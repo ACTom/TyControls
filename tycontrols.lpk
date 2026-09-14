@@ -849,6 +849,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Funnel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Gauge.pas"/>
+        <UnitName Value="tyControls.AdvChart.Gauge"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Title.pas"/>
         <UnitName Value="tyControls.AdvChart.Title"/>
       </Item>

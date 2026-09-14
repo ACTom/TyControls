@@ -1303,6 +1303,17 @@ begin
     '   library has a --success and a --danger already and they carry exactly the' + LineEnding +
     '   right meaning in either convention, so a theme that wants the other way' + LineEnding +
     '   round swaps two lines here instead of restyling a chart. */' + LineEnding +
+    '/* A GAUGE''S READING: the headline number under the needle, and the only thing' + LineEnding +
+    '   in this vocabulary that had no donor. The chart''s own title key is bold but' + LineEnding +
+    '   is sized off the title scale -- a gauge''s reading is the picture, not a' + LineEnding +
+    '   heading over it -- and every label key is base size. Upstream writes 30px' + LineEnding +
+    '   and a literal here is the right place for a literal: a skin that wants a' + LineEnding +
+    '   quieter dial changes this one line. The gauge''s name caption takes' + LineEnding +
+    '   TyAdvChartLabel, its scale takes TyAdvChartAxisLabel, its major ticks take' + LineEnding +
+    '   TyAdvChartAxisTick and its minor ones TyAdvChartMinorTick, so this is the' + LineEnding +
+    '   only key the whole series added. */' + LineEnding +
+    'TyAdvChartGaugeDetail { color: var(--on-surface); font-size: 30px;' + LineEnding +
+    '                        font-weight: var(--font-weight-bold); }' + LineEnding +
     'TyAdvChartCandleUp { background: var(--danger); }' + LineEnding +
     'TyAdvChartCandleDown { background: var(--success); }' + LineEnding +
     'TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }' + LineEnding +

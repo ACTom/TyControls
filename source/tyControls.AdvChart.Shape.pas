@@ -52,6 +52,19 @@ type
     StartRad, EndRad: Double;         // sector sweep, CLOCKWISE, matching the painter
     Points: TTyPointFArray;           // polyline / polygon
     PathData: string;                 // path
+    { A PATH AND NOTHING ELSE. Every other kind is built where it lands -- a
+      polygon can simply be given rotated points, and that is this layer's
+      founding rule. A path cannot: its geometry is a string in the author's
+      own coordinates and the painter fits it to a box, so the only place to
+      turn it is at draw time.
+
+      Zero for every shape that has not asked. The hit test IGNORES it, which
+      is honest rather than lazy: a path is already hit-tested by its box
+      alone, so a rotated one is no less accurate than an upright one. }
+    RotationRad: Double;
+    { The point the rotation turns about, DEVICE px. Meaningless when
+      RotationRad is zero. }
+    RotCX, RotCY: Double;
   end;
 
 { ---- constructors, so a caller never has to remember which fields a kind uses ---- }
@@ -92,7 +105,10 @@ function TySectorRadii(const AValues: array of Double): TTyCornerRadii;
 
 function TyShapePolyline(const APoints: array of TTyPointF): TTyChartShape;
 function TyShapePolygon(const APoints: array of TTyPointF): TTyChartShape;
-function TyShapePath(const APathData: string; const ABounds: TTyRectF): TTyChartShape;
+function TyShapePath(const APathData: string; const ABounds: TTyRectF): TTyChartShape; overload;
+{ A path TURNED about a point. The upright form is the overload above. }
+function TyShapePath(const APathData: string; const ABounds: TTyRectF;
+  ARotationRad, ARotCX, ARotCY: Double): TTyChartShape; overload;
 
 { ---- the path a sector traces ----
 
@@ -142,6 +158,42 @@ function TyDistanceToSegment(APX, APY, AX1, AY1, AX2, AY2: Double): Double;
 { Angle normalised into [0, 2*Pi). }
 function TyNormalizeAngle(AAngleRad: Double): Double;
 
+{ The same fold, in ONE STEP and with zrender's rounding.
+
+  Two things separate it from TyNormalizeAngle above. It answers a SIGNED
+  residue in (-2*Pi, 2*Pi) rather than a positive one, which is what the arc
+  normaliser below needs; and it folds with Int() instead of a loop, so an
+  angle of 1e14 radians -- legal, the option is an untyped number -- costs one
+  division rather than thirty thousand million subtractions.
+
+  The rounding to eight decimals of a half-turn is zrender's, and it is what
+  makes a whole number of degrees land exactly on a turn instead of a
+  ten-thousandth of a radian short of one. }
+function TyModTwoPi(ARadian: Double): Double;
+
+{ zrender's normalizeArcAngles: an option's two angles made into a consistent
+  sweep.
+
+  AStart comes back in [0, 2*Pi). AEnd is carried by the same amount, so the
+  sweep survives the wrap, and is then pulled onto the correct side of the
+  start -- above it when drawing clockwise, below it when not -- and clamped
+  to at most one turn. AEnd may therefore sit outside [0, 2*Pi), and that is
+  deliberate: the overshoot is the only thing that tells a full circle from a
+  sweep of nothing.
+
+  AAnticlockwise is the direction the sweep runs, which for an ECharts option
+  is `not clockwise`. }
+procedure TyNormalizeArcAngles(var AStart, AEnd: Double;
+  AAnticlockwise: Boolean);
+
+{ One point turned about another, DEVICE px, positive = clockwise on screen.
+
+  Exported because it is the whole of what rotation means in this layer, and
+  because it had already been written twice before anything needed it a
+  third time. }
+function TyRotatePoint(const APoint: TTyPointF;
+  ACX, ACY, AAngleRad: Double): TTyPointF;
+
 { A copy of AShape with its AXIS-ALIGNED edges snapped so a stroke of
   AStrokeWidthPx lands on whole pixels (see tyControls.SubPixel).
 
@@ -184,6 +236,62 @@ begin
     Result := Result + 2 * Pi;
   while Result >= 2 * Pi do
     Result := Result - 2 * Pi;
+end;
+
+function TyModTwoPi(ARadian: Double): Double;
+var n: Double;
+begin
+  { BROUGHT INSIDE A TURN FIRST. The line below is zrender's, verbatim -- round
+    to eight decimals of a half-turn, then take the residue -- and it is exact
+    for any angle anybody writes. But `Round` answers an Int64 and RAISES above
+    it, so `startAngle: 1e14` (legal: the option is typed `number` with no
+    clamp, and upstream draws it) would turn a chart into a dead render.
+
+    An angle is periodic, so folding it first changes no answer it could have
+    given. `Int` on a Double has no Int64 to overflow. }
+  if IsNan(ARadian) or IsInfinite(ARadian) then Exit(0);
+  ARadian := ARadian - Int(ARadian / (2 * Pi)) * (2 * Pi);
+  n := Round(ARadian / Pi * 1e8) / 1e8;
+  { FMod, not the integer Mod: n is not whole. }
+  Result := (n - Int(n / 2) * 2) * Pi;
+end;
+
+procedure TyNormalizeArcAngles(var AStart, AEnd: Double;
+  AAnticlockwise: Boolean);
+var
+  s, e, delta: Double;
+begin
+  s := TyModTwoPi(AStart);
+  if s < 0 then s := s + 2 * Pi;
+  { THE END IS CARRIED, NOT FOLDED. Folding both independently loses the sweep:
+    (3*Pi/2, 5*Pi/2) is a half turn and folds to (3*Pi/2, Pi/2), which reads as
+    a whole turn backwards. }
+  delta := s - AStart;
+  e := AEnd + delta;
+  if (not AAnticlockwise) and (e - s >= 2 * Pi) then
+    e := s + 2 * Pi
+  else if AAnticlockwise and (s - e >= 2 * Pi) then
+    e := s - 2 * Pi
+  else if (not AAnticlockwise) and (s > e) then
+    e := s + (2 * Pi - TyModTwoPi(s - e))
+  else if AAnticlockwise and (s < e) then
+    e := s - (2 * Pi - TyModTwoPi(e - s));
+  AStart := s;
+  AEnd := e;
+end;
+
+function TyRotatePoint(const APoint: TTyPointF;
+  ACX, ACY, AAngleRad: Double): TTyPointF;
+var
+  s, c, dx, dy: Double;
+begin
+  if AAngleRad = 0 then Exit(APoint);
+  s := Sin(AAngleRad);
+  c := Cos(AAngleRad);
+  dx := APoint.X - ACX;
+  dy := APoint.Y - ACY;
+  Result.X := ACX + dx * c - dy * s;
+  Result.Y := ACY + dx * s + dy * c;
 end;
 
 function TyDistanceToSegment(APX, APY, AX1, AY1, AX2, AY2: Double): Double;
@@ -762,6 +870,15 @@ function TyShapePolyline(const APoints: array of TTyPointF): TTyChartShape;
 begin
   Result := EmptyShape(cskPolyline);
   Result.Points := CopyPoints(APoints);
+end;
+
+function TyShapePath(const APathData: string; const ABounds: TTyRectF;
+  ARotationRad, ARotCX, ARotCY: Double): TTyChartShape;
+begin
+  Result := TyShapePath(APathData, ABounds);
+  Result.RotationRad := ARotationRad;
+  Result.RotCX := ARotCX;
+  Result.RotCY := ARotCY;
 end;
 
 function TyShapePolygon(const APoints: array of TTyPointF): TTyChartShape;

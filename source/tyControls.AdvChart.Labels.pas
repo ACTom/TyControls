@@ -171,6 +171,15 @@ function TyLabelIsInside(APosition: TTyLabelPosition): Boolean;
   reads as DARKER than its colour suggests and gets lighter ink. The comment
   beside upstream's own formula says "assumed white background" and is wrong for
   this call; it is right for the two dark-mode calls, which pass one. }
+{ A W x H BOX HUNG OFF ONE POINT, given which of its own edges is pinned
+  there.
+
+  Exported because it had been written out longhand in seven places by the time
+  an eighth wanted it, and because the pairing is the contract everything
+  downstream reads: an anchor alone does not say where the words go. }
+function TyAnchorBox(AX, AY, AW, AH: Double; AAnchorH: TTyTextAnchorH;
+  AAnchorV: TTyTextAnchorV): TTyRectF;
+
 function TyLabelLuminance(AColour: TTyChartColor): Double;
 
 { The ink an automatic label comes out in, given the host's own fill. }
@@ -342,6 +351,25 @@ begin
   end;
 end;
 
+function TyAnchorBox(AX, AY, AW, AH: Double; AAnchorH: TTyTextAnchorH;
+  AAnchorV: TTyTextAnchorV): TTyRectF;
+begin
+  case AAnchorH of
+    tahCentre: Result.Left := AX - AW / 2;
+    tahRight: Result.Left := AX - AW;
+  else
+    Result.Left := AX;
+  end;
+  Result.Right := Result.Left + AW;
+  case AAnchorV of
+    tavMiddle: Result.Top := AY - AH / 2;
+    tavBottom: Result.Top := AY - AH;
+  else
+    Result.Top := AY;
+  end;
+  Result.Bottom := Result.Top + AH;
+end;
+
 function TyLabelLuminance(AColour: TTyChartColor): Double;
 var
   a, r, g, b: Double;
@@ -430,20 +458,7 @@ begin
       is what the companion's shape IS -- so the hit test and the ink describe
       the same rectangle, which is the whole reason the caption gets an entry
       of its own rather than a note on somebody else's. }
-    case ah of
-      tahCentre: box.Left := x - w / 2;
-      tahRight: box.Left := x - w;
-    else
-      box.Left := x;
-    end;
-    box.Right := box.Left + w;
-    case av of
-      tavMiddle: box.Top := y - h / 2;
-      tavBottom: box.Top := y - h;
-    else
-      box.Top := y;
-    end;
-    box.Bottom := box.Top + h;
+    box := TyAnchorBox(x, y, w, h, ah, av);
 
     cap := TyChartElement(TyShapeRect(box));
     cap.Caption := host.Caption;

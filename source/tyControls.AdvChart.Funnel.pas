@@ -339,34 +339,12 @@ end;
 
 function TyFunnelMap(AValue, ADomainLo, ADomainHi, ARangeLo,
   ARangeHi: Double): Double;
-var
-  subDomain, subRange: Double;
 begin
-  subDomain := ADomainHi - ADomainLo;
-  subRange := ARangeHi - ARangeLo;
-  { THE DEGENERATE DOMAIN, and this is the branch a port gets wrong. Every
-    value equal -- which is what a funnel of equal steps is -- gives a domain
-    of no width, and the answer is the MIDPOINT of the range. Not its start,
-    not zero. }
-  if subDomain = 0 then
-  begin
-    if subRange = 0 then Exit(ARangeLo);
-    Exit((ARangeLo + ARangeHi) / 2);
-  end;
-  if IsNan(subDomain) or IsNan(AValue) then Exit(ARangeLo);
-  { CLAMPED, and the branch depends on which way the domain runs -- both it and
-    the range may be descending, and neither may be sorted into order. }
-  if subDomain > 0 then
-  begin
-    if AValue <= ADomainLo then Exit(ARangeLo);
-    if AValue >= ADomainHi then Exit(ARangeHi);
-  end
-  else
-  begin
-    if AValue >= ADomainLo then Exit(ARangeLo);
-    if AValue <= ADomainHi then Exit(ARangeHi);
-  end;
-  Result := (AValue - ADomainLo) / subDomain * subRange + ARangeLo;
+  { THE RULE MOVED to the unit where TTyBoxValue lives, because a gauge wanted
+    it too and a gauge asking a FUNNEL how to carry a value across an interval
+    is the borrowed-name mistake again. Only the name is here, and only because
+    this unit's own tests call it. }
+  Result := TyLinearMap(AValue, ADomainLo, ADomainHi, ARangeLo, ARangeHi, True);
 end;
 
 function TyFunnelOrder(AStore: TTyDataStore; ADim: Integer;
@@ -716,6 +694,7 @@ var
   anchorH: TTyTextAnchorH;
   el: TTyChartElement;
   box: TTyRectF;
+  auto: TTyLabelSpec;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or not ALayout.Valid then Exit;
@@ -884,15 +863,18 @@ begin
       order reads backwards until you see why: on a mid-dark band you want
       maximum contrast, but on a nearly black one the brightest ink glares.
       Outside is the theme's own ink and never looks at what it labels. }
-    if not inside then el.Caption.Colour := AInk.OutsideColour
-    else if fill = 0 then el.Caption.Colour := AInk.InsideColour[0]
-    else
-    begin
-      lum := TyLabelLuminance(fill);
-      if lum > 0.5 then el.Caption.Colour := AInk.InsideColour[0]
-      else if lum > 0.2 then el.Caption.Colour := AInk.InsideColour[1]
-      else el.Caption.Colour := AInk.InsideColour[2];
-    end;
+    { THE SHARED CHOOSER, not a second table. This unit carried its own copy
+      of the three bands for one batch, and it disagreed with the original in
+      one place: it tested `fill = 0` where the real rule asks whether the host
+      has a fill at all, so an opaque BLACK band ($FF000000, which is not zero)
+      took the light ground's ink. }
+    auto := TyLabelSpecNone;
+    auto.AutoColour := True;
+    auto.OutsideColour := AInk.OutsideColour;
+    auto.InsideColour[0] := AInk.InsideColour[0];
+    auto.InsideColour[1] := AInk.InsideColour[1];
+    auto.InsideColour[2] := AInk.InsideColour[2];
+    el.Caption.Colour := TyLabelAutoColour(auto, fill, fill <> 0, inside);
     el.Caption.X := textX;
     el.Caption.Y := textY;
     el.Caption.AnchorH := anchorH;

@@ -17,10 +17,18 @@ unit tyControls.AdvChart.Layout;
   the container is not known until the HOST has been laid out — the value has to
   be fetched late, not passed early.
 
-  PURE: SysUtils, Math and the AdvChart units. No Controls, no Graphics, no
-  handle. }
+  PURE: SysUtils, Math, fcl-json and the AdvChart units. No Controls, no
+  Graphics, no handle.
+
+  IT HAS GROWN PAST ITS NAME, on purpose. What lives here now is every rule
+  ABOUT A TTyBoxValue -- how one resolves against a base, how one is read out
+  of an option, how a pair of them becomes a centre -- plus the linear map that
+  every series with a scale needs. Each arrived the same way: a second series
+  was about to ask the first one how it worked, and the answer belongs where
+  the TYPE is, not beside whichever caller wanted it first. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Coord;
+uses SysUtils, Math, fpjson,
+     tyControls.AdvChart.Types, tyControls.AdvChart.Coord;
 
 type
   { How one edge or size is expressed. }
@@ -54,6 +62,51 @@ function TyBoxAuto: TTyBoxValue;
   it is a rule about TTyBoxValue, and a second series asking a PIE how to read
   a percentage is the borrowed-name mistake wearing another hat. }
 function TyBoxResolve(const AValue: TTyBoxValue; ABase: Double): Double;
+
+{ ONE OPTION VALUE READ AS A BOX VALUE -- upstream's parsePositionOption.
+
+  A number is pixels; a string ending in `%` is a percentage; the six position
+  words are the percentages they name. Anything else -- including an array, an
+  object or a null -- answers ADefault rather than raising, which is the rule
+  every reader in this family follows.
+
+  ONE COPY. There were four, and they had already drifted: two accepted the
+  British spelling of `centre` and two did not, and two answered buCentre where
+  the others answered buPercent(50). Those two resolve identically, which is
+  exactly why nobody noticed. }
+function TyBoxDataOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
+function TyBoxValueOf(ANode: TJSONObject; const AKey: string;
+  const ADefault: TTyBoxValue): TTyBoxValue;
+
+{ A CENTRE AND THE BASE ITS RADIUS IS MEASURED AGAINST, from one rect.
+
+  TWO DIFFERENT BASES, and that is the whole reason this is a function: the
+  centre's percentages run against the rect's width and height SEPARATELY,
+  while a radius' run against half its SHORTER side. A pie and a gauge both
+  need it; sharing one base would put a doughnut's hole off centre on any
+  rectangle that is not square. }
+procedure TySolveCircle(const ACentreX, ACentreY: TTyBoxValue;
+  const AViewport: TTyRectF; out ACX, ACY, ARadiusBase: Double);
+
+{ upstream's linearMap: AValue carried from one interval to another.
+
+  THE DEGENERATE DOMAIN IS THE BRANCH A PORT GETS WRONG, and it is not an edge
+  case: every value equal is what a funnel of equal steps looks like, and
+  `min: 50, max: 50` is a legal gauge. The answer is the MIDPOINT of the range,
+  not its start and not zero -- so a port that guarded "denominator is zero,
+  answer zero" draws nothing exactly where upstream draws half-width bands.
+  When the range is degenerate too the answer is its start, which for finite
+  numbers is the same thing said without an overflow.
+
+  AClamp pins a value outside the domain to the nearer end. BOTH DIRECTIONS
+  ARE HANDLED: neither the domain nor the range is required to ascend, and a
+  gauge running anticlockwise has a descending range.
+
+  NaN ANSWERS ARangeLo. Upstream lets it through every comparison and returns
+  NaN; here an ordered comparison against a quiet NaN would RAISE, so the test
+  comes first and the answer is the one a caller can draw. }
+function TyLinearMap(AValue, ADomainLo, ADomainHi, ARangeLo, ARangeHi: Double;
+  AClamp: Boolean): Double;
 
 function TyFixedContainer(const ARect: TTyRectF): ITyBoxContainer;
 function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
@@ -524,6 +577,84 @@ begin
   else
     Result := 0;
   end;
+end;
+
+function TyBoxDataOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
+var
+  s: string;
+  v: Double;
+  fs: TFormatSettings;
+begin
+  Result := ADefault;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AData.JSONType = jtNumber then Exit(TyBoxPx(AData.AsFloat));
+  if AData.JSONType <> jtString then Exit;
+  s := LowerCase(Trim(AData.AsString));
+  if s = '' then Exit;
+  { The presets parsePositionOption accepts. BOTH SPELLINGS of the middle one:
+    one of the four readers this replaced took `centre` and the others did not,
+    and nothing recorded which was meant. }
+  if (s = 'center') or (s = 'centre') or (s = 'middle') then
+    Exit(TyBoxPercent(50));
+  if (s = 'left') or (s = 'top') then Exit(TyBoxPercent(0));
+  if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  if s[Length(s)] = '%' then
+  begin
+    if TryStrToFloat(Copy(s, 1, Length(s) - 1), v, fs) then
+      Result := TyBoxPercent(v);
+    Exit;
+  end;
+  if TryStrToFloat(s, v, fs) then Result := TyBoxPx(v);
+end;
+
+function TyBoxValueOf(ANode: TJSONObject; const AKey: string;
+  const ADefault: TTyBoxValue): TTyBoxValue;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  Result := TyBoxDataOf(ANode.Find(AKey), ADefault);
+end;
+
+procedure TySolveCircle(const ACentreX, ACentreY: TTyBoxValue;
+  const AViewport: TTyRectF; out ACX, ACY, ARadiusBase: Double);
+var w, h: Double;
+begin
+  w := AViewport.Right - AViewport.Left;
+  h := AViewport.Bottom - AViewport.Top;
+  ACX := AViewport.Left + TyBoxResolve(ACentreX, w);
+  ACY := AViewport.Top + TyBoxResolve(ACentreY, h);
+  ARadiusBase := Min(w, h) / 2;
+end;
+
+function TyLinearMap(AValue, ADomainLo, ADomainHi, ARangeLo, ARangeHi: Double;
+  AClamp: Boolean): Double;
+var
+  subDomain, subRange: Double;
+begin
+  subDomain := ADomainHi - ADomainLo;
+  subRange := ARangeHi - ARangeLo;
+  if subDomain = 0 then
+  begin
+    if subRange = 0 then Exit(ARangeLo);
+    Exit((ARangeLo + ARangeHi) / 2);
+  end;
+  if IsNan(subDomain) or IsNan(AValue) then Exit(ARangeLo);
+  if AClamp then
+  begin
+    if subDomain > 0 then
+    begin
+      if AValue <= ADomainLo then Exit(ARangeLo);
+      if AValue >= ADomainHi then Exit(ARangeHi);
+    end
+    else
+    begin
+      if AValue >= ADomainLo then Exit(ARangeLo);
+      if AValue <= ADomainHi then Exit(ARangeHi);
+    end;
+  end;
+  Result := (AValue - ADomainLo) / subDomain * subRange + ARangeLo;
 end;
 
 function TyFixedContainer(const ARect: TTyRectF): ITyBoxContainer;

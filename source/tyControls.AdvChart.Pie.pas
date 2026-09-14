@@ -166,7 +166,12 @@ function TyPieSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPieSpec;
 
 { ---- the arithmetic, exposed because each is worth testing on its own ---- }
 { zrender's normalizeArcAngles: wrap the start into [0, 2*Pi) and pull the end
-  onto the correct side of it, never further than one turn away. }
+  onto the correct side of it, never further than one turn away.
+
+  THE RULE MOVED to the shape layer, where angles live and where a second
+  series can reach it -- a gauge asking a PIE which way its dial runs is the
+  borrowed-name mistake wearing another hat. Only the name is here, and only
+  because this unit's own tests call it. }
 procedure TyNormalizeArcAngles(var AStart, AEnd: Double; AAnticlockwise: Boolean);
 
 { parsePercent, in the one form this unit needs: a value against a base. }
@@ -461,58 +466,9 @@ end;
 
 { ==================== the angle normaliser ==================== }
 
-{ zrender's modPI2, transcribed including the rounding, whose own comment says
-  it is more stable to take the remainder in units of Pi.
-
-  MEASURED, because the comment overstates it and this port nearly repeated the
-  overstatement: over the 360 whole-degree start angles, rounding lands 273 of
-  them exactly on a whole turn against 215 without it. Better, not a guarantee.
-  Where it misses, the sweep is one part in 7*10^15 short and the pie takes the
-  redistribution path -- which computes the same angles to within that same
-  part, so nothing downstream can tell. Dropping the rounding is therefore an
-  EQUIVALENT MUTANT here, recorded rather than chased.
-
-  Int() truncates toward zero, so `n - Int(n/2) * 2` is JavaScript's `n % 2`
-  and not Pascal's integer Mod, which would not take a fractional operand. }
-function ModTwoPi(ARadian: Double): Double;
-var n: Double;
-begin
-  { BROUGHT INSIDE A TURN FIRST. The line below is zrender's, verbatim --
-    round to eight decimals of a half-turn, then take the residue -- and it
-    is exact for any angle anybody writes. But `Round` answers an Int64 and
-    RAISES above it, so `startAngle: 1e14` (legal: the option is typed
-    `number` with no clamp, and upstream draws it) turns a pie chart into a
-    dead render.
-
-    An angle is periodic, so folding it first changes no answer it could
-    have given. `Int` on a Double has no Int64 to overflow. }
-  if IsNan(ARadian) or IsInfinite(ARadian) then Exit(0);
-  ARadian := ARadian - Int(ARadian / (2 * Pi)) * (2 * Pi);
-  n := Round(ARadian / Pi * 1e8) / 1e8;
-  { FMod, not the integer Mod: n is not whole. }
-  Result := (n - Int(n / 2) * 2) * Pi;
-end;
-
 procedure TyNormalizeArcAngles(var AStart, AEnd: Double; AAnticlockwise: Boolean);
-var
-  s, e, delta: Double;
 begin
-  s := ModTwoPi(AStart);
-  if s < 0 then s := s + cTwoPi;
-  delta := s - AStart;
-  e := AEnd + delta;
-
-  if (not AAnticlockwise) and (e - s >= cTwoPi) then
-    e := s + cTwoPi
-  else if AAnticlockwise and (s - e >= cTwoPi) then
-    e := s - cTwoPi
-  else if (not AAnticlockwise) and (s > e) then
-    e := s + (cTwoPi - ModTwoPi(s - e))
-  else if AAnticlockwise and (s < e) then
-    e := s - (cTwoPi - ModTwoPi(e - s));
-
-  AStart := s;
-  AEnd := e;
+  tyControls.AdvChart.Shape.TyNormalizeArcAngles(AStart, AEnd, AAnticlockwise);
 end;
 
 { ==================== percentages that add up ==================== }

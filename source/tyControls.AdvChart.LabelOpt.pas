@@ -57,6 +57,14 @@ function TyLabelText(const AFormatter: string; ADefault: TTyLabelDefaultText;
   agree about what 1/3 looks like. }
 function TyLabelNumToStr(AValue: Double): string;
 
+{ Replace the FIRST occurrence of AToken only -- JavaScript's String#replace
+  takes a plain string, so a repeated token is emitted literally and every
+  formatter in ECharts that is not a regular expression behaves this way.
+
+  Exported because three callers now want it and the fourth was about to be
+  written inline. }
+function TyReplaceFirst(const AText, AToken, AWith: string): string;
+
 implementation
 
 uses tyControls.AdvChart.Handlers;
@@ -233,9 +241,7 @@ end;
 
 { ==================== the formatter ==================== }
 
-{ Replace the FIRST occurrence of AToken only -- upstream's replace takes a
-  plain string, so a repeated token is emitted literally. }
-function ReplaceFirst(const AText, AToken, AWith: string): string;
+function TyReplaceFirst(const AText, AToken, AWith: string): string;
 var p: Integer;
 begin
   Result := AText;
@@ -277,11 +283,11 @@ begin
     exactly these four and no indexed form, which is why the indexed rewrite
     upstream does first is not reproduced -- it would be a table nothing
     reads. }
-  Result := ReplaceFirst(Result, '{a}', ASeriesName);
-  Result := ReplaceFirst(Result, '{b}', nameText);
-  Result := ReplaceFirst(Result, '{c}', valueText);
+  Result := TyReplaceFirst(Result, '{a}', ASeriesName);
+  Result := TyReplaceFirst(Result, '{b}', nameText);
+  Result := TyReplaceFirst(Result, '{c}', valueText);
   if AHasPercent then
-    Result := ReplaceFirst(Result, '{d}', TyLabelNumToStr(APercent));
+    Result := TyReplaceFirst(Result, '{d}', TyLabelNumToStr(APercent));
 
   { `{@dim}` IS GLOBAL, because upstream's pattern for it is a regex with the
     g flag while the letters above are plain strings. Two rules, and they are

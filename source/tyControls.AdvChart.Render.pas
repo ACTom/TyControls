@@ -116,12 +116,28 @@ begin
           P.ClosePath;
       end;
     cskPath:
-      if TyRectFIsValid(AShape.Bounds) then
-        P.SvgPathIn(AShape.PathData,
-                    Rect(Round(AShape.Bounds.Left), Round(AShape.Bounds.Top),
-                         Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)))
-      else
-        P.SvgPath(AShape.PathData);
+      { TURNED AT TRACE TIME, and only this kind is. Every other shape is built
+        where it lands; a path cannot be, because its geometry is a string in
+        the author's own coordinates that the painter fits to a box. The
+        transform is pushed and popped around the trace, so the path comes out
+        of it already rotated and the fill and the stroke that follow know
+        nothing about it. }
+      begin
+        if AShape.RotationRad <> 0 then
+        begin
+          P.SaveState;
+          P.Translate(AShape.RotCX, AShape.RotCY);
+          P.RotateBy(AShape.RotationRad);
+          P.Translate(-AShape.RotCX, -AShape.RotCY);
+        end;
+        if TyRectFIsValid(AShape.Bounds) then
+          P.SvgPathIn(AShape.PathData,
+                      Rect(Round(AShape.Bounds.Left), Round(AShape.Bounds.Top),
+                           Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)))
+        else
+          P.SvgPath(AShape.PathData);
+        if AShape.RotationRad <> 0 then P.RestoreState;
+      end;
   end;
 end;
 

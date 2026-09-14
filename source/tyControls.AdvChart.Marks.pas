@@ -1364,7 +1364,7 @@ const
     drives TyBuildSeriesMarks, which a pie deliberately never enters. What
     guards it is TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector, which
     counts the control's own pixels. }
-  cElsewhere: array[0..1] of string = ('pie', 'funnel');
+  cElsewhere: array[0..2] of string = ('pie', 'funnel', 'gauge');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;

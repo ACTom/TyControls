@@ -1270,6 +1270,17 @@ TyAdvChartTooltipValue {
    library has a --success and a --danger already and they carry exactly the
    right meaning in either convention, so a theme that wants the other way
    round swaps two lines here instead of restyling a chart. */
+/* A GAUGE'S READING: the headline number under the needle, and the only thing
+   in this vocabulary that had no donor. The chart's own title key is bold but
+   is sized off the title scale -- a gauge's reading is the picture, not a
+   heading over it -- and every label key is base size. Upstream writes 30px
+   and a literal here is the right place for a literal: a skin that wants a
+   quieter dial changes this one line. The gauge's name caption takes
+   TyAdvChartLabel, its scale takes TyAdvChartAxisLabel, its major ticks take
+   TyAdvChartAxisTick and its minor ones TyAdvChartMinorTick, so this is the
+   only key the whole series added. */
+TyAdvChartGaugeDetail { color: var(--on-surface); font-size: 30px;
+                        font-weight: var(--font-weight-bold); }
 TyAdvChartCandleUp { background: var(--danger); }
 TyAdvChartCandleDown { background: var(--success); }
 TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }

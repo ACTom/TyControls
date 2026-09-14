@@ -40,6 +40,7 @@ uses
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Color,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
+  tyControls.AdvChart.Gauge,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
@@ -142,6 +143,14 @@ type
       carried rather than recomputed. }
     FFunnels: array of TTyFunnelLayout;
     FFunnelSpecs: array of TTyFunnelSpec;
+    { THE GAUGE'S, and it carries a third array the other two do not need: the
+      per-datum title and reading. Those live in the series' own `data` and
+      cannot come through the store's override table, which interns SCALAR
+      leaves -- and `offsetCenter` is an array, which is exactly the one thing
+      a multi-value gauge must set per datum. }
+    FGauges: array of TTyGaugeLayout;
+    FGaugeSpecs: array of TTyGaugeSpec;
+    FGaugeItems: array of TTyGaugeItemArray;
     { Index-parallel to FPies. The paint pass needs showEmptyCircle, and the
       mark builder is a pure unit that cannot re-read the option. }
     FPieSpecs: array of TTyPieSpec;
@@ -334,6 +343,9 @@ type
     { Every funnel's geometry. Runs in Relayout, beside SolvePies. }
     procedure SolveFunnels;
     function FunnelVisual(ASlot: Integer): TTyFunnelVisual;
+    { Every gauge's geometry. Runs in Relayout, beside SolvePies. }
+    procedure SolveGauges(APPI: Integer);
+    function GaugeVisual(ASlot: Integer): TTyGaugeVisual;
     function FunnelLabelInk: TTyFunnelLabelInk;
     { The label spec for one series, resolved from the theme and the option. }
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
@@ -962,6 +974,7 @@ begin
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   SolvePies;
   SolveFunnels;
+  SolveGauges(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   FDirty := False;
@@ -1996,6 +2009,81 @@ begin
   end;
 end;
 
+procedure TTyAdvanceChart.SolveGauges(APPI: Integer);
+var
+  i: Integer;
+begin
+  SetLength(FGauges, Length(FBindings));
+  SetLength(FGaugeSpecs, Length(FBindings));
+  SetLength(FGaugeItems, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FGauges[i] := Default(TTyGaugeLayout);
+    FGaugeSpecs[i] := TyGaugeSpecDefault;
+    FGaugeItems[i] := nil;
+    if i > High(FStores) then Break;
+    if not FBindings[i].Resolved then Continue;
+    if FBindings[i].SeriesType <> TyGaugeSeriesTypeName then Continue;
+    FGaugeSpecs[i] := TyGaugeSpecOf(FOption, FBindings[i].SeriesIndex);
+    FGaugeItems[i] := TyGaugeItemsOf(FOption, FBindings[i].SeriesIndex,
+      FGaugeSpecs[i]);
+    { FLastRect, and unlike the pie and the funnel there is no box between the
+      two: a gauge resolves its centre against the CONTROL's width and height
+      and its radius against half the shorter side. Its `center` is the only
+      thing that moves it. }
+    FGauges[i] := TyGaugeLayoutOf(FGaugeSpecs[i], FLastRect, APPI);
+  end;
+end;
+
+function TTyAdvanceChart.GaugeVisual(ASlot: Integer): TTyGaugeVisual;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+  f: TTyTitleFont;
+begin
+  Result := TyGaugeVisual;
+  Result.Fills := PerDatumColours(ASlot);
+  model := ActiveController.Model;
+  { THE TRACK IS THE RING A PIE DRAWS WITH NO DATA. Upstream writes a literal
+    pale grey, which is a pale grey ring on a dark skin; the same key the empty
+    pie uses is alpha over the ink and follows either mode. }
+  Result.Track := TTyChartColor(
+    model.ResolveStyle('TyAdvChartEmptyCircle', '', []).Background.Color);
+  { A GAUGE'S SPLIT LINE IS A MAJOR TICK and its axisTick is a minor one --
+    which is what they ARE, whatever the option calls them, so they take the
+    axis' own two keys rather than a pair of their own. }
+  Result.SplitLine := TTyChartColor(
+    model.ResolveStyle('TyAdvChartAxisTick', '', []).BorderColor);
+  Result.Tick := TTyChartColor(
+    model.ResolveStyle('TyAdvChartMinorTick', '', []).BorderColor);
+  st := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
+  Result.LabelColour := TTyChartColor(st.TextColor);
+  Result.LabelFontName := st.FontName;
+  Result.LabelFontSizeLogical := ResolveFontSize(st);
+  Result.LabelFontWeight := st.FontWeight;
+  f := TitleFont('TyAdvChartLabel');
+  st := model.ResolveStyle('TyAdvChartLabel', '', []);
+  Result.TitleColour := TTyChartColor(st.TextColor);
+  Result.TitleFontName := f.Name;
+  Result.TitleFontSizeLogical := f.SizeLogical;
+  Result.TitleFontWeight := f.Weight;
+  { THE READING IS THE ONE NEW KEY THIS SERIES NEEDED. Nothing in the existing
+    vocabulary is a big bold number: the chart's own title key is bold but is
+    sized from the title scale, and a gauge's reading is the headline of the
+    picture rather than a heading over it. }
+  f := TitleFont('TyAdvChartGaugeDetail');
+  st := model.ResolveStyle('TyAdvChartGaugeDetail', '', []);
+  Result.DetailColour := TTyChartColor(st.TextColor);
+  Result.DetailFontName := f.Name;
+  Result.DetailFontSizeLogical := f.SizeLogical;
+  Result.DetailFontWeight := f.Weight;
+  { The hub is the chart's own ground with the accent around it, which is what
+    upstream's white-on-theme-blue means said in this vocabulary. }
+  Result.AnchorFill := TTyChartColor(
+    model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]).Background.Color);
+  Result.AnchorBorder := TTyChartColor(ThemeRampColor(0));
+end;
+
 function TTyAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
 var st: TTyStyleSet;
 begin
@@ -2685,6 +2773,7 @@ var
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
+  gv: TTyGaugeVisual;
   specs: TTyLabelSpecArray;
 begin
   Result := 0;
@@ -2719,6 +2808,22 @@ begin
         beside a bar has to sort against it like anything else. }
       { A FUNNEL IS NOT ON A COORDINATE SYSTEM EITHER, and like the pie it
         solves its own geometry in the layout pass and replays it here. }
+      { A GAUGE IS NOT ON A COORDINATE SYSTEM EITHER, and it splits its
+        drawing in two: the dial is the same whatever the data says, and only
+        the needles, the arcs and the words depend on it. }
+      if FBindings[i].SeriesType = TyGaugeSeriesTypeName then
+      begin
+        if i <= High(FGauges) then
+        begin
+          gv := GaugeVisual(i);
+          Inc(drawn, TyBuildGaugeAxis(FBindings[i], FGauges[i],
+            FGaugeSpecs[i], gv, AMeasurer, APPI, list));
+          Inc(drawn, TyBuildGaugeValue(FBindings[i], FGauges[i],
+            FGaugeSpecs[i], FGaugeItems[i], gv, FStores[i],
+            FStores[i].DimIndexOf(TyGaugeValueDim), AMeasurer, APPI, list));
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyFunnelSeriesTypeName then
       begin
         if i <= High(FFunnels) then
