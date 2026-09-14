@@ -678,7 +678,15 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ### Task 4: 真机的 timer 驱动
 
-Task 3 只做了测试缝。这一步把它接到真 timer 上。
+> **Step 1 已经在 Task 3 顺带做掉了**：那一步声明了 `EnsureHideTimer` / `HandleHideTimer`，而 FPC 不接受只有声明没有实现体的方法，所以 Task 3 必须把它们写出来——写出来的东西几乎就是下面这段。
+>
+> **Task 4 实际剩下三件事**，都是审查揪出来的：
+>
+> 1. **按真实经过时间步进**，不按 timer 的标称间隔（详见下方注释块）。需要自己的 `FFadeLastTickMs` 和一个 `TickElapsedMs` 的孪生体——原件在「别碰」清单上，不能共用。
+> 2. **被按住不放的时候把 timer 停掉**，离开时再启起来。**这让 `MouseLeave` 重新有了存在的理由**（Task 3 因为它只剩一行不可观测代码而删了它）；`DoExit` 与拖动结束同理，但**逐个 trace 再决定加不加**，别反射性地全加上。当心别造出「按住 → 指针离开 → 再没人重启时钟」的悬停态——那是 Task 3 刚修好那个搁浅 bug 的镜像。
+> 3. **`EffectiveAutoHideMs` 按 `ThemeVersion` 缓存**，现在常见路径每 tick 调两次。
+>
+> **可测性要诚实**：第 3 条 headless 可测（换主题看延时跟不跟得上）。第 1、2 条多半测不到——`EnsureHideTimer` 无句柄就不建 timer，headless 下 `FHideTimer` 恒为 nil、`HandleHideTimer` 根本不跑。**测不到就直说，别造一个手工塞 timer 的假测试**：那钉的是实现，不是行为。
 
 **Files:**
 - Modify: `source/tyControls.ScrollBar.pas`
