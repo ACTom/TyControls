@@ -3,7 +3,8 @@ unit tyControls.ScrollBar;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, StdCtrls, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation,
+  tyControls.Controller, tyControls.StyleModel;
 const
   { 自动隐藏延时的主题令牌。一条轴，没有歧义的零：
       -1 = 关（滚动条一直显示，**内置主题就是这个值**）
@@ -101,8 +102,6 @@ type
     procedure StartFade(ATo: Single; ADurationMs: Integer);
     { 主题说的延时，按 (model, ThemeVersion) 缓存。见实现处：热路径上一拍要问两次。 }
     function ThemeAutoHideMs: Integer;
-    { 淡出这一拍该推进多少毫秒（真实经过时间）。TickElapsedMs 的孪生体。 }
-    function FadeTickElapsedMs: Integer;
   protected
     FDragging: Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -141,6 +140,16 @@ type
     { 一拍推进多少毫秒(真实经过时间)。测试用受控时钟覆写它。 }
     function TickElapsedMs: Integer; virtual;
     procedure HandleTimerTick;
+    { 淡出这一拍该推进多少毫秒(真实经过时间)。TickElapsedMs 的孪生体,连可见性
+      一起孪生:那边抽成可覆写的理由这边一字不差 —— 否则「按真实时间推进」这条
+      只能靠肉眼在真机上看,而那正是当初写成名义间隔也没人发现的原因。 }
+    function FadeTickElapsedMs: Integer; virtual;
+    { **缝开在「现在几点」这一层,不在算好的差值那一层。** 位置缓动那边的桩
+      (test.controls.scrollbar.pas 的 TFakeClockScroll)覆写的是整个
+      TickElapsedMs,那条路上没有别的逻辑;这边不行 —— 至少 1 毫秒的钳位和
+      首拍的种子值都长在 FadeTickElapsedMs 里,覆写它等于把被测的那段搬进桩子,
+      喂个 0 进去测出来的是桩子会不会返回 0。 }
+    function FadeNowMs: QWord; virtual;
     { 延时表这一拍之后还有没有活干。抽出来一是 HandleHideTimer 要用，二是无头
       只够得着这里——没有句柄就不建表，「按住不放就停表」那条逻辑的效果
       (FHideTimer.Enabled)在无头下根本不存在，能验的只有这个判断本身。 }
@@ -495,15 +504,21 @@ function TTyScrollBar.ThemeAutoHideMs: Integer;
   EffectiveAutoHideMs 里没有缓存：那几步是整数比较，缓存它省不下什么，却要
   SetAutoHide 记得去作废它——忘了作废正是缓存变成 bug 的方式。 }
 var
+  { ActiveController，不是裸 Controller——后者在没挂 controller 时会 AV。
+    全拎进局部变量:命中那条路是本函数存在的全部理由,别在上面反复问。 }
+  ctrl: TTyStyleController;
+  mdl: TTyStyleModel;
   ver: Cardinal;
 begin
-  ver := ActiveController.Model.ThemeVersion;
-  if (FAutoHideMsAnchor = TObject(ActiveController.Model)) and (FAutoHideMsVer = ver) then
+  ctrl := ActiveController;
+  mdl := ctrl.Model;
+  ver := mdl.ThemeVersion;
+  { 存下去的是 TObject:那个字段只拿来比相等,永远不解引用。 }
+  if (FAutoHideMsAnchor = TObject(mdl)) and (FAutoHideMsVer = ver) then
     Exit(FAutoHideMsCache);
-  { ActiveController，不是裸 Controller——后者在没挂 controller 时会 AV。 }
-  FAutoHideMsCache := ActiveController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef);
+  FAutoHideMsCache := ctrl.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef);
   FAutoHideMsVer := ver;
-  FAutoHideMsAnchor := TObject(ActiveController.Model);
+  FAutoHideMsAnchor := TObject(mdl);
   Result := FAutoHideMsCache;
 end;
 
@@ -612,16 +627,22 @@ end;
 function TTyScrollBar.AutoHideTimerNeeded: Boolean;
 { 三条,顺序是有讲究的。
 
-  **跑着的淡入淡出排第一。** 指针压上来的时候掉头那发淡入照样得跑完 —— 先问
-  「按住没有」的话，表当场停掉，条就卡在半透明上，而且再没人推它。
+  **跑着的淡入淡出排第一,这一条不是风格问题,是 Task 3 那个搁浅 bug 的完整重演。**
+  一条已经淡到 0、表也停了的条,指针移到它(看不见的)那块地方上:MouseEnter ->
+  NoteActivity 把淡入装上膛、把表起起来。要是先问「按住没有」,起起来的表**头一拍
+  就把自己停掉**,而指针一直搁在那儿,再没有第二个 MouseEnter —— 条就在指针底下
+  永远不出现。半路上被压住的淡出同理,会卡在半透明。
 
   「按住不放」要停表:指针停在滚动条上是个极其常见的鼠标停靠位置，而按住的时候
   本来就没有任何东西要推进(AutoHideTick 那条臂只是把闲置时钟清成 0)，让它以
-  16ms 转下去纯属白烧。离开/失焦/松手三处各自调 NoteActivity 把表起回来。
-  **万一哪条路漏了,坏的方向是「条多留一会儿」** —— 不是 Task 3 那个「条永久
-  隐身」的镜像，而且随便滚一下、碰一下就恢复。
+  16ms 转下去纯属白烧。离开/失焦/松手三处各自调 NoteActivity 把表起回来;
+  **单就那三处而言**,万一哪处漏了坏的方向是「条多留一会儿」,随便碰一下就恢复
+  ——这句只管重启那三处,不管上面那个顺序,别拿它去给重排这几行背书。
 
-  最后才问延时,因为那是三条里唯一要读主题的(虽然现在带缓存了)。 }
+  最后才问延时。它也不只是「省一次主题解析」:自动隐藏关掉(换主题或改属性)
+  的那一刻表要是正转着,没有这一条它就**再也停不下来** —— 一条主人压根没开
+  这个特性的滚动条上挂着个 60fps 的空转定时器,而构造函数许诺的是「不开这个
+  特性的人一分钱不花」。 }
 begin
   if FFadeAnim.Running then Exit(True);
   if AutoHideHeldOpen then Exit(False);
@@ -652,16 +673,22 @@ begin
   end;
 end;
 
+function TTyScrollBar.FadeNowMs: QWord;
+begin
+  Result := GetTickCount64;
+end;
+
 function TTyScrollBar.FadeTickElapsedMs: Integer;
 { TickElapsedMs 的孪生体,自带时刻戳。**不能共用 FLastTickMs** ——那是位置缓动
   的,两套定时器各跑各的,共用一个戳就是互相把对方的起点冲掉。
 
   钳到至少 1 毫秒:除了讲得通,它还是挡住 0 毫秒步长的那道闸 —— TTyAnimator.Advance
-  把 AMs <= 0 当成「直接吸附到 Target」,一个 0 毫秒的滴答会把淡出变成跳变。 }
+  把 AMs <= 0 当成「直接吸附到 Target」,一个 0 毫秒的滴答会把淡出变成跳变。
+  而 0 毫秒的一拍不是假想:两拍落在同一个 GetTickCount64 刻度里就是 0。 }
 var
   nowMs: QWord;
 begin
-  nowMs := GetTickCount64;
+  nowMs := FadeNowMs;
   if FFadeLastTickMs = 0 then
     Result := 16
   else
@@ -1237,7 +1264,9 @@ end;
 procedure TTyScrollBar.EndThumbDrag;
 var
   P: Integer;
+  wasDragging: Boolean;
 begin
+  wasDragging := FDragging;
   if FDragging then
   begin
     { Final committed value of the drag: scPosition then scEndScroll.
@@ -1263,11 +1292,17 @@ begin
   FDragging := False;
   FTrackPos := FPosition;
   { 松手也要把延时表起回来:按住的那段表是停的(AutoHideTimerNeeded)。
-    放在这里而不是 MouseUp,是因为 EndThumbDrag 是宿主直接够得着的公开口子。
+
+    **只在真有一次拖动结束的时候**。MouseUp 是无条件调 EndThumbDrag 的,箭头
+    点击、滑道翻页的那次抬起也会走到这里,而那些路本来就没人按住表;它们该有的
+    「在用」由 ScrollTo -> Position -> NoteActivity 给。
+
+    放在这里而不是 MouseUp,是因为 EndThumbDrag 是公开的:宿主自己驱动拖动的话
+    松手就只经过这里。source/ 里现在还没有哪个宿主这么用,是留给以后的。
 
     上面那几句 Position := 有时候也会顺带 NoteActivity,但那是在 FDragging 还
     是 True 的时候,而且只在值真变了的时候才走 —— 原地放手的拖动一次都不走。 }
-  NoteActivity;
+  if wasDragging then NoteActivity;
 end;
 
 function TTyScrollBar.PosAlong(X, Y: Integer): Integer;

@@ -77,6 +77,27 @@ type
     procedure HideTimerTick;
   end;
 
+  { 受控时钟驱动的淡入淡出。照 test.controls.scrollbar.pas 里 TFakeClockScroll
+    的路子(位置缓动那边的同一个问题:名义间隔写错了没人看得出来),但缝的位置
+    不一样:**桩喂的是「现在几点」,不是算好的差值**。至少 1 毫秒的钳位和首拍
+    的种子值都长在 FadeTickElapsedMs 里,覆写它等于把被测的那段逻辑搬进桩子,
+    喂个 0 下去测出来的只是桩子会不会返回 0。
+
+    有了它,「按真实时间推进」和「0 毫秒的一步要被钳住」两条都是**确定性**的,
+    不用靠 Sleep 去撞真实时钟的刻度。 }
+  TFakeFadeClock = class(TBarAccess)
+  private
+    FNow: QWord;
+  protected
+    function FadeNowMs: QWord; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    { 墙上的钟往前走，但**不走 timer** —— 表停着的那段时间就长这样。 }
+    procedure AdvanceClock(AMs: Integer);
+    { 钟往前走 AMs 毫秒，然后走一拍真正的 timer 回调。 }
+    procedure Tick(AMs: Integer);
+  end;
+
 procedure TBarAccess.SetDraggingState(AValue: Boolean);
 begin
   FDragging := AValue;
@@ -112,6 +133,39 @@ begin
   HandleHideTimerTick;
 end;
 
+constructor TFakeFadeClock.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  { 别从 0 起:0 是 FFadeLastTickMs 「还没开始」的哨兵。真机上 GetTickCount64
+    给 0 只有开机那一瞬,这里只是别在测试里把那个哨兵撞出来。 }
+  FNow := 100000;
+end;
+
+function TFakeFadeClock.FadeNowMs: QWord;
+begin
+  Result := FNow;
+end;
+
+procedure TFakeFadeClock.AdvanceClock(AMs: Integer);
+begin
+  Inc(FNow, QWord(AMs));
+end;
+
+procedure TFakeFadeClock.Tick(AMs: Integer);
+begin
+  AdvanceClock(AMs);
+  HideTimerTick;
+end;
+
+function NewFakeClockBar(AForm: TForm; ACtl: TTyStyleController): TFakeFadeClock;
+begin
+  { 同 SetUp:必须有父控件、必须自带 controller,否则读的是进程级主题
+    ——单跑绿、全量红。 }
+  Result := TFakeFadeClock.Create(AForm);
+  Result.Parent := AForm;
+  Result.Controller := ACtl;
+end;
+
 procedure TTyScrollBarAutoHideTests.SetUp;
 begin
   { 控件必须有父控件，并且自带 controller——否则它读的是进程级主题，
@@ -132,6 +186,7 @@ procedure TTyScrollBarAutoHideTests.UseThemeCss(const ACss: string);
 begin
   FCtl.LoadThemeCss(ACss);
 end;
+
 
 procedure TTyScrollBarAutoHideTests.ThemeOffByDefault;
 begin
@@ -474,17 +529,27 @@ end;
 
 procedure TTyScrollBarAutoHideTests.WaitingOutTheDelayNeedsTheClock;
 begin
-  { 两个终态:淡到底了、以及自动隐藏关着。到了终态就该停表,没到就得转着 —— 先
-    把「该转的时候在转」钉住,否则下一条「按住就停」可以靠恒 False 蒙混过关。 }
+  { 两个终态:自动隐藏关着、以及已经淡到底。到了终态就该停表,没到就得转着 ——
+    先把「该转的时候在转」钉住,否则下面两条「不该转」可以靠恒 False 蒙混过关。 }
   UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
   FBar.NoteActivity;
   AssertTrue('还在等延时,表得转着', TBarAccess(FBar).TimerNeeded);
+
+  { 「关着」这一条必须**趁可见度还是 1.0** 验。放到淡到底之后再验是条永远不会
+    红的断言:那时候「已经淡到底」自己就把结果按成 False 了,把延时那一条整个
+    删掉照样绿(第一版就是这么写的,而且真的漏掉了一个活着的变异体)。
+    丢了这一条的后果也不是化妆品:自动隐藏关掉的那一刻表要是正转着,它就
+    **再也停不下来** —— 一条主人压根没开这个特性的条上挂着个 60fps 的空转定时器,
+    而构造函数许诺的是「不开这个特性的人一分钱不花」。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: -1; }');
+  AssertFalse('关着的时候可见度还是 1.0,一样不该转', TBarAccess(FBar).TimerNeeded);
+
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.NoteActivity;
   FBar.AutoHideTick(1000);
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals(0.0, FBar.FadeLevel, 0.001);
   AssertFalse('淡到底了就没什么可推进的了', TBarAccess(FBar).TimerNeeded);
-  UseThemeCss(':root { --scrollbar-auto-hide: -1; }');
-  AssertFalse('关着自动隐藏更没有', TBarAccess(FBar).TimerNeeded);
 end;
 
 procedure TTyScrollBarAutoHideTests.PointerOnBarStopsTheClockSpinning;
@@ -503,16 +568,21 @@ end;
 
 procedure TTyScrollBarAutoHideTests.ARunningFadeOutranksBeingHeldOpen;
 begin
-  { 顺序:先问「有没有动画在跑」,再问「按住没有」。反过来的话,指针压到一条正在
-    淡出的条上,掉头那发淡入当场被停表掐掉 —— 条卡在半透明上,而且再没人推它。 }
-  UseThemeCss(':root { --scrollbar-auto-hide: 0; }');
+  { 顺序:先问「有没有动画在跑」,再问「按住没有」。反过来是 Task 3 那个搁浅 bug
+    的完整重演,不是「条多留一会儿」那种小毛病 ——
+
+    条已经淡到 0、表也停了。指针移到它(看不见的)那块地方上:MouseEnter ->
+    NoteActivity 把淡入装上膛、顺手把表起起来。要是先问「按住没有」,刚起起来的
+    表**头一拍就把自己停掉**;而指针一直搁在那儿,再没有第二个 MouseEnter ——
+    条就在指针底下永远不出现。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
   FBar.NoteActivity;
-  FBar.AutoHideTick(0);                            { 延时 0:当场装膛 }
-  FBar.AutoHideTick(TyScrollBarFadeOutMs div 2);   { 淡到半路 }
-  AssertTrue('前提:确实停在半路上',
-    (FBar.FadeLevel > 0.0) and (FBar.FadeLevel < 1.0));
-  TBarAccess(FBar).EnterBar;                       { 指针压上来 -> 掉头淡回去 }
-  AssertTrue('跑着的淡入不能因为「按住了」就被掐掉',
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('前提:条已经看不见了', 0.0, FBar.FadeLevel, 0.001);
+  AssertFalse('前提:这时候表本来就停着', TBarAccess(FBar).TimerNeeded);
+  TBarAccess(FBar).EnterBar;                       { 指针移到那条看不见的条上 }
+  AssertTrue('指针刚把淡入装上膛,这一拍要是因为「按住了」就停表,条永远不出现',
     TBarAccess(FBar).TimerNeeded);
 end;
 
@@ -560,52 +630,63 @@ begin
 end;
 
 procedure TTyScrollBarAutoHideTests.OneLateTickCatchesTheFadeUp;
+var
+  bar: TFakeFadeClock;
 begin
   { 界面忙的时候定时器会被饿死 —— 而**网格滚动中正是这段代码在跑的时候**。
     按 FHideTimer.Interval 那个标称的 16 累加的话,一拍迟到 260 毫秒也只走 16,
     200 毫秒的淡出要爬将近一秒,用户看到的是条黏在屏幕上化不掉。
-    这里睡一觉再走一拍:补齐的那一步必须一次把淡出走完。
-    (Sleep 只会睡多不会睡少,断言取的是下界,所以不会抖。) }
+    受控时钟直接把「这一拍隔了 260 毫秒」摆出来,不用睡。 }
   UseThemeCss(':root { --scrollbar-auto-hide: 0; }');
-  FBar.NoteActivity;
-  TBarAccess(FBar).HideTimerTick;          { 头一拍:16 毫秒的种子,把淡出装上膛 }
-  AssertEquals('前提:这一拍只是装膛', 1.0, FBar.FadeLevel, 0.001);
-  Sleep(TyScrollBarFadeOutMs + 60);
-  TBarAccess(FBar).HideTimerTick;
+  bar := NewFakeClockBar(FForm, FCtl);
+  bar.NoteActivity;
+  bar.Tick(16);                            { 头一拍:16 毫秒的种子,把淡出装上膛 }
+  AssertEquals('前提:这一拍只是装膛', 1.0, bar.FadeLevel, 0.001);
+  bar.Tick(TyScrollBarFadeOutMs + 60);     { 被饿死的一拍 }
   AssertEquals('一拍迟到这么久,淡出必须一次补齐,不是走 16 毫秒',
-    0.0, FBar.FadeLevel, 0.001);
+    0.0, bar.FadeLevel, 0.001);
 end;
 
 procedure TTyScrollBarAutoHideTests.BackToBackTicksStepTheFadeInsteadOfSnappingIt;
+var
+  bar: TFakeFadeClock;
 begin
-  { 真实经过时间会给出 0 毫秒的一步(两拍落在同一个 tick 里),而
-    TTyAnimator.Advance 把 AMs <= 0 当成「直接吸附到 Target」—— 钳到至少 1
-    毫秒的那道闸要是被拿掉,淡出就从渐变变成跳变:下面读到的会是 0.0。 }
+  { 两拍落在同一个时钟刻度里,真实经过时间就是 0 —— 而 TTyAnimator.Advance 把
+    AMs <= 0 当成「直接吸附到 Target」。钳到至少 1 毫秒的那道闸要是被拿掉,
+    淡出就从渐变变成跳变:下面读到的会是 0.0。
+    时钟是喂的,所以「同一刻度」是摆出来的,不是撞出来的 —— 靠真实 GetTickCount64
+    去撞,这条只能算个概率性的守卫。 }
   UseThemeCss(':root { --scrollbar-auto-hide: 0; }');
-  FBar.NoteActivity;
-  TBarAccess(FBar).HideTimerTick;          { 装膛,可见度仍是 1.0 }
-  AssertEquals('前提:这一拍只是装膛', 1.0, FBar.FadeLevel, 0.001);
-  TBarAccess(FBar).HideTimerTick;          { 紧接着一拍:真实经过 0 毫秒 }
+  bar := NewFakeClockBar(FForm, FCtl);
+  bar.NoteActivity;
+  bar.Tick(16);                            { 装膛,可见度仍是 1.0 }
+  AssertEquals('前提:这一拍只是装膛', 1.0, bar.FadeLevel, 0.001);
+  bar.Tick(0);                             { 紧接着一拍:钟一点没动 }
   AssertTrue('0 毫秒的一步会被 Advance 当成吸附,淡出就成了跳变',
-    (FBar.FadeLevel > 0.0) and (FBar.FadeLevel < 1.0));
+    (bar.FadeLevel > 0.0) and (bar.FadeLevel < 1.0));
 end;
 
 procedure TTyScrollBarAutoHideTests.AStoppedClockDoesNotBankTheTimeItWasStoppedFor;
+var
+  bar: TFakeFadeClock;
 begin
   { 停表的时候不把时刻戳清掉,重新起表的头一拍就会把**停着的那整段时间**报出来。
     真机上这就是:指针在滚动条上歇了一会儿(表停着),一挪开条当场就没了 —— 闲置
-    时钟被那一拍一步推过了延时。指针停在滚动条上正是这个特性最常撞上的场景。 }
+    时钟被那一拍一步推过了延时。指针停在滚动条上正是这个特性最常撞上的场景。
+    AdvanceClock 而不是 Tick:表停着的那段**墙上的钟照走、timer 不走**,这个
+    区别正是本条要摆出来的东西。 }
   UseThemeCss(':root { --scrollbar-auto-hide: 300; }');
-  FBar.NoteActivity;
-  TBarAccess(FBar).HideTimerTick;          { 表转起来,顺便把时刻戳打上 }
-  TBarAccess(FBar).EnterBar;               { 指针压上来 }
-  TBarAccess(FBar).HideTimerTick;          { 这一拍把表停掉,戳该跟着清 }
-  Sleep(400);                              { 指针在条上歇着,比延时还久 }
-  TBarAccess(FBar).LeaveBar;               { 挪开:表起回来 }
-  TBarAccess(FBar).HideTimerTick;          { 头一拍只能是种子值,不能是那 400 毫秒 }
-  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  bar := NewFakeClockBar(FForm, FCtl);
+  bar.NoteActivity;
+  bar.Tick(16);                { 表转起来,顺便把时刻戳打上 }
+  bar.EnterBar;                { 指针压上来 }
+  bar.Tick(1);                 { 这一拍把表停掉,戳该跟着清 }
+  bar.AdvanceClock(400);       { 指针在条上歇着:表停了,钟照走,比延时还久 }
+  bar.LeaveBar;                { 挪开:表起回来 }
+  bar.Tick(1);                 { 头一拍只能是种子值,不能是那 400 毫秒 }
+  bar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('歇着的那 400 毫秒不算闲置,挪开之后还得等满 300 毫秒',
-    1.0, FBar.FadeLevel, 0.001);
+    1.0, bar.FadeLevel, 0.001);
 end;
 
 initialization
