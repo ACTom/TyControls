@@ -37,6 +37,8 @@ type
     procedure SnappedMirrorCountsAsActivity;
     procedure ActivityCancelsAnArmedFadeOut;
     procedure TurningItOffDisarmsAPendingFade;
+    procedure ThemeTurningItOffUnhidesAFadedBar;
+    procedure FocusBringsItBack;
   end;
 
 implementation
@@ -52,6 +54,8 @@ type
       走同一个口子,而不是为了测试把控件的可见性往上抬。 }
     procedure EnterBar;
     procedure LeaveBar;
+    { DoEnter 同样是 protected。 }
+    procedure FocusIn;
   end;
 
 procedure TBarAccess.SetDraggingState(AValue: Boolean);
@@ -67,6 +71,11 @@ end;
 procedure TBarAccess.LeaveBar;
 begin
   MouseLeave;
+end;
+
+procedure TBarAccess.FocusIn;
+begin
+  DoEnter;
 end;
 
 procedure TTyScrollBarAutoHideTests.SetUp;
@@ -346,6 +355,39 @@ begin
   UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('关过一趟,关之前装的那发淡出不能再打出来', 1.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.ThemeTurningItOffUnhidesAFadedBar;
+begin
+  { 换主题时控件收到的**只有一个 Invalidate** —— TTyStyleController.Changed 就是
+    这么广播的,全库没有 StyleChanged 钩子。所以:自动隐藏的主题下淡到 0、定时器
+    把自己停了,这时候换到一个不自动隐藏的主题,没有任何东西会再推它一拍,条就
+    永久隐身。属性那条路(SetAutoHide)早就防了同一个坑,主题这半边漏了。
+    而这个库卖的就是换肤 —— 「换个皮肤滚动条没了」不能出。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.NoteActivity;
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals(0.0, FBar.FadeLevel, 0.001);
+  UseThemeCss(':root { --scrollbar-auto-hide: -1; }');
+  { **一拍都不推**:换完主题当场就得看得见。等谁来推一拍才恢复的话,真机上
+    就是「换肤之后条不见了,随便滚一下又回来」那种说不清的间歇性毛病。 }
+  AssertEquals('换到不自动隐藏的主题,条当场就该在那儿', 1.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.FocusBringsItBack;
+begin
+  { 焦点得**把条叫回来**,不能只是「不计时」。独立摆放的条 TabStop=True:淡到 0、
+    定时器停了之后 Tab 过来,按住不放那条臂连跑的机会都没有(没人推它),
+    键盘焦点就停在一个看不见的控件上。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.NoteActivity;
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals(0.0, FBar.FadeLevel, 0.001);
+  TBarAccess(FBar).FocusIn;
+  FBar.AutoHideTick(TyScrollBarFadeInMs);
+  AssertEquals('Tab 到条上就该看得见', 1.0, FBar.FadeLevel, 0.001);
 end;
 
 initialization

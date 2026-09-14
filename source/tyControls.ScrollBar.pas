@@ -95,6 +95,8 @@ type
     procedure Paint; override;
     { 全身只为自动隐藏服务：指针压在条上时它必须一直亮着。 }
     procedure MouseEnter; override;
+    { 同上,焦点那一半。 }
+    procedure DoEnter; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -151,6 +153,9 @@ type
     { 测试缝：推进 AMs 毫秒。真机由 FHideTimer 驱动，headless 由测试驱动
       ——和位置动画的 HandleTimerTick 是同一个路子。 }
     procedure AutoHideTick(AMs: Integer);
+    { 换主题时控件收到的就只有这一个广播,所以「自动隐藏关着 -> 条必须看得见」
+      这条不变量只能挂在这儿修。见实现处。 }
+    procedure Invalidate; override;
   published
     { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
       default and what this bar has always done) or only on mouse-up (False).
@@ -567,6 +572,44 @@ begin
     时钟清成 0 了,离开的那一刻它本来就是 0。 }
   inherited MouseEnter;
   NoteActivity;
+end;
+
+procedure TTyScrollBar.DoEnter;
+begin
+  { 焦点不只是「不计时」,还得**把条叫回来**。独立摆放的条 TabStop=True:等它
+    淡到 0、定时器把自己停掉之后再 Tab 过来,按住不放那条臂连跑的机会都没有
+    (没人推它了),键盘焦点就停在一个看不见的控件上 —— 这是可访问性事故,
+    不是设计。悬停那一半由 MouseEnter 拿到,焦点这一半得自己写。
+
+    不写对应的 DoExit:有焦点的时候,按住不放那条臂每一拍都把闲置时钟清成 0,
+    失焦的那一刻它本来就是 0 —— 和 MouseLeave 不必重写是同一个道理。 }
+  inherited DoEnter;
+  NoteActivity;
+end;
+
+procedure TTyScrollBar.Invalidate;
+begin
+  { 换主题是这个类唯一听不见的事件:TTyStyleController.Changed 广播出来的就是
+    一个光秃秃的 Invalidate(它自己的注释也这么写),全库没有 StyleChanged 钩子。
+    于是「自动隐藏的主题下淡到 0、定时器把自己停了,再换到一个不自动隐藏的主题」
+    会让条永久隐身:没有任何东西会再推它一拍。属性那条路(SetAutoHide ->
+    NoteActivity)早就防了同一个坑,主题这半边只能挂在这里。
+
+    为什么不用 AddChangeListener:全库的控件没有一个用它(只有 TTyNativeStyler
+    那种非可视组件在用,它自己管 controller 的加和摘),而控件的 Controller 可以
+    中途换、还能是 nil 回落到进程级的 TyDefaultController —— 把每一根滚动条的
+    方法指针塞进那张全局表,哪回忘了摘就是野指针。
+
+    重绘是热路径,所以三个条件的**顺序**是有讲究的:前两个都只是读字段,常态
+    (可见度就是 1.0)在第二个条件上就短路了,贵的那次 Metric 解析只有在条真的
+    淡着的时候才走得到 —— 而那种时候本来就有东西在按帧推它。
+    not FFadeAnim.Running 也是必须的:正在跑的淡入淡出不能被这里掐断。 }
+  if (not FFadeAnim.Running) and (FFadeLevel < 1.0) and (EffectiveAutoHideMs < 0) then
+  begin
+    FFadeAnim.SetTargetImmediate(1.0);
+    FFadeLevel := 1.0;
+  end;
+  inherited Invalidate;
 end;
 
 procedure TTyScrollBar.EnsureTimer;
