@@ -1128,6 +1128,25 @@ begin
       DrawFrame 把 S.Opacity 交给画笔，而画笔的 opacity 是整张位图一起算的，
       所以下面的滑块和箭头不用各自再乘一遍(见滑块那处的注释)。 }
     S := PaintStyle;
+    { 彻底隐身那一格短路掉，**不走画笔的 opacity**。
+
+      走的话就掉进 EndPaint 的合成分支：那条路先按 TyResolveParentBg 给的
+      **一个居中采样色**铺一层不透明底，再把 alpha 全零的 FBmp 盖上去——
+      TyFillParentBg 刚刚画进去的渐变切片/图片切片全被扔掉，留在屏幕上的是
+      一块平板。而滚动条是窗口化控件，没有别的东西会来重画这块矩形，所以
+      用户看到的就是这块平板，一直摆在那儿，不是 200 毫秒的过场。
+
+      之前没人撞上是因为 --disabled-opacity 是 0.5，永远到不了 0；自动隐藏
+      是头一个把 opacity 一路压到 0 的特性。
+
+      短路之后这一格干脆不画自己：把父控件的背景按**本控件这块矩形**原样
+      铺一遍就收工——既是像素级准确的背景，又省掉整趟绘制。 }
+    if (tpOpacity in S.Present) and (S.Opacity <= 0.0) then
+    begin
+      TyFillParentBg(Self, P, R, S);
+      P.EndPaint;
+      Exit;
+    end;
     DrawFrame(P, R, S);
     Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at

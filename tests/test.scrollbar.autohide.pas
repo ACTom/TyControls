@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Graphics,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
+  tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -56,6 +56,7 @@ type
     procedure FadingMarksOpacityPresentEvenWhenTheThemeNeverSetIt;
     procedure AtRestTheThemeStyleIsHandedOverUntouched;
     procedure FadeReachesThePaintedPixels;
+    procedure HidingShowsTheRealParentBackgroundNotAFlatSlab;
   end;
 
 implementation
@@ -218,6 +219,45 @@ begin
             Inc(ANotGround);
           if (p.red = wip.red) and (p.green = wip.green) and (p.blue = wip.blue) then
             Inc(AWipeLeft);
+        end;
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ 画一帧，数有多少像素**正好**落在 AColor 上。
+  用来问「淡出途中还有没有东西停在它主题里那个原色上」——漏掉淡出的元素
+  会原样保留自己的颜色，被淡到的不会。 }
+function RenderAndCountExact(ABar: TBarAccess; AColor: TColor): Integer;
+const
+  BarW = 16;
+  BarH = 160;
+var
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  c, p: TBGRAPixel;
+  x, y: Integer;
+begin
+  Result := 0;
+  c := ColorToBGRA(ColorToRGB(AColor));
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(BarW, BarH);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, BarW, BarH);
+    ABar.RenderInto(bmp.Canvas, Rect(0, 0, BarW, BarH), 96);
+    re := TBGRABitmap.Create(bmp);
+    try
+      for y := 0 to BarH - 1 do
+        for x := 0 to BarW - 1 do
+        begin
+          p := re.GetPixel(x, y);
+          if (p.red = c.red) and (p.green = c.green) and (p.blue = c.blue) then
+            Inc(Result);
         end;
     finally
       re.Free;
@@ -764,6 +804,17 @@ begin
     这时候问 opacity 拿到的还是主题那个 0.5。本特性已经有四条测试栽在
     「断言落在装膛那一拍上」,所以推进那一拍必须单独写出来。 }
   FBar.AutoHideTick(1000);
+
+  { **中途**这一刀是乘法唯一咬得住的地方。1.0 那头走的是早退、乘法根本没跑;
+    0.0 那头随便乘什么都是 0 —— 两头都是「两个答案碰巧一致」,把 base 整个
+    删掉也照样绿。只有卡在中间,0.5 × 系数 和 系数 才分得开。
+    动画吃的是明确的毫秒数,所以这一刀是确定的,不靠撞时钟。 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs div 3);
+  AssertTrue('前置：确实卡在中途', (FBar.FadeLevel > 0.01) and (FBar.FadeLevel < 0.99));
+  s := FBar.PaintStyleForTest;
+  AssertEquals('主题的 0.5 必须乘进去，不是被顶掉',
+    0.5 * FBar.FadeLevel, s.Opacity, 0.001);
+
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   s := FBar.PaintStyleForTest;
   AssertEquals('淡出到底 -> 0，而不是主题的 0.5', 0.0, s.Opacity, 0.001);
@@ -787,7 +838,17 @@ begin
               'TyScrollBar { background: #808080; }');
   FBar.NoteActivity;
   FBar.AutoHideTick(1000);                    { 装上膛 }
-  FBar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍才推进 }
+
+  { 同样要在中途看一眼,理由和上一条一样,但咬的是**另一个** base:这里走的是
+    「主题没给基数 -> 按 1.0 算」那条岔路。把它改成 0.0,淡到底那一格照样是 0、
+    看不出来;中途这一格立刻露馅。 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs div 3);
+  AssertTrue('前置：确实卡在中途', (FBar.FadeLevel > 0.01) and (FBar.FadeLevel < 0.99));
+  s := FBar.PaintStyleForTest;
+  AssertEquals('没有主题基数就按 1.0 算，乘出来就是可见度本身',
+    FBar.FadeLevel, s.Opacity, 0.001);
+
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍推到底 }
   AssertEquals('前置条件：确实淡到底了', 0.0, FBar.FadeLevel, 0.001);
   s := FBar.PaintStyleForTest;
   AssertTrue('主题没写 opacity 时，这个标记只可能是淡出补上的',
@@ -842,16 +903,87 @@ begin
 
   RenderAndTally(bar, Ground, Wipe, visible, wipeLeft);
   AssertEquals('渲染要盖满整块——还留着底漆就说明这条压根没画', 0, wipeLeft);
-  AssertTrue('静止时条是看得见的(否则下面那句「不见了」谁都能过)', visible > 0);
+  { 不是「画了点什么」,是**整块都画满了**。这段 css 没有边框、没有圆角,
+    base 层又被压掉了,所以没有半透明的抗锯齿边——静止时 16×160 一个不少
+    全是条自己的颜色。顺手把「静止时条不透明地铺满自己那块矩形」也钉住。 }
+  AssertEquals('静止时整块都是条(否则下面那句「不见了」谁都能过)', 16 * 160, visible);
 
   bar.AutoHideTick(1000);                    { 到点,装上膛 }
-  bar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍才真把可见度推到 0 }
+
+  { **中途**这一刀是滑块那条结论唯一还咬得住的地方。淡到底那一格现在被
+    RenderTo 的短路接管了(压根不画),所以「滑块跟着条一起淡」只在这 200
+    毫秒里看得见。判据:漏掉淡出的元素会原样留着它主题里那个原色,被淡到的
+    不会 —— 所以中途一个像素都不该还停在 #808080 或 #202020 上。 }
+  bar.AutoHideTick(TyScrollBarFadeOutMs div 3);
+  AssertTrue('前置：确实卡在中途',
+    (bar.FadeLevel > 0.01) and (bar.FadeLevel < 0.99));
+  AssertEquals('淡出途中不该有像素还停在条身的原色上',
+    0, RenderAndCountExact(bar, TColor($808080)));
+  AssertEquals('淡出途中不该有像素还停在滑块的原色上',
+    0, RenderAndCountExact(bar, TColor($202020)));
+
+  bar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍推到底 }
   AssertEquals('前置条件：确实淡到底了', 0.0, bar.FadeLevel, 0.001);
 
   RenderAndTally(bar, Ground, Wipe, hidden, wipeLeft);
   AssertEquals('渲染要盖满整块', 0, wipeLeft);
   AssertEquals('淡到底之后一个像素都不该剩下——边框、滑块、两头的箭头全算',
     0, hidden);
+end;
+
+procedure TTyScrollBarAutoHideTests.HidingShowsTheRealParentBackgroundNotAFlatSlab;
+const
+  Wipe = TColor($00FF00);
+var
+  panel: TTyPanel;
+  bar: TBarAccess;
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  top, bot: Integer;
+begin
+  { 父控件的背景是**渐变**的。彻底隐身那一格要是照旧走画笔的 opacity,
+    EndPaint 会按 TyResolveParentBg 给的**一个居中采样色**铺一块不透明平板,
+    再把 alpha 全零的图盖上去 —— 条那块矩形上下两头一样亮,成了渐变上挖出来
+    的一个方块。短路之后铺的是 TyFillParentBg 的渐变**切片**,上下差一整条
+    ramp。
+
+    上一条 FadeReachesThePaintedPixels 照不出这个区别:那里的父控件是纯色的
+    TForm,居中采样色**恰好**等于真背景,两条路给的是同一张图。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }' +
+              'TyPanel { background: linear-gradient(90deg, #000000, #FFFFFF);' +
+              ' border-width: 0px; padding: 0px; }' +
+              'TyScrollBar { background: #808080; border-width: 0px; }' +
+              'TyScrollThumb { background: #202020; }');
+  panel := TTyPanel.Create(FForm);
+  panel.Parent := FForm;
+  panel.Controller := FCtl;
+  panel.SetBounds(0, 0, 16, 160);
+  bar := TBarAccess.Create(FForm);
+  bar.Parent := panel;
+  bar.Controller := FCtl;
+  bar.SetBounds(0, 0, 16, 160);
+  bar.NoteActivity;
+  bar.AutoHideTick(1000);                    { 装上膛 }
+  bar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍推到底 }
+  AssertEquals('前置条件：确实淡到底了', 0.0, bar.FadeLevel, 0.001);
+
+  bmp := TBitmap.Create;
+  re := nil;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(16, 160);
+    bmp.Canvas.Brush.Color := Wipe;
+    bmp.Canvas.FillRect(0, 0, 16, 160);
+    bar.RenderInto(bmp.Canvas, Rect(0, 0, 16, 160), 96);
+    re := TBGRABitmap.Create(bmp);
+    top := re.GetPixel(8, 4).green;
+    bot := re.GetPixel(8, 155).green;
+  finally
+    re.Free;
+    bmp.Free;
+  end;
+  AssertTrue(Format('隐身那块要透出真的渐变，不是一块平板(顶=%d 底=%d)',
+    [top, bot]), bot - top > 100);
 end;
 
 initialization
