@@ -41,6 +41,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
+  tyControls.AdvChart.Tooltip,
   tyControls.AdvChart.Dataset,
   fpjson, tyControls.SubPixel;
 
@@ -53,6 +54,28 @@ const
   TyAdvChartMinorTickLenVar = '--advchart-minor-tick-length';
   TyAdvChartMinorTickLen = 3;
   TyAdvChartLabelMarginVar = '--advchart-label-margin';
+  { THE TOOLTIP'S FOUR METRICS, and the count is part of the design for the
+    same reason the axis' is: a skin author can check four numbers by eye
+    across seventeen themes and cannot check forty. Everything else the box
+    needs -- its fill, its border, its radius, its padding, both inks -- is a
+    STYLE and comes from the two type keys, because that is what a theme
+    already knows how to write.
+
+    The values are upstream's own, in logical px at the 96-PPI baseline. The
+    gap is the one number that is used twice: it is the distance from the
+    cursor to the box AND the distance the box is flipped by when it would not
+    fit, which is why it is one metric and not two. }
+  TyAdvChartTooltipGapVar = '--advchart-tooltip-gap';
+  TyAdvChartTooltipMarkerVar = '--advchart-tooltip-marker';
+  TyAdvChartTooltipMarkerGapVar = '--advchart-tooltip-marker-gap';
+  TyAdvChartTooltipGutterVar = '--advchart-tooltip-gutter';
+  TyAdvChartTooltipGap = 20;
+  TyAdvChartTooltipMarker = 10;
+  { Upstream splits this across two declarations -- `margin-right: 4px` on the
+    dot and `margin-left: 2px` on the name -- and they only ever appear
+    together. }
+  TyAdvChartTooltipMarkerGap = 6;
+  TyAdvChartTooltipGutter = 20;
   TyAdvChartLabelMargin = 8;
   TyAdvChartNameGapVar = '--advchart-name-gap';
   TyAdvChartNameGap = 15;
@@ -153,6 +176,20 @@ type
       MouseMove's X,Y arrives in. A render through RenderTo with a non-zero
       origin still fills it in local space, so a caller converting a point on
       that path has to subtract the origin itself. }
+    { THE TOOLTIP. Nothing here is geometry the layout owns: the box is
+      measured and placed inside the frame that draws it, because its anchor is
+      the CURSOR and the cursor moves between frames. Upstream anchors the same
+      way -- the raw offsetX/offsetY, never the snapped datum -- which is why
+      the old TTyChart's "repaint only when the datum changes" gate cannot be
+      carried over: a box that tracks the pointer would freeze between datums
+      under it. }
+    FTipDatum: TTyChartDatumRef;
+    { The element the hit came from, kept because it carries the colour of the
+      thing the pointer is over. Asking the series for its colour instead would
+      be a second answer to a question the ink has already answered, and would
+      miss a per-datum itemStyle. }
+    FTipElement: Integer;
+    FTipX, FTipY: Integer;
     FPaintList: TTyPaintList;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
@@ -282,6 +319,15 @@ type
       the base axis and then walking the store for the closest value. -1 when
       the series has no base axis, no store, or no column for it. }
     function NearestRowOn(ASlot: Integer; AX, AY: Double): Integer;
+    { The colour of the thing a datum was drawn as, taken from the element
+      that drew it. Asks the paint list rather than the series so a per-datum
+      itemStyle comes for free and the dot can never disagree with the mark it
+      names. Takes the datum rather than reading the hover, so the content
+      functions depend on their argument and nothing else -- a content rule
+      that only holds while a pointer is down is a rule no test can read. }
+    function DatumColour(const ADatum: TTyChartDatumRef): TTyChartColor;
+    procedure PaintTooltip(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer);
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -311,7 +357,29 @@ type
       hover style, so those five repaints were redrawing the identical picture
       at the cost of a full rebuild each -- and a hover session begins with
       exactly that. InvalidateFrame keeps the cache and blits it again. }
+    { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
+      procedure that draws. PROTECTED for the same reason RenderTo is: a
+      headless test has no window and no pointer, and a content rule tested
+      only by counting pixels is a content rule nobody can read.
+
+      The tooltip as the OPTION says it, with the cascade resolved for one
+      datum: the data item's own tooltip, then the series', then the global. }
+    function TooltipSpecFor(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+    { And as the THEME says it. }
+    function TooltipInk(const ASpec: TTyTooltipSpec): TTyTooltipInk;
+    { The default content tree for one datum, or nil when there is nothing to
+      say. The caller owns it. }
+    function TooltipContent(const ADatum: TTyChartDatumRef;
+      const ASpec: TTyTooltipSpec): TTyTooltipBlock;
+    { hit -> the record a formatter is given. }
+    function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
     procedure PointerStateChanged; override;
+    { WHERE THE POINTER IS, every pixel of the way. The tooltip's anchor is the
+      cursor, so this repaints on movement and not only when the datum under it
+      changes -- the frame it asks for is a blit of the static layer plus one
+      box, which is what the cache exists to make affordable. }
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -358,7 +426,12 @@ type
       LOCAL COORDINATES, origin (0, 0) -- what MouseMove is handed. After a
       RenderTo onto a rect with a non-zero origin the list is still in local
       space, so subtract that origin first. }
-    function HitTestAt(AX, AY: Integer): TTyChartDatumRef;
+    function HitTestAt(AX, AY: Integer): TTyChartDatumRef; overload;
+    { The same walk, also answering WHICH element replied -- which is how a
+      caller gets at the colour of the thing under the pointer without asking
+      the series a second time and risking a different answer. -1 for none. }
+    function HitTestAt(AX, AY: Integer;
+      out AElement: Integer): TTyChartDatumRef; overload;
     { For a test or a designer to look inside. nil until the first build. }
     property Build: TTyChartBuild read FBuild;
   published
@@ -417,6 +490,8 @@ begin
   FOption := TTyChartOption.Create;
   FIndex := TTyAxisSeriesIndex.Create;
   FDirty := True;
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
   Width := 320;
   Height := 200;
   TabStop := False;   { see the published declaration }
@@ -513,6 +588,14 @@ begin
     from the labels. Cheaper to redo than to be wrong about, and a chart is not
     invalidated on mouse movement. }
   FDirty := True;
+  { AND THE HOVER GOES WITH IT. Invalidate means the model may have moved, and
+    a hovered datum is a pair of subscripts into a build that is about to be
+    thrown away -- the row it names may not exist in the next one. Upstream
+    re-shows the tooltip after a setOption while the pointer is still there;
+    here the next movement re-establishes it, which is a real difference and a
+    small one, and the alternative is a box describing a bar nobody can see. }
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
   { AND THE STATIC LAYER GOES. It holds a picture drawn in the theme's font at
     the theme's colours; the whole reason this method treats every invalidate
     as a relayout is that a theme change arrives as a bare Invalidate, and a
@@ -2414,13 +2497,22 @@ begin
 end;
 
 function TTyAdvanceChart.HitTestAt(AX, AY: Integer): TTyChartDatumRef;
+var ignored: Integer;
+begin
+  Result := HitTestAt(AX, AY, ignored);
+end;
+
+function TTyAdvanceChart.HitTestAt(AX, AY: Integer;
+  out AElement: Integer): TTyChartDatumRef;
 var
   idx, slot, row: Integer;
 begin
   Result := TyChartNoDatum;
+  AElement := -1;
   if (FPaintList = nil) or not FPaintListValid then Exit;
   idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
   if idx < 0 then Exit;
+  AElement := idx;
   Result := FPaintList.Element(idx).Datum;
   if Result.SeriesIndex < 0 then Exit;
   { A RUN ELEMENT -- one element standing for a whole series, which is what a
@@ -2432,35 +2524,468 @@ begin
   begin
     slot := SlotOfSeries(Result.SeriesIndex);
     row := NearestRowOn(slot, AX, AY);
-    if row < 0 then Exit(TyChartNoDatum);
+    if row < 0 then
+    begin
+      AElement := -1;
+      Exit(TyChartNoDatum);
+    end;
     Result := TyChartDatum(Result.SeriesIndex, row,
       FStores[slot].GetRawIndex(row));
   end;
 end;
 
+{ ==================== the tooltip ==================== }
+
+function TTyAdvanceChart.TooltipSpecFor(
+  const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+begin
+  { THE RAW ROW, not the view row. A data-item tooltip is written beside the
+    datum in the option text, and the option text is the raw order -- a filter
+    is a view for readers and has never moved anything in the tree. }
+  Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex);
+end;
+
+function TTyAdvanceChart.TooltipInk(
+  const ASpec: TTyTooltipSpec): TTyTooltipInk;
+var
+  nameS, valueS: TTyStyleSet;
+  model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  nameS := model.ResolveStyle('TyAdvChartTooltip', StyleClass, [tysNormal]);
+  valueS := model.ResolveStyle('TyAdvChartTooltipValue', '', []);
+
+  Result.NameFontName := nameS.FontName;
+  Result.NameSizeLogical := ResolveFontSize(nameS);
+  Result.NameWeight := nameS.FontWeight;
+  Result.NameColour := TTyChartColor(nameS.TextColor);
+
+  Result.ValueFontName := valueS.FontName;
+  if Result.ValueFontName = '' then Result.ValueFontName := nameS.FontName;
+  Result.ValueSizeLogical := ResolveFontSize(valueS);
+  Result.ValueWeight := valueS.FontWeight;
+  Result.ValueColour := TTyChartColor(valueS.TextColor);
+
+  { THE OPTION LAST, over whatever the theme said. ECharts' textStyle is one
+    object for both roles, so a written colour or size takes BOTH -- the
+    hierarchy a theme drew with two keys collapses into one, which is exactly
+    what writing `tooltip.textStyle` asks for. }
+  if ASpec.HasTextColour then
+  begin
+    Result.NameColour := ASpec.TextColour;
+    Result.ValueColour := ASpec.TextColour;
+  end;
+  if ASpec.HasTextSize then
+  begin
+    Result.NameSizeLogical := TyRoundOpt(ASpec.TextSizeLogical, 12, 1, 400);
+    Result.ValueSizeLogical := Result.NameSizeLogical;
+  end;
+
+  { UPSTREAM'S OWN HTML RULE -- round(fontSize * 3 / 2) -- and NOT its richText
+    one, which is a flat 22 whatever the font is. A library whose themes change
+    the type scale cannot carry a constant here: a dense skin at 11px would get
+    a box of double-spaced rows and a display skin at 20px would get overlapping
+    ones. Recorded as a deliberate divergence. }
+  Result.LineHeightLogical :=
+    Round(Max(Result.NameSizeLogical, Result.ValueSizeLogical) * 3 / 2);
+
+  Result.MarkerSizeLogical := ActiveController.Metric(
+    TyAdvChartTooltipMarkerVar, TyAdvChartTooltipMarker);
+  Result.MarkerGapLogical := ActiveController.Metric(
+    TyAdvChartTooltipMarkerGapVar, TyAdvChartTooltipMarkerGap);
+  Result.GutterLogical := ActiveController.Metric(
+    TyAdvChartTooltipGutterVar, TyAdvChartTooltipGutter);
+  { The narrow gutter is half the wide one upstream (10 against 20), so it
+    follows a skin that retuned the wide one instead of being a fifth metric
+    nobody would think to change. }
+  Result.GutterCloseLogical := Result.GutterLogical / 2;
+  if Result.MarkerSizeLogical < 0 then Result.MarkerSizeLogical := 0;
+  if Result.MarkerGapLogical < 0 then Result.MarkerGapLogical := 0;
+  if Result.GutterLogical < 0 then Result.GutterLogical := 0;
+end;
+
+function TTyAdvanceChart.DatumColour(
+  const ADatum: TTyChartDatumRef): TTyChartColor;
+var
+  i, idx: Integer;
+  el: TTyChartElement;
+begin
+  Result := 0;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  idx := -1;
+  { THE ELEMENT THAT ANSWERED THE HIT, when there is one and it belongs to
+    this datum -- one lookup, and the only one that can be exactly right when
+    two series overlap. }
+  if (FTipElement >= 0) and (FTipElement < FPaintList.Count)
+    and (FPaintList.Element(FTipElement).Datum.SeriesIndex
+         = ADatum.SeriesIndex) then
+    idx := FTipElement;
+  { Otherwise find it. Exact row first; then any non-silent element of the
+    series, because a line with its symbols switched off puts ONE element in
+    the list for the whole run and it carries no row at all. }
+  if idx < 0 then
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(i);
+      if el.Silent then Continue;
+      if (el.Datum.SeriesIndex = ADatum.SeriesIndex)
+        and (el.Datum.DataIndex = ADatum.DataIndex) then
+      begin
+        idx := i;
+        Break;
+      end;
+    end;
+  if idx < 0 then
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(i);
+      if el.Silent then Continue;
+      if el.Datum.SeriesIndex = ADatum.SeriesIndex then
+      begin
+        idx := i;
+        Break;
+      end;
+    end;
+  if idx < 0 then Exit;
+  el := FPaintList.Element(idx);
+  { FILL FIRST, THEN STROKE. Upstream reads `style[series.visualDrawType]`,
+    which is 'fill' for everything except boxplot, lines and parallel -- and
+    in this port a line's mark carries its colour as the PEN, because for that
+    shape the pen is what the colour is. Asking the element rather than the
+    series also gets a per-datum itemStyle for nothing, and cannot disagree
+    with the ink the pointer is actually over. }
+  if el.Style.HasFill and (el.Style.FillColor <> 0) then
+    Result := el.Style.FillColor
+  else
+    Result := el.Style.StrokeColor;
+end;
+
+function TTyAdvanceChart.TooltipParams(
+  const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+var
+  slot, col, i, n: Integer;
+  st: TTyDataStore;
+begin
+  Result := Default(TTyChartCallbackParams);
+  Result.ComponentType := 'series';
+  Result.SeriesIndex := ADatum.SeriesIndex;
+  Result.DataIndex := ADatum.DataIndex;
+  Result.RawDataIndex := ADatum.RawDataIndex;
+  Result.Color := DatumColour(ADatum);
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if slot < 0 then Exit;
+  Result.SeriesType := FBindings[slot].SeriesType;
+  Result.SeriesName := SeriesNameOf(ADatum.SeriesIndex);
+  if slot > High(FStores) then Exit;
+  st := FStores[slot];
+  if st = nil then Exit;
+  if (ADatum.DataIndex < 0) or (ADatum.DataIndex >= st.Count) then Exit;
+
+  { THE NAME UPSTREAM CALLS `data.getName(dataIndex)`. On a category axis it is
+    the category; on two value axes there is none, because the default encode
+    only assigns an item name "the category way". A line on a value x axis
+    therefore shows a dot and a number and no words -- which is upstream's
+    picture, not a gap in this. }
+  Result.Name := st.GetName(ADatum.DataIndex);
+  if Result.Name = '' then
+  begin
+    col := -1;
+    if FBindings[slot].BaseAxis <> nil then
+      col := st.DimIndexOf(FBindings[slot].BaseAxis.Dim);
+    if col >= 0 then Result.Name := st.GetOrdinalText(col, ADatum.DataIndex);
+  end;
+
+  { WHICH VALUE. Upstream takes the last non-ordinal, non-time coordinate
+    dimension -- which on a cartesian series is the value axis' column, the
+    same one a data label reads. A tooltip showing x on a bar chart would show
+    the category ordinal, which is a number and looks like an answer. }
+  col := -1;
+  if FBindings[slot].ValueAxis <> nil then
+    col := st.DimIndexOf(FBindings[slot].ValueAxis.Dim);
+  if col < 0 then
+  begin
+    { A pie has no axes at all; its one dimension is the value. }
+    n := st.DimCount;
+    for i := n - 1 downto 0 do
+      if st.DimType(i) <> ddtOrdinal then
+      begin
+        col := i;
+        Break;
+      end;
+  end;
+  if col < 0 then Exit;
+  SetLength(Result.Values, 1);
+  Result.Values[0] := st.Get(col, ADatum.DataIndex);
+end;
+
+function TTyAdvanceChart.TooltipContent(const ADatum: TTyChartDatumRef;
+  const ASpec: TTyTooltipSpec): TTyTooltipBlock;
+var
+  p: TTyChartCallbackParams;
+  seriesName, inlineName, valueText: string;
+  haveValue: Boolean;
+begin
+  Result := nil;
+  p := TooltipParams(ADatum);
+  seriesName := p.SeriesName;
+  inlineName := p.Name;
+  haveValue := Length(p.Values) > 0;
+  if haveValue then valueText := TyTooltipValueText(p.Values[0])
+  else valueText := '';
+  if haveValue and (valueText = '') then haveValue := False;
+  if (Trim(inlineName) = '') and not haveValue and (Trim(seriesName) = '') then
+    Exit;
+
+  { ONE SECTION HOLDING ONE ROW, which is the whole of upstream's default for
+    a bar, a line, a scatter and a pie. `noHeader` is decided by whether the
+    series was NAMED -- an auto-generated name counts as unnamed upstream, and
+    SeriesNameOf answers '' for exactly that case -- and it is a different
+    LAYOUT, not a wording change: without a header the section's gap level
+    drops from 1 to 0 and the box loses a row. }
+  Result := TTyTooltipBlock.CreateSection(seriesName, False);
+  Result.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
+    inlineName, False, valueText, not haveValue));
+end;
+
+procedure TTyAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  spec: TTyTooltipSpec;
+  ink: TTyTooltipInk;
+  block: TTyTooltipBlock;
+  lines: TTyTooltipLineArray;
+  st: TTyStyleSet;
+  params: TTyChartParams;
+  tipText: string;
+  w, h, lineH, gap, cx, cy: Double;
+  padL, padT, padR, padB, radius, borderW: Double;
+  box: TTyRectF;
+  r: TRect;
+  i, j, row, lineTop: Integer;
+  corners: TTyCorners;
+  surface: TTyFill;
+  borderCol: TTyColor;
+begin
+  if not TyChartDatumValid(FTipDatum) then Exit;
+  spec := TooltipSpecFor(FTipDatum);
+  if not spec.Show or not spec.ShowContent then Exit;
+  if spec.Trigger <> tttItem then Exit;
+  ink := TooltipInk(spec);
+
+  st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
+    [tysNormal]);
+  { NO BOX WITHOUT A BACKGROUND. A theme that defines no tooltip surface gets
+    no tooltip -- never a hard-coded colour, which is the rule the old chart
+    already follows and the reason the key lives in the base layer where every
+    theme inherits it. }
+  if not (tpBackground in st.Present) then Exit;
+
+  block := nil;
+  try
+    if spec.HasFormatter then
+    begin
+      { A FORMATTER REPLACES THE CONTENT, it does not decorate it. Upstream
+        builds the default markup first and then throws it away, so a
+        formatter with side effects still sees them run; here the default is
+        simply not built, which is the same picture for less. }
+      SetLength(params, 1);
+      params[0] := TooltipParams(FTipDatum);
+      if not TyChartResolveText(spec.Formatter, params, tipText) then
+        { A named handler that is not registered says so rather than drawing
+          nothing -- TyChartResolveText puts the message in the text. }
+        ;
+      if Trim(tipText) = '' then Exit;
+      block := TTyTooltipBlock.CreateSection('', True);
+      { THE WHOLE STRING AS ONE NAME. A formatter's output is words, not a
+        name/value pair, so it takes the name ink and no gutter -- and with
+        neither marker nor name flag set the row is the third case upstream
+        has and most ports do not: no marker, no right-alignment. }
+      block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+        '', True));
+    end
+    else
+      block := TooltipContent(FTipDatum, spec);
+    if block = nil then Exit;
+
+    lines := TyTooltipFlatten(block, ink);
+    if Length(lines) = 0 then Exit;
+
+    if spec.HasPadding then
+    begin
+      padL := APainter.ScaleF(spec.PadLeft);
+      padT := APainter.ScaleF(spec.PadTop);
+      padR := APainter.ScaleF(spec.PadRight);
+      padB := APainter.ScaleF(spec.PadBottom);
+    end
+    else
+    begin
+      padL := APainter.Scale(st.Padding.Left);
+      padT := APainter.Scale(st.Padding.Top);
+      padR := APainter.Scale(st.Padding.Right);
+      padB := APainter.Scale(st.Padding.Bottom);
+    end;
+
+    TyTooltipMeasure(lines, ink, AMeasurer, APPI, padL, padT, padR, padB, w, h);
+    if (w <= 0) or (h <= 0) then Exit;
+
+    gap := APainter.ScaleF(ActiveController.Metric(TyAdvChartTooltipGapVar,
+      TyAdvChartTooltipGap));
+    box := TyTooltipBoxAt(FTipX, FTipY, w, h, gap,
+      TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom));
+    r := Rect(Round(box.Left), Round(box.Top),
+              Round(box.Right), Round(box.Bottom));
+
+    corners := TyEffectiveCorners(st);
+    if spec.HasBorderRadius then
+    begin
+      radius := spec.BorderRadiusLogical;
+      corners.TL := Round(radius);
+      corners.TR := corners.TL;
+      corners.BR := corners.TL;
+      corners.BL := corners.TL;
+    end;
+
+    { NOT DrawFrame. That is the CONTROL's frame path and it pushes tpOpacity
+      onto the painter, which EndPaint then applies to the WHOLE bitmap -- a
+      tooltip style carrying an opacity would fade the entire chart. So the
+      box paints its own surface, and a translucent panel has to arrive as an
+      alpha-bearing background colour rather than as an opacity. }
+    if (tpShadow in st.Present) and (TyAlphaOf(st.ShadowColor) > 0) then
+      APainter.DropShadow(r, st.BorderRadius, st.ShadowColor, st.ShadowBlur,
+        st.ShadowOffset);
+    { THE THEME'S FILL, with only its COLOUR replaced when the option named
+      one -- so a skin that made the tooltip a gradient or an image keeps that
+      treatment for every chart whose author did not overrule it. }
+    surface := st.Background;
+    if spec.HasBackground then
+    begin
+      surface.Kind := tfkSolid;
+      surface.Color := TTyColor(spec.Background);
+    end;
+    APainter.FillBackground(r, surface, corners);
+
+    { THE BORDER IS TINTED WITH THE HOVERED ITEM'S COLOUR, which is the
+      signature ECharts 6 look and is easy to miss: the grey token is the
+      fallback for an AXIS tooltip, and an item tooltip takes the datum's own
+      colour. A written borderColor still wins over both. }
+    if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
+    else if DatumColour(FTipDatum) <> 0 then
+      borderCol := TTyColor(DatumColour(FTipDatum))
+    else borderCol := st.BorderColor;
+    borderW := st.BorderWidth;
+    if spec.HasBorderWidth then borderW := spec.BorderWidthLogical;
+    if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
+      APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
+
+    lineH := APainter.ScaleF(ink.LineHeightLogical);
+    row := 0;
+    for i := 0 to High(lines) do
+    begin
+      row := row + lines[i].BlankLinesBefore;
+      lineTop := Round(box.Top + padT + row * lineH);
+      for j := 0 to High(lines[i].Runs) do
+        if lines[i].Runs[j].Kind = ttrMarker then
+        begin
+          cx := box.Left + padL + lines[i].Runs[j].X
+                + lines[i].Runs[j].W / 2;
+          cy := lineTop + lineH / 2;
+          { BeginPath FIRST. CirclePath APPENDS to the canvas' current path,
+            it does not start one -- so without this the fill takes in
+            whatever the static pass left half-built and paints it in the
+            marker's colour. It drew a blue rectangle over a legend label,
+            and the pixel test that counts what changed between two frames
+            went green on it, because the wrong pixels are still pixels. }
+          APainter.BeginPath;
+          APainter.CirclePath(cx, cy, lines[i].Runs[j].W / 2);
+          APainter.FillPath(TTyColor(lines[i].Runs[j].Colour));
+        end
+        else
+        begin
+          { NO ELLIPSIS. The box was measured to fit these exact runs, and
+            upstream never wraps or truncates a tooltip in either mode -- its
+            width is content-driven and its CSS says `white-space: nowrap`. }
+          APainter.DrawText(
+            Rect(Round(box.Left + padL + lines[i].Runs[j].X), lineTop,
+                 Round(box.Left + padL + lines[i].Runs[j].X
+                       + lines[i].Runs[j].W) + 1,
+                 Round(lineTop + lineH)),
+            lines[i].Runs[j].Text, lines[i].Runs[j].FontName,
+            lines[i].Runs[j].FontSizeLogical, lines[i].Runs[j].FontWeight,
+            TTyColor(lines[i].Runs[j].Colour), taLeftJustify, tlCenter, False);
+        end;
+      Inc(row);
+    end;
+  finally
+    block.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  d: TTyChartDatumRef;
+  spec: TTyTooltipSpec;
+  el: Integer;
+  wasOn: Boolean;
+begin
+  inherited MouseMove(Shift, X, Y);
+  if csDesigning in ComponentState then Exit;
+  spec := TyTooltipSpecOf(FOption, -1, -1);
+  if not spec.Show or (spec.Trigger = tttNone) then Exit;
+  if not TyTooltipTriggerOnHas(spec.TriggerOn, 'mousemove') then Exit;
+
+  wasOn := TyChartDatumValid(FTipDatum);
+  d := HitTestAt(X, Y, el);
+  FTipDatum := d;
+  FTipElement := el;
+  FTipX := X;
+  FTipY := Y;
+  { REPAINT ON MOVEMENT, not only when the datum changes. The box is anchored
+    to the CURSOR -- upstream positions against the raw pointer offsets and
+    never against the snapped datum -- so a repaint gated on the datum would
+    leave it standing still while the pointer walked away from it. The frame
+    this asks for is a blit of the static layer plus one box; the gate the old
+    TTyChart needed was compensating for a control that re-rendered everything
+    from scratch each paint, and that is what the cache removed. }
+  if wasOn or TyChartDatumValid(FTipDatum) then InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.MouseLeave;
+var wasOn: Boolean;
+begin
+  wasOn := TyChartDatumValid(FTipDatum);
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  { INHERITED LAST. The base class ends in PointerStateChanged, which this
+    control answers with a repaint -- and a repaint before the hover was
+    cleared would draw the tooltip one more time on the way out. }
+  inherited MouseLeave;
+  if wasOn then InvalidateFrame;
+end;
+
 procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 begin
-  { NOTHING YET, and the empty body is the point of this commit rather than an
-    omission: series marks, entry animation and the four-state highlight are
-    Tier 1, and the layer they will draw into has to exist before the first of
-    them is written or the first one written will draw into the static cache
-    and freeze there.
+  { WHAT IS DRAWN HERE IS COMPOSITED OVER the blitted static layer: BeginPaint
+    fills its bitmap transparent and EndPaint blends it (TBGRABitmap.Draw with
+    AOpaque = False), so an overlay painter adds ink without erasing what is
+    underneath. That is what makes two painters onto one canvas correct.
 
-    WHEN THIS STOPS BEING EMPTY, HasDynamicContent must start answering True,
-    or RenderCached will skip the pass entirely. And what is drawn here is
-    composited OVER the blitted static layer -- BeginPaint fills its bitmap
-    transparent and EndPaint blends it (TBGRABitmap.Draw with AOpaque = False),
-    so an overlay painter adds ink without erasing what is underneath. That is
-    what makes two painters onto one canvas correct. }
+    ANYTHING ADDED HERE MUST BE VISIBLE TO HasDynamicContent, or RenderCached
+    skips the whole pass and the new thing is written, compiled and never
+    drawn. That is the failure this body's empty version was left here to
+    prevent, and the tooltip is the first thing to test it. }
+  PaintTooltip(APainter, ARect, APPI, AMeasurer);
 end;
 
 function TTyAdvanceChart.HasDynamicContent: Boolean;
 begin
-  { False until Tier 1 puts something in PaintDynamic. It is a function rather
-    than a constant so the answer can become a real question -- "is anything
-    animating, is anything hovered" -- without every caller changing. }
-  Result := False;
+  { A REAL QUESTION NOW: is anything hovered. A second painter means allocating
+    a BGRA bitmap the size of the control, filling it, blending it and freeing
+    it -- roughly the 13 ms floor a frame has even with no axes -- so the
+    answer has to be cheap and it has to be exact. It is deliberately not
+    "would the tooltip draw": resolving the option cascade and the theme to
+    find out costs more than the pass it would save. }
+  Result := TyChartDatumValid(FTipDatum);
 end;
 
 procedure TTyAdvanceChart.DropStatic;

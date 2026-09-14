@@ -865,6 +865,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Legend"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Tooltip.pas"/>
+        <UnitName Value="tyControls.AdvChart.Tooltip"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Dataset.pas"/>
         <UnitName Value="tyControls.AdvChart.Dataset"/>
       </Item>

@@ -172,6 +172,10 @@ begin
     '  --advchart-minor-tick-length: 3px;' + LineEnding +
     '  --advchart-name-gap: 15px;' + LineEnding +
     '  --advchart-tick-length: 5px;' + LineEnding +
+    '  --advchart-tooltip-gap: 20px;' + LineEnding +
+    '  --advchart-tooltip-gutter: 20px;' + LineEnding +
+    '  --advchart-tooltip-marker: 10px;' + LineEnding +
+    '  --advchart-tooltip-marker-gap: 6px;' + LineEnding +
     '  --alert-close-gap: 8px;' + LineEnding +
     '  --alert-close-size: 14px;' + LineEnding +
     '  --alert-icon-gap: 8px;' + LineEnding +
@@ -1249,6 +1253,33 @@ begin
     'TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }' + LineEnding +
     'TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartLegendBackground { background: var(--surface); }' + LineEnding +
+    '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
+    '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
+    '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +
+    '   in this vocabulary''s own terms instead: the name is the muted ink a label' + LineEnding +
+    '   takes, the value is full ink and bold.' + LineEnding +
+    '' + LineEnding +
+    '   The chart paints NO box without a background on the first key (no surface =' + LineEnding +
+    '   nothing to draw on), which is the same rule TyChartTooltip follows, and it' + LineEnding +
+    '   is why both live in the base layer for every theme to inherit. A skin' + LineEnding +
+    '   wanting the box to float adds `shadow:`; the base stays flat like the rest' + LineEnding +
+    '   of light. The BORDER here is only the fallback -- an item tooltip tints its' + LineEnding +
+    '   border with the colour of the datum under the pointer, which is what makes' + LineEnding +
+    '   an ECharts tooltip look attached to the thing it describes. */' + LineEnding +
+    'TyAdvChartTooltip {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: var(--pad-tooltip);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    'TyAdvChartTooltipValue {' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '}' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

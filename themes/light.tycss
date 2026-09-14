@@ -139,6 +139,10 @@
   --advchart-minor-tick-length: 3px;
   --advchart-name-gap: 15px;
   --advchart-tick-length: 5px;
+  --advchart-tooltip-gap: 20px;
+  --advchart-tooltip-gutter: 20px;
+  --advchart-tooltip-marker: 10px;
+  --advchart-tooltip-marker-gap: 6px;
   --alert-close-gap: 8px;
   --alert-close-size: 14px;
   --alert-icon-gap: 8px;
@@ -1216,6 +1220,33 @@ TyAdvChartLegend { color: var(--muted); font-size: var(--font-size-base); }
 TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }
 TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }
 TyAdvChartLegendBackground { background: var(--surface); }
+/* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
+   inside the box is one weight difference -- the name at 400 and the value at
+   900, in the same grey -- and one style set cannot say two weights. Said here
+   in this vocabulary's own terms instead: the name is the muted ink a label
+   takes, the value is full ink and bold.
+
+   The chart paints NO box without a background on the first key (no surface =
+   nothing to draw on), which is the same rule TyChartTooltip follows, and it
+   is why both live in the base layer for every theme to inherit. A skin
+   wanting the box to float adds `shadow:`; the base stays flat like the rest
+   of light. The BORDER here is only the fallback -- an item tooltip tints its
+   border with the colour of the datum under the pointer, which is what makes
+   an ECharts tooltip look attached to the thing it describes. */
+TyAdvChartTooltip {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius-sm);
+  padding: var(--pad-tooltip);
+  font-size: var(--font-size-base);
+}
+TyAdvChartTooltipValue {
+  color: var(--on-surface);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group
