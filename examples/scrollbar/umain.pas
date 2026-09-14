@@ -11,6 +11,11 @@ unit umain;
     (immediate -- the "my host already scrolled, just mirror it" path)
   - AnimationsEnabled can be switched off live, and a third bar shows the degenerate
     Max = Min case where the thumb fills the whole track
+  - AUTO-HIDE (the right-hand column): a bar nobody is using fades out. The radio group
+    switches AutoHide between sbahDefault / sbahNever / sbahAuto on both bars and on the
+    list box (which forwards it to its own embedded bar as ScrollBarAutoHide), and the
+    label under it prints the theme token beside the delay the bar actually resolved --
+    the one thing on screen that proves --scrollbar-auto-hide reaches the control
   The window, all three scroll bars, the viewport, the hint/status labels and the live theme
   switcher are designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is event
   handlers + theme setup only. }
@@ -21,7 +26,7 @@ uses
   Classes, SysUtils, Forms, Controls, StdCtrls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.ScrollBar, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
-  tyControls.Panel, tyControls.Button;
+  tyControls.Panel, tyControls.Button, tyControls.RadioGroup, tyControls.ListBox;
 type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
@@ -49,6 +54,12 @@ type
     LblFull: TTyLabel;
     FullBar: TTyScrollBar;
 
+    LblAutoTitle: TTyLabel;
+    RgAutoHide: TTyRadioGroup;
+    LblAutoMs: TTyLabel;
+    AutoList: TTyListBox;
+    LblAutoHint: TTyLabel;
+
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -58,9 +69,12 @@ type
     procedure BtnSnapClick(Sender: TObject);
     procedure BtnEaseClick(Sender: TObject);
     procedure SwAnimChange(Sender: TObject);
+    procedure RgAutoHideSelectionChanged(Sender: TObject);
   private
     procedure UpdateStatus;
     procedure BuildContent;
+    procedure BuildAutoList;
+    procedure UpdateAutoHideMs;
   end;
 var
   MainForm: TMainForm;
@@ -75,6 +89,10 @@ resourcestring
   rsBarsFmt2  = 'Horizontal:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)';
   rsVetoedFmt = '%s OnScroll: scTop vetoed - Home clamps to 10, not Min';
   rsScrollFmt = '%s OnScroll: %s -> %d';
+  rsThemeTokenFmt = 'Theme --scrollbar-auto-hide: %s';
+  rsEffectiveFmt  = 'Bar EffectiveAutoHideMs: %s';
+  rsAutoHideOff   = '-1, never fades';
+  rsAutoHideMsFmt = '%d ms';
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -91,7 +109,9 @@ begin
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
   BuildContent;                            // the block of text the vertical bar scrolls
+  BuildAutoList;                           // enough rows that the list grows a bar of its own
   UpdateStatus;                            // initial readout
+  UpdateAutoHideMs;                        // what the theme says vs what the bar resolved
 end;
 
 { The viewport is a plain TTyPanel (a windowed control, so it CLIPS what sticks out) with
@@ -118,6 +138,7 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+  UpdateAutoHideMs;                        // the new skin's --scrollbar-auto-hide, live
 end;
 
 procedure TMainForm.DarkSwitchChange(Sender: TObject);
@@ -128,6 +149,7 @@ begin
   else
     TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
+  UpdateAutoHideMs;                        // a mode can carry its own auto-hide delay
 end;
 
 procedure TMainForm.UpdateStatus;
@@ -205,6 +227,66 @@ procedure TMainForm.SwAnimChange(Sender: TObject);
 begin
   VBar.AnimationsEnabled := SwAnim.Checked;
   HBar.AnimationsEnabled := SwAnim.Checked;
+end;
+
+{ Rows enough to overflow the box, so the list grows a vertical bar of its own -- the bar
+  the LIST owns, not one dropped on the form. That is the point of having it here: what is
+  set on the list is ScrollBarAutoHide, and the only way to see whether the host really
+  forwards it is to watch that embedded bar fade. }
+procedure TMainForm.BuildAutoList;
+var
+  i: Integer;
+begin
+  AutoList.Items.BeginUpdate;
+  try
+    for i := 1 to 24 do
+      AutoList.Items.Add(Format(rsLineFmt, [i]));
+  finally
+    AutoList.Items.EndUpdate;
+  end;
+end;
+
+{ ASK THE BAR, EVERY TIME. This label is the whole instrument: it puts the theme's own
+  --scrollbar-auto-hide next to the delay VBar actually resolved, so "the token reaches the
+  control" stops being something to take on faith. Caching either number -- or worse,
+  printing the 1200 the skins happen to ship -- would leave a label that only proves it can
+  copy a number out of a document. }
+procedure TMainForm.UpdateAutoHideMs;
+
+  function MsText(AMs: Integer): string;
+  begin
+    if AMs < 0 then
+      Result := rsAutoHideOff              // the one "off" value, spelled out
+    else
+      Result := Format(rsAutoHideMsFmt, [AMs]);
+  end;
+
+begin
+  LblAutoMs.Caption :=
+    Format(rsThemeTokenFmt,
+      [MsText(TyDefaultController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef))])
+    + LineEnding + LineEnding +
+    Format(rsEffectiveFmt, [MsText(VBar.EffectiveAutoHideMs)]);
+end;
+
+{ sbahDefault follows the theme; sbahNever and sbahAuto overrule it. The two numbers in the
+  label come apart the moment they disagree: a skin that ships -1 with sbahAuto selected
+  reads "-1, never fades" on top and "1200 ms" underneath -- the property winning, and the
+  fallback it falls back to. }
+procedure TMainForm.RgAutoHideSelectionChanged(Sender: TObject);
+var
+  v: TTyScrollBarAutoHide;
+begin
+  case RgAutoHide.ItemIndex of
+    1: v := sbahNever;
+    2: v := sbahAuto;
+  else
+    v := sbahDefault;
+  end;
+  VBar.AutoHide := v;
+  HBar.AutoHide := v;
+  AutoList.ScrollBarAutoHide := v;   // the host forwards it to the bar it owns
+  UpdateAutoHideMs;
 end;
 
 end.
