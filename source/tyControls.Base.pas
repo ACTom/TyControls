@@ -549,6 +549,25 @@ function TyOnTitleBar(AControl: TControl): Boolean;
   .on-titlebar is unaffected: the variant matches no rule. }
 function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
 
+{ 边框 + 焦点环占掉的那一圈有多宽,单位是逻辑像素(还没按 DPI 缩放),没有 chrome 时是 0。
+
+  DrawFrame 把边框和焦点环都画在控件矩形的**最外**一圈:边框占 [Left, Left+BorderWidth],
+  焦点环占 [Left+OutlineOffset, +OutlineWidth],所以这条带的内沿是两者中较大的那个(取全宽,
+  两者都画在边内侧)。再 +1 是抗锯齿留量:实测 1px 的边会把墨落到**两列**上(160 宽的控件
+  里 x=158 和 159 都变了色),只让开 1 列照样会被压掉一层。
+
+  两类调用者共用这一个数,而不是各抄一份:
+    · 内容(行/格)不许画到这条带上 —— 否则悬停或选中的填充会染到边框抗锯齿的内沿,那一段
+      边框跟着变色;
+    · 内嵌滚动条的**矩形**不许落在这条带上 —— 条是窗口化子控件,它那块矩形上宿主再也画不
+      进去,于是边框在那一段整段消失(真机报的「列表右侧 scrollbar 那一条,边框没了」)。
+      条完全可见时盖上去的是条自己的灰,看着像「贴着边」;自动隐藏把条淡没之后铺的是父控件
+      的表面色,就成了一条白。
+
+  传进来的是**状态解析后**的样式,所以宿主获得焦点时这个数会大一档(焦点环比边框宽):让开
+  的正好是当下真画出来的那一圈。 }
+function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+
 implementation
 
 function TyOnTitleBar(AControl: TControl): Boolean;
@@ -572,6 +591,16 @@ begin
   if not TyOnTitleBar(AControl) then Exit;
   if Result = '' then Result := 'on-titlebar'
   else Result := Result + ' on-titlebar';
+end;
+
+function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+begin
+  Result := AStyle.BorderWidth;
+  if Result < 0 then Result := 0;
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+    if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
+      Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
+  if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
 end;
 
 

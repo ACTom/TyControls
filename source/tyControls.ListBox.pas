@@ -945,7 +945,7 @@ end;
 procedure TTyListBox.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, padV, PPI,
-  maxH: Integer;
+  maxH, chrome: Integer;
   wantV, wantH: Boolean;
   S: TTyStyleSet;
 begin
@@ -962,6 +962,14 @@ begin
   padW := MulDiv(S.Padding.Left, PPI, 96) + MulDiv(S.Padding.Right, PPI, 96);
   padV := MulDiv(S.Padding.Top, PPI, 96) + MulDiv(S.Padding.Bottom, PPI, 96);
   extentW := MulDiv(FScrollWidth, PPI, 96);
+  { 边框/焦点环那一圈,内嵌条的**矩形**不许落上去:条是窗口化子控件,它盖住的那一段宿主
+    再也画不进去 —— 条完全可见时盖上去的是条自己的灰(看着像贴着边),自动隐藏把它淡没
+    之后铺的是父控件的表面色,那一段边框就成了一条白(真机报的就是这个)。让开的宽度与
+    RenderTo 让行让开的是同一条带、同一个函数。
+    **gutter 不动**:RowViewportBounds 仍只扣 thick,于是条与行内容之间不再留那道缝(行
+    填充本来就按 R.Right - inset - trailSB 收边,现在正好抵住条)。改 gutter 会动到每一行
+    的宽度,不在这次的范围里。 }
+  chrome := MulDiv(TyChromeInsetLogical(S), PPI, 96);
   { --- settle the TWO bars together ----------------------------------------------------
     Each bar's gutter comes out of the other's viewport, so one pass can decide "no
     horizontal bar" from a width the vertical bar has not given up yet, and the other way
@@ -1009,6 +1017,11 @@ begin
       every platform's list box has. }
     FHScrollBar.Align := alBottom;
     FHScrollBar.Height := thick;
+    { 三边都让开那一圈 chrome(对齐引擎认 BorderSpacing)。左右两边一起缩,否则横条的两端
+      仍压在左右边框上。 }
+    FHScrollBar.BorderSpacing.Left   := chrome;
+    FHScrollBar.BorderSpacing.Right  := chrome;
+    FHScrollBar.BorderSpacing.Bottom := chrome;
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
   end
@@ -1039,10 +1052,29 @@ begin
       straight back here). LCL's alignment engine has no BiDi of its own, so alRight stays
       the right-hand edge on a mirrored form and the side has to be chosen explicitly; this
       is the one place that chooses it, and RowContentBounds insets the rows to match. }
+    { 停靠在哪边,chrome 就缩哪边 —— RTL 下条在左边,内缩得记在 .Left 上。另一边显式清零:
+      BorderSpacing 会留在控件上,而 Align 是运行时可翻的(BiDiMode 一改就回到这里)。 }
     if RtlRowLayout then
-      FScrollBar.Align := alLeft
+    begin
+      FScrollBar.Align := alLeft;
+      FScrollBar.BorderSpacing.Left  := chrome;
+      FScrollBar.BorderSpacing.Right := 0;
+    end
     else
+    begin
       FScrollBar.Align := alRight;
+      FScrollBar.BorderSpacing.Right := chrome;
+      FScrollBar.BorderSpacing.Left  := 0;
+    end;
+    FScrollBar.BorderSpacing.Top    := chrome;
+    { 下沿只在**底下就是边框**时才让:横条在的时候,竖条下面挨着的是横条,不是边框 ——
+      再让一次就会在两条之间留下 chrome 宽的一道空。横条是 alBottom,LCL 先摆它,所以
+      竖条拿到的对齐区已经把横条那一条扣掉了。(Grid/ListView/TreeView 自己 SetBounds,
+      那边是 vh 先扣 sb 再减两个 chrome,天然就抵住。) }
+    if wantH then
+      FScrollBar.BorderSpacing.Bottom := 0
+    else
+      FScrollBar.BorderSpacing.Bottom := chrome;
     // Update DPI-dependent width and controller every call so DPI changes take effect
     FScrollBar.Width := thick;
     FScrollBar.Controller := Self.Controller;
@@ -1355,17 +1387,12 @@ begin
     // there, so the chrome — drawn once by DrawFrame over the listbox background — keeps a
     // UNIFORM colour: the row fills never touch its anti-aliased inner edge (which otherwise
     // picked up the row colour at a hovered/selected row, tinting the border/ring there).
-    // insetLogical = the chrome's inner edge + 1px AA clearance; 0 when there is no chrome.
-    // The border and the focus ring (StrokeBorder) are both drawn INSIDE the edge: the border
-    // occupies [Left, Left+BorderWidth] and the ring [Left+OutlineOffset, +OutlineWidth]. The
-    // chrome's inner edge is therefore the LARGER of those (full widths, not half). Inset the
-    // rows one logical px PAST it so a thin background gap sits between the chrome and the fill
-    // and the chrome keeps a single uniform colour. No chrome => inset 0 (rows fill fully).
-    insetLogical := BoxStyle.BorderWidth;
-    if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
-      if BoxStyle.OutlineOffset + BoxStyle.OutlineWidth > insetLogical then
-        insetLogical := BoxStyle.OutlineOffset + BoxStyle.OutlineWidth;
-    if insetLogical > 0 then Inc(insetLogical);
+    // How WIDE that band is: TyChromeInsetLogical -- the SAME number UpdateScrollBar insets the
+    // embedded bars by. The formula was worked out here first; it now lives in Base.pas so "the
+    // band the rows avoid" and "the band the BAR's rect avoids" stay one number instead of two
+    // transcriptions that can drift. (A bar left on the band erases the border outright: it is a
+    // windowed child, so the host cannot paint there at all.)
+    insetLogical := TyChromeInsetLogical(BoxStyle);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
     { The clip is what makes the horizontal scroll safe: RowContentBounds hands the rows a

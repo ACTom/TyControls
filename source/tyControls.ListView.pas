@@ -1778,7 +1778,7 @@ end;
 
 procedure TTyListView.UpdateScrollBars;
 var
-  cnt, sb, vw, vh, pass, regionH, maxV, maxH: Integer;
+  cnt, sb, vw, vh, pass, regionH, maxV, maxH, chrome, barW, barH: Integer;
   m: TTyListMetrics;
   ext: TSize;
   needV, needH, vertCap, horzCap: Boolean;
@@ -1786,6 +1786,11 @@ begin
   if csDestroying in ComponentState then Exit;
   cnt := GetItemCount;
   sb  := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
+  { 边框/焦点环那一圈的宽度 —— 条的**矩形**不许落上去。条是窗口化子控件,它盖住的那一段宿主
+    再也画不进去:条完全可见时盖上去的是条自己的底色,自动隐藏把它淡没之后铺的是父控件的表面
+    色,那一段边框整段变白(真机报的「列表右侧 scrollbar 那一条,边框没了」)。与列表框/备忘录
+    让开的是同一条带、同一个函数(tyControls.Base 的 TyChromeInsetLogical)。 }
+  chrome := ScaleI(TyChromeInsetLogical(CurrentStyle));
   { Which axis can scroll at all (see the flow table in the Layout unit). }
   vertCap := FViewStyle in [lvsReport, lvsIcon, lvsSmallIcon, lvsTile];
   horzCap := FViewStyle in [lvsReport, lvsList];
@@ -1815,6 +1820,10 @@ begin
   vh := ClientHeight - IfThen(needH, sb, 0);
   if vw < 0 then vw := 0;
   if vh < 0 then vh := 0;
+  { 两条一起缩,而且缩的是**同一个** chrome:只缩一条,角上那块就会多出或少掉 chrome 个像素。
+    vw/vh 已经各自让过对方的槽,这里只再让四边的 chrome。 }
+  barH := vh - 2 * chrome; if barH < 0 then barH := 0;
+  barW := vw - 2 * chrome; if barW < 0 then barW := 0;
   FillMetrics(m, vw, vh);
   ext := TyListContentExtent(cnt, m);
   if UseGroupedLayout then
@@ -1837,7 +1846,7 @@ begin
     FVScroll.Width := sb;
     FVScroll.Controller := Self.Controller;
     if not FVScroll.Dragging then
-      FVScroll.SetBounds(ClientWidth - sb, 0, sb, ClientHeight - IfThen(needH, sb, 0));
+      FVScroll.SetBounds(ClientWidth - sb - chrome, chrome, sb, barH);
     FSyncingScroll := True;
     try
       FVScroll.Min      := 0;
@@ -1871,7 +1880,7 @@ begin
       not. Same call TTyCustomGrid makes for the same reason. }
     FHScroll.MirrorHorizontal := RtlLayout;
     if not FHScroll.Dragging then
-      FHScroll.SetBounds(0, ClientHeight - sb, ClientWidth - IfThen(needV, sb, 0), sb);
+      FHScroll.SetBounds(chrome, ClientHeight - sb - chrome, barW, sb);
     FSyncingScroll := True;
     try
       FHScroll.Min      := 0;

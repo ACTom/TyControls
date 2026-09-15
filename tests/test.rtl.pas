@@ -171,6 +171,9 @@ type
     function  Metrics: TTyGridMetrics;
     function  ViewW: Integer;
     function  FrozenW: Integer;
+    { 内嵌条按边框/焦点环那一圈内缩的宽度(见 TyChromeInsetLogical)。期望值得跟着主题走:
+      换个边框更粗的主题,写死的数就假红。 }
+    function  ChromeInset: Integer;
     { The embedded bar is a PRIVATE field, so it is found the way a user would find it --
       among the children. That also makes the assertion stronger: it pins the bar the grid
       actually shows, not a field a refactor could leave behind. }
@@ -241,6 +244,8 @@ type
     function  CheckBox(const ACell: TRect): TRect;
     function  Cell(APos: Integer): TRect;
     function  VBar: TTyScrollBar;
+    { 见 TRtlGridAccess.ChromeInset —— 同一条带,同一个理由。 }
+    function  ChromeInset: Integer;
     procedure Remeasure;
   end;
 
@@ -946,6 +951,8 @@ begin
   Result := TyListItemRect(APos, Items.Count, CurrentMetrics, ScrollOffsetX, ScrollOffsetY);
 end;
 function TRtlListAccess.VBar: TTyScrollBar; begin Result := VScrollBar; end;
+function TRtlListAccess.ChromeInset: Integer;
+begin Result := MulDiv(TyChromeInsetLogical(CurrentStyle), Font.PixelsPerInch, 96); end;
 procedure TRtlListAccess.Remeasure;         begin UpdateScrollBars; end;
 procedure TRtlStripAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
 procedure TRtlSheetAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
@@ -3322,6 +3329,8 @@ function TRtlGridAccess.ViewW: Integer;
 begin Result := ViewportW; end;
 function TRtlGridAccess.FrozenW: Integer;
 begin Result := FrozenWidthPx; end;
+function TRtlGridAccess.ChromeInset: Integer;
+begin Result := MulDiv(TyChromeInsetLogical(CurrentStyle), Font.PixelsPerInch, 96); end;
 function TRtlGridAccess.HBar: TTyScrollBar;
 var i: Integer;
 begin
@@ -6130,8 +6139,13 @@ begin
          and (TTyScrollBar(G.Controls[i]).Kind = sbVertical) then
         bar := TTyScrollBar(G.Controls[i]);
     AssertNotNull('the grid shows a vertical bar', bar);
-    AssertEquals('which is still docked against the right edge',
-      G.ClientWidth, bar.Left + bar.Width);
+    { 守的是**边** —— 镜像不该把条搬到左手边去。数值上它不再严丝合缝贴着 ClientWidth:
+      内嵌条现在按边框/焦点环那一圈内缩(TyChromeInsetLogical),否则条那块矩形会把宿主
+      自己画的边框整段盖掉 —— 条是窗口化子控件,那块地方宿主再也画不进去。让开的宽度
+      跟着主题走,所以期望值也跟着主题算。 }
+    AssertTrue('which has not jumped to the left-hand edge', bar.Left > G.ClientWidth div 2);
+    AssertEquals('and still ends one chrome band short of the right edge',
+      G.ClientWidth - G.ChromeInset, bar.Left + bar.Width);
   finally
     Form.Free;
     Ctl.Free;
@@ -6192,8 +6206,12 @@ begin
     AssertTrue('precondition: the content overflows, so a bar exists',
       (L.VBar <> nil) and L.VBar.Visible);
     AssertTrue('the form really is mirrored', L.Mirrors);
-    AssertEquals('the vertical bar still ends at the client''s right edge',
-      L.ClientWidth, L.VBar.Left + L.VBar.Width);
+    { 同 TheGridsVerticalBarStaysOnTheRight…:守的是边,不是「正好等于 ClientWidth」。内嵌条
+      现在让开边框/焦点环那一圈(TyChromeInsetLogical),否则条会把宿主的边框整段盖掉。 }
+    AssertTrue('the vertical bar has not jumped to the left-hand edge',
+      L.VBar.Left > L.ClientWidth div 2);
+    AssertEquals('and still ends one chrome band short of the client''s right edge',
+      L.ClientWidth - L.ChromeInset, L.VBar.Left + L.VBar.Width);
     ax := L.Axis;
     AssertEquals('and the mirror axis is the viewport, which stops short of it',
       L.Metrics.ViewportW, ax.BandRight);

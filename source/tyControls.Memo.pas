@@ -2342,8 +2342,19 @@ begin
   SBW := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);   // both bars' thickness
   // Frame inset: the scrollbars sit flush to the edge and would cover the border + focus ring
   // DrawFrame paints at the OUTER edge (the memo's ring looked clipped by the vbar). Pull both
-  // bars in by ~the ring width so the frame stays visible around them, like a native memo.
-  fw := MulDiv(2, PPI, 96); if fw < 1 then fw := 1;
+  // bars in by that band so the frame stays visible around them, like a native memo.
+  // The width comes from TyChromeInsetLogical now instead of a hardcoded 2. The memo worked
+  // this out first and kept it to itself, while ListBox/Grid/ListView/TreeView went on covering
+  // their own borders ("列表右侧 scrollbar 那一条,边框没了"); they all read the one definition
+  // in Base.pas now. On the stock themes (1px border) it is still 2; it grows on a
+  // thicker-bordered theme, and by one more while the memo has focus -- the ring is wider than
+  // the border and only resolves under :focus, and it is the ring that has to be cleared then.
+  fw := TyChromeInsetLogical(StyleS);
+  if fw > 0 then
+  begin
+    fw := MulDiv(fw, PPI, 96);
+    if fw < 1 then fw := 1;   // 低 DPI 下别缩成 0:边框自己有 1px 下限
+  end;
   Total := TotalVisualRows(PPI);
 
   // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count

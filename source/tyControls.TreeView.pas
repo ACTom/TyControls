@@ -2876,7 +2876,7 @@ end;
   FOffsetY is clamped to [-(ContentHeight - viewportH), 0] each call. }
 procedure TTyTreeView.UpdateScrollBars;
 var
-  SBThick, viewW, viewH, contH, PPI: Integer;
+  SBThick, viewW, viewH, contH, PPI, chrome, barW, barH: Integer;
   wantVScroll, wantHScroll: Boolean;
 begin
   PPI     := Font.PixelsPerInch;
@@ -2924,20 +2924,29 @@ begin
     wantHScroll := False;
   end;
 
+  { 边框/焦点环那一圈的宽度 —— 条的**矩形**不许落上去。条是窗口化子控件,它盖住的那一段宿主
+    再也画不进去:条完全可见时盖上去的是条自己的底色,自动隐藏把它淡没之后铺的是父控件的表面
+    色,那一段边框整段变白。与列表框/备忘录让开的是同一条带、同一个函数。
+    两条一起缩,而且缩的是**同一个** chrome:只缩一条,角上那块就会多出或少掉 chrome 个像素
+    (树这里两条都让出角,角是空的 —— 让开后仍然是空的,位置整体内移 chrome)。 }
+  chrome := MulDiv(TyChromeInsetLogical(CurrentStyle), PPI, 96);
+  barH := Height - 2 * chrome;
+  if wantHScroll then Dec(barH, SBThick);
+  if barH < 0 then barH := 0;
+  barW := Width - 2 * chrome;
+  if wantVScroll then Dec(barW, SBThick);
+  if barW < 0 then barW := 0;
+
   { ── Vertical bar ────────────────────────────────────────────────────────── }
   if wantVScroll then
   begin
     { Bars always exist (created in constructor); just configure and show. }
     FVScroll.Width      := SBThick;
     FVScroll.Controller := Self.Controller;
-    { Position the bar along the right edge (above any horizontal bar). }
+    { Position the bar along the right edge (above any horizontal bar), inside the frame:
+      barH already gave up the horizontal bar's corner AND the chrome band at both ends. }
     if not FVScroll.Dragging then
-    begin
-      if wantHScroll then
-        FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height - SBThick)
-      else
-        FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height);
-    end;
+      FVScroll.SetBounds(Width - SBThick - chrome, chrome, SBThick, barH);
 
     { Clamp FOffsetY to [-(contentH - viewH), 0] before syncing the thumb. }
     if contH > viewH then
@@ -2984,14 +2993,10 @@ begin
       mirror ahead of the content it scrolls, and until this commit this one's content did
       not. Same call TTyCustomGrid makes for the same reason. }
     FHScroll.MirrorHorizontal := RtlLayout;
-    { Position the bar along the bottom edge (left of the vertical bar). }
+    { Position the bar along the bottom edge (left of the vertical bar), inside the frame:
+      barW already gave up the vertical bar's corner AND the chrome band at both ends. }
     if not FHScroll.Dragging then
-    begin
-      if wantVScroll then
-        FHScroll.SetBounds(0, Height - SBThick, Width - SBThick, SBThick)
-      else
-        FHScroll.SetBounds(0, Height - SBThick, Width, SBThick);
-    end;
+      FHScroll.SetBounds(chrome, Height - SBThick - chrome, barW, SBThick);
 
     if FOffsetX < -(FRangeX - viewW) then FOffsetX := -(FRangeX - viewW);
     if FOffsetX > 0 then FOffsetX := 0;

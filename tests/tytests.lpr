@@ -25,6 +25,7 @@ uses
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar,
   test.scrollbar.autohide,
+  test.scrollbar.hostframe,
   test.form, test.formsurface, test.edgepassthrough, test.release, test.themes,
   test.listbox, test.listbox.scroll,
   test.progressbar,
