@@ -62,6 +62,11 @@ type
     FFadeAnim: TTyAnimator;     // 0..1 traversal，驱动 FFadeFrom -> FFadeTo
     FFadeFrom, FFadeTo: Single;
     FIdleMs: Integer;           // 距上次「在用」过去了多久
+    { 指针在**宿主**身上——不是在条上。宿主的 MouseEnter/MouseLeave 转发进来，
+      见 SetHostHovered。**必须和 FHover 分开记**：条是窗口化子控件，指针从
+      宿主内容挪到条上时，宿主的 MouseLeave 和条的 MouseEnter 是两条各自到达
+      的消息；两个字段合起来判，交界处才不会闪。 }
+    FHostHovered: Boolean;
     { 淡入淡出上一拍的时刻(0 = 还没开始)。**不能和位置缓动的 FLastTickMs 共用**
       ——两套定时器各跑各的，串起来只会互相把对方的起点冲掉。 }
     FFadeLastTickMs: QWord;
@@ -220,6 +225,20 @@ type
     function AutoHideClockArmed: Boolean;
     { 「有人在用」。滚动、悬停、拖动、聚焦都调它。 }
     procedure NoteActivity;
+    { 宿主告诉这条条：指针现在在不在**宿主身上**。
+
+      规则是「指针在宿主上 = 显示且不计时」，见 docs/controls/scrollbar.md §7。
+      条自己的 MouseEnter 够不着这件事——指针停在列表正文上的时候条收不到
+      任何鼠标消息，而那正是用户报回来的场景：「鼠标移到列表上 scrollbar
+      没出来，只有滚轮滚一下或者移到条上才出来」。
+
+      **进来不只是按住，还要把条叫出来**：指针刚进列表的那一刻条多半已经
+      淡到 0 了，只把它标成「按住」的话没有任何东西会推它一拍。
+      **离开只起表，不当场隐藏**：指针从内容挪到条上时宿主先收 MouseLeave，
+      当场隐藏就是在交界处闪一下。 }
+    procedure SetHostHovered(AValue: Boolean);
+    { 指针在不在宿主身上。只读——写这件事只有宿主有资格，走 SetHostHovered。 }
+    property HostHovered: Boolean read FHostHovered;
     { 测试缝：推进 AMs 毫秒。真机由 FHideTimer 驱动，headless 由测试驱动
       ——和位置动画的 HandleTimerTick 是同一个路子。 }
     procedure AutoHideTick(AMs: Integer);
@@ -566,8 +585,14 @@ end;
 function TTyScrollBar.AutoHideHeldOpen: Boolean;
 begin
   { 任一成立就「按住不放」，延时表根本不起。
-    注意 Focused 只对独立摆放的条有意义：6 个宿主的内嵌条一律 TabStop=False。 }
-  Result := FHover or FDragging or (csDesigning in ComponentState)
+    注意 Focused 只对独立摆放的条有意义：6 个宿主的内嵌条一律 TabStop=False。
+
+    **FHover 和 FHostHovered 必须合起来判——交界处不抖的全部理由就在这里。**
+    条是窗口化子控件：指针从宿主内容挪到条上时，宿主收到 MouseLeave、条收到
+    MouseEnter，**两者的先后 LCL 不保证**。只认其中一个的话，先到的那个转假的
+    瞬间条就该淡了，用户看到的是移到条上的一刹那它闪一下。两个或起来，再加上
+    「离开只起表、不当场隐藏」（见 SetHostHovered），交界处就没有一帧是在淡的。 }
+  Result := FHover or FHostHovered or FDragging or (csDesigning in ComponentState)
             or (HandleAllocated and Focused);
 end;
 
@@ -592,6 +617,28 @@ begin
     StartFade(1.0, TyScrollBarFadeInMs);
   EnsureHideTimer;
   if FHideTimer <> nil then FHideTimer.Enabled := True;
+end;
+
+procedure TTyScrollBar.SetHostHovered(AValue: Boolean);
+begin
+  if FHostHovered = AValue then Exit;
+  FHostHovered := AValue;
+  { **进来无条件叫醒，离开只在条真的看得见的时候起表。** 两边不对称是有理由的。
+
+    离开那一半要挡：内容装得下的时候宿主把条 Visible 关了，而 NoteActivity 会给
+    它挂上 16ms 一拍的定时器，一路转完「延时 + 淡出」（默认 1.4 秒）——为一个一
+    个像素都不画的控件。指针每划过一个不需要滚动的列表就来这么一次，两条。
+
+    进来那一半**不能挡**：一条淡到 0 之后才被宿主收起来的条，等内容长出来、
+    宿主把它重新显示的那一刻，指针还在宿主上——AutoHideHeldOpen 恒真，
+    AutoHideTimerNeeded 就恒答「不用起表」，条会停在 0 上永远不露面，
+    正是这次要修的那类 bug。而叫醒一条看不见的条最多花一拍：按住不放的时候
+    表头一拍就把自己停掉。
+
+    字段则**无条件**记：等宿主把条显示出来的那一刻，「指针还在宿主上」这件事
+    必须是准的。离开之后要起的那块表由 Invalidate 那条臂补上——它判的就是
+    「没表就起表」。 }
+  if AValue or Visible then NoteActivity;
 end;
 
 procedure TTyScrollBar.StartFade(ATo: Single; ADurationMs: Integer);

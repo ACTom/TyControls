@@ -22,6 +22,11 @@ type
     procedure CheckHostDeclaredDefault(AHost: TComponent; const AWhat: string);
     procedure CheckBothBarsGot(AHost: TWinControl; AValue: TTyScrollBarAutoHide;
       const AWhat: string);
+    { 交界处那一组共用的：指针从宿主内容挪到条上，两个事件按给定顺序发生。 }
+    procedure CheckCrossingOntoTheBarNeverFades(ABarEntersFirst: Boolean;
+      ATickBetweenMs: Integer);
+    { 宿主转发 hover 那一组共用的。 }
+    procedure CheckHostHoverReachesBothBars(AHost: TWinControl; const AWhat: string);
     function NewListBox: TTyListBox;
     procedure FillListBox(ALb: TTyListBox);
     function NewMemo: TTyMemo;
@@ -102,6 +107,29 @@ type
     procedure TreeViewDeclaredDefaultMatchesConstructed;
     { 后代白拿。这不是第七个宿主，是「白拿」那句话的凭据。 }
     procedure ValueListEditorInheritsTheListBoxProperty;
+    { --- 指针在宿主上 --------------------------------------------------------
+      「指针在宿主内容上不算在用」这条规则是拿一个**错的事实**定下来的
+      （「Win11 也是滚动才出现」——对 macOS 成立，对 Fluent/UWP 不成立），
+      用户真机第一次用就撞上了：「鼠标移动到列表上的时候 scrollbar 并没有显示」。
+      规则已经改正，见 docs/superpowers/specs/2026-09-14-scrollbar-auto-hide-design.md §4。 }
+    procedure PointerOnTheHostHoldsItOpen;
+    procedure PointerEnteringTheHostWakesAFadedBar;
+    procedure PointerLeavingTheHostStartsTheClockInsteadOfHidingAtOnce;
+    { 交界处：条是窗口化子控件，指针从内容挪到条上时宿主收到的是 MouseLeave。
+      两个事件的先后 LCL 不保证，所以两种顺序各钉一条。 }
+    procedure CrossingOntoTheBarNeverFadesWhenTheHostLeavesFirst;
+    procedure CrossingOntoTheBarNeverFadesWhenTheBarEntersFirst;
+    procedure CrossingOntoTheBarSurvivesATickLandingBetweenTheTwoEvents;
+    procedure AnInvisibleBarIsNotWokenWhenThePointerLeavesTheHost;
+    { 六个宿主各一条：转发这种四平八稳的代码最容易只写一半。 }
+    procedure ListBoxForwardsHostHoverToBothBars;
+    procedure MemoForwardsHostHoverToBothBars;
+    procedure GridForwardsHostHoverToBothBars;
+    procedure ListViewForwardsHostHoverToBothBars;
+    procedure ScrollBoxForwardsHostHoverToBothBars;
+    procedure TreeViewForwardsHostHoverToBothBars;
+    { 端到端：真宿主 + 真内嵌条 + 真消息，一路走到可见度上。 }
+    procedure ListBoxHoverHoldsItsRealBarsOpen;
     { --- 出厂主题 ------------------------------------------------------------ }
     procedure ModernThemesHideClassicThemesDoNot;
     procedure AppWideOffSwitchIsTheControllerStyleOverride;
@@ -1509,6 +1537,263 @@ begin
     FBar.Invalidate;
   AssertFalse('主人压根没开这个特性,他的条上不该挂一块 60fps 的表空转',
     FBar.AutoHideClockArmed);
+end;
+
+procedure TTyScrollBarAutoHideTests.PointerOnTheHostHoldsItOpen;
+begin
+  { 规则：指针在宿主身上 = 显示且不计时。守的是 AutoHideHeldOpen 里的
+    FHostHovered 那一项——摘掉它，下面第一条断言立刻变红。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.SetHostHovered(True);
+  FBar.AutoHideTick(99999);                  // 指针在列表上，多久都不该淡
+  { 真跑完一整段淡出才算数：StartFade 只装膛、不动可见度，断在装膛那一拍上的
+    断言，守卫在不在都读到 1.0 —— 这个特性在这个坑里栽过五次。 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('指针在列表上，条就不该淡', 1.0, FBar.FadeLevel, 0.001);
+
+  FBar.SetHostHovered(False);
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('指针离开列表之后才开始计时', 0.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.PointerEnteringTheHostWakesAFadedBar;
+begin
+  { 「显示」和「不计时」是两件事，这条钉的是前者：用户抱怨的那一刻条已经淡没了，
+    只把它标成「按住不放」的话没有任何东西会推它一拍，条永远不回来。
+    把 SetHostHovered 里的 NoteActivity 删掉 -> 这条变红。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.NoteActivity;
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('坐标系：没人碰的条已经淡没了', 0.0, FBar.FadeLevel, 0.001);
+
+  FBar.SetHostHovered(True);
+  FBar.AutoHideTick(TyScrollBarFadeInMs);
+  AssertEquals('鼠标移到列表上，条得自己回来 —— 用户报的就是这一条',
+    1.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.PointerLeavingTheHostStartsTheClockInsteadOfHidingAtOnce;
+begin
+  { 离开是**起倒计时**，不是当场隐藏。当场隐藏的话，指针从内容挪到条上的那一步
+    （宿主先收 MouseLeave）就会闪一下。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.SetHostHovered(True);
+  FBar.AutoHideTick(5000);
+  FBar.SetHostHovered(False);
+  AssertEquals('离开这一刻不许隐藏', 1.0, FBar.FadeLevel, 0.001);
+
+  { **真正的守卫是这一对**：上面那句就算改成 StartFade(0.0) 也照样读到 1.0
+    （装膛不动可见度）。得往前推一段、而且推的这一段要短于延时。 }
+  FBar.AutoHideTick(500);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('延时没到之前条得一直在', 1.0, FBar.FadeLevel, 0.001);
+
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('到点了才淡', 0.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.CheckCrossingOntoTheBarNeverFades(
+  ABarEntersFirst: Boolean; ATickBetweenMs: Integer);
+const
+  Delay = 1000;
+  Step  = 50;
+var
+  i, steps: Integer;
+begin
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  { 指针先在列表正文上待着。 }
+  FBar.SetHostHovered(True);
+  FBar.AutoHideTick(500);
+  AssertEquals('坐标系：指针在宿主上的时候条是亮的', 1.0, FBar.FadeLevel, 0.001);
+
+  { 交界那一刻：宿主收到 MouseLeave、条收到 MouseEnter。**先后 LCL 不保证**，
+    所以两种顺序各走一遍；ATickBetweenMs > 0 时再让一拍恰好落在两者中间。 }
+  if ABarEntersFirst then
+  begin
+    TBarAccess(FBar).EnterBar;
+    if ATickBetweenMs > 0 then FBar.AutoHideTick(ATickBetweenMs);
+    FBar.SetHostHovered(False);
+  end
+  else
+  begin
+    FBar.SetHostHovered(False);
+    if ATickBetweenMs > 0 then FBar.AutoHideTick(ATickBetweenMs);
+    TBarAccess(FBar).EnterBar;
+  end;
+
+  { 指针从此停在条上不动。**必须真跑完「延时 + 一整段淡出」还多一截**：
+    只推到装膛那一拍的话，守卫在不在都读到 1.0。每一拍都断言，所以中途哪怕
+    只淡了一帧也抓得到 —— 「交界处不许有任何一帧在淡」这句话的字面意思。 }
+  steps := (Delay + TyScrollBarFadeOutMs) div Step + 4;
+  for i := 1 to steps do
+  begin
+    FBar.AutoHideTick(Step);
+    AssertEquals(Format('第 %d 拍：指针停在条上，交界处不许有任何一帧在淡', [i]),
+      1.0, FBar.FadeLevel, 0.001);
+  end;
+end;
+
+procedure TTyScrollBarAutoHideTests.CrossingOntoTheBarNeverFadesWhenTheHostLeavesFirst;
+begin
+  CheckCrossingOntoTheBarNeverFades(False, 0);
+end;
+
+procedure TTyScrollBarAutoHideTests.CrossingOntoTheBarNeverFadesWhenTheBarEntersFirst;
+begin
+  CheckCrossingOntoTheBarNeverFades(True, 0);
+end;
+
+procedure TTyScrollBarAutoHideTests.CrossingOntoTheBarSurvivesATickLandingBetweenTheTwoEvents;
+begin
+  { 两个事件之间真的可以塞进一拍定时器 —— 它们是两条消息，中间隔着消息队列。
+    16ms 是那块表的间隔。 }
+  CheckCrossingOntoTheBarNeverFades(False, 16);
+end;
+
+procedure TTyScrollBarAutoHideTests.AnInvisibleBarIsNotWokenWhenThePointerLeavesTheHost;
+var
+  hidden: TTyScrollBar;
+begin
+  { 「不开这个特性的人一分钱不花」在这条新路上的对照组：内容装得下的时候宿主把
+    条 Visible 关了，指针从宿主上划过去不该让那条看不见的条转 1.4 秒的表。
+
+    **两条条一起验**，只差一个 Visible：只写下半截的话，「这条路上根本没有表」
+    也能让 AssertFalse 绿着蒙混过关。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  FBar.HandleNeeded;
+
+  FBar.SetHostHovered(True);
+  TBarAccess(FBar).HideTimerTick;      // 按住不放：表头一拍把自己停掉
+  AssertFalse('坐标系：指针压在宿主上的时候表是停的', FBar.AutoHideClockArmed);
+  FBar.SetHostHovered(False);
+  AssertTrue('看得见的条：指针一走就得把表起回来', FBar.AutoHideClockArmed);
+
+  hidden := TTyScrollBar.Create(FForm);
+  hidden.Parent := FForm;
+  hidden.Controller := FCtl;
+  hidden.HandleNeeded;
+  { 顺序照真机来：条先活着，宿主发现内容装得下才把它收起来。 }
+  hidden.Visible := False;
+  hidden.SetHostHovered(True);
+  TBarAccess(hidden).HideTimerTick;
+  AssertFalse('坐标系：按住不放，表一样是停的', hidden.AutoHideClockArmed);
+  hidden.SetHostHovered(False);
+  AssertFalse('一条看不见的条不值得为「指针走了」起一块 60fps 的表',
+    hidden.AutoHideClockArmed);
+end;
+
+procedure TTyScrollBarAutoHideTests.CheckHostHoverReachesBothBars(AHost: TWinControl;
+  const AWhat: string);
+var
+  v, h: TTyScrollBar;
+begin
+  v := FindEmbeddedBar(AHost, sbVertical);
+  h := FindEmbeddedBar(AHost, sbHorizontal);
+  AssertTrue(AWhat + '：内嵌竖条应当已经存在', v <> nil);
+  AssertTrue(AWhat + '：内嵌横条应当已经存在', h <> nil);
+  AssertFalse(AWhat + '：坐标系——指针还没进来', v.HostHovered);
+  AssertFalse(AWhat + '：坐标系——指针还没进来', h.HostHovered);
+
+  { 走 LCL 真正用的那条路。直接调 MouseEnter 要另开 protected 口子，而且会跳过
+    FMouseInClient 那套记账 —— 滚动框挂的正是这两条消息（它的内容是别的控件，
+    指针落在里面那颗按钮上时 LCL 压根不调用它的 MouseEnter）。 }
+  AHost.Perform(CM_MOUSEENTER, 0, 0);
+  AssertTrue(AWhat + '：指针进宿主 -> 竖条必须知道', v.HostHovered);
+  { 横条这一句是真的在防东西：只喂竖条的转发，上面那句照样绿。 }
+  AssertTrue(AWhat + '：指针进宿主 -> 横条必须知道', h.HostHovered);
+
+  AHost.Perform(CM_MOUSELEAVE, 0, 0);
+  AssertFalse(AWhat + '：指针离开 -> 竖条必须知道', v.HostHovered);
+  AssertFalse(AWhat + '：指针离开 -> 横条必须知道', h.HostHovered);
+end;
+
+procedure TTyScrollBarAutoHideTests.ListBoxForwardsHostHoverToBothBars;
+var
+  lb: TTyListBox;
+begin
+  lb := NewListBox;
+  FillListBox(lb);
+  CheckHostHoverReachesBothBars(lb, 'ListBox');
+end;
+
+procedure TTyScrollBarAutoHideTests.MemoForwardsHostHoverToBothBars;
+var
+  m: TTyMemo;
+begin
+  m := NewMemo;
+  m.ScrollBars := ssBoth;
+  CheckHostHoverReachesBothBars(m, 'Memo');
+end;
+
+procedure TTyScrollBarAutoHideTests.GridForwardsHostHoverToBothBars;
+var
+  g: TTyStringGrid;
+begin
+  g := NewGrid;
+  CheckHostHoverReachesBothBars(g, 'Grid');
+end;
+
+procedure TTyScrollBarAutoHideTests.ListViewForwardsHostHoverToBothBars;
+var
+  lv: TTyListView;
+begin
+  lv := NewListView;
+  CheckHostHoverReachesBothBars(lv, 'ListView');
+end;
+
+procedure TTyScrollBarAutoHideTests.ScrollBoxForwardsHostHoverToBothBars;
+var
+  sb: TTyScrollBox;
+begin
+  { 滚动框是唯一挂 CM_MOUSEENTER 的宿主，理由见它那两个重写。 }
+  sb := NewScrollBox;
+  CheckHostHoverReachesBothBars(sb, 'ScrollBox');
+end;
+
+procedure TTyScrollBarAutoHideTests.TreeViewForwardsHostHoverToBothBars;
+var
+  tv: TTyTreeView;
+begin
+  tv := NewTreeView;
+  CheckHostHoverReachesBothBars(tv, 'TreeView');
+end;
+
+procedure TTyScrollBarAutoHideTests.ListBoxHoverHoldsItsRealBarsOpen;
+var
+  lb: TTyListBox;
+  v: TTyScrollBar;
+begin
+  { 上面那六条问的是「消息到没到」，这一条问的是「到了之后条亮没亮」——
+    中间隔着 SetHostHovered / AutoHideHeldOpen 两层，都得真走一遍。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  lb := NewListBox;
+  FillListBox(lb);
+  v := FindEmbeddedBar(lb, sbVertical);
+  AssertTrue('内嵌竖条应当已经存在', v <> nil);
+  AssertEquals('坐标系：宿主把 controller 传下去了，条读到的是这张主题的延时',
+    1000, v.EffectiveAutoHideMs);
+
+  { 先让它自己淡没 —— 这正是用户开始抱怨的那个状态。 }
+  v.AutoHideTick(1000);
+  v.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('坐标系：没人碰的条已经淡没了', 0.0, v.FadeLevel, 0.001);
+
+  lb.Perform(CM_MOUSEENTER, 0, 0);
+  v.AutoHideTick(TyScrollBarFadeInMs);
+  AssertEquals('鼠标移到列表上，条就该回来', 1.0, v.FadeLevel, 0.001);
+  v.AutoHideTick(99999);
+  v.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('指针一直在列表上，条就一直在', 1.0, v.FadeLevel, 0.001);
+
+  lb.Perform(CM_MOUSELEAVE, 0, 0);
+  v.AutoHideTick(1000);
+  v.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('指针离开列表之后才淡', 0.0, v.FadeLevel, 0.001);
 end;
 
 initialization

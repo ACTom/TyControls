@@ -71,6 +71,8 @@ type
     procedure HScrollBarChange(Sender: TObject);
     procedure SetScrollWidth(const AValue: Integer);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     { A bar's thickness in device px -- the same '--scrollbar-size' metric for both, so the
       horizontal one is as thick as the vertical one is wide on every theme and density. }
     function ScrollBarThickness: Integer;
@@ -201,6 +203,9 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
+      docs/controls/scrollbar.md §7。 }
+    procedure MouseEnter; override;
     procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
@@ -1274,9 +1279,27 @@ begin
   end;
 end;
 
+procedure TTyListBox.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉。** 只喂竖条的话，一个横向也溢出的列表指针进来时只亮一半
+    ——「转发只写了一半」是本库反复出过的那种故障。
+    两条都是惰性建的，nil 判断是真的会走到（内容还没撑出条的时候）。 }
+  if FScrollBar <> nil then FScrollBar.SetHostHovered(AHovered);
+  if FHScrollBar <> nil then FHScrollBar.SetHostHovered(AHovered);
+end;
+
+procedure TTyListBox.MouseEnter;
+begin
+  { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
+  inherited MouseEnter;
+  NoteHostHover(True);
+end;
+
 procedure TTyListBox.MouseLeave;
 begin
   inherited MouseLeave;
+  { 只是起倒计时，不当场隐藏：指针从列表正文挪到条上时这里也会走一趟。 }
+  NoteHostHover(False);
   if FHoverRow <> -1 then
   begin
     FHoverRow := -1;

@@ -1021,6 +1021,8 @@ type
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     procedure HeaderChanged(Sender: TObject);
     procedure SetHeader(AValue: TTyHeader);
     procedure SetRowCount(AValue: Integer);
@@ -1420,6 +1422,10 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
+      docs/controls/scrollbar.md §7。 }
+    procedure MouseEnter; override;
+    procedure MouseLeave; override;
     { 列头上 X 处的分隔条索引(拖它改列宽);没命中返回 -1。 }
     function  DividerAtX(AX: Integer): Integer;
 
@@ -4244,6 +4250,28 @@ begin
     回弹不用担心:SetScrollX -> SyncScrollBars 期间 FSyncingScroll 为真,
     再进到这里第一行就退出去了。 }
   ScrollX := FHScroll.Position;
+end;
+
+procedure TTyCustomGrid.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
+    两条都从构造函数起就存在，nil 判断是防御。 }
+  if FVScroll <> nil then FVScroll.SetHostHovered(AHovered);
+  if FHScroll <> nil then FHScroll.SetHostHovered(AHovered);
+end;
+
+procedure TTyCustomGrid.MouseEnter;
+begin
+  { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
+  inherited MouseEnter;
+  NoteHostHover(True);
+end;
+
+procedure TTyCustomGrid.MouseLeave;
+begin
+  inherited MouseLeave;
+  { 只是起倒计时，不当场隐藏：指针从单元格挪到条上时这里也会走一趟。 }
+  NoteHostHover(False);
 end;
 
 procedure TTyCustomGrid.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);

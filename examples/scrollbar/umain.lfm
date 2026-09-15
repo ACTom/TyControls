@@ -190,7 +190,7 @@ object MainForm: TMainForm
       Width = 236
       WordWrap = True
       Layout = tlTop
-      Caption = 'A bar nobody is using fades out; it comes back the moment you touch it'
+      Caption = 'A bar nobody is using fades out; point at its list and it is back'
     end
     object RgAutoHide: TTyRadioGroup
       Left = 560
@@ -228,7 +228,7 @@ object MainForm: TMainForm
       Width = 236
       WordWrap = True
       Layout = tlTop
-      Caption = 'Scroll the list, then let go: its bar fades after the delay above. A bar that has not been used yet does not fade. Only win11, macOS, fluent, material3, adwaita and ubuntu ship it on'
+      Caption = 'Move the pointer over the list and its bar appears; take it away and the bar fades after the delay above. Only win11, macOS, fluent, material3, adwaita and ubuntu ship it on'
     end
   end
 end

@@ -635,6 +635,8 @@ type
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     procedure UpdateScrollBars;
     { B (columns): header/column change handler }
     procedure HeaderChanged(Sender: TObject);
@@ -881,6 +883,9 @@ type
     procedure DblClick; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
+      docs/controls/scrollbar.md §7。 }
+    procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { ③d C1: LCL delivers printable chars here (after KeyDown). When
@@ -6787,9 +6792,26 @@ begin
   end;
 end;
 
+procedure TTyTreeView.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
+    两条都从构造函数起就存在，nil 判断是防御。 }
+  if FVScroll <> nil then FVScroll.SetHostHovered(AHovered);
+  if FHScroll <> nil then FHScroll.SetHostHovered(AHovered);
+end;
+
+procedure TTyTreeView.MouseEnter;
+begin
+  { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
+  inherited MouseEnter;
+  NoteHostHover(True);
+end;
+
 procedure TTyTreeView.MouseLeave;
 begin
   inherited MouseLeave;
+  { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
+  NoteHostHover(False);
   if FHotNode <> nil then
   begin
     FHotNode := nil;

@@ -286,6 +286,8 @@ type
     procedure SetWantReturns(AValue: Boolean);
     procedure SetScrollBars(AValue: TScrollStyle);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     procedure SetAlignment(AValue: TAlignment);
     procedure SetCharCase(AValue: TEditCharCase);
     { Fold AStr per CharCase (identical rule to TTyEdit.ApplyCharCase). '' passes through. }
@@ -709,6 +711,10 @@ type
     // End the drag on left-button release (no Enabled guard, matching TTyEdit).
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
+    { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
+      docs/controls/scrollbar.md §7。 }
+    procedure MouseEnter; override;
+    procedure MouseLeave; override;
     // Wheel scrolls +/-3 logical lines via SetTopLine (after the user's handler).
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
@@ -1285,6 +1291,28 @@ begin
   // Re-evaluate the embedded bar's visibility under the new policy.
   UpdateScrollBar;
   Invalidate;
+end;
+
+procedure TTyMemo.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
+    两条都是惰性建的，nil 判断是真的会走到（内容还没撑出条的时候）。 }
+  if FScrollBar <> nil then FScrollBar.SetHostHovered(AHovered);
+  if FHScrollBar <> nil then FHScrollBar.SetHostHovered(AHovered);
+end;
+
+procedure TTyMemo.MouseEnter;
+begin
+  { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
+  inherited MouseEnter;
+  NoteHostHover(True);
+end;
+
+procedure TTyMemo.MouseLeave;
+begin
+  inherited MouseLeave;
+  { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
+  NoteHostHover(False);
 end;
 
 procedure TTyMemo.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);

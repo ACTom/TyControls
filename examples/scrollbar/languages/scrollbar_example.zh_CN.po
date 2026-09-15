@@ -64,8 +64,8 @@ msgid "Animated thumb"
 msgstr "滑块动画"
 
 #: tmainform.lblautotitle.caption
-msgid "A bar nobody is using fades out; it comes back the moment you touch it"
-msgstr "没人用的滚动条会淡出；一碰它就回来"
+msgid "A bar nobody is using fades out; point at its list and it is back"
+msgstr "没人用的滚动条会淡出；鼠标指到列表上就回来"
 
 #: tmainform.rgautohide.caption
 msgid "AutoHide - both bars and the list"
@@ -84,8 +84,8 @@ msgid "sbahAuto - always fades"
 msgstr "sbahAuto —— 一定淡出"
 
 #: tmainform.lblautohint.caption
-msgid "Scroll the list, then let go: its bar fades after the delay above. A bar that has not been used yet does not fade. Only win11, macOS, fluent, material3, adwaita and ubuntu ship it on"
-msgstr "滚一下列表再松手：过了上面那个延时，它的滚动条就淡出。还没被用过的条不会淡。出厂开着它的只有 win11、macOS、fluent、material3、adwaita、ubuntu"
+msgid "Move the pointer over the list and its bar appears; take it away and the bar fades after the delay above. Only win11, macOS, fluent, material3, adwaita and ubuntu ship it on"
+msgstr "鼠标移到列表上，它的滚动条就出来；移开之后过了上面那个延时才淡出。出厂开着它的只有 win11、macOS、fluent、material3、adwaita、ubuntu"
 
 # --- code resourcestrings (msgid=Pascal source) ---
 

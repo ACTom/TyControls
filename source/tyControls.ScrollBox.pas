@@ -2,7 +2,7 @@ unit tyControls.ScrollBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollContent;
 
@@ -67,6 +67,9 @@ type
     procedure VScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件（或它里面的任何一个子控件）身上」转发给两条条。
+      见 CMMouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     procedure ScrollContentTo(ANewX, ANewY: Integer);
     function ScrollbarThick: Integer;
     function MeasureAndDock: Boolean;
@@ -96,6 +99,20 @@ type
       resize to ever notice its own content, and the docs had to tell hosts to call
       UpdateScrollRange by hand — something no other LCL container asks for. }
     procedure ControlsAligned; override;
+    { 指针进/出滚动框 = 两条条显示 / 开始倒计时。规则见 docs/controls/scrollbar.md §7。
+
+      **挂的是 CM_MOUSEENTER/CM_MOUSELEAVE，不是 MouseEnter/MouseLeave**，而另外
+      五个宿主挂的是后者。区别在于「内容」是什么：那五个的内容是自己画出来的，
+      指针落在内容上就是落在控件上；滚动框的内容是**别的控件**，指针落在里面
+      那颗按钮上时，LCL 只把 CM_MOUSEENTER 带着 LParam=子控件广播给父控件
+      （lcl/include/control.inc:1179），**不调用父控件的 MouseEnter**。只重写
+      MouseEnter 的话，一个装满控件的滚动框要指针正好落在空白背景上才亮条
+      ——而那恰恰是它最不常待的地方。
+
+      转发的是 MouseInClient 而不是「这条消息是进还是出」：那才是 LCL 记的
+      「指针在不在我这一片」，子控件之间来回挪时它一直是 True。 }
+    procedure CMMouseEnter(var Message: TLMessage); message CM_MOUSEENTER;
+    procedure CMMouseLeave(var Message: TLMessage); message CM_MOUSELEAVE;
     { The viewport: the box minus whatever gutters the visible bars own.
 
       This HAS to be on ClientRect and not just on the layout rect below. LCL records a
@@ -403,6 +420,28 @@ begin
     FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
     FHScrollBar.Visible := False;
   end;
+end;
+
+procedure TTyScrollBox.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
+    两条都是惰性建的（EnsureBars），nil 判断是真的会走到。 }
+  if FVScrollBar <> nil then FVScrollBar.SetHostHovered(AHovered);
+  if FHScrollBar <> nil then FHScrollBar.SetHostHovered(AHovered);
+end;
+
+procedure TTyScrollBox.CMMouseEnter(var Message: TLMessage);
+begin
+  inherited;
+  NoteHostHover(MouseInClient);
+end;
+
+procedure TTyScrollBox.CMMouseLeave(var Message: TLMessage);
+begin
+  inherited;
+  { 只是起倒计时，不当场隐藏：指针从一颗子控件挪到另一颗、或者挪到条上，
+    这里都会走一趟。 }
+  NoteHostHover(MouseInClient);
 end;
 
 procedure TTyScrollBox.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
