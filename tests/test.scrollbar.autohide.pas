@@ -322,6 +322,24 @@ begin
   end;
 end;
 
+{ 起表那三条要真句柄,而控制台 runner 里的 Application 是 tytests.lpr 那个
+  TTyTestRunner,不是 Forms.Application —— 后者没 Initialize 过,widgetset 的窗口类
+  就没注册,CreateHandle 报 1407(找不到窗口类)。
+
+  **必须自己做,不能指望全量跑的时候别的套件已经做过了。** 一开始这三条就是那样:
+  --all 全绿,--suite=TTyScrollBarAutoHideTests 单跑三条全是 1407 —— 断言其实站在
+  「谁先跑过」这个进程级事实上。test.base / test.form / test.windoweffects 等
+  好几个单元各自都有这么一份惰性开关,照抄,别去共用谁的。 }
+var
+  AutoHideWidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if AutoHideWidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  AutoHideWidgetSetReady := True;
+end;
+
 procedure TTyScrollBarAutoHideTests.SetUp;
 begin
   { 控件必须有父控件，并且自带 controller——否则它读的是进程级主题，
@@ -1442,6 +1460,7 @@ begin
   AssertFalse('没句柄建不出表来——这是 bug 的起点,不是要修的地方',
     FBar.AutoHideClockArmed);
 
+  NeedWidgetSet;
   FForm.HandleNeeded;
   FBar.HandleNeeded;
   AssertTrue('句柄到手必须把出生期间没赶上的那次起表补上',
@@ -1454,6 +1473,7 @@ begin
     「换到一个不自动隐藏的主题」(把淡掉的条收回来)那一个方向。反方向——换到一张
     开自动隐藏的皮肤——没有任何东西会去起表:条没被碰过就没有 NoteActivity,
     句柄早有了 InitializeWnd 也过去了,于是皮肤明明写了 1200,条一直亮着。 }
+  NeedWidgetSet;
   FForm.HandleNeeded;
   FBar.HandleNeeded;
 
@@ -1480,6 +1500,7 @@ begin
 
     重绘是热路径,所以特意连着刷好几次:一次没起、第五次起起来了同样是漏。 }
   UseThemeCss(':root { --surface: #fff; }');
+  NeedWidgetSet;
   FForm.HandleNeeded;
   FBar.HandleNeeded;
   AssertEquals('坐标系:这张皮肤把自动隐藏关着', TyScrollBarAutoHideOff,
