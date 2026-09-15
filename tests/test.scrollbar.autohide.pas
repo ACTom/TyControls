@@ -74,6 +74,13 @@ type
     procedure AtRestTheThemeStyleIsHandedOverUntouched;
     procedure FadeReachesThePaintedPixels;
     procedure HidingShowsTheRealParentBackgroundNotAFlatSlab;
+    { --- 起表 ----------------------------------------------------------------
+      「表该不该起」和「表转起来之后算得对不对」是两件事,上面那一整批验的全是
+      后者:它们都拿 AutoHideTick/HideTimerTick 手动推,等于替被测代码把表起好了。
+      真机上报回来的 bug 正是前者——一条谁也没碰过的条,表是 0 块。 }
+    procedure TheClockStartsWhenTheHandleArrives;
+    procedure ASkinThatTurnsAutoHideOnStartsTheClock;
+    procedure ASkinWithoutAutoHideBuildsNoClock;
     { --- 宿主转发 ------------------------------------------------------------
       每个宿主一组，故意不写成循环：六个宿主的构造路径各不相同(两个惰性、
       四个急切，其中 ScrollBox 的「急切」还发生在 inherited Create 里面)，
@@ -1416,6 +1423,71 @@ begin
   FBar.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
   AssertEquals('控件上的同名属性只收裸声明,带选择器的整块解析不过、被当空补丁扔掉',
     CModernMs, FBar.EffectiveAutoHideMs);
+end;
+
+procedure TTyScrollBarAutoHideTests.TheClockStartsWhenTheHandleArrives;
+begin
+  { 用户报的那条:「鼠标不移动经过 scrollbar,这个 scrollbar 永远不会自动隐藏」。
+    根因是起表这件事只有 NoteActivity 一条路,而条在出生期间收到的每一次
+    NoteActivity 都早于句柄 —— EnsureHideTimer 没句柄就直接 Exit,从前没有任何
+    东西回头重试。
+
+    **无头够得着真句柄**:HandleNeeded 在普通控制台进程里就会走完
+    CreateHandle -> InitializeWnd(test.focus.tabstop 和 test.form 早就这么干),
+    所以这条不需要任何假缝,问的是真表。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1200; }');
+  FBar.AutoHide := sbahAuto;
+  AssertEquals('坐标系:延时确实是开着的,否则下面两句都没在验东西',
+    1200, FBar.EffectiveAutoHideMs);
+  AssertFalse('没句柄建不出表来——这是 bug 的起点,不是要修的地方',
+    FBar.AutoHideClockArmed);
+
+  FForm.HandleNeeded;
+  FBar.HandleNeeded;
+  AssertTrue('句柄到手必须把出生期间没赶上的那次起表补上',
+    FBar.AutoHideClockArmed);
+end;
+
+procedure TTyScrollBarAutoHideTests.ASkinThatTurnsAutoHideOnStartsTheClock;
+begin
+  { 同一个根的另一半:换主题时控件收到的只有一个裸 Invalidate,而它从前只处理
+    「换到一个不自动隐藏的主题」(把淡掉的条收回来)那一个方向。反方向——换到一张
+    开自动隐藏的皮肤——没有任何东西会去起表:条没被碰过就没有 NoteActivity,
+    句柄早有了 InitializeWnd 也过去了,于是皮肤明明写了 1200,条一直亮着。 }
+  FForm.HandleNeeded;
+  FBar.HandleNeeded;
+
+  UseThemeCss(':root { --surface: #fff; }');
+  FBar.Invalidate;
+  AssertEquals('坐标系:这张皮肤没开自动隐藏', TyScrollBarAutoHideOff,
+    FBar.EffectiveAutoHideMs);
+  AssertFalse('关着的时候不该有表', FBar.AutoHideClockArmed);
+
+  UseThemeCss(':root { --scrollbar-auto-hide: 1200; }');
+  FBar.Invalidate;
+  AssertEquals('坐标系:新皮肤这一层是开着的', 1200, FBar.EffectiveAutoHideMs);
+  AssertTrue('换到一张开自动隐藏的皮肤,表必须自己转起来',
+    FBar.AutoHideClockArmed);
+end;
+
+procedure TTyScrollBarAutoHideTests.ASkinWithoutAutoHideBuildsNoClock;
+var
+  i: Integer;
+begin
+  { 构造函数许诺的「不开这个特性的人一分钱不花」在起表这条新路上的凭据。
+    断言不是空的:句柄是真的,起表真会走到 EnsureHideTimer 把 TTimer 建出来
+    ——把 ArmAutoHideClock 的两道门一起摘掉,这条立刻变红。
+
+    重绘是热路径,所以特意连着刷好几次:一次没起、第五次起起来了同样是漏。 }
+  UseThemeCss(':root { --surface: #fff; }');
+  FForm.HandleNeeded;
+  FBar.HandleNeeded;
+  AssertEquals('坐标系:这张皮肤把自动隐藏关着', TyScrollBarAutoHideOff,
+    FBar.EffectiveAutoHideMs);
+  for i := 1 to 5 do
+    FBar.Invalidate;
+  AssertFalse('主人压根没开这个特性,他的条上不该挂一块 60fps 的表空转',
+    FBar.AutoHideClockArmed);
 end;
 
 initialization

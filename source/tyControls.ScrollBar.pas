@@ -99,6 +99,14 @@ type
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     procedure EnsureHideTimer;
+    { 把延时表装上并起起来,**不碰闲置时钟**。
+
+      和 NoteActivity 的分工要划清:那个说的是「有人在用」——它把闲置清零、
+      该淡回来的淡回来;这个只回答「这条条现在该不该有一块表在转」。条刚
+      *进入*可自动隐藏的状态(句柄到手、换到一个开自动隐藏的皮肤)不是「有人
+      在用」,拿 NoteActivity 来干这活等于每次重绘都给它续一次命,条就再也
+      淡不掉了。 }
+    procedure ArmAutoHideClock;
     procedure HandleHideTimer(Sender: TObject);
     function AutoHideHeldOpen: Boolean;
     procedure StartFade(ATo: Single; ADurationMs: Integer);
@@ -110,6 +118,24 @@ type
     FDragging: Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    { 句柄到手的那一刻把延时表起起来。**这是自动隐藏唯一一个「没人碰过它」的
+      起表点。**
+
+      从前起表只有 NoteActivity 一条路,而它的每一个调用点要么是用户在条上比划、
+      要么是代码改 Position。条在出生期间收到的 NoteActivity 全都早于句柄
+      (.lfm 流式化设 AutoHide -> SetAutoHide、宿主把 ScrollBarAutoHide 转发给
+      刚建出来的条、宿主头一次 UpdateScrollBar 设 Position ——最后这个连
+      NoteActivity 都到不了,0 = 0 在 SetPosition 里就早退了),而 EnsureHideTimer
+      在没句柄的时候直接 Exit,建不出表来。句柄随后到位,**从前没有任何东西
+      回头重试**:一条摆在屏幕上、谁也没碰过的条,表是 0 块,永远停在
+      FadeLevel = 1.0,非得等鼠标移上去(MouseEnter -> NoteActivity)才开始算
+      延时——用户报的就是这个。
+
+      有一种情形这里救不了,也不该救:独立摆放的条要是正好是窗体的头一个
+      tab stop,一出生就有焦点,而有焦点是「按住不放」的信号之一
+      (AutoHideHeldOpen),表起来了头一拍也会把自己停掉。那是设计,不是 bug
+      ——键盘焦点停在一个看不见的控件上才是事故。 }
+    procedure InitializeWnd; override;
     { 全身只为自动隐藏服务：指针压在条上时它必须一直亮着。 }
     procedure MouseEnter; override;
     { 同上，指针离开那一半：把停掉的延时表重新起起来。 }
@@ -185,6 +211,13 @@ type
     function EffectiveAutoHideMs: Integer;
     { 0..1 的当前可见度。1 = 完全显示。绘制时乘进样式的 opacity。 }
     property FadeLevel: Single read FFadeLevel;
+    { 延时表现在转着没有。**只读**,问的是真表(FHideTimer),不是哪个影子状态。
+
+      开这个口是为了让测试断言「起表这个决定做没做」——只看 FadeLevel 是断不出
+      来的:一条从没起过表的条和一条刚起了表还没到点的条,可见度都是 1.0,
+      长得一模一样,而这两者正是这次修的 bug 的两边。无头够得着真句柄
+      (HandleNeeded 就会走 InitializeWnd),所以不需要假缝。 }
+    function AutoHideClockArmed: Boolean;
     { 「有人在用」。滚动、悬停、拖动、聚焦都调它。 }
     procedure NoteActivity;
     { 测试缝：推进 AMs 毫秒。真机由 FHideTimer 驱动，headless 由测试驱动
@@ -669,6 +702,45 @@ begin
   end;
 end;
 
+procedure TTyScrollBar.ArmAutoHideClock;
+begin
+  { 真正的门是第二句 AutoHideTimerNeeded:已经淡到 0 又没人按住的条起表也没活干,
+    头一拍就会把自己停掉——那一拍是白烧的,而且 HandleHideTimer 停表时顺手清掉
+    FFadeLastTickMs,看着像什么都没发生过,查起来更费事。
+
+    头一句是**热路径的短路**,不是第二道保险:AutoHideTimerNeeded 最后问的就是
+    同一个 EffectiveAutoHideMs >= 0,所以单独摘掉头一句,行为上几乎看不出来
+    ——变异测试证实过,全量 7103 条一条不红。它在这儿是因为 Invalidate 一秒钟
+    要走几十次,而自动隐藏关着的条应该在**第一个字段读**上就出去,不该先绕过
+    FFadeAnim.Running、再绕过 AutoHideHeldOpen(那里面还有一次 Focused,要问
+    widgetset)。顺带也真挡住一种状态:淡出刚装上膛还没推进(可见度仍是 1.0)
+    的那一刻主题把自动隐藏关掉,AutoHideTimerNeeded 会在 FFadeAnim.Running 上
+    答 True —— 没这一句就会给一条主人已经关掉特性的条挂上表(下一拍自己会停,
+    所以测不出来,但那一拍本来就不该有)。
+
+    **这里不碰 FIdleMs**,理由见声明处。 }
+  if EffectiveAutoHideMs < 0 then Exit;
+  if not AutoHideTimerNeeded then Exit;
+  EnsureHideTimer;
+  if FHideTimer <> nil then FHideTimer.Enabled := True;
+end;
+
+function TTyScrollBar.AutoHideClockArmed: Boolean;
+begin
+  Result := (FHideTimer <> nil) and FHideTimer.Enabled;
+end;
+
+procedure TTyScrollBar.InitializeWnd;
+begin
+  inherited InitializeWnd;
+  { 两个时钟都从这一刻起算。一条刚拿到句柄的条没有「已经闲置过的时间」——
+    出生那一段它根本还不在屏幕上;FFadeLastTickMs 同理,留着出生前的旧戳的话
+    头一拍会把那一整段报成经过时间,闲置时钟一步跨过延时,条一露面就开始淡。 }
+  FIdleMs := 0;
+  FFadeLastTickMs := 0;
+  ArmAutoHideClock;
+end;
+
 function TTyScrollBar.AutoHideTimerNeeded: Boolean;
 { 三条,顺序是有讲究的。
 
@@ -818,7 +890,19 @@ begin
   begin
     FFadeAnim.SetTargetImmediate(1.0);
     FFadeLevel := 1.0;
-  end;
+  end
+  { **换主题的另一半方向,从前这里是空的。** 上面那条管「换到一个不自动隐藏的
+    主题」,可反过来——换到一个自动隐藏的皮肤——同样没有任何东西会去起表:
+    条没被碰过就没有 NoteActivity,句柄早就有了所以 InitializeWnd 也过去了,
+    于是新皮肤明明写了 1200,条却一直亮着。跟上面那条是同一个根:换主题只有
+    Invalidate 这一个广播。
+
+    顺序是为热路径挑的,不是随手写的:重绘一秒钟几十次,而绝大多数重绘发生在
+    表已经转着的条上——先读 FHideTimer.Enabled 这个字段,那种情形一次比较就
+    短路了;自动隐藏关着的条落到 ArmAutoHideClock,头一句就是带缓存的
+    EffectiveAutoHideMs,同样立刻出来。 }
+  else if (FHideTimer = nil) or (not FHideTimer.Enabled) then
+    ArmAutoHideClock;
   inherited Invalidate;
 end;
 
