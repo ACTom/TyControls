@@ -568,6 +568,35 @@ function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
   的正好是当下真画出来的那一圈。 }
 function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
 
+{ 内嵌条**贴着圆角那一端**要让开多少,单位是设备像素(APPI 已经算进去了)。
+
+  TyChromeInsetLogical 让开的是**直边**上的那一圈:边框画在最外一圈,让开它那么宽就够了。
+  圆角上不够 —— 弧是往里弯的,同一条边框在靠近角的地方离外沿更远,于是它正好落进条那块矩形
+  里。真机报的就是这个:「容器一般是圆角的,滚动条隐藏之后,右上角、右下角两个角的边框还是
+  有几个像素被白色覆盖了」。
+
+  让开的不是一个半径。条的外沿本来就已经内缩了 chrome,而边框只有 w 宽 —— 中间那 slack =
+  chrome-w 列是条在直边上已经躲开的余量。弧走到条那几列时还没弯到底:圆弧横向弯进 slack 个
+  像素,纵向要走 sqrt(2·r·slack) 行(矢高 h≈s²/2r,解 h=slack)。于是
+      inset = chrome + (r - floor(sqrt(2·r·slack)) + 1)
+  末尾那个 +1 与 TyChromeInsetLogical 里的 +1 是同一件事:抗锯齿留量。没有它,实测 78 个组合
+  里有 3 个会差一行 —— 差一行就是真机报的那几个像素。
+  r=6 的主题每端让 6 不是 2,showcase(r=10、2px 边)让 10 不是 3 —— 条每一端短这么几个像素。
+  比「按半径让」便宜:同样 r=6 按半径要让 8,r=10 要让 13。
+  实测逐个量过(test.scrollbar.hostframe 的 TheCornerInsetClearsTheArcAtEveryRadius:
+  r=0..12 × 1px/2px 边框 × 96/144/192 DPI,共 78 组):这个数一次都没有短过,最多比「弧上最后
+  一点墨的下一行」多让 3 个设备像素。
+
+  半径取**四角里最大的那个**,因为 StrokeBorder 就是这么描的:半径为 0 的角走 rrXxxSquare
+  成直角,其余一律用最大的那个半径。ACornerRadius 传的是这一端自己那个角,它只决定「这个角
+  是不是圆的」。
+
+  按设备像素算,不是先按逻辑算完再缩放:sqrt 不是线性的,而那点余量在 200% 下是**两个**设备
+  像素(chrome 4 减边框 2),弧因此能多记一截。按逻辑算只给它一个像素的额度,算出来的数缩放
+  完会大出一截 —— 实测 r=6 在 200% 上会让到 12,而弧的墨到第 8 行就断了,条白白短了 4 个
+  像素。 }
+function TyBarCornerInsetPx(const AStyle: TTyStyleSet; ACornerRadius, APPI: Integer): Integer;
+
 implementation
 
 function TyOnTitleBar(AControl: TControl): Boolean;
@@ -601,6 +630,37 @@ begin
     if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
       Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
   if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
+end;
+
+function TyBarCornerInsetPx(const AStyle: TTyStyleSet; ACornerRadius, APPI: Integer): Integer;
+var
+  corners: TTyCorners;
+  band, r, slack, run, extra: Integer;
+begin
+  band   := TyChromeInsetLogical(AStyle);
+  Result := MulDiv(band, APPI, 96);
+  { 没有 chrome 就没有要护的那一圈(直边上也一样,见 TyChromeInsetLogical);这一端是直角
+    就没有弧,让开直边那一圈就够了。 }
+  if (Result <= 0) or (ACornerRadius <= 0) then Exit;
+  { 条在直边上已经躲开的余量:整条带减去边框自己那么宽。band-1 就是边框/焦点环的宽度
+    (TyChromeInsetLogical 是它 +1),两边各自缩放再相减 —— 200% 下这个余量是 2 个设备像素
+    而不是 1,先算完再缩会把它算成 1,于是让得太多。 }
+  slack := Result - MulDiv(band - 1, APPI, 96);
+  if slack < 1 then slack := 1;
+  corners := TyEffectiveCorners(AStyle);
+  r := corners.TL;
+  if corners.TR > r then r := corners.TR;
+  if corners.BR > r then r := corners.BR;
+  if corners.BL > r then r := corners.BL;
+  r := MulDiv(r, APPI, 96);
+  if r <= 0 then Exit;
+  { floor(sqrt(2·r·slack)) —— 整数开方,不走浮点:FPC 里 `2.0 * i` 是在 Single 里算的,而这个
+    数要拿去取整,差一个 ulp 就差一整行(而弧上正好有个整平方:r=8 那一档)。 }
+  run := 0;
+  while (run + 1) * (run + 1) <= 2 * r * slack do Inc(run);
+  extra := r - run + 1;   { +1:抗锯齿留量,与 TyChromeInsetLogical 里那个同源 }
+  if extra < 0 then extra := 0;
+  Inc(Result, extra);
 end;
 
 

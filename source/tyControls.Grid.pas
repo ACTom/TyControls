@@ -4551,7 +4551,10 @@ end;
 procedure TTyCustomGrid.UpdateScrollBars;
 var
   sb, vw, vh, pass, bodyH, bodyW, maxV, maxH, chrome, barW, barH: Integer;
+  vTop, vBot, hLeft, hRight: Integer;
   needV, needH: Boolean;
+  st: TTyStyleSet;
+  corners: TTyCorners;
 begin
   { csDestroying 留着,判空删了 —— 两句看着像一对,实际管的是**两件事**。
     析构那一侧:两个字段那时是野指针而不是 nil,判空救不了,csDestroying 才是护栏。
@@ -4564,7 +4567,12 @@ begin
     宿主再也画不进去:条完全可见时盖上去的是条自己的底色(看着像贴着边),自动隐藏把它淡没
     之后铺的是父控件的表面色,那一段边框就整段变白。与列表/备忘录让开的是同一条带、同一个
     函数(tyControls.Base 的 TyChromeInsetLogical)。 }
-  chrome := ScaleI(TyChromeInsetLogical(CurrentStyle));
+  st     := CurrentStyle;
+  chrome := ScaleI(TyChromeInsetLogical(st));
+  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 chrome
+    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
+    像素被白色覆盖了」)。见 TyBarCornerInsetPx。 }
+  corners := TyEffectiveCorners(st);
   needV := False;
   needH := False;
 
@@ -4613,10 +4621,17 @@ begin
   if FScrollY > maxV then FScrollY := maxV;
   if FScrollX > maxH then FScrollX := maxH;
 
-  { 两条一起缩,而且缩的是**同一个** chrome:只缩一条,角上那块就会多出或少掉 chrome 个
-    像素。vh/vw 已经各自让过对方的槽了,这里只再让四边的 chrome。 }
-  barH := vh - 2 * chrome; if barH < 0 then barH := 0;
-  barW := vw - 2 * chrome; if barW < 0 then barW := 0;
+  { 两条一起缩,而且**在它们相接的那一头缩同一个数**:只缩一条,角上那块就会多出或少掉一截。
+    vh/vw 已经各自让过对方的槽了,这里只再让两头。
+    朝着边框角的那一头按角让(见 TyBarCornerInsetPx),朝着**另一条条**的那一头仍按 chrome ——
+    挨着的是那条条,不是边框,再多让一截只会在两条之间豁开一道空。竖条让过之后的下沿正好落在
+    ClientHeight-sb-chrome,也就是横条的上沿,两条依旧严丝合缝。 }
+  vTop := TyBarCornerInsetPx(st, corners.TR, Dpi);
+  if needH then vBot := chrome else vBot := TyBarCornerInsetPx(st, corners.BR, Dpi);
+  hLeft := TyBarCornerInsetPx(st, corners.BL, Dpi);
+  if needV then hRight := chrome else hRight := TyBarCornerInsetPx(st, corners.BR, Dpi);
+  barH := vh - vTop - vBot; if barH < 0 then barH := 0;
+  barW := vw - hLeft - hRight; if barW < 0 then barW := 0;
 
   FSyncingScroll := True;
   try
@@ -4625,7 +4640,7 @@ begin
       FVScroll.Controller := Self.Controller;
       FVScroll.Width := sb;
       if not FVScroll.Dragging then
-        FVScroll.SetBounds(ClientWidth - sb - chrome, chrome, sb, barH);
+        FVScroll.SetBounds(ClientWidth - sb - chrome, vTop, sb, barH);
       FVScroll.Min := 0;
       { Max = **最大位置**而非内容尺寸 —— 滑块按 PageSize/((Max-Min)+PageSize) 定大小,
         喂内容尺寸会让滑块偏小、底部永远留一截、拖到底还会弹回。与列表/树同一约定。 }
@@ -4647,7 +4662,7 @@ begin
     begin
       FVScroll.Controller := Self.Controller;
       FVScroll.Width := sb;
-      FVScroll.SetBounds(ClientWidth - sb - chrome, chrome, sb, barH);
+      FVScroll.SetBounds(ClientWidth - sb - chrome, vTop, sb, barH);
       FVScroll.Min := 0;
       FVScroll.Max := maxV;
       FVScroll.PageSize := bodyH;
@@ -4667,7 +4682,7 @@ begin
       FHScroll.Controller := Self.Controller;
       FHScroll.Height := sb;
       if not FHScroll.Dragging then
-        FHScroll.SetBounds(chrome, ClientHeight - sb - chrome, barW, sb);
+        FHScroll.SetBounds(hLeft, ClientHeight - sb - chrome, barW, sb);
       FHScroll.Min := 0;
       FHScroll.Max := maxH;
       FHScroll.PageSize := bodyW;
@@ -4682,7 +4697,7 @@ begin
     begin
       FHScroll.Controller := Self.Controller;
       FHScroll.Height := sb;
-      FHScroll.SetBounds(chrome, ClientHeight - sb - chrome, barW, sb);
+      FHScroll.SetBounds(hLeft, ClientHeight - sb - chrome, barW, sb);
       FHScroll.Min := 0;
       FHScroll.Max := maxH;
       FHScroll.PageSize := bodyW;

@@ -950,9 +950,10 @@ end;
 procedure TTyListBox.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, padV, PPI,
-  maxH, chrome: Integer;
+  maxH, chrome, cTL, cTR, cBR, cBL: Integer;
   wantV, wantH: Boolean;
   S: TTyStyleSet;
+  corners: TTyCorners;
 begin
   PPI   := Font.PixelsPerInch;
   thick := ScrollBarThickness;
@@ -975,6 +976,15 @@ begin
     填充本来就按 R.Right - inset - trailSB 收边,现在正好抵住条)。改 gutter 会动到每一行
     的宽度,不在这次的范围里。 }
   chrome := MulDiv(TyChromeInsetLogical(S), PPI, 96);
+  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让
+    chrome 的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是
+    有几个像素被白色覆盖了」)。让多少见 TyBarCornerInsetPx —— 不是一个半径,是弧横向弯进一
+    个像素所需要的那几行。四个角各算各的:主题可以只圆两个角。 }
+  corners := TyEffectiveCorners(S);
+  cTL := TyBarCornerInsetPx(S, corners.TL, PPI);
+  cTR := TyBarCornerInsetPx(S, corners.TR, PPI);
+  cBR := TyBarCornerInsetPx(S, corners.BR, PPI);
+  cBL := TyBarCornerInsetPx(S, corners.BL, PPI);
   { --- settle the TWO bars together ----------------------------------------------------
     Each bar's gutter comes out of the other's viewport, so one pass can decide "no
     horizontal bar" from a width the vertical bar has not given up yet, and the other way
@@ -1023,9 +1033,10 @@ begin
     FHScrollBar.Align := alBottom;
     FHScrollBar.Height := thick;
     { 三边都让开那一圈 chrome(对齐引擎认 BorderSpacing)。左右两边一起缩,否则横条的两端
-      仍压在左右边框上。 }
-    FHScrollBar.BorderSpacing.Left   := chrome;
-    FHScrollBar.BorderSpacing.Right  := chrome;
+      仍压在左右边框上。横条是 alBottom、占满整宽,所以它两端贴着的正是下面那两个角 ——
+      两端按**角**让,下沿贴的是直边,按 chrome 让。 }
+    FHScrollBar.BorderSpacing.Left   := cBL;
+    FHScrollBar.BorderSpacing.Right  := cBR;
     FHScrollBar.BorderSpacing.Bottom := chrome;
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
@@ -1071,15 +1082,21 @@ begin
       FScrollBar.BorderSpacing.Right := chrome;
       FScrollBar.BorderSpacing.Left  := 0;
     end;
-    FScrollBar.BorderSpacing.Top    := chrome;
+    { 上沿贴的是它停靠那一侧的上角 —— RTL 下条在左边,那是左上角。 }
+    if RtlRowLayout then
+      FScrollBar.BorderSpacing.Top := cTL
+    else
+      FScrollBar.BorderSpacing.Top := cTR;
     { 下沿只在**底下就是边框**时才让:横条在的时候,竖条下面挨着的是横条,不是边框 ——
       再让一次就会在两条之间留下 chrome 宽的一道空。横条是 alBottom,LCL 先摆它,所以
       竖条拿到的对齐区已经把横条那一条扣掉了。(Grid/ListView/TreeView 自己 SetBounds,
       那边是 vh 先扣 sb 再减两个 chrome,天然就抵住。) }
     if wantH then
       FScrollBar.BorderSpacing.Bottom := 0
+    else if RtlRowLayout then
+      FScrollBar.BorderSpacing.Bottom := cBL
     else
-      FScrollBar.BorderSpacing.Bottom := chrome;
+      FScrollBar.BorderSpacing.Bottom := cBR;
     // Update DPI-dependent width and controller every call so DPI changes take effect
     FScrollBar.Width := thick;
     FScrollBar.Controller := Self.Controller;

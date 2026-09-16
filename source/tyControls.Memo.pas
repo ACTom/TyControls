@@ -2358,7 +2358,9 @@ end;
 procedure TTyMemo.UpdateScrollBar;
 var
   PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, fw, PadV: Integer;
+  cTR, cBR, cBL: Integer;
   StyleS: TTyStyleSet;
+  corners: TTyCorners;
   WasVisible, WantV, WantH: Boolean;
 begin
   PPI := Font.PixelsPerInch;
@@ -2383,6 +2385,17 @@ begin
     fw := MulDiv(fw, PPI, 96);
     if fw < 1 then fw := 1;   // 低 DPI 下别缩成 0:边框自己有 1px 下限
   end;
+  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 fw
+    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
+    像素被白色覆盖了」)。见 TyBarCornerInsetPx。竖条是 alRight 且横条不参与对齐(alNone),
+    所以**右下角归竖条**:横条那一头挨着的是竖条,不是边框,仍按 fw。 }
+  corners := TyEffectiveCorners(StyleS);
+  cTR := TyBarCornerInsetPx(StyleS, corners.TR, PPI);
+  cBR := TyBarCornerInsetPx(StyleS, corners.BR, PPI);
+  cBL := TyBarCornerInsetPx(StyleS, corners.BL, PPI);
+  if cTR < fw then cTR := fw;   // 同一条低 DPI 下限
+  if cBR < fw then cBR := fw;
+  if cBL < fw then cBL := fw;
   Total := TotalVisualRows(PPI);
 
   // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count
@@ -2419,8 +2432,8 @@ begin
     // Inset the vertical bar inside the frame (Align=alRight honours BorderSpacing) so the
     // border + focus ring drawn at the outer edge are not covered by it.
     FScrollBar.BorderSpacing.Right  := fw;
-    FScrollBar.BorderSpacing.Top    := fw;
-    FScrollBar.BorderSpacing.Bottom := fw;
+    FScrollBar.BorderSpacing.Top    := cTR;
+    FScrollBar.BorderSpacing.Bottom := cBR;
     FScrollBar.Controller := Self.Controller;
     FScrollBar.Visible := True;
     // WordWrap: a newly-visible vbar steals SBW from the content width -> narrower wrap -> MORE rows.
@@ -2482,7 +2495,11 @@ begin
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
     // Inset like the vertical bar: left/bottom by fw, and stop before the (also-inset) vbar.
-    FHScrollBar.SetBounds(fw, Height - SBW - fw, Width - 2*fw - (Ord(WantV) * SBW), SBW);
+    // 左端贴的是左下角(按角让);右端只有在没有竖条时才贴右下角,否则挨着的是竖条(按 fw)。
+    if WantV then
+      FHScrollBar.SetBounds(cBL, Height - SBW - fw, Width - cBL - fw - SBW, SBW)
+    else
+      FHScrollBar.SetBounds(cBL, Height - SBW - fw, Width - cBL - cBR, SBW);
     viewW := ContentWidthFor(PPI);
     hMax := WidestLineWidth(PPI) - viewW; if hMax < 0 then hMax := 0;
     if FScrollX > hMax then FScrollX := hMax;

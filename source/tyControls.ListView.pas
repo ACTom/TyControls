@@ -1784,9 +1784,12 @@ end;
 procedure TTyListView.UpdateScrollBars;
 var
   cnt, sb, vw, vh, pass, regionH, maxV, maxH, chrome, barW, barH: Integer;
+  vTop, vBot, hLeft, hRight: Integer;
   m: TTyListMetrics;
   ext: TSize;
   needV, needH, vertCap, horzCap: Boolean;
+  st: TTyStyleSet;
+  corners: TTyCorners;
 begin
   if csDestroying in ComponentState then Exit;
   cnt := GetItemCount;
@@ -1795,7 +1798,12 @@ begin
     再也画不进去:条完全可见时盖上去的是条自己的底色,自动隐藏把它淡没之后铺的是父控件的表面
     色,那一段边框整段变白(真机报的「列表右侧 scrollbar 那一条,边框没了」)。与列表框/备忘录
     让开的是同一条带、同一个函数(tyControls.Base 的 TyChromeInsetLogical)。 }
-  chrome := ScaleI(TyChromeInsetLogical(CurrentStyle));
+  st     := CurrentStyle;
+  chrome := ScaleI(TyChromeInsetLogical(st));
+  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 chrome
+    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
+    像素被白色覆盖了」)。见 TyBarCornerInsetPx。 }
+  corners := TyEffectiveCorners(st);
   { Which axis can scroll at all (see the flow table in the Layout unit). }
   vertCap := FViewStyle in [lvsReport, lvsIcon, lvsSmallIcon, lvsTile];
   horzCap := FViewStyle in [lvsReport, lvsList];
@@ -1825,10 +1833,15 @@ begin
   vh := ClientHeight - IfThen(needH, sb, 0);
   if vw < 0 then vw := 0;
   if vh < 0 then vh := 0;
-  { 两条一起缩,而且缩的是**同一个** chrome:只缩一条,角上那块就会多出或少掉 chrome 个像素。
-    vw/vh 已经各自让过对方的槽,这里只再让四边的 chrome。 }
-  barH := vh - 2 * chrome; if barH < 0 then barH := 0;
-  barW := vw - 2 * chrome; if barW < 0 then barW := 0;
+  { 两条一起缩,而且**在它们相接的那一头缩同一个数**:只缩一条,角上那块就会多出或少掉一截。
+    vw/vh 已经各自让过对方的槽,这里只再让两头。朝着边框角的那一头按角让,朝着**另一条条**的
+    那一头仍按 chrome —— 挨着的是那条条,不是边框,多让只会在两条之间豁开一道空。 }
+  vTop := TyBarCornerInsetPx(st, corners.TR, Dpi);
+  if needH then vBot := chrome else vBot := TyBarCornerInsetPx(st, corners.BR, Dpi);
+  hLeft := TyBarCornerInsetPx(st, corners.BL, Dpi);
+  if needV then hRight := chrome else hRight := TyBarCornerInsetPx(st, corners.BR, Dpi);
+  barH := vh - vTop - vBot; if barH < 0 then barH := 0;
+  barW := vw - hLeft - hRight; if barW < 0 then barW := 0;
   FillMetrics(m, vw, vh);
   ext := TyListContentExtent(cnt, m);
   if UseGroupedLayout then
@@ -1851,7 +1864,7 @@ begin
     FVScroll.Width := sb;
     FVScroll.Controller := Self.Controller;
     if not FVScroll.Dragging then
-      FVScroll.SetBounds(ClientWidth - sb - chrome, chrome, sb, barH);
+      FVScroll.SetBounds(ClientWidth - sb - chrome, vTop, sb, barH);
     FSyncingScroll := True;
     try
       FVScroll.Min      := 0;
@@ -1885,7 +1898,7 @@ begin
       not. Same call TTyCustomGrid makes for the same reason. }
     FHScroll.MirrorHorizontal := RtlLayout;
     if not FHScroll.Dragging then
-      FHScroll.SetBounds(chrome, ClientHeight - sb - chrome, barW, sb);
+      FHScroll.SetBounds(hLeft, ClientHeight - sb - chrome, barW, sb);
     FSyncingScroll := True;
     try
       FHScroll.Min      := 0;

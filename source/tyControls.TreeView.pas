@@ -2882,7 +2882,10 @@ end;
 procedure TTyTreeView.UpdateScrollBars;
 var
   SBThick, viewW, viewH, contH, PPI, chrome, barW, barH: Integer;
+  vTop, vBot, hLeft, hRight: Integer;
   wantVScroll, wantHScroll: Boolean;
+  st: TTyStyleSet;
+  corners: TTyCorners;
 begin
   PPI     := Font.PixelsPerInch;
   SBThick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);
@@ -2932,13 +2935,22 @@ begin
   { 边框/焦点环那一圈的宽度 —— 条的**矩形**不许落上去。条是窗口化子控件,它盖住的那一段宿主
     再也画不进去:条完全可见时盖上去的是条自己的底色,自动隐藏把它淡没之后铺的是父控件的表面
     色,那一段边框整段变白。与列表框/备忘录让开的是同一条带、同一个函数。
-    两条一起缩,而且缩的是**同一个** chrome:只缩一条,角上那块就会多出或少掉 chrome 个像素
-    (树这里两条都让出角,角是空的 —— 让开后仍然是空的,位置整体内移 chrome)。 }
-  chrome := MulDiv(TyChromeInsetLogical(CurrentStyle), PPI, 96);
-  barH := Height - 2 * chrome;
+    两条一起缩,而且**在它们相接的那一头缩同一个数**:只缩一条,角上那块就会多出或少掉一截。 }
+  st     := CurrentStyle;
+  chrome := MulDiv(TyChromeInsetLogical(st), PPI, 96);
+  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 chrome
+    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
+    像素被白色覆盖了」)。见 TyBarCornerInsetPx。朝着**另一条条**的那一头仍按 chrome ——
+    挨着的是那条条,不是边框。 }
+  corners := TyEffectiveCorners(st);
+  vTop := TyBarCornerInsetPx(st, corners.TR, PPI);
+  if wantHScroll then vBot := chrome else vBot := TyBarCornerInsetPx(st, corners.BR, PPI);
+  hLeft := TyBarCornerInsetPx(st, corners.BL, PPI);
+  if wantVScroll then hRight := chrome else hRight := TyBarCornerInsetPx(st, corners.BR, PPI);
+  barH := Height - vTop - vBot;
   if wantHScroll then Dec(barH, SBThick);
   if barH < 0 then barH := 0;
-  barW := Width - 2 * chrome;
+  barW := Width - hLeft - hRight;
   if wantVScroll then Dec(barW, SBThick);
   if barW < 0 then barW := 0;
 
@@ -2951,7 +2963,7 @@ begin
     { Position the bar along the right edge (above any horizontal bar), inside the frame:
       barH already gave up the horizontal bar's corner AND the chrome band at both ends. }
     if not FVScroll.Dragging then
-      FVScroll.SetBounds(Width - SBThick - chrome, chrome, SBThick, barH);
+      FVScroll.SetBounds(Width - SBThick - chrome, vTop, SBThick, barH);
 
     { Clamp FOffsetY to [-(contentH - viewH), 0] before syncing the thumb. }
     if contH > viewH then
@@ -3001,7 +3013,7 @@ begin
     { Position the bar along the bottom edge (left of the vertical bar), inside the frame:
       barW already gave up the vertical bar's corner AND the chrome band at both ends. }
     if not FHScroll.Dragging then
-      FHScroll.SetBounds(chrome, Height - SBThick - chrome, barW, SBThick);
+      FHScroll.SetBounds(hLeft, Height - SBThick - chrome, barW, SBThick);
 
     if FOffsetX < -(FRangeX - viewW) then FOffsetX := -(FRangeX - viewW);
     if FOffsetX > 0 then FOffsetX := 0;
