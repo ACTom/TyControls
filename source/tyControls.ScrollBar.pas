@@ -3,6 +3,7 @@ unit tyControls.ScrollBar;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, StdCtrls, ExtCtrls,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation,
   tyControls.Controller, tyControls.StyleModel;
 const
@@ -25,13 +26,51 @@ const
   { 出现要快——用户正在找它；消失要柔——别打扰。 }
   TyScrollBarFadeInMs  = 120;
   TyScrollBarFadeOutMs = 200;
+  { 贴边内嵌条滑道的圆角(逻辑 px)。基础层 light.tycss 写的是 0:条是宿主边上的一条带,
+    贴边侧的形状由宿主底色裁,内容侧再照 --radius-scroll 圆的话,两端各露出一块宿主底色的
+    缺口,条的端头又「飘」起来 —— 正是贴边要去掉的样子。想要圆滑道的皮肤写非零值,自己
+    接受两端的缺口。独立摆放的条不读它,照旧是 TyScrollBar 的 border-radius。
+    **是令牌不是 variant(TyScrollBar.embedded 之类)**:皮肤只要给某个 typeKey 写了任何一条
+    规则,内置那一层该 typeKey 的规则就**连同 variant**一起被压掉,variant 只写半截还会把控件
+    抹白;令牌走合并后的变量层,皮肤不写就继承基础层,没有这两种故障。 }
+  TyScrollBarEmbeddedRadiusVar = '--radius-scroll-embedded';
+  TyScrollBarEmbeddedRadiusDef = 0;
 
 type
+  TTyScrollBar = class;
   TTyScrollBarKind = (sbHorizontal, sbVertical);
 
   { 自动隐藏的三态。**不能是 Boolean**：Boolean 一旦被碰过就永远脱离主题
     控制，换主题不跟着变——在一个主打换肤的库里这是硬伤。 }
   TTyScrollBarAutoHide = (sbahDefault, sbahNever, sbahAuto);
+
+  { 把 TTyScrollBar **贴着自己的边**摆、并让条替自己把框画回去的宿主。
+    六个宿主实现它:列表框、备忘录、网格、列表视图、树、滚动框。
+
+    为什么要条来画:条是窗口化子控件,它那块矩形上宿主一个像素都画不进去。从前的办法是
+    把条的窗口缩小、让开边框 —— 直边上内缩一圈,圆角上再把条的两端各截掉几像素。真机的
+    结论是「条飘着的,感觉不够紧凑」,而只要前提是「缩小窗口去躲」,圆角就一定要截短条,
+    调常数调不出来。所以前提换了:条贴边、占满整条边,由条自己把宿主在这几个像素上的样子
+    画出来(底下宿主背景、中间条身、最上面宿主的边框和焦点环)。见 TTyScrollBar.RenderTo。
+
+    宿主只需要回答一件事:它**此刻**用哪份样式画自己的框。必须是状态解析过的那份
+    (CurrentStyle,带着 :focus/:hover/:disabled),焦点环才会恰好在宿主有焦点时出现在条上;
+    宿主画框前若改过样式(列表框在 Wayland 弹层上把圆角清零),这里要交出改过的那份。
+    何时重画不归这个接口管:宿主 Invalidate 时 TTyCustomControl 会顺带让条重画,见
+    TTyCustomControl.PaintsParentFrame。 }
+  ITyScrollBarFrameHost = interface
+    ['{5E0C8A7B-3F21-4C9D-B6E4-91D2A7F03C58}']
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ABar 是不是本宿主**自己建的**那几条之一。「内嵌」全库只认这一句,见
+      TTyScrollBar.IsEmbedded。
+
+      为什么不是「父控件实现了本接口」就算:滚动框是容器,用户完全可以往里面拖一根自己的
+      TTyScrollBar,它的 Parent 同样实现本接口,却是一根独立的条 —— 该画自己的框、该在点击时
+      拿焦点。也不是 TabStop:用户给独立条关掉 TabStop(不进 Tab 顺序)照样指望点它能拿到焦点。
+      也不是 Owner:代码里 TTyScrollBar.Create(ScrollBox1) 再 Parent := ScrollBox1 是常见写法。
+      只有宿主知道哪几根是它自己的,所以让宿主回答;做成接口方法,新宿主漏写就编译不过。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+  end;
 
   TTyScrollBar = class(TTyCustomControl)
   private
@@ -117,10 +156,34 @@ type
     procedure StartFade(ATo: Single; ADurationMs: Integer);
     { RenderTo 真正用的那份样式：主题样式叠上自动隐藏的淡出系数。见实现处。 }
     function PaintStyle: TTyStyleSet;
+    { 条身:滑块 + 两头的箭头。条自己的底色和边框不在这里(那是 DrawFrame / 三段帧函数)。
+      几何(箭头格、滑道、滑块在哪)一律按整条 ARect 算 —— 与 MouseDown 的命中测试是同一个
+      调用;ASpan 是**看得见的那一截**,滑块只画在它里面、箭头居中在它里面。独立摆放的条
+      ASpan = ARect,什么都不变。贴边的内嵌条见 RenderOverHostFrame。 }
+    procedure PaintBody(APainter: TTyPainter; const ARect, ASpan: TRect;
+      const AStyle: TTyStyleSet);
+    { 条身单独画到一张**透明**位图上,调用方负责释放。淡出/贴边两条路都要先有这一层,
+      再按可见度合成到底下真实的背景上。底色铺满 ARect,条自己的边框/焦点环和条身按 ASpan。 }
+    function RenderBodyLayer(const ARect, ASpan: TRect; const AStyle: TTyStyleSet;
+      APPI: Integer): TBGRABitmap;
+    { 贴边内嵌条的整套绘制:宿主背景 -> 条身(按 AAlpha 合成、裁进宿主的底色形状)->
+      宿主的边框与焦点环。见 RenderTo。 }
+    procedure RenderOverHostFrame(APainter: TTyPainter; const ARect: TRect;
+      const AHost: ITyScrollBarFrameHost; const AStyle: TTyStyleSet; AAlpha: Single);
+    { 本条若是某个宿主自己的内嵌条,交出那个宿主。见 IsEmbedded。 }
+    function EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
+    { 一次左键点击之后焦点该落在哪。独立的条拿焦点;内嵌条把焦点交给宿主。见实现处。 }
+    procedure FocusAfterClick;
     { 主题说的延时，按 (model, ThemeVersion) 缓存。见实现处：热路径上一拍要问两次。 }
     function ThemeAutoHideMs: Integer;
   protected
     FDragging: Boolean;
+    { Invalidate 被调过几次。只增不减,只给测试读 —— 它记在**真正的** Invalidate 里,所以
+      「宿主获得焦点 -> 条跟着重画」这条接线被拆掉时它不涨,测试就红。无头下条没有窗口,
+      重画本身看不见,能看见的只有这一下有没有被叫到。 }
+    FInvalidations: Cardinal;
+    { 内嵌条(IsEmbedded)在替宿主画框,宿主的框一变本条就得重画。 }
+    function PaintsParentFrame: Boolean; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     { 句柄到手的那一刻把延时表起起来。**这是自动隐藏唯一一个「没人碰过它」的
@@ -198,6 +261,11 @@ type
       内容已经动了,滑块再缓动追上去就是不跟手 —— 用户看到的是内容在动、
       滑块慢半拍。缓动只在"用户点滑道让它跳过去"那种场景才有意义。 }
     procedure SetPositionSnapped(AValue: Integer);
+    { 本条是不是某个宿主(列表框、备忘录、网格、列表视图、树、滚动框)**自己的**内嵌条 ——
+      由父控件经 ITyScrollBarFrameHost.EmbedsScrollBar 回答,不看 TabStop、不看 Owner。
+      内嵌条贴边摆、替宿主画框,而且**永远不拿焦点**:点它,焦点归宿主(见 MouseDown)。
+      独立摆放的条(哪怕摆在滚动框里)答 False,行为与从前一样。 }
+    function IsEmbedded: Boolean;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetStyleTypeKey: string; override;
@@ -214,7 +282,8 @@ type
     { 本条现在实际的自动隐藏延时，毫秒；-1 表示关（一直显示）。
       属性压过主题：sbahNever 恒为 -1；sbahAuto 在主题说关时用回退值。 }
     function EffectiveAutoHideMs: Integer;
-    { 0..1 的当前可见度。1 = 完全显示。绘制时乘进样式的 opacity。 }
+    { 0..1 的当前可见度。1 = 完全显示。绘制时乘进样式的 opacity,作为条身那一层合成到
+      真实背景上的不透明度(见 RenderTo)。 }
     property FadeLevel: Single read FFadeLevel;
     { 延时表现在转着没有。**只读**,问的是真表(FHideTimer),不是哪个影子状态。
 
@@ -360,6 +429,9 @@ function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
   AButtonSize: Integer): TRect;
 
 implementation
+
+uses
+  LCLIntf;
 
 function TyScrollMirrorOffset(AOffset, AFreeSpace: Integer; AKind: TTyScrollBarKind;
   ARightToLeft: Boolean): Integer;
@@ -585,7 +657,9 @@ end;
 function TTyScrollBar.AutoHideHeldOpen: Boolean;
 begin
   { 任一成立就「按住不放」，延时表根本不起。
-    注意 Focused 只对独立摆放的条有意义：6 个宿主的内嵌条一律 TabStop=False。
+    注意 Focused 只对独立摆放的条有意义：内嵌条既不进 Tab 顺序(TabStop=False),点击也把
+    焦点交给宿主(FocusAfterClick),所以这一臂对内嵌条恒假。内嵌条拖动时靠的是 FDragging
+    (和拖动途中指针在不在条上无关),指针在宿主上靠 FHostHovered —— 没有哪一臂指望它有焦点。
 
     **FHover 和 FHostHovered 必须合起来判——交界处不抖的全部理由就在这里。**
     条是窗口化子控件：指针从宿主内容挪到条上时，宿主收到 MouseLeave、条收到
@@ -656,15 +730,15 @@ end;
 function TTyScrollBar.PaintStyle: TTyStyleSet;
 { 主题给的那份样式，乘上自动隐藏的当前可见度。
 
-  为什么乘进 opacity 而不是各自改颜色：TTyPainter.Opacity 是**画笔级**的
-  ——EndPaint 对整张 FBmp 做一次 ApplyGlobalOpacity。所以这一个值一路管到
-  边框、滑块和两头的箭头，不用挨个去调它们的 alpha；而且它淡下去的方向是
-  「朝父控件的底色」而不是「朝透明」(见 EndPaint 里 OpacityBase 那段：
-  朝透明淡在 Win10 的 DWM 玻璃窗上会把玻璃露出来)。
+  乘出来的 Opacity 是**条身这一层**合成到底下时的不透明度(见 RenderTo),不再交给画笔。
+  从前交给画笔:EndPaint 先铺一层 OpacityBase —— 从父控件**正中间取样的一个颜色** ——
+  再把整张图按 opacity 盖上去,于是淡出途中条那一块底色是一块平板,渐变背景上实测上下
+  两头差 0,而真背景差 221。那条路是全库所有 opacity 共用的(TyApplyStyleOpacity),
+  修它等于改 Base.pas 里人人都在用的代码;在条自己的 RenderTo 里分层合成就绕开了。
 
-  完全可见时**原样**交出去，一个字段都不碰：多写一个 tpOpacity 进去，
-  EndPaint 就从「不合成」那条路挪到「合成」那条路上，而没开自动隐藏的条
-  一个像素都不许变。守它的是 test.scrollbar.autohide 的
+  完全可见时**原样**交出去，一个字段都不碰：独立摆放、完全可见的条走的还是原来那条
+  DrawFrame 路,多写一个 tpOpacity 进去就把它从「不合成」挪到「合成」上,而没开自动
+  隐藏的条一个像素都不许变。守它的是 test.scrollbar.autohide 的
   AtRestTheThemeStyleIsHandedOverUntouched。
 
   乘法不是摆设：主题给 TyScrollBar:disabled 写了 opacity(light/dark/green/
@@ -907,10 +981,10 @@ end;
 
 procedure TTyScrollBar.DoExit;
 begin
-  { 和 MouseLeave 同理,焦点这一半。逐条 trace 过确实需要:六个宿主的内嵌条虽然
-    TabStop=False,MouseDown 里那句 if CanFocus then SetFocus 照样能把焦点给它,
-    于是「点一下条、再去点别处」就走到这里;有焦点的那段延时表是停的,这里不
-    起回来的话条就一直留着。 }
+  { 和 MouseLeave 同理,焦点这一半:有焦点的那段延时表是停的,这里不起回来的话条就
+    一直留着。**只有独立摆放的条走得到这里。** 从前内嵌条也走得到 —— MouseDown 里那句
+    无条件的 if CanFocus then SetFocus 把焦点给了它,「点一下条、再去点别处」就进来了;
+    现在点内嵌条焦点归宿主(FocusAfterClick),内嵌条不再有 DoEnter/DoExit。 }
   inherited DoExit;
   NoteActivity;
 end;
@@ -933,6 +1007,7 @@ begin
     淡着的时候才走得到。(那次解析现在带缓存了——见 ThemeAutoHideMs——但命中
     也不是免费的,顺序照旧。)
     not FFadeAnim.Running 也是必须的:正在跑的淡入淡出不能被这里掐断。 }
+  Inc(FInvalidations);
   if (not FFadeAnim.Running) and (FFadeLevel < 1.0) and (EffectiveAutoHideMs < 0) then
   begin
     FFadeAnim.SetTargetImmediate(1.0);
@@ -1245,88 +1320,324 @@ begin
   Result := True;
 end;
 
+function TTyScrollBar.EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
+begin
+  Result := (Parent <> nil) and Supports(Parent, ITyScrollBarFrameHost, AHost)
+            and AHost.EmbedsScrollBar(Self);
+  if not Result then AHost := nil;
+end;
+
+function TTyScrollBar.IsEmbedded: Boolean;
+var
+  host: ITyScrollBarFrameHost;
+begin
+  Result := EmbeddingHost(host);
+end;
+
+function TTyScrollBar.PaintsParentFrame: Boolean;
+begin
+  Result := IsEmbedded;
+end;
+
+procedure TTyScrollBar.PaintBody(APainter: TTyPainter; const ARect, ASpan: TRect;
+  const AStyle: TTyStyleSet);
+var
+  ThumbS: TTyStyleSet;
+  Track, ThumbR, LoR, HiR: TRect;
+  ThumbFill: TTyFill;
+  ThumbStates: TTyStateSet;
+
+  { 箭头的字形框:大小仍按整格(箭头不因为贴边就变小),**中心**挪到这一格看得见的部分上。
+    横跨条的方向上要正好居中 —— 条的两条长边就是拿这个比的 —— 而一个偶数宽的框放不到奇数宽
+    那一截的正中(差半个像素,三角形的抗锯齿两边就不一样),这时框收一个像素。只有宿主带焦点环
+    (让 3 列)才会碰上。沿条方向差半个像素没人看得出,不为它再收。 }
+  function GlyphBox(const AButton: TRect): TRect;
+  var
+    vis: TRect;
+    s, crossVis: Integer;
+  begin
+    Result := TySquareGlyphBox(AButton);
+    if (not IntersectRect(vis, AButton, ASpan)) or EqualRect(vis, AButton) then Exit;
+    s := Result.Right - Result.Left;
+    if FKind = sbVertical then
+      crossVis := vis.Right - vis.Left
+    else
+      crossVis := vis.Bottom - vis.Top;
+    if Odd(s - crossVis) then Dec(s);
+    Result.Left := (vis.Left + vis.Right - s) div 2;
+    Result.Top := (vis.Top + vis.Bottom - s) div 2;
+    Result.Right := Result.Left + s;
+    Result.Bottom := Result.Top + s;
+  end;
+
+begin
+  Track := TyScrollTrackRect(ARect, FKind, TyScrollButtonSize(ARect, FKind));
+  // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
+  // rest DisplayPos == FPosition so headless renders are pixel-identical. The
+  // track-paging hit math, drag math and BeginThumbDrag keep using FPosition.
+  ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, Round(DisplayPos), FPageSize, Mirrored);
+  { 滑块只画在看得见的那一截里。位置和长短照旧按整条算(见声明处),收的只是它画出来的
+    矩形 —— 贴边侧那几列归宿主的框,滑块的圆边要落在框的内沿以内,两侧才一样圆。 }
+  if not IntersectRect(ThumbR, ThumbR, ASpan) then
+    ThumbR := Rect(0, 0, 0, 0);
+  // Thumb fill is its own sub-element typeKey (TyScrollThumb). Feed the control's
+  // hover/press state so TyScrollThumb:hover/:active render (matches the pre-typeKey
+  // behavior where the thumb borrowed the parent's state-resolved TextColor).
+  ThumbStates := [];
+  if FPressed then
+    Include(ThumbStates, tysActive)
+  else if FHover then
+    Include(ThumbStates, tysHover);
+  { 这里**不乘**淡出系数。滑块和条身画进的是同一层(RenderBodyLayer 那张透明位图),
+    淡出是整层合成时一次乘进去的;在这儿再乘一次只会把滑块压得比条身更淡。
+    (也根本不读 ThumbS.Opacity——只取 Background.Color 和 BorderRadius。哪天滑块被挪去
+    单开一层,就要自己接淡出了:test.scrollbar.autohide 的 FadeReachesThePaintedPixels
+    数的是整块像素,到时候会红。) }
+  ThumbS := ActiveController.Model.ResolveStyle('TyScrollThumb', '', ThumbStates);
+  ThumbFill := Default(TTyFill);
+  ThumbFill.Kind := tfkSolid;
+  ThumbFill.Color := ThumbS.Background.Color;
+  if not IsRectEmpty(ThumbR) then
+    APainter.FillBackground(ThumbR, ThumbFill, ThumbS.BorderRadius);
+  ButtonRects(ARect, LoR, HiR);
+  if (LoR.Right > LoR.Left) then   // buttons exist
+  begin
+    if FKind = sbVertical then
+    begin
+      // v3/C5 overridable. Triangles: a scroll-bar end button steps the view, the same role
+      // the spin buttons have, and Windows draws both from the same triangular idiom.
+      TyDrawGlyph(APainter, ActiveController, GlyphBox(LoR), tgTriangleUp,   AStyle.TextColor, 2, 1);
+      TyDrawGlyph(APainter, ActiveController, GlyphBox(HiR), tgTriangleDown, AStyle.TextColor, 2, 1);
+    end
+    else
+    begin
+      { The GLYPHS do not swap under MirrorHorizontal, and that is not an omission.
+        Reflecting a pair "left arrow at the left end, right arrow at the right end" gives
+        back the same picture, which is why Windows' mirrored horizontal bar is visually
+        indistinguishable from its unmirrored one. What the mirror moves is the MEANING:
+        the left-end button now steps Position UP (see MouseDown), because that is the
+        direction the thumb travels when it goes left. Drawing tgArrowRight on the left
+        would make the button point away from where it sends the thumb. }
+      TyDrawGlyph(APainter, ActiveController, GlyphBox(LoR), tgTriangleLeft,  AStyle.TextColor, 2, 1);
+      TyDrawGlyph(APainter, ActiveController, GlyphBox(HiR), tgTriangleRight, AStyle.TextColor, 2, 1);
+    end;
+  end;
+end;
+
+function TTyScrollBar.RenderBodyLayer(const ARect, ASpan: TRect; const AStyle: TTyStyleSet;
+  APPI: Integer): TBGRABitmap;
+var
+  B: TTyPainter;
+begin
+  { 位图是这里建、调用方释放的,所以走 BeginPaintOn:EndPaint 既不释放它,也没有画布可
+    blit(画布是 nil)。条自己的底色/边框/焦点环走的是 DrawFrame 的后两段,**不含**父背景
+    —— 这一层的透明处必须透出底下真实的背景,那正是分层的意义。
+    底色铺满整条:贴边侧宿主框占掉的那几列里,框线沾到的像素反正要被换回宿主的,沾不到的
+    (某些 DPI 下让开的那一圈比墨宽)就该是滑道,而不是一道宿主底色的细缝。 }
+  Result := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top,
+    BGRAPixelTransparent);
+  B := TTyPainter.Create;
+  try
+    B.BeginPaintOn(nil, ARect, APPI, Result);
+    TyDrawFrameUnderlay(B, ARect, AStyle);
+    TyDrawFrameChrome(Self, B, ASpan, AStyle);
+    PaintBody(B, ARect, ASpan, AStyle);
+    B.EndPaint;
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TTyScrollBar.RenderOverHostFrame(APainter: TTyPainter; const ARect: TRect;
+  const AHost: ITyScrollBarFrameHost; const AStyle: TTyStyleSet; AAlpha: Single);
+var
+  host: TControl;
+  hs, clipStyle, bodyStyle: TTyStyleSet;
+  hostR, span: TRect;
+  origin: TPoint;
+  frame, ink, clip, body: TBGRABitmap;
+  L: TTyPainter;
+  w, h, x, y, band, radius: Integer;
+  pd, pf, pk, pb, pc: PBGRAPixel;
+begin
+  host := Parent;
+  hs := AHost.ScrollBarFrameStyle;
+  { 宿主的矩形,在**本条**的坐标系里。条的 Left/Top 相对宿主客户区原点,宿主的框画在
+    Rect(0,0,宽,高) 上,所以就是平移一下;绝大部分落在本条的位图外面,画的时候被裁掉。
+    RTL 下竖条停在左边,Left = 0,于是这里画出来的自然是宿主的**左**边和左边两个角。 }
+  origin := Point(-Left, -Top);
+  hostR := Rect(origin.X, origin.Y, origin.X + host.Width, origin.Y + host.Height);
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+
+  { 条身看得见的那一截。条的哪条边贴着宿主外沿,那条边就让开宿主框**此刻**占掉的那一圈
+    (TyChromeInsetLogical:边框或焦点环取宽的那个,再加一列抗锯齿;宿主获得焦点时大一档,
+    与列表框的行让开的是同一条带)。
+    为什么要让:下面「上层」那一步把框线沾到的像素整列换回宿主的,条身若按整条排,凡是左右
+    对称画的东西 —— 滑块的圆边、条自己的焦点环、箭头的居中 —— 在内容侧完整、在贴边侧被削掉
+    一截,两条长边就长得不一样(真机报的「滚动条左右的渲染好奇怪」)。按看得见的那一截排,
+    两侧才是镜像。
+    只让贴边的那几条边:内容侧没有框;竖条下沿挨着横条时也没有。 }
+  band := APainter.Scale(TyChromeInsetLogical(hs));
+  span := ARect;
+  if hostR.Left >= ARect.Left then Inc(span.Left, band);
+  if hostR.Top >= ARect.Top then Inc(span.Top, band);
+  if hostR.Right <= ARect.Right then Dec(span.Right, band);
+  if hostR.Bottom <= ARect.Bottom then Dec(span.Bottom, band);
+  if span.Right < span.Left then span.Right := span.Left;
+  if span.Bottom < span.Top then span.Bottom := span.Top;
+
+  { 条身的形状归宿主,不归条自己的 border-radius。独立摆放的条是一颗药丸,四个角按主题圆;
+    贴边的条是宿主边上的一条带:贴边侧的两个角由宿主底色的形状裁(下面的 clip),内容侧照
+    主题圆的话,两端各露出一块宿主底色的缺口,条的端头又「飘」起来 —— 正是贴边要去掉的样子。
+    所以滑道、条自己的边框和焦点环的圆角换成 --radius-scroll-embedded,基础层给 0 = 方角
+    (理由和「为什么是令牌」见 TyScrollBarEmbeddedRadiusVar)。滑块是自己的 typeKey
+    (TyScrollThumb),照旧圆。
+    ActiveController,不是裸 Controller:没挂 controller 的条回落到进程级默认主题。 }
+  radius := ActiveController.Metric(TyScrollBarEmbeddedRadiusVar, TyScrollBarEmbeddedRadiusDef);
+  if radius < 0 then radius := 0;
+  bodyStyle := AStyle;
+  bodyStyle.BorderRadius := radius;
+  bodyStyle.Radius := TyUniformCorners(radius);
+
+  { 宿主整个被 :disabled 的 opacity 压暗时,本条跟它一起暗 —— 用宿主自己的样式、宿主自己
+    的 OpacityBase,与宿主画它那几百个像素时一模一样。 }
+  TyApplyStyleOpacity(host, APainter, hs);
+
+  { ---- 底层:宿主在这几个像素上的样子,去掉框线 ----
+    宿主背后的背景(圆角外面那几块)+ 宿主的阴影与底色。宿主画自己的时候也是这两步,
+    只是它画在 Rect(0,0,宽,高) 上,这里画在 hostR 上。 }
+  TyFillParentBgAt(host, APainter, Rect(0, 0, host.Width, host.Height), origin, hs);
+  TyDrawFrameUnderlay(APainter, hostR, hs);
+
+  if AAlpha <= 0.0 then
+  begin
+    { 彻底淡没:没有条身,底层上直接盖框线就是宿主本来的样子。 }
+    TyDrawFrameChrome(host, APainter, hostR, hs);
+    Exit;
+  end;
+
+  frame := nil; ink := nil; clip := nil; body := nil;
+  L := TTyPainter.Create;
+  try
+    { frame = 底层 + 框线:宿主自己在这几个像素上画出来的东西,逐字节。 }
+    frame := APainter.Bitmap.Duplicate as TBGRABitmap;
+    L.BeginPaintOn(nil, ARect, APainter.PPI, frame);
+    TyDrawFrameChrome(host, L, hostR, hs);
+    L.EndPaint;
+    { ink = 框线单独画在透明底上:alpha > 0 的像素就是框线(边框、焦点环、有阴影时角外的
+      缺口)沾到的像素。 }
+    ink := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+    L.BeginPaintOn(nil, ARect, APainter.PPI, ink);
+    TyDrawFrameChrome(host, L, hostR, hs);
+    L.EndPaint;
+    { clip = 宿主底色的形状。用 underlay 本身来画(换成不透明的纯色、去掉阴影),圆角怎么
+      算、render-style 怎么展开都与宿主画底色的那一句同源,不另抄一份几何。 }
+    clipStyle := hs;
+    clipStyle.Background := Default(TTyFill);
+    clipStyle.Background.Kind := tfkSolid;
+    clipStyle.Background.Color := TyRGB(255, 255, 255);
+    Include(clipStyle.Present, tpBackground);
+    Exclude(clipStyle.Present, tpShadow);
+    clip := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+    L.BeginPaintOn(nil, ARect, APainter.PPI, clip);
+    TyDrawFrameUnderlay(L, hostR, clipStyle);
+    L.EndPaint;
+
+    { ---- 中层:条身,按可见度合成 ----
+      合成到**真实的**底层上,不是合成到某一个取样色上 —— 渐变底色在淡出途中照样是渐变。
+      条身先裁进宿主底色的形状:圆角那一段条身被弧切掉,不会伸到弧外的父背景上。
+      **只留底色完全盖住的像素**,底色形状抗锯齿边上那一圈半盖的像素一律不要条身:那一圈
+      是宿主轮廓的一部分,宿主在那儿画的是「父背景和底色各占几成」。实测圆角上它会落在边框
+      外沿**外面**(底色的弧比边框描边的弧往外多出零点几个像素),框线没沾到,按比例留条身
+      的话条身就把宿主的轮廓染了一层灰。 }
+    body := RenderBodyLayer(ARect, span, bodyStyle, APainter.PPI);
+    for y := 0 to h - 1 do
+    begin
+      pb := body.ScanLine[y];
+      pc := clip.ScanLine[y];
+      for x := 0 to w - 1 do
+      begin
+        if pc^.alpha < 255 then pb^.alpha := 0;
+        Inc(pb);
+        Inc(pc);
+      end;
+    end;
+    body.InvalidateBitmap;
+    APainter.Bitmap.PutImage(0, 0, body, dmLinearBlend, Round(AAlpha * 255));
+
+    { ---- 上层:宿主的边框与焦点环,永远不透明 ----
+      不是在合成结果上**再描一遍**框线:框线的抗锯齿边会与底下的颜色混,底下是条身时混出来
+      的就不是宿主画的那个颜色。所以凡是框线沾到的像素,整个换成 frame 里的那个像素 ——
+      宿主自己在那儿画的是什么,这里就是什么,在任何可见度下都逐字节一致。代价是条身在
+      框线的抗锯齿内沿上让出那一两个像素,等于条身被框线的内沿裁掉。 }
+    for y := 0 to h - 1 do
+    begin
+      pd := APainter.Bitmap.ScanLine[y];
+      pf := frame.ScanLine[y];
+      pk := ink.ScanLine[y];
+      for x := 0 to w - 1 do
+      begin
+        if pk^.alpha > 0 then pd^ := pf^;
+        Inc(pd);
+        Inc(pf);
+        Inc(pk);
+      end;
+    end;
+    APainter.Bitmap.InvalidateBitmap;
+  finally
+    L.Free;
+    body.Free;
+    clip.Free;
+    ink.Free;
+    frame.Free;
+  end;
+end;
+
 procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, ThumbS: TTyStyleSet;
-  R, Track, ThumbR, LoR, HiR: TRect;
-  ThumbFill: TTyFill;
-  ThumbStates: TTyStateSet;
+  S: TTyStyleSet;
+  R: TRect;
+  host: ITyScrollBarFrameHost;
+  alpha: Single;
+  body: TBGRABitmap;
 begin
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     { PaintStyle，不是 CurrentStyle：自动隐藏的淡出**只有这一个入口**进绘制。
-      DrawFrame 把 S.Opacity 交给画笔，而画笔的 opacity 是整张位图一起算的，
-      所以下面的滑块和箭头不用各自再乘一遍(见滑块那处的注释)。 }
+      它的 Opacity(主题 opacity × 可见度)就是下面条身那一层的合成不透明度。 }
     S := PaintStyle;
-    { 彻底隐身那一格短路掉，**不走画笔的 opacity**。
+    if tpOpacity in S.Present then alpha := S.Opacity else alpha := 1.0;
+    if alpha < 0.0 then alpha := 0.0;
+    if alpha > 1.0 then alpha := 1.0;
 
-      走的话就掉进 EndPaint 的合成分支：那条路先按 TyResolveParentBg 给的
-      **一个居中采样色**铺一层不透明底，再把 alpha 全零的 FBmp 盖上去——
-      TyFillParentBg 刚刚画进去的渐变切片/图片切片全被扔掉，留在屏幕上的是
-      一块平板。而滚动条是窗口化控件，没有别的东西会来重画这块矩形，所以
-      用户看到的就是这块平板，一直摆在那儿，不是 200 毫秒的过场。
-
-      之前没人撞上是因为 --disabled-opacity 是 0.5，永远到不了 0；自动隐藏
-      是头一个把 opacity 一路压到 0 的特性。
-
-      短路之后这一格干脆不画自己：把父控件的背景按**本控件这块矩形**原样
-      铺一遍就收工——既是像素级准确的背景，又省掉整趟绘制。 }
-    if (tpOpacity in S.Present) and (S.Opacity <= 0.0) then
+    if EmbeddingHost(host) then
+      { 贴边的内嵌条:三层 —— 宿主的背景、条身、宿主的框。每个可见度都走这一条,完全可见
+        也一样:框线在条上面,焦点环不会再被一条看得见的条截断。 }
+      RenderOverHostFrame(P, R, host, S, alpha)
+    else if alpha <= 0.0 then
+      { 独立摆放、彻底隐身:不画自己,只把父控件的背景按**本控件这块矩形**原样铺一遍 ——
+        渐变切片、图片切片都是真的,不是一块居中取样的平板。 }
+      TyFillParentBg(Self, P, R, S)
+    else if SameValue(FFadeLevel, 1.0, 0.001) then
     begin
+      { 独立摆放、完全可见:原来那条路,一个像素不变(主题自己的 :disabled opacity 也还是
+        照旧交给 DrawFrame)。 }
+      DrawFrame(P, R, S);
+      PaintBody(P, R, R, S);
+    end
+    else
+    begin
+      { 独立摆放、淡出途中:父背景的真切片 + 条身按可见度合成上去。 }
       TyFillParentBg(Self, P, R, S);
-      P.EndPaint;
-      Exit;
-    end;
-    DrawFrame(P, R, S);
-    Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
-    // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
-    // rest DisplayPos == FPosition so headless renders are pixel-identical. The
-    // track-paging hit math, drag math and BeginThumbDrag keep using FPosition.
-    ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, Round(DisplayPos), FPageSize, Mirrored);
-    // Thumb fill is its own sub-element typeKey (TyScrollThumb). Feed the control's
-    // hover/press state so TyScrollThumb:hover/:active render (matches the pre-typeKey
-    // behavior where the thumb borrowed the parent's state-resolved TextColor).
-    ThumbStates := [];
-    if FPressed then
-      Include(ThumbStates, tysActive)
-    else if FHover then
-      Include(ThumbStates, tysHover);
-    { 这里**不用**再乘一遍淡出系数。滑块和上面的边框画进的是同一张 FBmp，
-      而 EndPaint 的 ApplyGlobalOpacity 是对整张图做的，所以 DrawFrame 那一下
-      已经把滑块一起管了；在这儿再乘一次只会把它压得比条身更淡。
-      (RenderTo 也根本不读 ThumbS.Opacity——只取 Background.Color 和
-      BorderRadius。哪天滑块被挪去单开一个 painter，就要自己接淡出了：
-      test.scrollbar.autohide 的 FadeReachesThePaintedPixels 数的是整块像素，
-      到时候会红。) }
-    ThumbS := ActiveController.Model.ResolveStyle('TyScrollThumb', '', ThumbStates);
-    ThumbFill := Default(TTyFill);
-    ThumbFill.Kind := tfkSolid;
-    ThumbFill.Color := ThumbS.Background.Color;
-    P.FillBackground(ThumbR, ThumbFill, ThumbS.BorderRadius);
-    ButtonRects(R, LoR, HiR);
-    if (LoR.Right > LoR.Left) then   // buttons exist
-    begin
-      if FKind = sbVertical then
-      begin
-        // v3/C5 overridable. Triangles: a scroll-bar end button steps the view, the same role
-        // the spin buttons have, and Windows draws both from the same triangular idiom.
-        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(LoR), tgTriangleUp,   S.TextColor, 2, 1);
-        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(HiR), tgTriangleDown, S.TextColor, 2, 1);
-      end
-      else
-      begin
-        { The GLYPHS do not swap under MirrorHorizontal, and that is not an omission.
-          Reflecting a pair "left arrow at the left end, right arrow at the right end" gives
-          back the same picture, which is why Windows' mirrored horizontal bar is visually
-          indistinguishable from its unmirrored one. What the mirror moves is the MEANING:
-          the left-end button now steps Position UP (see MouseDown), because that is the
-          direction the thumb travels when it goes left. Drawing tgArrowRight on the left
-          would make the button point away from where it sends the thumb. }
-        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(LoR), tgTriangleLeft,  S.TextColor, 2, 1);
-        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(HiR), tgTriangleRight, S.TextColor, 2, 1);
+      body := RenderBodyLayer(R, R, S, APPI);
+      try
+        P.Bitmap.PutImage(0, 0, body, dmLinearBlend, Round(alpha * 255));
+      finally
+        body.Free;
       end;
     end;
     P.EndPaint;
@@ -1524,6 +1835,43 @@ begin
     Result := X;
 end;
 
+procedure TTyScrollBar.FocusAfterClick;
+{ 独立摆放的条:点它就拿焦点,与从前一样 —— 它有完整的键盘操作,焦点也是自动隐藏「按住
+  不放」的信号。**不看 TabStop**:TabStop=False 的独立条只是不进 Tab 顺序,点它照样该拿到。
+
+  内嵌条:**永远不拿焦点**,焦点交给宿主。六个宿主建条时都写了 TabStop := False 并注释了理由
+  (拖条不能把焦点从列表抢走,否则列表丢了焦点环、滚到一半键盘导航也没了),设计文档
+  (2026-09-14-scrollbar-auto-hide-design.md §4)也写着内嵌条拿不到焦点 —— 而这里从前是一句
+  无条件的 if CanFocus then SetFocus,一点就把这些全推翻了:焦点落到一根 12px 的条上,条画起
+  自己的焦点环,方向键滚的是条而不是列表。
+
+  交给宿主的规则与宿主被直接点中时一样(TTyCustomControl.MouseDown:TabStop 且 CanFocus),
+  所以不参与焦点的宿主(滚动框默认 TabStop=False)点它的条焦点原地不动。多一条:焦点**已经在
+  宿主里面**(宿主自己,或它的行内编辑器,比如网格正在编辑的那一格)就不动。网格的编辑器一
+  失焦就提交并收起,滚一下就把编辑结束掉不是滚动条该做的事。条自己若被代码 SetFocus 过,不算
+  「在里面」,照样挪给宿主。
+
+  try/except 与从前相同:无头运行的窗体从没 Show 过,SetFocus 会一路抛到父窗体上。 }
+var
+  host: TWinControl;
+  focusedCtl: TWinControl;
+begin
+  try
+    if not IsEmbedded then
+    begin
+      if CanFocus then SetFocus;
+      Exit;
+    end;
+    host := Parent;
+    { 先问便宜的那两个:无头下 CanFocus 就是 False,GetFocus 根本不用去问 widgetset。 }
+    if not (host.TabStop and host.CanFocus) then Exit;
+    focusedCtl := FindOwnerControl(GetFocus);
+    if (focusedCtl <> nil) and (focusedCtl <> Self) and host.ContainsControl(focusedCtl) then Exit;
+    host.SetFocus;
+  except
+  end;
+end;
+
 procedure TTyScrollBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   ThumbR, LoR, HiR: TRect;
@@ -1552,13 +1900,13 @@ begin
     if PtInRect(LoR, Point(X, Y)) then
     begin
       ScrollTo(Back, Position + BackSign * FSmallChange);
-      try if CanFocus then SetFocus; except end;
+      FocusAfterClick;
       Exit;
     end;
     if PtInRect(HiR, Point(X, Y)) then
     begin
       ScrollTo(Fwd, Position - BackSign * FSmallChange);
-      try if CanFocus then SetFocus; except end;
+      FocusAfterClick;
       Exit;
     end;
     { THE HIT TEST AND THE PAINT ARE THE SAME CALL. RenderTo builds its thumb from
@@ -1589,10 +1937,7 @@ begin
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
         ScrollTo(Fwd, Position - BackSign * EffectiveLargeChange);
     end;
-    try
-      if CanFocus then SetFocus;
-    except
-    end;
+    FocusAfterClick;
   end;
 end;
 

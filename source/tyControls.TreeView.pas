@@ -415,7 +415,7 @@ type
     property TopLvlItems[AIndex: Integer]: TTyTreeNodeItem read GetTopLvlItems;
   end;
 
-  TTyTreeView = class(TTyCustomControl)
+  TTyTreeView = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     FRoot: PTyTreeNode;
     FNodeDataSize: Integer;     // -1 until set
@@ -1091,6 +1091,10 @@ type
     { LCL parity: the node whose EXPANDER is under (X, Y), nil otherwise
       (comctrls.pp:3717 GetNodeWithExpandSignAt). }
     function GetNodeWithExpandSignAt(X, Y: Integer): PTyTreeNode;
+    { ITyScrollBarFrameHost:两条内嵌条贴边摆,由它们把本控件的框画回自己那块矩形上。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     { C3: paint }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
@@ -2862,6 +2866,16 @@ begin
     Inc(Result.Top, MulDiv(FHeader.Height, PPI, 96));
 end;
 
+function TTyTreeView.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;   // RenderTo's DrawFrame uses exactly this
+end;
+
+function TTyTreeView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FVScroll) or (ABar = FHScroll);
+end;
+
 { UpdateScrollBars: show/hide and configure each scrollbar based on the
   current content size vs viewport size.  Mirrors ListBox.UpdateScrollBar.
 
@@ -2881,11 +2895,8 @@ end;
   FOffsetY is clamped to [-(ContentHeight - viewportH), 0] each call. }
 procedure TTyTreeView.UpdateScrollBars;
 var
-  SBThick, viewW, viewH, contH, PPI, chrome, barW, barH: Integer;
-  vTop, vBot, hLeft, hRight: Integer;
+  SBThick, viewW, viewH, contH, PPI: Integer;
   wantVScroll, wantHScroll: Boolean;
-  st: TTyStyleSet;
-  corners: TTyCorners;
 begin
   PPI     := Font.PixelsPerInch;
   SBThick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);
@@ -2932,27 +2943,9 @@ begin
     wantHScroll := False;
   end;
 
-  { 边框/焦点环那一圈的宽度 —— 条的**矩形**不许落上去。条是窗口化子控件,它盖住的那一段宿主
-    再也画不进去:条完全可见时盖上去的是条自己的底色,自动隐藏把它淡没之后铺的是父控件的表面
-    色,那一段边框整段变白。与列表框/备忘录让开的是同一条带、同一个函数。
-    两条一起缩,而且**在它们相接的那一头缩同一个数**:只缩一条,角上那块就会多出或少掉一截。 }
-  st     := CurrentStyle;
-  chrome := MulDiv(TyChromeInsetLogical(st), PPI, 96);
-  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 chrome
-    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
-    像素被白色覆盖了」)。见 TyBarCornerInsetPx。朝着**另一条条**的那一头仍按 chrome ——
-    挨着的是那条条,不是边框。 }
-  corners := TyEffectiveCorners(st);
-  vTop := TyBarCornerInsetPx(st, corners.TR, PPI);
-  if wantHScroll then vBot := chrome else vBot := TyBarCornerInsetPx(st, corners.BR, PPI);
-  hLeft := TyBarCornerInsetPx(st, corners.BL, PPI);
-  if wantVScroll then hRight := chrome else hRight := TyBarCornerInsetPx(st, corners.BR, PPI);
-  barH := Height - vTop - vBot;
-  if wantHScroll then Dec(barH, SBThick);
-  if barH < 0 then barH := 0;
-  barW := Width - hLeft - hRight;
-  if wantVScroll then Dec(barW, SBThick);
-  if barW < 0 then barW := 0;
+  { 两条都**贴边**,右下角那一格两条都不占。条盖住的边框和焦点环由条自己画回去
+    (ITyScrollBarFrameHost,见 TTyScrollBar.RenderTo);从前内缩、圆角上再截短两端,真机上
+    读出来是「条飘着的,不够紧凑」。 }
 
   { ── Vertical bar ────────────────────────────────────────────────────────── }
   if wantVScroll then
@@ -2960,10 +2953,14 @@ begin
     { Bars always exist (created in constructor); just configure and show. }
     FVScroll.Width      := SBThick;
     FVScroll.Controller := Self.Controller;
-    { Position the bar along the right edge (above any horizontal bar), inside the frame:
-      barH already gave up the horizontal bar's corner AND the chrome band at both ends. }
+    { Position the bar along the right edge (above any horizontal bar). }
     if not FVScroll.Dragging then
-      FVScroll.SetBounds(Width - SBThick - chrome, vTop, SBThick, barH);
+    begin
+      if wantHScroll then
+        FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height - SBThick)
+      else
+        FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height);
+    end;
 
     { Clamp FOffsetY to [-(contentH - viewH), 0] before syncing the thumb. }
     if contH > viewH then
@@ -3010,10 +3007,14 @@ begin
       mirror ahead of the content it scrolls, and until this commit this one's content did
       not. Same call TTyCustomGrid makes for the same reason. }
     FHScroll.MirrorHorizontal := RtlLayout;
-    { Position the bar along the bottom edge (left of the vertical bar), inside the frame:
-      barW already gave up the vertical bar's corner AND the chrome band at both ends. }
+    { Position the bar along the bottom edge (left of the vertical bar). }
     if not FHScroll.Dragging then
-      FHScroll.SetBounds(hLeft, Height - SBThick - chrome, barW, SBThick);
+    begin
+      if wantVScroll then
+        FHScroll.SetBounds(0, Height - SBThick, Width - SBThick, SBThick)
+      else
+        FHScroll.SetBounds(0, Height - SBThick, Width, SBThick);
+    end;
 
     if FOffsetX < -(FRangeX - viewW) then FOffsetX := -(FRangeX - viewW);
     if FOffsetX > 0 then FOffsetX := 0;

@@ -720,7 +720,7 @@ procedure TTyScrollBoxTest.TestHiddenBarIsDockedTheMomentItIsFirstShown;
 var
   SB: TScrollBoxAccess;
   child: TControl;
-  bw, thick, drifted: Integer;
+  thick, drifted: Integer;
 begin
   SB := TScrollBoxAccess.Create(FForm);
   SB.Parent := FForm;
@@ -741,11 +741,12 @@ begin
   SB.UpdateScrollRange;
   AssertTrue('横条露面了', SB.HBar.Visible);
 
-  bw := SB.Frame;
   thick := SB.VBar.Width;      { 两条同厚 —— 就是 ScrollbarThick }
-  AssertEquals('露面时它左端贴着框内边,而不是停在漂过的位置',
-    bw, SB.HBar.Left);
-  AssertEquals('露面时它贴着框的下内边', SB.Height - thick - bw, SB.HBar.Top);
+  { 停靠位置是**贴边**的(条自己把框画回它盖住的像素上,见 ITyScrollBarFrameHost),从前是
+    按框宽 bw 往里缩。这条守的不变量没变:露面那一刻它在停靠位置上,不在漂过的位置上。
+    左端 0 恰好也是出厂位置,所以真正咬得住「停靠了没有」的是下面 Top 那两句 —— 漂的是 Top。 }
+  AssertEquals('露面时它左端贴着框的左边', 0, SB.HBar.Left);
+  AssertEquals('露面时它贴着框的下边', SB.Height - thick, SB.HBar.Top);
   AssertTrue(Format('而且它确实不在漂过的位置上(漂到 %d,停在 %d)',
     [drifted, SB.HBar.Top]), SB.HBar.Top <> drifted);
 end;
@@ -754,7 +755,7 @@ procedure TTyScrollBoxTest.TestHiddenBarIsDockedWhenItComesBackAfterBeingHidden;
 var
   SB: TScrollBoxAccess;
   child: TControl;
-  bw, thick, docked, drifted: Integer;
+  thick, docked, drifted: Integer;
 begin
   { 第二条路:先让它露过面(于是 FHBarRect 非空),再藏起来漂,再回来。 }
   SB := TScrollBoxAccess.Create(FForm);
@@ -782,10 +783,10 @@ begin
   child.Width := 900;                        { 回来 }
   SB.UpdateScrollRange;
   AssertTrue('横条又露面了', SB.HBar.Visible);
-  bw := SB.Frame;
   thick := SB.VBar.Width;
-  AssertEquals('回来时仍旧贴着框内左边', bw, SB.HBar.Left);
-  AssertEquals('回来时仍旧贴着框的下内边', SB.Height - thick - bw, SB.HBar.Top);
+  AssertEquals('回来时仍旧贴着框的左边', 0, SB.HBar.Left);
+  AssertEquals('回来时仍旧贴着框的下边', SB.Height - thick, SB.HBar.Top);
+  AssertEquals('回来时就停在最初停靠的那个位置上', docked, SB.HBar.Top);
 end;
 
 { ── 滚轮:第一格 ───────────────────────────────────────────────────────── }

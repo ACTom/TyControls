@@ -2359,24 +2359,31 @@ procedure TTyPainter.FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap;
 var
   w, h, ovL, ovT, ovR, ovB: Integer;
   part: TBGRABitmap;
-  oldClip: TRect;
+  oldClip, dst: TRect;
+  src: TPoint;
 begin
   if (FBmp = nil) or (ASrc = nil) then Exit;
-  w := ARect.Right - ARect.Left;
-  h := ARect.Bottom - ARect.Top;
+  { Only the part of ARect that lands on this bitmap is copied out of the backdrop. For a
+    control filling its own rect that is ARect itself and nothing below changes; it matters
+    for a child painting its HOST's backdrop, whose rect is mostly off the child's bitmap
+    (an embedded scroll bar), where copying the whole host-sized slice would be pure waste. }
+  if not IntersectRect(dst, ARect, Rect(0, 0, FBmp.Width, FBmp.Height)) then Exit;
+  src := Point(ASrcOffset.X + (dst.Left - ARect.Left), ASrcOffset.Y + (dst.Top - ARect.Top));
+  w := dst.Right - dst.Left;
+  h := dst.Bottom - dst.Top;
   if (w <= 0) or (h <= 0) then Exit;
-  ovL := ASrcOffset.X; if ovL < 0 then ovL := 0;
-  ovT := ASrcOffset.Y; if ovT < 0 then ovT := 0;
-  ovR := ASrcOffset.X + w; if ovR > ASrc.Width then ovR := ASrc.Width;
-  ovB := ASrcOffset.Y + h; if ovB > ASrc.Height then ovB := ASrc.Height;
+  ovL := src.X; if ovL < 0 then ovL := 0;
+  ovT := src.Y; if ovT < 0 then ovT := 0;
+  ovR := src.X + w; if ovR > ASrc.Width then ovR := ASrc.Width;
+  ovB := src.Y + h; if ovB > ASrc.Height then ovB := ASrc.Height;
   if (ovR <= ovL) or (ovB <= ovT) then Exit;
   oldClip := FBmp.ClipRect;
-  FBmp.ClipRect := ARect;
+  FBmp.ClipRect := dst;
   try
     part := ASrc.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
     try
-      FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
-                    ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
+      FBmp.PutImage(dst.Left + (ovL - src.X),
+                    dst.Top  + (ovT - src.Y), part, dmSet);
     finally
       part.Free;
     end;
@@ -2445,6 +2452,7 @@ procedure TTyPainter.FillCornerGaps(const ARect: TRect; const ACorners: TTyCorne
 var
   temp: TBGRABitmap;
   w, h, r: Integer;
+  vis: TRect;
   opts: TRoundRectangleOptions;
 begin
   if FBmp = nil then Exit;
@@ -2466,10 +2474,15 @@ begin
   if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
   // Build AColor everywhere, then erase the rounded interior (AA) so only the corner
   // gaps remain; composite that over FBmp to overwrite whatever (shadow) was there.
-  temp := TBGRABitmap.Create(w, h, TyColorToBGRA(AColor));
+  { Only over the part of ARect that is on the bitmap: the shape keeps its full geometry (the
+    erase is offset, not shrunk), so a control filling its own rect gets exactly what it got
+    before, and a child replaying its host's frame does not allocate a host-sized buffer. }
+  if not IntersectRect(vis, ARect, Rect(0, 0, FBmp.Width, FBmp.Height)) then Exit;
+  temp := TBGRABitmap.Create(vis.Right - vis.Left, vis.Bottom - vis.Top, TyColorToBGRA(AColor));
   try
-    temp.EraseRoundRectAntialias(0, 0, w - 1, h - 1, r, r, 255, opts);
-    FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
+    temp.EraseRoundRectAntialias(ARect.Left - vis.Left, ARect.Top - vis.Top,
+      ARect.Left - vis.Left + w - 1, ARect.Top - vis.Top + h - 1, r, r, 255, opts);
+    FBmp.PutImage(vis.Left, vis.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;
   end;

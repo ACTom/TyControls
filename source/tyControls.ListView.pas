@@ -247,7 +247,7 @@ type
   { ===================================================================
     TTyListView
     =================================================================== }
-  TTyListView = class(TTyCustomControl)
+  TTyListView = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     { data }
     FItems:      TTyListItems;
@@ -601,6 +601,10 @@ type
     procedure RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TRect;
       const AStyle: TTyStyleSet; AStates: TTyStateSet); virtual;
 
+    { ITyScrollBarFrameHost:两条内嵌条贴边摆,由它们把本控件的框画回自己那块矩形上。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Resize; override;
@@ -1781,29 +1785,26 @@ begin
   FillMetrics(Result, vw, vh);
 end;
 
+function TTyListView.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;   // RenderTo's DrawFrame uses exactly this
+end;
+
+function TTyListView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FVScroll) or (ABar = FHScroll);
+end;
+
 procedure TTyListView.UpdateScrollBars;
 var
-  cnt, sb, vw, vh, pass, regionH, maxV, maxH, chrome, barW, barH: Integer;
-  vTop, vBot, hLeft, hRight: Integer;
+  cnt, sb, vw, vh, pass, regionH, maxV, maxH: Integer;
   m: TTyListMetrics;
   ext: TSize;
   needV, needH, vertCap, horzCap: Boolean;
-  st: TTyStyleSet;
-  corners: TTyCorners;
 begin
   if csDestroying in ComponentState then Exit;
   cnt := GetItemCount;
   sb  := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
-  { 边框/焦点环那一圈的宽度 —— 条的**矩形**不许落上去。条是窗口化子控件,它盖住的那一段宿主
-    再也画不进去:条完全可见时盖上去的是条自己的底色,自动隐藏把它淡没之后铺的是父控件的表面
-    色,那一段边框整段变白(真机报的「列表右侧 scrollbar 那一条,边框没了」)。与列表框/备忘录
-    让开的是同一条带、同一个函数(tyControls.Base 的 TyChromeInsetLogical)。 }
-  st     := CurrentStyle;
-  chrome := ScaleI(TyChromeInsetLogical(st));
-  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 chrome
-    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
-    像素被白色覆盖了」)。见 TyBarCornerInsetPx。 }
-  corners := TyEffectiveCorners(st);
   { Which axis can scroll at all (see the flow table in the Layout unit). }
   vertCap := FViewStyle in [lvsReport, lvsIcon, lvsSmallIcon, lvsTile];
   horzCap := FViewStyle in [lvsReport, lvsList];
@@ -1833,15 +1834,9 @@ begin
   vh := ClientHeight - IfThen(needH, sb, 0);
   if vw < 0 then vw := 0;
   if vh < 0 then vh := 0;
-  { 两条一起缩,而且**在它们相接的那一头缩同一个数**:只缩一条,角上那块就会多出或少掉一截。
-    vw/vh 已经各自让过对方的槽,这里只再让两头。朝着边框角的那一头按角让,朝着**另一条条**的
-    那一头仍按 chrome —— 挨着的是那条条,不是边框,多让只会在两条之间豁开一道空。 }
-  vTop := TyBarCornerInsetPx(st, corners.TR, Dpi);
-  if needH then vBot := chrome else vBot := TyBarCornerInsetPx(st, corners.BR, Dpi);
-  hLeft := TyBarCornerInsetPx(st, corners.BL, Dpi);
-  if needV then hRight := chrome else hRight := TyBarCornerInsetPx(st, corners.BR, Dpi);
-  barH := vh - vTop - vBot; if barH < 0 then barH := 0;
-  barW := vw - hLeft - hRight; if barW < 0 then barW := 0;
+  { 两条都**贴边**:竖条 (ClientWidth-sb, 0) 高 vh,横条 (0, ClientHeight-sb) 宽 vw,右下角那
+    一格两条都不占。条盖住的边框和焦点环由条自己画回去(ITyScrollBarFrameHost,见
+    TTyScrollBar.RenderTo);从前内缩、圆角上再截短两端,真机上读出来是「条飘着的」。 }
   FillMetrics(m, vw, vh);
   ext := TyListContentExtent(cnt, m);
   if UseGroupedLayout then
@@ -1864,7 +1859,7 @@ begin
     FVScroll.Width := sb;
     FVScroll.Controller := Self.Controller;
     if not FVScroll.Dragging then
-      FVScroll.SetBounds(ClientWidth - sb - chrome, vTop, sb, barH);
+      FVScroll.SetBounds(ClientWidth - sb, 0, sb, vh);
     FSyncingScroll := True;
     try
       FVScroll.Min      := 0;
@@ -1898,7 +1893,7 @@ begin
       not. Same call TTyCustomGrid makes for the same reason. }
     FHScroll.MirrorHorizontal := RtlLayout;
     if not FHScroll.Dragging then
-      FHScroll.SetBounds(hLeft, ClientHeight - sb - chrome, barW, sb);
+      FHScroll.SetBounds(0, ClientHeight - sb, vw, sb);
     FSyncingScroll := True;
     try
       FHScroll.Min      := 0;

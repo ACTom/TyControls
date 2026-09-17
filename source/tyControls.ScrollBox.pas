@@ -32,7 +32,7 @@ type
     aligned children. Re-measuring is likewise automatic — Resize, Loaded (the .lfm's
     children arrive after the last Resize) and ControlsAligned (any child added, removed,
     moved or resized) all funnel into UpdateScrollRange. }
-  TTyScrollBox = class(TTyPanel)
+  TTyScrollBox = class(TTyPanel, ITyScrollBarFrameHost)
   private
     FContent: TTyScrollContent;
     FVScrollBar: TTyScrollBar;   // nil until first needed
@@ -121,8 +121,15 @@ type
       the scrollbar thickness, every ScrollBy — which writes bounds to each child — banks that
       difference again, and an akRight-anchored child loses a scrollbar's width on every
       single scroll until it vanishes. }
-    { The themed border width in device px -- the frame the viewport must stay inside. }
+    { The themed border width in device px -- the frame the viewport must stay inside. It sizes
+      the VIEWPORT only; the bars sit flush and repaint the frame themselves (below). }
     function FrameInset: Integer;
+    { ITyScrollBarFrameHost: the style TTyPanel.RenderTo frames this box with. }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost: only the two bars this box built are embedded. A TTyScrollBar the
+      user drops INTO the box is a child here too, and it stays a standalone bar -- it frames
+      itself and takes focus on a click. }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     function GetClientRect: TRect; override;
     { The themed frame still covers the WHOLE control: ClientRect now stops at the gutters,
       but the box's background/border must run under the bars and fill the corner square
@@ -551,7 +558,7 @@ var
   vMax, hMax: Integer;
   oldW, oldH: Integer;
   oldV, oldH2: Boolean;
-  lead: Integer;
+  lead, barLen: Integer;
 begin
   thick := ScrollbarThick;
   oldW := FContentW;
@@ -616,10 +623,18 @@ begin
     { THE SIGNAL. A vertical bar on the left edge is what makes a window read as right-to-left
       before a single word is legible, which is why this one placement is the phase's headline
       even though the arithmetic around it is larger than phase 2's. }
+    { FLUSH to the edge, not inset by the frame: the bar repaints this box's border over its own
+      rect (ITyScrollBarFrameHost, see TTyScrollBar.RenderTo), so it can take the whole edge.
+      Inset by bw it still covered the border's anti-aliased inner column and, on a rounded
+      theme, both corner arcs -- the defect the other five hosts had. Its length is the full
+      height less the horizontal bar's gutter, so the corner square is the box's own paint.
+      The VIEWPORT keeps its bw inset (viewW/viewH above, FContent below): only the bars moved. }
+    barLen := Height - Ord(wantH) * thick;
+    if barLen < 0 then barLen := 0;
     if lead > 0 then
-      FVBarRect := Bounds(bw, bw, thick, viewH)
+      FVBarRect := Bounds(0, 0, thick, barLen)
     else
-      FVBarRect := Bounds(Width - thick - bw, bw, thick, viewH);
+      FVBarRect := Bounds(Width - thick, 0, thick, barLen);
     FVScrollBar.BoundsRect := FVBarRect;
     vMax := TyScrollMax(FContentH, viewH);
     FSyncing := True;
@@ -641,12 +656,14 @@ begin
   begin
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.BringToFront;
-    { Starts where the content starts, so it still stops short of the vertical bar's corner --
-      the corner has simply changed ends. Its own MirrorHorizontal stays OFF: the children it
-      scrolls are laid out left-to-right (see AdjustClientRect), so the content's origin IS
-      the left edge, and a bar that put Position=Min on the right would point at the wrong end
-      of its own document. The bar mirrors when the thing it scrolls does. }
-    FHBarRect := Bounds(bw + lead, Height - thick - bw, viewW, thick);
+    { Flush along the bottom edge and past the vertical bar's gutter, so it still stops short of
+      the vertical bar's corner -- the corner has simply changed ends. Its own MirrorHorizontal
+      stays OFF: the children it scrolls are laid out left-to-right (see AdjustClientRect), so
+      the content's origin IS the left edge, and a bar that put Position=Min on the right would
+      point at the wrong end of its own document. The bar mirrors when the thing it scrolls does. }
+    barLen := Width - Ord(wantV) * thick;
+    if barLen < 0 then barLen := 0;
+    FHBarRect := Bounds(lead, Height - thick, barLen, thick);
     FHScrollBar.BoundsRect := FHBarRect;
     hMax := TyScrollMax(FContentW, viewW);
     FSyncing := True;
@@ -681,6 +698,16 @@ begin
   // cache so the next anchor/align pass reads the new viewport instead of the stale one.
   if (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2) then
     InvalidateClientRectCache(True);
+end;
+
+function TTyScrollBox.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;   // TTyPanel.RenderTo's DrawFrame uses exactly this
+end;
+
+function TTyScrollBox.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FVScrollBar) or (ABar = FHScrollBar);
 end;
 
 function TTyScrollBox.FrameInset: Integer;

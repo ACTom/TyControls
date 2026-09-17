@@ -94,6 +94,11 @@ begin
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
+    '  /* 贴边内嵌滚动条(列表框、备忘录、网格、列表视图、树、滚动框自己的条)的滑道圆角。' + LineEnding +
+    '     0 = 方角:条是宿主边上的一条带,内容侧圆了会在两端露出宿主底色的缺口。想要圆滑道的' + LineEnding +
+    '     皮肤写非零值,接受两端的缺口。独立摆放的条和滑块仍用 --radius-scroll。' + LineEnding +
+    '     值必须等于代码里的 TyScrollBarEmbeddedRadiusDef。 */' + LineEnding +
+    '  --radius-scroll-embedded: 0px;' + LineEnding +
     '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
     '  /* Tool-bar 1px rules — TTyToolSeparator''s inset line and the tbsDropDown split divider —' + LineEnding +
     '     when the variant''s border-color resolves FULLY transparent. That is the `ghost` case a' + LineEnding +

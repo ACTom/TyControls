@@ -320,10 +320,17 @@ type
     { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
       hands its remaining clear a colour to work with, ONCE per theme change. }
     procedure RefreshGtk3EraseColor;
+    {$ENDIF}
+    { 这个子控件在自己的矩形上**替父控件画了一截框**(边框、焦点环、父控件的底色)。
+      答 True 的子控件在父控件 Invalidate 时跟着重画 —— 父控件的框变了(获得焦点出了焦点环、
+      悬停换了边框色、禁用、换 StyleClass),而窗口化子控件那块矩形父控件自己画不进去,
+      不跟着重画就会留着上一帧的框。默认 False。今天只有贴边的内嵌滚动条答 True。 }
+    function PaintsParentFrame: Boolean; virtual;
   public
+    { 见 PaintsParentFrame:父控件的框一变,替它画框的子控件一起重画。GTK3 下还要先给
+      擦除色一次机会(见 RefreshGtk3EraseColor)。 }
     procedure Invalidate; override;
   protected
-    {$ENDIF}
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
@@ -556,46 +563,45 @@ function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
   两者都画在边内侧)。再 +1 是抗锯齿留量:实测 1px 的边会把墨落到**两列**上(160 宽的控件
   里 x=158 和 159 都变了色),只让开 1 列照样会被压掉一层。
 
-  两类调用者共用这一个数,而不是各抄一份:
-    · 内容(行/格)不许画到这条带上 —— 否则悬停或选中的填充会染到边框抗锯齿的内沿,那一段
-      边框跟着变色;
-    · 内嵌滚动条的**矩形**不许落在这条带上 —— 条是窗口化子控件,它那块矩形上宿主再也画不
-      进去,于是边框在那一段整段消失(真机报的「列表右侧 scrollbar 那一条,边框没了」)。
-      条完全可见时盖上去的是条自己的灰,看着像「贴着边」;自动隐藏把条淡没之后铺的是父控件
-      的表面色,就成了一条白。
+  用它的是内容(行/格):内容不许画到这条带上 —— 否则悬停或选中的填充会染到边框抗锯齿的
+  内沿,那一段边框跟着变色。
+
+  它**不再**决定内嵌滚动条摆在哪。那条路走过两回(先按这条带内缩、再为圆角把两端各截掉
+  几像素),真机的结论是「条飘着的,感觉不够紧凑」:只要前提是「把条的窗口缩小去躲边框」,
+  圆角上就一定得截短条。现在条贴边摆,由条自己把宿主的边框画回它盖住的那几个像素上 ——
+  见 TyDrawFrameChrome 和 TTyScrollBar.RenderTo。
 
   传进来的是**状态解析后**的样式,所以宿主获得焦点时这个数会大一档(焦点环比边框宽):让开
   的正好是当下真画出来的那一圈。 }
 function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
 
-{ 内嵌条**贴着圆角那一端**要让开多少,单位是设备像素(APPI 已经算进去了)。
+{ ======================= DrawFrame,拆成可以「替别人画」的三段 =======================
+  TTyCustomControl.DrawFrame 就是这三段按顺序调一遍(再加一句 TyApplyStyleOpacity),
+  所以它们与 DrawFrame 不会各长各的。
 
-  TyChromeInsetLogical 让开的是**直边**上的那一圈:边框画在最外一圈,让开它那么宽就够了。
-  圆角上不够 —— 弧是往里弯的,同一条边框在靠近角的地方离外沿更远,于是它正好落进条那块矩形
-  里。真机报的就是这个:「容器一般是圆角的,滚动条隐藏之后,右上角、右下角两个角的边框还是
-  有几个像素被白色覆盖了」。
+  拆开是为了**贴边的内嵌滚动条**:条是窗口化子控件,它那块矩形上宿主一个像素都画不进去,
+  于是条要自己把「宿主在这几个像素上本来是什么样」画出来 —— 底下是宿主背后的背景和宿主
+  自己的底色,中间是条身,最上面是宿主的边框和焦点环。条的坐标系里,宿主的矩形是
+  Rect(-Left, -Top, 宿主宽 - Left, 宿主高 - Top),大半落在条的位图外面,画的时候自然被裁掉。
 
-  让开的不是一个半径。条的外沿本来就已经内缩了 chrome,而边框只有 w 宽 —— 中间那 slack =
-  chrome-w 列是条在直边上已经躲开的余量。弧走到条那几列时还没弯到底:圆弧横向弯进 slack 个
-  像素,纵向要走 sqrt(2·r·slack) 行(矢高 h≈s²/2r,解 h=slack)。于是
-      inset = chrome + (r - floor(sqrt(2·r·slack)) + 1)
-  末尾那个 +1 与 TyChromeInsetLogical 里的 +1 是同一件事:抗锯齿留量。没有它,实测 78 个组合
-  里有 3 个会差一行 —— 差一行就是真机报的那几个像素。
-  r=6 的主题每端让 6 不是 2,showcase(r=10、2px 边)让 10 不是 3 —— 条每一端短这么几个像素。
-  比「按半径让」便宜:同样 r=6 按半径要让 8,r=10 要让 13。
-  实测逐个量过(test.scrollbar.hostframe 的 TheCornerInsetClearsTheArcAtEveryRadius:
-  r=0..12 × 1px/2px 边框 × 96/144/192 DPI,共 78 组):这个数一次都没有短过,最多比「弧上最后
-  一点墨的下一行」多让 3 个设备像素。
+  三段都**只拿样式和矩形说话**,不读 Self 的 RTL/DPI/半径:DPI 在画笔上,半径在样式上。
+  唯一需要一个控件的地方是「宿主背后是什么」,由调用方显式传进来。 }
 
-  半径取**四角里最大的那个**,因为 StrokeBorder 就是这么描的:半径为 0 的角走 rrXxxSquare
-  成直角,其余一律用最大的那个半径。ACornerRadius 传的是这一端自己那个角,它只决定「这个角
-  是不是圆的」。
-
-  按设备像素算,不是先按逻辑算完再缩放:sqrt 不是线性的,而那点余量在 200% 下是**两个**设备
-  像素(chrome 4 减边框 2),弧因此能多记一截。按逻辑算只给它一个像素的额度,算出来的数缩放
-  完会大出一截 —— 实测 r=6 在 200% 上会让到 12,而弧的墨到第 8 行就断了,条白白短了 4 个
-  像素。 }
-function TyBarCornerInsetPx(const AStyle: TTyStyleSet; ACornerRadius, APPI: Integer): Integer;
+{ TyFillParentBg 的一般形式:ARect 在 AControl 自己的坐标系里,画到画笔坐标系的
+  ARect + AOrigin 上。AOrigin = (0,0) 时与 TyFillParentBg 一字不差(后者就是这么调的)。
+  子控件替宿主铺背景时,AControl 是**宿主**、AOrigin 是宿主原点在子控件画笔里的位置
+  (-子.Left, -子.Top)—— 这样渐变父背景给出的是宿主那一片的切片,图片主题取样的是宿主
+  在窗体上的偏移,都不会因为「是子控件在画」而错位。 }
+procedure TyFillParentBgAt(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AOrigin: TPoint; const AStyle: TTyStyleSet);
+{ DrawFrame 铺在内容**下面**的那一段:阴影 + 背景填充(render-style 展开之后的)。
+  不含父背景、不含 opacity。 }
+procedure TyDrawFrameUnderlay(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+{ DrawFrame 盖在内容**上面**的那一段:边框(含 3D 斜面)、有阴影时补四个角外的缺口、
+  焦点环。AOwner 只用来回答「角外缺口铺什么色」—— 传框的主人(宿主),不是替它画的子控件。 }
+procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
 
 implementation
 
@@ -630,37 +636,6 @@ begin
     if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
       Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
   if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
-end;
-
-function TyBarCornerInsetPx(const AStyle: TTyStyleSet; ACornerRadius, APPI: Integer): Integer;
-var
-  corners: TTyCorners;
-  band, r, slack, run, extra: Integer;
-begin
-  band   := TyChromeInsetLogical(AStyle);
-  Result := MulDiv(band, APPI, 96);
-  { 没有 chrome 就没有要护的那一圈(直边上也一样,见 TyChromeInsetLogical);这一端是直角
-    就没有弧,让开直边那一圈就够了。 }
-  if (Result <= 0) or (ACornerRadius <= 0) then Exit;
-  { 条在直边上已经躲开的余量:整条带减去边框自己那么宽。band-1 就是边框/焦点环的宽度
-    (TyChromeInsetLogical 是它 +1),两边各自缩放再相减 —— 200% 下这个余量是 2 个设备像素
-    而不是 1,先算完再缩会把它算成 1,于是让得太多。 }
-  slack := Result - MulDiv(band - 1, APPI, 96);
-  if slack < 1 then slack := 1;
-  corners := TyEffectiveCorners(AStyle);
-  r := corners.TL;
-  if corners.TR > r then r := corners.TR;
-  if corners.BR > r then r := corners.BR;
-  if corners.BL > r then r := corners.BL;
-  r := MulDiv(r, APPI, 96);
-  if r <= 0 then Exit;
-  { floor(sqrt(2·r·slack)) —— 整数开方,不走浮点:FPC 里 `2.0 * i` 是在 Single 里算的,而这个
-    数要拿去取整,差一个 ulp 就差一整行(而弧上正好有个整平方:r=8 那一档)。 }
-  run := 0;
-  while (run + 1) * (run + 1) <= 2 * r * slack do Inc(run);
-  extra := r - run + 1;   { +1:抗锯齿留量,与 TyChromeInsetLogical 里那个同源 }
-  if extra < 0 then extra := 0;
-  Inc(Result, extra);
 end;
 
 
@@ -1369,12 +1344,23 @@ end;
 
 procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
+begin
+  TyFillParentBgAt(AControl, APainter, ARect, Point(0, 0), AStyle);
+end;
+
+procedure TyFillParentBgAt(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AOrigin: TPoint; const AStyle: TTyStyleSet);
 var
   host: ITyGlassHost;
   off: TPoint;
-  c: TTyColor;
   f: TTyFill;
+  dst: TRect;
 begin
+  { ARect 说的是「AControl 的哪一片」,dst 说的是「画到画笔的哪儿」。两者从前是同一个矩形,
+    只有替别人画(内嵌条替宿主铺背景)时才分开;AOrigin = (0,0) 时下面每一句都与原来一字
+    不差。 }
+  dst := Rect(ARect.Left + AOrigin.X, ARect.Top + AOrigin.Y,
+              ARect.Right + AOrigin.X, ARect.Bottom + AOrigin.Y);
   if TyResolveGlassHost(AControl, host, off) then
   begin
     // Image-backed form: the SHARP photo slice is the opaque base for EVERY control,
@@ -1382,20 +1368,21 @@ begin
     // fill. Glass controls then get the round-clipped blurred pane + tint on top.
     // ARect may be a sub-rect (group-box frame below its caption, tab content frame
     // below the header), so fold its origin into the backdrop sample — the painter
-    // puts ASrcOffset at FBmp(ARect.Left,ARect.Top), and FBmp(cx,cy) must show
-    // backdrop(off.X+cx, off.Y+cy) for the photo to stay seamless across the frame.
-    APainter.FillImageSlice(ARect, host.GlassSharpBackdrop,
+    // puts ASrcOffset at FBmp(dst.Left,dst.Top), and that pixel must show
+    // backdrop(off.X+ARect.Left, off.Y+ARect.Top) for the photo to stay seamless.
+    APainter.FillImageSlice(dst, host.GlassSharpBackdrop,
       Point(off.X + ARect.Left, off.Y + ARect.Top));
     if tpGlass in AStyle.Present then
-      APainter.FillGlass(ARect, host.GlassBackdrop,
+      APainter.FillGlass(dst, host.GlassBackdrop,
         Point(off.X + ARect.Left, off.Y + ARect.Top),
         AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
   end
-  { Not the single-colour resolver: the fill comes back already re-expressed in THIS rect's
+  { Not the single-colour resolver: the fill comes back already re-expressed in ARect's
     space, so a gradient parent hands down the slice of its sweep that ARect covers instead
-    of one representative colour smeared flat across it. }
+    of one representative colour smeared flat across it. A gradient resolves against the
+    rect it is FILLED into, and dst is ARect moved, not resized -- so the slice is the same. }
   else if TyResolveParentBgFill(AControl, ARect, f) then
-    APainter.FillBackground(ARect, f, 0);
+    APainter.FillBackground(dst, f, 0);
 end;
 
 procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
@@ -1552,6 +1539,62 @@ begin
     Include(AStyle.Present, tpBorderColor);
   end;
   ACorners := TyUniformCorners(0);   // 3D bevels are square
+end;
+
+procedure TyDrawFrameUnderlay(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+var
+  corners: TTyCorners;
+  effStyle: TTyStyleSet;
+begin
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
+    APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
+  corners := TyEffectiveCorners(AStyle);
+  effStyle := AStyle;
+  TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
+  if tpBackground in effStyle.Present then
+    APainter.FillBackground(ARect, effStyle.Background, corners);
+end;
+
+procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+var
+  corners, ringCorners: TTyCorners;
+  off: Integer;
+  ringRect: TRect;
+  pc: TTyColor;
+  gHost: ITyGlassHost;
+  gOff: TPoint;
+  effStyle: TTyStyleSet;
+begin
+  corners := TyEffectiveCorners(AStyle);
+  effStyle := AStyle;
+  TyApplyRenderStyle(effStyle, corners);   // the same expansion the underlay saw
+  if TyBorderVisible(effStyle) then
+    if effStyle.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
+    else
+      APainter.StrokeBorder(ARect, corners, effStyle.BorderWidth, effStyle.BorderColor);
+  // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
+  // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
+  // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background
+  // to keep the rounded silhouette clean. Only when there IS a shadow + a solid (non-glass)
+  // parent — the glass path already shows the form photo through the corners. (The shadow
+  // INSIDE the rounded shape, e.g. a checkbox box, is untouched.)
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0)
+     and not TyResolveGlassHost(AOwner, gHost, gOff) and TyResolveParentBg(AOwner, pc) then
+    APainter.FillCornerGaps(ARect, corners, pc);
+  // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+  begin
+    off := APainter.Scale(AStyle.OutlineOffset);
+    ringRect := Rect(ARect.Left + off, ARect.Top + off, ARect.Right - off, ARect.Bottom - off);
+    ringCorners.TL := corners.TL - AStyle.OutlineOffset; if ringCorners.TL < 0 then ringCorners.TL := 0;
+    ringCorners.TR := corners.TR - AStyle.OutlineOffset; if ringCorners.TR < 0 then ringCorners.TR := 0;
+    ringCorners.BR := corners.BR - AStyle.OutlineOffset; if ringCorners.BR < 0 then ringCorners.BR := 0;
+    ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
+    APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
+  end;
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
@@ -1722,13 +1765,38 @@ begin
   Invalidate;
 end;
 
-{$IFDEF LCLGTK3}
-procedure TTyCustomControl.Invalidate;
+function TTyCustomControl.PaintsParentFrame: Boolean;
 begin
-  RefreshGtk3EraseColor;
-  inherited Invalidate;
+  Result := False;
 end;
 
+procedure TTyCustomControl.Invalidate;
+var
+  i: Integer;
+  c: TControl;
+begin
+  {$IFDEF LCLGTK3}
+  RefreshGtk3EraseColor;
+  {$ENDIF}
+  inherited Invalidate;
+  { 替本控件画了一截框的子控件跟着重画。为什么挂在 Invalidate 上、而不是挂在「获得焦点」
+    「悬停」这几个事件上:框会变的理由有一长串(焦点、悬停、按下、禁用、StyleClass、
+    StyleOverride、换 controller),它们**全部**以一句 Invalidate 收尾,这是唯一不会漏掉
+    其中某一个的地方。逐个事件去接,漏一个就是「焦点环在条那一段没出来」,而无头测试
+    看不见窗口重画,漏了也是绿的。
+
+    开销:没有子控件的控件(绝大多数)在 ControlCount 上就出去了;有子控件的每个只多一次
+    类型判断和一次虚调用。条的重画本身很小(一条 12px 宽的位图)。 }
+  if csDestroying in ComponentState then Exit;
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if c.Visible and (c is TTyCustomControl) and TTyCustomControl(c).PaintsParentFrame then
+      c.Invalidate;
+  end;
+end;
+
+{$IFDEF LCLGTK3}
 procedure TTyCustomControl.RefreshGtk3EraseColor;
 var
   st: TTyStyleSet;
@@ -1919,49 +1987,13 @@ begin
 end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
-var
-  corners, ringCorners: TTyCorners;
-  off: Integer;
-  ringRect: TRect;
-  pc: TTyColor;
-  gHost: ITyGlassHost;
-  gOff: TPoint;
-  effStyle: TTyStyleSet;
 begin
+  { 与拆开之前一步不差:父背景 -> opacity -> 阴影+底色 -> 边框 -> 角外缺口 -> 焦点环。
+    拆成三段是为了让贴边的内嵌滚动条能把**同一份**框画在自己那块矩形上(见声明处)。 }
   TyFillParentBg(Self, APainter, ARect, AStyle);
   TyApplyStyleOpacity(Self, APainter, AStyle);
-  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
-    APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
-  corners := TyEffectiveCorners(AStyle);
-  effStyle := AStyle;
-  TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
-  if tpBackground in effStyle.Present then
-    APainter.FillBackground(ARect, effStyle.Background, corners);
-  if TyBorderVisible(effStyle) then
-    if effStyle.BorderStyle in [tbsOutset, tbsInset] then
-      TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
-    else
-      APainter.StrokeBorder(ARect, corners, effStyle.BorderWidth, effStyle.BorderColor);
-  // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
-  // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
-  // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background
-  // to keep the rounded silhouette clean. Only when there IS a shadow + a solid (non-glass)
-  // parent — the glass path already shows the form photo through the corners. (The shadow
-  // INSIDE the rounded shape, e.g. a checkbox box, is untouched.)
-  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0)
-     and not TyResolveGlassHost(Self, gHost, gOff) and TyResolveParentBg(Self, pc) then
-    APainter.FillCornerGaps(ARect, corners, pc);
-  // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
-  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
-  begin
-    off := APainter.Scale(AStyle.OutlineOffset);
-    ringRect := Rect(ARect.Left + off, ARect.Top + off, ARect.Right - off, ARect.Bottom - off);
-    ringCorners.TL := corners.TL - AStyle.OutlineOffset; if ringCorners.TL < 0 then ringCorners.TL := 0;
-    ringCorners.TR := corners.TR - AStyle.OutlineOffset; if ringCorners.TR < 0 then ringCorners.TR := 0;
-    ringCorners.BR := corners.BR - AStyle.OutlineOffset; if ringCorners.BR < 0 then ringCorners.BR := 0;
-    ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
-    APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
-  end;
+  TyDrawFrameUnderlay(APainter, ARect, AStyle);
+  TyDrawFrameChrome(Self, APainter, ARect, AStyle);
 end;
 
 function TTyCustomControl.FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;

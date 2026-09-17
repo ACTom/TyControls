@@ -233,7 +233,7 @@ TTyScrollBar 继承 `TTyCustomControl` 的状态机制：
 | `tysNormal` | 正常 |
 | `tysHover` | 鼠标悬停在控件上 |
 | `tysActive` | 鼠标左键按下 |
-| `tysFocused` | 键盘焦点（独立摆放的条 `TabStop` 默认 `True`，参与 Tab 循环；宿主内嵌的条在代码里关掉了） |
+| `tysFocused` | 键盘焦点（独立摆放的条 `TabStop` 默认 `True`，参与 Tab 循环；宿主内嵌的条不拿焦点） |
 | `tysDisabled` | `Enabled = False` |
 
 ### 支持的伪类状态（TyScrollBar 轨道）
@@ -241,7 +241,7 @@ TTyScrollBar 继承 `TTyCustomControl` 的状态机制：
 | 伪类 | 触发条件 |
 |------|----------|
 | `:hover` | 鼠标悬停在控件上 |
-| `:focus` | 控件获得键盘焦点（绘制焦点环）。独立摆放的条 Tab 过去就会出现；内嵌条关了 `TabStop`，点上去才获焦 |
+| `:focus` | 控件获得键盘焦点（绘制焦点环）。独立摆放的条 Tab 过去或点一下就会出现；内嵌条不拿焦点，点它焦点归宿主，焦点环画的是宿主的 |
 | `:active` | 鼠标左键按下 |
 | `:disabled` | `Enabled = False`（统一施加 `opacity` 半透明，与其余控件状态一致） |
 
@@ -265,6 +265,8 @@ TyScrollThumb:active { background: var(--accent); }
 ```
 
 另有一个 metric 令牌 `--scrollbar-auto-hide`，控制闲下来之后淡不淡出，`light.tycss` 里是 `-1`（不淡）。见 §7。
+
+宿主内嵌的条贴着宿主的边，滑道圆角不读 `TyScrollBar` 的 `border-radius`，读令牌 `--radius-scroll-embedded`，`light.tycss` 里是 `0`（方角）。改成非零，滑道两端会露出宿主底色的缺口。滑块照旧用 `TyScrollThumb` 的圆角。
 
 ### 纯主题菜谱：平时淡、碰到才亮
 
@@ -385,7 +387,7 @@ TyDefaultController.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
 - 指针**在宿主上**——鼠标落到列表、网格、树、备忘或滚动框的任何位置，它的条就出来
 - 指针压在条本身上
 - 正在拖
-- 有焦点
+- 有焦点（只有独立摆放的条会有）
 
 指针离开宿主才开始倒计时，到点淡出。鼠标不在这个列表上的时候，它的滚动条本来也没有理由还杵在那儿。
 
@@ -485,7 +487,7 @@ end;
 2. **SetMin/SetMax 自动夹紧 Position：** 修改 `Min` 或 `Max` 时若导致 `Position` 越界，会静默调整 `Position`（不触发 `OnChange`，仅触发 `Invalidate`）。
 3. **BeginThumbDrag 的坐标系：** `AGrabPosAlongTrack` 和 `APosAlongTrack` 均为**控件客户区坐标**，垂直时取鼠标 Y，水平时取鼠标 X，与控件的 `ClientRect` 基准一致。
 4. **退化情形：** 当 `Max <= Min` 或 `PageSize <= 0` 时，`TyScrollThumbRect` 返回整个轨道矩形（thumb 填满），此时拖动无意义。
-5. **TabStop：** 独立摆放的 `TTyScrollBar` 是个键盘控件（方向键 / PgUp / PgDn / Home / End），`TabStop` published 且默认 `True`，和原生 `TScrollBar` 一致。六个宿主内嵌的条在代码里把它设成 `False`，不参与焦点循环。
+5. **TabStop：** 独立摆放的 `TTyScrollBar` 是个键盘控件（方向键 / PgUp / PgDn / Home / End），`TabStop` published 且默认 `True`，和原生 `TScrollBar` 一致。六个宿主内嵌的条在代码里把它设成 `False`，不参与焦点循环；点它也不拿焦点，焦点交给宿主（宿主本身不参与焦点时原地不动，焦点已在宿主的行内编辑器里时也不动），方向键照旧落在宿主上。
 6. **水平时默认尺寸不自动翻转：** `Kind` 改变后，控件的宽/高不会自动对调，需手动交换 `Width` 和 `Height`。
 7. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（键盘/滚轮/翻页/箭头）时滑块缓动到新位置（约 120ms），**拖动则始终瞬时跟手**；headless / 设计器下瞬间吸附。六个宿主（`TTyStringGrid` / `TTyDrawGrid`、`TTyListBox`、`TTyListView`、`TTyMemo`、`TTyScrollBox`、`TTyTreeView`）的**内嵌滚动条按设计置为静态**（`AnimationsEnabled := False`）；这**只关滑块缓动，不关自动隐藏的淡入淡出**。详见上文「状态过渡动画」。
 8. **自动隐藏出厂是关的，但六个皮肤打开了它。** `win11` / `macos` / `fluent` / `material3` / `adwaita` / `ubuntu` 下滚动条闲 1200ms 就会淡掉，这是主题的决定，不是 bug。要按控件摁住它：`AutoHide := sbahNever`，或者宿主上的 `ScrollBarAutoHide := sbahNever`。详见 §7。

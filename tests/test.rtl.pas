@@ -171,9 +171,6 @@ type
     function  Metrics: TTyGridMetrics;
     function  ViewW: Integer;
     function  FrozenW: Integer;
-    { 内嵌条按边框/焦点环那一圈内缩的宽度(见 TyChromeInsetLogical)。期望值得跟着主题走:
-      换个边框更粗的主题,写死的数就假红。 }
-    function  ChromeInset: Integer;
     { The embedded bar is a PRIVATE field, so it is found the way a user would find it --
       among the children. That also makes the assertion stronger: it pins the bar the grid
       actually shows, not a field a refactor could leave behind. }
@@ -244,8 +241,6 @@ type
     function  CheckBox(const ACell: TRect): TRect;
     function  Cell(APos: Integer): TRect;
     function  VBar: TTyScrollBar;
-    { 见 TRtlGridAccess.ChromeInset —— 同一条带,同一个理由。 }
-    function  ChromeInset: Integer;
     procedure Remeasure;
   end;
 
@@ -951,8 +946,6 @@ begin
   Result := TyListItemRect(APos, Items.Count, CurrentMetrics, ScrollOffsetX, ScrollOffsetY);
 end;
 function TRtlListAccess.VBar: TTyScrollBar; begin Result := VScrollBar; end;
-function TRtlListAccess.ChromeInset: Integer;
-begin Result := MulDiv(TyChromeInsetLogical(CurrentStyle), Font.PixelsPerInch, 96); end;
 procedure TRtlListAccess.Remeasure;         begin UpdateScrollBars; end;
 procedure TRtlStripAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
 procedure TRtlSheetAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
@@ -3329,8 +3322,6 @@ function TRtlGridAccess.ViewW: Integer;
 begin Result := ViewportW; end;
 function TRtlGridAccess.FrozenW: Integer;
 begin Result := FrozenWidthPx; end;
-function TRtlGridAccess.ChromeInset: Integer;
-begin Result := MulDiv(TyChromeInsetLogical(CurrentStyle), Font.PixelsPerInch, 96); end;
 function TRtlGridAccess.HBar: TTyScrollBar;
 var i: Integer;
 begin
@@ -6139,13 +6130,13 @@ begin
          and (TTyScrollBar(G.Controls[i]).Kind = sbVertical) then
         bar := TTyScrollBar(G.Controls[i]);
     AssertNotNull('the grid shows a vertical bar', bar);
-    { 守的是**边** —— 镜像不该把条搬到左手边去。数值上它不再严丝合缝贴着 ClientWidth:
-      内嵌条现在按边框/焦点环那一圈内缩(TyChromeInsetLogical),否则条那块矩形会把宿主
-      自己画的边框整段盖掉 —— 条是窗口化子控件,那块地方宿主再也画不进去。让开的宽度
-      跟着主题走,所以期望值也跟着主题算。 }
+    { 守的是**边** —— 镜像不该把条搬到左手边去。内嵌条又贴回边上了(它自己把宿主的边框
+      画回它盖住的那几个像素,见 TTyScrollBar.RenderTo),所以右沿重新等于 ClientWidth;
+      中间那几个月按边框内缩时这里是 ClientWidth - inset,旁边那句「没跳到左边」是那时
+      加的,留着。 }
     AssertTrue('which has not jumped to the left-hand edge', bar.Left > G.ClientWidth div 2);
-    AssertEquals('and still ends one chrome band short of the right edge',
-      G.ClientWidth - G.ChromeInset, bar.Left + bar.Width);
+    AssertEquals('which is still docked against the right edge',
+      G.ClientWidth, bar.Left + bar.Width);
   finally
     Form.Free;
     Ctl.Free;
@@ -6206,12 +6197,11 @@ begin
     AssertTrue('precondition: the content overflows, so a bar exists',
       (L.VBar <> nil) and L.VBar.Visible);
     AssertTrue('the form really is mirrored', L.Mirrors);
-    { 同 TheGridsVerticalBarStaysOnTheRight…:守的是边,不是「正好等于 ClientWidth」。内嵌条
-      现在让开边框/焦点环那一圈(TyChromeInsetLogical),否则条会把宿主的边框整段盖掉。 }
+    { 同 TheGridsVerticalBarStaysOnTheRight…:条贴回右边,右沿等于 ClientWidth。 }
     AssertTrue('the vertical bar has not jumped to the left-hand edge',
       L.VBar.Left > L.ClientWidth div 2);
-    AssertEquals('and still ends one chrome band short of the client''s right edge',
-      L.ClientWidth - L.ChromeInset, L.VBar.Left + L.VBar.Width);
+    AssertEquals('the vertical bar still ends at the client''s right edge',
+      L.ClientWidth, L.VBar.Left + L.VBar.Width);
     ax := L.Axis;
     AssertEquals('and the mirror axis is the viewport, which stops short of it',
       L.Metrics.ViewportW, ax.BandRight);
@@ -6620,8 +6610,11 @@ begin
     and not an align pass that headless never runs. }
   B := MakeBox(FForm, True, 100, 600);
   AssertTrue('the vertical bar is up', B.VBar.Visible);
-  AssertEquals('and it is docked at the LEFT edge, inside the frame',
-    B.Frame, B.VBar.Left);
+  { Flush against the left edge, like the other hosts' bars: the bar repaints the box's border
+    over its own rect (ITyScrollBarFrameHost), so it no longer stands one frame-width in. What
+    this pins is unchanged -- the LEFT edge, not the right one. }
+  AssertEquals('and it is docked at the LEFT edge', 0, B.VBar.Left);
+  AssertTrue('and not at the right one', B.VBar.Left + B.VBar.Width < B.Width div 2);
 end;
 
 procedure TRtlScrollBoxTest.TheHorizontalBarStartsAfterTheMirroredGutter;
@@ -6630,10 +6623,14 @@ var
 begin
   B := MakeBox(FForm, True, 800, 600);
   AssertTrue('both bars are up', B.VBar.Visible and B.HBar.Visible);
-  AssertEquals('the horizontal bar starts where the content does, past the vertical gutter',
-    B.Frame + B.VBar.Width, B.HBar.Left);
-  AssertEquals('and it still stops short of the corner, which has changed ends',
-    300 - B.Frame, B.HBar.Left + B.HBar.Width);
+  { Both bars sit flush now (they repaint the box's border over their own rects), so the
+    horizontal bar starts right at the mirrored vertical gutter rather than one frame-width
+    further in, and runs to the edge. The content viewport keeps its frame inset -- see
+    TheViewportStartsAfterTheMirroredGutter, unchanged. }
+  AssertEquals('the horizontal bar starts right past the mirrored vertical gutter',
+    B.VBar.Width, B.HBar.Left);
+  AssertEquals('and it runs to the right edge, the corner having changed ends',
+    300, B.HBar.Left + B.HBar.Width);
 end;
 
 procedure TRtlScrollBoxTest.TheViewportStartsAfterTheMirroredGutter;
@@ -6706,6 +6703,7 @@ end;
 procedure TRtlScrollBoxTest.ReDockingAfterAScrollKeepsTheBarsOnTheMirroredSide;
 var
   B: TBoxAccess;
+  vLeft, hLeft: Integer;
 begin
   { ScrollBy moves EVERY child, the two bars included, so the box puts them back straight
     afterwards. There is no longer a SECOND COPY of the placement to disagree with the first:
@@ -6719,13 +6717,23 @@ begin
     TheScrolledOriginStillFollowsTheOffsetWhenMirrored, which is B.Frame + B.VBar.Width)
     already said they were. So the file disagreed with itself: the bar sat one frame-width
     inside before a scroll and on the border line after one. That one-pixel jump, on every
-    scroll step, is the "flicker while dragging the thumb" from the forum thread. }
+    scroll step, is the "flicker while dragging the thumb" from the forum thread.
+
+    AND THEY CHANGED BACK, for a different reason: the bars sit flush again (Left=0 and
+    Left=VBar.Width), because they now repaint the box's border over their own rects instead
+    of standing inside it. The invariant this test exists for is untouched -- a scroll must not
+    move the bars -- so it now reads the docked position BEFORE the scroll and compares against
+    that, rather than restating the arithmetic a third time. }
   B := MakeBox(FForm, True, 800, 600);
+  vLeft := B.VBar.Left;
+  hLeft := B.HBar.Left;
+  AssertEquals('precondition: the vertical bar is docked on the mirrored (left) edge', 0, vLeft);
+  AssertEquals('precondition: the horizontal bar starts after its gutter', B.VBar.Width, hLeft);
   B.ScrollTo(60, 60);
-  AssertEquals('the vertical bar is still on the mirrored side, inside the frame, after a scroll',
-    B.Frame, B.VBar.Left);
+  AssertEquals('the vertical bar is still on the mirrored side after a scroll',
+    vLeft, B.VBar.Left);
   AssertEquals('and the horizontal bar still starts after its gutter',
-    B.Frame + B.VBar.Width, B.HBar.Left);
+    hLeft, B.HBar.Left);
 end;
 
 procedure TRtlScrollBoxTest.TheBoxsOwnHorizontalBarDoesNotMirrorItsOrigin;

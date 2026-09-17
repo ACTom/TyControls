@@ -774,7 +774,7 @@ type
   end;
 
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
-  TTyCustomGrid = class(TTyCustomControl)
+  TTyCustomGrid = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     FHeader:           TTyHeader;
     FRowCount:         Integer;
@@ -1498,6 +1498,11 @@ type
     procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
       const AFooterRect: TRect; const AFrame: TTyStyleSet); virtual;
 
+    { ITyScrollBarFrameHost:两条内嵌条贴边摆,由它们把本控件的框画回自己那块矩形上。
+      必须与 RenderTo 里 DrawFrame 用的是同一份样式。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     { 分窗格绘制的总入口。无头可测:直接对着任意 canvas 画,不需要窗口句柄。 }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); virtual;
     procedure RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
@@ -4548,13 +4553,20 @@ begin
   Invalidate;
 end;
 
+function TTyCustomGrid.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;   // RenderTo's DrawFrame uses exactly this
+end;
+
+function TTyCustomGrid.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FVScroll) or (ABar = FHScroll);
+end;
+
 procedure TTyCustomGrid.UpdateScrollBars;
 var
-  sb, vw, vh, pass, bodyH, bodyW, maxV, maxH, chrome, barW, barH: Integer;
-  vTop, vBot, hLeft, hRight: Integer;
+  sb, vw, vh, pass, bodyH, bodyW, maxV, maxH: Integer;
   needV, needH: Boolean;
-  st: TTyStyleSet;
-  corners: TTyCorners;
 begin
   { csDestroying 留着,判空删了 —— 两句看着像一对,实际管的是**两件事**。
     析构那一侧:两个字段那时是野指针而不是 nil,判空救不了,csDestroying 才是护栏。
@@ -4563,16 +4575,6 @@ begin
   if csDestroying in ComponentState then Exit;
 
   sb := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
-  { 边框/焦点环那一圈的宽度 —— 条的**矩形**不许落上去。条是窗口化子控件,它盖住的那一段
-    宿主再也画不进去:条完全可见时盖上去的是条自己的底色(看着像贴着边),自动隐藏把它淡没
-    之后铺的是父控件的表面色,那一段边框就整段变白。与列表/备忘录让开的是同一条带、同一个
-    函数(tyControls.Base 的 TyChromeInsetLogical)。 }
-  st     := CurrentStyle;
-  chrome := ScaleI(TyChromeInsetLogical(st));
-  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 chrome
-    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
-    像素被白色覆盖了」)。见 TyBarCornerInsetPx。 }
-  corners := TyEffectiveCorners(st);
   needV := False;
   needH := False;
 
@@ -4621,18 +4623,11 @@ begin
   if FScrollY > maxV then FScrollY := maxV;
   if FScrollX > maxH then FScrollX := maxH;
 
-  { 两条一起缩,而且**在它们相接的那一头缩同一个数**:只缩一条,角上那块就会多出或少掉一截。
-    vh/vw 已经各自让过对方的槽了,这里只再让两头。
-    朝着边框角的那一头按角让(见 TyBarCornerInsetPx),朝着**另一条条**的那一头仍按 chrome ——
-    挨着的是那条条,不是边框,再多让一截只会在两条之间豁开一道空。竖条让过之后的下沿正好落在
-    ClientHeight-sb-chrome,也就是横条的上沿,两条依旧严丝合缝。 }
-  vTop := TyBarCornerInsetPx(st, corners.TR, Dpi);
-  if needH then vBot := chrome else vBot := TyBarCornerInsetPx(st, corners.BR, Dpi);
-  hLeft := TyBarCornerInsetPx(st, corners.BL, Dpi);
-  if needV then hRight := chrome else hRight := TyBarCornerInsetPx(st, corners.BR, Dpi);
-  barH := vh - vTop - vBot; if barH < 0 then barH := 0;
-  barW := vw - hLeft - hRight; if barW < 0 then barW := 0;
-
+  { 两条都**贴边**:竖条 (ClientWidth-sb, 0) 高 vh,横条 (0, ClientHeight-sb) 宽 vw。vh/vw
+    已经各自让过对方的槽,所以竖条的下沿正好是横条的上沿,右下角那一格两条都不占。
+    条盖住的那几个像素上的边框和焦点环由条自己画回去(ITyScrollBarFrameHost,见
+    TTyScrollBar.RenderTo)—— 从前的办法是把条内缩、圆角上再截短两端,真机上读出来是
+    「条飘着的,不够紧凑」。 }
   FSyncingScroll := True;
   try
     if needV then
@@ -4640,7 +4635,7 @@ begin
       FVScroll.Controller := Self.Controller;
       FVScroll.Width := sb;
       if not FVScroll.Dragging then
-        FVScroll.SetBounds(ClientWidth - sb - chrome, vTop, sb, barH);
+        FVScroll.SetBounds(ClientWidth - sb, 0, sb, vh);
       FVScroll.Min := 0;
       { Max = **最大位置**而非内容尺寸 —— 滑块按 PageSize/((Max-Min)+PageSize) 定大小,
         喂内容尺寸会让滑块偏小、底部永远留一截、拖到底还会弹回。与列表/树同一约定。 }
@@ -4662,7 +4657,7 @@ begin
     begin
       FVScroll.Controller := Self.Controller;
       FVScroll.Width := sb;
-      FVScroll.SetBounds(ClientWidth - sb - chrome, vTop, sb, barH);
+      FVScroll.SetBounds(ClientWidth - sb, 0, sb, vh);
       FVScroll.Min := 0;
       FVScroll.Max := maxV;
       FVScroll.PageSize := bodyH;
@@ -4682,7 +4677,7 @@ begin
       FHScroll.Controller := Self.Controller;
       FHScroll.Height := sb;
       if not FHScroll.Dragging then
-        FHScroll.SetBounds(hLeft, ClientHeight - sb - chrome, barW, sb);
+        FHScroll.SetBounds(0, ClientHeight - sb, vw, sb);
       FHScroll.Min := 0;
       FHScroll.Max := maxH;
       FHScroll.PageSize := bodyW;
@@ -4697,7 +4692,7 @@ begin
     begin
       FHScroll.Controller := Self.Controller;
       FHScroll.Height := sb;
-      FHScroll.SetBounds(hLeft, ClientHeight - sb - chrome, barW, sb);
+      FHScroll.SetBounds(0, ClientHeight - sb, vw, sb);
       FHScroll.Min := 0;
       FHScroll.Max := maxH;
       FHScroll.PageSize := bodyW;

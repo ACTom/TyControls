@@ -69,7 +69,7 @@ type
     Lead, Trail: TTyIntArray;    // length = row codepoints + 1
   end;
 
-  TTyMemo = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable)
+  TTyMemo = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable, ITyScrollBarFrameHost)
   protected
     // Pixel x where text begins (left padding scaled). Promoted from private so
     // the horizontal-scroll geometry is testable through the access subclass.
@@ -685,6 +685,10 @@ type
     // [StartX+Margin, ViewRight-Margin]. No-op (clamped to 0) when WordWrap=True or
     // when the caret already fits (so fitting text never leaves ScrollX = 0).
     procedure EnsureCaretXVisible(APPI: Integer);
+    { ITyScrollBarFrameHost:两条内嵌条贴边摆,由它们把本控件的框画回自己那块矩形上。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     // Paint into ACanvas at ARect (RenderTo convention: draw local Rect(0,0,W,H),
     // EndPaint blits at ARect origin). APPI scales padding/line metrics.
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -2355,12 +2359,20 @@ begin
     Result := 0;
 end;
 
+function TTyMemo.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;   // RenderTo draws its frame with exactly this
+end;
+
+function TTyMemo.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FScrollBar) or (ABar = FHScrollBar);
+end;
+
 procedure TTyMemo.UpdateScrollBar;
 var
-  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, fw, PadV: Integer;
-  cTR, cBR, cBL: Integer;
+  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, PadV: Integer;
   StyleS: TTyStyleSet;
-  corners: TTyCorners;
   WasVisible, WantV, WantH: Boolean;
 begin
   PPI := Font.PixelsPerInch;
@@ -2370,32 +2382,11 @@ begin
   StyleS := CurrentStyle;
   PadV := MulDiv(StyleS.Padding.Top, PPI, 96) + MulDiv(StyleS.Padding.Bottom, PPI, 96);
   SBW := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);   // both bars' thickness
-  // Frame inset: the scrollbars sit flush to the edge and would cover the border + focus ring
-  // DrawFrame paints at the OUTER edge (the memo's ring looked clipped by the vbar). Pull both
-  // bars in by that band so the frame stays visible around them, like a native memo.
-  // The width comes from TyChromeInsetLogical now instead of a hardcoded 2. The memo worked
-  // this out first and kept it to itself, while ListBox/Grid/ListView/TreeView went on covering
-  // their own borders ("列表右侧 scrollbar 那一条,边框没了"); they all read the one definition
-  // in Base.pas now. On the stock themes (1px border) it is still 2; it grows on a
-  // thicker-bordered theme, and by one more while the memo has focus -- the ring is wider than
-  // the border and only resolves under :focus, and it is the ring that has to be cleared then.
-  fw := TyChromeInsetLogical(StyleS);
-  if fw > 0 then
-  begin
-    fw := MulDiv(fw, PPI, 96);
-    if fw < 1 then fw := 1;   // 低 DPI 下别缩成 0:边框自己有 1px 下限
-  end;
-  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让 fw
-    的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是有几个
-    像素被白色覆盖了」)。见 TyBarCornerInsetPx。竖条是 alRight 且横条不参与对齐(alNone),
-    所以**右下角归竖条**:横条那一头挨着的是竖条,不是边框,仍按 fw。 }
-  corners := TyEffectiveCorners(StyleS);
-  cTR := TyBarCornerInsetPx(StyleS, corners.TR, PPI);
-  cBR := TyBarCornerInsetPx(StyleS, corners.BR, PPI);
-  cBL := TyBarCornerInsetPx(StyleS, corners.BL, PPI);
-  if cTR < fw then cTR := fw;   // 同一条低 DPI 下限
-  if cBR < fw then cBR := fw;
-  if cBL < fw then cBL := fw;
+  { Both bars sit FLUSH to the edge. The memo used to pull them in by the border/focus-ring band
+    (its ring looked clipped by the vbar), and later by more at rounded corners; on a real
+    machine that read as a bar floating off the edge ("条飘着的,感觉不够紧凑"). The bars now
+    repaint this memo's border and focus ring over their own rects instead (ITyScrollBarFrameHost,
+    see TTyScrollBar.RenderTo), so the ring is whole under a visible bar too. }
   Total := TotalVisualRows(PPI);
 
   // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count
@@ -2429,11 +2420,6 @@ begin
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     FScrollBar.Width := SBW;
-    // Inset the vertical bar inside the frame (Align=alRight honours BorderSpacing) so the
-    // border + focus ring drawn at the outer edge are not covered by it.
-    FScrollBar.BorderSpacing.Right  := fw;
-    FScrollBar.BorderSpacing.Top    := cTR;
-    FScrollBar.BorderSpacing.Bottom := cBR;
     FScrollBar.Controller := Self.Controller;
     FScrollBar.Visible := True;
     // WordWrap: a newly-visible vbar steals SBW from the content width -> narrower wrap -> MORE rows.
@@ -2494,12 +2480,8 @@ begin
     FHScrollBar.Height := SBW;
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
-    // Inset like the vertical bar: left/bottom by fw, and stop before the (also-inset) vbar.
-    // 左端贴的是左下角(按角让);右端只有在没有竖条时才贴右下角,否则挨着的是竖条(按 fw)。
-    if WantV then
-      FHScrollBar.SetBounds(cBL, Height - SBW - fw, Width - cBL - fw - SBW, SBW)
-    else
-      FHScrollBar.SetBounds(cBL, Height - SBW - fw, Width - cBL - cBR, SBW);
+    // Flush along the bottom edge, stopping before the vbar (which owns the bottom-right corner).
+    FHScrollBar.SetBounds(0, Height - SBW, Width - (Ord(WantV) * SBW), SBW);
     viewW := ContentWidthFor(PPI);
     hMax := WidestLineWidth(PPI) - viewW; if hMax < 0 then hMax := 0;
     if FScrollX > hMax then FScrollX := hMax;

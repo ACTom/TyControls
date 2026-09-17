@@ -79,6 +79,7 @@ type
     procedure AtRestTheThemeStyleIsHandedOverUntouched;
     procedure FadeReachesThePaintedPixels;
     procedure HidingShowsTheRealParentBackgroundNotAFlatSlab;
+    procedure MidFadeShowsTheRealParentGradientNotAFlatSlab;
     { --- 起表 ----------------------------------------------------------------
       「表该不该起」和「表转起来之后算得对不对」是两件事,上面那一整批验的全是
       后者:它们都拿 AutoHideTick/HideTimerTick 手动推,等于替被测代码把表起好了。
@@ -1097,6 +1098,59 @@ begin
   end;
   AssertTrue(Format('隐身那块要透出真的渐变，不是一块平板(顶=%d 底=%d)',
     [top, bot]), bot - top > 100);
+end;
+
+procedure TTyScrollBarAutoHideTests.MidFadeShowsTheRealParentGradientNotAFlatSlab;
+const
+  Wipe = TColor($00FF00);
+var
+  panel: TTyPanel;
+  bar: TBarAccess;
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  a, b: Integer;
+begin
+  { 上一条的**淡出途中**那一半。彻底隐身有短路,这 200 毫秒没有:从前它走画笔的 opacity,
+    EndPaint 先铺一块从父控件正中间取样的**一个颜色**,再把条按 opacity 盖上去 —— 实测条
+    那一列上下两头读数一模一样(148/148),而真背景从 29 走到 250。现在条身这一层合成到
+    TyFillParentBg 铺好的真切片上,渐变照样透得出来。
+    取样避开滑块(Position=0,在滑道顶上)和两头的箭头。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }' +
+              'TyPanel { background: linear-gradient(90deg, #000000, #FFFFFF);' +
+              ' border-width: 0px; padding: 0px; }' +
+              'TyScrollBar { background: #808080; border-width: 0px; }' +
+              'TyScrollThumb { background: #202020; }');
+  panel := TTyPanel.Create(FForm);
+  panel.Parent := FForm;
+  panel.Controller := FCtl;
+  panel.SetBounds(0, 0, 16, 160);
+  bar := TBarAccess.Create(FForm);
+  bar.Parent := panel;
+  bar.Controller := FCtl;
+  bar.SetBounds(0, 0, 16, 160);
+  bar.NoteActivity;
+  bar.AutoHideTick(1000);                          { 装上膛 }
+  bar.AutoHideTick(TyScrollBarFadeOutMs div 3);    { 推一截,不推到底 }
+  AssertTrue('前置：确实卡在中途', (bar.FadeLevel > 0.01) and (bar.FadeLevel < 0.99));
+
+  bmp := TBitmap.Create;
+  re := nil;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(16, 160);
+    bmp.Canvas.Brush.Color := Wipe;
+    bmp.Canvas.FillRect(0, 0, 16, 160);
+    bar.RenderInto(bmp.Canvas, Rect(0, 0, 16, 160), 96);
+    re := TBGRABitmap.Create(bmp);
+    a := re.GetPixel(8, 60).green;
+    b := re.GetPixel(8, 130).green;
+  finally
+    re.Free;
+    bmp.Free;
+  end;
+  { 背景在这两行之间差 ~111;可见度 ~0.3 的条身盖上去,透出来的应当剩七成左右。平板是 0。 }
+  AssertTrue(Format('淡出途中条那一列要透出渐变，不是一块平板(第60行=%d 第130行=%d)',
+    [a, b]), b - a > 50);
 end;
 
 { ---- 宿主转发 -------------------------------------------------------------- }

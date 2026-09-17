@@ -16,7 +16,7 @@ type
     "I am updating" boolean at every call site. }
   TTySelectionChangeEvent = procedure(Sender: TObject; AUser: Boolean) of object;
 
-  TTyListBox = class(TTyCustomControl)
+  TTyListBox = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     FItems: TStringList;
     FItemIndex: Integer;
@@ -110,6 +110,12 @@ type
     procedure ApplyRangeSelection(ALo, AHi: Integer);
   protected
     function GetStyleTypeKey: string; override;
+    { 本控件画框用的样式 —— RenderTo 自己读它,贴边的内嵌条(ITyScrollBarFrameHost)也读它,
+      所以两边画出来的框是同一份。Wayland 弹层上的方角处理就在这里面,条替它画的那一截框
+      也跟着是方的。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     // Per-item content paint (default: the item text). A subclass overrides to draw a
     // swatch / glyph / checkbox before the text. ARowRect is the full row; AStyle the
@@ -950,10 +956,9 @@ end;
 procedure TTyListBox.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, padV, PPI,
-  maxH, chrome, cTL, cTR, cBR, cBL: Integer;
+  maxH: Integer;
   wantV, wantH: Boolean;
   S: TTyStyleSet;
-  corners: TTyCorners;
 begin
   PPI   := Font.PixelsPerInch;
   thick := ScrollBarThickness;
@@ -968,23 +973,10 @@ begin
   padW := MulDiv(S.Padding.Left, PPI, 96) + MulDiv(S.Padding.Right, PPI, 96);
   padV := MulDiv(S.Padding.Top, PPI, 96) + MulDiv(S.Padding.Bottom, PPI, 96);
   extentW := MulDiv(FScrollWidth, PPI, 96);
-  { 边框/焦点环那一圈,内嵌条的**矩形**不许落上去:条是窗口化子控件,它盖住的那一段宿主
-    再也画不进去 —— 条完全可见时盖上去的是条自己的灰(看着像贴着边),自动隐藏把它淡没
-    之后铺的是父控件的表面色,那一段边框就成了一条白(真机报的就是这个)。让开的宽度与
-    RenderTo 让行让开的是同一条带、同一个函数。
-    **gutter 不动**:RowViewportBounds 仍只扣 thick,于是条与行内容之间不再留那道缝(行
-    填充本来就按 R.Right - inset - trailSB 收边,现在正好抵住条)。改 gutter 会动到每一行
-    的宽度,不在这次的范围里。 }
-  chrome := MulDiv(TyChromeInsetLogical(S), PPI, 96);
-  { 贴着**圆角**的那一端要让得更多:弧往里弯,同一条边框在靠近角的地方离外沿更远,只让
-    chrome 的话角上那几个像素照样被条那块矩形吃掉(真机报的「右上角、右下角两个角的边框还是
-    有几个像素被白色覆盖了」)。让多少见 TyBarCornerInsetPx —— 不是一个半径,是弧横向弯进一
-    个像素所需要的那几行。四个角各算各的:主题可以只圆两个角。 }
-  corners := TyEffectiveCorners(S);
-  cTL := TyBarCornerInsetPx(S, corners.TL, PPI);
-  cTR := TyBarCornerInsetPx(S, corners.TR, PPI);
-  cBR := TyBarCornerInsetPx(S, corners.BR, PPI);
-  cBL := TyBarCornerInsetPx(S, corners.BL, PPI);
+  { 两条条都**贴边**摆,不为边框让一个像素:条是窗口化子控件,它盖住的那几个像素上的边框和
+    焦点环由条自己画回去(本控件实现 ITyScrollBarFrameHost,见 TTyScrollBar.RenderTo)。
+    从前按边框那一圈内缩、圆角上再把两端截短,真机的结论是「条飘着的,不够紧凑」。
+    gutter 与之无关,一直只扣 thick。 }
   { --- settle the TWO bars together ----------------------------------------------------
     Each bar's gutter comes out of the other's viewport, so one pass can decide "no
     horizontal bar" from a width the vertical bar has not given up yet, and the other way
@@ -1032,12 +1024,6 @@ begin
       every platform's list box has. }
     FHScrollBar.Align := alBottom;
     FHScrollBar.Height := thick;
-    { 三边都让开那一圈 chrome(对齐引擎认 BorderSpacing)。左右两边一起缩,否则横条的两端
-      仍压在左右边框上。横条是 alBottom、占满整宽,所以它两端贴着的正是下面那两个角 ——
-      两端按**角**让,下沿贴的是直边,按 chrome 让。 }
-    FHScrollBar.BorderSpacing.Left   := cBL;
-    FHScrollBar.BorderSpacing.Right  := cBR;
-    FHScrollBar.BorderSpacing.Bottom := chrome;
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
   end
@@ -1068,35 +1054,12 @@ begin
       straight back here). LCL's alignment engine has no BiDi of its own, so alRight stays
       the right-hand edge on a mirrored form and the side has to be chosen explicitly; this
       is the one place that chooses it, and RowContentBounds insets the rows to match. }
-    { 停靠在哪边,chrome 就缩哪边 —— RTL 下条在左边,内缩得记在 .Left 上。另一边显式清零:
-      BorderSpacing 会留在控件上,而 Align 是运行时可翻的(BiDiMode 一改就回到这里)。 }
+    { 贴边:RTL 下停在左边,条画出来的是本控件的**左**边和左边两个角。横条在的时候竖条的
+      下沿挨着横条(alBottom 先摆),角上那一格归横条。 }
     if RtlRowLayout then
-    begin
-      FScrollBar.Align := alLeft;
-      FScrollBar.BorderSpacing.Left  := chrome;
-      FScrollBar.BorderSpacing.Right := 0;
-    end
+      FScrollBar.Align := alLeft
     else
-    begin
       FScrollBar.Align := alRight;
-      FScrollBar.BorderSpacing.Right := chrome;
-      FScrollBar.BorderSpacing.Left  := 0;
-    end;
-    { 上沿贴的是它停靠那一侧的上角 —— RTL 下条在左边,那是左上角。 }
-    if RtlRowLayout then
-      FScrollBar.BorderSpacing.Top := cTL
-    else
-      FScrollBar.BorderSpacing.Top := cTR;
-    { 下沿只在**底下就是边框**时才让:横条在的时候,竖条下面挨着的是横条,不是边框 ——
-      再让一次就会在两条之间留下 chrome 宽的一道空。横条是 alBottom,LCL 先摆它,所以
-      竖条拿到的对齐区已经把横条那一条扣掉了。(Grid/ListView/TreeView 自己 SetBounds,
-      那边是 vh 先扣 sb 再减两个 chrome,天然就抵住。) }
-    if wantH then
-      FScrollBar.BorderSpacing.Bottom := 0
-    else if RtlRowLayout then
-      FScrollBar.BorderSpacing.Bottom := cBL
-    else
-      FScrollBar.BorderSpacing.Bottom := cBR;
     // Update DPI-dependent width and controller every call so DPI changes take effect
     FScrollBar.Width := thick;
     FScrollBar.Controller := Self.Controller;
@@ -1363,6 +1326,23 @@ begin
   UpdateScrollBar;
 end;
 
+function TTyListBox.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;
+  // Wayland popup: the window can't be shape-masked, so paint square corners to match it. Per-corner
+  // Radius wins in TyEffectiveCorners, so zero it AND BorderRadius (row caps key off BorderRadius).
+  if ForceSquareSurface then
+  begin
+    Result.BorderRadius := 0;
+    Result.Radius := Default(TTyCorners);
+  end;
+end;
+
+function TTyListBox.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FScrollBar) or (ABar = FHScrollBar);
+end;
+
 procedure TTyListBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
@@ -1383,14 +1363,7 @@ begin
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
-    BoxStyle := CurrentStyle;
-    // Wayland popup: the window can't be shape-masked, so paint square corners to match it. Per-corner
-    // Radius wins in TyEffectiveCorners, so zero it AND BorderRadius (row caps key off BorderRadius).
-    if ForceSquareSurface then
-    begin
-      BoxStyle.BorderRadius := 0;
-      BoxStyle.Radius := Default(TTyCorners);
-    end;
+    BoxStyle := ScrollBarFrameStyle;
     DrawFrame(P, R, BoxStyle);
 
     { Content area = full rect inset by the LISTBOX style's Padding, with the x edges coming
@@ -1427,11 +1400,9 @@ begin
     // there, so the chrome — drawn once by DrawFrame over the listbox background — keeps a
     // UNIFORM colour: the row fills never touch its anti-aliased inner edge (which otherwise
     // picked up the row colour at a hovered/selected row, tinting the border/ring there).
-    // How WIDE that band is: TyChromeInsetLogical -- the SAME number UpdateScrollBar insets the
-    // embedded bars by. The formula was worked out here first; it now lives in Base.pas so "the
-    // band the rows avoid" and "the band the BAR's rect avoids" stay one number instead of two
-    // transcriptions that can drift. (A bar left on the band erases the border outright: it is a
-    // windowed child, so the host cannot paint there at all.)
+    // How WIDE that band is: TyChromeInsetLogical. The formula was worked out here first and
+    // lives in Base.pas now. (The embedded bars no longer read it: they sit flush and repaint
+    // this band over their own rects -- see TTyScrollBar.RenderTo.)
     insetLogical := TyChromeInsetLogical(BoxStyle);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
