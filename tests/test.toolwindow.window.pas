@@ -64,6 +64,7 @@ type
     procedure TestHeaderRowPaintsItsOwnKeyNotTheWindowKey;
     procedure TestConstructionPinsTheControlStyleAndBounds;
     procedure TestBarOwnedPropertiesStayOutOfTheLfm;
+    procedure TestRelayoutHeaderDropsThePaintCacheItself;
   end;
 
 implementation
@@ -522,6 +523,18 @@ begin
   finally
     w.Free;
   end;
+end;
+
+procedure TTyToolWindowTests.TestRelayoutHeaderDropsThePaintCacheItself;
+begin
+  { 直接调这里的人拿不到 Invalidate 顺带丢缓存那一下 —— AutoAdjustLayout 就是这么调的。
+    DPI 变了而控件尺寸没变(宽度固定的栏)时 NeedsRender 为假,运行时 Paint 会 blit 出
+    旧密度的那一帧,而设计期不走缓存、看着一切正常。 }
+  FWin.SetBounds(0, 0, 120, 80);
+  FWin.PrimeCache(120, 80);
+  AssertFalse('刚渲染过的缓存不用再渲染一遍', FWin.CacheWouldRender(120, 80));
+  FWin.RelayoutHeader;
+  AssertTrue('重排过就得重渲染,尺寸一个像素没动也一样', FWin.CacheWouldRender(120, 80));
 end;
 
 initialization

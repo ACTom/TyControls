@@ -404,11 +404,12 @@ begin
   try
     { 客户区内缩量变了就必须重排,只 Invalidate 会让 alClient 子控件盖住标题行。 }
     Realign;
-    { 这里是 **inherited** Invalidate —— 它不丢绘制缓存。今天两个调用者都已经丢过了:
-      Invalidate 自己第一句就丢,CMBiDiModeChanged 经 inherited 吃到 LCL 那一下
-      Invalidate(control.inc:5969)、走的还是本类的重写。直接调本过程的人拿不到这个
-      顺带效果:运行时 Paint 会 blit 出旧的一帧,而设计期不走缓存、看着一切正常。
-      要丢缓存就走 Invalidate,别图省事直接调这里。 }
+    { 本方法自己丢缓存,所以直接调它也是安全的。下面那一句是 **inherited** Invalidate
+      (走本类的 Invalidate 会再查一遍缓存键、可能又绕回这里),而它不丢缓存 ——
+      指望调用方顺带丢的话,AutoAdjustLayout 这条路就漏了:DPI 变了而控件尺寸没变
+      (宽度固定的栏)时 NeedsRender 为假,运行时 Paint 会 blit 出旧密度的那一帧,
+      而设计期不走缓存、看着一切正常(spec §3.5)。 }
+    if FPaintCache <> nil then FPaintCache.Drop;
     inherited Invalidate;
   finally
     FRelayouting := False;
