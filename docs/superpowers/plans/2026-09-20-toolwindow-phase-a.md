@@ -620,7 +620,6 @@ begin
   inp.Pad := 6;
   inp.Gap := 4;
   inp.ActionsWidth := 80;
-  inp.CaptionWidth := 150;          { 想要 150,只剩 200-6-80-4-6 = 104 }
   g := TyToolWindowHeaderLayout(inp);
   AssertEquals('操作区贴右端', 200 - 6 - 80, g.Actions.Left);
   AssertEquals('操作区保住自己的宽', 80, g.Actions.Right - g.Actions.Left);
@@ -640,7 +639,6 @@ begin
   inp.Pad := 6;
   inp.Gap := 4;
   inp.ActionsWidth := 0;
-  inp.CaptionWidth := 40;
   g := TyToolWindowHeaderLayout(inp);
   AssertEquals('没有操作区时标题止于右内距', 200 - 6, g.Caption.Right);
   AssertTrue('没有操作区就是空矩形', g.Actions.Right <= g.Actions.Left);
@@ -656,6 +654,9 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi 2>&1 | tail -5
 Expected：`Error: Identifier not found "TTyToolWindowHeaderInput"`。
 
 - [ ] **Step 3: 在 interface 里声明纯几何层**
+
+> 声明要**分两批**跟着红绿循环走：Step 3/4 只声明并实现 `TyToolWindowHeaderLayout`，Step 7 再补其余四个。
+> 一次把五个函数都声明了而只实现一个，Step 5 会因为 Forward declaration not solved 直接编不过。
 
 ```pascal
 type
@@ -676,7 +677,6 @@ type
     RowWidth, RowHeight: Integer;
     Pad, Gap: Integer;
     ActionsWidth: Integer;      { 操作区 raw 首选宽;0 = 没有操作区 }
-    CaptionWidth: Integer;      { 侧栏:标题想要的宽 }
     TabWidths: array of Integer;{ 底栏:每个窗口的标签想要的宽 }
     ActiveIndex: Integer;
     TabAreaMin: Integer;
@@ -707,9 +707,9 @@ function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Intege
 
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
 
-{ 排布的精确逆运算:只扫 Layout 自己产出的矩形。 }
-function TyToolWindowZoneAt(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer;
-  out AIndex: Integer; out ARect: TRect): TTyToolWindowZone;
+{ 命中测试 `TyToolWindowZoneAt`(排布的精确逆运算)**留到 B 期**:它的 6 个 zone
+  全是底栏部件,和 `twhBottom` 那一支一起落地。A 期只声明枚举,不声明函数 ——
+  声明了却没有实现体,FPC 会报 Forward declaration not solved。 }
 
 { 图标条 / 标签行的插入槽:按已排布项的中点分。返回 0..N 的**窗口序号**位置。 }
 function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
@@ -749,10 +749,7 @@ begin
     else x := AInput.RowWidth - pad;      { 没有操作区,尾端补一个内距 }
     if x > pad then
       Result.Caption := Rect(pad, 0, x, AInput.RowHeight);
-    { 标题想要的宽小于可用宽时不拉伸:DrawText 左对齐、必要时自己出省略号。 }
-    if (AInput.CaptionWidth > 0)
-       and (Result.Caption.Left + AInput.CaptionWidth < Result.Caption.Right) then
-      Result.Caption.Right := Result.Caption.Left + AInput.CaptionWidth;
+    { 标题就是占满这条带:放不下由 DrawText 左对齐 + 省略号处理,这里不收缩矩形。 }
   end;
   { twhBottom 那一支在 B 期实现;twhNone 什么都不排。 }
 end;
