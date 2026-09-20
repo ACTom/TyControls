@@ -247,6 +247,11 @@ type
       right. }
     procedure NoteInstalledPPI(APPI: Integer);
     procedure ToggleMaximize;
+    { The engine's OWN maximize: fill the current monitor's work area, remembering the bounds
+      to come back to. ToggleMaximize's maximize half, and what TTyForm hands a
+      WindowState = wsMaximized to on first show (AdoptInitialWindowState) -- one path, so a
+      designer-set maximize and a caption-button maximize cannot differ. }
+    procedure MaximizeToWorkArea;
     property Form: TCustomForm read FForm write FForm;
     property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
     property BorderZone: Integer read FBorderZone write FBorderZone;
@@ -389,6 +394,11 @@ type
     procedure CMMouseEnter(var Message: TLMessage); message CM_MOUSEENTER;
     procedure Activate; override;
     {$ENDIF}
+    { A WindowState = wsMaximized that reaches the first show -- streamed from the .lfm (the
+      designer's setting) or assigned in code before Show -- is handed to the chrome engine's
+      own work-area maximize and taken away from the widgetset. Called at the top of DoShow;
+      the implementation says why neither half, nor the order, is optional. }
+    procedure AdoptInitialWindowState;
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
     { Re-derive the title bar's height AFTER LCL has scaled the form for a new monitor.
 
@@ -1770,9 +1780,6 @@ begin
 end;
 
 procedure TTyChromeEngine.ToggleMaximize;
-var
-  Wa: TRect;
-  Mon: TMonitor;
 begin
   if FForm = nil then
     Exit;
@@ -1803,19 +1810,31 @@ begin
     end;
   end
   else
-  begin
-    FSavedBounds := FForm.BoundsRect;
-    { Screen.MonitorFromWindow can return nil (an off-screen / not-yet-mapped handle,
-      or a multi-monitor edge case); guard it so double-click-to-maximize can't AV —
-      fall back to the primary monitor's work area. }
+    MaximizeToWorkArea;
+end;
+
+procedure TTyChromeEngine.MaximizeToWorkArea;
+var
+  Wa: TRect;
+  Mon: TMonitor;
+begin
+  if FForm = nil then
+    Exit;
+  FSavedBounds := FForm.BoundsRect;
+  { Screen.MonitorFromWindow can return nil (an off-screen / not-yet-mapped handle,
+    or a multi-monitor edge case); guard it so double-click-to-maximize can't AV —
+    fall back to the primary monitor's work area. Asked before the handle exists
+    (headless), the primary work area is all there is; asking for the Handle would
+    create one as a side effect. }
+  Mon := nil;
+  if FForm.HandleAllocated then
     Mon := Screen.MonitorFromWindow(FForm.Handle);
-    if Mon <> nil then
-      Wa := Mon.WorkareaRect
-    else
-      Wa := Screen.WorkAreaRect;
-    FForm.BoundsRect := TyMaximizedBounds(Wa);
-    ApplyMaximizedState(True, False);
-  end;
+  if Mon <> nil then
+    Wa := Mon.WorkareaRect
+  else
+    Wa := Screen.WorkAreaRect;
+  FForm.BoundsRect := TyMaximizedBounds(Wa);
+  ApplyMaximizedState(True, False);
 end;
 
 { TTyForm }
@@ -2677,6 +2696,9 @@ end;
 
 procedure TTyForm.DoShow;
 begin
+  { Before inherited: TCustomForm.DoShow reads WindowState (it skips OnShow on a first show
+    that is still maximized), and the widgetset reads it the moment this returns. }
+  AdoptInitialWindowState;
   inherited DoShow;
   {$IFDEF LCLCOCOA}
   // macOS multi-monitor fix. LCL's (0,0) is the top-left of the virtual-desktop UNION (the top of
@@ -2699,6 +2721,33 @@ begin
   if (not (csDesigning in ComponentState)) and HandleAllocated then
     ApplyResizeStrategy;
   ApplyWindowEffects;
+end;
+
+procedure TTyForm.AdoptInitialWindowState;
+begin
+  { Design time keeps the streamed value: the Object Inspector shows it, the .lfm saves it,
+    and the design surface must not be maximized. }
+  if csDesigning in ComponentState then Exit;
+  if WindowState <> wsMaximized then Exit;
+  if FEngine = nil then Exit;
+  { WHY THE ENGINE. This is a borderless window, and the maximize the widgetset would do
+    (ShowHide -> ShowWindow(SW_SHOWMAXIMIZED); TCustomForm.Show repeats it) is aimed at a
+    plain WS_POPUP at this moment -- the thick frame only arrives in ApplyResizeStrategy.
+    Windows then fills the whole monitor, taskbar included; GTK/Qt window managers ignore
+    the request for an undecorated window altogether; and the chrome learns of it only if an
+    OS size report happens to come back. The engine's maximize is the caption button's:
+    work-area bounds, a rect to restore to, the restore glyph, square corners.
+    WHY THIS ORDER. SetWindowState shows the window at once while Showing is True
+    (customform.inc:1813), so the bounds are applied first and the window appears maximized
+    rather than flashing at the designed size. And the state must be normal before DoShow
+    returns: CMShowingChanged runs inherited -- the widgetset's ShowHide, which reads it --
+    right after (customform.inc:585).
+    A fixed (Resizable=False) window cannot maximize, the same answer the caption button and
+    the double-click give; it is only put back to normal. An already-maximized engine (DoShow
+    re-fires on every show) is left alone so the saved rect survives. }
+  if FResizable and not FEngine.Maximized then
+    FEngine.MaximizeToWorkArea;
+  WindowState := wsNormal;
 end;
 
 initialization
