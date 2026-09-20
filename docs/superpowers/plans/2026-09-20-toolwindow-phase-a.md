@@ -1025,9 +1025,12 @@ procedure TTyToolWindowTests.ForceAlign(AHost: TWinControl);
 var
   r: TRect;
 begin
-  { 没 Show 的窗体上 LCL 跳过 AutoSize/Realign,但对齐引擎本身照样能跑。 }
+  { 没 Show 的窗体上 LCL 跳过 AutoSize/Realign,但对齐引擎本身照样能跑。
+    **传没扣过的矩形**:AlignControls 第一句就自己调 AdjustClientRect
+    (wincontrol.inc:3259),外面再扣一遍就是扣两次。仓库里
+    tests/test.scrollbar.hostframe.pas:197 的同名过程先扣了再传,别照那个抄;
+    tests/test.parity.barsmenus.pas:192 和 test.controlbar.pas:83 是对的。 }
   r := Rect(0, 0, AHost.Width, AHost.Height);
-  TWinAccess(AHost).AdjustClientRect(r);
   TWinAccess(AHost).AlignControls(nil, r);
 end;
 
@@ -1398,6 +1401,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
+
+> **Task 3 落地后对本节的两点影响：**
+> - 标题行的答案现在由 `HeaderGeomAt(const AClient: TRect; APPI: Integer)` 一处给出（照 `TTyCard.LayoutAtPPI`），它自己把行高钳进客户区。**`CustomAlignPosition` 要调它，不要再自己跑一遍排布。**
+> - 操作区的首选尺寸只有一个来源 `ActionsPreferredSize(APPI)`（Task 3 已把两处写死的 0 合并成它）。本节把它接到真的操作区上，**改那一处就够了**。
+> - RTL 在 Task 3 只由「接线断言 + 墨迹测试」各守一半。**本节操作区一进来，RTL 就有看得见的位置差了：补一条像素/矩形断言，断言 RTL 下操作区在左、标题在右。**
 
 ### Task 4: `TTyToolWindowActions`（操作区）
 
