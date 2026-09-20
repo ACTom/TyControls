@@ -961,6 +961,17 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Create: `tests/test.toolwindow.window.pas`
 - Modify: `tests/tytests.lpr`
 
+> **Task 3 已完成（464f6c77 + 21061f49）。实现期与本节初稿的出入，以代码为准：**
+> - `SetParent` / `CustomAlignPosition` 初稿在本节声明、却要到 Task 5 / Task 4 才有实现体 —— FPC 会报 unsolved forward declaration。**声明跟着实现走**，本节都不声明。
+> - `HeaderMode` 初稿读 `Bar.Placement`，而 `Placement` 是 Task 5 才有的：现在是「父控件是栏就答 `twhSide`，否则 `twhNone`」，补 Placement 的确切改法写在该函数注释里。
+> - `Actions.RawPreferredWidth/Height` 是 Task 4 的东西：本节 `Actions` 恒 nil，标题行高退化成 token 项。
+> - 初稿的 `FPaintCacheDummy` 是死字段，没加；`ForceAlign` 夹具没人用，没写。
+> - **夹具必须给工具窗口自己的 `Controller`**：`ActiveController` 不沿父链走，不设就回落进程级控制器，`StyleOverride` 根本到不了它。
+> - **Step 8 的变异杀不死 Step 6 的测试**（标题行高本来就按 ThemeVersion 键控，「只重画」时那两条照样绿）：加了「重排次数 > 0」的断言之后变异才红。
+> - **Step 9 的哨兵底色挂错了地方**：工具窗口的底色从**父控件的主题样式**解析，不是窗体的 LCL `Color`；改用控制器的 `StyleOverride` 把栏的主题背景刷成哨兵色。
+> - **两处接线是本节补的**：`HeaderInput(APPI, ARowWidth)` 把标题行输入收口成一处（绘制与 Task 4 摆操作区问同一份），并把 `RightToLeft` 真正接上几何层；`OnShow` / `OnHide` 从 `CM_VISIBLECHANGED` 发（初稿说「由栏在切换时调用」，而计划里任何一处都没写那一步）。另加 `TextChanged` → `Invalidate`（本控件自绘标题）。
+> - RTL 的两条线各守一半：`BeginPaint` 那条由墨迹测试守，排布那条今天没有像素能证伪（标题矩形对称，镜像=恒等），由 `HeaderInput` 上的接线断言守；**Task 4 操作区一进来就变成看得见的位置差，那时补一条像素断言。**
+
 - [ ] **Step 1: 写失败的测试——正文在标题行下面**
 
 `tests/test.toolwindow.window.pas`：
