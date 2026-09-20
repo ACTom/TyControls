@@ -218,6 +218,10 @@ type
       TCustomForm for the generic engine; default True for a non-TTyForm host). The
       edge hit-test routes through this so a fixed window never starts a resize. }
     function FormResizable: Boolean;
+    { Whether a user gesture may maximize the window -- TTyForm.CanMaximize, i.e. the same
+      three conditions that put the maximize button on the bar. Default True for a
+      non-TTyForm host. Gates the way IN only: a maximized window may always restore. }
+    function FormMaximizable: Boolean;
     { Whether the engine's MANUAL (BoundsRect-drag) edge resize is active. False on Windows —
       there the native WS_THICKFRAME + WM_NCHITTEST own resize, so the manual path is disabled
       to avoid double-handling (see tyControls.Win32WS); elsewhere it follows FormResizable.
@@ -455,6 +459,12 @@ type
       when CaptionAction = tcaRollUp. }
     procedure ToggleRollUp;
     property RolledUp: Boolean read FRolledUp;
+    { Whether a user gesture may maximize this window: Resizable, offered by BorderIcons, and
+      not switched off on the bar -- the three conditions that put the maximize button on the
+      title bar, so the button's presence, the title-bar double-click and the OS gestures
+      (WS_MAXIMIZEBOX: Aero Snap to the top edge, Win+Up) always agree, as they do on a native
+      window that has no maximize box. A window that is already maximized may always restore. }
+    function CanMaximize: Boolean;
     { The fully-resolved chrome style this window is rendered from: the active theme's TyForm
       token with StyleOverride merged on top — exactly what ApplyWindowEffects and the
       background paint consume. Falls back to the built-in default controller when no
@@ -1157,6 +1167,11 @@ begin
   if FShowMaximize = AValue then Exit;
   FShowMaximize := AValue;
   ApplyButtonVisibility;
+  { This switch feeds the window's WS_MAXIMIZEBOX (TTyForm.CanMaximize), so a flip at run time
+    refreshes the native NC strategy. FEngine is nil while streaming and at design time; the
+    first show applies the strategy then, with the streamed value. }
+  if (FEngine <> nil) and (FEngine.Form is TTyForm) then
+    TTyForm(FEngine.Form).ApplyResizeStrategy;
 end;
 
 procedure TTyTitleBar.SetShowClose(AValue: Boolean);
@@ -1474,6 +1489,14 @@ function TTyChromeEngine.FormResizable: Boolean;
 begin
   if FForm is TTyForm then
     Result := TTyForm(FForm).Resizable
+  else
+    Result := True;
+end;
+
+function TTyChromeEngine.FormMaximizable: Boolean;
+begin
+  if FForm is TTyForm then
+    Result := TTyForm(FForm).CanMaximize
   else
     Result := True;
 end;
@@ -1841,11 +1864,14 @@ begin
   // A double-click that maximizes presses the title bar first (arming a drag); cancel it so a
   // trailing MouseMove can't move the just-maximized window.
   FDragging := False;
-  // A fixed (non-resizable) window can't maximize. This gates BOTH entry points
-  // (the title-bar double-click via TitleBarDblClick and the max button); the button
-  // is also disabled when not resizable (SetResizable). When already maximized,
-  // still allow the restore branch so a window can't get stuck maximized.
-  if (not FormResizable) and (not FMaximized) then
+  // A window that offers no maximize button can't be maximized by a gesture either. This gates
+  // BOTH entry points (the title-bar double-click via TitleBarDblClick and the max button) on
+  // TTyForm.CanMaximize -- Resizable, biMaximize, the bar's ShowMaximize -- the three
+  // conditions that put the button there, so the gesture and the button never disagree (it
+  // used to look at Resizable alone, and a window with its button hidden still maximized on a
+  // double-click). When already maximized, still allow the restore branch so a window can't
+  // get stuck maximized.
+  if (not FormMaximizable) and (not FMaximized) then
     Exit;
   if FMaximized then
   begin
@@ -2336,6 +2362,12 @@ begin
   FTitleBar.OfferedButtons := TyResolveCaptionButtons(BorderIcons, FResizable);
 end;
 
+function TTyForm.CanMaximize: Boolean;
+begin
+  Result := FResizable and (biMaximize in BorderIcons)
+    and ((FTitleBar = nil) or FTitleBar.ShowMaximize);
+end;
+
 procedure TTyForm.ApplyResizeStrategy;
 {$IFDEF LCLWin32}
 var capH, zone: Integer; resiz, noFrame, maxed: Boolean; ctrl: TTyStyleController;
@@ -2373,7 +2405,7 @@ begin
     maxed := (FEngine <> nil) and FEngine.Maximized;
     TyNcApplyResize(Self, resiz, zone, capH,
       maxed,                                    // engine (work-area) maximize -> no NC inset
-      resiz and (biMaximize in BorderIcons),    // allow native maximize (WS_MAXIMIZEBOX)
+      CanMaximize and not FRolledUp,            // allow native maximize (WS_MAXIMIZEBOX): the button's presence
       noFrame);
     // The full-frame-eat above leaves the surface covering every pixel, so without this the
     // form is never hit-tested and the window cannot be edge-resized with the mouse at all.

@@ -294,6 +294,11 @@ type
     procedure TestNonResizableEdgePressDoesNotStartResize;
     procedure TestNonResizableDisablesMaxButton;
     procedure TestNonResizableGatesMaximize;
+    { The maximize gestures follow the button: no button, no double-click maximize. }
+    procedure TestHiddenMaxButtonGatesTheDoubleClick;
+    procedure TestBorderIconsWithoutMaximizeGateTheDoubleClick;
+    procedure TestHiddenMaxButtonStillRestoresAMaximizedWindow;
+    procedure TestCanMaximizeIsTheButtonsPresence;
   end;
 
   { Bugs #2 + #3 — the maximized window's chrome.
@@ -2054,6 +2059,90 @@ begin
     AssertFalse('precondition: not maximized', F.EngineMaximized);
     TTitleBarAccess(F.TitleBar).InjectDblClick;
     AssertFalse('maximize gated when not resizable', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestHiddenMaxButtonGatesTheDoubleClick;
+var F: TTyFormAccess;
+begin
+  { ShowMaximize=False hides the button; the title-bar double-click must be refused too. On a
+    native window the two are one fact -- no maximize box, no double-click maximize -- and the
+    gate used to look at Resizable alone, so a window with its button hidden still maximized. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertTrue('precondition: the double-click maximizes while the button shows', F.EngineMaximized);
+    F.Engine.ToggleMaximize;
+    AssertFalse('precondition: restored', F.EngineMaximized);
+    F.TB.ShowMaximize := False;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('double-click refused once the button is hidden', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestBorderIconsWithoutMaximizeGateTheDoubleClick;
+var F: TTyFormAccess;
+begin
+  { The same through BorderIcons: no biMaximize, no button, no double-click maximize. This gap
+    predates the bar switch. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.BorderIcons := [biSystemMenu, biMinimize];
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('double-click refused without biMaximize', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestHiddenMaxButtonStillRestoresAMaximizedWindow;
+var F: TTyFormAccess;
+begin
+  { Hiding the button on an already-maximized window must not trap it: the double-click still
+    restores. The gate refuses the way IN only, as it always did for Resizable=False. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertTrue('precondition: maximized', F.EngineMaximized);
+    F.TB.ShowMaximize := False;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('restored despite the hidden button', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestCanMaximizeIsTheButtonsPresence;
+var F: TTyFormAccess;
+begin
+  { One answer for the gestures and the button: CanMaximize flips exactly when the caption
+    button appears or disappears, for each of the three conditions. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    AssertTrue('default: yes', F.CanMaximize);
+    AssertTrue('and the button shows', F.TB.MaxButton.Visible);
+    F.Resizable := False;
+    AssertFalse('fixed window: no', F.CanMaximize);
+    AssertFalse('fixed window: button gone', F.TB.MaxButton.Visible);
+    F.Resizable := True;
+    F.BorderIcons := [biSystemMenu, biMinimize];
+    AssertFalse('no biMaximize: no', F.CanMaximize);
+    AssertFalse('no biMaximize: button gone', F.TB.MaxButton.Visible);
+    F.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+    F.TB.ShowMaximize := False;
+    AssertFalse('switch off: no', F.CanMaximize);
+    AssertFalse('switch off: button gone', F.TB.MaxButton.Visible);
+    F.TB.ShowMaximize := True;
+    AssertTrue('all three back: yes', F.CanMaximize);
+    AssertTrue('button back', F.TB.MaxButton.Visible);
   finally
     F.Free;
   end;
