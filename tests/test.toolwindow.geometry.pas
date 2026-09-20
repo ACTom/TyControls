@@ -3,6 +3,7 @@ unit test.toolwindow.geometry;
 interface
 uses
   Classes, fpcunit, testregistry,
+  { 只为它的 initialization —— 四个 RegisterClass 就发生在那里,别当成没用的 uses 删掉。 }
   tyControls.ToolWindows;
 
 type
