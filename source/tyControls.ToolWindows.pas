@@ -163,6 +163,16 @@ begin
 end;
 
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
+
+  function Flip(const ARect: TRect): TRect;
+  begin
+    { 空矩形保持全零:把「没有操作区」镜像成 (RowWidth,0,RowWidth,0)
+      会让零值看起来像个真位置。算术交给 LCL 自己那五行
+      (controls.pp:2966),跟 CheckGroup / Columns 同一个调用。 }
+    if ARect.Right <= ARect.Left then Exit(ARect);
+    Result := BidiFlipRect(ARect, Rect(0, 0, AInput.RowWidth, AInput.RowHeight), True);
+  end;
+
 var
   pad, gap, aw, x: Integer;
 begin
@@ -175,19 +185,33 @@ begin
   aw := AInput.ActionsWidth; if aw < 0 then aw := 0;
   if aw > AInput.RowWidth - pad then aw := AInput.RowWidth - pad;
 
-  if aw > 0 then
-    Result.Actions := Rect(AInput.RowWidth - pad - aw, 0, AInput.RowWidth - pad, AInput.RowHeight);
-
   if AInput.Mode = twhSide then
   begin
-    if aw > 0 then x := Result.Actions.Left - gap
-    else x := AInput.RowWidth - pad;      { 没有操作区,尾端补一个内距 }
+    { 贴右端的操作区只是侧栏的答案。底栏从尾端往前是
+      [收起][最大化][分隔线][操作区][溢出][标签…](spec §7.3),操作区不在最右端;
+      twhNone 的操作区按 raw 首选尺寸放在正文左上角(spec §3.2)。
+      在分支外面算就等于给那两支发一个看起来合法的错答案。 }
+    if aw > 0 then
+    begin
+      Result.Actions := Rect(AInput.RowWidth - pad - aw, 0, AInput.RowWidth - pad, AInput.RowHeight);
+      x := Result.Actions.Left - gap;
+    end
+    else
+      x := AInput.RowWidth - pad;         { 没有操作区,尾端补一个内距 }
     if x > pad then
       Result.Caption := Rect(pad, 0, x, AInput.RowHeight);
     { 标题拿下整个剩余跨度 —— spec §3.4:“操作区优先保宽;标题先省略号”。
       放不下由 DrawText 自己出省略号,所以这里没有「标题想要多宽」这个输入。 }
   end;
   { twhBottom 那一支在 B 期实现;twhNone 什么都不排。 }
+
+  if AInput.RightToLeft then
+  begin
+    { spec §7.3:整套几何按 LTR 算一次,再按行宽镜像。
+      镜像只动横向:标题行高就是行高。 }
+    Result.Caption := Flip(Result.Caption);
+    Result.Actions := Flip(Result.Actions);
+  end;
 end;
 
 function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Integer;
@@ -232,7 +256,14 @@ begin
   if Length(AWidths) = 0 then Exit;
   if AAvail <= 0 then
   begin
-    AAnyHidden := True;
+    { spec §7.3:当前页始终留在行上。「留出溢出按钮后一个都放不下」
+      那条路径就是这么答的 —— 这里不一致的话,栏宽收到 0 会把当前页也弄丢。 }
+    if (AActiveIndex >= 0) and (AActiveIndex <= High(AWidths)) then
+    begin
+      SetLength(Result, 1);
+      Result[0] := AActiveIndex;
+    end;
+    AAnyHidden := Length(Result) < Length(AWidths);
     Exit;
   end;
   plan := Fill(AAvail);
@@ -295,7 +326,7 @@ var
 begin
   Result := nil;
   AAnyHidden := False;
-  if (ACount <= 0) or (AItemSize <= 0) or (AStripHeight <= 0) then Exit;
+  if (ACount <= 0) or (AItemSize <= 0) or (AStripWidth <= 0) or (AStripHeight <= 0) then Exit;
   widths := nil;
   SetLength(widths, ACount);
   for i := 0 to ACount - 1 do widths[i] := AItemSize;   { 图标是方的,等宽 }
