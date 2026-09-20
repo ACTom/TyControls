@@ -657,6 +657,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ListGroupPanel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ToolWindows.pas"/>
+        <UnitName Value="tyControls.ToolWindows"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Shape.pas"/>
         <UnitName Value="tyControls.Shape"/>
       </Item>
