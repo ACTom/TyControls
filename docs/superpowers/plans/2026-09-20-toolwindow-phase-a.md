@@ -45,7 +45,8 @@
 8. **token 名一律写成单元级具名常量**（`TyToolWindowHeaderHeightVar = '--toolwindow-header-height'`），调用点不写字符串字面量。读值一律 `ActiveController.Metric(...)`，不是裸 `Controller`（nil 会 AV）。
 9. **`Metric` 返回逻辑像素**，用之前 `APainter.Scale(v)` 或 `MulDiv(v, Font.PixelsPerInch, 96)`。布局和绘制必须用同一套，否则出现「量的是逻辑、画的是设备」两套真相。
 10. **新单元不加进 `tycontrols.lpk` 编译照样过**，但会从安装包里消失；`tests/test.release.pas` 是唯一守卫。另：仓库里**没有** `tycontrols.pas`（.gitignore 掉了，装包时生成），别去改它。
-11. **换主题只广播一次裸 `Invalidate`**（`Controller.pas:665-687`），没有 StyleChanged 钩子。凡是缓存了主题值又影响布局的，都要在 `Invalidate` 重写里查缓存键（`ScrollBar.pas:616-657, 992-1028` 是范本）。
+11. **别用 `sed -i` 改 `tycontrols.lpk` / `tests/tytests.lpr`。** 本机 MSYS 的 `sed` 读 CRLF 文件会吞掉 `\r`，整文件被转成 LF、炸出巨大 diff。要脚本化就用 Python 二进制读写，或者直接用编辑工具。
+12. **换主题只广播一次裸 `Invalidate`**（`Controller.pas:665-687`），没有 StyleChanged 钩子。凡是缓存了主题值又影响布局的，都要在 `Invalidate` 重写里查缓存键（`ScrollBar.pas:616-657, 992-1028` 是范本）。
 
 ---
 
@@ -75,7 +76,7 @@ cd /d/Projects/ty-3.1/tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe
 
 ---
 
-### Task 0: 空单元 + 包登记 + 四个测试单元挂上去
+### Task 0: 空单元 + 包登记 + 第一个测试单元
 
 **Files:**
 - Create: `source/tyControls.ToolWindows.pas`
@@ -97,7 +98,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics,
-  tyControls.Types, tyControls.Base;
+  tyControls.Types, tyControls.Base, tyControls.Component;
 
 const
   { 长度 token。经典值必须等于这里的 Def —— light.tycss 的 :root 里写同一个数,
@@ -132,11 +133,12 @@ const
   TyToolWindowDropSizeDef     = 2;
 
   { 展开尺寸的出厂值。侧栏与底栏共用一个数:Pascal 的 published default 只能是常量,
-    按 Placement 分两个数会让 .lfm 省略掉其中一侧的值、加载后变成另一侧的默认。 }
-  TyToolWindowExpandedSizeDef = 240;
+    按 Placement 分两个数会让 .lfm 省略掉其中一侧的值、加载后变成另一侧的默认。
+    名字不叫 ...Def —— 本库的 ...Var / ...Def 成对只用于「主题 token 与它的回落值」。 }
+  TyToolWindowDefaultExpandedSize = 240;
 
   { 拖动阈值(逻辑像素)与点击防抖(毫秒)。 }
-  TyToolWindowDragThresholdDef = 6;
+  TyToolWindowDragThresholdPx = 6;
   TyToolWindowClickGuardMs     = 300;
 
 type
@@ -145,19 +147,31 @@ type
 
   TTyToolWindowBar = class;
   TTyToolWindowActions = class;
+  TTyToolWindowManager = class;
 
+  { GetStyleTypeKey 在 TTyCustomControl 上是 abstract,不覆写就等于注册了一个
+    「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
+    类型键是契约不是实现,A 期就钉死。 }
   TTyToolWindow = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
   end;
 
   TTyToolWindowActions = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
   end;
 
   TTyToolWindowBar = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
   end;
 
   { A 期只建壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
-    免得 B 期的测试和 .lfm 里写出两个名字。 }
-  TTyToolWindowManager = class(TComponent)
+    免得 B 期的测试和 .lfm 里写出两个名字。
+    继承 TTyComponent(不是 TComponent):全库非可视组件都从它来,它带着
+    对象查看器里那个只读 Version。 }
+  TTyToolWindowManager = class(TTyComponent)
   end;
 
 implementation
@@ -191,21 +205,25 @@ unit test.toolwindow.geometry;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
+  Classes, fpcunit, testregistry,
   tyControls.ToolWindows;
 
 type
   TTyToolWindowGeometryTests = class(TTestCase)
   published
-    procedure TestUnitCompilesAndConstantsAreSane;
+    procedure TestEveryClassIsRegisteredForStreaming;
   end;
 
 implementation
 
-procedure TTyToolWindowGeometryTests.TestUnitCompilesAndConstantsAreSane;
+procedure TTyToolWindowGeometryTests.TestEveryClassIsRegisteredForStreaming;
 begin
-  AssertEquals('侧栏与底栏共用一个出厂展开尺寸', 240, TyToolWindowExpandedSizeDef);
-  AssertTrue('图标条比图标大', TyToolWindowStripSizeDef >= TyToolWindowGlyphSizeDef);
+  { 这一条守的正是本任务交付的东西:漏掉任何一句 RegisterClass,读 .lfm 时按类名
+    就找不到类。断言常量等于它自己写的字面量是同义反复,不要那么写。 }
+  AssertNotNull('TTyToolWindow 必须注册', GetClass('TTyToolWindow'));
+  AssertNotNull('TTyToolWindowActions 必须注册', GetClass('TTyToolWindowActions'));
+  AssertNotNull('TTyToolWindowBar 必须注册', GetClass('TTyToolWindowBar'));
+  AssertNotNull('TTyToolWindowManager 必须注册', GetClass('TTyToolWindowManager'));
 end;
 
 initialization
@@ -227,13 +245,15 @@ end.
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyToolWindowGeometryTests --format=plain > /tmp/t.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t.txt
 ```
 
-Expected：`Number of run tests: 1`，errors/failures 都是 0。
+Expected：`Number of run tests: 1`，errors/failures 都是 0。**变异确认**：注释掉任何一句 `RegisterClass`，重编重跑必须红。
 
 - [ ] **Step 6: 跑一次 release 守卫，确认 .lpk 登记生效**
 
 ```bash
-cd /d/Projects/ty-3.1/tests && ./tytests-31.exe --suite=TTyReleaseTest --format=plain > /tmp/t.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t.txt
+cd /d/Projects/ty-3.1/tests && ./tytests-31.exe --suite=TReleaseManifestTest --format=plain > /tmp/t.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t.txt
 ```
+
+（suite 名写错的后果是 `No tests selected.` + exit 0 + grep 无输出——看着像「跑丢了」，其实是跑错了。名字以 `tests/` 里 `RegisterTest(...)` 注册的类名为准。）
 
 Expected：0 errors / 0 failures。**把 Step 2 的那个 `<Item>` 临时删掉重跑，这条必须红**（这是新单元漏进包的唯一守卫），红了再加回来。
 
@@ -891,7 +911,7 @@ end;
 function TyToolWindowDragThreshold(APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
-  Result := MulDiv(TyToolWindowDragThresholdDef, APPI, 96);
+  Result := MulDiv(TyToolWindowDragThresholdPx, APPI, 96);
   if Result < 1 then Result := 1;
 end;
 ```
@@ -1685,7 +1705,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi 2>&1 | tail -5
   published
     property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
     property ExpandedSize: Integer read FExpandedSize write SetExpandedSize
-      default TyToolWindowExpandedSizeDef;
+      default TyToolWindowDefaultExpandedSize;
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
     property ActiveIndex: Integer read FActiveIndex write SetActiveIndex default -1;
     property Images: TCustomImageList read FImages write SetImages;   { Task 6 }
