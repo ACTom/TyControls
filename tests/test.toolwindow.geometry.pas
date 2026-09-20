@@ -2,7 +2,7 @@ unit test.toolwindow.geometry;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, fpcunit, testregistry,
+  Classes, Types, fpcunit, testregistry,
   { 只为它的 initialization —— 四个 RegisterClass 就发生在那里,别当成没用的 uses 删掉。 }
   tyControls.ToolWindows;
 
@@ -19,6 +19,10 @@ type
     procedure TestDragThresholdScalesWithPpi;
     procedure TestStripWithNoWidthLaysOutNothing;
     procedure TestVisiblePlanKeepsTheActiveItemWhenNothingFits;
+    procedure TestVisiblePlanClampsNegativeInputs;
+    procedure TestStripClipsTheLastSlotToTheBand;
+    procedure TestFlipAllMirrorsAZeroWidthRectInPlace;
+    procedure TestFlipAllCoversEveryRectAndTab;
   end;
 
 implementation
@@ -78,12 +82,17 @@ end;
 procedure TTyToolWindowGeometryTests.TestStripKeepsTheActiveIconWhenItOverflows;
 var
   slots: TTyToolWindowSlots;
-  hidden: Boolean;
   i, seen: Integer;
 begin
-  { 高度 150、每项 36、溢出按钮 36 —— 放得下 3 项 + 溢出按钮。当前页是第 8 个。 }
-  slots := TyToolWindowStripLayout(36, 150, 36, 36, 10, 8, hidden);
-  AssertTrue('十个图标放不下,必须报溢出', hidden);
+  { 高度 150、每项 36、溢出按钮 36、当前页是第 8 个,排出来是 [0, 1, 8]:
+      Fill(150) 排上 4 项(144) → 还剩 6 个没排上,判溢出
+      → 给溢出按钮留位置,budget = 150 - 36 = 114
+      → Fill(114) 排上 3 项(108)= [0, 1, 2]
+      → 当前页 8 不在里面,追加成 [0, 1, 2, 8](144 > 114)
+      → 从它前面一个往前挤,去掉项 2 得 [0, 1, 8](108 ≤ 114)。
+    下面那条非前缀测试就建立在这个 114 上。 }
+  slots := TyToolWindowStripLayout(36, 150, 36, 36, 10, 8);
+  AssertTrue('十个图标放不下,必须有被收起来的', Length(slots) < 10);
   seen := -1;
   for i := 0 to High(slots) do
     if slots[i].ItemIndex = 8 then seen := i;
@@ -94,10 +103,9 @@ end;
 procedure TTyToolWindowGeometryTests.TestSlotAtMapsGapsToWindowIndexes;
 var
   slots: TTyToolWindowSlots;
-  hidden: Boolean;
 begin
-  slots := TyToolWindowStripLayout(36, 200, 36, 36, 4, 0, hidden);
-  AssertFalse('四个图标放得下', hidden);
+  slots := TyToolWindowStripLayout(36, 200, 36, 36, 4, 0);
+  AssertEquals('四个图标放得下', 4, Length(slots));
   AssertEquals('第一个图标的上半 → 插到它前面', 0,
     TyToolWindowSlotAt(slots, 18, slots[0].ItemRect.Top + 4, True, 4));
   AssertEquals('第一个图标的下半 → 插到它后面', 1,
@@ -109,11 +117,10 @@ end;
 procedure TTyToolWindowGeometryTests.TestSlotAtMapsWindowIndexesOnANonPrefixStrip;
 var
   slots: TTyToolWindowSlots;
-  hidden: Boolean;
 begin
   { 溢出时排出来的是 [0, 1, 8] —— 已排布项不是窗口列表的前缀,
     所以空隙必须答**窗口序号**,不是排布序号。 }
-  slots := TyToolWindowStripLayout(36, 150, 36, 36, 10, 8, hidden);
+  slots := TyToolWindowStripLayout(36, 150, 36, 36, 10, 8);
   AssertEquals('条上只剩三个', 3, Length(slots));
   AssertEquals('第三个是被强制留下的当前页', 8, slots[2].ItemIndex);
   AssertEquals('图标 1 的下半 → 插到窗口 8 前面(不是 2)', 8,
@@ -162,24 +169,105 @@ end;
 procedure TTyToolWindowGeometryTests.TestStripWithNoWidthLaysOutNothing;
 var
   slots: TTyToolWindowSlots;
-  hidden: Boolean;
 begin
   { 条宽跟其他三个入参一样要守 —— 不守就会产出一批零宽/反转矩形。 }
-  slots := TyToolWindowStripLayout(0, 200, 36, 36, 4, 0, hidden);
+  slots := TyToolWindowStripLayout(0, 200, 36, 36, 4, 0);
   AssertEquals('条宽为 0 就一个槽都不排', 0, Length(slots));
-  AssertFalse('一个都没排上不等于有东西被收起来', hidden);
+  { 「有没有被收起来」由调用方自己算。按宽退化和按高退化必须答同一句话:
+    条上一个都没有、模型里还有四个,就是有被收起来的。 }
+  AssertTrue('条上一个都没有,模型里还有四个', Length(slots) < 4);
 end;
 
 procedure TTyToolWindowGeometryTests.TestVisiblePlanKeepsTheActiveItemWhenNothingFits;
 var
   plan: TTyToolWindowPlan;
-  hidden: Boolean;
 begin
-  plan := TyToolWindowVisiblePlan(0, [36, 36, 36], 2, 36, hidden);
+  plan := TyToolWindowVisiblePlan(0, [36, 36, 36], 2, 36);
   AssertEquals('可用宽为 0 时也要留住当前页,和 0 < 可用宽 <= 溢出按钮宽 '
     + '那条路径一致(spec §7.3:当前页始终留在行上)', 1, Length(plan));
   AssertEquals('留下的就是当前页', 2, plan[0]);
-  AssertTrue('另外两个确实被收起来了', hidden);
+  AssertTrue('另外两个确实被收起来了', Length(plan) < 3);
+end;
+
+procedure TTyToolWindowGeometryTests.TestVisiblePlanClampsNegativeInputs;
+const
+  Avail = 100;
+  NegItem: array[0..3] of Integer = (36, -20, 36, 36);
+  Wide: array[0..2] of Integer = (60, 60, 60);
+
+  function Total(const APlan: TTyToolWindowPlan; const AW: array of Integer): Integer;
+  var
+    i: Integer;
+  begin
+    Result := 0;
+    for i := 0 to High(APlan) do
+      if AW[APlan[i]] > 0 then Inc(Result, AW[APlan[i]]);
+  end;
+
+begin
+  { 负的项宽让「放不下就停」的累加倒退,负的溢出按钮宽把预算放大 —— 两个都能排出
+    一个塞不进可用宽的计划。B 期的 TabWidths 是量文字来的,一次测量失败就喂进负数。 }
+  AssertTrue('负的项宽:排上去的总宽不许超过可用宽',
+    Total(TyToolWindowVisiblePlan(Avail, NegItem, 0, -1000), NegItem) <= Avail);
+  AssertTrue('负的溢出按钮宽:预算不许被放大',
+    Total(TyToolWindowVisiblePlan(Avail, Wide, 2, -1000), Wide) <= Avail);
+end;
+
+procedure TTyToolWindowGeometryTests.TestStripClipsTheLastSlotToTheBand;
+var
+  slots: TTyToolWindowSlots;
+begin
+  { 条高 20 连一个 36 的图标都放不下,但当前页必须留下 —— 留下的那个槽位要裁进条内,
+    不然它戳在条外面。 }
+  slots := TyToolWindowStripLayout(36, 20, 36, 36, 3, 2);
+  AssertEquals('当前页还是留下了', 1, Length(slots));
+  AssertEquals('留下的是当前页', 2, slots[0].ItemIndex);
+  AssertEquals('槽位裁进条内', 20, slots[0].ItemRect.Bottom);
+  AssertTrue('裁完不反转', slots[0].ItemRect.Bottom >= slots[0].ItemRect.Top);
+end;
+
+procedure TTyToolWindowGeometryTests.TestFlipAllMirrorsAZeroWidthRectInPlace;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  g := Default(TTyToolWindowHeaderGeom);
+  { 被挤成零宽但**有位置**的部件(B 期的分隔线、溢出按钮会这样)必须跟着镜像;
+    只有全零那个「没有这个部件」的哨兵才豁免。 }
+  g.Separator := Rect(150, 0, 150, 26);
+  TyToolWindowFlipAll(g, 200);
+  AssertEquals('零宽但有位置的矩形照样镜像', 50, g.Separator.Left);
+  AssertEquals('零宽镜像完还是零宽', 50, g.Separator.Right);
+  AssertEquals('全零哨兵原地不动', 0, g.Overflow.Left);
+  AssertEquals('全零哨兵原地不动', 0, g.Overflow.Right);
+end;
+
+procedure TTyToolWindowGeometryTests.TestFlipAllCoversEveryRectAndTab;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  g := Default(TTyToolWindowHeaderGeom);
+  g.Caption := Rect(10, 0, 20, 26);
+  g.Actions := Rect(10, 0, 20, 26);
+  g.TabArea := Rect(10, 0, 20, 26);
+  g.Overflow := Rect(10, 0, 20, 26);
+  g.Separator := Rect(10, 0, 20, 26);
+  g.Maximize := Rect(10, 0, 20, 26);
+  g.Collapse := Rect(10, 0, 20, 26);
+  SetLength(g.Tabs, 1);
+  g.Tabs[0].ItemIndex := 3;
+  g.Tabs[0].ItemRect := Rect(10, 0, 20, 26);
+  TyToolWindowFlipAll(g, 200);
+  { 漏掉任何一个字段,B 期那个部件就原地留在 LTR 坐标,而 LTR 那边全绿。 }
+  AssertEquals('Caption', 180, g.Caption.Left);
+  AssertEquals('Actions', 180, g.Actions.Left);
+  AssertEquals('TabArea', 180, g.TabArea.Left);
+  AssertEquals('Overflow', 180, g.Overflow.Left);
+  AssertEquals('Separator', 180, g.Separator.Left);
+  AssertEquals('Maximize', 180, g.Maximize.Left);
+  AssertEquals('Collapse', 180, g.Collapse.Left);
+  AssertEquals('Tabs[0].ItemRect', 180, g.Tabs[0].ItemRect.Left);
+  AssertEquals('镜像不动纵向', 26, g.Caption.Bottom);
+  AssertEquals('槽位的窗口序号不变', 3, g.Tabs[0].ItemIndex);
 end;
 
 initialization

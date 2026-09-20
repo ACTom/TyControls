@@ -99,13 +99,16 @@ type
   { 可见计划:按排布顺序列出的**窗口序号**。 }
   TTyToolWindowPlan = array of Integer;
 
+  { 一排宽度:设备像素,按**窗口序号**索引。 }
+  TTyToolWindowWidths = array of Integer;
+
   { 排布的全部输入。尺寸一律是**设备像素**,调用方缩放好再传。 }
   TTyToolWindowHeaderInput = record
     Mode: TTyToolWindowHeaderMode;
     RowWidth, RowHeight: Integer;
     Pad, Gap: Integer;
     ActionsWidth: Integer;      { 操作区 raw 首选宽;0 = 没有操作区 }
-    TabWidths: array of Integer;{ 底栏:每个窗口的标签想要的宽 }
+    TabWidths: TTyToolWindowWidths; { 底栏:每个窗口的标签想要的宽 }
     ActiveIndex: Integer;
     TabAreaMin: Integer;
     ButtonSize: Integer;        { 底栏:最大化 / 收起 }
@@ -123,17 +126,23 @@ type
     Separator: TRect;
     Maximize: TRect;
     Collapse: TRect;
-    Hidden: array of Integer;   { 底栏:收进溢出菜单的窗口序号 }
+    Hidden: TTyToolWindowPlan;  { 底栏:收进溢出菜单的窗口序号 }
   end;
 
 { --- 纯规则 / 几何(无控件、无句柄、无主题,可无头测) ------------------------ }
 
 { 按顺序放,遇到第一个放不下的就停;当前页不在里面就追加到末尾,再从它前面一个
-  开始往前挤,直到放得下。返回的是**窗口序号**的可见计划。 }
+  开始往前挤,直到放得下。返回的是**窗口序号**的可见计划。
+  有没有东西被收起来,调用方自己算 `Length(计划) < 窗口总数` ——
+  多一个 out 参数买不到任何信息,只会多一处能跟这个恒等式不一致的地方。 }
 function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Integer;
-  AActiveIndex, AOverflowWidth: Integer; out AAnyHidden: Boolean): TTyToolWindowPlan;
+  AActiveIndex, AOverflowWidth: Integer): TTyToolWindowPlan;
 
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
+
+{ 把排好的整套几何按行宽镜像(spec §7.3)。每个矩形字段和每个槽位都过一遍,
+  所以 B 期给 Geom 加部件不用记得回来添一行。 }
+procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);
 
 { 图标条 / 标签行的插入槽:按已排布项的中点分。返回 0..N 的**窗口序号**位置。 }
 function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
@@ -141,7 +150,7 @@ function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
 
 { 图标条排布(竖直)。 }
 function TyToolWindowStripLayout(AStripWidth, AStripHeight, AItemSize, AOverflowSize: Integer;
-  ACount, AActiveIndex: Integer; out AAnyHidden: Boolean): TTyToolWindowSlots;
+  ACount, AActiveIndex: Integer): TTyToolWindowSlots;
 
 function TyToolWindowDragThreshold(APPI: Integer): Integer;
 
@@ -162,28 +171,47 @@ begin
   Result := 'TyToolWindowBar';
 end;
 
-function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
+procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);
+var
+  span: TRect;
+  i: Integer;
 
   function Flip(const ARect: TRect): TRect;
   begin
-    { 空矩形保持全零:把「没有操作区」镜像成 (RowWidth,0,RowWidth,0)
-      会让零值看起来像个真位置。算术交给 LCL 自己那五行
-      (controls.pp:2966),跟 CheckGroup / Columns 同一个调用。 }
-    if ARect.Right <= ARect.Left then Exit(ARect);
-    Result := BidiFlipRect(ARect, Rect(0, 0, AInput.RowWidth, AInput.RowHeight), True);
+    { 只豁免全零那个「没有这个部件」的哨兵。被挤成零宽但**有位置**的部件照样要镜像 ——
+      放过它的话它会原地留在 LTR 坐标,而 LTR 那边全绿。 }
+    if (ARect.Left = 0) and (ARect.Right = 0) and (ARect.Top = 0) and (ARect.Bottom = 0) then
+      Exit(ARect);
+    Result := BidiFlipRect(ARect, span, True);
   end;
 
+begin
+  { 末尾一次过完每个矩形字段 —— 逐字段列在调用处的话,B 期加一个部件漏一行不会红。
+    算术交给 LCL 自己那五行(controls.pp:2966),跟 CoolBar / ControlBar 同一个调用。
+    span 的高写 0:纵向不动,这本身就是声明。 }
+  span := Rect(0, 0, ARowWidth, 0);
+  AGeom.Caption := Flip(AGeom.Caption);
+  AGeom.Actions := Flip(AGeom.Actions);
+  AGeom.TabArea := Flip(AGeom.TabArea);
+  AGeom.Overflow := Flip(AGeom.Overflow);
+  AGeom.Separator := Flip(AGeom.Separator);
+  AGeom.Maximize := Flip(AGeom.Maximize);
+  AGeom.Collapse := Flip(AGeom.Collapse);
+  for i := 0 to High(AGeom.Tabs) do
+    AGeom.Tabs[i].ItemRect := Flip(AGeom.Tabs[i].ItemRect);
+end;
+
+function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
 var
   pad, gap, aw, x: Integer;
 begin
   Result := Default(TTyToolWindowHeaderGeom);
-  Result.Tabs := nil;                { FPC 3.2 不认 SetLength 初始化 managed result }
-  Result.Hidden := nil;
   if (AInput.RowWidth <= 0) or (AInput.RowHeight <= 0) then Exit;
   pad := AInput.Pad; if pad < 0 then pad := 0;
   gap := AInput.Gap; if gap < 0 then gap := 0;
   aw := AInput.ActionsWidth; if aw < 0 then aw := 0;
-  if aw > AInput.RowWidth - pad then aw := AInput.RowWidth - pad;
+  { 两个内距都要留出来:只扣一个的话,侧栏拖窄时操作区会吃掉前导内距。 }
+  if aw > AInput.RowWidth - 2 * pad then aw := AInput.RowWidth - 2 * pad;
 
   if AInput.Mode = twhSide then
   begin
@@ -200,82 +228,90 @@ begin
       x := AInput.RowWidth - pad;         { 没有操作区,尾端补一个内距 }
     if x > pad then
       Result.Caption := Rect(pad, 0, x, AInput.RowHeight);
-    { 标题拿下整个剩余跨度 —— spec §3.4:“操作区优先保宽;标题先省略号”。
+    { 标题拿下整个剩余跨度 —— spec §3.4:"操作区优先保宽;标题先省略号"。
       放不下由 DrawText 自己出省略号,所以这里没有「标题想要多宽」这个输入。 }
   end;
   { twhBottom 那一支在 B 期实现;twhNone 什么都不排。 }
 
   if AInput.RightToLeft then
-  begin
-    { spec §7.3:整套几何按 LTR 算一次,再按行宽镜像。
-      镜像只动横向:标题行高就是行高。 }
-    Result.Caption := Flip(Result.Caption);
-    Result.Actions := Flip(Result.Actions);
-  end;
+    TyToolWindowFlipAll(Result, AInput.RowWidth);
 end;
 
 function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Integer;
-  AActiveIndex, AOverflowWidth: Integer; out AAnyHidden: Boolean): TTyToolWindowPlan;
+  AActiveIndex, AOverflowWidth: Integer): TTyToolWindowPlan;
+var
+  w: TTyToolWindowWidths;
+  plan: TTyToolWindowPlan;
+  n, budget, i: Integer;
 
   function Fill(ABudget: Integer): TTyToolWindowPlan;
   var
-    i, used: Integer;
+    k, used: Integer;
   begin
     Result := nil;
     used := 0;
-    for i := 0 to High(AWidths) do
+    for k := 0 to n - 1 do
     begin
-      if used + AWidths[i] > ABudget then Break;   { 遇到第一个放不下的就停 }
-      Inc(used, AWidths[i]);
+      if used + w[k] > ABudget then Break;   { 遇到第一个放不下的就停 }
+      Inc(used, w[k]);
       SetLength(Result, Length(Result) + 1);
-      Result[High(Result)] := i;
+      Result[High(Result)] := k;
     end;
   end;
 
   function Has(const APlan: TTyToolWindowPlan; AIdx: Integer): Boolean;
-  var i: Integer;
+  var k: Integer;
   begin
     Result := False;
-    for i := 0 to High(APlan) do
-      if APlan[i] = AIdx then Exit(True);
+    for k := 0 to High(APlan) do
+      if APlan[k] = AIdx then Exit(True);
   end;
 
   function Width(const APlan: TTyToolWindowPlan): Integer;
-  var i: Integer;
+  var k: Integer;
   begin
     Result := 0;
-    for i := 0 to High(APlan) do Inc(Result, AWidths[APlan[i]]);
+    for k := 0 to High(APlan) do Inc(Result, w[APlan[k]]);
   end;
 
-var
-  plan: TTyToolWindowPlan;
-  budget, i: Integer;
 begin
   Result := nil;
-  AAnyHidden := False;
-  if Length(AWidths) = 0 then Exit;
+  n := Length(AWidths);
+  if n = 0 then Exit;
+  { 负数入参在这里一次钳干净,下面的算术就能直着读(照 Breadcrumb 的规矩)。
+    不钳的话:负的项宽让累加倒退、负的溢出按钮宽把预算放大,两个都能骗过「放不下就停」。
+    B 期的 TabWidths 是量文字来的,一次测量失败就能喂进 0 或负数。 }
+  w := nil;
+  SetLength(w, n);
+  for i := 0 to n - 1 do
+  begin
+    w[i] := AWidths[i];
+    if w[i] < 0 then w[i] := 0;
+  end;
+  if AOverflowWidth < 0 then AOverflowWidth := 0;
+
   if AAvail <= 0 then
   begin
     { spec §7.3:当前页始终留在行上。「留出溢出按钮后一个都放不下」
       那条路径就是这么答的 —— 这里不一致的话,栏宽收到 0 会把当前页也弄丢。 }
-    if (AActiveIndex >= 0) and (AActiveIndex <= High(AWidths)) then
+    if (AActiveIndex >= 0) and (AActiveIndex < n) then
     begin
       SetLength(Result, 1);
       Result[0] := AActiveIndex;
     end;
-    AAnyHidden := Length(Result) < Length(AWidths);
     Exit;
   end;
+
   plan := Fill(AAvail);
-  AAnyHidden := Length(plan) < Length(AWidths);
-  if AAnyHidden then
+  if Length(plan) < n then
   begin
     { 确实有东西被收起来了,才给溢出按钮留位置,然后重排一次。 }
     budget := AAvail - AOverflowWidth;
     if budget < 0 then budget := 0;
+    if budget > AAvail then budget := AAvail;
     plan := Fill(budget);
     { 当前页强制留在行上:追加到末尾,再从它前面一个开始往前挤。 }
-    if (AActiveIndex >= 0) and (AActiveIndex <= High(AWidths)) and not Has(plan, AActiveIndex) then
+    if (AActiveIndex >= 0) and (AActiveIndex < n) and not Has(plan, AActiveIndex) then
     begin
       SetLength(plan, Length(plan) + 1);
       plan[High(plan)] := AActiveIndex;
@@ -286,7 +322,6 @@ begin
         Dec(i);
       end;
     end;
-    AAnyHidden := Length(plan) < Length(AWidths);
   end;
   Result := plan;
 end;
@@ -294,49 +329,61 @@ end;
 function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
   AVertical: Boolean; ACount: Integer): Integer;
 var
-  i, mid, pos: Integer;
+  i, mid, pos, last: Integer;
+  R: TRect;
 begin
   { 已排布项不一定是窗口列表的前缀(当前页被强制留下),所以空隙映射到**它对应窗口的序号**,
     不是排布序号。 }
-  Result := ACount;
-  if Length(ASlots) = 0 then Exit;
+  if Length(ASlots) = 0 then Exit(ACount);
+  last := -1;
   for i := 0 to High(ASlots) do
   begin
+    R := ASlots[i].ItemRect;
+    { 空槽没有中点可言,跳过 —— B 期 Geom.Tabs 会带被挤成零的槽位。 }
+    if (R.Right <= R.Left) or (R.Bottom <= R.Top) then Continue;
+    last := i;
     if AVertical then
     begin
-      mid := (ASlots[i].ItemRect.Top + ASlots[i].ItemRect.Bottom) div 2;
+      mid := (R.Top + R.Bottom) div 2;
       pos := Y;
     end
     else
     begin
-      mid := (ASlots[i].ItemRect.Left + ASlots[i].ItemRect.Right) div 2;
+      mid := (R.Left + R.Right) div 2;
       pos := X;
     end;
     if pos < mid then Exit(ASlots[i].ItemIndex);
   end;
-  Result := ASlots[High(ASlots)].ItemIndex + 1;
+  if last < 0 then Exit(ACount);          { 全是空槽 }
+  Result := ASlots[last].ItemIndex + 1;
 end;
 
 function TyToolWindowStripLayout(AStripWidth, AStripHeight, AItemSize, AOverflowSize: Integer;
-  ACount, AActiveIndex: Integer; out AAnyHidden: Boolean): TTyToolWindowSlots;
+  ACount, AActiveIndex: Integer): TTyToolWindowSlots;
 var
-  widths: array of Integer;
+  widths: TTyToolWindowWidths;
   plan: TTyToolWindowPlan;
-  i, y: Integer;
+  i, y, t, b: Integer;
 begin
   Result := nil;
-  AAnyHidden := False;
   if (ACount <= 0) or (AItemSize <= 0) or (AStripWidth <= 0) or (AStripHeight <= 0) then Exit;
   widths := nil;
   SetLength(widths, ACount);
   for i := 0 to ACount - 1 do widths[i] := AItemSize;   { 图标是方的,等宽 }
-  plan := TyToolWindowVisiblePlan(AStripHeight, widths, AActiveIndex, AOverflowSize, AAnyHidden);
+  plan := TyToolWindowVisiblePlan(AStripHeight, widths, AActiveIndex, AOverflowSize);
   SetLength(Result, Length(plan));
   y := 0;
   for i := 0 to High(plan) do
   begin
+    { 条裁掉它。条矮到放不下一个图标时当前页仍然被强制留下,那个槽位不裁就会戳在条外面;
+      同时保证不反转。 }
+    t := y;
+    if t > AStripHeight then t := AStripHeight;
+    b := y + AItemSize;
+    if b > AStripHeight then b := AStripHeight;
+    if b < t then b := t;
     Result[i].ItemIndex := plan[i];
-    Result[i].ItemRect := Rect(0, y, AStripWidth, y + AItemSize);
+    Result[i].ItemRect := Rect(0, t, AStripWidth, b);
     Inc(y, AItemSize);
   end;
 end;
