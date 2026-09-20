@@ -67,7 +67,7 @@
 
 | 方法 | 说明 |
 |------|------|
-| `procedure LayoutButtons` | 按 `CaptionLayout` 放置可见的 CloseButton、MaxButton、MinButton，每个宽度为 `ButtonWidth`（默认 46px），高度等于 `ClientHeight` 减上下 margin。隐藏的按钮（`ShowMinimize`/`ShowMaximize`/`ShowClose` = False）不占位——按钮簇是**紧凑排布**不是固定槽位，藏掉中间那个，外面两个会靠拢。关联到 `TTyForm` 后，这三个开关由窗体的 `BorderIcons` + `Resizable` 驱动。 |
+| `procedure LayoutButtons` | 按 `CaptionLayout` 放置可见的 CloseButton、MaxButton、MinButton，每个宽度为 `ButtonWidth`（默认 46px），高度等于 `ClientHeight` 减上下 margin。隐藏的按钮（`ShowMinimize`/`ShowMaximize`/`ShowClose` = False）不占位——按钮簇是**紧凑排布**不是固定槽位，藏掉中间那个，外面两个会靠拢。关联到 `TTyForm` 后，窗体按 `BorderIcons` + `Resizable` 决定窗口**提供**哪些按钮（`OfferedButtons`），按钮只在窗体提供**且**开关为 True 时显示；开关始终保留用户设的值，对象查看器和 `.lfm` 原样往返，窗体的同步不会覆盖它。 |
 | `procedure Resize` | 重写 `TCustomControl.Resize`，在控件尺寸变化时调用 `LayoutButtons`。 |
 | `procedure CMBiDiModeChanged` | 运行期改 `BiDiMode` 后重排按钮。LCL 自己那层只 `Invalidate` + `AdjustSize`；按钮是用 `SetBounds` 摆的、不是画出来的，少了这一步按钮簇会停在旧的一侧直到下一次重绘。 |
 | `procedure AdjustClientRect(var ARect)` | 覆写：按 `CaptionLayout.Content` 收缩客户区——阅读起始侧留标题内缩、另一侧让出整个按钮簇——返回中间内容条带，使对齐子控件自动约束于此。 |
@@ -174,8 +174,10 @@ procedure TMainForm.FormCreate(Sender: TObject);
 begin
   TitleBar.Caption := Application.Title;     // 同步标题
   TitleBar.ButtonWidth := 40;                // 可选：调整系统按钮宽度
-  // 隐藏最大化按钮（即时重排按钮与内容区右侧内缩）：
-  ShowMaximize := False;
+  // 隐藏最大化按钮（即时重排按钮与内容区右侧内缩）。在对象查看器里设也一样，
+  // 窗体按 BorderIcons 做的同步不会把它改回来；要连 Aero Snap / Win+↑ 一起禁掉，
+  // 改窗体的 BorderIcons。
+  TitleBar.ShowMaximize := False;
 end;
 ```
 
