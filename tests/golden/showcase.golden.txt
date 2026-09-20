@@ -1023,6 +1023,86 @@ TyGridSummaryRow||1 => pres[0,1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/
 TyGridSummaryRow||2 => pres[0,1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridSummaryRow||3 => pres[0,1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridSummaryRow||4 => pres[0,1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||0 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||1 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||2 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||3 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||4 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||0 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||1 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||2 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||3 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||4 => pres[0,1,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||0 => pres[0,1,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||1 => pres[0,1,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||2 => pres[0,1,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||3 => pres[0,1,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||4 => pres[0,1,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||2 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||3 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||0 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||1 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||2 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||3 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||4 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||0 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||1 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||2 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||3 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||4 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||0 => pres[0,1,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=6,6,6,6 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||1 => pres[0,1,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=6,6,6,6 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||2 => pres[0,1,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=6,6,6,6 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||3 => pres[0,1,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=6,6,6,6 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||4 => pres[0,1,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=6,6,6,6 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||0 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||1 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||2 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||3 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||4 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||0 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||1 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||2 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||3 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||4 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||0 => pres[1,5,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||1 => pres[1,5,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||2 => pres[1,5,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||3 => pres[1,5,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||4 => pres[1,5,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||0 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||1 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||2 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||3 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||4 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||2 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||3 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||2 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||3 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||0 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||1 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||2 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||3 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||4 => pres[0,] bg=k1/FFC4B5FD ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||0 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||1 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||2 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||3 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||4 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||0 => pres[1,7,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||1 => pres[1,7,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||2 => pres[1,7,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||3 => pres[1,7,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||4 => pres[1,7,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 metric --alert-close-gap => 8
 metric --alert-close-size => 14
 metric --alert-icon-gap => 8
@@ -1126,6 +1206,20 @@ metric --tab-padding => 12
 metric --tag-close-size => 14
 metric --tag-gap => 4
 metric --titlebar-padding => 8
+metric --toolwindow-button-size => 22
+metric --toolwindow-content-min => 120
+metric --toolwindow-drop-size => 2
+metric --toolwindow-edge-size => 4
+metric --toolwindow-glyph-size => 16
+metric --toolwindow-header-gap => 4
+metric --toolwindow-header-height => 26
+metric --toolwindow-header-pad => 6
+metric --toolwindow-indicator-size => 2
+metric --toolwindow-strip-indicator-size => 2
+metric --toolwindow-strip-item-size => 36
+metric --toolwindow-strip-size => 36
+metric --toolwindow-tab-area-min => 50
+metric --toolwindow-tab-pad => 10
 metric --transfer-arrow-margin => 3
 metric --transfer-arrow-size => 12
 metric --transfer-button-gap => 6

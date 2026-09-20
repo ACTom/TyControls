@@ -169,6 +169,20 @@ begin
       edge. This leaves 5px of breathing room above and below a full-height control. }
     '  --titlebar-height: 48px;' + LineEnding +
     '  --titlebar-padding: 12px;' + LineEnding +
+    '  --toolwindow-button-size: 28px;' + LineEnding +
+    '  --toolwindow-content-min: 160px;' + LineEnding +
+    '  --toolwindow-drop-size: 2px;' + LineEnding +
+    '  --toolwindow-edge-size: 4px;' + LineEnding +
+    '  --toolwindow-glyph-size: 20px;' + LineEnding +
+    '  --toolwindow-header-gap: 8px;' + LineEnding +
+    '  --toolwindow-header-height: 36px;' + LineEnding +
+    '  --toolwindow-header-pad: 8px;' + LineEnding +
+    '  --toolwindow-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-indicator-size: 3px;' + LineEnding +
+    '  --toolwindow-strip-item-size: 44px;' + LineEnding +
+    '  --toolwindow-strip-size: 48px;' + LineEnding +
+    '  --toolwindow-tab-area-min: 60px;' + LineEnding +
+    '  --toolwindow-tab-pad: 12px;' + LineEnding +
     '  --transfer-arrow-margin: 4px;' + LineEnding +
     '  --transfer-arrow-size: 16px;' + LineEnding +
     '  --transfer-button-gap: 10px;' + LineEnding +

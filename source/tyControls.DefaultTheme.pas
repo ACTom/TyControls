@@ -91,6 +91,21 @@ begin
     '  --info:             var(--accent);          /* "info" is the brand colour, not a seed of its own */' + LineEnding +
     '  --on-info:          var(--on-accent);' + LineEnding +
     '' + LineEnding +
+    '  /* 工具窗口(IDE 侧栏/底栏)。底色只引用皮肤已经定义好的 surface / chrome 令牌,' + LineEnding +
+    '     绝不在这里自己写 darken(--surface, ...) —— 那会绕过白底皮肤自定义的 chrome 值。 */' + LineEnding +
+    '  --toolwindow-bg:                  var(--surface);' + LineEnding +
+    '  --toolwindow-header-bg:           var(--toolwindow-bg);' + LineEnding +
+    '  --toolwindow-caption-ink:         var(--on-surface);' + LineEnding +
+    '  --toolwindow-tab-ink:             var(--muted);' + LineEnding +
+    '  --toolwindow-tab-ink-active:      var(--on-surface);' + LineEnding +
+    '  --toolwindow-indicator-color:     var(--accent);' + LineEnding +
+    '  --toolwindow-strip-bg:            var(--chrome-bar-bg);' + LineEnding +
+    '  --toolwindow-strip-ink:           var(--muted);' + LineEnding +
+    '  --toolwindow-strip-ink-active:    var(--on-surface);' + LineEnding +
+    '  --toolwindow-strip-indicator-color: var(--accent);' + LineEnding +
+    '  --toolwindow-edge-color:          var(--border);' + LineEnding +
+    '  --toolwindow-drop-color:          var(--accent);' + LineEnding +
+    '' + LineEnding +
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
@@ -283,6 +298,20 @@ begin
     '  --tag-close-size: 14px;' + LineEnding +
     '  --tag-gap: 4px;' + LineEnding +
     '  --titlebar-padding: 8px;' + LineEnding +
+    '  --toolwindow-button-size: 22px;' + LineEnding +
+    '  --toolwindow-content-min: 120px;' + LineEnding +
+    '  --toolwindow-drop-size: 2px;' + LineEnding +
+    '  --toolwindow-edge-size: 4px;' + LineEnding +
+    '  --toolwindow-glyph-size: 16px;' + LineEnding +
+    '  --toolwindow-header-gap: 4px;' + LineEnding +
+    '  --toolwindow-header-height: 26px;' + LineEnding +
+    '  --toolwindow-header-pad: 6px;' + LineEnding +
+    '  --toolwindow-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-item-size: 36px;' + LineEnding +
+    '  --toolwindow-strip-size: 36px;' + LineEnding +
+    '  --toolwindow-tab-area-min: 50px;' + LineEnding +
+    '  --toolwindow-tab-pad: 10px;' + LineEnding +
     '  --transfer-arrow-margin: 3px;' + LineEnding +
     '  --transfer-arrow-size: 12px;' + LineEnding +
     '  --transfer-button-gap: 6px;' + LineEnding +
@@ -1232,6 +1261,41 @@ begin
     'TyListGroupItem:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* selected: soft accent pill */' + LineEnding +
     'TyListGroupItem:disabled { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── ToolWindow (IDE 侧栏 / 底栏) ──────────────────────────────────────── */' + LineEnding +
+    '/* 容器键写全整套属性 —— 皮肤只要给某个 typeKey 写了任何一条规则,基础层这一整个键' + LineEnding +
+    '   (含 variant)就被压掉,所以容器不能只写半套;只带墨色的子部件故意不写 background,' + LineEnding +
+    '   好让它继承容器的表面。 */' + LineEnding +
+    'TyToolWindowBar    { background: var(--toolwindow-bg); color: var(--on-surface);' + LineEnding +
+    '                     font-size: var(--font-size-base); }' + LineEnding +
+    'TyToolWindow       { background: var(--toolwindow-bg); color: var(--on-surface);' + LineEnding +
+    '                     font-size: var(--font-size-base); }' + LineEnding +
+    'TyToolWindowStrip  { background: var(--toolwindow-strip-bg); color: var(--toolwindow-strip-ink); }' + LineEnding +
+    'TyToolWindowStripItem          { color: var(--toolwindow-strip-ink); }' + LineEnding +
+    'TyToolWindowStripItem:hover    { background: var(--overlay-hover); color: var(--toolwindow-strip-ink-active); }' + LineEnding +
+    'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-active); }' + LineEnding +
+    'TyToolWindowStripItem:active   { background: var(--overlay-hover); }' + LineEnding +
+    'TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }' + LineEnding +
+    'TyToolWindowEdge        { background: var(--toolwindow-edge-color); }' + LineEnding +
+    'TyToolWindowEdge:hover  { background: var(--accent); }' + LineEnding +
+    'TyToolWindowEdge:active { background: var(--accent); }' + LineEnding +
+    'TyToolWindowHeader      { background: var(--toolwindow-header-bg); color: var(--toolwindow-caption-ink);' + LineEnding +
+    '                          font-size: var(--font-size-base); padding: var(--toolwindow-header-pad); }' + LineEnding +
+    'TyToolWindowActions     { background: var(--toolwindow-header-bg); }' + LineEnding +
+    'TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }' + LineEnding +
+    'TyToolWindowTab          { color: var(--toolwindow-tab-ink); padding: var(--toolwindow-tab-pad); }' + LineEnding +
+    'TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-active); }' + LineEnding +
+    'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-active); }' + LineEnding +
+    'TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }' + LineEnding +
+    'TyToolWindowOverflow        { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowOverflow:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-active); }' + LineEnding +
+    'TyToolWindowOverflow:active { background: var(--overlay-hover); }' + LineEnding +
+    'TyToolWindowButton        { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowButton:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-active); }' + LineEnding +
+    'TyToolWindowButton:active { background: var(--overlay-hover); }' + LineEnding +
+    'TyToolWindowSeparator     { background: var(--border); }' + LineEnding +
+    'TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }' + LineEnding +
+    'TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '' + LineEnding +
     '/* ── Keys the CODE resolves that this file deliberately does NOT define ─────────────────' + LineEnding +
     '   Not drift — each of these is an OPT-IN hook whose painter has an explicit fallback, and' + LineEnding +

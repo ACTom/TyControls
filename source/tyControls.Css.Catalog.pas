@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (194 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (220 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (214 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (230 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..193] of string = (
+  TyCatalogTokens: array[0..219] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -204,6 +204,32 @@ const
     '--titlebar-bg',
     '--titlebar-padding',
     '--tool-rule-alpha',
+    '--toolwindow-bg',
+    '--toolwindow-button-size',
+    '--toolwindow-caption-ink',
+    '--toolwindow-content-min',
+    '--toolwindow-drop-color',
+    '--toolwindow-drop-size',
+    '--toolwindow-edge-color',
+    '--toolwindow-edge-size',
+    '--toolwindow-glyph-size',
+    '--toolwindow-header-bg',
+    '--toolwindow-header-gap',
+    '--toolwindow-header-height',
+    '--toolwindow-header-pad',
+    '--toolwindow-indicator-color',
+    '--toolwindow-indicator-size',
+    '--toolwindow-strip-bg',
+    '--toolwindow-strip-indicator-color',
+    '--toolwindow-strip-indicator-size',
+    '--toolwindow-strip-ink',
+    '--toolwindow-strip-ink-active',
+    '--toolwindow-strip-item-size',
+    '--toolwindow-strip-size',
+    '--toolwindow-tab-area-min',
+    '--toolwindow-tab-ink',
+    '--toolwindow-tab-ink-active',
+    '--toolwindow-tab-pad',
     '--transfer-arrow-margin',
     '--transfer-arrow-size',
     '--transfer-button-gap',
@@ -214,7 +240,7 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..213] of string = (
+  TyCatalogTypeKeys: array[0..229] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -416,6 +442,22 @@ const
     'TyToolBar',
     'TyToolGroupPanel',
     'TyToolSeparator',
+    'TyToolWindow',
+    'TyToolWindowActions',
+    'TyToolWindowBar',
+    'TyToolWindowButton',
+    'TyToolWindowDropIndicator',
+    'TyToolWindowEdge',
+    'TyToolWindowHeader',
+    'TyToolWindowNote',
+    'TyToolWindowOverflow',
+    'TyToolWindowSeparator',
+    'TyToolWindowStrip',
+    'TyToolWindowStripIndicator',
+    'TyToolWindowStripItem',
+    'TyToolWindowTab',
+    'TyToolWindowTabIndicator',
+    'TyToolWindowTabRow',
     'TyTrackBar',
     'TyTrackGroove',
     'TyTrackThumb',

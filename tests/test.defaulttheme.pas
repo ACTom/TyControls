@@ -120,6 +120,9 @@ begin
     AssertBg('TyTreeView', []);
     AssertBg('TyTreeHeader', []);
     AssertBg('TyTreeCheckBox', []);
+    AssertBg('TyToolWindow', []);
+    AssertBg('TyToolWindowBar', []);
+    AssertBg('TyToolWindowStrip', []);
   finally
     m.Free;
   end;
