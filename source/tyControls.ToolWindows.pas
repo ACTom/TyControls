@@ -61,88 +61,6 @@ type
   TTyToolWindowActions = class;
   TTyToolWindowManager = class;
 
-  { GetStyleTypeKey 在 TTyCustomControl 上是 abstract,不覆写就等于注册了一个
-    「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
-    类型键是契约不是实现,A 期就钉死。 }
-  TTyToolWindow = class(TTyCustomControl)
-  private
-    FImageName: string;
-    FImageIndex: Integer;
-    FStripHint: string;
-    FOnShow: TNotifyEvent;
-    FOnHide: TNotifyEvent;
-    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式);
-      -1 = 没缓存。操作区那一项不进这里,见 HeaderHeightPx。 }
-    FHeaderPxCache: Integer;
-    FHeaderPxPPI: Integer;
-    FHeaderPxVer: Cardinal;
-    FHeaderPxAnchor: TObject;
-    FHeaderPxRTL: Boolean;
-    FHeaderPxMode: TTyToolWindowHeaderMode;
-    FRelayouting: Boolean;
-    function ImageIndexIsStored: Boolean;
-    function GetBar: TTyToolWindowBar;
-    function GetActions: TTyToolWindowActions;
-  protected
-    FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
-    function GetStyleTypeKey: string; override;
-    procedure TextChanged; override;
-    procedure AdjustClientRect(var ARect: TRect); override;
-    procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
-      const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
-    procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
-  public
-    constructor Create(AOwner: TComponent); override;
-    destructor Destroy; override;
-    procedure Invalidate; override;
-    procedure Paint; override;
-    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-    procedure RelayoutHeader;
-    function HeaderMode: TTyToolWindowHeaderMode;
-    function HeaderHeightPx: Integer;
-    function HeaderRowRect: TRect;
-    function BodyRect: TRect;
-    property Bar: TTyToolWindowBar read GetBar;
-    property Actions: TTyToolWindowActions read GetActions;
-  published
-    property Caption;
-    property ImageName: string read FImageName write FImageName;
-    property ImageIndex: Integer read FImageIndex write FImageIndex
-      stored ImageIndexIsStored default -1;
-    property StripHint: string read FStripHint write FStripHint;
-    property StyleClass;
-    { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
-    property Controller stored False;
-    property Left stored False;
-    property Top stored False;
-    property Width stored False;
-    property Height stored False;
-    property TabOrder stored False;
-    property Visible stored False;
-    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来。那一段(连同
-      从 CM_VISIBLECHANGED 发这两个事件)是 Task 10「可见性与焦点」的活,在那之前
-      这两个事件挂得上但不会响。 }
-    property OnShow: TNotifyEvent read FOnShow write FOnShow;
-    property OnHide: TNotifyEvent read FOnHide write FOnHide;
-  end;
-
-  TTyToolWindowActions = class(TTyCustomControl)
-  protected
-    function GetStyleTypeKey: string; override;
-  end;
-
-  TTyToolWindowBar = class(TTyCustomControl)
-  protected
-    function GetStyleTypeKey: string; override;
-  end;
-
-  { A 期只建壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
-    免得 B 期的测试和 .lfm 里写出两个名字。
-    继承 TTyComponent(不是 TComponent):全库非可视组件都从它来,它带着
-    对象查看器里那个只读 Version。 }
-  TTyToolWindowManager = class(TTyComponent)
-  end;
-
   { 标题行的一个可点部件。返回它的命中测跟底栏一起在 B 期落地。 }
   TTyToolWindowZone = (twzNone, twzTab, twzOverflow, twzSeparator, twzMaximize, twzCollapse);
 
@@ -185,6 +103,96 @@ type
     Maximize: TRect;
     Collapse: TRect;
     Hidden: TTyToolWindowPlan;  { 底栏:收进溢出菜单的窗口序号 }
+  end;
+
+  { GetStyleTypeKey 在 TTyCustomControl 上是 abstract,不覆写就等于注册了一个
+    「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
+    类型键是契约不是实现,A 期就钉死。 }
+  TTyToolWindow = class(TTyCustomControl)
+  private
+    FImageName: string;
+    FImageIndex: Integer;
+    FStripHint: string;
+    FOnShow: TNotifyEvent;
+    FOnHide: TNotifyEvent;
+    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式);
+      -1 = 没缓存。操作区那一项不进这里,见 HeaderHeightPx。 }
+    FHeaderPxCache: Integer;
+    FHeaderPxPPI: Integer;
+    FHeaderPxVer: Cardinal;
+    FHeaderPxAnchor: TObject;
+    FHeaderPxRTL: Boolean;
+    FHeaderPxMode: TTyToolWindowHeaderMode;
+    FRelayouting: Boolean;
+    function ImageIndexIsStored: Boolean;
+    function GetBar: TTyToolWindowBar;
+    function GetActions: TTyToolWindowActions;
+  protected
+    FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
+    function GetStyleTypeKey: string; override;
+    procedure TextChanged; override;
+    procedure AdjustClientRect(var ARect: TRect); override;
+    procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+      const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
+    procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
+    { 栏切页就是开关 Visible(Task 5/10),所以这条消息就是本窗口的激活边 ——
+      与 TCustomPage / TTyTabSheet 发 OnShow / OnHide 的是同一个钩子。 }
+    procedure CMVisibleChanged(var Msg: TLMessage); message CM_VISIBLECHANGED;
+    procedure DoShow; virtual;
+    procedure DoHide; virtual;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure Invalidate; override;
+    procedure Paint; override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure RelayoutHeader;
+    function HeaderMode: TTyToolWindowHeaderMode;
+    { 标题行排布的全部输入,**一处算**:绘制(RenderTo)与摆操作区(Task 4 的
+      CustomAlignPosition)问的必须是同一份,否则画出来的和点得中的会错开。
+      APPI / ARowWidth 由调用方给:绘制时是 painter 的本地宽,摆控件时是 ClientWidth。 }
+    function HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
+    function HeaderHeightPx: Integer;
+    function HeaderRowRect: TRect;
+    function BodyRect: TRect;
+    property Bar: TTyToolWindowBar read GetBar;
+    property Actions: TTyToolWindowActions read GetActions;
+  published
+    property Caption;
+    property ImageName: string read FImageName write FImageName;
+    property ImageIndex: Integer read FImageIndex write FImageIndex
+      stored ImageIndexIsStored default -1;
+    property StripHint: string read FStripHint write FStripHint;
+    property StyleClass;
+    { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
+    property Controller stored False;
+    property Left stored False;
+    property Top stored False;
+    property Width stored False;
+    property Height stored False;
+    property TabOrder stored False;
+    property Visible stored False;
+    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来(Task 5/10),
+      而这两个事件就从 CM_VISIBLECHANGED 发,名字、签名、触发边都同 TCustomPage。 }
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnHide: TNotifyEvent read FOnHide write FOnHide;
+  end;
+
+  TTyToolWindowActions = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
+  end;
+
+  TTyToolWindowBar = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
+  end;
+
+  { A 期只建壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
+    免得 B 期的测试和 .lfm 里写出两个名字。
+    继承 TTyComponent(不是 TComponent):全库非可视组件都从它来,它带着
+    对象查看器里那个只读 Version。 }
+  TTyToolWindowManager = class(TTyComponent)
   end;
 
 { --- 纯规则 / 几何(无控件、无句柄、无主题,可无头测) ------------------------ }
@@ -282,6 +290,25 @@ begin
   else Result := twhNone;
 end;
 
+function TTyToolWindow.HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
+begin
+  Result := Default(TTyToolWindowHeaderInput);
+  Result.Mode := HeaderMode;
+  Result.RowWidth := ARowWidth;
+  Result.RowHeight := HeaderHeightPx;
+  Result.Pad := MulDiv(ActiveController.Metric(TyToolWindowHeaderPadVar,
+    TyToolWindowHeaderPadDef), APPI, 96);
+  Result.Gap := MulDiv(ActiveController.Metric(TyToolWindowHeaderGapVar,
+    TyToolWindowHeaderGapDef), APPI, 96);
+  { 操作区的宽是 Task 4 的活;没有操作区时标题就占满整条。 }
+  Result.ActionsWidth := 0;
+  { 镜像整套几何靠这一个字段。A 期行里只有标题、而标题占的是对称的那一整条,
+    镜像前后一模一样 —— 所以这条线今天没有任何像素能证伪,只有
+    TestRightToLeftReachesTheHeaderLayout 那条接线断言守着它。操作区一进来
+    (Task 4)它立刻变成看得见的东西。 }
+  Result.RightToLeft := IsRightToLeft;
+end;
+
 function TTyToolWindow.HeaderHeightPx: Integer;
 var
   mdl: TTyStyleModel;
@@ -296,7 +323,7 @@ begin
   { 键里既要版本号也要 model 身份:版本号是每个 model 各自算的,只按版本号键控
     会把 A 的值端给 B —— Controller 是 published,中途换得掉。 }
   if (FHeaderPxAnchor <> TObject(mdl)) or (FHeaderPxVer <> ver)
-     or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> UseRightToLeftAlignment)
+     or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> IsRightToLeft)
      or (FHeaderPxMode <> mode) or (FHeaderPxCache < 0) then
   begin
     FHeaderPxCache := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
@@ -304,7 +331,7 @@ begin
     FHeaderPxAnchor := TObject(mdl);
     FHeaderPxVer := ver;
     FHeaderPxPPI := Font.PixelsPerInch;
-    FHeaderPxRTL := UseRightToLeftAlignment;
+    FHeaderPxRTL := IsRightToLeft;
     FHeaderPxMode := mode;
   end;
   tokenPx := FHeaderPxCache;
@@ -379,6 +406,22 @@ begin
   RelayoutHeader;
 end;
 
+procedure TTyToolWindow.CMVisibleChanged(var Msg: TLMessage);
+begin
+  inherited;
+  if Visible then DoShow else DoHide;
+end;
+
+procedure TTyToolWindow.DoShow;
+begin
+  if Assigned(FOnShow) then FOnShow(Self);
+end;
+
+procedure TTyToolWindow.DoHide;
+begin
+  if Assigned(FOnHide) then FOnHide(Self);
+end;
+
 procedure TTyToolWindow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
@@ -391,7 +434,9 @@ begin
   try
     { painter 的位图是 W×H 并 blit 到 ARect 左上,所以内部一切坐标都用 (0,0)-local。 }
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { 两件不同的事,都要告诉:画笔镜像的是**对齐**(逻辑 -> 物理),
+      排布镜像的是**矩形**。少给哪一个,标题行都会跟读写方向脱节。 }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
     hdr := Rect(0, 0, R.Right, HeaderHeightPx);
@@ -401,14 +446,7 @@ begin
         TyStyleClassFor(Self, StyleClass), [tysNormal]);
       if tpBackground in hdrS.Present then
         P.FillBackground(hdr, hdrS.Background, 0);
-      inp := Default(TTyToolWindowHeaderInput);
-      inp.Mode := twhSide;
-      inp.RowWidth := hdr.Right;
-      inp.RowHeight := hdr.Bottom;
-      inp.Pad := P.Scale(ActiveController.Metric(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef));
-      inp.Gap := P.Scale(ActiveController.Metric(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef));
-      { 操作区的宽是 Task 4 的活;没有操作区时标题就占满整条。 }
-      inp.ActionsWidth := 0;
+      inp := HeaderInput(APPI, hdr.Right);
       g := TyToolWindowHeaderLayout(inp);
       { 标题拿下整个剩余跨度,放不下由 DrawText 自己出省略号。 }
       if (Caption <> '') and (g.Caption.Right > g.Caption.Left) then

@@ -33,6 +33,12 @@ type
     FCtl: TTyStyleController;
     FBar: TTyToolWindowBar;
     FWin: TProbeWindow;
+    FShows, FHides: Integer;
+    FLastSender: TObject;
+    procedure HandleShow(ASender: TObject);
+    procedure HandleHide(ASender: TObject);
+    { 把标题行那一条画出来,数左右两半各有多少「墨」(非底色像素)。 }
+    procedure TallyHeaderInk(out AInkLeft, AInkRight: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -42,6 +48,9 @@ type
     procedure TestHeaderHeightFollowsThePixelDensity;
     procedure TestHeaderPaintsItsOwnSurfaceNotTheGround;
     procedure TestInvalidateDropsThePaintCache;
+    procedure TestRightToLeftMovesTheCaptionToTheTrailingSide;
+    procedure TestRightToLeftReachesTheHeaderLayout;
+    procedure TestVisibilityFiresShowAndHideOnce;
   end;
 
 implementation
@@ -119,6 +128,56 @@ end;
 procedure TTyToolWindowTests.TearDown;
 begin
   FreeAndNil(FForm);
+end;
+
+procedure TTyToolWindowTests.HandleShow(ASender: TObject);
+begin
+  Inc(FShows);
+  FLastSender := ASender;
+end;
+
+procedure TTyToolWindowTests.HandleHide(ASender: TObject);
+begin
+  Inc(FHides);
+  FLastSender := ASender;
+end;
+
+procedure TTyToolWindowTests.TallyHeaderInk(out AInkLeft, AInkRight: Integer);
+const
+  W = 160;
+  H = 60;
+var
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  px: TBGRAPixel;
+  x, y, hdrH, mid: Integer;
+begin
+  AInkLeft := 0;
+  AInkRight := 0;
+  hdrH := FWin.HeaderHeightPx;
+  mid := W div 2;
+  FWin.SetBounds(0, 0, W, H);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(W, H);
+    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), 96);
+    re := TBGRABitmap.Create(bmp);
+    try
+      { 底色由上面的 StyleOverride 钉成纯白,所以标题行里任何非白像素都是字。 }
+      for y := 0 to hdrH - 1 do
+        for x := 0 to W - 1 do
+        begin
+          px := re.GetPixel(x, y);
+          if (px.red = 255) and (px.green = 255) and (px.blue = 255) then Continue;
+          if x < mid then Inc(AInkLeft) else Inc(AInkRight);
+        end;
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TTyToolWindowTests.TestBodyStartsBelowTheHeaderRow;
@@ -211,6 +270,50 @@ begin
   AssertFalse('刚渲染过的缓存不用再渲染一遍', FWin.CacheWouldRender(120, 80));
   FWin.Invalidate;
   AssertTrue('自己的样子变了就得重渲染', FWin.CacheWouldRender(120, 80));
+end;
+
+procedure TTyToolWindowTests.TestRightToLeftMovesTheCaptionToTheTrailingSide;
+var
+  ltrL, ltrR, rtlL, rtlR: Integer;
+begin
+  FCtl.StyleOverride := 'TyToolWindow { background: #FFFFFF; }' +
+    'TyToolWindowHeader { background: #FFFFFF; color: #000000; }';
+  FWin.Caption := 'ABCD';
+  TallyHeaderInk(ltrL, ltrR);
+  AssertTrue('从左往右读:标题贴前导边,也就是左边', ltrL > ltrR);
+  FWin.BiDiMode := bdRightToLeft;
+  TallyHeaderInk(rtlL, rtlR);
+  { 标题行的排布和画笔都要知道方向:不告诉它们,这一行就跟左右无关地停在左边。 }
+  AssertTrue('从右往左读:标题换到另一边去', rtlR > rtlL);
+end;
+
+procedure TTyToolWindowTests.TestRightToLeftReachesTheHeaderLayout;
+begin
+  { 接线断言,不是行为断言 —— 而且是故意的:A 期标题占的是对称的那一整条,
+    镜像前后同一个矩形,一个像素都证伪不了。守的是「方向确实传进了排布」,
+    Task 4 的操作区一进来,镜像就是看得见的位置差。 }
+  AssertFalse('默认从左往右', FWin.HeaderInput(96, 200).RightToLeft);
+  FWin.BiDiMode := bdRightToLeft;
+  AssertTrue('方向要传到排布那一层', FWin.HeaderInput(96, 200).RightToLeft);
+end;
+
+procedure TTyToolWindowTests.TestVisibilityFiresShowAndHideOnce;
+begin
+  { 切页就是开关 Visible(Task 10),所以这对事件的触发边是 CM_VISIBLECHANGED。 }
+  FWin.OnShow := @HandleShow;
+  FWin.OnHide := @HandleHide;
+  FShows := 0;
+  FHides := 0;
+  FLastSender := nil;
+  FWin.Visible := True;
+  AssertEquals('显示发一次 OnShow', 1, FShows);
+  AssertEquals('显示不发 OnHide', 0, FHides);
+  AssertSame('Sender 是发生这件事的那个窗口', FWin, FLastSender);
+  FLastSender := nil;
+  FWin.Visible := False;
+  AssertEquals('隐藏发一次 OnHide', 1, FHides);
+  AssertEquals('隐藏不再发 OnShow', 1, FShows);
+  AssertSame('Sender 是发生这件事的那个窗口', FWin, FLastSender);
 end;
 
 initialization
