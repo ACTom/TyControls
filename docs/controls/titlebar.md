@@ -175,8 +175,8 @@ begin
   TitleBar.Caption := Application.Title;     // 同步标题
   TitleBar.ButtonWidth := 40;                // 可选：调整系统按钮宽度
   // 隐藏最大化按钮（即时重排按钮与内容区右侧内缩）。在对象查看器里设也一样，
-  // 窗体按 BorderIcons 做的同步不会把它改回来；要连 Aero Snap / Win+↑ 一起禁掉，
-  // 改窗体的 BorderIcons。
+  // 窗体按 BorderIcons 做的同步不会把它改回来。按钮藏掉的同时，双击标题栏和
+  // 系统的贴顶 / Win+↑ 最大化也一并关闭，与原生窗口去掉最大化框的语义一致。
   TitleBar.ShowMaximize := False;
 end;
 ```
