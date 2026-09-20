@@ -7,7 +7,7 @@ unit test.toolwindow.window;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows;
 
@@ -25,6 +25,11 @@ type
     { AdjustClientRect 是 protected 的,而正文区归它管:对齐引擎排子控件时问的
       就是这一个。 }
     procedure CallAdjustClientRect(var ARect: TRect);
+    { 设计期标志与抑制口都是 protected 的,而 spec §6.6 要求的正是「这两种情形下
+      不发事件」—— 不开出来就只能测到发事件的那一半。 }
+    procedure MarkDesigning(AOn: Boolean);
+    procedure BeginSilent;
+    procedure EndSilent;
   end;
 
   TTyToolWindowTests = class(TTestCase)
@@ -51,6 +56,14 @@ type
     procedure TestRightToLeftMovesTheCaptionToTheTrailingSide;
     procedure TestRightToLeftReachesTheHeaderLayout;
     procedure TestVisibilityFiresShowAndHideOnce;
+    procedure TestDesignTimeVisibilityFiresNothing;
+    procedure TestSilentVisibilitySuppressesTheEventsAndNests;
+    procedure TestAnUnbalancedEndCannotBreakTheSuppression;
+    procedure TestARepaintWithNothingMovedDoesNotRelayout;
+    procedure TestHeaderInputScalesEverySizeWithTheGivenPpi;
+    procedure TestHeaderRowPaintsItsOwnKeyNotTheWindowKey;
+    procedure TestConstructionPinsTheControlStyleAndBounds;
+    procedure TestBarOwnedPropertiesStayOutOfTheLfm;
   end;
 
 implementation
@@ -75,6 +88,21 @@ end;
 procedure TProbeWindow.CallAdjustClientRect(var ARect: TRect);
 begin
   AdjustClientRect(ARect);
+end;
+
+procedure TProbeWindow.MarkDesigning(AOn: Boolean);
+begin
+  SetDesigning(AOn, False);
+end;
+
+procedure TProbeWindow.BeginSilent;
+begin
+  BeginSilentVisibility;
+end;
+
+procedure TProbeWindow.EndSilent;
+begin
+  EndSilentVisibility;
 end;
 
 { 把画出来的位图数两件事:
@@ -161,7 +189,9 @@ begin
   try
     bmp.PixelFormat := pf32bit;
     bmp.SetSize(W, H);
-    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), 96);
+    { 按自己字体的密度渲染 —— 换成别的 PPI 的话画出来的那一条比 HeaderHeightPx 高,
+      下面这个扫描框就只盖住它的上半截。 }
+    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), FWin.Font.PixelsPerInch);
     re := TBGRABitmap.Create(bmp);
     try
       { 底色由上面的 StyleOverride 钉成纯白,所以标题行里任何非白像素都是字。 }
@@ -314,6 +344,184 @@ begin
   AssertEquals('隐藏发一次 OnHide', 1, FHides);
   AssertEquals('隐藏不再发 OnShow', 1, FShows);
   AssertSame('Sender 是发生这件事的那个窗口', FWin, FLastSender);
+end;
+
+procedure TTyToolWindowTests.TestDesignTimeVisibilityFiresNothing;
+begin
+  { spec §6.6:设计期切 Visible 是设计器在摆控件 / 点页签,不是用户眼里的显示隐藏。 }
+  FWin.OnShow := @HandleShow;
+  FWin.OnHide := @HandleHide;
+  FShows := 0;
+  FHides := 0;
+  FWin.MarkDesigning(True);
+  FWin.Visible := True;
+  FWin.Visible := False;
+  AssertEquals('设计期不发 OnShow', 0, FShows);
+  AssertEquals('设计期不发 OnHide', 0, FHides);
+  FWin.MarkDesigning(False);
+  FWin.Visible := True;
+  AssertEquals('回到运行期照发', 1, FShows);
+end;
+
+procedure TTyToolWindowTests.TestSilentVisibilitySuppressesTheEventsAndNests;
+begin
+  { 栏换当前页的那一批 Visible 切换不发事件(spec §6.6);那时 csLoading 早清了,
+    所以必须有一个自己的抑制口。 }
+  FWin.OnShow := @HandleShow;
+  FWin.OnHide := @HandleHide;
+  FShows := 0;
+  FHides := 0;
+  FWin.BeginSilent;
+  FWin.Visible := True;
+  FWin.Visible := False;
+  AssertEquals('抑制期间不发 OnShow', 0, FShows);
+  AssertEquals('抑制期间不发 OnHide', 0, FHides);
+  FWin.EndSilent;
+  FWin.Visible := True;
+  AssertEquals('退出抑制后照发', 1, FShows);
+  { 嵌套:C 期的布局应用会套着调 Task 5 的 ActivateWindow,里层收工不许解外层的抑制。 }
+  FWin.BeginSilent;
+  FWin.BeginSilent;
+  FWin.EndSilent;
+  FWin.Visible := False;
+  AssertEquals('里层收工不解外层的抑制', 0, FHides);
+  FWin.EndSilent;
+  FWin.Visible := True;
+  AssertEquals('外层也收工了才恢复', 2, FShows);
+end;
+
+procedure TTyToolWindowTests.TestAnUnbalancedEndCannotBreakTheSuppression;
+begin
+  FWin.OnHide := @HandleHide;
+  FHides := 0;
+  FWin.Visible := True;
+  { 没配对的 End 一旦把计数压到负数,后面每个 Begin 都只是从负数往回爬 ——
+    抑制口再也关不上,而那时事件照发,没有一条断言会指向这里。 }
+  FWin.EndSilent;
+  FWin.EndSilent;
+  FWin.BeginSilent;
+  FWin.Visible := False;
+  AssertEquals('多余的 End 不许把抑制口弄坏', 0, FHides);
+  FWin.EndSilent;
+  FWin.Visible := True;
+  FWin.Visible := False;
+  AssertEquals('配平之后照发', 1, FHides);
+end;
+
+procedure TTyToolWindowTests.TestARepaintWithNothingMovedDoesNotRelayout;
+begin
+  { token 为 0 时 HeaderHeightPx 钳到 1 —— 拿这个最终值跟 token 缓存比的话,两者
+    永远不等,于是每一次重画(悬停、焦点、主题广播)都整控件重排一遍。 }
+  FWin.SetBounds(0, 0, 200, 300);
+  FCtl.StyleOverride := ':root { --toolwindow-header-height: 0px; }';
+  AssertEquals('token 为 0 时标题行高钳到 1', 1, FWin.HeaderHeightPx);
+  FWin.Invalidate;
+  FWin.AlignCount := 0;
+  FWin.Invalidate;
+  AssertEquals('主题没动的重画不许整控件重排', 0, FWin.AlignCount);
+end;
+
+procedure TTyToolWindowTests.TestHeaderInputScalesEverySizeWithTheGivenPpi;
+var
+  at96, at192: TTyToolWindowHeaderInput;
+begin
+  { 一条记录一套尺度。行高按 Font.PixelsPerInch、内距按入参 APPI 的话,真实路径上
+    两者相等看不出来,而 RenderTo 收到别的 PPI 时标题行就跟内距脱节。 }
+  FWin.Font.PixelsPerInch := 96;
+  at96 := FWin.HeaderInput(96, 200);
+  at192 := FWin.HeaderInput(192, 200);
+  AssertTrue('先得真有内距,否则下面三条乘 2 都是 0 = 0', at96.Pad > 0);
+  AssertTrue('先得真有行高', at96.RowHeight > 0);
+  AssertEquals('内距按入参 PPI', at96.Pad * 2, at192.Pad);
+  AssertEquals('间距按入参 PPI', at96.Gap * 2, at192.Gap);
+  AssertEquals('行高也按入参 PPI', at96.RowHeight * 2, at192.RowHeight);
+end;
+
+procedure TTyToolWindowTests.TestHeaderRowPaintsItsOwnKeyNotTheWindowKey;
+const
+  W = 120;
+  H = 80;
+var
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  hdrPx, bodyPx: TBGRAPixel;
+  hdrH: Integer;
+begin
+  { 两个键给**两个**底色。给同一个的话,删掉标题行那一句 FillBackground 照样绿:
+    整块本来就已经是那个颜色了。 }
+  FCtl.StyleOverride := 'TyToolWindow { background: #0000FF; }' +
+    'TyToolWindowHeader { background: #FF0000; }';
+  FWin.SetBounds(0, 0, W, H);
+  hdrH := FWin.HeaderHeightPx;
+  AssertTrue('标题行要有高度', hdrH >= 2);
+  AssertTrue('底下还要留得出正文', hdrH + 2 < H);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(W, H);
+    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), FWin.Font.PixelsPerInch);
+    re := TBGRABitmap.Create(bmp);
+    try
+      { 取行正中 —— 边上有边框、圆角和抗锯齿。只比 RGB,pf32bit 读回来的 alpha 不可信。 }
+      hdrPx := re.GetPixel(W div 2, hdrH div 2);
+      bodyPx := re.GetPixel(W div 2, hdrH + (H - hdrH) div 2);
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('标题行那一条画的是 TyToolWindowHeader 的底', 255, hdrPx.red);
+  AssertEquals('标题行那一条不是窗口的底', 0, hdrPx.blue);
+  AssertEquals('正文那一片画的是 TyToolWindow 的底', 255, bodyPx.blue);
+  AssertEquals('正文那一片不是标题行的底', 0, bodyPx.red);
+end;
+
+procedure TTyToolWindowTests.TestConstructionPinsTheControlStyleAndBounds;
+var
+  w: TTyToolWindow;
+begin
+  { 这几项掉了今天全量照样绿:设计器里摆不中、点不中,三击四击被还原成普通点击。 }
+  w := TTyToolWindow.Create(FForm);
+  try
+    AssertTrue('要能装子控件', csAcceptsControls in w.ControlStyle);
+    AssertTrue('设计器里不许拖动改尺寸 —— 位置归栏管', csDesignFixedBounds in w.ControlStyle);
+    AssertTrue('不进设计器的可见控件列表', csNoDesignVisible in w.ControlStyle);
+    AssertTrue('自己不抢焦点', csNoFocus in w.ControlStyle);
+    AssertTrue('三击要数得到', csTripleClicks in w.ControlStyle);
+    AssertTrue('四击要数得到', csQuadClicks in w.ControlStyle);
+    AssertEquals('出生就铺满栏', Ord(alClient), Ord(w.Align));
+    AssertFalse('出生是藏着的 —— 哪一页露头由栏说了算', w.Visible);
+    AssertEquals('出生没有图标', -1, w.ImageIndex);
+  finally
+    w.Free;
+  end;
+end;
+
+procedure TTyToolWindowTests.TestBarOwnedPropertiesStayOutOfTheLfm;
+const
+  BarOwned: array[0..6] of string =
+    ('Left', 'Top', 'Width', 'Height', 'TabOrder', 'Visible', 'Controller');
+var
+  w: TTyToolWindow;
+  i: Integer;
+begin
+  { 这七个由栏在运行期算出来;进了 .lfm 就会跟栏算的那一份漂开,而 IsStoredProp
+    是流式化真正问的那一问 —— 少一个 stored False 编译器不会吭声。 }
+  w := TTyToolWindow.Create(FForm);
+  try
+    w.Parent := FBar;
+    for i := Low(BarOwned) to High(BarOwned) do
+      AssertFalse(BarOwned[i] + ' 由栏说了算,不许进 .lfm', IsStoredProp(w, BarOwned[i]));
+    { ImageIndex 有条件:名字是持久键,序号只在名字给不出答案时才进流。 }
+    AssertFalse('没名字也没序号,不用存', IsStoredProp(w, 'ImageIndex'));
+    w.ImageIndex := 3;
+    AssertTrue('只有序号,存序号', IsStoredProp(w, 'ImageIndex'));
+    w.ImageName := 'house';
+    AssertFalse('有名字就不存序号', IsStoredProp(w, 'ImageIndex'));
+  finally
+    w.Free;
+  end;
 end;
 
 initialization

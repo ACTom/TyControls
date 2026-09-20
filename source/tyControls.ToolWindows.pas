@@ -127,8 +127,12 @@ type
     function ImageIndexIsStored: Boolean;
     function GetBar: TTyToolWindowBar;
     function GetActions: TTyToolWindowActions;
+    function HeaderTokenPx: Integer;
+    function HeaderHeightAt(APPI: Integer): Integer;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
+    { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
+    FSilentVisibility: Integer;
     function GetStyleTypeKey: string; override;
     procedure TextChanged; override;
     procedure AdjustClientRect(var ARect: TRect); override;
@@ -140,6 +144,13 @@ type
     procedure CMVisibleChanged(var Msg: TLMessage); message CM_VISIBLECHANGED;
     procedure DoShow; virtual;
     procedure DoHide; virtual;
+    { 栏换当前页时那一批 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求
+      它们不发 OnShow / OnHide。三个调用者:Task 5 的 TTyToolWindowBar.ActivateWindow、
+      Task 10 的收起 / 展开、C 期把存下来的布局应用回去那一遍。
+      计数而不是布尔:布局应用会套着调 ActivateWindow,一个布尔会被里层提前解除。
+      csLoading 挡不住这三个 —— 后两个发生时流式加载早就结束了。 }
+    procedure BeginSilentVisibility;
+    procedure EndSilentVisibility;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -150,7 +161,10 @@ type
     function HeaderMode: TTyToolWindowHeaderMode;
     { 标题行排布的全部输入,**一处算**:绘制(RenderTo)与摆操作区(Task 4 的
       CustomAlignPosition)问的必须是同一份,否则画出来的和点得中的会错开。
-      APPI / ARowWidth 由调用方给:绘制时是 painter 的本地宽,摆控件时是 ClientWidth。 }
+      APPI / ARowWidth 由调用方给:绘制时是 painter 的本地宽,摆控件时是 ClientWidth。
+      这条记录里的**每一个**尺寸都按入参 APPI 缩放 —— 行高按 Font.PixelsPerInch、
+      内距按 APPI 的话,真实路径上两者相等看不出来,而别的 PPI 传进来时同一条记录里
+      就是两套尺度。 }
     function HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
     function HeaderHeightPx: Integer;
     function HeaderRowRect: TRect;
@@ -295,7 +309,7 @@ begin
   Result := Default(TTyToolWindowHeaderInput);
   Result.Mode := HeaderMode;
   Result.RowWidth := ARowWidth;
-  Result.RowHeight := HeaderHeightPx;
+  Result.RowHeight := HeaderHeightAt(APPI);
   Result.Pad := MulDiv(ActiveController.Metric(TyToolWindowHeaderPadVar,
     TyToolWindowHeaderPadDef), APPI, 96);
   Result.Gap := MulDiv(ActiveController.Metric(TyToolWindowHeaderGapVar,
@@ -309,12 +323,15 @@ begin
   Result.RightToLeft := IsRightToLeft;
 end;
 
-function TTyToolWindow.HeaderHeightPx: Integer;
+{ 标题行高的 **token 那一项**,带缓存,按自己字体的像素密度算。
+  单独成一个过程是为了 Invalidate:它要比「主题动了没有」,而比的必须是同一个量 ——
+  HeaderHeightPx 的返回值是 max(这一项, 操作区) 再钳到下限 1,token 为 0 时它永远不等于
+  这一项,于是悬停、焦点、主题广播 —— 每一次重画都会整控件重排一遍。 }
+function TTyToolWindow.HeaderTokenPx: Integer;
 var
   mdl: TTyStyleModel;
   ver: Cardinal;
   mode: TTyToolWindowHeaderMode;
-  tokenPx, actionsPx: Integer;
 begin
   mode := HeaderMode;
   if mode = twhNone then Exit(0);
@@ -334,13 +351,31 @@ begin
     FHeaderPxRTL := IsRightToLeft;
     FHeaderPxMode := mode;
   end;
-  tokenPx := FHeaderPxCache;
+  Result := FHeaderPxCache;
+end;
+
+{ 标题行高,按**给定的** PPI。缓存键钉在 Font.PixelsPerInch 上,所以只有问的就是
+  自己那个密度时才走缓存,别的密度现算 —— HeaderInput 要能按它的入参 APPI 回答。 }
+function TTyToolWindow.HeaderHeightAt(APPI: Integer): Integer;
+var
+  actionsPx: Integer;
+begin
+  if HeaderMode = twhNone then Exit(0);
+  if APPI = Font.PixelsPerInch then Result := HeaderTokenPx
+  else Result := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
+    TyToolWindowHeaderHeightDef), APPI, 96);
   { 操作区那一项**不缓存**:子控件增删 / 显隐 / 改尺寸都会触发整窗体自顶向下重排,
     现取就能跟上。底栏模式下由栏统一算(B 期),A 期两种模式都按本窗口算。
     Task 4 把这个 0 换成 Actions.RawPreferredHeight。 }
   actionsPx := 0;
-  if actionsPx > tokenPx then Result := actionsPx else Result := tokenPx;
+  if actionsPx > Result then Result := actionsPx;
   if Result < 1 then Result := 1;
+end;
+
+function TTyToolWindow.HeaderHeightPx: Integer;
+begin
+  { 布局用的那一问:按自己字体的像素密度。AdjustClientRect / HeaderRowRect 走的都是它。 }
+  Result := HeaderHeightAt(Font.PixelsPerInch);
 end;
 
 function TTyToolWindow.HeaderRowRect: TRect;
@@ -369,6 +404,11 @@ begin
   try
     { 客户区内缩量变了就必须重排,只 Invalidate 会让 alClient 子控件盖住标题行。 }
     Realign;
+    { 这里是 **inherited** Invalidate —— 它不丢绘制缓存。今天两个调用者都已经丢过了:
+      Invalidate 自己第一句就丢,CMBiDiModeChanged 经 inherited 吃到 LCL 那一下
+      Invalidate(control.inc:5969)、走的还是本类的重写。直接调本过程的人拿不到这个
+      顺带效果:运行时 Paint 会 blit 出旧的一帧,而设计期不走缓存、看着一切正常。
+      要丢缓存就走 Invalidate,别图省事直接调这里。 }
     inherited Invalidate;
   finally
     FRelayouting := False;
@@ -383,10 +423,13 @@ begin
   if FPaintCache <> nil then FPaintCache.Drop;
   { 换主题是这个类唯一听不见的事件:广播过来的只有一个裸 Invalidate
     (tyControls.Controller.pas 的 Changed)。所以缓存键在这里重查一遍,
-    而键变了要重排、不是只重画。 }
+    而键变了要重排、不是只重画。
+    两边比的都是 **token 那一项**。拿它跟 HeaderHeightPx(= max(token, 操作区) 再钳到
+    下限 1)比的话,token 为 0 时两者永远不相等,于是悬停、焦点、主题广播 —— 每一次
+    重画都会整控件重排一遍;Task 4 的操作区一旦高过 token,同样如此。 }
   old := FHeaderPxCache;
   FHeaderPxCache := -1;
-  if (not FRelayouting) and (HeaderHeightPx <> old) and (old >= 0) then
+  if (not FRelayouting) and (old >= 0) and (HeaderTokenPx <> old) then
     RelayoutHeader;
   inherited Invalidate;
 end;
@@ -409,7 +452,23 @@ end;
 procedure TTyToolWindow.CMVisibleChanged(var Msg: TLMessage);
 begin
   inherited;
+  { spec §6.6 的事件表:设计期不发(设计器摆控件、点页签,切的都是 Visible),栏换
+    当前页的那一批也不发。这两种都不是 csLoading 能挡的 —— 栏在 Loaded 里应用
+    ActiveIndex、加载收尾时应用挂起的布局计划,发生时 csLoading 早已清掉。 }
+  if (csDesigning in ComponentState) or (FSilentVisibility > 0) then Exit;
   if Visible then DoShow else DoHide;
+end;
+
+procedure TTyToolWindow.BeginSilentVisibility;
+begin
+  Inc(FSilentVisibility);
+end;
+
+procedure TTyToolWindow.EndSilentVisibility;
+begin
+  { 钳住 0:没配对的 End 把计数压到负数的话,后面每一个 Begin 都只是从负数往上爬,
+    抑制口就再也关不上了 —— 而那时事件照发,没有一条断言会指向这里。 }
+  if FSilentVisibility > 0 then Dec(FSilentVisibility);
 end;
 
 procedure TTyToolWindow.DoShow;
@@ -439,14 +498,16 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    hdr := Rect(0, 0, R.Right, HeaderHeightPx);
-    if (HeaderMode = twhSide) and (hdr.Bottom > hdr.Top) then
+    { 画的那一条就是排布用的那一条:两边各算一次的话,传进来的 PPI 一旦不是
+      Font.PixelsPerInch,底色铺的高度和几何算的高度就会差开。 }
+    inp := HeaderInput(APPI, R.Right);
+    hdr := Rect(0, 0, inp.RowWidth, inp.RowHeight);
+    if (inp.Mode = twhSide) and (hdr.Bottom > hdr.Top) then
     begin
       hdrS := ActiveController.Model.ResolveStyle('TyToolWindowHeader',
         TyStyleClassFor(Self, StyleClass), [tysNormal]);
       if tpBackground in hdrS.Present then
         P.FillBackground(hdr, hdrS.Background, 0);
-      inp := HeaderInput(APPI, hdr.Right);
       g := TyToolWindowHeaderLayout(inp);
       { 标题拿下整个剩余跨度,放不下由 DrawText 自己出省略号。 }
       if (Caption <> '') and (g.Caption.Right > g.Caption.Left) then
