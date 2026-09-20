@@ -107,7 +107,8 @@ begin
     '  --toolwindow-edge-color:          var(--border);' + LineEnding +
     '  --toolwindow-edge-color-hover:    var(--accent);' + LineEnding +
     '  --toolwindow-drop-color:          var(--accent);' + LineEnding +
-    '  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.16);' + LineEnding +
+    '  --toolwindow-overlay-hover:       var(--overlay-hover);' + LineEnding +
+    '  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.20);' + LineEnding +
     '' + LineEnding +
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
@@ -1280,7 +1281,7 @@ begin
     'TyToolWindowStrip  { background: var(--toolwindow-strip-bg); color: var(--toolwindow-strip-ink);' + LineEnding +
     '                     border-color: var(--border); border-width: var(--input-border-width); }' + LineEnding +
     'TyToolWindowStripItem          { color: var(--toolwindow-strip-ink); }' + LineEnding +
-    'TyToolWindowStripItem:hover    { background: var(--overlay-hover); color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
+    'TyToolWindowStripItem:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
     'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
     'TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }' + LineEnding +
@@ -1296,10 +1297,10 @@ begin
     'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }' + LineEnding +
     'TyToolWindowOverflow        { color: var(--toolwindow-tab-ink); }' + LineEnding +
-    'TyToolWindowOverflow:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowOverflow:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowOverflow:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowButton        { color: var(--toolwindow-tab-ink); }' + LineEnding +
-    'TyToolWindowButton:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowButton:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowSeparator     { background: var(--border); }' + LineEnding +
     'TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }' + LineEnding +

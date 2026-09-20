@@ -74,7 +74,8 @@
   --toolwindow-edge-color:          var(--border);
   --toolwindow-edge-color-hover:    var(--accent);
   --toolwindow-drop-color:          var(--accent);
-  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.16);
+  --toolwindow-overlay-hover:       var(--overlay-hover);
+  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.20);
 
   /* ── COMPONENT: scalars ── */
   --input-border-width: 1px;
@@ -1247,7 +1248,7 @@ TyToolWindow:disabled { opacity: var(--disabled-opacity); }
 TyToolWindowStrip  { background: var(--toolwindow-strip-bg); color: var(--toolwindow-strip-ink);
                      border-color: var(--border); border-width: var(--input-border-width); }
 TyToolWindowStripItem          { color: var(--toolwindow-strip-ink); }
-TyToolWindowStripItem:hover    { background: var(--overlay-hover); color: var(--toolwindow-strip-ink-selected); }
+TyToolWindowStripItem:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }
 TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }
@@ -1263,10 +1264,10 @@ TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }
 TyToolWindowOverflow        { color: var(--toolwindow-tab-ink); }
-TyToolWindowOverflow:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-selected); }
+TyToolWindowOverflow:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowOverflow:active { background: var(--toolwindow-overlay-active); }
 TyToolWindowButton        { color: var(--toolwindow-tab-ink); }
-TyToolWindowButton:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-selected); }
+TyToolWindowButton:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }
 TyToolWindowSeparator     { background: var(--border); }
 TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }
