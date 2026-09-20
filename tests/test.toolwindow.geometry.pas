@@ -17,6 +17,8 @@ type
     procedure TestSlotAtMapsWindowIndexesOnANonPrefixStrip;
     procedure TestSideHeaderMirrorsUnderRightToLeft;
     procedure TestDragThresholdScalesWithPpi;
+    procedure TestStripWithNoWidthLaysOutNothing;
+    procedure TestVisiblePlanKeepsTheActiveItemWhenNothingFits;
   end;
 
 implementation
@@ -155,6 +157,29 @@ begin
   AssertEquals('PPI 传负数回落到 96', 6, TyToolWindowDragThreshold(-120));
   AssertEquals('再小也不能是 0 —— 0 阈值等于每次按下都成拖动', 1,
     TyToolWindowDragThreshold(1));
+end;
+
+procedure TTyToolWindowGeometryTests.TestStripWithNoWidthLaysOutNothing;
+var
+  slots: TTyToolWindowSlots;
+  hidden: Boolean;
+begin
+  { 条宽跟其他三个入参一样要守 —— 不守就会产出一批零宽/反转矩形。 }
+  slots := TyToolWindowStripLayout(0, 200, 36, 36, 4, 0, hidden);
+  AssertEquals('条宽为 0 就一个槽都不排', 0, Length(slots));
+  AssertFalse('一个都没排上不等于有东西被收起来', hidden);
+end;
+
+procedure TTyToolWindowGeometryTests.TestVisiblePlanKeepsTheActiveItemWhenNothingFits;
+var
+  plan: TTyToolWindowPlan;
+  hidden: Boolean;
+begin
+  plan := TyToolWindowVisiblePlan(0, [36, 36, 36], 2, 36, hidden);
+  AssertEquals('可用宽为 0 时也要留住当前页,和 0 < 可用宽 <= 溢出按钮宽 '
+    + '那条路径一致(spec §7.3:当前页始终留在行上)', 1, Length(plan));
+  AssertEquals('留下的就是当前页', 2, plan[0]);
+  AssertTrue('另外两个确实被收起来了', hidden);
 end;
 
 initialization
