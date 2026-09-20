@@ -8,8 +8,9 @@ unit tyControls.ToolWindows;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Base, tyControls.Component;
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
+  tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
+  tyControls.StyleModel;
 
 const
   { 长度 token。经典值必须等于这里的 Def —— light.tycss 的 :root 里写同一个数,
@@ -64,8 +65,65 @@ type
     「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
     类型键是契约不是实现,A 期就钉死。 }
   TTyToolWindow = class(TTyCustomControl)
+  private
+    FImageName: string;
+    FImageIndex: Integer;
+    FStripHint: string;
+    FOnShow: TNotifyEvent;
+    FOnHide: TNotifyEvent;
+    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式);
+      -1 = 没缓存。操作区那一项不进这里,见 HeaderHeightPx。 }
+    FHeaderPxCache: Integer;
+    FHeaderPxPPI: Integer;
+    FHeaderPxVer: Cardinal;
+    FHeaderPxAnchor: TObject;
+    FHeaderPxRTL: Boolean;
+    FHeaderPxMode: TTyToolWindowHeaderMode;
+    FRelayouting: Boolean;
+    function ImageIndexIsStored: Boolean;
+    function GetBar: TTyToolWindowBar;
+    function GetActions: TTyToolWindowActions;
   protected
+    FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     function GetStyleTypeKey: string; override;
+    procedure TextChanged; override;
+    procedure AdjustClientRect(var ARect: TRect); override;
+    procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+      const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
+    procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure Invalidate; override;
+    procedure Paint; override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure RelayoutHeader;
+    function HeaderMode: TTyToolWindowHeaderMode;
+    function HeaderHeightPx: Integer;
+    function HeaderRowRect: TRect;
+    function BodyRect: TRect;
+    property Bar: TTyToolWindowBar read GetBar;
+    property Actions: TTyToolWindowActions read GetActions;
+  published
+    property Caption;
+    property ImageName: string read FImageName write FImageName;
+    property ImageIndex: Integer read FImageIndex write FImageIndex
+      stored ImageIndexIsStored default -1;
+    property StripHint: string read FStripHint write FStripHint;
+    property StyleClass;
+    { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
+    property Controller stored False;
+    property Left stored False;
+    property Top stored False;
+    property Width stored False;
+    property Height stored False;
+    property TabOrder stored False;
+    property Visible stored False;
+    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来。那一段(连同
+      从 CM_VISIBLECHANGED 发这两个事件)是 Task 10「可见性与焦点」的活,在那之前
+      这两个事件挂得上但不会响。 }
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnHide: TNotifyEvent read FOnHide write FOnHide;
   end;
 
   TTyToolWindowActions = class(TTyCustomControl)
@@ -161,9 +219,224 @@ function TyToolWindowDragThreshold(APPI: Integer): Integer;
 
 implementation
 
+{ --- TTyToolWindow ------------------------------------------------------------ }
+
+constructor TTyToolWindow.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  { 多击两个标志:底栏标题行的按下落在窗口的句柄上,LCL 数点击次数看的是收到消息的
+    那个窗口化控件;不加的话第三次按下会被还原成普通按下,又生效一次。 }
+  ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds,
+    csNoDesignVisible, csNoFocus, csTripleClicks, csQuadClicks];
+  FImageIndex := -1;
+  FHeaderPxCache := -1;
+  Align := alClient;
+  Visible := False;
+  { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
+end;
+
+destructor TTyToolWindow.Destroy;
+begin
+  FPaintCache.Free;
+  inherited Destroy;
+end;
+
 function TTyToolWindow.GetStyleTypeKey: string;
 begin
   Result := 'TyToolWindow';
+end;
+
+function TTyToolWindow.ImageIndexIsStored: Boolean;
+begin
+  { 名字是持久键,序号只在名字给不出答案时才进流。 }
+  Result := (FImageName = '') and (FImageIndex >= 0);
+end;
+
+function TTyToolWindow.GetBar: TTyToolWindowBar;
+begin
+  if Parent is TTyToolWindowBar then Result := TTyToolWindowBar(Parent)
+  else Result := nil;
+end;
+
+function TTyToolWindow.GetActions: TTyToolWindowActions;
+begin
+  { 操作区本身(连同扫 Controls[] 取第一个的这一句)是 Task 4 的活;在那之前一个
+    操作区都不存在,标题行高就退化成 token 值。 }
+  Result := nil;
+end;
+
+procedure TTyToolWindow.TextChanged;
+begin
+  inherited TextChanged;
+  { 标题就画在自己的标题行里(见 RenderTo),不重画就停在上一句。 }
+  Invalidate;
+end;
+
+function TTyToolWindow.HeaderMode: TTyToolWindowHeaderMode;
+begin
+  { 只看所在栏的**位置** —— 不看哪页是当前页,否则切页时正文会跳。
+    而位置(Placement)是 Task 5 的活,今天栏还答不出来;A 期也只有侧栏,
+    twhBottom 连同它那一支标题行排布都在 B 期。Task 5 补上 Placement 时,
+    这里要跟着变成 `if Bar.Placement = twpBottom then twhBottom else twhSide`。 }
+  if Parent is TTyToolWindowBar then Result := twhSide
+  else Result := twhNone;
+end;
+
+function TTyToolWindow.HeaderHeightPx: Integer;
+var
+  mdl: TTyStyleModel;
+  ver: Cardinal;
+  mode: TTyToolWindowHeaderMode;
+  tokenPx, actionsPx: Integer;
+begin
+  mode := HeaderMode;
+  if mode = twhNone then Exit(0);
+  mdl := ActiveController.Model;
+  ver := mdl.ThemeVersion;
+  { 键里既要版本号也要 model 身份:版本号是每个 model 各自算的,只按版本号键控
+    会把 A 的值端给 B —— Controller 是 published,中途换得掉。 }
+  if (FHeaderPxAnchor <> TObject(mdl)) or (FHeaderPxVer <> ver)
+     or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> UseRightToLeftAlignment)
+     or (FHeaderPxMode <> mode) or (FHeaderPxCache < 0) then
+  begin
+    FHeaderPxCache := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
+      TyToolWindowHeaderHeightDef), Font.PixelsPerInch, 96);
+    FHeaderPxAnchor := TObject(mdl);
+    FHeaderPxVer := ver;
+    FHeaderPxPPI := Font.PixelsPerInch;
+    FHeaderPxRTL := UseRightToLeftAlignment;
+    FHeaderPxMode := mode;
+  end;
+  tokenPx := FHeaderPxCache;
+  { 操作区那一项**不缓存**:子控件增删 / 显隐 / 改尺寸都会触发整窗体自顶向下重排,
+    现取就能跟上。底栏模式下由栏统一算(B 期),A 期两种模式都按本窗口算。
+    Task 4 把这个 0 换成 Actions.RawPreferredHeight。 }
+  actionsPx := 0;
+  if actionsPx > tokenPx then Result := actionsPx else Result := tokenPx;
+  if Result < 1 then Result := 1;
+end;
+
+function TTyToolWindow.HeaderRowRect: TRect;
+begin
+  Result := Rect(0, 0, ClientWidth, HeaderHeightPx);
+end;
+
+function TTyToolWindow.BodyRect: TRect;
+begin
+  { 查询就调自己的 AdjustClientRect —— 正文区只有一个定义,手摆和对齐摆落在同一处。 }
+  Result := ClientRect;
+  AdjustClientRect(Result);
+end;
+
+procedure TTyToolWindow.AdjustClientRect(var ARect: TRect);
+begin
+  inherited AdjustClientRect(ARect);
+  Inc(ARect.Top, HeaderHeightPx);
+  if ARect.Top > ARect.Bottom then ARect.Top := ARect.Bottom;
+end;
+
+procedure TTyToolWindow.RelayoutHeader;
+begin
+  if FRelayouting then Exit;
+  FRelayouting := True;
+  try
+    { 客户区内缩量变了就必须重排,只 Invalidate 会让 alClient 子控件盖住标题行。 }
+    Realign;
+    inherited Invalidate;
+  finally
+    FRelayouting := False;
+  end;
+end;
+
+procedure TTyToolWindow.Invalidate;
+var
+  old: Integer;
+begin
+  { 自己的样子变了 —— 丢缓存。子控件打脏到不了这里,缓存正是靠这一点活着。 }
+  if FPaintCache <> nil then FPaintCache.Drop;
+  { 换主题是这个类唯一听不见的事件:广播过来的只有一个裸 Invalidate
+    (tyControls.Controller.pas 的 Changed)。所以缓存键在这里重查一遍,
+    而键变了要重排、不是只重画。 }
+  old := FHeaderPxCache;
+  FHeaderPxCache := -1;
+  if (not FRelayouting) and (HeaderHeightPx <> old) and (old >= 0) then
+    RelayoutHeader;
+  inherited Invalidate;
+end;
+
+procedure TTyToolWindow.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+  const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
+begin
+  inherited AutoAdjustLayout(AMode, AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth);
+  FHeaderPxCache := -1;
+  RelayoutHeader;
+end;
+
+procedure TTyToolWindow.CMBiDiModeChanged(var Msg: TLMessage);
+begin
+  inherited;
+  FHeaderPxCache := -1;
+  RelayoutHeader;
+end;
+
+procedure TTyToolWindow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S, hdrS: TTyStyleSet;
+  R, hdr: TRect;
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+begin
+  P := TTyPainter.Create;
+  try
+    { painter 的位图是 W×H 并 blit 到 ARect 左上,所以内部一切坐标都用 (0,0)-local。 }
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+    S := CurrentStyle;
+    DrawFrame(P, R, S);
+    hdr := Rect(0, 0, R.Right, HeaderHeightPx);
+    if (HeaderMode = twhSide) and (hdr.Bottom > hdr.Top) then
+    begin
+      hdrS := ActiveController.Model.ResolveStyle('TyToolWindowHeader',
+        TyStyleClassFor(Self, StyleClass), [tysNormal]);
+      if tpBackground in hdrS.Present then
+        P.FillBackground(hdr, hdrS.Background, 0);
+      inp := Default(TTyToolWindowHeaderInput);
+      inp.Mode := twhSide;
+      inp.RowWidth := hdr.Right;
+      inp.RowHeight := hdr.Bottom;
+      inp.Pad := P.Scale(ActiveController.Metric(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef));
+      inp.Gap := P.Scale(ActiveController.Metric(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef));
+      { 操作区的宽是 Task 4 的活;没有操作区时标题就占满整条。 }
+      inp.ActionsWidth := 0;
+      g := TyToolWindowHeaderLayout(inp);
+      { 标题拿下整个剩余跨度,放不下由 DrawText 自己出省略号。 }
+      if (Caption <> '') and (g.Caption.Right > g.Caption.Left) then
+        P.DrawText(g.Caption, Caption, hdrS.FontName, ResolveFontSize(hdrS),
+          hdrS.FontWeight, hdrS.TextColor, taLeftJustify, tlCenter, True);
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyToolWindow.Paint;
+var
+  w, h: Integer;
+begin
+  { 设计器重绘少、而且边重绘边流式化,所以只在运行时用缓存。 }
+  if csDesigning in ComponentState then
+  begin
+    RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+    Exit;
+  end;
+  w := ClientWidth; h := ClientHeight;
+  if (w <= 0) or (h <= 0) then Exit;
+  if FPaintCache = nil then FPaintCache := TTyPaintCache.Create;
+  if FPaintCache.NeedsRender(w, h) then
+    RenderTo(FPaintCache.Canvas, Rect(0, 0, w, h), Font.PixelsPerInch);
+  FPaintCache.Blit(Canvas);
 end;
 
 function TTyToolWindowActions.GetStyleTypeKey: string;
