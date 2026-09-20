@@ -13,7 +13,7 @@ type
   published
     procedure TestEveryLengthTokenIsDeclaredAndEqualsTheControlDefault;
     procedure TestSurfaceKeysReachEveryBuiltinTheme;
-    procedure TestStripItemSelectedDiffersFromRest;
+    procedure TestSelectedInkDiffersFromRest;
   end;
 
 implementation
@@ -74,6 +74,7 @@ procedure TTyToolWindowThemeTests.TestSurfaceKeysReachEveryBuiltinTheme;
 var
   c: TTyStyleController;
   names: TStringArray;
+  st: TTyStyleSet;
   i, k, md: Integer;
   mode: string;
 begin
@@ -89,26 +90,41 @@ begin
         c.ThemeName := names[i];
         c.Mode := mode;
         for k := 0 to High(CSurfaceKeys) do
+        begin
+          st := c.Model.ResolveStyle(CSurfaceKeys[k], '', []);
           AssertTrue(Format('%s/%s: %s 必须经基础层拿到底色', [names[i], mode, CSurfaceKeys[k]]),
-            tpBackground in c.Model.ResolveStyle(CSurfaceKeys[k], '', []).Present);
+            tpBackground in st.Present);
+          { 声明了 background 不等于会画: `background: none` 两个条件都满足,然后一笔不落
+            —— TyGridCell 就是故意这么写的,所以这不是假想的失败模式。 }
+          AssertTrue(Format('%s/%s: %s 的底色必须是真能画出来的填充,解成 none 等于没底色',
+            [names[i], mode, CSurfaceKeys[k]]), st.Background.Kind <> tfkNone);
+        end;
       end;
   finally
     c.Free;
   end;
 end;
 
-procedure TTyToolWindowThemeTests.TestStripItemSelectedDiffersFromRest;
+procedure TTyToolWindowThemeTests.TestSelectedInkDiffersFromRest;
+{ golden 的 STATES 停在 tysDisabled,:selected 压根不在那张网格里 —— 图标条和
+  标签行「哪个是当前」全靠墨色区分,而这里是它们唯一的守卫。 }
 var
   m: TTyStyleModel;
-  rest, sel: TTyStyleSet;
+  procedure CheckKey(const AKey, AWhere: string);
+  var
+    rest, sel: TTyStyleSet;
+  begin
+    rest := m.ResolveStyle(AKey, '', []);
+    sel := m.ResolveStyle(AKey, '', [tysSelected]);
+    AssertTrue(AKey + ': 当前项的墨色必须和静止态不同,否则' + AWhere + '上看不出选中',
+      sel.TextColor <> rest.TextColor);
+  end;
 begin
   m := TTyStyleModel.Create;
   try
     m.LoadFromFile(ThemePath('light.tycss'));
-    rest := m.ResolveStyle('TyToolWindowStripItem', '', []);
-    sel := m.ResolveStyle('TyToolWindowStripItem', '', [tysSelected]);
-    AssertTrue('当前图标的墨色必须和静止态不同,否则图标条上看不出选中',
-      sel.TextColor <> rest.TextColor);
+    CheckKey('TyToolWindowStripItem', '图标条');
+    CheckKey('TyToolWindowTab', '标签行');
   finally
     m.Free;
   end;

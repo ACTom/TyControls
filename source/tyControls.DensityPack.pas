@@ -170,7 +170,7 @@ begin
     '  --titlebar-height: 48px;' + LineEnding +
     '  --titlebar-padding: 12px;' + LineEnding +
     '  --toolwindow-button-size: 28px;' + LineEnding +
-    '  --toolwindow-content-min: 160px;' + LineEnding +
+    '  --toolwindow-content-min: 144px;' + LineEnding +
     '  --toolwindow-drop-size: 2px;' + LineEnding +
     '  --toolwindow-edge-size: 4px;' + LineEnding +
     '  --toolwindow-glyph-size: 20px;' + LineEnding +
@@ -178,8 +178,8 @@ begin
     '  --toolwindow-header-height: 36px;' + LineEnding +
     '  --toolwindow-header-pad: 8px;' + LineEnding +
     '  --toolwindow-indicator-size: 2px;' + LineEnding +
-    '  --toolwindow-strip-indicator-size: 3px;' + LineEnding +
-    '  --toolwindow-strip-item-size: 44px;' + LineEnding +
+    '  --toolwindow-strip-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-item-size: 48px;' + LineEnding +
     '  --toolwindow-strip-size: 48px;' + LineEnding +
     '  --toolwindow-tab-area-min: 60px;' + LineEnding +
     '  --toolwindow-tab-pad: 12px;' + LineEnding +

@@ -5,7 +5,7 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (220 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (223 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
     - TyCatalogTypeKeys : the control selector heads (230 of them), for the
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..219] of string = (
+  TyCatalogTokens: array[0..222] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -211,6 +211,7 @@ const
     '--toolwindow-drop-color',
     '--toolwindow-drop-size',
     '--toolwindow-edge-color',
+    '--toolwindow-edge-color-hover',
     '--toolwindow-edge-size',
     '--toolwindow-glyph-size',
     '--toolwindow-header-bg',
@@ -219,16 +220,18 @@ const
     '--toolwindow-header-pad',
     '--toolwindow-indicator-color',
     '--toolwindow-indicator-size',
+    '--toolwindow-ink',
+    '--toolwindow-overlay-active',
     '--toolwindow-strip-bg',
     '--toolwindow-strip-indicator-color',
     '--toolwindow-strip-indicator-size',
     '--toolwindow-strip-ink',
-    '--toolwindow-strip-ink-active',
+    '--toolwindow-strip-ink-selected',
     '--toolwindow-strip-item-size',
     '--toolwindow-strip-size',
     '--toolwindow-tab-area-min',
     '--toolwindow-tab-ink',
-    '--toolwindow-tab-ink-active',
+    '--toolwindow-tab-ink-selected',
     '--toolwindow-tab-pad',
     '--transfer-arrow-margin',
     '--transfer-arrow-size',

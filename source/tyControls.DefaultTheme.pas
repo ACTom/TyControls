@@ -95,16 +95,19 @@ begin
     '     绝不在这里自己写 darken(--surface, ...) —— 那会绕过白底皮肤自定义的 chrome 值。 */' + LineEnding +
     '  --toolwindow-bg:                  var(--surface);' + LineEnding +
     '  --toolwindow-header-bg:           var(--toolwindow-bg);' + LineEnding +
+    '  --toolwindow-ink:                 var(--on-surface);' + LineEnding +
     '  --toolwindow-caption-ink:         var(--on-surface);' + LineEnding +
     '  --toolwindow-tab-ink:             var(--muted);' + LineEnding +
-    '  --toolwindow-tab-ink-active:      var(--on-surface);' + LineEnding +
+    '  --toolwindow-tab-ink-selected:    var(--on-surface);' + LineEnding +
     '  --toolwindow-indicator-color:     var(--accent);' + LineEnding +
     '  --toolwindow-strip-bg:            var(--chrome-bar-bg);' + LineEnding +
     '  --toolwindow-strip-ink:           var(--muted);' + LineEnding +
-    '  --toolwindow-strip-ink-active:    var(--on-surface);' + LineEnding +
+    '  --toolwindow-strip-ink-selected:  var(--on-surface);' + LineEnding +
     '  --toolwindow-strip-indicator-color: var(--accent);' + LineEnding +
     '  --toolwindow-edge-color:          var(--border);' + LineEnding +
+    '  --toolwindow-edge-color-hover:    var(--accent);' + LineEnding +
     '  --toolwindow-drop-color:          var(--accent);' + LineEnding +
+    '  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.16);' + LineEnding +
     '' + LineEnding +
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
@@ -1263,36 +1266,41 @@ begin
     'TyListGroupItem:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     '/* ── ToolWindow (IDE 侧栏 / 底栏) ──────────────────────────────────────── */' + LineEnding +
-    '/* 容器键写全整套属性 —— 皮肤只要给某个 typeKey 写了任何一条规则,基础层这一整个键' + LineEnding +
-    '   (含 variant)就被压掉,所以容器不能只写半套;只带墨色的子部件故意不写 background,' + LineEnding +
-    '   好让它继承容器的表面。 */' + LineEnding +
-    'TyToolWindowBar    { background: var(--toolwindow-bg); color: var(--on-surface);' + LineEnding +
+    '/* 容器键写全整套属性 —— 皮肤只要给某个 typeKey 写了基础规则(无 variant、无 state),' + LineEnding +
+    '   基础层这一整个键(含 variant)就被压掉,所以容器不能只写半套;只带墨色的子部件' + LineEnding +
+    '   故意不写 background,好让绘制代码回落到容器的表面。 */' + LineEnding +
+    'TyToolWindowBar    { background: var(--toolwindow-bg); color: var(--toolwindow-ink);' + LineEnding +
     '                     font-size: var(--font-size-base); }' + LineEnding +
-    'TyToolWindow       { background: var(--toolwindow-bg); color: var(--on-surface);' + LineEnding +
+    'TyToolWindowBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyToolWindow       { background: var(--toolwindow-bg); color: var(--toolwindow-ink);' + LineEnding +
     '                     font-size: var(--font-size-base); }' + LineEnding +
-    'TyToolWindowStrip  { background: var(--toolwindow-strip-bg); color: var(--toolwindow-strip-ink); }' + LineEnding +
+    'TyToolWindow:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* 图标条要有自己的界线: 有四个内置皮肤把 --chrome-bar-bg 调成了 --surface,' + LineEnding +
+    '   只靠底色的话条子在那四个皮肤上整个看不见。写法照 TyStatusBar / TyToolBar。 */' + LineEnding +
+    'TyToolWindowStrip  { background: var(--toolwindow-strip-bg); color: var(--toolwindow-strip-ink);' + LineEnding +
+    '                     border-color: var(--border); border-width: var(--input-border-width); }' + LineEnding +
     'TyToolWindowStripItem          { color: var(--toolwindow-strip-ink); }' + LineEnding +
-    'TyToolWindowStripItem:hover    { background: var(--overlay-hover); color: var(--toolwindow-strip-ink-active); }' + LineEnding +
-    'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-active); }' + LineEnding +
-    'TyToolWindowStripItem:active   { background: var(--overlay-hover); }' + LineEnding +
+    'TyToolWindowStripItem:hover    { background: var(--overlay-hover); color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
+    'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
+    'TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }' + LineEnding +
     'TyToolWindowEdge        { background: var(--toolwindow-edge-color); }' + LineEnding +
-    'TyToolWindowEdge:hover  { background: var(--accent); }' + LineEnding +
-    'TyToolWindowEdge:active { background: var(--accent); }' + LineEnding +
+    'TyToolWindowEdge:hover  { background: var(--toolwindow-edge-color-hover); }' + LineEnding +
+    'TyToolWindowEdge:active { background: var(--toolwindow-edge-color-hover); }' + LineEnding +
     'TyToolWindowHeader      { background: var(--toolwindow-header-bg); color: var(--toolwindow-caption-ink);' + LineEnding +
     '                          font-size: var(--font-size-base); padding: var(--toolwindow-header-pad); }' + LineEnding +
     'TyToolWindowActions     { background: var(--toolwindow-header-bg); }' + LineEnding +
     'TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }' + LineEnding +
     'TyToolWindowTab          { color: var(--toolwindow-tab-ink); padding: var(--toolwindow-tab-pad); }' + LineEnding +
-    'TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-active); }' + LineEnding +
-    'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-active); }' + LineEnding +
+    'TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }' + LineEnding +
     'TyToolWindowOverflow        { color: var(--toolwindow-tab-ink); }' + LineEnding +
-    'TyToolWindowOverflow:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-active); }' + LineEnding +
-    'TyToolWindowOverflow:active { background: var(--overlay-hover); }' + LineEnding +
+    'TyToolWindowOverflow:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowOverflow:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowButton        { color: var(--toolwindow-tab-ink); }' + LineEnding +
-    'TyToolWindowButton:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-active); }' + LineEnding +
-    'TyToolWindowButton:active { background: var(--overlay-hover); }' + LineEnding +
+    'TyToolWindowButton:hover  { background: var(--overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowSeparator     { background: var(--border); }' + LineEnding +
     'TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }' + LineEnding +
     'TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
