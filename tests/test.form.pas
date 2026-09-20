@@ -303,6 +303,9 @@ type
       #3 a maximized window must still be draggable: the drag tears it loose (restores it under
          the pointer) and continues, which is what every native title bar does. }
   TMaximizedChromeTest = class(TTestCase)
+  private
+    FShows: Integer;
+    procedure CountShow(Sender: TObject);
   published
     procedure TestMaximizedPressArmsDrag;
     procedure TestMaximizedDragRestoresUnderPointer;
@@ -313,6 +316,14 @@ type
     procedure TestEngineMaximizeSurvivesRestoredReport;
     procedure TestNativeMaximizeRestoresThroughWindowState;
     procedure TestDesigningIgnoresWindowStateReport;
+    { A designer-set WindowState = wsMaximized: adopted by the engine on first show. }
+    procedure TestStreamedMaximizedStateIsAdoptedOnFirstShow;
+    procedure TestAdoptionPrecedesInheritedDoShow;
+    procedure TestAdoptedMaximizeRestoresToTheDesignedBounds;
+    procedure TestNormalWindowStateShowsAsDesigned;
+    procedure TestDesignSurfaceKeepsTheStreamedWindowState;
+    procedure TestFixedWindowIsNotMaximizedByItsWindowState;
+    procedure TestReshowingAMaximizedFormKeepsItsRestoreRect;
   end;
 
   { FIX #1: the photo backdrop must (re)build on theme-apply WITHOUT a paint cycle.
@@ -478,6 +489,10 @@ type
     { Replay what the widgetset reports after an OS-driven size change (LM_SIZE ->
       TScrollingWinControl.WMSize -> Resizing), which is how Aero Snap reaches the chrome. }
     procedure InjectResizing(AState: TWindowState);
+    { Run the form's own first-show entry (the protected DoShow) headlessly. Every step in it
+      that needs a handle is guarded, so this exercises exactly the path CMShowingChanged
+      takes before the widgetset reads WindowState. }
+    procedure InjectDoShow;
     { Drive the form's own (protected) mouse entry points headlessly — exactly the path
       the widgetset uses — so the engine's resize gating can be exercised without a handle. }
     procedure InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -535,6 +550,7 @@ function TTyFormAccess.EngineResizing: Boolean; begin Result := FEngine.Resizing
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
 function TTyFormAccess.Engine: TTyChromeEngine; begin Result := FEngine; end;
 procedure TTyFormAccess.InjectResizing(AState: TWindowState); begin Resizing(AState); end;
+procedure TTyFormAccess.InjectDoShow; begin DoShow; end;
 
 procedure TTyFormAccess.InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin MouseDown(Button, Shift, X, Y); end;
@@ -2209,6 +2225,176 @@ begin
     F.SetDesigning(True, False);
     F.InjectResizing(wsMaximized);
     AssertFalse('design surface state left alone', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.CountShow(Sender: TObject);
+begin
+  Inc(FShows);
+end;
+
+procedure TMaximizedChromeTest.TestStreamedMaximizedStateIsAdoptedOnFirstShow;
+var
+  F: TTyFormAccess;
+  want: TRect;
+begin
+  { A designer-set WindowState = wsMaximized used to reach the widgetset untouched, as
+    ShowWindow(SW_SHOWMAXIMIZED) on a borderless WS_POPUP: the whole monitor, taskbar
+    included, on Windows; ignored outright by GTK/Qt window managers; and the chrome never
+    heard of it either way. The first show now hands it to the engine's own work-area
+    maximize -- through the real entry, DoShow -- and takes it away from the widgetset. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;      // what the .lfm streams, or code sets before Show
+    F.InjectDoShow;
+    AssertTrue('engine maximized by the first show', F.EngineMaximized);
+    AssertFalse('the engine''s own maximize, not the window manager''s', F.Engine.NativeMaximized);
+    AssertEquals('state handed off: the widgetset must not maximize a popup',
+      Ord(wsNormal), Ord(F.WindowState));
+    want := TyMaximizedBounds(Screen.WorkAreaRect);
+    AssertTrue(Format('bounds fill the work area (got %d,%d %dx%d; want %d,%d %dx%d)',
+      [F.Left, F.Top, F.Width, F.Height,
+       want.Left, want.Top, want.Right - want.Left, want.Bottom - want.Top]),
+      (F.Left = want.Left) and (F.Top = want.Top)
+      and (F.Width = want.Right - want.Left) and (F.Height = want.Bottom - want.Top));
+    AssertTrue('caption button shows restore', F.TB.MaxButton.Kind = cbkRestore);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestAdoptionPrecedesInheritedDoShow;
+var F: TTyFormAccess;
+begin
+  { The hand-off happens BEFORE inherited DoShow. TCustomForm.DoShow skips OnShow on a FIRST
+    show that is still maximized (customform.inc:1003) and leaves it to a later resize pass;
+    normalised first, OnShow fires here, once, like any other form's, and already sees the
+    maximized bounds. The "first show" flag is raised only by the streaming constructor
+    (TCustomForm.Create, not CreateNew) -- which is how every designed form is built, and why
+    this test builds its form that way: on a CreateNew form the flag is never set and the
+    order is invisible (the first version of this assertion sat on a CreateNew form and
+    stayed green with the call moved after inherited). }
+  F := TTyFormAccess.Create(nil);    // no .lfm resource: RequireDerivedFormResource is off
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.OnShow := @CountShow;
+    FShows := 0;
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    AssertTrue('precondition: adopted', F.EngineMaximized);
+    AssertEquals('OnShow fired once, on this show, not deferred', 1, FShows);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestAdoptedMaximizeRestoresToTheDesignedBounds;
+var F: TTyFormAccess;
+begin
+  { The reason to go through the engine rather than the OS: it remembers where to go back to.
+    A window the OS showed maximized from the start had no normal-sized rect on record. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    F.Engine.ToggleMaximize;           // the caption button / the title-bar double-click
+    AssertFalse('restored', F.EngineMaximized);
+    AssertEquals('left', 10, F.Left);
+    AssertEquals('top', 10, F.Top);
+    AssertEquals('width', 400, F.Width);
+    AssertEquals('height', 300, F.Height);
+    AssertTrue('caption button back to maximize', F.TB.MaxButton.Kind = cbkMax);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestNormalWindowStateShowsAsDesigned;
+var F: TTyFormAccess;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.InjectDoShow;
+    AssertFalse('a normal window is not maximized by its show', F.EngineMaximized);
+    AssertEquals('width untouched', 400, F.Width);
+    AssertEquals('height untouched', 300, F.Height);
+    AssertEquals('state untouched', Ord(wsNormal), Ord(F.WindowState));
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestDesignSurfaceKeepsTheStreamedWindowState;
+var F: TTyFormAccess;
+begin
+  { At design time the value is the user's: the Object Inspector shows it and the .lfm saves
+    it. Normalising it there would drop the setting on the next save; maximizing would take
+    the IDE's design surface with it. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetDesigning(True, False);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    AssertEquals('streamed value kept for the OI and the .lfm', Ord(wsMaximized), Ord(F.WindowState));
+    AssertFalse('design surface not maximized', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestFixedWindowIsNotMaximizedByItsWindowState;
+var F: TTyFormAccess;
+begin
+  { Resizable=False means "cannot maximize" everywhere else -- the button is hidden, the
+    double-click is refused -- so a streamed wsMaximized gets the same answer. It is still
+    normalised: left alone, the widgetset would maximize the fixed window behind the chrome. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Resizable := False;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    AssertFalse('fixed window stays unmaximized', F.EngineMaximized);
+    AssertEquals('and the widgetset is not asked to either', Ord(wsNormal), Ord(F.WindowState));
+    AssertEquals('width untouched', 400, F.Width);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestReshowingAMaximizedFormKeepsItsRestoreRect;
+var
+  F: TTyFormAccess;
+  saved: TRect;
+begin
+  { DoShow re-fires on every hide/show. A form hidden while engine-maximized and shown again
+    with WindowState set back to wsMaximized must not maximize again from its maximized
+    bounds: that would overwrite the saved rect with the work area -- maximized but not
+    restorable, the very defect SyncNativeMaximized guards against on the OS side. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    saved := F.Engine.SavedBounds;
+    F.WindowState := wsMaximized;      // set again while hidden, then shown again
+    F.InjectDoShow;
+    AssertTrue('still maximized', F.EngineMaximized);
+    AssertEquals('restore rect not overwritten: left', saved.Left, F.Engine.SavedBounds.Left);
+    AssertEquals('restore rect not overwritten: width', 400,
+      F.Engine.SavedBounds.Right - F.Engine.SavedBounds.Left);
   finally
     F.Free;
   end;
