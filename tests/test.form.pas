@@ -400,6 +400,11 @@ type
     procedure TestCloseOnly;
     procedure TestResizableFalseHidesMaximize;
     procedure TestEmptyBorderIconsHidesAllRuntime;
+    { The bar's own switches survive the form's sync: a designer-set ShowMaximize=False is
+      streamed into the bar BEFORE Loaded re-syncs from BorderIcons, and used to be overwritten. }
+    procedure TestBarSwitchSurvivesTheFormsSync;
+    procedure TestBorderIconsStillGateAnExplicitlyShownButton;
+    procedure TestSwitchReadsTheUsersValueNotTheEffectiveVisibility;
   end;
 
   { A title bar belonging to another form cannot be associated. }
@@ -2700,6 +2705,61 @@ begin
     AssertFalse('no max', f.TB.MaxButton.Visible);
     f.BorderIcons := [biSystemMenu];
     AssertTrue('close restored', f.TB.CloseButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestBarSwitchSurvivesTheFormsSync;
+var f: TTyForm;
+begin
+  { The designer streams ShowMaximize=False into the bar; then the form's Loaded -- and every
+    BorderIcons / Resizable write after it -- re-syncs from BorderIcons, which still carries
+    biMaximize, and used to WRITE the switch back to True. The user's False must survive every
+    one of those syncs, and the switch must still read False afterwards. }
+  f := MakeFormWithBar;
+  try
+    f.TitleBar.ShowMaximize := False;                        // what the .lfm streams into the bar
+    f.TitleBar.ShowMinimize := False;
+    f.BorderIcons := [biSystemMenu, biMinimize, biMaximize]; // Loaded's sync: same value, re-pushed
+    f.Resizable := False;                                    // two more syncs
+    f.Resizable := True;
+    AssertFalse('max stays hidden through the syncs', f.TitleBar.MaxButton.Visible);
+    AssertFalse('min stays hidden through the syncs', f.TitleBar.MinButton.Visible);
+    AssertTrue('close untouched', f.TitleBar.CloseButton.Visible);
+    AssertFalse('the switch still reads the user''s value', f.TitleBar.ShowMaximize);
+    AssertFalse('so does the other', f.TitleBar.ShowMinimize);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestBorderIconsStillGateAnExplicitlyShownButton;
+var f: TTyForm;
+begin
+  { The other direction: a switch left (or set) True does not conjure a button the window does
+    not offer. BorderIcons without biMaximize hides it whatever the bar says. }
+  f := MakeFormWithBar;
+  try
+    f.TitleBar.ShowMaximize := True;
+    f.BorderIcons := [biSystemMenu, biMinimize];
+    AssertFalse('no biMaximize -> hidden despite the switch', f.TitleBar.MaxButton.Visible);
+    f.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+    AssertTrue('offered again -> shown again; the switch was True all along',
+      f.TitleBar.MaxButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestSwitchReadsTheUsersValueNotTheEffectiveVisibility;
+var f: TTyForm;
+begin
+  { ShowMinimize must answer with the user's switch, not with what is on screen: if it echoed
+    the effective visibility, a form that hides the button through BorderIcons would make the
+    switch read False, the .lfm would save that False, and restoring biMinimize later would find
+    the button still hidden by a switch nobody set. }
+  f := MakeFormWithBar;
+  try
+    f.BorderIcons := [biSystemMenu];
+    AssertFalse('button hidden by the window', f.TitleBar.MinButton.Visible);
+    AssertTrue('switch still True: the user never touched it', f.TitleBar.ShowMinimize);
+    f.BorderIcons := [biSystemMenu, biMinimize];
+    AssertTrue('offered again -> visible again', f.TitleBar.MinButton.Visible);
   finally f.Free; end;
 end;
 

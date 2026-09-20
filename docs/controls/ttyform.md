@@ -73,7 +73,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TitleHeight` | `Integer` | `32` | 标题栏高度（逻辑像素）。写入时重新布局顶部条带（`TitleBar.Height`）。 |
-| `BorderIcons` | `TBorderIcons` | `[biSystemMenu, biMinimize, biMaximize]` | 决定标题栏按钮：`biSystemMenu`→关闭、`biMinimize`→最小化、`biMaximize`→最大化（仅当 `Resizable`）。变更时即时同步到关联的标题栏。 |
+| `BorderIcons` | `TBorderIcons` | `[biSystemMenu, biMinimize, biMaximize]` | 决定窗口**提供**哪些标题栏按钮：`biSystemMenu`→关闭、`biMinimize`→最小化、`biMaximize`→最大化（仅当 `Resizable`）。变更时即时同步到关联的标题栏。标题栏自己的 `ShowMinimize`/`ShowMaximize`/`ShowClose` 是另一道门：按钮只在两边都允许时显示，这里的同步不覆盖它们。 |
 | `Resizable` | `Boolean` | `True` | 是否允许边缘拖拽缩放；同时门控最大化按钮（`False` 时即使含 `biMaximize` 也隐藏最大化）。 |
 | `BorderStyle` | `TFormBorderStyle` | `bsNone` | **锁定** `bsNone`（无边框自绘窗）：对象查看器中隐藏，赋任何值都归正为 `bsNone`。 |
 

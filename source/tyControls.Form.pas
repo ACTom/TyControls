@@ -96,6 +96,16 @@ type
     FButtonWidthPPI: Integer;
     FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
+    { The bar's own per-button switches (published ShowMinimize/ShowMaximize/ShowClose) and the
+      set of buttons the WINDOW offers (an associated TTyForm derives it from BorderIcons +
+      Resizable and pushes it through OfferedButtons; a standalone bar offers all three). A
+      button is visible only when both say so. Two fields rather than one because the form used
+      to WRITE the switches from its side, which threw away a False the designer had streamed
+      into the bar: the .lfm said hide, the form said show, and the form spoke last. }
+    FShowMinimize, FShowMaximize, FShowClose: Boolean;
+    FOffered: TTyCaptionButtonFlags;
+    procedure ApplyButtonVisibility;
+    procedure SetOfferedButtons(AValue: TTyCaptionButtonFlags);
     procedure SetCaption(const AValue: TCaption);
     procedure SetButtonWidth(AValue: Integer);
     procedure SetTitleAlignment(AValue: TAlignment);
@@ -146,6 +156,11 @@ type
     property MinButton: TTyCaptionButton read FMinButton;
     property MaxButton: TTyCaptionButton read FMaxButton;
     property CloseButton: TTyCaptionButton read FCloseButton;
+    { Which buttons the window OFFERS. TTyForm.SyncCaptionButtons sets it from BorderIcons +
+      Resizable; it gates the switches rather than replacing them (see ShowMinimize). All three
+      by default, so a standalone bar shows whatever its switches say. Not published: it is the
+      window's fact, not the bar's, and streaming it would let the two disagree. }
+    property OfferedButtons: TTyCaptionButtonFlags read FOffered write SetOfferedButtons;
     { Where the caption cluster and the content zone are right now, for the bar's live client
       size. Public because a host that wants to place something in the bar has to be able to ask
       ONE authority which side the buttons are on -- and because that is the only way a test can
@@ -167,8 +182,12 @@ type
     property Align;
     property Anchors;
     property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
-    { Per-button visibility for a STANDALONE title bar (not associated with a TTyForm).
-      When associated, the owning form drives these from its BorderIcons + Resizable. }
+    { Per-button switches. On a STANDALONE bar they are the whole story. Associated with a
+      TTyForm, the form additionally decides which buttons the WINDOW offers (BorderIcons +
+      Resizable, see OfferedButtons) and a button shows only when both agree: a designer-set
+      ShowMaximize=False hides the button on a maximizable window, while BorderIcons without
+      biMaximize hides it whatever the switch says. The switch keeps the user's value either
+      way, so the Object Inspector and the .lfm round-trip it. }
     property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
     property ShowClose: Boolean read GetShowClose write SetShowClose default True;
@@ -1037,6 +1056,12 @@ begin
   // Height follows the density axis: classic 32 (byte-identical); modern --titlebar-height when a
   // modern controller is already active at construction. Streamed forms associate the controller AFTER
   // this ctor, so TTyForm.ApplyChromeTheme re-derives the bar height once its controller is applied.
+  { All switched on and all offered: the buttons are created visible below, so this state and
+    theirs agree without a visibility pass. }
+  FShowMinimize := True;
+  FShowMaximize := True;
+  FShowClose := True;
+  FOffered := [cbfMinimize, cbfMaximize, cbfClose];
   SetBounds(0, 0, 200, TyTitleBarHeightFor(ActiveController));
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -1107,37 +1132,67 @@ begin
   Invalidate;
 end;
 
+{ The getters answer with the SWITCH, not with the button on screen. A button the window does
+  not offer is hidden while its switch stays True; echoing the visibility instead would make the
+  switch read False, the .lfm would save that False, and offering the button again later would
+  find it still hidden by a switch nobody set. }
 function TTyTitleBar.GetShowMinimize: Boolean;
-begin Result := (FMinButton = nil) or FMinButton.Visible; end;
+begin Result := FShowMinimize; end;
 
 function TTyTitleBar.GetShowMaximize: Boolean;
-begin Result := (FMaxButton = nil) or FMaxButton.Visible; end;
+begin Result := FShowMaximize; end;
 
 function TTyTitleBar.GetShowClose: Boolean;
-begin Result := (FCloseButton = nil) or FCloseButton.Visible; end;
+begin Result := FShowClose; end;
 
 procedure TTyTitleBar.SetShowMinimize(AValue: Boolean);
 begin
-  if FMinButton = nil then Exit;
-  if FMinButton.Visible = AValue then Exit;
-  FMinButton.Visible := AValue;
-  LayoutButtons;
+  if FShowMinimize = AValue then Exit;
+  FShowMinimize := AValue;
+  ApplyButtonVisibility;
 end;
 
 procedure TTyTitleBar.SetShowMaximize(AValue: Boolean);
 begin
-  if FMaxButton = nil then Exit;
-  if FMaxButton.Visible = AValue then Exit;
-  FMaxButton.Visible := AValue;
-  LayoutButtons;
+  if FShowMaximize = AValue then Exit;
+  FShowMaximize := AValue;
+  ApplyButtonVisibility;
 end;
 
 procedure TTyTitleBar.SetShowClose(AValue: Boolean);
 begin
-  if FCloseButton = nil then Exit;
-  if FCloseButton.Visible = AValue then Exit;
-  FCloseButton.Visible := AValue;
-  LayoutButtons;
+  if FShowClose = AValue then Exit;
+  FShowClose := AValue;
+  ApplyButtonVisibility;
+end;
+
+procedure TTyTitleBar.SetOfferedButtons(AValue: TTyCaptionButtonFlags);
+begin
+  if FOffered = AValue then Exit;
+  FOffered := AValue;
+  ApplyButtonVisibility;
+end;
+
+{ visible = switch AND offered, for each button; the cluster is re-laid only when something
+  actually changed (a re-sync with the same answer must not cost a layout pass). }
+procedure TTyTitleBar.ApplyButtonVisibility;
+var
+  touched: Boolean;   { not "changed": that name is already taken up the inheritance chain }
+
+  procedure Put(ABtn: TTyCaptionButton; AWanted: Boolean);
+  begin
+    if ABtn = nil then Exit;
+    if ABtn.Visible = AWanted then Exit;
+    ABtn.Visible := AWanted;
+    touched := True;
+  end;
+
+begin
+  touched := False;
+  Put(FMinButton,   FShowMinimize and (cbfMinimize in FOffered));
+  Put(FMaxButton,   FShowMaximize and (cbfMaximize in FOffered));
+  Put(FCloseButton, FShowClose    and (cbfClose    in FOffered));
+  if touched then LayoutButtons;
 end;
 
 function TTyTitleBar.CapMarginPx: Integer;
@@ -2273,13 +2328,12 @@ begin
 end;
 
 procedure TTyForm.SyncCaptionButtons;
-var flags: TTyCaptionButtonFlags;
 begin
   if FTitleBar = nil then Exit;
-  flags := TyResolveCaptionButtons(BorderIcons, FResizable);
-  FTitleBar.ShowMinimize := cbfMinimize in flags;
-  FTitleBar.ShowMaximize := cbfMaximize in flags;
-  FTitleBar.ShowClose    := cbfClose in flags;
+  { OFFER, do not write the switches. The bar's ShowMinimize/ShowMaximize/ShowClose are the
+    user's -- a designer-set False streams into the bar before Loaded runs this -- and writing
+    them from here is exactly what used to throw that False away on every start. }
+  FTitleBar.OfferedButtons := TyResolveCaptionButtons(BorderIcons, FResizable);
 end;
 
 procedure TTyForm.ApplyResizeStrategy;
