@@ -115,9 +115,13 @@ type
     FStripHint: string;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
-    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式);
-      -1 = 没缓存。操作区那一项不进这里,见 HeaderHeightPx。 }
+    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式)。
+      「有没有缓存」单拿一个布尔答,不拿 -1 当哨兵:token 是度量值,而 TyEvalLength
+      不钳(Css.Values.pas:373),皮肤或 StyleOverride 里写 -1px 就真的解析成 -1 ——
+      哨兵一旦跟真值撞上,缓存永远命中不了,Invalidate 里「上一次有值吗」也从此恒假,
+      之后任何一次换主题都不再重排。操作区那一项不进这里,见 HeaderHeightAt。 }
     FHeaderPxCache: Integer;
+    FHeaderPxValid: Boolean;
     FHeaderPxPPI: Integer;
     FHeaderPxVer: Cardinal;
     FHeaderPxAnchor: TObject;
@@ -129,6 +133,8 @@ type
     function GetActions: TTyToolWindowActions;
     function HeaderTokenPx: Integer;
     function HeaderHeightAt(APPI: Integer): Integer;
+    function HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
+    function ActionsPreferredSize(APPI: Integer): TSize;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
@@ -139,6 +145,9 @@ type
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
+    { 全库 76 处 RenderTo 里 71 处是 protected,两个近亲 TTyTabSheet / TTyCard 也是:
+      画自己不是给外面用的接口。测试走探针子类。 }
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { 栏切页就是开关 Visible(Task 5/10),所以这条消息就是本窗口的激活边 ——
       与 TCustomPage / TTyTabSheet 发 OnShow / OnHide 的是同一个钩子。 }
     procedure CMVisibleChanged(var Msg: TLMessage); message CM_VISIBLECHANGED;
@@ -148,7 +157,12 @@ type
       它们不发 OnShow / OnHide。三个调用者:Task 5 的 TTyToolWindowBar.ActivateWindow、
       Task 10 的收起 / 展开、C 期把存下来的布局应用回去那一遍。
       计数而不是布尔:布局应用会套着调 ActivateWindow,一个布尔会被里层提前解除。
-      csLoading 挡不住这三个 —— 后两个发生时流式加载早就结束了。 }
+      csLoading 挡不住这三个 —— 后两个发生时流式加载早就结束了。
+
+      **调用方必须 try/finally**。负方向钳住了(EndSilentVisibility 不减到 0 以下),
+      正方向钳不住:Begin 与 End 之间任何一处抛异常,计数就卡在 0 以上,这个窗口的
+      OnShow / OnHide 从此再也不响 —— 而它是静默的,没有一条断言会指向那里。
+      上面三个调用者一个都不例外。 }
     procedure BeginSilentVisibility;
     procedure EndSilentVisibility;
   public
@@ -156,16 +170,21 @@ type
     destructor Destroy; override;
     procedure Invalidate; override;
     procedure Paint; override;
-    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure RelayoutHeader;
     function HeaderMode: TTyToolWindowHeaderMode;
-    { 标题行排布的全部输入,**一处算**:绘制(RenderTo)与摆操作区(Task 4 的
-      CustomAlignPosition)问的必须是同一份,否则画出来的和点得中的会错开。
-      APPI / ARowWidth 由调用方给:绘制时是 painter 的本地宽,摆控件时是 ClientWidth。
+    { 标题行排布的全部**输入**。要答案请用 HeaderGeomAt —— 它手上有客户区,钳得住
+      行高;这里手上没有,答的是没钳过的那个。留在 public 是给断言 Pad / Gap / RTL
+      的测试用的。
       这条记录里的**每一个**尺寸都按入参 APPI 缩放 —— 行高按 Font.PixelsPerInch、
       内距按 APPI 的话,真实路径上两者相等看不出来,而别的 PPI 传进来时同一条记录里
       就是两套尺度。 }
     function HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
+    { 标题行排布的**答案**,一处算 —— 绘制(RenderTo)与摆操作区(Task 4 的
+      CustomAlignPosition)必须拿同一份几何。只共享输入、各自再跑一遍排布的话,
+      画出来的和点得中的照样会错开。行高在这里钳进 AClient,所以控件比标题行还矮时
+      操作区不会被摆到控件外面。照 TTyCard.LayoutAtPPI(Card.pas:181)。
+      返回的几何是**行内局部坐标**(0,0 在行的左上角);AClient 只用来定行宽、钳行高。 }
+    function HeaderGeomAt(const AClient: TRect; APPI: Integer): TTyToolWindowHeaderGeom;
     function HeaderHeightPx: Integer;
     function HeaderRowRect: TRect;
     function BodyRect: TRect;
@@ -251,7 +270,7 @@ begin
   ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds,
     csNoDesignVisible, csNoFocus, csTripleClicks, csQuadClicks];
   FImageIndex := -1;
-  FHeaderPxCache := -1;
+  FHeaderPxValid := False;
   Align := alClient;
   Visible := False;
   { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
@@ -314,8 +333,7 @@ begin
     TyToolWindowHeaderPadDef), APPI, 96);
   Result.Gap := MulDiv(ActiveController.Metric(TyToolWindowHeaderGapVar,
     TyToolWindowHeaderGapDef), APPI, 96);
-  { 操作区的宽是 Task 4 的活;没有操作区时标题就占满整条。 }
-  Result.ActionsWidth := 0;
+  Result.ActionsWidth := ActionsPreferredSize(APPI).cx;
   { 镜像整套几何靠这一个字段。A 期行里只有标题、而标题占的是对称的那一整条,
     镜像前后一模一样 —— 所以这条线今天没有任何像素能证伪,只有
     TestRightToLeftReachesTheHeaderLayout 那条接线断言守着它。操作区一进来
@@ -339,9 +357,9 @@ begin
   ver := mdl.ThemeVersion;
   { 键里既要版本号也要 model 身份:版本号是每个 model 各自算的,只按版本号键控
     会把 A 的值端给 B —— Controller 是 published,中途换得掉。 }
-  if (FHeaderPxAnchor <> TObject(mdl)) or (FHeaderPxVer <> ver)
+  if (not FHeaderPxValid) or (FHeaderPxAnchor <> TObject(mdl)) or (FHeaderPxVer <> ver)
      or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> IsRightToLeft)
-     or (FHeaderPxMode <> mode) or (FHeaderPxCache < 0) then
+     or (FHeaderPxMode <> mode) then
   begin
     FHeaderPxCache := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
       TyToolWindowHeaderHeightDef), Font.PixelsPerInch, 96);
@@ -350,8 +368,20 @@ begin
     FHeaderPxPPI := Font.PixelsPerInch;
     FHeaderPxRTL := IsRightToLeft;
     FHeaderPxMode := mode;
+    FHeaderPxValid := True;
   end;
   Result := FHeaderPxCache;
+end;
+
+{ 操作区的首选尺寸(设备像素,按给定 PPI)。Task 4 把这里换成真的 —— **一处答**:
+  标题行高拿它的高钳底、排布拿它的宽留位,两边各写一个 0 的话 Task 4 只改一处,
+  画出来的那条和挖出来的正文就会错开,而且不会红。 }
+function TTyToolWindow.ActionsPreferredSize(APPI: Integer): TSize;
+begin
+  { Task 4:操作区存在时换成 Actions 的 raw 首选尺寸按 APPI 缩放;在那之前一个操作区
+    都不存在,标题行高退化成 token 值、标题占满整条。 }
+  Result.cx := 0;
+  Result.cy := 0;
 end;
 
 { 标题行高,按**给定的** PPI。缓存键钉在 Font.PixelsPerInch 上,所以只有问的就是
@@ -365,11 +395,37 @@ begin
   else Result := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
     TyToolWindowHeaderHeightDef), APPI, 96);
   { 操作区那一项**不缓存**:子控件增删 / 显隐 / 改尺寸都会触发整窗体自顶向下重排,
-    现取就能跟上。底栏模式下由栏统一算(B 期),A 期两种模式都按本窗口算。
-    Task 4 把这个 0 换成 Actions.RawPreferredHeight。 }
-  actionsPx := 0;
+    现取就能跟上。底栏模式下由栏统一算(B 期),A 期两种模式都按本窗口算。 }
+  actionsPx := ActionsPreferredSize(APPI).cy;
   if actionsPx > Result then Result := actionsPx;
   if Result < 1 then Result := 1;
+end;
+
+{ 标题行在给定客户区里占的那一条,**钳进这个客户区**。不钳的话控件比标题行还矮时
+  (栏拖到很窄、或者正在动画)HeaderRowRect 会报出一个比控件还高的矩形,Task 4 的
+  CustomAlignPosition 就照着它把操作区摆到控件外面去。一处钳 —— HeaderGeomAt、
+  HeaderRowRect、RenderTo 问的是同一条。照 TTyCard.LayoutAtPPI(Card.pas:181)。 }
+function TTyToolWindow.HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
+var
+  clientH, h: Integer;
+begin
+  clientH := AClient.Bottom - AClient.Top;
+  if clientH < 0 then clientH := 0;
+  h := HeaderHeightAt(APPI);
+  if h > clientH then h := clientH;
+  Result := Rect(AClient.Left, AClient.Top, AClient.Right, AClient.Top + h);
+end;
+
+function TTyToolWindow.HeaderGeomAt(const AClient: TRect; APPI: Integer): TTyToolWindowHeaderGeom;
+var
+  inp: TTyToolWindowHeaderInput;
+  row: TRect;
+begin
+  row := HeaderRowIn(AClient, APPI);
+  inp := HeaderInput(APPI, row.Right - row.Left);
+  { HeaderInput 手上没有客户区,答的是没钳过的行高;钳在这里,一处。 }
+  inp.RowHeight := row.Bottom - row.Top;
+  Result := TyToolWindowHeaderLayout(inp);
 end;
 
 function TTyToolWindow.HeaderHeightPx: Integer;
@@ -380,7 +436,7 @@ end;
 
 function TTyToolWindow.HeaderRowRect: TRect;
 begin
-  Result := Rect(0, 0, ClientWidth, HeaderHeightPx);
+  Result := HeaderRowIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
 end;
 
 function TTyToolWindow.BodyRect: TRect;
@@ -419,18 +475,22 @@ end;
 procedure TTyToolWindow.Invalidate;
 var
   old: Integer;
+  hadOld: Boolean;
 begin
   { 自己的样子变了 —— 丢缓存。子控件打脏到不了这里,缓存正是靠这一点活着。 }
   if FPaintCache <> nil then FPaintCache.Drop;
   { 换主题是这个类唯一听不见的事件:广播过来的只有一个裸 Invalidate
     (tyControls.Controller.pas 的 Changed)。所以缓存键在这里重查一遍,
     而键变了要重排、不是只重画。
+    这里**不**手动作废缓存:主题版本号已经在键里,而 ResolveMetric 就按同一个
+    FVersion 记忆化(StyleModel.pas:1158),(anchor, ver) 这一对是完备的 ——
+    作废一下等于每次重画都必然重算,缓存加了等于没加。
     两边比的都是 **token 那一项**。拿它跟 HeaderHeightPx(= max(token, 操作区) 再钳到
     下限 1)比的话,token 为 0 时两者永远不相等,于是悬停、焦点、主题广播 —— 每一次
     重画都会整控件重排一遍;Task 4 的操作区一旦高过 token,同样如此。 }
   old := FHeaderPxCache;
-  FHeaderPxCache := -1;
-  if (not FRelayouting) and (old >= 0) and (HeaderTokenPx <> old) then
+  hadOld := FHeaderPxValid;
+  if (not FRelayouting) and hadOld and (HeaderTokenPx <> old) then
     RelayoutHeader;
   inherited Invalidate;
 end;
@@ -439,14 +499,14 @@ procedure TTyToolWindow.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
   const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
 begin
   inherited AutoAdjustLayout(AMode, AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth);
-  FHeaderPxCache := -1;
+  { 不用手动作废缓存:PPI 和 RTL 本来就是缓存键的一部分,键自己会答「变了」。
+    这里要做的只是重排 —— 内缩量变了,alClient 子控件得重新摆。 }
   RelayoutHeader;
 end;
 
 procedure TTyToolWindow.CMBiDiModeChanged(var Msg: TLMessage);
 begin
   inherited;
-  FHeaderPxCache := -1;
   RelayoutHeader;
 end;
 
@@ -487,7 +547,6 @@ var
   P: TTyPainter;
   S, hdrS: TTyStyleSet;
   R, hdr: TRect;
-  inp: TTyToolWindowHeaderInput;
   g: TTyToolWindowHeaderGeom;
 begin
   P := TTyPainter.Create;
@@ -499,17 +558,16 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    { 画的那一条就是排布用的那一条:两边各算一次的话,传进来的 PPI 一旦不是
-      Font.PixelsPerInch,底色铺的高度和几何算的高度就会差开。 }
-    inp := HeaderInput(APPI, R.Right);
-    hdr := Rect(0, 0, inp.RowWidth, inp.RowHeight);
-    if (inp.Mode = twhSide) and (hdr.Bottom > hdr.Top) then
+    { 画的那一条和排布用的那一条都从 HeaderRowIn / HeaderGeomAt 来,各算一次的话
+      传进来的 PPI 一旦不是 Font.PixelsPerInch,底色铺的高度和几何算的高度就会差开。 }
+    hdr := HeaderRowIn(R, APPI);
+    if (HeaderMode = twhSide) and (hdr.Bottom > hdr.Top) then
     begin
       hdrS := ActiveController.Model.ResolveStyle('TyToolWindowHeader',
         TyStyleClassFor(Self, StyleClass), [tysNormal]);
       if tpBackground in hdrS.Present then
         P.FillBackground(hdr, hdrS.Background, 0);
-      g := TyToolWindowHeaderLayout(inp);
+      g := HeaderGeomAt(R, APPI);
       { 标题拿下整个剩余跨度,放不下由 DrawText 自己出省略号。 }
       if (Caption <> '') and (g.Caption.Right > g.Caption.Left) then
         P.DrawText(g.Caption, Caption, hdrS.FontName, ResolveFontSize(hdrS),

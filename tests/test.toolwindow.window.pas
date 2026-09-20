@@ -12,8 +12,11 @@ uses
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows;
 
 type
-  { 探针:数对齐引擎被请了几次。「换主题只重画」和「换主题真重排」在别的断言下
-    读数一模一样,差别只在这里看得见。计数是真实调用路径上的,不另开一条。 }
+  { 探针:数「对齐引擎被请了几次」。「换主题只重画」和「换主题真重排」在别的断言下
+    读数一模一样,差别只在这里看得见。计数是真实调用路径上的,不另开一条。
+    注意这个数只说明 Realign 被**请**过:无头跑的时候窗体没有句柄,AdjustSize 在
+    IsControlVisible 为假时直接返回,子控件一个都不会被真正摆一遍(见
+    test.pagecontrol.pas:344)。真的排一遍要自己调 CallAlignControls。 }
   TProbeWindow = class(TTyToolWindow)
   public
     AlignCount: Integer;
@@ -30,6 +33,11 @@ type
     procedure MarkDesigning(AOn: Boolean);
     procedure BeginSilent;
     procedure EndSilent;
+    { 对齐引擎本身无头能跑 —— 自己按 LCL 的顺序(GetClientRect → AdjustClientRect →
+      AlignControls)请一遍,拿到的就是真机同值。 }
+    procedure CallAlignControls;
+    { RenderTo 是 protected 的(画自己不是给外面用的接口)。 }
+    procedure CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   TTyToolWindowTests = class(TTestCase)
@@ -65,6 +73,9 @@ type
     procedure TestConstructionPinsTheControlStyleAndBounds;
     procedure TestBarOwnedPropertiesStayOutOfTheLfm;
     procedure TestRelayoutHeaderDropsThePaintCacheItself;
+    procedure TestHeaderGeomClampsTheRowIntoTheControl;
+    procedure TestANegativeHeaderTokenDoesNotWedgeTheRelayout;
+    procedure TestAnAlClientChildLandsBelowTheHeaderRow;
   end;
 
 implementation
@@ -104,6 +115,22 @@ end;
 procedure TProbeWindow.EndSilent;
 begin
   EndSilentVisibility;
+end;
+
+procedure TProbeWindow.CallAlignControls;
+var
+  r: TRect;
+begin
+  { 传**没扣过**的客户区:AlignControls 自己第一句就调 AdjustClientRect
+    (wincontrol.inc:3259)。先扣一遍再传进去的话标题行高会扣两次,而这个错在
+    「子控件在标题行下面」这句断言下看起来只是数值大了一点。 }
+  r := ClientRect;
+  AlignControls(nil, r);
+end;
+
+procedure TProbeWindow.CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
 end;
 
 { 把画出来的位图数两件事:
@@ -192,7 +219,7 @@ begin
     bmp.SetSize(W, H);
     { 按自己字体的密度渲染 —— 换成别的 PPI 的话画出来的那一条比 HeaderHeightPx 高,
       下面这个扫描框就只盖住它的上半截。 }
-    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), FWin.Font.PixelsPerInch);
+    FWin.CallRenderTo(bmp.Canvas, Rect(0, 0, W, H), FWin.Font.PixelsPerInch);
     re := TBGRABitmap.Create(bmp);
     try
       { 底色由上面的 StyleOverride 钉成纯白,所以标题行里任何非白像素都是字。 }
@@ -242,7 +269,8 @@ begin
   { 换主题广播过来的只有一个裸 Invalidate(Controller.Changed)。只重画的话,
     alClient 的子控件会原地把新的标题行盖住 —— 而上面两条在「只重画」下照样绿,
     差别只在对齐引擎有没有被请过。 }
-  AssertTrue('客户区内缩量变了就得重排,不能只重画', FWin.AlignCount > 0);
+  AssertTrue('客户区内缩量变了就得请对齐引擎,不能只重画(无头跑不到真的摆一遍)',
+    FWin.AlignCount > 0);
 end;
 
 procedure TTyToolWindowTests.TestHeaderHeightFollowsThePixelDensity;
@@ -283,7 +311,7 @@ begin
     bmp.SetSize(W, H);
     bmp.Canvas.Brush.Color := Wipe;
     bmp.Canvas.FillRect(0, 0, W, H);
-    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), 96);
+    FWin.CallRenderTo(bmp.Canvas, Rect(0, 0, W, H), 96);
     TallyPixels(bmp, Ground, Wipe, notGround, wipeLeft);
   finally
     bmp.Free;
@@ -307,6 +335,8 @@ procedure TTyToolWindowTests.TestRightToLeftMovesTheCaptionToTheTrailingSide;
 var
   ltrL, ltrR, rtlL, rtlR: Integer;
 begin
+  { 钉死 96:标题行高跟着 PPI 走,机器 DPI 一高那一条就比 TallyHeaderInk 的位图还高。 }
+  FWin.Font.PixelsPerInch := 96;
   FCtl.StyleOverride := 'TyToolWindow { background: #FFFFFF; }' +
     'TyToolWindowHeader { background: #FFFFFF; color: #000000; }';
   FWin.Caption := 'ABCD';
@@ -419,7 +449,7 @@ begin
   FWin.Invalidate;
   FWin.AlignCount := 0;
   FWin.Invalidate;
-  AssertEquals('主题没动的重画不许整控件重排', 0, FWin.AlignCount);
+  AssertEquals('主题没动的重画一次都不许请对齐引擎', 0, FWin.AlignCount);
 end;
 
 procedure TTyToolWindowTests.TestHeaderInputScalesEverySizeWithTheGivenPpi;
@@ -450,6 +480,8 @@ var
 begin
   { 两个键给**两个**底色。给同一个的话,删掉标题行那一句 FillBackground 照样绿:
     整块本来就已经是那个颜色了。 }
+  { 钉死 96:标题行高跟着 PPI 走,机器 DPI 一高标题行就吃掉整张位图、取不到正文那一片。 }
+  FWin.Font.PixelsPerInch := 96;
   FCtl.StyleOverride := 'TyToolWindow { background: #0000FF; }' +
     'TyToolWindowHeader { background: #FF0000; }';
   FWin.SetBounds(0, 0, W, H);
@@ -460,7 +492,7 @@ begin
   try
     bmp.PixelFormat := pf32bit;
     bmp.SetSize(W, H);
-    FWin.RenderTo(bmp.Canvas, Rect(0, 0, W, H), FWin.Font.PixelsPerInch);
+    FWin.CallRenderTo(bmp.Canvas, Rect(0, 0, W, H), FWin.Font.PixelsPerInch);
     re := TBGRABitmap.Create(bmp);
     try
       { 取行正中 —— 边上有边框、圆角和抗锯齿。只比 RGB,pf32bit 读回来的 alpha 不可信。 }
@@ -537,7 +569,66 @@ begin
   AssertTrue('重排过就得重渲染,尺寸一个像素没动也一样', FWin.CacheWouldRender(120, 80));
 end;
 
+procedure TTyToolWindowTests.TestHeaderGeomClampsTheRowIntoTheControl;
+var
+  tall, squashed: TTyToolWindowHeaderGeom;
+  hdr: Integer;
+begin
+  { 控件比标题行还矮(栏拖到很窄、或者正在动画)时行高必须钳进客户区 —— 不钳的话
+    Task 4 的 CustomAlignPosition 会照着一个比控件还高的矩形把操作区摆到控件外面。 }
+  FWin.Font.PixelsPerInch := 96;
+  FWin.SetBounds(0, 0, 200, 300);
+  hdr := FWin.HeaderHeightPx;
+  AssertTrue('标题行要有高度', hdr > 4);
+  { 标题占满整条行高(Caption = Rect(pad, 0, x, RowHeight)),所以 Caption.Bottom
+    就是钳过的行高本身。 }
+  tall := FWin.HeaderGeomAt(Rect(0, 0, 200, 300), 96);
+  AssertEquals('装得下的时候就是整条', hdr, tall.Caption.Bottom);
+  squashed := FWin.HeaderGeomAt(Rect(0, 0, 200, hdr - 3), 96);
+  AssertEquals('装不下就钳进客户区,一个像素都不许伸出去', hdr - 3, squashed.Caption.Bottom);
+  { 客户区零高是合法的(动画收到底),不许翻出负矩形。 }
+  AssertEquals('零高客户区不许翻出负矩形', 0,
+    FWin.HeaderGeomAt(Rect(0, 0, 200, 0), 96).Caption.Bottom);
+end;
+
+procedure TTyToolWindowTests.TestANegativeHeaderTokenDoesNotWedgeTheRelayout;
+begin
+  { -1px 是合法的度量值(TyEvalLength 不钳),拿 -1 当「没缓存」的哨兵就会跟它撞上:
+    缓存从此永远命中不了,而且「上一次有值吗」恒假 —— 之后任何一次换主题都不再重排,
+    alClient 子控件会盖住新的标题行,而这正是 RelayoutHeader 存在的理由。 }
+  FWin.Font.PixelsPerInch := 96;   { 不钉死的话 48px 的 token 会按机器密度缩过再回答 }
+  FWin.SetBounds(0, 0, 200, 300);
+  FCtl.StyleOverride := ':root { --toolwindow-header-height: -1px; }';
+  FWin.HeaderHeightPx;
+  FWin.AlignCount := 0;
+  FCtl.StyleOverride := ':root { --toolwindow-header-height: 48px; }';
+  AssertEquals('换主题后标题行高要跟上', 48, FWin.HeaderHeightPx);
+  AssertTrue('-1px 之后换主题照样要请对齐引擎', FWin.AlignCount > 0);
+end;
+
+procedure TTyToolWindowTests.TestAnAlClientChildLandsBelowTheHeaderRow;
+var
+  child: TTyToolWindowActions;
+  hdr: Integer;
+begin
+  { 整条重排路径(RelayoutHeader → Realign)存在的理由就是这一条断言。对齐引擎本身
+    无头能跑:按 LCL 的顺序自己请一遍就是真机同值;指望 LCL 自己排的话,窗体没有句柄、
+    整棵树根本不对齐。 }
+  FWin.Font.PixelsPerInch := 96;
+  FWin.SetBounds(0, 0, 200, 300);
+  hdr := FWin.HeaderHeightPx;
+  AssertTrue('标题行要有高度', hdr > 0);
+  child := TTyToolWindowActions.Create(FForm);
+  child.Parent := FWin;
+  child.Align := alClient;
+  FWin.CallAlignControls;
+  AssertEquals('alClient 子控件从标题行下面开始,不许盖住它', hdr, child.Top);
+  AssertEquals('剩下的高度全归它', 300 - hdr, child.Height);
+  AssertEquals('宽度整条占满', 200, child.Width);
+end;
+
 initialization
-  RegisterClasses([TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions]);
+  { 这个单元不流式化,而四个类的 RegisterClass 在 tyControls.ToolWindows 自己的
+    initialization 里(:777)—— 这里再注册一遍是死代码。 }
   RegisterTest(TTyToolWindowTests);
 end.
