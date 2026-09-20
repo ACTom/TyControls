@@ -168,25 +168,31 @@ end;
 
 procedure TTyToolWindowGeometryTests.TestStripWithNoWidthLaysOutNothing;
 var
-  slots: TTyToolWindowSlots;
+  byWidth, byHeight: TTyToolWindowSlots;
 begin
   { 条宽跟其他三个入参一样要守 —— 不守就会产出一批零宽/反转矩形。 }
-  slots := TyToolWindowStripLayout(0, 200, 36, 36, 4, 0);
-  AssertEquals('条宽为 0 就一个槽都不排', 0, Length(slots));
-  { 「有没有被收起来」由调用方自己算。按宽退化和按高退化必须答同一句话:
-    条上一个都没有、模型里还有四个,就是有被收起来的。 }
-  AssertTrue('条上一个都没有,模型里还有四个', Length(slots) < 4);
+  byWidth := TyToolWindowStripLayout(0, 200, 36, 36, 4, 0);
+  byHeight := TyToolWindowStripLayout(36, 0, 36, 36, 4, 0);
+  AssertEquals('条宽为 0 就一个槽都不排', 0, Length(byWidth));
+  AssertEquals('条高为 0 同理', 0, Length(byHeight));
+  { 两条轴上同样是「条上一个都没有、模型里还有四个」,对「有没有被收起来」就必须
+    答同一句话。老的 out AAnyHidden 正是在这里答岔的:按高退化答 True、按宽退化答 False。 }
+  AssertEquals('两条轴对「有没有被收起来」必须答同一句话',
+    Length(byWidth) < 4, Length(byHeight) < 4);
 end;
 
 procedure TTyToolWindowGeometryTests.TestVisiblePlanKeepsTheActiveItemWhenNothingFits;
 var
-  plan: TTyToolWindowPlan;
+  zero, tight: TTyToolWindowPlan;
 begin
-  plan := TyToolWindowVisiblePlan(0, [36, 36, 36], 2, 36);
-  AssertEquals('可用宽为 0 时也要留住当前页,和 0 < 可用宽 <= 溢出按钮宽 '
-    + '那条路径一致(spec §7.3:当前页始终留在行上)', 1, Length(plan));
-  AssertEquals('留下的就是当前页', 2, plan[0]);
-  AssertTrue('另外两个确实被收起来了', Length(plan) < 3);
+  { 「可用宽为 0」和「留出溢出按钮后一个都放不下」是同一件事的两条路径
+    (spec §7.3:当前页始终留在行上),必须答同一句话。 }
+  zero := TyToolWindowVisiblePlan(0, [36, 36, 36], 2, 36);
+  tight := TyToolWindowVisiblePlan(20, [36, 36, 36], 2, 36);
+  AssertEquals('可用宽为 0:只留当前页', 1, Length(zero));
+  AssertEquals('留出溢出按钮后放不下:也只留当前页', 1, Length(tight));
+  AssertEquals('两条路径留下的是同一个', tight[0], zero[0]);
+  AssertEquals('留下的就是当前页', 2, zero[0]);
 end;
 
 procedure TTyToolWindowGeometryTests.TestVisiblePlanClampsNegativeInputs;

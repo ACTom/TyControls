@@ -141,7 +141,12 @@ function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Intege
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
 
 { 把排好的整套几何按行宽镜像(spec §7.3)。每个矩形字段和每个槽位都过一遍,
-  所以 B 期给 Geom 加部件不用记得回来添一行。 }
+  所以 B 期给 Geom 加部件不用记得回来添一行。
+
+  就地改,而且**不幂等**:TyToolWindowHeaderLayout 在 RightToLeft 为真时已经替你调过了,
+  拿到它的结果别再调第二次 —— 镜像两次等于没镜像,而 LTR 那边照样全绿。
+  ARowWidth 必须就是排布时用的那个 RowWidth;传成别的(比如此刻的 ClientWidth)不会报错,
+  整套几何会整体平移,同样不会红。 }
 procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);
 
 { 图标条 / 标签行的插入槽:按已排布项的中点分。返回 0..N 的**窗口序号**位置。 }
@@ -308,7 +313,6 @@ begin
     { 确实有东西被收起来了,才给溢出按钮留位置,然后重排一次。 }
     budget := AAvail - AOverflowWidth;
     if budget < 0 then budget := 0;
-    if budget > AAvail then budget := AAvail;
     plan := Fill(budget);
     { 当前页强制留在行上:追加到末尾,再从它前面一个开始往前挤。 }
     if (AActiveIndex >= 0) and (AActiveIndex < n) and not Has(plan, AActiveIndex) then
