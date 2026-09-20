@@ -653,6 +653,12 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi 2>&1 | tail -5
 
 Expected：`Error: Identifier not found "TTyToolWindowHeaderInput"`。
 
+> **Task 2 已完成（c1a30389 / e8cd7697 / 07cd0f6b / 0a620a81 / 53235044）。下面 Step 3–7 的代码块是初稿，落地时有这些修订：**
+> `out AAnyHidden` 两个函数都**删掉了**（它恒等于 `Length(plan) < 窗口数`，调用方自己算；而它唯一偏离这个恒等式的地方正好答错）；
+> `CaptionWidth` 删掉；`RightToLeft` 实现为末尾统一镜像，抽成 interface 里的 `TyToolWindowFlipAll`；
+> 负数入参一律在函数开头钳干净；`TabWidths` / `Hidden` 改用具名类型 `TTyToolWindowWidths` / `TTyToolWindowPlan`；
+> `TyToolWindowZoneAt` 归 B 期。**以 `source/tyControls.ToolWindows.pas` 的现状为准。**
+
 - [ ] **Step 3: 在 interface 里声明纯几何层**
 
 > 声明要**分两批**跟着红绿循环走：Step 3/4 只声明并实现 `TyToolWindowHeaderLayout`，Step 7 再补其余四个。
@@ -2025,7 +2031,7 @@ end;
 1. `P.BeginPaint(ACanvas, ARect, APPI)`；`R` 用 (0,0)-local。
 2. `DrawFrame(P, R, S)` 画栏自己的底色。
 3. 侧栏：`stripS := ActiveController.Model.ResolveStyle('TyToolWindowStrip', TyStyleClassFor(Self, StyleClass), [tysNormal])`，`P.FillBackground(StripRect, stripS.Background, 0)`。
-4. `slots := TyToolWindowStripLayout(stripPx, R.Bottom, itemPx, itemPx, WindowCount, FActiveIndex, hidden)`。
+4. `slots := TyToolWindowStripLayout(stripPx, R.Bottom, itemPx, itemPx, WindowCount, FActiveIndex)`；有没有被收起来由调用方自己算：`Length(slots) < WindowCount`。
 5. 逐格：`itemS := ActiveController.Model.ResolveStyle('TyToolWindowStripItem', StyleClass, ItemStates(i))`（`ItemStates` 照 `Segmented.pas:395-410`：disabled / hover / selected / active / normal）；有底色就 `FillBackground`；图标：
 
 ```pascal
