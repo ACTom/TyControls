@@ -64,7 +64,13 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi
 cd /d/Projects/ty-3.1/tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyToolWindowGeometryTests --format=plain > /tmp/t.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t.txt
 ```
 
-**判据是 `Number of run tests` 那一行存在且 errors/failures 为 0，不是 exit code。** 输出为空 = 这次跑丢了，重跑，别读成通过。全量：把 `--suite=...` 去掉。
+**判据是 `Number of run tests` 那一行存在且 errors/failures 为 0，不是 exit code。** 输出为空 = 这次跑丢了，重跑，别读成通过。
+
+全量要写 `--all`（**不能**只是把 `--suite=...` 去掉——不带参数的 runner 只打印 usage 然后 exit 0，正好伪装成「跑丢了」）：
+
+```bash
+cd /d/Projects/ty-3.1/tests && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
+```
 
 ## 关于「有的测试给的是判据不是代码」
 
@@ -403,7 +409,7 @@ unit test.toolwindow.theme;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
-  tyControls.Types, tyControls.Css, tyControls.Controller, tyControls.BuiltinThemes,
+  tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.ToolWindows;
 
 type
@@ -441,7 +447,9 @@ const
 
 function ThemePath(const AFile: string): string;
 begin
-  Result := '../themes/' + AFile;
+  { 不能写死相对路径:测试跑起来时的当前目录不一定是 tests/。照 test.themes.pas 的写法,
+    从 exe 位置往上一级找 themes/。 }
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AFile;
 end;
 
 procedure TTyToolWindowThemeTests.TestEveryLengthTokenIsDeclaredAndEqualsTheControlDefault;
@@ -558,7 +566,7 @@ cd /d/Projects/ty-3.1/tests/golden && for f in *.actual; do mv "$f" "${f%.actual
 
 - [ ] **Step 11: 给内置主题覆盖测试补三行**
 
-`tests/test.themes.pas` 的 `TestBuiltinCoversAllTypeKeys` 里加：
+`tests/test.defaulttheme.pas` 的 `TestBuiltinCoversAllTypeKeys` 里加（**不在 test.themes.pas**）：
 
 ```pascal
   AssertBg('TyToolWindow', []);
@@ -569,7 +577,7 @@ cd /d/Projects/ty-3.1/tests/golden && for f in *.actual; do mv "$f" "${f%.actual
 - [ ] **Step 12: 跑全量，确认没有连累别人**
 
 ```bash
-cd /d/Projects/ty-3.1/tests && ./tytests-31.exe --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
+cd /d/Projects/ty-3.1/tests && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
 ```
 
 - [ ] **Step 13: 提交**
@@ -2371,7 +2379,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - [ ] **Step 2: 跑全量**
 
 ```bash
-cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
+cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
 ```
 
 Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，总条数比 A 期开工前多出本计划新增的条数。
