@@ -291,6 +291,11 @@ cd /d/Projects/ty-3.1 && git checkout HEAD -- themes/light.tycss && powershell -
 
 Expected：打印 `FAITHFUL`。**不是 FAITHFUL 就停下来**——生成器会整体覆写那个单元，曾经吃掉过手写代码，先查清楚再继续。
 
+> **Task 1 已完成（commit 605dd1ab + 4db8da0b）。下面 Step 2/4/5 的代码块是当时的初稿，审查后有修订：**
+> 选中态两个墨色改名为 `-selected`；新增 `--toolwindow-ink`、`--toolwindow-edge-color-hover`、`--toolwindow-overlay-hover`、`--toolwindow-overlay-active`；
+> `TyToolWindowStrip` 补边框；两个容器键补 `:disabled`；现代密度 content-min 144、strip-item-size 48、strip-indicator-size 2。
+> **以 `themes/light.tycss` 和 `source/tyControls.DensityPack.pas` 的现状为准**，别照初稿回改。
+
 - [ ] **Step 2: 颜色 token 写进 light.tycss 的 MAP / ALIAS 段（第 14-60 行那一片）**
 
 ```css

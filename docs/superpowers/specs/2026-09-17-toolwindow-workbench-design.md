@@ -719,7 +719,7 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
 | 键 | 用途 |
 |---|---|
 | `TyToolWindowBar` | 栏底色 |
-| `TyToolWindowStrip` | 图标条底色 |
+| `TyToolWindowStrip` | 图标条底色与边框（**实现期补**：边框不能省——antdesign / bootstrap / material3 / ubuntu 四个皮肤的 `--chrome-bar-bg` 就等于 `--surface`，没有边框时整条图标条看不见） |
 | `TyToolWindowStripItem` | 图标项；`:hover` `:selected` `:active` |
 | `TyToolWindowStripIndicator` | 当前图标的指示条（定稿时新加） |
 | `TyToolWindowEdge` | 栏的边缘区（拉宽边，以及贴着编辑区的那条分隔线）；`:hover` `:active` |
@@ -740,17 +740,23 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
 | token | 默认 |
 |---|---|
 | `--toolwindow-bg` | `var(--surface)` |
+| `--toolwindow-ink` | `var(--on-surface)` |
 | `--toolwindow-header-bg`（标题行 / 操作区 / 标签行共用） | `var(--toolwindow-bg)` |
 | `--toolwindow-caption-ink` | `var(--on-surface)` |
 | `--toolwindow-tab-ink` | `var(--muted)` |
-| `--toolwindow-tab-ink-active` | `var(--on-surface)` |
+| `--toolwindow-tab-ink-selected` | `var(--on-surface)` |
 | `--toolwindow-indicator-color`（标签下划线） | `var(--accent)` |
 | `--toolwindow-strip-bg` | `var(--chrome-bar-bg)` |
 | `--toolwindow-strip-ink` | `var(--muted)` |
-| `--toolwindow-strip-ink-active` | `var(--on-surface)` |
+| `--toolwindow-strip-ink-selected` | `var(--on-surface)` |
 | `--toolwindow-strip-indicator-color` | `var(--accent)` |
 | `--toolwindow-edge-color` | `var(--border)` |
+| `--toolwindow-edge-color-hover` | `var(--accent)` |
+| `--toolwindow-overlay-hover` | `var(--overlay-hover)` |
+| `--toolwindow-overlay-active` | `alpha(var(--on-surface), 0.20)` |
 | `--toolwindow-drop-color` | `var(--accent)` |
+
+（**实现期修正 2026-09-20**：原表把选中态的两个墨色写成 `-active` 结尾。本库 `-active` 专指「按下」那一族——`--surface-active` / `--accent-active` / `--danger-active`——所以改成 `-selected`。同时补上实现期发现缺的四个：容器墨色、边缘区悬停色、以及悬停 / 按下两个叠加色，后者原来直接写死 `var(--overlay-hover)` 和 `var(--accent)`，皮肤压不住。）
 
 底色**只引用皮肤已经定义的 surface / chrome token**，不在新 token 里自己写 `darken(--surface, …)`——那会绕过白底皮肤已经定义好的 chrome token（[[skin-must-define-derived-tokens]]）。
 
