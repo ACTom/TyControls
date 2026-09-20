@@ -105,7 +105,6 @@ type
     RowWidth, RowHeight: Integer;
     Pad, Gap: Integer;
     ActionsWidth: Integer;      { 操作区 raw 首选宽;0 = 没有操作区 }
-    CaptionWidth: Integer;      { 侧栏:标题想要的宽 }
     TabWidths: array of Integer;{ 底栏:每个窗口的标签想要的宽 }
     ActiveIndex: Integer;
     TabAreaMin: Integer;
@@ -186,8 +185,7 @@ begin
     if x > pad then
       Result.Caption := Rect(pad, 0, x, AInput.RowHeight);
     { 标题拿下整个剩余跨度 —— spec §3.4:“操作区优先保宽;标题先省略号”。
-      把矩形收到 CaptionWidth 那么宽是另一回事,spec 没有这条规则,
-      而且库里的调用方一律传 0(= 用满可用宽,DrawText 自己出省略号)。 }
+      放不下由 DrawText 自己出省略号,所以这里没有「标题想要多宽」这个输入。 }
   end;
   { twhBottom 那一支在 B 期实现;twhNone 什么都不排。 }
 end;
@@ -298,6 +296,7 @@ begin
   Result := nil;
   AAnyHidden := False;
   if (ACount <= 0) or (AItemSize <= 0) or (AStripHeight <= 0) then Exit;
+  widths := nil;
   SetLength(widths, ACount);
   for i := 0 to ACount - 1 do widths[i] := AItemSize;   { 图标是方的,等宽 }
   plan := TyToolWindowVisiblePlan(AStripHeight, widths, AActiveIndex, AOverflowSize, AAnyHidden);

@@ -40,7 +40,6 @@ begin
   inp.Pad := 6;
   inp.Gap := 4;
   inp.ActionsWidth := 80;
-  inp.CaptionWidth := 150;          { 想要 150,只剩 200-6-80-4-6 = 104 }
   g := TyToolWindowHeaderLayout(inp);
   AssertEquals('操作区贴右端', 200 - 6 - 80, g.Actions.Left);
   AssertEquals('操作区保住自己的宽', 80, g.Actions.Right - g.Actions.Left);
@@ -60,7 +59,6 @@ begin
   inp.Pad := 6;
   inp.Gap := 4;
   inp.ActionsWidth := 0;
-  inp.CaptionWidth := 40;
   g := TyToolWindowHeaderLayout(inp);
   AssertEquals('没有操作区时标题止于右内距', 200 - 6, g.Caption.Right);
   AssertTrue('没有操作区就是空矩形', g.Actions.Right <= g.Actions.Left);
