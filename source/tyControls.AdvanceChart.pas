@@ -1405,7 +1405,7 @@ begin
   if ABelow and furn.ShowMinorSplitLine
     and (tpBorderColor in minorSplitS.Present) and (tickStep = 1) then
   begin
-    scaleTicks := AAxis.Scale.GetTicks;
+    scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
     for i := 0 to High(scaleTicks) do
     begin
@@ -1509,7 +1509,7 @@ begin
   if furn.ShowMinorTick and (tpBorderColor in minorTickS.Present)
     and (tickStep = 1) then
   begin
-    scaleTicks := AAxis.Scale.GetTicks;
+    scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
     for i := 0 to High(scaleTicks) do
     begin
@@ -1644,7 +1644,7 @@ begin
     a pixel count cannot see that, because the ticks and grid lines are hundreds
     of pixels on their own. It took a render on a real machine to notice. }
   TextSizeOf('Wg', labelS, lblW, lblH);
-  scaleTicks := AAxis.Scale.GetTicks;
+  scaleTicks := TyDrawnTicks(AAxis.Scale);
   for i := 0 to High(scaleTicks) do
   begin
     if AAxis.Scale is TTyOrdinalScale then

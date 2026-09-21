@@ -71,6 +71,10 @@ type
   and `'2011-01-02'` has to come back as `2011-01-02` rather than shifted. }
 function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
   AUTC: Boolean): TTyTimeTickArray;
+{ The same with the axis' minInterval / maxInterval in milliseconds, 0 for
+  none: they clamp the approximate interval, and so the tick count aimed at. }
+function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double): TTyTimeTickArray;
 
 { How round this timestamp is. }
 function TyTimeUnitOf(AMs: Double; AUTC: Boolean): TTyTimeUnit;
@@ -458,6 +462,12 @@ end;
 
 function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
   AUTC: Boolean): TTyTimeTickArray;
+begin
+  Result := TyTimeTicks(AMinMs, AMaxMs, ASplitNumber, AUTC, 0, 0);
+end;
+
+function TyTimeTicks(AMinMs, AMaxMs: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double): TTyTimeTickArray;
 var
   lo, hi, approx, target: Double;
   bottomSpan: TTyTimeSpan;
@@ -518,8 +528,12 @@ begin
   end;
   if ASplitNumber < 1 then ASplitNumber := 6;
   approx := (hi - lo) / ASplitNumber;
+  { minInterval and maxInterval clamp the approximate interval -- and the
+    number of ticks aimed at is the span over it, so they move that too. }
+  if (AMinInterval > 0) and (approx < AMinInterval) then approx := AMinInterval;
+  if (AMaxInterval > 0) and (approx > AMaxInterval) then approx := AMaxInterval;
   if approx <= 0 then Exit;
-  target := ASplitNumber;
+  target := (hi - lo) / approx;
 
   bottomSpan := BottomSpanFor(approx);
   bottomUnit := PrimaryOf(bottomSpan);

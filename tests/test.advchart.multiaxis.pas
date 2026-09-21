@@ -16,7 +16,7 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
+     tyControls.AdvChart.Types, tyControls.AdvChart.Coord, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Layout,
      tyControls.AdvanceChart, test.advancechart;
 type
@@ -403,7 +403,9 @@ begin
 end;
 
 procedure TAdvChartMultiAxisTest.TestTheGridNeverPaintsOverAnAxisLine;
-var r: TTyRectF; rows: TTyDoubleArray; want: Double;
+var
+  r: TTyRectF; rows: TTyDoubleArray; want: Double;
+  ticks: TTyScaleTickArray; col: Integer;
 begin
   { ALL THE GRID BELOW ALL THE AXES. Upstream keeps them apart by z; the
     port used to draw one axis' grid AND line before starting the next, and
@@ -419,8 +421,16 @@ begin
     + ' series: [{ type: ''scatter'', data: [[1, 2], [3, 4]] }] }');
   r := Grid.PlotRect;
   want := (r.Top + r.Bottom) / 2;
-  { A column well inside the plot, so neither y axis' own line is in it. }
-  rows := RedRows(Round((r.Left + r.Right) / 2), Round(r.Top), Round(r.Bottom));
+  { A column HALFWAY BETWEEN TWO X TICKS, so neither y axis' own line is in
+    it -- and nor is an x tick, whose mark starts on the axis line and is
+    drawn over it, as upstream draws it. (The plot's middle was used here
+    until batch 33 gave the x axis a tick at 1.5; it failed only after some
+    earlier suite had brought the widgetset up, because that moved the plot
+    by three pixels and put the tick's first row exactly on the line's.) }
+  ticks := Grid.XAxis(0).Scale.GetTicks;
+  AssertTrue('the x axis has ticks to go between', Length(ticks) >= 3);
+  col := Round(Grid.XAxis(0).DataToCoord((ticks[1].Value + ticks[2].Value) / 2));
+  rows := RedRows(col, Round(r.Top), Round(r.Bottom));
   AssertEquals('the x axis line survives the grid drawn after it',
     1, Length(rows));
   AssertEquals('and is still on zero', want, rows[0], Eps + 1);

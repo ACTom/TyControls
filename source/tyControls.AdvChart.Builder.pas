@@ -790,6 +790,8 @@ begin
           would be lost -- nothing is set yet at this point, and the extent is
           written in phase B. }
         iv.Mapper := TTyLogScaleMapper.Create(logBase);
+        { AND ITS STEP RULE: whole decades, not nice(). }
+        iv.LogRule := True;
         Exit(iv);
       end;
     atTime:
@@ -1761,7 +1763,7 @@ var
       end;
     end;
 
-    ticks := AAxis.Scale.GetTicks;
+    ticks := TyDrawnTicks(AAxis.Scale);
     isTime := AAxis.Scale is TTyTimeScale;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));

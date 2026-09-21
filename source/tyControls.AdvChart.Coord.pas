@@ -398,7 +398,7 @@ begin
     minor grid a second time in the MAJOR style, and put a full-length tick
     mark at every subdivision. The minor painters ask FScale.GetTicks
     themselves and test Level the other way round. }
-  ticks := TyMajorTicks(FScale.GetTicks);
+  ticks := TyMajorTicks(TyDrawnTicks(FScale));
   n := Length(ticks);
   if n = 0 then Exit(nil);
 

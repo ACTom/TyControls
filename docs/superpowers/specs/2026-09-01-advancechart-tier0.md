@@ -167,7 +167,7 @@ type
 | 6 | **校验式设计期编辑器** —— 路径感知的 DAG 补全、惰性参考树、能读出 `series[i]` 下 `type` 判别符的容错解析器、目录感知的错误提示 | L | 用户点名要的。先例：`Design.Css.Editor` 351 + `Css.Complete` 360 + `Css.Catalog` 411 = 1122 行已经在 `.tycss` 词汇上跑通了同一台机器 |
 | 7 | **具名句柄注册表 + 模板串** —— 面向那 **1212 个**接受函数的节点 | S | option 树里闭包活不下来。形状照 v6 的 `registerCustomSeries` + `itemPayload`（一个 30 行的注册表）：`renderItem: 'bubble'`、`formatter: '@MyFormatter'`，外加一等的 `'{b}: {c}'` 模板串——**光模板串就覆盖 539/1212** |
 | 8 | 列式类型化数据存储 —— 维度（float/int/ordinal/time）、**NaN 作无数据哨兵**、带 Has 标志的逐点覆盖侧表、逐点 id/name、ordinal 驻留 + 倒排索引 | XL | 23 种 series 里 20 种没有它就表达不了 |
-| 9 | **可断的 scale 抽象** —— `ITyScaleMapper`（Linear/Log/Break 同构）+ Ordinal/Interval/Log；nice 1-2-5、次刻度、`min`/`max`/`scale`/`splitNumber`/`interval`/`minInterval`/`maxInterval`/`boundaryGap`/`inverse`、退化域、**`startValue` 独立于 `min`**、**两种 extent** | L | 契约 ②。见 §2。**[第三十二批标注：实现用的是不取整的 1/2/2.5/5 阶梯；上游 `intervalScaleNiceTicks` 是 `nice(span/splitNumber, round)`，1/2/3/5/10、阈值 1.5/2.5/4/7。span 为 7 时上游间隔 1、这里 2。待单独一批按 oracle 修，见 §66。]** |
+| 9 | **可断的 scale 抽象** —— `ITyScaleMapper`（Linear/Log/Break 同构）+ Ordinal/Interval/Log；nice 1-2-5、次刻度、`min`/`max`/`scale`/`splitNumber`/`interval`/`minInterval`/`maxInterval`/`boundaryGap`/`inverse`、退化域、**`startValue` 独立于 `min`**、**两种 extent** | L | 契约 ②。见 §2。**[第三十二批标注：实现用的是不取整的 1/2/2.5/5 阶梯；上游 `intervalScaleNiceTicks` 是 `nice(span/splitNumber, round)`，1/2/3/5/10、阈值 1.5/2.5/4/7。span 为 7 时上游间隔 1、这里 2。待单独一批按 oracle 修，见 §66。]** **[第三十三批已修：步长、范围、主次刻度与上游逐位一致，见 §67。]** |
 | 10 | **坐标系接口 `DataToPoint` + `DataToLayout`** + `TTyCartesian2D`（N 个 x/y 轴 + master/sub 拆分） | L | 契约 ①。见 §2 |
 | 11 | **盒布局求解器收容器矩形提供者**（`left/top/right/bottom/width/height`；px、`'%'`、关键字），全组件共用 | M | 契约 ① 的另一半。写成「控件客户区」就等于把嵌套变成重写 |
 | 12 | 两阶段轴构建（估文字 → 收缩矩形 → 定尺寸），形状用 `outerBounds`/`outerBoundsContain`/`nameMoveOverlap`，**不用已弃用的 `containLabel`** | L | 标签适配的底座。v6 形状比 v5 多约 150 行（ECharts 把 v5 版留成 `legacyContainLabel.ts` 共 120 行，v6 解算器约 276 行）。**[第三十二批标注：`outerBoundsMode:'auto'` 的外边界默认是**整个画布**（`OUTER_BOUNDS_DEFAULT` 边距 0），只有标签越出画布才收缩 grid；实现把 grid 矩形当外边界、按标签厚度收缩，等于 `containLabel:true`，plot 普遍偏小。待单独一批按 oracle 修，见 §66。]** |
@@ -5131,6 +5131,7 @@ single 模式的图例、没有 data 的类目轴、有名字的节点、带值�
 
 1. **刻度间隔**。上游(v5 和 v6 都是)`intervalScaleNiceTicks` 用 `nice(span/splitNumber, round)`,档位 1/2/3/5/10,阈值 1.5/2.5/4/7。
    port 是不取整的 1/2/2.5/5。span 为 7 时上游间隔 1、这里 2;`graph-grid` 的 y 轴上游是 0 到 6000 七格,这里四格。
+   **[第三十三批已修,见 §67。]**
 2. **grid 收缩**。v6 的 `outerBoundsMode: 'auto'` 外边界默认是**整个画布**,标签不越出画布就不收缩。
    port 把 grid 矩形当外边界、按标签厚度收缩,等于 `containLabel: true`,plot 比上游普遍小三十像素左右。
 
@@ -5166,3 +5167,180 @@ single 模式的图例、没有 data 的类目轴、有名字的节点、带值�
 ### 还在队列里
 
 刻度间隔的取整规则 → grid 的外边界收缩 → roam(连同补偿缩放和非等比视图)→ `focus: 'adjacency'`。
+
+## 67. Tier 1 第三十三批:数值轴的取整刻度和原始范围(2026-09-21)
+
+数值轴和 log 轴的范围、步长、每一个主刻度和次刻度,现在和上游逐位相同。这是 §66 挖出的第一个全库问题。
+`graph-grid` 的 y 轴现在和上游一样是 0 到 6000 七格。
+
+### 步长:nice 的阶梯
+
+- 步长是 `nice(span / splitNumber, round)`:1、2、3、5、10 乘 10 的幂,阈值 1.5 / 2.5 / 4 / 7,
+  再用 toFixed 按指数截回小数(3 × 0.1 是 0.30000000000000004,截完是 0.3)。
+- 10 的幂查 V8 自己 `Math.pow` 的表,-323 到 308 全覆盖。V8 的 10^-4 不是离它最近的 Double
+  (是 0.00009999999999999999),FPC 的 `Power` 碰到负指数差得更远,1e-10 差 8 个 ulp。
+  尾数差一个 ulp 就可能落到 1.5 这种阈值的另一边,换一档步长。
+- 精度是 `getPrecision(步长) + 2`,toFixed 钳在 0 到 20 位。1e21 以上照 JS 原样返回——这一条不能省:
+  FPC 的 `Str(x:0:p)` 结果超过 255 个字符就改写成科学计数,只留两位有效数字,7.015e301 会变成 7.0E+301。
+- toFixed 按**二进制值**取整,和规范一样:(1.005).toFixed(2) 是 1.00,因为 1.005 实际比它小一丝。
+  最初用 Str/Val 实现,Str 按自己的十七位十进制取整,给出 1.01。现在用大整数精确算 m·10^p 再移位得到 n。
+  n 小于 2^53 时,n 和 10^p 都是精确的 Double,一次 IEEE 除法就是正确舍入;更长的做长除法,
+  商取到 64 位以上、记住余数是否非零,再就近偶数舍入到 53 位。**不走 FPC 的 Val**:它不是正确舍入,
+  把答案写成文本再读回来,276712 个向量里错 22 个,都差一个 ulp。现在和 node 比 276712 个一般向量、
+  再加两百万个长答案向量,零差异。
+- splitNumber 是 `round(max(写的值 || 默认, 1))`:0 和 NaN 用默认值,2.5 取 3,小于 1 取 1。
+- minInterval、maxInterval 在 nice 之后夹。
+
+### 范围:向外取整,刻度在范围里面
+
+- 先照 `intervalScaleEnsureValidExtent` 校验:平的范围按自身一半张开(max 被钉住时只往下张),
+  0 张成 [0, 1],端点不是有限数就整个换成 [0, 1]。
+- nice 刻度范围是 `ceil(lo/步长)·步长` 到 `floor(hi/步长)·步长`,在范围取整**之前**算。
+  钉住的一端如果不是步长的倍数,自己成为首刻度或末刻度。
+- 没钉住的一端按步长向外取整。
+- 写了 `interval` 只换刻度的步长。范围还是按自动步长取整(上游注释自己说这是历史行为),刻度走满整个范围。
+- 数据小到 1e-20 左右时,toFixed 会把步长截成 0,取整结果是 NaN。上游的 `setExtent` 跳过 NaN 端点,
+  范围停在校验后的样子,一个刻度都没有。这里照做,整段按 JS 的算术走,不抛异常。
+- 刻度两头补范围的端点;超过 3000 个就一个都不给;加一个步长加不动(`tick + 步长 = tick`)就停。
+
+### 次刻度
+
+- 切的是"展开到 nice 范围"的主刻度列表:钉住的端点往外推到步长的倍数,切完只留严格落在范围里的。
+  min 钉在 3、步长 20 时,第一个主刻度 20 前面照样有 4、8、12、16。
+- 每一段的精度是 `getPrecision(段长) + 2`。三等分是满精度的循环小数,也逐位相同。
+- log 轴也是在**值空间**里线性切:1 到 10 之间是 2.8、4.6、6.4、8.2。
+
+### log 轴
+
+- 不走 nice。步长是 `max(10^quantity(span), 1)` 个十年;`err = splitNumber / span × 步长` 不超过 0.5 时再乘 10,
+  这只有 splitNumber 不超过 4 时才可能。minInterval、maxInterval 不读。
+- 刻度和范围回到值空间走 V8 的 `Math.pow` 表。取整没动的一端保留它进来时的值——上游的 lookup,
+  不只管钉住的端点:10^log10(3) 在这里是 2.9999999999999996;数据从 10.000000000000002 起,首刻度就是它,不是整 10。
+- 只有 log 轴在 log 空间里 nice。断轴的装饰器也做变换,以前被当成 log 轴,步长在压缩后的空间里走,
+  刻度出了范围、顺序也乱(0、20、97.89、117.89、137.89、100)。上游在值空间里 nice 断轴(跨度扣掉断开的部分,这个还没做)。
+  断轴还没接到任何 option 上,图表碰不到,但单元测试碰得到。
+- 范围里没有小于等于 0 的端点:上游的 `sanitize` 把它挪到数据的最小值(`min: 0` 变成数据最小值)。
+  数据里的 0 和负数本来就不进范围。
+- 挪完如果反了(`min: 0, max: 2`,数据从 3 起):上游本想用 `ensureExtentAscSimply` 合上,可它先问
+  `isValidBoundsForExtent`,那个函数要求 start ≤ end,所以永远不动手。log scale 整对拒收,留着初始的
+  `[Infinity, -Infinity]`,校验成 [0, 1],也就是 1 到 10。这里照这个结果做,不照注释的意图做。
+
+### 空轴
+
+没有数据、也没有可用的 min 和 max 时,上游的 `isBlank` 为真:轴线和轴名照画,标签、刻度、次刻度、分隔线、分隔区一概不画。
+nice 照样给出 [0, 1] 和上面的刻度,oracle 比的也是它们。以前这里在空图上标 0、0.2 … 1。
+
+- 原始范围第 4 步算出的 Blank 交给 scale(`MarkedBlank`)。只有 max 也还是空轴,min 和 max 都有才不是。
+- 画轴部件的五处(标签规格、`TickCoords`、次分隔线、次刻度、画出来的标签)改走 `TyDrawnTicks`:空轴给空列表。
+  `GetTicks` 本身不变,和上游一样照样回答。
+- 时间轴没数据时范围是今天,同样是空轴。
+
+### 时间轴顺带修的两处
+
+两处都早于这一批,这批把时间轴也接到了 `TyAxisRawExtent` 上,oracle 顺手比了它们:
+
+- **平的范围在 scale 上左右各开一天**(上游 `calcNiceForTimeScale`)。以前只在生成刻度时开,scale 的范围还是平的,
+  每个刻度都归一到轴的正中间。
+- **minInterval / maxInterval 夹住近似间隔**,目标刻度数跟着变成 `跨度 / 近似间隔`。DoAxis 早就把两个值写进了时间 scale,
+  `GetTicks` 从来没读过。
+
+### 原始范围,照 scaleRawExtentInfo 的顺序
+
+`TyAxisRawExtent` 一步一步照抄:
+
+1. 数据范围,`dataMin` / `dataMax` 只扩不缩。
+2. `min` / `max` 钉住端点。`'dataMin'` / `'dataMax'` 取数据;其余走 `Number()`。NaN 也钉住——那是作者写的坏边界,轴变空。
+3. `boundaryGap` 只作用在没钉住的一端,单位是**数据跨度的比例**:数字就是比例,`'10%'` 是 0.1,
+   不带 % 的字符串按 parseFloat 读(`'1'` 就是一整个跨度)。只有一个值时拿它的绝对值当跨度。
+4. 不是有限数的端点算没有。
+5. 零:只在普通数值轴上、`scale` 为假、两端同号、那一端没钉住时。
+6. 反了就翻过来,轴跟着反向(`legacyMinMaxDontInverseAxis` 例外)。
+7. `startValue` 并进范围,钉住它挪动的那一端。柱子的值轴不写也要一个起点:log 轴是 1,其余是 0(`scale: true` 的柱子不并)。
+8. log 轴的 sanitize。
+
+被推翻的两句旧话:
+
+- `TestAValueAxisBoundaryGapPadsTheExtent` 说不带 % 的数字字符串一律不认,理由是"上游两种读法都没写"。
+  上游代码其实选了一种:parseFloat 之后当比例。测试已改,原处有标注。
+- `StepMantissaIsNice` 认 2.5、不认 3。那是 port 自己的阶梯。
+
+两处和下一节那条测试的改动都在原处写了标注。
+
+### 顺带暴露的一个测试缺陷
+
+`TestTheGridNeverPaintsOverAnAxisLine` 单跑绿、全量红。二分前面 549 个 suite,找到的是 `TComboSimpleModeTest`。
+它调 `Application.Initialize`,之后整个进程的字体走真实度量,plot 的底边从 198 挪到 195。
+扫描列取的是 plot 正中,新阶梯下 x 轴正好在 1.5 有一个刻度;onZero 的 x 轴刻度从轴线那一行往下画,把交点盖住了。
+上游在同一个 group 里也是先画轴线再画刻度,画法没错,错在扫描列选得太巧。改成取两个刻度的中点。
+
+### 基准
+
+`tools/advchart-oracle/value-axis.js`:134 个结构化用例加 400 个随机用例。scatter(或 bar)放在被测的轴上,
+默认是 yAxis[0],`axis: 'x'` 时是 xAxis[0](横向柱、x 数值轴)。读上游的 `getExtent()`、`getConfig().interval`、
+`getTicks()`、`getMinorTicks()`、`isBlank()` 和 `axis.inverse`。覆盖堆叠(总和、正负混合、横向)、8 条时间轴、6 条空轴。
+39188 项比较(17039 个主刻度、18868 个次刻度)全部逐位相同,log 轴和时间轴也是。
+
+上游的开发版在一条用例上自己断言失败(1e-25 量级的数据,nice 刻度范围越出了范围)。
+这条改用生产版跑,也就是网页上实际加载的那个,fixture 里标了 `productionBuild`。
+
+### 已知偏差
+
+- 刻度**标签**的格式(getPrecision / toFixed / addCommas)还是旧的,下一小批。axisPointer 的标签精度一起:
+  上游 `precision: 'auto'` 用步长的小数位加 2(37.25),这里用步长自己的(37),log 轴上显示成 4 而不是 3.72。
+- **非整数次幂**走 FPC 的 `Power`,和 V8 的 `Math.pow` 末位不同:log 轴写了小数 `interval`(0.5 → 3.1622776601683795)、
+  底数不是 10 或 2。标签看不出来。
+- **containShape 没做**:柱子放在数值或时间**基轴**上时,上游把平的 0 张成 [-1, 1],还把 mapping 范围放宽半个带宽,
+  两头的柱子不被截。这里都没有。刻度一致,柱子的像素位置不同。
+- `logBase` 小于等于 1 这里一律当 10;上游是 `logBase || 10`,0.5 这种底数照用。
+- 雷达指示器和 `alignTicks` 都要 `scaleCalcAlign`(NICE_MODE_MIN 加 increaseInterval),不在这批。
+- getPrecision 走字符串的那条路(负数、小于 1e-14)28572 个里差 7 个,步长不走那条路。
+
+### 落地
+
+- `source/tyControls.AdvChart.Scale.pas`:`TyJsRound`(用 Int 实现,过二十亿不溢出)、`TyJsPow10`(V8 的表)、
+  `TyJsToFixed`、`TyQuantityExponent`、`TyNice`、`TyGetPrecision`、`TyIntervalPrecision`、`TyValidSplitNumber`;
+  `TTyIntervalScale` 的 `Niceify(splitNumber, interval)`(外面一层屏蔽 FP 陷阱)、刻度和次刻度;
+  log mapper 的反变换查 V8 的表。
+- `source/tyControls.AdvChart.Series.pas`:`TyAxisRawExtent` 和它的几个解析函数,`DoAxis` 按上游顺序重排。
+- `source/tyControls.AdvChart.Builder.pas`:log 轴打开 `LogRule`;标签规格走 `TyDrawnTicks`。
+- `source/tyControls.AdvChart.Coord.pas`、`source/tyControls.AdvanceChart.pas`:刻度坐标、次分隔线、次刻度、画出来的标签走 `TyDrawnTicks`。
+- `source/tyControls.AdvChart.Time.pas`:`TyTimeTicks` 多一个带 minInterval / maxInterval 的重载。
+- `tools/advchart-oracle/value-axis.js`、`tests/fixtures/advchart-value-axis.json`、`tests/test.advchart.valueaxis.pas`(新)。
+
+### 变异测试
+
+三轮。
+
+**第一轮 87 个,活 7 个。** 用一个工作流逐个分析,每个结论再交给一个专门反驳的复核者:
+
+- **量级修正**:log(1000)/LN10 是 2.9999999999999996,上游和这里都会把指数往上补一。圆整阶梯对 1000 看不出来,
+  对 1e26 以上看得出来(10 × 1e26 比 1e27 小一个 ulp,toFixed 在 1e21 以上原样返回)。补了 0 到 5e27 的用例和单元断言。
+- **用户步长按自己的精度取整**:原来的用例步长都是一位小数,两种精度取整结果一样。补了 0.125 和"步长 1 配钉住的 0.001"。
+- **log 轴钉住的 min 读回原值、首刻度走查表**:唯一钉住 min 的用例是 5,而 10^log10(5) 在这里恰好是 5。换成 3 就不是。
+- **StillNiced**:没有任何图表路径在 Niceify 之后再设范围,只有单元测试钉得住。复核者指出线性那一半的"变异体"其实就是上游生产版的行为
+  (留着旧的 nice 范围),所以测试写成 port 自己的契约,log 那一半是必须的:变异后的刻度是 1、10、100、1000、100。
+- **log 轴上端 ≤ 0 的 sanitize**:`max: 0` 先被第 6 步翻到了下端,碰不到这一行。补了 `min: -5, max: 0`。
+- **NiceifyJs 里的反序交换:等价**。唯一调用方交进来的范围都经过会排序的 `TyRange`,log 变换单调;上游那一行同样是死代码。代码照抄保留。
+
+同一个工作流还审了 oracle 够不到的调用方,本节"空轴""时间轴顺带修的两处"、log 查表不限钉住、断轴不当 log、x 轴和堆叠的用例都来自这次审计。
+审计另外发现的 containShape、雷达、alignTicks、axisPointer 精度写在已知偏差里。
+
+**第二轮 27 个**(第一轮的 6 个加新代码),活 1 个:toFixed 的除法捷径。它引出了 Val 不正确舍入这件事,长答案改成长除法。
+
+**第三轮 110 个**:前两轮所有被杀的变异体按最终代码重跑,加上长除法的新变异体。活 1 个:toFixed 里"1e21 以上原样返回"。
+新实现里凡是 ≥ 2^53 的 Double 都是整数,早从"整数原样返回"那一支出去了,这一行是死代码,删掉,理由写在注释里。
+
+**记为等价、不进清单的**(都有证据):
+
+- 长除法的平局取偶、余数 sticky、商的低位检查。对 toFixed 的输入观测不到:长答案满足 x·10^p ≥ 2^53,n/10^p 离 x 至多半个 ulp 左右,
+  贴着一个 Double 而不是两个 Double 的中点。三个变体在两百万个长答案向量上和 node 零差异。一般意义上的正确舍入需要它们,代码保留。
+  (平局还能证明完全不可能:p 位小数要么够精确表示 x,要么不够表示任何中点。)
+- 短答案也走长除法:两条路径在 276712 个向量上都和 node 零差异,捷径只为快。
+- mant 进位到 2^53 后的重新规格化:2^53·2^k 和 2^52·2^(k+1) 是同一个 Double,那段已删。
+
+全量 **7702** 绿。
+
+### 还在队列里
+
+刻度标签的格式(连同 axisPointer 的精度)→ grid 的外边界收缩 → containShape → roam(连同补偿缩放和非等比视图)→
+`focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达指示器和 `alignTicks`)。

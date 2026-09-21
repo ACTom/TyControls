@@ -66,6 +66,7 @@ type
     procedure TestAHiddenAxisIsNotDrawn;
     procedure TestTheAxisHonoursMinMaxAndInterval;
     procedure TestAnAxisWithNoDataStillObeysItsOptions;
+    procedure TestAnAxisWithNothingToGoOnDrawsNoTicksOrLabels;
     procedure TestMinorTicksDoNotGetLabels;
     procedure TestCategoriesCollectedFromSeriesDataReachTheAxis;
     procedure TestAnUnnaturalIntervalIsNotRoundedAway;
@@ -1088,6 +1089,71 @@ begin
   AssertEquals('and so is max', 150.0, e.Stop, 1e-9);
 end;
 
+procedure TAdvanceChartTest.TestAnAxisWithNothingToGoOnDrawsNoTicksOrLabels;
+const
+  cBlank = '{ xAxis: { data: [''A'', ''B''] }, yAxis: { %s'
+    + ' minorTick: { show: true }, minorSplitLine: { show: true } }, series: [] }';
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  ax: TTyAxis;
+  r: TTyRectF;
+  bg: TBGRAPixel;
+
+  function Inside: Integer;
+  begin
+    r := gb.PlotRect;
+    { the ground just above the plot, which nothing draws on }
+    bg := PixelAt(Round((r.Left + r.Right) / 2), Round(r.Top) - 6);
+    Result := InkIn(Round(r.Left) + 3, Round(r.Top) + 3,
+      Round(r.Right) - 3, Round(r.Bottom) - 3, bg);
+  end;
+
+  { The gutter left of the axis, clear of the control's frame and of the
+    axis line: where only a label or a tick mark puts ink. }
+  function Gutter: Integer;
+  begin
+    r := gb.PlotRect;
+    bg := PixelAt(Round((r.Left + r.Right) / 2), Round(r.Top) - 6);
+    Result := InkIn(8, Round(r.Top) - 4, Round(r.Left) - 2,
+      Round(r.Bottom) + 4, bg);
+  end;
+
+begin
+  { UPSTREAM'S isBlank. A value axis with no data and no usable min or max is
+    still niced to [0, 1], with ticks -- upstream's is too, and the oracle
+    compares them -- but none of it is DRAWN: no labels, no tick marks, no
+    minor ticks, no split lines. The port labelled 0, 0.2 ... 1 on an empty
+    chart. A max alone is still nothing to go on; a min and a max are. }
+  FChart.Option := Format(cBlank, ['']);
+  Draw;
+  gb := FChart.Build.Grid(0);
+  ax := gb.YAxis(0);
+  AssertTrue('nothing to go on: blank', ax.Scale.Blank);
+  AssertTrue('its ticks still exist', Length(ax.Scale.GetTicks) > 0);
+  spec := gb.SpecFor(ax);
+  AssertTrue('the axis has a layout spec', spec <> nil);
+  AssertEquals('no labels', 0, Length(spec^.Labels));
+  AssertTrue('no tick marks, split lines or split areas', ax.TickCoords = nil);
+  AssertEquals('and nothing inside the plot, minor lines included', 0, Inside);
+  AssertEquals('nor in the gutter', 0, Gutter);
+
+  FChart.Option := Format(cBlank, ['max: 100,']);
+  Draw;
+  AssertTrue('a max alone is still blank', FChart.Build.Grid(0).YAxis(0).Scale.Blank);
+
+  FChart.Option := Format(cBlank, ['min: 0, max: 100,']);
+  Draw;
+  gb := FChart.Build.Grid(0);
+  ax := gb.YAxis(0);
+  AssertFalse('a min and a max are something', ax.Scale.Blank);
+  spec := gb.SpecFor(ax);
+  AssertEquals('0, 20 ... 100', 6, Length(spec^.Labels));
+  AssertTrue('with tick marks', ax.TickCoords <> nil);
+  AssertTrue('and lines inside the plot', Inside > 0);
+  AssertTrue('and numbers in the gutter', Gutter > 0);
+end;
+
 procedure TAdvanceChartTest.TestMinorTicksDoNotGetLabels;
 var
   gb: TTyGridBuild;
@@ -1189,16 +1255,24 @@ begin
   AssertEquals('and the extent is the unpadded one', bare.Start,
     padded.Start, 1e-9);
 
-  { A BARE NUMERIC STRING IS REFUSED, and that is the case that says the '%'
-    check is doing something: '50' could mean fifty units or fifty per cent,
-    ECharts documents neither, and choosing one would pad by a number the
-    author never asked for. A number belongs in the option as a number. }
+  { [Revised in batch 33: this used to refuse a bare numeric string, reasoning
+    that ECharts documents neither reading. Its code does choose one.]
+    A BARE NUMERIC STRING IS A RATIO, exactly as the number is: parsePercent
+    parseFloats a string without a '%', and the gap is that times the data's
+    span. '50' pads by fifty spans, which is what `50` does. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { boundaryGap: [50, 50] },'
+    + ' series: [{ type: ''line'', data: [10, 20] }] }';
+  Draw;
+  bare := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
   FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { boundaryGap: [''50'', ''50''] },'
     + ' series: [{ type: ''line'', data: [10, 20] }] }';
   Draw;
   padded := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
-  AssertEquals('a bare numeric string pads nothing', bare.Start,
+  AssertTrue(Format('fifty spans down (%.1f)', [padded.Start]),
+    padded.Start <= 10 - 50 * 10);
+  AssertEquals('the string pads as the number does', bare.Start,
     padded.Start, 1e-9);
   AssertEquals('at either end', bare.Stop, padded.Stop, 1e-9);
 end;

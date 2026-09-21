@@ -208,6 +208,26 @@ procedure TyIndexSeries(const ABindings: TTySeriesBindingArray;
   AIndex: TTyAxisSeriesIndex);
 
 { ---- phase B: axis ranges ---- }
+
+type
+  { One axis' extent before any nicing -- upstream's scaleRawExtentInfo for a
+    number or a time axis, in its order: the data widened by dataMin/dataMax,
+    min and max (which pin), boundaryGap on the ends nobody pinned, zero on a
+    plain value axis, the ends turned round when they came backwards,
+    startValue, and on a log axis no end at or under zero. Lo and Hi are
+    not-a-number where nothing gave them a value; Blank says so. FixLo/FixHi are the pins the nice step must keep. }
+  TTyAxisRawExtent = record
+    Lo, Hi: Double;
+    FixLo, FixHi: Boolean;
+    ToggleInverse: Boolean;
+    Blank: Boolean;
+  end;
+
+{ ADataLo/ADataHi are the series' own extent, +Infinity/-Infinity when there
+  is none. ARequireStartValue is a bar's: its value axis wants its base in
+  view. }
+function TyAxisRawExtent(ANode: TJSONObject; AAxis: TTyAxis;
+  ADataLo, ADataHi: Double; ARequireStartValue: Boolean): TTyAxisRawExtent;
 { Give every value axis the range its bound series actually need.
 
   AStacks says which series plot an accumulated total rather than their own
@@ -687,6 +707,326 @@ begin
   end;
 end;
 
+{ ==================== the raw extent, upstream's order ==================== }
+
+{ JavaScript's parseFloat: the longest numeric prefix, not-a-number when
+  there is none. '10%' is 10, '1e3px' 1000, 'abc' not-a-number. }
+function JsParseFloat(const AText: string): Double;
+var
+  s: string;
+  i, n, code: Integer;
+  seenDigit, seenDot, seenExp: Boolean;
+begin
+  Result := NaN;
+  s := TrimLeft(AText);
+  n := 0;
+  i := 1;
+  if (i <= Length(s)) and (s[i] in ['+', '-']) then Inc(i);
+  if Copy(s, i, 8) = 'Infinity' then
+  begin
+    if (i > 1) and (s[1] = '-') then Exit(NegInfinity);
+    Exit(Infinity);
+  end;
+  seenDigit := False;
+  seenDot := False;
+  seenExp := False;
+  while i <= Length(s) do
+  begin
+    if s[i] in ['0'..'9'] then
+    begin
+      seenDigit := True;
+      n := i;
+    end
+    else if (s[i] = '.') and not seenDot and not seenExp then
+      seenDot := True
+    else if (s[i] in ['e', 'E']) and seenDigit and not seenExp
+      and (i < Length(s)) and ((s[i + 1] in ['0'..'9'])
+        or ((i + 1 < Length(s)) and (s[i + 1] in ['+', '-'])
+          and (s[i + 2] in ['0'..'9']))) then
+    begin
+      seenExp := True;
+      if s[i + 1] in ['+', '-'] then Inc(i);
+    end
+    else
+      Break;
+    Inc(i);
+  end;
+  if not seenDigit then Exit;
+  Val(Copy(s, 1, n), Result, code);
+  if code <> 0 then Result := NaN;
+end;
+
+{ JavaScript's Number(x) for an option value. False for null or absent --
+  upstream's "not specified" -- and not-a-number for whatever Number() cannot
+  read, which is a deliberate invalid bound, not an absent one. }
+function JsNumberOf(AData: TJSONData; out AValue: Double): Boolean;
+var s: string; code: Integer;
+begin
+  AValue := NaN;
+  Result := False;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  Result := True;
+  case AData.JSONType of
+    jtNumber: AValue := AData.AsFloat;
+    jtBoolean: if AData.AsBoolean then AValue := 1 else AValue := 0;
+    jtString:
+      begin
+        s := Trim(AData.AsString);
+        if s = '' then AValue := 0
+        else if s = 'Infinity' then AValue := Infinity
+        else if s = '-Infinity' then AValue := NegInfinity
+        else
+        begin
+          Val(s, AValue, code);
+          if code <> 0 then AValue := NaN;
+        end;
+      end;
+  end;
+end;
+
+{ One bound the way the axis' scale parses it: Number() on a number axis, a
+  date on a time axis. }
+function ParseBound(AData: TJSONData; AAxis: TTyAxis; out AValue: Double): Boolean;
+var ms: Double;
+begin
+  if (AAxis <> nil) and (AAxis.AxisType = atTime) and (AData <> nil)
+    and (AData.JSONType = jtString) then
+  begin
+    AValue := NaN;
+    if TyParseDateMs(AData.AsString, ms) then AValue := ms;
+    Exit(True);
+  end;
+  Result := JsNumberOf(AData, AValue);
+end;
+
+{ parsePercent(item, 1) || 0 -- one end of a value axis' boundaryGap as a
+  RATIO of the data's span. A number is a ratio already (0.1 is ten per
+  cent); a string ending in '%' is its number over a hundred; any other
+  string is parseFloat'd, and 'center', 'left' and the rest are the ratios a
+  box position would give them. A boolean is nothing. }
+function GapRatio(AData: TJSONData): Double;
+var s: string;
+begin
+  Result := 0;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := AData.AsFloat;
+    jtString:
+      begin
+        s := AData.AsString;
+        if (s = 'center') or (s = 'middle') then s := '50%'
+        else if (s = 'left') or (s = 'top') then s := '0%'
+        else if (s = 'right') or (s = 'bottom') then s := '100%';
+        if (Trim(s) <> '') and (Trim(s)[Length(Trim(s))] = '%') then
+          Result := JsParseFloat(s) / 100 * 1
+        else
+          Result := JsParseFloat(s);
+      end;
+  end;
+  if IsNan(Result) then Result := 0;
+end;
+
+function JsTruthyOf(AData: TJSONData): Boolean;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (not IsNan(AData.AsFloat)) and (AData.AsFloat <> 0);
+    jtString: Result := AData.AsString <> '';
+    jtArray, jtObject: Result := True;
+  end;
+end;
+
+function Finite(AValue: Double): Boolean;
+begin
+  Result := not (IsNan(AValue) or IsInfinite(AValue));
+end;
+
+function TyAxisRawExtent(ANode: TJSONObject; AAxis: TTyAxis;
+  ADataLo, ADataHi: Double; ARequireStartValue: Boolean): TTyAxisRawExtent;
+var
+  d: TJSONData;
+  dLo, dHi, v, span, sv: Double;
+  hasLo, hasHi, interval, needZero, svSpecified: Boolean;
+  mask: TFPUExceptionMask;
+begin
+  Result := Default(TTyAxisRawExtent);
+  { Not-a-number is a legal value all the way through, as in JavaScript, and
+    comparing one with the traps on raises. }
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    { (1) THE DATA, widened by the option's own dataMin / dataMax -- which
+      can only widen it. Nothing at all is not-a-number from here on. }
+    dLo := ADataLo;
+    dHi := ADataHi;
+    if ANode <> nil then
+    begin
+      if ParseBound(ANode.Find('dataMin'), AAxis, v) and Finite(v) and (v < dLo) then
+        dLo := v;
+      if ParseBound(ANode.Find('dataMax'), AAxis, v) and Finite(v) and (v > dHi) then
+        dHi := v;
+    end;
+    span := dHi - dLo;
+    if not (Finite(span) and (span >= 0)) then
+    begin
+      dLo := NaN;
+      dHi := NaN;
+    end;
+
+    { (2) min AND max, which pin. 'dataMin' and 'dataMax' pin to the data;
+      anything else goes through the scale's parse, and even a not-a-number
+      pins -- it is a deliberate bad bound, and it blanks the axis. }
+    hasLo := False;
+    hasHi := False;
+    Result.Lo := NaN;
+    Result.Hi := NaN;
+    if ANode <> nil then
+    begin
+      d := ANode.Find('min');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dataMin') then
+      begin
+        Result.Lo := dLo;
+        hasLo := True;
+      end
+      else if ParseBound(d, AAxis, v) then
+      begin
+        Result.Lo := v;
+        hasLo := True;
+      end;
+      d := ANode.Find('max');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dataMax') then
+      begin
+        Result.Hi := dHi;
+        hasHi := True;
+      end
+      else if ParseBound(d, AAxis, v) then
+      begin
+        Result.Hi := v;
+        hasHi := True;
+      end;
+    end;
+    Result.FixLo := hasLo;
+    Result.FixHi := hasHi;
+
+    { (3) boundaryGap, on the ends nobody pinned, as a ratio of the DATA's
+      span -- or of the lone value's size when there is one. }
+    span := dHi - dLo;
+    if IsNan(span) or (span = 0) then span := Abs(dLo);
+    if not hasLo then
+    begin
+      v := 0;
+      if ANode <> nil then
+      begin
+        d := ANode.Find('boundaryGap');
+        if (d <> nil) and (d.JSONType = jtArray) then
+        begin
+          if TJSONArray(d).Count > 0 then v := GapRatio(TJSONArray(d).Items[0]);
+        end
+        else if (d <> nil) and (d.JSONType <> jtBoolean) then
+          v := GapRatio(d);
+      end;
+      Result.Lo := dLo - v * span;
+    end;
+    if not hasHi then
+    begin
+      v := 0;
+      if ANode <> nil then
+      begin
+        d := ANode.Find('boundaryGap');
+        if (d <> nil) and (d.JSONType = jtArray) then
+        begin
+          if TJSONArray(d).Count > 1 then v := GapRatio(TJSONArray(d).Items[1]);
+        end
+        else if (d <> nil) and (d.JSONType <> jtBoolean) then
+          v := GapRatio(d);
+      end;
+      Result.Hi := dHi + v * span;
+    end;
+
+    { (4) not a finite number is no end. }
+    if not Finite(Result.Lo) then Result.Lo := NaN;
+    if not Finite(Result.Hi) then Result.Hi := NaN;
+    Result.Blank := IsNan(Result.Lo) or IsNan(Result.Hi);
+
+    { (5) ZERO, on a plain value axis unless `scale` is truthy -- and only
+      pulling an end nobody pinned, when both ends share a sign. }
+    interval := (AAxis <> nil) and (AAxis.AxisType = atValue);
+    needZero := interval and not ((ANode <> nil) and JsTruthyOf(ANode.Find('scale')));
+    if needZero then
+    begin
+      if (Result.Lo > 0) and (Result.Hi > 0) and not Result.FixLo then
+        Result.Lo := 0;
+      if (Result.Lo < 0) and (Result.Hi < 0) and not Result.FixHi then
+        Result.Hi := 0;
+    end;
+
+    { (6) BACKWARDS IS TURNED ROUND, and the axis inverted -- the pin flags
+      stay on their index, as upstream leaves them. }
+    if Result.Lo > Result.Hi then
+    begin
+      v := Result.Lo;
+      Result.Lo := Result.Hi;
+      Result.Hi := v;
+      Result.ToggleInverse := True;
+    end;
+
+    { (7) startValue joins the extent and pins the end it moves. A bar's
+      value axis asks for one even unwritten: 1 on a log axis, and on a plain
+      one zero -- which the zero rule has always already covered. }
+    svSpecified := False;
+    sv := NaN;
+    if ANode <> nil then
+      svSpecified := ParseBound(ANode.Find('startValue'), AAxis, sv);
+    if (not Finite(sv)) and ARequireStartValue then
+    begin
+      if (AAxis <> nil) and (AAxis.AxisType = atLog) then sv := 1 else sv := 0;
+    end;
+    if Finite(sv) and (svSpecified or (not interval) or needZero) then
+    begin
+      if (sv < Result.Lo) and not Result.FixLo then
+      begin
+        Result.Lo := sv;
+        Result.FixLo := True;
+      end
+      else if (sv > Result.Hi) and not Result.FixHi then
+      begin
+        Result.Hi := sv;
+        Result.FixHi := True;
+      end;
+    end;
+
+    { (8) NOTHING AT OR UNDER ZERO ON A LOG AXIS: upstream's sanitize moves
+      such an end -- a min of 0, a bar's base -- onto the lowest value the
+      data holds. Only while the data is an extent at all; the pins stay. }
+    if (AAxis <> nil) and (AAxis.AxisType = atLog)
+      and Finite(dLo) and Finite(dHi) and (dLo <= dHi) then
+    begin
+      if Finite(Result.Lo) and (Result.Lo <= 0) then Result.Lo := dLo;
+      if Finite(Result.Hi) and (Result.Hi <= 0) then Result.Hi := dLo;
+      { A PAIR THAT NOW RUNS BACKWARDS IS NO EXTENT. Upstream means to close
+        it (ensureExtentAscSimply), but asks isValidBoundsForExtent first,
+        which wants start <= end -- so it never does. The log scale then
+        refuses the pair whole and keeps its initial [Infinity, -Infinity],
+        which the nice step makes [0, 1]: one decade up from 1, whatever
+        was written. }
+      if Finite(Result.Lo) and Finite(Result.Hi) and (Result.Lo > Result.Hi) then
+      begin
+        Result.Lo := NaN;
+        Result.Hi := NaN;
+      end;
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    { And the SSE flags, which ClearExceptions leaves standing on this CPU. }
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex);
@@ -696,20 +1036,20 @@ var
 
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string);
   var
-    k, c, si, split: Integer;
+    k, c, si: Integer;
     cols: TTyIntegerArray;
     node: TJSONObject;
     d: TJSONData;
-    fixLo, fixHi: Boolean;
-    ivl: Double;
+    ivl, split: Double;
     minor: Integer;
     minorSplit: Integer;
-    wantMinor: Boolean;
+    wantMinor, requireStart: Boolean;
     sub2: TJSONData;
     feeders: TTyIntegerArray;
-    lo, hi, dlo, dhi, minIvl, maxIvl, gapLo, gapHi: Double;
-    any, scaleOpt: Boolean;
+    lo, hi, dlo, dhi, minIvl, maxIvl: Double;
+    any: Boolean;
     filter: TTyExtentFilter;
+    raw: TTyAxisRawExtent;
   begin
     if AAxis = nil then Exit;
     { A category axis' range is its category COUNT -- read off the axis, never
@@ -734,12 +1074,20 @@ var
     if AAxis.AxisType = atLog then filter := defPositive else filter := defNone;
 
     any := False;
+    requireStart := False;
     lo := Infinity;
     hi := NegInfinity;
     feeders := AIndex.SeriesOnAxis(AAxis);
     for k := 0 to High(feeders) do
     begin
       si := feeders[k];
+      { A BAR WANTS ITS BASE IN VIEW: upstream's __requireStartValue, on the
+        bar's value axis and nowhere else. }
+      if (si >= 0) and (si <= High(ABindings))
+        and ((ABindings[si].SeriesType = 'bar')
+          or (ABindings[si].SeriesType = 'pictorialBar'))
+        and (ABindings[si].ValueAxis = AAxis) then
+        requireStart := True;
       if (si < 0) or (si > High(AStores)) then Continue;
       cols := ColumnsForAxis(AStores[si], AAxis);
       { A STACKED SERIES CONTRIBUTES ITS TOTAL, not its own value. Upstream
@@ -768,100 +1116,38 @@ var
         any := True;
       end;
     end;
-    { NOT A RETURN. Everything below is the AUTHOR's instruction --
-      scale/min/max/splitNumber/interval/minorTick -- and returning here
-      skipped all six on precisely the axis with no data to fall back on:
-      `yAxis: { min: 0, max: 100 }` beside an empty series kept whatever extent
-      construction happened to give it.
-
-      Only the data-derived ends depend on `any`. With no data they are 0..1,
-      which is what an axis showing nothing should span, and `min`/`max` below
-      overwrite them when the author said otherwise. }
-    if not any then
-      if AAxis.AxisType = atTime then
-      begin
-        { A TIME AXIS WITH NOTHING ON IT SHOWS TODAY, which is upstream's
-          answer and the only one an author reads as empty rather than as
-          broken: 0..1 on a time axis is the first second of 1970, and a
-          chart that lost its data should not look like a chart about the
-          Apollo programme. }
-        hi := TyDateTimeToMs(Date, False);
-        lo := hi - 86400000;
-      end
-      else
-      begin
-        lo := 0;
-        hi := 1;
-      end;
-
-    { An axis includes zero unless it was told to fit its data. That is why a
-      bar chart's baseline is the axis line rather than a floating number, and
-      it applies to every value axis rather than only to ones with bars on
-      them. A log axis is exempt: zero has no logarithm. }
-    scaleOpt := False;
-    if node <> nil then
+    { THE RAW EXTENT, UPSTREAM'S ORDER. No data is not-a-number from here on --
+      the data loop left the ends at their infinities -- and min, max,
+      boundaryGap, zero, a backwards pair and startValue all happen in
+      scaleRawExtentInfo's sequence, in TyAxisRawExtent. }
+    raw := TyAxisRawExtent(node, AAxis, lo, hi, requireStart);
+    if (not any) and (AAxis.AxisType = atTime) and raw.Blank then
     begin
-      d := node.Find('scale');
-      if (d <> nil) and (d.JSONType = jtBoolean) then scaleOpt := d.AsBoolean;
-    end;
-    { A TIME AXIS IS EXEMT TOO, and far more visibly than a log one: zero on a
-      time axis is the first instant of 1970, so a chart of last week would
-      span fifty-six years and draw its seven points in the last pixel. }
-    if (not scaleOpt) and not (AAxis.AxisType in [atLog, atTime]) then
-    begin
-      if lo > 0 then lo := 0;
-      if hi < 0 then hi := 0;
+      { A TIME AXIS WITH NOTHING ON IT SHOWS TODAY, which is upstream's
+        answer and the only one an author reads as empty rather than as
+        broken: 0..1 on a time axis is the first second of 1970, and a
+        chart that lost its data should not look like a chart about the
+        Apollo programme. }
+      raw.Hi := TyDateTimeToMs(Date, False);
+      raw.Lo := raw.Hi - 86400000;
     end;
 
-    { WHAT THE AUTHOR ASKED FOR BEATS WHAT THE DATA SUGGESTS. `min` and `max`
-      pin an end; a pinned end must survive Niceify, which is exactly what
-      FixMin and FixMax are for -- they have been on the scale since it was
-      written and nothing ever set them, so four of the most-used axis options
-      in ECharts did nothing at all. }
-    fixLo := False;
-    fixHi := False;
-    { SIX ON A TIME AXIS, five everywhere else -- upstream's own two defaults.
-      A date is a wider label than a number and six of them is what fits. }
+    { SIX ON A TIME AXIS, five everywhere else -- the options' own two
+      defaults. The value is handed on as written; the nice step makes it a
+      whole number the way upstream does. }
     if AAxis.AxisType = atTime then split := 6 else split := 5;
-    ivl := 0;
+    ivl := NaN;
     minIvl := 0;
     maxIvl := 0;
     minor := 0;
     if node <> nil then
     begin
-      { ON A TIME AXIS THE BOUND IS USUALLY A DATE STRING. `min: '2024-01-01'`
-        is how everybody writes it, and reading numbers only meant the
-        commonest form of the two most-used axis options silently did nothing
-        on the one axis type that needs them most. }
-      d := node.Find('min');
-      if AxisBound(d, AAxis, lo) then fixLo := True;
-      d := node.Find('max');
-      if AxisBound(d, AAxis, hi) then fixHi := True;
-      { A VALUE AXIS' boundaryGap IS A PAIR, not the boolean a category axis
-        takes -- `['10%', '10%']` or a pair of absolute amounts -- and it pads
-        the extent before it is nicied. Read here rather than in the builder
-        because it acts on the extent, and the builder has none yet. }
-      d := node.Find('boundaryGap');
-      if (d <> nil) and (d.JSONType = jtArray) and (TJSONArray(d).Count = 2) then
-      begin
-        gapLo := GapAmount(TJSONArray(d).Items[0], hi - lo);
-        gapHi := GapAmount(TJSONArray(d).Items[1], hi - lo);
-        if not IsNan(gapLo) then lo := lo - gapLo;
-        if not IsNan(gapHi) then hi := hi + gapHi;
-      end;
-
       d := node.Find('splitNumber');
-      if (d <> nil) and (d.JSONType = jtNumber) then
-      begin
-        split := TyTruncOpt(d.AsFloat, split);
-        if split < 1 then split := 1;
-      end;
+      if (d <> nil) and (d.JSONType = jtNumber) then split := d.AsFloat;
+      { `interval` AS WRITTEN, zero and negatives included: upstream draws no
+        ticks for either, and the scale says so rather than this. }
       d := node.Find('interval');
-      if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
-        ivl := d.AsFloat;
-      { minorTick: { splitNumber: n }. Off unless asked for -- an axis that
-        grows a second set of lines just by being drawn is not what anybody
-        wrote. Upstream's default split is 5. }
+      if (d <> nil) and (d.JSONType = jtNumber) then ivl := d.AsFloat;
       d := node.Find('minInterval');
       if (d <> nil) and (d.JSONType = jtNumber) then minIvl := d.AsFloat;
       d := node.Find('maxInterval');
@@ -909,39 +1195,47 @@ var
       if wantMinor then minor := minorSplit;
     end;
 
-    if lo > hi then Exit;
+    { A BACKWARDS min AND max INVERT THE AXIS, unless the chart asked for the
+      old behaviour by name. }
+    if raw.ToggleInverse and not ((AOption <> nil)
+      and (AOption.Root is TJSONObject)
+      and JsTruthyOf(TJSONObject(AOption.Root).Find('legacyMinMaxDontInverseAxis'))) then
+      AAxis.Inverse := not AAxis.Inverse;
+
+    lo := raw.Lo;
+    hi := raw.Hi;
+    { A BLANK END IS NO EXTENT: upstream's nice step replaces the pair with
+      [0, 1] -- a max written beside no data included -- and the pins stay. }
+    if IsNan(lo) or IsNan(hi) then
+    begin
+      lo := 0;
+      hi := 1;
+    end;
+    { A FLAT TIME RANGE OPENS BY A DAY EACH WAY, on the scale -- upstream's
+      calcNiceForTimeScale. Opening it only where the ticks are made left the
+      extent flat, and every tick then normalised to the middle of the axis. }
+    if (AAxis.AxisType = atTime) and (lo = hi) then
+    begin
+      lo := lo - 86400000;
+      hi := hi + 86400000;
+    end;
     AAxis.Scale.SetExtent(TyRange(lo, hi));
+    { NOTHING TO GO ON is still [0, 1] with ticks on it, as upstream's is; the
+      flag is what keeps them from being drawn. }
+    AAxis.Scale.MarkedBlank := raw.Blank;
     if AAxis.Scale is TTyIntervalScale then
     begin
-      TTyIntervalScale(AAxis.Scale).FixMin := fixLo;
-      TTyIntervalScale(AAxis.Scale).FixMax := fixHi;
+      TTyIntervalScale(AAxis.Scale).FixMin := raw.FixLo;
+      TTyIntervalScale(AAxis.Scale).FixMax := raw.FixHi;
       { BEFORE Niceify, because they bound the step it is about to choose. }
       TTyIntervalScale(AAxis.Scale).MinInterval := minIvl;
       TTyIntervalScale(AAxis.Scale).MaxInterval := maxIvl;
-      { An explicit `interval` is a statement about the STEP, so it is handed
-        to the tick generator AS the step -- one generator, one set of rules,
-        told the answer rather than asked to infer it.
-
-        Deriving a split number from it and letting Niceify re-round was the
-        first shape of this, and it lost every step NiceNum does not already
-        like: interval:30 on 0..120 came out 50, interval:3 on 0..12 came out
-        5. The split number is still computed, because it is what the minor
-        ticks and the fallback path need. }
-      if ivl > 0 then
-      begin
-        { The same hazard one indirection along: `max: 1e19` with
-          `interval: 1` asks how many whole intervals fit and the answer
-          does not fit in an Int64. The split only feeds a divisor, and an
-          interval too small to draw is caught in the tick generator. }
-        split := TyTruncOpt((hi - lo) / ivl, 1, 1, High(Integer));
-        if split < 1 then split := 1;
-      end;
       { NOT NICIED WHEN IT IS A CALENDAR. Niceify opens the extent out to
         round numbers before picking a step, and the round number nearest a
         week in March 2024 is somewhere in 1973. A time scale is handed the
         tick count instead and snaps to the calendar itself. }
       if AAxis.Scale is TTyTimeScale then
-        TTyTimeScale(AAxis.Scale).SplitNumber := split
+        TTyTimeScale(AAxis.Scale).SplitNumber := TyValidSplitNumber(split, 10)
       else
         TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
       { AFTER Niceify: it is the major interval that gets subdivided, and

@@ -183,6 +183,7 @@ type
     FMapper: ITyScaleMapper;
     FStartValue: Double;
     FHasStartValue: Boolean;
+    FMarkedBlank: Boolean;
     procedure SetStartValue(AValue: Double);
   protected
     function DefaultMapper: ITyScaleMapper; virtual;
@@ -209,6 +210,11 @@ type
       so it belongs on the base rather than on the ordinal subclass: GetTicks,
       band width and the axis builder all want ONE predicate. }
     function Blank: Boolean; virtual;
+    { UPSTREAM'S setBlank. The raw extent knows when an axis had nothing to
+      go on -- no data and no usable min or max -- and says so here; the nice
+      step still gives such an axis [0, 1] and ticks on it, and it is this
+      flag, not the extent, that keeps them from being drawn. }
+    property MarkedBlank: Boolean read FMarkedBlank write FMarkedBlank;
     { Swappable so a decorator (breaks) can be wrapped around it without the
       scale subclass knowing. NOTE a replacement mapper brings its OWN extents;
       set the extent again after swapping unless the new mapper wraps the old. }
@@ -286,23 +292,60 @@ type
     property Meta: TTyOrdinalMeta read FMeta;
   end;
 
-  { A linear/interval scale with nice 1-2-2.5-5 tick generation. }
+  { A linear/interval scale with upstream's nice ticks: a step of 1, 2, 3, 5
+    or 10 of a power of ten, and on a log axis a whole number of decades. }
   TTyIntervalScale = class(TTyScale)
   private
     FInterval: Double;
+    FIntervalPrecision: Integer;
+    { upstream's niceExtent: the first and last multiples of the step INSIDE
+      the extent -- in the stepping space, decades on a log axis. }
+    FNiceStart, FNiceStop: Double;
+    { The extent in the stepping space as Niceify left it, and the extent it
+      left in value space: while the two still match, the ticks walk the
+      former rather than a logarithm of the latter. }
+    FStubStart, FStubStop: Double;
+    FNiced: Boolean;
+    FNicedExtent: TTyRange;
+    FLogRule: Boolean;
     FMinorSplit: Integer;
     FFixMin: Boolean;
     FFixMax: Boolean;
     FMinInterval: Double;
     FMaxInterval: Double;
+    function StillNiced: Boolean;
+    function StubExtent: TTyRange;
+    function StubToValue(AValue: Double): Double;
+    function StubTicks(AExpand: Boolean): TTyDoubleArray;
+    function LogWarped: Boolean;
+    procedure NiceifyJs(ASplitNumber: Double; AUserInterval: Double);
   public
     constructor Create;
-    { Expand the extent to round boundaries so the tick count lands near
-      ASplitNumber. Honours FixMin/FixMax: a pinned end is never rounded away. }
-    procedure Niceify(ASplitNumber: Integer;
-      AExactInterval: Double = 0);
+    { upstream's calcNiceForIntervalOrLogScale. The extent is validated
+      (a flat one opened, a broken one replaced by [0, 1]), the step chosen
+      from ASplitNumber -- `raw || default`, rounded, at least one -- and each
+      end the author did not pin rounded OUT to a multiple of it. A pinned end
+      stays where it is and becomes a tick of its own.
+
+      AUserInterval is `interval` as written, not-a-number when there is none:
+      it replaces the tick STEP only. The extent is still rounded to the step
+      upstream would have picked. }
+    procedure Niceify(ASplitNumber: Double; AUserInterval: Double); overload;
+    procedure Niceify(ASplitNumber: Double); overload;
+    { Interval.ts' getTicks: the extent's own start when the step did not
+      land on it, every multiple inside, the extent's own end likewise --
+      rounded to the step's precision one by one, and none at all past three
+      thousand. Minor ticks, when asked for, merged in value order. }
     function GetTicks: TTyScaleTickArray; override;
     property Interval: Double read FInterval;
+    { Decimals every tick is rounded to: the step's own plus two. }
+    property IntervalPrecision: Integer read FIntervalPrecision;
+    property NiceStart: Double read FNiceStart;
+    property NiceStop: Double read FNiceStop;
+    { THE LOG AXIS' STEP RULE: whole decades, no nice(). Set by whoever gives
+      the scale a log mapper -- the mapper alone cannot say, because an axis
+      break transforms too and nices like a linear axis. }
+    property LogRule: Boolean read FLogRule write FLogRule;
     { How many pieces each major interval is cut into, matching ECharts'
       minorTick.splitNumber. 0 (the default) means no minor ticks at all --
       they are opt-in, because an axis that grows a second set of lines the
@@ -362,11 +405,34 @@ type
   option text's author expects. }
 function TyJsRound(AValue: Double): Double;
 
-implementation
+{ ---- upstream's util/number.ts, as the ticks need it ---- }
 
-const
-  { See TTyIntervalScale.GetTicks. }
-  cMaxTicks = 10000;
+{ Math.pow(10, k) exactly as the JavaScript engine answers it, which for some
+  negative k is not the correctly rounded power. }
+function TyJsPow10(AExp: Integer): Double;
+{ `+(+x).toFixed(p)`, p clamped to 0..20, rounded on the BINARY value as the
+  specification says: (1.005).toFixed(2) is 1.00, because 1.005 is a hair
+  under it. Not through FPC's Str, which rounds its own seventeen-digit
+  decimal and answered 1.01. }
+function TyJsToFixed(AValue: Double; APrecision: Integer): Double;
+{ The power of ten below AValue, corrected where the logarithm falls short. }
+function TyQuantityExponent(AValue: Double): Integer;
+{ nice(val, round): 1/2/3/5/10 of a power of ten, at 1.5/2.5/4/7 when
+  rounding and 1/2/3/5 otherwise, snapped to the decimal it means. }
+function TyNice(AValue: Double; ARound: Boolean): Double;
+{ getPrecision: how many decimals AValue carries. }
+function TyGetPrecision(AValue: Double): Integer;
+{ getIntervalPrecision: the step's decimals plus two. }
+function TyIntervalPrecision(AInterval: Double): Integer;
+{ ensureValidSplitNumber: `raw || default`, rounded, at least one. }
+function TyValidSplitNumber(ARaw: Double; ADefault: Integer): Integer;
+{ The ticks an axis DRAWS: none at all on a blank scale -- no labels, tick
+  marks, minor ticks, split lines or split areas, which is where upstream
+  checks isBlank -- and GetTicks otherwise. GetTicks itself still answers on
+  a blank scale, as upstream's does. }
+function TyDrawnTicks(AScale: TTyScale): TTyScaleTickArray;
+
+implementation
 
 function TyJsRound(AValue: Double): Double;
 begin
@@ -375,7 +441,11 @@ begin
     other band boundary to the wrong category. Floor(x + 0.5) matches JS on
     both signs: -0.5 gives 0, -1.5 gives -1. }
   if IsNan(AValue) or IsInfinite(AValue) then Exit(AValue);
-  Result := Floor(AValue + 0.5);
+  { NOT Floor(x + 0.5). Math.Floor answers a 32-bit Integer and wraps past two
+    thousand million, and the sum rounds: 0.49999999999999994 + 0.5 is 1. }
+  Result := Int(AValue);
+  if Result > AValue then Result := Result - 1;
+  if AValue - Result >= 0.5 then Result := Result + 1;
 end;
 
 { ============================ TTyScaleMapperBase ============================ }
@@ -493,6 +563,15 @@ end;
 
 function TTyLogScaleMapper.TransformOut(AValue: Double): Double;
 begin
+  { MATH.POW AS V8 ANSWERS IT for a whole power of ten -- every decade a log
+    axis draws, and both ends of its extent. FPC's Power walks a negative
+    exponent by repeated multiplication and lands up to eight units in the
+    last place away: 1e-10 came back as 1.0000000000000006e-10. Another
+    base, or a fraction of a power, goes through Power and may still part
+    from upstream in its last digit. }
+  if (FBase = 10) and not (IsNan(AValue) or IsInfinite(AValue))
+    and (Frac(AValue) = 0) and (Abs(AValue) <= 400) then
+    Exit(TyJsPow10(Trunc(AValue)));
   Result := Power(FBase, AValue);
 end;
 
@@ -787,7 +866,7 @@ begin
   { A scale is blank when its extent says nothing can be drawn. The base can
     answer that from the extent alone; the ordinal scale overrides because an
     empty category list is blank whatever the extent happens to hold. }
-  Result := IsNan(GetExtent.Start) or IsNan(GetExtent.Stop);
+  Result := FMarkedBlank or IsNan(GetExtent.Start) or IsNan(GetExtent.Stop);
 end;
 
 { ============================ TTyOrdinalScale ============================ }
@@ -930,208 +1009,912 @@ end;
 
 { ============================ TTyIntervalScale ============================ }
 
-{ Round AValue to a 1/2/2.5/5 x 10^k mantissa. ARound picks the nearest such
-  value; otherwise the next one up. Heckbert's nice numbers with 2.5 added — it
-  is what makes a 0..250 axis step by 50 instead of 100. }
-function NiceNum(AValue: Double; ARound: Boolean): Double;
+{ ---- upstream's util/number.ts, the parts a tick is made of ---- }
+
+const
+  { Math.pow(10, k) AS V8 ANSWERS IT, bit for bit. It is not the correctly
+    rounded power -- 10^-4 comes back as 0.00009999999999999999 -- and FPC's
+    Power is not either, in different places. A tick step is nice(x) and
+    nice(x) divides by this, so a mantissa read on the wrong side of 1.5 picks
+    another step; taken from the engine upstream runs in, it cannot. The
+    whole range a Double holds, because a log axis' extent is read back
+    through the same power. }
+  cJsPow10: array[-323..308] of QWord = (
+    $0000000000000002, $0000000000000014, $00000000000000CA, $00000000000007E8,
+    $0000000000004F10, $00000000000316A2, $00000000001EE257, $000000000134D761,
+    $000000000C1069CD, $0000000078A42205, $00000004B6695433, $0000002F201D49FB,
+    $000001D74124E3D1, $000012688B70E62B, $0000B8157268FDAF, $000730D67819E8D2,
+    $0031FA182C40C60E, $0066789E3750F790, $009C16C5C5253575, $00D18E3B9B374169,
+    $0105F1CA820511C4, $013B6E3D22865634, $017124E63593F5E1, $01A56E1FC2F8F359,
+    $01DAC9A7B3B7302F, $0210BE08D0527E1D, $0244ED8B04671DA5, $027A28EDC580E50E,
+    $02B059949B708F29, $02E46FF9C24CB2F3, $03198BF832DFDFB0, $034FEEF63F97D79C,
+    $0383F559E7BEE6C1, $03B8F2B061AEA072, $03EF2F5C7A1A488E, $04237D99CC506D59,
+    $04585D003F6488AF, $048E74404F3DAADB, $04C308A831868AC9, $04F7CAD23DE82D7B,
+    $052DBD86CD6238D9, $05629674405D6388, $05973C115074BC6A, $05CD0B15A491EB84,
+    $060226ED86DB3333, $0636B0A8E8920000, $066C5CD322B67FFF, $06A1BA03F5B21000,
+    $06D62884F31E93FF, $070BB2A62FE638FF, $07414FA7DDEFE3A0, $0775A391D56BDC87,
+    $07AB0C764AC6D3A9, $07E0E7C9EEBC444A, $081521BC6A6B555C, $084A6A2B85062AB4,
+    $0880825B3323DAB0, $08B4A2F1FFECD15C, $08E9CBAE7FE805B3, $09201F4D0FF10390,
+    $0954272053ED4474, $098930E868E89591, $09BF7D228322BAF5, $09F3AE3591F5B4D9,
+    $0A2899C2F6732210, $0A5EC033B40FEA93, $0A9338205089F29C, $0AC8062864AC6F43,
+    $0AFE07B27DD78B14, $0B32C4CF8EA6B6EC, $0B677603725064A8, $0B9D53844EE47DD1,
+    $0BD25432B14ECEA3, $0C06E93F5DA2824C, $0C3CA38F350B22DF, $0C71E6398126F5CB,
+    $0CA65FC7E170B33E, $0CDBF7B9D9CCE00E, $0D117AD428200C08, $0D45D98932280F0A,
+    $0D7B4FEB7EB212CD, $0DB111F32F2F4BC0, $0DE5566FFAFB1EB0, $0E1AAC0BF9B9E65C,
+    $0E50AB877C142FFA, $0E84D6695B193BF8, $0EBA0C03B1DF8AF6, $0EF047824F2BB6DA,
+    $0F245962E2F6A490, $0F596FBB9BB44DB4, $0F8FCBAA82A16121, $0FC3DF4A91A4DCB5,
+    $0FF8D71D360E13E2, $102F0CE4839198DB, $1063680ED23AFF89, $1098421286C9BF6B,
+    $10CE5297287C2F45, $1102F39E794D9D8B, $1137B08617A104EE, $116D9CA79D89462A,
+    $11A281E8C275CBDA, $11D72262F3133ED0, $120CEAFBAFD80E85, $124212DD4DE70913,
+    $12769794A160CB58, $12AC3D79C9B8FE2E, $12E1A66C1E139EDD, $1316100725988694,
+    $134B9408EEFEA839, $13813C85955F2923, $13B58BA6FAB6F36C, $13EAEE90B964B047,
+    $1420D51A73DEEE2D, $14550A6110D6A9B8, $148A4CF9550C5426, $14C0701BD527B498,
+    $14F48C22CA71A1BE, $1529AF2B7D0E0A2D, $15600D7B2E28C65C, $159410D9F9B2F7F3,
+    $15C91510781FB5F0, $15FF5A549627A36C, $16339874DDD8C623, $16687E92154EF7AC,
+    $169E9E369AA2B597, $16D322E220A5B17E, $1707EB9AA8CF1DDE, $173DE6815302E556,
+    $1772B010D3E1CF56, $17A75C1508DA432B, $17DD331A4B10D3F6, $18123FF06EEA847A,
+    $1846CFEC8AA52598, $187C83E7AD4E6EFE, $18B1D270CC51055F, $18E6470CFF6546B6,
+    $191BD8D03F3E9864, $1951678227871F3E, $1985C162B168E70E, $19BB31BB5DC320D2,
+    $19F0FF151A99F483, $1A253EDA614071A4, $1A5A8E90F9908E0D, $1A90991A9BFA58C8,
+    $1AC4BF6142F8EEFA, $1AF9EF3993B72AB8, $1B303583FC527AB3, $1B6442E4FB671960,
+    $1B99539E3A40DFB8, $1BCFA885C8D117A6, $1C03C9539D82AEC8, $1C38BBA884E35A7A,
+    $1C6EEA92A61C3118, $1CA3529BA7D19EAF, $1CD8274291C6065B, $1D0E3113363787F2,
+    $1D42DEAC01E2B4F7, $1D779657025B6234, $1DAD7BECC2F23AC2, $1DE26D73F9D764B9,
+    $1E1708D0F84D3DE8, $1E4CCB0536608D61, $1E81FEE341FC585D, $1EB67E9C127B6E74,
+    $1EEC1E43171A4A11, $1F2192E9EE706E4B, $1F55F7A46A0C89DD, $1F8B758D848FAC55,
+    $1FC1297872D9CBB5, $1FF573D68F903EA2, $202AD0CC33744E4B, $2060C27FA028B0EF,
+    $2094F31F8832DD2A, $20CA2FE76A3F9475, $21005DF0A267BCC9, $2134756CCB01ABFC,
+    $216992C7FDC216FA, $219FF779FD329CB9, $21D3FAAC3E3FA1F4, $2208F9574DCF8A70,
+    $223F37AD21436D0C, $227382CC34CA2428, $22A8637F41FCAD32, $22DE7C5F127BD87E,
+    $23130DBB6B8D674F, $2347D12A4670C122, $237DC574D80CF16B, $23B29B69070816E3,
+    $23E7424348CA1C9C, $241D12D41AFCA3C3, $24522BC490DDE65A, $2486B6B5B5155FF0,
+    $24BC6463225AB7EC, $24F1BEBDF578B2F4, $25262E6D72D6DFB0, $255BBA08CF8C979C,
+    $2591544581B7DEC2, $25C5A956E225D672, $25FB13AC9AAF4C0F, $2630EC4BE0AD8F89,
+    $2665275ED8D8F36C, $269A71368F0F3046, $26D086C219697E2C, $2704A8729FC3DDB7,
+    $2739D28F47B4D525, $277023998CD10537, $27A42C7FF0054685, $27D9379FEC069826,
+    $280F8587E7083E30, $2843B374F06526DE, $2878A0522C7E7095, $28AEC866B79E0CBA,
+    $28E33D4032C2C7F4, $29180C903F7379F2, $294E0FB44F50586E, $2982C9D0B1923745,
+    $29B77C44DDF6C516, $29ED5B561574765C, $2A225915CD68C9F9, $2A56EF5B40C2FC78,
+    $2A8CAB3210F3BB95, $2AC1EAFF4A98553D, $2AF665BF1D3E6A8C, $2B2BFF2EE48E0530,
+    $2B617F7D4ED8C33E, $2B95DF5CA28EF40D, $2BCB5733CB32B111, $2C0116805EFFAEAA,
+    $2C355C2076BF9A55, $2C6AB328946F80EA, $2CA0AFF95CC5B092, $2CD4DBF7B3F71CB7,
+    $2D0A12F5A0F4E3E5, $2D404BD984990E6F, $2D745ECFE5BF520B, $2DA97683DF2F268E,
+    $2DDFD424D6FAF031, $2E13E497065CD61F, $2E48DDBCC7F40BA6, $2E7F152BF9F10E90,
+    $2EB36D3B7C36A91A, $2EE8488A5B445360, $2F1E5AACF2156838, $2F52F8AC174D6123,
+    $2F87B6D71D20B96C, $2FBDA48CE468E7C7, $2FF286D80EC190DC, $3027288E1271F514,
+    $305CF2B1970E7258, $309217AEFE690777, $30C69D9ABE034955, $30FC45016D841BAA,
+    $3131AB20E472914A, $316615E91D8F359D, $319B9B6364F30304, $31D1411E1F17E1E3,
+    $32059165A6DDDA5B, $323AF5BF109550F2, $3270D9976A5D5297, $32A50FFD44F4A73D,
+    $32DA53FC9631D10C, $3310747DDDDF22A8, $3344919D5556EB52, $3379B604AAACA626,
+    $33B011C2EAABE7D8, $33E41633A556E1CE, $34191BC08EAC9A42, $344F62B0B257C0D2,
+    $34839DAE6F76D883, $34B8851A0B548EA4, $34EEA6608E29B24D, $352327FC58DA0F70,
+    $3557F1FB6F10934C, $358DEE7A4AD4B81F, $35C2B50C6EC4F313, $35F7624F8A762FD8,
+    $362D3AE36D13BBCE, $366244CE242C5561, $3696D601AD376AB9, $36CC8B8218854567,
+    $3701D7314F534B61, $37364CFDA3281E39, $376BE03D0BF225C7, $37A16C262777579C,
+    $37D5C72FB1552D84, $380B38FB9DAA78E4, $3841039D428A8B8F, $38754484932D2E72,
+    $38AA95A5B7F87A0F, $38E09D8792FB4C49, $3914C4E977BA1F5C, $3949F623D5A8A732,
+    $398039D665896880, $39B4484BFEEBC2A0, $39E95A5EFEA6B348, $3A1FB0F6BE506019,
+    $3A53CE9A36F23C10, $3A88C240C4AECB14, $3ABEF2D0F5DA7DD9, $3AF357C299A88EA8,
+    $3B282DB34012B252, $3B5E392010175EE6, $3B92E3B40A0E9B50, $3BC79CA10C924224,
+    $3BFD83C94FB6D2AC, $3C32725DD1D243AC, $3C670EF54646D496, $3C9CD2B297D889BC,
+    $3CD203AF9EE75616, $3D06849B86A12B9B, $3D3C25C268497682, $3D719799812DEA11,
+    $3DA5FD7FE1796495, $3DDB7CDFD9D7BDBB, $3E112E0BE826D695, $3E45798EE2308C3A,
+    $3E7AD7F29ABCAF48, $3EB0C6F7A0B5ED8D, $3EE4F8B588E368F0, $3F1A36E2EB1C432C,
+    $3F50624DD2F1A9FC, $3F847AE147AE147B, $3FB999999999999A, $3FF0000000000000,
+    $4024000000000000, $4059000000000000, $408F400000000000, $40C3880000000000,
+    $40F86A0000000000, $412E848000000000, $416312D000000000, $4197D78400000000,
+    $41CDCD6500000000, $4202A05F20000000, $42374876E8000000, $426D1A94A2000000,
+    $42A2309CE5400000, $42D6BCC41E900000, $430C6BF526340000, $4341C37937E08000,
+    $4376345785D8A000, $43ABC16D674EC800, $43E158E460913D00, $4415AF1D78B58C40,
+    $444B1AE4D6E2EF50, $4480F0CF064DD592, $44B52D02C7E14AF6, $44EA784379D99DB4,
+    $45208B2A2C280291, $4554ADF4B7320334, $4589D971E4FE8402, $45C027E72F1F1281,
+    $45F431E0FAE6D722, $46293E5939A08CEA, $465F8DEF8808B024, $4693B8B5B5056E17,
+    $46C8A6E32246C99C, $46FED09BEAD87C04, $4733426172C74D82, $476812F9CF7920E2,
+    $479E17B84357691B, $47D2CED32A16A1B1, $48078287F49C4A1E, $483D6329F1C35CA5,
+    $48725DFA371A19E7, $48A6F578C4E0A060, $48DCB2D6F618C879, $4911EFC659CF7D4C,
+    $49466BB7F0435C9E, $497C06A5EC5433C6, $49B18427B3B4A05C, $49E5E531A0A1C873,
+    $4A1B5E7E08CA3A90, $4A511B0EC57E649A, $4A8561D276DDFDC0, $4ABABA4714957D30,
+    $4AF0B46C6CDD6E3E, $4B24E1878814C9CE, $4B5A19E96A19FC41, $4B905031E2503DA9,
+    $4BC4643E5AE44D13, $4BF97D4DF19D6058, $4C2FDCA16E04B86D, $4C63E9E4E4C2F344,
+    $4C98E45E1DF3B016, $4CCF1D75A5709C1B, $4D03726987666191, $4D384F03E93FF9F5,
+    $4D6E62C4E38FF872, $4DA2FDBB0E39FB47, $4DD7BD29D1C87A19, $4E0DAC74463A989F,
+    $4E428BC8ABE49F64, $4E772EBAD6DDC73C, $4EACFA698C95390C, $4EE21C81F7DD43A7,
+    $4F16A3A275D49491, $4F4C4C8B1349B9B5, $4F81AFD6EC0E1411, $4FB61BCCA7119916,
+    $4FEBA2BFD0D5FF5B, $502145B7E285BF99, $50559725DB272F7F, $508AFCEF51F0FB5F,
+    $50C0DE1593369D1B, $50F5159AF8044462, $512A5B01B605557B, $516078E111C3556D,
+    $5194971956342AC8, $51C9BCDFABC1357A, $5200160BCB58C16C, $52341B8EBE2EF1C7,
+    $526922726DBAAE39, $529F6B0F092959C7, $52D3A2E965B9D81D, $53088BA3BF284E24,
+    $533EAE8CAEF261AD, $53732D17ED577D0C, $53A7F85DE8AD5C4E, $53DDF67562D8B362,
+    $5412BA095DC7701E, $5447688BB5394C25, $547D42AEA2879F2E, $54B249AD2594C37D,
+    $54E6DC186EF9F45C, $551C931E8AB87173, $5551DBF316B346E8, $558652EFDC6018A2,
+    $55BBE7ABD3781ECA, $55F170CB642B133F, $5625CCFE3D35D80E, $565B403DCC834E12,
+    $569108269FD210CB, $56C54A3047C694FE, $56FA9CBC59B83A3E, $5730A1F5B8132466,
+    $5764CA732617ED80, $5799FD0FEF9DE8E0, $57D03E29F5C2B18C, $58044DB473335DEF,
+    $583961219000356B, $586FB969F40042C5, $58A3D3E2388029BB, $58D8C8DAC6A0342A,
+    $590EFB1178484135, $59435CEAEB2D28C1, $59783425A5F872F1, $59AE412F0F768FAD,
+    $59E2E8BD69AA19CC, $5A17A2ECC414A040, $5A4D8BA7F519C84F, $5A827748F9301D32,
+    $5AB7151B377C247E, $5AECDA62055B2D9E, $5B22087D4358FC82, $5B568A9C942F3BA3,
+    $5B8C2D43B93B0A8C, $5BC19C4A53C4E697, $5BF6035CE8B6203D, $5C2B843422E3A84C,
+    $5C6132A095CE4930, $5C957F48BB41DB7C, $5CCADF1AEA12525B, $5D00CB70D24B7379,
+    $5D34FE4D06DE5057, $5D6A3DE04895E46C, $5DA066AC2D5DAEC4, $5DD4805738B51A75,
+    $5E09A06D06E26112, $5E400444244D7CAB, $5E7405552D60DBD6, $5EA906AA78B912CC,
+    $5EDF485516E7577F, $5F138D352E5096AF, $5F48708279E4BC5B, $5F7E8CA3185DEB72,
+    $5FB317E5EF3AB327, $5FE7DDDF6B095FF1, $601DD55745CBB7ED, $6052A5568B9F52F4,
+    $60874EAC2E8727B1, $60BD22573A28F19D, $60F2357684599702, $6126C2D4256FFCC3,
+    $615C73892ECBFBF4, $6191C835BD3F7D78, $61C63A432C8F5CD6, $61FBC8D3F7B3340C,
+    $62315D847AD00088, $6265B4E5998400AA, $629B221EFFE500D4, $62D0F5535FEF2084,
+    $630532A837EAE8A6, $633A7F5245E5A2CF, $63708F936BAF85C1, $63A4B378469B6732,
+    $63D9E056584240FE, $64102C35F729689F, $6444374374F3C2C6, $647945145230B378,
+    $64AF965966BCE056, $64E3BDF7E0360C36, $6518AD75D8438F43, $654ED8D34E547314,
+    $6583478410F4C7EC, $65B819651531F9E8, $65EE1FBE5A7E7861, $6622D3D6F88F0B3D,
+    $665788CCB6B2CE0C, $668D6AFFE45F818F, $66C262DFEEBBB0FA, $66F6FB97EA6A9D38,
+    $672CBA7DE5054486, $6761F48EAF234AD4, $679671B25AEC1D88, $67CC0E1EF1A724EB,
+    $680188D357087713, $6835EB082CCA94D7, $686B65CA37FD3A0D, $68A11F9E62FE4448,
+    $68D56785FBBDD55A, $690AC1677AAD4AB1, $6940B8E0ACAC4EAF, $6974E718D7D7625A,
+    $69AA20DF0DCD3AF1, $69E0548B68A044D6, $6A1469AE42C8560C, $6A498419D37A6B8F,
+    $6A7FE52048590673, $6AB3EF342D37A408, $6AE8EB0138858D0A, $6B1F25C186A6F04C,
+    $6B537798F4285630, $6B88557F31326BBC, $6BBE6ADEFD7F06AA, $6BF302CB5E6F642A,
+    $6C27C37E360B3D35, $6C5DB45DC38E0C82, $6C9290BA9A38C7D2, $6CC734E940C6F9C6,
+    $6CFD022390F8B837, $6D3221563A9B7322, $6D66A9ABC9424FEB, $6D9C5416BB92E3E6,
+    $6DD1B48E353BCE70, $6E0621B1C28AC20C, $6E3BAA1E332D728F, $6E714A52DFFC6799,
+    $6EA59CE797FB8180, $6EDB04217DFA61DF, $6F10E294EEBC7D2C, $6F451B3A2A6B9C76,
+    $6F7A6208B5068394, $6FB07D457124123D, $6FE49C96CD6D16CC, $7019C3BC80C85C7E,
+    $70501A55D07D39CF, $708420EB449C8843, $70B9292615C3AA54, $70EF736F9B3494E9,
+    $7123A825C100DD11, $7158922F31411456, $718EB6BAFD91596B, $71C33234DE7AD7E3,
+    $71F7FEC216198DDC, $722DFE729B9FF152, $7262BF07A143F6D4, $72976EC98994F488,
+    $72CD4A7BEBFA31AB, $73024E8D737C5F0B, $7336E230D05B76CD, $736C9ABD04725481,
+    $73A1E0B622C774D0, $73D658E3AB795204, $740BEF1C9657A686, $74417571DDF6C814,
+    $7475D2CE55747A18, $74AB4781EAD1989E, $74E10CB132C2FF63, $75154FDD7F73BF3C,
+    $754AA3D4DF50AF0B, $7580A6650B926D67, $75B4CFFE4E7708C0, $75EA03FDE214CAF0,
+    $7620427EAD4CFED6, $7654531E58A03E8C, $768967E5EEC84E2F, $76BFC1DF6A7A61BB,
+    $76F3D92BA28C7D15, $7728CF768B2F9C5A, $775F03542DFB8370, $779362149CBD3226,
+    $77C83A99C3EC7EB0, $77FE494034E79E5C, $7832EDC82110C2F9, $7867A93A2954F3B8,
+    $789D9388B3AA30A6, $78D27C35704A5E68, $79071B42CC5CF602, $793CE2137F743382,
+    $79720D4C2FA8A031, $79A6909F3B92C83D, $79DC34C70A777A4C, $7A11A0FC668AAC70,
+    $7A46093B802D578C, $7A7B8B8A6038AD6F, $7AB137367C236C65, $7AE585041B2C477E,
+    $7B1AE64521F7595E, $7B50CFEB353A97DB, $7B8503E602893DD2, $7BBA44DF832B8D46,
+    $7BF06B0BB1FB384C, $7C2485CE9E7A065E, $7C59A742461887F6, $7C9008896BCF54FA,
+    $7CC40AABC6C32A38, $7CF90D56B873F4C6, $7D2F50AC6690F1F8, $7D63926BC01A973B,
+    $7D987706B0213D0A, $7DCE94C85C298C4C, $7E031CFD3999F7B0, $7E37E43C8800759C,
+    $7E6DDD4BAA009303, $7EA2AA4F4A405BE2, $7ED754E31CD072DA, $7F0D2A1BE4048F90,
+    $7F423A516E82D9BA, $7F76C8E5CA239029, $7FAC7B1F3CAC7433, $7FE1CCF385EBC8A0
+  );
+  cJsLn10: Double = 2.302585092994046;
+  { Interval.ts' safeLimit: more ticks than this and there are none. }
+  cSafeTickLimit = 3000;
+
+function TyJsPow10(AExp: Integer): Double;
+var q: QWord;
+begin
+  if (AExp >= Low(cJsPow10)) and (AExp <= High(cJsPow10)) then
+  begin
+    q := cJsPow10[AExp];
+    Move(q, Result, SizeOf(Result));
+  end
+  else if AExp > 0 then
+    Result := Infinity
+  else
+    Result := 0;
+end;
+
+{ Math.floor and Math.ceil. Math.Floor answers a 32-bit Integer here and wraps
+  above two thousand million; these stay in the Double the value came in. }
+function JsFloor(AValue: Double): Double;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(AValue);
+  Result := Int(AValue);
+  if Result > AValue then Result := Result - 1;
+end;
+
+function JsCeil(AValue: Double): Double;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(AValue);
+  Result := Int(AValue);
+  if Result < AValue then Result := Result + 1;
+end;
+
+{ One 256-bit unsigned integer, least significant word first: the mantissa
+  times ten to the twentieth, shifted far enough left to divide into a
+  64-bit quotient. }
+type
+  TJsWide = array[0..7] of LongWord;
+
+procedure WideMulSmall(var AN: TJsWide; AFactor: LongWord);
+var i: Integer; t, carry: QWord;
+begin
+  carry := 0;
+  for i := 0 to High(AN) do
+  begin
+    t := QWord(AN[i]) * AFactor + carry;
+    AN[i] := LongWord(t and $FFFFFFFF);
+    carry := t shr 32;
+  end;
+end;
+
+function WideBit(const AN: TJsWide; ABit: Integer): Boolean;
+begin
+  if (ABit < 0) or (ABit >= 32 * Length(AN)) then Exit(False);
+  Result := (AN[ABit div 32] shr (ABit mod 32)) and 1 <> 0;
+end;
+
+procedure WideSetBit(var AN: TJsWide; ABit: Integer);
+begin
+  if (ABit < 0) or (ABit >= 32 * Length(AN)) then Exit;
+  AN[ABit div 32] := AN[ABit div 32] or (LongWord(1) shl (ABit mod 32));
+end;
+
+function WideBitLen(const AN: TJsWide): Integer;
+var i: Integer;
+begin
+  for i := 32 * Length(AN) - 1 downto 0 do
+    if WideBit(AN, i) then Exit(i + 1);
+  Result := 0;
+end;
+
+{ Adds 2^ABit, which is where the half-up of a right shift by ABit + 1 comes from. }
+procedure WideAddBit(var AN: TJsWide; ABit: Integer);
+var i: Integer; t, carry: QWord;
+begin
+  if (ABit < 0) or (ABit >= 32 * Length(AN)) then Exit;
+  i := ABit div 32;
+  carry := QWord(1) shl (ABit mod 32);
+  while (carry <> 0) and (i <= High(AN)) do
+  begin
+    t := QWord(AN[i]) + carry;
+    AN[i] := LongWord(t and $FFFFFFFF);
+    carry := t shr 32;
+    Inc(i);
+  end;
+end;
+
+procedure WideShr(var AN: TJsWide; ACount: Integer);
+var i, w, b: Integer; lo, hi: QWord;
+begin
+  if ACount >= 32 * Length(AN) then
+  begin
+    FillChar(AN, SizeOf(AN), 0);
+    Exit;
+  end;
+  w := ACount div 32;
+  b := ACount mod 32;
+  for i := 0 to High(AN) do
+  begin
+    if i + w <= High(AN) then lo := AN[i + w] else lo := 0;
+    if i + w + 1 <= High(AN) then hi := AN[i + w + 1] else hi := 0;
+    if b = 0 then AN[i] := LongWord(lo)
+    else AN[i] := LongWord(((lo shr b) or (hi shl (32 - b))) and $FFFFFFFF);
+  end;
+end;
+
+function WideCmp(const A, B: TJsWide): Integer;
+var i: Integer;
+begin
+  for i := High(A) downto 0 do
+    if A[i] <> B[i] then
+    begin
+      if A[i] > B[i] then Exit(1) else Exit(-1);
+    end;
+  Result := 0;
+end;
+
+procedure WideSub(var A: TJsWide; const B: TJsWide);
+var i: Integer; t: Int64; borrow: Int64;
+begin
+  borrow := 0;
+  for i := 0 to High(A) do
+  begin
+    t := Int64(A[i]) - Int64(B[i]) - borrow;
+    if t < 0 then
+    begin
+      t := t + (Int64(1) shl 32);
+      borrow := 1;
+    end
+    else
+      borrow := 0;
+    A[i] := LongWord(t);
+  end;
+end;
+
+procedure WideShl1(var AN: TJsWide);
+var i: Integer;
+begin
+  for i := High(AN) downto 1 do
+    AN[i] := (AN[i] shl 1) or (AN[i - 1] shr 31);
+  AN[0] := AN[0] shl 1;
+end;
+
+{ ANum / ADen as the nearest Double, a tie going to the even mantissa -- what
+  Number() gives the decimal text of the quotient, without reading any text.
+  The quotient is taken to 64 bits or more by long division, and whether
+  anything was left over decides the ties. }
+function WideDivToDouble(const ANum, ADen: TJsWide): Double;
+var
+  q, r, top: TJsWide;
+  ln, ld, s, i, lq, sh, k: Integer;
+  mant: QWord;
+  lower, up: Boolean;
+begin
+  ln := WideBitLen(ANum);
+  ld := WideBitLen(ADen);
+  if ln = 0 then Exit(0);
+  s := 64 + ld - ln;
+  if s < 0 then s := 0;
+  FillChar(q, SizeOf(q), 0);
+  FillChar(r, SizeOf(r), 0);
+  { ANum shifted left by s, one bit at a time into the remainder }
+  for i := ln - 1 + s downto 0 do
+  begin
+    WideShl1(r);
+    if (i >= s) and WideBit(ANum, i - s) then r[0] := r[0] or 1;
+    if WideCmp(r, ADen) >= 0 then
+    begin
+      WideSub(r, ADen);
+      WideSetBit(q, i);
+    end;
+  end;
+  lq := WideBitLen(q);
+  sh := lq - 53;
+  top := q;
+  WideShr(top, sh);
+  mant := (QWord(top[1]) shl 32) or top[0];
+  lower := False;
+  for k := 0 to sh - 2 do
+    if WideBit(q, k) then
+    begin
+      lower := True;
+      Break;
+    end;
+  for k := 0 to High(r) do
+    if r[k] <> 0 then lower := True;
+  { Past half, or on it with an odd mantissa. (A carry to 2^53 needs no
+    renormalising: 2^53 is an exact Double, and so is its power of two.) }
+  up := WideBit(q, sh - 1) and (lower or Odd(mant));
+  if up then Inc(mant);
+  Result := Ldexp(Double(mant), sh - s);
+end;
+
+function TyJsToFixed(AValue: Double; APrecision: Integer): Double;
+var
+  x: Double;
+  bits, m: QWord;
+  e, k, i: Integer;
+  neg: Boolean;
+  n, den: TJsWide;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(AValue);
+  if APrecision < 0 then APrecision := 0;
+  if APrecision > 20 then APrecision := 20;
+  { A NEGATIVE IS ROUNDED AS ITS MAGNITUDE, the sign put back afterwards --
+    the specification's order, and why a half goes away from zero. }
+  neg := AValue < 0;
+  x := Abs(AValue);
+  bits := 0;
+  Move(x, bits, SizeOf(bits));
+  e := Integer((bits shr 52) and $7FF);
+  m := bits and QWord($000FFFFFFFFFFFFF);
+  if e = 0 then e := -1074
+  else
+  begin
+    m := m or (QWord(1) shl 52);
+    e := e - 1075;
+  end;
+  { x = m * 2^e. With e at or above zero x is a whole number, and a whole
+    number is its own toFixed. That covers toFixed's own give-up too --
+    anything from 1e21 up comes back as the number itself -- which is why
+    there is no separate test for it: every Double that large is whole. }
+  if (e >= 0) or (m = 0) then Exit(AValue);
+  { n = the integer nearest x * 10^p, a tie going up: (m*10^p + 2^(k-1))
+    shifted right by k, exactly. m is under 2^53 and 10^20 under 2^67. }
+  k := -e;
+  FillChar(n, SizeOf(n), 0);
+  n[0] := LongWord(m and $FFFFFFFF);
+  n[1] := LongWord(m shr 32);
+  for i := 1 to APrecision do WideMulSmall(n, 10);
+  WideAddBit(n, k - 1);
+  WideShr(n, k);
+  { BACK TO A DOUBLE, correctly rounded, and never through FPC's Val, which
+    is not: read that way, 22 of 276,712 answers came back a unit in the last
+    place out. Under 2^53 both n and 10^p are exact Doubles and one IEEE
+    division rounds once -- the long division below gives the same answer
+    there, only slower. Longer answers go through it. }
+  if (n[7] = 0) and (n[6] = 0) and (n[5] = 0) and (n[4] = 0) and (n[3] = 0)
+    and (n[2] = 0) and (n[1] < $200000) then
+    Result := ((QWord(n[1]) shl 32) or n[0]) / TyJsPow10(APrecision)
+  else
+  begin
+    FillChar(den, SizeOf(den), 0);
+    den[0] := 1;
+    for i := 1 to APrecision do WideMulSmall(den, 10);
+    Result := WideDivToDouble(n, den);
+  end;
+  if neg then Result := -Result;
+end;
+
+function TyQuantityExponent(AValue: Double): Integer;
+var e: Double;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) or (AValue <= 0) then Exit(0);
+  e := JsFloor(Ln(AValue) / cJsLn10);
+  if IsNan(e) or IsInfinite(e) then Exit(0);
+  Result := Trunc(e);
+  { The logarithm lands a hair under an exact power often enough that
+    upstream checks: log(1000)/LN10 is 2.9999999999999996. }
+  if AValue / TyJsPow10(Result) >= 10 then Inc(Result);
+end;
+
+function TyNice(AValue: Double; ARound: Boolean): Double;
 var
   expo: Integer;
-  frac, nice: Double;
+  exp10, f, nf: Double;
 begin
-  if AValue <= 0 then
-    Exit(1);
-  expo := Floor(Log10(AValue));
-  frac := AValue / Power(10, expo);
+  expo := TyQuantityExponent(AValue);
+  exp10 := TyJsPow10(expo);
+  f := AValue / exp10;
   if ARound then
   begin
-    if frac < 1.5 then nice := 1
-    else if frac < 3 then nice := 2
-    else if frac < 7 then nice := 5
-    else nice := 10;
+    if f < 1.5 then nf := 1
+    else if f < 2.5 then nf := 2
+    else if f < 4 then nf := 3
+    else if f < 7 then nf := 5
+    else nf := 10;
   end
   else
   begin
-    if frac <= 1 then nice := 1
-    else if frac <= 2 then nice := 2
-    else if frac <= 2.5 then nice := 2.5
-    else if frac <= 5 then nice := 5
-    else nice := 10;
+    if f < 1 then nf := 1
+    else if f < 2 then nf := 2
+    else if f < 3 then nf := 3
+    else if f < 5 then nf := 5
+    else nf := 10;
   end;
-  Result := nice * Power(10, expo);
+  { And snapped to the decimal it means: 3 x 0.1 is 0.30000000000000004. }
+  Result := TyJsToFixed(nf * exp10, -expo);
+end;
+
+{ The number of decimals a value round-trips through, JavaScript's own
+  toString deciding what "the value" is -- only reached for a value the
+  counting loop cannot settle: a negative one, or one under 1e-14. }
+function GetPrecisionSafe(AValue: Double): Integer;
+var
+  w, code, ePos, i, nd, e10: Integer;
+  s, digits: string;
+  back: Double;
+begin
+  Result := 0;
+  if (AValue = 0) or IsNan(AValue) or IsInfinite(AValue) then Exit;
+  AValue := Abs(AValue);
+  for w := 8 to 26 do
+  begin
+    Str(AValue:w, s);
+    s := Trim(s);
+    Val(s, back, code);
+    if (code = 0) and (back = AValue) then
+    begin
+      ePos := Pos('E', s);
+      if ePos <= 0 then Exit;
+      e10 := StrToIntDef(Copy(s, ePos + 1, MaxInt), 0);
+      digits := '';
+      for i := 1 to ePos - 1 do
+        if s[i] in ['0'..'9'] then digits := digits + s[i];
+      nd := Length(digits);
+      while (nd > 1) and (digits[nd] = '0') do Dec(nd);
+      Exit(Max(0, (nd - 1) - e10));
+    end;
+  end;
+end;
+
+function TyGetPrecision(AValue: Double): Integer;
+var
+  e: Double;
+  i: Integer;
+begin
+  if IsNan(AValue) then Exit(0);
+  if AValue > 1e-14 then
+  begin
+    e := 1;
+    for i := 0 to 14 do
+    begin
+      if TyJsRound(AValue * e) / e = AValue then Exit(i);
+      e := e * 10;
+    end;
+  end;
+  Result := GetPrecisionSafe(AValue);
+end;
+
+function TyIntervalPrecision(AInterval: Double): Integer;
+begin
+  { "Two more digits for tick", upstream's own words and nothing more. }
+  Result := TyGetPrecision(AInterval) + 2;
+end;
+
+function TyDrawnTicks(AScale: TTyScale): TTyScaleTickArray;
+begin
+  if (AScale = nil) or AScale.Blank then Exit(nil);
+  Result := AScale.GetTicks;
+end;
+
+function TyValidSplitNumber(ARaw: Double; ADefault: Integer): Integer;
+begin
+  { `raw || default`, then round(max(it, 1)). Zero and not-a-number are the
+    default; 2.5 is three. }
+  if IsNan(ARaw) or (ARaw = 0) then ARaw := ADefault;
+  if IsInfinite(ARaw) then ARaw := ADefault;
+  ARaw := TyJsRound(Math.Max(ARaw, Double(1)));
+  if ARaw > High(Integer) then Exit(High(Integer));
+  Result := Trunc(ARaw);
 end;
 
 constructor TTyIntervalScale.Create;
 begin
   inherited Create;
   FInterval := 1;
+  FIntervalPrecision := 2;
+  FNiceStart := 0;
+  FNiceStop := 1;
+  FStubStart := 0;
+  FStubStop := 1;
+  FNiced := False;
+  FNicedExtent := TyRange(0, 1);
   FFixMin := False;
   FFixMax := False;
 end;
 
-procedure TTyIntervalScale.Niceify(ASplitNumber: Integer;
-  AExactInterval: Double);
+function TTyIntervalScale.StillNiced: Boolean;
+var e: TTyRange;
+begin
+  { Niceify's answer holds only while nobody has set another extent since. }
+  if not FNiced then Exit(False);
+  e := GetExtent;
+  Result := (e.Start = FNicedExtent.Start) and (e.Stop = FNicedExtent.Stop);
+end;
+
+{ THE STEP WALKS IN LOG SPACE ON A LOG AXIS ONLY. A break decorator
+  transforms too, but upstream nices a broken axis in value space -- on the
+  span with the breaks taken out, which this port does not do yet -- and
+  treating its collapsed space as decades put ticks past the extent and out
+  of order. }
+function TTyIntervalScale.LogWarped: Boolean;
+begin
+  Result := FLogRule and (FMapper <> nil) and FMapper.NeedTransform;
+end;
+
+function TTyIntervalScale.StubExtent: TTyRange;
 var
   e: TTyRange;
-  span, lo, hi, a, b: Double;
-  warped: Boolean;
+  a, b: Double;
 begin
-  if ASplitNumber < 1 then
-    ASplitNumber := 5;
+  { THE SPACE THE STEP WALKS IN. The same as the extent on a linear axis;
+    decades on a log one, and there the values Niceify left are kept rather
+    than recomputed, because the logarithm of a power is not always the
+    exponent it came from. }
+  if StillNiced then Exit(TyRange(FStubStart, FStubStop));
   e := GetExtent;
-
-  { IN THE MAPPER'S OWN SPACE. A log axis is this class carrying a log mapper,
-    and nicing it in raw value space put the step above the low end, floored
-    that end to 0, and made TransformIn(0) NaN -- after which Normalize answers
-    0.5 for every value and the entire series lands on the middle of the plot.
-
-    One decade is the step here, so the ticks come out on powers of the base,
-    which is the only thing a log axis' ticks can sensibly be. }
-  warped := (FMapper <> nil) and FMapper.NeedTransform;
-  if warped then
+  if LogWarped then
   begin
     a := FMapper.TransformIn(e.Start);
     b := FMapper.TransformIn(e.Stop);
-    { A low end the transform cannot take -- zero or negative on a log axis --
-      is pulled up to one step below the top rather than left as NaN. Dropping
-      back to the raw path here is what produced the collapse; refusing to nice
-      at all would leave the axis unlabelled. }
-    if IsNan(b) then Exit;
-    if IsNan(a) then a := b - 1;
-    e := TyRange(a, b);
+    Exit(TyRange(a, b));
   end;
-
-  span := TyRangeSpan(e);
-  if span <= 0 then
-  begin
-    { A flat extent has no scale of its own. Borrow one from the value's own
-      magnitude, so a chart of a single 42 does not get a 0..1 axis. }
-    if e.Start = 0 then
-      span := 1
-    else
-      span := Abs(e.Start);
-    e := TyRange(e.Start - span / 2, e.Start + span / 2);
-    span := TyRangeSpan(e);
-  end;
-  { AN EXPLICIT STEP IS NOT A SUGGESTION. ECharts' `interval` overrides the
-    step outright, and running it back through NiceNum turns 30 into 50 and 3
-    into 5 -- a different axis from the one the option asked for, with no
-    diagnostic. Everything below this line is unchanged either way, so there is
-    still one tick generator on one set of rules; it is just told the step
-    instead of guessing it. }
-  if AExactInterval > 0 then
-    FInterval := AExactInterval
-  else
-    FInterval := NiceNum(span / ASplitNumber, False);
-
-  { CLAMPED, after the nice number and before the extent is rounded to it, so
-    the ends still land on multiples of whatever step survives. An explicit
-    `interval` is exempt: it is already a statement about the step, and two
-    instructions about the same number should not silently fight. }
-  if AExactInterval <= 0 then
-  begin
-    if (FMinInterval > 0) and (FInterval < FMinInterval) then
-      FInterval := FMinInterval;
-    if (FMaxInterval > 0) and (FInterval > FMaxInterval) then
-      FInterval := FMaxInterval;
-  end;
-  if FFixMin then
-    lo := e.Start
-  else
-    lo := Floor(e.Start / FInterval) * FInterval;
-  if FFixMax then
-    hi := e.Stop
-  else
-    hi := Ceil(e.Stop / FInterval) * FInterval;
-  if hi <= lo then
-    hi := lo + FInterval;
-  if warped then
-    SetExtent(TyRange(FMapper.TransformOut(lo), FMapper.TransformOut(hi)))
-  else
-    SetExtent(TyRange(lo, hi));
+  Result := e;
 end;
 
-function TTyIntervalScale.GetTicks: TTyScaleTickArray;
+procedure TTyIntervalScale.Niceify(ASplitNumber: Double;
+  AUserInterval: Double);
+var mask: TFPUExceptionMask;
+begin
+  { JavaScript's arithmetic, not-a-number and all: a step that toFixed
+    rounded to nothing divides by zero, and upstream carries the result on
+    rather than stopping. }
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    NiceifyJs(ASplitNumber, AUserInterval);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    { And the SSE flags, which ClearExceptions leaves standing on this CPU. }
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+procedure TTyIntervalScale.NiceifyJs(ASplitNumber: Double;
+  AUserInterval: Double);
+var
+  e, oldE: TTyRange;
+  warped, hasUser: Boolean;
+  lo, hi, span, iv, autoIv, h, a, b, err, powLo, powHi, vLo, vHi: Double;
+  prec, autoPrec, split: Integer;
+begin
+  hasUser := not IsNan(AUserInterval);
+  oldE := GetExtent;
+  e := oldE;
+
+  { IN THE MAPPER'S OWN SPACE. A log axis nices its decades, and nicing it in
+    raw value space put the step above the low end, floored that end to 0,
+    and made TransformIn(0) NaN -- after which every value landed mid-plot. }
+  warped := LogWarped;
+  if warped then
+  begin
+    { NOT through TyRange: a log of zero is not-a-number, and TyRange orders
+      its pair by comparing it. The validation below sorts what it keeps. }
+    a := FMapper.TransformIn(e.Start);
+    b := FMapper.TransformIn(e.Stop);
+    lo := a;
+    hi := b;
+  end
+  else
+  begin
+    lo := e.Start;
+    hi := e.Stop;
+  end;
+  a := lo;
+  b := hi;
+
+  { intervalScaleEnsureValidExtent, verbatim. A FLAT extent opens by half its
+    own size -- on the low side only when the top is pinned, which keeps a
+    written max where it was written. Zero opens to [0, 1]. An end that is not
+    a number, or not finite, gives up on both: [0, 1]. }
+  { (Tested for a number FIRST: comparing a not-a-number raises here, and a
+    broken end can never have been equal to anything, so the order changes
+    nothing upstream would see.) }
+  if IsNan(lo) or IsNan(hi) or IsInfinite(lo) or IsInfinite(hi) then
+  begin
+    lo := 0;
+    hi := 1;
+  end
+  else if lo = hi then
+  begin
+    if lo <> 0 then
+    begin
+      h := Abs(lo);
+      if not FFixMax then
+      begin
+        hi := hi + h / 2;
+        lo := lo - h / 2;
+      end
+      else
+        lo := lo - h / 2;
+    end
+    else
+      hi := 1;
+  end;
+  if hi < lo then
+  begin
+    h := lo;
+    lo := hi;
+    hi := h;
+  end;
+  vLo := lo;
+  vHi := hi;
+  span := hi - lo;
+
+  if FLogRule then
+  begin
+    { A LOG AXIS DOES NOT NICE. Its step is a whole number of decades --
+      quantity(span), and ten of those when that would leave half the ticks
+      asked for -- and minInterval / maxInterval are not read. The fallback
+      split is ten here, upstream's, though the option's own default of five
+      almost always arrives first. }
+    split := TyValidSplitNumber(ASplitNumber, 10);
+    iv := Math.Max(TyJsPow10(TyQuantityExponent(span)), Double(1));
+    err := split / span * iv;
+    if err <= 0.5 then iv := iv * 10;
+  end
+  else
+  begin
+    split := TyValidSplitNumber(ASplitNumber, 5);
+    { nice(span / splitNumber, round): 1, 2, 3, 5 or 10 of a power of ten. }
+    iv := TyNice(span / split, True);
+    if (FMinInterval > 0) and (iv < FMinInterval) then iv := FMinInterval;
+    if (FMaxInterval > 0) and (iv > FMaxInterval) then iv := FMaxInterval;
+  end;
+  prec := TyIntervalPrecision(iv);
+  { THE NICE TICKS LIE INSIDE THE EXTENT, from the extent as validated and
+    before it is rounded outwards -- which is why a pinned end that is no
+    multiple of the step becomes a tick of its own, first or last. }
+  FNiceStart := TyJsToFixed(JsCeil(lo / iv) * iv, prec);
+  FNiceStop := TyJsToFixed(JsFloor(hi / iv) * iv, prec);
+  autoIv := iv;
+  autoPrec := prec;
+
+  { AN EXPLICIT `interval` STEPS THE TICKS AND NOTHING ELSE. The extent is
+    still rounded to the step upstream would have picked -- its own comment
+    calls it historical -- and the ticks walk the whole of it. }
+  if hasUser then
+  begin
+    iv := AUserInterval;
+    prec := TyIntervalPrecision(iv);
+  end;
+  if not FFixMin then lo := TyJsToFixed(JsFloor(lo / autoIv) * autoIv, autoPrec);
+  if not FFixMax then hi := TyJsToFixed(JsCeil(hi / autoIv) * autoIv, autoPrec);
+  { A STEP OF NOTHING ROUNDS AN END TO NOT-A-NUMBER, and upstream's setExtent
+    skips a not-a-number end -- the extent stays as validated. Values under
+    1e-20 or so get here: toFixed stops at twenty places, and the step they
+    would need is finer than that. }
+  if IsNan(lo) then lo := vLo;
+  if IsNan(hi) then hi := vHi;
+  if hasUser then
+  begin
+    FNiceStart := lo;
+    FNiceStop := hi;
+  end;
+  FInterval := iv;
+  FIntervalPrecision := prec;
+  FStubStart := lo;
+  FStubStop := hi;
+  FNiced := True;
+
+  if warped then
+  begin
+    { AN END NICING DID NOT MOVE KEEPS THE VALUE IT CAME IN AS: 10^log10(3)
+      is 2.9999999999999996 here, and a written min shown that way is a bug
+      report. Upstream's lookup, which holds for any end and not only a
+      pinned one: data from 10.000000000000002 keeps that as its first tick
+      and does not become a round 10. }
+    powLo := FMapper.TransformOut(lo);
+    powHi := FMapper.TransformOut(hi);
+    if (not IsNan(a)) and (lo = a) then powLo := oldE.Start;
+    if (not IsNan(b)) and (hi = b) then powHi := oldE.Stop;
+    SetExtent(TyRange(powLo, powHi));
+  end
+  else
+    SetExtent(TyRange(lo, hi));
+  FNicedExtent := GetExtent;
+end;
+
+procedure TTyIntervalScale.Niceify(ASplitNumber: Double);
+begin
+  Niceify(ASplitNumber, NaN);
+end;
+
+{ One tick value back in value space: a log axis' decades go out as powers,
+  and the two ends as the extent itself (upstream's lookup), so a pinned end
+  reads back as written. }
+function TTyIntervalScale.StubToValue(AValue: Double): Double;
+var e: TTyRange;
+begin
+  if not LogWarped then Exit(AValue);
+  e := GetExtent;
+  if StillNiced then
+  begin
+    if AValue = FStubStart then Exit(e.Start);
+    if AValue = FStubStop then Exit(e.Stop);
+  end;
+  Result := FMapper.TransformOut(AValue);
+end;
+
+function TTyIntervalScale.StubTicks(AExpand: Boolean): TTyDoubleArray;
 var
   e: TTyRange;
-  v, step, a, b, cnt: Double;
-  n, i, k, t, minor: Integer;
-  warped: Boolean;
+  n: Integer;
+  tick, iv, last: Double;
+  prec: Integer;
 
-  { Ticks are stepped in the space Niceify worked in and reported in value
-    space, so the two cannot disagree about what the interval means. }
-  function Out_(AValue: Double): Double;
+  procedure Push(AValue: Double);
   begin
-    if warped then Result := FMapper.TransformOut(AValue) else Result := AValue;
+    if n > High(Result) then SetLength(Result, n * 2 + 8);
+    Result[n] := AValue;
+    Inc(n);
   end;
 
 begin
   Result := nil;
-  e := GetExtent;
-  warped := (FMapper <> nil) and FMapper.NeedTransform;
-  if warped then
+  n := 0;
+  iv := FInterval;
+  prec := FIntervalPrecision;
+  { An interval of nothing is no ticks -- upstream's first line. }
+  if IsNan(iv) or (iv = 0) then Exit;
+  e := StubExtent;
+  if IsNan(e.Start) or IsNan(e.Stop) or IsInfinite(e.Start)
+    or IsInfinite(e.Stop) then Exit;
+  if not StillNiced then
   begin
-    a := FMapper.TransformIn(e.Start);
-    b := FMapper.TransformIn(e.Stop);
-    if IsNan(a) or IsNan(b) then Exit;
-    e := TyRange(a, b);
+    FNiceStart := TyJsToFixed(JsCeil(e.Start / iv) * iv, prec);
+    FNiceStop := TyJsToFixed(JsFloor(e.Stop / iv) * iv, prec);
   end;
-  if (FInterval <= 0) or (TyRangeSpan(e) <= 0) then
-    Exit;
-  { Count first, then fill from the INDEX: a float accumulator would drift.
-
-    AND THE COUNT IS TESTED WHILE IT IS STILL A DOUBLE. `Floor` answers an
-    Int64 and RAISES above it, so a bound written after the Floor is a bound
-    that never runs -- which is exactly how the first version of the guard
-    below was written, and it changed nothing. }
-  cnt := TyRangeSpan(e) / FInterval;
-  { AN INTERVAL TOO SMALL TO DRAW IS NOT AN INSTRUCTION.
-
-    `splitNumber: 1e19` is legal -- upstream floors the value at one and
-    caps it at nothing -- and upstream survives it by accident: the span
-    divided by it underflows to zero, and its generator returns early on a
-    zero interval without allocating anything. This one counts first, so the
-    same option asked it for two thousand million ticks and the render died
-    of memory instead. Clamping the option to an Integer only moved the
-    crash: the bound that matters is not the type's, it is what an axis can
-    draw.
-
-    Ten thousand is past any real axis -- a four-thousand-pixel chart with a
-    tick on every other pixel -- so beyond it the interval says nothing about
-    where ticks go, and the honest answer is upstream's: none. }
-  if IsNan(cnt) or (cnt < 0) or (cnt > cMaxTicks) then Exit;
-  n := Floor(cnt + 1e-9) + 1;
-
-  minor := FMinorSplit;
-  if minor < 2 then minor := 1;          { 1 = none; a split of 1 is no split }
-  step := FInterval / minor;
-
-  { Every tick, major and minor, in one array in value order. The last major
-    tick has no minor ticks after it -- they belong to the interval BEFORE the
-    next major, and there is no next major. }
-  SetLength(Result, n + (n - 1) * (minor - 1));
-  t := 0;
-  for i := 0 to n - 1 do
+  if e.Start < FNiceStart then
   begin
-    v := e.Start + i * FInterval;
-    { Snap away the last binary ulp so a 0.1 step does not label 0.30000000000000004. }
-    if Abs(v) < FInterval * 1e-9 then
-      v := 0;
-    Result[t].Value := Out_(v);
-    Result[t].Level := 0;
-    Inc(t);
-    if i = n - 1 then Break;
-    { Evenly in the STEPPING space, so on a log axis the minor ticks come out
-      geometrically spaced between one power and the next. Not ECharts' 2..9
-      set, which is a different rule and belongs with the log labelling work,
-      but spaced the way the axis itself is. }
-    for k := 1 to minor - 1 do
+    if AExpand then Push(TyJsToFixed(FNiceStart - iv, prec))
+    else Push(e.Start);
+  end;
+  tick := FNiceStart;
+  while True do
+  begin
+    if IsNan(tick) or IsInfinite(tick) or IsNan(FNiceStop)
+      or IsInfinite(FNiceStop) or (tick > FNiceStop) then Break;
+    Push(tick);
+    tick := TyJsToFixed(tick + iv, prec);
+    { Past the precision a Double can carry the step adds nothing. }
+    if tick = Result[n - 1] then Break;
+    if n > cSafeTickLimit then
     begin
-      Result[t].Value := Out_(e.Start + i * FInterval + k * step);
-      Result[t].Level := 1;
-      Inc(t);
+      Result := nil;
+      Exit;
     end;
   end;
-  SetLength(Result, t);
+  if n > 0 then last := Result[n - 1] else last := FNiceStop;
+  if e.Stop > last then
+  begin
+    if AExpand then Push(TyJsToFixed(last + iv, prec))
+    else Push(e.Stop);
+  end;
+  SetLength(Result, n);
+end;
+
+function TTyIntervalScale.GetTicks: TTyScaleTickArray;
+var
+  majors, wide: TTyDoubleArray;
+  minors: TTyDoubleArray;
+  e: TTyRange;
+  i, k, n, m, split, mprec: Integer;
+  prev, next, miv, v: Double;
+  nm: Integer;
+
+  procedure AddMinor(AValue: Double);
+  begin
+    if nm > High(minors) then SetLength(minors, nm * 2 + 8);
+    minors[nm] := AValue;
+    Inc(nm);
+  end;
+
+begin
+  Result := nil;
+  majors := StubTicks(False);
+  n := Length(majors);
+  if n = 0 then Exit;
+
+  { MINOR TICKS SPLIT EACH GAP OF THE WIDENED LIST -- the first and last
+    majors pushed out to the multiples beyond a pinned end -- and keep only
+    what falls strictly inside the extent. A pinned min of 3 still gets the
+    minors at 4, 8, 12, 16 before the first multiple of twenty. In VALUE
+    space, on a log axis too: upstream spaces them linearly between powers. }
+  nm := 0;
+  minors := nil;
+  split := FMinorSplit;
+  if split >= 2 then
+  begin
+    wide := StubTicks(True);
+    e := GetExtent;
+    for i := 1 to High(wide) do
+    begin
+      prev := StubToValue(wide[i - 1]);
+      next := StubToValue(wide[i]);
+      miv := (next - prev) / split;
+      mprec := TyIntervalPrecision(miv);
+      for k := 0 to split - 2 do
+      begin
+        v := TyJsToFixed(prev + (k + 1) * miv, mprec);
+        if (v > e.Start) and (v < e.Stop) then AddMinor(v);
+      end;
+    end;
+  end;
+
+  SetLength(Result, n + nm);
+  i := 0;
+  k := 0;
+  m := 0;
+  { ONE ARRAY IN VALUE ORDER, majors and minors merged. They never meet:
+    minors sit strictly between two widened majors. }
+  while (i < n) or (k < nm) do
+  begin
+    if (k >= nm) or ((i < n) and (StubToValue(majors[i]) <= minors[k])) then
+    begin
+      Result[m] := Default(TTyScaleTick);
+      Result[m].Value := StubToValue(majors[i]);
+      Result[m].Level := 0;
+      Inc(i);
+    end
+    else
+    begin
+      Result[m] := Default(TTyScaleTick);
+      Result[m].Value := minors[k];
+      Result[m].Level := 1;
+      Inc(k);
+    end;
+    Inc(m);
+  end;
+  SetLength(Result, m);
 end;
 
 { ============================ TTyTimeScale ============================ }
@@ -1151,7 +1934,7 @@ var
 begin
   Result := nil;
   e := GetExtent;
-  t := TyTimeTicks(e.Start, e.Stop, FSplitNumber, FUTC);
+  t := TyTimeTicks(e.Start, e.Stop, FSplitNumber, FUTC, MinInterval, MaxInterval);
   SetLength(Result, Length(t));
   for i := 0 to High(t) do
   begin
