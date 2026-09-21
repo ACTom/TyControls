@@ -165,6 +165,12 @@ type
     FGraphNodes: array of TTyGraphNodeArray;
     FGraphEdges: array of TTyGraphEdgeArray;
     FGraphCats: array of TTyGraphCategoryArray;
+    { WHAT EACH FORCE LAYOUT LEFT FOR THE NEXT PASS, indexed by SERIES index
+      rather than by slot, and kept OUTSIDE the build: every relayout throws
+      the build away, and this is the one thing about a graph that has to
+      outlive it. Cleared only when the option changes -- upstream keeps it on
+      the series model, and a replaced option is new series models. }
+    FGraphForce: array of TTyGraphForceState;
     { Which store column feeds spoke j, per series. Its own array because the
       store is exactly as wide as the first data row while the spokes come from
       the radar, and the two are allowed to disagree. }
@@ -729,6 +735,7 @@ begin
   if FOptionText = AValue then Exit;
   FOptionText := AValue;
   FOption.SetOptionText(AValue);
+  FGraphForce := nil;
   FDirty := True;
   Invalidate;
 end;
@@ -894,17 +901,11 @@ begin
         which is the very failure the paragraph above records for the funnel
         and the gauge. The same trap, the third time.
 
-        ONE VALUE COLUMN, and everything else a node carries -- x, y,
-        category, symbol -- arrives as an override under its own name, the
-        way every per-datum option in this port does. }
+        THE GRAPH UNIT BUILDS IT, the one way the suite builds it too: one
+        value column, read from `data` or from `nodes`, its second name. }
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
       begin
-        st.AddDimension('value', ddtFloat);
-        SetLength(dims, 1);
-        dims[0] := Default(TTySeriesDim);
-        dims[0].Name := 'value';
-        dims[0].Kind := ddtFloat;
-        TyFillSeriesStore(FOption, i, dims, st);
+        TyGraphFillStore(FOption, i, st);
         Continue;
       end;
       if TySeriesFindType(FBindings[i].SeriesType, typeInfo)
@@ -2134,10 +2135,9 @@ end;
 
 procedure TTyAdvanceChart.SolveGraphs(APPI: Integer);
 var
-  i: Integer;
-  dataRect, viewRect: TTyRectF;
-  aspect: Double;
-  hasData: Boolean;
+  i, si: Integer;
+  solved: TTyGraphSolved;
+  store: TTyDataStore;
 begin
   FreeGraphs;
   SetLength(FGraphs, Length(FBindings));
@@ -2156,36 +2156,19 @@ begin
       for. }
     if FBindings[i].CoordSysName <> 'view' then Continue;
 
-    FGraphSpecs[i] := TyGraphSpecOf(FOption, FBindings[i].SeriesIndex);
-    FGraphCats[i] := TyGraphCategoriesOf(FOption, FBindings[i].SeriesIndex);
-    if i <= High(FStores) then
-      FGraphNodes[i] := TyGraphNodesOf(FStores[i], FGraphCats[i]);
-    FGraphEdges[i] := TyGraphEdgesOf(FOption, FBindings[i].SeriesIndex,
-      FGraphNodes[i]);
-
-    { THE ORDER IS UPSTREAM'S AND IT MATTERS. The data rectangle is taken from
-      the positions the author wrote, the box is solved with the aspect that
-      came out of it -- and only THEN, if there were no positions at all, is
-      the data rectangle replaced by the box. So the box has already been
-      solved by the time anyone notices there was nothing to fit. }
-    hasData := TyGraphDataRect(FGraphNodes[i], dataRect, aspect);
-    viewRect := TyGraphViewRect(FGraphSpecs[i], FLastRect, aspect);
-    if not hasData then dataRect := viewRect;
-    FGraphs[i] := TTyGraphView.Create(dataRect, viewRect);
-
-    case FGraphSpecs[i].Layout of
-      glCircular:
-        TyGraphLayoutCircular(FGraphNodes[i], FGraphs[i], FGraphSpecs[i]);
-      glForce:
-        { NOT YET. A force layout has to converge before anything can be drawn
-          and this port has no frames to converge over, so the nodes keep the
-          positions the author wrote -- which for a force chart is none, and
-          the series draws nothing and says so. Its own batch. }
-        TyGraphLayoutNone(FGraphNodes[i], FGraphs[i]);
-    else
-      TyGraphLayoutNone(FGraphNodes[i], FGraphs[i]);
-    end;
-    TyGraphSolveCurveness(FGraphEdges[i], FGraphSpecs[i]);
+    si := FBindings[i].SeriesIndex;
+    if si < 0 then Continue;
+    if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
+    store := nil;
+    if i <= High(FStores) then store := FStores[i];
+    { THE WHOLE PASS IS THE PURE UNIT'S, so the suite drives the same path this
+      does rather than a copy of it. }
+    solved := TyGraphSolve(FOption, si, store, FLastRect, FGraphForce[si]);
+    FGraphs[i] := solved.View;
+    FGraphSpecs[i] := solved.Spec;
+    FGraphNodes[i] := solved.Nodes;
+    FGraphEdges[i] := solved.Edges;
+    FGraphCats[i] := solved.Cats;
   end;
   if APPI < 0 then ;
 end;

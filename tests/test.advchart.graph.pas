@@ -126,10 +126,15 @@ begin
   { `left: 'center'`, `top: 'center'` AND NOTHING ELSE. The commented-out
     `width: '80%'` in the source is not dead documentation -- see the box
     tests below for where the four fifths really comes from. }
-  AssertEquals(Ord(buCentre), Ord(s.Box.Left.Kind));
-  AssertEquals(Ord(buCentre), Ord(s.Box.Top.Kind));
-  AssertEquals('and no width at all', Ord(buAuto), Ord(s.Box.Width.Kind));
-  AssertEquals(Ord(buAuto), Ord(s.Box.Height.Kind));
+  AssertEquals('the centre, already a percentage', Ord(gpkPct),
+    Ord(s.PosLeft.Kind));
+  AssertEquals(50.0, s.PosLeft.V, Eps);
+  AssertEquals(Ord(gpkPct), Ord(s.PosTop.Kind));
+  AssertEquals(50.0, s.PosTop.V, Eps);
+  AssertEquals('and no width at all', Ord(gpkNaN), Ord(s.PosWidth.Kind));
+  AssertEquals(Ord(gpkNaN), Ord(s.PosHeight.Kind));
+  AssertEquals('centred both ways', 'center', s.AlignH);
+  AssertEquals('center', s.AlignV);
 end;
 
 procedure TAdvChartGraphRuleTest.TestTheCurvenessTableIsNotTheOneItsCommentDescribes;
@@ -242,10 +247,17 @@ begin
   AssertEquals(160.0, r.Right - r.Left, Eps);
 
   { AND WITH NO ASPECT AT ALL -- the ordinary chart, where no node carries a
-    position -- there is nothing to fit and the box is the whole container. }
+    position -- the branch STILL RUNS, and this assertion used to say the
+    opposite. It said the box was the whole container, which is what skipping
+    the branch gives; upstream does not skip it. `NaN > x` is false, so the
+    HEIGHT takes four fifths and the width, left not-a-number by the aspect,
+    is filled in from the container at the very end. Every circular and every
+    force graph with no positions is laid out in this box, and the oracle in
+    test.advchart.graphforce is what caught it. }
   r := TyGraphViewRect(s, TyRectF(0, 0, 400, 300), NaN);
   AssertEquals(400.0, r.Right - r.Left, Eps);
-  AssertEquals(300.0, r.Bottom - r.Top, Eps);
+  AssertEquals('four fifths of the height', 240.0, r.Bottom - r.Top, Eps);
+  AssertEquals('centred in it', 30.0, r.Top, Eps);
 end;
 
 procedure TAdvChartGraphRuleTest.TestCentreIsAPositionAndThenAnAlignment;
@@ -477,6 +489,8 @@ begin
   SetLength(nodes, 2);
   nodes[0] := Default(TTyGraphNode);
   nodes[1] := Default(TTyGraphNode);
+  nodes[0].X := 0;   nodes[0].Y := 0;
+  nodes[1].X := 200; nodes[1].Y := 0;
   nodes[0].PX := 0;   nodes[0].PY := 0;
   nodes[1].PX := 200; nodes[1].PY := 0;
   SetLength(edges, 1);
@@ -488,9 +502,10 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 200, 200), TyRectF(0, 0, 200, 200));
   list := TTyPaintList.Create;
   try
-    TyGraphSolveCurveness(edges, s);
+    TyGraphSolveCurveness(edges, s, True);
     AssertEquals('a written curveness is taken as written',
       0.3333333333333, edges[0].SolvedCurveness, 1e-9);
+    TyGraphEdgeGeometry(edges, nodes, view, True);
     TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
     { THE RING'S CENTRE IS (100, 100) AND THE CHORD RUNS ALONG y = 0, so a
       tripled third puts the control point exactly ON the centre and the curve's
@@ -529,6 +544,8 @@ begin
   SetLength(nodes, 2);
   nodes[0] := Default(TTyGraphNode);
   nodes[1] := Default(TTyGraphNode);
+  nodes[0].X := 0;   nodes[0].Y := 0;
+  nodes[1].X := 100; nodes[1].Y := 100;
   nodes[0].PX := 0;   nodes[0].PY := 0;
   nodes[1].PX := 100; nodes[1].PY := 100;
   SetLength(edges, 1);
@@ -540,7 +557,8 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 200, 200), TyRectF(0, 0, 200, 200));
   list := TTyPaintList.Create;
   try
-    TyGraphSolveCurveness(edges, s);
+    TyGraphSolveCurveness(edges, s, False);
+    TyGraphEdgeGeometry(edges, nodes, view, False);
     TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
     { THE BOUNDING BOX CANNOT SEE IT. Both control points -- the right one at
       (100, 0) and its mirror at (100, 100) -- give the identical box over this
@@ -638,7 +656,12 @@ begin
 end;
 
 procedure TAdvChartGraphRuleTest.TestParallelEdgesTakeOppositeSidesAndAWrittenZeroKillsThem;
-var edges: TTyGraphEdgeArray; s: TTyGraphSpec; i: Integer;
+var
+  edges: TTyGraphEdgeArray;
+  nodes: TTyGraphNodeArray;
+  view: TTyGraphView;
+  s: TTyGraphSpec;
+  i: Integer;
 begin
   { THREE EDGES ON ONE PAIR take three different entries of the table, and the
     table alternates sides -- which is the whole point of it. }
@@ -650,27 +673,56 @@ begin
     edges[i].Source := 0;
     edges[i].Target := 1;
   end;
-  TyGraphSolveCurveness(edges, s);
-  AssertTrue('they are not all the same curve',
-    (edges[0].SolvedCurveness <> edges[1].SolvedCurveness)
-    and (edges[1].SolvedCurveness <> edges[2].SolvedCurveness));
-  { AND THEY FALL ON BOTH SIDES OF THE LINE -- entry zero is exactly straight,
-    which is why the pair either side of it is what has to be asserted. }
+  { THE RING READS THE TABLE AS IT IS: 0, -0.2, 0.2 -- entry zero is exactly
+    straight, which is why the pair either side of it is what has to be
+    asserted. }
+  TyGraphSolveCurveness(edges, s, True);
   AssertEquals('the first of three is dead straight', 0.0,
     edges[0].SolvedCurveness, Eps);
-  AssertTrue('the second bows one way', edges[1].SolvedCurveness < 0);
-  AssertTrue('and the third the other', edges[2].SolvedCurveness > 0);
+  AssertEquals('the second bows one way', -0.2, edges[1].SolvedCurveness, Eps);
+  AssertEquals('and the third the other', 0.2, edges[2].SolvedCurveness, Eps);
+  { AND EVERY OTHER LAYOUT NEGATES IT. `-getCurvenessForEdge(...)` is written
+    at both call sites, unconditionally, so the same three edges under `none`
+    or `force` bow the opposite way to the same three on a ring. }
+  TyGraphSolveCurveness(edges, s, False);
+  AssertEquals(0.0, edges[0].SolvedCurveness, Eps);
+  AssertEquals('negated', 0.2, edges[1].SolvedCurveness, Eps);
+  AssertEquals(-0.2, edges[2].SolvedCurveness, Eps);
 
-  { AN EDGE THE OTHER WAY ROUND is the opposite pair, and it is drawn on the
-    far side rather than on top of the first. }
+  { THERE AND BACK: TWO EQUAL NUMBERS, AND THAT IS RIGHT. Neither key is ever
+    flagged forward -- the flag is set only on an insertion that finds its own
+    key already there -- so both read the far side of the table, entry two,
+    and both come out 0.2. They still do not land on one line, because the
+    perpendicular turns round with the edge: the same curveness on an edge
+    running the other way bows to the other side. That is the property worth
+    asserting, and the numbers are not where it lives. }
   SetLength(edges, 2);
   edges[0] := Default(TTyGraphEdge);
   edges[1] := Default(TTyGraphEdge);
   edges[0].Source := 0; edges[0].Target := 1;
   edges[1].Source := 1; edges[1].Target := 0;
-  TyGraphSolveCurveness(edges, s);
-  AssertTrue('the two directions do not land on one line',
-    edges[0].SolvedCurveness <> edges[1].SolvedCurveness);
+  TyGraphSolveCurveness(edges, s, False);
+  AssertEquals(0.2, edges[0].SolvedCurveness, Eps);
+  AssertEquals('the same number both ways', 0.2, edges[1].SolvedCurveness, Eps);
+  SetLength(nodes, 2);
+  nodes[0] := Default(TTyGraphNode);
+  nodes[1] := Default(TTyGraphNode);
+  nodes[1].X := 100;
+  view := TTyGraphView.Create(TyRectF(0, 0, 100, 100), TyRectF(0, 0, 100, 100));
+  try
+    TyGraphEdgeGeometry(edges, nodes, view, False);
+    AssertEquals('one bows up', -20.0, edges[0].CPY, Eps);
+    AssertEquals('and the other down', 20.0, edges[1].CPY, Eps);
+  finally
+    view.Free;
+  end;
+  { AND ON A RING THE SAME TWO LAND ON ONE CURVE. The ring's control point
+    slides towards the centre whichever way the edge runs, so two equal
+    numbers make one curve drawn twice -- upstream's answer, and the one place
+    a there-and-back pair is not separated. }
+  TyGraphSolveCurveness(edges, s, True);
+  AssertEquals(0.2, edges[0].SolvedCurveness, Eps);
+  AssertEquals(0.2, edges[1].SolvedCurveness, Eps);
 
   { AND A WRITTEN ZERO BEATS THE WHOLE TABLE. The three consumers all test for
     absence and nothing else, so `curveness: 0` at the series level kills every
@@ -683,7 +735,7 @@ begin
     edges[i].Source := 0;
     edges[i].Target := 1;
   end;
-  TyGraphSolveCurveness(edges, s);
+  TyGraphSolveCurveness(edges, s, False);
   for i := 0 to 2 do
     AssertEquals('every one of them is straight', 0.0,
       edges[i].SolvedCurveness, Eps);
@@ -760,16 +812,38 @@ begin
       + '{"source":"Alpha","target":"Beta"},'
       + '{"source":"n0","target":"nowhere"}]}]}'));
     edges := TyGraphEdgesOf(FOpt, 0, nodes);
-    { THREE OF THE FOUR SURVIVE. An id, an index and a name all resolve; the
-      one naming a node that is not there is DROPPED rather than kept with an
-      endpoint of minus one for somebody downstream to trip over. }
-    AssertEquals(3, Length(edges));
+    { TWO OF THE FOUR SURVIVE, and this assertion used to say three. An id and
+      an index resolve; the one naming a node that is not there is DROPPED
+      rather than kept with an endpoint of minus one. And the one written by
+      NAME is dropped too: upstream files every node under ONE key,
+      `retrieve(id, name, index)`, so a node that has an id cannot be reached
+      by its name at all. Reading the name as well kept an edge upstream never
+      draws. }
+    AssertEquals(2, Length(edges));
     AssertEquals('an id resolves', 0, edges[0].Source);
     AssertEquals(2, edges[0].Target);
     AssertEquals('an index resolves', 0, edges[1].Source);
     AssertEquals(1, edges[1].Target);
-    AssertEquals('and a name resolves', 0, edges[2].Source);
-    AssertEquals(1, edges[2].Target);
+
+    { WITHOUT AN ID THE NAME IS THE KEY, and with neither the node's POSITION
+      spelled as a string is. }
+    nodes[0].Id := '';
+    nodes[1].Id := '';
+    nodes[2].Id := '';
+    nodes[2].Name_ := '';
+    FreeAndNil(FOpt);
+    FOpt := TTyChartOption.Create;
+    AssertTrue(FOpt.SetOptionText(
+      '{"series":[{"type":"graph","links":['
+      + '{"source":"Alpha","target":"Beta"},'
+      + '{"source":"Beta","target":"2"},'
+      + '{"source":"n0","target":"Gamma"}]}]}'));
+    edges := TyGraphEdgesOf(FOpt, 0, nodes);
+    AssertEquals('the name and the position resolve, the gone id does not',
+      2, Length(edges));
+    AssertEquals(0, edges[0].Source);
+    AssertEquals(1, edges[0].Target);
+    AssertEquals('the third node is reached as "2"', 2, edges[1].Target);
   finally
     st.Free;
   end;
@@ -972,9 +1046,13 @@ begin
     edges[i].Source := 0;
     edges[i].Target := 1;
   end;
-  TyGraphSolveCurveness(edges, s);
+  TyGraphSolveCurveness(edges, s, True);
   AssertEquals(-0.2, edges[0].SolvedCurveness, 1e-9);
   AssertEquals(0.2, edges[1].SolvedCurveness, 1e-9);
+  { And the other family, negated: the pair still straddles the line. }
+  TyGraphSolveCurveness(edges, s, False);
+  AssertEquals(0.2, edges[0].SolvedCurveness, 1e-9);
+  AssertEquals(-0.2, edges[1].SolvedCurveness, 1e-9);
 end;
 
 procedure TAdvChartGraphRuleTest.TestAWrittenCurvenessTableIsNeverPadded;
@@ -993,11 +1071,21 @@ begin
     edges[i].Source := 0;
     edges[i].Target := 1;
   end;
-  TyGraphSolveCurveness(edges, s);
+  TyGraphSolveCurveness(edges, s, True);
   AssertEquals(0.1, edges[0].SolvedCurveness, 1e-9);
   AssertEquals(0.2, edges[1].SolvedCurveness, 1e-9);
+  { ON A RING, NOTHING FALLS THROUGH TO THE ZERO: `retrieve3` skips an
+    undefined entry and lands on its third argument. }
   AssertEquals('and the third finds nothing', 0.0,
     edges[2].SolvedCurveness, 1e-9);
+  { ANYWHERE ELSE IT IS NEGATED FIRST, and `-undefined` is not a number --
+    which the geometry then reads as a straight line, the same picture by a
+    different route. }
+  TyGraphSolveCurveness(edges, s, False);
+  AssertEquals(-0.1, edges[0].SolvedCurveness, 1e-9);
+  AssertEquals(-0.2, edges[1].SolvedCurveness, 1e-9);
+  AssertTrue('and the third is not a number',
+    IsNan(edges[2].SolvedCurveness));
 end;
 
 procedure TAdvChartGraphRuleTest.TestAnEdgesOwnCurvenessBeatsTheSeries;
@@ -1013,7 +1101,7 @@ begin
   edges[1].Target := 1;
   edges[1].HasCurveness := True;
   edges[1].Curveness := -0.9;
-  TyGraphSolveCurveness(edges, s);
+  TyGraphSolveCurveness(edges, s, False);
   AssertEquals('the one that said nothing takes the series''',
     0.4, edges[0].SolvedCurveness, 1e-9);
   AssertEquals('and the one that spoke keeps its own',
@@ -1230,6 +1318,8 @@ begin
   SetLength(nodes, 2);
   nodes[0] := Default(TTyGraphNode);
   nodes[1] := Default(TTyGraphNode);
+  nodes[0].X := 10; nodes[0].Y := 10;
+  nodes[1].X := 90; nodes[1].Y := 50;
   nodes[0].PX := 10; nodes[0].PY := 10;
   nodes[1].PX := 90; nodes[1].PY := 50;
   SetLength(edges, 1);
@@ -1242,6 +1332,9 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 100, 100), TyRectF(0, 0, 100, 100));
   list := TTyPaintList.Create;
   try
+    TyGraphEdgeGeometry(edges, nodes, view, False);
+    AssertFalse('the layout authors no control point', edges[0].Curved);
+    AssertFalse('and does not hide the edge either', edges[0].Hidden);
     TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
     AssertEquals('two points, not seventeen', 2,
       Length(list.Element(0).Shape.Points));

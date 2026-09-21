@@ -320,7 +320,8 @@ function TySeriesUsesRowIndex(AData: TJSONArray;
 { Read series[ASeriesIndex].data into AStore, which must already carry ADims as
   its dimensions and must be empty. Returns the number of rows appended. }
 function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore;
+  const AKey: string = 'data'): Integer;
 
 { The same job from a DATASET. AEncode says which source dimension feeds each
   of ADims; a coordinate it leaves at -1 gets no value at all.
@@ -1339,7 +1340,8 @@ begin
 end;
 
 function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore;
+  const AKey: string): Integer;
 var
   node: TJSONObject;
   d: TJSONData;
@@ -1354,7 +1356,8 @@ begin
   if (AOption = nil) or (AStore = nil) or (Length(ADims) = 0) then Exit;
   node := ObjOf(AOption.ComponentAt('series', ASeriesIndex));
   if node = nil then Exit;
-  d := node.Find('data');
+  { AKey IS NOT ALWAYS `data`: a graph's node list has a second name. }
+  d := node.Find(AKey);
   if (d = nil) or (d.JSONType = jtNull) or not (d is TJSONArray) then Exit;
   arr := TJSONArray(d);
 

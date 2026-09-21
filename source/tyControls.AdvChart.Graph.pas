@@ -36,6 +36,28 @@ type
   { `layout`, whose default is `null` and whose null means `none`. }
   TTyGraphLayout = (glNone, glCircular, glForce);
 
+  { `force.initLayout`: where the solver's nodes START. Null and 'none' start
+    from the positions the author wrote and 'circular' from a ring -- and
+    ANYTHING ELSE from nothing at all, not even the written positions: upstream
+    tests for the two words it knows and leaves every other string with no
+    layout, which the solver then fills at random. }
+  TTyGraphInitLayout = (gilNone, gilCircular, gilOther);
+
+  { `force`, as written. The two ranges are kept the way the author wrote them;
+    `edgeLength` is turned round only where it is used, which is the one place
+    upstream turns it round. }
+  TTyGraphForceSpec = record
+    InitLayout: TTyGraphInitLayout;
+    RepulsionLo, RepulsionHi: Double;
+    EdgeLengthLo, EdgeLengthHi: Double;
+    Gravity: Double;
+    Friction: Double;
+    { Read and not honoured: there are no frames here to animate the settling
+      over, so the layout is always run to the end before anything is drawn --
+      which is what upstream does when this is false. }
+    LayoutAnimation: Boolean;
+  end;
+
   { `lineStyle.color` TAKES TWO WORDS THAT ARE NOT COLOURS. `'source'` and
     `'target'` mean "whatever the node at that end came out", and they are the
     only reason a chord diagram reads as anything but a grey smudge. Every
@@ -50,11 +72,24 @@ type
     Id: string;
     { -1 for a node in no category. }
     Category: Integer;
+    { THE CATEGORY AS A MODEL PARENT, which is not the same thing. Colour
+      resolves a category written as a NAME; the option chain that `fixed`
+      climbs does not -- upstream indexes its category models with whatever
+      the node wrote, and an array indexed by a name finds nothing. -1 unless
+      the node wrote an index. }
+    ModelCategory: Integer;
     X, Y: Double;
-    { A node the author placed is not moved by a layout that would have placed
-      it -- and `fixed` is written by the DRAG, not by the option, so a port
-      with no drag still has to honour it for a node that carries x and y. }
+    { THE DRAG'S `fixed`, which the RING honours: upstream's circular layout
+      skips a node whose LAYOUT says fixed, and only a drag ever writes that.
+      There is no drag yet, so this is always false. }
     Fixed: Boolean;
+    { THE OPTION'S `fixed`, which the FORCE layout honours -- a different word
+      in a different place. The node's own, if it wrote one, and resolved by
+      TyGraphResolvePins into Pinned through the category and then the series,
+      the way an item model's parent chain runs. }
+    HasOwnFixed: Boolean;
+    OwnFixed: Boolean;
+    Pinned: Boolean;
     PX, PY: Double;
     { '' means the series' own symbol. }
     SymbolName: string;
@@ -80,6 +115,19 @@ type
     Curveness: Double;
     { What the curveness solver settled on, filled in by TyGraphSolveCurveness. }
     SolvedCurveness: Double;
+    { `ignoreForceLayout`: the spring leaves this edge out. It is still drawn,
+      and its two ends still push each other apart like any other pair. }
+    HasOwnIgnore: Boolean;
+    IgnoreForce: Boolean;
+    { THE CONTROL POINT, IN PIXELS, authored by the layout pass the way upstream
+      authors it -- in DATA space, from the laid-out positions, and only then
+      carried through the view. Filled in by TyGraphEdgeGeometry. }
+    Curved: Boolean;
+    CPX, CPY: Double;
+    { A control point that is not a point anybody can draw -- infinite, or a
+      thousand screens away -- takes its edge with it. Upstream hands such a
+      point to the canvas, which refuses the segment. }
+    Hidden: Boolean;
     Row: Integer;
   end;
   TTyGraphEdgeArray = array of TTyGraphEdge;
@@ -89,13 +137,51 @@ type
     SymbolName: string;
     HasColour: Boolean;
     Colour: TTyChartColor;
+    { A category is a MODEL PARENT of the nodes that name it by index, so a
+      `fixed` written here holds every one of them that did not say otherwise. }
+    HasFixed: Boolean;
+    Fixed: Boolean;
   end;
   TTyGraphCategoryArray = array of TTyGraphCategory;
 
+  { ONE BOX VALUE, the way upstream's parsePositionOption leaves it: a pixel
+    count, a percentage still waiting for its base, or not-a-number -- which is
+    what `null`, `''`, `'auto'`, `'Center'` and every other word it does not
+    know turn into, and what every step of getLayoutRect then treats as "not
+    written". The shared box reader in AdvChart.Layout is kinder than that --
+    it lower-cases, trims and takes `centre` -- and the graph's box is the one
+    place where the difference moves a picture. }
+  TTyGraphPosKind = (gpkNaN, gpkPx, gpkPct);
+  TTyGraphPos = record
+    Kind: TTyGraphPosKind;
+    V: Double;
+  end;
+
+  { `preserveAspect`: falsy is off, 'cover' is cover, and every other truthy
+    value -- `true`, 'contain', a typo -- is contain. }
+  TTyGraphPreserve = (gpaOff, gpaContain, gpaCover);
+
   { The series' own options, minus the ones that belong to a later batch. }
   TTyGraphSpec = record
-    Box: TTyBoxSpec;
+    PosLeft, PosTop, PosRight, PosBottom, PosWidth, PosHeight: TTyGraphPos;
+    PreserveAspect: TTyGraphPreserve;
+    PreserveAlign, PreserveVAlign: string;
+    { THE WORDS THE BOX IS ALIGNED BY, which are not the positions. Upstream
+      reads `left || right` and `top || bottom` a second time, as the raw
+      option values, after the rectangle is solved -- so `left: 'center'` is
+      50% first and a centring instruction second, and a position that was a
+      NUMBER is no instruction at all. '' when the value that won was not a
+      string. }
+    AlignH, AlignV: string;
     Layout: TTyGraphLayout;
+    Force: TTyGraphForceSpec;
+    { The series' own `fixed` and `ignoreForceLayout` -- the last parent every
+      node's and every edge's option chain reaches. Undocumented, and not in
+      the defaults, and honoured all the same. }
+    HasFixed: Boolean;
+    Fixed: Boolean;
+    HasIgnoreForce: Boolean;
+    IgnoreForce: Boolean;
     RotateLabel: Boolean;
     { The node symbol every node falls back on. }
     Symbol: TTySymbolSpec;
@@ -165,6 +251,13 @@ function TyGraphSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyGraphSpec;
 function TyGraphNodesOf(AStore: TTyDataStore;
   const ACategories: TTyGraphCategoryArray): TTyGraphNodeArray;
 
+{ THE STORE A GRAPH IS READ FROM, built the one way the control and the suite
+  both build it: one value column, filled from `data` -- or from `nodes`, the
+  node list's other name, when `data` is not there. `data || nodes`, so an
+  empty `data` array still wins. The store must be new and empty. }
+procedure TyGraphFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore);
+
 { The edges, out of the option tree. `links` and `edges` are the same key under
   two names and upstream reads whichever is there, preferring neither. }
 function TyGraphEdgesOf(AOption: TTyChartOption; ASlot: Integer;
@@ -201,6 +294,63 @@ procedure TyGraphLayoutNone(var ANodes: TTyGraphNodeArray; AView: TTyGraphView);
 procedure TyGraphLayoutCircular(var ANodes: TTyGraphNodeArray;
   AView: TTyGraphView; const ASpec: TTyGraphSpec);
 
+{ Every node's `fixed`, resolved the way an item model resolves an option: the
+  node's own if it wrote one, else its category's, else the series'. And every
+  edge's `ignoreForceLayout` the same way, minus the category. }
+procedure TyGraphResolvePins(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ACategories: TTyGraphCategoryArray;
+  const ASpec: TTyGraphSpec);
+
+{ Upstream's linearMap with no clamp: a flat domain answers the middle of the
+  range (or its one end, when the range is flat too), and a value on either end
+  of the domain answers that end of the range EXACTLY, rather than whatever the
+  division would have rounded to. }
+function TyGraphLinearMap(AValue, ADomain0, ADomain1, ARange0,
+  ARange1: Double): Double;
+
+{ THE RANDOM NUMBERS, which are not random. Upstream seeds nothing and draws
+  from Math.random, so no two renders of a force graph agree; a control that
+  lays out again on every resize cannot do that without the picture jumping.
+  So this is a xorshift32 -- tiny, and exactly reproducible in JavaScript,
+  which is what lets tools/advchart-oracle hold the port to upstream's own
+  output by giving upstream THESE numbers. }
+function TyGraphForceSeed(ASeriesIndex: Integer): LongWord;
+function TyGraphRandom(var AState: LongWord): Double;
+
+type
+  { WHAT A FORCE LAYOUT LEAVES FOR THE NEXT PASS over the same option --
+    upstream's `preservedPoints`. Every node's position in the space the
+    solver ran in, and the rectangle it ran in.
+
+    Upstream keeps these on the series model, which a merged setOption keeps
+    and a replacing one throws away. The control replaces its option whole, so
+    it clears this when the option changes and keeps it otherwise: a resize
+    continues the layout from where it stood instead of starting again from
+    nothing, and a pass that changed nothing the solver can see -- a theme, a
+    focus change -- gets the same picture back without running a step. }
+  TTyGraphForceState = record
+    Valid: Boolean;
+    Rect: TTyRectF;
+    X, Y: TTyDoubleArray;
+  end;
+
+{ How many steps upstream's driver runs from a given starting friction: until
+  the friction, shrunk by 0.992 a step, is under a hundredth -- and never fewer
+  than TWO, because the layout stage takes one step and the view then steps at
+  least once more before it looks at the answer. Capped, because the friction
+  is the author's and upstream's loop has no ceiling. }
+function TyGraphForceSteps(AFriction: Double): Integer;
+
+{ `layout: 'force'`. The nodes start where `initLayout` (or the previous pass)
+  says, fill in at random where it says nothing, and are stepped to rest; the
+  answer lands in X and Y, in the solver's space -- the DATA rectangle, which is
+  the pixel box whenever any node is unplaced -- and is then carried through
+  the view into PX and PY. }
+procedure TyGraphLayoutForce(var ANodes: TTyGraphNodeArray;
+  const AEdges: TTyGraphEdgeArray; AView: TTyGraphView;
+  const ASpec: TTyGraphSpec; ASeed: LongWord;
+  var AState: TTyGraphForceState);
+
 { Entry i of upstream's curveness table.
 
   `odd(i)` is `-(i + 1) / 10` and `even(i)` is `i / 10`, so the table runs
@@ -218,13 +368,63 @@ function TyGraphCurvenessLength(const ASpec: TTyGraphSpec;
 
 { Fill in every edge's SolvedCurveness.
 
+  TWO FAMILIES. The ring reads the automatic table as it is; every other
+  layout -- `none`, `force`, and a graph on axes -- NEGATES what it reads and
+  asks for the reversed variant, which turns some of the opposite-direction
+  answers round again. ACircular picks which.
+
   KEYED ON NODE INDICES, NOT ON A JOINED STRING. Upstream builds a key out of
   the node ids and a three-character delimiter and produces the opposite key by
   splitting that string -- so a node whose id contains the delimiter silently
   loses its direction pairing for ever. Two integers cannot do that, and the
   divergence is deliberate. }
 procedure TyGraphSolveCurveness(var AEdges: TTyGraphEdgeArray;
-  const ASpec: TTyGraphSpec);
+  const ASpec: TTyGraphSpec; ACircular: Boolean);
+
+{ Every edge's control point, from the laid-out positions, in DATA space and
+  then through the view -- the ring's pulled towards the ring's own centre,
+  every other layout's pushed out along the perpendicular. }
+procedure TyGraphEdgeGeometry(var AEdges: TTyGraphEdgeArray;
+  const ANodes: TTyGraphNodeArray; AView: TTyGraphView; ACircular: Boolean);
+
+{ Every node whose pixel position is not a point anybody can draw becomes
+  unplaced. See cTyGraphFarPx. }
+procedure TyGraphSanitise(var ANodes: TTyGraphNodeArray);
+
+const
+  { A THOUSAND SCREENS. A layout that is the author's arithmetic from end to end
+    -- a friction of fifty, a repulsion of a million -- can put a node anywhere
+    a Double reaches, and everything downstream squares distances. Past this a
+    node is treated as gone, and its edges with it, where upstream would have
+    drawn them running off the canvas. }
+  cTyGraphFarPx = 1e6;
+
+type
+  { One graph series, solved: everything the builder and the ink need. The
+    VIEW is the caller's to free. }
+  TTyGraphSolved = record
+    Spec: TTyGraphSpec;
+    Cats: TTyGraphCategoryArray;
+    Nodes: TTyGraphNodeArray;
+    Edges: TTyGraphEdgeArray;
+    View: TTyGraphView;
+  end;
+
+{ THE WHOLE LAYOUT PASS FOR ONE GRAPH ON A VIEW, in upstream's order: read the
+  three collections, fit the data rectangle, solve the box, lay the nodes out,
+  settle the curveness, author the edges' control points.
+
+  THE ARITHMETIC RUNS WITH THE FLOATING-POINT TRAPS OFF, and that is the port,
+  not a workaround. Every multiplier in a force layout is the author's, so a
+  layout that runs off to infinity is a legal outcome rather than a defect --
+  upstream computes it silently and draws what is left. Here an overflow, an
+  infinity minus an infinity and even an EQUALITY test against a not-a-number
+  raise by default; with the traps off they answer what JavaScript answers,
+  which is the thing being ported. The answers are sanitised on the way out,
+  so nothing downstream ever sees an infinity. }
+function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const AContainer: TTyRectF;
+  var AForce: TTyGraphForceState): TTyGraphSolved;
 
 type
   { Everything the builder needs a THEME to answer. This unit never asks what
@@ -286,6 +486,8 @@ function TyBuildGraphMarks(ASeriesIndex: Integer; AView: TTyGraphView;
   AStore: TTyDataStore; AList: TTyPaintList): Integer;
 
 implementation
+
+uses tyControls.AdvChart.Builder;
 
 { ==================== the view ==================== }
 
@@ -432,14 +634,34 @@ end;
 function TyGraphSpecDefault: TTyGraphSpec;
 begin
   Result := Default(TTyGraphSpec);
-  Result.Box := TyBoxSpec;
   { `left: 'center'`, `top: 'center'`, and NO width or height. The commented-out
     `width: '80%'` in the source is not dead documentation -- the 0.8 is
     reproduced inside the box solver, but only because both sizes are absent
-    and an aspect is supplied. }
-  Result.Box.Left := TyBoxCentre;
-  Result.Box.Top := TyBoxCentre;
+    and an aspect is supplied. `center` is parsed to 50% before anything reads
+    it. }
+  Result.PosLeft.Kind := gpkPct;
+  Result.PosLeft.V := 50;
+  Result.PosTop := Result.PosLeft;
+  Result.PosRight.Kind := gpkNaN;
+  Result.PosRight.V := NaN;
+  Result.PosBottom := Result.PosRight;
+  Result.PosWidth := Result.PosRight;
+  Result.PosHeight := Result.PosRight;
+  Result.PreserveAspect := gpaOff;
+  Result.AlignH := 'center';
+  Result.AlignV := 'center';
   Result.Layout := glNone;
+  { defaultOption.force, transcribed. `repulsion` defaults to a PAIR and
+    `edgeLength` to a scalar, which is why the first is a range from nothing to
+    fifty and the second is the same thirty at both ends. }
+  Result.Force.InitLayout := gilNone;
+  Result.Force.RepulsionLo := 0;
+  Result.Force.RepulsionHi := 50;
+  Result.Force.EdgeLengthLo := 30;
+  Result.Force.EdgeLengthHi := 30;
+  Result.Force.Gravity := 0.1;
+  Result.Force.Friction := 0.6;
+  Result.Force.LayoutAnimation := True;
   Result.RotateLabel := False;
   Result.Symbol := TySymbolDefault('');
   Result.Symbol.Kind := tsyCircle;
@@ -469,6 +691,18 @@ end;
 
 { `symbolSize` in either of its two forms, as pixels. A graph's is not a box
   value -- there is no band to take a percentage of. }
+{ A SIZE NOBODY CAN DRAW IS A THOUSAND SCREENS. The builder halves, averages
+  and squares node and arrow sizes with the traps on, and a symbol a thousand
+  screens across covers the canvas exactly as one a googol across does -- so
+  the clamp changes nothing anybody sees and nothing downstream overflows. }
+function SaneSize(AValue: Double): Double;
+begin
+  Result := AValue;
+  if IsNan(Result) then Exit;
+  if Result > cTyGraphFarPx then Result := cTyGraphFarPx
+  else if Result < -cTyGraphFarPx then Result := -cTyGraphFarPx;
+end;
+
 procedure ReadNodeSize(ANode: TJSONObject; var ASpec: TTyGraphSpec);
 var d: TJSONData; a: TJSONArray;
 begin
@@ -527,8 +761,282 @@ begin
     ASpec.EdgeSizeTo := a.Items[1].AsFloat;
 end;
 
+{ JavaScript's truthiness, for an option value that is tested rather than used.
+  Null is falsy here and absent is the caller's business -- the two differ in
+  where the option chain goes next, not in this answer. }
+function JsTruthy(AData: TJSONData): Boolean;
+var v: Double;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber:
+      begin
+        v := AData.AsFloat;
+        Result := (not IsNan(v)) and (v <> 0);
+      end;
+    jtString: Result := AData.AsString <> '';
+    jtArray, jtObject: Result := True;
+  end;
+end;
+
+{ A value used in ARITHMETIC, the way JavaScript coerces one: a number is
+  itself, null is nothing, a boolean is nought or one. Anything else -- a
+  string, an object -- is not a number here. Upstream would coerce a numeric
+  string and CONCATENATE two of them in `(r0 + r1) / 2`; neither is worth
+  reproducing for a value the option's type says is a number. }
+function JsNum(AData: TJSONData): Double;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := AData.AsFloat;
+    jtNull: Result := 0;
+    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+{ A range, read the way upstream reads `repulsion` and `edgeLength`: an ARRAY is
+  taken as it is -- a missing second entry is `undefined`, not a copy of the
+  first, so `[30]` makes every length not-a-number -- and anything else stands
+  for both ends. Absent leaves the default. }
+procedure ReadRange(AData: TJSONData; var ALo, AHi: Double);
+var a: TJSONArray;
+begin
+  if AData = nil then Exit;
+  if AData is TJSONArray then
+  begin
+    a := TJSONArray(AData);
+    ALo := NaN;
+    AHi := NaN;
+    if a.Count > 0 then ALo := JsNum(a.Items[0]);
+    if a.Count > 1 then AHi := JsNum(a.Items[1]);
+    Exit;
+  end;
+  ALo := JsNum(AData);
+  AHi := ALo;
+end;
+
+procedure ReadForce(ANode: TJSONObject; var ASpec: TTyGraphSpec);
+var sub: TJSONObject; d: TJSONData;
+begin
+  sub := SubObj(ANode, 'force');
+  if sub = nil then Exit;
+  d := sub.Find('initLayout');
+  { TWO WORDS, TESTED IN THIS ORDER: anything falsy or 'none' starts from the
+    written positions, 'circular' from a ring, and everything else falls
+    through both tests and starts from nothing. }
+  if (d = nil) or not JsTruthy(d) then ASpec.Force.InitLayout := gilNone
+  else if (d.JSONType = jtString) and (d.AsString = 'none') then
+    ASpec.Force.InitLayout := gilNone
+  else if (d.JSONType = jtString) and (d.AsString = 'circular') then
+    ASpec.Force.InitLayout := gilCircular
+  else
+    ASpec.Force.InitLayout := gilOther;
+  ReadRange(sub.Find('repulsion'), ASpec.Force.RepulsionLo,
+    ASpec.Force.RepulsionHi);
+  ReadRange(sub.Find('edgeLength'), ASpec.Force.EdgeLengthLo,
+    ASpec.Force.EdgeLengthHi);
+  { `== null ? 0.1 : gravity` IN THE SOLVER, not in the defaults -- so a written
+    null is the default again, where every other null in this reader is a
+    zero. }
+  d := sub.Find('gravity');
+  if (d <> nil) and (d.JSONType <> jtNull) then ASpec.Force.Gravity := JsNum(d);
+  d := sub.Find('friction');
+  if (d <> nil) and (d.JSONType <> jtNull) then ASpec.Force.Friction := JsNum(d);
+  d := sub.Find('layoutAnimation');
+  if d <> nil then ASpec.Force.LayoutAnimation := JsTruthy(d);
+end;
+
+{ The alignment word on one axis: `left || right`, as the raw option values. The
+  near side has a default -- 'center' -- and so only loses to the far side when
+  the author wrote something falsy there, a zero or a null. }
+{ `getShallow(key)` ON A SERIES: its own value, unless that is null or absent --
+  and then the ROOT's, because a series model's parent is the global one. So an
+  undocumented `fixed: true` at the top of the option pins every node of every
+  graph, and a stray top-level `width` sizes a graph's box. Upstream's answer
+  in both cases, by the same route. }
+function ShallowOf(ANode, ARoot: TJSONObject; const AKey: string): TJSONData;
+var d: TJSONData;
+begin
+  Result := nil;
+  if ANode <> nil then
+  begin
+    d := ANode.Find(AKey);
+    if (d <> nil) and (d.JSONType <> jtNull) then Exit(d);
+  end;
+  if ARoot <> nil then
+  begin
+    d := ARoot.Find(AKey);
+    if (d <> nil) and (d.JSONType <> jtNull) then Exit(d);
+  end;
+end;
+
+{ JavaScript's parseFloat: leading white space skipped, then the longest prefix
+  that reads as a decimal number -- sign, digits, a point, an exponent -- or
+  `Infinity`. Nothing readable is not-a-number. }
+function JsParseFloat(const S: string): Double;
+var
+  i, n, start, digits: Integer;
+  fs: TFormatSettings;
+  neg: Boolean;
+  body: string;
+begin
+  Result := NaN;
+  n := Length(S);
+  i := 1;
+  while (i <= n) and (S[i] in [' ', #9, #10, #11, #12, #13]) do Inc(i);
+  start := i;
+  neg := False;
+  if (i <= n) and (S[i] in ['+', '-']) then
+  begin
+    neg := S[i] = '-';
+    Inc(i);
+  end;
+  if Copy(S, i, 8) = 'Infinity' then
+  begin
+    if neg then Exit(NegInfinity) else Exit(Infinity);
+  end;
+  digits := 0;
+  while (i <= n) and (S[i] in ['0'..'9']) do
+  begin
+    Inc(i);
+    Inc(digits);
+  end;
+  if (i <= n) and (S[i] = '.') then
+  begin
+    Inc(i);
+    while (i <= n) and (S[i] in ['0'..'9']) do
+    begin
+      Inc(i);
+      Inc(digits);
+    end;
+  end;
+  if digits = 0 then Exit;
+  body := Copy(S, start, i - start);
+  { AN EXPONENT ONLY IF IT HAS DIGITS: in `1e` the `e` is not read. }
+  if (i <= n) and (S[i] in ['e', 'E']) then
+  begin
+    n := i + 1;
+    if (n <= Length(S)) and (S[n] in ['+', '-']) then Inc(n);
+    if (n <= Length(S)) and (S[n] in ['0'..'9']) then
+    begin
+      while (n <= Length(S)) and (S[n] in ['0'..'9']) do Inc(n);
+      body := Copy(S, start, n - start);
+    end;
+  end;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  if not TryStrToFloat(body, Result, fs) then Result := NaN;
+end;
+
+{ Upstream's parsePositionOption, on one raw option value. The four words are
+  matched EXACTLY -- `Center` and `centre` are not words here, they are strings
+  parseFloat cannot read -- and a string is a percentage when its trimmed form
+  ENDS in a percent sign. Everything that is not a string goes through a unary
+  plus: null is not-a-number, false is nought, true is one. }
+function GraphPosOf(AData: TJSONData): TTyGraphPos;
+var s, trimmed: string; a: TJSONArray;
+begin
+  Result.Kind := gpkNaN;
+  Result.V := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber:
+      begin
+        Result.Kind := gpkPx;
+        Result.V := AData.AsFloat;
+      end;
+    jtBoolean:
+      begin
+        Result.Kind := gpkPx;
+        if AData.AsBoolean then Result.V := 1 else Result.V := 0;
+      end;
+    jtString:
+      begin
+        s := AData.AsString;
+        if (s = 'center') or (s = 'middle') then s := '50%'
+        else if (s = 'left') or (s = 'top') then s := '0%'
+        else if (s = 'right') or (s = 'bottom') then s := '100%';
+        trimmed := Trim(s);
+        if (trimmed <> '') and (trimmed[Length(trimmed)] = '%') then
+          Result.Kind := gpkPct
+        else
+          Result.Kind := gpkPx;
+        Result.V := JsParseFloat(s);
+        if IsNan(Result.V) then Result.Kind := gpkNaN;
+      end;
+    jtArray:
+      begin
+        { A unary plus on an array: an empty one is nought and one of one
+          number is that number; anything longer is not a number. }
+        a := TJSONArray(AData);
+        if a.Count = 0 then
+        begin
+          Result.Kind := gpkPx;
+          Result.V := 0;
+        end
+        else if (a.Count = 1) and (a.Items[0].JSONType = jtNumber) then
+        begin
+          Result.Kind := gpkPx;
+          Result.V := a.Items[0].AsFloat;
+        end;
+      end;
+  end;
+end;
+
+{ One box value against its base: a percentage of it, a pixel count, or
+  not-a-number. }
+function ResolvePos(const APos: TTyGraphPos; ABase: Double): Double;
+begin
+  case APos.Kind of
+    gpkPx: Result := APos.V;
+    gpkPct: Result := APos.V / 100 * ABase;
+  else
+    Result := NaN;
+  end;
+end;
+
+function PosPx(AValue: Double): TTyGraphPos;
+begin
+  Result.Kind := gpkPx;
+  Result.V := AValue;
+end;
+
+function PosNaN: TTyGraphPos;
+begin
+  Result.Kind := gpkNaN;
+  Result.V := NaN;
+end;
+
+{ The alignment word on one axis: `left || right`, as the raw values the
+  option chain answers. The near side has a default -- 'center' -- that a
+  series which never wrote it always carries, so it only loses to the far side
+  when the author wrote something falsy there: a zero, a false, a null. }
+function AlignWord(ANode, ARoot: TJSONObject; const ANear, AFar,
+  ADefault: string): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if ANode.Find(ANear) = nil then Exit(ADefault);
+  d := ShallowOf(ANode, ARoot, ANear);
+  if not JsTruthy(d) then d := ShallowOf(ANode, ARoot, AFar);
+  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+end;
+
+{ A near side's position: its default 50% when the series never wrote it,
+  otherwise whatever the option chain answers -- which for a written null is
+  the root's value, and usually nothing at all. }
+function NearPos(ANode, ARoot: TJSONObject; const AKey: string;
+  const ADefault: TTyGraphPos): TTyGraphPos;
+begin
+  if ANode.Find(AKey) = nil then Exit(ADefault);
+  Result := GraphPosOf(ShallowOf(ANode, ARoot, AKey));
+end;
+
 procedure ReadAutoCurveness(ANode: TJSONObject; var ASpec: TTyGraphSpec);
-var d: TJSONData; a: TJSONArray; i, n: Integer;
+var d: TJSONData; a: TJSONArray; i: Integer;
 begin
   d := ANode.Find('autoCurveness');
   if d = nil then Exit;
@@ -553,22 +1061,22 @@ begin
         a := TJSONArray(d);
         ASpec.AutoCurveness := True;
         ASpec.HasAutoList := True;
-        n := 0;
+        { EVERY ENTRY KEEPS ITS PLACE. An entry that is not a number is looked up
+          by position like any other and draws its edge straight; dropping it
+          would slide every later entry down onto the wrong edge. }
         SetLength(ASpec.AutoList, a.Count);
         for i := 0 to a.Count - 1 do
           if a.Items[i].JSONType = jtNumber then
-          begin
-            ASpec.AutoList[n] := a.Items[i].AsFloat;
-            Inc(n);
-          end;
-        SetLength(ASpec.AutoList, n);
+            ASpec.AutoList[i] := a.Items[i].AsFloat
+          else
+            ASpec.AutoList[i] := NaN;
       end;
   end;
 end;
 
 function TyGraphSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyGraphSpec;
 var
-  node, sub: TJSONObject;
+  node, sub, root: TJSONObject;
   d: TJSONData;
   s: string;
   c: TTyChartColor;
@@ -579,12 +1087,43 @@ begin
   node := NodeAt(AOption, ASlot);
   if node = nil then Exit;
 
-  Result.Box.Left := TyBoxValueOf(node, 'left', Result.Box.Left);
-  Result.Box.Top := TyBoxValueOf(node, 'top', Result.Box.Top);
-  Result.Box.Right := TyBoxValueOf(node, 'right', Result.Box.Right);
-  Result.Box.Bottom := TyBoxValueOf(node, 'bottom', Result.Box.Bottom);
-  Result.Box.Width := TyBoxValueOf(node, 'width', Result.Box.Width);
-  Result.Box.Height := TyBoxValueOf(node, 'height', Result.Box.Height);
+  root := nil;
+  if (AOption <> nil) and (AOption.Root is TJSONObject) then
+    root := TJSONObject(AOption.Root);
+  Result.PosLeft := NearPos(node, root, 'left', Result.PosLeft);
+  Result.PosTop := NearPos(node, root, 'top', Result.PosTop);
+  Result.PosRight := GraphPosOf(ShallowOf(node, root, 'right'));
+  Result.PosBottom := GraphPosOf(ShallowOf(node, root, 'bottom'));
+  Result.PosWidth := GraphPosOf(ShallowOf(node, root, 'width'));
+  Result.PosHeight := GraphPosOf(ShallowOf(node, root, 'height'));
+  Result.AlignH := AlignWord(node, root, 'left', 'right', Result.AlignH);
+  Result.AlignV := AlignWord(node, root, 'top', 'bottom', Result.AlignV);
+  { getShallow(key, TRUE): the series' own and nothing above it. }
+  d := node.Find('preserveAspect');
+  if JsTruthy(d) then
+  begin
+    if (d.JSONType = jtString) and (d.AsString = 'cover') then
+      Result.PreserveAspect := gpaCover
+    else
+      Result.PreserveAspect := gpaContain;
+  end;
+  Result.PreserveAlign := StrIn(node, 'preserveAspectAlign', '');
+  Result.PreserveVAlign := StrIn(node, 'preserveAspectVerticalAlign', '');
+
+  ReadForce(node, Result);
+  d := ShallowOf(node, root, 'fixed');
+  if d <> nil then
+  begin
+    Result.HasFixed := True;
+    Result.Fixed := JsTruthy(d);
+  end;
+  d := ShallowOf(node, root, 'ignoreForceLayout');
+  if d <> nil then
+  begin
+    Result.HasIgnoreForce := True;
+    Result.IgnoreForce := JsTruthy(d);
+  end;
+
 
   { `layout: null` IS THE DEFAULT AND IT MEANS `none`. }
   s := StrIn(node, 'layout', '');
@@ -616,6 +1155,10 @@ begin
     Result.Symbol.KeepAspect := d.AsBoolean;
 
   ReadEdgeSymbol(node, Result);
+  Result.Symbol.WidthPx := SaneSize(Result.Symbol.WidthPx);
+  Result.Symbol.HeightPx := SaneSize(Result.Symbol.HeightPx);
+  Result.EdgeSizeFrom := SaneSize(Result.EdgeSizeFrom);
+  Result.EdgeSizeTo := SaneSize(Result.EdgeSizeTo);
 
   sub := SubObj(node, 'lineStyle');
   if sub <> nil then
@@ -685,6 +1228,12 @@ begin
     item := TJSONObject(a.Items[i]);
     Result[i].Name_ := StrIn(item, 'name', '');
     Result[i].SymbolName := StrIn(item, 'symbol', '');
+    d := item.Find('fixed');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      Result[i].HasFixed := True;
+      Result[i].Fixed := JsTruthy(d);
+    end;
     style := SubObj(item, 'itemStyle');
     if style <> nil then
     begin
@@ -714,6 +1263,29 @@ begin
   end;
 end;
 
+{ One row's scalar leaf tested for truth, and whether the row wrote it at all --
+  the two things an option chain needs to know before it goes to the parent. }
+function RowTruthy(AStore: TTyDataStore; ARow: Integer; const AKey: string;
+  out AWritten: Boolean): Boolean;
+var v: TTyDataValue; k: Integer;
+begin
+  Result := False;
+  AWritten := False;
+  if AStore = nil then Exit;
+  k := TyOverrideKey(AKey);
+  if not AStore.HasOverride(ARow, k) then Exit;
+  v := AStore.GetOverride(ARow, k);
+  case v.Kind of
+    dvkBool: begin AWritten := True; Result := v.Num <> 0; end;
+    dvkNumber:
+      begin
+        AWritten := True;
+        Result := (not IsNan(v.Num)) and (v.Num <> 0);
+      end;
+    dvkText: begin AWritten := True; Result := v.Text <> ''; end;
+  end;
+end;
+
 function RowNum(AStore: TTyDataStore; ARow: Integer; const AKey: string;
   out AValue: Double): Boolean;
 var v: TTyDataValue; k: Integer;
@@ -735,6 +1307,7 @@ var
   i, j, valCol: Integer;
   s: string;
   v: Double;
+  written: Boolean;
 begin
   Result := nil;
   if AStore = nil then Exit;
@@ -762,15 +1335,20 @@ begin
     Result[i].Y := NaN;
     if RowNum(AStore, i, 'x', v) then Result[i].X := v;
     if RowNum(AStore, i, 'y', v) then Result[i].Y := v;
-    { `fixed` IS THE DRAG'S WORD, NOT THE OPTION'S. Upstream writes it onto the
-      LAYOUT when a drag ends, and the layouts then leave that node where the
-      hand put it. A written x and y is a different thing entirely: it says
-      where the node goes under `layout: 'none'`, and it feeds the data
-      rectangle -- but it does not stop `circular` laying the node out, and
-      treating it as a pin leaves every positioned dataset drawn as if no
-      layout had been asked for. There is no drag here yet, so this is always
-      false and the field is what the drag will set. }
+    { TWO `fixed`s, IN TWO PLACES, FOR TWO LAYOUTS. The RING honours the one a
+      drag writes onto the node's LAYOUT, and there is no drag here yet, so
+      that one is always false. The FORCE solver honours the one written in
+      the OPTION -- `nodeData.getItemModel(idx).get('fixed')` -- which is read
+      here and resolved through the category and the series afterwards.
+
+      AND A WRITTEN x AND y IS NEITHER. It says where a node goes under `none`
+      and feeds the data rectangle, but it does not stop the ring laying the
+      node out, and reading it as a pin draws every positioned dataset as if
+      no layout had been asked for. }
     Result[i].Fixed := False;
+    Result[i].OwnFixed := RowTruthy(AStore, i, 'fixed', written);
+    Result[i].HasOwnFixed := written;
+    Result[i].ModelCategory := -1;
     Result[i].PX := NaN;
     Result[i].PY := NaN;
 
@@ -778,8 +1356,8 @@ begin
     if RowNum(AStore, i, 'symbolSize', v) then
     begin
       Result[i].HasSize := True;
-      Result[i].SizeW := v;
-      Result[i].SizeH := v;
+      Result[i].SizeW := SaneSize(v);
+      Result[i].SizeH := Result[i].SizeW;
     end;
 
     { `category` IS READ THREE DIFFERENT WAYS UPSTREAM -- as an index, as a
@@ -788,7 +1366,10 @@ begin
     if RowNum(AStore, i, 'category', v) then
     begin
       if (v >= 0) and (v < Length(ACategories)) and (Frac(v) = 0) then
+      begin
         Result[i].Category := Trunc(v);
+        Result[i].ModelCategory := Result[i].Category;
+      end;
     end
     else
     begin
@@ -800,11 +1381,57 @@ begin
             Result[i].Category := j;
             Break;
           end;
+      { A NUMBER WRITTEN AS A STRING IS STILL AN INDEX to the option chain:
+        upstream indexes an ARRAY with it, and `categories['1']` is element
+        one. Only the canonical spelling -- '01', '1.0' and ' 1' are property
+        names that array does not have. }
+      if (s <> '') and (Length(s) <= 9) and ((s = '0') or (s[1] in ['1'..'9']))
+        and TryStrToInt(s, j) and (IntToStr(j) = s)
+        and (j <= High(ACategories)) then
+        Result[i].ModelCategory := j;
     end;
   end;
 end;
 
+procedure TyGraphFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore);
+var
+  node: TJSONObject;
+  d: TJSONData;
+  dims: TTySeriesDimArray;
+  key: string;
+begin
+  if AStore = nil then Exit;
+  { ONE VALUE COLUMN, and everything else a node carries -- x, y, category,
+    symbol, fixed -- arrives as an override under its own name, the way every
+    per-datum option in this port does. }
+  AStore.AddDimension('value', ddtFloat);
+  SetLength(dims, 1);
+  dims[0] := Default(TTySeriesDim);
+  dims[0].Name := 'value';
+  dims[0].Kind := ddtFloat;
+  node := NodeAt(AOption, ASeriesIndex);
+  if node = nil then Exit;
+  { `data || nodes`: the second name is read only when the first is falsy --
+    absent or null. An empty `data` array is truthy and wins. }
+  key := 'data';
+  d := node.Find('data');
+  if (d = nil) or not JsTruthy(d) then key := 'nodes';
+  TyFillSeriesStore(AOption, ASeriesIndex, dims, AStore, key);
+end;
+
 { An endpoint, which the author may have written as a name or as an index. }
+{ The one key a node is filed under: `retrieve(id, name, index)` -- its id if it
+  has one, else its name, else its position spelled as a string. ONE key, not
+  three: a node that has an id cannot be reached by its name, and a node with
+  neither is reached by '0', '1', ... }
+function NodeKey(const ANode: TTyGraphNode; AIndex: Integer): string;
+begin
+  if ANode.Id <> '' then Result := ANode.Id
+  else if ANode.Name_ <> '' then Result := ANode.Name_
+  else Result := IntToStr(AIndex);
+end;
+
 function ResolveEnd(AData: TJSONData;
   const ANodes: TTyGraphNodeArray): Integer;
 var i: Integer; v: Double;
@@ -822,10 +1449,41 @@ begin
     Exit(Trunc(v));
   end;
   if AData.JSONType <> jtString then Exit;
+  { BY KEY, AND THE FIRST NODE FILED UNDER IT. A second node with the same key
+    is refused by upstream's graph -- it says so in the console -- so the
+    first is the only one there is to find. }
   for i := 0 to High(ANodes) do
-    if ANodes[i].Name_ = AData.AsString then Exit(i);
-  for i := 0 to High(ANodes) do
-    if (ANodes[i].Id <> '') and (ANodes[i].Id = AData.AsString) then Exit(i);
+    if NodeKey(ANodes[i], i) = AData.AsString then Exit(i);
+end;
+
+{ An edge's `value` the way the edge data reads it: an array gives its first
+  entry, and then upstream's parseDataValue -- nothing, null and the empty
+  string are not numbers, and everything else goes through Number(), so '4' is
+  four and true is one. }
+function EdgeValueOf(AData: TJSONData): Double;
+var fs: TFormatSettings; s: string;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  if AData is TJSONArray then
+  begin
+    if TJSONArray(AData).Count = 0 then Exit;
+    AData := TJSONArray(AData).Items[0];
+  end;
+  case AData.JSONType of
+    jtNumber: Result := AData.AsFloat;
+    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    jtString:
+      begin
+        s := Trim(AData.AsString);
+        if s = '' then Exit;
+        fs := DefaultFormatSettings;
+        fs.DecimalSeparator := '.';
+        if s = 'Infinity' then Result := Infinity
+        else if s = '-Infinity' then Result := NegInfinity
+        else if not TryStrToFloat(s, Result, fs) then Result := NaN;
+      end;
+  end;
 end;
 
 function TyGraphEdgesOf(AOption: TTyChartOption; ASlot: Integer;
@@ -839,10 +1497,11 @@ begin
   Result := nil;
   node := NodeAt(AOption, ASlot);
   if node = nil then Exit;
-  { `links` AND `edges` ARE ONE KEY UNDER TWO NAMES, and upstream prefers
-    neither: it reads `links` and falls back to `edges`. }
-  d := node.Find('links');
-  if not (d is TJSONArray) then d := node.Find('edges');
+  { `edges || links`: TWO NAMES FOR ONE LIST, and `edges` is read first --
+    `links` only when `edges` is falsy. An empty `edges` array is truthy and
+    wins; a truthy value that is not a list is no edges at all. }
+  d := node.Find('edges');
+  if (d = nil) or not JsTruthy(d) then d := node.Find('links');
   if not (d is TJSONArray) then Exit;
   a := TJSONArray(d);
   SetLength(Result, a.Count);
@@ -858,8 +1517,16 @@ begin
     { AN EDGE TO A NODE THAT IS NOT THERE IS DROPPED. Drawing it would need a
       point, and there is no point to draw it to. }
     if (Result[n].Source < 0) or (Result[n].Target < 0) then Continue;
-    Result[n].Value := NumIn(item, 'value', NaN);
+    Result[n].Value := EdgeValueOf(item.Find('value'));
     Result[n].Name_ := StrIn(item, 'name', '');
+    d := item.Find('ignoreForceLayout');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      Result[n].HasOwnIgnore := True;
+      Result[n].IgnoreForce := JsTruthy(d);
+    end;
+    Result[n].CPX := NaN;
+    Result[n].CPY := NaN;
     style := SubObj(item, 'lineStyle');
     if style <> nil then
     begin
@@ -931,72 +1598,177 @@ begin
   Result := True;
 end;
 
+type
+  { getLayoutRect's input, already read: six positions, the two alignment words,
+    and an aspect when there is one. }
+  TGraphBoxIn = record
+    Left, Top, Right, Bottom, Width, Height: TTyGraphPos;
+    AlignH, AlignV: string;
+    HasAspect: Boolean;
+    Aspect: Double;
+  end;
+
+{ `x || 0`: a zero and a not-a-number are both falsy. }
+function OrZero(AV: Double): Double;
+begin
+  if IsNan(AV) then Result := 0 else Result := AV;
+end;
+
+{ UPSTREAM'S getLayoutRect, LINE FOR LINE, with no margin -- a graph's box has
+  none. The container is given as an origin and a size rather than as a
+  rectangle, because the second call preserveAspect makes passes the first
+  call's WIDTH, and a width recovered as right minus left is not always the
+  same Double.
+
+  Every step is written the way upstream writes it, including the ones whose
+  only job is to launder a not-a-number an earlier step made: on a graph with
+  no positions the aspect IS a not-a-number, and those steps are what produce
+  the box. }
+procedure GraphLayoutRect(const AIn: TGraphBoxIn; AX, AY, ACW, ACH: Double;
+  out ARect: TTyRectF; out AW, AH: Double);
+var left, top, right, bottom, w, h: Double;
+begin
+  left := ResolvePos(AIn.Left, ACW);
+  top := ResolvePos(AIn.Top, ACH);
+  right := ResolvePos(AIn.Right, ACW);
+  bottom := ResolvePos(AIn.Bottom, ACH);
+  w := ResolvePos(AIn.Width, ACW);
+  h := ResolvePos(AIn.Height, ACH);
+
+  { A SIZE FROM THE TWO SIDES, which is not-a-number the moment either side is
+    -- and on a graph `right` is almost never written, so this is almost always
+    not-a-number in, not-a-number out. }
+  if IsNan(w) then w := ACW - right - left;
+  if IsNan(h) then h := ACH - bottom - top;
+
+  if AIn.HasAspect then
+  begin
+    { THE ASPECT BRANCH, and it is the only reason a graph is 80% of anything.
+      With neither size written, ONE axis takes four fifths of the container
+      -- whichever one the aspect says will then fit -- and the other follows.
+
+      A NOT-A-NUMBER ASPECT DOES NOT SKIP THIS, and that is the ordinary case:
+      a graph with no positions has no aspect. `NaN > x` is false, so it is
+      the HEIGHT that takes four fifths; the width then comes out
+      not-a-number from the aspect and is filled in from the container at the
+      very end. So the box of a circular or force graph is the full width and
+      four fifths of the height -- not the whole container. }
+    if IsNan(w) and IsNan(h) then
+    begin
+      if (not IsNan(AIn.Aspect)) and (AIn.Aspect > ACW / ACH) then
+        w := ACW * 0.8
+      else
+        h := ACH * 0.8;
+    end;
+    if IsNan(w) then w := AIn.Aspect * h;
+    if IsNan(h) and (not IsNan(AIn.Aspect)) and (AIn.Aspect <> 0) then
+      h := w / AIn.Aspect;
+  end;
+
+  { A MISSING SIDE FROM THE OTHER ONE. }
+  if IsNan(left) then left := ACW - right - w;
+  if IsNan(top) then top := ACH - bottom - h;
+
+  { AND NOW THE WORDS ARE READ AGAIN, AS AN ALIGNMENT. The same `center` does
+    two jobs in one function: it was a position above and it is a centring
+    instruction here, and the second reading overwrites the first. With the
+    width still not-a-number this makes `left` not-a-number too -- which the
+    next line turns into a zero. }
+  if AIn.AlignH = 'center' then left := ACW / 2 - w / 2
+  else if AIn.AlignH = 'right' then left := ACW - w;
+  if (AIn.AlignV = 'middle') or (AIn.AlignV = 'center') then
+    top := ACH / 2 - h / 2
+  else if AIn.AlignV = 'bottom' then top := ACH - h;
+
+  { `left = left || 0`. Reached on every graph that has no positions. }
+  left := OrZero(left);
+  top := OrZero(top);
+  if IsNan(w) then w := ACW - left - OrZero(right);
+  if IsNan(h) then h := ACH - top - OrZero(bottom);
+
+  AW := w;
+  AH := h;
+  ARect := TyRectF(OrZero(AX) + left, OrZero(AY) + top,
+                   OrZero(AX) + left + w, OrZero(AY) + top + h);
+end;
+
 function TyGraphViewRect(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
   AAspect: Double): TTyRectF;
 var
-  cw, ch, w, h, left, top: Double;
-  spec: TTyBoxSpec;
+  cw, ch, w, h, actual: Double;
+  box, inner: TGraphBoxIn;
+  wide, narrow, cover: Boolean;
 begin
   Result := TyInvalidRectF;
   if not TyRectFIsValid(AContainer) then Exit;
   cw := AContainer.Right - AContainer.Left;
   ch := AContainer.Bottom - AContainer.Top;
   if (cw <= 0) or (ch <= 0) then Exit;
-  spec := ASpec.Box;
 
-  { THE TWO SIDES FIRST, and `center` is a POSITION here, not a keyword: it is
-    rewritten to 50% before it is parsed, so `left` arrives as half the
-    container and only a written `right` can turn it into a width. }
-  left := TyBoxResolve(spec.Left, cw);
-  top := TyBoxResolve(spec.Top, ch);
-  if spec.Left.Kind = buAuto then left := NaN;
-  if spec.Top.Kind = buAuto then top := NaN;
+  box.Left := ASpec.PosLeft;
+  box.Top := ASpec.PosTop;
+  box.Right := ASpec.PosRight;
+  box.Bottom := ASpec.PosBottom;
+  box.Width := ASpec.PosWidth;
+  box.Height := ASpec.PosHeight;
+  box.AlignH := ASpec.AlignH;
+  box.AlignV := ASpec.AlignV;
+  { A GRAPH ALWAYS PASSES AN ASPECT -- a not-a-number one when nothing was
+    placed -- so the aspect branch always runs. }
+  box.HasAspect := True;
+  box.Aspect := AAspect;
+  GraphLayoutRect(box, AContainer.Left, AContainer.Top, cw, ch, Result, w, h);
+  if ASpec.PreserveAspect = gpaOff then Exit;
 
-  w := NaN;
-  h := NaN;
-  if spec.Width.Kind <> buAuto then w := TyBoxResolve(spec.Width, cw);
-  if spec.Height.Kind <> buAuto then h := TyBoxResolve(spec.Height, ch);
-  if IsNan(w) and (spec.Right.Kind <> buAuto) and not IsNan(left) then
-    w := cw - TyBoxResolve(spec.Right, cw) - left;
-  if IsNan(h) and (spec.Bottom.Kind <> buAuto) and not IsNan(top) then
-    h := ch - TyBoxResolve(spec.Bottom, ch) - top;
-
-  { THE ASPECT BRANCH, and it is the only reason a graph is 80% of anything.
-    With neither size written, ONE axis takes four fifths of the container --
-    whichever one the aspect says will then fit -- and the other follows. }
-  if not (IsNan(AAspect) or IsInfinite(AAspect) or (AAspect = 0)) then
+  { applyPreserveAspect: the box is laid out again INSIDE ITSELF with one side
+    shortened to the data's aspect -- which side depends on which way the two
+    aspects disagree and on `cover` -- and aligned by the two preserve words,
+    centred when they say nothing. Two aspects within a billionth of a radian
+    of each other leave the box alone. }
+  actual := w / h;
+  { A MUTANT THAT DROPS THIS SURVIVES: laying the box out again when the two
+    aspects already agree moves it by rounding alone, far under a millionth of
+    a pixel. It is upstream's guard and it stays. }
+  if (not IsNan(AAspect)) and (not IsNan(actual))
+    and (Abs(ArcTan(AAspect) - ArcTan(actual)) < 1e-9) then Exit;
+  inner.Left := PosNaN;
+  inner.Top := PosNaN;
+  inner.Right := PosNaN;
+  inner.Bottom := PosNaN;
+  inner.Width := PosPx(w);
+  inner.Height := PosPx(h);
+  inner.AlignH := '';
+  inner.AlignV := '';
+  inner.HasAspect := False;
+  inner.Aspect := NaN;
+  cover := ASpec.PreserveAspect = gpaCover;
+  wide := (not IsNan(actual)) and (not IsNan(AAspect)) and (actual > AAspect);
+  narrow := (not IsNan(actual)) and (not IsNan(AAspect)) and (actual < AAspect);
+  if (wide and not cover) or (narrow and cover) then
   begin
-    if IsNan(w) and IsNan(h) then
+    inner.Width := PosPx(h * AAspect);
+    if ASpec.PreserveAlign = 'left' then inner.Left := PosPx(0)
+    else if ASpec.PreserveAlign = 'right' then inner.Right := PosPx(0)
+    else
     begin
-      if AAspect > cw / ch then w := cw * 0.8 else h := ch * 0.8;
+      inner.Left.Kind := gpkPct;
+      inner.Left.V := 50;
+      inner.AlignH := 'center';
     end;
-    if IsNan(w) and not IsNan(h) then w := AAspect * h;
-    if IsNan(h) and not IsNan(w) then h := w / AAspect;
+  end
+  else
+  begin
+    inner.Height := PosPx(w / AAspect);
+    if ASpec.PreserveVAlign = 'top' then inner.Top := PosPx(0)
+    else if ASpec.PreserveVAlign = 'bottom' then inner.Bottom := PosPx(0)
+    else
+    begin
+      inner.Top.Kind := gpkPct;
+      inner.Top.V := 50;
+      inner.AlignV := 'middle';
+    end;
   end;
-  if IsNan(w) then w := cw;
-  if IsNan(h) then h := ch;
-
-  { AND NOW `center` IS READ AGAIN, AS AN ALIGNMENT. The same word does two
-    jobs in one function: it was a position three lines ago and it is a
-    centring instruction here, and the second reading overwrites the first. }
-  if spec.Left.Kind = buCentre then left := cw / 2 - w / 2;
-  if spec.Top.Kind = buCentre then top := ch / 2 - h / 2;
-  { A FINAL LAUNDERING. Upstream's `left = left || 0` is the only thing that
-    turns a not-a-number into a zero.
-
-    A MUTANT OF IT SURVIVES, and the reason is worth writing down rather than
-    chasing: a GRAPH cannot reach it. Its own default is `left: 'center'`, and
-    nothing an author can write makes that absent -- an unparseable value
-    falls back to the default, not to nothing -- so `left` is always a number
-    by the time it gets here. Upstream's own derivation of a missing side
-    from the opposite one is unreachable for the same reason and is not
-    written out. The guard stays because the rule belongs at this step; it is
-    not, today, guarding anything. }
-  if IsNan(left) or IsInfinite(left) then left := 0;
-  if IsNan(top) or IsInfinite(top) then top := 0;
-
-  Result := TyRectF(AContainer.Left + left, AContainer.Top + top,
-                    AContainer.Left + left + w, AContainer.Top + top + h);
+  GraphLayoutRect(inner, Result.Left, Result.Top, w, h, Result, w, h);
 end;
 
 { ==================== the layouts ==================== }
@@ -1080,6 +1852,506 @@ begin
   TyGraphLayoutNone(ANodes, AView);
 end;
 
+{ ==================== the force layout ==================== }
+
+{ THE TRAPS OFF, for a stretch of arithmetic that is the author's from end to
+  end. The pending flags are cleared before the old mask goes back, so nothing
+  computed in here can surface as an exception somewhere else later. }
+function MaskFP: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure UnmaskFP(const AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  { AND THE SSE FLAGS, which ClearExceptions does not touch on this CPU -- it
+    clears the x87 status word and nothing else, and a Double here is SSE. Left
+    standing, the invalid-operation flag the masked arithmetic raised stays
+    sticky, and the NEXT trap anywhere in the host -- a plain division by zero
+    -- is reported as an invalid operation instead. }
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+
+procedure TyGraphResolvePins(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ACategories: TTyGraphCategoryArray;
+  const ASpec: TTyGraphSpec);
+var i, c: Integer;
+begin
+  for i := 0 to High(ANodes) do
+  begin
+    { NEAREST FIRST, and a written FALSE stops the climb as surely as a true:
+      the chain moves on only when a level said nothing at all. }
+    if ANodes[i].HasOwnFixed then
+      ANodes[i].Pinned := ANodes[i].OwnFixed
+    else
+    begin
+      c := ANodes[i].ModelCategory;
+      if (c >= 0) and (c <= High(ACategories)) and ACategories[c].HasFixed then
+        ANodes[i].Pinned := ACategories[c].Fixed
+      else
+        ANodes[i].Pinned := ASpec.HasFixed and ASpec.Fixed;
+    end;
+  end;
+  { AN EDGE'S PARENT IS THE SERIES and nothing between: there are no edge
+    categories. }
+  for i := 0 to High(AEdges) do
+    if not AEdges[i].HasOwnIgnore then
+      AEdges[i].IgnoreForce := ASpec.HasIgnoreForce and ASpec.IgnoreForce;
+end;
+
+function TyGraphLinearMap(AValue, ADomain0, ADomain1, ARange0,
+  ARange1: Double): Double;
+var subDomain, subRange: Double; mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    subDomain := ADomain1 - ADomain0;
+    subRange := ARange1 - ARange0;
+    { A FLAT DOMAIN IS THE MIDDLE OF THE RANGE -- so with the default
+      repulsion of [0, 50] and every node the same value, every node repels at
+      twenty-five, which is neither end. }
+    if subDomain = 0 then
+    begin
+      if subRange = 0 then Result := ARange0
+      else Result := (ARange0 + ARange1) / 2;
+      Exit;
+    end;
+    { THE TWO ENDS EXACTLY. The division below would land on them to within a
+      rounding, and upstream does not leave it to the rounding. }
+    if AValue = ADomain0 then Exit(ARange0);
+    if AValue = ADomain1 then Exit(ARange1);
+    Result := (AValue - ADomain0) / subDomain * subRange + ARange0;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyGraphForceSeed(ASeriesIndex: Integer): LongWord;
+begin
+  {$push}{$R-}{$Q-}
+  Result := LongWord(2463534242 + LongWord(ASeriesIndex) * 2654435769);
+  {$pop}
+  { xorshift has one state it can never leave. }
+  if Result = 0 then Result := 2463534242;
+end;
+
+const
+  cTwo32: Double = 4294967296.0;
+
+function TyGraphRandom(var AState: LongWord): Double;
+var x: LongWord;
+begin
+  {$push}{$R-}{$Q-}
+  x := AState;
+  x := x xor LongWord(x shl 13);
+  x := x xor (x shr 17);
+  x := x xor LongWord(x shl 5);
+  {$pop}
+  AState := x;
+  { A TYPED CONSTANT, so the division is a Double one. An untyped real constant
+    here is a Single, and so is the arithmetic it takes part in. }
+  Result := x / cTwo32;
+end;
+
+const
+  { Where the driver stops trying. The friction is the author's, the loop
+    stops only when it has cooled below a hundredth, and upstream has no
+    ceiling: an infinite friction never cools, and a friction of a million
+    takes three thousand steps to. This many covers every friction under
+    ninety thousand. }
+  cForceMaxSteps = 2000;
+
+function TyGraphForceSteps(AFriction: Double): Integer;
+var f: Double; mask: TFPUExceptionMask;
+begin
+  mask := MaskFP;
+  try
+    { A FRICTION THAT CAN NEVER COOL runs until the ceiling. }
+    if IsNan(AFriction) or IsInfinite(AFriction) then Exit(cForceMaxSteps);
+    f := AFriction;
+    Result := 0;
+    repeat
+      f := f * 0.992;
+      Inc(Result);
+    until ((f < 0.01) and (Result >= 2)) or (Result >= cForceMaxSteps);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+{ `initLayout: 'circular'` -- the OTHER ring. Not the one `layout: 'circular'`
+  draws: this one shares the turn out by VALUE, not by symbol width, and it
+  honours no `fixed` of any kind. A node with no value makes its own share
+  not-a-number, and every node after it with it -- the angle is a running sum --
+  and the solver then starts all of those at random. }
+procedure RingByValue(const ANodes: TTyGraphNodeArray; const ARect: TTyRectF;
+  var AX, AY: TTyDoubleArray);
+var
+  i, count: Integer;
+  cx, cy, r, sum, unitAngle, angle, half, v, share: Double;
+begin
+  count := Length(ANodes);
+  if count = 0 then Exit;
+  cx := (ARect.Right - ARect.Left) / 2 + ARect.Left;
+  cy := (ARect.Bottom - ARect.Top) / 2 + ARect.Top;
+  r := Min(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top) / 2;
+  { THE SUM SKIPS WHAT IS NOT A NUMBER, and a sum of nothing -- or of values
+    that cancel -- shares the turn out evenly instead: `sum || count`. }
+  sum := 0;
+  for i := 0 to count - 1 do
+    if not IsNan(ANodes[i].Value) then sum := sum + ANodes[i].Value;
+  if IsNan(sum) or (sum = 0) then unitAngle := Pi * 2 / count
+  else unitAngle := Pi * 2 / sum;
+  angle := 0;
+  for i := 0 to count - 1 do
+  begin
+    v := ANodes[i].Value;
+    if IsNan(sum) or (sum = 0) then share := 1 else share := v;
+    half := unitAngle * share / 2;
+    angle := angle + half;
+    AX[i] := r * Cos(angle) + cx;
+    AY[i] := r * Sin(angle) + cy;
+    angle := angle + half;
+  end;
+end;
+
+procedure TyGraphLayoutForce(var ANodes: TTyGraphNodeArray;
+  const AEdges: TTyGraphEdgeArray; AView: TTyGraphView;
+  const ASpec: TTyGraphSpec; ASeed: LongWord;
+  var AState: TTyGraphForceState);
+var
+  n, ne, i, j, k, a, b, steps, total: Integer;
+  rect: TTyRectF;
+  width, height, cx, cy, gravity, friction, lo, hi, d, w, len_, repFact,
+    vx, vy, s, g, xi, yi, ri, ax, ay: Double;
+  fi: Boolean;
+  ox, oy, px, py, ppx, ppy, rep, elen: TTyDoubleArray;
+  qx, qy, qpx, qpy, qr: PDouble;
+  fixed_, eign: array of Boolean;
+  e1, e2: array of Integer;
+  rng: LongWord;
+  mask: TFPUExceptionMask;
+begin
+  if AView = nil then Exit;
+  n := Length(ANodes);
+  rect := AView.GetDataRect;
+  mask := MaskFP;
+  try
+    if (n = 0) or not TyRectFIsValid(rect) then
+    begin
+      TyGraphLayoutNone(ANodes, AView);
+      Exit;
+    end;
+
+    { NOTHING THE SOLVER CAN SEE HAS MOVED, so the answer is the last one. A
+      theme change or a focus change lays the chart out again; upstream would
+      never have laid it out for those, and running five hundred steps from
+      where the last run stopped would nudge every node for no reason. }
+    if AState.Valid and (Length(AState.X) = n) and (Length(AState.Y) = n)
+      and (AState.Rect.Left = rect.Left) and (AState.Rect.Top = rect.Top)
+      and (AState.Rect.Right = rect.Right)
+      and (AState.Rect.Bottom = rect.Bottom) then
+    begin
+      for i := 0 to n - 1 do
+      begin
+        ANodes[i].X := AState.X[i];
+        ANodes[i].Y := AState.Y[i];
+      end;
+      TyGraphLayoutNone(ANodes, AView);
+      Exit;
+    end;
+
+    { WHERE EVERY NODE STARTS -- its LAYOUT, in upstream's word, which is also
+      where a pinned node stays. Three sources, and the previous pass beats
+      both init layouts. }
+    SetLength(ox, n);
+    SetLength(oy, n);
+    if AState.Valid and (Length(AState.X) = n) and (Length(AState.Y) = n) then
+      for i := 0 to n - 1 do
+      begin
+        ox[i] := AState.X[i];
+        oy[i] := AState.Y[i];
+      end
+    else
+      case ASpec.Force.InitLayout of
+        gilNone:
+          for i := 0 to n - 1 do
+          begin
+            ox[i] := ANodes[i].X;
+            oy[i] := ANodes[i].Y;
+          end;
+        gilCircular:
+          RingByValue(ANodes, rect, ox, oy);
+      else
+        for i := 0 to n - 1 do
+        begin
+          ox[i] := NaN;
+          oy[i] := NaN;
+        end;
+      end;
+
+    { THE NODE RECORDS. The repulsion comes out of the node's VALUE, mapped from
+      the values' own extent onto the range -- not reversed. An extent of no
+      values at all is [+inf, -inf], which maps every value to not-a-number,
+      which lands on the middle of the range. }
+    lo := Infinity;
+    hi := NegInfinity;
+    for i := 0 to n - 1 do
+      if not IsNan(ANodes[i].Value) then
+      begin
+        if ANodes[i].Value < lo then lo := ANodes[i].Value;
+        if ANodes[i].Value > hi then hi := ANodes[i].Value;
+      end;
+    SetLength(rep, n);
+    SetLength(fixed_, n);
+    SetLength(px, n);
+    SetLength(py, n);
+    SetLength(ppx, n);
+    SetLength(ppy, n);
+    for i := 0 to n - 1 do
+    begin
+      rep[i] := TyGraphLinearMap(ANodes[i].Value, lo, hi,
+        ASpec.Force.RepulsionLo, ASpec.Force.RepulsionHi);
+      if IsNan(rep[i]) then
+        rep[i] := (ASpec.Force.RepulsionLo + ASpec.Force.RepulsionHi) / 2;
+      fixed_[i] := ANodes[i].Pinned;
+      px[i] := ox[i];
+      py[i] := oy[i];
+    end;
+
+    { THE EDGE RECORDS. The rest length comes out of the edge's value -- and
+      the range IS reversed, `[edgeLength[1], edgeLength[0]]`, so a heavier
+      edge is a SHORTER one. }
+    ne := Length(AEdges);
+    lo := Infinity;
+    hi := NegInfinity;
+    for k := 0 to ne - 1 do
+      if not IsNan(AEdges[k].Value) then
+      begin
+        if AEdges[k].Value < lo then lo := AEdges[k].Value;
+        if AEdges[k].Value > hi then hi := AEdges[k].Value;
+      end;
+    SetLength(elen, ne);
+    SetLength(eign, ne);
+    SetLength(e1, ne);
+    SetLength(e2, ne);
+    for k := 0 to ne - 1 do
+    begin
+      elen[k] := TyGraphLinearMap(AEdges[k].Value, lo, hi,
+        ASpec.Force.EdgeLengthHi, ASpec.Force.EdgeLengthLo);
+      if IsNan(elen[k]) then
+        elen[k] := (ASpec.Force.EdgeLengthHi + ASpec.Force.EdgeLengthLo) / 2;
+      eign[k] := AEdges[k].IgnoreForce;
+      e1[k] := AEdges[k].Source;
+      e2[k] := AEdges[k].Target;
+    end;
+
+    { THE RANDOM START, for every node with no position: a uniform box exactly
+      the size of the rectangle, centred on it, x and then y, node by node.
+
+      A PINNED node with no position draws too, as upstream's does, and its
+      draw is thrown away by the line below. Whether it draws CANNOT BE SEEN:
+      that node is pinned at not-a-number, which turns every free node into
+      not-a-number in the first step, so no position a later draw would have
+      decided survives to be looked at. Kept because it is upstream's line; a
+      mutant that skips it survives, and that is why. }
+    width := rect.Right - rect.Left;
+    height := rect.Bottom - rect.Top;
+    cx := rect.Left + width / 2;
+    cy := rect.Top + height / 2;
+    rng := ASeed;
+    for i := 0 to n - 1 do
+    begin
+      if IsNan(px[i]) or IsNan(py[i]) then
+      begin
+        px[i] := width * (TyGraphRandom(rng) - 0.5) + cx;
+        py[i] := height * (TyGraphRandom(rng) - 0.5) + cy;
+      end;
+      ppx[i] := px[i];
+      ppy[i] := py[i];
+    end;
+    { A PINNED NODE IS WHERE ITS LAYOUT IS, re-read at the top of every step
+      upstream so a drag can move it mid-settle. Nothing moves it here, so once
+      is every time -- and a pinned node with no layout is pinned at
+      not-a-number, which the repulsion then spreads to every free node. That
+      is upstream's answer, and the chart draws nothing but the pins. }
+    for i := 0 to n - 1 do
+      if fixed_[i] then
+      begin
+        px[i] := ox[i];
+        py[i] := oy[i];
+      end;
+
+    { The arrays are not resized from here on, so their storage stays put. }
+    qx := PDouble(px);
+    qy := PDouble(py);
+    qpx := PDouble(ppx);
+    qpy := PDouble(ppy);
+    qr := PDouble(rep);
+
+    gravity := ASpec.Force.Gravity;
+    friction := ASpec.Force.Friction;
+    total := TyGraphForceSteps(friction);
+    { A FRICTION THAT CAN NEVER COOL is a loop upstream never leaves, and the
+      only picture it ever shows is the one after its first steps: every free
+      node multiplied by something that is not a number. Two steps reach it.
+
+      THIS LINE IS ABOUT THE COST, NOT THE PICTURE: two thousand steps land on
+      the same not-a-numbers, only slower. A mutant that deletes it survives,
+      and that is the reason. }
+    if IsNan(friction) or IsInfinite(friction) then total := 2;
+
+    for steps := 1 to total do
+    begin
+      { THE SPRINGS, edge by edge and IN PLACE: each edge moves its two ends
+        before the next edge reads them. The weight is the far end's share of
+        the pair's repulsion, and 0/0 -- two nodes that repel at nothing -- is
+        the only way it is not a number. }
+      for k := 0 to ne - 1 do
+      begin
+        if eign[k] then Continue;
+        a := e1[k];
+        b := e2[k];
+        vx := px[b] - px[a];
+        vy := py[b] - py[a];
+        d := Sqrt(vx * vx + vy * vy) - elen[k];
+        w := rep[b] / (rep[a] + rep[b]);
+        if IsNan(w) then w := 0;
+        len_ := Sqrt(vx * vx + vy * vy);
+        if len_ = 0 then
+        begin
+          vx := 0;
+          vy := 0;
+        end
+        else
+        begin
+          vx := vx / len_;
+          vy := vy / len_;
+        end;
+        if not fixed_[a] then
+        begin
+          s := w * d * friction;
+          px[a] := px[a] + vx * s;
+          py[a] := py[a] + vy * s;
+        end;
+        if not fixed_[b] then
+        begin
+          s := -(1 - w) * d * friction;
+          px[b] := px[b] + vx * s;
+          py[b] := py[b] + vy * s;
+        end;
+      end;
+
+      { GRAVITY: a LINEAR spring to the centre, not a pull that fades. The
+        normalising lines are in upstream's source, commented out. }
+      g := gravity * friction;
+      for i := 0 to n - 1 do
+        if not fixed_[i] then
+        begin
+          vx := cx - px[i];
+          vy := cy - py[i];
+          px[i] := px[i] + vx * g;
+          py[i] := py[i] + vy * g;
+        end;
+
+      { REPULSION, every pair, and it writes the PREVIOUS position, not the
+        current one. The sign looks like attraction and is not: the far node's
+        previous position is pulled TOWARDS this one, and the next pass moves
+        each node along (current - previous) -- which is away. "Fixing" the
+        sign turns the layout inside out.
+
+        Two nodes on one point are pushed apart in a random direction -- two
+        more draws, x and then y, taken even when both of them are pinned. }
+      { THE HOT LOOP -- n squared over two, five hundred times -- so the near
+        node's figures are held in locals and its own previous position is
+        summed in one. That is the SAME additions in the same order: nothing
+        else writes that node's previous position while its row runs, and
+        every column before it has already added its share. }
+      for i := 0 to n - 1 do
+      begin
+        xi := qx[i];
+        yi := qy[i];
+        ri := qr[i];
+        fi := fixed_[i];
+        ax := qpx[i];
+        ay := qpy[i];
+        for j := i + 1 to n - 1 do
+        begin
+          vx := qx[j] - xi;
+          vy := qy[j] - yi;
+          d := Sqrt(vx * vx + vy * vy);
+          if d = 0 then
+          begin
+            vx := TyGraphRandom(rng) - 0.5;
+            vy := TyGraphRandom(rng) - 0.5;
+            d := 1;
+          end;
+          repFact := (ri + qr[j]) / d / d;
+          if not fi then
+          begin
+            ax := ax + vx * repFact;
+            ay := ay + vy * repFact;
+          end;
+          if not fixed_[j] then
+          begin
+            qpx[j] := qpx[j] + vx * (-repFact);
+            qpy[j] := qpy[j] + vy * (-repFact);
+          end;
+        end;
+        qpx[i] := ax;
+        qpy[i] := ay;
+      end;
+
+      { AND THE STEP ITSELF: along (current - previous), by the friction. }
+      for i := 0 to n - 1 do
+        if not fixed_[i] then
+        begin
+          vx := px[i] - ppx[i];
+          vy := py[i] - ppy[i];
+          px[i] := px[i] + vx * friction;
+          py[i] := py[i] + vy * friction;
+          ppx[i] := px[i];
+          ppy[i] := py[i];
+        end;
+
+      friction := friction * 0.992;
+    end;
+
+    { THE ANSWER. A free node takes where the solver left it; a pinned one keeps
+      its layout, which the solver never writes back. What the next pass starts
+      from is every node's solver position, pinned ones included. }
+    SetLength(AState.X, n);
+    SetLength(AState.Y, n);
+    for i := 0 to n - 1 do
+    begin
+      if fixed_[i] then
+      begin
+        ANodes[i].X := ox[i];
+        ANodes[i].Y := oy[i];
+      end
+      else
+      begin
+        ANodes[i].X := px[i];
+        ANodes[i].Y := py[i];
+      end;
+      AState.X[i] := px[i];
+      AState.Y[i] := py[i];
+    end;
+    AState.Rect := rect;
+    AState.Valid := True;
+
+    TyGraphLayoutNone(ANodes, AView);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
 { ==================== curveness ==================== }
 
 function TyGraphCurvenessAt(AIndex: Integer): Double;
@@ -1125,93 +2397,395 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-{ How many edges join the same ordered pair, and where this one sits among
-  them. }
-procedure PairPosition(const AEdges: TTyGraphEdgeArray; AAt: Integer;
-  out AIndex, ACount, AOpposite: Integer; out AForward: Boolean);
-var i, firstFwd, firstBack: Integer;
-begin
-  AIndex := 0;
-  ACount := 0;
-  AOpposite := 0;
-  firstFwd := -1;
-  firstBack := -1;
-  for i := 0 to High(AEdges) do
-  begin
-    if (AEdges[i].Source = AEdges[AAt].Source)
-      and (AEdges[i].Target = AEdges[AAt].Target) then
-    begin
-      if i = AAt then AIndex := ACount;
-      Inc(ACount);
-      if firstFwd < 0 then firstFwd := i;
-    end
-    else if (AEdges[i].Source = AEdges[AAt].Target)
-      and (AEdges[i].Target = AEdges[AAt].Source) then
-    begin
-      Inc(AOpposite);
-      if firstBack < 0 then firstBack := i;
-    end;
+{ ONE EDGE, FILED UNDER ITS ORDERED PAIR. Sorting these by pair and then by
+  edge gives upstream's edge map without a hash: each run of equal pairs is one
+  key, its members in the order they were listed. }
+type
+  TPairRef = record
+    S, T, Edge: Integer;
   end;
-  { WHICHEVER PAIR WAS SEEN FIRST IS THE FORWARD ONE, and the other is drawn on
-    the far side. With no opposite at all the pair is forward by default.
+  TPairRefArray = array of TPairRef;
 
-    A SELF-LOOP IS ITS OWN OPPOSITE upstream -- the key and the opposite key are
-    the same string -- so it is always forward and its opposite count is its own
-    count. Keyed on two integers, a self-loop falls into the first branch above
-    and never the second, which comes to the same answer without the aliasing. }
-  AForward := (firstBack < 0) or (firstFwd <= firstBack);
+function PairLess(const A, B: TPairRef): Boolean;
+begin
+  if A.S <> B.S then Exit(A.S < B.S);
+  if A.T <> B.T then Exit(A.T < B.T);
+  Result := A.Edge < B.Edge;
+end;
+
+procedure SortPairs(var A: TPairRefArray);
+var
+  tmp: TPairRefArray;
+  n, width, lo, mid, hi, i, j, k: Integer;
+begin
+  n := Length(A);
+  SetLength(tmp, n);
+  width := 1;
+  while width < n do
+  begin
+    lo := 0;
+    while lo < n do
+    begin
+      mid := Min(lo + width, n);
+      hi := Min(lo + 2 * width, n);
+      i := lo;
+      j := mid;
+      k := lo;
+      while (i < mid) and (j < hi) do
+      begin
+        if PairLess(A[j], A[i]) then
+        begin
+          tmp[k] := A[j];
+          Inc(j);
+        end
+        else
+        begin
+          tmp[k] := A[i];
+          Inc(i);
+        end;
+        Inc(k);
+      end;
+      while i < mid do
+      begin
+        tmp[k] := A[i];
+        Inc(i);
+        Inc(k);
+      end;
+      while j < hi do
+      begin
+        tmp[k] := A[j];
+        Inc(j);
+        Inc(k);
+      end;
+      lo := hi;
+    end;
+    for k := 0 to n - 1 do A[k] := tmp[k];
+    width := width * 2;
+  end;
+end;
+
+{ The key a pair is filed under, or -1 when no edge runs that way. }
+function FindPair(const ASorted: TPairRefArray; const AGroupOf: array of Integer;
+  ASrc, ATgt: Integer): Integer;
+var lo, hi, mid: Integer;
+begin
+  Result := -1;
+  lo := 0;
+  hi := High(ASorted);
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if (ASorted[mid].S < ASrc)
+      or ((ASorted[mid].S = ASrc) and (ASorted[mid].T < ATgt)) then
+      lo := mid + 1
+    else if (ASorted[mid].S = ASrc) and (ASorted[mid].T = ATgt) then
+      Exit(AGroupOf[mid])
+    else
+      hi := mid - 1;
+  end;
 end;
 
 procedure TyGraphSolveCurveness(var AEdges: TTyGraphEdgeArray;
-  const ASpec: TTyGraphSpec);
+  const ASpec: TTyGraphSpec; ACircular: Boolean);
 var
-  i, idx, total, opp, parity, at, len: Integer;
-  isFwd: Boolean;
-begin
-  for i := 0 to High(AEdges) do
+  n, i, k, g, o, ng, own, opp, total, parity, tableLen: Integer;
+  sorted: TPairRefArray;
+  groupOf, grp, rank, firstOf, countOf, forwardOf, oppOf: array of Integer;
+  res: Double;
+  isArray, ledByZero, keep, exists, oppExists: Boolean;
+
+  { One entry of the table in force, or upstream's `undefined` -- here a
+    not-a-number -- past its end. }
+  function ListAt(AAt: Integer): Double;
   begin
-    { THREE SOURCES, IN THIS ORDER, and each of them counts a written zero: the
-      edge's own, then the series', then the table. }
-    if AEdges[i].HasCurveness then
+    Result := NaN;
+    if AAt < 0 then Exit;
+    if isArray then
     begin
-      AEdges[i].SolvedCurveness := AEdges[i].Curveness;
-      Continue;
-    end;
-    if ASpec.HasCurveness then
-    begin
-      AEdges[i].SolvedCurveness := ASpec.Curveness;
-      Continue;
-    end;
-    if not ASpec.AutoCurveness then
-    begin
-      AEdges[i].SolvedCurveness := 0;
-      Continue;
-    end;
-
-    PairPosition(AEdges, i, idx, total, opp, isFwd);
-    len := TyGraphCurvenessLength(ASpec, total);
-    { THE PARITY CORRECTION, and the array form opts out of it: with a written
-      table the author's own entries are used as given. }
-    if ASpec.HasAutoList then parity := 0
-    else if Odd(total) then parity := 0
-    else parity := 1;
-
-    if isFwd then at := parity + idx
-    else at := idx + opp + parity;
-
-    if ASpec.HasAutoList then
-    begin
-      { A WRITTEN TABLE IS NEVER PADDED. Reading past its end finds nothing,
-        and nothing becomes a straight line. }
-      if (at >= 0) and (at <= High(ASpec.AutoList)) then
-        AEdges[i].SolvedCurveness := ASpec.AutoList[at]
-      else
-        AEdges[i].SolvedCurveness := 0;
+      if AAt <= High(ASpec.AutoList) then Result := ASpec.AutoList[AAt];
     end
-    else if at < len then
-      AEdges[i].SolvedCurveness := TyGraphCurvenessAt(at)
+    else if AAt < tableLen then
+      Result := TyGraphCurvenessAt(AAt);
+  end;
+
+begin
+  n := Length(AEdges);
+  { THREE SOURCES, NEAREST FIRST, and each of them counts a written zero: the
+    edge's own, then the series', then the table. The written ones are used
+    AS WRITTEN under every layout -- the negation below is applied to what the
+    table answers and to nothing else. }
+  for i := 0 to n - 1 do
+    if AEdges[i].HasCurveness then
+      AEdges[i].SolvedCurveness := AEdges[i].Curveness
+    else if ASpec.HasCurveness then
+      AEdges[i].SolvedCurveness := ASpec.Curveness
     else
       AEdges[i].SolvedCurveness := 0;
+  if (not ASpec.AutoCurveness) or (n = 0) then Exit;
+
+  { UPSTREAM'S EDGE MAP. Every ordered pair is a key; its members are the
+    edges that run that way, in the order they were listed. }
+  SetLength(sorted, n);
+  for i := 0 to n - 1 do
+  begin
+    sorted[i].S := AEdges[i].Source;
+    sorted[i].T := AEdges[i].Target;
+    sorted[i].Edge := i;
+  end;
+  SortPairs(sorted);
+  SetLength(groupOf, n);
+  SetLength(grp, n);
+  SetLength(rank, n);
+  SetLength(firstOf, n);
+  SetLength(countOf, n);
+  SetLength(forwardOf, n);
+  ng := -1;
+  for k := 0 to n - 1 do
+  begin
+    if (k = 0) or (sorted[k].S <> sorted[k - 1].S)
+      or (sorted[k].T <> sorted[k - 1].T) then
+    begin
+      Inc(ng);
+      firstOf[ng] := sorted[k].Edge;
+      countOf[ng] := 0;
+      forwardOf[ng] := 0;
+    end;
+    groupOf[k] := ng;
+    grp[sorted[k].Edge] := ng;
+    rank[sorted[k].Edge] := countOf[ng];
+    Inc(countOf[ng]);
+  end;
+  { A SELF-LOOP IS ITS OWN OPPOSITE: the key and the reversed key are the same
+    pair, so this finds the loop's own key. }
+  SetLength(oppOf, n);
+  for i := 0 to n - 1 do
+    oppOf[i] := FindPair(sorted, groupOf, AEdges[i].Target, AEdges[i].Source);
+
+  { WHICH WAY IS FORWARD, and it is not "whichever came first". Upstream sets
+    the flag as each edge is FILED, looking only at what was filed before it:
+    a key that already had members and no opposite becomes forward; a key and
+    an opposite that both already had members make the OPPOSITE forward and
+    this one not. Nothing else ever sets it -- so a lone edge, and both halves
+    of a single there-and-back pair, are never flagged at all, and an unset
+    flag reads as NOT forward. A self-loop takes the second branch on its
+    second copy and ends up not forward, the two assignments landing on one
+    key. Five states of the same small graph disagree with any tidier rule. }
+  for i := 0 to n - 1 do
+  begin
+    g := grp[i];
+    o := oppOf[i];
+    exists := firstOf[g] < i;
+    oppExists := (o >= 0) and (firstOf[o] < i);
+    if exists and not oppExists then
+      forwardOf[g] := 1
+    else if oppExists and exists then
+    begin
+      forwardOf[o] := 1;
+      forwardOf[g] := 2;
+    end;
+  end;
+
+  isArray := ASpec.HasAutoList;
+  { `autoCurvenessParams[0] === 0`, strictly: the NUMBER zero leads the list. }
+  ledByZero := isArray and (Length(ASpec.AutoList) > 0)
+    and (not IsNan(ASpec.AutoList[0])) and (ASpec.AutoList[0] = 0);
+
+  for i := 0 to n - 1 do
+  begin
+    if AEdges[i].HasCurveness or ASpec.HasCurveness then Continue;
+    g := grp[i];
+    o := oppOf[i];
+    own := countOf[g];
+    if o >= 0 then opp := countOf[o] else opp := 0;
+    { BOTH DIRECTIONS, and a self-loop's own count twice over -- both lookups
+      find the same key. }
+    total := own + opp;
+    if isArray then tableLen := Length(ASpec.AutoList)
+    else tableLen := TyGraphCurvenessLength(ASpec, total);
+    { THE PARITY CORRECTION, and a written list opts out of it. }
+    if isArray or Odd(total) then parity := 0 else parity := 1;
+
+    if forwardOf[g] <> 1 then
+    begin
+      { THE FAR SIDE: this pair's entries start after the opposite pair's. }
+      res := ListAt(rank[i] + opp + parity);
+      if not ACircular then
+      begin
+        { AND EVERY LAYOUT BUT THE RING TURNS SOME OF THEM ROUND AGAIN, by a
+          parity rule that itself depends on whether a written list starts
+          with a zero. `cond ? value : -value`. }
+        if isArray and not ledByZero then
+        begin
+          if Odd(opp) then keep := Odd(parity) else keep := not Odd(parity);
+        end
+        else
+          keep := Odd(opp + parity);
+        if not keep then res := -res;
+      end;
+    end
+    else
+      res := ListAt(parity + rank[i]);
+
+    if ACircular then
+    begin
+      { `retrieve3(written, table, 0)`: an entry that is not there falls through
+        to the zero. }
+      if IsNan(res) then res := 0;
+    end
+    else
+      { `-getCurvenessForEdge(...)`, UNCONDITIONALLY, on top of the turning
+        round above -- so a forward edge under `none` or `force` bows the
+        opposite way to the same edge on a ring. And `-undefined` is not a
+        number: a straight line. }
+      res := -res;
+    AEdges[i].SolvedCurveness := res;
+  end;
+end;
+
+{ A point a canvas can take. }
+function Drawable(AX, AY: Double): Boolean;
+begin
+  Result := not (IsNan(AX) or IsNan(AY) or IsInfinite(AX) or IsInfinite(AY))
+    and (Abs(AX) <= cTyGraphFarPx) and (Abs(AY) <= cTyGraphFarPx);
+end;
+
+procedure TyGraphEdgeGeometry(var AEdges: TTyGraphEdgeArray;
+  const ANodes: TTyGraphNodeArray; AView: TTyGraphView; ACircular: Boolean);
+var
+  i, a, b: Integer;
+  c, x1, y1, x2, y2, x12, y12, qx, qy, cx, cy: Double;
+  rect: TTyRectF;
+  p: TTyPointF;
+  mask: TFPUExceptionMask;
+begin
+  if AView = nil then Exit;
+  mask := MaskFP;
+  try
+    { THE RING'S OWN CENTRE, in data space: the centre of the DATA rectangle
+      the ring was laid out in, which is not the pixel box's centre whenever
+      the author placed the nodes. }
+    rect := AView.GetDataRect;
+    cx := (rect.Right - rect.Left) / 2 + rect.Left;
+    cy := (rect.Bottom - rect.Top) / 2 + rect.Top;
+    for i := 0 to High(AEdges) do
+    begin
+      AEdges[i].Curved := False;
+      AEdges[i].Hidden := False;
+      AEdges[i].CPX := NaN;
+      AEdges[i].CPY := NaN;
+      a := AEdges[i].Source;
+      b := AEdges[i].Target;
+      if (a < 0) or (a > High(ANodes)) or (b < 0) or (b > High(ANodes)) then
+        Continue;
+      c := AEdges[i].SolvedCurveness;
+      { `+curveness`: zero and not-a-number are falsy and draw a straight line.
+        Infinity is not falsy -- it makes a point that cannot be drawn. }
+      if IsNan(c) or (c = 0) then Continue;
+      { IN DATA SPACE, from the laid-out positions -- where upstream authors
+        the point, before the view's transform carries the whole group. Done
+        in pixels instead, the ring's control point would be pulled towards a
+        centre measured in the wrong units, and every chord of a positioned
+        ring would bow off towards one corner. }
+      x1 := ANodes[a].X;
+      y1 := ANodes[a].Y;
+      x2 := ANodes[b].X;
+      y2 := ANodes[b].Y;
+      x12 := (x1 + x2) / 2;
+      y12 := (y1 + y2) / 2;
+      if ACircular then
+      begin
+        { A COMPLETELY DIFFERENT CONTROL POINT. The ring does not offset the
+          midpoint perpendicularly -- it multiplies the curveness by three and
+          slides the midpoint towards the ring's own centre, so a third puts
+          the control point exactly on that centre and more overshoots past
+          it. Every edge therefore bows INWARD, which is what makes a chord
+          diagram look like one. }
+        c := c * 3;
+        qx := cx * c + x12 * (1 - c);
+        qy := cy * c + y12 * (1 - c);
+      end
+      else
+      begin
+        { AND THE OPERAND ORDERS ARE NOT THE SAME ON THE TWO AXES: x subtracts
+          (p1.y - p2.y) and y subtracts (p2.x - p1.x). That is the midpoint
+          plus curveness times the perpendicular, written out by hand, and
+          copying one line onto the other mirrors every curve. }
+        qx := x12 - (y1 - y2) * c;
+        qy := y12 - (x2 - x1) * c;
+      end;
+      p := AView.DataToPoint([qx, qy]);
+      if Drawable(p.X, p.Y) then
+      begin
+        AEdges[i].Curved := True;
+        AEdges[i].CPX := p.X;
+        AEdges[i].CPY := p.Y;
+      end
+      else
+        AEdges[i].Hidden := True;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyGraphSanitise(var ANodes: TTyGraphNodeArray);
+var i: Integer;
+begin
+  for i := 0 to High(ANodes) do
+    if not Drawable(ANodes[i].PX, ANodes[i].PY) then
+    begin
+      ANodes[i].PX := NaN;
+      ANodes[i].PY := NaN;
+    end;
+end;
+
+function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const AContainer: TTyRectF;
+  var AForce: TTyGraphForceState): TTyGraphSolved;
+var
+  dataRect, viewRect: TTyRectF;
+  aspect: Double;
+  hasData, circ: Boolean;
+  mask: TFPUExceptionMask;
+begin
+  Result := Default(TTyGraphSolved);
+  Result.Spec := TyGraphSpecOf(AOption, ASeriesIndex);
+  Result.Cats := TyGraphCategoriesOf(AOption, ASeriesIndex);
+  Result.Nodes := TyGraphNodesOf(AStore, Result.Cats);
+  Result.Edges := TyGraphEdgesOf(AOption, ASeriesIndex, Result.Nodes);
+  TyGraphResolvePins(Result.Nodes, Result.Edges, Result.Cats, Result.Spec);
+
+  mask := MaskFP;
+  try
+    { THE ORDER IS UPSTREAM'S AND IT MATTERS. The data rectangle is taken from
+      the positions the author wrote, the box is solved with the aspect that
+      came out of it -- and only THEN, if there were no positions at all, is
+      the data rectangle replaced by the box. So the box has already been
+      solved by the time anyone notices there was nothing to fit. }
+    hasData := TyGraphDataRect(Result.Nodes, dataRect, aspect);
+    viewRect := TyGraphViewRect(Result.Spec, AContainer, aspect);
+    if not hasData then dataRect := viewRect;
+    Result.View := TTyGraphView.Create(dataRect, viewRect);
+
+    case Result.Spec.Layout of
+      glCircular:
+        TyGraphLayoutCircular(Result.Nodes, Result.View, Result.Spec);
+      glForce:
+        TyGraphLayoutForce(Result.Nodes, Result.Edges, Result.View,
+          Result.Spec, TyGraphForceSeed(ASeriesIndex), AForce);
+    else
+      TyGraphLayoutNone(Result.Nodes, Result.View);
+    end;
+
+    { THE EDGES AFTER THE NODES, because their control points are made of the
+      nodes' final positions -- and the ring is the only layout that reads the
+      curveness table without turning it round. }
+    circ := Result.Spec.Layout = glCircular;
+    TyGraphSolveCurveness(Result.Edges, Result.Spec, circ);
+    TyGraphEdgeGeometry(Result.Edges, Result.Nodes, Result.View, circ);
+    TyGraphSanitise(Result.Nodes);
+  finally
+    UnmaskFP(mask);
   end;
 end;
 
@@ -1421,9 +2995,8 @@ var
   i, k, edgeAt: Integer;
   p1, p2, cp, pt, tan_: TTyPointF;
   curved: Boolean;
-  c, cx, cy, x12, y12, sz: Double;
+  sz: Double;
   pts: TTyPointFArray;
-  rect: TTyRectF;
   sym: TTySymbolSpec;
   el: TTyChartElement;
   shape: TTyChartShape;
@@ -1503,9 +3076,6 @@ var
 begin
   Result := 0;
   if (AList = nil) or (AView = nil) then Exit;
-  rect := AView.GetDataRect;
-  cx := (rect.Right - rect.Left) / 2 + rect.Left;
-  cy := (rect.Bottom - rect.Top) / 2 + rect.Top;
 
   for i := 0 to High(AEdges) do
   begin
@@ -1514,39 +3084,16 @@ begin
     p1 := TyPointF(ANodes[AEdges[i].Source].PX, ANodes[AEdges[i].Source].PY);
     p2 := TyPointF(ANodes[AEdges[i].Target].PX, ANodes[AEdges[i].Target].PY);
     if IsNan(p1.X) or IsNan(p1.Y) or IsNan(p2.X) or IsNan(p2.Y) then Continue;
+    if AEdges[i].Hidden then Continue;
 
-    c := AEdges[i].SolvedCurveness;
-    { A CURVENESS THAT IS NOT A NUMBER DRAWS A STRAIGHT LINE. Upstream tests it
-      with a unary plus rather than against zero, and not-a-number is falsy --
-      which is the one place in the whole edge pipeline where a NaN is
-      laundered rather than propagated. }
-    curved := (not IsNan(c)) and (not IsInfinite(c)) and (c <> 0);
-    cp := TyPointF(0, 0);
-    if curved then
-    begin
-      x12 := (p1.X + p2.X) / 2;
-      y12 := (p1.Y + p2.Y) / 2;
-      if ASpec.Layout = glCircular then
-      begin
-        { A COMPLETELY DIFFERENT CONTROL POINT. The ring does not offset the
-          midpoint perpendicularly -- it multiplies the curveness by three and
-          slides the midpoint towards the ring's own centre, so a third puts
-          the control point exactly on that centre and more overshoots past
-          it. Every edge therefore bows INWARD, which is what makes a chord
-          diagram look like one. }
-        c := c * 3;
-        cp := TyPointF(cx * c + x12 * (1 - c), cy * c + y12 * (1 - c));
-      end
-      else
-      begin
-        { AND THE OPERAND ORDERS ARE NOT THE SAME ON THE TWO AXES: x subtracts
-          (p1.y - p2.y) and y subtracts (p2.x - p1.x). That is the midpoint
-          plus curveness times the perpendicular, written out by hand, and
-          copying one line onto the other mirrors every curve. }
-        cp := TyPointF(x12 - (p1.Y - p2.Y) * c, y12 - (p2.X - p1.X) * c);
-      end;
-      if IsNan(cp.X) or IsNan(cp.Y) then curved := False;
-    end;
+    { THE CONTROL POINT IS THE LAYOUT'S, not this function's. Upstream authors
+      it in the layout pass, in data space, and the view only ever shortens
+      what the layout produced -- see TyGraphEdgeGeometry. Nothing here
+      multiplies by a curveness, which is the author's number and could be
+      anything a Double holds. }
+    curved := AEdges[i].Curved;
+    if curved then cp := TyPointF(AEdges[i].CPX, AEdges[i].CPY)
+    else cp := TyPointF(0, 0);
 
     { AND NOW PULL THE ENDS OFF THE NODES, but only the ends that carry a
       symbol. An arrowhead placed on a node's centre is an arrowhead under a
