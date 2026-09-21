@@ -455,6 +455,19 @@ begin
       Continue;
     end;
 
+    if sys = 'view' then
+    begin
+      { THE THIRD SYSTEM, AND THE ONE WITH NOTHING TO LOOK UP. A radar names
+        which radar; a cartesian names which pair of axes. A view belongs to
+        the series that draws into it -- there is no `view` component and no
+        viewIndex -- so naming the system IS resolving it, and the series
+        solves its own geometry from the box the way a pie does. }
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
     if sys <> 'cartesian2d' then
     begin
       { The two-step shape is here; only cartesian and radar have a system to

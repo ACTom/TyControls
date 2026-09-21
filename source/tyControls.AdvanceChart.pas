@@ -42,6 +42,7 @@ uses
   tyControls.AdvChart.Color,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
+  tyControls.AdvChart.Graph,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
@@ -156,6 +157,14 @@ type
       and its spokes are theirs jointly, which is the whole reason a radar is a
       coordinate system rather than a series' private geometry. }
     FRadars: array of TTyRadar;
+    { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
+      system belongs to the series, so these are indexed by BINDING slot and
+      most of them are nil. }
+    FGraphs: array of TTyGraphView;
+    FGraphSpecs: array of TTyGraphSpec;
+    FGraphNodes: array of TTyGraphNodeArray;
+    FGraphEdges: array of TTyGraphEdgeArray;
+    FGraphCats: array of TTyGraphCategoryArray;
     { Which store column feeds spoke j, per series. Its own array because the
       store is exactly as wide as the first data row while the spokes come from
       the radar, and the two are allowed to disagree. }
@@ -363,6 +372,9 @@ type
       position to collect. }
     procedure SolveRadars(APPI: Integer);
     procedure FreeRadars;
+    procedure SolveGraphs(APPI: Integer);
+    procedure FreeGraphs;
+    function GraphInk(ASlot: Integer): TTyGraphInk;
     function RadarInk: TTyRadarInk;
     function RadarVisual(ASlot: Integer): TTyRadarVisual;
     function FunnelLabelInk: TTyFunnelLabelInk;
@@ -689,6 +701,7 @@ begin
     INDEX, and the spoke objects a paint list was built against are about to
     stop existing. }
   FreeRadars;
+  FreeGraphs;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -874,6 +887,26 @@ begin
         if Length(dims) > 0 then TyFillSeriesStore(FOption, i, dims, st);
         Continue;
       end;
+      { A GRAPH IS NOT ON NO COORDINATE SYSTEM EITHER -- it is on a view, whose
+        axes do not exist rather than being spokes -- and it is NOT scuBox:
+        its usage says `data` because its nodes are data. So it matched
+        neither branch and left with a store of no columns and no rows,
+        which is the very failure the paragraph above records for the funnel
+        and the gauge. The same trap, the third time.
+
+        ONE VALUE COLUMN, and everything else a node carries -- x, y,
+        category, symbol -- arrives as an override under its own name, the
+        way every per-datum option in this port does. }
+      if FBindings[i].SeriesType = TyGraphSeriesTypeName then
+      begin
+        st.AddDimension('value', ddtFloat);
+        SetLength(dims, 1);
+        dims[0] := Default(TTySeriesDim);
+        dims[0].Name := 'value';
+        dims[0].Kind := ddtFloat;
+        TyFillSeriesStore(FOption, i, dims, st);
+        Continue;
+      end;
       if TySeriesFindType(FBindings[i].SeriesType, typeInfo)
         and (typeInfo.Usage = scuBox) and (Length(typeInfo.Dims) > 0) then
       begin
@@ -1020,6 +1053,7 @@ begin
   SolveFunnels;
   SolveGauges(APPI);
   SolveRadars(APPI);
+  SolveGraphs(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   FDirty := False;
@@ -2087,6 +2121,138 @@ begin
   FRadars := nil;
 end;
 
+procedure TTyAdvanceChart.FreeGraphs;
+var i: Integer;
+begin
+  for i := 0 to High(FGraphs) do FreeAndNil(FGraphs[i]);
+  FGraphs := nil;
+  FGraphSpecs := nil;
+  FGraphNodes := nil;
+  FGraphEdges := nil;
+  FGraphCats := nil;
+end;
+
+procedure TTyAdvanceChart.SolveGraphs(APPI: Integer);
+var
+  i: Integer;
+  dataRect, viewRect: TTyRectF;
+  aspect: Double;
+  hasData: Boolean;
+begin
+  FreeGraphs;
+  SetLength(FGraphs, Length(FBindings));
+  SetLength(FGraphSpecs, Length(FBindings));
+  SetLength(FGraphNodes, Length(FBindings));
+  SetLength(FGraphEdges, Length(FBindings));
+  SetLength(FGraphCats, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FGraphs[i] := nil;
+    if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
+    if not FBindings[i].Resolved then Continue;
+    { ONLY THE VIEW IS SOLVED HERE. A graph on a cartesian is laid out by the
+      axes it named and is a batch of its own; until then it resolves and
+      draws nothing rather than being quietly given a view it did not ask
+      for. }
+    if FBindings[i].CoordSysName <> 'view' then Continue;
+
+    FGraphSpecs[i] := TyGraphSpecOf(FOption, FBindings[i].SeriesIndex);
+    FGraphCats[i] := TyGraphCategoriesOf(FOption, FBindings[i].SeriesIndex);
+    if i <= High(FStores) then
+      FGraphNodes[i] := TyGraphNodesOf(FStores[i], FGraphCats[i]);
+    FGraphEdges[i] := TyGraphEdgesOf(FOption, FBindings[i].SeriesIndex,
+      FGraphNodes[i]);
+
+    { THE ORDER IS UPSTREAM'S AND IT MATTERS. The data rectangle is taken from
+      the positions the author wrote, the box is solved with the aspect that
+      came out of it -- and only THEN, if there were no positions at all, is
+      the data rectangle replaced by the box. So the box has already been
+      solved by the time anyone notices there was nothing to fit. }
+    hasData := TyGraphDataRect(FGraphNodes[i], dataRect, aspect);
+    viewRect := TyGraphViewRect(FGraphSpecs[i], FLastRect, aspect);
+    if not hasData then dataRect := viewRect;
+    FGraphs[i] := TTyGraphView.Create(dataRect, viewRect);
+
+    case FGraphSpecs[i].Layout of
+      glCircular:
+        TyGraphLayoutCircular(FGraphNodes[i], FGraphs[i], FGraphSpecs[i]);
+      glForce:
+        { NOT YET. A force layout has to converge before anything can be drawn
+          and this port has no frames to converge over, so the nodes keep the
+          positions the author wrote -- which for a force chart is none, and
+          the series draws nothing and says so. Its own batch. }
+        TyGraphLayoutNone(FGraphNodes[i], FGraphs[i]);
+    else
+      TyGraphLayoutNone(FGraphNodes[i], FGraphs[i]);
+    end;
+    TyGraphSolveCurveness(FGraphEdges[i], FGraphSpecs[i]);
+  end;
+  if APPI < 0 then ;
+end;
+
+function TTyAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
+var
+  i, cat: Integer;
+  ramp: TTyChartColorArray;
+  own: TTyChartColor;
+  v: TTyDataValue;
+  base: TTyChartColor;
+begin
+  Result := Default(TTyGraphInk);
+  Result.LabelValueDim := -1;
+  if (ASlot < 0) or (ASlot > High(FGraphNodes)) then Exit;
+  base := TTyChartColor(SeriesColor(FBindings[ASlot].SeriesIndex));
+  Result.EdgeColour := FGraphSpecs[ASlot].LineColour;
+  if not FGraphSpecs[ASlot].HasLineColour then
+    { THE THEME'S OWN LINE, not the grey the option tree carries. Upstream's
+      default is a fixed token and this library's rule is that a visual value
+      comes from the theme -- so the token is replaced here, where a theme can
+      be seen, rather than in the pure unit. }
+    Result.EdgeColour := TTyChartColor(
+      ActiveController.Model.ResolveStyle('TyAdvChartSplitLine', '',
+        []).BorderColor);
+
+  ramp := PerDatumColours(ASlot);
+  SetLength(Result.NodeFills, Length(FGraphNodes[ASlot]));
+  for i := 0 to High(FGraphNodes[ASlot]) do
+  begin
+    { THREE SOURCES, NEAREST FIRST: what the node wrote, then what its category
+      wrote or was given, then the series' own colour. A graph is the only
+      series here whose per-datum colour can come from a THIRD object. }
+    Result.NodeFills[i] := base;
+    cat := FGraphNodes[ASlot][i].Category;
+    if (cat >= 0) and (cat <= High(FGraphCats[ASlot])) then
+    begin
+      if FGraphCats[ASlot][cat].HasColour then
+        Result.NodeFills[i] := FGraphCats[ASlot][cat].Colour
+      else if cat <= High(ramp) then
+        Result.NodeFills[i] := ramp[cat]
+      else
+        Result.NodeFills[i] := TTyChartColor(ThemeRampColor(cat));
+    end;
+    if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
+      if FStores[ASlot].HasOverride(FGraphNodes[ASlot][i].Row,
+        TyOverrideKey('itemStyle.color')) then
+      begin
+        v := FStores[ASlot].GetOverride(FGraphNodes[ASlot][i].Row,
+          TyOverrideKey('itemStyle.color'));
+        if (v.Kind = dvkText) and TyTryParseChartColor(v.Text, own) then
+          Result.NodeFills[i] := own;
+      end;
+  end;
+
+  Result.Label_ := LabelSpecFor(ASlot);
+  { A NODE'S LABEL IS ITS NAME, and the graph is the only series here whose
+    default formatter says so: `label.formatter: '{b}'` is in its own
+    defaultOption. Every other series defaults to the VALUE, and a graph node
+    usually has no value at all -- so without this the labels come out
+    empty rather than wrong, which is harder to notice. }
+  Result.Label_.DefaultText := tldName;
+  Result.SeriesName := SeriesNameOf(FBindings[ASlot].SeriesIndex);
+  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
+    Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+end;
+
 procedure TTyAdvanceChart.SolveRadars(APPI: Integer);
 var
   i, j, k, n, dim, slot: Integer;
@@ -3037,6 +3203,7 @@ var
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
   gv: TTyGaugeVisual;
+  gi: TTyGraphInk;
   specs: TTyLabelSpecArray;
 begin
   Result := 0;
@@ -3081,6 +3248,28 @@ begin
         beside a bar has to sort against it like anything else. }
       { A FUNNEL IS NOT ON A COORDINATE SYSTEM EITHER, and like the pie it
         solves its own geometry in the layout pass and replays it here. }
+      { A GRAPH IS ON A COORDINATE SYSTEM OF ITS OWN, and that system belongs
+        to the series rather than to a component -- so it is solved in the
+        layout pass like a pie's box and replayed here like a radar's. }
+      if FBindings[i].SeriesType = TyGraphSeriesTypeName then
+      begin
+        if (i <= High(FGraphs)) and (FGraphs[i] <> nil) then
+        begin
+          gi := GraphInk(i);
+          Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
+            FGraphs[i], FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
+            gi, FStores[i], list));
+          { AND ITS LABEL SPEC INTO THE TABLE THE EXPANSION READS. A mark
+            carries only the WORDS; where they go and what they are drawn
+            in is looked up by series index afterwards, so a branch that
+            returns before filling this row stamps captions nothing ever
+            places -- which looks exactly like a series with no labels. }
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := gi.Label_;
+        end;
+        Continue;
+      end;
       if FBindings[i].RadarIndex >= 0 then
       begin
         if FBindings[i].RadarIndex <= High(FRadars) then
