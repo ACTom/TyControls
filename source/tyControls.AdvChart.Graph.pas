@@ -95,8 +95,18 @@ type
     SymbolName: string;
     HasSize: Boolean;
     SizeW, SizeH: Double;
-    { The store row this came from, so a mark can name its datum. }
+    { THE RING MEASURES A SIZE IT DOES NOT DRAW: upstream's getSymbolSize
+      averages a [w, h] pair, and a pair missing a number -- a one-element
+      array above all -- averages to not-a-number, which the ring then reads
+      as two. True for exactly that case; the zero value is the ordinary
+      average of SizeW and SizeH. }
+    RingSizeNaN: Boolean;
+    { WHICH ROW, IN TWO NUMBERINGS. Row is the position in the store's VIEW --
+      what labels, overrides and the ink read by -- and -1 for a node the
+      legend filtered out. RawRow is the position in what the author wrote,
+      which is what a datum reports and what an edge's `source: 3` means. }
     Row: Integer;
+    RawRow: Integer;
     Value: Double;
   end;
   TTyGraphNodeArray = array of TTyGraphNode;
@@ -115,7 +125,12 @@ type
     Curveness: Double;
     { What the curveness solver settled on, filled in by TyGraphSolveCurveness. }
     SolvedCurveness: Double;
+    { The edge's position among every edge that resolved -- upstream's edge
+      dataIndex before any filter, which the automatic curveness table is keyed
+      on. }
+    RawIndex: Integer;
     { `ignoreForceLayout`: the spring leaves this edge out. It is still drawn,
+
       and its two ends still push each other apart like any other pair. }
     HasOwnIgnore: Boolean;
     IgnoreForce: Boolean;
@@ -128,15 +143,32 @@ type
       thousand screens away -- takes its edge with it. Upstream hands such a
       point to the canvas, which refuses the segment. }
     Hidden: Boolean;
+    { A CURVE WHOSE CONTROL POINT HAS A NOT-A-NUMBER HALF. Upstream's
+      isStraightLine draws it straight -- unless an end carries a symbol:
+      adjustEdge then cuts the CURVE at the node's rim, the arithmetic turns
+      both ends into not-a-number, and nothing is drawn at all. }
+    NaNCurve: Boolean;
+    { A CONTROL POINT LEFT OVER, in data space, used only when the layout's own
+      curveness is falsy. The force layout overwrites an edge's third point
+      only when its curveness is truthy, so a point the initial layout's edge
+      pass wrote survives -- made from the INITIAL positions. }
+    HasStale: Boolean;
+    StaleX, StaleY: Double;
     Row: Integer;
   end;
   TTyGraphEdgeArray = array of TTyGraphEdge;
 
   TTyGraphCategory = record
+    { `''` for a category that has no name -- including one written as a bare
+      string, which upstream reads as an object with no `name`. }
     Name_: string;
+    { The category's `symbol` and `symbolSize`, which its nodes inherit when
+      they say nothing of their own. The legend chip does NOT use them. }
     SymbolName: string;
-    HasColour: Boolean;
-    Colour: TTyChartColor;
+    HasSize: Boolean;
+    SizeW, SizeH: Double;
+    { See TTyGraphNode.RingSizeNaN. }
+    RingSizeNaN: Boolean;
     { A category is a MODEL PARENT of the nodes that name it by index, so a
       `fixed` written here holds every one of them that did not say otherwise. }
     HasFixed: Boolean;
@@ -175,6 +207,9 @@ type
     AlignH, AlignV: string;
     Layout: TTyGraphLayout;
     Force: TTyGraphForceSpec;
+    { The series' `symbolSize` as the ring measures it; see
+      TTyGraphNode.RingSizeNaN. }
+    RingSizeNaN: Boolean;
     { The series' own `fixed` and `ignoreForceLayout` -- the last parent every
       node's and every edge's option chain reaches. Undocumented, and not in
       the defaults, and honoured all the same. }
@@ -250,6 +285,57 @@ function TyGraphSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyGraphSpec;
   record the layouts and the builder work on. }
 function TyGraphNodesOf(AStore: TTyDataStore;
   const ACategories: TTyGraphCategoryArray): TTyGraphNodeArray;
+
+{ EVERY node the author wrote, in the order they wrote them, whether or not the
+  legend kept it: Row is the view position or -1. The data rectangle is fitted
+  to these and edges resolve their ends against these -- upstream builds both
+  before the legend filter runs. }
+function TyGraphAllNodesOf(AStore: TTyDataStore;
+  const ACategories: TTyGraphCategoryArray): TTyGraphNodeArray;
+
+type
+  { One graph series' category colours. Known is False where no colour could be
+    found -- a declared but empty palette, a pick past the end of one, a
+    `color: 'none'` -- and for every category of a graph the legend switched
+    off by its series name, which upstream never colours. Such a category's
+    nodes get NO fill.
+
+    Base is the third answer: a colour was written but it is not one anybody
+    can paint -- 'auto', a word no parser knows, `true`. Upstream hands it to
+    the canvas, which ignores it; here the node keeps the series colour, the
+    port's usual answer to a colour it cannot read. It took no palette slot
+    either way. }
+  TTyGraphCatColours = record
+    Known: array of Boolean;
+    Base: array of Boolean;
+    Colours: TTyChartColorArray;
+  end;
+  TTyGraphCatColourTable = array of TTyGraphCatColours;
+
+{ EVERY GRAPH'S CATEGORY COLOURS, in one pass -- upstream's categoryVisual. One
+  cursor and one name memo run across every graph series that is drawn, in
+  series order. The colour is `itemStyle.color` along the model chain -- the
+  category's, else the series', else the chart root's, the first that is not
+  null -- and only when THAT is falsy is a palette asked: the series' own
+  `color`, then the chart's with the same cursor, and AFallback, the theme's
+  colours, when the chart declares none.
+
+  AShown is per SERIES index; a graph that is not shown takes no slots, so
+  switching an earlier graph off re-colours the ones after it. Indexed by
+  series index; a series that is not a graph has an empty entry. }
+function TyGraphCategoryColours(AOption: TTyChartOption;
+  const AShown: array of Boolean;
+  const AFallback: TTyChartColorArray): TTyGraphCatColourTable;
+
+{ ONE NODE'S FILL, the way the visual pipeline builds it: the series colour,
+  the node's category laid over it -- only when the series declares at least
+  one category and the node resolves to one -- and then the node's own
+  `itemStyle.color`. AEdgeEnd is the fill BEFORE the node's own colour, which
+  is what an edge coloured by 'source' or 'target' takes. }
+function TyGraphNodeFill(const ANode: TTyGraphNode;
+  const ACats: TTyGraphCatColours; ACategoryCount: Integer;
+  ABase: TTyChartColor; AStore: TTyDataStore;
+  out AEdgeEnd: TTyChartColor): TTyChartColor;
 
 { THE STORE A GRAPH IS READ FROM, built the one way the control and the suite
   both build it: one value column, filled from `data` -- or from `nodes`, the
@@ -331,7 +417,20 @@ type
   TTyGraphForceState = record
     Valid: Boolean;
     Rect: TTyRectF;
+    { AND THE PIXEL BOX it was drawn into. A resize leaves the DATA rectangle
+      alone whenever every node wrote a position -- but upstream lays the chart
+      out again on every resize all the same, so an unchanged data rectangle
+      alone is not "nothing changed". }
+    ViewRect: TTyRectF;
     X, Y: TTyDoubleArray;
+    { A STALE CONTROL POINT per surviving edge, in data space, where Stale
+      says there is one -- and it can be not-a-number and still be one, which
+      is an edge drawn straight rather than an edge with no point. See
+      TyGraphSolve: the first pass after an option can leave one behind, and a
+      pass that reuses the answer must show it again, while a pass that
+      continues from it starts on fresh edges. }
+    Stale: array of Boolean;
+    StaleX, StaleY: TTyDoubleArray;
   end;
 
 { How many steps upstream's driver runs from a given starting friction: until
@@ -435,12 +534,27 @@ type
     { One per node, already resolved: the category's colour, or the node's own
       itemStyle, or the series' palette entry. }
     NodeFills: TTyChartColorArray;
+    { One per node, BEFORE the node's own itemStyle: what an edge coloured by
+      'source' or 'target' takes. Upstream resolves those two words after the
+      category colour and before the node's own, so an edge leaving a node that
+      painted itself red still takes the category's colour. Empty means
+      "the same as NodeFills". }
+    EdgeEndFills: TTyChartColorArray;
     EdgeColour: TTyChartColor;
     { The label the author asked for, and the ink to draw it in. }
     Label_: TTyLabelSpec;
     LabelValueDim: Integer;
     SeriesName: string;
   end;
+
+{ WHAT ONE EDGE IS DRAWN IN -- the builder's own answer, and the one the
+  suite reads back. The series' line colour, or for `'source'` and
+  `'target'` that end node's fill from BEFORE its own `itemStyle.color`:
+  upstream's edge visual reads the node's style while categoryVisual is done
+  with it and before the node's own colour is laid over it. }
+function TyGraphEdgeStroke(const ASpec: TTyGraphSpec;
+  const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
+  AAt: Integer): TTyChartColor;
 
 { The point on a straight line or a quadratic at t, and the tangent there.
 
@@ -622,6 +736,12 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
 end;
 
+function ObjOf(AData: TJSONData): TJSONObject;
+begin
+  if AData is TJSONObject then Result := TJSONObject(AData)
+  else Result := nil;
+end;
+
 function SubObj(ANode: TJSONObject; const AKey: string): TJSONObject;
 var d: TJSONData;
 begin
@@ -703,6 +823,19 @@ begin
   else if Result < -cTyGraphFarPx then Result := -cTyGraphFarPx;
 end;
 
+{ Whether upstream's getSymbolSize comes out not-a-number for this
+  `symbolSize`: an array without a number in both of its first two places --
+  `(size[0] + size[1]) / 2` with an undefined in it. }
+function RingSizeNaNOf(AData: TJSONData): Boolean;
+var a: TJSONArray;
+begin
+  Result := False;
+  if not (AData is TJSONArray) then Exit;
+  a := TJSONArray(AData);
+  Result := (a.Count < 2) or (a.Items[0].JSONType <> jtNumber)
+    or (a.Items[1].JSONType <> jtNumber);
+end;
+
 procedure ReadNodeSize(ANode: TJSONObject; var ASpec: TTyGraphSpec);
 var d: TJSONData; a: TJSONArray;
 begin
@@ -715,6 +848,7 @@ begin
     Exit;
   end;
   if not (d is TJSONArray) then Exit;
+  ASpec.RingSizeNaN := RingSizeNaNOf(d);
   a := TJSONArray(d);
   if (a.Count > 0) and (a.Items[0].JSONType = jtNumber) then
     ASpec.Symbol.WidthPx := a.Items[0].AsFloat;
@@ -1155,6 +1289,8 @@ begin
     Result.Symbol.KeepAspect := d.AsBoolean;
 
   ReadEdgeSymbol(node, Result);
+  { (Sizes below are clamped; see SaneSize.) }
+
   Result.Symbol.WidthPx := SaneSize(Result.Symbol.WidthPx);
   Result.Symbol.HeightPx := SaneSize(Result.Symbol.HeightPx);
   Result.EdgeSizeFrom := SaneSize(Result.EdgeSizeFrom);
@@ -1203,10 +1339,7 @@ var
   d: TJSONData;
   a: TJSONArray;
   item: TJSONObject;
-  style: TJSONObject;
   i: Integer;
-  s: string;
-  c: TTyChartColor;
 begin
   Result := nil;
   node := NodeAt(AOption, ASlot);
@@ -1218,44 +1351,58 @@ begin
   for i := 0 to a.Count - 1 do
   begin
     Result[i] := Default(TTyGraphCategory);
-    if a.Items[i].JSONType = jtString then
-    begin
-      { A BARE STRING IS A NAME. }
-      Result[i].Name_ := a.Items[i].AsString;
-      Continue;
-    end;
+    { A BARE STRING IS NOT A NAME. Upstream extends an object of `value: 0` with it,
+      which copies a string's index keys and no `name` -- so the category is
+      nameless, its chip is a line break, and a node naming it by that string
+      finds nothing. }
     if not (a.Items[i] is TJSONObject) then Continue;
     item := TJSONObject(a.Items[i]);
-    Result[i].Name_ := StrIn(item, 'name', '');
+    { A NUMBER IS A NAME TOO -- `name: 5` is the category '5'. }
+    d := item.Find('name');
+    if d <> nil then
+      case d.JSONType of
+        jtString: Result[i].Name_ := d.AsString;
+        jtNumber: Result[i].Name_ := TyLabelNumToStr(d.AsFloat);
+      end;
     Result[i].SymbolName := StrIn(item, 'symbol', '');
+    d := item.Find('symbolSize');
+    Result[i].RingSizeNaN := RingSizeNaNOf(d);
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      Result[i].HasSize := True;
+      Result[i].SizeW := SaneSize(d.AsFloat);
+      Result[i].SizeH := Result[i].SizeW;
+    end
+    else if (d is TJSONArray) and (TJSONArray(d).Count > 0)
+      and (TJSONArray(d).Items[0].JSONType = jtNumber) then
+    begin
+      Result[i].HasSize := True;
+      Result[i].SizeW := SaneSize(TJSONArray(d).Items[0].AsFloat);
+      Result[i].SizeH := Result[i].SizeW;
+      if (TJSONArray(d).Count > 1)
+        and (TJSONArray(d).Items[1].JSONType = jtNumber) then
+        Result[i].SizeH := SaneSize(TJSONArray(d).Items[1].AsFloat);
+    end;
     d := item.Find('fixed');
     if (d <> nil) and (d.JSONType <> jtNull) then
     begin
       Result[i].HasFixed := True;
       Result[i].Fixed := JsTruthy(d);
     end;
-    style := SubObj(item, 'itemStyle');
-    if style <> nil then
-    begin
-      s := StrIn(style, 'color', '');
-      if (s <> '') and TyTryParseChartColor(s, c) then
-      begin
-        Result[i].HasColour := True;
-        Result[i].Colour := c;
-      end;
-    end;
   end;
 end;
 
-{ One row's scalar leaf as text, '' when the row did not write that key. }
+{ One row's scalar leaf as text, '' when the row did not write that key. ARow is
+  a RAW row: a node the legend filtered out is still read, because the data
+  rectangle and the edges are built from every node. }
 function RowText(AStore: TTyDataStore; ARow: Integer; const AKey: string): string;
 var v: TTyDataValue; k: Integer;
 begin
   Result := '';
   if AStore = nil then Exit;
   k := TyOverrideKey(AKey);
-  if not AStore.HasOverride(ARow, k) then Exit;
-  v := AStore.GetOverride(ARow, k);
+  if not AStore.HasOverrideByRaw(ARow, k) then Exit;
+  v := AStore.GetOverrideByRaw(ARow, k);
   case v.Kind of
     dvkText: Result := v.Text;
     dvkNumber: Result := FloatToStr(v.Num);
@@ -1273,8 +1420,8 @@ begin
   AWritten := False;
   if AStore = nil then Exit;
   k := TyOverrideKey(AKey);
-  if not AStore.HasOverride(ARow, k) then Exit;
-  v := AStore.GetOverride(ARow, k);
+  if not AStore.HasOverrideByRaw(ARow, k) then Exit;
+  v := AStore.GetOverrideByRaw(ARow, k);
   case v.Kind of
     dvkBool: begin AWritten := True; Result := v.Num <> 0; end;
     dvkNumber:
@@ -1286,6 +1433,23 @@ begin
   end;
 end;
 
+{ One row's leaf when it is a STRING -- '' included, which RowText cannot tell
+  apart from nothing written. }
+function RowIsText(AStore: TTyDataStore; ARow: Integer; const AKey: string;
+  out AText: string): Boolean;
+var v: TTyDataValue; k: Integer;
+begin
+  AText := '';
+  Result := False;
+  if AStore = nil then Exit;
+  k := TyOverrideKey(AKey);
+  if not AStore.HasOverrideByRaw(ARow, k) then Exit;
+  v := AStore.GetOverrideByRaw(ARow, k);
+  if v.Kind <> dvkText then Exit;
+  AText := v.Text;
+  Result := True;
+end;
+
 function RowNum(AStore: TTyDataStore; ARow: Integer; const AKey: string;
   out AValue: Double): Boolean;
 var v: TTyDataValue; k: Integer;
@@ -1294,38 +1458,52 @@ begin
   Result := False;
   if AStore = nil then Exit;
   k := TyOverrideKey(AKey);
-  if not AStore.HasOverride(ARow, k) then Exit;
-  v := AStore.GetOverride(ARow, k);
+  if not AStore.HasOverrideByRaw(ARow, k) then Exit;
+  v := AStore.GetOverrideByRaw(ARow, k);
   if v.Kind <> dvkNumber then Exit;
   AValue := v.Num;
   Result := True;
 end;
 
-function TyGraphNodesOf(AStore: TTyDataStore;
-  const ACategories: TTyGraphCategoryArray): TTyGraphNodeArray;
+{ Every node (AAll) or only the ones the store's view kept, in RAW order either
+  way -- a filter keeps order, so the view position of a kept node is its
+  position among the kept ones. }
+function ReadNodes(AStore: TTyDataStore;
+  const ACategories: TTyGraphCategoryArray; AAll: Boolean): TTyGraphNodeArray;
 var
-  i, j, valCol: Integer;
+  i, j, valCol, n, raw: Integer;
   s: string;
   v: Double;
   written: Boolean;
+  viewOf: array of Integer;
 begin
   Result := nil;
   if AStore = nil then Exit;
   valCol := AStore.DimIndexOf('value');
-  SetLength(Result, AStore.Count);
+  SetLength(viewOf, AStore.RawCount);
+  for i := 0 to High(viewOf) do viewOf[i] := -1;
   for i := 0 to AStore.Count - 1 do
   begin
+    raw := AStore.GetRawIndex(i);
+    if (raw >= 0) and (raw <= High(viewOf)) then viewOf[raw] := i;
+  end;
+  if AAll then n := AStore.RawCount else n := AStore.Count;
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+  begin
+    if AAll then raw := i else raw := AStore.GetRawIndex(i);
     Result[i] := Default(TTyGraphNode);
-    Result[i].Row := i;
-    Result[i].Name_ := AStore.GetName(i);
+    Result[i].Row := viewOf[raw];
+    Result[i].RawRow := raw;
+    Result[i].Name_ := AStore.GetNameByRaw(raw);
     { THE ID IS NOT AN OVERRIDE. The store keeps `value`, `name` and `id` out of
       the override table on purpose -- they are the datum's identity rather
       than options written on it -- so it has to be asked for by name. And an
       edge NAMES its endpoints: the gallery's own Les Miserables graph joins
       `"1"` to `"0"`, which are ids, while every node's name is a person. }
-    Result[i].Id := AStore.GetId(i);
+    Result[i].Id := AStore.GetIdByRaw(raw);
     Result[i].Category := -1;
-    if valCol >= 0 then Result[i].Value := AStore.Get(valCol, i)
+    if valCol >= 0 then Result[i].Value := AStore.GetByRaw(valCol, raw)
     else Result[i].Value := NaN;
 
     { A NODE WITH NO x IS NOT A NODE AT ZERO. Upstream coerces whatever the
@@ -1333,8 +1511,8 @@ begin
       -- which is the whole reason the view has a second branch. }
     Result[i].X := NaN;
     Result[i].Y := NaN;
-    if RowNum(AStore, i, 'x', v) then Result[i].X := v;
-    if RowNum(AStore, i, 'y', v) then Result[i].Y := v;
+    if RowNum(AStore, raw, 'x', v) then Result[i].X := v;
+    if RowNum(AStore, raw, 'y', v) then Result[i].Y := v;
     { TWO `fixed`s, IN TWO PLACES, FOR TWO LAYOUTS. The RING honours the one a
       drag writes onto the node's LAYOUT, and there is no drag here yet, so
       that one is always false. The FORCE solver honours the one written in
@@ -1346,14 +1524,14 @@ begin
       node out, and reading it as a pin draws every positioned dataset as if
       no layout had been asked for. }
     Result[i].Fixed := False;
-    Result[i].OwnFixed := RowTruthy(AStore, i, 'fixed', written);
+    Result[i].OwnFixed := RowTruthy(AStore, raw, 'fixed', written);
     Result[i].HasOwnFixed := written;
     Result[i].ModelCategory := -1;
     Result[i].PX := NaN;
     Result[i].PY := NaN;
 
-    Result[i].SymbolName := RowText(AStore, i, 'symbol');
-    if RowNum(AStore, i, 'symbolSize', v) then
+    Result[i].SymbolName := RowText(AStore, raw, 'symbol');
+    if RowNum(AStore, raw, 'symbolSize', v) then
     begin
       Result[i].HasSize := True;
       Result[i].SizeW := SaneSize(v);
@@ -1363,7 +1541,7 @@ begin
     { `category` IS READ THREE DIFFERENT WAYS UPSTREAM -- as an index, as a
       name, and as neither. An index that is out of range and a name nobody
       declared both come to the same thing here: no category. }
-    if RowNum(AStore, i, 'category', v) then
+    if RowNum(AStore, raw, 'category', v) then
     begin
       if (v >= 0) and (v < Length(ACategories)) and (Frac(v) = 0) then
       begin
@@ -1371,16 +1549,19 @@ begin
         Result[i].ModelCategory := Result[i].Category;
       end;
     end
-    else
+    else if RowIsText(AStore, raw, 'category', s) then
     begin
-      s := RowText(AStore, i, 'category');
-      if s <> '' then
-        for j := 0 to High(ACategories) do
-          if ACategories[j].Name_ = s then
-          begin
-            Result[i].Category := j;
-            Break;
-          end;
+      { BY NAME, AND THE LAST OF THAT NAME. Upstream builds a name-to-index map
+        by walking the categories in order, so a repeated name ends up pointing
+        at its last category -- while the legend's chip takes the FIRST. Two
+        answers for one name, both upstream's.
+
+        THE EMPTY STRING IS A NAME TOO: every nameless category is filed under
+        it, so `category: ''` finds the last of them. A boolean is neither an
+        index nor a name and finds nothing. }
+      for j := 0 to High(ACategories) do
+        if ACategories[j].Name_ = s then
+          Result[i].Category := j;
       { A NUMBER WRITTEN AS A STRING IS STILL AN INDEX to the option chain:
         upstream indexes an ARRAY with it, and `categories['1']` is element
         one. Only the canonical spelling -- '01', '1.0' and ' 1' are property
@@ -1390,6 +1571,260 @@ begin
         and (j <= High(ACategories)) then
         Result[i].ModelCategory := j;
     end;
+
+    { THE CATEGORY'S SYMBOL AND SIZE, for a node that wrote none of its own --
+      upstream's categoryVisual, which runs before the ring lays anything out,
+      so a category of big symbols takes a bigger share of the ring. }
+    j := Result[i].Category;
+    if (j >= 0) and (j <= High(ACategories)) then
+    begin
+      if (Result[i].SymbolName = '') and (ACategories[j].SymbolName <> '') then
+        Result[i].SymbolName := ACategories[j].SymbolName;
+      if (not Result[i].HasSize) and ACategories[j].HasSize then
+      begin
+        Result[i].HasSize := True;
+        Result[i].SizeW := ACategories[j].SizeW;
+        Result[i].SizeH := ACategories[j].SizeH;
+        Result[i].RingSizeNaN := ACategories[j].RingSizeNaN;
+      end;
+    end;
+  end;
+end;
+
+function TyGraphNodesOf(AStore: TTyDataStore;
+  const ACategories: TTyGraphCategoryArray): TTyGraphNodeArray;
+begin
+  Result := ReadNodes(AStore, ACategories, False);
+end;
+
+function TyGraphAllNodesOf(AStore: TTyDataStore;
+  const ACategories: TTyGraphCategoryArray): TTyGraphNodeArray;
+begin
+  Result := ReadNodes(AStore, ACategories, True);
+end;
+
+type
+  { categoryVisual's `paletteScope`: one cursor and one name memo, shared by
+    every graph and by BOTH palettes a graph asks. The memo remembers a pick
+    that found NOTHING as well -- upstream stores `palette[idx]` whatever it
+    is -- so a name whose first pick fell past a short palette's end stays
+    uncoloured for the rest of the chart. }
+  TGraphPaletteScope = record
+    Idx: Integer;
+    Names: array of string;
+    Found: array of Boolean;
+    Colours: TTyChartColorArray;
+  end;
+
+{ upstream's getFromPalette, LITERALLY, over one palette: the memo is checked
+  first, an empty palette answers nothing and touches nothing, and the colour
+  picked is `palette[idx]` WITHOUT a modulo -- the cursor wraps by the length
+  of whatever palette advanced it last, so a long palette followed by a short
+  one can land past the short one's end and find nothing. The shared palette
+  cursor in AdvChart.Color wraps at the pick instead; that is right for the
+  series it serves and wrong here. }
+function PaletteTakeOne(var AScope: TGraphPaletteScope;
+  const APalette: TTyChartColorArray; const AName: string;
+  out AColour: TTyChartColor): Boolean;
+var i: Integer;
+begin
+  AColour := 0;
+  for i := 0 to High(AScope.Names) do
+    if AScope.Names[i] = AName then
+    begin
+      AColour := AScope.Colours[i];
+      Exit(AScope.Found[i]);
+    end;
+  if Length(APalette) = 0 then Exit(False);
+  Result := (AScope.Idx >= 0) and (AScope.Idx <= High(APalette));
+  if Result then AColour := APalette[AScope.Idx];
+  if AName <> '' then
+  begin
+    i := Length(AScope.Names);
+    SetLength(AScope.Names, i + 1);
+    SetLength(AScope.Found, i + 1);
+    SetLength(AScope.Colours, i + 1);
+    AScope.Names[i] := AName;
+    AScope.Found[i] := Result;
+    AScope.Colours[i] := AColour;
+  end;
+  AScope.Idx := (AScope.Idx + 1) mod Length(APalette);
+end;
+
+{ SeriesModel.getColorFromPalette: the series' own palette, and when that
+  finds nothing -- none declared, an empty one, a pick past its end -- the
+  chart's, WITH THE SAME SCOPE. A named pick that failed was memoised on the
+  way, so the second ask finds that failure and gives up too; only a
+  nameless one really reaches the chart's palette. }
+function GraphPaletteTake(var AScope: TGraphPaletteScope;
+  const AOwn, AGlobal: TTyChartColorArray; const AName: string;
+  out AColour: TTyChartColor): Boolean;
+begin
+  Result := PaletteTakeOne(AScope, AOwn, AName, AColour);
+  if not Result then
+    Result := PaletteTakeOne(AScope, AGlobal, AName, AColour);
+end;
+
+type
+  TGraphCatFill = (gcfPalette, gcfColour, gcfNone, gcfBase);
+
+{ ONE LINK OF THE `itemStyle.color` CHAIN. False when this level says nothing
+  -- no itemStyle object, no colour, a null one -- and the parent is asked.
+  Anything else ENDS the chain, whatever it is: a falsy value sends the
+  category to the palette, a gradient or a colour is the category's own,
+  'none' paints nothing, and every other truthy thing takes no slot and
+  leaves the node the series colour (see TTyGraphCatColours.Base). }
+function CatFillAt(ANode: TJSONObject; out AFill: TGraphCatFill;
+  out AColour: TTyChartColor): Boolean;
+var
+  style: TJSONObject;
+  d: TJSONData;
+  g: TTyChartGradient;
+begin
+  AFill := gcfPalette;
+  AColour := 0;
+  Result := False;
+  style := SubObj(ANode, 'itemStyle');
+  if style = nil then Exit;
+  d := style.Find('color');
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  Result := True;
+  if not JsTruthy(d) then Exit;
+  if TyTryReadGradient(d, g) then
+  begin
+    AFill := gcfColour;
+    AColour := TyGradientSolid(g);
+  end
+  else if (d.JSONType = jtString) and (LowerCase(Trim(d.AsString)) = 'none') then
+    AFill := gcfNone
+  else if (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, AColour) then
+    AFill := gcfColour
+  else
+    AFill := gcfBase;
+end;
+
+function TyGraphCategoryColours(AOption: TTyChartOption;
+  const AShown: array of Boolean;
+  const AFallback: TTyChartColorArray): TTyGraphCatColourTable;
+var
+  n, i, k: Integer;
+  node, root, item: TJSONObject;
+  cats: TTyGraphCategoryArray;
+  d: TJSONData;
+  scope: TGraphPaletteScope;
+  own, glob: TTyChartColorArray;
+  ownDecl, globDecl, hasSeries, hasRoot: Boolean;
+  seriesFill, rootFill, fill: TGraphCatFill;
+  seriesColour, rootColour, c: TTyChartColor;
+begin
+  Result := nil;
+  if AOption = nil then Exit;
+  n := AOption.ComponentCount('series');
+  SetLength(Result, n);
+  { THE CHART'S PALETTE, or the theme's when the chart declares none -- the
+    theme's nine colours stand where upstream's default palette stands. A
+    DECLARED empty palette stays empty: `color: []` is truthy upstream and
+    colours nothing. }
+  glob := TyChartPaletteOf(AOption, -1, globDecl);
+  if not globDecl then glob := AFallback;
+  scope := Default(TGraphPaletteScope);
+  { THE LAST PARENT: the chart root's own `itemStyle`, which every series'
+    item model reaches when its own says nothing. }
+  root := ObjOf(AOption.Root);
+  hasRoot := CatFillAt(root, rootFill, rootColour);
+  for i := 0 to n - 1 do
+  begin
+    node := NodeAt(AOption, i);
+    if node = nil then Continue;
+    if StrIn(node, 'type', '') <> TyGraphSeriesTypeName then Continue;
+    cats := TyGraphCategoriesOf(AOption, i);
+    SetLength(Result[i].Known, Length(cats));
+    SetLength(Result[i].Base, Length(cats));
+    SetLength(Result[i].Colours, Length(cats));
+    { A GRAPH THE LEGEND SWITCHED OFF IS NOT VISITED, so it takes no slot and
+      the graphs after it start where it would have started. }
+    if (i <= High(AShown)) and not AShown[i] then Continue;
+    own := TyChartPaletteOf(AOption, i, ownDecl);
+    { The category's itemStyle has the SERIES' itemStyle as its parent, and
+      that one the root's -- so a colour written on either colours every
+      category and the palette is never asked. }
+    hasSeries := CatFillAt(node, seriesFill, seriesColour);
+    d := node.Find('categories');
+    for k := 0 to High(cats) do
+    begin
+      { A bare-string category is not an object and has no itemStyle. }
+      item := nil;
+      if (d is TJSONArray) and (k < TJSONArray(d).Count) then
+        item := ObjOf(TJSONArray(d).Items[k]);
+      if not CatFillAt(item, fill, c) then
+      begin
+        if hasSeries then
+        begin
+          fill := seriesFill;
+          c := seriesColour;
+        end
+        else if hasRoot then
+        begin
+          fill := rootFill;
+          c := rootColour;
+        end
+        else
+          fill := gcfPalette;
+      end;
+      case fill of
+        gcfColour:
+          begin
+            Result[i].Known[k] := True;
+            Result[i].Colours[k] := c;
+          end;
+        gcfBase:
+          Result[i].Base[k] := True;
+        gcfPalette:
+          if GraphPaletteTake(scope, own, glob, cats[k].Name_, c) then
+          begin
+            Result[i].Known[k] := True;
+            Result[i].Colours[k] := c;
+          end;
+      end;
+    end;
+  end;
+end;
+
+function TyGraphNodeFill(const ANode: TTyGraphNode;
+  const ACats: TTyGraphCatColours; ACategoryCount: Integer;
+  ABase: TTyChartColor; AStore: TTyDataStore;
+  out AEdgeEnd: TTyChartColor): TTyChartColor;
+var
+  cat, k: Integer;
+  v: TTyDataValue;
+  own: TTyChartColor;
+begin
+  Result := ABase;
+  cat := ANode.Category;
+  { ONLY WHEN THE SERIES HAS CATEGORIES AT ALL, and only when the node's
+    reference finds one: an index out of range or a name nobody declared
+    leaves the series colour. A category that found no colour -- a declared
+    empty palette -- gives the node none either: upstream lays an undefined
+    fill over the series one. }
+  if (ACategoryCount > 0) and (cat >= 0) and (cat < ACategoryCount) then
+  begin
+    if (cat <= High(ACats.Known)) and ACats.Known[cat] then
+      Result := ACats.Colours[cat]
+    else if (cat <= High(ACats.Base)) and ACats.Base[cat] then
+      { A colour nobody can paint: the series' stays. }
+    else
+      Result := 0;
+  end;
+
+  AEdgeEnd := Result;
+  { AND THE NODE'S OWN, LAST. }
+  if AStore = nil then Exit;
+  k := TyOverrideKey('itemStyle.color');
+  if (ANode.RawRow >= 0) and AStore.HasOverrideByRaw(ANode.RawRow, k) then
+  begin
+    v := AStore.GetOverrideByRaw(ANode.RawRow, k);
+    if (v.Kind = dvkText) and TyTryParseChartColor(v.Text, own) then
+      Result := own;
   end;
 end;
 
@@ -1400,6 +1835,8 @@ var
   d: TJSONData;
   dims: TTySeriesDimArray;
   key: string;
+  i, k: Integer;
+  v: TTyDataValue;
 begin
   if AStore = nil then Exit;
   { ONE VALUE COLUMN, and everything else a node carries -- x, y, category,
@@ -1418,6 +1855,31 @@ begin
   d := node.Find('data');
   if (d = nil) or not JsTruthy(d) then key := 'nodes';
   TyFillSeriesStore(AOption, ASeriesIndex, dims, AStore, key);
+
+  { A NODE'S `category` HAS PARENTS. Upstream reads it with getShallow, which
+    walks the item model's chain -- the node, then the series, then the chart
+    root -- so a `category` written on the series is every silent node's
+    category, and the legend filters them by it. Filed here, into the rows
+    that wrote none, so every reader downstream sees one answer. A node that
+    wrote null wrote none: null is never filed as an override. }
+  d := node.Find('category');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    d := nil;
+    if (AOption.Root is TJSONObject) then
+      d := TJSONObject(AOption.Root).Find('category');
+  end;
+  if (d = nil) or not (d.JSONType in [jtNumber, jtString, jtBoolean]) then Exit;
+  k := TyOverrideKey('category');
+  v := TyDataNone;
+  case d.JSONType of
+    jtNumber: v := TyDataNum(d.AsFloat);
+    jtString: v := TyDataText(d.AsString);
+    jtBoolean: v := TyDataBool(d.AsBoolean);
+  end;
+  for i := 0 to AStore.RawCount - 1 do
+    if not AStore.HasOverrideByRaw(i, k) then
+      AStore.SetOverride(i, k, v);
 end;
 
 { An endpoint, which the author may have written as a name or as an index. }
@@ -1512,6 +1974,7 @@ begin
     item := TJSONObject(a.Items[i]);
     Result[n] := Default(TTyGraphEdge);
     Result[n].Row := i;
+    Result[n].RawIndex := n;
     Result[n].Source := ResolveEnd(item.Find('source'), ANodes);
     Result[n].Target := ResolveEnd(item.Find('target'), ANodes);
     { AN EDGE TO A NODE THAT IS NOT THERE IS DROPPED. Drawing it would need a
@@ -1811,8 +2274,16 @@ begin
   sumRadian := 0;
   for i := 0 to count - 1 do
   begin
-    if ANodes[i].HasSize then sz := ANodes[i].SizeW
-    else sz := ASpec.Symbol.WidthPx;
+    { THE AVERAGE OF THE PAIR, upstream's getSymbolSize -- a [40, 10] symbol
+      takes the share of a 25. }
+    if ANodes[i].HasSize then
+    begin
+      if ANodes[i].RingSizeNaN then sz := NaN
+      else sz := (ANodes[i].SizeW + ANodes[i].SizeH) / 2;
+    end
+    else if ASpec.RingSizeNaN then sz := NaN
+    else sz := (ASpec.Symbol.WidthPx + ASpec.Symbol.HeightPx) / 2;
+
     { TWO DEFENSIVE LINES, IN THIS ORDER. A size that is not a number becomes
       two -- an arbitrary value, and upstream says so -- and only then is a
       negative one flattened to zero. The order matters: after the first line
@@ -2056,7 +2527,11 @@ begin
     if AState.Valid and (Length(AState.X) = n) and (Length(AState.Y) = n)
       and (AState.Rect.Left = rect.Left) and (AState.Rect.Top = rect.Top)
       and (AState.Rect.Right = rect.Right)
-      and (AState.Rect.Bottom = rect.Bottom) then
+      and (AState.Rect.Bottom = rect.Bottom)
+      and (AState.ViewRect.Left = AView.GetRect.Left)
+      and (AState.ViewRect.Top = AView.GetRect.Top)
+      and (AState.ViewRect.Right = AView.GetRect.Right)
+      and (AState.ViewRect.Bottom = AView.GetRect.Bottom) then
     begin
       for i := 0 to n - 1 do
       begin
@@ -2344,6 +2819,7 @@ begin
       AState.Y[i] := py[i];
     end;
     AState.Rect := rect;
+    AState.ViewRect := AView.GetRect;
     AState.Valid := True;
 
     TyGraphLayoutNone(ANodes, AView);
@@ -2485,17 +2961,31 @@ begin
   end;
 end;
 
-procedure TyGraphSolveCurveness(var AEdges: TTyGraphEdgeArray;
-  const ASpec: TTyGraphSpec; ACircular: Boolean);
+{ THE CURVENESS OF SOME EDGES OF AAll, asked the way upstream asks.
+
+  The edge map is built over EVERY edge in AAll -- upstream builds it once,
+  over every edge that resolved, before any legend filter -- and each query
+  then names three things: which edge of AAll it is (AQRaw), the index upstream
+  LOOKS IT UP BY (AQLookup), and whether its key still matches (AQKeyOk).
+  Without a filter the three agree and this is the plain solve. With one they
+  need not: upstream's key carries each end's data index, which a filter
+  renumbers, so an edge whose end moved down misses the map and is drawn
+  straight; and the force layout looks up by the edge's FILTERED position
+  while the map holds raw ones, so an edge after a removed one finds another
+  edge's slot, or none. Both are upstream's, and both are copied. }
+procedure SolveCurvenessQueries(const AAll: TTyGraphEdgeArray;
+  const ASpec: TTyGraphSpec; ACircular: Boolean;
+  const AQRaw, AQLookup: array of Integer; const AQKeyOk: array of Boolean;
+  out AOut: TTyDoubleArray);
 var
-  n, i, k, g, o, ng, own, opp, total, parity, tableLen: Integer;
+  n, i, k, q, r, g, o, ng, own, opp, total, parity, tableLen, rank: Integer;
   sorted: TPairRefArray;
-  groupOf, grp, rank, firstOf, countOf, forwardOf, oppOf: array of Integer;
+  groupOf, grp, firstOf, countOf, forwardOf, oppOf, startOf: array of Integer;
   res: Double;
   isArray, ledByZero, keep, exists, oppExists: Boolean;
 
   { One entry of the table in force, or upstream's `undefined` -- here a
-    not-a-number -- past its end. }
+    not-a-number -- past its end, and before its start. }
   function ListAt(AAt: Integer): Double;
   begin
     Result := NaN;
@@ -2509,18 +2999,22 @@ var
   end;
 
 begin
-  n := Length(AEdges);
+  SetLength(AOut, Length(AQRaw));
+  n := Length(AAll);
   { THREE SOURCES, NEAREST FIRST, and each of them counts a written zero: the
     edge's own, then the series', then the table. The written ones are used
     AS WRITTEN under every layout -- the negation below is applied to what the
-    table answers and to nothing else. }
-  for i := 0 to n - 1 do
-    if AEdges[i].HasCurveness then
-      AEdges[i].SolvedCurveness := AEdges[i].Curveness
+    table answers and to nothing else -- and the map has no say in them. }
+  for q := 0 to High(AQRaw) do
+  begin
+    r := AQRaw[q];
+    if (r >= 0) and (r < n) and AAll[r].HasCurveness then
+      AOut[q] := AAll[r].Curveness
     else if ASpec.HasCurveness then
-      AEdges[i].SolvedCurveness := ASpec.Curveness
+      AOut[q] := ASpec.Curveness
     else
-      AEdges[i].SolvedCurveness := 0;
+      AOut[q] := 0;
+  end;
   if (not ASpec.AutoCurveness) or (n = 0) then Exit;
 
   { UPSTREAM'S EDGE MAP. Every ordered pair is a key; its members are the
@@ -2528,17 +3022,17 @@ begin
   SetLength(sorted, n);
   for i := 0 to n - 1 do
   begin
-    sorted[i].S := AEdges[i].Source;
-    sorted[i].T := AEdges[i].Target;
+    sorted[i].S := AAll[i].Source;
+    sorted[i].T := AAll[i].Target;
     sorted[i].Edge := i;
   end;
   SortPairs(sorted);
   SetLength(groupOf, n);
   SetLength(grp, n);
-  SetLength(rank, n);
   SetLength(firstOf, n);
   SetLength(countOf, n);
   SetLength(forwardOf, n);
+  SetLength(startOf, n);
   ng := -1;
   for k := 0 to n - 1 do
   begin
@@ -2549,17 +3043,17 @@ begin
       firstOf[ng] := sorted[k].Edge;
       countOf[ng] := 0;
       forwardOf[ng] := 0;
+      startOf[ng] := k;
     end;
     groupOf[k] := ng;
     grp[sorted[k].Edge] := ng;
-    rank[sorted[k].Edge] := countOf[ng];
     Inc(countOf[ng]);
   end;
   { A SELF-LOOP IS ITS OWN OPPOSITE: the key and the reversed key are the same
     pair, so this finds the loop's own key. }
   SetLength(oppOf, n);
   for i := 0 to n - 1 do
-    oppOf[i] := FindPair(sorted, groupOf, AEdges[i].Target, AEdges[i].Source);
+    oppOf[i] := FindPair(sorted, groupOf, AAll[i].Target, AAll[i].Source);
 
   { WHICH WAY IS FORWARD, and it is not "whichever came first". Upstream sets
     the flag as each edge is FILED, looking only at what was filed before it:
@@ -2590,11 +3084,20 @@ begin
   ledByZero := isArray and (Length(ASpec.AutoList) > 0)
     and (not IsNan(ASpec.AutoList[0])) and (ASpec.AutoList[0] = 0);
 
-  for i := 0 to n - 1 do
+  for q := 0 to High(AQRaw) do
   begin
-    if AEdges[i].HasCurveness or ASpec.HasCurveness then Continue;
-    g := grp[i];
-    o := oppOf[i];
+    r := AQRaw[q];
+    if (r < 0) or (r >= n) then Continue;
+    if AAll[r].HasCurveness or ASpec.HasCurveness then Continue;
+    { A KEY THAT NO LONGER MATCHES finds nothing in the map: `null`, which
+      every layout turns into a straight line. }
+    if not AQKeyOk[q] then
+    begin
+      AOut[q] := 0;
+      Continue;
+    end;
+    g := grp[r];
+    o := oppOf[r];
     own := countOf[g];
     if o >= 0 then opp := countOf[o] else opp := 0;
     { BOTH DIRECTIONS, and a self-loop's own count twice over -- both lookups
@@ -2604,11 +3107,20 @@ begin
     else tableLen := TyGraphCurvenessLength(ASpec, total);
     { THE PARITY CORRECTION, and a written list opts out of it. }
     if isArray or Odd(total) then parity := 0 else parity := 1;
+    { WHERE THE LOOKUP INDEX SITS AMONG THE KEY'S MEMBERS, or -1 -- which the
+      arithmetic below then carries on with, exactly as upstream's does. }
+    rank := -1;
+    for k := startOf[g] to startOf[g] + countOf[g] - 1 do
+      if sorted[k].Edge = AQLookup[q] then
+      begin
+        rank := k - startOf[g];
+        Break;
+      end;
 
     if forwardOf[g] <> 1 then
     begin
       { THE FAR SIDE: this pair's entries start after the opposite pair's. }
-      res := ListAt(rank[i] + opp + parity);
+      res := ListAt(rank + opp + parity);
       if not ACircular then
       begin
         { AND EVERY LAYOUT BUT THE RING TURNS SOME OF THEM ROUND AGAIN, by a
@@ -2624,7 +3136,7 @@ begin
       end;
     end
     else
-      res := ListAt(parity + rank[i]);
+      res := ListAt(parity + rank);
 
     if ACircular then
     begin
@@ -2638,8 +3150,29 @@ begin
         opposite way to the same edge on a ring. And `-undefined` is not a
         number: a straight line. }
       res := -res;
-    AEdges[i].SolvedCurveness := res;
+    AOut[q] := res;
   end;
+end;
+
+procedure TyGraphSolveCurveness(var AEdges: TTyGraphEdgeArray;
+  const ASpec: TTyGraphSpec; ACircular: Boolean);
+var
+  i: Integer;
+  qr: array of Integer;
+  ok: array of Boolean;
+  res: TTyDoubleArray;
+begin
+  { NO FILTER: every edge is asked about as itself. }
+  SetLength(qr, Length(AEdges));
+  SetLength(ok, Length(AEdges));
+  for i := 0 to High(AEdges) do
+  begin
+    qr[i] := i;
+    ok[i] := True;
+  end;
+  SolveCurvenessQueries(AEdges, ASpec, ACircular, qr, qr, ok, res);
+  for i := 0 to High(AEdges) do
+    AEdges[i].SolvedCurveness := res[i];
 end;
 
 { A point a canvas can take. }
@@ -2655,8 +3188,33 @@ var
   i, a, b: Integer;
   c, x1, y1, x2, y2, x12, y12, qx, qy, cx, cy: Double;
   rect: TTyRectF;
-  p: TTyPointF;
   mask: TFPUExceptionMask;
+
+  { WHERE ONE CONTROL POINT GOES, given in data space. A point with a
+    not-a-number half is not a curve at all: upstream's isStraightLine asks
+    exactly that and draws the edge straight -- which is what an unplaced
+    node's leftover point, or a level edge bowed by an infinite curveness,
+    comes to. Only a point that IS a number but cannot be drawn takes the
+    edge with it. }
+  procedure Place(AI: Integer; AQX, AQY: Double);
+  var p: TTyPointF;
+  begin
+    if IsNan(AQX) or IsNan(AQY) then
+    begin
+      AEdges[AI].NaNCurve := True;
+      Exit;
+    end;
+    p := AView.DataToPoint([AQX, AQY]);
+    if Drawable(p.X, p.Y) then
+    begin
+      AEdges[AI].Curved := True;
+      AEdges[AI].CPX := p.X;
+      AEdges[AI].CPY := p.Y;
+    end
+    else
+      AEdges[AI].Hidden := True;
+  end;
+
 begin
   if AView = nil then Exit;
   mask := MaskFP;
@@ -2671,6 +3229,7 @@ begin
     begin
       AEdges[i].Curved := False;
       AEdges[i].Hidden := False;
+      AEdges[i].NaNCurve := False;
       AEdges[i].CPX := NaN;
       AEdges[i].CPY := NaN;
       a := AEdges[i].Source;
@@ -2679,8 +3238,16 @@ begin
         Continue;
       c := AEdges[i].SolvedCurveness;
       { `+curveness`: zero and not-a-number are falsy and draw a straight line.
-        Infinity is not falsy -- it makes a point that cannot be drawn. }
-      if IsNan(c) or (c = 0) then Continue;
+        Infinity is not falsy -- it makes a point that cannot be drawn.
+
+        UNLESS AN OLDER POINT IS STILL THERE: then the edge runs from its final
+        ends through that point. }
+      if IsNan(c) or (c = 0) then
+      begin
+        if AEdges[i].HasStale then
+          Place(i, AEdges[i].StaleX, AEdges[i].StaleY);
+        Continue;
+      end;
       { IN DATA SPACE, from the laid-out positions -- where upstream authors
         the point, before the view's transform carries the whole group. Done
         in pixels instead, the ring's control point would be pulled towards a
@@ -2713,15 +3280,7 @@ begin
         qx := x12 - (y1 - y2) * c;
         qy := y12 - (x2 - x1) * c;
       end;
-      p := AView.DataToPoint([qx, qy]);
-      if Drawable(p.X, p.Y) then
-      begin
-        AEdges[i].Curved := True;
-        AEdges[i].CPX := p.X;
-        AEdges[i].CPY := p.Y;
-      end
-      else
-        AEdges[i].Hidden := True;
+      Place(i, qx, qy);
     end;
   finally
     UnmaskFP(mask);
@@ -2747,13 +3306,139 @@ var
   aspect: Double;
   hasData, circ: Boolean;
   mask: TFPUExceptionMask;
+  all: TTyGraphNodeArray;
+  allEdges: TTyGraphEdgeArray;
+  i, n, a, b: Integer;
+  qr, ql: array of Integer;
+  ok: array of Boolean;
+  res: TTyDoubleArray;
+  initX, initY: TTyDoubleArray;
+  kind: Integer;
+
+  { Which pass this force layout is: 0 fresh, 1 reusing the answer, 2
+    continuing from it -- the same test TyGraphLayoutForce makes. }
+  function ForcePassKind(const ARect, AViewRect: TTyRectF;
+    ACount: Integer): Integer;
+  begin
+    if not (AForce.Valid and (Length(AForce.X) = ACount)
+      and (Length(AForce.Y) = ACount)) then Exit(0);
+    if (AForce.Rect.Left = ARect.Left) and (AForce.Rect.Top = ARect.Top)
+      and (AForce.Rect.Right = ARect.Right)
+      and (AForce.Rect.Bottom = ARect.Bottom)
+      and (AForce.ViewRect.Left = AViewRect.Left)
+      and (AForce.ViewRect.Top = AViewRect.Top)
+      and (AForce.ViewRect.Right = AViewRect.Right)
+      and (AForce.ViewRect.Bottom = AViewRect.Bottom) then Exit(1);
+    Result := 2;
+  end;
+
+  procedure ApplyStalePoints;
+  var j, s, t: Integer; c, cx, cy, x12, y12: Double; initRes: TTyDoubleArray;
+      rect: TTyRectF; circInit: Boolean; qi, ql2: array of Integer;
+      oki: array of Boolean;
+  begin
+    if kind = 1 then
+    begin
+      for j := 0 to High(Result.Edges) do
+        if (j <= High(AForce.Stale)) and AForce.Stale[j] then
+        begin
+          Result.Edges[j].HasStale := True;
+          Result.Edges[j].StaleX := AForce.StaleX[j];
+          Result.Edges[j].StaleY := AForce.StaleY[j];
+        end;
+      Exit;
+    end;
+    SetLength(AForce.Stale, Length(Result.Edges));
+    SetLength(AForce.StaleX, Length(Result.Edges));
+    SetLength(AForce.StaleY, Length(Result.Edges));
+    for j := 0 to High(Result.Edges) do
+    begin
+      AForce.Stale[j] := False;
+      AForce.StaleX[j] := NaN;
+      AForce.StaleY[j] := NaN;
+    end;
+    if (kind <> 0) or (Result.Spec.Force.InitLayout = gilOther) then Exit;
+    { THE INITIAL LAYOUT'S EDGE PASS: `none` asks the negated, reversed
+      family and the ring the plain one -- both by the edge's RAW index. }
+    circInit := Result.Spec.Force.InitLayout = gilCircular;
+    SetLength(qi, Length(Result.Edges));
+    SetLength(ql2, Length(Result.Edges));
+    SetLength(oki, Length(Result.Edges));
+    for j := 0 to High(Result.Edges) do
+    begin
+      qi[j] := Result.Edges[j].RawIndex;
+      ql2[j] := qi[j];
+      s := allEdges[qi[j]].Source;
+      t := allEdges[qi[j]].Target;
+      oki[j] := (all[s].Row = s) and (all[t].Row = t);
+    end;
+    SolveCurvenessQueries(allEdges, Result.Spec, circInit, qi, ql2, oki, initRes);
+    rect := Result.View.GetDataRect;
+    cx := (rect.Right - rect.Left) / 2 + rect.Left;
+    cy := (rect.Bottom - rect.Top) / 2 + rect.Top;
+    for j := 0 to High(Result.Edges) do
+    begin
+      c := initRes[j];
+      if IsNan(c) or (c = 0) then Continue;
+      s := Result.Edges[j].Source;
+      t := Result.Edges[j].Target;
+      x12 := (initX[s] + initX[t]) / 2;
+      y12 := (initY[s] + initY[t]) / 2;
+      if circInit then
+      begin
+        c := c * 3;
+        AForce.StaleX[j] := cx * c + x12 * (1 - c);
+        AForce.StaleY[j] := cy * c + y12 * (1 - c);
+      end
+      else
+      begin
+        AForce.StaleX[j] := x12 - (initY[s] - initY[t]) * c;
+        AForce.StaleY[j] := y12 - (initX[t] - initX[s]) * c;
+      end;
+      AForce.Stale[j] := True;
+      Result.Edges[j].HasStale := True;
+      Result.Edges[j].StaleX := AForce.StaleX[j];
+      Result.Edges[j].StaleY := AForce.StaleY[j];
+    end;
+  end;
+
 begin
   Result := Default(TTyGraphSolved);
   Result.Spec := TyGraphSpecOf(AOption, ASeriesIndex);
   Result.Cats := TyGraphCategoriesOf(AOption, ASeriesIndex);
-  Result.Nodes := TyGraphNodesOf(AStore, Result.Cats);
-  Result.Edges := TyGraphEdgesOf(AOption, ASeriesIndex, Result.Nodes);
-  TyGraphResolvePins(Result.Nodes, Result.Edges, Result.Cats, Result.Spec);
+  { EVERY NODE FIRST, WHATEVER THE LEGEND SAYS. Upstream builds the graph --
+    nodes, the edges between them, the curveness map -- from everything the
+    author wrote, and only then does the legend filter run over the NODE data;
+    each edge that lost an end goes with it. Edges resolve `source: 3` against
+    the full list for the same reason: the fourth node is the fourth node the
+    author wrote, not the fourth one that survived. }
+  all := TyGraphAllNodesOf(AStore, Result.Cats);
+  allEdges := TyGraphEdgesOf(AOption, ASeriesIndex, all);
+  TyGraphResolvePins(all, allEdges, Result.Cats, Result.Spec);
+  { THE SURVIVORS, in the order they were written; a kept node's view position
+    IS its position among the kept, so Row is where it lands. }
+  n := 0;
+  SetLength(Result.Nodes, Length(all));
+  for i := 0 to High(all) do
+    if all[i].Row >= 0 then
+    begin
+      Result.Nodes[n] := all[i];
+      Inc(n);
+    end;
+  SetLength(Result.Nodes, n);
+  n := 0;
+  SetLength(Result.Edges, Length(allEdges));
+  for i := 0 to High(allEdges) do
+  begin
+    a := all[allEdges[i].Source].Row;
+    b := all[allEdges[i].Target].Row;
+    if (a < 0) or (b < 0) then Continue;
+    Result.Edges[n] := allEdges[i];
+    Result.Edges[n].Source := a;
+    Result.Edges[n].Target := b;
+    Inc(n);
+  end;
+  SetLength(Result.Edges, n);
 
   mask := MaskFP;
   try
@@ -2761,8 +3446,14 @@ begin
       the positions the author wrote, the box is solved with the aspect that
       came out of it -- and only THEN, if there were no positions at all, is
       the data rectangle replaced by the box. So the box has already been
-      solved by the time anyone notices there was nothing to fit. }
-    hasData := TyGraphDataRect(Result.Nodes, dataRect, aspect);
+      solved by the time anyone notices there was nothing to fit.
+
+      AND FROM EVERY NODE, the switched-off ones included: upstream creates the
+      view before the legend filter runs (its own comment asks whether it
+      should not be after). So switching the outermost category off does not
+      re-fit the rest, and the force layout's random box and its centre of
+      gravity still span the nodes nobody can see. }
+    hasData := TyGraphDataRect(all, dataRect, aspect);
     viewRect := TyGraphViewRect(Result.Spec, AContainer, aspect);
     if not hasData then dataRect := viewRect;
     Result.View := TTyGraphView.Create(dataRect, viewRect);
@@ -2771,8 +3462,23 @@ begin
       glCircular:
         TyGraphLayoutCircular(Result.Nodes, Result.View, Result.Spec);
       glForce:
-        TyGraphLayoutForce(Result.Nodes, Result.Edges, Result.View,
-          Result.Spec, TyGraphForceSeed(ASeriesIndex), AForce);
+        begin
+          { WHERE THE INITIAL LAYOUT PUT EVERY SURVIVOR, taken before the
+            solver moves them: the written positions, or the ring by value. }
+          kind := ForcePassKind(dataRect, viewRect, Length(Result.Nodes));
+          SetLength(initX, Length(Result.Nodes));
+          SetLength(initY, Length(Result.Nodes));
+          for i := 0 to High(Result.Nodes) do
+          begin
+            initX[i] := Result.Nodes[i].X;
+            initY[i] := Result.Nodes[i].Y;
+          end;
+          if Result.Spec.Force.InitLayout = gilCircular then
+            RingByValue(Result.Nodes, dataRect, initX, initY);
+          TyGraphLayoutForce(Result.Nodes, Result.Edges, Result.View,
+            Result.Spec, TyGraphForceSeed(ASeriesIndex), AForce);
+        end;
+
     else
       TyGraphLayoutNone(Result.Nodes, Result.View);
     end;
@@ -2780,8 +3486,36 @@ begin
     { THE EDGES AFTER THE NODES, because their control points are made of the
       nodes' final positions -- and the ring is the only layout that reads the
       curveness table without turning it round. }
+    { THE FORCE LAYOUT'S LEFTOVERS. Upstream's force pass rewrites an edge's
+      control point only when its OWN curveness is truthy, and its lookup by
+      the filtered edge index can come out falsy where the initial layout's
+      lookup by the raw index did not -- so the point the initial layout's edge
+      pass wrote, from the INITIAL positions, is what gets drawn. Only on the
+      pass that ran an initial layout: a later pass starts from fresh edge
+      data with no points on it, and one that reuses the answer shows what the
+      first one showed. }
+    if Result.Spec.Layout = glForce then
+      ApplyStalePoints;
     circ := Result.Spec.Layout = glCircular;
-    TyGraphSolveCurveness(Result.Edges, Result.Spec, circ);
+    { ASKED OF THE MAP BUILT OVER EVERY EDGE. A survivor's key still matches
+      only if neither of its ends was renumbered by the filter -- a node before
+      either end taken out shifts it -- and the force layout looks the edge up
+      by its SURVIVING position where the others use the one it was filed
+      under. Without a filter every answer is the plain one. }
+    SetLength(qr, Length(Result.Edges));
+    SetLength(ql, Length(Result.Edges));
+    SetLength(ok, Length(Result.Edges));
+    for i := 0 to High(Result.Edges) do
+    begin
+      qr[i] := Result.Edges[i].RawIndex;
+      if Result.Spec.Layout = glForce then ql[i] := i else ql[i] := qr[i];
+      a := allEdges[qr[i]].Source;
+      b := allEdges[qr[i]].Target;
+      ok[i] := (all[a].Row = a) and (all[b].Row = b);
+    end;
+    SolveCurvenessQueries(allEdges, Result.Spec, circ, qr, ql, ok, res);
+    for i := 0 to High(Result.Edges) do
+      Result.Edges[i].SolvedCurveness := res[i];
     TyGraphEdgeGeometry(Result.Edges, Result.Nodes, Result.View, circ);
     TyGraphSanitise(Result.Nodes);
   finally
@@ -2987,6 +3721,22 @@ begin
   Result := RadToDeg(sign * Pi / 2 - ArcTan2(ATangent.Y, ATangent.X));
 end;
 
+function TyGraphEdgeStroke(const ASpec: TTyGraphSpec;
+  const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
+  AAt: Integer): TTyChartColor;
+var at: Integer;
+begin
+  Result := AInk.EdgeColour;
+  if ASpec.ColourBy = gecFixed then Exit;
+  if (AAt < 0) or (AAt > High(AEdges)) then Exit;
+  if ASpec.ColourBy = gecSource then at := AEdges[AAt].Source
+  else at := AEdges[AAt].Target;
+  if (at >= 0) and (at <= High(AInk.EdgeEndFills)) then
+    Result := AInk.EdgeEndFills[at]
+  else if (at >= 0) and (at <= High(AInk.NodeFills)) then
+    Result := AInk.NodeFills[at];
+end;
+
 function TyBuildGraphMarks(ASeriesIndex: Integer; AView: TTyGraphView;
   const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
@@ -3004,17 +3754,9 @@ var
   path: string;
   fill: TTyChartColor;
 
-  { WHAT ONE EDGE IS DRAWN IN. `'source'` and `'target'` take the node's own
-    colour, which is already resolved and sitting in the ink. }
   function EdgeColour(AAt: Integer): TTyChartColor;
-  var at: Integer;
   begin
-    Result := AInk.EdgeColour;
-    if ASpec.ColourBy = gecFixed then Exit;
-    if (AAt < 0) or (AAt > High(AEdges)) then Exit;
-    if ASpec.ColourBy = gecSource then at := AEdges[AAt].Source
-    else at := AEdges[AAt].Target;
-    if (at >= 0) and (at <= High(AInk.NodeFills)) then Result := AInk.NodeFills[at];
+    Result := TyGraphEdgeStroke(ASpec, AEdges, AInk, AAt);
   end;
 
   { HALF THE NODE'S SIZE -- its radius -- and an oblong symbol is AVERAGED to
@@ -3085,6 +3827,10 @@ begin
     p2 := TyPointF(ANodes[AEdges[i].Target].PX, ANodes[AEdges[i].Target].PY);
     if IsNan(p1.X) or IsNan(p1.Y) or IsNan(p2.X) or IsNan(p2.Y) then Continue;
     if AEdges[i].Hidden then Continue;
+    if AEdges[i].NaNCurve
+      and (((ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'))
+        or ((ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'))) then
+      Continue;
 
     { THE CONTROL POINT IS THE LAYOUT'S, not this function's. Upstream authors
       it in the layout pass, in data space, and the view only ever shortens
@@ -3174,7 +3920,9 @@ begin
       keeps that true the day an edge is appended after a node. }
     el.Z2 := ASpec.Z2 + 1;
     el.Silent := False;
-    el.Datum := TyChartDatum(ASeriesIndex, ANodes[i].Row);
+    { THE ROW IT WAS WRITTEN AT AS WELL: under a legend filter the two differ,
+      and what a datum reports is the author's numbering. }
+    el.Datum := TyChartDatum(ASeriesIndex, ANodes[i].Row, ANodes[i].RawRow);
     el.HitSlopLogical := 4;
     if AInk.Label_.Show and (AInk.Label_.Position <> tlpNone) then
       el.Caption.Text := TyLabelText(AInk.Label_.Formatter,

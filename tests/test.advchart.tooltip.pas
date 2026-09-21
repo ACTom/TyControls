@@ -85,6 +85,7 @@ type
     procedure TestEverythingThatChangedIsTheTooltip;
     procedure TestHoveringNothingDrawsNothing;
     procedure TestTheMarkerTakesTheColourOfWhateverColoursByDatum;
+    procedure TestAGraphNodesMarkerIsItsCategoryColourByViewRow;
     procedure TestLeavingTheChartTakesItAway;
     procedure TestShowFalseDrawsNothing;
     procedure TestTriggerNoneDrawsNothing;
@@ -730,7 +731,28 @@ begin
   AssertEquals('a bar is one colour', Int64(a.Color), Int64(d.Color));
 end;
 
+procedure TAdvChartTooltipDrawTest.TestAGraphNodesMarkerIsItsCategoryColourByViewRow;
+var p: TTyChartCallbackParams;
+begin
+  { A GRAPH NODE'S DOT IS ITS CATEGORY'S COLOUR, which the series colour is
+    not: the series takes palette slot 0 and category Y the shared cursor's
+    slot 1. And it is found by the node's VIEW row -- the legend has taken
+    'a' out, so 'b' is row 0 of the view and row 1 of what was written. }
+  Draw('{"color":["#111111","#222222","#333333"],'
+    + '"legend":{"selected":{"X":false}},'
+    + '"series":[{"type":"graph","layout":"none",'
+    + '"categories":[{"name":"X"},{"name":"Y"}],'
+    + '"data":[{"name":"a","x":0,"y":0,"category":0},'
+    + '{"name":"b","x":10,"y":0,"category":1},'
+    + '{"name":"c","x":20,"y":5,"category":1,"itemStyle":{"color":"#00ff00"}}]}]}');
+  p := FChart.ParamsFor(TyChartDatum(0, 0, 1));
+  AssertEquals('b is category Y', Int64($FF222222), Int64(p.Color));
+  p := FChart.ParamsFor(TyChartDatum(0, 1, 2));
+  AssertEquals('c is its own colour', Int64($FF00FF00), Int64(p.Color));
+end;
+
 procedure TAdvChartTooltipDrawTest.TestHoveringNothingDrawsNothing;
+
 var p: TPoint;
 begin
   Draw(cBars);

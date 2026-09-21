@@ -691,11 +691,16 @@ begin
     out is treated the same way, because everything downstream squares
     distances. }
   s := TyGraphSpecDefault;
-  SetLength(nodes, 2);
+  SetLength(nodes, 3);
   nodes[0] := Default(TTyGraphNode);
   nodes[1] := Default(TTyGraphNode);
   nodes[1].X := 100;
+  nodes[1].Y := 50;
   nodes[1].PX := 100;
+  nodes[1].PY := 50;
+  nodes[2] := Default(TTyGraphNode);
+  nodes[2].X := 100;
+  nodes[2].PX := 100;
   SetLength(edges, 3);
   for i := 0 to 2 do
   begin
@@ -707,7 +712,7 @@ begin
   edges[2].SolvedCurveness := 0.5;
   ink := Default(TTyGraphInk);
   ink.EdgeColour := TTyChartColor($FF808080);
-  SetLength(ink.NodeFills, 2);
+  SetLength(ink.NodeFills, 3);
   view := TTyGraphView.Create(TyRectF(0, 0, 100, 100), TyRectF(0, 0, 100, 100));
   list := TTyPaintList.Create;
   try
@@ -716,10 +721,38 @@ begin
     AssertFalse('rather than drawing it straight', edges[0].Curved);
     AssertTrue('and so does one a thousand screens out', edges[1].Hidden);
     AssertTrue('an ordinary one curves', edges[2].Curved and not edges[2].Hidden);
-    AssertEquals('at the perpendicular', -50.0, edges[2].CPY, 1e-9);
+    AssertEquals('at the perpendicular', 75.0, edges[2].CPX, 1e-9);
+    AssertEquals(-25.0, edges[2].CPY, 1e-9);
     TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
-    { ONE EDGE AND TWO NODES: the two hidden edges put nothing in the list. }
-    AssertEquals(3, list.Count);
+    { ONE EDGE AND THREE NODES: the two hidden edges put nothing in the list. }
+    AssertEquals(4, list.Count);
+
+    { [Revised in batch 31: the rule above holds only while the point is a
+      NUMBER.] A LEVEL EDGE bowed by an infinite curveness gets
+      `50 - 0 * Infinity` for its x -- not-a-number -- and upstream's
+      isStraightLine asks exactly that: it draws the edge STRAIGHT. Unless
+      an end carries a symbol, when adjustEdge cuts the curve at the node's
+      rim and the arithmetic turns both ends into not-a-number. }
+    SetLength(edges, 1);
+    edges[0] := Default(TTyGraphEdge);
+    edges[0].Target := 2;
+    edges[0].SolvedCurveness := Infinity;
+    TyGraphEdgeGeometry(edges, nodes, view, False);
+    AssertFalse('a level edge is not hidden', edges[0].Hidden);
+    AssertFalse('it is not curved', edges[0].Curved);
+    AssertTrue('it is a broken curve', edges[0].NaNCurve);
+    list.Clear;
+    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    AssertEquals('drawn straight, beside three nodes', 4, list.Count);
+    s.EdgeSymbolTo := 'arrow';
+    list.Clear;
+    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    AssertEquals('and with an arrow, not at all', 3, list.Count);
+    s.EdgeSymbolTo := 'none';
+    s.EdgeSymbolFrom := 'arrow';
+    list.Clear;
+    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    AssertEquals('whichever end carries it', 3, list.Count);
   finally
     list.Free;
     view.Free;

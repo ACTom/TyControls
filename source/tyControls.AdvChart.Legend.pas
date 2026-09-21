@@ -147,6 +147,13 @@ type
       marker sits alone. }
     LineColour: TTyChartColor;
     LineWidthLogical: Double;
+    { DRAWN INACTIVE WHATEVER THE LEGEND SAYS. The one case is a graph's
+      category whose graph the legend switched off by its SERIES name:
+      upstream never colours those categories and then throws dereferencing
+      the colour it did not make. Its own comment says a name that cannot be
+      found in the filtered data "will display as gray", so that is what this
+      does. }
+    Greyed: Boolean;
   end;
   TTyLegendSourceArray = array of TTyLegendSource;
 
@@ -264,9 +271,44 @@ function TyLegendSelected(AOption: TTyChartOption; AIndex: Integer;
   has no such names, so the rule is stated rather than inherited.
 
   ONE LEGEND SAYING NO IS ENOUGH, so a caller with several ORs the answers --
-  legendFilter.ts:36-41 says exactly that. }
+  legendFilter.ts:36-41 says exactly that.
+
+  [Overturned in part, batch 31: "not the legend's business" holds only for a
+  name `selected` does not mention either. See the overload below, which is
+  the one the control asks.] }
 function TyLegendHides(const AEntries: TTyLegendEntryArray;
-  const AFlags: TTyLegendFlags; const AName: string): Boolean;
+  const AFlags: TTyLegendFlags; const AName: string): Boolean; overload;
+
+{ THE WHOLE RULE: the listed answer above, plus A NAME `selected` SWITCHES
+  OFF BY NAME, listed or not. Upstream's isSelected reads the map before it
+  reads the list, and every series name is available, so a `selected` map
+  writing `"a": false` hides series `a` whether `legend.data` names it or
+  not -- which matters most for a graph with categories, whose legend lists
+  the categories and never the series.
+
+  Only the availability half is left out, and that is what keeps the old
+  rule's point: a series name is always available upstream, and a name this
+  port could not prove available must not blank a series. The empty name is
+  still never hidden. }
+function TyLegendHides(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const AName: string): Boolean; overload;
+
+{ UPSTREAM'S `isSelected(name)`, FOR ANY NAME -- listed or not.
+
+  TyLegendHides leaves out the availability half, deliberately, for series.
+  The graph's category filter is upstream's categoryFilter, which asks
+  isSelected for every node's category, listed or not: a name switched off in
+  `selected` is off whether `legend.data` names it or not, and a name the
+  chart does not offer at all -- a category index out of range, a name nobody
+  declared -- is NEVER selected, so its nodes go.
+
+  A listed name answers with its flag, which already carries single mode's
+  rewrite; an unlisted one asks the `selected` map and the available names,
+  which single mode never touched. }
+function TyLegendNameSelected(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const AAvailable: array of string; const AName: string): Boolean;
 
 { `{name}`, replaced once. An empty formatter answers the name unchanged. }
 function TyLegendText(const AFormatter, AName: string): string;
@@ -814,6 +856,15 @@ end;
 
 function TyLegendDefaultIcon(const ASeriesType, ASymbolWord: string): string;
 begin
+  { A GRAPH HAS A SYMBOL VISUAL -- `hasSymbolVisual = true` -- so a graph the
+    legend names by its SERIES name is drawn as its node symbol, a circle by
+    default. (Its CATEGORIES are drawn as rounded rectangles: the category
+    provider publishes no icon.) }
+  if ASeriesType = 'graph' then
+  begin
+    if ASymbolWord <> '' then Exit(ASymbolWord);
+    Exit('circle');
+  end;
   { A bar, a pie, a funnel: no symbol visual, so nothing is published and the
     chain falls through to roundRect. }
   if (ASeriesType <> 'line') and (ASeriesType <> 'scatter') then Exit('');
@@ -840,6 +891,49 @@ begin
     { The entry exists, so the legend does have an opinion. }
     Exit((i > High(AFlags)) or (not AFlags[i]));
   end;
+end;
+
+function TyLegendHides(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const AName: string): Boolean;
+var
+  node: TJSONObject;
+  map: TSelMap;
+  i, j: Integer;
+begin
+  Result := False;
+  if AName = '' then Exit;
+  for i := 0 to High(AEntries) do
+    if (not AEntries[i].Newline) and (AEntries[i].Name = AName) then
+      Exit(TyLegendHides(AEntries, AFlags, AName));
+  node := nil;
+  if AOption <> nil then node := ObjOf(AOption.ComponentAt('legend', AIndex));
+  map := ReadSelectedMap(node);
+  j := MapFind(map, AName);
+  Result := (j >= 0) and not map.On_[j];
+end;
+
+function TyLegendNameSelected(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const AAvailable: array of string; const AName: string): Boolean;
+var
+  node: TJSONObject;
+  map: TSelMap;
+  i, j: Integer;
+begin
+  { A LINE BREAK IS LISTED TOO: `''` is an item upstream, and single mode can
+    even pick it. }
+  for i := 0 to High(AEntries) do
+    if AEntries[i].Name = AName then
+      Exit((i <= High(AFlags)) and AFlags[i]);
+  node := nil;
+  if AOption <> nil then node := ObjOf(AOption.ComponentAt('legend', AIndex));
+  map := ReadSelectedMap(node);
+  j := MapFind(map, AName);
+  if (j >= 0) and not map.On_[j] then Exit(False);
+  Result := False;
+  for i := 0 to High(AAvailable) do
+    if AAvailable[i] = AName then Exit(True);
 end;
 
 function TyLegendText(const AFormatter, AName: string): string;
@@ -1134,6 +1228,7 @@ begin
 
     src := Default(TTyLegendSource);
     if i <= High(ASources) then src := ASources[i];
+    if src.Greyed then it.Selected := False;
     ResolveIcon(ASpec, AEntries[i], src, it.Icon, it.OwnIcon);
     it.Colour := src.Colour;
     it.LineColour := src.LineColour;

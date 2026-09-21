@@ -171,6 +171,7 @@ type
       outlive it. Cleared only when the option changes -- upstream keeps it on
       the series model, and a replaced option is new series models. }
     FGraphForce: array of TTyGraphForceState;
+    FFilterCats: TTyGraphCategoryArray;
     { Which store column feeds spoke j, per series. Its own array because the
       store is exactly as wide as the first data row while the spokes come from
       the radar, and the two are allowed to disagree. }
@@ -188,6 +189,14 @@ type
       Rebuild; the LAYOUT has to measure the words, so it waits for Relayout
       like the axes and the title. }
     FLegendSpecs: array of TTyLegendSpec;
+    { Every name the chart offers a legend, kept past SolveLegendData because
+      the graph's category filter asks upstream's isSelected -- which needs
+      them -- for names no legend lists. }
+    FLegendAvailable: TTyLegendNames;
+    { Every graph's category colours, by SERIES index, solved once after the
+      legend filter: the chip and the node read the same table, so they cannot
+      disagree. }
+    FGraphCatColours: TTyGraphCatColourTable;
     FLegendEntries: array of TTyLegendEntryArray;
     FLegendFlags: array of TTyLegendFlags;
     FLegends: array of TTyLegendLayout;
@@ -380,6 +389,11 @@ type
     procedure FreeRadars;
     procedure SolveGraphs(APPI: Integer);
     procedure FreeGraphs;
+    procedure SolveGraphCategoryColours;
+    { A graph node's raw row survives the legend: upstream's categoryFilter,
+      with isSelected asked of every legend. FFilterCats carries the
+      categories the predicate needs. }
+    function KeepGraphNode(ARawIndex: Integer): Boolean;
     function GraphInk(ASlot: Integer): TTyGraphInk;
     function RadarInk: TTyRadarInk;
     function RadarVisual(ASlot: Integer): TTyRadarVisual;
@@ -605,6 +619,20 @@ type
       out AElement: Integer): TTyChartDatumRef; overload;
     { For a test or a designer to look inside. nil until the first build. }
     property Build: TTyChartBuild read FBuild;
+    { THE GRAPH SERIES ASeriesIndex, AS THE LAST RENDER LAID IT OUT: the nodes
+      the legend kept -- in the order they were written, with their pixel
+      positions -- the edges between them, and each node's fill. False when
+      that series is not a graph on a view, or nothing has been rendered.
+      Read-only, and what a host needs to put something over a node. }
+    function GraphLayout(ASeriesIndex: Integer; out ANodes: TTyGraphNodeArray;
+      out AEdges: TTyGraphEdgeArray; out AFills: TTyChartColorArray): Boolean;
+    { THE SAME GRAPH'S INK AND SPEC, which is what TyGraphEdgeStroke needs to
+      say what colour each edge is drawn in. }
+    function GraphInkOf(ASeriesIndex: Integer; out AInk: TTyGraphInk;
+      out ASpec: TTyGraphSpec): Boolean;
+    { The legends as the last render placed them. }
+    function LegendLayoutCount: Integer;
+    function LegendLayout(AIndex: Integer): TTyLegendLayout;
   published
     { THE API. Relaxed JSON: unquoted keys, single quotes, trailing commas and
       comments all parse, because that is what an ECharts config in the wild
@@ -1006,6 +1034,10 @@ begin
     none of it has to wait for Relayout. }
   SolveLegendData;
   ApplyLegendFilter;
+  { AFTER the filter, because a graph the legend switched off takes no slot of
+    the shared category palette -- upstream's categoryVisual walks only the
+    series the filter kept. }
+  SolveGraphCategoryColours;
   { AFTER the filter but over EVERY series slot, hidden ones included --
     see SolveSeriesColors. The two are not in tension: the filter decides
     what is drawn, the palette decides what colour each series IS, and the
@@ -2122,6 +2154,75 @@ begin
   FRadars := nil;
 end;
 
+function TTyAdvanceChart.GraphLayout(ASeriesIndex: Integer;
+  out ANodes: TTyGraphNodeArray; out AEdges: TTyGraphEdgeArray;
+  out AFills: TTyChartColorArray): Boolean;
+var slot: Integer;
+begin
+  ANodes := nil;
+  AEdges := nil;
+  AFills := nil;
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil) then Exit;
+  ANodes := Copy(FGraphNodes[slot]);
+  AEdges := Copy(FGraphEdges[slot]);
+  AFills := GraphInk(slot).NodeFills;
+  Result := True;
+end;
+
+function TTyAdvanceChart.GraphInkOf(ASeriesIndex: Integer;
+  out AInk: TTyGraphInk; out ASpec: TTyGraphSpec): Boolean;
+var slot: Integer;
+begin
+  AInk := Default(TTyGraphInk);
+  ASpec := Default(TTyGraphSpec);
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil) then Exit;
+  AInk := GraphInk(slot);
+  ASpec := FGraphSpecs[slot];
+  Result := True;
+end;
+
+function TTyAdvanceChart.LegendLayoutCount: Integer;
+begin
+  Result := Length(FLegends);
+end;
+
+function TTyAdvanceChart.LegendLayout(AIndex: Integer): TTyLegendLayout;
+begin
+  Result := Default(TTyLegendLayout);
+  if (AIndex >= 0) and (AIndex <= High(FLegends)) then
+  begin
+    Result := FLegends[AIndex];
+    { A dynamic array is shared, not copied, and a caller writing into it
+      would be writing into the control's own layout. }
+    Result.Items := Copy(FLegends[AIndex].Items);
+  end;
+end;
+
+procedure TTyAdvanceChart.SolveGraphCategoryColours;
+var
+  shown: array of Boolean;
+  fallback: TTyChartColorArray;
+  i, n: Integer;
+begin
+  FGraphCatColours := nil;
+  if FOption = nil then Exit;
+  n := FOption.ComponentCount('series');
+  SetLength(shown, n);
+  for i := 0 to n - 1 do shown[i] := True;
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesIndex >= 0) and (FBindings[i].SeriesIndex < n) then
+      shown[FBindings[i].SeriesIndex] := not FBindings[i].Hidden;
+  { THE THEME'S NINE, standing where upstream's default palette stands -- the
+    same nine every series colour falls back to. }
+  SetLength(fallback, 9);
+  for i := 0 to 8 do fallback[i] := TTyChartColor(ThemeRampColor(i));
+  FGraphCatColours := TyGraphCategoryColours(FOption, shown, fallback);
+end;
+
 procedure TTyAdvanceChart.FreeGraphs;
 var i: Integer;
 begin
@@ -2150,6 +2251,11 @@ begin
     FGraphs[i] := nil;
     if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
     if not FBindings[i].Resolved then Continue;
+    { A GRAPH THE LEGEND SWITCHED OFF IS NOT LAID OUT AT ALL -- upstream's
+      legendFilter takes the series out before any layout runs -- and for a
+      force graph of five hundred nodes that is a second and a half nobody
+      would see. }
+    if FBindings[i].Hidden then Continue;
     { ONLY THE VIEW IS SOLVED HERE. A graph on a cartesian is laid out by the
       axes it named and is a batch of its own; until then it resolves and
       draws nothing rather than being quietly given a view it did not ask
@@ -2175,11 +2281,10 @@ end;
 
 function TTyAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
 var
-  i, cat: Integer;
-  ramp: TTyChartColorArray;
-  own: TTyChartColor;
-  v: TTyDataValue;
+  i, si: Integer;
   base: TTyChartColor;
+  cols: TTyGraphCatColours;
+  store: TTyDataStore;
 begin
   Result := Default(TTyGraphInk);
   Result.LabelValueDim := -1;
@@ -2195,34 +2300,22 @@ begin
       ActiveController.Model.ResolveStyle('TyAdvChartSplitLine', '',
         []).BorderColor);
 
-  ramp := PerDatumColours(ASlot);
+  { THREE SOURCES, NEAREST FIRST: what the node wrote, then its category's
+    colour, then the series' own. The category's comes from the ONE table the
+    legend's chips read too -- it used to index a per-NODE palette by the
+    CATEGORY number, which agreed with the chips by coincidence and let the
+    first few nodes' own colours leak into whole categories. }
+  si := FBindings[ASlot].SeriesIndex;
+  cols := Default(TTyGraphCatColours);
+  if (si >= 0) and (si <= High(FGraphCatColours)) then
+    cols := FGraphCatColours[si];
+  store := nil;
+  if ASlot <= High(FStores) then store := FStores[ASlot];
   SetLength(Result.NodeFills, Length(FGraphNodes[ASlot]));
+  SetLength(Result.EdgeEndFills, Length(FGraphNodes[ASlot]));
   for i := 0 to High(FGraphNodes[ASlot]) do
-  begin
-    { THREE SOURCES, NEAREST FIRST: what the node wrote, then what its category
-      wrote or was given, then the series' own colour. A graph is the only
-      series here whose per-datum colour can come from a THIRD object. }
-    Result.NodeFills[i] := base;
-    cat := FGraphNodes[ASlot][i].Category;
-    if (cat >= 0) and (cat <= High(FGraphCats[ASlot])) then
-    begin
-      if FGraphCats[ASlot][cat].HasColour then
-        Result.NodeFills[i] := FGraphCats[ASlot][cat].Colour
-      else if cat <= High(ramp) then
-        Result.NodeFills[i] := ramp[cat]
-      else
-        Result.NodeFills[i] := TTyChartColor(ThemeRampColor(cat));
-    end;
-    if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
-      if FStores[ASlot].HasOverride(FGraphNodes[ASlot][i].Row,
-        TyOverrideKey('itemStyle.color')) then
-      begin
-        v := FStores[ASlot].GetOverride(FGraphNodes[ASlot][i].Row,
-          TyOverrideKey('itemStyle.color'));
-        if (v.Kind = dvkText) and TyTryParseChartColor(v.Text, own) then
-          Result.NodeFills[i] := own;
-      end;
-  end;
+    Result.NodeFills[i] := TyGraphNodeFill(FGraphNodes[ASlot][i], cols,
+      Length(FGraphCats[ASlot]), base, store, Result.EdgeEndFills[i]);
 
   Result.Label_ := LabelSpecFor(ASlot);
   { A NODE'S LABEL IS ITS NAME, and the graph is the only series here whose
@@ -2748,18 +2841,21 @@ procedure TTyAdvanceChart.LegendNames(out APotential, AAvailable: TTyLegendNames
 var
   i, k, np, na: Integer;
   nm: string;
+  cats: TTyGraphCategoryArray;
 
-  procedure PushP(const AName: string);
+  { AKeepEmpty is a graph category's: a nameless category IS a name upstream,
+    `''`, which the legend draws as a line break and single mode can pick. }
+  procedure PushP(const AName: string; AKeepEmpty: Boolean = False);
   begin
-    if AName = '' then Exit;
+    if (AName = '') and not AKeepEmpty then Exit;
     if np >= Length(APotential) then SetLength(APotential, np * 2 + 8);
     APotential[np] := AName;
     Inc(np);
   end;
 
-  procedure PushA(const AName: string);
+  procedure PushA(const AName: string; AKeepEmpty: Boolean = False);
   begin
-    if AName = '' then Exit;
+    if (AName = '') and not AKeepEmpty then Exit;
     if na >= Length(AAvailable) then SetLength(AAvailable, na * 2 + 8);
     AAvailable[na] := AName;
     Inc(na);
@@ -2772,6 +2868,25 @@ begin
   na := 0;
   for i := 0 to High(FBindings) do
   begin
+    { A GRAPH OFFERS ITS CATEGORIES, and its own name only as AVAILABLE --
+      the same shape as a pie's slices. With no categories at all it is an
+      ordinary series and offers its name. The categories come from the
+      OPTION, never from a solved graph: this runs in Rebuild, before any
+      graph is solved, and a graph on a cartesian is never solved here. }
+    if FBindings[i].SeriesType = TyGraphSeriesTypeName then
+    begin
+      cats := TyGraphCategoriesOf(FOption, FBindings[i].SeriesIndex);
+      if Length(cats) > 0 then
+      begin
+        PushA(SeriesNameOf(FBindings[i].SeriesIndex));
+        for k := 0 to High(cats) do
+        begin
+          PushP(cats[k].Name_, True);
+          PushA(cats[k].Name_, True);
+        end;
+        Continue;
+      end;
+    end;
     if TySeriesLegendByDatum(FBindings[i].SeriesType)
       and (i <= High(FStores)) and (FStores[i] <> nil) then
     begin
@@ -2816,9 +2931,10 @@ end;
 function TTyAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray):
   TTyLegendSourceArray;
 var
-  i, j, k: Integer;
+  i, j, k, si: Integer;
   found: Boolean;
   perRaw: TTyChartColorArray;
+  cats: TTyGraphCategoryArray;
 begin
   SetLength(Result, Length(AEntries));
   for i := 0 to High(AEntries) do
@@ -2853,6 +2969,50 @@ begin
     if found then Continue;
     for j := 0 to High(FBindings) do
     begin
+      { A GRAPH'S CATEGORY, AT THE GRAPH'S PLACE IN SERIES ORDER -- so a name
+        that is both a pie slice and a category is drawn by whichever series
+        comes first, and a name two categories share by the FIRST of them. A
+        rounded rectangle in the category's colour: the category provider
+        publishes no icon, and the category's `symbol` is its nodes', not its
+        chip's. }
+      if FBindings[j].SeriesType = TyGraphSeriesTypeName then
+      begin
+        si := FBindings[j].SeriesIndex;
+        cats := TyGraphCategoriesOf(FOption, si);
+        for k := 0 to High(cats) do
+          if cats[k].Name_ = AEntries[i].Name then
+          begin
+            Result[i].Found := True;
+            Result[i].SeriesType := FBindings[j].SeriesType;
+            Result[i].DefaultIcon := '';
+            Result[i].OwnIcon := False;
+            if FBindings[j].Hidden then
+              Result[i].Greyed := True
+            else if (si <= High(FGraphCatColours))
+              and (k <= High(FGraphCatColours[si].Known))
+              and FGraphCatColours[si].Known[k] then
+            begin
+              Result[i].Colour := FGraphCatColours[si].Colours[k];
+              { A TRANSPARENT CATEGORY IS SHOWN AT A FIFTH, not as nothing --
+                upstream's legend rescues an alpha of zero to 0.2 so the item
+                can still be found. The nodes stay transparent. }
+              if (LongWord(Result[i].Colour) shr 24) = 0 then
+                Result[i].Colour := TTyChartColor(
+                  (LongWord(Result[i].Colour) and $00FFFFFF) or $33000000);
+            end
+            else if (si <= High(FGraphCatColours))
+              and (k <= High(FGraphCatColours[si].Base))
+              and FGraphCatColours[si].Base[k] then
+              { A colour nobody can paint: the chip wears the series colour,
+                as the nodes do. }
+              Result[i].Colour := TTyChartColor(SeriesColor(si));
+            Result[i].LineColour := Result[i].Colour;
+            found := True;
+            Break;
+          end;
+        if found then Break;
+        Continue;
+      end;
       if not TySeriesLegendByDatum(FBindings[j].SeriesType) then Continue;
       if (j > High(FStores)) or (FStores[j] = nil) then Continue;
       { THE RAW ROWS, NOT THE VIEW. This runs in Relayout, which is to say
@@ -2909,8 +3069,10 @@ begin
   SetLength(FLegendEntries, n);
   SetLength(FLegendFlags, n);
   SetLength(FLegends, n);
+  FLegendAvailable := nil;
   if n = 0 then Exit;
   LegendNames(potential, available);
+  FLegendAvailable := available;
   for i := 0 to n - 1 do
   begin
     FLegendSpecs[i] := TyLegendSpecOf(FOption, i);
@@ -2929,7 +3091,7 @@ var i: Integer;
 begin
   Result := False;
   for i := 0 to High(FLegendSpecs) do
-    if TyLegendHides(FLegendEntries[i], FLegendFlags[i], AName) then
+    if TyLegendHides(FOption, i, FLegendEntries[i], FLegendFlags[i], AName) then
       Exit(True);
 end;
 
@@ -2938,6 +3100,46 @@ begin
   Result := True;
   if FFilterStore = nil then Exit;
   Result := not LegendHides(FFilterStore.GetNameByRaw(ARawIndex));
+end;
+
+function TTyAdvanceChart.KeepGraphNode(ARawIndex: Integer): Boolean;
+var
+  v: TTyDataValue;
+  i: Integer;
+  nm: string;
+begin
+  Result := True;
+  if FFilterStore = nil then Exit;
+  { `category == null` KEEPS THE NODE -- absent and null alike. }
+  if not FFilterStore.HasOverrideByRaw(ARawIndex, TyOverrideKey('category')) then
+    Exit;
+  v := FFilterStore.GetOverrideByRaw(ARawIndex, TyOverrideKey('category'));
+  case v.Kind of
+    dvkNone: Exit;
+    dvkNumber:
+      { `categoryNames[n]`: a JavaScript array indexed by the number, so an
+        index out of range -- or negative, or fractional -- finds `undefined`,
+        a name no legend offers. }
+      { The range first: Frac of an infinity raises, and `1e999` parses as
+        one. }
+      if (v.Num >= 0) and (v.Num <= High(FFilterCats)) and (Frac(v.Num) = 0) then
+        nm := FFilterCats[Trunc(v.Num)].Name_
+      else
+        Exit(False);
+    dvkText:
+      { A STRING IS ASKED ABOUT EXACTLY AS WRITTEN -- '1' is the name '1',
+        not index one -- and against every name the CHART offers, so a node
+        naming a series or another graph's category is kept, and goes when
+        that name is switched off. }
+      nm := v.Text;
+  else
+    { A boolean is never a name anything offers. }
+    Exit(False);
+  end;
+  for i := 0 to High(FLegendSpecs) do
+    if not TyLegendNameSelected(FOption, i, FLegendEntries[i], FLegendFlags[i],
+      FLegendAvailable, nm) then
+      Exit(False);
 end;
 
 procedure TTyAdvanceChart.ApplyLegendFilter;
@@ -2949,6 +3151,42 @@ begin
   if Length(FLegendSpecs) = 0 then Exit;
   for i := 0 to High(FBindings) do
   begin
+    { A GRAPH IS FILTERED TWICE: WHOLE, by its series name -- upstream's
+      legendFilter runs on every series first -- and then, if it survived,
+      node by node by CATEGORY. The second is upstream's categoryFilter, and
+      its rule is not the series rule: it asks isSelected of every legend for
+      every node that names a category, so a category switched off only in
+      `selected` goes, and a node whose category the chart does not offer --
+      an index past the end, a name nobody declared -- goes too, whenever any
+      legend exists. With no legend at all nothing is filtered: this whole
+      procedure has already returned. }
+    if FBindings[i].SeriesType = TyGraphSeriesTypeName then
+    begin
+      FBindings[i].Hidden :=
+        LegendHides(SeriesNameOf(FBindings[i].SeriesIndex));
+      if FBindings[i].Hidden then Continue;
+      if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+      st := FStores[i];
+      FFilterCats := TyGraphCategoriesOf(FOption, FBindings[i].SeriesIndex);
+      FFilterStore := st;
+      try
+        { ASKED BEFORE IT IS DONE, and with the graph's OWN rule: with a
+          legend present a node can go even when every item is switched on,
+          so the question is not "is anything off" but "does any node fail". }
+        any := False;
+        for k := 0 to st.RawCount - 1 do
+          if not KeepGraphNode(k) then
+          begin
+            any := True;
+            Break;
+          end;
+        if any then st.FilterSelf(@KeepGraphNode);
+      finally
+        FFilterStore := nil;
+        FFilterCats := nil;
+      end;
+      Continue;
+    end;
     if not TySeriesLegendByDatum(FBindings[i].SeriesType) then
     begin
       FBindings[i].Hidden :=
@@ -3556,6 +3794,7 @@ var
   perDatum: Boolean;
   el: TTyChartElement;
   v: TTySeriesVisual;
+  gi: TTyGraphInk;
 begin
   Result := 0;
   { THE SERIES' COLOUR WITH THE ROW'S OVERRIDE, which is what upstream's marker
@@ -3571,6 +3810,19 @@ begin
     the marker names is a SERIES and a ROW, so that is what it asks. }
   slot := SlotOfSeries(ADatum.SeriesIndex);
   if slot < 0 then Exit;
+  { A GRAPH NODE'S MARKER IS THE NODE'S FILL -- its category's colour, or its
+    own -- found by the node's VIEW row. Not through the paint list: a graph's
+    edges number their data in the same space as its nodes, so the first
+    element carrying a datum could be an edge. }
+  if (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+    and (slot <= High(FGraphNodes)) then
+  begin
+    gi := GraphInk(slot);
+    for idx := 0 to High(FGraphNodes[slot]) do
+      if (FGraphNodes[slot][idx].Row = ADatum.DataIndex)
+        and (idx <= High(gi.NodeFills)) then
+        Exit(gi.NodeFills[idx]);
+  end;
   v := TySeriesVisual(TTyChartColor(SeriesColor(ADatum.SeriesIndex)));
   ApplyOptStyle(v, ADatum.SeriesIndex);
   Result := v.Fill;

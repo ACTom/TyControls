@@ -325,6 +325,7 @@ type
     procedure SetId(ARawIndex: Integer; const AId: string);
     procedure SetName(ARawIndex: Integer; const AName: string);
     function GetId(AIndex: Integer): string;
+    function GetIdByRaw(ARawIndex: Integer): string;
     function GetName(AIndex: Integer): string;
     { The same name in RAW space. FilterSelf hands its predicate a raw
       index -- it is deciding which raw rows survive, so it cannot speak
@@ -1242,6 +1243,13 @@ begin
   raw := GetRawIndex(AIndex);
   if raw < 0 then Exit('');
   Result := FIds[raw];
+end;
+
+function TTyDataStore.GetIdByRaw(ARawIndex: Integer): string;
+begin
+  if FIds = nil then Exit('');
+  if (ARawIndex < 0) or (ARawIndex > High(FIds)) then Exit('');
+  Result := FIds[ARawIndex];
 end;
 
 function TTyDataStore.GetName(AIndex: Integer): string;
