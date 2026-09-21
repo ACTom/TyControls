@@ -264,10 +264,11 @@ function TyTooltipTriggerOnHas(const ATriggerOn, AWhat: string): Boolean;
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
   `1,048`.
 
-  NOT TyChartNumToStr, which every axis tick label uses and which suppresses
-  the grouping deliberately. The two are different upstream too -- the default
-  markup runs values through `addCommas` and a `{c}` in a template does not --
-  so they are two functions here rather than one with a flag. }
+  NOT TyChartNumToStr: upstream's default markup runs values through
+  `addCommas` and a `{c}` in a template does not, so they are two functions
+  here rather than one with a flag. (Axis tick labels are neither -- they
+  are IntervalScale.getLabel, grouped as well, in TyScaleValueLabel. This
+  said they were ungrouped; that was never upstream.) }
 function TyTooltipValueText(AValue: Double): string;
 
 { ---- layout ---- }

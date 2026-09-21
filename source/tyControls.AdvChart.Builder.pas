@@ -88,6 +88,11 @@ type
     LabelMarginLogical: Double;
     { DEGREES, clockwise on screen, which is how the option spells it. }
     LabelRotateDeg: Double;
+    { `axisLabel.formatter` when it is a STRING: its first '{value}' becomes
+      the label. '' is a string too, and blanks every label. A function
+      cannot come through an option text. }
+    LabelFormatter: string;
+    HasLabelFormatter: Boolean;
     { `axis.offset`, LOGICAL px, default 0 -- and the default is declared
       rather than implied: upstream merges `offset: 0` into all eight axis
       model classes.
@@ -252,6 +257,13 @@ procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   its opposite-dimension axis whether or not this axis is in it. }
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean): TTyAxisFurniture;
+
+{ One tick's label as upstream's makeLabelFormatter makes it for a category,
+  value or log axis: the scale's own label -- the category, or the number as
+  IntervalScale.getLabel prints it, '1,234.5' -- and with a string formatter,
+  that formatter with its FIRST '{value}' replaced. A time axis has its own. }
+function TyAxisTickLabel(AAxis: TTyAxis; AValue: Double;
+  AHasFormatter: Boolean; const AFormatter: string): string;
 
 { ---- reading series data ---- }
 type
@@ -1083,6 +1095,34 @@ begin
   if sub.AsBoolean then Result := aelShow else Result := aelHide;
 end;
 
+{ axisLabel.formatter, when it is a string. }
+function LabelFormatterIn(ANode: TJSONObject; out AFormatter: string): Boolean;
+var sub: TJSONData;
+begin
+  AFormatter := '';
+  Result := False;
+  sub := FindIn(ANode, 'axisLabel');
+  if (sub = nil) or (sub.JSONType <> jtObject) then Exit;
+  sub := TJSONObject(sub).Find('formatter');
+  if (sub = nil) or (sub.JSONType <> jtString) then Exit;
+  AFormatter := sub.AsString;
+  Result := True;
+end;
+
+function TyAxisTickLabel(AAxis: TTyAxis; AValue: Double;
+  AHasFormatter: Boolean; const AFormatter: string): string;
+begin
+  if AAxis.Scale is TTyOrdinalScale then
+    Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
+  else
+    Result := TyScaleValueLabel(AAxis.Scale, AValue, Default(TTyLabelPrecision));
+  { String.replace with a string pattern: the first occurrence, as written,
+    case and all. The label never carries a '$', so none of replace's '$'
+    patterns can fire. }
+  if AHasFormatter then
+    Result := StringReplace(AFormatter, '{value}', Result, []);
+end;
+
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean): TTyAxisFurniture;
 var
@@ -1142,6 +1182,7 @@ begin
     SubNumIn(ANode, 'minorTick', 'length', NaN);
   Result.LabelMarginLogical := SubNumIn(ANode, 'axisLabel', 'margin', NaN);
   Result.LabelRotateDeg := SubNumIn(ANode, 'axisLabel', 'rotate', 0);
+  Result.HasLabelFormatter := LabelFormatterIn(ANode, Result.LabelFormatter);
   Result.OffsetLogical := 0;
   if ANode <> nil then
   begin
@@ -1797,14 +1838,13 @@ var
           axis read `12 13 14 Feb 2 3` rather than as six equal numbers. }
         ASpec.LabelEmphasis[kept] := ticks[q].TimeLevel >= 1;
       end
-      else if AAxis.Scale is TTyOrdinalScale then
-        ASpec.Labels[kept] := TTyOrdinalScale(AAxis.Scale).GetLabel(ticks[q].Value)
       else
-        { NumText, not FloatToStr: the paint pass formats the same tick with a
-          forced '.' separator, and FloatToStr follows the machine's locale --
-          on a comma-decimal machine the width measured here is not the width of
-          the string that gets drawn. }
-        ASpec.Labels[kept] := NumText(ticks[q].Value);
+        { UPSTREAM'S getLabel, grouped and to the tick's own decimals --
+          '1,400,000', '0.0000001', '1e+21' -- and the one routine the paint
+          pass calls too, so the width measured here is the width of the string
+          drawn. Locale-free: no FormatFloat anywhere on the way. }
+        ASpec.Labels[kept] := TyAxisTickLabel(AAxis, ticks[q].Value,
+          AFurn.HasLabelFormatter, AFurn.LabelFormatter);
       { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
         renderer cannot disagree about where a label goes. }
       { Broken to the width the option asked for, through the measurer: this

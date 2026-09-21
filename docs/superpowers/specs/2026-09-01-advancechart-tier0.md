@@ -5287,6 +5287,7 @@ nice 照样给出 [0, 1] 和上面的刻度,oracle 比的也是它们。以前�
 
 - 刻度**标签**的格式(getPrecision / toFixed / addCommas)还是旧的,下一小批。axisPointer 的标签精度一起:
   上游 `precision: 'auto'` 用步长的小数位加 2(37.25),这里用步长自己的(37),log 轴上显示成 4 而不是 3.72。
+  **[第三十四批已修,见 §68。]**
 - **非整数次幂**走 FPC 的 `Power`,和 V8 的 `Math.pow` 末位不同:log 轴写了小数 `interval`(0.5 → 3.1622776601683795)、
   底数不是 10 或 2。标签看不出来。
 - **containShape 没做**:柱子放在数值或时间**基轴**上时,上游把平的 0 张成 [-1, 1],还把 mapping 范围放宽半个带宽,
@@ -5344,3 +5345,113 @@ nice 照样给出 [0, 1] 和上面的刻度,oracle 比的也是它们。以前�
 
 刻度标签的格式(连同 axisPointer 的精度)→ grid 的外边界收缩 → containShape → roam(连同补偿缩放和非等比视图)→
 `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达指示器和 `alignTicks`)。
+
+## 68. Tier 1 第三十四批:数值轴上的文字(2026-09-22)
+
+上一批让刻度的**值**和上游逐位相同,这一批让它们的**文字**也相同:刻度标签、`axisLabel.formatter` 模板、axisPointer 标签、axis tooltip 的表头。
+
+### 上游只有一个函数
+
+数值轴和 log 轴上凡是数字变成字,都走 `IntervalScale.getLabel(tick, opt)`:
+
+1. 精度:没给就是这个值自己的 `getPrecision`;`'auto'` 是 scale 的 intervalPrecision(步长的小数位加 2);给了数就用它。
+2. `round(value, 精度, true)`:精度钳在 0 到 20,再 toFixed,拿到的是**字符串**。精度不是数时,直接是值的 ToString。
+3. `addCommas`:只给第一个小数点前面的数字串分组。
+
+刻度标签不带 opt,每个刻度用自己的精度;pointer 标签和表头带 `label.precision`,默认 `'auto'`,所以步长为 1 的轴上 pointer 读 "3.00"。
+log 轴的 `getLabel` 转给它的 intervalStub:数值是幂,`'auto'` 是十年步长的精度,也就是 2。
+
+port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多六位小数(1e-7 印成 0)、大约十五位有效数字、1e18 以上印成 `1E18`。
+上一批 fixture 里 16933 个刻度有 12229 个文字和上游不同。pointer 用的是"步长自己的小数位、不补零",37.246964 显示 37,上游是 37.25。
+
+### 三个精确的 JS 数字转文字
+
+全部在 `tyControls.AdvChart.Scale`,不经过 FPC 的 `Str`、`Val` 或 `FormatFloat`:
+
+- `TyJsNumberToString`:ECMAScript 的 `Number::toString`。对 k = 1..17,取夹住 x 的两个 k 位十进制,
+  用整数判断能不能读回 x——x 两边各半个间距,binade 底部下侧是四分之一,边界上只有尾数为偶时读回;
+  最短的 k 胜出,同一个 k 两个都读得回时取更近的,平局取偶。排版按规范:1e-7 到 1e21 之间是位置记法,外面是 `1.5e-7`、`1e+21`。
+  变长大整数实现。
+  **只看更近的那一个是错的**:binade 底部读回区间不对称,更近的候选可能落在窄的下半边读不回,稍远的上侧候选却读得回。
+  2^-1015 上游是 `7.120236347223045e-307`,只看更近者会得到 17 位。第一版就这么写,20 万个随机向量没抓到,
+  是变异体活下来之后专门拿全部 2 的幂去探才暴露的,一共 46 个。
+- `TyJsToFixedStr`:toFixed 的字符串。数字取自上一批的精确 n;负号取自 x < 0,所以 -0.001 保留两位是 "-0.00",-0 是 "0.00";
+  1e21 以上交给 ToString。
+- `TyJsAddCommas`:照上游正则的效果,只处理第一个 '.' 之前、只处理连续数字,所以 '1e+21'、'NaN' 原样通过。
+
+`getPrecision` 的字符串分支(负数、1e-14 以下)改用 `TyJsNumberToString`。它以前用 Str/Val,60011 个随机 Double 里有 28 个和上游不同。
+
+四个函数和 node 比了 200104 个向量(随机位模式、各种量级、专挑的半数、边界值),ToString 另外比了全部 2 的幂和它们的邻居(6280 个),零差异。
+
+### 刻度标签和模板
+
+- `TyAxisTickLabel`:类目轴取类目文字,数值和 log 轴取 `getLabel`(不带 opt);`axisLabel.formatter` 是字符串时,把**第一个** `{value}` 换成它。
+  这和上游 `makeLabelFormatter` 的字符串分支一样,不分轴的类型;时间轴另有自己的一套。`''` 也是字符串,所有标签变空。
+- 布局量的和画出来的是同一个字符串:只有 Builder 生成标签规格时调用它。绘制那边原来还有一条"没有 placements 时自己排版"的兜底路径,
+  带着自己的一份数字格式。它其实走不到——每根 grid 轴都有规格,placements 和标签一一对应——变异测试里改它什么都不会红。删了,
+  Layout 里说"没有 plot rect 时 placements 为空"的那句注释与代码不符,一并改正。
+- 分组让标签变宽,四位数以上的轴 gutter 会跟着变。
+
+### axisPointer 标签和表头
+
+- `label.precision` 进了级联:数、`'auto'`、Number() 读得懂的字符串('3'、'' 是 0)、true/false 是 1/0,读不懂的('abc'、对象)印 ToString。
+  **没写**就是 `'auto'`——这由 `HasPrecision` 表示,记录的零值就是默认值。
+- 级联里的 null 不再认领这个键。上游只在某层的值是 null 或没写时才落到下一层;以前轴上写 `formatter: null` 会挡住 tooltip 那层的 formatter。
+- 表头和 pointer 标签是同一个函数(上游的 `getValueLabel`),formatter 和精度都作用在表头上;被 formatter 弄成空白的表头就是没有表头。
+- pointer 自己的值:开 snap 时是吸附到的那一行,关了就是光标处。以前线画在光标处、标签却写吸附行的值。
+  值先按上游的 `fixValue` 夹进 scale 的范围,线和标签都用夹过的值:写了 max 100 时,一行 150 的数据让 pointer 停在 100。表头不夹,它总是描述吸附行。
+- 数值超过约 9.2e18 时,原来的 `RoundTo` 会在绘制里抛 EInvalidOp。现在没有这条路了。
+
+### 基准
+
+`tools/advchart-oracle/axis-labels.js`,四节,数值用 IEEE 位模式传(JSON 读取端会把超过 2^63 的整数字面量读错):
+
+- ticks 37 条:`getViewLabels()` 的 formattedLabel,正负、小数、钉住的端点、1e-7 步长、1e20 到 1e27、log(含底数 2、1e-7..1)、x 数值轴、六种模板。
+- getLabel 88 条:在真实 scale 上按各种精度调用。
+- pointer 22 条:画出来的 pointer 标签(同一个 option 有没有 pointer 两次渲染,取文字元素的差集)。
+- header 11 条:node 下 tooltip 不渲染,oracle 临时改掉 `env.node` 和 `getDom`,从 formatter 参数的 `axisValueLabel` 拿表头,再用 showtip 事件核对值。
+
+比对一共 470 多项,全部相同;把机器的小数点改成逗号、千分位改成句点再跑一遍,也全部相同。表头走真实的悬停路径,不是抄一遍公式。
+
+另有单元测试:`TyJsNumberToString(1e23)` 是 '1e+23'(最接近 1e23 的 Double 比它小,一位数进位成十,是下一位的一,不是两位的 '10');
+精度 1e300 和 -1e300 必须先夹再截断,否则 `Trunc` 溢出;NaN 和 Infinity 的标签;类目轴也吃模板。
+
+### 被推翻的旧话
+
+- `TestThePointerLabelRoundsToTheScalesPrecision` 钉的是 '37' 和 '1,234'。上游是 '37.25' 和 '1,234.40'。已改,原处有标注。
+- `AdvanceChart.pas` 和 `Tooltip.pas` 的注释说上游刻度标签不分组,和 pointer 标签是两条路。不对:两者都是 `getLabel`,都分组。注释已改。
+
+### 已知偏差
+
+- 函数形式的 formatter(`axisLabel.formatter`、`axisPointer.label.formatter`)不做:option 文本里写不出函数,port 这边要走 `@Name` 事件,参数另设计。
+- `axisLabel.customValues` 不做:它决定标在哪些值上,文字照样走这里。
+- 系列标签的 `{c}`、tooltip 里系列那几行的值:上游是 `addCommas(ToString(值))`,这里还是 `TyChartNumToStr`/`TyTooltipValueText`。下一小批。
+- 雷达环上的标签:上游分组,但环上的值要先按上游方式取整(scaleCalcAlign),不然全精度标签会印出浮点噪声。和雷达对齐一起做。
+- 值的偏差照样会反映到文字上:log 轴的分数次幂(FPC Power 末位不同)。
+
+### 落地
+
+- `source/tyControls.AdvChart.Scale.pas`:`TyJsNumberToString`、`TyJsToFixedStr`、`TyJsAddCommas`、`TTyLabelPrecision`、`TyScaleValueLabel`;
+  `getPrecision` 的字符串分支;`FixedDigits` 由两个 toFixed 共用。
+- `source/tyControls.AdvChart.Builder.pas`:`TyAxisTickLabel`,`TTyAxisFurniture.LabelFormatter`。
+- `source/tyControls.AdvChart.AxisPointer.pas`:`label.precision`、`TyLabelPrecisionOf`,`Claim` 不认 null。
+- `source/tyControls.AdvanceChart.pas`:`AxisValueText`(规格驱动)、`PointerAt`、`PointerValue`,表头,兜底路径。
+- `tools/advchart-oracle/axis-labels.js`、`tests/fixtures/advchart-axis-labels.json`、`tests/test.advchart.labeltext.pas`(新)。
+
+### 变异测试
+
+两轮。
+
+**第一轮 47 个,活 7 个:**
+
+- **ToString 的三条边界规则**(下界相等时读回、binade 底收窄、平局取偶)。追查它们时发现上面那个真 bug:只看更近的候选。
+  改成两侧都问之后,这三条连同"只问下侧""只问上侧""两个都行时取下侧"在 2 的幂和 20 万向量上各自错几十到几万个,挑代表写成单元断言。
+- **精度是个词('abc')时照样取整**:在位置记法范围里,`toFixed(x, getPrecision(x))` 和 ToString 恰好一样;只有指数形式分得开。补了 1e-7 的断言。
+- **无穷大的刻度自己算精度**:`getPrecision(Infinity)` 不抛异常,toFixed 又把 Infinity 交给 ToString,那道保护多余,删了。
+- **绘制兜底路径的两个**:整条路径走不到,删了(见上)。
+
+**第二轮 46 个**:第一轮被杀的按新代码重跑,加上两侧候选的新变异,全部杀死。全量 **7714** 绿。
+
+### 还在队列里
+
+系列标签与 tooltip 值的文字 → grid 的外边界收缩 → containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达与 `alignTicks`)。

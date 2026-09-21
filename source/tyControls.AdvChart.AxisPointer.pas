@@ -40,7 +40,8 @@ interface
 uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Color;
+  tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
+  tyControls.AdvChart.Scale;
 
 type
   { `'cross'` is here because the OPTION can say it; no shape ever does. }
@@ -57,6 +58,12 @@ type
     ShowWritten: Boolean;
     Formatter: string;
     HasFormatter: Boolean;
+    { `label.precision` as written. NOT written is 'auto' -- the scale's own
+      interval precision, so a pointer on an axis stepping by one reads 3.00
+      -- and it is this flag, not a zero Precision, that says so: the zero
+      value of the record then means the default. }
+    HasPrecision: Boolean;
+    Precision: TTyLabelPrecision;
     MarginLogical: Double;
     HasColour: Boolean;
     Colour: TTyChartColor;
@@ -110,6 +117,12 @@ function TyAxisPointerSpecOf(AOption: TTyChartOption;
   const AAxisMainType: string; AAxisIndex: Integer; AAxisIsCategory: Boolean;
   AFromTooltip, ATriggerTooltip, ACross: Boolean): TTyAxisPointerSpec;
 
+{ `label.precision` the way upstream's round reads it: 'auto'; a number; a
+  string Number() reads ('3' is three, '' is nought); true and false as one
+  and nought. What Number() cannot read -- 'abc', an object -- prints the
+  value's own ToString. }
+function TyLabelPrecisionOf(AData: TJSONData): TTyLabelPrecision;
+
 { The type the TOOLTIP asked for, read on its own -- which is how a caller
   learns it said 'cross' before that word is rewritten away per axis. }
 function TyTooltipAxisPointerType(AOption: TTyChartOption): TTyAxisPointerType;
@@ -146,6 +159,36 @@ end;
 procedure ReadLabel(ANode: TJSONObject; var ASpec: TTyAxisPointerLabelSpec;
   var ASeen: TTyStringArray); forward;
 
+function TyLabelPrecisionOf(AData: TJSONData): TTyLabelPrecision;
+var s: string; v: Double; code: Integer;
+begin
+  Result := TyLabelPrecision(lpNotANumber);
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := TyLabelPrecision(lpDigits, AData.AsFloat);
+    jtBoolean:
+      if AData.AsBoolean then Result := TyLabelPrecision(lpDigits, 1)
+      else Result := TyLabelPrecision(lpDigits, 0);
+    jtString:
+      begin
+        s := Trim(AData.AsString);
+        if AData.AsString = 'auto' then Result := TyLabelPrecision(lpAuto)
+        else if s = '' then Result := TyLabelPrecision(lpDigits, 0)
+        else
+        begin
+          Val(s, v, code);
+          if code = 0 then Result := TyLabelPrecision(lpDigits, v);
+        end;
+      end;
+    jtArray:
+      { Number([]) is nought, Number([3]) three, anything longer NaN. }
+      if TJSONArray(AData).Count = 0 then Result := TyLabelPrecision(lpDigits, 0)
+      else if (TJSONArray(AData).Count = 1)
+        and (TJSONArray(AData).Items[0].JSONType = jtNumber) then
+        Result := TyLabelPrecision(lpDigits, TJSONArray(AData).Items[0].AsFloat);
+  end;
+end;
+
 { First level to mention a key wins it -- which is what upstream's per-leaf
   null-only fallback comes to when the levels are visited innermost first. }
 function Claim(ANode: TJSONObject; const AKey: string;
@@ -161,7 +204,10 @@ begin
   if ANode = nil then Exit;
   for i := 0 to High(ASeen) do
     if ASeen[i] = APrefix + AKey then Exit;
-  if ANode.Find(AKey) = nil then Exit;
+  { A NULL IS NOT A VALUE. Upstream falls back per leaf only when a level's
+    value is null or absent, so `formatter: null` on the axis lets the
+    tooltip's formatter through; claiming it here blocked every level below. }
+  if (ANode.Find(AKey) = nil) or (ANode.Find(AKey).JSONType = jtNull) then Exit;
   SetLength(ASeen, Length(ASeen) + 1);
   ASeen[High(ASeen)] := APrefix + AKey;
   Result := True;
@@ -199,6 +245,12 @@ begin
       ASpec.Formatter := d.AsString;
       ASpec.HasFormatter := True;
     end;
+  end;
+  if Claim(lbl, 'precision', ASeen, 'label.') then
+  begin
+    d := lbl.Find('precision');
+    ASpec.HasPrecision := True;
+    ASpec.Precision := TyLabelPrecisionOf(d);
   end;
   if Claim(lbl, 'margin', ASeen, 'label.') then
   begin

@@ -543,11 +543,22 @@ type
       survived the filters. }
     function AxisTooltipContent(const AHits: TTyAxisHitArray;
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
-    { How a value reads on an axis: the category, the time label, or the
-      number. AGrouped adds thousands separators, which the POINTER label does
-      and a tick label does not. }
+    { How a value reads under an axis pointer or at the head of its tooltip:
+      upstream's getValueLabel -- the category, the time label, or the number
+      as IntervalScale.getLabel prints it to the label's precision ('auto'
+      unless written: the step's decimals plus two, padded, so 3.00), with
+      the label's string formatter over it. }
     function AxisValueText(AAxis: TTyAxis; AValue: Double;
-      AGrouped: Boolean): string;
+      const ALabel: TTyAxisPointerLabelSpec): string;
+    { Where a pointer stands for AValue: inside the scale's extent, which
+      upstream's fixValue clamps it to before the line or the label is drawn
+      -- a row past a written max puts the pointer on the max. An interval
+      scale only; a category pointer is always on a category. }
+    function PointerAt(AAxis: TTyAxis; AValue: Double): Double;
+    { The value a pointer stands at, line and label alike: the snapped row
+      with snap on, the cursor with it off, clamped by PointerAt. The tooltip
+      header is not this -- it always describes the snapped row. }
+    function PointerValue(const AHit: TTyAxisHit): Double;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -1121,7 +1132,6 @@ var
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
   lblStyle, primaryS: TTyStyleSet;
-  tt: TTyTimeTick;
   minorTickS, minorSplitS, nameS: TTyStyleSet;
   ticks: TTyDoubleArray;
   i: Integer;
@@ -1129,7 +1139,6 @@ var
   nameOff, nx, ny, nameAngle: Double;
   maxW, batched: Integer;
   horiz: Boolean;
-  txt: string;
   lblH, lblW, step, tickStep: Integer;
   scaleTicks: TTyScaleTickArray;
   spec: PTyAxisLayoutSpec;
@@ -1639,46 +1648,12 @@ begin
     Exit;
   end;
 
-  { A CATEGORY axis labels its categories; a VALUE axis labels its tick values.
-    Handling only the first leaves a value axis with ticks and no numbers -- and
-    a pixel count cannot see that, because the ticks and grid lines are hundreds
-    of pixels on their own. It took a render on a real machine to notice. }
-  TextSizeOf('Wg', labelS, lblW, lblH);
-  scaleTicks := TyDrawnTicks(AAxis.Scale);
-  for i := 0 to High(scaleTicks) do
-  begin
-    if AAxis.Scale is TTyOrdinalScale then
-      txt := TTyOrdinalScale(AAxis.Scale).GetLabel(scaleTicks[i].Value)
-    else if AAxis.Scale is TTyTimeScale then
-    begin
-      if scaleTicks[i].NotNice then Continue;
-      tt.Value := scaleTicks[i].Value;
-      tt.Unit_ := scaleTicks[i].TimeUnit;
-      tt.Level := scaleTicks[i].TimeLevel;
-      tt.NotNice := False;
-      txt := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
-    end
-    else
-      txt := TyChartNumToStr(scaleTicks[i].Value);
-    if txt = '' then Continue;
-    along := AAxis.DataToCoord(scaleTicks[i].Value);
-    TextSizeOf(txt, labelS, lblW, lblH);
-    { A label belongs to its band, so it is CENTRED on the band's anchor while
-      the tick above sits on the band's edge. Those are different places by
-      design and the gap between them is what boundaryGap means. }
-    if horiz then
-      APainter.DrawText(
-        Rect(Round(along - lblW), Round(at + tickLen + 2),
-             Round(along + lblW), Round(at + tickLen + 2 + lblH)),
-        txt, labelS.FontName, ResolveFontSize(labelS), labelS.FontWeight,
-        labelS.TextColor, taCenter, tlTop, False)
-    else
-      APainter.DrawText(
-        Rect(Round(at - tickLen - 2 - lblW), Round(along - lblH / 2),
-             Round(at - tickLen - 2), Round(along + lblH / 2)),
-        txt, labelS.FontName, ResolveFontSize(labelS), labelS.FontWeight,
-        labelS.TextColor, taRightJustify, tlCenter, False);
-  end;
+  { NO PLACEMENTS, NO LABELS. There used to be a second route here that
+    formatted and positioned the ticks itself, for an axis laid out without a
+    spec. None reaches it -- every grid axis gets a spec, and the placements
+    are one per label -- so all it ever did was keep its own copy of the
+    number format in step with the builder's, which it did not. The builder
+    is the one place a label's text comes from. }
 end;
 
 procedure TTyAdvanceChart.RenderTo(ACanvas: TCanvas; const ARect: TRect;
@@ -4083,57 +4058,52 @@ begin
     inlineName, False, valueText, not haveValue));
 end;
 
-{ How many decimals an interval is worth -- 10 gives 0, 0.5 gives 1, 0.025
-  gives 3. Capped at six, which is where TyChartNumToStr stops anyway, and
-  answers 0 for anything not finite so a degenerate scale rounds to whole
-  numbers rather than raising. }
-function IntervalDecimals(AInterval: Double): Integer;
-var v: Double;
+function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
+var ext: TTyRange;
 begin
-  Result := 0;
-  v := Abs(AInterval);
-  if IsNan(v) or IsInfinite(v) or (v <= 0) then Exit;
-  while (v < 1) and (Result < 6) do
-  begin
-    v := v * 10;
-    Inc(Result);
-  end;
+  Result := AValue;
+  if (AAxis = nil) or IsNan(AValue) then Exit;
+  if not (AAxis.Scale is TTyIntervalScale) then Exit;
+  ext := AAxis.Scale.GetExtent;
+  if Result > ext.Stop then Result := ext.Stop;
+  if Result < ext.Start then Result := ext.Start;
+end;
+
+function TTyAdvanceChart.PointerValue(const AHit: TTyAxisHit): Double;
+begin
+  if AHit.Spec.Snap then Result := AHit.SnapValue else Result := AHit.Value;
+  Result := PointerAt(AHit.Axis, Result);
 end;
 
 function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
-  AGrouped: Boolean): string;
+  const ALabel: TTyAxisPointerLabelSpec): string;
 var tt: TTyTimeTick;
 begin
   Result := '';
   if AAxis = nil then Exit;
   if AAxis.Scale is TTyOrdinalScale then
-    Exit(TTyOrdinalScale(AAxis.Scale).GetLabel(AValue));
-  if AAxis.Scale is TTyTimeScale then
+    Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
+  else if AAxis.Scale is TTyTimeScale then
   begin
     tt.Value := AValue;
     tt.Unit_ := TyTimeUnitOf(AValue, TTyTimeScale(AAxis.Scale).UTC);
     tt.Level := 0;
     tt.NotNice := False;
-    Exit(TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC));
-  end;
-  { GROUPED FOR THE POINTER, plain for a tick. Upstream runs the pointer
-    label's number through addCommas and an axis tick label through a
-    different path that does not -- so `1,234.5` under the pointer and `1234.5`
-    on the axis is parity, not an inconsistency to tidy up. }
-  { PRECISION FIRST. `label.precision` defaults to 'auto', which does NOT mean
-    "however many digits the number happens to have" -- it means the SCALE's
-    own interval precision, so an axis ticking in tens labels its pointer 37
-    and one ticking in hundredths labels it 37.25. Without it a pointer dragged
-    along a value axis reads 37.246964, which is a true number and a useless
-    label.
-
-    A non-interval scale keeps every digit it has: neither an ordinal nor a
-    time axis has an interval in the first place. }
-  if AAxis.Scale is TTyIntervalScale then
-    AValue := RoundTo(AValue, -IntervalDecimals(
-      TTyIntervalScale(AAxis.Scale).Interval));
-  if AGrouped then Result := TyTooltipValueText(AValue)
-  else Result := TyChartNumToStr(AValue);
+    Result := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
+  end
+  else if ALabel.HasPrecision then
+    Result := TyScaleValueLabel(AAxis.Scale, AValue, ALabel.Precision)
+  else
+    { 'AUTO' IS NOT "every digit the number has": it is the scale's interval
+      precision -- the step's decimals plus two -- PADDED, as toFixed pads.
+      An axis stepping by twenty labels its pointer 37.25 and one stepping by
+      one 3.00. It was the step's own decimals, unpadded, and read 37 and 3. }
+    Result := TyScaleValueLabel(AAxis.Scale, AValue, TyLabelPrecision(lpAuto));
+  { FIRST OCCURRENCE ONLY, which is upstream's `.replace('{value}', text)` --
+    a plain string pattern, not a global one. An empty formatter was never
+    taken, as upstream ignores a falsy one. }
+  if ALabel.HasFormatter then
+    Result := StringReplace(ALabel.Formatter, '{value}', Result, []);
 end;
 
 function TTyAdvanceChart.NearestOnAxis(ASlot: Integer; AAxis: TTyAxis;
@@ -4474,7 +4444,7 @@ var
   i: Integer;
   lineS, shadowS, labelS: TTyStyleSet;
   hit: TTyAxisHit;
-  at, lo, hi, w: Double;
+  at, lo, hi, w, pv: Double;
   colour: TTyColor;
   band: TTyRectF;
   dash: TTyDoubleArray;
@@ -4496,8 +4466,12 @@ begin
     { SNAP MOVES THE POINTER, not the content. With snap off the line stays
       under the cursor while the tooltip still describes the nearest row --
       upstream splits them at exactly this branch. }
-    if hit.Spec.Snap then at := hit.Axis.DataToCoord(hit.SnapValue)
-    else at := hit.Axis.DataToCoord(hit.Value);
+    { THE POINTER'S OWN VALUE: the snapped row with snap on, the cursor with
+      it off -- and inside the scale's extent, which upstream's fixValue
+      clamps it to before drawing the line or writing the label. A row past
+      a written max puts the pointer on the max, not off the plot. }
+    pv := PointerValue(hit);
+    at := hit.Axis.DataToCoord(pv);
     if IsNan(at) then Continue;
 
     case hit.Spec.PointerType of
@@ -4567,11 +4541,9 @@ begin
     { ---- the label ---- }
     if not hit.Spec.LabelSpec.Show then Continue;
     if not (tpBackground in labelS.Present) then Continue;
-    txt := AxisValueText(hit.Axis, hit.SnapValue, True);
-    if hit.Spec.LabelSpec.HasFormatter then
-      { FIRST OCCURRENCE ONLY, which is upstream's `.replace('{value}', text)`
-        -- a plain string pattern, not a global one. }
-      txt := StringReplace(hit.Spec.LabelSpec.Formatter, '{value}', txt, []);
+    { The value the line is at -- the cursor's with snap off, where it used to
+      be the nearest row's while the line stood under the cursor. }
+    txt := AxisValueText(hit.Axis, pv, hit.Spec.LabelSpec);
     if txt = '' then Continue;
     AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
       labelS.FontWeight, tw, th);
@@ -4710,7 +4682,12 @@ begin
       its triggerTooltip to false, which is why a cross shows one tooltip and
       not two. }
     if AHits[i].Cross then Continue;
-    header := AxisValueText(AHits[i].Axis, AHits[i].SnapValue, True);
+    { THE SAME ROUTINE AS THE POINTER'S LABEL, formatter and precision and
+      all -- upstream's header is getValueLabel with the pointer's label
+      options -- at the snapped row, which the tooltip always describes. A
+      header left blank by the formatter is no header. }
+    header := AxisValueText(AHits[i].Axis, AHits[i].SnapValue,
+      AHits[i].Spec.LabelSpec);
     section := TTyTooltipBlock.CreateSection(header, False);
     for k := 0 to High(AHits[i].Slots) do
     begin

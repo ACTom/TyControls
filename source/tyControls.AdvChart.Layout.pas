@@ -241,9 +241,8 @@ type
       measurements a frame at 5,000 categories, to choose the twenty that get
       drawn.
 
-      LabelStep is 1 when nothing is thinned. Placements is empty when the axis
-      was laid out without a plot rect to place into, and the renderer falls
-      back to its own arithmetic then. }
+      LabelStep is 1 when nothing is thinned. Placements holds one entry per
+      label, shown or not; the renderer draws labels from nowhere else. }
     LabelStep: Integer;
     Placements: TTyAxisLabelPlacementArray;
     { WHAT THIS AXIS ACTUALLY DRAWS, resolved by the builder from the option

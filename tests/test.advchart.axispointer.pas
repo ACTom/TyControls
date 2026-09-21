@@ -20,7 +20,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Color, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
-     tyControls.AdvanceChart;
+     tyControls.AdvChart.Scale, tyControls.AdvanceChart;
 type
   TAdvChartAxisPointerRuleTest = class(TTestCase)
   private
@@ -49,6 +49,11 @@ type
     function AxisContent(const AHits: TTyAxisHitArray;
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     function ValueText(AAxis: TTyAxis; AValue: Double): string;
+    { What the pointer's label reads for AValue under ALabel: clamped into the
+      extent as the paint clamps it, then formatted as the paint formats it. }
+    function PointerText(AAxis: TTyAxis; AValue: Double;
+      const ALabel: TTyAxisPointerLabelSpec): string;
+    function PointerValueOf(const AHit: TTyAxisHit): Double;
   end;
 
   TAdvChartAxisTriggerTest = class(TTestCase)
@@ -73,6 +78,7 @@ type
     procedure TestShowContentFalseKeepsThePointerAndDropsTheBox;
     procedure TestAModelChangeTakesThePointerAway;
     procedure TestThePointerLabelRoundsToTheScalesPrecision;
+    procedure TestWithSnapOffTheLabelReadsTheCursor;
     procedure TestOrderReordersTheRowsWithinTheSection;
     procedure TestACrossPutsAPointerOnBothAxes;
     procedure TestACrossDrawsEvenWithoutAnAxisTrigger;
@@ -311,9 +317,21 @@ begin
   Result := AxisTooltipContent(AHits, ASpec);
 end;
 
+function TAxisProbe.PointerValueOf(const AHit: TTyAxisHit): Double;
+begin
+  Result := PointerValue(AHit);
+end;
+
+function TAxisProbe.PointerText(AAxis: TTyAxis; AValue: Double;
+  const ALabel: TTyAxisPointerLabelSpec): string;
+begin
+  Result := AxisValueText(AAxis, PointerAt(AAxis, AValue), ALabel);
+end;
+
 function TAxisProbe.ValueText(AAxis: TTyAxis; AValue: Double): string;
 begin
-  Result := AxisValueText(AAxis, AValue, True);
+  { the default label: 'auto' precision, no formatter }
+  Result := AxisValueText(AAxis, AValue, Default(TTyAxisPointerLabelSpec));
 end;
 
 procedure TAdvChartAxisTriggerTest.SetUp;
@@ -657,16 +675,69 @@ procedure TAdvChartAxisTriggerTest.TestThePointerLabelRoundsToTheScalesPrecision
 var g: TTyGridBuild;
 begin
   { `precision: 'auto'` IS THE SCALE'S INTERVAL PRECISION, not "every digit the
-    number happens to have". An axis ticking in twenties labels its pointer 37;
-    without the rounding it labels it 37.246964, which is true and useless. }
+    number happens to have" -- without it the label is 37.246964, which is true
+    and useless.
+    [Revised in batch 34: this pinned 37 and 1,234, the step's OWN decimals
+    unpadded. Upstream's interval precision is the step's decimals PLUS TWO,
+    and toFixed pads to it: 37.25 and 1,234.40, checked against node.] }
   Draw('{"tooltip":{"trigger":"axis"},' +
        '"xAxis":{"type":"value","min":0,"max":100},' +
        '"yAxis":{"type":"value","min":0,"max":100},' +
        '"series":[{"type":"line","name":"S","data":[[10,20],[50,60]]}]}');
   g := FChart.Build.Grid(0);
-  AssertEquals('37', FChart.ValueText(g.YAxis(0), 37.246964));
-  AssertEquals('and the grouping survives it', '1,234',
+  AssertEquals('37.25', FChart.ValueText(g.YAxis(0), 37.246964));
+  AssertEquals('padded, and the grouping survives it', '1,234.40',
                FChart.ValueText(g.YAxis(0), 1234.4));
+end;
+
+procedure TAdvChartAxisTriggerTest.TestWithSnapOffTheLabelReadsTheCursor;
+const
+  cOpt = '{"tooltip":{"trigger":"axis"},' +
+    '"xAxis":{"type":"value","min":0,"max":100,' +
+    '"axisPointer":{"snap":%s,"label":{"show":true}}},' +
+    '"yAxis":{"type":"value"},' +
+    '"series":[{"type":"scatter","name":"S","data":[[10,20],[50,60]]}]}';
+var
+  hits: TTyAxisHitArray;
+  g: TTyGridBuild;
+  x, y, i, k: Integer;
+  pv: Double;
+begin
+  { THE LABEL NAMES WHERE THE LINE IS. With snap off the line stays under the
+    cursor, and upstream's label reads the pointer's own value there -- 46.67
+    at a cursor near 46.7 -- where this used to print the nearest row's, 50,
+    beside a line that was not at 50. The tooltip still describes the row. }
+  Draw(Format(cOpt, ['false']));
+  g := FChart.Build.Grid(0);
+  x := Round(g.XAxis(0).DataToCoord(46.7));
+  y := Round((g.PlotRect.Top + g.PlotRect.Bottom) / 2);
+  hits := FChart.Pointers(x, y);
+  k := -1;
+  for i := 0 to High(hits) do
+    if hits[i].Axis = g.XAxis(0) then k := i;
+  AssertTrue('the x axis is pointed at', k >= 0);
+  AssertFalse('snap is off', hits[k].Spec.Snap);
+  AssertEquals('the row the tooltip describes', 50, hits[k].SnapValue, 1e-9);
+  pv := FChart.PointerValueOf(hits[k]);
+  AssertTrue(Format('the pointer is at the cursor (%g), not the row', [pv]),
+    Abs(pv - 46.7) < 0.5);
+  AssertEquals('and its label says so, to the step''s precision plus two',
+    TyScaleValueLabel(g.XAxis(0).Scale, pv, TyLabelPrecision(lpAuto)),
+    FChart.PointerText(hits[k].Axis, pv, hits[k].Spec.LabelSpec));
+  AssertFalse('which is not the row''s 50.00',
+    FChart.PointerText(hits[k].Axis, pv, hits[k].Spec.LabelSpec) = '50.00');
+
+  { snap on: the row, line and label both }
+  Draw(Format(cOpt, ['true']));
+  g := FChart.Build.Grid(0);
+  hits := FChart.Pointers(x, y);
+  k := -1;
+  for i := 0 to High(hits) do
+    if hits[i].Axis = g.XAxis(0) then k := i;
+  AssertTrue('the x axis is pointed at', k >= 0);
+  AssertEquals('snapped to the row', 50, FChart.PointerValueOf(hits[k]), 1e-9);
+  AssertEquals('50.00', FChart.PointerText(hits[k].Axis,
+    FChart.PointerValueOf(hits[k]), hits[k].Spec.LabelSpec));
 end;
 
 procedure TAdvChartAxisTriggerTest.TestOrderReordersTheRowsWithinTheSection;

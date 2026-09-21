@@ -432,6 +432,44 @@ function TyValidSplitNumber(ARaw: Double; ADefault: Integer): Integer;
   a blank scale, as upstream's does. }
 function TyDrawnTicks(AScale: TTyScale): TTyScaleTickArray;
 
+{ ---- upstream's text for a number ---- }
+
+{ Number::toString(10): the SHORTEST digits that read back as AValue, laid
+  out as JavaScript lays them out -- positionally from 1e-7 up to 1e21,
+  '1.5e-7' and '1e+21' outside that. 'NaN', 'Infinity', and '0' for either
+  zero. Exact: digits are found and checked with integer arithmetic, never
+  through FPC's Str or Val. }
+function TyJsNumberToString(AValue: Double): string;
+{ (x).toFixed(p) as the STRING it returns. p is clamped to 0..20, as
+  upstream's round clamps it; the sign comes from x < 0, so -0.001 to two
+  places is '-0.00' and -0 is '0.00'; and from 1e21 up it is ToString. }
+function TyJsToFixedStr(AValue: Double; APrecision: Integer): string;
+{ addCommas: the integer part's digits grouped in threes -- only the part
+  before the first '.', and only runs of digits, so '1e+21', '-0.00' and
+  'NaN' come through as they are. }
+function TyJsAddCommas(const AText: string): string;
+
+type
+  { How a label's precision was written. lpNone: the value's own decimals,
+    as every tick label gets. lpAuto: the scale's interval precision, which is
+    the pointer's default. lpDigits: a number, clamped to 0..20 and truncated
+    where it is used (upstream's round, then toFixed). lpNotANumber: something
+    Number() cannot read, which makes upstream print the value's ToString.
+    The zero value is lpNone, a tick label's precision. }
+  TTyLabelPrecisionKind = (lpNone, lpAuto, lpDigits, lpNotANumber);
+  TTyLabelPrecision = record
+    Kind: TTyLabelPrecisionKind;
+    Digits: Double;
+  end;
+
+function TyLabelPrecision(AKind: TTyLabelPrecisionKind;
+  ADigits: Double = 0): TTyLabelPrecision;
+{ IntervalScale.getLabel: the value rounded to the precision asked for, as
+  toFixed prints it, grouped by addCommas. A log axis is labelled by the same
+  routine -- its 'auto' precision is the decade step's, which is two. }
+function TyScaleValueLabel(AScale: TTyScale; AValue: Double;
+  const APrecision: TTyLabelPrecision): string;
+
 implementation
 
 function TyJsRound(AValue: Double): Double;
@@ -1373,11 +1411,75 @@ begin
   Result := Ldexp(Double(mant), sh - s);
 end;
 
+{ x = m * 2^e for a finite, non-negative x: m under 2^53, e from -1074. }
+procedure SplitDouble(AValue: Double; out AMant: QWord; out AExp: Integer);
+var bits: QWord;
+begin
+  bits := 0;
+  Move(AValue, bits, SizeOf(bits));
+  AExp := Integer((bits shr 52) and $7FF);
+  AMant := bits and QWord($000FFFFFFFFFFFFF);
+  if AExp = 0 then AExp := -1074
+  else
+  begin
+    AMant := AMant or (QWord(1) shl 52);
+    AExp := AExp - 1075;
+  end;
+end;
+
+{ n = the integer nearest x * 10^p, a tie going up, exactly, for x from 0 to
+  under 1e21. A fraction: (m*10^p + 2^(k-1)) shifted right by k. A whole
+  number: m shifted left by e, times 10^p -- under 2^70 times 10^20. }
+procedure FixedDigits(AAbs: Double; APrecision: Integer; out AN: TJsWide);
+var m: QWord; e, i: Integer;
+begin
+  SplitDouble(AAbs, m, e);
+  FillChar(AN, SizeOf(AN), 0);
+  AN[0] := LongWord(m and $FFFFFFFF);
+  AN[1] := LongWord(m shr 32);
+  if e >= 0 then
+  begin
+    for i := 1 to e do WideShl1(AN);
+    for i := 1 to APrecision do WideMulSmall(AN, 10);
+  end
+  else
+  begin
+    for i := 1 to APrecision do WideMulSmall(AN, 10);
+    WideAddBit(AN, -e - 1);
+    WideShr(AN, -e);
+  end;
+end;
+
+function WideIsZero(const AN: TJsWide): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(AN) do
+    if AN[i] <> 0 then Exit(False);
+  Result := True;
+end;
+
+{ The decimal digits, most significant first; '0' for zero. }
+function WideToDecimal(AN: TJsWide): string;
+var i: Integer; rem, t: QWord;
+begin
+  Result := '';
+  repeat
+    rem := 0;
+    for i := High(AN) downto 0 do
+    begin
+      t := (rem shl 32) or AN[i];
+      AN[i] := LongWord(t div 10);
+      rem := t mod 10;
+    end;
+    Result := Char(Ord('0') + rem) + Result;
+  until WideIsZero(AN);
+end;
+
 function TyJsToFixed(AValue: Double; APrecision: Integer): Double;
 var
   x: Double;
-  bits, m: QWord;
-  e, k, i: Integer;
+  m: QWord;
+  e, i: Integer;
   neg: Boolean;
   n, den: TJsWide;
 begin
@@ -1388,30 +1490,13 @@ begin
     the specification's order, and why a half goes away from zero. }
   neg := AValue < 0;
   x := Abs(AValue);
-  bits := 0;
-  Move(x, bits, SizeOf(bits));
-  e := Integer((bits shr 52) and $7FF);
-  m := bits and QWord($000FFFFFFFFFFFFF);
-  if e = 0 then e := -1074
-  else
-  begin
-    m := m or (QWord(1) shl 52);
-    e := e - 1075;
-  end;
-  { x = m * 2^e. With e at or above zero x is a whole number, and a whole
-    number is its own toFixed. That covers toFixed's own give-up too --
-    anything from 1e21 up comes back as the number itself -- which is why
-    there is no separate test for it: every Double that large is whole. }
+  SplitDouble(x, m, e);
+  { With e at or above zero x is a whole number, and a whole number is its
+    own toFixed. That covers toFixed's own give-up too -- anything from 1e21
+    up comes back as the number itself -- which is why there is no separate
+    test for it: every Double that large is whole. }
   if (e >= 0) or (m = 0) then Exit(AValue);
-  { n = the integer nearest x * 10^p, a tie going up: (m*10^p + 2^(k-1))
-    shifted right by k, exactly. m is under 2^53 and 10^20 under 2^67. }
-  k := -e;
-  FillChar(n, SizeOf(n), 0);
-  n[0] := LongWord(m and $FFFFFFFF);
-  n[1] := LongWord(m shr 32);
-  for i := 1 to APrecision do WideMulSmall(n, 10);
-  WideAddBit(n, k - 1);
-  WideShr(n, k);
+  FixedDigits(x, APrecision, n);
   { BACK TO A DOUBLE, correctly rounded, and never through FPC's Val, which
     is not: read that way, 22 of 276,712 answers came back a unit in the last
     place out. Under 2^53 both n and 10^p are exact Doubles and one IEEE
@@ -1428,6 +1513,341 @@ begin
     Result := WideDivToDouble(n, den);
   end;
   if neg then Result := -Result;
+end;
+
+function TyJsToFixedStr(AValue: Double; APrecision: Integer): string;
+var n: TJsWide;
+begin
+  if IsNan(AValue) then Exit('NaN');
+  if APrecision < 0 then APrecision := 0;
+  if APrecision > 20 then APrecision := 20;
+  { toFixed hands anything this large to ToString -- 'Infinity' included. }
+  if Abs(AValue) >= 1e21 then Exit(TyJsNumberToString(AValue));
+  FixedDigits(Abs(AValue), APrecision, n);
+  Result := WideToDecimal(n);
+  while Length(Result) <= APrecision do Result := '0' + Result;
+  if APrecision > 0 then
+    Insert('.', Result, Length(Result) - APrecision + 1);
+  { THE SIGN FROM x < 0, which -0 is not and -0.001 is, whatever the
+    digits came to. }
+  if AValue < 0 then Result := '-' + Result;
+end;
+
+{ ---- Number::toString, exactly ---- }
+
+type
+  { An unsigned integer of any size, least significant word first, no
+    leading zero words. For a Double's decimal digits: a denormal is a
+    thousand bits below one, and 10^17 more on top. }
+  TJsBig = array of LongWord;
+
+procedure BigTrim(var A: TJsBig);
+var n: Integer;
+begin
+  n := Length(A);
+  while (n > 0) and (A[n - 1] = 0) do Dec(n);
+  SetLength(A, n);
+end;
+
+function BigOf(AValue: QWord): TJsBig;
+begin
+  Result := nil;
+  SetLength(Result, 2);
+  Result[0] := LongWord(AValue and $FFFFFFFF);
+  Result[1] := LongWord(AValue shr 32);
+  BigTrim(Result);
+end;
+
+procedure BigMulSmall(var A: TJsBig; AFactor: LongWord);
+var i: Integer; t, carry: QWord;
+begin
+  carry := 0;
+  for i := 0 to High(A) do
+  begin
+    t := QWord(A[i]) * AFactor + carry;
+    A[i] := LongWord(t and $FFFFFFFF);
+    carry := t shr 32;
+  end;
+  if carry <> 0 then
+  begin
+    SetLength(A, Length(A) + 1);
+    A[High(A)] := LongWord(carry);
+  end;
+end;
+
+procedure BigMulPow10(var A: TJsBig; AExp: Integer);
+begin
+  while AExp >= 9 do
+  begin
+    BigMulSmall(A, 1000000000);
+    Dec(AExp, 9);
+  end;
+  while AExp > 0 do
+  begin
+    BigMulSmall(A, 10);
+    Dec(AExp);
+  end;
+end;
+
+procedure BigShl(var A: TJsBig; ACount: Integer);
+var w, b, i: Integer; r: TJsBig;
+begin
+  if (ACount <= 0) or (Length(A) = 0) then Exit;
+  w := ACount div 32;
+  b := ACount mod 32;
+  r := nil;
+  SetLength(r, Length(A) + w + 1);
+  for i := 0 to High(r) do r[i] := 0;
+  for i := 0 to High(A) do
+  begin
+    r[i + w] := r[i + w] or LongWord((QWord(A[i]) shl b) and $FFFFFFFF);
+    if b > 0 then r[i + w + 1] := LongWord(QWord(A[i]) shr (32 - b));
+  end;
+  BigTrim(r);
+  A := r;
+end;
+
+function BigCmp(const A, B: TJsBig): Integer;
+var i: Integer;
+begin
+  if Length(A) <> Length(B) then
+  begin
+    if Length(A) > Length(B) then Exit(1) else Exit(-1);
+  end;
+  for i := High(A) downto 0 do
+    if A[i] <> B[i] then
+    begin
+      if A[i] > B[i] then Exit(1) else Exit(-1);
+    end;
+  Result := 0;
+end;
+
+{ A := A - B, with A >= B. }
+procedure BigSub(var A: TJsBig; const B: TJsBig);
+var i: Integer; t, borrow: Int64;
+begin
+  borrow := 0;
+  for i := 0 to High(A) do
+  begin
+    t := Int64(A[i]) - borrow;
+    if i <= High(B) then t := t - Int64(B[i]);
+    if t < 0 then
+    begin
+      t := t + (Int64(1) shl 32);
+      borrow := 1;
+    end
+    else
+      borrow := 0;
+    A[i] := LongWord(t);
+  end;
+  BigTrim(A);
+end;
+
+function BigBitLen(const A: TJsBig): Integer;
+var top: LongWord;
+begin
+  if Length(A) = 0 then Exit(0);
+  Result := 32 * (Length(A) - 1);
+  top := A[High(A)];
+  while top <> 0 do
+  begin
+    Inc(Result);
+    top := top shr 1;
+  end;
+end;
+
+{ ANum div ADen for a quotient under 2^62; ANum is left holding the
+  remainder. }
+function BigDivSmall(var ANum: TJsBig; const ADen: TJsBig): QWord;
+var j: Integer; t: TJsBig;
+begin
+  Result := 0;
+  j := BigBitLen(ANum) - BigBitLen(ADen);
+  if j > 61 then j := 61;
+  while j >= 0 do
+  begin
+    t := Copy(ADen);
+    BigShl(t, j);
+    if BigCmp(t, ANum) <= 0 then
+    begin
+      BigSub(ANum, t);
+      Result := Result or (QWord(1) shl j);
+    end;
+    Dec(j);
+  end;
+end;
+
+{ Is m * 2^e at least 10^t? }
+function AtLeastPow10(AMant: QWord; AExp, ATen: Integer): Boolean;
+var a, b: TJsBig;
+begin
+  a := BigOf(AMant);
+  if AExp > 0 then BigShl(a, AExp);
+  if ATen < 0 then BigMulPow10(a, -ATen);
+  b := BigOf(1);
+  if AExp < 0 then BigShl(b, -AExp);
+  if ATen > 0 then BigMulPow10(b, ATen);
+  Result := BigCmp(a, b) >= 0;
+end;
+
+function TyJsNumberToString(AValue: Double): string;
+var
+  m, lowBound, qf, qc, q: QWord;
+  e, n, k, t, c, nnf, nnc, nn: Integer;
+  num, den, rem2: TJsBig;
+  okF, okC: Boolean;
+  digits: string;
+
+  { Does q * 10^(ANn-k) read back as x? A candidate that rounded up to 10^k
+    is one digit of the next power instead -- 10 at one digit is 1 at the
+    next place -- and ANn moves with it. The check is against the two bounds,
+    in units of 2^(e-2): x is 4m, the upper bound 4m + 2, the lower one 4m - 2,
+    or 4m - 1 at the bottom of a binade, where the spacing below halves. A
+    bound itself reads back as x only when m is even. }
+  function ReadsBack(var AQ: QWord; var ANn: Integer): Boolean;
+  var
+    a, bh, bl: TJsBig;
+    lim: QWord;
+    i, tt, ch, cl: Integer;
+  begin
+    lim := 1;
+    for i := 1 to k do lim := lim * 10;
+    if AQ = lim then
+    begin
+      AQ := lim div 10;
+      Inc(ANn);
+    end;
+    tt := ANn - k;
+    a := BigOf(AQ);
+    if tt > 0 then BigMulPow10(a, tt);
+    if 2 - e > 0 then BigShl(a, 2 - e);
+    bh := BigOf(4 * m + 2);
+    bl := BigOf(lowBound);
+    if tt < 0 then
+    begin
+      BigMulPow10(bh, -tt);
+      BigMulPow10(bl, -tt);
+    end;
+    if e - 2 > 0 then
+    begin
+      BigShl(bh, e - 2);
+      BigShl(bl, e - 2);
+    end;
+    ch := BigCmp(a, bh);
+    cl := BigCmp(a, bl);
+    Result := ((ch < 0) or ((ch = 0) and not Odd(m)))
+      and ((cl > 0) or ((cl = 0) and not Odd(m)));
+  end;
+
+begin
+  if IsNan(AValue) then Exit('NaN');
+  if AValue = 0 then Exit('0');
+  if AValue < 0 then Exit('-' + TyJsNumberToString(-AValue));
+  if IsInfinite(AValue) then Exit('Infinity');
+  SplitDouble(AValue, m, e);
+  { n, the decimal exponent: 10^(n-1) <= x < 10^n. The logarithm is a
+    guess; the integers settle it. }
+  n := Floor(Log10(AValue)) + 1;
+  while not AtLeastPow10(m, e, n - 1) do Dec(n);
+  while AtLeastPow10(m, e, n) do Inc(n);
+  if (m = QWord(1) shl 52) and (e > -1074) then lowBound := 4 * m - 1
+  else lowBound := 4 * m - 2;
+  for k := 1 to 17 do
+  begin
+    { THE TWO k-DIGIT DECIMALS EITHER SIDE OF x, not only the nearer one.
+      At the bottom of a binade the interval that reads back as x is lopsided
+      -- a quarter of a spacing below, a half above -- and the nearer decimal
+      can fall outside it while the farther one, above, is inside:
+      2^-1015 is 7.120236347223045e-307, not the seventeen digits the nearer
+      one forces. The shortest length wins; at that length, the one nearer
+      x, a tie to the even one. }
+    t := k - n;
+    num := BigOf(m);
+    if e > 0 then BigShl(num, e);
+    if t > 0 then BigMulPow10(num, t);
+    den := BigOf(1);
+    if e < 0 then BigShl(den, -e);
+    if t < 0 then BigMulPow10(den, -t);
+    qf := BigDivSmall(num, den);
+    rem2 := Copy(num);
+    BigShl(rem2, 1);
+    c := BigCmp(rem2, den);
+    nnf := n;
+    okF := ReadsBack(qf, nnf);
+    okC := False;
+    qc := qf;
+    nnc := n;
+    if Length(num) > 0 then
+    begin
+      qc := qf + 1;
+      okC := ReadsBack(qc, nnc);
+    end;
+    if not (okF or okC) then Continue;
+    if okF and okC then
+    begin
+      if (c < 0) or ((c = 0) and not Odd(qf)) then okC := False
+      else okF := False;
+    end;
+    if okF then
+    begin
+      q := qf;
+      nn := nnf;
+    end
+    else
+    begin
+      q := qc;
+      nn := nnc;
+    end;
+    digits := IntToStr(q);
+    { Number::toString's layout, by where the point falls. }
+    if (Length(digits) <= nn) and (nn <= 21) then
+      Result := digits + StringOfChar('0', nn - Length(digits))
+    else if (0 < nn) and (nn <= 21) then
+      Result := Copy(digits, 1, nn) + '.' + Copy(digits, nn + 1, MaxInt)
+    else if (-6 < nn) and (nn <= 0) then
+      Result := '0.' + StringOfChar('0', -nn) + digits
+    else
+    begin
+      if Length(digits) = 1 then Result := digits
+      else Result := digits[1] + '.' + Copy(digits, 2, MaxInt);
+      if nn - 1 >= 0 then Result := Result + 'e+' + IntToStr(nn - 1)
+      else Result := Result + 'e-' + IntToStr(1 - nn);
+    end;
+    Exit;
+  end;
+  { Seventeen digits always read back; this is not reached. }
+  Result := FloatToStr(AValue);
+end;
+
+function TyJsAddCommas(const AText: string): string;
+var
+  dot, i, j, runStart, runLen: Integer;
+  head: string;
+begin
+  dot := Pos('.', AText);
+  if dot > 0 then head := Copy(AText, 1, dot - 1) else head := AText;
+  Result := '';
+  i := 1;
+  while i <= Length(head) do
+  begin
+    if head[i] in ['0'..'9'] then
+    begin
+      runStart := i;
+      while (i <= Length(head)) and (head[i] in ['0'..'9']) do Inc(i);
+      runLen := i - runStart;
+      for j := 0 to runLen - 1 do
+      begin
+        if (j > 0) and ((runLen - j) mod 3 = 0) then Result := Result + ',';
+        Result := Result + head[runStart + j];
+      end;
+    end
+    else
+    begin
+      Result := Result + head[i];
+      Inc(i);
+    end;
+  end;
+  if dot > 0 then Result := Result + Copy(AText, dot, MaxInt);
 end;
 
 function TyQuantityExponent(AValue: Double): Integer;
@@ -1470,36 +1890,31 @@ begin
   Result := TyJsToFixed(nf * exp10, -expo);
 end;
 
-{ The number of decimals a value round-trips through, JavaScript's own
-  toString deciding what "the value" is -- only reached for a value the
-  counting loop cannot settle: a negative one, or one under 1e-14. }
+{ getPrecisionSafe: the decimals of the value's own ToString, less its
+  exponent -- '1.5e-7' has one decimal and an exponent of -7, so eight. Only
+  reached for a value the counting loop cannot settle: a negative one, or one
+  under 1e-14. It went through FPC's Str and Val before, and disagreed with
+  upstream on 28 of 60,011 random Doubles. }
 function GetPrecisionSafe(AValue: Double): Integer;
 var
-  w, code, ePos, i, nd, e10: Integer;
-  s, digits: string;
-  back: Double;
+  s: string;
+  ePos, dot, sigLen, ex, code: Integer;
 begin
-  Result := 0;
-  if (AValue = 0) or IsNan(AValue) or IsInfinite(AValue) then Exit;
-  AValue := Abs(AValue);
-  for w := 8 to 26 do
+  s := LowerCase(TyJsNumberToString(AValue));
+  ePos := Pos('e', s);
+  ex := 0;
+  if ePos > 0 then
   begin
-    Str(AValue:w, s);
-    s := Trim(s);
-    Val(s, back, code);
-    if (code = 0) and (back = AValue) then
-    begin
-      ePos := Pos('E', s);
-      if ePos <= 0 then Exit;
-      e10 := StrToIntDef(Copy(s, ePos + 1, MaxInt), 0);
-      digits := '';
-      for i := 1 to ePos - 1 do
-        if s[i] in ['0'..'9'] then digits := digits + s[i];
-      nd := Length(digits);
-      while (nd > 1) and (digits[nd] = '0') do Dec(nd);
-      Exit(Max(0, (nd - 1) - e10));
-    end;
-  end;
+    Val(Copy(s, ePos + 1, MaxInt), ex, code);
+    if code <> 0 then ex := 0;
+    sigLen := ePos - 1;
+  end
+  else
+    sigLen := Length(s);
+  dot := Pos('.', s);
+  if (dot = 0) or (dot > sigLen) then Result := 0
+  else Result := sigLen - dot;
+  Result := Max(0, Result - ex);
 end;
 
 function TyGetPrecision(AValue: Double): Integer;
@@ -1530,6 +1945,44 @@ function TyDrawnTicks(AScale: TTyScale): TTyScaleTickArray;
 begin
   if (AScale = nil) or AScale.Blank then Exit(nil);
   Result := AScale.GetTicks;
+end;
+
+function TyLabelPrecision(AKind: TTyLabelPrecisionKind;
+  ADigits: Double): TTyLabelPrecision;
+begin
+  Result.Kind := AKind;
+  Result.Digits := ADigits;
+end;
+
+function TyScaleValueLabel(AScale: TTyScale; AValue: Double;
+  const APrecision: TTyLabelPrecision): string;
+var p: Integer; d: Double;
+begin
+  case APrecision.Kind of
+    lpAuto:
+      if AScale is TTyIntervalScale then
+        p := TTyIntervalScale(AScale).IntervalPrecision
+      else
+        p := TyGetPrecision(AValue);
+    lpDigits:
+      begin
+        d := APrecision.Digits;
+        { upstream's round: not a number prints the value's ToString;
+          otherwise clamped to 0..20, and toFixed drops the fraction. }
+        if IsNan(d) then Exit(TyJsAddCommas(TyJsNumberToString(AValue)));
+        if d < 0 then d := 0;
+        if d > 20 then d := 20;
+        p := Trunc(d);
+      end;
+    lpNotANumber:
+      Exit(TyJsAddCommas(TyJsNumberToString(AValue)));
+  else
+    { a tick's own decimals -- getPrecision(value) || 0. Not-a-number and
+      the infinities come out of it as nought, and toFixed prints them as
+      ToString does whatever the precision. }
+    p := TyGetPrecision(AValue);
+  end;
+  Result := TyJsAddCommas(TyJsToFixedStr(AValue, p));
 end;
 
 function TyValidSplitNumber(ARaw: Double; ADefault: Integer): Integer;

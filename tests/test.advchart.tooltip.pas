@@ -263,7 +263,7 @@ procedure TAdvChartTooltipRuleTest.TestAValueIsGroupedInThrees;
 begin
   { Upstream runs every default-content value through addCommas. A `{c}` in a
     TEMPLATE does not get it, which is why this is a second function and not a
-    flag on the one the axis labels use. }
+    flag on TyChartNumToStr. }
   AssertEquals('1,048', TyTooltipValueText(1048));
   AssertEquals('999', TyTooltipValueText(999));
   AssertEquals('1,000', TyTooltipValueText(1000));
