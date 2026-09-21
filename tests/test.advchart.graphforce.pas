@@ -658,7 +658,7 @@ begin
         ink := Default(TTyGraphInk);
         ink.EdgeColour := TTyChartColor($FF808080);
         SetLength(ink.NodeFills, Length(solved.Nodes));
-        TyBuildGraphMarks(0, solved.View, solved.Spec, solved.Nodes,
+        TyBuildGraphMarks(0, solved.Spec, solved.Nodes,
           solved.Edges, ink, st, list);
         if Pos('"_sizes"', cBodies[i]) > 0 then
           AssertTrue('the sizes case really drew something', list.Count > 0);
@@ -723,7 +723,7 @@ begin
     AssertTrue('an ordinary one curves', edges[2].Curved and not edges[2].Hidden);
     AssertEquals('at the perpendicular', 75.0, edges[2].CPX, 1e-9);
     AssertEquals(-25.0, edges[2].CPY, 1e-9);
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     { ONE EDGE AND THREE NODES: the two hidden edges put nothing in the list. }
     AssertEquals(4, list.Count);
 
@@ -742,16 +742,16 @@ begin
     AssertFalse('it is not curved', edges[0].Curved);
     AssertTrue('it is a broken curve', edges[0].NaNCurve);
     list.Clear;
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('drawn straight, beside three nodes', 4, list.Count);
     s.EdgeSymbolTo := 'arrow';
     list.Clear;
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('and with an arrow, not at all', 3, list.Count);
     s.EdgeSymbolTo := 'none';
     s.EdgeSymbolFrom := 'arrow';
     list.Clear;
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('whichever end carries it', 3, list.Count);
   finally
     list.Free;

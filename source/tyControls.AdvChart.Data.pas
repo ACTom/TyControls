@@ -327,6 +327,16 @@ type
     function GetId(AIndex: Integer): string;
     function GetIdByRaw(ARawIndex: Integer): string;
     function GetName(AIndex: Integer): string;
+    { WHAT UPSTREAM'S getName ANSWERS: the item's own name, and without one
+      the category behind the FIRST ordinal dimension -- createSeriesData
+      hands that dimension the item-name role. So a bare 842 on a category
+      axis is called 'Mon', and a label's b placeholder says so.
+      '' when there is neither.
+
+      NOT what identifies a row. A graph keys its nodes by the name the
+      author wrote, and a node written as a bare number is keyed by its
+      position -- a link to 'Mon' finds nothing upstream either. }
+    function GetItemName(AIndex: Integer): string;
     { The same name in RAW space. FilterSelf hands its predicate a raw
       index -- it is deciding which raw rows survive, so it cannot speak
       the view's language -- and a predicate that wants to test the name
@@ -1260,6 +1270,16 @@ begin
   raw := GetRawIndex(AIndex);
   if raw < 0 then Exit('');
   Result := FNames[raw];
+end;
+
+function TTyDataStore.GetItemName(AIndex: Integer): string;
+var i: Integer;
+begin
+  Result := GetName(AIndex);
+  if Result <> '' then Exit;
+  for i := 0 to High(FDims) do
+    if FDims[i].Kind = ddtOrdinal then
+      Exit(GetOrdinalText(i, AIndex));
 end;
 
 function TTyDataStore.GetNameByRaw(ARawIndex: Integer): string;

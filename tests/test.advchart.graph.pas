@@ -314,7 +314,7 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 100, 100), TyRectF(0, 0, 100, 100));
   list := TTyPaintList.Create;
   try
-    n := TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    n := TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('one edge and two nodes', 3, n);
     AssertEquals('and they all reached the list', 3, list.Count);
     AssertEquals('the edge comes first, under the nodes',
@@ -506,7 +506,7 @@ begin
     AssertEquals('a written curveness is taken as written',
       0.3333333333333, edges[0].SolvedCurveness, 1e-9);
     TyGraphEdgeGeometry(edges, nodes, view, True);
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     { THE RING'S CENTRE IS (100, 100) AND THE CHORD RUNS ALONG y = 0, so a
       tripled third puts the control point exactly ON the centre and the curve's
       middle halfway there, at y = 50. Untripled it would sit at y = 33 and the
@@ -559,7 +559,7 @@ begin
   try
     TyGraphSolveCurveness(edges, s, False);
     TyGraphEdgeGeometry(edges, nodes, view, False);
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     { THE BOUNDING BOX CANNOT SEE IT. Both control points -- the right one at
       (100, 0) and its mirror at (100, 100) -- give the identical box over this
       chord, so the box is exactly the wrong thing to assert. A POINT on the
@@ -924,12 +924,12 @@ begin
   list := TTyPaintList.Create;
   try
     s := SpecOf(',"lineStyle":{"color":"source"}');
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('the edge leaves node zero', LongWord($FF111111),
       LongWord(list.Element(0).Style.StrokeColor));
     list.Clear;
     s := SpecOf(',"lineStyle":{"color":"target"}');
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('and arrives at node one', LongWord($FF222222),
       LongWord(list.Element(0).Style.StrokeColor));
   finally
@@ -1137,7 +1137,7 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 200, 200), TyRectF(0, 0, 200, 200));
   list := TTyPaintList.Create;
   try
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     pts := list.Element(0).Shape.Points;
     AssertEquals('forty across means twenty back', 20.0, pts[0].X, 1e-6);
     AssertEquals(180.0, pts[1].X, 1e-6);
@@ -1148,7 +1148,7 @@ begin
     nodes[0].HasSize := True;
     nodes[0].SizeW := 40;
     nodes[0].SizeH := 20;
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     pts := list.Element(0).Shape.Points;
     AssertEquals(15.0, pts[0].X, 1e-6);
   finally
@@ -1186,7 +1186,7 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 100, 100), TyRectF(0, 0, 100, 100));
   list := TTyPaintList.Create;
   try
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('one line, two arrowheads and two nodes', 5, list.Count);
     hittable := 0;
     for i := 0 to list.Count - 1 do
@@ -1205,12 +1205,12 @@ begin
       not-a-number. }
     list.Clear;
     edges[0].Target := 0;
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('two nodes and no line', 2, list.Count);
     list.Clear;
     edges[0].Target := 1;
     nodes[1].PX := NaN;
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('and an unplaced node takes its edge with it', 1, list.Count);
   finally
     list.Free;
@@ -1335,7 +1335,7 @@ begin
     TyGraphEdgeGeometry(edges, nodes, view, False);
     AssertFalse('the layout authors no control point', edges[0].Curved);
     AssertFalse('and does not hide the edge either', edges[0].Hidden);
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals('two points, not seventeen', 2,
       Length(list.Element(0).Shape.Points));
     AssertEquals(10.0, list.Element(0).Shape.Points[0].X, Eps);

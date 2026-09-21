@@ -100,6 +100,12 @@ type
       noticed because the only row filtering in the control is the pie's.
       TTyChartCallbackParams has declared both fields since it was written. }
     RawDataIndex: Integer;
+    { A GRAPH EDGE, whose rows are the LINKS and not the nodes. The two are
+      numbered in the same space -- edge 0 and node 0 are both row 0 -- and
+      upstream tells them apart by a data type on the element; without it a
+      hover over the first edge described the first node. False for every
+      other datum, which is what the zero value answers. }
+    IsEdge: Boolean;
   end;
 
   { WORDS ON A MARK, and -- once the label pass has placed them -- everything
@@ -236,6 +242,8 @@ function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef; overload;
 { When the two spaces disagree -- a pie, whose sectors skip the rows a
   negative value removed and whose layout therefore counts in neither. }
 function TyChartDatum(ASeries, AData, ARaw: Integer): TTyChartDatumRef; overload;
+{ Link ARow of a graph series -- see TTyChartDatumRef.IsEdge. }
+function TyChartEdgeDatum(ASeries, ARow: Integer): TTyChartDatumRef;
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
@@ -272,6 +280,9 @@ begin
     idx := FOrder[i];
     if FItems[idx].Silent then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
+    { A ROW IS A DATUM'S, never a graph link's that happens to share its
+      number. }
+    if FItems[idx].Datum.IsEdge then Continue;
     if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
     Exit(idx);
   end;
@@ -288,6 +299,7 @@ begin
     idx := FOrder[i];
     if FItems[idx].Silent then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
+    if FItems[idx].Datum.IsEdge then Continue;
     if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
     if FItems[idx].Style.HasFill and (FItems[idx].Style.FillColor <> 0) then
       Exit(idx);
@@ -301,6 +313,7 @@ begin
   Result.SeriesIndex := -1;
   Result.DataIndex := -1;
   Result.RawDataIndex := -1;
+  Result.IsEdge := False;
 end;
 
 function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef;
@@ -313,6 +326,7 @@ begin
     so with the three-argument form; one that used this while they differed
     would be making a claim it had not checked. }
   Result.RawDataIndex := AData;
+  Result.IsEdge := False;
 end;
 
 function TyChartDatum(ASeries, AData, ARaw: Integer): TTyChartDatumRef;
@@ -320,6 +334,15 @@ begin
   Result.SeriesIndex := ASeries;
   Result.DataIndex := AData;
   Result.RawDataIndex := ARaw;
+  Result.IsEdge := False;
+end;
+
+function TyChartEdgeDatum(ASeries, ARow: Integer): TTyChartDatumRef;
+begin
+  Result.SeriesIndex := ASeries;
+  Result.DataIndex := ARow;
+  Result.RawDataIndex := ARow;
+  Result.IsEdge := True;
 end;
 
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;

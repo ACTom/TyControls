@@ -1,0 +1,3522 @@
+{
+ "source": "ECharts 6.1.0",
+ "cases": [
+  {
+   "name": "graph-grid",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "tooltip": {},
+    "xAxis": {
+     "type": "category",
+     "boundaryGap": false,
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Very Loooong Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "coordinateSystem": "cartesian2d",
+      "symbolSize": 40,
+      "label": {
+       "show": true
+      },
+      "edgeSymbol": [
+       "circle",
+       "arrow"
+      ],
+      "edgeSymbolSize": [
+       4,
+       10
+      ],
+      "data": [
+       842,
+       1276,
+       2288,
+       393,
+       893,
+       3559,
+       5374
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 3
+       },
+       {
+        "source": 3,
+        "target": 4
+       },
+       {
+        "source": 4,
+        "target": 5
+       },
+       {
+        "source": 5,
+        "target": 6
+       }
+      ],
+      "lineStyle": {
+       "color": "#2f4554"
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      6
+     ],
+     "yExtent": [
+      0,
+      6000
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 60,
+       "py": 315.09333333333336,
+       "x": 0,
+       "y": 842,
+       "name": "Mon",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 291.94666666666666,
+       "x": 1,
+       "y": 1276,
+       "name": "Tue",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 226.66666666666666,
+       "py": 237.97333333333333,
+       "x": 2,
+       "y": 2288,
+       "name": "Wed",
+       "fill": "#111111"
+      },
+      {
+       "raw": 3,
+       "placed": true,
+       "px": 310,
+       "py": 339.04,
+       "x": 3,
+       "y": 393,
+       "name": "Very Loooong Thu",
+       "fill": "#111111"
+      },
+      {
+       "raw": 4,
+       "placed": true,
+       "px": 393.3333333333333,
+       "py": 312.37333333333333,
+       "x": 4,
+       "y": 893,
+       "name": "Fri",
+       "fill": "#111111"
+      },
+      {
+       "raw": 5,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 170.18666666666667,
+       "x": 5,
+       "y": 3559,
+       "name": "Sat",
+       "fill": "#111111"
+      },
+      {
+       "raw": 6,
+       "placed": true,
+       "px": 560,
+       "py": 73.38666666666666,
+       "x": 6,
+       "y": 5374,
+       "name": "Sun",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "Mon > Tue",
+       "tipValue": null,
+       "stroke": "#2f4554"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "Tue > Wed",
+       "tipValue": null,
+       "stroke": "#2f4554"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "Wed > Very Loooong Thu",
+       "tipValue": null,
+       "stroke": "#2f4554"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "Very Loooong Thu > Fri",
+       "tipValue": null,
+       "stroke": "#2f4554"
+      },
+      {
+       "raw": 4,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "Fri > Sat",
+       "tipValue": null,
+       "stroke": "#2f4554"
+      },
+      {
+       "raw": 5,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "Sat > Sun",
+       "tipValue": null,
+       "stroke": "#2f4554"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a category axis with a gap",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       3,
+       7,
+       2,
+       9
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 3
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      3
+     ],
+     "yExtent": [
+      0,
+      10
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 122.5,
+       "py": 264,
+       "x": 0,
+       "y": 3,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 247.5,
+       "py": 136,
+       "x": 1,
+       "y": 7,
+       "name": "b",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 372.5,
+       "py": 296,
+       "x": 2,
+       "y": 2,
+       "name": "c",
+       "fill": "#111111"
+      },
+      {
+       "raw": 3,
+       "placed": true,
+       "px": 497.5,
+       "py": 72,
+       "x": 3,
+       "y": 9,
+       "name": "d",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "c > d",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "both axes value, bare numbers",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       3,
+       5,
+       8
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      8
+     ],
+     "yExtent": [
+      0,
+      8
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 247.5,
+       "py": 240,
+       "x": 3,
+       "y": 3,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 372.5,
+       "py": 160,
+       "x": 5,
+       "y": 5,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 560,
+       "py": 40,
+       "x": 8,
+       "y": 8,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a category y axis",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q",
+      "r"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       10,
+       20,
+       30
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      30
+     ],
+     "yExtent": [
+      0,
+      2
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 226.66666666666666,
+       "py": 306.6666666666667,
+       "x": 10,
+       "y": 0,
+       "name": "p",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 393.3333333333333,
+       "py": 200,
+       "x": 20,
+       "y": 1,
+       "name": "q",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 560,
+       "py": 93.33333333333331,
+       "x": 30,
+       "y": 2,
+       "name": "r",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "p > q",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "q > r",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "value arrays with extra columns and numeric names",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true,
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "name": "China",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       {
+        "name": 1800,
+        "value": [
+         985,
+         32,
+         321675013,
+         "China",
+         1800
+        ]
+       },
+       {
+        "name": 1810,
+        "value": [
+         1100,
+         34,
+         350542958,
+         "China",
+         1810
+        ]
+       },
+       {
+        "name": 1820,
+        "value": [
+         1500,
+         40,
+         380055273,
+         "China",
+         1820
+        ]
+       },
+       {
+        "name": 1830,
+        "value": [
+         900,
+         36,
+         402373519,
+         "China",
+         1830
+        ]
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": "1820",
+        "target": "1830"
+       },
+       {
+        "source": 1830,
+        "target": 0
+       }
+      ],
+      "edgeSymbol": [
+       "none",
+       "arrow"
+      ],
+      "symbolSize": 5
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "China",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      1500
+     ],
+     "yExtent": [
+      32,
+      40
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 388.3333333333333,
+       "py": 360,
+       "x": 985,
+       "y": 32,
+       "name": "1800",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 426.66666666666663,
+       "py": 280,
+       "x": 1100,
+       "y": 34,
+       "name": "1810",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 560,
+       "py": 40,
+       "x": 1500,
+       "y": 40,
+       "name": "1820",
+       "fill": "#111111"
+      },
+      {
+       "raw": 3,
+       "placed": true,
+       "px": 360,
+       "py": 200,
+       "x": 900,
+       "y": 36,
+       "name": "1830",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "1800 > 1810",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "1810 > 1820",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "1820 > 1830",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "missing values",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       5,
+       "-",
+       [
+        2,
+        "-"
+       ],
+       {
+        "value": [
+         3,
+         4
+        ]
+       },
+       [
+        "-",
+        6
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 3
+       },
+       {
+        "source": 3,
+        "target": 4
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      5
+     ],
+     "yExtent": [
+      0,
+      6
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 560,
+       "py": 93.33333333333331,
+       "x": 5,
+       "y": 5,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": false,
+       "px": null,
+       "py": null,
+       "x": null,
+       "y": null,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": false,
+       "px": null,
+       "py": null,
+       "x": 2,
+       "y": null,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 3,
+       "placed": true,
+       "px": 360,
+       "py": 146.66666666666666,
+       "x": 3,
+       "y": 4,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 4,
+       "placed": false,
+       "px": null,
+       "py": null,
+       "x": null,
+       "y": 6,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": false,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": false,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": false,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": false,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "curveness on axes is authored in pixels",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       100,
+       900,
+       300
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ],
+      "lineStyle": {
+       "curveness": 0.3
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      1000
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 328,
+       "x": 0,
+       "y": 100,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 72,
+       "x": 1,
+       "y": 900,
+       "name": "b",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 264,
+       "x": 2,
+       "y": 300,
+       "name": "c",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 149.86666666666667,
+       "cpy": 150,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 450.9333333333334,
+       "cpy": 118,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "auto curveness on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "autoCurveness": true,
+      "data": [
+       100,
+       900,
+       300
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 0
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 1,
+        "lineStyle": {
+         "curveness": -0.5
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      1000
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 328,
+       "x": 0,
+       "y": 100,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 72,
+       "x": 1,
+       "y": 900,
+       "name": "b",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 264,
+       "x": 2,
+       "y": 300,
+       "name": "c",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 175.46666666666664,
+       "cpy": 166.66666666666666,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 277.8666666666667,
+       "cpy": 233.33333333333334,
+       "tipName": "b > a",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 431.73333333333335,
+       "cpy": 134.66666666666666,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 4,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 489.33333333333337,
+       "cpy": 84.66666666666666,
+       "tipName": "c > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "auto curveness on axes after a filter",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "legend": {
+     "selected": {
+      "A": false
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "value": 3,
+        "category": 1
+       },
+       {
+        "value": 8,
+        "category": 1
+       },
+       {
+        "value": 5
+       },
+       {
+        "value": 6,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": 3,
+        "target": 0
+       },
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 0
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      3
+     ],
+     "yExtent": [
+      0,
+      8
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 122.5,
+       "py": 240,
+       "x": 0,
+       "y": 3,
+       "name": "a",
+       "fill": "#222222"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 247.5,
+       "py": 40,
+       "x": 1,
+       "y": 8,
+       "name": "b",
+       "fill": "#222222"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 372.5,
+       "py": 160,
+       "x": 2,
+       "y": 5,
+       "name": "c",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 145,
+       "cpy": 115,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 225,
+       "cpy": 165,
+       "tipName": "b > a",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "layout force is not run on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "force": {
+       "layoutAnimation": false
+      },
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        2,
+        5
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      3
+     ],
+     "yExtent": [
+      0,
+      5
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 226.66666666666666,
+       "py": 232,
+       "x": 1,
+       "y": 2,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 560,
+       "py": 296,
+       "x": 3,
+       "y": 1,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 393.3333333333333,
+       "py": 40,
+       "x": 2,
+       "y": 5,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "layout circular is not run on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "coordinateSystem": "cartesian2d",
+      "autoCurveness": true,
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        2,
+        5
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      3
+     ],
+     "yExtent": [
+      0,
+      5
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 226.66666666666666,
+       "py": 232,
+       "x": 1,
+       "y": 2,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 560,
+       "py": 296,
+       "x": 3,
+       "y": 1,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 393.3333333333333,
+       "py": 40,
+       "x": 2,
+       "y": 5,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 406.1333333333333,
+       "cpy": 197.33333333333331,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 380.5333333333333,
+       "cpy": 330.6666666666667,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "the item x and y are not positions on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       {
+        "value": [
+         1,
+         2
+        ],
+        "x": 500,
+        "y": 600
+       },
+       {
+        "value": [
+         4,
+         3
+        ],
+        "x": -100,
+        "y": 0
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      4
+     ],
+     "yExtent": [
+      0,
+      3
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 185,
+       "py": 146.66666666666666,
+       "x": 1,
+       "y": 2,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 560,
+       "py": 40,
+       "x": 4,
+       "y": 3,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "categories and a legend filter on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "value": 5,
+        "category": 0
+       },
+       {
+        "value": 9,
+        "category": 1
+       },
+       {
+        "value": 2,
+        "category": 0
+       },
+       {
+        "value": 8
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 3
+       },
+       {
+        "source": 0,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      3
+     ],
+     "yExtent": [
+      0,
+      8
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 122.5,
+       "py": 160,
+       "x": 0,
+       "y": 5,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 372.5,
+       "py": 280,
+       "x": 2,
+       "y": 2,
+       "name": "c",
+       "fill": "#111111"
+      },
+      {
+       "raw": 3,
+       "placed": true,
+       "px": 497.5,
+       "py": 40,
+       "x": 3,
+       "y": 8,
+       "name": "d",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "c > d",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a series-level category on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "category": 1,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "value": 5,
+        "category": 0
+       },
+       {
+        "value": 9
+       },
+       {
+        "value": 2,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      5
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 40,
+       "x": 0,
+       "y": 5,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 232,
+       "x": 2,
+       "y": 2,
+       "name": "c",
+       "fill": "#111111"
+      }
+     ],
+     "edges": []
+    }
+   ]
+  },
+  {
+   "name": "nodes beside a dataset",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "dataset": {
+     "source": [
+      [
+       1,
+       100
+      ],
+      [
+       2,
+       200
+      ],
+      [
+       3,
+       300
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "nodes": [
+       [
+        5,
+        6
+       ],
+       [
+        8,
+        9
+       ]
+      ],
+      "edges": [
+       {
+        "source": 0,
+        "target": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      8
+     ],
+     "yExtent": [
+      0,
+      10
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 372.5,
+       "py": 168,
+       "x": 5,
+       "y": 6,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 560,
+       "py": 72,
+       "x": 8,
+       "y": 9,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a value off the axis is not clipped",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10,
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       2,
+       50,
+       4
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      10
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 296,
+       "x": 0,
+       "y": 2,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": -1240,
+       "x": 1,
+       "y": 50,
+       "name": "b",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 232,
+       "x": 2,
+       "y": 4,
+       "name": "c",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a second y axis",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": [
+     {
+      "type": "value",
+      "axisLabel": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      }
+     },
+     {
+      "type": "value",
+      "position": "right",
+      "axisLabel": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      }
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "yAxisIndex": 1,
+      "data": [
+       500,
+       100,
+       300
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 1,
+     "name": "series\u00001",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      500
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 40,
+       "x": 0,
+       "y": 500,
+       "name": "a",
+       "fill": "#222222"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 296,
+       "x": 1,
+       "y": 100,
+       "name": "b",
+       "fill": "#222222"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 168,
+       "x": 2,
+       "y": 300,
+       "name": "c",
+       "fill": "#222222"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "legend single over several graphs",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "legend": {
+     "selectedMode": "single"
+    },
+    "xAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true,
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "name": "P",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       [
+        1,
+        10
+       ],
+       [
+        2,
+        12
+       ],
+       [
+        4,
+        15
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "name": "Q",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       [
+        2,
+        20
+       ],
+       [
+        3,
+        24
+       ],
+       [
+        5,
+        30
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "name": "R",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       [
+        3,
+        30
+       ],
+       [
+        4,
+        36
+       ],
+       [
+        6,
+        45
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "P",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      4
+     ],
+     "yExtent": [
+      10,
+      15
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 185,
+       "py": 360,
+       "x": 1,
+       "y": 10,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 232,
+       "x": 2,
+       "y": 12,
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 560,
+       "py": 40,
+       "x": 4,
+       "y": 15,
+       "name": "",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": " > ",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a category axis with no data collects",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       4,
+       8,
+       6
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      8
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 200,
+       "x": 0,
+       "y": 4,
+       "name": "0",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 40,
+       "x": 1,
+       "y": 8,
+       "name": "1",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 120,
+       "x": 2,
+       "y": 6,
+       "name": "2",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "0 > 1",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "1 > 2",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "named nodes on a category axis keep their names",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       {
+        "name": "first",
+        "value": 3
+       },
+       5,
+       {
+        "name": "third",
+        "value": 4
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      5
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 168,
+       "x": 0,
+       "y": 3,
+       "name": "first",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 40,
+       "x": 1,
+       "y": 5,
+       "name": "b",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 104,
+       "x": 2,
+       "y": 4,
+       "name": "third",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "first > b",
+       "tipValue": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "b > third",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "an edge with a value",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1,
+        "value": 42
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      5
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 168,
+       "x": 0,
+       "y": 3,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 40,
+       "x": 1,
+       "y": 5,
+       "name": "b",
+       "fill": "#111111"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 104,
+       "x": 2,
+       "y": 4,
+       "name": "c",
+       "fill": "#111111"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": 42,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#86878c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "edges coloured by their ends on axes",
+   "width": 600,
+   "height": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "value": 3,
+        "category": 0
+       },
+       {
+        "value": 5,
+        "category": 1
+       },
+       {
+        "value": 4,
+        "category": 1,
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ],
+      "lineStyle": {
+       "color": "target"
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "name": "series\u00000",
+     "area": [
+      60,
+      40,
+      500,
+      320
+     ],
+     "xExtent": [
+      0,
+      2
+     ],
+     "yExtent": [
+      0,
+      5
+     ],
+     "nodes": [
+      {
+       "raw": 0,
+       "placed": true,
+       "px": 143.33333333333331,
+       "py": 168,
+       "x": 0,
+       "y": 3,
+       "name": "a",
+       "fill": "#111111"
+      },
+      {
+       "raw": 1,
+       "placed": true,
+       "px": 310,
+       "py": 40,
+       "x": 1,
+       "y": 5,
+       "name": "b",
+       "fill": "#222222"
+      },
+      {
+       "raw": 2,
+       "placed": true,
+       "px": 476.6666666666667,
+       "py": 104,
+       "x": 2,
+       "y": 4,
+       "name": "c",
+       "fill": "#ff0000"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "a > b",
+       "tipValue": null,
+       "stroke": "#222222"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "tipName": "b > c",
+       "tipValue": null,
+       "stroke": "#222222"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

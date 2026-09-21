@@ -579,7 +579,7 @@ begin
   view := TTyGraphView.Create(TyRectF(0, 0, 100, 100), TyRectF(0, 0, 100, 100));
   list := TTyPaintList.Create;
   try
-    TyBuildGraphMarks(0, view, s, nodes, edges, ink, nil, list);
+    TyBuildGraphMarks(0, s, nodes, edges, ink, nil, list);
     AssertEquals(LongWord($FF00AA00), LongWord(list.Element(0).Style.StrokeColor));
   finally
     list.Free;

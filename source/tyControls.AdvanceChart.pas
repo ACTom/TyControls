@@ -159,8 +159,11 @@ type
     FRadars: array of TTyRadar;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
-      most of them are nil. }
+      most of them are nil. A graph on AXES has none either -- its coordinate
+      system is the grid's -- and FGraphLaidOut is what says a slot holds a
+      solved graph at all. }
     FGraphs: array of TTyGraphView;
+    FGraphLaidOut: array of Boolean;
     FGraphSpecs: array of TTyGraphSpec;
     FGraphNodes: array of TTyGraphNodeArray;
     FGraphEdges: array of TTyGraphEdgeArray;
@@ -395,6 +398,9 @@ type
       categories the predicate needs. }
     function KeepGraphNode(ARawIndex: Integer): Boolean;
     function GraphInk(ASlot: Integer): TTyGraphInk;
+    { What upstream's getName calls node ANode of the graph in ASlot -- its
+      own name, or its category on a category axis. '' when there is none. }
+    function GraphNodeName(ASlot, ANode: Integer): string;
     function RadarInk: TTyRadarInk;
     function RadarVisual(ASlot: Integer): TTyRadarVisual;
     function FunnelLabelInk: TTyFunnelLabelInk;
@@ -622,8 +628,9 @@ type
     { THE GRAPH SERIES ASeriesIndex, AS THE LAST RENDER LAID IT OUT: the nodes
       the legend kept -- in the order they were written, with their pixel
       positions -- the edges between them, and each node's fill. False when
-      that series is not a graph on a view, or nothing has been rendered.
-      Read-only, and what a host needs to put something over a node. }
+      that series is not a laid-out graph -- on a view or on axes -- or
+      nothing has been rendered. Read-only, and what a host needs to put
+      something over a node. }
     function GraphLayout(ASeriesIndex: Integer; out ANodes: TTyGraphNodeArray;
       out AEdges: TTyGraphEdgeArray; out AFills: TTyChartColorArray): Boolean;
     { THE SAME GRAPH'S INK AND SPEC, which is what TyGraphEdgeStroke needs to
@@ -930,7 +937,8 @@ begin
         and the gauge. The same trap, the third time.
 
         THE GRAPH UNIT BUILDS IT, the one way the suite builds it too: one
-        value column, read from `data` or from `nodes`, its second name. }
+        value column, read from `data` or from `nodes`, its second name.
+        A graph on AXES is not here at all -- it has the axes' columns, below. }
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
       begin
         TyGraphFillStore(FOption, i, st);
@@ -985,6 +993,18 @@ begin
         one -- that sharing is what makes two series agree about which name
         ordinal 0 is. }
       if dims[k].Axis <> nil then st.UseOrdinalMeta(k, dims[k].Axis.Categories);
+    end;
+    { A GRAPH ON AXES FILLS THE AXES' COLUMNS THE GRAPH'S WAY: `data` or
+      `nodes`, the series' own `category` filed into every silent node, and
+      never a dataset -- upstream builds a graph's nodes from its own option
+      whatever tables the chart carries. The columns are the ones every other
+      series here gets, which is what upstream does too: a bare number on a
+      category axis is its row and its value, and the axes size themselves
+      from these like from anything else. }
+    if FBindings[i].SeriesType = TyGraphSeriesTypeName then
+    begin
+      TyGraphFillNodes(FOption, i, dims, st);
+      Continue;
     end;
     ds := FSeriesDataset[i];
     if ds < 0 then
@@ -2164,7 +2184,8 @@ begin
   AFills := nil;
   Result := False;
   slot := SlotOfSeries(ASeriesIndex);
-  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil) then Exit;
+  if (slot < 0) or (slot > High(FGraphLaidOut)) or not FGraphLaidOut[slot] then
+    Exit;
   ANodes := Copy(FGraphNodes[slot]);
   AEdges := Copy(FGraphEdges[slot]);
   AFills := GraphInk(slot).NodeFills;
@@ -2179,7 +2200,8 @@ begin
   ASpec := Default(TTyGraphSpec);
   Result := False;
   slot := SlotOfSeries(ASeriesIndex);
-  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil) then Exit;
+  if (slot < 0) or (slot > High(FGraphLaidOut)) or not FGraphLaidOut[slot] then
+    Exit;
   AInk := GraphInk(slot);
   ASpec := FGraphSpecs[slot];
   Result := True;
@@ -2228,6 +2250,7 @@ var i: Integer;
 begin
   for i := 0 to High(FGraphs) do FreeAndNil(FGraphs[i]);
   FGraphs := nil;
+  FGraphLaidOut := nil;
   FGraphSpecs := nil;
   FGraphNodes := nil;
   FGraphEdges := nil;
@@ -2236,12 +2259,14 @@ end;
 
 procedure TTyAdvanceChart.SolveGraphs(APPI: Integer);
 var
-  i, si: Integer;
+  i, si, colX, colY: Integer;
   solved: TTyGraphSolved;
   store: TTyDataStore;
+  cols: TTyIntegerArray;
 begin
   FreeGraphs;
   SetLength(FGraphs, Length(FBindings));
+  SetLength(FGraphLaidOut, Length(FBindings));
   SetLength(FGraphSpecs, Length(FBindings));
   SetLength(FGraphNodes, Length(FBindings));
   SetLength(FGraphEdges, Length(FBindings));
@@ -2249,6 +2274,7 @@ begin
   for i := 0 to High(FBindings) do
   begin
     FGraphs[i] := nil;
+    FGraphLaidOut[i] := False;
     if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
     if not FBindings[i].Resolved then Continue;
     { A GRAPH THE LEGEND SWITCHED OFF IS NOT LAID OUT AT ALL -- upstream's
@@ -2256,27 +2282,66 @@ begin
       force graph of five hundred nodes that is a second and a half nobody
       would see. }
     if FBindings[i].Hidden then Continue;
-    { ONLY THE VIEW IS SOLVED HERE. A graph on a cartesian is laid out by the
-      axes it named and is a batch of its own; until then it resolves and
-      draws nothing rather than being quietly given a view it did not ask
-      for. }
-    if FBindings[i].CoordSysName <> 'view' then Continue;
-
     si := FBindings[i].SeriesIndex;
     if si < 0 then Continue;
-    if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
     store := nil;
     if i <= High(FStores) then store := FStores[i];
+    { A GRAPH ON AXES IS LAID OUT BY THE AXES IT NAMED, here, after the grids
+      have their final pixels: every node at the grid's dataToPoint of its two
+      columns, whatever `layout` says. Upstream skips the ring, the force
+      simulation and the view alike for any coordinate system that is not a
+      view, so this keeps no force state either. The columns are the first
+      each axis owns, the same lookup every other renderer makes. }
+    if (FBindings[i].CoordSysName = 'cartesian2d') and (FBindings[i].Cart <> nil)
+      and (store <> nil) then
+    begin
+      colX := -1;
+      colY := -1;
+      if FBindings[i].XAxis <> nil then
+      begin
+        cols := store.DimsOfCoord(FBindings[i].XAxis.Dim);
+        if Length(cols) > 0 then colX := cols[0];
+      end;
+      if FBindings[i].YAxis <> nil then
+      begin
+        cols := store.DimsOfCoord(FBindings[i].YAxis.Dim);
+        if Length(cols) > 0 then colY := cols[0];
+      end;
+      solved := TyGraphSolveOnCoordSys(FOption, si, store, FBindings[i].Cart,
+        colX, colY);
+      FGraphLaidOut[i] := True;
+      FGraphSpecs[i] := solved.Spec;
+      FGraphNodes[i] := solved.Nodes;
+      FGraphEdges[i] := solved.Edges;
+      FGraphCats[i] := solved.Cats;
+      Continue;
+    end;
+    { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar, geo, a calendar --
+      and a graph on one resolves and draws nothing rather than being quietly
+      given a view it did not ask for. }
+    if FBindings[i].CoordSysName <> 'view' then Continue;
+    if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
     { THE WHOLE PASS IS THE PURE UNIT'S, so the suite drives the same path this
       does rather than a copy of it. }
     solved := TyGraphSolve(FOption, si, store, FLastRect, FGraphForce[si]);
     FGraphs[i] := solved.View;
+    FGraphLaidOut[i] := True;
     FGraphSpecs[i] := solved.Spec;
     FGraphNodes[i] := solved.Nodes;
     FGraphEdges[i] := solved.Edges;
     FGraphCats[i] := solved.Cats;
   end;
   if APPI < 0 then ;
+end;
+
+function TTyAdvanceChart.GraphNodeName(ASlot, ANode: Integer): string;
+begin
+  Result := '';
+  if (ASlot < 0) or (ASlot > High(FGraphNodes)) or (ASlot > High(FStores))
+    or (FStores[ASlot] = nil) then Exit;
+  if (ANode < 0) or (ANode > High(FGraphNodes[ASlot])) then Exit;
+  if FGraphNodes[ASlot][ANode].Row < 0 then Exit;
+  Result := FStores[ASlot].GetItemName(FGraphNodes[ASlot][ANode].Row);
 end;
 
 function TTyAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
@@ -2325,8 +2390,16 @@ begin
     empty rather than wrong, which is harder to notice. }
   Result.Label_.DefaultText := tldName;
   Result.SeriesName := SeriesNameOf(FBindings[ASlot].SeriesIndex);
+  { THE c PLACEHOLDER IS THE VALUE COLUMN on a view and the value AXIS' column on axes,
+    where there is no column called value at all. }
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
-    Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+  begin
+    if FBindings[ASlot].ValueAxis <> nil then
+      Result.LabelValueDim :=
+        FStores[ASlot].DimIndexOf(FBindings[ASlot].ValueAxis.Dim)
+    else
+      Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+  end;
 end;
 
 procedure TTyAdvanceChart.SolveRadars(APPI: Integer);
@@ -2872,7 +2945,7 @@ begin
       the same shape as a pie's slices. With no categories at all it is an
       ordinary series and offers its name. The categories come from the
       OPTION, never from a solved graph: this runs in Rebuild, before any
-      graph is solved, and a graph on a cartesian is never solved here. }
+      graph is solved. }
     if FBindings[i].SeriesType = TyGraphSeriesTypeName then
     begin
       cats := TyGraphCategoriesOf(FOption, FBindings[i].SeriesIndex);
@@ -3474,11 +3547,11 @@ begin
         layout pass like a pie's box and replayed here like a radar's. }
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
       begin
-        if (i <= High(FGraphs)) and (FGraphs[i] <> nil) then
+        if (i <= High(FGraphLaidOut)) and FGraphLaidOut[i] then
         begin
           gi := GraphInk(i);
           Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
-            FGraphs[i], FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
+            FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
             gi, FStores[i], list));
           { AND ITS LABEL SPEC INTO THE TABLE THE EXPANSION READS. A mark
             carries only the WORDS; where they go and what they are drawn
@@ -3725,7 +3798,13 @@ begin
   { THE RAW ROW, not the view row. A data-item tooltip is written beside the
     datum in the option text, and the option text is the raw order -- a filter
     is a view for readers and has never moved anything in the tree. }
-  Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex);
+  { A GRAPH LINK has a row of its own, in the LINK list, and a node's tooltip
+    written at that position is somebody else's -- so a link takes the
+    series'. }
+  if ADatum.IsEdge then
+    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, -1)
+  else
+    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex);
 end;
 
 function TTyAdvanceChart.TooltipInk(
@@ -3810,6 +3889,19 @@ begin
     the marker names is a SERIES and a ROW, so that is what it asks. }
   slot := SlotOfSeries(ADatum.SeriesIndex);
   if slot < 0 then Exit;
+  { A GRAPH LINK'S COLOUR IS ITS STROKE, found by its own row. }
+  if ADatum.IsEdge then
+  begin
+    if (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+      and (slot <= High(FGraphEdges)) and (slot <= High(FGraphSpecs)) then
+    begin
+      gi := GraphInk(slot);
+      for idx := 0 to High(FGraphEdges[slot]) do
+        if FGraphEdges[slot][idx].Row = ADatum.DataIndex then
+          Exit(TyGraphEdgeStroke(FGraphSpecs[slot], FGraphEdges[slot], gi, idx));
+    end;
+    Exit;
+  end;
   { A GRAPH NODE'S MARKER IS THE NODE'S FILL -- its category's colour, or its
     own -- found by the node's VIEW row. Not through the paint list: a graph's
     edges number their data in the same space as its nodes, so the first
@@ -3869,7 +3961,7 @@ end;
 function TTyAdvanceChart.TooltipParams(
   const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
-  slot, col, i, n: Integer;
+  slot, i, n: Integer;
   cols: TTyIntegerArray;
   st: TTyDataStore;
 begin
@@ -3886,21 +3978,41 @@ begin
   if slot > High(FStores) then Exit;
   st := FStores[slot];
   if st = nil then Exit;
+  if Result.SeriesType = TyGraphSeriesTypeName then
+  begin
+    if ADatum.IsEdge then Result.DataType := 'edge'
+    else Result.DataType := 'node';
+  end;
+  { A GRAPH LINK IS NAMED BY ITS TWO ENDS, `source > target`, each the name
+    upstream's getName answers -- so a link between two bare numbers on a
+    category axis reads 'Mon > Tue'. Its value is the link's own, and most
+    links have none. }
+  if ADatum.IsEdge then
+  begin
+    if slot > High(FGraphEdges) then Exit;
+    for i := 0 to High(FGraphEdges[slot]) do
+      if FGraphEdges[slot][i].Row = ADatum.DataIndex then
+      begin
+        Result.Name := GraphNodeName(slot, FGraphEdges[slot][i].Source)
+          + ' > ' + GraphNodeName(slot, FGraphEdges[slot][i].Target);
+        if not IsNan(FGraphEdges[slot][i].Value) then
+        begin
+          SetLength(Result.Values, 1);
+          Result.Values[0] := FGraphEdges[slot][i].Value;
+        end;
+        Break;
+      end;
+    Exit;
+  end;
   if (ADatum.DataIndex < 0) or (ADatum.DataIndex >= st.Count) then Exit;
 
   { THE NAME UPSTREAM CALLS `data.getName(dataIndex)`. On a category axis it is
     the category; on two value axes there is none, because the default encode
     only assigns an item name "the category way". A line on a value x axis
     therefore shows a dot and a number and no words -- which is upstream's
-    picture, not a gap in this. }
-  Result.Name := st.GetName(ADatum.DataIndex);
-  if Result.Name = '' then
-  begin
-    col := -1;
-    if FBindings[slot].BaseAxis <> nil then
-      col := st.DimIndexOf(FBindings[slot].BaseAxis.Dim);
-    if col >= 0 then Result.Name := st.GetOrdinalText(col, ADatum.DataIndex);
-  end;
+    picture, not a gap in this. The store answers it, by the same rule the
+    label's b placeholder asks. }
+  Result.Name := st.GetItemName(ADatum.DataIndex);
 
   { WHICH VALUES, PLURAL. Upstream's `tooltipDims` is every data dimension
     mapped onto the value coordinate -- one for a bar, a line or a pie, and
@@ -3946,6 +4058,17 @@ begin
   haveValue := Length(p.Values) > 0;
   valueText := ValuesText(p);
   if haveValue and (valueText = '') then haveValue := False;
+  { A GRAPH LINK IS ONE BARE ROW -- upstream's formatTooltip hands back a
+    nameValue with no marker and no section, so no series header either,
+    named or not. }
+  if ADatum.IsEdge then
+  begin
+    if (Trim(inlineName) = '') and not haveValue then Exit;
+    Result := TTyTooltipBlock.CreateSection('', True);
+    Result.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0,
+      inlineName, False, valueText, not haveValue));
+    Exit;
+  end;
   if (Trim(inlineName) = '') and not haveValue and (Trim(seriesName) = '') then
     Exit;
 

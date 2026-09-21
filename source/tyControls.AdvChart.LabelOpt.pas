@@ -264,7 +264,10 @@ begin
   valueText := '';
   if AStore <> nil then
   begin
-    nameText := AStore.GetName(ARow);
+    { THE b PLACEHOLDER IS getName, which falls back to the category when the item has no
+      name of its own -- a bare number on a category axis is labelled with
+      its category, not with nothing. }
+    nameText := AStore.GetItemName(ARow);
     if (AValueDim >= 0) and (AValueDim < AStore.DimCount) then
     begin
       v := AStore.Get(AValueDim, ARow);

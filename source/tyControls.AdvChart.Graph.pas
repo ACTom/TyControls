@@ -27,7 +27,10 @@ uses
   tyControls.AdvChart.Layout, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Labels,
   tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.Symbol, tyControls.AdvChart.Color;
+  tyControls.AdvChart.Symbol, tyControls.AdvChart.Color,
+  { For TTySeriesDimArray: a graph on axes fills the axes' own columns. The
+    builder uses none of this unit, so the dependency stays one-way. }
+  tyControls.AdvChart.Builder;
 
 const
   TyGraphSeriesTypeName = 'graph';
@@ -66,7 +69,10 @@ type
 
   { ONE NODE. Positions are kept twice on purpose: X and Y are what the author
     wrote, in DATA space, and may be not-a-number; PX and PY are where the node
-    ended up, in device pixels, after a layout ran and the view mapped it. }
+    ended up, in device pixels, after a layout ran and the view mapped it.
+    On AXES X and Y are the node's two coordinates as the axes read them -- a
+    bare number on a category axis is its row and its value -- and PX and PY
+    are where the axes put them. }
   TTyGraphNode = record
     Name_: string;
     Id: string;
@@ -344,6 +350,14 @@ function TyGraphNodeFill(const ANode: TTyGraphNode;
 procedure TyGraphFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore);
 
+{ THE SAME FILL INTO COLUMNS ALREADY THERE -- a graph on axes, whose store
+  carries the axes' x and y and no value column at all, because upstream
+  builds its nodes the way it builds a scatter's points. Still `data || nodes`,
+  still the series' and the root's `category`, and never a dataset: a graph
+  reads its own nodes or none. }
+procedure TyGraphFillNodes(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore);
+
 { The edges, out of the option tree. `links` and `edges` are the same key under
   two names and upstream reads whichever is there, preferring neither. }
 function TyGraphEdgesOf(AOption: TTyChartOption; ASlot: Integer;
@@ -482,7 +496,11 @@ procedure TyGraphSolveCurveness(var AEdges: TTyGraphEdgeArray;
 
 { Every edge's control point, from the laid-out positions, in DATA space and
   then through the view -- the ring's pulled towards the ring's own centre,
-  every other layout's pushed out along the perpendicular. }
+  every other layout's pushed out along the perpendicular.
+
+  WITHOUT A VIEW the positions are already pixels -- a graph on axes, whose
+  layout IS dataToPoint -- and the point is authored from PX and PY and kept
+  as it comes out. There is no ring there, so ACircular is not asked. }
 procedure TyGraphEdgeGeometry(var AEdges: TTyGraphEdgeArray;
   const ANodes: TTyGraphNodeArray; AView: TTyGraphView; ACircular: Boolean);
 
@@ -500,7 +518,7 @@ const
 
 type
   { One graph series, solved: everything the builder and the ink need. The
-    VIEW is the caller's to free. }
+    VIEW is the caller's to free, and nil for a graph on axes. }
   TTyGraphSolved = record
     Spec: TTyGraphSpec;
     Cats: TTyGraphCategoryArray;
@@ -524,6 +542,22 @@ type
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState): TTyGraphSolved;
+
+{ THE SAME PASS FOR A GRAPH ON AXES, and most of it is not there. Upstream
+  lays such a graph out in one place for every coordinate system that is not
+  a view: each node goes to dataToPoint of its two coordinates, read from
+  AColX and AColY at the node's view row, and that is the whole layout --
+  `layout: 'force'` and `'circular'` both return before they start, and no
+  box, zoom, centre or aspect is ever read. A node with a not-a-number
+  coordinate is unplaced, and its links go with it.
+
+  THE EDGES ARE AUTHORED IN PIXELS, from those positions, with the curveness
+  a `none` layout asks for -- the negated family, by raw index. On axes whose
+  two scales differ, a control point made in data space and then mapped would
+  bow the other way. }
+function TyGraphSolveOnCoordSys(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const ACoordSys: ITyCoordSys;
+  AColX, AColY: Integer): TTyGraphSolved;
 
 type
   { Everything the builder needs a THEME to answer. This unit never asks what
@@ -594,14 +628,12 @@ function TyGraphArrowRotation(const ATangent: TTyPointF;
   EDGES FIRST. Upstream keeps them in a group below the nodes, and a node drawn
   under its own edges reads as a line crossing it rather than as a thing the
   lines join. }
-function TyBuildGraphMarks(ASeriesIndex: Integer; AView: TTyGraphView;
+function TyBuildGraphMarks(ASeriesIndex: Integer;
   const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AStore: TTyDataStore; AList: TTyPaintList): Integer;
 
 implementation
-
-uses tyControls.AdvChart.Builder;
 
 { ==================== the view ==================== }
 
@@ -1831,12 +1863,7 @@ end;
 procedure TyGraphFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore);
 var
-  node: TJSONObject;
-  d: TJSONData;
   dims: TTySeriesDimArray;
-  key: string;
-  i, k: Integer;
-  v: TTyDataValue;
 begin
   if AStore = nil then Exit;
   { ONE VALUE COLUMN, and everything else a node carries -- x, y, category,
@@ -1847,6 +1874,19 @@ begin
   dims[0] := Default(TTySeriesDim);
   dims[0].Name := 'value';
   dims[0].Kind := ddtFloat;
+  TyGraphFillNodes(AOption, ASeriesIndex, dims, AStore);
+end;
+
+procedure TyGraphFillNodes(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore);
+var
+  node: TJSONObject;
+  d: TJSONData;
+  key: string;
+  i, k: Integer;
+  v: TTyDataValue;
+begin
+  if AStore = nil then Exit;
   node := NodeAt(AOption, ASeriesIndex);
   if node = nil then Exit;
   { `data || nodes`: the second name is read only when the first is falsy --
@@ -1854,7 +1894,7 @@ begin
   key := 'data';
   d := node.Find('data');
   if (d = nil) or not JsTruthy(d) then key := 'nodes';
-  TyFillSeriesStore(AOption, ASeriesIndex, dims, AStore, key);
+  TyFillSeriesStore(AOption, ASeriesIndex, ADims, AStore, key);
 
   { A NODE'S `category` HAS PARENTS. Upstream reads it with getShallow, which
     walks the item model's chain -- the node, then the series, then the chart
@@ -3204,7 +3244,8 @@ var
       AEdges[AI].NaNCurve := True;
       Exit;
     end;
-    p := AView.DataToPoint([AQX, AQY]);
+    if AView = nil then p := TyPointF(AQX, AQY)
+    else p := AView.DataToPoint([AQX, AQY]);
     if Drawable(p.X, p.Y) then
     begin
       AEdges[AI].Curved := True;
@@ -3216,15 +3257,21 @@ var
   end;
 
 begin
-  if AView = nil then Exit;
   mask := MaskFP;
   try
     { THE RING'S OWN CENTRE, in data space: the centre of the DATA rectangle
       the ring was laid out in, which is not the pixel box's centre whenever
-      the author placed the nodes. }
-    rect := AView.GetDataRect;
-    cx := (rect.Right - rect.Left) / 2 + rect.Left;
-    cy := (rect.Bottom - rect.Top) / 2 + rect.Top;
+      the author placed the nodes. No view, no ring. }
+    cx := NaN;
+    cy := NaN;
+    if AView = nil then
+      ACircular := False
+    else
+    begin
+      rect := AView.GetDataRect;
+      cx := (rect.Right - rect.Left) / 2 + rect.Left;
+      cy := (rect.Bottom - rect.Top) / 2 + rect.Top;
+    end;
     for i := 0 to High(AEdges) do
     begin
       AEdges[i].Curved := False;
@@ -3253,10 +3300,20 @@ begin
         in pixels instead, the ring's control point would be pulled towards a
         centre measured in the wrong units, and every chord of a positioned
         ring would bow off towards one corner. }
-      x1 := ANodes[a].X;
-      y1 := ANodes[a].Y;
-      x2 := ANodes[b].X;
-      y2 := ANodes[b].Y;
+      if AView = nil then
+      begin
+        x1 := ANodes[a].PX;
+        y1 := ANodes[a].PY;
+        x2 := ANodes[b].PX;
+        y2 := ANodes[b].PY;
+      end
+      else
+      begin
+        x1 := ANodes[a].X;
+        y1 := ANodes[a].Y;
+        x2 := ANodes[b].X;
+        y2 := ANodes[b].Y;
+      end;
       x12 := (x1 + x2) / 2;
       y12 := (y1 + y2) / 2;
       if ACircular then
@@ -3298,6 +3355,83 @@ begin
     end;
 end;
 
+{ WHAT EVERY PASS STARTS FROM, whatever the graph is laid out on: the spec,
+  the categories, every node and edge the author wrote -- pins resolved -- and
+  the legend's survivors, renumbered.
+
+  EVERY NODE FIRST, WHATEVER THE LEGEND SAYS. Upstream builds the graph --
+  nodes, the edges between them, the curveness map -- from everything the
+  author wrote, and only then does the legend filter run over the NODE data;
+  each edge that lost an end goes with it. Edges resolve `source: 3` against
+  the full list for the same reason: the fourth node is the fourth node the
+  author wrote, not the fourth one that survived. }
+procedure GatherGraph(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; var ASolved: TTyGraphSolved;
+  out AAll: TTyGraphNodeArray; out AAllEdges: TTyGraphEdgeArray);
+var i, n, a, b: Integer;
+begin
+  ASolved.Spec := TyGraphSpecOf(AOption, ASeriesIndex);
+  ASolved.Cats := TyGraphCategoriesOf(AOption, ASeriesIndex);
+  AAll := TyGraphAllNodesOf(AStore, ASolved.Cats);
+  AAllEdges := TyGraphEdgesOf(AOption, ASeriesIndex, AAll);
+  TyGraphResolvePins(AAll, AAllEdges, ASolved.Cats, ASolved.Spec);
+  { THE SURVIVORS, in the order they were written; a kept node's view position
+    IS its position among the kept, so Row is where it lands. }
+  n := 0;
+  SetLength(ASolved.Nodes, Length(AAll));
+  for i := 0 to High(AAll) do
+    if AAll[i].Row >= 0 then
+    begin
+      ASolved.Nodes[n] := AAll[i];
+      Inc(n);
+    end;
+  SetLength(ASolved.Nodes, n);
+  n := 0;
+  SetLength(ASolved.Edges, Length(AAllEdges));
+  for i := 0 to High(AAllEdges) do
+  begin
+    a := AAll[AAllEdges[i].Source].Row;
+    b := AAll[AAllEdges[i].Target].Row;
+    if (a < 0) or (b < 0) then Continue;
+    ASolved.Edges[n] := AAllEdges[i];
+    ASolved.Edges[n].Source := a;
+    ASolved.Edges[n].Target := b;
+    Inc(n);
+  end;
+  SetLength(ASolved.Edges, n);
+end;
+
+{ Every survivor's curveness. ASKED OF THE MAP BUILT OVER EVERY EDGE. A
+  survivor's key still matches only if neither of its ends was renumbered by
+  the filter -- a node before either end taken out shifts it -- and the force
+  layout looks the edge up by its SURVIVING position (AByPosition) where the
+  others use the one it was filed under. Without a filter every answer is the
+  plain one. }
+procedure SolveSurvivorCurveness(var ASolved: TTyGraphSolved;
+  const AAll: TTyGraphNodeArray; const AAllEdges: TTyGraphEdgeArray;
+  ACircular, AByPosition: Boolean);
+var
+  i, a, b: Integer;
+  qr, ql: array of Integer;
+  ok: array of Boolean;
+  res: TTyDoubleArray;
+begin
+  SetLength(qr, Length(ASolved.Edges));
+  SetLength(ql, Length(ASolved.Edges));
+  SetLength(ok, Length(ASolved.Edges));
+  for i := 0 to High(ASolved.Edges) do
+  begin
+    qr[i] := ASolved.Edges[i].RawIndex;
+    if AByPosition then ql[i] := i else ql[i] := qr[i];
+    a := AAllEdges[qr[i]].Source;
+    b := AAllEdges[qr[i]].Target;
+    ok[i] := (AAll[a].Row = a) and (AAll[b].Row = b);
+  end;
+  SolveCurvenessQueries(AAllEdges, ASolved.Spec, ACircular, qr, ql, ok, res);
+  for i := 0 to High(ASolved.Edges) do
+    ASolved.Edges[i].SolvedCurveness := res[i];
+end;
+
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState): TTyGraphSolved;
@@ -3308,10 +3442,7 @@ var
   mask: TFPUExceptionMask;
   all: TTyGraphNodeArray;
   allEdges: TTyGraphEdgeArray;
-  i, n, a, b: Integer;
-  qr, ql: array of Integer;
-  ok: array of Boolean;
-  res: TTyDoubleArray;
+  i: Integer;
   initX, initY: TTyDoubleArray;
   kind: Integer;
 
@@ -3404,41 +3535,7 @@ var
 
 begin
   Result := Default(TTyGraphSolved);
-  Result.Spec := TyGraphSpecOf(AOption, ASeriesIndex);
-  Result.Cats := TyGraphCategoriesOf(AOption, ASeriesIndex);
-  { EVERY NODE FIRST, WHATEVER THE LEGEND SAYS. Upstream builds the graph --
-    nodes, the edges between them, the curveness map -- from everything the
-    author wrote, and only then does the legend filter run over the NODE data;
-    each edge that lost an end goes with it. Edges resolve `source: 3` against
-    the full list for the same reason: the fourth node is the fourth node the
-    author wrote, not the fourth one that survived. }
-  all := TyGraphAllNodesOf(AStore, Result.Cats);
-  allEdges := TyGraphEdgesOf(AOption, ASeriesIndex, all);
-  TyGraphResolvePins(all, allEdges, Result.Cats, Result.Spec);
-  { THE SURVIVORS, in the order they were written; a kept node's view position
-    IS its position among the kept, so Row is where it lands. }
-  n := 0;
-  SetLength(Result.Nodes, Length(all));
-  for i := 0 to High(all) do
-    if all[i].Row >= 0 then
-    begin
-      Result.Nodes[n] := all[i];
-      Inc(n);
-    end;
-  SetLength(Result.Nodes, n);
-  n := 0;
-  SetLength(Result.Edges, Length(allEdges));
-  for i := 0 to High(allEdges) do
-  begin
-    a := all[allEdges[i].Source].Row;
-    b := all[allEdges[i].Target].Row;
-    if (a < 0) or (b < 0) then Continue;
-    Result.Edges[n] := allEdges[i];
-    Result.Edges[n].Source := a;
-    Result.Edges[n].Target := b;
-    Inc(n);
-  end;
-  SetLength(Result.Edges, n);
+  GatherGraph(AOption, ASeriesIndex, AStore, Result, all, allEdges);
 
   mask := MaskFP;
   try
@@ -3497,26 +3594,65 @@ begin
     if Result.Spec.Layout = glForce then
       ApplyStalePoints;
     circ := Result.Spec.Layout = glCircular;
-    { ASKED OF THE MAP BUILT OVER EVERY EDGE. A survivor's key still matches
-      only if neither of its ends was renumbered by the filter -- a node before
-      either end taken out shifts it -- and the force layout looks the edge up
-      by its SURVIVING position where the others use the one it was filed
-      under. Without a filter every answer is the plain one. }
-    SetLength(qr, Length(Result.Edges));
-    SetLength(ql, Length(Result.Edges));
-    SetLength(ok, Length(Result.Edges));
-    for i := 0 to High(Result.Edges) do
-    begin
-      qr[i] := Result.Edges[i].RawIndex;
-      if Result.Spec.Layout = glForce then ql[i] := i else ql[i] := qr[i];
-      a := allEdges[qr[i]].Source;
-      b := allEdges[qr[i]].Target;
-      ok[i] := (all[a].Row = a) and (all[b].Row = b);
-    end;
-    SolveCurvenessQueries(allEdges, Result.Spec, circ, qr, ql, ok, res);
-    for i := 0 to High(Result.Edges) do
-      Result.Edges[i].SolvedCurveness := res[i];
+    SolveSurvivorCurveness(Result, all, allEdges, circ,
+      Result.Spec.Layout = glForce);
     TyGraphEdgeGeometry(Result.Edges, Result.Nodes, Result.View, circ);
+    TyGraphSanitise(Result.Nodes);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyGraphSolveOnCoordSys(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const ACoordSys: ITyCoordSys;
+  AColX, AColY: Integer): TTyGraphSolved;
+var
+  mask: TFPUExceptionMask;
+  all: TTyGraphNodeArray;
+  allEdges: TTyGraphEdgeArray;
+  i, row: Integer;
+  x, y: Double;
+  p: TTyPointF;
+begin
+  Result := Default(TTyGraphSolved);
+  GatherGraph(AOption, ASeriesIndex, AStore, Result, all, allEdges);
+  mask := MaskFP;
+  try
+    for i := 0 to High(Result.Nodes) do
+    begin
+      { THE TWO COORDINATES FROM THE COLUMNS, at the node's VIEW row -- the
+        legend's category filter is a view, and a column read by raw row
+        would hand a survivor the value of the node before it. The x and y
+        the author may have written on the item are the view layout's words
+        and mean nothing here. }
+      row := Result.Nodes[i].Row;
+      x := NaN;
+      y := NaN;
+      if (AStore <> nil) and (row >= 0) and (row < AStore.Count) then
+      begin
+        if (AColX >= 0) and (AColX < AStore.DimCount) then
+          x := AStore.Get(AColX, row);
+        if (AColY >= 0) and (AColY < AStore.DimCount) then
+          y := AStore.Get(AColY, row);
+      end;
+      Result.Nodes[i].X := x;
+      Result.Nodes[i].Y := y;
+      Result.Nodes[i].PX := NaN;
+      Result.Nodes[i].PY := NaN;
+      { A HALF IS NOT A PLACE. Upstream keeps one half of a point whose other
+        half is not-a-number, and draws neither the node nor its links; the
+        port keeps no halves at all, which draws the same nothing. A value
+        off the axis is placed off the grid, unclamped: nothing about a graph
+        is clipped. }
+      if IsNan(x) or IsNan(y) or (ACoordSys = nil) then Continue;
+      p := ACoordSys.DataToPoint([x, y]);
+      Result.Nodes[i].PX := p.X;
+      Result.Nodes[i].PY := p.Y;
+    end;
+    { THE `none` FAMILY, by raw index, whatever `layout` says: upstream's
+      one layout for a graph off a view is simpleLayoutEdge. }
+    SolveSurvivorCurveness(Result, all, allEdges, False, False);
+    TyGraphEdgeGeometry(Result.Edges, Result.Nodes, nil, False);
     TyGraphSanitise(Result.Nodes);
   finally
     UnmaskFP(mask);
@@ -3737,7 +3873,7 @@ begin
     Result := AInk.NodeFills[at];
 end;
 
-function TyBuildGraphMarks(ASeriesIndex: Integer; AView: TTyGraphView;
+function TyBuildGraphMarks(ASeriesIndex: Integer;
   const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AStore: TTyDataStore; AList: TTyPaintList): Integer;
@@ -3817,7 +3953,10 @@ var
 
 begin
   Result := 0;
-  if (AList = nil) or (AView = nil) then Exit;
+  { NO COORDINATE SYSTEM IS ASKED HERE. Every position this draws was solved
+    into pixels already -- by a view or by a pair of axes -- so the one
+    builder serves both. }
+  if AList = nil then Exit;
 
   for i := 0 to High(AEdges) do
   begin
@@ -3877,7 +4016,7 @@ begin
     { AN EDGE IS ITS OWN DATUM, and it is numbered in the EDGE list -- a
       tooltip that read it as a node index would name whichever node happened
       to share the number. }
-    el.Datum := TyChartDatum(ASeriesIndex, AEdges[i].Row);
+    el.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[i].Row);
     el.HitSlopLogical := 4;
     AList.Add(el);
     Inc(Result);

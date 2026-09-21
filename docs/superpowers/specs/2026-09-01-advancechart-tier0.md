@@ -167,10 +167,10 @@ type
 | 6 | **校验式设计期编辑器** —— 路径感知的 DAG 补全、惰性参考树、能读出 `series[i]` 下 `type` 判别符的容错解析器、目录感知的错误提示 | L | 用户点名要的。先例：`Design.Css.Editor` 351 + `Css.Complete` 360 + `Css.Catalog` 411 = 1122 行已经在 `.tycss` 词汇上跑通了同一台机器 |
 | 7 | **具名句柄注册表 + 模板串** —— 面向那 **1212 个**接受函数的节点 | S | option 树里闭包活不下来。形状照 v6 的 `registerCustomSeries` + `itemPayload`（一个 30 行的注册表）：`renderItem: 'bubble'`、`formatter: '@MyFormatter'`，外加一等的 `'{b}: {c}'` 模板串——**光模板串就覆盖 539/1212** |
 | 8 | 列式类型化数据存储 —— 维度（float/int/ordinal/time）、**NaN 作无数据哨兵**、带 Has 标志的逐点覆盖侧表、逐点 id/name、ordinal 驻留 + 倒排索引 | XL | 23 种 series 里 20 种没有它就表达不了 |
-| 9 | **可断的 scale 抽象** —— `ITyScaleMapper`（Linear/Log/Break 同构）+ Ordinal/Interval/Log；nice 1-2-5、次刻度、`min`/`max`/`scale`/`splitNumber`/`interval`/`minInterval`/`maxInterval`/`boundaryGap`/`inverse`、退化域、**`startValue` 独立于 `min`**、**两种 extent** | L | 契约 ②。见 §2 |
+| 9 | **可断的 scale 抽象** —— `ITyScaleMapper`（Linear/Log/Break 同构）+ Ordinal/Interval/Log；nice 1-2-5、次刻度、`min`/`max`/`scale`/`splitNumber`/`interval`/`minInterval`/`maxInterval`/`boundaryGap`/`inverse`、退化域、**`startValue` 独立于 `min`**、**两种 extent** | L | 契约 ②。见 §2。**[第三十二批标注：实现用的是不取整的 1/2/2.5/5 阶梯；上游 `intervalScaleNiceTicks` 是 `nice(span/splitNumber, round)`，1/2/3/5/10、阈值 1.5/2.5/4/7。span 为 7 时上游间隔 1、这里 2。待单独一批按 oracle 修，见 §66。]** |
 | 10 | **坐标系接口 `DataToPoint` + `DataToLayout`** + `TTyCartesian2D`（N 个 x/y 轴 + master/sub 拆分） | L | 契约 ①。见 §2 |
 | 11 | **盒布局求解器收容器矩形提供者**（`left/top/right/bottom/width/height`；px、`'%'`、关键字），全组件共用 | M | 契约 ① 的另一半。写成「控件客户区」就等于把嵌套变成重写 |
-| 12 | 两阶段轴构建（估文字 → 收缩矩形 → 定尺寸），形状用 `outerBounds`/`outerBoundsContain`/`nameMoveOverlap`，**不用已弃用的 `containLabel`** | L | 标签适配的底座。v6 形状比 v5 多约 150 行（ECharts 把 v5 版留成 `legacyContainLabel.ts` 共 120 行，v6 解算器约 276 行） |
+| 12 | 两阶段轴构建（估文字 → 收缩矩形 → 定尺寸），形状用 `outerBounds`/`outerBoundsContain`/`nameMoveOverlap`，**不用已弃用的 `containLabel`** | L | 标签适配的底座。v6 形状比 v5 多约 150 行（ECharts 把 v5 版留成 `legacyContainLabel.ts` 共 120 行，v6 解算器约 276 行）。**[第三十二批标注：`outerBoundsMode:'auto'` 的外边界默认是**整个画布**（`OUTER_BOUNDS_DEFAULT` 边距 0），只有标签越出画布才收缩 grid；实现把 grid 矩形当外边界、按标签厚度收缩，等于 `containLabel:true`，plot 普遍偏小。待单独一批按 oracle 修，见 §66。]** |
 | 13 | series 注册表 —— 逐 series 的 `Type` + 逐 series 的轴绑定 | M | 混合图表类型与副轴全靠它 |
 | 14 | 元素 / 绘制列表，`z`/`z2` 排序，**唯一**的命中路径 | M | 今天绘制顺序 = 代码顺序。TTySegmented 那条「绘制与命中调同一批函数」的规矩，放大版 |
 | 15 | 文字度量缓存（逐字体记录、ASCII 宽表、字符串 LRU）+ 折行/截断/省略号接到 `TyWrapTextCJK` | M | 每一趟布局都要先量文字才能定矩形；而仓库记忆 `cjk-wordwrap-space-only-trap` 说只认空格的折行在 CJK 上会静默失效 |
@@ -5071,3 +5071,98 @@ graph 写了 `categories`,图例列的就是类别,不再是系列名。关掉�
 ### 还在队列里
 
 笛卡尔上的 graph(graph-life-expectancy 有 19 个系列)、roam(连同补偿缩放和非等比视图)、`focus: 'adjacency'`。
+
+## 66. Tier 1 第三十二批:直角坐标系上的 graph(2026-09-21)
+
+`coordinateSystem: 'cartesian2d'` 的 graph 以前能解析、画不出来。现在节点按两根轴落位,连线、箭头、标签、tooltip 都有。
+目标示例是画廊里的 `graph-grid` 和 `graph-life-expectancy`。
+
+### 上游在轴上只做一件事
+
+不是 view 的坐标系,上游只有一种布局:每个节点放在 `dataToPoint(x, y)`,这就是全部。
+
+- `layout: 'force'` 和 `'circular'` 都在开头判断坐标系类型,直接返回。写了也没用,节点位置和 `none` 一模一样。
+- 盒子、`zoom`、`center`、`preserveAspect`、`nodeScaleRatio` 一概不读。节点按自己的 `symbolSize` 像素画,箭头也是。
+- 数据项上写的 `x`、`y` 不算位置。位置来自数据的两个维度:类目轴上一个裸数字就是"行号 + 值"(`graph-grid` 的 842 落在 Mon),值数组取前两列。
+- 数据和别的直角坐标系列一样参与轴的范围。图例把节点滤掉以后,范围按剩下的算。
+- 连线的控制点在**像素**里算,曲度取 `none` 那一族(取负、按原始边号查)。两根轴比例不同,在数据空间里算再映射,曲线会往另一边弯。
+- 什么都不裁剪。轴外的值画在 grid 外面。
+
+### 仓库和求解
+
+- 轴上的 graph 用轴自己的 x、y 两列,没有 `value` 列。还是读 `data || nodes`,还是把系列和根上的 `category` 填进没写的节点,**从不读 dataset**:上游 graph 只认自己的节点。
+- `TyGraphSolveOnCoordSys`:在节点的**视图行**上读两列(图例过滤是个视图),`dataToPoint`,然后算曲度和控制点。
+  有一个坐标是 NaN 的节点没有位置,连线跟着不画。上游会保留另外半个坐标,但半个点两边都画不出来。
+- 两个求解器共用同一段"收集节点、边、存活者"的代码和同一段曲度查询。`TyGraphEdgeGeometry` 不传 view 时就用像素位置,也不走环形公式(环形要 view 的中心)。
+- 控件里 `FGraphLaidOut` 取代了"`FGraphs[i]` 非空"这个判断:轴上的 graph 没有 view,也是布局好的。`TyBuildGraphMarks` 去掉了 view 参数,它从来只拿它判断是不是 nil。
+
+### 名字:getName 会回落到类目
+
+上游 `createSeriesData` 把"条目名"交给**第一个类目维**。条目自己没名字时,`getName` 回答类目文字。
+所以 `graph-grid` 的标签是 Mon…Sun,不是空的。
+
+- 新增 `TTyDataStore.GetItemName`:先看自己的名字,没有就取第一个 ordinal 维的类目文字。
+- 标签的 b 占位符(`TyLabelText`)和 tooltip 的名字都改走它。**这是全库的**:类目轴上的柱子、折线写 `{b}` 以前是空的,现在显示类目。
+- 节点的**键**不变,还是作者写的 id、名字或位置。上游也是:裸数字节点按 '0'、'1' 连,连 'Mon' 找不到。
+
+### 连线不再冒充节点
+
+连线的行号和节点的行号在同一个数字空间里。以前鼠标移到第一条连线上,tooltip 说的是第一个节点。
+
+- `TTyChartDatumRef.IsEdge`,连线用 `TyChartEdgeDatum`。零值是 False,其他所有数据不受影响。
+- 按行找元素(`IndexOfDatum` / `IndexOfDatumInk`)跳过连线。
+- 连线的 tooltip 照上游 `formatTooltip`:一行 `源 > 目标`(两头都用 getName),没有标记,没有系列标题,有 `value` 才显示值。
+  用系列级的 tooltip 设置,不读同行节点的。颜色是连线的描边。
+- 回调参数多了 `DataType`:graph 的节点是 `'node'`,连线是 `'edge'`,其他为空。
+
+### 基准
+
+`tools/advchart-oracle/graph-cartesian.js`,22 个用例,直接读上游的 `getItemLayout`(轴上已经是像素,不能再映射一次)。
+比对 plot 矩形、每个节点的原始行和像素位置、名字、每条连线的弯法、控制点、两端在不在、tooltip 名字和值、作者写了线色时的描边,
+以及上游滤掉的 graph 这里也不布局。380 多项,全部一致。
+
+用例覆盖类目 x / 类目 y / 两根值轴、值数组带多余列和数字名、缺值、像素曲度、自动曲度(含过滤后按原始边号查)、
+force 和 circular 被忽略、条目的 x/y 不算、图例按类别过滤、系列级 `category`、`nodes` 旁边有 dataset、轴外的值、第二根 y 轴、
+single 模式的图例、没有 data 的类目轴、有名字的节点、带值的连线、按端点着色的连线。
+
+### 顺带挖出的两个全库问题(单独成批)
+
+为了让比对只看 graph,夹具把所有轴的标签和刻度藏了起来,还避开了两种取整规则会分歧的轴范围。原因是这两件事 port 都和上游不一样:
+
+1. **刻度间隔**。上游(v5 和 v6 都是)`intervalScaleNiceTicks` 用 `nice(span/splitNumber, round)`,档位 1/2/3/5/10,阈值 1.5/2.5/4/7。
+   port 是不取整的 1/2/2.5/5。span 为 7 时上游间隔 1、这里 2;`graph-grid` 的 y 轴上游是 0 到 6000 七格,这里四格。
+2. **grid 收缩**。v6 的 `outerBoundsMode: 'auto'` 外边界默认是**整个画布**,标签不越出画布就不收缩。
+   port 把 grid 矩形当外边界、按标签厚度收缩,等于 `containLabel: true`,plot 比上游普遍小三十像素左右。
+
+两处都在 Tier 0 的原话旁边加了标注。两批都会动很多旧测试,要先写 oracle。
+
+### 已知偏差
+
+- `graph-life-expectancy` 的节点颜色来自 visualMap(还没有),这里是系列色。
+- 节点的 `itemStyle.borderColor/borderWidth` 不画,每个数据项自己的 `label`(那三个年份标签)不读,图例色块没有 2px 边框。view 上的 graph 也一样。
+- 内部标签的自动描边没有:上游给 inside 文字加一圈 2px 宿主色描边,溢出节点的白字靠它看得见。这里 "Very Loooong Thu" 溢出的部分白底白字。全库的问题。
+- `{c}` 在轴上读值轴那一列;上游是原始值,值数组会整个拼出来。两个目标示例都不用。
+- 没有 `tooltip` 组件的图(life-expectancy)这里照样弹 tooltip。全库的问题。
+- 轴上的 graph 不能拖节点(拖动还没做)。
+
+### 落地
+
+- `source/tyControls.AdvChart.Graph.pas`:`TyGraphSolveOnCoordSys`、共用的收集和曲度查询、`TyGraphFillNodes`、
+  `TyGraphEdgeGeometry` 的无 view 分支、`TyBuildGraphMarks` 去掉 view 参数、连线用边数据引用。
+- `source/tyControls.AdvanceChart.pas`:轴上 graph 的仓库分支和求解分支、`FGraphLaidOut`、`{c}` 列、tooltip 和颜色的连线分支、`GraphNodeName`。
+- `source/tyControls.AdvChart.Paint.pas`:`IsEdge` 和 `TyChartEdgeDatum`,按行查找跳过连线。
+- `source/tyControls.AdvChart.Data.pas`:`GetItemName`。`source/tyControls.AdvChart.LabelOpt.pas`:b 占位符走它。
+- `source/tyControls.AdvChart.Handlers.pas`:`DataType`。
+- `tools/advchart-oracle/graph-cartesian.js`、`tests/fixtures/advchart-graph-cartesian.json`、`tests/test.advchart.graphcartesian.pas`(新)。
+
+### 变异测试
+
+三十二个变异体。一个是等价的:半个坐标是 NaN 的节点在前面跳过,还是交给后面的清洗,结果一样——清洗本来就把半个点清成 NaN。
+它从清单里拿掉,理由记在这里。
+
+剩下 31 个,第一轮活了一个:**轴上不做清洗**。半个点早就跳过了,夹具里又没有远得离谱的值,清洗只剩"一千屏"那一条管得着。
+规则测试里补了一个 1e12 的节点,当场就死。全量 **7692** 绿。
+
+### 还在队列里
+
+刻度间隔的取整规则 → grid 的外边界收缩 → roam(连同补偿缩放和非等比视图)→ `focus: 'adjacency'`。

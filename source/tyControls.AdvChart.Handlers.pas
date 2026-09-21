@@ -43,6 +43,10 @@ type
   TTyChartCallbackParams = record
     ComponentType: string;      // 'series' for everything a series draws
     SeriesType: string;         // 'bar', 'line', ...
+    { '' for every datum but a graph's, where it is 'node' or 'edge' --
+      upstream's params.dataType, which is how a formatter tells a link from
+      the node that shares its row number. }
+    DataType: string;
     SeriesIndex: Integer;
     SeriesName: string;         // the a placeholder
     Name: string;               // data or category name -- the b placeholder
