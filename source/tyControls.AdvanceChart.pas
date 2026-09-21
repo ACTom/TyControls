@@ -404,8 +404,12 @@ type
     function RadarInk: TTyRadarInk;
     function RadarVisual(ASlot: Integer): TTyRadarVisual;
     function FunnelLabelInk: TTyFunnelLabelInk;
-    { The label spec for one series, resolved from the theme and the option. }
-    function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
+    { The label spec for one series, resolved from the theme and the option.
+      ADefaultFormatter is the series type's own `label.formatter` default,
+      which an option can override and -- with null -- remove. }
+    function LabelSpecFor(ASlot: Integer): TTyLabelSpec; overload;
+    function LabelSpecFor(ASlot: Integer;
+      const ADefaultFormatter: string): TTyLabelSpec; overload;
     { The fonts and the four inks a pie label is drawn with. }
     function PieLabelInk: TTyPieLabelInk;
     { `series.name`, which is what `{a}` in a label formatter means -- and,
@@ -490,9 +494,6 @@ type
       always takes. The sub-row form, a small dot per dimension on its own
       line, is the other branch and is not built yet. }
     function ValuesText(const AParams: TTyChartCallbackParams): string;
-    { Every surviving series as a formatter would see it, in section order --
-      so `{a0}` is the first row of the first section. }
-    function AxisTooltipParams(const AHits: TTyAxisHitArray): TTyChartParams;
     { The colour of the thing a datum was drawn as, taken from the element
       that drew it. Asks the paint list rather than the series so a per-datum
       itemStyle comes for free and the dot can never disagree with the mark it
@@ -510,6 +511,12 @@ type
     function HasDynamicContent: Boolean;
     procedure DropStatic;
   protected
+    { Every surviving series as a formatter would see it, in section order --
+      so `{a0}` is the first row of the first section. }
+    function AxisTooltipParams(const AHits: TTyAxisHitArray): TTyChartParams;
+    { The elements the last render built, series and labels -- the list the
+      hit test walks and the painter draws, read-only. }
+    property SeriesList: TTyPaintList read FPaintList;
     function GetStyleTypeKey: string; override;
     procedure Resize; override;
     { Protected and non-virtual, exactly as every other control in the library:
@@ -2357,13 +2364,14 @@ begin
     Result.NodeFills[i] := TyGraphNodeFill(FGraphNodes[ASlot][i], cols,
       Length(FGraphCats[ASlot]), base, store, Result.EdgeEndFills[i]);
 
-  Result.Label_ := LabelSpecFor(ASlot);
   { A NODE'S LABEL IS ITS NAME, and the graph is the only series here whose
     default formatter says so: `label.formatter: '{b}'` is in its own
-    defaultOption. Every other series defaults to the VALUE, and a graph node
-    usually has no value at all -- so without this the labels come out
-    empty rather than wrong, which is harder to notice. }
-  Result.Label_.DefaultText := tldName;
+    defaultOption -- a TEMPLATE, so a name is read the way formatTpl reads it.
+    Being a default, the option can take it away: `formatter: null` stays
+    null through upstream's merge, and a node then shows what every other
+    series shows, its VALUE (on a cartesian graph, the value axis' column). }
+  Result.Label_ := LabelSpecFor(ASlot, '{b}');
+  Result.Label_.DefaultText := tldValue;
   Result.SeriesName := SeriesNameOf(FBindings[ASlot].SeriesIndex);
   { THE c PLACEHOLDER IS THE VALUE COLUMN on a view and the value AXIS' column on axes,
     where there is no column called value at all. }
@@ -2852,6 +2860,10 @@ begin
   node := TJSONObject(d);
   d := node.Find('name');
   if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString);
+  { A NUMBER IS A NAME TOO -- convertOptionIdName, `'' + name` -- so a
+    series called 2015 is headed and listed as 2015, not as nobody. }
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    Exit(TyJsNumberToString(d.AsFloat));
 
   { A SERIES READING A TABLE NAMES ITSELF AFTER THE COLUMN IT TOOK. That is
     how three bars on one dataset end up called 2015, 2016 and 2017 in a
@@ -3420,11 +3432,22 @@ begin
 end;
 
 function TTyAdvanceChart.LabelSpecFor(ASlot: Integer): TTyLabelSpec;
+begin
+  Result := LabelSpecFor(ASlot, '');
+end;
+
+function TTyAdvanceChart.LabelSpecFor(ASlot: Integer;
+  const ADefaultFormatter: string): TTyLabelSpec;
 var
   base: TTyLabelSpec;
   outS, lightS, midS, darkS: TTyStyleSet;
 begin
   base := TyLabelSpecNone;
+  if ADefaultFormatter <> '' then
+  begin
+    base.Formatter := ADefaultFormatter;
+    base.HasFormatter := True;
+  end;
   outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
   lightS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight',
     '', []);
@@ -3577,7 +3600,8 @@ begin
           Inc(drawn, TyBuildFunnelLabels(FBindings[i], FFunnels[i],
             TyFunnelLabelSpecOf(FOption, FBindings[i].SeriesIndex,
               TyFunnelLabelSpecDefault),
-            FunnelLabelInk, fv.Fills, FStores[i], AMeasurer, APPI, list));
+            FunnelLabelInk, fv.Fills, FStores[i], SeriesNameOf(i),
+            FStores[i].DimIndexOf(TyPieValueDim), AMeasurer, APPI, list));
         end;
         Continue;
       end;
@@ -3596,7 +3620,9 @@ begin
           Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i],
             TyPieLabelSpecOf(FOption, FBindings[i].SeriesIndex,
               TyPieLabelSpecDefault),
-            PieLabelInk, pv.Fills, FStores[i], AMeasurer, APPI, list));
+            PieLabelInk, pv.Fills, FStores[i], SeriesNameOf(i),
+            FStores[i].DimIndexOf(TyPieValueDim),
+            FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));
         end;
         Continue;
       end;
@@ -3939,6 +3965,7 @@ var
   slot, i, n: Integer;
   cols: TTyIntegerArray;
   st: TTyDataStore;
+  pct: TTyDoubleArray;
 begin
   Result := Default(TTyChartCallbackParams);
   Result.ComponentType := 'series';
@@ -3989,6 +4016,28 @@ begin
     label's b placeholder asks. }
   Result.Name := st.GetItemName(ADatum.DataIndex);
 
+  { THE d LETTER, which only a pie and a funnel have: the pie's seats (the
+    largest-remainder shares, to percentPrecision) and the funnel's two-place
+    share, both over the slices there are. Everywhere else `{d}` is no
+    letter at all and a template leaves it as written. }
+  if (Result.SeriesType = TyPieSeriesTypeName) and (slot <= High(FPies)) then
+  begin
+    Result.HasPercent := True;
+    pct := TyPieSectorPercents(FPies[slot], FPieSpecs[slot].PercentPrecision);
+    for i := 0 to High(FPies[slot].Sectors) do
+      if FPies[slot].Sectors[i].Index = ADatum.DataIndex then
+        Result.Percent := pct[i];
+  end
+  else if (Result.SeriesType = TyFunnelSeriesTypeName)
+    and (slot <= High(FFunnels)) then
+  begin
+    Result.HasPercent := True;
+    pct := TyFunnelPercents(FFunnels[slot]);
+    for i := 0 to High(FFunnels[slot].Items) do
+      if FFunnels[slot].Items[i].Index = ADatum.DataIndex then
+        Result.Percent := pct[i];
+  end;
+
   { WHICH VALUES, PLURAL. Upstream's `tooltipDims` is every data dimension
     mapped onto the value coordinate -- one for a bar, a line or a pie, and
     FOUR for a candlestick, which is why `mapDimensionsAll` is the plural
@@ -4038,6 +4087,10 @@ begin
     named or not. }
   if ADatum.IsEdge then
   begin
+    { A LINK WITH NO VALUE HAS NO VALUE CELL -- upstream's noValue is
+      `value == null` here -- where a node or a bar with a missing value
+      shows '-'. Nothing to decide here: TooltipParams gives a link a value
+      only when it has one, so haveValue is already False. }
     if (Trim(inlineName) = '') and not haveValue then Exit;
     Result := TTyTooltipBlock.CreateSection('', True);
     Result.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0,
@@ -4053,6 +4106,10 @@ begin
     SeriesNameOf answers '' for exactly that case -- and it is a different
     LAYOUT, not a wording change: without a header the section's gap level
     drops from 1 to 0 and the box loses a row. }
+  { A NAME OF BLANKS IS STILL A NAME: upstream's isNameSpecified asks only
+    whether one was written, and the header then goes through
+    makeValueReadable, which never shows nothing -- so it reads '-'. }
+  if (seriesName <> '') and (Trim(seriesName) = '') then seriesName := '-';
   Result := TTyTooltipBlock.CreateSection(seriesName, False);
   Result.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
     inlineName, False, valueText, not haveValue));

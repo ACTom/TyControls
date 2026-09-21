@@ -45,6 +45,7 @@ type
     procedure TestMinAndMaxAreAbsentNotZero;
     procedure TestTheLastBandTapersToTheWidthOfZero;
     procedure TestZeroRowsIsNotADivisionByZero;
+    procedure TestAShareOfNothingIsZero;
     procedure TestAWrittenMinWidensTheDomainAndNarrowsTheBands;
     procedure TestTheSizeIsMeasuredAcrossTheStackNotAlongIt;
     procedure TestTheCornerOrderIsTheContractTheLabelsRead;
@@ -339,6 +340,26 @@ begin
   widest := lay.Items[0].Points[1].X - lay.Items[0].Points[0].X;
   AssertEquals('the widest band is the full WIDTH of the box', 400.0,
                widest, 1.0);
+end;
+
+procedure TAdvChartFunnelRuleTest.TestAShareOfNothingIsZero;
+var
+  lay: TTyFunnelLayout;
+  pct: TTyDoubleArray;
+begin
+  { `!sum ? 0 : +(value / sum * 100).toFixed(2)` -- bands that add up to
+    nothing each have a share of 0, not a division by zero; and a missing
+    value is left out of the sum, so it cannot make one either. }
+  lay := Default(TTyFunnelLayout);
+  SetLength(lay.Items, 3);
+  lay.Items[0].Value := 0;
+  lay.Items[1].Value := NaN;
+  lay.Items[2].Value := 0;
+  pct := TyFunnelPercents(lay);
+  AssertEquals(3, Length(pct));
+  AssertEquals('an empty band', 0.0, pct[0], 0);
+  AssertEquals('even the missing one', 0.0, pct[1], 0);
+  AssertEquals(0.0, pct[2], 0);
 end;
 
 procedure TAdvChartFunnelRuleTest.TestZeroRowsIsNotADivisionByZero;

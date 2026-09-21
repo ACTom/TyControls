@@ -589,7 +589,7 @@ begin
 
     AssertTrue('something was added',
       TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF000000],
-        store, m, 96, list) > 0);
+        store, '', 0, 2, m, 96, list) > 0);
 
     captions := 0;
     for i := 0 to list.Count - 1 do
@@ -616,8 +616,9 @@ begin
     { A formatter overrides the name. }
     list.Clear;
     spec.Formatter := '{b}!';
+    spec.HasFormatter := True;
     TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF000000],
-      store, m, 96, list);
+      store, '', 0, 2, m, 96, list);
     captions := 0;
     for i := 0 to list.Count - 1 do
       if list.Element(i).Caption.Text = 'Rent!' then Inc(captions);
@@ -668,7 +669,7 @@ procedure TAdvChartPieLabelTest.TestOnlyAnInsideLabelTakesTheContrastInk;
       { A near-black slice, so the contrast rule answers the third band and
         cannot be confused with the outside ink. }
       TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF000000],
-        store, m, 96, list);
+        store, '', 0, 2, m, 96, list);
       for i := 0 to list.Count - 1 do
         if list.Element(i).Caption.Text <> '' then
           Exit(list.Element(i).Caption.Colour);
@@ -722,7 +723,7 @@ begin
     ink.LineWidthLogical := 1;
     spec := TyPieLabelSpecDefault;
     TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF00FF00, $FF0000FF],
-      store, m, 96, list);
+      store, '', 0, 2, m, 96, list);
 
     lines := 0;
     for i := 0 to list.Count - 1 do
@@ -737,6 +738,24 @@ begin
       AssertTrue('and is stroked, not filled', el.Style.StrokeWidthLogical > 0);
     end;
     AssertEquals('one leader per slice', 2, lines);
+
+    { AN EMPTY LABEL KEEPS ITS LINE. `formatter: ''` is an empty text, not
+      no label, and upstream still draws the leader that points at it. }
+    list.Clear;
+    spec.Formatter := '';
+    spec.HasFormatter := True;
+    TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF00FF00, $FF0000FF],
+      store, '', 0, 2, m, 96, list);
+    lines := 0;
+    for i := 0 to list.Count - 1 do
+      if list.Element(i).Shape.Kind = cskPolyline then Inc(lines);
+    AssertEquals('an empty label still has its leader', 2, lines);
+    for i := 0 to list.Count - 1 do
+      AssertEquals('and no words', '', list.Element(i).Caption.Text);
+    spec := TyPieLabelSpecDefault;
+    list.Clear;
+    TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF00FF00, $FF0000FF],
+      store, '', 0, 2, m, 96, list);
 
     { IN THE SLICE'S OWN COLOUR, and the two slices have different ones -- so
       a version that used one colour for every leader is visible here and

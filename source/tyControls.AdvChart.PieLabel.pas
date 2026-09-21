@@ -85,7 +85,9 @@ type
       applies it inside the rotation, which this does not; noted where it is
       applied. }
     OffsetXLogical, OffsetYLogical: Double;
+    { A string template, the empty one included; see TTyLabelSpec. }
     Formatter: string;
+    HasFormatter: Boolean;
     Overflow: TTyLabelOverflow;
     { WHAT THE OPTION SAID, kept beside the enum because two rules read the
       WORD rather than the placement: the guide line exists only for the
@@ -151,7 +153,8 @@ type
 function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   const ALayout: TTyPieLayout; const ASpec: TTyPieLabelSpec;
   const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
-  AStore: TTyDataStore; const AMeasurer: ITyTextMeasurer;
+  AStore: TTyDataStore; const ASeriesName: string; AValueDim,
+  APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
 
 { bleedMargin's computed default: ten on a normal chart, two on a small one.
@@ -172,6 +175,9 @@ const
 
 function TyPieLabelSpecDefault: TTyPieLabelSpec;
 begin
+  { every field, so a flag added later starts False rather than wherever
+    the stack left it }
+  Result := Default(TTyPieLabelSpec);
   Result.Show := True;                        { PieSeries.ts:269 }
   Result.Position := tplOuter;                { :271-272, 'outer' not 'outside' }
   Result.AlignTo := tpaNone;
@@ -349,7 +355,17 @@ begin
     d := node.Find('bleedMargin');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.BleedMargin := d.AsFloat;
-    Result.Formatter := StrIn(node, 'formatter');
+    d := node.Find('formatter');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      Result.Formatter := d.AsString;
+      Result.HasFormatter := True;
+    end
+    else if (d <> nil) and (d.JSONType = jtNull) then
+    begin
+      Result.Formatter := '';
+      Result.HasFormatter := False;
+    end;
     s := StrIn(node, 'overflow');
     if s = 'truncate' then Result.Overflow := tloTruncate
     else if s = 'none' then Result.Overflow := tloNone;
@@ -536,10 +552,12 @@ end;
 function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   const ALayout: TTyPieLayout; const ASpec: TTyPieLabelSpec;
   const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
-  AStore: TTyDataStore; const AMeasurer: ITyTextMeasurer;
+  AStore: TTyDataStore; const ASeriesName: string; AValueDim,
+  APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
 var
   i, row: Integer;
+  percents: TTyDoubleArray;
   place: TTyPieLabelPlacement;
   words: string;
   w, h: Double;
@@ -564,6 +582,7 @@ begin
   lbl.InsideColour[1] := AInk.InsideColour[1];
   lbl.InsideColour[2] := AInk.InsideColour[2];
   lbl.OutsideColour := AInk.OutsideColour;
+  percents := TyPieSectorPercents(ALayout, APercentPrecision);
 
   for i := 0 to High(ALayout.Sectors) do
   begin
@@ -576,10 +595,14 @@ begin
 
     row := ALayout.Sectors[i].RawIndex;
     { A PIE SAYS ITS NAME, not its value -- getFormattedLabel falls back to
-      the datum's name where a bar falls back to its number. }
-    words := TyLabelText(ASpec.Formatter, tldName, AStore, row,
-      ABinding.SeriesType, -1, 0, False);
-    if words = '' then Continue;
+      the datum's name where a bar falls back to its number. The row asked
+      is the VIEW row, the one the store's accessors answer for: with a slice
+      deselected in the legend the raw index named the next slice along. `{a}`
+      is the series' NAME, `{c}` its value, `{d}` its share.
+      AN EMPTY TEXT KEEPS ITS LINE: a formatter of '' is an empty label, and
+      upstream still draws the line that points at it. }
+    words := TyLabelText(ASpec.Formatter, ASpec.HasFormatter, tldName, AStore,
+      ALayout.Sectors[i].Index, ASeriesName, AValueDim, percents[i], True);
 
     if Length(AFills) > 0 then fill := AFills[i mod Length(AFills)]
     else fill := AInk.OutsideColour;

@@ -61,6 +61,7 @@ type
     procedure TestAllZeroesStillShowOrDoNot;
     procedure TestRoseTypeAreaEqualisesTheAnglesAndRadiusDoesNot;
     procedure TestPercentagesAddUpToAHundred;
+    procedure TestAPrecisionPastCountingStillAnswers;
     procedure TestTheMarksAreSectorsThatAnswerForTheirOwnRow;
     procedure TestEachSectorTakesTheNextColour;
     procedure TestAnEmptyPieDrawsItsRingAndSaysNothing;
@@ -371,6 +372,50 @@ begin
     but only one of them is upstream's. }
   seats := TyPiePercentSeats([0, 0], 2);
   AssertEquals('nothing to share out', 0, Length(seats));
+end;
+
+procedure TAdvChartPieTest.TestAPrecisionPastCountingStillAnswers;
+var
+  seats, pct: TTyDoubleArray;
+begin
+  { `percentPrecision` is whatever the author wrote, and `Math.pow(10, p)`
+    carries on where FPC would raise. Every value below is upstream's own
+    getPercentSeats, run in node. }
+
+  { 1e19 reaches here as the largest Integer; digits is Infinity, an empty
+    slice votes 0 * Infinity, and every seat is not-a-number -- which the
+    label reads as 0 (`seats[i] || 0`). This one killed the whole render. }
+  seats := TyPiePercentSeats([1, 1, 1], High(Integer));
+  AssertEquals(3, Length(seats));
+  AssertTrue('a seat past counting is not-a-number', IsNan(seats[0]));
+  Run('{ "series": [ { "type": "pie", "data": [1, 1, 1] } ] }');
+  pct := TyPieSectorPercents(FLay, High(Integer));
+  AssertEquals('and the share it shows is 0', 0.0, pct[0], 0);
+  AssertEquals(0.0, pct[2], 0);
+
+  { 1e307: the votes overflow, and a share of Infinity is printed as one;
+    an empty slice still votes 0 }
+  seats := TyPiePercentSeats([0, 1], 307);
+  AssertEquals('an empty slice', 0.0, seats[0], 0);
+  AssertTrue('the other overflows', IsInfinite(seats[1]) and (seats[1] > 0));
+
+  { 1e-323, the last power of ten above zero: nothing floors to a seat, the
+    first slice gets the one there is, and one seat of 1e-323 is Infinity }
+  seats := TyPiePercentSeats([1, 1, 1], -323);
+  AssertTrue(IsInfinite(seats[0]));
+  AssertEquals(0.0, seats[1], 0);
+  AssertEquals(0.0, seats[2], 0);
+
+  { and below it digits is 0, every seat 0 / 0 }
+  seats := TyPiePercentSeats([1, 2], -400);
+  AssertTrue(IsNan(seats[0]) and IsNan(seats[1]));
+
+  { WHERE UPSTREAM NEVER RETURNS: past 2^53 the seat that would close the
+    gap is no change to the sum, and its loop spins. This set does that at
+    14 places; here it has to come back. }
+  seats := TyPiePercentSeats([201, 906, 14, 92.57142857142857, 804, 282,
+    142.14285714285714], 14);
+  AssertEquals('it comes back', 7, Length(seats));
 end;
 
 procedure TAdvChartPieTest.TestTheMarksAreSectorsThatAnswerForTheirOwnRow;

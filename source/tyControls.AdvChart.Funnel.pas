@@ -128,7 +128,8 @@ type
     LineShow: Boolean;
     LineLengthLogical: Double;
     LineWidthLogical: Double;
-    { The words. Empty means the datum's name, which is upstream's default. }
+    { The words: a template when HasFormatter -- the empty one included, which
+      is an empty label -- and the datum's name, upstream's default, when not. }
     Formatter: string;
     HasFormatter: Boolean;
   end;
@@ -156,8 +157,16 @@ function TyFunnelLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
 function TyBuildFunnelLabels(const ABinding: TTySeriesBinding;
   const ALayout: TTyFunnelLayout; const ASpec: TTyFunnelLabelSpec;
   const AInk: TTyFunnelLabelInk; const AFills: array of TTyChartColor;
-  AStore: TTyDataStore; const AMeasurer: ITyTextMeasurer;
+  AStore: TTyDataStore; const ASeriesName: string; AValueDim: Integer;
+  const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
+
+{ Each band's percentage, index-parallel to ALayout.Items -- upstream's
+  `+(value / sum * 100).toFixed(2)`: two places, no seats, so three equal
+  bands are 33.33 each. The sum is over the bands there are (the legend's
+  filtered rows), a missing value left out of it and a negative one kept in;
+  a sum of nothing makes every band 0, and a missing value is not-a-number. }
+function TyFunnelPercents(const ALayout: TTyFunnelLayout): TTyDoubleArray;
 
 function TyFunnelSpecDefault: TTyFunnelSpec;
 function TyFunnelSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyFunnelSpec;
@@ -196,6 +205,8 @@ function TyFunnelOrder(AStore: TTyDataStore; ADim: Integer;
   ASort: TTyFunnelSort): TTyIntegerArray;
 
 implementation
+
+uses tyControls.AdvChart.Scale;
 
 function TyFunnelSpecDefault: TTyFunnelSpec;
 begin
@@ -643,10 +654,15 @@ begin
         Result.Position := flpOuter;
     end;
     d := lbl.Find('formatter');
-    if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+    if (d <> nil) and (d.JSONType = jtString) then
     begin
       Result.Formatter := d.AsString;
       Result.HasFormatter := True;
+    end
+    else if (d <> nil) and (d.JSONType = jtNull) then
+    begin
+      Result.Formatter := '';
+      Result.HasFormatter := False;
     end;
   end;
 
@@ -678,13 +694,31 @@ begin
   Result.LineShow := Result.LineShow and Result.Show;
 end;
 
+function TyFunnelPercents(const ALayout: TTyFunnelLayout): TTyDoubleArray;
+var
+  i: Integer;
+  sum: Double;
+begin
+  Result := nil;
+  SetLength(Result, Length(ALayout.Items));
+  sum := 0;
+  for i := 0 to High(ALayout.Items) do
+    if not IsNan(ALayout.Items[i].Value) then
+      sum := sum + ALayout.Items[i].Value;
+  for i := 0 to High(ALayout.Items) do
+    if sum = 0 then Result[i] := 0
+    else Result[i] := TyJsToFixed(ALayout.Items[i].Value / sum * 100, 2);
+end;
+
 function TyBuildFunnelLabels(const ABinding: TTySeriesBinding;
   const ALayout: TTyFunnelLayout; const ASpec: TTyFunnelLabelSpec;
   const AInk: TTyFunnelLabelInk; const AFills: array of TTyChartColor;
-  AStore: TTyDataStore; const AMeasurer: ITyTextMeasurer;
+  AStore: TTyDataStore; const ASeriesName: string; AValueDim: Integer;
+  const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
 var
   i, raw: Integer;
+  percents: TTyDoubleArray;
   pos: TTyFunnelLabelPosition;
   p: array[0..3] of TTyPointF;
   words: string;
@@ -700,12 +734,15 @@ begin
   if (AList = nil) or (AStore = nil) or not ALayout.Valid then Exit;
   if not ASpec.Show then Exit;
   lineLen := ASpec.LineLengthLogical * APPI / 96;
+  percents := TyFunnelPercents(ALayout);
 
   for i := 0 to High(ALayout.Items) do
   begin
     raw := ALayout.Items[i].RawIndex;
-    words := AStore.GetName(ALayout.Items[i].Index);
-    if ASpec.HasFormatter then words := ASpec.Formatter;
+    { THE NAME, or the template with a, b, c and d filled in -- it was drawn
+      as written, braces and all. }
+    words := TyLabelText(ASpec.Formatter, ASpec.HasFormatter, tldName, AStore,
+      ALayout.Items[i].Index, ASeriesName, AValueDim, percents[i], True);
     if words = '' then Continue;
     p[0] := ALayout.Items[i].Points[0];
     p[1] := ALayout.Items[i].Points[1];

@@ -541,8 +541,9 @@ begin
   Result := '';
   if not AVisual.Label_.Show then Exit;
   if AVisual.Label_.Position = tlpNone then Exit;
-  Result := TyLabelText(AVisual.Label_.Formatter, AVisual.Label_.DefaultText,
-    AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False);
+  Result := TyLabelText(AVisual.Label_.Formatter, AVisual.Label_.HasFormatter,
+    AVisual.Label_.DefaultText, AStore, ARow, AVisual.SeriesName,
+    AVisual.LabelValueDim, 0, False);
 end;
 
 { THIS ROW'S OWN COLOUR, when the author gave it one.
@@ -1336,7 +1337,8 @@ begin
       if baseHoriz and (r.Bottom - r.Top < 1) then r.Bottom := r.Top + 1;
       if (not baseHoriz) and (r.Right - r.Left < 1) then r.Right := r.Left + 1;
       el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
-      el.Caption.Text := CaptionFor(AVisual, AStore, i);
+      { NO CAPTION. Upstream's candlestick view never builds a label, whatever
+        label.show says -- the option is accepted and draws nothing. }
       AList.Add(el);
       Inc(Result);
     end;

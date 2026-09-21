@@ -382,6 +382,19 @@ begin
     0.301, TyAddSafe(0.001, 0.3), 0);
   AssertEquals('whole numbers are untouched', 3.0, TyAddSafe(1, 2), 0);
   AssertTrue('a NaN operand gives NaN', IsNan(TyAddSafe(NaN, 1)));
+  { The rest are upstream's addSafe, run in node. Eight places on a sum of
+    1e17 is `+(1e17).toFixed(8)`, the number itself; multiplying it out to
+    round it went past Int64 and raised out of the render. }
+  AssertTrue('a large sum at many places', TyAddSafe(1.23456789, 1e17) = 1e17);
+  AssertTrue(TyAddSafe(1.5e-7, 2.5) = 2.50000015);
+  { seventeen places, which the old reading of fifteen printed digits saw as
+    one -- and then rounded the sum to fifteen }
+  AssertTrue('the precision is the shortest text''s',
+    TyAddSafe(0.30000000000000004, 0.3333333333333333) = 0.6333333333333333);
+  { past twenty places toFixed cannot go, and the sum comes back untouched --
+    rounded to twenty it would be 0 }
+  AssertTrue('past twenty places, the raw sum',
+    TyAddSafe(1e-21, 1e-22) = 1.0999999999999998e-21);
 end;
 
 procedure TAdvChartStackTest.TestDecimalPrecisionCountsWhatIsWritten;
@@ -391,6 +404,8 @@ begin
   AssertEquals('three', 3, TyDecimalPrecision(100.123));
   AssertEquals('a negative is measured the same', 2, TyDecimalPrecision(-1.25));
   AssertEquals('NaN has none to count', 0, TyDecimalPrecision(NaN));
+  AssertEquals('all seventeen digits count', 17,
+    TyDecimalPrecision(0.30000000000000004));
 end;
 
 initialization

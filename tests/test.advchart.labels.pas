@@ -435,9 +435,9 @@ begin
   { A BAR SHOWS ITS VALUE AND A PIE SHOWS ITS NAME, and one default for both
     renders every unformatted pie label as a number. }
   AssertEquals('a value series', '42',
-    TyLabelText('', tldValue, FStore, 0, 'Cost', 0, 0, False));
+    TyLabelText('', False, tldValue, FStore, 0, 'Cost', 0, 0, False));
   AssertEquals('a named one', 'Rent',
-    TyLabelText('', tldName, FStore, 0, 'Cost', 0, 0, False));
+    TyLabelText('', False, tldName, FStore, 0, 'Cost', 0, 0, False));
 end;
 
 procedure TAdvChartLabelsTest.TestALetterTokenIsReplacedOnceAndADimensionEveryTime;
@@ -449,30 +449,30 @@ begin
   FStore.SetName(0, 'Rent');
 
   AssertEquals('the four letters', 'Cost Rent 42',
-    TyLabelText('{a} {b} {c}', tldValue, FStore, 0, 'Cost', 0, 0, False));
+    TyLabelText('{a} {b} {c}', True, tldValue, FStore, 0, 'Cost', 0, 0, False));
 
   { ONCE EACH. Upstream hands String.replace a plain string rather than a
     regex, so a repeated token is emitted LITERALLY -- and a port using a
     global replace diverges on any template that repeats one. Nothing in the
     harvested gallery repeats a token, so only a test can pin this. }
   AssertEquals('the second {c} is left standing', '42 {c}',
-    TyLabelText('{c} {c}', tldValue, FStore, 0, 'Cost', 0, 0, False));
+    TyLabelText('{c} {c}', True, tldValue, FStore, 0, 'Cost', 0, 0, False));
 
   { AND {@dim} IS THE OTHER WAY ROUND, because its pattern upstream IS a global
     regex. Two rules, and they are upstream's two rules. }
   AssertEquals('every {@extra}', '7 and 7',
-    TyLabelText('{@extra} and {@extra}', tldValue, FStore, 0, 'Cost', 0, 0, False));
+    TyLabelText('{@extra} and {@extra}', True, tldValue, FStore, 0, 'Cost', 0, 0, False));
 
   { An unknown dimension is blank rather than left as a token. }
-  AssertEquals('', '', TyLabelText('{@nope}', tldValue, FStore, 0, 'Cost', 0,
+  AssertEquals('', '', TyLabelText('{@nope}', True, tldValue, FStore, 0, 'Cost', 0,
     0, False));
 
   { {d} is the percent, and a series that has none leaves it alone rather than
     printing a zero. }
   AssertEquals('{d} untouched without a percent', '{d}',
-    TyLabelText('{d}', tldValue, FStore, 0, 'Cost', 0, 0, False));
+    TyLabelText('{d}', True, tldValue, FStore, 0, 'Cost', 0, 0, False));
   AssertEquals('and filled in with one', '25',
-    TyLabelText('{d}', tldValue, FStore, 0, 'Cost', 0, 25, True));
+    TyLabelText('{d}', True, tldValue, FStore, 0, 'Cost', 0, 25, True));
 end;
 
 procedure TAdvChartLabelsTest.TestACaptionBecomesASecondEntryForTheSameDatum;

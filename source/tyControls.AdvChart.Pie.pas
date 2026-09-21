@@ -181,6 +181,14 @@ function TyPieResolve(const AValue: TTyBoxValue; ABase: Double): Double;
 function TyPiePercentSeats(const AValues: array of Double;
   APrecision: Integer): TTyDoubleArray;
 
+{ Each sector's percentage, index-parallel to ALayout.Sectors -- the `{d}` a
+  label or a tooltip template shows. Over the sectors that exist: the legend's
+  filtered rows, the negatives already gone, a missing value counted as 0. A
+  total of nothing is 0 for every slice, as upstream's `seats[i] || 0` -- and
+  so is every slice of a precision too large to count in. }
+function TyPieSectorPercents(const ALayout: TTyPieLayout;
+  APrecision: Integer): TTyDoubleArray;
+
 { ---- the layout ---- }
 { ADim is the store column holding the value. AViewport is the control's own
   rect: the series' box is solved against it. }
@@ -211,6 +219,8 @@ function TyBuildPieMarks(const ABinding: TTySeriesBinding;
 function TyPieVisual(AFill: TTyChartColor): TTyPieVisual;
 
 implementation
+
+uses tyControls.AdvChart.Scale;
 
 const
   cRadian = Pi / 180;
@@ -473,13 +483,12 @@ end;
 
 { ==================== percentages that add up ==================== }
 
-function TyPiePercentSeats(const AValues: array of Double;
+function SeatsJs(const AValues: array of Double;
   APrecision: Integer): TTyDoubleArray;
 var
-  i, n, maxId, digits, target, currentSum: Integer;
-  sum, v, best: Double;
-  quota, remainder: TTyDoubleArray;
-  seats: array of Integer;
+  i, n, maxId: Integer;
+  sum, v, digits, target, currentSum, best: Double;
+  votes, seats, remainder: TTyDoubleArray;
 begin
   Result := nil;
   n := Length(AValues);
@@ -492,20 +501,25 @@ begin
     the empty one is what a test can pin. }
   if sum = 0 then Exit;
 
-  digits := Round(IntPower(10, APrecision));
-  if digits < 1 then digits := 1;
+  { getPercentSeats, line for line. DOUBLES THROUGHOUT: digits is
+    Math.pow(10, precision), so a precision of -1 counts in tenths of a whole
+    per cent rather than being clamped to whole ones, and a precision of 8
+    wants ten thousand million seats, which an Integer does not hold. }
+  digits := TyJsPow10(APrecision);
   target := digits * 100;
-  SetLength(quota, n);
+  SetLength(votes, n);
   SetLength(seats, n);
   SetLength(remainder, n);
   currentSum := 0;
   for i := 0 to n - 1 do
   begin
     if IsNan(AValues[i]) then v := 0 else v := AValues[i];
-    quota[i] := v / sum * digits * 100;
-    seats[i] := Floor(quota[i]);
-    remainder[i] := quota[i] - seats[i];
+    votes[i] := v / sum * digits * 100;
+    { Math.floor, in the Double: Floor answers a 32-bit Integer }
+    seats[i] := Int(votes[i]);
+    if seats[i] > votes[i] then seats[i] := seats[i] - 1;
     currentSum := currentSum + seats[i];
+    remainder[i] := votes[i] - seats[i];
   end;
 
   while currentSum < target do
@@ -519,14 +533,58 @@ begin
         maxId := i;
       end;
     if maxId < 0 then Break;
-    Inc(seats[maxId]);
+    seats[maxId] := seats[maxId] + 1;
     remainder[maxId] := 0;
-    Inc(currentSum);
+    { WHERE UPSTREAM NEVER STOPS: past 2^53 a seat more is no change to the
+      running sum, and `++currentSum` spins forever -- a percentPrecision of
+      14 or so hangs the browser tab. The seats given so far are the answer
+      here. }
+    if currentSum + 1 = currentSum then Break;
+    currentSum := currentSum + 1;
   end;
 
   SetLength(Result, n);
   for i := 0 to n - 1 do
     Result[i] := seats[i] / digits;
+end;
+
+function TyPiePercentSeats(const AValues: array of Double;
+  APrecision: Integer): TTyDoubleArray;
+var mask: TFPUExceptionMask;
+begin
+  { THE ARITHMETIC CARRIES ON where FPC would stop: a precision past 308 makes
+    digits Infinity (and one past -323 makes it 0), a slice of nothing then
+    votes 0 * Infinity, and every seat comes out not-a-number -- which the
+    caller turns into 0, as upstream's `seats[i] || 0` does. }
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := SeatsJs(AValues, APrecision);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TyPieSectorPercents(const ALayout: TTyPieLayout;
+  APrecision: Integer): TTyDoubleArray;
+var
+  vals, seats: TTyDoubleArray;
+  i: Integer;
+begin
+  vals := nil;
+  SetLength(vals, Length(ALayout.Sectors));
+  for i := 0 to High(vals) do vals[i] := ALayout.Sectors[i].Value;
+  seats := TyPiePercentSeats(vals, APrecision);
+  Result := nil;
+  SetLength(Result, Length(vals));
+  { `seats[i] || 0`: a missing seat and a not-a-number one are both 0 }
+  for i := 0 to High(Result) do
+    if (i <= High(seats)) and not IsNan(seats[i]) then Result[i] := seats[i]
+    else Result[i] := 0;
 end;
 
 { ==================== the layout ==================== }

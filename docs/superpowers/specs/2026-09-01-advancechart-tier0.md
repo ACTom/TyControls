@@ -5426,6 +5426,7 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 - 函数形式的 formatter(`axisLabel.formatter`、`axisPointer.label.formatter`)不做:option 文本里写不出函数,port 这边要走 `@Name` 事件,参数另设计。
 - `axisLabel.customValues` 不做:它决定标在哪些值上,文字照样走这里。
 - 系列标签的 `{c}`、tooltip 里系列那几行的值:上游是 `addCommas(ToString(值))`,这里还是 `TyChartNumToStr`/`TyTooltipValueText`。下一小批。
+  **[第三十五批已修,见 §69。标签的 `{c}` 其实不分组,只有 tooltip 的默认行分组。]**
 - 雷达环上的标签:上游分组,但环上的值要先按上游方式取整(scaleCalcAlign),不然全精度标签会印出浮点噪声。和雷达对齐一起做。
 - 值的偏差照样会反映到文字上:log 轴的分数次幂(FPC Power 末位不同)。
 
@@ -5455,3 +5456,109 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 ### 还在队列里
 
 系列标签与 tooltip 值的文字 → grid 的外边界收缩 → containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达与 `alignTicks`)。
+
+## 69. Tier 1 第三十五批:系列自己的文字(2026-09-22)
+
+上一批管轴上的字,这一批管系列上的字:数据标签、tooltip 的默认行、tooltip 的 formatter 模板,以及仪表盘的标题、数值和刻度。
+
+### 上游的规则
+
+- **标签的默认文字和模板里的 `{c}`**:`String(值)`,也就是 ToString,不分组。1e-7 是 `1e-7`,0.1+0.2 是 `0.30000000000000004`。
+- **tooltip 默认行的值**:`makeValueReadable`。有限数是 `addCommas(ToString)`;NaN 和 Infinity 是 `-`,从不留空。
+- **模板是 `formatTpl`**,标签和 tooltip 共用:
+  - 先把每个裸字母的**第一处** `{a}` 改写成 `{a0}`,再按系列逐个替换**第一处** `{a0}`、`{b0}`……
+  - 字母只有 a、b、c;d 只在有百分比的系列(pie、funnel)才算字母。
+  - 替换用的是 `String.prototype.replace`,替换串里的 `$$`、`$&`、`` $` ``、`$'` 按 JS 规则解释。
+  - 其余一律原样留下:第二个 `{c}`、`{e}`、只有一个系列时的 `{c1}`、`{a5}`、没有百分比时的 `{d}`。
+  - `{@维度}` 只在**标签**里展开(`getFormattedLabel`),tooltip 模板里原样留下。
+  - tooltip 模板会对替换进去的值做 HTML 转义;浏览器默认的 html 模式再解码回来,所以比对用解码后的文字。
+- **`formatter: ''` 是空标签**,不是"没写"。`null` 才是没写,会退回默认文字——还会去掉系列类型自带的默认值:graph 的默认 formatter 是 `'{b}'`,写 `null` 以后显示的是值。
+- **pie 的 `{d}`**:`getPercentSeats`,最大余数法。`digits = Math.pow(10, precision)`,不钳位,负精度也照算(-1 就是按十个百分点分)。算的是图例过滤后的那些扇区;取值是 `seats[i] || 0`。
+- **funnel 的 `{d}`**:`+(值 / 总和 * 100).toFixed(2)`,不走最大余数,三等分就是三个 33.33。总和跳过缺失值;总和为 0 时全是 0;缺失值自己的是 NaN。
+- **仪表盘**:数值是 `value + ''`,缺失值显示 `NaN`;刻度值先 `round(x, 14)`,所以 0..1 三等分是 0.33333333333333。
+- **K 线**:`label.show` 接受但什么都不画。
+- **系列名是数字**时按 `'' + name` 当名字用;名字是空格时,tooltip 表头是 `-`。
+- **缺失值**:节点、柱子的 tooltip 行显示 `-`;graph 的边没有值时整格不出。
+
+### port 以前
+
+- 所有这些地方都用 `TyChartNumToStr`(`FormatFloat`,最多六位小数):1e21 印成 `1E21`,1e-7 印成 `0.000000`,0.1+0.2 印成 `0.3`。
+- 模板只认 `{a}{b}{c}{d}` 各替换一次:`{a0}` 不认;没有百分比时 `{d}` 变成空;`{a5}` 变成空;tooltip 里也展开 `{@}`;多个值用 `, ` 连。
+- `formatter: ''` 当成没写。
+- pie 标签:按原始行号取数据,图例关掉一块以后,后面的扇区读的是下一块的名字;`{a}` 是类型名 `pie`;`{c}` 是空;`{d}` 从来没算过——`TyPiePercentSeats` 写好了,没有调用方。
+- funnel 标签:formatter 原样画出来,花括号也在。
+- tooltip 里的缺失值是空白。仪表盘六位小数。K 线画了数据标签。
+
+### 顺带发现的三个问题
+
+- **堆叠求和把整张图弄没了。** `TyAddSafe` 用 `Round(和 * 10^p) / 10^p` 取整,1.23456789 叠在 1e17 上,乘积超出 Int64,EInvalidOp 一路抛出渲染。
+  它还自带一份 getPrecision,探测不出来的部分读 `FloatToStr` 的十五位:0.30000000000000004 的精度算成 1。
+  现在精度用轴那边的 `TyGetPrecision`,取整用 `TyJsToFixed`,精度超过 20 时原样返回和(上游 `TO_FIXED_SUPPORTED_PRECISION_MAX`)。
+- **`percentPrecision: 1e19` 让渲染失败。** 敌意选项测试抓到的:精度钳到 MaxInt,`Math.pow` 是 Infinity,空扇区投票 0 × Infinity,FPC 抛异常。
+  上游算出 NaN,再被 `|| 0` 变成 0。现在在屏蔽浮点异常的外壳里照算,NaN 取 0。
+  另外,上游这个循环在精度大约 14 以上会死循环:和过了 2^53 以后加 1 不变,`while (currentSum < targetSeats)` 永远成立。
+  精度取 14 到 300 之间的 11 个值,每个随机 3000 组数据,卡住的有 53 到 1521 组。port 在这里停下,用已经分好的席位。
+- **graph 的 `formatter: null`**:以前 graph 的默认文字硬写成名字,`null` 改不回来。现在默认 formatter 是模板 `'{b}'`,`null` 去掉它,显示值。
+
+### 基准
+
+`tools/advchart-oracle/series-text.js`,跑真实的 ECharts 6.1,读 zrender 拿到的文字,不信任 API 自称的结果:
+
+- 标签:每个数据项的图形元素及其子元素上的每个 label(`getTextContent`);没有元素就是没画。
+- tooltip:真的 TooltipView,richText 模式,node 下临时改 `env.node` 和 `getDom`;逐行解析出 marker、名字、值。
+  样式名的编号取自 `Math.random`,加载库之前换成常数,fixture 才能复现。
+- 仪表盘:`_titleEls`、`_detailEls`,以及刻度的静默 Text。
+
+标签 44 个用例(209 项,175 项有字),tooltip 53 个,仪表盘 14 个,逐字比较;把小数点改成逗号再跑一遍。全部相同。
+
+另有 34 个用例标成 deferred,上游答案一并记着,以后只需去掉标记:原始值通道、数组的 `{c}`、tooltip 子行、encode、未命名系列的自动名,还有下面说的柱子几何。
+
+### 被推翻的旧断言
+
+- `test.advchart.handlers.pas`:
+  - `{d}` 没有百分比时是空:改为原样 `{d}`。
+  - 多值 `{c}` 是 `10, 20.5`:改为 `10,20.5`。
+  - `{a5}` 是空:改为原样。
+  - tooltip 模板展开 `{@price}`、`{@[2]}`:改为原样。
+  - 原处都有标注。
+- `test.advchart.tooltip.pas`:`TyTooltipValueText(NaN)` 是 `''`,改为 `-`。
+
+### 已知偏差
+
+- **原始值通道**:store 只存解析后的 Double。原始字符串(`'12.50'`)、布尔、`null` 和 `undefined` 的文字、数组和 dataset 行的 `{c}`、objectRows,都要能回头查原始 JSON。
+  `{@维度}` 对标量数据项的回退也在这里:上游一个标量项对任何维度名、任何 `[n]` 都答它自己的值,这要知道原始项是不是数组。
+- **tooltip 子行**:K 线的 open/close/lowest/highest、雷达每个指标一行、`displayName`、`encode.tooltip`。
+- 雷达的数据标签没有实现;雷达环上的标签还是 `TyChartNumToStr`,要和 scaleCalcAlign 一起做。
+- `encode.label` 和 defaultedLabel 维度规则(类目-类目、时间-类目的散点没有默认标签)。
+- 未命名系列的自动名 `series N`:要先决定怎么画一个 NUL。
+- 仪表盘 `splitNumber: 0`:上游印 NaN,port 有意画最小值(gauge 测试钉着)。
+- **柱子几何,下一批**:fixture 里的堆叠用例暴露了两个问题。
+  - 柱子从坐标轴的 min 画起,不是从 0(上游 `getValueAxisStart`)。数据全为正时两者重合,有负值就画错。
+  - 长度为 0 的柱子整个被丢掉,标签也一起没了;上游画一个扁的矩形,标签照常。1/3 叠在 1e17 上就是这样。
+- 函数形式的 formatter、`valueFormatter`、`@Name` 事件用在标签上。
+
+### 落地
+
+- `source/tyControls.AdvChart.Handlers.pas`:`TyJsReplaceFirst`、`TyJsFormatTpl`、`TyChartValueText`,`TyChartFormatTemplate` 改用 formatTpl。
+- `source/tyControls.AdvChart.LabelOpt.pas`、`Labels.pas`:`HasFormatter`,`TyLabelText` 用 formatTpl。
+- `source/tyControls.AdvChart.Pie.pas`、`PieLabel.pas`:精确的 `TyPiePercentSeats`、`TyPieSectorPercents`;标签用视图行号、系列名、值列和百分比。
+- `source/tyControls.AdvChart.Funnel.pas`:`TyFunnelPercents`,标签走 `TyLabelText`。
+- `source/tyControls.AdvChart.Tooltip.pas`、`Gauge.pas`、`Stack.pas`、`Marks.pas`、`Data.pas`、`Builder.pas`、`Graph.pas`。
+- `source/tyControls.AdvanceChart.pas`:pie/funnel 的 `{d}` 参数、数字系列名、空白表头、边的缺值、graph 的默认 formatter。
+- `tools/advchart-oracle/series-text.js`、`tests/fixtures/advchart-series-text.json`、`tests/test.advchart.seriestext.pas`(新)。
+
+### 变异测试
+
+51 个,第一轮活 9 个,另有 1 个是没编译过的假杀(删掉 `else if` 分支后前一个 `end` 缺分号),改写法重跑。
+
+- **fixture 没覆盖到的输入**,补成 oracle 用例:K 线带 formatter(不带时默认文字本来就空,放回标题也画不出字);
+  关掉中间一块的饼图 tooltip 模板(视图行号和原始行号相同时分不出来);数据里收集的数值类目;数字形式的数据项名字。
+- **fixture 只比文字**,补单元断言:`formatter: ''` 的饼图标签引导线还在;漏斗总和为 0 时占比是 0;
+  `` $` `` 以及其余几种 `$` 写法逐个按 node 的答案检查;零个系列时 formatTpl 返回空串(绘制路径走不到,函数是导出的)。
+- **等价的一个**:没有值的 graph 边不出值格子,我专门加了一行判断。其实 `TooltipParams` 只在边有值时才给它值,那一行多余,删了,留一句注释说明原因。
+
+补完后 9 个全部杀死。全量 **7721** 绿。
+
+### 还在队列里
+
+柱子的基线和零长度柱子 → grid 的外边界收缩 → containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达与 `alignTicks`)→ 原始值通道 → tooltip 子行。

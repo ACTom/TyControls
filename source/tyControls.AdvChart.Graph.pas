@@ -4065,8 +4065,8 @@ begin
     el.HitSlopLogical := 4;
     if AInk.Label_.Show and (AInk.Label_.Position <> tlpNone) then
       el.Caption.Text := TyLabelText(AInk.Label_.Formatter,
-        AInk.Label_.DefaultText, AStore, ANodes[i].Row, AInk.SeriesName,
-        AInk.LabelValueDim, 0, False);
+        AInk.Label_.HasFormatter, AInk.Label_.DefaultText, AStore,
+        ANodes[i].Row, AInk.SeriesName, AInk.LabelValueDim, 0, False);
     AList.Add(el);
     Inc(Result);
   end;

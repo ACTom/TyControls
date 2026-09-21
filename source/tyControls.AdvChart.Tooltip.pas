@@ -304,7 +304,7 @@ function TyTooltipBoxAt(AAnchorX, AAnchorY, AWidth, AHeight, AGapPx: Double;
 
 implementation
 
-uses tyControls.AdvChart.Handlers;
+uses tyControls.AdvChart.Handlers, tyControls.AdvChart.Scale;
 
 { ============================ the tree ============================ }
 
@@ -773,38 +773,13 @@ end;
 { ============================ content ============================ }
 
 function TyTooltipValueText(AValue: Double): string;
-var
-  s, head, tail: string;
-  dot, i, k: Integer;
-  neg: Boolean;
 begin
-  s := TyChartNumToStr(AValue);
-  if s = '' then Exit('');
-  neg := (s <> '') and (s[1] = '-');
-  if neg then Delete(s, 1, 1);
-  dot := Pos('.', s);
-  if dot > 0 then
-  begin
-    head := Copy(s, 1, dot - 1);
-    tail := Copy(s, dot, MaxInt);
-  end
-  else
-  begin
-    head := s;
-    tail := '';
-  end;
-  { GROUPS OF THREE FROM THE RIGHT, and only in the integer part -- upstream's
-    regex is anchored so the fraction is never grouped. }
-  Result := '';
-  k := 0;
-  for i := Length(head) downto 1 do
-  begin
-    Result := head[i] + Result;
-    Inc(k);
-    if (k mod 3 = 0) and (i > 1) then Result := ',' + Result;
-  end;
-  Result := Result + tail;
-  if neg then Result := '-' + Result;
+  { makeValueReadable, for a number: a finite one as JavaScript prints it --
+    0.30000000000000004, 1e-7, 1e+21 -- grouped by addCommas; anything else,
+    a missing value or an infinite one, is '-'. Upstream's own rule is never
+    to print NaN, Infinity or nothing where a value belongs. }
+  if IsNan(AValue) or IsInfinite(AValue) then Exit('-');
+  Result := TyJsAddCommas(TyJsNumberToString(AValue));
 end;
 
 { ============================ flattening ============================ }

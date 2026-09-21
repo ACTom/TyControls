@@ -1321,17 +1321,11 @@ begin
   end;
 end;
 
-{ A number in its decimal form, locale-independently. Local rather than reusing
-  the formatter unit's: that one lives behind Handlers, which pulls in Paint,
-  and this needs three lines of it. }
+{ A number as an id or a name: convertOptionIdName's `'' + x`, so a name of
+  1.23456789 is that and not 1.234568. }
 function NumText(AValue: Double): string;
-var fs: TFormatSettings;
 begin
-  if IsNan(AValue) or IsInfinite(AValue) then Exit('');
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  fs.ThousandSeparator := #0;
-  Result := FormatFloat('0.######', AValue, fs);
+  Result := TyJsNumberToString(AValue);
 end;
 
 { An id or a name as upstream coerces it: a string is kept, a number becomes its

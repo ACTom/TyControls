@@ -409,6 +409,8 @@ function TyOverrideKeyCount: Integer;
 
 implementation
 
+uses tyControls.AdvChart.Scale;
+
 const
   MsPerDay = 86400000.0;
   { 1970-01-01 as a TDateTime. }
@@ -1026,7 +1028,6 @@ function TTyDataStore.ParseCell(ADim: Integer; const AValue: TTyDataValue): Doub
 var
   meta: TTyOrdinalMeta;
   ord_: Integer;
-  fs: TFormatSettings;
 begin
   if FDims[ADim].Kind <> ddtOrdinal then
     Exit(TyParseDataValue(AValue, FDims[ADim].Kind));
@@ -1045,8 +1046,9 @@ begin
         begin
           { A number arriving at a collecting dimension is a category LABEL --
             years in `[[2001, 12], [2002, 15]]` are categories, not indices. }
-          fs := FixedFloatSettings;
-          ord_ := meta.ParseAndCollect(FloatToStr(AValue.Num, fs));
+          { as JavaScript names it -- 0.30000000000000004, 1e+21 -- where
+            FloatToStr kept fifteen digits and wrote 1E21 }
+          ord_ := meta.ParseAndCollect(TyJsNumberToString(AValue.Num));
         end
         else
         begin

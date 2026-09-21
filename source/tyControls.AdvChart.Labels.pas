@@ -121,8 +121,11 @@ type
       theme's own ink rather than anything derived from the mark. }
     OutsideColour: TTyChartColor;
     Overflow: TTyLabelOverflow;
-    { The template, as written. Empty means the default text for the type. }
+    { The template, as written. HasFormatter says one was written at all: an
+      EMPTY template is an empty label, as upstream's is, and only no template
+      -- or null -- means the default text for the type. }
     Formatter: string;
+    HasFormatter: Boolean;
     DefaultText: TTyLabelDefaultText;
     { Painted over its mark. Z2 one above the host so a caption is never
       swallowed by the thing it names. }

@@ -65,68 +65,34 @@ function TyDecimalPrecision(AValue: Double): Integer;
 
 implementation
 
+uses tyControls.AdvChart.Scale;
+
 const
-  { getPrecision gives up past 15 places, and round() clamps at 20. Both
-    numbers are upstream's. }
-  cMaxProbedPrecision = 15;
+  { round() clamps at 20 places, and addSafe hands back the raw sum past it.
+    Upstream's TO_FIXED_SUPPORTED_PRECISION_MAX. }
   cMaxFixedPrecision = 20;
 
-  { 10^0 .. 10^15, every one exactly representable in a Double (10^15 is well
-    under 2^53), so the probe below divides by an exact power and a value that
-    really does have i decimals round-trips exactly. }
-  cPow10: array[0..15] of Double = (
-    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
-    1000000000, 10000000000, 100000000000, 1000000000000,
-    10000000000000, 100000000000000, 1000000000000000);
-
 function TyDecimalPrecision(AValue: Double): Integer;
-var
-  i, dot, ePos, expv: Integer;
-  v: Double;
-  s: string;
-  fs: TFormatSettings;
 begin
-  if IsNan(AValue) or IsInfinite(AValue) then Exit(0);
-  v := Abs(AValue);
-  { Upstream's own guard: below 1e-14 the round-trip probe stops being
-    trustworthy, so it falls through to reading the printed form instead. }
-  if v > 1e-14 then
-    for i := 0 to cMaxProbedPrecision - 1 do
-      if Round(AValue * cPow10[i]) / cPow10[i] = AValue then
-        Exit(i);
-
-  { The slow, safe route: count the decimals of the shortest text that reads
-    back as this number, exponent included -- 3.4e-12 has fourteen. }
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  s := LowerCase(FloatToStr(AValue, fs));
-  expv := 0;
-  ePos := Pos('e', s);
-  if ePos > 0 then
-  begin
-    expv := StrToIntDef(Copy(s, ePos + 1, Length(s) - ePos), 0);
-    s := Copy(s, 1, ePos - 1);
-  end;
-  Result := 0;
-  dot := Pos('.', s);
-  if dot > 0 then Result := Length(s) - dot;
-  Result := Result - expv;
-  if Result < 0 then Result := 0;
+  { ONE getPrecision, the axis' exact one. This unit had its own copy, which
+    read what the probe could not settle from FloatToStr's fifteen digits
+    rather than the shortest text that reads back. }
+  Result := TyGetPrecision(AValue);
 end;
 
 function TyAddSafe(A, B: Double): Double;
 var
   p: Integer;
-  e: Double;
 begin
   Result := A + B;
   if IsNan(Result) or IsInfinite(Result) then Exit;
   p := Max(TyDecimalPrecision(A), TyDecimalPrecision(B));
-  { Past the clamp there is nothing sensible to round to, and upstream returns
-    the raw sum rather than inventing a precision. }
-  if (p > cMaxFixedPrecision) or (p > cMaxProbedPrecision) then Exit;
-  e := cPow10[p];
-  Result := Round(Result * e) / e;
+  if p > cMaxFixedPrecision then Exit;
+  { `round(sum, p)`, which is `+sum.toFixed(p)`: the digits from the binary
+    value, and from 1e21 up the number itself. It was Round(sum * 10^p) /
+    10^p, and stacking 1.23456789 on 1e17 took that product past Int64 and
+    the whole render with it. }
+  Result := TyJsToFixed(Result, p);
 end;
 
 { The four types that carry `stack` in ECharts 6.1: BarSeries, PictorialBar,

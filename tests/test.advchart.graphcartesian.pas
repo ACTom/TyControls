@@ -537,9 +537,9 @@ begin
     AssertEquals('a name of its own wins', 'own', st.GetItemName(1));
     AssertEquals('while the raw name stays empty', '', st.GetName(0));
     AssertEquals('and b says the same', 'Mon',
-      TyLabelText('{b}', tldValue, st, 0, '', 0, 0, False));
+      TyLabelText('{b}', True, tldValue, st, 0, '', 0, 0, False));
     AssertEquals('as the default name text does', 'Mon',
-      TyLabelText('', tldName, st, 0, '', 0, 0, False));
+      TyLabelText('', False, tldName, st, 0, '', 0, 0, False));
   finally
     st.Free;
   end;

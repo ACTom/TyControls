@@ -272,7 +272,14 @@ begin
   { The FRACTION is never grouped -- upstream's regex is anchored so it cannot
     be, and a port that grouped both would render 0.1234 as 0.123,4. }
   AssertEquals('0.1234', TyTooltipValueText(0.1234));
-  AssertEquals('', TyTooltipValueText(NaN));
+  { [Revised in batch 35: '' for a missing value. makeValueReadable never
+    prints nothing where a value belongs: a missing or infinite one is '-'.
+    And a value is printed as JavaScript prints it before it is grouped.] }
+  AssertEquals('-', TyTooltipValueText(NaN));
+  AssertEquals('-', TyTooltipValueText(Infinity));
+  AssertEquals('0.30000000000000004', TyTooltipValueText(0.1 + 0.2));
+  AssertEquals('1e-7', TyTooltipValueText(1e-7));
+  AssertEquals('1e+21', TyTooltipValueText(1e21));
 end;
 
 procedure TAdvChartTooltipRuleTest.TestTheBoxHangsDownAndRightOfThePointer;

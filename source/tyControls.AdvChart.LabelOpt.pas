@@ -39,22 +39,23 @@ uses
 function TyLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyLabelSpec): TTyLabelSpec;
 
-{ The words for one datum.
+{ The words for one datum: upstream's getFormattedLabel.
 
-  THE LETTER TOKENS ARE REPLACED ONCE EACH, not globally: upstream hands
-  String.prototype.replace a plain string rather than a regex, so a second
-  `{c}` in the same formatter is emitted literally. `{@dim}` is the other way
-  round -- its pattern IS a global regex. Two rules in one function because
-  upstream has two.
+  THE LETTER TOKENS go through formatTpl -- the first bare `{a}` becomes
+  `{a0}`, then the first `{a0}` is replaced, and a second `{c}` is emitted as
+  written; `{d}` is a letter only where the series has a percentage (a pie, a
+  funnel). `{@dim}` is the other way round -- its pattern IS a global regex.
+  Two rules in one function because upstream has two.
 
-  An empty AFormatter answers the default text for the series type. }
-function TyLabelText(const AFormatter: string; ADefault: TTyLabelDefaultText;
-  AStore: TTyDataStore; ARow: Integer; const ASeriesName: string;
-  AValueDim: Integer; APercent: Double; AHasPercent: Boolean): string;
+  No formatter (AHasFormatter False) answers the default text for the series
+  type; an empty one is an empty label. }
+function TyLabelText(const AFormatter: string; AHasFormatter: Boolean;
+  ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
+  const ASeriesName: string; AValueDim: Integer; APercent: Double;
+  AHasPercent: Boolean): string;
 
-{ A number the way a chart writes one: no trailing zeroes, no exponent for the
-  sizes a chart deals in. Exposed because the label text and a tooltip have to
-  agree about what 1/3 looks like. }
+{ A value the way a label prints a raw one: JavaScript's String(), exact and
+  never grouped -- 0.30000000000000004, 1e-7, 1e+21. A missing value is ''. }
 function TyLabelNumToStr(AValue: Double): string;
 
 { Replace the FIRST occurrence of AToken only -- JavaScript's String#replace
@@ -67,11 +68,11 @@ function TyReplaceFirst(const AText, AToken, AWith: string): string;
 
 implementation
 
-uses tyControls.AdvChart.Handlers;
+uses tyControls.AdvChart.Handlers, tyControls.AdvChart.Scale;
 
 function TyLabelNumToStr(AValue: Double): string;
 begin
-  Result := TyChartNumToStr(AValue);
+  Result := TyChartValueText(AValue);
 end;
 
 function ObjOf(AData: TJSONData): TJSONObject;
@@ -227,7 +228,19 @@ begin
     Result.InheritColour := True;
   end;
 
-  Result.Formatter := StrIn(node, 'formatter');
+  { A STRING is a template, the empty one included; null is none, and falls
+    back to the default text; anything else is not one this can use. }
+  d := node.Find('formatter');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.Formatter := d.AsString;
+    Result.HasFormatter := True;
+  end
+  else if (d <> nil) and (d.JSONType = jtNull) then
+  begin
+    Result.Formatter := '';
+    Result.HasFormatter := False;
+  end;
 
   Result.FontSizeLogical := TyRoundOpt(NumIn(node, 'fontSize',
     Result.FontSizeLogical));
@@ -251,14 +264,16 @@ begin
     + Copy(Result, p + Length(AToken), Length(Result));
 end;
 
-function TyLabelText(const AFormatter: string; ADefault: TTyLabelDefaultText;
-  AStore: TTyDataStore; ARow: Integer; const ASeriesName: string;
-  AValueDim: Integer; APercent: Double; AHasPercent: Boolean): string;
+function TyLabelText(const AFormatter: string; AHasFormatter: Boolean;
+  ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
+  const ASeriesName: string; AValueDim: Integer; APercent: Double;
+  AHasPercent: Boolean): string;
 var
   nameText, valueText: string;
-  i, dim, openAt: Integer;
+  i, dim, openAt, n: Integer;
   v: Double;
   key: string;
+  vars: array of TTyStringArray;
 begin
   nameText := '';
   valueText := '';
@@ -275,22 +290,27 @@ begin
     end;
   end;
 
-  if AFormatter = '' then
+  if not AHasFormatter then
   begin
     if ADefault = tldName then Exit(nameText);
     Exit(valueText);
   end;
 
-  Result := AFormatter;
-  { a = series name, b = datum name, c = value, d = percent. The corpus uses
-    exactly these four and no indexed form, which is why the indexed rewrite
-    upstream does first is not reproduced -- it would be a table nothing
-    reads. }
-  Result := TyReplaceFirst(Result, '{a}', ASeriesName);
-  Result := TyReplaceFirst(Result, '{b}', nameText);
-  Result := TyReplaceFirst(Result, '{c}', valueText);
-  if AHasPercent then
-    Result := TyReplaceFirst(Result, '{d}', TyLabelNumToStr(APercent));
+  { formatTpl over the one series: a = series name, b = datum name,
+    c = value, and d = percent where there is one. The indexed forms work
+    too -- `{a0}|{b0}|{c0}` is upstream's own spelling of the same three --
+    and a '$' in a name is read as String.replace reads it. }
+  if AHasPercent then n := 4 else n := 3;
+  vars := nil;
+  SetLength(vars, 1);
+  SetLength(vars[0], n);
+  vars[0][0] := ASeriesName;
+  vars[0][1] := nameText;
+  vars[0][2] := valueText;
+  { the percentage as String() prints it -- 'NaN' included, which is what a
+    funnel's missing value shows }
+  if n = 4 then vars[0][3] := TyJsNumberToString(APercent);
+  Result := TyJsFormatTpl(AFormatter, n, vars);
 
   { `{@dim}` IS GLOBAL, because upstream's pattern for it is a regex with the
     g flag while the letters above are plain strings. Two rules, and they are

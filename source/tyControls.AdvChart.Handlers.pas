@@ -90,21 +90,27 @@ procedure TyChartFormatterNames(AList: TStrings);
 procedure TyChartClearFormatters;
 
 { ---- template strings ---- }
-{ Expand ECharts' template syntax:
+{ String.prototype.replace(pattern, replacement) with a STRING pattern: the
+  first occurrence only, and the replacement read the way JavaScript reads
+  it -- '$$' is a dollar, '$&' the matched text, '$`' what came before it and
+  "$'" what comes after. There are no groups, so '$1' stays as written. }
+function TyJsReplaceFirst(const ASubject, APattern, AReplacement: string): string;
 
-    a  series name        b  data or category name     c  data value
-    d  percentage         e  a series-specific extra
+{ upstream's formatTpl. AVars[s] holds series s's texts in the order of the
+  template letters a, b, c (and d when AVarCount is 4). First every bare
+  letter token -- its first occurrence -- becomes the series-0 form, `{a}` to
+  `{a0}`; then, for each series in turn, the first `{a0}`, `{b0}` ... of that
+  series is replaced. Everything else stays as written: a second `{c}`, an
+  `{e}`, an index past the series count, a `{d}` where there is no
+  percentage. }
+function TyJsFormatTpl(const ATemplate: string; AVarCount: Integer;
+  const AVars: array of TTyStringArray): string;
 
-  each optionally suffixed with a series index -- a0, b1 -- which is how an
-  axis-triggered tooltip names one of several series at the same category.
-  Without a suffix the first entry is used.
-
-  Also the dataset forms: @name is the value of the dimension called `name`,
-  and @[n] the value of the dimension at index n.
-
-  A placeholder that is none of these is left VERBATIM. Deleting it would make a
-  typo invisible, and a user's own literal text is more likely than a silent
-  mistake being what they wanted. }
+{ A tooltip formatter template: formatTpl over one entry per series. The
+  letters are a (series name), b (name), c (the value -- several joined with
+  ',' as JavaScript prints an array) and, for a series that has one, d (the
+  percentage). @dimension forms are NOT expanded here; upstream only expands
+  them in labels. }
 function TyChartFormatTemplate(const ATemplate: string;
   const AParams: TTyChartParams): string;
 
@@ -119,14 +125,20 @@ function TyChartResolveText(const ASpec: string; const AParams: TTyChartParams;
 { True when ASpec names a handler rather than being a template. }
 function TyChartIsHandlerRef(const ASpec: string): Boolean;
 
-{ How a number reaches a template. Locale-INDEPENDENT on purpose: '.' always,
-  matching ECharts, so the same option text produces the same chart whatever the
-  machine's regional settings say. Trailing zeros are dropped. }
+{ A number as a template or a label prints a raw value: JavaScript's String(),
+  exact -- 0.30000000000000004, 1e-7, 1e+21 -- and never grouped. A missing
+  value (not-a-number) is ''. }
+function TyChartValueText(AValue: Double): string;
+
+{ The OLD rounding format, six decimals and no exponent below 1e17. Only the
+  radar's ring labels still use it: their values are not rounded the way
+  upstream rounds an axis', and full precision would print the noise. }
 function TyChartNumToStr(AValue: Double): string;
 
 implementation
 
 uses
+  tyControls.AdvChart.Scale,
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. }
   tyControls.StrConsts;
@@ -209,129 +221,124 @@ begin
   Result := FormatFloat('0.######', AValue, fs);
 end;
 
+function TyChartValueText(AValue: Double): string;
+begin
+  if IsNan(AValue) then Exit('');
+  Result := TyJsNumberToString(AValue);
+end;
+
+function TyJsReplaceFirst(const ASubject, APattern, AReplacement: string): string;
+var
+  p, i: Integer;
+  repl: string;
+begin
+  Result := ASubject;
+  p := Pos(APattern, ASubject);
+  if (APattern = '') or (p <= 0) then Exit;
+  repl := '';
+  i := 1;
+  while i <= Length(AReplacement) do
+  begin
+    if (AReplacement[i] = '$') and (i < Length(AReplacement)) then
+      case AReplacement[i + 1] of
+        '$':
+          begin
+            repl := repl + '$';
+            Inc(i, 2);
+            Continue;
+          end;
+        '&':
+          begin
+            repl := repl + APattern;
+            Inc(i, 2);
+            Continue;
+          end;
+        '`':
+          begin
+            repl := repl + Copy(ASubject, 1, p - 1);
+            Inc(i, 2);
+            Continue;
+          end;
+        '''':
+          begin
+            repl := repl + Copy(ASubject, p + Length(APattern), MaxInt);
+            Inc(i, 2);
+            Continue;
+          end;
+      end;
+    repl := repl + AReplacement[i];
+    Inc(i);
+  end;
+  Result := Copy(ASubject, 1, p - 1) + repl
+    + Copy(ASubject, p + Length(APattern), MaxInt);
+end;
+
+function TyJsFormatTpl(const ATemplate: string; AVarCount: Integer;
+  const AVars: array of TTyStringArray): string;
+const
+  cAlias: array[0..6] of Char = ('a', 'b', 'c', 'd', 'e', 'f', 'g');
+var
+  s, k: Integer;
+begin
+  Result := ATemplate;
+  { no series, no text -- formatTpl's own first answer }
+  if Length(AVars) = 0 then Exit('');
+  if AVarCount > Length(cAlias) then AVarCount := Length(cAlias);
+  for k := 0 to AVarCount - 1 do
+    Result := TyJsReplaceFirst(Result, '{' + cAlias[k] + '}',
+      '{' + cAlias[k] + '0}');
+  for s := 0 to High(AVars) do
+    for k := 0 to AVarCount - 1 do
+      if k <= High(AVars[s]) then
+        Result := TyJsReplaceFirst(Result,
+          '{' + cAlias[k] + IntToStr(s) + '}', AVars[s][k]);
+end;
+
 function TyChartIsHandlerRef(const ASpec: string): Boolean;
 begin
   Result := (Length(ASpec) > 1) and (ASpec[1] = '@') and (ASpec[2] <> '[');
 end;
 
-{ The value a c placeholder shows: one dimension formatted, or all of them
-  joined when the datum carries several (a scatter's x and y, a candlestick's
-  four). }
+{ The c text: the value as JavaScript prints it, several joined with ',' as
+  an array prints -- a missing one as nothing, as join leaves a null. }
 function ValueTextOf(const P: TTyChartCallbackParams): string;
 var i: Integer;
 begin
   Result := '';
   for i := 0 to High(P.Values) do
   begin
-    if i > 0 then Result := Result + ', ';
-    Result := Result + TyChartNumToStr(P.Values[i]);
+    if i > 0 then Result := Result + ',';
+    Result := Result + TyChartValueText(P.Values[i]);
   end;
-end;
-
-function DimensionValue(const P: TTyChartCallbackParams; const AName: string;
-  out AText: string): Boolean;
-var
-  i, idx: Integer;
-begin
-  AText := '';
-  Result := False;
-  if (Length(AName) > 2) and (AName[1] = '[') and (AName[Length(AName)] = ']') then
-  begin
-    idx := StrToIntDef(Copy(AName, 2, Length(AName) - 2), -1);
-    if (idx < 0) or (idx > High(P.Values)) then Exit;
-    AText := TyChartNumToStr(P.Values[idx]);
-    Exit(True);
-  end;
-  for i := 0 to High(P.DimensionNames) do
-    if SameText(P.DimensionNames[i], AName) then
-    begin
-      if i > High(P.Values) then Exit;
-      AText := TyChartNumToStr(P.Values[i]);
-      Exit(True);
-    end;
-end;
-
-{ Resolve one placeholder body, without its braces. Returns False when it is not
-  a placeholder this understands, so the caller can leave it verbatim. }
-function ExpandOne(const ABody: string; const AParams: TTyChartParams;
-  out AText: string): Boolean;
-var
-  letter: Char;
-  idxText: string;
-  which, i: Integer;
-begin
-  AText := '';
-  Result := False;
-  if ABody = '' then Exit;
-
-  if ABody[1] = '@' then
-    Exit(DimensionValue(AParams[0], Copy(ABody, 2, MaxInt), AText));
-
-  letter := ABody[1];
-  if not (letter in ['a', 'b', 'c', 'd', 'e']) then Exit;
-  idxText := Copy(ABody, 2, MaxInt);
-  which := 0;
-  if idxText <> '' then
-  begin
-    for i := 1 to Length(idxText) do
-      if not (idxText[i] in ['0'..'9']) then Exit;
-    which := StrToIntDef(idxText, -1);
-    if which < 0 then Exit;
-  end;
-  { An index past the end is not an error in the template -- it is an axis
-    tooltip whose series list is shorter than the author expected. Expanding to
-    nothing keeps the rest of the line readable. }
-  if which > High(AParams) then
-  begin
-    AText := '';
-    Exit(True);
-  end;
-
-  case letter of
-    'a': AText := AParams[which].SeriesName;
-    'b': AText := AParams[which].Name;
-    'c': AText := ValueTextOf(AParams[which]);
-    'd': if AParams[which].HasPercent then
-           AText := TyChartNumToStr(AParams[which].Percent);
-    'e': AText := AParams[which].Extra;
-  end;
-  Result := True;
 end;
 
 function TyChartFormatTemplate(const ATemplate: string;
   const AParams: TTyChartParams): string;
 var
-  i, n, close_: Integer;
-  body, expanded: string;
+  vars: array of TTyStringArray;
+  i, n: Integer;
 begin
-  Result := '';
-  n := Length(ATemplate);
-  if Length(AParams) = 0 then
-    Exit(ATemplate);
-  i := 1;
-  while i <= n do
+  vars := nil;
+  SetLength(vars, Length(AParams));
+  { d is one of the letters only where the series HAS a percentage -- a pie,
+    a funnel -- and the first series decides, as upstream's $vars come from
+    the first entry. }
+  if (Length(AParams) > 0) and AParams[0].HasPercent then n := 4 else n := 3;
+  for i := 0 to High(AParams) do
   begin
-    if ATemplate[i] <> '{' then
+    SetLength(vars[i], n);
+    vars[i][0] := AParams[i].SeriesName;
+    vars[i][1] := AParams[i].Name;
+    vars[i][2] := ValueTextOf(AParams[i]);
+    if n = 4 then
     begin
-      Result := Result + ATemplate[i];
-      Inc(i);
-      Continue;
+      if AParams[i].HasPercent then
+        vars[i][3] := TyJsNumberToString(AParams[i].Percent)
+      else
+        vars[i][3] := '';
     end;
-    close_ := i + 1;
-    while (close_ <= n) and (ATemplate[close_] <> '}') do Inc(close_);
-    if close_ > n then
-    begin
-      { An unclosed brace is literal text, not a broken placeholder. }
-      Result := Result + Copy(ATemplate, i, MaxInt);
-      Break;
-    end;
-    body := Copy(ATemplate, i + 1, close_ - i - 1);
-    if ExpandOne(body, AParams, expanded) then
-      Result := Result + expanded
-    else
-      Result := Result + Copy(ATemplate, i, close_ - i + 1);
-    i := close_ + 1;
   end;
+  Result := TyJsFormatTpl(ATemplate, n, vars);
 end;
 
 function TyChartResolveText(const ASpec: string; const AParams: TTyChartParams;

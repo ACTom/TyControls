@@ -357,6 +357,8 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
 
 implementation
 
+uses tyControls.AdvChart.Scale;
+
 const
   cRadian = Pi / 180;
   { A sweep under this is no sweep at all. The shape layer will happily emit a
@@ -1061,7 +1063,9 @@ end;
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
   AValue: Double): string;
 begin
-  Result := TyChartNumToStr(AValue);
+  { formatLabel: `value + ''` -- JavaScript's own text, so a missing value
+    reads NaN, as upstream's dial does, and 1e21 reads 1e+21. }
+  Result := TyJsNumberToString(AValue);
   if not AHasFormatter then Exit;
   Result := TyReplaceFirst(AFormatter, '{value}', Result);
   Result := StripRich(Result);
@@ -1083,6 +1087,9 @@ begin
   { MULTIPLIED BEFORE IT IS DIVIDED, which is upstream's own comment: it keeps
     the error out of the label rather than rounding it away afterwards. }
   Result := AIndex * (AMax - AMin) / ASplitNumber + AMin;
+  { AND ROUNDED AT FOURTEEN PLACES, upstream's round(x, 14): a third of the
+    way round a 0..1 dial is 0.33333333333333, not every digit a Double has. }
+  Result := TyJsToFixed(Result, 14);
 end;
 
 { ==================== the dial ==================== }
