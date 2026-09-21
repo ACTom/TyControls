@@ -94,6 +94,10 @@ type
   TTyLabelSpec = record
     Show: Boolean;
     Position: TTyLabelPosition;
+    { `position: 'outside'`, which is not a position but a request for the
+      mark's own: Position then holds tlpTop, the answer for a mark that has
+      none, and a mark with an outside side (a bar) answers per datum. }
+    Outside: Boolean;
     { tlpAt only, DEVICE px from the host's top-left. }
     AtX, AtY: Double;
     { LOGICAL px. The gap outside, or the inset inside, depending on the
@@ -413,6 +417,7 @@ var
   i, n, si: Integer;
   host, cap: TTyChartElement;
   spec: TTyLabelSpec;
+  pos: TTyLabelPosition;
   bounds, box: TTyRectF;
   x, y, w, h, scale, dist: Double;
   ah: TTyTextAnchorH;
@@ -449,7 +454,16 @@ begin
     if (w <= 0) or (h <= 0) then Continue;
 
     dist := spec.DistanceLogical * scale;
-    TyLabelAnchor(bounds, spec.Position, dist, spec.AtX, spec.AtY, x, y, ah, av);
+    { OUTSIDE IS DECIDED PER MARK: past whichever end the bar grows to. }
+    pos := spec.Position;
+    if spec.Outside then
+      case host.Caption.Outside of
+        coTop: pos := tlpTop;
+        coBottom: pos := tlpBottom;
+        coLeft: pos := tlpLeft;
+        coRight: pos := tlpRight;
+      end;
+    TyLabelAnchor(bounds, pos, dist, spec.AtX, spec.AtY, x, y, ah, av);
     { OFFSET AFTER THE POSITION, which is upstream's order. Upstream also
       applies it INSIDE the rotation, so a rotated label's offset runs along
       the rotated axes; this applies it in screen axes and says so, because the

@@ -277,6 +277,15 @@ begin
   AssertEquals('outside becomes top', Ord(tlpTop),
     Ord(SpecOf('{ "series": [ { "type": "bar", "label":'
       + ' { "position": "outside" } } ] }').Position));
+  { ... for a mark that has no outside of its own. A bar has one -- past the
+    end it grows to -- so the request is remembered, and a written 'top' is
+    not it. }
+  AssertTrue('and is remembered as a request',
+    SpecOf('{ "series": [ { "type": "bar", "label":'
+      + ' { "position": "outside" } } ] }').Outside);
+  AssertFalse('top is only top',
+    SpecOf('{ "series": [ { "type": "bar", "label":'
+      + ' { "position": "top" } } ] }').Outside);
 end;
 
 procedure TAdvChartLabelsTest.TestTheArrayFormPinsTheTopLeft;

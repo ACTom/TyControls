@@ -52,7 +52,11 @@ type
     procedure TestABarPastTheAxisIsCutAtThePlotEdge;
     procedure TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;
     procedure TestAHorizontalStackedBarStacksAlongXNotY;
-    procedure TestTheBottomOfAStackKeepsTheAxisOwnBaseline;
+    procedure TestTheBottomOfAStackStandsOnTheStartValue;
+    procedure TestABarStandsOnZeroNotOnTheAxisMin;
+    procedure TestAHorizontalBarStandsOnZeroToo;
+    procedure TestABarOfNoLengthIsKeptWithItsWords;
+    procedure TestAStackedMinimumIsMeasuredFromTheBarBelow;
     procedure TestAStackedLineIsDrawnThroughItsTotals;
     procedure TestAnAreaIsAClosedRingUnderTheLine;
     procedure TestTheAreaOriginFollowsTheAxisWhenItIsAllOneSign;
@@ -771,21 +775,21 @@ begin
     b.Left > FCart.DataToPoint([0.0, 1.0]).X + 1);
 end;
 
-procedure TAdvChartMarksTest.TestTheBottomOfAStackKeepsTheAxisOwnBaseline;
+procedure TAdvChartMarksTest.TestTheBottomOfAStackStandsOnTheStartValue;
 var
   v: TTySeriesVisual;
   stk: TTySeriesStack;
   b: TTyRectF;
   resultCol: Integer;
 begin
-  { THE BOTTOM MEMBER IS DRAWN LIKE AN UNSTACKED SERIES. It accumulates onto
-    nothing, so its floor is the axis' own baseline -- and computing one for it
-    as (cumulative - own) would put it at ZERO instead.
-
-    ON AN AXIS THAT STARTS AT ZERO THE TWO ARE THE SAME NUMBER, which is why
-    every earlier test missed this: a mutant that gave the bottom member a
-    computed floor survived them all. The axis here starts at 10 so the two
-    answers differ. }
+  { THE BOTTOM MEMBER IS DRAWN LIKE AN UNSTACKED SERIES: it stacks on nothing
+    and stands where any bar does, on the axis' start value -- zero -- even on
+    an axis whose min is 10. With clip on, the plot's edge cuts it at 10
+    either way; with clip off the difference shows.
+    [Revised in batch 36: this was "the bottom of a stack keeps the axis' own
+    baseline" and pinned the bar at 10, the extent's start. Upstream stands
+    it on the start value; the old test only passed because clip hid the
+    difference, and it is now run unclipped.] }
   Given('bar', 1, [40]);
   TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(10, 100));
   resultCol := FStore.AddDimension('total', ddtFloat);
@@ -798,15 +802,142 @@ begin
 
   v := TySeriesVisual($FF3366CC);
   v.Bar := TyBarColumnForOneSeries(100);
+  v.Bar.Clip := False;
   TyBuildSeriesMarks(FBinding, FStore, stk, v, FList);
 
   b := TyShapeBounds(FList.Element(0).Shape);
-  AssertEquals('it stands on the axis, at 10',
-    FCart.DataToPoint([0.0, 10.0]).Y, b.Bottom, 0.001);
+  AssertEquals('it stands on zero, below this axis',
+    FCart.DataToPoint([0.0, 0.0]).Y, b.Bottom, 0.001);
   AssertEquals('and reaches its value', FCart.DataToPoint([0.0, 40.0]).Y,
     b.Top, 0.001);
-  AssertTrue('not down at zero, which is off this axis',
-    b.Bottom < FCart.DataToPoint([0.0, 0.0]).Y - 1);
+
+  { A WRITTEN startValue is where it stands instead }
+  FList.Clear;
+  FBinding.ValueAxis.Scale.StartValue := 20;
+  TyBuildSeriesMarks(FBinding, FStore, stk, v, FList);
+  b := TyShapeBounds(FList.Element(0).Shape);
+  AssertEquals('or on the start value', FCart.DataToPoint([0.0, 20.0]).Y,
+    b.Bottom, 0.001);
+end;
+
+procedure TAdvChartMarksTest.TestABarStandsOnZeroNotOnTheAxisMin;
+var
+  v: TTySeriesVisual;
+  b, cell: TTyRectF;
+  i: Integer;
+  y0: Double;
+begin
+  { ON AN AXIS FROM -4 TO 6 every bar grows from ZERO, up or down -- upstream's
+    getValueAxisStart. Grown from the min, the -3 bar stood 25 px tall from
+    the bottom of the plot and the 5 bar 230 px, and a chart of losses read as
+    a chart of gains. }
+  Given('bar', 3, [5, -3, 0]);
+  TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(-4, 6));
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(100);
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  y0 := FCart.DataToPoint([0.0, 0.0]).Y;
+
+  b := TyShapeBounds(FList.Element(0).Shape);
+  AssertEquals('5 rises from zero', y0, b.Bottom, 1e-9);
+  AssertEquals(FCart.DataToPoint([0.0, 5.0]).Y, b.Top, 1e-9);
+  b := TyShapeBounds(FList.Element(1).Shape);
+  AssertEquals('-3 hangs from zero', y0, b.Top, 1e-9);
+  AssertEquals(FCart.DataToPoint([1.0, -3.0]).Y, b.Bottom, 1e-9);
+
+  { AND THE CELL IS THE SAME RECTANGLE -- contract (1): DataToLayout and the
+    bar agree on where a bar stands, on this axis as on one from zero. }
+  for i := 0 to 1 do
+  begin
+    b := TyShapeBounds(FList.Element(i).Shape);
+    cell := FCart.DataToLayout([Double(i), FStore.Get(1, i)]).Rect;
+    AssertEquals('the cell''s top', cell.Top, b.Top, 1e-9);
+    AssertEquals('the cell''s bottom', cell.Bottom, b.Bottom, 1e-9);
+  end;
+end;
+
+procedure TAdvChartMarksTest.TestAHorizontalBarStandsOnZeroToo;
+var
+  v: TTySeriesVisual;
+  b: TTyRectF;
+  x0: Double;
+begin
+  { the same across x: 5 runs right from zero, -3 left }
+  GivenSideways('bar', 2, [5, -3]);
+  TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(-4, 6));
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(100);
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  x0 := FCart.DataToPoint([0.0, 0.0]).X;
+  b := TyShapeBounds(FList.Element(0).Shape);
+  AssertEquals('5 runs right from zero', x0, b.Left, 1e-9);
+  AssertEquals(FCart.DataToPoint([5.0, 0.0]).X, b.Right, 1e-9);
+  b := TyShapeBounds(FList.Element(1).Shape);
+  AssertEquals('-3 runs left from zero', x0, b.Right, 1e-9);
+  AssertEquals(FCart.DataToPoint([-3.0, 1.0]).X, b.Left, 1e-9);
+end;
+
+procedure TAdvChartMarksTest.TestABarOfNoLengthIsKeptWithItsWords;
+var
+  v: TTySeriesVisual;
+  b: TTyRectF;
+begin
+  { A 0 IS A BAR TOO: upstream draws it flat, which paints nothing, and hangs
+    its label on it. Dropped, the chart lost the one number that says "none".
+    So is a value equal to a pinned min, clipped to the plot's very edge; one
+    clipped PAST itself, wholly off the plot, is not drawn. }
+  Given('bar', 4, [0, 20, 10, 5]);
+  TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(0, 100));
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(100);
+  v.Label_ := TyLabelSpecNone;
+  v.Label_.Show := True;
+  v.LabelValueDim := 1;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('four bars, the 0 among them', 4, FList.Count);
+  b := TyShapeBounds(FList.Element(0).Shape);
+  AssertEquals('of no length', 0.0, b.Bottom - b.Top, 0);
+  AssertEquals('on the axis', FCart.DataToPoint([0.0, 0.0]).Y, b.Top, 1e-9);
+  AssertEquals('and still saying so', '0', FList.Element(0).Caption.Text);
+
+  FList.Clear;
+  TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(10, 100));
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  { 0 and 5 are wholly below a min of 10; 10 touches it }
+  AssertEquals('what is under the min is not drawn', 2, FList.Count);
+  b := TyShapeBounds(FList.Element(1).Shape);
+  AssertEquals('the min itself is a flat bar', 0.0, b.Bottom - b.Top, 0);
+  AssertEquals('at the plot''s edge', FCart.GetRect.Bottom, b.Bottom, 1e-9);
+  AssertEquals('with its number', '10', FList.Element(1).Caption.Text);
+end;
+
+procedure TAdvChartMarksTest.TestAStackedMinimumIsMeasuredFromTheBarBelow;
+var
+  v: TTySeriesVisual;
+  stk: TTySeriesStack;
+  b: TTyRectF;
+  resultCol: Integer;
+  floorY: Double;
+begin
+  { barMinHeight FROM THE BAR'S OWN FLOOR: a 0.001 on top of a 5 is ten
+    pixels standing on the 5, as upstream's is. Measured from the axis, the
+    segment was already "long enough" and drew as a sliver. }
+  Given('bar', 1, [0.001]);
+  TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(0, 6));
+  resultCol := FStore.AddDimension('total', ddtFloat);
+  FStore.SetCalculated(resultCol, 0, 5.001);
+  stk := TyNoStack;
+  stk.Stacked := True;
+  stk.HasBelow := True;
+  stk.ResultCol := resultCol;
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(100);
+  v.Bar.MinHeightPx := 10;
+  TyBuildSeriesMarks(FBinding, FStore, stk, v, FList);
+  b := TyShapeBounds(FList.Element(0).Shape);
+  floorY := FCart.DataToPoint([0.0, 5.0]).Y;
+  AssertEquals('it stands on the 5', floorY, b.Bottom, 1e-9);
+  AssertEquals('ten pixels up from there', floorY - 10, b.Top, 1e-9);
 end;
 
 procedure TAdvChartMarksTest.TestAStackedLineIsDrawnThroughItsTotals;

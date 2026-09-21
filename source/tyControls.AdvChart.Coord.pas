@@ -252,7 +252,19 @@ type
     property OwnsAxes: Boolean read FOwnsAxes write FOwnsAxes;
   end;
 
+{ THE VALUE A BAR STANDS ON, upstream's getValueAxisStart: the axis' resolved
+  startValue, or where it has none 1 on a log axis and 0 on any other -- NOT
+  the extent's start. The two agree only while the extent starts there: a
+  chart with a negative bar in it grows every bar from zero, up or down. }
+function TyValueAxisStart(AAxis: TTyAxis): Double;
+
 implementation
+
+function TyValueAxisStart(AAxis: TTyAxis): Double;
+begin
+  if AAxis.Scale.HasStartValue then Exit(AAxis.Scale.StartValue);
+  if AAxis.AxisType = atLog then Result := 1 else Result := 0;
+end;
 
 { ============================ TTyAxis ============================ }
 
@@ -666,7 +678,12 @@ begin
   end
   else
   begin
-    baseline := across.DataToCoord(across.Scale.GetExtent.Start);
+    { FROM WHERE A BAR STANDS, which is the value axis' start value and not
+      its min: a -3 on an axis from -4 to 6 runs down from 0, not up from -4.
+      A start the axis cannot place -- a log axis told to start at 0 -- is no
+      cell at all, as upstream draws no bar there. }
+    baseline := across.DataToCoord(TyValueAxisStart(across));
+    if IsNan(baseline) or IsInfinite(baseline) then Exit;
     aMin := Min(aAnchor, baseline);
     aMax := Max(aAnchor, baseline);
   end;

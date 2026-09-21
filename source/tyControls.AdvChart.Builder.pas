@@ -1691,6 +1691,7 @@ var
   ticks: TTyScaleTickArray;
   gb: TTyGridBuild;
   node: TJSONObject;
+  mode: TTyOuterBoundsMode;
 
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
     ANode: TJSONObject; const AFurn: TTyAxisFurniture);
@@ -1901,7 +1902,16 @@ begin
     { obcAll, explicitly. Our own default is obcAxisLabel while upstream's
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
-    gb.FPlotRect := TySolveGrid(gb.FOuterRect, specs, AMeasurer, APPI, obmAuto, obcAll);
+    { `outerBoundsMode: 'none'` IS THE GRID'S RECT AS WRITTEN, labels
+      overflowing it where they will -- upstream's own meaning. Every other
+      mode still reserves the labels' room inside the rect, which is not what
+      upstream's 'auto' does (it bounds by the whole canvas); that is the
+      outer-bounds batch. }
+    mode := obmAuto;
+    node := ObjOf(AOption.ComponentAt('grid', gb.ComponentIndex));
+    if (node <> nil) and (StrIn(node, 'outerBoundsMode', '') = 'none') then
+      mode := obmNone;
+    gb.FPlotRect := TySolveGrid(gb.FOuterRect, specs, AMeasurer, APPI, mode, obcAll);
 
     { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
       measuring every label, and the paint pass used to derive them itself on

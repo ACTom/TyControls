@@ -219,9 +219,16 @@ type
       scale subclass knowing. NOTE a replacement mapper brings its OWN extents;
       set the extent again after swapping unless the new mapper wraps the old. }
     property Mapper: ITyScaleMapper read FMapper write FMapper;
-    { ECharts 6.1 break B7: startValue is NOT min. It is a viewport hint that
-      dataZoom and axisPointer read; it never moves the extent. Built in from day
-      one because retrofitting it means reworking the extent model. }
+    { upstream's startValue, as the raw extent resolved it: the value a bar on
+      this axis stands on (getValueAxisStart). Not min -- setting it moves no
+      extent. The raw extent has already joined it to the extent where
+      upstream does, and pinned the end it moved; this only carries the value
+      on to the bars. Not-a-number (HasStartValue False) where no bar asked
+      and none was written.
+      [Revised in batch 36: this said startValue was a viewport hint that
+      "never moves the extent". Upstream's scaleRawExtentInfo unions it into
+      the extent when it was written, on a log axis, or where zero is
+      included -- which the raw extent here has done since batch 33.] }
     property StartValue: Double read FStartValue write SetStartValue;
     property HasStartValue: Boolean read FHasStartValue;
   end;

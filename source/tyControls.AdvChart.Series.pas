@@ -221,6 +221,13 @@ type
     FixLo, FixHi: Boolean;
     ToggleInverse: Boolean;
     Blank: Boolean;
+    { THE VALUE A BAR STANDS ON: startValue as written, or -- where a bar asked
+      for one and none was written -- 1 on a log axis and 0 elsewhere. Kept
+      as parsed, NOT sanitized with the extent: a log start of 0 stays 0, and
+      no bar can stand on it. HasStartValue False, the zero value, is an axis
+      with no start at all. }
+    HasStartValue: Boolean;
+    StartValue: Double;
   end;
 
 { ADataLo/ADataHi are the series' own extent, +Infinity/-Infinity when there
@@ -983,6 +990,11 @@ begin
     begin
       if (AAxis <> nil) and (AAxis.AxisType = atLog) then sv := 1 else sv := 0;
     end;
+    if Finite(sv) then
+    begin
+      Result.HasStartValue := True;
+      Result.StartValue := sv;
+    end;
     if Finite(sv) and (svSpecified or (not interval) or needZero) then
     begin
       if (sv < Result.Lo) and not Result.FixLo then
@@ -1223,6 +1235,10 @@ var
     { NOTHING TO GO ON is still [0, 1] with ticks on it, as upstream's is; the
       flag is what keeps them from being drawn. }
     AAxis.Scale.MarkedBlank := raw.Blank;
+    { AND WHERE ITS BARS STAND. Written every build, not-a-number included, so
+      an axis that has lost its bars loses its start with them. }
+    if raw.HasStartValue then AAxis.Scale.StartValue := raw.StartValue
+    else AAxis.Scale.StartValue := NaN;
     if AAxis.Scale is TTyIntervalScale then
     begin
       TTyIntervalScale(AAxis.Scale).FixMin := raw.FixLo;

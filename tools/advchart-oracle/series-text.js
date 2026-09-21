@@ -187,6 +187,12 @@ label('bar stacked: each series labels its own value', catX(['A', 'B', 'C'], [
   { type: 'bar', name: 'S1', stack: 't', data: [0.1 + 0.2, 1e-7, 1.23456789], label: { show: true } },
   { type: 'bar', name: 'S2', stack: 't', data: [1 / 3, -1234.5, 12.5], label: { show: true } },
 ]));
+// A bar of no length keeps its label: stacked on 1e17, a third is no length
+// at all -- upstream draws it flat, number and all.
+label('bar stacked: a bar too short to see keeps its label', catX(['A', 'B', 'C'], [
+  { type: 'bar', name: 'S1', stack: 't', data: [0.1 + 0.2, 1e-7, 1.23456789], label: { show: true } },
+  { type: 'bar', name: 'S2', stack: 't', data: [1 / 3, -1234.5, 1e17], label: { show: true } },
+]));
 for (const f of ['{a}|{b}|{c}', '{c}/{c}', '{a0}|{b0}|{c0}', '{d}|{e}|{c1}']) {
   label('bar template ' + f + ' on V', catX(VC, [{ type: 'bar', name: 'S', data: V, label: { show: true, formatter: f } }]));
 }
@@ -295,14 +301,6 @@ label('pie: numeric names', { series: [{ type: 'pie', name: 'P', data: [
 // every {@dim}, [n] or name, with its one value (retrieveRawValue)
 label('bar template {@[0]}|{@value}|{@nope} on V', catX(VC, [
   { type: 'bar', name: 'S', data: V, label: { show: true, formatter: '{@[0]}|{@value}|{@nope}' } },
-]), deferred);
-// deferred: bar geometry. The port draws a bar up from the axis' min rather
-// than from 0, and drops one of no length -- label and all -- where upstream
-// draws a flat rect with its label. Stacked on 1e17, a third is no length at
-// all.
-label('bar stacked: a bar too short to see keeps its label', catX(['A', 'B', 'C'], [
-  { type: 'bar', name: 'S1', stack: 't', data: [0.1 + 0.2, 1e-7, 1.23456789], label: { show: true } },
-  { type: 'bar', name: 'S2', stack: 't', data: [1 / 3, -1234.5, 1e17], label: { show: true } },
 ]), deferred);
 label('bar: raw strings and booleans', catX(['A', 'B', 'C', 'D', 'E'], [
   { type: 'bar', name: 'S', data: ['12.50', ' 5 ', '1e3', true, 'abc'], label: { show: true } },

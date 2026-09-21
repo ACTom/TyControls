@@ -16,7 +16,8 @@ unit tyControls.AdvChart.Marks;
 
   ONE RECT PER BAR, FROM DataToLayout. That function is contract (1) of the
   spec, and a bar is the shape it was designed to return: one band wide, from
-  the value axis' baseline to the datum. A renderer that computed the rect
+  the value axis' start value (TyValueAxisStart -- zero, not the axis' min) to
+  the datum. A renderer that computed the rect
   itself would be the second producer of a number the coordinate system already
   owns -- and would get horizontal bars wrong, which is exactly the defect
   DataToLayout carried until it was made to ask which axis is the spine.
@@ -654,32 +655,67 @@ end;
 { barMinHeight, applied ACROSS the base axis so a value too small to see still
   shows as something.
 
-  Anchored on the baseline, not on the cell, because which end of the cell is
-  the baseline is exactly what the Min/Max that built it threw away. The sign
-  rule is upstream's and differs between the two orientations by one boundary:
-  a vertical bar of value zero points in the positive direction (`<= 0`), and
-  so does a horizontal one (`< 0`), which is the same answer reached from
-  opposite sides of the comparison. }
+  MEASURED FROM THE BAR'S OWN FLOOR -- the axis' start value for a bar that
+  stands on it, the top of the one below for a stacked one (upstream's
+  baseCoord) -- because which end of the cell is the floor is exactly what the
+  Min/Max that built it threw away. So a minimum does not climb a stack: two
+  short segments one above the other overlap, as upstream's do.
+  [Revised in batch 36: this was anchored on the axis' extent start for every
+  member of a stack, and a short segment on top of a tall one was drawn as a
+  sliver from its own end towards the axis.]
+
+  The sign rule is upstream's and differs between the two orientations by one
+  boundary: a vertical bar of length zero points up the screen (`<= 0`), a
+  horizontal one right (`< 0`). }
 function ApplyMinHeight(const ABounds: TTyRectF; ABaseHorizontal: Boolean;
-  AAnchor, ABaseline, AMinHeight: Double): TTyRectF;
+  AAnchor, AFloor, AMinHeight: Double): TTyRectF;
 var
   span, sign: Double;
 begin
   Result := ABounds;
   if AMinHeight <= 0 then Exit;
-  span := AAnchor - ABaseline;
+  span := AAnchor - AFloor;
   if Abs(span) >= AMinHeight then Exit;
   if ABaseHorizontal then
   begin
     if span <= 0 then sign := -1 else sign := 1;
-    Result.Top := Min(ABaseline, ABaseline + sign * AMinHeight);
-    Result.Bottom := Max(ABaseline, ABaseline + sign * AMinHeight);
+    Result.Top := Min(AFloor, AFloor + sign * AMinHeight);
+    Result.Bottom := Max(AFloor, AFloor + sign * AMinHeight);
   end
   else
   begin
     if span < 0 then sign := -1 else sign := 1;
-    Result.Left := Min(ABaseline, ABaseline + sign * AMinHeight);
-    Result.Right := Max(ABaseline, ABaseline + sign * AMinHeight);
+    Result.Left := Min(AFloor, AFloor + sign * AMinHeight);
+    Result.Right := Max(AFloor, AFloor + sign * AMinHeight);
+  end;
+end;
+
+{ Which side `outside` is for a bar: past the end it grows to, decided on its
+  signed length (upstream's getLabelPositionFor*). One CLIPPED TO NOTHING --
+  or of no length at all -- has no end of its own, and takes the side the
+  value axis runs towards: up, or down on an inverse axis; right, or left.
+
+  THE LENGTH BEFORE barMinHeight WILL DO: the minimum never turns a bar
+  round -- a zero it lengthens goes up, or right, which is what a zero here
+  already answers. }
+function BarOutside(ALen: Double; AZero, ABaseHorizontal,
+  AInverse: Boolean): TTyCaptionOutside;
+begin
+  if ABaseHorizontal then
+  begin
+    if AZero then
+    begin
+      if AInverse then Exit(coBottom) else Exit(coTop);
+    end;
+    if ALen > 0 then Result := coBottom else Result := coTop;
+  end
+  else
+  begin
+    if AZero then
+    begin
+      if AInverse then Exit(coLeft) else Exit(coRight);
+    end;
+    if ALen >= 0 then Result := coRight else Result := coLeft;
   end;
 end;
 
@@ -713,7 +749,8 @@ function BuildBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, valCol: Integer;
-  x, y, baseline, anchor, own, floorV: Double;
+  x, y, baseline, anchor, own, floorV, floorPx, len: Double;
+  zero, inverse: Boolean;
   lay: TTyCoordLayout;
   r, bg, plot: TTyRectF;
   p, hiPt, loPt: TTyPointF;
@@ -731,13 +768,18 @@ begin
   if baseHoriz then valCol := AColY else valCol := AColX;
   haveCol := False;
   col := Default(TTyBarColumn);
-  { The baseline the value axis measures from -- the same one DataToLayout used
-    to build the cell, asked again because the cell's Min/Max lost which end it
-    was. Only barMinHeight needs it. }
+  { THE LINE A BAR STANDS ON -- the value axis' start value, the same one
+    DataToLayout built the cell from, asked again because the cell's Min/Max
+    lost which end it was. A bar's length, its minimum and its outside side
+    are all measured from it (or, stacked, from the bar below). }
   baseline := 0;
+  inverse := False;
   if ABinding.ValueAxis <> nil then
+  begin
     baseline := ABinding.ValueAxis.DataToCoord(
-      ABinding.ValueAxis.Scale.GetExtent.Start);
+      TyValueAxisStart(ABinding.ValueAxis));
+    inverse := ABinding.ValueAxis.Inverse;
+  end;
   for i := 0 to AStore.Count - 1 do
   begin
     x := AStore.Get(AColX, i);
@@ -767,26 +809,40 @@ begin
       col := ColumnFor(AVisual, lay.Rect, baseHoriz);
       haveCol := True;
     end;
-    { A STACKED BAR STANDS ON THE ONE BELOW IT, not on the axis baseline.
+    { A STACKED BAR STANDS ON THE ONE BELOW IT, not on the axis' start.
 
       Its floor is recomputed as (cumulative - own) rather than read out of the
       stacked-over column, which is what upstream does and for a stated reason:
       barMinHeight can move the drawn END, so the value a bar was stacked over
-      is not necessarily where its own segment begins.
+      is not necessarily where its own segment begins. A member with nothing
+      of its own sign below it gets (cumulative - own) = 0: it stands on zero,
+      not on the start value -- upstream's own, and documented as such.
 
-      THE BOTTOM MEMBER IS EXCLUDED. It accumulates onto nothing, so its floor
-      is the axis' own baseline and DataToLayout has already put it there;
-      forcing it to (cumulative - own) = 0 would move it on any axis that does
-      not start at zero. }
+      THE BOTTOM MEMBER stacks on nothing (upstream gives it no stackedOn
+      series) and stands where an unstacked bar does, on the start value --
+      which DataToLayout has already used.
+      [Revised in batch 36: the bottom member was said to keep "the axis' own
+      baseline", the extent start, so as not to move on an axis that does not
+      start at zero. Upstream stands it on the start value like any bar; the
+      two only looked the same because clip cut both at the plot's edge.] }
+    floorPx := baseline;
     if stacked and AStack.HasBelow and not IsNan(own) then
     begin
       if baseHoriz then floorV := y - own else floorV := x - own;
+      { A FLOOR THE AXIS CANNOT PLACE is no bar: on a log axis a member with
+        nothing of its sign below it stands on zero, which is nowhere, and
+        upstream draws nothing. Compared, it raised out of the render. }
+      if baseHoriz then loPt := ABinding.Cart.DataToPoint([x, floorV])
+      else loPt := ABinding.Cart.DataToPoint([floorV, y]);
+      if IsNan(loPt.X) or IsNan(loPt.Y) or IsInfinite(loPt.X)
+        or IsInfinite(loPt.Y) then Continue;
       if baseHoriz then
       begin
         hiPt := ABinding.Cart.DataToPoint([x, y]);
         loPt := ABinding.Cart.DataToPoint([x, floorV]);
         lay.Rect.Top := Min(hiPt.Y, loPt.Y);
         lay.Rect.Bottom := Max(hiPt.Y, loPt.Y);
+        floorPx := loPt.Y;
       end
       else
       begin
@@ -794,6 +850,7 @@ begin
         loPt := ABinding.Cart.DataToPoint([floorV, y]);
         lay.Rect.Left := Min(hiPt.X, loPt.X);
         lay.Rect.Right := Max(hiPt.X, loPt.X);
+        floorPx := loPt.X;
       end;
       if not TyRectFIsValid(lay.Rect) then Continue;
     end;
@@ -838,12 +895,13 @@ begin
       Inc(Result);
     end;
 
+    { THE BAR'S OWN LENGTH, signed, from its floor to its end: what the
+      minimum is measured on and which side is outside. }
+    p := ABinding.Cart.DataToPoint([x, y]);
+    if baseHoriz then anchor := p.Y else anchor := p.X;
+    len := anchor - floorPx;
     if col.MinHeightPx > 0 then
-    begin
-      p := ABinding.Cart.DataToPoint([x, y]);
-      if baseHoriz then anchor := p.Y else anchor := p.X;
-      r := ApplyMinHeight(r, baseHoriz, anchor, baseline, col.MinHeightPx);
-    end;
+      r := ApplyMinHeight(r, baseHoriz, anchor, floorPx, col.MinHeightPx);
 
     { clip, default TRUE: a bar whose value runs past the axis' own min or max
       is CUT at the plot edge rather than drawn over the labels. Upstream does
@@ -863,9 +921,25 @@ begin
     end;
 
     { A zero-width column draws nothing rather than an invisible rect that is
-      still hit-testable -- which is what a bar on a value axis used to be, and
-      is now also what a fully clipped one would be. }
-    if (r.Right - r.Left <= 0) or (r.Bottom - r.Top <= 0) then Continue;
+      still hit-testable -- which is what a bar on a value axis used to be.
+
+      ALONG THE VALUE AXIS the rule is upstream's clip: a bar clipped past
+      itself -- wholly outside the plot -- is not drawn, but one of NO LENGTH
+      is: a 0, a value equal to the start or to a pinned min, a bar clipped
+      to the plot's very edge. It is a flat rect that paints nothing, and it
+      still carries its label.
+      [Revised in batch 36: every bar of no length was dropped, and its label
+      with it.] }
+    if baseHoriz then
+    begin
+      if (r.Right - r.Left <= 0) or (r.Bottom < r.Top) then Continue;
+      zero := r.Bottom = r.Top;
+    end
+    else
+    begin
+      if (r.Bottom - r.Top <= 0) or (r.Right < r.Left) then Continue;
+      zero := r.Right = r.Left;
+    end;
     if TyHasCorner(col.Radii) then
       shape := TyShapeRoundRect(r, col.Radii)
     else
@@ -873,6 +947,7 @@ begin
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
     el.Caption.Text := CaptionFor(AVisual, AStore, i);
+    el.Caption.Outside := BarOutside(len, zero, baseHoriz, inverse);
     AList.Add(el);
     Inc(Result);
   end;
@@ -1414,11 +1489,12 @@ begin
   haveCol := False;
   col := Default(TTyBarColumn);
 
-  { THE LINE A BAR STANDS ON -- the axis' own start, which is the same one
-    DataToLayout built its cell from and not necessarily zero. Asked again
-    here because the cell's Min/Max threw away which of its two ends it was. }
+  { THE LINE A BAR STANDS ON -- the axis' start value, the same one
+    DataToLayout built its cell from: zero, 1 on a log axis, or what
+    startValue says, and not the axis' min. Asked again here because the
+    cell's Min/Max threw away which of its two ends it was. }
   baseline := ABinding.ValueAxis.DataToCoord(
-    ABinding.ValueAxis.Scale.GetExtent.Start);
+    TyValueAxisStart(ABinding.ValueAxis));
   if IsNan(baseline) or IsInfinite(baseline) then Exit;
   { AND THE ZERO LINE, which is a DIFFERENT question: it is the only thing
     symbolBoundingData is measured from, and on a stacked bar or an axis that

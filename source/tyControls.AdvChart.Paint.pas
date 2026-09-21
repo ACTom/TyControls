@@ -123,8 +123,16 @@ type
     compute. The caption rides here instead, where resolved ink already is,
     and the entry the label pass emits carries a plain rect the shape layer
     understands completely. }
+  { WHICH SIDE `outside` MEANS for the mark a caption names. A bar grows up or
+    down (left or right) from what it stands on, and an outside label goes
+    past the end it grows to -- a -3 hangs its number below the bar. coNone,
+    the zero value, is every mark with no such end, whose outside is its top. }
+  TTyCaptionOutside = (coNone, coTop, coBottom, coLeft, coRight);
+
   TTyElementCaption = record
     Text: string;
+    { Set by the mark alongside Text, and read only for `position: outside`. }
+    Outside: TTyCaptionOutside;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;

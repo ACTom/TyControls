@@ -181,7 +181,12 @@ begin
         is where an unrecognised name goes. }
       if s = 'outside' then s := 'top';
       pos := TyLabelPositionOf(s, known);
-      if known then Result.Position := pos;
+      if known then
+      begin
+        Result.Position := pos;
+        { remembered, so a bar can say which side its outside is }
+        Result.Outside := d.AsString = 'outside';
+      end;
       { An unknown name is left at the base position rather than adopted as
         tlpNone: tlpNone means "draw nothing", and upstream draws something. }
     end;

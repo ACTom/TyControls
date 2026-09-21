@@ -435,6 +435,107 @@
    ]
   },
   {
+   "name": "bar stacked: a bar too short to see keeps its label",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S1",
+      "stack": "t",
+      "data": [
+       0.30000000000000004,
+       1e-7,
+       1.23456789
+      ],
+      "label": {
+       "show": true
+      }
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "stack": "t",
+      "data": [
+       0.3333333333333333,
+       -1234.5,
+       100000000000000000
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "0.30000000000000004"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "1e-7"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "1.23456789"
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "0.3333333333333333"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "-1234.5"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "100000000000000000"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
    "name": "bar template {a}|{b}|{c} on V",
    "option": {
     "xAxis": {
@@ -3480,108 +3581,6 @@
        "dataIndex": 14,
        "drawn": false,
        "texts": []
-      }
-     ]
-    }
-   ]
-  },
-  {
-   "name": "bar stacked: a bar too short to see keeps its label",
-   "option": {
-    "xAxis": {
-     "type": "category",
-     "data": [
-      "A",
-      "B",
-      "C"
-     ]
-    },
-    "yAxis": {
-     "type": "value"
-    },
-    "series": [
-     {
-      "type": "bar",
-      "name": "S1",
-      "stack": "t",
-      "data": [
-       0.30000000000000004,
-       1e-7,
-       1.23456789
-      ],
-      "label": {
-       "show": true
-      }
-     },
-     {
-      "type": "bar",
-      "name": "S2",
-      "stack": "t",
-      "data": [
-       0.3333333333333333,
-       -1234.5,
-       100000000000000000
-      ],
-      "label": {
-       "show": true
-      }
-     }
-    ],
-    "animation": false
-   },
-   "deferred": true,
-   "series": [
-    {
-     "seriesIndex": 0,
-     "type": "bar",
-     "items": [
-      {
-       "dataIndex": 0,
-       "drawn": true,
-       "texts": [
-        "0.30000000000000004"
-       ]
-      },
-      {
-       "dataIndex": 1,
-       "drawn": true,
-       "texts": [
-        "1e-7"
-       ]
-      },
-      {
-       "dataIndex": 2,
-       "drawn": true,
-       "texts": [
-        "1.23456789"
-       ]
-      }
-     ]
-    },
-    {
-     "seriesIndex": 1,
-     "type": "bar",
-     "items": [
-      {
-       "dataIndex": 0,
-       "drawn": true,
-       "texts": [
-        "0.3333333333333333"
-       ]
-      },
-      {
-       "dataIndex": 1,
-       "drawn": true,
-       "texts": [
-        "-1234.5"
-       ]
-      },
-      {
-       "dataIndex": 2,
-       "drawn": true,
-       "texts": [
-        "100000000000000000"
-       ]
       }
      ]
     }

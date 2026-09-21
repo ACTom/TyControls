@@ -5530,11 +5530,12 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 - **tooltip 子行**:K 线的 open/close/lowest/highest、雷达每个指标一行、`displayName`、`encode.tooltip`。
 - 雷达的数据标签没有实现;雷达环上的标签还是 `TyChartNumToStr`,要和 scaleCalcAlign 一起做。
 - `encode.label` 和 defaultedLabel 维度规则(类目-类目、时间-类目的散点没有默认标签)。
-- 未命名系列的自动名 `series N`:要先决定怎么画一个 NUL。
+- 未命名系列的自动名 `series\0N`:要先决定怎么画一个 NUL。
 - 仪表盘 `splitNumber: 0`:上游印 NaN,port 有意画最小值(gauge 测试钉着)。
 - **柱子几何,下一批**:fixture 里的堆叠用例暴露了两个问题。
   - 柱子从坐标轴的 min 画起,不是从 0(上游 `getValueAxisStart`)。数据全为正时两者重合,有负值就画错。
   - 长度为 0 的柱子整个被丢掉,标签也一起没了;上游画一个扁的矩形,标签照常。1/3 叠在 1e17 上就是这样。
+  **[第三十六批已修,见 §70;那条用例已去掉 deferred。]**
 - 函数形式的 formatter、`valueFormatter`、`@Name` 事件用在标签上。
 
 ### 落地
@@ -5562,3 +5563,97 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 ### 还在队列里
 
 柱子的基线和零长度柱子 → grid 的外边界收缩 → containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达与 `alignTicks`)→ 原始值通道 → tooltip 子行。
+
+## 70. Tier 1 第三十六批:柱子站在哪里(2026-09-22)
+
+上一批的 fixture 里,一根 1/3 叠在 1e17 上的柱子连标签一起不见了。顺着查下去是两个老问题:柱子从坐标轴的 min 画起,长度为 0 的柱子被丢掉。
+这一批把柱子沿数值轴方向的几何对齐上游。
+
+### 上游的规则
+
+- **起点是 startValue**(`getValueAxisStart`):写了 `startValue` 就用它;没写时 log 轴是 1,其他是 0。不是轴的 min。
+  - 只有柱状图(含 pictorialBar)的数值轴要起点;基轴不要。
+  - 起点什么时候并进轴的范围,第 33 批已经按 scaleRawExtentInfo 做了。`scale: true` 又没写 startValue 时它不进范围,但仍然是柱子的起点,于是柱子从画布外开始、被 clip 裁到边上。
+  - 起点按原样保存,不跟范围一起清理:log 轴写 `startValue: 0`,起点落不到像素上,一根柱子也不画。
+- **堆叠**:最底层没有 stackedOn 系列,和不堆叠的柱子一样站在起点上;上面各层从 `累计 - 自己` 画到 `累计`。下面没有同号层的,站在 0 上,不是起点(上游自己在注释里承认这里有问题)。
+- **barMinHeight** 从每根柱子自己的底量起,所以不会沿着堆叠往上传,两段短柱会重叠。竖柱长度 ≤ 0 时向上,横柱 < 0 时向左。
+- **长度为 0 的柱子照画**:一个扁矩形,不出颜色,标签照挂。clip 只在矩形被裁到"反过来"(整个在图外)时才隐藏它;正好贴边的不隐藏。
+- **`label.position: 'outside'`** 不是一个位置,是按柱子方向求的:竖柱向下长的放下方、否则上方;横柱向左长的放左边、否则右边。
+  判断用的是裁剪后的矩形;长度为 0(包括被裁成 0)时看数值轴是否 inverse。只有 `outside` 会翻,写死的 `top` 不翻。
+
+### port 以前
+
+- `DataToLayout` 和 `BuildBars` 都拿 `Scale.GetExtent.Start` 当柱子的底。有负值时 -3 那根从图底往上长,5 那根高出一倍多;全负的数据柱子倒过来,最小值那根长度为 0 被丢掉。
+- `startValue` 在第 33 批的原始范围第 (7) 步里算出来、并进了范围,然后就扔了:`TTyScale.StartValue` 这个属性早就有,没有任何生产代码写它。它的注释还说它"从不改变范围",和第 33 批的实现矛盾。
+- 堆叠最底层的注释专门论证它要站在"轴自己的基线"上;对应的测试只因为 clip 默认开、把两种答案都裁到了图边,才一直是绿的。
+- 长度 ≤ 0 的柱子连同标签被丢弃。数值为 0、等于钉住的 min、`scale: true` 的最小值,都没有标签。
+- barMinHeight 对堆叠的上层也从轴量起:叠在 5 上的 0.001 已经"够长",画成 0.04 像素的一条缝。
+- `outside` 在解析时就变成了 `top`。
+- log 轴上"下面没有同号层"的上层柱:底是 0,映射成 NaN,`Min(NaN, …)` 在 FPC 的默认陷阱下把整张图的渲染抛掉。
+
+### 做法
+
+- 原始范围记录加了 `HasStartValue`/`StartValue`(零值是"没有",因为 log 轴的默认是 1 而不是 0),构建时写进 `Scale.StartValue`,每次构建都写,没有就写 NaN。
+- `TyValueAxisStart(axis)`:有 startValue 用它,否则 log 轴 1、其他 0。`DataToLayout`、`BuildBars`、`BuildPictorialBar` 三处都用它;起点落不到像素上就没有格子。
+- `BuildBars` 求每根柱子的底(起点,或下一层的顶)和带符号的长度,barMinHeight 和 outside 的方向都用它。
+  outside 用的是加最小高度之前的长度:最小高度只会把 0 撑成向上(竖)或向右(横),而长度为 0 本来就是这个答案。
+- 沿数值轴只在"反过来"时丢弃;沿基轴仍然是宽度 ≤ 0 就丢(上游有 `barMinWidth || 1`,零宽柱子造不出来)。
+- 元素标题加了 `Outside`(`TTyCaptionOutside`,零值 `coNone` 表示没有自己的外侧,即上方);标签规格加了 `Outside` 标记,标签排版对 `outside` 按元素求位置。
+- `grid.outerBoundsMode: 'none'` 现在会读:grid 的矩形就是绘图区。别的模式照旧,留给外边界那一批。
+
+### 基准
+
+`tools/advchart-oracle/bar-geometry.js`,73 个用例(另有 5 个 deferred),每个数据项记录:drawn / hidden(整个被裁掉)/ none(缺值或起点落不到像素上)、裁剪后画出来的矩形、标签画没画、锚点和对齐方式。
+用例覆盖起点(正负、全负、`scale: true`、各种 startValue、log、inverse)、堆叠(混号、NaN、带 startValue、log)、barMinHeight(横竖、inverse、堆叠、被裁回 0)、clip(min、max、远端、多出的数据)、outside 和 pictorial 的底。
+
+所有用例都写 `grid: { outerBoundsMode: 'none' }`:两边默认 grid 的收缩规则不同(下一批),先把绘图区钉成一样,只比柱子。
+
+243 个画出的柱子(其中 42 个长度为 0)、9 个隐藏、11 个不画,239 个标签,共 1150 项比较,每个用例渲染两遍(第二遍之前 Invalidate)。
+坐标按 ulp 比:线性轴上最多差 1 ulp,log 轴上最多 4 ulp。像素是同一个值走不同的算式得到的(上游 `(v - d0) / span * range + r0`,这里 `r0 + n * range`),
+log 轴的对数还来自不同的库。数值本身第 33 批已经逐位对齐。
+
+第 35 批那条"太短看不见的柱子也保留标签"的用例去掉了 deferred,现在也相同。
+
+### 被推翻的旧话
+
+- `TestTheBottomOfAStackKeepsTheAxisOwnBaseline` 钉的是"最底层站在轴的 min 上"。改名为 `TestTheBottomOfAStackStandsOnTheStartValue`,关掉 clip,期望站在 0 上、写了 startValue 时站在它上面。原处有标注。
+- `Scale.pas` 里 `StartValue` 的注释("只是视口提示,从不改变范围")、`Marks.pas` 里堆叠最底层和 barMinHeight 的注释,都已改正并标注。
+
+### 已知偏差
+
+- **数值型基轴上的柱子**:上游按数据的最小间隔求柱宽,并把基轴范围放宽半个柱宽(containShape);port 还没有。起点这部分已经一致,那条用例标 deferred。
+- **边框内缩**(`itemStyle.borderWidth` 让矩形向里缩半个线宽)、**缺值行的背景条**、`barMinWidth: 0`:各自 deferred,上游答案已记在 fixture 里。
+- **长度为 0 的柱子的悬停**:上游竖直的零高柱子本身悬停不到(有边框或 inside 标签时才能),port 的矩形在那条线上能命中。标签照样代表这个数据。fixture 没有收悬停。
+- pictorialBar 的 `outside`:上游用自己的规则(`boundingLength` 的符号),port 仍然放上方。
+
+### 落地
+
+- `source/tyControls.AdvChart.Series.pas`:`TTyAxisRawExtent.HasStartValue/StartValue`,写 `Scale.StartValue`。
+- `source/tyControls.AdvChart.Coord.pas`:`TyValueAxisStart`,`DataToLayout` 用它。
+- `source/tyControls.AdvChart.Marks.pas`:`BarLength`、`BarOutside`,`ApplyMinHeight` 以底为锚,零长度柱子保留,log 堆叠守卫,pictorial 的起点。
+- `source/tyControls.AdvChart.Paint.pas`:`TTyCaptionOutside`、`TTyElementCaption.Outside`。
+- `source/tyControls.AdvChart.Labels.pas`、`LabelOpt.pas`:`TTyLabelSpec.Outside`,标签排版按元素求 outside。
+- `source/tyControls.AdvChart.Builder.pas`:`outerBoundsMode: 'none'`。
+- `source/tyControls.AdvChart.Scale.pas`:注释。
+- `tools/advchart-oracle/bar-geometry.js`、`tests/fixtures/advchart-bar-geometry.json`、`tests/test.advchart.bargeometry.pas`(新);
+  `test.advchart.marks.pas`、`test.advchart.labels.pas`、`test.advchart.coord.pas` 补测试。
+
+### 变异测试
+
+33 个,第一轮活 5 个:
+
+- **等价的两个**:
+  - 没写 startValue 时存不存默认值:存下来的(log 1、否则 0)和 `TyValueAxisStart` 的回退值一样。默认值算了两处,一处给范围、一处给手工搭的坐标系,答案相同。
+  - `BarLength` 里"够长就不改"的判断:barMinHeight 不改变长度的符号,所以对 outside 没有影响。顺着这个把 `BuildBars` 简化了:
+    outside 直接用原始长度,`BarLength` 并回 `ApplyMinHeight`。"方向在最小高度之前决定"那个变异体随之消失。
+- **补 oracle 用例的三个**:横向堆叠的上层柱在 `startValue: 20` 下的 outside(底和起点方向不同才分得开)、横向堆叠的 barMinHeight、
+  横向 barMinHeight 撑开的 0 的 outside(简化后 `>= 0` 在这里才起作用)。
+
+重新锚定的两个"零长度朝向"变异体和上面三个全部杀死。另外试了一个"按画出来的矩形中点定方向"的写法,和原写法等价,活下来是预期的。
+全量 **7727** 绿。
+
+另:第 35 批写进本文档的 `series\0N` 经 heredoc 变成了一个 NUL 字节,`grep` 把整个文件当成二进制。已改回字面的反斜杠 0。
+
+### 还在队列里
+
+grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达与 `alignTicks`)→ 原始值通道 → tooltip 子行。
