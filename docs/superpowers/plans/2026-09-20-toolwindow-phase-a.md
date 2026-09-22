@@ -1633,7 +1633,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ---
 
 > **Task 3 留给本节的三件事（审查结论）：**
-> - **静默开关要成对包起来**：`BeginSilentVisibility` / `EndSilentVisibility` 之间抛异常，计数会卡在 0 以上、`OnShow`/`OnHide` 从此不响。本节在栏上提供**一个** helper，把一次切页里的两个窗口一起包进 `try/finally`，`ActivateWindow`、`Loaded` 应用 `ActiveIndex`、以及 C 期的布局应用都只调它。
+> - **静默开关要成对包起来**：`BeginSilentVisibility` / `EndSilentVisibility` 之间抛异常，计数会卡在 0 以上、`OnShow`/`OnHide` 从此不响。本节在栏上提供**一个** helper（落地为 `SwitchSilently`），把一次切页里的窗口一起包进 `try/finally`。**调用者只有 `Loaded` 应用 `ActiveIndex` 和 C 期的挂起布局计划**——（实现期修正：初稿把 `ActivateWindow` 也列进来，与 spec §6.6 冲突；用户切页、收起、展开都照常发 `OnShow`/`OnHide`。）
 > - **`HeaderMode` 改成读 `Bar`**：加 `Placement` 时把「父控件是不是栏」统一成 `GetBar` 一处回答，别在 `HeaderMode` 里再判一遍。
 > - **推 Controller 要推到每一个操作区**（Task 4 审查）：不止 `SetController` 时推，工具窗口**插入**操作区子控件时也要推；而且要推给**所有** `TTyToolWindowActions` 子控件，不只第一个——多余的那些设计期要用它画提示。
 > - **「谁先读就是谁的」**：工具窗口察觉主题变化，靠的是 `Invalidate` 在版本号变了之后**第一个**去读 token。本节如果在栏的 `Invalidate` 里向各窗口做纯查询（比如为底栏统一行高去问每个窗口的标题行高），会先把窗口的缓存刷成新值、吃掉这条边。真要这么做，改用 LCL 自带的 `DoAdjustClientRectChange`（public，`controls.pp:2377`）：它比的是对齐引擎上一次真正用过的矩形，查询吃不掉。
@@ -2256,6 +2256,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
+
+> **Task 5 落地后对本节的影响**：栏的窗口顺序**每次从 `Controls` 现取、不缓存**（设计器「移到最前 / 最后」直接调非虚的 `SetControlIndex`，缓存会漂）；所有序号都是「窗口之间」的位置，提交前换算成 `Controls` 下标。`TTyToolWindow.WindowIndex`（spec §9.9，public、`stored False`、没有 manager 也能调栏内顺序）**Task 5 没有做**，由本节补上并让拖放提交与它走同一条路。
 
 ### Task 9: 栏内拖动调顺序（阈值、插入线、松开提交、Esc 取消）
 
