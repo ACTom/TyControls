@@ -233,9 +233,17 @@ type
     function IsUsedByWindow: Boolean;
     function HasVisibleChild: Boolean;
     function MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+    { 子控件那一排的尺寸;一个可见子控件都没有就是 (0, 0),设计期也一样(方槽不算)。 }
+    function RowSizeAt(APPI: Integer): TSize;
     function NoteText: string;
     function NoteStyle: TTyStyleSet;
-    { 设计期多余操作区 / 孤儿的最小尺寸:max(raw, 提示宽 + 2×pad) × max(raw 高, token)。 }
+    { 提示离前导边多远:有子控件时排在那一排后面(raw 宽 + gap),没有就是一个 pad。
+      尺寸下限和提示的框都从这里取,两边不会各算各的。 }
+    function NoteLeadAt(APPI: Integer): Integer;
+    { 提示的框,AClient 坐标;不画提示时是空矩形。RTL 整体按宽镜像。 }
+    function NoteRectIn(const AClient: TRect; APPI: Integer): TRect;
+    { 设计期多余操作区 / 孤儿的最小尺寸:
+      (提示前导距 + 提示宽 + pad) × max(raw 高, token)。 }
     function StrayDesignSize(APPI: Integer): TSize;
   protected
     function GetStyleTypeKey: string; override;
@@ -258,6 +266,9 @@ type
       InsertControl 不作废它(wincontrol.inc:6392),而且答不了别的 PPI。
       运行时一个可见子控件都没有 → (0, 0);设计期空着 → 边长为 token 的方槽。 }
     function PreferredSizeAt(APPI: Integer): TSize;
+    { 设计期提示画在哪里(客户区坐标,按自己字体的密度)—— Paint 画提示用的就是这个框。
+      窗口认的那一个、以及运行时,答空矩形。 }
+    function NoteRect: TRect;
   published
     { 由窗口推送,不进 .lfm(同 TTyToolWindow)。 }
     property Controller stored False;
@@ -816,7 +827,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolWindowActions.PreferredSizeAt(APPI: Integer): TSize;
+function TTyToolWindowActions.RowSizeAt(APPI: Integer): TSize;
 var
   i, n, w, h, ch, own, pad, gap: Integer;
   c: TControl;
@@ -841,23 +852,25 @@ begin
     ch := MulDiv(ch, APPI, own);
     if ch > h then h := ch;
   end;
-  if n = 0 then
-  begin
-    { 运行时就是 0:非 raw 的 GetPreferredSize 会把 0 宽换成 75px 默认宽
-      (control.inc:5609-5643),空操作区会平白占掉一截标题。
-      设计期给一个方槽方便往里拖控件,边长取 token 本身 —— 取标题行高的话,标题行高
-      本来就是 max(token, 操作区),定义会绕回自己。 }
-    if csDesigning in ComponentState then
-    begin
-      Result.cx := MetricPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
-      Result.cy := Result.cx;
-    end;
-    Exit;
-  end;
+  if n = 0 then Exit;
   pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
   gap := MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI);
   Result.cx := 2 * pad + w + (n - 1) * gap;
   Result.cy := h + 2 * pad;
+end;
+
+function TTyToolWindowActions.PreferredSizeAt(APPI: Integer): TSize;
+begin
+  Result := RowSizeAt(APPI);
+  { 一个可见子控件都没有:运行时就是 0 —— 非 raw 的 GetPreferredSize 会把 0 宽换成 75px
+    默认宽(control.inc:5609-5643),空操作区会平白占掉一截标题。
+    设计期给一个方槽方便往里拖控件,边长取 token 本身 —— 取标题行高的话,标题行高
+    本来就是 max(token, 操作区),定义会绕回自己。 }
+  if (csDesigning in ComponentState) and not HasVisibleChild then
+  begin
+    Result.cx := MetricPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+    Result.cy := Result.cx;
+  end;
 end;
 
 procedure TTyToolWindowActions.CalculatePreferredSize(var PreferredWidth,
@@ -883,13 +896,44 @@ begin
     TyStyleClassFor(Self, StyleClass), [tysNormal]);
 end;
 
+function TTyToolWindowActions.NoteLeadAt(APPI: Integer): Integer;
+begin
+  { 粘贴一个现成的操作区,进来的就是带按钮的多余操作区(spec §4 点名的场景)。子控件照常
+    从前导边排,提示排在那一排后面 —— 从 pad 开始画的话前半截压在按钮底下。 }
+  if HasVisibleChild then
+    Result := RowSizeAt(APPI).cx + MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI)
+  else
+    Result := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
+end;
+
+function TTyToolWindowActions.NoteRectIn(const AClient: TRect; APPI: Integer): TRect;
+var
+  lead, pad: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if not (csDesigning in ComponentState) or IsUsedByWindow then Exit;
+  lead := NoteLeadAt(APPI);
+  pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
+  { [子控件那一排][gap][提示][pad];从右往左读时整体按宽镜像,跟子控件那一排的镜像
+    (AlignControls)是同一条规则 —— 子控件到右边,提示在它们左边。 }
+  if IsRightToLeft then
+    Result := Rect(AClient.Left + pad, AClient.Top, AClient.Right - lead, AClient.Bottom)
+  else
+    Result := Rect(AClient.Left + lead, AClient.Top, AClient.Right - pad, AClient.Bottom);
+  if Result.Right < Result.Left then Result.Right := Result.Left;
+end;
+
+function TTyToolWindowActions.NoteRect: TRect;
+begin
+  { Paint 按 ClientRect、Font.PixelsPerInch 画(见 Paint → RenderTo),这里问的是同一个框。 }
+  Result := NoteRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+end;
+
 function TTyToolWindowActions.StrayDesignSize(APPI: Integer): TSize;
 var
   st: TTyStyleSet;
-  raw: TSize;
   blockW, blockH, textW, fontSize: Integer;
 begin
-  raw := PreferredSizeAt(APPI);
   st := NoteStyle;
   fontSize := ResolveFontSize(st);
   { 两个量法取大的(Painter.pas 的约定):画布量的和渲染器量的差一个像素,只按前者
@@ -897,9 +941,11 @@ begin
   TyMeasureTextBlock(NoteText, st.FontName, fontSize, st.FontWeight, APPI, 0, 0, blockW, blockH);
   textW := TyMeasureRenderedTextWidth(NoteText, st.FontName, fontSize, st.FontWeight, APPI);
   if blockW > textW then textW := blockW;
-  Inc(textW, 2 * MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI));
-  Result := raw;
-  if textW > Result.cx then Result.cx := textW;
+  { 宽 = 提示前导距 + 提示宽 + pad:有子控件时是 raw 宽 + gap + 提示宽 + pad,
+    没有时退化成 pad + 提示宽 + pad。跟 NoteRectIn 画提示用的是同一个前导距。 }
+  Result.cx := NoteLeadAt(APPI) + textW
+    + MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
+  Result.cy := PreferredSizeAt(APPI).cy;
   blockH := MetricPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
   if blockH > Result.cy then Result.cy := blockH;
 end;
@@ -976,7 +1022,6 @@ var
   P: TTyPainter;
   S, extraS: TTyStyleSet;
   R, noteR: TRect;
-  pad: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -994,16 +1039,14 @@ begin
         if tpBorderColor in extraS.Present then
           P.StrokeBorder(R, 0, 1, extraS.BorderColor);
       end;
-      { 窗口不认的那一个(多出来的、孤儿):说明它为什么在这里、运行时会怎样。
-        两侧各留一个 pad —— StrayDesignSize 就是按这个量的,量和画必须是同一个框。 }
-      if not IsUsedByWindow then
+      { 窗口不认的那一个(多出来的、孤儿):一眼看得懂的提醒。框从 NoteRectIn 来 ——
+        StrayDesignSize 按它量、NoteRect 按它答,量的、画的、测的是同一个框。 }
+      noteR := NoteRectIn(R, APPI);
+      if noteR.Right > noteR.Left then
       begin
         extraS := NoteStyle;
-        pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
-        noteR := Rect(pad, 0, R.Right - pad, R.Bottom);
-        if noteR.Right > noteR.Left then
-          P.DrawText(noteR, NoteText, extraS.FontName, ResolveFontSize(extraS),
-            extraS.FontWeight, extraS.TextColor, taLeftJustify, tlCenter, True);
+        P.DrawText(noteR, NoteText, extraS.FontName, ResolveFontSize(extraS),
+          extraS.FontWeight, extraS.TextColor, taLeftJustify, tlCenter, True);
       end;
     end;
     P.EndPaint;

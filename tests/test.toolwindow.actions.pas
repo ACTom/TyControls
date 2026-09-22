@@ -65,6 +65,7 @@ type
     procedure TestTheFlowFloorsEachChildAtItsMinHeight;
     procedure TestDesignTimeCountsChildrenTheUserHid;
     procedure TestAStrayAreaIsWideEnoughForItsNoteAtDesignTimeOnly;
+    procedure TestTheNoteOfAStrayAreaNeverSitsUnderItsChildren;
   end;
 
 implementation
@@ -641,6 +642,54 @@ begin
   runtime.SetBounds(10, 10, 75, 50);
   AssertEquals('运行时的孤儿保持原宽', 75, runtime.Width);
   AssertEquals('运行时的孤儿保持原高', 50, runtime.Height);
+end;
+
+procedure TTyToolWindowActionsTests.TestTheNoteOfAStrayAreaNeverSitsUnderItsChildren;
+var
+  first, extra, bare: TProbeActions;
+  a, b: TBodyChild;
+  note, tmp: TRect;
+  row, fitRed, fullRed, blue: Integer;
+begin
+  { 粘贴一个现成的操作区,进来的就是带按钮的多余操作区(spec §4 点名的场景)。提示要排在
+    子控件那一排的后面:[子控件那一排][gap][提示][pad],RTL 整体镜像。
+    判据是矩形不相交,不是数墨迹 —— RenderTo 不画子控件,数墨迹永远看不见重叠。
+    NoteRect 就是 RenderTo 画提示用的那个框(同一个函数),不是另算的。 }
+  FCtl.StyleOverride := 'TyToolWindowActions { background: #FFFFFF; }' +
+    'TyToolWindowNote { color: #FF0000; }';
+  first := NewActions(FWin);
+  NewChild(first, 20, 12);
+  extra := NewActions(FWin);
+  a := NewChild(extra, 30, 18);
+  b := NewChild(extra, 24, 18);
+  bare := NewActions(FWin);          { 同一句提示、没有子控件:拿它的宽当「pad + 提示宽 + pad」 }
+  extra.MarkDesigning(True);
+  bare.MarkDesigning(True);
+  FWin.CallAlignControls;            { 窗口给尺寸,设计期下限在这一步起作用 }
+  extra.CallAlignControls;           { 它自己排子控件 }
+  row := 2 * TyToolWindowHeaderPadDef + 30 + 24 + TyToolWindowHeaderGapDef;
+  AssertEquals('宽 = raw 首选宽 + gap + 提示宽 + pad',
+    row + TyToolWindowHeaderGapDef + (bare.Width - TyToolWindowHeaderPadDef), extra.Width);
+  note := extra.NoteRect;
+  AssertTrue('提示要有地方', note.Right > note.Left);
+  AssertFalse('提示不压第一个子控件', IntersectRect(tmp, note, a.BoundsRect));
+  AssertFalse('提示不压第二个子控件', IntersectRect(tmp, note, b.BoundsRect));
+  AssertTrue('子控件从前导边照常排', a.Left = TyToolWindowHeaderPadDef);
+  AssertTrue('提示在子控件那一排后面', note.Left >= b.Left + b.Width);
+  TallyActionsInk(extra, extra.Width, extra.Height, fitRed, blue);
+  TallyActionsInk(extra, 4000, extra.Height, fullRed, blue);
+  AssertTrue('前提:提示真的画出来了', fullRed > 0);
+  AssertEquals('按窗口给的尺寸画,提示一个字都不少', fullRed, fitRed);
+  { 从右往左读:整体镜像 —— 子控件到右边,提示在它们左边。 }
+  FWin.BiDiMode := bdRightToLeft;
+  FWin.CallAlignControls;
+  extra.CallAlignControls;
+  note := extra.NoteRect;
+  AssertTrue('RTL:提示要有地方', note.Right > note.Left);
+  AssertFalse('RTL:提示不压第一个子控件', IntersectRect(tmp, note, a.BoundsRect));
+  AssertFalse('RTL:提示不压第二个子控件', IntersectRect(tmp, note, b.BoundsRect));
+  AssertTrue('RTL:子控件在右边', a.Left + a.Width = extra.Width - TyToolWindowHeaderPadDef);
+  AssertTrue('RTL:提示在子控件那一排左边', note.Right <= b.Left);
 end;
 
 initialization
