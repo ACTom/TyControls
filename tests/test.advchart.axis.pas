@@ -239,7 +239,7 @@ begin
   axes[0] := LeftAxis(['12345']);
   axes[0].TextMarginHLogical := 3;
   plot := TySolveGridBounds(TyRectF(70, 20, 330, 260), Canvas, obcAll, 0, 0,
-    axes, FM, 96);
+    axes, FM, 96, Canvas);
   AssertEquals(70.0, plot.Left, 0);
   AssertEquals(20.0, plot.Top, 0);
   AssertEquals(330.0, plot.Right, 0);
@@ -266,7 +266,7 @@ begin
   axes[1].Positions[0] := 0.5;
   axes[1].TextMarginHLogical := 3;
   plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
-    axes, FM, 96);
+    axes, FM, 96, Canvas);
   AssertEquals('left in by the y label', 61.0, plot.Left, 0);
   AssertEquals('bottom up by the x label', 272.0, plot.Bottom, 0);
   AssertEquals('right untouched', 400.0, plot.Right, 0);
@@ -290,12 +290,12 @@ begin
   axes[1].Positions[0] := 0.5;
   axes[1].TextMarginHLogical := 3;
   plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
-    axes, FM, 96);
+    axes, FM, 96, Canvas);
   AssertEquals('the larger', 61.0, plot.Left, 0);
   { offset 60 stands the second axis' labels further out: 60 + 31 }
   axes[1].OffsetLogical := 60;
   plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
-    axes, FM, 96);
+    axes, FM, 96, Canvas);
   AssertEquals('the offset one, now', 91.0, plot.Left, 0);
 end;
 
@@ -314,7 +314,7 @@ begin
   axes[0].Proportions[0] := 0.5;
   axes[0].TextMarginHLogical := 3;
   plot := TySolveGridBounds(TyRectF(0, 0, 100, 300), TyXYWH(0, 0, 100, 300),
-    obcAll, 0, 0, axes, FM, 96);
+    obcAll, 0, 0, axes, FM, 96, TyXYWH(0, 0, 100, 300));
   AssertEquals('left: 3 / 0.5', 6.0, plot.Left, 0);
   AssertEquals('right: 3 / 0.5', 94.0, plot.Right, 0);
   AssertEquals('bottom: 8 + 20, as it is', 272.0, plot.Bottom, 0);
@@ -325,31 +325,46 @@ var
   axes: TTyAxisLayoutSpecArray;
   withName, labelsOnly: TTyRectF;
 begin
-  { INTERIM, until names are laid out as upstream lays them out: under
-    outerBoundsContain 'all' a name counts where the paint pass draws it --
-    past the labels' band, centred -- and under 'axisLabel' it does not. A
-    y name 20 tall (turned, so 20 wide) is centred in the band its gap and
-    height add past the labels' 5 + 8 + 50: that band runs 63..98 out from
-    the edge, its middle is 80.5, and the name's outer side is at 90.5. }
+  { UNDER outerBoundsContain 'all' A NAME COUNTS WHERE IT IS LAID OUT, and
+    under 'axisLabel' it does not. A middle name on a left axis, 50 by 20,
+    turned with the axis: 15 out from the line, bottom-aligned towards it,
+    padded by the grid's level -- 400 wide on a 400 canvas is level 2, eight
+    across and three along -- so 36 wide, its near side at 7. The labels
+    stand 8 out and are 50 wide, reaching 58: in the way. It is moved out
+    until its near side is a tenth inside theirs, 57.9, and its far side is
+    then 93.9 from the edge.
+    [Revised in batch 38: the interim rule -- a turned name centred past the
+    labels' band, 90.5 here, and 100 / 200 for the long one -- gave way to
+    upstream's layout.] }
   SetLength(axes, 1);
   axes[0] := LeftAxis(['12345']);
   axes[0].Positions[0] := 0.5;
   axes[0].Name := 'Value';
+  axes[0].NameLocation := anlMiddle;
   withName := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
-    axes, FM, 96);
+    axes, FM, 96, Canvas);
   labelsOnly := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas,
-    obcAxisLabel, 0, 0, axes, FM, 96);
+    obcAxisLabel, 0, 0, axes, FM, 96, Canvas);
   AssertEquals('the labels alone', 58.0, labelsOnly.Left, 0);
-  AssertEquals('the name past them', 90.5, withName.Left, 0);
+  AssertEquals('the name past them', 93.9, withName.Left, 1e-9);
 
-  { ALONG ITS AXIS A CENTRED NAME IS HALFWAY: forty characters turned are
-    400 tall on a 300 plot, 50 over each end, and a thing halfway along is
-    brought in by half the shrink -- so each end gives up 100 }
+  { ALONG ITS AXIS A MIDDLE NAME IS HALFWAY: forty characters and three on
+    each end are 406 along a 300 plot, 53 over each end, and a thing halfway
+    along is brought in by half the shrink -- so each end gives up 106 }
   axes[0].Name := '1234567890123456789012345678901234567890';
   withName := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
-    axes, FM, 96);
-  AssertEquals('top in by 50 / 0.5', 100.0, withName.Top, 0);
-  AssertEquals('and the bottom', 200.0, withName.Bottom, 0);
+    axes, FM, 96, Canvas);
+  AssertEquals('top in by 53 / 0.5', 106.0, withName.Top, 1e-9);
+  AssertEquals('and the bottom', 194.0, withName.Bottom, 1e-9);
+
+  { AN END NAME IS WHERE IT IS, and counts so: level, centred over the top
+    of the line, 15 above it -- 25 over the canvas, taken as it is }
+  axes[0].Name := 'Value';
+  axes[0].NameLocation := anlEnd;
+  withName := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
+    axes, FM, 96, Canvas);
+  AssertEquals('the top by the end name', 35.0, withName.Top, 1e-9);
+  AssertEquals('the left by its half and three', 58.0, withName.Left, 1e-9);
 end;
 
 function Item(AX, AY, AW, AH: Double; AAlongY: Boolean;
@@ -486,7 +501,7 @@ begin
   SetLength(axes, 1);
   axes[0] := LeftAxis(['1234567890123456789012345678901234567890']);
   plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 100, 75,
-    axes, FM, 96);
+    axes, FM, 96, Canvas);
   AssertEquals('at the clamp', 100.0, TyRectFWidth(plot), 0);
   AssertEquals('past the old right edge', 400.0, plot.Left, 0);
 end;

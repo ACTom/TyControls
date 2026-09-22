@@ -27538,9 +27538,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "axis names (location, gap, margin levels, moveOverlap) are a batch of their own"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "I2 names, outerBoundsContain axisLabel",
@@ -27944,9 +27942,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "axis names (location, gap, margin levels, moveOverlap) are a batch of their own"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "I3 y name middle, big9",
@@ -28335,9 +28331,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "axis names (location, gap, margin levels, moveOverlap) are a batch of their own"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "Z4 y name at the end overflows the top, grid top 10",
@@ -28727,9 +28721,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "axis names (location, gap, margin levels, moveOverlap) are a batch of their own"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "Z6 outerBoundsMode same + names: the name margin level differs per pass",
@@ -29133,9 +29125,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "axis names (location, gap, margin levels, moveOverlap) are a batch of their own"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "AC hideOverlap, interval 0 long categories, grid left/right 0",

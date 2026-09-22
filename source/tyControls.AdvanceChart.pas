@@ -1114,6 +1114,11 @@ begin
     TyAdvChartTickLen);
   txt.NameGapLogical := ActiveController.Metric(TyAdvChartNameGapVar,
     TyAdvChartNameGap);
+  { the name is measured in the font it is drawn in }
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisName', '', []);
+  txt.NameFontName := labelS.FontName;
+  txt.NameFontSizeLogical := ResolveFontSize(labelS);
+  txt.NameFontWeight := labelS.FontWeight;
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
@@ -1143,7 +1148,6 @@ var
   ticks: TTyDoubleArray;
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
-  nameOff, nx, ny, nameAngle: Double;
   maxW, batched: Integer;
   horiz: Boolean;
   lblH, lblW, step, tickStep: Integer;
@@ -1550,44 +1554,36 @@ begin
     StrokeBatch(minorTickS);
   end;
 
-  { THE AXIS NAME. Builder solves the grid with obcAll, so TyAxisThickness has
-    been charging every named axis' side for NameGap plus the name's turned
-    extent since item 12 -- and nothing ever drew into it. Setting xAxis.name
-    shrank the plot by the width of a string that was not there.
-
-    Placed by asking TyAxisThickness twice: once counting the name and once not.
-    The difference IS the band reserved for it, so the name lands in the space
-    the layout set aside rather than at an offset reassembled here out of the
-    same parts -- which is the mistake this file warns about two hundred lines
-    up, about computing a step by a second route.
-
-    Centred in that band with taCenter/tlCenter, which also makes the placement
-    independent of the rotation: a quarter turn about a centred anchor moves
-    nothing. }
+  { THE AXIS NAME, WHERE THE LAYOUT PUT IT. The grid was shrunk for the
+    name's box on its estimate pass and the name laid out again on the final
+    rect -- at its location and gap, turned and aligned as upstream turns and
+    aligns it, and moved clear of the labels -- so this draws that answer
+    and works nothing out: a second route here is how the name used to land
+    beside the band that was reserved for it. }
   nameS := model.ResolveStyle('TyAdvChartAxisName', '', []);
-  if (AAxis.Name <> '') and (spec <> nil) and (AMeasurer <> nil)
+  if (spec <> nil) and spec^.NamePlacement.Shown
     and (tpTextColor in nameS.Present) then
   begin
-    nameOff := (TyAxisThickness(spec^, AMeasurer, APPI, obcAxisLabel)
-              + TyAxisThickness(spec^, AMeasurer, APPI, obcAll)) / 2;
-    if horiz then
+    { LEVEL IS LEVEL: a y axis' end name comes out of the matrices a few
+      hundred quadrillionths of a radian off, and the flat path is the one
+      that sets a name of several lines }
+    if Abs(spec^.NamePlacement.RotationRad) < 1e-9 then
     begin
-      nx := (APlot.Left + APlot.Right) / 2;
-      if AAxis.Side = asTop then ny := at - nameOff else ny := at + nameOff;
-      nameAngle := 0;
+      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+      APainter.DrawText(
+        AnchorBox(spec^.NamePlacement.X, spec^.NamePlacement.Y, lblW, lblH,
+          spec^.NamePlacement.AnchorH, spec^.NamePlacement.AnchorV),
+        spec^.NamePlacement.Text, nameS.FontName, ResolveFontSize(nameS),
+        nameS.FontWeight, nameS.TextColor, taCenter, tlCenter, False, 0, False,
+        Pos(#10, spec^.NamePlacement.Text) > 0);
     end
     else
-    begin
-      ny := (APlot.Top + APlot.Bottom) / 2;
-      if AAxis.Side = asRight then nx := at + nameOff else nx := at - nameOff;
-      { A quarter turn so it reads up the side -- and the same quarter turn
-        TyAxisThickness applied when it charged the name's HEIGHT against this
-        axis' width rather than its length. }
-      nameAngle := Pi / 2;
-    end;
-    APainter.DrawTextRotated(AAxis.Name, nameS.FontName,
-      ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
-      nx, ny, nameAngle, taCenter, tlCenter);
+      APainter.DrawTextRotated(spec^.NamePlacement.Text, nameS.FontName,
+        ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
+        spec^.NamePlacement.X, spec^.NamePlacement.Y,
+        spec^.NamePlacement.RotationRad,
+        AnchorAlign(spec^.NamePlacement.AnchorH),
+        AnchorLayout(spec^.NamePlacement.AnchorV));
   end;
 
   if not (tpTextColor in labelS.Present) then Exit;

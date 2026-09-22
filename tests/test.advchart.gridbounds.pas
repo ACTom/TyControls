@@ -210,6 +210,10 @@ begin
   Result.LabelMarginLogical := 8;
   Result.TickLengthLogical := 5;
   Result.NameGapLogical := 15;
+  { and its name, in the same }
+  Result.NameFontName := 'sans-serif';
+  Result.NameFontSizeLogical := 12;
+  Result.NameFontWeight := 400;
 end;
 
 procedure TAdvChartGridBoundsOracleTest.RunCase(ACase: TJSONObject);
@@ -314,8 +318,12 @@ begin
         items[n].Proportion := Num(lb, 'p');
         Inc(n);
       end;
+      { A NAME COUNTS UNDER 'all' ONLY -- the fixture records it whatever
+        the grid contains.
+        [Revised in batch 38: every recorded name was added, which the name
+        cases, deferred until then, never showed.] }
       d := ax.Find('nameRect');
-      if d is TJSONObject then
+      if (d is TJSONObject) and (cs.Get('contain', '') = 'all') then
       begin
         SetLength(items, n + 1);
         items[n].R := XYWHOf(TJSONObject(d));

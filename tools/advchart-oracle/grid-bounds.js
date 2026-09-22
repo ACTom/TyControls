@@ -69,11 +69,11 @@
 // must give rect exactly. none: rect must be raw. A case that fails is recorded
 // all the same, deferred, with the reason.
 //
-// A case marked deferred depends on something the port does not do yet (axis
-// names, category auto interval, hideOverlap, label font size, truncate and
-// break, the grid box merge); its upstream answer is recorded so a later batch
-// only has to take the flag off. A documentary case pins a port test's
-// fixture: the rect is compared, the label set need not match.
+// A case marked deferred depends on something the port does not do yet (category
+// auto interval, hideOverlap, label font size, truncate and break, the grid box
+// merge); its upstream answer is recorded so a later batch only has to take the
+// flag off. A documentary case pins a port test's fixture: the rect is compared,
+// the label set need not match.
 //
 // Doubles are written as the 16 hex digits of their IEEE-754 bits (big-endian,
 // lowercase) with a readable twin beside them (rectText beside rect, ...),
@@ -700,16 +700,17 @@ add('PM4 documentary: port axislabel fixture, 30 categories, 900x520', {
   'nothing shrinks; upstream labels every fourth category (the category auto interval picks 3, and the last '
   + 'category\'s label is dropped for overlapping), which the port does not reproduce yet')));
 
-// deferred
+// axis names (how each name is laid out: axis-names.js)
 const NAMED_X = { name: 'Day of the week', nameLocation: 'end' };
 const NAMED_Y = { name: 'Revenue in dollars (USD)', nameLocation: 'middle', nameGap: 60 };
-const NAMES = 'axis names (location, gap, margin levels, moveOverlap) are a batch of their own';
-add('I names, outerBoundsContain all', bar({ outerBoundsContain: 'all' }, NAMED_X, NAMED_Y), deferred(NAMES));
-add('I2 names, outerBoundsContain axisLabel', bar({ outerBoundsContain: 'axisLabel' }, NAMED_X, NAMED_Y), deferred(NAMES));
-add('I3 y name middle, big9', bar(null, null, NAMED_Y, BIG9), deferred(NAMES));
-add('Z4 y name at the end overflows the top, grid top 10', bar({ top: 10 }, null, { name: 'Revenue (USD)' }), deferred(NAMES));
+add('I names, outerBoundsContain all', bar({ outerBoundsContain: 'all' }, NAMED_X, NAMED_Y));
+add('I2 names, outerBoundsContain axisLabel', bar({ outerBoundsContain: 'axisLabel' }, NAMED_X, NAMED_Y));
+add('I3 y name middle, big9', bar(null, null, NAMED_Y, BIG9));
+add('Z4 y name at the end overflows the top, grid top 10', bar({ top: 10 }, null, { name: 'Revenue (USD)' }));
 add('Z6 outerBoundsMode same + names: the name margin level differs per pass',
-  bar({ outerBoundsMode: 'same' }, NAMED_X, NAMED_Y), deferred(NAMES));
+  bar({ outerBoundsMode: 'same' }, NAMED_X, NAMED_Y));
+
+// deferred
 add('AC hideOverlap, interval 0 long categories, grid left/right 0',
   bar({ left: 0, right: 0 }, { data: LONG, axisLabel: { interval: 0, hideOverlap: true } }),
   deferred('hideOverlap: the estimate and the final rect keep different labels; the thinning batch'));

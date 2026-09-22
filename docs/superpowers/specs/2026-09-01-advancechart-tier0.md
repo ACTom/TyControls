@@ -5693,6 +5693,7 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 - Builder 读 `containLabel`、`outerBoundsMode`、`outerBounds`(按上游"每个方向最多保留两个键"合并)、`outerBoundsContain`、`outerBoundsClampWidth/Height`、`axisLabel.textMargin`;构建记录保存画布矩形。
 - `NormalizedCoord` 改为相对整个像素范围。
 - 坐标轴名称(`'all'` 时):暂时按 port 画出来的位置计入,比例取 0.5。上游名称默认在轴的末端、有自己的 gap 和层级规则,那是单独一批;这里先保证名称仍然占地方。
+  **[第三十八批已改,见 §72:名称按上游的布局计入,末端名称的比例是 NaN,只有居中名称取 0.5。]**
 
 ### 基准
 
@@ -5702,7 +5703,7 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 2. **收缩**:把上游自己的估算标签框和比例喂给 `TyOuterBoundsMargin` + `TyShrinkRect`,边距和最终矩形逐位相同(60 条)。
 3. **整条流水线**:读选项、格式化、稀疏、定位、旋转、加 textMargin、收缩,最终矩形在每条用例自己的容差内(约 4.5e-13;标签框经过 zrender 的变换矩阵,1.72 会变成 1.720000000000013)。64 条。
 
-另有 23 条 deferred:坐标轴名称(5)、hideOverlap、类目自动间隔、fontSize、truncate/break、grid 盒子合并(10)、值轴稀疏(2)、containShape(1)。
+另有 23 条 deferred:坐标轴名称(5,**第三十八批已解除,见 §72**)、hideOverlap、类目自动间隔、fontSize、truncate/break、grid 盒子合并(10)、值轴稀疏(2)、containShape(1)。
 
 生成器自带两道自检:转写的收缩在 60 条上复现上游矩形,转写的旧版规则在 15 条上复现。
 
@@ -5717,6 +5718,7 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 ### 已知偏差
 
 - **坐标轴名称**的完整布局(nameLocation、nameGap、nameRotate、margin 层级、nameMoveOverlap):单独一批。现在名称还画在居中位置。
+  **[第三十八批已做,见 §72。]**
 - **稀疏**:上游值轴从不按序号稀疏标签,port 会;类目自动间隔、`fixMinMaxLabelShow`、`hideOverlap` 与上游不同。估算用的标签集因此可能不一样。单独一批。
 - **containShape**:柱子让无 band 的类目范围加宽半个 band,影响比例 p。
 - **grid 盒子本身**:`left: 'right'`、`top: 'bottom'`、居中无尺寸、键的合并规则(D12),和 title/legend 共用 `TySolveBox`,单独一批。
@@ -5753,3 +5755,132 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 ### 还在队列里
 
 坐标轴名称的布局 → 标签稀疏(值轴不稀疏、类目自动间隔、fixMinMaxLabelShow、hideOverlap)→ containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。
+
+## 72. Tier 1 第三十八批:坐标轴名称(2026-09-22)
+
+port 一直把名称居中画在标签外侧,y 轴的转 90°,位置由画的时候临时算。上游默认把名称放在轴的**末端**、水平书写,再把它从标签上挪开。这一批按上游 `AxisBuilder` 的 axisName 部分重写:布局给出名称的位置、对齐、旋转和框,grid 收缩和绘制都读这一份结果。
+
+### 上游的做法
+
+- **读选项**:
+  - `name` 按 JS 真值判断有没有名称:`0`、`false`、`''`、`null` 都算没有;`true` 是 `'true'`,`1.5` 是 `'1.5'`,`' '` 算有。
+  - `nameLocation`:默认 `'end'`;`'center'` 等于 `'middle'`。
+  - `nameGap` 是 `get('nameGap') || 0`:没写取主题的 15,`null` 和 `false` 是 0,负数照用。
+  - `nameRotate`:度数乘 π/180;没写时居中名称随轴转,两端名称保持水平。
+  - `nameTextStyle.align` / `verticalAlign` 覆盖布局算出的对齐;`textMargin`(数或 css 数组)和 `minMargin` 取代层级边距,两者都写时 `minMargin` 优先。
+  - `nameMoveOverlap`:`null` 和 `'auto'` 取 grid 的默认——旧版 `containLabel` 为真时不挪,否则挪;其他值按 JS 真值。
+- **坐标系**:轴线位置(x 轴在绘图区上/下边加减 offset,y 轴在左/右边;有 onZero 时换成对方的零线)、旋转(x 轴 0,y 轴 π/2)、范围 `[0, len]`(inverse 时反过来)、`labelOffset`(onZero 时标签仍在原边,离轴线的距离)、`nameDirection`(上/左为 −1)。
+- **锚点**,在轴自己的坐标系里,`s` 为 inverse 时的 −1:
+  - start:`(ext0 − s·gap, 0)`,往 `−s` 方向挪;
+  - end:`(ext1 + s·gap, 0)`,往 `s` 方向挪;
+  - middle:`((ext0 + ext1)/2, labelOffset + nameDirection·gap)`,往 `nameDirection` 方向挪。
+  - 挪动方向再按轴的旋转转过去。
+- **对齐和旋转**:两端名称用 `endTextLayout`(传入 `nameRotate || 0`),居中名称用 `innerTextLayout`;"接近"指差值在 1e-4 以内,`remRadian` 用 JS 的 `%`,是精确取余。
+- **矩阵**:轴的组变换 G 乘上文字自己的变换 L(文字在组原点且不转时直接用 G)。画在 (M4, M5),旋转 −atan2(M1, M0)。
+- **框**:文字框按对齐放好,再加边距得到 `localRect`,经矩阵得到屏幕上的 `rect`。
+  - 层级按**这一遍**的 grid 矩形和画布比:x 轴高度不超过画布一半为 0,否则 1;y 轴宽度不超过一半为 0,否则 2。
+  - 居中名称的边距表 `[1,2,1,2] [5,3,5,3] [8,3,8,3]`,两端名称 `[0,1,0,1] [0,3,0,3] [0,3,0,3]`(上右下左)。
+  - `minMargin` 不加本地边距,而是把屏幕上的 `rect` 每边扩 `minMargin/2`。
+- **挪开**:
+  - 居中名称只躲一块:所有显示的标签在轴坐标系里的并集(按标签原本的顺序求并,不是排序后的顺序),再拉到轴线。平行的其他轴不管。
+  - 两端名称先躲自己的标签,再躲每根垂直轴的标签;标签按离轴原点的距离排序,和挪动方向同向时从近到远,反向时从远到近。
+  - 碰撞用 zrender 的 `BoundingRect.intersect`:两框各缩 0.05,重叠时取挪动方向上最短的平移(只许朝一个方向)。结果是名称的近边落在障碍物远边往里 0.1 的地方。
+  - 两个框里有一个不和坐标轴平行、并且外接框确实相交时,上游改用有向包围盒判断——**这条没做**,名称不挪。
+- **两遍**:
+  - **估算**:只在 auto/same 模式且 `outerBoundsContain` 为 `'all'` 时做,在原始矩形上排,名称框作为一项参与收缩;居中名称的比例是 0.5,两端名称是 NaN(溢出多少算多少)。
+  - **确定**:在最终矩形上重排一遍,用它自己的层级和零线位置。画出来的是这一遍。
+
+### port 以前
+
+- 名称总居中在标签外侧,y 轴的转 90°;不读 `nameLocation`、`nameGap`、`nameRotate`、`nameTextStyle`、`nameMoveOverlap`;不管 inverse。
+- 没有层级边距,没有挪开;比例一律 0.5。
+- offset 在布局里算了两次;有 onZero 时绘制和布局差一个 offset。
+- 布局用标签字体测名称,绘制用名称字体。
+- `name: 0` 画成 `0`,`false` 画成 `False`,`1.5` 画成科学计数法。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.AxisName`:
+  - `TyLayoutAxisName`:一个名称、一遍布局。输入是规格、坐标系、层级、自己的标签和垂直轴的标签几何。它是纯函数,测试可以直接喂上游的标签几何。
+  - `TyLayoutGridNames`:一个 grid 的所有名称。先把每根轴的标签排好,再排名称。
+  - 另有 `TyRectIntersectDir`(zrender 的相交)、`TySortLabelGeoms`、`TyAxisNameLevel`、`TyRemRadian`。
+- `tyControls.AdvChart.Layout`:
+  - zrender 的矩阵运算:`TyMatLocal`、`TyMatMul`、`TyMatInvert`、`TyRectApplyMat`、`TyRectUnion`、`TyRectExpand`。
+  - 标签几何 `TyAxisLabelGeoms`,估算标签项也改由它生成。
+  - 规格加上名称的输入、坐标系和最终摆放 `NamePlacement`;`TySolveGridBounds` 先排完所有标签再排名称,并多一个画布参数(层级要用)。
+- Builder:
+  - 读上面那些选项。
+  - `NameFrameFor` 按当前矩形和零线给出坐标系,在收缩前(原始矩形)和写入最终矩形后各算一次。确定那一遍的结果存进规格。
+  - 名称字体从主题的 `TyAdvChartAxisName` 解出来交给布局。
+- 绘制只读 `NamePlacement`:水平的走普通文字路径(能画多行),转过的走 `DrawTextRotated`。
+- **新单元 `tyControls.AdvChart.JsMath`**:V8 的 `Math.sin/cos/atan/atan2` 是 fdlibm,FPC 的不是。
+  - FPC 的 `Sin(2)`、`Cos(7π/4)` 和 V8 差最后一位。
+  - FPC 的 `ArcTan2(-6.1e-17, -1)` 给出 +π,V8 给出 −π。y 轴名称的挪动方向正好是这个数。
+  - 于是逐条转写 fdlibm。先用 JS 转写一遍,和 node 比 240 万个参数全部一致,再照同样的运算顺序写成 Pascal。
+  - 常数按位写,因为 FPC 读十进制浮点字面量不保证正确舍入。
+  - 超过 2^19·π/2(约 82 万弧度)的参数交给运行库,图表转不到那么远。
+  - 矩阵旋转和名称布局全部改用它。
+
+### 基准
+
+- `tools/advchart-oracle/axis-names.js`:
+  - 65 条用例,54 条比较,11 条延后。
+  - 每条记录每根轴每一遍的坐标系、层级、按上游顺序的标签几何(含原始顺序)、名称的对齐、框、矩阵、挪动前后的框、每次平移、最终位置。
+  - 估算那一遍直接在真实运行里挂钩 `AxisBuilder.build` 取得。
+  - 生成器自检:它自己的转写在 198 次名称排布、72 次平移、62 个 stOccupiedRect 上与上游逐位一致;收缩自检 52/52。
+- 测试 `test.advchart.axisnames`,三层:
+  1. 测宽逐位一致,四分之一圈的三角函数值与 V8 逐位一致。
+  2. 纯函数:上游的坐标系、层级、标签几何喂给 `TyLayoutAxisName`,198 次名称排布的对齐、局部旋转、`localRect`、锚点、矩阵、挪动前后的框、stOccupiedRect、每次平移和最终旋转**逐位**一致。
+  3. 整条流水线:名称位置和框、grid 最终矩形,都在各用例的容差内。
+- 另有三条单元测试补夹具够不到的地方:斜名称碰到标签时不挪;名称用自己的字体测量;Builder 对各种选项形态的读取。
+- `tools/advchart-oracle/js-math.js` → `test.advchart.jsmath`:
+  - 3182 个参数的 sin/cos/atan、3225 对 atan2,逐位一致;NaN 对 NaN。
+  - 另有一条钉住"运行库确实不一致",哪天 FPC 追上了会变红提醒。
+- grid-bounds 的 I、I2、I3、Z4、Z6 解除延后,收缩测试只在 `'all'` 时计入名称。
+
+### 被推翻的旧测试
+
+- `test.advchart.axis.pas` 的"名称在 `'all'` 下计入":以前按居中临时规则断言 90.5 和 100/200。
+  - 改成上游规则下手算的值:居中名称被标签推开后外缘 93.9;40 个字符沿轴溢出 53,除以 0.5 得 106/194。
+  - 另加末端名称:顶部 35,左边仍由标签决定为 58。
+- `test.advancechart.pas` 的名称绘制测试:以前数"绘图区下方的红色像素"。末端名称在轴线右侧,一半在绘图区下方,那种数法不再说明问题。
+  - 改为:每一个红色像素都落在布局给的名称框里(留 1 像素抗锯齿),居中名称也一样。
+- `test.advchart.gridbounds.pas` 的收缩测试:只有 `'all'` 时才计入名称。以前不分,I2 解除延后就会红。
+- 原处都有标注。
+
+### 已知偏差
+
+- **有向包围盒**:名称或障碍物不和坐标轴平行、外接框又相交时,上游用有向包围盒算平移,port 不挪。只有 `nameRotate` 不是 90° 的倍数、或者两端名称碰上转过的标签时才会出现。
+- **`nameTruncate`**:没有和 zrender 一致的截断,等标签截断一起做。
+- **`nameTextStyle` 的字号、颜色、padding、lineHeight 等**:字体和颜色来自主题,和 `axisLabel` 的做法一致。
+- **不认识的 `nameLocation`**:上游用居中的锚点配两端的排布,port 当成 `'end'`。
+- **颜色**:上游名称和轴线、标签同色;port 用主题的 `TyAdvChartAxisName`,这是主题的决定。
+- 主题没给名称文字色时,绘制不画,但布局照样给它留地方(以前就是这样)。
+- 转过的多行名称:`DrawTextRotated` 只画一行。
+- `TyAxisThickness` 已没有产品代码调用,只剩测试用它量标签带;它里面的名称项是旧的临时规则。
+- 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。
+
+### 变异测试
+
+89 个,第一轮活 16 个:
+
+- **等价的一个**:`atan2` 里"|y/x| 小于 2^-60 时 z 取 0"那一支。去掉后 z 是一个不到 2^-60 的数,π − (z − pi_lo) 照样舍入回 π。
+- **夹具和流水线够不到、补单元测试的十五个**:
+  - 文字排布:"接近"的 1e-4 阈值、转 180° 的居中名称、斜转的居中名称的对齐、居中名称读不读 `nameRotate`。夹具里的居中名称只有水平和四分之一圈两种,斜的都走有向包围盒,被延后了。
+  - 层级在正好一半时取小的那档(`<=`)。
+  - stOccupiedRect 按标签排布的原始顺序求并:三个标签框按原序并出 27.049999999999997,按排序后的顺序并出 27.05。
+  - 逆着轴挪时从远到近检查标签:构造两个标签,从近到远会推两次,从远到近只推一次。
+  - 斜方向上取最短的允许平移(名称只沿轴挪,这条只能直接测相交函数)。
+  - 标签排序:沿轴、按离原点的距离、同距离保持原序。
+  - 零线上的轴:居中名称跟着标签走(标签隐藏时没有东西推它,只剩坐标系的 labelOffset);顶部轴的坐标系在上边。
+  - 估算那一遍也要用零线:y 轴在 x 轴零点上时,末端名称在绘图区中间,`grid.left: 0` 不收。
+  - 层级按画布算:半个画布以内的 grid 在估算时也用 0 档边距,右边正好让出 15 + 宽度 + 1。
+  - 绘制用挪动后的位置:控件测试的居中名称改成 `nameGap: 0`,确认它确实被挪了十像素以上,再要求每个红色像素都在框里。
+
+补完后除等价的一个外全部杀死。全量 **7756** 绿(新增 `test.advchart.axisnames` 17 条、`test.advchart.jsmath` 4 条)。
+
+单独跑 `TAdvanceChartTest` 时 `TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark` 会红(10 像素,断言要大于 10),上一个提交也一样,全量下是绿的;和本批无关,另立任务查。
+
+### 还在队列里
+
+标签稀疏(值轴不稀疏、类目自动间隔、fixMinMaxLabelShow、hideOverlap)→ containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。

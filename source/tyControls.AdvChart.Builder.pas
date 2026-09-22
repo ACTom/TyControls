@@ -195,6 +195,13 @@ type
       else is skipped, which is what stops two y axes landing on top of each
       other when both ask. }
     function OnZeroProviderFor(AAxis: TTyAxis): TTyAxis;
+    { THE FRAME AN AXIS' NAME IS LAID OUT IN on the plot rect as it stands:
+      the line where AxisLineCoord puts it, and -- when that is the other
+      family's zero -- how far the labels, which stay at the edge, stand
+      from it. Asked on the raw rect for the estimate and on the final one
+      for the name that is drawn. }
+    function NameFrameFor(AAxis: TTyAxis; const ASpec: TTyAxisLayoutSpec;
+      APPI: Integer): TTyAxisNameFrame;
   end;
 
   { Everything one option tree produced. Owns the grids, the axes and, through
@@ -395,7 +402,7 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.AdvChart.AxisName;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -442,6 +449,25 @@ begin
   if (d = nil) or (d.JSONType in [jtNull, jtArray, jtObject]) then
     Exit(ADefault);
   Result := d.AsString;
+end;
+
+{ AN AXIS' NAME AS UPSTREAM READS IT: there is one when the option is truthy
+  (`!!name`), and it is the value's own string -- `0`, `false` and '' are no
+  name at all, `true` is 'true' and 1.5 is '1.5'. An array or an object is
+  none, as it always was here. }
+function AxisNameIn(ANode: TJSONObject): string;
+var d: TJSONData;
+begin
+  Result := '';
+  d := FindIn(ANode, 'name');
+  if d = nil then Exit;
+  case d.JSONType of
+    jtString: Result := d.AsString;
+    jtBoolean: if d.AsBoolean then Result := 'true';
+    jtNumber:
+      if (not IsNan(d.AsFloat)) and (d.AsFloat <> 0) then
+        Result := TyJsNumberToString(d.AsFloat);
+  end;
 end;
 
 function BoolIn(ANode: TJSONObject; const AKey: string; ADefault: Boolean): Boolean;
@@ -854,7 +880,7 @@ var
       a.MainType := AMainType;
       a.ComponentIndex := q;
       a.Id := StrIn(nd, 'id', '');
-      a.Name := StrIn(nd, 'name', '');
+      a.Name := AxisNameIn(nd);
       a.AxisType := t;
       if t = atCategory then
         ReadCategories(nd, a);
@@ -1684,6 +1710,27 @@ begin
     asRight: Result := hi;
   end;
 end;
+function TTyGridBuild.NameFrameFor(AAxis: TTyAxis;
+  const ASpec: TTyAxisLayoutSpec; APPI: Integer): TTyAxisNameFrame;
+var line: Double;
+begin
+  { upstream's layout(): posBound from the rect and the offset, the line on
+    the raw side of it unless the other family's zero takes it }
+  Result := TyDefaultNameFrame(ASpec, FPlotRect, APPI);
+  if (AAxis = nil) or (OnZeroProviderFor(AAxis) = nil) then Exit;
+  line := AxisLineCoord(AAxis, APPI);
+  if AAxis.Horizontal then
+  begin
+    Result.LabelOffset := Result.PosY - line;
+    Result.PosY := line;
+  end
+  else
+  begin
+    Result.LabelOffset := Result.PosX - line;
+    Result.PosX := line;
+  end;
+end;
+
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle);
@@ -1695,7 +1742,31 @@ var
   ax: TTyAxis;
   ticks: TTyScaleTickArray;
   gb: TTyGridBuild;
-  node: TJSONObject;
+  node, gridNode: TJSONObject;
+  containLabel: Boolean;
+  names: TTyAxisNamePlacementArray;
+  vp: TTyRectF;
+
+  { `grid.containLabel` in JavaScript's truthiness: true, a non-zero number,
+    a non-empty string, any object }
+  function ContainLabelOn(AGridNode: TJSONObject): Boolean;
+  var d: TJSONData;
+  begin
+    Result := False;
+    if AGridNode = nil then Exit;
+    d := AGridNode.Find('containLabel');
+    Result := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+      or ((d.JSONType = jtNumber) and (not IsNan(d.AsFloat)) and (d.AsFloat <> 0))
+      or ((d.JSONType = jtString) and (d.AsString <> ''))
+      or (d.JSONType in [jtArray, jtObject]));
+  end;
+
+  { the grid's axes by spec index: the x axes, then the y axes }
+  function AxisAt(AGrid: TTyGridBuild; AIndex: Integer): TTyAxis;
+  begin
+    if AIndex < AGrid.XAxisCount then Result := AGrid.XAxis(AIndex)
+    else Result := AGrid.YAxis(AIndex - AGrid.XAxisCount);
+  end;
 
   { ONE BOUND OF grid.outerBounds on the canvas: upstream merges it into
     {left: 0, right: 0} keeping at most two of left, right and width -- the
@@ -1756,17 +1827,8 @@ var
     raw := AGrid.FOuterRect;
     Result := raw;
     { LEGACY containLabel WINS, and every outerBounds key is ignored }
-    if AGridNode <> nil then
-    begin
-      d := AGridNode.Find('containLabel');
-      { JavaScript's truthiness: true, a non-zero number, a non-empty
-        string, any object }
-      if (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
-        or ((d.JSONType = jtNumber) and (not IsNan(d.AsFloat)) and (d.AsFloat <> 0))
-        or ((d.JSONType = jtString) and (d.AsString <> ''))
-        or (d.JSONType in [jtArray, jtObject])) then
-        Exit(TyLegacyContainLabel(raw, ASpecs, AMeasurer, APPI));
-    end;
+    if ContainLabelOn(AGridNode) then
+      Exit(TyLegacyContainLabel(raw, ASpecs, AMeasurer, APPI));
     s := '';
     if AGridNode <> nil then
     begin
@@ -1807,8 +1869,141 @@ var
       if (d <> nil) and (d.JSONType <> jtNull) then
         ch := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.Bottom - raw.Top);
     end;
+    { THE NAME MARGIN LEVEL IS OF THE CANVAS: the grid's rect against the
+      container it was laid out in }
     Result := TySolveGridBounds(raw, outer, contain, cw, ch, ASpecs,
-      AMeasurer, APPI);
+      AMeasurer, APPI, TyXYWHOfRect(vp));
+  end;
+
+  { nameTextStyle's own padding: textMargin, a number or upstream's css
+    array, or minMargin, which wins }
+  procedure ReadNameMargin(var ASpec: TTyAxisLayoutSpec; AStyle: TJSONObject);
+  var
+    d: TJSONData;
+    a: TJSONArray;
+    v: array[0..3] of Double;
+    k: Integer;
+  begin
+    d := FindIn(AStyle, 'minMargin');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      ASpec.NameMarginKind := nmkMinMargin;
+      { `minMargin` only supports a number; anything else is none }
+      if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+        ASpec.NameMinMarginLogical := d.AsFloat
+      else
+        ASpec.NameMinMarginLogical := 0;
+      Exit;
+    end;
+    d := FindIn(AStyle, 'textMargin');
+    if (d = nil) or (d.JSONType = jtNull) then Exit;
+    if d.JSONType = jtNumber then
+    begin
+      for k := 0 to 3 do v[k] := d.AsFloat;
+    end
+    else if (d is TJSONArray) and (TJSONArray(d).Count in [1..4]) then
+    begin
+      a := TJSONArray(d);
+      for k := 0 to a.Count - 1 do
+        if a.Items[k].JSONType <> jtNumber then Exit;
+      { normalizeCssArray: [a] [v, h] [t, h, b] [t, r, b, l] }
+      case a.Count of
+        1: for k := 0 to 3 do v[k] := a.Items[0].AsFloat;
+        2: begin
+             v[0] := a.Items[0].AsFloat; v[1] := a.Items[1].AsFloat;
+             v[2] := v[0]; v[3] := v[1];
+           end;
+        3: begin
+             v[0] := a.Items[0].AsFloat; v[1] := a.Items[1].AsFloat;
+             v[2] := a.Items[2].AsFloat; v[3] := v[1];
+           end;
+      else
+        for k := 0 to 3 do v[k] := a.Items[k].AsFloat;
+      end;
+    end
+    else
+      Exit;
+    ASpec.NameMarginKind := nmkTextMargin;
+    for k := 0 to 3 do ASpec.NameMargin[k] := v[k];
+  end;
+
+  { EVERYTHING ABOUT THE NAME that the option says: where it goes, the gap,
+    the turn, the alignment and padding, and whether it moves out of the
+    labels' way. }
+  procedure ReadName(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+    ANode: TJSONObject);
+  var
+    d: TJSONData;
+    st: TJSONObject;
+    s: string;
+  begin
+    ASpec.Inverse := AAxis.Inverse;
+    ASpec.NameFontName := AText.NameFontName;
+    ASpec.NameFontSizeLogical := AText.NameFontSizeLogical;
+    ASpec.NameFontWeight := AText.NameFontWeight;
+    { 'end' by default; 'center' is 'middle'. A location upstream does not
+      know takes its middle anchor and its end layout there -- here it is
+      simply 'end'. }
+    s := StrIn(ANode, 'nameLocation', 'end');
+    if s = 'start' then ASpec.NameLocation := anlStart
+    else if (s = 'middle') or (s = 'center') then ASpec.NameLocation := anlMiddle
+    else ASpec.NameLocation := anlEnd;
+    { `get('nameGap') || 0`: the theme's when absent, nought for null or
+      false, a negative gap kept }
+    d := FindIn(ANode, 'nameGap');
+    if d <> nil then
+    begin
+      if d.JSONType = jtNumber then
+      begin
+        if IsNan(d.AsFloat) then ASpec.NameGapLogical := 0
+        else ASpec.NameGapLogical := d.AsFloat;
+      end
+      else if (d.JSONType = jtNull)
+        or ((d.JSONType = jtBoolean) and not d.AsBoolean) then
+        ASpec.NameGapLogical := 0;
+    end;
+    d := FindIn(ANode, 'nameRotate');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+    begin
+      ASpec.HasNameRotate := True;
+      ASpec.NameRotateRad := d.AsFloat * Pi / 180;
+    end;
+    st := ObjOf(FindIn(ANode, 'nameTextStyle'));
+    if st <> nil then
+    begin
+      { a truthy string over the layout's own; zrender reads anything but
+        'right' and 'center' as left, anything but 'middle' and 'bottom' as
+        top }
+      s := StrIn(st, 'align', '');
+      if s <> '' then
+      begin
+        ASpec.HasNameAlignH := True;
+        if s = 'right' then ASpec.NameAlignH := tahRight
+        else if s = 'center' then ASpec.NameAlignH := tahCentre
+        else ASpec.NameAlignH := tahLeft;
+      end;
+      s := StrIn(st, 'verticalAlign', '');
+      if s <> '' then
+      begin
+        ASpec.HasNameAlignV := True;
+        if s = 'bottom' then ASpec.NameAlignV := tavBottom
+        else if s = 'middle' then ASpec.NameAlignV := tavMiddle
+        else ASpec.NameAlignV := tavTop;
+      end;
+      ReadNameMargin(ASpec, st);
+    end;
+    { nameMoveOverlap: null and 'auto' are the grid's -- off under legacy
+      containLabel, on otherwise; any other value is its truthiness }
+    d := FindIn(ANode, 'nameMoveOverlap');
+    if (d = nil) or (d.JSONType = jtNull)
+      or ((d.JSONType = jtString) and (d.AsString = 'auto')) then
+      ASpec.NameNoMove := containLabel
+    else if d.JSONType = jtBoolean then
+      ASpec.NameNoMove := not d.AsBoolean
+    else if d.JSONType = jtNumber then
+      ASpec.NameNoMove := IsNan(d.AsFloat) or (d.AsFloat = 0)
+    else if d.JSONType = jtString then
+      ASpec.NameNoMove := d.AsString = '';
   end;
 
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
@@ -1859,6 +2054,7 @@ var
     if not IsNan(AFurn.TickLengthLogical) then
       ASpec.TickLengthLogical := AFurn.TickLengthLogical;
     ASpec.NameGapLogical := AText.NameGapLogical;
+    ReadName(ASpec, AAxis, ANode);
     { `xAxis.show: false` MUST GIVE THE GUTTER BACK. Upstream builds nothing
       at all for a hidden axis and skips it again when it folds the shrink,
       so the plot grows into the band. The port hid it at PAINT time only:
@@ -2009,9 +2205,13 @@ var
 
 begin
   if (ABuild = nil) or (AMeasurer = nil) then Exit;
+  vp := ABuild.Viewport;
   for g := 0 to ABuild.GridCount - 1 do
   begin
     gb := ABuild.Grid(g);
+    gridNode := ObjOf(AOption.ComponentAt('grid', gb.ComponentIndex));
+    containLabel := ContainLabelOn(gridNode);
+    specs := nil;
     SetLength(specs, gb.XAxisCount + gb.YAxisCount);
     SetLength(furn, gb.XAxisCount + gb.YAxisCount);
     { WHICH FAMILY IS A NUMBER LINE, asked once per grid. This is the whole
@@ -2045,11 +2245,18 @@ begin
     end;
     gb.FFurniture := furn;
 
+    { THE ESTIMATE'S FRAMES, on the raw rect: the extents are still the raw
+      rect's, so the other family's zero is where upstream finds it then }
+    for t := 0 to High(specs) do
+    begin
+      specs[t].NameFrame := gb.NameFrameFor(AxisAt(gb, t), specs[t], APPI);
+      specs[t].HasNameFrame := True;
+    end;
+
     { obcAll, explicitly. Our own default is obcAxisLabel while upstream's
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
-    gb.FPlotRect := SolveGridRect(gb, ObjOf(AOption.ComponentAt('grid',
-      gb.ComponentIndex)), specs);
+    gb.FPlotRect := SolveGridRect(gb, gridNode, specs);
 
     { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
       measuring every label, and the paint pass used to derive them itself on
@@ -2075,6 +2282,19 @@ begin
       and coordinates live, so nothing has to be invalidated. }
     for j := 0 to gb.CartesianCount - 1 do
       gb.CartesianByIndex(j).SetRect(gb.FPlotRect);
+
+    { THE NAMES AS THEY ARE DRAWN: laid out again on the final rect, after
+      the write, so an axis on the other family's zero finds it where it now
+      is -- upstream's determine pass, with its own margin level }
+    for t := 0 to High(gb.FSpecs) do
+    begin
+      gb.FSpecs[t].NameFrame := gb.NameFrameFor(AxisAt(gb, t), gb.FSpecs[t], APPI);
+      gb.FSpecs[t].HasNameFrame := True;
+    end;
+    names := TyLayoutGridNames(gb.FSpecs, gb.FPlotRect, vp.Right - vp.Left,
+      vp.Bottom - vp.Top, AMeasurer, APPI);
+    for t := 0 to High(gb.FSpecs) do
+      gb.FSpecs[t].NamePlacement := names[t];
   end;
 end;
 

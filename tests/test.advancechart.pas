@@ -823,47 +823,82 @@ end;
 
 procedure TAdvanceChartTest.TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
 
-  { Red pixels anywhere below the plot. Nothing else on the canvas is red, so
-    this counts the axis name and only the axis name.
+  { Red pixels on the canvas, and how many of them fall in the box the layout
+    gave the x axis' name. Nothing else on the canvas is red, so this counts
+    the axis name and only the axis name.
 
     Comparing TOTAL ink for a named axis against an unnamed one was the first
     attempt and it was fake-green: naming an axis MOVES THE PLOT, because the
     layout reserves the name's space whether or not anything draws into it, so
     the two runs differed for a reason unrelated to the name. Mutating the
     drawing out left the test green, which is how this was found. }
-  function RedBelowPlot(const AName: string): Integer;
+  function RedPixels(const AOption: string; out AInBox: Integer;
+    out APlace: TTyAxisNamePlacement): Integer;
   var
-    gb: TTyGridBuild;
+    spec: PTyAxisLayoutSpec;
+    box: TTyXYWH;
+    hasBox: Boolean;
     x, y: Integer;
     p: TBGRAPixel;
   begin
-    FChart.Option := '{ xAxis: { data: [''A'', ''B'']' + AName + ' },'
-      + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }';
+    FChart.Option := AOption;
     Draw;
-    gb := FChart.Build.Grid(0);
+    spec := FChart.Build.Grid(0).SpecFor(FChart.Build.Axis('xAxis', 0));
+    hasBox := (spec <> nil) and spec^.NamePlacement.Shown;
+    APlace := Default(TTyAxisNamePlacement);
+    if hasBox then
+    begin
+      APlace := spec^.NamePlacement;
+      box := APlace.Rect;
+    end;
     Result := 0;
-    for y := Round(gb.PlotRect.Bottom) + 1 to 299 do
+    AInBox := 0;
+    for y := 0 to 299 do
       for x := 0 to 399 do
       begin
         p := PixelAt(x, y);
-        if (p.red > p.green + 60) and (p.red > p.blue + 60) then Inc(Result);
+        if (p.red > p.green + 60) and (p.red > p.blue + 60) then
+        begin
+          Inc(Result);
+          { a pixel of slack round the box: the glyphs are anti-aliased }
+          if hasBox and (x >= box.X - 1) and (x <= box.X + box.W + 1)
+            and (y >= box.Y - 1) and (y <= box.Y + box.H + 1) then
+            Inc(AInBox);
+        end;
       end;
   end;
 
 var
-  named, unnamed: Integer;
+  named, unnamed, inBox: Integer;
+  place: TTyAxisNamePlacement;
 begin
-  { THE SPACE WAS ALREADY BEING RESERVED. Builder solves the grid with obcAll,
-    so TyAxisThickness charged every named axis for NameGap plus the name's
-    turned extent -- and nothing drew into it. Setting `name` shrank the plot by
-    the width of a string that was not on screen, and every other assertion in
-    this file stayed green because they all sample INSIDE the plot. }
+  { THE SPACE WAS ALREADY BEING RESERVED, and nothing drew into it: setting
+    `name` shrank the plot by the width of a string that was not on screen,
+    and every other assertion in this file stayed green because they all
+    sample INSIDE the plot. Then it was drawn beside the band rather than in
+    it, the paint pass working out a place of its own. Now the layout puts
+    the name -- at the end of the axis, by default -- and every red pixel
+    has to be inside the box it put it in.
+    [Revised in batch 38: this counted red pixels below the plot, which an
+    end name on the axis line only half is.] }
   FCtl.StyleOverride := 'TyAdvChartAxisName { color: #FF0000; }';
-  unnamed := RedBelowPlot('');
-  named := RedBelowPlot(', name: ''WWWWWWWW''');
+  unnamed := RedPixels('{ xAxis: { data: [''A'', ''B''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2] }] }', inBox, place);
   AssertEquals('nothing is red when the axis has no name', 0, unnamed);
-  AssertTrue(Format('a named axis put %d red pixels below the plot -- the name '
+  named := RedPixels('{ xAxis: { data: [''A'', ''B''], name: ''WWWWWWWW'' },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }', inBox, place);
+  AssertTrue(Format('a named axis put %d red pixels on the canvas -- the name '
     + 'is not being drawn', [named]), named > 30);
+  AssertEquals('every one of them in the box the layout gave it', named, inBox);
+  { AND A MIDDLE NAME, under the labels -- set down on them by its gap of
+    nought and MOVED clear of them, so it is drawn where the move put it and
+    not where the gap did }
+  named := RedPixels('{ xAxis: { data: [''A'', ''B''], name: ''WWWWWWWW'','
+    + ' nameLocation: ''middle'', nameGap: 0 }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2] }] }', inBox, place);
+  AssertTrue(Format('moved by %.1f', [place.MovedY]), place.MovedY > 10);
+  AssertTrue(Format('a middle name drew %d', [named]), named > 30);
+  AssertEquals('in its box too', named, inBox);
 end;
 
 procedure TAdvanceChartTest.TestAThickerThemeBorderDrawsAThickerAxis;

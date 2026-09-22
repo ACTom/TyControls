@@ -193,6 +193,11 @@ type
     LabelMarginLogical: Double;
     TickLengthLogical: Double;
     NameGapLogical: Double;
+    { The axis NAME's font, which the layout measures the name in: the same
+      one the paint pass draws it in, and not always the labels'. }
+    NameFontName: string;
+    NameFontSizeLogical: Integer;
+    NameFontWeight: Integer;
   end;
 
   { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
@@ -221,6 +226,73 @@ type
     Emphasis: Boolean;
   end;
   TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
+
+  { x, y, width and height: upstream's own shape for a rect. The shrink and
+    the name layout are done in it so that their arithmetic is upstream's to
+    the bit -- a right edge is x + width there, and a width taken back from
+    one is not always the same number. }
+  TTyXYWH = record
+    X, Y, W, H: Double;
+  end;
+
+  { zrender's 2-D affine matrix [a, b, c, d, tx, ty]:
+    x' = a x + c y + tx, y' = b x + d y + ty. }
+  TTyMat2D = array[0..5] of Double;
+
+  { nameLocation: 'end' is upstream's default and so the zero value;
+    'center' is 'middle'. }
+  TTyAxisNameLocation = (anlEnd, anlStart, anlMiddle);
+  { What pads the box round a name: the level table (the zero value, and
+    upstream's default), nameTextStyle.textMargin in its place, or no local
+    padding but the drawn rect grown by half of nameTextStyle.minMargin. }
+  TTyNameMarginKind = (nmkLevel, nmkTextMargin, nmkMinMargin);
+
+  { UPSTREAM'S AXIS FRAME for one pass (cartesianAxisHelper): the axis
+    group's origin -- the line at the axis' start -- and its turn, the
+    axis' extent along itself, how far the labels stand from the line (a
+    line on the other axis' zero leaves them at the edge), and which side
+    is out. A name is laid out in it. }
+  TTyAxisNameFrame = record
+    PosX, PosY: Double;
+    Rotation: Double;
+    Ext0, Ext1: Double;
+    LabelOffset: Double;
+    NameDirection: Integer;
+    Inverse: Boolean;
+  end;
+
+  { WHERE AN AXIS NAME IS DRAWN, decided by the layout so that the paint pass
+    and the grid's shrink read one answer. X, Y is the point the text hangs
+    by (AnchorH, AnchorV), RotationRad its turn, counter-clockwise; Rect the
+    padded box round it on the screen, which is what the shrink counts. }
+  TTyAxisNamePlacement = record
+    Shown: Boolean;
+    Text: string;
+    Location: TTyAxisNameLocation;
+    Level: Integer;
+    { before any move -- where nameLocation and nameGap put it }
+    AnchorX, AnchorY: Double;
+    X, Y: Double;
+    MovedX, MovedY: Double;
+    LocalRotationRad, RotationRad: Double;
+    AnchorH: TTyTextAnchorH;
+    AnchorV: TTyTextAnchorV;
+    LocalRect: TTyXYWH;
+    M: TTyMat2D;
+    { the box on the screen before the move, and after it }
+    PreRect: TTyXYWH;
+    Rect: TTyXYWH;
+    AxisAligned: Boolean;
+    { how many times it was moved }
+    Moves: Integer;
+    { a middle name's obstacle, in the axis' own frame: every shown label and
+      the line. Only when there was a label to make it from. }
+    HasOccupied: Boolean;
+    Occupied: TTyXYWH;
+    { along its own axis: one half for a middle name, none for an end one }
+    Proportion: Double;
+  end;
+  TTyAxisNamePlacementArray = array of TTyAxisNamePlacement;
   { Everything one axis needs to lay itself out. Pure data: the caller has
     already resolved the font and formatted the labels, because deciding what a
     tick says is the scale's job and this unit does not know about scales. }
@@ -339,17 +411,55 @@ type
       blank -- whether or not the axis itself is shown, which ShowLabels
       is not. }
     LegacyLabels: Boolean;
+
+    { ---- the axis name ---- }
+
+    NameLocation: TTyAxisNameLocation;
+    { axis.inverse: the extent runs from the far end, so a start name stands
+      there and an end name at the origin }
+    Inverse: Boolean;
+    { nameRotate, turned into radians as upstream turns it (degrees times pi
+      over 180); without it a middle name turns with its axis and an end name
+      stays level }
+    HasNameRotate: Boolean;
+    NameRotateRad: Double;
+    { nameTextStyle.align / verticalAlign, over the layout's own }
+    HasNameAlignH, HasNameAlignV: Boolean;
+    NameAlignH: TTyTextAnchorH;
+    NameAlignV: TTyTextAnchorV;
+    NameMarginKind: TTyNameMarginKind;
+    { LOGICAL px, [top, right, bottom, left], nmkTextMargin only }
+    NameMargin: array[0..3] of Double;
+    NameMinMarginLogical: Double;
+    { nameMoveOverlap off. The zero value moves, as upstream's default does. }
+    NameNoMove: Boolean;
+    { The name's own font. A size of nought falls back to the label font. }
+    NameFontName: string;
+    NameFontSizeLogical: Integer;
+    NameFontWeight: Integer;
+    { the frame of the pass being laid out, set by the builder; without it a
+      frame is made from the rect with the line on the plot's edge }
+    HasNameFrame: Boolean;
+    NameFrame: TTyAxisNameFrame;
+    { the name as the paint pass draws it: the last pass, on the final rect }
+    NamePlacement: TTyAxisNamePlacement;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
 
-  { x, y, width and height: upstream's own shape for a rect. The shrink is
-    done in it so that its arithmetic is upstream's to the bit -- a right edge
-    is x + width there, and a width taken back from one is not always the
-    same number. }
-  TTyXYWH = record
-    X, Y, W, H: Double;
+  { One shown label as the name layout meets it: the point it hangs by, its
+    box in its own frame -- textMargin included -- the matrix that places
+    that box, and the axis-aligned rect round the result. }
+  TTyLabelGeom = record
+    { which of the spec's labels }
+    Index: Integer;
+    X, Y: Double;
+    LocalRect: TTyXYWH;
+    M: TTyMat2D;
+    Rect: TTyXYWH;
+    AxisAligned: Boolean;
   end;
+  TTyLabelGeomArray = array of TTyLabelGeom;
 
   { Something that may overflow the grid's outer bounds: a label's box or a
     name's, DEVICE px. AlongY says which dimension is its axis' own; along it
@@ -389,13 +499,35 @@ function TyAxisLabelBoundsItems(const ASpec: TTyAxisLayoutSpec;
   const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyBoundsItemArray;
 
-{ The axis NAME as the paint pass draws it, proportion one half, which is
-  upstream's for a centred name. INTERIM: upstream lays names out by
-  location, gap, rotation and margin level, and a name batch will; until
-  then the name counts where it is actually drawn. False for no name. }
-function TyAxisNameBoundsItem(const ASpec: TTyAxisLayoutSpec;
-  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer; APPI: Integer;
-  out AItem: TTyBoundsItem): Boolean;
+{ ---- zrender's matrix arithmetic, operation for operation ---- }
+function TyMatIdentity: TTyMat2D;
+{ Transformable.getLocalTransform with no scale, skew or origin }
+function TyMatLocal(AX, AY, ARotation: Double): TTyMat2D;
+function TyMatMul(const A, B: TTyMat2D): TTyMat2D;
+{ False, and the identity, for a matrix with no inverse }
+function TyMatInvert(const A: TTyMat2D; out AInverse: TTyMat2D): Boolean;
+{ BoundingRect.applyTransform: the rect round ARect's four corners }
+function TyRectApplyMat(const ARect: TTyXYWH; const M: TTyMat2D): TTyXYWH;
+{ isBoundingRectAxisAligned }
+function TyMatAxisAligned(const M: TTyMat2D): Boolean;
+{ BoundingRect.union }
+function TyRectUnion(const A, B: TTyXYWH): TTyXYWH;
+{ expandOrShrinkRect(rect, delta, expand, may-be-negative): grow ARect by
+  [top, right, bottom, left] }
+function TyRectExpand(const ARect: TTyXYWH; ATop, ARight, ABottom,
+  ALeft: Double): TTyXYWH;
+
+{ Every label an axis shows when laid out on ARect, as the name layout and
+  the shrink meet it. }
+function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyLabelGeomArray;
+
+{ The frame of an axis on ARect when nothing better is known: its line on
+  the plot's edge, moved out by the offset. The builder, which knows about
+  a line on the other axis' zero, sets its own. }
+function TyDefaultNameFrame(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; APPI: Integer): TTyAxisNameFrame;
 
 { upstream's fillMarginOnOneDimension, over every item and the raw rect
   itself: the largest overflow of AOuter on each side, along an item's own
@@ -416,7 +548,7 @@ procedure TyShrinkRect(var ARect: TTyXYWH; const AMargin: TTyMargin4;
 function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
   AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer): TTyRectF;
+  APPI: Integer; const AContainer: TTyXYWH): TTyRectF;
 
 { Legacy grid.containLabel: for every axis in turn whose labels are not
   inside, the widest (or tallest) of all its labels -- unrotated, turned by
@@ -439,6 +571,8 @@ function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): Integer;
 
 implementation
+
+uses tyControls.AdvChart.AxisName, tyControls.AdvChart.JsMath;
 
 type
   TTyFixedContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -852,8 +986,8 @@ procedure RotatedExtent(AW, AH, AAngleRad: Double; out ARW, ARH: Double);
 var
   c, s: Double;
 begin
-  c := Abs(Cos(AAngleRad));
-  s := Abs(Sin(AAngleRad));
+  c := Abs(TyJsCos(AAngleRad));
+  s := Abs(TyJsSin(AAngleRad));
   ARW := AW * c + AH * s;
   ARH := AW * s + AH * c;
 end;
@@ -1004,70 +1138,167 @@ begin
   Result := TyRectF(A.X, A.Y, A.X + A.W, A.Y + A.H);
 end;
 
-{ The box a label is drawn in, turned about its anchor and padded, as the
-  axis-aligned rect round it -- zrender's getBoundingRect after the label's
-  transform: the four corners, their least and greatest. }
-function LabelBox(AX, AY, AW, AH, APadH, APadV, ARot: Double;
-  AAnchorH: TTyTextAnchorH; AAnchorV: TTyTextAnchorV): TTyXYWH;
-var
-  x0, x1, y0, y1, c, s, px, py, lo, hi, vlo, vhi: Double;
-  k: Integer;
+{ ==================== zrender's matrices ==================== }
+
+function TyMatIdentity: TTyMat2D;
 begin
-  case AAnchorH of
-    tahLeft: x0 := 0;
-    tahRight: x0 := -AW;
-  else
-    x0 := -AW / 2;
-  end;
-  case AAnchorV of
-    tavTop: y0 := 0;
-    tavBottom: y0 := -AH;
-  else
-    y0 := -AH / 2;
-  end;
-  x1 := x0 + AW + APadH;
-  x0 := x0 - APadH;
-  y1 := y0 + AH + APadV;
-  y0 := y0 - APadV;
-  if ARot = 0 then
-    Exit(TyXYWH(AX + x0, AY + y0, x1 - x0, y1 - y0));
-  { COUNTER-CLOCKWISE on a screen whose y runs down, zrender's rotate: x' is
-    x cos + y sin, y' is -x sin + y cos }
-  c := Cos(ARot);
-  s := Sin(ARot);
-  lo := Infinity;
-  hi := NegInfinity;
-  vlo := Infinity;
-  vhi := NegInfinity;
-  for k := 0 to 3 do
-  begin
-    if k in [0, 3] then px := x0 else px := x1;
-    if k in [0, 1] then py := y0 else py := y1;
-    if px * c + py * s < lo then lo := px * c + py * s;
-    if px * c + py * s > hi then hi := px * c + py * s;
-    if -px * s + py * c < vlo then vlo := -px * s + py * c;
-    if -px * s + py * c > vhi then vhi := -px * s + py * c;
-  end;
-  Result := TyXYWH(AX + lo, AY + vlo, hi - lo, vhi - vlo);
+  Result[0] := 1; Result[1] := 0; Result[2] := 0;
+  Result[3] := 1; Result[4] := 0; Result[5] := 0;
 end;
 
-function TyAxisLabelBoundsItems(const ASpec: TTyAxisLayoutSpec;
-  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer): TTyBoundsItemArray;
+{ matrix.rotate(out, a, rad), pivot at nought, operation for operation }
+function MatRotate(const A: TTyMat2D; ARad: Double): TTyMat2D;
+var aa, ac, atx, ab, ad, aty, st, ct: Double;
+begin
+  aa := A[0]; ac := A[2]; atx := A[4];
+  ab := A[1]; ad := A[3]; aty := A[5];
+  st := TyJsSin(ARad);
+  ct := TyJsCos(ARad);
+  Result[0] := aa * ct + ab * st;
+  Result[1] := -aa * st + ab * ct;
+  Result[2] := ac * ct + ad * st;
+  Result[3] := -ac * st + ct * ad;
+  Result[4] := ct * (atx - 0) + st * (aty - 0) + 0;
+  Result[5] := ct * (aty - 0) - st * (atx - 0) + 0;
+end;
+
+function TyMatLocal(AX, AY, ARotation: Double): TTyMat2D;
+begin
+  Result := TyMatIdentity;
+  if ARotation <> 0 then Result := MatRotate(Result, ARotation);
+  Result[4] := Result[4] + (0 + AX);
+  Result[5] := Result[5] + (0 + AY);
+end;
+
+function TyMatMul(const A, B: TTyMat2D): TTyMat2D;
+begin
+  Result[0] := A[0] * B[0] + A[2] * B[1];
+  Result[1] := A[1] * B[0] + A[3] * B[1];
+  Result[2] := A[0] * B[2] + A[2] * B[3];
+  Result[3] := A[1] * B[2] + A[3] * B[3];
+  Result[4] := A[0] * B[4] + A[2] * B[5] + A[4];
+  Result[5] := A[1] * B[4] + A[3] * B[5] + A[5];
+end;
+
+function TyMatInvert(const A: TTyMat2D; out AInverse: TTyMat2D): Boolean;
+var aa, ac, atx, ab, ad, aty, det: Double;
+begin
+  AInverse := TyMatIdentity;
+  aa := A[0]; ac := A[2]; atx := A[4];
+  ab := A[1]; ad := A[3]; aty := A[5];
+  det := aa * ad - ab * ac;
+  if (det = 0) or IsNan(det) then Exit(False);
+  det := 1.0 / det;
+  AInverse[0] := ad * det;
+  AInverse[1] := -ab * det;
+  AInverse[2] := -ac * det;
+  AInverse[3] := aa * det;
+  AInverse[4] := (ac * aty - ad * atx) * det;
+  AInverse[5] := (ab * atx - aa * aty) * det;
+  Result := True;
+end;
+
+function TyRectApplyMat(const ARect: TTyXYWH; const M: TTyMat2D): TTyXYWH;
+var
+  sx, sy: Double;
+  px: array[0..3] of Double;
+  py: array[0..3] of Double;
+  cx, cy, maxX, maxY: Double;
+  k: Integer;
+begin
+  { THE FAST PATH when nothing turns, as zrender takes it }
+  if (M[1] < 1e-5) and (M[1] > -1e-5) and (M[2] < 1e-5) and (M[2] > -1e-5) then
+  begin
+    sx := M[0];
+    sy := M[3];
+    Result.X := ARect.X * sx + M[4];
+    Result.Y := ARect.Y * sy + M[5];
+    Result.W := ARect.W * sx;
+    Result.H := ARect.H * sy;
+    if Result.W < 0 then
+    begin
+      Result.X := Result.X + Result.W;
+      Result.W := -Result.W;
+    end;
+    if Result.H < 0 then
+    begin
+      Result.Y := Result.Y + Result.H;
+      Result.H := -Result.H;
+    end;
+    Exit;
+  end;
+  { lt, rt, rb, lb }
+  px[0] := ARect.X;            py[0] := ARect.Y;
+  px[1] := ARect.X + ARect.W;  py[1] := ARect.Y;
+  px[2] := ARect.X + ARect.W;  py[2] := ARect.Y + ARect.H;
+  px[3] := ARect.X;            py[3] := ARect.Y + ARect.H;
+  Result.X := Infinity;
+  Result.Y := Infinity;
+  maxX := NegInfinity;
+  maxY := NegInfinity;
+  for k := 0 to 3 do
+  begin
+    cx := M[0] * px[k] + M[2] * py[k] + M[4];
+    cy := M[1] * px[k] + M[3] * py[k] + M[5];
+    if cx < Result.X then Result.X := cx;
+    if cy < Result.Y then Result.Y := cy;
+    if cx > maxX then maxX := cx;
+    if cy > maxY then maxY := cy;
+  end;
+  Result.W := maxX - Result.X;
+  Result.H := maxY - Result.Y;
+end;
+
+function TyMatAxisAligned(const M: TTyMat2D): Boolean;
+begin
+  Result := ((Abs(M[1]) < 1e-5) and (Abs(M[2]) < 1e-5))
+    or ((Abs(M[0]) < 1e-5) and (Abs(M[3]) < 1e-5));
+end;
+
+function TyRectUnion(const A, B: TTyXYWH): TTyXYWH;
+begin
+  { A is `this`, B `other` }
+  Result.X := Min(B.X, A.X);
+  Result.Y := Min(B.Y, A.Y);
+  if (not IsNan(A.X)) and (not IsInfinite(A.X)) and (not IsNan(A.W))
+    and (not IsInfinite(A.W)) then
+    Result.W := Max(B.X + B.W, A.X + A.W) - Result.X
+  else
+    Result.W := B.W;
+  if (not IsNan(A.Y)) and (not IsInfinite(A.Y)) and (not IsNan(A.H))
+    and (not IsInfinite(A.H)) then
+    Result.H := Max(B.Y + B.H, A.Y + A.H) - Result.Y
+  else
+    Result.H := B.H;
+end;
+
+procedure ShrinkOneDimension(var APos, ASize: Double; ALo, AHi, AMin: Double); forward;
+
+function TyRectExpand(const ARect: TTyXYWH; ATop, ARight, ABottom,
+  ALeft: Double): TTyXYWH;
+begin
+  Result := ARect;
+  ShrinkOneDimension(Result.X, Result.W, ALeft, ARight, 0);
+  ShrinkOneDimension(Result.Y, Result.H, ATop, ABottom, 0);
+end;
+
+{ ==================== the labels as geometry ==================== }
+
+function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyLabelGeomArray;
 var
   places: TTyAxisLabelPlacementArray;
   i, n: Integer;
-  w, h, padH, padV: Double;
-  horiz: Boolean;
+  w, h, padH, padV, x0, y0: Double;
 begin
   Result := nil;
   if (AMeasurer = nil) or (not ASpec.ShowLabels) then Exit;
-  { THE LABELS THE ESTIMATE SHOWS: thinned on the raw rect, the hidden ends
-    left out -- upstream measures the survivors and nothing else }
-  places := TyLayoutAxisLabels(ASpec, ARaw, AMeasurer, APPI);
+  { THE LABELS THIS RECT SHOWS: thinned on it, the hidden ends left out --
+    upstream measures the survivors and nothing else }
+  places := TyLayoutAxisLabels(ASpec, ARect, AMeasurer, APPI);
   padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
   padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
-  horiz := AxisIsHorizontal(ASpec.Side);
   SetLength(Result, Length(places));
   n := 0;
   for i := 0 to High(places) do
@@ -1075,51 +1306,94 @@ begin
     if (not places[i].Shown) or (places[i].Text = '') then Continue;
     AMeasurer.MeasureLine(places[i].Text, ASpec.FontName,
       ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
-    Result[n].R := LabelBox(places[i].X, places[i].Y, w, h, padH, padV,
-      ASpec.RotationRad, places[i].AnchorH, places[i].AnchorV);
-    Result[n].AlongY := not horiz;
-    { a y axis measures its proportion from the TOP, where the overflow the
-      division applies to is the one below }
-    Result[n].Proportion := NaN;
-    if i <= High(ASpec.Proportions) then
-    begin
-      if horiz then Result[n].Proportion := ASpec.Proportions[i]
-      else Result[n].Proportion := 1 - ASpec.Proportions[i];
+    { zrender's adjustTextX / adjustTextY, then the textMargin round it }
+    x0 := 0;
+    case places[i].AnchorH of
+      tahRight: x0 := x0 - w;
+      tahCentre: x0 := x0 - w / 2;
     end;
+    y0 := 0;
+    case places[i].AnchorV of
+      tavBottom: y0 := y0 - h;
+      tavMiddle: y0 := y0 - h / 2;
+    end;
+    Result[n].Index := i;
+    Result[n].X := places[i].X;
+    Result[n].Y := places[i].Y;
+    Result[n].LocalRect := TyRectExpand(TyXYWH(x0, y0, w, h), padV, padH,
+      padV, padH);
+    Result[n].M := TyMatLocal(places[i].X, places[i].Y, ASpec.RotationRad);
+    Result[n].Rect := TyRectApplyMat(Result[n].LocalRect, Result[n].M);
+    Result[n].AxisAligned := TyMatAxisAligned(Result[n].M);
     Inc(n);
   end;
   SetLength(Result, n);
 end;
 
-function TyAxisNameBoundsItem(const ASpec: TTyAxisLayoutSpec;
-  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer; APPI: Integer;
-  out AItem: TTyBoundsItem): Boolean;
+function TyAxisLabelBoundsItems(const ASpec: TTyAxisLayoutSpec;
+  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyBoundsItemArray;
 var
-  nw, nh, off, at, cx, cy: Double;
+  geoms: TTyLabelGeomArray;
+  i, k: Integer;
+  horiz: Boolean;
 begin
-  AItem := Default(TTyBoundsItem);
-  Result := (ASpec.Name <> '') and (AMeasurer <> nil);
-  if not Result then Exit;
-  AMeasurer.MeasureLine(ASpec.Name, ASpec.FontName, ASpec.FontSizeLogical,
-    ASpec.FontWeight, nw, nh);
-  { WHERE THE PAINT PASS PUTS IT: the middle of the band the thickness sets
-    aside for it, measured out from the axis line }
-  off := (TyAxisThickness(ASpec, AMeasurer, APPI, obcAxisLabel)
-    + TyAxisThickness(ASpec, AMeasurer, APPI, obcAll)) / 2;
-  at := AxisScaleF(ASpec.OffsetLogical, APPI);
-  case ASpec.Side of
-    asBottom: begin cx := (ARaw.Left + ARaw.Right) / 2; cy := ARaw.Bottom + at + off; end;
-    asTop: begin cx := (ARaw.Left + ARaw.Right) / 2; cy := ARaw.Top - at - off; end;
-    asLeft: begin cy := (ARaw.Top + ARaw.Bottom) / 2; cx := ARaw.Left - at - off; end;
-  else
-    begin cy := (ARaw.Top + ARaw.Bottom) / 2; cx := ARaw.Right + at + off; end;
+  Result := nil;
+  geoms := TyAxisLabelGeoms(ASpec, ARaw, AMeasurer, APPI);
+  horiz := AxisIsHorizontal(ASpec.Side);
+  SetLength(Result, Length(geoms));
+  for k := 0 to High(geoms) do
+  begin
+    i := geoms[k].Index;
+    Result[k].R := geoms[k].Rect;
+    Result[k].AlongY := not horiz;
+    { a y axis measures its proportion from the TOP, where the overflow the
+      division applies to is the one below }
+    Result[k].Proportion := NaN;
+    if i <= High(ASpec.Proportions) then
+    begin
+      if horiz then Result[k].Proportion := ASpec.Proportions[i]
+      else Result[k].Proportion := 1 - ASpec.Proportions[i];
+    end;
   end;
+end;
+
+function TyDefaultNameFrame(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; APPI: Integer): TTyAxisNameFrame;
+var off, len: Double;
+begin
+  Result := Default(TTyAxisNameFrame);
+  off := AxisScaleF(ASpec.OffsetLogical, APPI);
   if AxisIsHorizontal(ASpec.Side) then
-    AItem.R := TyXYWH(cx - nw / 2, cy - nh / 2, nw, nh)
+  begin
+    Result.PosX := ARect.Left;
+    if ASpec.Side = asTop then Result.PosY := ARect.Top - off
+    else Result.PosY := ARect.Bottom + off;
+    Result.Rotation := 0;
+    len := ARect.Right - ARect.Left;
+  end
   else
-    AItem.R := TyXYWH(cx - nh / 2, cy - nw / 2, nh, nw);
-  AItem.AlongY := not AxisIsHorizontal(ASpec.Side);
-  AItem.Proportion := 0.5;
+  begin
+    if ASpec.Side = asLeft then Result.PosX := ARect.Left - off
+    else Result.PosX := ARect.Right + off;
+    Result.PosY := ARect.Bottom;
+    Result.Rotation := Pi / 2;
+    len := ARect.Bottom - ARect.Top;
+  end;
+  { Grid's updateAxisTransform: [0, len], turned round for an inverse axis }
+  if ASpec.Inverse then
+  begin
+    Result.Ext0 := len;
+    Result.Ext1 := 0;
+  end
+  else
+  begin
+    Result.Ext0 := 0;
+    Result.Ext1 := len;
+  end;
+  Result.Inverse := ASpec.Inverse;
+  if ASpec.Side in [asTop, asLeft] then Result.NameDirection := -1
+  else Result.NameDirection := 1;
 end;
 
 function TyOuterBoundsMargin(const AOuter, ARaw: TTyXYWH;
@@ -1210,29 +1484,41 @@ end;
 function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
   AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer): TTyRectF;
+  APPI: Integer; const AContainer: TTyXYWH): TTyRectF;
 var
   items, one: TTyBoundsItemArray;
-  name: TTyBoundsItem;
+  names: TTyAxisNamePlacementArray;
   i, k, n: Integer;
   r: TTyXYWH;
 begin
   items := nil;
   n := 0;
+  { EVERY AXIS' LABELS FIRST: an end name is moved clear of the other axis'
+    labels, so they must all be laid out before any name is }
   for i := 0 to High(AAxes) do
   begin
     one := TyAxisLabelBoundsItems(AAxes[i], ARaw, AMeasurer, APPI);
-    SetLength(items, n + Length(one) + 1);
+    SetLength(items, n + Length(one));
     for k := 0 to High(one) do
       items[n + k] := one[k];
     Inc(n, Length(one));
-    { A hidden axis has lost its name in the builder, as it has its labels }
-    if (AContain = obcAll)
-      and TyAxisNameBoundsItem(AAxes[i], ARaw, AMeasurer, APPI, name) then
-    begin
-      items[n] := name;
-      Inc(n);
-    end;
+  end;
+  { THEN THE NAMES, under 'all' only -- estimated on the raw rect, at its
+    margin level, after their moves -- each counted along its own axis by
+    its proportion (none for an end name) and across it as it is }
+  if AContain = obcAll then
+  begin
+    names := TyLayoutGridNames(AAxes, ARaw, AContainer.W, AContainer.H,
+      AMeasurer, APPI);
+    for i := 0 to High(names) do
+      if names[i].Shown then
+      begin
+        SetLength(items, n + 1);
+        items[n].R := names[i].Rect;
+        items[n].AlongY := not AxisIsHorizontal(AAxes[i].Side);
+        items[n].Proportion := names[i].Proportion;
+        Inc(n);
+      end;
   end;
   SetLength(items, n);
   r := TyXYWHOfRect(ARaw);
@@ -1261,7 +1547,7 @@ begin
         is upstream's own economy and so its answer }
       step := 1;
       if n > 40 then step := Ceil(n / 40);
-      c := Abs(Cos(AAxes[i].RotationRad));
+      c := Abs(TyJsCos(AAxes[i].RotationRad));
       uw := 0;
       uh := 0;
       any := False;
@@ -1270,9 +1556,9 @@ begin
       begin
         AMeasurer.MeasureLine(AAxes[i].Labels[k], AAxes[i].FontName,
           AAxes[i].FontSizeLogical, AAxes[i].FontWeight, w, h);
-        s := Sin(AAxes[i].RotationRad);
+        s := TyJsSin(AAxes[i].RotationRad);
         rw := w * c + Abs(h * s);
-        rh := w * Abs(s) + Abs(h * Cos(AAxes[i].RotationRad));
+        rh := w * Abs(s) + Abs(h * TyJsCos(AAxes[i].RotationRad));
         if (not any) or (rw > uw) then uw := rw;
         if (not any) or (rh > uh) then uh := rh;
         any := True;
