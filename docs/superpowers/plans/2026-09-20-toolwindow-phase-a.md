@@ -28,7 +28,8 @@
 | `tests/test.toolwindow.theme.pas` | **新建**。token 与 typeKey 走真皮肤的链路守卫 |
 | `tests/tytests.lpr` | uses 段加上面四个新测试单元 |
 
-**A 期不碰**：`designtime/`（组件编辑器和属性编辑器是 D 期）、`examples/`、`docs/controls/`、`languages/`。
+**A 期不碰**：`designtime/`（组件编辑器和属性编辑器是 D 期）、`examples/`、`docs/controls/`。
+（`languages/` 原先也列在这里，**实现期修正**：Task 4 的设计期提示文字要用 resourcestring，而 `TI18NTest` 要求 `.pot` / `zh_CN.po` 同步，所以 A 期会碰 `source/tyControls.StrConsts.pas` 和那两个语言文件。）
 所以 A 期**不需要**编 `tycontrols_dt.lpk`，也不用跑 `scripts/gen-icons.ps1`。
 
 ---
