@@ -276,11 +276,13 @@ resourcestring
     'content area. Move it into the Surface content container so it stays visible.';
   { Drawn inside a TTyToolWindowActions at design time when its window will not use it:
     a second actions area in the same tool window (a paste), or one that is not in a tool
-    window at all (undo of a delete re-creates it on the form). Both are hidden at run time. }
+    window at all (undo of a delete re-creates it on the form). Both are hidden at run time.
+    Kept to a glance-sized reminder on purpose: the area is sized to fit the note, and a
+    side bar is only 240px wide by default. The why belongs in the control docs. }
   rsTyToolWindowActionsExtra =
-    'Only the first actions area of a tool window goes into its header. This one is hidden at run time.';
+    'Unused actions area';
   rsTyToolWindowActionsOrphan =
-    'An actions area only works inside a tool window. This one is hidden at run time.';
+    'Not in a tool window';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

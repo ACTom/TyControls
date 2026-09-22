@@ -612,12 +612,12 @@ msgid "More commands"
 msgstr "更多命令"
 
 #: tycontrols.strconsts.rstytoolwindowactionsextra
-msgid "Only the first actions area of a tool window goes into its header. This one is hidden at run time."
-msgstr "工具窗口只把第一个操作区放进标题行，这一个运行时隐藏。"
+msgid "Unused actions area"
+msgstr "多余的操作区"
 
 #: tycontrols.strconsts.rstytoolwindowactionsorphan
-msgid "An actions area only works inside a tool window. This one is hidden at run time."
-msgstr "操作区只能放在工具窗口里，这一个运行时隐藏。"
+msgid "Not in a tool window"
+msgstr "不在工具窗口里"
 
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
