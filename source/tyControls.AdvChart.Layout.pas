@@ -241,6 +241,21 @@ type
   end;
   TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
 
+  { ONE TICK MARK, SPLIT LINE OR SPLIT-AREA EDGE, where the layout put it: the
+    tick it stands for (a category axis' ordinal; the category past the last
+    for the closing band edge), its place in device px along the axis,
+    whether it was moved onto a band edge, and whether it is drawn -- a tick
+    whose label was hidden goes with it, a split line at an end can be
+    denied. }
+  TTyAxisMark = record
+    Value: Double;
+    Coord: Double;
+    OffInterval: Boolean;
+    OnBand: Boolean;
+    Drawn: Boolean;
+  end;
+  TTyAxisMarkArray = array of TTyAxisMark;
+
   { x, y, width and height: upstream's own shape for a rect. The shrink and
     the name layout are done in it so that their arithmetic is upstream's to
     the bit -- a right edge is x + width there, and a width taken back from
@@ -478,6 +493,13 @@ type
     NameFrame: TTyAxisNameFrame;
     { the name as the paint pass draws it: the last pass, on the final rect }
     NamePlacement: TTyAxisNamePlacement;
+
+    { THE FURNITURE AS IT IS DRAWN, on the final rect: the tick marks, the
+      split lines, and the edges the split areas run between. Each follows
+      the labels unless its own interval says otherwise. }
+    TickMarks: TTyAxisMarkArray;
+    SplitLineMarks: TTyAxisMarkArray;
+    SplitAreaMarks: TTyAxisMarkArray;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -606,6 +628,13 @@ function TyLegacyContainLabel(const ARaw: TTyRectF;
   step when they would collide. }
 function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
+
+{ A CATEGORY AXIS' LABEL INTERVAL on APlot: the author's, or measured as
+  upstream's calculateCategoryInterval measures it. +Infinity on an axis of
+  no length. }
+function TyCategoryLabelInterval(const ASpec: TTyAxisLayoutSpec;
+  const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): Double;
 
 { The uniform step TyLayoutAxisLabels chose: 1 = every label, 2 = every other.
   Exposed because a caller drawing tick MARKS has to thin them the same way, and
@@ -1094,6 +1123,17 @@ end;
 { A CATEGORY AXIS' INTERVAL on APlot: the author's, or measured as upstream
   measures it -- every label up to forty, then every n/40-th, each in the
   label font, over the band width turned into the label's frame. }
+function CategoryIntervalOn(const ASpec: TTyAxisLayoutSpec;
+  const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): Double; forward;
+
+function TyCategoryLabelInterval(const ASpec: TTyAxisLayoutSpec;
+  const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): Double;
+begin
+  Result := CategoryIntervalOn(ASpec, APlot, AMeasurer, APPI);
+end;
+
 function CategoryIntervalOn(const ASpec: TTyAxisLayoutSpec;
   const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): Double;

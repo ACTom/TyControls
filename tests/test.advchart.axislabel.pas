@@ -99,6 +99,7 @@ type
     procedure TestShowMaxLabelReachesTheLayout;
     procedure TestANonCategoryAxisIsHandedNoStrideEvenWhenAsked;
     procedure TestAnExplicitTickStrideChangesTheMarksOnScreen;
+    procedure TestATickGoesWithItsHiddenLabel;
   end;
 
   { The same fact, asked of the pixels. }
@@ -608,6 +609,21 @@ begin
   AssertEquals('nor a time axis', 0, p^.ForcedLabelStep);
 end;
 
+procedure TAdvChartIntervalOptionTest.TestATickGoesWithItsHiddenLabel;
+begin
+  { OFF THE BAND, A TICK GOES WITH ITS LABEL. Twelve categories with no
+    boundary gap at interval 4 build 0, 5, 10 and the eleventh, which is off
+    the interval and hidden -- and its mark is not drawn either: three on
+    screen, not four. On a band the marks are edges and stay. }
+  FCtl.StyleOverride :=
+    'TyAdvChartAxisTick { border-color: #FF0000; border-width: 1px; }';
+  DrawCats(12, '{"interval":4}', '{"show":true},"boundaryGap":false');
+  AssertEquals('the labels', '0,5,10', ShownIndices);
+  AssertEquals('and their marks alone', 3, RedMarks);
+  DrawCats(12, '{"interval":4}', '{"show":true}');
+  AssertEquals('on the band, every edge and the closing one', 4, RedMarks);
+end;
+
 procedure TAdvChartIntervalOptionTest.TestAnExplicitTickStrideChangesTheMarksOnScreen;
 var all, thinned: Integer;
 begin
@@ -629,7 +645,11 @@ begin
   AssertEquals('every band edge got a mark', 13, all);
   DrawCats(12, '{"interval":0}', '{"show":true,"interval":4}');
   thinned := RedMarks;
-  AssertEquals('one edge in five', 3, thinned);
+  { ONE EDGE IN FIVE AND THE CLOSING ONE: upstream always adds the edge past
+    the last category, so 0, 5, 10 and 12.
+    [Revised in batch 40: 3 -- the closing edge only when the count suited
+    the stride.] }
+  AssertEquals('one edge in five, and the last', 4, thinned);
   AssertEquals('and the labels stayed where they were',
                '0,1,2,3,4,5,6,7,8,9,10,11', ShownIndices);
 end;

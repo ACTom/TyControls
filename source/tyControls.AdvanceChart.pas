@@ -1145,12 +1145,11 @@ var
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
   lblStyle, primaryS: TTyStyleSet;
   minorTickS, minorSplitS, nameS: TTyStyleSet;
-  ticks: TTyDoubleArray;
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
   maxW, batched: Integer;
   horiz: Boolean;
-  lblH, lblW, step, tickStep: Integer;
+  lblH, lblW: Integer;
   scaleTicks: TTyScaleTickArray;
   spec: PTyAxisLayoutSpec;
   places: TTyAxisLabelPlacementArray;
@@ -1371,15 +1370,10 @@ begin
     tickLen := -tickLen;
     minorLen := -minorLen;
   end;
-  step := 1;
-  if (spec <> nil) and (spec^.LabelStep > 0) then step := spec^.LabelStep;
-  { THE FURNITURE FOLLOWS THE LABELS UNLESS IT WAS TOLD OTHERWISE. Upstream
-    defaults `axisTick.interval` to `auto`, and `auto` there does not compute
-    anything -- it re-runs the LABEL pipeline and takes its ticks. So the
-    label stride drives the marks, the split lines and the split areas one
-    way, and only an explicit `axisTick.interval` breaks the tie. }
-  tickStep := step;
-  if (spec <> nil) and (spec^.TickStep > 0) then tickStep := spec^.TickStep;
+  { THE FURNITURE FOLLOWS THE LABELS UNLESS IT WAS TOLD OTHERWISE -- and
+    where each tick, split line and split-area edge goes, and whether it is
+    drawn, the layout has already decided (spec^.TickMarks and the rest).
+    This draws that answer. }
   batched := 0;
 
   { Split lines first, so the domain and the ticks sit on top of them.
@@ -1403,14 +1397,19 @@ begin
     means between the band EDGES: one shaded band per category, which is what
     makes the alternating stripe line up with the bars rather than straddle
     them. }
-  if ABelow and furn.ShowSplitArea and (tpBackground in areaS.Present) then
+  { BETWEEN THE EDGES THE LAYOUT PUT -- on the split area's own interval,
+    the labels' unless it says otherwise.
+    [Revised in batch 40: between every band edge, whatever the labels
+    were doing.] }
+  if ABelow and furn.ShowSplitArea and (tpBackground in areaS.Present)
+    and (spec <> nil) then
   begin
-    ticks := AAxis.TickCoords;
-    for i := 0 to High(ticks) - 1 do
+    for i := 0 to High(spec^.SplitAreaMarks) - 1 do
     begin
       if i mod 2 <> 0 then Continue;
-      bandLo := ticks[i];
-      bandHi := ticks[i + 1];
+      if not spec^.SplitAreaMarks[i].Drawn then Continue;
+      bandLo := spec^.SplitAreaMarks[i].Coord;
+      bandHi := spec^.SplitAreaMarks[i + 1].Coord;
       if horiz then
         APainter.FillBackground(
           Rect(Round(bandLo), Round(APlot.Top),
@@ -1422,8 +1421,10 @@ begin
     end;
   end;
 
+  { WHATEVER THE LABELS ARE DOING: upstream subdivides every interval.
+    [Revised in batch 40: only while every major label was drawn.] }
   if ABelow and furn.ShowMinorSplitLine
-    and (tpBorderColor in minorSplitS.Present) and (tickStep = 1) then
+    and (tpBorderColor in minorSplitS.Present) then
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
@@ -1439,20 +1440,21 @@ begin
     StrokeBatch(minorSplitS);
   end;
 
-  if ABelow and furn.ShowSplitLine and (tpBorderColor in splitS.Present) then
+  { WHERE THE LAYOUT PUT THEM: the split line's own interval, the labels'
+    unless it says otherwise, on the band edges of a banded axis with the
+    closing edge; the two on the ends separately deniable -- a grid line on
+    the axis' own extreme doubles whatever border is already there.
+    [Revised in batch 40: every tickStep-th band edge, the stride of
+    axisTick.interval when there was one, and no closing edge unless the
+    count suited it.] }
+  if ABelow and furn.ShowSplitLine and (tpBorderColor in splitS.Present)
+    and (spec <> nil) then
   begin
-    ticks := AAxis.TickCoords;
     APainter.BeginPath;
-    for i := 0 to High(ticks) do
+    for i := 0 to High(spec^.SplitLineMarks) do
     begin
-      { THINNED WITH THE LABELS, on the same step the ticks use. }
-      if (tickStep > 1) and (i mod tickStep <> 0) then Continue;
-      { THE TWO ON THE ENDS ARE SEPARATELY DENIABLE. A grid line on the axis'
-        own extreme sits exactly on the plot's edge, doubling whatever border
-        is already there, and these are the keys that turn it off. }
-      if (i = 0) and (not furn.ShowMinLine) then Continue;
-      if (i = High(ticks)) and (not furn.ShowMaxLine) then Continue;
-      along := ticks[i];
+      if not spec^.SplitLineMarks[i].Drawn then Continue;
+      along := spec^.SplitLineMarks[i].Coord;
       if horiz then
         BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
       else
@@ -1491,19 +1493,16 @@ begin
     the two are half a band apart, and which one a tick means is exactly what
     the option exists to say -- the split lines above keep the edges either
     way, because a divider that pointed at a label would not divide anything. }
-  ticks := AAxis.TickCoords(furn.AlignWithLabel);
-  { THE MARKS THIN WITH THE LABELS. Drawing every tick under a thinned set of
-    labels reads as an axis that lost its labels rather than one that spaced
-    them out, and computing the step by a second route is how the two drift --
-    which is why `step` is worked out once, above, and the split lines use the
-    same one. }
-  if furn.ShowTicks and (tpBorderColor in tickStyle.Present) then
+  { THE MARKS WHERE THE LAYOUT PUT THEM, on their own interval or the
+    labels', a tick whose label was hidden gone with it.
+    [Revised in batch 40: every tickStep-th tick, a hidden label's kept.] }
+  if furn.ShowTicks and (tpBorderColor in tickStyle.Present) and (spec <> nil) then
   begin
     APainter.BeginPath;
-    for i := 0 to High(ticks) do
+    for i := 0 to High(spec^.TickMarks) do
     begin
-      if (tickStep > 1) and (i mod tickStep <> 0) then Continue;
-      along := ticks[i];
+      if not spec^.TickMarks[i].Drawn then Continue;
+      along := spec^.TickMarks[i].Coord;
       if horiz then
       begin
         x1 := along; x2 := along;
@@ -1526,8 +1525,7 @@ begin
     a fraction hardcoded here. --advchart-minor-tick-length, its constant and
     its default have all been in place since item 18 with nothing reading them,
     so a skin that set it changed nothing. }
-  if furn.ShowMinorTick and (tpBorderColor in minorTickS.Present)
-    and (tickStep = 1) then
+  if furn.ShowMinorTick and (tpBorderColor in minorTickS.Present) then
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;

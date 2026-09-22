@@ -91,6 +91,15 @@ procedure TyFixMinMaxLabelShow(var ACands: TTyLabelCandidateArray;
 { hideOverlap over the built labels still shown. }
 procedure TyHideOverlap(var ACands: TTyLabelCandidateArray);
 
+{ fixOnBandTicksCoords, on marks whose Coord is in the axis' OWN frame --
+  from its start, the way its extent runs: every mark back half a band onto
+  the leading edge, the last dropped if it is off the interval, and the edge
+  past the last category added -- the last mark's, one band on. The marks are
+  flagged OnBand. Nothing happens off a band, aligned with the labels, with
+  no marks, or with no band width. }
+procedure TyFixOnBandMarks(var AMarks: TTyAxisMarkArray; AOnBand,
+  AAlignWithLabel: Boolean; ABandWidth: Double; ALastCategory: Integer);
+
 implementation
 
 uses tyControls.AdvChart.JsMath;
@@ -447,6 +456,31 @@ begin
       Inc(nk);
     end;
   end;
+end;
+
+procedure TyFixOnBandMarks(var AMarks: TTyAxisMarkArray; AOnBand,
+  AAlignWithLabel: Boolean; ABandWidth: Double; ALastCategory: Integer);
+var
+  i, n: Integer;
+  oldLast: TTyAxisMark;
+begin
+  n := Length(AMarks);
+  if (not AOnBand) or AAlignWithLabel or (n = 0) then Exit;
+  if (ABandWidth = 0) or IsNan(ABandWidth) then Exit;
+  for i := 0 to n - 1 do
+    AMarks[i].Coord := AMarks[i].Coord - ABandWidth / 2;
+  oldLast := AMarks[n - 1];
+  if oldLast.OffInterval then
+  begin
+    SetLength(AMarks, n - 1);
+    Dec(n);
+  end;
+  SetLength(AMarks, n + 1);
+  AMarks[n] := Default(TTyAxisMark);
+  AMarks[n].Value := ALastCategory + 1;
+  AMarks[n].Coord := oldLast.Coord + ABandWidth;
+  for i := 0 to n do
+    AMarks[i].OnBand := True;
 end;
 
 initialization

@@ -47,6 +47,7 @@ type
     procedure TestTheBuiltListIsUpstreams;
     procedure TestTheEndRulesAndHideOverlapKeepWhatUpstreamKeeps;
     procedure TestEveryAxisDrawsTheLabelsUpstreamDraws;
+    procedure TestEveryAxisDrawsTheFurnitureUpstreamDraws;
     { ---- what the cases do not reach ---- }
     procedure TestTheSevenPixelFloorHoldsBothWays;
     procedure TestABandOfNoLengthKeepsTheFirstAlone;
@@ -670,6 +671,141 @@ begin
   AssertTrue(Format('enough axes (%d)', [axesCompared]), axesCompared >= 180);
   AssertTrue(Format('enough strides (%d)', [strides]), strides >= 40);
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(compared) + ' cases differ:' + report, 0, bad);
+end;
+
+{ THE FURNITURE: every tick mark, split line and split area of every axis'
+  drawn pass -- the ticks it stands for and whether it is drawn exactly, where
+  it goes within the case's tolerance. }
+procedure TAdvChartLabelThinningOracleTest.TestEveryAxisDrawsTheFurnitureUpstreamDraws;
+var
+  cases, axes, passes, vals, drawn, coords, rects, r: TJSONArray;
+  cs, ax, ps, rec: TJSONObject;
+  c, a, g, k, bad, compared, closing, synced, areas: Integer;
+  axis: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  tol, lo, hi, wlo, whi: Double;
+  why, report: string;
+
+  function MarksDiffer(const AName: string; const AMarks: TTyAxisMarkArray;
+    ARec: TJSONObject; ACheckDrawn: Boolean): string;
+  var q: Integer;
+  begin
+    Result := '';
+    vals := ARec.Arrays['values'];
+    coords := ARec.Arrays['globalCoords'];
+    drawn := ARec.Arrays['drawn'];
+    if Length(AMarks) <> vals.Count then
+      Exit(Format('%s: %d, upstream %d', [AName, Length(AMarks), vals.Count]));
+    for q := 0 to vals.Count - 1 do
+    begin
+      if AMarks[q].Value <> NumAt(vals, q) then
+        Exit(Format('%s %d: tick %s, upstream %s', [AName, q, Fmt(AMarks[q].Value),
+          Fmt(NumAt(vals, q))]));
+      if Abs(AMarks[q].Coord - NumAt(coords, q)) > tol then
+        Exit(Format('%s %d: at %s, upstream %s', [AName, q, Fmt(AMarks[q].Coord),
+          Fmt(NumAt(coords, q))]));
+      if ACheckDrawn and (AMarks[q].Drawn <> drawn.Booleans[q]) then
+        Exit(Format('%s %d (tick %s): drawn %s, upstream %s', [AName, q,
+          Fmt(AMarks[q].Value), BoolToStr(AMarks[q].Drawn, True),
+          BoolToStr(drawn.Booleans[q], True)]));
+    end;
+  end;
+
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  bad := 0;
+  compared := 0;
+  closing := 0;
+  synced := 0;
+  areas := 0;
+  report := '';
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    if IsDeferred(cs) then Continue;
+    try
+      RunCase(cs);
+    except
+      on E: Exception do
+      begin
+        Inc(bad);
+        report := report + LineEnding + '  ' + cs.Strings['name'] + ': '
+          + E.ClassName + ': ' + E.Message;
+        Continue;
+      end;
+    end;
+    g := cs.Integers['grid'];
+    tol := Num(cs, 'tol');
+    axes := cs.Arrays['axes'];
+    why := '';
+    for a := 0 to axes.Count - 1 do
+    begin
+      if why <> '' then Break;
+      ax := axes.Objects[a];
+      if not ax.Booleans['shown'] then Continue;
+      if not (ax.Find('passes') is TJSONArray) then Continue;
+      passes := ax.Arrays['passes'];
+      ps := passes.Objects[passes.Count - 1];
+      if not (ps.Find('ticks') is TJSONObject) then Continue;
+      axis := AxisFor(FBuild, g, ax.Strings['dim'], ax.Integers['index']);
+      spec := FBuild.Grid(g).SpecFor(axis);
+      Inc(compared);
+      rec := ps.Objects['ticks'];
+      why := MarksDiffer(ax.Strings['dim'] + ' ticks', spec^.TickMarks, rec, True);
+      if why = '' then
+      begin
+        for k := 0 to rec.Arrays['drawn'].Count - 1 do
+          if (not rec.Arrays['drawn'].Booleans[k]) and ax.Objects['axisTick'].Booleans['shown'] then
+            Inc(synced);
+        if rec.Booleans['onBand'] and (rec.Arrays['values'].Count > 0) then Inc(closing);
+        why := MarksDiffer(ax.Strings['dim'] + ' split lines', spec^.SplitLineMarks,
+          ps.Objects['splitLines'], True);
+      end;
+      if (why = '') and (ps.Objects['splitAreas'].Arrays['rects'].Count > 0) then
+      begin
+        { THE AREAS, each between two consecutive edges }
+        Inc(areas);
+        rects := ps.Objects['splitAreas'].Arrays['rects'];
+        if Length(spec^.SplitAreaMarks) - 1 <> rects.Count then
+          why := Format('%s areas: %d, upstream %d', [ax.Strings['dim'],
+            Length(spec^.SplitAreaMarks) - 1, rects.Count])
+        else
+          for k := 0 to rects.Count - 1 do
+          begin
+            r := rects.Arrays[k];
+            if ax.Strings['dim'] = 'x' then
+            begin
+              wlo := NumAt(r, 0);
+              whi := NumAt(r, 0) + NumAt(r, 2);
+            end
+            else
+            begin
+              wlo := NumAt(r, 1);
+              whi := NumAt(r, 1) + NumAt(r, 3);
+            end;
+            lo := Min(spec^.SplitAreaMarks[k].Coord, spec^.SplitAreaMarks[k + 1].Coord);
+            hi := Max(spec^.SplitAreaMarks[k].Coord, spec^.SplitAreaMarks[k + 1].Coord);
+            if (Abs(lo - Min(wlo, whi)) > tol) or (Abs(hi - Max(wlo, whi)) > tol) then
+            begin
+              why := Format('%s area %d: %s..%s, upstream %s..%s', [ax.Strings['dim'],
+                k, Fmt(lo), Fmt(hi), Fmt(Min(wlo, whi)), Fmt(Max(wlo, whi))]);
+              Break;
+            end;
+          end;
+      end;
+    end;
+    if why <> '' then
+    begin
+      Inc(bad);
+      if bad <= 30 then
+        report := report + LineEnding + '  ' + cs.Strings['name'] + ': ' + why;
+    end;
+  end;
+  AssertTrue(Format('enough axes (%d)', [compared]), compared >= 180);
+  AssertTrue(Format('banded ones (%d)', [closing]), closing >= 30);
+  AssertTrue(Format('ticks hidden with their labels (%d)', [synced]), synced >= 5);
+  AssertTrue(Format('split areas (%d)', [areas]), areas >= 4);
+  AssertEquals(IntToStr(bad) + ' cases differ:' + report, 0, bad);
 end;
 
 { ==================== 5. what the cases do not reach ==================== }

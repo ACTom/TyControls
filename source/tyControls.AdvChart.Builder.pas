@@ -138,6 +138,15 @@ type
     ShowAllLabels: Boolean;
     { axisLabel.hideOverlap, in JavaScript's truthiness }
     HideOverlap: Boolean;
+    { EACH PIECE OF FURNITURE'S OWN interval on a category axis: axisTick,
+      splitLine, splitArea. NaN is `auto` -- follow the labels -- and a
+      number is taken whole, as axisLabel.interval is. }
+    TickInterval, SplitLineInterval, SplitAreaInterval: Double;
+    { splitLine.alignWithLabel / splitArea.alignWithLabel }
+    SplitLineAlign, SplitAreaAlign: Boolean;
+    { minorTick.show as written, on any axis: shown minor ticks keep every
+      major tick, even one whose label was hidden }
+    MinorTickOption: Boolean;
   end;
 
 
@@ -408,7 +417,8 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
-  tyControls.StrConsts, tyControls.AdvChart.AxisName;
+  tyControls.StrConsts, tyControls.AdvChart.AxisName,
+  tyControls.AdvChart.AxisLabels;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -1120,6 +1130,18 @@ begin
   Result := n + 1;
 end;
 
+{ `interval` on one sub-node as a count, whole: NaN when absent or `auto`. }
+function IntervalIn(ANode: TJSONObject; const AKey: string): Double;
+var sub: TJSONData;
+begin
+  Result := NaN;
+  sub := FindIn(ANode, AKey);
+  if (sub = nil) or (sub.JSONType <> jtObject) then Exit;
+  sub := TJSONObject(sub).Find('interval');
+  if (sub = nil) or (sub.JSONType <> jtNumber) or IsNan(sub.AsFloat) then Exit;
+  Result := TyTruncOpt(sub.AsFloat);
+end;
+
 { `showMinLabel` / `showMaxLabel` on axisLabel: absent is AUTO, not false. }
 function EndLabelIn(ANode: TJSONObject; const AKey: string): TTyAxisEndLabel;
 var sub: TJSONData;
@@ -1207,6 +1229,18 @@ begin
   end;
   Result.ShowMinLabel := EndLabelIn(ANode, 'showMinLabel');
   Result.ShowMaxLabel := EndLabelIn(ANode, 'showMaxLabel');
+  Result.TickInterval := NaN;
+  Result.SplitLineInterval := NaN;
+  Result.SplitAreaInterval := NaN;
+  if cat then
+  begin
+    Result.TickInterval := IntervalIn(ANode, 'axisTick');
+    Result.SplitLineInterval := IntervalIn(ANode, 'splitLine');
+    Result.SplitAreaInterval := IntervalIn(ANode, 'splitArea');
+  end;
+  Result.SplitLineAlign := SubBoolIn(ANode, 'splitLine', 'alignWithLabel', False);
+  Result.SplitAreaAlign := SubBoolIn(ANode, 'splitArea', 'alignWithLabel', False);
+  Result.MinorTickOption := ShowIn(ANode, 'minorTick', False, False, True);
   if cat then
   begin
     d := FindIn(ObjOf(FindIn(ANode, 'axisLabel')), 'interval');
@@ -1788,6 +1822,115 @@ var
     else Result := AGrid.YAxis(AIndex - AGrid.XAxisCount);
   end;
 
+  { THE FURNITURE ON THE FINAL RECT. A category axis' tick marks, split
+    lines and split areas each walk their own interval -- the labels' when
+    they say nothing, whether or not the labels are drawn -- and, on a
+    banded axis, are moved back half a band onto the edges, the last dropped
+    when it is off the interval and the edge past the last category added.
+    A value, log or time axis has a mark per tick. A tick whose label was
+    built and then hidden goes with it, unless it sits on a band edge or the
+    minor ticks are shown; a split line at an end can be denied. }
+  procedure AxisMarks(AGrid: TTyGridBuild; AAxis: TTyAxis;
+    var ASpec: TTyAxisLayoutSpec; const AFurn: TTyAxisFurniture);
+  var
+    plot: TTyRectF;
+    labelIv: Double;
+    n, k, i: Integer;
+    ticks: TTyScaleTickArray;
+
+    { upstream's axis frame: from the axis' start at the plot's left or
+      bottom, the way its extent runs }
+    function ToLocal(AGlobal: Double): Double;
+    begin
+      if AAxis.Horizontal then Result := AGlobal - plot.Left
+      else Result := plot.Bottom - AGlobal;
+    end;
+
+    function ToGlobal(ALocal: Double): Double;
+    begin
+      if AAxis.Horizontal then Result := ALocal + plot.Left
+      else Result := plot.Bottom - ALocal;
+    end;
+
+    function CategoryMarks(AOptInterval: Double; AAlign: Boolean): TTyAxisMarkArray;
+    var
+      iv: Double;
+      vals: TTyIntegerArray;
+      offs: TTyBoolArray;
+      q: Integer;
+    begin
+      if IsNan(AOptInterval) then iv := labelIv else iv := AOptInterval;
+      TyCategoryBuiltList(ASpec.OrdinalStart, n, iv, vals, offs);
+      Result := nil;
+      SetLength(Result, Length(vals));
+      for q := 0 to High(vals) do
+      begin
+        Result[q] := Default(TTyAxisMark);
+        Result[q].Value := vals[q];
+        Result[q].OffInterval := offs[q];
+        Result[q].Coord := ToLocal(AAxis.DataToCoord(vals[q]));
+      end;
+      TyFixOnBandMarks(Result, AAxis.OnBand, AAlign, AAxis.BandWidth,
+        ASpec.OrdinalStart + n - 1);
+      for q := 0 to High(Result) do
+        Result[q].Coord := ToGlobal(Result[q].Coord);
+    end;
+
+  begin
+    ASpec.TickMarks := nil;
+    ASpec.SplitLineMarks := nil;
+    ASpec.SplitAreaMarks := nil;
+    if (AAxis = nil) or AAxis.Scale.Blank then Exit;
+    plot := AGrid.FPlotRect;
+    n := Length(ASpec.Labels);
+    if ASpec.LabelKind = lakCategory then
+    begin
+      if n = 0 then Exit;
+      labelIv := TyCategoryLabelInterval(ASpec, plot, AMeasurer, APPI);
+      ASpec.TickMarks := CategoryMarks(AFurn.TickInterval, AFurn.AlignWithLabel);
+      ASpec.SplitLineMarks := CategoryMarks(AFurn.SplitLineInterval, AFurn.SplitLineAlign);
+      ASpec.SplitAreaMarks := CategoryMarks(AFurn.SplitAreaInterval, AFurn.SplitAreaAlign);
+    end
+    else
+    begin
+      { the majors, as the labels were made from them: one mark per label }
+      ticks := TyDrawnTicks(AAxis.Scale);
+      SetLength(ASpec.TickMarks, Length(ticks));
+      i := 0;
+      for k := 0 to High(ticks) do
+      begin
+        if ticks[k].Level <> 0 then Continue;
+        ASpec.TickMarks[i] := Default(TTyAxisMark);
+        ASpec.TickMarks[i].Value := ticks[k].Value;
+        ASpec.TickMarks[i].Coord := AAxis.DataToCoord(ticks[k].Value);
+        Inc(i);
+      end;
+      SetLength(ASpec.TickMarks, i);
+      ASpec.SplitLineMarks := Copy(ASpec.TickMarks);
+      ASpec.SplitAreaMarks := Copy(ASpec.TickMarks);
+    end;
+    { WHICH ARE DRAWN }
+    for k := 0 to High(ASpec.TickMarks) do
+    begin
+      ASpec.TickMarks[k].Drawn := ASpec.ShowTicks;
+      if AFurn.MinorTickOption or ASpec.TickMarks[k].OnBand
+        or (not ASpec.ShowLabels) then Continue;
+      if ASpec.LabelKind = lakCategory then
+        i := Round(ASpec.TickMarks[k].Value) - ASpec.OrdinalStart
+      else
+        i := k;
+      if (i >= 0) and (i <= High(ASpec.Placements))
+        and ASpec.Placements[i].Built and (not ASpec.Placements[i].Shown) then
+        ASpec.TickMarks[k].Drawn := False;
+    end;
+    for k := 0 to High(ASpec.SplitLineMarks) do
+      ASpec.SplitLineMarks[k].Drawn := AFurn.ShowSplitLine
+        and not ((k = 0) and not AFurn.ShowMinLine)
+        and not ((k = High(ASpec.SplitLineMarks)) and not AFurn.ShowMaxLine);
+    for k := 0 to High(ASpec.SplitAreaMarks) do
+      ASpec.SplitAreaMarks[k].Drawn := AFurn.ShowSplitArea;
+  end;
+
   { ONE BOUND OF grid.outerBounds on the canvas: upstream merges it into
     {left: 0, right: 0} keeping at most two of left, right and width -- the
     author's own when they wrote two, else theirs and the first default --
@@ -2345,6 +2488,10 @@ begin
       vp.Bottom - vp.Top, AMeasurer, APPI);
     for t := 0 to High(gb.FSpecs) do
       gb.FSpecs[t].NamePlacement := names[t];
+
+    { AND THE FURNITURE, on the same final rect }
+    for t := 0 to High(gb.FSpecs) do
+      AxisMarks(gb, AxisAt(gb, t), gb.FSpecs[t], gb.FFurniture[t]);
   end;
 end;
 

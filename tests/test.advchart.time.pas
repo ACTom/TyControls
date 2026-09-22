@@ -841,7 +841,9 @@ var p: PTyAxisLayoutSpec; i, hidden: Integer;
 begin
   { Data that starts at 07:13 keeps 07:13 as its first tick -- the grid has to
     reach the data -- but labelling it puts a ragged number hard against the
-    first round hour. Upstream hides the label and keeps the tick. }
+    first round hour. Upstream hides the label, and the tick mark with it.
+    [Revised in batch 40: `and keeps the tick' -- it does not, and nor does
+    the port now.] }
   Draw('{"useUTC":true,"xAxis":{"type":"time"},"yAxis":{},'
     + '"series":[{"type":"line","data":['
     + '["2024-03-01T07:13:00Z",1],["2024-03-01T19:48:00Z",2]]}]}');
