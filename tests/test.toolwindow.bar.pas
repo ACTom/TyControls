@@ -83,6 +83,7 @@ type
     procedure TestADirectZOrderChangeIsAReorderToo;
     procedure TestFirstWindowBecomesActiveAndRemovalFallsBack;
     procedure TestAReparentedActiveWindowFallsBackWithoutBeingHidden;
+    procedure TestTheFirstWindowLeavingHandsOverToTheSecond;
     procedure TestRemovingAnotherWindowKeepsTheActiveOne;
     procedure TestAWindowFreedWithoutAnOwnerLeavesNoDanglingEntry;
     procedure TestRegisteringTwiceKeepsOneEntry;
@@ -686,6 +687,24 @@ begin
   AssertTrue('离开的窗口不被栏藏起来', b.Visible);
   c.Parent := FForm;
   AssertSame('没有下一个就上一个', a, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBarTests.TestTheFirstWindowLeavingHandsOverToTheSecond;
+var
+  a, b, c, d: TProbeWindow;
+begin
+  { 「原位置上的下一个」要的是**离开前**的位置。离开的窗口这时已经不在 Controls 里了,
+    位置得在它被摘下之前记住 —— 记不住就只能退成「最后一个」,那是 d 不是 b。 }
+  a := NewWindow;
+  b := NewWindow;
+  c := NewWindow;
+  d := NewWindow;
+  FBar.ActivateWindow(a);
+  a.Free;
+  AssertSame('第一个离开 → 第二个接班(释放)', b, FBar.ActiveWindow);
+  b.Parent := FForm;
+  AssertSame('第一个离开 → 第二个接班(改 Parent)', c, FBar.ActiveWindow);
+  AssertSame('d 还在最后', d, FBar.Windows[1]);
 end;
 
 procedure TTyToolWindowBarTests.TestRemovingAnotherWindowKeepsTheActiveOne;
