@@ -213,12 +213,26 @@ type
     False would lose the ends of every axis that is not thinned at all. }
   TTyAxisEndLabel = (aelAuto, aelShow, aelHide);
 
+  { WHICH RULES PICK AN AXIS' LABELS. A category axis builds only every
+    interval-th label, the interval measured or written; a value or log axis
+    and a time axis build every tick and never thin one by its index. All
+    three then lose an end label that crowds its neighbour, and any label that
+    crowds a kept one under hideOverlap. The zero value is the one that never
+    thins, so a spec that says nothing hides nothing by position. }
+  TTyLabelAxisKind = (lakValue, lakCategory, lakTime);
+
   TTyAxisLabelPlacement = record
     Index: Integer;
     Text: string;
     X, Y: Double;
     AnchorH: TTyTextAnchorH;
     AnchorV: TTyTextAnchorV;
+    { in the list upstream builds -- every value tick, a category axis' every
+      interval-th and its two ends -- whether or not it survives the overlap
+      rules }
+    Built: Boolean;
+    { a category axis' end that the interval did not land on }
+    OffInterval: Boolean;
     Shown: Boolean;
     { Drawn in the heavier weight. Carried on the PLACEMENT and not looked up
       again at paint time, because the measurement that reserved room for this
@@ -352,31 +366,50 @@ type
       deciding what a tick SAYS is the scale's job and the layout is only told
       the answer. }
 
-    { Labels that exist -- they were measured, they hold their place in the
-      parallel arrays -- but are not drawn. The two ends of a time axis are
-      the data's own ragged boundaries, and a `07:13` jammed against the
-      first round hour is the most visible mark of a careless port. }
-    LabelHidden: TTyBoolArray;
+    { A TIME AXIS' RAGGED ENDS: the data's own boundaries, not a round tick.
+      Built like any label, and hidden unless showMinLabel / showMaxLabel says
+      otherwise -- a `07:13` jammed against the first round hour is the most
+      visible mark of a careless port, and one the author asked for is theirs.
+      [Revised in batch 39: LabelHidden, never drawn whatever the option.] }
+    LabelNotNice: TTyBoolArray;
+    { A time label's level, which is its priority under hideOverlap: the
+      coarser ticks are kept first. }
+    LabelLevel: TTyIntegerArray;
     { Which labels carry the heavier weight: on a time axis the coarse ticks,
       the ones that say `Mar` among a run of day numbers. }
     LabelEmphasis: TTyBoolArray;
     { The weight those get. Nought means the spec's own weight, so an axis
       that marks no label for emphasis need not name one. }
     EmphasisFontWeight: Integer;
-    { DO NOT THIN. The uniform every-Nth step below is right for a category
-      axis, where the labels are interchangeable; a time axis' labels are not
-      -- dropping every other one takes the month markers with it and leaves a
-      row of day numbers that restart for no visible reason. Upstream thins a
-      time axis by measuring collisions instead, never by index.
+    { THE RULES THIS AXIS' LABELS ARE PICKED BY. Only a category axis is
+      thinned by index; upstream never drops a value, log or time label for its
+      position, only for crowding.
+      [Revised in batch 39: KeepEveryLabel, set on time axes alone, so value
+      and log axes were thinned like categories.] }
+    LabelKind: TTyLabelAxisKind;
+    { `axisLabel.interval: 0` exactly, on a category axis: every label, and
+      the end rules not even asked -- upstream's shouldShowAllLabels. A
+      negative interval builds every label too, but the ends are still
+      weighed. }
+    ShowAllLabels: Boolean;
+    { axisLabel.rotate as written, degrees: the auto interval turns the
+      band into the label's frame by it, before a top axis negates it. }
+    LabelRotateDeg: Double;
+    { the category axis' own band and first category, for the auto
+      interval's band width and the stride's alignment from nought }
+    OnBand: Boolean;
+    OrdinalStart: Integer;
+    { axisLabel.hideOverlap }
+    HideOverlap: Boolean;
+    { FROM THE ESTIMATE, on a value, log or time axis whose grid then shrank:
+      the labels that pass did not show. Upstream re-lays those labels out on
+      the final rect rather than building them again, and a label it hid then
+      is the first to go now. Empty otherwise. }
+    LabelSuggestIgnore: TTyBoolArray;
 
-      This is a statement about the AXIS TYPE. What the AUTHOR asked for is
-      ForcedLabelStep below, and the two cannot collide: an authored interval
-      is read on category axes only, and no category axis sets this. }
-    KeepEveryLabel: Boolean;
-
-    { `axisLabel.interval`, already turned into a stride: nought means the
-      author said nothing and the measured rule decides, 1 means every label,
-      N means every Nth.
+    { `axisLabel.interval` on a category axis, already turned into a stride:
+      nought means the author said nothing and the measured rule decides, 1
+      means every label, N means every Nth.
 
       A STRIDE AND NOT THE OPTION'S OWN NUMBER. `interval` counts what it
       SKIPS -- 0 shows everything, 1 shows every other one -- so the option's N
@@ -391,8 +424,10 @@ type
       only one of them draws the numbers. }
     TickStep: Integer;
 
-    { The two ends, separately deniable. `aelAuto` is upstream's default and
-      means `shown when the stride landed on it`. }
+    { The two ends. `aelAuto` is upstream's default: an end off the interval
+      or a time axis' ragged end is dropped, and an end that crowds its
+      neighbour gives way. `aelHide` drops it; `aelShow` keeps it and drops the
+      neighbour it crowds. }
     ShowMinLabel: TTyAxisEndLabel;
     ShowMaxLabel: TTyAxisEndLabel;
 
@@ -548,7 +583,15 @@ procedure TyShrinkRect(var ARect: TTyXYWH; const AMargin: TTyMargin4;
 function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
   AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer; const AContainer: TTyXYWH): TTyRectF;
+  APPI: Integer; const AContainer: TTyXYWH): TTyRectF; overload;
+{ The same, saying whether anything overflowed at all -- upstream's
+  noPxChange, which is not `the rect came out the same`: a shrink held at
+  the clamp still moves the rect. }
+function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
+  AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; const AContainer: TTyXYWH;
+  out ANoPxChange: Boolean): TTyRectF; overload;
 
 { Legacy grid.containLabel: for every axis in turn whose labels are not
   inside, the widest (or tallest) of all its labels -- unrotated, turned by
@@ -572,7 +615,8 @@ function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
 
 implementation
 
-uses tyControls.AdvChart.AxisName, tyControls.AdvChart.JsMath;
+uses tyControls.AdvChart.AxisName, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.AxisLabels;
 
 type
   TTyFixedContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -1005,36 +1049,95 @@ begin
     then Result := ASpec.EmphasisFontWeight;
 end;
 
-{ Whether label AIndex is drawn at all. }
-function HiddenAt(const ASpec: TTyAxisLayoutSpec; AIndex: Integer): Boolean;
+{ ONE LABEL'S BOX, as zrender holds it: the text's box hung by its anchor,
+  with axisLabel.textMargin round it (AMargin) and without (ABare), placed by
+  the label's point and turn. The end rules weigh the bare one unless the
+  author asked for overlaps to be resolved. }
+procedure LabelBoxes(const ASpec: TTyAxisLayoutSpec;
+  const APlace: TTyAxisLabelPlacement; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; out AMargin, ABare: TTyLabelBox);
+var w, h, x0, y0, padH, padV: Double;
 begin
-  Result := (AIndex >= 0) and (AIndex <= High(ASpec.LabelHidden))
-            and ASpec.LabelHidden[AIndex];
+  AMeasurer.MeasureLine(APlace.Text, ASpec.FontName, ASpec.FontSizeLogical,
+    WeightAt(ASpec, APlace.Index), w, h);
+  { zrender's adjustTextX / adjustTextY }
+  x0 := 0;
+  case APlace.AnchorH of
+    tahRight: x0 := x0 - w;
+    tahCentre: x0 := x0 - w / 2;
+  end;
+  y0 := 0;
+  case APlace.AnchorV of
+    tavBottom: y0 := y0 - h;
+    tavMiddle: y0 := y0 - h / 2;
+  end;
+  padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
+  padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
+  ABare.LocalRect := TyXYWH(x0, y0, w, h);
+  AMargin.LocalRect := TyRectExpand(ABare.LocalRect, padV, padH, padV, padH);
+  ABare.M := TyMatLocal(APlace.X, APlace.Y, ASpec.RotationRad);
+  AMargin.M := ABare.M;
+  ABare.Rect := TyRectApplyMat(ABare.LocalRect, ABare.M);
+  AMargin.Rect := TyRectApplyMat(AMargin.LocalRect, AMargin.M);
+  ABare.AxisAligned := TyMatAxisAligned(ABare.M);
+  AMargin.AxisAligned := ABare.AxisAligned;
 end;
 
-{ Does one of the two end-label options decide this index outright?
-
-  THE ENDS ARE THE ONLY INDICES A STRIDE CAN BE ASKED TO OVERRULE. A stride
-  anchored at nought always lands on the first label and lands on the last
-  only when the count happens to suit it, so the last label of a thinned
-  axis is missing far more often than the first -- and it is the one a
-  reader looks for, because it says where the data stops.
-
-  Neither option applies to an axis with a single label: upstream's rule
-  needs an inner neighbour to weigh the end against and bails without one. }
-function EndLabelDecides(const ASpec: TTyAxisLayoutSpec;
-  AIndex, ACount: Integer; out AShown: Boolean): Boolean;
-var opt: TTyAxisEndLabel;
+{ The first line of a label: the auto interval measures one line's height. }
+function FirstLine(const AText: string): string;
+var p: Integer;
 begin
-  Result := False;
-  AShown := False;
-  if ACount < 2 then Exit;
-  if AIndex = 0 then opt := ASpec.ShowMinLabel
-  else if AIndex = ACount - 1 then opt := ASpec.ShowMaxLabel
-  else Exit;
-  if opt = aelAuto then Exit;
-  AShown := opt = aelShow;
-  Result := True;
+  p := Pos(#10, AText);
+  if p > 0 then Result := Copy(AText, 1, p - 1) else Result := AText;
+end;
+
+{ A CATEGORY AXIS' INTERVAL on APlot: the author's, or measured as upstream
+  measures it -- every label up to forty, then every n/40-th, each in the
+  label font, over the band width turned into the label's frame. }
+function CategoryIntervalOn(const ASpec: TTyAxisLayoutSpec;
+  const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): Double;
+var
+  n, s, i, k: Integer;
+  len, unitSpan, axisRot, w, h, lw: Double;
+  ws, hs: array of Double;
+begin
+  if ASpec.ForcedLabelStep > 0 then Exit(ASpec.ForcedLabelStep - 1);
+  Result := 0;
+  n := Length(ASpec.Labels);
+  if (n - 1 < 1) or (AMeasurer = nil) then Exit;
+  s := TyCategorySampleStep(n);
+  if AxisIsHorizontal(ASpec.Side) then
+  begin
+    len := TyRectFWidth(APlot);
+    axisRot := 0;
+  end
+  else
+  begin
+    len := TyRectFHeight(APlot);
+    axisRot := 90;
+  end;
+  unitSpan := TyCategoryUnitSpan(len, n, ASpec.OnBand, ASpec.Inverse);
+  SetLength(ws, (n - 1) div s + 1);
+  SetLength(hs, Length(ws));
+  k := 0;
+  i := 0;
+  while i <= n - 1 do
+  begin
+    { the widest line, and one line's height }
+    AMeasurer.MeasureLine(ASpec.Labels[i], ASpec.FontName,
+      ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
+    AMeasurer.MeasureLine(FirstLine(ASpec.Labels[i]), ASpec.FontName,
+      ASpec.FontSizeLogical, ASpec.FontWeight, lw, h);
+    ws[k] := w;
+    hs[k] := h;
+    Inc(k);
+    Inc(i, s);
+  end;
+  SetLength(ws, k);
+  SetLength(hs, k);
+  Result := TyCategoryAutoInterval(ws, hs, unitSpan, axisRot,
+    ASpec.LabelRotateDeg, AxisScaleF(7, APPI));
 end;
 
 procedure MeasureLabels(const ASpec: TTyAxisLayoutSpec;
@@ -1290,41 +1393,26 @@ function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
 var
   places: TTyAxisLabelPlacementArray;
   i, n: Integer;
-  w, h, padH, padV, x0, y0: Double;
+  box, bare: TTyLabelBox;
 begin
   Result := nil;
   if (AMeasurer = nil) or (not ASpec.ShowLabels) then Exit;
   { THE LABELS THIS RECT SHOWS: thinned on it, the hidden ends left out --
     upstream measures the survivors and nothing else }
   places := TyLayoutAxisLabels(ASpec, ARect, AMeasurer, APPI);
-  padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
-  padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
   SetLength(Result, Length(places));
   n := 0;
   for i := 0 to High(places) do
   begin
     if (not places[i].Shown) or (places[i].Text = '') then Continue;
-    AMeasurer.MeasureLine(places[i].Text, ASpec.FontName,
-      ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
-    { zrender's adjustTextX / adjustTextY, then the textMargin round it }
-    x0 := 0;
-    case places[i].AnchorH of
-      tahRight: x0 := x0 - w;
-      tahCentre: x0 := x0 - w / 2;
-    end;
-    y0 := 0;
-    case places[i].AnchorV of
-      tavBottom: y0 := y0 - h;
-      tavMiddle: y0 := y0 - h / 2;
-    end;
+    LabelBoxes(ASpec, places[i], AMeasurer, APPI, box, bare);
     Result[n].Index := i;
     Result[n].X := places[i].X;
     Result[n].Y := places[i].Y;
-    Result[n].LocalRect := TyRectExpand(TyXYWH(x0, y0, w, h), padV, padH,
-      padV, padH);
-    Result[n].M := TyMatLocal(places[i].X, places[i].Y, ASpec.RotationRad);
-    Result[n].Rect := TyRectApplyMat(Result[n].LocalRect, Result[n].M);
-    Result[n].AxisAligned := TyMatAxisAligned(Result[n].M);
+    Result[n].LocalRect := box.LocalRect;
+    Result[n].M := box.M;
+    Result[n].Rect := box.Rect;
+    Result[n].AxisAligned := box.AxisAligned;
     Inc(n);
   end;
   SetLength(Result, n);
@@ -1485,11 +1573,23 @@ function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
   AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; const AContainer: TTyXYWH): TTyRectF;
+var noPx: Boolean;
+begin
+  Result := TySolveGridBounds(ARaw, AOuter, AContain, AClampW, AClampH, AAxes,
+    AMeasurer, APPI, AContainer, noPx);
+end;
+
+function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
+  AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; const AContainer: TTyXYWH;
+  out ANoPxChange: Boolean): TTyRectF;
 var
   items, one: TTyBoundsItemArray;
   names: TTyAxisNamePlacementArray;
   i, k, n: Integer;
   r: TTyXYWH;
+  margin: TTyMargin4;
 begin
   items := nil;
   n := 0;
@@ -1522,8 +1622,11 @@ begin
   end;
   SetLength(items, n);
   r := TyXYWHOfRect(ARaw);
-  TyShrinkRect(r, TyOuterBoundsMargin(AOuter, TyXYWHOfRect(ARaw), items),
-    AClampW, AClampH);
+  margin := TyOuterBoundsMargin(AOuter, TyXYWHOfRect(ARaw), items);
+  ANoPxChange := True;
+  for k := 0 to 3 do
+    if margin[k] > 0 then ANoPxChange := False;
+  TyShrinkRect(r, margin, AClampW, AClampH);
   Result := TyRectOfXYWH(r);
 end;
 
@@ -1579,76 +1682,31 @@ begin
   Result := TyRectOfXYWH(r);
 end;
 
-{ Does showing every AStep-th label leave every shown pair clear of its
-  neighbour? Positions are fractions of the axis, ALength is the axis in px. }
-function StepFits(const APositions: TTyDoubleArray; const AAlongEach: TTyDoubleArray;
-  ALength, AMinGap: Double; AStep: Integer): Boolean;
-var
-  i, prev: Integer;
-  cPrev, cCur, need: Double;
-begin
-  Result := True;
-  prev := -1;
-  i := 0;
-  while i <= High(APositions) do
-  begin
-    if prev >= 0 then
-    begin
-      cPrev := APositions[prev] * ALength;
-      cCur := APositions[i] * ALength;
-      need := (AAlongEach[prev] + AAlongEach[i]) / 2 + AMinGap;
-      if Abs(cCur - cPrev) < need then
-        Exit(False);
-    end;
-    prev := i;
-    Inc(i, AStep);
-  end;
-end;
-
 function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): Integer;
 var
-  across, along, len, minGap: Double;
-  each: TTyDoubleArray;
-  n, step: Integer;
+  iv: Double;
+  n: Integer;
 begin
+  { ONLY A CATEGORY AXIS HAS A STRIDE. A value, log or time axis builds a
+    label per tick and never drops one for its index.
+    [Revised in batch 39: every axis but a time one was thinned to the
+    smallest uniform stride that left 4 px between labels.] }
   Result := 1;
-  { An axis that says so is never thinned by index. }
-  if ASpec.KeepEveryLabel then Exit;
-  { AND AN AUTHOR WHO NAMED A STRIDE GETS IT, measured or not. `interval` is
-    not a hint: `interval: 0` on a crowded axis means `draw them all and let
-    them collide`, which is a thing people write on purpose and which no
-    value the measured rule can return expresses.
-
-    BEFORE the measuring, and that placement is cost rather than answer:
-    mutation testing moved this line below MeasureLabels and every reading
-    stayed identical, because measuring changes nothing but the locals. It
-    stays here because an axis of five thousand categories that was told what
-    to do should not measure five thousand strings to be told again. }
+  if ASpec.LabelKind <> lakCategory then Exit;
+  { AN AUTHOR WHO NAMED A STRIDE GETS IT, measured or not. `interval: 0` on a
+    crowded axis means `draw them all and let them collide`, which is a thing
+    people write on purpose. And it stays ahead of the measuring because an
+    axis of five thousand categories that was told what to do should not
+    measure them to be told again. }
   if ASpec.ForcedLabelStep > 0 then Exit(ASpec.ForcedLabelStep);
-  MeasureLabels(ASpec, AMeasurer, across, along, each);
-  n := Length(each);
-  if n < 2 then Exit;
-  if AxisIsHorizontal(ASpec.Side) then
-    len := TyRectFWidth(APlot)
-  else
-    len := TyRectFHeight(APlot);
-  if len <= 0 then Exit;
-  minGap := AxisScaleF(4, APPI);
-  { A UNIFORM step, not a greedy keep-if-it-fits. Greedy leaves the kept labels
-    unevenly spaced, which on a category axis reads as missing data rather than
-    as thinning. This is also what axisLabel.interval:'auto' means in ECharts. }
-  for step := 1 to n - 1 do
-    if StepFits(ASpec.Positions, each, len, minGap, step) then
-      Exit(step);
-  { Stop ONE SHORT of n and state the terminal case outright. At step = n the
-    shown indices are 0, n, 2n... and the last label is n-1, so only the first
-    is ever shown and StepFits can never fail -- which would make this line
-    unreachable if the loop ran to n, and unreachable code that looks like a
-    safety net is worse than none. Written this way it is the answer, not a
-    fallback: an axis with no labels at all looks broken, and one still tells
-    the reader what the axis counts in. }
-  Result := n;
+  { MEASURED EVEN WITH THE LABELS OFF: the ticks and split lines follow this
+    stride whether or not the labels are drawn }
+  iv := CategoryIntervalOn(ASpec, APlot, AMeasurer, APPI);
+  n := Length(ASpec.Labels);
+  { an infinite interval, or one past the last label, keeps the first alone }
+  if IsInfinite(iv) or (iv + 1 > n) then Result := Max(1, n)
+  else Result := Trunc(iv) + 1;
 end;
 
 { Into [0, 2*PI), which is upstream's remRadian and NOT the [-PI, PI) a
@@ -1730,16 +1788,17 @@ end;
 function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
 var
-  i, step: Integer;
-  endShown: Boolean;
+  i, k, m, n: Integer;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
-  gap, len, base: Double;
+  gap, len, iv: Double;
+  values: TTyIntegerArray;
+  offs: TTyBoolArray;
+  cands: TTyLabelCandidateArray;
 begin
   Result := nil;
   SetLength(Result, Length(ASpec.Labels));
   if Length(ASpec.Labels) = 0 then Exit;
-  step := TyAxisLabelStep(ASpec, APlot, AMeasurer, APPI);
   AnchorsFor(ASpec, ah, av);
   { THE SAME SUM TyAxisThickness RESERVES, and it has to be: the thickness is
     what the plot gives up and this is where the text goes in it. They were
@@ -1771,16 +1830,10 @@ begin
   begin
     Result[i].Index := i;
     Result[i].Text := ASpec.Labels[i];
-    { HIDDEN IS NOT THE SAME AS THINNED. A thinned label was crowded out and
-      the ones around it stand where they always did; a hidden one was never
-      going to be drawn, yet it keeps its place in every parallel array so
-      that the indices still line up with the ticks. }
-    if EndLabelDecides(ASpec, i, Length(ASpec.Labels), endShown) then
-      Result[i].Shown := ASpec.ShowLabels and endShown
-                         and (not HiddenAt(ASpec, i))
-    else
-      Result[i].Shown := ASpec.ShowLabels and (i mod step = 0)
-                         and (not HiddenAt(ASpec, i));
+    { decided below, once every label has its place }
+    Result[i].Built := False;
+    Result[i].OffInterval := False;
+    Result[i].Shown := False;
     Result[i].Emphasis := (ASpec.EmphasisFontWeight > 0)
                           and (i <= High(ASpec.LabelEmphasis))
                           and ASpec.LabelEmphasis[i];
@@ -1813,6 +1866,75 @@ begin
           Result[i].Y := APlot.Bottom - ASpec.Positions[i] * len;
         end;
     end;
+  end;
+
+  { NOTHING IS BUILT WITH THE LABELS OFF -- a hidden axis' labels are not
+    there to crowd anything }
+  if not ASpec.ShowLabels then Exit;
+  n := Length(ASpec.Labels);
+
+  { THE BUILT LIST. A category axis: every interval-th category from nought,
+    and its two ends; anything else: every tick. }
+  values := nil;
+  offs := nil;
+  if ASpec.LabelKind = lakCategory then
+  begin
+    iv := CategoryIntervalOn(ASpec, APlot, AMeasurer, APPI);
+    TyCategoryBuiltList(ASpec.OrdinalStart, n, iv, values, offs);
+  end
+  else
+  begin
+    SetLength(values, n);
+    SetLength(offs, n);
+    for i := 0 to n - 1 do
+    begin
+      values[i] := ASpec.OrdinalStart + i;
+      offs[i] := False;
+    end;
+  end;
+  m := 0;
+  SetLength(cands, Length(values));
+  for k := 0 to High(values) do
+  begin
+    i := values[k] - ASpec.OrdinalStart;
+    if (i < 0) or (i >= n) then Continue;
+    cands[m] := Default(TTyLabelCandidate);
+    cands[m].Index := i;
+    cands[m].OffInterval := offs[k];
+    cands[m].NotNice := (ASpec.LabelKind = lakTime)
+      and (i <= High(ASpec.LabelNotNice)) and ASpec.LabelNotNice[i];
+    cands[m].SuggestIgnore := (i <= High(ASpec.LabelSuggestIgnore))
+      and ASpec.LabelSuggestIgnore[i];
+    { upstream's z2: ten, and a time tick's level on top }
+    cands[m].Priority := 10;
+    if (ASpec.LabelKind = lakTime) and (i <= High(ASpec.LabelLevel)) then
+      cands[m].Priority := 10 + ASpec.LabelLevel[i];
+    Inc(m);
+  end;
+  SetLength(cands, m);
+
+  { THE BOXES the rules weigh: every one under hideOverlap, else only the
+    two at each end }
+  if AMeasurer <> nil then
+    for k := 0 to m - 1 do
+      if ASpec.HideOverlap or (k <= 1) or (k >= m - 2) then
+      begin
+        LabelBoxes(ASpec, Result[cands[k].Index], AMeasurer, APPI,
+          cands[k].Margin, cands[k].Bare);
+        cands[k].HasBox := True;
+      end;
+  if AMeasurer <> nil then
+  begin
+    TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
+      ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
+      ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap);
+    if ASpec.HideOverlap then TyHideOverlap(cands);
+  end;
+  for k := 0 to m - 1 do
+  begin
+    Result[cands[k].Index].Built := True;
+    Result[cands[k].Index].OffInterval := cands[k].OffInterval;
+    Result[cands[k].Index].Shown := not cands[k].Ignore;
   end;
 end;
 

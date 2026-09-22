@@ -158,8 +158,8 @@ begin
   Result.LabelMarginLogical := 8;
   Result.RotationRad := ARotateDeg * Pi / 180;
   Result.LabelInside := AInside;
-  { Never thinned, so index 0 is always placed and always shown. }
-  Result.KeepEveryLabel := True;
+  { A value axis' labels, never thinned by index, and two far enough apart
+  that neither end gives way: index 0 is always placed and always shown. }
 end;
 
 function TAdvChartAxisLabelTest.AnchorsOf(ASide: TTyAxisSide;
@@ -261,7 +261,7 @@ function TAdvChartAxisLabelTest.Crowded(AStride: Integer): TTyAxisLayoutSpec;
 var i: Integer;
 begin
   Result := Spec(asBottom, 0);
-  Result.KeepEveryLabel := False;
+  Result.LabelKind := lakCategory;
   Result.ForcedLabelStep := AStride;
   SetLength(Result.Labels, 12);
   SetLength(Result.Positions, 12);
@@ -294,15 +294,24 @@ begin
     authored answer are DIFFERENT, so that the next two tests are testing
     the author's number rather than agreeing with the measurer by luck. }
   AssertEquals('measured, for contrast', '0,4,8', ShownIndices(Crowded(0)));
-  AssertEquals('authored', '0,2,4,6,8,10', ShownIndices(Crowded(2)));
+  { AND THE FIRST GIVES WAY: at every other label these 49-px labels stand
+    34.5 px apart, and an end that crowds its neighbour is dropped.
+    [Revised in batch 39: 0,2,4,6,8,10 -- the ends were never weighed.] }
+  AssertEquals('authored', '2,4,6,8,10', ShownIndices(Crowded(2)));
 end;
 
 procedure TAdvChartAxisLabelTest.TestAStrideOfOneKeepsThemAllHoweverCrowded;
+var sp: TTyAxisLayoutSpec;
 begin
   { `interval: 0` -- the commonest value anybody writes -- means DRAW THEM
     ALL, collisions and all. No value the measured rule can return says
     that, because the measured rule exists precisely to avoid collisions. }
-  AssertEquals('0,1,2,3,4,5,6,7,8,9,10,11', ShownIndices(Crowded(1)));
+  sp := Crowded(1);
+  sp.ShowAllLabels := True;
+  AssertEquals('0,1,2,3,4,5,6,7,8,9,10,11', ShownIndices(sp));
+  { A NEGATIVE ONE BUILDS THEM ALL TOO, but only nought skips the ends: the
+    two that crowd their neighbours go }
+  AssertEquals('interval -1', '1,2,3,4,5,6,7,8,9,10', ShownIndices(Crowded(1)));
 end;
 
 procedure TAdvChartAxisLabelTest.TestAStrideOfThreeKeepsEveryThird;
@@ -329,7 +338,9 @@ begin
     and the stride is the thing most likely to have taken it. }
   sp := Crowded(5);
   sp.ShowMaxLabel := aelShow;
-  AssertEquals('0,5,10,11', ShownIndices(sp));
+  { AND THE ONE IT CROWDS GIVES WAY INSTEAD: 11 and 10 are 17 px apart
+    [Revised in batch 39: 0,5,10,11 -- both kept, overlapping.] }
+  AssertEquals('0,5,11', ShownIndices(sp));
 end;
 
 procedure TAdvChartAxisLabelTest.TestShowMinLabelCanDropAnOnStrideFirstLabel;
@@ -551,8 +562,11 @@ begin
     which says where the data stops -- is off the grid and goes. }
   DrawCats(12, '{"interval":4}');
   AssertEquals('0,5,10', ShownIndices);
+  { KEPT, AND THE TENTH GIVES WAY: the two crowd each other, and upstream's
+    showMaxLabel keeps its end by dropping the neighbour.
+    [Revised in batch 39: 0,5,10,11, the two overlapping.] }
   DrawCats(12, '{"interval":4,"showMaxLabel":true}');
-  AssertEquals('0,5,10,11', ShownIndices);
+  AssertEquals('0,5,11', ShownIndices);
   DrawCats(12, '{"interval":4,"showMinLabel":false}');
   AssertEquals('5,10', ShownIndices);
 end;

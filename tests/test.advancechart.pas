@@ -76,7 +76,7 @@ type
     procedure TestMinIntervalKeepsACountingAxisWhole;
     procedure TestMaxIntervalCapsTheStep;
     procedure TestAValueAxisBoundaryGapPadsTheExtent;
-    procedure TestACrowdedAxisThinsItsLabels;
+    procedure TestACrowdedValueAxisDrawsEveryLabelButItsEnds;
     procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
     procedure TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
@@ -104,7 +104,7 @@ type
     procedure TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
     procedure TestTheLayoutOwnsTheThinningDecision;
     procedure TestTheGridThinsWithTheLabels;
-    procedure TestMinorTicksVanishWhenTheMajorsAreThinned;
+    procedure TestACrowdedValueAxisKeepsItsMinorTicks;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
     procedure TestAThickerThemeBorderDrawsAThickerAxis;
@@ -691,7 +691,7 @@ begin
     Length(FChart.Build.Axis('yAxis', 0).Scale.GetTicks) <= 4);
 end;
 
-procedure TAdvanceChartTest.TestACrowdedAxisThinsItsLabels;
+procedure TAdvanceChartTest.TestACrowdedValueAxisDrawsEveryLabelButItsEnds;
 var
   x, y, ink, gutter, x0, yTop, yBot: Integer;
   p, bg: TBGRAPixel;
@@ -741,14 +741,25 @@ begin
   fewTicks := Bands;
   AssertTrue('a sparse axis drew some labels', fewTicks > 1);
 
-  { Same control, same height, a scale that wants far more ticks. }
+  { Same control, same height, a scale that wants far more ticks. A VALUE
+    AXIS IS NEVER THINNED BY INDEX: every interior label is drawn, crowded or
+    not, and only the two ends -- each crowding its neighbour -- give way.
+    [Revised in batch 39: this demanded fewer than 40 label bands, the port
+    thinning the value axis as it thins a category one.] }
   FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 3000,'
     + ' interval: 20 }, series: [{ type: ''bar'', data: [3000] }] }';
   Draw;
-  bg := PixelAt(200, 150);
-  manyTicks := Bands;
-  AssertTrue(Format('%d label bands for a scale asking for 150 ticks -- '
-    + 'nothing is thinning them', [manyTicks]), manyTicks < 40);
+  AssertEquals('151 labels', 151, Length(FChart.Build.Grid(0).SpecFor(
+    FChart.Build.Grid(0).YAxis(0))^.Placements));
+  manyTicks := 0;
+  for x := 0 to 150 do
+    if FChart.Build.Grid(0).SpecFor(FChart.Build.Grid(0).YAxis(0))^
+      .Placements[x].Shown then Inc(manyTicks);
+  AssertEquals('149 of them drawn', 149, manyTicks);
+  AssertFalse('not the first', FChart.Build.Grid(0).SpecFor(
+    FChart.Build.Grid(0).YAxis(0))^.Placements[0].Shown);
+  AssertFalse('nor the last', FChart.Build.Grid(0).SpecFor(
+    FChart.Build.Grid(0).YAxis(0))^.Placements[150].Shown);
 end;
 
 procedure TAdvanceChartTest.TestResizingRelaysOutTheAxes;
@@ -1526,7 +1537,7 @@ begin
   end;
 end;
 
-procedure TAdvanceChartTest.TestMinorTicksVanishWhenTheMajorsAreThinned;
+procedure TAdvanceChartTest.TestACrowdedValueAxisKeepsItsMinorTicks;
 
   { Red runs in the band BELOW the major ticks, where only a minor tick reaches.
     The minor-tick key alone is overridden, so the count is of minor ticks. }
@@ -1574,13 +1585,16 @@ begin
   AssertTrue(Format('an uncrowded axis shows its minor ticks (%d runs)',
     [roomy]), roomy > 2);
 
+  { A VALUE AXIS IS NEVER THINNED BY INDEX, so however crowded, its majors
+    all stand and so do the minors between them -- upstream draws 1200 here.
+    [Revised in batch 39: the port thinned the value axis and drew none.] }
   crowded := MinorRuns('{ xAxis: { min: 0, max: 4000, interval: 10,'
     + ' minorTick: { show: true, splitNumber: 4 } }, yAxis: {},'
     + ' series: [{ type: ''line'', data: [1] }] }');
   gb := FChart.Build.Grid(0);
-  AssertTrue('the crowded fixture really thins',
-    gb.SpecFor(gb.XAxis(0))^.LabelStep > 1);
-  AssertEquals('and then it draws no minor ticks at all', 0, crowded);
+  AssertEquals('not thinned', 1, gb.SpecFor(gb.XAxis(0))^.LabelStep);
+  AssertTrue(Format('and its minor ticks are drawn (%d runs)', [crowded]),
+    crowded > 0);
 end;
 
 procedure TAdvanceChartTest.TestALayeredFrameDrawsTheSamePictureAsAWholeOne;

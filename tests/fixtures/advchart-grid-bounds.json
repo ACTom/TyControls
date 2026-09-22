@@ -8607,9 +8607,7 @@
     }
    ],
    "tol": "3d65555555555555",
-   "tolText": "6.063298011819521e-13",
-   "deferred": true,
-   "why": "a value axis is never thinned upstream; the port thins it by index when its labels crowd -- the thinning batch"
+   "tolText": "6.063298011819521e-13"
   },
   {
    "name": "Z12 value x labels overflow right, grid right 0",
@@ -9248,9 +9246,7 @@
     }
    ],
    "tol": "3d84000000000001",
-   "tolText": "2.273736754432321e-12",
-   "deferred": true,
-   "why": "a value axis is never thinned upstream; the port thins it by index when its labels crowd -- the thinning batch"
+   "tolText": "2.273736754432321e-12"
   },
   {
    "name": "AD interval 0 long categories, grid left/right 0: band labels under-shrink",
@@ -27134,7 +27130,7 @@
    "tol": "3d60000000000000",
    "tolText": "4.547473508864641e-13",
    "documentary": true,
-   "note": "nothing shrinks; upstream labels every fourth category (the category auto interval picks 3, and the last category's label is dropped for overlapping), which the port does not reproduce yet"
+   "note": "nothing shrinks; upstream labels every fourth category (the category auto interval picks 3); the last category's label is built off the interval and dropped for that, not for overlapping"
   },
   {
    "name": "I names, outerBoundsContain all",
@@ -29433,9 +29429,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "hideOverlap: the estimate and the final rect keep different labels; the thinning batch"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "B long categories, horizontal: category auto interval",
@@ -29716,9 +29710,7 @@
     }
    ],
    "tol": "3d60000000000000",
-   "tolText": "4.547473508864641e-13",
-   "deferred": true,
-   "why": "the category auto interval is the thinning batch"
+   "tolText": "4.547473508864641e-13"
   },
   {
    "name": "AA label margin 20 + fontSize 14, grid left/bottom 0",

@@ -849,11 +849,11 @@ begin
   AssertTrue('the axis has labels', Length(p^.Labels) > 2);
   AssertEquals('the ragged start is still a tick', '07:13', p^.Labels[0]);
   hidden := 0;
-  for i := 0 to High(p^.LabelHidden) do
-    if p^.LabelHidden[i] then Inc(hidden);
-  AssertEquals('both ends hidden', 2, hidden);
-  AssertTrue('the first is one of them', p^.LabelHidden[0]);
-  AssertTrue('and so is the last', p^.LabelHidden[High(p^.LabelHidden)]);
+  for i := 0 to High(p^.LabelNotNice) do
+    if p^.LabelNotNice[i] then Inc(hidden);
+  AssertEquals('both ends ragged', 2, hidden);
+  AssertTrue('the first is one of them', p^.LabelNotNice[0]);
+  AssertTrue('and so is the last', p^.LabelNotNice[High(p^.LabelNotNice)]);
   AssertEquals('and neither is drawn', '08:00|10:00|12:00|14:00|16:00|18:00',
     ShownLabels);
 end;
@@ -997,11 +997,13 @@ begin
   { A SENTINEL IN THE LOCALE TIER, so that the two tiers cannot accidentally
     give the same answer and let a chart with its own hardcoded table pass
     both halves of this. On an English machine they otherwise would. }
-  DefaultFormatSettings.ShortMonthNames[3] := 'LocaleProbeMar';
+  { THREE LETTERS, like the real one: a first label much wider than its
+    neighbour crowds it and gives way, as upstream's does }
+  DefaultFormatSettings.ShortMonthNames[3] := 'MaR';
   TyDateTimeNameSource := dnLocale;
   Draw(cTwoDays);
   AssertEquals('the machine''s own name for March',
-    'LocaleProbeMar', FirstLabel);
+    'MaR', FirstLabel);
   { CLEARED IN BETWEEN, because writing the same option text twice is a
     deliberate no-op and the labels would otherwise be the previous pass'.
     That is also the limit of this: a chart already built does not relabel

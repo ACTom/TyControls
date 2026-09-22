@@ -132,6 +132,12 @@ type
       time boundary) but the author's override does not. }
     ShowMinLabel: TTyAxisEndLabel;
     ShowMaxLabel: TTyAxisEndLabel;
+    { `axisLabel.interval: 0` exactly on a category axis: every label, and
+      the end rules not asked -- a negative interval also builds them all, but
+      is not this }
+    ShowAllLabels: Boolean;
+    { axisLabel.hideOverlap, in JavaScript's truthiness }
+    HideOverlap: Boolean;
   end;
 
 
@@ -1201,6 +1207,17 @@ begin
   end;
   Result.ShowMinLabel := EndLabelIn(ANode, 'showMinLabel');
   Result.ShowMaxLabel := EndLabelIn(ANode, 'showMaxLabel');
+  if cat then
+  begin
+    d := FindIn(ObjOf(FindIn(ANode, 'axisLabel')), 'interval');
+    Result.ShowAllLabels := (d <> nil) and (d.JSONType = jtNumber)
+      and (not IsNan(d.AsFloat)) and (d.AsFloat = 0);
+  end;
+  d := FindIn(ObjOf(FindIn(ANode, 'axisLabel')), 'hideOverlap');
+  Result.HideOverlap := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (not IsNan(d.AsFloat)) and (d.AsFloat <> 0))
+    or ((d.JSONType = jtString) and (d.AsString <> ''))
+    or (d.JSONType in [jtArray, jtObject]));
 
   Result.TickInside := SubBoolIn(ANode, 'axisTick', 'inside', False);
   Result.LabelInside := SubBoolIn(ANode, 'axisLabel', 'inside', False);
@@ -1746,6 +1763,9 @@ var
   containLabel: Boolean;
   names: TTyAxisNamePlacementArray;
   vp: TTyRectF;
+  { whether the grid's estimate ran, and whether it overflowed anything }
+  estimated, noPx: Boolean;
+  est: TTyAxisLabelPlacementArray;
 
   { `grid.containLabel` in JavaScript's truthiness: true, a non-zero number,
     a non-empty string, any object }
@@ -1826,6 +1846,8 @@ var
   begin
     raw := AGrid.FOuterRect;
     Result := raw;
+    estimated := False;
+    noPx := True;
     { LEGACY containLabel WINS, and every outerBounds key is ignored }
     if ContainLabelOn(AGridNode) then
       Exit(TyLegacyContainLabel(raw, ASpecs, AMeasurer, APPI));
@@ -1872,7 +1894,8 @@ var
     { THE NAME MARGIN LEVEL IS OF THE CANVAS: the grid's rect against the
       container it was laid out in }
     Result := TySolveGridBounds(raw, outer, contain, cw, ch, ASpecs,
-      AMeasurer, APPI, TyXYWHOfRect(vp));
+      AMeasurer, APPI, TyXYWHOfRect(vp), noPx);
+    estimated := True;
   end;
 
   { nameTextStyle's own padding: textMargin, a number or upstream's css
@@ -2026,6 +2049,13 @@ var
     ASpec.LegacyLabels := AFurn.ShowLabels;
     ASpec.ShowTicks := AFurn.ShowTicks;
     ASpec.ForcedLabelStep := AFurn.LabelStep;
+    ASpec.ShowAllLabels := AFurn.ShowAllLabels;
+    ASpec.HideOverlap := AFurn.HideOverlap;
+    ASpec.LabelRotateDeg := AFurn.LabelRotateDeg;
+    ASpec.OnBand := AAxis.OnBand;
+    if AAxis.AxisType = atCategory then ASpec.LabelKind := lakCategory
+    else if AAxis.AxisType = atTime then ASpec.LabelKind := lakTime
+    else ASpec.LabelKind := lakValue;
     ASpec.TickStep := AFurn.TickStep;
     ASpec.ShowMinLabel := AFurn.ShowMinLabel;
     ASpec.ShowMaxLabel := AFurn.ShowMaxLabel;
@@ -2139,11 +2169,10 @@ var
     SetLength(ASpec.Proportions, Length(ticks));
     if isTime then
     begin
-      SetLength(ASpec.LabelHidden, Length(ticks));
+      SetLength(ASpec.LabelNotNice, Length(ticks));
+      SetLength(ASpec.LabelLevel, Length(ticks));
       SetLength(ASpec.LabelEmphasis, Length(ticks));
-      { A time axis is never thinned by index, and its coarse ticks are the
-        ones that carry the weight. }
-      ASpec.KeepEveryLabel := True;
+      { its coarse ticks are the ones that carry the weight }
       ASpec.EmphasisFontWeight := AText.EmphasisFontWeight;
     end;
     kept := 0;
@@ -2157,12 +2186,12 @@ var
         tt.Level := ticks[q].TimeLevel;
         tt.NotNice := ticks[q].NotNice;
         ASpec.Labels[kept] := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
-        { THE TWO RAGGED ENDS KEEP THEIR TICKS AND LOSE THEIR TEXT. The extent
-          of a time axis is the data's own, never rounded outwards, so its
-          first and last ticks are wherever the data happens to start and
-          stop; labelling those puts a `07:13` hard against the first round
-          hour. }
-        ASpec.LabelHidden[kept] := ticks[q].NotNice;
+        { THE TWO RAGGED ENDS. The extent of a time axis is the data's own,
+          never rounded outwards, so its first and last ticks are wherever
+          the data happens to start and stop; labelling those puts a `07:13`
+          hard against the first round hour -- unless the author asks. }
+        ASpec.LabelNotNice[kept] := ticks[q].NotNice;
+        ASpec.LabelLevel[kept] := ticks[q].TimeLevel;
         { Every level above the finest is emphasised, which is what makes an
           axis read `12 13 14 Feb 2 3` rather than as six equal numbers. }
         ASpec.LabelEmphasis[kept] := ticks[q].TimeLevel >= 1;
@@ -2184,6 +2213,10 @@ var
           ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
           AxisScaleF(ASpec.LabelWidthLogical, APPI));
       ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
+      { the first category, which the stride is aligned from nought against }
+      if (kept = 0) and (AAxis.Scale is TTyOrdinalScale) then
+        ASpec.OrdinalStart := Round(TTyOrdinalScale(AAxis.Scale).TickToOrdinal(
+          ticks[q].Value));
       { upstream's proportion: the tick in the scale's own extent -- an
         ordinal's raw number, not band-adjusted and not inverted }
       if AAxis.Scale is TTyOrdinalScale then
@@ -2198,7 +2231,8 @@ var
     SetLength(ASpec.Proportions, kept);
     if isTime then
     begin
-      SetLength(ASpec.LabelHidden, kept);
+      SetLength(ASpec.LabelNotNice, kept);
+      SetLength(ASpec.LabelLevel, kept);
       SetLength(ASpec.LabelEmphasis, kept);
     end;
   end;
@@ -2257,6 +2291,22 @@ begin
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
     gb.FPlotRect := SolveGridRect(gb, gridNode, specs);
+
+    { WHAT THE ESTIMATE HID, CARRIED OVER. After a shrink upstream builds a
+      category axis' labels again on the final rect, but lays a value, log or
+      time axis' same labels out again -- and a label the estimate hid is the
+      first to go this time, under the end rules and under hideOverlap
+      alike. With nothing overflowed the estimate is the answer, which laying
+      out again on the same rect reproduces. }
+    if estimated and not noPx then
+      for t := 0 to High(specs) do
+        if specs[t].LabelKind <> lakCategory then
+        begin
+          est := TyLayoutAxisLabels(specs[t], gb.FOuterRect, AMeasurer, APPI);
+          SetLength(specs[t].LabelSuggestIgnore, Length(est));
+          for i := 0 to High(est) do
+            specs[t].LabelSuggestIgnore[i] := not est[i].Shown;
+        end;
 
     { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
       measuring every label, and the paint pass used to derive them itself on

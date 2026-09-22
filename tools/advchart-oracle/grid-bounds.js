@@ -69,9 +69,9 @@
 // must give rect exactly. none: rect must be raw. A case that fails is recorded
 // all the same, deferred, with the reason.
 //
-// A case marked deferred depends on something the port does not do yet (category
-// auto interval, hideOverlap, label font size, truncate and break, the grid box
-// merge); its upstream answer is recorded so a later batch only has to take the
+// A case marked deferred depends on something the port does not do yet (label
+// font size, truncate and break, the grid box merge, a category extent widened
+// by containShape); its upstream answer is recorded so a later batch only has to take the
 // flag off. A documentary case pins a port test's fixture: the rect is compared,
 // the label set need not match.
 //
@@ -580,15 +580,16 @@ add('M grid px left 20 top 20, 300x200', bar({ left: 20, top: 20, width: 300, he
 // has none, so every label is 20 lines, the end labels are hidden, and the
 // bottom is high enough that only 150 (normalize .75) overflows: top 47.5 / .75.
 // Both ends are hidden outright: left to themselves (or forced on), upstream
-// drops an end label or its neighbour for overlapping (fixMinMaxLabelShow, the
-// thinning batch); interior labels overlap and all stay.
+// drops an end label or its neighbour for overlapping (fixMinMaxLabelShow);
+// interior labels overlap and all stay, since a value axis is never thinned
+// by index (label-thinning.js records the label sets).
 add('W2 interior y label p=.75 overflows the top: 20-line labels, end labels hidden', {
   grid: { top: 10, bottom: 140 },
   xAxis: { type: 'category', data: DAYS },
   yAxis: { type: 'value', min: 0, max: 200, interval: 50,
     axisLabel: { formatter: '{value}' + '\nx'.repeat(19), showMinLabel: false, showMaxLabel: false } },
   series: [{ type: 'bar', data: VALS }],
-}, deferred('a value axis is never thinned upstream; the port thins it by index when its labels crowd -- the thinning batch'));
+});
 add('Z12 value x labels overflow right, grid right 0', {
   grid: { right: 0 },
   xAxis: { type: 'value', min: 0, max: 1e9 }, yAxis: { type: 'category', data: DAYS },
@@ -603,7 +604,7 @@ add('inverse value x: p is not flipped (discriminating), long labels, end labels
     axisLabel: { formatter: '{value} eighty-eighty-eighty-eighty-eighty-eighty-eighty', showMinLabel: false, showMaxLabel: false } },
   yAxis: { type: 'category', data: DAYS, axisLabel: { show: false } },
   series: [{ type: 'bar', data: VALS.map(v => v / 3) }],
-}, deferred('a value axis is never thinned upstream; the port thins it by index when its labels crowd -- the thinning batch'));
+});
 add('AD interval 0 long categories, grid left/right 0: band labels under-shrink',
   bar({ left: 0, right: 0 }, { data: LONG, axisLabel: { interval: 0 } }));
 add('n=1 category, a long label, grid left/right 0',
@@ -697,8 +698,8 @@ add('PM4 documentary: port axislabel fixture, 30 categories, 900x520', {
   xAxis: { type: 'category', data: Array.from({ length: 30 }, (_, i) => 'Category ' + (i + 1)) }, yAxis: { type: 'value' },
   series: [{ type: 'bar', data: Array.from({ length: 30 }, (_, i) => 10 + ((i + 1) * 37) % 50) }],
 }, Object.assign({ W: 900, H: 520 }, documentary(
-  'nothing shrinks; upstream labels every fourth category (the category auto interval picks 3, and the last '
-  + 'category\'s label is dropped for overlapping), which the port does not reproduce yet')));
+  'nothing shrinks; upstream labels every fourth category (the category auto interval picks 3); the last '
+  + 'category\'s label is built off the interval and dropped for that, not for overlapping')));
 
 // axis names (how each name is laid out: axis-names.js)
 const NAMED_X = { name: 'Day of the week', nameLocation: 'end' };
@@ -710,12 +711,12 @@ add('Z4 y name at the end overflows the top, grid top 10', bar({ top: 10 }, null
 add('Z6 outerBoundsMode same + names: the name margin level differs per pass',
   bar({ outerBoundsMode: 'same' }, NAMED_X, NAMED_Y));
 
-// deferred
+// label thinning (label-thinning.js records the label sets per pass)
 add('AC hideOverlap, interval 0 long categories, grid left/right 0',
-  bar({ left: 0, right: 0 }, { data: LONG, axisLabel: { interval: 0, hideOverlap: true } }),
-  deferred('hideOverlap: the estimate and the final rect keep different labels; the thinning batch'));
-add('B long categories, horizontal: category auto interval', bar(null, { data: LONG }),
-  deferred('the category auto interval is the thinning batch'));
+  bar({ left: 0, right: 0 }, { data: LONG, axisLabel: { interval: 0, hideOverlap: true } }));
+add('B long categories, horizontal: category auto interval', bar(null, { data: LONG }));
+
+// deferred
 add('AA label margin 20 + fontSize 14, grid left/bottom 0',
   bar({ left: 0, bottom: 0 }, { axisLabel: { margin: 20, fontSize: 14 } }, { axisLabel: { margin: 20, fontSize: 14 } }),
   deferred('axisLabel.fontSize: the label font is the theme\'s'));

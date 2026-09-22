@@ -63,7 +63,7 @@ type
     procedure TestLeftAxisFractionsRunFromTheBottom;
     procedure TestRoomyAxisShowsEveryLabel;
     procedure TestCrowdedAxisThinsToAUniformStep;
-    procedure TestThinningNeverHidesEverything;
+    procedure TestAnAxisTooShortForItsLabelsShowsNone;
     procedure TestLabelStepAgreesWithThePlacements;
   end;
 
@@ -464,11 +464,16 @@ var
   i: Integer;
 begin
   { ONLY THE LABELS THE ESTIMATE SHOWS: a 300-wide label in the middle of a
-    100-wide axis thins the axis to every other label, and the one thinned
-    out -- the widest -- must not push the plot in }
+    100-wide category axis thins it to every eighth label -- 390 over a band
+    of 50 -- which builds the first and the last, and the last is off that
+    interval and so dropped. The one thinned out, the widest, must not push
+    the plot in.
+    [Revised in batch 39: both ends were kept, the stride being the smallest
+    that left 4 px between labels.] }
   a := BottomAxis(['1', '123456789012345678901234567890', '3']);
+  a.LabelKind := lakCategory;
   items := TyAxisLabelBoundsItems(a, TyRectF(0, 0, 100, 300), FM, 96);
-  AssertEquals('the two ends only', 2, Length(items));
+  AssertEquals('the first only', 1, Length(items));
   for i := 0 to High(items) do
     AssertTrue('and not the wide one', items[i].R.W < 50);
 end;
@@ -643,6 +648,7 @@ var
   i: Integer;
 begin
   a := BottomAxis(['0', '1', '2', '3']);
+  a.LabelKind := lakCategory;
   p := TyLayoutAxisLabels(a, TyRectF(0, 0, 800, 200), FM, 96);
   AssertEquals('step is 1', 1, TyAxisLabelStep(a, TyRectF(0, 0, 800, 200), FM, 96));
   for i := 0 to High(p) do
@@ -655,11 +661,14 @@ var
   p: TTyAxisLabelPlacementArray;
   i, step: Integer;
 begin
-  { Ten 4-character labels (40 px each) across 120 px. Everything collides. }
+  { Ten 4-character labels (40 px each) across 120 px of category axis.
+    Upstream's interval: 40 grown by 1.3 over a band of 120/9, floored, is
+    3 -- every fourth label; the last is off that and dropped. }
   a := BottomAxis(['1000', '1001', '1002', '1003', '1004',
                    '1005', '1006', '1007', '1008', '1009']);
+  a.LabelKind := lakCategory;
   step := TyAxisLabelStep(a, TyRectF(0, 0, 120, 100), FM, 96);
-  AssertTrue('it had to thin (step=' + IntToStr(step) + ')', step > 1);
+  AssertEquals('every fourth', 4, step);
   p := TyLayoutAxisLabels(a, TyRectF(0, 0, 120, 100), FM, 96);
   { UNIFORM: exactly the indices divisible by step, no others. A greedy
     keep-if-it-fits would leave gaps of differing size, which on a category axis
@@ -668,21 +677,26 @@ begin
     AssertEquals('label ' + IntToStr(i) + ' shown?', i mod step = 0, p[i].Shown);
 end;
 
-procedure TAdvChartAxisTest.TestThinningNeverHidesEverything;
+procedure TAdvChartAxisTest.TestAnAxisTooShortForItsLabelsShowsNone;
 var
   a: TTyAxisLayoutSpec;
   p: TTyAxisLabelPlacementArray;
   i, shown: Integer;
 begin
+  { UPSTREAM SHOWS NONE. Four 100-px labels on 12 px of category axis: the
+    interval builds the first and the last; the last is off the interval, and
+    the first crowds it and gives way too.
+    [Revised in batch 39: exactly the first was kept, on the grounds that an
+    axis with no labels looks broken -- upstream draws it so.] }
   a := BottomAxis(['1000000000', '1000000001', '1000000002', '1000000003']);
+  a.LabelKind := lakCategory;
   p := TyLayoutAxisLabels(a, TyRectF(0, 0, 12, 100), FM, 96);   // absurdly narrow
   shown := 0;
   for i := 0 to High(p) do
     if p[i].Shown then Inc(shown);
-  { An axis with no labels at all looks broken; one still tells the reader what
-    the axis counts in. }
-  AssertEquals('exactly one survives', 1, shown);
-  AssertTrue('and it is the first', p[0].Shown);
+  AssertEquals('none', 0, shown);
+  AssertTrue('though the first was built', p[0].Built);
+  AssertTrue('and the last', p[3].Built and p[3].OffInterval);
 end;
 
 procedure TAdvChartAxisTest.TestLabelStepAgreesWithThePlacements;
@@ -696,6 +710,7 @@ begin
     TyLayoutAxisLabels. Two routes to the same number is how marks and labels
     drift apart, so this pins that they agree. }
   a := BottomAxis(['100', '101', '102', '103', '104', '105']);
+  a.LabelKind := lakCategory;
   plot := TyRectF(0, 0, 150, 100);
   step := TyAxisLabelStep(a, plot, FM, 96);
   p := TyLayoutAxisLabels(a, plot, FM, 96);
