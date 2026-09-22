@@ -11,8 +11,8 @@ unit test.toolwindow.bar;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, LCLType, fpcunit, testregistry,
-  tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, LCLType, LCLProc, fpcunit, testregistry,
+  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
   test.toolwindow.window;
 
 type
@@ -44,6 +44,8 @@ type
     FBar: TBarAccess;
     FDesignOwner: TDesignOwner;
     FChanges, FCollapses, FExpands, FShows, FHides: Integer;
+    { OnShow / OnHide 的发生顺序,「show 名字;」「hide 名字;」连起来。 }
+    FOrder: string;
     procedure HandleChange(ASender: TObject);
     procedure HandleCollapse(ASender: TObject);
     procedure HandleExpand(ASender: TObject);
@@ -54,6 +56,8 @@ type
     function NewDesignBar: TBarAccess;
     procedure Watch(AWin: TTyToolWindow);
     procedure ResetCounts;
+    procedure HandleShowOrder(ASender: TObject);
+    procedure HandleHideOrder(ASender: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -98,6 +102,17 @@ type
     procedure TestCollapsedIsAppliedAtRunTimeOnly;
     procedure TestShowControlActivatesAndExpands;
     procedure TestControllerReachesEveryWindowAndEveryActionsArea;
+    procedure TestAPpiChangeReachesTheContentEvenWhenTheTokensRoundTheSame;
+    procedure TestACollapsedBarsFallbackDoesNotShowTheNewActiveWindow;
+    procedure TestFreeingTheActiveWindowFiresOnChange;
+    procedure TestDesignerResizeSkipsLoadingAndClampsTheWriteBack;
+    procedure TestChangingTheControllerOrTheStyleClassRederivesTheSize;
+    procedure TestADesignTimeEmptyBottomBarIsLaidOutExpanded;
+    procedure TestABottomBarFloorsItsHeight;
+    procedure TestTheNewPageShowsBeforeTheOldOneHides;
+    procedure TestNoBarEventFiresWhileLoading;
+    procedure TestDesignTimeSwitchTellsTheDesignerButLoadedDoesNot;
+    procedure TestRightAndBottomBarsGoOutsideTheirSiblings;
   end;
 
 implementation
@@ -107,6 +122,22 @@ const
   StripPx = TyToolWindowStripSizeDef;
   EdgePx = TyToolWindowEdgeSizeDef;
   ContentMinPx = TyToolWindowContentMinDef;
+
+var
+  { OwnerFormDesignerModified / TyDesignerRefreshValuesProc 是进程级钩子,只能数到全局上
+    (同 test.tabset)。 }
+  DesignerPings: Integer;
+  RefreshPings: Integer;
+
+procedure CountDesignerModified(AComponent: TComponent);
+begin
+  Inc(DesignerPings);
+end;
+
+procedure CountRefresh;
+begin
+  Inc(RefreshPings);
+end;
 
 procedure TBarAccess.AdjustSize;
 begin
@@ -1011,6 +1042,233 @@ begin
   w2 := TTyToolWindow.Create(FForm);
   w2.Parent := FBar;
   AssertSame('新注册的窗口拿到栏的', c2, w2.Controller);
+end;
+
+procedure TTyToolWindowBarTests.HandleShowOrder(ASender: TObject);
+begin
+  FOrder := FOrder + 'show ' + TComponent(ASender).Name + ';';
+end;
+
+procedure TTyToolWindowBarTests.HandleHideOrder(ASender: TObject);
+begin
+  FOrder := FOrder + 'hide ' + TComponent(ASender).Name + ';';
+end;
+
+procedure TTyToolWindowBarTests.TestAPpiChangeReachesTheContentEvenWhenTheTokensRoundTheSame;
+begin
+  { 默认 token 的底栏:没有图标条,chrome 为 0,边缘区 4px 在 100 PPI 下取整还是 4 ——
+    三项主题尺寸一个都没动,而内容项 MulDiv(240, 100, 96) 从 240 变成 250。 }
+  FBar.Placement := twpBottom;
+  NewWindow;
+  AssertEquals('前提:96 PPI 下是 边缘区 + 240', EdgePx + TyToolWindowDefaultExpandedSize, FBar.Height);
+  FBar.Font.PixelsPerInch := 100;
+  AssertEquals('前提:边缘区取整之后没变', EdgePx, FBar.EdgeSizePx);
+  AssertEquals('内容项按新 PPI 重推', EdgePx + MulDiv(TyToolWindowDefaultExpandedSize, 100, 96),
+    FBar.Height);
+end;
+
+procedure TTyToolWindowBarTests.TestACollapsedBarsFallbackDoesNotShowTheNewActiveWindow;
+var
+  a, b, c: TProbeWindow;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  c := NewWindow;
+  FBar.ActivateWindow(b);
+  FBar.Collapsed := True;
+  b.Free;
+  AssertSame('收起着也回落到下一个', c, FBar.ActiveWindow);
+  AssertFalse('栏收起着,接班的那页不显示', c.Visible);
+  AssertFalse('别的页也不显示', a.Visible);
+  AssertTrue('回落不展开栏', FBar.Collapsed);
+  FBar.Collapsed := False;
+  AssertTrue('展开时显示的是接班的那页', c.Visible);
+end;
+
+procedure TTyToolWindowBarTests.TestFreeingTheActiveWindowFiresOnChange;
+var
+  a, b: TProbeWindow;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  FBar.OnChange := @HandleChange;
+  ResetCounts;
+  b.Free;
+  AssertEquals('当前页被释放、有人接班:发 OnChange', 1, FChanges);
+  AssertSame('接班的是 a', a, FBar.ActiveWindow);
+  a.Free;
+  AssertEquals('最后一页被释放、没人接班:也发', 2, FChanges);
+  AssertNull('当前页是 nil', FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBarTests.TestDesignerResizeSkipsLoadingAndClampsTheWriteBack;
+var
+  d: TBarAccess;
+begin
+  d := NewDesignBar;
+  { 流式加载时读进来的边界不是用户拖出来的。 }
+  d.BeginLoad;
+  d.SetBounds(d.Left, d.Top, StripPx + EdgePx + 300, d.Height);
+  AssertEquals('加载中的 SetBounds 不写回', TyToolWindowDefaultExpandedSize, d.ExpandedSize);
+  d.EndLoad;
+  AssertEquals('加载完还是原值', TyToolWindowDefaultExpandedSize, d.ExpandedSize);
+  d.SetBounds(d.Left, d.Top, 10, d.Height);
+  AssertEquals('写回钳到 0', 0, d.ExpandedSize);
+  { 上限 99999 在 96 PPI 下是 10 万像素宽 —— LCL 设计期不许 Width >= 10000
+    (control.inc:4315)。压到 8 PPI:拖到 9000px 反算是 107964,钳到 99999,
+    推回来是 3 + 8333 = 8336px,摆得下。 }
+  d.Font.PixelsPerInch := 8;
+  d.SetBounds(d.Left, d.Top, 9000, d.Height);
+  AssertEquals('写回钳到 99999(布局串的 1-5 位)', 99999, d.ExpandedSize);
+  AssertEquals('宽按钳过的值推', MulDiv(StripPx, 8, 96) + MulDiv(EdgePx, 8, 96)
+    + MulDiv(99999, 8, 96), d.Width);
+end;
+
+procedure TTyToolWindowBarTests.TestChangingTheControllerOrTheStyleClassRederivesTheSize;
+var
+  c2: TTyStyleController;
+begin
+  NewWindow;
+  FBar.ExpandedSize := 200;
+  c2 := TTyStyleController.Create(FForm);
+  { 两个 model 各自数版本号 —— 让它们撞上,键里只有版本号的话缓存就把 FCtl 的值端给 c2。 }
+  FCtl.StyleOverride := ':root { --toolwindow-glyph-size: 17px; }';
+  c2.StyleOverride := ':root { --toolwindow-strip-size: 50px; }' +
+    'TyToolWindowBar.wide { border-width: 3px; }';
+  AssertEquals('前提:两个 model 的主题版本号一样', FCtl.Model.ThemeVersion, c2.Model.ThemeVersion);
+  FBar.Controller := c2;
+  AssertEquals('换 Controller 按新 model 重推', 50 + EdgePx + 200, FBar.Width);
+  { 换 StyleClass 只带来一次裸 Invalidate,主题版本号不动。 }
+  FBar.StyleClass := 'wide';
+  AssertEquals('前提:新样式类给了一圈 chrome', 4, FBar.ChromeInsetPx);
+  AssertEquals('换 StyleClass 重推', 50 + 2 * 4 + EdgePx + 200, FBar.Width);
+end;
+
+procedure TTyToolWindowBarTests.TestADesignTimeEmptyBottomBarIsLaidOutExpanded;
+var
+  d: TBarAccess;
+begin
+  { 零高的栏在设计器里点不中(spec §5.4)。 }
+  d := NewDesignBar;
+  d.Placement := twpBottom;
+  AssertEquals('设计期没有窗口的底栏也按展开算',
+    EdgePx + TyToolWindowDefaultExpandedSize, d.Height);
+end;
+
+procedure TTyToolWindowBarTests.TestABottomBarFloorsItsHeight;
+begin
+  FBar.Placement := twpBottom;
+  NewWindow;
+  FBar.SetBounds(FBar.Left, FBar.Top, FBar.Width, 10);
+  AssertEquals('展开时不低于 边缘区 + content-min', EdgePx + ContentMinPx, FBar.Height);
+  AssertEquals('用户的 Constraints 不碰', 0, FBar.Constraints.MinHeight);
+  FBar.Collapsed := True;
+  FBar.SetBounds(FBar.Left, FBar.Top, FBar.Width, 5);
+  AssertEquals('收起的底栏没有下限', 5, FBar.Height);
+end;
+
+procedure TTyToolWindowBarTests.TestTheNewPageShowsBeforeTheOldOneHides;
+var
+  a, b: TProbeWindow;
+begin
+  { spec §5.1 第 2 步在第 3 步之前:先藏旧页的话,焦点在旧页里时 LCL 会把它交给窗体本身。 }
+  a := NewWindow;
+  a.Name := 'WA';
+  b := NewWindow;
+  b.Name := 'WB';
+  FBar.ActivateWindow(a);
+  a.OnShow := @HandleShowOrder;
+  a.OnHide := @HandleHideOrder;
+  b.OnShow := @HandleShowOrder;
+  b.OnHide := @HandleHideOrder;
+  FOrder := '';
+  FBar.ActiveWindow := b;
+  AssertEquals('先显示新页、再藏旧页', 'show WB;hide WA;', FOrder);
+end;
+
+procedure TTyToolWindowBarTests.TestNoBarEventFiresWhileLoading;
+var
+  a, b: TProbeWindow;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  FBar.OnChange := @HandleChange;
+  FBar.OnCollapse := @HandleCollapse;
+  FBar.OnExpand := @HandleExpand;
+  ResetCounts;
+  FBar.BeginLoad;
+  b.Parent := FForm;                  { 当前页在加载中离开:只换 FActive }
+  FBar.Collapsed := True;
+  FBar.Collapsed := False;
+  AssertSame('前提:当前页确实换了', a, FBar.ActiveWindow);
+  AssertEquals('加载中不发 OnChange', 0, FChanges);
+  AssertEquals('加载中不发 OnCollapse', 0, FCollapses);
+  AssertEquals('加载中不发 OnExpand', 0, FExpands);
+  FBar.EndLoad;
+  AssertEquals('Loaded 也不补发', 0, FChanges);
+end;
+
+procedure TTyToolWindowBarTests.TestDesignTimeSwitchTellsTheDesignerButLoadedDoesNot;
+var
+  d: TBarAccess;
+  a, b, ra, rb: TProbeWindow;
+  saved: TOwnerFormDesignerModifiedProc;
+begin
+  { 设计期切页改了一个 published 值(ActiveIndex):两声都要 —— 一声标脏,一声让对象查看器
+    重读(同 test.tabset 的 TestDesignTimeSwitchTellsTheDesigner)。打开窗体时 Loaded 的
+    那一批不是修改。 }
+  d := NewDesignBar;
+  a := NewWindowIn(d, FDesignOwner);
+  b := NewWindowIn(d, FDesignOwner);
+  ra := NewWindow;
+  rb := NewWindow;
+  saved := OwnerFormDesignerModifiedProc;
+  OwnerFormDesignerModifiedProc := @CountDesignerModified;
+  TyDesignerRefreshValuesProc := @CountRefresh;
+  DesignerPings := 0;
+  RefreshPings := 0;
+  try
+    d.ActiveWindow := a;
+    AssertEquals('设计期切页标脏', 1, DesignerPings);
+    AssertEquals('并让对象查看器重读', 1, RefreshPings);
+    d.ActiveWindow := a;
+    AssertEquals('同一页不再响', 1, DesignerPings);
+    FBar.ActiveWindow := ra;
+    AssertEquals('运行时切页不响', 1, DesignerPings);
+    AssertEquals('对象查看器也不响', 1, RefreshPings);
+    DesignerPings := 0;
+    RefreshPings := 0;
+    d.BeginLoad;
+    d.ActiveIndex := 1;
+    d.EndLoad;
+    AssertSame('前提:Loaded 真的切了页', b, d.ActiveWindow);
+    AssertEquals('Loaded 的静默批次不标脏', 0, DesignerPings);
+    AssertEquals('也不让对象查看器重读', 0, RefreshPings);
+  finally
+    OwnerFormDesignerModifiedProc := saved;
+    TyDesignerRefreshValuesProc := nil;
+  end;
+  AssertTrue('rb 只是凑一个运行时的第二页', rb <> nil);
+end;
+
+procedure TTyToolWindowBarTests.TestRightAndBottomBarsGoOutsideTheirSiblings;
+var
+  pr, pb: TBodyChild;
+begin
+  { 同 TestPlacementDrivesAlignAndMovesToTheOuterEdge 的左栏:兄弟已经贴在边上时,
+    LCL 的严格比较分不出先后,栏必须再往外一格。 }
+  pr := TBodyChild.Create(FForm);
+  pr.Parent := FForm;
+  pr.Align := alRight;
+  pr.SetBounds(FForm.ClientWidth - 50, 0, 50, 400);
+  FBar.Placement := twpRight;
+  AssertTrue('右栏排在同向对齐兄弟的外侧', FBar.Left + FBar.Width > pr.Left + pr.Width);
+  pb := TBodyChild.Create(FForm);
+  pb.Parent := FForm;
+  pb.Align := alBottom;
+  pb.SetBounds(0, FForm.ClientHeight - 30, 300, 30);
+  FBar.Placement := twpBottom;        { 空栏,运行时改得动 }
+  AssertTrue('底栏排在同向对齐兄弟的外侧', FBar.Top + FBar.Height > pb.Top + pb.Height);
 end;
 
 initialization

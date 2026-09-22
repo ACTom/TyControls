@@ -359,8 +359,11 @@ type
     FMetricsOverride: string;
     { 上一次推导尺寸时**真正用过**的那一份。Invalidate 拿它比,而不是拿缓存比 ——
       缓存谁读都会刷新(对齐引擎在 AdjustClientRect 里读、ConstrainedResize 里读),
-      「谁先读就是谁的」:别人先把缓存刷成新值,Invalidate 就再也看不出主题变了。 }
+      「谁先读就是谁的」:别人先把缓存刷成新值,Invalidate 就再也看不出主题变了。
+      PPI 单独记:内容项 MulDiv(ExpandedSize, PPI, 96) 也跟着它变,而三项主题尺寸取整之后
+      可能一个都没动(默认 token 的底栏在 96 → 100 PPI 下就是这样)。 }
     FLaid: TTyToolWindowBarMetrics;
+    FLaidPPI: Integer;
     FLaidValid: Boolean;
     FOnChange: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
@@ -1468,6 +1471,7 @@ begin
   try
     m := Metrics;
     FLaid := m;
+    FLaidPPI := PPI;
     FLaidValid := True;
     v := DerivedAxisPx(m);
     if FPlacement = twpBottom then Height := v
@@ -1502,7 +1506,8 @@ begin
      and ([csLoading, csDestroying] * ComponentState = []) then
   begin
     m := Metrics;
-    if (m.Strip <> FLaid.Strip) or (m.Edge <> FLaid.Edge) or (m.Chrome <> FLaid.Chrome) then
+    if (m.Strip <> FLaid.Strip) or (m.Edge <> FLaid.Edge) or (m.Chrome <> FLaid.Chrome)
+       or (PPI <> FLaidPPI) then
       Relayout;
   end;
   inherited Invalidate;
@@ -1719,27 +1724,30 @@ begin
   if FCollapsed = AValue then Exit;
   FCollapsed := AValue;
   { 只在运行时生效:流式加载时由 Loaded 统一应用;设计期永远按展开显示。 }
-  if [csLoading, csDesigning, csDestroying] * ComponentState <> [] then Exit;
-  if FActive <> nil then
+  if [csLoading, csDesigning, csDestroying] * ComponentState = [] then
   begin
-    if AValue then
+    if FActive <> nil then
     begin
-      { 先记下焦点在不在里面 —— 藏起来之后 LCL 会把它挪到窗体本身。 }
-      focusIn := FocusIsInside(FActive);
-      HideWindowNow(FActive);
-      { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半由 Task 10 测。 }
-      if focusIn then
+      if AValue then
       begin
-        form := GetParentForm(Self);
-        if form <> nil then form.SelectNext(Self, True, True);
-      end;
-    end
-    else
-      ShowWindowNow(FActive);
+        { 先记下焦点在不在里面 —— 藏起来之后 LCL 会把它挪到窗体本身。 }
+        focusIn := FocusIsInside(FActive);
+        HideWindowNow(FActive);
+        { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半由 Task 10 测。 }
+        if focusIn then
+        begin
+          form := GetParentForm(Self);
+          if form <> nil then form.SelectNext(Self, True, True);
+        end;
+      end
+      else
+        ShowWindowNow(FActive);
+    end;
+    DeriveSize;
+    Realign;
+    Invalidate;
   end;
-  DeriveSize;
-  Realign;
-  Invalidate;
+  { 事件只由 EventsAllowed 一处把关(设计期、加载中、静默批次都不发)。 }
   if EventsAllowed then
   begin
     if AValue then
