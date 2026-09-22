@@ -10,7 +10,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
-  tyControls.StyleModel, tyControls.StrConsts;
+  tyControls.StyleModel, tyControls.Controller, tyControls.StrConsts;
 
 const
   { 长度 token。经典值必须等于这里的 Def —— light.tycss 的 :root 里写同一个数,
@@ -149,6 +149,8 @@ type
       标题行跟着变,而窗口尺寸一个像素没动 —— 缓存自己看不出来,见 AlignControls。 }
     FAlignedRow: TRect;
     FAlignedGeom: TTyToolWindowHeaderGeom;
+    { 探针的底:最近一次写 Visible 那一刻 csNoDesignVisible 在不在(见 SetVisible)。 }
+    FNoDesignVisibleAtShow: Boolean;
     function ImageIndexIsStored: Boolean;
     function GetBar: TTyToolWindowBar;
     function GetActions: TTyToolWindowActions;
@@ -180,21 +182,30 @@ type
     procedure CMVisibleChanged(var Msg: TLMessage); message CM_VISIBLECHANGED;
     procedure DoShow; virtual;
     procedure DoHide; virtual;
-    { 栏换当前页时那一批 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求
-      它们不发 OnShow / OnHide。三个调用者:Task 5 的 TTyToolWindowBar.ActivateWindow、
-      Task 10 的收起 / 展开、C 期把存下来的布局应用回去那一遍。
-      计数而不是布尔:布局应用会套着调 ActivateWindow,一个布尔会被里层提前解除。
-      csLoading 挡不住这三个 —— 后两个发生时流式加载早就结束了。
+    { 照 TTyTabSheet.SetParent:先记旧父控件 → 继承 → 从旧栏注销(任一方 csDestroying
+      时跳过,释放那条路由 Notification 管)→ 注册到新栏 → 重排标题行(spec §3.2)。 }
+    procedure SetParent(NewParent: TWinControl); override;
+    { 这里只记探针;对外设 Visible 经栏路由(spec §3.3)在 Task 10。 }
+    procedure SetVisible(Value: Boolean); override;
+    { 推送链的第二段:窗口 → **每一个**操作区。多出来的那些设计期要按它画提示。 }
+    procedure SetController(AValue: TTyStyleController); override;
+    { 有些 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求它们不发
+      OnShow / OnHide:栏在 Loaded 里应用 ActiveIndex、C 期加载结束时应用挂起的布局计划。
+      用户看得见的切页、收起、展开**照发**。唯一的调用者是
+      TTyToolWindowBar.SwitchSilently,它把一次切换涉及的窗口整批包起来。
+      计数而不是布尔:布局应用会套着切页,一个布尔会被里层提前解除。
+      csLoading 挡不住这两个 —— 发生时 csLoading 已经清了。
 
       **调用方必须 try/finally**。负方向钳住了(EndSilentVisibility 不减到 0 以下),
       正方向钳不住:Begin 与 End 之间任何一处抛异常,计数就卡在 0 以上,这个窗口的
-      OnShow / OnHide 从此再也不响 —— 而它是静默的,没有一条断言会指向那里。
-      上面三个调用者一个都不例外。 }
+      OnShow / OnHide 从此再也不响 —— 而它是静默的,没有一条断言会指向那里。 }
     procedure BeginSilentVisibility;
     procedure EndSilentVisibility;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { 操作区插进来时把自己的控制器推给它 —— 流式加载、粘贴、代码里 Parent := 都走这里。 }
+    procedure InsertControl(AControl: TControl; Index: Integer); override;
     procedure Invalidate; override;
     procedure Paint; override;
     procedure RelayoutHeader;
@@ -218,8 +229,14 @@ type
     function HeaderHeightPx: Integer;
     function HeaderRowRect: TRect;
     function BodyRect: TRect;
+    { 把焦点给正文里第一个可聚焦的控件(protected 的 SelectFirst 的公开包装,spec §3.1)。 }
+    procedure FocusFirst;
     property Bar: TTyToolWindowBar read GetBar;
     property Actions: TTyToolWindowActions read GetActions;
+    { 探针:最近一次写 Visible 那一刻 csNoDesignVisible 在不在 —— 真实状态的只读视图。
+      栏切页必须先改这个标志再写 Visible(spec §5.1 第 2、3 步),顺序无头看不出来,
+      只能从这里钉(TestDesignVisibleFlagIsSetBeforeVisible)。 }
+    property NoDesignVisibleAtLastShow: Boolean read FNoDesignVisibleAtShow;
   published
     property Caption;
     property ImageName: string read FImageName write FImageName;
@@ -300,9 +317,143 @@ type
     property Height stored IsBoundsStored;
   end;
 
+  { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome。 }
+  TTyToolWindowBarMetrics = record
+    Strip, Edge, Chrome: Integer;
+  end;
+
+  TTyToolWindowArray = array of TTyToolWindow;
+
   TTyToolWindowBar = class(TTyCustomControl)
+  private
+    { 注册过的窗口(集合,顺序不算数)。**窗口顺序永远就是 Controls 顺序**(spec §6.1),
+      每次现取:SetControlIndex 不是虚方法,设计器的「移到最前 / 最后」直接调它 ——
+      缓存一份顺序就会跟 Controls 漂开,.lfm 按 Controls 写、ActiveIndex 按缓存写。 }
+    FRegistered: TTyToolWindowArray;
+    { 正在离开的窗口和它离开前的窗口序号。两条离开的路(SetParent 的注销分支、释放时的
+      Notification)走到时它都已经不在 Controls 里了,所以在 RemoveControl 里先记下来。 }
+    FLeaving: TTyToolWindow;
+    FLeavingIndex: Integer;
+    FPlacement: TTyToolWindowPlacement;
+    FExpandedSize: Integer;
+    FCollapsed: Boolean;
+    FActive: TTyToolWindow;
+    { 流式加载期间读进来的 ActiveIndex,Loaded 里应用(那时窗口才全注册完)。 }
+    FLoadingActiveIndex: Integer;
+    { 栏自己在切 Visible:Task 10 的 TTyToolWindow.SetVisible 看见它就直接放行。 }
+    FBarSwitching: Boolean;
+    FDeriving: Boolean;
+    FRelayouting: Boolean;
+    { > 0 = 这一批切换不发任何用户事件(栏的 OnChange 和窗口的 OnShow / OnHide),
+      见 SwitchSilently。 }
+    FSilent: Integer;
+    { 主题尺寸的缓存,键 = (PPI, model 身份, 主题版本, RTL, Placement, 样式类, StyleOverride)。 }
+    FMetrics: TTyToolWindowBarMetrics;
+    FMetricsValid: Boolean;
+    FMetricsPPI: Integer;
+    FMetricsAnchor: TObject;
+    FMetricsVer: Cardinal;
+    FMetricsRTL: Boolean;
+    FMetricsPlacement: TTyToolWindowPlacement;
+    FMetricsClass: string;
+    FMetricsOverride: string;
+    { 上一次推导尺寸时**真正用过**的那一份。Invalidate 拿它比,而不是拿缓存比 ——
+      缓存谁读都会刷新(对齐引擎在 AdjustClientRect 里读、ConstrainedResize 里读),
+      「谁先读就是谁的」:别人先把缓存刷成新值,Invalidate 就再也看不出主题变了。 }
+    FLaid: TTyToolWindowBarMetrics;
+    FLaidValid: Boolean;
+    FOnChange: TNotifyEvent;
+    FOnCollapse: TNotifyEvent;
+    FOnExpand: TNotifyEvent;
+    procedure SetPlacement(AValue: TTyToolWindowPlacement);
+    procedure SetExpandedSize(AValue: Integer);
+    procedure SetCollapsed(AValue: Boolean);
+    function GetActiveIndex: Integer;
+    procedure SetActiveIndex(AValue: Integer);
+    function GetWindow(AIndex: Integer): TTyToolWindow;
+    function GetWindowCount: Integer;
+    function WidthIsStored: Boolean;
+    function HeightIsStored: Boolean;
+    function PPI: Integer;
+    function Metrics: TTyToolWindowBarMetrics;
+    { 运行时收起着(设计期永远按展开)。 }
+    function CollapsedAtRunTime: Boolean;
+    { 按「收起」算尺寸:运行时收起着或没有窗口;设计期永远不算。 }
+    function SizesAsCollapsed: Boolean;
+    { 沿栏轴向的推导尺寸(侧栏 = Width,底栏 = Height),设备像素。 }
+    function DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+    procedure DeriveSize;
+    procedure Relayout;
+    { Controls 顺序里的窗口,去掉 AExcept(可为 nil)。非窗口子控件(粘贴等途径漏进来的)
+      不计入任何序号。 }
+    function WindowList(AExcept: TTyToolWindow): TTyToolWindowArray;
+    function IsRegistered(AWindow: TTyToolWindow): Boolean;
+    { 把窗口 AWindow 挪到窗口序号 APos 要用的 Controls 下标(spec §2 的换算)。 }
+    function ControlIndexForWindowPos(AWindow: TTyToolWindow; APos: Integer): Integer;
+    procedure MoveToOuterEdge;
+    function FocusIsInside(AWindow: TTyToolWindow): Boolean;
+    procedure ShowWindowNow(AWindow: TTyToolWindow);
+    procedure HideWindowNow(AWindow: TTyToolWindow);
+    { spec §5.1 的六步。AOld 是要藏起来的那一页(可为 nil 或就是 AWindow)。 }
+    procedure SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
+    { **唯一**的静默切页入口:把一次切换里涉及的窗口整批包进 BeginSilentVisibility /
+      EndSilentVisibility(try/finally),期间栏也不发 OnChange、不通知设计器。
+      调用者:Loaded 应用 ActiveIndex;C 期加载结束时应用挂起的布局计划。 }
+    procedure SwitchSilently(AWindow: TTyToolWindow);
+    function EventsAllowed: Boolean;
+    procedure DoChange;
   protected
     function GetStyleTypeKey: string; override;
+    { spec §6.1:只接受工具窗口。用 InheritsFrom:派生的窗口类照收。 }
+    function ChildClassAllowed(ChildClass: TClass): Boolean; override;
+    procedure AdjustClientRect(var ARect: TRect); override;
+    procedure ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
+      MaxHeight: TConstraintSize); override;
+    procedure Loaded; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure SetController(AValue: TTyStyleController); override;
+    { TWinControl 不重写它(继承的是 TComponent 的空实现),继承窗体里写的 ffChildPos
+      会被静默丢掉。Order 按窗口序号算(spec §2)。 }
+    procedure SetChildOrder(Child: TComponent; Order: Integer); override;
+    { 本栏的窗口:激活;运行时同时展开,设计期不写 Collapsed(spec §5.1)。 }
+    procedure ShowControl(AControl: TControl); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    procedure Invalidate; override;
+    procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+      const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
+    { 设计器拖栏的边:只有这一种 SetBounds 写回 ExpandedSize(spec §6.1)。 }
+    procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
+    { 离开的两条路都在这之后才走到,窗口序号只能在这里记。 }
+    procedure RemoveControl(AControl: TControl); override;
+    procedure RegisterWindow(AWindow: TTyToolWindow);
+    procedure UnregisterWindow(AWindow: TTyToolWindow);
+    procedure ActivateWindow(AWindow: TTyToolWindow);
+    function IndexOfWindow(AWindow: TTyToolWindow): Integer;
+    function ChromeInsetPx: Integer;
+    function StripSizePx: Integer;
+    function EdgeSizePx: Integer;
+    function ContentMinPx: Integer;
+    property Windows[AIndex: Integer]: TTyToolWindow read GetWindow;
+    property WindowCount: Integer read GetWindowCount;
+    { 设成不在本栏里的窗口(或 nil)被忽略。 }
+    property ActiveWindow: TTyToolWindow read FActive write ActivateWindow;
+  published
+    property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
+    property ExpandedSize: Integer read FExpandedSize write SetExpandedSize
+      default TyToolWindowDefaultExpandedSize;
+    property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
+    { 窗口序号,跟随窗口身份:调顺序后当前页还是那个窗口,数值跟着变。 }
+    property ActiveIndex: Integer read GetActiveIndex write SetActiveIndex default -1;
+    { 构造时按 Placement 设成 alLeft,default 必须跟着一致(否则 .lfm 省略的那个值加载后丢)。
+      几何一律看 Placement,不看 Align。 }
+    property Align default alLeft;
+    { 沿栏轴向的那一边由 ExpandedSize 推出来,不进 .lfm。 }
+    property Width stored WidthIsStored;
+    property Height stored HeightIsStored;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnCollapse: TNotifyEvent read FOnCollapse write FOnCollapse;
+    property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
   end;
 
   { A 期只建壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
@@ -355,6 +506,10 @@ function TyToolWindowStripLayout(AStripWidth, AStripHeight, AItemSize, AOverflow
 function TyToolWindowDragThreshold(APPI: Integer): Integer;
 
 implementation
+
+uses
+  Forms,     { GetParentForm:切页 / 收起时看焦点在不在旧页里 }
+  LCLProc;   { OwnerFormDesignerModified:设计期切页要告诉 IDE }
 
 { --- TTyToolWindow ------------------------------------------------------------ }
 
@@ -415,13 +570,16 @@ begin
 end;
 
 function TTyToolWindow.HeaderMode: TTyToolWindowHeaderMode;
+var
+  b: TTyToolWindowBar;
 begin
   { 只看所在栏的**位置** —— 不看哪页是当前页,否则切页时正文会跳。
-    而位置(Placement)是 Task 5 的活,今天栏还答不出来;A 期也只有侧栏,
-    twhBottom 连同它那一支标题行排布都在 B 期。Task 5 补上 Placement 时,
-    这里要跟着变成 `if Bar.Placement = twpBottom then twhBottom else twhSide`。 }
-  if Parent is TTyToolWindowBar then Result := twhSide
-  else Result := twhNone;
+    「在不在栏里」只由 GetBar 一处回答。twhBottom 那一支标题行排布在 B 期,
+    A 期它排出来是空的(TyToolWindowHeaderLayout)。 }
+  b := Bar;
+  if b = nil then Result := twhNone
+  else if b.Placement = twpBottom then Result := twhBottom
+  else Result := twhSide;
 end;
 
 function TTyToolWindow.HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
@@ -558,6 +716,56 @@ begin
   Result.Controller := Controller;
   Result.Parent := Self;
   Result.TabOrder := 0;
+end;
+
+procedure TTyToolWindow.FocusFirst;
+begin
+  SelectFirst;
+end;
+
+procedure TTyToolWindow.SetParent(NewParent: TWinControl);
+var
+  old: TWinControl;
+begin
+  old := Parent;
+  inherited SetParent(NewParent);
+  { 离开一条栏跟进入一条栏一样是窗口表的事件。任一方正在拆:释放那条路走栏的
+    Notification(opRemove),而旧栏这时可能已经拆了一半。 }
+  if (old <> NewParent) and (old is TTyToolWindowBar)
+     and not (csDestroying in ComponentState)
+     and not (csDestroying in old.ComponentState) then
+    TTyToolWindowBar(old).UnregisterWindow(Self);
+  { 注册本身推 Controller;流式加载、设计器放下、代码里 Parent := 都走这一条。 }
+  if NewParent is TTyToolWindowBar then
+    TTyToolWindowBar(NewParent).RegisterWindow(Self);
+  { 标题行模式跟着父控件变(侧栏 / 底栏 / 孤儿),内缩量变了就得重排。 }
+  if not (csDestroying in ComponentState) then
+    RelayoutHeader;
+end;
+
+procedure TTyToolWindow.SetVisible(Value: Boolean);
+begin
+  { 探针只读真实状态:此刻的 ControlStyle。 }
+  FNoDesignVisibleAtShow := csNoDesignVisible in ControlStyle;
+  inherited SetVisible(Value);
+end;
+
+procedure TTyToolWindow.SetController(AValue: TTyStyleController);
+var
+  i: Integer;
+begin
+  inherited SetController(AValue);
+  { 继承那一句在值没变时直接返回,推送照做:操作区可能是后插进来、带着别的控制器的。 }
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyToolWindowActions then
+      TTyToolWindowActions(Controls[i]).Controller := AValue;
+end;
+
+procedure TTyToolWindow.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  if AControl is TTyToolWindowActions then
+    TTyToolWindowActions(AControl).Controller := Controller;
 end;
 
 function TTyToolWindow.HeaderHeightPx: Integer;
@@ -709,8 +917,8 @@ end;
 procedure TTyToolWindow.CMVisibleChanged(var Msg: TLMessage);
 begin
   inherited;
-  { spec §6.6 的事件表:设计期不发(设计器摆控件、点页签,切的都是 Visible),栏换
-    当前页的那一批也不发。这两种都不是 csLoading 能挡的 —— 栏在 Loaded 里应用
+  { spec §6.6 的事件表:设计期不发(设计器摆控件、点页签,切的都是 Visible),栏静默
+    切换的那一批也不发。这两种都不是 csLoading 能挡的 —— 栏在 Loaded 里应用
     ActiveIndex、加载收尾时应用挂起的布局计划,发生时 csLoading 早已清掉。 }
   if (csDesigning in ComponentState) or (FSilentVisibility > 0) then Exit;
   if Visible then DoShow else DoHide;
@@ -1118,9 +1326,798 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
+{ --- TTyToolWindowBar ---------------------------------------------------------- }
+
+constructor TTyToolWindowBar.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  ControlStyle := ControlStyle + [csAcceptsControls, csTripleClicks, csQuadClicks];
+  FPlacement := twpLeft;
+  FExpandedSize := TyToolWindowDefaultExpandedSize;
+  FLoadingActiveIndex := -1;
+  Align := alLeft;
+  { 默认值的属性不会进 .lfm,setter 也就不会跑 —— 出生时就得有一个推导过的尺寸。
+    csDesigning 此刻已经在了(TComponent.Create 里的 InsertComponent),所以设计器里
+    放下的空栏按展开算。 }
+  DeriveSize;
+end;
+
 function TTyToolWindowBar.GetStyleTypeKey: string;
 begin
   Result := 'TyToolWindowBar';
+end;
+
+function TTyToolWindowBar.ChildClassAllowed(ChildClass: TClass): Boolean;
+begin
+  Result := inherited ChildClassAllowed(ChildClass)
+    and ChildClass.InheritsFrom(TTyToolWindow);
+end;
+
+function TTyToolWindowBar.PPI: Integer;
+begin
+  Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
+function TTyToolWindowBar.Metrics: TTyToolWindowBarMetrics;
+var
+  mdl: TTyStyleModel;
+  ver: Cardinal;
+  cls: string;
+  S: TTyStyleSet;
+
+  function Px(const AName: string; ADefault: Integer): Integer;
+  begin
+    Result := MulDiv(ActiveController.Metric(AName, ADefault), PPI, 96);
+    { 度量值不钳(TyEvalLength),负的按 0 算。 }
+    if Result < 0 then Result := 0;
+  end;
+
+begin
+  mdl := ActiveController.Model;
+  ver := mdl.ThemeVersion;
+  cls := TyStyleClassFor(Self, StyleClass);
+  { 键里除了 spec §6.1 列的五项,还有样式类和本控件的 StyleOverride:chrome 按它们解析,
+    而改这两个只会带来一次裸 Invalidate,键不变的话缓存就一直端旧值。 }
+  if (not FMetricsValid) or (FMetricsAnchor <> TObject(mdl)) or (FMetricsVer <> ver)
+     or (FMetricsPPI <> PPI) or (FMetricsRTL <> IsRightToLeft)
+     or (FMetricsPlacement <> FPlacement) or (FMetricsClass <> cls)
+     or (FMetricsOverride <> StyleOverride) then
+  begin
+    if FPlacement = twpBottom then FMetrics.Strip := 0
+    else FMetrics.Strip := Px(TyToolWindowStripSizeVar, TyToolWindowStripSizeDef);
+    FMetrics.Edge := Px(TyToolWindowEdgeSizeVar, TyToolWindowEdgeSizeDef);
+    { **静止态**样式:TyChromeInsetLogical 按状态解析后的样式量(焦点环比边框宽),拿
+      CurrentStyle 的话悬停一下内缩量就变 —— 而悬停只 Invalidate、不 Realign,窗口会
+      停在旧的客户区里。本控件的 StyleOverride 照样叠上(spec §6.1)。 }
+    S := mdl.ResolveStyle(GetStyleTypeKey, cls, [tysNormal]);
+    if StyleOverride <> '' then
+      TyMergeStyleSet(S, mdl.ResolveOverride(StyleOverride));
+    FMetrics.Chrome := MulDiv(TyChromeInsetLogical(S), PPI, 96);
+    FMetricsAnchor := TObject(mdl);
+    FMetricsVer := ver;
+    FMetricsPPI := PPI;
+    FMetricsRTL := IsRightToLeft;
+    FMetricsPlacement := FPlacement;
+    FMetricsClass := cls;
+    FMetricsOverride := StyleOverride;
+    FMetricsValid := True;
+  end;
+  Result := FMetrics;
+end;
+
+function TTyToolWindowBar.ChromeInsetPx: Integer;
+begin
+  Result := Metrics.Chrome;
+end;
+
+function TTyToolWindowBar.StripSizePx: Integer;
+begin
+  Result := Metrics.Strip;
+end;
+
+function TTyToolWindowBar.EdgeSizePx: Integer;
+begin
+  Result := Metrics.Edge;
+end;
+
+function TTyToolWindowBar.ContentMinPx: Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(TyToolWindowContentMinVar,
+    TyToolWindowContentMinDef), PPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyToolWindowBar.CollapsedAtRunTime: Boolean;
+begin
+  Result := FCollapsed and not (csDesigning in ComponentState);
+end;
+
+function TTyToolWindowBar.SizesAsCollapsed: Boolean;
+begin
+  { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。 }
+  Result := not (csDesigning in ComponentState)
+    and (FCollapsed or (WindowCount = 0));
+end;
+
+function TTyToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+var
+  content: Integer;
+begin
+  content := MulDiv(FExpandedSize, PPI, 96);
+  if FPlacement = twpBottom then
+  begin
+    if SizesAsCollapsed then Result := 0
+    else Result := 2 * AM.Chrome + AM.Edge + content;
+  end
+  else
+  begin
+    Result := AM.Strip + 2 * AM.Chrome;
+    if not SizesAsCollapsed then Inc(Result, AM.Edge + content);
+  end;
+end;
+
+procedure TTyToolWindowBar.DeriveSize;
+var
+  m: TTyToolWindowBarMetrics;
+  v: Integer;
+begin
+  if FDeriving or FDpiAdjusting
+     or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  FDeriving := True;
+  try
+    m := Metrics;
+    FLaid := m;
+    FLaidValid := True;
+    v := DerivedAxisPx(m);
+    if FPlacement = twpBottom then Height := v
+    else Width := v;
+  finally
+    FDeriving := False;
+  end;
+end;
+
+procedure TTyToolWindowBar.Relayout;
+begin
+  if FRelayouting then Exit;
+  FRelayouting := True;
+  try
+    DeriveSize;
+    { 内缩量变了:窗口是 alClient,只重画的话它们停在旧的客户区里。 }
+    Realign;
+  finally
+    FRelayouting := False;
+  end;
+end;
+
+procedure TTyToolWindowBar.Invalidate;
+var
+  m: TTyToolWindowBarMetrics;
+begin
+  { 换主题只带来一次裸 Invalidate(Controller.Changed),没人调 Realign。所以在这里比:
+    比的是上一次推导**用过**的那一份(FLaid),不是缓存 —— 见 FLaid 的声明。
+    **不**在这里问窗口的标题行高:那是窗口自己的缓存,先替它读掉,窗口的 Invalidate
+    就看不出主题变了(计划 Task 5 上方「谁先读就是谁的」)。 }
+  if FLaidValid and not FRelayouting and not FDpiAdjusting
+     and ([csLoading, csDestroying] * ComponentState = []) then
+  begin
+    m := Metrics;
+    if (m.Strip <> FLaid.Strip) or (m.Edge <> FLaid.Edge) or (m.Chrome <> FLaid.Chrome) then
+      Relayout;
+  end;
+  inherited Invalidate;
+end;
+
+procedure TTyToolWindowBar.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+  const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
+begin
+  { 继承那一遍按比例缩放了 Width(期间 FDpiAdjusting 为真,不写回 ExpandedSize、
+    不推导);之后按新 PPI 重新推 —— 按比例缩放的值和推导值会差一个舍入。 }
+  inherited AutoAdjustLayout(AMode, AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth);
+  Relayout;
+end;
+
+function TTyToolWindowBar.WidthIsStored: Boolean;
+begin
+  Result := FPlacement = twpBottom;
+end;
+
+function TTyToolWindowBar.HeightIsStored: Boolean;
+begin
+  Result := FPlacement <> twpBottom;
+end;
+
+procedure TTyToolWindowBar.SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+var
+  m: TTyToolWindowBarMetrics;
+  v: Integer;
+begin
+  { 只有设计器拖边这一种来源写回 ExpandedSize。推导(FDeriving)、DPI 缩放
+    (FDpiAdjusting)、运行时、流式加载一律不写回 —— 否则收窄值会写回、DPI 会二次缩放,
+    低于 96 的 PPI 下推导出来的宽再反算回去还会差一个舍入。 }
+  if ([csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning])
+     and not FDeriving and not FDpiAdjusting then
+  begin
+    m := Metrics;
+    if FPlacement = twpBottom then
+    begin
+      if AHeight <> Height then
+      begin
+        v := MulDiv(AHeight - 2 * m.Chrome - m.Edge, 96, PPI);
+        if v < 0 then v := 0 else if v > 99999 then v := 99999;
+        FExpandedSize := v;
+        AHeight := DerivedAxisPx(m);
+      end;
+    end
+    else if AWidth <> Width then
+    begin
+      v := MulDiv(AWidth - m.Strip - 2 * m.Chrome - m.Edge, 96, PPI);
+      if v < 0 then v := 0 else if v > 99999 then v := 99999;
+      FExpandedSize := v;
+      AWidth := DerivedAxisPx(m);
+    end;
+  end;
+  inherited SetBounds(ALeft, ATop, AWidth, AHeight);
+end;
+
+procedure TTyToolWindowBar.ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
+  MaxHeight: TConstraintSize);
+var
+  m: TTyToolWindowBarMetrics;
+  lo: Integer;
+begin
+  inherited ConstrainedResize(MinWidth, MinHeight, MaxWidth, MaxHeight);
+  { 和推导走同一个分支;只改传进来的下限,不写用户的 Constraints。 }
+  m := Metrics;
+  if FPlacement = twpBottom then
+  begin
+    if SizesAsCollapsed then lo := 0
+    else lo := 2 * m.Chrome + m.Edge + ContentMinPx;
+    if lo > MinHeight then MinHeight := lo;
+  end
+  else
+  begin
+    lo := m.Strip + 2 * m.Chrome;
+    if not SizesAsCollapsed then Inc(lo, m.Edge + ContentMinPx);
+    if lo > MinWidth then MinWidth := lo;
+  end;
+end;
+
+procedure TTyToolWindowBar.AdjustClientRect(var ARect: TRect);
+var
+  m: TTyToolWindowBarMetrics;
+begin
+  inherited AdjustClientRect(ARect);
+  { chrome 四周各一圈;图标条贴外侧,边缘区贴靠编辑区的那一侧(底栏在顶边)。
+    哪一侧一律按 Placement,不看 Align、不看 RTL。 }
+  m := Metrics;
+  InflateRect(ARect, -m.Chrome, -m.Chrome);
+  case FPlacement of
+    twpLeft:
+      begin
+        Inc(ARect.Left, m.Strip);
+        Dec(ARect.Right, m.Edge);
+      end;
+    twpRight:
+      begin
+        Dec(ARect.Right, m.Strip);
+        Inc(ARect.Left, m.Edge);
+      end;
+    twpBottom:
+      Inc(ARect.Top, m.Edge);
+  end;
+  { 收起时栏只剩图标条,内容区是负宽 —— 钳成空的,别让对齐引擎拿到反转的矩形。 }
+  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+end;
+
+procedure TTyToolWindowBar.SetPlacement(AValue: TTyToolWindowPlacement);
+var
+  wins: TTyToolWindowArray;
+  i: Integer;
+begin
+  if FPlacement = AValue then Exit;
+  { 侧 ↔ 底:运行时栏里有窗口就忽略 —— 会破坏「不能跨到底栏」的规则和布局串的键。 }
+  if ((FPlacement = twpBottom) <> (AValue = twpBottom)) and (WindowCount > 0)
+     and ([csDesigning, csLoading] * ComponentState = []) then Exit;
+  FPlacement := AValue;
+  { 流式加载时 Align 自己也在流里,不替它改。 }
+  if not (csLoading in ComponentState) then
+  begin
+    case AValue of
+      twpLeft: Align := alLeft;
+      twpRight: Align := alRight;
+      twpBottom: Align := alBottom;
+    end;
+  end;
+  DeriveSize;
+  if not (csLoading in ComponentState) then
+    MoveToOuterEdge;
+  { 侧 ↔ 底换的是窗口的标题行模式。 }
+  wins := WindowList(nil);
+  for i := 0 to High(wins) do
+    wins[i].RelayoutHeader;
+  Realign;
+  Invalidate;
+end;
+
+procedure TTyToolWindowBar.MoveToOuterEdge;
+var
+  p: TWinControl;
+  c: TControl;
+  i, v: Integer;
+begin
+  { 把 Left(左右)或 Top(底)设到父控件同侧的最外边,让对齐引擎把它排在同向对齐兄弟的
+    最外侧。LCL 按 Left / 右端 / 底端**严格**比较定顺序(wincontrol.inc:2522),相等时看
+    BaseBounds —— 不可预测,所以已经有兄弟贴在边上时再往外一格。这个数只是排序键,
+    对齐引擎排一遍就改掉。 }
+  p := Parent;
+  if p = nil then Exit;
+  case FPlacement of
+    twpLeft:
+      begin
+        v := 0;
+        for i := 0 to p.ControlCount - 1 do
+        begin
+          c := p.Controls[i];
+          if (c <> Self) and (c.Align = alLeft) and (c.Left <= v) then v := c.Left - 1;
+        end;
+        Left := v;
+      end;
+    twpRight:
+      begin
+        v := p.ClientWidth;
+        for i := 0 to p.ControlCount - 1 do
+        begin
+          c := p.Controls[i];
+          if (c <> Self) and (c.Align = alRight) and (c.Left + c.Width >= v) then
+            v := c.Left + c.Width + 1;
+        end;
+        Left := v - Width;
+      end;
+    twpBottom:
+      begin
+        v := p.ClientHeight;
+        for i := 0 to p.ControlCount - 1 do
+        begin
+          c := p.Controls[i];
+          if (c <> Self) and (c.Align = alBottom) and (c.Top + c.Height >= v) then
+            v := c.Top + c.Height + 1;
+        end;
+        Top := v - Height;
+      end;
+  end;
+end;
+
+procedure TTyToolWindowBar.SetExpandedSize(AValue: Integer);
+begin
+  { 和布局串的 1-5 位纯数字对齐。拉宽、设计器改大小、代码、读布局都经过这里。 }
+  if AValue < 0 then AValue := 0
+  else if AValue > 99999 then AValue := 99999;
+  if FExpandedSize = AValue then Exit;
+  FExpandedSize := AValue;
+  DeriveSize;
+  Realign;
+  Invalidate;
+end;
+
+function TTyToolWindowBar.EventsAllowed: Boolean;
+begin
+  Result := ([csDesigning, csLoading, csDestroying] * ComponentState = []) and (FSilent = 0);
+end;
+
+procedure TTyToolWindowBar.DoChange;
+begin
+  if EventsAllowed and Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTyToolWindowBar.SetCollapsed(AValue: Boolean);
+var
+  focusIn: Boolean;
+  form: TCustomForm;
+begin
+  if FCollapsed = AValue then Exit;
+  FCollapsed := AValue;
+  { 只在运行时生效:流式加载时由 Loaded 统一应用;设计期永远按展开显示。 }
+  if [csLoading, csDesigning, csDestroying] * ComponentState <> [] then Exit;
+  if FActive <> nil then
+  begin
+    if AValue then
+    begin
+      { 先记下焦点在不在里面 —— 藏起来之后 LCL 会把它挪到窗体本身。 }
+      focusIn := FocusIsInside(FActive);
+      HideWindowNow(FActive);
+      { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半由 Task 10 测。 }
+      if focusIn then
+      begin
+        form := GetParentForm(Self);
+        if form <> nil then form.SelectNext(Self, True, True);
+      end;
+    end
+    else
+      ShowWindowNow(FActive);
+  end;
+  DeriveSize;
+  Realign;
+  Invalidate;
+  if EventsAllowed then
+  begin
+    if AValue then
+    begin
+      if Assigned(FOnCollapse) then FOnCollapse(Self);
+    end
+    else if Assigned(FOnExpand) then
+      FOnExpand(Self);
+  end;
+end;
+
+function TTyToolWindowBar.WindowList(AExcept: TTyToolWindow): TTyToolWindowArray;
+var
+  i, n: Integer;
+begin
+  Result := nil;
+  SetLength(Result, ControlCount);
+  n := 0;
+  for i := 0 to ControlCount - 1 do
+    if (Controls[i] is TTyToolWindow) and (Controls[i] <> AExcept) then
+    begin
+      Result[n] := TTyToolWindow(Controls[i]);
+      Inc(n);
+    end;
+  SetLength(Result, n);
+end;
+
+function TTyToolWindowBar.IsRegistered(AWindow: TTyToolWindow): Boolean;
+var
+  i: Integer;
+begin
+  if AWindow <> nil then
+    for i := 0 to High(FRegistered) do
+      if FRegistered[i] = AWindow then Exit(True);
+  Result := False;
+end;
+
+function TTyToolWindowBar.GetWindow(AIndex: Integer): TTyToolWindow;
+var
+  i, n: Integer;
+begin
+  n := 0;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyToolWindow then
+    begin
+      if n = AIndex then Exit(TTyToolWindow(Controls[i]));
+      Inc(n);
+    end;
+  raise EListError.CreateFmt('Tool window index out of bounds (%d)', [AIndex]);
+end;
+
+function TTyToolWindowBar.GetWindowCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyToolWindow then Inc(Result);
+end;
+
+function TTyToolWindowBar.IndexOfWindow(AWindow: TTyToolWindow): Integer;
+var
+  i, n: Integer;
+begin
+  if AWindow <> nil then
+  begin
+    n := 0;
+    for i := 0 to ControlCount - 1 do
+      if Controls[i] is TTyToolWindow then
+      begin
+        if Controls[i] = AWindow then Exit(n);
+        Inc(n);
+      end;
+  end;
+  Result := -1;
+end;
+
+function TTyToolWindowBar.ControlIndexForWindowPos(AWindow: TTyToolWindow;
+  APos: Integer): Integer;
+var
+  others: TTyToolWindowArray;
+  cur, c: Integer;
+begin
+  { SetControlIndex 是「先摘下再插到 NewIndex」,所以目标在自己后面时要减一。 }
+  cur := GetControlIndex(AWindow);
+  Result := cur;
+  others := WindowList(AWindow);
+  if Length(others) = 0 then Exit;
+  if APos < 0 then APos := 0;
+  if APos <= High(others) then
+  begin
+    c := GetControlIndex(others[APos]);            { 插到它前面 }
+    if cur < c then Result := c - 1 else Result := c;
+  end
+  else
+  begin
+    c := GetControlIndex(others[High(others)]);    { 插到最后一个窗口后面 }
+    if cur < c then Result := c else Result := c + 1;
+  end;
+end;
+
+procedure TTyToolWindowBar.SetChildOrder(Child: TComponent; Order: Integer);
+begin
+  if (Child is TTyToolWindow) and (TTyToolWindow(Child).Parent = Self) then
+  begin
+    SetControlIndex(TControl(Child),
+      ControlIndexForWindowPos(TTyToolWindow(Child), Order));
+    Invalidate;
+  end
+  else
+    inherited SetChildOrder(Child, Order);
+end;
+
+function TTyToolWindowBar.FocusIsInside(AWindow: TTyToolWindow): Boolean;
+var
+  form: TCustomForm;
+begin
+  Result := False;
+  if AWindow = nil then Exit;
+  form := GetParentForm(Self);
+  if (form = nil) or (form.ActiveControl = nil) then Exit;
+  Result := AWindow.ContainsControl(form.ActiveControl);
+end;
+
+procedure TTyToolWindowBar.ShowWindowNow(AWindow: TTyToolWindow);
+var
+  was: Boolean;
+begin
+  was := FBarSwitching;
+  FBarSwitching := True;
+  try
+    { csNoDesignVisible 必须在写 Visible 之前摘:设计期的显示状态是
+      `Visible or (csDesigning and not csNoDesignVisible)`,触发重算的是写 Visible 那一次。
+      顺序反了,设计器里这一页的 HWND 要到整体重绘才露面(PageControl.pas:244-262)。 }
+    AWindow.ControlStyle := AWindow.ControlStyle - [csNoDesignVisible];
+    AWindow.Visible := True;
+  finally
+    FBarSwitching := was;
+  end;
+end;
+
+procedure TTyToolWindowBar.HideWindowNow(AWindow: TTyToolWindow);
+var
+  was: Boolean;
+begin
+  was := FBarSwitching;
+  FBarSwitching := True;
+  try
+    { 同上,反过来:先加标志再写 Visible,否则切走的那一页 HWND 一直杵着。 }
+    AWindow.ControlStyle := AWindow.ControlStyle + [csNoDesignVisible];
+    AWindow.Visible := False;
+  finally
+    FBarSwitching := was;
+  end;
+end;
+
+procedure TTyToolWindowBar.SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
+var
+  focusIn: Boolean;
+begin
+  { 第 5 步要的是「焦点**原来**在不在旧页里」,藏之前记。 }
+  focusIn := AMoveFocus and (AOld <> nil) and (AOld <> AWindow) and FocusIsInside(AOld);
+  { 1. 收起着就到此为止,不显示(spec §5.3)。 }
+  FActive := AWindow;
+  if not CollapsedAtRunTime then
+  begin
+    { 2、3:先显示新页再藏旧页 —— 先藏的话 LCL 会把焦点交给窗体本身。 }
+    if AWindow <> nil then ShowWindowNow(AWindow);
+    if (AOld <> nil) and (AOld <> AWindow) then HideWindowNow(AOld);
+    { 4. 标题行按此刻的样子重排。按指针位置重查悬停要等栏有了悬停(Task 7)。 }
+    if AWindow <> nil then AWindow.RelayoutHeader;
+    { 5. 只有焦点原来在旧页里才动它;新页已经显示了才聚焦得上。 }
+    if focusIn and (AWindow <> nil) and AWindow.CanFocus then
+      AWindow.FocusFirst;
+  end;
+  { 6. 设计期切页改了一个 published 值:两声都要(见 TTyCustomTabStrip 同一处)。
+    静默那一批(Loaded 应用 ActiveIndex)是打开窗体,不是改了它。 }
+  if FSilent = 0 then
+  begin
+    OwnerFormDesignerModified(Self);
+    if ([csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning])
+       and Assigned(TyDesignerRefreshValuesProc) then
+      TyDesignerRefreshValuesProc();
+  end;
+end;
+
+procedure TTyToolWindowBar.SwitchSilently(AWindow: TTyToolWindow);
+var
+  old: TTyToolWindow;
+begin
+  old := FActive;
+  Inc(FSilent);
+  try
+    if old <> nil then old.BeginSilentVisibility;
+    try
+      if (AWindow <> nil) and (AWindow <> old) then AWindow.BeginSilentVisibility;
+      try
+        SwitchCore(AWindow, old, False);
+      finally
+        if (AWindow <> nil) and (AWindow <> old) then AWindow.EndSilentVisibility;
+      end;
+    finally
+      if old <> nil then old.EndSilentVisibility;
+    end;
+  finally
+    Dec(FSilent);
+  end;
+end;
+
+procedure TTyToolWindowBar.ActivateWindow(AWindow: TTyToolWindow);
+var
+  prev: TTyToolWindow;
+begin
+  if IndexOfWindow(AWindow) < 0 then Exit;
+  { 流式加载期间只记下来,Loaded 统一应用。 }
+  if csLoading in ComponentState then
+  begin
+    FLoadingActiveIndex := IndexOfWindow(AWindow);
+    Exit;
+  end;
+  if AWindow = FActive then Exit;
+  prev := FActive;
+  SwitchCore(AWindow, prev, True);
+  if FActive <> prev then DoChange;
+end;
+
+function TTyToolWindowBar.GetActiveIndex: Integer;
+begin
+  if csLoading in ComponentState then Result := FLoadingActiveIndex
+  else Result := IndexOfWindow(FActive);
+end;
+
+procedure TTyToolWindowBar.SetActiveIndex(AValue: Integer);
+begin
+  { 流式加载时窗口还没读完,先记下来。 }
+  if csLoading in ComponentState then
+  begin
+    FLoadingActiveIndex := AValue;
+    Exit;
+  end;
+  if (AValue < 0) or (AValue >= WindowCount) then Exit;
+  ActivateWindow(Windows[AValue]);
+end;
+
+procedure TTyToolWindowBar.RegisterWindow(AWindow: TTyToolWindow);
+begin
+  if (AWindow = nil) or (AWindow.Parent <> Self) then Exit;
+  if IsRegistered(AWindow) then Exit;     { 幂等 }
+  SetLength(FRegistered, Length(FRegistered) + 1);
+  FRegistered[High(FRegistered)] := AWindow;
+  { 窗体之外建的窗口(Owner = nil)被释放时,Owner 的广播到不了这里。 }
+  AWindow.FreeNotification(Self);
+  AWindow.Controller := Controller;
+  if csLoading in ComponentState then
+  begin
+    { 加载中不显示任何一页:Loaded 按读进来的 ActiveIndex 静默地显示。 }
+    if FActive = nil then FActive := AWindow;
+  end
+  else
+    { 第一个成为当前页;不在加载中注册进来的(组件编辑器新建、粘贴、代码添加)也是。 }
+    ActivateWindow(AWindow);
+  DeriveSize;
+  Invalidate;
+end;
+
+procedure TTyToolWindowBar.RemoveControl(AControl: TControl);
+begin
+  if (AControl is TTyToolWindow) and IsRegistered(TTyToolWindow(AControl)) then
+  begin
+    FLeaving := TTyToolWindow(AControl);
+    FLeavingIndex := IndexOfWindow(FLeaving);
+  end;
+  inherited RemoveControl(AControl);
+end;
+
+procedure TTyToolWindowBar.UnregisterWindow(AWindow: TTyToolWindow);
+var
+  i, idx: Integer;
+  prev, next: TTyToolWindow;
+  rest: TTyToolWindowArray;
+begin
+  if not IsRegistered(AWindow) then Exit;
+  for i := 0 to High(FRegistered) do
+    if FRegistered[i] = AWindow then
+    begin
+      Delete(FRegistered, i, 1);
+      Break;
+    end;
+  { 离开前的窗口序号:通常它已经不在 Controls 里了,取 RemoveControl 记下的那个;
+    直接调本方法、它还在里面时现量。 }
+  idx := IndexOfWindow(AWindow);
+  if (idx < 0) and (AWindow = FLeaving) then idx := FLeavingIndex;
+  if AWindow = FLeaving then FLeaving := nil;
+  if not (csDestroying in AWindow.ComponentState) then
+    AWindow.RemoveFreeNotification(Self);
+  prev := FActive;
+  if csDestroying in ComponentState then
+  begin
+    if FActive = AWindow then FActive := nil;
+    Exit;
+  end;
+  if AWindow = FActive then
+  begin
+    { 先置 nil 再回落:回落用的切换不该去藏一个已经离开的窗口,也不该因为「焦点在旧页里」
+      去挪焦点(spec §5.2)。原位置上的下一个,没有就上一个,都没有就保持 nil。 }
+    FActive := nil;
+    next := nil;
+    rest := WindowList(AWindow);
+    if (idx >= 0) and (idx <= High(rest)) then next := rest[idx]
+    else if Length(rest) > 0 then next := rest[High(rest)];
+    if next <> nil then
+    begin
+      if csLoading in ComponentState then FActive := next
+      else SwitchCore(next, nil, False);
+    end;
+  end;
+  DeriveSize;
+  Realign;
+  Invalidate;
+  if FActive <> prev then DoChange;
+end;
+
+procedure TTyToolWindowBar.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  { 窗口被释放(含设计期删除):LCL 在 SetParent(nil) 时它已经 csDestroying,
+    注销那一步跳过了,走到这里。 }
+  if (Operation = opRemove) and (AComponent is TTyToolWindow) then
+    UnregisterWindow(TTyToolWindow(AComponent));
+end;
+
+procedure TTyToolWindowBar.SetController(AValue: TTyStyleController);
+var
+  wins: TTyToolWindowArray;
+  i: Integer;
+begin
+  inherited SetController(AValue);
+  { 推送链的第一段:栏 → 每个窗口(窗口再推给它的每个操作区)。 }
+  wins := WindowList(nil);
+  for i := 0 to High(wins) do
+    wins[i].Controller := AValue;
+end;
+
+procedure TTyToolWindowBar.ShowControl(AControl: TControl);
+begin
+  if (AControl is TTyToolWindow) and (IndexOfWindow(TTyToolWindow(AControl)) >= 0) then
+  begin
+    ActivateWindow(TTyToolWindow(AControl));
+    if not (csDesigning in ComponentState) then
+      Collapsed := False;
+  end;
+  { 往上传:栏自己在某个页里时,那一页也得露面。 }
+  inherited ShowControl(AControl);
+end;
+
+procedure TTyToolWindowBar.Loaded;
+var
+  wins: TTyToolWindowArray;
+  idx, i: Integer;
+  target: TTyToolWindow;
+begin
+  inherited Loaded;
+  { 窗口都在 SetParent 里注册过了,顺序就是 Controls 顺序(ffChildPos 经 SetChildOrder)。
+    -1 或越界、栏里又有窗口时取第一个(同 PageControl.pas:392-395)。 }
+  wins := WindowList(nil);
+  idx := FLoadingActiveIndex;
+  if (idx < 0) or (idx > High(wins)) then
+  begin
+    if Length(wins) > 0 then idx := 0 else idx := -1;
+  end;
+  if idx >= 0 then target := wins[idx] else target := nil;
+  { 视同流式加载:csLoading 已清,但窗体的 OnCreate 还没跑 —— 不发 OnChange,
+    也不发窗口的 OnShow / OnHide(spec §5.1 / §6.6)。 }
+  SwitchSilently(target);
+  for i := 0 to High(wins) do
+    wins[i].RelayoutHeader;
+  DeriveSize;
+  Realign;
 end;
 
 procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);

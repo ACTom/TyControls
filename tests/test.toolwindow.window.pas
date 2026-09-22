@@ -377,7 +377,9 @@ end;
 
 procedure TTyToolWindowTests.TestVisibilityFiresShowAndHideOnce;
 begin
-  { 切页就是开关 Visible(Task 10),所以这对事件的触发边是 CM_VISIBLECHANGED。 }
+  { 切页就是开关 Visible(Task 10),所以这对事件的触发边是 CM_VISIBLECHANGED。
+    栏里唯一的窗口一注册就是当前页、已经显示着(Task 5),先藏起来再挂事件。 }
+  FWin.Visible := False;
   FWin.OnShow := @HandleShow;
   FWin.OnHide := @HandleHide;
   FShows := 0;
