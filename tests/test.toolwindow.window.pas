@@ -7,7 +7,7 @@ unit test.toolwindow.window;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows;
 
@@ -87,6 +87,14 @@ type
     procedure TestAnAlClientChildLandsBelowTheHeaderRow;
     procedure TestAWindowThatLeftTheBarStopsRelayouting;
     procedure TestChildClassAllowedRejectsWindowsAndBars;
+  end;
+
+  { .lfm 读写走的就是这一条路:栏 + 窗口 + 操作区 + 正文,读回来的样子得跟写出去的一样。 }
+  TTyToolWindowStreamingTests = class(TTestCase)
+  published
+    procedure TestRoundTripKeepsWindowsOrderActiveAndSizes;
+    procedure TestExpandedSizeStreamsOnBothSidesOfTheDefault;
+    procedure TestAnInheritedFormKeepsTheWindowOrder;
   end;
 
 implementation
@@ -682,8 +690,219 @@ begin
   AssertTrue('拦下之后它不在里面', inner.Parent <> TWinControl(FWin));
 end;
 
+type
+  { 流式化的根:它拥有整棵设计树(同 test.pagecontrol.streaming 的 THostForm)。 }
+  TToolWindowHostForm = class(TForm)
+  end;
+
+function NewHost: TForm;
+begin
+  Result := TToolWindowHostForm.CreateNew(nil);
+  Result.Name := 'HostForm1';
+end;
+
+function AddWindow(AHost: TComponent; ABar: TTyToolWindowBar; const AName: string): TTyToolWindow;
+begin
+  Result := TTyToolWindow.Create(AHost);
+  Result.Name := AName;
+  Result.Parent := ABar;
+end;
+
+function NewBar(AHost: TForm): TTyToolWindowBar;
+begin
+  Result := TTyToolWindowBar.Create(AHost);
+  Result.Name := 'Bar';
+  Result.Parent := AHost;
+end;
+
+function StreamText(AStream: TMemoryStream): string;
+var
+  txt: TStringStream;
+begin
+  txt := TStringStream.Create('');
+  try
+    AStream.Position := 0;
+    ObjectBinaryToText(AStream, txt);
+    Result := txt.DataString;
+  finally
+    txt.Free;
+  end;
+end;
+
+function CountOf(const ASub, AText: string): Integer;
+var
+  rest: string;
+  p: Integer;
+begin
+  Result := 0;
+  rest := AText;
+  p := Pos(ASub, rest);
+  while p > 0 do
+  begin
+    Inc(Result);
+    Delete(rest, 1, p + Length(ASub) - 1);
+    p := Pos(ASub, rest);
+  end;
+end;
+
+procedure TTyToolWindowStreamingTests.TestRoundTripKeepsWindowsOrderActiveAndSizes;
+var
+  src, dst: TForm;
+  ms: TMemoryStream;
+  ctl: TTyStyleController;
+  bar, dbar: TTyToolWindowBar;
+  w2: TTyToolWindow;
+  act: TTyToolWindowActions;
+  btn, body: TBodyChild;
+  txt: string;
+begin
+  src := NewHost;
+  dst := TToolWindowHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    ctl := TTyStyleController.Create(src);
+    ctl.Name := 'Ctl1';
+    bar := NewBar(src);
+    bar.Controller := ctl;
+    AddWindow(src, bar, 'W1');
+    w2 := AddWindow(src, bar, 'W2');
+    AddWindow(src, bar, 'W3');
+    act := w2.EnsureActions;
+    act.Name := 'Act2';
+    btn := TBodyChild.Create(src);
+    btn.Name := 'ActBtn';
+    btn.Parent := act;
+    body := TBodyChild.Create(src);
+    body.Name := 'Body2';
+    body.Parent := w2;
+    body.Align := alClient;
+    bar.ExpandedSize := 200;
+    bar.ActiveIndex := 1;
+    bar.Collapsed := True;
+    ms.WriteComponent(src);
+    txt := StreamText(ms);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    dbar := dst.FindComponent('Bar') as TTyToolWindowBar;
+    AssertNotNull('栏读回来了', dbar);
+    AssertEquals('窗口数', 3, dbar.WindowCount);
+    AssertEquals('顺序 1', 'W1', dbar.Windows[0].Name);
+    AssertEquals('顺序 2', 'W2', dbar.Windows[1].Name);
+    AssertEquals('顺序 3', 'W3', dbar.Windows[2].Name);
+    AssertEquals('当前页序号', 1, dbar.ActiveIndex);
+    AssertEquals('展开尺寸', 200, dbar.ExpandedSize);
+    AssertTrue('收起标志', dbar.Collapsed);
+    AssertFalse('收起着读回来,当前页也不显示', dbar.Windows[1].Visible);
+    AssertNotNull('操作区跟着窗口一起流', dbar.Windows[1].Actions);
+    AssertEquals('操作区里的子控件也在', 'ActBtn', dbar.Windows[1].Actions.Controls[0].Name);
+    AssertTrue('正文子控件回到窗口里',
+      TControl(dst.FindComponent('Body2')).Parent = TWinControl(dbar.Windows[1]));
+    { Controller 不进 .lfm:读进来的时机在注册之后,两边会漂开;由栏在 fixup 时推过去。 }
+    AssertEquals('Controller 只写了栏的那一个', 1, CountOf('Controller = ', txt));
+    AssertSame('窗口拿到的是栏推过去的', dst.FindComponent('Ctl1'), dbar.Windows[1].Controller);
+    AssertSame('操作区也是', dst.FindComponent('Ctl1'), dbar.Windows[1].Actions.Controller);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowStreamingTests.TestExpandedSizeStreamsOnBothSidesOfTheDefault;
+
+  procedure Check(APlacement: TTyToolWindowPlacement; AValue: Integer);
+  var
+    src, dst: TForm;
+    ms: TMemoryStream;
+    bar, dbar: TTyToolWindowBar;
+    tag: string;
+  begin
+    tag := Format('Placement %d, ExpandedSize %d: ', [Ord(APlacement), AValue]);
+    src := NewHost;
+    dst := TToolWindowHostForm.CreateNew(nil);
+    ms := TMemoryStream.Create;
+    try
+      bar := NewBar(src);
+      bar.Placement := APlacement;
+      AddWindow(src, bar, 'W1');
+      bar.ExpandedSize := AValue;
+      ms.WriteComponent(src);
+      ms.Position := 0;
+      ms.ReadComponent(dst);
+      dbar := dst.FindComponent('Bar') as TTyToolWindowBar;
+      { 等于 default 的值不写出去,读回来的是构造值 —— 两者不一致就在这里变成另一个数。 }
+      AssertEquals(tag + '展开尺寸原样读回', AValue, dbar.ExpandedSize);
+      AssertEquals(tag + 'Placement 原样读回', Ord(APlacement), Ord(dbar.Placement));
+      { 推出来的那一边不进 .lfm,Loaded 按读回来的值重推。 }
+      if APlacement = twpBottom then
+        AssertEquals(tag + '高按读回来的值推', 2 * dbar.ChromeInsetPx + dbar.EdgeSizePx
+          + MulDiv(AValue, dbar.Font.PixelsPerInch, 96), dbar.Height)
+      else
+        AssertEquals(tag + '宽按读回来的值推', dbar.StripSizePx + 2 * dbar.ChromeInsetPx
+          + dbar.EdgeSizePx + MulDiv(AValue, dbar.Font.PixelsPerInch, 96), dbar.Width);
+    finally
+      ms.Free;
+      dst.Free;
+      src.Free;
+    end;
+  end;
+
+begin
+  Check(twpLeft, TyToolWindowDefaultExpandedSize);
+  Check(twpLeft, 260);
+  Check(twpBottom, TyToolWindowDefaultExpandedSize);
+  Check(twpBottom, 260);
+end;
+
+procedure TTyToolWindowStreamingTests.TestAnInheritedFormKeepsTheWindowOrder;
+var
+  anc, desc, e: TForm;
+  ancMS, descMS: TMemoryStream;
+  bar, dbar, ebar: TTyToolWindowBar;
+begin
+  { 子孙窗体里调了继承来的窗口的顺序,写出来的是 ffChildPos;读的时候 FPC 调父控件的
+    SetChildOrder(compon.inc:389)—— TWinControl 不重写它,不接的话顺序被静默丢掉。 }
+  anc := NewHost;
+  desc := TToolWindowHostForm.CreateNew(nil);
+  e := TToolWindowHostForm.CreateNew(nil);
+  ancMS := TMemoryStream.Create;
+  descMS := TMemoryStream.Create;
+  try
+    bar := NewBar(anc);
+    AddWindow(anc, bar, 'W1');
+    AddWindow(anc, bar, 'W2');
+    AddWindow(anc, bar, 'W3');
+    ancMS.WriteComponent(anc);
+    { 子孙:先按祖先读出来,再在上面把 W3 挪到最前(设计器的「移到最前」就是这一句)。 }
+    ancMS.Position := 0;
+    ancMS.ReadComponent(desc);
+    dbar := desc.FindComponent('Bar') as TTyToolWindowBar;
+    dbar.SetControlIndex(desc.FindComponent('W3') as TControl, 0);
+    descMS.WriteDescendent(desc, anc);
+    AssertTrue('前提:子孙流里写了子控件位置', Pos('[0]', StreamText(descMS)) > 0);
+    { 加载子孙窗体 = 先读祖先那一份,再在同一个实例上读子孙那一份。 }
+    ancMS.Position := 0;
+    ancMS.ReadComponent(e);
+    descMS.Position := 0;
+    descMS.ReadComponent(e);
+    ebar := e.FindComponent('Bar') as TTyToolWindowBar;
+    AssertEquals('窗口数不变', 3, ebar.WindowCount);
+    AssertEquals('W3 在最前', 'W3', ebar.Windows[0].Name);
+    AssertEquals('W1 第二', 'W1', ebar.Windows[1].Name);
+    AssertEquals('W2 第三', 'W2', ebar.Windows[2].Name);
+  finally
+    descMS.Free;
+    ancMS.Free;
+    e.Free;
+    desc.Free;
+    anc.Free;
+  end;
+end;
+
 initialization
-  { 这个单元不流式化,而四个类的 RegisterClass 在 tyControls.ToolWindows 自己的
-    initialization 里(:777)—— 这里再注册一遍是死代码。 }
+  { 流式测试读回来时按类名实例化:工具窗口四个类在 tyControls.ToolWindows 自己的
+    initialization 里注册,测试用的正文控件和控制器在这里补上。 }
+  RegisterClasses([TBodyChild, TTyStyleController]);
   RegisterTest(TTyToolWindowTests);
+  RegisterTest(TTyToolWindowStreamingTests);
 end.
