@@ -66,6 +66,10 @@ type
     procedure TestDesignTimeCountsChildrenTheUserHid;
     procedure TestAStrayAreaIsWideEnoughForItsNoteAtDesignTimeOnly;
     procedure TestTheNoteOfAStrayAreaNeverSitsUnderItsChildren;
+    procedure TestEnsureActionsMeasuresWithTheWindowController;
+    procedure TestAChildMinWidthWidensItsSlotInTheFlow;
+    procedure TestTheAreaOwnConstraintsReachTheHeader;
+    procedure TestDraggingIntoADesignTimeOrphanReappliesItsFloor;
   end;
 
 implementation
@@ -98,6 +102,9 @@ procedure TTyToolWindowActionsTests.SetUp;
 begin
   { 控件必须有父控件并自带 controller,否则读的是进程级主题:单跑绿、全量红。 }
   FForm := TForm.CreateNew(nil);
+  { 挂在窗体上的孤儿从这里继承密度。不钉的话无头是 72、widgetset 初始化之后是机器 DPI ——
+    200% 的机器上孤儿的最小高(token × 2)就超过测试里给的 50,视 suite 顺序而红。 }
+  FForm.Font.PixelsPerInch := 96;
   FCtl := TTyStyleController.Create(FForm);
   FBar := TTyToolWindowBar.Create(FForm);
   FBar.Parent := FForm;
@@ -252,7 +259,9 @@ var
   btn: TBodyChild;
 begin
   act := NewActions(FWin);
-  btn := NewChild(act, 40, 18);
+  { 12px 高:raw 高 24 < token 26。拿 18px 的话 raw 高 30 > 26,「高 = 标题行高」和
+    「高 = 自己的 raw 高」恰好是同一个数,分不出操作区到底是不是被标题行撑满的。 }
+  btn := NewChild(act, 40, 12);
   act.Align := alClient;        { 用户乱设也没用 }
   AssertEquals('Align 钉死在 alCustom', Ord(alCustom), Ord(act.Align));
   FWin.CallAlignControls;
@@ -261,7 +270,8 @@ begin
   AssertEquals('贴到标题行的右端,不再补尾端 pad(§3.4:操作区自带内边距)', 200, act.Left + act.Width);
   AssertEquals('宽就是 raw 首选宽', 2 * TyToolWindowHeaderPadDef + 40, act.Width);
   AssertEquals('在标题行里', 0, act.Top);
-  AssertEquals('高就是标题行高', FWin.HeaderHeightPx, act.Height);
+  AssertEquals('前提:标题行就是 token 高', TyToolWindowHeaderHeightDef, FWin.HeaderHeightPx);
+  AssertEquals('高被标题行撑满(token 26),不是自己的 raw 高 24', TyToolWindowHeaderHeightDef, act.Height);
   { 用户看得见的那个数:最后一个按钮离窗口右边正好一个 pad(它自己的内边距),不是两个。 }
   act.CallAlignControls;
   AssertEquals('最后一个按钮离右边一个 pad,不是两个(§3.4)',
@@ -405,6 +415,13 @@ begin
   AssertEquals('第一个贴到标题行右端(§3.4:操作区自带内边距,尾端不补 pad)', 200, first.Left + first.Width);
   AssertEquals('多出来的不被摆动', 3, extra.Left);
   AssertEquals('多出来的不被摆动', 150, extra.Top);
+  { 上面那两条标题行断言在运行时被「多出来的不露面」遮住了:「取所有可见操作区的最大值」
+    这种错实现照样绿。设计期多出来的那个看得见,再问一遍。 }
+  extra.MarkDesigning(True);
+  AssertTrue('前提:设计期多出来的那个看得见', extra.IsControlVisible);
+  AssertEquals('设计期标题行也只给第一个留宽',
+    2 * TyToolWindowHeaderPadDef + 40, FWin.HeaderInput(96, 200).ActionsWidth);
+  AssertEquals('设计期标题行高也只看第一个', TyToolWindowHeaderHeightDef, FWin.HeaderHeightPx);
 end;
 
 procedure TTyToolWindowActionsTests.TestAStrayAreaSitsAtTheBodyTopLeftAtDesignTime;
@@ -521,7 +538,7 @@ begin
     if FWin.Controls[i] is TTyToolWindowActions then Inc(n);
   AssertEquals('只建了一个', 1, n);
   AssertTrue('建完之后 Actions 就是它', FWin.Actions = act);
-  act.Controller := FCtl;
+  AssertTrue('窗口把自己的控制器给了它', act.Controller = FCtl);
   NewChild(act, 40, 18);
   AssertEquals('标题行给它留了位置',
     2 * TyToolWindowHeaderPadDef + 40, FWin.HeaderInput(96, 200).ActionsWidth);
@@ -690,6 +707,88 @@ begin
   AssertFalse('RTL:提示不压第二个子控件', IntersectRect(tmp, note, b.BoundsRect));
   AssertTrue('RTL:子控件在右边', a.Left + a.Width = extra.Width - TyToolWindowHeaderPadDef);
   AssertTrue('RTL:提示在子控件那一排左边', note.Right <= b.Left);
+end;
+
+procedure TTyToolWindowActionsTests.TestEnsureActionsMeasuresWithTheWindowController;
+var
+  act: TTyToolWindowActions;
+begin
+  { 专门**不**手工设控制器(NewActions 设了,会把这个缺口遮住):窗口按自己的控制器读
+    pad 给操作区留位,操作区若按 TyDefaultController 量自己,留的宽就是另一套主题下的。 }
+  FCtl.StyleOverride := ':root { --toolwindow-header-pad: 10px; }';
+  act := FWin.EnsureActions;
+  NewChild(act, 40, 18);
+  AssertEquals('前提:窗口读到的是改过的 pad', 10, FWin.HeaderInput(96, 200).Pad);
+  AssertEquals('操作区按窗口的控制器量:2×10 + 40', 2 * 10 + 40, act.PreferredSizeAt(96).cx);
+  AssertEquals('标题行留的宽也是这个', 2 * 10 + 40, FWin.HeaderInput(96, 200).ActionsWidth);
+end;
+
+procedure TTyToolWindowActionsTests.TestAChildMinWidthWidensItsSlotInTheFlow;
+var
+  act: TProbeActions;
+  a, b: TBodyChild;
+begin
+  { TTyButton 按标题设 MinWidth(Button.pas:702),SetBounds 会把它撑得比 Width 宽。
+    只按 Width 排的话,撑宽的那个压到下一个身上,首选宽也少算一截。 }
+  act := NewActions(FWin);
+  a := NewChild(act, 20, 18);
+  a.Constraints.MinWidth := 40;
+  b := NewChild(act, 30, 18);
+  AssertTrue('前提:子控件此刻真的比下限窄', a.Width < 40);
+  AssertEquals('首选宽按 max(Width, MinWidth)',
+    2 * TyToolWindowHeaderPadDef + 40 + 30 + TyToolWindowHeaderGapDef, act.PreferredSizeAt(96).cx);
+  act.SetBounds(0, 0, act.PreferredSizeAt(96).cx, 26);
+  act.CallAlignControls;
+  AssertEquals('第一个按下限的宽排', 40, a.Width);
+  AssertEquals('第二个排在撑宽之后的那个后面,不压上去',
+    TyToolWindowHeaderPadDef + 40 + TyToolWindowHeaderGapDef, b.Left);
+end;
+
+procedure TTyToolWindowActionsTests.TestTheAreaOwnConstraintsReachTheHeader;
+var
+  act: TProbeActions;
+begin
+  { 操作区自己的 Constraints 是 published 的,LCL 却在 CustomAlignPosition 之后才施加
+    (wincontrol.inc:3081-3082):标题行按没抬过的宽留位,施加之后它伸出行外、压住标题。 }
+  act := NewActions(FWin);
+  NewChild(act, 20, 12);
+  act.Constraints.MinWidth := 80;
+  act.Constraints.MinHeight := 40;
+  AssertEquals('首选宽抬到自己的 MinWidth', 80, act.PreferredSizeAt(96).cx);
+  AssertEquals('首选高抬到自己的 MinHeight', 40, act.PreferredSizeAt(96).cy);
+  AssertEquals('标题行按抬过的宽留位', 80, FWin.HeaderInput(96, 200).ActionsWidth);
+  AssertEquals('标题行按抬过的高', 40, FWin.HeaderHeightPx);
+  FWin.CallAlignControls;
+  AssertEquals('施加完约束仍是这个宽', 80, act.Width);
+  AssertEquals('施加完约束仍贴着行的右端,不伸出去', 200, act.Left + act.Width);
+end;
+
+procedure TTyToolWindowActionsTests.TestDraggingIntoADesignTimeOrphanReappliesItsFloor;
+var
+  orphan: TProbeActions;
+  a, b: TBodyChild;
+  bare, row: Integer;
+  note, tmp: TRect;
+begin
+  { 没人摆孤儿:ConstrainedResize 只在它自己的边界被设时才跑。设计期往里拖子控件之后,
+    下限得由它自己排子控件那一遍重新施加,否则提示停在省略号。 }
+  orphan := NewActions(FForm);
+  orphan.MarkDesigning(True);
+  orphan.SetBounds(10, 10, 75, 50);
+  bare := orphan.Width;              { pad + 提示宽 + pad }
+  AssertTrue('前提:空着的孤儿已经撑到放得下提示', bare > 75);
+  a := NewChild(orphan, 30, 18);
+  b := NewChild(orphan, 24, 18);
+  AssertEquals('前提:拖进来的那一刻没人改它的尺寸', bare, orphan.Width);
+  orphan.CallAlignControls;          { LCL 对孤儿只会请它自己排子控件 }
+  row := 2 * TyToolWindowHeaderPadDef + 30 + 24 + TyToolWindowHeaderGapDef;
+  AssertEquals('排子控件那一遍把下限重新施加:raw 宽 + gap + 提示宽 + pad',
+    row + TyToolWindowHeaderGapDef + (bare - TyToolWindowHeaderPadDef), orphan.Width);
+  orphan.CallAlignControls;          { 尺寸变了之后 LCL 按新客户区再请的那一遍 }
+  note := orphan.NoteRect;
+  AssertTrue('提示要有地方', note.Right > note.Left);
+  AssertFalse('提示不压第一个子控件', IntersectRect(tmp, note, a.BoundsRect));
+  AssertFalse('提示不压第二个子控件', IntersectRect(tmp, note, b.BoundsRect));
 end;
 
 initialization

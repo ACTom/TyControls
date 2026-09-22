@@ -24,6 +24,8 @@ type
     procedure TestStripClipsTheLastSlotToTheBand;
     procedure TestFlipAllMirrorsAZeroWidthRectInPlace;
     procedure TestFlipAllCoversEveryRectAndTab;
+    procedure TestSameGeomComparesEveryRectAndTab;
+    procedure TestActionsFlowFloorsEachItemAtItsMinimums;
   end;
 
 implementation
@@ -300,6 +302,81 @@ begin
   AssertEquals('Tabs[0].ItemRect', 180, g.Tabs[0].ItemRect.Left);
   AssertEquals('镜像不动纵向', 26, g.Caption.Bottom);
   AssertEquals('槽位的窗口序号不变', 3, g.Tabs[0].ItemIndex);
+end;
+
+{ 每次新建一份(动态数组在记录赋值时共享,拿 b := a 再改 b.Tabs[0] 会连 a 一起改)。 }
+function FullGeom: TTyToolWindowHeaderGeom;
+begin
+  Result := Default(TTyToolWindowHeaderGeom);
+  Result.Caption := Rect(1, 0, 11, 26);
+  Result.Actions := Rect(2, 0, 12, 26);
+  Result.TabArea := Rect(3, 0, 13, 26);
+  Result.Overflow := Rect(4, 0, 14, 26);
+  Result.Separator := Rect(5, 0, 15, 26);
+  Result.Maximize := Rect(6, 0, 16, 26);
+  Result.Collapse := Rect(7, 0, 17, 26);
+  SetLength(Result.Tabs, 2);
+  Result.Tabs[0].ItemIndex := 0;
+  Result.Tabs[0].ItemRect := Rect(20, 0, 40, 26);
+  Result.Tabs[1].ItemIndex := 5;
+  Result.Tabs[1].ItemRect := Rect(40, 0, 60, 26);
+  SetLength(Result.Hidden, 1);
+  Result.Hidden[0] := 3;
+end;
+
+procedure TTyToolWindowGeometryTests.TestSameGeomComparesEveryRectAndTab;
+var
+  b: TTyToolWindowHeaderGeom;
+begin
+  { 同 TestFlipAllCoversEveryRectAndTab 的形状:逐字段改一个值,每一处都要判成不同。
+    漏比任何一个字段,B 期那个部件变了而控件尺寸没变,窗口就 blit 出旧的那一帧。 }
+  AssertTrue('一模一样就是相同', TyToolWindowSameGeom(FullGeom, FullGeom));
+  b := FullGeom; b.Caption.Right := 99;
+  AssertFalse('Caption', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Actions.Left := 99;
+  AssertFalse('Actions', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.TabArea.Bottom := 99;
+  AssertFalse('TabArea', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Overflow.Top := 9;
+  AssertFalse('Overflow', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Separator.Right := 99;
+  AssertFalse('Separator', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Maximize.Left := 99;
+  AssertFalse('Maximize', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Collapse.Right := 99;
+  AssertFalse('Collapse', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Tabs[1].ItemRect.Right := 99;
+  AssertFalse('Tabs[1].ItemRect(标签宽变了)', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Tabs[1].ItemIndex := 6;
+  AssertFalse('Tabs[1].ItemIndex', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; SetLength(b.Tabs, 1);
+  AssertFalse('标签个数', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; b.Hidden[0] := 4;
+  AssertFalse('Hidden[0]', TyToolWindowSameGeom(FullGeom, b));
+  b := FullGeom; SetLength(b.Hidden, 0);
+  AssertFalse('收起的个数', TyToolWindowSameGeom(FullGeom, b));
+end;
+
+procedure TTyToolWindowGeometryTests.TestActionsFlowFloorsEachItemAtItsMinimums;
+var
+  items: array[0..2] of TTyToolWindowFlowItem;
+  fl: TTyToolWindowFlow;
+begin
+  { 宽按 max(Width, MinWidth)、高按 max(Height, MinHeight);最高的放中间,
+    「取最后一个」这种错实现不会碰巧对。 }
+  items[0].Width := 20; items[0].Height := 10; items[0].MinWidth := 40; items[0].MinHeight := 0;
+  items[1].Width := 30; items[1].Height := 12; items[1].MinWidth := 0;  items[1].MinHeight := 30;
+  items[2].Width := 10; items[2].Height := 18; items[2].MinWidth := 0;  items[2].MinHeight := 0;
+  fl := TyToolWindowActionsFlow(items, 200, 40, 6, 4, False);
+  AssertEquals('宽 = 2×pad + (40 + 30 + 10) + 2×gap', 12 + 80 + 8, fl.Size.cx);
+  AssertEquals('高 = 最高的(MinHeight 30) + 2×pad', 30 + 12, fl.Size.cy);
+  AssertEquals('第一个按 MinWidth 占 40', 40, fl.Rects[0].Right - fl.Rects[0].Left);
+  AssertEquals('第二个从 pad + 40 + gap 开始', 6 + 40 + 4, fl.Rects[1].Left);
+  AssertEquals('第二个按 MinHeight 高 30', 30, fl.Rects[1].Bottom - fl.Rects[1].Top);
+  AssertEquals('第二个按下限居中', (40 - 30) div 2, fl.Rects[1].Top);
+  fl := TyToolWindowActionsFlow([], 200, 40, 6, 4, False);
+  AssertEquals('一项都没有:宽 0', 0, fl.Size.cx);
+  AssertEquals('一项都没有:高 0', 0, fl.Size.cy);
 end;
 
 initialization

@@ -105,6 +105,23 @@ type
     Hidden: TTyToolWindowPlan;  { 底栏:收进溢出菜单的窗口序号 }
   end;
 
+  { 操作区那一排的一项输入(设备像素)。宽、高各按 max(本值, 下限) 算:TTyButton 按标题
+    设 MinWidth(Button.pas:702),SetBounds 会把它撑得比 Width 宽 —— 只按 Width 排,
+    撑宽的那一个就压到下一个身上。 }
+  TTyToolWindowFlowItem = record
+    Width, Height, MinWidth, MinHeight: Integer;
+  end;
+  TTyToolWindowFlowItems = array of TTyToolWindowFlowItem;
+
+  { 操作区那一排的答案:每项的矩形(区域内坐标,与输入同序)和整排的 raw 首选尺寸。 }
+  TTyToolWindowFlow = record
+    Rects: array of TRect;
+    Size: TSize;
+  end;
+
+  { 操作区的可见子控件,Controls[] 顺序,与 TTyToolWindowFlowItems 一一对应。 }
+  TTyToolWindowKids = array of TControl;
+
   { GetStyleTypeKey 在 TTyCustomControl 上是 abstract,不覆写就等于注册了一个
     「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
     类型键是契约不是实现,A 期就钉死。 }
@@ -128,9 +145,10 @@ type
     FHeaderPxRTL: Boolean;
     FHeaderPxMode: TTyToolWindowHeaderMode;
     FRelayouting: Boolean;
-    { 上一次对齐时标题行的样子(行、标题、操作区三个矩形)。操作区变宽 / 变高 / 被藏起来,
+    { 上一次对齐时标题行的样子(那一条 + 整套几何)。操作区变宽 / 变高 / 被藏起来,
       标题行跟着变,而窗口尺寸一个像素没动 —— 缓存自己看不出来,见 AlignControls。 }
-    FAlignedRow, FAlignedCaption, FAlignedActions: TRect;
+    FAlignedRow: TRect;
+    FAlignedGeom: TTyToolWindowHeaderGeom;
     function ImageIndexIsStored: Boolean;
     function GetBar: TTyToolWindowBar;
     function GetActions: TTyToolWindowActions;
@@ -233,6 +251,9 @@ type
     function IsUsedByWindow: Boolean;
     function HasVisibleChild: Boolean;
     function MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+    { 可见子控件(Controls[] 顺序)和它们在 APPI 下的流输入 —— 一处筛、一处换算,
+      排子控件(AlignControls)和量那一排(RowSizeAt)拿的是同一份。 }
+    function FlowInput(APPI: Integer; out AKids: TTyToolWindowKids): TTyToolWindowFlowItems;
     { 子控件那一排的尺寸;一个可见子控件都没有就是 (0, 0),设计期也一样(方槽不算)。 }
     function RowSizeAt(APPI: Integer): TSize;
     function NoteText: string;
@@ -310,6 +331,18 @@ function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyTo
   ARowWidth 必须就是排布时用的那个 RowWidth;传成别的(比如此刻的 ClientWidth)不会报错,
   整套几何会整体平移,同样不会红。 }
 procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);
+
+{ 两套几何是否一模一样:每个矩形字段、每个标签槽(窗口序号 + 矩形)、收进溢出菜单的
+  序号都比。同 TyToolWindowFlipAll,一处过完所有字段 —— 只比手挑的几个,B 期标签宽变了
+  而控件尺寸没变,窗口就会 blit 出旧的那一帧。 }
+function TyToolWindowSameGeom(const A, B: TTyToolWindowHeaderGeom): Boolean;
+
+{ 操作区自己那一排(spec §4):按顺序从左往右,两端各 APad、之间 AGap;每项宽按
+  max(Width, MinWidth)、高按 max(Height, MinHeight),在 AAvailH 里垂直居中。整排比
+  AAvailW 宽时贴尾端(裁掉的是开头的);ARightToLeft 时按 AAvailW 整排镜像。
+  Size 与 AAvailW / AAvailH 无关;一项都没有时 Size = (0, 0)、Rects 为空。 }
+function TyToolWindowActionsFlow(const AItems: array of TTyToolWindowFlowItem;
+  AAvailW, AAvailH, APad, AGap: Integer; ARightToLeft: Boolean): TTyToolWindowFlow;
 
 { 图标条 / 标签行的插入槽:按已排布项的中点分。返回 0..N 的**窗口序号**位置。 }
 function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
@@ -520,6 +553,9 @@ begin
     TTyPageControl 建页的规矩(PageControl.pas:332)回落到窗口自己。 }
   if Owner <> nil then own := Owner else own := Self;
   Result := TTyToolWindowActions.Create(own);
+  { 窗口按自己的控制器读 pad / gap 给操作区留位;操作区不接这一个的话,它按
+    TyDefaultController 量自己,留的宽就是在另一套主题下算的(同 PageControl.pas:280)。 }
+  Result.Controller := Controller;
   Result.Parent := Self;
   Result.TabOrder := 0;
 end;
@@ -572,11 +608,9 @@ begin
     只在真的变了时才丢:每一遍 DoAllAutoSize 都会来这里,无条件丢缓存就等于没有缓存。 }
   row := HeaderRowRect;
   g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
-  if EqualRect(row, FAlignedRow) and EqualRect(g.Caption, FAlignedCaption)
-     and EqualRect(g.Actions, FAlignedActions) then Exit;
+  if EqualRect(row, FAlignedRow) and TyToolWindowSameGeom(g, FAlignedGeom) then Exit;
   FAlignedRow := row;
-  FAlignedCaption := g.Caption;
-  FAlignedActions := g.Actions;
+  FAlignedGeom := g;
   if FPaintCache <> nil then FPaintCache.Drop;
   inherited Invalidate;
 end;
@@ -827,39 +861,48 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolWindowActions.RowSizeAt(APPI: Integer): TSize;
+function TTyToolWindowActions.FlowInput(APPI: Integer;
+  out AKids: TTyToolWindowKids): TTyToolWindowFlowItems;
 var
-  i, n, w, h, ch, own, pad, gap: Integer;
+  i, n, own: Integer;
   c: TControl;
 begin
-  Result.cx := 0;
-  Result.cy := 0;
   { 子控件的尺寸是按本控件此刻的密度排的设备像素;问别的 PPI 时按比例换过去,
     这一条记录里才是一套尺度。 }
   own := Font.PixelsPerInch;
   if own <= 0 then own := 96;
+  Result := nil;
+  AKids := nil;
+  SetLength(Result, ControlCount);
+  SetLength(AKids, ControlCount);
   n := 0;
-  w := 0;
-  h := 0;
   for i := 0 to ControlCount - 1 do
   begin
     c := Controls[i];
     if not c.IsControlVisible then Continue;
+    AKids[n] := c;
+    Result[n].Width := MulDiv(c.Width, APPI, own);
+    Result[n].Height := MulDiv(c.Height, APPI, own);
+    Result[n].MinWidth := MulDiv(c.Constraints.MinWidth, APPI, own);
+    Result[n].MinHeight := MulDiv(c.Constraints.MinHeight, APPI, own);
     Inc(n);
-    Inc(w, MulDiv(c.Width, APPI, own));
-    ch := c.Height;
-    if c.Constraints.MinHeight > ch then ch := c.Constraints.MinHeight;
-    ch := MulDiv(ch, APPI, own);
-    if ch > h then h := ch;
   end;
-  if n = 0 then Exit;
-  pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
-  gap := MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI);
-  Result.cx := 2 * pad + w + (n - 1) * gap;
-  Result.cy := h + 2 * pad;
+  SetLength(Result, n);
+  SetLength(AKids, n);
+end;
+
+function TTyToolWindowActions.RowSizeAt(APPI: Integer): TSize;
+var
+  kids: TTyToolWindowKids;
+begin
+  Result := TyToolWindowActionsFlow(FlowInput(APPI, kids), 0, 0,
+    MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI),
+    MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI), False).Size;
 end;
 
 function TTyToolWindowActions.PreferredSizeAt(APPI: Integer): TSize;
+var
+  own, lo: Integer;
 begin
   Result := RowSizeAt(APPI);
   { 一个可见子控件都没有:运行时就是 0 —— 非 raw 的 GetPreferredSize 会把 0 宽换成 75px
@@ -871,6 +914,15 @@ begin
     Result.cx := MetricPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
     Result.cy := Result.cx;
   end;
+  { 自己的 Constraints 是 published 的,可 LCL 在 CustomAlignPosition 之后才施加
+    (wincontrol.inc:3081-3082):标题行按没抬过的宽留位,施加之后它就伸出行外、压住标题。
+    所以首选尺寸自己先抬到下限 —— 标题行、正文顶都按抬过的算。 }
+  own := Font.PixelsPerInch;
+  if own <= 0 then own := 96;
+  lo := MulDiv(Constraints.MinWidth, APPI, own);
+  if lo > Result.cx then Result.cx := lo;
+  lo := MulDiv(Constraints.MinHeight, APPI, own);
+  if lo > Result.cy then Result.cy := lo;
 end;
 
 procedure TTyToolWindowActions.CalculatePreferredSize(var PreferredWidth,
@@ -969,10 +1021,12 @@ end;
 
 procedure TTyToolWindowActions.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
 var
-  kids: array of TControl;
-  cr: TRect;
-  i, n, pad, gap, availW, availH, x, ch, kx: Integer;
-  rtl: Boolean;
+  kids: TTyToolWindowKids;
+  items: TTyToolWindowFlowItems;
+  fl: TTyToolWindowFlow;
+  cr, r: TRect;
+  sz: TSize;
+  i: Integer;
 begin
   { 不调继承:子控件的 Align / Anchors 在这里一律不算,由这一排说了算。
     给子控件 SetBounds 会绕回这里,所以带保护。 }
@@ -982,38 +1036,41 @@ begin
     { LCL 的 AlignControls 第一步就是这一句(wincontrol.inc:3259),传进来的是没扣过的客户区。 }
     cr := RemainingClientRect;
     AdjustClientRect(cr);
-    kids := nil;
-    SetLength(kids, ControlCount);
-    n := 0;
-    for i := 0 to ControlCount - 1 do
-      if Controls[i].IsControlVisible then
-      begin
-        kids[n] := Controls[i];
-        Inc(n);
-      end;
-    if n = 0 then Exit;
-    pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, Font.PixelsPerInch);
-    gap := MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, Font.PixelsPerInch);
-    availW := cr.Right - cr.Left;
-    availH := cr.Bottom - cr.Top;
-    { 内容宽跟首选宽是同一处定义;放不下就整排贴尾端,被裁掉的是开头的控件 ——
-      尾端那几个最常用(spec §4)。 }
-    x := PreferredSizeAt(Font.PixelsPerInch).cx;
-    if x <= availW then x := pad
-    else x := availW - x + pad;
-    { 从右往左读时整排按宽镜像:第一个到右端,贴尾端就成了贴左端,被裁的仍是开头那个。 }
-    rtl := IsRightToLeft;
-    for i := 0 to n - 1 do
+    items := FlowInput(Font.PixelsPerInch, kids);
+    if Length(kids) > 0 then
     begin
-      ch := kids[i].Height;
-      if kids[i].Constraints.MinHeight > ch then ch := kids[i].Constraints.MinHeight;
-      if rtl then kx := availW - x - kids[i].Width
-      else kx := x;
-      kids[i].SetBounds(cr.Left + kx, cr.Top + (availH - ch) div 2, kids[i].Width, ch);
-      Inc(x, kids[i].Width + gap);
+      { 排法全在 TyToolWindowActionsFlow:从前导边排、放不下贴尾端(被裁的是开头的,
+        尾端那几个最常用,spec §4)、RTL 整排镜像;量那一排的 RowSizeAt 问的也是它。 }
+      fl := TyToolWindowActionsFlow(items, cr.Right - cr.Left, cr.Bottom - cr.Top,
+        MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, Font.PixelsPerInch),
+        MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, Font.PixelsPerInch),
+        IsRightToLeft);
+      for i := 0 to High(kids) do
+      begin
+        r := fl.Rects[i];
+        kids[i].SetBounds(cr.Left + r.Left, cr.Top + r.Top, r.Right - r.Left, r.Bottom - r.Top);
+      end;
     end;
   finally
     FInLayout := False;
+  end;
+  { 设计期往孤儿里拖控件:没人摆孤儿,ConstrainedResize 只在它自己的边界被设时才跑,
+    于是下限停在拖进来之前、提示停在省略号。排完子控件顺手再施加一次。
+    先例是 TTyToolBar 在 AlignControls 末尾设自己的 Height(ToolBar.pas:1905);这里放在
+    保护**之外**,尺寸一变 LCL 为新的客户区再请一遍这里时能真的按新宽重排,而那一遍
+    宽已够、不会再设,所以不循环。 }
+  if (csDesigning in ComponentState) and not IsUsedByWindow then
+  begin
+    sz := StrayDesignSize(Font.PixelsPerInch);
+    { 把撑好的尺寸直接给出去:SetBounds(Left, Top, Width, Height) 是空操作 ——
+      TWinControl.SetBounds 见边界没变就直接返回(wincontrol.inc:8163 的 SameRect),
+      根本走不到施加下限的 DoConstrainedResize。 }
+    if (Width < sz.cx) or (Height < sz.cy) then
+    begin
+      if sz.cx < Width then sz.cx := Width;
+      if sz.cy < Height then sz.cy := Height;
+      SetBounds(Left, Top, sz.cx, sz.cy);
+    end;
   end;
 end;
 
@@ -1096,6 +1153,77 @@ begin
     AGeom.Tabs[i].ItemRect := Flip(AGeom.Tabs[i].ItemRect);
 end;
 
+function TyToolWindowSameGeom(const A, B: TTyToolWindowHeaderGeom): Boolean;
+var
+  i: Integer;
+begin
+  { 跟 TyToolWindowFlipAll 同一份字段清单,一处过完 —— B 期给 Geom 加部件时,这里和
+    那里挨着,漏一行看得见。 }
+  Result := False;
+  if not EqualRect(A.Caption, B.Caption) then Exit;
+  if not EqualRect(A.Actions, B.Actions) then Exit;
+  if not EqualRect(A.TabArea, B.TabArea) then Exit;
+  if not EqualRect(A.Overflow, B.Overflow) then Exit;
+  if not EqualRect(A.Separator, B.Separator) then Exit;
+  if not EqualRect(A.Maximize, B.Maximize) then Exit;
+  if not EqualRect(A.Collapse, B.Collapse) then Exit;
+  if Length(A.Tabs) <> Length(B.Tabs) then Exit;
+  for i := 0 to High(A.Tabs) do
+  begin
+    if A.Tabs[i].ItemIndex <> B.Tabs[i].ItemIndex then Exit;
+    if not EqualRect(A.Tabs[i].ItemRect, B.Tabs[i].ItemRect) then Exit;
+  end;
+  if Length(A.Hidden) <> Length(B.Hidden) then Exit;
+  for i := 0 to High(A.Hidden) do
+    if A.Hidden[i] <> B.Hidden[i] then Exit;
+  Result := True;
+end;
+
+function TyToolWindowActionsFlow(const AItems: array of TTyToolWindowFlowItem;
+  AAvailW, AAvailH, APad, AGap: Integer; ARightToLeft: Boolean): TTyToolWindowFlow;
+var
+  ws, hs: array of Integer;
+  n, i, sum, tallest, x, left: Integer;
+begin
+  Result := Default(TTyToolWindowFlow);
+  n := Length(AItems);
+  if n = 0 then Exit;
+  { 同 TyToolWindowHeaderLayout:度量值不钳,负的内距 / 间距按 0 算。 }
+  if APad < 0 then APad := 0;
+  if AGap < 0 then AGap := 0;
+  ws := nil;
+  hs := nil;
+  SetLength(ws, n);
+  SetLength(hs, n);
+  sum := 0;
+  tallest := 0;
+  for i := 0 to n - 1 do
+  begin
+    ws[i] := AItems[i].Width;
+    if AItems[i].MinWidth > ws[i] then ws[i] := AItems[i].MinWidth;
+    if ws[i] < 0 then ws[i] := 0;
+    hs[i] := AItems[i].Height;
+    if AItems[i].MinHeight > hs[i] then hs[i] := AItems[i].MinHeight;
+    if hs[i] < 0 then hs[i] := 0;
+    Inc(sum, ws[i]);
+    if hs[i] > tallest then tallest := hs[i];
+  end;
+  Result.Size.cx := 2 * APad + sum + (n - 1) * AGap;
+  Result.Size.cy := tallest + 2 * APad;
+  { 放得下从前导内距开始;放不下整排贴尾端,被裁掉的是开头的。 }
+  if Result.Size.cx <= AAvailW then x := APad
+  else x := AAvailW - Result.Size.cx + APad;
+  SetLength(Result.Rects, n);
+  for i := 0 to n - 1 do
+  begin
+    { 从右往左读时整排按宽镜像:第一个到右端,贴尾端就成了贴左端,被裁的仍是开头那个。 }
+    if ARightToLeft then left := AAvailW - x - ws[i]
+    else left := x;
+    Result.Rects[i] := Bounds(left, (AAvailH - hs[i]) div 2, ws[i], hs[i]);
+    Inc(x, ws[i] + AGap);
+  end;
+end;
+
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
 var
   pad, gap, aw, x: Integer;
@@ -1105,16 +1233,16 @@ begin
   pad := AInput.Pad; if pad < 0 then pad := 0;
   gap := AInput.Gap; if gap < 0 then gap := 0;
   aw := AInput.ActionsWidth; if aw < 0 then aw := 0;
-  { 只给前导那个内距让位:尾端的 pad 由操作区自己带着(它的首选宽里就有两侧的 2×pad),
-    spec §3.4「操作区自带内边距,宽为 0 时尾端补一个 header-pad」。 }
-  if aw > AInput.RowWidth - pad then aw := AInput.RowWidth - pad;
 
   if AInput.Mode = twhSide then
   begin
     { 贴右端的操作区只是侧栏的答案。底栏从尾端往前是
       [收起][最大化][分隔线][操作区][溢出][标签…](spec §7.3),操作区不在最右端;
       twhNone 的操作区按 raw 首选尺寸放在正文左上角(spec §3.2)。
-      在分支外面算就等于给那两支发一个看起来合法的错答案。 }
+      在分支外面算就等于给那两支发一个看起来合法的错答案 —— 下面的钳位也一样。 }
+    { 只给前导那个内距让位:尾端的 pad 由操作区自己带着(它的首选宽里就有两侧的 2×pad),
+      spec §3.4「操作区自带内边距,宽为 0 时尾端补一个 header-pad」。 }
+    if aw > AInput.RowWidth - pad then aw := AInput.RowWidth - pad;
     if aw > 0 then
     begin
       { 贴到行的右端:再补一个 pad 的话,最后一个按钮离右边就是 2×pad。 }
