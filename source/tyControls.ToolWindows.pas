@@ -352,7 +352,6 @@ var
   mode: TTyToolWindowHeaderMode;
 begin
   mode := HeaderMode;
-  if mode = twhNone then Exit(0);
   mdl := ActiveController.Model;
   ver := mdl.ThemeVersion;
   { 键里既要版本号也要 model 身份:版本号是每个 model 各自算的,只按版本号键控
@@ -361,8 +360,15 @@ begin
      or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> IsRightToLeft)
      or (FHeaderPxMode <> mode) then
   begin
-    FHeaderPxCache := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
-      TyToolWindowHeaderHeightDef), Font.PixelsPerInch, 96);
+    { twhNone 也进缓存,键照常存(连同 mode)。在查键之前就 Exit(0) 的话,缓存和
+      FHeaderPxMode 都停在上一次 —— 比如还在栏里时的 26 —— 于是 Invalidate 从此每次都
+      看见 0 <> 26、每次都整控件重排。C 期应用布局时窗口暂时脱离栏、跨栏移动的中间态
+      都会走到这里。 }
+    if mode = twhNone then
+      FHeaderPxCache := 0
+    else
+      FHeaderPxCache := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
+        TyToolWindowHeaderHeightDef), Font.PixelsPerInch, 96);
     FHeaderPxAnchor := TObject(mdl);
     FHeaderPxVer := ver;
     FHeaderPxPPI := Font.PixelsPerInch;
@@ -403,8 +409,9 @@ end;
 
 { 标题行在给定客户区里占的那一条,**钳进这个客户区**。不钳的话控件比标题行还矮时
   (栏拖到很窄、或者正在动画)HeaderRowRect 会报出一个比控件还高的矩形,Task 4 的
-  CustomAlignPosition 就照着它把操作区摆到控件外面去。一处钳 —— HeaderGeomAt、
-  HeaderRowRect、RenderTo 问的是同一条。照 TTyCard.LayoutAtPPI(Card.pas:181)。 }
+  CustomAlignPosition 就照着它把操作区摆到控件外面去。一处钳 —— 正文区
+  (AdjustClientRect)、HeaderGeomAt、HeaderRowRect、RenderTo 问的是同一条。
+  照 TTyCard.LayoutAtPPI(Card.pas:181)。 }
 function TTyToolWindow.HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
 var
   clientH, h: Integer;
@@ -430,7 +437,8 @@ end;
 
 function TTyToolWindow.HeaderHeightPx: Integer;
 begin
-  { 布局用的那一问:按自己字体的像素密度。AdjustClientRect / HeaderRowRect 走的都是它。 }
+  { 按自己字体的像素密度问的那一问,**没钳过**。正文区(AdjustClientRect)和
+    HeaderRowRect 要的是钳进客户区的那一条,走 HeaderRowIn,不走这里。 }
   Result := HeaderHeightAt(Font.PixelsPerInch);
 end;
 
@@ -449,8 +457,8 @@ end;
 procedure TTyToolWindow.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
-  Inc(ARect.Top, HeaderHeightPx);
-  if ARect.Top > ARect.Bottom then ARect.Top := ARect.Bottom;
+  { 正文从钳过的标题行底下开始 —— 跟画出来的那一条、Task 4 摆操作区的那一条是同一处钳。 }
+  ARect.Top := HeaderRowIn(ARect, Font.PixelsPerInch).Bottom;
 end;
 
 procedure TTyToolWindow.RelayoutHeader;

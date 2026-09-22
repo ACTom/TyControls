@@ -40,6 +40,15 @@ type
     procedure CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  { 一个最普通的 alClient 子控件。别拿 TTyToolWindowActions 充数:Task 4 要让它变成
+    「那个操作区」—— 被 GetActions 扫出来、摆进标题行、首选高喂进行高 —— 到时候用它
+    当正文子控件的测试不是红就是得改写。GetStyleTypeKey 在 TTyCustomControl 上是
+    abstract,不覆写就是「一解析样式就抛 EAbstractError」。 }
+  TBodyChild = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
+  end;
+
   TTyToolWindowTests = class(TTestCase)
   private
     FForm: TForm;
@@ -76,9 +85,15 @@ type
     procedure TestHeaderGeomClampsTheRowIntoTheControl;
     procedure TestANegativeHeaderTokenDoesNotWedgeTheRelayout;
     procedure TestAnAlClientChildLandsBelowTheHeaderRow;
+    procedure TestAWindowThatLeftTheBarStopsRelayouting;
   end;
 
 implementation
+
+function TBodyChild.GetStyleTypeKey: string;
+begin
+  Result := 'TyTestBodyChild';
+end;
 
 procedure TProbeWindow.AdjustSize;
 begin
@@ -283,9 +298,10 @@ begin
   at96 := FWin.HeaderHeightPx;
   FWin.Font.PixelsPerInch := 192;
   at192 := FWin.HeaderHeightPx;
-  { 守的是「标题行高是**设备**像素」:token 不按 PPI 放大,这里两次就一样大。
-    键里那个 PPI 反而守不住 —— 改 Font.PixelsPerInch 会发 Changed、走到 Invalidate,
-    而 Invalidate 无条件把 token 缓存清掉,键少一项照样绿(实测过)。 }
+  { 守两件事。一是「标题行高是**设备**像素」:token 不按 PPI 放大的话两次一样大。
+    二是缓存键里的 PPI 那一项:Invalidate 不再手动作废缓存(608c33fc)之后,改完
+    Font.PixelsPerInch 能重算全靠键里有它 —— 从键里删掉这一项,这条就红(实测过)。
+    别照着早先的说法去删:那时候它确实是白写的,Invalidate 每次都顺手把缓存清掉。 }
   AssertEquals('标题行高按像素密度缩放', at96 * 2, at192);
   body := FWin.ClientRect;
   FWin.CallAdjustClientRect(body);
@@ -608,7 +624,7 @@ end;
 
 procedure TTyToolWindowTests.TestAnAlClientChildLandsBelowTheHeaderRow;
 var
-  child: TTyToolWindowActions;
+  child: TBodyChild;
   hdr: Integer;
 begin
   { 整条重排路径(RelayoutHeader → Realign)存在的理由就是这一条断言。对齐引擎本身
@@ -618,13 +634,28 @@ begin
   FWin.SetBounds(0, 0, 200, 300);
   hdr := FWin.HeaderHeightPx;
   AssertTrue('标题行要有高度', hdr > 0);
-  child := TTyToolWindowActions.Create(FForm);
+  child := TBodyChild.Create(FForm);
   child.Parent := FWin;
   child.Align := alClient;
   FWin.CallAlignControls;
   AssertEquals('alClient 子控件从标题行下面开始,不许盖住它', hdr, child.Top);
   AssertEquals('剩下的高度全归它', 300 - hdr, child.Height);
   AssertEquals('宽度整条占满', 200, child.Width);
+end;
+
+procedure TTyToolWindowTests.TestAWindowThatLeftTheBarStopsRelayouting;
+begin
+  { 在栏里算过一次(缓存 26、有效)之后离开栏:twhNone 若在查键之前就答 0,缓存和
+    mode 键都停在 26 / twhSide,之后每次 Invalidate 都看见 0 <> 26,每次都整控件
+    重排。C 期应用布局时窗口暂时脱离栏、跨栏移动的中间态都会走到。 }
+  FWin.SetBounds(0, 0, 200, 300);
+  AssertTrue('在栏里有标题行', FWin.HeaderHeightPx > 0);
+  FWin.Parent := FForm;
+  AssertEquals('离开栏就没有标题行', 0, FWin.HeaderHeightPx);
+  FWin.Invalidate;           { 这一次该请:内缩量真的从一整行变成了 0 }
+  FWin.AlignCount := 0;
+  FWin.Invalidate;
+  AssertEquals('离开过栏之后,什么都没动的重画一次都不许请对齐引擎', 0, FWin.AlignCount);
 end;
 
 initialization
