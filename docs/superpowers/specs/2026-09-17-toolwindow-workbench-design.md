@@ -100,7 +100,7 @@
 - `AdjustClientRect`：继承后 `Top += 标题行高`。
 - `CustomAlignPosition`：
   - 侧栏 / 底栏模式：`Actions`（第一个操作区）的四个边界全部取 `Bar.HeaderGeometry(Self).Actions`。
-  - 多出来的操作区（§4）放在正文区左上角（`AdjustClientRect` 之后的客户区原点），按 raw 首选尺寸。
+  - 多出来的操作区（§4）放在正文区左上角（`AdjustClientRect` 之后的客户区原点），按 raw 首选尺寸；**设计期**另有下限，见 §4「实现期修正」。
   - HeaderMode = none：不调 `Bar`（§3.2）。
   - 其他子控件走继承。
 
@@ -141,6 +141,7 @@
 - `ChildClassAllowed` 拒绝 `TTyToolWindow`、`TTyToolWindowBar`、`TTyToolWindowActions`。
 - **只由组件编辑器的"添加操作区"或 `EnsureActions` 创建**（`TabOrder := 0`）；不在窗口构造里自动建。
 - **一个窗口只认第一个操作区**（`Actions`）。粘贴等途径多出来的不参与标题行排布：设计期显示在正文左上角，并画 `TyToolWindowNote` 提示；运行时隐藏。
+  （**实现期修正 2026-09-22**：按 raw 尺寸摆，提示根本看不见——空的只有一个 token 方块、有子控件时被子控件盖住。所以**只在设计期**、只对多余操作区和孤儿：提示排在子控件那一排**后面**，宽度 = raw 首选宽 + gap + 提示宽 + pad，高度不低于 token 高；RTL 下整体镜像。提示文案也改短成 `Unused actions area` / `Not in a tool window`（96 PPI 下约 126 / 132px，塞得进侧栏）。运行时两者照旧隐藏。）
 - **孤儿**（Parent 不是 `TTyToolWindow`）：设计期画 `TyToolWindowNote` 提示（构造里没有 csNoDesignVisible，本来就看得见），运行时隐藏。
 
 **排列**（重写 `AlignControls`，不调继承，带保护）：
