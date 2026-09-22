@@ -138,18 +138,27 @@ function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
 
-  Shaped as v6's outerBounds rather than as the deprecated grid.containLabel:
-    obmNone -- the rect given IS the plot band; labels may overflow outside it.
-               (v5's default, containLabel:false.)
-    obmAuto -- the rect given is the OUTER bound; the plot band is shrunk so the
-               labels land inside it. (v6's default, ~ containLabel:true.)
+  UPSTREAM'S layOutGridByOuterBounds (v6), whole. The grid's own rect is the
+  RAW rect; the labels are laid out on it as they would be drawn, and the plot
+  shrinks only by how far they OVERFLOW the outer bounds -- by default the
+  whole canvas. A chart whose labels fit on the canvas keeps its grid exactly
+  as written. Along an axis the overflow is divided by how far along the axis
+  the label sits (shrinking the plot moves a label at 40% of the way by only
+  40% of the shrink); across it, it counts as it is. Each side takes the
+  largest, never the sum, and a side never shrinks below the clamp.
+    obmNone -- no outer bounds: the raw rect IS the plot.
+    obmAuto -- the outer bounds are grid.outerBounds on the canvas.
+    obmSame -- the outer bounds are the raw rect itself.
+  Legacy grid.containLabel is its own rule (TyLegacyContainLabel): the
+  widest label's room taken off each side, summed.
+  [Revised in batch 37: the port reserved every axis' thickness INSIDE the
+  grid's rect, summed per side -- which is containLabel, not v6's default --
+  and every chart's plot came out some thirty pixels smaller than
+  upstream's.]
 
-  THE TWO PHASES DO NOT ITERATE, on purpose. An axis' thickness is the largest
-  extent its labels reach PERPENDICULAR to it. Shrinking the plot shortens the
-  axis, which can force more thinning -- but thinning changes how MANY labels
-  show, not how big each one is, so the thickness is unchanged and a second pass
-  would compute the same number. The one case that escapes it is the widest label
-  happening to be one of the thinned-out ones; ECharts does not chase that either.
+  THE TWO PHASES DO NOT ITERATE, and upstream's do not either: the labels are
+  estimated once on the raw rect and determined once on the final one, and a
+  label the shrink has moved is not asked again.
 
   NOT DONE HERE, deliberately: nameMoveOverlap (v6's shuffle when an axis name
   collides with the end label). That is its own feature, not part of the pass. }
@@ -158,7 +167,7 @@ type
   { TTyAxisSide moved down to AdvChart.Types -- Coord needs it and Layout
     already uses Coord. Re-exported here so no caller has to change its uses. }
   TTyAxisSide = tyControls.AdvChart.Types.TTyAxisSide;
-  TTyOuterBoundsMode = (obmNone, obmAuto);
+  TTyOuterBoundsMode = (obmNone, obmAuto, obmSame);
   { Whether an axis' NAME counts toward the space reserved, or only its labels. }
   TTyOuterBoundsContain = (obcAxisLabel, obcAll);
 
@@ -314,9 +323,48 @@ type
       means `shown when the stride landed on it`. }
     ShowMinLabel: TTyAxisEndLabel;
     ShowMaxLabel: TTyAxisEndLabel;
+
+    { ---- what the outer-bounds shrink needs besides the boxes ---- }
+
+    { WHERE EACH LABEL'S TICK SITS IN THE SCALE'S OWN EXTENT, 0..1 from its
+      start: upstream's proportion, `scale.normalize(tick)`. NOT Positions --
+      those are band-adjusted and inverted, and the shrink divides by neither.
+      Parallel to Labels; empty means no proportion at all. }
+    Proportions: TTyDoubleArray;
+    { axisLabel.textMargin, LOGICAL px: the padding round each label's box,
+      across its own lines (V) and along them (H). Upstream's default is
+      [0, 3]; the zero value is none. }
+    TextMarginVLogical, TextMarginHLogical: Double;
+    { WHAT LEGACY containLabel MEASURES: axisLabel.show on a scale that is not
+      blank -- whether or not the axis itself is shown, which ShowLabels
+      is not. }
+    LegacyLabels: Boolean;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
+
+  { x, y, width and height: upstream's own shape for a rect. The shrink is
+    done in it so that its arithmetic is upstream's to the bit -- a right edge
+    is x + width there, and a width taken back from one is not always the
+    same number. }
+  TTyXYWH = record
+    X, Y, W, H: Double;
+  end;
+
+  { Something that may overflow the grid's outer bounds: a label's box or a
+    name's, DEVICE px. AlongY says which dimension is its axis' own; along it
+    the overflow is divided by Proportion, because a thing that sits that far
+    along the axis is brought in by only that much of the shrink.
+    Not-a-number is no proportion, and the overflow counts as it is. }
+  TTyBoundsItem = record
+    R: TTyXYWH;
+    AlongY: Boolean;
+    Proportion: Double;
+  end;
+  TTyBoundsItemArray = array of TTyBoundsItem;
+
+  { top, right, bottom, left -- upstream's order for a margin }
+  TTyMargin4 = array[0..3] of Double;
 
 
 { Logical px -> device px for axis geometry. Exported because the builder
@@ -329,13 +377,55 @@ function TyAxisThickness(const ASpec: TTyAxisLayoutSpec;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AContain: TTyOuterBoundsContain): Double;
 
-{ Phase 2. Shrink the container by every axis' thickness to get the plot band.
-  Under obmNone this returns AContainer unchanged -- the axes are still measured
-  by the caller if it wants them, they just do not take space. }
-function TySolveGrid(const AContainer: TTyRectF;
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+
+{ Phase 2, the estimate. Every label this axis shows when laid out on ARaw,
+  as the box it would be drawn in: anchored beyond the plot's edge by the
+  offset and the label margin, turned, and padded by textMargin -- and with
+  its proportion. Nothing for an axis that shows no labels. }
+function TyAxisLabelBoundsItems(const ASpec: TTyAxisLayoutSpec;
+  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyBoundsItemArray;
+
+{ The axis NAME as the paint pass draws it, proportion one half, which is
+  upstream's for a centred name. INTERIM: upstream lays names out by
+  location, gap, rotation and margin level, and a name batch will; until
+  then the name counts where it is actually drawn. False for no name. }
+function TyAxisNameBoundsItem(const ASpec: TTyAxisLayoutSpec;
+  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  out AItem: TTyBoundsItem): Boolean;
+
+{ upstream's fillMarginOnOneDimension, over every item and the raw rect
+  itself: the largest overflow of AOuter on each side, along an item's own
+  dimension divided by its proportion (when the overflow is positive and the
+  proportion above 1e-4). }
+function TyOuterBoundsMargin(const AOuter, ARaw: TTyXYWH;
+  const AItems: TTyBoundsItemArray): TTyMargin4;
+
+{ upstream's expandOrShrinkRect, shrinking, negative margins taken as none,
+  and no side smaller than AMinW / AMinH -- or than it already was. A rect
+  that hits the floor keeps the side that did not ask to move. }
+procedure TyShrinkRect(var ARect: TTyXYWH; const AMargin: TTyMargin4;
+  AMinW, AMinH: Double);
+
+{ Phase 2, whole: upstream's layOutGridByOuterBounds. ARaw is the grid's
+  rect, AOuter the bounds the labels (and, under obcAll, the names) must
+  stay inside, AClampW/H the smallest the plot may become. }
+function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
+  AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer; AMode: TTyOuterBoundsMode;
-  AContain: TTyOuterBoundsContain = obcAxisLabel): TTyRectF;
+  APPI: Integer): TTyRectF;
+
+{ Legacy grid.containLabel: for every axis in turn whose labels are not
+  inside, the widest (or tallest) of all its labels -- unrotated, turned by
+  |cos| and |sin|, no textMargin, every label up to forty and a sample past
+  that -- plus the label margin, taken off its side. Axes on one side stack.
+  Names, offsets and axis.show do not enter into it. }
+function TyLegacyContainLabel(const ARaw: TTyRectF;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyRectF;
 
 { Phase 3. Place the labels along the FINAL plot band, thinning to a uniform
   step when they would collide. }
@@ -895,39 +985,312 @@ begin
   end;
 end;
 
-function TySolveGrid(const AContainer: TTyRectF;
-  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
-  APPI: Integer; AMode: TTyOuterBoundsMode;
-  AContain: TTyOuterBoundsContain): TTyRectF;
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+  Result.W := AW;
+  Result.H := AH;
+end;
+
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+begin
+  Result := TyXYWH(ARect.Left, ARect.Top, ARect.Right - ARect.Left,
+    ARect.Bottom - ARect.Top);
+end;
+
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+begin
+  Result := TyRectF(A.X, A.Y, A.X + A.W, A.Y + A.H);
+end;
+
+{ The box a label is drawn in, turned about its anchor and padded, as the
+  axis-aligned rect round it -- zrender's getBoundingRect after the label's
+  transform: the four corners, their least and greatest. }
+function LabelBox(AX, AY, AW, AH, APadH, APadV, ARot: Double;
+  AAnchorH: TTyTextAnchorH; AAnchorV: TTyTextAnchorV): TTyXYWH;
+var
+  x0, x1, y0, y1, c, s, px, py, lo, hi, vlo, vhi: Double;
+  k: Integer;
+begin
+  case AAnchorH of
+    tahLeft: x0 := 0;
+    tahRight: x0 := -AW;
+  else
+    x0 := -AW / 2;
+  end;
+  case AAnchorV of
+    tavTop: y0 := 0;
+    tavBottom: y0 := -AH;
+  else
+    y0 := -AH / 2;
+  end;
+  x1 := x0 + AW + APadH;
+  x0 := x0 - APadH;
+  y1 := y0 + AH + APadV;
+  y0 := y0 - APadV;
+  if ARot = 0 then
+    Exit(TyXYWH(AX + x0, AY + y0, x1 - x0, y1 - y0));
+  { COUNTER-CLOCKWISE on a screen whose y runs down, zrender's rotate: x' is
+    x cos + y sin, y' is -x sin + y cos }
+  c := Cos(ARot);
+  s := Sin(ARot);
+  lo := Infinity;
+  hi := NegInfinity;
+  vlo := Infinity;
+  vhi := NegInfinity;
+  for k := 0 to 3 do
+  begin
+    if k in [0, 3] then px := x0 else px := x1;
+    if k in [0, 1] then py := y0 else py := y1;
+    if px * c + py * s < lo then lo := px * c + py * s;
+    if px * c + py * s > hi then hi := px * c + py * s;
+    if -px * s + py * c < vlo then vlo := -px * s + py * c;
+    if -px * s + py * c > vhi then vhi := -px * s + py * c;
+  end;
+  Result := TyXYWH(AX + lo, AY + vlo, hi - lo, vhi - vlo);
+end;
+
+function TyAxisLabelBoundsItems(const ASpec: TTyAxisLayoutSpec;
+  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyBoundsItemArray;
+var
+  places: TTyAxisLabelPlacementArray;
+  i, n: Integer;
+  w, h, padH, padV: Double;
+  horiz: Boolean;
+begin
+  Result := nil;
+  if (AMeasurer = nil) or (not ASpec.ShowLabels) then Exit;
+  { THE LABELS THE ESTIMATE SHOWS: thinned on the raw rect, the hidden ends
+    left out -- upstream measures the survivors and nothing else }
+  places := TyLayoutAxisLabels(ASpec, ARaw, AMeasurer, APPI);
+  padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
+  padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
+  horiz := AxisIsHorizontal(ASpec.Side);
+  SetLength(Result, Length(places));
+  n := 0;
+  for i := 0 to High(places) do
+  begin
+    if (not places[i].Shown) or (places[i].Text = '') then Continue;
+    AMeasurer.MeasureLine(places[i].Text, ASpec.FontName,
+      ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
+    Result[n].R := LabelBox(places[i].X, places[i].Y, w, h, padH, padV,
+      ASpec.RotationRad, places[i].AnchorH, places[i].AnchorV);
+    Result[n].AlongY := not horiz;
+    { a y axis measures its proportion from the TOP, where the overflow the
+      division applies to is the one below }
+    Result[n].Proportion := NaN;
+    if i <= High(ASpec.Proportions) then
+    begin
+      if horiz then Result[n].Proportion := ASpec.Proportions[i]
+      else Result[n].Proportion := 1 - ASpec.Proportions[i];
+    end;
+    Inc(n);
+  end;
+  SetLength(Result, n);
+end;
+
+function TyAxisNameBoundsItem(const ASpec: TTyAxisLayoutSpec;
+  const ARaw: TTyRectF; const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  out AItem: TTyBoundsItem): Boolean;
+var
+  nw, nh, off, at, cx, cy: Double;
+begin
+  AItem := Default(TTyBoundsItem);
+  Result := (ASpec.Name <> '') and (AMeasurer <> nil);
+  if not Result then Exit;
+  AMeasurer.MeasureLine(ASpec.Name, ASpec.FontName, ASpec.FontSizeLogical,
+    ASpec.FontWeight, nw, nh);
+  { WHERE THE PAINT PASS PUTS IT: the middle of the band the thickness sets
+    aside for it, measured out from the axis line }
+  off := (TyAxisThickness(ASpec, AMeasurer, APPI, obcAxisLabel)
+    + TyAxisThickness(ASpec, AMeasurer, APPI, obcAll)) / 2;
+  at := AxisScaleF(ASpec.OffsetLogical, APPI);
+  case ASpec.Side of
+    asBottom: begin cx := (ARaw.Left + ARaw.Right) / 2; cy := ARaw.Bottom + at + off; end;
+    asTop: begin cx := (ARaw.Left + ARaw.Right) / 2; cy := ARaw.Top - at - off; end;
+    asLeft: begin cy := (ARaw.Top + ARaw.Bottom) / 2; cx := ARaw.Left - at - off; end;
+  else
+    begin cy := (ARaw.Top + ARaw.Bottom) / 2; cx := ARaw.Right + at + off; end;
+  end;
+  if AxisIsHorizontal(ASpec.Side) then
+    AItem.R := TyXYWH(cx - nw / 2, cy - nh / 2, nw, nh)
+  else
+    AItem.R := TyXYWH(cx - nh / 2, cy - nw / 2, nh, nw);
+  AItem.AlongY := not AxisIsHorizontal(ASpec.Side);
+  AItem.Proportion := 0.5;
+end;
+
+function TyOuterBoundsMargin(const AOuter, ARaw: TTyXYWH;
+  const AItems: TTyBoundsItemArray): TTyMargin4;
 var
   i: Integer;
-  t: Double;
-  inset: array[TTyAxisSide] of Double;
-  side: TTyAxisSide;
+  m: TTyMargin4;
+
+  function Apply(AOverflow, AProportion: Double): Double;
+  begin
+    { a proportion near nought gives up the division rather than blow the
+      overflow up past any meaning }
+    Result := AOverflow;
+    if (AOverflow > 0) and (not IsNan(AProportion)) and (AProportion > 1e-4) then
+      Result := AOverflow / AProportion;
+  end;
+
+  procedure Fill(const AR: TTyXYWH; AOnY: Boolean; AProportion: Double);
+  var o1, o2: Double;
+  begin
+    if AOnY then
+    begin
+      o1 := AOuter.Y - AR.Y;
+      o2 := (AR.H + AR.Y) - (AOuter.H + AOuter.Y);
+      o1 := Apply(o1, 1 - AProportion);
+      o2 := Apply(o2, AProportion);
+      if o1 > m[0] then m[0] := o1;
+      if o2 > m[2] then m[2] := o2;
+    end
+    else
+    begin
+      o1 := AOuter.X - AR.X;
+      o2 := (AR.W + AR.X) - (AOuter.W + AOuter.X);
+      o1 := Apply(o1, 1 - AProportion);
+      o2 := Apply(o2, AProportion);
+      if o1 > m[3] then m[3] := o1;
+      if o2 > m[1] then m[1] := o2;
+    end;
+  end;
+
 begin
-  Result := AContainer;
-  if AMode = obmNone then
-    Exit;
-  for side := Low(TTyAxisSide) to High(TTyAxisSide) do
-    inset[side] := 0;
-  { Several axes may share a side (a secondary y axis on the left). Each takes
-    the space it needs, so the side's inset is the SUM, not the max. }
+  m[0] := 0; m[1] := 0; m[2] := 0; m[3] := 0;
+  for i := 0 to High(AItems) do
+  begin
+    Fill(AItems[i].R, AItems[i].AlongY, AItems[i].Proportion);
+    Fill(AItems[i].R, not AItems[i].AlongY, NaN);
+  end;
+  { AND THE RECT ITSELF: a grid written wider than its bounds overflows them
+    with no label at all }
+  Fill(ARaw, False, NaN);
+  Fill(ARaw, True, NaN);
+  Result := m;
+end;
+
+procedure ShrinkOneDimension(var APos, ASize: Double; ALo, AHi, AMin: Double);
+var sum, old, least: Double;
+begin
+  sum := AHi + ALo;
+  old := ASize;
+  ASize := ASize + sum;
+  least := Max(Double(0), Min(AMin, old));
+  if ASize < least then
+  begin
+    ASize := least;
+    { THE SIDE THAT DID NOT ASK TO MOVE STAYS WHERE IT WAS }
+    if ALo >= 0 then APos := APos + (-ALo)
+    else if AHi >= 0 then APos := APos + (old + AHi)
+    else if Abs(sum) > 1e-8 then APos := APos + ((old - least) * ALo / sum);
+  end
+  else
+    APos := APos - ALo;
+end;
+
+procedure TyShrinkRect(var ARect: TTyXYWH; const AMargin: TTyMargin4;
+  AMinW, AMinH: Double);
+var d: TTyMargin4;
+  i: Integer;
+begin
+  { negative margins are none; then, to SHRINK, every one is negated }
+  for i := 0 to 3 do
+    d[i] := -Max(Double(0), AMargin[i]);
+  if IsNan(AMinW) then AMinW := 0;
+  if IsNan(AMinH) then AMinH := 0;
+  ShrinkOneDimension(ARect.X, ARect.W, d[3], d[1], AMinW);
+  ShrinkOneDimension(ARect.Y, ARect.H, d[0], d[2], AMinH);
+end;
+
+function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
+  AContain: TTyOuterBoundsContain; AClampW, AClampH: Double;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyRectF;
+var
+  items, one: TTyBoundsItemArray;
+  name: TTyBoundsItem;
+  i, k, n: Integer;
+  r: TTyXYWH;
+begin
+  items := nil;
+  n := 0;
   for i := 0 to High(AAxes) do
   begin
-    t := TyAxisThickness(AAxes[i], AMeasurer, APPI, AContain);
-    inset[AAxes[i].Side] := inset[AAxes[i].Side] + t;
+    one := TyAxisLabelBoundsItems(AAxes[i], ARaw, AMeasurer, APPI);
+    SetLength(items, n + Length(one) + 1);
+    for k := 0 to High(one) do
+      items[n + k] := one[k];
+    Inc(n, Length(one));
+    { A hidden axis has lost its name in the builder, as it has its labels }
+    if (AContain = obcAll)
+      and TyAxisNameBoundsItem(AAxes[i], ARaw, AMeasurer, APPI, name) then
+    begin
+      items[n] := name;
+      Inc(n);
+    end;
   end;
-  Result.Left := AContainer.Left + inset[asLeft];
-  Result.Right := AContainer.Right - inset[asRight];
-  Result.Top := AContainer.Top + inset[asTop];
-  Result.Bottom := AContainer.Bottom - inset[asBottom];
-  { Over-constrained -- more axis furniture than container. Collapse rather than
-    invert: an inverted plot rect survives a later Min/Max swap and reappears as
-    a phantom band, which is far harder to find than an empty chart. }
-  if Result.Right < Result.Left then
-    Result.Right := Result.Left;
-  if Result.Bottom < Result.Top then
-    Result.Bottom := Result.Top;
+  SetLength(items, n);
+  r := TyXYWHOfRect(ARaw);
+  TyShrinkRect(r, TyOuterBoundsMargin(AOuter, TyXYWHOfRect(ARaw), items),
+    AClampW, AClampH);
+  Result := TyRectOfXYWH(r);
+end;
+
+function TyLegacyContainLabel(const ARaw: TTyRectF;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyRectF;
+var
+  i, k, n, step: Integer;
+  w, h, uw, uh, c, s, rw, rh, gap: Double;
+  r: TTyXYWH;
+  any: Boolean;
+begin
+  r := TyXYWHOfRect(ARaw);
+  if AMeasurer <> nil then
+    for i := 0 to High(AAxes) do
+    begin
+      if AAxes[i].LabelInside or (not AAxes[i].LegacyLabels) then Continue;
+      n := Length(AAxes[i].Labels);
+      if n = 0 then Continue;
+      { EVERY LABEL, NOT THE SHOWN ONES -- and past forty only a sample, which
+        is upstream's own economy and so its answer }
+      step := 1;
+      if n > 40 then step := Ceil(n / 40);
+      c := Abs(Cos(AAxes[i].RotationRad));
+      uw := 0;
+      uh := 0;
+      any := False;
+      k := 0;
+      while k < n do
+      begin
+        AMeasurer.MeasureLine(AAxes[i].Labels[k], AAxes[i].FontName,
+          AAxes[i].FontSizeLogical, AAxes[i].FontWeight, w, h);
+        s := Sin(AAxes[i].RotationRad);
+        rw := w * c + Abs(h * s);
+        rh := w * Abs(s) + Abs(h * Cos(AAxes[i].RotationRad));
+        if (not any) or (rw > uw) then uw := rw;
+        if (not any) or (rh > uh) then uh := rh;
+        any := True;
+        Inc(k, step);
+      end;
+      gap := AxisScaleF(AAxes[i].LabelMarginLogical, APPI);
+      if AxisIsHorizontal(AAxes[i].Side) then
+      begin
+        r.H := r.H - (uh + gap);
+        if AAxes[i].Side = asTop then r.Y := r.Y + (uh + gap);
+      end
+      else
+      begin
+        r.W := r.W - (uw + gap);
+        if AAxes[i].Side = asLeft then r.X := r.X + (uw + gap);
+      end;
+    end;
+  Result := TyRectOfXYWH(r);
 end;
 
 { Does showing every AStep-th label leave every shown pair clear of its
@@ -1104,13 +1467,16 @@ begin
     and the anchors below have to follow it, or it reads outward from a point
     inside and straddles the line it was moved off. }
   gap := AxisScaleF(ASpec.LabelMarginLogical, APPI);
-  { THE TICK COUNTS ONLY WHEN IT IS IN THE WAY -- that is, when it points the
-    same way the label does. An outward tick under an INSIDE label is on the
-    other side of the axis line entirely and standing the label clear of it
-    would push it a tick-length too far into the plot. }
-  if ASpec.ShowTicks and (ASpec.TickInside = ASpec.LabelInside) then
-    gap := gap + Max(Double(0), AxisScaleF(ASpec.TickLengthLogical, APPI));
   if ASpec.LabelInside then gap := -gap;
+  { FROM THE AXIS LINE, WHICH THE OFFSET HAS MOVED, and by the label margin
+    alone: upstream's label sits at the line plus `margin`, and the default
+    margin of 8 already clears the default tick of 5. Standing it a tick
+    further out put every label five pixels from where upstream draws it;
+    ignoring the offset left an offset axis' labels at the plot's edge while
+    its line moved away.
+    [Revised in batch 37: the tick length was added whenever the tick
+    pointed the label's way, and the offset never was.] }
+  gap := gap + AxisScaleF(ASpec.OffsetLogical, APPI);
   if AxisIsHorizontal(ASpec.Side) then
     len := TyRectFWidth(APlot)
   else

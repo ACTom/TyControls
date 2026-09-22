@@ -54,9 +54,7 @@ type
     { the options }
     procedure TestEveryDefaultCanBeOverturned;
     { the gutter }
-    procedure TestHiddenTicksGiveTheGutterBack;
-    procedure TestAnInsideTickCostsNothingOutside;
-    procedure TestTheAuthorsTickLengthMovesThePlot;
+    procedure TestATickNeverMovesThePlot;
     procedure TestInsideLabelsGiveTheirGutterBack;
     procedure TestTheAuthorsLabelMarginMovesThePlot;
     procedure TestARotatedLabelDeepensTheBottomGutter;
@@ -443,59 +441,32 @@ end;
 
 { ==================== the gutter ==================== }
 
-procedure TAdvChartFurnitureTest.TestHiddenTicksGiveTheGutterBack;
-var withT, without: TTyRectF;
+procedure TAdvChartFurnitureTest.TestATickNeverMovesThePlot;
+var outside, inside, off, long_: TTyRectF;
 begin
-  { Switching the ticks off must give the space back, not merely stop drawing
-    them -- otherwise a tickless axis still pushes the plot in five pixels and
-    reads as an axis that lost its marks rather than one that has none. }
-  withT := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
-    + ' yAxis: { axisTick: { show: true } },'
-    + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  without := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
-    + ' yAxis: { axisTick: { show: false } },'
-    + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  AssertEquals('exactly the tick''s length, given back',
-    cTickLen, withT.Left - without.Left, Eps);
-end;
-
-procedure TAdvChartFurnitureTest.TestAnInsideTickCostsNothingOutside;
-var outside, inside, off: TTyRectF;
-begin
-  { THREE WAYS, because two would not separate the readings. An inside tick is
-    drawn and costs nothing; a hidden tick is not drawn and costs nothing; an
-    outside tick is drawn and costs its length. Read `inside` as `hidden` and
-    the first two still agree -- the pixels in TestAnInsideTickPointsIntoThePlot
-    are what tell those apart. }
-  outside := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  { UPSTREAM NEVER MEASURES A TICK. Its labels stand at the margin from the
+    axis line, the margin clears the tick, and the plot gives up only what
+    the LABELS overflow. So on, off, inside or twenty long, the plot is the
+    same -- here with the grid against the canvas' left edge, where the
+    labels do overflow and the shrink is real.
+    [Revised in batch 37: three tests pinned that an outside tick reserved
+    its length (five, or twenty) and an inside or hidden one did not.] }
+  outside := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { axisTick: { show: true, inside: false } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  inside := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  inside := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { axisTick: { show: true, inside: true } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  off := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  off := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { axisTick: { show: false } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  AssertEquals('an inside tick reserves nothing outside',
-    off.Left, inside.Left, Eps);
-  AssertEquals('and an outside one reserves its length',
-    cTickLen, outside.Left - inside.Left, Eps);
-end;
-
-procedure TAdvChartFurnitureTest.TestTheAuthorsTickLengthMovesThePlot;
-var short_, long_: TTyRectF;
-begin
-  { A length is a geometric value and an author is allowed to name one. Twenty
-    against the theme's five, so the difference is fifteen and no rounding can
-    mistake it for the default. }
-  short_ := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
-    + ' yAxis: { axisTick: { show: true } },'
-    + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  long_ := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  long_ := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { axisTick: { show: true, length: 20 } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  AssertEquals('fifteen more than the theme''s five',
-    20 - cTickLen, long_.Left - short_.Left, Eps);
+  AssertTrue('the labels do overflow here', off.Left > cLabelMargin);
+  AssertEquals('an outside tick', off.Left, outside.Left, 0);
+  AssertEquals('an inside one', off.Left, inside.Left, 0);
+  AssertEquals('a long one', off.Left, long_.Left, 0);
 end;
 
 procedure TAdvChartFurnitureTest.TestInsideLabelsGiveTheirGutterBack;
@@ -504,13 +475,16 @@ begin
   { Same three-way as the ticks. The labels here are wide -- five figures -- so
     the gutter they own is far larger than the margin, and a reading that gave
     back only the margin would still fail. }
-  outside := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  { [Revised in batch 37: the grid now stands against the canvas' left
+    edge. Upstream gives up room only for labels that overflow the canvas,
+    and at the default grid these do not.] }
+  outside := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { min: 0, max: 10000 },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  inside := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  inside := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { min: 0, max: 10000, axisLabel: { inside: true } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  off := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  off := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { min: 0, max: 10000, axisLabel: { show: false } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
   AssertEquals('inside labels reserve nothing outside',
@@ -524,9 +498,11 @@ end;
 procedure TAdvChartFurnitureTest.TestTheAuthorsLabelMarginMovesThePlot;
 var near_, far_: TTyRectF;
 begin
-  near_ := PlotOf('{ xAxis: { data: [''A'', ''B''] }, yAxis: {},'
+  { with the grid against the canvas' edge, where the labels overflow and
+    the margin is part of how far [Revised in batch 37] }
+  near_ := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] }, yAxis: {},'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  far_ := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  far_ := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { axisLabel: { margin: 40 } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
   AssertEquals('forty instead of the theme''s eight',
@@ -539,9 +515,10 @@ begin
   { Turned upright, a bottom label's WIDTH is what eats height. The categories
     are long enough that the two readings cannot be confused -- nine characters
     against one line of text. }
-  flat := PlotOf('{ xAxis: { data: [''Wednesday'', ''Thursday''] },'
+  { against the canvas' bottom edge [Revised in batch 37] }
+  flat := PlotOf('{ grid: { bottom: 0 }, xAxis: { data: [''Wednesday'', ''Thursday''] },'
     + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }');
-  turned := PlotOf('{ xAxis: { data: [''Wednesday'', ''Thursday''],'
+  turned := PlotOf('{ grid: { bottom: 0 }, xAxis: { data: [''Wednesday'', ''Thursday''],'
     + ' axisLabel: { rotate: 90 } },'
     + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }');
   AssertTrue(Format('a quarter turn costs height (flat bottom %.1f, '
@@ -909,13 +886,14 @@ begin
 
     Three ways: hiding the AXIS gives back exactly what hiding everything it
     draws gives back, and that is more than twenty pixels of numbers. }
-  shown := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  { against the canvas' left edge [Revised in batch 37] }
+  shown := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { min: 0, max: 10000 },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  labelsOff := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  labelsOff := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { min: 0, max: 10000, axisLabel: { show: false } },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
-  hidden := PlotOf('{ xAxis: { data: [''A'', ''B''] },'
+  hidden := PlotOf('{ grid: { left: 0 }, xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { min: 0, max: 10000, show: false },'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
   AssertTrue(Format('a hidden axis costs no gutter (shown %.1f, hidden %.1f)',

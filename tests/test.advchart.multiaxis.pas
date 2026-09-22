@@ -179,9 +179,13 @@ begin
     the control. Upstream reaches the same place by a different route -- it
     builds the labels AT the offset position and then shrinks the grid by
     however far they overflow the canvas. }
-  near_ := PlotOf('{ xAxis: {}, yAxis: {},'
+  { Against the canvas' left edge, where both sets of labels overflow and
+    the offset is the whole difference. At the default grid upstream gives
+    up only the few pixels by which the offset labels pass the canvas.
+    [Revised in batch 37: the offset was reserved inside the grid always.] }
+  near_ := PlotOf('{ grid: { left: 0 }, xAxis: {}, yAxis: {},'
     + ' series: [{ type: ''scatter'', data: [[1, 2]] }] }');
-  far_ := PlotOf('{ xAxis: {}, yAxis: { offset: 40 },'
+  far_ := PlotOf('{ grid: { left: 0 }, xAxis: {}, yAxis: { offset: 40 },'
     + ' series: [{ type: ''scatter'', data: [[1, 2]] }] }');
   AssertEquals('exactly the offset, given up by the plot',
     40.0, far_.Left - near_.Left, Eps);

@@ -5657,3 +5657,99 @@ log 轴的对数还来自不同的库。数值本身第 33 批已经逐位对齐
 ### 还在队列里
 
 grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign`(雷达与 `alignTicks`)→ 原始值通道 → tooltip 子行。
+
+## 71. Tier 1 第三十七批:grid 的外边界(2026-09-22)
+
+上游 v6 的默认是 `outerBoundsMode: 'auto'`:grid 按写的矩形放,标签只要没越出画布就不收缩。port 一直把 grid 的矩形当外边界,在里面给每根轴的标签、刻度、间隔、名称预留地方,相当于 `containLabel: true`,绘图区普遍比上游小三十像素左右。这一批按上游的 `layOutGridByOuterBounds` 重写。
+
+### 上游的做法
+
+- **模式**:`containLabel` 为真时走旧版规则,`outerBounds*` 全部忽略。否则看 `outerBoundsMode`:
+  - 没写、null、`'auto'`:外边界是 `outerBounds` 在画布上解出来的矩形,默认 `{left: 0, right: 0, top: 0, bottom: 0}`,即整个画布。
+  - `'same'`:外边界就是 grid 自己的矩形。
+  - `'none'` 和任何不认识的值:不收缩。
+- **估算**:在 grid 原始矩形上把标签照画的样子排一遍:锚点在绘图区边缘加 offset 加 `axisLabel.margin`,**不算刻度**;按 `rotate` 转;文字框沿行方向两端各加 `textMargin` 的 3(默认 `[0, 3]`);只算稀疏后显示的那些。
+- **溢出**:每个标签框相对外边界的溢出量。沿自己那根轴的方向,溢出量除以标签在轴上的比例 p(`scale.normalize(tick)`,不做 band 调整,也不按 inverse 翻转;y 轴取 1 − p),只在溢出量为正、p 大于 1e-4 时才除;垂直方向原样计入。grid 矩形本身也算一项。**每边取最大,不是求和。**
+- **收缩**:`expandOrShrinkRect`。负的边距当 0;每个方向最小不小于钳位值(`outerBoundsClampWidth/Height`,默认原始矩形的 25%)。碰到钳位时,只有一侧要收的那一侧不动,另一侧的位置有一条特别的规则:只从左边收时矩形会移到原来的右端(上游代码如此,照搬)。
+- **不迭代**:估算一次、收缩一次、在最终矩形上定一次标签。收缩后标签可能又越出画布,上游也不管。
+- **旧版 `containLabel`**:每根轴取所有标签(超过 40 个时抽样)未旋转尺寸按 |cos|、|sin| 转过后的最大宽高,加 margin,从那一侧扣掉;同侧多根轴累加;不管 offset、名称和 `axis.show`,内侧标签不算,也没有 textMargin。
+- **node 里怎么量字**:zrender 没有 canvas 时查一张表,可打印 ASCII 每个字符是字号的固定比例(数字 0.56、逗号 0.28……),其他字符算一个字号,行高等于字号。字体、粗细都不看。
+
+### port 以前
+
+- `TySolveGrid` 在 grid 矩形里给每根轴留"offset + 刻度 + margin + 最宽标签 (+ 名称)",同侧求和;一个标签也没越出画布,绘图区照样缩。
+- 标签离轴线的距离多算了一个刻度长度(5 像素);有 offset 的轴线移出去了,标签却还贴在绘图区边上。
+- 没有 textMargin,没有钳位(太长的标签把绘图区压到宽度 0),`'same'`、`outerBounds`、`outerBoundsContain`、钳位选项、`containLabel` 都不读。
+- **类目标签站错了地方**:`NormalizedCoord` 给的是相对"扣掉半个 band 的范围"的比例,标签布局却乘以整个绘图区宽度。七个类目时第一个标签在绘图区左边缘,不在第一根柱子下面,最后一个在右边缘,只有中间那个对齐。有一个测试专门钉着这个错法(按内缩范围换算回像素)。
+
+### 做法
+
+- `tyControls.AdvChart.Layout`:
+  - `TTyXYWH`、`TTyBoundsItem`、`TTyMargin4`;
+  - `TyAxisLabelBoundsItems`(估算标签框)、`TyOuterBoundsMargin`(溢出)、`TyShrinkRect`(收缩)、`TySolveGridBounds`(三步合一)、`TyLegacyContainLabel`;
+  - 收缩用 x/y/宽/高做,和上游的运算顺序一致,可以逐位相同;
+  - 删掉 `TySolveGrid`;标签定位改为"margin + offset",不含刻度。
+- 规格记录加 `Proportions`、`TextMarginV/HLogical`、`LegacyLabels`(隐藏的轴旧版规则照样量它的标签)。
+- Builder 读 `containLabel`、`outerBoundsMode`、`outerBounds`(按上游"每个方向最多保留两个键"合并)、`outerBoundsContain`、`outerBoundsClampWidth/Height`、`axisLabel.textMargin`;构建记录保存画布矩形。
+- `NormalizedCoord` 改为相对整个像素范围。
+- 坐标轴名称(`'all'` 时):暂时按 port 画出来的位置计入,比例取 0.5。上游名称默认在轴的末端、有自己的 gap 和层级规则,那是单独一批;这里先保证名称仍然占地方。
+
+### 基准
+
+`tools/advchart-oracle/grid-bounds.js`,三层:
+
+1. **测宽**:zrender 那张表的 95 个比例从 dist 解码、以位模式写进 fixture;60 条字符串 × 字号的宽高,port 的 `TZrSsrMeasurer` 必须逐位相同。
+2. **收缩**:把上游自己的估算标签框和比例喂给 `TyOuterBoundsMargin` + `TyShrinkRect`,边距和最终矩形逐位相同(60 条)。
+3. **整条流水线**:读选项、格式化、稀疏、定位、旋转、加 textMargin、收缩,最终矩形在每条用例自己的容差内(约 4.5e-13;标签框经过 zrender 的变换矩阵,1.72 会变成 1.720000000000013)。64 条。
+
+另有 23 条 deferred:坐标轴名称(5)、hideOverlap、类目自动间隔、fontSize、truncate/break、grid 盒子合并(10)、值轴稀疏(2)、containShape(1)。
+
+生成器自带两道自检:转写的收缩在 60 条上复现上游矩形,转写的旧版规则在 15 条上复现。
+
+### 被推翻的旧测试
+
+- `test.advchart.axis.pas`:`TySolveGrid` 的五个测试改写为新语义(不越界不收、只收越出的那一侧、同侧取最大、沿轴除以比例、钳位);三处标签定位 87→92、163→158(不再加刻度),另加 offset 的断言。
+- `test.advchart.furniture.pas`:刻度三个测试合并为"刻度从不移动绘图区";标签内外、margin、旋转、隐藏轴四个测试改为 grid 贴画布边(`left: 0` / `bottom: 0`),在标签真正越界时比较。
+- `test.advchart.multiaxis.pas` 的 offset、`test.advchart.builder.pas` 的像素范围:同样改为贴边,另加"默认 grid 不收缩"。
+- `test.advchart.scale.ordinal.pas`:`NormalizedCoord` 的比例按整个范围换算。
+- 原处都有标注。
+
+### 已知偏差
+
+- **坐标轴名称**的完整布局(nameLocation、nameGap、nameRotate、margin 层级、nameMoveOverlap):单独一批。现在名称还画在居中位置。
+- **稀疏**:上游值轴从不按序号稀疏标签,port 会;类目自动间隔、`fixMinMaxLabelShow`、`hideOverlap` 与上游不同。估算用的标签集因此可能不一样。单独一批。
+- **containShape**:柱子让无 band 的类目范围加宽半个 band,影响比例 p。
+- **grid 盒子本身**:`left: 'right'`、`top: 'bottom'`、居中无尺寸、键的合并规则(D12),和 title/legend 共用 `TySolveBox`,单独一批。
+- `axisLabel.fontSize`(字体由主题决定)、`minMargin`、`width` + `overflow` 的估算:未做。
+
+### 落地
+
+- `source/tyControls.AdvChart.Layout.pas`、`Builder.pas`、`Coord.pas`。
+- `tools/advchart-oracle/grid-bounds.js`、`tests/fixtures/advchart-grid-bounds.json`、`tests/test.advchart.gridbounds.pas`(新)。
+- 上面列出的测试。
+
+### 变异测试
+
+40 个,第一轮活 11 个:
+
+- **等价的两个**:
+  - 收缩模式下近侧边距为 0 时"加上负的近侧边距"那一支:加的就是 0。
+  - `outerBounds` 只写一个键时保留哪个默认值:无论保留哪个,解出来的矩形一样。那段合并代码因此简化为"写了两个键时去掉默认值"。
+- **oracle 够不到、补单元测试的九个**:
+  - 比例为 0 或小于 1e-4 时不做除法;
+  - y 方向近侧用 1 − p;
+  - 负边距不会撑大矩形;
+  - 钳位值大于原尺寸时取原尺寸;
+  - y 轴项的比例从顶部量;
+  - 被稀疏掉的标签不计入;
+  - 名称沿轴越界时按 0.5 放大;
+  - 旧版规则跳过内侧标签;
+  - `'axisLabel'` 时不计名称(builder 测试)。
+  这些能区分的上游用例大都因为稀疏或名称被延后了,所以直接对纯函数断言。
+- 简化后补的"写了两个键时去掉默认值"变异体,用 `outerBounds: { right: 10, width: 300 }` 的 builder 测试杀死。
+
+补完后除等价的一个外全部杀死。全量 **7735** 绿。
+
+### 还在队列里
+
+坐标轴名称的布局 → 标签稀疏(值轴不稀疏、类目自动间隔、fixMinMaxLabelShow、hideOverlap)→ containShape → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。

@@ -532,10 +532,13 @@ begin
     the final one off the rect the labels left over. Both are legitimate: a
     dataZoom slider and a bar layouter need an extent before the labels have
     been measured. }
-  b := Build('{ xAxis: { data: [''alpha'', ''beta'', ''gamma''] }, yAxis: {} }',
+  { the grid against the canvas' left edge, so the y labels overflow it and
+    the plot does shrink [Revised in batch 37: the default grid shrank
+    whether or not anything overflowed] }
+  b := Build('{ grid: { left: 0 }, xAxis: { data: [''alpha'', ''beta'', ''gamma''] }, yAxis: {} }',
     TyRectF(0, 0, 600, 400));
   before := b.Axis('xAxis', 0).PxStop - b.Axis('xAxis', 0).PxStart;
-  AssertEquals('the raw grid width', 450.0, before, 1e-9);
+  AssertEquals('the raw grid width', 540.0, before, 1e-9);
   m := TFixedMeasurer.Create;
   { The style is the CALLER's to resolve, so the test states what it measures
     with instead of inheriting a default -- there is deliberately no default in
@@ -545,6 +548,35 @@ begin
   after := b.Axis('xAxis', 0).PxStop - b.Axis('xAxis', 0).PxStart;
   AssertTrue('the plot shrank to make room for the labels', after < before);
   AssertTrue('and the band width followed it', b.Axis('xAxis', 0).BandWidth < before / 3);
+  { AND A GRID WHOSE LABELS FIT KEEPS ITS RECT: the default one, 90 in from
+    each side, gives nothing up }
+  b := Build('{ xAxis: { data: [''alpha'', ''beta'', ''gamma''] }, yAxis: {} }',
+    TyRectF(0, 0, 600, 400));
+  TyLayoutGrids(b, FOpt, m, 96, TestAxisTextStyle);
+  AssertEquals('the default grid, untouched', 450.0,
+    b.Axis('xAxis', 0).PxStop - b.Axis('xAxis', 0).PxStart, 1e-9);
+  { AND A NAME COUNTS UNLESS outerBoundsContain SAYS LABELS ONLY }
+  b := Build('{ grid: { left: 0 }, xAxis: { data: [''a''] },'
+    + ' yAxis: { name: ''A long axis name'' } }', TyRectF(0, 0, 600, 400));
+  TyLayoutGrids(b, FOpt, m, 96, TestAxisTextStyle);
+  before := b.Grid(0).PlotRect.Left;
+  b := Build('{ grid: { left: 0, outerBoundsContain: ''axisLabel'' },'
+    + ' xAxis: { data: [''a''] }, yAxis: { name: ''A long axis name'' } }',
+    TyRectF(0, 0, 600, 400));
+  TyLayoutGrids(b, FOpt, m, 96, TestAxisTextStyle);
+  after := b.Grid(0).PlotRect.Left;
+  AssertTrue(Format('the name took room (%.1f) that labels alone do not (%.1f)',
+    [before, after]), before > after + 10);
+  { OUTER BOUNDS WITH TWO KEYS IN A DIMENSION KEEP ONLY THOSE TWO: right 10
+    and width 300 put the bound at 290..590, and a grid written from 90 to
+    540 overflows it on the left by 200 -- with the default left 0 kept
+    beside them the bound would be 0..300, and the overflow on the right }
+  b := Build('{ grid: { outerBounds: { right: 10, width: 300 } },'
+    + ' xAxis: { data: [''a''] }, yAxis: { axisLabel: { show: false } } }',
+    TyRectF(0, 0, 600, 400));
+  TyLayoutGrids(b, FOpt, m, 96, TestAxisTextStyle);
+  AssertEquals('in to the bound''s left', 290.0, b.Grid(0).PlotRect.Left, 1e-9);
+  AssertEquals('its own right kept', 540.0, b.Grid(0).PlotRect.Right, 1e-9);
 end;
 
 { ============================ robustness ============================ }

@@ -205,7 +205,11 @@ type
     FXAxes: TTyAxisArray;      // OWNED; indexed by global component index
     FYAxes: TTyAxisArray;      // OWNED
     FDiagnostics: TTyStringArray;
+    FViewport: TTyRectF;
   public
+    { The canvas the grids were solved against -- what a grid's default outer
+      bounds are measured on. }
+    property Viewport: TTyRectF read FViewport;
     { Public because the series binder is a different unit and FPC's private is
       unit-scoped. One list for everything the option said that could not be
       honoured, whoever noticed it. }
@@ -916,6 +920,7 @@ begin
     spec.Width := BoxValueIn(node, 'width', TyBoxAuto);
     spec.Height := BoxValueIn(node, 'height', TyBoxAuto);
     build.FGrids[i].FOuterRect := TySolveBox(spec, TyFixedContainer(AViewport));
+    build.FViewport := AViewport;
     build.FGrids[i].FPlotRect := build.FGrids[i].FOuterRect;
 
     usedBottom := False;
@@ -1691,7 +1696,120 @@ var
   ticks: TTyScaleTickArray;
   gb: TTyGridBuild;
   node: TJSONObject;
-  mode: TTyOuterBoundsMode;
+
+  { ONE BOUND OF grid.outerBounds on the canvas: upstream merges it into
+    {left: 0, right: 0} keeping at most two of left, right and width -- the
+    author's own when they wrote two, else theirs and the first default --
+    and then getLayoutRect solves it. }
+  procedure OuterDim(ANode: TJSONObject; const ALo, AHi, ASize: string;
+    AExtent: Double; out APos, ALen: Double);
+  var
+    lo, hi, sz: TTyBoxValue;
+    hasLo, hasHi, hasSz: Boolean;
+    n: Integer;
+  begin
+    hasLo := (ANode <> nil) and (ANode.Find(ALo) <> nil);
+    hasHi := (ANode <> nil) and (ANode.Find(AHi) <> nil);
+    hasSz := (ANode <> nil) and (ANode.Find(ASize) <> nil);
+    n := Ord(hasLo) + Ord(hasHi) + Ord(hasSz);
+    lo := TyBoxPx(0);
+    hi := TyBoxPx(0);
+    sz := TyBoxAuto;
+    if hasLo then lo := TyBoxDataOf(ANode.Find(ALo), TyBoxPx(0));
+    if hasHi then hi := TyBoxDataOf(ANode.Find(AHi), TyBoxPx(0));
+    if hasSz then sz := TyBoxDataOf(ANode.Find(ASize), TyBoxAuto);
+    { TWO WRITTEN: only those two, the defaults dropped. One written keeps
+      a default beside it, and whichever it keeps comes to the same rect:
+      a lone width stands at left 0, a lone left or right runs to the other
+      side's 0. }
+    if n >= 2 then
+    begin
+      if not hasLo then lo := TyBoxAuto;
+      if not hasHi then hi := TyBoxAuto;
+    end;
+    if sz.Kind <> buAuto then
+    begin
+      ALen := TyBoxResolve(sz, AExtent);
+      if lo.Kind <> buAuto then APos := TyBoxResolve(lo, AExtent)
+      else APos := AExtent - TyBoxResolve(hi, AExtent) - ALen;
+    end
+    else
+    begin
+      APos := TyBoxResolve(lo, AExtent);
+      ALen := AExtent - TyBoxResolve(hi, AExtent) - APos;
+    end;
+  end;
+
+  { The grid's plot rect: upstream's resize, after the raw rect. }
+  function SolveGridRect(AGrid: TTyGridBuild; AGridNode: TJSONObject;
+    const ASpecs: TTyAxisLayoutSpecArray): TTyRectF;
+  var
+    raw: TTyRectF;
+    outer: TTyXYWH;
+    d: TJSONData;
+    s: string;
+    contain: TTyOuterBoundsContain;
+    ob: TJSONObject;
+    cw, ch: Double;
+    vp: TTyRectF;
+  begin
+    raw := AGrid.FOuterRect;
+    Result := raw;
+    { LEGACY containLabel WINS, and every outerBounds key is ignored }
+    if AGridNode <> nil then
+    begin
+      d := AGridNode.Find('containLabel');
+      { JavaScript's truthiness: true, a non-zero number, a non-empty
+        string, any object }
+      if (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+        or ((d.JSONType = jtNumber) and (not IsNan(d.AsFloat)) and (d.AsFloat <> 0))
+        or ((d.JSONType = jtString) and (d.AsString <> ''))
+        or (d.JSONType in [jtArray, jtObject])) then
+        Exit(TyLegacyContainLabel(raw, ASpecs, AMeasurer, APPI));
+    end;
+    s := '';
+    if AGridNode <> nil then
+    begin
+      d := AGridNode.Find('outerBoundsMode');
+      if (d <> nil) and (d.JSONType = jtString) then s := d.AsString
+      else if (d <> nil) and (d.JSONType <> jtNull) then s := '?';
+    end;
+    vp := ABuild.Viewport;
+    if s = 'same' then
+      outer := TyXYWHOfRect(raw)
+    else if (s = '') or (s = 'auto') then
+    begin
+      { the bounds on the canvas: {left, right, top, bottom: 0} unless
+        grid.outerBounds says otherwise }
+      ob := nil;
+      if AGridNode <> nil then ob := ObjOf(AGridNode.Find('outerBounds'));
+      OuterDim(ob, 'left', 'right', 'width', vp.Right - vp.Left, outer.X, outer.W);
+      OuterDim(ob, 'top', 'bottom', 'height', vp.Bottom - vp.Top, outer.Y, outer.H);
+      outer.X := vp.Left + outer.X;
+      outer.Y := vp.Top + outer.Y;
+    end
+    else
+      { 'none' -- and anything upstream does not know, which it ignores too }
+      Exit;
+    contain := obcAll;
+    if (AGridNode <> nil) and (StrIn(AGridNode, 'outerBoundsContain', '') = 'axisLabel') then
+      contain := obcAxisLabel;
+    { THE CLAMP IS OF THE RAW RECT: a quarter of its width and height unless
+      the option says }
+    cw := TyBoxResolve(TyBoxPercent(25), raw.Right - raw.Left);
+    ch := TyBoxResolve(TyBoxPercent(25), raw.Bottom - raw.Top);
+    if AGridNode <> nil then
+    begin
+      d := AGridNode.Find('outerBoundsClampWidth');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+        cw := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.Right - raw.Left);
+      d := AGridNode.Find('outerBoundsClampHeight');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+        ch := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.Bottom - raw.Top);
+    end;
+    Result := TySolveGridBounds(raw, outer, contain, cw, ch, ASpecs,
+      AMeasurer, APPI);
+  end;
 
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
     ANode: TJSONObject; const AFurn: TTyAxisFurniture);
@@ -1709,6 +1827,8 @@ var
       `axisLabel: { show: false }` did nothing while a hidden axis was asked
       about twice. }
     ASpec.ShowLabels := AFurn.ShowLabels;
+    { legacy containLabel measures these even on a hidden axis }
+    ASpec.LegacyLabels := AFurn.ShowLabels;
     ASpec.ShowTicks := AFurn.ShowTicks;
     ASpec.ForcedLabelStep := AFurn.LabelStep;
     ASpec.TickStep := AFurn.TickStep;
@@ -1784,11 +1904,28 @@ var
       wrapping happened at all. }
     ASpec.LabelWidthLogical := 0;
     ASpec.LabelOverflow := loNone;
+    { textMargin: [0, 3] unless the option says -- a number for all four
+      sides, or [vertical, horizontal] }
+    ASpec.TextMarginVLogical := 0;
+    ASpec.TextMarginHLogical := 3;
     if ANode <> nil then
     begin
       lbl := FindIn(ANode, 'axisLabel');
       if (lbl <> nil) and (lbl.JSONType = jtObject) then
       begin
+        wd := FindIn(TJSONObject(lbl), 'textMargin');
+        if (wd <> nil) and (wd.JSONType = jtNumber) then
+        begin
+          ASpec.TextMarginVLogical := wd.AsFloat;
+          ASpec.TextMarginHLogical := wd.AsFloat;
+        end
+        else if (wd is TJSONArray) and (TJSONArray(wd).Count >= 2)
+          and (TJSONArray(wd).Items[0].JSONType = jtNumber)
+          and (TJSONArray(wd).Items[1].JSONType = jtNumber) then
+        begin
+          ASpec.TextMarginVLogical := TJSONArray(wd).Items[0].AsFloat;
+          ASpec.TextMarginHLogical := TJSONArray(wd).Items[1].AsFloat;
+        end;
         wd := FindIn(TJSONObject(lbl), 'width');
         if (wd <> nil) and (wd.JSONType = jtNumber) then
           ASpec.LabelWidthLogical := wd.AsFloat;
@@ -1803,6 +1940,7 @@ var
     isTime := AAxis.Scale is TTyTimeScale;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));
+    SetLength(ASpec.Proportions, Length(ticks));
     if isTime then
     begin
       SetLength(ASpec.LabelHidden, Length(ticks));
@@ -1850,10 +1988,18 @@ var
           ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
           AxisScaleF(ASpec.LabelWidthLogical, APPI));
       ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
+      { upstream's proportion: the tick in the scale's own extent -- an
+        ordinal's raw number, not band-adjusted and not inverted }
+      if AAxis.Scale is TTyOrdinalScale then
+        ASpec.Proportions[kept] := AAxis.Scale.Normalize(
+          TTyOrdinalScale(AAxis.Scale).TickToOrdinal(ticks[q].Value))
+      else
+        ASpec.Proportions[kept] := AAxis.Scale.Normalize(ticks[q].Value);
       Inc(kept);
     end;
     SetLength(ASpec.Labels, kept);
     SetLength(ASpec.Positions, kept);
+    SetLength(ASpec.Proportions, kept);
     if isTime then
     begin
       SetLength(ASpec.LabelHidden, kept);
@@ -1902,16 +2048,8 @@ begin
     { obcAll, explicitly. Our own default is obcAxisLabel while upstream's
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
-    { `outerBoundsMode: 'none'` IS THE GRID'S RECT AS WRITTEN, labels
-      overflowing it where they will -- upstream's own meaning. Every other
-      mode still reserves the labels' room inside the rect, which is not what
-      upstream's 'auto' does (it bounds by the whole canvas); that is the
-      outer-bounds batch. }
-    mode := obmAuto;
-    node := ObjOf(AOption.ComponentAt('grid', gb.ComponentIndex));
-    if (node <> nil) and (StrIn(node, 'outerBoundsMode', '') = 'none') then
-      mode := obmNone;
-    gb.FPlotRect := TySolveGrid(gb.FOuterRect, specs, AMeasurer, APPI, mode, obcAll);
+    gb.FPlotRect := SolveGridRect(gb, ObjOf(AOption.ComponentAt('grid',
+      gb.ComponentIndex)), specs);
 
     { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
       measuring every label, and the paint pass used to derive them itself on

@@ -44,10 +44,18 @@ type
     procedure TestAnInsideLabelCrossesTheAxisAndFlipsItsAnchor;
     procedure TestAnInwardTickIsChargedNothingHoweverLongItIs;
     { ---- phase 2: shrink ---- }
-    procedure TestOuterBoundsNoneDoesNotShrink;
-    procedure TestOuterBoundsAutoShrinksTheSideTheAxisIsOn;
-    procedure TestTwoAxesOnTheSameSideBothTakeRoom;
-    procedure TestOverConstrainedGridCollapsesNotInverts;
+    procedure TestLabelsThatFitTheBoundsCostTheGridNothing;
+    procedure TestOnlyTheOverflowIsTakenOnTheSideItOverflows;
+    procedure TestTwoAxesOnOneSideTakeTheLargerNotTheSum;
+    procedure TestAnOverflowAlongTheAxisIsDividedByHowFarAlongItSits;
+    procedure TestTheClampStopsTheShrinkAtAQuarterOfTheRawRect;
+    procedure TestANameCountsUnderContainAllWhereItIsDrawn;
+    procedure TestANoughtProportionTakesTheOverflowAsItIs;
+    procedure TestAYOverflowIsDividedOnItsOwnSide;
+    procedure TestTheShrinkNeitherGrowsNorClampsPastTheRect;
+    procedure TestAYLabelsProportionIsMeasuredFromTheTop;
+    procedure TestAThinnedLabelIsNotMeasured;
+    procedure TestLegacyContainLabelSkipsInsideLabels;
     { ---- phase 3: placement and thinning ---- }
     procedure TestBottomLabelAnchorsSitOnTheTicks;
     procedure TestBottomLabelsSitBelowThePlot;
@@ -57,8 +65,6 @@ type
     procedure TestCrowdedAxisThinsToAUniformStep;
     procedure TestThinningNeverHidesEverything;
     procedure TestLabelStepAgreesWithThePlacements;
-    { ---- the pass itself ---- }
-    procedure TestSecondPassOverTheShrunkPlotKeepsTheSameThickness;
   end;
 
 implementation
@@ -213,61 +219,276 @@ end;
 
 { ======================== phase 2: shrink ======================== }
 
-procedure TAdvChartAxisTest.TestOuterBoundsNoneDoesNotShrink;
+{ The whole canvas, as upstream's default outer bounds are. }
+function Canvas: TTyXYWH;
+begin
+  Result := TyXYWH(0, 0, 400, 300);
+end;
+
+procedure TAdvChartAxisTest.TestLabelsThatFitTheBoundsCostTheGridNothing;
 var
   axes: TTyAxisLayoutSpecArray;
   plot: TTyRectF;
 begin
+  { v6's default: the grid is the rect written, and the labels may stand
+    outside it as long as they stay on the canvas. Anchored at 70 - 8, a
+    label of 50 padded by 3 reaches 9: inside, so nothing moves.
+    [Revised in batch 37: this was "outer bounds none does not shrink",
+    beside a default that reserved every label's room inside the rect.] }
   SetLength(axes, 1);
-  axes[0] := LeftAxis(['1000000']);
-  plot := TySolveGrid(TyRectF(0, 0, 400, 300), axes, FM, 96, obmNone);
-  { obmNone is v5's containLabel:false -- the rect given IS the plot band and
-    the labels hang outside it. }
-  AssertEquals('left', 0.0, plot.Left, Eps);
-  AssertEquals('right', 400.0, plot.Right, Eps);
+  axes[0] := LeftAxis(['12345']);
+  axes[0].TextMarginHLogical := 3;
+  plot := TySolveGridBounds(TyRectF(70, 20, 330, 260), Canvas, obcAll, 0, 0,
+    axes, FM, 96);
+  AssertEquals(70.0, plot.Left, 0);
+  AssertEquals(20.0, plot.Top, 0);
+  AssertEquals(330.0, plot.Right, 0);
+  AssertEquals(260.0, plot.Bottom, 0);
 end;
 
-procedure TAdvChartAxisTest.TestOuterBoundsAutoShrinksTheSideTheAxisIsOn;
+procedure TAdvChartAxisTest.TestOnlyTheOverflowIsTakenOnTheSideItOverflows;
 var
   axes: TTyAxisLayoutSpecArray;
   plot: TTyRectF;
 begin
+  { A grid filling the canvas: the y label stands 8 out from the edge, 50
+    wide, padded 3 each end -- it overflows the left by 61; the x label,
+    20 tall 8 below, overflows the bottom by 28. THE TICK IS NOT IN IT:
+    upstream's label sits at the margin from the line, and the margin
+    clears the tick.
+    [Revised in batch 37: 63 and 33 -- tick, margin and label, reserved
+    inside the rect whether or not anything overflowed.] }
   SetLength(axes, 2);
-  axes[0] := LeftAxis(['12345']);        // 50 + 5 + 8 = 63
-  axes[1] := BottomAxis(['1']);          // 20 + 5 + 8 = 33
-  plot := TySolveGrid(TyRectF(0, 0, 400, 300), axes, FM, 96, obmAuto);
-  AssertEquals('left inset by the y axis', 63.0, plot.Left, Eps);
-  AssertEquals('bottom inset by the x axis', 300.0 - 33.0, plot.Bottom, Eps);
-  AssertEquals('right untouched', 400.0, plot.Right, Eps);
-  AssertEquals('top untouched', 0.0, plot.Top, Eps);
+  axes[0] := LeftAxis(['12345']);
+  axes[0].Positions[0] := 0.5;
+  axes[0].TextMarginHLogical := 3;
+  axes[1] := BottomAxis(['1']);
+  axes[1].Positions[0] := 0.5;
+  axes[1].TextMarginHLogical := 3;
+  plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
+    axes, FM, 96);
+  AssertEquals('left in by the y label', 61.0, plot.Left, 0);
+  AssertEquals('bottom up by the x label', 272.0, plot.Bottom, 0);
+  AssertEquals('right untouched', 400.0, plot.Right, 0);
+  AssertEquals('top untouched', 0.0, plot.Top, 0);
 end;
 
-procedure TAdvChartAxisTest.TestTwoAxesOnTheSameSideBothTakeRoom;
+procedure TAdvChartAxisTest.TestTwoAxesOnOneSideTakeTheLargerNotTheSum;
 var
   axes: TTyAxisLayoutSpecArray;
   plot: TTyRectF;
 begin
-  { A secondary y axis on the same side is the commonest real request. The
-    side's inset is the SUM -- taking the max would stack them on top of each
-    other. }
+  { EACH SIDE TAKES ITS LARGEST OVERFLOW. Two axes on one side are already
+    apart by their offset, and the offset is in where their labels stand --
+    adding their widths would count the first one twice.
+    [Revised in batch 37: the side's inset was the sum.] }
   SetLength(axes, 2);
-  axes[0] := LeftAxis(['12345']);        // 63
-  axes[1] := LeftAxis(['12']);           // 20 + 5 + 8 = 33
-  plot := TySolveGrid(TyRectF(0, 0, 400, 300), axes, FM, 96, obmAuto);
-  AssertEquals('both axes fit side by side', 96.0, plot.Left, Eps);
+  axes[0] := LeftAxis(['12345']);        // overflows by 8 + 50 + 3 = 61
+  axes[0].Positions[0] := 0.5;
+  axes[0].TextMarginHLogical := 3;
+  axes[1] := LeftAxis(['12']);           // by 8 + 20 + 3 = 31
+  axes[1].Positions[0] := 0.5;
+  axes[1].TextMarginHLogical := 3;
+  plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
+    axes, FM, 96);
+  AssertEquals('the larger', 61.0, plot.Left, 0);
+  { offset 60 stands the second axis' labels further out: 60 + 31 }
+  axes[1].OffsetLogical := 60;
+  plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
+    axes, FM, 96);
+  AssertEquals('the offset one, now', 91.0, plot.Left, 0);
 end;
 
-procedure TAdvChartAxisTest.TestOverConstrainedGridCollapsesNotInverts;
+procedure TAdvChartAxisTest.TestAnOverflowAlongTheAxisIsDividedByHowFarAlongItSits;
 var
   axes: TTyAxisLayoutSpecArray;
   plot: TTyRectF;
 begin
-  SetLength(axes, 2);
-  axes[0] := LeftAxis(['1234567890123456789012345']);   // 250 + 13
-  axes[1] := LeftAxis(['1234567890123456789012345']);
-  plot := TySolveGrid(TyRectF(0, 0, 400, 300), axes, FM, 96, obmAuto);
-  AssertTrue('still a valid rect', TyRectFIsValid(plot));
-  AssertEquals('collapsed to zero width', 0.0, TyRectFWidth(plot), Eps);
+  { A label halfway along the axis comes in by half of any shrink, so to
+    bring its 3 px of overflow in the plot must give up 6 -- on each side
+    it overflows. Across the axis the overflow is taken as it is. }
+  SetLength(axes, 1);
+  axes[0] := BottomAxis(['1234567890']);
+  axes[0].Positions[0] := 0.5;
+  SetLength(axes[0].Proportions, 1);
+  axes[0].Proportions[0] := 0.5;
+  axes[0].TextMarginHLogical := 3;
+  plot := TySolveGridBounds(TyRectF(0, 0, 100, 300), TyXYWH(0, 0, 100, 300),
+    obcAll, 0, 0, axes, FM, 96);
+  AssertEquals('left: 3 / 0.5', 6.0, plot.Left, 0);
+  AssertEquals('right: 3 / 0.5', 94.0, plot.Right, 0);
+  AssertEquals('bottom: 8 + 20, as it is', 272.0, plot.Bottom, 0);
+end;
+
+procedure TAdvChartAxisTest.TestANameCountsUnderContainAllWhereItIsDrawn;
+var
+  axes: TTyAxisLayoutSpecArray;
+  withName, labelsOnly: TTyRectF;
+begin
+  { INTERIM, until names are laid out as upstream lays them out: under
+    outerBoundsContain 'all' a name counts where the paint pass draws it --
+    past the labels' band, centred -- and under 'axisLabel' it does not. A
+    y name 20 tall (turned, so 20 wide) is centred in the band its gap and
+    height add past the labels' 5 + 8 + 50: that band runs 63..98 out from
+    the edge, its middle is 80.5, and the name's outer side is at 90.5. }
+  SetLength(axes, 1);
+  axes[0] := LeftAxis(['12345']);
+  axes[0].Positions[0] := 0.5;
+  axes[0].Name := 'Value';
+  withName := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
+    axes, FM, 96);
+  labelsOnly := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas,
+    obcAxisLabel, 0, 0, axes, FM, 96);
+  AssertEquals('the labels alone', 58.0, labelsOnly.Left, 0);
+  AssertEquals('the name past them', 90.5, withName.Left, 0);
+
+  { ALONG ITS AXIS A CENTRED NAME IS HALFWAY: forty characters turned are
+    400 tall on a 300 plot, 50 over each end, and a thing halfway along is
+    brought in by half the shrink -- so each end gives up 100 }
+  axes[0].Name := '1234567890123456789012345678901234567890';
+  withName := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 0, 0,
+    axes, FM, 96);
+  AssertEquals('top in by 50 / 0.5', 100.0, withName.Top, 0);
+  AssertEquals('and the bottom', 200.0, withName.Bottom, 0);
+end;
+
+function Item(AX, AY, AW, AH: Double; AAlongY: Boolean;
+  AProportion: Double): TTyBoundsItem;
+begin
+  Result.R := TyXYWH(AX, AY, AW, AH);
+  Result.AlongY := AAlongY;
+  Result.Proportion := AProportion;
+end;
+
+procedure TAdvChartAxisTest.TestANoughtProportionTakesTheOverflowAsItIs;
+var
+  items: TTyBoundsItemArray;
+  m: TTyMargin4;
+begin
+  { A THING AT THE VERY START OF ITS AXIS is not brought in at all by a
+    shrink from the far end, and dividing by that nought would ask for an
+    infinite one. Upstream gives up the division below 1e-4 and takes the
+    overflow as it is. }
+  SetLength(items, 1);
+  items[0] := Item(0, 0, 190, 10, False, 0);
+  m := TyOuterBoundsMargin(TyXYWH(0, 0, 100, 300), TyXYWH(0, 0, 100, 300), items);
+  AssertEquals('p 0: as it is', 90.0, m[1], 0);
+  items[0].Proportion := 5e-5;
+  m := TyOuterBoundsMargin(TyXYWH(0, 0, 100, 300), TyXYWH(0, 0, 100, 300), items);
+  AssertEquals('p below 1e-4: as it is', 90.0, m[1], 0);
+  items[0].Proportion := 0.5;
+  m := TyOuterBoundsMargin(TyXYWH(0, 0, 100, 300), TyXYWH(0, 0, 100, 300), items);
+  AssertEquals('p 0.5: doubled', 180.0, m[1], 0);
+end;
+
+procedure TAdvChartAxisTest.TestAYOverflowIsDividedOnItsOwnSide;
+var
+  items: TTyBoundsItemArray;
+  m: TTyMargin4;
+  over: Double;
+begin
+  { upstream's fillMarginOnOneDimension on y: the top divides by 1 - p, the
+    bottom by p -- p here being the item's, already measured from the top }
+  SetLength(items, 2);
+  items[0] := Item(10, -10, 5, 5, True, 0.25);
+  items[1] := Item(10, 305, 5, 5, True, 0.25);
+  m := TyOuterBoundsMargin(TyXYWH(0, 0, 100, 300), TyXYWH(0, 0, 100, 300), items);
+  over := 10;
+  AssertEquals('the top by 1 - p', over / 0.75, m[0], 0);
+  AssertEquals('the bottom by p', over / 0.25, m[2], 0);
+end;
+
+procedure TAdvChartAxisTest.TestTheShrinkNeitherGrowsNorClampsPastTheRect;
+var
+  r: TTyXYWH;
+  m: TTyMargin4;
+begin
+  { a negative margin is none: a label well inside never grows the plot }
+  r := TyXYWH(0, 0, 100, 300);
+  m[0] := -10; m[1] := -10; m[2] := -10; m[3] := -10;
+  TyShrinkRect(r, m, 0, 0);
+  AssertEquals(0.0, r.X, 0);
+  AssertEquals(100.0, r.W, 0);
+  AssertEquals(300.0, r.H, 0);
+  { A CLAMP BIGGER THAN THE RECT is the rect's own size: shrunk by 30 on the
+    left against a floor of 500, it keeps its 100 -- and, from the left only,
+    moves to where its right end was, as upstream's does }
+  r := TyXYWH(0, 0, 100, 300);
+  m[0] := 0; m[1] := 0; m[2] := 0; m[3] := 30;
+  TyShrinkRect(r, m, 500, 0);
+  AssertEquals('no wider than it was', 100.0, r.W, 0);
+  AssertEquals('at its old right end', 100.0, r.X, 0);
+end;
+
+procedure TAdvChartAxisTest.TestAYLabelsProportionIsMeasuredFromTheTop;
+var
+  a: TTyAxisLayoutSpec;
+  items: TTyBoundsItemArray;
+begin
+  { a y axis' proportion counts up from the bottom, and the overflow the
+    shrink divides by it is the one BELOW -- so the item carries 1 - p }
+  a := LeftAxis(['1']);
+  a.Positions[0] := 0.25;
+  SetLength(a.Proportions, 1);
+  a.Proportions[0] := 0.25;
+  items := TyAxisLabelBoundsItems(a, TyRectF(0, 0, 400, 300), FM, 96);
+  AssertEquals(1, Length(items));
+  AssertEquals(0.75, items[0].Proportion, 0);
+  { and an x axis' is as it is }
+  a := BottomAxis(['1']);
+  SetLength(a.Proportions, 1);
+  a.Proportions[0] := 0.25;
+  items := TyAxisLabelBoundsItems(a, TyRectF(0, 0, 400, 300), FM, 96);
+  AssertEquals(0.25, items[0].Proportion, 0);
+end;
+
+procedure TAdvChartAxisTest.TestAThinnedLabelIsNotMeasured;
+var
+  a: TTyAxisLayoutSpec;
+  items: TTyBoundsItemArray;
+  i: Integer;
+begin
+  { ONLY THE LABELS THE ESTIMATE SHOWS: a 300-wide label in the middle of a
+    100-wide axis thins the axis to every other label, and the one thinned
+    out -- the widest -- must not push the plot in }
+  a := BottomAxis(['1', '123456789012345678901234567890', '3']);
+  items := TyAxisLabelBoundsItems(a, TyRectF(0, 0, 100, 300), FM, 96);
+  AssertEquals('the two ends only', 2, Length(items));
+  for i := 0 to High(items) do
+    AssertTrue('and not the wide one', items[i].R.W < 50);
+end;
+
+procedure TAdvChartAxisTest.TestLegacyContainLabelSkipsInsideLabels;
+var
+  axes: TTyAxisLayoutSpecArray;
+  r: TTyRectF;
+begin
+  { legacy containLabel: a label inside the plot takes nothing from it }
+  SetLength(axes, 1);
+  axes[0] := LeftAxis(['12345']);
+  axes[0].LegacyLabels := True;
+  r := TyLegacyContainLabel(TyRectF(0, 0, 400, 300), axes, FM, 96);
+  AssertEquals('outside: 50 + 8 off the left', 58.0, r.Left, 0);
+  axes[0].LabelInside := True;
+  r := TyLegacyContainLabel(TyRectF(0, 0, 400, 300), axes, FM, 96);
+  AssertEquals('inside: nothing', 0.0, r.Left, 0);
+end;
+
+procedure TAdvChartAxisTest.TestTheClampStopsTheShrinkAtAQuarterOfTheRawRect;
+var
+  axes: TTyAxisLayoutSpecArray;
+  plot: TTyRectF;
+begin
+  { NO SIDE SHRINKS PAST THE CLAMP -- and where the rect then goes is
+    upstream's own: overflowing on the left only, it keeps its width at the
+    clamp and moves to the RIGHT end of where it was (expandOrShrinkRect's
+    `oldSize + delta`). A label wider than the canvas does that. }
+  SetLength(axes, 1);
+  axes[0] := LeftAxis(['1234567890123456789012345678901234567890']);
+  plot := TySolveGridBounds(TyRectF(0, 0, 400, 300), Canvas, obcAll, 100, 75,
+    axes, FM, 96);
+  AssertEquals('at the clamp', 100.0, TyRectFWidth(plot), 0);
+  AssertEquals('past the old right edge', 400.0, plot.Left, 0);
 end;
 
 { THE TWO HALVES OF THE GUTTER MUST AGREE. TyAxisThickness says how much the
@@ -282,28 +503,22 @@ var
   a: TTyAxisLayoutSpec;
   p: TTyAxisLabelPlacementArray;
 begin
-  { TICKS ON, then off, and the label moves in by exactly the length that
-    stopped being reserved -- which is the arithmetic the thickness does two
-    hundred lines up. Asserted as the two numbers rather than as a
-    difference, so a placement that ignored the tick entirely fails the
-    first line and one that always charges it fails the second. }
+  { THE LABEL STANDS AT THE MARGIN FROM THE AXIS LINE, tick or no tick --
+    upstream's rule, and its default margin of 8 clears the default tick of 5
+    on its own. An OFFSET moves the line, and the label with it.
+    [Revised in batch 37: this pinned the label a tick further out whenever
+    the tick pointed its way (87), and ignored the offset -- so an offset
+    axis drew its line out at the offset and its numbers against the plot.
+    The thickness still counts the tick: it places only the axis name now.] }
   a := LeftAxis(['1000']);
   p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
-  AssertEquals('tick 5 + margin 8 out from the plot', 87.0, p[0].X, Eps);
-  AssertEquals('and the thickness reserved the label on top of those',
-    5 + 8 + 40.0, TyAxisThickness(a, FM, 96, obcAxisLabel), Eps);
-
+  AssertEquals('the margin from the plot', 92.0, p[0].X, Eps);
   a.ShowTicks := False;
   p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
-  AssertEquals('the margin alone once the tick is gone', 92.0, p[0].X, Eps);
-  AssertEquals('and the thickness gave the same five back',
-    8 + 40.0, TyAxisThickness(a, FM, 96, obcAxisLabel), Eps);
-
-  a.ShowTicks := True;
-  a.TickInside := True;
+  AssertEquals('the same with no tick', 92.0, p[0].X, Eps);
+  a.OffsetLogical := 10;
   p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
-  AssertEquals('an inward tick is the same as no tick, out here',
-    92.0, p[0].X, Eps);
+  AssertEquals('an offset line takes its labels with it', 82.0, p[0].X, Eps);
 end;
 
 procedure TAdvChartAxisTest.TestAnInsideLabelCrossesTheAxisAndFlipsItsAnchor;
@@ -371,7 +586,9 @@ var
 begin
   a := BottomAxis(['0', '5']);
   p := TyLayoutAxisLabels(a, TyRectF(0, 0, 200, 150), FM, 96);
-  AssertEquals('tick 5 + margin 8 below the plot', 163.0, p[0].Y, Eps);
+  { [Revised in batch 37: 163, tick and margin. Upstream's label stands at
+    the margin from the axis line, which clears the tick by itself.] }
+  AssertEquals('margin 8 below the plot', 158.0, p[0].Y, Eps);
   AssertTrue('anchored by its top edge', p[0].AnchorV = tavTop);
   AssertTrue('and centred on the tick', p[0].AnchorH = tahCentre);
 end;
@@ -383,7 +600,8 @@ var
 begin
   a := LeftAxis(['0', '5']);
   p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
-  AssertEquals('tick 5 + margin 8 left of the plot', 87.0, p[0].X, Eps);
+  { [Revised in batch 37: 87, tick and margin -- see TestBottomLabelsSitBelowThePlot.] }
+  AssertEquals('margin 8 left of the plot', 92.0, p[0].X, Eps);
   AssertTrue('right-aligned so the numbers line up', p[0].AnchorH = tahRight);
   AssertTrue('and vertically centred on the tick', p[0].AnchorV = tavMiddle);
 end;
@@ -468,28 +686,6 @@ begin
   p := TyLayoutAxisLabels(a, plot, FM, 96);
   for i := 0 to High(p) do
     AssertEquals('index ' + IntToStr(i), i mod step = 0, p[i].Shown);
-end;
-
-{ ======================== the pass itself ======================== }
-
-procedure TAdvChartAxisTest.TestSecondPassOverTheShrunkPlotKeepsTheSameThickness;
-var
-  axes: TTyAxisLayoutSpecArray;
-  plot: TTyRectF;
-  before, after: Double;
-begin
-  { The pass is estimate -> shrink -> determine, ONE way, no iteration. That is
-    only sound because thinning changes how many labels show, not how big each
-    one is -- so re-estimating against the shrunk plot must give the same
-    thickness. If this ever fails, the single pass has become wrong and the
-    unit header's argument needs revisiting, not this test. }
-  SetLength(axes, 1);
-  axes[0] := LeftAxis(['1', '1000000', '9']);
-  before := TyAxisThickness(axes[0], FM, 96, obcAxisLabel);
-  plot := TySolveGrid(TyRectF(0, 0, 400, 300), axes, FM, 96, obmAuto);
-  after := TyAxisThickness(axes[0], FM, 96, obcAxisLabel);
-  AssertEquals('a second estimate changes nothing', before, after, Eps);
-  AssertTrue('and the plot really did shrink', plot.Left > 0);
 end;
 
 function TFakeMeasurer.WrapToWidth(const AText, AFontName: string;

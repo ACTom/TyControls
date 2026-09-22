@@ -626,7 +626,12 @@ var ax: TTyAxis; i: Integer; a, b: Double;
 begin
   { The layout layer wants fractions and the renderer wants pixels. If they are
     computed independently they drift -- and the drift is exactly half a band,
-    which looks like a rounding error rather than a missing rule. }
+    which looks like a rounding error rather than a missing rule.
+    [Revised in batch 37: this mapped the fraction back over the band-INSET
+    extent, 150..450. Its one consumer, the label layout, maps it over the
+    whole plot, 100..500 -- so the first of seven category labels stood at
+    the plot's edge instead of under its bar, and this test held that in
+    place. The fraction is now of the whole extent, as it is used.] }
   ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
   try
     ax.SetCategories(['a', 'b', 'c', 'd']);
@@ -637,7 +642,7 @@ begin
       a := ax.NormalizedCoord(i);
       b := ax.DataToCoord(i);
       AssertEquals('fraction ' + IntToStr(i) + ' maps back to the same pixel',
-        b, 150 + a * (450 - 150), 1e-9);
+        b, 100 + a * (500 - 100), 1e-9);
     end;
   finally
     ax.Free;

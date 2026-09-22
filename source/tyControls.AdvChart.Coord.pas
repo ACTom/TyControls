@@ -145,13 +145,18 @@ type
       and an empty extent. }
     procedure SetCategories(const A: array of string);
 
-    { Where a value sits along this axis as a fraction of its BAND-ADJUSTED
-      pixel extent, 0 at the start and 1 at the stop.
+    { Where a value sits along this axis as a fraction of its WHOLE pixel
+      extent, 0 at the start and 1 at the stop -- with the half-band inset
+      and Inverse already applied, because it is DataToCoord's own answer.
 
-      Exists so the layout layer and the renderer cannot drift: the layout layer
-      wants fractions, DataToCoord applies Inverse and the half-band inset
-      internally, and a caller computing its own fraction from the raw extent
-      would silently disagree with where the datum is actually drawn. }
+      Exists so the layout layer and the renderer cannot drift: the layout
+      layer wants fractions of the plot it is laying out on, and a caller
+      computing its own fraction would silently disagree with where the
+      datum is actually drawn.
+      [Revised in batch 37: this was a fraction of the band-INSET extent,
+      which the layout then spread over the whole plot -- so the first of
+      seven category labels stood at the plot's edge and the last at the
+      other, a band's half-width wide of the bars they named.] }
     function NormalizedCoord(AValue: Double): Double;
 
     { Where the TICK MARKS go, in device px.
@@ -375,11 +380,9 @@ begin
 end;
 
 function TTyAxis.NormalizedCoord(AValue: Double): Double;
-var a, b: Double;
 begin
-  BandPxExtent(a, b);
-  if b = a then Exit(0.5);
-  Result := (DataToCoord(AValue) - a) / (b - a);
+  if FPxStop = FPxStart then Exit(0.5);
+  Result := (DataToCoord(AValue) - FPxStart) / (FPxStop - FPxStart);
 end;
 
 { The Level-0 members of a tick array, in order. }
