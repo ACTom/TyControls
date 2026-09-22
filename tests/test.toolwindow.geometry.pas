@@ -12,6 +12,7 @@ type
     procedure TestEveryClassIsRegisteredForStreaming;
     procedure TestSideHeaderGivesActionsItsWidthAndClipsTheCaption;
     procedure TestSideHeaderWithoutActionsPadsTheTrailingEdge;
+    procedure TestNarrowSideHeaderKeepsOnlyTheLeadingPadForTheActions;
     procedure TestStripKeepsTheActiveIconWhenItOverflows;
     procedure TestSlotAtMapsGapsToWindowIndexes;
     procedure TestSlotAtMapsWindowIndexesOnANonPrefixStrip;
@@ -50,10 +51,15 @@ begin
   inp.Gap := 4;
   inp.ActionsWidth := 80;
   g := TyToolWindowHeaderLayout(inp);
-  AssertEquals('操作区贴右端', 200 - 6 - 80, g.Actions.Left);
+  { spec §3.4:「操作区自带内边距,宽为 0 时尾端补一个 header-pad」—— 尾端的 pad 只在
+    没有操作区时才补。操作区的首选宽本来就含它自己两侧的 2×pad,再补一个的话
+    最后一个按钮离右边是 12px 而不是 6px。这里原先钉的就是那个多出来的 pad。 }
+  AssertEquals('操作区贴到行的右端,尾端不再补 pad(§3.4:操作区自带内边距)', 200 - 80, g.Actions.Left);
+  AssertEquals('操作区右边就是行的右边(§3.4:宽为 0 时才补尾端 pad)', 200, g.Actions.Right);
   AssertEquals('操作区保住自己的宽', 80, g.Actions.Right - g.Actions.Left);
   AssertEquals('标题从左内距开始', 6, g.Caption.Left);
-  AssertEquals('标题被挤到操作区左边', 200 - 6 - 80 - 4, g.Caption.Right);
+  AssertEquals('标题被挤到操作区左边,隔一个 gap(§3.4:[pad][标题][gap][操作区])',
+    200 - 80 - 4, g.Caption.Right);
   AssertEquals('操作区从行顶开始', 0, g.Actions.Top);
   AssertEquals('操作区占满行高', 26, g.Actions.Bottom);
   AssertEquals('标题从行顶开始', 0, g.Caption.Top);
@@ -77,6 +83,26 @@ begin
   AssertTrue('没有操作区就是空矩形', g.Actions.Right <= g.Actions.Left);
   AssertEquals('标题从行顶开始', 0, g.Caption.Top);
   AssertEquals('标题占满行高', 26, g.Caption.Bottom);
+end;
+
+procedure TTyToolWindowGeometryTests.TestNarrowSideHeaderKeepsOnlyTheLeadingPadForTheActions;
+var
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+begin
+  { 行比操作区还窄:操作区优先保宽,但前导那个 pad 要留出来 —— 尾端不再留(§3.4:
+    操作区自带内边距),所以钳位只扣一个 pad,不是两个。 }
+  inp := Default(TTyToolWindowHeaderInput);
+  inp.Mode := twhSide;
+  inp.RowWidth := 50;
+  inp.RowHeight := 26;
+  inp.Pad := 6;
+  inp.Gap := 4;
+  inp.ActionsWidth := 80;
+  g := TyToolWindowHeaderLayout(inp);
+  AssertEquals('操作区从前导内距开始,不吃掉它', 6, g.Actions.Left);
+  AssertEquals('操作区一直到行的右端', 50, g.Actions.Right);
+  AssertTrue('标题没地方了', g.Caption.Right <= g.Caption.Left);
 end;
 
 procedure TTyToolWindowGeometryTests.TestStripKeepsTheActiveIconWhenItOverflows;
@@ -144,7 +170,7 @@ begin
   ltr := TyToolWindowHeaderLayout(inp);
   inp.RightToLeft := True;
   rtl := TyToolWindowHeaderLayout(inp);
-  AssertEquals('RTL:操作区贴左内距', 6, rtl.Actions.Left);
+  AssertEquals('RTL:操作区贴到行的左端(尾端),不补 pad(§3.4:操作区自带内边距)', 0, rtl.Actions.Left);
   AssertEquals('RTL:操作区保住自己的宽',
     ltr.Actions.Right - ltr.Actions.Left, rtl.Actions.Right - rtl.Actions.Left);
   AssertEquals('RTL:标题在操作区右边,隔一个 gap',

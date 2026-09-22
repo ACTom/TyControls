@@ -86,6 +86,7 @@ type
     procedure TestANegativeHeaderTokenDoesNotWedgeTheRelayout;
     procedure TestAnAlClientChildLandsBelowTheHeaderRow;
     procedure TestAWindowThatLeftTheBarStopsRelayouting;
+    procedure TestChildClassAllowedRejectsWindowsAndBars;
   end;
 
 implementation
@@ -656,6 +657,27 @@ begin
   FWin.AlignCount := 0;
   FWin.Invalidate;
   AssertEquals('离开过栏之后,什么都没动的重画一次都不许请对齐引擎', 0, FWin.AlignCount);
+end;
+
+procedure TTyToolWindowTests.TestChildClassAllowedRejectsWindowsAndBars;
+var
+  inner: TTyToolWindow;
+  raised: Boolean;
+begin
+  { spec §3.2:防止窗口套窗口。用子类问:拿 = 比类的实现会放过 TProbeWindow 这样的派生类。 }
+  AssertFalse('窗口里不许套窗口', FWin.CheckChildClassAllowed(TProbeWindow, False));
+  AssertFalse('窗口里不许放栏', FWin.CheckChildClassAllowed(TTyToolWindowBar, False));
+  AssertTrue('操作区照收', FWin.CheckChildClassAllowed(TTyToolWindowActions, False));
+  AssertTrue('正文控件照收', FWin.CheckChildClassAllowed(TBodyChild, False));
+  inner := TTyToolWindow.Create(FForm);
+  raised := False;
+  try
+    inner.Parent := FWin;
+  except
+    on EInvalidOperation do raised := True;
+  end;
+  AssertTrue('运行时硬塞进去要被 LCL 拦下', raised);
+  AssertTrue('拦下之后它不在里面', inner.Parent <> TWinControl(FWin));
 end;
 
 initialization

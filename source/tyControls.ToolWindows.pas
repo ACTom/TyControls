@@ -145,6 +145,8 @@ type
     function GetStyleTypeKey: string; override;
     procedure TextChanged; override;
     procedure AdjustClientRect(var ARect: TRect); override;
+    { spec §3.2:拒绝工具窗口和栏,防止窗口套窗口。 }
+    function ChildClassAllowed(ChildClass: TClass): Boolean; override;
     procedure AlignControls(AControl: TControl; var RemainingClientRect: TRect); override;
     { 第一个操作区摆进标题行、多出来的摆到正文左上角;别的子控件走继承。 }
     procedure CustomAlignPosition(AControl: TControl; var ANewLeft, ANewTop, ANewWidth,
@@ -192,6 +194,9 @@ type
       操作区不会被摆到控件外面。照 TTyCard.LayoutAtPPI(Card.pas:181)。
       返回的几何是**行内局部坐标**(0,0 在行的左上角);AClient 只用来定行宽、钳行高。 }
     function HeaderGeomAt(const AClient: TRect; APPI: Integer): TTyToolWindowHeaderGeom;
+    { 已有就返回第一个操作区,没有就建一个(spec §3.1 / §4):Owner 是窗口的 Owner
+      (窗体拥有,设计期容器的契约),Parent 是本窗口,TabOrder 0。 }
+    function EnsureActions: TTyToolWindowActions;
     function HeaderHeightPx: Integer;
     function HeaderRowRect: TRect;
     function BodyRect: TRect;
@@ -228,9 +233,15 @@ type
     function IsUsedByWindow: Boolean;
     function HasVisibleChild: Boolean;
     function MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+    function NoteText: string;
+    function NoteStyle: TTyStyleSet;
+    { 设计期多余操作区 / 孤儿的最小尺寸:max(raw, 提示宽 + 2×pad) × max(raw 高, token)。 }
+    function StrayDesignSize(APPI: Integer): TSize;
   protected
     function GetStyleTypeKey: string; override;
     procedure SetAlign(Value: TAlign); override;
+    { 设计期多余的、孤儿的:尺寸不低于 StrayDesignSize,提示才看得全。运行时它们不露面,不碰。 }
+    procedure ConstrainedResize(var MinWidth, MinHeight, MaxWidth, MaxHeight: TConstraintSize); override;
     function ChildClassAllowed(ChildClass: TClass): Boolean; override;
     procedure AlignControls(AControl: TControl; var RemainingClientRect: TRect); override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -487,6 +498,21 @@ begin
   Result := TyToolWindowHeaderLayout(inp);
 end;
 
+function TTyToolWindow.EnsureActions: TTyToolWindowActions;
+var
+  own: TComponent;
+begin
+  Result := Actions;
+  if Result <> nil then Exit;
+  { 窗体拥有,好让它进 .lfm、设计器里点得到。代码里 Create(nil) 的窗口没有 Owner,
+    而 LCL 不释放没有 Owner 的子控件(TWinControl.Destroy 只把它们摘下来),所以照
+    TTyPageControl 建页的规矩(PageControl.pas:332)回落到窗口自己。 }
+  if Owner <> nil then own := Owner else own := Self;
+  Result := TTyToolWindowActions.Create(own);
+  Result.Parent := Self;
+  Result.TabOrder := 0;
+end;
+
 function TTyToolWindow.HeaderHeightPx: Integer;
 begin
   { 按自己字体的像素密度问的那一问,**没钳过**。正文区(AdjustClientRect)和
@@ -511,6 +537,15 @@ begin
   inherited AdjustClientRect(ARect);
   { 正文从钳过的标题行底下开始 —— 跟画出来的那一条、摆操作区的那一条是同一处钳。 }
   ARect.Top := HeaderRowIn(ARect, Font.PixelsPerInch).Bottom;
+end;
+
+function TTyToolWindow.ChildClassAllowed(ChildClass: TClass): Boolean;
+begin
+  { 用 InheritsFrom 不用 = :派生类同样不许进来。设计期面板拖放和「改变父控件」都问这里;
+    粘贴漏过去的由孤儿模式显示出来(spec §11),不在 CheckNewParent 里抛异常。 }
+  Result := inherited ChildClassAllowed(ChildClass)
+    and not ChildClass.InheritsFrom(TTyToolWindow)
+    and not ChildClass.InheritsFrom(TTyToolWindowBar);
 end;
 
 procedure TTyToolWindow.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
@@ -836,6 +871,56 @@ begin
   PreferredHeight := sz.cy;
 end;
 
+function TTyToolWindowActions.NoteText: string;
+begin
+  if Parent is TTyToolWindow then Result := rsTyToolWindowActionsExtra
+  else Result := rsTyToolWindowActionsOrphan;
+end;
+
+function TTyToolWindowActions.NoteStyle: TTyStyleSet;
+begin
+  Result := ActiveController.Model.ResolveStyle('TyToolWindowNote',
+    TyStyleClassFor(Self, StyleClass), [tysNormal]);
+end;
+
+function TTyToolWindowActions.StrayDesignSize(APPI: Integer): TSize;
+var
+  st: TTyStyleSet;
+  raw: TSize;
+  blockW, blockH, textW, fontSize: Integer;
+begin
+  raw := PreferredSizeAt(APPI);
+  st := NoteStyle;
+  fontSize := ResolveFontSize(st);
+  { 两个量法取大的(Painter.pas 的约定):画布量的和渲染器量的差一个像素,只按前者
+    给尺寸,DrawText 就会觉得放不下、出省略号。 }
+  TyMeasureTextBlock(NoteText, st.FontName, fontSize, st.FontWeight, APPI, 0, 0, blockW, blockH);
+  textW := TyMeasureRenderedTextWidth(NoteText, st.FontName, fontSize, st.FontWeight, APPI);
+  if blockW > textW then textW := blockW;
+  Inc(textW, 2 * MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI));
+  Result := raw;
+  if textW > Result.cx then Result.cx := textW;
+  blockH := MetricPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+  if blockH > Result.cy then Result.cy := blockH;
+end;
+
+procedure TTyToolWindowActions.ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
+  MaxHeight: TConstraintSize);
+var
+  sz: TSize;
+begin
+  inherited ConstrainedResize(MinWidth, MinHeight, MaxWidth, MaxHeight);
+  { 设计期、窗口不认的那一个(多出来的、孤儿)才有下限:raw 尺寸下它是 26×26 的方槽,
+    有子控件时子控件盖住提示,撤销删除后回来的孤儿是 LCL 默认的 75×50 —— 提示都只剩
+    一个省略号。一处下限同时管住两条路:多出来的由窗口按 raw 摆(CustomAlignPosition),
+    孤儿的尺寸是流里读出来 / 设计器给的,两边的 SetBounds 都经过这里
+    (TControl.DoConstrainedResize)。运行时它们不露面,这里不碰。 }
+  if not (csDesigning in ComponentState) or IsUsedByWindow then Exit;
+  sz := StrayDesignSize(Font.PixelsPerInch);
+  if sz.cx > MinWidth then MinWidth := sz.cx;
+  if sz.cy > MinHeight then MinHeight := sz.cy;
+end;
+
 procedure TTyToolWindowActions.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
 var
   kids: array of TControl;
@@ -890,8 +975,8 @@ procedure TTyToolWindowActions.RenderTo(ACanvas: TCanvas; const ARect: TRect; AP
 var
   P: TTyPainter;
   S, extraS: TTyStyleSet;
-  R: TRect;
-  note: string;
+  R, noteR: TRect;
+  pad: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -909,15 +994,16 @@ begin
         if tpBorderColor in extraS.Present then
           P.StrokeBorder(R, 0, 1, extraS.BorderColor);
       end;
-      { 窗口不认的那一个(多出来的、孤儿):说明它为什么在这里、运行时会怎样。 }
+      { 窗口不认的那一个(多出来的、孤儿):说明它为什么在这里、运行时会怎样。
+        两侧各留一个 pad —— StrayDesignSize 就是按这个量的,量和画必须是同一个框。 }
       if not IsUsedByWindow then
       begin
-        if Parent is TTyToolWindow then note := rsTyToolWindowActionsExtra
-        else note := rsTyToolWindowActionsOrphan;
-        extraS := ActiveController.Model.ResolveStyle('TyToolWindowNote',
-          TyStyleClassFor(Self, StyleClass), [tysNormal]);
-        P.DrawText(R, note, extraS.FontName, ResolveFontSize(extraS), extraS.FontWeight,
-          extraS.TextColor, taLeftJustify, tlCenter, True);
+        extraS := NoteStyle;
+        pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
+        noteR := Rect(pad, 0, R.Right - pad, R.Bottom);
+        if noteR.Right > noteR.Left then
+          P.DrawText(noteR, NoteText, extraS.FontName, ResolveFontSize(extraS),
+            extraS.FontWeight, extraS.TextColor, taLeftJustify, tlCenter, True);
       end;
     end;
     P.EndPaint;
@@ -976,8 +1062,9 @@ begin
   pad := AInput.Pad; if pad < 0 then pad := 0;
   gap := AInput.Gap; if gap < 0 then gap := 0;
   aw := AInput.ActionsWidth; if aw < 0 then aw := 0;
-  { 两个内距都要留出来:只扣一个的话,侧栏拖窄时操作区会吃掉前导内距。 }
-  if aw > AInput.RowWidth - 2 * pad then aw := AInput.RowWidth - 2 * pad;
+  { 只给前导那个内距让位:尾端的 pad 由操作区自己带着(它的首选宽里就有两侧的 2×pad),
+    spec §3.4「操作区自带内边距,宽为 0 时尾端补一个 header-pad」。 }
+  if aw > AInput.RowWidth - pad then aw := AInput.RowWidth - pad;
 
   if AInput.Mode = twhSide then
   begin
@@ -987,7 +1074,8 @@ begin
       在分支外面算就等于给那两支发一个看起来合法的错答案。 }
     if aw > 0 then
     begin
-      Result.Actions := Rect(AInput.RowWidth - pad - aw, 0, AInput.RowWidth - pad, AInput.RowHeight);
+      { 贴到行的右端:再补一个 pad 的话,最后一个按钮离右边就是 2×pad。 }
+      Result.Actions := Rect(AInput.RowWidth - aw, 0, AInput.RowWidth, AInput.RowHeight);
       x := Result.Actions.Left - gap;
     end
     else
