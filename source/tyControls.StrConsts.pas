@@ -274,6 +274,13 @@ resourcestring
     'The graphic control "%s" was placed directly on the form.'#10 +
     'Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the '#10 +
     'content area. Move it into the Surface content container so it stays visible.';
+  { Drawn inside a TTyToolWindowActions at design time when its window will not use it:
+    a second actions area in the same tool window (a paste), or one that is not in a tool
+    window at all (undo of a delete re-creates it on the form). Both are hidden at run time. }
+  rsTyToolWindowActionsExtra =
+    'Only the first actions area of a tool window goes into its header. This one is hidden at run time.';
+  rsTyToolWindowActionsOrphan =
+    'An actions area only works inside a tool window. This one is hidden at run time.';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

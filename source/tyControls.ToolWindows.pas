@@ -10,7 +10,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
-  tyControls.StyleModel;
+  tyControls.StyleModel, tyControls.StrConsts;
 
 const
   { 长度 token。经典值必须等于这里的 Def —— light.tycss 的 :root 里写同一个数,
@@ -128,6 +128,9 @@ type
     FHeaderPxRTL: Boolean;
     FHeaderPxMode: TTyToolWindowHeaderMode;
     FRelayouting: Boolean;
+    { 上一次对齐时标题行的样子(行、标题、操作区三个矩形)。操作区变宽 / 变高 / 被藏起来,
+      标题行跟着变,而窗口尺寸一个像素没动 —— 缓存自己看不出来,见 AlignControls。 }
+    FAlignedRow, FAlignedCaption, FAlignedActions: TRect;
     function ImageIndexIsStored: Boolean;
     function GetBar: TTyToolWindowBar;
     function GetActions: TTyToolWindowActions;
@@ -142,6 +145,10 @@ type
     function GetStyleTypeKey: string; override;
     procedure TextChanged; override;
     procedure AdjustClientRect(var ARect: TRect); override;
+    procedure AlignControls(AControl: TControl; var RemainingClientRect: TRect); override;
+    { 第一个操作区摆进标题行、多出来的摆到正文左上角;别的子控件走继承。 }
+    procedure CustomAlignPosition(AControl: TControl; var ANewLeft, ANewTop, ANewWidth,
+      ANewHeight: Integer; var AlignRect: TRect; AlignInfo: TAlignInfo); override;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
@@ -211,9 +218,43 @@ type
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
   end;
 
+  { 标题行尾端的操作区(spec §4)。只由组件编辑器的「添加操作区」或 EnsureActions 建,
+    位置和尺寸永远由所在窗口排:Align 钉死 alCustom,Align / Anchors 不 published;
+    AutoSize、ChildSizing、BorderSpacing 在这个类上不起作用,子控件由它自己排成一排。 }
   TTyToolWindowActions = class(TTyCustomControl)
+  private
+    FInLayout: Boolean;
+    function IsBoundsStored: Boolean;
+    function IsUsedByWindow: Boolean;
+    function HasVisibleChild: Boolean;
+    function MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;
+    procedure SetAlign(Value: TAlign); override;
+    function ChildClassAllowed(ChildClass: TClass): Boolean; override;
+    procedure AlignControls(AControl: TControl; var RemainingClientRect: TRect); override;
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  public
+    constructor Create(AOwner: TComponent); override;
+    { 运行时,所在窗口不认的那一个(多出来的、孤儿)不露面。派生而不是去写 Visible:
+      写了就会进 .lfm,而且第一个被删掉之后第二个也回不来。 }
+    function IsControlVisible: Boolean; override;
+    procedure Paint; override;
+    { raw 首选尺寸,设备像素,按给定 PPI —— 窗口排标题行、LCL 的 GetPreferredSize、
+      自己排子控件,问的都是这一处。**不**走 LCL 的 GetPreferredSize:那边有缓存,
+      InsertControl 不作废它(wincontrol.inc:6392),而且答不了别的 PPI。
+      运行时一个可见子控件都没有 → (0, 0);设计期空着 → 边长为 token 的方槽。 }
+    function PreferredSizeAt(APPI: Integer): TSize;
+  published
+    { 由窗口推送,不进 .lfm(同 TTyToolWindow)。 }
+    property Controller stored False;
+    { 在窗口里由标题行排出来;孤儿的位置是用户摆的,照常存。 }
+    property Left stored IsBoundsStored;
+    property Top stored IsBoundsStored;
+    property Width stored IsBoundsStored;
+    property Height stored IsBoundsStored;
   end;
 
   TTyToolWindowBar = class(TTyCustomControl)
@@ -300,9 +341,14 @@ begin
 end;
 
 function TTyToolWindow.GetActions: TTyToolWindowActions;
+var
+  i: Integer;
 begin
-  { 操作区本身(连同扫 Controls[] 取第一个的这一句)是 Task 4 的活;在那之前一个
-    操作区都不存在,标题行高就退化成 token 值。 }
+  { 一个窗口只认 Controls[] 里的第一个操作区;粘贴等途径多出来的不参与标题行。
+    不缓存:子控件增删、调顺序都不用再记得回来作废什么。 }
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyToolWindowActions then
+      Exit(TTyToolWindowActions(Controls[i]));
   Result := nil;
 end;
 
@@ -334,10 +380,9 @@ begin
   Result.Gap := MulDiv(ActiveController.Metric(TyToolWindowHeaderGapVar,
     TyToolWindowHeaderGapDef), APPI, 96);
   Result.ActionsWidth := ActionsPreferredSize(APPI).cx;
-  { 镜像整套几何靠这一个字段。A 期行里只有标题、而标题占的是对称的那一整条,
-    镜像前后一模一样 —— 所以这条线今天没有任何像素能证伪,只有
-    TestRightToLeftReachesTheHeaderLayout 那条接线断言守着它。操作区一进来
-    (Task 4)它立刻变成看得见的东西。 }
+  { 镜像整套几何靠这一个字段。没有操作区时标题占的是对称的那一整条,镜像前后一模一样;
+    有操作区时它就是看得见的位置差 —— 操作区到左端、标题到它右边,
+    TestRightToLeftPutsTheActionsLeftAndTheCaptionRightOfIt 守着。 }
   Result.RightToLeft := IsRightToLeft;
 end;
 
@@ -379,15 +424,22 @@ begin
   Result := FHeaderPxCache;
 end;
 
-{ 操作区的首选尺寸(设备像素,按给定 PPI)。Task 4 把这里换成真的 —— **一处答**:
-  标题行高拿它的高钳底、排布拿它的宽留位,两边各写一个 0 的话 Task 4 只改一处,
-  画出来的那条和挖出来的正文就会错开,而且不会红。 }
+{ 操作区的首选尺寸(设备像素,按给定 PPI),**一处答**:标题行高拿它的高钳底、排布
+  拿它的宽留位。两边各问各的话改一处漏一处,画出来的那条和挖出来的正文就会错开,
+  而且不会红。只认第一个操作区(Actions),多出来的不进标题行。 }
 function TTyToolWindow.ActionsPreferredSize(APPI: Integer): TSize;
+var
+  act: TTyToolWindowActions;
 begin
-  { Task 4:操作区存在时换成 Actions 的 raw 首选尺寸按 APPI 缩放;在那之前一个操作区
-    都不存在,标题行高退化成 token 值、标题占满整条。 }
-  Result.cx := 0;
-  Result.cy := 0;
+  { 没有操作区、或者它被藏起来了,标题行高退化成 token 值、标题占满整条。 }
+  act := Actions;
+  if (act <> nil) and act.IsControlVisible then
+    Result := act.PreferredSizeAt(APPI)
+  else
+  begin
+    Result.cx := 0;
+    Result.cy := 0;
+  end;
 end;
 
 { 标题行高,按**给定的** PPI。缓存键钉在 Font.PixelsPerInch 上,所以只有问的就是
@@ -457,8 +509,64 @@ end;
 procedure TTyToolWindow.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
-  { 正文从钳过的标题行底下开始 —— 跟画出来的那一条、Task 4 摆操作区的那一条是同一处钳。 }
+  { 正文从钳过的标题行底下开始 —— 跟画出来的那一条、摆操作区的那一条是同一处钳。 }
   ARect.Top := HeaderRowIn(ARect, Font.PixelsPerInch).Bottom;
+end;
+
+procedure TTyToolWindow.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
+var
+  row: TRect;
+  g: TTyToolWindowHeaderGeom;
+begin
+  inherited AlignControls(AControl, RemainingClientRect);
+  { 标题行的样子跟着操作区走:它变宽、变高、被藏起来,标题的省略号、那条底色的高度
+    都得重画。而窗口尺寸一个像素没动,NeedsRender 答「不用」—— 运行时 blit 出旧的
+    那一帧,设计期不走缓存、看着一切正常(spec §3.5)。子控件的变化都会走到整窗体
+    DoAllAutoSize 的 AlignControl(control.inc:3097),所以在这里比。
+    只在真的变了时才丢:每一遍 DoAllAutoSize 都会来这里,无条件丢缓存就等于没有缓存。 }
+  row := HeaderRowRect;
+  g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  if EqualRect(row, FAlignedRow) and EqualRect(g.Caption, FAlignedCaption)
+     and EqualRect(g.Actions, FAlignedActions) then Exit;
+  FAlignedRow := row;
+  FAlignedCaption := g.Caption;
+  FAlignedActions := g.Actions;
+  if FPaintCache <> nil then FPaintCache.Drop;
+  inherited Invalidate;
+end;
+
+procedure TTyToolWindow.CustomAlignPosition(AControl: TControl; var ANewLeft, ANewTop,
+  ANewWidth, ANewHeight: Integer; var AlignRect: TRect; AlignInfo: TAlignInfo);
+var
+  g: TTyToolWindowHeaderGeom;
+  body: TRect;
+  sz: TSize;
+begin
+  if not (AControl is TTyToolWindowActions) then
+  begin
+    inherited CustomAlignPosition(AControl, ANewLeft, ANewTop, ANewWidth, ANewHeight,
+      AlignRect, AlignInfo);
+    Exit;
+  end;
+  if (AControl = Actions) and (HeaderMode <> twhNone) then
+  begin
+    { 四个边界全部取标题行的答案 —— 跟 RenderTo 画标题用的是同一份 HeaderGeomAt、同一个
+      客户区,画出来的和摆出来的不会错开。行从客户区原点开始,所以行内坐标就是客户区坐标。 }
+    g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+    ANewLeft := g.Actions.Left;
+    ANewTop := g.Actions.Top;
+    ANewWidth := g.Actions.Right - g.Actions.Left;
+    ANewHeight := g.Actions.Bottom - g.Actions.Top;
+    Exit;
+  end;
+  { 多出来的操作区(只有设计期走得到这里,运行时它不露面),以及没有标题行的窗口
+    (孤儿,不在栏里)的那一个:放在正文区左上角,按 raw 首选尺寸(spec §3.2 / §3.4)。 }
+  body := BodyRect;
+  sz := TTyToolWindowActions(AControl).PreferredSizeAt(Font.PixelsPerInch);
+  ANewLeft := body.Left;
+  ANewTop := body.Top;
+  ANewWidth := sz.cx;
+  ANewHeight := sz.cy;
 end;
 
 procedure TTyToolWindow.RelayoutHeader;
@@ -605,9 +713,223 @@ begin
   FPaintCache.Blit(Canvas);
 end;
 
+{ --- TTyToolWindowActions ----------------------------------------------------- }
+
+constructor TTyToolWindowActions.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  { 两个 KeepChild 标志:用户在对象查看器里开 AutoSize,TWinControl.DoAutoSize 会把
+    子控件往左上挪(wincontrol.inc:3441-3476),和这里自己的排列互相覆盖。 }
+  ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds, csNoFocus,
+    csAutoSizeKeepChildLeft, csAutoSizeKeepChildTop];
+  inherited SetAlign(alCustom);
+  { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
+end;
+
 function TTyToolWindowActions.GetStyleTypeKey: string;
 begin
   Result := 'TyToolWindowActions';
+end;
+
+procedure TTyToolWindowActions.SetAlign(Value: TAlign);
+begin
+  { 位置由所在窗口的 CustomAlignPosition 定,Align 不接受别的值。 }
+  inherited SetAlign(alCustom);
+end;
+
+function TTyToolWindowActions.ChildClassAllowed(ChildClass: TClass): Boolean;
+begin
+  { 用 InheritsFrom 不用 = :派生类同样不许进来。 }
+  Result := inherited ChildClassAllowed(ChildClass)
+    and not ChildClass.InheritsFrom(TTyToolWindow)
+    and not ChildClass.InheritsFrom(TTyToolWindowBar)
+    and not ChildClass.InheritsFrom(TTyToolWindowActions);
+end;
+
+function TTyToolWindowActions.IsBoundsStored: Boolean;
+begin
+  Result := not (Parent is TTyToolWindow);
+end;
+
+function TTyToolWindowActions.IsUsedByWindow: Boolean;
+begin
+  Result := (Parent is TTyToolWindow) and (TTyToolWindow(Parent).Actions = Self);
+end;
+
+function TTyToolWindowActions.IsControlVisible: Boolean;
+begin
+  Result := inherited IsControlVisible;
+  { 状态一翻(第一个被删掉、孤儿被放回窗口)不用谁来通知:RemoveControl / InsertControl
+    都会走到整窗体的 DoAllAutoSize,它对整棵树重新问一遍这里(UpdateShowingRecursive)。 }
+  if Result and not (csDesigning in ComponentState) and not IsUsedByWindow then
+    Result := False;
+end;
+
+function TTyToolWindowActions.HasVisibleChild: Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to ControlCount - 1 do
+    if Controls[i].IsControlVisible then Exit(True);
+  Result := False;
+end;
+
+function TTyToolWindowActions.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(AName, ADefault), APPI, 96);
+  { 同 TyToolWindowHeaderLayout:度量值不钳(TyEvalLength),负的内距 / 间距按 0 算。 }
+  if Result < 0 then Result := 0;
+end;
+
+function TTyToolWindowActions.PreferredSizeAt(APPI: Integer): TSize;
+var
+  i, n, w, h, ch, own, pad, gap: Integer;
+  c: TControl;
+begin
+  Result.cx := 0;
+  Result.cy := 0;
+  { 子控件的尺寸是按本控件此刻的密度排的设备像素;问别的 PPI 时按比例换过去,
+    这一条记录里才是一套尺度。 }
+  own := Font.PixelsPerInch;
+  if own <= 0 then own := 96;
+  n := 0;
+  w := 0;
+  h := 0;
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if not c.IsControlVisible then Continue;
+    Inc(n);
+    Inc(w, MulDiv(c.Width, APPI, own));
+    ch := c.Height;
+    if c.Constraints.MinHeight > ch then ch := c.Constraints.MinHeight;
+    ch := MulDiv(ch, APPI, own);
+    if ch > h then h := ch;
+  end;
+  if n = 0 then
+  begin
+    { 运行时就是 0:非 raw 的 GetPreferredSize 会把 0 宽换成 75px 默认宽
+      (control.inc:5609-5643),空操作区会平白占掉一截标题。
+      设计期给一个方槽方便往里拖控件,边长取 token 本身 —— 取标题行高的话,标题行高
+      本来就是 max(token, 操作区),定义会绕回自己。 }
+    if csDesigning in ComponentState then
+    begin
+      Result.cx := MetricPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+      Result.cy := Result.cx;
+    end;
+    Exit;
+  end;
+  pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
+  gap := MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI);
+  Result.cx := 2 * pad + w + (n - 1) * gap;
+  Result.cy := h + 2 * pad;
+end;
+
+procedure TTyToolWindowActions.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+var
+  sz: TSize;
+begin
+  { LCL 的 GetPreferredSize(raw) 答的也是这一处,不另算一遍。 }
+  sz := PreferredSizeAt(Font.PixelsPerInch);
+  PreferredWidth := sz.cx;
+  PreferredHeight := sz.cy;
+end;
+
+procedure TTyToolWindowActions.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
+var
+  kids: array of TControl;
+  cr: TRect;
+  i, n, pad, gap, availW, availH, x, ch, kx: Integer;
+  rtl: Boolean;
+begin
+  { 不调继承:子控件的 Align / Anchors 在这里一律不算,由这一排说了算。
+    给子控件 SetBounds 会绕回这里,所以带保护。 }
+  if FInLayout then Exit;
+  FInLayout := True;
+  try
+    { LCL 的 AlignControls 第一步就是这一句(wincontrol.inc:3259),传进来的是没扣过的客户区。 }
+    cr := RemainingClientRect;
+    AdjustClientRect(cr);
+    kids := nil;
+    SetLength(kids, ControlCount);
+    n := 0;
+    for i := 0 to ControlCount - 1 do
+      if Controls[i].IsControlVisible then
+      begin
+        kids[n] := Controls[i];
+        Inc(n);
+      end;
+    if n = 0 then Exit;
+    pad := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, Font.PixelsPerInch);
+    gap := MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, Font.PixelsPerInch);
+    availW := cr.Right - cr.Left;
+    availH := cr.Bottom - cr.Top;
+    { 内容宽跟首选宽是同一处定义;放不下就整排贴尾端,被裁掉的是开头的控件 ——
+      尾端那几个最常用(spec §4)。 }
+    x := PreferredSizeAt(Font.PixelsPerInch).cx;
+    if x <= availW then x := pad
+    else x := availW - x + pad;
+    { 从右往左读时整排按宽镜像:第一个到右端,贴尾端就成了贴左端,被裁的仍是开头那个。 }
+    rtl := IsRightToLeft;
+    for i := 0 to n - 1 do
+    begin
+      ch := kids[i].Height;
+      if kids[i].Constraints.MinHeight > ch then ch := kids[i].Constraints.MinHeight;
+      if rtl then kx := availW - x - kids[i].Width
+      else kx := x;
+      kids[i].SetBounds(cr.Left + kx, cr.Top + (availH - ch) div 2, kids[i].Width, ch);
+      Inc(x, kids[i].Width + gap);
+    end;
+  finally
+    FInLayout := False;
+  end;
+end;
+
+procedure TTyToolWindowActions.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S, extraS: TTyStyleSet;
+  R: TRect;
+  note: string;
+begin
+  P := TTyPainter.Create;
+  try
+    { painter 的位图是 W×H 并 blit 到 ARect 左上,所以内部一切坐标都用 (0,0)-local。 }
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
+    S := CurrentStyle;
+    DrawFrame(P, R, S);
+    if csDesigning in ComponentState then
+    begin
+      { 设计期空着:描出那个方槽,看得见才知道往哪里拖。 }
+      if not HasVisibleChild then
+      begin
+        extraS := ActiveController.Model.ResolveOverride('border-color: var(--border);');
+        if tpBorderColor in extraS.Present then
+          P.StrokeBorder(R, 0, 1, extraS.BorderColor);
+      end;
+      { 窗口不认的那一个(多出来的、孤儿):说明它为什么在这里、运行时会怎样。 }
+      if not IsUsedByWindow then
+      begin
+        if Parent is TTyToolWindow then note := rsTyToolWindowActionsExtra
+        else note := rsTyToolWindowActionsOrphan;
+        extraS := ActiveController.Model.ResolveStyle('TyToolWindowNote',
+          TyStyleClassFor(Self, StyleClass), [tysNormal]);
+        P.DrawText(R, note, extraS.FontName, ResolveFontSize(extraS), extraS.FontWeight,
+          extraS.TextColor, taLeftJustify, tlCenter, True);
+      end;
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyToolWindowActions.Paint;
+begin
+  { 不做绘制缓存:它小,而且子控件就铺在它上面,几乎没有只露它自己的那种重画。 }
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 function TTyToolWindowBar.GetStyleTypeKey: string;

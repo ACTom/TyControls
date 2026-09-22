@@ -1023,6 +1023,14 @@ msgstr ""
 msgid "TTyForm content host — click for details"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowactionsextra
+msgid "Only the first actions area of a tool window goes into its header. This one is hidden at run time."
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowactionsorphan
+msgid "An actions area only works inside a tool window. This one is hidden at run time."
+msgstr ""
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."
