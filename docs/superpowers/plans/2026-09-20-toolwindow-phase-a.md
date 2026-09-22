@@ -2018,6 +2018,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+> **spec 里有、但 A 期计划一直没有任务认领的两件事，归本节**：
+> - `TTyToolWindow.IsActive`（spec §3.1 列为 public 成员，B 期底栏代画要用）。
+> - 栏里漏进来的**非窗口子控件**（粘贴、运行时代码）：设计期画 `TyToolWindowNote` 提示，运行时隐藏（spec §6.1）。Task 5 只做到了「不计入任何序号」。
+> （`TryFinishLoading` 属于 C 期布局保存，不在 A 期。）
+
 ### Task 6b: 栏的绘制（图标条、图标着色、指示条、边缘区、设计期提示）
 
 **Files:**
@@ -2096,6 +2101,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
+
+> **Task 5 推给本节、而本节初稿没写的两件事**：
+> - spec §5.1 第 4 步「切页后按 `Mouse.CursorPos` 重查悬停」——Task 5 在 `SwitchCore` 里留了注释指向这里。
+> - spec §5.2「`Notification(opRemove)` 清掉属于被移除窗口的悬停、按下部件和手势记录」——有了悬停和手势状态之后在这里补，配一条「窗口在 Armed 状态被释放，松开不许当成点击」的测试。
 
 ### Task 7: 图标条手势（松开切换、收起、防抖、多击、设计期）
 
