@@ -1631,6 +1631,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+> **Task 3 留给本节的三件事（审查结论）：**
+> - **静默开关要成对包起来**：`BeginSilentVisibility` / `EndSilentVisibility` 之间抛异常，计数会卡在 0 以上、`OnShow`/`OnHide` 从此不响。本节在栏上提供**一个** helper，把一次切页里的两个窗口一起包进 `try/finally`，`ActivateWindow`、`Loaded` 应用 `ActiveIndex`、以及 C 期的布局应用都只调它。
+> - **`HeaderMode` 改成读 `Bar`**：加 `Placement` 时把「父控件是不是栏」统一成 `GetBar` 一处回答，别在 `HeaderMode` 里再判一遍。
+> - **「谁先读就是谁的」**：工具窗口察觉主题变化，靠的是 `Invalidate` 在版本号变了之后**第一个**去读 token。本节如果在栏的 `Invalidate` 里向各窗口做纯查询（比如为底栏统一行高去问每个窗口的标题行高），会先把窗口的缓存刷成新值、吃掉这条边。真要这么做，改用 LCL 自带的 `DoAdjustClientRectChange`（public，`controls.pp:2377`）：它比的是对齐引擎上一次真正用过的矩形，查询吃不掉。
+
 ### Task 5: `TTyToolWindowBar` 状态模型（Placement、尺寸、注册、当前页、收起）
 
 **Files:**
