@@ -1006,6 +1006,10 @@ type
     function OverflowWindows: TTyToolWindowPlan;
     { 溢出菜单(点过一次溢出按钮才有);菜单项的 Tag 是窗口引用。 }
     property OverflowMenu: TPopupMenu read FOverflowMenu;
+    { 溢出菜单挂在哪:答宿主控件(nil = 没有可挂的,底栏没有当前页时),APoint 是宿主客户区
+      里的锚点。侧栏按栏自己的几何和读写方向;底栏按当前页标签行里的溢出按钮和**当前页**的
+      读写方向(那一行就是按它镜像的)。ShowOverflowMenu 只问这一处。 }
+    function OverflowMenuAnchorIn(out APoint: TPoint; out AAlignment: TPopupAlignment): TWinControl;
     { 最近一次右键落在哪个窗口的图标上;不在图标上是 nil(spec §6.8)。只读。 }
     property ContextWindow: TTyToolWindow read FContextWindow;
     { 拉宽边(= BarLayout.Edge):运行时收起、没有窗口时为空。 }
@@ -4627,9 +4631,7 @@ procedure TTyToolWindowBar.ShowOverflowMenu;
 var
   hidden: TTyToolWindowPlan;
   item: TMenuItem;
-  L: TTyToolWindowBarLayout;
   host: TWinControl;
-  r: TRect;
   pt: TPoint;
   menuAlign: TPopupAlignment;
   i: Integer;
@@ -4648,27 +4650,42 @@ begin
     item.OnClick := @OverflowItemClick;
     FOverflowMenu.Items.Add(item);
   end;
-  { 菜单贴着溢出按钮开(锚点和对齐方式一处算,见 TyToolWindowOverflowMenuAnchor)。
-    底栏的溢出按钮在当前页的标签行里:矩形是当前页的坐标,换屏幕坐标用当前页;
-    PopupComponent 仍是栏。只在有句柄时弹(spec §7.4)。 }
-  if FPlacement = twpBottom then
-  begin
-    host := FActive;
-    if host = nil then Exit;
-    r := FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
-      FActive.Font.PixelsPerInch).Overflow;
-  end
-  else
-  begin
-    host := Self;
-    L := BarLayout;
-    r := L.Overflow;
-  end;
-  TyToolWindowOverflowMenuAnchor(r, FPlacement, IsRightToLeft, pt, menuAlign);
+  { PopupComponent 仍是栏。只在有句柄时弹(spec §7.4)。 }
+  host := OverflowMenuAnchorIn(pt, menuAlign);
+  if host = nil then Exit;
   FOverflowMenu.Alignment := menuAlign;
   if not host.HandleAllocated then Exit;
   pt := host.ClientToScreen(pt);
   FOverflowMenu.PopUp(pt.X, pt.Y);
+end;
+
+function TTyToolWindowBar.OverflowMenuAnchorIn(out APoint: TPoint;
+  out AAlignment: TPopupAlignment): TWinControl;
+var
+  r: TRect;
+begin
+  { 菜单贴着溢出按钮开(锚点和对齐方式一处算,见 TyToolWindowOverflowMenuAnchor)。
+    底栏的溢出按钮在当前页的标签行里:矩形是当前页的坐标,换屏幕坐标用当前页;读写方向
+    也取当前页的 —— 那一行几何就是按它镜像的,取栏的话两者不一致时锚到镜像前的那一侧。 }
+  if FPlacement = twpBottom then
+  begin
+    Result := FActive;
+    if Result = nil then
+    begin
+      APoint := Point(0, 0);
+      AAlignment := paLeft;
+      Exit;
+    end;
+    r := FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
+      FActive.Font.PixelsPerInch).Overflow;
+    TyToolWindowOverflowMenuAnchor(r, FPlacement, FActive.IsRightToLeft, APoint, AAlignment);
+  end
+  else
+  begin
+    Result := Self;
+    r := BarLayout.Overflow;
+    TyToolWindowOverflowMenuAnchor(r, FPlacement, IsRightToLeft, APoint, AAlignment);
+  end;
 end;
 
 function TTyToolWindowBar.EdgeRect: TRect;

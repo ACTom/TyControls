@@ -128,6 +128,8 @@ type
     FDesignWins: array of TProbeWindow;
     { HostTheBar 建的宿主和它上面那个 alTop 兄弟。 }
     FHost, FTop: TBodyChild;
+    { MoveRaises 接住的异常文字。 }
+    FRaisedMessage: string;
     { 窗体上一条运行时底栏,带一个窗口。 }
     function NewRuntimeBar(APlacement: TTyToolWindowPlacement; out AWin: TProbeWindow): TBarAccess;
     { AWin.Parent := ANew,答「抛了 EInvalidOperation」。 }
@@ -173,6 +175,8 @@ type
     { Task 8:溢出菜单、收起按钮、提示、右键。 }
     procedure TestTheOverflowMenuListsTheHiddenWindows;
     procedure TestPickingAnOverflowItemActivatesIt;
+    { 底栏溢出菜单的锚点按当前页的读写方向(与标签行几何的镜像同源),不按栏的。 }
+    procedure TestTheBottomOverflowMenuFollowsThePagesDirection;
     procedure TestADoubleClickPressOnOverflowOrHideDoesNothing;
     procedure TestTheHideButtonCollapsesOnRelease;
     procedure TestATabHintIsStripHintOrCaptionNeverHint;
@@ -1692,10 +1696,15 @@ end;
 function TTyToolWindowBottomTests.MoveRaises(AWin: TTyToolWindow; ANew: TWinControl): Boolean;
 begin
   Result := False;
+  FRaisedMessage := '';
   try
     AWin.Parent := ANew;
   except
-    on EInvalidOperation do Result := True;
+    on E: EInvalidOperation do
+    begin
+      Result := True;
+      FRaisedMessage := E.Message;
+    end;
   end;
 end;
 
@@ -2199,6 +2208,32 @@ begin
   ClickAt(w, g.Overflow.CenterPoint);
   FBar.OverflowMenu.Items[0].Click;
   AssertSame('点菜单项:那个窗口成为当前页', target, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheBottomOverflowMenuFollowsThePagesDirection;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  host: TWinControl;
+  pt: TPoint;
+  ltr: TRect;
+  al: TPopupAlignment;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  Narrow;
+  ltr := ActiveGeom.Overflow;
+  { 只让当前页从右往左读,栏还是从左往右。 }
+  w.BiDiMode := bdRightToLeft;
+  AssertTrue('前提:当前页从右往左', w.IsRightToLeft);
+  AssertFalse('前提:栏从左往右', FBar.IsRightToLeft);
+  g := ActiveGeom;
+  AssertEquals('前提:溢出按钮镜像了', w.ClientWidth - ltr.Right, g.Overflow.Left);
+  host := FBar.OverflowMenuAnchorIn(pt, al);
+  AssertSame('挂在当前页上', w, host);
+  AssertEquals('RTL:锚在溢出按钮的右沿(阅读起点)', g.Overflow.Right, pt.X);
+  AssertEquals('从按钮底边往下开', g.Overflow.Bottom, pt.Y);
+  AssertEquals('贴阅读起点', Ord(paLeft), Ord(al));
 end;
 
 procedure TTyToolWindowBottomInputTests.TestADoubleClickPressOnOverflowOrHideDoesNothing;
