@@ -66,6 +66,9 @@ type
     procedure TestAWindowJoiningCountsTowardsTheSharedHeight;
     procedure TestAConstraintsOnlyChangeReachesTheRow;
     procedure TestAThemeChangeStillRelayoutsABottomPage;
+    { 行高没变、几何变了(spec §3.5 / §7.3):栏的样式类换了,当前页的操作区照样重排。
+      换主题 token 那一半要真句柄,在 test.toolwindow.focus。 }
+    procedure TestABarStyleClassChangeRelayoutsTheActivePage;
     { Task 5:标签行绘制(哨兵底色,地雷 13)。 }
     procedure TestTheUnderlineSitsOnTheActiveTabsBottomOnly;
     procedure TestTheIndicatorSizeTokenSetsTheUnderlineRows;
@@ -655,6 +658,30 @@ begin
   { 换主题只广播裸 Invalidate;窗口在自己的 Invalidate 里看 token 缓存察觉。栏替它先读了
     那个缓存,它就再也看不出来(谁先读就是谁的)。 }
   AssertTrue('底栏窗口照样被请重排', w.AlignCount > 0);
+end;
+
+procedure TTyToolWindowBottomTests.TestABarStyleClassChangeRelayoutsTheActivePage;
+var
+  w: TProbeWindow;
+  act: TTyToolWindowActions;
+  before: TRect;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := 'TyToolWindowSeparator.wide { border-color: #000000; border-width: 5px; }';
+  w := FWins[1];
+  AddActionsKid(w, 40, 20);
+  act := w.Actions;
+  Relayout;
+  before := act.BoundsRect;
+  AssertTrue('前提:操作区摆在几何给的位置', EqualRect(ActiveGeom.Actions, before));
+  ArmActive(w);
+  { 只换栏的样式类:主题版本号不动,行高不动,只带来栏自己一次裸 Invalidate。 }
+  FBar.StyleClass := 'wide';
+  AssertTrue('当前页被请了重排', w.AlignCount > 0);
+  AssertTrue('当前页丢了缓存', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+  w.CallAlignControls;
+  AssertEquals('分隔线粗 5:操作区左移 4', before.Left - 4, act.Left);
+  AssertTrue('摆在新几何给的位置', EqualRect(ActiveGeom.Actions, act.BoundsRect));
 end;
 
 { --- Task 5 --------------------------------------------------------------------- }

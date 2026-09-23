@@ -149,6 +149,10 @@ type
     FAlignedGeom: TTyToolWindowHeaderGeom;
     { 探针的底:最近一次写 Visible 那一刻 csNoDesignVisible 在不在(见 SetVisible)。 }
     FNoDesignVisibleAtShow: Boolean;
+    { 底栏当前页:此刻的标题行几何跟上一次对齐(或上一次请重排)时不一样了 —— 行高没变、
+      操作区却要挪(换主题改了按钮尺寸、标签区下限、分隔线、标签宽)。答 True 时已经把
+      这一份记进 FAlignedGeom。 }
+    function BottomGeomDrifted: Boolean;
     function ImageIndexIsStored: Boolean;
     function GetImageIndex: TImageIndex;
     procedure SetImageIndex(AValue: TImageIndex);
@@ -610,6 +614,10 @@ type
     FLaid: TTyToolWindowBarMetrics;
     FLaidPPI: Integer;
     FLaidValid: Boolean;
+    { 上一次 Invalidate 时的样式类 + StyleOverride。标签行的样式按栏的样式类解析、画在当前页里,
+      改这两个只带来栏自己的一次裸 Invalidate —— 变了就让当前页重查几何(InvalidateHeader)。 }
+    FHeaderStyleKey: string;
+    FHeaderStyleKeyValid: Boolean;
     FOnChange: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
     FOnExpand: TNotifyEvent;
@@ -1688,8 +1696,32 @@ begin
   hadOld := FHeaderPxValid;
   if (not FRelayouting) and hadOld
      and ((HeaderTokenPx <> old) or (FHeaderRuleCache <> oldRule)) then
+    RelayoutHeader
+  else if BottomGeomDrifted then
     RelayoutHeader;
   inherited Invalidate;
+end;
+
+function TTyToolWindow.BottomGeomDrifted: Boolean;
+var
+  b: TTyToolWindowBar;
+  g: TTyToolWindowHeaderGeom;
+begin
+  { 底栏的标题行几何不止看行高:按钮尺寸、标签区下限、分隔线粗细、标签宽都能在行高不变时
+    把操作区挪走,而换主题只带来一次裸 Invalidate(spec §3.5 / §7.3)。只查当前页:别的页
+    切过来时第 4 步本来就重排。 }
+  Result := False;
+  if FRelayouting or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  if (HeaderMode <> twhBottom) or not IsActive then Exit;
+  b := Bar;
+  if [csLoading, csDestroying] * b.ComponentState <> [] then Exit;
+  g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  if TyToolWindowSameGeom(g, FAlignedGeom) then Exit;
+  { 先记下这一份:对齐引擎没跑起来的时候(藏着、没有句柄)不至于每一次重画都再请一遍。
+    RelayoutHeader 自己丢缓存,AlignControls 看见「没变」也没关系 —— 操作区的位置
+    CustomAlignPosition 每次都现算。 }
+  FAlignedGeom := g;
+  Result := True;
 end;
 
 procedure TTyToolWindow.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
@@ -2843,7 +2875,22 @@ end;
 procedure TTyToolWindowBar.Invalidate;
 var
   m: TTyToolWindowBarMetrics;
+  key: string;
 begin
+  if [csLoading, csDestroying] * ComponentState = [] then
+  begin
+    key := TyStyleClassFor(Self, StyleClass) + #1 + StyleOverride;
+    if FHeaderStyleKeyValid and (key <> FHeaderStyleKey) then
+    begin
+      FHeaderStyleKey := key;
+      InvalidateHeader;
+    end
+    else
+    begin
+      FHeaderStyleKey := key;
+      FHeaderStyleKeyValid := True;
+    end;
+  end;
   { 换主题只带来一次裸 Invalidate(Controller.Changed),没人调 Realign。所以在这里比:
     比的是上一次推导**用过**的那一份(FLaid),不是缓存 —— 见 FLaid 的声明。
     **不**在这里问窗口的标题行高:那是窗口自己的缓存,先替它读掉,窗口的 Invalidate

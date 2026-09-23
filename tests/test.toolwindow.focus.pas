@@ -69,6 +69,9 @@ type
     procedure TestCollapsingTheBottomBarMovesFocusOut;
     { spec §9.7:标签拖动的捕获在当前页上,计时器轮询的是它。 }
     procedure TestATabDragPollsTheCaptureOfTheActivePage;
+    { 换主题只改了按钮尺寸 / 标签区下限 / 分隔线粗细,行高不变:当前页的操作区照样被真的挪到
+      新几何上(对齐引擎要真句柄才会跑)。 }
+    procedure TestAThemeChangeMovesTheBottomActions;
   end;
 
 implementation
@@ -460,6 +463,45 @@ begin
   AssertNothingRaised('捕获计时器');
   AssertEquals('计时器发现捕获丢了:取消', Ord(twgsCancelled), Ord(b.GestureStateForTest));
   SetCaptureControl(nil);
+end;
+
+procedure TTyToolWindowFocusTests.TestAThemeChangeMovesTheBottomActions;
+var
+  first, w: TProbeWindow;
+  act: TTyToolWindowActions;
+  btn: TTyButton;
+
+  function Geom: TTyToolWindowHeaderGeom;
+  begin
+    Result := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight), w.Font.PixelsPerInch);
+  end;
+
+  procedure Check(const AWhat, AOverride: string);
+  var
+    before: TRect;
+  begin
+    before := act.BoundsRect;
+    FCtl.StyleOverride := AOverride;
+    Pump;
+    AssertNothingRaised(AWhat);
+    AssertFalse(AWhat + ':操作区真的挪了', EqualRect(before, act.BoundsRect));
+    AssertTrue(AWhat + ':摆在新几何给的位置', EqualRect(Geom.Actions, act.BoundsRect));
+  end;
+
+begin
+  NewBottomBar(first, w);
+  act := w.EnsureActions;
+  btn := TTyButton.Create(FForm);
+  btn.Parent := act;
+  Pump;
+  AssertFalse('前提:操作区排上了', IsRectEmpty(Geom.Actions));
+  AssertTrue('前提:对齐引擎摆过', EqualRect(Geom.Actions, act.BoundsRect));
+  Check('按钮尺寸', ':root { --toolwindow-button-size: 30px; }');
+  Check('标签区下限',
+    ':root { --toolwindow-button-size: 30px; --toolwindow-tab-area-min: 700px; }');
+  Check('分隔线粗细(覆写层)',
+    ':root { --toolwindow-button-size: 30px; --toolwindow-tab-area-min: 700px; }' +
+    ' TyToolWindowSeparator { border-color: #000000; border-width: 5px; }');
 end;
 
 initialization
