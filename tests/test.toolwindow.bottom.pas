@@ -137,6 +137,10 @@ type
     procedure TestWindowAtPosFindsTabsInBarCoordinates;
     procedure TestAFinishedClickRepaintsThePressedState;
     procedure TestHoverIsRecheckedAfterASwitch;
+    { 手势进行中代码换了当前页(spec §7.1 / §9.7):旧页上的手势作废,之后在旧页上的松开
+      不调顺序、不收起。 }
+    procedure TestSwitchingInCodeCancelsATabDrag;
+    procedure TestSwitchingInCodeCancelsAnArmedPress;
     { Task 8:溢出菜单、收起按钮、提示、右键。 }
     procedure TestTheOverflowMenuListsTheHiddenWindows;
     procedure TestPickingAnOverflowItemActivatesIt;
@@ -1605,6 +1609,46 @@ begin
   ClickAt(w, TabCentre(2));
   AssertSame('前提:切过去了', FWins[2], FBar.ActiveWindow);
   AssertEquals('切页之后按指针此刻的位置重查悬停', 0, FBar.HeaderHoverIndexForTest);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestSwitchingInCodeCancelsATabDrag;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c, e: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  g := ActiveGeom;
+  c := TabCentre(0);
+  e := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(e.X, e.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  FBar.ActiveWindow := FWins[2];
+  AssertEquals('代码换了当前页:拖动取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  AssertEquals('插入线清掉', -1, FBar.DropSlotForTest);
+  w.CallMouseUp(e.X, e.Y);
+  AssertSame('旧页上的松开不调顺序', FWins[0], FBar.Windows[0]);
+  AssertSame('当前页还是代码换上的那一页', FWins[2], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestSwitchingInCodeCancelsAnArmedPress;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := ActiveGeom.Collapse.CenterPoint;
+  w.CallMouseDown(c.X, c.Y);
+  AssertEquals('前提:收起按钮武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  FBar.ActiveWindow := FWins[2];
+  AssertEquals('代码换了当前页:武装解除', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  w.CallClick;
+  w.CallMouseUp(c.X, c.Y);
+  AssertFalse('旧页上的松开不收起', FBar.Collapsed);
+  AssertSame('当前页不变', FWins[2], FBar.ActiveWindow);
 end;
 
 { --- Task 8 --------------------------------------------------------------------- }

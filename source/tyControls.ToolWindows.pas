@@ -5033,6 +5033,10 @@ begin
   { 第 5 步要的是「焦点**原来**在不在旧页里」,藏之前记。 }
   focusIn := AMoveFocus and (AOld <> nil) and (AOld <> AWindow) and FocusIsInside(AOld);
   FActive := AWindow;
+  { 标签行上的手势属于捕获它的那一页。代码在手势进行中换了当前页:那一页的标签行不再显示,
+    手势作废 —— 否则之后在旧页上的松开照样被当成点击 / 落点(spec §7.1 / §9.7)。 }
+  if (FGesture.Capturer is TTyToolWindow) and (FGesture.Capturer <> FActive) then
+    ResetGesture(twgeCancel);
   { 藏的是栏里**其余每一个**窗口,不只 AOld:带着 Visible = True 进来的窗口(从别的栏
     挪过来、代码里先 Visible 再 Parent)、C 期应用布局挪进来的窗口,都不是「上一页」,
     只按 (新, 旧) 成对开关的话它们会一直杵在那里。已经藏着的再藏一次不改 Visible,
