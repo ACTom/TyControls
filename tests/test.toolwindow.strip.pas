@@ -53,6 +53,7 @@ type
     { spec §6.8:右键。 }
     procedure TestARightClickOnAnIconSetsContextWindowAndPopsTheBarsMenu;
     procedure TestARightClickOffTheIconsBubblesToTheForm;
+    procedure TestADisabledBarGreysItsIcons;
   end;
 
 implementation
@@ -63,7 +64,9 @@ var
   restPix, activePix, wipeLeft: Integer;
   bmp: TBitmap;
 begin
-  FCtl.StyleOverride := StripTheme;
+  { 整条栏禁用时的 opacity 会把所有颜色一起淡掉、混不出墨色线;钉成 1,只看图标项自己的
+    :disabled 墨色。 }
+  FCtl.StyleOverride := StripTheme + ' TyToolWindowBar:disabled { opacity: 1; }';
   FBar.Images := NewHouseList;
   a := NewWindow;
   a.ImageName := 'house';
@@ -153,7 +156,9 @@ var
   a, b, c: TProbeWindow;
   pix, housePix, wipeLeft: Integer;
 begin
-  FCtl.StyleOverride := StripTheme;
+  { 整条栏禁用时的 opacity 会把所有颜色一起淡掉、混不出墨色线;钉成 1,只看图标项自己的
+    :disabled 墨色。 }
+  FCtl.StyleOverride := StripTheme + ' TyToolWindowBar:disabled { opacity: 1; }';
   FBar.Images := NewHouseList;
   a := NewWindow;
   a.ImageName := 'house';
@@ -241,7 +246,8 @@ var
   L: TTyToolWindowBarLayout;
   bmp: TBitmap;
 begin
-  FCtl.StyleOverride := ':root { --toolwindow-edge-color: #000080; }';
+  { 栏的底色钉成品红:静止的边缘区不单独填色,露出来的就是它。 }
+  FCtl.StyleOverride := ':root { --toolwindow-edge-color: #000080; --toolwindow-bg: #FF00FF; }';
   AssertTrue('运行时空栏:边缘区不起作用', IsRectEmpty(FBar.BarLayout.Edge));
   NewWindow;
   L := FBar.BarLayout;
@@ -249,8 +255,20 @@ begin
   AssertEquals('左栏的边缘区贴右边(靠编辑区)', FBar.ClientWidth, L.Edge.Right);
   bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, L.Edge, Wipe);
   try
-    AssertEquals('整条铺边缘区的底色', (L.Edge.Right - L.Edge.Left) * (L.Edge.Bottom - L.Edge.Top),
-      CountExact(bmp, Navy));
+    { spec §6.3 / §12:静止时只在靠编辑区那一侧画一列(96 PPI 下 1 物理像素)线色。 }
+    AssertEquals('静止:只有一列是线色', L.Edge.Bottom - L.Edge.Top, CountExact(bmp, Navy));
+    AssertTrue('那一列贴编辑区那一侧', PixelIs(bmp, bmp.Width - 1, bmp.Height div 2, Navy));
+    AssertTrue('其余是栏的底色,不单独填色', PixelIs(bmp, 0, bmp.Height div 2, Ground));
+    AssertEquals('没有残留底漆', 0, CountExact(bmp, Wipe));
+  finally
+    bmp.Free;
+  end;
+  FBar.Placement := twpRight;
+  L := FBar.BarLayout;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, L.Edge, Wipe);
+  try
+    AssertTrue('右栏:线在边缘区左边(靠编辑区)', PixelIs(bmp, 0, bmp.Height div 2, Navy));
+    AssertEquals('右栏:同样只有一列', L.Edge.Bottom - L.Edge.Top, CountExact(bmp, Navy));
   finally
     bmp.Free;
   end;
@@ -899,6 +917,42 @@ begin
     FBar.Perform(LM_CONTEXTMENU, 0, PtrInt($FFFFFFFF)));
   AssertEquals('菜单键:也不发 OnContextPopup', 0, FContextPopups);
   AssertTrue('菜单键:ContextWindow nil', FBar.ContextWindow = nil);
+end;
+
+procedure TTyToolWindowStripTests.TestADisabledBarGreysItsIcons;
+var
+  a: TProbeWindow;
+  nonGround, wipeLeft, selOn: Integer;
+  cell: TRect;
+  bmp: TBitmap;
+begin
+  { 整条栏禁用时的 opacity 会把所有颜色一起淡掉、混不出墨色线;钉成 1,只看图标项自己的
+    :disabled 墨色。 }
+  FCtl.StyleOverride := StripTheme + ' TyToolWindowBar:disabled { opacity: 1; }';
+  FBar.Images := NewHouseList;
+  a := NewWindow;
+  a.ImageName := 'house';
+  FBar.ActiveWindow := a;
+  cell := FBar.StripItemRect(0);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
+  try
+    selOn := CountInk(bmp, Ground, SelInk);
+    AssertTrue('前提:启用时当前图标是选中墨色', selOn > 8);
+  finally
+    bmp.Free;
+  end;
+  FBar.Enabled := False;
+  TallyStripCell(0, Ground, Wipe, nonGround, wipeLeft);
+  AssertTrue('禁用:图标还在(灰掉,不是没了)', nonGround > 0);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
+  try
+    { 灰墨的抗锯齿边缘偶尔有一两个像素恰好落在「品红→黄」那条混合线的容差里。 }
+    AssertTrue('禁用:不再是选中墨色', CountInk(bmp, Ground, SelInk) < selOn div 4);
+    AssertEquals('禁用:也不是静止墨色(--muted,不是皮肤的图标墨色)', 0,
+      CountInk(bmp, Ground, RestInk));
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

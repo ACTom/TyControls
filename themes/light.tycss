@@ -1251,15 +1251,21 @@ TyToolWindowStripItem          { color: var(--toolwindow-strip-ink); }
 TyToolWindowStripItem:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }
+TyToolWindowStripItem:disabled { color: var(--muted); }
 TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }
-TyToolWindowEdge        { background: var(--toolwindow-edge-color); }
-TyToolWindowEdge:hover  { background: var(--toolwindow-edge-color-hover); }
-TyToolWindowEdge:active { background: var(--toolwindow-edge-color-hover); }
+/* 边缘区平时不单独填色(底色同内容区),只在靠编辑区那一侧画一条细线 —— 写法照 TyStatusBar
+   的顶线:border-color 是线色、border-width 是粗细。悬停和拉宽中整块填色,那条线收掉。 */
+TyToolWindowEdge        { border-color: var(--toolwindow-edge-color); border-width: var(--input-border-width); }
+TyToolWindowEdge:hover  { background: var(--toolwindow-edge-color-hover); border-width: 0; }
+TyToolWindowEdge:active { background: var(--toolwindow-edge-color-hover); border-width: 0; }
+/* 可选的底线(spec §12):皮肤给这里写 border-color + border-width 就画;基础主题不设。
+   标题行的内距由代码读 --toolwindow-header-pad,不走 padding。 */
 TyToolWindowHeader      { background: var(--toolwindow-header-bg); color: var(--toolwindow-caption-ink);
-                          font-size: var(--font-size-base); padding: var(--toolwindow-header-pad); }
+                          font-size: var(--font-size-base); }
 TyToolWindowActions     { background: var(--toolwindow-header-bg); }
 TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }
-TyToolWindowTab          { color: var(--toolwindow-tab-ink); padding: var(--toolwindow-tab-pad); }
+/* 标签的内距由代码读 --toolwindow-tab-pad(B 期接线),不走 padding。 */
+TyToolWindowTab          { color: var(--toolwindow-tab-ink); }
 TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }

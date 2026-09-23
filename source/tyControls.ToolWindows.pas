@@ -2610,7 +2610,9 @@ begin
       end;
     end;
 
-    { 边缘区:拉宽边,也是贴着编辑区的那条分隔线。 }
+    { 边缘区:拉宽边,也是贴着编辑区的那条分隔线(spec §6.3 / §12)。静止时不单独填色,只在
+      靠编辑区那一侧画一条线(border-color / border-width,写法照 TyStatusBar 的顶线);悬停和
+      拉宽中主题给整块底色、把线收掉。两样都由主题说了算,这里有什么画什么。 }
     if (L.Edge.Right > L.Edge.Left) and (L.Edge.Bottom > L.Edge.Top) then
     begin
       if FEdgeDragging then states := [tysActive]
@@ -2619,6 +2621,28 @@ begin
       partS := ActiveController.Model.ResolveStyle(TyToolWindowEdgeKey, cls, states);
       if tpBackground in partS.Present then
         P.FillBackground(L.Edge, partS.Background, 0);
+      if TyBorderVisible(partS) then
+      begin
+        bw := MulDiv(partS.BorderWidth, APPI, 96);
+        if bw < 1 then bw := 1;
+        case FPlacement of
+          twpLeft:
+            begin
+              if bw > L.Edge.Right - L.Edge.Left then bw := L.Edge.Right - L.Edge.Left;
+              gr := Rect(L.Edge.Right - bw, L.Edge.Top, L.Edge.Right, L.Edge.Bottom);
+            end;
+          twpRight:
+            begin
+              if bw > L.Edge.Right - L.Edge.Left then bw := L.Edge.Right - L.Edge.Left;
+              gr := Rect(L.Edge.Left, L.Edge.Top, L.Edge.Left + bw, L.Edge.Bottom);
+            end;
+        else
+          if bw > L.Edge.Bottom - L.Edge.Top then bw := L.Edge.Bottom - L.Edge.Top;
+          gr := Rect(L.Edge.Left, L.Edge.Top, L.Edge.Right, L.Edge.Top + bw);
+        end;
+        fill.Color := partS.BorderColor;
+        P.FillBackground(gr, fill, 0);
+      end;
     end;
 
     { 设计期提示(LayoutIn 只在设计期给这两个框)。 }

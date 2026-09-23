@@ -183,6 +183,7 @@ end;
 procedure TTyToolWindowEdgeTests.TestHoveringTheEdgeShowsTheResizeCursorAndHoverColour;
 const
   Olive = TColor($008080);   { CSS #808000 }
+  Navy = TColor($800000);    { CSS #000080 }
 var
   e: TPoint;
   bmp: TBitmap;
@@ -198,10 +199,19 @@ begin
   AssertEquals('悬停在边缘区:调整光标', Ord(crHSplit), Ord(FBar.Cursor));
   bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.EdgeRect, Wipe);
   try
-    AssertEquals('悬停:整条换成 :hover 的颜色', area, CountExact(bmp, Olive));
+    AssertEquals('悬停:整块换成 :hover 的颜色', area, CountExact(bmp, Olive));
+    AssertEquals('悬停:那条静止的线收掉', 0, CountExact(bmp, Navy));
   finally
     bmp.Free;
   end;
+  FBar.CallMouseDown(e.X, e.Y);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.EdgeRect, Wipe);
+  try
+    AssertEquals('拉宽中:整块同样是 :hover 的颜色', area, CountExact(bmp, Olive));
+  finally
+    bmp.Free;
+  end;
+  FBar.CallMouseUp(e.X, e.Y);
   FBar.CallMouseMove(FBar.BarLayout.Content.CenterPoint.X, e.Y, []);
   AssertEquals('离开边缘区:用户自己的光标原样还回去', Ord(crHandPoint), Ord(FBar.Cursor));
   bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.EdgeRect, Wipe);

@@ -1284,15 +1284,21 @@ begin
     'TyToolWindowStripItem:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
     'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
     'TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowStripItem:disabled { color: var(--muted); }' + LineEnding +
     'TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }' + LineEnding +
-    'TyToolWindowEdge        { background: var(--toolwindow-edge-color); }' + LineEnding +
-    'TyToolWindowEdge:hover  { background: var(--toolwindow-edge-color-hover); }' + LineEnding +
-    'TyToolWindowEdge:active { background: var(--toolwindow-edge-color-hover); }' + LineEnding +
+    '/* 边缘区平时不单独填色(底色同内容区),只在靠编辑区那一侧画一条细线 —— 写法照 TyStatusBar' + LineEnding +
+    '   的顶线:border-color 是线色、border-width 是粗细。悬停和拉宽中整块填色,那条线收掉。 */' + LineEnding +
+    'TyToolWindowEdge        { border-color: var(--toolwindow-edge-color); border-width: var(--input-border-width); }' + LineEnding +
+    'TyToolWindowEdge:hover  { background: var(--toolwindow-edge-color-hover); border-width: 0; }' + LineEnding +
+    'TyToolWindowEdge:active { background: var(--toolwindow-edge-color-hover); border-width: 0; }' + LineEnding +
+    '/* 可选的底线(spec §12):皮肤给这里写 border-color + border-width 就画;基础主题不设。' + LineEnding +
+    '   标题行的内距由代码读 --toolwindow-header-pad,不走 padding。 */' + LineEnding +
     'TyToolWindowHeader      { background: var(--toolwindow-header-bg); color: var(--toolwindow-caption-ink);' + LineEnding +
-    '                          font-size: var(--font-size-base); padding: var(--toolwindow-header-pad); }' + LineEnding +
+    '                          font-size: var(--font-size-base); }' + LineEnding +
     'TyToolWindowActions     { background: var(--toolwindow-header-bg); }' + LineEnding +
     'TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }' + LineEnding +
-    'TyToolWindowTab          { color: var(--toolwindow-tab-ink); padding: var(--toolwindow-tab-pad); }' + LineEnding +
+    '/* 标签的内距由代码读 --toolwindow-tab-pad(B 期接线),不走 padding。 */' + LineEnding +
+    'TyToolWindowTab          { color: var(--toolwindow-tab-ink); }' + LineEnding +
     'TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }' + LineEnding +
