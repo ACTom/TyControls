@@ -462,6 +462,8 @@ type
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
+    { 溢出按钮的状态:disabled / hover / active。 }
+    function OverflowStates: TTyStateSet;
   private
     { --- 手势(spec §9.2)。每次按下新建一条记录:窗口记引用不记序号。 --- }
     FGState: TTyToolWindowGestureState;
@@ -716,6 +718,15 @@ type
     对象查看器里那个只读 Version。 }
   TTyToolWindowManager = class(TTyComponent)
   end;
+
+{ 图标条溢出菜单挂在哪、怎么对齐(栏客户区坐标):菜单往内容区那一侧开 —— 左栏从溢出按钮的
+  右沿往右,右栏从左沿往左。TPopupAlignment 是**阅读顺序**的量(paLeft = 贴阅读起点,
+  TyPopupAnchorShift 在 RTL 下把位移反过来),而栏的几何是物理方向(Placement):菜单跟着栏
+  读 RTL 时(TTyPopupMenu 按 PopupComponent 定方向),物理上往右开的是 paRight、往左开的是
+  paLeft,所以这里按 Placement 与 ARightToLeft 的异或选。 }
+procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
+  APlacement: TTyToolWindowPlacement; ARightToLeft: Boolean; out APoint: TPoint;
+  out AAlignment: TPopupAlignment);
 
 implementation
 
@@ -2216,6 +2227,20 @@ begin
   Result := Rect(0, 0, 0, 0);
 end;
 
+function TTyToolWindowBar.OverflowStates: TTyStateSet;
+begin
+  { 同 StripItemStates:禁用时不接悬停、按下。溢出按钮没有「当前」。 }
+  Result := [];
+  if not Enabled then
+    Include(Result, tysDisabled)
+  else
+  begin
+    if FOverflowHover then Include(Result, tysHover);
+    if FOverflowPressed then Include(Result, tysActive);
+  end;
+  if Result = [] then Include(Result, tysNormal);
+end;
+
 function TTyToolWindowBar.StripItemStates(AIndex: Integer): TTyStateSet;
 begin
   Result := [];
@@ -2335,9 +2360,16 @@ begin
       { 溢出按钮:图标大小的一格,中间一个字形大小的下箭头(主题可换,--glyph-chevron-down)。 }
       if (L.Overflow.Right > L.Overflow.Left) and (L.Overflow.Bottom > L.Overflow.Top) then
       begin
-        partS := ActiveController.Model.ResolveStyle('TyToolWindowOverflow', cls, [tysNormal]);
+        { 状态照图标格(OverflowStates):悬停、按下、禁用。底色取溢出按钮自己的规则;字形的
+          墨色取图标条的墨色(图标项按同一组状态解析)—— TyToolWindowOverflow 的 color 是给
+          底栏标签行的(--toolwindow-tab-ink),皮肤只调了图标条的墨色时,条上的箭头得跟着图标走。 }
+        states := OverflowStates;
+        partS := ActiveController.Model.ResolveStyle('TyToolWindowOverflow', cls, states);
         if tpBackground in partS.Present then
           P.FillBackground(L.Overflow, partS.Background, 0);
+        itemS := ActiveController.Model.ResolveStyle('TyToolWindowStripItem', cls, states);
+        if tpTextColor in itemS.Present then ink := itemS.TextColor
+        else ink := stripS.TextColor;
         gr := L.Overflow;
         if glyphPx < gr.Right - gr.Left then
         begin
@@ -2349,7 +2381,7 @@ begin
           gr.Top := gr.Top + (gr.Bottom - gr.Top - glyphPx) div 2;
           gr.Bottom := gr.Top + glyphPx;
         end;
-        TyDrawGlyph(P, ActiveController, gr, tgChevronDown, partS.TextColor, 1);
+        TyDrawGlyph(P, ActiveController, gr, tgChevronDown, ink, 1);
       end;
     end;
 
@@ -2893,6 +2925,7 @@ var
   item: TMenuItem;
   L: TTyToolWindowBarLayout;
   pt: TPoint;
+  menuAlign: TPopupAlignment;
   i: Integer;
 begin
   hidden := OverflowWindows;
@@ -2909,11 +2942,13 @@ begin
     item.OnClick := @OverflowItemClick;
     FOverflowMenu.Items.Add(item);
   end;
-  { 只在有句柄时弹(spec §7.4);菜单贴着溢出按钮往内容区那一侧开。 }
-  if not HandleAllocated then Exit;
+  { 菜单贴着溢出按钮往内容区那一侧开(锚点和对齐方式一处算,见
+    TyToolWindowOverflowMenuAnchor)。只在有句柄时弹(spec §7.4)。 }
   L := BarLayout;
-  if FPlacement = twpRight then pt := ClientToScreen(Point(L.Overflow.Left, L.Overflow.Top))
-  else pt := ClientToScreen(Point(L.Overflow.Right, L.Overflow.Top));
+  TyToolWindowOverflowMenuAnchor(L.Overflow, FPlacement, IsRightToLeft, pt, menuAlign);
+  FOverflowMenu.Alignment := menuAlign;
+  if not HandleAllocated then Exit;
+  pt := ClientToScreen(pt);
   FOverflowMenu.PopUp(pt.X, pt.Y);
 end;
 
@@ -3812,6 +3847,20 @@ begin
   for i := 0 to High(wins) do
     wins[i].RelayoutHeader;
   Relayout;
+end;
+
+procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
+  APlacement: TTyToolWindowPlacement; ARightToLeft: Boolean; out APoint: TPoint;
+  out AAlignment: TPopupAlignment);
+var
+  opensLeft: Boolean;
+begin
+  opensLeft := APlacement = twpRight;
+  if opensLeft then APoint := Point(AOverflow.Left, AOverflow.Top)
+  else APoint := Point(AOverflow.Right, AOverflow.Top);
+  { 物理上往左开:LTR 下是「贴阅读终点」(paRight),RTL 下阅读起点就在右边(paLeft)。 }
+  if opensLeft <> ARightToLeft then AAlignment := paRight
+  else AAlignment := paLeft;
 end;
 
 initialization

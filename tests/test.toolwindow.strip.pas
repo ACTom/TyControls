@@ -7,7 +7,7 @@ unit test.toolwindow.strip;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc, LMessages,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, Menus, LCLType, LCLProc, LMessages,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
@@ -44,6 +44,9 @@ type
     procedure TestACancelledDesignGestureIgnoresTheNextBareHitTest;
     procedure TestAWindowLeavingKeepsThePressedIconOnItsWindow;
     procedure TestADesignGestureFollowsItsWindowWhenAnotherLeaves;
+    procedure TestTheOverflowButtonPaintsHoverAndPressedInTheStripInk;
+    procedure TestTheOverflowMenuOpensTowardsTheContent;
+    procedure TestShowingTheOverflowMenuSetsItsAlignment;
   end;
 
 implementation
@@ -204,7 +207,8 @@ var
   L: TTyToolWindowBarLayout;
   bmp: TBitmap;
 begin
-  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-tab-ink: #0000FF; }';
+  { 字形着的是图标条的墨色,不是标签行的(--toolwindow-tab-ink 属于底栏)。 }
+  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-strip-ink: #0000FF; }';
   for i := 1 to 4 do NewWindow;         { 最后一个是当前页 }
   L := FBar.BarLayout;
   AssertEquals('前提:放得下时四个都在条上', 4, Length(L.Slots));
@@ -719,6 +723,115 @@ begin
   p := bar.StripItemRect(1).CenterPoint;
   bar.DesignHitTest(p.X, p.Y, 0);
   AssertSame('松开在 c 现在的位置上:切到 c', c, bar.ActiveWindow);
+end;
+
+{ --- 溢出按钮的状态与菜单方向 ------------------------------------------------------ }
+
+procedure TTyToolWindowStripTests.TestTheOverflowButtonPaintsHoverAndPressedInTheStripInk;
+const
+  Cyan = TColor($FFFF00);    { CSS #00FFFF:悬停叠加色 }
+  Green = TColor($008000);   { CSS #008000:按下叠加色 }
+  Orange = TColor($0080FF);  { CSS #FF8000:标签行墨色,条上不许出现 }
+var
+  i: Integer;
+  r: TRect;
+  p: TPoint;
+
+  function Shot: TBitmap;
+  begin
+    Result := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, r, Wipe);
+  end;
+
+var
+  bmp: TBitmap;
+  reds: Integer;
+begin
+  FCtl.StyleOverride := StripTheme + ' :root { --toolwindow-tab-ink: #FF8000;' +
+    ' --toolwindow-overlay-hover: #00FFFF; --toolwindow-overlay-active: #008000; }';
+  for i := 1 to 4 do NewWindow;
+  FBar.Height := 3 * TyToolWindowStripItemSizeDef + TyToolWindowStripItemSizeDef div 2;
+  r := FBar.BarLayout.Overflow;
+  AssertTrue('前提:有溢出按钮', r.Bottom > r.Top);
+  bmp := Shot;
+  try
+    AssertTrue('静止:字形是图标条的墨色', CountInk(bmp, Ground, RestInk) > 0);
+    AssertEquals('静止:不是标签行的墨色', 0, CountInk(bmp, Ground, Orange));
+    AssertEquals('静止:没有悬停底色', 0, CountExact(bmp, Cyan));
+  finally
+    bmp.Free;
+  end;
+  p := r.CenterPoint;
+  FBar.CallMouseMove(p.X, p.Y, []);
+  bmp := Shot;
+  try
+    AssertTrue('悬停:铺 :hover 的底色', CountExact(bmp, Cyan) > 0);
+    { 青底上画黄墨:抗锯齿按伽马混合,不落在 CountInk 的线性混合线上;判据用红通道 ——
+      青底和静止的蓝墨红通道都是 0,只有黄墨(悬停墨色)把它抬起来。 }
+    reds := 0;
+    for i := 0 to bmp.Width * bmp.Height - 1 do
+      if Red(ColorToRGB(bmp.Canvas.Pixels[i mod bmp.Width, i div bmp.Width])) > 128 then Inc(reds);
+    AssertTrue('悬停:字形换成图标条悬停的墨色', reds > 0);
+  finally
+    bmp.Free;
+  end;
+  FBar.CallMouseDown(p.X, p.Y);
+  bmp := Shot;
+  try
+    AssertTrue('按下:铺 :active 的底色', CountExact(bmp, Green) > 0);
+  finally
+    bmp.Free;
+  end;
+  FBar.CallMouseMove(p.X, p.Y + 1000, []);   { 丢了松开:回到 Idle,不弹菜单 }
+  FBar.Enabled := False;
+  FBar.CallMouseMove(p.X, p.Y, []);
+  bmp := Shot;
+  try
+    AssertEquals('禁用:不接悬停', 0, CountExact(bmp, Cyan));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowStripTests.TestTheOverflowMenuOpensTowardsTheContent;
+var
+  r: TRect;
+  p: TPoint;
+  al: TPopupAlignment;
+begin
+  r := Rect(10, 100, 46, 136);
+  TyToolWindowOverflowMenuAnchor(r, twpLeft, False, p, al);
+  AssertEquals('左栏:挂在溢出按钮右沿', 46, p.X);
+  AssertEquals('左栏:上沿', 100, p.Y);
+  AssertEquals('左栏 LTR:往右开 = 贴阅读起点', Ord(paLeft), Ord(al));
+  TyToolWindowOverflowMenuAnchor(r, twpRight, False, p, al);
+  AssertEquals('右栏:挂在溢出按钮左沿', 10, p.X);
+  AssertEquals('右栏 LTR:往左开 = 贴阅读终点', Ord(paRight), Ord(al));
+  { 菜单跟着栏读 RTL 时,对齐方式是阅读顺序的量:物理方向不变,名字反过来。 }
+  TyToolWindowOverflowMenuAnchor(r, twpLeft, True, p, al);
+  AssertEquals('左栏 RTL:锚点不变', 46, p.X);
+  AssertEquals('左栏 RTL:往右开 = 贴阅读终点', Ord(paRight), Ord(al));
+  TyToolWindowOverflowMenuAnchor(r, twpRight, True, p, al);
+  AssertEquals('右栏 RTL:往左开 = 贴阅读起点', Ord(paLeft), Ord(al));
+end;
+
+procedure TTyToolWindowStripTests.TestShowingTheOverflowMenuSetsItsAlignment;
+var
+  i: Integer;
+  p: TPoint;
+begin
+  for i := 1 to 4 do NewWindow;
+  FBar.Height := 3 * TyToolWindowStripItemSizeDef + TyToolWindowStripItemSizeDef div 2;
+  FBar.Placement := twpRight;
+  p := FBar.BarLayout.Overflow.CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertTrue('前提:菜单建出来了', FBar.OverflowMenu <> nil);
+  AssertEquals('右栏:菜单往左(内容区)开', Ord(paRight), Ord(FBar.OverflowMenu.Alignment));
+  FBar.Placement := twpLeft;
+  p := FBar.BarLayout.Overflow.CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertEquals('左栏:往右开', Ord(paLeft), Ord(FBar.OverflowMenu.Alignment));
 end;
 
 initialization
