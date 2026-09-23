@@ -83,7 +83,7 @@
   HeaderMode = none：标题行高 0，`CustomAlignPosition` 不调 `Bar`，操作区按 raw 首选尺寸放在左上角。
   **不在 `CheckNewParent` 里 raise**：源码上读取器会经过它，但 `designtime/tyControls.Design.pas:211-216` 记着真机结果——设计器粘贴不经过能挂守卫的 SetParent；在读取器里抛异常还会中止整个撤销。
 - **运行时直接改 Parent**：
-  - 改到**另一类**栏（侧 ↔ 底）抛 `EInvalidOperation`（csLoading / csDesigning 时除外）。（~~**实现期修正（A 期）**：归 B 期，底栏上线时做，见 §16。~~ **实现期修正（B 期）**：已完成。在 `SetParent` 调继承之前抛，窗口还留在原来的栏里、状态没动；窗口或两条栏任一在加载、设计期或释放中时放行；孤儿进栏、出栏，同类栏之间都不抛。判据是窗口的 `MovesAcrossBarKinds`。）
+  - 改到**另一类**栏（侧 ↔ 底）抛 `EInvalidOperation`（csLoading / csDesigning 时除外）。（~~**实现期修正（A 期）**：归 B 期，底栏上线时做，见 §16。~~ **实现期修正（B 期）**：已完成。在 `SetParent` 调继承之前抛，窗口还留在原来的栏里、状态没动；窗口或两条栏任一在加载、设计期或释放中时放行；孤儿进栏、出栏，同类栏之间都不抛。判据是窗口的 `MovesAcrossBarKinds`。异常文字是 resourcestring `rsTyToolWindowCrossBarMove`（**实现期补（B 期收尾）**）。）
   - 改到**同类**栏：有没有 manager、目标冲不冲突都照做（用户显式要求，这里又不能抛异常）；执行 §9.5 的源栏 / 目标栏簿记（源栏回落当前页，W 成为目标栏当前页并展开），不问否决。`SetParent` 在继承之前记下窗体的 `ActiveControl`，簿记完成后它还在 W 里且 `CanFocus` 就还给它（同 `MoveWindow`）。两条栏在同一个 manager 下时发 `OnWindowMoved`；栏的事件照 §6.6。`MoveWindow` 和布局应用（§10.4）内部自己改 Parent 时置标志，跳过这段。
 
 ### 3.3 可见性
@@ -104,8 +104,10 @@
   - 底栏模式：由栏统一算 `max(token 项, 栏内所有窗口操作区的 raw 首选高度)`，所有窗口共用，**标签行高度不随切页变化**；窗口列表或任一操作区的首选高度变了，栏对所有窗口 `RelayoutHeader`。
   - token 项 = `--toolwindow-header-height` 按 PPI 缩放，按键 `(PPI, model identity, ThemeVersion, UseRightToLeftAlignment, HeaderMode)` 缓存；在 `Invalidate` 重写里、继承的 `AutoAdjustLayout` 之后、`CMBiDiModeChanged` 里各查一次键，变了就带重入保护 `Realign`。理由：主题切换只会带来一次裸 `Invalidate`（`Controller.pas:665-687`），没人调 Realign（`ScrollBar.pas:992-1000` 同一处注释）。
     **实现期修正（A 期）**：底线粗细跟 token 项用同一把键缓存，`Invalidate` 里两个一起比——换皮肤只是多出或去掉底线、token 没变，也得重排。
+    **实现期补（B 期收尾）**：底栏只比行高不够——按钮尺寸、标签区下限、分隔线、标签宽都可能在行高不变时把操作区挪走。当前页在 `Invalidate` 里另把此刻的几何和上一次对齐记下的 `FAlignedGeom` 比，漂移了就重排操作区（只查当前页，别的页切过来时第 4 步本来就重排）。栏的样式类或 StyleOverride 变了只会来一次栏自己的裸 `Invalidate`，栏在那里比对后 `InvalidateHeader`，把当前页带进这条路。
   - 操作区那一项**不缓存**，`AdjustClientRect` 每次现取。侧栏模式和底栏当前页：操作区子控件增删、显隐、改尺寸会触发整窗体 `DoAllAutoSize` 自顶向下 `AlignControl`（`control.inc:3092-3099`），现取就能跟上。
-  - **底栏另加一个通知**：只靠整窗体 `DoAllAutoSize` 不够——`AdjustSize` 往上传到隐藏的窗口就停（`control.inc:383-388`），当前页察觉不到非当前页操作区的变化。所以操作区重写 `AdjustSize`（虚方法，`controls.pp:1640`；子控件增删 `wincontrol.inc:6416, 6459`、改尺寸 `control.inc:731-732`、隐藏 `control.inc:4639-4640` 都会调到它，所在窗口隐藏时也调得到），继承之后先 `InvalidatePreferredSize`（子控件只改 `Constraints` 时缓存不会失效，`control.inc:1520-1522`），再比较自己的 raw 首选宽高和上次记下的值，变了就通知所在栏；栏重算统一行高，变了就带重入保护对当前页 `RelayoutHeader`（csLoading 期间跳过）。非当前页在激活第 4 步 `RelayoutHeader` 时现取。
+  - **底栏另加一个通知**：只靠整窗体 `DoAllAutoSize` 不够——`AdjustSize` 往上传到隐藏的窗口就停（`control.inc:383-388`），当前页察觉不到非当前页操作区的变化。所以操作区重写 `AdjustSize`（虚方法，`controls.pp:1640`；子控件增删 `wincontrol.inc:6416, 6459`、改尺寸 `control.inc:731-732`、隐藏 `control.inc:4639-4640` 都会调到它，所在窗口隐藏时也调得到），继承之后先 `InvalidatePreferredSize`（子控件只改 `Constraints` 时缓存不会失效，`control.inc:1520-1522`），再比较~~自己的 raw 首选宽高~~和上次记下的值，变了就通知所在栏；栏重算统一行高，变了就带重入保护对当前页 `RelayoutHeader`（csLoading 期间跳过）。非当前页在激活第 4 步 `RelayoutHeader` 时现取。
+    **实现期修正（B 期收尾）**：比的是窗口真正拿去用的那个量——把可见性算进去，整个操作区藏起来时按 0 比（子控件尺寸一个没变，那一项照样从它的高变成 0）；不在窗口里时不记。只靠 `AdjustSize` 还漏两条路，窗口补上：`InsertControl` 对挂进来的操作区调一次 `AdjustSize`（带着子控件挂进来的，LCL 不替它调）；重写 `RemoveControl`，操作区被摘走时清掉它记下的值并通知栏。
   - 换了内边距大的皮肤，按钮不会被裁。
 - **底线**（**实现期修正（A 期）**，即 §12 的「可选底线」）：样式模型没有单边边框，底线就用 `TyToolWindowHeader` 的 border-color + border-width——解析出可见边框才画，粗细取 border-width 按 PPI 缩放、至少 1 像素，钳在行高以内；只在侧栏模式。标题和操作区都排在线上面那条带里。light.tycss 不设，基础主题没有底线。
 - `AdjustClientRect`：继承后 `Top += 标题行高`。
@@ -133,9 +135,11 @@
 
 **标签行区域** = 标题行矩形减去操作区矩形（窗口坐标，包括标签之间和标签后面的空白）。下面的武装、吞输入、转发、提示、右键都按这个区域判断；区域内 `HeaderZoneAt` 返回 none 的点只吞掉，不转发。
 
-- 在标签行区域里按下 → 武装 `FHeaderGesture`；武装期间 Down / Move / Up / Leave 全部转给栏。
+- 在标签行区域里按下 → ~~武装 `FHeaderGesture`；武装期间 Down / Move / Up / Leave 全部转给栏。~~
+  **实现期修正（B 期收尾）**：按下落在部件上就转给栏，武装由栏的手势引擎做。之后移动和松开转不转给栏，只看引擎的捕获者是不是本页（栏的 `HeaderCapturedBy`），窗口不另记镜像标志。栏拒绝的按下（禁用、那时不是当前页）照样吞掉，但后续松开不再转发——引擎那时可能正武装在别的页上。
 - 区域内的输入**吞掉**继承的 `MouseDown / MouseUp / Click / DblClick`、`DoContextPopup`（Handled）、`DoMouseWheel`（True）。否则用户挂在窗口上的 `OnClick`、`PopupMenu`、滚轮处理会对标签行的点击起反应（`control.inc:2515-2523, 2827-2846`）。区域内从不 `SetFocus`。
   **实现期修正（B 期）**：按下决定归属。任一键按在标签行区域，这一整次点击（`MouseUp` / `Click` / `DblClick`）都归标签行，不管松开在哪；按在正文的照常给用户，松开在标签行也一样。`MouseDown`、右键、滚轮、提示仍按各自那一刻的位置判。移动不吞，用户的 `OnMouseMove` 照常触发。归属在 `WndProc` 里按按下消息的坐标记，`MouseDown` 里也按自己的坐标再判一次——测试直接调 `MouseDown` 也走得通。禁用的栏不武装。
+  **实现期修正（B 期收尾）**：归属按鼠标键分开记（`FRowPresses`），每次按下只重写那个键的一位——左键拖动中右键按在正文，不会把左键那一次改判成归用户。
 - 重写 `BeginAutoDrag`：用户设了 `DragMode = dmAutomatic`，在标签行区域按下也不会起一个 LCL 拖动（`control.inc:2284`）。
 - **设计期**：窗口在整个标签行区域回答 `CM_MASKHITTEST > 0`（坐标先 `ParentToClient(pt, GetDesignerForm(Self))`），设计器的命中搜索跳过窗口、落到栏上，而栏永远不会被隐藏（`designer.pp:497-502`）。栏的 `CM_DESIGNHITTEST` 仍然只在标签上和武装期间回答 1（§7.4），点空白就是选中栏。
 - `CM_HINTSHOW`：区域内从 `Bar.HeaderHint` 取 `HintStr` 和 `CursorRect`，区域外走继承。**不强行把窗口的 `ShowHint` 设成 True**——它会经 `ParentShowHint` 传给用户的所有子控件（`control.inc:1295-1304`）。标签提示跟随窗口自己的 `ShowHint`，文档写明。
@@ -225,6 +229,7 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   侧栏剩下图标条；底栏高度推成 0（**栏自己的 `Visible` 不动**，那是用户的属性）。收起时当前图标不画 `:selected`。
   布局应用批次内跳过焦点这一步，由 §10.4 第 7 步统一处理。
 - **展开**：在 `FBarSwitching` 下把 `FActive` 显示出来（发 `OnShow`）。
+  **实现期补（B 期收尾）**：栏显示任何一页之前（`ShowWindowNow`，切页和展开共用）都先丢这一页的绘制缓存。非当前页的缓存平时没人维护——收起期间切到它、别的页改了标题、换了主题——不丢的话展开时贴旧帧（§7.1）。
 - 栏收起时 `ActivateWindow` 只换 `FActive`。点击、`ShowControl`、对窗口设 `Visible := True`（包括当前页）引起的激活会同时展开栏。
 - **底栏收起后界面上不留入口**（侧栏至少还有图标条），由应用提供开关（菜单项或快捷键设 `Collapsed := False`），文档写明；示例里有这个菜单项（§16）。
 
@@ -278,7 +283,9 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   - 放不下时按 `ExpandedSize` 比例分可用空间，参与者的 `ExpandedSize` 全为 0 时平分；每条不超过自己要的，不低于 content-min。不写回 `ExpandedSize`（§6.1）。
   - 设计期同样收窄。
   - 重推时机：父控件 OnResize（`AddHandlerOnResize`，换父控件时跟着挪）；本栏推导尺寸后，连带同一父控件里的其他栏；栏显隐；换父控件（新旧两边都重分）。窗体的 OnResize 是排队发的，窗体改尺寸后，收窄要晚一个消息循环才跟上。
-  - 非栏兄弟改尺寸不会通知栏，要等下一次父控件 resize 或栏自己重推。
+  - ~~非栏兄弟改尺寸不会通知栏，要等下一次父控件 resize 或栏自己重推。~~
+    **实现期修正（B 期收尾）**：栏给父控件里每个非栏兄弟挂显隐（`AddHandlerOnVisibleChanged`）和改边界（`AddHandlerOnChangeBounds`）处理器并 `FreeNotification`，兄弟藏起、露出、改尺寸都重推。每次推导先对一遍：已离开父控件的摘掉，新来的挂上；兄弟被释放或从 Owner 摘走（`opRemove`）、栏析构时摘掉。栏之间本来就互相通知，不挂。
+    **限制**：LCL 不通知「来了一个兄弟」，新兄弟要等下一次推导才挂上。有 alClient 编辑区时，兄弟进出引起的重排会改编辑区的边界、带动一次推导，一般场景跟得上。
 
 ### 6.3 拉宽边
 
@@ -300,6 +307,7 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   **实现期修正（B 期）**：份额 = 父控件调整后客户区高 − 同轴非栏对齐兄弟 − 所有参与分空间（§6.2）的同轴栏的固定部分 − 其余参与者未收窄的内容，不低于 content-min；其余栏不让位。侧栏、设计期、加载中、收起着、没有窗口时，设 `True` 一律忽略，读回 False，也不顺带展开。
 - ~~最大化期间订阅 `Parent.AddHandlerOnResize`；还原、`SetParent`、销毁时退订。切换时 `RelayoutHeader`。~~
   **实现期修正（B 期）**：不另订阅——栏为了收窄（§6.2）一直订阅着父控件的 OnResize，最大化只换推导里的内容项。切换时栏自己 `Relayout`；标题行几何不变，只 `InvalidateHeader` 换字形，不 `RelayoutHeader`。
+  **实现期补（B 期收尾）**：同轴兄弟藏起、露出、改尺寸也跟着重推，走 §6.2 的兄弟监听，限制相同。
 - 收起、栏变空、`SetParent` 之前先还原（~~并 `RelayoutHeader`~~ **实现期修正（B 期）**：同上，不 `RelayoutHeader`），再展开时用还原高度。
 
 ### 6.5 图标条（侧栏）
@@ -354,6 +362,7 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
 所以当前页替栏画标签、溢出按钮、分隔线、固定按钮，输入转给栏；悬停、按下、溢出集合、最大化状态都存在栏上。
 
 - 栏**忽略非当前页窗口转来的 `HeaderMouseMove` / `HeaderMouseLeave`**：切换后旧页迟到的 leave 不许清掉 §5.1 第 4 步重算的悬停。
+- **实现期补（B 期收尾）**，绘制缓存：栏的 `InvalidateHeader` 只丢当前页的缓存，藏着的页画过的标签行没人管，所以一页被栏显示出来之前（`ShowWindowNow`）统一丢它的缓存（§5.3）。显示是低频事件，丢得起。
 
 比较过的另外两种（核实结论）：
 
@@ -362,7 +371,8 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
 
 ### 7.2 接口
 
-栏实现 `ITyToolWindowHeaderHost`，~~窗口用 `Supports(Parent, ...)` 找~~ **实现期修正（B 期）**：窗口经 `Bar` 找宿主，不另写 `Supports(Parent, …)`：
+~~栏实现 `ITyToolWindowHeaderHost`，窗口用 `Supports(Parent, ...)` 找~~ **实现期修正（B 期）**：窗口经 `Bar` 找宿主，不另写 `Supports(Parent, …)`。
+**再修正（B 期收尾）**：`ITyToolWindowHeaderHost` 接口已删——只有栏一个实现者，窗口本来就经 `Bar` 直接调。下面这些是栏上的普通公开方法：
 
 ```pascal
 HeaderMode(W): TTyToolWindowHeaderMode;
@@ -393,7 +403,7 @@ HeaderContextPopup(W; X, Y);
 
 - 几何照 `TTyBreadcrumb` 的拆法写成纯函数：可见计划、排布、`IndexAt` 三个函数（`Breadcrumb.pas:140-159`），`IndexAt` 扫描排布自己产出的矩形，是排布的精确逆运算；输入是一个 record。侧栏和底栏两种模式一起定。
 - ~~栏按 `(W, 行宽, PPI, model identity, ThemeVersion, RTL, 窗口列表戳, 标题戳, 本窗口操作区的 raw 首选宽, 生效的标题行高, 是否最大化)` 缓存（底栏模式的标题行高取栏统一算出的值，§3.4）。~~
-  **实现期修正（B 期）**：不缓存整份几何，只缓存标签宽。理由：设计器「移到最前 / 最后」直接调非虚的 `SetControlIndex`，戳记不到，窗口顺序只能每次现取。键 = 此刻「(窗口, Caption) 按 `Controls` 顺序」的快照逐项比，加 PPI、model 身份、ThemeVersion、栏的样式类、StyleOverride、字号（`Font.Size`）；只缓存栏自己字体 PPI 的那一份，别的 PPI 现量。「是否最大化」不进键。（StyleOverride 在键里，但量宽时解析样式不叠它，对结果没有影响。）
+  **实现期修正（B 期）**：不缓存整份几何，只缓存标签宽。理由：设计器「移到最前 / 最后」直接调非虚的 `SetControlIndex`，戳记不到，窗口顺序只能每次现取。键 = 此刻「(窗口, Caption) 按 `Controls` 顺序」的快照逐项比，加 PPI、model 身份、ThemeVersion、栏的样式类、StyleOverride、字号（~~`Font.Size`~~ **再修正（B 期收尾）**：静止态、选中态两份**解析后**的字号，即量字真正用的那个——样式的 font-size、非 ParentFont 时自己的 `Font.Size`、主题基准字号依次回落；只记 `Font.Size` 的话 ParentFont 一翻、`Font.Size` 没变而字号换了来源，缓存照样命中）；只缓存栏自己字体 PPI 的那一份，别的 PPI 现量。「是否最大化」不进键。（StyleOverride 在键里，但量宽时解析样式不叠它，对结果没有影响。）
 - 五个使用者~~读同一份结果~~ **实现期修正（B 期）**：走同一个几何函数：窗口绘制、运行时命中、`CM_MASKHITTEST`、`CM_DESIGNHITTEST`、~~栏自绘~~ 栏坐标的查询（§5.4）。
 - `HeaderHint` 的文字：标签用 `StripHint`，空的时候用 `Caption`；最大化、还原、收起、溢出用 resourcestring。
 
@@ -422,7 +432,7 @@ HeaderContextPopup(W; X, Y);
 - 设计期：`CM_DESIGNHITTEST` 只在标签上和武装期间回答 1；松开分支里先切换，再回答 0。溢出、最大化、收起在设计期回答 0（它们改模型且没有撤销）。设计期不做悬停（设计期控件收不到 enter / leave，`application.inc:604-605`）。
 - 标签上不提供双击手势：切换后第二次按下落在新窗口上，多击计数会重置（`controls.pp:3187-3240`）。
 - 溢出菜单是 `TTyPopupMenu`（~~Owner = 栏，~~和图标条共用；**实现期修正（A 期）**：Owner = nil，由栏持有、析构时释放——给栏当 Owner 会进栏的 `Components`，还要操心流式化），只在 `HandleAllocated` 时弹出；菜单项的动作是激活该窗口。
-  （**实现期修正（A 期）**：侧栏菜单的方向和锚点见 §6.5；~~底栏的 B 期接线时再定。~~ **实现期修正（B 期）**：底栏菜单从溢出按钮底边往下开，贴阅读起点（LTR 左沿、RTL 右沿），对齐都是 paLeft，仍由 `TyToolWindowOverflowMenuAnchor` 一处算。）
+  （**实现期修正（A 期）**：侧栏菜单的方向和锚点见 §6.5；~~底栏的 B 期接线时再定。~~ **实现期修正（B 期）**：底栏菜单从溢出按钮底边往下开，贴阅读起点（LTR 左沿、RTL 右沿），对齐都是 paLeft，仍由 `TyToolWindowOverflowMenuAnchor` 一处算。**再修正（B 期收尾）**：底栏的读写方向取当前页的 `IsRightToLeft`，不取栏的——溢出按钮在当前页的标签行里，那一行的几何就是按它镜像的，两者不一致时取栏的会锚到镜像前那一侧。宿主（底栏是当前页）、锚点、对齐由栏的 `OverflowMenuAnchorIn` 一处算，它再调上面那个纯函数。）
 - **实现期补（B 期）**：标签行字形——溢出 `tgChevronDown`（下拉用空心 V），最大化 / 还原 `tgMaximize` / `tgRestore`，收起 `tgMinimize`（不用 `tgClose`，那会被读成「关掉这个窗口」）。
 
 ---
@@ -454,7 +464,7 @@ HeaderContextPopup(W; X, Y);
 
 ### 9.2 手势状态机
 
-每条栏一个引擎，状态：Idle、Armed、Dragging、Cancelled。底栏的输入经当前页的 `HeaderMouse*` 转进来。
+每条栏一个引擎，状态：Idle、Armed、Dragging、Cancelled。底栏的输入经当前页的 `HeaderMouse*` 转进来。（**实现期修正（B 期收尾）**：按下归属按鼠标键分开记；移动和松开转不转，只看引擎的捕获者是不是那一页，见 §3.6。）
 
 **按下**（左键，落在图标或标签上）：
 
@@ -513,6 +523,7 @@ HeaderContextPopup(W; X, Y);
 **为什么松开才切**（用户 2026-09-17 拍板）：按下就切的话，按住一个没显示的图标准备拖走，这一页先闪出来（收起的栏还先展开、焦点可能跳进去）；拖走后原侧剩下一个用户没选过的页；Esc 取消后切换也撤不回。
 
 底栏标签：不是当前页 → 激活；是当前页 → 什么都不做（只有 VS Code 活动栏会切换收起）。
+**实现期补（B 期收尾）**：底栏的标签、溢出、按钮都在当前页的标签行里，运行时由当前页收、转给栏。栏自己收到落在这些部件上的按下（当前页没有句柄、程序里直接调的）一律吞掉（连同 `Click` / `DblClick`），不武装——不许走图标条「点当前页就收起」的语义。设计期点标签不受影响（§7.4）。
 
 ### 9.4 命中测试（manager 上的纯函数，每次移动重建探测矩形）
 
@@ -578,6 +589,7 @@ HeaderContextPopup(W; X, Y);
 - 源栏、窗口、目标栏、manager 的 `opRemove`：不论 Armed 还是 Dragging，都清掉手势记录（~~Dragging 再走 `EndGesture`~~ **实现期修正（A 期）**：都走 `ResetGesture`），同时清掉属于被移除窗口的悬停和按下部件。
   **实现期修正（A 期）**：窗口离开时手势回到 Idle，不记成 Cancelled。
   **实现期修正（B 期）**：底栏上捕获者（当前页）和手势窗口（按下的那个标签）可以是两个窗口。捕获者离开本栏（释放、改 Parent）也收尾，否则引擎记着一个已释放的捕获者——B 期实测出来并修掉的 bug。
+- **实现期补（B 期收尾）**：代码切页（`SwitchCore`）时，引擎的捕获者是一个窗口、又不是新的当前页（即旧页）——取消。旧页的标签行已经看不见了，不取消的话旧页上的松开会按看不见的几何调顺序或收起。
 - **实现期补（A 期）**：栏被禁用或隐藏。
 - **实现期补（A 期）**：用户的 `OnMouseUp` 抛异常——先取消手势，再把异常往外抛。
 - `MoveWindow`、`LoadLayoutFromString`、`ResetLayout`，或参与的栏改了 `Collapsed / Placement / Manager`。
@@ -778,6 +790,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 - 窗口顺序 = `Controls` 顺序，栏重写 `SetChildOrder`（§6.1）。
 - 设计期点图标的手势：武装记窗口引用、不记序号；`LM_CANCELMODE`、设计期 `MouseLeave`、捕获被别人拿走都解除武装（**实现期修正（A 期）**，详见 §6.5）。
   （顺带发现 `TTyPageControl.MovePage` 也没同步子控件顺序，已单独开修复任务给 3.0 会话。）
+- **实现期补（B 期收尾）**：底栏窗口在设计期回答 `CM_MASKHITTEST` 的判定（§3.6）抽成公开纯查询 `TTyToolWindow.DesignMaskAnswerAt(X, Y)`，坐标是窗口客户区：标签行区域（标签、空白、溢出、分隔线、按钮）答 1，操作区、正文答 0。消息处理只负责换坐标。无头测试直接问它；设计器是否真的落到栏上仍待真机（§15）。
 - 粘贴：粘贴目标是第一个带 `csAcceptsControls` 的选中控件，选中栏的正文时会粘进当前页里。`ChildClassAllowed` 拦住面板拖放和"改变父控件"；漏过去的由孤儿模式 / 提示显示出来。文档写明：先选中栏再粘贴——侧栏点图标条，底栏点标签行的空白处或边缘区。
 
 **已知限制**（文档写明）：删掉一个工具窗口或操作区后撤销 / 重做，它会被建到**窗体**上而不是回到原来的栏或窗口里。
@@ -801,10 +814,10 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
 | `TyToolWindowHeader` | 侧栏标题行底色、标题墨色和字体、可选底线。**实现期修正（A 期）**：底线 = border-color + border-width（§3.4），light 不设 |
 | `TyToolWindowActions` | 操作区 |
 | `TyToolWindowTabRow` | 底栏标签行 |
-| `TyToolWindowTab` | 标签；`:hover` `:selected`（当前页只用 `[tysSelected]` 解析） |
+| `TyToolWindowTab` | 标签；`:hover` `:selected`（当前页只用 `[tysSelected]` 解析）。**实现期补（B 期收尾）**：`:disabled` 墨色 `--muted`；标签行按栏的 `IsEnabled`（父控件禁用也算）画禁用，当前页保留 `:selected` 再加 `:disabled`，不接悬停、按下。拖动中源标签（不是当前页时）保持 `:active` 直到手势结束 |
 | `TyToolWindowTabIndicator` | 当前标签下划线 |
-| `TyToolWindowOverflow` | 溢出按钮（图标条和标签行共用）；`:hover` `:active`。**实现期修正（A 期）**：图标条上只取它的底色，字形墨色取 `TyToolWindowStripItem`；这里的 color 只给底栏标签行用 |
-| `TyToolWindowButton` | 最大化 / 收起；`:hover` `:active` |
+| `TyToolWindowOverflow` | 溢出按钮（图标条和标签行共用）；`:hover` `:active`。**实现期修正（A 期）**：图标条上只取它的底色，字形墨色取 `TyToolWindowStripItem`；这里的 color 只给底栏标签行用。**实现期补（B 期收尾）**：`:disabled` 墨色 `--muted`（底栏标签行，同 `TyToolWindowTab`） |
+| `TyToolWindowButton` | 最大化 / 收起；`:hover` `:active`。**实现期补（B 期收尾）**：`:disabled` 墨色 `--muted`（同 `TyToolWindowTab`） |
 | `TyToolWindowSeparator` | 底栏标题行里固定按钮前面的分隔线。**实现期修正（B 期）**：按「线」来写——border-color 是线色，border-width 是线宽，按 PPI 缩放、至少 1；解析不出可见边框就不画，槽宽只剩 2 × gap。light.tycss 写 `border-color: var(--border); border-width: 1px`，没有状态。皮肤覆写这个键要两项一起写：只写 border-width 会把基础规则整条压掉，线就没了 |
 | `TyToolWindowDropIndicator` | 拖放插入线 |
 | `TyToolWindowNote` | 设计期提示（孤儿、没有窗口、Placement 冲突、多余操作区、非窗口子控件） |
@@ -945,14 +958,14 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
 - **各 widgetset**：Alt+Tab 中途取消；拖动中 `ShowModal` 能否取消；拖动中弹出菜单抢走捕获后能否取消；禁用当前页后标签行点击落到哪里。
 - **Linux / macOS**：图标条和固定按钮字形是否清晰。
 - **皮肤**：17 个主题下的标题行、标签下划线、图标着色；高对比度皮肤下插入线是否看得见。
-- **实现期补（B 期）**，B 期落地、待真机的：窗口的 `CM_MASKHITTEST` 在标签行让位给栏（Lazarus IDE）；底栏溢出菜单从按钮底边往下开的位置（GTK3 / Qt Wayland）；标签行溢出、最大化 / 还原、收起的字形是否清晰（Linux / macOS）。
+- **实现期补（B 期）**，B 期落地、待真机的：窗口的 `CM_MASKHITTEST` 在标签行让位给栏（Lazarus IDE；判定本身已由 `DesignMaskAnswerAt` 无头钉住，待验的是设计器真的落到栏上）；底栏溢出菜单从按钮底边往下开的位置（GTK3 / Qt Wayland）；标签行溢出、最大化 / 还原、收起的字形是否清晰（Linux / macOS）。
 
 ---
 
 ## 16. 交付顺序（给计划用）
 
 1. **主题**：§12 的类型键和 token，跑两个生成器，加进 GGRID / GMETRICS。
-2. **标题行几何**：纯函数和 `ITyToolWindowHeaderHost`（§7.2，侧栏、底栏两种模式一起定）。
+2. **标题行几何**：纯函数和 ~~`ITyToolWindowHeaderHost`~~ 栏上的标题行方法（§7.2，侧栏、底栏两种模式一起定；**实现期修正（B 期收尾）**：接口已删）。
 3. **窗口 + 操作区 + 侧栏**：图标条、手势引擎的武装和点击（§9.2 按下 / 松开，§9.3）、当前页与收起（§5）、拉宽、`ExpandedSize` / `Collapsed`、栏内拖动调顺序；没有 manager，`TryFinishLoading` 先留空。
 4. **底栏**：标签、溢出、最大化、标签行输入转发。**已完成（B 期）。**
    **实现期修正（A 期）**，归这一步（B 期）的：§3.2 运行时 Parent 改到另一类栏抛 `EInvalidOperation`，底栏上线时一起做。（**实现期修正（B 期）**：已完成，见 §3.2。）

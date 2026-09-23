@@ -1141,7 +1141,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/plans/2026-09-23-toolwindow-phase-b.md`
 - Modify: `docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md`
 
-- [ ] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
+- [x] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
 
 逐条对着代码查，每条记「在哪一行实现 / 为什么不需要」：
 
@@ -1160,7 +1160,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - §3.2：`EInvalidOperation`。
 - §12：底栏五个类型键、四个长度 token 都有人读。
 
-- [ ] **Step 2: grep——没有只在定义处 / tests 里出现的常量**
+- [x] **Step 2: grep——没有只在定义处 / tests 里出现的常量**
 
 ```bash
 cd /d/Projects/ty-3.1 && for c in $(grep -hoE "^ +TyToolWindow[A-Za-z]+ += " source/tyControls.ToolWindows.pas source/tyControls.ToolWindows.Layout.pas | sed -E 's/^ +//; s/ +=.*//'); do n=$(grep -rwn "$c" source --include=*.pas | grep -vE "^[^:]+:[0-9]+: +$c +=" | wc -l); [ "$n" -eq 0 ] && echo "没人读: $c"; done; echo done
@@ -1168,7 +1168,7 @@ cd /d/Projects/ty-3.1 && for c in $(grep -hoE "^ +TyToolWindow[A-Za-z]+ += " sou
 
 Expected：只打印 `done`。再确认空位接线表里的每一项都真的被读：`grep -n "TyToolWindowTabPadVar\|TyToolWindowTabAreaMinVar\|TyToolWindowIndicatorSizeVar\|TyToolWindowButtonSizeVar\|TyToolWindowTabRowKey\|TyToolWindowTabKey\|TyToolWindowTabIndicatorKey\|TyToolWindowButtonKey\|TyToolWindowSeparatorKey" source/tyControls.ToolWindows.pas`，每个名字至少一处在定义行之外。
 
-- [ ] **Step 3: 跑全量**
+- [x] **Step 3: 跑全量**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
@@ -1176,7 +1176,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests
 
 Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，总数 = Task 0 的基线 + 本期新增条数。红了先按 [[known-rare-suite-flake]]、[[suite-order-widgetset-init]] 排查是不是既有的偶发 / 顺序问题，再疑本期代码。
 
-- [ ] **Step 4: 抽查变异（每条三拍，必须红）**
+- [x] **Step 4: 抽查变异（每条三拍，必须红）**
 
 1. Task 1 Step 6 的第 2 条（Cancelled 不记）与第 13 条（处理器不摘）。
 2. Task 2 Step 5 的第 3 条（`ItemIndex := i`）。
@@ -1184,15 +1184,15 @@ Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，
 4. Task 6 Step 5 的第 1 条（按下就切）。
 5. Task 9 Step 2 的 RTL 那一条（指针不镜像）。
 
-- [ ] **Step 5: 整体代码质量审查**
+- [x] **Step 5: 整体代码质量审查**
 
 按执行方式，本期只在这里做一次：对 `git diff <Task 0 的 HEAD>..HEAD -- source/` 做一次代码质量审查（重复代码、注释与代码不符、遗留的「B 期」字样、死字段 / 死方法）。审出来的问题修完再回到 Step 3 跑一次全量。
 
-- [ ] **Step 6: 把实现期的偏差写回 spec 原处**
+- [x] **Step 6: 把实现期的偏差写回 spec 原处**
 
 「开工前要定的问题」里用户拍板的每一条，和实现中新发现的每一处 spec 没写准的地方，都在 spec **原处**改并标「实现期修正（B 期）」——C / D 期读的是 spec，不是这份计划。至少要落的：§5.4 / §7.2（`W = nil`）、§7.2（接口签名、缓存键）、§6.4（订阅复用、份额）、§3.6（按下决定归属）、§7.4（底栏溢出菜单方向）、§12（分隔线写法，若采纳）。§16 第 4 步标「已完成」，并把 B 期留给 C 期的事（引擎的「目标栏」、spec §9.2 记录里 B 期没加的字段）写进第 5 步。
 
-- [ ] **Step 7: 签收记录写进本计划末尾，提交**
+- [x] **Step 7: 签收记录写进本计划末尾，提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(toolwindows): phase B sign-off notes and spec corrections
@@ -1200,12 +1200,7 @@ cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(toolwindows): phas
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-**B 期签收**（执行时填）
-
-- 基线：全量 ___ 条（Task 0）→ 收尾 ___ 条，errors / failures 0 / 0。
-- 抽查变异全部红过，改回后重编转绿。
-- 整体审查的问题修完，提交区间 `____..____`。
-- 真机未验项见下。
+**B 期签收**：已填，见本计划末尾「B 期签收（2026-09-24）」。
 
 ---
 
@@ -1273,3 +1268,18 @@ end;
 - 各 widgetset：当前页禁用后标签行点击落到哪里；底栏溢出菜单的弹出位置（GTK3 / Qt Wayland）；标签拖动中弹出菜单 / `ShowModal` 抢走捕获后能否取消；Win32 捕获期间的 `WM_MOUSELEAVE`。
 - Linux / macOS：标签行按钮字形是否清晰。
 - 皮肤：17 个主题下的标签下划线、分隔线、按钮；高对比度皮肤下标签插入线是否看得见。
+
+---
+
+## B 期签收（2026-09-24）
+
+- 全量 7485 条，errors / failures 0 / 0。
+- 提交区间：Task 0–11 `67779154..1d9b55da`；整体审查（规格核对 + 代码质量）的修复 `16686303..1a93b9e0`。
+- spec 写回：`16686303`（开工前拍板的各条、实现中的偏差）和本次提交（修复批次的偏差，标「实现期修正 / 补（B 期收尾）」）。
+- 遗留，不阻塞：
+  - (a) 父控件 `Enabled` 变化不通知栏，当前页的缓存帧要等下一次失效才变灰。
+  - (b) 新来的非栏兄弟要等下一次推导才被监听（spec §6.2 的限制）。
+  - (c) 收起按钮的横线落在半像素上；像素测试只覆盖了最大化按钮。
+  - (d) 只能真机验的项见 spec §15。
+
+**C 期开工前**：先读 spec §16 第 5 步——B 期留给 C 期的 6 项（引擎的「目标栏」、§9.2 记录里没加的三个字段、manager 的「正在拖」标记、调顺序发 `OnWindowMoved`、`MoveWindow` / `CanMoveWindow` 复用 `MovesAcrossBarKinds`、布局应用第 2 步直接 `Maximized := False`）。
