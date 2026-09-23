@@ -9,6 +9,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ImgList, Menus,
+  Forms,     { TCustomForm:拖动期间 Screen 的「活动窗体换了」处理器 }
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
   tyControls.StyleModel, tyControls.Controller, tyControls.StrConsts;
 
@@ -170,6 +171,8 @@ type
     procedure InvalidateBar;
     function GetBar: TTyToolWindowBar;
     function GetActions: TTyToolWindowActions;
+    function GetWindowIndex: Integer;
+    procedure SetWindowIndex(AValue: Integer);
     function HeaderTokenPx: Integer;
     function HeaderHeightAt(APPI: Integer): Integer;
     function HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
@@ -251,6 +254,10 @@ type
       「栏认哪一页」,不是「此刻看不看得见」。不在栏里、栏在流式加载中(那时栏还没挑)答 False。
       B 期底栏的标签行只由当前页代画,问的就是这一处。 }
     function IsActive: Boolean;
+    { 在所在栏的窗口里排第几(spec §9.9);不在栏里是 -1。写 = 栏内调顺序,钳到
+      0..窗口数-1,跟拖放提交走同一条路(TTyToolWindowBar.ReorderWindow)。不进 .lfm:
+      顺序就是 Controls 顺序,已经流过了。 }
+    property WindowIndex: Integer read GetWindowIndex write SetWindowIndex;
     property Bar: TTyToolWindowBar read GetBar;
     property Actions: TTyToolWindowActions read GetActions;
     { 探针:最近一次写 Visible 那一刻 csNoDesignVisible 在不在 —— 真实状态的只读视图。
@@ -544,6 +551,39 @@ type
     procedure HookDeactivate(AOn: Boolean);
     procedure AppDeactivated(Sender: TObject);
     procedure LMCancelMode(var Message: TLMessage); message LM_CANCELMODE;
+  private
+    { --- 拖动调顺序(spec §9.2 / §9.4 / §9.7) --- }
+    { 插入槽(窗口序号 0..N);-1 = 没有目标(指针不在图标条上)。 }
+    FDropSlot: Integer;
+    FDragCursor: TCursor;
+    FTempCursorPushed: Boolean;
+    FGestureHooked: Boolean;
+    FCaptureConfirmed: Boolean;
+    { 只在拖动期间存在的计时器(ExtCtrls.TTimer),轮询捕获是不是被别人抢走了。 }
+    FCaptureTimer: TComponent;
+    { 拉宽或拖动任一个在进行,就挂着 Application 的失活处理器。 }
+    procedure SyncDeactivateHook;
+    procedure BeginDragging;
+    procedure DragTo(X, Y: Integer);
+    { (X, Y) 上的插入槽:只有图标条算目标(源栏自己的内容区、别处都不是)。 }
+    function DropSlotAt(X, Y: Integer): Integer;
+    { 插入槽是不是空操作:拖到自己前后两个空隙(spec §9.4)。 }
+    function IsNoOpSlot(ASlot: Integer): Boolean;
+    procedure SetDropSlot(ASlot: Integer);
+    procedure SetDragCursor(ACursor: TCursor);
+    { 幂等:弹唯一一次临时光标、摘全部处理器、放掉计时器、清反馈,回到 Idle。 }
+    procedure EndGesture;
+    { 拖动中被打断:EndGesture 并记成 Cancelled —— 之后的松开什么都不做,也不算点击。
+      武装着的只回到 Idle。 }
+    procedure CancelGesture;
+    procedure KeyDownBefore(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ActiveFormChanged(Sender: TObject; Form: TCustomForm);
+    procedure CaptureTimerTick(Sender: TObject);
+    { 插入线的那一行(栏坐标 y);没有线答 -1。 }
+    function DropLineY(const L: TTyToolWindowBarLayout): Integer;
+    { 栏内调顺序:WindowIndex 和拖放提交的唯一一条路。钳到 0..N-1;窗口序号换算成
+      Controls 下标(spec §2)。 }
+    procedure ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
     procedure ResetGesture;
     procedure SetStripHover(AIndex: Integer; AOverflow: Boolean);
     procedure UpdateHoverAt(X, Y: Integer);
@@ -667,6 +707,8 @@ type
     { 探针:手势此刻是否武装着 / 拖动中 —— 真实状态的只读视图。 }
     function GestureStateForTest: TTyToolWindowGestureState;
     property IsEdgeDraggingForTest: Boolean read FEdgeDragging;
+    function IsDraggingForTest: Boolean;
+    property DropSlotForTest: Integer read FDropSlot;
     property TickForTest: QWord read FTickOffset write FTickOffset;
     procedure RegisterWindow(AWindow: TTyToolWindow);
     procedure UnregisterWindow(AWindow: TTyToolWindow);
@@ -755,7 +797,7 @@ function TyToolWindowDragThreshold(APPI: Integer): Integer;
 implementation
 
 uses
-  Forms,     { GetParentForm:切页 / 收起时看焦点在不在旧页里 }
+  ExtCtrls,  { TTimer:拖动期间轮询捕获还在不在 }
   LCLProc,   { OwnerFormDesignerModified:设计期切页要告诉 IDE }
   BGRABitmap, BGRABitmapTypes,  { 图标条:渲染出来的图标是调用方持有的 BGRA 位图 }
   tyControls.ImageCollection,   { TyTintBitmapAlpha / TyFadeBitmapAlpha:图标按状态着色 }
@@ -887,6 +929,22 @@ var
 begin
   b := Bar;
   Result := (b <> nil) and (b.ActiveWindow = Self);
+end;
+
+function TTyToolWindow.GetWindowIndex: Integer;
+var
+  b: TTyToolWindowBar;
+begin
+  b := Bar;
+  if b <> nil then Result := b.IndexOfWindow(Self) else Result := -1;
+end;
+
+procedure TTyToolWindow.SetWindowIndex(AValue: Integer);
+var
+  b: TTyToolWindowBar;
+begin
+  b := Bar;
+  if b <> nil then b.ReorderWindow(Self, AValue);
 end;
 
 function TTyToolWindow.GetActions: TTyToolWindowActions;
@@ -1676,6 +1734,7 @@ begin
   FLoadingActiveIndex := -1;
   FStripHover := -1;
   FStripPressed := -1;
+  FDropSlot := -1;
   FImageLink := TChangeLink.Create;
   FImageLink.OnChange := @ImageListChange;
   Align := alLeft;
@@ -1692,8 +1751,15 @@ begin
   FreeAndNil(FImageLink);
   FSubscribedList := nil;
   FreeAndNil(FOverflowMenu);
-  { 拉宽 / 拖动期间装在 Application 上的处理器,一个不留。 }
-  if Application <> nil then Application.RemoveAllHandlersOfObject(Self);
+  { 拖动中被释放:临时光标弹掉、计时器放掉。拉宽 / 拖动期间装在 Application 和 Screen
+    上的处理器,一个不留。 }
+  EndGesture;
+  if Application <> nil then
+  begin
+    Application.RemoveAllHandlersOfObject(Self);
+    Application.RemoveAsyncCalls(Self);
+  end;
+  if Screen <> nil then Screen.RemoveAllHandlersOfObject(Self);
   inherited Destroy;
 end;
 
@@ -2324,6 +2390,21 @@ begin
       end;
     end;
 
+    { 拖动调顺序的插入线:画进 BGRA 层,在 EndPaint 之前(之后画 GDI 会被盖掉)。 }
+    idx := DropLineY(L);
+    if idx >= 0 then
+    begin
+      bw := TokenPx(TyToolWindowDropSizeVar, TyToolWindowDropSizeDef);
+      partS := ActiveController.Model.ResolveStyle('TyToolWindowDropIndicator', cls, [tysNormal]);
+      if (bw > 0) and (tpBackground in partS.Present) then
+      begin
+        gr := Rect(L.Cells.Left, idx - bw div 2, L.Cells.Right, idx - bw div 2 + bw);
+        if gr.Top < L.Cells.Top then Types.OffsetRect(gr, 0, L.Cells.Top - gr.Top);
+        if gr.Bottom > L.Cells.Bottom then Types.OffsetRect(gr, 0, L.Cells.Bottom - gr.Bottom);
+        P.FillBackground(gr, partS.Background, 0);
+      end;
+    end;
+
     { 边缘区:拉宽边,也是贴着编辑区的那条分隔线。 }
     if (L.Edge.Right > L.Edge.Left) and (L.Edge.Bottom > L.Edge.Top) then
     begin
@@ -2586,6 +2667,9 @@ begin
 end;
 
 procedure TTyToolWindowBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  p: TPoint;
+  d: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
   if FEdgeDragging then
@@ -2594,9 +2678,29 @@ begin
     if ssLeft in Shift then EdgeDragTo(X, Y) else CancelEdgeDrag;
     Exit;
   end;
+  if FGState = twgsDragging then
+  begin
+    { 没有 ssLeft:丢了松开,取消(spec §9.7)。 }
+    if ssLeft in Shift then DragTo(X, Y) else CancelGesture;
+    Exit;
+  end;
   if FGState = twgsArmed then
   begin
-    if not (ssLeft in Shift) then ResetGesture;   { 丢了松开:回到 Idle }
+    if not (ssLeft in Shift) then
+      ResetGesture                              { 丢了松开:回到 Idle }
+    else if FGPart = twbpItem then
+    begin
+      { 阈值按屏幕坐标、两个轴取大的(spec §9.2):只算沿条方向的话,竖着的图标条往右
+        横拖永远拖不起来(TabStrip 就是这样)。溢出按钮不是拖动把手。 }
+      p := ClientToScreen(Point(X, Y));
+      d := Abs(p.X - FGOrigin.X);
+      if Abs(p.Y - FGOrigin.Y) > d then d := Abs(p.Y - FGOrigin.Y);
+      if d >= TyToolWindowDragThreshold(PPI) then
+      begin
+        BeginDragging;
+        DragTo(X, Y);
+      end;
+    end;
     Exit;
   end;
   if FGState = twgsIdle then UpdateHoverAt(X, Y);
@@ -2626,6 +2730,22 @@ begin
     EndEdgeDrag;
     if multi then Collapsed := True;
     UpdateHoverAt(X, Y);
+    Exit;
+  end;
+  if FGState = twgsDragging then
+  begin
+    { 在松开点重算落点、拷到局部、EndGesture,提交作为最后一句(spec §9.2)。 }
+    idx := DropSlotAt(X, Y);
+    w := FGWindow;
+    multi := (idx >= 0) and (IndexOfWindow(w) >= 0) and not IsNoOpSlot(idx);
+    EndGesture;
+    UpdateHoverAt(X, Y);
+    if multi then
+    begin
+      { FinalIndex := slot - Ord(slot > src):移走自己之后,后面的空隙往前挪一格。 }
+      if idx > IndexOfWindow(w) then Dec(idx);
+      ReorderWindow(w, idx);
+    end;
     Exit;
   end;
   { 拷到局部再清记录:点击的动作放最后,它引起的事件里就算重新按下也是一条新记录。 }
@@ -2713,6 +2833,11 @@ begin
   Result := BarLayout.Edge;
 end;
 
+procedure TTyToolWindowBar.SyncDeactivateHook;
+begin
+  HookDeactivate(FEdgeDragging or FGestureHooked);
+end;
+
 procedure TTyToolWindowBar.HookDeactivate(AOn: Boolean);
 begin
   if (AOn = FDeactivateHooked) or (Application = nil) then Exit;
@@ -2724,13 +2849,16 @@ end;
 procedure TTyToolWindowBar.AppDeactivated(Sender: TObject);
 begin
   CancelEdgeDrag;
+  CancelGesture;
 end;
 
 procedure TTyToolWindowBar.LMCancelMode(var Message: TLMessage);
 begin
   inherited;
-  { ShowModal、Application.HandleException 会发:拉宽到一半的尺寸不许留下。 }
+  { ShowModal、Application.HandleException 会发:拉宽到一半的尺寸不许留下,拖到一半的
+    也作废。 }
   CancelEdgeDrag;
+  CancelGesture;
 end;
 
 procedure TTyToolWindowBar.SetEdgeHover(AOn: Boolean);
@@ -2766,7 +2894,7 @@ begin
   FEdgeStartSize := FExpandedSize;
   FEdgeStartPos := ClientToScreen(Point(X, Y));
   FGSwallowClick := True;
-  HookDeactivate(True);
+  SyncDeactivateHook;
   Invalidate;
 end;
 
@@ -2808,7 +2936,7 @@ procedure TTyToolWindowBar.EndEdgeDrag;
 begin
   if not FEdgeDragging then Exit;
   FEdgeDragging := False;
-  HookDeactivate(False);
+  SyncDeactivateHook;
   if FEdgeSnapped then
   begin
     { 吸附着松手:调用方接着写 Collapsed := True。这里先把排布还给「展开」那一支,
@@ -2829,6 +2957,168 @@ begin
     ExpandedSize := FEdgeStartSize
   else if wasSnapped and not (csDestroying in ComponentState) then
     Relayout;
+end;
+
+function TTyToolWindowBar.IsDraggingForTest: Boolean;
+begin
+  Result := FGState = twgsDragging;
+end;
+
+function TTyToolWindowBar.DropSlotAt(X, Y: Integer): Integer;
+var
+  L: TTyToolWindowBarLayout;
+begin
+  L := BarLayout;
+  { 源栏自己只算它的图标条(spec §9.4):内容区被当前页盖着,反馈也只能画在条上。
+    条上沿条方向按已排布图标的中点找空隙;条的空白尾巴、溢出按钮都算「最后一个之后」。 }
+  if not PtInRect(L.Cells, Point(X, Y)) then Exit(-1);
+  Result := TyToolWindowSlotAt(L.Slots, X, Y, True, WindowCount);
+end;
+
+function TTyToolWindowBar.IsNoOpSlot(ASlot: Integer): Boolean;
+var
+  src: Integer;
+begin
+  src := IndexOfWindow(FGWindow);
+  Result := (src < 0) or (ASlot = src) or (ASlot = src + 1);
+end;
+
+function TTyToolWindowBar.DropLineY(const L: TTyToolWindowBarLayout): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  if (FGState <> twgsDragging) or (FDropSlot < 0) or IsNoOpSlot(FDropSlot) then Exit;
+  { 空隙 k 画在「窗口 k 那一格」的上沿;最后一个之后画在最后一格的下沿。 }
+  for i := 0 to High(L.Slots) do
+    if L.Slots[i].ItemIndex = FDropSlot then Exit(L.Slots[i].ItemRect.Top);
+  for i := 0 to High(L.Slots) do
+    if L.Slots[i].ItemIndex = FDropSlot - 1 then Exit(L.Slots[i].ItemRect.Bottom);
+end;
+
+procedure TTyToolWindowBar.SetDropSlot(ASlot: Integer);
+begin
+  if ASlot = FDropSlot then Exit;
+  FDropSlot := ASlot;
+  { 只在槽位变了时 invalidate(spec §9.8)。 }
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+procedure TTyToolWindowBar.SetDragCursor(ACursor: TCursor);
+begin
+  if (not FTempCursorPushed) or (ACursor = FDragCursor) then Exit;
+  { 先压新的再弹旧的:中间不闪回原来的光标(spec §9.2)。 }
+  Screen.BeginTempCursor(ACursor);
+  Screen.EndTempCursor(FDragCursor);
+  FDragCursor := ACursor;
+end;
+
+procedure TTyToolWindowBar.BeginDragging;
+begin
+  FGState := twgsDragging;
+  FGSwallowClick := True;
+  if Application <> nil then Application.CancelHint;
+  SetStripHover(-1, False);
+  { 控件自己的 Cursor 在捕获期间管不到别的窗口,用 Screen 的临时光标(spec §9.2)。 }
+  FDragCursor := crDrag;
+  Screen.BeginTempCursor(FDragCursor);
+  FTempCursorPushed := True;
+  { 图标条不拿焦点,Esc 到不了栏的 KeyDown:挂在 Application 的 KeyDownBefore 上。 }
+  Application.AddOnKeyDownBeforeHandler(@KeyDownBefore);
+  Screen.AddHandlerActiveFormChanged(@ActiveFormChanged);
+  FGestureHooked := True;
+  SyncDeactivateHook;
+  { 不用 AddOnIdleHandler:链上任一个把 Done 置 False,后面的就不跑;弹出菜单直接
+    ReleaseCapture 抢走捕获的情况只有轮询抓得到(spec §9.2)。捕获没确认过(无头、
+    没有句柄)就没有可轮询的。 }
+  FCaptureConfirmed := HandleAllocated and (GetCaptureControl = Self);
+  if FCaptureConfirmed then
+  begin
+    FCaptureTimer := TTimer.Create(nil);
+    TTimer(FCaptureTimer).Interval := 100;
+    TTimer(FCaptureTimer).OnTimer := @CaptureTimerTick;
+    TTimer(FCaptureTimer).Enabled := True;
+  end;
+end;
+
+procedure TTyToolWindowBar.DragTo(X, Y: Integer);
+var
+  slot: Integer;
+begin
+  slot := DropSlotAt(X, Y);
+  SetDropSlot(slot);
+  { 不在图标条上 = 没有目标,在这里松开就是取消。 }
+  if slot < 0 then SetDragCursor(crNoDrop) else SetDragCursor(crDrag);
+end;
+
+procedure TTyToolWindowBar.EndGesture;
+begin
+  if FGestureHooked then
+  begin
+    FGestureHooked := False;
+    if Application <> nil then Application.RemoveOnKeyDownBeforeHandler(@KeyDownBefore);
+    if Screen <> nil then Screen.RemoveHandlerActiveFormChanged(@ActiveFormChanged);
+    SyncDeactivateHook;
+  end;
+  { 唯一一次:不配对的 EndTempCursor 会抛。 }
+  if FTempCursorPushed then
+  begin
+    FTempCursorPushed := False;
+    Screen.EndTempCursor(FDragCursor);
+  end;
+  FreeAndNil(FCaptureTimer);
+  FCaptureConfirmed := False;
+  SetDropSlot(-1);
+  ResetGesture;
+end;
+
+procedure TTyToolWindowBar.CancelGesture;
+begin
+  if FGState = twgsDragging then
+  begin
+    EndGesture;
+    FGState := twgsCancelled;
+  end
+  else if FGState = twgsArmed then
+    ResetGesture;
+end;
+
+procedure TTyToolWindowBar.KeyDownBefore(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  { 只吃掉 KeyDown;Esc 的 KeyUp 照样到焦点控件(spec §9.7)。 }
+  if (Key = VK_ESCAPE) and (FGState = twgsDragging) then
+  begin
+    Key := 0;
+    CancelGesture;
+  end;
+end;
+
+procedure TTyToolWindowBar.ActiveFormChanged(Sender: TObject; Form: TCustomForm);
+begin
+  if Form <> GetParentForm(Self) then CancelGesture;
+end;
+
+procedure TTyToolWindowBar.CaptureTimerTick(Sender: TObject);
+begin
+  { CaptureChanged 从不取消(Win32 上每次正常松开都会先到);捕获被别人抢走只有轮询抓得到。 }
+  if FCaptureConfirmed and (GetCaptureControl <> Self) then CancelGesture;
+end;
+
+procedure TTyToolWindowBar.ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
+var
+  cur, n: Integer;
+begin
+  cur := IndexOfWindow(AWindow);
+  if cur < 0 then Exit;
+  n := WindowCount;
+  if AIndex < 0 then AIndex := 0;
+  if AIndex > n - 1 then AIndex := n - 1;
+  if AIndex = cur then Exit;
+  { 不激活、不展开、不换父(spec §9.5);当前页还是那个窗口,ActiveIndex 跟着变,不发 OnChange。 }
+  SetControlIndex(AWindow, ControlIndexForWindowPos(AWindow, AIndex));
+  Invalidate;
+  if [csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning] then
+    OwnerFormDesignerModified(Self);
 end;
 
 procedure TTyToolWindowBar.CMDesignHitTest(var Message: TCMDesignHitTest);
@@ -2883,6 +3173,7 @@ begin
   if ((FPlacement = twpBottom) <> (AValue = twpBottom)) and (WindowCount > 0)
      and ([csDesigning, csLoading] * ComponentState = []) then Exit;
   CancelEdgeDrag;
+  CancelGesture;
   FPlacement := AValue;
   { 流式加载时 Align 自己也在流里,不替它改。 }
   if not (csLoading in ComponentState) then
@@ -2975,6 +3266,7 @@ begin
   if FCollapsed = AValue then Exit;
   { 拉宽中途 Collapsed 被别处改了:拉宽作废,ExpandedSize 回到起点(spec §6.3)。 }
   CancelEdgeDrag;
+  CancelGesture;
   FCollapsed := AValue;
   { 只在运行时生效:流式加载时由 Loaded 统一应用;设计期永远按展开显示。 }
   if [csLoading, csDesigning, csDestroying] * ComponentState = [] then
@@ -3339,7 +3631,7 @@ begin
   if AWindow = FLoadingTarget then FLoadingTarget := nil;
   { spec §5.2 / §9.7:属于它的手势记录清掉 —— 武装着的窗口走了,松开不许当成点击。
     悬停和按下按窗口序号记,它一走序号全挪了,一并清(按下跟着还在的手势重新对上)。 }
-  if AWindow = FGWindow then ResetGesture;
+  if AWindow = FGWindow then EndGesture;
   { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废。 }
   if FEdgeDragging and (Length(FRegistered) = 0) then CancelEdgeDrag;
   FStripHover := -1;
