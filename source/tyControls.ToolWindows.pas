@@ -248,6 +248,8 @@ type
     { 标签行区域 = 标题行减去操作区(窗口客户区坐标,含标签之间和后面的空白)。只有在栏里、
       底栏模式下才可能为真。下面所有「在不在区域里」都问这一处。 }
     function InTabRowRegion(X, Y: Integer): Boolean;
+    { 同上,几何由调用方给(此刻客户区下的 HeaderGeomAt):一次事件里已经排过一份的,不再排。 }
+    function InTabRowRegionOf(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer): Boolean;
     { 按下消息的坐标记给 BeginAutoDrag、并记下这一次按下归不归标签行(地雷 10)。 }
     procedure WndProc(var TheMessage: TLMessage); override;
     { 区域内:不调继承(用户的 OnMouseDown 不触发),落在部件上才转给栏;none 只吞。 }
@@ -773,17 +775,19 @@ type
       当前页上,所以记在栏上一份就够。 }
     FHeaderHoverPart: TTyToolWindowBarPart;
     FHeaderHoverIndex: Integer;
-    { 标签行上 APart(标签时窗口序号 AIndex)此刻是不是按下着 —— 从手势引擎读,不另记:
+    { 标签行上 APart(标签时是窗口 AItem 的那一个)此刻是不是按下着 —— 从手势引擎读,不另记:
       武装着(标签在拖动中也算,源标签保持 :active 直到收尾)、捕获者是这一页、部件相同
       (标签还要窗口相同)。 }
     function HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
-      AIndex: Integer): Boolean;
+      AItem: TTyToolWindow): Boolean;
     { 标签行上的手势此刻捕获在 AWindow 上(引擎的捕获者就是它)—— 窗口决定「移动 / 松开
       转不转给栏」只问这一处,自己不另记镜像。 }
     function HeaderCapturedBy(AWindow: TTyToolWindow): Boolean;
     { 标签的状态:当前页只有 :selected(spec §12,禁用时再加 :disabled);其余按禁用 / 悬停 /
-      按下 / 静止。 }
-    function HeaderTabStates(AWindow: TTyToolWindow; AIndex: Integer): TTyStateSet;
+      按下 / 静止。AIndex 是窗口序号、AItem 是那个窗口、AActiveIndex 是当前页的窗口序号 ——
+      由调用方一次取好(PaintHeader 逐个标签问,每次现数窗口表就是 O(N²))。 }
+    function HeaderTabStates(AWindow: TTyToolWindow; AIndex, AActiveIndex: Integer;
+      AItem: TTyToolWindow): TTyStateSet;
     { 溢出 / 最大化 / 收起按钮的状态:禁用 / 悬停 / 按下 / 静止。 }
     function HeaderPartStates(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart): TTyStateSet;
     { 标签行的像素属于当前页,当前页有绘制缓存(spec §3.5):标签行的一切视觉变化都经这里丢
@@ -797,8 +801,15 @@ type
       -1。按阅读顺序找空隙:RTL 时拿一份几何翻回 LTR、指针 X' := 行宽 − 1 − X(地雷 8)。
       空隙映射到窗口序号(当前页被强制留下时已排标签不是前缀)。 }
     function HeaderDropSlotAt(AWindow: TTyToolWindow; X, Y: Integer): Integer;
+    { 同上,几何由调用方给(AWindow 此刻客户区下的 HeaderGeomAt)。 }
+    function HeaderDropSlotIn(AWindow: TTyToolWindow; const AGeom: TTyToolWindowHeaderGeom;
+      X, Y: Integer): Integer;
     { 拖动中:重算插入槽、换光标(区域外 crNoDrop,其余 crDrag;空操作不画线)。 }
-    procedure HeaderDragTo(X, Y: Integer);
+    procedure HeaderDragIn(AWindow: TTyToolWindow; const AGeom: TTyToolWindowHeaderGeom;
+      X, Y: Integer);
+    { 移动的实体,几何由调用方给(当前页一次事件只排一份,见 TTyToolWindow.MouseMove)。 }
+    procedure HeaderMoveIn(AWindow: TTyToolWindow; const AGeom: TTyToolWindowHeaderGeom;
+      Shift: TShiftState; X, Y: Integer);
   private
     { --- 最大化(spec §6.4)。只在运行时有,不进 .lfm。 --- }
     FMaximized: Boolean;
@@ -1902,17 +1913,23 @@ end;
 { --- 底栏标签行的输入(spec §3.6 运行时、§7.4) ------------------------------------- }
 
 function TTyToolWindow.InTabRowRegion(X, Y: Integer): Boolean;
+begin
+  if HeaderMode <> twhBottom then Exit(False);
+  Result := InTabRowRegionOf(HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight),
+    Font.PixelsPerInch), X, Y);
+end;
+
+function TTyToolWindow.InTabRowRegionOf(const AGeom: TTyToolWindowHeaderGeom;
+  X, Y: Integer): Boolean;
 var
   pt: TPoint;
-  g: TTyToolWindowHeaderGeom;
 begin
   Result := False;
   if HeaderMode <> twhBottom then Exit;
   pt := Point(X, Y);
   if not PtInRect(HeaderRowRect, pt) then Exit;
   { 行从客户区原点开始,几何的行内坐标就是客户区坐标。 }
-  g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
-  Result := not PtInRect(g.Actions, pt);
+  Result := not PtInRect(AGeom.Actions, pt);
 end;
 
 procedure TTyToolWindow.WndProc(var TheMessage: TLMessage);
@@ -1959,17 +1976,19 @@ end;
 procedure TTyToolWindow.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   b: TTyToolWindowBar;
+  g: TTyToolWindowHeaderGeom;
   idx: Integer;
-  r: TRect;
 begin
   b := Bar;
   if (b <> nil) and (HeaderMode = twhBottom) then
   begin
+    { 移动是高频事件:一次只排一份几何,区域判断、部件命中、栏那一侧的悬停 / 拖动都用它。 }
+    g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
     { 标签行上的手势捕获在本页:移动不论位置都转。 }
     if b.HeaderCapturedBy(Self) then
-      b.HeaderMouseMove(Self, Shift, X, Y)
-    else if InTabRowRegion(X, Y) and (b.HeaderZoneAt(Self, X, Y, idx, r) <> twzNone) then
-      b.HeaderMouseMove(Self, Shift, X, Y)
+      b.HeaderMoveIn(Self, g, Shift, X, Y)
+    else if InTabRowRegionOf(g, X, Y) and (TyToolWindowZoneAt(g, X, Y, idx) <> twzNone) then
+      b.HeaderMoveIn(Self, g, Shift, X, Y)
     else
       { 区域里的空白、或者出了区域:清悬停(不算「转发 none」)。 }
       b.HeaderMouseLeave(Self);
@@ -3684,14 +3703,14 @@ begin
 end;
 
 function TTyToolWindowBar.HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
-  AIndex: Integer): Boolean;
+  AItem: TTyToolWindow): Boolean;
 begin
   { 拖动中被拖的那个标签(源)照样画按下态,直到手势收尾;按钮不是拖动把手,只有武装态。 }
   Result := (FGesture <> nil)
     and ((FGesture.State = twgsArmed) or ((FGesture.State = twgsDragging) and (APart = twbpItem)))
     and (FGesture.Capturer = AWindow) and (FGesture.Part = APart);
   if Result and (APart = twbpItem) then
-    Result := (AIndex >= 0) and (AIndex < WindowCount) and (FGesture.Window = Windows[AIndex]);
+    Result := (AItem <> nil) and (FGesture.Window = AItem);
 end;
 
 function TTyToolWindowBar.HeaderCapturedBy(AWindow: TTyToolWindow): Boolean;
@@ -3699,10 +3718,11 @@ begin
   Result := (AWindow <> nil) and (FGesture <> nil) and (FGesture.Capturer = AWindow);
 end;
 
-function TTyToolWindowBar.HeaderTabStates(AWindow: TTyToolWindow; AIndex: Integer): TTyStateSet;
+function TTyToolWindowBar.HeaderTabStates(AWindow: TTyToolWindow; AIndex, AActiveIndex: Integer;
+  AItem: TTyToolWindow): TTyStateSet;
 begin
   Result := [];
-  if AIndex = IndexOfWindow(FActive) then Include(Result, tysSelected);
+  if AIndex = AActiveIndex then Include(Result, tysSelected);
   { 禁用时保留 :selected(同图标条):灰掉的栏也得看得出哪一页是当前页。禁用看 IsEnabled
     (父控件被禁用也算)—— 跟 HeaderMouseDown 收不收按下是同一个判断。 }
   if not IsEnabled then
@@ -3711,7 +3731,7 @@ begin
   begin
     if (FHeaderHoverPart = twbpItem) and (FHeaderHoverIndex = AIndex) then
       Include(Result, tysHover);
-    if HeaderPressed(AWindow, twbpItem, AIndex) then Include(Result, tysActive);
+    if HeaderPressed(AWindow, twbpItem, AItem) then Include(Result, tysActive);
   end;
   if Result = [] then Include(Result, tysNormal);
 end;
@@ -3725,7 +3745,7 @@ begin
   else
   begin
     if FHeaderHoverPart = APart then Include(Result, tysHover);
-    if HeaderPressed(AWindow, APart, -1) then Include(Result, tysActive);
+    if HeaderPressed(AWindow, APart, nil) then Include(Result, tysActive);
   end;
   if Result = [] then Include(Result, tysNormal);
 end;
@@ -3755,28 +3775,38 @@ begin
 end;
 
 function TTyToolWindowBar.HeaderDropSlotAt(AWindow: TTyToolWindow; X, Y: Integer): Integer;
+begin
+  if AWindow = nil then Exit(-1);
+  Result := HeaderDropSlotIn(AWindow, AWindow.HeaderGeomAt(Rect(0, 0, AWindow.ClientWidth,
+    AWindow.ClientHeight), AWindow.Font.PixelsPerInch), X, Y);
+end;
+
+function TTyToolWindowBar.HeaderDropSlotIn(AWindow: TTyToolWindow;
+  const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer): Integer;
 var
   g: TTyToolWindowHeaderGeom;
   rowW: Integer;
 begin
   Result := -1;
-  if (AWindow = nil) or not AWindow.InTabRowRegion(X, Y) then Exit;
+  if (AWindow = nil) or not AWindow.InTabRowRegionOf(AGeom, X, Y) then Exit;
   rowW := AWindow.ClientWidth;
-  { 现算的一份:动态数组是新的,就地翻不会改到别人手上的几何。 }
-  g := AWindow.HeaderGeomAt(Rect(0, 0, rowW, AWindow.ClientHeight), AWindow.Font.PixelsPerInch);
+  g := AGeom;
   if AWindow.IsRightToLeft then
   begin
+    { 就地翻的是一份拷贝:动态数组赋值共享存储,不先拷一份就翻到了调用方手上的几何。 }
+    g.Tabs := Copy(AGeom.Tabs);
     TyToolWindowFlipAll(g, rowW);
     X := rowW - 1 - X;
   end;
   Result := TyToolWindowSlotAt(g.Tabs, X, Y, False, WindowCount);
 end;
 
-procedure TTyToolWindowBar.HeaderDragTo(X, Y: Integer);
+procedure TTyToolWindowBar.HeaderDragIn(AWindow: TTyToolWindow;
+  const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer);
 var
   slot: Integer;
 begin
-  slot := HeaderDropSlotAt(FActive, X, Y);
+  slot := HeaderDropSlotIn(AWindow, AGeom, X, Y);
   SetDropSlot(slot);
   { 出了标签行 = 没有目标,在这里松开就是取消(spec §9.4)。 }
   if slot < 0 then FGesture.SetCursor(crNoDrop) else FGesture.SetCursor(crDrag);
@@ -3798,6 +3828,7 @@ var
   S: TTyStyleSet;
   r, box, gr: TRect;
   fill: TTyFill;
+  wins: TTyToolWindowArray;
   pad, indPx, glyphPx, line, active, i, idx, bandTop, bandBottom, dropPx: Integer;
 
   { 部件矩形换到画笔坐标(行在窗口里的位置)。 }
@@ -3859,15 +3890,19 @@ begin
   if tpBackground in S.Present then
     APainter.FillBackground(ARow, S.Background, 0);
 
-  { 2、3. 标签与当前页的下划线。 }
-  active := IndexOfWindow(FActive);
+  { 2、3. 标签与当前页的下划线。窗口表取一次:Windows[] / IndexOfWindow 每问一次都数一遍
+    Controls,逐个标签问就是 O(N²)。 }
+  wins := WindowList(nil);
+  active := -1;
+  for i := 0 to High(wins) do
+    if wins[i] = FActive then active := i;
   for i := 0 to High(AGeom.Tabs) do
   begin
     r := Place(AGeom.Tabs[i].ItemRect);
     idx := AGeom.Tabs[i].ItemIndex;
-    if IsEmptyBox(r) or (idx < 0) or (idx >= WindowCount) then Continue;
+    if IsEmptyBox(r) or (idx < 0) or (idx > High(wins)) then Continue;
     S := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls,
-      HeaderTabStates(AWindow, idx));
+      HeaderTabStates(AWindow, idx, active, wins[idx]));
     if tpBackground in S.Present then
       APainter.FillBackground(r, S.Background, 0);
     { 文字框:标签左右各内缩 tab-pad。只有被截的当前页标签会真的出省略号。 }
@@ -3875,8 +3910,8 @@ begin
     InflateRect(box, -pad, 0);
     if box.Right > box.Left then
     begin
-      if Windows[idx].Caption <> '' then
-        APainter.DrawText(box, Windows[idx].Caption, S.FontName, ResolveFontSize(S),
+      if wins[idx].Caption <> '' then
+        APainter.DrawText(box, wins[idx].Caption, S.FontName, ResolveFontSize(S),
           S.FontWeight, S.TextColor, taCenter, tlCenter, True);
       { 下划线贴标签底边,横向跨文字框;粗细 0 = 不画。 }
       if (idx = active) and (indPx > 0) then
@@ -4024,26 +4059,33 @@ end;
 
 procedure TTyToolWindowBar.HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState;
   X, Y: Integer);
+begin
+  if AWindow = nil then Exit;
+  HeaderMoveIn(AWindow, AWindow.HeaderGeomAt(Rect(0, 0, AWindow.ClientWidth,
+    AWindow.ClientHeight), AWindow.Font.PixelsPerInch), Shift, X, Y);
+end;
+
+procedure TTyToolWindowBar.HeaderMoveIn(AWindow: TTyToolWindow;
+  const AGeom: TTyToolWindowHeaderGeom; Shift: TShiftState; X, Y: Integer);
 var
   zone: TTyToolWindowZone;
   idx: Integer;
-  r: TRect;
 begin
   { spec §7.1:旧页迟到的消息不许清新页的悬停。设计期不做悬停。 }
   if (AWindow = nil) or (AWindow <> FActive) or (csDesigning in ComponentState) then Exit;
   case FGesture.Move(Shift, X, Y) of
     twgmHover:
       begin
-        zone := HeaderZoneAt(AWindow, X, Y, idx, r);
+        zone := TyToolWindowZoneAt(AGeom, X, Y, idx);
         SetHeaderHover(PartOfZone(zone), idx);
       end;
     twgmDragStart:
       begin
         SetHeaderHover(twbpNone, -1);
-        HeaderDragTo(X, Y);
+        HeaderDragIn(AWindow, AGeom, X, Y);
       end;
     twgmDrag:
-      HeaderDragTo(X, Y);
+      HeaderDragIn(AWindow, AGeom, X, Y);
   end;
 end;
 
