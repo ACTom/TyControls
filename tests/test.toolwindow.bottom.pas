@@ -868,9 +868,13 @@ begin
   g96 := ActiveGeom;
   g144 := w.HeaderGeomAt(Rect(0, 0, 900, 360), 144);
   AssertEquals('按钮按 144 缩放', 33, g144.Collapse.Width);
+  { 字的宽不是严格线性的(widgetset 初始化过之后按真实字体度量,hinting 让 144 下的字宽
+    跟 1.5 倍差几个像素):只要求落在 1.25 ~ 1.75 倍之间 —— 按字体 PPI 量的话是 1 倍。 }
   for i := 0 to 2 do
-    AssertTrue(Format('标签 %d 按 144 量(约 1.5 倍)', [i]),
-      Abs(TabRectOf(g144, i).Width * 2 - TabRectOf(g96, i).Width * 3) <= 8);
+    AssertTrue(Format('标签 %d 按 144 量(约 1.5 倍:96 下 %d,144 下 %d)',
+      [i, TabRectOf(g96, i).Width, TabRectOf(g144, i).Width]),
+      (TabRectOf(g144, i).Width * 4 >= TabRectOf(g96, i).Width * 5)
+      and (TabRectOf(g144, i).Width * 4 <= TabRectOf(g96, i).Width * 7));
   r := TabRectOf(g144, 1);
   bmp := RenderPage(w, 900, 360, 144);
   try
