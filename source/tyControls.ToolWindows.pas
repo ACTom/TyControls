@@ -51,9 +51,11 @@ const
     名字不叫 ...Def —— 本库的 ...Var / ...Def 成对只用于「主题 token 与它的回落值」。 }
   TyToolWindowDefaultExpandedSize = 240;
 
-  { 本单元自己解析的样式类型键(spec §12)。底栏那几个(TabRow / Tab / TabIndicator / Button /
-    Separator)B 期接线时再加 —— 没人读的常量就是「建好没接线」。 }
+  { 本单元自己解析的样式类型键(spec §12)。底栏那几个(TabRow / TabIndicator / Button)
+    B 期接线时再加 —— 没人读的常量就是「建好没接线」。 }
   TyToolWindowKey                = 'TyToolWindow';
+  TyToolWindowTabKey             = 'TyToolWindowTab';
+  TyToolWindowSeparatorKey       = 'TyToolWindowSeparator';
   TyToolWindowBarKey             = 'TyToolWindowBar';
   TyToolWindowActionsKey         = 'TyToolWindowActions';
   TyToolWindowHeaderKey          = 'TyToolWindowHeader';
@@ -71,9 +73,39 @@ const
 type
   TTyToolWindowPlacement = (twpLeft, twpRight, twpBottom);
 
+  TTyToolWindow = class;
   TTyToolWindowBar = class;
   TTyToolWindowActions = class;
   TTyToolWindowManager = class;
+
+  { 底栏标题行的宿主(spec §7.1 / §7.2)。标签行的像素属于当前页(窗口化子控件自己拥有那块像素),
+    所以当前页替栏画、把输入转给栏;悬停、按下、溢出集合、最大化状态都在栏上。
+    只有 TTyToolWindowBar 实现它;窗口找宿主经 Bar(「在不在栏里」只由 GetBar 回答)。
+    AWindow = nil 表示「栏坐标、当前页的标题行」(开工前问题 1);没有当前页时几何为空、
+    部件为 none。尺寸一律按入参 APPI(同 RenderTo 的一套尺度)。 }
+  ITyToolWindowHeaderHost = interface
+    ['{DCDF22CA-27B6-47C8-87CC-7157244C477C}']
+    function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+    { 底栏统一行高里操作区那一项:栏里所有窗口操作区 raw 首选高的最大值(spec §3.4)。 }
+    function HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
+    function HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+      APPI: Integer): TTyToolWindowHeaderGeom;
+    procedure PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter; const ARow: TRect;
+      const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
+    function HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer; out AIndex: Integer;
+      out ARect: TRect): TTyToolWindowZone;
+    procedure HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
+    procedure HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState; X, Y: Integer);
+    procedure HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
+    procedure HeaderMouseLeave(AWindow: TTyToolWindow);
+    { 捕获者是当前页、它收到了 LM_CANCELMODE(spec §9.7)。 }
+    procedure HeaderCancelMode(AWindow: TTyToolWindow);
+    function HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
+      out ARect: TRect): Boolean;
+    procedure HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
+  end;
 
   { 操作区的可见子控件,Controls[] 顺序,与 TTyToolWindowFlowItems 一一对应。 }
   TTyToolWindowKids = array of TControl;
@@ -466,7 +498,7 @@ type
     property DesignWindow: TTyToolWindow read FDesignWindow;
   end;
 
-  TTyToolWindowBar = class(TTyCustomControl)
+  TTyToolWindowBar = class(TTyCustomControl, ITyToolWindowHeaderHost)
   private
     { 注册过的窗口(集合,顺序不算数)。**窗口顺序永远就是 Controls 顺序**(spec §6.1),
       每次现取:SetControlIndex 不是虚方法,设计器的「移到最前 / 最后」直接调它 ——
@@ -605,6 +637,33 @@ type
     function LayoutAt(const AClient: TRect; APPI: Integer): TTyToolWindowBarLayout;
     { 漏进来的非窗口子控件有几个(粘贴等途径;spec §6.1)。 }
     function StrayCount: Integer;
+  private
+    { --- 底栏标题行(spec §7.2 / §7.3) --- }
+    { 标签宽的缓存(开工前问题 3):只缓存量出来的宽,不缓存整份几何 —— 窗口顺序每次现取,
+      设计器「移到最前 / 最后」直接调非虚的 SetControlIndex,戳记不到。键 = 此刻
+      「(窗口引用, Caption) 按 Controls 顺序」的快照逐项比 + (PPI, model 身份, 主题版本,
+      样式类, StyleOverride, 字号)。只缓存自己字体的 PPI 那一份,别的 PPI 现量。 }
+    FTabCacheValid: Boolean;
+    FTabCacheWins: TTyToolWindowArray;
+    FTabCacheCaps: array of string;
+    FTabCachePPI: Integer;
+    FTabCacheAnchor: TObject;
+    FTabCacheVer: Cardinal;
+    FTabCacheClass: string;
+    FTabCacheOverride: string;
+    FTabCacheFontSize: Integer;
+    FTabCacheWidths: TTyToolWindowWidths;
+    { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」两份样式量的较大者(开工前问题 9;
+      每份又是 Painter 的两种量法取大),再加 2 × tab-pad。空标题也有 2 × tab-pad。 }
+    function TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
+    function MeasureTabWidths(const AWins: TTyToolWindowArray; APPI: Integer): TTyToolWindowWidths;
+    { 标签行竖分隔线的线宽(设备像素):TyToolWindowSeparator 解析出可见边框时按 border-width
+      缩放、至少 1;否则 0(开工前问题 2)。 }
+    function SeparatorLinePx(APPI: Integer): Integer;
+    { 标题行排布的全部输入:窗口给公共那几项(模式、行宽、pad、gap、操作区宽、RTL),
+      底栏由栏补标签宽、当前页、标签区下限、按钮、分隔线槽、溢出按钮宽。 }
+    function HeaderInputFor(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+      APPI: Integer): TTyToolWindowHeaderInput;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
@@ -821,6 +880,28 @@ type
     { 设成不在本栏里的窗口(或 nil)被忽略。加载中答 nil(见 FActive)—— 继承窗体的第二遍
       加载例外,那时答第一遍挑好、正显示着的那一页。设进来的记作待定,Loaded 应用。 }
     property ActiveWindow: TTyToolWindow read FActive write ActivateWindow;
+  public
+    { --- ITyToolWindowHeaderHost(spec §7.2)。放 public:接口调用本来就绕过可见性,放 private
+      反而让测试够不着。 --- }
+    function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+    function HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
+    function HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+      APPI: Integer): TTyToolWindowHeaderGeom;
+    procedure PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter; const ARow: TRect;
+      const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
+    { AWindow 的客户区坐标(nil = 栏坐标、当前页);ARect 是命中部件的矩形,同一套坐标。 }
+    function HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer; out AIndex: Integer;
+      out ARect: TRect): TTyToolWindowZone;
+    procedure HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
+    procedure HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState; X, Y: Integer);
+    procedure HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
+    procedure HeaderMouseLeave(AWindow: TTyToolWindow);
+    procedure HeaderCancelMode(AWindow: TTyToolWindow);
+    function HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
+      out ARect: TRect): Boolean;
+    procedure HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
   published
     property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
     property ExpandedSize: Integer read FExpandedSize write SetExpandedSize
@@ -1036,12 +1117,10 @@ var
   b: TTyToolWindowBar;
 begin
   { 只看所在栏的**位置** —— 不看哪页是当前页,否则切页时正文会跳。
-    「在不在栏里」只由 GetBar 一处回答。twhBottom 那一支标题行排布在 B 期,
-    A 期它排出来是空的(TyToolWindowHeaderLayout)。 }
+    「在不在栏里」只由 GetBar 一处回答;在栏里时模式由栏答(ITyToolWindowHeaderHost)。 }
   b := Bar;
   if b = nil then Result := twhNone
-  else if b.Placement = twpBottom then Result := twhBottom
-  else Result := twhSide;
+  else Result := b.HeaderMode(Self);
 end;
 
 function TTyToolWindow.HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
@@ -1184,6 +1263,9 @@ var
   row: TRect;
 begin
   row := HeaderRowIn(AClient, APPI);
+  { 底栏:标签行由栏统一排(标签宽、当前页、按钮都在栏上),行仍由这里钳。 }
+  if HeaderMode = twhBottom then
+    Exit(Bar.HeaderGeometry(Self, row.Right - row.Left, row.Bottom - row.Top, APPI));
   inp := HeaderInput(APPI, row.Right - row.Left);
   { HeaderInput 手上没有客户区,答的是没钳过的行高;钳在这里,一处。 }
   inp.RowHeight := row.Bottom - row.Top;
@@ -2805,6 +2887,234 @@ begin
     Realign;
     Invalidate;
   end;
+end;
+
+{ --- 底栏标题行(ITyToolWindowHeaderHost) --------------------------------------- }
+
+function TTyToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
+  APPI: Integer): TTyToolWindowWidths;
+var
+  cls: string;
+  restS, selS: TTyStyleSet;
+  i, pad, w: Integer;
+
+  function TextPx(const AText: string; const AStyle: TTyStyleSet): Integer;
+  var
+    bw, bh, rw, fs: Integer;
+  begin
+    if AText = '' then Exit(0);
+    fs := ResolveFontSize(AStyle);
+    { 两种量法取大(Painter.pas 的约定):只按画布量,渲染器多出一个像素就出省略号。 }
+    TyMeasureTextBlock(AText, AStyle.FontName, fs, AStyle.FontWeight, APPI, 0, 0, bw, bh);
+    rw := TyMeasureRenderedTextWidth(AText, AStyle.FontName, fs, AStyle.FontWeight, APPI);
+    if rw > bw then bw := rw;
+    Result := bw;
+  end;
+
+begin
+  cls := TyStyleClassFor(Self, StyleClass);
+  restS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysNormal]);
+  selS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysSelected]);
+  pad := TokenPxAt(TyToolWindowTabPadVar, TyToolWindowTabPadDef, APPI);
+  Result := nil;
+  SetLength(Result, Length(AWins));
+  for i := 0 to High(AWins) do
+  begin
+    { 两种状态取大(开工前问题 9):皮肤只让选中态加粗时,按静止态量会截当前标签,按各自
+      状态量则切页时整行重排。 }
+    w := TextPx(AWins[i].Caption, restS);
+    if TextPx(AWins[i].Caption, selS) > w then w := TextPx(AWins[i].Caption, selS);
+    Result[i] := w + 2 * pad;
+  end;
+end;
+
+function TTyToolWindowBar.TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
+var
+  wins: TTyToolWindowArray;
+  mdl: TTyStyleModel;
+  ver: Cardinal;
+  cls: string;
+  hit: Boolean;
+  i: Integer;
+begin
+  wins := WindowList(nil);
+  if APPI <> PPI then Exit(MeasureTabWidths(wins, APPI));
+  mdl := ActiveController.Model;
+  ver := mdl.ThemeVersion;
+  cls := TyStyleClassFor(Self, StyleClass);
+  { 快照每次现取,逐项比(见 FTabCacheValid)。 }
+  hit := FTabCacheValid and (FTabCachePPI = APPI) and (FTabCacheAnchor = TObject(mdl))
+    and (FTabCacheVer = ver) and (FTabCacheClass = cls) and (FTabCacheOverride = StyleOverride)
+    and (FTabCacheFontSize = Font.Size) and (Length(FTabCacheWins) = Length(wins));
+  if hit then
+    for i := 0 to High(wins) do
+      if (FTabCacheWins[i] <> wins[i]) or (FTabCacheCaps[i] <> wins[i].Caption) then
+      begin
+        hit := False;
+        Break;
+      end;
+  if not hit then
+  begin
+    FTabCacheWidths := MeasureTabWidths(wins, APPI);
+    FTabCacheWins := wins;
+    FTabCacheCaps := nil;
+    SetLength(FTabCacheCaps, Length(wins));
+    for i := 0 to High(wins) do
+      FTabCacheCaps[i] := wins[i].Caption;
+    FTabCachePPI := APPI;
+    FTabCacheAnchor := TObject(mdl);
+    FTabCacheVer := ver;
+    FTabCacheClass := cls;
+    FTabCacheOverride := StyleOverride;
+    FTabCacheFontSize := Font.Size;
+    FTabCacheValid := True;
+  end;
+  { 拷一份出去:动态数组赋值共享存储,调用方改了会改到缓存。 }
+  Result := Copy(FTabCacheWidths);
+end;
+
+function TTyToolWindowBar.SeparatorLinePx(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+begin
+  S := ActiveController.Model.ResolveStyle(TyToolWindowSeparatorKey,
+    TyStyleClassFor(Self, StyleClass), [tysNormal]);
+  if not TyBorderVisible(S) then Exit(0);
+  Result := MulDiv(S.BorderWidth, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyToolWindowBar.HeaderInputFor(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+  APPI: Integer): TTyToolWindowHeaderInput;
+begin
+  Result := AWindow.HeaderInput(APPI, ARowWidth);
+  Result.RowHeight := ARowHeight;
+  if Result.Mode <> twhBottom then Exit;
+  Result.TabWidths := TabWidthsAt(APPI);
+  Result.ActiveIndex := IndexOfWindow(FActive);
+  Result.TabAreaMin := TokenPxAt(TyToolWindowTabAreaMinVar, TyToolWindowTabAreaMinDef, APPI);
+  Result.ButtonSize := TokenPxAt(TyToolWindowButtonSizeVar, TyToolWindowButtonSizeDef, APPI);
+  { 溢出按钮跟最大化 / 收起一样大。 }
+  Result.OverflowWidth := Result.ButtonSize;
+  Result.SeparatorWidth := 2 * Result.Gap + SeparatorLinePx(APPI);
+end;
+
+function TTyToolWindowBar.HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+begin
+  { 只看位置(同 TTyToolWindow.HeaderMode 的说明)。 }
+  if FPlacement = twpBottom then Result := twhBottom
+  else Result := twhSide;
+end;
+
+function TTyToolWindowBar.HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
+var
+  wins: TTyToolWindowArray;
+  i, h: Integer;
+begin
+  { 每一页操作区的 raw 首选高都算 —— 不只当前页:切页时标签行不许跳(spec §3.4)。 }
+  Result := 0;
+  wins := WindowList(nil);
+  for i := 0 to High(wins) do
+  begin
+    h := wins[i].ActionsPreferredSize(APPI).cy;
+    if h > Result then Result := h;
+  end;
+end;
+
+function TTyToolWindowBar.HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+  APPI: Integer): TTyToolWindowHeaderGeom;
+var
+  w: TTyToolWindow;
+begin
+  w := AWindow;
+  if w = nil then w := FActive;
+  if w = nil then Exit(Default(TTyToolWindowHeaderGeom));
+  Result := TyToolWindowHeaderLayout(HeaderInputFor(w, ARowWidth, ARowHeight, APPI));
+end;
+
+procedure TTyToolWindowBar.PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter;
+  const ARow: TRect; const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
+begin
+  { Task 5 填:标签行由当前页代画。 }
+end;
+
+function TTyToolWindowBar.HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer;
+  out AIndex: Integer; out ARect: TRect): TTyToolWindowZone;
+var
+  w: TTyToolWindow;
+  g: TTyToolWindowHeaderGeom;
+  ox, oy, i: Integer;
+begin
+  AIndex := -1;
+  ARect := Rect(0, 0, 0, 0);
+  Result := twzNone;
+  w := AWindow;
+  ox := 0;
+  oy := 0;
+  if w = nil then
+  begin
+    { 栏坐标:窗口是栏的直接子控件,它的 Left / Top 就是它在栏客户区里的位置。 }
+    w := FActive;
+    if w = nil then Exit;
+    ox := w.Left;
+    oy := w.Top;
+  end;
+  if w.HeaderMode <> twhBottom then Exit;
+  { 标题行从客户区原点开始,行内坐标就是窗口客户区坐标。 }
+  g := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight), w.Font.PixelsPerInch);
+  Result := TyToolWindowZoneAt(g, X - ox, Y - oy, AIndex);
+  case Result of
+    twzTab:
+      for i := 0 to High(g.Tabs) do
+        if g.Tabs[i].ItemIndex = AIndex then ARect := g.Tabs[i].ItemRect;
+    twzOverflow: ARect := g.Overflow;
+    twzSeparator: ARect := g.Separator;
+    twzMaximize: ARect := g.Maximize;
+    twzCollapse: ARect := g.Collapse;
+  end;
+  if Result <> twzNone then Types.OffsetRect(ARect, ox, oy);
+end;
+
+procedure TTyToolWindowBar.HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  { Task 6 填。 }
+end;
+
+procedure TTyToolWindowBar.HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  { Task 6 填。 }
+end;
+
+procedure TTyToolWindowBar.HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  { Task 6 填。 }
+end;
+
+procedure TTyToolWindowBar.HeaderMouseLeave(AWindow: TTyToolWindow);
+begin
+  { Task 6 填。 }
+end;
+
+procedure TTyToolWindowBar.HeaderCancelMode(AWindow: TTyToolWindow);
+begin
+  { Task 6 填。 }
+end;
+
+function TTyToolWindowBar.HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
+  out ARect: TRect): Boolean;
+begin
+  { Task 8 填。 }
+  AText := '';
+  ARect := Rect(0, 0, 0, 0);
+  Result := False;
+end;
+
+procedure TTyToolWindowBar.HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
+begin
+  { Task 8 填。 }
 end;
 
 { --- 图标条手势 ---------------------------------------------------------------- }

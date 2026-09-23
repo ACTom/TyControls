@@ -1308,7 +1308,9 @@ begin
     'TyToolWindowButton        { color: var(--toolwindow-tab-ink); }' + LineEnding +
     'TyToolWindowButton:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
-    'TyToolWindowSeparator     { background: var(--border); }' + LineEnding +
+    '/* 标签行的竖分隔线是「线」:border-color 是线色、border-width 是线宽(同边缘区的写法);' + LineEnding +
+    '   槽宽 = 2 × --toolwindow-header-gap + 线宽,由代码算。 */' + LineEnding +
+    'TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }' + LineEnding +
     'TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '' + LineEnding +

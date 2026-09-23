@@ -1088,11 +1088,11 @@ TyToolWindowButton||1 => pres[0,1,] bg=k1/1F1F2937 ut=0 txt=FF1F2937 bd=00000000
 TyToolWindowButton||2 => pres[0,1,] bg=k1/331F2937 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowButton||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowButton||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowSeparator||0 => pres[0,] bg=k1/FFD1D5DB ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowSeparator||1 => pres[0,] bg=k1/FFD1D5DB ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowSeparator||2 => pres[0,] bg=k1/FFD1D5DB ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowSeparator||3 => pres[0,] bg=k1/FFD1D5DB ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowSeparator||4 => pres[0,] bg=k1/FFD1D5DB ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||0 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||1 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||2 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||3 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||4 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropIndicator||0 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropIndicator||1 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropIndicator||2 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

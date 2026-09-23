@@ -1275,7 +1275,9 @@ TyToolWindowOverflow:active { background: var(--toolwindow-overlay-active); }
 TyToolWindowButton        { color: var(--toolwindow-tab-ink); }
 TyToolWindowButton:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }
-TyToolWindowSeparator     { background: var(--border); }
+/* 标签行的竖分隔线是「线」:border-color 是线色、border-width 是线宽(同边缘区的写法);
+   槽宽 = 2 × --toolwindow-header-gap + 线宽,由代码算。 */
+TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }
 TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }
 TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }
 

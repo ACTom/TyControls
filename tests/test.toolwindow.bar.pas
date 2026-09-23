@@ -32,6 +32,9 @@ type
     procedure BeginLoad;
     procedure EndLoad;
     procedure CallAdjustClientRect(var ARect: TRect);
+    { 对齐引擎本身无头能跑(同 TProbeWindow.CallAlignControls):按 LCL 的顺序请一遍,
+      窗口才有真实边界。 }
+    procedure CallAlignControls;
     procedure CallSetChildOrder(AChild: TComponent; AOrder: Integer);
     procedure CallBeginSilent;
     procedure CallEndSilent;
@@ -283,6 +286,15 @@ end;
 procedure TBarAccess.CallAdjustClientRect(var ARect: TRect);
 begin
   AdjustClientRect(ARect);
+end;
+
+procedure TBarAccess.CallAlignControls;
+var
+  r: TRect;
+begin
+  { 传没扣过的客户区:AlignControls 自己第一句就调 AdjustClientRect。 }
+  r := ClientRect;
+  AlignControls(nil, r);
 end;
 
 procedure TBarAccess.CallSetChildOrder(AChild: TComponent; AOrder: Integer);
