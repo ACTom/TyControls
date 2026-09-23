@@ -94,8 +94,18 @@ type
     procedure TestTheDesignTimeRowsBlankSelectsTheBar;
     procedure TestTheTabRowRegionLeavesOutTheActions;
     procedure TestMaskHitTestFallsBackToSelectable;
+    { Task 11:运行时跨类改 Parent 抛 EInvalidOperation(spec §3.2)。 }
+    procedure TestASideWindowCannotMoveToABottomBarAtRunTime;
+    procedure TestABottomWindowCannotMoveToASideBarAtRunTime;
+    procedure TestDesignTimeMovesAcrossBarKinds;
+    procedure TestLoadingMovesAcrossBarKinds;
+    procedure TestSameKindOrphanAndNilMovesDoNotRaise;
   private
     FDesignWins: array of TProbeWindow;
+    { 窗体上一条运行时底栏,带一个窗口。 }
+    function NewRuntimeBar(APlacement: TTyToolWindowPlacement; out AWin: TProbeWindow): TBarAccess;
+    { AWin.Parent := ANew,答「抛了 EInvalidOperation」。 }
+    function MoveRaises(AWin: TTyToolWindow; ANew: TWinControl): Boolean;
     { 设计期的底栏(宽 600),三个窗口,当前页是第二个;窗口摆到内容区。 }
     function NewDesignBottomBar(AWidth: Integer = 600): TBarAccess;
     { 设计期底栏上窗口 AIndex 的标签中心,栏坐标。 }
@@ -1227,6 +1237,103 @@ begin
   msg.Result := 99;
   w.Dispatch(msg);
   AssertEquals('没有设计器窗体:答 0', 0, msg.Result);
+end;
+
+{ --- Task 11 -------------------------------------------------------------------- }
+
+function TTyToolWindowBottomTests.NewRuntimeBar(APlacement: TTyToolWindowPlacement;
+  out AWin: TProbeWindow): TBarAccess;
+begin
+  Result := TBarAccess.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.Placement := APlacement;
+  AWin := NewWindowIn(Result, FForm);
+end;
+
+function TTyToolWindowBottomTests.MoveRaises(AWin: TTyToolWindow; ANew: TWinControl): Boolean;
+begin
+  Result := False;
+  try
+    AWin.Parent := ANew;
+  except
+    on EInvalidOperation do Result := True;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestASideWindowCannotMoveToABottomBarAtRunTime;
+var
+  a, other: TProbeWindow;
+  b: TBarAccess;
+begin
+  a := NewWindow;
+  b := NewRuntimeBar(twpBottom, other);
+  FBar.ActiveWindow := a;
+  AssertTrue('侧栏窗口改到底栏:抛 EInvalidOperation', MoveRaises(a, b));
+  AssertSame('它还在侧栏里', FBar, a.Parent);
+  AssertSame('还是侧栏的当前页', a, FBar.ActiveWindow);
+  AssertEquals('侧栏窗口数不变', 1, FBar.WindowCount);
+  AssertEquals('底栏窗口数不变', 1, b.WindowCount);
+end;
+
+procedure TTyToolWindowBottomTests.TestABottomWindowCannotMoveToASideBarAtRunTime;
+var
+  w: TProbeWindow;
+  b: TBarAccess;
+begin
+  NewWindow;
+  b := NewRuntimeBar(twpBottom, w);
+  AssertTrue('底栏窗口改到侧栏:同样抛', MoveRaises(w, FBar));
+  AssertSame('它还在底栏里', b, w.Parent);
+  AssertEquals('侧栏窗口数不变', 1, FBar.WindowCount);
+end;
+
+procedure TTyToolWindowBottomTests.TestDesignTimeMovesAcrossBarKinds;
+var
+  d1, d2: TBarAccess;
+  w: TProbeWindow;
+begin
+  d1 := NewDesignBar;
+  w := NewWindowIn(d1, FDesignOwner);
+  d2 := NewDesignBar;
+  d2.Placement := twpBottom;
+  AssertFalse('设计期照做,不抛', MoveRaises(w, d2));
+  AssertSame('挪过去了', d2, w.Parent);
+end;
+
+procedure TTyToolWindowBottomTests.TestLoadingMovesAcrossBarKinds;
+var
+  a, other: TProbeWindow;
+  b: TBarAccess;
+begin
+  a := NewWindow;
+  b := NewRuntimeBar(twpBottom, other);
+  b.BeginLoad;
+  try
+    AssertFalse('加载中照做,不抛', MoveRaises(a, b));
+  finally
+    b.EndLoad;
+  end;
+  AssertSame('挪过去了', b, a.Parent);
+end;
+
+procedure TTyToolWindowBottomTests.TestSameKindOrphanAndNilMovesDoNotRaise;
+var
+  a, w, other: TProbeWindow;
+  side2, b: TBarAccess;
+  orphan: TProbeWindow;
+begin
+  a := NewWindow;
+  side2 := NewRuntimeBar(twpRight, other);
+  AssertFalse('侧 → 侧:不抛', MoveRaises(a, side2));
+  AssertSame('挪过去了', side2, a.Parent);
+  b := NewRuntimeBar(twpBottom, w);
+  orphan := TProbeWindow.Create(FForm);
+  orphan.Parent := FForm;
+  AssertFalse('孤儿 → 底栏:不抛', MoveRaises(orphan, b));
+  AssertSame('进了底栏', b, orphan.Parent);
+  AssertFalse('底栏 → nil:不抛', MoveRaises(w, nil));
+  AssertNull('离开了', w.Parent);
 end;
 
 { --- Task 6:TTyToolWindowBottomInputTests ------------------------------------------ }

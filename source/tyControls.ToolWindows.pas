@@ -194,6 +194,8 @@ type
       没有这个处理器时 TControl 的答案)。写法照 TTyShape.CMMaskHitTest。本窗口的
       CM_DESIGNHITTEST 不改:窗口本身在设计期不接标签行的手势。 }
     procedure CMMaskHitTest(var Message: TCMHitTest); message CM_MASKHITTEST;
+    { 运行时从一类栏直接挪到另一类栏(侧 ↔ 底)?见 SetParent。 }
+    function MovesAcrossBarKinds(AOld, ANew: TWinControl): Boolean;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
@@ -219,7 +221,8 @@ type
     procedure DoShow; virtual;
     procedure DoHide; virtual;
     { 照 TTyTabSheet.SetParent:先记旧父控件 → 继承 → 从旧栏注销(任一方 csDestroying
-      时跳过,释放那条路由 Notification 管)→ 注册到新栏 → 重排标题行(spec §3.2)。 }
+      时跳过,释放那条路由 Notification 管)→ 注册到新栏 → 重排标题行(spec §3.2)。
+      运行时从侧栏直接挪到底栏(或反过来)在继承之前抛 EInvalidOperation。 }
     procedure SetParent(NewParent: TWinControl); override;
     { 对外设 Visible 经栏路由(spec §3.3):运行时 True = 激活并展开,对当前页 False = 收起;
       设计期 True 只激活。栏自己切的(FBarSwitching)照写,并记探针。 }
@@ -1452,11 +1455,30 @@ begin
   SelectFirst;
 end;
 
+function TTyToolWindow.MovesAcrossBarKinds(AOld, ANew: TWinControl): Boolean;
+const
+  Exempt = [csLoading, csDesigning, csDestroying];
+begin
+  { 两边都是栏、一侧一底(按 Placement,不看 Align),并且窗口和两条栏都不在加载 / 设计 /
+    释放中。孤儿进栏、出栏到 nil、同类栏之间都不算。 }
+  Result := (AOld <> ANew) and (AOld is TTyToolWindowBar) and (ANew is TTyToolWindowBar)
+    and ((TTyToolWindowBar(AOld).Placement = twpBottom)
+         <> (TTyToolWindowBar(ANew).Placement = twpBottom))
+    and (Exempt * ComponentState = [])
+    and (Exempt * AOld.ComponentState = [])
+    and (Exempt * ANew.ComponentState = []);
+end;
+
 procedure TTyToolWindow.SetParent(NewParent: TWinControl);
 var
   old: TWinControl;
 begin
   old := Parent;
+  { spec §3.2:运行时侧栏和底栏之间不能直接改 Parent(标题行模式、布局串的键都不一样)——
+    在继承之前抛,窗口还在原来的栏里、原来的状态一点没动。**不在 CheckNewParent 里做**:
+    读取器和设计器粘贴也经过它,而那两条路要放行(加载中 / 设计期豁免)。 }
+  if MovesAcrossBarKinds(old, NewParent) then
+    raise EInvalidOperation.Create('A tool window cannot move between a side bar and a bottom bar');
   inherited SetParent(NewParent);
   { 离开一条栏跟进入一条栏一样是窗口表的事件。任一方正在拆:释放那条路走栏的
     Notification(opRemove),而旧栏这时可能已经拆了一半。 }
