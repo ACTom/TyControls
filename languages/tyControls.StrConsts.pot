@@ -1043,6 +1043,10 @@ msgstr ""
 msgid "Hide"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowcrossbarmove
+msgid "A tool window cannot move between a side bar and a bottom bar"
+msgstr ""
+
 #: tycontrols.strconsts.rstytoolwindowmaximize
 msgid "Maximize"
 msgstr ""

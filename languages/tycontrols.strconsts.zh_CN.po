@@ -631,6 +631,10 @@ msgstr "不是工具窗口，运行时隐藏"
 msgid "Hide"
 msgstr "收起"
 
+#: tycontrols.strconsts.rstytoolwindowcrossbarmove
+msgid "A tool window cannot move between a side bar and a bottom bar"
+msgstr "工具窗口不能在侧栏和底栏之间直接移动"
+
 #: tycontrols.strconsts.rstytoolwindowmaximize
 msgid "Maximize"
 msgstr "最大化"

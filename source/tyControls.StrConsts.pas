@@ -297,6 +297,11 @@ resourcestring
   rsTyToolWindowRestore  = 'Restore';
   rsTyToolWindowCollapse = 'Hide';
   rsTyToolWindowMore     = 'More';
+  { Raised (EInvalidOperation) when code moves a tool window straight from a side bar to a
+    bottom bar or back at run time (TTyToolWindow.SetParent): the header mode and the layout
+    key differ between the two kinds. }
+  rsTyToolWindowCrossBarMove =
+    'A tool window cannot move between a side bar and a bottom bar';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).
