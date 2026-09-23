@@ -410,6 +410,13 @@ type
       旧列表析构时 `while Count > 0 do UnregisterChanges(第 0 个)` 按 Sender 删,删不掉,
       死循环(imglist.inc:1692-1698, 2706-2711)。 }
     procedure SyncImageSubscription;
+    { link 从 FSubscribedList 上摘下来、FSubscribedList 置 nil,并撤掉和它互相的
+      FreeNotification —— 除非 FImages 还引用着它(引用要靠那条通知来清),或者它正在
+      释放(它自己的析构在清通知表)。
+      **FreeNotification 只归订阅这一处管**:订阅谁就 FreeNotification 谁(Sync 里加),
+      注销谁就撤谁(这里撤)。FImages 不另外登记 —— 它非空且活着时就是生效列表,
+      必然是订阅着的那一个。SetImages 不碰 FreeNotification。 }
+    procedure UnsubscribeImages;
     { 生效列表可能换了:重新订阅、解析挂起的序号、重画。 }
     procedure ImagesChanged;
     { 订阅的列表内容变了(加名字、换图标集……)。 }
@@ -491,9 +498,13 @@ type
     destructor Destroy; override;
     procedure Invalidate; override;
     { 图标解析用的列表:Images,为空时**读取时**回落到 Manager.Images(spec §8)。
-      A 期栏还没有 Manager 属性(manager 是空壳),所以此刻就是 Images。C 期接 Manager 时
-      改这一处,再在 Manager、Manager.Images 变化和 manager 被移除时调 ImagesChanged ——
-      订阅(SyncImageSubscription)和解析读的都是这里。 }
+      A 期栏还没有 Manager 属性(manager 是空壳),所以此刻就是 Images。
+      正在释放的列表(csDestroying)不算生效列表,答 nil:它的 opRemove 到栏时,不管
+      Manager 那边清没清引用,重新订阅都不会又订回这个快死的列表。
+      C 期接 Manager 时:改这一处(FImages 为空时回落 Manager.Images,同样滤掉 csDestroying),
+      再在 Manager、Manager.Images 变化和 manager 被移除时调 ImagesChanged。别的不用动 ——
+      订阅和 FreeNotification 都跟着这里走(SyncImageSubscription),被释放 / 摘走的订阅列表
+      Notification 按身份注销,不看它是 Images 还是 Manager.Images。 }
     function EffectiveImages: TCustomImageList;
     { 图标条要画的那一格:ImageName 非空就按名字在 EffectiveImages 里找,找不到是 -1
       (不许乱画一个);名字为空才用序号。 }
@@ -655,14 +666,19 @@ begin
 end;
 
 procedure TTyToolWindow.SetImageIndex(AValue: TImageIndex);
+var
+  oldName: string;
 begin
   if AValue < -1 then AValue := -1;   { 「没有图标」只有一个值 }
   FImageIndex := AValue;
   { 先记挂起:这个请求不管此刻换不换得成名字都成立 —— 只在换得成时才记的话,流进来的
     ImageIndex 在栏的列表 fixup 之前就没了。 }
   FImageIndexPending := True;
+  oldName := FImageName;
   ResolveImageIndex;
-  InvalidateBar;
+  { 名字变了,SetImageName 已经重画过。没变的 —— 没有列表、外来列表、越界(名字一直是 ''),
+    或者新序号恰好还是同名的那一格 —— 画的是序号,得在这里重画。 }
+  if FImageName = oldName then InvalidateBar;
 end;
 
 procedure TTyToolWindow.SetImageName(const AValue: string);
@@ -702,8 +718,11 @@ begin
 end;
 
 procedure TTyToolWindow.InvalidateBar;
+var
+  b: TTyToolWindowBar;
 begin
-  if Bar <> nil then Bar.Invalidate;
+  b := Bar;
+  if b <> nil then b.Invalidate;
 end;
 
 function TTyToolWindow.GetBar: TTyToolWindowBar;
@@ -1523,6 +1542,24 @@ end;
 function TTyToolWindowBar.EffectiveImages: TCustomImageList;
 begin
   Result := FImages;
+  if (Result <> nil) and (csDestroying in Result.ComponentState) then Result := nil;
+end;
+
+procedure TTyToolWindowBar.UnsubscribeImages;
+var
+  old: TCustomImageList;
+begin
+  old := FSubscribedList;
+  if old = nil then Exit;
+  FSubscribedList := nil;
+  { 被移除的正是它时**照样注销**(spec §8 原写「跳过」):opRemove 从列表的继承析构里
+    发出,那时它的 link 表还在(imglist.inc:1692-1698 —— 表在 inherited Destroy 之后才清、
+    才释放),注销是安全的;而跳过的话 link 还挂在它身上,紧接着注册到别的列表上,
+    就是那个死循环。 }
+  if FImageLink <> nil then
+    old.UnRegisterChanges(FImageLink);
+  if (old <> FImages) and not (csDestroying in old.ComponentState) then
+    old.RemoveFreeNotification(Self);
 end;
 
 procedure TTyToolWindowBar.SyncImageSubscription;
@@ -1532,12 +1569,8 @@ begin
   if FImageLink = nil then Exit;
   target := EffectiveImages;
   if target = FSubscribedList then Exit;
-  { 先注销旧的。被移除的正是 FSubscribedList 时**照样注销**(spec §8 原写「跳过」,见
-    Notification):opRemove 从列表的继承析构里发出,那时它的 link 表还在
-    (imglist.inc:1692-1698 —— 表在 inherited Destroy 之后才清、才释放),注销是安全的;
-    而跳过的话 link 还挂在它身上,紧接着注册到别的列表上,就是那个死循环。 }
-  if FSubscribedList <> nil then
-    FSubscribedList.UnRegisterChanges(FImageLink);
+  { 先注销旧的,再订新的(见声明处)。 }
+  UnsubscribeImages;
   FSubscribedList := target;
   if target <> nil then
   begin
@@ -1564,24 +1597,19 @@ end;
 
 procedure TTyToolWindowBar.ImageListChange(Sender: TObject);
 begin
-  { 列表里加了名字,之前越界 / 没有列表时挂起的序号也许就换得成名字了(同
-    TTyPageControl.DoImagesChanged)。图标条要重画。 }
-  ResolvePendingImageIndexes;
+  { 只重画,不解析挂起的序号:挂起只在「栏没有列表」或「栏在加载中」时才有 —— 前者这里
+    订阅着列表就不成立,后者 ResolvePendingImageIndexes 本来就不做。越界的序号也不是挂起的:
+    它解析过了(名字是 '',序号就是键),列表后来长出那一格,画的就是那一格。 }
   if not (csDestroying in ComponentState) then Invalidate;
 end;
 
 procedure TTyToolWindowBar.SetImages(AValue: TCustomImageList);
-var
-  old: TCustomImageList;
 begin
   if FImages = AValue then Exit;
-  old := FImages;
   FImages := AValue;
-  { 流式加载时照样订阅(只是挂一个 link);解析留给 Loaded。 }
+  { 流式加载时照样订阅(只是挂一个 link);解析留给 Loaded。旧列表的注销和
+    FreeNotification 都在 SyncImageSubscription 里。 }
   ImagesChanged;
-  { 旧列表已经不是订阅的那一个了:它被释放时不用再通知本栏。 }
-  if (old <> nil) and (old <> FSubscribedList) then
-    old.RemoveFreeNotification(Self);
 end;
 
 function TTyToolWindowBar.ResolvedImageIndex(AWindow: TTyToolWindow): Integer;
@@ -2372,12 +2400,15 @@ begin
   if (Operation = opRemove) and (AComponent is TTyToolWindow) then
     UnregisterWindow(TTyToolWindow(AComponent));
   { 列表被释放,或者只是从 Owner 里摘走(RemoveComponent 同样广播 opRemove,列表还活着):
-    清引用、重新订阅。重新订阅会从它身上注销 —— 两种情形都必须:摘走的那个活下来还会
-    发变更、日后析构时要清自己的 link 表;释放中的那个,C 期这一刻会改订 Manager.Images。 }
-  if (Operation = opRemove) and (AComponent is TCustomImageList)
+    清引用,是订阅着的那一个就**当场**注销,再按生效列表重新订阅。注销不交给 Sync 去比
+    差值:两种情形都必须注销 —— 摘走的那个活下来还会发变更、日后析构时要清自己的 link 表;
+    释放中的那个,C 期这一刻会改订 Manager.Images。先清 FImages 再注销,互相的
+    FreeNotification 才撤得掉(继承的 TComponent.Notification 在 opRemove 时也撤一遍,幂等)。 }
+  if (Operation = opRemove)
      and ((AComponent = FImages) or (AComponent = FSubscribedList)) then
   begin
     if AComponent = FImages then FImages := nil;
+    if AComponent = FSubscribedList then UnsubscribeImages;
     ImagesChanged;
   end;
 end;

@@ -8,22 +8,44 @@ unit test.toolwindow.images;
 
   几条「旧列表不许还挂着 link」的测试,先用一个不会卡死的判据(旧列表的变更不再到栏),
   判据红了就**故意泄漏**那几个列表再 Fail —— 它们的析构会死循环(imglist.inc:1692-1698),
-  释放它们就是把一条红测试变成挂死的整个套件。判据绿了才真的释放,释放得完就是第二道证据。 }
+  释放它们就是把一条红测试变成挂死的整个套件。只有这一个判据红才泄漏;别的断言失败照常
+  在 finally 里释放。判据绿了才真的释放,释放得完就是第二道证据。 }
 
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, ImgList, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Controls, Graphics, Forms, ImgList, fpcunit, testregistry,
   tyControls.Controller, tyControls.ToolWindows, tyControls.Icons.Lucide;
 
 type
-  { 探针:数「栏被请求重画了几次」,并开出流式加载的两个入口。 }
+  { 探针:数「栏被请求重画了几次」,记下「被通知了谁的 opRemove」,并开出流式加载的两个入口。 }
   TImagesBar = class(TTyToolWindowBar)
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     InvalidateCount: Integer;
+    { 为真时析构不还内存:清零后留成尸体(Corpse),由测试稍后 FreeMem。死对象上的调用
+      因此必然 AV —— 还了的内存可能原样留着 csDestroying,悬空回调就静悄悄地什么也不做。 }
+    class var KeepCorpse: Boolean;
+    class var Corpse: Pointer;
+    { 设了 Watched,它的 opRemove 到栏时 WatchedRemoved 置真。 }
+    Watched: TComponent;
+    WatchedRemoved: Boolean;
     procedure Invalidate; override;
     procedure BeginLoad;
     procedure EndLoad;
+    procedure FreeInstance; override;
+  end;
+
+  { 在栏**之前**收到列表的 opRemove(FreeNotification 表倒序通知,后登记的先到),
+    那一刻看栏的生效列表。 }
+  TFreeWatcher = class(TComponent)
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    Bar: TTyToolWindowBar;
+    Called: Boolean;
+    SeenEffective: TCustomImageList;
   end;
 
   TTyToolWindowImagesTests = class(TTestCase)
@@ -48,6 +70,10 @@ type
     procedure TestFreeingTheSubscribedListClearsTheReference;
     procedure TestAListTakenFromItsOwnerIsUnsubscribed;
     procedure TestAListChangeRepaintsTheStrip;
+    procedure TestSwappingTheListDropsTheOldFreeNotification;
+    procedure TestAListBeingFreedIsNoLongerEffective;
+    procedure TestFreeingTheBarUnhooksItFromALiveList;
+    procedure TestAnIndexChangeRepaintsEvenWithoutANameToChange;
     procedure TestRunTimeIconAndHintChangesRepaintTheBar;
     procedure TestStripHintFallsBackToCaptionNeverToHint;
   end;
@@ -73,6 +99,55 @@ end;
 procedure TImagesBar.EndLoad;
 begin
   Loaded;
+end;
+
+procedure TImagesBar.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  if (Operation = opRemove) and (Watched <> nil) and (AComponent = Watched) then
+    WatchedRemoved := True;
+  inherited Notification(AComponent, Operation);
+end;
+
+procedure TImagesBar.FreeInstance;
+begin
+  if not KeepCorpse then
+  begin
+    inherited FreeInstance;
+    Exit;
+  end;
+  CleanupInstance;
+  FillChar(Pointer(Self)^, InstanceSize, 0);   { VMT 也清成 nil:任何虚调用都 AV }
+  Corpse := Pointer(Self);
+end;
+
+procedure TFreeWatcher.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent is TCustomImageList) and (Bar <> nil) then
+  begin
+    Called := True;
+    SeenEffective := Bar.EffectiveImages;
+  end;
+end;
+
+{ 外来的 LCL 列表(没有名字),里面放 ACount 张 16×16 的图:序号在界内,
+  换不成名字只因为它是外来的。 }
+function NewForeignList(AOwner: TComponent; ACount: Integer): TImageList;
+var
+  bmp: TBitmap;
+  i: Integer;
+begin
+  Result := TImageList.Create(AOwner);
+  Result.Width := 16;
+  Result.Height := 16;
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(16, 16);
+    for i := 1 to ACount do
+      Result.Add(bmp, nil);
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TTyToolWindowImagesTests.SetUp;
@@ -161,8 +236,10 @@ begin
   w.ImageIndex := 2;
   AssertEquals('没有列表时名字不动', '', w.ImageName);
   AssertEquals('没有名字就用序号', 2, FBar.ResolvedImageIndex(w));
-  { 外来的 LCL 列表没有名字:序号换不成名字,它自己就是键,照样进 .lfm。 }
-  foreign := TImageList.Create(FForm);
+  { 外来的 LCL 列表没有名字:序号换不成名字,它自己就是键,照样进 .lfm。列表里有 3 张图,
+    序号 2 在界内 —— 换不成名字只能是因为它是外来的,不是因为越界。 }
+  foreign := NewForeignList(FForm, 3);
+  AssertEquals('前提:序号在界内', 3, foreign.Count);
   FBar.Images := foreign;
   AssertEquals('外来列表换不出名字', '', w.ImageName);
   AssertEquals('序号就是键', 2, FBar.ResolvedImageIndex(w));
@@ -172,6 +249,7 @@ end;
 procedure TTyToolWindowImagesTests.TestAPendingIndexResolvesInLoadedNotWhileLoading;
 var
   w: TTyToolWindow;
+  b: TTyLucideImageList;
 begin
   { 模拟流式:加载中栏先拿到列表 A,窗口读进序号 1,之后引用又被 fixup 成列表 B。
     判据:加载中不解析(名字还空着),Loaded 之后按 **B** 解析 —— 在加载中就解析的话,
@@ -181,10 +259,14 @@ begin
   w := NewWindow;
   w.ImageIndex := 1;
   AssertEquals('加载中不碰列表', '', w.ImageName);
-  FBar.Images := NewList(FForm, FolderHouse);
+  b := NewList(FForm, FolderHouse);
+  FBar.Images := b;
   FBar.EndLoad;
   AssertEquals('Loaded 里按最终的列表解析', 'house', w.ImageName);
-  AssertEquals('画的是最终列表里的那一格', 1, FBar.ResolvedImageIndex(w));
+  { 之后 B 前面插进一格:画的那一格跟着名字走到第 2 格,和写进来的序号 1 分得开 ——
+    没解析(还画序号)、按 A 解析('folder' 此刻在第 1 格)都答不出 2。 }
+  b.Names.Insert(0, 'star');
+  AssertEquals('画的是最终列表里名字所在的那一格', 2, FBar.ResolvedImageIndex(w));
   AssertFalse('有了名字,序号不再进流', IsStoredProp(w, 'ImageIndex'));
 end;
 
@@ -212,66 +294,98 @@ end;
 procedure TTyToolWindowImagesTests.TestSwappingTheListUnsubscribesTheOldOneFirst;
 var
   a, b: TTyLucideImageList;
+  leak: Boolean;
 begin
   a := NewList(nil, HouseFolder);
   b := NewList(nil, FolderHouse);
-  FBar.Images := a;
-  FBar.Images := b;
-  if ChangeReachesBar(a) then
-  begin
-    { 故意泄漏 a、b:link 还挂在 a 上而 Sender 已经不是 a,释放就死循环。 }
-    Fail('换列表后旧列表的变更还到栏:link 没从旧列表注销(旧列表析构会死循环)');
+  leak := False;
+  try
+    FBar.Images := a;
+    FBar.Images := b;
+    if ChangeReachesBar(a) then
+    begin
+      { 故意泄漏 a、b:link 还挂在 a 上而 Sender 已经不是 a,释放就死循环。 }
+      leak := True;
+      Fail('换列表后旧列表的变更还到栏:link 没从旧列表注销(旧列表析构会死循环)');
+    end;
+    AssertTrue('新列表的变更到栏', ChangeReachesBar(b));
+  finally
+    if not leak then
+    begin
+      { 判据绿了才释放 —— 这一句能返回就是第二道证据。 }
+      a.Free;
+      FBar.Images := nil;
+      b.Free;
+    end;
   end;
-  AssertTrue('新列表的变更到栏', ChangeReachesBar(b));
-  { 判据绿了才释放 —— 这一句能返回就是第二道证据。 }
-  a.Free;
-  FBar.Images := nil;
-  b.Free;
 end;
 
 procedure TTyToolWindowImagesTests.TestFreeingTheSubscribedListClearsTheReference;
 var
   a, b: TTyLucideImageList;
   w: TTyToolWindow;
+  before: Integer;
 begin
   a := NewList(nil, HouseFolder);
-  FBar.Images := a;
-  w := NewWindow;
-  w.ImageName := 'house';
-  a.Free;
-  AssertNull('列表释放后引用清掉', FBar.Images);
-  AssertNull('生效列表也没了', FBar.EffectiveImages);
-  AssertEquals('没有列表,名字解析不出来', -1, FBar.ResolvedImageIndex(w));
-  AssertEquals('名字这个持久键留着', 'house', w.ImageName);
-  { 之后换上的列表照常订阅。 }
-  b := NewList(nil, HouseFolder);
-  FBar.Images := b;
-  AssertTrue('新列表的变更到栏', ChangeReachesBar(b));
-  AssertEquals('名字在新列表里解析', 0, FBar.ResolvedImageIndex(w));
-  FBar.Images := nil;
-  b.Free;
+  b := nil;
+  try
+    FBar.Images := a;
+    w := NewWindow;
+    w.ImageName := 'house';
+    before := FBar.InvalidateCount;
+    FreeAndNil(a);
+    AssertNull('列表释放后引用清掉', FBar.Images);
+    AssertNull('生效列表也没了', FBar.EffectiveImages);
+    AssertTrue('列表释放后栏重画(图标没了)', FBar.InvalidateCount > before);
+    AssertEquals('没有列表,名字解析不出来', -1, FBar.ResolvedImageIndex(w));
+    AssertEquals('名字这个持久键留着', 'house', w.ImageName);
+    { 之后换上的列表照常订阅。 }
+    b := NewList(nil, HouseFolder);
+    FBar.Images := b;
+    AssertTrue('新列表的变更到栏', ChangeReachesBar(b));
+    AssertEquals('名字在新列表里解析', 0, FBar.ResolvedImageIndex(w));
+  finally
+    FBar.Images := nil;
+    a.Free;
+    b.Free;
+  end;
 end;
 
 procedure TTyToolWindowImagesTests.TestAListTakenFromItsOwnerIsUnsubscribed;
 var
   a, b: TTyLucideImageList;
+  leak: Boolean;
 begin
   { RemoveComponent 同样广播 opRemove,而列表还活着。栏照 LCL 惯例清引用 —— 那就必须同时
     从它身上注销:跳过注销的话 link 还挂在它上面,再订阅别的列表就是那个死循环。 }
   a := NewList(FForm, HouseFolder);
-  FBar.Images := a;
-  FForm.RemoveComponent(a);
-  AssertNull('摘走的列表不再是栏的 Images', FBar.Images);
-  b := NewList(nil, FolderHouse);
-  FBar.Images := b;
-  if ChangeReachesBar(a) then
-  begin
-    { 故意泄漏 a、b,理由同上。 }
-    Fail('摘走的列表的变更还到栏:link 没从它身上注销(它析构时会死循环)');
+  b := nil;
+  leak := False;
+  try
+    FBar.Images := a;
+    FForm.RemoveComponent(a);
+    AssertNull('摘走的列表不再是栏的 Images', FBar.Images);
+    b := NewList(nil, FolderHouse);
+    FBar.Images := b;
+    if ChangeReachesBar(a) then
+    begin
+      { 故意泄漏 a、b,理由同上。 }
+      leak := True;
+      Fail('摘走的列表的变更还到栏:link 没从它身上注销(它析构时会死循环)');
+    end;
+    { 互相的 FreeNotification 也撤了:它日后释放不再通知本栏。 }
+    FBar.Watched := a;
+    FreeAndNil(a);
+    AssertFalse('摘走的列表释放时不再通知栏', FBar.WatchedRemoved);
+  finally
+    FBar.Watched := nil;
+    if not leak then
+    begin
+      a.Free;
+      FBar.Images := nil;
+      b.Free;
+    end;
   end;
-  a.Free;
-  FBar.Images := nil;
-  b.Free;
 end;
 
 procedure TTyToolWindowImagesTests.TestAListChangeRepaintsTheStrip;
@@ -281,6 +395,108 @@ begin
   a := NewList(FForm, HouseFolder);
   FBar.Images := a;
   AssertTrue('列表内容变了,图标条要重画', ChangeReachesBar(a));
+end;
+
+procedure TTyToolWindowImagesTests.TestSwappingTheListDropsTheOldFreeNotification;
+var
+  a, b: TTyLucideImageList;
+begin
+  { FreeNotification 跟着订阅走:换掉的旧列表日后释放,不再通知本栏。 }
+  a := NewList(nil, HouseFolder);
+  b := NewList(nil, FolderHouse);
+  try
+    FBar.Images := a;
+    FBar.Images := b;
+    FBar.Watched := a;
+    FreeAndNil(a);
+    AssertFalse('换掉的旧列表释放时不再通知栏', FBar.WatchedRemoved);
+    { 反面:订阅着的那一个释放时要通知到 —— 引用靠它清。 }
+    FBar.Watched := b;
+    FreeAndNil(b);
+    AssertTrue('订阅着的列表释放时通知栏', FBar.WatchedRemoved);
+    AssertNull('引用清掉', FBar.Images);
+  finally
+    FBar.Watched := nil;
+    FBar.Images := nil;
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestAListBeingFreedIsNoLongerEffective;
+var
+  a: TTyLucideImageList;
+  watcher: TFreeWatcher;
+begin
+  { 正在释放的列表不是生效列表 —— 栏自己的 opRemove 还没到时也不是(C 期回落
+    Manager.Images 时,manager 清引用和栏收通知谁先谁后说不准)。观察者在栏之后登记
+    FreeNotification,于是先于栏收到通知。 }
+  a := NewList(nil, HouseFolder);
+  watcher := TFreeWatcher.Create(nil);
+  try
+    FBar.Images := a;
+    watcher.Bar := FBar;
+    a.FreeNotification(watcher);
+    FreeAndNil(a);
+    AssertTrue('前提:观察者收到了通知', watcher.Called);
+    AssertNull('释放中的列表不是生效列表', watcher.SeenEffective);
+    AssertNull('之后引用清掉', FBar.Images);
+  finally
+    a.Free;
+    watcher.Free;
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestFreeingTheBarUnhooksItFromALiveList;
+var
+  list: TTyLucideImageList;
+  corpse: Pointer;
+begin
+  { 栏先于列表析构:link 得跟着栏走,不然列表的下一次变更打到死栏身上。栏留成清零的
+    尸体(见 TImagesBar.FreeInstance),悬空回调必然 AV,不会碰巧没事。 }
+  list := NewList(nil, HouseFolder);
+  try
+    FBar.Images := list;
+    NewWindow.ImageName := 'house';
+    TImagesBar.Corpse := nil;
+    TImagesBar.KeepCorpse := True;
+    try
+      FreeAndNil(FBar);
+    finally
+      TImagesBar.KeepCorpse := False;
+    end;
+    AssertTrue('前提:栏留成了尸体', TImagesBar.Corpse <> nil);
+    list.Names.Add('star');          { 触发 Change }
+    AssertEquals('栏走后列表照常变更', 3, list.Names.Count);
+  finally
+    list.Free;                       { 能正常返回:link 表里没有死 link 要清 }
+    corpse := TImagesBar.Corpse;
+    TImagesBar.Corpse := nil;
+    if corpse <> nil then FreeMem(corpse);
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestAnIndexChangeRepaintsEvenWithoutANameToChange;
+var
+  w: TTyToolWindow;
+  before: Integer;
+begin
+  { 外来列表没有名字:ImageIndex 2 → 3 时名字一直是 '',重画只能来自 SetImageIndex 自己。 }
+  FBar.Images := NewForeignList(FForm, 4);
+  w := NewWindow;
+  w.ImageIndex := 2;
+  AssertEquals('前提:名字一直空着', '', w.ImageName);
+  before := FBar.InvalidateCount;
+  w.ImageIndex := 3;
+  AssertEquals('前提:名字还是空的', '', w.ImageName);
+  AssertTrue('序号变了,栏重画', FBar.InvalidateCount > before);
+  { 本库的列表:名字跟着变,SetImageName 已经重画过,不再重画第二次。 }
+  FBar.Images := NewList(FForm, HouseFolder);
+  w.ImageName := 'house';
+  before := FBar.InvalidateCount;
+  w.ImageIndex := 1;
+  AssertEquals('前提:名字换了', 'folder', w.ImageName);
+  AssertEquals('名字变了只重画一次', before + 1, FBar.InvalidateCount);
 end;
 
 procedure TTyToolWindowImagesTests.TestRunTimeIconAndHintChangesRepaintTheBar;
