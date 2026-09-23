@@ -2,8 +2,10 @@ unit test.toolwindow.bar;
 {$mode objfpc}{$H+}
 
 { TTyToolWindowBar 的状态模型(spec §5 / §6.1 / §6.6):尺寸推导、Placement、注册与当前页、
-  收起 / 展开、事件、推送链。流式往返在 test.toolwindow.window;需要真句柄的焦点那一半
-  在 Task 10。
+  收起 / 展开、事件、推送链。本单元还放着栏测试共用的夹具(TTyToolWindowBarFixture)、
+  探针 TBarAccess 和数像素的几个函数 —— 图标条(test.toolwindow.strip)、拉宽边
+  (test.toolwindow.edge)、拖动调顺序(test.toolwindow.reorder)都从这里继承。
+  流式往返在 test.toolwindow.window;需要真句柄的焦点那一半在 test.toolwindow.focus。
 
   无头跑的时候窗体没有句柄,LCL 自己一次都不对齐 —— 这里断言的是栏自己推导出来的尺寸
   和它答出来的客户区,不是对齐引擎摆出来的位置。 }
@@ -68,8 +70,10 @@ type
     procedure MarkDesigning;
   end;
 
-  TTyToolWindowBarTests = class(TTestCase)
-  private
+  { 栏测试共用的夹具:窗体、控制器、探针栏和一组计数器。本身没有 published 测试 ——
+    fpcunit 会把基类的 published 方法在每个子类里各跑一遍。 }
+  TTyToolWindowBarFixture = class(TTestCase)
+  protected
     FForm: TForm;
     FCtl: TTyStyleController;
     FBar: TBarAccess;
@@ -105,9 +109,12 @@ type
     { 在第 AIndex 格图标的中心按下再松开(真实的 MouseDown / MouseUp)。 }
     procedure ClickIcon(AIndex: Integer);
     procedure HandleClick(ASender: TObject);
-  protected
     procedure SetUp; override;
     procedure TearDown; override;
+  end;
+
+  { 状态模型:尺寸推导、Placement、注册与当前页、收起 / 展开、事件、推送链、Visible 路由。 }
+  TTyToolWindowBarTests = class(TTyToolWindowBarFixture)
   published
     procedure TestConstructionPinsTheStyleAndThePublishedDefaults;
     procedure TestSideWidthIsStripPlusChromePlusEdgePlusContent;
@@ -171,62 +178,42 @@ type
     procedure TestExpandedSizeBelowTheFloorKeepsWidthOnTheDerivation;
     procedure TestOnChangeFromANewWindowSeesTheNewWidth;
     procedure TestDesignerResizeDoesNotWriteBackUnderAForeignAlign;
-    { Task 6b:栏的绘制。 }
-    procedure TestStripPaintsAndTheActiveItemDiffers;
-    procedure TestTheIndicatorSitsOnTheContentSideOfTheActiveCellOnly;
-    procedure TestAnUnresolvedNameDrawsNoIcon;
-    procedure TestAHoveredCellPaintsItsHoverState;
-    procedure TestAShortStripShowsTheOverflowAfterTheLastIcon;
-    procedure TestTheEdgeFillsItsBandAndGoesAwayWhenCollapsed;
-    procedure TestDesignTimeEmptyBarPaintsANote;
     procedure TestAStrayChildIsHiddenAtRunTime;
-    procedure TestAStrayChildGetsANoteLineAtDesignTime;
     procedure TestIsActiveFollowsTheBarsCurrentPage;
-    { Task 7:图标条手势(点击那一半)。 }
-    procedure TestIconSwitchesOnReleaseNotOnPress;
-    procedure TestClickingTheActiveIconTogglesCollapse;
-    procedure TestASecondClickWithin300msIsIgnored;
-    procedure TestDoubleClickPressNeverCounts;
-    procedure TestAReleaseOffTheIconIsNotAClick;
-    procedure TestDesignerHitTestArmsOnPressAndHandsBackOnRelease;
-    procedure TestAWindowFreedWhileArmedIsNotAClick;
-    procedure TestHoverFollowsThePointerAndIsRecheckedAfterASwitch;
-    procedure TestStripHintComesFromTheIconUnderThePointer;
-    procedure TestAPressOnTheStripDoesNotFireTheBarsOnClick;
-    procedure TestTheOverflowMenuListsTheHiddenWindowsAndActivatesOne;
-    procedure TestTheStripNeverStartsAnLclDrag;
-    { Task 8:拉宽边。 }
-    procedure TestEdgeDragWritesExpandedSizeLive;
-    procedure TestEdgeDragSnapsClosedBelowHalfTheMinimum;
-    procedure TestEdgeDragBackAboveTheSnapDoesNotCollapse;
-    procedure TestEdgeDragCancelRestoresTheStartValue;
-    procedure TestRightBarGrowsLeftwardsAndBottomBarUpwards;
-    procedure TestTheEdgeIsInertWithoutWindowsAndAtDesignTime;
-    procedure TestHoveringTheEdgeShowsTheResizeCursorAndHoverColour;
-    { Task 9:栏内拖动调顺序。 }
-    procedure TestDragReordersOnReleaseNotLive;
-    procedure TestSidewaysDragStarts;
-    procedure TestEscCancelsAndTheReleaseIsNotAClick;
-    procedure TestNoOpSlotsDoNotReorder;
-    procedure TestDropIndicatorPixelsLandInTheStrip;
-    procedure TestALostReleaseCancelModeOrCollapseCancelsTheDrag;
-    procedure TestAMultiClickPressCanStillDrag;
-    procedure TestADropOffTheStripIsACancel;
-    procedure TestFreeingTheDraggedWindowEndsTheGesture;
-    procedure TestWindowIndexReordersAndTheActivePageFollows;
     { Task 10:Visible 经栏路由(需要真句柄的焦点那一半在 test.toolwindow.focus)。 }
     procedure TestRunTimeVisibleRoutesThroughTheBar;
     procedure TestDesignTimeVisibleOnlyActivatesAndNeverWritesCollapsed;
     procedure TestVisibleWritesWhileLoadingAreIgnored;
   end;
 
-implementation
-
 const
   { 基础主题(light.tycss)里栏的类型键没有边框,chrome 为 0。 }
   StripPx = TyToolWindowStripSizeDef;
   EdgePx = TyToolWindowEdgeSizeDef;
   ContentMinPx = TyToolWindowContentMinDef;
+
+  { 品红:绝不能用白 —— 白就是 light 主题的表面色。 }
+  Ground = TColor($FF00FF);
+  Wipe   = TColor($00FF00);
+  { TColor 是 $BBGGRR:CSS 的 #0000FF(蓝)写成 $FF0000,#FFFF00(黄)写成 $00FFFF。
+    两种墨色跟品红底的混合线互不相交(蓝那条 G 恒为 0、黄那条 R 恒为 255),抗锯齿的边缘
+    也分得清是哪一种。 }
+  RestInk = TColor($FF0000);
+  SelInk  = TColor($00FFFF);
+  { 图标条钉成品红底、静止墨蓝、选中墨黄、指示条黑。 }
+  StripTheme = ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-strip-ink: #0000FF;' +
+    ' --toolwindow-strip-ink-selected: #FFFF00; --toolwindow-strip-indicator-color: #000000; }';
+
+{ 把 ABar 按 AW×AH 的尺寸画出来,只留 ARegion 那一块(栏坐标)。调用方释放。 }
+function RenderRegion(ABar: TBarAccess; AW, AH: Integer; const ARegion: TRect;
+  AWipe: TColor): TBitmap;
+{ 有多少像素落在「AGround 上盖一层半透明 AInk」那条混合线上(含实心的 AInk)。 }
+function CountInk(ABmp: TBitmap; AGround, AInk: TColor): Integer;
+{ 颜色恰好是 AColor 的像素数。 }
+function CountExact(ABmp: TBitmap; AColor: TColor): Integer;
+function PixelIs(ABmp: TBitmap; X, Y: Integer; AColor: TColor): Boolean;
+
+implementation
 
 var
   { OwnerFormDesignerModified / TyDesignerRefreshValuesProc 是进程级钩子,只能数到全局上
@@ -458,7 +445,8 @@ begin
   SetDesigning(True);
 end;
 
-procedure TTyToolWindowBarTests.SetUp;
+
+procedure TTyToolWindowBarFixture.SetUp;
 begin
   { 控件必须有父控件并自带 controller,否则读的是进程级主题:单跑绿、全量红。
     这里的数全跟着 PPI 走,无头默认不是 96 —— 窗体和栏都钉死。 }
@@ -474,45 +462,45 @@ begin
   ResetCounts;
 end;
 
-procedure TTyToolWindowBarTests.TearDown;
+procedure TTyToolWindowBarFixture.TearDown;
 begin
   { 设计期的栏由它的 Owner 释放;先放它,它才从窗体的子控件里摘下来。 }
   FreeAndNil(FDesignOwner);
   FreeAndNil(FForm);
 end;
 
-procedure TTyToolWindowBarTests.HandleChange(ASender: TObject);
+procedure TTyToolWindowBarFixture.HandleChange(ASender: TObject);
 begin
   Inc(FChanges);
 end;
 
-procedure TTyToolWindowBarTests.HandleChangeWidth(ASender: TObject);
+procedure TTyToolWindowBarFixture.HandleChangeWidth(ASender: TObject);
 begin
   Inc(FChanges);
   FWidthAtChange := FBar.Width;
 end;
 
-procedure TTyToolWindowBarTests.HandleCollapse(ASender: TObject);
+procedure TTyToolWindowBarFixture.HandleCollapse(ASender: TObject);
 begin
   Inc(FCollapses);
 end;
 
-procedure TTyToolWindowBarTests.HandleExpand(ASender: TObject);
+procedure TTyToolWindowBarFixture.HandleExpand(ASender: TObject);
 begin
   Inc(FExpands);
 end;
 
-procedure TTyToolWindowBarTests.HandleShow(ASender: TObject);
+procedure TTyToolWindowBarFixture.HandleShow(ASender: TObject);
 begin
   Inc(FShows);
 end;
 
-procedure TTyToolWindowBarTests.HandleHide(ASender: TObject);
+procedure TTyToolWindowBarFixture.HandleHide(ASender: TObject);
 begin
   Inc(FHides);
 end;
 
-procedure TTyToolWindowBarTests.ResetCounts;
+procedure TTyToolWindowBarFixture.ResetCounts;
 begin
   FChanges := 0;
   FCollapses := 0;
@@ -521,25 +509,25 @@ begin
   FHides := 0;
 end;
 
-procedure TTyToolWindowBarTests.Watch(AWin: TTyToolWindow);
+procedure TTyToolWindowBarFixture.Watch(AWin: TTyToolWindow);
 begin
   AWin.OnShow := @HandleShow;
   AWin.OnHide := @HandleHide;
 end;
 
-function TTyToolWindowBarTests.NewWindowIn(ABar: TTyToolWindowBar;
+function TTyToolWindowBarFixture.NewWindowIn(ABar: TTyToolWindowBar;
   AOwner: TComponent): TProbeWindow;
 begin
   Result := TProbeWindow.Create(AOwner);
   Result.Parent := ABar;
 end;
 
-function TTyToolWindowBarTests.NewWindow: TProbeWindow;
+function TTyToolWindowBarFixture.NewWindow: TProbeWindow;
 begin
   Result := NewWindowIn(FBar, FForm);
 end;
 
-function TTyToolWindowBarTests.NewDesignBar: TBarAccess;
+function TTyToolWindowBarFixture.NewDesignBar: TBarAccess;
 begin
   if FDesignOwner = nil then
   begin
@@ -552,6 +540,60 @@ begin
   Result.Font.PixelsPerInch := 96;
   Result.Height := 400;
 end;
+
+procedure TTyToolWindowBarFixture.HandleShowOrder(ASender: TObject);
+begin
+  FOrder := FOrder + 'show ' + TComponent(ASender).Name + ';';
+end;
+
+procedure TTyToolWindowBarFixture.HandleHideOrder(ASender: TObject);
+begin
+  FOrder := FOrder + 'hide ' + TComponent(ASender).Name + ';';
+end;
+
+procedure TTyToolWindowBarFixture.HandleEndSilentInGap(ASender: TObject);
+begin
+  Inc(FGapCalls);
+  FBar.CallEndSilent;
+end;
+
+function TTyToolWindowBarFixture.NewHouseList: TTyLucideImageList;
+begin
+  Result := TTyLucideImageList.Create(FForm);
+  Result.Names.Text := 'house';
+end;
+
+procedure TTyToolWindowBarFixture.TallyStripCell(AIndex: Integer; AGround, AWipe: TColor;
+  out ANotGround, AWipeLeft: Integer);
+var
+  cell: TRect;
+  bmp: TBitmap;
+begin
+  cell := FBar.StripItemRect(AIndex);
+  AssertTrue(Format('前提:第 %d 格排上了图标条', [AIndex]),
+    (cell.Right > cell.Left) and (cell.Bottom > cell.Top));
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, AWipe);
+  try
+    TallyPixels(bmp, AGround, AWipe, ANotGround, AWipeLeft);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBarFixture.ClickIcon(AIndex: Integer);
+var
+  p: TPoint;
+begin
+  p := FBar.StripItemRect(AIndex).CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  FBar.CallMouseUp(p.X, p.Y);
+end;
+
+procedure TTyToolWindowBarFixture.HandleClick(ASender: TObject);
+begin
+  Inc(FClicks);
+end;
+
 
 procedure TTyToolWindowBarTests.TestConstructionPinsTheStyleAndThePublishedDefaults;
 var
@@ -1334,16 +1376,6 @@ begin
   AssertSame('新注册的窗口拿到栏的', c2, w2.Controller);
 end;
 
-procedure TTyToolWindowBarTests.HandleShowOrder(ASender: TObject);
-begin
-  FOrder := FOrder + 'show ' + TComponent(ASender).Name + ';';
-end;
-
-procedure TTyToolWindowBarTests.HandleHideOrder(ASender: TObject);
-begin
-  FOrder := FOrder + 'hide ' + TComponent(ASender).Name + ';';
-end;
-
 procedure TTyToolWindowBarTests.TestAPpiChangeReachesTheContentEvenWhenTheTokensRoundTheSame;
 begin
   { 默认 token 的底栏:没有图标条,chrome 为 0,边缘区 4px 在 100 PPI 下取整还是 4 ——
@@ -1699,12 +1731,6 @@ begin
   AssertEquals('之后切页照发 OnHide', 1, FHides);
 end;
 
-procedure TTyToolWindowBarTests.HandleEndSilentInGap(ASender: TObject);
-begin
-  Inc(FGapCalls);
-  FBar.CallEndSilent;
-end;
-
 procedure TTyToolWindowBarTests.TestABatchEndingWhileAWindowIsHalfwayOutReleasesIt;
 var
   a, b: TProbeWindow;
@@ -1835,275 +1861,6 @@ begin
   AssertEquals('回到 Placement 要的 Align:拖边照常写回', 300, d.ExpandedSize);
 end;
 
-{ --- Task 6b:栏的绘制 ------------------------------------------------------- }
-
-const
-  { 品红:绝不能用白 —— 白就是 light 主题的表面色。 }
-  Ground = TColor($FF00FF);
-  Wipe   = TColor($00FF00);
-  { TColor 是 $BBGGRR:CSS 的 #0000FF(蓝)写成 $FF0000,#FFFF00(黄)写成 $00FFFF。
-    两种墨色跟品红底的混合线互不相交(蓝那条 G 恒为 0、黄那条 R 恒为 255),抗锯齿的边缘
-    也分得清是哪一种。 }
-  RestInk = TColor($FF0000);
-  SelInk  = TColor($00FFFF);
-  { 图标条钉成品红底、静止墨蓝、选中墨黄、指示条黑。 }
-  StripTheme = ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-strip-ink: #0000FF;' +
-    ' --toolwindow-strip-ink-selected: #FFFF00; --toolwindow-strip-indicator-color: #000000; }';
-
-function TTyToolWindowBarTests.NewHouseList: TTyLucideImageList;
-begin
-  Result := TTyLucideImageList.Create(FForm);
-  Result.Names.Text := 'house';
-end;
-
-procedure TTyToolWindowBarTests.TallyStripCell(AIndex: Integer; AGround, AWipe: TColor;
-  out ANotGround, AWipeLeft: Integer);
-var
-  cell: TRect;
-  bmp: TBitmap;
-begin
-  cell := FBar.StripItemRect(AIndex);
-  AssertTrue(Format('前提:第 %d 格排上了图标条', [AIndex]),
-    (cell.Right > cell.Left) and (cell.Bottom > cell.Top));
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, AWipe);
-  try
-    TallyPixels(bmp, AGround, AWipe, ANotGround, AWipeLeft);
-  finally
-    bmp.Free;
-  end;
-end;
-
-procedure TTyToolWindowBarTests.TestStripPaintsAndTheActiveItemDiffers;
-var
-  a, b: TProbeWindow;
-  restPix, activePix, wipeLeft: Integer;
-  bmp: TBitmap;
-begin
-  FCtl.StyleOverride := StripTheme;
-  FBar.Images := NewHouseList;
-  a := NewWindow;
-  a.ImageName := 'house';
-  b := NewWindow;
-  b.ImageName := 'house';
-  FBar.ActiveWindow := a;
-  { 两个窗口,当前页是第一个。分别数图标条第 1 格和第 2 格里的非底色像素。 }
-  TallyStripCell(0, Ground, Wipe, activePix, wipeLeft);
-  AssertEquals('整块都画到,不许留底漆', 0, wipeLeft);
-  TallyStripCell(1, Ground, Wipe, restPix, wipeLeft);
-  AssertEquals('静止格也整块画到', 0, wipeLeft);
-  AssertTrue('图标条画了东西', restPix > 0);
-  AssertTrue('当前页那一格和静止格不一样', activePix <> restPix);
-  { 像素数只说明「画了不一样多的东西」(指示条就占掉这个差)—— 图标着的是哪种墨色得看颜色。 }
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(0), Wipe);
-  try
-    AssertTrue('当前格的图标着成 :selected 的墨色', CountInk(bmp, Ground, SelInk) > 0);
-    AssertEquals('当前格里没有静止态的墨色', 0, CountInk(bmp, Ground, RestInk));
-  finally
-    bmp.Free;
-  end;
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(1), Wipe);
-  try
-    AssertTrue('静止格的图标着成静止态的墨色', CountInk(bmp, Ground, RestInk) > 0);
-    AssertEquals('静止格里没有选中墨色', 0, CountInk(bmp, Ground, SelInk));
-  finally
-    bmp.Free;
-  end;
-end;
-
-procedure TTyToolWindowBarTests.TestTheIndicatorSitsOnTheContentSideOfTheActiveCellOnly;
-var
-  a: TProbeWindow;
-  cell: TRect;
-  bmp: TBitmap;
-  w, h: Integer;
-
-  function Cell0: TBitmap;
-  begin
-    cell := FBar.StripItemRect(0);
-    w := cell.Right - cell.Left;
-    h := cell.Bottom - cell.Top;
-    Result := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
-  end;
-
-begin
-  FCtl.StyleOverride := StripTheme;
-  a := NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  bmp := Cell0;
-  try
-    AssertEquals('指示条 = 粗细 × 格高', TyToolWindowStripIndicatorSizeDef * h,
-      CountExact(bmp, clBlack));
-    AssertTrue('左栏:贴在靠内容区的那一侧(右)', PixelIs(bmp, w - 1, h div 2, clBlack));
-    AssertFalse('外侧没有', PixelIs(bmp, 0, h div 2, clBlack));
-  finally
-    bmp.Free;
-  end;
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(1), Wipe);
-  try
-    AssertEquals('静止格没有指示条', 0, CountExact(bmp, clBlack));
-  finally
-    bmp.Free;
-  end;
-  FBar.Placement := twpRight;
-  bmp := Cell0;
-  try
-    AssertTrue('右栏:内容区在左,指示条跟着到左', PixelIs(bmp, 0, h div 2, clBlack));
-    AssertFalse('右栏的外侧(右)没有', PixelIs(bmp, w - 1, h div 2, clBlack));
-  finally
-    bmp.Free;
-  end;
-  FBar.Placement := twpLeft;
-  FBar.Collapsed := True;
-  bmp := Cell0;
-  try
-    AssertEquals('收起时当前图标不画 :selected,指示条也不画(spec §5.3)', 0,
-      CountExact(bmp, clBlack));
-  finally
-    bmp.Free;
-  end;
-end;
-
-procedure TTyToolWindowBarTests.TestAnUnresolvedNameDrawsNoIcon;
-var
-  a, b, c: TProbeWindow;
-  pix, housePix, wipeLeft: Integer;
-begin
-  FCtl.StyleOverride := StripTheme;
-  FBar.Images := NewHouseList;
-  a := NewWindow;
-  a.ImageName := 'house';
-  b := NewWindow;
-  b.ImageIndex := 0;
-  AssertEquals('前提:序号当场换成了名字', 'house', b.ImageName);
-  b.ImageName := 'no-such-glyph';
-  AssertEquals('前提:ImageIndex 这个视图回落到写过的序号', 0, b.ImageIndex);
-  AssertEquals('前提:图标条要的那一格是 -1', -1, FBar.ResolvedImageIndex(b));
-  c := NewWindow;
-  c.ImageName := 'house';
-  FBar.ActiveWindow := a;
-  TallyStripCell(2, Ground, Wipe, housePix, wipeLeft);
-  AssertTrue('对照:静止格里名字找得到就画得出图标', housePix > 0);
-  { 静止格没有底色、没有指示条,非底色像素只能是图标。拿窗口的 ImageIndex 画的话,这里
-    画的是那个退回来的序号 —— spec §8「找不到 → -1,不许乱画一个」。 }
-  TallyStripCell(1, Ground, Wipe, pix, wipeLeft);
-  AssertEquals('整块都画到', 0, wipeLeft);
-  AssertEquals('名字找不到:那一格一个图标像素都没有', 0, pix);
-end;
-
-procedure TTyToolWindowBarTests.TestAHoveredCellPaintsItsHoverState;
-const
-  Cyan = TColor($FFFF00);   { CSS #00FFFF }
-var
-  a: TProbeWindow;
-  cell: TRect;
-  bmp: TBitmap;
-begin
-  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF;' +
-    ' --toolwindow-overlay-hover: #00FFFF; }';
-  a := NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  cell := FBar.StripItemRect(1);
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
-  try
-    AssertEquals('前提:没悬停时没有悬停底色', 0, CountExact(bmp, Cyan));
-  finally
-    bmp.Free;
-  end;
-  FBar.SetStripHover(1);
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
-  try
-    AssertEquals('悬停格整格铺 :hover 的底色',
-      (cell.Right - cell.Left) * (cell.Bottom - cell.Top), CountExact(bmp, Cyan));
-  finally
-    bmp.Free;
-  end;
-end;
-
-procedure TTyToolWindowBarTests.TestAShortStripShowsTheOverflowAfterTheLastIcon;
-const
-  ItemPx = TyToolWindowStripItemSizeDef;
-var
-  i: Integer;
-  L: TTyToolWindowBarLayout;
-  bmp: TBitmap;
-begin
-  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-tab-ink: #0000FF; }';
-  for i := 1 to 4 do NewWindow;         { 最后一个是当前页 }
-  L := FBar.BarLayout;
-  AssertEquals('前提:放得下时四个都在条上', 4, Length(L.Slots));
-  AssertTrue('放得下就没有溢出按钮', L.Overflow.Bottom <= L.Overflow.Top);
-  FBar.Height := 3 * ItemPx + ItemPx div 2;
-  L := FBar.BarLayout;
-  AssertEquals('放不下:扣掉溢出按钮后只剩两格', 2, Length(L.Slots));
-  AssertEquals('当前页被留在条上', 3, L.Slots[1].ItemIndex);
-  AssertTrue('有溢出按钮', L.Overflow.Bottom > L.Overflow.Top);
-  AssertEquals('溢出按钮紧跟在最后一个图标后面', L.Slots[1].ItemRect.Bottom, L.Overflow.Top);
-  AssertEquals('跟图标一样大', ItemPx, L.Overflow.Bottom - L.Overflow.Top);
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, L.Overflow, Wipe);
-  try
-    AssertTrue('溢出按钮画出了它的字形', CountInk(bmp, Ground, RestInk) > 0);
-  finally
-    bmp.Free;
-  end;
-end;
-
-procedure TTyToolWindowBarTests.TestTheEdgeFillsItsBandAndGoesAwayWhenCollapsed;
-const
-  Navy = TColor($800000);   { CSS #000080 }
-var
-  L: TTyToolWindowBarLayout;
-  bmp: TBitmap;
-begin
-  FCtl.StyleOverride := ':root { --toolwindow-edge-color: #000080; }';
-  AssertTrue('运行时空栏:边缘区不起作用', IsRectEmpty(FBar.BarLayout.Edge));
-  NewWindow;
-  L := FBar.BarLayout;
-  AssertEquals('边缘区宽 = token', EdgePx, L.Edge.Right - L.Edge.Left);
-  AssertEquals('左栏的边缘区贴右边(靠编辑区)', FBar.ClientWidth, L.Edge.Right);
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, L.Edge, Wipe);
-  try
-    AssertEquals('整条铺边缘区的底色', (L.Edge.Right - L.Edge.Left) * (L.Edge.Bottom - L.Edge.Top),
-      CountExact(bmp, Navy));
-  finally
-    bmp.Free;
-  end;
-  FBar.Collapsed := True;
-  AssertTrue('收起:边缘区不起作用,也不画', IsRectEmpty(FBar.BarLayout.Edge));
-end;
-
-procedure TTyToolWindowBarTests.TestDesignTimeEmptyBarPaintsANote;
-var
-  d: TBarAccess;
-  L: TTyToolWindowBarLayout;
-  bmp: TBitmap;
-  pix, wipeLeft: Integer;
-begin
-  FCtl.StyleOverride := 'TyToolWindowBar { background: #FF00FF; }';
-  d := NewDesignBar;
-  L := d.BarLayout;
-  AssertFalse('设计期空栏有提示框', IsRectEmpty(L.EmptyNote));
-  bmp := RenderRegion(d, d.ClientWidth, d.ClientHeight, L.EmptyNote, Wipe);
-  try
-    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
-  finally
-    bmp.Free;
-  end;
-  AssertEquals('整块都画到', 0, wipeLeft);
-  AssertTrue('设计期没有窗口:画出提示文字', pix > 0);
-  { 运行时同一个位置(按设计期那么大画)一个字都没有。 }
-  AssertTrue('运行时没有提示框', IsRectEmpty(FBar.BarLayout.EmptyNote));
-  bmp := RenderRegion(FBar, d.ClientWidth, d.ClientHeight, L.EmptyNote, Wipe);
-  try
-    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
-  finally
-    bmp.Free;
-  end;
-  AssertEquals('运行时也整块画到', 0, wipeLeft);
-  AssertEquals('运行时不画提示', 0, pix);
-end;
-
 procedure TTyToolWindowBarTests.TestAStrayChildIsHiddenAtRunTime;
 var
   stray: TBodyChild;
@@ -2125,46 +1882,6 @@ begin
   AssertEquals('窗口的内容区不变', bottom, r.Bottom);
 end;
 
-procedure TTyToolWindowBarTests.TestAStrayChildGetsANoteLineAtDesignTime;
-var
-  d: TBarAccess;
-  stray: TBodyChild;
-  full, r: TRect;
-  L: TTyToolWindowBarLayout;
-  bmp: TBitmap;
-  pix, wipeLeft: Integer;
-begin
-  FCtl.StyleOverride := 'TyToolWindowBar { background: #FF00FF; }';
-  d := NewDesignBar;
-  NewWindowIn(d, FDesignOwner);
-  full := d.ClientRect;
-  d.CallAdjustClientRect(full);
-  AssertTrue('前提:没有漏进来的就不让提示行', IsRectEmpty(d.BarLayout.StrayNote));
-  stray := TBodyChild.Create(FDesignOwner);
-  d.InsertControl(stray);
-  AssertTrue('设计期不藏:用户得看得见它、删得掉它', stray.Visible);
-  L := d.BarLayout;
-  AssertFalse('设计期让出一行提示', IsRectEmpty(L.StrayNote));
-  AssertEquals('提示行贴在原来内容区的底边', full.Bottom, L.StrayNote.Bottom);
-  { 不让出来的话当前页(alClient)整个盖在内容区上,提示一个像素都露不出来。 }
-  r := d.ClientRect;
-  d.CallAdjustClientRect(r);
-  AssertEquals('窗口的内容区停在提示行上面', L.StrayNote.Top, r.Bottom);
-  bmp := RenderRegion(d, d.ClientWidth, d.ClientHeight, L.StrayNote, Wipe);
-  try
-    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
-  finally
-    bmp.Free;
-  end;
-  AssertEquals('整块都画到', 0, wipeLeft);
-  AssertTrue('提示行里画了字', pix > 0);
-  stray.Free;
-  AssertTrue('它走了,提示行也走', IsRectEmpty(d.BarLayout.StrayNote));
-  r := d.ClientRect;
-  d.CallAdjustClientRect(r);
-  AssertEquals('内容区还给窗口', full.Bottom, r.Bottom);
-end;
-
 procedure TTyToolWindowBarTests.TestIsActiveFollowsTheBarsCurrentPage;
 var
   a, b, orphan: TProbeWindow;
@@ -2181,765 +1898,6 @@ begin
   orphan := TProbeWindow.Create(FForm);
   AssertFalse('不在栏里的窗口不是任何栏的当前页', orphan.IsActive);
 end;
-
-{ --- Task 7:图标条手势(点击那一半) --------------------------------------------- }
-
-procedure TTyToolWindowBarTests.ClickIcon(AIndex: Integer);
-var
-  p: TPoint;
-begin
-  p := FBar.StripItemRect(AIndex).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseUp(p.X, p.Y);
-end;
-
-procedure TTyToolWindowBarTests.HandleClick(ASender: TObject);
-begin
-  Inc(FClicks);
-end;
-
-procedure TTyToolWindowBarTests.TestIconSwitchesOnReleaseNotOnPress;
-var
-  a, b: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  FBar.ActiveWindow := a;
-  { 两个窗口,当前页是第一个;点第二个图标。 }
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  AssertSame('按下不切', a, FBar.ActiveWindow);
-  AssertEquals('按下只武装', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertSame('松开才切', b, FBar.ActiveWindow);
-  AssertEquals('松开之后回到 Idle', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
-end;
-
-procedure TTyToolWindowBarTests.TestClickingTheActiveIconTogglesCollapse;
-var
-  a: TProbeWindow;
-begin
-  a := NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  ClickIcon(0);
-  AssertTrue('点当前页的图标 → 收起', FBar.Collapsed);
-  AssertSame('当前页不变', a, FBar.ActiveWindow);
-  FBar.TickForTest := FBar.TickForTest + TyToolWindowClickGuardMs + 1;
-  ClickIcon(0);
-  AssertFalse('再点一次 → 展开', FBar.Collapsed);
-  AssertTrue('展开后当前页显示出来', a.Visible);
-end;
-
-procedure TTyToolWindowBarTests.TestASecondClickWithin300msIsIgnored;
-var
-  a, b: TProbeWindow;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  FBar.ActiveWindow := a;
-  ClickIcon(0);
-  AssertTrue('前提:第一下收起', FBar.Collapsed);
-  { 不推时钟:慢速双击(系统默认 500 ms,第二下不一定带 ssDouble)不许收起又展开。 }
-  FBar.TickForTest := FBar.TickForTest + TyToolWindowClickGuardMs - 50;
-  ClickIcon(0);
-  AssertTrue('300 ms 以内的第二下什么都不做', FBar.Collapsed);
-  { 防抖按窗口记:点 A 之后马上点 B 照常生效。 }
-  ClickIcon(1);
-  AssertSame('别的窗口的点击不受这个窗口的防抖限制', b, FBar.ActiveWindow);
-  AssertFalse('点收起栏里的另一个图标:激活并展开', FBar.Collapsed);
-end;
-
-procedure TTyToolWindowBarTests.TestDoubleClickPressNeverCounts;
-var
-  a: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y, [ssLeft, ssDouble]);
-  { 多击的按下照常武装 —— 点一下图标再马上按住拖,必须拖得起来(拖动那一半在 Task 9)。 }
-  AssertEquals('多击的按下也武装', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertSame('松开不算点击:当前页不变', a, FBar.ActiveWindow);
-  AssertFalse('也不收起', FBar.Collapsed);
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y, [ssLeft, ssTriple]);
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertFalse('三击的按下落在当前页上也不收起', FBar.Collapsed);
-end;
-
-procedure TTyToolWindowBarTests.TestAReleaseOffTheIconIsNotAClick;
-var
-  a: TProbeWindow;
-  p, q: TPoint;
-begin
-  a := NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  p := FBar.StripItemRect(1).CenterPoint;
-  q := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseUp(q.X, q.Y);
-  AssertSame('在别的图标上松开不是点击', a, FBar.ActiveWindow);
-  AssertFalse('也不收起按下时不在的那一页', FBar.Collapsed);
-end;
-
-procedure TTyToolWindowBarTests.TestDesignerHitTestArmsOnPressAndHandsBackOnRelease;
-var
-  d: TBarAccess;
-  w0, w1: TProbeWindow;
-  icon, body: TPoint;
-begin
-  d := NewDesignBar;
-  w0 := NewWindowIn(d, FDesignOwner);
-  w1 := NewWindowIn(d, FDesignOwner);
-  d.ActiveWindow := w0;
-  icon := d.StripItemRect(1).CenterPoint;
-  body := d.BarLayout.Content.CenterPoint;
-  { ① 图标上按位置问 → 1;正文 → 0(设计器照常选中 / 放控件)。 }
-  AssertEquals('图标上按位置答 1', 1, d.DesignHitTest(icon.X, icon.Y, 0));
-  AssertEquals('正文答 0', 0, d.DesignHitTest(body.X, body.Y, 0));
-  d.CallMouseDown(icon.X, icon.Y);
-  AssertSame('设计期按下也不切', w0, d.ActiveWindow);
-  { ② 手势中(带 MK_LBUTTON)哪里都答 1 —— 按位置答的话,选中一变排布就把手势撕开。 }
-  AssertEquals('手势中正文也答 1', 1, d.DesignHitTest(body.X, body.Y, MK_LBUTTON));
-  { ③ 松开那一拍答 0 交还设计器,并且在这一拍切过去(答 0 之后设计器不再调 MouseUp)。 }
-  AssertEquals('松开答 0,哪怕还在图标上', 0, d.DesignHitTest(icon.X, icon.Y, 0));
-  AssertSame('松开那一拍切页', w1, d.ActiveWindow);
-  { ④ 解除武装:再按位置回答。 }
-  AssertEquals('解除武装后正文答 0', 0, d.DesignHitTest(body.X, body.Y, 0));
-  { 点当前页的图标在设计期什么都不做(收起没有撤销、也不许写进 .lfm)。 }
-  icon := d.StripItemRect(1).CenterPoint;
-  d.CallMouseDown(icon.X, icon.Y);
-  d.DesignHitTest(icon.X, icon.Y, 0);
-  AssertFalse('设计期不收起', d.Collapsed);
-  AssertSame('当前页还是它', w1, d.ActiveWindow);
-end;
-
-procedure TTyToolWindowBarTests.TestAWindowFreedWhileArmedIsNotAClick;
-var
-  a, b: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  AssertEquals('前提:按在 b 上武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
-  b.Free;
-  AssertEquals('武装着的窗口走了,手势记录跟着清掉(spec §5.2)', Ord(twgsIdle),
-    Ord(FBar.GestureStateForTest));
-  { 这时第二格上已经是 c 了 —— 在同一个位置松开不许当成点击。 }
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertSame('当前页不变', a, FBar.ActiveWindow);
-  AssertFalse('也不收起', FBar.Collapsed);
-end;
-
-procedure TTyToolWindowBarTests.TestHoverFollowsThePointerAndIsRecheckedAfterASwitch;
-var
-  a, b: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  FBar.ActiveWindow := a;
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseMove(p.X, p.Y, []);
-  AssertEquals('指针在第二格上', 1, FBar.StripHover);
-  FBar.CallMouseLeave;
-  AssertEquals('离开清掉悬停', -1, FBar.StripHover);
-  FBar.CallMouseMove(p.X, p.Y, []);
-  { 切页之后条上排的图标可能换了位置:按指针此刻的位置重查。这里指针其实在第一格上,
-    悬停还记着第二格 —— 切页必须把它对回来(spec §5.1 第 4 步)。 }
-  FBar.FakePointer := True;
-  FBar.FakePoint := FBar.StripItemRect(0).CenterPoint;
-  FBar.ActiveWindow := b;
-  AssertEquals('切页后按指针位置重查悬停', 0, FBar.StripHover);
-  FBar.FakePoint := Point(-5, -5);
-  FBar.ActiveWindow := a;
-  AssertEquals('指针不在条上:悬停清掉', -1, FBar.StripHover);
-end;
-
-procedure TTyToolWindowBarTests.TestStripHintComesFromTheIconUnderThePointer;
-var
-  a, b: TProbeWindow;
-  txt: string;
-  r: TRect;
-  p: TPoint;
-  info: THintInfo;
-  res: PtrInt;
-begin
-  a := NewWindow;
-  a.Caption := 'Explorer';
-  b := NewWindow;
-  b.Caption := 'Search';
-  b.StripHint := 'Find in files';
-  p := FBar.StripItemRect(0).CenterPoint;
-  AssertTrue('图标上有提示', FBar.StripHintAt(p.X, p.Y, txt, r));
-  AssertEquals('StripHint 空就用 Caption', 'Explorer', txt);
-  AssertTrue('提示矩形就是那一格', EqualRect(FBar.StripItemRect(0), r));
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.StripHintAt(p.X, p.Y, txt, r);
-  AssertEquals('有 StripHint 用 StripHint', 'Find in files', txt);
-  p := FBar.BarLayout.Content.CenterPoint;
-  AssertFalse('不在图标上没有', FBar.StripHintAt(p.X, p.Y, txt, r));
-  { 接线:LCL 发来的 CM_HINTSHOW 走的就是这一处。 }
-  info := Default(THintInfo);
-  info.HintControl := FBar;
-  info.HintStr := 'bar hint';
-  info.CursorPos := FBar.StripItemRect(1).CenterPoint;
-  res := FBar.Perform(CM_HINTSHOW, 0, PtrInt(@info));
-  AssertEquals('处理器答 0 = 显示', 0, res);
-  AssertEquals('HintStr 换成图标的提示', 'Find in files', info.HintStr);
-  AssertTrue('CursorRect 是那一格:指针出了这一格提示就换', EqualRect(FBar.StripItemRect(1),
-    info.CursorRect));
-  info.HintStr := 'bar hint';
-  info.CursorPos := FBar.BarLayout.Content.CenterPoint;
-  FBar.Perform(CM_HINTSHOW, 0, PtrInt(@info));
-  AssertEquals('不在图标上:走继承,栏自己的提示原样', 'bar hint', info.HintStr);
-end;
-
-procedure TTyToolWindowBarTests.TestAPressOnTheStripDoesNotFireTheBarsOnClick;
-var
-  p: TPoint;
-begin
-  NewWindow;
-  NewWindow;
-  FBar.OnClick := @HandleClick;
-  FClicks := 0;
-  { LCL 的次序:按下 → Click → MouseUp(control.inc:2827-2846)。 }
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallClick;
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertEquals('按在图标上:不是「点了栏」', 0, FClicks);
-  p := FBar.BarLayout.Content.CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallClick;
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertEquals('别处照常', 1, FClicks);
-end;
-
-procedure TTyToolWindowBarTests.TestTheOverflowMenuListsTheHiddenWindowsAndActivatesOne;
-var
-  w: array[0..3] of TProbeWindow;
-  i: Integer;
-  p: TPoint;
-begin
-  for i := 0 to 3 do
-  begin
-    w[i] := NewWindow;
-    w[i].Caption := 'W' + IntToStr(i);
-  end;
-  FBar.Height := 3 * TyToolWindowStripItemSizeDef + TyToolWindowStripItemSizeDef div 2;
-  AssertEquals('前提:第二、三个收进溢出', 2, Length(FBar.OverflowWindows));
-  FBar.Collapsed := True;
-  p := FBar.BarLayout.Overflow.CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  AssertTrue('按下不弹', FBar.OverflowMenu = nil);
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertTrue('松开建出菜单', FBar.OverflowMenu <> nil);
-  AssertEquals('菜单里是收进去的那两个', 2, FBar.OverflowMenu.Items.Count);
-  AssertEquals('按窗口顺序', 'W1', FBar.OverflowMenu.Items[0].Caption);
-  FBar.OverflowMenu.Items[0].Click;
-  AssertSame('菜单项激活那个窗口', w[1], FBar.ActiveWindow);
-  AssertFalse('栏收起着就一并展开', FBar.Collapsed);
-end;
-
-procedure TTyToolWindowBarTests.TestTheStripNeverStartsAnLclDrag;
-begin
-  NewWindow;
-  FBar.DragMode := dmAutomatic;
-  FBar.FakePointer := True;
-  FBar.FakePoint := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallBeginAutoDrag;
-  AssertFalse('图标上不起 LCL 拖动', FBar.Dragging);
-  FBar.FakePoint := FBar.BarLayout.Edge.CenterPoint;
-  FBar.CallBeginAutoDrag;
-  AssertFalse('边缘区上也不起', FBar.Dragging);
-  { 没有对照组:无头时真起一次 LCL 拖动要建句柄,直接抛「Failed to create win32 control」。
-    这恰好就是判据 —— 把图标条那一句 Exit 变异掉,上面两次调用走进继承、同样抛出来,这条变红。 }
-end;
-
-{ --- Task 8:拉宽边 ---------------------------------------------------------- }
-
-procedure TTyToolWindowBarTests.TestEdgeDragWritesExpandedSizeLive;
-var
-  e: TPoint;
-begin
-  NewWindow;
-  FBar.ExpandedSize := 200;
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  AssertTrue('按在边缘区上开始拉宽', FBar.IsEdgeDraggingForTest);
-  FBar.CallMouseMove(e.X + 30, e.Y);
-  AssertEquals('拖动过程中就写', 230, FBar.ExpandedSize);
-  AssertEquals('宽跟着推', StripPx + EdgePx + 230, FBar.Width);
-  FBar.CallMouseUp(e.X + 30, e.Y);
-  AssertEquals('松开保持', 230, FBar.ExpandedSize);
-  AssertFalse('没收起', FBar.Collapsed);
-  AssertFalse('拉宽结束', FBar.IsEdgeDraggingForTest);
-end;
-
-procedure TTyToolWindowBarTests.TestEdgeDragSnapsClosedBelowHalfTheMinimum;
-var
-  e: TPoint;
-begin
-  NewWindow;
-  FBar.ExpandedSize := 200;
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  { 不到一半之前:钳在 content-min,不收起。 }
-  FBar.CallMouseMove(e.X - (200 - ContentMinPx + 20), e.Y);
-  AssertEquals('一半以上、下限以下:钳在下限', ContentMinPx, FBar.ExpandedSize);
-  AssertEquals('还是展开排布', StripPx + EdgePx + ContentMinPx, FBar.Width);
-  { 从 200 往回拖到 content-min 的一半以下。 }
-  FBar.CallMouseMove(e.X - (200 - ContentMinPx div 2 + 10), e.Y);
-  AssertEquals('实时按收起排布:只剩图标条', StripPx, FBar.Width);
-  AssertEquals('ExpandedSize 停在起点', 200, FBar.ExpandedSize);
-  AssertFalse('拖动中还没写 Collapsed', FBar.Collapsed);
-  FBar.CallMouseUp(e.X - (200 - ContentMinPx div 2 + 10), e.Y);
-  AssertTrue('松开时处在吸附排布:收起', FBar.Collapsed);
-  AssertEquals('ExpandedSize 仍是起点', 200, FBar.ExpandedSize);
-  AssertEquals('收起的宽', StripPx, FBar.Width);
-end;
-
-procedure TTyToolWindowBarTests.TestEdgeDragBackAboveTheSnapDoesNotCollapse;
-var
-  e: TPoint;
-begin
-  NewWindow;
-  FBar.ExpandedSize := 200;
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X - 190, e.Y);
-  AssertEquals('前提:吸附着', StripPx, FBar.Width);
-  FBar.CallMouseMove(e.X - 20, e.Y);
-  AssertEquals('拖回来:恢复展开、继续实时写', 180, FBar.ExpandedSize);
-  AssertEquals('展开排布', StripPx + EdgePx + 180, FBar.Width);
-  FBar.CallMouseUp(e.X - 20, e.Y);
-  AssertFalse('拖回来再松开不收起', FBar.Collapsed);
-  AssertEquals('尺寸是最后写的那个', 180, FBar.ExpandedSize);
-end;
-
-procedure TTyToolWindowBarTests.TestEdgeDragCancelRestoresTheStartValue;
-var
-  e: TPoint;
-begin
-  NewWindow;
-  FBar.ExpandedSize := 200;
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X + 60, e.Y);
-  AssertEquals('前提:拖到 260', 260, FBar.ExpandedSize);
-  FBar.Perform(LM_CANCELMODE, 0, 0);
-  AssertEquals('LM_CANCELMODE:回到起点', 200, FBar.ExpandedSize);
-  AssertFalse('拉宽结束', FBar.IsEdgeDraggingForTest);
-  FBar.CallMouseMove(e.X + 90, e.Y);
-  AssertEquals('之后的移动不再写', 200, FBar.ExpandedSize);
-  FBar.CallMouseUp(e.X + 90, e.Y);
-  { 吸附中途被打断:回到展开排布,不写 Collapsed。 }
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X - 190, e.Y);
-  AssertEquals('前提:吸附着', StripPx, FBar.Width);
-  FBar.Perform(LM_CANCELMODE, 0, 0);
-  AssertEquals('打断吸附:回到展开的宽', StripPx + EdgePx + 200, FBar.Width);
-  AssertFalse('不收起', FBar.Collapsed);
-  { 拉宽中途 Collapsed 被别处改了:拉宽作废。 }
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X + 40, e.Y);
-  FBar.Collapsed := True;
-  AssertEquals('Collapsed 被改:回到起点', 200, FBar.ExpandedSize);
-  AssertFalse('拉宽结束', FBar.IsEdgeDraggingForTest);
-  { 丢了松开(移动不带左键):也当被打断。 }
-  FBar.Collapsed := False;
-  e := FBar.EdgeRect.CenterPoint;
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X + 40, e.Y);
-  FBar.CallMouseMove(e.X + 50, e.Y, []);
-  AssertEquals('没有 ssLeft 的移动:回到起点', 200, FBar.ExpandedSize);
-  AssertFalse('拉宽结束', FBar.IsEdgeDraggingForTest);
-end;
-
-procedure TTyToolWindowBarTests.TestRightBarGrowsLeftwardsAndBottomBarUpwards;
-var
-  e: TPoint;
-begin
-  NewWindow;
-  FBar.Placement := twpRight;
-  FBar.ExpandedSize := 200;
-  e := FBar.EdgeRect.CenterPoint;
-  AssertEquals('右栏的边缘区在左边(靠编辑区)', 0, FBar.EdgeRect.Left);
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X - 30, e.Y);
-  AssertEquals('右栏向左拖是变宽', 230, FBar.ExpandedSize);
-  FBar.CallMouseUp(e.X - 30, e.Y);
-  { 底栏:侧 ↔ 底在运行时只有空栏改得动。 }
-  FBar.Free;
-  FBar := TBarAccess.Create(FForm);
-  FBar.Parent := FForm;
-  FBar.Controller := FCtl;
-  FBar.Font.PixelsPerInch := 96;
-  FBar.Placement := twpBottom;
-  FBar.Width := 600;
-  NewWindow;
-  FBar.ExpandedSize := 150;
-  e := FBar.EdgeRect.CenterPoint;
-  AssertEquals('底栏的边缘区在顶边', 0, FBar.EdgeRect.Top);
-  FBar.CallMouseDown(e.X, e.Y);
-  FBar.CallMouseMove(e.X, e.Y - 25);
-  AssertEquals('底栏向上拖是变高', 175, FBar.ExpandedSize);
-  FBar.CallMouseUp(e.X, e.Y - 25);
-end;
-
-procedure TTyToolWindowBarTests.TestTheEdgeIsInertWithoutWindowsAndAtDesignTime;
-var
-  d: TBarAccess;
-  e: TPoint;
-begin
-  AssertTrue('运行时空栏没有边缘区', IsRectEmpty(FBar.EdgeRect));
-  d := NewDesignBar;
-  NewWindowIn(d, FDesignOwner);
-  d.ExpandedSize := 200;
-  e := d.EdgeRect.CenterPoint;
-  AssertFalse('设计期边缘区照画', IsRectEmpty(d.EdgeRect));
-  d.CallMouseDown(e.X, e.Y);
-  d.CallMouseMove(e.X + 40, e.Y);
-  d.CallMouseUp(e.X + 40, e.Y);
-  AssertFalse('设计期不拉宽(用设计器拖栏的边)', d.IsEdgeDraggingForTest);
-  AssertEquals('ExpandedSize 不动', 200, d.ExpandedSize);
-end;
-
-procedure TTyToolWindowBarTests.TestHoveringTheEdgeShowsTheResizeCursorAndHoverColour;
-const
-  Olive = TColor($008080);   { CSS #808000 }
-var
-  e: TPoint;
-  bmp: TBitmap;
-  area: Integer;
-begin
-  FCtl.StyleOverride := ':root { --toolwindow-edge-color: #000080;' +
-    ' --toolwindow-edge-color-hover: #808000; }';
-  NewWindow;
-  FBar.Cursor := crHandPoint;
-  e := FBar.EdgeRect.CenterPoint;
-  area := (FBar.EdgeRect.Right - FBar.EdgeRect.Left) * (FBar.EdgeRect.Bottom - FBar.EdgeRect.Top);
-  FBar.CallMouseMove(e.X, e.Y, []);
-  AssertEquals('悬停在边缘区:调整光标', Ord(crHSplit), Ord(FBar.Cursor));
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.EdgeRect, Wipe);
-  try
-    AssertEquals('悬停:整条换成 :hover 的颜色', area, CountExact(bmp, Olive));
-  finally
-    bmp.Free;
-  end;
-  FBar.CallMouseMove(FBar.BarLayout.Content.CenterPoint.X, e.Y, []);
-  AssertEquals('离开边缘区:用户自己的光标原样还回去', Ord(crHandPoint), Ord(FBar.Cursor));
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.EdgeRect, Wipe);
-  try
-    AssertEquals('不悬停:没有 :hover 的颜色', 0, CountExact(bmp, Olive));
-  finally
-    bmp.Free;
-  end;
-end;
-
-{ --- Task 9:栏内拖动调顺序 ------------------------------------------------------ }
-
-procedure TTyToolWindowBarTests.TestDragReordersOnReleaseNotLive;
-var
-  a, b, c: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  c := NewWindow;
-  FBar.ActiveWindow := b;
-  FBar.OnChange := @HandleChange;
-  FBar.OnClick := @HandleClick;
-  ResetCounts;
-  FClicks := 0;
-  { 三个窗口 a b c;把 a 拖到 c 后面。 }
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 80);
-  AssertTrue('过了阈值就是拖动', FBar.IsDraggingForTest);
-  AssertSame('拖动过程中不实时挪', a, FBar.Windows[0]);
-  AssertEquals('插入线落在末尾', 3, FBar.DropSlotForTest);
-  { LCL 在 MouseUp 之前调 Click。 }
-  FBar.CallClick;
-  FBar.CallMouseUp(p.X, p.Y + 80);
-  AssertSame('松开才提交', b, FBar.Windows[0]);
-  AssertSame('c 跟上来', c, FBar.Windows[1]);
-  AssertSame('a 到了最后', a, FBar.Windows[2]);
-  AssertSame('当前页还是那个窗口', b, FBar.ActiveWindow);
-  AssertEquals('ActiveIndex 跟着窗口走', 0, FBar.ActiveIndex);
-  AssertEquals('调顺序不发 OnChange', 0, FChanges);
-  AssertEquals('调顺序后栏的 OnClick 不触发', 0, FClicks);
-  AssertFalse('不收起', FBar.Collapsed);
-  AssertFalse('手势结束', FBar.IsDraggingForTest);
-  { 往后拖到中间的空隙:FinalIndex = slot - 1(移走自己之后后面的空隙往前挪一格)。
-    上面那次落在末尾,钳位会把少减的一格盖住,这里不会。 }
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, FBar.StripItemRect(2).Top + 2);
-  AssertEquals('前提:落点是 a 前面那个空隙', 2, FBar.DropSlotForTest);
-  FBar.CallMouseUp(p.X, FBar.StripItemRect(2).Top + 2);
-  AssertSame('c 到了最前', c, FBar.Windows[0]);
-  AssertSame('b 落在 a 前面', b, FBar.Windows[1]);
-  AssertSame('a 还在最后', a, FBar.Windows[2]);
-end;
-
-procedure TTyToolWindowBarTests.TestSidewaysDragStarts;
-var
-  p: TPoint;
-  thr: Integer;
-begin
-  NewWindow;
-  NewWindow;
-  thr := TyToolWindowDragThreshold(96);
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X + thr - 1, p.Y);
-  AssertFalse('阈值以内还是武装', FBar.IsDraggingForTest);
-  { 竖直图标条上**横向**移动过阈值也要进入拖动 —— TabStrip 只算主轴,照抄永远拖不起来。 }
-  FBar.CallMouseMove(p.X + thr, p.Y);
-  AssertTrue('横拖也算拖', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(p.X + thr, p.Y);
-end;
-
-procedure TTyToolWindowBarTests.TestEscCancelsAndTheReleaseIsNotAClick;
-var
-  a, b: TProbeWindow;
-  other: TBodyChild;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  FBar.ActiveWindow := a;
-  other := TBodyChild.Create(FForm);
-  other.Parent := FForm;
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y - 50);
-  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
-  AssertEquals('前提:落点是 a 前面', 0, FBar.DropSlotForTest);
-  { 图标条不拿焦点,Esc 落在焦点控件上;经 Application 的 KeyDownBefore 到栏。 }
-  other.Perform(CN_KEYDOWN, VK_ESCAPE, 0);
-  AssertFalse('Esc 取消拖动', FBar.IsDraggingForTest);
-  AssertEquals('记成 Cancelled', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
-  AssertEquals('反馈清掉', -1, FBar.DropSlotForTest);
-  FBar.CallMouseMove(p.X, p.Y - 50);
-  FBar.CallMouseUp(p.X, p.Y);
-  AssertSame('顺序不变', a, FBar.Windows[0]);
-  AssertSame('取消后的松开不是点击:当前页不变', a, FBar.ActiveWindow);
-  AssertEquals('松开之后回到 Idle', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
-  ClickIcon(1);
-  AssertSame('下一次按下照常点击', b, FBar.ActiveWindow);
-end;
-
-procedure TTyToolWindowBarTests.TestNoOpSlotsDoNotReorder;
-var
-  a, b, c: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  c := NewWindow;
-  FBar.ActiveWindow := a;
-  FBar.OnChange := @HandleChange;
-  ResetCounts;
-  { 拖 b 放回它自己前后两个空隙(slot = src 与 src+1)。 }
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, FBar.StripItemRect(1).Top + 2);
-  AssertEquals('自己前面的空隙', 1, FBar.DropSlotForTest);
-  FBar.CallMouseUp(p.X, FBar.StripItemRect(1).Top + 2);
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, FBar.StripItemRect(2).Top + 2);
-  AssertEquals('自己后面的空隙', 2, FBar.DropSlotForTest);
-  FBar.CallMouseUp(p.X, FBar.StripItemRect(2).Top + 2);
-  AssertSame('顺序一点不变', a, FBar.Windows[0]);
-  AssertSame('顺序一点不变', b, FBar.Windows[1]);
-  AssertSame('顺序一点不变', c, FBar.Windows[2]);
-  AssertEquals('也不发 OnChange', 0, FChanges);
-end;
-
-procedure TTyToolWindowBarTests.TestDropIndicatorPixelsLandInTheStrip;
-const
-  Orange = TColor($0080FF);   { CSS #FF8000:红绿蓝三个都不相等,别的元素混不出来 }
-var
-  a: TProbeWindow;
-  cells: TRect;
-  p: TPoint;
-  bmp: TBitmap;
-  w, lineY: Integer;
-
-  function Drawn: Integer;
-  var
-    b: TBitmap;
-  begin
-    b := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cells, Wipe);
-    try
-      Result := CountExact(b, Orange);
-    finally
-      b.Free;
-    end;
-  end;
-
-begin
-  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-drop-color: #FF8000; }';
-  a := NewWindow;
-  NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  cells := FBar.BarLayout.Cells;
-  w := cells.Right - cells.Left;
-  AssertEquals('没拖动:没有插入线', 0, Drawn);
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 80);
-  AssertEquals('前提:落点在末尾', 3, FBar.DropSlotForTest);
-  AssertEquals('拖动中:插入线横跨图标条,粗细 = token', TyToolWindowDropSizeDef * w, Drawn);
-  lineY := FBar.StripItemRect(2).Bottom;
-  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cells, Wipe);
-  try
-    AssertTrue('线画在最后一格的下沿', PixelIs(bmp, w div 2, lineY - cells.Top - 1, Orange));
-  finally
-    bmp.Free;
-  end;
-  { 空操作(拖回自己前面):不画线。 }
-  FBar.CallMouseMove(p.X, FBar.StripItemRect(0).Top + 2);
-  AssertEquals('前提:空操作的空隙', 0, FBar.DropSlotForTest);
-  AssertEquals('空操作不画线', 0, Drawn);
-  FBar.Perform(LM_CANCELMODE, 0, 0);
-  AssertEquals('取消后没有线', 0, Drawn);
-end;
-
-procedure TTyToolWindowBarTests.TestALostReleaseCancelModeOrCollapseCancelsTheDrag;
-var
-  a: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  NewWindow;
-  NewWindow;
-  FBar.ActiveWindow := a;
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 80);
-  FBar.CallMouseMove(p.X, p.Y + 80, []);
-  AssertFalse('没有 ssLeft 的移动:取消', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(p.X, p.Y + 80);
-  AssertSame('顺序不变', a, FBar.Windows[0]);
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 80);
-  FBar.Perform(LM_CANCELMODE, 0, 0);
-  AssertFalse('LM_CANCELMODE:取消', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(p.X, p.Y + 80);
-  AssertSame('顺序不变', a, FBar.Windows[0]);
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 80);
-  FBar.Collapsed := True;
-  AssertFalse('栏的 Collapsed 被改:取消', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(p.X, p.Y + 80);
-  AssertSame('顺序不变', a, FBar.Windows[0]);
-end;
-
-procedure TTyToolWindowBarTests.TestAMultiClickPressCanStillDrag;
-var
-  a: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  NewWindow;
-  NewWindow;
-  p := FBar.StripItemRect(0).CenterPoint;
-  { 点一下图标、马上按住同一个图标拖:第二下被 LCL 标成 ssDouble(spec §9.2)。 }
-  FBar.CallMouseDown(p.X, p.Y, [ssLeft, ssDouble]);
-  FBar.CallMouseMove(p.X, p.Y + 80);
-  AssertTrue('多击的按下照样拖得起来', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(p.X, p.Y + 80);
-  AssertSame('照样提交', a, FBar.Windows[2]);
-end;
-
-procedure TTyToolWindowBarTests.TestADropOffTheStripIsACancel;
-var
-  a: TProbeWindow;
-  p, q: TPoint;
-begin
-  a := NewWindow;
-  NewWindow;
-  p := FBar.StripItemRect(0).CenterPoint;
-  q := FBar.BarLayout.Content.CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(q.X, q.Y);
-  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
-  AssertEquals('源栏自己的内容区不是目标', -1, FBar.DropSlotForTest);
-  FBar.CallMouseUp(q.X, q.Y);
-  AssertSame('在这里松开就是取消', a, FBar.Windows[0]);
-end;
-
-procedure TTyToolWindowBarTests.TestFreeingTheDraggedWindowEndsTheGesture;
-var
-  a, b: TProbeWindow;
-  p: TPoint;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  NewWindow;
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 60);
-  AssertTrue('前提:拖着 b', FBar.IsDraggingForTest);
-  b.Free;
-  AssertEquals('拖着的窗口走了:手势结束(spec §9.7)', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
-  AssertEquals('反馈清掉', -1, FBar.DropSlotForTest);
-  FBar.CallMouseUp(p.X, p.Y + 60);
-  AssertSame('剩下的顺序不变', a, FBar.Windows[0]);
-  { 临时光标弹过、处理器摘过:下一次拖动照常起、照常结束。 }
-  p := FBar.StripItemRect(0).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X, p.Y + 60);
-  AssertTrue('下一次照常拖', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(p.X, p.Y + 60);
-  AssertSame('照常提交', a, FBar.Windows[1]);
-end;
-
-procedure TTyToolWindowBarTests.TestWindowIndexReordersAndTheActivePageFollows;
-var
-  a, b, c, orphan: TProbeWindow;
-begin
-  a := NewWindow;
-  b := NewWindow;
-  c := NewWindow;
-  FBar.ActiveWindow := b;
-  FBar.OnChange := @HandleChange;
-  ResetCounts;
-  AssertEquals('WindowIndex 就是窗口序号', 1, b.WindowIndex);
-  a.WindowIndex := 2;
-  AssertSame('a 到了最后', a, FBar.Windows[2]);
-  AssertSame('b 到了最前', b, FBar.Windows[0]);
-  AssertSame('当前页不变', b, FBar.ActiveWindow);
-  AssertEquals('ActiveIndex 跟着窗口', 0, FBar.ActiveIndex);
-  AssertEquals('不发 OnChange', 0, FChanges);
-  c.WindowIndex := 99;
-  AssertEquals('钳到最后', 2, c.WindowIndex);
-  c.WindowIndex := -5;
-  AssertEquals('钳到最前', 0, c.WindowIndex);
-  orphan := TProbeWindow.Create(FForm);
-  AssertEquals('不在栏里是 -1', -1, orphan.WindowIndex);
-  orphan.WindowIndex := 1;
-  AssertEquals('不在栏里写了也没用', -1, orphan.WindowIndex);
-end;
-
-{ --- Task 10:Visible 经栏路由 --------------------------------------------------- }
 
 procedure TTyToolWindowBarTests.TestRunTimeVisibleRoutesThroughTheBar;
 var
