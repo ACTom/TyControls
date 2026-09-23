@@ -8,7 +8,7 @@ unit tyControls.ToolWindows;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ImgList,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ImgList, Menus,
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
   tyControls.StyleModel, tyControls.Controller, tyControls.StrConsts;
 
@@ -132,6 +132,9 @@ type
     { 按序号写进来、还没换成名字的那一次(没有栏 / 栏没有列表 / 栏正在流式加载)。 }
     FImageIndexPending: Boolean;
     FStripHint: string;
+    { 图标条上对这个窗口最近一次**真正执行**的点击动作的时刻(栏的 TickNow;0 = 没有)。
+      防抖按窗口记(spec §9.3):点 A 之后马上点 B 照常生效。 }
+    FLastStripClick: QWord;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
     { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式)。
@@ -374,6 +377,12 @@ type
     StrayNote: TRect;
   end;
 
+  { 栏上一个点落在哪个部件上(TTyToolWindowBar.PartAt)。 }
+  TTyToolWindowBarPart = (twbpNone, twbpItem, twbpOverflow, twbpEdge);
+
+  { 图标条手势引擎的状态(spec §9.2)。Cancelled 之后的松开什么都不做,也不算点击。 }
+  TTyToolWindowGestureState = (twgsIdle, twgsArmed, twgsDragging, twgsCancelled);
+
   TTyToolWindowBar = class(TTyCustomControl)
   private
     { 注册过的窗口(集合,顺序不算数)。**窗口顺序永远就是 Controls 顺序**(spec §6.1),
@@ -497,11 +506,60 @@ type
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
+  private
+    { --- 手势(spec §9.2)。每次按下新建一条记录:窗口记引用不记序号。 --- }
+    FGState: TTyToolWindowGestureState;
+    FGPart: TTyToolWindowBarPart;
+    FGWindow: TTyToolWindow;
+    FGSource: Integer;
+    FGOrigin: TPoint;           { 屏幕坐标 }
+    FGMulti: Boolean;           { 按下带 ssDouble / ssTriple / ssQuad:阈值以内松开永远不算点击 }
+    { 这次按下落在图标条 / 边缘区:吞掉 LCL 在 MouseUp 之前调的 Click、以及 DblClick。 }
+    FGSwallowClick: Boolean;
+    { 设计期按在图标上:从按下到松开,CM_DESIGNHITTEST 一律答 1;松开那一拍先切页再答 0。 }
+    FDesignGesture: Boolean;
+    FDesignSource: Integer;
+    FOverflowHover: Boolean;
+    FOverflowPressed: Boolean;
+    { 溢出菜单。不给 Owner:给栏的话它进栏的 Components,还得操心流式化;栏自己释放。 }
+    FOverflowMenu: TPopupMenu;
+    procedure ResetGesture;
+    procedure SetStripHover(AIndex: Integer; AOverflow: Boolean);
+    procedure UpdateHoverAt(X, Y: Integer);
+    { spec §5.1 第 4 步:切页之后条上的图标可能换了位置(当前页被强制留在条上),按指针此刻
+      的位置重查悬停。 }
+    procedure RecheckHover;
+    { 点击语义(spec §9.3):不是当前页 → 激活(收起着就展开);是当前页 → 切换收起。
+      按窗口 300 ms 防抖。 }
+    procedure StripClick(AWindow: TTyToolWindow);
+    procedure OverflowItemClick(Sender: TObject);
+    { 溢出按钮上松开:按此刻收进去的窗口重建菜单,有句柄才弹。 }
+    procedure ShowOverflowMenu;
+    procedure CMDesignHitTest(var Message: TCMDesignHitTest); message CM_DESIGNHITTEST;
+    { 图标上给 StripHintText 和那一格的 CursorRect,别处走继承(spec §8)。
+      提示跟着栏自己的 ShowHint 走:LCL 只把 CM_HINTSHOW 发给 ShowHint 为真的那一级控件。 }
+    procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
   protected
     { 图标条上悬停 / 按下的那一格(窗口序号,-1 = 没有)。A 期只画:给了哪一格就按哪一格的
       状态画。谁来写它们 —— 悬停追踪、按下、切页后重查 —— 是 Task 7 的事。 }
     FStripHover: Integer;
     FStripPressed: Integer;
+    { 测试把时钟往前推的偏移(见 TickNow)。 }
+    FTickOffset: QWord;
+    { 防抖的时钟:GetTickCount64 + FTickOffset。无头测试要能推它,否则 300 ms 防抖只能
+      靠 Sleep(套件变慢又不稳)。 }
+    function TickNow: QWord; virtual;
+    { 指针此刻在本控件客户区里的位置;没有句柄(无头)答 False。切页后重查悬停、
+      BeginAutoDrag 问的都是这一处,测试探针重写它。 }
+    function PointerInClient(out APoint: TPoint): Boolean; virtual;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    procedure Click; override;
+    procedure DblClick; override;
+    { 图标条和边缘区不起 LCL 拖动(DragMode = dmAutomatic 时任何位置左键按下都会起)。 }
+    procedure BeginAutoDrag; override;
     function GetStyleTypeKey: string; override;
     { 栏客户区坐标(0,0 起)里画整条栏:底色、图标条、图标、指示条、溢出、边缘区、设计期提示。
       几何全部来自 LayoutIn(R),跟 AdjustClientRect / 命中是同一份。 }
@@ -551,7 +609,7 @@ type
     function ResolvedImageIndex(AWindow: TTyToolWindow): Integer;
     { 图标条提示的文字:StripHint,空的时候 Caption。**不用 Hint**:LCL 顺着父链找第一个
       非空 Hint(application.inc:33-41),窗口的 Hint 一设,里面所有没设 Hint 的控件都会
-      冒出它。CM_HINTSHOW 在图标条手势那一步(Task 7)接。 }
+      冒出它。栏的 CM_HINTSHOW(StripHintAt)用的就是它。 }
     function StripHintText(AWindow: TTyToolWindow): string;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
@@ -572,6 +630,20 @@ type
     function BarLayout: TTyToolWindowBarLayout;
     { 窗口序号为 AIndex 的图标在栏上的格子;不在条上(收进溢出、底栏、越界)答空矩形。 }
     function StripItemRect(AIndex: Integer): TRect;
+    { (X, Y)(栏客户区坐标)落在哪个部件上;图标时 AIndex 是窗口序号,否则 -1。
+      绘制、手势、提示、设计期命中问的都是 BarLayout 这一份几何。 }
+    function PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWindowBarPart;
+    { (X, Y) 上的图标对应的窗口;不在图标上答 nil(同 IndexOfTabAt,spec §6.8)。 }
+    function WindowAtPos(X, Y: Integer): TTyToolWindow;
+    { 提示的纯查询:图标上答 True,给文字(StripHint,空则 Caption)和那一格的矩形。 }
+    function StripHintAt(X, Y: Integer; out AText: string; out ARect: TRect): Boolean;
+    { 收进溢出菜单的窗口(窗口序号,按窗口顺序)。 }
+    function OverflowWindows: TTyToolWindowPlan;
+    { 溢出菜单(点过一次溢出按钮才有);菜单项的 Tag 是窗口引用。 }
+    property OverflowMenu: TPopupMenu read FOverflowMenu;
+    { 探针:手势此刻是否武装着 / 拖动中 —— 真实状态的只读视图。 }
+    function GestureStateForTest: TTyToolWindowGestureState;
+    property TickForTest: QWord read FTickOffset write FTickOffset;
     procedure RegisterWindow(AWindow: TTyToolWindow);
     procedure UnregisterWindow(AWindow: TTyToolWindow);
     procedure ActivateWindow(AWindow: TTyToolWindow);
@@ -663,7 +735,8 @@ uses
   LCLProc,   { OwnerFormDesignerModified:设计期切页要告诉 IDE }
   BGRABitmap, BGRABitmapTypes,  { 图标条:渲染出来的图标是调用方持有的 BGRA 位图 }
   tyControls.ImageCollection,   { TyTintBitmapAlpha / TyFadeBitmapAlpha:图标按状态着色 }
-  tyControls.ImageDraw;  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子;TyRenderImage }
+  tyControls.ImageDraw,  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子;TyRenderImage }
+  tyControls.Menu;       { TTyPopupMenu:图标条的溢出菜单 }
 
 { --- TTyToolWindow ------------------------------------------------------------ }
 
@@ -1594,6 +1667,7 @@ begin
     里再有通知进来,SyncImageSubscription 看见 link 没了就不碰任何列表。 }
   FreeAndNil(FImageLink);
   FSubscribedList := nil;
+  FreeAndNil(FOverflowMenu);
   inherited Destroy;
 end;
 
@@ -2275,6 +2349,358 @@ begin
   end;
 end;
 
+{ --- 图标条手势 ---------------------------------------------------------------- }
+
+function TTyToolWindowBar.PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWindowBarPart;
+var
+  L: TTyToolWindowBarLayout;
+  pt: TPoint;
+  i: Integer;
+begin
+  AIndex := -1;
+  Result := twbpNone;
+  L := BarLayout;
+  pt := Point(X, Y);
+  for i := 0 to High(L.Slots) do
+    if PtInRect(L.Slots[i].ItemRect, pt) then
+    begin
+      AIndex := L.Slots[i].ItemIndex;
+      Exit(twbpItem);
+    end;
+  if PtInRect(L.Overflow, pt) then Exit(twbpOverflow);
+  if PtInRect(L.Edge, pt) then Exit(twbpEdge);
+end;
+
+function TTyToolWindowBar.WindowAtPos(X, Y: Integer): TTyToolWindow;
+var
+  idx: Integer;
+begin
+  if PartAt(X, Y, idx) = twbpItem then Result := Windows[idx]
+  else Result := nil;
+end;
+
+function TTyToolWindowBar.StripHintAt(X, Y: Integer; out AText: string;
+  out ARect: TRect): Boolean;
+var
+  idx: Integer;
+begin
+  AText := '';
+  ARect := Rect(0, 0, 0, 0);
+  Result := PartAt(X, Y, idx) = twbpItem;
+  if not Result then Exit;
+  AText := StripHintText(Windows[idx]);
+  ARect := StripItemRect(idx);
+end;
+
+function TTyToolWindowBar.OverflowWindows: TTyToolWindowPlan;
+var
+  L: TTyToolWindowBarLayout;
+  shown: array of Boolean;
+  i, n: Integer;
+begin
+  Result := nil;
+  n := WindowCount;
+  if n = 0 then Exit;
+  L := BarLayout;
+  shown := nil;
+  SetLength(shown, n);
+  for i := 0 to High(L.Slots) do
+    if (L.Slots[i].ItemIndex >= 0) and (L.Slots[i].ItemIndex < n) then
+      shown[L.Slots[i].ItemIndex] := True;
+  for i := 0 to n - 1 do
+    if not shown[i] then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := i;
+    end;
+end;
+
+function TTyToolWindowBar.GestureStateForTest: TTyToolWindowGestureState;
+begin
+  Result := FGState;
+end;
+
+function TTyToolWindowBar.TickNow: QWord;
+begin
+  Result := GetTickCount64 + FTickOffset;
+end;
+
+function TTyToolWindowBar.PointerInClient(out APoint: TPoint): Boolean;
+begin
+  Result := HandleAllocated;
+  if Result then APoint := ScreenToClient(Mouse.CursorPos)
+  else APoint := Point(-1, -1);
+end;
+
+procedure TTyToolWindowBar.ResetGesture;
+begin
+  FGState := twgsIdle;
+  FGPart := twbpNone;
+  FGWindow := nil;
+  FGSource := -1;
+  FGMulti := False;
+  if (FStripPressed <> -1) or FOverflowPressed then
+  begin
+    FStripPressed := -1;
+    FOverflowPressed := False;
+    if not (csDestroying in ComponentState) then Invalidate;
+  end;
+end;
+
+procedure TTyToolWindowBar.SetStripHover(AIndex: Integer; AOverflow: Boolean);
+begin
+  if (AIndex = FStripHover) and (AOverflow = FOverflowHover) then Exit;
+  FStripHover := AIndex;
+  FOverflowHover := AOverflow;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+procedure TTyToolWindowBar.UpdateHoverAt(X, Y: Integer);
+var
+  part: TTyToolWindowBarPart;
+  idx: Integer;
+begin
+  { 设计期不做悬停:设计期控件收不到 enter / leave(spec §7.4)。 }
+  if csDesigning in ComponentState then Exit;
+  part := PartAt(X, Y, idx);
+  if part <> twbpItem then idx := -1;
+  SetStripHover(idx, part = twbpOverflow);
+end;
+
+procedure TTyToolWindowBar.RecheckHover;
+var
+  p: TPoint;
+begin
+  if [csDesigning, csDestroying] * ComponentState <> [] then Exit;
+  if PointerInClient(p) then UpdateHoverAt(p.X, p.Y)
+  else SetStripHover(-1, False);
+end;
+
+procedure TTyToolWindowBar.StripClick(AWindow: TTyToolWindow);
+var
+  now: QWord;
+begin
+  if IndexOfWindow(AWindow) < 0 then Exit;
+  { 防抖:距离这个窗口上一次真正执行的点击不到 300 ms 就忽略 —— 慢速双击(系统默认
+    500 ms 内的第二次按下才标 ssDouble,而那条路有多击标记挡着)之外,GTK3 不下发三击
+    消息,三击靠这里(spec §9.3)。 }
+  now := TickNow;
+  if (AWindow.FLastStripClick <> 0) and (now >= AWindow.FLastStripClick)
+     and (now - AWindow.FLastStripClick < TyToolWindowClickGuardMs) then Exit;
+  AWindow.FLastStripClick := now;
+  if AWindow <> FActive then
+  begin
+    { 收起着时 ActivateWindow 只换 FActive,展开那一步把它显示出来。 }
+    ActivateWindow(AWindow);
+    Collapsed := False;
+  end
+  else
+    Collapsed := not FCollapsed;
+end;
+
+procedure TTyToolWindowBar.OverflowItemClick(Sender: TObject);
+var
+  w: TTyToolWindow;
+begin
+  { Tag 里是窗口引用;只拿来跟活着的窗口列表比指针,不解引用 —— 菜单开着的时候它可能
+    已经走了。菜单项不受防抖限制(spec §6.5)。 }
+  w := TTyToolWindow(PtrUInt(TMenuItem(Sender).Tag));
+  if IndexOfWindow(w) < 0 then Exit;
+  ActivateWindow(w);
+  Collapsed := False;
+end;
+
+procedure TTyToolWindowBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  part: TTyToolWindowBarPart;
+  idx: Integer;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  { 右键、中键从不武装、从不切换(spec §6.8 / §9.2)。 }
+  if Button <> mbLeft then Exit;
+  { 每次按下都新建一条记录:上一次手势丢了松开,也不影响这次。 }
+  ResetGesture;
+  part := PartAt(X, Y, idx);
+  FGSwallowClick := part <> twbpNone;
+  if csDesigning in ComponentState then
+  begin
+    { 设计期只有「点图标切页」,切换写在 CM_DESIGNHITTEST 的松开分支里;收起、调顺序、
+      拉宽一律不做。捕获好让拖出控件的移动也到这里(设计器递消息前放掉了捕获)。 }
+    FDesignGesture := part = twbpItem;
+    FDesignSource := idx;
+    if FDesignGesture and HandleAllocated then MouseCapture := True;
+    Exit;
+  end;
+  if part in [twbpItem, twbpOverflow] then
+  begin
+    { 按下只武装,什么都不激活(spec §9.3「为什么松开才切」)。 }
+    FGState := twgsArmed;
+    FGPart := part;
+    FGOrigin := ClientToScreen(Point(X, Y));
+    { 多击的按下照常武装(之后可以拖),但阈值以内松开永远不算点击(spec §9.2)。 }
+    FGMulti := Shift * [ssDouble, ssTriple, ssQuad] <> [];
+    if part = twbpItem then
+    begin
+      FGWindow := Windows[idx];
+      FGSource := idx;
+      FStripPressed := idx;
+    end
+    else
+      FOverflowPressed := True;
+    Invalidate;
+  end;
+end;
+
+procedure TTyToolWindowBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if FGState = twgsArmed then
+  begin
+    if not (ssLeft in Shift) then ResetGesture;   { 丢了松开:回到 Idle }
+    Exit;
+  end;
+  if FGState = twgsIdle then UpdateHoverAt(X, Y);
+end;
+
+procedure TTyToolWindowBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  state: TTyToolWindowGestureState;
+  pressedPart, part: TTyToolWindowBarPart;
+  w: TTyToolWindow;
+  multi: Boolean;
+  idx: Integer;
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if Button <> mbLeft then Exit;
+  if csDesigning in ComponentState then
+  begin
+    { 正常情况下松开那一拍 CM_DESIGNHITTEST 已经答了 0,设计器不会再调这里;万一来了,
+      只解除武装,不切页。 }
+    FDesignGesture := False;
+    Exit;
+  end;
+  { 拷到局部再清记录:点击的动作放最后,它引起的事件里就算重新按下也是一条新记录。 }
+  state := FGState;
+  pressedPart := FGPart;
+  w := FGWindow;
+  multi := FGMulti;
+  part := PartAt(X, Y, idx);
+  ResetGesture;
+  UpdateHoverAt(X, Y);
+  { Armed、落在同一个部件(同一个窗口的图标)上、没有多击标记 → 点击;其他情况什么都不做。 }
+  if (state <> twgsArmed) or multi or (part <> pressedPart) then Exit;
+  case part of
+    twbpItem:
+      if Windows[idx] = w then StripClick(w);
+    twbpOverflow:
+      ShowOverflowMenu;
+  end;
+end;
+
+procedure TTyToolWindowBar.MouseLeave;
+begin
+  inherited MouseLeave;
+  { 只清悬停,**不**解除武装:捕获期间 Win32 的 WM_MOUSELEAVE 可能在捕获者身上触发一次
+    (spec §9.2)。 }
+  SetStripHover(-1, False);
+end;
+
+procedure TTyToolWindowBar.Click;
+begin
+  { 栏 published 了 OnClick,LCL 在 MouseUp 之前调它:按在图标条 / 边缘区上的那一下不是
+    「点了栏」。 }
+  if FGSwallowClick then Exit;
+  inherited Click;
+end;
+
+procedure TTyToolWindowBar.DblClick;
+begin
+  if FGSwallowClick then Exit;
+  inherited DblClick;
+end;
+
+procedure TTyToolWindowBar.BeginAutoDrag;
+var
+  p: TPoint;
+  idx: Integer;
+begin
+  { LCL 在 MouseDown 之前就调这里(control.inc:2284),手势记录还没建,所以按指针位置问。 }
+  if PointerInClient(p) and (PartAt(p.X, p.Y, idx) <> twbpNone) then Exit;
+  inherited BeginAutoDrag;
+end;
+
+procedure TTyToolWindowBar.ShowOverflowMenu;
+var
+  hidden: TTyToolWindowPlan;
+  item: TMenuItem;
+  L: TTyToolWindowBarLayout;
+  pt: TPoint;
+  i: Integer;
+begin
+  hidden := OverflowWindows;
+  if Length(hidden) = 0 then Exit;
+  if FOverflowMenu = nil then FOverflowMenu := TTyPopupMenu.Create(nil);
+  TTyPopupMenu(FOverflowMenu).Controller := Controller;
+  FOverflowMenu.PopupComponent := Self;
+  FOverflowMenu.Items.Clear;
+  for i := 0 to High(hidden) do
+  begin
+    item := TMenuItem.Create(FOverflowMenu);
+    item.Caption := Windows[hidden[i]].Caption;
+    item.Tag := PtrInt(Windows[hidden[i]]);
+    item.OnClick := @OverflowItemClick;
+    FOverflowMenu.Items.Add(item);
+  end;
+  { 只在有句柄时弹(spec §7.4);菜单贴着溢出按钮往内容区那一侧开。 }
+  if not HandleAllocated then Exit;
+  L := BarLayout;
+  if FPlacement = twpRight then pt := ClientToScreen(Point(L.Overflow.Left, L.Overflow.Top))
+  else pt := ClientToScreen(Point(L.Overflow.Right, L.Overflow.Top));
+  FOverflowMenu.PopUp(pt.X, pt.Y);
+end;
+
+procedure TTyToolWindowBar.CMDesignHitTest(var Message: TCMDesignHitTest);
+var
+  idx: Integer;
+begin
+  { 应答照 TabStrip(designer-hittest-gesture-consistency):按下和拖动答 1,松开答 0
+    交还设计器。切换时机不照 TabStrip(它按下就切):写在松开分支里,**先切再答 0** ——
+    答 0 之后设计器不会再调 MouseUp(designer.pp:2486-2494)。 }
+  Message.Result := 0;
+  if FDesignGesture then
+  begin
+    if (Message.Keys and MK_LBUTTON) <> 0 then
+      Message.Result := 1
+    else
+    begin
+      FDesignGesture := False;
+      if HandleAllocated then MouseCapture := False;
+      if (PartAt(Message.XPos, Message.YPos, idx) = twbpItem) and (idx = FDesignSource) then
+        ActivateWindow(Windows[idx]);
+      Message.Result := 0;
+    end;
+  end
+  else if PartAt(Message.XPos, Message.YPos, idx) = twbpItem then
+    Message.Result := 1;
+end;
+
+procedure TTyToolWindowBar.CMHintShow(var Message: TLMessage);
+var
+  info: PHintInfo;
+  txt: string;
+  r: TRect;
+begin
+  info := PHintInfo(Message.LParam);
+  if (info <> nil) and StripHintAt(info^.CursorPos.X, info^.CursorPos.Y, txt, r) then
+  begin
+    info^.HintStr := txt;
+    info^.CursorRect := r;
+    Message.Result := 0;      { 0 = 显示 }
+  end
+  else
+    inherited;
+end;
+
 procedure TTyToolWindowBar.SetPlacement(AValue: TTyToolWindowPlacement);
 var
   wins: TTyToolWindowArray;
@@ -2582,12 +3008,15 @@ begin
     if AWindow <> nil then ShowWindowNow(AWindow);
     for i := 0 to High(wins) do
       if (wins[i] <> AWindow) and IsRegistered(wins[i]) then HideWindowNow(wins[i]);
-    { 4. 标题行按此刻的样子重排。按指针位置重查悬停要等栏有了悬停(Task 7)。 }
+    { 4. 标题行按此刻的样子重排(悬停在下面重查)。 }
     if AWindow <> nil then AWindow.RelayoutHeader;
     { 5. 只有焦点原来在旧页里才动它;新页已经显示了才聚焦得上。 }
     if focusIn and (AWindow <> nil) and AWindow.CanFocus then
       AWindow.FocusFirst;
   end;
+  { 4(续). 当前页被强制留在条上,切页可能换掉条上排的是哪几个图标:按指针此刻的位置
+    重查悬停,不然悬停停在切页前那一格上。设计期不做悬停。 }
+  RecheckHover;
   { 6. 设计期切页改了一个 published 值:两声都要(见 TTyCustomTabStrip 同一处)。
     静默那一批(Loaded 应用 ActiveIndex)是打开窗体,不是改了它。 }
   if FSilent = 0 then
@@ -2733,6 +3162,11 @@ begin
   for i := 1 to FSilent do
     AWindow.EndSilentVisibility;
   if AWindow = FLoadingTarget then FLoadingTarget := nil;
+  { spec §5.2 / §9.7:属于它的手势记录清掉 —— 武装着的窗口走了,松开不许当成点击。
+    悬停和按下按窗口序号记,它一走序号全挪了,一并清(按下跟着还在的手势重新对上)。 }
+  if AWindow = FGWindow then ResetGesture;
+  FStripHover := -1;
+  FOverflowHover := False;
   { 离开前的窗口序号:通常它已经不在 Controls 里了,取 RemoveControl 记下的那个;
     直接调本方法、它还在里面时现量。 }
   idx := IndexOfWindow(AWindow);
