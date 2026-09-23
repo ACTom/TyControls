@@ -47,6 +47,16 @@ type
     because a reversed rect is a real signal (an axis whose band collapsed) that
     callers must be able to see rather than have silently normalised away. }
   TTyRectF = record Left, Top, Right, Bottom: Double; end;
+  { x, y, width and height: upstream's own shape for a rect. A grid's plot,
+    its shrink and the name layout are kept in it so that their arithmetic is
+    upstream's to the bit -- a right edge is x + width there, and a width
+    taken back from the edges, (x + w) - x, is not always w. }
+  TTyXYWH = record
+    X, Y, W, H: Double;
+  end;
+  { zrender's 2-D affine matrix [a, b, c, d, tx, ty]:
+    x' = a x + c y + tx, y' = b x + d y + ty. }
+  TTyMat2D = array[0..5] of Double;
 
   { A closed value range. TyRange DOES normalise, because a reversed VALUE range
     is always a caller mistake — an inverse axis is expressed by the PIXEL extent
@@ -121,6 +131,10 @@ type
 function TyPointF(AX, AY: Double): TTyPointF;
 function TyRectF(ALeft, ATop, ARight, ABottom: Double): TTyRectF;
 function TyRange(AStart, AStop: Double): TTyRange;
+
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
 
 function TyRectFWidth(const AR: TTyRectF): Double;
 function TyRectFHeight(const AR: TTyRectF): Double;
@@ -232,6 +246,25 @@ begin
 end;
 
 { ==================== queries ==================== }
+
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+  Result.W := AW;
+  Result.H := AH;
+end;
+
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+begin
+  Result := TyXYWH(ARect.Left, ARect.Top, ARect.Right - ARect.Left,
+    ARect.Bottom - ARect.Top);
+end;
+
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+begin
+  Result := TyRectF(A.X, A.Y, A.X + A.W, A.Y + A.H);
+end;
 
 function TyRectFWidth(const AR: TTyRectF): Double;
 begin

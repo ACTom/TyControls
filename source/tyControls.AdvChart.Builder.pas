@@ -161,6 +161,10 @@ type
     FComponentIndex: Integer;
     FOuterRect: TTyRectF;
     FPlotRect: TTyRectF;
+    { The same two as upstream holds them. The edges above are x + width and
+      y + height of these; the axes are laid over these. }
+    FOuterXYWH: TTyXYWH;
+    FPlotXYWH: TTyXYWH;
     FSpecs: TTyAxisLayoutSpecArray;
     { Index-parallel to FSpecs: the x axes then the y axes, which is the
       order SpecFor already walks. }
@@ -187,6 +191,8 @@ type
     property OuterRect: TTyRectF read FOuterRect;
     { After it. Equal to OuterRect until phase C runs. }
     property PlotRect: TTyRectF read FPlotRect;
+    property OuterXYWH: TTyXYWH read FOuterXYWH;
+    property PlotXYWH: TTyXYWH read FPlotXYWH;
     { WHAT THE LAYOUT PASS MEASURED, kept so the renderer draws from it rather
       than assembling a second one. The plot rect was shrunk to fit exactly
       these labels in exactly this font, and a paint pass that rebuilt the spec
@@ -545,6 +551,59 @@ begin
   if TryStrToFloat(s, v, fs) then Result := TyBoxPx(v);
 end;
 
+{ UPSTREAM'S mergeLayoutParam, one direction of a box: the option's own
+  left/right/width (or top/bottom/height) against the component's defaults.
+  Two written wins outright -- `right` and `width` drop the default `left`
+  rather than being overruled by it; one written borrows the first default
+  of the three the option did not name; none, or two altogether, keep the
+  defaults as they are. A key written as null or 'auto' is present but has
+  no value, as upstream counts it. }
+procedure MergedBoxDim(ANode: TJSONObject; const AK0, AK1, AK2: string;
+  const AD0, AD1, AD2: TTyBoxValue; out AV0, AV1, AV2: TTyBoxValue);
+var
+  keys: array[0..2] of string;
+  defs, user, res: array[0..2] of TTyBoxValue;
+  own, hasNew, hasMerged: array[0..2] of Boolean;
+  i, nNew, nMerged: Integer;
+  d: TJSONData;
+begin
+  keys[0] := AK0; keys[1] := AK1; keys[2] := AK2;
+  defs[0] := AD0; defs[1] := AD1; defs[2] := AD2;
+  nNew := 0;
+  nMerged := 0;
+  for i := 0 to 2 do
+  begin
+    d := FindIn(ANode, keys[i]);
+    own[i] := d <> nil;
+    hasNew[i] := own[i] and (d.JSONType <> jtNull)
+      and not ((d.JSONType = jtString) and (d.AsString = 'auto'));
+    user[i] := BoxValueIn(ANode, keys[i], TyBoxAuto);
+    if own[i] then hasMerged[i] := hasNew[i]
+    else hasMerged[i] := defs[i].Kind <> buAuto;
+    if hasNew[i] then Inc(nNew);
+    if hasMerged[i] then Inc(nMerged);
+  end;
+  for i := 0 to 2 do
+    if own[i] then res[i] := user[i] else res[i] := defs[i];
+  if (nMerged <> 2) and (nNew > 0) then
+  begin
+    { the option's own keys only ... }
+    for i := 0 to 2 do
+      if own[i] then res[i] := user[i] else res[i] := TyBoxAuto;
+    { ... and with only one of them, the first default it did not name }
+    if nNew < 2 then
+      for i := 0 to 2 do
+        if (not own[i]) and (defs[i].Kind <> buAuto) then
+        begin
+          res[i] := defs[i];
+          Break;
+        end;
+  end;
+  AV0 := res[0];
+  AV1 := res[1];
+  AV2 := res[2];
+end;
+
 { ==================== the axis type rule ==================== }
 
 function TyResolveAxisType(ANode: TJSONObject; out AType: TTyAxisType;
@@ -629,7 +688,9 @@ constructor TTyGridBuild.Create(AComponentIndex: Integer);
 begin
   inherited Create;
   FComponentIndex := AComponentIndex;
-  FOuterRect := TyRectF(0, 0, 0, 0);
+  FOuterXYWH := TyXYWH(0, 0, 0, 0);
+  FPlotXYWH := FOuterXYWH;
+  FOuterRect := TyRectOfXYWH(FOuterXYWH);
   FPlotRect := FOuterRect;
 end;
 
@@ -959,14 +1020,16 @@ begin
     if synth then node := nil else node := ObjOf(AOption.ComponentAt('grid', i));
 
     spec := TyBoxSpec;
-    spec.Left := BoxValueIn(node, 'left', TyBoxPercent(GridDefaultLeft));
-    spec.Top := BoxValueIn(node, 'top', TyBoxPx(GridDefaultTop));
-    spec.Right := BoxValueIn(node, 'right', TyBoxPercent(GridDefaultRight));
-    spec.Bottom := BoxValueIn(node, 'bottom', TyBoxPx(GridDefaultBottom));
-    spec.Width := BoxValueIn(node, 'width', TyBoxAuto);
-    spec.Height := BoxValueIn(node, 'height', TyBoxAuto);
-    build.FGrids[i].FOuterRect := TySolveBox(spec, TyFixedContainer(AViewport));
+    MergedBoxDim(node, 'left', 'right', 'width', TyBoxPercent(GridDefaultLeft),
+      TyBoxPercent(GridDefaultRight), TyBoxAuto, spec.Left, spec.Right, spec.Width);
+    MergedBoxDim(node, 'top', 'bottom', 'height', TyBoxPx(GridDefaultTop),
+      TyBoxPx(GridDefaultBottom), TyBoxAuto, spec.Top, spec.Bottom, spec.Height);
+    { AS UPSTREAM'S getLayoutRect GIVES IT: a width that was given is the
+      width, and the right edge is x + width }
+    build.FGrids[i].FOuterXYWH := TySolveBoxXYWH(spec, TyFixedContainer(AViewport));
+    build.FGrids[i].FOuterRect := TyRectOfXYWH(build.FGrids[i].FOuterXYWH);
     build.FViewport := AViewport;
+    build.FGrids[i].FPlotXYWH := build.FGrids[i].FOuterXYWH;
     build.FGrids[i].FPlotRect := build.FGrids[i].FOuterRect;
 
     usedBottom := False;
@@ -1040,7 +1103,7 @@ begin
         c.AddAxis(build.FGrids[i].FXAxes[j]);
         c.AddAxis(build.FGrids[i].FYAxes[k]);
         { The approximate pixel extent. Phase C writes the final one. }
-        c.SetRect(build.FGrids[i].FOuterRect);
+        c.SetRectXYWH(build.FGrids[i].FOuterXYWH);
         n := Length(build.FGrids[i].FCartesians);
         SetLength(build.FGrids[i].FCartesians, n + 1);
         SetLength(build.FGrids[i].FKeys, n + 1);
@@ -1988,10 +2051,10 @@ var
 
   { The grid's plot rect: upstream's resize, after the raw rect. }
   function SolveGridRect(AGrid: TTyGridBuild; AGridNode: TJSONObject;
-    const ASpecs: TTyAxisLayoutSpecArray): TTyRectF;
+    const ASpecs: TTyAxisLayoutSpecArray): TTyXYWH;
   var
-    raw: TTyRectF;
-    outer: TTyXYWH;
+    rawR: TTyRectF;
+    raw, outer: TTyXYWH;
     d: TJSONData;
     s: string;
     contain: TTyOuterBoundsContain;
@@ -1999,13 +2062,14 @@ var
     cw, ch: Double;
     vp: TTyRectF;
   begin
-    raw := AGrid.FOuterRect;
+    rawR := AGrid.FOuterRect;
+    raw := AGrid.FOuterXYWH;
     Result := raw;
     estimated := False;
     noPx := True;
     { LEGACY containLabel WINS, and every outerBounds key is ignored }
     if ContainLabelOn(AGridNode) then
-      Exit(TyLegacyContainLabel(raw, ASpecs, AMeasurer, APPI));
+      Exit(TyLegacyContainLabelXYWH(raw, ASpecs, AMeasurer, APPI));
     s := '';
     if AGridNode <> nil then
     begin
@@ -2015,7 +2079,7 @@ var
     end;
     vp := ABuild.Viewport;
     if s = 'same' then
-      outer := TyXYWHOfRect(raw)
+      outer := raw
     else if (s = '') or (s = 'auto') then
     begin
       { the bounds on the canvas: {left, right, top, bottom: 0} unless
@@ -2035,20 +2099,20 @@ var
       contain := obcAxisLabel;
     { THE CLAMP IS OF THE RAW RECT: a quarter of its width and height unless
       the option says }
-    cw := TyBoxResolve(TyBoxPercent(25), raw.Right - raw.Left);
-    ch := TyBoxResolve(TyBoxPercent(25), raw.Bottom - raw.Top);
+    cw := TyBoxResolve(TyBoxPercent(25), raw.W);
+    ch := TyBoxResolve(TyBoxPercent(25), raw.H);
     if AGridNode <> nil then
     begin
       d := AGridNode.Find('outerBoundsClampWidth');
       if (d <> nil) and (d.JSONType <> jtNull) then
-        cw := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.Right - raw.Left);
+        cw := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.W);
       d := AGridNode.Find('outerBoundsClampHeight');
       if (d <> nil) and (d.JSONType <> jtNull) then
-        ch := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.Bottom - raw.Top);
+        ch := TyBoxResolve(TyBoxDataOf(d, TyBoxPercent(25)), raw.H);
     end;
     { THE NAME MARGIN LEVEL IS OF THE CANVAS: the grid's rect against the
       container it was laid out in }
-    Result := TySolveGridBounds(raw, outer, contain, cw, ch, ASpecs,
+    Result := TySolveGridBoundsXYWH(rawR, raw, outer, contain, cw, ch, ASpecs,
       AMeasurer, APPI, TyXYWHOfRect(vp), noPx);
     estimated := True;
   end;
@@ -2445,7 +2509,8 @@ begin
     { obcAll, explicitly. Our own default is obcAxisLabel while upstream's
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
-    gb.FPlotRect := SolveGridRect(gb, gridNode, specs);
+    gb.FPlotXYWH := SolveGridRect(gb, gridNode, specs);
+    gb.FPlotRect := TyRectOfXYWH(gb.FPlotXYWH);
 
     { WHAT THE ESTIMATE HID, CARRIED OVER. After a shrink upstream builds a
       category axis' labels again on the final rect, but lays a value, log or
@@ -2486,7 +2551,12 @@ begin
     { The second and final pixel write. Everything downstream reads band widths
       and coordinates live, so nothing has to be invalidated. }
     for j := 0 to gb.CartesianCount - 1 do
-      gb.CartesianByIndex(j).SetRect(gb.FPlotRect);
+    begin
+      gb.CartesianByIndex(j).SetRectXYWH(gb.FPlotXYWH);
+      { upstream's Grid.resize ends here too: the rect is final, the scales
+        were final before it, and the matrix is made from both }
+      gb.CartesianByIndex(j).CalcAffineTransform;
+    end;
 
     { THE NAMES AS THEY ARE DRAWN: laid out again on the final rect, after
       the write, so an axis on the other family's zero finds it where it now

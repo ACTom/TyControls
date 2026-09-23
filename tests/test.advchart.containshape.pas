@@ -18,15 +18,14 @@ unit test.advchart.containshape;
   gave; the band a bar is laid out in is measured over the mapping extent;
   an axis whose zero a bar moved is no zero for an `auto` onZero.
 
-  Extents, band, offset and width are compared to the bit; a log axis' to
-  eight units in the last place. A log mapping end is a power of ten to a
-  fractional exponent, and FPC's Power is not V8's Math.pow: 10^2.5 comes
-  back six units apart, 50^(1/2)-ish ends seven. Rects to eight too:
-  upstream places a bar through the coordinate system's affine matrix, this
-  through each axis in turn, and the two orders of the same arithmetic part
-  by up to eight (the batch 41 audit). The G9 cases exist to tell those two
-  apart: their axes are compared, their ticks to eight units and their
-  rects not at all, until the affine path is ported. }
+  Everything is compared to the bit -- extents, band, offset, width, ticks
+  and every rect, the G9 cases that tell upstream's affine placement from a
+  per-axis one included -- except on a log axis, held to eight units in the
+  last place. A log mapping end is a power of ten to a fractional exponent,
+  and FPC's Power is not V8's Math.pow: 10^2.5 comes back six units apart,
+  50^(1/2)-ish ends seven.
+  [Revised in batch 42: rects were held to eight units and the G9 rects not
+  at all, until the affine path was ported.] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -299,7 +298,7 @@ begin
   arr := AAxis.Arrays['ticks'];
   coords := AAxis.Arrays['tickCoords'];
   if Flag(ACase, 'documentary') then coords := nil;
-  if ACase.Strings['group'] = 'G9' then ctol := 8 else ctol := Max(tol, 1);
+  ctol := tol;
   if not (isCat and ax.OnBand) then
   begin
     if not isCat then
@@ -389,7 +388,7 @@ begin
 
   { THE RECTS -- except where the case exists to tell upstream's affine
     placement from this per-axis one, which is the next batch's }
-  boxes := ACase.Strings['group'] <> 'G9';
+  boxes := True;
   if not boxes then Exit;
   lst := FChart.List;
   items := ASeries.Arrays['items'];
@@ -436,14 +435,14 @@ begin
       end
       else if Abs(b.Left - floor) < Abs(b.Right - floor) then e0 := b.Left
       else e0 := b.Right;
-      if not Near(e0, floor, 8) then
+      if not Near(e0, floor, tol) then
         Miss(AName, Format('item %d/%d: floor %s upstream, %s here',
           [si, k, Fmt(floor), Fmt(e0)]));
       Continue;
     end;
     box := item.Arrays['box'];
-    if not (Near(b.Left, HexAt(box, 0), 8) and Near(b.Top, HexAt(box, 1), 8)
-      and Near(b.Right, HexAt(box, 2), 8) and Near(b.Bottom, HexAt(box, 3), 8)) then
+    if not (Near(b.Left, HexAt(box, 0), tol) and Near(b.Top, HexAt(box, 1), tol)
+      and Near(b.Right, HexAt(box, 2), tol) and Near(b.Bottom, HexAt(box, 3), tol)) then
       Miss(AName, Format('item %d/%d: box %s,%s,%s,%s upstream, %s,%s,%s,%s here',
         [si, k, Fmt(HexAt(box, 0)), Fmt(HexAt(box, 1)), Fmt(HexAt(box, 2)),
          Fmt(HexAt(box, 3)), Fmt(b.Left), Fmt(b.Top), Fmt(b.Right),
@@ -458,6 +457,7 @@ var
   axes, series: TJSONArray;
   rect: TJSONObject;
   plot: TTyRectF;
+  xywh: TTyXYWH;
   i: Integer;
 begin
   name := ACase.Strings['name'];
@@ -472,11 +472,12 @@ begin
   begin
     rect := ACase.Objects['rect'];
     plot := FChart.Build.Grid(0).PlotRect;
+    xywh := FChart.Build.Grid(0).PlotXYWH;
     Inc(FCompared);
-    if not (Near(plot.Left, FromHex(rect.Strings['x']), 1)
-      and Near(plot.Top, FromHex(rect.Strings['y']), 1)
-      and Near(plot.Right - plot.Left, FromHex(rect.Strings['width']), 1)
-      and Near(plot.Bottom - plot.Top, FromHex(rect.Strings['height']), 1)) then
+    if not (Near(xywh.X, FromHex(rect.Strings['x']), 0)
+      and Near(xywh.Y, FromHex(rect.Strings['y']), 0)
+      and Near(xywh.W, FromHex(rect.Strings['width']), 0)
+      and Near(xywh.H, FromHex(rect.Strings['height']), 0)) then
     begin
       rect := ACase.Objects['rectText'];
       Miss(name, Format('the plot is %s,%s %sx%s upstream, %s,%s %sx%s here',

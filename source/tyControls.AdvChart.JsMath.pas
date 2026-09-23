@@ -29,6 +29,10 @@ function TyJsSin(AX: Double): Double;
 function TyJsCos(AX: Double): Double;
 function TyJsAtan(AX: Double): Double;
 function TyJsAtan2(AY, AX: Double): Double;
+{ Math.fround: the nearest single, ties to even, and past the largest single
+  -- by half a unit of its last place -- an infinity. Upstream keeps a line's
+  vertices in a Float32Array, so a vertex is this of the coordinate. }
+function TyJsFround(AX: Double): Double;
 
 implementation
 
@@ -385,6 +389,22 @@ begin
   else
     Result := (z - pi_lo) - pi_;
   end;
+end;
+
+function TyJsFround(AX: Double): Double;
+const
+  { the largest single, 2^128 - 2^104, plus half a unit of its last place:
+    2^128 - 2^103, where the tie goes to the infinity }
+  cOverflow: Double = 3.4028235677973366e38;
+var s: Single;
+begin
+  if IsNan(AX) or IsInfinite(AX) then Exit(AX);
+  { STATED, NOT LEFT TO THE CONVERSION, which raises on an overflow the
+    run-time library has not masked }
+  if AX >= cOverflow then Exit(Infinity);
+  if AX <= -cOverflow then Exit(NegInfinity);
+  s := AX;
+  Result := s;
 end;
 
 initialization

@@ -25,6 +25,7 @@ type
     procedure TestAtanIsV8sToTheBit;
     procedure TestAtan2IsV8sToTheBit;
     procedure TestTheRunTimeLibraryIsNot;
+    procedure TestFroundIsMathFround;
   end;
 
 implementation
@@ -184,6 +185,43 @@ begin
   a := 2;
   AssertTrue('V8: sin 2', Hex(TyJsSin(a)) = '3fed18f6ead1b446');
   AssertTrue('the run-time library: not', Hex(Sin(a)) <> '3fed18f6ead1b446');
+end;
+
+procedure TAdvChartJsMathTest.TestFroundIsMathFround;
+const
+  { Math.fround in node, argument and answer as bit patterns: a vertex, the
+    largest single, the tie just past it that goes to the infinity, below
+    half the smallest subnormal, and -0 }
+  Cases: array[0..11, 0..1] of string = (
+    ('3ff199999999999a', '3ff19999a0000000'),
+    ('406faaaaaaaaaaab', '406faaaaa0000000'),
+    ('c05f276276276800', 'c05f276280000000'),
+    ('47efffffe0000000', '47efffffe0000000'),
+    ('47efffffefffffff', '47efffffe0000000'),
+    ('47effffff0000000', '7ff0000000000000'),
+    ('c7effffff0000000', 'fff0000000000000'),
+    ('48078287f49c4a1d', '7ff0000000000000'),
+    ('36a0000000000000', '36a0000000000000'),
+    ('368ff868bf4d956a', '0000000000000000'),
+    ('3fe0000000000000', '3fe0000000000000'),
+    ('8000000000000000', '8000000000000000'));
+var
+  i: Integer;
+  x, want, got: Double;
+  q: QWord;
+begin
+  for i := 0 to High(Cases) do
+  begin
+    q := StrToQWord('$' + Cases[i, 0]);
+    Move(q, x, 8);
+    q := StrToQWord('$' + Cases[i, 1]);
+    Move(q, want, 8);
+    got := TyJsFround(x);
+    Move(got, q, 8);
+    AssertEquals('fround of ' + Cases[i, 0], LowerCase(Cases[i, 1]),
+      LowerCase(IntToHex(q, 16)));
+  end;
+  AssertTrue('and a gap stays one', IsNan(TyJsFround(NaN)));
 end;
 
 initialization

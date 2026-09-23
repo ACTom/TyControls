@@ -344,6 +344,14 @@ type
       upstream would have picked. }
     procedure Niceify(ASplitNumber: Double; AUserInterval: Double); overload;
     procedure Niceify(ASplitNumber: Double); overload;
+    { ON A LOG AXIS, OVER THE DECADES NICEIFY LEFT: upstream's intervalStub
+      holds the extent in log space as the nice step wrote it -- -1 and 3,
+      not the logarithms of 0.1 and 1000, which come back as
+      -0.9999999999999998 and 2.9999999999999996 -- and normalises over that.
+      A mapping extent, when one is set, is still taken back through the
+      logarithm, as upstream's setExtent2 takes it. }
+    function Normalize(AValue: Double): Double; override;
+    function Denormalize(ANorm: Double): Double; override;
     { Interval.ts' getTicks: the extent's own start when the step did not
       land on it, every multiple inside, the extent's own end likewise --
       rounded to the step's precision one by one, and none at all past three
@@ -2244,6 +2252,23 @@ end;
 procedure TTyIntervalScale.Niceify(ASplitNumber: Double);
 begin
   Niceify(ASplitNumber, NaN);
+end;
+
+function TTyIntervalScale.Normalize(AValue: Double): Double;
+var t: Double;
+begin
+  if not (LogWarped and StillNiced and not FMapper.HasExtent(sekMapping)) then
+    Exit(inherited Normalize(AValue));
+  if FStubStop = FStubStart then Exit(0.5);
+  t := FMapper.TransformIn(AValue);
+  Result := (t - FStubStart) / (FStubStop - FStubStart);
+end;
+
+function TTyIntervalScale.Denormalize(ANorm: Double): Double;
+begin
+  if not (LogWarped and StillNiced and not FMapper.HasExtent(sekMapping)) then
+    Exit(inherited Denormalize(ANorm));
+  Result := FMapper.TransformOut(FStubStart + ANorm * (FStubStop - FStubStart));
 end;
 
 { One tick value back in value space: a log axis' decades go out as powers,

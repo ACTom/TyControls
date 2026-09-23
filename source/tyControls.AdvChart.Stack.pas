@@ -95,8 +95,12 @@ begin
   Result := TyJsToFixed(Result, p);
 end;
 
-{ The four types that carry `stack` in ECharts 6.1: BarSeries, PictorialBar,
-  LineSeries and ScatterSeries all mix in SeriesStackOptionMixin.
+{ The types that stack in ECharts 6.1: bar, line and scatter.
+  [Revised in batch 42: pictorialBar was on this list. It carries the option
+  through SeriesStackOptionMixin, but PictorialBarSeries.getInitialData sets
+  `stack` to null before the data is made -- a stacked pictorial bar stands on
+  the axis like any other, and the value axis spans the values, not their
+  sums.]
 
   Deliberately NOT the same list as AdvChart.Marks' renderer table, and not a
   second copy of it either: "can these values accumulate" and "can this be
@@ -105,8 +109,7 @@ end;
   over the rows. }
 function TypeCanStack(const AType: string): Boolean;
 begin
-  Result := (AType = 'bar') or (AType = 'line')
-         or (AType = 'scatter') or (AType = 'pictorialBar');
+  Result := (AType = 'bar') or (AType = 'line') or (AType = 'scatter');
 end;
 
 function SeriesNode(AOption: TTyChartOption; ASlot: Integer): TJSONObject;

@@ -478,22 +478,16 @@ begin
         case AValue.Kind of
           dvkNone: Exit(NaN);
           dvkBool: Exit(NaN);   // a boolean names no instant
-          { Round, then let the Int64 widen on the way out. Writing it as
-            `Round(x) * 1.0` looks equivalent and is not: FPC types the untyped
-            constant 1.0 as SINGLE, and the product loses everything below
-            131,072 ms at epoch scale -- about half a day per year of drift. }
-          { GUARDED, like the float and int branches further down. Round on a
-            NaN or on 1e30 raises EInvalidOp, and it raised straight out of
-            TyFillSeriesStore -- reachable from option text, since every JSON
-            number becomes a TyDataNum. This unit's header calls NaN the single
-            spelling of no data across all four types, and an exception is not
-            a spelling. }
+          { A NUMBER IS KEPT AS WRITTEN: upstream's parseDataValue parses only
+            what is not a number, so half a millisecond stays in the store and
+            in the extent. The time scale rounds -- Math.round, half up -- only
+            where it places a value on the axis.
+            [Revised in batch 42: this rounded, banker's way, as it read.] }
           dvkNumber:
-            if IsNan(AValue.Num) or IsInfinite(AValue.Num)
-              or (Abs(AValue.Num) > 9.2e18) then
+            if IsNan(AValue.Num) or IsInfinite(AValue.Num) then
               Exit(NaN)
             else
-              Exit(Round(AValue.Num));
+              Exit(AValue.Num);
           dvkText:
             if TyParseDateMs(AValue.Text, n) then Exit(n) else Exit(NaN);
         end;

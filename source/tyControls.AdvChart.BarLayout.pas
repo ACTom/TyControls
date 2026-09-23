@@ -524,7 +524,7 @@ var
       ext := AAxis.Scale.GetExtent2(sekMapping);
       span := AAxis.Scale.Mapper.TransformIn(ext.Stop)
         - AAxis.Scale.Mapper.TransformIn(ext.Start);
-      band := TyBandFromMinGap(Abs(AAxis.PxStop - AAxis.PxStart), span,
+      band := TyBandFromMinGap(AAxis.PxLength, span,
         TyLiPosMinGap(AStores, onIt, AAxis));
     end;
     if IsNan(band) then band := cMinBandWidth;

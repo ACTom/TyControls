@@ -134,6 +134,11 @@ function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer):
   background covers it. title and legend both position themselves this way. }
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
   const AMargin: array of Double): TTyRectF; overload;
+{ A grid's rect as upstream's getLayoutRect gives it: x, y, and a width and
+  height that are the ones given, where one was, rather than an edge less an
+  edge. No margin: a grid has none. }
+function TySolveBoxXYWH(const ASpec: TTyBoxSpec;
+  const AContainer: ITyBoxContainer): TTyXYWH;
 
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
@@ -255,18 +260,6 @@ type
     Drawn: Boolean;
   end;
   TTyAxisMarkArray = array of TTyAxisMark;
-
-  { x, y, width and height: upstream's own shape for a rect. The shrink and
-    the name layout are done in it so that their arithmetic is upstream's to
-    the bit -- a right edge is x + width there, and a width taken back from
-    one is not always the same number. }
-  TTyXYWH = record
-    X, Y, W, H: Double;
-  end;
-
-  { zrender's 2-D affine matrix [a, b, c, d, tx, ty]:
-    x' = a x + c y + tx, y' = b x + d y + ty. }
-  TTyMat2D = array[0..5] of Double;
 
   { nameLocation: 'end' is upstream's default and so the zero value;
     'center' is 'middle'. }
@@ -544,9 +537,6 @@ function TyAxisThickness(const ASpec: TTyAxisLayoutSpec;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AContain: TTyOuterBoundsContain): Double;
 
-function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
-function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
-function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
 
 { Phase 2, the estimate. Every label this axis shows when laid out on ARaw,
   as the box it would be drawn in: anchored beyond the plot's edge by the
@@ -614,6 +604,13 @@ function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; const AContainer: TTyXYWH;
   out ANoPxChange: Boolean): TTyRectF; overload;
+{ The same, from and to the rect as upstream holds it: ARawXYWH is the raw
+  rect's own x, y, width and height, and the shrunk one comes back whole. }
+function TySolveGridBoundsXYWH(const ARaw: TTyRectF; const ARawXYWH: TTyXYWH;
+  const AOuter: TTyXYWH; AContain: TTyOuterBoundsContain;
+  AClampW, AClampH: Double; const AAxes: TTyAxisLayoutSpecArray;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; const AContainer: TTyXYWH;
+  out ANoPxChange: Boolean): TTyXYWH;
 
 { Legacy grid.containLabel: for every axis in turn whose labels are not
   inside, the widest (or tallest) of all its labels -- unrotated, turned by
@@ -623,6 +620,9 @@ function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
 function TyLegacyContainLabel(const ARaw: TTyRectF;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyRectF;
+function TyLegacyContainLabelXYWH(const ARawXYWH: TTyXYWH;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyXYWH;
 
 { Phase 3. Place the labels along the FINAL plot band, thinning to a uniform
   step when they would collide. }
@@ -720,7 +720,7 @@ end;
   the margin could be added to this rather than beside it. }
 procedure SolveAxis(const AStartV, AEndV, ASizeV: TTyBoxValue;
   AContainerStart, AContainerExtent, AMarginStart, AMarginEnd: Double;
-  out AStart, AStop: Double);
+  out AStart, AStop, ALen: Double);
 var
   s, e, sz: Double;
 begin
@@ -744,6 +744,7 @@ begin
     begin
       AStart := AContainerStart + AMarginStart;
       AStop := AContainerStart + AContainerExtent - AMarginEnd;
+      ALen := AStop - AStart;
       Exit;
     end;
     { NO MARGIN TERM. Upstream writes `extent/2 - size/2 - marginStart` and
@@ -751,6 +752,7 @@ begin
       box is centred on the CONTAINER, not on what is left of it. }
     AStart := AContainerStart + (AContainerExtent - sz) / 2;
     AStop := AStart + sz;
+    ALen := sz;
     Exit;
   end;
 
@@ -790,18 +792,28 @@ begin
     AStop := AContainerStart + AContainerExtent - AMarginEnd;
   end;
 
+  { THE LENGTH AS UPSTREAM HOLDS IT: a size that was given is the width,
+    not the far edge less the near one, which need not round back to it. }
+  if not IsNan(sz) then
+    ALen := sz
+  else
+    ALen := AStop - AStart;
+
   { Over-constrained: collapse to zero at the near edge rather than invert. An
     inverted rect survives a later Min/Max swap and reappears as a phantom band
     somewhere else on screen, which is far harder to find than an empty one. }
   if AStop < AStart then
+  begin
     AStop := AStart;
+    ALen := 0;
+  end;
 end;
 
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
   const AMargin: array of Double): TTyRectF;
 var
   c: TTyRectF;
-  l, r, t, b: Double;
+  l, r, t, b, lw, lh: Double;
   m: array[0..3] of Double;
   i: Integer;
 begin
@@ -829,15 +841,32 @@ begin
     for i := 0 to 3 do m[i] := AMargin[i];
   end;
   SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
-    m[3], m[1], l, r);
+    m[3], m[1], l, r, lw);
   SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
-    m[0], m[2], t, b);
+    m[0], m[2], t, b, lh);
   Result := TyRectF(l, t, r, b);
 end;
 
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
 begin
   Result := TySolveBox(ASpec, AContainer, []);
+end;
+
+function TySolveBoxXYWH(const ASpec: TTyBoxSpec;
+  const AContainer: ITyBoxContainer): TTyXYWH;
+var
+  c: TTyRectF;
+  l, r, t, b, lw, lh: Double;
+begin
+  Result := TyXYWH(NaN, NaN, NaN, NaN);
+  if AContainer = nil then Exit;
+  c := AContainer.ContainerRect;
+  if not TyRectFIsValid(c) then Exit;
+  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
+    0, 0, l, r, lw);
+  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
+    0, 0, t, b, lh);
+  Result := TyXYWH(l, t, lw, lh);
 end;
 
 { ============================ containers ============================ }
@@ -1262,24 +1291,6 @@ begin
   end;
 end;
 
-function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
-begin
-  Result.X := AX;
-  Result.Y := AY;
-  Result.W := AW;
-  Result.H := AH;
-end;
-
-function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
-begin
-  Result := TyXYWH(ARect.Left, ARect.Top, ARect.Right - ARect.Left,
-    ARect.Bottom - ARect.Top);
-end;
-
-function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
-begin
-  Result := TyRectF(A.X, A.Y, A.X + A.W, A.Y + A.H);
-end;
 
 { ==================== zrender's matrices ==================== }
 
@@ -1624,6 +1635,17 @@ function TySolveGridBounds(const ARaw: TTyRectF; const AOuter: TTyXYWH;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; const AContainer: TTyXYWH;
   out ANoPxChange: Boolean): TTyRectF;
+begin
+  Result := TyRectOfXYWH(TySolveGridBoundsXYWH(ARaw, TyXYWHOfRect(ARaw),
+    AOuter, AContain, AClampW, AClampH, AAxes, AMeasurer, APPI, AContainer,
+    ANoPxChange));
+end;
+
+function TySolveGridBoundsXYWH(const ARaw: TTyRectF; const ARawXYWH: TTyXYWH;
+  const AOuter: TTyXYWH; AContain: TTyOuterBoundsContain;
+  AClampW, AClampH: Double; const AAxes: TTyAxisLayoutSpecArray;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; const AContainer: TTyXYWH;
+  out ANoPxChange: Boolean): TTyXYWH;
 var
   items, one: TTyBoundsItemArray;
   names: TTyAxisNamePlacementArray;
@@ -1661,25 +1683,33 @@ begin
       end;
   end;
   SetLength(items, n);
-  r := TyXYWHOfRect(ARaw);
-  margin := TyOuterBoundsMargin(AOuter, TyXYWHOfRect(ARaw), items);
+  r := ARawXYWH;
+  margin := TyOuterBoundsMargin(AOuter, ARawXYWH, items);
   ANoPxChange := True;
   for k := 0 to 3 do
     if margin[k] > 0 then ANoPxChange := False;
   TyShrinkRect(r, margin, AClampW, AClampH);
-  Result := TyRectOfXYWH(r);
+  Result := r;
 end;
 
 function TyLegacyContainLabel(const ARaw: TTyRectF;
   const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyRectF;
+begin
+  Result := TyRectOfXYWH(TyLegacyContainLabelXYWH(TyXYWHOfRect(ARaw), AAxes,
+    AMeasurer, APPI));
+end;
+
+function TyLegacyContainLabelXYWH(const ARawXYWH: TTyXYWH;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): TTyXYWH;
 var
   i, k, n, step: Integer;
   w, h, uw, uh, c, s, rw, rh, gap: Double;
   r: TTyXYWH;
   any: Boolean;
 begin
-  r := TyXYWHOfRect(ARaw);
+  r := ARawXYWH;
   if AMeasurer <> nil then
     for i := 0 to High(AAxes) do
     begin
@@ -1719,7 +1749,7 @@ begin
         if AAxes[i].Side = asLeft then r.X := r.X + (uw + gap);
       end;
     end;
-  Result := TyRectOfXYWH(r);
+  Result := r;
 end;
 
 function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;

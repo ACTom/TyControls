@@ -317,7 +317,11 @@ procedure TAdvChartDataTest.TestTimeNumberIsAlreadyEpochMs;
 begin
   { A number on a time dimension is a timestamp, not something to parse. }
   AssertEquals(1700000000000.0, TyParseDataValue(TyDataNum(1700000000000.0), ddtTime), 0);
-  AssertEquals('rounded to the millisecond', 1700000000001.0,
+  { KEPT AS WRITTEN: upstream parses only what is not a number, and the time
+    scale rounds where it places a value, not where it stores one.
+    [Revised in batch 42: this pinned a rounding on the way in, which moved
+    a half-millisecond extent end off upstream's.] }
+  AssertEquals('not rounded on the way in', 1700000000000.6,
     TyParseDataValue(TyDataNum(1700000000000.6), ddtTime), 0);
 end;
 
@@ -1174,8 +1178,11 @@ begin
     IsNan(TyParseDataValue(TyDataNum(NaN), ddtTime)));
   AssertTrue('so is an infinity',
     IsNan(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
-  AssertTrue('and so is a number past what an Int64 can hold',
-    IsNan(TyParseDataValue(TyDataNum(1e30), ddtTime)));
+  { A number past what an Int64 can hold is still a number: nothing rounds
+    it on the way in any more, so there is nothing for it to overflow.
+    [Revised in batch 42: this was a gap, when the branch still rounded.] }
+  AssertEquals('a number past an Int64 is still a number', 1e30,
+    TyParseDataValue(TyDataNum(1e30), ddtTime), 0);
   { And an ordinary epoch millisecond still comes through exactly -- the guard
     must not cost the range the type is for. }
   AssertEquals('an ordinary instant is unharmed', 1709596800000.0,

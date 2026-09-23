@@ -1229,7 +1229,7 @@ var
     a := AAxis.Scale.Mapper.TransformIn(e.Start);
     b := AAxis.Scale.Mapper.TransformIn(e.Stop);
     span := b - a;
-    px := Abs(AAxis.PxStop - AAxis.PxStart);
+    px := AAxis.PxLength;
     haveSup := False;
     sup0 := 0;
     sup1 := 0;

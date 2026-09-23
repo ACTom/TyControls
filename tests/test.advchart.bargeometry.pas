@@ -80,7 +80,12 @@ end;
 
 var
   { the largest difference seen, in units in the last place, and how many
-    this case may have: one on a linear axis, four on a log axis }
+    a case may have: none.
+    [Revised in batch 42: one on a linear axis and four on a log one, while
+    an axis mapped as a + n * (b - a) between canvas edges and a log axis
+    normalised over the logarithms of its ends. Upstream's own arithmetic,
+    local then global, over the decades the nice step stored, leaves no
+    difference.] }
   GWorstUlps: Double;
   GTolUlps: Double;
 
@@ -97,16 +102,8 @@ end;
 function Same(A, B: Double): Boolean;
 var d: Double;
 begin
-  { EXACT, or within a few units in the last place -- and -0 is 0, which a
-    rect clipped to nothing is, upstream. The pixel is reached by a different
-    order of the same arithmetic: upstream's linearMap is
-    (v - d0) / span * range + r0, this is r0 + n * range, and a log axis
-    takes its logarithm through a different library. The value each side
-    maps is the same to the bit (the value-axis oracle holds that); the
-    pixel may not be, by one unit on a linear axis. A log axis also takes
-    its logarithm through a different library (V8's against FPC's Ln), and
-    the pixels measured on it differ by up to four. Anything more than a
-    rounding is a rule. }
+  { EXACT -- and -0 is 0, which a rect clipped to nothing is, upstream.
+    GTolUlps stays as the dial, at nought. }
   if A = B then Exit(True);
   d := Abs(A - B) / Ulp(Max(Abs(A), Abs(B)));
   if d > GWorstUlps then GWorstUlps := d;
@@ -165,33 +162,27 @@ procedure TAdvChartBarGeometryOracleTest.CheckCase(ACase: TJSONObject;
 var
   name, cls, want, got: string;
   items: TJSONArray;
-  item, box, lbl, grid, axes: TJSONObject;
+  item, box, lbl, grid: TJSONObject;
   lst: TTyPaintList;
   e, mark, cap: TTyChartElement;
   i, k, si, raw, marks, caps: Integer;
   b: TTyRectF;
-  plot: TTyRectF;
+  xywh: TTyXYWH;
   pictorial, vertical, zero: Boolean;
   floor, e0: Double;
 begin
   name := ACase.Strings['name'];
-  GTolUlps := 1;
-  axes := ACase.Objects['axes'];
-  for i := 0 to axes.Count - 1 do
-    if (axes.Items[i] is TJSONObject)
-      and (TJSONObject(axes.Items[i]).Strings['type'] = 'log') then
-      GTolUlps := 4;
+  GTolUlps := 0;
   if APass = 1 then name := name + ' (again)';
   pictorial := (ACase.Find('pictorial') <> nil) and ACase.Booleans['pictorial'];
   vertical := ACase.Strings['baseAxis'] = 'x';
 
   { THE PLOT FIRST: every rectangle below is measured in it }
   grid := ACase.Objects['grid'];
-  plot := FChart.Build.Grid(0).PlotRect;
+  xywh := FChart.Build.Grid(0).PlotXYWH;
   Inc(FCompared);
-  if not (Same(plot.Left, Num(grid, 'x')) and Same(plot.Top, Num(grid, 'y'))
-    and Same(plot.Right - plot.Left, Num(grid, 'width'))
-    and Same(plot.Bottom - plot.Top, Num(grid, 'height'))) then
+  if not (Same(xywh.X, Num(grid, 'x')) and Same(xywh.Y, Num(grid, 'y'))
+    and Same(xywh.W, Num(grid, 'width')) and Same(xywh.H, Num(grid, 'height'))) then
   begin
     Miss(name, 'the plot is not upstream''s grid');
     Exit;

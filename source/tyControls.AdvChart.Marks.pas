@@ -242,6 +242,8 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
 
 implementation
 
+uses tyControls.AdvChart.JsMath;
+
 function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ADefaults: TTyCandleSpec): TTyCandleSpec;
 var
@@ -618,76 +620,58 @@ begin
   Result.Datum := TyChartDatum(ASeries, ARow);
 end;
 
-{ ABounds' band replaced by the solved column, ALONG the base axis.
-
-  Along the base axis, not along x: on a horizontal bar chart the band runs
-  vertically, and touching the wrong axis would change the bar's LENGTH, which
-  is the value it is drawing.
-
-  The offset is measured from the band CENTRE, upstream's convention, because
-  that is the point the coordinate system hands back for a category. A lone
-  default bar has Offset = -Width/2 and so stays centred. }
-function PlaceInBand(const ABounds: TTyRectF; ABaseHorizontal: Boolean;
-  const ACol: TTyBarColumn): TTyRectF;
+{ UPSTREAM'S clip.cartesian2d (BarView.ts), on the layout as upstream holds
+  it -- x, y and a signed width and height -- against the coordinate
+  system's area. True when the bar was clipped past itself: it is then not
+  drawn. The far edge is x + width, never an edge taken over as it is. }
+function ClipBarLayout(const AArea: TTyXYWH; var AX, AY, AW, AH: Double): Boolean;
 var
-  centre: Double;
+  signW, signH: Integer;
+  x2c, y2c, x, x2, y, y2: Double;
+  xClipped, yClipped: Boolean;
 begin
-  Result := ABounds;
-  { A COLUMN OF NO WIDTH COLLAPSES; it does not fall back to the band. Leaving
-    ABounds alone looks like the safe branch and is the opposite: ABounds is
-    the whole cell, so `barCategoryGap: '100%'` -- which solves every column to
-    zero -- drew bars filling their entire band. The caller drops a collapsed
-    rect, and it can only do that if one actually arrives. }
-  if ABaseHorizontal then
+  if AW < 0 then signW := -1 else signW := 1;
+  if AH < 0 then signH := -1 else signH := 1;
+  if signW < 0 then
   begin
-    centre := (ABounds.Left + ABounds.Right) / 2;
-    Result.Left := centre + ACol.Offset;
-    Result.Right := Result.Left + ACol.Width;
-  end
-  else
-  begin
-    centre := (ABounds.Top + ABounds.Bottom) / 2;
-    Result.Top := centre + ACol.Offset;
-    Result.Bottom := Result.Top + ACol.Width;
+    AX := AX + AW;
+    AW := -AW;
   end;
+  if signH < 0 then
+  begin
+    AY := AY + AH;
+    AH := -AH;
+  end;
+  x2c := AArea.X + AArea.W;
+  y2c := AArea.Y + AArea.H;
+  x := Max(AX, AArea.X);
+  x2 := Min(AX + AW, x2c);
+  y := Max(AY, AArea.Y);
+  y2 := Min(AY + AH, y2c);
+  xClipped := x2 < x;
+  yClipped := y2 < y;
+  if xClipped and (x > x2c) then AX := x2 else AX := x;
+  if yClipped and (y > y2c) then AY := y2 else AY := y;
+  if xClipped then AW := 0 else AW := x2 - x;
+  if yClipped then AH := 0 else AH := y2 - y;
+  if signW < 0 then
+  begin
+    AX := AX + AW;
+    AW := -AW;
+  end;
+  if signH < 0 then
+  begin
+    AY := AY + AH;
+    AH := -AH;
+  end;
+  Result := xClipped or yClipped;
 end;
 
-{ barMinHeight, applied ACROSS the base axis so a value too small to see still
-  shows as something.
-
-  MEASURED FROM THE BAR'S OWN FLOOR -- the axis' start value for a bar that
-  stands on it, the top of the one below for a stacked one (upstream's
-  baseCoord) -- because which end of the cell is the floor is exactly what the
-  Min/Max that built it threw away. So a minimum does not climb a stack: two
-  short segments one above the other overlap, as upstream's do.
-  [Revised in batch 36: this was anchored on the axis' extent start for every
-  member of a stack, and a short segment on top of a tall one was drawn as a
-  sliver from its own end towards the axis.]
-
-  The sign rule is upstream's and differs between the two orientations by one
-  boundary: a vertical bar of length zero points up the screen (`<= 0`), a
-  horizontal one right (`< 0`). }
-function ApplyMinHeight(const ABounds: TTyRectF; ABaseHorizontal: Boolean;
-  AAnchor, AFloor, AMinHeight: Double): TTyRectF;
-var
-  span, sign: Double;
+{ The rect of a layout whose width and height may be negative. }
+function LayoutBox(AX, AY, AW, AH: Double): TTyRectF;
 begin
-  Result := ABounds;
-  if AMinHeight <= 0 then Exit;
-  span := AAnchor - AFloor;
-  if Abs(span) >= AMinHeight then Exit;
-  if ABaseHorizontal then
-  begin
-    if span <= 0 then sign := -1 else sign := 1;
-    Result.Top := Min(AFloor, AFloor + sign * AMinHeight);
-    Result.Bottom := Max(AFloor, AFloor + sign * AMinHeight);
-  end
-  else
-  begin
-    if span < 0 then sign := -1 else sign := 1;
-    Result.Left := Min(AFloor, AFloor + sign * AMinHeight);
-    Result.Right := Max(AFloor, AFloor + sign * AMinHeight);
-  end;
+  Result := TyRectF(Min(AX, AX + AW), Min(AY, AY + AH),
+    Max(AX, AX + AW), Max(AY, AY + AH));
 end;
 
 { Which side `outside` is for a bar: past the end it grows to, decided on its
@@ -749,11 +733,12 @@ function BuildBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, valCol: Integer;
-  x, y, baseline, anchor, own, floorV, floorPx, len: Double;
+  x, y, baseline, own, floorV, floorPx, len: Double;
+  lx, ly, lw, lh: Double;
   zero, inverse: Boolean;
   lay: TTyCoordLayout;
   r, bg, plot: TTyRectF;
-  p, hiPt, loPt: TTyPointF;
+  p, loPt: TTyPointF;
   col: TTyBarColumn;
   baseHoriz, haveCol, stacked: Boolean;
   shape: TTyChartShape;
@@ -802,10 +787,12 @@ begin
       way. The check stays because it states the rule at the point the rule
       applies -- but it is not, today, the thing enforcing it. }
     if IsNan(x) or IsNan(y) then Continue;
-    lay := ABinding.Cart.DataToLayout([x, y]);
-    if not TyRectFIsValid(lay.Rect) then Continue;
+    { THE COLUMN: solved for the axis, or -- for a series nobody solved --
+      one lone column in the datum's own band }
     if not haveCol then
     begin
+      lay := ABinding.Cart.DataToLayout([x, y]);
+      if not TyRectFIsValid(lay.Rect) then Continue;
       col := ColumnFor(AVisual, lay.Rect, baseHoriz);
       haveCol := True;
     end;
@@ -819,8 +806,7 @@ begin
       not on the start value -- upstream's own, and documented as such.
 
       THE BOTTOM MEMBER stacks on nothing (upstream gives it no stackedOn
-      series) and stands where an unstacked bar does, on the start value --
-      which DataToLayout has already used.
+      series) and stands where an unstacked bar does, on the start value.
       [Revised in batch 36: the bottom member was said to keep "the axis' own
       baseline", the extent start, so as not to move on an axis that does not
       start at zero. Upstream stands it on the start value like any bar; the
@@ -829,33 +815,43 @@ begin
     if stacked and AStack.HasBelow and not IsNan(own) then
     begin
       if baseHoriz then floorV := y - own else floorV := x - own;
-      { A FLOOR THE AXIS CANNOT PLACE is no bar: on a log axis a member with
-        nothing of its sign below it stands on zero, which is nowhere, and
-        upstream draws nothing. Compared, it raised out of the render. }
       if baseHoriz then loPt := ABinding.Cart.DataToPoint([x, floorV])
       else loPt := ABinding.Cart.DataToPoint([floorV, y]);
-      if IsNan(loPt.X) or IsNan(loPt.Y) or IsInfinite(loPt.X)
-        or IsInfinite(loPt.Y) then Continue;
-      if baseHoriz then
-      begin
-        hiPt := ABinding.Cart.DataToPoint([x, y]);
-        loPt := ABinding.Cart.DataToPoint([x, floorV]);
-        lay.Rect.Top := Min(hiPt.Y, loPt.Y);
-        lay.Rect.Bottom := Max(hiPt.Y, loPt.Y);
-        floorPx := loPt.Y;
-      end
-      else
-      begin
-        hiPt := ABinding.Cart.DataToPoint([x, y]);
-        loPt := ABinding.Cart.DataToPoint([floorV, y]);
-        lay.Rect.Left := Min(hiPt.X, loPt.X);
-        lay.Rect.Right := Max(hiPt.X, loPt.X);
-        floorPx := loPt.X;
-      end;
-      if not TyRectFIsValid(lay.Rect) then Continue;
+      if baseHoriz then floorPx := loPt.Y else floorPx := loPt.X;
     end;
+    { A FLOOR THE AXIS CANNOT PLACE is no bar: on a log axis a start of 0, or
+      a member with nothing of its sign below it, stands on zero, which is
+      nowhere, and upstream draws nothing. }
+    if IsNan(floorPx) or IsInfinite(floorPx) then Continue;
 
-    r := PlaceInBand(lay.Rect, baseHoriz, col);
+    { UPSTREAM'S LAYOUT, barGrid.ts: the datum through the coordinate
+      system -- its matrix, where there is one -- the column's offset from
+      there along the base axis, the floor across it, and a SIGNED length
+      from the floor to the datum. }
+    p := ABinding.Cart.DataToPoint([x, y]);
+    if baseHoriz then
+    begin
+      lx := p.X + col.Offset;
+      ly := floorPx;
+      lw := col.Width;
+      lh := p.Y - floorPx;
+      len := lh;
+      { barMinHeight: a zero points up the screen -- `<= 0` }
+      if Abs(lh) < col.MinHeightPx then
+        if lh <= 0 then lh := -col.MinHeightPx else lh := col.MinHeightPx;
+    end
+    else
+    begin
+      lx := floorPx;
+      ly := p.Y + col.Offset;
+      lw := p.X - floorPx;
+      lh := col.Width;
+      len := lw;
+      { and on a horizontal bar a zero points right -- `< 0` }
+      if Abs(lw) < col.MinHeightPx then
+        if lw < 0 then lw := -col.MinHeightPx else lw := col.MinHeightPx;
+    end;
+    if IsNan(lx) or IsNan(ly) or IsNan(lw) or IsNan(lh) then Continue;
 
     { showBackground: the bar's own band, stretched over the WHOLE plot along
       the value axis -- BarView.ts:1237-1246. Emitted BEFORE the bar, because
@@ -866,13 +862,12 @@ begin
       the same reason a gridline is silent: a strip the height of the plot
       would take every hover the bar under the pointer was meant to get.
 
-      WHERE THIS AND UPSTREAM PART: a gap in the data gets no strip here. The
-      band is read off the datum's own cell, and a NaN has no cell -- upstream
-      reads the band from the layout stage, which keeps it. So a bar chart
-      with holes shows a gap in the backing strips too. }
+      WHERE THIS AND UPSTREAM PART: a gap in the data gets no strip here --
+      upstream reads the band from the layout stage, which keeps it. So a bar
+      chart with holes shows a gap in the backing strips too. }
     if col.ShowBackground then
     begin
-      bg := r;
+      bg := LayoutBox(lx, ly, lw, lh);
       plot := ABinding.Cart.GetRect;
       if baseHoriz then
       begin
@@ -895,50 +890,36 @@ begin
       Inc(Result);
     end;
 
-    { THE BAR'S OWN LENGTH, signed, from its floor to its end: what the
-      minimum is measured on and which side is outside. }
-    p := ABinding.Cart.DataToPoint([x, y]);
-    if baseHoriz then anchor := p.Y else anchor := p.X;
-    len := anchor - floorPx;
-    if col.MinHeightPx > 0 then
-      r := ApplyMinHeight(r, baseHoriz, anchor, floorPx, col.MinHeightPx);
-
     { clip, default TRUE: a bar whose value runs past the axis' own min or max
       is CUT at the plot edge rather than drawn over the labels. Upstream does
-      it by intersecting the layout rect -- clip.cartesian2d, BarView.ts:684 --
-      not by setting a clip path, so the bar keeps a real rect and the hit test
+      it by intersecting the layout -- clip.cartesian2d, BarView.ts:684 -- not
+      by setting a clip path, so the bar keeps a real rect and the hit test
       keeps agreeing with the ink. Transcribed that way for the same reason.
 
       AFTER barMinHeight, because that can push the drawn end outward and a
-      clip applied first would then be undone. }
-    if col.Clip then
-    begin
-      plot := ABinding.Cart.GetRect;
-      if r.Left < plot.Left then r.Left := plot.Left;
-      if r.Top < plot.Top then r.Top := plot.Top;
-      if r.Right > plot.Right then r.Right := plot.Right;
-      if r.Bottom > plot.Bottom then r.Bottom := plot.Bottom;
-    end;
+      clip applied first would then be undone.
 
-    { A zero-width column draws nothing rather than an invisible rect that is
-      still hit-testable -- which is what a bar on a value axis used to be.
-
-      ALONG THE VALUE AXIS the rule is upstream's clip: a bar clipped past
-      itself -- wholly outside the plot -- is not drawn, but one of NO LENGTH
-      is: a 0, a value equal to the start or to a pinned min, a bar clipped
-      to the plot's very edge. It is a flat rect that paints nothing, and it
-      still carries its label.
+      A bar clipped past itself -- wholly outside the plot -- is not drawn;
+      one of NO LENGTH is: a 0, a value equal to the start or to a pinned
+      min, a bar clipped to the plot's very edge. It is a flat rect that
+      paints nothing, and it still carries its label.
       [Revised in batch 36: every bar of no length was dropped, and its label
       with it.] }
+    if col.Clip and ClipBarLayout(ABinding.Cart.GetArea, lx, ly, lw, lh) then
+      Continue;
+    r := LayoutBox(lx, ly, lw, lh);
+
+    { A zero-width column draws nothing rather than an invisible rect that is
+      still hit-testable -- which is what a bar on a value axis used to be. }
     if baseHoriz then
     begin
-      if (r.Right - r.Left <= 0) or (r.Bottom < r.Top) then Continue;
-      zero := r.Bottom = r.Top;
+      if r.Right - r.Left <= 0 then Continue;
+      zero := lh = 0;
     end
     else
     begin
-      if (r.Bottom - r.Top <= 0) or (r.Right < r.Left) then Continue;
-      zero := r.Right = r.Left;
+      if r.Bottom - r.Top <= 0 then Continue;
+      zero := lw = 0;
     end;
     if TyHasCorner(col.Radii) then
       shape := TyShapeRoundRect(r, col.Radii)
@@ -1010,7 +991,7 @@ var
     if not (ABinding.BaseAxis.Scale is TTyOrdinalScale) then Exit;
     cats := TTyOrdinalScale(ABinding.BaseAxis.Scale).Count;
     if cats <= 0 then Exit;
-    avail := Abs(ABinding.BaseAxis.PxStop - ABinding.BaseAxis.PxStart) / cats;
+    avail := ABinding.BaseAxis.PxLength / cats;
     { The ACROSS size, which is upstream's own index choice: it reads
       symbolSize[1] for a horizontal category axis. Only visible with an
       oblong symbolSize, and transcribed rather than corrected. }
@@ -1146,9 +1127,13 @@ begin
     gap := IsNan(x) or IsNan(y);
     p := TyPointF(NaN, NaN);
     q := TyPointF(NaN, NaN);
+    { AS A SINGLE, both the vertex and the area's lower edge: upstream keeps
+      them in a Float32Array, and draws, hovers and puts the symbols where
+      that array says }
     if not gap then
     begin
       p := ABinding.Cart.DataToPoint([x, y]);
+      p := TyPointF(TyJsFround(p.X), TyJsFround(p.Y));
       gap := Illegal(p);
     end;
 
@@ -1164,6 +1149,7 @@ begin
       if IsNan(lowV) then lowV := startV;
       if baseHoriz then q := ABinding.Cart.DataToPoint([x, lowV])
                    else q := ABinding.Cart.DataToPoint([lowV, y]);
+      q := TyPointF(TyJsFround(q.X), TyJsFround(q.Y));
       gap := Illegal(q);
     end;
 
@@ -1455,7 +1441,7 @@ var
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
   offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
   lay: TTyCoordLayout;
-  cell, plot, barRect, clipRect: TTyRectF;
+  plot, barRect, clipRect: TTyRectF;
   col: TTyBarColumn;
   run: TTyPictorialRun;
   sym: TTySymbolSpec;
@@ -1545,8 +1531,6 @@ begin
       if not AVisual.Bar.Solved then col.Clip := False;
       haveCol := True;
     end;
-    cell := PlaceInBand(lay.Rect, baseHoriz, col);
-
     pt := ABinding.Cart.DataToPoint([x, y]);
     if baseHoriz then valuePx := pt.Y else valuePx := pt.X;
     if IsNan(valuePx) or IsInfinite(valuePx) then Continue;
@@ -1558,22 +1542,20 @@ begin
     floorPx := baseline;
     if stacked and AStack.HasBelow and not IsNan(own) then
     begin
-      if baseHoriz then floorPx := ABinding.ValueAxis.DataToCoord(y - own)
-      else floorPx := ABinding.ValueAxis.DataToCoord(x - own);
+      { through the coordinate system, as a bar's stacked floor is -- its
+        matrix, where there is one }
+      if baseHoriz then floorPx := ABinding.Cart.DataToPoint([x, y - own]).Y
+      else floorPx := ABinding.Cart.DataToPoint([x - own, y]).X;
       if IsNan(floorPx) or IsInfinite(floorPx) then Continue;
     end;
     cutLen := valuePx - floorPx;
 
-    if baseHoriz then
-    begin
-      categorySize := Abs(cell.Right - cell.Left);
-      acrossCentre := (cell.Left + cell.Right) / 2;
-    end
-    else
-    begin
-      categorySize := Abs(cell.Bottom - cell.Top);
-      acrossCentre := (cell.Top + cell.Bottom) / 2;
-    end;
+    { THE COLUMN ACROSS THE BAR, as barGrid lays it: the datum's point on the
+      base axis plus the column's offset, the column's width, and the glyphs
+      on its middle -- upstream's layout[xy] + layout[wh] / 2 }
+    categorySize := Abs(col.Width);
+    if baseHoriz then acrossCentre := pt.X + col.Offset + col.Width / 2
+    else acrossCentre := pt.Y + col.Offset + col.Width / 2;
     { A COLLAPSED COLUMN DRAWS NOTHING, the same answer a bar gives: every
       percentage across the bar would be a percentage of nothing. }
     if categorySize <= 0 then Continue;

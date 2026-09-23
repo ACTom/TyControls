@@ -6165,6 +6165,7 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
   - 上游在 value/time × value/time 上用坐标系的仿射矩阵落位,port 逐轴算,盒子最多差 8 ulp。
   - y 轴端点的刻度坐标差 2 ulp:上游是 `(r0 + r1) - map(n) + y`,port 是 `a + n * (b - a)`。
   - G9 的 8 条只比轴、不比盒子。下一批做。
+  **[第四十二批已做,见 §76。containshape 的盒子、刻度、G9 现在全部逐位比较。]**
 - **对数轴的 pow**:mapping 端点是 10 的小数次幂,FPC 的 `Power` 和 V8 的 `Math.pow` 差 6–7 ulp(10^2.5、log 2/3/50 的上端)。审计估计的 4 ulp 不够,容差放到 8。要逐位一致,得移植 fdlibm 的 `pow` / `log`。
 - **candlestick 和 boxplot** 也会让 ctnShp 为真,上游值轴上的 candlestick 也会放宽(mapping [-0.5, 4.5]);port 的 K 线在非类目轴上是固定的 8 px,这批不管。用例 deferred。
 - alignTicks、dataZoom(`zoomFixMM`)、axisPointer 的钳位与阴影宽:port 还没有这些功能,用例 deferred。
@@ -6188,3 +6189,108 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
 ### 还在队列里
 
 仿射快路径(value/time × value/time)→ 类目轴 `min` / `max` → 线图符号跟着标签间隔 → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。V8 兼容的 `pow` / `log` 视需要插进来。
+
+## 76. Tier 1 第四十二批:坐标落位逐位对齐上游(仿射矩阵与逐轴公式)(2026-09-23)
+
+§75 留下的尾巴是仿射快路径。审计发现问题不止这一处:port 的逐轴公式本身和上游不同(类目轴上也不同),网格矩形丢了宽高,柱子的盒子和裁剪另有写法,折线顶点上游存成 float32,时间数据在读入时被取整。这一批把一个值从数据落到画布的整条路都换成上游的算法。
+
+### 上游的做法
+
+- **网格矩形**:上游始终按 `(x, y, width, height)` 保存。给了宽度就用那个宽度,右边缘是 `x + width`。`(x + w) - x` 不一定等于 `w`。
+- **网格选项的合并(mergeLayoutParam)**:用户在一个方向上写了两个键(比如 `right` 和 `width`),就只用这两个,默认的 `left` 丢掉;只写了一个,就从默认值里按 left、right、width 的顺序补第一个没写的;写成 `null` 或 `'auto'` 的键算写了但没有值。
+- **逐轴落位**:
+  - 轴有自己的局部范围 `[0, w]`,反向时是 `[w, 0]`(交换两端,不是 `1 - n`);
+  - 类目轴在局部范围上各收半个带;
+  - `linearMap(n, [0,1], [r0,r1])`:n 为 0 或 1 时原样返回端点,其余 `n * (r1 - r0) + r0`;clamp 时越界返回端点;
+  - 再转到画布:x 是 `c + x`,y 是 `(e0 + e1) - c + y`;
+  - 时间轴先按 `Math.round` 取整到毫秒(scale.parse);
+  - 值是 NaN 且轴的范围是平的(一个类目),落在中点(normalize 先答 0.5)。
+- **仿射矩阵**:
+  - 两根主轴都是 value 或 time(不是 log、不是类目)才有;两根轴的 mapping 跨度都不能为 0 或 NaN。
+  - 用逐轴落位算 mapping 两端的点,`sx = (end - start) / span`,`tx = start - m0 * sx`;时间轴的两端因此先被取整。
+  - 只在最终矩形写定之后算一次(Grid.resize 末尾);还有逆矩阵(zrender 的 invert,行列式为 0 时没有)。
+  - `dataToPoint`:两个值都有限才走矩阵,否则两维都走逐轴;矩阵不 clamp。`pointToData` 有逆矩阵就用逆矩阵。
+- **柱子**:`coord = dataToPoint([base, value])`,`x = coord.x + offset`、`width = size`、`y = 底`、`height = coord.y - 底`(横向对称);底是数值轴起点(逐轴),堆叠时是 `dataToPoint` 算的下一层。barMinHeight 之后按 `clip.cartesian2d` 在 x/width 形式下裁剪到 `getArea()`,远端总是 `x + width`。
+- **pictorialBar**:布局同柱子,图形沿 `layout.xy + layout.wh / 2` 居中;**不堆叠**(getInitialData 把 `stack` 置空)。
+- **折线**:顶点、面积下沿、符号位置都来自 `Float32Array`。
+- **时间数据**:数据存储里数值原样保留,只在落位时取整。
+- **对数轴**:nice 之后用存下的指数空间范围(比如 -1 到 3)归一化,不是端点的对数(-0.9999999999999998)。
+
+### port 以前
+
+- 网格只存四条边,宽度靠 `Right - Left` 反推。
+- grid 只写 `right` + `width` 时,默认的 `left: 15%` 还在,落进"起点 + 尺寸"分支,整个网格放错位置。
+- 逐轴公式是全局两端之间的 `a + n * (b - a)`,反向用 `1 - n`,带宽内缩也在全局坐标上做。
+- 没有仿射矩阵。
+- 柱子盒子用 `Min/Max` 拼,在带子中心 `(L + R) / 2` 上加偏移,裁剪直接夹四条边。
+- pictorialBar 会堆叠。
+- 折线顶点是 double。
+- 时间数据读入时按银行家舍入取整。
+- 对数轴归一化用端点的对数。
+
+### 做法
+
+- `Types`:`TTyXYWH`、`TTyMat2D` 及转换函数从 Layout 挪过来。
+- `Layout`:`SolveAxis` 多给出上游的长度(给了尺寸就是尺寸);`TySolveBoxXYWH`;`TySolveGridBoundsXYWH`、`TyLegacyContainLabelXYWH` 以 XYWH 进出。
+- `Builder`:
+  - 网格保存 `OuterXYWH` / `PlotXYWH`,四条边由它导出;
+  - grid 的 box 选项按 mergeLayoutParam 合并(`MergedBoxDim`);
+  - 最终写矩形后调用 `CalcAffineTransform`。
+- `Coord`:
+  - 轴存局部长度和基点(`SetLayoutExtent`),`LocalExtent`、`BandExtent`、`ToGlobal`、`ToLocal`、`DataToLocal`;`DataToCoord` 可 clamp;`PxLength` 是宽度本身,带宽和 containShape 的像素长度都用它;
+  - 雷达等仍用 `SetPxExtent`(恒等映射);
+  - 笛卡尔系存 XYWH,`CalcAffineTransform`、`Transform`、`InvTransform`、`GetArea`、`DataToPointClamped`,`PointToData` 走逆矩阵。
+- `Marks`:柱子按上游布局 + `ClipBarLayout`;pictorialBar 的列和堆叠底同上;折线顶点和面积下沿经 `TyJsFround`。
+- `JsMath`:`TyJsFround`(Math.fround,溢出按半个末位判定为无穷,不交给会抛异常的转换)。
+- `Scale`:`TTyIntervalScale.Normalize/Denormalize` 在对数轴、nice 未被改写、没有 mapping 时用存下的指数范围。
+- `Stack`:pictorialBar 不堆叠。
+- `Data`:时间维的数值原样保存。
+
+### 基准
+
+- `tools/advchart-oracle/coord-affine.js` → `tests/fixtures/advchart-coord-affine.json`,53 条(51 比较、2 文档性)。生成器有 8 项自检,包括逐位复现矩阵与逆矩阵、每条用例都能区分仿射与逐轴、port 旧公式与上游、D4(毫秒级时间柱子,两条路差 9.16 px)。
+- `test.advchart.coordaffine`,两遍,一万多项:矩形、矩阵与逆矩阵、裁剪区、局部范围、刻度坐标、onZero 线、数值轴起点、每个点、柱列的 offset 和 size、柱子盒子、pictorial 底、折线顶点与面积下沿、各种探针(非有限值、clamp、pointToData 与轴的 pointToData、axisPointer 的 clamp 像素)。全部逐位,只有对数轴上从像素换回数值(pow 的小数次幂)放宽到 16 ulp。
+- 收紧的旧测试:
+  - `test.advchart.containshape`:盒子、刻度 8 ulp → 逐位,G9 的盒子打开,绘图区直接比 XYWH;对数轴仍 8 ulp(mapping 端点是 pow)。
+  - `test.advchart.bargeometry`:1 ulp(对数 4)→ 全部逐位,对数也是;绘图区比 XYWH。
+
+### 被推翻的旧测试
+
+- `test.advchart.data.pas`:时间维的数值不再取整;超过 Int64 的数也是数。原处有标注。
+- `test.advchart.bargeometry.pas`、`test.advchart.containshape.pas` 的容差说明同样更正。
+
+### 已知偏差
+
+- **对数轴的 pow**:从像素换回数值、以及 containShape 的 mapping 端点,都要算小数次幂,FPC 的 `Power` 和 V8 的 `Math.pow` 差到 12 ulp。要逐位得移植 fdlibm 的 `pow`(可能还有 `log`)。
+- **坐标轴标签锚点**:上游经 AxisBuilder 的组矩阵(y 轴是旋转矩阵,含 `cos(π/2)` 的 6e-17),port 仍是 `L + p * len`,且 p 取自初始矩形。差 ≤ 2 ulp;类目轴带边刻度也还是全局 → 局部 → 全局的往返。
+- **axisPointer**:值的钳位仍按有效范围;clamp 的像素已经有了(`DataToCoord(v, True)`),指针还没改用。
+- **K 线**:仍逐轴,没有 subPixelOptimize。
+- **轴断裂**:port 不建断裂,矩阵门控没查断裂。
+- title / legend 的 box 选项还没按 mergeLayoutParam 合并,只做了 grid。
+
+### 变异测试
+
+55 个变异体。第一轮存活 15 个,其中 10 个是夹具里没有能区分它们的用例。给生成器补了 12 条用例:
+
+- 反向的带轴画到最后一个类目(那里 `(r1 - r0) + r0` 不等于 `r1`);
+- `(x + w) - x ≠ w` 的网格上放类目柱、数值基轴柱、单值 containShape,以及一个不收缩的 outerBounds;
+- grid 只写 `width`,或写 `left: 'auto'`;
+- 小数网格上 `((c - h) + (c + h)) / 2 ≠ c` 的横竖两种类目柱;
+- 横向柱子在左侧被裁剪。
+
+Pascal 测试另外加比柱列的 offset 和 size。这 10 个随后全部被杀。
+
+仍然存活的 5 个:
+
+- 4 个等价:
+  - mapping 跨度为 0 的判断:nice 之后跨度不会是 0;
+  - 换矩形后清掉旧矩阵:每次构建都新建坐标系;
+  - CoordToData 两端原样返回:在数值轴上算式本来就精确到端点,在类目轴上结果还要再取整;
+  - 裁剪之后的宽度写 `x2 - x` 还是 `x2 - AX`:AX 在这之前已经被赋成 x。
+- 1 个被容差遮住:对数轴的 Denormalize 走不走存下的指数范围,差别淹没在 pow 的 16 ulp 里。等 fdlibm 的 `pow` 移植进来就能分辨。
+
+重编后全量 **7775** 绿。
+
+### 还在队列里
+
+坐标轴标签锚点的组矩阵(连同类目轴带边刻度)与 fdlibm 的 `pow` / `log` → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。
