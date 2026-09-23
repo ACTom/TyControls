@@ -1264,17 +1264,21 @@ TyToolWindowHeader      { background: var(--toolwindow-header-bg); color: var(--
                           font-size: var(--font-size-base); }
 TyToolWindowActions     { background: var(--toolwindow-header-bg); }
 TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }
-/* 标签的内距由代码读 --toolwindow-tab-pad(B 期接线),不走 padding。 */
+/* 标签的内距由代码读 --toolwindow-tab-pad,不走 padding。禁用时(栏或它的父控件被禁用)
+   选中的那一个也按禁用墨色画,:disabled 排在 :selected 后面(同图标条)。 */
 TyToolWindowTab          { color: var(--toolwindow-tab-ink); }
 TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }
+TyToolWindowTab:disabled { color: var(--muted); }
 TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }
-TyToolWindowOverflow        { color: var(--toolwindow-tab-ink); }
-TyToolWindowOverflow:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
-TyToolWindowOverflow:active { background: var(--toolwindow-overlay-active); }
-TyToolWindowButton        { color: var(--toolwindow-tab-ink); }
-TyToolWindowButton:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
-TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }
+TyToolWindowOverflow          { color: var(--toolwindow-tab-ink); }
+TyToolWindowOverflow:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
+TyToolWindowOverflow:active   { background: var(--toolwindow-overlay-active); }
+TyToolWindowOverflow:disabled { color: var(--muted); }
+TyToolWindowButton          { color: var(--toolwindow-tab-ink); }
+TyToolWindowButton:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
+TyToolWindowButton:active   { background: var(--toolwindow-overlay-active); }
+TyToolWindowButton:disabled { color: var(--muted); }
 /* 标签行的竖分隔线是「线」:border-color 是线色、border-width 是线宽(同边缘区的写法);
    槽宽 = 2 × --toolwindow-header-gap + 线宽,由代码算。 */
 TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }

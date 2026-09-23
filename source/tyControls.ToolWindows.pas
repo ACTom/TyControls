@@ -3699,8 +3699,9 @@ function TTyToolWindowBar.HeaderTabStates(AWindow: TTyToolWindow; AIndex: Intege
 begin
   Result := [];
   if AIndex = IndexOfWindow(FActive) then Include(Result, tysSelected);
-  { 禁用时保留 :selected(同图标条):灰掉的栏也得看得出哪一页是当前页。 }
-  if not Enabled then
+  { 禁用时保留 :selected(同图标条):灰掉的栏也得看得出哪一页是当前页。禁用看 IsEnabled
+    (父控件被禁用也算)—— 跟 HeaderMouseDown 收不收按下是同一个判断。 }
+  if not IsEnabled then
     Include(Result, tysDisabled)
   else if not (tysSelected in Result) then
   begin
@@ -3715,7 +3716,7 @@ function TTyToolWindowBar.HeaderPartStates(AWindow: TTyToolWindow;
   APart: TTyToolWindowBarPart): TTyStateSet;
 begin
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
     Include(Result, tysDisabled)
   else
   begin

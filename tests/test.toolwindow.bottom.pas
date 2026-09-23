@@ -85,6 +85,8 @@ type
     procedure TestTheSeparatorIsALineCentredInItsSlot;
     procedure TestTheUnderlineFollowsTheMirroredTab;
     procedure TestRenderingAt144ScalesTabsAndButtons;
+    { 栏的父控件被禁用(栏自己的 Enabled 没动):标签、按钮一律按 :disabled 的墨色画。 }
+    procedure TestADisabledParentGreysTheTabRow;
     procedure TestRenamingAHiddenPageRepaintsTheActivePage;
     procedure TestReorderingRepaintsTheActivePage;
     { 收起期间切到另一页、别的页改了标题:展开时那一页不许 blit 旧帧(spec §3.5)。 }
@@ -1062,6 +1064,45 @@ begin
   try
     { 画的和排的是同一套尺度:下划线横跨 144 下的文字框(tab-pad 15)、粗 3。 }
     AssertEquals('下划线按 144 的几何画', (r.Width - 30) * 3, ExactIn(bmp, r, clBlack));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestADisabledParentGreysTheTabRow;
+const
+  { CSS #00FF00,基础主题的 :disabled 取 --muted。绿在品红底上的混合线跟蓝、黄两条都不相交
+    (R、B 一起降、G 升),抗锯齿的边缘分得清;橙(R 恒 255)会跟黄那条在淡像素上重合。
+    底漆也是绿,但整页都画到(TestTheUnderlineSitsOnTheActiveTabsBottomOnly 钉着)。 }
+  DisInk = TColor($00FF00);
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+  i: Integer;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme + ' :root { --muted: #00FF00; }';
+  w := FWins[1];
+  g := ActiveGeom;
+  FHost.Enabled := False;
+  AssertTrue('前提:栏自己的 Enabled 没动', FBar.Enabled);
+  AssertFalse('前提:栏实际上是禁用的', FBar.IsEnabled);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    for i := 0 to 2 do
+    begin
+      r := TabRectOf(g, i);
+      AssertTrue(Format('标签 %d:禁用墨色', [i]), InkIn(bmp, r, DisInk) > 0);
+      AssertEquals(Format('标签 %d:没有静止墨', [i]), 0, InkIn(bmp, r, RestInk));
+      AssertEquals(Format('标签 %d:没有选中墨(当前页也灰)', [i]), 0, InkIn(bmp, r, SelInk));
+    end;
+    { 按钮看最大化那一个:它的方框有整像素的边,收起的横线落在半像素上、只有 BGRA 按 gamma
+      混出来的灰,混合线数不出来。 }
+    AssertTrue('最大化按钮:禁用墨色', InkIn(bmp, g.Maximize, DisInk) > 0);
+    AssertEquals('最大化按钮:没有静止墨', 0, InkIn(bmp, g.Maximize, RestInk));
   finally
     bmp.Free;
   end;

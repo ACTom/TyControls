@@ -1297,17 +1297,21 @@ begin
     '                          font-size: var(--font-size-base); }' + LineEnding +
     'TyToolWindowActions     { background: var(--toolwindow-header-bg); }' + LineEnding +
     'TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }' + LineEnding +
-    '/* 标签的内距由代码读 --toolwindow-tab-pad(B 期接线),不走 padding。 */' + LineEnding +
+    '/* 标签的内距由代码读 --toolwindow-tab-pad,不走 padding。禁用时(栏或它的父控件被禁用)' + LineEnding +
+    '   选中的那一个也按禁用墨色画,:disabled 排在 :selected 后面(同图标条)。 */' + LineEnding +
     'TyToolWindowTab          { color: var(--toolwindow-tab-ink); }' + LineEnding +
     'TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowTab:disabled { color: var(--muted); }' + LineEnding +
     'TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }' + LineEnding +
-    'TyToolWindowOverflow        { color: var(--toolwindow-tab-ink); }' + LineEnding +
-    'TyToolWindowOverflow:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
-    'TyToolWindowOverflow:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
-    'TyToolWindowButton        { color: var(--toolwindow-tab-ink); }' + LineEnding +
-    'TyToolWindowButton:hover  { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
-    'TyToolWindowButton:active { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowOverflow          { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowOverflow:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowOverflow:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowOverflow:disabled { color: var(--muted); }' + LineEnding +
+    'TyToolWindowButton          { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowButton:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowButton:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowButton:disabled { color: var(--muted); }' + LineEnding +
     '/* 标签行的竖分隔线是「线」:border-color 是线色、border-width 是线宽(同边缘区的写法);' + LineEnding +
     '   槽宽 = 2 × --toolwindow-header-gap + 线宽,由代码算。 */' + LineEnding +
     'TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }' + LineEnding +
