@@ -2424,11 +2424,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/plans/2026-09-20-toolwindow-phase-a.md`
 - Modify: `docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md`
 
-- [ ] **Step 1: 按 spec 逐条核代码，不看测试**
+- [x] **Step 1: 按 spec 逐条核代码，不看测试**
 
 对着 spec §3、§4、§5、§6、§9.1–9.3、§12 一条条查实现。**全绿不等于按 spec 做完**：重点查测试碰不到的那些——`csNoFocus`、六个 `stored False`、`ChildClassAllowed`、`TabStop` 的 published default、改 `Placement` 时同步 `Align` 与 `Left`/`Top`、`--toolwindow-*` 每个 token 是不是真的有人读。**只在 tests/ 里出现的常量就是红旗**（建好没接线是本库的默认故障）。
 
-- [ ] **Step 2: 跑全量**
+- [x] **Step 2: 跑全量**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
@@ -2436,21 +2436,29 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests
 
 Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，总条数比 A 期开工前多出本计划新增的条数。
 
-- [ ] **Step 3: 抽查四条变异**
+- [x] **Step 3: 抽查四条变异**
 
 按任务里写死的四处（Task 2 Step 9、Task 5 Step 7、Task 7 Step 4 第一条、Task 10 Step 4）各做一次「改 → `lazbuild -B` → 必须红 → 改回 → 重编 → 绿」。
 
-- [ ] **Step 4: 把实现期发现的偏差写回 spec**
+- [x] **Step 4: 把实现期发现的偏差写回 spec**
 
 实现期一定会撞上 spec 没写准的地方。发现一条就在 spec **原处**改，并注明「实现期修正」——B/C/D 期读的是 spec，不是这份计划。
 
-- [ ] **Step 5: 提交收尾**
+- [x] **Step 5: 提交收尾**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(toolwindows): phase A sign-off notes and spec corrections
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
+
+**A 期签收（2026-09-23）**
+
+- 全量 7364 条，errors / failures 0 / 0。
+- 上面四处计划变异全部红过，改回后重编转绿。
+- 两轮整体审查（对着 spec 核、代码质量）提出的问题都已修完，提交区间 `2246f810..9d4cbb85`；和 spec 不一致的地方已在 spec 原处标「实现期修正（A 期）」。
+- 审查第 26 项（悬停只 `InvalidateRect` 图标条那一块）有意不做：全库没有这种写法，spec §3.5 也禁止裸 `InvalidateRect`。
+- 只能真机验的项见 spec §15，本期没验。
 
 ---
 
@@ -2466,3 +2474,5 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - 换主题 / 换密度 / 换 DPI，标题行和图标条都跟着变。
 
 **还做不到的**（B / C / D 期）：底栏、跨侧拖动、布局保存、设计器里加窗口、示例和文档。
+
+**留给 B 期开工时做**：把栏上的手势状态机（按下 / 阈值 / 拖动 / 取消 / `ResetGesture`）抽成独立的类。B 期底栏标签的输入转发、C 期跨栏拖动都要复用它。
