@@ -17,7 +17,7 @@ const
 type
   TTyToolWindowHeaderMode = (twhNone, twhSide, twhBottom);
 
-  { 标题行的一个可点部件。返回它的命中测跟底栏一起在 B 期落地。 }
+  { 标题行的一个可点部件。命中测是 TyToolWindowZoneAt。 }
   TTyToolWindowZone = (twzNone, twzTab, twzOverflow, twzSeparator, twzMaximize, twzCollapse);
 
   { 一个标签 / 一个图标的槽位。ItemIndex 是**窗口序号**,不是排布序号 ——
@@ -86,6 +86,12 @@ function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Intege
   AActiveIndex, AOverflowWidth: Integer): TTyToolWindowPlan;
 
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
+
+{ 底栏标题行上 (X, Y)(行内坐标)落在哪个部件上。是排布的**精确逆运算**:只扫排布产出的
+  矩形(标签、溢出、分隔线、最大化、收起),空矩形命不中;操作区和空白答 twzNone。
+  标签时 AIndex 是**窗口序号**(不是排布序号),其余 -1。侧栏几何里没有这些部件,恒答 none。 }
+function TyToolWindowZoneAt(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer;
+  out AIndex: Integer): TTyToolWindowZone;
 
 { 把排好的整套几何按行宽镜像(spec §7.3)。每个矩形字段和每个槽位都过一遍,
   所以 B 期给 Geom 加部件不用记得回来添一行。
@@ -225,6 +231,107 @@ begin
   end;
 end;
 
+{ 底栏标题行(spec §7.3)。从尾端往前 [收起][最大化][分隔线][操作区][溢出][标签…];
+  固定部件不缩,放不下的那一截钳在 [0, 行宽];操作区保宽直到标签区缩到 TabAreaMin;
+  标签按可见计划排(当前页强制留下),溢出按钮紧跟最后一个已排标签(开工前问题 7)。
+  镜像由调用方末尾统一做。 }
+procedure LayoutBottomRow(const AInput: TTyToolWindowHeaderInput; APad, AGap, AActionsW: Integer;
+  var AGeom: TTyToolWindowHeaderGeom);
+var
+  rowW, rowH, btn, bh, bt, sep, ovf, amin, x, fixedLeft, room, right, limit, n, i, k, w: Integer;
+  plan: TTyToolWindowPlan;
+  shown: array of Boolean;
+
+  function ClampX(AValue: Integer): Integer;
+  begin
+    if AValue < 0 then Result := 0
+    else if AValue > rowW then Result := rowW
+    else Result := AValue;
+  end;
+
+  function Span(ALeft, ARight, ATop, ABottom: Integer): TRect;
+  begin
+    Result := Rect(ClampX(ALeft), ATop, ClampX(ARight), ABottom);
+    if Result.Right < Result.Left then Result.Right := Result.Left;
+  end;
+
+begin
+  rowW := AInput.RowWidth;
+  rowH := AInput.RowHeight;
+  { 负数入参一次钳干净(同 TyToolWindowVisiblePlan 的规矩)。 }
+  btn := AInput.ButtonSize;      if btn < 0 then btn := 0;
+  sep := AInput.SeparatorWidth;  if sep < 0 then sep := 0;
+  ovf := AInput.OverflowWidth;   if ovf < 0 then ovf := 0;
+  amin := AInput.TabAreaMin;     if amin < 0 then amin := 0;
+  { 按钮见方,高钳进行高、垂直居中。 }
+  bh := btn;
+  if bh > rowH then bh := rowH;
+  bt := (rowH - bh) div 2;
+
+  x := rowW - APad;
+  AGeom.Collapse := Span(x - btn, x, bt, bt + bh);
+  Dec(x, btn + AGap);
+  AGeom.Maximize := Span(x - btn, x, bt, bt + bh);
+  Dec(x, btn);
+  AGeom.Separator := Span(x - sep, x, 0, rowH);
+  Dec(x, sep);
+  fixedLeft := x;
+
+  { 操作区保宽,直到标签区(行首 pad 到操作区左沿)缩到 TabAreaMin;再往下才压它,最小 0
+    (0 = 全零哨兵,同「没有操作区」)。只缩宽:子控件贴尾端、裁开头,由操作区自己排。 }
+  room := fixedLeft - APad;
+  if AActionsW > room - amin then AActionsW := room - amin;
+  if AActionsW < 0 then AActionsW := 0;
+  if AActionsW > 0 then
+    AGeom.Actions := Span(fixedLeft - AActionsW, fixedLeft, 0, rowH);
+  right := fixedLeft - AActionsW;
+  if right < APad then right := APad;
+  AGeom.TabArea := Span(APad, right, 0, rowH);
+
+  { 标签:每个右沿不越过「标签区右沿,有东西被收起时再减溢出按钮宽」—— 于是只有当前页的
+    标签连单独都放不下时才会被截(画的时候出省略号)。 }
+  n := Length(AInput.TabWidths);
+  plan := TyToolWindowVisiblePlan(AGeom.TabArea.Right - AGeom.TabArea.Left,
+    AInput.TabWidths, AInput.ActiveIndex, ovf);
+  limit := AGeom.TabArea.Right;
+  if Length(plan) < n then Dec(limit, ovf);
+  if limit < AGeom.TabArea.Left then limit := AGeom.TabArea.Left;
+  AGeom.Tabs := nil;
+  SetLength(AGeom.Tabs, Length(plan));
+  x := AGeom.TabArea.Left;
+  for i := 0 to High(plan) do
+  begin
+    k := plan[i];
+    w := AInput.TabWidths[k];
+    if w < 0 then w := 0;
+    if x + w > limit then w := limit - x;
+    if w < 0 then w := 0;
+    AGeom.Tabs[i].ItemIndex := k;
+    AGeom.Tabs[i].ItemRect := Span(x, x + w, 0, rowH);
+    Inc(x, w);
+  end;
+
+  AGeom.Hidden := nil;
+  if Length(plan) < n then
+  begin
+    { 溢出按钮紧跟最后一个已排标签,按钮带那样垂直居中,右沿钳在标签区右沿。 }
+    AGeom.Overflow := Span(x, x + ovf, bt, bt + bh);
+    if AGeom.Overflow.Right > AGeom.TabArea.Right then
+      AGeom.Overflow.Right := AGeom.TabArea.Right;
+    if AGeom.Overflow.Right < AGeom.Overflow.Left then
+      AGeom.Overflow.Right := AGeom.Overflow.Left;
+    shown := nil;
+    SetLength(shown, n);
+    for i := 0 to High(plan) do shown[plan[i]] := True;
+    for i := 0 to n - 1 do
+      if not shown[i] then
+      begin
+        SetLength(AGeom.Hidden, Length(AGeom.Hidden) + 1);
+        AGeom.Hidden[High(AGeom.Hidden)] := i;
+      end;
+  end;
+end;
+
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
 var
   pad, gap, aw, x, band: Integer;
@@ -260,11 +367,35 @@ begin
       Result.Caption := Rect(pad, 0, x, band);
     { 标题拿下整个剩余跨度 —— spec §3.4:"操作区优先保宽;标题先省略号"。
       放不下由 DrawText 自己出省略号,所以这里没有「标题想要多宽」这个输入。 }
-  end;
-  { twhBottom 那一支在 B 期实现;twhNone 什么都不排。 }
+  end
+  else if AInput.Mode = twhBottom then
+    LayoutBottomRow(AInput, pad, gap, aw, Result);
+  { twhNone 什么都不排。 }
 
   if AInput.RightToLeft then
     TyToolWindowFlipAll(Result, AInput.RowWidth);
+end;
+
+function TyToolWindowZoneAt(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer;
+  out AIndex: Integer): TTyToolWindowZone;
+var
+  pt: TPoint;
+  i: Integer;
+begin
+  AIndex := -1;
+  pt := Point(X, Y);
+  { PtInRect 不含右沿、下沿:零宽 / 零高的矩形自然命不中。 }
+  for i := 0 to High(AGeom.Tabs) do
+    if PtInRect(AGeom.Tabs[i].ItemRect, pt) then
+    begin
+      AIndex := AGeom.Tabs[i].ItemIndex;
+      Exit(twzTab);
+    end;
+  if PtInRect(AGeom.Overflow, pt) then Exit(twzOverflow);
+  if PtInRect(AGeom.Separator, pt) then Exit(twzSeparator);
+  if PtInRect(AGeom.Maximize, pt) then Exit(twzMaximize);
+  if PtInRect(AGeom.Collapse, pt) then Exit(twzCollapse);
+  Result := twzNone;
 end;
 
 function TyToolWindowVisiblePlan(AAvail: Integer; const AWidths: array of Integer;

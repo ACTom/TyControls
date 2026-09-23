@@ -2,7 +2,7 @@ unit test.toolwindow.geometry;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, Types, fpcunit, testregistry,
+  Classes, SysUtils, Types, fpcunit, testregistry,
   { 只为它的 initialization —— 四个 RegisterClass 就发生在那里,别当成没用的 uses 删掉。 }
   tyControls.ToolWindows, tyControls.ToolWindows.Layout;
 
@@ -26,6 +26,31 @@ type
     procedure TestFlipAllCoversEveryRectAndTab;
     procedure TestSameGeomComparesEveryRectAndTab;
     procedure TestActionsFlowFloorsEachItemAtItsMinimums;
+    { 底栏标题行(spec §7.3,开工前问题 7):从尾端往前 [收起][最大化][分隔线][操作区][溢出][标签…]。 }
+    procedure TestBottomRowLaysOutFromTheTrailingEnd;
+    procedure TestBottomRowOverflowFollowsTheLastTab;
+    procedure TestBottomRowKeepsTheActiveTabWhenOthersOverflow;
+    procedure TestBottomRowSqueezesTheActionsDownToTheTabAreaMin;
+    procedure TestBottomRowNarrowerThanItsButtonsClampsEverything;
+    procedure TestBottomRowWithoutActionsGivesTheTabsTheRoom;
+    procedure TestBottomRowWithoutWindowsKeepsOnlyTheButtons;
+    procedure TestBottomRowMirrorsUnderRightToLeft;
+    procedure TestBottomRowClampsTheButtonsToTheRowHeight;
+    procedure TestBottomRowClampsNegativeInputs;
+    { 命中是排布的精确逆运算。 }
+    procedure TestZoneAtInvertsTheBottomLayout;
+    procedure TestZoneAtAnswersNoneOffTheParts;
+    procedure TestZoneAtOnASideRowIsAlwaysNone;
+    procedure TestZoneAtNeverHitsAnEmptyPart;
+  private
+    procedure CheckRect(const AMsg: string; L, T, R, B: Integer; const ARect: TRect);
+    { AExpected 是 (窗口序号, Left, Right) 三个一组;纵向一律 0..ARowH。 }
+    procedure CheckTabs(const AMsg: string; const AGeom: TTyToolWindowHeaderGeom;
+      ARowH: Integer; const AExpected: array of Integer);
+    procedure CheckHidden(const AMsg: string; const AGeom: TTyToolWindowHeaderGeom;
+      const AExpected: array of Integer);
+    { 每个非空部件的中心都命中它自己(标签答窗口序号)。 }
+    procedure CheckCentresHit(const AMsg: string; const AGeom: TTyToolWindowHeaderGeom);
   end;
 
 implementation
@@ -377,6 +402,343 @@ begin
   fl := TyToolWindowActionsFlow([], 200, 40, 6, 4, False);
   AssertEquals('一项都没有:宽 0', 0, fl.Size.cx);
   AssertEquals('一项都没有:高 0', 0, fl.Size.cy);
+end;
+
+{ --- 底栏标题行 ---------------------------------------------------------------- }
+
+{ 公共输入(计划 Task 2 的表):行高 26、pad 6、gap 4、按钮 22、分隔线槽 9、溢出 22、
+  标签区下限 50、操作区 60、标签宽 [80, 70, 90]。 }
+function BottomInput(ARowWidth, AActive: Integer): TTyToolWindowHeaderInput;
+begin
+  Result := Default(TTyToolWindowHeaderInput);
+  Result.Mode := twhBottom;
+  Result.RowWidth := ARowWidth;
+  Result.RowHeight := 26;
+  Result.Pad := 6;
+  Result.Gap := 4;
+  Result.ButtonSize := 22;
+  Result.SeparatorWidth := 9;
+  Result.OverflowWidth := 22;
+  Result.TabAreaMin := 50;
+  Result.ActionsWidth := 60;
+  Result.TabWidths := nil;
+  SetLength(Result.TabWidths, 3);
+  Result.TabWidths[0] := 80;
+  Result.TabWidths[1] := 70;
+  Result.TabWidths[2] := 90;
+  Result.ActiveIndex := AActive;
+end;
+
+{ 一套几何里的每一个矩形(含标签),方便整体扫。 }
+type
+  TRectArray = array of TRect;
+
+function AllRects(const AGeom: TTyToolWindowHeaderGeom): TRectArray;
+var
+  i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, 7 + Length(AGeom.Tabs));
+  Result[0] := AGeom.Caption;
+  Result[1] := AGeom.Actions;
+  Result[2] := AGeom.TabArea;
+  Result[3] := AGeom.Overflow;
+  Result[4] := AGeom.Separator;
+  Result[5] := AGeom.Maximize;
+  Result[6] := AGeom.Collapse;
+  for i := 0 to High(AGeom.Tabs) do
+    Result[7 + i] := AGeom.Tabs[i].ItemRect;
+end;
+
+procedure TTyToolWindowGeometryTests.CheckRect(const AMsg: string; L, T, R, B: Integer;
+  const ARect: TRect);
+begin
+  AssertEquals(AMsg + ' Left', L, ARect.Left);
+  AssertEquals(AMsg + ' Top', T, ARect.Top);
+  AssertEquals(AMsg + ' Right', R, ARect.Right);
+  AssertEquals(AMsg + ' Bottom', B, ARect.Bottom);
+end;
+
+procedure TTyToolWindowGeometryTests.CheckTabs(const AMsg: string;
+  const AGeom: TTyToolWindowHeaderGeom; ARowH: Integer; const AExpected: array of Integer);
+var
+  i: Integer;
+begin
+  AssertEquals(AMsg + ':排上的标签个数', Length(AExpected) div 3, Length(AGeom.Tabs));
+  for i := 0 to High(AGeom.Tabs) do
+  begin
+    AssertEquals(Format('%s:第 %d 格的窗口序号', [AMsg, i]), AExpected[3 * i],
+      AGeom.Tabs[i].ItemIndex);
+    CheckRect(Format('%s:第 %d 格', [AMsg, i]), AExpected[3 * i + 1], 0,
+      AExpected[3 * i + 2], ARowH, AGeom.Tabs[i].ItemRect);
+  end;
+end;
+
+procedure TTyToolWindowGeometryTests.CheckHidden(const AMsg: string;
+  const AGeom: TTyToolWindowHeaderGeom; const AExpected: array of Integer);
+var
+  i: Integer;
+begin
+  AssertEquals(AMsg + ':收起的个数', Length(AExpected), Length(AGeom.Hidden));
+  for i := 0 to High(AExpected) do
+    AssertEquals(Format('%s:收起的第 %d 个', [AMsg, i]), AExpected[i], AGeom.Hidden[i]);
+end;
+
+procedure TTyToolWindowGeometryTests.CheckCentresHit(const AMsg: string;
+  const AGeom: TTyToolWindowHeaderGeom);
+
+  procedure One(const AName: string; const ARect: TRect; AZone: TTyToolWindowZone);
+  var
+    idx: Integer;
+    c: TPoint;
+  begin
+    if (ARect.Right <= ARect.Left) or (ARect.Bottom <= ARect.Top) then Exit;
+    c := ARect.CenterPoint;
+    AssertEquals(AMsg + ':' + AName + ' 的中心', Ord(AZone),
+      Ord(TyToolWindowZoneAt(AGeom, c.X, c.Y, idx)));
+    AssertEquals(AMsg + ':' + AName + ' 不是标签,序号 -1', -1, idx);
+  end;
+
+var
+  i, idx: Integer;
+  c: TPoint;
+begin
+  One('溢出', AGeom.Overflow, twzOverflow);
+  One('分隔线', AGeom.Separator, twzSeparator);
+  One('最大化', AGeom.Maximize, twzMaximize);
+  One('收起', AGeom.Collapse, twzCollapse);
+  for i := 0 to High(AGeom.Tabs) do
+  begin
+    c := AGeom.Tabs[i].ItemRect.CenterPoint;
+    AssertEquals(Format('%s:第 %d 格标签的中心', [AMsg, i]), Ord(twzTab),
+      Ord(TyToolWindowZoneAt(AGeom, c.X, c.Y, idx)));
+    AssertEquals(Format('%s:第 %d 格标签答的是窗口序号', [AMsg, i]),
+      AGeom.Tabs[i].ItemIndex, idx);
+  end;
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowLaysOutFromTheTrailingEnd;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  { B1:全放得下。 }
+  g := TyToolWindowHeaderLayout(BottomInput(400, 0));
+  CheckRect('收起贴尾端内距', 372, 2, 394, 24, g.Collapse);
+  CheckRect('最大化隔一个 gap', 346, 2, 368, 24, g.Maximize);
+  CheckRect('分隔线槽占整行高', 337, 0, 346, 26, g.Separator);
+  CheckRect('操作区保宽', 277, 0, 337, 26, g.Actions);
+  CheckRect('标签区', 6, 0, 277, 26, g.TabArea);
+  CheckTabs('标签按窗口顺序', g, 26, [0, 6, 86, 1, 86, 156, 2, 156, 246]);
+  CheckRect('没有收起的就没有溢出按钮', 0, 0, 0, 0, g.Overflow);
+  CheckHidden('B1', g, []);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowOverflowFollowsTheLastTab;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  { B2:放不下,溢出按钮紧跟最后一个已排标签(问题 7),不贴操作区。 }
+  g := TyToolWindowHeaderLayout(BottomInput(300, 0));
+  CheckRect('操作区', 177, 0, 237, 26, g.Actions);
+  CheckRect('标签区', 6, 0, 177, 26, g.TabArea);
+  CheckTabs('只剩第一个', g, 26, [0, 6, 86]);
+  CheckRect('溢出紧跟在它后面', 86, 2, 108, 24, g.Overflow);
+  CheckHidden('B2', g, [1, 2]);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowKeepsTheActiveTabWhenOthersOverflow;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  { B3:当前页是窗口 2,被强制留在行上 —— 它排在第一格,ItemIndex 答窗口序号 2。 }
+  g := TyToolWindowHeaderLayout(BottomInput(300, 2));
+  CheckTabs('当前页排在第一格', g, 26, [2, 6, 96]);
+  CheckRect('溢出紧跟在它后面', 96, 2, 118, 24, g.Overflow);
+  CheckHidden('B3', g, [0, 1]);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowSqueezesTheActionsDownToTheTabAreaMin;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  { B4:标签区缩到下限之后才压操作区;当前页的标签连单独都放不下时被截(画的时候出省略号)。 }
+  g := TyToolWindowHeaderLayout(BottomInput(160, 0));
+  CheckRect('分隔线', 97, 0, 106, 26, g.Separator);
+  CheckRect('操作区被压到 41', 56, 0, 97, 26, g.Actions);
+  CheckRect('标签区停在下限 50', 6, 0, 56, 26, g.TabArea);
+  CheckTabs('当前页被截在溢出按钮前面', g, 26, [0, 6, 34]);
+  CheckRect('溢出', 34, 2, 56, 24, g.Overflow);
+  CheckHidden('B4', g, [1, 2]);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowNarrowerThanItsButtonsClampsEverything;
+var
+  g: TTyToolWindowHeaderGeom;
+  r: TRect;
+begin
+  { B5:行比固定部件还窄。固定部件不缩,放不下的那一截钳在 [0, 行宽] 里。 }
+  g := TyToolWindowHeaderLayout(BottomInput(60, 1));
+  CheckRect('收起', 32, 2, 54, 24, g.Collapse);
+  CheckRect('最大化', 6, 2, 28, 24, g.Maximize);
+  CheckRect('分隔线钳到行首', 0, 0, 6, 26, g.Separator);
+  CheckRect('操作区压没了(全零哨兵)', 0, 0, 0, 0, g.Actions);
+  AssertEquals('标签区宽 0', 0, g.TabArea.Right - g.TabArea.Left);
+  AssertEquals('当前页还在', 1, Length(g.Tabs));
+  AssertEquals('留下的是当前页', 1, g.Tabs[0].ItemIndex);
+  AssertEquals('它宽 0', 0, g.Tabs[0].ItemRect.Right - g.Tabs[0].ItemRect.Left);
+  CheckHidden('B5', g, [0, 2]);
+  for r in AllRects(g) do
+  begin
+    AssertTrue('矩形不出行首', r.Left >= 0);
+    AssertTrue('矩形不出行尾', r.Right <= 60);
+    AssertTrue('矩形不反转', r.Right >= r.Left);
+  end;
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowWithoutActionsGivesTheTabsTheRoom;
+var
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+begin
+  inp := BottomInput(400, 0);
+  inp.ActionsWidth := 0;
+  g := TyToolWindowHeaderLayout(inp);
+  CheckRect('没有操作区:全零', 0, 0, 0, 0, g.Actions);
+  CheckRect('标签区一直到分隔线', 6, 0, 337, 26, g.TabArea);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowWithoutWindowsKeepsOnlyTheButtons;
+var
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+begin
+  inp := BottomInput(400, 0);
+  inp.TabWidths := nil;
+  inp.ActiveIndex := -1;
+  g := TyToolWindowHeaderLayout(inp);
+  AssertEquals('没有标签', 0, Length(g.Tabs));
+  CheckRect('没有溢出', 0, 0, 0, 0, g.Overflow);
+  CheckHidden('B7', g, []);
+  CheckRect('收起同 B1', 372, 2, 394, 24, g.Collapse);
+  CheckRect('最大化同 B1', 346, 2, 368, 24, g.Maximize);
+  CheckRect('分隔线同 B1', 337, 0, 346, 26, g.Separator);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowMirrorsUnderRightToLeft;
+var
+  inp: TTyToolWindowHeaderInput;
+  ltr, rtl: TTyToolWindowHeaderGeom;
+  a, b: TRectArray;
+  i: Integer;
+begin
+  inp := BottomInput(400, 0);
+  ltr := TyToolWindowHeaderLayout(inp);
+  inp.RightToLeft := True;
+  rtl := TyToolWindowHeaderLayout(inp);
+  CheckRect('RTL:收起到行首', 6, 2, 28, 24, rtl.Collapse);
+  CheckRect('RTL:第一个标签到行尾', 314, 0, 394, 26, rtl.Tabs[0].ItemRect);
+  CheckRect('RTL:操作区', 63, 0, 123, 26, rtl.Actions);
+  a := AllRects(ltr);
+  b := AllRects(rtl);
+  AssertEquals('矩形个数一样', Length(a), Length(b));
+  for i := 0 to High(a) do
+    if not ((a[i].Left = 0) and (a[i].Right = 0) and (a[i].Top = 0) and (a[i].Bottom = 0)) then
+      CheckRect(Format('RTL:第 %d 个矩形是 LTR 的镜像', [i]), 400 - a[i].Right, a[i].Top,
+        400 - a[i].Left, a[i].Bottom, b[i]);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowClampsTheButtonsToTheRowHeight;
+var
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+begin
+  inp := BottomInput(300, 0);
+  inp.RowHeight := 16;
+  g := TyToolWindowHeaderLayout(inp);
+  CheckRect('按钮高钳进行高', 272, 0, 294, 16, g.Collapse);
+  CheckRect('溢出按钮同样', 86, 0, 108, 16, g.Overflow);
+end;
+
+procedure TTyToolWindowGeometryTests.TestBottomRowClampsNegativeInputs;
+var
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+  r: TRect;
+begin
+  inp := BottomInput(400, 0);
+  inp.TabWidths[1] := -5;
+  inp.ButtonSize := -3;
+  g := TyToolWindowHeaderLayout(inp);
+  AssertEquals('按钮宽按 0', 0, g.Collapse.Right - g.Collapse.Left);
+  AssertEquals('三个标签都排上', 3, Length(g.Tabs));
+  AssertEquals('负宽的标签按 0', 0, g.Tabs[1].ItemRect.Right - g.Tabs[1].ItemRect.Left);
+  AssertEquals('后一个紧接着它', g.Tabs[1].ItemRect.Right, g.Tabs[2].ItemRect.Left);
+  for r in AllRects(g) do
+  begin
+    AssertTrue('矩形不反转(横)', r.Right >= r.Left);
+    AssertTrue('矩形不反转(纵)', r.Bottom >= r.Top);
+  end;
+end;
+
+procedure TTyToolWindowGeometryTests.TestZoneAtInvertsTheBottomLayout;
+var
+  inp: TTyToolWindowHeaderInput;
+begin
+  CheckCentresHit('B1', TyToolWindowHeaderLayout(BottomInput(400, 0)));
+  CheckCentresHit('B2', TyToolWindowHeaderLayout(BottomInput(300, 0)));
+  CheckCentresHit('B3', TyToolWindowHeaderLayout(BottomInput(300, 2)));
+  CheckCentresHit('B4', TyToolWindowHeaderLayout(BottomInput(160, 0)));
+  inp := BottomInput(400, 0);
+  inp.RightToLeft := True;
+  CheckCentresHit('B8', TyToolWindowHeaderLayout(inp));
+end;
+
+procedure TTyToolWindowGeometryTests.TestZoneAtAnswersNoneOffTheParts;
+var
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+  idx: Integer;
+begin
+  g := TyToolWindowHeaderLayout(BottomInput(400, 0));
+  c := g.Actions.CenterPoint;
+  AssertEquals('操作区不是标题行的部件', Ord(twzNone), Ord(TyToolWindowZoneAt(g, c.X, c.Y, idx)));
+  AssertEquals('none 的序号 -1', -1, idx);
+  AssertEquals('最后一个标签之后的空白', Ord(twzNone), Ord(TyToolWindowZoneAt(g, 260, 13, idx)));
+  AssertEquals('空白的序号 -1', -1, idx);
+end;
+
+procedure TTyToolWindowGeometryTests.TestZoneAtOnASideRowIsAlwaysNone;
+var
+  inp: TTyToolWindowHeaderInput;
+  g: TTyToolWindowHeaderGeom;
+  x, idx: Integer;
+begin
+  inp := Default(TTyToolWindowHeaderInput);
+  inp.Mode := twhSide;
+  inp.RowWidth := 200;
+  inp.RowHeight := 26;
+  inp.Pad := 6;
+  inp.Gap := 4;
+  inp.ActionsWidth := 80;
+  g := TyToolWindowHeaderLayout(inp);
+  for x := -1 to 201 do
+    AssertEquals('侧栏标题行没有可点的部件', Ord(twzNone), Ord(TyToolWindowZoneAt(g, x, 13, idx)));
+end;
+
+procedure TTyToolWindowGeometryTests.TestZoneAtNeverHitsAnEmptyPart;
+var
+  g: TTyToolWindowHeaderGeom;
+  x, idx: Integer;
+  z: TTyToolWindowZone;
+begin
+  { B5:当前页的标签宽 0、溢出按钮被钳成零宽 —— 扫整行,哪一点都不许答它们。 }
+  g := TyToolWindowHeaderLayout(BottomInput(60, 1));
+  for x := 0 to 60 do
+  begin
+    z := TyToolWindowZoneAt(g, x, 13, idx);
+    AssertFalse(Format('x=%d 不许命中宽 0 的标签', [x]), z = twzTab);
+    AssertFalse(Format('x=%d 不许命中零宽的溢出按钮', [x]), z = twzOverflow);
+  end;
 end;
 
 initialization
