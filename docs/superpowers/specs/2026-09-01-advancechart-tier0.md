@@ -204,7 +204,7 @@ type
 
 SVG 渲染器与 SVG 输出 · SSR/hydrate · tooltip 的 `renderMode:'html'` · echarts-gl 与全部 3D 坐标系 · bmap/amap/leaflet · **发布 GeoJSON 图集**（引擎做，图集不做）· SVG 底图 · 可插拔 JS 投影 · `dataView` 的 DOM textarea · `setPlatformAPI` · `'lighter'` 以外的 blendMode · 把浏览器调优旋钮作为公开 option · CSS 光标名 · `transform.print` · worker 线程 · `axisPointer.handle`
 
-**永不实现的 v5 遗留拼写**：`grid.containLabel` · `series-line.triggerLineEvent` · `tooltip.appendToBody` · `legacyViewCoordSysCenterBase` · `richInheritPlainLabel: false` · `grid.outerBoundsMode: 'none'` · `axis.containShape: false` · 以及那约 64 个 v5 时代弃用名（`itemStyle.normal`、`hoverAnimation`、`focusNodeAdjacency`、`clipOverflow`、`mapType`、18 个 zrender `text*` 样式属性…）。
+**永不实现的 v5 遗留拼写**：`grid.containLabel` · `series-line.triggerLineEvent` · `tooltip.appendToBody` · `legacyViewCoordSysCenterBase` · `richInheritPlainLabel: false` · `grid.outerBoundsMode: 'none'` · `axis.containShape: false`(**[第四十一批更正:6.1 里它不是遗留拼写,上游照读,port 也照读,见 §75。]**)· 以及那约 64 个 v5 时代弃用名（`itemStyle.normal`、`hoverAnimation`、`focusNodeAdjacency`、`clipOverflow`、`mapType`、18 个 zrender `text*` 样式属性…）。
 
 ---
 
@@ -5292,6 +5292,7 @@ nice 照样给出 [0, 1] 和上面的刻度,oracle 比的也是它们。以前�
   底数不是 10 或 2。标签看不出来。
 - **containShape 没做**:柱子放在数值或时间**基轴**上时,上游把平的 0 张成 [-1, 1],还把 mapping 范围放宽半个带宽,
   两头的柱子不被截。这里都没有。刻度一致,柱子的像素位置不同。
+  **[第四十一批已做,见 §75。时间轴不走张成 [-1, 1] 那条,平的时间范围仍是前后各一天。]**
 - `logBase` 小于等于 1 这里一律当 10;上游是 `logBase || 10`,0.5 这种底数照用。
 - 雷达指示器和 `alignTicks` 都要 `scaleCalcAlign`(NICE_MODE_MIN 加 increaseInterval),不在这批。
 - getPrecision 走字符串的那条路(负数、小于 1e-14)28572 个里差 7 个,步长不走那条路。
@@ -5622,6 +5623,7 @@ log 轴的对数还来自不同的库。数值本身第 33 批已经逐位对齐
 ### 已知偏差
 
 - **数值型基轴上的柱子**:上游按数据的最小间隔求柱宽,并把基轴范围放宽半个柱宽(containShape);port 还没有。起点这部分已经一致,那条用例标 deferred。
+  **[第四十一批已做,见 §75;那条用例已解除 deferred,盒子与上游一致。]**
 - **边框内缩**(`itemStyle.borderWidth` 让矩形向里缩半个线宽)、**缺值行的背景条**、`barMinWidth: 0`:各自 deferred,上游答案已记在 fixture 里。
 - **长度为 0 的柱子的悬停**:上游竖直的零高柱子本身悬停不到(有边框或 inside 标签时才能),port 的矩形在那条线上能命中。标签照样代表这个数据。fixture 没有收悬停。
 - pictorialBar 的 `outside`:上游用自己的规则(`boundingLength` 的符号),port 仍然放上方。
@@ -5703,7 +5705,7 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 2. **收缩**:把上游自己的估算标签框和比例喂给 `TyOuterBoundsMargin` + `TyShrinkRect`,边距和最终矩形逐位相同(60 条)。
 3. **整条流水线**:读选项、格式化、稀疏、定位、旋转、加 textMargin、收缩,最终矩形在每条用例自己的容差内(约 4.5e-13;标签框经过 zrender 的变换矩阵,1.72 会变成 1.720000000000013)。64 条。
 
-另有 23 条 deferred:坐标轴名称(5,**第三十八批已解除,见 §72**)、hideOverlap、类目自动间隔、fontSize、truncate/break、grid 盒子合并(10)、值轴稀疏(2)、containShape(1)。
+另有 23 条 deferred:坐标轴名称(5,**第三十八批已解除,见 §72**)、hideOverlap、类目自动间隔、fontSize、truncate/break、grid 盒子合并(10)、值轴稀疏(2)、containShape(1,**第四十一批已解除,见 §75**)。
 
 生成器自带两道自检:转写的收缩在 60 条上复现上游矩形,转写的旧版规则在 15 条上复现。
 
@@ -5722,6 +5724,7 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 - **稀疏**:上游值轴从不按序号稀疏标签,port 会;类目自动间隔、`fixMinMaxLabelShow`、`hideOverlap` 与上游不同。估算用的标签集因此可能不一样。单独一批。
   **[第三十九批已做,见 §73。]**
 - **containShape**:柱子让无 band 的类目范围加宽半个 band,影响比例 p。
+  **[第四十一批已做,见 §75。]**
 - **grid 盒子本身**:`left: 'right'`、`top: 'bottom'`、居中无尺寸、键的合并规则(D12),和 title/legend 共用 `TySolveBox`,单独一批。
 - `axisLabel.fontSize`(字体由主题决定)、`minMargin`、`width` + `overflow` 的估算:未做。
 
@@ -6074,3 +6077,114 @@ port 以前对除时间轴外的每根轴都用同一条规则:找最小的等�
 ### 还在队列里
 
 containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。
+
+## 75. Tier 1 第四十一批:containShape(2026-09-23)
+
+柱子站在数值轴、对数轴、时间轴,或者 `boundaryGap: false` 的类目轴上时,两头的柱子原来有一半画在绘图区外面,被截掉。上游给这种轴另算一个 **mapping 范围**:在刻度范围两边各加半个柱宽。值按 mapping 范围落位,刻度仍按原来的范围取。port 的刻度层早就有两种范围(§2),只是从来没人写 mapping。
+
+### 上游的做法
+
+- **谁要放宽(ctnShp)**:
+  - 轴的 `containShape` 按 JS 真假读;没写时,类目轴 `boundaryGap` 为真就不放宽,其余都放宽。
+  - 而且这根轴得是某个 `bar` 或 `pictorialBar`(cartesian2d)的**基轴**。柱子的数值轴从不放宽。
+  - 被图例关掉的系列、一行数据都没有的系列也算。
+- **平的零点**:要放宽的轴上,数据全是 0 时范围张成 [-1, 1],不是 [0, 1]。`min: 0, max: 0` 也一样。对数轴在指数空间里做,单个 1 得到 [0.1, 10]。时间轴不管这条。
+- **半个柱宽(数据空间)**,每种系列类型各算一次:
+  - 先算最小间隔:没被图例关掉的系列,所有行的基轴值,只取有限值;对数轴只取正值,换成以底数为底的对数。排序后取最小的正差。
+    所有值都相同时得到 SINGLE,没有值时得到 NONE。
+  - 类目轴:`px / span * span / px`,通常是 1,末位由这趟像素往返决定(12 个类目、400 px 时是 1.0000000000000002)。
+  - 数值轴:有间隔就用间隔;SINGLE 时用 `px * 0.8 * span / px`,直接写 `0.8 * span` 有三分之一的情况末位不同;NONE 时不放宽。
+  - 这里的 `px` 是布局选项给出的像素长度,也就是标签收缩绘图区**之前**的那个。上游做 nice 时,坐标系是新建的,还没收缩。
+- **mapping 范围**:各类型的半宽取并集,加到刻度范围两端。
+  - 类目轴总是写。
+  - 其余轴只有真的变宽才写。对数轴在指数空间里加,再换回原值。
+  - `min` / `max` 挡不住这一步。
+- **谁读哪个范围**:
+  - 刻度、标签、分割线、`clampData`、onZero 的"零在范围内"判断:读刻度范围。
+  - 落位、带宽、`contain`:读 mapping 范围。
+- **柱子的带宽**:最终像素长度 ÷ mapping 范围的线性跨度 × 最小间隔;SINGLE 时是像素长度的 0.8;下限 1 px。
+- **onZero**:一根轴只要加了半宽,就记为"零点不宜"。对面轴的 `axisLine.onZero` 没写或写 `'auto'` 时,不再站到它的零点上;写 `true` 仍然站上去。
+
+### port 以前
+
+- 没有 ctnShp,平的零点总是 [0, 1]。
+- 从来不写 mapping 范围,两头的柱子被截掉一半。
+- 带宽按刻度范围算。对数轴按原值算间隔,也不滤掉非正值。
+- `Contain` 读刻度范围,和上游相反。
+- onZero 只有真假两态。
+
+### 做法
+
+- `Scale`:
+  - `TTyIntervalScale.ContainShape` 标志,平的零点在它为真时张成 [-1, 1]。
+  - `Contain` 改读 mapping 范围。
+- `Series`:
+  - `TyMinGapOf`、`TyLiPosMinGap`:最小间隔统计,两个特殊答案是 `cTyMinGapSingle` 和 `cTyMinGapNone`。
+  - `TyApplyAxisExtents` 先算每根轴的 ctnShp。它直接查绑定,因为索引跳过了隐藏系列。
+  - nice 之后写 mapping 范围;类目轴在按类目数定范围之后写。
+  - 半宽用的像素长度就是阶段 A 写好的那个,正好是上游的初始长度。
+- `Coord`:`TTyAxis.ZeroDiscouraged`。
+- `BarLayout`:
+  - 带宽按 mapping 范围的线性跨度算,间隔用同一个统计。
+  - `TyBandFromMinGap` 按上游的判断顺序:先看"有间隔、跨度为正",再看 SINGLE,都不是就不放宽。
+- `Builder`:
+  - 家具记录加 `OnZeroAuto`:键没写、写 `null` 或写 `'auto'` 时为真。
+  - `CanProvideZero` 在 `auto` 下拒绝零点不宜的轴。
+- `TTyAdvanceChart.BarColumnOf`(受保护):测试读柱子求解结果用。
+
+### 基准
+
+- `tools/advchart-oracle/contain-shape.js` → `tests/fixtures/advchart-contain-shape.json`,82 条,4 条 deferred。
+- 生成器自带 6 项自检:
+  - 转写的 R2–R5 逐位复现 mapping;
+  - 带宽等于 R7;
+  - 变换矩阵等于仿射公式;
+  - 刻度落在刻度范围上;
+  - onZero 与 ctnShp 都符合规则。
+- `test.advchart.containshape`,两遍(第二遍先 Invalidate),共 1008 项比较:
+  - 刻度范围、mapping 范围、ctnShp、零点不宜、onZero、带宽 / 偏移 / 柱宽:逐位;
+  - 对数轴 8 ulp;
+  - 盒子 8 ulp;
+  - 刻度坐标 1 ulp,G9 为 8 ulp。
+  - 一次通过。
+- 解除 deferred:
+  - bar-geometry 的 `value base axis [[1,5],[2,-3],[4,2]]`,盒子在该测试的 1 ulp 容差内一致;
+  - grid-bounds 的 `boundaryGap false category, long labels, interval 1, grid left/right 0`,最终矩形一致。
+- G8 的 4 条是文档性的:只比范围,最终矩形归 grid-bounds 管。真正能分辨"初始像素长度"和"最终像素长度"的只有 PX3。
+
+### 被推翻的旧测试
+
+- `test.advchart.barlayout.pas`:`min: 0, max: 10` 上 x = 1, 2, 3 的带宽从绘图区的 1/10 改为 1/11。上游的 mapping 是 [-0.5, 10.5],`min` / `max` 挡不住。
+- `test.advchart.scale.pas`:`TestEffectiveExtentStillDrivesContain` 改为 `TestMappingExtentDrivesContain`。原测试钉的是上游的反面。
+- `Scale` 单元头的注释同样更正。
+- 原处都有标注。
+
+### 已知偏差
+
+- **仿射快路径**:
+  - 上游在 value/time × value/time 上用坐标系的仿射矩阵落位,port 逐轴算,盒子最多差 8 ulp。
+  - y 轴端点的刻度坐标差 2 ulp:上游是 `(r0 + r1) - map(n) + y`,port 是 `a + n * (b - a)`。
+  - G9 的 8 条只比轴、不比盒子。下一批做。
+- **对数轴的 pow**:mapping 端点是 10 的小数次幂,FPC 的 `Power` 和 V8 的 `Math.pow` 差 6–7 ulp(10^2.5、log 2/3/50 的上端)。审计估计的 4 ulp 不够,容差放到 8。要逐位一致,得移植 fdlibm 的 `pow` / `log`。
+- **candlestick 和 boxplot** 也会让 ctnShp 为真,上游值轴上的 candlestick 也会放宽(mapping [-0.5, 4.5]);port 的 K 线在非类目轴上是固定的 8 px,这批不管。用例 deferred。
+- alignTicks、dataZoom(`zoomFixMM`)、axisPointer 的钳位与阴影宽:port 还没有这些功能,用例 deferred。
+- 时间轴平的范围仍是前后各一天,和上游一样,不走 [-1, 1]。
+
+### 变异测试
+
+42 个变异体,杀掉 36 个,活下来 6 个,都是等价的:
+
+- 两个是多余的守卫,已删:
+  - 每次构建都把"零点不宜"清零。轴每次构建都是新建的,不用清。
+  - 对数统计里先滤掉非正值。`TransformIn` 对非正值本来就返回 NaN,随后会被滤掉。
+- 四个照上游原样保留,改掉也看不出差别:
+  - 没写 `containShape` 时类目轴 `boundaryGap` 为真就不放宽:在带子上的类目轴本来就不加半宽。
+  - 有间隔时还要求跨度为正:nice 之后跨度总是正的。
+  - 数值轴"真的变宽才写 mapping":半宽总是正的,所以总会变宽。
+  - 类目轴 mapping 的写法:同理。退一步说,就算写了一个和刻度范围相同的 mapping,落位结果也完全一样。
+
+两处删改之后重编,全量 **7773** 绿。
+
+### 还在队列里
+
+仿射快路径(value/time × value/time)→ 类目轴 `min` / `max` → 线图符号跟着标签间隔 → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。V8 兼容的 `pow` / `log` 视需要插进来。

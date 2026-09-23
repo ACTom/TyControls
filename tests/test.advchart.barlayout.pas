@@ -400,10 +400,13 @@ begin
   AssertTrue('with a real band: ' + FloatToStr(FCols[0].BandWidth),
     FCols[0].BandWidth > 1);
   AssertTrue('and a real width', FCols[0].Width > 1);
-  { The gaps are all 1 and the axis spans 10, so the band is a tenth of the
-    plot -- the heuristic doing exactly what it says. }
+  { The gaps are all 1, and the axis maps over 11: min and max pin the ticks
+    to 0..10, but half a bar is added at each end all the same, so the bars
+    at the ends stay in the plot. The band is an eleventh of the plot.
+    [Revised in batch 41: this was a tenth, from the tick extent. Upstream
+    measures over the mapping extent, [-0.5, 10.5] here.] }
   AssertEquals('the band is one data gap in pixels',
-    TyRectFWidth(Plot) / 10, FCols[0].BandWidth, Eps);
+    TyRectFWidth(Plot) / 11, FCols[0].BandWidth, Eps);
 end;
 
 procedure TAdvChartBarLayoutTest.TestADerivedBandNeverFallsBelowOnePixel;
@@ -441,6 +444,12 @@ begin
     IsNan(TyDerivedBandWidth(100, 0, [1.0, 2.0])));
   AssertTrue('and NaN data is skipped, not counted as a value',
     IsNan(TyDerivedBandWidth(100, 10, [NaN, NaN])));
+  { NOR IS AN INFINITY: upstream's statistic keeps finite values only, so a
+    lone one is nothing to measure, not one value to take 0.8 of the axis. }
+  AssertTrue('an infinity is not a value either',
+    IsNan(TyDerivedBandWidth(100, 10, [Infinity])));
+  AssertEquals('and does not widen a gap it sits beside',
+    100.0 / 10 * 1, TyDerivedBandWidth(100, 10, [NegInfinity, 1.0, 2.0]), Eps);
 end;
 
 procedure TAdvChartBarLayoutTest.TestBarMinHeightAndBorderRadiusReachTheColumn;

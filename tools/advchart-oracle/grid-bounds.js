@@ -70,8 +70,8 @@
 // all the same, deferred, with the reason.
 //
 // A case marked deferred depends on something the port does not do yet (label
-// font size, truncate and break, the grid box merge, a category extent widened
-// by containShape); its upstream answer is recorded so a later batch only has to take the
+// font size, truncate and break, the grid box merge); its upstream answer is
+// recorded so a later batch only has to take the
 // flag off. A documentary case pins a port test's fixture: the rect is compared,
 // the label set need not match.
 //
@@ -610,10 +610,11 @@ add('AD interval 0 long categories, grid left/right 0: band labels under-shrink'
 add('n=1 category, a long label, grid left/right 0',
   bar({ left: 0, right: 0 }, { data: ['A single very long category label that overflows both sides of the plot area'] }, null, [1]));
 // interval 1 is what the category auto interval picks here; written out so the
-// case does not hang on the auto interval (the thinning batch)
+// case does not hang on the auto interval (the thinning batch). The bars widen
+// the unbanded category extent by half a band (containShape: mapping
+// [-0.5, 6.5] from the raw rect's 600 px), so normalize(0) is 0.5/7.
 add('boundaryGap false category, long labels, interval 1, grid left/right 0',
-  bar({ left: 0, right: 0 }, { boundaryGap: false, data: DAYS.map(d => d + ' long label text'), axisLabel: { interval: 1 } }),
-  deferred('bars widen an unbanded category extent by half a band (containShape), so normalize(0) is 0.5/7 -- the containShape batch'));
+  bar({ left: 0, right: 0 }, { boundaryGap: false, data: DAYS.map(d => d + ' long label text'), axisLabel: { interval: 1 } }));
 add('log y, grid left 0', {
   grid: { left: 0 }, xAxis: { type: 'category', data: DAYS }, yAxis: { type: 'log' },
   series: [{ type: 'bar', data: [1, 10, 100, 1e3, 1e4, 1e5, 1e6] }],

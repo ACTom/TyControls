@@ -235,6 +235,25 @@ type
   view. }
 function TyAxisRawExtent(ANode: TJSONObject; AAxis: TTyAxis;
   ADataLo, ADataHi: Double; ARequireStartValue: Boolean): TTyAxisRawExtent;
+
+const
+  { The two answers upstream's liPosMinGap gives besides a gap: nothing to
+    measure at all, and exactly one distinct value. Both negative, so no
+    caller can mistake either for a gap. }
+  cTyMinGapNone = -1.0;
+  cTyMinGapSingle = -2.0;
+
+{ UPSTREAM'S liPosMinGap over a plain list: the smallest strictly positive
+  difference between two of the values once sorted. Not-a-number and the
+  infinities are not values. cTyMinGapSingle when every value that is left
+  is the same one, cTyMinGapNone when none is left. }
+function TyMinGapOf(const AValues: array of Double): Double;
+{ The same statistic over the base values of a set of series on AAxis --
+  every row of every store, whatever its value column holds. On a log axis
+  a value at or under zero is dropped and the rest are measured in decades,
+  which is the space a log axis is laid out in. }
+function TyLiPosMinGap(const AStores: array of TTyDataStore;
+  const ASeries: TTyIntegerArray; AAxis: TTyAxis): Double;
 { Give every value axis the range its bound series actually need.
 
   AStacks says which series plot an accumulated total rather than their own
@@ -657,6 +676,115 @@ end;
 
 { ==================== phase B: axis ranges ==================== }
 
+procedure SortDoubles(var A: TTyDoubleArray);
+var
+  n, i, j, k: Integer;
+  t: Double;
+
+  procedure Sift(ARoot, AEnd: Integer);
+  begin
+    i := ARoot;
+    while 2 * i + 1 <= AEnd do
+    begin
+      j := 2 * i + 1;
+      if (j < AEnd) and (A[j] < A[j + 1]) then Inc(j);
+      if A[i] >= A[j] then Exit;
+      t := A[i];
+      A[i] := A[j];
+      A[j] := t;
+      i := j;
+    end;
+  end;
+
+begin
+  { A heap sort: a large bar series is tens of thousands of rows in any
+    order, and the gap statistic has to sort them every build. }
+  n := Length(A);
+  for k := n div 2 - 1 downto 0 do Sift(k, n - 1);
+  for k := n - 1 downto 1 do
+  begin
+    t := A[0];
+    A[0] := A[k];
+    A[k] := t;
+    Sift(0, k - 1);
+  end;
+end;
+
+function MinGapOfSorted(const AVals: TTyDoubleArray): Double;
+var
+  i: Integer;
+  gap: Double;
+begin
+  if Length(AVals) = 0 then Exit(cTyMinGapNone);
+  Result := Infinity;
+  for i := 1 to High(AVals) do
+  begin
+    gap := AVals[i] - AVals[i - 1];
+    { STRICTLY positive. Duplicates are ordinary -- two series both reporting
+      the same x -- and a zero gap would collapse every bar to nothing. }
+    if (gap > 0) and (gap < Result) then Result := gap;
+  end;
+  if IsInfinite(Result) then Result := cTyMinGapSingle;
+end;
+
+function TyMinGapOf(const AValues: array of Double): Double;
+var
+  vals: TTyDoubleArray;
+  i, n: Integer;
+begin
+  n := 0;
+  SetLength(vals, Length(AValues));
+  for i := 0 to High(AValues) do
+    if not (IsNan(AValues[i]) or IsInfinite(AValues[i])) then
+    begin
+      vals[n] := AValues[i];
+      Inc(n);
+    end;
+  SetLength(vals, n);
+  SortDoubles(vals);
+  Result := MinGapOfSorted(vals);
+end;
+
+function TyLiPosMinGap(const AStores: array of TTyDataStore;
+  const ASeries: TTyIntegerArray; AAxis: TTyAxis): Double;
+var
+  vals: TTyDoubleArray;
+  k, si, col, r, n: Integer;
+  v: Double;
+  isLog: Boolean;
+begin
+  Result := cTyMinGapNone;
+  if (AAxis = nil) or (AAxis.Scale = nil) then Exit;
+  isLog := AAxis.AxisType = atLog;
+  vals := nil;
+  n := 0;
+  for k := 0 to High(ASeries) do
+  begin
+    si := ASeries[k];
+    if (si < 0) or (si > High(AStores)) or (AStores[si] = nil) then Continue;
+    col := AStores[si].DimIndexOf(AAxis.Dim);
+    if col < 0 then Continue;
+    for r := 0 to AStores[si].Count - 1 do
+    begin
+      v := AStores[si].Get(col, r);
+      if IsNan(v) or IsInfinite(v) then Continue;
+      { A log axis' TransformIn answers not-a-number at or under zero, which
+        is upstream's `v > 0` filter. }
+      if isLog then
+      begin
+        v := AAxis.Scale.Mapper.TransformIn(v);
+        if IsNan(v) or IsInfinite(v) then Continue;
+      end;
+      if n > High(vals) then SetLength(vals, Max(16, n * 2));
+      vals[n] := v;
+      Inc(n);
+    end;
+  end;
+  SetLength(vals, n);
+  SortDoubles(vals);
+  Result := MinGapOfSorted(vals);
+end;
+
 { Which column of a series' store feeds this axis. The store's columns are the
   coordinate dimensions in order, so the axis' own dim names it. }
 function ColumnsForAxis(AStore: TTyDataStore; AAxis: TTyAxis): TTyIntegerArray;
@@ -1046,6 +1174,110 @@ var
   g, a: Integer;
   ax: TTyAxis;
 
+  { A BAR OF THIS TYPE IS LAID OUT ALONG AAxis -- upstream's statistics key,
+    which exists for a series the legend has switched off and for one with no
+    rows. The index skips the first, so the bindings are asked directly. }
+  function KeyOnAxis(AAxis: TTyAxis; const AType: string): Boolean;
+  var i: Integer;
+  begin
+    Result := False;
+    for i := 0 to High(ABindings) do
+      if (ABindings[i].BaseAxis = AAxis) and (ABindings[i].SeriesType = AType)
+        and (ABindings[i].CoordSysName = 'cartesian2d') then Exit(True);
+  end;
+
+  { UPSTREAM'S ctnShp. `containShape` as written, JavaScript-truthy; absent,
+    it is on unless the axis has bands, where the bar already sits inside
+    one. And only on the base axis of a bar or a pictorial bar: the axis a bar
+    stands on is its value axis, and that one is never widened. }
+  function WantsContainShape(AAxis: TTyAxis; ANode: TJSONObject): Boolean;
+  var
+    d: TJSONData;
+    opt: Boolean;
+  begin
+    d := nil;
+    if ANode <> nil then d := ANode.Find('containShape');
+    if (d = nil) or (d.JSONType = jtNull) then opt := not AAxis.OnBand
+    else opt := JsTruthyOf(d);
+    Result := opt and (KeyOnAxis(AAxis, 'bar')
+      or KeyOnAxis(AAxis, 'pictorialBar'));
+  end;
+
+  { THE MAPPING EXTENT: the effective one, widened by half a bar each way so
+    the bars at its ends are drawn inside the plot. Run once the effective
+    extent is final. Ticks, labels and split lines stay on the effective
+    extent; only where values land moves.
+
+    The half bar is measured in data space, from the axis' pixel length AS
+    THE LAYOUT OPTIONS GAVE IT -- phase A's extent, before labels shrank the
+    plot. Upstream does the same, because its nice step runs on a freshly
+    made coordinate system that has not been shrunk yet. }
+  procedure ApplyContainShape(AAxis: TTyAxis);
+  const
+    cSingleRatio: Double = 0.8;
+  var
+    e: TTyRange;
+    a, b, span, px, w2, gap, sup0, sup1, lo, hi: Double;
+    haveSup, ordinal: Boolean;
+    k: Integer;
+    typ: string;
+  begin
+    ordinal := AAxis.Scale is TTyOrdinalScale;
+    { A band already holds its bar: no half width to add. }
+    if ordinal and AAxis.OnBand then Exit;
+    e := AAxis.Scale.GetExtent;
+    a := AAxis.Scale.Mapper.TransformIn(e.Start);
+    b := AAxis.Scale.Mapper.TransformIn(e.Stop);
+    span := b - a;
+    px := Abs(AAxis.PxStop - AAxis.PxStart);
+    haveSup := False;
+    sup0 := 0;
+    sup1 := 0;
+    for k := 0 to 1 do
+    begin
+      if k = 0 then typ := 'bar' else typ := 'pictorialBar';
+      if not KeyOnAxis(AAxis, typ) then Continue;
+      w2 := NaN;
+      if ordinal then
+      begin
+        { One category's width in categories -- 1, give or take the last bit,
+          which upstream's round trip through pixels decides. }
+        if (span <> 0) and (px <> 0) and not IsNan(span) then
+          w2 := px / span * span / px;
+      end
+      else
+      begin
+        gap := TyLiPosMinGap(AStores,
+          AIndex.SeriesOnAxisOfKey(AAxis, TySeriesStatKey(typ, 'cartesian2d')),
+          AAxis);
+        if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
+          and (gap > 0) then
+          w2 := gap
+        else if (gap = cTyMinGapSingle) and (px > 0) then
+          { ONE VALUE: the band is four fifths of the axis, and the round
+            trip through pixels is upstream's -- 0.8 * span parts from it in
+            the last bit a third of the time. }
+          w2 := px * cSingleRatio * span / px;
+      end;
+      if IsNan(w2) or IsInfinite(w2) then Continue;
+      haveSup := True;
+      sup0 := Min(sup0, -w2 / 2);
+      sup1 := Max(sup1, w2 / 2);
+      AAxis.ZeroDiscouraged := True;
+    end;
+    if not haveSup then Exit;
+    if ordinal then
+      AAxis.Scale.SetExtent2(sekMapping,
+        TyRange(Min(e.Start, e.Start + sup0), Max(e.Stop, e.Stop + sup1)))
+    else
+    begin
+      lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
+      hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
+      if (lo < e.Start) or (hi > e.Stop) then
+        AAxis.Scale.SetExtent2(sekMapping, TyRange(lo, hi));
+    end;
+  end;
+
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string);
   var
     k, c, si: Integer;
@@ -1062,8 +1294,11 @@ var
     any: Boolean;
     filter: TTyExtentFilter;
     raw: TTyAxisRawExtent;
+    ctnShp: Boolean;
   begin
     if AAxis = nil then Exit;
+    node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
+    ctnShp := WantsContainShape(AAxis, node);
     { A category axis' range is its category COUNT -- read off the axis, never
       computed from the values, so a name the data never mentions still gets a
       band and a bar chart does not shuffle when a value goes missing.
@@ -1078,11 +1313,13 @@ var
     if AAxis.AxisType = atCategory then
     begin
       if AAxis.Scale is TTyOrdinalScale then
+      begin
         TTyOrdinalScale(AAxis.Scale).SetExtentFromCategories;
+        if ctnShp then ApplyContainShape(AAxis);
+      end;
       Exit;
     end;
 
-    node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
     if AAxis.AxisType = atLog then filter := defPositive else filter := defNone;
 
     any := False;
@@ -1246,6 +1483,7 @@ var
       { BEFORE Niceify, because they bound the step it is about to choose. }
       TTyIntervalScale(AAxis.Scale).MinInterval := minIvl;
       TTyIntervalScale(AAxis.Scale).MaxInterval := maxIvl;
+      TTyIntervalScale(AAxis.Scale).ContainShape := ctnShp;
       { NOT NICIED WHEN IT IS A CALENDAR. Niceify opens the extent out to
         round numbers before picking a step, and the round number nearest a
         week in March 2024 is somewhere in 1973. A time scale is handed the
@@ -1258,6 +1496,9 @@ var
         Niceify is what decides the major interval. }
       TTyIntervalScale(AAxis.Scale).MinorSplitNumber := minor;
     end;
+    { AFTER the effective extent is final: the half bar widens what the
+      nice step left, pins and all. }
+    if ctnShp then ApplyContainShape(AAxis);
   end;
 
 begin

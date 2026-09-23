@@ -104,6 +104,10 @@ type
     { `axisLine.onZero`, default `auto` -- which is TRUTHY, so an axis whose
       opposite number crosses zero sits on it unless told otherwise. }
     OnZero: Boolean;
+    { THE `auto` HALF OF IT: the key absent, or the string 'auto'. Only this
+      one defers to an axis whose zero a bar's half width has moved
+      (TTyAxis.ZeroDiscouraged); a written `true` sits on that zero anyway. }
+    OnZeroAuto: Boolean;
     { `axisLine.onZeroAxisIndex`: which of the other family provides the
       zero. -1 for `whichever qualifies first`. An index that names an axis
       that cannot provide one does NOT fall back to the scan -- upstream's
@@ -1186,7 +1190,7 @@ function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean): TTyAxisFurniture;
 var
   cat, tickAuto: Boolean;
-  d: TJSONData;
+  d, sub: TJSONData;
 begin
   Result := Default(TTyAxisFurniture);
   if AAxis = nil then Exit;
@@ -1277,12 +1281,16 @@ begin
     an absent key (on) is preserved for compatibility -- an absent key is all
     this port can see, so it reads as on. }
   Result.OnZero := SubBoolIn(ANode, 'axisLine', 'onZero', True);
+  Result.OnZeroAuto := True;
   Result.OnZeroAxisIndex := -1;
   if ANode <> nil then
   begin
     d := ObjOf(ANode.Find('axisLine'));
     if d <> nil then
     begin
+      sub := TJSONObject(d).Find('onZero');
+      Result.OnZeroAuto := (sub = nil) or (sub.JSONType = jtNull)
+        or ((sub.JSONType = jtString) and (sub.AsString = 'auto'));
       d := TJSONObject(d).Find('onZeroAxisIndex');
       if (d <> nil) and (d.JSONType = jtNumber) then
         Result.OnZeroAxisIndex := TyTruncOpt(d.AsFloat, -1);
@@ -1600,6 +1608,7 @@ begin
   Result.ShowMaxLine := True;
   Result.OffsetLogical := 0;
   Result.OnZero := True;
+  Result.OnZeroAuto := True;
   Result.OnZeroAxisIndex := -1;
   Result.TickLengthLogical := NaN;
   Result.MinorTickLengthLogical := NaN;
@@ -1622,11 +1631,14 @@ end;
 
 
 
-function CanProvideZero(AAxis: TTyAxis): Boolean;
+function CanProvideZero(AAxis: TTyAxis; AAuto: Boolean): Boolean;
 var e: TTyRange;
 begin
   Result := False;
   if (AAxis = nil) or (AAxis.Scale = nil) then Exit;
+  { A BAR'S HALF WIDTH MOVED THIS ONE'S ZERO off where its bars start, and an
+    axis that only asked for `auto` does not follow it there. }
+  if AAuto and AAxis.ZeroDiscouraged then Exit;
   { A CATEGORY OR TIME AXIS NEVER PROVIDES ONE, however plainly it crosses
     zero -- upstream calls this historical and keeps it. }
   if AAxis.AxisType in [atCategory, atTime] then Exit;
@@ -1680,7 +1692,7 @@ begin
     if furn.OnZeroAxisIndex < OtherCount then
     begin
       cand := OtherAt(furn.OnZeroAxisIndex);
-      if CanProvideZero(cand) then Result := cand;
+      if CanProvideZero(cand, furn.OnZeroAuto) then Result := cand;
     end;
     Exit;
   end;
@@ -1693,7 +1705,7 @@ begin
   for i := 0 to OtherCount - 1 do
   begin
     cand := OtherAt(i);
-    if not CanProvideZero(cand) then Continue;
+    if not CanProvideZero(cand, furn.OnZeroAuto) then Continue;
     taken := False;
     for j := 0 to SameFamilyCount - 1 do
     begin

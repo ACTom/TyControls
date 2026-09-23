@@ -517,6 +517,9 @@ type
     { The elements the last render built, series and labels -- the list the
       hit test walks and the painter draws, read-only. }
     property SeriesList: TTyPaintList read FPaintList;
+    { What the bar solve gave a series -- its band, offset and width. An
+      unsolved column (not a bar, or no such series) when there is none. }
+    function BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
     function GetStyleTypeKey: string; override;
     procedure Resize; override;
     { Protected and non-virtual, exactly as every other control in the library:
@@ -3478,6 +3481,13 @@ begin
   Result.OutsideColour := TTyChartColor(outS.TextColor);
   { labelLine.lineStyle.width, PieSeries.ts:299 -- one logical pixel. }
   Result.LineWidthLogical := 1;
+end;
+
+function TTyAdvanceChart.BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
+begin
+  Result := Default(TTyBarColumn);
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FBarCols)) then
+    Result := FBarCols[ASeriesIndex];
 end;
 
 function TTyAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;

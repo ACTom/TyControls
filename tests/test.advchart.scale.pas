@@ -24,7 +24,7 @@ type
     procedure TestContainRespectsEffectiveExtent;
     procedure TestMappingExtentAbsentByDefault;
     procedure TestMappingExtentDrivesNormalize;
-    procedure TestEffectiveExtentStillDrivesContain;
+    procedure TestMappingExtentDrivesContain;
   end;
 
   TAdvChartIntervalScaleTest = class(TTestCase)
@@ -171,17 +171,22 @@ begin
   AssertEquals('10 is no longer at the stop', 11/12, m.Normalize(10), Eps);
 end;
 
-procedure TAdvChartMapperTest.TestEffectiveExtentStillDrivesContain;
+procedure TAdvChartMapperTest.TestMappingExtentDrivesContain;
 var m: ITyScaleMapper;
 begin
   m := TTyLinearScaleMapper.Create;
   m.SetExtent(sekEffective, TyRange(0, 10));
   m.SetExtent(sekMapping, TyRange(-1, 11));
-  { ...but ticks, labels, splitLines and hit-testing stay on the EFFECTIVE
-    extent, or a widened axis grows phantom ticks at -1 and 11. }
-  AssertFalse('below effective', m.Contain(-0.5));
-  AssertFalse('above effective', m.Contain(10.5));
-  AssertTrue('effective end', m.Contain(10));
+  { ...and so does Contain: upstream's contain reads the mapping extent
+    (scaleMapper.ts:446-451), so a pointer in a bar's margin is still on the
+    axis. The ticks stay on the effective extent -- they never ask Contain.
+    [Revised in batch 41: this test was TestEffectiveExtentStillDrivesContain
+    and pinned the opposite, which is not upstream's rule.] }
+  AssertTrue('inside the margin below', m.Contain(-0.5));
+  AssertTrue('inside the margin above', m.Contain(10.5));
+  AssertTrue('the mapping end', m.Contain(11));
+  AssertFalse('past the mapping end', m.Contain(11.5));
+  AssertFalse('past the mapping start', m.Contain(-1.5));
 end;
 
 { ---------------------- TAdvChartIntervalScaleTest ---------------------- }

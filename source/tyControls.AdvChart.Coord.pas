@@ -61,6 +61,7 @@ type
     FSide: TTyAxisSide;
     FVisible: Boolean;
     FOnBand: Boolean;
+    FZeroDiscouraged: Boolean;
     FCategories: TTyOrdinalMeta;
     procedure SetOnBand(AValue: Boolean);
     procedure SetAxisType(AValue: TTyAxisType);
@@ -122,6 +123,13 @@ type
       percentages rather than a boolean, and an ungated setter would band every
       value axis in the chart. }
     property OnBand: Boolean read FOnBand write SetOnBand;
+    { UPSTREAM'S discourageOnAxisZero. Set in phase B when a bar's half width
+      was added to this axis' mapping extent: its zero is no longer where the
+      eye expects the other axis to stand, so an axis whose onZero is `auto`
+      no longer sits on it. One that wrote `onZero: true` still does. Set even
+      when the widening moved no end. Never cleared: every build makes its
+      axes afresh. }
+    property ZeroDiscouraged: Boolean read FZeroDiscouraged write FZeroDiscouraged;
     { A stable name for this axis across the whole chart, for keying a map by.
 
       MainType plus ComponentIndex, because that pair is unique and never

@@ -10229,9 +10229,7 @@
     }
    ],
    "tol": "3d613b13b13b13b1",
-   "tolText": "4.89727916339269e-13",
-   "deferred": true,
-   "why": "bars widen an unbanded category extent by half a band (containShape), so normalize(0) is 0.5/7 -- the containShape batch"
+   "tolText": "4.89727916339269e-13"
   },
   {
    "name": "log y, grid left 0",

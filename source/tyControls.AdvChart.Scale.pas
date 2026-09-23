@@ -18,11 +18,15 @@ unit tyControls.AdvChart.Scale;
   break decorator never mentions Interval or Log.
 
   TWO EXTENTS, not one (ECharts scale/scaleMapper.ts:33-68, new in 6.1):
-    sekEffective — always present. Ticks, labels, splitLine, Contain, hit-test.
+    sekEffective — always present. Ticks, labels, splitLine, hit-test.
     sekMapping   — present only when set. Widened outward from the effective ends
                    so a shape drawn AT an end (a bar's half width, a candlestick
-                   body) stays inside the plot band. Only Normalize/Denormalize
-                   and axisPointer read it.
+                   body) stays inside the plot band. Normalize/Denormalize, the
+                   band width, Contain and the axisPointer read it.
+                   [Revised in batch 41: this put Contain with the effective
+                   extent. Upstream's contain reads the mapping one
+                   (scaleMapper.ts:446-451): a pointer in a bar's margin is on
+                   the axis.]
   Getting this wrong is not a missing option, it is a different extent model:
   axis.containShape and axis.dataMin/dataMax both rest on it.
 
@@ -46,7 +50,7 @@ type
       mapping extent is set). Returns 0.5 on a degenerate span — never divides. }
     function Normalize(AValue: Double): Double;
     function Denormalize(ANorm: Double): Double;
-    { Against the EFFECTIVE extent, always — see the unit header. }
+    { Against the MAPPING extent when one is set — see the unit header. }
     function Contain(AValue: Double): Boolean;
     function GetExtent(AKind: TTyScaleExtentKind): TTyRange;
     procedure SetExtent(AKind: TTyScaleExtentKind; const ARange: TTyRange);
@@ -320,6 +324,7 @@ type
     FFixMax: Boolean;
     FMinInterval: Double;
     FMaxInterval: Double;
+    FContainShape: Boolean;
     function StillNiced: Boolean;
     function StubExtent: TTyRange;
     function StubToValue(AValue: Double): Double;
@@ -375,6 +380,12 @@ type
       ECharts says "this axis counts". }
     property MinInterval: Double read FMinInterval write FMinInterval;
     property MaxInterval: Double read FMaxInterval write FMaxInterval;
+    { UPSTREAM'S ctnShp: a bar stands on this axis and asked to be contained.
+      It touches the effective extent in one place only -- a flat extent at
+      zero opens to [-1, 1] rather than [0, 1], pins or no pins, so the bar
+      standing at zero has room on both sides. Everything else it does is the
+      mapping extent, which whoever set this writes after Niceify. }
+    property ContainShape: Boolean read FContainShape write FContainShape;
   end;
 
   { An axis whose ticks are DATES.
@@ -554,7 +565,7 @@ end;
 
 function TTyScaleMapperBase.Contain(AValue: Double): Boolean;
 begin
-  Result := TyRangeContains(FExtent[sekEffective], AValue);
+  Result := TyRangeContains(MappingExtent, AValue);
 end;
 
 function TTyScaleMapperBase.GetExtent(AKind: TTyScaleExtentKind): TTyRange;
@@ -2135,6 +2146,13 @@ begin
       end
       else
         lo := lo - h / 2;
+    end
+    { Upstream's helper asks ctnShp here and nothing else -- not min, not
+      max: `min: 0, max: 0` still opens both ways. }
+    else if FContainShape then
+    begin
+      lo := -1;
+      hi := 1;
     end
     else
       hi := 1;

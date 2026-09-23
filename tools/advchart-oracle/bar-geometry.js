@@ -41,8 +41,10 @@
 // Per case: the grid rect (the grid's coordinateSystem.getRect()), the
 // cartesian's getArea(), which axis is the base (the same for every series, or
 // the run fails), and for each value or log axis its type, whether it is
-// inverse, scale.getExtent() and rawExtentInfo.makeRenderInfo().startValue
-// (null when nothing asked the axis for one). A category axis records only its
+// inverse, scale.getExtent(), the mapping extent (getExtentUnsafe(MAPPING):
+// containShape's widening, null when there is none) and
+// rawExtentInfo.makeRenderInfo().startValue (null when nothing asked the axis
+// for one). A category axis records only its
 // type and inverse. A case with showBackground also records the background
 // strips (view._backgroundEls) per item.
 //
@@ -116,6 +118,11 @@ function axisRecord(axis) {
   const extent = axis.scale.getExtent();
   rec.extent = extent.map(hex);
   rec.extentText = extent.map(text);
+  // the mapping extent (containShape), what dataToCoord normalizes over; null
+  // when the scale has none
+  const mapping = axis.scale.getExtentUnsafe(1, null);
+  rec.mapping = mapping ? mapping.map(hex) : null;
+  rec.mappingText = mapping ? mapping.map(text) : null;
   const info = axis.scale.rawExtentInfo;
   const sv = info ? info.makeRenderInfo().startValue : null;
   if (sv == null) {
@@ -325,13 +332,14 @@ add('V log startValue 0.5 [1,10,100]', V([1, 10, 100], { type: 'log', startValue
 add('V log startValue 0 [1,10,100]: no bars', V([1, 10, 100], { type: 'log', startValue: 0 }));
 add('V inverse [5,-3,0,1e-9]', V(D, { inverse: true }));
 add('H inverse [5,-3,0,1e-9]', H(D, { inverse: true }));
-// deferred: bars on a VALUE base axis take their width from the smallest gap
-// in the data and widen the axis to fit (containShape) -- a batch of its own.
-// Their value-axis start is this file's rule and already agrees.
+// bars on a VALUE base axis take their width from the smallest gap in the data
+// and widen the axis' mapping extent to fit (containShape: x maps [-0.5, 4.5]
+// while its effective extent stays [0, 4]; contain-shape.js asks that question
+// in full). Their value-axis start is this file's rule.
 add('value base axis [[1,5],[2,-3],[4,2]]', {
   xAxis: { type: 'value' }, yAxis: { type: 'value' },
   series: [{ type: 'bar', data: [[1, 5], [2, -3], [4, 2]], label: shown }],
-}, deferred);
+});
 // R4: a bar of no length keeps its element and its label
 add('V [0,5]: the 0 bar has no length', V([0, 5]));
 add('V scale:true [100,120,130]: the 100 bar has no length', V([100, 120, 130], { scale: true }));

@@ -34,7 +34,8 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Shape, tyControls.AdvChart.Pictorial;
+  tyControls.AdvChart.Shape, tyControls.AdvChart.Pictorial,
+  tyControls.AdvChart.Scale;
 
 type
   { What the solver has to say about one series.
@@ -94,9 +95,15 @@ function TyBarColumnForOneSeries(ABandWidth: Double): TTyBarColumn;
   values, scaled into pixels. Exported because it is testable on its own and
   because a wrong answer here is invisible -- nothing raises, the bars are
   merely the wrong width. AValues may be in any order and may contain NaN.
-  Answers NaN when the axis is degenerate. }
+  Answers NaN when the axis is degenerate.
+
+  AScaleSpan is the span the axis MAPS over -- the mapping extent's, in the
+  axis' linear space -- which is wider than its ticks once the bars' own half
+  widths have been added to it. }
 function TyDerivedBandWidth(APxSpan, AScaleSpan: Double;
   const AValues: array of Double): Double;
+{ The same, from a gap statistic already taken (TyLiPosMinGap's answer). }
+function TyBandFromMinGap(APxSpan, AScaleSpan, AGap: Double): Double;
 
 implementation
 
@@ -316,57 +323,24 @@ begin
   Result := CornersOf(TJSONObject(d));
 end;
 
-function TyDerivedBandWidth(APxSpan, AScaleSpan: Double;
-  const AValues: array of Double): Double;
-var
-  vals: array of Double;
-  i, j, n: Integer;
-  tmp, gap, minGap: Double;
+function TyBandFromMinGap(APxSpan, AScaleSpan, AGap: Double): Double;
 begin
-  Result := NaN;
-  if (AScaleSpan <= 0) or (APxSpan <= 0) then Exit;
-
-  n := 0;
-  SetLength(vals, Length(AValues));
-  for i := 0 to High(AValues) do
-    if not IsNan(AValues[i]) then
-    begin
-      vals[n] := AValues[i];
-      Inc(n);
-    end;
-  SetLength(vals, n);
-  if n = 0 then Exit;
-
-  { Insertion sort: this is one chart's bar data on one axis, already close to
-    sorted, and a sort that is obviously correct beats a clever one nobody will
-    re-read. }
-  for i := 1 to n - 1 do
-  begin
-    tmp := vals[i];
-    j := i - 1;
-    while (j >= 0) and (vals[j] > tmp) do
-    begin
-      vals[j + 1] := vals[j];
-      Dec(j);
-    end;
-    vals[j + 1] := tmp;
-  end;
-
-  minGap := Infinity;
-  for i := 1 to n - 1 do
-  begin
-    gap := vals[i] - vals[i - 1];
-    { STRICTLY positive. Duplicates are ordinary -- two series both reporting
-      the same x -- and a zero gap would collapse every bar to nothing. }
-    if (gap > 0) and (gap < minGap) then minGap := gap;
-  end;
-
-  { One value, or every value identical: there is no gap to measure, so
-    upstream falls back to a fixed share of the whole span. }
-  if IsInfinite(minGap) then
+  { barGrid.ts via calcBandWidth: a gap and a real span give the gap in
+    pixels; one distinct value, with nothing to measure, gives a fixed share
+    of the whole axis -- whatever the span, which is upstream's order of
+    tests; anything else is no band at all. }
+  if (AGap > 0) and (AScaleSpan > 0) and not IsInfinite(AScaleSpan) then
+    Result := APxSpan / AScaleSpan * AGap
+  else if AGap = cTyMinGapSingle then
     Result := APxSpan * cFallbackBandWidthRatio
   else
-    Result := APxSpan / AScaleSpan * minGap;
+    Result := NaN;
+end;
+
+function TyDerivedBandWidth(APxSpan, AScaleSpan: Double;
+  const AValues: array of Double): Double;
+begin
+  Result := TyBandFromMinGap(APxSpan, AScaleSpan, TyMinGapOf(AValues));
 end;
 
 { The solve, over one axis' columns.
@@ -509,32 +483,6 @@ begin
   Result.Clip := True;
 end;
 
-{ Every base-dimension value of every bar series on this axis, which is what
-  the value-axis band heuristic measures the gaps between. }
-function BaseValuesOnAxis(const AStores: array of TTyDataStore;
-  const ASeries: TTyIntegerArray; AAxis: TTyAxis): TTyDoubleArray;
-var
-  k, si, col, r, n: Integer;
-begin
-  Result := nil;
-  n := 0;
-  for k := 0 to High(ASeries) do
-  begin
-    si := ASeries[k];
-    if (si < 0) or (si > High(AStores)) then Continue;
-    if AStores[si] = nil then Continue;
-    col := AStores[si].DimIndexOf(AAxis.Dim);
-    if col < 0 then Continue;
-    for r := 0 to AStores[si].Count - 1 do
-    begin
-      if n > High(Result) then SetLength(Result, Max(16, n * 2));
-      Result[n] := AStores[si].Get(col, r);
-      Inc(n);
-    end;
-  end;
-  SetLength(Result, n);
-end;
-
 function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   AIndex: TTyAxisSeriesIndex): TTyBarColumnArray;
@@ -554,6 +502,7 @@ var
     stackId: string;
     node: TJSONObject;
     band, span: Double;
+    ext: TTyRange;
     autoCount, k, m, si: Integer;
     barGap, catGap, v: TBarSize;
     found: Boolean;
@@ -569,9 +518,14 @@ var
     band := AAxis.BandWidth;
     if band <= 0 then
     begin
-      span := TyRangeSpan(AAxis.Scale.GetExtent);
-      band := TyDerivedBandWidth(Abs(AAxis.PxStop - AAxis.PxStart), span,
-        BaseValuesOnAxis(AStores, onIt, AAxis));
+      { OVER THE MAPPING EXTENT, in the axis' own linear space: the bars'
+        half widths are part of what the plot spans, and on a log axis the
+        gaps were measured in decades, so the span has to be too. }
+      ext := AAxis.Scale.GetExtent2(sekMapping);
+      span := AAxis.Scale.Mapper.TransformIn(ext.Stop)
+        - AAxis.Scale.Mapper.TransformIn(ext.Start);
+      band := TyBandFromMinGap(Abs(AAxis.PxStop - AAxis.PxStart), span,
+        TyLiPosMinGap(AStores, onIt, AAxis));
     end;
     if IsNan(band) then band := cMinBandWidth;
     band := AtLeast(band, cMinBandWidth);
