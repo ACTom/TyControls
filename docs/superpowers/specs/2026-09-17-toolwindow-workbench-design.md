@@ -375,7 +375,8 @@ HeaderContextPopup(W; X, Y);
   - 文档写明：只设了 `ImageIndex`、没设 `ImageName` 的窗口，要在两侧之间移动就得用 manager 上的共享列表。
   - 文档写明：属性编辑器只看栏自己的 `Images`（`graphpropedits.pas:713-728`），看不到 `Manager.Images` 回落；只在 manager 上设列表时，对象查看器里 `ImageIndex` 的下拉是空的，这种用法应该设 `ImageName`。
 - 挂起的 `ImageIndex` 在**栏的 `Loaded`** 里解析，不在 csLoading 期间解析（否则解析到先 fixup 的那个列表）。
-- 订阅列表变化：栏记住 `FSubscribedList`。生效列表变了（`Bar.Images`、`Manager`、`Manager.Images`、manager 被移除），**先对旧列表 `UnRegisterChanges` 再注册新的**，并 `FreeNotification`。只有被移除的正是 `FSubscribedList` 时才跳过注销——同一个 link 不注销就重复注册，旧列表析构时死循环（`imglist.inc:1692-1698, 2706-2711`）。
+- 订阅列表变化：栏记住 `FSubscribedList`。生效列表变了（`Bar.Images`、`Manager`、`Manager.Images`、manager 被移除），**先对旧列表 `UnRegisterChanges` 再注册新的**，并 `FreeNotification`。~~只有被移除的正是 `FSubscribedList` 时才跳过注销~~——同一个 link 不注销就重复注册，旧列表析构时死循环（`imglist.inc:1692-1698, 2706-2711`）。
+  - **实现时推翻（Task 6）：被移除的是 `FSubscribedList` 时也照样注销。** 跳过的理由是「列表正在析构，别碰它」，但 opRemove 是从它的 `inherited Destroy` 里发的，那时 link 表还在（表在 `inherited Destroy` 之后才清、才释放），注销是安全的。跳过反而会出事：`RemoveComponent` 同样广播 opRemove 而列表还活着，link 留在它身上，栏再订阅别的列表就是这个死循环；C 期回落到 `Manager.Images` 时，同一次通知里就会订阅新列表，也是一样。测试 `TestAListTakenFromItsOwnerIsUnsubscribed` 守着。
 - 着色：照 glyph 按钮（`GlyphButtons.pas:645-658`），把图标着成图标项自己类型键各状态的 `TextColor`。本库的列表（`TTyVirtualImageList` 及其子类）一律用 `RenderIndex(i, px)`（或 `TyRenderImage`）取一张调用方持有的位图——字体字形出来是列表自己的 `GlyphColor`，**不是墨色**（`ImageCollection.pas:1477-1490`）；再 `TyTintBitmapAlpha(bmp, 墨色)` + `TyFadeBitmapAlpha(bmp, TyAlphaOf(墨色))`，用完释放。不给列表加新接口。**外来列表默认不着色**（部分 widgetset 上物化出的位图可能丢了 alpha，`ImageDraw.pas:275-279`）。
 - 缓存：先不做，照现有调用方每次绘制都渲染。要做就先测，键 `(名字, px, ARGB)`，按 `(列表身份, IconFont.Version, Collection.ChangeStamp, model identity, ThemeVersion, PPI)` 清，**LRU 上限**（同 `TyImageCacheDefaultCapacity = 64`），不接受动画插值出来的颜色。
 - **图标条提示**用 `StripHint`，空的时候用 `Caption`，由栏处理 `CM_HINTSHOW`。**不用 `Hint`**：LCL 顺着父链找第一个非空 Hint（`application.inc:33-41`），窗口里所有没设 Hint 的控件都会冒出"资源管理器"。

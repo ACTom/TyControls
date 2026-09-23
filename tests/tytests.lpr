@@ -197,7 +197,7 @@ uses
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,
   test.toolwindow.geometry, test.toolwindow.theme, test.toolwindow.window,
-  test.toolwindow.actions, test.toolwindow.bar,
+  test.toolwindow.actions, test.toolwindow.bar, test.toolwindow.images,
   test.dpi.fontlatch,
   test.parity.datetime;
 

@@ -8,7 +8,7 @@ unit tyControls.ToolWindows;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ImgList,
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
   tyControls.StyleModel, tyControls.Controller, tyControls.StrConsts;
 
@@ -127,8 +127,10 @@ type
     类型键是契约不是实现,A 期就钉死。 }
   TTyToolWindow = class(TTyCustomControl)
   private
-    FImageName: string;
-    FImageIndex: Integer;
+    FImageName: string;           { 持久键,在所在栏的生效列表里按名字解析 }
+    FImageIndex: Integer;         { 最近一次按序号写进来的值;名字给不出答案时的回落 }
+    { 按序号写进来、还没换成名字的那一次(没有栏 / 栏没有列表 / 栏正在流式加载)。 }
+    FImageIndexPending: Boolean;
     FStripHint: string;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
@@ -152,6 +154,17 @@ type
     { 探针的底:最近一次写 Visible 那一刻 csNoDesignVisible 在不在(见 SetVisible)。 }
     FNoDesignVisibleAtShow: Boolean;
     function ImageIndexIsStored: Boolean;
+    function GetImageIndex: TImageIndex;
+    procedure SetImageIndex(AValue: TImageIndex);
+    procedure SetImageName(const AValue: string);
+    procedure SetStripHint(const AValue: string);
+    { 挂起的 ImageIndex 换成生效列表里那一格的名字(照 TTyTabSheet.ResolveImageIndex)。
+      没挂起、没有栏、栏没有列表、栏正在流式加载 —— 都不动,留给之后那一次:
+      加载中不解析,是因为这时候栏的列表引用谁先 fixup 上谁就是答案(spec §8),
+      栏的 Loaded 统一解析。 }
+    procedure ResolveImageIndex;
+    { 图标条画的是名字 / 序号、提示读的是 StripHint:改了要让所在栏重画。 }
+    procedure InvalidateBar;
     function GetBar: TTyToolWindowBar;
     function GetActions: TTyToolWindowActions;
     function HeaderTokenPx: Integer;
@@ -239,10 +252,19 @@ type
     property NoDesignVisibleAtLastShow: Boolean read FNoDesignVisibleAtShow;
   published
     property Caption;
-    property ImageName: string read FImageName write FImageName;
-    property ImageIndex: Integer read FImageIndex write FImageIndex
+    { 图标条上的图标**按名字** —— 持久键,在所在栏的 EffectiveImages 里解析。列表是本库的
+      (TTyVirtualImageList 及其子类)时,名字挺得过列表调顺序。'' = 没有;外来的 LCL 列表
+      没有名字,那时它不起作用,键是 ImageIndex。找不到这个名字就不画(-1),不回落到序号。 }
+    property ImageName: string read FImageName write SetImageName;
+    { ImageName 的**视图**(TTyTabSheet 的约定):读 = 名字在生效列表里的那一格,名字解析
+      不出来时回落到最近一次写进来的序号;写 = 把那一格的名字记成 ImageName(在栏里、栏有
+      列表、栏不在加载中时当场换,否则挂起,栏的 Loaded / 换列表 / 进栏时再换)。
+      只在名字存不下这个选择时进流(ImageIndexIsStored)。类型是 ImgList.TImageIndex:
+      LCL 的 TImageIndexPropertyEditor 就会顺着 Parent = 栏 → Images 挂上下拉。 }
+    property ImageIndex: TImageIndex read GetImageIndex write SetImageIndex
       stored ImageIndexIsStored default -1;
-    property StripHint: string read FStripHint write FStripHint;
+    { 图标条提示;空的时候用 Caption,**不用 Hint**(见 TTyToolWindowBar.StripHintText)。 }
+    property StripHint: string read FStripHint write SetStripHint;
     property StyleClass;
     { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
     property Controller stored False;
@@ -377,6 +399,23 @@ type
     FOnChange: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
     FOnExpand: TNotifyEvent;
+    FImages: TCustomImageList;
+    { 变更 link **真正注册在**哪个列表上。它和 EffectiveImages 可以一时不同 —— 生效列表刚变、
+      还没重新订阅的那一刻 —— 所以单记一份:注销要找的是 link 实际挂着的那一个。 }
+    FSubscribedList: TCustomImageList;
+    FImageLink: TChangeLink;
+    procedure SetImages(AValue: TCustomImageList);
+    { 让 link 跟上 EffectiveImages:**先**从旧列表注销,**再**注册到新列表并 FreeNotification。
+      顺序反了(或者不注销),同一个 link 就同时挂在两个列表上,而 Sender 只记得后一个 ——
+      旧列表析构时 `while Count > 0 do UnregisterChanges(第 0 个)` 按 Sender 删,删不掉,
+      死循环(imglist.inc:1692-1698, 2706-2711)。 }
+    procedure SyncImageSubscription;
+    { 生效列表可能换了:重新订阅、解析挂起的序号、重画。 }
+    procedure ImagesChanged;
+    { 订阅的列表内容变了(加名字、换图标集……)。 }
+    procedure ImageListChange(Sender: TObject);
+    { 栏里每个窗口挂起的 ImageIndex 换成名字;加载中、析构中不做(见 TTyToolWindow.ResolveImageIndex)。 }
+    procedure ResolvePendingImageIndexes;
     procedure SetPlacement(AValue: TTyToolWindowPlacement);
     procedure SetExpandedSize(AValue: Integer);
     procedure SetCollapsed(AValue: Boolean);
@@ -449,7 +488,20 @@ type
     procedure EndSilent;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure Invalidate; override;
+    { 图标解析用的列表:Images,为空时**读取时**回落到 Manager.Images(spec §8)。
+      A 期栏还没有 Manager 属性(manager 是空壳),所以此刻就是 Images。C 期接 Manager 时
+      改这一处,再在 Manager、Manager.Images 变化和 manager 被移除时调 ImagesChanged ——
+      订阅(SyncImageSubscription)和解析读的都是这里。 }
+    function EffectiveImages: TCustomImageList;
+    { 图标条要画的那一格:ImageName 非空就按名字在 EffectiveImages 里找,找不到是 -1
+      (不许乱画一个);名字为空才用序号。 }
+    function ResolvedImageIndex(AWindow: TTyToolWindow): Integer;
+    { 图标条提示的文字:StripHint,空的时候 Caption。**不用 Hint**:LCL 顺着父链找第一个
+      非空 Hint(application.inc:33-41),窗口的 Hint 一设,里面所有没设 Hint 的控件都会
+      冒出它。CM_HINTSHOW 在图标条手势那一步(Task 7)接。 }
+    function StripHintText(AWindow: TTyToolWindow): string;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     { 设计器拖栏的边:只有这一种 SetBounds 写回 ExpandedSize(spec §6.1)。Align 不是
@@ -478,6 +530,10 @@ type
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
     { 窗口序号,跟随窗口身份:调顺序后当前页还是那个窗口,数值跟着变。 }
     property ActiveIndex: Integer read GetActiveIndex write SetActiveIndex default -1;
+    { 窗口图标的列表。对象查看器里窗口 ImageIndex 的下拉只看这一个(graphpropedits.pas:
+      713-728),看不到 Manager.Images 回落 —— 只在 manager 上设列表时请设 ImageName。
+      只设了 ImageIndex、没设 ImageName 的窗口要在两侧之间移动,就得用 manager 上的共享列表。 }
+    property Images: TCustomImageList read FImages write SetImages;
     { 构造时按 Placement 设成 alLeft,default 必须跟着一致(否则 .lfm 省略的那个值加载后丢)。
       几何一律看 Placement,不看 Align。 }
     property Align default alLeft;
@@ -542,7 +598,8 @@ implementation
 
 uses
   Forms,     { GetParentForm:切页 / 收起时看焦点在不在旧页里 }
-  LCLProc;   { OwnerFormDesignerModified:设计期切页要告诉 IDE }
+  LCLProc,   { OwnerFormDesignerModified:设计期切页要告诉 IDE }
+  tyControls.ImageDraw;  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子 }
 
 { --- TTyToolWindow ------------------------------------------------------------ }
 
@@ -575,6 +632,78 @@ function TTyToolWindow.ImageIndexIsStored: Boolean;
 begin
   { 名字是持久键,序号只在名字给不出答案时才进流。 }
   Result := (FImageName = '') and (FImageIndex >= 0);
+end;
+
+function TTyToolWindow.GetImageIndex: TImageIndex;
+var
+  b: TTyToolWindowBar;
+  n: Integer;
+begin
+  { 名字能在生效列表里解析就答那一格;否则答最近一次写进来的序号 —— 于是「设名字、读序号」
+    和反过来那一问答得一致(同 TTyTabSheet.GetImageIndex)。图标条画什么不看这里,看
+    TTyToolWindowBar.ResolvedImageIndex:名字解析不出来时那边答 -1。 }
+  if FImageName <> '' then
+  begin
+    b := Bar;
+    if b <> nil then
+    begin
+      n := TyImageIndexOfName(b.EffectiveImages, FImageName);
+      if n >= 0 then Exit(n);
+    end;
+  end;
+  Result := FImageIndex;
+end;
+
+procedure TTyToolWindow.SetImageIndex(AValue: TImageIndex);
+begin
+  if AValue < -1 then AValue := -1;   { 「没有图标」只有一个值 }
+  FImageIndex := AValue;
+  { 先记挂起:这个请求不管此刻换不换得成名字都成立 —— 只在换得成时才记的话,流进来的
+    ImageIndex 在栏的列表 fixup 之前就没了。 }
+  FImageIndexPending := True;
+  ResolveImageIndex;
+  InvalidateBar;
+end;
+
+procedure TTyToolWindow.SetImageName(const AValue: string);
+begin
+  { 后写的算:按名字设了,之前挂起的那个序号就作废 —— 不然栏一拿到列表,挂起的序号会把
+    刚设的名字盖掉。ResolveImageIndex 自己调这里之前已经清了挂起,不受影响。 }
+  FImageIndexPending := False;
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  InvalidateBar;
+end;
+
+procedure TTyToolWindow.SetStripHint(const AValue: string);
+begin
+  if FStripHint = AValue then Exit;
+  FStripHint := AValue;
+  InvalidateBar;
+end;
+
+procedure TTyToolWindow.ResolveImageIndex;
+var
+  b: TTyToolWindowBar;
+  list: TCustomImageList;
+begin
+  if not FImageIndexPending then Exit;   { 没有挂起的:绝不碰已经设好的 ImageName }
+  b := Bar;
+  if b = nil then Exit;
+  if csLoading in b.ComponentState then Exit;
+  list := b.EffectiveImages;
+  if list = nil then Exit;               { 栏还没有列表:进栏 / 设列表时再来 }
+  FImageIndexPending := False;
+  if FImageIndex < 0 then
+    SetImageName('')                     { 明确写 -1 = 清掉图标 }
+  else
+    { 外来列表、越界:名字是 '',序号就是键。 }
+    SetImageName(TyImageNameOfIndex(list, FImageIndex));
+end;
+
+procedure TTyToolWindow.InvalidateBar;
+begin
+  if Bar <> nil then Bar.Invalidate;
 end;
 
 function TTyToolWindow.GetBar: TTyToolWindowBar;
@@ -1368,6 +1497,8 @@ begin
   FPlacement := twpLeft;
   FExpandedSize := TyToolWindowDefaultExpandedSize;
   FLoadingActiveIndex := -1;
+  FImageLink := TChangeLink.Create;
+  FImageLink.OnChange := @ImageListChange;
   Align := alLeft;
   { 默认值的属性不会进 .lfm,setter 也就不会跑 —— 出生时就得有一个推导过的尺寸。
     csDesigning 此刻已经在了(TComponent.Create 里的 InsertComponent),所以设计器里
@@ -1375,9 +1506,98 @@ begin
   DeriveSize;
 end;
 
+destructor TTyToolWindowBar.Destroy;
+begin
+  { TChangeLink.Destroy 自己从 Sender(就是 FSubscribedList)注销。先放它:之后的继承析构
+    里再有通知进来,SyncImageSubscription 看见 link 没了就不碰任何列表。 }
+  FreeAndNil(FImageLink);
+  FSubscribedList := nil;
+  inherited Destroy;
+end;
+
 function TTyToolWindowBar.GetStyleTypeKey: string;
 begin
   Result := 'TyToolWindowBar';
+end;
+
+function TTyToolWindowBar.EffectiveImages: TCustomImageList;
+begin
+  Result := FImages;
+end;
+
+procedure TTyToolWindowBar.SyncImageSubscription;
+var
+  target: TCustomImageList;
+begin
+  if FImageLink = nil then Exit;
+  target := EffectiveImages;
+  if target = FSubscribedList then Exit;
+  { 先注销旧的。被移除的正是 FSubscribedList 时**照样注销**(spec §8 原写「跳过」,见
+    Notification):opRemove 从列表的继承析构里发出,那时它的 link 表还在
+    (imglist.inc:1692-1698 —— 表在 inherited Destroy 之后才清、才释放),注销是安全的;
+    而跳过的话 link 还挂在它身上,紧接着注册到别的列表上,就是那个死循环。 }
+  if FSubscribedList <> nil then
+    FSubscribedList.UnRegisterChanges(FImageLink);
+  FSubscribedList := target;
+  if target <> nil then
+  begin
+    target.RegisterChanges(FImageLink);
+    target.FreeNotification(Self);
+  end;
+end;
+
+procedure TTyToolWindowBar.ResolvePendingImageIndexes;
+var
+  i: Integer;
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  for i := 0 to High(FRegistered) do
+    FRegistered[i].ResolveImageIndex;
+end;
+
+procedure TTyToolWindowBar.ImagesChanged;
+begin
+  SyncImageSubscription;
+  ResolvePendingImageIndexes;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+procedure TTyToolWindowBar.ImageListChange(Sender: TObject);
+begin
+  { 列表里加了名字,之前越界 / 没有列表时挂起的序号也许就换得成名字了(同
+    TTyPageControl.DoImagesChanged)。图标条要重画。 }
+  ResolvePendingImageIndexes;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+procedure TTyToolWindowBar.SetImages(AValue: TCustomImageList);
+var
+  old: TCustomImageList;
+begin
+  if FImages = AValue then Exit;
+  old := FImages;
+  FImages := AValue;
+  { 流式加载时照样订阅(只是挂一个 link);解析留给 Loaded。 }
+  ImagesChanged;
+  { 旧列表已经不是订阅的那一个了:它被释放时不用再通知本栏。 }
+  if (old <> nil) and (old <> FSubscribedList) then
+    old.RemoveFreeNotification(Self);
+end;
+
+function TTyToolWindowBar.ResolvedImageIndex(AWindow: TTyToolWindow): Integer;
+begin
+  if AWindow = nil then Exit(-1);
+  if AWindow.ImageName <> '' then
+    Result := TyImageIndexOfName(EffectiveImages, AWindow.ImageName)
+  else
+    Result := AWindow.FImageIndex;
+end;
+
+function TTyToolWindowBar.StripHintText(AWindow: TTyToolWindow): string;
+begin
+  if AWindow = nil then Exit('');
+  if AWindow.StripHint <> '' then Result := AWindow.StripHint
+  else Result := AWindow.Caption;
 end;
 
 function TTyToolWindowBar.ChildClassAllowed(ChildClass: TClass): Boolean;
@@ -2071,6 +2291,8 @@ begin
     必须在下面的切页之前 —— 它进来就会被显示出来。 }
   for i := 1 to FSilent do
     AWindow.BeginSilentVisibility;
+  { 没有列表时写进来的序号,进了有列表的栏就换成名字。加载中它自己不动(Loaded 统一换)。 }
+  AWindow.ResolveImageIndex;
   { 加载中不碰当前页,也不显示任何一页:Loaded 按待定值静默地挑、静默地显示。 }
   prev := FActive;
   if not (csLoading in ComponentState) then
@@ -2149,6 +2371,15 @@ begin
     注销那一步跳过了,走到这里。 }
   if (Operation = opRemove) and (AComponent is TTyToolWindow) then
     UnregisterWindow(TTyToolWindow(AComponent));
+  { 列表被释放,或者只是从 Owner 里摘走(RemoveComponent 同样广播 opRemove,列表还活着):
+    清引用、重新订阅。重新订阅会从它身上注销 —— 两种情形都必须:摘走的那个活下来还会
+    发变更、日后析构时要清自己的 link 表;释放中的那个,C 期这一刻会改订 Manager.Images。 }
+  if (Operation = opRemove) and (AComponent is TCustomImageList)
+     and ((AComponent = FImages) or (AComponent = FSubscribedList)) then
+  begin
+    if AComponent = FImages then FImages := nil;
+    ImagesChanged;
+  end;
 end;
 
 procedure TTyToolWindowBar.SetController(AValue: TTyStyleController);
@@ -2203,6 +2434,12 @@ begin
   SwitchSilently(target);
   { 继承窗体的下一遍加载从真正应用的那一页开始,加载中 ActiveIndex 也答它。 }
   FLoadingActiveIndex := IndexOfWindow(FActive);
+  { 挂起的 ImageIndex 在这里、而且只在这里换成名字(spec §8):加载中列表引用还没 fixup 完,
+    谁先 fixup 上就会解析到谁。到这一步同一窗体里的引用都已就位(根读完时
+    DoFixupReferences,reader.inc:1061-1062,早于 1528-1530 逐个调 Loaded);指向别的窗体 /
+    数据模块的列表可能更晚才到(GlobalFixupReferences,:1537),那时经 SetImages →
+    ImagesChanged 再解析。 }
+  ResolvePendingImageIndexes;
   for i := 0 to High(wins) do
     wins[i].RelayoutHeader;
   Relayout;
