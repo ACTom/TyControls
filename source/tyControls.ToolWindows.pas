@@ -500,6 +500,11 @@ type
     FAutoDragPosValid: Boolean;
     FOverflowHover: Boolean;
     FOverflowPressed: Boolean;
+    { 右键(spec §6.8):落在图标上时是那个窗口,别处 nil。 }
+    FContextWindow: TTyToolWindow;
+    { 这一次右键不在图标上:GetPopupMenu 答 nil,请求冒泡到窗体。DoContextPopup 置、
+      GetPopupMenu 用掉就清(LCL 在同一条 WM_CONTEXTMENU 里先调前者、再调后者)。 }
+    FPopupBlocked: Boolean;
     { 溢出菜单。不给 Owner:给栏的话它进栏的 Components,还得操心流式化;栏自己释放。 }
     FOverflowMenu: TPopupMenu;
     { --- 拉宽边(spec §6.3)。起点记逻辑尺寸和屏幕坐标:右栏 / 底栏拉宽时自己在挪,
@@ -592,6 +597,13 @@ type
     { 挡在 LCL 自动拖动前面的那一道闸;通过才调继承的 BeginAutoDrag。测试探针重写它数次数,
       不用靠「无头起 LCL 拖动会抛异常」当判据。 }
     procedure StartLclAutoDrag; virtual;
+    { spec §6.8:图标上的右键先设 ContextWindow 再走继承(OnContextPopup、PopupMenu);
+      别处 —— 包括键盘菜单键的 (-1, -1),栏不拿焦点,这种请求一定来自子控件 —— 不调继承
+      (不发 OnContextPopup,Handled 留 False),ContextWindow 置 nil,并挡住 GetPopupMenu,
+      子控件的右键请求照样冒泡到窗体。两处都要挡:LCL 先调 DoContextPopup 再调
+      GetPopupMenu(control.inc:2484-2492),只改后者挡不住 OnContextPopup。 }
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
+    function GetPopupMenu: TPopupMenu; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -687,6 +699,8 @@ type
     function OverflowWindows: TTyToolWindowPlan;
     { 溢出菜单(点过一次溢出按钮才有);菜单项的 Tag 是窗口引用。 }
     property OverflowMenu: TPopupMenu read FOverflowMenu;
+    { 最近一次右键落在哪个窗口的图标上;不在图标上是 nil(spec §6.8)。只读。 }
+    property ContextWindow: TTyToolWindow read FContextWindow;
     { 拉宽边(= BarLayout.Edge):运行时收起、没有窗口时为空。 }
     function EdgeRect: TRect;
     { 探针:手势此刻是否武装着 / 拖动中 —— 真实状态的只读视图。 }
@@ -3046,6 +3060,27 @@ begin
   inherited BeginAutoDrag;
 end;
 
+procedure TTyToolWindowBar.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+begin
+  if (MousePos.X <> -1) or (MousePos.Y <> -1) then
+    FContextWindow := WindowAtPos(MousePos.X, MousePos.Y)
+  else
+    FContextWindow := nil;
+  FPopupBlocked := FContextWindow = nil;
+  if FPopupBlocked then Exit;
+  inherited DoContextPopup(MousePos, Handled);
+end;
+
+function TTyToolWindowBar.GetPopupMenu: TPopupMenu;
+begin
+  if FPopupBlocked then
+  begin
+    FPopupBlocked := False;
+    Exit(nil);
+  end;
+  Result := inherited GetPopupMenu;
+end;
+
 procedure TTyToolWindowBar.ShowOverflowMenu;
 var
   hidden: TTyToolWindowPlan;
@@ -3851,6 +3886,7 @@ begin
     FDesignGesture := False;
     FDesignWindow := nil;
   end;
+  if AWindow = FContextWindow then FContextWindow := nil;
   { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废。 }
   if FEdgeDragging and (Length(FRegistered) = 0) then ResetGesture(twgeCancel);
   { 悬停和按下按窗口序号记,别的窗口一走序号就挪了:悬停清掉(下一次移动重查),

@@ -17,6 +17,9 @@ uses
 
 type
   TTyToolWindowStripTests = class(TTyToolWindowBarFixture)
+  private
+    FContextPopups: Integer;
+    procedure CountContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
   published
     procedure TestStripPaintsAndTheActiveItemDiffers;
     procedure TestTheIndicatorSitsOnTheContentSideOfTheActiveCellOnly;
@@ -47,6 +50,9 @@ type
     procedure TestTheOverflowButtonPaintsHoverAndPressedInTheStripInk;
     procedure TestTheOverflowMenuOpensTowardsTheContent;
     procedure TestShowingTheOverflowMenuSetsItsAlignment;
+    { spec §6.8:右键。 }
+    procedure TestARightClickOnAnIconSetsContextWindowAndPopsTheBarsMenu;
+    procedure TestARightClickOffTheIconsBubblesToTheForm;
   end;
 
 implementation
@@ -832,6 +838,67 @@ begin
   FBar.CallMouseDown(p.X, p.Y);
   FBar.CallMouseUp(p.X, p.Y);
   AssertEquals('左栏:往右开', Ord(paLeft), Ord(FBar.OverflowMenu.Alignment));
+end;
+
+{ --- 右键(spec §6.8) ---------------------------------------------------------------- }
+
+procedure TTyToolWindowStripTests.CountContextPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  Inc(FContextPopups);
+end;
+
+procedure TTyToolWindowStripTests.TestARightClickOnAnIconSetsContextWindowAndPopsTheBarsMenu;
+var
+  a, b: TProbeWindow;
+  menu: TPopupMenu;
+  handled: Boolean;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  FBar.ActiveWindow := a;
+  menu := TPopupMenu.Create(FForm);
+  FBar.PopupMenu := menu;
+  FBar.OnContextPopup := @CountContextPopup;
+  FContextPopups := 0;
+  handled := False;
+  FBar.CallDoContextPopup(FBar.StripItemRect(1).CenterPoint, handled);
+  AssertSame('图标上:ContextWindow 是那个窗口', b, FBar.ContextWindow);
+  AssertEquals('图标上:照常发 OnContextPopup', 1, FContextPopups);
+  AssertSame('图标上:栏的菜单照常弹', menu, FBar.CallGetPopupMenu);
+  AssertSame('右键从不切页', a, FBar.ActiveWindow);
+  b.Free;
+  AssertTrue('那个窗口走了:ContextWindow 不悬空', FBar.ContextWindow = nil);
+end;
+
+procedure TTyToolWindowStripTests.TestARightClickOffTheIconsBubblesToTheForm;
+var
+  menu: TPopupMenu;
+  handled: Boolean;
+begin
+  NewWindow;
+  NewWindow;
+  menu := TPopupMenu.Create(FForm);
+  FBar.PopupMenu := menu;
+  FBar.OnContextPopup := @CountContextPopup;
+  FContextPopups := 0;
+  FBar.CallDoContextPopup(FBar.StripItemRect(0).CenterPoint, handled);
+  AssertTrue('前提:图标上设了 ContextWindow', FBar.ContextWindow <> nil);
+  FBar.CallGetPopupMenu;
+  FContextPopups := 0;
+  { 正文里一个没有自己菜单的控件的右键冒泡上来:落点在内容区。 }
+  handled := False;
+  FBar.CallDoContextPopup(FBar.BarLayout.Content.CenterPoint, handled);
+  AssertEquals('不在图标上:不发栏的 OnContextPopup', 0, FContextPopups);
+  AssertFalse('Handled 留 False,请求接着往上冒', handled);
+  AssertTrue('ContextWindow 置 nil', FBar.ContextWindow = nil);
+  AssertTrue('栏的菜单不弹', FBar.CallGetPopupMenu = nil);
+  AssertSame('挡一次就用掉:之后别的地方问菜单照常答', menu, FBar.CallGetPopupMenu);
+  { 键盘菜单键:(-1, -1)。走真实的 LM_CONTEXTMENU,没弹就是 0,窗体接着处理。 }
+  AssertEquals('菜单键:栏不弹,消息结果 0', 0,
+    FBar.Perform(LM_CONTEXTMENU, 0, PtrInt($FFFFFFFF)));
+  AssertEquals('菜单键:也不发 OnContextPopup', 0, FContextPopups);
+  AssertTrue('菜单键:ContextWindow nil', FBar.ContextWindow = nil);
 end;
 
 initialization

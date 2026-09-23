@@ -13,7 +13,7 @@ unit test.toolwindow.bar;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc, LMessages,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, Menus, LCLType, LCLProc, LMessages,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
@@ -66,6 +66,8 @@ type
     function CallRealPointerInClient(out APoint: TPoint): Boolean;
     function StripPressed: Integer;
     procedure CallCaptureChanged;
+    procedure CallDoContextPopup(const APos: TPoint; var AHandled: Boolean);
+    function CallGetPopupMenu: TPopupMenu;
   protected
     function PointerInClient(out APoint: TPoint): Boolean; override;
     function TickNow: QWord; override;
@@ -367,6 +369,16 @@ end;
 function TBarAccess.CallRealPointerInClient(out APoint: TPoint): Boolean;
 begin
   Result := inherited PointerInClient(APoint);
+end;
+
+procedure TBarAccess.CallDoContextPopup(const APos: TPoint; var AHandled: Boolean);
+begin
+  DoContextPopup(APos, AHandled);
+end;
+
+function TBarAccess.CallGetPopupMenu: TPopupMenu;
+begin
+  Result := GetPopupMenu;
 end;
 
 procedure TBarAccess.CallCaptureChanged;
