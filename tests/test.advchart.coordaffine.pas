@@ -34,7 +34,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.BarLayout, tyControls.AdvanceChart;
+     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart;
 type
   TCoordAffineProbe = class(TTyAdvanceChart)
   public
@@ -49,7 +50,7 @@ type
     FCtl: TTyStyleController;
     FChart: TCoordAffineProbe;
     FRoot: TJSONData;
-    FBad, FCompared, FAffine, FBoxes, FVertices: Integer;
+    FBad, FCompared, FAffine, FBoxes, FVertices, FLabels: Integer;
     FReport: string;
     FName: string;
     FTol: Double;
@@ -149,6 +150,7 @@ begin
   FAffine := 0;
   FBoxes := 0;
   FVertices := 0;
+  FLabels := 0;
   FReport := '';
 end;
 
@@ -207,15 +209,38 @@ begin
       if AGrid.YAxis(i).ComponentIndex = AIndex then Exit(AGrid.YAxis(i));
 end;
 
+function AnchorHName(A: TTyTextAnchorH): string;
+begin
+  case A of
+    tahLeft: Result := 'left';
+    tahRight: Result := 'right';
+  else
+    Result := 'center';
+  end;
+end;
+
+function AnchorVName(A: TTyTextAnchorV): string;
+begin
+  case A of
+    tavTop: Result := 'top';
+    tavBottom: Result := 'bottom';
+  else
+    Result := 'middle';
+  end;
+end;
+
 procedure TAdvChartCoordAffineOracleTest.CheckAxis(AGrid: TTyGridBuild;
   AAxis: TJSONObject);
 var
   ax: TTyAxis;
   tag: string;
-  a, b: Double;
+  a, b, tickV: Double;
   e: TTyRange;
   arr, coords: TJSONArray;
-  i: Integer;
+  i, k, p, built: Integer;
+  spec: PTyAxisLayoutSpec;
+  lab: TJSONObject;
+  hidden: Boolean;
 begin
   tag := AAxis.Strings['dim'] + IntToStr(AAxis.Integers['index']);
   ax := AxisOf(AGrid, AAxis.Strings['dim'], AAxis.Integers['index']);
@@ -240,15 +265,91 @@ begin
     Same(tag + ' mapping start', e.Start, arr.Items[0]);
     Same(tag + ' mapping stop', e.Stop, arr.Items[1]);
   end;
-  { WHERE THE TICKS LAND. A banded axis' are band edges, which the axis
-    furniture places -- the next batch's, with the labels. }
-  if not AAxis.Booleans['onBand'] then
+  { WHERE THE TICKS LAND -- as the furniture draws them: one per tick, or
+    on a banded axis the band edges, shifted half a band and closed at the
+    far end (on an inverse one, upstream's duplicate and all) }
+  spec := AGrid.SpecFor(ax);
+  coords := AAxis.Arrays['tickCoords'];
+  { A BLANK AXIS draws no ticks and no split lines upstream, whatever
+    getTicksCoords answers for it; here it has none to draw }
+  if ax.Scale.Blank then
   begin
-    arr := AAxis.Arrays['ticks'];
-    coords := AAxis.Arrays['tickCoords'];
-    for i := 0 to arr.Count - 1 do
-      Same(Format('%s tick %s', [tag, Fmt(NumOf(arr.Items[i]))]),
-        ax.DataToCoord(NumOf(arr.Items[i])), coords.Items[i]);
+    if Length(spec^.TickMarks) + Length(spec^.SplitLineMarks) > 0 then
+      Miss(tag + ': a blank axis with marks here');
+  end
+  else if Length(spec^.TickMarks) <> coords.Count then
+    Miss(Format('%s: %d ticks upstream, %d here', [tag, coords.Count,
+      Length(spec^.TickMarks)]))
+  else
+    for i := 0 to coords.Count - 1 do
+      Same(Format('%s tick %d', [tag, i]), spec^.TickMarks[i].Coord,
+        coords.Items[i]);
+  { and the split lines, which read their own alignWithLabel }
+  if (not ax.Scale.Blank) and (AAxis.Find('splitLineCoords') is TJSONArray) then
+  begin
+    coords := AAxis.Arrays['splitLineCoords'];
+    if Length(spec^.SplitLineMarks) <> coords.Count then
+      Miss(Format('%s: %d split lines upstream, %d here', [tag, coords.Count,
+        Length(spec^.SplitLineMarks)]))
+    else
+      for i := 0 to coords.Count - 1 do
+        Same(Format('%s split line %d', [tag, i]), spec^.SplitLineMarks[i].Coord,
+          coords.Items[i]);
+  end;
+
+  { THE LABELS: every one upstream built, where its anchor is and whether
+    the overlap rules kept it, matched to the port's by tick value }
+  arr := AAxis.Arrays['labels'];
+  built := 0;
+  for i := 0 to High(spec^.Placements) do
+    if spec^.Placements[i].Built then Inc(built);
+  if built <> arr.Count then
+    Miss(Format('%s: %d labels built upstream, %d here', [tag, arr.Count, built]));
+  for k := 0 to arr.Count - 1 do
+  begin
+    lab := arr.Objects[k];
+    tickV := NumOf(lab.Find('tick'));
+    p := -1;
+    for i := 0 to High(spec^.TickValues) do
+      if spec^.TickValues[i] = tickV then
+      begin
+        p := i;
+        Break;
+      end;
+    Inc(FLabels);
+    if (p < 0) or (p > High(spec^.Placements)) then
+    begin
+      Miss(Format('%s: no label for tick %s here', [tag, Fmt(tickV)]));
+      Continue;
+    end;
+    Same(Format('%s label %s x', [tag, Fmt(tickV)]), spec^.Placements[p].X,
+      lab.Find('x'));
+    Same(Format('%s label %s y', [tag, Fmt(tickV)]), spec^.Placements[p].Y,
+      lab.Find('y'));
+    hidden := (lab.Find('hidden') <> nil) and lab.Booleans['hidden'];
+    if spec^.Placements[p].Shown = hidden then
+      Miss(Format('%s label %s: hidden %s upstream', [tag, Fmt(tickV),
+        BoolToStr(hidden, True)]));
+  end;
+  { which way they turn and where they hang from them -- the sign of a top
+    axis' turn among it }
+  if (arr.Count > 0) and (AAxis.Find('labelRotation') <> nil)
+    and (AAxis.Find('labelRotation').JSONType = jtString) then
+  begin
+    Inc(FCompared);
+    if Abs(spec^.RotationRad - NumOf(AAxis.Find('labelRotation'))) > 1e-9 then
+      Miss(Format('%s: labels turned %s upstream, %s here', [tag,
+        Fmt(NumOf(AAxis.Find('labelRotation'))), Fmt(spec^.RotationRad)]));
+    if (Length(spec^.Placements) > 0) then
+    begin
+      Inc(FCompared);
+      if AnchorHName(spec^.Placements[0].AnchorH) <> AAxis.Strings['align'] then
+        Miss(Format('%s: aligned %s upstream, %s here', [tag,
+          AAxis.Strings['align'], AnchorHName(spec^.Placements[0].AnchorH)]));
+      if AnchorVName(spec^.Placements[0].AnchorV) <> AAxis.Strings['verticalAlign'] then
+        Miss(Format('%s: vertically %s upstream, %s here', [tag,
+          AAxis.Strings['verticalAlign'], AnchorVName(spec^.Placements[0].AnchorV)]));
+    end;
   end;
   { THE LINE IT SITS ON, and the floor its bars stand on }
   if (AAxis.Find('onZeroOf') <> nil) and (AAxis.Find('onZeroOf').JSONType = jtString) then
@@ -461,11 +562,7 @@ var
   ax: TTyAxis;
 begin
   kind := AProbe.Strings['kind'];
-  { back from a pixel on a log axis is Power's, not Math.pow's }
-  if FLogCase and ((kind = 'pointToData') or (kind = 'axisPointToData')) then
-    FTol := 16
-  else
-    FTol := 0;
+  FTol := 0;
   inp := AProbe.Arrays['input'];
   outp := AProbe.Arrays['output'];
   tag := kind + ' ' + AProbe.Arrays['inputText'].AsJSON;
@@ -645,6 +742,7 @@ begin
   AssertTrue(Format('enough matrices (%d)', [FAffine]), FAffine > 40);
   AssertTrue(Format('enough bars (%d)', [FBoxes]), FBoxes > 60);
   AssertTrue(Format('enough vertices (%d)', [FVertices]), FVertices > 60);
+  AssertTrue(Format('enough labels (%d)', [FLabels]), FLabels > 1000);
 end;
 
 initialization

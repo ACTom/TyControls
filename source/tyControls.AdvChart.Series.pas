@@ -1216,7 +1216,7 @@ var
   const
     cSingleRatio: Double = 0.8;
   var
-    e: TTyRange;
+    e, lin: TTyRange;
     a, b, span, px, w2, gap, sup0, sup1, lo, hi: Double;
     haveSup, ordinal: Boolean;
     k: Integer;
@@ -1228,7 +1228,11 @@ var
     e := AAxis.Scale.GetExtent;
     a := AAxis.Scale.Mapper.TransformIn(e.Start);
     b := AAxis.Scale.Mapper.TransformIn(e.Stop);
-    span := b - a;
+    { the span in the linear space as the scale KEEPS it -- a log axis' nice
+      decades -- while the ends the half bar is added to are taken through
+      the logarithm, as upstream's transformIn takes them }
+    lin := AAxis.Scale.LinearExtent2(sekEffective);
+    span := lin.Stop - lin.Start;
     px := AAxis.PxLength;
     haveSup := False;
     sup0 := 0;

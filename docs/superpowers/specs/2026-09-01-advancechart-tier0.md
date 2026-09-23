@@ -6250,6 +6250,7 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
 
 - `tools/advchart-oracle/coord-affine.js` → `tests/fixtures/advchart-coord-affine.json`,53 条(51 比较、2 文档性)。生成器有 8 项自检,包括逐位复现矩阵与逆矩阵、每条用例都能区分仿射与逐轴、port 旧公式与上游、D4(毫秒级时间柱子,两条路差 9.16 px)。
 - `test.advchart.coordaffine`,两遍,一万多项:矩形、矩阵与逆矩阵、裁剪区、局部范围、刻度坐标、onZero 线、数值轴起点、每个点、柱列的 offset 和 size、柱子盒子、pictorial 底、折线顶点与面积下沿、各种探针(非有限值、clamp、pointToData 与轴的 pointToData、axisPointer 的 clamp 像素)。全部逐位,只有对数轴上从像素换回数值(pow 的小数次幂)放宽到 16 ulp。
+  **[第四十三批:16 ulp 已归零,见 §77。]**
 - 收紧的旧测试:
   - `test.advchart.containshape`:盒子、刻度 8 ulp → 逐位,G9 的盒子打开,绘图区直接比 XYWH;对数轴仍 8 ulp(mapping 端点是 pow)。
   - `test.advchart.bargeometry`:1 ulp(对数 4)→ 全部逐位,对数也是;绘图区比 XYWH。
@@ -6262,8 +6263,11 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
 ### 已知偏差
 
 - **对数轴的 pow**:从像素换回数值、以及 containShape 的 mapping 端点,都要算小数次幂,FPC 的 `Power` 和 V8 的 `Math.pow` 差到 12 ulp。要逐位得移植 fdlibm 的 `pow`(可能还有 `log`)。
+  **[第四十三批已做,见 §77。]**
 - **坐标轴标签锚点**:上游经 AxisBuilder 的组矩阵(y 轴是旋转矩阵,含 `cos(π/2)` 的 6e-17),port 仍是 `L + p * len`,且 p 取自初始矩形。差 ≤ 2 ulp;类目轴带边刻度也还是全局 → 局部 → 全局的往返。
+  **[第四十三批已做,见 §77。]**
 - **axisPointer**:值的钳位仍按有效范围;clamp 的像素已经有了(`DataToCoord(v, True)`),指针还没改用。
+  **[第四十三批:指针像素已改用 clamp。]**
 - **K 线**:仍逐轴,没有 subPixelOptimize。
 - **轴断裂**:port 不建断裂,矩阵门控没查断裂。
 - title / legend 的 box 选项还没按 mergeLayoutParam 合并,只做了 grid。
@@ -6294,3 +6298,90 @@ Pascal 测试另外加比柱列的 offset 和 size。这 10 个随后全部被�
 ### 还在队列里
 
 坐标轴标签锚点的组矩阵(连同类目轴带边刻度)与 fdlibm 的 `pow` / `log` → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。
+
+## 77. Tier 1 第四十三批:坐标轴标签锚点、带边刻度与 V8 的 pow / log(2026-09-23)
+
+§76 之后,数据落位已经逐位对齐,轴上的东西还没有:标签锚点用初始矩形上取的比例铺到最终矩形上;带边刻度要先转到画布再转回来;对数轴的小数次幂走 FPC 的 `Power`。审计另外找出一处肉眼可见的错误:onZero 的顶部轴,标签旋转方向反了。
+
+### 上游的做法
+
+- **轴框(cartesianAxisHelper)**:
+  - 位置 `(X, Y)`:x 轴在 `(x, 上或下边界)`,y 轴在 `(左或右边界, y + h)`;边界是矩形边 ± `offset`;
+  - 坐在另一根轴的零点上时,X 或 Y 就是那个零点,`labelOffset` 是原位置与零点之差;
+  - 位置是 `'top'` 才把 `rotate` 取反;坐在零点上的轴位置是 `'onZero'`,不取反。
+- **标签锚点(AxisBuilder)**:
+  - 局部点 `(c, t)`:c 是轴自己的坐标(`dataToCoord`);`t = labelOffset + 方向 × margin`,`inside` 时方向反过来;offset 已在 `(X, Y)` 里,不进 t。
+  - 用轴组矩阵变换:x 轴 `[1,0,0,1,X,Y]`,y 轴 `[ct,-1,1,ct,X,Y]`,`ct = cos(π/2) = 6.123e-17`。所以 y 轴标签横向是 `(ct·c + t) + X`、纵向是 `(-c + ct·t) + Y`——不是 `toGlobalCoord`。
+  - 估算那遍在初始矩形上、最终那遍在最终矩形上各算一次;最终那遍在写入最终矩形之后。
+- **带边刻度与分割线**:在轴自己的坐标里取 `dataToCoord`、平移半个带、补收尾那条,再 `toGlobalCoord`。反向带轴上会重复一条、缺远端那条,上游如此,照搬。
+- **长度**:offset、margin 等按写的值用;`v * 96 / 96` 对六分之一的 double 不等于 v。
+- **轴名称**:沿轴的范围是 `[0, w]`,不是右边减左边。
+- **Math.log**:V8 用的就是 fdlibm 的 `e_log.c`。**Math.pow**:fdlibm 的 `e_pow.c`,只改了一行:修正项放进了除数里(ieee754.cc:2894)。
+- **对数轴的线性范围**:span、半宽、带宽用的是 intervalStub 存下的指数范围(比如平零张开的 `[-1, 1]`),不是 pow 端点的对数。
+
+### port 以前
+
+- 标签锚点是 `L + p·len`(y 轴 `B − p·len`),p 取自初始矩形,而且是在写入最终矩形之前算的;横向用 `边 ± (margin + offset)`,没有 `ct` 项。y 轴横向差到 36 ulp,纵向差到 8 ulp。
+- 顶部轴一律取反旋转角。onZero 的顶部类目轴因此斜向反了,对齐也反了。
+- 带边刻度:全局 → 局部 → 全局,差 2 ulp。
+- 长度按 `v * 96 / 96` 换算。
+- 轴名称沿轴的范围是 `Right - Left`。
+- 对数轴:`Ln` / `Power`;span 取 pow 端点的对数。
+- axisPointer 的像素不 clamp。
+
+### 做法
+
+- `Layout`:规格加 `TickValues`、`LocalCoords`;有了它们,`TyLayoutAxisLabels` 用名称框(没有就用默认框)按轴组矩阵算锚点,没有就退回旧的比例路径(手工构造的规格用)。`AxisScaleF` 改成 `v * (PPI / 96)`,96 时就是 v 本身。
+- `Builder`:
+  - 先算出全部轴的 furniture,再逐轴建规格——判断"坐在谁的零点上"要读所有轴的 onZero;
+  - 顶部轴只在不坐在零点上时取反旋转;
+  - 最终矩形写入(连同仿射矩阵)提前到最终标签之前,随后重算名称框和各标签的局部坐标;
+  - 带边刻度直接用 `DataToLocal` / `ToGlobal`;
+  - 名称框的范围取轴自己的局部范围;AxisLineCoord 的 offset 也经 `AxisScaleF`。
+- `JsMath`:`TyJsLog`、`TyJsPow`,逐行转写 fdlibm(V8 版);C 里靠溢出、除零、无效运算得到的 ±Inf、0、NaN 直接写出,两个可能溢出的特殊分支(`x*x`、`1/x`)临时屏蔽溢出。
+- `Scale`:对数映射用 `TyJsLog` / `TyJsPow`;`LinearExtent2`:nice 过、没有被改写时返回存下的指数范围;containShape 的 span 和柱子的带宽都用它。
+- `AdvanceChart`:指针像素 `DataToCoord(v, True)`。
+
+### 基准
+
+- `coord-affine` 扩到 63 条:新增顶部轴在零点上与不在零点上、offset 2.7 与 margin 12.3、inside、alignWithLabel 只对刻度、分割线间隔让最后一个类目出列、`(x + w) - x ≠ w` 的反向带轴等;每个标签记锚点、变换矩阵和局部框,每根轴记旋转、对齐、分割线坐标。
+- `test.advchart.coordaffine` 新增比较:每个建出的标签的锚点与是否隐藏、旋转角与对齐、刻度标记与分割线坐标(空白轴除外),全部逐位;两万多项。
+- `js-pow-log.js` → `advchart-js-powlog.json`:3,348 条 pow、2,824 条 log,包括教科书 fdlibm 与 V8 不同的 450 条和能区分 log 两个分支的 13 条;`test.advchart.jsmath` 逐位比较,另钉 `10^-4`、`10^-307`、`1.5^1025` 三个只有 V8 版才对的值。
+- `axis-names` 加一条 `(x + w) - x ≠ w` 的中间名称用例。
+- 收紧:
+  - coordaffine 的对数反算 16 ulp → 0;
+  - containshape 的对数 8 ulp → 0,现在全部逐位;
+  - label-thinning 的刻度与分割线,在绘图区逐位一致的用例上逐位比较(至少 80 条);
+  - axis-names 的名称:绘图区逐位一致时,挪动前的锚点逐位比较,没挪动的连最终锚点一起(至少 60 个)。挪动量量的是上游分解后的标签矩阵,属于上面的已知偏差。
+
+### 被推翻的旧测试
+
+- `test.advchart.furniture.pas` `TestATopAxisTurnsItsLabelsTheOtherWay`:onZero 的顶部轴保持 `+π/4`、左对齐;加 `onZero: false` 才是 `−π/4`、右对齐。
+- `test.advchart.valueaxis.pas`:小数次幂不再钉 FPC 的 `Power`,而是 V8 的 `3.1622776601683795`。
+- 原处都有标注。
+
+### 已知偏差
+
+- **旋转标签的矩形**:上游把组矩阵乘标签自身的变换,再分解、重组,旋转角因此差 1–6 ulp,±90° 时还要 V8 的 `tan`;port 直接用请求的旋转角。矩形差 ≤ 1.14e-13,在各用例容差内。`remRadian` 的写法也不同(差到 64 ulp,只影响这个矩阵)。
+- 刻度线、轴线像素的 `subPixelOptimizeLine`,以及 y 轴刻度两端的 `ct·c` 项:是绘制几何,亚像素。
+- 上游的 title / legend 选项合并(mergeLayoutParam)仍只做了 grid。
+
+### 变异测试
+
+31 个变异体,第一轮存活 9 个。补了三样之后,其中 3 个被杀:
+
+- log 的两个分支(|f| < 2^-20 的捷径、i > 0 的另一个核):搜出 13 个能区分它们的参数,作为 `kernel discriminators` 加进 js-pow-log 夹具;
+- 轴名称的范围:axis-names 在绘图区逐位一致的用例上,改为逐位比较挪动前的锚点,没挪动过的名称连最终锚点一起逐位比较(至少 60 个名称)。
+
+仍然存活的 6 个都是等价的:
+
+- AxisLineCoord 的 offset 按 `*96/96` 换算:它只进一个到不了的钳位;
+- 指针像素不 clamp:值在前面已经钳进有效范围了;
+- pow 的 `y = 2` 特殊分支:走通用路径,得到的位也一样;
+- 对数刻度的 `Ln`、底数的 `Ln`、数量级的 `Ln` 换成 FPC 的:win64 上 FPC 的通用 `Ln` 本身就是 fdlibm,和 V8 逐位相同。在有 x87 扩展精度的平台上(比如 x86_64 Linux),`Ln` 走 x87,就不一样了,所以 `TyJsLog` 保留。
+
+重编后全量 **7777** 绿。
+
+### 还在队列里
+
+类目轴 `min` / `max` → 线图符号跟着标签间隔 → roam → `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)视需要插进来。

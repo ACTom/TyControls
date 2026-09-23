@@ -1794,7 +1794,7 @@ begin
   Result := 0;
   if AAxis = nil then Exit;
   furn := FurnitureFor(AAxis);
-  off := furn.OffsetLogical * APPI / 96;
+  off := AxisScaleF(furn.OffsetLogical, APPI);
 
   { THE TWO ENDS OF WHAT IS REACHABLE. Positive offset always means AWAY from
     the plot, so the low end moves down and the high end up -- it is a side,
@@ -1843,6 +1843,10 @@ begin
   { upstream's layout(): posBound from the rect and the offset, the line on
     the raw side of it unless the other family's zero takes it }
   Result := TyDefaultNameFrame(ASpec, FPlotRect, APPI);
+  { THE EXTENT IS THE AXIS' OWN, [0, w] -- not the right edge less the left,
+    which need not come back to w -- and a name at the end stands off it }
+  if AAxis <> nil then
+    AAxis.LocalExtent(Result.Ext0, Result.Ext1);
   if (AAxis = nil) or (OnZeroProviderFor(AAxis) = nil) then Exit;
   line := AxisLineCoord(AAxis, APPI);
   if AAxis.Horizontal then
@@ -1913,20 +1917,6 @@ var
     n, k, i: Integer;
     ticks: TTyScaleTickArray;
 
-    { upstream's axis frame: from the axis' start at the plot's left or
-      bottom, the way its extent runs }
-    function ToLocal(AGlobal: Double): Double;
-    begin
-      if AAxis.Horizontal then Result := AGlobal - plot.Left
-      else Result := plot.Bottom - AGlobal;
-    end;
-
-    function ToGlobal(ALocal: Double): Double;
-    begin
-      if AAxis.Horizontal then Result := ALocal + plot.Left
-      else Result := plot.Bottom - ALocal;
-    end;
-
     function CategoryMarks(AOptInterval: Double; AAlign: Boolean): TTyAxisMarkArray;
     var
       iv: Double;
@@ -1943,12 +1933,14 @@ var
         Result[q] := Default(TTyAxisMark);
         Result[q].Value := vals[q];
         Result[q].OffInterval := offs[q];
-        Result[q].Coord := ToLocal(AAxis.DataToCoord(vals[q]));
+        { IN THE AXIS' OWN FRAME, as upstream's getTicksCoords: straight from
+          the axis, not a canvas coordinate taken back into it }
+        Result[q].Coord := AAxis.DataToLocal(vals[q]);
       end;
       TyFixOnBandMarks(Result, AAxis.OnBand, AAlign, AAxis.BandWidth,
         ASpec.OrdinalStart + n - 1);
       for q := 0 to High(Result) do
-        Result[q].Coord := ToGlobal(Result[q].Coord);
+        Result[q].Coord := AAxis.ToGlobal(Result[q].Coord);
     end;
 
   begin
@@ -2327,10 +2319,14 @@ var
       turned every rotated label the wrong way -- invisible while nothing drew
       the rotation at all, because the extent a turn costs is the same either
       way round. }
-    { AND A TOP AXIS TURNS THE OTHER WAY. Upstream negates the rotation for
-      `position: top` alone, so that `rotate: 45` slants the labels away from
-      the plot on both edges instead of into it on one of them. }
-    if AAxis.Side = asTop then
+    { AND A TOP AXIS TURNS THE OTHER WAY, so that `rotate: 45` slants the
+      labels away from the plot on both edges instead of into it on one --
+      but only where the axis IS on top: one that sits on the other family's
+      zero is positioned 'onZero', which upstream never negates.
+      [Revised in batch 43: this negated for `position: top` alone, and a
+      top category axis over a value axis through zero slanted the wrong way
+      with the wrong alignment.] }
+    if (AAxis.Side = asTop) and (gb.OnZeroProviderFor(AAxis) = nil) then
       ASpec.RotationRad := -AFurn.LabelRotateDeg * Pi / 180
     else
       ASpec.RotationRad := AFurn.LabelRotateDeg * Pi / 180;
@@ -2385,6 +2381,8 @@ var
     isTime := AAxis.Scale is TTyTimeScale;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));
+    SetLength(ASpec.TickValues, Length(ticks));
+    SetLength(ASpec.LocalCoords, Length(ticks));
     SetLength(ASpec.Proportions, Length(ticks));
     if isTime then
     begin
@@ -2432,6 +2430,10 @@ var
           ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
           AxisScaleF(ASpec.LabelWidthLogical, APPI));
       ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
+      { on the raw rect, which is what the estimate lays out on; the final
+        pass takes them again once the rect is final }
+      ASpec.TickValues[kept] := ticks[q].Value;
+      ASpec.LocalCoords[kept] := AAxis.DataToLocal(ticks[q].Value);
       { the first category, which the stride is aligned from nought against }
       if (kept = 0) and (AAxis.Scale is TTyOrdinalScale) then
         ASpec.OrdinalStart := Round(TTyOrdinalScale(AAxis.Scale).TickToOrdinal(
@@ -2447,6 +2449,8 @@ var
     end;
     SetLength(ASpec.Labels, kept);
     SetLength(ASpec.Positions, kept);
+    SetLength(ASpec.TickValues, kept);
+    SetLength(ASpec.LocalCoords, kept);
     SetLength(ASpec.Proportions, kept);
     if isTime then
     begin
@@ -2479,13 +2483,15 @@ begin
     for i := 0 to gb.YAxisCount - 1 do
       if gb.YAxis(i).AxisType in [atValue, atLog] then yIsValue := True;
 
+    { EVERY AXIS' FURNITURE FIRST: a spec asks which axis sits on whose zero
+      (a top axis on the other's zero keeps its label rotation), and that
+      reads every axis' onZero }
     t := 0;
     for i := 0 to gb.XAxisCount - 1 do
     begin
       ax := gb.XAxis(i);
       node := ObjOf(AOption.ComponentAt('xAxis', ax.ComponentIndex));
       furn[t] := TyAxisFurnitureOf(node, ax, yIsValue);
-      FillSpec(specs[t], ax, node, furn[t]);
       Inc(t);
     end;
     for i := 0 to gb.YAxisCount - 1 do
@@ -2493,10 +2499,24 @@ begin
       ax := gb.YAxis(i);
       node := ObjOf(AOption.ComponentAt('yAxis', ax.ComponentIndex));
       furn[t] := TyAxisFurnitureOf(node, ax, xIsValue);
-      FillSpec(specs[t], ax, node, furn[t]);
       Inc(t);
     end;
     gb.FFurniture := furn;
+    t := 0;
+    for i := 0 to gb.XAxisCount - 1 do
+    begin
+      ax := gb.XAxis(i);
+      node := ObjOf(AOption.ComponentAt('xAxis', ax.ComponentIndex));
+      FillSpec(specs[t], ax, node, furn[t]);
+      Inc(t);
+    end;
+    for i := 0 to gb.YAxisCount - 1 do
+    begin
+      ax := gb.YAxis(i);
+      node := ObjOf(AOption.ComponentAt('yAxis', ax.ComponentIndex));
+      FillSpec(specs[t], ax, node, furn[t]);
+      Inc(t);
+    end;
 
     { THE ESTIMATE'S FRAMES, on the raw rect: the extents are still the raw
       rect's, so the other family's zero is where upstream finds it then }
@@ -2528,6 +2548,34 @@ begin
             specs[t].LabelSuggestIgnore[i] := not est[i].Shown;
         end;
 
+    { THE FINAL PIXEL WRITE, BEFORE THE FINAL LABELS: upstream's resize
+      writes the axes' extents from the shrunk rect and only then builds
+      the axes that are drawn, reading every coordinate from them live.
+      [Revised in batch 43: this came after the placements, which were then
+      made from fractions taken on the raw rect and spread over the final
+      one -- a y label up to eight units in the last place off along, and
+      one missing the matrix' cos(pi/2) term across.] }
+    for j := 0 to gb.CartesianCount - 1 do
+    begin
+      gb.CartesianByIndex(j).SetRectXYWH(gb.FPlotXYWH);
+      { upstream's Grid.resize ends here too: the rect is final, the scales
+        were final before it, and the matrix is made from both }
+      gb.CartesianByIndex(j).CalcAffineTransform;
+    end;
+    { the frames and the labels' own coordinates, on the final axes -- the
+      frame after the write, because an axis on the other's zero finds that
+      zero on them }
+    for t := 0 to High(specs) do
+    begin
+      specs[t].NameFrame := gb.NameFrameFor(AxisAt(gb, t), specs[t], APPI);
+      specs[t].HasNameFrame := True;
+      for i := 0 to High(specs[t].TickValues) do
+      begin
+        specs[t].LocalCoords[i] := AxisAt(gb, t).DataToLocal(specs[t].TickValues[i]);
+        specs[t].Positions[i] := AxisAt(gb, t).NormalizedCoord(specs[t].TickValues[i]);
+      end;
+    end;
+
     { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
       measuring every label, and the paint pass used to derive them itself on
       every frame -- ten thousand measurements per frame at 5,000 categories, to
@@ -2548,24 +2596,9 @@ begin
     { Kept for the renderer. }
     gb.FSpecs := specs;
 
-    { The second and final pixel write. Everything downstream reads band widths
-      and coordinates live, so nothing has to be invalidated. }
-    for j := 0 to gb.CartesianCount - 1 do
-    begin
-      gb.CartesianByIndex(j).SetRectXYWH(gb.FPlotXYWH);
-      { upstream's Grid.resize ends here too: the rect is final, the scales
-        were final before it, and the matrix is made from both }
-      gb.CartesianByIndex(j).CalcAffineTransform;
-    end;
-
-    { THE NAMES AS THEY ARE DRAWN: laid out again on the final rect, after
-      the write, so an axis on the other family's zero finds it where it now
-      is -- upstream's determine pass, with its own margin level }
-    for t := 0 to High(gb.FSpecs) do
-    begin
-      gb.FSpecs[t].NameFrame := gb.NameFrameFor(AxisAt(gb, t), gb.FSpecs[t], APPI);
-      gb.FSpecs[t].HasNameFrame := True;
-    end;
+    { THE NAMES AS THEY ARE DRAWN: laid out again on the final rect, from the
+      final frames above -- upstream's determine pass, with its own margin
+      level }
     names := TyLayoutGridNames(gb.FSpecs, gb.FPlotRect, vp.Right - vp.Left,
       vp.Bottom - vp.Top, AMeasurer, APPI);
     for t := 0 to High(gb.FSpecs) do

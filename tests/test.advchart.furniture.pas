@@ -854,26 +854,41 @@ begin
 end;
 
 procedure TAdvChartFurnitureTest.TestATopAxisTurnsItsLabelsTheOtherWay;
-var bottom, top_: Double;
+var bottom, top_, onZero: Double;
 begin
-  { Upstream negates `rotate` for `position: top` and for nothing else, so
-    that a slant leans AWAY from the plot on both edges instead of into it on
-    one of them. Asserted as the two angles rather than in ink: at forty-five
-    degrees the two turns differ by a lean, and a pixel probe that could tell
-    them apart would be measuring the font more than the option.
+  { Upstream negates `rotate` for an axis POSITIONED on top, so that a slant
+    leans AWAY from the plot on both edges instead of into it on one of them.
+    An axis that sits on the other family's zero is positioned 'onZero', not
+    'top', and keeps the rotation as written (cartesianAxisHelper.ts). A
+    value axis from 0 to 10 has its zero on the edge, so a top category axis
+    over it is on that zero unless told otherwise.
+    [Revised in batch 43: this asserted -pi/4 for the onZero one too.]
 
-    Opposite signs and equal magnitudes, both asserted -- `-x` and `0` are
-    also opposite in the only sense a sign test can see. }
+    Asserted as the angles rather than in ink: at forty-five degrees the two
+    turns differ by a lean, and a pixel probe that could tell them apart
+    would be measuring the font more than the option. Opposite signs and
+    equal magnitudes, both asserted -- `-x` and `0` are also opposite in the
+    only sense a sign test can see. }
   Draw('{ xAxis: { data: [''A'', ''B''], axisLabel: { rotate: 45 } },'
     + ' yAxis: { min: 0, max: 10 }, series: [] }');
   bottom := Grid.SpecFor(Grid.XAxis(0))^.RotationRad;
   Draw('{ xAxis: { data: [''A'', ''B''], position: ''top'','
-    + ' axisLabel: { rotate: 45 } },'
+    + ' axisLine: { onZero: false }, axisLabel: { rotate: 45 } },'
     + ' yAxis: { min: 0, max: 10 }, series: [] }');
   top_ := Grid.SpecFor(Grid.XAxis(0))^.RotationRad;
   AssertEquals('a bottom axis turns counter-clockwise, as written',
     Pi / 4, bottom, 1e-6);
   AssertEquals('and a top axis turns the other way', -Pi / 4, top_, 1e-6);
+  AssertTrue('and aligns from its right end',
+    Grid.SpecFor(Grid.XAxis(0))^.Placements[0].AnchorH = tahRight);
+  Draw('{ xAxis: { data: [''A'', ''B''], position: ''top'','
+    + ' axisLabel: { rotate: 45 } },'
+    + ' yAxis: { min: 0, max: 10 }, series: [] }');
+  onZero := Grid.SpecFor(Grid.XAxis(0))^.RotationRad;
+  AssertEquals('but one on the value axis'' zero keeps it as written',
+    Pi / 4, onZero, 1e-6);
+  AssertTrue('and aligns from its left end, as upstream draws it',
+    Grid.SpecFor(Grid.XAxis(0))^.Placements[0].AnchorH = tahLeft);
 end;
 
 procedure TAdvChartFurnitureTest.TestAHiddenAxisGivesItsGutterBack;

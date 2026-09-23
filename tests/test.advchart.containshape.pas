@@ -234,7 +234,7 @@ begin
   end;
   isLog := AAxis.Strings['type'] = 'log';
   isCat := AAxis.Strings['type'] = 'category';
-  if isLog then tol := 8 else tol := 0;
+  tol := 0;
   mapper := ax.Scale.Mapper;
 
   { WHETHER IT ASKED -- visible on an interval scale as the flag the flat
@@ -367,7 +367,7 @@ begin
   si := ASeries.Integers['index'];
   pictorial := typ = 'pictorialBar';
   vertical := ASeries.Strings['baseDim'] = 'x';
-  if Flag(ACase, 'logTolerance') then tol := 8 else tol := 0;
+  tol := 0;
 
   { THE SOLVE: band, offset, width, bit for bit }
   d := ASeries.Find('bandWidth');

@@ -26,6 +26,8 @@ type
     procedure TestAtan2IsV8sToTheBit;
     procedure TestTheRunTimeLibraryIsNot;
     procedure TestFroundIsMathFround;
+    procedure TestPowAndLogAreV8sToTheBit;
+    procedure TestPowFollowsV8NotTheTextbook;
   end;
 
 implementation
@@ -185,6 +187,81 @@ begin
   a := 2;
   AssertTrue('V8: sin 2', Hex(TyJsSin(a)) = '3fed18f6ead1b446');
   AssertTrue('the run-time library: not', Hex(Sin(a)) <> '3fed18f6ead1b446');
+end;
+
+function PowLogPath: string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+    + 'advchart-js-powlog.json';
+end;
+
+procedure TAdvChartJsMathTest.TestPowAndLogAreV8sToTheBit;
+var
+  root: TJSONData;
+  rows, r: TJSONArray;
+  sl: TStringList;
+  i, bad: Integer;
+  got: Double;
+  report: string;
+begin
+  { tools/advchart-oracle/js-pow-log.js: node's Math.pow and Math.log over
+    the shapes a log axis asks for -- 10 and 2 to fractional powers, the
+    decades, the ends of a mapping extent -- random arguments over the whole
+    range, the specials, and every row where fdlibm as printed and V8 part }
+  AssertTrue('the fixture is where the suite expects it', FileExists(PowLogPath));
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(PowLogPath);
+    root := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  try
+    bad := 0;
+    report := '';
+    rows := TJSONObject(root).Arrays['pow'];
+    for i := 0 to rows.Count - 1 do
+    begin
+      r := rows.Arrays[i];
+      got := TyJsPow(FromHex(r.Strings[0]), FromHex(r.Strings[1]));
+      if not Same(got, r.Strings[2]) then
+      begin
+        Inc(bad);
+        if bad <= 10 then
+          report := report + LineEnding + Format('  pow %s: %s, V8 %s',
+            [r.Strings[3], Hex(got), r.Strings[2]]);
+      end;
+    end;
+    AssertTrue('enough powers', rows.Count >= 3000);
+    rows := TJSONObject(root).Arrays['log'];
+    for i := 0 to rows.Count - 1 do
+    begin
+      r := rows.Arrays[i];
+      got := TyJsLog(FromHex(r.Strings[0]));
+      if not Same(got, r.Strings[1]) then
+      begin
+        Inc(bad);
+        if bad <= 10 then
+          report := report + LineEnding + Format('  log %s: %s, V8 %s',
+            [r.Strings[2], Hex(got), r.Strings[1]]);
+      end;
+    end;
+    AssertTrue('enough logarithms', rows.Count >= 2500);
+    AssertEquals(IntToStr(bad) + ' differ:' + report, 0, bad);
+  finally
+    root.Free;
+  end;
+end;
+
+procedure TAdvChartJsMathTest.TestPowFollowsV8NotTheTextbook;
+begin
+  { V8'S ONE CHANGED LINE, ieee754.cc:2894, the correction inside the
+    divisor: these three are where it and fdlibm as printed part. 10^2.5
+    and 2^27.5 are not -- they tell V8 from FPC's Power, not from fdlibm. }
+  AssertEquals('10^-4', '3f1a36e2eb1c432c', Hex(TyJsPow(10, -4)));
+  AssertEquals('10^-307', '0031fa182c40c60e', Hex(TyJsPow(10, -307)));
+  AssertEquals('1.5^1025', '656806d222b7eba6', Hex(TyJsPow(1.5, 1025)));
+  AssertTrue('and FPC''s Power is not it', Hex(Power(10, -4)) <> '3f1a36e2eb1c432c');
 end;
 
 procedure TAdvChartJsMathTest.TestFroundIsMathFround;

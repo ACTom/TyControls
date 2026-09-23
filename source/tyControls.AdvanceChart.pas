@@ -4532,7 +4532,9 @@ begin
       clamps it to before drawing the line or writing the label. A row past
       a written max puts the pointer on the max, not off the plot. }
     pv := PointerValue(hit);
-    at := hit.Axis.DataToCoord(pv);
+    { CLAMPED, as upstream's pointer asks the axis: dataToCoord(value, true)
+      hands the end back as itself at or past it }
+    at := hit.Axis.DataToCoord(pv, True);
     if IsNan(at) then Continue;
 
     case hit.Spec.PointerType of

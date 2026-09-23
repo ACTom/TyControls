@@ -585,9 +585,11 @@ var
   axis: TTyAxis;
   spec: PTyAxisLayoutSpec;
   got: TTyAxisNamePlacement;
-  want: TTyXYWH;
+  want, xywh, rect: TTyXYWH;
   tol: Double;
   report, why: string;
+  exactPlot, moved: Boolean;
+  exactNames: Integer;
 
   procedure Miss(const AWhat: string);
   begin
@@ -604,6 +606,7 @@ begin
   bad := 0;
   compared := 0;
   absent := 0;
+  exactNames := 0;
   report := '';
   for c := 0 to cases.Count - 1 do
   begin
@@ -622,6 +625,13 @@ begin
     end;
     g := cs.Integers['grid'];
     tol := Num(cs, 'tol');
+    { EXACT where the plot is upstream's to the bit -- the name stands off
+      the axis' own [0, w], not its edges -- and within the case's tolerance
+      where rotated labels moved the shrink }
+    xywh := FBuild.Grid(g).PlotXYWH;
+    rect := XYWHOf(cs.Objects['rect']);
+    exactPlot := (xywh.X = rect.X) and (xywh.Y = rect.Y) and (xywh.W = rect.W)
+      and (xywh.H = rect.H);
     axes := cs.Arrays['axes'];
     for a := 0 to axes.Count - 1 do
     begin
@@ -659,7 +669,23 @@ begin
           if got.AnchorV <> VAlignOf(nm.Strings['verticalAlign']) then Miss('verticalAlign');
           if Abs(got.RotationRad - Num(nm, 'rotation')) > 1e-12 then
             Miss('rotation ' + Fmt(got.RotationRad));
-          if not (Near(got.X, NumAt(nm.Arrays['finalAnchor'], 0))
+          { BEFORE ANY MOVE, to the bit; after one too when there was none. A
+            move is measured off the labels' boxes through upstream's
+            decomposed label matrix, whose 1e-16 shear is not ported yet. }
+          if exactPlot then Inc(exactNames);
+          moved := (nm.Find('translations') is TJSONArray)
+            and (nm.Arrays['translations'].Count > 0);
+          if exactPlot and not ((got.AnchorX = NumAt(nm.Arrays['anchor'], 0))
+            and (got.AnchorY = NumAt(nm.Arrays['anchor'], 1))) then
+            Miss(Format('anchored at %s, %s; upstream %s, %s exactly',
+              [Fmt(got.AnchorX), Fmt(got.AnchorY), nm.Arrays['anchorText'].Strings[0],
+               nm.Arrays['anchorText'].Strings[1]]))
+          else if exactPlot and (not moved) and not ((got.X = NumAt(nm.Arrays['finalAnchor'], 0))
+            and (got.Y = NumAt(nm.Arrays['finalAnchor'], 1))) then
+            Miss(Format('at %s, %s; upstream %s, %s exactly', [Fmt(got.X), Fmt(got.Y),
+              nm.Arrays['finalAnchorText'].Strings[0],
+              nm.Arrays['finalAnchorText'].Strings[1]]))
+          else if not (Near(got.X, NumAt(nm.Arrays['finalAnchor'], 0))
             and Near(got.Y, NumAt(nm.Arrays['finalAnchor'], 1))) then
             Miss(Format('at %s, %s; upstream %s, %s', [Fmt(got.X), Fmt(got.Y),
               nm.Arrays['finalAnchorText'].Strings[0],
@@ -681,6 +707,8 @@ begin
   end;
   AssertTrue(Format('enough names were compared (%d)', [compared]), compared >= 80);
   AssertTrue(Format('and enough axes drew none (%d)', [absent]), absent >= 4);
+  AssertTrue(Format('names on a plot upstream''s to the bit (%d)', [exactNames]),
+    exactNames >= 60);
   AssertEquals(IntToStr(bad) + ' names differ:' + report, 0, bad);
 end;
 

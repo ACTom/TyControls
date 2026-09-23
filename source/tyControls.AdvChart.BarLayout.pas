@@ -521,9 +521,8 @@ var
       { OVER THE MAPPING EXTENT, in the axis' own linear space: the bars'
         half widths are part of what the plot spans, and on a log axis the
         gaps were measured in decades, so the span has to be too. }
-      ext := AAxis.Scale.GetExtent2(sekMapping);
-      span := AAxis.Scale.Mapper.TransformIn(ext.Stop)
-        - AAxis.Scale.Mapper.TransformIn(ext.Start);
+      ext := AAxis.Scale.LinearExtent2(sekMapping);
+      span := ext.Stop - ext.Start;
       band := TyBandFromMinGap(AAxis.PxLength, span,
         TyLiPosMinGap(AStores, onIt, AAxis));
     end;

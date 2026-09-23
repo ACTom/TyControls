@@ -374,8 +374,11 @@ begin
   Eq('the table''s far end', FromBits($7FE1CCF385EBC8A0), TyJsPow10(308));
   AssertTrue('past it, infinity', IsInfinite(TyJsPow10(309)));
   Eq('and under the smallest, zero', 0, TyJsPow10(-324));
-  { A fraction of a power still goes through Power. }
-  Eq('', Power(10, 0.5), m.TransformOut(0.5));
+  { A fraction of a power goes through V8's own pow: Math.pow(10, 0.5) is
+    3.1622776601683795, which FPC's Power misses.
+    [Revised in batch 43: this pinned FPC's Power.] }
+  Eq('a fraction of a power, V8''s way', FromBits($40094C583ADA5B53),
+    m.TransformOut(0.5));
 end;
 
 initialization

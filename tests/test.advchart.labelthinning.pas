@@ -680,11 +680,13 @@ procedure TAdvChartLabelThinningOracleTest.TestEveryAxisDrawsTheFurnitureUpstrea
 var
   cases, axes, passes, vals, drawn, coords, rects, r: TJSONArray;
   cs, ax, ps, rec: TJSONObject;
-  c, a, g, k, bad, compared, closing, synced, areas: Integer;
+  c, a, g, k, bad, compared, closing, synced, areas, exactPlots: Integer;
   axis: TTyAxis;
   spec: PTyAxisLayoutSpec;
   tol, lo, hi, wlo, whi: Double;
   why, report: string;
+  exactPlot: Boolean;
+  xywh, want: TTyXYWH;
 
   function MarksDiffer(const AName: string; const AMarks: TTyAxisMarkArray;
     ARec: TJSONObject; ACheckDrawn: Boolean): string;
@@ -701,7 +703,11 @@ var
       if AMarks[q].Value <> NumAt(vals, q) then
         Exit(Format('%s %d: tick %s, upstream %s', [AName, q, Fmt(AMarks[q].Value),
           Fmt(NumAt(vals, q))]));
-      if Abs(AMarks[q].Coord - NumAt(coords, q)) > tol then
+      { EXACT where the plot is upstream's to the bit; where rotated labels'
+        boxes -- a unit off in their turn until the decomposed matrix is
+        ported -- moved the shrink, within the case's tolerance }
+      if (exactPlot and (AMarks[q].Coord <> NumAt(coords, q)))
+        or (Abs(AMarks[q].Coord - NumAt(coords, q)) > tol) then
         Exit(Format('%s %d: at %s, upstream %s', [AName, q, Fmt(AMarks[q].Coord),
           Fmt(NumAt(coords, q))]));
       if ACheckDrawn and (AMarks[q].Drawn <> drawn.Booleans[q]) then
@@ -718,6 +724,7 @@ begin
   closing := 0;
   synced := 0;
   areas := 0;
+  exactPlots := 0;
   report := '';
   for c := 0 to cases.Count - 1 do
   begin
@@ -736,6 +743,11 @@ begin
     end;
     g := cs.Integers['grid'];
     tol := Num(cs, 'tol');
+    xywh := FBuild.Grid(g).PlotXYWH;
+    want := XYWHOf(cs.Objects['rect']);
+    exactPlot := (xywh.X = want.X) and (xywh.Y = want.Y) and (xywh.W = want.W)
+      and (xywh.H = want.H);
+    if exactPlot then Inc(exactPlots);
     axes := cs.Arrays['axes'];
     why := '';
     for a := 0 to axes.Count - 1 do
@@ -805,6 +817,8 @@ begin
   AssertTrue(Format('banded ones (%d)', [closing]), closing >= 30);
   AssertTrue(Format('ticks hidden with their labels (%d)', [synced]), synced >= 5);
   AssertTrue(Format('split areas (%d)', [areas]), areas >= 4);
+  AssertTrue(Format('plots upstream''s to the bit (%d)', [exactPlots]),
+    exactPlots >= 80);
   AssertEquals(IntToStr(bad) + ' cases differ:' + report, 0, bad);
 end;
 

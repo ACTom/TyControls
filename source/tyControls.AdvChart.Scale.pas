@@ -207,6 +207,12 @@ type
       needs that preference and reaching through the public Mapper to get it
       would put the fallback rule in the caller. }
     function GetExtent2(AKind: TTyScaleExtentKind): TTyRange;
+    { The same extent in the mapper's LINEAR space -- decades on a log
+      axis. Upstream keeps it rather than taking the logarithm of the ends
+      again: a log axis nices to -1 and 3, not -0.9999999999999998. A span,
+      a band, a half bar are all measured in it. Unsorted: the ends as the
+      extent has them. }
+    function LinearExtent2(AKind: TTyScaleExtentKind): TTyRange; virtual;
     procedure SetExtent(const ARange: TTyRange);
     procedure SetExtent2(AKind: TTyScaleExtentKind; const ARange: TTyRange);
     function GetTicks: TTyScaleTickArray; virtual; abstract;
@@ -352,6 +358,7 @@ type
       logarithm, as upstream's setExtent2 takes it. }
     function Normalize(AValue: Double): Double; override;
     function Denormalize(ANorm: Double): Double; override;
+    function LinearExtent2(AKind: TTyScaleExtentKind): TTyRange; override;
     { Interval.ts' getTicks: the extent's own start when the step did not
       land on it, every multiple inside, the extent's own end likewise --
       rounded to the step's precision one by one, and none at all past three
@@ -498,6 +505,8 @@ function TyScaleValueLabel(AScale: TTyScale; AValue: Double;
 
 implementation
 
+uses tyControls.AdvChart.JsMath;
+
 function TyJsRound(AValue: Double): Double;
 begin
   { JavaScript's Math.round is half-toward-plus-infinity. FPC's Round is
@@ -610,7 +619,7 @@ begin
   if (ABase <= 0) or (ABase = 1) then
     ABase := 10;
   FBase := ABase;
-  FLnBase := Ln(ABase);
+  FLnBase := TyJsLog(ABase);
 end;
 
 function TTyLogScaleMapper.NeedTransform: Boolean;
@@ -622,7 +631,7 @@ function TTyLogScaleMapper.TransformIn(AValue: Double): Double;
 begin
   if AValue <= 0 then
     Exit(NaN);
-  Result := Ln(AValue) / FLnBase;
+  Result := TyJsLog(AValue) / FLnBase;
 end;
 
 function TTyLogScaleMapper.TransformOut(AValue: Double): Double;
@@ -631,12 +640,14 @@ begin
     axis draws, and both ends of its extent. FPC's Power walks a negative
     exponent by repeated multiplication and lands up to eight units in the
     last place away: 1e-10 came back as 1.0000000000000006e-10. Another
-    base, or a fraction of a power, goes through Power and may still part
-    from upstream in its last digit. }
+    base, or a fraction of a power, goes through V8's own pow.
+    [Revised in batch 43: those went through FPC's Power, up to a dozen
+    units in the last place off V8's at a fractional exponent -- every
+    containShape end on a log axis.] }
   if (FBase = 10) and not (IsNan(AValue) or IsInfinite(AValue))
     and (Frac(AValue) = 0) and (Abs(AValue) <= 400) then
     Exit(TyJsPow10(Trunc(AValue)));
-  Result := Power(FBase, AValue);
+  Result := TyJsPow(FBase, AValue);
 end;
 
 { ============================ TTyBreakScaleMapper ============================ }
@@ -923,6 +934,14 @@ end;
 function TTyScale.GetExtent2(AKind: TTyScaleExtentKind): TTyRange;
 begin
   Result := FMapper.GetExtent(AKind);
+end;
+
+function TTyScale.LinearExtent2(AKind: TTyScaleExtentKind): TTyRange;
+var e: TTyRange;
+begin
+  e := GetExtent2(AKind);
+  Result.Start := FMapper.TransformIn(e.Start);
+  Result.Stop := FMapper.TransformIn(e.Stop);
 end;
 
 function TTyScale.Blank: Boolean;
@@ -1880,7 +1899,7 @@ function TyQuantityExponent(AValue: Double): Integer;
 var e: Double;
 begin
   if IsNan(AValue) or IsInfinite(AValue) or (AValue <= 0) then Exit(0);
-  e := JsFloor(Ln(AValue) / cJsLn10);
+  e := JsFloor(TyJsLog(AValue) / cJsLn10);
   if IsNan(e) or IsInfinite(e) then Exit(0);
   Result := Trunc(e);
   { The logarithm lands a hair under an exact power often enough that
@@ -2262,6 +2281,21 @@ begin
   if FStubStop = FStubStart then Exit(0.5);
   t := FMapper.TransformIn(AValue);
   Result := (t - FStubStart) / (FStubStop - FStubStart);
+end;
+
+function TTyIntervalScale.LinearExtent2(AKind: TTyScaleExtentKind): TTyRange;
+begin
+  { THE DECADES THE NICE STEP LEFT, while nothing has set another extent and
+    no mapping extent was asked for -- a mapping one upstream takes through
+    the logarithm, as setExtent2 does }
+  if LogWarped and StillNiced
+    and ((AKind = sekEffective) or not FMapper.HasExtent(sekMapping)) then
+  begin
+    Result.Start := FStubStart;
+    Result.Stop := FStubStop;
+    Exit;
+  end;
+  Result := inherited LinearExtent2(AKind);
 end;
 
 function TTyIntervalScale.Denormalize(ANorm: Double): Double;

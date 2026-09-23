@@ -91,7 +91,11 @@
 //   needs something the port does not do (an OBB test: the AABBs meet and a
 //   rect is turned; truncation, padding, lineHeight, a font or colour of its
 //   own, an unknown nameLocation, a label font other than 12px) or that fails a
-//   check is recorded all the same, deferred, with the reason.
+//   check is recorded all the same, deferred, with the reason. The run exits 1
+//   when a case not declared deferred fails a check, or a case's deferral is
+//   not as declared. Outside the script: run twice and diff; run with
+//   ECHARTS_DIST set to echarts.min.js (ORACLE_OUT elsewhere) and diff: the
+//   production build must write the same file.
 //
 // Doubles are written as the 16 hex digits of their IEEE-754 bits (big-endian,
 // lowercase) with a readable twin beside them (rectText beside rect, ...),
@@ -109,7 +113,7 @@ const echarts = require(DIST);
 const PROD = require(DIST.replace(/echarts\.js$/, 'echarts.min.js'));
 const ZRENDER_SRC = process.env.ZRENDER_SRC || 'D:/Projects/zrender/src/core/platform.ts';
 const ROOT = path.resolve(__dirname, '..', '..');
-const OUT = path.join(ROOT, 'tests', 'fixtures', 'advchart-axis-names.json');
+const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-axis-names.json');
 
 // This generator's own assertions: never retried through the production build.
 class OracleError extends Error {}
@@ -163,10 +167,13 @@ function decodeTable(literal, where) {
     where + ': the width table is not ' + (LAST_CODE - FIRST_CODE + 1) + ' characters');
   return s;
 }
+// the minified build has no name to find the table by: its development twin's
+// table is read, and the 1px check below holds it to the build being run
+const TABLE_DIST = DIST.replace(/echarts\.min\.js$/, 'echarts.js');
 const mapStr = (() => {
-  const line = fs.readFileSync(DIST, 'utf8').split('\n').find(l => /\bdefaultWidthMapStr\s*=/.test(l));
-  must(line, DIST + ': no defaultWidthMapStr');
-  const s = decodeTable(line.slice(line.indexOf('=') + 1).trim().replace(/;$/, ''), DIST);
+  const line = fs.readFileSync(TABLE_DIST, 'utf8').split('\n').find(l => /\bdefaultWidthMapStr\s*=/.test(l));
+  must(line, TABLE_DIST + ': no defaultWidthMapStr');
+  const s = decodeTable(line.slice(line.indexOf('=') + 1).trim().replace(/;$/, ''), TABLE_DIST);
   if (fs.existsSync(ZRENDER_SRC)) {
     const m = /const defaultWidthMapStr = (`[^`]*`)/.exec(fs.readFileSync(ZRENDER_SRC, 'utf8'));
     must(m, ZRENDER_SRC + ': no defaultWidthMapStr');
@@ -1172,6 +1179,14 @@ add('grid-bounds Z6: outerBoundsMode same + names, the level differs per pass',
   gb({ outerBoundsMode: 'same' }, NAMED_X, NAMED_Y));
 add('grid-bounds CL9: containLabel with names',
   gb({ containLabel: true }, { name: 'Day of the week' }, { name: 'Revenue', nameLocation: 'middle', nameGap: 60 }));
+// the name frame's extent is the axis extent [0, w], not the rect's edges: on
+// this rect (x+w)-x != w and (y+h)-y != h, the middle x name's (0+w)/2 and the
+// end y name's h+15 give other Doubles from the edges (batch 43 audit, N3). The
+// rect is coord-affine.js's L cases'; the case checks it stays unshrunk and
+// that the edges differ (expectXWH)
+const XWH = { left: 77.13, width: 498.7, top: 47.97, height: 286.18 };
+add('rect where (x+w)-x != w and (y+h)-y != h: middle x name, end y name',
+  bar(middle(DAY), { name: 'Value', nameLocation: 'end' }, { grid: XWH }), { W: 611, H: 397, expectXWH: XWH });
 
 // deferred: recorded, not compared
 add('nameRotate 30 on a middle x name: an OBB move',
@@ -1368,6 +1383,13 @@ function recordOf(c) {
       missed.add('shrink');
     }
   }
+  if (c.expectXWH) {
+    const e = c.expectXWH;
+    const ok = Object.is(r.rect.x, e.left) && Object.is(r.rect.width, e.width) && Object.is(r.rect.y, e.top)
+      && Object.is(r.rect.height, e.height) && (r.rect.x + r.rect.width) - r.rect.x !== r.rect.width
+      && (r.rect.y + r.rect.height) - r.rect.y !== r.rect.height;
+    if (!ok) misses.push('the rect ' + JSON.stringify(textRect(r.rect)) + ' is not the one asked for, or its edges give w and h back');
+  }
   if (misses.length) {
     if (unsupportedFound) console.log(c.name + ' (deferred anyway): the transcription misses ' + Array.from(missed).join(', '));
     else failed.push(c.name + ': ' + misses.join('; '));
@@ -1447,4 +1469,8 @@ console.log('self-checks (compared cases): ' + Array.from(tally, ([k, [ok, all]]
 fs.writeFileSync(OUT, json + '\n');
 const d = out.cases.filter(c => c.deferred).length;
 console.log('wrote', OUT, (out.cases.length - d) + ' cases + ' + d + ' deferred, ' + measure.length + ' measured strings');
+if (failed.length || surprises.length) {
+  console.log('FAILED: ' + (failed.length + surprises.length) + ' self-check(s) or deferral(s) not as declared');
+  process.exit(1);
+}
 process.exit(0);

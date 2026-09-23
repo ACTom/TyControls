@@ -43,8 +43,21 @@
 //     normalize reads), extent[2] (axis.getExtent(), local px),
 //     ticks[], tickCoords[] (getTicksCoords, GLOBAL px; on an onBand axis the
 //     band edges, shifted by half a band and one more at the end),
-//     labels[] {tick, x, y, hidden?} (the label element's x, y: recipe B),
-//     labelOffset, onZeroOf ('y0' or null), onZeroCoord (the pixel of the
+//     splitLineShow (the splitLine.show option), splitLineTicks[],
+//     splitLineCoords[] (getTicksCoords with the splitLine model, GLOBAL px:
+//     every split line upstream builds, before subPixelOptimizeLine and before
+//     showMinLine / showMaxLine drop the first / last; band-shifted by the
+//     splitLine model's own alignWithLabel),
+//     labels[] {tick, x, y, hidden?, transform, localRect} (the label element's
+//     x, y: recipe B; transform: the six numbers of its computed transform,
+//     or null; localRect: [x, y, width, height] of its text box with the
+//     label's textMargin, local to transform -- both as the builder's
+//     labelLayoutList holds them),
+//     labelOffset, labelRotation (the first label element's rotation, the
+//     same on every label of the axis; null without labels), layoutRotation
+//     (innerTextLayout's rotation, remRadian(labelRotate - axis rotation),
+//     the local rotation the anchor matrix is built with), align and
+//     verticalAlign (the label text's), onZeroOf ('y0' or null), onZeroCoord (the pixel of the
 //     other axis' 0, P) or null, startValue and valueAxisStart (P of it) for
 //     the value axis of a bar or pictorialBar series, else null
 //   transform[6]|null, invTransform[6]|null   cartesian._transform/_invTransform
@@ -94,6 +107,8 @@
 //     autoAsValue           left 'auto' counted as a value (x = 0)
 //     cellCentre            a column at its band cell's centre, not coord
 //     clipFromOriginal      the clip's width from the unclipped x
+//   pins               (cases L only) per property the case pins, how many
+//                      recorded numbers or labels show it (see the L cases)
 //
 // Self-checks (a case that fails any is recorded deferred with the reason and
 // the run exits 1):
@@ -103,8 +118,18 @@
 //     every pointToData probe; the replay the mutants run on (every recorded
 //     number with the recipe that predicts it) reproduces the record.
 //   2 P reproduces every tick coord, onZeroCoord, valueAxisStart, area and the
-//     axisPointToData / axisPointerPixel probes.
-//   3 B reproduces every label element's x and y.
+//     axisPointToData / axisPointerPixel probes; P with fixOnBandTicksCoords
+//     (the pushed far edge from the boundary tick) reproduces every split-line
+//     coord and again every tick coord.
+//   3 B reproduces every label element's x and y. And per label, from the
+//     frame (cartesianAxisHelper.ts:57-106), the rotation (AxisBuilder.ts:
+//     1369-1373) and zrender's matrix code: the element's rotation is
+//     -atan2(M1, M0) of M = G * local(c, t, layoutRotation) and the same on
+//     every label of the axis; its layoutRotation, align and verticalAlign are
+//     innerTextLayout's (AxisBuilder.ts:592-621); the decomposed x, y are the
+//     element's; the recorded transform is M decomposed and recomposed
+//     (Transformable.ts:186-211, 303-347), bit for bit, and the element's own
+//     computed transform.
 //   4 line storage: points and stackedOnPoints are Float32Arrays, each is
 //     Math.fround of the transcribed point, symbols sit on the points.
 //   5 bars: the barGrid recipe reproduces every layout, the BarView clip
@@ -114,7 +139,8 @@
 //     case logNormalize >= 1; a control case affineVsPerAxis = 0 and
 //     portVsUpstream = 0; every mutant of a kill list moves >= 1 recorded
 //     number (with the barGrid band/width/offset, containShape mapping and
-//     rect transcriptions those mutants use reproducing upstream first).
+//     rect transcriptions those mutants use reproducing upstream first);
+//     every entry of a pins list bites >= 1 time.
 //   7 builds: the production build (echarts.min.js) writes the same record.
 //   8 determinism: run twice, diff the output (done outside the script).
 //
@@ -361,6 +387,120 @@ function labelAnchorU(ar, frame, tickValue) {
   const t = frame.t;
   if (ar.dim === 'x') return [1 * c + 0 * t + frame.X, 0 * c + 1 * t + frame.Y];
   return [CT * c + 1 * t + frame.X, -1 * c + CT * t + frame.Y];
+}
+// zrender, operation for operation: matrix.ts:47-64 (mul), 83-105 (rotate,
+// pivot [0,0]); Transformable.ts:7-11 (the 5e-5 test), 95-103 (needLocal),
+// 108-147 (updateTransform), 186-211 (setLocalTransform, which the
+// decomposeTransform of a parentless element ends in), 303-347
+// (getLocalTransform, origin and anchor 0)
+function zrMul(m1, m2) {
+  return [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1], m1[0] * m2[2] + m1[2] * m2[3],
+    m1[1] * m2[2] + m1[3] * m2[3], m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];
+}
+function zrRotate(a, rad) {
+  const aa = a[0], ac = a[2], atx = a[4], ab = a[1], ad = a[3], aty = a[5];
+  const st = Math.sin(rad), ct = Math.cos(rad);
+  return [aa * ct + ab * st, -aa * st + ab * ct, ac * ct + ad * st, -ac * st + ct * ad,
+    ct * (atx - 0) + st * (aty - 0) + 0, ct * (aty - 0) - st * (atx - 0) + 0];
+}
+const zrNotAroundZero = v => v > 5e-5 || v < -5e-5;
+const zrT = p => Object.assign({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 }, p);
+function zrNeedLocal(t) {
+  return zrNotAroundZero(t.rotation) || zrNotAroundZero(t.x) || zrNotAroundZero(t.y)
+    || zrNotAroundZero(t.scaleX - 1) || zrNotAroundZero(t.scaleY - 1) || zrNotAroundZero(t.skewX) || zrNotAroundZero(t.skewY);
+}
+function zrLocal(t) {
+  const skewX = t.skewX ? Math.tan(t.skewX) : 0;
+  const skewY = t.skewY ? Math.tan(-t.skewY) : 0;
+  let m = [t.scaleX, skewY * t.scaleX, skewX * t.scaleY, t.scaleY, 0, 0];
+  if (t.rotation) m = zrRotate(m, t.rotation);
+  m[4] += 0 + t.x;
+  m[5] += 0 + t.y;
+  return m;
+}
+// hadOne: the element already holds a transform array (reset to identity
+// when it needs none and has no parent)
+function zrUpdate(t, parentM, hadOne) {
+  const nl = zrNeedLocal(t);
+  if (!(nl || parentM)) return hadOne ? [1, 0, 0, 1, 0, 0] : null;
+  const m = nl ? zrLocal(t) : [1, 0, 0, 1, 0, 0];
+  if (parentM) return nl ? zrMul(parentM, m) : parentM.slice();
+  return m;
+}
+function zrDecompose(m) {
+  let sx = m[0] * m[0] + m[1] * m[1];
+  let sy = m[2] * m[2] + m[3] * m[3];
+  const rotation = Math.atan2(m[1], m[0]);
+  const shearX = Math.PI / 2 + rotation - Math.atan2(m[3], m[2]);
+  sy = Math.sqrt(sy) * Math.cos(shearX);
+  sx = Math.sqrt(sx);
+  return { skewX: shearX, skewY: 0, rotation: -rotation, x: +m[4], y: +m[5], scaleX: sx, scaleY: sy };
+}
+// number.ts:470-481
+const remRadianU = r => { const pi2 = Math.PI * 2; return (r % pi2 + pi2) % pi2; };
+const aroundZeroU = v => v > -1e-4 && v < 1e-4;
+// AxisBuilder.ts:592-621
+function innerTextLayoutU(axisRotation, textRotation, direction) {
+  const rotationDiff = remRadianU(textRotation - axisRotation);
+  let textAlign;
+  let textVerticalAlign;
+  if (aroundZeroU(rotationDiff)) {
+    textVerticalAlign = direction > 0 ? 'top' : 'bottom';
+    textAlign = 'center';
+  } else if (aroundZeroU(rotationDiff - Math.PI)) {
+    textVerticalAlign = direction > 0 ? 'bottom' : 'top';
+    textAlign = 'center';
+  } else {
+    textVerticalAlign = 'middle';
+    if (rotationDiff > 0 && rotationDiff < Math.PI) textAlign = direction > 0 ? 'right' : 'left';
+    else textAlign = direction > 0 ? 'left' : 'right';
+  }
+  return { rotation: rotationDiff, textAlign, textVerticalAlign };
+}
+// cartesianAxisHelper.ts:63-66, 88-106 + AxisBuilder.ts:1369-1373, 553-558:
+// the label rotation (+rotate on zero, -rotate only on a top axis off zero),
+// the text layout, and the axis group's matrix G
+function labelLayoutU(ar, frame, onZero) {
+  const axisRotation = Math.PI / 2 * (ar.dim === 'x' ? 0 : 1);
+  const pos = onZero ? 'onZero' : ar.position;
+  const raw = pos === 'top' ? -ar.rotate : ar.rotate;           // cfg.raw.labelRotate
+  const labelRotation = ((raw != null ? raw : ar.rotate) || 0) * Math.PI / 180;
+  let dir = { top: -1, bottom: 1, left: -1, right: 1 }[ar.position];
+  if (ar.labelInside) dir = -dir;
+  const lay = innerTextLayoutU(axisRotation, labelRotation, dir);
+  const G = zrUpdate(zrT({ x: frame.X, y: frame.Y, rotation: axisRotation }), null, false);
+  return { axisRotation, labelRotation, dir, layoutRotation: lay.rotation, align: lay.textAlign, verticalAlign: lay.textVerticalAlign, G };
+}
+// AxisBuilder.ts:1563-1574 + the label's getComputedTransform (S3): the
+// product M = G * local(c, t, layoutRotation), decomposed, recomposed as F
+function labelMatrixU(ar, frame, lay, tickValue, hadOne) {
+  const M = zrUpdate(zrT({ x: localU(ar, tickValue), y: frame.t, rotation: lay.layoutRotation }), lay.G, true);
+  const d = zrDecompose(M);
+  return { M, d, F: zrUpdate(zrT(d), null, hadOne) };
+}
+// Axis.ts:167-201 + fixOnBandTicksCoords (:314-354), global: the band-shifted
+// list ends in a pushed (extent[1] + 1) at oldLast + bandWidth, and oldLast is
+// the boundary tick extent[1] whether or not it was popped as offInterval
+function bandTickListU(r, tickValues, modified) {
+  const bw = modified ? categoryBandWidthU(r) : 0;
+  return tickValues.map((tv, i) => {
+    const pushed = modified && i === tickValues.length - 1 && tv === r.effective[1] + 1;
+    const local = pushed ? (localU(r, r.effective[1]) - bw / 2) + bw : localU(r, tv) - (modified ? bw / 2 : 0);
+    return toGlobalU(r, local);
+  });
+}
+// the port at HEAD for a band-shifted list (Builder.pas CategoryMarks):
+// global -> local by the rect's edges, shift, back by the edges
+function bandTickListQ(r, tickValues) {
+  const bw = categoryBandWidthU(r);
+  const L = r.rect.x;
+  const B = r.rect.y + r.rect.height;
+  const lq = g => (r.dim === 'x' ? g - L : B - g);
+  const gq = c => (r.dim === 'x' ? c + L : B - c);
+  return tickValues.map((tv, i) => {
+    if (i === tickValues.length - 1 && tv === r.effective[1] + 1) return gq((lq(toGlobalU(r, localU(r, r.effective[1]))) - bw / 2) + bw);
+    return gq(lq(toGlobalU(r, localU(r, tv))) - bw / 2);
+  });
 }
 // BarView.ts:684-727
 function clipU(a, l) {
@@ -643,7 +783,7 @@ function run(c, lib) {
     const ecModel = chart.getModel();
     const fails = [];
     const fail = (check, msg) => fails.push({ check, msg });
-    const disc = { compared: 0, affineVsPerAxis: 0, maxAffineShift: 0, portVsUpstream: 0, logNormalize: 0, kills: {} };
+    const disc = { compared: 0, affineVsPerAxis: 0, maxAffineShift: 0, portVsUpstream: 0, logNormalize: 0, kills: {}, pins: {} };
     const grids = [];
     ecModel.eachComponent('grid', gm => {
       grids.push(runGrid(c, lib, chart, ecModel, gm, fail, disc));
@@ -674,6 +814,8 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
   const thunks = [];
   const replay = (live, f) => thunks.push({ live, f });
   const rawRect = plainRect(lib.helper.getLayoutRect(gm.getBoxLayoutParams(), { width: c.W, height: c.H }));
+  const pinSet = new Set(c.pins || []);
+  const pin = id => { disc.pins[id] = (disc.pins[id] || 0) + 1; };
 
   // the axes, x then y, in index order
   const axes = [];
@@ -704,6 +846,7 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
       offset: axis.model.get('offset') || 0,
       margin: axis.model.get(['axisLabel', 'margin']),
       labelInside: !!axis.model.get(['axisLabel', 'inside']),
+      rotate: axis.model.get(['axisLabel', 'rotate']),
       axis,
     };
     if (log) {
@@ -762,6 +905,22 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
       logDisc(r, t.tickValue);
       tally(r.tickCoords[i], modified ? undefined : perAxisQ(r, t.tickValue, E));
     });
+    // split lines (check 2): CartesianAxisView.ts:118-128, the coordinates
+    // before subPixelOptimizeLine; not replayed and not tallied, so the kill
+    // and discrimination counts stay what they were
+    const sl = axis.getTicksCoords({ tickModel: axis.model.getModel('splitLine'), breakTicks: 'none', pruneByBreak: 'preserve_extent_bound' });
+    r.splitLineShow = !!axis.model.get(['splitLine', 'show']);
+    r.splitLineTicks = sl.map(t => t.tickValue);
+    r.splitLineCoords = sl.map(t => axis.toGlobalCoord(t.coord));
+    r.splitLineBanded = sl.length > 0 && !!sl[0].onBand;
+    r.tickBanded = modified;
+    const slWant = bandTickListU(r, r.splitLineTicks, r.splitLineBanded);
+    sl.forEach((t, i) => {
+      if (!same(slWant[i], r.splitLineCoords[i])) fail(2, r.dim + r.index + ': split line ' + t.tickValue + ' at ' + text(r.splitLineCoords[i]) + ', P gives ' + text(slWant[i]));
+    });
+    // the transcription the split lines use gives the ticks too
+    const tkWant = bandTickListU(r, r.ticks, modified);
+    if (!sameArr(tkWant, r.tickCoords)) fail(2, r.dim + r.index + ': the split-line transcription misses a tick');
   });
 
   // onZero (check 2)
@@ -787,8 +946,15 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
     const frame = labelFrameU(r, r.onZeroCoord);
     r.labelOffset = frame.labelOffset;
     r.labels = [];
+    r.labelRotation = null;
+    r.layoutRotation = null;
+    r.align = null;
+    r.verticalAlign = null;
     const view = chart.getViewOfComponentModel(axis.model);
     if (!view || !view.group) return;
+    const lay = labelLayoutU(r, frame, r.onZeroCoord != null);
+    const layoutList = (axis.axisBuilder && axis.axisBuilder._local && axis.axisBuilder._local.labelLayoutList) || [];
+    const lw = v => r.dim + r.index + ': label ' + v;
     view.group.traverse(el => {
       if (el.type !== 'text') return;
       const k = Object.keys(el).find(kk => kk.startsWith('__ec_inner') && el[kk] && el[kk].labelInfo);
@@ -798,17 +964,94 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
       const v = tick.value;
       const want = labelAnchorU(r, frame, v);
       if (!same(want[0], el.x) || !same(want[1], el.y)) {
-        fail(3, r.dim + r.index + ': label ' + v + ' at [' + text(el.x) + ', ' + text(el.y) + '], B gives [' + textArr(want) + ']');
+        fail(3, lw(v) + ' at [' + text(el.x) + ', ' + text(el.y) + '], B gives [' + textArr(want) + ']');
       }
       const frameNow = () => labelFrameU(r, r.onZeroRec ? perAxisU(r.onZeroRec, 0) : null);
       replay(el.x, () => labelAnchorU(r, frameNow(), v)[0]);
       replay(el.y, () => labelAnchorU(r, frameNow(), v)[1]);
       const lab = { tick: num(v), x: num(el.x), y: num(el.y) };
       if (el.ignore || el.invisible) lab.hidden = true;
+      // the rotation, the text layout, the transform and the local rect (check 3)
+      const layout = layoutList.find(l => l && l.label === el);
+      must(layout && layout.localRect, c.name + ' ' + lw(v) + ': not in the builder\'s labelLayoutList');
+      const live = layout.transform ? Array.from(layout.transform) : null;
+      const U = labelMatrixU(r, frame, lay, v, live != null);
+      const rotU = -Math.atan2(U.M[1], U.M[0]);
+      if (!same(rotU, el.rotation)) fail(3, lw(v) + ': rotation ' + text(el.rotation) + ', -atan2(M1, M0) gives ' + text(rotU));
+      if (!same(U.d.x, el.x) || !same(U.d.y, el.y)) fail(3, lw(v) + ': the decomposed x, y are not the element\'s');
+      if (!sameArr(U.F, live)) fail(3, lw(v) + ': transform [' + textArr(live) + '], the recompose gives [' + textArr(U.F) + ']');
+      const cur = layout.transform ? Array.from(el.getComputedTransform() || []) : null;
+      if (!sameArr(cur, live)) fail(3, lw(v) + ': the layout transform is not the element\'s computed transform');
+      if (!same(el[k].layoutRotation, lay.layoutRotation)) {
+        fail(3, lw(v) + ': layoutRotation ' + text(el[k].layoutRotation) + ', innerTextLayout gives ' + text(lay.layoutRotation));
+      }
+      if (el.style.align !== lay.align || el.style.verticalAlign !== lay.verticalAlign) {
+        fail(3, lw(v) + ': ' + el.style.align + '/' + el.style.verticalAlign + ', innerTextLayout gives ' + lay.align + '/' + lay.verticalAlign);
+      }
+      if (!r.labels.length) {
+        r.labelRotation = el.rotation;
+        r.layoutRotation = el[k].layoutRotation;
+        r.align = el.style.align;
+        r.verticalAlign = el.style.verticalAlign;
+      } else if (!same(el.rotation, r.labelRotation)) {
+        fail(3, lw(v) + ': rotation ' + text(el.rotation) + ' is not the axis\' ' + text(r.labelRotation));
+      }
+      const lr = layout.localRect;
+      lab.transform = live ? live.map(num) : null;
+      lab.localRect = [num(lr.x), num(lr.y), num(lr.width), num(lr.height)];
       r.labels.push(lab);
       tally(r.dim === 'x' ? el.x : el.y, labelQ(r, v, E, E0));
+      // what the new cases pin (self-check 6 `pins`), counted per label
+      if (pinSet.size) {
+        const moved = rr => { const a = labelAnchorU(r, labelFrameU(rr, r.onZeroCoord), v); return differs(a[0], el.x) || differs(a[1], el.y); };
+        const s96 = q => q * 96 / 96;
+        if (pinSet.has('N1') && r.position === 'top' && r.onZeroCoord != null && r.rotate && Math.sign(el.rotation) === Math.sign(r.rotate)) pin('N1');
+        if (pinSet.has('topNegates') && r.position === 'top' && r.onZeroCoord == null && r.rotate && Math.sign(el.rotation) === -Math.sign(r.rotate)) pin('topNegates');
+        if (pinSet.has('N2') && moved(Object.assign({}, r, { offset: s96(r.offset), margin: s96(r.margin) }))) pin('N2');
+        if (pinSet.has('offsetOutOfT')) {
+          const f2 = Object.assign({}, frame, { t: frame.t + lay.dir * r.offset });
+          const a = labelAnchorU(r, f2, v);
+          if (differs(a[0], el.x) || differs(a[1], el.y)) pin('offsetOutOfT');
+        }
+        if (pinSet.has('inside') && r.labelInside && moved(Object.assign({}, r, { labelInside: false }))) pin('inside');
+      }
     });
   });
+
+  // what the new cases pin, per axis and per rect (self-check 6 `pins`)
+  if (pinSet.has('bandedMarks')) {
+    axes.forEach(axis => {
+      const r = recs.get(axis);
+      [[r.tickBanded, r.ticks, r.tickCoords], [r.splitLineBanded, r.splitLineTicks, r.splitLineCoords]].forEach(([banded, vals, coords]) => {
+        if (!banded) return;
+        const q = bandTickListQ(r, vals);
+        coords.forEach((g, i) => { if (differs(q[i], g)) pin('bandedMarks'); });
+      });
+    });
+  }
+  if (pinSet.has('alignPerModel')) {
+    axes.forEach(axis => {
+      const r = recs.get(axis);
+      if (!axis.model.get(['axisTick', 'alignWithLabel']) || axis.model.get(['splitLine', 'alignWithLabel'])) return;
+      if (r.tickBanded || !r.splitLineBanded) return;
+      r.splitLineCoords.forEach((g, i) => { if (differs(g, r.tickCoords[i])) pin('alignPerModel'); });
+    });
+  }
+  if (pinSet.has('popsLast')) {
+    // the pushed far edge differs from the one built on the tick before it
+    axes.forEach(axis => {
+      const r = recs.get(axis);
+      const vals = r.splitLineTicks;
+      const n = vals.length;
+      if (!r.splitLineBanded || n < 2 || vals[n - 1] !== r.effective[1] + 1 || vals[n - 2] === r.effective[1]) return;
+      const bw = categoryBandWidthU(r);
+      if (differs(toGlobalU(r, (localU(r, vals[n - 2]) - bw / 2) + bw), r.splitLineCoords[n - 1])) pin('popsLast');
+    });
+  }
+  if (pinSet.has('edgesNotSize')) {
+    if (differs((rect.x + rect.width) - rect.x, rect.width)) pin('edgesNotSize');
+    if (differs((rect.y + rect.height) - rect.y, rect.height)) pin('edgesNotSize');
+  }
 
   // a recorded dataToPoint: check 1 and the discrimination tallies
   const pointOf = (xv, yv, live, clamp, where) => {
@@ -1229,9 +1472,20 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
     ticksText: textArr(r.ticks),
     tickCoords: numArr(r.tickCoords),
     tickCoordsText: textArr(r.tickCoords),
+    splitLineShow: r.splitLineShow,
+    splitLineTicks: numArr(r.splitLineTicks),
+    splitLineTicksText: textArr(r.splitLineTicks),
+    splitLineCoords: numArr(r.splitLineCoords),
+    splitLineCoordsText: textArr(r.splitLineCoords),
     labels: r.labels,
     labelOffset: num(r.labelOffset),
     labelOffsetText: text(r.labelOffset),
+    labelRotation: num(r.labelRotation),
+    labelRotationText: text(r.labelRotation),
+    layoutRotation: num(r.layoutRotation),
+    layoutRotationText: text(r.layoutRotation),
+    align: r.align,
+    verticalAlign: r.verticalAlign,
     onZeroOf: r.onZeroOf,
     onZeroCoord: num(r.onZeroCoord),
     onZeroCoordText: text(r.onZeroCoord),
@@ -1459,6 +1713,64 @@ add('H', 'horizontal bars clipped on the left (x min 2)', { grid: PCT, xAxis: VA
 add('H', 'horizontal bars on an inverse x, clipped on the right and past max', { grid: PCT, xAxis: VAL({ min: 2, max: 10, inverse: true }),
   yAxis: CAT(4), series: [bar([5.5, 12.7, 8.3, 1.5])] }, kill('clipFromOriginal'));
 
+// L: the axis-label frame beyond bottom/left (batch 43 audit, ORACLE 1). Each
+// case names what it pins (`pins`, self-check 6: at least one recorded number
+// or label bites):
+//   N1            a top axis on the other axis' zero keeps +rotate (the port
+//                 negates for every top axis)
+//   topNegates    a top axis off zero turns its labels by -rotate
+//   N2            offset or margin that v*96/96 moves: a label moves when both
+//                 are put through it
+//   offsetOutOfT  on zero with an offset: a label moves when the offset is also
+//                 added to t = labelOffset + dir*margin
+//   inside        axisLabel.inside: a label moves when the direction is not flipped
+//   alignPerModel axisTick.alignWithLabel without splitLine's: the split lines
+//                 are band-shifted, the ticks are not, and they differ
+//   bandedMarks   a band-shifted tick or split line the port's global round trip
+//                 (CategoryMarks) misses
+//   popsLast      the last category is off the split-line interval: popped, and
+//                 the far edge pushed from it (built from the tick before it, the
+//                 edge moves)
+//   edgesNotSize  (x+w)-x != w and (y+h)-y != h on the rect
+const pins = (...ids) => ({ pins: ids });
+const NEGC = [5.1, -3.3, 8.9, -1.7, 4.4];
+add('L', 'top category x on the y zero, rotate 45 (N1)', { grid: PCT,
+  xAxis: CAT(5, { position: 'top', axisLabel: { rotate: 45 } }), yAxis: VAL(), series: [bar(NEGC)] }, pins('N1'));
+add('L', 'top category x off the y zero (onZero false), rotate 45', { grid: PCT,
+  xAxis: CAT(5, { position: 'top', axisLine: { onZero: false }, axisLabel: { rotate: 45 } }), yAxis: VAL(), series: [bar(NEGC)] },
+pins('topNegates'));
+add('L', 'top x and right y off zero, offset 2.7, margin 12.3 (N2)', { grid: PCT,
+  xAxis: VAL({ position: 'top', scale: true, offset: 2.7, axisLabel: { margin: 12.3 } }),
+  yAxis: VAL({ position: 'right', scale: true, offset: 2.7, axisLabel: { margin: 12.3 } }),
+  series: [scatter([[23.1, 51.7], [37.9, 88.3], [30.2, 64.9]])] }, pins('N2'));
+add('L', 'top x and right y on zero, offset 2.7, margin 12.3: the offset stays out of t', { grid: PCT,
+  xAxis: VAL({ position: 'top', offset: 2.7, axisLabel: { margin: 12.3 } }),
+  yAxis: VAL({ position: 'right', offset: 2.7, axisLabel: { margin: 12.3 } }),
+  series: [scatter([[-13.1, 21.7], [27.9, -18.3], [9.2, 34.9]])] }, pins('offsetOutOfT'));
+add('L', 'labels inside on x and on y', { grid: PCT,
+  xAxis: CAT(5, { axisLabel: { inside: true } }), yAxis: VAL({ axisLabel: { inside: true } }), series: [bar([5.1, 3.3, 8.9, 1.7, 4.4])] },
+pins('inside'));
+add('L', 'labels inside on top x and right y, rotate -30', { grid: PCT,
+  xAxis: CAT(5, { position: 'top', axisLine: { onZero: false }, axisLabel: { inside: true, rotate: -30 } }),
+  yAxis: VAL({ position: 'right', axisLabel: { inside: true, rotate: -30 } }), series: [bar([5.1, 3.3, 8.9, 1.7, 4.4])] },
+pins('inside', 'topNegates'));
+add('L', 'category x: axisTick alignWithLabel, splitLine not', { grid: PCT,
+  xAxis: CAT(6, { axisTick: { alignWithLabel: true }, splitLine: { show: true } }), yAxis: VAL(),
+  series: [bar([5.1, 3.3, 8.9, 1.7, 4.4, 6.6])] }, pins('alignPerModel', 'bandedMarks'));
+// the last category is off the split lines' interval: fixOnBandTicksCoords pops
+// it and pushes the far band edge from it, not from the tick before
+add('L', 'category x: splitLine interval 1 over 6 categories pops the off-interval last', { grid: PCT,
+  xAxis: CAT(6, { splitLine: { show: true, interval: 1 } }), yAxis: VAL(),
+  series: [bar([5.1, 3.3, 8.9, 1.7, 4.4, 6.6])] }, pins('bandedMarks', 'popsLast'));
+// 611 x 397: (77.13 + 498.7) - 77.13 != 498.7 and (47.97 + 286.18) - 47.97 != 286.18
+const XWH = { left: 77.13, width: 498.7, top: 47.97, height: 286.18 };
+add('L', '(x+w)-x != w and (y+h)-y != h: category x inverse, value y inverse', { grid: XWH,
+  xAxis: CAT(7, { inverse: true, splitLine: { show: true } }), yAxis: VAL({ inverse: true }),
+  series: [bar([5.1, 3.3, -2.7, 8.9, 4.4, 6.6, 2.2])] }, pins('edgesNotSize', 'bandedMarks'));
+add('L', '(x+w)-x != w and (y+h)-y != h: value x, category y inverse', { grid: XWH,
+  xAxis: VAL(), yAxis: CAT(5, { inverse: true, splitLine: { show: true } }),
+  series: [bar([5.1, 3.3, 8.9, 1.7, 4.4])] }, pins('edgesNotSize', 'bandedMarks'));
+
 // ---------- run, check and write ----------
 
 {
@@ -1486,6 +1798,9 @@ function recordOf(c) {
   if (c.pinsD5 && d.logNormalize < 1) r.fails.push({ check: 6, msg: 'pinsD5, but every log normalize agrees' });
   (c.kills || []).forEach(id => {
     if (!(d.kills[id] >= 1)) r.fails.push({ check: 6, msg: 'mutant ' + id + ' changes no recorded number' });
+  });
+  (c.pins || []).forEach(id => {
+    if (!(d.pins[id] >= 1)) r.fails.push({ check: 6, msg: 'pins ' + id + ', but it bites nowhere' });
   });
   if (c.control && (d.affineVsPerAxis !== 0 || d.portVsUpstream !== 0)) {
     r.fails.push({ check: 6, msg: 'control, but A != P on ' + d.affineVsPerAxis + ' and Q != U on ' + d.portVsUpstream + ' coordinates' });
@@ -1521,6 +1836,7 @@ function recordOf(c) {
     logNormalize: d.logNormalize,
   };
   if (c.kills) rec.discriminates.kills = d.kills;
+  if (c.pins) rec.discriminates.pins = d.pins;
   if (r.grids.length === 1) {
     const g = r.grids[0];
     delete g.index;

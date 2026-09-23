@@ -33,6 +33,12 @@ function TyJsAtan2(AY, AX: Double): Double;
   -- by half a unit of its last place -- an infinity. Upstream keeps a line's
   vertices in a Float32Array, so a vertex is this of the coordinate. }
 function TyJsFround(AX: Double): Double;
+{ Math.log and Math.pow as V8 answers them: fdlibm's e_log.c, and e_pow.c
+  with V8's one change. FPC's Power is exp(y ln x) and parts from V8 by up
+  to a dozen units in the last place at a fractional exponent -- every log
+  axis' mapping end, every pixel taken back to a value on one. }
+function TyJsLog(AX: Double): Double;
+function TyJsPow(AX, AY: Double): Double;
 
 implementation
 
@@ -47,6 +53,15 @@ var
   pi_o_4, pi_o_2, pi_, pi_lo, tiny: Double;
   { a literal -0.0 may be folded to +0.0 }
   negZero: Double;
+  { e_log.c }
+  lg_ln2_hi, lg_ln2_lo, lg_two54, lg_third: Double;
+  Lg1, Lg2, Lg3, Lg4, Lg5, Lg6, Lg7: Double;
+  { e_pow.c }
+  pw_dp_h1, pw_dp_l1, pw_two53, pw_twom54: Double;
+  pw_L1, pw_L2, pw_L3, pw_L4, pw_L5, pw_L6: Double;
+  pw_P1, pw_P2, pw_P3, pw_P4, pw_P5: Double;
+  pw_lg2, pw_lg2_h, pw_lg2_l, pw_ovt: Double;
+  pw_cp, pw_cp_h, pw_cp_l, pw_ivln2, pw_ivln2_h, pw_ivln2_l, pw_thrd: Double;
 
 const
   npio2_hw: array[0..31] of LongInt = (
@@ -407,6 +422,416 @@ begin
   Result := s;
 end;
 
+{ ==================== __ieee754_log and __ieee754_pow ====================
+
+  V8's Math.log is fdlibm's e_log.c as it stands; its Math.pow is e_pow.c
+  with one line changed (ieee754.cc:2894), the correction taken inside the
+  divisor. Transcribed from tools/advchart-oracle/fdlibm-powlog.js, which
+  matched node on millions of arguments; tools/advchart-oracle/js-pow-log.js
+  holds this to the same answers.
+
+  WHERE C LETS THE HARDWARE MAKE AN INFINITY, A ZERO OR A NAN -- huge*huge,
+  tiny*tiny, x/0, (x-x)/(x-x) -- the answer is written out: FPC raises on an
+  overflow, a division by nought and an invalid operation that C's defaults
+  let through. The results are the same values.
+
+  SIGNED SHIFTS are SarLongint where the operand can be negative; everything
+  else is a non-negative word and shr is the same. Integer arithmetic wraps
+  as C's does, with range and overflow checks off. }
+
+{$PUSH}{$R-}{$Q-}
+
+function WithHigh(AX: Double; AHigh: LongInt): Double;
+begin
+  Result := FromWords(AHigh, LowWord(AX));
+end;
+
+function WithLow(AX: Double; ALow: LongWord): Double;
+begin
+  Result := FromWords(HighWord(AX), ALow);
+end;
+
+{ A PRODUCT OR QUOTIENT THAT MAY OVERFLOW, as C computes it: to the
+  infinity, not to an exception. Only the two special cases that can --
+  x * x for y = 2 and 1 / x for y = -1 -- come here. }
+function MulOrDivQuiet(A, B: Double; ADivide: Boolean): Double;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exOverflow, exUnderflow, exPrecision]);
+  try
+    if ADivide then Result := A / B else Result := A * B;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function SignedInf(ANeg: Boolean): Double;
+begin
+  if ANeg then Result := NegInfinity else Result := Infinity;
+end;
+
+function SignedZero(ANeg: Boolean): Double;
+begin
+  if ANeg then Result := negZero else Result := 0;
+end;
+
+function TyJsLog(AX: Double): Double;
+var
+  hfsq, f, s, z, R, w, t1, t2, dk, x: Double;
+  k, hx, i, j: LongInt;
+  lx: LongWord;
+begin
+  x := AX;
+  hx := HighWord(x);
+  lx := LowWord(x);
+  k := 0;
+  if hx < $00100000 then                         { x < 2**-1022 }
+  begin
+    if ((hx and $7FFFFFFF) or LongInt(lx)) = 0 then
+      Exit(NegInfinity);                         { log(+-0) = -inf }
+    if hx < 0 then Exit(NaN);                    { log(-#) = NaN }
+    k := k - 54;
+    x := x * lg_two54;                           { subnormal, scale up }
+    hx := HighWord(x);
+  end;
+  if hx >= $7FF00000 then Exit(x + x);
+  k := k + (hx shr 20) - 1023;
+  hx := hx and $000FFFFF;
+  i := (hx + $95F64) and $100000;
+  x := WithHigh(x, hx or (i xor $3FF00000));    { normalize x or x/2 }
+  k := k + (i shr 20);
+  f := x - 1.0;
+  if (($000FFFFF and (2 + hx)) < 3) then         { -2**-20 <= f < 2**-20 }
+  begin
+    if f = 0.0 then
+    begin
+      if k = 0 then Exit(0.0);
+      dk := k;
+      Exit(dk * lg_ln2_hi + dk * lg_ln2_lo);
+    end;
+    R := f * f * (0.5 - lg_third * f);
+    if k = 0 then Exit(f - R);
+    dk := k;
+    Exit(dk * lg_ln2_hi - ((R - dk * lg_ln2_lo) - f));
+  end;
+  s := f / (2.0 + f);
+  dk := k;
+  z := s * s;
+  i := hx - $6147A;
+  w := z * z;
+  j := $6B851 - hx;
+  t1 := w * (Lg2 + w * (Lg4 + w * Lg6));
+  t2 := z * (Lg1 + w * (Lg3 + w * (Lg5 + w * Lg7)));
+  i := i or j;
+  R := t2 + t1;
+  if i > 0 then
+  begin
+    hfsq := 0.5 * f * f;
+    if k = 0 then Exit(f - (hfsq - s * (hfsq + R)));
+    Exit(dk * lg_ln2_hi - ((hfsq - (s * (hfsq + R) + dk * lg_ln2_lo)) - f));
+  end;
+  if k = 0 then Exit(f - s * (f - R));
+  Result := dk * lg_ln2_hi - ((s * (f - R) - dk * lg_ln2_lo) - f);
+end;
+
+{ s_scalbn.c, reached only for a result below the normal range }
+function ScalbN(AX: Double; AN: LongInt): Double;
+var
+  k, hx: LongInt;
+  lx: LongWord;
+  x: Double;
+begin
+  x := AX;
+  hx := HighWord(x);
+  lx := LowWord(x);
+  k := (hx and $7FF00000) shr 20;
+  if k = 0 then
+  begin
+    if (LongInt(lx) or (hx and $7FFFFFFF)) = 0 then Exit(x);
+    x := x * lg_two54;
+    hx := HighWord(x);
+    k := ((hx and $7FF00000) shr 20) - 54;
+    if AN < -50000 then Exit(SignedZero(x < 0));
+  end;
+  if k = $7FF then Exit(x + x);
+  k := k + AN;
+  if k > $7FE then Exit(SignedInf(x < 0));
+  if k > 0 then Exit(WithHigh(x, (hx and LongInt($800FFFFF)) or (k shl 20)));
+  if k <= -54 then
+  begin
+    if AN > 50000 then Exit(SignedInf(x < 0));
+    Exit(SignedZero(x < 0));
+  end;
+  k := k + 54;
+  x := WithHigh(x, (hx and LongInt($800FFFFF)) or (k shl 20));
+  Result := x * pw_twom54;
+end;
+
+function TyJsPow(AX, AY: Double): Double;
+var
+  z, absx, z_h, z_l, p_h, p_l, y1, t1, t2, r, s, t, u, v, w: Double;
+  ss, s2, s_h, s_l, t_h, t_l: Double;
+  i, j, k, yisint, n, hx, hy, ix, iy: LongInt;
+  lx, ly, uj: LongWord;
+  bpk, dphk, dplk: Double;
+begin
+  hx := HighWord(AX);
+  lx := LowWord(AX);
+  hy := HighWord(AY);
+  ly := LowWord(AY);
+  ix := hx and $7FFFFFFF;
+  iy := hy and $7FFFFFFF;
+
+  { y == zero: x**0 = 1 }
+  if (iy or LongInt(ly)) = 0 then Exit(1.0);
+  { +-NaN return x + y }
+  if (ix > $7FF00000) or ((ix = $7FF00000) and (lx <> 0))
+    or (iy > $7FF00000) or ((iy = $7FF00000) and (ly <> 0)) then
+    Exit(AX + AY);
+
+  { is y an odd integer when x < 0: 0 not an integer, 1 odd, 2 even }
+  yisint := 0;
+  if hx < 0 then
+  begin
+    if iy >= $43400000 then yisint := 2
+    else if iy >= $3FF00000 then
+    begin
+      k := (iy shr 20) - $3FF;
+      if k > 20 then
+      begin
+        uj := ly shr (52 - k);
+        if LongWord(uj shl (52 - k)) = ly then yisint := 2 - LongInt(uj and 1);
+      end
+      else if ly = 0 then
+      begin
+        j := iy shr (20 - k);
+        if (j shl (20 - k)) = iy then yisint := 2 - (j and 1);
+      end;
+    end;
+  end;
+
+  { special values of y }
+  if ly = 0 then
+  begin
+    if iy = $7FF00000 then                       { y is +-inf }
+    begin
+      if ((ix - $3FF00000) or LongInt(lx)) = 0 then
+        Exit(NaN)                                { (+-1)**+-inf is NaN }
+      else if ix >= $3FF00000 then               { (|x|>1)**+-inf = inf, 0 }
+      begin
+        if hy >= 0 then Exit(AY) else Exit(0.0);
+      end
+      else                                       { (|x|<1)**-,+inf = inf, 0 }
+      begin
+        if hy < 0 then Exit(-AY) else Exit(0.0);
+      end;
+    end;
+    if iy = $3FF00000 then                       { y is +-1 }
+    begin
+      if hy < 0 then
+      begin
+        if AX = 0 then Exit(SignedInf(hx < 0));
+        Exit(MulOrDivQuiet(1.0, AX, True));
+      end;
+      Exit(AX);
+    end;
+    if hy = $40000000 then Exit(MulOrDivQuiet(AX, AX, False));   { y is 2 }
+    if (hy = $3FE00000) and (hx >= 0) then       { y is 0.5, x >= +0 }
+      Exit(Sqrt(AX));
+  end;
+
+  absx := Abs(AX);
+  { special values of x }
+  if lx = 0 then
+    if (ix = $7FF00000) or (ix = 0) or (ix = $3FF00000) then
+    begin
+      z := absx;                                   { x is +-0, +-inf, +-1 }
+      if hy < 0 then
+      begin
+        if z = 0 then z := Infinity else z := 1.0 / z;
+      end;
+      if hx < 0 then
+      begin
+        if ((ix - $3FF00000) or yisint) = 0 then
+          z := NaN                               { (-1)**non-int is NaN }
+        else if yisint = 1 then
+          z := -z;                               { (x<0)**odd = -(|x|**odd) }
+      end;
+      Exit(z);
+    end;
+
+  n := LongInt(LongWord(hx) shr 31) - 1;        { 0 when x < 0, -1 otherwise }
+  { (x<0)**(non-int) is NaN }
+  if (n or yisint) = 0 then Exit(NaN);
+  s := 1.0;
+  if (n or (yisint - 1)) = 0 then s := -1.0;    { (-ve)**(odd int) }
+
+  if iy > $41E00000 then                         { |y| > 2**31 }
+  begin
+    if iy > $43F00000 then                       { |y| > 2**64: must o/uflow }
+    begin
+      if ix <= $3FEFFFFF then
+      begin
+        if hy < 0 then Exit(Infinity) else Exit(0.0);
+      end;
+      if ix >= $3FF00000 then
+      begin
+        if hy > 0 then Exit(Infinity) else Exit(0.0);
+      end;
+    end;
+    { over/underflow if x is not close to one }
+    if ix < $3FEFFFFF then
+    begin
+      if hy < 0 then Exit(SignedInf(s < 0)) else Exit(SignedZero(s < 0));
+    end;
+    if ix > $3FF00000 then
+    begin
+      if hy > 0 then Exit(SignedInf(s < 0)) else Exit(SignedZero(s < 0));
+    end;
+    { |1 - x| is tiny <= 2**-20: log(x) by x - x^2/2 + x^3/3 - x^4/4 }
+    t := absx - 1.0;
+    w := (t * t) * (0.5 - t * (pw_thrd - t * 0.25));
+    u := pw_ivln2_h * t;
+    v := t * pw_ivln2_l - w * pw_ivln2;
+    t1 := u + v;
+    t1 := WithLow(t1, 0);
+    t2 := v - (t1 - u);
+  end
+  else
+  begin
+    n := 0;
+    { take care of a subnormal }
+    if ix < $00100000 then
+    begin
+      absx := absx * pw_two53;
+      n := n - 53;
+      ix := HighWord(absx);
+    end;
+    n := n + (ix shr 20) - $3FF;
+    j := ix and $000FFFFF;
+    { determine the interval }
+    ix := j or $3FF00000;
+    if j <= $3988E then k := 0                   { |x| < sqrt(3/2) }
+    else if j < $BB67A then k := 1               { |x| < sqrt(3) }
+    else
+    begin
+      k := 0;
+      n := n + 1;
+      ix := ix - $00100000;
+    end;
+    absx := WithHigh(absx, ix);
+    if k = 0 then
+    begin
+      bpk := 1.0;
+      dphk := 0.0;
+      dplk := 0.0;
+    end
+    else
+    begin
+      bpk := 1.5;
+      dphk := pw_dp_h1;
+      dplk := pw_dp_l1;
+    end;
+
+    { ss = s_h + s_l = (x-1)/(x+1) or (x-1.5)/(x+1.5) }
+    u := absx - bpk;
+    v := 1.0 / (absx + bpk);
+    ss := u * v;
+    s_h := ss;
+    s_h := WithLow(s_h, 0);
+    { t_h = absx + bp[k], high }
+    t_h := 0.0;
+    t_h := WithHigh(t_h, ((ix shr 1) or $20000000) + $00080000 + (k shl 18));
+    t_l := absx - (t_h - bpk);
+    s_l := v * ((u - s_h * t_h) - s_h * t_l);
+    { log(absx) }
+    s2 := ss * ss;
+    r := s2 * s2 * (pw_L1 + s2 * (pw_L2 + s2 * (pw_L3 + s2 * (pw_L4
+      + s2 * (pw_L5 + s2 * pw_L6)))));
+    r := r + s_l * (s_h + ss);
+    s2 := s_h * s_h;
+    t_h := 3.0 + s2 + r;
+    t_h := WithLow(t_h, 0);
+    t_l := r - ((t_h - 3.0) - s2);
+    { u + v = ss * (1 + ...) }
+    u := s_h * t_h;
+    v := s_l * t_h + t_l * ss;
+    { 2/(3 log2) * (ss + ...) }
+    p_h := u + v;
+    p_h := WithLow(p_h, 0);
+    p_l := v - (p_h - u);
+    z_h := pw_cp_h * p_h;
+    z_l := pw_cp_l * p_h + p_l * pw_cp + dplk;
+    { log2(absx) = (ss + ..) * 2/(3 log2) = n + dp_h + z_h + z_l }
+    t := n;
+    t1 := ((z_h + z_l) + dphk) + t;
+    t1 := WithLow(t1, 0);
+    t2 := z_l - (((t1 - t) - dphk) - z_h);
+  end;
+
+  { split y into y1 + y2 and compute (y1 + y2) * (t1 + t2) }
+  y1 := AY;
+  y1 := WithLow(y1, 0);
+  p_l := (AY - y1) * t1 + AY * t2;
+  p_h := y1 * t1;
+  z := p_l + p_h;
+  j := HighWord(z);
+  i := LongInt(LowWord(z));
+  if j >= $40900000 then                         { z >= 1024 }
+  begin
+    if ((j - $40900000) or i) <> 0 then
+      Exit(SignedInf(s < 0))                     { overflow }
+    else if p_l + pw_ovt > z - p_h then
+      Exit(SignedInf(s < 0));
+  end
+  else if (j and $7FFFFFFF) >= $4090CC00 then    { z <= -1075 }
+  begin
+    if ((j - LongInt($C090CC00)) or i) <> 0 then
+      Exit(SignedZero(s < 0))                    { underflow }
+    else if p_l <= z - p_h then
+      Exit(SignedZero(s < 0));
+  end;
+  { 2**(p_h + p_l) }
+  i := j and $7FFFFFFF;
+  k := (i shr 20) - $3FF;
+  n := 0;
+  if i > $3FE00000 then                          { |z| > 0.5: n = [z + 0.5] }
+  begin
+    n := j + ($00100000 shr (k + 1));
+    k := ((n and $7FFFFFFF) shr 20) - $3FF;
+    t := 0.0;
+    t := WithHigh(t, n and not ($000FFFFF shr k));
+    n := ((n and $000FFFFF) or $00100000) shr (20 - k);
+    if j < 0 then n := -n;
+    p_h := p_h - t;
+  end;
+  t := p_l + p_h;
+  t := WithLow(t, 0);
+  u := t * pw_lg2_h;
+  v := (p_l - (t - p_h)) * pw_lg2 + t * pw_lg2_l;
+  z := u + v;
+  w := v - (z - u);
+  t := z * z;
+  t1 := z - t * (pw_P1 + t * (pw_P2 + t * (pw_P3 + t * (pw_P4 + t * pw_P5))));
+  { V8's line, not fdlibm's: the correction inside the divisor }
+  r := (z * t1) / ((t1 - 2.0) - (w + z * w));
+  z := 1.0 - (r - z);
+  j := HighWord(z);
+  j := j + (n shl 20);
+  if SarLongint(j, 20) <= 0 then
+    z := ScalbN(z, n)                            { subnormal output }
+  else
+    z := WithHigh(z, j);
+  Result := s * z;
+end;
+
+{$POP}
+
 initialization
   invpio2 := FromBits(QWord($3FE45F306DC9C883));
   pio2_1 := FromBits(QWord($3FF921FB54400000));
@@ -452,4 +877,41 @@ initialization
   pi_lo := FromBits(QWord($3CA1A62633145C07));
   tiny := FromBits(QWord($01A56E1FC2F8F359));
   negZero := FromBits(QWord($8000000000000000));
+  lg_ln2_hi := FromBits(QWord($3FE62E42FEE00000));
+  lg_ln2_lo := FromBits(QWord($3DEA39EF35793C76));
+  lg_two54 := FromBits(QWord($4350000000000000));
+  lg_third := FromBits(QWord($3FD5555555555555));
+  Lg1 := FromBits(QWord($3FE5555555555593));
+  Lg2 := FromBits(QWord($3FD999999997FA04));
+  Lg3 := FromBits(QWord($3FD2492494229359));
+  Lg4 := FromBits(QWord($3FCC71C51D8E78AF));
+  Lg5 := FromBits(QWord($3FC7466496CB03DE));
+  Lg6 := FromBits(QWord($3FC39A09D078C69F));
+  Lg7 := FromBits(QWord($3FC2F112DF3E5244));
+  pw_dp_h1 := FromBits(QWord($3FE2B80340000000));
+  pw_dp_l1 := FromBits(QWord($3E4CFDEB43CFD006));
+  pw_two53 := FromBits(QWord($4340000000000000));
+  pw_twom54 := FromBits(QWord($3C90000000000000));
+  pw_L1 := FromBits(QWord($3FE3333333333303));
+  pw_L2 := FromBits(QWord($3FDB6DB6DB6FABFF));
+  pw_L3 := FromBits(QWord($3FD55555518F264D));
+  pw_L4 := FromBits(QWord($3FD17460A91D4101));
+  pw_L5 := FromBits(QWord($3FCD864A93C9DB65));
+  pw_L6 := FromBits(QWord($3FCA7E284A454EEF));
+  pw_P1 := FromBits(QWord($3FC555555555553E));
+  pw_P2 := FromBits(QWord($BF66C16C16BEBD93));
+  pw_P3 := FromBits(QWord($3F11566AAF25DE2C));
+  pw_P4 := FromBits(QWord($BEBBBD41C5D26BF1));
+  pw_P5 := FromBits(QWord($3E66376972BEA4D0));
+  pw_lg2 := FromBits(QWord($3FE62E42FEFA39EF));
+  pw_lg2_h := FromBits(QWord($3FE62E4300000000));
+  pw_lg2_l := FromBits(QWord($BE205C610CA86C39));
+  pw_ovt := FromBits(QWord($3C971547652B82FE));
+  pw_cp := FromBits(QWord($3FEEC709DC3A03FD));
+  pw_cp_h := FromBits(QWord($3FEEC709E0000000));
+  pw_cp_l := FromBits(QWord($BE3E2FE0145B01F5));
+  pw_ivln2 := FromBits(QWord($3FF71547652B82FE));
+  pw_ivln2_h := FromBits(QWord($3FF7154760000000));
+  pw_ivln2_l := FromBits(QWord($3E54AE0BF85DDF44));
+  pw_thrd := FromBits(QWord($3FD5555555555555));
 end.

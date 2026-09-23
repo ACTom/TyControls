@@ -325,6 +325,13 @@ type
     { Each label's place along the axis, as a fraction 0..1 of the axis' own
       extent measured from its start. Parallel to Labels. }
     Positions: TTyDoubleArray;
+    { Each label's tick value, and its place in the axis' OWN frame --
+      TTyAxis.DataToLocal on the rect of the pass being laid out. Parallel to
+      Labels. With these a label is placed as upstream places it, through
+      the axis group's matrix from the name frame; without them -- a spec
+      built by hand -- it falls back to the fraction along the plot. }
+    TickValues: TTyDoubleArray;
+    LocalCoords: TTyDoubleArray;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
@@ -1074,7 +1081,10 @@ function AxisScaleF(ALogical: Double; APPI: Integer): Double;
 begin
   if APPI <= 0 then
     Exit(ALogical);
-  Result := ALogical * APPI / 96;
+  { THE LENGTH AS WRITTEN at 96: v * 96 / 96 is not v for a sixth of all
+    doubles -- 2.7 and 12.3 among them -- and upstream uses the length as it
+    is. The ratio first, which is exactly 1 there. }
+  Result := ALogical * (APPI / 96);
 end;
 
 function AxisIsHorizontal(ASide: TTyAxisSide): Boolean;
@@ -1861,15 +1871,35 @@ var
   i, k, m, n: Integer;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
-  gap, len, iv: Double;
+  gap, len, iv, t: Double;
   values: TTyIntegerArray;
   offs: TTyBoolArray;
   cands: TTyLabelCandidateArray;
+  byFrame: Boolean;
+  fr: TTyAxisNameFrame;
+  g, lm: TTyMat2D;
 begin
   Result := nil;
   SetLength(Result, Length(ASpec.Labels));
   if Length(ASpec.Labels) = 0 then Exit;
   AnchorsFor(ASpec, ah, av);
+  { UPSTREAM'S ANCHOR (AxisBuilder): the label's point in the axis' own
+    frame -- its coordinate c along, and t across, the label offset of an
+    axis on the other's zero plus the margin outward -- turned into the
+    canvas by the axis group's matrix, [1,0,0,1,X,Y] across and a quarter
+    turn down. That turn is not exact: cos(pi/2) is 6e-17, and it moves a
+    y axis' labels in their last bits, as upstream's move. The offset is
+    already in the frame's X and Y, so not in t. }
+  byFrame := Length(ASpec.LocalCoords) = Length(ASpec.Labels);
+  if byFrame then
+  begin
+    if ASpec.HasNameFrame then fr := ASpec.NameFrame
+    else fr := TyDefaultNameFrame(ASpec, APlot, APPI);
+    t := AxisScaleF(ASpec.LabelMarginLogical, APPI);
+    if ASpec.LabelInside then t := -t;
+    t := fr.LabelOffset + fr.NameDirection * t;
+    g := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
+  end;
   { THE SAME SUM TyAxisThickness RESERVES, and it has to be: the thickness is
     what the plot gives up and this is where the text goes in it. They were
     written apart, so the moment the thickness stopped charging for a hidden
@@ -1911,6 +1941,13 @@ begin
       on it is AnchorsFor's, for all four alike. }
     Result[i].AnchorH := ah;
     Result[i].AnchorV := av;
+    if byFrame then
+    begin
+      lm := TyMatMul(g, TyMatLocal(ASpec.LocalCoords[i], t, 0));
+      Result[i].X := lm[4];
+      Result[i].Y := lm[5];
+    end
+    else
     case ASpec.Side of
       asBottom:
         begin
