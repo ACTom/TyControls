@@ -14,7 +14,7 @@ interface
 
 uses
   Classes, SysUtils, Types, LCLType, Controls, Forms, fpcunit, testregistry,
-  tyControls.Controller, tyControls.Edit, tyControls.ToolWindows;
+  tyControls.Controller, tyControls.Edit, tyControls.Button, tyControls.ToolWindows;
 
 type
   TTyToolWindowFocusTests = class(TTestCase)
@@ -24,6 +24,7 @@ type
     FBar: TTyToolWindowBar;
     FWin, FWin2: TTyToolWindow;
     FEdit, FEdit2, FOutside: TTyEdit;
+    FButton2: TTyButton;
     { Tab 顺序在栏**前面**的一个编辑框。没有它,「焦点去了哪」分不出是栏的 SelectNext
       挪的还是平台自己挪的:Win32 上藏掉焦点所在的窗口,LCL 把 ActiveControl 置 nil
       (customform.inc:901-910)之后,焦点并不停在窗体本身,而是落到窗体里 Tab 顺序第一个
@@ -110,6 +111,10 @@ begin
   FWin2 := TTyToolWindow.Create(FForm);
   FWin2.Parent := FBar;
   FEdit2 := NewEditIn(FWin2, 40);
+  { 第二页带一个操作区,里面一个按钮:TabOrder 0,Tab 顺序在正文前面。切页带焦点进来时
+    要落在正文里,不是它上面(spec §5.1 第 5 步)。 }
+  FButton2 := TTyButton.Create(FForm);
+  FButton2.Parent := FWin2.EnsureActions;
   { 栏外面、Tab 顺序在栏**后面**的可聚焦控件:收起时 SelectNext(栏) 的去处。 }
   FOutside := NewEditIn(FForm, 8);
   FOutside.Left := 500;
@@ -146,7 +151,9 @@ begin
   FBar.ActiveWindow := FWin2;
   AssertNothingRaised('切页');
   { 删掉 FocusFirst 的话,旧页藏起来之后焦点落到 FBefore(平台挑的第一个)。 }
-  AssertSame('焦点原来在旧页里:落到新页第一个可聚焦控件', FEdit2, FForm.ActiveControl);
+  AssertTrue('前提:标题行的按钮聚焦得上', FButton2.CanFocus);
+  AssertSame('焦点原来在旧页里:落到新页正文里第一个可聚焦控件,不是标题行的按钮',
+    FEdit2, FForm.ActiveControl);
   FOutside.SetFocus;
   AssertSame('前提:焦点在栏外', FOutside, FForm.ActiveControl);
   FBar.ActiveWindow := FWin;

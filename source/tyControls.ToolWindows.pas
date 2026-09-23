@@ -1131,7 +1131,36 @@ begin
 end;
 
 procedure TTyToolWindow.FocusFirst;
+var
+  form: TCustomForm;
+  act: TTyToolWindowActions;
+  list: TFPList;
+  c: TWinControl;
+  pass, i: Integer;
 begin
+  { 同 SelectFirst(先要 TabStop 的,没有再放宽),但跳过操作区那一棵子树:切页把焦点带进新页
+    时要落在正文里,不是标题行的按钮上(spec §5.1 第 5 步)。正文里一个可聚焦的都没有,
+    才退回整个窗口(含操作区)—— 总比把焦点留在刚藏起来的旧页里强。 }
+  form := GetParentForm(Self);
+  if form = nil then Exit;
+  act := Actions;
+  list := TFPList.Create;
+  try
+    GetTabOrderList(list);
+    for pass := 0 to 1 do
+      for i := 0 to list.Count - 1 do
+      begin
+        c := TWinControl(list[i]);
+        if (act <> nil) and ((c = act) or act.ContainsControl(c)) then Continue;
+        if ((pass = 1) or c.TabStop) and c.Enabled and c.IsVisible then
+        begin
+          form.ActiveControl := c;
+          Exit;
+        end;
+      end;
+  finally
+    list.Free;
+  end;
   SelectFirst;
 end;
 
