@@ -31,6 +31,8 @@ type
     function AddActionsKid(AWin: TTyToolWindow; AW, AH: Integer): TBodyChild;
     { 当前页:对齐计数清零、绘制缓存填上一帧,之后看「有没有被请重排 / 丢缓存」。 }
     procedure ArmActive(AWin: TProbeWindow);
+    { 把 AWin 按 AW×AH、APPI 画出来;先铺底漆 Wipe。调用方释放。 }
+    function RenderPage(AWin: TProbeWindow; AW, AH, APPI: Integer): TBitmap;
   published
     { Task 3:装配。 }
     procedure TestTheActionsSitInTheBottomRowBeforeTheButtons;
@@ -49,9 +51,95 @@ type
     procedure TestAWindowJoiningCountsTowardsTheSharedHeight;
     procedure TestAConstraintsOnlyChangeReachesTheRow;
     procedure TestAThemeChangeStillRelayoutsABottomPage;
+    { Task 5:标签行绘制(哨兵底色,地雷 13)。 }
+    procedure TestTheUnderlineSitsOnTheActiveTabsBottomOnly;
+    procedure TestTheIndicatorSizeTokenSetsTheUnderlineRows;
+    procedure TestSelectedInkOnlyOnTheActiveTabRestingInkOnTheOthers;
+    procedure TestAHiddenPagePaintsNoTabRow;
+    procedure TestTheOverflowButtonPaintsOnlyWhenSomethingIsHidden;
+    procedure TestTheSeparatorIsALineCentredInItsSlot;
+    procedure TestTheUnderlineFollowsTheMirroredTab;
+    procedure TestRenderingAt144ScalesTabsAndButtons;
+    procedure TestRenamingAHiddenPageRepaintsTheActivePage;
+    procedure TestReorderingRepaintsTheActivePage;
   end;
 
 implementation
+
+const
+  { 标签行钉成品红底(窗口本身也是)、静止墨蓝、选中墨黄、下划线黑、分隔线青
+    (不用绿:绿是夹具的底漆 Wipe)。 }
+  BottomTheme = ':root { --toolwindow-bg: #FF00FF; --toolwindow-header-bg: #FF00FF;' +
+    ' --toolwindow-tab-ink: #0000FF; --toolwindow-tab-ink-selected: #FFFF00;' +
+    ' --toolwindow-indicator-color: #000000; }' +
+    ' TyToolWindowSeparator { border-color: #00FFFF; border-width: 1px; }';
+  LineInk = TColor($FFFF00);
+
+{ ARect(位图坐标,钳进位图)里有多少像素:AExact 时恰好是 AInk;否则落在「AGround 上盖一层
+  半透明 AInk」那条混合线上(含实心,不含纯底色,算法同 CountInk)。 }
+function CountIn(ABmp: TBitmap; const ARect: TRect; AGround, AInk: TColor;
+  AExact: Boolean): Integer;
+var
+  re: TBGRABitmap;
+  g, k, px: TBGRAPixel;
+  x, y, c, best: Integer;
+  gv, kv, pv: array[0..2] of Integer;
+  a: Double;
+  ok: Boolean;
+  r: TRect;
+begin
+  Result := 0;
+  r := ARect;
+  if r.Left < 0 then r.Left := 0;
+  if r.Top < 0 then r.Top := 0;
+  if r.Right > ABmp.Width then r.Right := ABmp.Width;
+  if r.Bottom > ABmp.Height then r.Bottom := ABmp.Height;
+  g := ColorToBGRA(ColorToRGB(AGround));
+  k := ColorToBGRA(ColorToRGB(AInk));
+  gv[0] := g.red; gv[1] := g.green; gv[2] := g.blue;
+  kv[0] := k.red; kv[1] := k.green; kv[2] := k.blue;
+  best := 0;
+  for c := 1 to 2 do
+    if Abs(kv[c] - gv[c]) > Abs(kv[best] - gv[best]) then best := c;
+  re := TBGRABitmap.Create(ABmp);
+  try
+    for y := r.Top to r.Bottom - 1 do
+      for x := r.Left to r.Right - 1 do
+      begin
+        px := re.GetPixel(x, y);
+        pv[0] := px.red; pv[1] := px.green; pv[2] := px.blue;
+        if AExact then
+        begin
+          if (pv[0] = kv[0]) and (pv[1] = kv[1]) and (pv[2] = kv[2]) then Inc(Result);
+          Continue;
+        end;
+        if kv[best] = gv[best] then Continue;
+        a := (pv[best] - gv[best]) / (kv[best] - gv[best]);
+        if (a <= 0.01) or (a > 1.02) then Continue;
+        ok := True;
+        for c := 0 to 2 do
+          if Abs(gv[c] + a * (kv[c] - gv[c]) - pv[c]) > 3 then ok := False;
+        if ok then Inc(Result);
+      end;
+  finally
+    re.Free;
+  end;
+end;
+
+function ExactIn(ABmp: TBitmap; const ARect: TRect; AColor: TColor): Integer;
+begin
+  Result := CountIn(ABmp, ARect, AColor, AColor, True);
+end;
+
+function InkIn(ABmp: TBitmap; const ARect: TRect; AInk: TColor): Integer;
+begin
+  Result := CountIn(ABmp, ARect, Ground, AInk, False);
+end;
+
+function Area(const ARect: TRect): Integer;
+begin
+  Result := (ARect.Right - ARect.Left) * (ARect.Bottom - ARect.Top);
+end;
 
 procedure TTyToolWindowBottomTests.NewBottomBar(const ACaptions: array of string;
   AActive: Integer);
@@ -115,6 +203,16 @@ begin
   AWin.AlignCount := 0;
   AWin.PrimeCache(AWin.ClientWidth, AWin.ClientHeight);
   AssertFalse('前提:缓存填上了', AWin.CacheWouldRender(AWin.ClientWidth, AWin.ClientHeight));
+end;
+
+function TTyToolWindowBottomTests.RenderPage(AWin: TProbeWindow; AW, AH, APPI: Integer): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.PixelFormat := pf32bit;
+  Result.SetSize(AW, AH);
+  Result.Canvas.Brush.Color := Wipe;
+  Result.Canvas.FillRect(0, 0, AW, AH);
+  AWin.CallRenderTo(Result.Canvas, Rect(0, 0, AW, AH), APPI);
 end;
 
 { --- Task 3 --------------------------------------------------------------------- }
@@ -415,6 +513,253 @@ begin
   { 换主题只广播裸 Invalidate;窗口在自己的 Invalidate 里看 token 缓存察觉。栏替它先读了
     那个缓存,它就再也看不出来(谁先读就是谁的)。 }
   AssertTrue('底栏窗口照样被请重排', w.AlignCount > 0);
+end;
+
+{ --- Task 5 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowBottomTests.TestTheUnderlineSitsOnTheActiveTabsBottomOnly;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+  i: Integer;
+begin
+  { 三个标题长短不一,当前页是第二个(地雷 12)。 }
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  g := ActiveGeom;
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('整块都画到', 0, CountExact(bmp, Wipe));
+    for i := 0 to 2 do
+    begin
+      r := TabRectOf(g, i);
+      if i = 1 then
+      begin
+        { 下划线横跨文字框(标签左右各内缩 tab-pad 10)、贴底边、粗 2。 }
+        AssertEquals('当前页:下划线正好是文字框宽 × 2 行', (r.Width - 20) * 2,
+          ExactIn(bmp, r, clBlack));
+        AssertEquals('全在底边那两行', (r.Width - 20) * 2,
+          ExactIn(bmp, Rect(r.Left, r.Bottom - 2, r.Right, r.Bottom), clBlack));
+      end
+      else
+        AssertEquals(Format('标签 %d 不是当前页:没有下划线', [i]), 0, ExactIn(bmp, r, clBlack));
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestTheIndicatorSizeTokenSetsTheUnderlineRows;
+var
+  w: TProbeWindow;
+  bmp: TBitmap;
+  r: TRect;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme + ' :root { --toolwindow-indicator-size: 4px; }';
+  w := FWins[1];
+  r := TabRectOf(ActiveGeom, 1);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('粗 4:底边 4 行', (r.Width - 20) * 4,
+      ExactIn(bmp, Rect(r.Left, r.Bottom - 4, r.Right, r.Bottom), clBlack));
+    AssertEquals('再往上一行没有', 0,
+      ExactIn(bmp, Rect(r.Left, r.Top, r.Right, r.Bottom - 4), clBlack));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestSelectedInkOnlyOnTheActiveTabRestingInkOnTheOthers;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+  i: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  g := ActiveGeom;
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    for i := 0 to 2 do
+    begin
+      r := TabRectOf(g, i);
+      if i = 1 then
+      begin
+        AssertTrue('当前页:选中墨(黄)', InkIn(bmp, r, SelInk) > 0);
+        AssertEquals('当前页:没有静止墨(蓝)', 0, InkIn(bmp, r, RestInk));
+      end
+      else
+      begin
+        AssertTrue(Format('标签 %d:静止墨(蓝)', [i]), InkIn(bmp, r, RestInk) > 0);
+        AssertEquals(Format('标签 %d:没有选中墨(黄)', [i]), 0, InkIn(bmp, r, SelInk));
+      end;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestAHiddenPagePaintsNoTabRow;
+var
+  bmp: TBitmap;
+  row: TRect;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  bmp := RenderPage(FWins[0], 600, 240, 96);
+  try
+    row := Rect(0, 0, 600, TyToolWindowHeaderHeightDef);
+    AssertEquals('非当前页:标题行里没有静止墨', 0, InkIn(bmp, row, RestInk));
+    AssertEquals('非当前页:标题行里没有选中墨', 0, InkIn(bmp, row, SelInk));
+    AssertEquals('非当前页:没有下划线', 0, ExactIn(bmp, row, clBlack));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestTheOverflowButtonPaintsOnlyWhenSomethingIsHidden;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  g := ActiveGeom;
+  AssertTrue('前提:全放得下,没有溢出按钮', IsRectEmpty(g.Overflow));
+  { 溢出按钮要是出现,就在最后一个标签后面那一格。 }
+  r := Rect(g.Tabs[High(g.Tabs)].ItemRect.Right, 0, g.Tabs[High(g.Tabs)].ItemRect.Right + 22, 26);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('全放得下:那一格是底色', Area(r), ExactIn(bmp, r, Ground));
+  finally
+    bmp.Free;
+  end;
+  FBar.Width := 220;
+  Relayout;
+  g := ActiveGeom;
+  AssertFalse('前提:窄下来有东西收起', IsRectEmpty(g.Overflow));
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertTrue('溢出按钮里有字形(标签行墨色)', InkIn(bmp, g.Overflow, RestInk) > 0);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestTheSeparatorIsALineCentredInItsSlot;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+  mid: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  g := ActiveGeom;
+  r := g.Separator;
+  AssertEquals('前提:槽宽 2 × gap + 1', 9, r.Width);
+  mid := r.Left + 4;
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('中间那一列在按钮带里是线色', g.Maximize.Height,
+      ExactIn(bmp, Rect(mid, g.Maximize.Top, mid + 1, g.Maximize.Bottom), LineInk));
+    AssertEquals('左边的 gap 是底色', 4 * g.Maximize.Height,
+      ExactIn(bmp, Rect(r.Left, g.Maximize.Top, mid, g.Maximize.Bottom), Ground));
+    AssertEquals('右边的 gap 是底色', 4 * g.Maximize.Height,
+      ExactIn(bmp, Rect(mid + 1, g.Maximize.Top, r.Right, g.Maximize.Bottom), Ground));
+    AssertEquals('线只有一条', g.Maximize.Height, ExactIn(bmp, r, LineInk));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestTheUnderlineFollowsTheMirroredTab;
+var
+  w: TProbeWindow;
+  ltr, rtl: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  ltr := ActiveGeom;
+  FBar.BiDiMode := bdRightToLeft;
+  AssertTrue('前提:窗口跟着栏从右往左读', w.IsRightToLeft);
+  rtl := ActiveGeom;
+  r := TabRectOf(rtl, 1);
+  AssertFalse('前提:镜像前后当前页的标签不重叠',
+    IntersectRect(r, r, TabRectOf(ltr, 1)));
+  r := TabRectOf(rtl, 1);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('下划线落在镜像后的当前页标签里', (r.Width - 20) * 2, ExactIn(bmp, r, clBlack));
+    AssertEquals('没有落在镜像前的位置', 0, ExactIn(bmp, TabRectOf(ltr, 1), clBlack));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestRenderingAt144ScalesTabsAndButtons;
+var
+  w: TProbeWindow;
+  g96, g144: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  r: TRect;
+  i: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  g96 := ActiveGeom;
+  g144 := w.HeaderGeomAt(Rect(0, 0, 900, 360), 144);
+  AssertEquals('按钮按 144 缩放', 33, g144.Collapse.Width);
+  for i := 0 to 2 do
+    AssertTrue(Format('标签 %d 按 144 量(约 1.5 倍)', [i]),
+      Abs(TabRectOf(g144, i).Width * 2 - TabRectOf(g96, i).Width * 3) <= 8);
+  r := TabRectOf(g144, 1);
+  bmp := RenderPage(w, 900, 360, 144);
+  try
+    { 画的和排的是同一套尺度:下划线横跨 144 下的文字框(tab-pad 15)、粗 3。 }
+    AssertEquals('下划线按 144 的几何画', (r.Width - 30) * 3, ExactIn(bmp, r, clBlack));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestRenamingAHiddenPageRepaintsTheActivePage;
+var
+  w: TProbeWindow;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  ArmActive(w);
+  FWins[0].Caption := 'Problems and warnings';
+  AssertTrue('改的是别的页的标题,当前页也得重画(标签画在它里面)',
+    w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+end;
+
+procedure TTyToolWindowBottomTests.TestReorderingRepaintsTheActivePage;
+var
+  w: TProbeWindow;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  ArmActive(w);
+  FWins[0].WindowIndex := 2;
+  AssertTrue('调顺序之后当前页重画', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
 end;
 
 initialization

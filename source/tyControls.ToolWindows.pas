@@ -51,10 +51,12 @@ const
     名字不叫 ...Def —— 本库的 ...Var / ...Def 成对只用于「主题 token 与它的回落值」。 }
   TyToolWindowDefaultExpandedSize = 240;
 
-  { 本单元自己解析的样式类型键(spec §12)。底栏那几个(TabRow / TabIndicator / Button)
-    B 期接线时再加 —— 没人读的常量就是「建好没接线」。 }
+  { 本单元自己解析的样式类型键(spec §12)。 }
   TyToolWindowKey                = 'TyToolWindow';
+  TyToolWindowTabRowKey          = 'TyToolWindowTabRow';
   TyToolWindowTabKey             = 'TyToolWindowTab';
+  TyToolWindowTabIndicatorKey    = 'TyToolWindowTabIndicator';
+  TyToolWindowButtonKey          = 'TyToolWindowButton';
   TyToolWindowSeparatorKey       = 'TyToolWindowSeparator';
   TyToolWindowBarKey             = 'TyToolWindowBar';
   TyToolWindowActionsKey         = 'TyToolWindowActions';
@@ -388,8 +390,11 @@ type
     StrayNote: TRect;
   end;
 
-  { 栏上一个点落在哪个部件上(TTyToolWindowBar.PartAt)。 }
-  TTyToolWindowBarPart = (twbpNone, twbpItem, twbpOverflow, twbpEdge);
+  { 栏上一个点落在哪个部件上(TTyToolWindowBar.PartAt)。图标和底栏标签共用 twbpItem、两种溢出
+    共用 twbpOverflow:一条栏只会有其中一种,手势引擎和点击分派因此不用分两套。最大化 / 收起 /
+    分隔线只在底栏标签行上有。 }
+  TTyToolWindowBarPart = (twbpNone, twbpItem, twbpOverflow, twbpEdge,
+    twbpMaximize, twbpCollapse, twbpSeparator);
 
   { 图标条手势引擎的状态(spec §9.2)。Cancelled 之后的松开什么都不做,也不算点击。 }
   TTyToolWindowGestureState = (twgsIdle, twgsArmed, twgsDragging, twgsCancelled);
@@ -679,6 +684,23 @@ type
     { 某一页的操作区首选尺寸变了、或者窗口列表变了(spec §3.4):底栏统一行高的操作区那一项
       变了,就对**当前页**重排标题行。非当前页在切页第 4 步 RelayoutHeader 时现取。 }
     procedure ActionsSizeChanged;
+  private
+    { 标签行上悬停的部件和(标签时)窗口序号;没有悬停是 (twbpNone, -1)。标签行的悬停只在
+      当前页上,所以记在栏上一份就够。 }
+    FHeaderHoverPart: TTyToolWindowBarPart;
+    FHeaderHoverIndex: Integer;
+    { 标签行上 APart(标签时窗口序号 AIndex)此刻是不是按下着 —— 从手势引擎读,不另记:
+      武装着、捕获者是这一页、部件相同(标签还要窗口相同)。 }
+    function HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
+      AIndex: Integer): Boolean;
+    { 标签的状态:当前页只有 :selected(spec §12,禁用时再加 :disabled);其余按禁用 / 悬停 /
+      按下 / 静止。 }
+    function HeaderTabStates(AWindow: TTyToolWindow; AIndex: Integer): TTyStateSet;
+    { 溢出 / 最大化 / 收起按钮的状态:禁用 / 悬停 / 按下 / 静止。 }
+    function HeaderPartStates(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart): TTyStateSet;
+    { 标签行的像素属于当前页,当前页有绘制缓存(spec §3.5):标签行的一切视觉变化都经这里丢
+      当前页的缓存。只 Invalidate 栏的话,运行时当前页 blit 旧帧。 }
+    procedure InvalidateHeader;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
@@ -1121,10 +1143,15 @@ begin
 end;
 
 procedure TTyToolWindow.TextChanged;
+var
+  b: TTyToolWindowBar;
 begin
   inherited TextChanged;
   { 标题就画在自己的标题行里(见 RenderTo),不重画就停在上一句。 }
   Invalidate;
+  { 底栏:标题是一个标签,画在**当前页**里 —— 改的是别的页的标题也得让当前页重画。 }
+  b := Bar;
+  if b <> nil then b.InvalidateHeader;
 end;
 
 function TTyToolWindow.HeaderMode: TTyToolWindowHeaderMode;
@@ -1653,6 +1680,13 @@ begin
       if (Caption <> '') and (g.Caption.Right > g.Caption.Left) then
         P.DrawText(g.Caption, Caption, hdrS.FontName, ResolveFontSize(hdrS),
           hdrS.FontWeight, hdrS.TextColor, taLeftJustify, tlCenter, True);
+    end
+    { 底栏:标签行只由当前页代画(spec §7.1)。非当前页藏着(设计期也是 csNoDesignVisible),
+      它画出来的那一帧没人看得见,画了反而跟当前页的悬停 / 按下对不上。 }
+    else if (HeaderMode = twhBottom) and (hdr.Bottom > hdr.Top) and IsActive then
+    begin
+      g := HeaderGeomAt(R, APPI);
+      Bar.PaintHeader(Self, P, hdr, g, APPI);
     end;
     P.EndPaint;
   finally
@@ -2036,6 +2070,7 @@ begin
   FExpandedSize := TyToolWindowDefaultExpandedSize;
   FLoadingActiveIndex := -1;
   FBottomActionsPx := -1;
+  FHeaderHoverIndex := -1;
   FStripHover := -1;
   FStripPressed := -1;
   FDropSlot := -1;
@@ -3091,10 +3126,183 @@ begin
   Result := TyToolWindowHeaderLayout(HeaderInputFor(w, ARowWidth, ARowHeight, APPI));
 end;
 
+function TTyToolWindowBar.HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
+  AIndex: Integer): Boolean;
+begin
+  Result := (FGesture <> nil) and (FGesture.State = twgsArmed)
+    and (FGesture.Capturer = AWindow) and (FGesture.Part = APart);
+  if Result and (APart = twbpItem) then
+    Result := (AIndex >= 0) and (AIndex < WindowCount) and (FGesture.Window = Windows[AIndex]);
+end;
+
+function TTyToolWindowBar.HeaderTabStates(AWindow: TTyToolWindow; AIndex: Integer): TTyStateSet;
+begin
+  Result := [];
+  if AIndex = IndexOfWindow(FActive) then Include(Result, tysSelected);
+  { 禁用时保留 :selected(同图标条):灰掉的栏也得看得出哪一页是当前页。 }
+  if not Enabled then
+    Include(Result, tysDisabled)
+  else if not (tysSelected in Result) then
+  begin
+    if (FHeaderHoverPart = twbpItem) and (FHeaderHoverIndex = AIndex) then
+      Include(Result, tysHover);
+    if HeaderPressed(AWindow, twbpItem, AIndex) then Include(Result, tysActive);
+  end;
+  if Result = [] then Include(Result, tysNormal);
+end;
+
+function TTyToolWindowBar.HeaderPartStates(AWindow: TTyToolWindow;
+  APart: TTyToolWindowBarPart): TTyStateSet;
+begin
+  Result := [];
+  if not Enabled then
+    Include(Result, tysDisabled)
+  else
+  begin
+    if FHeaderHoverPart = APart then Include(Result, tysHover);
+    if HeaderPressed(AWindow, APart, -1) then Include(Result, tysActive);
+  end;
+  if Result = [] then Include(Result, tysNormal);
+end;
+
+procedure TTyToolWindowBar.InvalidateHeader;
+begin
+  if (FPlacement = twpBottom) and (FActive <> nil)
+     and not (csDestroying in ComponentState) then
+    FActive.Invalidate;
+end;
+
 procedure TTyToolWindowBar.PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter;
   const ARow: TRect; const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
+var
+  cls: string;
+  S: TTyStyleSet;
+  r, box, gr: TRect;
+  fill: TTyFill;
+  pad, indPx, glyphPx, line, active, i, idx, bandTop, bandBottom: Integer;
+
+  { 部件矩形换到画笔坐标(行在窗口里的位置)。 }
+  function Place(const ARect: TRect): TRect;
+  begin
+    Result := ARect;
+    Types.OffsetRect(Result, ARow.Left, ARow.Top);
+  end;
+
+  function IsEmptyBox(const ARect: TRect): Boolean;
+  begin
+    Result := (ARect.Right <= ARect.Left) or (ARect.Bottom <= ARect.Top);
+  end;
+
+  { 按钮格里居中一个字形大小的方框(照图标条的溢出按钮)。 }
+  function GlyphBox(const ACell: TRect): TRect;
+  begin
+    Result := ACell;
+    if glyphPx < Result.Right - Result.Left then
+    begin
+      Result.Left := Result.Left + (Result.Right - Result.Left - glyphPx) div 2;
+      Result.Right := Result.Left + glyphPx;
+    end;
+    if glyphPx < Result.Bottom - Result.Top then
+    begin
+      Result.Top := Result.Top + (Result.Bottom - Result.Top - glyphPx) div 2;
+      Result.Bottom := Result.Top + glyphPx;
+    end;
+  end;
+
+  { 溢出 / 最大化 / 收起:底色 + 字形,墨色取这个键自己的 color(spec §12)。 }
+  procedure PaintButton(const ACell: TRect; const AKey: string; APart: TTyToolWindowBarPart;
+    AGlyph: TTyGlyphKind);
+  var
+    cell: TRect;
+    bs: TTyStyleSet;
+  begin
+    cell := Place(ACell);
+    if IsEmptyBox(cell) then Exit;
+    bs := ActiveController.Model.ResolveStyle(AKey, cls, HeaderPartStates(AWindow, APart));
+    if tpBackground in bs.Present then
+      APainter.FillBackground(cell, bs.Background, 0);
+    if glyphPx > 0 then
+      TyDrawGlyph(APainter, ActiveController, GlyphBox(cell), AGlyph, bs.TextColor, 1);
+  end;
+
 begin
-  { Task 5 填:标签行由当前页代画。 }
+  { 一切画进 BGRA 层,在调用方的 EndPaint 之前(之后画 GDI 会被盖掉)。几何已经镜像过
+    (RTL 只镜像一次),这里只按矩形画;文字的阅读方向由画笔自己的 RTL 管。 }
+  cls := TyStyleClassFor(Self, StyleClass);
+  pad := TokenPxAt(TyToolWindowTabPadVar, TyToolWindowTabPadDef, APPI);
+  indPx := TokenPxAt(TyToolWindowIndicatorSizeVar, TyToolWindowIndicatorSizeDef, APPI);
+  glyphPx := TokenPxAt(TyToolWindowGlyphSizeVar, TyToolWindowGlyphSizeDef, APPI);
+  fill := Default(TTyFill);
+  fill.Kind := tfkSolid;
+
+  { 1. 标签行底色。 }
+  S := ActiveController.Model.ResolveStyle(TyToolWindowTabRowKey, cls, [tysNormal]);
+  if tpBackground in S.Present then
+    APainter.FillBackground(ARow, S.Background, 0);
+
+  { 2、3. 标签与当前页的下划线。 }
+  active := IndexOfWindow(FActive);
+  for i := 0 to High(AGeom.Tabs) do
+  begin
+    r := Place(AGeom.Tabs[i].ItemRect);
+    idx := AGeom.Tabs[i].ItemIndex;
+    if IsEmptyBox(r) or (idx < 0) or (idx >= WindowCount) then Continue;
+    S := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls,
+      HeaderTabStates(AWindow, idx));
+    if tpBackground in S.Present then
+      APainter.FillBackground(r, S.Background, 0);
+    { 文字框:标签左右各内缩 tab-pad。只有被截的当前页标签会真的出省略号。 }
+    box := r;
+    InflateRect(box, -pad, 0);
+    if box.Right > box.Left then
+    begin
+      if Windows[idx].Caption <> '' then
+        APainter.DrawText(box, Windows[idx].Caption, S.FontName, ResolveFontSize(S),
+          S.FontWeight, S.TextColor, taCenter, tlCenter, True);
+      { 下划线贴标签底边,横向跨文字框;粗细 0 = 不画。 }
+      if (idx = active) and (indPx > 0) then
+      begin
+        S := ActiveController.Model.ResolveStyle(TyToolWindowTabIndicatorKey, cls, [tysNormal]);
+        if tpBackground in S.Present then
+        begin
+          gr := Rect(box.Left, r.Bottom - indPx, box.Right, r.Bottom);
+          if gr.Top < r.Top then gr.Top := r.Top;
+          APainter.FillBackground(gr, S.Background, 0);
+        end;
+      end;
+    end;
+  end;
+
+  { 4. 溢出按钮(有东西收起时才有)。下拉用空心 V(开工前问题 6)。 }
+  PaintButton(AGeom.Overflow, TyToolWindowOverflowKey, twbpOverflow, tgChevronDown);
+
+  { 5. 分隔线:槽中间一条线,纵向跟按钮带同高。 }
+  r := Place(AGeom.Separator);
+  line := SeparatorLinePx(APPI);
+  if not IsEmptyBox(r) and (line > 0) then
+  begin
+    S := ActiveController.Model.ResolveStyle(TyToolWindowSeparatorKey, cls, [tysNormal]);
+    if line > r.Right - r.Left then line := r.Right - r.Left;
+    gr := Place(AGeom.Maximize);
+    if IsEmptyBox(gr) then gr := Place(AGeom.Collapse);
+    if IsEmptyBox(gr) then
+    begin
+      bandTop := r.Top;
+      bandBottom := r.Bottom;
+    end
+    else
+    begin
+      bandTop := gr.Top;
+      bandBottom := gr.Bottom;
+    end;
+    fill.Color := S.BorderColor;
+    i := r.Left + (r.Right - r.Left - line) div 2;
+    APainter.FillBackground(Rect(i, bandTop, i + line, bandBottom), fill, 0);
+  end;
+
+  { 6. 最大化、收起。收起用「隐藏」的横线(tgMinimize):tgClose 会被读成「关掉这个窗口」。 }
+  PaintButton(AGeom.Maximize, TyToolWindowButtonKey, twbpMaximize, tgMaximize);
+  PaintButton(AGeom.Collapse, TyToolWindowButtonKey, twbpCollapse, tgMinimize);
 end;
 
 function TTyToolWindowBar.HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer;
@@ -3649,6 +3857,8 @@ procedure TTyToolWindowBar.CMEnabledChanged(var Message: TLMessage);
 begin
   inherited;
   if not Enabled then ResetGesture(twgeCancel);
+  { 标签行跟着灰掉 / 恢复(它画在当前页里)。 }
+  InvalidateHeader;
 end;
 
 procedure TTyToolWindowBar.CMVisibleChanged(var Message: TLMessage);
@@ -3794,6 +4004,7 @@ begin
   { 不激活、不展开、不换父(spec §9.5);当前页还是那个窗口,ActiveIndex 跟着变,不发 OnChange。 }
   SetControlIndex(AWindow, ControlIndexForWindowPos(AWindow, AIndex));
   Invalidate;
+  InvalidateHeader;
   if [csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning] then
     OwnerFormDesignerModified(Self);
 end;
@@ -4077,6 +4288,7 @@ begin
     SetControlIndex(TControl(Child),
       ControlIndexForWindowPos(TTyToolWindow(Child), Order));
     Invalidate;
+    InvalidateHeader;
   end
   else
     inherited SetChildOrder(Child, Order);
@@ -4271,6 +4483,8 @@ begin
   Invalidate;
   { 底栏统一行高:窗口列表变了,操作区那一项可能跟着变(spec §3.4)。 }
   ActionsSizeChanged;
+  { 标签多了一个。 }
+  InvalidateHeader;
   if FActive <> prev then DoChange;
 end;
 
@@ -4354,6 +4568,7 @@ begin
   Relayout;
   Invalidate;
   ActionsSizeChanged;
+  InvalidateHeader;
   if FActive <> prev then DoChange;
 end;
 
