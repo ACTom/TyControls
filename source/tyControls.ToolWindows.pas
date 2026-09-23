@@ -468,8 +468,8 @@ type
     function ContentMinPx: Integer;
     property Windows[AIndex: Integer]: TTyToolWindow read GetWindow;
     property WindowCount: Integer read GetWindowCount;
-    { 设成不在本栏里的窗口(或 nil)被忽略。加载中答 nil(见 FActive),设进来的记作
-      待定,Loaded 应用。 }
+    { 设成不在本栏里的窗口(或 nil)被忽略。加载中答 nil(见 FActive)—— 继承窗体的第二遍
+      加载例外,那时答第一遍挑好、正显示着的那一页。设进来的记作待定,Loaded 应用。 }
     property ActiveWindow: TTyToolWindow read FActive write ActivateWindow;
   published
     property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
@@ -1986,25 +1986,24 @@ end;
 
 procedure TTyToolWindowBar.BeginSilent;
 var
-  wins: TTyToolWindowArray;
   i: Integer;
 begin
+  { 走 FRegistered 而不是 Controls:这一批的账是按注册记的(注册时补层、注销时还层)。
+    释放那条路上窗口先被 RemoveControl 摘下、过一阵才由 Notification 注销 ——
+    按 Controls 找的话,这个空档里的 End 会漏掉它,它就带着一层静默走了。 }
   Inc(FSilent);
-  wins := WindowList(nil);
-  for i := 0 to High(wins) do
-    if IsRegistered(wins[i]) then wins[i].BeginSilentVisibility;
+  for i := 0 to High(FRegistered) do
+    FRegistered[i].BeginSilentVisibility;
 end;
 
 procedure TTyToolWindowBar.EndSilent;
 var
-  wins: TTyToolWindowArray;
   i: Integer;
 begin
   { 同 EndSilentVisibility 钳住 0:没配对的 End 不许把窗口那边的计数也减下去。 }
   if FSilent <= 0 then Exit;
-  wins := WindowList(nil);
-  for i := 0 to High(wins) do
-    if IsRegistered(wins[i]) then wins[i].EndSilentVisibility;
+  for i := 0 to High(FRegistered) do
+    FRegistered[i].EndSilentVisibility;
   Dec(FSilent);
 end;
 
