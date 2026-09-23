@@ -2104,6 +2104,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 > **Task 5 推给本节、而本节初稿没写的两件事**：
 > - spec §5.1 第 4 步「切页后按 `Mouse.CursorPos` 重查悬停」——Task 5 在 `SwitchCore` 里留了注释指向这里。
+> - **图标条的提示**（spec §8）：Task 6 只做了取字函数 `StripHintText(AWindow)`（`StripHint`，空则 `Caption`，绝不用 `Hint`）。本节接上栏的 `CM_HINTSHOW`：指针在某个图标上时给 `HintStr` 和该图标的 `CursorRect`，不在图标上走继承。`CM_HINTSHOW` 在本库没有先例，形状照 LCL（`controls.pp` 的 `THintInfo`，处理器返回 0 = 显示），把「(X,Y) → (文字, 矩形)」做成纯查询来测。
 > - spec §5.2「`Notification(opRemove)` 清掉属于被移除窗口的悬停、按下部件和手势记录」——有了悬停和手势状态之后在这里补，配一条「窗口在 Armed 状态被释放，松开不许当成点击」的测试。
 
 ### Task 7: 图标条手势（松开切换、收起、防抖、多击、设计期）
