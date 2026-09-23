@@ -410,19 +410,30 @@ begin
 end;
 
 procedure TTyToolWindowTests.TestDesignTimeVisibilityFiresNothing;
+var
+  w2: TProbeWindow;
 begin
-  { spec §6.6:设计期切 Visible 是设计器在摆控件 / 点页签,不是用户眼里的显示隐藏。 }
+  { spec §6.6:设计期切 Visible 是设计器在点页签,不是用户眼里的显示隐藏。
+    外部写 Visible 经栏路由(Task 10):设计期设 True 只激活、设 False 忽略,本身就不动
+    Visible —— 所以这里让**栏**来切(它在 FBarSwitching 下真的开关 Visible),守的是
+    CM_VISIBLECHANGED 里那道设计期闸。 }
+  w2 := TProbeWindow.Create(FForm);
+  w2.Parent := FBar;
+  w2.Controller := FCtl;
+  AssertFalse('前提:第二个窗口进来,FWin 藏起来了', FWin.Visible);
   FWin.OnShow := @HandleShow;
   FWin.OnHide := @HandleHide;
   FShows := 0;
   FHides := 0;
   FWin.MarkDesigning(True);
-  FWin.Visible := True;
-  FWin.Visible := False;
+  FBar.ActiveWindow := FWin;
+  AssertTrue('前提:栏真的把它显示出来了', FWin.Visible);
+  FBar.ActiveWindow := w2;
+  AssertFalse('前提:又藏起来了', FWin.Visible);
   AssertEquals('设计期不发 OnShow', 0, FShows);
   AssertEquals('设计期不发 OnHide', 0, FHides);
   FWin.MarkDesigning(False);
-  FWin.Visible := True;
+  FBar.ActiveWindow := FWin;
   AssertEquals('回到运行期照发', 1, FShows);
 end;
 

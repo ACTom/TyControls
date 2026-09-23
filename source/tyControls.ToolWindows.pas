@@ -204,7 +204,8 @@ type
     { 照 TTyTabSheet.SetParent:先记旧父控件 → 继承 → 从旧栏注销(任一方 csDestroying
       时跳过,释放那条路由 Notification 管)→ 注册到新栏 → 重排标题行(spec §3.2)。 }
     procedure SetParent(NewParent: TWinControl); override;
-    { 这里只记探针;对外设 Visible 经栏路由(spec §3.3)在 Task 10。 }
+    { 对外设 Visible 经栏路由(spec §3.3):运行时 True = 激活并展开,对当前页 False = 收起;
+      设计期 True 只激活。栏自己切的(FBarSwitching)照写,并记探针。 }
     procedure SetVisible(Value: Boolean); override;
     { 推送链的第二段:窗口 → **每一个**操作区。多出来的那些设计期要按它画提示。 }
     procedure SetController(AValue: TTyStyleController); override;
@@ -413,7 +414,7 @@ type
       离开,就会指到别的窗口上。Loaded 应用完把序号记成真正应用的那一个、窗口清空。 }
     FLoadingActiveIndex: Integer;
     FLoadingTarget: TTyToolWindow;
-    { 栏自己在切 Visible:Task 10 的 TTyToolWindow.SetVisible 看见它就直接放行。 }
+    { 栏自己在切 Visible:TTyToolWindow.SetVisible 看见它就直接放行,不再路由回栏。 }
     FBarSwitching: Boolean;
     FDeriving: Boolean;
     FRelayouting: Boolean;
@@ -1141,10 +1142,45 @@ begin
 end;
 
 procedure TTyToolWindow.SetVisible(Value: Boolean);
+var
+  b: TTyToolWindowBar;
 begin
-  { 探针只读真实状态:此刻的 ControlStyle。 }
-  FNoDesignVisibleAtShow := csNoDesignVisible in ControlStyle;
-  inherited SetVisible(Value);
+  b := Bar;
+  { 每条栏同时只显示一页,这个不变量由栏守(spec §3.3)。栏自己在切页 / 收起 / 展开
+    (FBarSwitching),或者窗口不在栏里(构造、孤儿):照写。 }
+  if (b = nil) or b.FBarSwitching then
+  begin
+    { 探针只读真实状态:此刻的 ControlStyle。 }
+    FNoDesignVisibleAtShow := csNoDesignVisible in ControlStyle;
+    inherited SetVisible(Value);
+    Exit;
+  end;
+  { 加载中的赋值忽略:当前页由栏的 Loaded 挑。正在拆的窗口也不许借这一句去收起栏。 }
+  if ([csLoading, csDestroying] * ComponentState <> [])
+     or ([csLoading, csDestroying] * b.ComponentState <> []) then Exit;
+  if csDesigning in ComponentState then
+  begin
+    { 设计期:外部设 True 只激活,不写 Collapsed;对当前页设 False 忽略。否则对象查看器里
+      一勾,Collapsed 就被写进 .lfm,设计期又永远按展开显示,用户看不到,运行时却是收起的。 }
+    if Value then b.ActivateWindow(Self);
+    Exit;
+  end;
+  if Value then
+  begin
+    { 运行时对非当前页设 True → 通过栏激活并展开;对当前页设 True、栏收起着 → 展开。
+      收起着时 ActivateWindow 只换当前页,展开那一步才把它显示出来。 }
+    if b.FActive <> Self then b.ActivateWindow(Self);
+    b.Collapsed := False;
+  end
+  else if b.FActive = Self then
+    { 对当前页设 False → 收起栏(焦点搬家在 SetCollapsed 里)。 }
+    b.Collapsed := True
+  else
+  begin
+    { 非当前页本来就该藏着;万一还显示着(从别处带着 Visible 挪进来的),照藏。 }
+    FNoDesignVisibleAtShow := csNoDesignVisible in ControlStyle;
+    inherited SetVisible(False);
+  end;
 end;
 
 procedure TTyToolWindow.SetController(AValue: TTyStyleController);

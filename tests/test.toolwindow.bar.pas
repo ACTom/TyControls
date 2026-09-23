@@ -213,6 +213,10 @@ type
     procedure TestADropOffTheStripIsACancel;
     procedure TestFreeingTheDraggedWindowEndsTheGesture;
     procedure TestWindowIndexReordersAndTheActivePageFollows;
+    { Task 10:Visible 经栏路由(需要真句柄的焦点那一半在 test.toolwindow.focus)。 }
+    procedure TestRunTimeVisibleRoutesThroughTheBar;
+    procedure TestDesignTimeVisibleOnlyActivatesAndNeverWritesCollapsed;
+    procedure TestVisibleWritesWhileLoadingAreIgnored;
   end;
 
 implementation
@@ -1593,14 +1597,23 @@ procedure TTyToolWindowBarTests.TestAVisibleStrayIsHiddenByTheNextSwitch;
 var
   a, b, c: TProbeWindow;
 begin
-  { 栏里除了当前页还有一页显示着(C 期应用布局挪窗口、Task 10 之前的 Visible 写入):
-    下一次切页之后只剩新的当前页显示。 }
-  a := NewWindow;
+  { 栏里除了当前页还有一页显示着:下一次切页之后只剩新的当前页显示。
+    外部写 Visible 已经经栏路由(Task 10,写 True 就是激活它),造不出这个状态了 ——
+    改从流式加载那条路造:加载中注册进来的窗口不切页,带着 Visible = True 进来就一直显示着
+    (C 期应用布局挪窗口也是这个样子)。守的仍是「切页时藏掉其余**每一个**窗口」:
+    只藏 AOld 的话 a 留着。 }
+  NewWindow;
   b := NewWindow;
   c := NewWindow;
-  a.Visible := True;
+  AssertSame('前提:c 是当前页', c, FBar.ActiveWindow);
+  FBar.BeginLoad;
+  a := TProbeWindow.Create(FForm);
+  a.Visible := True;              { 还不在栏里:照写 }
+  a.Parent := FBar;
   AssertTrue('前提:两页同时显示着', a.Visible and c.Visible);
-  FBar.ActiveWindow := b;
+  FBar.ActiveWindow := b;         { 加载中:记下来,Loaded 应用 }
+  FBar.EndLoad;
+  AssertSame('前提:切到了 b', b, FBar.ActiveWindow);
   AssertTrue('新当前页显示', b.Visible);
   AssertFalse('上一页藏起来', c.Visible);
   AssertFalse('多出来的那一页也藏起来', a.Visible);
@@ -2923,6 +2936,77 @@ begin
   AssertEquals('不在栏里是 -1', -1, orphan.WindowIndex);
   orphan.WindowIndex := 1;
   AssertEquals('不在栏里写了也没用', -1, orphan.WindowIndex);
+end;
+
+{ --- Task 10:Visible 经栏路由 --------------------------------------------------- }
+
+procedure TTyToolWindowBarTests.TestRunTimeVisibleRoutesThroughTheBar;
+var
+  a, b, c: TProbeWindow;
+  i, shown: Integer;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  c := NewWindow;
+  FBar.ActiveWindow := a;
+  FBar.OnChange := @HandleChange;
+  FBar.OnCollapse := @HandleCollapse;
+  ResetCounts;
+  b.Visible := True;
+  AssertSame('对非当前页设 True = 激活它', b, FBar.ActiveWindow);
+  AssertEquals('这是用户看得见的切页:发 OnChange', 1, FChanges);
+  shown := 0;
+  for i := 0 to FBar.WindowCount - 1 do
+    if FBar.Windows[i].Visible then Inc(shown);
+  AssertEquals('恰好一个可见窗口', 1, shown);
+  c.Visible := False;
+  AssertFalse('对非当前页设 False:什么都不变', FBar.Collapsed);
+  AssertSame('当前页不变', b, FBar.ActiveWindow);
+  b.Visible := False;
+  AssertTrue('对当前页设 False = 收起栏', FBar.Collapsed);
+  AssertEquals('发 OnCollapse', 1, FCollapses);
+  AssertSame('当前页还是它', b, FBar.ActiveWindow);
+  a.Visible := True;
+  AssertSame('收起着对别的页设 True:激活', a, FBar.ActiveWindow);
+  AssertFalse('并且展开', FBar.Collapsed);
+  AssertTrue('显示的是它', a.Visible);
+  AssertFalse('b 藏着', b.Visible);
+end;
+
+procedure TTyToolWindowBarTests.TestDesignTimeVisibleOnlyActivatesAndNeverWritesCollapsed;
+var
+  d: TBarAccess;
+  w0, w1: TProbeWindow;
+begin
+  d := NewDesignBar;
+  w0 := NewWindowIn(d, FDesignOwner);
+  w1 := NewWindowIn(d, FDesignOwner);
+  AssertSame('前提:后进来的是当前页', w1, d.ActiveWindow);
+  w0.Visible := True;
+  AssertSame('设计期设 True:只激活', w0, d.ActiveWindow);
+  AssertFalse('不写 Collapsed', d.Collapsed);
+  w0.Visible := False;
+  AssertFalse('设计期对当前页设 False 忽略 —— 否则 Collapsed 被写进 .lfm', d.Collapsed);
+  AssertSame('当前页不变', w0, d.ActiveWindow);
+  AssertTrue('也还显示着', w0.Visible);
+end;
+
+procedure TTyToolWindowBarTests.TestVisibleWritesWhileLoadingAreIgnored;
+var
+  a, b: TProbeWindow;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  AssertSame('前提:b 是当前页', b, FBar.ActiveWindow);
+  FBar.BeginLoad;
+  a.Visible := True;
+  b.Visible := False;
+  AssertFalse('加载中的 True 忽略', a.Visible);
+  AssertTrue('加载中的 False 也忽略', b.Visible);
+  AssertFalse('也不收起', FBar.Collapsed);
+  FBar.ActiveIndex := 1;
+  FBar.EndLoad;
+  AssertSame('当前页由 Loaded 挑', b, FBar.ActiveWindow);
 end;
 
 initialization
