@@ -94,7 +94,7 @@ function TyToolWindowZoneAt(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer;
   out AIndex: Integer): TTyToolWindowZone;
 
 { 把排好的整套几何按行宽镜像(spec §7.3)。每个矩形字段和每个槽位都过一遍,
-  所以 B 期给 Geom 加部件不用记得回来添一行。
+  所以以后给 Geom 加部件不用记得回来添一行。
 
   就地改,而且**不幂等**:TyToolWindowHeaderLayout 在 RightToLeft 为真时已经替你调过了,
   拿到它的结果别再调第二次 —— 镜像两次等于没镜像,而 LTR 那边照样全绿。
@@ -103,7 +103,7 @@ function TyToolWindowZoneAt(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer;
 procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);
 
 { 两套几何是否一模一样:每个矩形字段、每个标签槽(窗口序号 + 矩形)、收进溢出菜单的
-  序号都比。同 TyToolWindowFlipAll,一处过完所有字段 —— 只比手挑的几个,B 期标签宽变了
+  序号都比。同 TyToolWindowFlipAll,一处过完所有字段 —— 只比手挑的几个,底栏标签宽变了
   而控件尺寸没变,窗口就会 blit 出旧的那一帧。 }
 function TyToolWindowSameGeom(const A, B: TTyToolWindowHeaderGeom): Boolean;
 
@@ -145,7 +145,7 @@ var
   end;
 
 begin
-  { 末尾一次过完每个矩形字段 —— 逐字段列在调用处的话,B 期加一个部件漏一行不会红。
+  { 末尾一次过完每个矩形字段 —— 逐字段列在调用处的话,加一个部件漏一行不会红。
     算术交给 LCL 自己那五行(controls.pp:2966),跟 CoolBar / ControlBar 同一个调用。
     span 的高写 0:纵向不动,这本身就是声明。 }
   span := Rect(0, 0, ARowWidth, 0);
@@ -164,7 +164,7 @@ function TyToolWindowSameGeom(const A, B: TTyToolWindowHeaderGeom): Boolean;
 var
   i: Integer;
 begin
-  { 跟 TyToolWindowFlipAll 同一份字段清单,一处过完 —— B 期给 Geom 加部件时,这里和
+  { 跟 TyToolWindowFlipAll 同一份字段清单,一处过完 —— 给 Geom 加部件时,这里和
     那里挨着,漏一行看得见。 }
   Result := False;
   if not EqualRect(A.Caption, B.Caption) then Exit;
@@ -233,7 +233,7 @@ end;
 
 { 底栏标题行(spec §7.3)。从尾端往前 [收起][最大化][分隔线][操作区][溢出][标签…];
   固定部件不缩,放不下的那一截钳在 [0, 行宽];操作区保宽直到标签区缩到 TabAreaMin;
-  标签按可见计划排(当前页强制留下),溢出按钮紧跟最后一个已排标签(开工前问题 7)。
+  标签按可见计划排(当前页强制留下),溢出按钮紧跟最后一个已排标签、不贴操作区(spec §7.3)。
   镜像由调用方末尾统一做。 }
 procedure LayoutBottomRow(const AInput: TTyToolWindowHeaderInput; APad, AGap, AActionsW: Integer;
   var AGeom: TTyToolWindowHeaderGeom);
@@ -441,7 +441,7 @@ begin
   if n = 0 then Exit;
   { 负数入参在这里一次钳干净,下面的算术就能直着读(照 Breadcrumb 的规矩)。
     不钳的话:负的项宽让累加倒退、负的溢出按钮宽把预算放大,两个都能骗过「放不下就停」。
-    B 期的 TabWidths 是量文字来的,一次测量失败就能喂进 0 或负数。 }
+    底栏的 TabWidths 是量文字来的,一次测量失败就能喂进 0 或负数。 }
   w := nil;
   SetLength(w, n);
   for i := 0 to n - 1 do
@@ -499,7 +499,7 @@ begin
   for i := 0 to High(ASlots) do
   begin
     R := ASlots[i].ItemRect;
-    { 空槽没有中点可言,跳过 —— B 期 Geom.Tabs 会带被挤成零的槽位。 }
+    { 空槽没有中点可言,跳过 —— 底栏的 Geom.Tabs 会带被挤成零的槽位。 }
     if (R.Right <= R.Left) or (R.Bottom <= R.Top) then Continue;
     last := i;
     if AVertical then

@@ -1945,7 +1945,8 @@ begin
   AssertEquals('前提:武装在标签 0 上', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
   FWins[0].Free;
   FWins[0] := nil;
-  { 不比已释放的指针(assertsame-freed-pointer-trap):看手势状态和之后的行为。 }
+  { 不比已释放的指针(地址会被立刻复用,比出来的「相等 / 不等」都不可信):看手势状态和
+    之后的行为。 }
   AssertEquals('手势窗口走了:记录作废', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
   { 记录要是还在,按住拖过阈值就会拿着那个悬垂的窗口起拖。原位置松开不是判据:悬垂指针
     跟哪个活着的窗口都不相等,点击本来就成立不了。 }

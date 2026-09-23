@@ -3,7 +3,8 @@ unit tyControls.ToolWindows;
 
 { IDE 工作台的侧栏 / 底栏。设计定稿见
   docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md。
-  四个类同在一个单元:窗口与栏互相引用,拆单元只会多一圈前向声明。 }
+  窗口、操作区、栏、栏的手势引擎(内部类)和 manager 的壳同在一个单元:窗口、操作区、栏
+  互相引用,引擎只服务栏,拆单元只会多一圈前向声明。 }
 
 interface
 
@@ -85,7 +86,7 @@ type
 
   { GetStyleTypeKey 在 TTyCustomControl 上是 abstract,不覆写就等于注册了一个
     「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
-    类型键是契约不是实现,A 期就钉死。 }
+    类型键是契约不是实现,一开始就钉死。 }
   TTyToolWindow = class(TTyCustomControl)
   private
     FImageName: string;           { 持久键,在所在栏的生效列表里按名字解析 }
@@ -190,7 +191,7 @@ type
     { 全库 76 处 RenderTo 里 71 处是 protected,两个近亲 TTyTabSheet / TTyCard 也是:
       画自己不是给外面用的接口。测试走探针子类。 }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-    { 栏切页就是开关 Visible(Task 5/10),所以这条消息就是本窗口的激活边 ——
+    { 栏切页就是开关 Visible(ShowWindowNow / HideWindowNow),所以这条消息就是本窗口的激活边 ——
       与 TCustomPage / TTyTabSheet 发 OnShow / OnHide 的是同一个钩子。 }
     procedure CMVisibleChanged(var Msg: TLMessage); message CM_VISIBLECHANGED;
     procedure DoShow; virtual;
@@ -221,7 +222,8 @@ type
     function InTabRowRegion(X, Y: Integer): Boolean;
     { 同上,几何由调用方给(此刻客户区下的 HeaderGeomAt):一次事件里已经排过一份的,不再排。 }
     function InTabRowRegionOf(const AGeom: TTyToolWindowHeaderGeom; X, Y: Integer): Boolean;
-    { 按下消息的坐标记给 BeginAutoDrag、并记下这一次按下归不归标签行(地雷 10)。 }
+    { 按下消息的坐标记给 BeginAutoDrag、并记下这一次按下归不归标签行:LCL 在 WndProc 里先调
+      BeginAutoDrag、再调 MouseDown,等到 MouseDown 才记就晚了。 }
     procedure WndProc(var TheMessage: TLMessage); override;
     { 区域内:不调继承(用户的 OnMouseDown 不触发),落在部件上才转给栏;none 只吞。 }
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -264,8 +266,8 @@ type
       内距按 APPI 的话,真实路径上两者相等看不出来,而别的 PPI 传进来时同一条记录里
       就是两套尺度。 }
     function HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
-    { 标题行排布的**答案**,一处算 —— 绘制(RenderTo)与摆操作区(Task 4 的
-      CustomAlignPosition)必须拿同一份几何。只共享输入、各自再跑一遍排布的话,
+    { 标题行排布的**答案**,一处算 —— 绘制(RenderTo)与摆操作区(CustomAlignPosition)
+      必须拿同一份几何。只共享输入、各自再跑一遍排布的话,
       画出来的和点得中的照样会错开。行高在这里钳进 AClient,所以控件比标题行还矮时
       操作区不会被摆到控件外面。照 TTyCard.LayoutAtPPI(Card.pas:181)。
       返回的几何是**行内局部坐标**(0,0 在行的左上角);AClient 只用来定行宽、钳行高。 }
@@ -285,7 +287,7 @@ type
     function DesignMaskAnswerAt(X, Y: Integer): Integer;
     { 是不是所在栏的当前页(spec §3.1)。栏收起着时当前页照样是它 —— 这里答的是
       「栏认哪一页」,不是「此刻看不看得见」。不在栏里、栏在流式加载中(那时栏还没挑)答 False。
-      B 期底栏的标签行只由当前页代画,问的就是这一处。 }
+      底栏的标签行只由当前页代画(spec §7.1),问的就是这一处。 }
     function IsActive: Boolean;
     { 在所在栏的窗口里排第几(spec §9.9);不在栏里是 -1。写 = 栏内调顺序,钳到
       0..窗口数-1,跟拖放提交走同一条路(TTyToolWindowBar.ReorderWindow)。不进 .lfm:
@@ -321,7 +323,7 @@ type
     property Height stored False;
     property TabOrder stored False;
     property Visible stored False;
-    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来(Task 5/10),
+    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来(spec §5.1),
       而这两个事件就从 CM_VISIBLECHANGED 发,名字、签名、触发边都同 TCustomPage。 }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
@@ -405,7 +407,7 @@ type
   TTyToolWindowArray = array of TTyToolWindow;
 
   { 栏自己的几何,栏客户区坐标,**一处算**(TTyToolWindowBar.LayoutIn):AdjustClientRect 取
-    Content、绘制取全部、图标条的命中(Task 7)取 Slots / Overflow。空矩形 = 没有这个部件。 }
+    Content、绘制取全部、图标条的命中(PartAt)取 Slots / Overflow。空矩形 = 没有这个部件。 }
   TTyToolWindowBarLayout = record
     { 放窗口的那一块 —— AdjustClientRect 的答案。 }
     Content: TRect;
@@ -469,7 +471,7 @@ type
     FState: TTyToolWindowGestureState;
     FPart: TTyToolWindowBarPart;
     FWindow: TTyToolWindow;
-    { 收到按下、持有捕获的控件:图标条是栏,B 期标签行是当前页。阈值原点、捕获轮询都按它。 }
+    { 收到按下、持有捕获的控件:图标条是栏,底栏标签行是当前页。阈值原点、捕获轮询都按它。 }
     FCapturer: TControl;
     FOrigin: TPoint;            { 屏幕坐标 }
     { 按下带 ssDouble / ssTriple / ssQuad:阈值以内松开永远不算点击。 }
@@ -705,7 +707,7 @@ type
     function StrayCount: Integer;
   private
     { --- 底栏标题行(spec §7.2 / §7.3) --- }
-    { 标签宽的缓存(开工前问题 3):只缓存量出来的宽,不缓存整份几何 —— 窗口顺序每次现取,
+    { 标签宽的缓存:只缓存量出来的宽(量字是贵的那一步),不缓存整份几何 —— 窗口顺序每次现取,
       设计器「移到最前 / 最后」直接调非虚的 SetControlIndex,戳记不到。键 = 此刻
       「(窗口引用, Caption) 按 Controls 顺序」的快照逐项比 + (PPI, model 身份, 主题版本,
       样式类, StyleOverride, 两种状态**解析后**的字号)。字号取量字真正用的那个
@@ -723,12 +725,12 @@ type
     FTabCacheRestFs: Integer;
     FTabCacheSelFs: Integer;
     FTabCacheWidths: TTyToolWindowWidths;
-    { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」两份样式量的较大者(开工前问题 9;
+    { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」两份样式量的较大者(spec §7.3;
       每份又是 Painter 的两种量法取大),再加 2 × tab-pad。空标题也有 2 × tab-pad。 }
     function TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
     function MeasureTabWidths(const AWins: TTyToolWindowArray; APPI: Integer): TTyToolWindowWidths;
     { 标签行竖分隔线的线宽(设备像素):TyToolWindowSeparator 解析出可见边框时按 border-width
-      缩放、至少 1;否则 0(开工前问题 2)。 }
+      缩放、至少 1;否则 0(槽宽 = 2 × gap + 线宽,spec §7.3)。 }
     function SeparatorLinePx(APPI: Integer): Integer;
     { 标题行排布的全部输入:窗口给公共那几项(模式、行宽、pad、gap、操作区宽、RTL),
       底栏由栏补标签宽、当前页、标签区下限、按钮、分隔线槽、溢出按钮宽。 }
@@ -769,7 +771,8 @@ type
     { 变了才写,并 InvalidateHeader(悬停画在当前页里)。 }
     procedure SetHeaderHover(APart: TTyToolWindowBarPart; AIndex: Integer);
     { 标签行上 (X, Y)(AWindow 客户区坐标)的插入槽:只有标签行区域算目标(spec §9.4),区域外
-      -1。按阅读顺序找空隙:RTL 时拿一份几何翻回 LTR、指针 X' := 行宽 − 1 − X(地雷 8)。
+      -1。按阅读顺序找空隙:RTL 时拿一份几何翻回 LTR、指针 X' := 行宽 − 1 − X —— 直接在镜像
+      后的几何上按 X 找,「前半边 / 后半边」会整个反过来。
       空隙映射到窗口序号(当前页被强制留下时已排标签不是前缀)。 }
     function HeaderDropSlotAt(AWindow: TTyToolWindow; X, Y: Integer): Integer;
     { 同上,几何由调用方给(AWindow 此刻客户区下的 HeaderGeomAt)。 }
@@ -784,11 +787,11 @@ type
   private
     { --- 最大化(spec §6.4)。只在运行时有,不进 .lfm。 --- }
     FMaximized: Boolean;
-    { 侧栏、设计期、加载中、收起着、没有窗口时设 True 一律忽略(开工前问题 10)。设成功:拉宽
+    { 侧栏、设计期、加载中、收起着、没有窗口时设 True 一律忽略(spec §6.4)。设成功:拉宽
       中途被改 = 结束拉宽回起点(spec §6.3),重推尺寸,标签行的字形换掉。ExpandedSize 从头到尾
       不写。 }
     procedure SetMaximized(AValue: Boolean);
-    { 最大化时的内容项(开工前问题 4):父控件调整后客户区高 − 同轴非栏对齐兄弟 − 所有参与
+    { 最大化时的内容项(spec §6.4):父控件调整后客户区高 − 同轴非栏对齐兄弟 − 所有参与
       分空间的同轴栏的固定部分 − **其余**参与者未收窄的内容,不低于 content-min。其余栏照
       §6.2 用各自的未收窄值,不让位。父控件改尺寸(ParentResized)、兄弟显隐 / 改尺寸
       (WatchSiblings)都会重推。 }
@@ -800,7 +803,8 @@ type
     function OverflowStates: TTyStateSet;
   private
     { --- 手势(spec §9.2):状态机、记录、资源都在引擎上(TTyToolWindowGesture)。构造第一句建、
-      析构最后一句放;读它的小函数一律 nil 安全。 --- }
+      析构最后一句放,其间一直在。只有继承构造 / 继承析构里可能被问到的那几个判 nil
+      (EdgeResizing、EdgeSnapped、ResetGesture、HeaderPressed、HeaderCapturedBy),其余直接用。 --- }
     FGesture: TTyToolWindowGesture;
     { LCL 在 WndProc 里、MouseDown 之前调 BeginAutoDrag,手上没有坐标;按下消息自己带着
       坐标,在 WndProc 里先记下来(只在那一拍有效)。 }
@@ -941,7 +945,7 @@ type
     destructor Destroy; override;
     procedure Invalidate; override;
     { 图标解析用的列表:Images,为空时**读取时**回落到 Manager.Images(spec §8)。
-      A 期栏还没有 Manager 属性(manager 是空壳),所以此刻就是 Images。
+      栏眼下还没有 Manager 属性(manager 是空壳,C 期接线),所以此刻就是 Images。
       正在释放的列表(csDestroying)不算生效列表,答 nil:它的 opRemove 到栏时,不管
       Manager 那边清没清引用,重新订阅都不会又订回这个快死的列表。
       C 期接 Manager 时:改这一处(FImages 为空时回落 Manager.Images,同样滤掉 csDestroying),
@@ -1072,8 +1076,8 @@ type
     property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
   end;
 
-  { A 期只建壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
-    免得 B 期的测试和 .lfm 里写出两个名字。
+  { 目前只是壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
+    免得测试和 .lfm 里先后写出两个名字。
     继承 TTyComponent(不是 TComponent):全库非可视组件都从它来,它带着
     对象查看器里那个只读 Version。 }
   TTyToolWindowManager = class(TTyComponent)
@@ -1405,7 +1409,7 @@ begin
 end;
 
 { 标题行在给定客户区里占的那一条,**钳进这个客户区**。不钳的话控件比标题行还矮时
-  (栏拖到很窄、或者正在动画)HeaderRowRect 会报出一个比控件还高的矩形,Task 4 的
+  (栏拖到很窄、或者正在动画)HeaderRowRect 会报出一个比控件还高的矩形,
   CustomAlignPosition 就照着它把操作区摆到控件外面去。一处钳 —— 正文区
   (AdjustClientRect)、HeaderGeomAt、HeaderRowRect、RenderTo 问的是同一条。
   照 TTyCard.LayoutAtPPI(Card.pas:181)。 }
@@ -1732,7 +1736,7 @@ begin
     作废一下等于每次重画都必然重算,缓存加了等于没加。
     两边比的都是 **token 那一项**。拿它跟 HeaderHeightPx(= max(token, 操作区) 再钳到
     下限 1)比的话,token 为 0 时两者永远不相等,于是悬停、焦点、主题广播 —— 每一次
-    重画都会整控件重排一遍;Task 4 的操作区一旦高过 token,同样如此。 }
+    重画都会整控件重排一遍;操作区一旦高过 token,同样如此。 }
   old := FHeaderPxCache;
   oldRule := FHeaderRuleCache;
   hadOld := FHeaderPxValid;
@@ -2511,7 +2515,7 @@ begin
   if Application <> nil then
   begin
     Application.RemoveAllHandlersOfObject(Self);
-    { A 期本单元没有 QueueAsyncCall;留着给 C 期:manager 排队的 MoveWindow 以本栏为目标时,
+    { 本单元眼下没有 QueueAsyncCall;留着给 C 期:manager 排队的 MoveWindow 以本栏为目标时,
       spec §9.7 要求栏析构时撤掉(先写在这里,C 期接队列时不用记得回来加)。 }
     Application.RemoveAsyncCalls(Self);
   end;
@@ -3022,7 +3026,8 @@ begin
   { 换主题只带来一次裸 Invalidate(Controller.Changed),没人调 Realign。所以在这里比:
     比的是上一次推导**用过**的那一份(FLaid),不是缓存 —— 见 FLaid 的声明。
     **不**在这里问窗口的标题行高:那是窗口自己的缓存,先替它读掉,窗口的 Invalidate
-    就看不出主题变了(计划 Task 5 上方「谁先读就是谁的」)。 }
+    就看不出主题变了 —— 缓存谁先读就是谁的,换主题的那一次裸 Invalidate 广播到谁先、谁后
+    看注册顺序,不能假定窗口总在栏前面。 }
   if FLaidValid and not FRelayouting and not FDpiAdjusting
      and ([csLoading, csDestroying] * ComponentState = []) then
   begin
@@ -3543,7 +3548,7 @@ begin
   SetLength(Result, Length(AWins));
   for i := 0 to High(AWins) do
   begin
-    { 两种状态取大(开工前问题 9):皮肤只让选中态加粗时,按静止态量会截当前标签,按各自
+    { 两种状态取大(spec §7.3):皮肤只让选中态加粗时,按静止态量会截当前标签,按各自
       状态量则切页时整行重排。 }
     w := TextPx(AWins[i].Caption, restS);
     sw := TextPx(AWins[i].Caption, selS);
@@ -3848,6 +3853,8 @@ var
     bs := ActiveController.Model.ResolveStyle(AKey, cls, HeaderPartStates(AWindow, APart));
     if tpBackground in bs.Present then
       APainter.FillBackground(cell, bs.Background, 0);
+    { 字形框、线宽 1、默认内距都同图标条的溢出按钮(RenderTo):两处是同一族按钮,
+      没有单独的 token。 }
     if glyphPx > 0 then
       TyDrawGlyph(APainter, ActiveController, GlyphBox(cell), AGlyph, bs.TextColor, 1);
   end;
@@ -3904,7 +3911,8 @@ begin
     end;
   end;
 
-  { 4. 溢出按钮(有东西收起时才有)。下拉用空心 V(开工前问题 6)。 }
+  { 4. 溢出按钮(有东西收起时才有)。它弹的是下拉菜单,用下拉的空心 V(spec §7.3),
+    不用步进按钮的实心三角。 }
   PaintButton(AGeom.Overflow, TyToolWindowOverflowKey, twbpOverflow, tgChevronDown);
 
   { 5. 分隔线:槽中间一条线,纵向跟按钮带同高。 }
@@ -4091,7 +4099,7 @@ begin
   part := PartOfZone(zone);
   if part = twbpItem then w := Windows[idx] else w := nil;
   { 引擎判完、收尾,答案拷在局部;动作放最后一句 —— 它可能把捕获者(当前页)自己藏起来
-    (spec §9.2,地雷 9),之后不再碰 AWindow。 }
+    (spec §9.2),之后不再碰 AWindow。 }
   rel := FGesture.Release(part, w);
   if AWindow = FActive then SetHeaderHover(part, idx);
   if rel.Kind = twrDrop then
@@ -4113,7 +4121,7 @@ begin
       Maximized := not FMaximized;
     twbpOverflow:
       ShowOverflowMenu;
-    { 会把捕获者(当前页)自己藏起来:最后一句(地雷 9)。 }
+    { 会把捕获者(当前页)自己藏起来:最后一句(spec §9.2)。 }
     twbpCollapse:
       Collapsed := True;
   end;
@@ -5831,7 +5839,7 @@ procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
 var
   opensLeft: Boolean;
 begin
-  { 底栏:从溢出按钮底边、按阅读起点往下开(开工前问题 7)—— LTR 左沿、RTL 右沿,都是 paLeft
+  { 底栏:从溢出按钮底边、按阅读起点往下开(spec §7.3)—— LTR 左沿、RTL 右沿,都是 paLeft
     (TyPopupAnchorShift 在 RTL 下把「贴阅读起点」换成贴右沿)。 }
   if APlacement = twpBottom then
   begin
