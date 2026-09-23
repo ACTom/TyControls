@@ -51,6 +51,20 @@ const
     名字不叫 ...Def —— 本库的 ...Var / ...Def 成对只用于「主题 token 与它的回落值」。 }
   TyToolWindowDefaultExpandedSize = 240;
 
+  { 本单元自己解析的样式类型键(spec §12)。底栏那几个(TabRow / Tab / TabIndicator / Button /
+    Separator)B 期接线时再加 —— 没人读的常量就是「建好没接线」。 }
+  TyToolWindowKey                = 'TyToolWindow';
+  TyToolWindowBarKey             = 'TyToolWindowBar';
+  TyToolWindowActionsKey         = 'TyToolWindowActions';
+  TyToolWindowHeaderKey          = 'TyToolWindowHeader';
+  TyToolWindowStripKey           = 'TyToolWindowStrip';
+  TyToolWindowStripItemKey       = 'TyToolWindowStripItem';
+  TyToolWindowStripIndicatorKey  = 'TyToolWindowStripIndicator';
+  TyToolWindowOverflowKey        = 'TyToolWindowOverflow';
+  TyToolWindowEdgeKey            = 'TyToolWindowEdge';
+  TyToolWindowDropIndicatorKey   = 'TyToolWindowDropIndicator';
+  TyToolWindowNoteKey            = 'TyToolWindowNote';
+
   { 点击防抖(毫秒)。拖动阈值在 tyControls.ToolWindows.Layout。 }
   TyToolWindowClickGuardMs    = 300;
 
@@ -85,6 +99,9 @@ type
       哨兵一旦跟真值撞上,缓存永远命中不了,Invalidate 里「上一次有值吗」也从此恒假,
       之后任何一次换主题都不再重排。操作区那一项不进这里,见 HeaderHeightAt。 }
     FHeaderPxCache: Integer;
+    { 同一把键下标题行底线的粗细(设备像素,0 = 没有)。跟 token 一起缓存、一起比:换主题
+      只带来一次裸 Invalidate,底线出现 / 消失而 token 没变时也得重排。 }
+    FHeaderRuleCache: Integer;
     FHeaderPxValid: Boolean;
     FHeaderPxPPI: Integer;
     FHeaderPxVer: Cardinal;
@@ -115,6 +132,11 @@ type
     function GetWindowIndex: Integer;
     procedure SetWindowIndex(AValue: Integer);
     function HeaderTokenPx: Integer;
+    { 侧栏标题行底线的粗细,设备像素,按给定 PPI:TyToolWindowHeader 解析出可见边框
+      (border-color + border-width)才有,宽取 border-width,不低于 1 —— 写法照图标条的界线。
+      底栏 / 孤儿答 0。 }
+    function HeaderRuleAt(APPI: Integer): Integer;
+    function HeaderRuleUncached(APPI: Integer): Integer;
     function HeaderHeightAt(APPI: Integer): Integer;
     function HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
     function ActionsPreferredSize(APPI: Integer): TSize;
@@ -793,7 +815,7 @@ end;
 
 function TTyToolWindow.GetStyleTypeKey: string;
 begin
-  Result := 'TyToolWindow';
+  Result := TyToolWindowKey;
 end;
 
 function TTyToolWindow.ImageIndexIsStored: Boolean;
@@ -955,6 +977,7 @@ begin
   Result.Gap := MulDiv(ActiveController.Metric(TyToolWindowHeaderGapVar,
     TyToolWindowHeaderGapDef), APPI, 96);
   Result.ActionsWidth := ActionsPreferredSize(APPI).cx;
+  Result.BottomRule := HeaderRuleAt(APPI);
   { 镜像整套几何靠这一个字段。没有操作区时标题占的是对称的那一整条,镜像前后一模一样;
     有操作区时它就是看得见的位置差 —— 操作区到左端、标题到它右边,
     TestRightToLeftPutsTheActionsLeftAndTheCaptionRightOfIt 守着。 }
@@ -989,6 +1012,7 @@ begin
     else
       FHeaderPxCache := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
         TyToolWindowHeaderHeightDef), Font.PixelsPerInch, 96);
+    FHeaderRuleCache := HeaderRuleUncached(Font.PixelsPerInch);
     FHeaderPxAnchor := TObject(mdl);
     FHeaderPxVer := ver;
     FHeaderPxPPI := Font.PixelsPerInch;
@@ -997,6 +1021,30 @@ begin
     FHeaderPxValid := True;
   end;
   Result := FHeaderPxCache;
+end;
+
+function TTyToolWindow.HeaderRuleUncached(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+begin
+  Result := 0;
+  if HeaderMode <> twhSide then Exit;
+  S := ActiveController.Model.ResolveStyle(TyToolWindowHeaderKey,
+    TyStyleClassFor(Self, StyleClass), [tysNormal]);
+  if not TyBorderVisible(S) then Exit;
+  Result := MulDiv(S.BorderWidth, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyToolWindow.HeaderRuleAt(APPI: Integer): Integer;
+begin
+  if APPI = Font.PixelsPerInch then
+  begin
+    HeaderTokenPx;              { 刷新同一把键下的缓存 }
+    Result := FHeaderRuleCache;
+  end
+  else
+    Result := HeaderRuleUncached(APPI);
 end;
 
 { 操作区的首选尺寸(设备像素,按给定 PPI),**一处答**:标题行高拿它的高钳底、排布
@@ -1029,7 +1077,9 @@ begin
     TyToolWindowHeaderHeightDef), APPI, 96);
   { 操作区那一项**不缓存**:子控件增删 / 显隐 / 改尺寸都会触发整窗体自顶向下重排,
     现取就能跟上。底栏模式下由栏统一算(B 期),A 期两种模式都按本窗口算。 }
+  { 操作区排在底线上面那一条带里(spec §4),行高要连底线一起够它。 }
   actionsPx := ActionsPreferredSize(APPI).cy;
+  if actionsPx > 0 then Inc(actionsPx, HeaderRuleAt(APPI));
   if actionsPx > Result then Result := actionsPx;
   if Result < 1 then Result := 1;
 end;
@@ -1280,7 +1330,7 @@ end;
 
 procedure TTyToolWindow.Invalidate;
 var
-  old: Integer;
+  old, oldRule: Integer;
   hadOld: Boolean;
 begin
   { 自己的样子变了 —— 丢缓存。子控件打脏到不了这里,缓存正是靠这一点活着。 }
@@ -1295,8 +1345,10 @@ begin
     下限 1)比的话,token 为 0 时两者永远不相等,于是悬停、焦点、主题广播 —— 每一次
     重画都会整控件重排一遍;Task 4 的操作区一旦高过 token,同样如此。 }
   old := FHeaderPxCache;
+  oldRule := FHeaderRuleCache;
   hadOld := FHeaderPxValid;
-  if (not FRelayouting) and hadOld and (HeaderTokenPx <> old) then
+  if (not FRelayouting) and hadOld
+     and ((HeaderTokenPx <> old) or (FHeaderRuleCache <> oldRule)) then
     RelayoutHeader;
   inherited Invalidate;
 end;
@@ -1354,6 +1406,8 @@ var
   S, hdrS: TTyStyleSet;
   R, hdr: TRect;
   g: TTyToolWindowHeaderGeom;
+  fill: TTyFill;
+  rule: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -1369,10 +1423,20 @@ begin
     hdr := HeaderRowIn(R, APPI);
     if (HeaderMode = twhSide) and (hdr.Bottom > hdr.Top) then
     begin
-      hdrS := ActiveController.Model.ResolveStyle('TyToolWindowHeader',
+      hdrS := ActiveController.Model.ResolveStyle(TyToolWindowHeaderKey,
         TyStyleClassFor(Self, StyleClass), [tysNormal]);
       if tpBackground in hdrS.Present then
         P.FillBackground(hdr, hdrS.Background, 0);
+      { 可选的底线(spec §12):靠正文那一侧一条,粗细与排布让出来的是同一个数。 }
+      rule := HeaderRuleAt(APPI);
+      if rule > hdr.Bottom - hdr.Top then rule := hdr.Bottom - hdr.Top;
+      if rule > 0 then
+      begin
+        fill := Default(TTyFill);
+        fill.Kind := tfkSolid;
+        fill.Color := hdrS.BorderColor;
+        P.FillBackground(Rect(hdr.Left, hdr.Bottom - rule, hdr.Right, hdr.Bottom), fill, 0);
+      end;
       g := HeaderGeomAt(R, APPI);
       { 标题拿下整个剩余跨度,放不下由 DrawText 自己出省略号。 }
       if (Caption <> '') and (g.Caption.Right > g.Caption.Left) then
@@ -1418,7 +1482,7 @@ end;
 
 function TTyToolWindowActions.GetStyleTypeKey: string;
 begin
-  Result := 'TyToolWindowActions';
+  Result := TyToolWindowActionsKey;
 end;
 
 procedure TTyToolWindowActions.SetAlign(Value: TAlign);
@@ -1554,7 +1618,7 @@ end;
 
 function TTyToolWindowActions.NoteStyle: TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TyToolWindowNote',
+  Result := ActiveController.Model.ResolveStyle(TyToolWindowNoteKey,
     TyStyleClassFor(Self, StyleClass), [tysNormal]);
 end;
 
@@ -1779,7 +1843,7 @@ end;
 
 function TTyToolWindowBar.GetStyleTypeKey: string;
 begin
-  Result := 'TyToolWindowBar';
+  Result := TyToolWindowBarKey;
 end;
 
 function TTyToolWindowBar.EffectiveImages: TCustomImageList;
@@ -2329,7 +2393,7 @@ begin
   { 图标条的界线画在靠内容区那一侧(写法照 TyStatusBar 的顶线),图标只排在界线以内 ——
     否则当前格的指示条会跟界线叠在同一列上。 }
   Result.Cells := Result.Strip;
-  stripS := ActiveController.Model.ResolveStyle('TyToolWindowStrip',
+  stripS := ActiveController.Model.ResolveStyle(TyToolWindowStripKey,
     TyStyleClassFor(Self, StyleClass), [tysNormal]);
   if TyBorderVisible(stripS) then
   begin
@@ -2433,7 +2497,7 @@ begin
 
     if L.Strip.Right > L.Strip.Left then
     begin
-      stripS := ActiveController.Model.ResolveStyle('TyToolWindowStrip', cls, [tysNormal]);
+      stripS := ActiveController.Model.ResolveStyle(TyToolWindowStripKey, cls, [tysNormal]);
       if tpBackground in stripS.Present then
         P.FillBackground(L.Strip, stripS.Background, 0);
       { 界线:靠内容区那一侧一条,不是整圈框(同 TyStatusBar)。宽度与 LayoutIn 扣掉的同一个数。 }
@@ -2459,7 +2523,7 @@ begin
         cell := L.Slots[i].ItemRect;
         if (cell.Right <= cell.Left) or (cell.Bottom <= cell.Top) then Continue;
         states := StripItemStates(L.Slots[i].ItemIndex);
-        itemS := ActiveController.Model.ResolveStyle('TyToolWindowStripItem', cls, states);
+        itemS := ActiveController.Model.ResolveStyle(TyToolWindowStripItemKey, cls, states);
         if tpBackground in itemS.Present then
           P.FillBackground(cell, itemS.Background, 0);
         { 图标序号只从 ResolvedImageIndex 来:窗口的 ImageIndex 在名字找不到时会退回写过的
@@ -2490,7 +2554,7 @@ begin
         { 当前格的指示条:贴在靠内容区那一侧,粗细 0 = 不画。 }
         if (tysSelected in states) and (indPx > 0) then
         begin
-          partS := ActiveController.Model.ResolveStyle('TyToolWindowStripIndicator', cls,
+          partS := ActiveController.Model.ResolveStyle(TyToolWindowStripIndicatorKey, cls,
             [tysNormal]);
           if tpBackground in partS.Present then
           begin
@@ -2510,10 +2574,10 @@ begin
           墨色取图标条的墨色(图标项按同一组状态解析)—— TyToolWindowOverflow 的 color 是给
           底栏标签行的(--toolwindow-tab-ink),皮肤只调了图标条的墨色时,条上的箭头得跟着图标走。 }
         states := OverflowStates;
-        partS := ActiveController.Model.ResolveStyle('TyToolWindowOverflow', cls, states);
+        partS := ActiveController.Model.ResolveStyle(TyToolWindowOverflowKey, cls, states);
         if tpBackground in partS.Present then
           P.FillBackground(L.Overflow, partS.Background, 0);
-        itemS := ActiveController.Model.ResolveStyle('TyToolWindowStripItem', cls, states);
+        itemS := ActiveController.Model.ResolveStyle(TyToolWindowStripItemKey, cls, states);
         if tpTextColor in itemS.Present then ink := itemS.TextColor
         else ink := stripS.TextColor;
         gr := L.Overflow;
@@ -2536,7 +2600,7 @@ begin
     if idx >= 0 then
     begin
       bw := TokenPx(TyToolWindowDropSizeVar, TyToolWindowDropSizeDef);
-      partS := ActiveController.Model.ResolveStyle('TyToolWindowDropIndicator', cls, [tysNormal]);
+      partS := ActiveController.Model.ResolveStyle(TyToolWindowDropIndicatorKey, cls, [tysNormal]);
       if (bw > 0) and (tpBackground in partS.Present) then
       begin
         gr := Rect(L.Cells.Left, idx - bw div 2, L.Cells.Right, idx - bw div 2 + bw);
@@ -2552,7 +2616,7 @@ begin
       if FEdgeDragging then states := [tysActive]
       else if FEdgeHover then states := [tysHover]
       else states := [tysNormal];
-      partS := ActiveController.Model.ResolveStyle('TyToolWindowEdge', cls, states);
+      partS := ActiveController.Model.ResolveStyle(TyToolWindowEdgeKey, cls, states);
       if tpBackground in partS.Present then
         P.FillBackground(L.Edge, partS.Background, 0);
     end;
@@ -2560,7 +2624,7 @@ begin
     { 设计期提示(LayoutIn 只在设计期给这两个框)。 }
     if (L.EmptyNote.Right > L.EmptyNote.Left) or (L.StrayNote.Right > L.StrayNote.Left) then
     begin
-      partS := ActiveController.Model.ResolveStyle('TyToolWindowNote', cls, [tysNormal]);
+      partS := ActiveController.Model.ResolveStyle(TyToolWindowNoteKey, cls, [tysNormal]);
       pad := TokenPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef);
       gr := L.EmptyNote;
       InflateRect(gr, -pad, 0);

@@ -88,6 +88,10 @@ type
     procedure TestAnAlClientChildLandsBelowTheHeaderRow;
     procedure TestAWindowThatLeftTheBarStopsRelayouting;
     procedure TestChildClassAllowedRejectsWindowsAndBars;
+    { spec §3.5 / §4 / §12:标题行可选底线。 }
+    procedure TestAHeaderBorderPaintsABottomRuleTheActionsStayAbove;
+    procedure TestTheBaseThemeHasNoHeaderRule;
+    procedure TestAThemeThatAddsOnlyTheRuleRelayouts;
   end;
 
 { 数一张画好的位图:非底色像素、残留底漆(见实现处)。栏的像素测试(test.toolwindow.bar)也用它。 }
@@ -914,6 +918,94 @@ begin
     desc.Free;
     anc.Free;
   end;
+end;
+
+{ --- 标题行底线 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowTests.TestAHeaderBorderPaintsABottomRuleTheActionsStayAbove;
+const
+  W = 160;
+  H = 120;
+var
+  act: TTyToolWindowActions;
+  kid: TBodyChild;
+  g: TTyToolWindowHeaderGeom;
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  hdrH, y, redRows: Integer;
+  px: TBGRAPixel;
+begin
+  FWin.Font.PixelsPerInch := 96;
+  FCtl.StyleOverride := 'TyToolWindowHeader { background: #0000FF; border-color: #FF0000;' +
+    ' border-width: 2px; }';
+  FWin.SetBounds(0, 0, W, H);
+  act := FWin.EnsureActions;
+  kid := TBodyChild.Create(FForm);
+  kid.SetBounds(0, 0, 20, TyToolWindowHeaderHeightDef);   { 跟 token 一样高 }
+  kid.Parent := act;
+  hdrH := FWin.HeaderHeightPx;
+  AssertEquals('行高连底线一起够操作区:token 高的控件 + 2 条带 + 底线 2',
+    TyToolWindowHeaderHeightDef + 2 * TyToolWindowHeaderPadDef + 2, hdrH);
+  g := FWin.HeaderGeomAt(Rect(0, 0, W, H), 96);
+  AssertEquals('操作区排在底线上面:底边 = 行高 - 底线', hdrH - 2, g.Actions.Bottom);
+  AssertEquals('标题同样', hdrH - 2, g.Caption.Bottom);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(W, H);
+    FWin.CallRenderTo(bmp.Canvas, Rect(0, 0, W, H), 96);
+    re := TBGRABitmap.Create(bmp);
+    try
+      redRows := 0;
+      for y := 0 to hdrH - 1 do
+      begin
+        px := re.GetPixel(W div 4, y);
+        if (px.red = 255) and (px.blue = 0) then Inc(redRows);
+      end;
+      AssertEquals('底线恰好 2 行', 2, redRows);
+      px := re.GetPixel(W div 4, hdrH - 1);
+      AssertEquals('底线在标题行最下面', 255, px.red);
+      px := re.GetPixel(W div 4, hdrH - 3);
+      AssertEquals('底线上面还是标题行的底', 255, px.blue);
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowTests.TestTheBaseThemeHasNoHeaderRule;
+var
+  g: TTyToolWindowHeaderGeom;
+begin
+  { spec §12:底线是可选的,light 不设 —— 标题和操作区占满整条行高。 }
+  FWin.Font.PixelsPerInch := 96;
+  FWin.SetBounds(0, 0, 160, 120);
+  g := FWin.HeaderGeomAt(Rect(0, 0, 160, 120), 96);
+  AssertEquals('没有底线:标题占满行高', FWin.HeaderHeightPx, g.Caption.Bottom);
+  AssertEquals('没有底线:HeaderInput 的 BottomRule 是 0', 0, FWin.HeaderInput(96, 160).BottomRule);
+end;
+
+procedure TTyToolWindowTests.TestAThemeThatAddsOnlyTheRuleRelayouts;
+var
+  act: TTyToolWindowActions;
+  kid: TBodyChild;
+  before: Integer;
+begin
+  FWin.Font.PixelsPerInch := 96;
+  FWin.SetBounds(0, 0, 160, 120);
+  act := FWin.EnsureActions;
+  kid := TBodyChild.Create(FForm);
+  kid.SetBounds(0, 0, 20, TyToolWindowHeaderHeightDef);
+  kid.Parent := act;
+  AssertEquals('前提:没有底线时行高 = 操作区 raw 高', TyToolWindowHeaderHeightDef
+    + 2 * TyToolWindowHeaderPadDef, FWin.HeaderHeightPx);   { 顺带让缓存键就位 }
+  before := FWin.AlignCount;
+  { 只加底线、token 不变:行高因为操作区那一项变了(+2),正文得重排 —— 换主题只带来
+    一次裸 Invalidate,缓存键里没有底线的话它看不出来。 }
+  FCtl.StyleOverride := 'TyToolWindowHeader { border-color: #FF0000; border-width: 2px; }';
+  AssertTrue('只加了底线的主题也要重排', FWin.AlignCount > before);
 end;
 
 initialization

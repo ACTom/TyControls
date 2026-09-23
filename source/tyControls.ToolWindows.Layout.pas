@@ -40,6 +40,9 @@ type
     RowWidth, RowHeight: Integer;
     Pad, Gap: Integer;
     ActionsWidth: Integer;      { 操作区 raw 首选宽;0 = 没有操作区 }
+    { 侧栏:标题行底线的粗细(0 = 没有)。标题和操作区都排在它上面那一条带里 —— 操作区
+      不盖标题行的装饰(spec §4)。 }
+    BottomRule: Integer;
     TabWidths: TTyToolWindowWidths; { 底栏:每个窗口的标签想要的宽 }
     ActiveIndex: Integer;
     TabAreaMin: Integer;
@@ -224,7 +227,7 @@ end;
 
 function TyToolWindowHeaderLayout(const AInput: TTyToolWindowHeaderInput): TTyToolWindowHeaderGeom;
 var
-  pad, gap, aw, x: Integer;
+  pad, gap, aw, x, band: Integer;
 begin
   Result := Default(TTyToolWindowHeaderGeom);
   if (AInput.RowWidth <= 0) or (AInput.RowHeight <= 0) then Exit;
@@ -241,16 +244,20 @@ begin
     { 只给前导那个内距让位:尾端的 pad 由操作区自己带着(它的首选宽里就有两侧的 2×pad),
       spec §3.4「操作区自带内边距,宽为 0 时尾端补一个 header-pad」。 }
     if aw > AInput.RowWidth - pad then aw := AInput.RowWidth - pad;
+    { 底线那一条带让出来:标题和操作区只在它上面。 }
+    band := AInput.RowHeight - AInput.BottomRule;
+    if band > AInput.RowHeight then band := AInput.RowHeight;
+    if band < 0 then band := 0;
     if aw > 0 then
     begin
       { 贴到行的右端:再补一个 pad 的话,最后一个按钮离右边就是 2×pad。 }
-      Result.Actions := Rect(AInput.RowWidth - aw, 0, AInput.RowWidth, AInput.RowHeight);
+      Result.Actions := Rect(AInput.RowWidth - aw, 0, AInput.RowWidth, band);
       x := Result.Actions.Left - gap;
     end
     else
       x := AInput.RowWidth - pad;         { 没有操作区,尾端补一个内距 }
     if x > pad then
-      Result.Caption := Rect(pad, 0, x, AInput.RowHeight);
+      Result.Caption := Rect(pad, 0, x, band);
     { 标题拿下整个剩余跨度 —— spec §3.4:"操作区优先保宽;标题先省略号"。
       放不下由 DrawText 自己出省略号,所以这里没有「标题想要多宽」这个输入。 }
   end;
