@@ -1150,10 +1150,9 @@ add('C 10 "Category N" interval 2, ticks interval 4 at 900x520 (axislabel.pas)',
   Object.assign({}, P900, documentary('TestTheTicksFollowTheLabelsUnlessToldOtherwise')));
 add('C M1 20 categories, min 1, interval 2: aligned from zero', { xAxis: { type: 'category', data: cats(20, i => 'c' + i), min: 1,
   axisLabel: { interval: 2 }, axisTick: { show: true, alignWithLabel: true } }, yAxis: { type: 'value' },
-series: [{ type: 'bar', data: cats(20, i => i) }] }, deferred('category axis min/max: the port does not narrow an ordinal extent yet'));
+series: [{ type: 'bar', data: cats(20, i => i) }] });
 add('C M2 20 categories, min 1, max 6, interval 2', { xAxis: { type: 'category', data: cats(20, i => 'c' + i), min: 1, max: 6,
-  axisLabel: { interval: 2 } }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: cats(20, i => i) }] },
-  deferred('category axis min/max: the port does not narrow an ordinal extent yet'));
+  axisLabel: { interval: 2 } }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: cats(20, i => i) }] });
 add('C 30 "Category N", showMaxLabel true', cat30({ axisLabel: { showMaxLabel: true } }));
 
 // D. never thinned by index, and the end rule
@@ -1248,7 +1247,7 @@ add('F labels interval 4, axisTick.interval 0, split lines', c12({ axisLabel: { 
 add('F labels interval 4, split areas, splitLine interval 0', c12({ axisLabel: { interval: 4 }, splitArea: { show: true },
   splitLine: { show: true, interval: 0 } }), P900);
 add('F labels interval 4, axisTick.interval 2, min 1', c12({ min: 1, axisLabel: { interval: 4 }, axisTick: { show: true, interval: 2 } }),
-  Object.assign({}, P900, deferred('category axis min/max: the port does not narrow an ordinal extent yet')));
+  P900);
 add('F 11 categories, interval 4: the closing edge', { xAxis: { type: 'category', data: CN(11), axisLabel: { interval: 4 },
   axisTick: { show: true }, splitLine: { show: true } }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: PORTDATA(11) }] }, P900);
 add('F 12 categories, interval 4, ticks and split lines', c12({ axisLabel: { interval: 4 }, axisTick: { show: true }, splitLine: { show: true } }), P900);

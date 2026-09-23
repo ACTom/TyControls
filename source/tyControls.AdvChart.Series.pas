@@ -919,11 +919,66 @@ begin
   end;
 end;
 
+{ JavaScript's Number() of an array: its string form read as a number --
+  [] is 0, [3] is 3, ['c'] and [1, 2] are not numbers. }
+function JsNumberOfArray(AArr: TJSONArray): Double;
+var
+  d: TJSONData;
+  s: string;
+  code: Integer;
+begin
+  if AArr.Count = 0 then Exit(0);
+  if AArr.Count > 1 then Exit(NaN);
+  d := AArr.Items[0];
+  case d.JSONType of
+    jtNull: Result := 0;
+    jtNumber: Result := d.AsFloat;
+    jtArray: Result := JsNumberOfArray(TJSONArray(d));
+    jtString:
+      begin
+        s := Trim(d.AsString);
+        if s = '' then Result := 0
+        else
+        begin
+          Val(s, Result, code);
+          if code <> 0 then Result := NaN;
+        end;
+      end;
+  else
+    Result := NaN;
+  end;
+end;
+
+{ UPSTREAM'S ORDINAL parse (Ordinal.ts): a string is a category's NAME,
+  looked up as written -- no trim, and never read as a number, so '3' names
+  nothing and blanks the axis -- and anything else is Number()'d and rounded
+  the way Math.round rounds: 2.5 is 3, -2.5 is -2. }
+function ParseOrdinalBound(AData: TJSONData; AAxis: TTyAxis;
+  out AValue: Double): Boolean;
+begin
+  AValue := NaN;
+  Result := False;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  Result := True;
+  case AData.JSONType of
+    jtString:
+      if AAxis.Scale is TTyOrdinalScale then
+        AValue := TTyOrdinalScale(AAxis.Scale).ParseText(AData.AsString);
+    jtNumber: AValue := AData.AsFloat;
+    jtBoolean: if AData.AsBoolean then AValue := 1 else AValue := 0;
+    jtArray: AValue := JsNumberOfArray(TJSONArray(AData));
+  end;
+  if (AData.JSONType <> jtString) and not (IsNan(AValue) or IsInfinite(AValue)) then
+    AValue := TyJsRound(AValue);
+end;
+
 { One bound the way the axis' scale parses it: Number() on a number axis, a
-  date on a time axis. }
+  date on a time axis, a category on a category one. }
 function ParseBound(AData: TJSONData; AAxis: TTyAxis; out AValue: Double): Boolean;
 var ms: Double;
 begin
+  if (AAxis <> nil) and (AAxis.AxisType = atCategory) then
+    Exit(ParseOrdinalBound(AData, AAxis, AValue));
   if (AAxis <> nil) and (AAxis.AxisType = atTime) and (AData <> nil)
     and (AData.JSONType = jtString) then
   begin
@@ -983,10 +1038,19 @@ function TyAxisRawExtent(ANode: TJSONObject; AAxis: TTyAxis;
 var
   d: TJSONData;
   dLo, dHi, v, span, sv: Double;
-  hasLo, hasHi, interval, needZero, svSpecified: Boolean;
+  hasLo, hasHi, interval, needZero, svSpecified, ordinal: Boolean;
+  nCat: Integer;
   mask: TFPUExceptionMask;
 begin
   Result := Default(TTyAxisRawExtent);
+  { A CATEGORY AXIS takes the same path with three differences, upstream's
+    own: no dataMin / dataMax key widens its data, an end nobody wrote is
+    the first or the last category rather than the data plus a gap, and an
+    axis with no categories at all is blank. }
+  ordinal := (AAxis <> nil) and (AAxis.AxisType = atCategory);
+  nCat := 0;
+  if ordinal and (AAxis.Scale is TTyOrdinalScale) then
+    nCat := TTyOrdinalScale(AAxis.Scale).CategoryCount;
   { Not-a-number is a legal value all the way through, as in JavaScript, and
     comparing one with the traps on raises. }
   mask := GetExceptionMask;
@@ -996,7 +1060,7 @@ begin
       can only widen it. Nothing at all is not-a-number from here on. }
     dLo := ADataLo;
     dHi := ADataHi;
-    if ANode <> nil then
+    if (ANode <> nil) and not ordinal then
     begin
       if ParseBound(ANode.Find('dataMin'), AAxis, v) and Finite(v) and (v < dLo) then
         dLo := v;
@@ -1046,7 +1110,17 @@ begin
     Result.FixHi := hasHi;
 
     { (3) boundaryGap, on the ends nobody pinned, as a ratio of the DATA's
-      span -- or of the lone value's size when there is one. }
+      span -- or of the lone value's size when there is one. A category
+      axis' free ends are its first and last category. }
+    if ordinal then
+    begin
+      if not hasLo then
+        if nCat > 0 then Result.Lo := 0 else Result.Lo := NaN;
+      if not hasHi then
+        if nCat > 0 then Result.Hi := nCat - 1 else Result.Hi := NaN;
+      hasLo := True;
+      hasHi := True;
+    end;
     span := dHi - dLo;
     if IsNan(span) or (span = 0) then span := Abs(dLo);
     if not hasLo then
@@ -1083,6 +1157,8 @@ begin
     { (4) not a finite number is no end. }
     if not Finite(Result.Lo) then Result.Lo := NaN;
     if not Finite(Result.Hi) then Result.Hi := NaN;
+    { (a category axis with no categories at all keeps the ends it was
+      given and is blank all the same -- the scale answers that one) }
     Result.Blank := IsNan(Result.Lo) or IsNan(Result.Hi);
 
     { (5) ZERO, on a plain value axis unless `scale` is truthy -- and only
@@ -1282,6 +1358,35 @@ var
     end;
   end;
 
+  { A category axis' extent from its raw one: the ends as rounded -- not a
+    number where a bound named nothing, which blanks the axis: no count, no
+    ticks and no bars. And a window of more categories than anything can draw
+    is refused rather than walked: min: 1e300 would build a label per
+    category. }
+  procedure ApplyCategoryExtent(AAxis: TTyAxis; const ARaw: TTyAxisRawExtent;
+    ACtnShp: Boolean);
+  const
+    cMaxWindow = 1048576;
+  var
+    e: TTyRange;
+    blank: Boolean;
+  begin
+    e.Start := ARaw.Lo;
+    e.Stop := ARaw.Hi;
+    blank := ARaw.Blank;
+    if (not blank) and (ARaw.Hi - ARaw.Lo + 1 > cMaxWindow) then
+    begin
+      blank := True;
+      e.Start := NaN;
+      e.Stop := NaN;
+    end;
+    AAxis.Scale.SetExtent(e);
+    AAxis.Scale.MarkedBlank := blank;
+    { startValue has already moved the extent; nothing stands on this axis }
+    AAxis.Scale.StartValue := NaN;
+    if ACtnShp and not blank then ApplyContainShape(AAxis);
+  end;
+
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string);
   var
     k, c, si: Integer;
@@ -1303,27 +1408,21 @@ var
     if AAxis = nil then Exit;
     node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
     ctnShp := WantsContainShape(AAxis, node);
-    { A category axis' range is its category COUNT -- read off the axis, never
-      computed from the values, so a name the data never mentions still gets a
-      band and a bar chart does not shuffle when a value goes missing.
+    { A CATEGORY AXIS' RANGE is its categories, first to last -- read off the
+      axis, never computed from the values, so a name the data never mentions
+      still gets a band and a bar chart does not shuffle when a value goes
+      missing -- unless min and max narrow it, or widen it past either end,
+      which upstream lets them do. It goes through the raw extent below with
+      the number axes, in its ordinal mode.
 
       But the count has to be read AFTER the rows are in. An axis with no
       `data` of its own collects its categories while the store parses, and
       until this ran the extent was the one fixed during construction, when the
       list was empty: one band across the whole plot with every point stacked
-      on it, and Contain(2) answering False for a category the store had
-      interned. Re-deriving is not "from the data" -- it is the same one place
-      the extent has always come from, asked once more now the list is full. }
-    if AAxis.AxisType = atCategory then
-    begin
-      if AAxis.Scale is TTyOrdinalScale then
-      begin
-        TTyOrdinalScale(AAxis.Scale).SetExtentFromCategories;
-        if ctnShp then ApplyContainShape(AAxis);
-      end;
-      Exit;
-    end;
-
+      on it. This is the one place the extent comes from, asked once the list
+      is full.
+      [Revised in batch 44: this set [0, n - 1] and returned before min and
+      max were read.] }
     if AAxis.AxisType = atLog then filter := defPositive else filter := defNone;
 
     any := False;
@@ -1373,6 +1472,7 @@ var
       the data loop left the ends at their infinities -- and min, max,
       boundaryGap, zero, a backwards pair and startValue all happen in
       scaleRawExtentInfo's sequence, in TyAxisRawExtent. }
+    if AAxis.AxisType = atCategory then requireStart := False;
     raw := TyAxisRawExtent(node, AAxis, lo, hi, requireStart);
     if (not any) and (AAxis.AxisType = atTime) and raw.Blank then
     begin
@@ -1454,6 +1554,13 @@ var
       and (AOption.Root is TJSONObject)
       and JsTruthyOf(TJSONObject(AOption.Root).Find('legacyMinMaxDontInverseAxis'))) then
       AAxis.Inverse := not AAxis.Inverse;
+
+    if AAxis.AxisType = atCategory then
+    begin
+      if AAxis.Scale is TTyOrdinalScale then
+        ApplyCategoryExtent(AAxis, raw, ctnShp);
+      Exit;
+    end;
 
     lo := raw.Lo;
     hi := raw.Hi;

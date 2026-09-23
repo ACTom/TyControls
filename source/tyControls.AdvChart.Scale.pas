@@ -436,6 +436,10 @@ type
 { JavaScript's rounding, which is NOT FPC's -- Round is banker's here. Exported
   because the ordinal scale is not the only place that has to snap the way the
   option text's author expects. }
+{ Math.floor and Math.ceil on the double itself: FPC's Floor and Ceil answer
+  a 32-bit Integer and wrap. }
+function JsFloor(AValue: Double): Double;
+function JsCeil(AValue: Double): Double;
 function TyJsRound(AValue: Double): Double;
 
 { ---- upstream's util/number.ts, as the ticks need it ---- }
@@ -1007,7 +1011,11 @@ end;
 
 function TTyOrdinalScale.Blank: Boolean;
 begin
-  Result := CategoryCount <= 0;
+  { NO CATEGORIES, or a min or max that named none: upstream's blank axis
+    draws nothing at all.
+    [Revised in batch 44: only the first, while nothing could narrow the
+    extent.] }
+  Result := inherited Blank or (CategoryCount <= 0);
 end;
 
 function TTyOrdinalScale.Count: Integer;
@@ -1068,7 +1076,13 @@ begin
 end;
 
 function TTyOrdinalScale.Normalize(AValue: Double): Double;
+var e: TTyRange;
 begin
+  { A BLANK EXTENT PLACES NOTHING: upstream keeps [Infinity, -Infinity] and
+    every value normalises to not-a-number, where a flat one -- min equal to
+    max -- still puts everything in the middle. }
+  e := GetExtent2(sekMapping);
+  if IsNan(e.Start) or IsNan(e.Stop) then Exit(NaN);
   { Ordinal to TICK first: the extent is measured in tick numbers, and the
     mapper only ever sees that space. }
   Result := Mapper.Normalize(OrdinalToTick(AValue));

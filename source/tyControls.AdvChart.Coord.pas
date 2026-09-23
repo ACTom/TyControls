@@ -272,6 +272,10 @@ type
       and the distance to the other, and the same for y. What a bar is
       clipped to. }
     function GetArea: TTyXYWH;
+    { getArea(tolerance): the same widened by ATol on every side, in
+      upstream's order -- the lesser end less it, and the distance to the
+      greater end plus it }
+    function GetAreaTol(ATol: Double): TTyXYWH;
     { With AClamp, a value past an end lands on it -- on the per-axis path
       only, as upstream's: the matrix does not clamp. }
     function DataToPointClamped(const AData: array of Double;
@@ -597,7 +601,9 @@ begin
   { THE SCALE'S parse FIRST: a time scale rounds to the millisecond, the way
     Math.round does. It matters at the ends of a mapping extent, which half a
     bar can leave fractional. }
-  if FScale is TTyTimeScale then AValue := TyJsRound(AValue);
+  if FScale is TTyTimeScale then AValue := TyJsRound(AValue)
+  { an ordinal one to a whole category, as Ordinal.parse rounds a number }
+  else if FScale is TTyOrdinalScale then AValue := TyJsRound(AValue);
   n := FScale.Normalize(AValue);
   if IsNan(n) then
     Exit(NaN);
@@ -761,6 +767,27 @@ function TTyCartesian2D.InvTransform(out AM: TTyMat2D): Boolean;
 begin
   AM := FInvTransform;
   Result := FHasInvTransform;
+end;
+
+function TTyCartesian2D.GetAreaTol(ATol: Double): TTyXYWH;
+var
+  ax, ay: TTyAxis;
+  a, b, g0, g1: Double;
+begin
+  Result := FXYWH;
+  ax := MasterX;
+  ay := MasterY;
+  if (ax = nil) or (ay = nil) then Exit;
+  ax.LocalExtent(a, b);
+  g0 := ax.ToGlobal(a);
+  g1 := ax.ToGlobal(b);
+  Result.X := Min(g0, g1) - ATol;
+  Result.W := Max(g0, g1) - Result.X + ATol;
+  ay.LocalExtent(a, b);
+  g0 := ay.ToGlobal(a);
+  g1 := ay.ToGlobal(b);
+  Result.Y := Min(g0, g1) - ATol;
+  Result.H := Max(g0, g1) - Result.Y + ATol;
 end;
 
 function TTyCartesian2D.GetArea: TTyXYWH;
@@ -1037,9 +1064,24 @@ begin
 end;
 
 function TTyCartesian2D.ContainPoint(const APoint: TTyPointF): Boolean;
+var
+  ax, ay: TTyAxis;
+  a, b, l: Double;
 begin
-  Result := (APoint.X >= FRect.Left) and (APoint.X <= FRect.Right)
-        and (APoint.Y >= FRect.Top) and (APoint.Y <= FRect.Bottom);
+  ax := MasterX;
+  ay := MasterY;
+  if (ax = nil) or (ay = nil) then
+    Exit((APoint.X >= FRect.Left) and (APoint.X <= FRect.Right)
+      and (APoint.Y >= FRect.Top) and (APoint.Y <= FRect.Bottom));
+  { upstream's containPoint: each axis takes the point into its own frame
+    and asks whether it falls in [0, w], both ends included }
+  ax.LocalExtent(a, b);
+  l := ax.ToLocal(APoint.X);
+  Result := (l >= Min(a, b)) and (l <= Max(a, b));
+  if not Result then Exit;
+  ay.LocalExtent(a, b);
+  l := ay.ToLocal(APoint.Y);
+  Result := (l >= Min(a, b)) and (l <= Max(a, b));
 end;
 
 end.

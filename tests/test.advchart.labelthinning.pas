@@ -107,16 +107,17 @@ begin
   Result := (ACase.Find('deferred') <> nil) and ACase.Booleans['deferred'];
 end;
 
-{ DEFERRED FOR THE PIPELINE ONLY: a case the port cannot build yet (a
-  category axis narrowed by min / max, a grid box past its container) still
-  carries upstream's own numbers, and the pure functions are held to them }
+{ DEFERRED FOR THE PIPELINE ONLY: a case the port cannot build yet (a grid
+  box past its container) still carries upstream's own numbers, and the pure
+  functions are held to them. (The category axes narrowed by min / max were
+  such cases until batch 44, and run whole now.) }
 function PureSkipped(ACase: TJSONObject): Boolean;
 var why: string;
 begin
   Result := IsDeferred(ACase);
   if not Result then Exit;
   why := ACase.Get('why', '');
-  if (Pos('the port does not narrow', why) > 0) or (Pos('grid box', why) > 0) then
+  if Pos('grid box', why) > 0 then
     Result := False;
 end;
 

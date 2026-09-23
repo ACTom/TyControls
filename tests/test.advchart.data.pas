@@ -460,8 +460,13 @@ begin
   FS.AppendRow([TyDataNum(1.5)]);
   AssertEquals('an index into the list', 2, FS.Get(0, 0), 0);
   AssertEquals('Wed', FS.GetOrdinalText(0, 0));
-  AssertTrue('out of range names no category', IsNan(FS.Get(0, 1)));
-  AssertTrue('and neither does half of one', IsNan(FS.Get(0, 2)));
+  { KEPT AS IT IS, as upstream's parseAndCollect returns it: past the list
+    is still a place on the axis, which a max can reach and the plot clips
+    otherwise; the axis rounds it where it places it.
+    [Revised in batch 44: both of these were gaps.] }
+  AssertEquals('past the list is still an index', 7, FS.Get(0, 1), 0);
+  AssertEquals('and half of one is kept for the axis to round', 1.5, FS.Get(0, 2), 0);
+  AssertEquals('which names no category', '', FS.GetOrdinalText(0, 1));
 end;
 
 procedure TAdvChartDataTest.TestANumberOnACollectingAxisIsALabel;

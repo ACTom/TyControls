@@ -520,6 +520,10 @@ type
     { What the bar solve gave a series -- its band, offset and width. An
       unsolved column (not a bar, or no such series) when there is none. }
     function BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
+    { What every render measures its text with: the painter's own, in the
+      theme's fonts. Virtual so a text table -- zrender's, for a chart laid
+      out against upstream's -- can stand in for the fonts. }
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; virtual;
     function GetStyleTypeKey: string; override;
     procedure Resize; override;
     { Protected and non-virtual, exactly as every other control in the library:
@@ -1681,7 +1685,7 @@ begin
 
     Holding it here also means the layout pass and the paint pass measure with
     the same instance, which is what they are supposed to agree about. }
-  measurer := TTyPainterTextMeasurer.Create(APPI);
+  measurer := NewTextMeasurer(APPI);
   P := TTyPainter.Create;
   try
     { LOCAL space. EndPaint blits at ARect's origin, so everything below is
@@ -3483,6 +3487,11 @@ begin
   Result.LineWidthLogical := 1;
 end;
 
+function TTyAdvanceChart.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  Result := TTyPainterTextMeasurer.Create(APPI);
+end;
+
 function TTyAdvanceChart.BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
 begin
   Result := Default(TTyBarColumn);
@@ -4283,6 +4292,11 @@ var
       grid -- and a guard that is redundant only by coincidence is still the
       guard that has to be there when the coincidence ends. }
     if not TyRangeContains(AAxis.Scale.GetExtent2(sekEffective), value) then Exit;
+    { AND ON A CATEGORY AXIS, A CATEGORY: upstream's contain asks for one
+      that exists, so a min or max reaching past the list leaves positions
+      that take no pointer; and a blank axis takes none anywhere. }
+    if AAxis.Scale.Blank then Exit;
+    if isCat and not AAxis.Scale.Contain(value) then Exit;
 
     { ---- the nearest series, and only the nearest ---- }
     snapTo := value;
@@ -4350,7 +4364,11 @@ begin
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
-    if not TyRectFContains(gb.PlotRect, TyPointF(AX, AY)) then Continue;
+    { CLOSED ON EVERY EDGE, as upstream's containPoint: a pointer on the
+      plot's right or bottom edge still points at the last category
+      [Revised in batch 44: this was the half-open cell rule.] }
+    if (gb.CartesianCount = 0)
+      or not gb.CartesianByIndex(0).ContainPoint(TyPointF(AX, AY)) then Continue;
     for c := 0 to gb.CartesianCount - 1 do
     begin
       cart := gb.CartesianByIndex(c);
@@ -5118,7 +5136,7 @@ begin
 
   if FStatic.NeedsRender(w, h) then
   begin
-    measurer := TTyPainterTextMeasurer.Create(APPI);
+    measurer := NewTextMeasurer(APPI);
     P := TTyPainter.Create;
     try
       P.BeginPaint(FStatic.Canvas, R, APPI);
@@ -5136,7 +5154,7 @@ begin
     no axes, so paying it to draw nothing would give back most of what the
     cache just saved. }
   if not HasDynamicContent then Exit;
-  measurer := TTyPainterTextMeasurer.Create(APPI);
+  measurer := NewTextMeasurer(APPI);
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);

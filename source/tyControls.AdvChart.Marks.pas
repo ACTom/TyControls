@@ -94,6 +94,11 @@ type
       strategy on the category axis", and this is that interval, computed once
       by the layout pass rather than guessed at again here. }
     LabelStep: Integer;
+    { `clip`, default TRUE: a line is cut at the plot, widened by half its
+      width, and a marker -- a line's or a scatter's -- outside the plot is
+      not drawn at all. FALSE lets the line run past the plot along the
+      value axis only. }
+    Clip: Boolean;
   end;
 
   { Everything about ONE series that was decided somewhere else.
@@ -242,7 +247,7 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
 
 implementation
 
-uses tyControls.AdvChart.JsMath;
+uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels;
 
 function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ADefaults: TTyCandleSpec): TTyCandleSpec;
@@ -313,6 +318,7 @@ begin
   Result.ShowSymbol := True;
   Result.ShowAllSymbol := sasAuto;
   Result.LabelStep := 1;
+  Result.Clip := True;
   if AOption = nil then Exit;
   d := AOption.ComponentAt('series', ASlot);
   if (d = nil) or not (d is TJSONObject) then Exit;
@@ -336,6 +342,17 @@ begin
   d := node.Find('connectNulls');
   if (d <> nil) and (d.JSONType = jtBoolean) then
     Result.ConnectNulls := d.AsBoolean;
+
+  { get('clip', true), then read as a truth: absent or null is the default }
+  d := node.Find('clip');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+    case d.JSONType of
+      jtBoolean: Result.Clip := d.AsBoolean;
+      jtNumber: Result.Clip := (not IsNan(d.AsFloat)) and (d.AsFloat <> 0);
+      jtString: Result.Clip := d.AsString <> '';
+    else
+      Result.Clip := True;
+    end;
 
   d := node.Find('showSymbol');
   if (d <> nil) and (d.JSONType = jtBoolean) then
@@ -938,7 +955,11 @@ function BuildLine(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
-  i, n, step: Integer;
+  i, n, thinStart: Integer;
+  thin: Boolean;
+  thinKeep: TTyBoolArray;
+  lineClip: TTyRectF;
+  symbolArea: TTyXYWH;
   x, y, lowV, startV: Double;
   p, q: TTyPointF;
   pts, lows: TTyPointFArray;
@@ -978,27 +999,115 @@ var
   { showAllSymbol. Upstream: 'auto' shows every marker unless one would crowd
     its neighbour -- it compares the symbol's size against the space a single
     category gets, with an empirical 1.5 margin -- and when they would crowd it
-    "follows the label interval strategy on the category axis", which is the
-    step the axis layout already worked out. }
-  function SymbolStep: Integer;
+    "follows the label interval strategy on the category axis": a marker is
+    drawn on a category that has a label, and on no other.
+    WHICH CATEGORY, not which point: the row's own value on the category
+    axis against the labels' list, from the axis' first category with the
+    step the layout worked out, its two off-interval ends left out.
+    [Revised in batch 44: this kept every step-th point of the run, which is
+    the same thing only while the points start at the axis' first category
+    and are one per category -- a min, a max or name-keyed data broke it.] }
+  procedure PrepareThinning;
   var
     avail, sz: Double;
-    cats: Integer;
+    cats, k: Integer;
+    e: TTyRange;
+    vals: TTyIntegerArray;
+    offs: TTyBoolArray;
   begin
-    Result := 1;
+    thin := False;
     if AVisual.Line.ShowAllSymbol = sasYes then Exit;
     if ABinding.BaseAxis = nil then Exit;
     if not (ABinding.BaseAxis.Scale is TTyOrdinalScale) then Exit;
     cats := TTyOrdinalScale(ABinding.BaseAxis.Scale).Count;
     if cats <= 0 then Exit;
-    avail := ABinding.BaseAxis.PxLength / cats;
-    { The ACROSS size, which is upstream's own index choice: it reads
-      symbolSize[1] for a horizontal category axis. Only visible with an
-      oblong symbolSize, and transcribed rather than corrected. }
-    if baseHoriz then sz := AVisual.Symbol.HeightPx
-                 else sz := AVisual.Symbol.WidthPx;
-    if sz * 1.5 <= avail then Exit;
-    Result := Max(1, AVisual.Line.LabelStep);
+    if AVisual.Line.ShowAllSymbol = sasAuto then
+    begin
+      avail := ABinding.BaseAxis.PxLength / cats;
+      { The ACROSS size, which is upstream's own index choice: it reads
+        symbolSize[1] for a horizontal category axis. Only visible with an
+        oblong symbolSize, and transcribed rather than corrected. }
+      if baseHoriz then sz := AVisual.Symbol.HeightPx
+                   else sz := AVisual.Symbol.WidthPx;
+      if sz * 1.5 <= avail then Exit;
+    end;
+    e := ABinding.BaseAxis.Scale.GetExtent;
+    thinStart := Trunc(e.Start);
+    TyCategoryBuiltList(thinStart, cats, Max(1, AVisual.Line.LabelStep) - 1,
+      vals, offs);
+    SetLength(thinKeep, cats);
+    for k := 0 to cats - 1 do thinKeep[k] := False;
+    for k := 0 to High(vals) do
+      if (not offs[k]) and (vals[k] - thinStart >= 0)
+        and (vals[k] - thinStart < cats) then
+        thinKeep[vals[k] - thinStart] := True;
+    thin := True;
+  end;
+
+  { UPSTREAM'S createGridClipPath: the plot widened by half the pen each
+    way -- so the stroke along an edge is not cut thin -- its width rounded
+    up, and a fractional left edge rounded down with a pixel given back on
+    the width. The top is left as it falls. With clip off the rect runs
+    past the plot along the value axis by its own greater side each way. }
+  procedure PrepareClip;
+  var
+    area: TTyXYWH;
+    lw, x, y, w, h, ex: Double;
+  begin
+    area := ABinding.Cart.GetArea;
+    lw := AVisual.StrokeWidthLogical;
+    if lw <= 0 then lw := 2;
+    x := area.X - lw / 2;
+    y := area.Y - lw / 2;
+    w := area.W + lw;
+    h := area.H + lw;
+    w := JsCeil(w);
+    if x <> JsFloor(x) then
+    begin
+      x := JsFloor(x);
+      w := w + 1;
+    end;
+    if not spec.Clip then
+    begin
+      ex := Max(w, h);
+      if baseHoriz then
+      begin
+        y := y - ex;
+        h := h + ex * 2;
+      end
+      else
+      begin
+        x := x - ex;
+        w := w + ex * 2;
+      end;
+    end;
+    lineClip := TyRectF(x, y, x + w, y + h);
+    { and where a marker may be: the plot and a tenth of a pixel, with clip
+      on; anywhere with it off }
+    symbolArea := area;
+    symbolArea.X := symbolArea.X - 0.1;
+    symbolArea.Y := symbolArea.Y - 0.1;
+    symbolArea.W := symbolArea.W + 0.2;
+    symbolArea.H := symbolArea.H + 0.2;
+  end;
+
+  function InSymbolArea(const AP: TTyPointF): Boolean;
+  begin
+    if not spec.Clip then Exit(True);
+    Result := (AP.X >= symbolArea.X) and (AP.X <= symbolArea.X + symbolArea.W)
+      and (AP.Y >= symbolArea.Y) and (AP.Y <= symbolArea.Y + symbolArea.H);
+  end;
+
+  function SymbolKept(ARow: Integer): Boolean;
+  var
+    v: Double;
+    k: Int64;
+  begin
+    if not thin then Exit(True);
+    if baseHoriz then v := AStore.Get(AColX, ARow) else v := AStore.Get(AColY, ARow);
+    if IsNan(v) or IsInfinite(v) then Exit(False);
+    k := Round(v) - thinStart;
+    Result := (k >= 0) and (k <= High(thinKeep)) and thinKeep[k];
   end;
 
   { Upstream's isPointIllegal: NOT only NaN. Any non-finite coordinate is a
@@ -1067,6 +1176,8 @@ var
       { SILENT: the fill is decoration behind the line, and a pointer landing
         on it should find the line, not the shading. }
       el.Silent := True;
+      el.HasClip := True;
+      el.ClipRect := lineClip;
       AList.Add(el);
       Inc(Result);
     end;
@@ -1086,6 +1197,8 @@ var
     { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
       resolved width -- the default 2 was filled in a few lines up. }
     el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
+    el.HasClip := True;
+    el.ClipRect := lineClip;
     AList.Add(el);
     Inc(Result);
 
@@ -1095,7 +1208,8 @@ var
       line between two markers cannot. }
     if spec.ShowSymbol then
       for k := 0 to n - 1 do
-        if ((k mod step) = 0) and EmitSymbol(pts[k], rows[k]) then
+        if SymbolKept(rows[k]) and InSymbolArea(pts[k])
+          and EmitSymbol(pts[k], rows[k]) then
           Inc(Result);
   end;
 
@@ -1105,7 +1219,8 @@ begin
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
   startV := AreaStartValue(ABinding.ValueAxis, spec);
-  step := SymbolStep;
+  PrepareThinning;
+  PrepareClip;
   SetLength(pts, AStore.Count);
   SetLength(lows, AStore.Count);
   SetLength(rows, AStore.Count);
@@ -1192,10 +1307,12 @@ var
   v: TTySeriesVisual;
   el: TTyChartElement;
   baseHoriz, stacked: Boolean;
+  area: TTyXYWH;
 begin
   Result := 0;
   spec := AVisual.Symbol;
   if spec.Kind = tsyNone then Exit;
+  area := ABinding.Cart.GetAreaTol(0.1);
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
 
@@ -1223,6 +1340,9 @@ begin
     p := ABinding.Cart.DataToPoint([x, y]);
     if IsNan(p.X) or IsNan(p.Y)
       or IsInfinite(p.X) or IsInfinite(p.Y) then Continue;
+    { OUTSIDE THE PLOT, WITH CLIP ON, NO MARKER: upstream's getArea(0.1) }
+    if AVisual.Line.Clip and not ((p.X >= area.X) and (p.X <= area.X + area.W)
+      and (p.Y >= area.Y) and (p.Y <= area.Y + area.H)) then Continue;
 
     if sizeCol >= 0 then
     begin

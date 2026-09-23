@@ -329,7 +329,9 @@ begin
     pixels; one distinct value, with nothing to measure, gives a fixed share
     of the whole axis -- whatever the span, which is upstream's order of
     tests; anything else is no band at all. }
-  if (AGap > 0) and (AScaleSpan > 0) and not IsInfinite(AScaleSpan) then
+  { a blank axis has no span at all -- not-a-number, which is no band }
+  if (AGap > 0) and not IsNan(AScaleSpan) and (AScaleSpan > 0)
+    and not IsInfinite(AScaleSpan) then
     Result := APxSpan / AScaleSpan * AGap
   else if AGap = cTyMinGapSingle then
     Result := APxSpan * cFallbackBandWidthRatio

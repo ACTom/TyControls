@@ -1196,7 +1196,14 @@ begin
     len := TyRectFHeight(APlot);
     axisRot := 90;
   end;
-  unitSpan := TyCategoryUnitSpan(len, n, ASpec.OnBand, ASpec.Inverse);
+  { UPSTREAM'S OWN EXPRESSION when the axis gave the labels' coordinates:
+    dataToCoord(e0 + 1) - dataToCoord(e0), over the mapping extent -- which
+    half a bar widens on an unbanded axis, and which the closed form below
+    does not know about }
+  if Length(ASpec.LocalCoords) = n then
+    unitSpan := ASpec.LocalCoords[1] - ASpec.LocalCoords[0]
+  else
+    unitSpan := TyCategoryUnitSpan(len, n, ASpec.OnBand, ASpec.Inverse);
   SetLength(ws, (n - 1) div s + 1);
   SetLength(hs, Length(ws));
   k := 0;

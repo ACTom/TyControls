@@ -1047,11 +1047,11 @@ begin
         else
         begin
           { A fixed category list gives a number its other meaning: the INDEX of
-            a category, which is ECharts' documented shorthand. Out of range
-            names no category, so it is a gap rather than a point drawn past the
-            end of the axis. }
-          if (AValue.Num < 0) or (AValue.Num >= meta.Count)
-             or (Frac(AValue.Num) <> 0) then Exit(NaN);
+            a category, which is ECharts' documented shorthand -- and taken as
+            it is, as upstream's parseAndCollect returns it: an index past the
+            list is still a place on the axis, which a max or 'dataMax' can
+            reach, and which the plot clips otherwise.
+            [Revised in batch 44: out of range, or fractional, was a gap.] }
           Exit(AValue.Num);
         end;
       end;
