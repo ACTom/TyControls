@@ -15,6 +15,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
+  tyControls.ToolWindows.Layout,
   tyControls.Icons.Lucide, test.toolwindow.window;
 
 type

@@ -13,6 +13,7 @@ uses
   Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
+  tyControls.ToolWindows.Layout,
   test.toolwindow.window;
 
 type
