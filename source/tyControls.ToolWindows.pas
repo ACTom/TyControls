@@ -618,6 +618,9 @@ type
       改这两个只带来栏自己的一次裸 Invalidate —— 变了就让当前页重查几何(InvalidateHeader)。 }
     FHeaderStyleKey: string;
     FHeaderStyleKeyValid: Boolean;
+    { 挂着显隐 / 改尺寸处理器的兄弟(同一父控件里的非栏控件),见 WatchSiblings。每个都
+      FreeNotification 过:它被释放时从这里摘掉,不留悬垂。 }
+    FWatched: array of TControl;
     FOnChange: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
     FOnExpand: TNotifyEvent;
@@ -677,6 +680,16 @@ type
     function JoinsNarrowing: Boolean;
     { 父控件尺寸变了:重推(收窄跟着可用空间走)。 }
     procedure ParentResized(Sender: TObject);
+    { 收窄(spec §6.2)和最大化(§6.4)扣的是同轴对齐兄弟的尺寸 —— 兄弟显隐、改尺寸而父控件
+      没动时 ParentResized 听不见。所以给父控件里每一个非栏兄弟挂显隐 / 改边界的处理器
+      (栏之间本来就互相 DeriveSiblings)。和父控件此刻的子控件对一遍:已经不在父控件里的摘掉,
+      新来的挂上。每次推导尺寸时对一遍(换父控件也经推导)—— LCL 不告诉别的子控件「来了
+      一个兄弟」,新兄弟要等下一次推导才挂上(父控件里有 alClient 编辑区时,兄弟进出引起的
+      重排会挪它,它的改边界处理器就触发这一次推导)。 }
+    procedure WatchSiblings;
+    procedure UnwatchAt(AIndex: Integer);
+    procedure UnwatchAll;
+    procedure SiblingChanged(Sender: TObject);
     { 同一父控件里其余每一条栏重推(它们按比例分的份额跟着本栏变)。 }
     procedure DeriveSiblings(AParent: TWinControl);
     { Placement 要求的 Align(左 → alLeft,右 → alRight,底 → alBottom)。 }
@@ -779,7 +792,8 @@ type
     procedure SetMaximized(AValue: Boolean);
     { 最大化时的内容项(开工前问题 4):父控件调整后客户区高 − 同轴非栏对齐兄弟 − 所有参与
       分空间的同轴栏的固定部分 − **其余**参与者未收窄的内容,不低于 content-min。其余栏照
-      §6.2 用各自的未收窄值,不让位。父控件的 OnResize 本来就订阅着(ParentResized),跟着变。 }
+      §6.2 用各自的未收窄值,不让位。父控件改尺寸(ParentResized)、兄弟显隐 / 改尺寸
+      (WatchSiblings)都会重推。 }
     function MaximizedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
@@ -990,6 +1004,8 @@ type
     property DropSlotForTest: Integer read FDropSlot;
     { 探针:拖动期间轮询捕获的计时器此刻在不在。 }
     function HasCaptureTimerForTest: Boolean;
+    { 探针:此刻挂着处理器的兄弟有几个(真实列表的长度)。 }
+    function WatchedSiblingCountForTest: Integer;
     procedure ActivateWindow(AWindow: TTyToolWindow);
     function IndexOfWindow(AWindow: TTyToolWindow): Integer;
     function ChromeInsetPx: Integer;
@@ -2445,6 +2461,8 @@ begin
   FreeAndNil(FImageLink);
   FSubscribedList := nil;
   FreeAndNil(FOverflowMenu);
+  { 兄弟身上挂着的处理器指向本栏,先摘。 }
+  UnwatchAll;
   { 拖动 / 拉宽中被释放:临时光标弹掉、计时器放掉、拉宽标志清掉。拉宽 / 拖动期间装在
     Application 和 Screen 上的处理器,一个不留。 }
   ResetGesture(twgeDiscard);
@@ -2791,6 +2809,69 @@ begin
   if [csLoading, csDestroying] * ComponentState = [] then DeriveSize;
 end;
 
+procedure TTyToolWindowBar.WatchSiblings;
+var
+  p: TWinControl;
+  c: TControl;
+  i, k: Integer;
+  known: Boolean;
+begin
+  p := Parent;
+  { 已经离开父控件的(挪到别处、父控件换了)先摘掉。 }
+  for i := High(FWatched) downto 0 do
+    if (p = nil) or (FWatched[i].Parent <> p) then UnwatchAt(i);
+  if (p = nil) or (csDestroying in ComponentState) or (csDestroying in p.ComponentState) then Exit;
+  for i := 0 to p.ControlCount - 1 do
+  begin
+    c := p.Controls[i];
+    { 栏之间已经互相通知(DeriveSiblings、CMVisibleChanged),不再挂。 }
+    if (c = Self) or (c is TTyToolWindowBar) or (csDestroying in c.ComponentState) then Continue;
+    known := False;
+    for k := 0 to High(FWatched) do
+      if FWatched[k] = c then
+      begin
+        known := True;
+        Break;
+      end;
+    if known then Continue;
+    c.AddHandlerOnVisibleChanged(@SiblingChanged);
+    c.AddHandlerOnChangeBounds(@SiblingChanged);
+    c.FreeNotification(Self);
+    SetLength(FWatched, Length(FWatched) + 1);
+    FWatched[High(FWatched)] := c;
+  end;
+end;
+
+procedure TTyToolWindowBar.UnwatchAt(AIndex: Integer);
+var
+  c: TControl;
+begin
+  c := FWatched[AIndex];
+  Delete(FWatched, AIndex, 1);
+  { 正在释放的那个:它的处理器表跟着它走,互相的 FreeNotification 由它的析构清。 }
+  if csDestroying in c.ComponentState then Exit;
+  c.RemoveHandlerOnVisibleChanged(@SiblingChanged);
+  c.RemoveHandlerOnChangeBounds(@SiblingChanged);
+  c.RemoveFreeNotification(Self);
+end;
+
+procedure TTyToolWindowBar.UnwatchAll;
+var
+  i: Integer;
+begin
+  for i := High(FWatched) downto 0 do
+    UnwatchAt(i);
+end;
+
+procedure TTyToolWindowBar.SiblingChanged(Sender: TObject);
+begin
+  { 自己推导时改了尺寸,对齐引擎接着挪兄弟,那一圈回到这里 —— FDeriving 挡住。已经不在
+    同一父控件里的(还没来得及摘)不算。 }
+  if FDeriving or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  if not (Sender is TControl) or (TControl(Sender).Parent <> Parent) then Exit;
+  DeriveSize;
+end;
+
 procedure TTyToolWindowBar.DeriveSiblings(AParent: TWinControl);
 var
   i: Integer;
@@ -2813,6 +2894,9 @@ begin
   if old = NewParent then Exit;
   if (NewParent <> nil) and not (csDestroying in ComponentState) then
     NewParent.AddHandlerOnResize(@ParentResized);
+  { 兄弟的处理器不在这里挪:下面的 DeriveSize 第一件事就是 WatchSiblings(旧父控件里的摘掉、
+    新的挂上;父控件为 nil 时全摘)。加载中推导不跑 —— 那时挂着的都指向别处的兄弟,
+    SiblingChanged 按 Parent 比对不理它们,Loaded 的推导再对一遍。 }
   { 同轴的栏在两边各少了 / 多了一个,各自重分。 }
   if not (csDestroying in ComponentState) then
   begin
@@ -2845,6 +2929,8 @@ begin
      or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
   FDeriving := True;
   try
+    { 推导要扣的兄弟一个不漏地挂上(新来的兄弟在这一刻才被看见)。 }
+    WatchSiblings;
     m := Metrics;
     FLaid := m;
     FLaidPPI := PPI;
@@ -4111,6 +4197,11 @@ begin
   Result := FGesture.HasCaptureTimer;
 end;
 
+function TTyToolWindowBar.WatchedSiblingCountForTest: Integer;
+begin
+  Result := Length(FWatched);
+end;
+
 function TTyToolWindowBar.IsEdgeDraggingForTest: Boolean;
 begin
   Result := EdgeResizing;
@@ -5274,8 +5365,15 @@ begin
 end;
 
 procedure TTyToolWindowBar.Notification(AComponent: TComponent; Operation: TOperation);
+var
+  i: Integer;
 begin
   inherited Notification(AComponent, Operation);
+  { 挂着处理器的兄弟被释放(或从 Owner 摘走 —— 那时它还活着,UnwatchAt 照常摘处理器,
+    下一次推导再挂)。 }
+  if (Operation = opRemove) and (AComponent is TControl) then
+    for i := High(FWatched) downto 0 do
+      if FWatched[i] = AComponent then UnwatchAt(i);
   { 窗口被释放(含设计期删除):LCL 在 SetParent(nil) 时它已经 csDestroying,
     注销那一步跳过了,走到这里。 }
   if (Operation = opRemove) and (AComponent is TTyToolWindow) then

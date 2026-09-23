@@ -93,6 +93,13 @@ type
     procedure TestTheMaximizeButtonTogglesOnARealClick;
     procedure TestTheMaximizeGlyphTurnsIntoRestore;
     procedure TestMaximizingRepaintsTheActivePage;
+    { 父控件没动、兄弟显隐 / 改尺寸:最大化的高跟着变(spec §6.4)。 }
+    procedure TestAMaximizedBarFollowsItsSiblings;
+    { spec §6.4:栏变空、栏换父控件之前先还原。 }
+    procedure TestAnEmptiedBarRestoresFirst;
+    procedure TestReparentingTheBarRestoresFirst;
+    { 同一父控件里两条底栏:最大化的那条扣掉另一条的固定部分和未收窄的内容。 }
+    procedure TestTwoBottomBarsShareTheParentWhenOneIsMaximized;
     { Task 10:设计期点标签(spec §3.6 设计期、§7.4 设计期)。 }
     procedure TestADesignTimeTabClickSwitchesOnRelease;
     procedure TestDesignTimeButtonsAndSeparatorAnswerZero;
@@ -107,6 +114,8 @@ type
     procedure TestSameKindOrphanAndNilMovesDoNotRaise;
   private
     FDesignWins: array of TProbeWindow;
+    { HostTheBar 建的宿主和它上面那个 alTop 兄弟。 }
+    FHost, FTop: TBodyChild;
     { 窗体上一条运行时底栏,带一个窗口。 }
     function NewRuntimeBar(APlacement: TTyToolWindowPlacement; out AWin: TProbeWindow): TBarAccess;
     { AWin.Parent := ANew,答「抛了 EInvalidOperation」。 }
@@ -964,19 +973,19 @@ end;
 
 procedure TTyToolWindowBottomTests.HostTheBar;
 var
-  host, top, client: TBodyChild;
+  client: TBodyChild;
 begin
-  host := TBodyChild.Create(FForm);
-  host.Parent := FForm;
-  host.SetBounds(0, 0, 600, 400);
-  top := TBodyChild.Create(FForm);
-  top.Parent := host;
-  top.Align := alTop;
-  top.Height := 30;
+  FHost := TBodyChild.Create(FForm);
+  FHost.Parent := FForm;
+  FHost.SetBounds(0, 0, 600, 400);
+  FTop := TBodyChild.Create(FForm);
+  FTop.Parent := FHost;
+  FTop.Align := alTop;
+  FTop.Height := 30;
   client := TBodyChild.Create(FForm);
-  client.Parent := host;
+  client.Parent := FHost;
   client.Align := alClient;
-  FBar.Parent := host;
+  FBar.Parent := FHost;
 end;
 
 procedure TTyToolWindowBottomTests.TestMaximizeFillsTheParentOverItsSiblings;
@@ -1156,6 +1165,80 @@ begin
   ArmActive(w);
   FBar.Maximized := True;
   AssertTrue('字形换了:当前页丢缓存', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+end;
+
+procedure TTyToolWindowBottomTests.TestAMaximizedBarFollowsItsSiblings;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  FBar.Maximized := True;
+  AssertEquals('前提:扣掉上面那个 30 高的兄弟', 400 - 30, FBar.Height);
+  FTop.Visible := False;
+  AssertEquals('兄弟藏起来:占满宿主', 400, FBar.Height);
+  FTop.Visible := True;
+  AssertEquals('兄弟回来:让出它的高', 370, FBar.Height);
+  FTop.Height := 60;
+  AssertEquals('兄弟变高:跟着让', 340, FBar.Height);
+  AssertEquals('ExpandedSize 从头到尾不写', 150, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowBottomTests.TestAnEmptiedBarRestoresFirst;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output'], 1);
+  FBar.ExpandedSize := 150;
+  FBar.Maximized := True;
+  AssertTrue('前提:最大化了', FBar.Maximized);
+  FWins[0].Free;
+  FWins[0] := nil;
+  AssertTrue('还剩一个窗口:照样最大化', FBar.Maximized);
+  FWins[1].Free;
+  FWins[1] := nil;
+  AssertFalse('栏变空:先还原', FBar.Maximized);
+  { 再进来一个窗口,展开的高是按 ExpandedSize 推的,不是最大化的高。 }
+  NewWindow;
+  AssertEquals('再有窗口时是还原的高', 154, FBar.Height);
+end;
+
+procedure TTyToolWindowBottomTests.TestReparentingTheBarRestoresFirst;
+var
+  other: TBodyChild;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  FBar.Maximized := True;
+  AssertEquals('前提:最大化的高', 370, FBar.Height);
+  other := TBodyChild.Create(FForm);
+  other.Parent := FForm;
+  other.SetBounds(0, 0, 600, 500);
+  FBar.Parent := other;
+  AssertFalse('换父控件之前先还原', FBar.Maximized);
+  AssertEquals('在新父控件里是还原的高', 154, FBar.Height);
+end;
+
+procedure TTyToolWindowBottomTests.TestTwoBottomBarsShareTheParentWhenOneIsMaximized;
+var
+  b2: TBarAccess;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  b2 := TBarAccess.Create(FForm);
+  b2.Controller := FCtl;
+  b2.Font.PixelsPerInch := 96;
+  b2.Placement := twpBottom;
+  b2.Parent := FHost;
+  b2.ExpandedSize := 130;
+  NewWindowIn(b2, FForm);
+  AssertEquals('前提:另一条按展开尺寸推', 134, b2.Height);
+  FBar.Maximized := True;
+  { 400 − 30(上面的兄弟)− 4(本栏边缘区)− 4 − 130(另一条的固定部分 + 未收窄的内容)。 }
+  AssertEquals('最大化的那条扣掉另一条', 4 + 232, FBar.Height);
+  AssertEquals('另一条不让位', 134, b2.Height);
+  FBar.Maximized := False;
+  AssertEquals('还原', 154, FBar.Height);
 end;
 
 { --- Task 10 -------------------------------------------------------------------- }

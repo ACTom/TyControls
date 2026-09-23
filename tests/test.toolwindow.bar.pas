@@ -215,6 +215,10 @@ type
     procedure TestNarrowingDoesNotDependOnTheAlignOrder;
     procedure TestNonBarSiblingsOnTheAxisCountAndOthersDoNot;
     procedure TestABottomBarNarrowsAgainstTopAndBottomSiblings;
+    { 父控件没动、同轴兄弟显隐 / 改尺寸:收窄跟着变。 }
+    procedure TestNarrowingFollowsASiblingThatHidesOrResizes;
+    { 挂在兄弟身上的处理器:兄弟被释放、栏离开父控件时摘掉,不留悬垂。 }
+    procedure TestSiblingWatchesAreDroppedWhenEitherSideLeaves;
   end;
 
 const
@@ -2170,6 +2174,48 @@ begin
   { 600 - 200 - 4(边缘区)= 396。 }
   AssertEquals('底栏按上下的对齐兄弟收窄', EdgePx + 396, FBar.Height);
   AssertEquals('不写回', 500, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowBarTests.TestNarrowingFollowsASiblingThatHidesOrResizes;
+var
+  side: TBodyChild;
+begin
+  side := TBodyChild.Create(FForm);
+  side.Align := alRight;
+  side.Width := 100;
+  side.Parent := FForm;
+  NewWindow;
+  FBar.ExpandedSize := 1000;
+  AssertEquals('前提:800 - 100 - 40 = 660', StripPx + EdgePx + 660, FBar.Width);
+  side.Width := 200;
+  AssertEquals('兄弟变宽:跟着收窄', StripPx + EdgePx + 560, FBar.Width);
+  side.Visible := False;
+  AssertEquals('兄弟藏起来:让回来', StripPx + EdgePx + 760, FBar.Width);
+  side.Visible := True;
+  AssertEquals('兄弟回来:再收窄', StripPx + EdgePx + 560, FBar.Width);
+  AssertEquals('不写回', 1000, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowBarTests.TestSiblingWatchesAreDroppedWhenEitherSideLeaves;
+var
+  a, b: TBodyChild;
+  n: Integer;
+begin
+  a := TBodyChild.Create(FForm);
+  a.Parent := FForm;
+  b := TBodyChild.Create(FForm);
+  b.Parent := FForm;
+  NewWindow;
+  FBar.ExpandedSize := 300;            { 推一次:两个兄弟都挂上 }
+  n := FBar.WatchedSiblingCountForTest;
+  AssertTrue('前提:两个兄弟都挂上了', n >= 2);
+  a.Free;
+  AssertEquals('兄弟被释放:从列表里摘掉', n - 1, FBar.WatchedSiblingCountForTest);
+  FBar.Parent := nil;
+  AssertEquals('栏离开父控件:一个都不挂', 0, FBar.WatchedSiblingCountForTest);
+  b.Width := 50;                       { 摘干净了:不回调本栏 }
+  FBar.Parent := FForm;
+  AssertEquals('回到父控件:重新挂上', n - 1, FBar.WatchedSiblingCountForTest);
 end;
 
 initialization
