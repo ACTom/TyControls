@@ -244,6 +244,10 @@ type
     function BodyRect: TRect;
     { 把焦点给正文里第一个可聚焦的控件(protected 的 SelectFirst 的公开包装,spec §3.1)。 }
     procedure FocusFirst;
+    { 是不是所在栏的当前页(spec §3.1)。栏收起着时当前页照样是它 —— 这里答的是
+      「栏认哪一页」,不是「此刻看不看得见」。不在栏里、栏在流式加载中(那时栏还没挑)答 False。
+      B 期底栏的标签行只由当前页代画,问的就是这一处。 }
+    function IsActive: Boolean;
     property Bar: TTyToolWindowBar read GetBar;
     property Actions: TTyToolWindowActions read GetActions;
     { 探针:最近一次写 Visible 那一刻 csNoDesignVisible 在不在 —— 真实状态的只读视图。
@@ -347,6 +351,28 @@ type
   end;
 
   TTyToolWindowArray = array of TTyToolWindow;
+
+  { 栏自己的几何,栏客户区坐标,**一处算**(TTyToolWindowBar.LayoutIn):AdjustClientRect 取
+    Content、绘制取全部、图标条的命中(Task 7)取 Slots / Overflow。空矩形 = 没有这个部件。 }
+  TTyToolWindowBarLayout = record
+    { 放窗口的那一块 —— AdjustClientRect 的答案。 }
+    Content: TRect;
+    { 图标条整条(含靠内容区那一侧的界线);底栏为空。 }
+    Strip: TRect;
+    { 图标条里排图标的那一段:Strip 去掉界线。 }
+    Cells: TRect;
+    { 排上条的图标,ItemIndex 是**窗口序号**,ItemRect 已换成栏坐标。 }
+    Slots: TTyToolWindowSlots;
+    { 有窗口放不下时,紧跟在最后一个图标后面的溢出按钮。 }
+    Overflow: TRect;
+    { 拉宽边 / 贴编辑区的分隔线。运行时收起或没有窗口时为空(它这时不起作用,也不占宽)。 }
+    Edge: TRect;
+    { 设计期没有窗口:「添加工具窗口」提示画在这里。 }
+    EmptyNote: TRect;
+    { 设计期有漏进来的非窗口子控件:内容区底部让出来的一行提示(不让出来的话当前页整个
+      盖在内容区上,提示一个像素都露不出来)。 }
+    StrayNote: TRect;
+  end;
 
   TTyToolWindowBar = class(TTyCustomControl)
   private
@@ -464,8 +490,22 @@ type
     procedure SwitchSilently(AWindow: TTyToolWindow);
     function EventsAllowed: Boolean;
     procedure DoChange;
+    { 长度 token 按栏自己的 PPI 换成设备像素,负的按 0。 }
+    function TokenPx(const AName: string; ADefault: Integer): Integer;
+    { 漏进来的非窗口子控件有几个(粘贴等途径;spec §6.1)。 }
+    function StrayCount: Integer;
+    { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
+      收起时当前图标不画 :selected(spec §5.3)。 }
+    function StripItemStates(AIndex: Integer): TTyStateSet;
   protected
+    { 图标条上悬停 / 按下的那一格(窗口序号,-1 = 没有)。A 期只画:给了哪一格就按哪一格的
+      状态画。谁来写它们 —— 悬停追踪、按下、切页后重查 —— 是 Task 7 的事。 }
+    FStripHover: Integer;
+    FStripPressed: Integer;
     function GetStyleTypeKey: string; override;
+    { 栏客户区坐标(0,0 起)里画整条栏:底色、图标条、图标、指示条、溢出、边缘区、设计期提示。
+      几何全部来自 LayoutIn(R),跟 AdjustClientRect / 命中是同一份。 }
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { spec §6.1:只接受工具窗口。用 InheritsFrom:派生的窗口类照收。 }
     function ChildClassAllowed(ChildClass: TClass): Boolean; override;
     procedure AdjustClientRect(var ARect: TRect); override;
@@ -521,6 +561,17 @@ type
     procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
     { 离开的两条路都在这之后才走到,窗口序号只能在这里记。 }
     procedure RemoveControl(AControl: TControl); override;
+    { 漏进来的非窗口子控件(粘贴等途径,ChildClassAllowed 拦不住的那几条):运行时藏起来,
+      设计期让出提示那一行(spec §6.1)。overload:不写的话单参数的 InsertControl(AControl)
+      被这一个遮住,而它正是「直接塞进来」的那条路。 }
+    procedure InsertControl(AControl: TControl; Index: Integer); overload; override;
+    procedure Paint; override;
+    { 栏的几何,AClient 是栏的客户区(AdjustClientRect 之前的那个)。见 TTyToolWindowBarLayout。 }
+    function LayoutIn(const AClient: TRect): TTyToolWindowBarLayout;
+    { 此刻客户区下的 LayoutIn。 }
+    function BarLayout: TTyToolWindowBarLayout;
+    { 窗口序号为 AIndex 的图标在栏上的格子;不在条上(收进溢出、底栏、越界)答空矩形。 }
+    function StripItemRect(AIndex: Integer): TRect;
     procedure RegisterWindow(AWindow: TTyToolWindow);
     procedure UnregisterWindow(AWindow: TTyToolWindow);
     procedure ActivateWindow(AWindow: TTyToolWindow);
@@ -610,7 +661,9 @@ implementation
 uses
   Forms,     { GetParentForm:切页 / 收起时看焦点在不在旧页里 }
   LCLProc,   { OwnerFormDesignerModified:设计期切页要告诉 IDE }
-  tyControls.ImageDraw;  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子 }
+  BGRABitmap, BGRABitmapTypes,  { 图标条:渲染出来的图标是调用方持有的 BGRA 位图 }
+  tyControls.ImageCollection,   { TyTintBitmapAlpha / TyFadeBitmapAlpha:图标按状态着色 }
+  tyControls.ImageDraw;  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子;TyRenderImage }
 
 { --- TTyToolWindow ------------------------------------------------------------ }
 
@@ -729,6 +782,14 @@ function TTyToolWindow.GetBar: TTyToolWindowBar;
 begin
   if Parent is TTyToolWindowBar then Result := TTyToolWindowBar(Parent)
   else Result := nil;
+end;
+
+function TTyToolWindow.IsActive: Boolean;
+var
+  b: TTyToolWindowBar;
+begin
+  b := Bar;
+  Result := (b <> nil) and (b.ActiveWindow = Self);
 end;
 
 function TTyToolWindow.GetActions: TTyToolWindowActions;
@@ -1516,6 +1577,8 @@ begin
   FPlacement := twpLeft;
   FExpandedSize := TyToolWindowDefaultExpandedSize;
   FLoadingActiveIndex := -1;
+  FStripHover := -1;
+  FStripPressed := -1;
   FImageLink := TChangeLink.Create;
   FImageLink.OnChange := @ImageListChange;
   Align := alLeft;
@@ -1881,31 +1944,335 @@ begin
 end;
 
 procedure TTyToolWindowBar.AdjustClientRect(var ARect: TRect);
-var
-  m: TTyToolWindowBarMetrics;
 begin
   inherited AdjustClientRect(ARect);
+  { 内容区只有一个定义:LayoutIn。画的、命中的、摆窗口的是同一份。 }
+  ARect := LayoutIn(ARect).Content;
+end;
+
+function TTyToolWindowBar.TokenPx(const AName: string; ADefault: Integer): Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(AName, ADefault), PPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyToolWindowBar.StrayCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to ControlCount - 1 do
+    if not (Controls[i] is TTyToolWindow) then Inc(Result);
+end;
+
+function TTyToolWindowBar.LayoutIn(const AClient: TRect): TTyToolWindowBarLayout;
+var
+  m: TTyToolWindowBarMetrics;
+  R: TRect;
+  stripS: TTyStyleSet;
+  bw, itemPx, bandH, i: Integer;
+  slots: TTyToolWindowSlots;
+
+  procedure ClampRect(var ARect: TRect);
+  begin
+    if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+    if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+  end;
+
+begin
+  Result := Default(TTyToolWindowBarLayout);
+  m := Metrics;
+  R := AClient;
+  InflateRect(R, -m.Chrome, -m.Chrome);
+  ClampRect(R);
+  Result.Content := R;
   { chrome 四周各一圈;图标条贴外侧,边缘区贴靠编辑区的那一侧(底栏在顶边)。
     哪一侧一律按 Placement,不看 Align、不看 RTL。 }
-  m := Metrics;
-  InflateRect(ARect, -m.Chrome, -m.Chrome);
   case FPlacement of
     twpLeft:
       begin
-        Inc(ARect.Left, m.Strip);
-        Dec(ARect.Right, m.Edge);
+        Result.Strip := Rect(R.Left, R.Top, R.Left + m.Strip, R.Bottom);
+        Result.Edge := Rect(R.Right - m.Edge, R.Top, R.Right, R.Bottom);
+        Inc(Result.Content.Left, m.Strip);
+        Dec(Result.Content.Right, m.Edge);
       end;
     twpRight:
       begin
-        Dec(ARect.Right, m.Strip);
-        Inc(ARect.Left, m.Edge);
+        Result.Strip := Rect(R.Right - m.Strip, R.Top, R.Right, R.Bottom);
+        Result.Edge := Rect(R.Left, R.Top, R.Left + m.Edge, R.Bottom);
+        Dec(Result.Content.Right, m.Strip);
+        Inc(Result.Content.Left, m.Edge);
       end;
     twpBottom:
-      Inc(ARect.Top, m.Edge);
+      begin
+        Result.Edge := Rect(R.Left, R.Top, R.Right, R.Top + m.Edge);
+        Inc(Result.Content.Top, m.Edge);
+      end;
   end;
   { 收起时栏只剩图标条,内容区是负宽 —— 钳成空的,别让对齐引擎拿到反转的矩形。 }
-  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
-  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+  ClampRect(Result.Content);
+  { 栏比图标条还窄时(拖到很窄、正在动画)条不许伸出栏外。底栏没有条,别给它钳出一个位置。 }
+  if FPlacement <> twpBottom then
+  begin
+    if Result.Strip.Left < R.Left then Result.Strip.Left := R.Left;
+    if Result.Strip.Right > R.Right then Result.Strip.Right := R.Right;
+    ClampRect(Result.Strip);
+  end;
+  { 运行时收起或没有窗口:宽里本来就没算边缘区(DerivedAxisPx),它也不起作用(spec §5.4 /
+    §6.3)—— 不画、不命中。这时按上面算出来的那一条会压在图标条上。 }
+  if SizesAsCollapsed then
+    Result.Edge := Rect(0, 0, 0, 0)
+  else
+    ClampRect(Result.Edge);
+
+  { 设计期有漏进来的子控件:内容区底部让出一行提示。行高借标题行的 token —— 它本来就是
+    「一行字加上下留白」的尺寸。 }
+  if (csDesigning in ComponentState) and (StrayCount > 0) then
+  begin
+    bandH := TokenPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef);
+    if bandH > Result.Content.Bottom - Result.Content.Top then
+      bandH := Result.Content.Bottom - Result.Content.Top;
+    Result.StrayNote := Rect(Result.Content.Left, Result.Content.Bottom - bandH,
+      Result.Content.Right, Result.Content.Bottom);
+    Dec(Result.Content.Bottom, bandH);
+  end;
+  if (csDesigning in ComponentState) and (WindowCount = 0) then
+    Result.EmptyNote := Result.Content;
+
+  if Result.Strip.Right <= Result.Strip.Left then Exit;
+  { 图标条的界线画在靠内容区那一侧(写法照 TyStatusBar 的顶线),图标只排在界线以内 ——
+    否则当前格的指示条会跟界线叠在同一列上。 }
+  Result.Cells := Result.Strip;
+  stripS := ActiveController.Model.ResolveStyle('TyToolWindowStrip',
+    TyStyleClassFor(Self, StyleClass), [tysNormal]);
+  if TyBorderVisible(stripS) then
+  begin
+    bw := MulDiv(stripS.BorderWidth, PPI, 96);
+    if bw < 1 then bw := 1;
+    if FPlacement = twpRight then Inc(Result.Cells.Left, bw)
+    else Dec(Result.Cells.Right, bw);
+    ClampRect(Result.Cells);
+  end;
+  itemPx := TokenPx(TyToolWindowStripItemSizeVar, TyToolWindowStripItemSizeDef);
+  { 溢出按钮跟图标一样大。 }
+  slots := TyToolWindowStripLayout(Result.Cells.Right - Result.Cells.Left,
+    Result.Cells.Bottom - Result.Cells.Top, itemPx, itemPx, WindowCount, IndexOfWindow(FActive));
+  for i := 0 to High(slots) do
+    Types.OffsetRect(slots[i].ItemRect, Result.Cells.Left, Result.Cells.Top);
+  Result.Slots := slots;
+  { 有没有收起来的由调用方自己算(TyToolWindowVisiblePlan 的约定)。溢出按钮紧跟在最后一个
+    图标后面:排布时已经从可用高度里给它扣过位置,所以它放得下。 }
+  if Length(slots) < WindowCount then
+  begin
+    i := Result.Cells.Top + Length(slots) * itemPx;
+    Result.Overflow := Rect(Result.Cells.Left, i, Result.Cells.Right, i + itemPx);
+    if Result.Overflow.Top > Result.Cells.Bottom then Result.Overflow.Top := Result.Cells.Bottom;
+    if Result.Overflow.Bottom > Result.Cells.Bottom then Result.Overflow.Bottom := Result.Cells.Bottom;
+  end;
+end;
+
+function TTyToolWindowBar.BarLayout: TTyToolWindowBarLayout;
+begin
+  Result := LayoutIn(ClientRect);
+end;
+
+function TTyToolWindowBar.StripItemRect(AIndex: Integer): TRect;
+var
+  L: TTyToolWindowBarLayout;
+  i: Integer;
+begin
+  L := BarLayout;
+  for i := 0 to High(L.Slots) do
+    if L.Slots[i].ItemIndex = AIndex then Exit(L.Slots[i].ItemRect);
+  Result := Rect(0, 0, 0, 0);
+end;
+
+function TTyToolWindowBar.StripItemStates(AIndex: Integer): TTyStateSet;
+begin
+  Result := [];
+  if (AIndex = IndexOfWindow(FActive)) and not CollapsedAtRunTime then
+    Include(Result, tysSelected);
+  { 禁用时保留 :selected(同 TTySegmented):灰掉的栏也得看得出哪一页是当前页。
+    悬停、按下它不接。 }
+  if not Enabled then
+    Include(Result, tysDisabled)
+  else
+  begin
+    if AIndex = FStripHover then Include(Result, tysHover);
+    if AIndex = FStripPressed then Include(Result, tysActive);
+  end;
+  if Result = [] then Include(Result, tysNormal);
+end;
+
+procedure TTyToolWindowBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S, stripS, itemS, partS: TTyStyleSet;
+  R, cell, gr, rule: TRect;
+  L: TTyToolWindowBarLayout;
+  cls: string;
+  list: TCustomImageList;
+  bmp: TBGRABitmap;
+  fill: TTyFill;
+  ink: TTyColor;
+  states: TTyStateSet;
+  i, idx, glyphPx, indPx, bw, pad: Integer;
+begin
+  P := TTyPainter.Create;
+  try
+    { painter 的位图是 W×H 并 blit 到 ARect 左上,所以内部一切坐标都用 (0,0)-local。
+      几何一律是物理方向(Placement 定左右),不给画笔 RTL。 }
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+    S := CurrentStyle;
+    DrawFrame(P, R, S);
+    L := LayoutIn(R);
+    cls := TyStyleClassFor(Self, StyleClass);
+    fill := Default(TTyFill);
+    fill.Kind := tfkSolid;
+
+    if L.Strip.Right > L.Strip.Left then
+    begin
+      stripS := ActiveController.Model.ResolveStyle('TyToolWindowStrip', cls, [tysNormal]);
+      if tpBackground in stripS.Present then
+        P.FillBackground(L.Strip, stripS.Background, 0);
+      { 界线:靠内容区那一侧一条,不是整圈框(同 TyStatusBar)。宽度与 LayoutIn 扣掉的同一个数。 }
+      if TyBorderVisible(stripS) then
+      begin
+        bw := L.Strip.Right - L.Strip.Left - (L.Cells.Right - L.Cells.Left);
+        if bw > 0 then
+        begin
+          if FPlacement = twpRight then
+            rule := Rect(L.Strip.Left, L.Strip.Top, L.Strip.Left + bw, L.Strip.Bottom)
+          else
+            rule := Rect(L.Strip.Right - bw, L.Strip.Top, L.Strip.Right, L.Strip.Bottom);
+          fill.Color := stripS.BorderColor;
+          P.FillBackground(rule, fill, 0);
+        end;
+      end;
+
+      list := EffectiveImages;
+      glyphPx := TokenPx(TyToolWindowGlyphSizeVar, TyToolWindowGlyphSizeDef);
+      indPx := TokenPx(TyToolWindowStripIndicatorSizeVar, TyToolWindowStripIndicatorSizeDef);
+      for i := 0 to High(L.Slots) do
+      begin
+        cell := L.Slots[i].ItemRect;
+        if (cell.Right <= cell.Left) or (cell.Bottom <= cell.Top) then Continue;
+        states := StripItemStates(L.Slots[i].ItemIndex);
+        itemS := ActiveController.Model.ResolveStyle('TyToolWindowStripItem', cls, states);
+        if tpBackground in itemS.Present then
+          P.FillBackground(cell, itemS.Background, 0);
+        { 图标序号只从 ResolvedImageIndex 来:窗口的 ImageIndex 在名字找不到时会退回写过的
+          序号,而 spec §8 要的是「找不到就不画」。 }
+        idx := ResolvedImageIndex(Windows[L.Slots[i].ItemIndex]);
+        if (list <> nil) and (idx >= 0) and (glyphPx > 0) then
+        begin
+          bmp := TyRenderImage(list, idx, glyphPx, APPI, False);
+          if bmp <> nil then
+          try
+            { 本库的列表出来的是列表自己的 GlyphColor,不是墨色 —— 着成这一格状态的墨色。
+              TyRenderImage 给的是调用方持有的拷贝,就地染不污染缓存。外来列表不染
+              (部分 widgetset 物化出来的位图丢了 alpha,染了就是一个实心方块,spec §8)。 }
+            if not TyImageIsBaked(list) then
+            begin
+              if tpTextColor in itemS.Present then ink := itemS.TextColor
+              else ink := stripS.TextColor;
+              TyTintBitmapAlpha(bmp, ink);
+              if TyAlphaOf(ink) < 255 then TyFadeBitmapAlpha(bmp, TyAlphaOf(ink));
+            end;
+            P.Bitmap.PutImage(cell.Left + (cell.Right - cell.Left - bmp.Width) div 2,
+              cell.Top + (cell.Bottom - cell.Top - bmp.Height) div 2, bmp,
+              dmDrawWithTransparency);
+          finally
+            bmp.Free;
+          end;
+        end;
+        { 当前格的指示条:贴在靠内容区那一侧,粗细 0 = 不画。 }
+        if (tysSelected in states) and (indPx > 0) then
+        begin
+          partS := ActiveController.Model.ResolveStyle('TyToolWindowStripIndicator', cls,
+            [tysNormal]);
+          if tpBackground in partS.Present then
+          begin
+            if FPlacement = twpRight then
+              gr := Rect(cell.Left, cell.Top, cell.Left + indPx, cell.Bottom)
+            else
+              gr := Rect(cell.Right - indPx, cell.Top, cell.Right, cell.Bottom);
+            P.FillBackground(gr, partS.Background, 0);
+          end;
+        end;
+      end;
+
+      { 溢出按钮:图标大小的一格,中间一个字形大小的下箭头(主题可换,--glyph-chevron-down)。 }
+      if (L.Overflow.Right > L.Overflow.Left) and (L.Overflow.Bottom > L.Overflow.Top) then
+      begin
+        partS := ActiveController.Model.ResolveStyle('TyToolWindowOverflow', cls, [tysNormal]);
+        if tpBackground in partS.Present then
+          P.FillBackground(L.Overflow, partS.Background, 0);
+        gr := L.Overflow;
+        if glyphPx < gr.Right - gr.Left then
+        begin
+          gr.Left := gr.Left + (gr.Right - gr.Left - glyphPx) div 2;
+          gr.Right := gr.Left + glyphPx;
+        end;
+        if glyphPx < gr.Bottom - gr.Top then
+        begin
+          gr.Top := gr.Top + (gr.Bottom - gr.Top - glyphPx) div 2;
+          gr.Bottom := gr.Top + glyphPx;
+        end;
+        TyDrawGlyph(P, ActiveController, gr, tgChevronDown, partS.TextColor, 1);
+      end;
+    end;
+
+    { 边缘区:拉宽边,也是贴着编辑区的那条分隔线。 }
+    if (L.Edge.Right > L.Edge.Left) and (L.Edge.Bottom > L.Edge.Top) then
+    begin
+      partS := ActiveController.Model.ResolveStyle('TyToolWindowEdge', cls, [tysNormal]);
+      if tpBackground in partS.Present then
+        P.FillBackground(L.Edge, partS.Background, 0);
+    end;
+
+    { 设计期提示(LayoutIn 只在设计期给这两个框)。 }
+    if (L.EmptyNote.Right > L.EmptyNote.Left) or (L.StrayNote.Right > L.StrayNote.Left) then
+    begin
+      partS := ActiveController.Model.ResolveStyle('TyToolWindowNote', cls, [tysNormal]);
+      pad := TokenPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef);
+      gr := L.EmptyNote;
+      InflateRect(gr, -pad, 0);
+      if (gr.Right > gr.Left) and (gr.Bottom > gr.Top) then
+        P.DrawText(gr, rsTyToolWindowBarEmpty, partS.FontName, ResolveFontSize(partS),
+          partS.FontWeight, partS.TextColor, taCenter, tlCenter, True);
+      gr := L.StrayNote;
+      InflateRect(gr, -pad, 0);
+      if (gr.Right > gr.Left) and (gr.Bottom > gr.Top) then
+        P.DrawText(gr, rsTyToolWindowBarStray, partS.FontName, ResolveFontSize(partS),
+          partS.FontWeight, partS.TextColor, taLeftJustify, tlCenter, True);
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyToolWindowBar.Paint;
+begin
+  { 不做绘制缓存:悬停变化频繁,而且没有会不停打脏它的子控件(工具窗口有,所以工具窗口做)。 }
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+procedure TTyToolWindowBar.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  if AControl is TTyToolWindow then Exit;
+  { 漏进来的:运行时藏起来(写 Visible 而不是派生 —— 这不是我们的类,IsControlVisible
+    重写不了;运行时写 Visible 也进不了 .lfm)。设计期让出提示那一行,内缩量变了要重排。 }
+  if not (csDesigning in ComponentState) then
+    AControl.Visible := False
+  else if not (csDestroying in ComponentState) then
+  begin
+    Realign;
+    Invalidate;
+  end;
 end;
 
 procedure TTyToolWindowBar.SetPlacement(AValue: TTyToolWindowPlacement);
@@ -2340,6 +2707,13 @@ begin
     FLeavingIndex := IndexOfWindow(FLeaving);
   end;
   inherited RemoveControl(AControl);
+  { 设计期漏进来的那个被删掉 / 挪走:提示那一行让回给窗口。 }
+  if not (AControl is TTyToolWindow)
+     and ([csDesigning, csDestroying] * ComponentState = [csDesigning]) then
+  begin
+    Realign;
+    Invalidate;
+  end;
 end;
 
 procedure TTyToolWindowBar.UnregisterWindow(AWindow: TTyToolWindow);

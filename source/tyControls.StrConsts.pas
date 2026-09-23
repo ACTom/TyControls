@@ -283,6 +283,13 @@ resourcestring
     'Unused actions area';
   rsTyToolWindowActionsOrphan =
     'Not in a tool window';
+  { Drawn by TTyToolWindowBar at design time: in the content area of a bar with no tool
+    windows, and in a line reserved at the bottom of the content area when a control that is
+    not a tool window got into the bar (a paste). Such a control is hidden at run time. }
+  rsTyToolWindowBarEmpty =
+    'Add a tool window';
+  rsTyToolWindowBarStray =
+    'Not a tool window: hidden at run time';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

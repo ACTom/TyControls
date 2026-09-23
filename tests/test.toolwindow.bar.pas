@@ -11,9 +11,10 @@ unit test.toolwindow.bar;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, LCLType, LCLProc, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc, fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
-  test.toolwindow.window;
+  tyControls.Icons.Lucide, test.toolwindow.window;
 
 type
   { 探针:受保护的那几个入口开出来。AlignCount 数的是真实调用路径上「对齐引擎被请了
@@ -31,6 +32,9 @@ type
     procedure CallBeginSilent;
     procedure CallEndSilent;
     function CallDerivedAxisPx: Integer;
+    procedure CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { 悬停格由 Task 7 的追踪来写;这里只要「给定悬停格就画得出来」。 }
+    procedure SetStripHover(AIndex: Integer);
   public
     { 窗口刚从 Controls 里摘下、还没从本栏注销的那个空档里调一次(SetParent 的继承部分
       还没返回)。 }
@@ -72,6 +76,12 @@ type
     { 静默批次在窗口离开的空档里结束(TBarAccess.OnControlRemoved)。 }
     procedure HandleEndSilentInGap(ASender: TObject);
     procedure HandleHideOrder(ASender: TObject);
+    { 栏的图标列表,里面只有 'house'。 }
+    function NewHouseList: TTyLucideImageList;
+    { 图标条第 AIndex 格(FBar.StripItemRect)画出来数一遍:底漆铺 AWipe,数法同 TallyPixels。
+      AGround 由调用方用主题钉住(图标条的底色),这里只负责数。 }
+    procedure TallyStripCell(AIndex: Integer; AGround, AWipe: TColor;
+      out ANotGround, AWipeLeft: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -138,6 +148,17 @@ type
     procedure TestExpandedSizeBelowTheFloorKeepsWidthOnTheDerivation;
     procedure TestOnChangeFromANewWindowSeesTheNewWidth;
     procedure TestDesignerResizeDoesNotWriteBackUnderAForeignAlign;
+    { Task 6b:栏的绘制。 }
+    procedure TestStripPaintsAndTheActiveItemDiffers;
+    procedure TestTheIndicatorSitsOnTheContentSideOfTheActiveCellOnly;
+    procedure TestAnUnresolvedNameDrawsNoIcon;
+    procedure TestAHoveredCellPaintsItsHoverState;
+    procedure TestAShortStripShowsTheOverflowAfterTheLastIcon;
+    procedure TestTheEdgeFillsItsBandAndGoesAwayWhenCollapsed;
+    procedure TestDesignTimeEmptyBarPaintsANote;
+    procedure TestAStrayChildIsHiddenAtRunTime;
+    procedure TestAStrayChildGetsANoteLineAtDesignTime;
+    procedure TestIsActiveFollowsTheBarsCurrentPage;
   end;
 
 implementation
@@ -214,6 +235,108 @@ end;
 function TBarAccess.CallDerivedAxisPx: Integer;
 begin
   Result := DerivedAxisPx;
+end;
+
+procedure TBarAccess.CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TBarAccess.SetStripHover(AIndex: Integer);
+begin
+  FStripHover := AIndex;
+end;
+
+{ 把 ABar 按 AW×AH 的尺寸画出来,只留 ARegion 那一块(栏坐标):位图就是那一块的大小,
+  整条栏往左上平移 ARegion 的原点再画 —— 画笔的位图落在 ARect 的左上,伸出去的部分被
+  画布裁掉。先铺 AWipe 当底漆,数得出「压根没画到」的像素。调用方释放。 }
+function RenderRegion(ABar: TBarAccess; AW, AH: Integer; const ARegion: TRect;
+  AWipe: TColor): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.PixelFormat := pf32bit;
+  Result.SetSize(ARegion.Right - ARegion.Left, ARegion.Bottom - ARegion.Top);
+  Result.Canvas.Brush.Color := AWipe;
+  Result.Canvas.FillRect(0, 0, Result.Width, Result.Height);
+  ABar.CallRenderTo(Result.Canvas,
+    Rect(-ARegion.Left, -ARegion.Top, AW - ARegion.Left, AH - ARegion.Top), 96);
+end;
+
+{ 有多少像素落在「AGround 上盖一层半透明 AInk」那条混合线上(含实心的 AInk,不含纯底色)。
+  着色过的图标边缘是抗锯齿的,只数和 AInk 一模一样的像素会漏掉大半 —— 细线图标在 16px
+  下可能一个实心像素都没有。只比 RGB(同 TallyPixels)。 }
+function CountInk(ABmp: TBitmap; AGround, AInk: TColor): Integer;
+var
+  re: TBGRABitmap;
+  g, k, px: TBGRAPixel;
+  x, y, c, best: Integer;
+  gv, kv, pv: array[0..2] of Integer;
+  a: Double;
+  ok: Boolean;
+begin
+  Result := 0;
+  g := ColorToBGRA(ColorToRGB(AGround));
+  k := ColorToBGRA(ColorToRGB(AInk));
+  gv[0] := g.red; gv[1] := g.green; gv[2] := g.blue;
+  kv[0] := k.red; kv[1] := k.green; kv[2] := k.blue;
+  best := 0;
+  for c := 1 to 2 do
+    if Abs(kv[c] - gv[c]) > Abs(kv[best] - gv[best]) then best := c;
+  if kv[best] = gv[best] then Exit;
+  re := TBGRABitmap.Create(ABmp);
+  try
+    for y := 0 to ABmp.Height - 1 do
+      for x := 0 to ABmp.Width - 1 do
+      begin
+        px := re.GetPixel(x, y);
+        pv[0] := px.red; pv[1] := px.green; pv[2] := px.blue;
+        a := (pv[best] - gv[best]) / (kv[best] - gv[best]);
+        if (a <= 0.01) or (a > 1.02) then Continue;
+        ok := True;
+        for c := 0 to 2 do
+          if Abs(gv[c] + a * (kv[c] - gv[c]) - pv[c]) > 3 then ok := False;
+        if ok then Inc(Result);
+      end;
+  finally
+    re.Free;
+  end;
+end;
+
+{ 颜色恰好是 AColor 的像素数。 }
+function CountExact(ABmp: TBitmap; AColor: TColor): Integer;
+var
+  re: TBGRABitmap;
+  k, px: TBGRAPixel;
+  x, y: Integer;
+begin
+  Result := 0;
+  k := ColorToBGRA(ColorToRGB(AColor));
+  re := TBGRABitmap.Create(ABmp);
+  try
+    for y := 0 to ABmp.Height - 1 do
+      for x := 0 to ABmp.Width - 1 do
+      begin
+        px := re.GetPixel(x, y);
+        if (px.red = k.red) and (px.green = k.green) and (px.blue = k.blue) then Inc(Result);
+      end;
+  finally
+    re.Free;
+  end;
+end;
+
+function PixelIs(ABmp: TBitmap; X, Y: Integer; AColor: TColor): Boolean;
+var
+  re: TBGRABitmap;
+  k, px: TBGRAPixel;
+begin
+  k := ColorToBGRA(ColorToRGB(AColor));
+  re := TBGRABitmap.Create(ABmp);
+  try
+    px := re.GetPixel(X, Y);
+    Result := (px.red = k.red) and (px.green = k.green) and (px.blue = k.blue);
+  finally
+    re.Free;
+  end;
 end;
 
 procedure TDesignOwner.MarkDesigning;
@@ -1587,6 +1710,353 @@ begin
   d.Align := alLeft;
   d.SetBounds(d.Left, d.Top, StripPx + EdgePx + 300, d.Height);
   AssertEquals('回到 Placement 要的 Align:拖边照常写回', 300, d.ExpandedSize);
+end;
+
+{ --- Task 6b:栏的绘制 ------------------------------------------------------- }
+
+const
+  { 品红:绝不能用白 —— 白就是 light 主题的表面色。 }
+  Ground = TColor($FF00FF);
+  Wipe   = TColor($00FF00);
+  { TColor 是 $BBGGRR:CSS 的 #0000FF(蓝)写成 $FF0000,#FFFF00(黄)写成 $00FFFF。
+    两种墨色跟品红底的混合线互不相交(蓝那条 G 恒为 0、黄那条 R 恒为 255),抗锯齿的边缘
+    也分得清是哪一种。 }
+  RestInk = TColor($FF0000);
+  SelInk  = TColor($00FFFF);
+  { 图标条钉成品红底、静止墨蓝、选中墨黄、指示条黑。 }
+  StripTheme = ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-strip-ink: #0000FF;' +
+    ' --toolwindow-strip-ink-selected: #FFFF00; --toolwindow-strip-indicator-color: #000000; }';
+
+function TTyToolWindowBarTests.NewHouseList: TTyLucideImageList;
+begin
+  Result := TTyLucideImageList.Create(FForm);
+  Result.Names.Text := 'house';
+end;
+
+procedure TTyToolWindowBarTests.TallyStripCell(AIndex: Integer; AGround, AWipe: TColor;
+  out ANotGround, AWipeLeft: Integer);
+var
+  cell: TRect;
+  bmp: TBitmap;
+begin
+  cell := FBar.StripItemRect(AIndex);
+  AssertTrue(Format('前提:第 %d 格排上了图标条', [AIndex]),
+    (cell.Right > cell.Left) and (cell.Bottom > cell.Top));
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, AWipe);
+  try
+    TallyPixels(bmp, AGround, AWipe, ANotGround, AWipeLeft);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBarTests.TestStripPaintsAndTheActiveItemDiffers;
+var
+  a, b: TProbeWindow;
+  restPix, activePix, wipeLeft: Integer;
+  bmp: TBitmap;
+begin
+  FCtl.StyleOverride := StripTheme;
+  FBar.Images := NewHouseList;
+  a := NewWindow;
+  a.ImageName := 'house';
+  b := NewWindow;
+  b.ImageName := 'house';
+  FBar.ActiveWindow := a;
+  { 两个窗口,当前页是第一个。分别数图标条第 1 格和第 2 格里的非底色像素。 }
+  TallyStripCell(0, Ground, Wipe, activePix, wipeLeft);
+  AssertEquals('整块都画到,不许留底漆', 0, wipeLeft);
+  TallyStripCell(1, Ground, Wipe, restPix, wipeLeft);
+  AssertEquals('静止格也整块画到', 0, wipeLeft);
+  AssertTrue('图标条画了东西', restPix > 0);
+  AssertTrue('当前页那一格和静止格不一样', activePix <> restPix);
+  { 像素数只说明「画了不一样多的东西」(指示条就占掉这个差)—— 图标着的是哪种墨色得看颜色。 }
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(0), Wipe);
+  try
+    AssertTrue('当前格的图标着成 :selected 的墨色', CountInk(bmp, Ground, SelInk) > 0);
+    AssertEquals('当前格里没有静止态的墨色', 0, CountInk(bmp, Ground, RestInk));
+  finally
+    bmp.Free;
+  end;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(1), Wipe);
+  try
+    AssertTrue('静止格的图标着成静止态的墨色', CountInk(bmp, Ground, RestInk) > 0);
+    AssertEquals('静止格里没有选中墨色', 0, CountInk(bmp, Ground, SelInk));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBarTests.TestTheIndicatorSitsOnTheContentSideOfTheActiveCellOnly;
+var
+  a: TProbeWindow;
+  cell: TRect;
+  bmp: TBitmap;
+  w, h: Integer;
+
+  function Cell0: TBitmap;
+  begin
+    cell := FBar.StripItemRect(0);
+    w := cell.Right - cell.Left;
+    h := cell.Bottom - cell.Top;
+    Result := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
+  end;
+
+begin
+  FCtl.StyleOverride := StripTheme;
+  a := NewWindow;
+  NewWindow;
+  FBar.ActiveWindow := a;
+  bmp := Cell0;
+  try
+    AssertEquals('指示条 = 粗细 × 格高', TyToolWindowStripIndicatorSizeDef * h,
+      CountExact(bmp, clBlack));
+    AssertTrue('左栏:贴在靠内容区的那一侧(右)', PixelIs(bmp, w - 1, h div 2, clBlack));
+    AssertFalse('外侧没有', PixelIs(bmp, 0, h div 2, clBlack));
+  finally
+    bmp.Free;
+  end;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(1), Wipe);
+  try
+    AssertEquals('静止格没有指示条', 0, CountExact(bmp, clBlack));
+  finally
+    bmp.Free;
+  end;
+  FBar.Placement := twpRight;
+  bmp := Cell0;
+  try
+    AssertTrue('右栏:内容区在左,指示条跟着到左', PixelIs(bmp, 0, h div 2, clBlack));
+    AssertFalse('右栏的外侧(右)没有', PixelIs(bmp, w - 1, h div 2, clBlack));
+  finally
+    bmp.Free;
+  end;
+  FBar.Placement := twpLeft;
+  FBar.Collapsed := True;
+  bmp := Cell0;
+  try
+    AssertEquals('收起时当前图标不画 :selected,指示条也不画(spec §5.3)', 0,
+      CountExact(bmp, clBlack));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBarTests.TestAnUnresolvedNameDrawsNoIcon;
+var
+  a, b, c: TProbeWindow;
+  pix, housePix, wipeLeft: Integer;
+begin
+  FCtl.StyleOverride := StripTheme;
+  FBar.Images := NewHouseList;
+  a := NewWindow;
+  a.ImageName := 'house';
+  b := NewWindow;
+  b.ImageIndex := 0;
+  AssertEquals('前提:序号当场换成了名字', 'house', b.ImageName);
+  b.ImageName := 'no-such-glyph';
+  AssertEquals('前提:ImageIndex 这个视图回落到写过的序号', 0, b.ImageIndex);
+  AssertEquals('前提:图标条要的那一格是 -1', -1, FBar.ResolvedImageIndex(b));
+  c := NewWindow;
+  c.ImageName := 'house';
+  FBar.ActiveWindow := a;
+  TallyStripCell(2, Ground, Wipe, housePix, wipeLeft);
+  AssertTrue('对照:静止格里名字找得到就画得出图标', housePix > 0);
+  { 静止格没有底色、没有指示条,非底色像素只能是图标。拿窗口的 ImageIndex 画的话,这里
+    画的是那个退回来的序号 —— spec §8「找不到 → -1,不许乱画一个」。 }
+  TallyStripCell(1, Ground, Wipe, pix, wipeLeft);
+  AssertEquals('整块都画到', 0, wipeLeft);
+  AssertEquals('名字找不到:那一格一个图标像素都没有', 0, pix);
+end;
+
+procedure TTyToolWindowBarTests.TestAHoveredCellPaintsItsHoverState;
+const
+  Cyan = TColor($FFFF00);   { CSS #00FFFF }
+var
+  a: TProbeWindow;
+  cell: TRect;
+  bmp: TBitmap;
+begin
+  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF;' +
+    ' --toolwindow-overlay-hover: #00FFFF; }';
+  a := NewWindow;
+  NewWindow;
+  FBar.ActiveWindow := a;
+  cell := FBar.StripItemRect(1);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
+  try
+    AssertEquals('前提:没悬停时没有悬停底色', 0, CountExact(bmp, Cyan));
+  finally
+    bmp.Free;
+  end;
+  FBar.SetStripHover(1);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, cell, Wipe);
+  try
+    AssertEquals('悬停格整格铺 :hover 的底色',
+      (cell.Right - cell.Left) * (cell.Bottom - cell.Top), CountExact(bmp, Cyan));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBarTests.TestAShortStripShowsTheOverflowAfterTheLastIcon;
+const
+  ItemPx = TyToolWindowStripItemSizeDef;
+var
+  i: Integer;
+  L: TTyToolWindowBarLayout;
+  bmp: TBitmap;
+begin
+  FCtl.StyleOverride := ':root { --toolwindow-strip-bg: #FF00FF; --toolwindow-tab-ink: #0000FF; }';
+  for i := 1 to 4 do NewWindow;         { 最后一个是当前页 }
+  L := FBar.BarLayout;
+  AssertEquals('前提:放得下时四个都在条上', 4, Length(L.Slots));
+  AssertTrue('放得下就没有溢出按钮', L.Overflow.Bottom <= L.Overflow.Top);
+  FBar.Height := 3 * ItemPx + ItemPx div 2;
+  L := FBar.BarLayout;
+  AssertEquals('放不下:扣掉溢出按钮后只剩两格', 2, Length(L.Slots));
+  AssertEquals('当前页被留在条上', 3, L.Slots[1].ItemIndex);
+  AssertTrue('有溢出按钮', L.Overflow.Bottom > L.Overflow.Top);
+  AssertEquals('溢出按钮紧跟在最后一个图标后面', L.Slots[1].ItemRect.Bottom, L.Overflow.Top);
+  AssertEquals('跟图标一样大', ItemPx, L.Overflow.Bottom - L.Overflow.Top);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, L.Overflow, Wipe);
+  try
+    AssertTrue('溢出按钮画出了它的字形', CountInk(bmp, Ground, RestInk) > 0);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBarTests.TestTheEdgeFillsItsBandAndGoesAwayWhenCollapsed;
+const
+  Navy = TColor($800000);   { CSS #000080 }
+var
+  L: TTyToolWindowBarLayout;
+  bmp: TBitmap;
+begin
+  FCtl.StyleOverride := ':root { --toolwindow-edge-color: #000080; }';
+  AssertTrue('运行时空栏:边缘区不起作用', IsRectEmpty(FBar.BarLayout.Edge));
+  NewWindow;
+  L := FBar.BarLayout;
+  AssertEquals('边缘区宽 = token', EdgePx, L.Edge.Right - L.Edge.Left);
+  AssertEquals('左栏的边缘区贴右边(靠编辑区)', FBar.ClientWidth, L.Edge.Right);
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, L.Edge, Wipe);
+  try
+    AssertEquals('整条铺边缘区的底色', (L.Edge.Right - L.Edge.Left) * (L.Edge.Bottom - L.Edge.Top),
+      CountExact(bmp, Navy));
+  finally
+    bmp.Free;
+  end;
+  FBar.Collapsed := True;
+  AssertTrue('收起:边缘区不起作用,也不画', IsRectEmpty(FBar.BarLayout.Edge));
+end;
+
+procedure TTyToolWindowBarTests.TestDesignTimeEmptyBarPaintsANote;
+var
+  d: TBarAccess;
+  L: TTyToolWindowBarLayout;
+  bmp: TBitmap;
+  pix, wipeLeft: Integer;
+begin
+  FCtl.StyleOverride := 'TyToolWindowBar { background: #FF00FF; }';
+  d := NewDesignBar;
+  L := d.BarLayout;
+  AssertFalse('设计期空栏有提示框', IsRectEmpty(L.EmptyNote));
+  bmp := RenderRegion(d, d.ClientWidth, d.ClientHeight, L.EmptyNote, Wipe);
+  try
+    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('整块都画到', 0, wipeLeft);
+  AssertTrue('设计期没有窗口:画出提示文字', pix > 0);
+  { 运行时同一个位置(按设计期那么大画)一个字都没有。 }
+  AssertTrue('运行时没有提示框', IsRectEmpty(FBar.BarLayout.EmptyNote));
+  bmp := RenderRegion(FBar, d.ClientWidth, d.ClientHeight, L.EmptyNote, Wipe);
+  try
+    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('运行时也整块画到', 0, wipeLeft);
+  AssertEquals('运行时不画提示', 0, pix);
+end;
+
+procedure TTyToolWindowBarTests.TestAStrayChildIsHiddenAtRunTime;
+var
+  stray: TBodyChild;
+  r: TRect;
+  bottom: Integer;
+begin
+  NewWindow;
+  r := FBar.ClientRect;
+  FBar.CallAdjustClientRect(r);
+  bottom := r.Bottom;
+  stray := TBodyChild.Create(FForm);
+  AssertTrue('前提:新建的控件是可见的', stray.Visible);
+  { 粘贴等途径不经过 ChildClassAllowed;直接 InsertControl 就是那条路。 }
+  FBar.InsertControl(stray);
+  AssertFalse('运行时漏进来的非窗口子控件藏起来(spec §6.1)', stray.Visible);
+  AssertTrue('运行时不让提示行', IsRectEmpty(FBar.BarLayout.StrayNote));
+  r := FBar.ClientRect;
+  FBar.CallAdjustClientRect(r);
+  AssertEquals('窗口的内容区不变', bottom, r.Bottom);
+end;
+
+procedure TTyToolWindowBarTests.TestAStrayChildGetsANoteLineAtDesignTime;
+var
+  d: TBarAccess;
+  stray: TBodyChild;
+  full, r: TRect;
+  L: TTyToolWindowBarLayout;
+  bmp: TBitmap;
+  pix, wipeLeft: Integer;
+begin
+  FCtl.StyleOverride := 'TyToolWindowBar { background: #FF00FF; }';
+  d := NewDesignBar;
+  NewWindowIn(d, FDesignOwner);
+  full := d.ClientRect;
+  d.CallAdjustClientRect(full);
+  AssertTrue('前提:没有漏进来的就不让提示行', IsRectEmpty(d.BarLayout.StrayNote));
+  stray := TBodyChild.Create(FDesignOwner);
+  d.InsertControl(stray);
+  AssertTrue('设计期不藏:用户得看得见它、删得掉它', stray.Visible);
+  L := d.BarLayout;
+  AssertFalse('设计期让出一行提示', IsRectEmpty(L.StrayNote));
+  AssertEquals('提示行贴在原来内容区的底边', full.Bottom, L.StrayNote.Bottom);
+  { 不让出来的话当前页(alClient)整个盖在内容区上,提示一个像素都露不出来。 }
+  r := d.ClientRect;
+  d.CallAdjustClientRect(r);
+  AssertEquals('窗口的内容区停在提示行上面', L.StrayNote.Top, r.Bottom);
+  bmp := RenderRegion(d, d.ClientWidth, d.ClientHeight, L.StrayNote, Wipe);
+  try
+    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('整块都画到', 0, wipeLeft);
+  AssertTrue('提示行里画了字', pix > 0);
+  stray.Free;
+  AssertTrue('它走了,提示行也走', IsRectEmpty(d.BarLayout.StrayNote));
+  r := d.ClientRect;
+  d.CallAdjustClientRect(r);
+  AssertEquals('内容区还给窗口', full.Bottom, r.Bottom);
+end;
+
+procedure TTyToolWindowBarTests.TestIsActiveFollowsTheBarsCurrentPage;
+var
+  a, b, orphan: TProbeWindow;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  AssertTrue('后进来的是当前页', b.IsActive);
+  AssertFalse('另一页不是', a.IsActive);
+  FBar.ActiveWindow := a;
+  AssertTrue('切页之后跟着换', a.IsActive);
+  AssertFalse('换下来的不再是', b.IsActive);
+  FBar.Collapsed := True;
+  AssertTrue('收起着,栏认的当前页还是它', a.IsActive);
+  orphan := TProbeWindow.Create(FForm);
+  AssertFalse('不在栏里的窗口不是任何栏的当前页', orphan.IsActive);
 end;
 
 initialization

@@ -619,6 +619,14 @@ msgstr "多余的操作区"
 msgid "Not in a tool window"
 msgstr "不在工具窗口里"
 
+#: tycontrols.strconsts.rstytoolwindowbarempty
+msgid "Add a tool window"
+msgstr "添加工具窗口"
+
+#: tycontrols.strconsts.rstytoolwindowbarstray
+msgid "Not a tool window: hidden at run time"
+msgstr "不是工具窗口，运行时隐藏"
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."

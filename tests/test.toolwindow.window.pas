@@ -89,6 +89,11 @@ type
     procedure TestChildClassAllowedRejectsWindowsAndBars;
   end;
 
+{ 数一张画好的位图:非底色像素、残留底漆(见实现处)。栏的像素测试(test.toolwindow.bar)也用它。 }
+procedure TallyPixels(ABmp: TBitmap; AGround, AWipe: TColor;
+  out ANotGround, AWipeLeft: Integer);
+
+type
   { .lfm 读写走的就是这一条路:栏 + 窗口 + 操作区 + 正文,读回来的样子得跟写出去的一样。 }
   TTyToolWindowStreamingTests = class(TTestCase)
   published

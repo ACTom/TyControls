@@ -1031,6 +1031,14 @@ msgstr ""
 msgid "Not in a tool window"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowbarempty
+msgid "Add a tool window"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowbarstray
+msgid "Not a tool window: hidden at run time"
+msgstr ""
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."
