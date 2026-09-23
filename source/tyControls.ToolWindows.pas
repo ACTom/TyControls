@@ -5003,6 +5003,10 @@ begin
       `Visible or (csDesigning and not csNoDesignVisible)`,触发重算的是写 Visible 那一次。
       顺序反了,设计器里这一页的 HWND 要到整体重绘才露面(PageControl.pas:244-262)。 }
     AWindow.ControlStyle := AWindow.ControlStyle - [csNoDesignVisible];
+    { 藏着的这段时间里,它画的标签行可能已经过时了:收起期间切到它、别的页改了标题
+      (那时 InvalidateHeader 丢的是当时的当前页)、换了主题……藏着的页没人替它丢缓存,
+      显示出来就 blit 旧帧(spec §3.5)。显示是低频事件,统一在这里丢。 }
+    if AWindow.FPaintCache <> nil then AWindow.FPaintCache.Drop;
     AWindow.Visible := True;
   finally
     FBarSwitching := was;

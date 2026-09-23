@@ -80,6 +80,8 @@ type
     procedure TestRenderingAt144ScalesTabsAndButtons;
     procedure TestRenamingAHiddenPageRepaintsTheActivePage;
     procedure TestReorderingRepaintsTheActivePage;
+    { 收起期间切到另一页、别的页改了标题:展开时那一页不许 blit 旧帧(spec §3.5)。 }
+    procedure TestExpandingRepaintsAPageChosenWhileCollapsed;
     { Task 7:最大化 / 还原(spec §6.4)。 }
     procedure TestMaximizeFillsTheParentOverItsSiblings;
     procedure TestRestoringGoesBackToTheExpandedHeight;
@@ -937,6 +939,25 @@ begin
   ArmActive(w);
   FWins[0].WindowIndex := 2;
   AssertTrue('调顺序之后当前页重画', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+end;
+
+procedure TTyToolWindowBottomTests.TestExpandingRepaintsAPageChosenWhileCollapsed;
+var
+  b: TProbeWindow;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  b := FWins[0];
+  FBar.Collapsed := True;
+  { 收起期间改标题:InvalidateHeader 丢的是此刻的当前页(窗口 1)的缓存。 }
+  FWins[2].Caption := 'Terminal 2';
+  { 窗口 0 手上还是它上一次当当前页时画的那一帧。 }
+  b.PrimeCache(b.ClientWidth, b.ClientHeight);
+  FBar.ActiveWindow := b;
+  AssertFalse('前提:收起着,它还藏着', b.Visible);
+  AssertFalse('前提:切页没碰它的缓存', b.CacheWouldRender(b.ClientWidth, b.ClientHeight));
+  FBar.Collapsed := False;
+  AssertTrue('前提:展开显示了它', b.Visible);
+  AssertTrue('展开时重画,画出新标题', b.CacheWouldRender(b.ClientWidth, b.ClientHeight));
 end;
 
 { --- Task 7 --------------------------------------------------------------------- }
