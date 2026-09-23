@@ -840,6 +840,9 @@ procedure TTyToolWindowStreamingTests.TestExpandedSizeStreamsOnBothSidesOfTheDef
   begin
     tag := Format('Placement %d, ExpandedSize %d: ', [Ord(APlacement), AValue]);
     src := NewHost;
+    { 窗体得放得下:默认 320 × 240 的窗体里,240 的底栏连同边缘区放不下,按 spec §6.2 收窄。
+      客户区尺寸随窗体流过去,读回来的那一个同样够大。 }
+    src.SetBounds(0, 0, 1000, 800);
     dst := TToolWindowHostForm.CreateNew(nil);
     ms := TMemoryStream.Create;
     try
