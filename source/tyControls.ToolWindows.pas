@@ -296,6 +296,8 @@ type
   TTyToolWindowActions = class(TTyCustomControl)
   private
     FInLayout: Boolean;
+    { 上一次 AdjustSize 时的首选尺寸(按自己字体的 PPI):变了才通知所在底栏(spec §3.4)。 }
+    FLastPreferred: TSize;
     function IsBoundsStored: Boolean;
     function IsUsedByWindow: Boolean;
     function HasVisibleChild: Boolean;
@@ -331,6 +333,12 @@ type
       写了就会进 .lfm,而且第一个被删掉之后第二个也回不来。 }
     function IsControlVisible: Boolean; override;
     procedure Paint; override;
+    { 底栏统一行高的通知链(spec §3.4)。子控件增删、显隐、改尺寸、只改 Constraints 都走到
+      这里(InsertControl / RemoveControl / 子控件的 AdjustSize 与 DoConstraintsChange →
+      Parent.AdjustSize,wincontrol.inc:6416, 6459、control.inc:1520-1522, 4639-4640)——
+      所在窗口藏着也一样:TControl.AdjustSize 向上传要看的是**子控件**自己可见。
+      首选尺寸变了就告诉所在窗口的栏。 }
+    procedure AdjustSize; override;
     { raw 首选尺寸,设备像素,按给定 PPI —— 窗口排标题行、LCL 的 GetPreferredSize、
       自己排子控件,问的都是这一处。**不**走 LCL 的 GetPreferredSize:那边有缓存,
       InsertControl 不作废它(wincontrol.inc:6392),而且答不了别的 PPI。
@@ -664,6 +672,13 @@ type
       底栏由栏补标签宽、当前页、标签区下限、按钮、分隔线槽、溢出按钮宽。 }
     function HeaderInputFor(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
       APPI: Integer): TTyToolWindowHeaderInput;
+  private
+    { 上一次**用过**的统一行高里操作区那一项(HeaderActionsHeight(nil, PPI));-1 = 还没用过。 }
+    FBottomActionsPx: Integer;
+    FActionsNotifying: Boolean;
+    { 某一页的操作区首选尺寸变了、或者窗口列表变了(spec §3.4):底栏统一行高的操作区那一项
+      变了,就对**当前页**重排标题行。非当前页在切页第 4 步 RelayoutHeader 时现取。 }
+    procedure ActionsSizeChanged;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
@@ -1233,10 +1248,17 @@ begin
   else Result := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
     TyToolWindowHeaderHeightDef), APPI, 96);
   { 操作区那一项**不缓存**:子控件增删 / 显隐 / 改尺寸都会触发整窗体自顶向下重排,
-    现取就能跟上。底栏模式下由栏统一算(B 期),A 期两种模式都按本窗口算。 }
-  { 操作区排在底线上面那一条带里(spec §4),行高要连底线一起够它。 }
-  actionsPx := ActionsPreferredSize(APPI).cy;
-  if actionsPx > 0 then Inc(actionsPx, HeaderRuleAt(APPI));
+    现取就能跟上。底栏:栏里所有页统一一个行高(spec §3.4),由栏答 —— 切页时标签行不跳。
+    这里只问栏各窗口操作区的首选高,不碰任何窗口的 HeaderTokenPx 缓存(那是每个窗口在自己
+    Invalidate 里察觉换主题的唯一一条边,谁先读就是谁的)。底栏没有底线。 }
+  if HeaderMode = twhBottom then
+    actionsPx := Bar.HeaderActionsHeight(Self, APPI)
+  else
+  begin
+    { 侧栏:操作区排在底线上面那一条带里(spec §4),行高要连底线一起够它。 }
+    actionsPx := ActionsPreferredSize(APPI).cy;
+    if actionsPx > 0 then Inc(actionsPx, HeaderRuleAt(APPI));
+  end;
   if actionsPx > Result then Result := actionsPx;
   if Result < 1 then Result := 1;
 end;
@@ -1788,6 +1810,23 @@ begin
   if lo > Result.cy then Result.cy := lo;
 end;
 
+procedure TTyToolWindowActions.AdjustSize;
+var
+  sz: TSize;
+  win: TTyToolWindow;
+begin
+  inherited AdjustSize;
+  { 子控件只改 Constraints 时 LCL 不作废本控件的首选尺寸缓存(control.inc:1520-1522 只调
+    AdjustSize),GetPreferredSize 会端旧值。 }
+  InvalidatePreferredSize;
+  sz := PreferredSizeAt(Font.PixelsPerInch);
+  if (sz.cx = FLastPreferred.cx) and (sz.cy = FLastPreferred.cy) then Exit;
+  FLastPreferred := sz;
+  if not (Parent is TTyToolWindow) then Exit;
+  win := TTyToolWindow(Parent);
+  if win.Bar <> nil then win.Bar.ActionsSizeChanged;
+end;
+
 procedure TTyToolWindowActions.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
@@ -1996,6 +2035,7 @@ begin
   FPlacement := twpLeft;
   FExpandedSize := TyToolWindowDefaultExpandedSize;
   FLoadingActiveIndex := -1;
+  FBottomActionsPx := -1;
   FStripHover := -1;
   FStripPressed := -1;
   FDropSlot := -1;
@@ -3018,6 +3058,25 @@ begin
   begin
     h := wins[i].ActionsPreferredSize(APPI).cy;
     if h > Result then Result := h;
+  end;
+end;
+
+procedure TTyToolWindowBar.ActionsSizeChanged;
+var
+  h: Integer;
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  if FPlacement <> twpBottom then Exit;
+  h := HeaderActionsHeight(nil, PPI);
+  if h = FBottomActionsPx then Exit;
+  FBottomActionsPx := h;
+  { 重排当前页会摆它的操作区,操作区的 AdjustSize 又会回到这里;值已经记下了,挡一层就够。 }
+  if FActionsNotifying or (FActive = nil) then Exit;
+  FActionsNotifying := True;
+  try
+    FActive.RelayoutHeader;
+  finally
+    FActionsNotifying := False;
   end;
 end;
 
@@ -4210,6 +4269,8 @@ begin
   { 先把尺寸推好再发事件:OnChange 里读到的 Width 得是新的(第一个窗口进来,空栏就展开)。 }
   Relayout;
   Invalidate;
+  { 底栏统一行高:窗口列表变了,操作区那一项可能跟着变(spec §3.4)。 }
+  ActionsSizeChanged;
   if FActive <> prev then DoChange;
 end;
 
@@ -4292,6 +4353,7 @@ begin
   end;
   Relayout;
   Invalidate;
+  ActionsSizeChanged;
   if FActive <> prev then DoChange;
 end;
 
