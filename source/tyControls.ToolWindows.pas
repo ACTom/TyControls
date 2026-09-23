@@ -774,7 +774,8 @@ type
     FHeaderHoverPart: TTyToolWindowBarPart;
     FHeaderHoverIndex: Integer;
     { 标签行上 APart(标签时窗口序号 AIndex)此刻是不是按下着 —— 从手势引擎读,不另记:
-      武装着、捕获者是这一页、部件相同(标签还要窗口相同)。 }
+      武装着(标签在拖动中也算,源标签保持 :active 直到收尾)、捕获者是这一页、部件相同
+      (标签还要窗口相同)。 }
     function HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
       AIndex: Integer): Boolean;
     { 标签行上的手势此刻捕获在 AWindow 上(引擎的捕获者就是它)—— 窗口决定「移动 / 松开
@@ -3681,7 +3682,9 @@ end;
 function TTyToolWindowBar.HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
   AIndex: Integer): Boolean;
 begin
-  Result := (FGesture <> nil) and (FGesture.State = twgsArmed)
+  { 拖动中被拖的那个标签(源)照样画按下态,直到手势收尾;按钮不是拖动把手,只有武装态。 }
+  Result := (FGesture <> nil)
+    and ((FGesture.State = twgsArmed) or ((FGesture.State = twgsDragging) and (APart = twbpItem)))
     and (FGesture.Capturer = AWindow) and (FGesture.Part = APart);
   if Result and (APart = twbpItem) then
     Result := (AIndex >= 0) and (AIndex < WindowCount) and (FGesture.Window = Windows[AIndex]);

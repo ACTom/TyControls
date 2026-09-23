@@ -189,6 +189,8 @@ type
     procedure TestCancelModeOnTheActivePageCancelsATabDrag;
     procedure TestADropSlotChangeRepaintsTheActivePage;
     procedure TestFreeingTheActivePageMidDragEndsTheGesture;
+    { 拖动中源标签一直画按下态(:active),松开才收掉。 }
+    procedure TestTheDraggedTabStaysPressedUntilTheGestureEnds;
   private
     FBarPopups, FWinPopups: Integer;
     FBarPopupPos: TPoint;
@@ -2560,6 +2562,46 @@ begin
   c := TabCentre(0);
   next.CallMouseDown(c.X, c.Y);
   next.CallMouseUp(c.X, c.Y);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheDraggedTabStaysPressedUntilTheGestureEnds;
+const
+  PressInk = TColor($0080FF);   { CSS #FF8000 }
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  r: TRect;
+  c: TPoint;
+  bmp: TBitmap;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme + ' TyToolWindowTab:active { background: #FF8000; }';
+  w := FWins[1];
+  g := ActiveGeom;
+  r := TabRectOf(g, 0);
+  c := r.CenterPoint;
+  w.CallMouseDown(c.X, c.Y);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertTrue('前提:武装着的标签画按下态', ExactIn(bmp, r, PressInk) > 0);
+  finally
+    bmp.Free;
+  end;
+  w.CallMouseMove(TabRectOf(g, 2).Left + 2, c.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertTrue('拖动中源标签还是按下态', ExactIn(bmp, r, PressInk) > 0);
+  finally
+    bmp.Free;
+  end;
+  w.CallMouseUp(c.X, c.Y + 60);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('收尾之后没有按下态', 0, ExactIn(bmp, Rect(0, 0, w.ClientWidth, 26), PressInk));
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization
