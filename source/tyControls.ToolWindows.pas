@@ -80,35 +80,6 @@ type
   TTyToolWindowActions = class;
   TTyToolWindowManager = class;
 
-  { 底栏标题行的宿主(spec §7.1 / §7.2)。标签行的像素属于当前页(窗口化子控件自己拥有那块像素),
-    所以当前页替栏画、把输入转给栏;悬停、按下、溢出集合、最大化状态都在栏上。
-    只有 TTyToolWindowBar 实现它;窗口找宿主经 Bar(「在不在栏里」只由 GetBar 回答)。
-    AWindow = nil 表示「栏坐标、当前页的标题行」(开工前问题 1);没有当前页时几何为空、
-    部件为 none。尺寸一律按入参 APPI(同 RenderTo 的一套尺度)。 }
-  ITyToolWindowHeaderHost = interface
-    ['{DCDF22CA-27B6-47C8-87CC-7157244C477C}']
-    function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
-    { 底栏统一行高里操作区那一项:栏里所有窗口操作区 raw 首选高的最大值(spec §3.4)。 }
-    function HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
-    function HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
-      APPI: Integer): TTyToolWindowHeaderGeom;
-    procedure PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter; const ARow: TRect;
-      const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
-    function HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer; out AIndex: Integer;
-      out ARect: TRect): TTyToolWindowZone;
-    procedure HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
-      X, Y: Integer);
-    procedure HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState; X, Y: Integer);
-    procedure HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
-      X, Y: Integer);
-    procedure HeaderMouseLeave(AWindow: TTyToolWindow);
-    { 捕获者是当前页、它收到了 LM_CANCELMODE(spec §9.7)。 }
-    procedure HeaderCancelMode(AWindow: TTyToolWindow);
-    function HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
-      out ARect: TRect): Boolean;
-    procedure HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
-  end;
-
   { 操作区的可见子控件,Controls[] 顺序,与 TTyToolWindowFlowItems 一一对应。 }
   TTyToolWindowKids = array of TControl;
 
@@ -576,7 +547,7 @@ type
     property DesignWindow: TTyToolWindow read FDesignWindow;
   end;
 
-  TTyToolWindowBar = class(TTyCustomControl, ITyToolWindowHeaderHost)
+  TTyToolWindowBar = class(TTyCustomControl)
   private
     { 注册过的窗口(集合,顺序不算数)。**窗口顺序永远就是 Controls 顺序**(spec §6.1),
       每次现取:SetControlIndex 不是虚方法,设计器的「移到最前 / 最后」直接调它 ——
@@ -1052,9 +1023,14 @@ type
       published**:只在运行时有、不进 .lfm。收起、栏变空、换父控件、改 Placement 之前先还原。 }
     property Maximized: Boolean read FMaximized write SetMaximized;
   public
-    { --- ITyToolWindowHeaderHost(spec §7.2)。放 public:接口调用本来就绕过可见性,放 private
-      反而让测试够不着。 --- }
+    { --- 底栏标题行的宿主那一面(spec §7.1 / §7.2)。标签行的像素属于当前页(窗口化子控件
+      自己拥有那块像素),所以当前页替栏画、把输入转给栏;悬停、按下、溢出集合、最大化状态都在
+      栏上。窗口找宿主经 Bar(「在不在栏里」只由 GetBar 回答)。AWindow = nil 表示「栏坐标、
+      当前页的标题行」;没有当前页时几何为空、部件为 none。尺寸一律按入参 APPI(同 RenderTo
+      的一套尺度)。只有栏一个实现、只有窗口一个调用方,所以是栏上的普通方法,不另立接口;
+      放 public 是给测试直接问的。 --- }
     function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+    { 底栏统一行高里操作区那一项:栏里所有窗口操作区 raw 首选高的最大值(spec §3.4)。 }
     function HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
     function HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
       APPI: Integer): TTyToolWindowHeaderGeom;
@@ -1069,6 +1045,7 @@ type
     procedure HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
     procedure HeaderMouseLeave(AWindow: TTyToolWindow);
+    { 捕获者是当前页、它收到了 LM_CANCELMODE(spec §9.7)。 }
     procedure HeaderCancelMode(AWindow: TTyToolWindow);
     function HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
       out ARect: TRect): Boolean;
@@ -1296,7 +1273,7 @@ var
   b: TTyToolWindowBar;
 begin
   { 只看所在栏的**位置** —— 不看哪页是当前页,否则切页时正文会跳。
-    「在不在栏里」只由 GetBar 一处回答;在栏里时模式由栏答(ITyToolWindowHeaderHost)。 }
+    「在不在栏里」只由 GetBar 一处回答;在栏里时模式由栏答(TTyToolWindowBar.HeaderMode)。 }
   b := Bar;
   if b = nil then Result := twhNone
   else Result := b.HeaderMode(Self);
@@ -3535,7 +3512,7 @@ begin
   end;
 end;
 
-{ --- 底栏标题行(ITyToolWindowHeaderHost) --------------------------------------- }
+{ --- 底栏标题行(栏作宿主,spec §7.2) ----------------------------------------------- }
 
 function TTyToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
   APPI: Integer): TTyToolWindowWidths;
