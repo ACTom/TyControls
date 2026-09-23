@@ -77,6 +77,20 @@ type
     procedure TestRenderingAt144ScalesTabsAndButtons;
     procedure TestRenamingAHiddenPageRepaintsTheActivePage;
     procedure TestReorderingRepaintsTheActivePage;
+    { Task 7:最大化 / 还原(spec §6.4)。 }
+    procedure TestMaximizeFillsTheParentOverItsSiblings;
+    procedure TestRestoringGoesBackToTheExpandedHeight;
+    procedure TestCollapsingRestoresFirst;
+    procedure TestMaximizeIsIgnoredWhereItCannotApply;
+    procedure TestMaximizedIsNotPublished;
+    procedure TestTheEdgeIsInertWhileMaximized;
+    procedure TestMaximizingMidResizeRestoresTheStartSize;
+    procedure TestTheMaximizeButtonTogglesOnARealClick;
+    procedure TestTheMaximizeGlyphTurnsIntoRestore;
+    procedure TestMaximizingRepaintsTheActivePage;
+  private
+    { 一个 600×400 的宿主:上面一个 30 高的 alTop 兄弟、一个 alClient 编辑区;栏挪进去。 }
+    procedure HostTheBar;
   end;
 
   { 标签行的输入:转发、点击、溢出、提示、右键、调顺序(spec §3.6 / §7.4 / §9)。 }
@@ -837,6 +851,204 @@ begin
   ArmActive(w);
   FWins[0].WindowIndex := 2;
   AssertTrue('调顺序之后当前页重画', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+end;
+
+{ --- Task 7 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowBottomTests.HostTheBar;
+var
+  host, top, client: TBodyChild;
+begin
+  host := TBodyChild.Create(FForm);
+  host.Parent := FForm;
+  host.SetBounds(0, 0, 600, 400);
+  top := TBodyChild.Create(FForm);
+  top.Parent := host;
+  top.Align := alTop;
+  top.Height := 30;
+  client := TBodyChild.Create(FForm);
+  client.Parent := host;
+  client.Align := alClient;
+  FBar.Parent := host;
+end;
+
+procedure TTyToolWindowBottomTests.TestMaximizeFillsTheParentOverItsSiblings;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  AssertEquals('前提:按展开尺寸推(边缘区 4 + 150)', 154, FBar.Height);
+  FBar.Maximized := True;
+  AssertTrue('最大化了', FBar.Maximized);
+  AssertEquals('撑满父控件、扣掉上面那个兄弟', 400 - 30, FBar.Height);
+  AssertEquals('ExpandedSize 不写', 150, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowBottomTests.TestRestoringGoesBackToTheExpandedHeight;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  FBar.Maximized := True;
+  AssertEquals('前提:最大化的高', 370, FBar.Height);
+  FBar.Maximized := False;
+  AssertEquals('还原回展开尺寸推的高', 154, FBar.Height);
+end;
+
+procedure TTyToolWindowBottomTests.TestCollapsingRestoresFirst;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  FBar.Maximized := True;
+  FBar.Collapsed := True;
+  AssertFalse('收起之前先还原', FBar.Maximized);
+  AssertEquals('收起的底栏高 0', 0, FBar.Height);
+  FBar.Collapsed := False;
+  AssertEquals('再展开是还原的高', 154, FBar.Height);
+end;
+
+procedure TTyToolWindowBottomTests.TestMaximizeIsIgnoredWhereItCannotApply;
+var
+  b, d: TBarAccess;
+begin
+  { 侧栏。 }
+  NewWindow;
+  FBar.Maximized := True;
+  AssertFalse('侧栏不能最大化', FBar.Maximized);
+  { 设计期的底栏。 }
+  d := NewDesignBar;
+  d.Placement := twpBottom;
+  NewWindowIn(d, FDesignOwner);
+  d.Maximized := True;
+  AssertFalse('设计期不能最大化', d.Maximized);
+  { 空底栏。 }
+  b := TBarAccess.Create(FForm);
+  b.Parent := FForm;
+  b.Controller := FCtl;
+  b.Placement := twpBottom;
+  b.Maximized := True;
+  AssertFalse('没有窗口不能最大化', b.Maximized);
+  { 收起着。 }
+  NewWindowIn(b, FForm);
+  b.Collapsed := True;
+  b.Maximized := True;
+  AssertFalse('收起着不能最大化', b.Maximized);
+  AssertTrue('也不顺带展开', b.Collapsed);
+  { 加载中。 }
+  b.Collapsed := False;
+  b.BeginLoad;
+  b.Maximized := True;
+  b.EndLoad;
+  AssertFalse('加载中不能最大化', b.Maximized);
+  b.Maximized := True;
+  AssertTrue('前提:同一条栏条件都满足时设得上', b.Maximized);
+end;
+
+procedure TTyToolWindowBottomTests.TestMaximizedIsNotPublished;
+begin
+  AssertNull('Maximized 只在运行时有,不进 .lfm', GetPropInfo(FBar, 'Maximized'));
+end;
+
+procedure TTyToolWindowBottomTests.TestTheEdgeIsInertWhileMaximized;
+var
+  e: TPoint;
+  cur: TCursor;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  FBar.Maximized := True;
+  e := FBar.EdgeRect.CenterPoint;
+  AssertFalse('前提:那条线照画(边缘区还在几何里)', IsRectEmpty(FBar.EdgeRect));
+  cur := FBar.Cursor;
+  FBar.CallMouseMove(e.X, e.Y, []);
+  AssertEquals('悬停不借调整光标', Ord(cur), Ord(FBar.Cursor));
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X, e.Y - 40);
+  AssertFalse('按下拖动不拉宽', FBar.IsEdgeDraggingForTest);
+  FBar.CallMouseUp(e.X, e.Y - 40);
+  AssertEquals('ExpandedSize 不变', 150, FBar.ExpandedSize);
+  AssertTrue('还是最大化着', FBar.Maximized);
+end;
+
+procedure TTyToolWindowBottomTests.TestMaximizingMidResizeRestoresTheStartSize;
+var
+  e: TPoint;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.ExpandedSize := 150;
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X, e.Y - 40);
+  AssertTrue('前提:拉宽中', FBar.IsEdgeDraggingForTest);
+  AssertEquals('前提:拉宽实时写', 190, FBar.ExpandedSize);
+  FBar.Maximized := True;
+  AssertFalse('拉宽结束', FBar.IsEdgeDraggingForTest);
+  AssertEquals('ExpandedSize 回到起点', 150, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowBottomTests.TestTheMaximizeButtonTogglesOnARealClick;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := ActiveGeom.Maximize.CenterPoint;
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseUp(100, w.BodyRect.Top + 40);
+  AssertFalse('按在按钮、松开在别处:不变', FBar.Maximized);
+  w.CallMouseDown(c.X, c.Y, [ssLeft, ssDouble]);
+  w.CallMouseUp(c.X, c.Y);
+  AssertFalse('多击的按下:不变(spec §7.4)', FBar.Maximized);
+  ClickAt(w, c);
+  AssertTrue('同一个按钮上按下松开:最大化', FBar.Maximized);
+  ClickAt(w, c);
+  AssertFalse('再点一下:还原', FBar.Maximized);
+end;
+
+procedure TTyToolWindowBottomTests.TestTheMaximizeGlyphTurnsIntoRestore;
+var
+  w: TProbeWindow;
+  r: TRect;
+  before, after: TBitmap;
+  x, y, diff: Integer;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme;
+  w := FWins[1];
+  r := ActiveGeom.Maximize;
+  { 两次都按同一个尺寸画:标签行的几何只看行宽。 }
+  before := RenderPage(w, 600, 200, 96);
+  FBar.Maximized := True;
+  after := RenderPage(w, 600, 200, 96);
+  try
+    AssertTrue('前提:按钮里有字形', InkIn(before, r, RestInk) > 0);
+    diff := 0;
+    for y := r.Top to r.Bottom - 1 do
+      for x := r.Left to r.Right - 1 do
+        if before.Canvas.Pixels[x, y] <> after.Canvas.Pixels[x, y] then Inc(diff);
+    AssertTrue('最大化之后按钮画的是「还原」', diff > 0);
+  finally
+    before.Free;
+    after.Free;
+  end;
+end;
+
+procedure TTyToolWindowBottomTests.TestMaximizingRepaintsTheActivePage;
+var
+  w: TProbeWindow;
+begin
+  HostTheBar;
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  ArmActive(w);
+  FBar.Maximized := True;
+  AssertTrue('字形换了:当前页丢缓存', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
 end;
 
 { --- Task 6:TTyToolWindowBottomInputTests ------------------------------------------ }

@@ -42,7 +42,8 @@ type
     procedure Pump;
     { 窗体上再放一条底栏,两个探针窗口(Problems、Output),当前页是后一个;抽过消息,
       对齐引擎真的摆过。 }
-    function NewBottomBar(out AFirst, AActive: TProbeWindow): TTyToolWindowBar;
+    function NewBottomBar(out AFirst, AActive: TProbeWindow;
+      AParent: TWinControl = nil): TTyToolWindowBar;
     { 当前页上窗口 AIndex 的标签中心(当前页客户区坐标)。 }
     function BottomTabCentre(AActive: TProbeWindow; AIndex: Integer): TPoint;
   protected
@@ -62,6 +63,8 @@ type
     procedure TestNarrowingFollowsTheFormAndNeverWritesBack;
     { 底栏标签行(spec §3.6):真实的按下消息走 WndProc → WMLButtonDown(抓捕获要句柄)。 }
     procedure TestTheBottomTabRowNeverStartsAnLclDrag;
+    { spec §6.4:最大化的底栏跟着窗体变高(窗体的 OnResize 排队发,要真句柄)。 }
+    procedure TestAMaximizedBottomBarFollowsTheForm;
   end;
 
 implementation
@@ -308,12 +311,14 @@ begin
   AssertEquals('窗体放宽:回到展开尺寸', wide, FBar.Width);
 end;
 
-function TTyToolWindowFocusTests.NewBottomBar(out AFirst, AActive: TProbeWindow): TTyToolWindowBar;
+function TTyToolWindowFocusTests.NewBottomBar(out AFirst, AActive: TProbeWindow;
+  AParent: TWinControl): TTyToolWindowBar;
 begin
+  if AParent = nil then AParent := FForm;
   Result := TTyToolWindowBar.Create(FForm);
   { 先设 Placement 再加窗口:运行时有窗口时侧 ↔ 底被忽略。 }
   Result.Placement := twpBottom;
-  Result.Parent := FForm;
+  Result.Parent := AParent;
   Result.Controller := FCtl;
   Result.ExpandedSize := 220;
   AFirst := TProbeWindow.Create(FForm);
@@ -368,6 +373,31 @@ begin
   w.Perform(LM_LBUTTONUP, 0, Coords(body));
   AssertNothingRaised('正文里的按下');
   AssertEquals('正文里照常起', 1, w.AutoDragStarts);
+end;
+
+procedure TTyToolWindowFocusTests.TestAMaximizedBottomBarFollowsTheForm;
+var
+  b: TTyToolWindowBar;
+  first, w: TProbeWindow;
+  host: TBodyChild;
+  h: Integer;
+begin
+  { 底栏单独放在一个 alClient 的宿主里:和夹具的侧栏同在窗体上的话,侧栏的 ParentResized
+    会顺手重推同一父控件里的每一条栏(DeriveSiblings),底栏自己跟没跟上就看不出来了。 }
+  host := TBodyChild.Create(FForm);
+  host.Parent := FForm;
+  host.Align := alClient;
+  b := NewBottomBar(first, w, host);
+  b.Maximized := True;
+  Pump;
+  AssertNothingRaised('最大化');
+  h := b.Height;
+  AssertTrue('前提:最大化的高比展开尺寸大', h > 220 + b.EdgeSizePx);
+  FForm.Height := FForm.Height + 100;
+  Pump;
+  AssertNothingRaised('窗体拉高');
+  AssertEquals('窗体高 100,最大化的底栏也高 100', h + 100, b.Height);
+  AssertEquals('ExpandedSize 不变', 220, b.ExpandedSize);
 end;
 
 initialization

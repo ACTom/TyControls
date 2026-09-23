@@ -745,6 +745,17 @@ type
     function PartOfZone(AZone: TTyToolWindowZone): TTyToolWindowBarPart;
     { 变了才写,并 InvalidateHeader(悬停画在当前页里)。 }
     procedure SetHeaderHover(APart: TTyToolWindowBarPart; AIndex: Integer);
+  private
+    { --- 最大化(spec §6.4)。只在运行时有,不进 .lfm。 --- }
+    FMaximized: Boolean;
+    { 侧栏、设计期、加载中、收起着、没有窗口时设 True 一律忽略(开工前问题 10)。设成功:拉宽
+      中途被改 = 结束拉宽回起点(spec §6.3),重推尺寸,标签行的字形换掉。ExpandedSize 从头到尾
+      不写。 }
+    procedure SetMaximized(AValue: Boolean);
+    { 最大化时的内容项(开工前问题 4):父控件调整后客户区高 − 同轴非栏对齐兄弟 − 所有参与
+      分空间的同轴栏的固定部分 − **其余**参与者未收窄的内容,不低于 content-min。其余栏照
+      §6.2 用各自的未收窄值,不让位。父控件的 OnResize 本来就订阅着(ParentResized),跟着变。 }
+    function MaximizedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
@@ -779,9 +790,10 @@ type
     function EdgeResizing: Boolean;
     function EdgeSnapped: Boolean;
     { 引擎收尾时的两个回调。ResizeEnded:拉宽结束(栏不在析构中),松开保留此刻的尺寸,
-      其他收尾回到起点(spec §6.3)。GestureCleared:按下的视觉状态清掉并重画。 }
+      其他收尾回到起点(spec §6.3)。GestureCleared:按下的视觉状态清掉并重画;ATabRow = 这次
+      手势的捕获者是底栏的一页,它的标签行画着按下态,要重画掉。 }
     procedure ResizeEnded(AReason: TTyToolWindowGestureEnd; AWasSnapped: Boolean);
-    procedure GestureCleared;
+    procedure GestureCleared(ATabRow: Boolean);
     procedure LMCancelMode(var Message: TLMessage); message LM_CANCELMODE;
   private
     { --- 拖动调顺序(spec §9.2 / §9.4 / §9.7) --- }
@@ -964,6 +976,9 @@ type
     { 设成不在本栏里的窗口(或 nil)被忽略。加载中答 nil(见 FActive)—— 继承窗体的第二遍
       加载例外,那时答第一遍挑好、正显示着的那一页。设进来的记作待定,Loaded 应用。 }
     property ActiveWindow: TTyToolWindow read FActive write ActivateWindow;
+    { 底栏最大化(spec §6.4):撑满父控件里编辑区那一截,还原回 ExpandedSize 推的高。**不
+      published**:只在运行时有、不进 .lfm。收起、栏变空、换父控件、改 Placement 之前先还原。 }
+    property Maximized: Boolean read FMaximized write SetMaximized;
   public
     { --- ITyToolWindowHeaderHost(spec §7.2)。放 public:接口调用本来就绕过可见性,放 private
       反而让测试够不着。 --- }
@@ -2604,7 +2619,58 @@ end;
 
 function TTyToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
-  Result := FixedAxisPx(AM) + NarrowedContentPx(AM);
+  { 最大化只改内容项;按收起算尺寸时照旧(那时内容项是 0)。 }
+  if (FPlacement = twpBottom) and FMaximized and not SizesAsCollapsed then
+    Result := FixedAxisPx(AM) + MaximizedContentPx(AM)
+  else
+    Result := FixedAxisPx(AM) + NarrowedContentPx(AM);
+end;
+
+function TTyToolWindowBar.MaximizedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+var
+  p: TWinControl;
+  r: TRect;
+  c: TControl;
+  b: TTyToolWindowBar;
+  m: TTyToolWindowBarMetrics;
+  i: Integer;
+begin
+  p := Parent;
+  if (p = nil) or not JoinsNarrowing then Exit(UnnarrowedContentPx(AM));
+  r := p.ClientRect;
+  TWinControlAccess(p).AdjustClientRect(r);
+  Result := r.Bottom - r.Top;
+  for i := 0 to p.ControlCount - 1 do
+  begin
+    c := p.Controls[i];
+    if not c.IsControlVisible then Continue;
+    if (c is TTyToolWindowBar) and TTyToolWindowBar(c).JoinsNarrowing
+       and (TTyToolWindowBar(c).FPlacement = twpBottom) then
+    begin
+      b := TTyToolWindowBar(c);
+      if b = Self then m := AM else m := b.Metrics;
+      Dec(Result, b.FixedAxisPx(m));
+      if b <> Self then Dec(Result, b.UnnarrowedContentPx(m));
+    end
+    else if c.Align in [alTop, alBottom] then
+      Dec(Result, c.Height);
+    { alClient(编辑区)不算:最大化就是把它压到 0。 }
+  end;
+  if Result < AM.ContentMin then Result := AM.ContentMin;
+end;
+
+procedure TTyToolWindowBar.SetMaximized(AValue: Boolean);
+begin
+  if FMaximized = AValue then Exit;
+  if AValue and ((FPlacement <> twpBottom)
+     or ([csDesigning, csLoading, csDestroying] * ComponentState <> [])
+     or FCollapsed or (WindowCount = 0)) then Exit;
+  ResetGesture(twgeCancel);
+  FMaximized := AValue;
+  if csDestroying in ComponentState then Exit;
+  Relayout;
+  { 标签行上最大化按钮的字形换了(tgMaximize ↔ tgRestore)。标题行几何不变,不用重排。 }
+  InvalidateHeader;
 end;
 
 procedure TTyToolWindowBar.ParentResized(Sender: TObject);
@@ -2627,6 +2693,8 @@ var
   old: TWinControl;
 begin
   old := Parent;
+  { 换父控件之前先还原(spec §6.4):最大化的高是按旧父控件算的。 }
+  if old <> NewParent then Maximized := False;
   if (old <> nil) and (old <> NewParent) then old.RemoveHandlerOnResize(@ParentResized);
   inherited SetParent(NewParent);
   if old = NewParent then Exit;
@@ -3549,7 +3617,10 @@ begin
   end;
 
   { 6. 最大化、收起。收起用「隐藏」的横线(tgMinimize):tgClose 会被读成「关掉这个窗口」。 }
-  PaintButton(AGeom.Maximize, TyToolWindowButtonKey, twbpMaximize, tgMaximize);
+  if FMaximized then
+    PaintButton(AGeom.Maximize, TyToolWindowButtonKey, twbpMaximize, tgRestore)
+  else
+    PaintButton(AGeom.Maximize, TyToolWindowButtonKey, twbpMaximize, tgMaximize);
   PaintButton(AGeom.Collapse, TyToolWindowButtonKey, twbpCollapse, tgMinimize);
 end;
 
@@ -3660,6 +3731,8 @@ begin
     { 点当前页的标签什么都不做(spec §9.3 底栏标签);非当前页 → 切过去。 }
     twbpItem:
       if rel.Window <> FActive then ActivateWindow(rel.Window);
+    twbpMaximize:
+      Maximized := not FMaximized;
   end;
 end;
 
@@ -3721,7 +3794,8 @@ begin
       Exit(twbpItem);
     end;
   if PtInRect(L.Overflow, pt) then Exit(twbpOverflow);
-  if PtInRect(L.Edge, pt) then Exit(twbpEdge);
+  { 最大化期间边缘区不起作用(spec §6.4):不命中、不借调整光标;那条贴编辑区的线照画。 }
+  if PtInRect(L.Edge, pt) and not FMaximized then Exit(twbpEdge);
 end;
 
 function TTyToolWindowBar.WindowAtPos(X, Y: Integer): TTyToolWindow;
@@ -3824,7 +3898,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolWindowBar.GestureCleared;
+procedure TTyToolWindowBar.GestureCleared(ATabRow: Boolean);
 begin
   if (FStripPressed <> -1) or FOverflowPressed then
   begin
@@ -3833,7 +3907,7 @@ begin
     if not (csDestroying in ComponentState) then Invalidate;
   end;
   { 标签行的按下态是从引擎读的(HeaderPressed):收尾之后当前页得重画掉它。 }
-  InvalidateHeader;
+  if ATabRow then InvalidateHeader;
 end;
 
 procedure TTyToolWindowBar.SetStripHover(AIndex: Integer; AOverflow: Boolean);
@@ -4230,7 +4304,7 @@ procedure TTyToolWindowBar.BeginEdgeDrag(X, Y: Integer);
 begin
   { 没有窗口、设计期:边缘区不起作用(LayoutIn 这时给的 Edge 本来就是空的,按不到这里)。
     吞点击的标志 MouseDown 已经按部件设过了。 }
-  if (WindowCount = 0) or (csDesigning in ComponentState) then Exit;
+  if (WindowCount = 0) or (csDesigning in ComponentState) or FMaximized then Exit;
   FGesture.BeginResize(FExpandedSize, ClientToScreen(Point(X, Y)));
   Invalidate;
 end;
@@ -4395,6 +4469,8 @@ begin
   { 侧 ↔ 底:运行时栏里有窗口就忽略 —— 会破坏「不能跨到底栏」的规则和布局串的键。 }
   if ((FPlacement = twpBottom) <> (AValue = twpBottom)) and (WindowCount > 0)
      and ([csDesigning, csLoading] * ComponentState = []) then Exit;
+  { 改 Placement 之前先还原(spec §6.4)。 }
+  Maximized := False;
   ResetGesture(twgeCancel);
   FPlacement := AValue;
   { 流式加载时 Align 自己也在流里,不替它改。 }
@@ -4486,6 +4562,8 @@ var
   form: TCustomForm;
 begin
   if FCollapsed = AValue then Exit;
+  { 收起之前先还原(spec §6.4):再展开时是还原的高度。 }
+  if AValue then Maximized := False;
   { 拉宽中途 Collapsed 被别处改了:拉宽作废,ExpandedSize 回到起点(spec §6.3)。 }
   ResetGesture(twgeCancel);
   FCollapsed := AValue;
@@ -4860,8 +4938,9 @@ begin
   if AWindow = FGesture.Window then ResetGesture(twgeDiscard);
   if AWindow = FGesture.DesignWindow then FGesture.DisarmDesign;
   if AWindow = FContextWindow then FContextWindow := nil;
-  { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废。 }
+  { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废;最大化的底栏先还原(spec §6.4)。 }
   if EdgeResizing and (Length(FRegistered) = 0) then ResetGesture(twgeCancel);
+  if Length(FRegistered) = 0 then Maximized := False;
   { 悬停和按下按窗口序号记,别的窗口一走序号就挪了:悬停清掉(下一次移动重查),
     按下按还在的那个手势窗口重新对上(溢出按钮的按下态不按序号,不动)。 }
   FStripHover := -1;
@@ -5185,8 +5264,10 @@ end;
 
 procedure TTyToolWindowGesture.Reset(AReason: TTyToolWindowGestureEnd);
 var
-  dying, wasSnapped, wasDragging, wasCancelled: Boolean;
+  dying, wasSnapped, wasDragging, wasCancelled, onTabRow: Boolean;
 begin
+  { 捕获者是一页(底栏标签行):它画着按下态,收尾之后要重画。清记录之前先记下。 }
+  onTabRow := FCapturer is TTyToolWindow;
   dying := csDestroying in FBar.ComponentState;
   { 拉宽:析构中只清标志 —— 回到起点要 Relayout,而栏已经拆了一半。 }
   if FResizing then
@@ -5207,7 +5288,7 @@ begin
   FCapturer := nil;
   FMulti := False;
   FDraggable := False;
-  FBar.GestureCleared;
+  FBar.GestureCleared(onTabRow);
 end;
 
 procedure TTyToolWindowGesture.SetCursor(ACursor: TCursor);
