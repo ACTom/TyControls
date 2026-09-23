@@ -191,8 +191,8 @@ type
     procedure SetController(AValue: TTyStyleController); override;
     { 有些 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求它们不发
       OnShow / OnHide:栏在 Loaded 里应用 ActiveIndex、C 期加载结束时应用挂起的布局计划。
-      用户看得见的切页、收起、展开**照发**。唯一的调用者是
-      TTyToolWindowBar.SwitchSilently,它把一次切换涉及的窗口整批包起来。
+      用户看得见的切页、收起、展开**照发**。唯一的调用者是 TTyToolWindowBar.BeginSilent /
+      EndSilent,它把栏里的**每一个**窗口整批包起来(静默期间注册进来的也包上)。
       计数而不是布尔:布局应用会套着切页,一个布尔会被里层提前解除。
       csLoading 挡不住这两个 —— 发生时 csLoading 已经清了。
 
@@ -317,9 +317,11 @@ type
     property Height stored IsBoundsStored;
   end;
 
-  { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome。 }
+  { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome、
+    内容区下限。下限也在这里:推导按它钳内容项,只换 --toolwindow-content-min 的主题
+    也得重推。 }
   TTyToolWindowBarMetrics = record
-    Strip, Edge, Chrome: Integer;
+    Strip, Edge, Chrome, ContentMin: Integer;
   end;
 
   TTyToolWindowArray = array of TTyToolWindow;
@@ -337,30 +339,37 @@ type
     FPlacement: TTyToolWindowPlacement;
     FExpandedSize: Integer;
     FCollapsed: Boolean;
+    { 当前页。加载中注册进来的窗口不碰它 —— 加载中「哪一页是当前页」只有一个答案:
+      Loaded 还没挑,FActive 是 nil(继承窗体的第二遍加载例外:那时第一遍挑好的那页
+      真的显示着,它照样答那一页)。 }
     FActive: TTyToolWindow;
-    { 流式加载期间读进来的 ActiveIndex,Loaded 里应用(那时窗口才全注册完)。 }
+    { 加载中的待定当前页,Loaded 里应用(那时窗口才全注册完)。两种来源,后写的算:
+      读进来 / 设进来的 ActiveIndex 记序号(流里本来就是序号);按窗口激活的
+      (ActiveWindow、ShowControl)记窗口本身 —— 记成序号的话,加载中调顺序、有窗口
+      离开,就会指到别的窗口上。Loaded 应用完把序号记成真正应用的那一个、窗口清空。 }
     FLoadingActiveIndex: Integer;
+    FLoadingTarget: TTyToolWindow;
     { 栏自己在切 Visible:Task 10 的 TTyToolWindow.SetVisible 看见它就直接放行。 }
     FBarSwitching: Boolean;
     FDeriving: Boolean;
     FRelayouting: Boolean;
-    { > 0 = 这一批切换不发任何用户事件(栏的 OnChange 和窗口的 OnShow / OnHide),
-      见 SwitchSilently。 }
+    { > 0 = 这一批不发任何用户事件(栏的 OnChange / OnCollapse / OnExpand 和窗口的
+      OnShow / OnHide),见 BeginSilent。 }
     FSilent: Integer;
-    { 主题尺寸的缓存,键 = (PPI, model 身份, 主题版本, RTL, Placement, 样式类, StyleOverride)。 }
+    { 主题尺寸的缓存,键 = (PPI, model 身份, 主题版本, Placement, 样式类, StyleOverride)。
+      不含 RTL:栏的几何一律看 Placement,不看读写方向。 }
     FMetrics: TTyToolWindowBarMetrics;
     FMetricsValid: Boolean;
     FMetricsPPI: Integer;
     FMetricsAnchor: TObject;
     FMetricsVer: Cardinal;
-    FMetricsRTL: Boolean;
     FMetricsPlacement: TTyToolWindowPlacement;
     FMetricsClass: string;
     FMetricsOverride: string;
     { 上一次推导尺寸时**真正用过**的那一份。Invalidate 拿它比,而不是拿缓存比 ——
       缓存谁读都会刷新(对齐引擎在 AdjustClientRect 里读、ConstrainedResize 里读),
       「谁先读就是谁的」:别人先把缓存刷成新值,Invalidate 就再也看不出主题变了。
-      PPI 单独记:内容项 MulDiv(ExpandedSize, PPI, 96) 也跟着它变,而三项主题尺寸取整之后
+      PPI 单独记:内容项 MulDiv(ExpandedSize, PPI, 96) 也跟着它变,而几项主题尺寸取整之后
       可能一个都没动(默认 token 的底栏在 96 → 100 PPI 下就是这样)。 }
     FLaid: TTyToolWindowBarMetrics;
     FLaidPPI: Integer;
@@ -383,8 +392,12 @@ type
     function CollapsedAtRunTime: Boolean;
     { 按「收起」算尺寸:运行时收起着或没有窗口;设计期永远不算。 }
     function SizesAsCollapsed: Boolean;
-    { 沿栏轴向的推导尺寸(侧栏 = Width,底栏 = Height),设备像素。 }
-    function DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+    { 沿栏轴向的推导尺寸(侧栏 = Width,底栏 = Height),设备像素。内容项不低于
+      content-min —— 和 ConstrainedResize 的下限同一个数,所以 ExpandedSize 比下限还小时
+      Width 照样等于这里的答案,不会被对齐引擎悄悄钳开。 }
+    function DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer; overload;
+    { Placement 要求的 Align(左 → alLeft,右 → alRight,底 → alBottom)。 }
+    function PlacementAlign: TAlign;
     procedure DeriveSize;
     procedure Relayout;
     { Controls 顺序里的窗口,去掉 AExcept(可为 nil)。非窗口子控件(粘贴等途径漏进来的)
@@ -397,11 +410,11 @@ type
     function FocusIsInside(AWindow: TTyToolWindow): Boolean;
     procedure ShowWindowNow(AWindow: TTyToolWindow);
     procedure HideWindowNow(AWindow: TTyToolWindow);
-    { spec §5.1 的六步。AOld 是要藏起来的那一页(可为 nil 或就是 AWindow)。 }
+    { spec §5.1 的六步。AOld 只用来判断焦点原来在不在旧页里(可为 nil 或就是 AWindow)。
+      显示 / 隐藏不看 AOld:先显示目标,再把栏里**其余每一个**窗口藏起来;收起着就
+      连目标一起藏。 }
     procedure SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
-    { **唯一**的静默切页入口:把一次切换里涉及的窗口整批包进 BeginSilentVisibility /
-      EndSilentVisibility(try/finally),期间栏也不发 OnChange、不通知设计器。
-      调用者:Loaded 应用 ActiveIndex;C 期加载结束时应用挂起的布局计划。 }
+    { 一次静默切页 = BeginSilent + 切 + EndSilent(try/finally)的薄包装。 }
     procedure SwitchSilently(AWindow: TTyToolWindow);
     function EventsAllowed: Boolean;
     procedure DoChange;
@@ -420,12 +433,28 @@ type
     procedure SetChildOrder(Child: TComponent; Order: Integer); override;
     { 本栏的窗口:激活;运行时同时展开,设计期不写 Collapsed(spec §5.1)。 }
     procedure ShowControl(AControl: TControl); override;
+    { 此刻的主题尺寸下的推导值 —— Width(侧栏)/ Height(底栏)应当等于它。 }
+    function DerivedAxisPx: Integer; overload;
+    { 静默批次(spec §6.6):Begin 与 End 之间,栏不发 OnChange / OnCollapse / OnExpand、
+      不通知设计器,栏里**每一个**窗口不发 OnShow / OnHide —— 切页、收起、展开、窗口进出
+      都算在这一批里。EventsAllowed 是栏这一侧唯一的闸。计数,可嵌套。
+      调用者:Loaded 应用 ActiveIndex(经 SwitchSilently);C 期应用挂起的布局计划。
+      用户看得见的切换**不许**包进来。
+      批次中途注册进来的窗口是这一批的一部分:注册时按当前层数补上静默,End 照样解除;
+      中途离开的窗口在注销时把本栏加的那几层还掉 —— 否则它会带着静默去到别处,
+      OnShow / OnHide 从此不响。
+      **调用方必须 try/finally**:Begin 之后抛异常而没走到 End,整条栏和它的每个窗口
+      从此都不发事件,而且没有一条断言会指向这里。 }
+    procedure BeginSilent;
+    procedure EndSilent;
   public
     constructor Create(AOwner: TComponent); override;
     procedure Invalidate; override;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
-    { 设计器拖栏的边:只有这一种 SetBounds 写回 ExpandedSize(spec §6.1)。 }
+    { 设计器拖栏的边:只有这一种 SetBounds 写回 ExpandedSize(spec §6.1)。Align 不是
+      Placement 要求的那一个时(比如用户改成 alClient)不写回:那时宽 / 高是对齐引擎按
+      父控件摆出来的,父控件一变就会把 ExpandedSize 改掉。 }
     procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
     { 离开的两条路都在这之后才走到,窗口序号只能在这里记。 }
     procedure RemoveControl(AControl: TControl); override;
@@ -439,7 +468,8 @@ type
     function ContentMinPx: Integer;
     property Windows[AIndex: Integer]: TTyToolWindow read GetWindow;
     property WindowCount: Integer read GetWindowCount;
-    { 设成不在本栏里的窗口(或 nil)被忽略。 }
+    { 设成不在本栏里的窗口(或 nil)被忽略。加载中答 nil(见 FActive),设进来的记作
+      待定,Loaded 应用。 }
     property ActiveWindow: TTyToolWindow read FActive write ActivateWindow;
   published
     property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
@@ -1380,16 +1410,17 @@ begin
   mdl := ActiveController.Model;
   ver := mdl.ThemeVersion;
   cls := TyStyleClassFor(Self, StyleClass);
-  { 键里除了 spec §6.1 列的五项,还有样式类和本控件的 StyleOverride:chrome 按它们解析,
+  { 键里除了 spec §6.1 列的几项,还有样式类和本控件的 StyleOverride:chrome 按它们解析,
     而改这两个只会带来一次裸 Invalidate,键不变的话缓存就一直端旧值。 }
   if (not FMetricsValid) or (FMetricsAnchor <> TObject(mdl)) or (FMetricsVer <> ver)
-     or (FMetricsPPI <> PPI) or (FMetricsRTL <> IsRightToLeft)
+     or (FMetricsPPI <> PPI)
      or (FMetricsPlacement <> FPlacement) or (FMetricsClass <> cls)
      or (FMetricsOverride <> StyleOverride) then
   begin
     if FPlacement = twpBottom then FMetrics.Strip := 0
     else FMetrics.Strip := Px(TyToolWindowStripSizeVar, TyToolWindowStripSizeDef);
     FMetrics.Edge := Px(TyToolWindowEdgeSizeVar, TyToolWindowEdgeSizeDef);
+    FMetrics.ContentMin := Px(TyToolWindowContentMinVar, TyToolWindowContentMinDef);
     { **静止态**样式:TyChromeInsetLogical 按状态解析后的样式量(焦点环比边框宽),拿
       CurrentStyle 的话悬停一下内缩量就变 —— 而悬停只 Invalidate、不 Realign,窗口会
       停在旧的客户区里。本控件的 StyleOverride 照样叠上(spec §6.1)。 }
@@ -1400,7 +1431,6 @@ begin
     FMetricsAnchor := TObject(mdl);
     FMetricsVer := ver;
     FMetricsPPI := PPI;
-    FMetricsRTL := IsRightToLeft;
     FMetricsPlacement := FPlacement;
     FMetricsClass := cls;
     FMetricsOverride := StyleOverride;
@@ -1426,9 +1456,7 @@ end;
 
 function TTyToolWindowBar.ContentMinPx: Integer;
 begin
-  Result := MulDiv(ActiveController.Metric(TyToolWindowContentMinVar,
-    TyToolWindowContentMinDef), PPI, 96);
-  if Result < 0 then Result := 0;
+  Result := Metrics.ContentMin;
 end;
 
 function TTyToolWindowBar.CollapsedAtRunTime: Boolean;
@@ -1448,6 +1476,7 @@ var
   content: Integer;
 begin
   content := MulDiv(FExpandedSize, PPI, 96);
+  if content < AM.ContentMin then content := AM.ContentMin;
   if FPlacement = twpBottom then
   begin
     if SizesAsCollapsed then Result := 0
@@ -1457,6 +1486,21 @@ begin
   begin
     Result := AM.Strip + 2 * AM.Chrome;
     if not SizesAsCollapsed then Inc(Result, AM.Edge + content);
+  end;
+end;
+
+function TTyToolWindowBar.DerivedAxisPx: Integer;
+begin
+  Result := DerivedAxisPx(Metrics);
+end;
+
+function TTyToolWindowBar.PlacementAlign: TAlign;
+begin
+  case FPlacement of
+    twpRight: Result := alRight;
+    twpBottom: Result := alBottom;
+  else
+    Result := alLeft;
   end;
 end;
 
@@ -1507,7 +1551,7 @@ begin
   begin
     m := Metrics;
     if (m.Strip <> FLaid.Strip) or (m.Edge <> FLaid.Edge) or (m.Chrome <> FLaid.Chrome)
-       or (PPI <> FLaidPPI) then
+       or (m.ContentMin <> FLaid.ContentMin) or (PPI <> FLaidPPI) then
       Relayout;
   end;
   inherited Invalidate;
@@ -1541,7 +1585,7 @@ begin
     (FDpiAdjusting)、运行时、流式加载一律不写回 —— 否则收窄值会写回、DPI 会二次缩放,
     低于 96 的 PPI 下推导出来的宽再反算回去还会差一个舍入。 }
   if ([csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning])
-     and not FDeriving and not FDpiAdjusting then
+     and not FDeriving and not FDpiAdjusting and (Align = PlacementAlign) then
   begin
     m := Metrics;
     if FPlacement = twpBottom then
@@ -1577,13 +1621,13 @@ begin
   if FPlacement = twpBottom then
   begin
     if SizesAsCollapsed then lo := 0
-    else lo := 2 * m.Chrome + m.Edge + ContentMinPx;
+    else lo := 2 * m.Chrome + m.Edge + m.ContentMin;
     if lo > MinHeight then MinHeight := lo;
   end
   else
   begin
     lo := m.Strip + 2 * m.Chrome;
-    if not SizesAsCollapsed then Inc(lo, m.Edge + ContentMinPx);
+    if not SizesAsCollapsed then Inc(lo, m.Edge + m.ContentMin);
     if lo > MinWidth then MinWidth := lo;
   end;
 end;
@@ -1628,13 +1672,7 @@ begin
   FPlacement := AValue;
   { 流式加载时 Align 自己也在流里,不替它改。 }
   if not (csLoading in ComponentState) then
-  begin
-    case AValue of
-      twpLeft: Align := alLeft;
-      twpRight: Align := alRight;
-      twpBottom: Align := alBottom;
-    end;
-  end;
+    Align := PlacementAlign;
   DeriveSize;
   if not (csLoading in ComponentState) then
     MoveToOuterEdge;
@@ -1701,8 +1739,7 @@ begin
   else if AValue > 99999 then AValue := 99999;
   if FExpandedSize = AValue then Exit;
   FExpandedSize := AValue;
-  DeriveSize;
-  Realign;
+  Relayout;
   Invalidate;
 end;
 
@@ -1743,8 +1780,7 @@ begin
       else
         ShowWindowNow(FActive);
     end;
-    DeriveSize;
-    Realign;
+    Relayout;
     Invalidate;
   end;
   { 事件只由 EventsAllowed 一处把关(设计期、加载中、静默批次都不发)。 }
@@ -1907,16 +1943,30 @@ end;
 procedure TTyToolWindowBar.SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
 var
   focusIn: Boolean;
+  wins: TTyToolWindowArray;
+  i: Integer;
 begin
   { 第 5 步要的是「焦点**原来**在不在旧页里」,藏之前记。 }
   focusIn := AMoveFocus and (AOld <> nil) and (AOld <> AWindow) and FocusIsInside(AOld);
-  { 1. 收起着就到此为止,不显示(spec §5.3)。 }
   FActive := AWindow;
-  if not CollapsedAtRunTime then
+  { 藏的是栏里**其余每一个**窗口,不只 AOld:带着 Visible = True 进来的窗口(从别的栏
+    挪过来、代码里先 Visible 再 Parent)、C 期应用布局挪进来的窗口,都不是「上一页」,
+    只按 (新, 旧) 成对开关的话它们会一直杵在那里。已经藏着的再藏一次不改 Visible,
+    也就不发 CM_VISIBLECHANGED —— 事件语义不变。只算注册过的:直接调 UnregisterWindow
+    时离开的那个还在 Controls 里,回落不该去藏它(spec §5.2)。 }
+  wins := WindowList(nil);
+  if CollapsedAtRunTime then
   begin
-    { 2、3:先显示新页再藏旧页 —— 先藏的话 LCL 会把焦点交给窗体本身。 }
+    { 1. 收起着就到此为止(spec §5.3):一页都不显示,连目标一起藏。 }
+    for i := 0 to High(wins) do
+      if IsRegistered(wins[i]) then HideWindowNow(wins[i]);
+  end
+  else
+  begin
+    { 2、3:先显示新页再藏其余的 —— 先藏的话 LCL 会把焦点交给窗体本身。 }
     if AWindow <> nil then ShowWindowNow(AWindow);
-    if (AOld <> nil) and (AOld <> AWindow) then HideWindowNow(AOld);
+    for i := 0 to High(wins) do
+      if (wins[i] <> AWindow) and IsRegistered(wins[i]) then HideWindowNow(wins[i]);
     { 4. 标题行按此刻的样子重排。按指针位置重查悬停要等栏有了悬停(Task 7)。 }
     if AWindow <> nil then AWindow.RelayoutHeader;
     { 5. 只有焦点原来在旧页里才动它;新页已经显示了才聚焦得上。 }
@@ -1934,26 +1984,37 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.SwitchSilently(AWindow: TTyToolWindow);
+procedure TTyToolWindowBar.BeginSilent;
 var
-  old: TTyToolWindow;
+  wins: TTyToolWindowArray;
+  i: Integer;
 begin
-  old := FActive;
   Inc(FSilent);
+  wins := WindowList(nil);
+  for i := 0 to High(wins) do
+    if IsRegistered(wins[i]) then wins[i].BeginSilentVisibility;
+end;
+
+procedure TTyToolWindowBar.EndSilent;
+var
+  wins: TTyToolWindowArray;
+  i: Integer;
+begin
+  { 同 EndSilentVisibility 钳住 0:没配对的 End 不许把窗口那边的计数也减下去。 }
+  if FSilent <= 0 then Exit;
+  wins := WindowList(nil);
+  for i := 0 to High(wins) do
+    if IsRegistered(wins[i]) then wins[i].EndSilentVisibility;
+  Dec(FSilent);
+end;
+
+procedure TTyToolWindowBar.SwitchSilently(AWindow: TTyToolWindow);
+begin
+  BeginSilent;
   try
-    if old <> nil then old.BeginSilentVisibility;
-    try
-      if (AWindow <> nil) and (AWindow <> old) then AWindow.BeginSilentVisibility;
-      try
-        SwitchCore(AWindow, old, False);
-      finally
-        if (AWindow <> nil) and (AWindow <> old) then AWindow.EndSilentVisibility;
-      end;
-    finally
-      if old <> nil then old.EndSilentVisibility;
-    end;
+    SwitchCore(AWindow, FActive, False);
   finally
-    Dec(FSilent);
+    EndSilent;
   end;
 end;
 
@@ -1962,10 +2023,11 @@ var
   prev: TTyToolWindow;
 begin
   if IndexOfWindow(AWindow) < 0 then Exit;
-  { 流式加载期间只记下来,Loaded 统一应用。 }
+  { 流式加载期间只记下来,Loaded 统一应用。记窗口本身,不记序号(见 FLoadingTarget)。 }
   if csLoading in ComponentState then
   begin
-    FLoadingActiveIndex := IndexOfWindow(AWindow);
+    FLoadingTarget := AWindow;
+    FLoadingActiveIndex := -1;
     Exit;
   end;
   if AWindow = FActive then Exit;
@@ -1976,8 +2038,9 @@ end;
 
 function TTyToolWindowBar.GetActiveIndex: Integer;
 begin
-  if csLoading in ComponentState then Result := FLoadingActiveIndex
-  else Result := IndexOfWindow(FActive);
+  if not (csLoading in ComponentState) then Result := IndexOfWindow(FActive)
+  else if FLoadingTarget <> nil then Result := IndexOfWindow(FLoadingTarget)
+  else Result := FLoadingActiveIndex;
 end;
 
 procedure TTyToolWindowBar.SetActiveIndex(AValue: Integer);
@@ -1986,6 +2049,7 @@ begin
   if csLoading in ComponentState then
   begin
     FLoadingActiveIndex := AValue;
+    FLoadingTarget := nil;
     Exit;
   end;
   if (AValue < 0) or (AValue >= WindowCount) then Exit;
@@ -1993,6 +2057,9 @@ begin
 end;
 
 procedure TTyToolWindowBar.RegisterWindow(AWindow: TTyToolWindow);
+var
+  i: Integer;
+  prev: TTyToolWindow;
 begin
   if (AWindow = nil) or (AWindow.Parent <> Self) then Exit;
   if IsRegistered(AWindow) then Exit;     { 幂等 }
@@ -2001,16 +2068,19 @@ begin
   { 窗体之外建的窗口(Owner = nil)被释放时,Owner 的广播到不了这里。 }
   AWindow.FreeNotification(Self);
   AWindow.Controller := Controller;
-  if csLoading in ComponentState then
-  begin
-    { 加载中不显示任何一页:Loaded 按读进来的 ActiveIndex 静默地显示。 }
-    if FActive = nil then FActive := AWindow;
-  end
-  else
-    { 第一个成为当前页;不在加载中注册进来的(组件编辑器新建、粘贴、代码添加)也是。 }
-    ActivateWindow(AWindow);
-  DeriveSize;
+  { 静默批次中途进来的窗口是这一批的一部分:按当前层数补上,EndSilent 照样解除。
+    必须在下面的切页之前 —— 它进来就会被显示出来。 }
+  for i := 1 to FSilent do
+    AWindow.BeginSilentVisibility;
+  { 加载中不碰当前页,也不显示任何一页:Loaded 按待定值静默地挑、静默地显示。 }
+  prev := FActive;
+  if not (csLoading in ComponentState) then
+    { 不在加载中注册进来的(组件编辑器新建、粘贴、代码添加、从别的栏挪过来)成为当前页。 }
+    SwitchCore(AWindow, prev, True);
+  { 先把尺寸推好再发事件:OnChange 里读到的 Width 得是新的(第一个窗口进来,空栏就展开)。 }
+  Relayout;
   Invalidate;
+  if FActive <> prev then DoChange;
 end;
 
 procedure TTyToolWindowBar.RemoveControl(AControl: TControl);
@@ -2036,6 +2106,10 @@ begin
       Delete(FRegistered, i, 1);
       Break;
     end;
+  { 静默批次中途离开:把本栏加的那几层还掉,不然它带着静默去到别处(见 BeginSilent)。 }
+  for i := 1 to FSilent do
+    AWindow.EndSilentVisibility;
+  if AWindow = FLoadingTarget then FLoadingTarget := nil;
   { 离开前的窗口序号:通常它已经不在 Controls 里了,取 RemoveControl 记下的那个;
     直接调本方法、它还在里面时现量。 }
   idx := IndexOfWindow(AWindow);
@@ -2049,23 +2123,22 @@ begin
     if FActive = AWindow then FActive := nil;
     Exit;
   end;
-  if AWindow = FActive then
+  { 加载中 FActive 通常是 nil(见 FActive);继承窗体第二遍加载时它是第一遍挑好的那页,
+    离开了也不回落 —— 置 nil,Loaded 自己挑。 }
+  if (AWindow = FActive) and (csLoading in ComponentState) then
+    FActive := nil
+  else if AWindow = FActive then
   begin
-    { 先置 nil 再回落:回落用的切换不该去藏一个已经离开的窗口,也不该因为「焦点在旧页里」
-      去挪焦点(spec §5.2)。原位置上的下一个,没有就上一个,都没有就保持 nil。 }
+    { 先置 nil 再回落:回落用的切换不该因为「焦点在旧页里」去挪焦点(spec §5.2)。
+      原位置上的下一个,没有就上一个,都没有就保持 nil。 }
     FActive := nil;
     next := nil;
     rest := WindowList(AWindow);
     if (idx >= 0) and (idx <= High(rest)) then next := rest[idx]
     else if Length(rest) > 0 then next := rest[High(rest)];
-    if next <> nil then
-    begin
-      if csLoading in ComponentState then FActive := next
-      else SwitchCore(next, nil, False);
-    end;
+    if next <> nil then SwitchCore(next, nil, False);
   end;
-  DeriveSize;
-  Realign;
+  Relayout;
   Invalidate;
   if FActive <> prev then DoChange;
 end;
@@ -2113,19 +2186,27 @@ begin
   { 窗口都在 SetParent 里注册过了,顺序就是 Controls 顺序(ffChildPos 经 SetChildOrder)。
     -1 或越界、栏里又有窗口时取第一个(同 PageControl.pas:392-395)。 }
   wins := WindowList(nil);
-  idx := FLoadingActiveIndex;
-  if (idx < 0) or (idx > High(wins)) then
+  { 按窗口激活过的就是那个窗口(它离开时 UnregisterWindow 已经清掉了);否则按序号。 }
+  if FLoadingTarget <> nil then
+    target := FLoadingTarget
+  else
   begin
-    if Length(wins) > 0 then idx := 0 else idx := -1;
+    idx := FLoadingActiveIndex;
+    if (idx < 0) or (idx > High(wins)) then
+    begin
+      if Length(wins) > 0 then idx := 0 else idx := -1;
+    end;
+    if idx >= 0 then target := wins[idx] else target := nil;
   end;
-  if idx >= 0 then target := wins[idx] else target := nil;
+  FLoadingTarget := nil;
   { 视同流式加载:csLoading 已清,但窗体的 OnCreate 还没跑 —— 不发 OnChange,
     也不发窗口的 OnShow / OnHide(spec §5.1 / §6.6)。 }
   SwitchSilently(target);
+  { 继承窗体的下一遍加载从真正应用的那一页开始,加载中 ActiveIndex 也答它。 }
+  FLoadingActiveIndex := IndexOfWindow(FActive);
   for i := 0 to High(wins) do
     wins[i].RelayoutHeader;
-  DeriveSize;
-  Realign;
+  Relayout;
 end;
 
 procedure TyToolWindowFlipAll(var AGeom: TTyToolWindowHeaderGeom; ARowWidth: Integer);

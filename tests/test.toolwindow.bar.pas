@@ -28,6 +28,9 @@ type
     procedure EndLoad;
     procedure CallAdjustClientRect(var ARect: TRect);
     procedure CallSetChildOrder(AChild: TComponent; AOrder: Integer);
+    procedure CallBeginSilent;
+    procedure CallEndSilent;
+    function CallDerivedAxisPx: Integer;
   end;
 
   { 设计器放下控件时,csDesigning 是在构造里(InsertComponent)从 Owner 传下来的 ——
@@ -44,9 +47,12 @@ type
     FBar: TBarAccess;
     FDesignOwner: TDesignOwner;
     FChanges, FCollapses, FExpands, FShows, FHides: Integer;
+    { OnChange 那一刻栏的 Width。 }
+    FWidthAtChange: Integer;
     { OnShow / OnHide 的发生顺序,「show 名字;」「hide 名字;」连起来。 }
     FOrder: string;
     procedure HandleChange(ASender: TObject);
+    procedure HandleChangeWidth(ASender: TObject);
     procedure HandleCollapse(ASender: TObject);
     procedure HandleExpand(ASender: TObject);
     procedure HandleShow(ASender: TObject);
@@ -113,6 +119,16 @@ type
     procedure TestNoBarEventFiresWhileLoading;
     procedure TestDesignTimeSwitchTellsTheDesignerButLoadedDoesNot;
     procedure TestRightAndBottomBarsGoOutsideTheirSiblings;
+    procedure TestAVisibleWindowJoiningACollapsedBarIsHidden;
+    procedure TestAVisibleStrayIsHiddenByTheNextSwitch;
+    procedure TestASilentBatchCoversSwitchCollapseExpandAndArrivals;
+    procedure TestAnExceptionInsideASilentBatchLeavesEventsAlive;
+    procedure TestLoadedHidesAShownPageSilently;
+    procedure TestActivatingByWindowWhileLoadingFollowsTheWindow;
+    procedure TestAContentMinOnlyThemeChangeRelayouts;
+    procedure TestExpandedSizeBelowTheFloorKeepsWidthOnTheDerivation;
+    procedure TestOnChangeFromANewWindowSeesTheNewWidth;
+    procedure TestDesignerResizeDoesNotWriteBackUnderAForeignAlign;
   end;
 
 implementation
@@ -170,6 +186,21 @@ begin
   SetChildOrder(AChild, AOrder);
 end;
 
+procedure TBarAccess.CallBeginSilent;
+begin
+  BeginSilent;
+end;
+
+procedure TBarAccess.CallEndSilent;
+begin
+  EndSilent;
+end;
+
+function TBarAccess.CallDerivedAxisPx: Integer;
+begin
+  Result := DerivedAxisPx;
+end;
+
 procedure TDesignOwner.MarkDesigning;
 begin
   SetDesigning(True);
@@ -201,6 +232,12 @@ end;
 procedure TTyToolWindowBarTests.HandleChange(ASender: TObject);
 begin
   Inc(FChanges);
+end;
+
+procedure TTyToolWindowBarTests.HandleChangeWidth(ASender: TObject);
+begin
+  Inc(FChanges);
+  FWidthAtChange := FBar.Width;
 end;
 
 procedure TTyToolWindowBarTests.HandleCollapse(ASender: TObject);
@@ -890,6 +927,7 @@ begin
   Watch(c);
   ResetCounts;
   AssertEquals('加载中答读进来的那个数', 1, FBar.ActiveIndex);
+  AssertNull('加载中还没有当前页 —— Loaded 才挑', FBar.ActiveWindow);
   AssertFalse('加载中一页都不显示', a.Visible or b.Visible or c.Visible);
   FBar.EndLoad;
   AssertSame('Loaded 应用读进来的序号', b, FBar.ActiveWindow);
@@ -1197,22 +1235,24 @@ begin
   FBar.OnExpand := @HandleExpand;
   ResetCounts;
   FBar.BeginLoad;
-  b.Parent := FForm;                  { 当前页在加载中离开:只换 FActive }
+  b.Parent := FForm;                  { 当前页在加载中离开:不回落,留给 Loaded 挑 }
   FBar.Collapsed := True;
   FBar.Collapsed := False;
-  AssertSame('前提:当前页确实换了', a, FBar.ActiveWindow);
+  AssertNull('前提:当前页确实变了(b → 无)', FBar.ActiveWindow);
   AssertEquals('加载中不发 OnChange', 0, FChanges);
   AssertEquals('加载中不发 OnCollapse', 0, FCollapses);
   AssertEquals('加载中不发 OnExpand', 0, FExpands);
   FBar.EndLoad;
+  AssertSame('Loaded 挑了剩下的那一页', a, FBar.ActiveWindow);
   AssertEquals('Loaded 也不补发', 0, FChanges);
 end;
 
 procedure TTyToolWindowBarTests.TestDesignTimeSwitchTellsTheDesignerButLoadedDoesNot;
 var
   d: TBarAccess;
-  a, b, ra, rb: TProbeWindow;
+  a, b, ra: TProbeWindow;
   saved: TOwnerFormDesignerModifiedProc;
+  savedRefresh: procedure;
 begin
   { 设计期切页改了一个 published 值(ActiveIndex):两声都要 —— 一声标脏,一声让对象查看器
     重读(同 test.tabset 的 TestDesignTimeSwitchTellsTheDesigner)。打开窗体时 Loaded 的
@@ -1221,8 +1261,9 @@ begin
   a := NewWindowIn(d, FDesignOwner);
   b := NewWindowIn(d, FDesignOwner);
   ra := NewWindow;
-  rb := NewWindow;
+  NewWindow;                          { 运行时的第二页:它成为当前页,切到 ra 才是一次切换 }
   saved := OwnerFormDesignerModifiedProc;
+  savedRefresh := TyDesignerRefreshValuesProc;
   OwnerFormDesignerModifiedProc := @CountDesignerModified;
   TyDesignerRefreshValuesProc := @CountRefresh;
   DesignerPings := 0;
@@ -1246,9 +1287,8 @@ begin
     AssertEquals('也不让对象查看器重读', 0, RefreshPings);
   finally
     OwnerFormDesignerModifiedProc := saved;
-    TyDesignerRefreshValuesProc := nil;
+    TyDesignerRefreshValuesProc := savedRefresh;
   end;
-  AssertTrue('rb 只是凑一个运行时的第二页', rb <> nil);
 end;
 
 procedure TTyToolWindowBarTests.TestRightAndBottomBarsGoOutsideTheirSiblings;
@@ -1269,6 +1309,233 @@ begin
   pb.SetBounds(0, FForm.ClientHeight - 30, 300, 30);
   FBar.Placement := twpBottom;        { 空栏,运行时改得动 }
   AssertTrue('底栏排在同向对齐兄弟的外侧', FBar.Top + FBar.Height > pb.Top + pb.Height);
+end;
+
+procedure TTyToolWindowBarTests.TestAVisibleWindowJoiningACollapsedBarIsHidden;
+var
+  a, w, x: TProbeWindow;
+  b2: TBarAccess;
+begin
+  { 收起着的栏不显示任何一页(spec §5.3)。进来的窗口成为当前页,但它是带着
+    Visible = True 进来的 —— 只按 (新, 旧) 成对开关的话,它就一直杵在零宽的内容区里。 }
+  a := NewWindow;
+  FBar.Collapsed := True;
+  w := TProbeWindow.Create(FForm);
+  w.Visible := True;                  { 代码里先 Visible 再 Parent }
+  w.Parent := FBar;
+  AssertSame('进来的成为当前页', w, FBar.ActiveWindow);
+  AssertFalse('栏收起着,带着 Visible 进来的那页也得藏起来', w.Visible);
+  AssertFalse('原来那页照样藏着', a.Visible);
+  AssertTrue('进来不展开栏', FBar.Collapsed);
+  { 把另一条展开的栏的当前页挪进收起的栏:同一个缺口的真实入口。 }
+  b2 := TBarAccess.Create(FForm);
+  b2.Parent := FForm;
+  b2.Controller := FCtl;
+  b2.Font.PixelsPerInch := 96;
+  x := NewWindowIn(b2, FForm);
+  AssertTrue('前提:它在原栏里显示着', x.Visible);
+  x.Parent := FBar;
+  AssertSame('挪进来的成为当前页', x, FBar.ActiveWindow);
+  AssertFalse('挪进收起的栏:藏起来', x.Visible);
+  FBar.Collapsed := False;
+  AssertTrue('展开时显示的是它', x.Visible);
+  AssertFalse('别的都藏着', a.Visible or w.Visible);
+end;
+
+procedure TTyToolWindowBarTests.TestAVisibleStrayIsHiddenByTheNextSwitch;
+var
+  a, b, c: TProbeWindow;
+begin
+  { 栏里除了当前页还有一页显示着(C 期应用布局挪窗口、Task 10 之前的 Visible 写入):
+    下一次切页之后只剩新的当前页显示。 }
+  a := NewWindow;
+  b := NewWindow;
+  c := NewWindow;
+  a.Visible := True;
+  AssertTrue('前提:两页同时显示着', a.Visible and c.Visible);
+  FBar.ActiveWindow := b;
+  AssertTrue('新当前页显示', b.Visible);
+  AssertFalse('上一页藏起来', c.Visible);
+  AssertFalse('多出来的那一页也藏起来', a.Visible);
+  AssertTrue('多出来的那一页也带上设计期标志', csNoDesignVisible in a.ControlStyle);
+end;
+
+procedure TTyToolWindowBarTests.TestASilentBatchCoversSwitchCollapseExpandAndArrivals;
+var
+  a, b, c: TProbeWindow;
+  before: Integer;
+begin
+  { 一个静默批次(C 期的布局应用就是这样一批)里切页、收起、展开、窗口进出,
+    一个用户事件都不发;批次结束后照常发。 }
+  a := NewWindow;
+  b := NewWindow;
+  FBar.OnChange := @HandleChange;
+  FBar.OnCollapse := @HandleCollapse;
+  FBar.OnExpand := @HandleExpand;
+  Watch(a);
+  Watch(b);
+  c := TProbeWindow.Create(FForm);
+  Watch(c);
+  ResetCounts;
+  FBar.CallBeginSilent;
+  try
+    FBar.ActiveWindow := a;
+    FBar.Collapsed := True;
+    FBar.Collapsed := False;
+    c.Parent := FBar;                 { 批次中途进来:它是这一批的一部分 }
+    b.Parent := FForm;                { 批次中途离开 }
+  finally
+    FBar.CallEndSilent;
+  end;
+  AssertSame('前提:批次里的切换都生效了', c, FBar.ActiveWindow);
+  AssertTrue('前提:进来的那页显示着', c.Visible);
+  AssertFalse('前提:a 藏起来了', a.Visible);
+  AssertEquals('批次里不发 OnChange', 0, FChanges);
+  AssertEquals('批次里不发 OnCollapse', 0, FCollapses);
+  AssertEquals('批次里不发 OnExpand', 0, FExpands);
+  AssertEquals('批次里不发 OnShow(含中途进来的)', 0, FShows);
+  AssertEquals('批次里不发 OnHide', 0, FHides);
+  { 解除是配平的:栏、留下的窗口、中途进来的窗口、中途离开的窗口都回到照常发。 }
+  FBar.ActiveWindow := a;
+  AssertEquals('之后切页照发 OnChange', 1, FChanges);
+  AssertEquals('之后切页照发 OnShow', 1, FShows);
+  AssertEquals('中途进来的那页之后照发 OnHide', 1, FHides);
+  FBar.Collapsed := True;
+  AssertEquals('之后收起照发', 1, FCollapses);
+  before := FShows + FHides;
+  b.Visible := not b.Visible;
+  AssertEquals('中途离开的那页不再带着静默', before + 1, FShows + FHides);
+end;
+
+procedure TTyToolWindowBarTests.TestAnExceptionInsideASilentBatchLeavesEventsAlive;
+var
+  a, b: TProbeWindow;
+  raised: Boolean;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  FBar.OnChange := @HandleChange;
+  Watch(a);
+  Watch(b);
+  ResetCounts;
+  raised := False;
+  try
+    FBar.CallBeginSilent;
+    try
+      FBar.ActiveWindow := a;
+      raise Exception.Create('批次中途出错');
+    finally
+      FBar.CallEndSilent;
+    end;
+  except
+    on Exception do raised := True;
+  end;
+  AssertTrue('前提:批次里抛了异常', raised);
+  AssertEquals('前提:批次里没发', 0, FChanges + FShows + FHides);
+  FBar.ActiveWindow := b;
+  AssertEquals('之后切页照发 OnChange', 1, FChanges);
+  AssertEquals('之后切页照发 OnShow', 1, FShows);
+  AssertEquals('之后切页照发 OnHide', 1, FHides);
+end;
+
+procedure TTyToolWindowBarTests.TestLoadedHidesAShownPageSilently;
+var
+  a, b, c: TProbeWindow;
+begin
+  { 窗口在加载**之前**就建好、显示着:继承窗体的第二遍加载、C 期的布局应用走的是这条路。
+    Loaded 把显示着的那一页藏起来,这一下也不许发 OnHide。 }
+  a := NewWindow;
+  b := NewWindow;
+  c := NewWindow;
+  FBar.OnChange := @HandleChange;
+  Watch(a);
+  Watch(b);
+  Watch(c);
+  ResetCounts;
+  AssertTrue('前提:c 是显示着的当前页', c.Visible);
+  FBar.BeginLoad;
+  FBar.ActiveIndex := 1;
+  FBar.EndLoad;
+  AssertSame('Loaded 应用读进来的序号', b, FBar.ActiveWindow);
+  AssertTrue('当前页显示出来', b.Visible);
+  AssertFalse('原来显示着的那页藏起来', c.Visible);
+  AssertEquals('不发 OnShow', 0, FShows);
+  AssertEquals('藏起原来那页也不发 OnHide', 0, FHides);
+  AssertEquals('不发 OnChange', 0, FChanges);
+end;
+
+procedure TTyToolWindowBarTests.TestActivatingByWindowWhileLoadingFollowsTheWindow;
+var
+  a, c: TProbeWindow;
+begin
+  { 加载中按窗口激活:记的是窗口,不是序号 —— 之后调顺序、有窗口离开,指的还是它。 }
+  FBar.BeginLoad;
+  a := NewWindow;
+  NewWindow;
+  c := NewWindow;
+  FBar.ActiveWindow := c;
+  AssertNull('加载中还没有当前页', FBar.ActiveWindow);
+  AssertEquals('ActiveIndex 答它此刻的序号', 2, FBar.ActiveIndex);
+  FBar.SetControlIndex(c, 0);
+  AssertEquals('调顺序后跟着窗口走', 0, FBar.ActiveIndex);
+  a.Free;
+  AssertEquals('别的窗口离开也跟着窗口走', 0, FBar.ActiveIndex);
+  FBar.EndLoad;
+  AssertSame('Loaded 应用的是那个窗口', c, FBar.ActiveWindow);
+  AssertTrue('它显示出来', c.Visible);
+end;
+
+procedure TTyToolWindowBarTests.TestAContentMinOnlyThemeChangeRelayouts;
+begin
+  NewWindow;
+  FBar.ExpandedSize := 200;
+  FBar.AlignCount := 0;
+  { 只动 content-min:另外三项主题尺寸一个没变,比较里没有它的话这一下看不出来。 }
+  FCtl.StyleOverride := ':root { --toolwindow-content-min: 300px; }';
+  AssertEquals('前提:新下限读到了', 300, FBar.ContentMinPx);
+  AssertEquals('宽按新下限重推', StripPx + EdgePx + 300, FBar.Width);
+  AssertTrue('并且请了对齐引擎', FBar.AlignCount > 0);
+end;
+
+procedure TTyToolWindowBarTests.TestExpandedSizeBelowTheFloorKeepsWidthOnTheDerivation;
+begin
+  NewWindow;
+  FBar.ExpandedSize := 50;
+  AssertEquals('ExpandedSize 照存,不被下限改写', 50, FBar.ExpandedSize);
+  AssertEquals('推导值按 content-min 钳内容项', StripPx + EdgePx + ContentMinPx,
+    FBar.CallDerivedAxisPx);
+  AssertEquals('Width 就是推导值', FBar.CallDerivedAxisPx, FBar.Width);
+  FBar.Placement := twpRight;
+  AssertEquals('换一边也一样', FBar.CallDerivedAxisPx, FBar.Width);
+end;
+
+procedure TTyToolWindowBarTests.TestOnChangeFromANewWindowSeesTheNewWidth;
+begin
+  FBar.ExpandedSize := 200;
+  AssertEquals('前提:运行时空栏只剩图标条', StripPx, FBar.Width);
+  FBar.OnChange := @HandleChangeWidth;
+  FWidthAtChange := -1;
+  NewWindow;
+  AssertEquals('前提:第一个窗口进来发了 OnChange', 1, FChanges);
+  AssertEquals('OnChange 里读到的已经是展开后的宽', StripPx + EdgePx + 200, FWidthAtChange);
+end;
+
+procedure TTyToolWindowBarTests.TestDesignerResizeDoesNotWriteBackUnderAForeignAlign;
+var
+  d: TBarAccess;
+begin
+  { 用户把 Align 改成 alClient:宽是对齐引擎按父控件摆的,父控件一变就是一次 SetBounds。
+    无头时 LCL 不对齐,这里直接调对齐引擎会调的那一句。 }
+  d := NewDesignBar;
+  d.ExpandedSize := 200;
+  d.Align := alClient;
+  d.SetBounds(0, 0, 700, 500);
+  AssertEquals('Align 不是 Placement 要的那个:父控件变了不写回', 200, d.ExpandedSize);
+  d.SetBounds(0, 0, 650, 450);
+  AssertEquals('再变一次也不写回', 200, d.ExpandedSize);
+  d.Align := alLeft;
+  d.SetBounds(d.Left, d.Top, StripPx + EdgePx + 300, d.Height);
+  AssertEquals('回到 Placement 要的 Align:拖边照常写回', 300, d.ExpandedSize);
 end;
 
 initialization
