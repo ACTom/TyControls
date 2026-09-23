@@ -132,6 +132,10 @@ type
 
   { 状态模型:尺寸推导、Placement、注册与当前页、收起 / 展开、事件、推送链、Visible 路由。 }
   TTyToolWindowBarTests = class(TTyToolWindowBarFixture)
+  private
+    { AParent 上一条带一个窗口的栏(运行时没有窗口的栏按收起算,不参与分空间)。 }
+    function NewSideBar(AParent: TWinControl; APlacement: TTyToolWindowPlacement;
+      AExpanded: Integer): TBarAccess;
   published
     procedure TestConstructionPinsTheStyleAndThePublishedDefaults;
     procedure TestSideWidthIsStripPlusChromePlusEdgePlusContent;
@@ -201,6 +205,11 @@ type
     procedure TestRunTimeVisibleRoutesThroughTheBar;
     procedure TestDesignTimeVisibleOnlyActivatesAndNeverWritesCollapsed;
     procedure TestVisibleWritesWhileLoadingAreIgnored;
+    { spec §6.2:空间不够时的收窄。 }
+    procedure TestTwoSideBarsThatDoNotFitShareByExpandedSize;
+    procedure TestNarrowingDoesNotDependOnTheAlignOrder;
+    procedure TestNonBarSiblingsOnTheAxisCountAndOthersDoNot;
+    procedure TestABottomBarNarrowsAgainstTopAndBottomSiblings;
   end;
 
 const
@@ -1492,12 +1501,13 @@ begin
   AssertEquals('写回钳到 0', 0, d.ExpandedSize);
   { 上限 99999 在 96 PPI 下是 10 万像素宽 —— LCL 设计期不许 Width >= 10000
     (control.inc:4315)。压到 8 PPI:拖到 9000px 反算是 107964,钳到 99999,
-    推回来是 3 + 8333 = 8336px,摆得下。 }
+    推回来是 3 + 8333 = 8336px —— 再按 spec §6.2 收窄(设计期一样):800 宽的窗体减去
+    运行时那条空栏的图标条 36、本栏的图标条 3(边缘区 4 在 8 PPI 下是 0),内容只剩 761。 }
   d.Font.PixelsPerInch := 8;
   d.SetBounds(d.Left, d.Top, 9000, d.Height);
   AssertEquals('写回钳到 99999(布局串的 1-5 位)', 99999, d.ExpandedSize);
-  AssertEquals('宽按钳过的值推', MulDiv(StripPx, 8, 96) + MulDiv(EdgePx, 8, 96)
-    + MulDiv(99999, 8, 96), d.Width);
+  AssertEquals('宽按钳过的值推,再收窄进窗体', MulDiv(StripPx, 8, 96) + MulDiv(EdgePx, 8, 96)
+    + (800 - StripPx - MulDiv(StripPx, 8, 96) - MulDiv(EdgePx, 8, 96)), d.Width);
 end;
 
 procedure TTyToolWindowBarTests.TestChangingTheControllerOrTheStyleClassRederivesTheSize;
@@ -2020,6 +2030,112 @@ begin
   FBar.ActiveIndex := 1;
   FBar.EndLoad;
   AssertSame('当前页由 Loaded 挑', b, FBar.ActiveWindow);
+end;
+
+{ --- spec §6.2:空间不够时的收窄 ------------------------------------------------------ }
+
+function TTyToolWindowBarTests.NewSideBar(AParent: TWinControl;
+  APlacement: TTyToolWindowPlacement; AExpanded: Integer): TBarAccess;
+begin
+  Result := TBarAccess.Create(FForm);
+  Result.Parent := AParent;
+  Result.Controller := FCtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.Placement := APlacement;
+  Result.ExpandedSize := AExpanded;
+  { 运行时没有窗口的栏按收起算尺寸,不参与分内容。 }
+  NewWindowIn(Result, FForm);
+end;
+
+procedure TTyToolWindowBarTests.TestTwoSideBarsThatDoNotFitShareByExpandedSize;
+var
+  right: TBarAccess;
+begin
+  NewWindow;
+  FBar.ExpandedSize := 400;
+  right := NewSideBar(FForm, twpRight, 400);
+  { 800 宽的窗体:两条栏的固定部分 2 × (36 + 4) = 80,剩 720;两边要 800,放不下。 }
+  AssertEquals('前提:窗体客户区 800 宽', 800, FForm.ClientWidth);
+  AssertEquals('按 ExpandedSize 比例:各得 360', StripPx + EdgePx + 360, FBar.Width);
+  AssertEquals('另一条同样', StripPx + EdgePx + 360, right.Width);
+  AssertEquals('收窄不写回', 400, FBar.ExpandedSize);
+  AssertEquals('收窄不写回(另一条)', 400, right.ExpandedSize);
+  { 改一条的 ExpandedSize,另一条的份额跟着变。 }
+  FBar.ExpandedSize := 600;
+  right.ExpandedSize := 200;
+  AssertEquals('600 : 200 分 720:左 540', StripPx + EdgePx + 540, FBar.Width);
+  AssertEquals('600 : 200 分 720:右 180', StripPx + EdgePx + 180, right.Width);
+  { 放得下就各用各的。 }
+  right.ExpandedSize := 100;
+  AssertEquals('600 + 120(下限)放得下:左拿满', StripPx + EdgePx + 600, FBar.Width);
+  AssertEquals('右是它自己的(钳到下限)', StripPx + EdgePx + ContentMinPx, right.Width);
+  { 很窄:按比例那一份低于 content-min 的,钳到下限(编辑区可以被压到 0)。窗体的 OnResize
+    无头时不发,这里改一下 ExpandedSize 让它重推。 }
+  FForm.Width := 400;
+  right.ExpandedSize := 201;
+  AssertEquals('400 - 80 = 320 按 600 : 201 分:左 240(MulDiv 四舍五入)', StripPx + EdgePx + 240, FBar.Width);
+  AssertEquals('右那一份 80 低于下限:钳到 120', StripPx + EdgePx + ContentMinPx, right.Width);
+  AssertEquals('推导值本身就钳过(不靠 ConstrainedResize 悄悄钳开)', right.Width,
+    right.CallDerivedAxisPx);
+end;
+
+procedure TTyToolWindowBarTests.TestNarrowingDoesNotDependOnTheAlignOrder;
+var
+  f2: TForm;
+  l1, r1, l2, r2: TBarAccess;
+begin
+  { 同一组栏,先建左的和先建右的,两种对齐顺序给出同一个答案。 }
+  FBar.Free;
+  FBar := nil;
+  l1 := NewSideBar(FForm, twpLeft, 500);
+  r1 := NewSideBar(FForm, twpRight, 300);
+  f2 := TForm.CreateNew(FForm);
+  f2.Font.PixelsPerInch := 96;
+  f2.SetBounds(0, 0, 800, 600);
+  r2 := NewSideBar(f2, twpRight, 300);
+  l2 := NewSideBar(f2, twpLeft, 500);
+  AssertEquals('前提:放不下', True, l1.Width + r1.Width < 80 + 800);
+  AssertEquals('左栏同宽', l1.Width, l2.Width);
+  AssertEquals('右栏同宽', r1.Width, r2.Width);
+  AssertEquals('5 : 3 分 720:左 450', StripPx + EdgePx + 450, l1.Width);
+  AssertEquals('5 : 3 分 720:右 270', StripPx + EdgePx + 270, r1.Width);
+end;
+
+procedure TTyToolWindowBarTests.TestNonBarSiblingsOnTheAxisCountAndOthersDoNot;
+var
+  side, top: TBodyChild;
+begin
+  NewWindow;
+  FBar.ExpandedSize := 1000;
+  AssertEquals('一条栏:800 - 40 = 760', StripPx + EdgePx + 760, FBar.Width);
+  { 兄弟增减不通知栏(父控件尺寸变了才重推,那一半在 test.toolwindow.focus 里用真句柄测);
+    这里在兄弟就位之后再推一次,钉的是算法。 }
+  side := TBodyChild.Create(FForm);
+  side.Align := alRight;
+  side.Width := 100;
+  side.Parent := FForm;
+  top := TBodyChild.Create(FForm);
+  top.Align := alTop;
+  top.Height := 100;
+  top.Parent := FForm;
+  FBar.ExpandedSize := 999;
+  AssertEquals('同轴的对齐兄弟扣掉它的宽;交叉轴的不算', StripPx + EdgePx + 660, FBar.Width);
+end;
+
+procedure TTyToolWindowBarTests.TestABottomBarNarrowsAgainstTopAndBottomSiblings;
+var
+  top: TBodyChild;
+begin
+  top := TBodyChild.Create(FForm);
+  top.Align := alTop;
+  top.Height := 200;
+  top.Parent := FForm;
+  FBar.Placement := twpBottom;
+  NewWindow;
+  FBar.ExpandedSize := 500;
+  { 600 - 200 - 4(边缘区)= 396。 }
+  AssertEquals('底栏按上下的对齐兄弟收窄', EdgePx + 396, FBar.Height);
+  AssertEquals('不写回', 500, FBar.ExpandedSize);
 end;
 
 initialization

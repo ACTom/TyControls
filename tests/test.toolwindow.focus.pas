@@ -13,7 +13,7 @@ unit test.toolwindow.focus;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
+  Classes, SysUtils, Types, LCLType, Controls, Forms, fpcunit, testregistry,
   tyControls.Controller, tyControls.Edit, tyControls.ToolWindows;
 
 type
@@ -36,6 +36,8 @@ type
     function NewEditIn(AParent: TWinControl; ATop: Integer): TTyEdit;
     { 按住第一个图标拖过阈值,捕获是真的抓着的。 }
     procedure StartCapturedDrag;
+    { 抽 200 ms 消息:窗体的 OnResize 处理器是排队发的。 }
+    procedure Pump;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -48,6 +50,9 @@ type
     procedure TestTheCaptureTimerCancelsWhenCaptureIsLost;
     procedure TestASecondPressFreesTheCaptureTimer;
     procedure TestPointerInClientAnswersWithAHandle;
+    { spec §6.2:窗体缩窄后跟着收窄、放宽后回来,ExpandedSize 不变。窗体的 OnResize 处理器
+      是 QueueAsyncCall 推迟发的,而无头时 AutoSizeDelayed 连 Resize 都不走 —— 要真句柄。 }
+    procedure TestNarrowingFollowsTheFormAndNeverWritesBack;
   end;
 
 implementation
@@ -253,6 +258,39 @@ begin
   q := FBar.ScreenToClient(Mouse.CursorPos);
   { 真实指针可能在两次读之间动一下;只要求落在同一个量级上(同一套坐标系)。 }
   AssertTrue('答的是本控件客户区坐标', (Abs(p.X - q.X) < 200) and (Abs(p.Y - q.Y) < 200));
+end;
+
+procedure TTyToolWindowFocusTests.Pump;
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  while GetTickCount64 - t0 < 200 do
+  begin
+    Application.ProcessMessages;
+    Sleep(5);
+  end;
+end;
+
+procedure TTyToolWindowFocusTests.TestNarrowingFollowsTheFormAndNeverWritesBack;
+var
+  fixed, wide: Integer;
+begin
+  FBar.ExpandedSize := 400;
+  Pump;
+  fixed := FBar.StripSizePx + FBar.EdgeSizePx + 2 * FBar.ChromeInsetPx;
+  wide := FBar.Width;
+  AssertEquals('前提:放得下,按展开尺寸推', fixed + MulDiv(400, FBar.Font.PixelsPerInch, 96), wide);
+  FForm.Width := 300;
+  Pump;
+  AssertNothingRaised('窗体缩窄');
+  AssertTrue('前提:窗体客户区比展开尺寸窄、比下限宽', (FForm.ClientWidth < wide)
+    and (FForm.ClientWidth - fixed > FBar.ContentMinPx));
+  AssertEquals('窗体缩窄:内容收窄到窗体客户区里', FForm.ClientWidth, FBar.Width);
+  AssertEquals('收窄不写回', 400, FBar.ExpandedSize);
+  FForm.Width := 1400;
+  Pump;
+  AssertEquals('窗体放宽:回到展开尺寸', wide, FBar.Width);
 end;
 
 initialization

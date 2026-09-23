@@ -431,8 +431,23 @@ type
     function SizesAsCollapsed: Boolean;
     { 沿栏轴向的推导尺寸(侧栏 = Width,底栏 = Height),设备像素。内容项不低于
       content-min —— 和 ConstrainedResize 的下限同一个数,所以 ExpandedSize 比下限还小时
-      Width 照样等于这里的答案,不会被对齐引擎悄悄钳开。 }
+      Width 照样等于这里的答案,不会被对齐引擎悄悄钳开。空间不够时按 spec §6.2 收窄
+      (NarrowedContentPx),收窄的结果同样不低于 content-min。 }
     function DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer; overload;
+    { 推导的两段:沿轴的固定部分(图标条、边缘区、chrome)和内容项。 }
+    function FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+    { 内容项,钳到 content-min,**没收窄**;按收起算尺寸时是 0。 }
+    function UnnarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+    { spec §6.2:空间不够时收窄的内容项。可用 = 父控件调整后客户区沿轴尺寸 − 同轴的非栏
+      对齐兄弟 − 同轴所有栏的固定部分;同轴的栏按各自**未收窄**的内容一起算,放不下按
+      ExpandedSize 比例分,各自不低于 content-min。只影响这一次排布,不写回 ExpandedSize。 }
+    function NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+    { 参与分空间:看得见、Align 就是 Placement 要求的那个。 }
+    function JoinsNarrowing: Boolean;
+    { 父控件尺寸变了:重推(收窄跟着可用空间走)。 }
+    procedure ParentResized(Sender: TObject);
+    { 同一父控件里其余每一条栏重推(它们按比例分的份额跟着本栏变)。 }
+    procedure DeriveSiblings(AParent: TWinControl);
     { Placement 要求的 Align(左 → alLeft,右 → alRight,底 → alBottom)。 }
     function PlacementAlign: TAlign;
     procedure DeriveSize;
@@ -646,6 +661,8 @@ type
       Placement 要求的那一个时(比如用户改成 alClient)不写回:那时宽 / 高是对齐引擎按
       父控件摆出来的,父控件一变就会把 ExpandedSize 改掉。 }
     procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
+    { 父控件的 OnResize 处理器跟着栏挪(spec §6.2 的收窄要看父控件的客户区)。 }
+    procedure SetParent(NewParent: TWinControl); override;
     { 离开的两条路都在这之后才走到,窗口序号只能在这里记。 }
     procedure RemoveControl(AControl: TControl); override;
     { 漏进来的非窗口子控件(粘贴等途径,ChildClassAllowed 拦不住的那几条):运行时藏起来,
@@ -1694,6 +1711,10 @@ end;
 
 { --- TTyToolWindowBar ---------------------------------------------------------- }
 
+type
+  { AdjustClientRect 是 protected:收窄要的是父控件「调整后」的客户区。 }
+  TWinControlAccess = class(TWinControl);
+
 constructor TTyToolWindowBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -1922,21 +1943,125 @@ begin
     and (FCollapsed or (WindowCount = 0) or FEdgeSnapped);
 end;
 
-function TTyToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
-var
-  content: Integer;
+function TTyToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
-  content := MulDiv(FExpandedSize, PPI, 96);
-  if content < AM.ContentMin then content := AM.ContentMin;
   if FPlacement = twpBottom then
   begin
     if SizesAsCollapsed then Result := 0
-    else Result := 2 * AM.Chrome + AM.Edge + content;
+    else Result := 2 * AM.Chrome + AM.Edge;
   end
   else
   begin
     Result := AM.Strip + 2 * AM.Chrome;
-    if not SizesAsCollapsed then Inc(Result, AM.Edge + content);
+    if not SizesAsCollapsed then Inc(Result, AM.Edge);
+  end;
+end;
+
+function TTyToolWindowBar.UnnarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+begin
+  if SizesAsCollapsed then Exit(0);
+  Result := MulDiv(FExpandedSize, PPI, 96);
+  if Result < AM.ContentMin then Result := AM.ContentMin;
+end;
+
+function TTyToolWindowBar.JoinsNarrowing: Boolean;
+begin
+  { 只有按 Placement 对齐的、看得见的栏参与分空间:改成 alClient 之类的栏,宽高由父控件定。 }
+  Result := IsControlVisible and (Align = PlacementAlign);
+end;
+
+function TTyToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+var
+  p: TWinControl;
+  r: TRect;
+  c: TControl;
+  b: TTyToolWindowBar;
+  m: TTyToolWindowBarMetrics;
+  side: Boolean;
+  avail, demand, sumDemand, sumW, n, i, v: Integer;
+begin
+  Result := UnnarrowedContentPx(AM);
+  if Result <= 0 then Exit;
+  p := Parent;
+  if (p = nil) or not JoinsNarrowing then Exit;
+  { 父控件调整后的客户区,沿栏的轴向(spec §6.2)。 }
+  r := p.ClientRect;
+  TWinControlAccess(p).AdjustClientRect(r);
+  side := FPlacement <> twpBottom;
+  if side then avail := r.Right - r.Left else avail := r.Bottom - r.Top;
+  sumDemand := 0;
+  sumW := 0;
+  n := 0;
+  for i := 0 to p.ControlCount - 1 do
+  begin
+    c := p.Controls[i];
+    if not c.IsControlVisible then Continue;
+    if (c is TTyToolWindowBar) and TTyToolWindowBar(c).JoinsNarrowing
+       and ((TTyToolWindowBar(c).FPlacement <> twpBottom) = side) then
+    begin
+      { 同轴的栏:扣掉固定部分,内容按各自**未收窄**的值算,不读对方此刻的宽 ——
+        读的话结果跟对齐顺序有关,先排的那一条总是赢。 }
+      b := TTyToolWindowBar(c);
+      if b = Self then m := AM else m := b.Metrics;
+      Dec(avail, b.FixedAxisPx(m));
+      demand := b.UnnarrowedContentPx(m);
+      if demand > 0 then
+      begin
+        Inc(sumDemand, demand);
+        Inc(sumW, b.FExpandedSize);
+        Inc(n);
+      end;
+    end
+    else if side and (c.Align in [alLeft, alRight]) then
+      Dec(avail, c.Width)
+    else if (not side) and (c.Align in [alTop, alBottom]) then
+      Dec(avail, c.Height);
+    { alClient(编辑区)不算:它可以被压到 0。 }
+  end;
+  if sumDemand <= avail then Exit;           { 放得下就各用各的 }
+  if avail < 0 then avail := 0;
+  { 放不下:按 ExpandedSize 比例分,不超过自己要的,不低于 content-min。 }
+  if sumW > 0 then v := MulDiv(avail, FExpandedSize, sumW)
+  else v := avail div n;
+  if v < Result then Result := v;
+  if Result < AM.ContentMin then Result := AM.ContentMin;
+end;
+
+function TTyToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+begin
+  Result := FixedAxisPx(AM) + NarrowedContentPx(AM);
+end;
+
+procedure TTyToolWindowBar.ParentResized(Sender: TObject);
+begin
+  if [csLoading, csDestroying] * ComponentState = [] then DeriveSize;
+end;
+
+procedure TTyToolWindowBar.DeriveSiblings(AParent: TWinControl);
+var
+  i: Integer;
+begin
+  if AParent = nil then Exit;
+  for i := 0 to AParent.ControlCount - 1 do
+    if (AParent.Controls[i] is TTyToolWindowBar) and (AParent.Controls[i] <> Self) then
+      TTyToolWindowBar(AParent.Controls[i]).DeriveSize;
+end;
+
+procedure TTyToolWindowBar.SetParent(NewParent: TWinControl);
+var
+  old: TWinControl;
+begin
+  old := Parent;
+  if (old <> nil) and (old <> NewParent) then old.RemoveHandlerOnResize(@ParentResized);
+  inherited SetParent(NewParent);
+  if old = NewParent then Exit;
+  if (NewParent <> nil) and not (csDestroying in ComponentState) then
+    NewParent.AddHandlerOnResize(@ParentResized);
+  { 同轴的栏在两边各少了 / 多了一个,各自重分。 }
+  if not (csDestroying in ComponentState) then
+  begin
+    DeriveSiblings(old);
+    DeriveSize;
   end;
 end;
 
@@ -1971,6 +2096,8 @@ begin
     v := DerivedAxisPx(m);
     if FPlacement = twpBottom then Height := v
     else Width := v;
+    { 同轴的另一条栏按比例分的那一份也跟着变(spec §6.2)。它们各自的 FDeriving 挡住回调。 }
+    DeriveSiblings(Parent);
   finally
     FDeriving := False;
   end;
@@ -2995,6 +3122,8 @@ procedure TTyToolWindowBar.CMVisibleChanged(var Message: TLMessage);
 begin
   inherited;
   if not Visible then ResetGesture(twgeCancel);
+  { 看得见的栏才参与分空间:同轴的另一条要重分。 }
+  if [csLoading, csDestroying] * ComponentState = [] then DeriveSiblings(Parent);
 end;
 
 procedure TTyToolWindowBar.SetEdgeHover(AOn: Boolean);
