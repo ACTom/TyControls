@@ -166,6 +166,8 @@ type
       别的页武装着的手势;左键拖动中右键按在正文,不许把左键的松开改判成「归用户」。 }
     procedure TestARejectedPressDoesNotReachAnotherPagesGesture;
     procedure TestARightPressInTheBodyKeepsTheLeftRelease;
+    { 栏自己收到按在标签行部件上的点击:不走图标条的点击语义(不收起、不切页)。 }
+    procedure TestTheBarItselfIgnoresClicksOnTheTabRow;
     { Task 8:溢出菜单、收起按钮、提示、右键。 }
     procedure TestTheOverflowMenuListsTheHiddenWindows;
     procedure TestPickingAnOverflowItemActivatesIt;
@@ -2057,6 +2059,34 @@ begin
   AssertSame('左键的松开照常投递:调了顺序', FWins[0], FBar.Windows[2]);
   AssertEquals('手势收尾', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
   AssertEquals('左键的松开不给用户', 1, FUps);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheBarItselfIgnoresClicksOnTheTabRow;
+var
+  w: TProbeWindow;
+
+  procedure ClickBar(const AWinPos: TPoint);
+  var
+    p: TPoint;
+  begin
+    { 栏坐标:当前页是栏的直接子控件。 }
+    p := Point(AWinPos.X + w.Left, AWinPos.Y + w.Top);
+    FBar.CallMouseDown(p.X, p.Y);
+    FBar.CallClick;
+    FBar.CallMouseUp(p.X, p.Y);
+  end;
+
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.FakeClock := True;
+  FBar.Clock := 100000;
+  ClickBar(TabCentre(1));
+  AssertFalse('当前页的标签:不收起', FBar.Collapsed);
+  FBar.Clock := FBar.Clock + 1000;
+  ClickBar(TabCentre(0));
+  AssertSame('别的标签:也不切页', w, FBar.ActiveWindow);
+  AssertEquals('没有武装任何东西', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
 end;
 
 { --- Task 8 --------------------------------------------------------------------- }

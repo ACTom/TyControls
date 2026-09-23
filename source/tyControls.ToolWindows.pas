@@ -4422,6 +4422,11 @@ begin
     if FGesture.DesignArmed and HandleAllocated then MouseCapture := True;
     Exit;
   end;
+  { 底栏:标签、溢出、按钮都在当前页的标签行里,运行时由当前页收、转给 HeaderMouseDown。
+    栏自己收到落在它们上面的按下(当前页没有句柄、程序里直接调的)只吞掉 —— 不许走图标条
+    「点当前页就收起」的语义(spec §9.3 底栏标签)。 }
+  if (FPlacement = twpBottom) and (part in [twbpItem, twbpOverflow, twbpMaximize, twbpCollapse]) then
+    Exit;
   if part in [twbpItem, twbpOverflow] then
   begin
     { 按下只武装,什么都不激活(spec §9.3「为什么松开才切」)。多击的按下照常武装
