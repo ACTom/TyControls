@@ -278,6 +278,8 @@ type
     destructor Destroy; override;
     { 操作区插进来时把自己的控制器推给它 —— 流式加载、粘贴、代码里 Parent := 都走这里。 }
     procedure InsertControl(AControl: TControl; Index: Integer); override;
+    { 操作区离开:底栏的共用行高少了它那一项(spec §3.4)。 }
+    procedure RemoveControl(AControl: TControl); override;
     procedure Invalidate; override;
     procedure Paint; override;
     procedure RelayoutHeader;
@@ -358,7 +360,8 @@ type
   TTyToolWindowActions = class(TTyCustomControl)
   private
     FInLayout: Boolean;
-    { 上一次 AdjustSize 时的首选尺寸(按自己字体的 PPI):变了才通知所在底栏(spec §3.4)。 }
+    { 上一次 AdjustSize 时窗口拿去用的尺寸(按自己字体的 PPI;自己看不见时是 0,没挂在窗口里
+      时不记):变了才通知所在底栏(spec §3.4)。 }
     FLastPreferred: TSize;
     function IsBoundsStored: Boolean;
     function IsUsedByWindow: Boolean;
@@ -1589,7 +1592,25 @@ procedure TTyToolWindow.InsertControl(AControl: TControl; Index: Integer);
 begin
   inherited InsertControl(AControl, Index);
   if AControl is TTyToolWindowActions then
+  begin
     TTyToolWindowActions(AControl).Controller := Controller;
+    { 带着子控件挂进来的:LCL 不替它调 AdjustSize,底栏的共用行高要在这一刻知道(spec §3.4)。 }
+    TTyToolWindowActions(AControl).AdjustSize;
+  end;
+end;
+
+procedure TTyToolWindow.RemoveControl(AControl: TControl);
+var
+  b: TTyToolWindowBar;
+begin
+  inherited RemoveControl(AControl);
+  if AControl is TTyToolWindowActions then
+  begin
+    { 下一次挂进窗口时从「没有」比起。 }
+    TTyToolWindowActions(AControl).FLastPreferred := Default(TSize);
+    b := Bar;
+    if (b <> nil) and not (csDestroying in ComponentState) then b.ActionsSizeChanged;
+  end;
 end;
 
 function TTyToolWindow.HeaderHeightPx: Integer;
@@ -2236,10 +2257,14 @@ begin
   { 子控件只改 Constraints 时 LCL 不作废本控件的首选尺寸缓存(control.inc:1520-1522 只调
     AdjustSize),GetPreferredSize 会端旧值。 }
   InvalidatePreferredSize;
-  sz := PreferredSizeAt(Font.PixelsPerInch);
+  { 比的是窗口真正拿去用的那个量(TTyToolWindow.ActionsPreferredSize):整个操作区藏起来,
+    子控件的尺寸一个没变,那一项照样从它的高变成 0。 }
+  if IsControlVisible then sz := PreferredSizeAt(Font.PixelsPerInch)
+  else sz := Default(TSize);
+  { 没挂在窗口里时不记:先建好、带着子控件再挂进窗口的,挂进去那一次才是「变了」。 }
+  if not (Parent is TTyToolWindow) then Exit;
   if (sz.cx = FLastPreferred.cx) and (sz.cy = FLastPreferred.cy) then Exit;
   FLastPreferred := sz;
-  if not (Parent is TTyToolWindow) then Exit;
   win := TTyToolWindow(Parent);
   if win.Bar <> nil then win.Bar.ActionsSizeChanged;
 end;

@@ -68,6 +68,11 @@ type
     procedure TestAWindowJoiningCountsTowardsTheSharedHeight;
     procedure TestAConstraintsOnlyChangeReachesTheRow;
     procedure TestAThemeChangeStillRelayoutsABottomPage;
+    { 整个操作区藏起来 / 带着子控件挂进非当前页:共用行高跟着变,当前页重排。 }
+    procedure TestHidingAHiddenPagesActionsShrinksTheSharedRow;
+    procedure TestAFilledActionsAttachedToAHiddenPageGrowsTheSharedRow;
+    { 设计期没挂在窗口里的操作区看得见(提示要画),它量过的尺寸不许记成「窗口用过的」。 }
+    procedure TestADesignTimeActionsFilledOutsideAWindowCountsWhenItJoins;
     { 行高没变、几何变了(spec §3.5 / §7.3):栏的样式类换了,当前页的操作区照样重排。
       换主题 token 那一半要真句柄,在 test.toolwindow.focus。 }
     procedure TestABarStyleClassChangeRelayoutsTheActivePage;
@@ -703,6 +708,81 @@ begin
   { 换主题只广播裸 Invalidate;窗口在自己的 Invalidate 里看 token 缓存察觉。栏替它先读了
     那个缓存,它就再也看不出来(谁先读就是谁的)。 }
   AssertTrue('底栏窗口照样被请重排', w.AlignCount > 0);
+end;
+
+procedure TTyToolWindowBottomTests.TestHidingAHiddenPagesActionsShrinksTheSharedRow;
+var
+  w: TProbeWindow;
+  tall: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  AddActionsKid(FWins[0], 30, 60);
+  tall := FWins[0].Actions.PreferredSizeAt(96).cy;
+  AssertEquals('前提:当前页按非当前页的高操作区排', tall, w.HeaderHeightPx);
+  ArmActive(w);
+  { 藏的是整个操作区,不是它的子控件:子控件的尺寸一个没变。 }
+  FWins[0].Actions.Visible := False;
+  AssertEquals('共用行高变回 token 高', TyToolWindowHeaderHeightDef, w.HeaderHeightPx);
+  AssertTrue('当前页被请了重排', w.AlignCount > 0);
+  ArmActive(w);
+  FWins[0].Actions.Visible := True;
+  AssertEquals('再显示:又变高', tall, w.HeaderHeightPx);
+  AssertTrue('又被请了重排', w.AlignCount > 0);
+end;
+
+procedure TTyToolWindowBottomTests.TestAFilledActionsAttachedToAHiddenPageGrowsTheSharedRow;
+var
+  w: TProbeWindow;
+  act: TTyToolWindowActions;
+  kid: TBodyChild;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  { 先建好、放上子控件,再挂进非当前页。 }
+  act := TTyToolWindowActions.Create(FForm);
+  act.Controller := FCtl;
+  act.Font.PixelsPerInch := 96;
+  kid := TBodyChild.Create(FForm);
+  kid.SetBounds(0, 0, 30, 60);
+  kid.Parent := act;
+  { 没挂在窗口里时也会有人请它 AdjustSize(子控件增删、改尺寸都走到这里)。 }
+  act.AdjustSize;
+  ArmActive(w);
+  act.Parent := FWins[0];
+  AssertEquals('共用行高算上它', act.PreferredSizeAt(96).cy, w.HeaderHeightPx);
+  AssertTrue('当前页被请了重排', w.AlignCount > 0);
+  ArmActive(w);
+  act.Parent := nil;
+  AssertEquals('摘走:变回 token 高', TyToolWindowHeaderHeightDef, w.HeaderHeightPx);
+  AssertTrue('摘走也请重排', w.AlignCount > 0);
+  ArmActive(w);
+  act.Parent := FWins[2];
+  AssertTrue('再挂进另一页:又请重排', w.AlignCount > 0);
+end;
+
+procedure TTyToolWindowBottomTests.TestADesignTimeActionsFilledOutsideAWindowCountsWhenItJoins;
+var
+  d: TBarAccess;
+  w: TProbeWindow;
+  act: TTyToolWindowActions;
+  kid: TBodyChild;
+begin
+  d := NewDesignBottomBar;
+  w := FDesignWins[1];
+  act := TTyToolWindowActions.Create(FDesignOwner);
+  act.Controller := FCtl;
+  act.Font.PixelsPerInch := 96;
+  kid := TBodyChild.Create(FDesignOwner);
+  kid.SetBounds(0, 0, 30, 60);
+  kid.Parent := act;
+  act.AdjustSize;
+  AssertTrue('前提:设计期没挂在窗口里也看得见', act.IsControlVisible);
+  w.AlignCount := 0;
+  act.Parent := FDesignWins[0];
+  AssertEquals('共用行高算上它', act.PreferredSizeAt(96).cy, w.HeaderHeightPx);
+  AssertTrue('当前页被请了重排', w.AlignCount > 0);
+  AssertSame('前提:栏没换当前页', w, d.ActiveWindow);
 end;
 
 procedure TTyToolWindowBottomTests.TestABarStyleClassChangeRelayoutsTheActivePage;
