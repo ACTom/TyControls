@@ -54,6 +54,8 @@ type
     procedure TestARightClickOnAnIconSetsContextWindowAndPopsTheBarsMenu;
     procedure TestARightClickOffTheIconsBubblesToTheForm;
     procedure TestADisabledBarGreysItsIcons;
+    procedure TestRenderingAtAnotherPpiScalesTheWholeGeometry;
+    procedure TestTheDesignNotesFollowTheReadingDirection;
   end;
 
 implementation
@@ -412,7 +414,7 @@ begin
   FBar.ActiveWindow := a;
   p := FBar.StripItemRect(1).CenterPoint;
   FBar.CallMouseDown(p.X, p.Y, [ssLeft, ssDouble]);
-  { 多击的按下照常武装 —— 点一下图标再马上按住拖,必须拖得起来(拖动那一半在 Task 9)。 }
+  { 多击的按下照常武装 —— 点一下图标再马上按住拖,必须拖得起来(拖动那一半在 test.toolwindow.reorder)。 }
   AssertEquals('多击的按下也武装', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
   FBar.CallMouseUp(p.X, p.Y);
   AssertSame('松开不算点击:当前页不变', a, FBar.ActiveWindow);
@@ -953,6 +955,79 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ --- RenderTo 的 PPI、设计期提示的 RTL ---------------------------------------------- }
+
+procedure TTyToolWindowStripTests.TestRenderingAtAnotherPpiScalesTheWholeGeometry;
+var
+  bmp: TBitmap;
+  w, h, y: Integer;
+begin
+  FCtl.StyleOverride := StripTheme;
+  NewWindow;
+  w := FBar.ClientWidth;
+  h := FBar.ClientHeight;
+  y := 2 * h - 10;          { 图标下面、条尾的空白 }
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(2 * w, 2 * h);
+    bmp.Canvas.Brush.Color := Wipe;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    FBar.CallRenderTo(bmp.Canvas, Rect(0, 0, 2 * w, 2 * h), 192);
+    { 192 PPI:图标条 72 宽(36 × 2),界线 2 列。只按字体 PPI 排的话条还是 36 宽、
+      x = 60 已经在内容区里 —— 同一张图里两套尺度。 }
+    AssertTrue('x = 60 还在图标条里', PixelIs(bmp, 60, y, Ground));
+    AssertTrue('条的右沿在 72', not PixelIs(bmp, 73, y, Ground));
+    AssertEquals('没有残留底漆', 0, CountExact(bmp, Wipe));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowStripTests.TestTheDesignNotesFollowTheReadingDirection;
+var
+  d: TBarAccess;
+  stray: TBodyChild;
+  note: TRect;
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  x, y, inkL, inkR: Integer;
+  px, bg: TBGRAPixel;
+begin
+  FCtl.StyleOverride := 'TyToolWindowBar { background: #FF00FF; }';
+  d := NewDesignBar;
+  NewWindowIn(d, FDesignOwner);
+  stray := TBodyChild.Create(FDesignOwner);
+  d.InsertControl(stray);
+  d.ExpandedSize := 700;          { 提示比半行短,左右才分得开 }
+  d.BiDiMode := bdRightToLeft;
+  note := d.BarLayout.StrayNote;
+  AssertFalse('前提:有提示行', IsRectEmpty(note));
+  bmp := RenderRegion(d, d.ClientWidth, d.ClientHeight, note, Wipe);
+  try
+    re := TBGRABitmap.Create(bmp);
+    try
+      bg := ColorToBGRA(ColorToRGB(Ground));
+      inkL := 0;
+      inkR := 0;
+      for y := 0 to re.Height - 1 do
+        for x := 0 to re.Width - 1 do
+        begin
+          px := re.GetPixel(x, y);
+          if (px.red <> bg.red) or (px.green <> bg.green) or (px.blue <> bg.blue) then
+            if x < re.Width div 2 then Inc(inkL) else Inc(inkR);
+        end;
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+  { 同本单元标题行的做法:画笔按 RTL 把「贴阅读起点」换到右边。 }
+  AssertTrue('从右往左读:提示贴右边', inkR > 0);
+  AssertEquals('左半边没有字', 0, inkL);
 end;
 
 initialization

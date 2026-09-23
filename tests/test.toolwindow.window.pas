@@ -203,7 +203,7 @@ end;
 procedure TTyToolWindowTests.SetUp;
 begin
   { 控件必须有父控件并自带 controller，否则读的是进程级主题：单跑绿、全量红。
-    栏把 controller 推给窗口要到 Task 5，所以这里两个都自己接。 }
+    栏也会把 controller 推给窗口,这里两个都自己接,不靠推送链。 }
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(FForm);
   FBar := TTyToolWindowBar.Create(FForm);

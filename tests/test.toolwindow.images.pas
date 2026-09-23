@@ -4,7 +4,7 @@ unit test.toolwindow.images;
 { 栏的图片列表与窗口图标的解析(spec §8):名字是持久键、序号是它的视图;挂起的序号只在
   栏的 Loaded 里解析;换列表先注销旧的;列表被释放 / 被摘走时清引用;运行时改图标 / 提示
   要让栏重画;图标条提示用 StripHint,空了用 Caption,不用 Hint。
-  绘制(着色)在 Task 6b,CM_HINTSHOW 在 Task 7。
+  绘制(着色)和 CM_HINTSHOW 在 test.toolwindow.strip。
 
   几条「旧列表不许还挂着 link」的测试,先用一个不会卡死的判据(旧列表的变更不再到栏),
   判据红了就**故意泄漏**那几个列表再 Fail —— 它们的析构会死循环(imglist.inc:1692-1698),

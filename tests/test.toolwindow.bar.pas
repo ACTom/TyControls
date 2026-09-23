@@ -37,7 +37,7 @@ type
     procedure CallEndSilent;
     function CallDerivedAxisPx: Integer;
     procedure CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-    { 悬停格由 Task 7 的追踪来写;这里只要「给定悬停格就画得出来」。 }
+    { 直接写悬停格(真实的悬停追踪走 MouseMove);这里只要「给定悬停格就画得出来」。 }
     procedure SetStripHover(AIndex: Integer);
     function StripHover: Integer;
     { 真实的 MouseDown / MouseMove / MouseUp(protected)。默认按住左键。 }
@@ -2039,16 +2039,19 @@ var
 begin
   a := NewWindow;
   b := NewWindow;
-  AssertSame('前提:b 是当前页', b, FBar.ActiveWindow);
+  FBar.ActiveWindow := a;
+  AssertSame('前提:a 是当前页(也是 Loaded 回落时会挑的第一个)', a, FBar.ActiveWindow);
   FBar.BeginLoad;
-  a.Visible := True;
-  b.Visible := False;
-  AssertFalse('加载中的 True 忽略', a.Visible);
-  AssertTrue('加载中的 False 也忽略', b.Visible);
+  b.Visible := True;
+  a.Visible := False;
+  AssertFalse('加载中的 True 忽略', b.Visible);
+  AssertTrue('加载中的 False 也忽略', a.Visible);
   AssertFalse('也不收起', FBar.Collapsed);
-  FBar.ActiveIndex := 1;
+  { 不在这里设 ActiveIndex:设了就把 True 那一半记下的待定窗口盖掉,「忽略」与「没忽略」
+    在 Loaded 之后一模一样。 }
   FBar.EndLoad;
-  AssertSame('当前页由 Loaded 挑', b, FBar.ActiveWindow);
+  AssertSame('Loaded 之后当前页还是原来那页:加载中的 True 没有记成待定', a, FBar.ActiveWindow);
+  AssertFalse('也没收起', FBar.Collapsed);
 end;
 
 { --- spec §6.2:空间不够时的收窄 ------------------------------------------------------ }

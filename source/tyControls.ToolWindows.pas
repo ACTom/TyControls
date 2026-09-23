@@ -492,8 +492,12 @@ type
     procedure SwitchSilently(AWindow: TTyToolWindow);
     function EventsAllowed: Boolean;
     procedure DoChange;
-    { 长度 token 按栏自己的 PPI 换成设备像素,负的按 0。 }
-    function TokenPx(const AName: string; ADefault: Integer): Integer;
+    { 长度 token 按给定 PPI 换成设备像素,负的按 0。 }
+    function TokenPxAt(const AName: string; ADefault, APPI: Integer): Integer;
+    { 栏自己那几项主题尺寸按给定 PPI 现算(不缓存);Metrics 是按自己字体 PPI 的那一份的缓存。 }
+    function MetricsAt(APPI: Integer): TTyToolWindowBarMetrics;
+    { LayoutIn 的任意 PPI 版:RenderTo(APPI) 画的几何必须跟 APPI 是同一套尺度。 }
+    function LayoutAt(const AClient: TRect; APPI: Integer): TTyToolWindowBarLayout;
     { 漏进来的非窗口子控件有几个(粘贴等途径;spec §6.1)。 }
     function StrayCount: Integer;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
@@ -1976,20 +1980,29 @@ begin
   if Result <= 0 then Result := 96;
 end;
 
+function TTyToolWindowBar.MetricsAt(APPI: Integer): TTyToolWindowBarMetrics;
+var
+  S: TTyStyleSet;
+begin
+  if FPlacement = twpBottom then Result.Strip := 0
+  else Result.Strip := TokenPxAt(TyToolWindowStripSizeVar, TyToolWindowStripSizeDef, APPI);
+  Result.Edge := TokenPxAt(TyToolWindowEdgeSizeVar, TyToolWindowEdgeSizeDef, APPI);
+  Result.ContentMin := TokenPxAt(TyToolWindowContentMinVar, TyToolWindowContentMinDef, APPI);
+  { **静止态**样式:TyChromeInsetLogical 按状态解析后的样式量(焦点环比边框宽),拿
+    CurrentStyle 的话悬停一下内缩量就变 —— 而悬停只 Invalidate、不 Realign,窗口会
+    停在旧的客户区里。本控件的 StyleOverride 照样叠上(spec §6.1)。 }
+  S := ActiveController.Model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass),
+    [tysNormal]);
+  if StyleOverride <> '' then
+    TyMergeStyleSet(S, ActiveController.Model.ResolveOverride(StyleOverride));
+  Result.Chrome := MulDiv(TyChromeInsetLogical(S), APPI, 96);
+end;
+
 function TTyToolWindowBar.Metrics: TTyToolWindowBarMetrics;
 var
   mdl: TTyStyleModel;
   ver: Cardinal;
   cls: string;
-  S: TTyStyleSet;
-
-  function Px(const AName: string; ADefault: Integer): Integer;
-  begin
-    Result := MulDiv(ActiveController.Metric(AName, ADefault), PPI, 96);
-    { 度量值不钳(TyEvalLength),负的按 0 算。 }
-    if Result < 0 then Result := 0;
-  end;
-
 begin
   mdl := ActiveController.Model;
   ver := mdl.ThemeVersion;
@@ -2001,17 +2014,7 @@ begin
      or (FMetricsPlacement <> FPlacement) or (FMetricsClass <> cls)
      or (FMetricsOverride <> StyleOverride) then
   begin
-    if FPlacement = twpBottom then FMetrics.Strip := 0
-    else FMetrics.Strip := Px(TyToolWindowStripSizeVar, TyToolWindowStripSizeDef);
-    FMetrics.Edge := Px(TyToolWindowEdgeSizeVar, TyToolWindowEdgeSizeDef);
-    FMetrics.ContentMin := Px(TyToolWindowContentMinVar, TyToolWindowContentMinDef);
-    { **静止态**样式:TyChromeInsetLogical 按状态解析后的样式量(焦点环比边框宽),拿
-      CurrentStyle 的话悬停一下内缩量就变 —— 而悬停只 Invalidate、不 Realign,窗口会
-      停在旧的客户区里。本控件的 StyleOverride 照样叠上(spec §6.1)。 }
-    S := mdl.ResolveStyle(GetStyleTypeKey, cls, [tysNormal]);
-    if StyleOverride <> '' then
-      TyMergeStyleSet(S, mdl.ResolveOverride(StyleOverride));
-    FMetrics.Chrome := MulDiv(TyChromeInsetLogical(S), PPI, 96);
+    FMetrics := MetricsAt(PPI);
     FMetricsAnchor := TObject(mdl);
     FMetricsVer := ver;
     FMetricsPPI := PPI;
@@ -2329,9 +2332,10 @@ begin
   ARect := LayoutIn(ARect).Content;
 end;
 
-function TTyToolWindowBar.TokenPx(const AName: string; ADefault: Integer): Integer;
+function TTyToolWindowBar.TokenPxAt(const AName: string; ADefault, APPI: Integer): Integer;
 begin
-  Result := MulDiv(ActiveController.Metric(AName, ADefault), PPI, 96);
+  Result := MulDiv(ActiveController.Metric(AName, ADefault), APPI, 96);
+  { 度量值不钳(TyEvalLength),负的按 0 算。 }
   if Result < 0 then Result := 0;
 end;
 
@@ -2345,6 +2349,11 @@ begin
 end;
 
 function TTyToolWindowBar.LayoutIn(const AClient: TRect): TTyToolWindowBarLayout;
+begin
+  Result := LayoutAt(AClient, PPI);
+end;
+
+function TTyToolWindowBar.LayoutAt(const AClient: TRect; APPI: Integer): TTyToolWindowBarLayout;
 var
   m: TTyToolWindowBarMetrics;
   R: TRect;
@@ -2360,7 +2369,7 @@ var
 
 begin
   Result := Default(TTyToolWindowBarLayout);
-  m := Metrics;
+  if APPI = PPI then m := Metrics else m := MetricsAt(APPI);
   R := AClient;
   InflateRect(R, -m.Chrome, -m.Chrome);
   ClampRect(R);
@@ -2408,7 +2417,7 @@ begin
     「一行字加上下留白」的尺寸。 }
   if (csDesigning in ComponentState) and (StrayCount > 0) then
   begin
-    bandH := TokenPx(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef);
+    bandH := TokenPxAt(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
     if bandH > Result.Content.Bottom - Result.Content.Top then
       bandH := Result.Content.Bottom - Result.Content.Top;
     Result.StrayNote := Rect(Result.Content.Left, Result.Content.Bottom - bandH,
@@ -2426,13 +2435,13 @@ begin
     TyStyleClassFor(Self, StyleClass), [tysNormal]);
   if TyBorderVisible(stripS) then
   begin
-    bw := MulDiv(stripS.BorderWidth, PPI, 96);
+    bw := MulDiv(stripS.BorderWidth, APPI, 96);
     if bw < 1 then bw := 1;
     if FPlacement = twpRight then Inc(Result.Cells.Left, bw)
     else Dec(Result.Cells.Right, bw);
     ClampRect(Result.Cells);
   end;
-  itemPx := TokenPx(TyToolWindowStripItemSizeVar, TyToolWindowStripItemSizeDef);
+  itemPx := TokenPxAt(TyToolWindowStripItemSizeVar, TyToolWindowStripItemSizeDef, APPI);
   { 溢出按钮跟图标一样大。 }
   slots := TyToolWindowStripLayout(Result.Cells.Right - Result.Cells.Left,
     Result.Cells.Bottom - Result.Cells.Top, itemPx, itemPx, WindowCount, IndexOfWindow(FActive));
@@ -2514,12 +2523,14 @@ begin
   P := TTyPainter.Create;
   try
     { painter 的位图是 W×H 并 blit 到 ARect 左上,所以内部一切坐标都用 (0,0)-local。
-      几何一律是物理方向(Placement 定左右),不给画笔 RTL。 }
+      几何一律是物理方向(Placement 定左右),不看 RTL;画笔的 RTL 只管文字的对齐和阅读方向
+      (同 TTyToolWindow.RenderTo 的标题行)—— 这里只有设计期提示是文字。几何和 token 一律
+      按 APPI(LayoutAt / TokenPxAt),跟传进来的密度是同一套尺度。 }
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    L := LayoutIn(R);
+    L := LayoutAt(R, APPI);
     cls := TyStyleClassFor(Self, StyleClass);
     fill := Default(TTyFill);
     fill.Kind := tfkSolid;
@@ -2545,8 +2556,8 @@ begin
       end;
 
       list := EffectiveImages;
-      glyphPx := TokenPx(TyToolWindowGlyphSizeVar, TyToolWindowGlyphSizeDef);
-      indPx := TokenPx(TyToolWindowStripIndicatorSizeVar, TyToolWindowStripIndicatorSizeDef);
+      glyphPx := TokenPxAt(TyToolWindowGlyphSizeVar, TyToolWindowGlyphSizeDef, APPI);
+      indPx := TokenPxAt(TyToolWindowStripIndicatorSizeVar, TyToolWindowStripIndicatorSizeDef, APPI);
       for i := 0 to High(L.Slots) do
       begin
         cell := L.Slots[i].ItemRect;
@@ -2628,7 +2639,7 @@ begin
     idx := DropLineY(L);
     if idx >= 0 then
     begin
-      bw := TokenPx(TyToolWindowDropSizeVar, TyToolWindowDropSizeDef);
+      bw := TokenPxAt(TyToolWindowDropSizeVar, TyToolWindowDropSizeDef, APPI);
       partS := ActiveController.Model.ResolveStyle(TyToolWindowDropIndicatorKey, cls, [tysNormal]);
       if (bw > 0) and (tpBackground in partS.Present) then
       begin
@@ -2678,7 +2689,7 @@ begin
     if (L.EmptyNote.Right > L.EmptyNote.Left) or (L.StrayNote.Right > L.StrayNote.Left) then
     begin
       partS := ActiveController.Model.ResolveStyle(TyToolWindowNoteKey, cls, [tysNormal]);
-      pad := TokenPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef);
+      pad := TokenPxAt(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
       gr := L.EmptyNote;
       InflateRect(gr, -pad, 0);
       if (gr.Right > gr.Left) and (gr.Bottom > gr.Top) then
@@ -3649,7 +3660,7 @@ begin
         { 先记下焦点在不在里面 —— 藏起来之后 LCL 会把它挪到窗体本身。 }
         focusIn := FocusIsInside(FActive);
         HideWindowNow(FActive);
-        { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半由 Task 10 测。 }
+        { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半在 test.toolwindow.focus 测。 }
         if focusIn then
         begin
           form := GetParentForm(Self);
