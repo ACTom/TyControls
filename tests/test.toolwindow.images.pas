@@ -37,6 +37,9 @@ type
     procedure FreeInstance; override;
   end;
 
+  { 开出 protected 的 MarkAsChanged。 }
+  TImageListAccess = class(TCustomImageList);
+
   { 在栏**之前**收到列表的 opRemove(FreeNotification 表倒序通知,后登记的先到),
     那一刻看栏的生效列表。 }
   TFreeWatcher = class(TComponent)
@@ -56,7 +59,7 @@ type
     function NewList(AOwner: TComponent; const ANames: string): TTyLucideImageList;
     function NewWindow: TTyToolWindow;
     { 列表 AList 的一次变更有没有到栏(link 还挂不挂在它身上)。 }
-    function ChangeReachesBar(AList: TTyLucideImageList): Boolean;
+    function ChangeReachesBar(AList: TCustomImageList): Boolean;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -165,8 +168,30 @@ begin
 end;
 
 procedure TTyToolWindowImagesTests.TearDown;
+var
+  i: Integer;
+  list: TCustomImageList;
+  stray: string;
 begin
+  { 窗体拥有的列表也照「判据红才泄漏」办:不是栏此刻订阅的那一个、变更却还到栏的,
+    link 还挂在它上面,跟着窗体释放就死循环 —— 把它从窗体摘下来泄漏掉,再报红。
+    各测试自己没接住的换列表(加载中的 fixup、外来列表换本库列表)都落在这里。 }
+  stray := '';
+  if (FForm <> nil) and (FBar <> nil) then
+    for i := FForm.ComponentCount - 1 downto 0 do
+      if (FForm.Components[i] is TCustomImageList)
+         and (FForm.Components[i] <> FBar.Images) then
+      begin
+        list := TCustomImageList(FForm.Components[i]);
+        if ChangeReachesBar(list) then
+        begin
+          FForm.RemoveComponent(list);
+          stray := stray + ' ' + list.ClassName;
+        end;
+      end;
   FreeAndNil(FForm);
+  if stray <> '' then
+    Fail('换掉的列表还挂着栏的 link(已泄漏,不然析构死循环):' + stray);
 end;
 
 function TTyToolWindowImagesTests.NewList(AOwner: TComponent;
@@ -182,12 +207,20 @@ begin
   Result.Parent := FBar;
 end;
 
-function TTyToolWindowImagesTests.ChangeReachesBar(AList: TTyLucideImageList): Boolean;
+function TTyToolWindowImagesTests.ChangeReachesBar(AList: TCustomImageList): Boolean;
 var
   before: Integer;
 begin
   before := FBar.InvalidateCount;
-  AList.Names.Add('star');
+  { 列表只在记了「变过」时才发变更(TCustomImageList.Change 看 FChanged),空喊一声 Change
+    不算。本库的列表走真实路径(改名字),外来的先记一笔再喊(TImageList.Add 不记)。 }
+  if AList is TTyLucideImageList then
+    TTyLucideImageList(AList).Names.Add('star')
+  else
+  begin
+    TImageListAccess(AList).MarkAsChanged;
+    AList.Change;
+  end;
   Result := FBar.InvalidateCount <> before;
 end;
 
@@ -400,13 +433,20 @@ end;
 procedure TTyToolWindowImagesTests.TestSwappingTheListDropsTheOldFreeNotification;
 var
   a, b: TTyLucideImageList;
+  leak: Boolean;
 begin
   { FreeNotification 跟着订阅走:换掉的旧列表日后释放,不再通知本栏。 }
   a := NewList(nil, HouseFolder);
   b := NewList(nil, FolderHouse);
+  leak := False;
   try
     FBar.Images := a;
     FBar.Images := b;
+    if ChangeReachesBar(a) then
+    begin
+      leak := True;                    { 理由同 TestSwappingTheListUnsubscribesTheOldOneFirst }
+      Fail('换列表后旧列表的变更还到栏:link 没从旧列表注销');
+    end;
     FBar.Watched := a;
     FreeAndNil(a);
     AssertFalse('换掉的旧列表释放时不再通知栏', FBar.WatchedRemoved);
@@ -417,9 +457,12 @@ begin
     AssertNull('引用清掉', FBar.Images);
   finally
     FBar.Watched := nil;
-    FBar.Images := nil;
-    a.Free;
-    b.Free;
+    if not leak then
+    begin
+      FBar.Images := nil;
+      a.Free;
+      b.Free;
+    end;
   end;
 end;
 
