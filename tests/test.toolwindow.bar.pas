@@ -31,6 +31,11 @@ type
     procedure CallBeginSilent;
     procedure CallEndSilent;
     function CallDerivedAxisPx: Integer;
+  public
+    { 窗口刚从 Controls 里摘下、还没从本栏注销的那个空档里调一次(SetParent 的继承部分
+      还没返回)。 }
+    OnControlRemoved: TNotifyEvent;
+    procedure RemoveControl(AControl: TControl); override;
   end;
 
   { 设计器放下控件时,csDesigning 是在构造里(InsertComponent)从 Owner 传下来的 ——
@@ -46,6 +51,7 @@ type
     FCtl: TTyStyleController;
     FBar: TBarAccess;
     FDesignOwner: TDesignOwner;
+    FGapCalls: Integer;
     FChanges, FCollapses, FExpands, FShows, FHides: Integer;
     { OnChange 那一刻栏的 Width。 }
     FWidthAtChange: Integer;
@@ -63,6 +69,8 @@ type
     procedure Watch(AWin: TTyToolWindow);
     procedure ResetCounts;
     procedure HandleShowOrder(ASender: TObject);
+    { 静默批次在窗口离开的空档里结束(TBarAccess.OnControlRemoved)。 }
+    procedure HandleEndSilentInGap(ASender: TObject);
     procedure HandleHideOrder(ASender: TObject);
   protected
     procedure SetUp; override;
@@ -123,6 +131,7 @@ type
     procedure TestAVisibleStrayIsHiddenByTheNextSwitch;
     procedure TestASilentBatchCoversSwitchCollapseExpandAndArrivals;
     procedure TestAnExceptionInsideASilentBatchLeavesEventsAlive;
+    procedure TestABatchEndingWhileAWindowIsHalfwayOutReleasesIt;
     procedure TestLoadedHidesAShownPageSilently;
     procedure TestActivatingByWindowWhileLoadingFollowsTheWindow;
     procedure TestAContentMinOnlyThemeChangeRelayouts;
@@ -194,6 +203,12 @@ end;
 procedure TBarAccess.CallEndSilent;
 begin
   EndSilent;
+end;
+
+procedure TBarAccess.RemoveControl(AControl: TControl);
+begin
+  inherited RemoveControl(AControl);
+  if Assigned(OnControlRemoved) then OnControlRemoved(Self);
 end;
 
 function TBarAccess.CallDerivedAxisPx: Integer;
@@ -1436,6 +1451,42 @@ begin
   AssertEquals('之后切页照发 OnChange', 1, FChanges);
   AssertEquals('之后切页照发 OnShow', 1, FShows);
   AssertEquals('之后切页照发 OnHide', 1, FHides);
+end;
+
+procedure TTyToolWindowBarTests.HandleEndSilentInGap(ASender: TObject);
+begin
+  Inc(FGapCalls);
+  FBar.CallEndSilent;
+end;
+
+procedure TTyToolWindowBarTests.TestABatchEndingWhileAWindowIsHalfwayOutReleasesIt;
+var
+  a, b: TProbeWindow;
+begin
+  { 窗口离开栏分两步:先从 Controls 里摘下(RemoveControl),SetParent 返回前 / 释放路上
+    Notification 到来时才注销。批次恰好在这个空档里结束,也得把它那一层还掉 —— 按
+    Controls 找窗口的话找不到它,注销时批次已经结束、也不再还,它就带着一层静默去了别处,
+    OnShow / OnHide 从此不响。 }
+  a := NewWindow;
+  b := NewWindow;
+  Watch(b);
+  FBar.CallBeginSilent;
+  try
+    FGapCalls := 0;
+    FBar.OnControlRemoved := @HandleEndSilentInGap;
+    try
+      b.Parent := FForm;
+    finally
+      FBar.OnControlRemoved := nil;
+    end;
+  finally
+    FBar.CallEndSilent;               { 空档里已经结束了的话是空操作(钳住 0) }
+  end;
+  AssertEquals('前提:批次在空档里结束', 1, FGapCalls);
+  AssertSame('前提:a 还在栏里', FBar, a.Parent);
+  ResetCounts;
+  b.Visible := not b.Visible;
+  AssertEquals('离开的那页不带着静默', 1, FShows + FHides);
 end;
 
 procedure TTyToolWindowBarTests.TestLoadedHidesAShownPageSilently;
