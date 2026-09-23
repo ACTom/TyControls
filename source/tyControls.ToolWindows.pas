@@ -180,15 +180,15 @@ type
     function ActionsPreferredSize(APPI: Integer): TSize;
   private
     { --- 底栏标签行的输入(spec §3.6):当前页把标签行区域的输入转给栏。 --- }
-    { 这一次按下落在标签行区域里:这整次点击(MouseUp / Click / DblClick)都归标签行,
-      不给用户的处理器 —— 按下落在哪决定归谁(开工前问题 8)。每次按下重写。 }
-    FPressInRow: Boolean;
+    { 哪几个键的这一次按下落在标签行区域里:这个键的整次点击(MouseUp,左键还有 Click /
+      DblClick)都归标签行,不给用户的处理器 —— 按下落在哪决定归谁(spec §3.6)。按键分开记:
+      左键拖动中右键按在正文,不许把左键那一次改判成「归用户」。每次按下重写那个键的一位。
+      「手势在不在我身上」不在这里记,只问栏的引擎(HeaderCapturedBy)。 }
+    FRowPresses: set of TMouseButton;
     { 按下消息自己带的坐标,只在那一拍有效:LCL 在 WndProc 里、MouseDown 之前调 BeginAutoDrag,
       手上没有坐标(同栏的 FAutoDragPos)。 }
     FPressPos: TPoint;
     FPressPosValid: Boolean;
-    { 左键按在标签行的部件上、转给了栏:之后的移动不论位置都转,松开也转。 }
-    FHeaderGesture: Boolean;
     procedure LMCancelMode(var Message: TLMessage); message LM_CANCELMODE;
     { 标签行区域里的提示问栏(HeaderHint);区域外走继承。**不改**窗口的 ShowHint(spec §3.6):
       LCL 只把 CM_HINTSHOW 发给 ShowHint 为真的那一级控件。 }
@@ -777,6 +777,9 @@ type
       武装着、捕获者是这一页、部件相同(标签还要窗口相同)。 }
     function HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
       AIndex: Integer): Boolean;
+    { 标签行上的手势此刻捕获在 AWindow 上(引擎的捕获者就是它)—— 窗口决定「移动 / 松开
+      转不转给栏」只问这一处,自己不另记镜像。 }
+    function HeaderCapturedBy(AWindow: TTyToolWindow): Boolean;
     { 标签的状态:当前页只有 :selected(spec §12,禁用时再加 :disabled);其余按禁用 / 悬停 /
       按下 / 静止。 }
     function HeaderTabStates(AWindow: TTyToolWindow; AIndex: Integer): TTyStateSet;
@@ -1915,7 +1918,8 @@ begin
       DoMouseDown(ssDouble) 再 DblClick(control.inc:2602-2604)。所以这一次按在哪要在这里记。 }
     FPressPos := Point(TLMMouse(TheMessage).XPos, TLMMouse(TheMessage).YPos);
     FPressPosValid := True;
-    FPressInRow := InTabRowRegion(FPressPos.X, FPressPos.Y);
+    if InTabRowRegion(FPressPos.X, FPressPos.Y) then Include(FRowPresses, mbLeft)
+    else Exclude(FRowPresses, mbLeft);
     try
       inherited WndProc(TheMessage);
     finally
@@ -1932,17 +1936,18 @@ var
   idx: Integer;
   r: TRect;
 begin
-  { 任何一键的按下都重新决定「这一次归谁」(程序里直接调的也一样,不只经 WndProc 的那一路)。 }
-  FPressInRow := InTabRowRegion(X, Y);
-  if not FPressInRow then
+  { 每一次按下都重新决定这个键「这一次归谁」(程序里直接调的也一样,不只经 WndProc 的那一路)。 }
+  if not InTabRowRegion(X, Y) then
   begin
+    Exclude(FRowPresses, Button);
     inherited MouseDown(Button, Shift, X, Y);
     Exit;
   end;
-  { 区域内:不调继承 —— 用户的 OnMouseDown 不触发,也从不 SetFocus(窗口本来就 csNoFocus)。 }
+  Include(FRowPresses, Button);
+  { 区域内:不调继承 —— 用户的 OnMouseDown 不触发,也从不 SetFocus(窗口本来就 csNoFocus)。
+    栏收不收这一下(禁用、不是当前页、右键……)由栏自己判,收了才记得住捕获者。 }
   b := Bar;
   if b.HeaderZoneAt(Self, X, Y, idx, r) = twzNone then Exit;   { 空白只吞 }
-  if Button = mbLeft then FHeaderGesture := True;
   b.HeaderMouseDown(Self, Button, Shift, X, Y);
 end;
 
@@ -1955,7 +1960,8 @@ begin
   b := Bar;
   if (b <> nil) and (HeaderMode = twhBottom) then
   begin
-    if FHeaderGesture then
+    { 标签行上的手势捕获在本页:移动不论位置都转。 }
+    if b.HeaderCapturedBy(Self) then
       b.HeaderMouseMove(Self, Shift, X, Y)
     else if InTabRowRegion(X, Y) and (b.HeaderZoneAt(Self, X, Y, idx, r) <> twzNone) then
       b.HeaderMouseMove(Self, Shift, X, Y)
@@ -1971,19 +1977,18 @@ procedure TTyToolWindow.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: 
 var
   b: TTyToolWindowBar;
 begin
-  { 按问题 8:按下落在哪决定这整次点击归谁 —— 按在正文、松开在标签行,照常给用户。 }
-  if not FPressInRow then
+  { 这个键的按下落在哪决定这整次点击归谁 —— 按在正文、松开在标签行,照常给用户。 }
+  if not (Button in FRowPresses) then
   begin
     inherited MouseUp(Button, Shift, X, Y);
     Exit;
   end;
-  if FHeaderGesture and (Button = mbLeft) then
-  begin
-    FHeaderGesture := False;
-    b := Bar;
-    { 最后一句:点标签切页、点收起都会在这里把本窗口藏起来(地雷 9)。 }
-    if b <> nil then b.HeaderMouseUp(Self, Button, Shift, X, Y);
-  end;
+  b := Bar;
+  { 只有手势真的捕获在本页上才转:栏拒绝过的按下(禁用、那时不是当前页)、已经收尾的手势,
+    松开都不许去碰引擎 —— 引擎那时可能正武装在别的页上。最后一句:点标签切页、点收起都会
+    在这里把本窗口藏起来(spec §9.2)。 }
+  if (Button = mbLeft) and (b <> nil) and b.HeaderCapturedBy(Self) then
+    b.HeaderMouseUp(Self, Button, Shift, X, Y);
 end;
 
 procedure TTyToolWindow.MouseLeave;
@@ -1998,13 +2003,13 @@ end;
 procedure TTyToolWindow.Click;
 begin
   { LCL 在 MouseUp 之前调它(control.inc:2827-2846)。 }
-  if FPressInRow then Exit;
+  if mbLeft in FRowPresses then Exit;
   inherited Click;
 end;
 
 procedure TTyToolWindow.DblClick;
 begin
-  if FPressInRow then Exit;
+  if mbLeft in FRowPresses then Exit;
   inherited DblClick;
 end;
 
@@ -2107,13 +2112,9 @@ var
   b: TTyToolWindowBar;
 begin
   inherited;
-  { 捕获者是本页、手势进行中(spec §9.7)。 }
-  if FHeaderGesture then
-  begin
-    FHeaderGesture := False;
-    b := Bar;
-    if b <> nil then b.HeaderCancelMode(Self);
-  end;
+  { 捕获者是本页、手势进行中(spec §9.7);是不是由栏按引擎判。 }
+  b := Bar;
+  if b <> nil then b.HeaderCancelMode(Self);
 end;
 
 { --- TTyToolWindowActions ----------------------------------------------------- }
@@ -3684,6 +3685,11 @@ begin
     and (FGesture.Capturer = AWindow) and (FGesture.Part = APart);
   if Result and (APart = twbpItem) then
     Result := (AIndex >= 0) and (AIndex < WindowCount) and (FGesture.Window = Windows[AIndex]);
+end;
+
+function TTyToolWindowBar.HeaderCapturedBy(AWindow: TTyToolWindow): Boolean;
+begin
+  Result := (AWindow <> nil) and (FGesture <> nil) and (FGesture.Capturer = AWindow);
 end;
 
 function TTyToolWindowBar.HeaderTabStates(AWindow: TTyToolWindow; AIndex: Integer): TTyStateSet;

@@ -162,6 +162,10 @@ type
       不调顺序、不收起。 }
     procedure TestSwitchingInCodeCancelsATabDrag;
     procedure TestSwitchingInCodeCancelsAnArmedPress;
+    { 「手势在不在本页上」只问引擎:栏拒绝过的按下(那时不是当前页)不许让本页的松开去碰
+      别的页武装着的手势;左键拖动中右键按在正文,不许把左键的松开改判成「归用户」。 }
+    procedure TestARejectedPressDoesNotReachAnotherPagesGesture;
+    procedure TestARightPressInTheBodyKeepsTheLeftRelease;
     { Task 8:溢出菜单、收起按钮、提示、右键。 }
     procedure TestTheOverflowMenuListsTheHiddenWindows;
     procedure TestPickingAnOverflowItemActivatesIt;
@@ -2003,6 +2007,56 @@ begin
   w.CallMouseUp(c.X, c.Y);
   AssertFalse('旧页上的松开不收起', FBar.Collapsed);
   AssertSame('当前页不变', FWins[2], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestARejectedPressDoesNotReachAnotherPagesGesture;
+var
+  w, old: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  old := FWins[0];
+  { 每一页的标签行排得一样(全放得下、同一个当前页):同一个点在两页上都是标签 2。 }
+  c := TabCentre(2);
+  { 藏着的页迟到的按下:栏不收(不是当前页)。 }
+  old.CallMouseDown(c.X, c.Y);
+  AssertEquals('前提:栏没收那一下', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  { 当前页上真正的按下:武装在标签 2 上。 }
+  w.CallMouseDown(c.X, c.Y);
+  AssertEquals('前提:当前页武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  { 藏着的页迟到的松开:不许把当前页的手势当成它的点击。 }
+  old.CallMouseUp(c.X, c.Y);
+  AssertSame('没有切页', w, FBar.ActiveWindow);
+  AssertEquals('当前页的手势还武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  w.CallMouseUp(c.X, c.Y);
+  AssertSame('当前页自己的松开照常切页', FWins[2], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestARightPressInTheBodyKeepsTheLeftRelease;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c, e: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  w.OnMouseUp := @CountUp;
+  g := ActiveGeom;
+  c := TabCentre(0);
+  e := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(e.X, e.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  { 拖动中右键按在正文:这是右键自己的一次点击,归用户。 }
+  w.CallMouseDown(100, w.BodyRect.Top + 40, [ssLeft, ssRight], mbRight);
+  w.CallMouseUp(100, w.BodyRect.Top + 40, mbRight);
+  AssertEquals('右键的松开照常给用户', 1, FUps);
+  AssertTrue('左键的拖动还在', FBar.IsDraggingForTest);
+  w.CallMouseUp(e.X, e.Y);
+  AssertSame('左键的松开照常投递:调了顺序', FWins[0], FBar.Windows[2]);
+  AssertEquals('手势收尾', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  AssertEquals('左键的松开不给用户', 1, FUps);
 end;
 
 { --- Task 8 --------------------------------------------------------------------- }
