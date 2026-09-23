@@ -11,7 +11,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
-  tyControls.ToolWindows.Layout,
+  tyControls.ToolWindows.Layout, tyControls.StrConsts,
   tyControls.Icons.Lucide, test.toolwindow.window,
   test.toolwindow.bar;
 
@@ -113,6 +113,25 @@ type
     procedure TestWindowAtPosFindsTabsInBarCoordinates;
     procedure TestAFinishedClickRepaintsThePressedState;
     procedure TestHoverIsRecheckedAfterASwitch;
+    { Task 8:溢出菜单、收起按钮、提示、右键。 }
+    procedure TestTheOverflowMenuListsTheHiddenWindows;
+    procedure TestPickingAnOverflowItemActivatesIt;
+    procedure TestADoubleClickPressOnOverflowOrHideDoesNothing;
+    procedure TestTheHideButtonCollapsesOnRelease;
+    procedure TestATabHintIsStripHintOrCaptionNeverHint;
+    procedure TestTheMaximizeHintFollowsTheState;
+    procedure TestTheRowsBlankShowsNoHint;
+    procedure TestARightClickOnATabGoesToTheBarInBarCoordinates;
+    procedure TestARightClickOnTheRowsBlankIsSwallowed;
+  private
+    FBarPopups, FWinPopups: Integer;
+    FBarPopupPos: TPoint;
+    procedure CountBarPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+    procedure CountWinPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+    { 让 AWin 回答 (X, Y) 上的 CM_HINTSHOW(LCL 自己发的那一条)。 }
+    function AskHint(AWin: TProbeWindow; const APos: TPoint; out AInfo: THintInfo): PtrInt;
+    { 栏窄到放不下全部标签(有溢出按钮)。 }
+    procedure Narrow;
   end;
 
 implementation
@@ -1289,6 +1308,205 @@ begin
   ClickAt(w, TabCentre(2));
   AssertSame('前提:切过去了', FWins[2], FBar.ActiveWindow);
   AssertEquals('切页之后按指针此刻的位置重查悬停', 0, FBar.HeaderHoverIndexForTest);
+end;
+
+{ --- Task 8 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowBottomInputTests.CountBarPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  Inc(FBarPopups);
+  FBarPopupPos := MousePos;
+end;
+
+procedure TTyToolWindowBottomInputTests.CountWinPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  Inc(FWinPopups);
+end;
+
+function TTyToolWindowBottomInputTests.AskHint(AWin: TProbeWindow; const APos: TPoint;
+  out AInfo: THintInfo): PtrInt;
+begin
+  FillChar(AInfo, SizeOf(AInfo), 0);
+  AInfo.HintControl := AWin;
+  AInfo.CursorPos := APos;
+  AInfo.HintStr := '<untouched>';
+  Result := AWin.Perform(CM_HINTSHOW, 0, PtrInt(@AInfo));
+end;
+
+procedure TTyToolWindowBottomInputTests.Narrow;
+begin
+  FBar.Width := 220;
+  Relayout;
+  AssertFalse('前提:窄下来有溢出按钮', IsRectEmpty(ActiveGeom.Overflow));
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheOverflowMenuListsTheHiddenWindows;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  i: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  Narrow;
+  g := ActiveGeom;
+  AssertTrue('前提:有收起的', Length(g.Hidden) > 0);
+  ClickAt(w, g.Overflow.CenterPoint);
+  AssertNotNull('松开在溢出按钮上:建了菜单', FBar.OverflowMenu);
+  AssertEquals('菜单项恰好是收起的那几个', Length(g.Hidden), FBar.OverflowMenu.Items.Count);
+  for i := 0 to High(g.Hidden) do
+  begin
+    AssertEquals(Format('第 %d 项按窗口顺序', [i]), FBar.Windows[g.Hidden[i]].Caption,
+      FBar.OverflowMenu.Items[i].Caption);
+    AssertFalse('当前页不在里面', FBar.OverflowMenu.Items[i].Caption = w.Caption);
+  end;
+end;
+
+procedure TTyToolWindowBottomInputTests.TestPickingAnOverflowItemActivatesIt;
+var
+  w, target: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  Narrow;
+  g := ActiveGeom;
+  target := FWins[g.Hidden[0]];
+  ClickAt(w, g.Overflow.CenterPoint);
+  FBar.OverflowMenu.Items[0].Click;
+  AssertSame('点菜单项:那个窗口成为当前页', target, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestADoubleClickPressOnOverflowOrHideDoesNothing;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  Narrow;
+  g := ActiveGeom;
+  c := g.Overflow.CenterPoint;
+  w.CallMouseDown(c.X, c.Y, [ssLeft, ssDouble]);
+  w.CallMouseUp(c.X, c.Y);
+  AssertNull('多击的按下:溢出不弹菜单', FBar.OverflowMenu);
+  c := g.Collapse.CenterPoint;
+  w.CallMouseDown(c.X, c.Y, [ssLeft, ssDouble]);
+  w.CallMouseUp(c.X, c.Y);
+  AssertFalse('多击的按下:收起不生效', FBar.Collapsed);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheHideButtonCollapsesOnRelease;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := ActiveGeom.Collapse.CenterPoint;
+  w.CallMouseDown(c.X, c.Y);
+  AssertFalse('按下不收起', FBar.Collapsed);
+  w.CallClick;
+  w.CallMouseUp(c.X, c.Y);
+  AssertTrue('同处松开:收起', FBar.Collapsed);
+  AssertFalse('底栏收起后当前页不可见(spec §14)', w.Visible);
+  AssertEquals('收起的底栏高 0', 0, FBar.Height);
+  AssertSame('当前页还是它', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestATabHintIsStripHintOrCaptionNeverHint;
+var
+  w: TProbeWindow;
+  info: THintInfo;
+  g: TTyToolWindowHeaderGeom;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FWins[0].StripHint := 'Show the problems';
+  FWins[0].Hint := 'window hint 0';
+  FWins[2].Hint := 'window hint 2';
+  g := ActiveGeom;
+  AssertEquals('显示提示', 0, AskHint(w, TabRectOf(g, 0).CenterPoint, info));
+  AssertEquals('设了 StripHint 用它', 'Show the problems', info.HintStr);
+  AssertTrue('CursorRect 是那个标签(窗口坐标)', EqualRect(TabRectOf(g, 0), info.CursorRect));
+  AskHint(w, TabRectOf(g, 2).CenterPoint, info);
+  AssertEquals('没设 StripHint 用 Caption,不用 Hint', 'Terminal', info.HintStr);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheMaximizeHintFollowsTheState;
+var
+  w: TProbeWindow;
+  info: THintInfo;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := ActiveGeom.Maximize.CenterPoint;
+  AskHint(w, c, info);
+  AssertEquals('最大化之前', rsTyToolWindowMaximize, info.HintStr);
+  FBar.Maximized := True;
+  AskHint(w, c, info);
+  AssertEquals('最大化之后', rsTyToolWindowRestore, info.HintStr);
+  AskHint(w, ActiveGeom.Collapse.CenterPoint, info);
+  AssertEquals('收起按钮', rsTyToolWindowCollapse, info.HintStr);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheRowsBlankShowsNoHint;
+var
+  w: TProbeWindow;
+  info: THintInfo;
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  w.Hint := 'window hint';
+  g := ActiveGeom;
+  c := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, 13);
+  AssertEquals('标签行空白处:不显示', 1, AskHint(w, c, info));
+  AssertEquals('也不填窗口自己的提示', '<untouched>', info.HintStr);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestARightClickOnATabGoesToTheBarInBarCoordinates;
+var
+  w: TProbeWindow;
+  c: TPoint;
+  handled: Boolean;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.OnContextPopup := @CountBarPopup;
+  w.OnContextPopup := @CountWinPopup;
+  c := TabCentre(0);
+  handled := False;
+  w.CallDoContextPopup(c, handled);
+  AssertTrue('标签行里的右键窗口这边处理掉了', handled);
+  AssertEquals('栏的 OnContextPopup 触发', 1, FBarPopups);
+  AssertSame('ContextWindow 是那个标签的窗口', FWins[0], FBar.ContextWindow);
+  AssertEquals('MousePos 是栏坐标(X)', c.X + w.Left, FBarPopupPos.X);
+  AssertEquals('MousePos 是栏坐标(Y)', c.Y + w.Top, FBarPopupPos.Y);
+  AssertEquals('窗口的 OnContextPopup 不触发', 0, FWinPopups);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestARightClickOnTheRowsBlankIsSwallowed;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  handled: Boolean;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.OnContextPopup := @CountBarPopup;
+  w.OnContextPopup := @CountWinPopup;
+  g := ActiveGeom;
+  handled := False;
+  w.CallDoContextPopup(Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, 13), handled);
+  AssertTrue('空白处的右键吞掉', handled);
+  AssertEquals('栏的不触发', 0, FBarPopups);
+  AssertEquals('窗口的也不触发', 0, FWinPopups);
 end;
 
 initialization

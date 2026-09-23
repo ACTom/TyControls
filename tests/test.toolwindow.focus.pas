@@ -65,6 +65,8 @@ type
     procedure TestTheBottomTabRowNeverStartsAnLclDrag;
     { spec §6.4:最大化的底栏跟着窗体变高(窗体的 OnResize 排队发,要真句柄)。 }
     procedure TestAMaximizedBottomBarFollowsTheForm;
+    { spec §5.3 / §14:底栏收起,焦点从当前页里搬出来(侧栏、底栏各测一次)。 }
+    procedure TestCollapsingTheBottomBarMovesFocusOut;
   end;
 
 implementation
@@ -398,6 +400,35 @@ begin
   AssertNothingRaised('窗体拉高');
   AssertEquals('窗体高 100,最大化的底栏也高 100', h + 100, b.Height);
   AssertEquals('ExpandedSize 不变', 220, b.ExpandedSize);
+end;
+
+procedure TTyToolWindowFocusTests.TestCollapsingTheBottomBarMovesFocusOut;
+var
+  b: TTyToolWindowBar;
+  first, w: TProbeWindow;
+  inside, after: TTyEdit;
+  c: TPoint;
+begin
+  b := NewBottomBar(first, w);
+  inside := NewEditIn(w, w.HeaderHeightPx + 20);
+  { Tab 顺序在底栏**后面**的一个:SelectNext(栏) 的去处。没有它的话,平台随手挑的第一个
+    (FBefore)和 SelectNext 绕回来的第一个是同一个,删掉 SelectNext 也绿。 }
+  after := NewEditIn(FForm, 8);
+  after.Left := 650;
+  Pump;
+  inside.SetFocus;
+  AssertSame('前提:焦点在底栏当前页里', inside, FForm.ActiveControl);
+  { 点收起按钮:真实的按下 / 松开消息,收起发生在当前页自己的 MouseUp 里。 }
+  c := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight),
+    w.Font.PixelsPerInch).Collapse.CenterPoint;
+  w.SimulatePress(c.X, c.Y);
+  w.Perform(LM_LBUTTONUP, 0, PtrInt((c.Y shl 16) or (c.X and $FFFF)));
+  AssertNothingRaised('点收起按钮');
+  AssertTrue('收起了', b.Collapsed);
+  AssertTrue('焦点不许掉到窗体本身', (FForm.ActiveControl <> nil) and
+    (FForm.ActiveControl <> FForm));
+  AssertFalse('焦点不留在藏起来的页里', w.ContainsControl(FForm.ActiveControl));
+  AssertSame('交给 Tab 顺序里底栏后面的那一个', after, FForm.ActiveControl);
 end;
 
 initialization

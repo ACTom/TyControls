@@ -186,6 +186,9 @@ type
     { 左键按在标签行的部件上、转给了栏:之后的移动不论位置都转,松开也转。 }
     FHeaderGesture: Boolean;
     procedure LMCancelMode(var Message: TLMessage); message LM_CANCELMODE;
+    { 标签行区域里的提示问栏(HeaderHint);区域外走继承。**不改**窗口的 ShowHint(spec §3.6):
+      LCL 只把 CM_HINTSHOW 发给 ShowHint 为真的那一级控件。 }
+    procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
@@ -1034,7 +1037,9 @@ type
   右沿往右,右栏从左沿往左。TPopupAlignment 是**阅读顺序**的量(paLeft = 贴阅读起点,
   TyPopupAnchorShift 在 RTL 下把位移反过来),而栏的几何是物理方向(Placement):菜单跟着栏
   读 RTL 时(TTyPopupMenu 按 PopupComponent 定方向),物理上往右开的是 paRight、往左开的是
-  paLeft,所以这里按 Placement 与 ARightToLeft 的异或选。 }
+  paLeft,所以这里按 Placement 与 ARightToLeft 的异或选。
+  底栏(AOverflow 是当前页标签行里的溢出按钮):从按钮底边、按阅读起点往下开 —— LTR 锚在左沿、
+  RTL 锚在右沿,都是 paLeft。 }
 procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
   APlacement: TTyToolWindowPlacement; ARightToLeft: Boolean; out APoint: TPoint;
   out AAlignment: TPopupAlignment);
@@ -1935,6 +1940,34 @@ end;
 procedure TTyToolWindow.StartLclAutoDrag;
 begin
   inherited BeginAutoDrag;
+end;
+
+procedure TTyToolWindow.CMHintShow(var Message: TLMessage);
+var
+  info: PHintInfo;
+  txt: string;
+  r: TRect;
+  p: TPoint;
+begin
+  info := PHintInfo(Message.LParam);
+  if (info = nil) or not InTabRowRegion(info^.CursorPos.X, info^.CursorPos.Y) then
+  begin
+    inherited;
+    Exit;
+  end;
+  p := info^.CursorPos;
+  if Bar.HeaderHint(Self, p.X, p.Y, txt, r) then
+  begin
+    info^.HintStr := txt;
+    info^.CursorRect := r;          { 本窗口客户区坐标:挪出这个部件就重新问 }
+    Message.Result := 0;            { 0 = 显示 }
+  end
+  else
+  begin
+    { 分隔线、空白:不显示,也不回落到窗口自己的提示。挪一下就重新问。 }
+    info^.CursorRect := Rect(p.X, p.Y, p.X + 1, p.Y + 1);
+    Message.Result := 1;
+  end;
 end;
 
 procedure TTyToolWindow.LMCancelMode(var Message: TLMessage);
@@ -3733,6 +3766,11 @@ begin
       if rel.Window <> FActive then ActivateWindow(rel.Window);
     twbpMaximize:
       Maximized := not FMaximized;
+    twbpOverflow:
+      ShowOverflowMenu;
+    { 会把捕获者(当前页)自己藏起来:最后一句(地雷 9)。 }
+    twbpCollapse:
+      Collapsed := True;
   end;
 end;
 
@@ -3751,16 +3789,48 @@ end;
 
 function TTyToolWindowBar.HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
   out ARect: TRect): Boolean;
+var
+  idx: Integer;
 begin
-  { Task 8 填。 }
   AText := '';
-  ARect := Rect(0, 0, 0, 0);
-  Result := False;
+  Result := True;
+  case HeaderZoneAt(AWindow, X, Y, idx, ARect) of
+    { 标签:StripHint,空的时候 Caption,**不用 Hint**(同图标条,见 StripHintText)。 }
+    twzTab: AText := StripHintText(Windows[idx]);
+    twzOverflow: AText := rsTyToolWindowMore;
+    twzMaximize:
+      if FMaximized then AText := rsTyToolWindowRestore
+      else AText := rsTyToolWindowMaximize;
+    twzCollapse: AText := rsTyToolWindowCollapse;
+  else
+    Result := False;           { 分隔线、空白:不给提示 }
+  end;
+  if not Result then ARect := Rect(0, 0, 0, 0);
 end;
 
 procedure TTyToolWindowBar.HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
+var
+  idx: Integer;
+  r: TRect;
+  pt: TPoint;
+  handled: Boolean;
+  menu: TPopupMenu;
 begin
-  { Task 8 填。 }
+  { 只在标签上(溢出、分隔线、按钮、空白上的右键窗口那边已经吞了)。 }
+  if (AWindow = nil) or (HeaderZoneAt(AWindow, X, Y, idx, r) <> twzTab) then Exit;
+  { 换成栏坐标,走栏自己的 DoContextPopup —— 它按栏坐标的 PartAt / WindowAtPos 认得标签,
+    设 ContextWindow、不挡菜单、按栏坐标发 OnContextPopup(spec §6.8 的同一条路)。 }
+  pt := Point(X + AWindow.Left, Y + AWindow.Top);
+  handled := False;
+  DoContextPopup(pt, handled);
+  if handled then Exit;
+  { DoContextPopup 只发事件;弹菜单本来是 LCL 的 WM_CONTEXTMENU 在它之后做的,这里没有那一层,
+    自己补。只在当前页有句柄时弹。 }
+  menu := GetPopupMenu;
+  if (menu = nil) or not menu.AutoPopup or not AWindow.HandleAllocated then Exit;
+  menu.PopupComponent := Self;
+  pt := AWindow.ClientToScreen(Point(X, Y));
+  menu.PopUp(pt.X, pt.Y);
 end;
 
 { --- 图标条手势 ---------------------------------------------------------------- }
@@ -3828,6 +3898,14 @@ begin
   Result := nil;
   n := WindowCount;
   if n = 0 then Exit;
+  { 底栏:收进去的是当前页此刻标签行几何里的 Hidden(没有当前页时空)。 }
+  if FPlacement = twpBottom then
+  begin
+    if FActive <> nil then
+      Result := Copy(FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
+        FActive.Font.PixelsPerInch).Hidden);
+    Exit;
+  end;
   L := BarLayout;
   shown := nil;
   SetLength(shown, n);
@@ -4218,6 +4296,8 @@ var
   hidden: TTyToolWindowPlan;
   item: TMenuItem;
   L: TTyToolWindowBarLayout;
+  host: TWinControl;
+  r: TRect;
   pt: TPoint;
   menuAlign: TPopupAlignment;
   i: Integer;
@@ -4236,13 +4316,26 @@ begin
     item.OnClick := @OverflowItemClick;
     FOverflowMenu.Items.Add(item);
   end;
-  { 菜单贴着溢出按钮往内容区那一侧开(锚点和对齐方式一处算,见
-    TyToolWindowOverflowMenuAnchor)。只在有句柄时弹(spec §7.4)。 }
-  L := BarLayout;
-  TyToolWindowOverflowMenuAnchor(L.Overflow, FPlacement, IsRightToLeft, pt, menuAlign);
+  { 菜单贴着溢出按钮开(锚点和对齐方式一处算,见 TyToolWindowOverflowMenuAnchor)。
+    底栏的溢出按钮在当前页的标签行里:矩形是当前页的坐标,换屏幕坐标用当前页;
+    PopupComponent 仍是栏。只在有句柄时弹(spec §7.4)。 }
+  if FPlacement = twpBottom then
+  begin
+    host := FActive;
+    if host = nil then Exit;
+    r := FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
+      FActive.Font.PixelsPerInch).Overflow;
+  end
+  else
+  begin
+    host := Self;
+    L := BarLayout;
+    r := L.Overflow;
+  end;
+  TyToolWindowOverflowMenuAnchor(r, FPlacement, IsRightToLeft, pt, menuAlign);
   FOverflowMenu.Alignment := menuAlign;
-  if not HandleAllocated then Exit;
-  pt := ClientToScreen(pt);
+  if not host.HandleAllocated then Exit;
+  pt := host.ClientToScreen(pt);
   FOverflowMenu.PopUp(pt.X, pt.Y);
 end;
 
@@ -5350,6 +5443,15 @@ procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
 var
   opensLeft: Boolean;
 begin
+  { 底栏:从溢出按钮底边、按阅读起点往下开(开工前问题 7)—— LTR 左沿、RTL 右沿,都是 paLeft
+    (TyPopupAnchorShift 在 RTL 下把「贴阅读起点」换成贴右沿)。 }
+  if APlacement = twpBottom then
+  begin
+    if ARightToLeft then APoint := Point(AOverflow.Right, AOverflow.Bottom)
+    else APoint := Point(AOverflow.Left, AOverflow.Bottom);
+    AAlignment := paLeft;
+    Exit;
+  end;
   opensLeft := APlacement = twpRight;
   if opensLeft then APoint := Point(AOverflow.Left, AOverflow.Top)
   else APoint := Point(AOverflow.Right, AOverflow.Top);

@@ -49,6 +49,7 @@ type
     procedure TestADesignGestureFollowsItsWindowWhenAnotherLeaves;
     procedure TestTheOverflowButtonPaintsHoverAndPressedInTheStripInk;
     procedure TestTheOverflowMenuOpensTowardsTheContent;
+    procedure TestTheBottomOverflowMenuOpensDownFromTheReadingStart;
     procedure TestShowingTheOverflowMenuSetsItsAlignment;
     { spec §6.8:右键。 }
     procedure TestARightClickOnAnIconSetsContextWindowAndPopsTheBarsMenu;
@@ -838,6 +839,24 @@ begin
   AssertEquals('左栏 RTL:往右开 = 贴阅读终点', Ord(paRight), Ord(al));
   TyToolWindowOverflowMenuAnchor(r, twpRight, True, p, al);
   AssertEquals('右栏 RTL:往左开 = 贴阅读起点', Ord(paLeft), Ord(al));
+end;
+
+procedure TTyToolWindowStripTests.TestTheBottomOverflowMenuOpensDownFromTheReadingStart;
+var
+  r: TRect;
+  p: TPoint;
+  al: TPopupAlignment;
+begin
+  { 底栏的溢出按钮在标签行里:从按钮底边往下开,按阅读起点对齐(开工前问题 7)。 }
+  r := Rect(10, 2, 32, 24);
+  TyToolWindowOverflowMenuAnchor(r, twpBottom, False, p, al);
+  AssertEquals('底栏 LTR:锚在左沿', 10, p.X);
+  AssertEquals('底栏:锚在底边', 24, p.Y);
+  AssertEquals('底栏 LTR:贴阅读起点', Ord(paLeft), Ord(al));
+  TyToolWindowOverflowMenuAnchor(r, twpBottom, True, p, al);
+  AssertEquals('底栏 RTL:锚在右沿(阅读起点)', 32, p.X);
+  AssertEquals('底栏 RTL:锚在底边', 24, p.Y);
+  AssertEquals('底栏 RTL:贴阅读起点', Ord(paLeft), Ord(al));
 end;
 
 procedure TTyToolWindowStripTests.TestShowingTheOverflowMenuSetsItsAlignment;

@@ -1039,6 +1039,22 @@ msgstr ""
 msgid "Not a tool window: hidden at run time"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowcollapse
+msgid "Hide"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowmaximize
+msgid "Maximize"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowmore
+msgid "More"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowrestore
+msgid "Restore"
+msgstr ""
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."

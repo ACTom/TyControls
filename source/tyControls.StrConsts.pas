@@ -290,6 +290,13 @@ resourcestring
     'Add a tool window';
   rsTyToolWindowBarStray =
     'Not a tool window: hidden at run time';
+  { Hints on the bottom bar's tab row (TTyToolWindowBar.HeaderHint): the maximize button
+    (its two states), the hide button that collapses the whole bottom bar, and the
+    overflow button that lists the tabs that did not fit. }
+  rsTyToolWindowMaximize = 'Maximize';
+  rsTyToolWindowRestore  = 'Restore';
+  rsTyToolWindowCollapse = 'Hide';
+  rsTyToolWindowMore     = 'More';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

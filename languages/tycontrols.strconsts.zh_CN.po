@@ -627,6 +627,22 @@ msgstr "添加工具窗口"
 msgid "Not a tool window: hidden at run time"
 msgstr "不是工具窗口，运行时隐藏"
 
+#: tycontrols.strconsts.rstytoolwindowcollapse
+msgid "Hide"
+msgstr "收起"
+
+#: tycontrols.strconsts.rstytoolwindowmaximize
+msgid "Maximize"
+msgstr "最大化"
+
+#: tycontrols.strconsts.rstytoolwindowmore
+msgid "More"
+msgstr "更多"
+
+#: tycontrols.strconsts.rstytoolwindowrestore
+msgid "Restore"
+msgstr "还原"
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."
