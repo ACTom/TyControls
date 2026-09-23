@@ -471,7 +471,7 @@ type
     function Metrics: TTyToolWindowBarMetrics;
     { 运行时收起着(设计期永远按展开)。 }
     function CollapsedAtRunTime: Boolean;
-    { 按「收起」算尺寸:运行时收起着或没有窗口;设计期永远不算。 }
+    { 按「收起」算尺寸:运行时收起着、没有窗口、或拉宽边正吸附着(spec §6.3);设计期永远不算。 }
     function SizesAsCollapsed: Boolean;
     { 沿栏轴向的推导尺寸(侧栏 = Width,底栏 = Height),设备像素。内容项不低于
       content-min —— 和 ConstrainedResize 的下限同一个数,所以 ExpandedSize 比下限还小时
@@ -523,6 +523,27 @@ type
     FOverflowPressed: Boolean;
     { 溢出菜单。不给 Owner:给栏的话它进栏的 Components,还得操心流式化;栏自己释放。 }
     FOverflowMenu: TPopupMenu;
+    { --- 拉宽边(spec §6.3)。起点记逻辑尺寸和屏幕坐标:右栏 / 底栏拉宽时自己在挪,
+      客户区坐标跟着变,屏幕坐标不变。 --- }
+    FEdgeDragging: Boolean;
+    { 未钳的尺寸小于 content-min 的一半:实时按收起排布,ExpandedSize 停在起点。 }
+    FEdgeSnapped: Boolean;
+    FEdgeStartSize: Integer;
+    FEdgeStartPos: TPoint;
+    FEdgeHover: Boolean;
+    { 悬停在边缘区时借用 Cursor 显示调整光标;借之前的值原样还回去(同 TTyTreeView 的 A15)。 }
+    FSavedCursor: TCursor;
+    FCursorOverridden: Boolean;
+    FDeactivateHooked: Boolean;
+    procedure BeginEdgeDrag(X, Y: Integer);
+    procedure EdgeDragTo(X, Y: Integer);
+    procedure EndEdgeDrag;
+    { 拉宽中途被打断:ExpandedSize 回到起点。不在拉宽时什么都不做。 }
+    procedure CancelEdgeDrag;
+    procedure SetEdgeHover(AOn: Boolean);
+    procedure HookDeactivate(AOn: Boolean);
+    procedure AppDeactivated(Sender: TObject);
+    procedure LMCancelMode(var Message: TLMessage); message LM_CANCELMODE;
     procedure ResetGesture;
     procedure SetStripHover(AIndex: Integer; AOverflow: Boolean);
     procedure UpdateHoverAt(X, Y: Integer);
@@ -641,8 +662,11 @@ type
     function OverflowWindows: TTyToolWindowPlan;
     { 溢出菜单(点过一次溢出按钮才有);菜单项的 Tag 是窗口引用。 }
     property OverflowMenu: TPopupMenu read FOverflowMenu;
+    { 拉宽边(= BarLayout.Edge):运行时收起、没有窗口时为空。 }
+    function EdgeRect: TRect;
     { 探针:手势此刻是否武装着 / 拖动中 —— 真实状态的只读视图。 }
     function GestureStateForTest: TTyToolWindowGestureState;
+    property IsEdgeDraggingForTest: Boolean read FEdgeDragging;
     property TickForTest: QWord read FTickOffset write FTickOffset;
     procedure RegisterWindow(AWindow: TTyToolWindow);
     procedure UnregisterWindow(AWindow: TTyToolWindow);
@@ -1668,6 +1692,8 @@ begin
   FreeAndNil(FImageLink);
   FSubscribedList := nil;
   FreeAndNil(FOverflowMenu);
+  { 拉宽 / 拖动期间装在 Application 上的处理器,一个不留。 }
+  if Application <> nil then Application.RemoveAllHandlersOfObject(Self);
   inherited Destroy;
 end;
 
@@ -1853,7 +1879,7 @@ function TTyToolWindowBar.SizesAsCollapsed: Boolean;
 begin
   { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。 }
   Result := not (csDesigning in ComponentState)
-    and (FCollapsed or (WindowCount = 0));
+    and (FCollapsed or (WindowCount = 0) or FEdgeSnapped);
 end;
 
 function TTyToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
@@ -2301,7 +2327,10 @@ begin
     { 边缘区:拉宽边,也是贴着编辑区的那条分隔线。 }
     if (L.Edge.Right > L.Edge.Left) and (L.Edge.Bottom > L.Edge.Top) then
     begin
-      partS := ActiveController.Model.ResolveStyle('TyToolWindowEdge', cls, [tysNormal]);
+      if FEdgeDragging then states := [tysActive]
+      else if FEdgeHover then states := [tysHover]
+      else states := [tysNormal];
+      partS := ActiveController.Model.ResolveStyle('TyToolWindowEdge', cls, states);
       if tpBackground in partS.Present then
         P.FillBackground(L.Edge, partS.Background, 0);
     end;
@@ -2449,6 +2478,8 @@ end;
 
 procedure TTyToolWindowBar.SetStripHover(AIndex: Integer; AOverflow: Boolean);
 begin
+  { 边缘区的悬停另算(SetEdgeHover):清悬停的地方都经过这里,一起清。 }
+  if (AIndex = -1) and not AOverflow and not FEdgeDragging then SetEdgeHover(False);
   if (AIndex = FStripHover) and (AOverflow = FOverflowHover) then Exit;
   FStripHover := AIndex;
   FOverflowHover := AOverflow;
@@ -2465,6 +2496,7 @@ begin
   part := PartAt(X, Y, idx);
   if part <> twbpItem then idx := -1;
   SetStripHover(idx, part = twbpOverflow);
+  SetEdgeHover(part = twbpEdge);
 end;
 
 procedure TTyToolWindowBar.RecheckHover;
@@ -2548,12 +2580,20 @@ begin
     else
       FOverflowPressed := True;
     Invalidate;
-  end;
+  end
+  else if part = twbpEdge then
+    BeginEdgeDrag(X, Y);
 end;
 
 procedure TTyToolWindowBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
+  if FEdgeDragging then
+  begin
+    { 丢了松开(没有 ssLeft):当作被打断,回到起点。 }
+    if ssLeft in Shift then EdgeDragTo(X, Y) else CancelEdgeDrag;
+    Exit;
+  end;
   if FGState = twgsArmed then
   begin
     if not (ssLeft in Shift) then ResetGesture;   { 丢了松开:回到 Idle }
@@ -2577,6 +2617,15 @@ begin
     { 正常情况下松开那一拍 CM_DESIGNHITTEST 已经答了 0,设计器不会再调这里;万一来了,
       只解除武装,不切页。 }
     FDesignGesture := False;
+    Exit;
+  end;
+  if FEdgeDragging then
+  begin
+    { 松手时处在吸附排布才写 Collapsed;ExpandedSize 一直停在起点(spec §6.3)。 }
+    multi := FEdgeSnapped;
+    EndEdgeDrag;
+    if multi then Collapsed := True;
+    UpdateHoverAt(X, Y);
     Exit;
   end;
   { 拷到局部再清记录:点击的动作放最后,它引起的事件里就算重新按下也是一条新记录。 }
@@ -2659,6 +2708,129 @@ begin
   FOverflowMenu.PopUp(pt.X, pt.Y);
 end;
 
+function TTyToolWindowBar.EdgeRect: TRect;
+begin
+  Result := BarLayout.Edge;
+end;
+
+procedure TTyToolWindowBar.HookDeactivate(AOn: Boolean);
+begin
+  if (AOn = FDeactivateHooked) or (Application = nil) then Exit;
+  FDeactivateHooked := AOn;
+  if AOn then Application.AddOnDeactivateHandler(@AppDeactivated)
+  else Application.RemoveOnDeactivateHandler(@AppDeactivated);
+end;
+
+procedure TTyToolWindowBar.AppDeactivated(Sender: TObject);
+begin
+  CancelEdgeDrag;
+end;
+
+procedure TTyToolWindowBar.LMCancelMode(var Message: TLMessage);
+begin
+  inherited;
+  { ShowModal、Application.HandleException 会发:拉宽到一半的尺寸不许留下。 }
+  CancelEdgeDrag;
+end;
+
+procedure TTyToolWindowBar.SetEdgeHover(AOn: Boolean);
+var
+  want: TCursor;
+begin
+  if AOn = FEdgeHover then Exit;
+  FEdgeHover := AOn;
+  if AOn then
+  begin
+    if FPlacement = twpBottom then want := crVSplit else want := crHSplit;
+    if not FCursorOverridden then
+    begin
+      FSavedCursor := Cursor;
+      FCursorOverridden := True;
+    end;
+    Cursor := want;
+  end
+  else if FCursorOverridden then
+  begin
+    FCursorOverridden := False;
+    Cursor := FSavedCursor;
+  end;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+procedure TTyToolWindowBar.BeginEdgeDrag(X, Y: Integer);
+begin
+  { 没有窗口、设计期:边缘区不起作用(LayoutIn 这时给的 Edge 本来就是空的,按不到这里)。 }
+  if (WindowCount = 0) or (csDesigning in ComponentState) then Exit;
+  FEdgeDragging := True;
+  FEdgeSnapped := False;
+  FEdgeStartSize := FExpandedSize;
+  FEdgeStartPos := ClientToScreen(Point(X, Y));
+  FGSwallowClick := True;
+  HookDeactivate(True);
+  Invalidate;
+end;
+
+procedure TTyToolWindowBar.EdgeDragTo(X, Y: Integer);
+var
+  p: TPoint;
+  d, want, minL, v: Integer;
+  wasSnapped: Boolean;
+begin
+  p := ClientToScreen(Point(X, Y));
+  { 位移按增长方向取符号:左栏向右、右栏向左、底栏向上为正(同 TySplitterNewSize 对
+    alRight / alBottom 取反,Splitter.pas:103-106)。 }
+  case FPlacement of
+    twpLeft: d := p.X - FEdgeStartPos.X;
+    twpRight: d := FEdgeStartPos.X - p.X;
+  else
+    d := FEdgeStartPos.Y - p.Y;
+  end;
+  want := FEdgeStartSize + MulDiv(d, 96, PPI);
+  minL := ActiveController.Metric(TyToolWindowContentMinVar, TyToolWindowContentMinDef);
+  if minL < 0 then minL := 0;
+  wasSnapped := FEdgeSnapped;
+  { 吸附收起(spec §6.3):原始尺寸不到 content-min 的一半就实时按收起排布,ExpandedSize
+    保持起点;拖回阈值以内恢复展开、继续实时写。 }
+  FEdgeSnapped := want < minL div 2;
+  if FEdgeSnapped then v := FEdgeStartSize
+  else if want < minL then v := minL
+  else v := want;
+  if v <> FExpandedSize then
+    ExpandedSize := v            { 自己 Relayout }
+  else if wasSnapped <> FEdgeSnapped then
+  begin
+    Relayout;
+    Invalidate;
+  end;
+end;
+
+procedure TTyToolWindowBar.EndEdgeDrag;
+begin
+  if not FEdgeDragging then Exit;
+  FEdgeDragging := False;
+  HookDeactivate(False);
+  if FEdgeSnapped then
+  begin
+    { 吸附着松手:调用方接着写 Collapsed := True。这里先把排布还给「展开」那一支,
+      Collapsed 的 Relayout 再按收起推。 }
+    FEdgeSnapped := False;
+  end;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+procedure TTyToolWindowBar.CancelEdgeDrag;
+var
+  wasSnapped: Boolean;
+begin
+  if not FEdgeDragging then Exit;
+  wasSnapped := FEdgeSnapped;
+  EndEdgeDrag;
+  if FExpandedSize <> FEdgeStartSize then
+    ExpandedSize := FEdgeStartSize
+  else if wasSnapped and not (csDestroying in ComponentState) then
+    Relayout;
+end;
+
 procedure TTyToolWindowBar.CMDesignHitTest(var Message: TCMDesignHitTest);
 var
   idx: Integer;
@@ -2710,6 +2882,7 @@ begin
   { 侧 ↔ 底:运行时栏里有窗口就忽略 —— 会破坏「不能跨到底栏」的规则和布局串的键。 }
   if ((FPlacement = twpBottom) <> (AValue = twpBottom)) and (WindowCount > 0)
      and ([csDesigning, csLoading] * ComponentState = []) then Exit;
+  CancelEdgeDrag;
   FPlacement := AValue;
   { 流式加载时 Align 自己也在流里,不替它改。 }
   if not (csLoading in ComponentState) then
@@ -2800,6 +2973,8 @@ var
   form: TCustomForm;
 begin
   if FCollapsed = AValue then Exit;
+  { 拉宽中途 Collapsed 被别处改了:拉宽作废,ExpandedSize 回到起点(spec §6.3)。 }
+  CancelEdgeDrag;
   FCollapsed := AValue;
   { 只在运行时生效:流式加载时由 Loaded 统一应用;设计期永远按展开显示。 }
   if [csLoading, csDesigning, csDestroying] * ComponentState = [] then
@@ -3165,6 +3340,8 @@ begin
   { spec §5.2 / §9.7:属于它的手势记录清掉 —— 武装着的窗口走了,松开不许当成点击。
     悬停和按下按窗口序号记,它一走序号全挪了,一并清(按下跟着还在的手势重新对上)。 }
   if AWindow = FGWindow then ResetGesture;
+  { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废。 }
+  if FEdgeDragging and (Length(FRegistered) = 0) then CancelEdgeDrag;
   FStripHover := -1;
   FOverflowHover := False;
   { 离开前的窗口序号:通常它已经不在 Controls 里了,取 RemoveControl 记下的那个;
