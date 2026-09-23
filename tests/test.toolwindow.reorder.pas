@@ -364,12 +364,19 @@ begin
   b := NewWindow;
   NewWindow;
   FBar.ActiveWindow := a;
-  before := Screen.RealCursor;
-  StartDrag(0);
-  { 松开丢了:下一次按下直接落在 b 的图标上。 }
-  p := FBar.StripItemRect(1).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  AssertEquals('临时光标弹回原样', Ord(before), Ord(Screen.RealCursor));
+  { 哨兵:自己先压一层独有的光标,断言栈顶回到它。只记「之前是什么」的话,同一 suite 里
+    前面哪条测试漏掉的一层 crDrag 会让 before 本身就是 crDrag,漏弹也照样绿。 }
+  Screen.BeginTempCursor(crHandPoint);
+  try
+    before := Screen.RealCursor;
+    StartDrag(0);
+    { 松开丢了:下一次按下直接落在 b 的图标上。 }
+    p := FBar.StripItemRect(1).CenterPoint;
+    FBar.CallMouseDown(p.X, p.Y);
+    AssertEquals('临时光标弹回原样(栈顶是哨兵)', Ord(before), Ord(Screen.RealCursor));
+  finally
+    Screen.EndTempCursor(crHandPoint);
+  end;
   AssertEquals('新的按下是一条新记录:武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
   AssertEquals('插入线清掉', -1, FBar.DropSlotForTest);
   AssertFalse('没有计时器', FBar.HasCaptureTimerForTest);
@@ -402,11 +409,17 @@ var
 begin
   NewWindow;
   NewWindow;
-  before := Screen.RealCursor;
-  StartDrag(0);
-  FBar.Free;
-  FBar := nil;
-  AssertEquals('栏走了,临时光标也弹掉了', Ord(before), Ord(Screen.RealCursor));
+  { 哨兵同 TestASecondPressWhileDraggingUnwindsEverything。 }
+  Screen.BeginTempCursor(crHandPoint);
+  try
+    before := Screen.RealCursor;
+    StartDrag(0);
+    FBar.Free;
+    FBar := nil;
+    AssertEquals('栏走了,临时光标也弹掉了(栈顶是哨兵)', Ord(before), Ord(Screen.RealCursor));
+  finally
+    Screen.EndTempCursor(crHandPoint);
+  end;
   { Application 的处理器也摘干净了:失活时不会调进一个已经释放的栏。 }
   Application.IntfAppActivate;
   Application.IntfAppDeactivate;
