@@ -189,6 +189,11 @@ type
     { 标签行区域里的提示问栏(HeaderHint);区域外走继承。**不改**窗口的 ShowHint(spec §3.6):
       LCL 只把 CM_HINTSHOW 发给 ShowHint 为真的那一级控件。 }
     procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
+    { 设计期(spec §3.6 / §7.4):标签行区域让位给栏 —— 答 1,设计器跳过本窗口、落到栏上,
+      栏的 CM_DESIGNHITTEST 在栏坐标里认标签。别处、翻不了坐标时答 0(「在我身上」,也是
+      没有这个处理器时 TControl 的答案)。写法照 TTyShape.CMMaskHitTest。本窗口的
+      CM_DESIGNHITTEST 不改:窗口本身在设计期不接标签行的手势。 }
+    procedure CMMaskHitTest(var Message: TCMHitTest); message CM_MASKHITTEST;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
@@ -1975,6 +1980,20 @@ begin
     info^.CursorRect := Rect(p.X, p.Y, p.X + 1, p.Y + 1);
     Message.Result := 1;
   end;
+end;
+
+procedure TTyToolWindow.CMMaskHitTest(var Message: TCMHitTest);
+var
+  frm: TCustomForm;
+  p: TPoint;
+begin
+  { 注意极性:0 = 「这一点在我身上」。 }
+  Message.Result := 0;
+  { 设计器发的是**设计器窗体**坐标;TControl 重载的 GetDesignerForm 沿 Parent 找。 }
+  frm := GetDesignerForm(TControl(Self));
+  if frm = nil then Exit;
+  p := ScreenToClient(frm.ClientToScreen(Point(Message.XPos, Message.YPos)));
+  if InTabRowRegion(p.X, p.Y) then Message.Result := 1;
 end;
 
 procedure TTyToolWindow.LMCancelMode(var Message: TLMessage);

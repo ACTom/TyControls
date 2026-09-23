@@ -88,7 +88,18 @@ type
     procedure TestTheMaximizeButtonTogglesOnARealClick;
     procedure TestTheMaximizeGlyphTurnsIntoRestore;
     procedure TestMaximizingRepaintsTheActivePage;
+    { Task 10:设计期点标签(spec §3.6 设计期、§7.4 设计期)。 }
+    procedure TestADesignTimeTabClickSwitchesOnRelease;
+    procedure TestDesignTimeButtonsAndSeparatorAnswerZero;
+    procedure TestTheDesignTimeRowsBlankSelectsTheBar;
+    procedure TestTheTabRowRegionLeavesOutTheActions;
+    procedure TestMaskHitTestFallsBackToSelectable;
   private
+    FDesignWins: array of TProbeWindow;
+    { 设计期的底栏(宽 600),三个窗口,当前页是第二个;窗口摆到内容区。 }
+    function NewDesignBottomBar(AWidth: Integer = 600): TBarAccess;
+    { 设计期底栏上窗口 AIndex 的标签中心,栏坐标。 }
+    function DesignTabCentre(ABar: TBarAccess; AIndex: Integer): TPoint;
     { 一个 600×400 的宿主:上面一个 30 高的 alTop 兄弟、一个 alClient 编辑区;栏挪进去。 }
     procedure HostTheBar;
   end;
@@ -1079,6 +1090,143 @@ begin
   ArmActive(w);
   FBar.Maximized := True;
   AssertTrue('字形换了:当前页丢缓存', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+end;
+
+{ --- Task 10 -------------------------------------------------------------------- }
+
+function TTyToolWindowBottomTests.NewDesignBottomBar(AWidth: Integer): TBarAccess;
+const
+  Caps: array[0..2] of string = ('Problems', 'Output', 'Terminal');
+var
+  r: TRect;
+  i: Integer;
+begin
+  Result := NewDesignBar;
+  Result.Placement := twpBottom;
+  Result.Width := AWidth;
+  FDesignWins := nil;
+  SetLength(FDesignWins, 3);
+  for i := 0 to 2 do
+  begin
+    FDesignWins[i] := NewWindowIn(Result, FDesignOwner);
+    FDesignWins[i].Caption := Caps[i];
+  end;
+  Result.ActiveWindow := FDesignWins[1];
+  AssertTrue('前提:窗口是设计期的', csDesigning in FDesignWins[1].ComponentState);
+  r := Result.ClientRect;
+  Result.CallAdjustClientRect(r);
+  for i := 0 to 2 do
+    FDesignWins[i].BoundsRect := r;
+end;
+
+function TTyToolWindowBottomTests.DesignTabCentre(ABar: TBarAccess; AIndex: Integer): TPoint;
+var
+  w: TTyToolWindow;
+begin
+  w := ABar.ActiveWindow;
+  Result := TabRectOf(w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight),
+    w.Font.PixelsPerInch), AIndex).CenterPoint;
+  Result.X := Result.X + w.Left;
+  Result.Y := Result.Y + w.Top;
+end;
+
+procedure TTyToolWindowBottomTests.TestADesignTimeTabClickSwitchesOnRelease;
+var
+  d: TBarAccess;
+  p: TPoint;
+begin
+  d := NewDesignBottomBar;
+  p := DesignTabCentre(d, 0);
+  AssertEquals('栏坐标里非当前页的标签:答 1', 1, d.DesignHitTest(p.X, p.Y, 0));
+  d.CallMouseDown(p.X, p.Y);
+  AssertSame('按下不切', FDesignWins[1], d.ActiveWindow);
+  AssertEquals('按着拖动:答 1', 1, d.DesignHitTest(p.X, p.Y, MK_LBUTTON));
+  AssertEquals('松开那一拍:答 0 交还设计器', 0, d.DesignHitTest(p.X, p.Y, 0));
+  AssertSame('并且在这一拍切过去', FDesignWins[0], d.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomTests.TestDesignTimeButtonsAndSeparatorAnswerZero;
+var
+  d: TBarAccess;
+  w: TTyToolWindow;
+  g: TTyToolWindowHeaderGeom;
+
+  procedure Probe(const AName: string; const ARect: TRect);
+  var
+    p: TPoint;
+  begin
+    AssertFalse('前提:' + AName + ' 排上了', IsRectEmpty(ARect));
+    p := ARect.CenterPoint;
+    p.X := p.X + w.Left;
+    p.Y := p.Y + w.Top;
+    AssertEquals(AName + ':答 0(改模型、没有撤销)', 0, d.DesignHitTest(p.X, p.Y, 0));
+    d.CallMouseDown(p.X, p.Y);
+    d.DesignHitTest(p.X, p.Y, 0);
+    d.CallMouseUp(p.X, p.Y);
+    AssertFalse(AName + ':没有最大化', d.Maximized);
+    AssertFalse(AName + ':没有收起', d.Collapsed);
+    AssertSame(AName + ':当前页不变', FDesignWins[1], d.ActiveWindow);
+  end;
+
+begin
+  d := NewDesignBottomBar(220);
+  w := d.ActiveWindow;
+  g := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight), w.Font.PixelsPerInch);
+  Probe('溢出', g.Overflow);
+  Probe('分隔线', g.Separator);
+  Probe('最大化', g.Maximize);
+  Probe('收起', g.Collapse);
+end;
+
+procedure TTyToolWindowBottomTests.TestTheDesignTimeRowsBlankSelectsTheBar;
+var
+  d: TBarAccess;
+  w: TTyToolWindow;
+  g: TTyToolWindowHeaderGeom;
+begin
+  d := NewDesignBottomBar;
+  w := d.ActiveWindow;
+  g := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight), w.Font.PixelsPerInch);
+  AssertEquals('标签行空白:答 0(点空白就是选中栏)', 0,
+    d.DesignHitTest(g.Tabs[High(g.Tabs)].ItemRect.Right + 5 + w.Left, 13 + w.Top, 0));
+end;
+
+procedure TTyToolWindowBottomTests.TestTheTabRowRegionLeavesOutTheActions;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  AddActionsKid(w, 40, 20);
+  Relayout;
+  g := ActiveGeom;
+  AssertFalse('前提:有操作区', IsRectEmpty(g.Actions));
+  AssertTrue('标签上', w.CallInTabRowRegion(TabCentre(0).X, TabCentre(0).Y));
+  AssertTrue('最后一个标签之后、操作区左边的空白',
+    w.CallInTabRowRegion(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, 10));
+  AssertTrue('按钮上', w.CallInTabRowRegion(g.Collapse.CenterPoint.X, g.Collapse.CenterPoint.Y));
+  AssertFalse('操作区里不算', w.CallInTabRowRegion(g.Actions.CenterPoint.X, g.Actions.CenterPoint.Y));
+  AssertFalse('正文里不算', w.CallInTabRowRegion(100, w.BodyRect.Top + 20));
+end;
+
+procedure TTyToolWindowBottomTests.TestMaskHitTestFallsBackToSelectable;
+var
+  w: TProbeWindow;
+  msg: TCMHitTest;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(0);
+  { 没有设计器窗体:坐标翻不过去,答 0(可选中),同 TestMaskHitTestFallsBackToSelectable。 }
+  FillChar(msg, SizeOf(msg), 0);
+  msg.Msg := CM_MASKHITTEST;
+  msg.XPos := c.X;
+  msg.YPos := c.Y;
+  msg.Result := 99;
+  w.Dispatch(msg);
+  AssertEquals('没有设计器窗体:答 0', 0, msg.Result);
 end;
 
 { --- Task 6:TTyToolWindowBottomInputTests ------------------------------------------ }
