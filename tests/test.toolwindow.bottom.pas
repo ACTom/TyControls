@@ -1717,6 +1717,7 @@ begin
   b := NewRuntimeBar(twpBottom, other);
   FBar.ActiveWindow := a;
   AssertTrue('侧栏窗口改到底栏:抛 EInvalidOperation', MoveRaises(a, b));
+  AssertEquals('文字是可翻译的 resourcestring', rsTyToolWindowCrossBarMove, FRaisedMessage);
   AssertSame('它还在侧栏里', FBar, a.Parent);
   AssertSame('还是侧栏的当前页', a, FBar.ActiveWindow);
   AssertEquals('侧栏窗口数不变', 1, FBar.WindowCount);

@@ -1522,7 +1522,7 @@ begin
     在继承之前抛,窗口还在原来的栏里、原来的状态一点没动。**不在 CheckNewParent 里做**:
     读取器和设计器粘贴也经过它,而那两条路要放行(加载中 / 设计期豁免)。 }
   if MovesAcrossBarKinds(old, NewParent) then
-    raise EInvalidOperation.Create('A tool window cannot move between a side bar and a bottom bar');
+    raise EInvalidOperation.Create(rsTyToolWindowCrossBarMove);
   inherited SetParent(NewParent);
   { 离开一条栏跟进入一条栏一样是窗口表的事件。任一方正在拆:释放那条路走栏的
     Notification(opRemove),而旧栏这时可能已经拆了一半。 }
