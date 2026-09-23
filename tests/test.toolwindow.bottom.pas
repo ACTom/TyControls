@@ -106,6 +106,9 @@ type
     procedure TestTheDesignTimeRowsBlankSelectsTheBar;
     procedure TestTheTabRowRegionLeavesOutTheActions;
     procedure TestMaskHitTestFallsBackToSelectable;
+    { CM_MASKHITTEST 的正路径:纯查询按部件答,消息经设计器窗体的坐标答同一个数。 }
+    procedure TestDesignMaskAnswersOneOnTheRowZeroElsewhere;
+    procedure TestMaskHitTestOnTheRowSkipsTheWindowForTheDesigner;
     { Task 11:运行时跨类改 Parent 抛 EInvalidOperation(spec §3.2)。 }
     procedure TestASideWindowCannotMoveToABottomBarAtRunTime;
     procedure TestABottomWindowCannotMoveToASideBarAtRunTime;
@@ -1376,6 +1379,124 @@ begin
   msg.Result := 99;
   w.Dispatch(msg);
   AssertEquals('没有设计器窗体:答 0', 0, msg.Result);
+end;
+
+procedure TTyToolWindowBottomTests.TestDesignMaskAnswersOneOnTheRowZeroElsewhere;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  AddActionsKid(w, 40, 20);
+  Relayout;
+  g := ActiveGeom;
+  AssertFalse('前提:有操作区', IsRectEmpty(g.Actions));
+  AssertEquals('标签:1', 1, w.DesignMaskAnswerAt(TabCentre(0).X, TabCentre(0).Y));
+  AssertEquals('标签行空白:1', 1,
+    w.DesignMaskAnswerAt(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, 10));
+  AssertEquals('收起按钮:1', 1, w.DesignMaskAnswerAt(g.Collapse.CenterPoint.X,
+    g.Collapse.CenterPoint.Y));
+  AssertEquals('分隔线:1', 1, w.DesignMaskAnswerAt(g.Separator.CenterPoint.X,
+    g.Separator.CenterPoint.Y));
+  AssertEquals('操作区:0', 0, w.DesignMaskAnswerAt(g.Actions.CenterPoint.X,
+    g.Actions.CenterPoint.Y));
+  AssertEquals('正文:0', 0, w.DesignMaskAnswerAt(100, w.BodyRect.Top + 20));
+end;
+
+type
+  { 设计器窗体的替身:GetDesignerForm 只认 Designer <> nil 的窗体。方法一个都不该被调到。 }
+  TStubDesigner = class(TIDesigner)
+  public
+    function IsDesignMsg(Sender: TControl; var Message: TLMessage): Boolean; override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    procedure Modified; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure PaintGrid; override;
+    procedure ValidateRename(AComponent: TComponent; const CurName, NewName: string); override;
+    function GetShiftState: TShiftState; override;
+    procedure SelectOnlyThisComponent(AComponent: TComponent); override;
+    function UniqueName(const BaseName: string): string; override;
+    procedure PrepareFreeDesigner(AFreeComponent: Boolean); override;
+  end;
+
+function TStubDesigner.IsDesignMsg(Sender: TControl; var Message: TLMessage): Boolean;
+begin
+  Result := False;
+end;
+
+procedure TStubDesigner.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+end;
+
+procedure TStubDesigner.Modified;
+begin
+end;
+
+procedure TStubDesigner.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+end;
+
+procedure TStubDesigner.PaintGrid;
+begin
+end;
+
+procedure TStubDesigner.ValidateRename(AComponent: TComponent; const CurName, NewName: string);
+begin
+end;
+
+function TStubDesigner.GetShiftState: TShiftState;
+begin
+  Result := [];
+end;
+
+procedure TStubDesigner.SelectOnlyThisComponent(AComponent: TComponent);
+begin
+end;
+
+function TStubDesigner.UniqueName(const BaseName: string): string;
+begin
+  Result := BaseName;
+end;
+
+procedure TStubDesigner.PrepareFreeDesigner(AFreeComponent: Boolean);
+begin
+end;
+
+procedure TTyToolWindowBottomTests.TestMaskHitTestOnTheRowSkipsTheWindowForTheDesigner;
+var
+  w: TProbeWindow;
+  d: TStubDesigner;
+
+  function Ask(const AClient: TPoint): PtrInt;
+  var
+    msg: TCMHitTest;
+    p: TPoint;
+  begin
+    { 设计器发的是设计器窗体的客户区坐标。 }
+    p := FForm.ScreenToClient(w.ClientToScreen(AClient));
+    FillChar(msg, SizeOf(msg), 0);
+    msg.Msg := CM_MASKHITTEST;
+    msg.XPos := p.X;
+    msg.YPos := p.Y;
+    msg.Result := 99;
+    w.Dispatch(msg);
+    Result := msg.Result;
+  end;
+
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  d := TStubDesigner.Create;
+  FForm.Designer := d;
+  try
+    AssertSame('前提:窗体是设计器窗体', FForm, GetDesignerForm(TControl(w)));
+    AssertEquals('标签上:答 1,设计器跳过窗口落到栏上', 1, Ask(TabCentre(0)));
+    AssertEquals('正文里:答 0', 0, Ask(Point(100, w.BodyRect.Top + 20)));
+  finally
+    FForm.Designer := nil;
+    d.Free;
+  end;
 end;
 
 { --- Task 11 -------------------------------------------------------------------- }

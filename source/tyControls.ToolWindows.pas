@@ -303,6 +303,11 @@ type
     function BodyRect: TRect;
     { 把焦点给正文里第一个可聚焦的控件(protected 的 SelectFirst 的公开包装,spec §3.1)。 }
     procedure FocusFirst;
+    { 设计期 CM_MASKHITTEST 的答案,(X, Y) 是本窗口客户区坐标(spec §3.6 / §7.4):标签行区域
+      (标签、标签之间和后面的空白、溢出、分隔线、按钮)答 1 —— 设计器跳过本窗口、落到栏上,
+      栏在栏坐标里认标签;操作区、正文、底栏以外答 0(「在我身上」)。CMMaskHitTest 只负责
+      换坐标,答案一律问这里。 }
+    function DesignMaskAnswerAt(X, Y: Integer): Integer;
     { 是不是所在栏的当前页(spec §3.1)。栏收起着时当前页照样是它 —— 这里答的是
       「栏认哪一页」,不是「此刻看不看得见」。不在栏里、栏在流式加载中(那时栏还没挑)答 False。
       B 期底栏的标签行只由当前页代画,问的就是这一处。 }
@@ -2063,7 +2068,13 @@ begin
   frm := GetDesignerForm(TControl(Self));
   if frm = nil then Exit;
   p := ScreenToClient(frm.ClientToScreen(Point(Message.XPos, Message.YPos)));
-  if InTabRowRegion(p.X, p.Y) then Message.Result := 1;
+  Message.Result := DesignMaskAnswerAt(p.X, p.Y);
+end;
+
+function TTyToolWindow.DesignMaskAnswerAt(X, Y: Integer): Integer;
+begin
+  { 注意极性:1 = 「跳过我」,0 = 「在我身上」(同 TyShapeMaskHitTestAnswer 的约定)。 }
+  if InTabRowRegion(X, Y) then Result := 1 else Result := 0;
 end;
 
 procedure TTyToolWindow.LMCancelMode(var Message: TLMessage);
