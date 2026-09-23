@@ -11,7 +11,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
-  tyControls.ToolWindows.Layout, tyControls.StrConsts,
+  tyControls.ToolWindows.Layout, tyControls.StrConsts, tyControls.Painter,
   tyControls.Icons.Lucide, test.toolwindow.window,
   test.toolwindow.bar;
 
@@ -58,6 +58,8 @@ type
     procedure TestAThemeChangeRemeasuresTheTabs;
     procedure TestADirectZOrderChangeReordersTheTabs;
     procedure TestTabsAreMeasuredAtTheWiderOfRestingAndSelected;
+    { 标签宽缓存按量字真正用的字号作键:ParentFont 一翻,Font.Size 没变、字号换了来源。 }
+    procedure TestTabWidthsFollowTheResolvedFontSize;
     procedure TestTheSeparatorSlotFollowsItsBorderWidth;
     procedure TestZoneAtInBarCoordinatesMapsThroughTheActivePage;
     { Task 4:统一行高(spec §3.4)。 }
@@ -188,6 +190,10 @@ type
   end;
 
 implementation
+
+type
+  { ParentFont 在 TControl 上是 protected。 }
+  TControlAccess = class(TControl);
 
 const
   { 标签行钉成品红底(窗口本身也是)、静止墨蓝、选中墨黄、下划线黑、分隔线青
@@ -515,6 +521,27 @@ begin
   for i := 0 to 2 do
     AssertEquals(Format('切页之后标签 %d 宽不变(整行不跳)', [i]), TabRectOf(bold, i).Width,
       TabRectOf(switched, i).Width);
+end;
+
+procedure TTyToolWindowBottomTests.TestTabWidthsFollowTheResolvedFontSize;
+var
+  inherited_, own: TTyToolWindowHeaderGeom;
+  i: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  { 父控件字号 20,栏跟着它(ParentFont):标签的样式里没有 font-size,ParentFont 时量字取
+    主题基准字号,不看 Font.Size。 }
+  TControlAccess(FBar).ParentFont := True;
+  FForm.Font.Size := 20;
+  AssertEquals('前提:栏的 Font.Size 跟着父控件', 20, FBar.Font.Size);
+  inherited_ := ActiveGeom;
+  { 只翻 ParentFont:Font.Size 还是 20,量字的字号从基准字号换成它。 }
+  TControlAccess(FBar).ParentFont := False;
+  AssertEquals('前提:Font.Size 没变', 20, FBar.Font.Size);
+  own := ActiveGeom;
+  for i := 0 to 2 do
+    AssertTrue(Format('标签 %d 按新字号重量', [i]),
+      TabRectOf(own, i).Width > TabRectOf(inherited_, i).Width);
 end;
 
 procedure TTyToolWindowBottomTests.TestTheSeparatorSlotFollowsItsBorderWidth;
@@ -902,24 +929,46 @@ end;
 procedure TTyToolWindowBottomTests.TestRenderingAt144ScalesTabsAndButtons;
 var
   w: TProbeWindow;
-  g96, g144: TTyToolWindowHeaderGeom;
+  g144: TTyToolWindowHeaderGeom;
   bmp: TBitmap;
   r: TRect;
   i: Integer;
+  cls: string;
+  restS, selS: TTyStyleSet;
+
+  { 同一组量字函数、同一个 PPI:两种量法取大(Painter.pas 的约定),静止态、选中态再取大。 }
+  function TextPx(const AText: string; const AStyle: TTyStyleSet; APPI: Integer): Integer;
+  var
+    bw, bh, rw, fs: Integer;
+  begin
+    fs := TyResolveFontSize(AStyle, TControlAccess(FBar).ParentFont, FBar.Font.Size, FCtl);
+    TyMeasureTextBlock(AText, AStyle.FontName, fs, AStyle.FontWeight, APPI, 0, 0, bw, bh);
+    rw := TyMeasureRenderedTextWidth(AText, AStyle.FontName, fs, AStyle.FontWeight, APPI);
+    if rw > bw then bw := rw;
+    Result := bw;
+  end;
+
+  function WantPx(const AText: string; APPI: Integer): Integer;
+  begin
+    Result := TextPx(AText, restS, APPI);
+    if TextPx(AText, selS, APPI) > Result then Result := TextPx(AText, selS, APPI);
+  end;
+
 begin
   NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
   FCtl.StyleOverride := BottomTheme;
   w := FWins[1];
-  g96 := ActiveGeom;
   g144 := w.HeaderGeomAt(Rect(0, 0, 900, 360), 144);
   AssertEquals('按钮按 144 缩放', 33, g144.Collapse.Width);
-  { 字的宽不是严格线性的(widgetset 初始化过之后按真实字体度量,hinting 让 144 下的字宽
-    跟 1.5 倍差几个像素):只要求落在 1.25 ~ 1.75 倍之间 —— 按字体 PPI 量的话是 1 倍。 }
+  cls := TyStyleClassFor(FBar, FBar.StyleClass);
+  restS := FCtl.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysNormal]);
+  selS := FCtl.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysSelected]);
+  AssertTrue('前提:144 与 96 量出来的字宽不同(否则分不出按哪个 PPI 量)',
+    WantPx('Problems', 144) <> WantPx('Problems', 96));
+  { 精确值:按 144 量的字宽 + 两侧各一个 144 下的 tab-pad(10 → 15)。 }
   for i := 0 to 2 do
-    AssertTrue(Format('标签 %d 按 144 量(约 1.5 倍:96 下 %d,144 下 %d)',
-      [i, TabRectOf(g96, i).Width, TabRectOf(g144, i).Width]),
-      (TabRectOf(g144, i).Width * 4 >= TabRectOf(g96, i).Width * 5)
-      and (TabRectOf(g144, i).Width * 4 <= TabRectOf(g96, i).Width * 7));
+    AssertEquals(Format('标签 %d = 144 下的字宽 + 2 × 15', [i]),
+      WantPx(FWins[i].Caption, 144) + 2 * 15, TabRectOf(g144, i).Width);
   r := TabRectOf(g144, 1);
   bmp := RenderPage(w, 900, 360, 144);
   try

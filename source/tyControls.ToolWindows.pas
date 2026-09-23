@@ -732,7 +732,10 @@ type
     { 标签宽的缓存(开工前问题 3):只缓存量出来的宽,不缓存整份几何 —— 窗口顺序每次现取,
       设计器「移到最前 / 最后」直接调非虚的 SetControlIndex,戳记不到。键 = 此刻
       「(窗口引用, Caption) 按 Controls 顺序」的快照逐项比 + (PPI, model 身份, 主题版本,
-      样式类, StyleOverride, 字号)。只缓存自己字体的 PPI 那一份,别的 PPI 现量。 }
+      样式类, StyleOverride, 两种状态**解析后**的字号)。字号取量字真正用的那个
+      (ResolveFontSize:样式的 font-size、非 ParentFont 时自己的 Font.Size、主题基准字号
+      依次回落)—— 只记 Font.Size 的话,ParentFont 一翻、Font.Size 没变而字号换了一个来源,
+      缓存照样命中。只缓存自己字体的 PPI 那一份,别的 PPI 现量。 }
     FTabCacheValid: Boolean;
     FTabCacheWins: TTyToolWindowArray;
     FTabCacheCaps: array of string;
@@ -741,7 +744,8 @@ type
     FTabCacheVer: Cardinal;
     FTabCacheClass: string;
     FTabCacheOverride: string;
-    FTabCacheFontSize: Integer;
+    FTabCacheRestFs: Integer;
+    FTabCacheSelFs: Integer;
     FTabCacheWidths: TTyToolWindowWidths;
     { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」两份样式量的较大者(开工前问题 9;
       每份又是 Painter 的两种量法取大),再加 2 × tab-pad。空标题也有 2 × tab-pad。 }
@@ -3488,7 +3492,7 @@ function TTyToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
 var
   cls: string;
   restS, selS: TTyStyleSet;
-  i, pad, w: Integer;
+  i, pad, w, sw: Integer;
 
   function TextPx(const AText: string; const AStyle: TTyStyleSet): Integer;
   var
@@ -3515,7 +3519,8 @@ begin
     { 两种状态取大(开工前问题 9):皮肤只让选中态加粗时,按静止态量会截当前标签,按各自
       状态量则切页时整行重排。 }
     w := TextPx(AWins[i].Caption, restS);
-    if TextPx(AWins[i].Caption, selS) > w then w := TextPx(AWins[i].Caption, selS);
+    sw := TextPx(AWins[i].Caption, selS);
+    if sw > w then w := sw;
     Result[i] := w + 2 * pad;
   end;
 end;
@@ -3527,17 +3532,20 @@ var
   ver: Cardinal;
   cls: string;
   hit: Boolean;
-  i: Integer;
+  i, restFs, selFs: Integer;
 begin
   wins := WindowList(nil);
   if APPI <> PPI then Exit(MeasureTabWidths(wins, APPI));
   mdl := ActiveController.Model;
   ver := mdl.ThemeVersion;
   cls := TyStyleClassFor(Self, StyleClass);
+  restFs := ResolveFontSize(mdl.ResolveStyle(TyToolWindowTabKey, cls, [tysNormal]));
+  selFs := ResolveFontSize(mdl.ResolveStyle(TyToolWindowTabKey, cls, [tysSelected]));
   { 快照每次现取,逐项比(见 FTabCacheValid)。 }
   hit := FTabCacheValid and (FTabCachePPI = APPI) and (FTabCacheAnchor = TObject(mdl))
     and (FTabCacheVer = ver) and (FTabCacheClass = cls) and (FTabCacheOverride = StyleOverride)
-    and (FTabCacheFontSize = Font.Size) and (Length(FTabCacheWins) = Length(wins));
+    and (FTabCacheRestFs = restFs) and (FTabCacheSelFs = selFs)
+    and (Length(FTabCacheWins) = Length(wins));
   if hit then
     for i := 0 to High(wins) do
       if (FTabCacheWins[i] <> wins[i]) or (FTabCacheCaps[i] <> wins[i].Caption) then
@@ -3558,7 +3566,8 @@ begin
     FTabCacheVer := ver;
     FTabCacheClass := cls;
     FTabCacheOverride := StyleOverride;
-    FTabCacheFontSize := Font.Size;
+    FTabCacheRestFs := restFs;
+    FTabCacheSelFs := selFs;
     FTabCacheValid := True;
   end;
   { 拷一份出去:动态数组赋值共享存储,调用方改了会改到缓存。 }
