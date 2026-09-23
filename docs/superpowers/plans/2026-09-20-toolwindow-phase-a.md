@@ -2088,6 +2088,8 @@ end;
 
 - [ ] **Step 3: 跑，两条绿**
 
+> **Task 6 审查补充——图标序号从哪来**：`idx := ResolvedImageIndex(Windows[i])`，**不许**用 `Windows[i].ImageIndex`。后者走 `GetImageIndex`，名字在列表里找不到时会退回写过的序号，违反 spec §8「找不到 → -1，不许乱画一个」。配一条像素测试：名字找不到（且写过一个有效序号）时，那一格图标位置没有图标像素；判据是把 `ResolvedImageIndex` 换成 `.ImageIndex` 必须红。
+
 - [ ] **Step 4: 变异确认着色那条在守**
 
 把 `TyTintBitmapAlpha(bmp, itemS.TextColor)` 改成 `TyTintBitmapAlpha(bmp, S.TextColor)`（永远用栏的静止态墨色），重编重跑——`TestStripPaintsAndTheActiveItemDiffers` **必须红**。改回来确认绿。
