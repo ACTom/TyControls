@@ -1927,7 +1927,9 @@ begin
   AssertEquals('前提:武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
   w.Perform(LM_CANCELMODE, 0, 0);
   AssertEquals('捕获者收到 LM_CANCELMODE:手势收尾', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
-  w.CallMouseUp(c.X, c.Y);
+  { 直接交给栏,不经窗口的转发闸(捕获者清掉之后窗口本来就不转):引擎要是还武装着,
+    这一下就是点击。 }
+  FBar.HeaderMouseUp(w, mbLeft, [], c.X, c.Y);
   AssertSame('之后的松开不是点击', w, FBar.ActiveWindow);
 end;
 
@@ -1943,10 +1945,13 @@ begin
   AssertEquals('前提:武装在标签 0 上', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
   FWins[0].Free;
   FWins[0] := nil;
-  { 不比已释放的指针(地雷 14):看手势状态和当前页。 }
+  { 不比已释放的指针(assertsame-freed-pointer-trap):看手势状态和之后的行为。 }
   AssertEquals('手势窗口走了:记录作废', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
-  w.CallMouseUp(c.X, c.Y);
-  AssertSame('原位置松开:当前页不变', w, FBar.ActiveWindow);
+  { 记录要是还在,按住拖过阈值就会拿着那个悬垂的窗口起拖。原位置松开不是判据:悬垂指针
+    跟哪个活着的窗口都不相等,点击本来就成立不了。 }
+  w.CallMouseMove(c.X + 60, c.Y, [ssLeft]);
+  AssertFalse('按住拖过阈值也不起拖', FBar.IsDraggingForTest);
+  w.CallMouseUp(c.X + 60, c.Y);
 end;
 
 procedure TTyToolWindowBottomInputTests.TestADisabledBarDoesNotSwitch;
@@ -1999,12 +2004,16 @@ var
 begin
   NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
   w := FWins[1];
-  c := TabCentre(1);
-  { 悬停先落定,松开时悬停不变 —— 只剩「按下态收尾」这一件事会丢缓存。 }
+  { 非当前页的标签:当前页的标签不画按下 / 悬停,在它上面按下本来就没有东西要重画。 }
+  c := TabCentre(0);
+  { 悬停先落定,松开时悬停不变;多击的按下松开不算点击、不切页 —— 只剩「按下态收尾」
+    这一件事会丢缓存。 }
   w.CallMouseMove(c.X, c.Y);
-  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseDown(c.X, c.Y, [ssLeft, ssDouble]);
   ArmActive(w);
   w.CallMouseUp(c.X, c.Y);
+  AssertSame('前提:没有切页', w, FBar.ActiveWindow);
+  AssertEquals('前提:悬停没变', 0, FBar.HeaderHoverIndexForTest);
   AssertTrue('按下态要被重画掉', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
 end;
 
