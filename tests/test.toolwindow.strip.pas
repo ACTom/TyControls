@@ -38,6 +38,12 @@ type
     procedure TestAPressOnTheStripDoesNotFireTheBarsOnClick;
     procedure TestTheOverflowMenuListsTheHiddenWindowsAndActivatesOne;
     procedure TestTheStripNeverStartsAnLclDrag;
+    procedure TestTheAutoDragUsesThePressPositionNotThePointer;
+    procedure TestPointerInClientIsFalseWithoutAHandle;
+    procedure TestTheGuardCountsFromTheLastClickThatRan;
+    procedure TestACancelledDesignGestureIgnoresTheNextBareHitTest;
+    procedure TestAWindowLeavingKeepsThePressedIconOnItsWindow;
+    procedure TestADesignGestureFollowsItsWindowWhenAnotherLeaves;
   end;
 
 implementation
@@ -341,7 +347,8 @@ begin
   ClickIcon(0);
   AssertTrue('点当前页的图标 → 收起', FBar.Collapsed);
   AssertSame('当前页不变', a, FBar.ActiveWindow);
-  FBar.TickForTest := FBar.TickForTest + TyToolWindowClickGuardMs + 1;
+  FBar.FakeClock := True;
+  FBar.Clock := GetTickCount64 + TyToolWindowClickGuardMs + 1;
   ClickIcon(0);
   AssertFalse('再点一次 → 展开', FBar.Collapsed);
   AssertTrue('展开后当前页显示出来', a.Visible);
@@ -357,7 +364,8 @@ begin
   ClickIcon(0);
   AssertTrue('前提:第一下收起', FBar.Collapsed);
   { 不推时钟:慢速双击(系统默认 500 ms,第二下不一定带 ssDouble)不许收起又展开。 }
-  FBar.TickForTest := FBar.TickForTest + TyToolWindowClickGuardMs - 50;
+  FBar.FakeClock := True;
+  FBar.Clock := GetTickCount64 + TyToolWindowClickGuardMs - 50;
   ClickIcon(0);
   AssertTrue('300 ms 以内的第二下什么都不做', FBar.Collapsed);
   { 防抖按窗口记:点 A 之后马上点 B 照常生效。 }
@@ -572,14 +580,145 @@ begin
   NewWindow;
   FBar.DragMode := dmAutomatic;
   FBar.FakePointer := True;
+  { 判据是那一道闸(StartLclAutoDrag)被放行了几次 —— 探针只数、不真的起拖。 }
   FBar.FakePoint := FBar.StripItemRect(0).CenterPoint;
   FBar.CallBeginAutoDrag;
-  AssertFalse('图标上不起 LCL 拖动', FBar.Dragging);
+  AssertEquals('图标上不起 LCL 拖动', 0, FBar.AutoDragStarts);
+  FBar.FakePoint := Point(FBar.StripItemRect(0).CenterPoint.X, FBar.StripItemRect(0).Bottom + 20);
+  AssertTrue('前提:条尾的空白在图标条里、不在任何图标上',
+    PtInRect(FBar.BarLayout.Strip, FBar.FakePoint) and (FBar.WindowAtPos(FBar.FakePoint.X,
+    FBar.FakePoint.Y) = nil));
+  FBar.CallBeginAutoDrag;
+  AssertEquals('条上的空白也不起', 0, FBar.AutoDragStarts);
   FBar.FakePoint := FBar.BarLayout.Edge.CenterPoint;
   FBar.CallBeginAutoDrag;
-  AssertFalse('边缘区上也不起', FBar.Dragging);
-  { 没有对照组:无头时真起一次 LCL 拖动要建句柄,直接抛「Failed to create win32 control」。
-    这恰好就是判据 —— 把图标条那一句 Exit 变异掉,上面两次调用走进继承、同样抛出来,这条变红。 }
+  AssertEquals('边缘区上也不起', 0, FBar.AutoDragStarts);
+  { 对照组:内容区是用户的地盘,dmAutomatic 照常生效。 }
+  FBar.FakePoint := FBar.BarLayout.Content.CenterPoint;
+  FBar.CallBeginAutoDrag;
+  AssertEquals('内容区照常起', 1, FBar.AutoDragStarts);
+end;
+
+{ --- 自动拖动的闸、指针、防抖窗口、设计期手势、窗口离开 ------------------------------- }
+
+procedure TTyToolWindowStripTests.TestTheAutoDragUsesThePressPositionNotThePointer;
+var
+  icon, body: TPoint;
+begin
+  NewWindow;
+  FBar.DragMode := dmAutomatic;
+  { 无头没有句柄,按下消息里的 MouseCapture 会去建句柄;这条只关心按下位置怎么传到
+    BeginAutoDrag,捕获关掉。 }
+  FBar.ControlStyle := FBar.ControlStyle - [csCaptureMouse];
+  icon := FBar.StripItemRect(0).CenterPoint;
+  body := FBar.BarLayout.Content.CenterPoint;
+  { 快速按下就拖:按下落在图标上,LCL 调 BeginAutoDrag 那一刻指针已经到了内容区。 }
+  FBar.FakePointer := True;
+  FBar.FakePoint := body;
+  FBar.Perform(LM_LBUTTONDOWN, MK_LBUTTON, PtrInt((icon.Y shl 16) or (icon.X and $FFFF)));
+  FBar.Perform(LM_LBUTTONUP, 0, PtrInt((icon.Y shl 16) or (icon.X and $FFFF)));
+  AssertEquals('按在图标上:不起 LCL 拖动,不管指针此刻在哪', 0, FBar.AutoDragStarts);
+  { 反过来:按在内容区(那里用户的 dmAutomatic 该生效),指针此刻恰好在图标上。 }
+  FBar.FakePoint := icon;
+  FBar.Perform(LM_LBUTTONDOWN, MK_LBUTTON, PtrInt((body.Y shl 16) or (body.X and $FFFF)));
+  FBar.Perform(LM_LBUTTONUP, 0, PtrInt((body.Y shl 16) or (body.X and $FFFF)));
+  AssertEquals('按在内容区:照常起', 1, FBar.AutoDragStarts);
+end;
+
+procedure TTyToolWindowStripTests.TestPointerInClientIsFalseWithoutAHandle;
+var
+  p: TPoint;
+begin
+  AssertFalse('前提:无头', FBar.HandleAllocated);
+  AssertFalse('没有句柄:答 False(真实实现,不是探针)', FBar.CallRealPointerInClient(p));
+  AssertEquals('并给一个在哪里都不命中的点', -1, p.X);
+end;
+
+procedure TTyToolWindowStripTests.TestTheGuardCountsFromTheLastClickThatRan;
+begin
+  NewWindow;
+  NewWindow;
+  FBar.ActiveWindow := FBar.Windows[0];
+  FBar.FakeClock := True;
+  FBar.Clock := 10000;
+  ClickIcon(0);
+  AssertTrue('0 ms:收起', FBar.Collapsed);
+  FBar.Clock := 10250;
+  ClickIcon(0);
+  AssertTrue('250 ms:防抖挡掉', FBar.Collapsed);
+  FBar.Clock := 10400;
+  ClickIcon(0);
+  { 被挡掉的那一下不算数:从 0 ms 那一下算起已经 400 ms。 }
+  AssertFalse('400 ms:执行(被挡掉的那一下不刷新时间戳)', FBar.Collapsed);
+end;
+
+procedure TTyToolWindowStripTests.TestACancelledDesignGestureIgnoresTheNextBareHitTest;
+var
+  bar: TBarAccess;
+  a, b: TProbeWindow;
+  p: TPoint;
+begin
+  bar := NewDesignBar;
+  a := NewWindowIn(bar, FDesignOwner);
+  b := NewWindowIn(bar, FDesignOwner);
+  bar.ActiveWindow := a;
+  p := bar.StripItemRect(1).CenterPoint;
+  { 三条解除武装的路:LM_CANCELMODE、设计期离开、捕获被别人拿走。 }
+  bar.CallMouseDown(p.X, p.Y);
+  bar.Perform(LM_CANCELMODE, 0, 0);
+  bar.DesignHitTest(p.X, p.Y, 0);
+  AssertSame('LM_CANCELMODE 之后那条不带按键的命中测试不是松开:不切页', a, bar.ActiveWindow);
+  bar.CallMouseDown(p.X, p.Y);
+  bar.CallMouseLeave;
+  bar.DesignHitTest(p.X, p.Y, 0);
+  AssertSame('设计期离开之后:不切页', a, bar.ActiveWindow);
+  bar.CallMouseDown(p.X, p.Y);
+  bar.CallCaptureChanged;
+  bar.DesignHitTest(p.X, p.Y, 0);
+  AssertSame('捕获被拿走之后:不切页', a, bar.ActiveWindow);
+  { 对照:没被打断的那一次照常在松开时切。 }
+  bar.CallMouseDown(p.X, p.Y);
+  bar.DesignHitTest(p.X, p.Y, 0);
+  AssertSame('正常松开照切', b, bar.ActiveWindow);
+end;
+
+procedure TTyToolWindowStripTests.TestAWindowLeavingKeepsThePressedIconOnItsWindow;
+var
+  a, c: TProbeWindow;
+  p: TPoint;
+begin
+  a := NewWindow;
+  NewWindow;
+  c := NewWindow;
+  FBar.ActiveWindow := a;
+  p := FBar.StripItemRect(2).CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  AssertEquals('前提:按下态在第 2 格', 2, FBar.StripPressed);
+  a.Free;
+  AssertEquals('a 走了,c 挪到第 1 格:按下态跟着 c', 1, FBar.StripPressed);
+  p := FBar.StripItemRect(1).CenterPoint;
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertSame('松开照常点中 c', c, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowStripTests.TestADesignGestureFollowsItsWindowWhenAnotherLeaves;
+var
+  bar: TBarAccess;
+  a, b, c: TProbeWindow;
+  p: TPoint;
+begin
+  bar := NewDesignBar;
+  a := NewWindowIn(bar, FDesignOwner);
+  b := NewWindowIn(bar, FDesignOwner);
+  c := NewWindowIn(bar, FDesignOwner);
+  bar.ActiveWindow := b;
+  p := bar.StripItemRect(2).CenterPoint;
+  bar.CallMouseDown(p.X, p.Y);
+  a.Free;
+  { 设计器里删掉了别的窗口:按下的那个记的是窗口,不是序号。 }
+  p := bar.StripItemRect(1).CenterPoint;
+  bar.DesignHitTest(p.X, p.Y, 0);
+  AssertSame('松开在 c 现在的位置上:切到 c', c, bar.ActiveWindow);
 end;
 
 initialization

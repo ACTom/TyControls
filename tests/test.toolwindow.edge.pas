@@ -24,6 +24,9 @@ type
     procedure TestRightBarGrowsLeftwardsAndBottomBarUpwards;
     procedure TestTheEdgeIsInertWithoutWindowsAndAtDesignTime;
     procedure TestHoveringTheEdgeShowsTheResizeCursorAndHoverColour;
+    procedure TestMovingAlongTheEdgeWritesTheCursorOnce;
+    procedure TestFreeingTheBarMidResizeIsQuiet;
+    procedure TestAPressAfterALostReleaseRestoresTheStartSize;
   end;
 
 implementation
@@ -207,6 +210,66 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ --- 悬停抖动与退出路径 ---------------------------------------------------------- }
+
+procedure TTyToolWindowEdgeTests.TestMovingAlongTheEdgeWritesTheCursorOnce;
+var
+  e: TPoint;
+  cw, inv: Integer;
+begin
+  NewWindow;
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseMove(e.X, e.Y, []);
+  AssertEquals('前提:进了边缘区,光标换成调整光标', Ord(crHSplit), Ord(FBar.Cursor));
+  cw := FBar.CursorWrites;
+  inv := FBar.Invalidates;
+  FBar.CallMouseMove(e.X, e.Y + 5, []);
+  FBar.CallMouseMove(e.X, e.Y + 10, []);
+  { 清边缘悬停只在指针真的离开边缘区时做:在里面移动,每一下都「清掉再设回去」的话,
+    光标和整条栏各白写一遍。 }
+  AssertEquals('在边缘区里移动:不再写 Cursor', cw, FBar.CursorWrites);
+  AssertEquals('在边缘区里移动:不再重画', inv, FBar.Invalidates);
+  FBar.CallMouseMove(FBar.BarLayout.Content.CenterPoint.X, e.Y, []);
+  AssertFalse('离开边缘区:光标还回去', FBar.Cursor = crHSplit);
+end;
+
+procedure TTyToolWindowEdgeTests.TestFreeingTheBarMidResizeIsQuiet;
+var
+  e: TPoint;
+begin
+  NewWindow;
+  FBar.ExpandedSize := 200;
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X + 30, e.Y);
+  AssertTrue('前提:拉宽中', FBar.IsEdgeDraggingForTest);
+  { 析构里只清标志:回到起点要 Relayout,而栏已经拆了一半。 }
+  FBar.Free;
+  FBar := nil;
+  Application.IntfAppActivate;
+  Application.IntfAppDeactivate;
+end;
+
+procedure TTyToolWindowEdgeTests.TestAPressAfterALostReleaseRestoresTheStartSize;
+var
+  e, p: TPoint;
+begin
+  NewWindow;
+  NewWindow;
+  FBar.ExpandedSize := 200;
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X + 30, e.Y);
+  AssertEquals('前提:实时写', 230, FBar.ExpandedSize);
+  { 松开丢了,下一次按下落在图标上:拉到一半的尺寸不许留下。 }
+  p := FBar.StripItemRect(1).CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  AssertFalse('拉宽结束', FBar.IsEdgeDraggingForTest);
+  AssertEquals('回到起点', 200, FBar.ExpandedSize);
+  AssertEquals('这次按下照常武装', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  FBar.CallMouseUp(p.X, p.Y);
 end;
 
 initialization

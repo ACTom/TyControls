@@ -54,8 +54,25 @@ type
     { 指针位置:无头没有句柄,PointerInClient 恒答 False。设了 FakePointer 就答 FakePoint。 }
     FakePointer: Boolean;
     FakePoint: TPoint;
+    { 防抖的时钟:FakeClock 为真时 TickNow 答 Clock(毫秒,测试自己推);否则走真时钟。 }
+    FakeClock: Boolean;
+    Clock: QWord;
+    { LCL 自动拖动那一道闸放行了几次(StartLclAutoDrag 被调几次;不真的起拖)。 }
+    AutoDragStarts: Integer;
+    { 写 Cursor、整栏 Invalidate 各发生几次。 }
+    CursorWrites: Integer;
+    Invalidates: Integer;
+    { 真实的 PointerInClient(不看 FakePointer)。 }
+    function CallRealPointerInClient(out APoint: TPoint): Boolean;
+    function StripPressed: Integer;
+    procedure CallCaptureChanged;
   protected
     function PointerInClient(out APoint: TPoint): Boolean; override;
+    function TickNow: QWord; override;
+    procedure StartLclAutoDrag; override;
+    procedure SetCursor(Value: TCursor); override;
+  public
+    procedure Invalidate; override;
   public
     { 窗口刚从 Controls 里摘下、还没从本栏注销的那个空档里调一次(SetParent 的继承部分
       还没返回)。 }
@@ -336,6 +353,43 @@ end;
 function TBarAccess.DesignHitTest(X, Y: Integer; AKeys: PtrInt): PtrInt;
 begin
   Result := Perform(CM_DESIGNHITTEST, AKeys, PtrInt((Y shl 16) or (X and $FFFF)));
+end;
+
+function TBarAccess.CallRealPointerInClient(out APoint: TPoint): Boolean;
+begin
+  Result := inherited PointerInClient(APoint);
+end;
+
+procedure TBarAccess.CallCaptureChanged;
+begin
+  CaptureChanged;
+end;
+
+function TBarAccess.StripPressed: Integer;
+begin
+  Result := FStripPressed;
+end;
+
+function TBarAccess.TickNow: QWord;
+begin
+  if FakeClock then Result := Clock else Result := inherited TickNow;
+end;
+
+procedure TBarAccess.StartLclAutoDrag;
+begin
+  Inc(AutoDragStarts);
+end;
+
+procedure TBarAccess.SetCursor(Value: TCursor);
+begin
+  Inc(CursorWrites);
+  inherited SetCursor(Value);
+end;
+
+procedure TBarAccess.Invalidate;
+begin
+  Inc(Invalidates);
+  inherited Invalidate;
 end;
 
 function TBarAccess.PointerInClient(out APoint: TPoint): Boolean;

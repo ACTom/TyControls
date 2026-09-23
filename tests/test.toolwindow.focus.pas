@@ -13,7 +13,7 @@ unit test.toolwindow.focus;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, fpcunit, testregistry,
+  Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
   tyControls.Controller, tyControls.Edit, tyControls.ToolWindows;
 
 type
@@ -34,6 +34,8 @@ type
     procedure TrapException(Sender: TObject; E: Exception);
     procedure AssertNothingRaised(const AWhere: string);
     function NewEditIn(AParent: TWinControl; ATop: Integer): TTyEdit;
+    { 按住第一个图标拖过阈值,捕获是真的抓着的。 }
+    procedure StartCapturedDrag;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -42,6 +44,10 @@ type
     procedure TestSwitchingMovesFocusOnlyIfItWasInside;
     procedure TestExternalVisibleTrueActivatesThroughTheBar;
     procedure TestHidingTheActivePageByVisibleMovesFocusOutToo;
+    { 拖动期间的捕获计时器(spec §9.2 / §9.7)与真实的指针查询,都要真句柄。 }
+    procedure TestTheCaptureTimerCancelsWhenCaptureIsLost;
+    procedure TestASecondPressFreesTheCaptureTimer;
+    procedure TestPointerInClientAnswersWithAHandle;
   end;
 
 implementation
@@ -173,6 +179,80 @@ begin
     (FForm.ActiveControl <> FForm));
   AssertFalse('焦点不留在藏起来的窗口里', FWin.ContainsControl(FForm.ActiveControl));
   AssertSame('同一条收起的路:交给栏后面的那一个', FOutside, FForm.ActiveControl);
+end;
+
+{ --- 捕获计时器、真实指针 --------------------------------------------------------- }
+
+type
+  { 受保护的鼠标入口开出来(本单元的栏是 TTyToolWindowBar 本身,没有探针子类)。 }
+  TBarCrack = class(TTyToolWindowBar);
+
+procedure TTyToolWindowFocusTests.StartCapturedDrag;
+var
+  p: TPoint;
+  t0: QWord;
+begin
+  { 先把窗体显示出来之后排着的激活 / 失活消息抽干:否则下面等计时器时,抽到的是 Application
+    的失活(它也取消拖动),分不出是哪条路取消的。 }
+  t0 := GetTickCount64;
+  while GetTickCount64 - t0 < 300 do
+  begin
+    Application.ProcessMessages;
+    Sleep(10);
+  end;
+  p := FBar.StripItemRect(0).CenterPoint;
+  { 真实的按下由 WMLButtonDown 抓捕获;这里直接调 MouseDown,捕获自己抓。 }
+  TBarCrack(FBar).MouseCapture := True;
+  TBarCrack(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBarCrack(FBar).MouseMove([ssLeft], p.X, p.Y + 60);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  AssertTrue('前提:捕获确认过,计时器在', FBar.HasCaptureTimerForTest);
+end;
+
+procedure TTyToolWindowFocusTests.TestTheCaptureTimerCancelsWhenCaptureIsLost;
+var
+  t0: QWord;
+begin
+  StartCapturedDrag;
+  { 弹出菜单直接 ReleaseCapture 抢走捕获 —— 只有轮询抓得到。 }
+  TBarCrack(FBar).MouseCapture := False;
+  AssertTrue('放掉捕获这一下本身不取消(CaptureChanged 从不取消)', FBar.IsDraggingForTest);
+  t0 := GetTickCount64;
+  while FBar.IsDraggingForTest and (GetTickCount64 - t0 < 3000) do
+  begin
+    Application.ProcessMessages;
+    Sleep(10);
+  end;
+  AssertNothingRaised('捕获计时器');
+  AssertEquals('计时器发现捕获丢了:取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  AssertFalse('计时器在自己的 OnTimer 里放掉了', FBar.HasCaptureTimerForTest);
+end;
+
+procedure TTyToolWindowFocusTests.TestASecondPressFreesTheCaptureTimer;
+var
+  before: TCursor;
+  p: TPoint;
+begin
+  before := Screen.RealCursor;
+  StartCapturedDrag;
+  p := FBar.StripItemRect(1).CenterPoint;
+  TBarCrack(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  AssertFalse('松开丢了,下一次按下:计时器放掉', FBar.HasCaptureTimerForTest);
+  AssertEquals('临时光标弹回', Ord(before), Ord(Screen.RealCursor));
+  AssertEquals('新记录武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  TBarCrack(FBar).MouseUp(mbLeft, [], p.X, p.Y);
+  TBarCrack(FBar).MouseCapture := False;
+end;
+
+procedure TTyToolWindowFocusTests.TestPointerInClientAnswersWithAHandle;
+var
+  p, q: TPoint;
+begin
+  AssertTrue('前提:有句柄', FBar.HandleAllocated);
+  AssertTrue('有句柄:真实实现答 True', TBarCrack(FBar).PointerInClient(p));
+  q := FBar.ScreenToClient(Mouse.CursorPos);
+  { 真实指针可能在两次读之间动一下;只要求落在同一个量级上(同一套坐标系)。 }
+  AssertTrue('答的是本控件客户区坐标', (Abs(p.X - q.X) < 200) and (Abs(p.Y - q.Y) < 200));
 end;
 
 initialization

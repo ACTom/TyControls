@@ -16,6 +16,11 @@ uses
 
 type
   TTyToolWindowReorderTests = class(TTyToolWindowBarFixture)
+  private
+    procedure RaiseInMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
+    { 在第 AIndex 格图标上按下、往下拖过阈值。 }
+    procedure StartDrag(AIndex: Integer);
   published
     procedure TestDragReordersOnReleaseNotLive;
     procedure TestSidewaysDragStarts;
@@ -27,6 +32,15 @@ type
     procedure TestADropOffTheStripIsACancel;
     procedure TestFreeingTheDraggedWindowEndsTheGesture;
     procedure TestWindowIndexReordersAndTheActivePageFollows;
+    { 退出路径(spec §9.7):每一条都把临时光标栈、处理器、计时器、插入线收干净。 }
+    procedure TestASecondPressWhileDraggingUnwindsEverything;
+    procedure TestReleasingTheButtonAfterACancelResumesHover;
+    procedure TestFreeingTheBarMidDragUnwindsTheCursorStack;
+    procedure TestApplicationDeactivationCancelsTheDrag;
+    procedure TestAnotherFormBecomingActiveCancelsTheDrag;
+    procedure TestAPlacementChangeCancelsTheDragAndTheResize;
+    procedure TestDisablingOrHidingTheBarEndsTheGestures;
+    procedure TestAnExceptionInOnMouseUpLeavesNoGestureBehind;
   end;
 
 implementation
@@ -316,6 +330,200 @@ begin
   AssertEquals('不在栏里是 -1', -1, orphan.WindowIndex);
   orphan.WindowIndex := 1;
   AssertEquals('不在栏里写了也没用', -1, orphan.WindowIndex);
+end;
+
+{ --- 退出路径 ------------------------------------------------------------------ }
+
+type
+  EOnMouseUpBoom = class(Exception);
+
+procedure TTyToolWindowReorderTests.RaiseInMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  raise EOnMouseUpBoom.Create('boom');
+end;
+
+procedure TTyToolWindowReorderTests.StartDrag(AIndex: Integer);
+var
+  p: TPoint;
+begin
+  p := FBar.StripItemRect(AIndex).CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  FBar.CallMouseMove(p.X, p.Y + 60);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  AssertEquals('前提:拖动光标压上了', Ord(crDrag), Ord(Screen.RealCursor));
+end;
+
+procedure TTyToolWindowReorderTests.TestASecondPressWhileDraggingUnwindsEverything;
+var
+  a, b: TProbeWindow;
+  before: TCursor;
+  p: TPoint;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  NewWindow;
+  FBar.ActiveWindow := a;
+  before := Screen.RealCursor;
+  StartDrag(0);
+  { 松开丢了:下一次按下直接落在 b 的图标上。 }
+  p := FBar.StripItemRect(1).CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  AssertEquals('临时光标弹回原样', Ord(before), Ord(Screen.RealCursor));
+  AssertEquals('新的按下是一条新记录:武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  AssertEquals('插入线清掉', -1, FBar.DropSlotForTest);
+  AssertFalse('没有计时器', FBar.HasCaptureTimerForTest);
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertSame('这次松开照常是点击', b, FBar.ActiveWindow);
+  AssertSame('顺序没动', a, FBar.Windows[0]);
+end;
+
+procedure TTyToolWindowReorderTests.TestReleasingTheButtonAfterACancelResumesHover;
+var
+  q: TPoint;
+begin
+  NewWindow;
+  NewWindow;
+  StartDrag(0);
+  FBar.Perform(LM_CANCELMODE, 0, 0);
+  AssertEquals('前提:Cancelled', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  q := FBar.StripItemRect(1).CenterPoint;
+  FBar.CallMouseMove(q.X, q.Y);
+  AssertEquals('还按着:仍是 Cancelled', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  AssertEquals('还按着:不追悬停', -1, FBar.StripHover);
+  FBar.CallMouseMove(q.X, q.Y, []);
+  AssertEquals('按键松了(松开丢了):回到 Idle', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  AssertEquals('悬停追踪接着来', 1, FBar.StripHover);
+end;
+
+procedure TTyToolWindowReorderTests.TestFreeingTheBarMidDragUnwindsTheCursorStack;
+var
+  before: TCursor;
+begin
+  NewWindow;
+  NewWindow;
+  before := Screen.RealCursor;
+  StartDrag(0);
+  FBar.Free;
+  FBar := nil;
+  AssertEquals('栏走了,临时光标也弹掉了', Ord(before), Ord(Screen.RealCursor));
+  { Application 的处理器也摘干净了:失活时不会调进一个已经释放的栏。 }
+  Application.IntfAppActivate;
+  Application.IntfAppDeactivate;
+end;
+
+procedure TTyToolWindowReorderTests.TestApplicationDeactivationCancelsTheDrag;
+var
+  before: TCursor;
+begin
+  NewWindow;
+  NewWindow;
+  before := Screen.RealCursor;
+  StartDrag(0);
+  Application.IntfAppActivate;
+  Application.IntfAppDeactivate;
+  AssertEquals('失活:取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  AssertEquals('光标弹回', Ord(before), Ord(Screen.RealCursor));
+end;
+
+procedure TTyToolWindowReorderTests.TestAnotherFormBecomingActiveCancelsTheDrag;
+var
+  other: TForm;
+  before: TCursor;
+begin
+  NewWindow;
+  NewWindow;
+  before := Screen.RealCursor;
+  other := TForm.CreateNew(nil);
+  try
+    StartDrag(0);
+    { SetFocusedControl 是 LCL 通知「活动窗体换了」的那条真实路径(Screen.UpdateLastActive)。 }
+    other.SetFocusedControl(other);
+    AssertEquals('别的窗体成了活动窗体:取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+    AssertEquals('光标弹回', Ord(before), Ord(Screen.RealCursor));
+  finally
+    other.Free;
+  end;
+end;
+
+procedure TTyToolWindowReorderTests.TestAPlacementChangeCancelsTheDragAndTheResize;
+var
+  e: TPoint;
+begin
+  NewWindow;
+  NewWindow;
+  StartDrag(0);
+  FBar.Placement := twpRight;
+  AssertFalse('改 Placement:拖动取消', FBar.IsDraggingForTest);
+  FBar.Placement := twpLeft;
+  FBar.ExpandedSize := 200;
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X + 40, e.Y);
+  AssertEquals('前提:拉宽实时写', 240, FBar.ExpandedSize);
+  FBar.Placement := twpRight;
+  AssertFalse('改 Placement:拉宽结束', FBar.IsEdgeDraggingForTest);
+  AssertEquals('并回到起点', 200, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowReorderTests.TestDisablingOrHidingTheBarEndsTheGestures;
+var
+  before: TCursor;
+  e: TPoint;
+begin
+  NewWindow;
+  NewWindow;
+  before := Screen.RealCursor;
+  StartDrag(0);
+  FBar.Enabled := False;
+  AssertFalse('禁用:拖动结束', FBar.IsDraggingForTest);
+  AssertEquals('光标弹回', Ord(before), Ord(Screen.RealCursor));
+  FBar.Enabled := True;
+  StartDrag(0);
+  FBar.Visible := False;
+  AssertFalse('藏起来:拖动结束', FBar.IsDraggingForTest);
+  AssertEquals('光标弹回', Ord(before), Ord(Screen.RealCursor));
+  FBar.Visible := True;
+  FBar.ExpandedSize := 200;
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X + 40, e.Y);
+  FBar.Enabled := False;
+  AssertFalse('禁用:拉宽结束', FBar.IsEdgeDraggingForTest);
+  AssertEquals('并回到起点', 200, FBar.ExpandedSize);
+  FBar.Enabled := True;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X + 40, e.Y);
+  FBar.Visible := False;
+  AssertFalse('藏起来:拉宽结束', FBar.IsEdgeDraggingForTest);
+  AssertEquals('并回到起点', 200, FBar.ExpandedSize);
+end;
+
+procedure TTyToolWindowReorderTests.TestAnExceptionInOnMouseUpLeavesNoGestureBehind;
+var
+  a: TProbeWindow;
+  before: TCursor;
+  p: TPoint;
+  raised: Boolean;
+begin
+  a := NewWindow;
+  NewWindow;
+  NewWindow;
+  before := Screen.RealCursor;
+  FBar.OnMouseUp := @RaiseInMouseUp;
+  StartDrag(0);
+  p := FBar.StripItemRect(0).CenterPoint;
+  raised := False;
+  try
+    FBar.CallMouseUp(p.X, p.Y + 60);
+  except
+    on EOnMouseUpBoom do raised := True;
+  end;
+  AssertTrue('前提:用户的 OnMouseUp 抛了', raised);
+  AssertFalse('拖动不许留着', FBar.IsDraggingForTest);
+  AssertEquals('光标弹回', Ord(before), Ord(Screen.RealCursor));
+  AssertEquals('插入线清掉', -1, FBar.DropSlotForTest);
+  AssertSame('也没提交', a, FBar.Windows[0]);
 end;
 
 initialization
