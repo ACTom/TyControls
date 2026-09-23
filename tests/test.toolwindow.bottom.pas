@@ -123,6 +123,17 @@ type
     procedure TestTheRowsBlankShowsNoHint;
     procedure TestARightClickOnATabGoesToTheBarInBarCoordinates;
     procedure TestARightClickOnTheRowsBlankIsSwallowed;
+    { Task 9:标签拖动调顺序(spec §9.1 / §9.2 / §9.4 / §9.8)。 }
+    procedure TestDraggingOutOfTheRowShowsNoDropAndCancels;
+    procedure TestDraggingToTheEndReordersOnRelease;
+    procedure TestItsOwnGapsAreANoOpWithoutALine;
+    procedure TestAForcedActiveTabMapsGapsToWindowIndexes;
+    procedure TestTheDropSlotReadsTheMirroredRowInReadingOrder;
+    procedure TestTheInsertLinePaintsInTheActivePage;
+    procedure TestEscCancelsATabDrag;
+    procedure TestCancelModeOnTheActivePageCancelsATabDrag;
+    procedure TestADropSlotChangeRepaintsTheActivePage;
+    procedure TestFreeingTheActivePageMidDragEndsTheGesture;
   private
     FBarPopups, FWinPopups: Integer;
     FBarPopupPos: TPoint;
@@ -1507,6 +1518,280 @@ begin
   AssertTrue('空白处的右键吞掉', handled);
   AssertEquals('栏的不触发', 0, FBarPopups);
   AssertEquals('窗口的也不触发', 0, FWinPopups);
+end;
+
+{ --- Task 9 --------------------------------------------------------------------- }
+
+const
+  { 插入线钉成橙色(CSS #FF8000)。 }
+  DropTheme = ' :root { --toolwindow-drop-color: #FF8000; }';
+  DropInk = TColor($0080FF);
+
+procedure TTyToolWindowBottomInputTests.TestDraggingOutOfTheRowShowsNoDropAndCancels;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(0);
+  w.CallMouseDown(c.X, c.Y);
+  { 竖着移出标签行:阈值两个轴取大的。 }
+  w.CallMouseMove(c.X, c.Y + 60, [ssLeft]);
+  AssertTrue('竖着移过阈值:进入拖动', FBar.IsDraggingForTest);
+  AssertEquals('标签行外没有目标', -1, FBar.DropSlotForTest);
+  AssertEquals('禁止光标', Ord(crNoDrop), Ord(Screen.RealCursor));
+  w.CallMouseUp(c.X, c.Y + 60);
+  AssertSame('松开:顺序不变', FWins[0], FBar.Windows[0]);
+  AssertSame('也不切页', w, FBar.ActiveWindow);
+  AssertEquals('收尾', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+end;
+
+procedure TTyToolWindowBottomInputTests.TestDraggingToTheEndReordersOnRelease;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c, e: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.OnChange := @HandleChange;
+  ResetCounts;
+  g := ActiveGeom;
+  c := TabCentre(0);
+  e := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(e.X, e.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  AssertEquals('落点是最后一个之后', 3, FBar.DropSlotForTest);
+  AssertSame('拖动过程中顺序不实时变', FWins[0], FBar.Windows[0]);
+  w.CallMouseUp(e.X, e.Y);
+  AssertSame('松开:它变成最后一个', FWins[0], FBar.Windows[2]);
+  AssertSame('当前页不变', w, FBar.ActiveWindow);
+  AssertEquals('不发 OnChange', 0, FChanges);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestItsOwnGapsAreANoOpWithoutALine;
+var
+  w: TProbeWindow;
+  r: TRect;
+  c: TPoint;
+  bmp: TBitmap;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme + DropTheme;
+  w := FWins[1];
+  r := TabRectOf(ActiveGeom, 1);
+  c := r.CenterPoint;
+  w.CallMouseDown(c.X, c.Y);
+  { 在自己的右半边拖过阈值:落点是自己后面那个空隙。 }
+  w.CallMouseMove(r.Right - 2, c.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  AssertEquals('前提:落点是自己后面的空隙', 2, FBar.DropSlotForTest);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('空操作不画线', 0, ExactIn(bmp, Rect(0, 0, w.ClientWidth, 26), DropInk));
+  finally
+    bmp.Free;
+  end;
+  w.CallMouseUp(r.Right - 2, c.Y);
+  AssertSame('顺序不变', w, FBar.Windows[1]);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestAForcedActiveTabMapsGapsToWindowIndexes;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  r: TRect;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal', 'Debug'], 3);
+  FBar.Width := 250;
+  Relayout;
+  w := FWins[3];
+  g := ActiveGeom;
+  AssertEquals('前提:只排上两个', 2, Length(g.Tabs));
+  AssertEquals('前提:当前页被强制留在第二格(不是前缀)', 3, g.Tabs[1].ItemIndex);
+  r := g.Tabs[1].ItemRect;
+  c := r.CenterPoint;
+  { 拖到它自己右边的空隙:按窗口序号是 4 = 自己 + 1,空操作。 }
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(r.Right - 2, c.Y, [ssLeft]);
+  AssertEquals('右边的空隙是窗口序号 4', 4, FBar.DropSlotForTest);
+  w.CallMouseUp(r.Right - 2, c.Y);
+  AssertSame('空操作:顺序不变', w, FBar.Windows[3]);
+  { 拖到第一格左边:窗口序号 0。 }
+  c := TabCentre(3);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(g.Tabs[0].ItemRect.Left + 2, c.Y, [ssLeft]);
+  AssertEquals('第一格左边是窗口序号 0', 0, FBar.DropSlotForTest);
+  w.CallMouseUp(g.Tabs[0].ItemRect.Left + 2, c.Y);
+  AssertSame('它挪到最前面', w, FBar.Windows[0]);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheDropSlotReadsTheMirroredRowInReadingOrder;
+var
+  w: TProbeWindow;
+  r: TRect;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FBar.BiDiMode := bdRightToLeft;
+  w := FWins[1];
+  AssertTrue('前提:从右往左读', w.IsRightToLeft);
+  r := TabRectOf(ActiveGeom, 0);
+  AssertTrue('前提:窗口 0 的标签在物理最右边', r.Right > TabRectOf(ActiveGeom, 2).Right);
+  c := TabCentre(2);
+  w.CallMouseDown(c.X, c.Y);
+  { 物理上最右那个标签的右半边 = 阅读顺序上它的前半边。 }
+  w.CallMouseMove(r.Right - 3, c.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  AssertEquals('落点是窗口 0 前面(槽位 0)', 0, FBar.DropSlotForTest);
+  w.CallMouseUp(r.Right - 3, c.Y);
+  AssertSame('松开:窗口 2 挪到最前', FWins[2], FBar.Windows[0]);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheInsertLinePaintsInTheActivePage;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+  x: Integer;
+  bmp: TBitmap;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme + DropTheme;
+  w := FWins[1];
+  g := ActiveGeom;
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertEquals('没拖动时没有插入线', 0, ExactIn(bmp, Rect(0, 0, w.ClientWidth, 26), DropInk));
+  finally
+    bmp.Free;
+  end;
+  c := TabCentre(0);
+  x := g.Tabs[High(g.Tabs)].ItemRect.Right;
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(x + 5, c.Y, [ssLeft]);
+  AssertEquals('前提:落点是最后一个之后', 3, FBar.DropSlotForTest);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertTrue('插入线画在当前页里、最后一个标签的右沿',
+      ExactIn(bmp, Rect(x - 2, 0, x + 2, 26), DropInk) > 0);
+    AssertEquals('别处没有', ExactIn(bmp, Rect(0, 0, w.ClientWidth, 26), DropInk),
+      ExactIn(bmp, Rect(x - 2, 0, x + 2, 26), DropInk));
+  finally
+    bmp.Free;
+  end;
+  w.CallMouseUp(c.X, c.Y + 60);
+  { RTL:同一个落点画在镜像后的位置 —— 最后一个标签的左沿。 }
+  FBar.BiDiMode := bdRightToLeft;
+  g := ActiveGeom;
+  c := TabCentre(0);
+  x := g.Tabs[High(g.Tabs)].ItemRect.Left;
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(x - 5, c.Y, [ssLeft]);
+  AssertEquals('前提:RTL 下落点也是最后一个之后', 3, FBar.DropSlotForTest);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertTrue('RTL:插入线在镜像后的位置', ExactIn(bmp, Rect(x - 2, 0, x + 2, 26), DropInk) > 0);
+  finally
+    bmp.Free;
+  end;
+  w.CallMouseUp(c.X, c.Y + 60);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestEscCancelsATabDrag;
+var
+  w: TProbeWindow;
+  other: TBodyChild;
+  g: TTyToolWindowHeaderGeom;
+  c, e: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  other := TBodyChild.Create(FForm);
+  other.Parent := FForm;
+  g := ActiveGeom;
+  c := TabCentre(0);
+  e := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(e.X, e.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  { 捕获者换成了当前页,Esc 照样经 Application 的 KeyDownBefore 到引擎。 }
+  other.Perform(CN_KEYDOWN, VK_ESCAPE, 0);
+  AssertEquals('Esc 取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  w.CallMouseUp(e.X, e.Y);
+  AssertSame('之后的松开不提交', FWins[0], FBar.Windows[0]);
+  AssertSame('也不是点击', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestCancelModeOnTheActivePageCancelsATabDrag;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c, e: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  g := ActiveGeom;
+  c := TabCentre(0);
+  e := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(e.X, e.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  w.Perform(LM_CANCELMODE, 0, 0);
+  AssertEquals('当前页收到 LM_CANCELMODE:取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  w.CallMouseUp(e.X, e.Y);
+  AssertSame('顺序不变', FWins[0], FBar.Windows[0]);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestADropSlotChangeRepaintsTheActivePage;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  g := ActiveGeom;
+  c := TabCentre(0);
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y, [ssLeft]);
+  AssertEquals('前提:落点 3', 3, FBar.DropSlotForTest);
+  ArmActive(w);
+  w.CallMouseMove(TabRectOf(g, 2).Left + 2, c.Y, [ssLeft]);
+  AssertEquals('前提:落点换成 2', 2, FBar.DropSlotForTest);
+  AssertTrue('插入线挪了:当前页丢缓存', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+  w.CallMouseUp(c.X, c.Y + 60);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestFreeingTheActivePageMidDragEndsTheGesture;
+var
+  w, next: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  g := ActiveGeom;
+  c := TabCentre(0);
+  { 拖的是标签 0,捕获者是当前页(窗口 1):手势窗口和捕获者是两个窗口。 }
+  w.CallMouseDown(c.X, c.Y);
+  w.CallMouseMove(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, c.Y, [ssLeft]);
+  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  FWins[1].Free;
+  FWins[1] := nil;
+  { 不比已释放的指针(地雷 14):看手势状态。 }
+  AssertEquals('捕获者走了:手势作废', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  AssertEquals('反馈清掉', -1, FBar.DropSlotForTest);
+  next := TProbeWindow(FBar.ActiveWindow);
+  AssertNotNull('前提:回落到别的页', next);
+  Relayout;
+  { 下一次按下是一条新记录,不碰那个走掉的捕获者。 }
+  c := TabCentre(0);
+  next.CallMouseDown(c.X, c.Y);
+  next.CallMouseUp(c.X, c.Y);
 end;
 
 initialization

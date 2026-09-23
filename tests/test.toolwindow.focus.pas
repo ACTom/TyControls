@@ -67,6 +67,8 @@ type
     procedure TestAMaximizedBottomBarFollowsTheForm;
     { spec §5.3 / §14:底栏收起,焦点从当前页里搬出来(侧栏、底栏各测一次)。 }
     procedure TestCollapsingTheBottomBarMovesFocusOut;
+    { spec §9.7:标签拖动的捕获在当前页上,计时器轮询的是它。 }
+    procedure TestATabDragPollsTheCaptureOfTheActivePage;
   end;
 
 implementation
@@ -429,6 +431,35 @@ begin
     (FForm.ActiveControl <> FForm));
   AssertFalse('焦点不留在藏起来的页里', w.ContainsControl(FForm.ActiveControl));
   AssertSame('交给 Tab 顺序里底栏后面的那一个', after, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowFocusTests.TestATabDragPollsTheCaptureOfTheActivePage;
+var
+  b: TTyToolWindowBar;
+  first, w: TProbeWindow;
+  c: TPoint;
+  t0: QWord;
+begin
+  b := NewBottomBar(first, w);
+  c := BottomTabCentre(w, 0);
+  { 真按下:WMLButtonDown 把捕获给当前页(csCaptureMouse)。 }
+  w.SimulatePress(c.X, c.Y);
+  AssertSame('前提:捕获在当前页上', w, GetCaptureControl);
+  w.Perform(LM_MOUSEMOVE, MK_LBUTTON, PtrInt(((c.Y + 60) shl 16) or (c.X and $FFFF)));
+  AssertNothingRaised('拖过阈值');
+  AssertTrue('前提:拖起来了', b.IsDraggingForTest);
+  AssertTrue('捕获确认过(捕获者是当前页):计时器建起来了', b.HasCaptureTimerForTest);
+  { 弹出菜单直接抢走捕获 —— 只有轮询抓得到。 }
+  SetCaptureControl(FOutside);
+  t0 := GetTickCount64;
+  while b.IsDraggingForTest and (GetTickCount64 - t0 < 3000) do
+  begin
+    Application.ProcessMessages;
+    Sleep(10);
+  end;
+  AssertNothingRaised('捕获计时器');
+  AssertEquals('计时器发现捕获丢了:取消', Ord(twgsCancelled), Ord(b.GestureStateForTest));
+  SetCaptureControl(nil);
 end;
 
 initialization
