@@ -1099,7 +1099,12 @@ begin
     TTyToolWindowBar(old).UnregisterWindow(Self);
   { 注册本身推 Controller;流式加载、设计器放下、代码里 Parent := 都走这一条。 }
   if NewParent is TTyToolWindowBar then
-    TTyToolWindowBar(NewParent).RegisterWindow(Self);
+    TTyToolWindowBar(NewParent).RegisterWindow(Self)
+  else if [csDesigning, csDestroying] * ComponentState = [] then
+    { 运行时的孤儿(父控件不是栏)保持隐藏(spec §3.2):没有栏替它守「一次只显示一页」,
+      带着 Visible = True 挪出来的当前页会原样杵在新父控件上。设计期那一半(显示 + 提示)
+      归 D 期。 }
+    Visible := False;
   { 标题行模式跟着父控件变(侧栏 / 底栏 / 孤儿),内缩量变了就得重排。 }
   if not (csDestroying in ComponentState) then
     RelayoutHeader;

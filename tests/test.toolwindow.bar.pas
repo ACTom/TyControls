@@ -1109,21 +1109,28 @@ end;
 procedure TTyToolWindowBarTests.TestAReparentedActiveWindowFallsBackWithoutBeingHidden;
 var
   a, b, c: TProbeWindow;
+  other: TBarAccess;
 begin
   a := NewWindow;
   b := NewWindow;
   c := NewWindow;
+  other := TBarAccess.Create(FForm);
+  other.Parent := FForm;
+  other.Controller := FCtl;
   FBar.ActivateWindow(b);
   FBar.OnChange := @HandleChange;
   ResetCounts;
-  b.Parent := FForm;
+  b.Parent := other;
   AssertSame('改 Parent 离开 → 下一个接班', c, FBar.ActiveWindow);
   AssertEquals('窗口数少一个', 2, FBar.WindowCount);
   AssertEquals('当前页离开本栏发 OnChange', 1, FChanges);
-  { 先置 nil 再回落:回落的切换不去碰已经离开的窗口。 }
-  AssertTrue('离开的窗口不被栏藏起来', b.Visible);
+  { 先置 nil 再回落:回落的切换不去碰已经离开的窗口 —— 挪到另一条栏的照常显示(spec §5.2)。 }
+  AssertSame('在新栏里成了当前页', b, other.ActiveWindow);
+  AssertTrue('挪到另一条栏:不被藏起来', b.Visible);
+  { 运行时挪到不是栏的控件上:孤儿保持隐藏(spec §3.2)。 }
   c.Parent := FForm;
   AssertSame('没有下一个就上一个', a, FBar.ActiveWindow);
+  AssertFalse('挪到非栏控件上:藏起来', c.Visible);
 end;
 
 procedure TTyToolWindowBarTests.TestTheFirstWindowLeavingHandsOverToTheSecond;
