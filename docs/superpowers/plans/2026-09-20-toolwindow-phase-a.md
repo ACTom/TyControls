@@ -2348,6 +2348,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+> **Task 5 落地后对本节的两点影响**：
+> - `tests/test.toolwindow.bar.pas` 里 `TestAVisibleStrayIsHiddenByTheNextSwitch` 靠直接写 `a.Visible := True` 造出「多出一页显示着」。本节把外部 `Visible` 路由到栏之后，这样写会变成「激活 a」，那条测试要换一种造法（例如在栏的静默批次里直接写，或用探针绕过路由）——**换完仍要保证它守的是「切页时藏掉其余每一个窗口」**，变异「只藏 AOld」必须还能让它红。
+> - 栏上已有 `BeginSilent` / `EndSilent`（批次静默，try/finally），本节的 `SetVisible` 路由在批次内要尊重它。
+
 ### Task 10: 可见性与焦点（`SetVisible` 收口、收起时焦点搬家）
 
 **Files:**
