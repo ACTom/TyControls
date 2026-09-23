@@ -13,8 +13,9 @@ unit test.toolwindow.focus;
 interface
 
 uses
-  Classes, SysUtils, Types, LCLType, Controls, Forms, fpcunit, testregistry,
-  tyControls.Controller, tyControls.Edit, tyControls.Button, tyControls.ToolWindows;
+  Classes, SysUtils, Types, LCLType, LMessages, Controls, Forms, fpcunit, testregistry,
+  tyControls.Controller, tyControls.Edit, tyControls.Button, tyControls.ToolWindows,
+  tyControls.ToolWindows.Layout, test.toolwindow.window;
 
 type
   TTyToolWindowFocusTests = class(TTestCase)
@@ -39,6 +40,11 @@ type
     procedure StartCapturedDrag;
     { 抽 200 ms 消息:窗体的 OnResize 处理器是排队发的。 }
     procedure Pump;
+    { 窗体上再放一条底栏,两个探针窗口(Problems、Output),当前页是后一个;抽过消息,
+      对齐引擎真的摆过。 }
+    function NewBottomBar(out AFirst, AActive: TProbeWindow): TTyToolWindowBar;
+    { 当前页上窗口 AIndex 的标签中心(当前页客户区坐标)。 }
+    function BottomTabCentre(AActive: TProbeWindow; AIndex: Integer): TPoint;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -54,6 +60,8 @@ type
     { spec §6.2:窗体缩窄后跟着收窄、放宽后回来,ExpandedSize 不变。窗体的 OnResize 处理器
       是 QueueAsyncCall 推迟发的,而无头时 AutoSizeDelayed 连 Resize 都不走 —— 要真句柄。 }
     procedure TestNarrowingFollowsTheFormAndNeverWritesBack;
+    { 底栏标签行(spec §3.6):真实的按下消息走 WndProc → WMLButtonDown(抓捕获要句柄)。 }
+    procedure TestTheBottomTabRowNeverStartsAnLclDrag;
   end;
 
 implementation
@@ -298,6 +306,68 @@ begin
   FForm.Width := 1400;
   Pump;
   AssertEquals('窗体放宽:回到展开尺寸', wide, FBar.Width);
+end;
+
+function TTyToolWindowFocusTests.NewBottomBar(out AFirst, AActive: TProbeWindow): TTyToolWindowBar;
+begin
+  Result := TTyToolWindowBar.Create(FForm);
+  { 先设 Placement 再加窗口:运行时有窗口时侧 ↔ 底被忽略。 }
+  Result.Placement := twpBottom;
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.ExpandedSize := 220;
+  AFirst := TProbeWindow.Create(FForm);
+  AFirst.Caption := 'Problems';
+  AFirst.Parent := Result;
+  AActive := TProbeWindow.Create(FForm);
+  AActive.Caption := 'Output';
+  AActive.Parent := Result;
+  Pump;
+  AssertSame('前提:后加的是当前页', AActive, Result.ActiveWindow);
+  AssertTrue('前提:当前页有句柄', AActive.HandleAllocated);
+end;
+
+function TTyToolWindowFocusTests.BottomTabCentre(AActive: TProbeWindow; AIndex: Integer): TPoint;
+var
+  g: TTyToolWindowHeaderGeom;
+  i: Integer;
+begin
+  g := AActive.HeaderGeomAt(Rect(0, 0, AActive.ClientWidth, AActive.ClientHeight),
+    AActive.Font.PixelsPerInch);
+  for i := 0 to High(g.Tabs) do
+    if g.Tabs[i].ItemIndex = AIndex then Exit(g.Tabs[i].ItemRect.CenterPoint);
+  Fail(Format('窗口 %d 的标签没排上', [AIndex]));
+  Result := Point(-1, -1);
+end;
+
+procedure TTyToolWindowFocusTests.TestTheBottomTabRowNeverStartsAnLclDrag;
+var
+  first, w: TProbeWindow;
+  c, body: TPoint;
+
+  function Coords(const P: TPoint): PtrInt;
+  begin
+    Result := PtrInt((P.Y shl 16) or (P.X and $FFFF));
+  end;
+
+begin
+  NewBottomBar(first, w);
+  w.DragMode := dmAutomatic;
+  c := BottomTabCentre(w, 1);
+  body := Point(100, w.BodyRect.Top + 40);
+  AssertTrue('前提:正文那一点在窗口里', body.Y < w.ClientHeight);
+  { 指针在正文里:只问指针的话,按在标签行也会起拖。 }
+  w.FakePointer := True;
+  w.FakePoint := body;
+  { 真实的按下消息:LCL 在 WndProc 里、MouseDown 之前调 BeginAutoDrag(control.inc:2284)。 }
+  w.SimulatePress(c.X, c.Y);
+  w.Perform(LM_LBUTTONUP, 0, Coords(c));
+  AssertNothingRaised('标签行上的按下');
+  AssertEquals('标签行上按下不起 LCL 拖动', 0, w.AutoDragStarts);
+  w.SimulatePress(body.X, body.Y);
+  w.Perform(LM_LBUTTONUP, 0, Coords(body));
+  AssertNothingRaised('正文里的按下');
+  AssertEquals('正文里照常起', 1, w.AutoDragStarts);
 end;
 
 initialization

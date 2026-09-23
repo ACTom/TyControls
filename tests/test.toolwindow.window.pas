@@ -7,7 +7,8 @@ unit test.toolwindow.window;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LMessages,
+  fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
   tyControls.ToolWindows.Layout;
@@ -39,6 +40,30 @@ type
     procedure CallAlignControls;
     { RenderTo 是 protected 的(画自己不是给外面用的接口)。 }
     procedure CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  public
+    { LCL 自动拖动那一道闸放行了几次(StartLclAutoDrag 被调几次;不真的起拖)。 }
+    AutoDragStarts: Integer;
+    { 指针位置:无头没有句柄,PointerInClient 恒答 False。设了 FakePointer 就答 FakePoint。 }
+    FakePointer: Boolean;
+    FakePoint: TPoint;
+    { 底栏标签行的输入(protected 的真实入口,只转发,不另算)。 }
+    procedure CallMouseDown(X, Y: Integer; AShift: TShiftState = [ssLeft];
+      AButton: TMouseButton = mbLeft);
+    procedure CallMouseMove(X, Y: Integer; AShift: TShiftState = []);
+    procedure CallMouseUp(X, Y: Integer; AButton: TMouseButton = mbLeft);
+    procedure CallMouseLeave;
+    procedure CallClick;
+    procedure CallDblClick;
+    procedure CallDoContextPopup(const APos: TPoint; var AHandled: Boolean);
+    function CallDoMouseWheel(const APos: TPoint): Boolean;
+    procedure CallBeginAutoDrag;
+    function CallInTabRowRegion(X, Y: Integer): Boolean;
+    { 真实的按下消息:Perform(LM_LBUTTONDOWN) 走 WndProc → LCL 的 WMLButtonDown → MouseDown
+      整条路,「这一次按在哪」由真实代码记下。用它的测试别再另调 CallMouseDown。 }
+    procedure SimulatePress(X, Y: Integer);
+  protected
+    procedure StartLclAutoDrag; override;
+    function PointerInClient(out APoint: TPoint): Boolean; override;
   end;
 
   { 一个最普通的 alClient 子控件。别拿 TTyToolWindowActions 充数:Task 4 要让它变成
@@ -160,6 +185,76 @@ begin
     「子控件在标题行下面」这句断言下看起来只是数值大了一点。 }
   r := ClientRect;
   AlignControls(nil, r);
+end;
+
+procedure TProbeWindow.CallMouseDown(X, Y: Integer; AShift: TShiftState; AButton: TMouseButton);
+begin
+  MouseDown(AButton, AShift, X, Y);
+end;
+
+procedure TProbeWindow.CallMouseMove(X, Y: Integer; AShift: TShiftState);
+begin
+  MouseMove(AShift, X, Y);
+end;
+
+procedure TProbeWindow.CallMouseUp(X, Y: Integer; AButton: TMouseButton);
+begin
+  MouseUp(AButton, [], X, Y);
+end;
+
+procedure TProbeWindow.CallMouseLeave;
+begin
+  MouseLeave;
+end;
+
+procedure TProbeWindow.CallClick;
+begin
+  Click;
+end;
+
+procedure TProbeWindow.CallDblClick;
+begin
+  DblClick;
+end;
+
+procedure TProbeWindow.CallDoContextPopup(const APos: TPoint; var AHandled: Boolean);
+begin
+  DoContextPopup(APos, AHandled);
+end;
+
+function TProbeWindow.CallDoMouseWheel(const APos: TPoint): Boolean;
+begin
+  Result := DoMouseWheel([], -120, APos);
+end;
+
+procedure TProbeWindow.CallBeginAutoDrag;
+begin
+  BeginAutoDrag;
+end;
+
+function TProbeWindow.CallInTabRowRegion(X, Y: Integer): Boolean;
+begin
+  Result := InTabRowRegion(X, Y);
+end;
+
+procedure TProbeWindow.SimulatePress(X, Y: Integer);
+begin
+  Perform(LM_LBUTTONDOWN, MK_LBUTTON, PtrInt((Y shl 16) or (X and $FFFF)));
+end;
+
+procedure TProbeWindow.StartLclAutoDrag;
+begin
+  Inc(AutoDragStarts);
+end;
+
+function TProbeWindow.PointerInClient(out APoint: TPoint): Boolean;
+begin
+  if FakePointer then
+  begin
+    APoint := FakePoint;
+    Exit(True);
+  end;
+  Result := inherited PointerInClient(APoint);
 end;
 
 procedure TProbeWindow.CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

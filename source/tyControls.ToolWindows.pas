@@ -174,6 +174,18 @@ type
     function HeaderHeightAt(APPI: Integer): Integer;
     function HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
     function ActionsPreferredSize(APPI: Integer): TSize;
+  private
+    { --- 底栏标签行的输入(spec §3.6):当前页把标签行区域的输入转给栏。 --- }
+    { 这一次按下落在标签行区域里:这整次点击(MouseUp / Click / DblClick)都归标签行,
+      不给用户的处理器 —— 按下落在哪决定归谁(开工前问题 8)。每次按下重写。 }
+    FPressInRow: Boolean;
+    { 按下消息自己带的坐标,只在那一拍有效:LCL 在 WndProc 里、MouseDown 之前调 BeginAutoDrag,
+      手上没有坐标(同栏的 FAutoDragPos)。 }
+    FPressPos: TPoint;
+    FPressPosValid: Boolean;
+    { 左键按在标签行的部件上、转给了栏:之后的移动不论位置都转,松开也转。 }
+    FHeaderGesture: Boolean;
+    procedure LMCancelMode(var Message: TLMessage); message LM_CANCELMODE;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
@@ -218,6 +230,34 @@ type
       OnShow / OnHide 从此再也不响 —— 而它是静默的,没有一条断言会指向那里。 }
     procedure BeginSilentVisibility;
     procedure EndSilentVisibility;
+    { 标签行区域 = 标题行减去操作区(窗口客户区坐标,含标签之间和后面的空白)。只有在栏里、
+      底栏模式下才可能为真。下面所有「在不在区域里」都问这一处。 }
+    function InTabRowRegion(X, Y: Integer): Boolean;
+    { 按下消息的坐标记给 BeginAutoDrag、并记下这一次按下归不归标签行(地雷 10)。 }
+    procedure WndProc(var TheMessage: TLMessage); override;
+    { 区域内:不调继承(用户的 OnMouseDown 不触发),落在部件上才转给栏;none 只吞。 }
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { 转给栏(手势中不论位置;否则区域内的部件上转移动、别处转离开),然后照常调继承。 }
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    { 这一次按下归标签行 → 不调继承;手势中转给栏,作为最后一句(可能藏掉自己)。 }
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    procedure Click; override;
+    procedure DblClick; override;
+    { 区域内的滚轮吞掉。MousePos 是客户区坐标:win32callback.inc:1711-1712 把 WM_MOUSEWHEEL
+      的屏幕坐标换成客户区,TControl.WMMouseWheel 经 GetMousePosFromMessage(control.inc:1931-1940,
+      宽高 ≤ 32767 时直接用消息坐标)交过来。 }
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
+    { 区域内的右键:Handled,不调继承;落在标签上时交给栏(spec §6.8 的同一条路)。
+      键盘菜单键的 (-1, -1) 不在区域里,走继承。 }
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
+    { 标签行不起 LCL 拖动(DragMode = dmAutomatic 时任何位置左键按下都会起);位置取按下消息
+      记下的那一个,没有才问指针。 }
+    procedure BeginAutoDrag; override;
+    { 挡在 LCL 自动拖动前面的那一道闸之后;测试探针重写它数次数。 }
+    procedure StartLclAutoDrag; virtual;
+    { 指针此刻在本控件客户区里的位置;没有句柄(无头)答 False。测试探针重写它。 }
+    function PointerInClient(out APoint: TPoint): Boolean; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -701,6 +741,10 @@ type
     { 标签行的像素属于当前页,当前页有绘制缓存(spec §3.5):标签行的一切视觉变化都经这里丢
       当前页的缓存。只 Invalidate 栏的话,运行时当前页 blit 旧帧。 }
     procedure InvalidateHeader;
+    { 标签行的部件换成栏的部件:标签 → twbpItem、溢出 → twbpOverflow,其余一一对应。 }
+    function PartOfZone(AZone: TTyToolWindowZone): TTyToolWindowBarPart;
+    { 变了才写,并 InvalidateHeader(悬停画在当前页里)。 }
+    procedure SetHeaderHover(APart: TTyToolWindowBarPart; AIndex: Integer);
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。 }
     function StripItemStates(AIndex: Integer): TTyStateSet;
@@ -903,6 +947,9 @@ type
     function GestureStateForTest: TTyToolWindowGestureState;
     function IsEdgeDraggingForTest: Boolean;
     function IsDraggingForTest: Boolean;
+    { 探针:底栏标签行上悬停的部件和窗口序号 —— 真实字段的只读视图。 }
+    property HeaderHoverPartForTest: TTyToolWindowBarPart read FHeaderHoverPart;
+    property HeaderHoverIndexForTest: Integer read FHeaderHoverIndex;
     property DropSlotForTest: Integer read FDropSlot;
     { 探针:拖动期间轮询捕获的计时器此刻在不在。 }
     function HasCaptureTimerForTest: Boolean;
@@ -1710,6 +1757,183 @@ begin
   if FPaintCache.NeedsRender(w, h) then
     RenderTo(FPaintCache.Canvas, Rect(0, 0, w, h), Font.PixelsPerInch);
   FPaintCache.Blit(Canvas);
+end;
+
+{ --- 底栏标签行的输入(spec §3.6 运行时、§7.4) ------------------------------------- }
+
+function TTyToolWindow.InTabRowRegion(X, Y: Integer): Boolean;
+var
+  pt: TPoint;
+  g: TTyToolWindowHeaderGeom;
+begin
+  Result := False;
+  if HeaderMode <> twhBottom then Exit;
+  pt := Point(X, Y);
+  if not PtInRect(HeaderRowRect, pt) then Exit;
+  { 行从客户区原点开始,几何的行内坐标就是客户区坐标。 }
+  g := HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  Result := not PtInRect(g.Actions, pt);
+end;
+
+procedure TTyToolWindow.WndProc(var TheMessage: TLMessage);
+begin
+  if (TheMessage.Msg = LM_LBUTTONDOWN) or (TheMessage.Msg = LM_LBUTTONDBLCLK) then
+  begin
+    { LCL 的顺序:WndProc 里先 BeginAutoDrag(control.inc:2284),再 MouseDown;双击是先
+      DoMouseDown(ssDouble) 再 DblClick(control.inc:2602-2604)。所以这一次按在哪要在这里记。 }
+    FPressPos := Point(TLMMouse(TheMessage).XPos, TLMMouse(TheMessage).YPos);
+    FPressPosValid := True;
+    FPressInRow := InTabRowRegion(FPressPos.X, FPressPos.Y);
+    try
+      inherited WndProc(TheMessage);
+    finally
+      FPressPosValid := False;
+    end;
+  end
+  else
+    inherited WndProc(TheMessage);
+end;
+
+procedure TTyToolWindow.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  b: TTyToolWindowBar;
+  idx: Integer;
+  r: TRect;
+begin
+  { 任何一键的按下都重新决定「这一次归谁」(程序里直接调的也一样,不只经 WndProc 的那一路)。 }
+  FPressInRow := InTabRowRegion(X, Y);
+  if not FPressInRow then
+  begin
+    inherited MouseDown(Button, Shift, X, Y);
+    Exit;
+  end;
+  { 区域内:不调继承 —— 用户的 OnMouseDown 不触发,也从不 SetFocus(窗口本来就 csNoFocus)。 }
+  b := Bar;
+  if b.HeaderZoneAt(Self, X, Y, idx, r) = twzNone then Exit;   { 空白只吞 }
+  if Button = mbLeft then FHeaderGesture := True;
+  b.HeaderMouseDown(Self, Button, Shift, X, Y);
+end;
+
+procedure TTyToolWindow.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  b: TTyToolWindowBar;
+  idx: Integer;
+  r: TRect;
+begin
+  b := Bar;
+  if (b <> nil) and (HeaderMode = twhBottom) then
+  begin
+    if FHeaderGesture then
+      b.HeaderMouseMove(Self, Shift, X, Y)
+    else if InTabRowRegion(X, Y) and (b.HeaderZoneAt(Self, X, Y, idx, r) <> twzNone) then
+      b.HeaderMouseMove(Self, Shift, X, Y)
+    else
+      { 区域里的空白、或者出了区域:清悬停(不算「转发 none」)。 }
+      b.HeaderMouseLeave(Self);
+  end;
+  { spec 只要求吞 Down / Up / Click / DblClick / 右键 / 滚轮,移动照常给用户。 }
+  inherited MouseMove(Shift, X, Y);
+end;
+
+procedure TTyToolWindow.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  b: TTyToolWindowBar;
+begin
+  { 按问题 8:按下落在哪决定这整次点击归谁 —— 按在正文、松开在标签行,照常给用户。 }
+  if not FPressInRow then
+  begin
+    inherited MouseUp(Button, Shift, X, Y);
+    Exit;
+  end;
+  if FHeaderGesture and (Button = mbLeft) then
+  begin
+    FHeaderGesture := False;
+    b := Bar;
+    { 最后一句:点标签切页、点收起都会在这里把本窗口藏起来(地雷 9)。 }
+    if b <> nil then b.HeaderMouseUp(Self, Button, Shift, X, Y);
+  end;
+end;
+
+procedure TTyToolWindow.MouseLeave;
+var
+  b: TTyToolWindowBar;
+begin
+  inherited MouseLeave;
+  b := Bar;
+  if b <> nil then b.HeaderMouseLeave(Self);
+end;
+
+procedure TTyToolWindow.Click;
+begin
+  { LCL 在 MouseUp 之前调它(control.inc:2827-2846)。 }
+  if FPressInRow then Exit;
+  inherited Click;
+end;
+
+procedure TTyToolWindow.DblClick;
+begin
+  if FPressInRow then Exit;
+  inherited DblClick;
+end;
+
+function TTyToolWindow.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  if InTabRowRegion(MousePos.X, MousePos.Y) then Exit(True);
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+end;
+
+procedure TTyToolWindow.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+var
+  b: TTyToolWindowBar;
+  idx: Integer;
+  r: TRect;
+begin
+  if ((MousePos.X <> -1) or (MousePos.Y <> -1)) and InTabRowRegion(MousePos.X, MousePos.Y) then
+  begin
+    Handled := True;
+    b := Bar;
+    if b.HeaderZoneAt(Self, MousePos.X, MousePos.Y, idx, r) = twzTab then
+      b.HeaderContextPopup(Self, MousePos.X, MousePos.Y);
+    Exit;
+  end;
+  inherited DoContextPopup(MousePos, Handled);
+end;
+
+function TTyToolWindow.PointerInClient(out APoint: TPoint): Boolean;
+begin
+  Result := HandleAllocated;
+  if Result then APoint := ScreenToClient(Mouse.CursorPos)
+  else APoint := Point(-1, -1);
+end;
+
+procedure TTyToolWindow.BeginAutoDrag;
+var
+  p: TPoint;
+begin
+  if FPressPosValid then p := FPressPos
+  else if not PointerInClient(p) then p := Point(-1, -1);
+  if InTabRowRegion(p.X, p.Y) then Exit;
+  StartLclAutoDrag;
+end;
+
+procedure TTyToolWindow.StartLclAutoDrag;
+begin
+  inherited BeginAutoDrag;
+end;
+
+procedure TTyToolWindow.LMCancelMode(var Message: TLMessage);
+var
+  b: TTyToolWindowBar;
+begin
+  inherited;
+  { 捕获者是本页、手势进行中(spec §9.7)。 }
+  if FHeaderGesture then
+  begin
+    FHeaderGesture := False;
+    b := Bar;
+    if b <> nil then b.HeaderCancelMode(Self);
+  end;
 end;
 
 { --- TTyToolWindowActions ----------------------------------------------------- }
@@ -3165,6 +3389,30 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
+function TTyToolWindowBar.PartOfZone(AZone: TTyToolWindowZone): TTyToolWindowBarPart;
+begin
+  case AZone of
+    twzTab: Result := twbpItem;
+    twzOverflow: Result := twbpOverflow;
+    twzSeparator: Result := twbpSeparator;
+    twzMaximize: Result := twbpMaximize;
+    twzCollapse: Result := twbpCollapse;
+  else
+    Result := twbpNone;
+  end;
+end;
+
+procedure TTyToolWindowBar.SetHeaderHover(APart: TTyToolWindowBarPart; AIndex: Integer);
+begin
+  { 分隔线不可点,没有悬停态。 }
+  if APart = twbpSeparator then APart := twbpNone;
+  if APart <> twbpItem then AIndex := -1;
+  if (APart = FHeaderHoverPart) and (AIndex = FHeaderHoverIndex) then Exit;
+  FHeaderHoverPart := APart;
+  FHeaderHoverIndex := AIndex;
+  InvalidateHeader;
+end;
+
 procedure TTyToolWindowBar.InvalidateHeader;
 begin
   if (FPlacement = twpBottom) and (FActive <> nil)
@@ -3344,30 +3592,88 @@ end;
 
 procedure TTyToolWindowBar.HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  zone: TTyToolWindowZone;
+  idx: Integer;
+  r: TRect;
 begin
-  { Task 6 填。 }
+  { 只认当前页转来的(旧页迟到的消息不算);禁用的栏不武装(同图标条:LCL 不给禁用控件发
+    鼠标消息,这里是给直接转发过来的那一路补同一道闸);设计期标签行不接手势(spec §3.6)。 }
+  if (AWindow = nil) or (AWindow <> FActive) or not IsEnabled
+     or (csDesigning in ComponentState) then Exit;
+  { 右键、中键从不武装、从不切换(spec §6.8 / §9.2)。 }
+  if Button <> mbLeft then Exit;
+  { 每次按下新建一条记录:上一次丢了松开留下的一切在这里收干净。 }
+  ResetGesture(twgeDiscard);
+  zone := HeaderZoneAt(AWindow, X, Y, idx, r);
+  case zone of
+    { 按下只武装,什么都不激活(spec §9.3「为什么松开才切」)。标签是拖动把手。 }
+    twzTab: FGesture.Press(twbpItem, Windows[idx], True, AWindow, X, Y, Shift);
+    twzOverflow, twzMaximize, twzCollapse:
+      FGesture.Press(PartOfZone(zone), nil, False, AWindow, X, Y, Shift);
+  else
+    Exit;                  { 分隔线、空白:不武装 }
+  end;
+  InvalidateHeader;        { 按下态 }
 end;
 
 procedure TTyToolWindowBar.HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState;
   X, Y: Integer);
+var
+  zone: TTyToolWindowZone;
+  idx: Integer;
+  r: TRect;
 begin
-  { Task 6 填。 }
+  { spec §7.1:旧页迟到的消息不许清新页的悬停。设计期不做悬停。 }
+  if (AWindow = nil) or (AWindow <> FActive) or (csDesigning in ComponentState) then Exit;
+  case FGesture.Move(Shift, X, Y) of
+    twgmHover:
+      begin
+        zone := HeaderZoneAt(AWindow, X, Y, idx, r);
+        SetHeaderHover(PartOfZone(zone), idx);
+      end;
+    twgmDragStart:
+      SetHeaderHover(twbpNone, -1);
+  end;
 end;
 
 procedure TTyToolWindowBar.HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  zone: TTyToolWindowZone;
+  part: TTyToolWindowBarPart;
+  w: TTyToolWindow;
+  rel: TTyToolWindowGestureRelease;
+  idx: Integer;
+  r: TRect;
 begin
-  { Task 6 填。 }
+  if (AWindow = nil) or (Button <> mbLeft) then Exit;
+  zone := HeaderZoneAt(AWindow, X, Y, idx, r);
+  part := PartOfZone(zone);
+  if part = twbpItem then w := Windows[idx] else w := nil;
+  { 引擎判完、收尾,答案拷在局部;动作放最后一句 —— 它可能把捕获者(当前页)自己藏起来
+    (spec §9.2,地雷 9),之后不再碰 AWindow。 }
+  rel := FGesture.Release(part, w);
+  if AWindow = FActive then SetHeaderHover(part, idx);
+  if rel.Kind <> twrClick then Exit;
+  case rel.Part of
+    { 点当前页的标签什么都不做(spec §9.3 底栏标签);非当前页 → 切过去。 }
+    twbpItem:
+      if rel.Window <> FActive then ActivateWindow(rel.Window);
+  end;
 end;
 
 procedure TTyToolWindowBar.HeaderMouseLeave(AWindow: TTyToolWindow);
 begin
-  { Task 6 填。 }
+  { 只清悬停,从不解除武装(spec §9.2:捕获期间 Win32 的 WM_MOUSELEAVE 可能在捕获者身上触发)。
+    旧页迟到的离开不算(spec §7.1)。 }
+  if (AWindow <> nil) and (AWindow = FActive) then SetHeaderHover(twbpNone, -1);
 end;
 
 procedure TTyToolWindowBar.HeaderCancelMode(AWindow: TTyToolWindow);
 begin
-  { Task 6 填。 }
+  { 捕获者是这一页、它收到了 LM_CANCELMODE(spec §9.7):ShowModal、异常对话框之类。 }
+  if (AWindow <> nil) and (FGesture.Capturer = AWindow) then ResetGesture(twgeCancel);
 end;
 
 function TTyToolWindowBar.HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
@@ -3390,10 +3696,22 @@ function TTyToolWindowBar.PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWin
 var
   L: TTyToolWindowBarLayout;
   pt: TPoint;
+  r: TRect;
   i: Integer;
 begin
   AIndex := -1;
   Result := twbpNone;
+  { 底栏:标签行在当前页里,栏坐标经当前页换算(HeaderZoneAt(nil, …))。运行时栏自己收不到
+    标签行上的按下(当前页盖着),这一段服务栏坐标的查询:WindowAtPos、右键、设计期命中。 }
+  if (FPlacement = twpBottom) and (FActive <> nil) then
+  begin
+    Result := PartOfZone(HeaderZoneAt(nil, X, Y, i, r));
+    if Result <> twbpNone then
+    begin
+      if Result = twbpItem then AIndex := i;
+      Exit;
+    end;
+  end;
   L := BarLayout;
   pt := Point(X, Y);
   for i := 0 to High(L.Slots) do
@@ -3514,6 +3832,8 @@ begin
     FOverflowPressed := False;
     if not (csDestroying in ComponentState) then Invalidate;
   end;
+  { 标签行的按下态是从引擎读的(HeaderPressed):收尾之后当前页得重画掉它。 }
+  InvalidateHeader;
 end;
 
 procedure TTyToolWindowBar.SetStripHover(AIndex: Integer; AOverflow: Boolean);
@@ -3534,6 +3854,16 @@ begin
   { 设计期不做悬停:设计期控件收不到 enter / leave(spec §7.4)。 }
   if csDesigning in ComponentState then Exit;
   part := PartAt(X, Y, idx);
+  if FPlacement = twpBottom then
+  begin
+    { 底栏的标签、溢出、按钮在当前页的标签行里,悬停记在标签行那一份上。 }
+    if part in [twbpItem, twbpOverflow, twbpMaximize, twbpCollapse] then
+      SetHeaderHover(part, idx)
+    else
+      SetHeaderHover(twbpNone, -1);
+    SetEdgeHover(part = twbpEdge);
+    Exit;
+  end;
   if part <> twbpItem then idx := -1;
   SetStripHover(idx, part = twbpOverflow);
   SetEdgeHover(part = twbpEdge);
@@ -3544,10 +3874,13 @@ var
   p: TPoint;
 begin
   if [csDesigning, csDestroying] * ComponentState <> [] then Exit;
+  { 底栏同样经这里:栏坐标的指针经当前页换算成标签行的部件(PartAt → HeaderZoneAt(nil, …)),
+    不在当前页的标签行里就清掉。 }
   if PointerInClient(p) then UpdateHoverAt(p.X, p.Y)
   else
   begin
     SetStripHover(-1, False);
+    SetHeaderHover(twbpNone, -1);
     if not EdgeResizing then SetEdgeHover(False);
   end;
 end;
@@ -4533,6 +4866,8 @@ begin
     按下按还在的那个手势窗口重新对上(溢出按钮的按下态不按序号,不动)。 }
   FStripHover := -1;
   FOverflowHover := False;
+  FHeaderHoverPart := twbpNone;
+  FHeaderHoverIndex := -1;
   if (FGesture.Window <> nil) and (FGesture.Part = twbpItem) then
     FStripPressed := IndexOfWindow(FGesture.Window)
   else

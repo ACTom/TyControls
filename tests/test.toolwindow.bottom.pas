@@ -16,9 +16,20 @@ uses
   test.toolwindow.bar;
 
 type
-  TTyToolWindowBottomTests = class(TTyToolWindowBarFixture)
+  { 底栏测试共用的夹具。本身没有 published 测试 —— fpcunit 会把基类的 published 方法在每个
+    子类里各跑一遍。 }
+  TTyToolWindowBottomFixture = class(TTyToolWindowBarFixture)
   protected
     FWins: array of TProbeWindow;
+    FDowns, FUps, FWheels: Integer;
+    procedure CountDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure CountUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure CountWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint; var Handled: Boolean);
+    { 当前页上第 AIndex 个窗口的标签的中心(当前页客户区坐标)。 }
+    function TabCentre(AIndex: Integer): TPoint;
+    { 在 AWin 上按 LCL 的顺序按下、Click、松开(真实的 protected 入口)。 }
+    procedure ClickAt(AWin: TProbeWindow; const APos: TPoint);
     { 一条宽 600 的底栏,按 ACaptions 建窗口(标题长短不一,地雷 12),AActive 是当前页。
       先设 Placement 再加窗口:运行时有窗口时侧 ↔ 底被忽略。最后请一遍对齐,窗口才有真实边界。 }
     procedure NewBottomBar(const ACaptions: array of string; AActive: Integer);
@@ -33,6 +44,10 @@ type
     procedure ArmActive(AWin: TProbeWindow);
     { 把 AWin 按 AW×AH、APPI 画出来;先铺底漆 Wipe。调用方释放。 }
     function RenderPage(AWin: TProbeWindow; AW, AH, APPI: Integer): TBitmap;
+  end;
+
+  { 装配、统一行高、绘制、最大化、跨类改 Parent、设计期。 }
+  TTyToolWindowBottomTests = class(TTyToolWindowBottomFixture)
   published
     { Task 3:装配。 }
     procedure TestTheActionsSitInTheBottomRowBeforeTheButtons;
@@ -62,6 +77,28 @@ type
     procedure TestRenderingAt144ScalesTabsAndButtons;
     procedure TestRenamingAHiddenPageRepaintsTheActivePage;
     procedure TestReorderingRepaintsTheActivePage;
+  end;
+
+  { 标签行的输入:转发、点击、溢出、提示、右键、调顺序(spec §3.6 / §7.4 / §9)。 }
+  TTyToolWindowBottomInputTests = class(TTyToolWindowBottomFixture)
+  published
+    { Task 6:转发与标签点击。 }
+    procedure TestATabSwitchesOnReleaseNotOnPress;
+    procedure TestAReleaseOnAnotherTabIsNotAClick;
+    procedure TestClickingTheActiveTabDoesNothing;
+    procedure TestADoubleClickPressNeverCounts;
+    procedure TestTheRowSwallowsTheUsersMouseEvents;
+    procedure TestAPressInTheBodyKeepsItsMouseUpInTheRow;
+    procedure TestTheWheelIsSwallowedInTheRow;
+    { 「标签行不起 LCL 拖动」要真实的按下消息(抓捕获要句柄),在 test.toolwindow.focus。 }
+    procedure TestALateLeaveFromTheOldPageKeepsTheNewHover;
+    procedure TestCancelModeOnTheActivePageCancelsThePress;
+    procedure TestAWindowFreedWhileArmedIsNotAClick;
+    procedure TestADisabledBarDoesNotSwitch;
+    procedure TestHoverFollowsThePointerAndRepaintsTheActivePage;
+    procedure TestWindowAtPosFindsTabsInBarCoordinates;
+    procedure TestAFinishedClickRepaintsThePressedState;
+    procedure TestHoverIsRecheckedAfterASwitch;
   end;
 
 implementation
@@ -141,7 +178,7 @@ begin
   Result := (ARect.Right - ARect.Left) * (ARect.Bottom - ARect.Top);
 end;
 
-procedure TTyToolWindowBottomTests.NewBottomBar(const ACaptions: array of string;
+procedure TTyToolWindowBottomFixture.NewBottomBar(const ACaptions: array of string;
   AActive: Integer);
 var
   i: Integer;
@@ -159,16 +196,56 @@ begin
   Relayout;
 end;
 
-procedure TTyToolWindowBottomTests.Relayout;
+procedure TTyToolWindowBottomFixture.Relayout;
 var
+  r: TRect;
   i: Integer;
 begin
   FBar.CallAlignControls;
+  { 藏着的页对齐引擎不摆;真机上切页时会摆到内容区,这里直接给它们内容区,切页之后
+    立刻问几何(悬停重查、命中)的测试才有真实的边界。 }
+  r := FBar.ClientRect;
+  FBar.CallAdjustClientRect(r);
   for i := 0 to High(FWins) do
-    if FWins[i].Parent = FBar then FWins[i].CallAlignControls;
+    if (FWins[i] <> nil) and (FWins[i].Parent = FBar) then
+    begin
+      FWins[i].BoundsRect := r;
+      FWins[i].CallAlignControls;
+    end;
 end;
 
-function TTyToolWindowBottomTests.ActiveGeom: TTyToolWindowHeaderGeom;
+procedure TTyToolWindowBottomFixture.CountDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FDowns);
+end;
+
+procedure TTyToolWindowBottomFixture.CountUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FUps);
+end;
+
+procedure TTyToolWindowBottomFixture.CountWheel(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+begin
+  Inc(FWheels);
+end;
+
+function TTyToolWindowBottomFixture.TabCentre(AIndex: Integer): TPoint;
+begin
+  Result := TabRectOf(ActiveGeom, AIndex).CenterPoint;
+end;
+
+procedure TTyToolWindowBottomFixture.ClickAt(AWin: TProbeWindow; const APos: TPoint);
+begin
+  AWin.CallMouseDown(APos.X, APos.Y);
+  { LCL 在 MouseUp 之前调 Click(control.inc:2827-2846)。 }
+  AWin.CallClick;
+  AWin.CallMouseUp(APos.X, APos.Y);
+end;
+
+function TTyToolWindowBottomFixture.ActiveGeom: TTyToolWindowHeaderGeom;
 var
   w: TTyToolWindow;
 begin
@@ -177,7 +254,7 @@ begin
   Result := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight), w.Font.PixelsPerInch);
 end;
 
-function TTyToolWindowBottomTests.TabRectOf(const AGeom: TTyToolWindowHeaderGeom;
+function TTyToolWindowBottomFixture.TabRectOf(const AGeom: TTyToolWindowHeaderGeom;
   AWindowIndex: Integer): TRect;
 var
   i: Integer;
@@ -188,7 +265,7 @@ begin
   Result := Rect(0, 0, 0, 0);
 end;
 
-function TTyToolWindowBottomTests.AddActionsKid(AWin: TTyToolWindow; AW, AH: Integer): TBodyChild;
+function TTyToolWindowBottomFixture.AddActionsKid(AWin: TTyToolWindow; AW, AH: Integer): TBodyChild;
 var
   act: TTyToolWindowActions;
 begin
@@ -198,14 +275,14 @@ begin
   Result.Parent := act;
 end;
 
-procedure TTyToolWindowBottomTests.ArmActive(AWin: TProbeWindow);
+procedure TTyToolWindowBottomFixture.ArmActive(AWin: TProbeWindow);
 begin
   AWin.AlignCount := 0;
   AWin.PrimeCache(AWin.ClientWidth, AWin.ClientHeight);
   AssertFalse('前提:缓存填上了', AWin.CacheWouldRender(AWin.ClientWidth, AWin.ClientHeight));
 end;
 
-function TTyToolWindowBottomTests.RenderPage(AWin: TProbeWindow; AW, AH, APPI: Integer): TBitmap;
+function TTyToolWindowBottomFixture.RenderPage(AWin: TProbeWindow; AW, AH, APPI: Integer): TBitmap;
 begin
   Result := TBitmap.Create;
   Result.PixelFormat := pf32bit;
@@ -762,6 +839,247 @@ begin
   AssertTrue('调顺序之后当前页重画', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
 end;
 
+{ --- Task 6:TTyToolWindowBottomInputTests ------------------------------------------ }
+
+procedure TTyToolWindowBottomInputTests.TestATabSwitchesOnReleaseNotOnPress;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(0);
+  w.CallMouseDown(c.X, c.Y);
+  AssertSame('按下什么都不激活', w, FBar.ActiveWindow);
+  w.CallClick;
+  w.CallMouseUp(c.X, c.Y);
+  AssertSame('在同一个标签上松开:切过去', FWins[0], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestAReleaseOnAnotherTabIsNotAClick;
+var
+  w: TProbeWindow;
+  a, b: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  a := TabCentre(0);
+  b := TabCentre(2);
+  { 两点离得近,不过拖动阈值:按在 A、松开在 B。 }
+  AssertTrue('前提:两个标签挨着', Abs(b.X - a.X) > 0);
+  w.CallMouseDown(a.X, a.Y);
+  w.CallMouseUp(b.X, b.Y);
+  AssertSame('按在 A、松开在 B:不切', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestClickingTheActiveTabDoesNothing;
+var
+  w: TProbeWindow;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.OnChange := @HandleChange;
+  ResetCounts;
+  ClickAt(w, TabCentre(1));
+  AssertSame('当前页不变', w, FBar.ActiveWindow);
+  AssertFalse('不收起(不是图标条的「再点一下收起」)', FBar.Collapsed);
+  AssertEquals('不发 OnChange', 0, FChanges);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestADoubleClickPressNeverCounts;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(0);
+  w.CallMouseDown(c.X, c.Y, [ssLeft, ssDouble]);
+  w.CallMouseUp(c.X, c.Y);
+  AssertSame('多击的按下阈值以内松开永远不算点击', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheRowSwallowsTheUsersMouseEvents;
+var
+  w: TProbeWindow;
+  c, body: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  w.OnMouseDown := @CountDown;
+  w.OnMouseUp := @CountUp;
+  w.OnClick := @HandleClick;
+  FClicks := 0;
+  c := TabCentre(1);
+  ClickAt(w, c);
+  AssertEquals('标签行:OnMouseDown 不触发', 0, FDowns);
+  AssertEquals('标签行:OnMouseUp 不触发', 0, FUps);
+  AssertEquals('标签行:OnClick 不触发', 0, FClicks);
+  body := Point(100, w.BodyRect.Top + 40);
+  ClickAt(w, body);
+  AssertEquals('正文:OnMouseDown 照常', 1, FDowns);
+  AssertEquals('正文:OnMouseUp 照常', 1, FUps);
+  AssertEquals('正文:OnClick 照常', 1, FClicks);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestAPressInTheBodyKeepsItsMouseUpInTheRow;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  w.OnMouseDown := @CountDown;
+  w.OnMouseUp := @CountUp;
+  c := TabCentre(0);
+  w.CallMouseDown(100, w.BodyRect.Top + 40);
+  w.CallMouseUp(c.X, c.Y);
+  AssertEquals('按在正文:OnMouseDown', 1, FDowns);
+  AssertEquals('按下决定归谁:松开在标签行也给用户配对的 OnMouseUp', 1, FUps);
+  AssertSame('也不是标签点击', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestTheWheelIsSwallowedInTheRow;
+var
+  w: TProbeWindow;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  w.OnMouseWheel := @CountWheel;
+  AssertTrue('标签行里的滚轮答「处理过了」', w.CallDoMouseWheel(TabCentre(0)));
+  AssertEquals('用户的 OnMouseWheel 不触发', 0, FWheels);
+  w.CallDoMouseWheel(Point(100, w.BodyRect.Top + 40));
+  AssertEquals('正文里照常', 1, FWheels);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestALateLeaveFromTheOldPageKeepsTheNewHover;
+var
+  old, cur: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  old := FWins[1];
+  ClickAt(old, TabCentre(2));
+  cur := FWins[2];
+  AssertSame('前提:切过去了', cur, FBar.ActiveWindow);
+  c := TabCentre(0);
+  cur.CallMouseMove(c.X, c.Y);
+  AssertEquals('前提:新页上悬停在标签 0', 0, FBar.HeaderHoverIndexForTest);
+  old.CallMouseLeave;
+  AssertEquals('旧页迟到的离开不清新页的悬停', 0, FBar.HeaderHoverIndexForTest);
+  AssertEquals('部件也还是标签', Ord(twbpItem), Ord(FBar.HeaderHoverPartForTest));
+end;
+
+procedure TTyToolWindowBottomInputTests.TestCancelModeOnTheActivePageCancelsThePress;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(0);
+  w.CallMouseDown(c.X, c.Y);
+  AssertEquals('前提:武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  w.Perform(LM_CANCELMODE, 0, 0);
+  AssertEquals('捕获者收到 LM_CANCELMODE:手势收尾', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  w.CallMouseUp(c.X, c.Y);
+  AssertSame('之后的松开不是点击', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestAWindowFreedWhileArmedIsNotAClick;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(0);
+  w.CallMouseDown(c.X, c.Y);
+  AssertEquals('前提:武装在标签 0 上', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  FWins[0].Free;
+  FWins[0] := nil;
+  { 不比已释放的指针(地雷 14):看手势状态和当前页。 }
+  AssertEquals('手势窗口走了:记录作废', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  w.CallMouseUp(c.X, c.Y);
+  AssertSame('原位置松开:当前页不变', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestADisabledBarDoesNotSwitch;
+var
+  w: TProbeWindow;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.Enabled := False;
+  ClickAt(w, TabCentre(0));
+  AssertSame('禁用的栏:标签点不动', w, FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestHoverFollowsThePointerAndRepaintsTheActivePage;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  ArmActive(w);
+  c := TabCentre(2);
+  w.CallMouseMove(c.X, c.Y);
+  AssertEquals('悬停在标签 2', 2, FBar.HeaderHoverIndexForTest);
+  AssertEquals('部件是标签', Ord(twbpItem), Ord(FBar.HeaderHoverPartForTest));
+  AssertTrue('悬停画在当前页里:当前页丢缓存', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+  w.CallMouseMove(100, w.BodyRect.Top + 40);
+  AssertEquals('移到正文:悬停清掉', -1, FBar.HeaderHoverIndexForTest);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestWindowAtPosFindsTabsInBarCoordinates;
+var
+  w: TProbeWindow;
+  g: TTyToolWindowHeaderGeom;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  g := ActiveGeom;
+  c := TabCentre(2);
+  AssertSame('栏坐标里的标签答那个窗口', FWins[2], FBar.WindowAtPos(c.X + w.Left, c.Y + w.Top));
+  c := Point(g.Tabs[High(g.Tabs)].ItemRect.Right + 5, 13);
+  AssertNull('标签行空白处答 nil', FBar.WindowAtPos(c.X + w.Left, c.Y + w.Top));
+end;
+
+procedure TTyToolWindowBottomInputTests.TestAFinishedClickRepaintsThePressedState;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  c := TabCentre(1);
+  { 悬停先落定,松开时悬停不变 —— 只剩「按下态收尾」这一件事会丢缓存。 }
+  w.CallMouseMove(c.X, c.Y);
+  w.CallMouseDown(c.X, c.Y);
+  ArmActive(w);
+  w.CallMouseUp(c.X, c.Y);
+  AssertTrue('按下态要被重画掉', w.CacheWouldRender(w.ClientWidth, w.ClientHeight));
+end;
+
+procedure TTyToolWindowBottomInputTests.TestHoverIsRecheckedAfterASwitch;
+var
+  w: TProbeWindow;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  { 每一页的标签行排得一样(全放得下),指针放在标签 0 上(栏坐标)。 }
+  c := TabCentre(0);
+  FBar.FakePointer := True;
+  FBar.FakePoint := Point(c.X + w.Left, c.Y + w.Top);
+  ClickAt(w, TabCentre(2));
+  AssertSame('前提:切过去了', FWins[2], FBar.ActiveWindow);
+  AssertEquals('切页之后按指针此刻的位置重查悬停', 0, FBar.HeaderHoverIndexForTest);
+end;
+
 initialization
+  RegisterTest(TTyToolWindowBottomInputTests);
   RegisterTest(TTyToolWindowBottomTests);
 end.
