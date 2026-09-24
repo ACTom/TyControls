@@ -1080,6 +1080,10 @@ type
     property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
   end;
 
+  { spec §9.9:跨栏移动之前问一次(拖动悬停、放下、MoveWindow、排队的移动执行前)。 }
+  TTyCanMoveWindowEvent = procedure(Sender: TObject; AWindow: TTyToolWindow;
+    ATargetBar: TTyToolWindowBar; var AAllow: Boolean) of object;
+
   { 工具窗口栏的协调者(spec §2):可以不放。栏经 Manager 属性注册到它上面;跨侧拖动、
     MoveWindow、布局保存都要它。非可视组件,从 TTyComponent 来(带对象查看器里的 Version)。
     不支持放在数据模块里、栏分布在多个窗体上(spec §10.6)。 }
@@ -1088,11 +1092,17 @@ type
     { 注册着的栏,注册顺序,无语义(「先注册的赢」不成立:fixup 倒序执行,spec §10.6)。 }
     FBars: array of TTyToolWindowBar;
     FImages: TCustomImageList;
+    { > 0 = 正在发本 manager 的事件:处理器里再调 MoveWindow 答 False(spec §9.9)。 }
+    FEventDepth: Integer;
+    FOnCanMoveWindow: TTyCanMoveWindowEvent;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
     { 每条没在释放的注册栏的生效列表可能换了(spec §8)。 }
     procedure NotifyImagesChanged;
+    { spec §9.9 的结构检查(不问事件)。ASource 出参是窗口此刻的栏。 }
+    function StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+      out ASource: TTyToolWindowBar): Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1100,10 +1110,14 @@ type
     { 这条栏是不是可用:注册在本 manager 上,且没有别的注册栏和它 Placement 相同(spec §10.6)。
       现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。 }
     function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
+    { 结构检查 + OnCanMoveWindow(spec §9.9)。同一条栏永远 True、不问事件;设计期不问事件。
+      没有副作用:不取消拖动、不记默认布局、不动任何状态。 }
+    function CanMoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar): Boolean;
   published
     { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
       没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
     property Images: TCustomImageList read FImages write SetImages;
+    property OnCanMoveWindow: TTyCanMoveWindowEvent read FOnCanMoveWindow write FOnCanMoveWindow;
   end;
 
 { 图标条溢出菜单挂在哪、怎么对齐(栏客户区坐标):菜单往内容区那一侧开 —— 左栏从溢出按钮的
@@ -1514,15 +1528,22 @@ begin
   SelectFirst;
 end;
 
+{ 两边都是栏、一侧一底(按 Placement,不看 Align)。不带任何豁免:运行时改 Parent 的豁免在
+  MovesAcrossBarKinds 里,manager 的结构检查(设计期也要拒)只用这一句。 }
+function BarKindsDiffer(AOld, ANew: TWinControl): Boolean;
+begin
+  Result := (AOld <> ANew) and (AOld is TTyToolWindowBar) and (ANew is TTyToolWindowBar)
+    and ((TTyToolWindowBar(AOld).Placement = twpBottom)
+         <> (TTyToolWindowBar(ANew).Placement = twpBottom));
+end;
+
 function TTyToolWindow.MovesAcrossBarKinds(AOld, ANew: TWinControl): Boolean;
 const
   Exempt = [csLoading, csDesigning, csDestroying];
 begin
-  { 两边都是栏、一侧一底(按 Placement,不看 Align),并且窗口和两条栏都不在加载 / 设计 /
-    释放中。孤儿进栏、出栏到 nil、同类栏之间都不算。 }
-  Result := (AOld <> ANew) and (AOld is TTyToolWindowBar) and (ANew is TTyToolWindowBar)
-    and ((TTyToolWindowBar(AOld).Placement = twpBottom)
-         <> (TTyToolWindowBar(ANew).Placement = twpBottom))
+  { 一侧一底(BarKindsDiffer),并且窗口和两条栏都不在加载 / 设计 / 释放中。孤儿进栏、
+    出栏到 nil、同类栏之间都不算。 }
+  Result := BarKindsDiffer(AOld, ANew)
     and (Exempt * ComponentState = [])
     and (Exempt * AOld.ComponentState = [])
     and (Exempt * ANew.ComponentState = []);
@@ -5957,6 +5978,52 @@ begin
   if not Result then Exit;
   for i := 0 to High(FBars) do
     if (FBars[i] <> ABar) and (FBars[i].Placement = ABar.Placement) then Exit(False);
+end;
+
+function TTyToolWindowManager.StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+  out ASource: TTyToolWindowBar): Boolean;
+const
+  Busy = [csLoading, csDestroying];
+begin
+  Result := False;
+  ASource := nil;
+  if (AWindow = nil) or (ATarget = nil) then Exit;
+  ASource := AWindow.Bar;
+  if ASource = nil then Exit;
+  { 两条栏都注册在本 manager 上。 }
+  if (ASource.Manager <> Self) or (ATarget.Manager <> Self) then Exit;
+  { manager、窗口、两条栏都不在加载 / 释放中。 }
+  if Busy * (ComponentState + AWindow.ComponentState + ASource.ComponentState
+     + ATarget.ComponentState) <> [] then Exit;
+  { 同一个窗体(spec §9.1:不做跨窗体)。 }
+  if GetParentForm(ASource) <> GetParentForm(ATarget) then Exit;
+  { 侧 ↔ 底永远不行,设计期也不行 —— 所以不用 MovesAcrossBarKinds(它对设计期放行)。 }
+  if BarKindsDiffer(ASource, ATarget) then Exit;
+  { 冲突的栏只能栏内调顺序(spec §10.6)。 }
+  Result := (ASource = ATarget) or (IsBarUsable(ASource) and IsBarUsable(ATarget));
+end;
+
+function TTyToolWindowManager.CanMoveWindow(AWindow: TTyToolWindow;
+  ATargetBar: TTyToolWindowBar): Boolean;
+var
+  src: TTyToolWindowBar;
+  allow: Boolean;
+begin
+  Result := StructureAllows(AWindow, ATargetBar, src);
+  if not Result then Exit;
+  { 同一条栏就是调顺序,永远行;设计期不问事件(spec §6.6)。 }
+  if (src = ATargetBar) or (csDesigning in ComponentState) then Exit(True);
+  allow := True;
+  if Assigned(FOnCanMoveWindow) then
+  begin
+    Inc(FEventDepth);
+    try
+      FOnCanMoveWindow(Self, AWindow, ATargetBar, allow);
+    finally
+      Dec(FEventDepth);
+    end;
+  end;
+  Result := allow;
 end;
 
 procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
