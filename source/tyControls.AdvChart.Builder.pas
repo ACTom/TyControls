@@ -1457,6 +1457,10 @@ begin
     Result := not ((v <> nil) and (v is TJSONArray));
     Exit;
   end;
+  { NOTHING BUT NULLS: the detected width is item 0's, a null's, which is
+    one -- so the category is not in the item and is the row index, and a
+    `data: [null]` bar still answers its category's axis tooltip with '-'. }
+  Result := True;
 end;
 
 { A JSON scalar as a raw store value. Anything that is not a scalar -- an object
@@ -1529,6 +1533,66 @@ begin
   end;
 end;
 
+{ A data item AS WRITTEN, for the text a label or a tooltip prints --
+  upstream's getDataItemValue, not UnwrapItem: `{value: null}` is a null and
+  an object with no `value` is absent, where UnwrapItem hands both back as the
+  object. A whisker-box series on a category axis has its row index put in
+  front, as upstream's unshift does. }
+function RawItemOf(AItem: TJSONData; APrepend: Boolean;
+  ARowIndex: Integer): TTyRawItem;
+var
+  v: TJSONData;
+  a: TJSONArray;
+  k, off: Integer;
+begin
+  Result := Default(TTyRawItem);
+  if (AItem = nil) or (AItem.JSONType = jtNull) then
+  begin
+    Result.Shape := rshAbsent;
+    Exit;
+  end;
+  v := AItem;
+  if AItem is TJSONObject then
+  begin
+    v := TJSONObject(AItem).Find('value');
+    if v = nil then
+    begin
+      Result.Shape := rshAbsent;
+      Exit;
+    end;
+    if v.JSONType = jtNull then
+    begin
+      Result.Shape := rshNull;
+      Exit;
+    end;
+  end;
+  if v is TJSONArray then
+  begin
+    a := TJSONArray(v);
+    if APrepend then off := 1 else off := 0;
+    Result.Shape := rshArray;
+    SetLength(Result.Cells, a.Count + off);
+    if APrepend then Result.Cells[0] := TyDataNum(ARowIndex);
+    for k := 0 to a.Count - 1 do Result.Cells[k + off] := CellValue(a.Items[k]);
+  end
+  else if v is TJSONObject then
+    Result.Shape := rshObject
+  else
+  begin
+    Result.Shape := rshScalar;
+    Result.Scalar := CellValue(v);
+  end;
+end;
+
+function RawNameTaken(AStore: TTyDataStore; const AName: string;
+  ACount: Integer): Boolean;
+var p: Integer;
+begin
+  for p := 0 to ACount - 1 do
+    if AStore.RawDimName(p) = AName then Exit(True);
+  Result := False;
+end;
+
 function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ADims: TTySeriesDimArray; AStore: TTyDataStore;
   const AKey: string): Integer;
@@ -1537,9 +1601,9 @@ var
   d: TJSONData;
   arr: TJSONArray;
   row: array of TTyDataValue;
-  i, k, src, catDim, raw: Integer;
+  i, k, src, catDim, raw, pos: Integer;
   item, v, cell: TJSONData;
-  useIndex: Boolean;
+  useIndex, prepend: Boolean;
   txt: string;
 begin
   Result := 0;
@@ -1554,6 +1618,68 @@ begin
   catDim := FirstCategoryDim(ADims);
   useIndex := TySeriesUsesRowIndex(arr, ADims);
   SetLength(row, Length(ADims));
+
+  { THE RAW SIDE. A category column on the row index means upstream put the
+    index in FRONT of every item (whiskerBoxCommon), which moves every other
+    element one place on. }
+  prepend := False;
+  for k := 0 to High(ADims) do
+    if ADims[k].FromRowIndex and (ADims[k].Kind = ddtOrdinal) then prepend := True;
+  for k := 0 to High(ADims) do
+  begin
+    if ADims[k].FromRowIndex then
+    begin
+      if prepend then pos := 0 else pos := -1;
+    end
+    else if ADims[k].SourceSlot > 0 then
+    begin
+      pos := ADims[k].SourceSlot - 1;
+      if prepend then Inc(pos);
+    end
+    else
+      pos := k;
+    AStore.SetRawDimPos(k, pos);
+  end;
+  { THE NAMES `{@name}` FINDS: the series' own `dimensions` when it has them
+    -- which replace the coordinate names outright -- and otherwise each
+    column's name at the position it reads. }
+  d := node.Find('dimensions');
+  if (d <> nil) and (d is TJSONArray) then
+  begin
+    for k := 0 to TJSONArray(d).Count - 1 do
+    begin
+      cell := TJSONArray(d).Items[k];
+      txt := '';
+      if cell.JSONType = jtString then txt := cell.AsString
+      else if cell is TJSONObject then
+      begin
+        cell := TJSONObject(cell).Find('name');
+        if (cell <> nil) and (cell.JSONType = jtString) then txt := cell.AsString;
+      end;
+      if txt <> '' then AStore.SetRawDimName(k, txt);
+    end;
+  end
+  else
+  begin
+    for k := 0 to High(ADims) do
+      if (AStore.RawDimPos(k) >= 0) and (ADims[k].Name <> '') then
+        AStore.SetRawDimName(AStore.RawDimPos(k), ADims[k].Name);
+    { EVERY OTHER POSITION THE DATA HAS gets a generated name, in order --
+      `value`, then `value0`, `value1`, ... skipping any already taken --
+      which is how `{@value}` finds a scatter's third number. }
+    src := TySeriesDetectedDimCount(arr);
+    if prepend then Inc(src);
+    raw := -1;
+    for pos := 0 to src - 1 do
+    begin
+      if AStore.RawDimName(pos) <> '' then Continue;
+      repeat
+        if raw < 0 then txt := 'value' else txt := 'value' + IntToStr(raw);
+        Inc(raw);
+      until not RawNameTaken(AStore, txt, src);
+      AStore.SetRawDimName(pos, txt);
+    end;
+  end;
 
   for i := 0 to arr.Count - 1 do
   begin
@@ -1586,6 +1712,7 @@ begin
     end;
     raw := AStore.AppendRow(row);
     Inc(Result);
+    AStore.SetRawItem(raw, RawItemOf(item, prepend, i));
 
     if not (item is TJSONObject) then Continue;
     if OptionIdName(TJSONObject(item).Find('name'), txt) then AStore.SetName(raw, txt);
@@ -1602,12 +1729,34 @@ var
   i, k, n, col, raw: Integer;
   cell: TJSONData;
   nm: string;
+  named: Boolean;
+  it: TTyRawItem;
+  line: TJSONArray;
 begin
   Result := 0;
   if (AStore = nil) or (Length(ADims) = 0) then Exit;
   if not ASource.Valid then Exit;
   n := TySourceRowCount(ASource);
   SetLength(row, Length(ADims));
+
+  { THE RAW SIDE: each column at the source dimension it is encoded from, and
+    the names the table's own header gives -- or, with no header, the
+    columns' own names at those positions. }
+  named := False;
+  for k := 0 to High(ASource.Dims) do
+    if ASource.Dims[k].Name <> '' then
+    begin
+      AStore.SetRawDimName(k, ASource.Dims[k].Name);
+      named := True;
+    end;
+  for k := 0 to High(ADims) do
+  begin
+    col := -1;
+    if k <= High(AEncode.Columns) then col := AEncode.Columns[k];
+    AStore.SetRawDimPos(k, col);
+    if (not named) and (col >= 0) and (ADims[k].Name <> '') then
+      AStore.SetRawDimName(col, ADims[k].Name);
+  end;
 
   for i := 0 to n - 1 do
   begin
@@ -1622,6 +1771,37 @@ begin
     end;
     raw := AStore.AppendRow(row);
     Inc(Result);
+
+    { upstream's getItem: a column-layout row is the line itself, every cell
+      of it; a row-layout record is rebuilt across every line; an object row
+      is an object whose reachable fields are the source dimensions. }
+    it := Default(TTyRawItem);
+    if (ASource.Format = tsfArrayRows) and (ASource.LayoutBy = slbColumn) then
+    begin
+      line := nil;
+      if (ASource.Data <> nil) and (i + ASource.StartIndex < ASource.Data.Count)
+        and (ASource.Data.Items[i + ASource.StartIndex] is TJSONArray) then
+        line := TJSONArray(ASource.Data.Items[i + ASource.StartIndex]);
+      if line = nil then it.Shape := rshAbsent
+      else
+      begin
+        it.Shape := rshArray;
+        SetLength(it.Cells, line.Count);
+        for k := 0 to line.Count - 1 do it.Cells[k] := CellValue(line.Items[k]);
+      end;
+    end
+    else
+    begin
+      if ASource.Format = tsfObjectRows then it.Shape := rshObject
+      else it.Shape := rshArray;
+      if (ASource.Format = tsfArrayRows) and (ASource.Data <> nil) then
+        col := ASource.Data.Count
+      else
+        col := ASource.DimCount;
+      SetLength(it.Cells, col);
+      for k := 0 to col - 1 do it.Cells[k] := CellValue(TySourceCell(ASource, i, k));
+    end;
+    AStore.SetRawItem(raw, it);
 
     { THE ROW'S OWN NAME comes from a column rather than from a `name` field:
       a dataset row has no fields outside its dimensions. }

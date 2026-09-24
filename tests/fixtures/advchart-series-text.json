@@ -3475,7 +3475,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -3620,7 +3619,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -3699,7 +3697,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -3754,7 +3751,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -3822,7 +3818,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -3878,7 +3873,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -3938,7 +3932,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -4001,7 +3994,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
    "series": [
     {
      "seriesIndex": 0,
@@ -4019,6 +4011,1746 @@
        "drawn": true,
        "texts": [
         "y,0.30000000000000004,3"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar raw zoo: default labels",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "z0",
+      "z1",
+      "z2",
+      "z3",
+      "z4",
+      "z5",
+      "z6",
+      "z7",
+      "z8",
+      "z9",
+      "z10",
+      "z11",
+      "z12",
+      "z13"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "12.50",
+       " 5 ",
+       "1e3",
+       true,
+       false,
+       {
+        "value": "12.50"
+       },
+       {
+        "value": true
+       },
+       {
+        "value": null
+       },
+       {},
+       null,
+       "-",
+       "abc",
+       0,
+       1e+21
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        " 5 "
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "1e3"
+       ]
+      },
+      {
+       "dataIndex": 3,
+       "drawn": true,
+       "texts": [
+        "true"
+       ]
+      },
+      {
+       "dataIndex": 4,
+       "drawn": true,
+       "texts": [
+        "false"
+       ]
+      },
+      {
+       "dataIndex": 5,
+       "drawn": true,
+       "texts": [
+        "12.50"
+       ]
+      },
+      {
+       "dataIndex": 6,
+       "drawn": true,
+       "texts": [
+        "true"
+       ]
+      },
+      {
+       "dataIndex": 7,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 8,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 9,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 10,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 11,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 12,
+       "drawn": true,
+       "texts": [
+        "0"
+       ]
+      },
+      {
+       "dataIndex": 13,
+       "drawn": true,
+       "texts": [
+        "1e+21"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar raw zoo: {c}",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "z0",
+      "z1",
+      "z2",
+      "z3",
+      "z4",
+      "z5",
+      "z6",
+      "z7",
+      "z8",
+      "z9",
+      "z10",
+      "z11",
+      "z12",
+      "z13"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "12.50",
+       " 5 ",
+       "1e3",
+       true,
+       false,
+       {
+        "value": "12.50"
+       },
+       {
+        "value": true
+       },
+       {
+        "value": null
+       },
+       {},
+       null,
+       "-",
+       "abc",
+       0,
+       1e+21
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        " 5 "
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "1e3"
+       ]
+      },
+      {
+       "dataIndex": 3,
+       "drawn": true,
+       "texts": [
+        "true"
+       ]
+      },
+      {
+       "dataIndex": 4,
+       "drawn": true,
+       "texts": [
+        "false"
+       ]
+      },
+      {
+       "dataIndex": 5,
+       "drawn": true,
+       "texts": [
+        "12.50"
+       ]
+      },
+      {
+       "dataIndex": 6,
+       "drawn": true,
+       "texts": [
+        "true"
+       ]
+      },
+      {
+       "dataIndex": 7,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 8,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 9,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 10,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 11,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 12,
+       "drawn": true,
+       "texts": [
+        "0"
+       ]
+      },
+      {
+       "dataIndex": 13,
+       "drawn": true,
+       "texts": [
+        "1e+21"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar raw zoo: [{@[0]}|{@y}|{@x}|{@nope}|{@[1]}]",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "z0",
+      "z1",
+      "z2",
+      "z3",
+      "z4",
+      "z5",
+      "z6",
+      "z7",
+      "z8",
+      "z9",
+      "z10",
+      "z11",
+      "z12",
+      "z13"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "12.50",
+       " 5 ",
+       "1e3",
+       true,
+       false,
+       {
+        "value": "12.50"
+       },
+       {
+        "value": true
+       },
+       {
+        "value": null
+       },
+       {},
+       null,
+       "-",
+       "abc",
+       0,
+       1e+21
+      ],
+      "label": {
+       "show": true,
+       "formatter": "[{@[0]}|{@y}|{@x}|{@nope}|{@[1]}]"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "[12.50|12.50|12.50|12.50|12.50]"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "[ 5 | 5 | 5 | 5 | 5 ]"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "[1e3|1e3|1e3|1e3|1e3]"
+       ]
+      },
+      {
+       "dataIndex": 3,
+       "drawn": true,
+       "texts": [
+        "[true|true|true|true|true]"
+       ]
+      },
+      {
+       "dataIndex": 4,
+       "drawn": true,
+       "texts": [
+        "[false|false|false|false|false]"
+       ]
+      },
+      {
+       "dataIndex": 5,
+       "drawn": true,
+       "texts": [
+        "[12.50|12.50|12.50|12.50|12.50]"
+       ]
+      },
+      {
+       "dataIndex": 6,
+       "drawn": true,
+       "texts": [
+        "[true|true|true|true|true]"
+       ]
+      },
+      {
+       "dataIndex": 7,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 8,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 9,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 10,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 11,
+       "drawn": false,
+       "texts": []
+      },
+      {
+       "dataIndex": 12,
+       "drawn": true,
+       "texts": [
+        "[0|0|0|0|0]"
+       ]
+      },
+      {
+       "dataIndex": 13,
+       "drawn": true,
+       "texts": [
+        "[1e+21|1e+21|1e+21|1e+21|1e+21]"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "funnel {b}:{c}:{@value} of a null item, {}, a null value and a raw string",
+   "option": {
+    "series": [
+     {
+      "type": "funnel",
+      "name": "F",
+      "label": {
+       "formatter": "{b}:{c}:{@value}"
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 1
+       },
+       null,
+       {},
+       {
+        "name": "z",
+        "value": null
+       },
+       {
+        "name": "s",
+        "value": "12.50"
+       }
+      ]
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "funnel",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "a:1:1"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        ":undefined:"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        ":undefined:"
+       ]
+      },
+      {
+       "dataIndex": 3,
+       "drawn": true,
+       "texts": [
+        "z:null:"
+       ]
+      },
+      {
+       "dataIndex": 4,
+       "drawn": true,
+       "texts": [
+        "s:12.50:12.50"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "pie {c} of '12.50' and true",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "data": [
+       {
+        "name": "a",
+        "value": "12.50"
+       },
+       {
+        "name": "b",
+        "value": true
+       }
+      ],
+      "label": {
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "pie",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "true"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scatter encode {x: 1, y: 0}: {@x}|{@y}|{@[0]}|{@1}|{c}",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "Sc",
+      "encode": {
+       "x": 1,
+       "y": 0
+      },
+      "data": [
+       [
+        "1.50",
+        7,
+        "z"
+       ],
+       [
+        2,
+        "3.25"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{@x}|{@y}|{@[0]}|{@1}|{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "7|1.50|1.50|7|1.50,7,z"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "3.25|2|2|3.25|2,3.25"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar [cat, 1, 2, 3, 4]: {@value}|{@value0}|{@value1}|{@[3]}",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       [
+        "A",
+        1,
+        2,
+        3,
+        4
+       ],
+       [
+        "B",
+        5,
+        "6.50",
+        7
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{@value}|{@value0}|{@value1}|{@[3]}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "2|3|4|3"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6.50|7||7"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scatter dimensions ['u', 'v', 'w']: {@u}|{@v}|{@w}|{@x}",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "Sc",
+      "dimensions": [
+       "u",
+       "v",
+       "w"
+      ],
+      "data": [
+       [
+        1,
+        "2.0",
+        "q"
+       ],
+       [
+        3,
+        4,
+        "r"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{@u}|{@v}|{@w}|{@x}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "1|2.0|q|"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "3|4|r|"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scatter {c} of [3, 4, null]",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "Sc",
+      "data": [
+       [
+        3,
+        4,
+        null
+       ],
+       [
+        1,
+        2
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "3,4,"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "1,2"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "line {value: ['a', '1.50']}: {c}|{@y}",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       {
+        "value": [
+         "a",
+         "1.50"
+        ]
+       },
+       [
+        "b",
+        "2e0"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{c}|{@y}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "a,1.50|1.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "b,2e0|2e0"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "line {value: ['a', '1.50']}: default labels",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       {
+        "value": [
+         "a",
+         "1.50"
+        ]
+       },
+       [
+        "b",
+        "2e0"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "1.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "2e0"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scatter {@} corners on arrays",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "Sc",
+      "data": [
+       [
+        1.5,
+        "2.50",
+        "q"
+       ],
+       [
+        3,
+        4
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{@[]}|{@[ 1 ]}|{@[x]}|{@[-1]}|{@[99]}|{@}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "1.5|2.50||||{@}"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "3|4||||{@}"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar {@} corners on scalars",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "12.50",
+       3
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{@[]}|{@[ 1 ]}|{@[x]}|{@[-1]}|{@[99]}|{@}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "12.50|12.50|12.50|12.50|12.50|{@}"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "3|3|3|3|3|{@}"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar {a} of a series named N{@[0]}",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "N{@[0]}",
+      "data": [
+       "12.50",
+       3
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{a}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "N12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "N3"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar {b} of a category named c{@y}",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c{@y}",
+      "d{@[0]}"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "12.50",
+       3
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "c12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "d3"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset with a header: {@p}|{@a}|{@x}|{@y}|{c}",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       "12.50",
+       2
+      ],
+      [
+       "y",
+       3
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "formatter": "{@p}|{@a}|{@x}|{@y}|{c}"
+      }
+     },
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "formatter": "{@p}|{@b}|{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x|12.50|||x,12.50,2"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "y|3|||y,3"
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x|2|x,12.50,2"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": false,
+       "texts": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset without a header: {@x}|{@y}|{@[1]}",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       "3.50",
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "formatter": "{@x}|{@y}|{@[1]}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x|1|1"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "y|3.50|3.50"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset row layout, a short row: {c}",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "x",
+       "y",
+       "z"
+      ],
+      [
+       "a",
+       1,
+       "2.50",
+       3
+      ],
+      [
+       "b",
+       4,
+       5
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "seriesLayoutBy": "row",
+      "label": {
+       "show": true,
+       "formatter": "{c}"
+      }
+     },
+     {
+      "type": "bar",
+      "seriesLayoutBy": "row",
+      "label": {
+       "show": true,
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x,1,4"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "y,2.50,5"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "z,3,"
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x,1,4"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "y,2.50,5"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": false,
+       "texts": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset objectRows: {c}|{@a}|{@[1]}|{@extra}",
+   "option": {
+    "dataset": {
+     "dimensions": [
+      "p",
+      "a"
+     ],
+     "source": [
+      {
+       "p": "x",
+       "a": "12.50",
+       "extra": 9
+      },
+      {
+       "p": "y",
+       "a": true
+      }
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "formatter": "{c}|{@a}|{@[1]}|{@extra}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "[object Object]|12.50|12.50|"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "[object Object]|true|true|"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset keyedColumns: {c}",
+   "option": {
+    "dataset": {
+     "dimensions": [
+      "p",
+      "a"
+     ],
+     "source": {
+      "p": [
+       "x",
+       "y"
+      ],
+      "a": [
+       "12.50",
+       3
+      ]
+     }
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x,12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "y,3"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset second series: default labels",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       "12.50",
+       " 7 "
+      ],
+      [
+       "y",
+       3,
+       "abc"
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true
+      }
+     },
+     {
+      "type": "bar",
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "12.50"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "3"
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        " 7 "
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": false,
+       "texts": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset ordinal and time dims: {@p}|{@t}",
+   "option": {
+    "dataset": {
+     "dimensions": [
+      "p",
+      {
+       "name": "t",
+       "type": "time"
+      },
+      "a"
+     ],
+     "sourceHeader": false,
+     "source": [
+      [
+       "x",
+       "2020-01-02",
+       "12.50"
+      ],
+      [
+       "y",
+       1577923200000,
+       3
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "encode": {
+       "x": "p",
+       "y": "a"
+      },
+      "label": {
+       "show": true,
+       "formatter": "{@p}|{@t}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "x|2020-01-02"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "y|1577923200000"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar: '   ' and '0x10' are drawn",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "   ",
+       "0x10",
+       5
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "deferred": true,
+   "why": "parse parity (D9)",
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "   "
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "0x10"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "5"
        ]
       }
      ]
@@ -4062,6 +5794,7 @@
     "animation": false
    },
    "deferred": true,
+   "why": "encode and the defaulted label dimension",
    "series": [
     {
      "seriesIndex": 0,
@@ -4124,6 +5857,7 @@
     "animation": false
    },
    "deferred": true,
+   "why": "encode and the defaulted label dimension",
    "series": [
     {
      "seriesIndex": 0,
@@ -4182,6 +5916,7 @@
     "animation": false
    },
    "deferred": true,
+   "why": "encode and the defaulted label dimension",
    "series": [
     {
      "seriesIndex": 0,
@@ -4232,6 +5967,7 @@
     "animation": false
    },
    "deferred": true,
+   "why": "the unnamed series' auto name",
    "series": [
     {
      "seriesIndex": 0,
@@ -7731,7 +9467,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -7787,7 +9522,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 1,
@@ -7843,7 +9577,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 2,
@@ -7899,7 +9632,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 3,
@@ -7955,7 +9687,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "axis",
    "category": "A",
    "lines": [
@@ -8010,7 +9741,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "axis",
    "category": "B",
    "lines": [
@@ -8065,7 +9795,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "axis",
    "category": "C",
    "lines": [
@@ -8120,7 +9849,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "axis",
    "category": "D",
    "lines": [
@@ -8175,7 +9903,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
    "trigger": "axis",
    "category": "E",
    "lines": [
@@ -8228,7 +9955,6 @@
      "formatter": "{c}"
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8284,7 +10010,6 @@
      "formatter": "{c}"
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8343,7 +10068,6 @@
      "formatter": "{c}"
     }
    },
-   "deferred": true,
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8356,6 +10080,732 @@
    ],
    "text": "x,1234.5,2",
    "visible": "x,1234.5,2"
+  },
+  {
+   "name": "dataset second series: default cell of item 0",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       "12.50",
+       " 7 "
+      ],
+      [
+       "y",
+       3,
+       "abc"
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar"
+     },
+     {
+      "type": "bar"
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 1,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "b",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "x",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_4|b}\n{__EC_aUTo_1|}  {__EC_aUTo_2|x}{__EC_aUTo_3|7}",
+   "visible": "b\n  x7"
+  },
+  {
+   "name": "axis over one bar per raw: default cells",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S0",
+      "data": [
+       "12.50"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S1",
+      "data": [
+       " 5 "
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "data": [
+       "1e3"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S3",
+      "data": [
+       true
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S4",
+      "data": [
+       false
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S5",
+      "data": [
+       "-"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S6",
+      "data": [
+       "abc"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S7",
+      "data": [
+       ""
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S8",
+      "data": [
+       "Infinity"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S9",
+      "data": [
+       "0x10"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S10",
+      "data": [
+       null
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S11",
+      "data": [
+       {
+        "value": null
+       }
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S0",
+     "value": "12.5"
+    },
+    {
+     "marker": "item",
+     "name": "S1",
+     "value": "5"
+    },
+    {
+     "marker": "item",
+     "name": "S2",
+     "value": "1,000"
+    },
+    {
+     "marker": "item",
+     "name": "S3",
+     "value": "true"
+    },
+    {
+     "marker": "item",
+     "name": "S4",
+     "value": "false"
+    },
+    {
+     "marker": "item",
+     "name": "S5",
+     "value": "-"
+    },
+    {
+     "marker": "item",
+     "name": "S6",
+     "value": "abc"
+    },
+    {
+     "marker": "item",
+     "name": "S7",
+     "value": "-"
+    },
+    {
+     "marker": "item",
+     "name": "S8",
+     "value": "Infinity"
+    },
+    {
+     "marker": "item",
+     "name": "S9",
+     "value": "0x10"
+    },
+    {
+     "marker": "item",
+     "name": "S10",
+     "value": "-"
+    },
+    {
+     "marker": "item",
+     "name": "S11",
+     "value": "-"
+    }
+   ],
+   "text": "{__EC_aUTo_48|A}\n{__EC_aUTo_12|}  {__EC_aUTo_13|S0}{__EC_aUTo_14|12.5}\n{__EC_aUTo_15|}  {__EC_aUTo_16|S1}{__EC_aUTo_17|5}\n{__EC_aUTo_18|}  {__EC_aUTo_19|S2}{__EC_aUTo_20|1,000}\n{__EC_aUTo_21|}  {__EC_aUTo_22|S3}{__EC_aUTo_23|true}\n{__EC_aUTo_24|}  {__EC_aUTo_25|S4}{__EC_aUTo_26|false}\n{__EC_aUTo_27|}  {__EC_aUTo_28|S5}{__EC_aUTo_29|-}\n{__EC_aUTo_30|}  {__EC_aUTo_31|S6}{__EC_aUTo_32|abc}\n{__EC_aUTo_33|}  {__EC_aUTo_34|S7}{__EC_aUTo_35|-}\n{__EC_aUTo_36|}  {__EC_aUTo_37|S8}{__EC_aUTo_38|Infinity}\n{__EC_aUTo_39|}  {__EC_aUTo_40|S9}{__EC_aUTo_41|0x10}\n{__EC_aUTo_42|}  {__EC_aUTo_43|S10}{__EC_aUTo_44|-}\n{__EC_aUTo_45|}  {__EC_aUTo_46|S11}{__EC_aUTo_47|-}",
+   "visible": "A\n  S012.5\n  S15\n  S21,000\n  S3true\n  S4false\n  S5-\n  S6abc\n  S7-\n  S8Infinity\n  S90x10\n  S10-\n  S11-"
+  },
+  {
+   "name": "axis over one bar per raw: template {c0}..{c11}",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S0",
+      "data": [
+       "12.50"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S1",
+      "data": [
+       " 5 "
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "data": [
+       "1e3"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S3",
+      "data": [
+       true
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S4",
+      "data": [
+       false
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S5",
+      "data": [
+       "-"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S6",
+      "data": [
+       "abc"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S7",
+      "data": [
+       ""
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S8",
+      "data": [
+       "Infinity"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S9",
+      "data": [
+       "0x10"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S10",
+      "data": [
+       null
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S11",
+      "data": [
+       {
+        "value": null
+       }
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "formatter": "{c0}|{c1}|{c2}|{c3}|{c4}|{c5}|{c6}|{c7}|{c8}|{c9}|{c10}|{c11}"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": null,
+     "value": null
+    }
+   ],
+   "text": "12.50| 5 |1e3|true|false|-|abc||Infinity|0x10||",
+   "visible": "12.50| 5 |1e3|true|false|-|abc||Infinity|0x10||"
+  },
+  {
+   "name": "objectRows item template {c}",
+   "option": {
+    "dataset": {
+     "dimensions": [
+      "p",
+      "a"
+     ],
+     "source": [
+      {
+       "p": "x",
+       "a": "12.50",
+       "extra": 9
+      },
+      {
+       "p": "y",
+       "a": true
+      }
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar"
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "formatter": "{c}"
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": null,
+     "value": null
+    }
+   ],
+   "text": "[object Object]",
+   "visible": "[object Object]"
+  },
+  {
+   "name": "keyedColumns item template {c}",
+   "option": {
+    "dataset": {
+     "dimensions": [
+      "p",
+      "a"
+     ],
+     "source": {
+      "p": [
+       "x",
+       "y"
+      ],
+      "a": [
+       "12.50",
+       3
+      ]
+     }
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar"
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "formatter": "{c}"
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": null,
+     "value": null
+    }
+   ],
+   "text": "x,12.50",
+   "visible": "x,12.50"
+  },
+  {
+   "name": "row layout item template {c}",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "x",
+       "y",
+       "z"
+      ],
+      [
+       "a",
+       1,
+       "2.50",
+       3
+      ],
+      [
+       "b",
+       4,
+       5
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "seriesLayoutBy": "row"
+     },
+     {
+      "type": "bar",
+      "seriesLayoutBy": "row"
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "formatter": "{c}"
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 1,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": null,
+     "value": null
+    }
+   ],
+   "text": "y,2.50,5",
+   "visible": "y,2.50,5"
+  },
+  {
+   "name": "item template {c} of [cat, 5, 'a&<b']",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       [
+        "A",
+        5,
+        "a&<b"
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "formatter": "{c}"
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": null,
+     "value": null
+    }
+   ],
+   "text": "A,5,a&amp;&lt;b",
+   "visible": "A,5,a&<b"
+  },
+  {
+   "name": "pie item '12.50'",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "data": [
+       {
+        "name": "a",
+        "value": "12.50"
+       },
+       {
+        "name": "b",
+        "value": true
+       }
+      ],
+      "label": {
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "a",
+     "value": "12.5"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|a}{__EC_aUTo_3|12.5}",
+   "visible": "P\n  a12.5"
+  },
+  {
+   "name": "pie item true",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "data": [
+       {
+        "name": "a",
+        "value": "12.50"
+       },
+       {
+        "name": "b",
+        "value": true
+       }
+      ],
+      "label": {
+       "formatter": "{c}"
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "b",
+     "value": "true"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|b}{__EC_aUTo_3|true}",
+   "visible": "P\n  btrue"
+  },
+  {
+   "name": "bar item '   '",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       "   ",
+       "0x10",
+       5
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "deferred": true,
+   "why": "parse parity (D9)",
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "A",
+     "value": "-"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|A}{__EC_aUTo_3|-}",
+   "visible": "S\n  A-"
   },
   {
    "name": "candlestick item: open/close/lowest/highest rows",
@@ -8399,6 +10849,7 @@
     }
    },
    "deferred": true,
+   "why": "sub-row tooltips",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 1,
@@ -8479,6 +10930,7 @@
     }
    },
    "deferred": true,
+   "why": "sub-row tooltips",
    "trigger": "axis",
    "category": "d1",
    "lines": [
@@ -8567,6 +11019,7 @@
     }
    },
    "deferred": true,
+   "why": "sub-row tooltips",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8646,6 +11099,7 @@
     }
    },
    "deferred": true,
+   "why": "sub-row tooltips",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 1,
@@ -8710,6 +11164,7 @@
     }
    },
    "deferred": true,
+   "why": "encode.tooltip and displayName",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8774,6 +11229,7 @@
     }
    },
    "deferred": true,
+   "why": "encode.tooltip and displayName",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8844,6 +11300,7 @@
     }
    },
    "deferred": true,
+   "why": "the defaulted value of a category-category series",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -8910,6 +11367,7 @@
     }
    },
    "deferred": true,
+   "why": "the unnamed series' auto name",
    "trigger": "axis",
    "category": "B",
    "lines": [
@@ -9470,6 +11928,7 @@
     "animation": false
    },
    "deferred": true,
+   "why": "a documented deviation: the port draws the min",
    "titles": [
     "t"
    ],

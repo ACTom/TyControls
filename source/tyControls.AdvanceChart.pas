@@ -475,6 +475,7 @@ type
     function AxisDimOf(AAxis: TTyAxis): string;
     { Rewrite ADims for a series type that declares more than one value per
       datum. A no-op for every other type. }
+    procedure SeriesDataEncode(ASlot: Integer; var ADims: TTySeriesDimArray);
     procedure MultiValueDims(const ABinding: TTySeriesBinding;
       var ADims: TTySeriesDimArray);
     { The legend's elements, into the chart's own paint list. }
@@ -1127,6 +1128,7 @@ begin
     ds := FSeriesDataset[i];
     if ds < 0 then
     begin
+      SeriesDataEncode(i, dims);
       TyFillSeriesStore(FOption, i, dims, st);
       Continue;
     end;
@@ -3622,6 +3624,35 @@ begin
   end;
 end;
 
+{ `encode` ON A SERIES' OWN DATA: `encode: {x: 1, y: 0}` has x read element
+  1 of each item and y element 0, exactly as it would pick table columns.
+  Only the plain coordinate columns -- a multi-value series places its own,
+  and a row-index column reads no element at all. }
+procedure TTyAdvanceChart.SeriesDataEncode(ASlot: Integer;
+  var ADims: TTySeriesDimArray);
+var
+  coord: TTyCoordDimArray;
+  enc: TTySeriesEncode;
+  k: Integer;
+begin
+  for k := 0 to High(ADims) do
+    if (ADims[k].Coord <> '') or (ADims[k].SourceSlot > 0) then Exit;
+  coord := nil;
+  SetLength(coord, Length(ADims));
+  for k := 0 to High(ADims) do
+  begin
+    coord[k].Name := ADims[k].Name;
+    coord[k].Ordinal := ADims[k].Kind = ddtOrdinal;
+  end;
+  enc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
+    Default(TTyChartSource), coord);
+  if not enc.Given then Exit;
+  for k := 0 to High(ADims) do
+    if (k <= High(enc.Columns)) and (enc.Columns[k] >= 0)
+      and not ADims[k].FromRowIndex then
+      ADims[k].SourceSlot := enc.Columns[k] + 1;
+end;
+
 procedure TTyAdvanceChart.MultiValueDims(const ABinding: TTySeriesBinding;
   var ADims: TTySeriesDimArray);
 var
@@ -4382,6 +4413,7 @@ begin
     picture, not a gap in this. The store answers it, by the same rule the
     label's b placeholder asks. }
   Result.Name := st.GetItemName(ADatum.DataIndex);
+  Result.Raw := st.RawItem(ADatum.DataIndex);
 
   { THE d LETTER, which only a pie and a funnel have: the pie's seats (the
     largest-remainder shares, to percentPrecision) and the funnel's two-place
@@ -4432,6 +4464,17 @@ begin
   begin
     Result.Values[i] := st.Get(cols[i], ADatum.DataIndex);
     Result.DimensionNames[i] := st.DimName(cols[i]);
+  end;
+  { EACH VALUE'S RAW CELL, at the position its dimension was read from. }
+  if Result.Raw.Shape = rshNone then Exit;
+  SetLength(Result.RawCells, Length(cols));
+  SetLength(Result.RawTypes, Length(cols));
+  for i := 0 to High(cols) do
+  begin
+    if not TTyDataStore.RawCell(Result.Raw, st.RawDimPos(cols[i]),
+      Result.RawCells[i]) then
+      Result.RawCells[i] := Default(TTyDataValue);
+    Result.RawTypes[i] := st.DimType(cols[i]);
   end;
 end;
 
@@ -5355,7 +5398,14 @@ begin
   for i := 0 to High(AParams.Values) do
   begin
     if i > 0 then Result := Result + '  ';
-    Result := Result + TyTooltipValueText(AParams.Values[i]);
+    { makeValueReadable ON THE RAW CELL: 'abc' is 'abc', true is true,
+      '0x10' is '0x10' -- where the parsed Double would say '-' or 1. A
+      time is still the number's (its formatting is local time). }
+    if (i <= High(AParams.RawCells)) and (i <= High(AParams.RawTypes))
+      and (AParams.RawTypes[i] <> ddtTime) then
+      Result := Result + TyReadableCell(AParams.RawCells[i], AParams.RawTypes[i])
+    else
+      Result := Result + TyTooltipValueText(AParams.Values[i]);
   end;
 end;
 

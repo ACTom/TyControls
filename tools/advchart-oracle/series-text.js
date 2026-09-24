@@ -46,9 +46,17 @@
 //             to the view's group, one per split, in tick order.
 //
 // A case marked deferred depends on something the port does not keep or draw
-// yet (the raw value as written, array values in {c}, sub-row tooltips,
-// encode, the unnamed series' auto name, ...). Its upstream answer is recorded
-// all the same, so a later batch only has to take the flag off.
+// yet (sub-row tooltips, encode, the unnamed series' auto name, the parse of a
+// raw string into the number drawn, ...). Its upstream answer is recorded all
+// the same, so a later batch only has to take the flag off; why says what it
+// waits for.
+//
+// Spot checks (the fixture is not written and the run exits 1 when one
+// fails): a handful of recorded answers are compared with what separate
+// probes of the same build printed -- the raw-value cases' scalar fallback,
+// null against a missing value, arrays joined, datasets, the tooltip cell's
+// reparse. They guard the harness, not the port. Outside the script: run
+// twice and diff.
 //
 // Math.random is replaced by a constant BEFORE the library loads (the builds
 // capture it at load time). TooltipMarkupStyleCreator starts naming its rich
@@ -129,7 +137,10 @@ function itemLabels(el) {
 }
 
 function withDeferred(record, c) {
-  if (c.deferred) record.deferred = true;
+  if (c.deferred) {
+    record.deferred = true;
+    record.why = c.deferred;
+  }
   return record;
 }
 
@@ -166,7 +177,7 @@ function runLabels(c, lib) {
 
 const labels = [];
 const label = (name, option, extra) => labels.push(Object.assign({ name, option }, extra || {}));
-const deferred = { deferred: true };
+const deferredFor = why => ({ deferred: why });
 
 // The values the number text is held to. {value: 7} is an item object, null
 // and '-' are missing values: no bar, no symbol, '-' in a tooltip row.
@@ -297,54 +308,175 @@ label('bar: numeric categories are named as JavaScript names them', {
 label('pie: numeric names', { series: [{ type: 'pie', name: 'P', data: [
   { name: 1.23456789, value: 1 }, { name: 1e21, value: 2 }, { name: 0.1 + 0.2, value: 3 }] }] });
 
-// deferred: the raw value as written -- and a scalar item, which answers
-// every {@dim}, [n] or name, with its one value (retrieveRawValue)
+// The raw value as written -- and a scalar item, which answers every {@dim},
+// [n] or name, with its one value (retrieveRawValue)
 label('bar template {@[0]}|{@value}|{@nope} on V', catX(VC, [
   { type: 'bar', name: 'S', data: V, label: { show: true, formatter: '{@[0]}|{@value}|{@nope}' } },
-]), deferred);
+]));
 label('bar: raw strings and booleans', catX(['A', 'B', 'C', 'D', 'E'], [
   { type: 'bar', name: 'S', data: ['12.50', ' 5 ', '1e3', true, 'abc'], label: { show: true } },
-]), deferred);
+]));
 label('graph cartesian2d: label formatter null on a raw string', catX(['a', 'b'], [{
   type: 'graph', name: 'G', coordinateSystem: 'cartesian2d', data: [['a', '1.50'], ['b', 2]],
   label: { show: true, formatter: null },
-}]), deferred);
+}]));
 label("funnel {c} of '-', null and a missing value", { series: [{
   type: 'funnel', name: 'F', label: { formatter: '{b}:{c}:{d}' },
   data: [{ name: 'a', value: 1 }, { name: 'd', value: '-' }, { name: 'e', value: null }, { name: 'f' }],
-}] }, deferred);
+}] });
 label('graph {c} of a node without a value', { series: [{
   type: 'graph', name: 'G', layout: 'none', label: { show: true, formatter: '[{c}]' },
   data: [{ name: 'n1', x: 0, y: 0, value: 1.5 }, { name: 'n2', x: 10, y: 10 }],
   links: [],
-}] }, deferred);
-// deferred: {c} of an array value
+}] });
+// {c} of an array value
 label('scatter {c} of [x, y]', valueXY([
   { type: 'scatter', name: 'Sc', data: [[1234.5, 20.5], [3, 4, 5]], label: { show: true, formatter: '{c}' } },
-]), deferred);
+]));
 label('graph cartesian2d {c} of [x, y]', catX(['a', 'b'], [{
   type: 'graph', name: 'G', coordinateSystem: 'cartesian2d', data: [['a', 1.5], ['b', 0.1 + 0.2]],
   label: { show: true, formatter: '{c}' },
-}]), deferred);
+}]));
 label('dataset row {c}', {
   dataset: { source: [['p', 'a', 'b'], ['x', 1234.5, 2], ['y', 0.1 + 0.2, 3]] },
   xAxis: { type: 'category' }, yAxis: { type: 'value' },
   series: [{ type: 'bar', label: { show: true, formatter: '{c}' } }],
-}, deferred);
+});
+
+// The raw zoo: every shape a JSON item comes in. The default text is the raw
+// cell as written; {c} is String(raw) -- 'null' for {value: null},
+// 'undefined' for a null item or one without a value; a scalar answers every
+// {@...} with itself, a null or missing value with ''.
+const ZOO = ['12.50', ' 5 ', '1e3', true, false, { value: '12.50' }, { value: true }, { value: null }, {}, null,
+  '-', 'abc', 0, 1e21];
+const zoo = formatter => catX(ZOO.map((_, i) => 'z' + i), [
+  { type: 'bar', name: 'S', data: ZOO, label: formatter === undefined ? { show: true } : { show: true, formatter } },
+]);
+label('bar raw zoo: default labels', zoo());
+label('bar raw zoo: {c}', zoo('{c}'));
+label('bar raw zoo: [{@[0]}|{@y}|{@x}|{@nope}|{@[1]}]', zoo('[{@[0]}|{@y}|{@x}|{@nope}|{@[1]}]'));
+// null and a missing value apart: {c} is 'null' against 'undefined', {@}
+// prints '' for both, and a null item has no name either
+label('funnel {b}:{c}:{@value} of a null item, {}, a null value and a raw string', { series: [{
+  type: 'funnel', name: 'F', label: { formatter: '{b}:{c}:{@value}' },
+  data: [{ name: 'a', value: 1 }, null, {}, { name: 'z', value: null }, { name: 's', value: '12.50' }],
+}] });
+const pieRaw = () => ({ series: [{
+  type: 'pie', name: 'P', data: [{ name: 'a', value: '12.50' }, { name: 'b', value: true }], label: { formatter: '{c}' },
+}] });
+label("pie {c} of '12.50' and true", pieRaw());
+// Original arrays: a declared name is the position it was encoded from;
+// positions past the coord dims are value, value0, value1, ...; a series'
+// dimensions replace the coord names; a null element joins as ''.
+label('scatter encode {x: 1, y: 0}: {@x}|{@y}|{@[0]}|{@1}|{c}', valueXY([{
+  type: 'scatter', name: 'Sc', encode: { x: 1, y: 0 }, data: [['1.50', 7, 'z'], [2, '3.25']],
+  label: { show: true, formatter: '{@x}|{@y}|{@[0]}|{@1}|{c}' },
+}]));
+label('bar [cat, 1, 2, 3, 4]: {@value}|{@value0}|{@value1}|{@[3]}', catX(['A', 'B'], [{
+  type: 'bar', name: 'S', data: [['A', 1, 2, 3, 4], ['B', 5, '6.50', 7]],
+  label: { show: true, formatter: '{@value}|{@value0}|{@value1}|{@[3]}' },
+}]));
+label("scatter dimensions ['u', 'v', 'w']: {@u}|{@v}|{@w}|{@x}", valueXY([{
+  type: 'scatter', name: 'Sc', dimensions: ['u', 'v', 'w'], data: [[1, '2.0', 'q'], [3, 4, 'r']],
+  label: { show: true, formatter: '{@u}|{@v}|{@w}|{@x}' },
+}]));
+label('scatter {c} of [3, 4, null]', valueXY([
+  { type: 'scatter', name: 'Sc', data: [[3, 4, null], [1, 2]], label: { show: true, formatter: '{c}' } },
+]));
+const lineWrapped = label => catX(['a', 'b'], [
+  { type: 'line', name: 'L', data: [{ value: ['a', '1.50'] }, ['b', '2e0']], label },
+]);
+label("line {value: ['a', '1.50']}: {c}|{@y}", lineWrapped({ show: true, formatter: '{c}|{@y}' }));
+label("line {value: ['a', '1.50']}: default labels", lineWrapped({ show: true }));
+// {@...} corners: [n] is Number(n) ([] is 0, [ 1 ] is 1), a bad or out of
+// range index is '', {@} is no placeholder at all; and the {@...} pass runs
+// over the whole text, so a series or category name carrying one expands too.
+// ({@[x]} has the development build warn 'Invalide label formatter'.)
+const CORNERS = '{@[]}|{@[ 1 ]}|{@[x]}|{@[-1]}|{@[99]}|{@}';
+label('scatter {@} corners on arrays', valueXY([{
+  type: 'scatter', name: 'Sc', data: [[1.5, '2.50', 'q'], [3, 4]], label: { show: true, formatter: CORNERS },
+}]));
+label('bar {@} corners on scalars', catX(['A', 'B'], [{
+  type: 'bar', name: 'S', data: ['12.50', 3], label: { show: true, formatter: CORNERS },
+}]));
+label('bar {a} of a series named N{@[0]}', catX(['A', 'B'], [{
+  type: 'bar', name: 'N{@[0]}', data: ['12.50', 3], label: { show: true, formatter: '{a}' },
+}]));
+label('bar {b} of a category named c{@y}', catX(['c{@y}', 'd{@[0]}'], [{
+  type: 'bar', name: 'S', data: ['12.50', 3], label: { show: true, formatter: '{b}' },
+}]));
+// Datasets: the dims are named by the header (none: x, y, value, ...); an
+// ordinal or time cell prints as written, not as its index or epoch ms.
+label('dataset with a header: {@p}|{@a}|{@x}|{@y}|{c}', {
+  dataset: { source: [['p', 'a', 'b'], ['x', '12.50', 2], ['y', 3]] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [
+    { type: 'bar', label: { show: true, formatter: '{@p}|{@a}|{@x}|{@y}|{c}' } },
+    { type: 'bar', label: { show: true, formatter: '{@p}|{@b}|{c}' } },
+  ],
+});
+label('dataset without a header: {@x}|{@y}|{@[1]}', {
+  dataset: { source: [['x', 1, 2], ['y', '3.50', 4]] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', label: { show: true, formatter: '{@x}|{@y}|{@[1]}' } }],
+});
+const rowLayout = label => ({
+  dataset: { source: [['p', 'x', 'y', 'z'], ['a', 1, '2.50', 3], ['b', 4, 5]] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', seriesLayoutBy: 'row', label }, { type: 'bar', seriesLayoutBy: 'row', label }],
+});
+label('dataset row layout, a short row: {c}', rowLayout({ show: true, formatter: '{c}' }));
+const objectRows = label => ({
+  dataset: { dimensions: ['p', 'a'], source: [{ p: 'x', a: '12.50', extra: 9 }, { p: 'y', a: true }] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', label }],
+});
+label('dataset objectRows: {c}|{@a}|{@[1]}|{@extra}', objectRows({ show: true, formatter: '{c}|{@a}|{@[1]}|{@extra}' }));
+const keyedColumns = label => ({
+  dataset: { dimensions: ['p', 'a'], source: { p: ['x', 'y'], a: ['12.50', 3] } },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', label }],
+});
+label('dataset keyedColumns: {c}', keyedColumns({ show: true, formatter: '{c}' }));
+// The second series reads the table's THIRD column, which is its store's
+// second: its default label and tooltip cell are that column's raw cell.
+const secondColumn = label => ({
+  dataset: { source: [['p', 'a', 'b'], ['x', '12.50', ' 7 '], ['y', 3, 'abc']] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', label }, { type: 'bar', label }],
+});
+label('dataset second series: default labels', secondColumn({ show: true }));
+label('dataset ordinal and time dims: {@p}|{@t}', {
+  dataset: {
+    dimensions: ['p', { name: 't', type: 'time' }, 'a'], sourceHeader: false,
+    source: [['x', '2020-01-02', '12.50'], ['y', 1577923200000, 3]],
+  },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', encode: { x: 'p', y: 'a' }, label: { show: true, formatter: '{@p}|{@t}' } }],
+});
+// deferred: a raw string's number is Number(s) -- '   ' is 0 and drawn, '0x10'
+// is 16
+label("bar: '   ' and '0x10' are drawn", catX(['A', 'B', 'C'], [
+  { type: 'bar', name: 'S', data: ['   ', '0x10', 5], label: { show: true } },
+]), deferredFor('parse parity (D9)'));
+
 // deferred: encode and the defaulted label dimension
+const ENCODE = 'encode and the defaulted label dimension';
 label('scatter encode.label [0, 1]', valueXY([
   { type: 'scatter', name: 'Sc', encode: { label: [0, 1] }, data: [[10, 20.5], [3, 4]], label: { show: true } },
-]), deferred);
+]), deferredFor(ENCODE));
 label('scatter category-category: no default label', {
   xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['u', 'v'] },
   series: [{ type: 'scatter', name: 'CC', data: [['a', 'u'], [1, 1]], label: { show: true } }],
-}, deferred);
+}, deferredFor(ENCODE));
 label('scatter time-category: no default label', {
   xAxis: { type: 'time' }, yAxis: { type: 'category', data: ['a', 'b'] },
   series: [{ type: 'scatter', name: 'TC', data: [['2020-01-01', 'a'], ['2020-01-02', 'b']], label: { show: true } }],
-}, deferred);
+}, deferredFor(ENCODE));
 // deferred: the unnamed series' auto name 'series\0' + index
-label('bar unnamed series: {a}', catX(['A'], [{ type: 'bar', data: [5], label: { show: true, formatter: '[{a}]' } }]), deferred);
+const AUTONAME = "the unnamed series' auto name";
+label('bar unnamed series: {a}', catX(['A'], [{ type: 'bar', data: [5], label: { show: true, formatter: '[{a}]' } }]),
+  deferredFor(AUTONAME));
 
 // ---------- tooltips ----------
 
@@ -541,44 +673,73 @@ itemTip("item template on names with '&', '<' and quotes", catX(['x&y'], [
   { type: 'bar', name: 'a&b<c>"\'', data: [1] },
 ]), 0, 0, { formatter: '{a}|{b}' });
 
-// deferred: the raw value as written
+// The raw value as written: the cell is the raw reparsed (numericToNumber)
+// and given commas, or the text itself when that is not a number. Items 0-2
+// and axis A-C pin the reparse ('12.50' -> 12.5, '1e3' -> 1,000). Item 4
+// ('abc') is never shown: no bar.
 const barRaw = () => catX(['A', 'B', 'C', 'D', 'E'], [{ type: 'bar', name: 'S', data: ['12.50', ' 5 ', '1e3', true, 'abc'] }]);
-[0, 1, 2, 3, 4].forEach(i => itemTip('bar item raw ' + i, barRaw(), 0, i, null, deferred));
-['A', 'B', 'C', 'D', 'E'].forEach(k => axisTip('bar axis raw ' + k, barRaw(), k, null, deferred));
-// deferred: {c} of an array value
-itemTip('scatter template {c} of [x, y]', sc(), 0, 0, { formatter: '{c}' }, deferred);
+const AGREE = 'the raw value as written (the reparse already agrees)';
+[0, 1, 2, 3, 4].forEach(i => itemTip('bar item raw ' + i, barRaw(), 0, i, null, i === 4 ? deferredFor(AGREE) : undefined));
+['A', 'B', 'C', 'D', 'E'].forEach(k => axisTip('bar axis raw ' + k, barRaw(), k, null));
+// {c} of an array value
+itemTip('scatter template {c} of [x, y]', sc(), 0, 0, { formatter: '{c}' });
 const candle = () => catX(['d0', 'd1'], [{ type: 'candlestick', name: 'K', data: [[20, 34, 10, 38], [4000.5, 1234.25, 1000, 5000]] }]);
-itemTip('candlestick template {c}', candle(), 0, 0, { formatter: '{c}' }, deferred);
+itemTip('candlestick template {c}', candle(), 0, 0, { formatter: '{c}' });
 const dataset = () => ({
   dataset: { source: [['p', 'a', 'b'], ['x', 1234.5, 2], ['y', 0.1 + 0.2, 3]] },
   xAxis: { type: 'category' }, yAxis: { type: 'value' },
   series: [{ type: 'bar' }, { type: 'bar' }],
 });
-itemTip('dataset row template {c}', dataset(), 0, 0, { formatter: '{c}' }, deferred);
+itemTip('dataset row template {c}', dataset(), 0, 0, { formatter: '{c}' });
+itemTip('dataset second series: default cell of item 0', secondColumn(), 1, 0);
+itemTip('dataset second series: default cell of item 1', secondColumn(), 1, 1);
+// One category, one bar series per raw: the axis tooltip keeps a row for
+// every series, '-' where the cell is no number and no text; a template's {cN}
+// is String(raw), '' for null.
+const TIPRAW = ['12.50', ' 5 ', '1e3', true, false, '-', 'abc', '', 'Infinity', '0x10', null, { value: null }];
+const tipRaw = () => catX(['A'], TIPRAW.map((v, i) => ({ type: 'bar', name: 'S' + i, data: [v] })));
+axisTip('axis over one bar per raw: default cells', tipRaw(), 'A');
+axisTip('axis over one bar per raw: template {c0}..{c11}', tipRaw(), 'A',
+  { formatter: TIPRAW.map((_, i) => '{c' + i + '}').join('|') });
+// an item template's {c}: an object row is [object Object], a column or row
+// layout the whole array, and what it prints is entity-encoded
+itemTip('objectRows item template {c}', objectRows(), 0, 0, { formatter: '{c}' });
+itemTip('keyedColumns item template {c}', keyedColumns(), 0, 0, { formatter: '{c}' });
+itemTip('row layout item template {c}', rowLayout(), 1, 1, { formatter: '{c}' });
+itemTip("item template {c} of [cat, 5, 'a&<b']", catX(['A'], [
+  { type: 'bar', name: 'S', data: [['A', 5, 'a&<b']] },
+]), 0, 0, { formatter: '{c}' });
+// the default cells of a raw string and of a pie's raw values
+itemTip("pie item '12.50'", pieRaw(), 0, 0);
+itemTip('pie item true', pieRaw(), 0, 1);
+// deferred: '   ' is Number('   ') = 0, a bar with a tooltip
+itemTip("bar item '   '", catX(['A', 'B', 'C'], [{ type: 'bar', name: 'S', data: ['   ', '0x10', 5] }]), 0, 0, null,
+  deferredFor('parse parity (D9)'));
 // deferred: sub-row tooltips
-itemTip('candlestick item: open/close/lowest/highest rows', candle(), 0, 1, null, deferred);
-axisTip('candlestick axis: open/close/lowest/highest rows', candle(), 'd1', null, deferred);
+const SUBROWS = 'sub-row tooltips';
+itemTip('candlestick item: open/close/lowest/highest rows', candle(), 0, 1, null, deferredFor(SUBROWS));
+axisTip('candlestick axis: open/close/lowest/highest rows', candle(), 'd1', null, deferredFor(SUBROWS));
 const radar = () => ({
   radar: { indicator: [{ name: 'A', max: 20000 }, { name: 'B', max: 10 }, { name: 'C', max: 10 }] },
   series: [{ type: 'radar', name: 'R', data: [{ name: 'r', value: [12345.5, 0.1 + 0.2, '-'] }, { value: [1, 2, 3] }] }],
 });
-itemTip('radar item: one row per indicator', radar(), 0, 0, null, deferred);
-itemTip('radar item unnamed: the series name heads it', radar(), 0, 1, null, deferred);
+itemTip('radar item: one row per indicator', radar(), 0, 0, null, deferredFor(SUBROWS));
+itemTip('radar item unnamed: the series name heads it', radar(), 0, 1, null, deferredFor(SUBROWS));
 // deferred: encode.tooltip and displayName
 itemTip('scatter encode.tooltip [1, 0]', valueXY([
   { type: 'scatter', name: 'E', encode: { tooltip: [1, 0] }, data: [[10, 20]] },
-]), 0, 0, null, deferred);
+]), 0, 0, null, deferredFor('encode.tooltip and displayName'));
 itemTip('scatter displayName rows', valueXY([{
   type: 'scatter', name: 'E', encode: { tooltip: [0, 1] },
   dimensions: [{ name: 'x', displayName: 'XX' }, { name: 'y', displayName: 'YY' }], data: [[10, 20]],
-}]), 0, 0, null, deferred);
+}]), 0, 0, null, deferredFor('encode.tooltip and displayName'));
 // deferred: the defaulted value of a category-category series
 itemTip('scatter category-category item', {
   xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['u', 'v'] },
   series: [{ type: 'scatter', name: 'CC', data: [['a', 'u'], [1, 1]] }],
-}, 0, 0, null, deferred);
+}, 0, 0, null, deferredFor('the defaulted value of a category-category series'));
 // deferred: the unnamed series' auto name
-axisTip('axis template over three series, the third unnamed', three(true), 'B', { formatter: threeTpl }, deferred);
+axisTip('axis template over three series, the third unnamed', three(true), 'B', { formatter: threeTpl }, deferredFor(AUTONAME));
 
 // ---------- gauge ----------
 
@@ -634,7 +795,8 @@ for (const [min, max, splitNumber] of [[0, 1, 3], [-0.3, 0.3, 6], [0, 0.3, 3], [
 gauge('axis template {value}%', { axisLabel: { formatter: '{value}%' }, data: [{ name: 't', value: 5 }] });
 // A documented deviation: upstream divides by zero and prints 'NaN'; the port
 // draws the min on purpose.
-gauge('axis splitNumber 0', { splitNumber: 0, data: [{ name: 't', value: 5 }] }, deferred);
+gauge('axis splitNumber 0', { splitNumber: 0, data: [{ name: 't', value: 5 }] },
+  deferredFor('a documented deviation: the port draws the min'));
 
 // ---------- run and write ----------
 
@@ -664,6 +826,51 @@ const out = {
   tooltips: runAll(runTooltip, tooltips),
   gauge: runAll(runGauge, gauges),
 };
+
+// ---------- spot checks ----------
+
+// What separate probes of the same build printed (wf49 probes a1, a2, P1-P7):
+// a label case as its items' texts ('/' between labels, '#' for an item not
+// drawn), per series; a tooltip as its visible text or its value cells.
+const itemTexts = r => r.series.map(s => s.items.map(i => (i.drawn ? i.texts.join('/') : '#')));
+const cells = r => r.lines.slice(1).map(l => l.value);
+const SPOT = [
+  ['labels', 'bar raw zoo: default labels', itemTexts, [['12.50', ' 5 ', '1e3', 'true', 'false', '12.50', 'true',
+    '#', '#', '#', '#', '#', '0', '1e+21']]],
+  ['labels', 'bar raw zoo: [{@[0]}|{@y}|{@x}|{@nope}|{@[1]}]', r => itemTexts(r)[0][1], '[ 5 | 5 | 5 | 5 | 5 ]'],
+  ['labels', 'funnel {b}:{c}:{@value} of a null item, {}, a null value and a raw string', itemTexts,
+    [['a:1:1', ':undefined:', ':undefined:', 'z:null:', 's:12.50:12.50']]],
+  ['labels', "pie {c} of '12.50' and true", itemTexts, [['12.50', 'true']]],
+  ['labels', 'scatter encode {x: 1, y: 0}: {@x}|{@y}|{@[0]}|{@1}|{c}', r => itemTexts(r)[0][0], '7|1.50|1.50|7|1.50,7,z'],
+  ['labels', 'bar [cat, 1, 2, 3, 4]: {@value}|{@value0}|{@value1}|{@[3]}', r => itemTexts(r)[0][0], '2|3|4|3'],
+  ['labels', "scatter dimensions ['u', 'v', 'w']: {@u}|{@v}|{@w}|{@x}", r => itemTexts(r)[0][0], '1|2.0|q|'],
+  ['labels', "line {value: ['a', '1.50']}: {c}|{@y}", itemTexts, [['a,1.50|1.50', 'b,2e0|2e0']]],
+  ['labels', "line {value: ['a', '1.50']}: default labels", itemTexts, [['1.50', '2e0']]],
+  ['labels', 'dataset with a header: {@p}|{@a}|{@x}|{@y}|{c}', r => itemTexts(r)[0][0], 'x|12.50|||x,12.50,2'],
+  ['labels', 'dataset objectRows: {c}|{@a}|{@[1]}|{@extra}', itemTexts,
+    [['[object Object]|12.50|12.50|', '[object Object]|true|true|']]],
+  ['labels', 'dataset keyedColumns: {c}', itemTexts, [['x,12.50', 'y,3']]],
+  ['tooltips', "pie item '12.50'", cells, ['12.5']],
+  ['tooltips', 'pie item true', cells, ['true']],
+  ['tooltips', 'axis over one bar per raw: default cells', cells,
+    ['12.5', '5', '1,000', 'true', 'false', '-', 'abc', '-', 'Infinity', '0x10', '-', '-']],
+  ['tooltips', 'axis over one bar per raw: template {c0}..{c11}', r => r.visible,
+    '12.50| 5 |1e3|true|false|-|abc||Infinity|0x10||'],
+  ['tooltips', 'objectRows item template {c}', r => r.visible, '[object Object]'],
+  ['tooltips', 'keyedColumns item template {c}', r => r.visible, 'x,12.50'],
+];
+const spotFails = [];
+for (const [section, name, read, want] of SPOT) {
+  const r = out[section].find(c => c.name === name);
+  const got = r ? JSON.stringify(read(r)) : 'no such case';
+  if (got !== JSON.stringify(want)) spotFails.push(name + ': ' + got + ', the probes printed ' + JSON.stringify(want));
+}
+if (spotFails.length) {
+  spotFails.forEach(f => console.log('spot check failed: ' + f));
+  console.log('FAILED: ' + spotFails.length + ' spot check(s); the fixture is not written');
+  process.exit(1);
+}
+console.log('spot checks: ' + SPOT.length + '/' + SPOT.length);
 
 // A number JSON.stringify would write as an integer literal past 2^63 goes
 // out in exponent form instead: marked in the replacer, unquoted afterwards.

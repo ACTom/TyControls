@@ -562,6 +562,11 @@ function TyJsToFixedStr(AValue: Double; APrecision: Integer): string;
   before the first '.', and only runs of digits, so '1e+21', '-0.00' and
   'NaN' come through as they are. }
 function TyJsAddCommas(const AText: string): string;
+{ The Double nearest ADigits x 10^AExp10 -- ADigits a run of decimal digits,
+  leading noughts allowed -- rounded once, half to even, into the
+  denormals too: what JavaScript's Number() and parseFloat() give. Never
+  through FPC's Val, which rounds a denormal half-way case the wrong way. }
+function TyJsDecimalToDouble(const ADigits: string; AExp10: Int64): Double;
 
 type
   { How a label's precision was written. lpNone: the value's own decimals,
@@ -1824,6 +1829,108 @@ begin
   if AExp < 0 then BigShl(b, -AExp);
   if ATen > 0 then BigMulPow10(b, ATen);
   Result := BigCmp(a, b) >= 0;
+end;
+
+procedure BigAddSmall(var A: TJsBig; AValue: LongWord);
+var i: Integer; t: QWord;
+begin
+  t := AValue;
+  i := 0;
+  while t <> 0 do
+  begin
+    if i > High(A) then
+    begin
+      SetLength(A, i + 1);
+      A[i] := 0;
+    end;
+    t := t + A[i];
+    A[i] := LongWord(t and $FFFFFFFF);
+    t := t shr 32;
+    Inc(i);
+  end;
+end;
+
+function TyJsDecimalToDouble(const ADigits: string; AExp10: Int64): Double;
+var
+  i, d, first, chunk, cnt: Integer;
+  num, den, a, b: TJsBig;
+  s: Integer;
+  q, mant, bits: QWord;
+  sticky: Boolean;
+  e2: Integer;
+
+  procedure Quot;
+  begin
+    a := Copy(num);
+    b := Copy(den);
+    if s > 0 then BigShl(a, s) else BigShl(b, -s);
+    q := BigDivSmall(a, b);
+    sticky := Length(a) > 0;
+  end;
+
+begin
+  first := 1;
+  while (first <= Length(ADigits)) and (ADigits[first] = '0') do Inc(first);
+  d := Length(ADigits) - first + 1;
+  if d <= 0 then Exit(0);
+  { At least 10^(d - 1 + e): past the largest Double. Under 10^(d + e):
+    below half the smallest. }
+  if d - 1 + AExp10 > 309 then Exit(Infinity);
+  if d + AExp10 < -324 then Exit(0);
+  { SHORT AND SMALL: the digits and the power of ten are both exact Doubles,
+    and one IEEE operation rounds once. }
+  if (d <= 15) and (AExp10 >= -22) and (AExp10 <= 22) then
+  begin
+    Result := StrToInt64(Copy(ADigits, first, d));
+    if AExp10 >= 0 then Result := Result * TyJsPow10(AExp10)
+    else Result := Result / TyJsPow10(-AExp10);
+    Exit;
+  end;
+  num := nil;
+  i := first;
+  while i <= Length(ADigits) do
+  begin
+    cnt := Min(9, Length(ADigits) - i + 1);
+    chunk := StrToInt(Copy(ADigits, i, cnt));
+    if Length(num) > 0 then BigMulPow10(num, cnt);
+    BigAddSmall(num, chunk);
+    Inc(i, cnt);
+  end;
+  den := BigOf(1);
+  if AExp10 >= 0 then BigMulPow10(num, AExp10) else BigMulPow10(den, -AExp10);
+  { q = floor(num 2^s / den) with 54 bits: 53 of mantissa and one to round
+    by, the rest of the remainder sticky. }
+  s := 54 - (BigBitLen(num) - BigBitLen(den));
+  Quot;
+  if q >= QWord(1) shl 54 then
+  begin
+    Dec(s);
+    Quot;
+  end;
+  { THE LOWEST MANTISSA BIT IS 2^(1 - s), and no Double has one below
+    2^-1074: a denormal keeps fewer bits. }
+  if s > 1075 then
+  begin
+    s := 1075;
+    Quot;
+  end;
+  mant := q shr 1;
+  if ((q and 1) <> 0) and (sticky or ((mant and 1) <> 0)) then Inc(mant);
+  e2 := 1 - s;
+  if mant = QWord(1) shl 53 then
+  begin
+    mant := mant shr 1;
+    Inc(e2);
+  end;
+  if mant >= QWord(1) shl 52 then
+  begin
+    if e2 + 52 + 1023 >= 2047 then Exit(Infinity);
+    bits := (QWord(e2 + 52 + 1023) shl 52) or (mant and ((QWord(1) shl 52) - 1));
+  end
+  else
+    bits := mant; // a denormal: e2 is -1074
+  Result := 0;
+  Move(bits, Result, SizeOf(Result));
 end;
 
 function TyJsNumberToString(AValue: Double): string;

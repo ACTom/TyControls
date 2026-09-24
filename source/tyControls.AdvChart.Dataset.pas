@@ -80,6 +80,9 @@ type
     StartIndex: Integer;
     { The table itself, borrowed from the option's tree -- never owned. }
     Data: TJSONArray;
+    { The same for `tsfKeyedColumns`, whose table is an object of columns;
+      Data is nil then. }
+    Keyed: TJSONObject;
     Dims: TTySourceDimArray;
     { How many dimensions the table has, which is not always Length(Dims): a
       table with no names still has columns. }
@@ -467,7 +470,30 @@ begin
 
   d := node.Find('source');
   Result.Format := TyDetectSourceFormat(d);
-  if (Result.Format = tsfUnknown) or (Result.Format = tsfKeyedColumns) then Exit;
+  if Result.Format = tsfUnknown then Exit;
+  if Result.Format = tsfKeyedColumns then
+  begin
+    { A TABLE OF COLUMNS BY NAME: its dimensions are the declared ones or,
+      failing those, every key in order; a record is the i-th cell of each
+      column; and there are as many as the FIRST dimension's column holds.
+      No header and no layout -- both are questions about lines. }
+    if not (d is TJSONObject) then Exit;
+    Result.Keyed := TJSONObject(d);
+    named := ReadDimensions(Meta('dimensions'));
+    if named = nil then
+    begin
+      SetLength(named, Result.Keyed.Count);
+      for i := 0 to Result.Keyed.Count - 1 do
+      begin
+        named[i].Name := Result.Keyed.Names[i];
+        named[i].DimType := '';
+      end;
+    end;
+    Result.Dims := named;
+    Result.DimCount := Length(named);
+    Result.Valid := True;
+    Exit;
+  end;
   Result.Data := ArrOf(d);
   if Result.Data = nil then Exit;
 
@@ -536,6 +562,13 @@ var row: TJSONArray;
 begin
   Result := 0;
   if not ASource.Valid then Exit;
+  if ASource.Format = tsfKeyedColumns then
+  begin
+    if (ASource.Keyed = nil) or (Length(ASource.Dims) = 0) then Exit;
+    row := ArrOf(ASource.Keyed.Find(ASource.Dims[0].Name));
+    if row <> nil then Result := row.Count;
+    Exit;
+  end;
   if ASource.Data = nil then Exit;
   if ASource.Format = tsfObjectRows then Exit(ASource.Data.Count);
   { A table of arrays, minus its header. Under `row` layout a RECORD is a
@@ -562,6 +595,17 @@ begin
   Result := nil;
   if not ASource.Valid then Exit;
   if (ARow < 0) or (ADim < 0) then Exit;
+  if ASource.Format = tsfKeyedColumns then
+  begin
+    { The dimension's column, by name, and the record's cell in it. }
+    if ASource.Keyed = nil then Exit;
+    nm := TySourceDimName(ASource, ADim);
+    if nm = '' then Exit;
+    row := ArrOf(ASource.Keyed.Find(nm));
+    if (row = nil) or (ARow >= row.Count) then Exit;
+    Result := row.Items[ARow];
+    Exit;
+  end;
   if ASource.Data = nil then Exit;
 
   if ASource.Format = tsfObjectRows then

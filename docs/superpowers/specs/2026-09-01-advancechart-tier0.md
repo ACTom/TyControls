@@ -5519,6 +5519,7 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 标签 44 个用例(209 项,175 项有字),tooltip 53 个,仪表盘 14 个,逐字比较;把小数点改成逗号再跑一遍。全部相同。
 
 另有 34 个用例标成 deferred,上游答案一并记着,以后只需去掉标记:原始值通道、数组的 `{c}`、tooltip 子行、encode、未命名系列的自动名,还有下面说的柱子几何。
+**[第四十九批:原始值通道和数组的 `{c}` 已做,那 20 条已解除 deferred,见 §83。]**
 
 ### 被推翻的旧断言
 
@@ -6774,3 +6775,67 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 还在队列里
 
 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。
+
+## 83. Tier 1 第四十九批:原始值通道(2026-09-24)
+
+标签和 tooltip 打印的是数据**写成的样子**,不是解析后的数。`'12.50'` 的标签是 `12.50`,`true` 是 `true`,`{c}` 是整个原始值(数组用逗号连,`null`、`undefined`、`[object Object]` 照印)。port 的 store 只存 Double,所以这些全都印成了解析后的数:`12.5`、`1`,`{c}` 只取一列。
+
+### 上游的做法
+
+- **原始项**(`getRawValue` / `getDataItemValue`):对象取 `value`,`{value: null}` 是 null,没有 `value` 的对象和 JSON `null` 是 undefined;标量回答任何维度;数组、数据集的行按位置回答。K 线和箱线图在类目轴上会把行号插到每项前面(`whiskerBoxCommon` 的 `unshift`)。
+- **数据集**:列布局的一行是整行;行布局按所有行重建一条记录;objectRows 是对象,只有源维度能取到;keyedColumns 是各列的第 i 格。
+- **`{@key}`**(`getDimensionIndex`):`[n]` 按 `Number` 读成位置,声明过的维度名取它的位置,看起来像数字的 key 也是位置;名字表是上游自己的——系列写了 `dimensions` 就用它,否则坐标名放在各自 encode 的位置上,其余位置依次叫 `value`、`value0`、`value1`……;数据集用表头。
+- **tooltip 单元格**(`makeValueReadable`):ordinal 原样印文字(空白是 `-`)、有限数不加千分位;其余先 `numericToNumber`——`parseFloat` 与 `Number` 一致才算数,且不是从第二个字符之后带 `x` 的串读出的 0——有限就 `addCommas`,否则印文字、布尔词或 `-`。
+- **tooltip 模板的 `{c}`**:`String(raw)`,null 和 undefined 是空串。
+
+### port 以前
+
+- 默认标签、`{c}`、`{@}`、tooltip 单元格和模板的 `{c}` 全部从 Double 来。
+- `{@}` 按 store 的坐标名找列:数据集表头名找不到,`[n]` 和数字 key 不认,标量不回答别的维度。
+- 原始数据上的 `encode` 不读(`encode: {x: 1, y: 0}` 的散点画在错的位置)。
+- 全是 null 的系列在类目轴上没有行号,轴 tooltip 里整行消失。
+- keyedColumns 数据集不读,整张图是空的。
+
+### 做法
+
+- `Data`:
+  - 原始项旁表 `TTyRawItem`(`rshNone` 表示没存,消费者回到 Double 路径;`rshAbsent` / `rshNull` / `rshScalar` / `rshArray` / `rshObject`),和名字表、维度位置表、`RawPosOf`、`RawCell`。
+  - JS 数值:`TyJsTrim`(JS 的空白比 `Trim` 宽:NBSP、U+FEFF、Zs 各字符、行分隔符)、`TyJsToNumber`、`TyJsParseFloat`、`TyJsNumericToNumber`、`TyJsValueText`、`TyRawItemText`、`TyReadableCell`。
+- `Scale`:`TyJsDecimalToDouble`,大整数实现的正确舍入(含次正规数)。**FPC 的 `TryStrToFloat` 不是正确舍入的**:`2.4703282292062328e-324` 刚过最小次正规数的一半,应入到 `5e-324`,它给 0。短数字(≤15 位、10 的指数在 ±22 内)走一次 IEEE 运算。
+- `Builder`:原始数据按 `getDataItemValue` 填原始项(不用 `UnwrapItem`),K 线/箱线图的行号前插;名字表和位置表;数据集按格式填;全 null 的系列用行号。
+- `Dataset`:keyedColumns 可读——维度是声明的或全部 key,行数是**第一个**维度那列的长度。
+- `AdvanceChart`:原始数据上的 `encode` 决定各坐标列读第几个元素(多值系列除外);tooltip 参数带原始项和各值的原始格与维度类型。
+- `LabelOpt`、`Handlers`:默认标签、`{c}`、`{@}`、模板 `{c}` 读原始项。
+
+### 基准
+
+- 新的 `tools/advchart-oracle/raw-value.js` → `advchart-raw-value.json`:633 条字符串(133 条手挑,500 条种子随机),调用真实的 `echarts.number.numericToNumber` 和 `echarts.format.addCommas`,记下数的位模式和单元格文字。`test.advchart.rawvalue` 逐位比较;另有 2 万个随机 Double(含次正规数和两端)的 `Number(String(x)) = x` 往返检验,以及 `Number` / `parseFloat` 分开的边界、原始项字符串化、key 解析、按维度类型的单元格。
+- `series-text.js` 解除 20 条 deferred,新增 N1–N8 和"数据集第二个系列读第三列";N9(`'   '`、`'0x10'` 的解析)标 deferred 等 D9。现在标签 75 例、tooltip 74 例、仪表盘 14 例,另有 15 条 deferred(encode.label / defaultedLabel、tooltip 子行、自动系列名、仪表盘 `splitNumber: 0`、D9)。
+
+### 被推翻的旧测试
+
+- `test.advchart.dataset.pas`:"keyedColumns 暂时没有读取器"改为可读,并钉住行数取第一列、短列越界是空。原处有标注。
+
+### 已知偏差
+
+- **D9,数据解析与上游不一致**:`'   '` 上游是 0、`'0x10'` 是 16、`'Infinity'` 是 ∞,port 的 store 仍是 NaN;`test.advchart.data.pas` 钉的 `'   '` → NaN 是错的。这会动几何和范围,单独一批。
+- 时间维的 tooltip 单元格(上游按**本地时间**格式化成 `yyyy-MM-dd HH:mm:ss`):仍走 Double。
+- 函数格式化器、`valueFormatter`、`@Name` 处理器拿到的仍是 Double;`order` 排序仍按 Double。
+- JSON 表达不了的:NaN、空洞、显式 undefined、Date、TypedArray;数组里嵌套的数组或对象记为空格。
+
+### 变异测试
+
+63 个。60 个被杀,3 个等价或不可观察。
+
+- 第一轮存活 8 个。补测试后杀掉 5 个:
+  - ordinal 单元格(加千分位、当数读):`TyReadableCell` 按维度类型的单元测试;
+  - 数据集列位置、默认标签取维度下标、tooltip 单元格取维度下标:基准里加"第二个系列读第三列"(store 第 2 列,表第 3 列),默认标签和单元格都要读对列。
+- 另有一个变异体原先编不过(删掉了 for 循环的唯一语句),改成 `if False` 后被杀。
+- **等价或不可观察的 3 个**:
+  - `x` 守卫从第 2 个字符改成第 1 个:首字符是 `x` 的串 `parseFloat` 已是 NaN,到不了守卫;
+  - `parseFloat` 连尾部空白一起修剪:前缀扫描本来不读尾部;
+  - 时间维也走原始格:两种写法都不是上游的本地时间格式,属于上面的已知偏差。
+
+### 还在队列里
+
+tooltip 子行 → 旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并、D9 数据解析对齐。

@@ -599,8 +599,20 @@ begin
   sc := Src('{ "dataset": { "source": [1,2,3] } }');
   AssertFalse('a flat array of numbers has no reader', sc.Valid);
   AssertEquals('and no rows', 0, TySourceRowCount(sc));
+  { A column-keyed object HAS a reader now (batch 49) -- `for now` has
+    passed; test.advchart.seriestext holds it to upstream. }
   sc := Src('{ "dataset": { "source": {"a":[1,2]} } }');
-  AssertFalse('nor has a column-keyed object, for now', sc.Valid);
+  AssertTrue('a column-keyed object is read', sc.Valid);
+  AssertEquals('as many rows as its first column', 2, TySourceRowCount(sc));
+  { The FIRST dimension's column counts, not the longest -- and a shorter
+    column past its end is a gap. }
+  sc := Src('{ "dataset": { "source": {"a":[1,2,3],"b":[4]} } }');
+  AssertEquals('the first column counts', 3, TySourceRowCount(sc));
+  AssertEquals('the second column is b', 'b', TySourceDimName(sc, 1));
+  AssertTrue('b has no second cell', TySourceCell(sc, 1, 1) = nil);
+  AssertEquals('a has', 2, TySourceCell(sc, 1, 0).AsInteger);
+  sc := Src('{ "dataset": { "source": {"a":[1],"b":[4,5,6]} } }');
+  AssertEquals('whatever the others hold', 1, TySourceRowCount(sc));
   sc := Src('{ "xAxis": {} }');
   AssertFalse('nor has a chart with no dataset at all', sc.Valid);
   AssertEquals('', 0, TyDatasetCount(FOpt));

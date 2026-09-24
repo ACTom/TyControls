@@ -353,9 +353,18 @@ var
   v: Double;
   key: string;
   vars: array of TTyStringArray;
+  it: TTyRawItem;
+  hasRaw: Boolean;
+  cell: TTyDataValue;
 begin
   nameText := '';
   valueText := '';
+  it := Default(TTyRawItem);
+  if AStore <> nil then it := AStore.RawItem(ARow);
+  { THE ITEM AS WRITTEN, when the store kept it: every text below prints
+    that and not the parsed number -- '12.50' stays '12.50', true stays
+    true. A store with no raw side answers rshNone and the Double speaks. }
+  hasRaw := it.Shape <> rshNone;
   if AStore <> nil then
   begin
     { THE b PLACEHOLDER IS getName, which falls back to the category when the item has no
@@ -364,8 +373,18 @@ begin
     nameText := AStore.GetItemName(ARow);
     if (AValueDim >= 0) and (AValueDim < AStore.DimCount) then
     begin
-      v := AStore.Get(AValueDim, ARow);
-      if not IsNan(v) then valueText := TyLabelNumToStr(v);
+      if hasRaw then
+      begin
+        { getDefaultLabel: the cell at the label dimension's position, a
+          scalar for any position, nothing for a gap. }
+        if TTyDataStore.RawCell(it, AStore.RawDimPos(AValueDim), cell) then
+          valueText := TyJsValueText(cell, '');
+      end
+      else
+      begin
+        v := AStore.Get(AValueDim, ARow);
+        if not IsNan(v) then valueText := TyLabelNumToStr(v);
+      end;
     end;
   end;
 
@@ -385,7 +404,10 @@ begin
   SetLength(vars[0], n);
   vars[0][0] := ASeriesName;
   vars[0][1] := nameText;
-  vars[0][2] := valueText;
+  { `{c}` IS THE WHOLE RAW VALUE, String()-ed: an array joined by commas,
+    `null`, `undefined`, `[object Object]` -- not the label dimension. }
+  if hasRaw then vars[0][2] := TyRawItemText(it)
+  else vars[0][2] := valueText;
   { the percentage as String() prints it -- 'NaN' included, which is what a
     funnel's missing value shows }
   if n = 4 then vars[0][3] := TyJsNumberToString(APercent);
@@ -410,12 +432,22 @@ begin
       end;
       if (i <= Length(Result)) and (key <> '') then
       begin
-        dim := AStore.DimIndexOf(key);
         valueText := '';
-        if dim >= 0 then
+        if hasRaw then
         begin
-          v := AStore.Get(dim, ARow);
-          if not IsNan(v) then valueText := TyLabelNumToStr(v);
+          { getDimensionIndex against upstream's names -- `[n]`, a declared
+            name, a numeric-looking key -- and the raw cell there. }
+          if TTyDataStore.RawCell(it, AStore.RawPosOf(key), cell) then
+            valueText := TyJsValueText(cell, '');
+        end
+        else
+        begin
+          dim := AStore.DimIndexOf(key);
+          if dim >= 0 then
+          begin
+            v := AStore.Get(dim, ARow);
+            if not IsNan(v) then valueText := TyLabelNumToStr(v);
+          end;
         end;
         Result := Copy(Result, 1, openAt - 1) + valueText
           + Copy(Result, i + 1, Length(Result));

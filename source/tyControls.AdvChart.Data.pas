@@ -67,6 +67,19 @@ type
   end;
   TTyDataValueArray = array of TTyDataValue;
 
+  { WHAT A DATA ITEM WAS, as written -- upstream's getRawValue, for the text a
+    label or a tooltip prints. rshNone is "nothing kept", and every reader
+    then falls back to the parsed Double. An item written as null, or as an
+    object with no `value`, is ABSENT (`undefined`); `{value: null}` is NULL.
+    A scalar answers every dimension; an array or a row answers by position,
+    and an objectRows row by its source dimension's position. }
+  TTyRawShape = (rshNone, rshAbsent, rshNull, rshScalar, rshArray, rshObject);
+  TTyRawItem = record
+    Shape: TTyRawShape;
+    Scalar: TTyDataValue;
+    Cells: TTyDataValueArray;
+  end;
+
   { Which values an extent is allowed to see. defPositive is the log axis'
     requirement -- zero and negatives have no logarithm, and an extent that
     included them would hand the log mapper a domain it cannot map. }
@@ -98,6 +111,36 @@ function TyDataBool(AValue: Boolean): TTyDataValue;
   the locale's -- data text arrives from option text, where the separator is
   always '.', and reading it through a comma locale would turn 1.5 into NaN. }
 function TyParseDataValue(const AValue: TTyDataValue; AType: TTyDimType): Double;
+
+{ ---- JavaScript's numbers from text ---- }
+
+{ AText with JavaScript's white space taken off both ends -- which is wider
+  than Trim's: no-break space, U+FEFF, the line and paragraph separators and
+  every space separator, as UTF-8. }
+function TyJsTrim(const AText: string): string;
+{ `Number(text)`: the whole string, trimmed, as a decimal literal, `Infinity`,
+  or a 0x / 0o / 0b integer; nothing at all is nought; anything else is
+  not-a-number. }
+function TyJsToNumber(const AText: string): Double;
+{ `parseFloat(text)`: the longest decimal prefix after the white space, or
+  `Infinity`; not-a-number when there is none. }
+function TyJsParseFloat(const AText: string): Double;
+{ upstream's numericToNumber: a number is itself (minus nought is nought); a
+  string is its parseFloat when that equals its Number -- and is not a nought
+  read off something with an `x` past the first character; anything else is
+  not-a-number. }
+function TyJsNumericToNumber(const AValue: TTyDataValue): Double;
+{ JavaScript's String() of one value: a number as it prints, text verbatim,
+  a boolean as its word, a gap as ANone. }
+function TyJsValueText(const AValue: TTyDataValue; const ANone: string): string;
+{ String() of a whole raw item: the scalar; the cells joined by commas, a gap
+  as nothing; `[object Object]`; `null`; `undefined`. }
+function TyRawItemText(const AItem: TTyRawItem): string;
+{ One raw cell as a tooltip prints it -- upstream's makeValueReadable for
+  everything but a time: an ordinal's text as written ('-' when blank) or its
+  number without commas; otherwise the number numericToNumber reads, grouped
+  by addCommas, and failing that the text, the boolean's word, or '-'. }
+function TyReadableCell(const ACell: TTyDataValue; AType: TTyDimType): string;
 
 { ---- time ---- }
 { ECharts' TIME_REG subset: yyyy, optionally -MM, -dd, then T or space and
@@ -222,6 +265,9 @@ type
     FFiltered: Boolean;
     FCount: Integer;
     FIds, FNames: TTyStringArray; // lazily sized; empty until first written
+    FRawItems: array of TTyRawItem; // lazily sized, like the names
+    FRawDimNames: TTyStringArray;
+    FRawDimPos: array of Integer; // per store dimension; -1 = no position
     FOvrHead: array of Integer;   // per raw row, -1 = no overrides
     FOvr: array of TOvr;
     FOvrCount: Integer;
@@ -347,6 +393,31 @@ type
     function HasIds: Boolean;
     function HasNames: Boolean;
 
+    { ---- the raw items ---- }
+    procedure SetRawItem(ARawIndex: Integer; const AItem: TTyRawItem);
+    { rshNone when nothing was kept for the row. }
+    function RawItem(AIndex: Integer): TTyRawItem;
+    function RawItemByRaw(ARawIndex: Integer): TTyRawItem;
+    function HasRawItems: Boolean;
+    { upstream's dimension NAMES by position -- not the store's coordinate
+      names: the encoded coordinate names at their positions, `value`,
+      `value0`, ... past them, or a dataset's own header. }
+    procedure SetRawDimName(APos: Integer; const AName: string);
+    { WHERE IN THE RAW ITEM a store dimension was read from -- its encoded
+      position, which is not its own index once `encode` or a prepended row
+      index moves it. Unset, a dimension is at its own index; -1 is none. }
+    procedure SetRawDimPos(ADim, APos: Integer);
+    function RawDimPos(ADim: Integer): Integer;
+    function RawDimName(APos: Integer): string;
+    { `{@key}` to a position (getDimensionIndex): `[n]` as a number, a
+      declared name, a numeric-looking key as a number; not-a-number when
+      none of them. }
+    function RawPosOf(const AKey: string): Double;
+    { The cell at APos of an item: a scalar answers any position; an array or
+      object by an in-range whole position; anything else is no cell. }
+    class function RawCell(const AItem: TTyRawItem; APos: Double;
+      out ACell: TTyDataValue): Boolean; static;
+
     { ---- per-point overrides ----
       The native answer to ECharts' getItemModel, which wraps a datum in a Model
       whose prototype chain falls back to the series. There is no prototype
@@ -465,6 +536,294 @@ begin
   if s = '' then Exit(False);
   Result := TryStrToFloat(s, AValue, FixedFloatSettings);
   if not Result then AValue := NaN;
+end;
+
+{ ==================== JavaScript's numbers from text ==================== }
+
+{ The code point at AText[AAt], and how many bytes it takes. }
+function CodePointAt(const AText: string; AAt: Integer; out ALen: Integer): LongWord;
+var b: Byte;
+begin
+  b := Ord(AText[AAt]);
+  ALen := 1;
+  Result := b;
+  if b < $80 then Exit;
+  if (b and $E0 = $C0) and (AAt + 1 <= Length(AText)) then
+  begin
+    ALen := 2;
+    Result := ((b and $1F) shl 6) or (Ord(AText[AAt + 1]) and $3F);
+  end
+  else if (b and $F0 = $E0) and (AAt + 2 <= Length(AText)) then
+  begin
+    ALen := 3;
+    Result := ((b and $0F) shl 12) or ((Ord(AText[AAt + 1]) and $3F) shl 6)
+      or (Ord(AText[AAt + 2]) and $3F);
+  end
+  else if (b and $F8 = $F0) and (AAt + 3 <= Length(AText)) then
+  begin
+    ALen := 4;
+    Result := ((b and $07) shl 18) or ((Ord(AText[AAt + 1]) and $3F) shl 12)
+      or ((Ord(AText[AAt + 2]) and $3F) shl 6) or (Ord(AText[AAt + 3]) and $3F);
+  end;
+end;
+
+{ WhiteSpace and LineTerminator, as the specification lists them. }
+function IsJsSpace(ACode: LongWord): Boolean;
+begin
+  case ACode of
+    9, 10, 11, 12, 13, 32, $A0, $1680, $2000..$200A, $2028, $2029, $202F,
+    $205F, $3000, $FEFF: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+function TyJsTrim(const AText: string): string;
+var i, j, n, len, cpLen: Integer; cp: LongWord;
+begin
+  n := Length(AText);
+  i := 1;
+  while i <= n do
+  begin
+    cp := CodePointAt(AText, i, len);
+    if not IsJsSpace(cp) then Break;
+    Inc(i, len);
+  end;
+  if i > n then Exit('');
+  { From the end: step back to a code point's first byte. }
+  j := n;
+  while j >= i do
+  begin
+    len := j;
+    while (len > i) and ((Ord(AText[len]) and $C0) = $80) do Dec(len);
+    cp := CodePointAt(AText, len, cpLen);
+    if not IsJsSpace(cp) then Break;
+    j := len - 1;
+  end;
+  Result := Copy(AText, i, j - i + 1);
+end;
+
+{ A decimal literal's digits and exponent to the nearest Double, the sign
+  last so a nought keeps it. }
+function DecimalToDouble(const AIntPart, AFracPart: string; AExp: Int64;
+  ANeg: Boolean): Double;
+begin
+  Result := TyJsDecimalToDouble(AIntPart + AFracPart, AExp - Length(AFracPart));
+  if ANeg then Result := -Result;
+end;
+
+{ The longest decimal literal at AText[AAt..]: sign, digits, a point, digits,
+  an exponent with digits. Answers how many bytes were read -- nought when
+  there is no digit at all. }
+function ScanDecimal(const AText: string; AAt: Integer; out AValue: Double): Integer;
+var
+  i, n, start, e: Integer;
+  neg, expNeg: Boolean;
+  intPart, fracPart, expDigits: string;
+  expo: Int64;
+begin
+  AValue := NaN;
+  n := Length(AText);
+  i := AAt;
+  neg := False;
+  if (i <= n) and (AText[i] in ['+', '-']) then
+  begin
+    neg := AText[i] = '-';
+    Inc(i);
+  end;
+  start := i;
+  while (i <= n) and (AText[i] in ['0'..'9']) do Inc(i);
+  intPart := Copy(AText, start, i - start);
+  fracPart := '';
+  if (i <= n) and (AText[i] = '.') then
+  begin
+    start := i + 1;
+    e := start;
+    while (e <= n) and (AText[e] in ['0'..'9']) do Inc(e);
+    fracPart := Copy(AText, start, e - start);
+    { A point with no digit on either side is no number. }
+    if (intPart <> '') or (fracPart <> '') then i := e;
+  end;
+  if (intPart = '') and (fracPart = '') then Exit(0);
+  expo := 0;
+  if (i <= n) and (AText[i] in ['e', 'E']) then
+  begin
+    e := i + 1;
+    expNeg := False;
+    if (e <= n) and (AText[e] in ['+', '-']) then
+    begin
+      expNeg := AText[e] = '-';
+      Inc(e);
+    end;
+    start := e;
+    while (e <= n) and (AText[e] in ['0'..'9']) do Inc(e);
+    expDigits := Copy(AText, start, e - start);
+    { AN EXPONENT ONLY WITH DIGITS: in `1e` the `e` is not read. }
+    if expDigits <> '' then
+    begin
+      if Length(expDigits) > 9 then expo := 1000000
+      else expo := StrToInt(expDigits);
+      if expNeg then expo := -expo;
+      i := e;
+    end;
+  end;
+  AValue := DecimalToDouble(intPart, fracPart, expo, neg);
+  Result := i - AAt;
+end;
+
+function TyJsToNumber(const AText: string): Double;
+var
+  s, body: string;
+  i, radix, d: Integer;
+  used: Integer;
+  mask: TFPUExceptionMask;
+begin
+  s := TyJsTrim(AText);
+  if s = '' then Exit(0);
+  if (s = 'Infinity') or (s = '+Infinity') then Exit(Infinity);
+  if s = '-Infinity' then Exit(NegInfinity);
+  { 0x / 0o / 0b: no sign, at least one digit, every digit of the radix. }
+  if (Length(s) > 2) and (s[1] = '0') and (s[2] in ['x', 'X', 'o', 'O', 'b', 'B']) then
+  begin
+    case s[2] of
+      'x', 'X': radix := 16;
+      'o', 'O': radix := 8;
+    else
+      radix := 2;
+    end;
+    body := Copy(s, 3, MaxInt);
+    Result := 0;
+    mask := GetExceptionMask;
+    SetExceptionMask(mask + [exOverflow, exPrecision]);
+    try
+      for i := 1 to Length(body) do
+      begin
+        case body[i] of
+          '0'..'9': d := Ord(body[i]) - Ord('0');
+          'a'..'f': d := Ord(body[i]) - Ord('a') + 10;
+          'A'..'F': d := Ord(body[i]) - Ord('A') + 10;
+        else
+          d := 99;
+        end;
+        if d >= radix then Exit(NaN);
+        Result := Result * radix + d;
+      end;
+    finally
+      ClearExceptions(False);
+      SetExceptionMask(mask);
+    end;
+    Exit;
+  end;
+  used := ScanDecimal(s, 1, Result);
+  { The WHOLE string must be the literal. }
+  if (used = 0) or (used <> Length(s)) then Result := NaN;
+end;
+
+function TyJsParseFloat(const AText: string): Double;
+var s: string; used: Integer;
+begin
+  { Only the leading white space goes; the tail is simply not read. }
+  s := TyJsTrim(AText + 'x');
+  Delete(s, Length(s), 1);
+  if Copy(s, 1, 8) = 'Infinity' then Exit(Infinity);
+  if Copy(s, 1, 9) = '+Infinity' then Exit(Infinity);
+  if Copy(s, 1, 9) = '-Infinity' then Exit(NegInfinity);
+  used := ScanDecimal(s, 1, Result);
+  if used = 0 then Result := NaN;
+end;
+
+function TyJsNumericToNumber(const AValue: TTyDataValue): Double;
+var f, n: Double; p: Integer;
+begin
+  case AValue.Kind of
+    dvkNumber:
+      begin
+        { parseFloat(String(x)): minus nought comes back as nought. }
+        Result := AValue.Num;
+        if (not IsNan(Result)) and (Result = 0) then Result := 0;
+      end;
+    dvkText:
+      begin
+        f := TyJsParseFloat(AValue.Text);
+        n := TyJsToNumber(AValue.Text);
+        { `valFloat == val`: a not-a-number is never equal. }
+        if IsNan(f) or IsNan(n) or (f <> n) then Exit(NaN);
+        { `val.indexOf('x') <= 0` for a nought: ' 0x0 ' is not nought. }
+        p := Pos('x', AValue.Text);
+        if (f = 0) and (p > 1) then Exit(NaN);
+        Result := f;
+      end;
+  else
+    Result := NaN;
+  end;
+end;
+
+function TyJsValueText(const AValue: TTyDataValue; const ANone: string): string;
+begin
+  case AValue.Kind of
+    dvkNumber: Result := TyJsNumberToString(AValue.Num);
+    dvkText: Result := AValue.Text;
+    dvkBool: if AValue.Num <> 0 then Result := 'true' else Result := 'false';
+  else
+    Result := ANone;
+  end;
+end;
+
+function TyRawItemText(const AItem: TTyRawItem): string;
+var i: Integer;
+begin
+  case AItem.Shape of
+    rshScalar: Result := TyJsValueText(AItem.Scalar, '');
+    rshArray:
+      begin
+        Result := '';
+        for i := 0 to High(AItem.Cells) do
+        begin
+          if i > 0 then Result := Result + ',';
+          Result := Result + TyJsValueText(AItem.Cells[i], '');
+        end;
+      end;
+    rshObject: Result := '[object Object]';
+    rshNull: Result := 'null';
+    rshAbsent: Result := 'undefined';
+  else
+    Result := '';
+  end;
+end;
+
+function TyReadableCell(const ACell: TTyDataValue; AType: TTyDimType): string;
+var n: Double; mask: TFPUExceptionMask;
+begin
+  if AType = ddtOrdinal then
+  begin
+    case ACell.Kind of
+      dvkText:
+        if TyJsTrim(ACell.Text) <> '' then Exit(ACell.Text) else Exit('-');
+      dvkNumber:
+        if IsNan(ACell.Num) or IsInfinite(ACell.Num) then Exit('-')
+        else Exit(TyJsNumberToString(ACell.Num));
+    else
+      Exit('-');
+    end;
+  end;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exUnderflow, exPrecision]);
+  try
+    n := TyJsNumericToNumber(ACell);
+    if not (IsNan(n) or IsInfinite(n)) then
+      Exit(TyJsAddCommas(TyJsNumberToString(n)));
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+  case ACell.Kind of
+    dvkText:
+      if TyJsTrim(ACell.Text) <> '' then Result := ACell.Text else Result := '-';
+    dvkBool:
+      if ACell.Num <> 0 then Result := 'true' else Result := 'false';
+  else
+    Result := '-';
+  end;
 end;
 
 function TyParseDataValue(const AValue: TTyDataValue; AType: TTyDimType): Double;
@@ -957,6 +1316,7 @@ begin
     SetLength(FCols[i], cap);
   if FIds <> nil then SetLength(FIds, cap);
   if FNames <> nil then SetLength(FNames, cap);
+  if FRawItems <> nil then SetLength(FRawItems, cap);
   if FOvrHead <> nil then
   begin
     SetLength(FOvrHead, cap);
@@ -1135,6 +1495,9 @@ begin
   FFiltered := False;
   FIds := nil;
   FNames := nil;
+  FRawItems := nil;
+  FRawDimNames := nil;
+  FRawDimPos := nil;
   FOvrHead := nil;
   FOvr := nil;
   FOvrCount := 0;
@@ -1283,6 +1646,118 @@ begin
   if FNames = nil then Exit('');
   if (ARawIndex < 0) or (ARawIndex > High(FNames)) then Exit('');
   Result := FNames[ARawIndex];
+end;
+
+procedure TTyDataStore.SetRawItem(ARawIndex: Integer; const AItem: TTyRawItem);
+begin
+  if (ARawIndex < 0) or (ARawIndex >= FRawCount) then Exit;
+  if FRawItems = nil then SetLength(FRawItems, FCapacity);
+  FRawItems[ARawIndex] := AItem;
+end;
+
+function TTyDataStore.RawItemByRaw(ARawIndex: Integer): TTyRawItem;
+begin
+  Result := Default(TTyRawItem);
+  if FRawItems = nil then Exit;
+  if (ARawIndex < 0) or (ARawIndex > High(FRawItems)) or (ARawIndex >= FRawCount) then
+    Exit;
+  Result := FRawItems[ARawIndex];
+end;
+
+function TTyDataStore.RawItem(AIndex: Integer): TTyRawItem;
+var raw: Integer;
+begin
+  Result := Default(TTyRawItem);
+  if FRawItems = nil then Exit;
+  raw := GetRawIndex(AIndex);
+  if raw < 0 then Exit;
+  Result := RawItemByRaw(raw);
+end;
+
+function TTyDataStore.HasRawItems: Boolean;
+begin
+  Result := FRawItems <> nil;
+end;
+
+procedure TTyDataStore.SetRawDimPos(ADim, APos: Integer);
+var i: Integer;
+begin
+  if ADim < 0 then Exit;
+  if ADim > High(FRawDimPos) then
+  begin
+    i := Length(FRawDimPos);
+    SetLength(FRawDimPos, ADim + 1);
+    for i := i to ADim do FRawDimPos[i] := i;
+  end;
+  FRawDimPos[ADim] := APos;
+end;
+
+function TTyDataStore.RawDimPos(ADim: Integer): Integer;
+begin
+  if (ADim >= 0) and (ADim <= High(FRawDimPos)) then Result := FRawDimPos[ADim]
+  else Result := ADim;
+end;
+
+procedure TTyDataStore.SetRawDimName(APos: Integer; const AName: string);
+var i: Integer;
+begin
+  if APos < 0 then Exit;
+  if APos > High(FRawDimNames) then
+  begin
+    i := Length(FRawDimNames);
+    SetLength(FRawDimNames, APos + 1);
+    for i := i to APos do FRawDimNames[i] := '';
+  end;
+  FRawDimNames[APos] := AName;
+end;
+
+function TTyDataStore.RawDimName(APos: Integer): string;
+begin
+  Result := '';
+  if (APos >= 0) and (APos <= High(FRawDimNames)) then Result := FRawDimNames[APos];
+end;
+
+function TTyDataStore.RawPosOf(const AKey: string): Double;
+var i: Integer; mask: TFPUExceptionMask;
+begin
+  Result := NaN;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow]);
+  try
+    { `[n]`: the inside as a JavaScript number -- `[]` is nought. }
+    if (Length(AKey) >= 2) and (AKey[1] = '[') and (AKey[Length(AKey)] = ']') then
+      Exit(TyJsToNumber(Copy(AKey, 2, Length(AKey) - 2)));
+    for i := 0 to High(FRawDimNames) do
+      if (FRawDimNames[i] <> '') and (FRawDimNames[i] = AKey) then Exit(i);
+    { `!isNaN(key)`: a numeric-looking name is a position. }
+    Result := TyJsToNumber(AKey);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+class function TTyDataStore.RawCell(const AItem: TTyRawItem; APos: Double;
+  out ACell: TTyDataValue): Boolean;
+var p: Integer;
+begin
+  ACell := Default(TTyDataValue);
+  Result := False;
+  case AItem.Shape of
+    rshScalar:
+      begin
+        ACell := AItem.Scalar;
+        Result := True;
+      end;
+    rshArray, rshObject:
+      begin
+        if IsNan(APos) or IsInfinite(APos) or (Frac(APos) <> 0) then Exit;
+        if (APos < 0) or (APos > High(AItem.Cells)) then Exit;
+        p := Trunc(APos);
+        ACell := AItem.Cells[p];
+        Result := True;
+      end;
+  end;
 end;
 
 function TTyDataStore.HasIds: Boolean;

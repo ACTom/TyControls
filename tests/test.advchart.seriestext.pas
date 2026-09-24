@@ -485,13 +485,13 @@ end;
 procedure TAdvChartSeriesTextOracleTest.TestLabels;
 begin
   CheckLabels;
-  Verdict(200);
+  Verdict(336);
 end;
 
 procedure TAdvChartSeriesTextOracleTest.TestTooltips;
 begin
   CheckTooltips;
-  Verdict(50);
+  Verdict(72);
 end;
 
 procedure TAdvChartSeriesTextOracleTest.TestGauges;
@@ -513,7 +513,7 @@ begin
   finally
     DefaultFormatSettings := saved;
   end;
-  Verdict(260);
+  Verdict(422);
 end;
 
 initialization

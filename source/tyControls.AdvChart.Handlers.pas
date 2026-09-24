@@ -35,7 +35,8 @@ unit tyControls.AdvChart.Handlers;
 interface
 uses
   SysUtils, Classes, Math,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Paint;
+  tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
+  tyControls.AdvChart.Data;
 
 type
   { What a handler is given, and what a template expands from. Modelled on
@@ -62,6 +63,13 @@ type
     { Parallel to Values when the data came from a dataset, so a template can
       say @price instead of counting columns. Empty otherwise. }
     DimensionNames: TTyStringArray;
+    { THE ITEM AS WRITTEN, when the store kept it (rshNone otherwise): the
+      template's c prints this, not Values. RawCells and RawTypes run parallel
+      to Values -- each value's own cell and its dimension's type -- for the
+      tooltip's value cell. Empty when there is no raw item. }
+    Raw: TTyRawItem;
+    RawCells: TTyDataValueArray;
+    RawTypes: array of TTyDimType;
     { The d placeholder. HasPercent separates "zero per cent" from "this series
       has no percentage", which is most of them. }
     Percent: Double;
@@ -304,6 +312,13 @@ end;
 function ValueTextOf(const P: TTyChartCallbackParams): string;
 var i: Integer;
 begin
+  { THE RAW VALUE, String()-ed -- except a null or a missing one, which the
+    tooltip's formatTpl prints as nothing rather than `null`. }
+  if P.Raw.Shape <> rshNone then
+  begin
+    if P.Raw.Shape in [rshNull, rshAbsent] then Exit('');
+    Exit(TyRawItemText(P.Raw));
+  end;
   Result := '';
   for i := 0 to High(P.Values) do
   begin
