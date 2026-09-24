@@ -111,6 +111,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyGroupBox](groupbox.md) | 带标题的分组框 |
 | [TTyPageControl](pagecontrol.md) | 多页签容器（含 `TTyTabSheet`） |
 | [TTyTabSet](tabset.md) | 纯标签条（非页容器） |
+| [TTyToolWindowBar](toolwindows.md) | IDE 式侧栏 / 底栏：图标条或标签切换工具窗口，可拉宽、收起 |
+| [TTyToolWindowManager](toolwindows.md) | 工具窗口跨侧拖动、`MoveWindow`、布局保存 |
 | [TTySplitter](splitter.md) | 面板间可拖拽分隔条 |
 | [TTyToolBar](toolbar.md) | 工具条 + `TTyToolSeparator` 分隔符 |
 | [TTyStatusBar](statusbar.md) | 底部多分区状态栏 |
