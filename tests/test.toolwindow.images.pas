@@ -15,8 +15,8 @@ interface
 
 uses
   Classes, SysUtils, Types, TypInfo, Controls, Graphics, Forms, ImgList, fpcunit, testregistry,
-  tyControls.Controller, tyControls.ToolWindows, tyControls.Icons.Lucide,
-  test.toolwindow.bar;
+  tyControls.Controller, tyControls.ToolWindows, tyControls.ToolWindows.Manager,
+  tyControls.Icons.Lucide, test.toolwindow.bar;
 
 type
   { 探针:数「栏被请求重画了几次」,记下「被通知了谁的 opRemove」,并开出流式加载的两个入口。 }

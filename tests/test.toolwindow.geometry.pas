@@ -3,8 +3,9 @@ unit test.toolwindow.geometry;
 interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry,
-  { 只为它的 initialization —— 四个 RegisterClass 就发生在那里,别当成没用的 uses 删掉。 }
-  tyControls.ToolWindows, tyControls.ToolWindows.Layout;
+  { 只为它们的 initialization —— 四个 RegisterClass 就发生在那里(窗口、操作区、栏在
+    ToolWindows,manager 在 ToolWindows.Manager),别当成没用的 uses 删掉。 }
+  tyControls.ToolWindows, tyControls.ToolWindows.Manager, tyControls.ToolWindows.Layout;
 
 type
   TTyToolWindowGeometryTests = class(TTestCase)

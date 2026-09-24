@@ -12,7 +12,7 @@ uses
   Classes, SysUtils, StrUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc,
   LMessages, fpcunit, testregistry,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.Edit, tyControls.Button,
-  tyControls.ToolWindows, tyControls.ToolWindows.Layout,
+  tyControls.ToolWindows, tyControls.ToolWindows.Layout, tyControls.ToolWindows.Manager,
   test.toolwindow.window, test.toolwindow.bar;
 
 type
@@ -545,7 +545,11 @@ var
 begin
   info := GetPropInfo(TTyToolWindowBar, 'Manager');
   AssertNotNull('Manager 是 published', info);
-  AssertEquals('类型是 manager', 'TTyToolWindowManager', info^.PropType^.Name);
+  { 类型是 manager 的基类(栏那一面在 tyControls.ToolWindows);窗体上放的 TTyToolWindowManager
+    是它的派生类,对象查看器照样列得出来。 }
+  AssertEquals('类型是 manager 的基类', 'TTyCustomToolWindowManager', info^.PropType^.Name);
+  AssertTrue('TTyToolWindowManager 赋得上去',
+    TTyToolWindowManager.InheritsFrom(GetTypeData(info^.PropType)^.ClassType));
   AssertTrue('读得到(对象查看器要能读)', info^.GetProc <> nil);
 end;
 

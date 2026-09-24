@@ -12,6 +12,7 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages,
   fpcunit, testregistry,
   tyControls.Controller, tyControls.ToolWindows, tyControls.ToolWindows.Layout,
+  tyControls.ToolWindows.Manager,
   tyControls.Icons.Lucide, test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager;
 
 type

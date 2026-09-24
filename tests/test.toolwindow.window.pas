@@ -11,7 +11,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
-  tyControls.ToolWindows.Layout;
+  tyControls.ToolWindows.Layout, tyControls.ToolWindows.Manager;
 
 type
   { 探针:数「对齐引擎被请了几次」。「换主题只重画」和「换主题真重排」在别的断言下
