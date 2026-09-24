@@ -228,6 +228,9 @@ type
       with no start at all. }
     HasStartValue: Boolean;
     StartValue: Double;
+    { A PLAIN VALUE AXIS INCLUDES ZERO unless `scale` says otherwise -- the
+      rule that gave Lo and Hi their zero, which alignment asks again. }
+    Incl0: Boolean;
   end;
 
 { ADataLo/ADataHi are the series' own extent, +Infinity/-Infinity when there
@@ -267,7 +270,8 @@ function TyLiPosMinGap(const AStores: array of TTyDataStore;
   the axis, never from the data. }
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex);
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  APPI: Integer = 96);
 
 implementation
 
@@ -1165,6 +1169,7 @@ begin
       pulling an end nobody pinned, when both ends share a sign. }
     interval := (AAxis <> nil) and (AAxis.AxisType = atValue);
     needZero := interval and not ((ANode <> nil) and JsTruthyOf(ANode.Find('scale')));
+    Result.Incl0 := needZero;
     if needZero then
     begin
       if (Result.Lo > 0) and (Result.Hi > 0) and not Result.FixLo then
@@ -1245,10 +1250,13 @@ end;
 
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex);
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  APPI: Integer);
 var
   g, a: Integer;
   ax: TTyAxis;
+  alignTo: TTyAxis;
+  aligners: array of TTyAxis;
 
   { A BAR OF THIS TYPE IS LAID OUT ALONG AAxis -- upstream's statistics key,
     which exists for a series the legend has switched off and for one with no
@@ -1387,7 +1395,8 @@ var
     if ACtnShp and not blank then ApplyContainShape(AAxis);
   end;
 
-  procedure DoAxis(AAxis: TTyAxis; const AMainType: string);
+  procedure DoAxis(AAxis: TTyAxis; const AMainType: string;
+    AAlignTo: TTyAxis; AAlignPx: Double);
   var
     k, c, si: Integer;
     cols: TTyIntegerArray;
@@ -1601,6 +1610,13 @@ var
         tick count instead and snaps to the calendar itself. }
       if AAxis.Scale is TTyTimeScale then
         TTyTimeScale(AAxis.Scale).SplitNumber := TyValidSplitNumber(split, 10)
+      { ALIGNED TO ANOTHER AXIS' TICKS, over the grid's pixel span as its
+        option alone lays it out -- upstream aligns before the labels shrink
+        the grid. A reference with nothing to align to nices instead. }
+      else if (AAlignTo <> nil) and (AAlignTo.Scale is TTyIntervalScale)
+        and TTyIntervalScale(AAxis.Scale).AlignTo(
+          TTyIntervalScale(AAlignTo.Scale), raw.FixLo, raw.FixHi, raw.Incl0,
+          AAlignPx) then
       else
         TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
       { AFTER Niceify: it is the major interval that gets subdivided, and
@@ -1612,20 +1628,90 @@ var
     if ctnShp then ApplyContainShape(AAxis);
   end;
 
+  function InList(AAxis: TTyAxis): Boolean;
+  var k: Integer;
+  begin
+    for k := 0 to High(aligners) do
+      if aligners[k] = AAxis then Exit(True);
+    Result := False;
+  end;
+
+  { THE AXIS IS A NUMBER AXIS -- value or log, not category and not time --
+    and so can align or be aligned to. }
+  function Numeric(AAxis: TTyAxis): Boolean;
+  begin
+    Result := (AAxis <> nil) and (AAxis.Scale is TTyIntervalScale)
+      and not (AAxis.Scale is TTyTimeScale);
+  end;
+
+  { `alignTicks` asked for, and no `interval` written. }
+  function WantsAlign(AAxis: TTyAxis; const AMainType: string): Boolean;
+  var node: TJSONObject; d: TJSONData;
+  begin
+    Result := False;
+    node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
+    if node = nil then Exit;
+    d := node.Find('alignTicks');
+    if (d = nil) or not JsTruthyOf(d) then Exit;
+    d := node.Find('interval');
+    Result := (d = nil) or (d.JSONType = jtNull);
+  end;
+
+  { ONE DIRECTION OF ONE GRID, as upstream's prepareAlignToInCoordSysCreate
+    and updateAxisTicks do it: walking the axes in REVERSE index order, the
+    last number axis that does not ask to align is the reference -- or, if
+    every one asks, the first to ask -- and every other asker aligns to it
+    after the rest are niced. }
+  procedure Direction(AGrid: TTyGridBuild; AHoriz: Boolean;
+    const AMainType: string);
+  var
+    k, cnt: Integer;
+    px: Double;
+    list: array of TTyAxis;
+  begin
+    if AHoriz then cnt := AGrid.XAxisCount else cnt := AGrid.YAxisCount;
+    SetLength(list, cnt);
+    for k := 0 to cnt - 1 do
+      if AHoriz then list[k] := AGrid.XAxis(k) else list[k] := AGrid.YAxis(k);
+    alignTo := nil;
+    aligners := nil;
+    for k := cnt - 1 downto 0 do
+    begin
+      if not Numeric(list[k]) then Continue;
+      if WantsAlign(list[k], AMainType) then
+      begin
+        SetLength(aligners, Length(aligners) + 1);
+        aligners[High(aligners)] := list[k];
+      end
+      else
+        alignTo := list[k];
+    end;
+    if (alignTo = nil) and (Length(aligners) > 0) then
+    begin
+      alignTo := aligners[High(aligners)];
+      SetLength(aligners, Length(aligners) - 1);
+    end;
+    if alignTo = nil then aligners := nil;
+    { The grid's span as its option alone lays it out, in LOGICAL px. }
+    if AHoriz then px := AGrid.OuterXYWH.W else px := AGrid.OuterXYWH.H;
+    if APPI > 0 then px := px * 96 / APPI;
+    { EVERY AXIS THAT DOES NOT ALIGN FIRST, in reverse order, so the
+      reference has its ticks before anyone asks for them. }
+    for k := cnt - 1 downto 0 do
+    begin
+      ax := list[k];
+      if not InList(ax) then DoAxis(ax, AMainType, nil, NaN);
+    end;
+    for k := 0 to High(aligners) do
+      DoAxis(aligners[k], AMainType, alignTo, px);
+  end;
+
 begin
   if (ABuild = nil) or (AIndex = nil) then Exit;
   for g := 0 to ABuild.GridCount - 1 do
   begin
-    for a := 0 to ABuild.Grid(g).XAxisCount - 1 do
-    begin
-      ax := ABuild.Grid(g).XAxis(a);
-      DoAxis(ax, 'xAxis');
-    end;
-    for a := 0 to ABuild.Grid(g).YAxisCount - 1 do
-    begin
-      ax := ABuild.Grid(g).YAxis(a);
-      DoAxis(ax, 'yAxis');
-    end;
+    Direction(ABuild.Grid(g), True, 'xAxis');
+    Direction(ABuild.Grid(g), False, 'yAxis');
   end;
 end;
 

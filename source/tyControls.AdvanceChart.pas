@@ -179,6 +179,8 @@ type
       outlive it. Cleared only when the option changes -- upstream keeps it on
       the series model, and a replaced option is new series models. }
     FGraphForce: array of TTyGraphForceState;
+    { The PPI the last layout ran at -- alignment works in logical px. }
+    FLastPPI: Integer;
     { WHAT EACH GRAPH'S ROAM LEFT, by SERIES index and outside the build for
       the same reason as FGraphForce: upstream writes it back into the
       series' option, so it survives a resize and a merge and goes only with
@@ -743,6 +745,10 @@ type
     function GraphView(ASeriesIndex: Integer): TTyGraphView;
     { The compensation scale the graph is drawn with -- stale across pans. }
     function GraphNodeScale(ASeriesIndex: Integer): Double;
+    { Radar component AIndex as the last render resolved it -- its spokes'
+      scales, rings and angles -- or nil. Owned by the control and gone at
+      the next layout. }
+    function RadarLayout(AIndex: Integer): TTyRadar;
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
     function LegendLayout(AIndex: Integer): TTyLegendLayout;
@@ -1180,7 +1186,8 @@ begin
   { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
     whose axis was sized from the raw values draws off the top of its plot. }
   FStacks := TySolveStacks(FOption, FBindings, FStores);
-  TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex);
+  TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
+    FLastPPI);
 end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
@@ -1190,6 +1197,7 @@ var
   labelS: TTyStyleSet;
 begin
   FLastRect := ARect;
+  FLastPPI := APPI;
   Rebuild;
   { The layout pass measures the labels the PAINT pass will draw, so it has to
     be handed the same font and the same gaps. Resolving them here rather than
@@ -2488,6 +2496,12 @@ begin
   Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
 end;
 
+function TTyAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FRadars)) then Result := FRadars[AIndex];
+end;
+
 function TTyAdvanceChart.LegendLayoutCount: Integer;
 begin
   Result := Length(FLegends);
@@ -2695,7 +2709,7 @@ var
   i, j, k, n, dim, slot: Integer;
   spec: TTyRadarSpec;
   lo, hi, v, dLo, dHi: Double;
-  seen: Boolean;
+  seen, fixLo, fixHi, incl0: Boolean;
 begin
   FreeRadars;
   SetLength(FRadarDims, Length(FBindings));
@@ -2770,8 +2784,12 @@ begin
           end;
         end;
       end;
-      TyRadarIndicatorExtent(spec.Indicators[j], dLo, dHi, spec.Scale_, lo, hi);
-      FRadars[k].SetAxisExtent(j, lo, hi);
+      { THE RAW RANGE, THEN ALIGNED to splitNumber segments -- upstream's
+        radar runs every spoke through scaleCalcAlign. [Revised in batch 48:
+        the raw range was the spoke's extent.] }
+      TyRadarIndicatorExtent(spec.Indicators[j], dLo, dHi, spec.Scale_, lo, hi,
+        fixLo, fixHi, incl0);
+      FRadars[k].AlignAxis(j, lo, hi, fixLo, fixHi, incl0);
     end;
   end;
 end;

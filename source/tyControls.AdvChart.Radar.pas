@@ -133,6 +133,15 @@ type
     FCX, FCY, FR0, FR1: Double;
     FValid: Boolean;
     FRect: TTyRectF;
+    FPPI: Integer;
+    { EACH SPOKE'S ALIGNED TICKS, and where each lands -- empty for a spoke
+      whose extent was set bare, which then falls back to even spacing. }
+    FTicks: array of TTyDoubleArray;
+    FCoords: array of TTyDoubleArray;
+    { Which spokes were aligned: an aligned spoke with no ticks at all -- a
+      step rounded to nothing -- has no rings, which is not the same as a
+      spoke set bare. }
+    FAligned: array of Boolean;
   public
     constructor Create(const ASpec: TTyRadarSpec);
     destructor Destroy; override;
@@ -140,15 +149,28 @@ type
       no left/top/right/bottom at all -- its option carries no box -- so this
       is the canvas and nothing shrinks it. }
     procedure Resize(const AViewport: TTyRectF; APPI: Integer);
-    { The value range of one spoke, after the whole min/max chain. }
+    { The value range of one spoke, after the whole min/max chain, set BARE --
+      no alignment, rings evenly spaced. }
     procedure SetAxisExtent(AIndex: Integer; ALo, AHi: Double);
+    { UPSTREAM'S RADAR: the spoke's raw extent aligned to a dummy scale of
+      exactly splitNumber segments (scaleCalcAlign), with which ends the
+      author fixed and whether zero is included -- over the spoke's LOGICAL
+      pixel span, which decides how the step is rounded when both ends are
+      fixed. The rings then stand at the aligned ticks. }
+    procedure AlignAxis(AIndex: Integer; ALo, AHi: Double;
+      AFixLo, AFixHi, AIncl0: Boolean);
+    { How many rings past the centre: the fewest any spoke has on a polygon,
+      the first spoke's on a circle; splitNumber on a spoke set bare. }
+    function RingCount: Integer;
+    { Ring k's radius on spoke AIndex: where its tick lands. }
+    function RingRadiusOf(AIndex, AK: Integer): Double;
     function AxisExtent(AIndex: Integer): TTyRange;
     { A radius, in device px, to a point. }
     function CoordToPoint(ACoord: Double; AIndex: Integer): TTyPointF;
     { A value on spoke AIndex to a point. }
     function ValueToPoint(AValue: Double; AIndex: Integer): TTyPointF;
     function AngleOf(AIndex: Integer): Double;
-    { Ring k's radius, k in 0..SplitNumber. Evenly spaced by construction. }
+    { Ring k's radius on the FIRST spoke -- the circle's. }
     function RingRadius(AK: Integer): Double;
     { The value ring k stands for on spoke AIndex. }
     function RingValue(AIndex, AK: Integer): Double;
@@ -245,6 +267,13 @@ function TyRadarAngle(AStartRad: Double; AIndex, ACount: Integer;
       whether zero was included. }
 procedure TyRadarIndicatorExtent(const AInd: TTyRadarIndicator;
   ADataLo, ADataHi: Double; AScale: Boolean; out ALo, AHi: Double);
+{ THE SAME, with which ends the author fixed (after the pre-pass) and whether
+  zero is included -- what the alignment needs. The flags stay BY INDEX when
+  a reversed pair is swapped: `min: 3` over data at 1 is [1, 3] with the LOW
+  end fixed. }
+procedure TyRadarIndicatorExtent(const AInd: TTyRadarIndicator;
+  ADataLo, ADataHi: Double; AScale: Boolean; out ALo, AHi: Double;
+  out AFixLo, AFixHi, AIncl0: Boolean);
 
 (* The value token -- spelt with braces in the option -- substituted into an
    axis name's formatter, FIRST OCCURRENCE ONLY.
@@ -519,11 +548,12 @@ begin
 
   Result.StartDeg := NumIn(node, 'startAngle', Result.StartDeg);
   Result.Clockwise := BoolIn(node, 'clockwise', Result.Clockwise);
-  { A COUNT, so it truncates -- and upstream's own sanitiser turns zero, NaN
-    and everything falsy into the default five, then floors it at one. }
+  { upstream's ensureValidSplitNumber: zero, NaN and everything falsy are the
+    default five, then Math.round(max(it, 1)) -- 2.5 is THREE. Capped at a
+    thousand, which upstream is not. [Revised in batch 48: rounded the
+    banker's way, so 2.5 was two.] }
   v := NumIn(node, 'splitNumber', Result.SplitNumber);
-  if IsNan(v) or (v = 0) then v := 5;
-  Result.SplitNumber := TyRoundOpt(v, 5, 1, 1000);
+  Result.SplitNumber := Min(TyValidSplitNumber(v, 5), 1000);
   Result.Scale_ := BoolIn(node, 'scale', Result.Scale_);
   { COMPARED WHOLE against the one word. `'Circle'` and every typo draw a
     polygon, silently, which is upstream's behaviour and not a slip here. }
@@ -608,9 +638,17 @@ end;
 
 procedure TyRadarIndicatorExtent(const AInd: TTyRadarIndicator;
   ADataLo, ADataHi: Double; AScale: Boolean; out ALo, AHi: Double);
+var fl, fh, z: Boolean;
+begin
+  TyRadarIndicatorExtent(AInd, ADataLo, ADataHi, AScale, ALo, AHi, fl, fh, z);
+end;
+
+procedure TyRadarIndicatorExtent(const AInd: TTyRadarIndicator;
+  ADataLo, ADataHi: Double; AScale: Boolean; out ALo, AHi: Double;
+  out AFixLo, AFixHi, AIncl0: Boolean);
 var
   ind: TTyRadarIndicator;
-  t, expand: Double;
+  t: Double;
 begin
   ind := AInd;
   { THE PRE-PASS, and its tests are FALSY rather than null checks: a written
@@ -640,6 +678,9 @@ begin
   AHi := ADataHi;
   if ind.HasMin then ALo := ind.Min_;
   if ind.HasMax then AHi := ind.Max_;
+  AFixLo := ind.HasMin;
+  AFixHi := ind.HasMax;
+  AIncl0 := not AScale;
 
   { NO DATA AND NO DECLARATION is an axis of nothing, which upstream ends up
     calling 0..1. Tested with IsNan first, because every comparison below
@@ -659,29 +700,16 @@ begin
     if (ALo < 0) and (AHi < 0) and (not ind.HasMax) then AHi := 0;
   end;
 
+  { SWAPPED, THE FLAGS NOT: they stay by index. }
   if ALo > AHi then
   begin
     t := ALo;
     ALo := AHi;
     AHi := t;
   end;
-
-  if ALo = AHi then
-  begin
-    { A RANGE OF NO WIDTH IS EXPANDED, and how depends on whether zero is in
-      it. With `scale` off the include-zero pass above has already turned a
-      non-zero flat range into [0, v] or [v, 0], so only a flat ZERO reaches
-      here and becomes 0..1. With `scale` on the range is opened about the
-      value itself. }
-    if ALo = 0 then
-      AHi := 1
-    else
-    begin
-      expand := Abs(ALo) / 2;
-      ALo := ALo - expand;
-      AHi := AHi + expand;
-    end;
-  end;
+  { A RANGE OF NO WIDTH IS LEFT FLAT HERE. It is opened by the alignment's
+    own validation, which knows the pins -- a fixed max opens the low side
+    only. [Revised in batch 48: opened both ways here, whatever the pins.] }
 end;
 
 function TyRadarNameText(const AInd: TTyRadarIndicator;
@@ -755,6 +783,7 @@ begin
   FR1 := TyBoxResolve(FSpec.R1V, base);
   if FSpec.R0V.Kind = buPx then FR0 := FR0 * APPI / 96;
   if FSpec.R1V.Kind = buPx then FR1 := FR1 * APPI / 96;
+  FPPI := APPI;
   if IsNan(FCX) or IsNan(FCY) or IsNan(FR0) or IsNan(FR1) then Exit;
   if FR1 <= 0 then Exit;
   if Length(FAxes) = 0 then Exit;
@@ -775,6 +804,97 @@ procedure TTyRadar.SetAxisExtent(AIndex: Integer; ALo, AHi: Double);
 begin
   if (AIndex < 0) or (AIndex > High(FAxes)) then Exit;
   FAxes[AIndex].Scale.SetExtent(TyRange(ALo, AHi));
+  if Length(FTicks) <> Length(FAxes) then
+  begin
+    SetLength(FTicks, Length(FAxes));
+    SetLength(FCoords, Length(FAxes));
+    SetLength(FAligned, Length(FAxes));
+  end;
+  FTicks[AIndex] := nil;
+  FCoords[AIndex] := nil;
+  FAligned[AIndex] := False;
+end;
+
+procedure TTyRadar.AlignAxis(AIndex: Integer; ALo, AHi: Double;
+  AFixLo, AFixHi, AIncl0: Boolean);
+var
+  ai: TTyAlignInput;
+  r: TTyAlignResult;
+  n, k: Integer;
+  sc: TTyIntervalScale;
+  tk: TTyScaleTickArray;
+  ppi: Integer;
+begin
+  if (AIndex < 0) or (AIndex > High(FAxes)) then Exit;
+  SetAxisExtent(AIndex, ALo, AHi);
+  if not (FAxes[AIndex].Scale is TTyIntervalScale) then Exit;
+  sc := TTyIntervalScale(FAxes[AIndex].Scale);
+  { THE DUMMY: [0, splitNumber], a step of one, every tick whole. }
+  n := FSpec.SplitNumber;
+  if n < 1 then n := 1;
+  ai := Default(TTyAlignInput);
+  SetLength(ai.RefTicks, n + 1);
+  for k := 0 to n do ai.RefTicks[k] := k;
+  ai.RefExpTicks := ai.RefTicks;
+  ai.RefInterval := 1;
+  ai.Lo := ALo;
+  ai.Hi := AHi;
+  ai.FixLo := AFixLo;
+  ai.FixHi := AFixHi;
+  ai.Incl0 := AIncl0;
+  ai.IsLog := False;
+  ai.Base := 10;
+  { LOGICAL px: the radii are device px, and the precision a both-fixed
+    step is rounded to comes from the span upstream measures in CSS px. }
+  ppi := FPPI;
+  if ppi <= 0 then ppi := 96;
+  ai.PxSpan := Abs(FR1 - FR0) * 96 / ppi;
+  r := TyScaleCalcAlign(ai);
+  sc.SetAligned(r.Lo, r.Hi, r.Interval, r.Precision, r.Seg, r.NiceLo, r.NiceHi);
+  FAligned[AIndex] := True;
+  tk := sc.GetTicks;
+  SetLength(FTicks[AIndex], 0);
+  for k := 0 to High(tk) do
+    if tk[k].Level = 0 then
+    begin
+      SetLength(FTicks[AIndex], Length(FTicks[AIndex]) + 1);
+      FTicks[AIndex][High(FTicks[AIndex])] := tk[k].Value;
+    end;
+  SetLength(FCoords[AIndex], Length(FTicks[AIndex]));
+  for k := 0 to High(FTicks[AIndex]) do
+    FCoords[AIndex][k] := FAxes[AIndex].DataToCoord(FTicks[AIndex][k]);
+end;
+
+function TTyRadar.RingCount: Integer;
+var i, c: Integer;
+
+  function CountOf(AI: Integer): Integer;
+  begin
+    { A spoke set bare counts as splitNumber; an aligned one with no ticks
+      has none, and minus one rings is none drawn. }
+    if FAligned[AI] then Result := Length(FTicks[AI]) - 1
+    else Result := FSpec.SplitNumber;
+  end;
+
+begin
+  Result := FSpec.SplitNumber;
+  if Length(FAligned) = 0 then Exit;
+  if FSpec.Shape = rsCircle then Exit(CountOf(0));
+  Result := MaxInt;
+  for i := 0 to High(FAligned) do
+  begin
+    c := CountOf(i);
+    if c < Result then Result := c;
+  end;
+end;
+
+function TTyRadar.RingRadiusOf(AIndex, AK: Integer): Double;
+begin
+  if (AIndex >= 0) and (AIndex <= High(FCoords))
+    and (AK >= 0) and (AK <= High(FCoords[AIndex])) then
+    Exit(FCoords[AIndex][AK]);
+  if FSpec.SplitNumber < 1 then Exit(FR1);
+  Result := FR0 + (FR1 - FR0) * AK / FSpec.SplitNumber;
 end;
 
 function TTyRadar.AxisExtent(AIndex: Integer): TTyRange;
@@ -810,16 +930,19 @@ end;
 
 function TTyRadar.RingRadius(AK: Integer): Double;
 begin
-  { EVENLY SPACED BY CONSTRUCTION, not by asking the scale: upstream forces
-    every spoke onto one dummy scale of exactly splitNumber intervals, so a
-    ring is a fraction of the radius and never a nice tick. }
-  if FSpec.SplitNumber < 1 then Exit(FR1);
-  Result := FR0 + (FR1 - FR0) * AK / FSpec.SplitNumber;
+  { WHERE THE FIRST SPOKE'S TICK LANDS -- a ring is a tick, rounded to the
+    step's precision, not a fraction of the radius: 2167 on a 6500 spoke of
+    three is 33.338 of 100, not 33.333. [Revised in batch 48: evenly spaced
+    by construction.] }
+  Result := RingRadiusOf(0, AK);
 end;
 
 function TTyRadar.RingValue(AIndex, AK: Integer): Double;
 var e: TTyRange;
 begin
+  if (AIndex >= 0) and (AIndex <= High(FTicks))
+    and (AK >= 0) and (AK <= High(FTicks[AIndex])) then
+    Exit(FTicks[AIndex][AK]);
   e := AxisExtent(AIndex);
   if FSpec.SplitNumber < 1 then Exit(e.Stop);
   Result := e.Start + (e.Stop - e.Start) * AK / FSpec.SplitNumber;
@@ -932,15 +1055,15 @@ end;
 function RingPoints(ARadar: TTyRadar; AK: Integer): TTyPointFArray;
 var
   i, n: Integer;
-  r: Double;
 begin
   n := ARadar.AxisCount;
   Result := nil;
   if n = 0 then Exit;
-  r := ARadar.RingRadius(AK);
   SetLength(Result, n + 1);
+  { EACH SPOKE AT ITS OWN TICK: the ticks are rounded per spoke, so a
+    polygon's corners are not all at one radius. }
   for i := 0 to n - 1 do
-    Result[i] := ARadar.CoordToPoint(r, i);
+    Result[i] := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, AK), i);
   { CLOSED EXPLICITLY. The polygon kind closes itself, but the split LINE is a
     polyline and would leave the last edge missing. }
   Result[n] := Result[0];
@@ -970,7 +1093,7 @@ begin
 
   { ---- the bands, innermost first, under everything ---- }
   if spec.SplitArea.Show then
-    for k := 0 to spec.SplitNumber - 1 do
+    for k := 0 to ARadar.RingCount - 1 do
     begin
       { BAND k SITS BETWEEN RING k AND RING k+1 and takes colour k. Both
         shapes agree about that, though upstream reaches it by two different
@@ -1014,7 +1137,7 @@ begin
 
   { ---- the rings ---- }
   if spec.SplitLine.Show and (spec.SplitLine.WidthLogical > 0) then
-    for k := 0 to spec.SplitNumber do
+    for k := 0 to ARadar.RingCount do
     begin
       if not TyRadarBucket(spec.SplitLine.Colours, k, c) then
         c := AInk.SplitLine;
@@ -1119,9 +1242,9 @@ begin
     if spec.AxisTick.Show and (spec.AxisTick.LengthLogical > 0) then
     begin
       len := spec.AxisTick.LengthLogical * APPI / 96;
-      for k := 0 to spec.SplitNumber do
+      for k := 0 to ARadar.RingCount do
       begin
-        p := ARadar.CoordToPoint(ARadar.RingRadius(k), i);
+        p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         q := TyPointF(p.X - perp.X * len, p.Y - perp.Y * len);
         el := TyChartElement(TyShapePolyline([p, q]));
         el.Style.StrokeColor := AInk.Tick;
@@ -1151,11 +1274,14 @@ begin
         anchorV := tavMiddle;
         if Sin(a) > 0 then anchorH := tahRight else anchorH := tahLeft;
       end;
-      for k := 0 to spec.SplitNumber do
+      for k := 0 to ARadar.RingCount do
       begin
-        words := TyChartNumToStr(ARadar.RingValue(i, k));
+        { Interval.getLabel: the tick's own decimals, thousands grouped.
+          [Revised in batch 48: printed with no grouping.] }
+        words := TyScaleValueLabel(ARadar.GetAxis(i).Scale,
+          ARadar.RingValue(i, k), Default(TTyLabelPrecision));
         if words = '' then Continue;
-        p := ARadar.CoordToPoint(ARadar.RingRadius(k), i);
+        p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         p := TyPointF(p.X - perp.X * margin, p.Y - perp.Y * margin);
         AMeasurer.MeasureLine(words, AInk.LabelFontName,
           AInk.LabelFontSizeLogical, AInk.LabelFontWeight, w, h);

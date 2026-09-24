@@ -331,6 +331,12 @@ type
     FMinInterval: Double;
     FMaxInterval: Double;
     FContainShape: Boolean;
+    { AN ALIGNED SCALE'S OWN COUNT OF NICE SEGMENTS, and whether it has one --
+      nought and minus one are both legal counts, so the zero value cannot
+      mean "none". A precision that is not a number rounds nothing. }
+    FHasIntervalCount: Boolean;
+    FIntervalCount: Integer;
+    FPrecisionNaN: Boolean;
     function StillNiced: Boolean;
     function StubExtent: TTyRange;
     function StubToValue(AValue: Double): Double;
@@ -350,6 +356,25 @@ type
       upstream would have picked. }
     procedure Niceify(ASplitNumber: Double; AUserInterval: Double); overload;
     procedure Niceify(ASplitNumber: Double); overload;
+    { THE ANSWER OF scaleCalcAlign, set as upstream's axisHelper sets it: the
+      extent, the step, its precision (possibly not a number), the count of
+      nice segments and the nice extent. The ticks then walk exactly ACount
+      segments from ANiceLo and land the last one ON ANiceHi. }
+    procedure SetAligned(ALo, AHi, AInterval, APrecision: Double;
+      ACount: Integer; ANiceLo, ANiceHi: Double);
+    { `alignTicks`: this scale's extent -- as validated and pinned -- given
+      ARef's number of whole segments and its fractional ends, over APxSpan
+      LOGICAL px. A log scale searches its own decades and keeps a fixed end
+      that did not move at the value it came in as. False, with nothing
+      changed, when ARef has fewer than two ticks -- the caller nices
+      instead. }
+    function AlignTo(ARef: TTyIntervalScale; AFixLo, AFixHi, AIncl0: Boolean;
+      APxSpan: Double): Boolean;
+    { The major ticks in the stepping space -- decades on a log axis -- as
+      drawn, or expanded to the nice extent. }
+    function StepTicks(AExpand: Boolean): TTyDoubleArray;
+    property HasIntervalCount: Boolean read FHasIntervalCount;
+    property IntervalCount: Integer read FIntervalCount;
     { ON A LOG AXIS, OVER THE DECADES NICEIFY LEFT: upstream's intervalStub
       holds the extent in log space as the nice step wrote it -- -1 and 3,
       not the logarithms of 0.1 and 1000, which come back as
@@ -463,6 +488,58 @@ function TyGetPrecision(AValue: Double): Integer;
 function TyIntervalPrecision(AInterval: Double): Integer;
 { ensureValidSplitNumber: `raw || default`, rounded, at least one. }
 function TyValidSplitNumber(ARaw: Double; ADefault: Integer): Integer;
+
+{ ==================== scaleCalcAlign ==================== }
+
+{ `round(x, p)` with a precision that may be NOT A NUMBER -- upstream hands
+  the value back untouched then -- and may exceed twenty, which only the
+  rounding clamps. }
+function TyRoundP(AValue, APrecision: Double): Double;
+{ nice(val, NICE_MODE_MIN): the power of ten itself, 1 x 10^e, snapped. }
+function TyNiceMin(AValue: Double): Double;
+{ increaseInterval: the next step up the 1, 2, 3, 5, 10 ladder of its own
+  decade -- a leading digit that rounds to nothing is 1, 2 is 3, 3 is 5, and
+  anything else doubles. }
+function TyIncreaseInterval(AInterval: Double): Double;
+{ getAcceptableTickPrecision: the decimals a tick needs so that ASpan over
+  APxSpan pixels at APxDiff is told apart. Not a number for a span of nothing
+  or an infinite one; nought for a pixel span of nothing. }
+function TyAcceptableTickPrecision(ALo, AHi, APxSpan, APxDiff: Double): Double;
+
+type
+  { What scaleCalcAlign is given: the reference axis' ticks (as drawn, and
+    expanded to its nice extent) and step; the target's extent in its
+    stepping space, which ends were fixed, whether it includes zero, whether
+    it is a log axis and its base; the target's pixel span. }
+  TTyAlignInput = record
+    RefTicks, RefExpTicks: TTyDoubleArray;
+    RefInterval: Double;
+    Lo, Hi: Double;
+    FixLo, FixHi, Incl0, IsLog: Boolean;
+    Base: Double;
+    PxSpan: Double;
+  end;
+
+  { And what it answers: the fractional segments at each end, the whole ones
+    between, the validated extent, the aligned extent, step and precision
+    (which may be not-a-number), the nice extent, and how many passes the
+    search took -- all fifty and still short is Exhausted. }
+  TTyAlignResult = record
+    T0, T1: Double;
+    Seg: Integer;
+    ValidLo, ValidHi: Double;
+    Lo, Hi: Double;
+    Interval, Precision: Double;
+    NiceLo, NiceHi: Double;
+    Passes: Integer;
+    Exhausted: Boolean;
+  end;
+
+{ UPSTREAM'S scaleCalcAlign (axisAlignTicks.ts), LINE FOR LINE: the target is
+  given the reference's number of whole segments, and the fractional ones at
+  its ends, by searching the step up the increaseInterval ladder from
+  niceMin(span / segments) -- or, with both ends fixed, by dividing. }
+function TyScaleCalcAlign(const AIn: TTyAlignInput): TTyAlignResult;
 { The ticks an axis DRAWS: none at all on a blank scale -- no labels, tick
   marks, minor ticks, split lines or split areas, which is where upstream
   checks isBlank -- and GetTicks otherwise. GetTicks itself still answers on
@@ -2055,6 +2132,267 @@ begin
   Result := Trunc(ARaw);
 end;
 
+function TyRoundP(AValue, APrecision: Double): Double;
+begin
+  if IsNan(APrecision) then Exit(AValue);
+  if APrecision < 0 then APrecision := 0;
+  if APrecision > 20 then APrecision := 20;
+  Result := TyJsToFixed(AValue, Trunc(APrecision));
+end;
+
+function TyNiceMin(AValue: Double): Double;
+var expo: Integer;
+begin
+  expo := TyQuantityExponent(AValue);
+  Result := TyJsToFixed(1 * TyJsPow10(expo), -expo);
+end;
+
+function TyIncreaseInterval(AInterval: Double): Double;
+var
+  expo: Integer;
+  exp10, f: Double;
+begin
+  expo := TyQuantityExponent(AInterval);
+  exp10 := TyJsPow10(expo);
+  f := TyJsRound(AInterval / exp10);
+  { `!f`: nought and not-a-number are both falsy. }
+  if IsNan(f) or (f = 0) then f := 1
+  else if f = 2 then f := 3
+  else if f = 3 then f := 5
+  else f := f * 2;
+  Result := TyJsToFixed(f * exp10, -expo);
+end;
+
+function TyAcceptableTickPrecision(ALo, AHi, APxSpan, APxDiff: Double): Double;
+var span, d, q, a: Double;
+begin
+  span := Abs(AHi - ALo);
+  if IsNan(span) or IsInfinite(span) or (span = 0) then Exit(NaN);
+  { `pxDiff || 1`. }
+  a := APxDiff;
+  if IsNan(a) or (a = 0) then a := 1;
+  d := TyJsLog(2 * Abs(a) * Abs(span)) / cJsLn10;
+  q := TyJsLog(Abs(APxSpan)) / cJsLn10;
+  { A PIXEL SPAN OF NOTHING is minus infinity here, whose ceiling is minus
+    infinity, and max(0, that) is nought -- not a not-a-number. }
+  Result := JsCeil(-d + q);
+  if IsNan(Result) then Exit(NaN);
+  if Result < 0 then Result := 0;
+  if IsInfinite(Result) then Result := NaN;
+end;
+
+function TyScaleCalcAlign(const AIn: TTyAlignInput): TTyAlignResult;
+var
+  n, g, seg: Integer;
+  t0, t1: Double;
+  i0, i1, e0, e1, h, iv, p, minV, maxV, minNice, maxNice, span: Double;
+  cnt, more, half, pair0, pair1: Double;
+  z: Boolean;
+  mask: TFPUExceptionMask;
+
+  procedure Inc_;
+  begin
+    if AIn.IsLog then iv := iv * Math.Max(AIn.Base, Double(2))
+    else iv := TyIncreaseInterval(iv);
+    p := TyIntervalPrecision(iv);
+  end;
+
+  { One pass of the search; True stops it. }
+  function Pass: Boolean;
+  begin
+    Result := False;
+    if AIn.FixLo then
+    begin
+      if t0 <> 0 then minNice := TyRoundP(minV + iv * t0, p)
+      else minNice := minV;
+      maxNice := TyRoundP(minNice + iv * seg, p);
+      maxV := TyRoundP(maxNice + iv * t1, p);
+      Exit(maxV >= e1);
+    end;
+    if AIn.FixHi then
+    begin
+      if t1 <> 0 then maxNice := TyRoundP(maxV - iv * t1, p)
+      else maxNice := maxV;
+      minNice := TyRoundP(maxNice - iv * seg, p);
+      minV := TyRoundP(minNice - iv * t0, p);
+      Exit(minV <= e0);
+    end;
+    minNice := TyRoundP(JsCeil(e0 / iv) * iv, p);
+    maxNice := TyRoundP(JsFloor(e1 / iv) * iv, p);
+    cnt := TyJsRound((maxNice - minNice) / iv);
+    if cnt <= seg then
+    begin
+      more := seg - cnt;
+      z := AIn.Incl0 or AIn.IsLog;
+      if z and (e0 = 0) then
+      begin
+        pair0 := 0;
+        pair1 := more;
+      end
+      else if z and (e1 = 0) then
+      begin
+        pair0 := more;
+        pair1 := 0;
+      end
+      else
+      begin
+        half := JsFloor(more / 2);
+        if Frac(more / 2) = 0 then
+        begin
+          pair0 := half;
+          pair1 := half;
+        end
+        { THE PREVIOUS PASS'S min AND max, and not-a-number on the first --
+          upstream reads them before this pass writes them, and a
+          not-a-number sum compares false. }
+        else if (not IsNan(minV + maxV)) and ((minV + maxV) < (e0 + e1)) then
+        begin
+          pair0 := half;
+          pair1 := half + 1;
+        end
+        else
+        begin
+          pair0 := half + 1;
+          pair1 := half;
+        end;
+      end;
+      minNice := TyRoundP(minNice - iv * pair0, p);
+      maxNice := TyRoundP(maxNice + iv * pair1, p);
+      minV := TyRoundP(minNice - iv * t0, p);
+      maxV := TyRoundP(maxNice + iv * t1, p);
+      if (minV <= e0) and (maxV >= e1) then Exit(True);
+    end;
+  end;
+
+begin
+  Result := Default(TTyAlignResult);
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exUnderflow,
+    exPrecision, exDenormalized]);
+  try
+    { ---- the reference's shape ---- }
+    n := Length(AIn.RefTicks) - 1;
+    t0 := 0;
+    t1 := 0;
+    if n <= 1 then seg := 1
+    else if n = 2 then
+    begin
+      i0 := Abs(AIn.RefTicks[0] - AIn.RefTicks[1]);
+      i1 := Abs(AIn.RefTicks[1] - AIn.RefTicks[2]);
+      if i0 = i1 then seg := 2
+      else
+      begin
+        seg := 1;
+        if i0 < i1 then t0 := i0 / i1 else t1 := i1 / i0;
+      end;
+    end
+    else
+    begin
+      { `(1 - (tick0 - expTick0) / interval) % 1`: JavaScript's remainder
+        keeps the dividend's sign, as Frac does. }
+      t0 := Frac(1 - (AIn.RefTicks[0] - AIn.RefExpTicks[0]) / AIn.RefInterval);
+      t1 := Frac(1 - (AIn.RefExpTicks[n] - AIn.RefTicks[n]) / AIn.RefInterval);
+      seg := n;
+      if t0 <> 0 then Dec(seg);
+      if t1 <> 0 then Dec(seg);
+    end;
+
+    { ---- intervalScaleEnsureValidExtent, with no ctnShp ---- }
+    e0 := AIn.Lo;
+    e1 := AIn.Hi;
+    if (not IsNan(e0)) and (e0 = e1) then
+    begin
+      if e0 <> 0 then
+      begin
+        h := Abs(e0);
+        if not AIn.FixHi then
+        begin
+          e1 := e1 + h / 2;
+          e0 := e0 - h / 2;
+        end
+        else
+          e0 := e0 - h / 2;
+      end
+      else
+        e1 := 1;
+    end;
+    if IsNan(e0) or IsInfinite(e0) or IsNan(e1) or IsInfinite(e1) then
+    begin
+      e0 := 0;
+      e1 := 1;
+    end;
+    if e1 < e0 then
+    begin
+      h := e0;
+      e0 := e1;
+      e1 := h;
+    end;
+    Result.T0 := t0;
+    Result.T1 := t1;
+    Result.Seg := seg;
+    Result.ValidLo := e0;
+    Result.ValidHi := e1;
+
+    minV := NaN;
+    maxV := NaN;
+    minNice := NaN;
+    maxNice := NaN;
+    if AIn.FixLo and AIn.FixHi then
+    begin
+      { ---- both fixed: divide ---- }
+      minV := e0;
+      maxV := e1;
+      iv := (maxV - minV) / ((seg + t0) + t1);
+      { Double(0.5): a real constant over an Integer is worked in SINGLE
+        precision here, and 0.1 in single moves the precision a place. }
+      p := TyAcceptableTickPrecision(maxV, minV, AIn.PxSpan, Double(0.5) / seg);
+      if t0 <> 0 then minNice := TyRoundP(minV + iv * t0, p)
+      else minNice := minV;
+      if t1 <> 0 then maxNice := TyRoundP(maxV - iv * t1, p)
+      else maxNice := maxV;
+      { THE STEP IS ROUNDED AFTER the nice ends were made from it. }
+      if not (IsNan(p) or IsInfinite(p)) then iv := TyRoundP(iv, p);
+      Result.Passes := 0;
+    end
+    else
+    begin
+      span := e1 - e0;
+      if AIn.IsLog then
+        iv := Math.Max(TyJsPow10(TyQuantityExponent(span)), Double(1))
+      else
+        iv := TyNiceMin(span / seg);
+      p := TyIntervalPrecision(iv);
+      if AIn.FixLo then minV := e0;
+      if AIn.FixHi then maxV := e1;
+      Result.Exhausted := True;
+      for g := 0 to 49 do
+      begin
+        Inc(Result.Passes);
+        if Pass then
+        begin
+          Result.Exhausted := False;
+          Break;
+        end;
+        { AND ONE STEP MORE AFTER THE FIFTIETH MISS -- upstream increases
+          before it tests the loop bound. }
+        Inc_;
+      end;
+    end;
+    Result.Lo := minV;
+    Result.Hi := maxV;
+    Result.Interval := iv;
+    Result.Precision := p;
+    Result.NiceLo := minNice;
+    Result.NiceHi := maxNice;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
 constructor TTyIntervalScale.Create;
 begin
   inherited Create;
@@ -2260,6 +2598,8 @@ begin
   end;
   FInterval := iv;
   FIntervalPrecision := prec;
+  FPrecisionNaN := False;
+  FHasIntervalCount := False;
   FStubStart := lo;
   FStubStop := hi;
   FNiced := True;
@@ -2285,6 +2625,104 @@ end;
 procedure TTyIntervalScale.Niceify(ASplitNumber: Double);
 begin
   Niceify(ASplitNumber, NaN);
+end;
+
+function TTyIntervalScale.StepTicks(AExpand: Boolean): TTyDoubleArray;
+begin
+  Result := StubTicks(AExpand);
+end;
+
+function TTyIntervalScale.AlignTo(ARef: TTyIntervalScale; AFixLo, AFixHi,
+  AIncl0: Boolean; APxSpan: Double): Boolean;
+var
+  ai: TTyAlignInput;
+  r: TTyAlignResult;
+  e: TTyRange;
+  warped: Boolean;
+  a, b, vLo, vHi: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := False;
+  if ARef = nil then Exit;
+  ai := Default(TTyAlignInput);
+  ai.RefTicks := ARef.StubTicks(False);
+  { upstream's incapableOfAlignNeedFallback: a reference with fewer than
+    two ticks has nothing to align to. }
+  if Length(ai.RefTicks) < 2 then Exit;
+  ai.RefExpTicks := ARef.StubTicks(True);
+  ai.RefInterval := ARef.Interval;
+  e := GetExtent;
+  warped := LogWarped;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    if warped then
+    begin
+      a := FMapper.TransformIn(e.Start);
+      b := FMapper.TransformIn(e.Stop);
+      { The base comes back out of the mapper: base^1. }
+      ai.Base := FMapper.TransformOut(1);
+    end
+    else
+    begin
+      a := e.Start;
+      b := e.Stop;
+      ai.Base := 10;
+    end;
+    ai.Lo := a;
+    ai.Hi := b;
+    ai.FixLo := AFixLo;
+    ai.FixHi := AFixHi;
+    ai.Incl0 := AIncl0;
+    ai.IsLog := warped;
+    ai.PxSpan := APxSpan;
+    r := TyScaleCalcAlign(ai);
+    if warped then
+    begin
+      { A FIXED END THAT DID NOT MOVE keeps the value it came in as. }
+      if AFixLo and (r.Lo = a) then vLo := e.Start
+      else vLo := FMapper.TransformOut(r.Lo);
+      if AFixHi and (r.Hi = b) then vHi := e.Stop
+      else vHi := FMapper.TransformOut(r.Hi);
+    end
+    else
+    begin
+      vLo := r.Lo;
+      vHi := r.Hi;
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+  SetAligned(r.Lo, r.Hi, r.Interval, r.Precision, r.Seg, r.NiceLo, r.NiceHi);
+  if warped then
+  begin
+    SetExtent(TyRange(vLo, vHi));
+    FNicedExtent := GetExtent;
+  end;
+  Result := True;
+end;
+
+procedure TTyIntervalScale.SetAligned(ALo, AHi, AInterval, APrecision: Double;
+  ACount: Integer; ANiceLo, ANiceHi: Double);
+begin
+  SetExtent(TyRange(ALo, AHi));
+  FInterval := AInterval;
+  FPrecisionNaN := IsNan(APrecision);
+  if FPrecisionNaN then FIntervalPrecision := 0
+  else if APrecision > High(Integer) then FIntervalPrecision := High(Integer)
+  else FIntervalPrecision := Trunc(APrecision);
+  FHasIntervalCount := True;
+  FIntervalCount := ACount;
+  FNiceStart := ANiceLo;
+  FNiceStop := ANiceHi;
+  FStubStart := ALo;
+  FStubStop := AHi;
+  FNiced := True;
+  FNicedExtent := GetExtent;
 end;
 
 function TTyIntervalScale.Normalize(AValue: Double): Double;
@@ -2338,8 +2776,8 @@ end;
 function TTyIntervalScale.StubTicks(AExpand: Boolean): TTyDoubleArray;
 var
   e: TTyRange;
-  n: Integer;
-  tick, iv, last: Double;
+  n, k: Integer;
+  tick, iv, last, precD: Double;
   prec: Integer;
 
   procedure Push(AValue: Double);
@@ -2364,18 +2802,31 @@ begin
     FNiceStart := TyJsToFixed(JsCeil(e.Start / iv) * iv, prec);
     FNiceStop := TyJsToFixed(JsFloor(e.Stop / iv) * iv, prec);
   end;
+  if FPrecisionNaN then precD := NaN else precD := prec;
   if e.Start < FNiceStart then
   begin
-    if AExpand then Push(TyJsToFixed(FNiceStart - iv, prec))
+    if AExpand then Push(TyRoundP(FNiceStart - iv, precD))
     else Push(e.Start);
   end;
   tick := FNiceStart;
+  k := 0;
   while True do
   begin
-    if IsNan(tick) or IsInfinite(tick) or IsNan(FNiceStop)
+    if FHasIntervalCount and StillNiced then
+    begin
+      { A COUNT OF NICE SEGMENTS, and the last tick IS the nice end: summing
+        a rounded step drifts, and the count is what an aligned axis
+        promised. }
+      if k > FIntervalCount then Break;
+      if (not IsNan(tick)) and (not IsNan(FNiceStop)) and (tick > FNiceStop) then
+        tick := FNiceStop;
+      if k = FIntervalCount then tick := FNiceStop;
+    end
+    else if IsNan(tick) or IsInfinite(tick) or IsNan(FNiceStop)
       or IsInfinite(FNiceStop) or (tick > FNiceStop) then Break;
+    Inc(k);
     Push(tick);
-    tick := TyJsToFixed(tick + iv, prec);
+    tick := TyRoundP(tick + iv, precD);
     { Past the precision a Double can carry the step adds nothing. }
     if tick = Result[n - 1] then Break;
     if n > cSafeTickLimit then
@@ -2387,7 +2838,7 @@ begin
   if n > 0 then last := Result[n - 1] else last := FNiceStop;
   if e.Stop > last then
   begin
-    if AExpand then Push(TyJsToFixed(last + iv, prec))
+    if AExpand then Push(TyRoundP(last + iv, precD))
     else Push(e.Stop);
   end;
   SetLength(Result, n);

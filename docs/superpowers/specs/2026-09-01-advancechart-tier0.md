@@ -5536,6 +5536,7 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
   `{@维度}` 对标量数据项的回退也在这里:上游一个标量项对任何维度名、任何 `[n]` 都答它自己的值,这要知道原始项是不是数组。
 - **tooltip 子行**:K 线的 open/close/lowest/highest、雷达每个指标一行、`displayName`、`encode.tooltip`。
 - 雷达的数据标签没有实现;雷达环上的标签还是 `TyChartNumToStr`,要和 scaleCalcAlign 一起做。
+  **[第四十八批:环上的标签改成刻度标签(千分位),见 §82。]**
 - `encode.label` 和 defaultedLabel 维度规则(类目-类目、时间-类目的散点没有默认标签)。
 - 未命名系列的自动名 `series\0N`:要先决定怎么画一个 NUL。
 - 仪表盘 `splitNumber: 0`:上游印 NaN,port 有意画最小值(gauge 测试钉着)。
@@ -6703,3 +6704,73 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 还在队列里
 
 `scaleCalcAlign`(雷达指示器与 `alignTicks`)→ 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。
+
+## 82. Tier 1 第四十八批:`scaleCalcAlign`——雷达指示器与 `alignTicks`(2026-09-24)
+
+上游有两处不自己 nice、而是把一根轴的刻度"对齐"到另一根轴上:雷达的每条指标轴对齐到一个 `[0, splitNumber]` 的哑刻度,笛卡尔上写了 `alignTicks: true` 的数值轴对齐到同方向的参考轴。port 两处都没有:雷达直接用原始范围、环按半径等分、标签用 `FormatFloat` 不带千分位;`alignTicks` 根本不读。
+
+### 上游的做法(axisAlignTicks.ts)
+
+- **参考轴的形状**:刻度数 `n`。一段时 `seg = 1`;两段且不等长时 `seg = 1`,短的那段按比例算成端部的分数段;三段以上 `t0 = (1 − (T0 − X0)/iv) % 1`、`t1` 对称,`seg = n − (t0?1:0) − (t1?1:0)`(X 是扩展到 nice 范围的刻度)。
+- **目标的范围**先过 `ensureValidExtent`(平值:固定了 max 只向下开,否则两边各开一半;零 → `[0, 1]`;非有限 → `[0, 1]`)。对数目标在自己的指数空间里算。
+- **两端都固定**:`iv = (max − min)/(seg + t0 + t1)`,精度 `getAcceptableTickPrecision([max, min], px, 0.5/seg)`(px 为 0 时是 0 而不是 NaN;跨度为 0 或非有限时是 NaN);nice 两端用**未取整**的 iv 算,之后才把 iv 按精度取整。
+- **否则搜索**:起点 `niceMin(span/seg)`(10 的整数幂,`NICE_MODE_MIN`),对数轴是 `max(10^qE(span), 1)`;最多 50 轮,每轮不满足就 `increaseInterval`(首位数 1→2→3→5→10,0 当 1),对数轴乘 `max(base, 2)`;**第 50 轮失败后还会再加一次**,所以存下的步长比决定范围的那一步大一格。
+  - min 固定:从 min 往上铺 `seg` 段,直到 max 够到数据;max 固定对称。
+  - 都不固定:取数据里的整倍数,段数不够时把多出的段补在两边——含零(或对数轴)且一端是 0 时全补在另一端;否则奇数段按**上一轮**的 `min + max` 与数据中点比较决定多给哪边(第一轮是 NaN,比较为假)。
+- **写回**:范围、步长、精度(不钳制,可以是 28)、`intervalCount = seg`、nice 范围。刻度严格走 `intervalCount` 段,最后一个刻度就是 nice 终点;步长为 0 时没有刻度。标签是 `getLabel`:按值自己的小数位,加千分位。
+- **雷达**:哑刻度 `[0, n]`、步长 1,所以 `t0 = t1 = 0`、`seg = n`;`n = Math.round(max(splitNumber || 5, 1))`;范围来自原始规则(max>0 且 min 为假 → min=0 等),固定标志按下标保留(min > max 时只交换值);px 是 CSS 像素的半径差。环画在每条轴自己取整后的刻度坐标上:多边形取各条轴刻度数的最小值,圆形用第一条轴。
+- **笛卡尔**:每个网格、每个方向,按下标**倒序**找参考轴——最后一个没要求对齐的数值轴(值轴或对数轴),都要求时取第一个要求的;写了 `interval` 的不对齐。先 nice 其余轴,再对齐。px 是**只按网格选项**算出的矩形宽高(在 outerBounds / containLabel 收缩之前)。
+
+### port 以前
+
+- 雷达:范围就是原始范围(40..90 画成 `[0, 90]`,上游 `[0, 100]`);平值在原始规则里两边各开一半,不看固定标志;环按半径等分、环上的值线性插值;标签 `FormatFloat('0.######')`,没有千分位;splitNumber 用 banker's 取整(2.5 → 2);半径差按设备像素。
+- 笛卡尔:`alignTicks` 不读,每根轴自己 nice。
+- 刻度:没有 `intervalCount` 分支;没有 `NICE_MODE_MIN`、`increaseInterval`、`getAcceptableTickPrecision`。
+
+### 做法
+
+- `Scale`:`TyRoundP`(精度可为 NaN 或大于 20)、`TyNiceMin`、`TyIncreaseInterval`、`TyAcceptableTickPrecision`、纯函数 `TyScaleCalcAlign`(输入输出记录,逐行照搬,在屏蔽浮点异常的外壳里算);`TTyIntervalScale.SetAligned`(范围、步长、精度、段数、nice 范围,段数用单独的"有"标志,NaN 精度也单独记)、`AlignTo`(读参考轴的步进空间刻度和扩展刻度,对数目标在指数空间里算、固定且没动的一端保留原值)、`StepTicks`;`StubTicks` 加 `intervalCount` 分支;`Niceify` 清掉对齐状态。
+- `Radar`:原始范围函数多输出固定标志和是否含零,不再展开平值;`AlignAxis` 对齐到哑刻度,px 换算成逻辑像素;`RingCount`、`RingRadiusOf`(每条轴自己的刻度坐标)、`RingValue` 读对齐后的刻度;绘制逐条轴取环坐标;标签用 `TyScaleValueLabel`;splitNumber 用 `TyValidSplitNumber`(保留 1000 的上限)。
+- `Series`:原始范围记录导出 `Incl0`;每个网格每个方向按上游规则选参考轴,先 nice 其余轴,再 `AlignTo`;px 取构建阶段已算好的选项矩形,按 PPI 换成逻辑像素。
+- `AdvanceChart`:雷达走 `AlignAxis`;记下 `FLastPPI`;`RadarLayout` 供测试读取。
+
+### 基准
+
+- `tools/advchart-oracle/scale-align.js` → `advchart-scale-align.json`:111 例、258 条对齐轴(雷达 53 例,笛卡尔 57 例,1 例 dataZoom 只作单元层;其中 3 例是变异测试后补的判别用例)。生成器内嵌一份逐位验证过的配方,逐字段对拍;14 个判别守卫(新鲜居中、`log10`、banker's 取整、无 `intervalCount`、1-2-5 阶梯、`NICE_MODE_ROUND`、取整后的步长做 nice 端、交换固定标志、平值两边开、px 0 → NaN、存储时钳制精度、50 轮后不多加一次、最终 px、设备 px)各自至少改变一个具名用例。
+- `test.advchart.scalealign`:
+  - 单元层:全部 258 条对齐轴,把 input 喂给 `TyScaleCalcAlign`,逐位比较 t0、t1、段数、有效范围、范围、步长、精度、nice 范围、轮数与是否耗尽,再经 `SetAligned` 比较刻度和标签。约六千项。
+  - 雷达端到端:真实渲染后逐条轴比较范围、步长、nice 范围、每个环的值和半径、环数。
+  - 笛卡尔端到端:真实渲染后比较对齐轴的范围(对数轴比值域)、步长、nice 范围、步进空间的刻度。
+  - 144 PPI、画布放大 1.5 倍的雷达,步长和范围与 96 PPI 相同;辅助函数的边界(`round(x, NaN)`、`increaseInterval(0)`)。
+- 一个 FPC 陷阱在这里咬到:`0.5 / seg` 里实常量除以整数按 Single 算,0.1 的 Single 让 LOG10-BOUNDARY 的精度差一位,改成 `Double(0.5)`。
+
+### 被推翻的旧测试
+
+- `test.advchart.radar.pas`:平值 `[25, 75]` 是对齐之前的原始值,上游从不显示;改为原始规则原样返回平值,对齐后 scale:true 的 50/50 是 `[0, 100]`、两端都钉在 50 是 `[25, 50]`。原处有标注。
+
+### 已知偏差
+
+- dataZoom 驱动的对齐(两端都算固定)、轴断裂的回退、对齐轴上的 containShape 采用、`inverse` 的交互:不做(dataZoom 那例只在单元层比较)。
+- 雷达半径为 0 时不画(上游算出精度 0 但什么也看不见)。
+- splitNumber 上限 1000(上游无上限)。
+- 雷达轴标签的首尾隐藏(`fixMinMaxLabelShow` / `hideOverlap`):不做。
+
+### 变异测试
+
+42 个。38 个被杀,4 个等价。
+
+- 第一轮存活 11 个。补测试后杀掉 7 个,加上新写的"对齐后没有刻度的辐条按 splitNumber 算环数",共 8 个:
+  - `TyRoundP` 精度为 NaN 时原样返回、`increaseInterval(0)` 是 1:辅助函数的边界单元测试;
+  - 雷达按设备像素算半径:同一雷达在 144 PPI、画布放大 1.5 倍时,步长和范围与 96 PPI 一样;
+  - 对齐后没有刻度时的环数:TINY 例原先因为上游环数是 −1 被跳过,改为照样比较(并据此改了 `RingCount`:对齐过的辐条没有刻度就是没有环);
+  - `scale: true` 不含零(雷达、笛卡尔各一):补了数据恰好碰到 0 的基准用例,含零会把多出的一段全补在上面;
+  - 对数目标固定端保留原值:补了对数轴固定在 3 的基准用例。
+- **等价的 4 个**:
+  - 存储时把精度钳到 20:取整时本来就钳制,可见结果不变;
+  - 参考轴不足两个刻度照样对齐:上游保证参考轴至少两个刻度,这个分支到不了;
+  - 用最终绘图矩形代替选项矩形算 px:对齐时绘图矩形还没收缩,两者相同(变异本身不成立;OB-74 例钉的是选项矩形算出的精度);
+  - 圆形雷达取所有辐条里最少的环数:所有辐条的刻度数都等于 splitNumber+1(或都为空),两种取法相同。
+
+### 还在队列里
+
+原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。

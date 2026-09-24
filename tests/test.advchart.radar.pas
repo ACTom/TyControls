@@ -21,7 +21,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Shape, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Radar, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Series, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Color,
+     tyControls.AdvChart.Color, tyControls.AdvChart.Scale,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartRadarRuleTest = class(TTestCase)
@@ -323,9 +323,31 @@ begin
   AssertEquals(90.0, hi, 1e-9);
 end;
 
+{ A spoke aligned to the radar's default five segments. }
+function AlignFive(ALo, AHi: Double; AFixLo, AFixHi, AIncl0: Boolean): TTyAlignResult;
+var ai: TTyAlignInput; k: Integer;
+begin
+  ai := Default(TTyAlignInput);
+  SetLength(ai.RefTicks, 6);
+  for k := 0 to 5 do ai.RefTicks[k] := k;
+  ai.RefExpTicks := ai.RefTicks;
+  ai.RefInterval := 1;
+  ai.Lo := ALo;
+  ai.Hi := AHi;
+  ai.FixLo := AFixLo;
+  ai.FixHi := AFixHi;
+  ai.Incl0 := AIncl0;
+  ai.Base := 10;
+  ai.PxSpan := 100;
+  Result := TyScaleCalcAlign(ai);
+end;
+
 procedure TAdvChartRadarRuleTest.
   TestARangeOfNoWidthIsOpenedRatherThanLeftFlat;
-var lo, hi: Double;
+var
+  lo, hi: Double;
+  fixLo, fixHi, incl0: Boolean;
+  r: TTyAlignResult;
 begin
   { EVERY VALUE THE SAME is ordinary on a radar -- four indicators all reading
     fifty is a circle, not an error -- and a flat range would divide by zero on
@@ -333,15 +355,29 @@ begin
   TyRadarIndicatorExtent(IndicatorOf('a', False, 0, False, 0), 50, 50, False, lo, hi);
   AssertEquals(0.0, lo, 1e-9);
   AssertEquals(50.0, hi, 1e-9);
-  { With it OFF the range is opened about the value itself, half its own
-    magnitude either way. }
-  TyRadarIndicatorExtent(IndicatorOf('a', False, 0, False, 0), 50, 50, True, lo, hi);
-  AssertEquals(25.0, lo, 1e-9);
-  AssertEquals(75.0, hi, 1e-9);
+  { WITH IT OFF THE RAW RANGE STAYS FLAT, and the alignment opens it -- the
+    one place that knows which end is pinned. [Revised in batch 48: this
+    pinned [25, 75], a raw value upstream never shows; the spoke it draws is
+    [0, 100].] }
+  TyRadarIndicatorExtent(IndicatorOf('a', False, 0, False, 0), 50, 50, True, lo, hi,
+    fixLo, fixHi, incl0);
+  AssertEquals(50.0, lo, 0);
+  AssertEquals(50.0, hi, 0);
+  r := AlignFive(lo, hi, fixLo, fixHi, incl0);
+  AssertEquals('opened and aligned', 0.0, r.Lo, 0);
+  AssertEquals(100.0, r.Hi, 0);
+  { BOTH ENDS WRITTEN AT FIFTY: a pinned max opens the LOW side only. }
+  TyRadarIndicatorExtent(IndicatorOf('a', True, 50, True, 50), NaN, NaN, False,
+    lo, hi, fixLo, fixHi, incl0);
+  r := AlignFive(lo, hi, fixLo, fixHi, incl0);
+  AssertEquals('the low side only', 25.0, r.Lo, 0);
+  AssertEquals(50.0, r.Hi, 0);
   { AND A FLAT ZERO has no magnitude to borrow, so it becomes nought to one. }
-  TyRadarIndicatorExtent(IndicatorOf('a', False, 0, False, 0), 0, 0, True, lo, hi);
-  AssertEquals(0.0, lo, 1e-9);
-  AssertEquals(1.0, hi, 1e-9);
+  TyRadarIndicatorExtent(IndicatorOf('a', False, 0, False, 0), 0, 0, True, lo, hi,
+    fixLo, fixHi, incl0);
+  r := AlignFive(lo, hi, fixLo, fixHi, incl0);
+  AssertEquals(0.0, r.Lo, 0);
+  AssertEquals(1.0, r.Hi, 0);
 end;
 
 procedure TAdvChartRadarRuleTest.TestNoDataAtAllIsAnAxisOfNothing;
