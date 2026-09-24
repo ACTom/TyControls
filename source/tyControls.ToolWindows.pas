@@ -13,7 +13,8 @@ uses
   Forms,     { TCustomForm:拖动期间 Screen 的「活动窗体换了」处理器 }
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
   tyControls.StyleModel, tyControls.Controller, tyControls.StrConsts,
-  tyControls.ToolWindows.Layout;  { 纯规则 / 几何:标题行、图标条、槽位、阈值 }
+  tyControls.ToolWindows.Layout,      { 纯规则 / 几何:标题行、图标条、槽位、阈值 }
+  tyControls.ToolWindows.LayoutText;  { 布局串:解析、格式化、版本漂移计划 }
 
 const
   { 长度 token。经典值必须等于这里的 Def —— light.tycss 的 :root 里写同一个数,
@@ -729,6 +730,10 @@ type
       只记进 FPendingEvents,由调用方在 EnableAlign、焦点恢复之后按顺序发(FireBarEvent)。 --- }
     FDeferEvents: Integer;
     FPendingEvents: TTyToolWindowBarEvents;
+    { > 0 = 布局应用的批次(spec §10.4):栏事件不发(EventsAllowed)、切页和收起跳过焦点那一步、
+      当前页离开不回落(由计划统一激活)。窗口的 OnShow / OnHide 照常 —— 那是 BeginSilent 的事,
+      两者互不替代(加载结束时应用挂起计划才两样一起包)。 }
+    FLayoutBatch: Integer;
     { 调用方必须 try/finally 配对。 }
     procedure BeginDeferEvents;
     { 降到 0 时交还记下的事件并清空;没降到 0 交还空集(外层还在延后)。钳在 0。 }
@@ -1147,6 +1152,10 @@ type
   end;
   TTyToolWindowQueue = array of TTyToolWindowQueued;
 
+  { 布局串的三组各对应哪条可用栏、它的窗口(Controls 顺序)。没有可用栏的组是 nil。 }
+  TTyToolLayoutBars = array[TTyToolLayoutSide] of TTyToolWindowBar;
+  TTyToolLayoutWindows = array[TTyToolLayoutSide] of TTyToolWindowArray;
+
   { 工具窗口栏的协调者(spec §2):可以不放。栏经 Manager 属性注册到它上面;跨侧拖动、
     MoveWindow、布局保存都要它。非可视组件,从 TTyComponent 来(带对象查看器里的 Version)。
     不支持放在数据模块里、栏分布在多个窗体上(spec §10.6)。 }
@@ -1167,6 +1176,14 @@ type
     { 正在拖图标的那条栏(spec §9.2「标记 manager 正在拖」);nil = 没在拖。由源栏的引擎写:
       进入拖动时置上,收尾(ReleaseResources)时清。 }
     FDragSource: TTyToolWindowBar;
+    { --- 布局(spec §10) --- }
+    { > 0 = 正在应用布局的批次。 }
+    FApplying: Integer;
+    { 默认布局(ResetLayout 恢复的对象)存成一份布局串(开工前问题 15):记 = SaveLayoutToString,
+      恢复 = 按这份串走同一条应用路径。 }
+    FDefaultText: string;
+    FDefaultCaptured: Boolean;
+    FOnLayoutApplied: TNotifyEvent;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1204,6 +1221,17 @@ type
       窗体 Showing 了也不排队(源栏不在窗口里,LCL 在 MouseUp 之前已放掉捕获)。 }
     function MoveFromDrop(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
       ASlot: Integer): Boolean;
+    { --- 布局(spec §10) --- }
+    { 可用栏按 Placement 分到三组(每组最多一条:同 Placement 的都不可用),窗口按 Controls 顺序。 }
+    function BuildWorld(out ABars: TTyToolLayoutBars;
+      out AWindows: TTyToolLayoutWindows): TTyToolLayoutWorld;
+    { spec §10.4 的批次:取消拖动、还原最大化、按计划挪窗口 / 调顺序 / 激活 / 设尺寸和收起、
+      焦点、OnLayoutApplied。不问 OnCanMoveWindow、不发 OnWindowMoved 和栏事件;窗口的
+      OnShow / OnHide 照常。 }
+    procedure ApplyText(const ADoc: TTyToolLayoutDoc);
+    { Load / Reset 的门(spec §10.1 + 开工前问题 14):设计期、正在释放、没有注册栏、从本 manager
+      的事件处理里重入,都答 False。 }
+    function LayoutCallAllowed: Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1227,12 +1255,25 @@ type
     procedure CancelDrag;
     { 注册栏里有一条正在拖图标。 }
     function IsDragging: Boolean;
+    { spec §10.2:可用栏按 left、right、bottom 写一组(尺寸是 ExpandedSize,最大化期间也是它);
+      窗口按 Controls 顺序、跳过无名和与可用栏里另一个窗口重名的(保存写出来的串必须能读回来)。
+      没有可用栏时是 TYTOOLLAYOUT/1|end。 }
+    function SaveLayoutToString: string;
+    { spec §10.1:格式错、设计期、正在释放、没有注册栏、从事件处理里重入 → False,什么都不改;
+      否则应用(一个批次)并答 True。格式错不抛异常。 }
+    function LoadLayoutFromString(const AText: string): Boolean;
+    { 恢复默认布局。还没记过默认布局就先记下此刻的样子。门同 LoadLayoutFromString。 }
+    function ResetLayout: Boolean;
+    { 把此刻的样子记成默认布局,随时覆盖。 }
+    procedure CaptureDefaultLayout;
   published
     { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
       没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
     property Images: TCustomImageList read FImages write SetImages;
     property OnCanMoveWindow: TTyCanMoveWindowEvent read FOnCanMoveWindow write FOnCanMoveWindow;
     property OnWindowMoved: TTyWindowMovedEvent read FOnWindowMoved write FOnWindowMoved;
+    { Load / Reset 的批次结束后一次(spec §6.6)。 }
+    property OnLayoutApplied: TNotifyEvent read FOnLayoutApplied write FOnLayoutApplied;
   end;
 
 { 图标条溢出菜单挂在哪、怎么对齐(栏客户区坐标):菜单往内容区那一侧开 —— 左栏从溢出按钮的
@@ -5193,8 +5234,9 @@ var
   old: Integer;
 begin
   old := PlaceWindow(AWindow, AIndex);
-  { 空操作(拖回原位、钳位之后没动)不报。SetChildOrder(流式、设计器)不经过这里,不报。 }
-  if (old >= 0) and (FManager <> nil) then
+  { 空操作(拖回原位、钳位之后没动)不报。SetChildOrder(流式、设计器)不经过这里,不报。
+    布局应用的批次不报(它用 PlaceWindow,这一道防以后有人在批次里调 WindowIndex)。 }
+  if (old >= 0) and (FManager <> nil) and (FLayoutBatch = 0) then
     FManager.WindowMoved(AWindow, Self, old);
 end;
 
@@ -5360,7 +5402,8 @@ end;
 
 function TTyToolWindowBar.EventsAllowed: Boolean;
 begin
-  Result := ([csDesigning, csLoading, csDestroying] * ComponentState = []) and (FSilent = 0);
+  Result := ([csDesigning, csLoading, csDestroying] * ComponentState = []) and (FSilent = 0)
+    and (FLayoutBatch = 0);
 end;
 
 procedure TTyToolWindowBar.DoChange;
@@ -5394,8 +5437,9 @@ begin
     begin
       if AValue then
       begin
-        { 先记下焦点在不在里面 —— 藏起来之后 LCL 会把它挪到窗体本身。 }
-        focusIn := FocusIsInside(FActive);
+        { 先记下焦点在不在里面 —— 藏起来之后 LCL 会把它挪到窗体本身。布局应用的批次跳过
+          这一步,由批次最后统一处理(spec §5.3 / §10.4 第 7 步)。 }
+        focusIn := (FLayoutBatch = 0) and FocusIsInside(FActive);
         HideWindowNow(FActive);
         { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半在 test.toolwindow.focus 测。 }
         if focusIn then
@@ -5585,6 +5629,8 @@ var
   wins: TTyToolWindowArray;
   i: Integer;
 begin
+  { 布局应用的批次跳过焦点这一步,由批次最后统一处理(spec §5.1 第 5 步 / §10.4 第 7 步)。 }
+  if FLayoutBatch > 0 then AMoveFocus := False;
   { 第 5 步要的是「焦点**原来**在不在旧页里」,藏之前记。 }
   focusIn := AMoveFocus and (AOld <> nil) and (AOld <> AWindow) and FocusIsInside(AOld);
   FActive := AWindow;
@@ -5721,8 +5767,9 @@ begin
   AWindow.ResolveImageIndex;
   { 加载中不碰当前页,也不显示任何一页:Loaded 按待定值静默地挑、静默地显示。 }
   prev := FActive;
-  if not (csLoading in ComponentState) then
-    { 不在加载中注册进来的(组件编辑器新建、粘贴、代码添加、从别的栏挪过来)成为当前页。 }
+  { 不在加载中注册进来的(组件编辑器新建、粘贴、代码添加、从别的栏挪过来)成为当前页。
+    MoveWindow 和布局应用自己管激活(FQuietMove,spec §5.1)。 }
+  if not (csLoading in ComponentState) and not AWindow.FQuietMove then
     SwitchCore(AWindow, prev, True);
   { 先把尺寸推好再发事件:OnChange 里读到的 Width 得是新的(第一个窗口进来,空栏就展开)。 }
   Relayout;
@@ -5804,7 +5851,9 @@ begin
   end;
   { 加载中 FActive 通常是 nil(见 FActive);继承窗体第二遍加载时它是第一遍挑好的那页,
     离开了也不回落 —— 置 nil,Loaded 自己挑。 }
-  if (AWindow = FActive) and (csLoading in ComponentState) then
+  { 布局应用的批次里也不回落:回落页会先显示、再被计划藏掉,多一对 OnShow / OnHide(spec §5.2 /
+    §10.3,计划统一激活)。 }
+  if (AWindow = FActive) and ((csLoading in ComponentState) or (FLayoutBatch > 0)) then
     FActive := nil
   else if AWindow = FActive then
   begin
@@ -6280,6 +6329,230 @@ begin
     and CanMoveWindow(AWindow, ATarget);
   { 跨栏的最终位置就是槽位本身(spec §9.4:移走的不在目标栏里,不减一)。 }
   if Result then MoveNow(AWindow, ATarget, ASlot);
+end;
+
+{ --- 布局(spec §10) --- }
+
+const
+  { 布局串的组和栏的 Placement 一一对应。 }
+  LayoutSideOf: array[TTyToolWindowPlacement] of TTyToolLayoutSide = (tlsLeft, tlsRight, tlsBottom);
+
+function TTyToolWindowManager.BuildWorld(out ABars: TTyToolLayoutBars;
+  out AWindows: TTyToolLayoutWindows): TTyToolLayoutWorld;
+var
+  i, k: Integer;
+  b: TTyToolWindowBar;
+  side: TTyToolLayoutSide;
+begin
+  Result := Default(TTyToolLayoutWorld);
+  for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+  begin
+    ABars[side] := nil;
+    AWindows[side] := nil;
+    Result[side].Active := -1;
+  end;
+  for i := 0 to High(FBars) do
+  begin
+    b := FBars[i];
+    if not IsBarUsable(b) then Continue;
+    side := LayoutSideOf[b.Placement];
+    ABars[side] := b;
+    AWindows[side] := b.WindowList(nil);
+    Result[side].Usable := True;
+    SetLength(Result[side].Names, Length(AWindows[side]));
+    for k := 0 to High(AWindows[side]) do
+      Result[side].Names[k] := AWindows[side][k].Name;
+    Result[side].Active := b.IndexOfWindow(b.ActiveWindow);
+  end;
+end;
+
+function TTyToolWindowManager.SaveLayoutToString: string;
+var
+  bars: TTyToolLayoutBars;
+  wins: TTyToolLayoutWindows;
+  world: TTyToolLayoutWorld;
+  doc: TTyToolLayoutDoc;
+  side, other: TTyToolLayoutSide;
+  k, j, n: Integer;
+  nm: string;
+  dup: Boolean;
+begin
+  world := BuildWorld(bars, wins);
+  doc := Default(TTyToolLayoutDoc);
+  for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+  begin
+    if bars[side] = nil then Continue;
+    doc[side].Present := True;
+    { 最大化期间也是还原高度(spec §10.2 / §10.7)。 }
+    doc[side].Size := bars[side].ExpandedSize;
+    doc[side].Collapsed := bars[side].Collapsed;
+    for k := 0 to High(wins[side]) do
+    begin
+      nm := wins[side][k].Name;
+      if nm = '' then Continue;
+      { 与可用栏里另一个窗口重名(CompareText):写出来读的时候会被当成重复拒掉整串(开工前
+        问题 16:范围 = 读取时按名字找的范围)。 }
+      dup := False;
+      for other := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+        for j := 0 to High(world[other].Names) do
+          if ((other <> side) or (j <> k)) and (CompareText(world[other].Names[j], nm) = 0) then
+            dup := True;
+      if dup then Continue;
+      n := Length(doc[side].Names);
+      SetLength(doc[side].Names, n + 1);
+      doc[side].Names[n] := nm;
+      if wins[side][k] = bars[side].ActiveWindow then doc[side].Active := nm;
+    end;
+  end;
+  Result := TyToolLayoutFormat(doc);
+end;
+
+function TTyToolWindowManager.LayoutCallAllowed: Boolean;
+begin
+  Result := ([csDesigning, csDestroying] * ComponentState = []) and (Length(FBars) > 0)
+    and (FEventDepth = 0);
+end;
+
+function TTyToolWindowManager.LoadLayoutFromString(const AText: string): Boolean;
+var
+  doc: TTyToolLayoutDoc;
+begin
+  Result := LayoutCallAllowed and TyToolLayoutParse(AText, doc);
+  if Result then ApplyText(doc);
+end;
+
+procedure TTyToolWindowManager.CaptureDefaultLayout;
+begin
+  FDefaultText := SaveLayoutToString;
+  FDefaultCaptured := True;
+end;
+
+function TTyToolWindowManager.ResetLayout: Boolean;
+var
+  doc: TTyToolLayoutDoc;
+begin
+  Result := LayoutCallAllowed;
+  if not Result then Exit;
+  if not FDefaultCaptured then CaptureDefaultLayout;
+  { 默认布局是自己写出来的串,一定解析得了;万一不能(不该发生)就什么都不做、答 False。 }
+  Result := TyToolLayoutParse(FDefaultText, doc);
+  if Result then ApplyText(doc);
+end;
+
+procedure TTyToolWindowManager.ApplyText(const ADoc: TTyToolLayoutDoc);
+var
+  bars: TTyToolLayoutBars;
+  wins: TTyToolLayoutWindows;
+  plan: TTyToolLayoutPlan;
+  touched: array of TTyToolWindowBar;
+  form: TCustomForm;
+  focus: TWinControl;
+  focusWin, w, target: TTyToolWindow;
+  b: TTyToolWindowBar;
+  side: TTyToolLayoutSide;
+  i, k: Integer;
+begin
+  { 1. 取消拖动。 }
+  CancelDrag;
+  { 2. 最大化的底栏先还原(spec §10.4 第 2 步;B 期留下的那一项)。 }
+  for i := 0 to High(FBars) do
+    if FBars[i].Placement = twpBottom then FBars[i].Maximized := False;
+  { 3. 记下焦点控件,以及它原来在哪个工具窗口里。 }
+  form := nil;
+  if Length(FBars) > 0 then form := GetParentForm(FBars[0]);
+  if form <> nil then focus := form.ActiveControl else focus := nil;
+  focusWin := nil;
+  if focus <> nil then
+    for i := 0 to High(FBars) do
+      for k := 0 to FBars[i].WindowCount - 1 do
+        if FBars[i].Windows[k].ContainsControl(focus) then focusWin := FBars[i].Windows[k];
+  { 4. 计划;所有注册栏进批次、停对齐。 }
+  plan := TyToolLayoutPlanFor(BuildWorld(bars, wins), ADoc);
+  touched := Copy(FBars);
+  Inc(FApplying);
+  try
+    for i := 0 to High(touched) do
+    begin
+      Inc(touched[i].FLayoutBatch);
+      touched[i].DisableAlign;
+    end;
+    try
+      { 5a. 窗口挪到各自的栏(自己换父:FQuietMove,不走直接改 Parent 的簿记、不注册即激活)。 }
+      for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+      begin
+        b := bars[side];
+        if b = nil then Continue;
+        for k := 0 to High(plan[side].Order) do
+        begin
+          w := wins[plan[side].Order[k].Side][plan[side].Order[k].Index];
+          if w.Parent = b then Continue;
+          w.FQuietMove := True;
+          try
+            w.Parent := b;
+          finally
+            w.FQuietMove := False;
+          end;
+        end;
+      end;
+      { 5b. 顺序、尺寸、收起、当前页。收起的栏先收起再切页(不显示任何一页);展开的先切页再
+        展开(只显示新的当前页一次)—— 哪一种都不会让一页先显示再藏掉。 }
+      for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+      begin
+        b := bars[side];
+        if b = nil then Continue;
+        for k := 0 to High(plan[side].Order) do
+          b.PlaceWindow(wins[plan[side].Order[k].Side][plan[side].Order[k].Index], k);
+        if plan[side].Active >= 0 then
+          target := wins[plan[side].Order[plan[side].Active].Side]
+            [plan[side].Order[plan[side].Active].Index]
+        else
+          target := nil;
+        if plan[side].Apply then b.ExpandedSize := plan[side].Size;
+        if plan[side].Apply and plan[side].Collapsed then b.Collapsed := True;
+        { 切页走 SwitchCore(不是 ActivateWindow):目标就是此刻的当前页时,带着 Visible 挪进来的
+          别的窗口照样要藏起来。批次里它不挪焦点。 }
+        b.SwitchCore(target, b.FActive, False);
+        if plan[side].Apply and not plan[side].Collapsed then b.Collapsed := False;
+      end;
+    finally
+      { 6. 倒序恢复对齐、出批次。 }
+      for i := High(touched) downto 0 do
+      begin
+        touched[i].EnableAlign;
+        if touched[i].FLayoutBatch > 0 then Dec(touched[i].FLayoutBatch);
+      end;
+    end;
+  finally
+    Dec(FApplying);
+  end;
+  { 7. 焦点(spec §10.4 第 7 步):原控件还聚焦得上就还给它;否则它原来所在的窗口现在在哪条栏,
+    那条栏收起了或者没有能聚焦的当前页就交给 Tab 顺序里栏后面那一个,展开着就进当前页的正文。
+    原控件不在任何工具窗口里就不动。 }
+  if (form <> nil) and (focus <> nil) then
+  begin
+    if focus.CanFocus then
+    begin
+      if form.ActiveControl <> focus then form.ActiveControl := focus;
+    end
+    else if (focusWin <> nil) and (focusWin.Bar <> nil) then
+    begin
+      b := focusWin.Bar;
+      if b.Collapsed or (b.ActiveWindow = nil) or not b.ActiveWindow.CanFocus then
+        form.SelectNext(b, True, True)
+      else
+        b.ActiveWindow.FocusFirst;
+    end;
+  end;
+  { 8. 一次 OnLayoutApplied;处理器里再调 Load / Reset / MoveWindow 答 False。 }
+  if Assigned(FOnLayoutApplied) then
+  begin
+    Inc(FEventDepth);
+    try
+      FOnLayoutApplied(Self);
+    finally
+      Dec(FEventDepth);
+    end;
+  end;
 end;
 
 procedure TTyToolWindowManager.BarChanged(ABar: TTyToolWindowBar);
