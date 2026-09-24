@@ -220,6 +220,22 @@ add('time startValue', twoWeeks, { type: 'time', startValue: day(2024, 2, 1) }, 
 add('time dataMax', twoWeeks, { type: 'time', dataMax: day(2024, 4, 1) }, { axis: 'x' });
 add('bars on a time value axis', twoWeeks, { type: 'time' }, { series: 'bar' });
 
+// ---------- parse parity (D9, wf53 G1..G8; bar-geometry.js has the same) ----------
+// a raw string is Number(s); a series whose extent has a non-finite end adds
+// nothing to the axis, so alone it leaves the axis blank; a log axis filters
+// +Inf out instead; a stack's calculated column carries the Inf upward
+add("G1 V ['   ','0x10',5]", ['   ', '0x10', 5], {}, { series: 'bar' });
+add("G2 V ['Infinity',5,3]: blank axis", ['Infinity', 5, 3], {}, { series: 'bar' });
+add("G3 [5,10,1]+['Infinity',3,2]: the Inf series adds nothing", [0], {}, { root: { xAxis: cats3, series: [
+  { type: 'bar', data: [5, 10, 1] }, { type: 'bar', data: ['Infinity', 3, 2] }] } });
+add("G4 V ['Infinity',5,3] min 0 max 20", ['Infinity', 5, 3], { min: 0, max: 20 }, { series: 'bar' });
+add("G5 V ['Infinity',5,3] max 20: still blank", ['Infinity', 5, 3], { max: 20 }, { series: 'bar' });
+add("G6 V log ['Infinity',5,3]", ['Infinity', 5, 3], { type: 'log' }, { series: 'bar' });
+add("G7 stack ['Infinity',5,3]+[2,2,2]", [0], {}, { root: { xAxis: cats3, series: [
+  { type: 'bar', stack: 's', data: ['Infinity', 5, 3] }, { type: 'bar', stack: 's', data: [2, 2, 2] }] } });
+add("G8 stack [2,2,2]+['Infinity',5,3]", [0], {}, { root: { xAxis: cats3, series: [
+  { type: 'bar', stack: 's', data: [2, 2, 2] }, { type: 'bar', stack: 's', data: ['Infinity', 5, 3] }] } });
+
 // ---------- random rows ----------
 let s = 20260921;
 function rnd() { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }

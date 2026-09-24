@@ -603,7 +603,30 @@ begin
   Result := (AVal - AD0) / subDomain * subRange + AR0;
 end;
 
+function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyPieLayout; forward;
+
+{ AN INFINITE SLICE IS DATA NOW -- 'Infinity' reads as what upstream reads it
+  as -- and its arithmetic goes on to not-a-number angles the way
+  JavaScript's does, where FPC would raise. }
 function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := PieLayoutOfImpl(ASpec, AViewport, AStore, ADim);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
 var
   size, startA, endA, padA, minA, minPad, halfPad: Double;

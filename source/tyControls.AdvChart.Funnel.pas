@@ -407,7 +407,29 @@ begin
   end;
 end;
 
+function FunnelLayoutOfImpl(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout; forward;
+
+{ An infinite value's arithmetic goes on to not-a-number, as JavaScript's
+  does, where FPC would raise. }
 function TyFunnelLayoutOf(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := FunnelLayoutOfImpl(ASpec, AViewport, AStore, ADim);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function FunnelLayoutOfImpl(const ASpec: TTyFunnelSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyFunnelLayout;
 var
   order: TTyIntegerArray;
@@ -503,7 +525,9 @@ begin
   for i := 0 to n - 1 do
   begin
     v := AStore.Get(ADim, i);
-    if IsNan(v) or IsInfinite(v) then Continue;
+    { getDataExtent: an infinity is an end -- the infinite band then spans
+      the full width and every other one maps to nought }
+    if IsNan(v) then Continue;
     if v < lo then lo := v;
     if v > hi then hi := v;
     haveAny := True;
@@ -702,7 +726,25 @@ begin
   Result.LineShow := Result.LineShow and Result.Show;
 end;
 
+function FunnelPercentsImpl(const ALayout: TTyFunnelLayout): TTyDoubleArray; forward;
+
 function TyFunnelPercents(const ALayout: TTyFunnelLayout): TTyDoubleArray;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := FunnelPercentsImpl(ALayout);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function FunnelPercentsImpl(const ALayout: TTyFunnelLayout): TTyDoubleArray;
 var
   i: Integer;
   sum: Double;

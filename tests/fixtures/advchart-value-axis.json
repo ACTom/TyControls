@@ -6454,6 +6454,392 @@
    "inverse": false
   },
   {
+   "name": "G1 V ['   ','0x10',5]",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "   ",
+       "0x10",
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": false,
+   "extent": [
+    0,
+    18
+   ],
+   "interval": 3,
+   "ticks": [
+    0,
+    3,
+    6,
+    9,
+    12,
+    15,
+    18
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G2 V ['Infinity',5,3]: blank axis",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": true,
+   "extent": [
+    0,
+    1
+   ],
+   "interval": 0.2,
+   "ticks": [
+    0,
+    0.2,
+    0.4,
+    0.6,
+    0.8,
+    1
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G3 [5,10,1]+['Infinity',3,2]: the Inf series adds nothing",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       10,
+       1
+      ]
+     },
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       3,
+       2
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": false,
+   "extent": [
+    0,
+    10
+   ],
+   "interval": 2,
+   "ticks": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G4 V ['Infinity',5,3] min 0 max 20",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": false,
+   "extent": [
+    0,
+    20
+   ],
+   "interval": 5,
+   "ticks": [
+    0,
+    5,
+    10,
+    15,
+    20
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G5 V ['Infinity',5,3] max 20: still blank",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": true,
+   "extent": [
+    0,
+    1
+   ],
+   "interval": 0.2,
+   "ticks": [
+    0,
+    0.2,
+    0.4,
+    0.6,
+    0.8,
+    1
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G6 V log ['Infinity',5,3]",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": true,
+   "blank": false,
+   "extent": [
+    1,
+    10
+   ],
+   "interval": 1,
+   "ticks": [
+    1,
+    10
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G7 stack ['Infinity',5,3]+[2,2,2]",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "stack": "s",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "stack": "s",
+      "data": [
+       2,
+       2,
+       2
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": true,
+   "extent": [
+    0,
+    1
+   ],
+   "interval": 0.2,
+   "ticks": [
+    0,
+    0.2,
+    0.4,
+    0.6,
+    0.8,
+    1
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
+   "name": "G8 stack [2,2,2]+['Infinity',5,3]",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "stack": "s",
+      "data": [
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "stack": "s",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "log": false,
+   "blank": false,
+   "extent": [
+    0,
+    2
+   ],
+   "interval": 0.5,
+   "ticks": [
+    0,
+    0.5,
+    1,
+    1.5,
+    2
+   ],
+   "minor": null,
+   "inverse": false
+  },
+  {
    "name": "random 0",
    "option": {
     "animation": false,

@@ -296,6 +296,14 @@ function stackV(rows, axis, series) {
     series: rows.map(d => Object.assign({ type: 'bar', stack: 't', data: d, label: shown }, series || {})),
   };
 }
+// Bar series side by side (no stack), one per row of `rows`.
+function multiV(rows, axis, series) {
+  return {
+    xAxis: { type: 'category', data: cats(rows[0].length) },
+    yAxis: Object.assign({ type: 'value' }, axis || {}),
+    series: rows.map(d => Object.assign({ type: 'bar', data: d, label: shown }, series || {})),
+  };
+}
 function stackH(rows, axis, series) {
   return {
     yAxis: { type: 'category', data: cats(rows[0].length) },
@@ -414,6 +422,21 @@ add('pictorial H [5,-3] rect', {
   yAxis: { type: 'category', data: cats(2) }, xAxis: { type: 'value' },
   series: [{ type: 'pictorialBar', symbol: 'rect', data: [5, -3] }],
 });
+
+// Parse parity (D9, wf53 G1..G8): a raw string is Number(s) ('   ' is 0,
+// '0x10' is 16, 'Infinity' is +Inf); a series whose extent has a non-finite
+// end adds nothing to the axis (util/model.ts:1258-1264), so alone it leaves
+// the axis blank at [0,1] and its finite bars overrun and are clipped; a log
+// axis filters +Inf out instead (Log.ts:236-238); a stack's calculated column
+// carries the Inf into the member above it.
+add("G1 V ['   ','0x10',5]", V(['   ', '0x10', 5]));
+add("G2 V ['Infinity',5,3]: blank axis", V(['Infinity', 5, 3]));
+add("G3 [5,10,1]+['Infinity',3,2]: the Inf series adds nothing", multiV([[5, 10, 1], ['Infinity', 3, 2]]));
+add("G4 V ['Infinity',5,3] min 0 max 20", V(['Infinity', 5, 3], { min: 0, max: 20 }));
+add("G5 V ['Infinity',5,3] max 20: still blank", V(['Infinity', 5, 3], { max: 20 }));
+add("G6 V log ['Infinity',5,3]", V(['Infinity', 5, 3], { type: 'log' }));
+add("G7 stack ['Infinity',5,3]+[2,2,2]", stackV([['Infinity', 5, 3], [2, 2, 2]]));
+add("G8 stack [2,2,2]+['Infinity',5,3]", stackV([[2, 2, 2], ['Infinity', 5, 3]]));
 
 // deferred: the border inset (D6), background strips on gap rows (D5),
 // barMinWidth 0 still floors the width at 1 (D7)

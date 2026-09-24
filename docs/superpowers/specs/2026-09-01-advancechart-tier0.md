@@ -6827,6 +6827,7 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 已知偏差
 
 - **D9,数据解析与上游不一致**:`'   '` 上游是 0、`'0x10'` 是 16、`'Infinity'` 是 ∞,port 的 store 仍是 NaN;`test.advchart.data.pas` 钉的 `'   '` → NaN 是错的。这会动几何和范围,单独一批。
+  **[第五十三批已做,见 §87。]**
 - 时间维的 tooltip 单元格(上游按**本地时间**格式化成 `yyyy-MM-dd HH:mm:ss`):仍走 Double。
 - 函数格式化器、`valueFormatter`、`@Name` 处理器拿到的仍是 Double;`order` 排序仍按 Double。
 - JSON 表达不了的:NaN、空洞、显式 undefined、Date、TypedArray;数组里嵌套的数组或对象记为空格。
@@ -7031,3 +7032,60 @@ title / legend 的 mergeLayoutParam(第五十二批,审计已完成)→ D9 数�
 ### 还在队列里
 
 D9 数据解析对齐(`'   '` → 0、`'0x10'` → 16、`'Infinity'` → ∞)。这是计划里的最后一项。
+
+## 87. Tier 1 第五十三批:数据解析对齐上游(D9)(2026-09-24)
+
+store 里的一个格子,上游是 `parseDataValue`:除了恰好的空串,文字都是 `Number()`。port 以前是 `Trim` + `TryStrToFloat`,于是 `'   '`、`'0x10'`、`'Infinity'` 是 NaN,`'Inf'` 反而是无穷——四个都和上游反着。时间格还会先修剪、拒绝越界字段,布尔也不认。
+
+### 上游的做法
+
+- **数值维**:`''` 是 NaN,其余文字 `Number()`——空白是 0,`0x/0o/0b` 是整数,`Infinity` 是无穷,`Inf`、`5e+`、`12px` 是 NaN;数照原样(±∞、−0 保留),布尔 1/0。
+- **时间维**:数照原样;布尔是 `new Date(Math.round(true))`,即 1 和 0;文字走 `parseDate`:`TIME_REG` 锚定、不修剪;字段交给 `Date.UTC` / `new Date`——月 13 是下一年一月,日 0 当 1,24 点进到次日,两位年份算 19xx;小数取 `substring(0, 3)`,所以 `'.5'` 是 5 毫秒;时区只读 `slice(0, 3)`,分钟被丢掉;小写 `z` 和纯日期后的 `Z` 都不认。
+- **范围**:store 把无穷当端点留着;是**轴的并集**(`unionExtentFromExtent`)丢掉端点不有限的整个系列——所以一个 `'Infinity'` 只让没有别的系列的轴变空白。对数轴的过滤条件 `0 < v < Infinity` 另外丢掉 +∞。
+- **下游**:无穷的柱子裁剪成 NaN 矩形,不画;饼图的角度、漏斗的份额算成 NaN,JavaScript 照常往下走。
+
+### port 以前
+
+- 上面的解析全是反的;时间格先 `Trim`、越界字段拒绝、`'.5'` 是半秒、时区读到分钟;布尔在时间维是 NaN。
+- 范围把无穷在两处都挡掉,轴的并集不看端点是否有限。
+- 饼图、漏斗、柱子遇到无穷在 FPC 里会抛 `EInvalidOp`。
+
+### 做法
+
+- `Data`:`TyParseNumberText`(`''` 是 NaN,否则 `TyJsToNumber`),删掉 `TextToNumber` 和 `FixedFloatSettings`;时间维布尔取 0/1;`TyParseDateMs` 按 `TIME_REG` 逐个 token 扫描、按 `MakeDay` 进位(`DaysFromCivil` 走前推格里历),不修剪;`NoteValue` 与扫描只跳过 NaN,`defPositive` 另跳过 +∞。
+- `Series`:轴并集只收两端都有限、`lo ≤ hi` 的系列范围。
+- `Pie`、`Funnel`:布局与份额在屏蔽浮点异常的外壳里算;漏斗范围只跳过 NaN(无穷的那一带占满宽度,其余宽度为 0)。
+- `Marks`:无穷的柱子布局不画;堆叠在无穷上的无穷(`Inf − Inf`)是 NaN 地板,不画。
+- `Graph`:边的 `value` 用同一个解析。
+
+### 基准
+
+- 新的 `tools/advchart-oracle/parse-value.js` → `advchart-parse-value.json`:713 条(213 条手挑,500 条种子随机),从上游**真实 store** 读数值维(柱子的 y)和时间维(时间轴上折线的 x,`useUTC: true`,本地时区的输入不记);`test.advchart.parsevalue` 逐位比较。
+- `bar-geometry.js`、`value-axis.js` 各加 G1–G8(空白与十六进制、单系列无穷、多系列里的无穷系列、写了 min/max、对数轴、两种堆叠顺序)。
+- `series-text.js` 解除最后两条 D9 的 deferred。
+- 单元测试:饼图 `[Infinity, 5]` 不抛异常、角度和份额是 NaN/0;`['   ', '0x10', 5]` 的份额 0/76.19/23.81;漏斗 `[Infinity, 5, 3]` 的份额与带宽;graph 边值。
+
+### 被推翻的旧测试
+
+- `test.advchart.data.pas`:
+  - `'   '` → NaN 改为 0;
+  - 时间维布尔 NaN 改为 1/0;
+  - `'.5'` 是 500 毫秒改为 5;
+  - "拒绝不可能的字段"改为按 `Date.UTC` 进位(`TestTimeCarriesOverLikeDateUTC`);
+  - "范围忽略无穷"改为范围保留无穷、对数轴丢掉(`TestExtentKeepsInfinityForTheAxisToDrop`)。
+  - 原处都有标注。`TyParseDateMs` 头注释里"越界字段拒绝"的理由也就地标了推翻。
+
+### 已知偏差
+
+- 历史时区(V8 对 1000 年这类日期用当地平太阳时,差 343 秒):port 用今天的偏移。
+- 坐标系之外、声明为 `int` 的维度(上游 Int32Array):port 不从选项建 int 列。
+- 按名字选编码的三值判断(Not / Might / Must):已有偏差,和 D9 无关,另立一项。
+- 时间维里数值 ±∞ 仍是 NaN(上游保留),序数维里非字符串的下标。
+
+### 变异测试
+
+23 个。22 个被杀;1 个不可达,连同代码删掉:`TimeClip`——四位年份加两位字段最多到一万年出头,远不到 ±8.64e15 毫秒。另有一个变异体原先编不过,改写后被杀。
+
+### 队列
+
+计划里的任务到这里全部完成。

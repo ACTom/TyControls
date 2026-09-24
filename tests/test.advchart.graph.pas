@@ -40,6 +40,7 @@ type
     procedure TestParallelEdgesTakeOppositeSidesAndAWrittenZeroKillsThem;
     procedure TestTheReaderTakesItsNamesAndIdsFromTheStore;
     procedure TestAnEdgeNamesItsEndsByIdOrByIndexAndADanglingOneIsDropped;
+    procedure TestAnEdgeValueIsParsedLikeAnyDatum;
     procedure TestEdgesAndLinksAreOneKeyUnderTwoNames;
     procedure TestAScalarEdgeSymbolNamesBothEnds;
     procedure TestAnEdgeCanTakeTheColourOfTheNodeItLeaves;
@@ -792,6 +793,36 @@ begin
 
     AssertFalse('and one unplaced node leaves no box to fit',
       TyGraphDataRect(nodes, r, a));
+  finally
+    st.Free;
+  end;
+end;
+
+{ An edge's `value` is a datum like any other: parseDataValue's Number() of
+  anything but the empty string. [Batch 53: it was Trim + TryStrToFloat,
+  which read '0x10' and '   ' as not numbers.] }
+procedure TAdvChartGraphRuleTest.TestAnEdgeValueIsParsedLikeAnyDatum;
+var st: TTyDataStore; nodes: TTyGraphNodeArray; edges: TTyGraphEdgeArray;
+begin
+  st := GraphStore;
+  try
+    nodes := TyGraphNodesOf(st, nil);
+    FreeAndNil(FOpt);
+    FOpt := TTyChartOption.Create;
+    AssertTrue(FOpt.SetOptionText(
+      '{"series":[{"type":"graph","links":['
+      + '{"source":0,"target":1,"value":"0x10"},'
+      + '{"source":0,"target":2,"value":"   "},'
+      + '{"source":1,"target":2,"value":""},'
+      + '{"source":1,"target":0,"value":"Inf"},'
+      + '{"source":2,"target":0,"value":"Infinity"}]}]}'));
+    edges := TyGraphEdgesOf(FOpt, 0, nodes);
+    AssertEquals('five edges', 5, Length(edges));
+    AssertEquals('hex', 16, edges[0].Value, 0);
+    AssertEquals('blanks are nought', 0, edges[1].Value, 0);
+    AssertTrue('empty is no number', IsNan(edges[2].Value));
+    AssertTrue('Inf is no number', IsNan(edges[3].Value));
+    AssertTrue('Infinity is infinite', IsInfinite(edges[4].Value));
   finally
     st.Free;
   end;

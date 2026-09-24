@@ -5725,8 +5725,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
-   "why": "parse parity (D9)",
    "series": [
     {
      "seriesIndex": 0,
@@ -11393,8 +11391,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "parse parity (D9)",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,

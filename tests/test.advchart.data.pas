@@ -46,7 +46,7 @@ type
     procedure TestTimeFractionIsPaddedNotTruncated;
     procedure TestTimeZoneDesignatorsAreApplied;
     procedure TestTimeWithoutAZoneIsLocal;
-    procedure TestTimeRejectsImpossibleComponents;
+    procedure TestTimeCarriesOverLikeDateUTC;
     procedure TestTimeRejectsTrailingJunk;
     procedure TestTimeNumberIsAlreadyEpochMs;
     procedure TestTimeRoundTripsThroughTDateTime;
@@ -87,7 +87,7 @@ type
     { ---- extent ---- }
     procedure TestExtentIgnoresGaps;
     procedure TestAllGapsHasNoExtent;
-    procedure TestExtentIgnoresInfinity;
+    procedure TestExtentKeepsInfinityForTheAxisToDrop;
     procedure TestPositiveOnlyExtentIsForTheLogAxis;
     procedure TestExtentFollowsTheFilter;
     procedure TestExtentIsInvalidatedByAnAppend;
@@ -170,7 +170,11 @@ begin
     its own: it is simply not a number. }
   AssertTrue('dash', IsNan(TyParseDataValue(TyDataText('-'), ddtFloat)));
   AssertTrue('empty', IsNan(TyParseDataValue(TyDataText(''), ddtFloat)));
-  AssertTrue('blank', IsNan(TyParseDataValue(TyDataText('   '), ddtFloat)));
+  { [Batch 53: this pinned '   ' as no data. Upstream's parseDataValue is
+    Number() of anything but the exact empty string, and Number('   ') is
+    nought -- upstream draws that bar at zero.] }
+  AssertEquals('blank is Number()''s nought', 0,
+    TyParseDataValue(TyDataText('   '), ddtFloat), 0);
   AssertTrue('word', IsNan(TyParseDataValue(TyDataText('none'), ddtFloat)));
 end;
 
@@ -214,8 +218,11 @@ begin
   AssertEquals(1, TyParseDataValue(TyDataBool(True), ddtFloat), 0);
   AssertEquals(0, TyParseDataValue(TyDataBool(False), ddtFloat), 0);
   { A boolean names no instant, so it is a gap on a time dimension rather than
-    the epoch. }
-  AssertTrue('time', IsNan(TyParseDataValue(TyDataBool(True), ddtTime)));
+    the epoch.
+    [Batch 53: WRONG -- upstream's parseDate is new Date(Math.round(true)),
+    the first millisecond of 1970; false is the epoch itself.] }
+  AssertEquals('time true', 1, TyParseDataValue(TyDataBool(True), ddtTime), 0);
+  AssertEquals('time false', 0, TyParseDataValue(TyDataBool(False), ddtTime), 0);
 end;
 
 procedure TAdvChartDataTest.TestOrdinalIsNotParsedByTheValueParser;
@@ -249,18 +256,20 @@ var ms, base: Double;
 begin
   base := TyDateTimeToMs(EncodeDate(2024, 3, 5) + EncodeTime(0, 0, 1, 0));
   { .5 of a second is 500 ms, not 5. Reading the digits as a plain integer is
-    the obvious mistake and it is silently wrong by two orders of magnitude. }
+    the obvious mistake and it is silently wrong by two orders of magnitude.
+    [Batch 53: and it is upstream's reading -- `+match[7].substring(0, 3)`,
+    so '.5' IS 5 ms and '.05' 5 too. Overturned to match.] }
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.5', ms, True));
-  AssertEquals('one digit', base + 500, ms, 0);
+  AssertEquals('one digit', base + 5, ms, 0);
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.05', ms, True));
-  AssertEquals('two digits', base + 50, ms, 0);
+  AssertEquals('two digits', base + 5, ms, 0);
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.125', ms, True));
   AssertEquals('three digits', base + 125, ms, 0);
   { Finer than this store's resolution: dropped, as ECharts drops it. }
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.1259999', ms, True));
   AssertEquals('surplus digits', base + 125, ms, 0);
   AssertTrue('a comma is a decimal point here', TyParseDateMs('2024-03-05T00:00:01,5', ms, True));
-  AssertEquals(base + 500, ms, 0);
+  AssertEquals(base + 5, ms, 0);
 end;
 
 procedure TAdvChartDataTest.TestTimeZoneDesignatorsAreApplied;
@@ -288,20 +297,27 @@ begin
   AssertEquals(asUTC + GetLocalTimeOffset * 60000.0, asLocal, 0);
 end;
 
-procedure TAdvChartDataTest.TestTimeRejectsImpossibleComponents;
+procedure TAdvChartDataTest.TestTimeCarriesOverLikeDateUTC;
 var ms: Double;
 begin
   { JavaScript would wrap month 13 into next January. A gap says "this is a
-    typo"; a point silently a year away does not. }
-  AssertFalse('month 13', TyParseDateMs('2024-13-01', ms, True));
-  AssertFalse('month 0', TyParseDateMs('2024-00-01', ms, True));
-  AssertFalse('day 32', TyParseDateMs('2024-01-32', ms, True));
-  AssertFalse('30 February', TyParseDateMs('2024-02-30', ms, True));
-  AssertTrue('but 29 February in a leap year', TyParseDateMs('2024-02-29', ms, True));
-  AssertFalse('and not in a common one', TyParseDateMs('2023-02-29', ms, True));
-  AssertFalse('hour 24', TyParseDateMs('2024-01-01T24:00', ms, True));
-  AssertFalse('minute 60', TyParseDateMs('2024-01-01T00:60', ms, True));
-  AssertTrue('the answer is NaN, not a stale value', IsNan(ms));
+    typo"; a point silently a year away does not.
+    [Batch 53: overturned. Upstream hands the fields to Date.UTC, which
+    wraps, and parity is the rule: month 13 IS next January.] }
+  AssertTrue('month 13', TyParseDateMs('2024-13-01', ms, True));
+  AssertEquals('is next January', TyDateTimeToMs(EncodeDate(2025, 1, 1)), ms, 0);
+  AssertTrue('month 0', TyParseDateMs('2024-00-01', ms, True));
+  AssertEquals('is the December before', TyDateTimeToMs(EncodeDate(2023, 12, 1)), ms, 0);
+  AssertTrue('day 32', TyParseDateMs('2024-01-32', ms, True));
+  AssertEquals('is 1 February', TyDateTimeToMs(EncodeDate(2024, 2, 1)), ms, 0);
+  AssertTrue('day 0', TyParseDateMs('2024-03-00', ms, True));
+  AssertEquals('is falsy and so the first', TyDateTimeToMs(EncodeDate(2024, 3, 1)), ms, 0);
+  AssertTrue('29 February in a common year', TyParseDateMs('2023-02-29', ms, True));
+  AssertEquals('is 1 March', TyDateTimeToMs(EncodeDate(2023, 3, 1)), ms, 0);
+  AssertTrue('hour 24', TyParseDateMs('2024-01-01T24:00', ms, True));
+  AssertEquals('is the next midnight', TyDateTimeToMs(EncodeDate(2024, 1, 2)), ms, 0);
+  AssertTrue('minute 60', TyParseDateMs('2024-01-01T00:60', ms, True));
+  AssertEquals('is one o''clock', TyDateTimeToMs(EncodeDate(2024, 1, 1) + EncodeTime(1, 0, 0, 0)), ms, 0);
 end;
 
 procedure TAdvChartDataTest.TestTimeRejectsTrailingJunk;
@@ -800,7 +816,7 @@ begin
   AssertTrue('and it does not hand back a number', IsNan(lo) and IsNan(hi));
 end;
 
-procedure TAdvChartDataTest.TestExtentIgnoresInfinity;
+procedure TAdvChartDataTest.TestExtentKeepsInfinityForTheAxisToDrop;
 var lo, hi: Double;
 begin
   { An infinite bound poisons every nice-tick calculation downstream, and there
@@ -808,7 +824,12 @@ begin
     arrive, and the scan that a filter forces instead. Mutation found that only
     the first was covered -- an unfiltered store never reaches the loop -- so
     the filter here is on a SECOND dimension, which drops a row while leaving
-    both infinities in the window. }
+    both infinities in the window.
+    [Batch 53: overturned. Upstream's store keeps an infinity as an extent
+    end; it is the AXIS that drops a series whose extent is not finite
+    (unionExtentFromExtent), so one 'Infinity' blanks only an axis nothing
+    else is on. Both places now keep them; a log axis' filter still drops
+    +Infinity, as upstream's does.] }
   FS.AddDimension('v', ddtFloat);
   FS.AddDimension('k', ddtFloat);
   FS.AppendRow([3.0, 1.0]);
@@ -817,11 +838,17 @@ begin
   FS.AppendRow([NaN, 1.0]);
   FS.AppendRow([500.0, 9.0]);
   AssertTrue('kept as the rows arrived', FS.DataExtent(0, lo, hi));
+  AssertTrue('minus infinity is the low end', IsInfinite(lo) and (lo < 0));
+  AssertTrue('infinity the high one', IsInfinite(hi) and (hi > 0));
+  AssertTrue('a log axis drops both', FS.DataExtent(0, lo, hi, defPositive));
   AssertEquals(3, lo, 0);
   AssertEquals(500, hi, 0);
   FS.SelectRange(1, 0, 5);
   AssertEquals('the infinities are still in the window', 4, FS.Count);
   AssertTrue('and scanned', FS.DataExtent(0, lo, hi));
+  AssertTrue('scanned: minus infinity', IsInfinite(lo) and (lo < 0));
+  AssertTrue('scanned: infinity', IsInfinite(hi) and (hi > 0));
+  AssertTrue('a log axis drops both, scanned', FS.DataExtent(0, lo, hi, defPositive));
   AssertEquals(3, lo, 0);
   AssertEquals(3, hi, 0);
 end;

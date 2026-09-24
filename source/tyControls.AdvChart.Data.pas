@@ -124,12 +124,19 @@ function TyDataBool(AValue: Boolean): TTyDataValue;
   because interning needs the dimension's category list; it returns NaN, and the
   store routes ordinal values through TTyOrdinalMeta instead.
 
-  The numeric text rules are ECharts' parseDataValue: an empty string and a
-  string that is not a number both give NaN, so the '-' that ECharts documents
-  as "no data" needs no special case. Parsing uses a FIXED decimal point, never
-  the locale's -- data text arrives from option text, where the separator is
-  always '.', and reading it through a comma locale would turn 1.5 into NaN. }
+  The numeric text rules are ECharts' parseDataValue: the empty string is
+  NaN, and any other text is JavaScript's Number() of it -- so '   ' is
+  nought, '0x10' sixteen, 'Infinity' infinite, and '-' (ECharts' documented
+  "no data") and '12px' NaN. Never the locale's decimal point.
+  [Batch 53: this was Trim + TryStrToFloat, which read '   ' and '0x10' as
+  NaN, 'Infinity' as NaN and 'Inf' as infinite -- all four the other way
+  round from upstream.]
+
+  A TIME is a number as written, a boolean as its 0 or 1 (new Date(true)),
+  and text through the date parser as written -- no trimming. }
 function TyParseDataValue(const AValue: TTyDataValue; AType: TTyDimType): Double;
+{ Number() of a data text the way parseDataValue takes it: '' is NaN. }
+function TyParseNumberText(const AText: string): Double;
 
 { ---- JavaScript's numbers from text ---- }
 
@@ -162,8 +169,10 @@ function TyRawItemText(const AItem: TTyRawItem): string;
 function TyReadableCell(const ACell: TTyDataValue; AType: TTyDimType): string;
 
 { ---- time ---- }
-{ ECharts' TIME_REG subset: yyyy, optionally -MM, -dd, then T or space and
-  HH:mm:ss.fff, then Z or a +hh:mm offset. Slashes are accepted where dashes are.
+{ ECharts' parseDate on a string: TIME_REG exactly -- yyyy, optionally -MM,
+  -dd, then T or space and HH:mm:ss.fff, then Z or a +hh:mm offset, nothing
+  trimmed; slashes where dashes are -- and the fields handed on the way
+  Date.UTC / new Date take them.
 
   With no zone designator the timestamp is LOCAL, which is ECharts' documented
   choice and deliberately unlike JavaScript's own Date parser. AAssumeUTC forces
@@ -177,7 +186,12 @@ function TyReadableCell(const ACell: TTyDataValue; AType: TTyDimType): string;
 
   Out-of-range components are REJECTED, where JavaScript would wrap them: month
   13 is a typo, and a gap shows it while silently becoming next January does
-  not. }
+  not.
+  [Batch 53: overturned -- upstream wraps (month 13 is next January, minute
+  61 the next hour), takes a two-digit year as 19xx, reads '.5' as 5 ms and
+  a zone as its whole hours only, and so does this now. Parity is the rule
+  the whole port holds itself to; a gap where upstream draws a point is a
+  different chart, not a kinder one.] }
 function TyParseDateMs(const AText: string; out AMs: Double;
   AAssumeUTC: Boolean = False): Boolean;
 function TyDateTimeToMs(ADateTime: TDateTime; AIsUTC: Boolean = True): Double;
@@ -569,23 +583,6 @@ begin
   Result.Text := '';
 end;
 
-function FixedFloatSettings: TFormatSettings;
-begin
-  Result := DefaultFormatSettings;
-  Result.DecimalSeparator := '.';
-  Result.ThousandSeparator := #0;
-end;
-
-function TextToNumber(const AText: string; out AValue: Double): Boolean;
-var
-  s: string;
-begin
-  AValue := NaN;
-  s := Trim(AText);
-  if s = '' then Exit(False);
-  Result := TryStrToFloat(s, AValue, FixedFloatSettings);
-  if not Result then AValue := NaN;
-end;
 
 { ==================== JavaScript's numbers from text ==================== }
 
@@ -875,6 +872,21 @@ begin
   end;
 end;
 
+function TyParseNumberText(const AText: string): Double;
+var mask: TFPUExceptionMask;
+begin
+  { `value === ''` exactly -- a string of blanks is Number()'s nought. }
+  if AText = '' then Exit(NaN);
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exUnderflow, exPrecision]);
+  try
+    Result := TyJsToNumber(AText);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
 function TyParseDataValue(const AValue: TTyDataValue; AType: TTyDimType): Double;
 var
   n: Double;
@@ -885,7 +897,8 @@ begin
       begin
         case AValue.Kind of
           dvkNone: Exit(NaN);
-          dvkBool: Exit(NaN);   // a boolean names no instant
+          { new Date(Math.round(true)): the first millisecond. }
+          dvkBool: Exit(AValue.Num);
           { A NUMBER IS KEPT AS WRITTEN: upstream's parseDataValue parses only
             what is not a number, so half a millisecond stays in the store and
             in the extent. The time scale rounds -- Math.round, half up -- only
@@ -906,7 +919,7 @@ begin
   case AValue.Kind of
     dvkNone: n := NaN;
     dvkNumber, dvkBool: n := AValue.Num;
-    dvkText: if not TextToNumber(AValue.Text, n) then n := NaN;
+    dvkText: n := TyParseNumberText(AValue.Text);
   else
     n := NaN;
   end;
@@ -952,122 +965,164 @@ begin
   Result := n > 0;
 end;
 
+{ Days from 1970-01-01 to the first of AMonth (1..12) of AYear, proleptic
+  Gregorian -- MakeDay's arithmetic without a calendar that stops at year 1. }
+function DaysFromCivil(AYear: Int64; AMonth: Integer): Int64;
+var y, era, yoe, doy, doe, m: Int64;
+begin
+  y := AYear;
+  m := AMonth;
+  if m <= 2 then Dec(y);
+  if y >= 0 then era := y div 400 else era := (y - 399) div 400;
+  yoe := y - era * 400;
+  if m > 2 then doy := (153 * (m - 3) + 2) div 5 else doy := (153 * (m + 9) + 2) div 5;
+  doe := yoe * 365 + yoe div 4 - yoe div 100 + doy;
+  Result := era * 146097 + doe - 719468;
+end;
+
 function TyParseDateMs(const AText: string; out AMs: Double;
   AAssumeUTC: Boolean): Boolean;
 var
   s: string;
-  p, y, mo, d, h, mi, sec, ms, n, offMin, offH, offM: Integer;
+  p, n, sign: Integer;
+  fY, fMo, fD, fH, fMi, fS, fMs, fZ: string;
+  haveMo, haveD, haveH, haveMi, haveS, haveMs, haveZone, zoneZ: Boolean;
+  zoneH: Integer;
+  y, mo, d, h, mi, sec, ms: Int64;
   days, total: Int64;
-  sign: Integer;
-  haveZone: Boolean;
+
+  function Digits(AMin, AMax: Integer; out AText_: string): Boolean;
+  var start: Integer;
+  begin
+    start := p;
+    while (p <= Length(s)) and (s[p] in ['0'..'9']) and (p - start < AMax) do Inc(p);
+    AText_ := Copy(s, start, p - start);
+    Result := Length(AText_) >= AMin;
+  end;
+
+  function Num(const AText_: string): Int64;
+  begin
+    if AText_ = '' then Exit(0);
+    Result := StrToInt64(AText_);
+  end;
+
 begin
   AMs := NaN;
   Result := False;
-  s := Trim(AText);
+  { AS WRITTEN: upstream's TIME_REG is anchored and nothing trims first, so
+    ' 2020' is no date. [Batch 53: this trimmed.] }
+  s := AText;
   if s = '' then Exit;
 
+  { ---- TIME_REG, token for token ----
+    ^(\d{4})([-/](\d{1,2})([-/](\d{1,2})([T ](\d{1,2})(:(\d{1,2})(:(\d{1,2})
+    ([.,](\d+))?)?)?(Z|[+-]\d\d:?\d\d)?)?)?)?$ -- every group after the year
+    optional, and a zone only after an hour. }
   p := 1;
-  if not ScanInt(s, p, 4, y) then Exit;
-  if p - 1 <> 4 then Exit;         // the year is exactly four digits
-
-  mo := 1; d := 1; h := 0; mi := 0; sec := 0; ms := 0;
-  offMin := 0;
-  haveZone := False;
-
-  if p <= Length(s) then
-  begin
-    if not (s[p] in ['-', '/']) then Exit;
-    Inc(p);
-    if not ScanInt(s, p, 2, mo) then Exit;
-  end;
-
-  if p <= Length(s) then
-  begin
-    if not (s[p] in ['-', '/']) then Exit;
-    Inc(p);
-    if not ScanInt(s, p, 2, d) then Exit;
-  end;
-
-  if (p <= Length(s)) and (s[p] in ['T', 't', ' ']) then
+  haveMo := False; haveD := False; haveH := False; haveMi := False;
+  haveS := False; haveMs := False; haveZone := False; zoneZ := False;
+  zoneH := 0;
+  if not Digits(4, 4, fY) then Exit;
+  if (p <= Length(s)) and (s[p] in ['-', '/']) then
   begin
     Inc(p);
-    if not ScanInt(s, p, 2, h) then Exit;
-    if (p <= Length(s)) and (s[p] = ':') then
+    if not Digits(1, 2, fMo) then Exit;
+    haveMo := True;
+    if (p <= Length(s)) and (s[p] in ['-', '/']) then
     begin
       Inc(p);
-      if not ScanInt(s, p, 2, mi) then Exit;
-      if (p <= Length(s)) and (s[p] = ':') then
+      if not Digits(1, 2, fD) then Exit;
+      haveD := True;
+      if (p <= Length(s)) and (s[p] in ['T', ' ']) then
       begin
         Inc(p);
-        if not ScanInt(s, p, 2, sec) then Exit;
-        if (p <= Length(s)) and (s[p] in ['.', ',']) then
+        if not Digits(1, 2, fH) then Exit;
+        haveH := True;
+        if (p <= Length(s)) and (s[p] = ':') then
         begin
           Inc(p);
-          { Only the first three digits are milliseconds. The rest is finer than
-            this store's resolution and is dropped rather than rounded, which is
-            what ECharts does when it takes substring(0, 3). Fewer than three is
-            padded, so .5 is half a second and not five milliseconds. }
-          n := 0;
-          ms := 0;
-          while (p <= Length(s)) and (s[p] >= '0') and (s[p] <= '9') do
+          if not Digits(1, 2, fMi) then Exit;
+          haveMi := True;
+          if (p <= Length(s)) and (s[p] = ':') then
           begin
-            if n < 3 then ms := ms * 10 + (Ord(s[p]) - Ord('0'));
-            Inc(n);
             Inc(p);
+            if not Digits(1, 2, fS) then Exit;
+            haveS := True;
+            if (p <= Length(s)) and (s[p] in ['.', ',']) then
+            begin
+              Inc(p);
+              if not Digits(1, MaxInt, fMs) then Exit;
+              haveMs := True;
+            end;
           end;
-          if n = 0 then Exit;
-          while n < 3 do
-          begin
-            ms := ms * 10;
-            Inc(n);
-          end;
+        end;
+        if (p <= Length(s)) and (s[p] = 'Z') then
+        begin
+          Inc(p);
+          haveZone := True;
+          zoneZ := True;
+        end
+        else if (p <= Length(s)) and (s[p] in ['+', '-']) then
+        begin
+          if s[p] = '-' then sign := -1 else sign := 1;
+          Inc(p);
+          { `[+-]\d\d:?\d\d`, and only the sign and the hours are read:
+            `hour -= +match[8].slice(0, 3)` }
+          if not Digits(2, 2, fZ) then Exit;
+          zoneH := sign * StrToInt(fZ);
+          if (p <= Length(s)) and (s[p] = ':') then Inc(p);
+          { the zone's minutes are matched and never read }
+          if not Digits(2, 2, fZ) then Exit;
+          haveZone := True;
         end;
       end;
     end;
   end;
+  if p <= Length(s) then Exit;     // `$`: anything left is no match
 
-  if p <= Length(s) then
+  { ---- the fields, as parseDate reads them ----
+    [Batch 53: this REJECTED out-of-range fields, took '.5' as half a
+    second and read the zone's minutes. Upstream hands the fields to
+    Date.UTC / new Date, which carries them over (month 13 is next January),
+    takes `+fraction.substring(0, 3)` (so '.5' is 5 ms) and reads the offset
+    as `+match[8].slice(0, 3)` (whole hours only).] }
+  y := Num(fY);
+  { `+(match[2] || 1) - 1`: a month written 0 is the December before }
+  if haveMo then mo := Num(fMo) - 1 else mo := 0;
+  { `+match[3] || 1`: a day of nought is falsy and becomes the first }
+  d := 0;
+  if haveD then d := Num(fD);
+  if d = 0 then d := 1;
+  h := 0;
+  if haveH then h := Num(fH);
+  mi := 0;
+  if haveMi then mi := Num(fMi);
+  sec := 0;
+  if haveS then sec := Num(fS);
+  ms := 0;
+  if haveMs then ms := Num(Copy(fMs, 1, 3));
+  if haveZone and not zoneZ then h := h - zoneH;
+  { Date.UTC and new Date: a year 0..99 is 1900 + it }
+  if (y >= 0) and (y <= 99) then y := y + 1900;
+  { MakeDay: the month carries into the year }
+  if mo >= 0 then
   begin
-    if s[p] in ['Z', 'z'] then
-    begin
-      haveZone := True;
-      Inc(p);
-    end
-    else if s[p] in ['+', '-'] then
-    begin
-      if s[p] = '-' then sign := -1 else sign := 1;
-      Inc(p);
-      if not ScanInt(s, p, 2, offH) then Exit;
-      if (p <= Length(s)) and (s[p] = ':') then Inc(p);
-      if not ScanInt(s, p, 2, offM) then Exit;
-      if (offH > 23) or (offM > 59) then Exit;
-      offMin := sign * (offH * 60 + offM);
-      haveZone := True;
-    end;
+    y := y + mo div 12;
+    mo := mo mod 12;
+  end
+  else
+  begin
+    y := y + (mo - 11) div 12;
+    mo := mo - ((mo - 11) div 12) * 12;
   end;
-
-  if p <= Length(s) then Exit;     // trailing junk
-
-  if (mo < 1) or (mo > 12) or (d < 1) or (h > 23) or (mi > 59) or (sec > 59) then Exit;
-  if d > DaysInAMonth(y, mo) then Exit;
-
-  { Integer arithmetic from here on. Building the instant as a TDateTime and
-    scaling it by 86,400,000 would put the answer a fraction of a millisecond
-    off the integer it should be, and every equality test downstream would then
-    depend on which side it landed. }
-  { ENCODEDATE RAISES OUTSIDE YEAR 1..9999, and `'0000-01-01'` parses
-    perfectly well up to here -- four digits is four digits. A date the
-    calendar cannot hold is not a date; answer `not a date` rather than
-    throwing out of whatever was reading the option. }
-  if (y < 1) or (y > 9999) then Exit;
-  days := Round(EncodeDate(y, mo, d) - UnixEpochDT);
-  total := days * Int64(86400000) + h * 3600000 + mi * 60000 + sec * 1000 + ms;
-  if haveZone then
-    total := total - Int64(offMin) * 60000
-  else if not AAssumeUTC then
-    { GetLocalTimeOffset is UTC-minus-local in minutes, which is the same sign
-      convention LocalTimeToUniversal uses one indirection further down. }
+  days := DaysFromCivil(y, mo + 1) + (d - 1);
+  total := days * Int64(86400000) + ((h * 60 + mi) * 60 + sec) * 1000 + ms;
+  if (not haveZone) and (not AAssumeUTC) then
+    { LOCAL: new Date(...). GetLocalTimeOffset is UTC-minus-local in
+      minutes -- today's, since FPC 3.2.2 has no offset-at-a-date. }
     total := total + Int64(GetLocalTimeOffset) * 60000;
+  { No TimeClip: a four-digit year and two-digit fields reach year 10007 at
+    most, nowhere near the +-8.64e15 ms a Date can hold. }
   AMs := total;
   Result := True;
 end;
@@ -1485,7 +1540,9 @@ end;
 
 procedure TTyDataStore.NoteValue(ADim: Integer; AValue: Double);
 begin
-  if IsNan(AValue) or IsInfinite(AValue) then Exit;
+  { AN INFINITY IS AN EXTENT END, as upstream's store keeps it: it is the
+    AXIS that then drops a series whose extent is not finite. }
+  if IsNan(AValue) then Exit;
   if AValue < FDims[ADim].RawMin then FDims[ADim].RawMin := AValue;
   if AValue > FDims[ADim].RawMax then FDims[ADim].RawMax := AValue;
 end;
@@ -2092,8 +2149,9 @@ begin
   begin
     if FFiltered then raw := FIndices[i] else raw := i;
     v := FCols[ADim][raw];
-    if IsNan(v) or IsInfinite(v) then Continue;
-    if (AFilter = defPositive) and (v <= 0) then Continue;
+    if IsNan(v) then Continue;
+    { a log axis' filter is 0 < v < Infinity: it drops +Inf too }
+    if (AFilter = defPositive) and ((v <= 0) or (v = Infinity)) then Continue;
     if v < lo then lo := v;
     if v > hi then hi := v;
   end;

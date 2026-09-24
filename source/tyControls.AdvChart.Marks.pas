@@ -831,7 +831,16 @@ begin
     floorPx := baseline;
     if stacked and AStack.HasBelow and not IsNan(own) then
     begin
-      if baseHoriz then floorV := y - own else floorV := x - own;
+      { Infinity stacked on Infinity: JavaScript's Inf - Inf, not-a-number,
+        where FPC would raise -- and a floor that is not a number is no bar. }
+      if baseHoriz then
+      begin
+        if IsInfinite(y) and IsInfinite(own) then floorV := NaN else floorV := y - own;
+      end
+      else
+      begin
+        if IsInfinite(x) and IsInfinite(own) then floorV := NaN else floorV := x - own;
+      end;
       if baseHoriz then loPt := ABinding.Cart.DataToPoint([x, floorV])
       else loPt := ABinding.Cart.DataToPoint([floorV, y]);
       if baseHoriz then floorPx := loPt.Y else floorPx := loPt.X;
@@ -869,6 +878,11 @@ begin
         if lw < 0 then lw := -col.MinHeightPx else lw := col.MinHeightPx;
     end;
     if IsNan(lx) or IsNan(ly) or IsNan(lw) or IsNan(lh) then Continue;
+    { AN INFINITE LAYOUT -- a value of 'Infinity', which the store now keeps
+      as upstream's does -- clips to a not-a-number rect upstream (x + w is
+      -Inf + Inf) and draws nothing. Here that sum would raise. }
+    if IsInfinite(lx) or IsInfinite(ly) or IsInfinite(lw) or IsInfinite(lh) then
+      Continue;
 
     { showBackground: the bar's own band, stretched over the WHOLE plot along
       the value axis -- BarView.ts:1237-1246. Emitted BEFORE the bar, because

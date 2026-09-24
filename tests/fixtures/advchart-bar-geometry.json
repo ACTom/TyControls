@@ -19957,6 +19957,2218 @@
    ]
   },
   {
+   "name": "G1 V ['   ','0x10',5]",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "   ",
+       "0x10",
+       5
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "4032000000000000"
+     ],
+     "extentText": [
+      "0",
+      "18"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "drawn",
+     "layout": {
+      "x": "405c500000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "0000000000000000"
+     },
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "0"
+     },
+     "shape": {
+      "x": "405c500000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "0000000000000000"
+     },
+     "shapeText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "0"
+     },
+     "box": {
+      "l": "405c500000000000",
+      "t": "4074000000000000",
+      "r": "406b180000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "113.25",
+      "t": "320",
+      "r": "216.75",
+      "b": "320"
+     },
+     "zeroLength": true,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4064a00000000000",
+      "y": "4074000000000000",
+      "xText": "165",
+      "yText": "320",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06c555555555555"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-226.66666666666666"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06c555555555555"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-226.66666666666666"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4057555555555556",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "93.33333333333334",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4069d55555555556",
+      "xText": "315",
+      "yText": "206.66666666666669",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c051b55555555556"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-70.83333333333334"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c051b55555555556"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-70.83333333333334"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "406f255555555555",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "249.16666666666666",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4071c95555555555",
+      "xText": "465",
+      "yText": "284.5833333333333",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
+   "name": "G2 V ['Infinity',5,3]: blank axis",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ],
+     "extentText": [
+      "0",
+      "1"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-Infinity"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c093ec0000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-1275"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4050400000000000",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "65",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4068100000000000",
+      "xText": "315",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c087e80000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-765"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4050400000000000",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "65",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4068100000000000",
+      "xText": "465",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
+   "name": "G3 [5,10,1]+['Infinity',3,2]: the Inf series adds nothing",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       10,
+       1
+      ],
+      "label": {
+       "show": true
+      }
+     },
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       3,
+       2
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "4024000000000000"
+     ],
+     "extentText": [
+      "0",
+      "10"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "drawn",
+     "layout": {
+      "x": "405b900000000000",
+      "y": "4074000000000000",
+      "width": "404a124924924924",
+      "height": "c05fe00000000000"
+     },
+     "layoutText": {
+      "x": "110.25",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-127.5"
+     },
+     "shape": {
+      "x": "405b900000000000",
+      "y": "4074000000000000",
+      "width": "404a124924924924",
+      "height": "c05fe00000000000"
+     },
+     "shapeText": {
+      "x": "110.25",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-127.5"
+     },
+     "box": {
+      "l": "405b900000000000",
+      "t": "4068100000000000",
+      "r": "40644c9249249249",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "110.25",
+      "t": "192.5",
+      "r": "162.39285714285714",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "40610a4924924924",
+      "y": "4070040000000000",
+      "xText": "136.32142857142856",
+      "yText": "256.25",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070440000000000",
+      "y": "4074000000000000",
+      "width": "404a124924924924",
+      "height": "c06fe00000000000"
+     },
+     "layoutText": {
+      "x": "260.25",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-255"
+     },
+     "shape": {
+      "x": "4070440000000000",
+      "y": "4074000000000000",
+      "width": "404a124924924920",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "260.25",
+      "y": "320",
+      "width": "52.14285714285711",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4070440000000000",
+      "t": "4050400000000000",
+      "r": "4073864924924924",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "260.25",
+      "t": "65",
+      "r": "312.3928571428571",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4071e52492492492",
+      "y": "4068100000000000",
+      "xText": "286.32142857142856",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079a40000000000",
+      "y": "4074000000000000",
+      "width": "404a124924924924",
+      "height": "c039800000000000"
+     },
+     "layoutText": {
+      "x": "410.25",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-25.5"
+     },
+     "shape": {
+      "x": "4079a40000000000",
+      "y": "4074000000000000",
+      "width": "404a124924924920",
+      "height": "c039800000000000"
+     },
+     "shapeText": {
+      "x": "410.25",
+      "y": "320",
+      "width": "52.14285714285711",
+      "height": "-25.5"
+     },
+     "box": {
+      "l": "4079a40000000000",
+      "t": "4072680000000000",
+      "r": "407ce64924924924",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "410.25",
+      "t": "294.5",
+      "r": "462.3928571428571",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407b452492492492",
+      "y": "4073340000000000",
+      "xText": "436.32142857142856",
+      "yText": "307.25",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "167.60714285714286",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-Infinity"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4073d9b6db6db6db",
+      "y": "4074000000000000",
+      "width": "404a124924924924",
+      "height": "c053200000000000"
+     },
+     "layoutText": {
+      "x": "317.60714285714283",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-76.5"
+     },
+     "shape": {
+      "x": "4073d9b6db6db6db",
+      "y": "4074000000000000",
+      "width": "404a124924924928",
+      "height": "c053200000000000"
+     },
+     "shapeText": {
+      "x": "317.60714285714283",
+      "y": "320",
+      "width": "52.14285714285717",
+      "height": "-76.5"
+     },
+     "box": {
+      "l": "4073d9b6db6db6db",
+      "t": "406e700000000000",
+      "r": "40771c0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "317.60714285714283",
+      "t": "243.5",
+      "r": "369.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "40757adb6db6db6e",
+      "y": "40719c0000000000",
+      "xText": "343.67857142857144",
+      "yText": "281.75",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "407d39b6db6db6db",
+      "y": "4074000000000000",
+      "width": "404a124924924924",
+      "height": "c049800000000000"
+     },
+     "layoutText": {
+      "x": "467.60714285714283",
+      "y": "320",
+      "width": "52.14285714285714",
+      "height": "-51"
+     },
+     "shape": {
+      "x": "407d39b6db6db6db",
+      "y": "4074000000000000",
+      "width": "404a124924924928",
+      "height": "c049800000000000"
+     },
+     "shapeText": {
+      "x": "467.60714285714283",
+      "y": "320",
+      "width": "52.14285714285717",
+      "height": "-51"
+     },
+     "box": {
+      "l": "407d39b6db6db6db",
+      "t": "4070d00000000000",
+      "r": "40803e0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "467.60714285714283",
+      "t": "269",
+      "r": "519.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407edadb6db6db6e",
+      "y": "4072680000000000",
+      "xText": "493.67857142857144",
+      "yText": "294.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
+   "name": "G4 V ['Infinity',5,3] min 0 max 20",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "4034000000000000"
+     ],
+     "extentText": [
+      "0",
+      "20"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-Infinity"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c04fe00000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-63.75"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c04fe00000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-63.75"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4070040000000000",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "256.25",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4072020000000000",
+      "xText": "315",
+      "yText": "288.125",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c043200000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-38.25"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c043200000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-38.25"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "40719c0000000000",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "281.75",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4072ce0000000000",
+      "xText": "465",
+      "yText": "300.875",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
+   "name": "G5 V ['Infinity',5,3] max 20: still blank",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ],
+     "extentText": [
+      "0",
+      "1"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-Infinity"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c093ec0000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-1275"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4050400000000000",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "65",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4068100000000000",
+      "xText": "315",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c087e80000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-765"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4050400000000000",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "65",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4068100000000000",
+      "xText": "465",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
+   "name": "G6 V log ['Infinity',5,3]",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "log",
+     "inverse": false,
+     "extent": [
+      "3ff0000000000000",
+      "4024000000000000"
+     ],
+     "extentText": [
+      "1",
+      "10"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "3ff0000000000000",
+     "startValueText": "1"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-Infinity"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c0664798615892bd"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-178.23735110568478"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c0664798615892bd"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-178.23735110568478"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4061b8679ea76d43",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "141.76264889431522",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "406cdc33cf53b6a2",
+      "xText": "315",
+      "yText": "230.88132444715762",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c05e6a9e6eb98624"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-121.66591995351388"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c05e6a9e6eb98624"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-121.66591995351388"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4068cab0c8a33cee",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "198.33408004648612",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "407032ac3228cf3c",
+      "xText": "465",
+      "yText": "259.1670400232431",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
+   "name": "G7 stack ['Infinity',5,3]+[2,2,2]",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "stack": "t",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ],
+      "label": {
+       "show": true
+      }
+     },
+     {
+      "type": "bar",
+      "stack": "t",
+      "data": [
+       2,
+       2,
+       2
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ],
+     "extentText": [
+      "0",
+      "1"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-Infinity"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c093ec0000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-1275"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4050400000000000",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "65",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4068100000000000",
+      "xText": "315",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c087e80000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-765"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4050400000000000",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "65",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4068100000000000",
+      "xText": "465",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "-Infinity",
+      "width": "103.5",
+      "height": "NaN"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 1,
+     "class": "hidden",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "c08dd80000000000",
+      "width": "4059e00000000000",
+      "height": "c07fe00000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "-955",
+      "width": "103.5",
+      "height": "-510"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4050400000000000",
+      "width": "4059e00000000000",
+      "height": "8000000000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "65",
+      "width": "103.5",
+      "height": "-0"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4050400000000000",
+      "r": "4076ec0000000000",
+      "b": "4050400000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "65",
+      "r": "366.75",
+      "b": "65"
+     },
+     "zeroLength": true,
+     "label": {
+      "drawn": false,
+      "word": "inside",
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 2,
+     "class": "hidden",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "c07bd00000000000",
+      "width": "4059e00000000000",
+      "height": "c07fe00000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "-445",
+      "width": "103.5",
+      "height": "-510"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4050400000000000",
+      "width": "4059e00000000000",
+      "height": "8000000000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "65",
+      "width": "103.5",
+      "height": "-0"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4050400000000000",
+      "r": "4080260000000000",
+      "b": "4050400000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "65",
+      "r": "516.75",
+      "b": "65"
+     },
+     "zeroLength": true,
+     "label": {
+      "drawn": false,
+      "word": "inside",
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "G8 stack [2,2,2]+['Infinity',5,3]",
+   "option": {
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "stack": "t",
+      "data": [
+       2,
+       2,
+       2
+      ],
+      "label": {
+       "show": true
+      }
+     },
+     {
+      "type": "bar",
+      "stack": "t",
+      "data": [
+       "Infinity",
+       5,
+       3
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "grid": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "gridText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "area": {
+    "x": "4056800000000000",
+    "y": "4050400000000000",
+    "width": "407c200000000000",
+    "height": "406fe00000000000"
+   },
+   "areaText": {
+    "x": "90",
+    "y": "65",
+    "width": "450",
+    "height": "255"
+   },
+   "baseAxis": "x",
+   "axes": {
+    "x": {
+     "type": "category",
+     "inverse": false
+    },
+    "y": {
+     "type": "value",
+     "inverse": false,
+     "extent": [
+      "0000000000000000",
+      "4000000000000000"
+     ],
+     "extentText": [
+      "0",
+      "2"
+     ],
+     "mapping": null,
+     "mappingText": null,
+     "startValue": "0000000000000000",
+     "startValueText": "0"
+    }
+   },
+   "items": [
+    {
+     "seriesIndex": 0,
+     "dataIndex": 0,
+     "class": "drawn",
+     "layout": {
+      "x": "405c500000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "layoutText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "shape": {
+      "x": "405c500000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "113.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "405c500000000000",
+      "t": "4050400000000000",
+      "r": "406b180000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "113.25",
+      "t": "65",
+      "r": "216.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4064a00000000000",
+      "y": "4068100000000000",
+      "xText": "165",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4050400000000000",
+      "r": "4076ec0000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "65",
+      "r": "366.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4068100000000000",
+      "xText": "315",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 0,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4074000000000000",
+      "width": "4059e00000000000",
+      "height": "c06fe00000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "320",
+      "width": "103.5",
+      "height": "-255"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4050400000000000",
+      "r": "4080260000000000",
+      "b": "4074000000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "65",
+      "r": "516.75",
+      "b": "320"
+     },
+     "zeroLength": false,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4068100000000000",
+      "xText": "465",
+      "yText": "192.5",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 0,
+     "class": "none",
+     "layout": null,
+     "layoutText": {
+      "x": "113.25",
+      "y": "NaN",
+      "width": "103.5",
+      "height": "NaN"
+     },
+     "shape": null,
+     "shapeText": null,
+     "box": null,
+     "boxText": null,
+     "zeroLength": null,
+     "label": {
+      "drawn": false,
+      "word": null,
+      "x": null,
+      "y": null,
+      "xText": null,
+      "yText": null,
+      "align": null,
+      "verticalAlign": null
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 1,
+     "class": "drawn",
+     "layout": {
+      "x": "4070740000000000",
+      "y": "4050400000000000",
+      "width": "4059e00000000000",
+      "height": "c083ec0000000000"
+     },
+     "layoutText": {
+      "x": "263.25",
+      "y": "65",
+      "width": "103.5",
+      "height": "-637.5"
+     },
+     "shape": {
+      "x": "4070740000000000",
+      "y": "4050400000000000",
+      "width": "4059e00000000000",
+      "height": "8000000000000000"
+     },
+     "shapeText": {
+      "x": "263.25",
+      "y": "65",
+      "width": "103.5",
+      "height": "-0"
+     },
+     "box": {
+      "l": "4070740000000000",
+      "t": "4050400000000000",
+      "r": "4076ec0000000000",
+      "b": "4050400000000000"
+     },
+     "boxText": {
+      "l": "263.25",
+      "t": "65",
+      "r": "366.75",
+      "b": "65"
+     },
+     "zeroLength": true,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "4073b00000000000",
+      "y": "4050400000000000",
+      "xText": "315",
+      "yText": "65",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    },
+    {
+     "seriesIndex": 1,
+     "dataIndex": 2,
+     "class": "drawn",
+     "layout": {
+      "x": "4079d40000000000",
+      "y": "4050400000000000",
+      "width": "4059e00000000000",
+      "height": "c077e80000000000"
+     },
+     "layoutText": {
+      "x": "413.25",
+      "y": "65",
+      "width": "103.5",
+      "height": "-382.5"
+     },
+     "shape": {
+      "x": "4079d40000000000",
+      "y": "4050400000000000",
+      "width": "4059e00000000000",
+      "height": "8000000000000000"
+     },
+     "shapeText": {
+      "x": "413.25",
+      "y": "65",
+      "width": "103.5",
+      "height": "-0"
+     },
+     "box": {
+      "l": "4079d40000000000",
+      "t": "4050400000000000",
+      "r": "4080260000000000",
+      "b": "4050400000000000"
+     },
+     "boxText": {
+      "l": "413.25",
+      "t": "65",
+      "r": "516.75",
+      "b": "65"
+     },
+     "zeroLength": true,
+     "label": {
+      "drawn": true,
+      "word": "inside",
+      "x": "407d100000000000",
+      "y": "4050400000000000",
+      "xText": "465",
+      "yText": "65",
+      "align": "center",
+      "verticalAlign": "middle"
+     }
+    }
+   ]
+  },
+  {
    "name": "V borderWidth 2 [5,-3,0,1e-9]",
    "option": {
     "grid": {

@@ -2650,7 +2650,6 @@ end;
   string are not numbers, and everything else goes through Number(), so '4' is
   four and true is one. }
 function EdgeValueOf(AData: TJSONData): Double;
-var fs: TFormatSettings; s: string;
 begin
   Result := NaN;
   if AData = nil then Exit;
@@ -2662,16 +2661,8 @@ begin
   case AData.JSONType of
     jtNumber: Result := AData.AsFloat;
     jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
-    jtString:
-      begin
-        s := Trim(AData.AsString);
-        if s = '' then Exit;
-        fs := DefaultFormatSettings;
-        fs.DecimalSeparator := '.';
-        if s = 'Infinity' then Result := Infinity
-        else if s = '-Infinity' then Result := NegInfinity
-        else if not TryStrToFloat(s, Result, fs) then Result := NaN;
-      end;
+    { parseDataValue's rule, the store's own: '' is NaN, else Number(). }
+    jtString: Result := TyParseNumberText(AData.AsString);
   end;
 end;
 

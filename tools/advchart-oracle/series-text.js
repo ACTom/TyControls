@@ -465,11 +465,10 @@ label('dataset ordinal and time dims: {@p}|{@t}', {
   xAxis: { type: 'category' }, yAxis: { type: 'value' },
   series: [{ type: 'bar', encode: { x: 'p', y: 'a' }, label: { show: true, formatter: '{@p}|{@t}' } }],
 });
-// deferred: a raw string's number is Number(s) -- '   ' is 0 and drawn, '0x10'
-// is 16
+// a raw string's number is Number(s) -- '   ' is 0 and drawn, '0x10' is 16
 label("bar: '   ' and '0x10' are drawn", catX(['A', 'B', 'C'], [
   { type: 'bar', name: 'S', data: ['   ', '0x10', 5], label: { show: true } },
-]), deferredFor('parse parity (D9)'));
+]));
 
 // encode.label and the defaulted label dimension: the last coordinate that is
 // neither ordinal nor time, so none for category-category or time-category;
@@ -769,9 +768,8 @@ itemTip("item template {c} of [cat, 5, 'a&<b']", catX(['A'], [
 // the default cells of a raw string and of a pie's raw values
 itemTip("pie item '12.50'", pieRaw(), 0, 0);
 itemTip('pie item true', pieRaw(), 0, 1);
-// deferred: '   ' is Number('   ') = 0, a bar with a tooltip
-itemTip("bar item '   '", catX(['A', 'B', 'C'], [{ type: 'bar', name: 'S', data: ['   ', '0x10', 5] }]), 0, 0, null,
-  deferredFor('parse parity (D9)'));
+// '   ' is Number('   ') = 0, a bar with a tooltip
+itemTip("bar item '   '", catX(['A', 'B', 'C'], [{ type: 'bar', name: 'S', data: ['   ', '0x10', 5] }]), 0, 0, null);
 // Sub-rows: a candlestick's open/close/lowest/highest and a boxplot's
 // min..max. The item row keeps an empty value cell; unnamed, the item tooltip
 // has no header and the axis row no name.

@@ -1472,9 +1472,13 @@ var
       begin
         if cols[c] < 0 then Continue;
         if not AStores[si].DataExtent(cols[c], dlo, dhi, filter) then Continue;
+        any := True;
+        { unionExtentFromExtent: a series whose extent has an infinite end
+          adds NOTHING -- upstream drops it whole, so one 'Infinity' blanks
+          only an axis nothing else is on. }
+        if IsInfinite(dlo) or IsInfinite(dhi) or (dlo > dhi) then Continue;
         if dlo < lo then lo := dlo;
         if dhi > hi then hi := dhi;
-        any := True;
       end;
     end;
     { THE RAW EXTENT, UPSTREAM'S ORDER. No data is not-a-number from here on --
