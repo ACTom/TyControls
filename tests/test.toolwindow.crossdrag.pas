@@ -12,7 +12,7 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages,
   fpcunit, testregistry,
   tyControls.Controller, tyControls.ToolWindows, tyControls.ToolWindows.Layout,
-  test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager;
+  tyControls.Icons.Lucide, test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager;
 
 type
   TTyToolWindowCrossDragTests = class(TTyToolWindowManagerFixture)
@@ -25,9 +25,13 @@ type
     function ScreenOf(ABar: TWinControl; const APoint: TPoint): TPoint;
     function ToSourceClient(const AScreen: TPoint): TPoint;
     { 在左栏第 AIndex 格按下、横拖过阈值(还在自己的图标条上)。 }
-    procedure StartDrag(AIndex: Integer);
-    procedure MoveTo(const AScreen: TPoint);
-    procedure ReleaseAt(const AScreen: TPoint);
+    procedure StartDrag(AIndex: Integer; ASource: TBarAccess = nil);
+    procedure MoveTo(const AScreen: TPoint; ASource: TBarAccess = nil);
+    procedure ReleaseAt(const AScreen: TPoint; ASource: TBarAccess = nil);
+    { 从 ASource 的第 AIndex 格一路拖到 AScreen 松开。 }
+    procedure DragDrop(AIndex: Integer; const AScreen: TPoint; ASource: TBarAccess = nil);
+    procedure CountingVetoOnSecondAsk(Sender: TObject; AWindow: TTyToolWindow;
+      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
     { 常用的几个屏幕点。 }
     function RightFirstCellTop: TPoint;
     function RightContent: TPoint;
@@ -60,6 +64,16 @@ type
     procedure TestAMoveWithoutTheButtonOnAnotherBarCancels;
     procedure TestTakingTheManagerFromItsOwnerCancels;
     procedure TestMoveWindowCancelsTheDrag;
+    { spec §9.5:松开提交。 }
+    procedure TestDroppingOnTheOtherStripMovesTheWindowThere;
+    procedure TestDroppingOnTheOtherContentAppends;
+    procedure TestADropExpandsACollapsedTarget;
+    procedure TestDroppingOnTheEditorChangesNothing;
+    procedure TestTheTargetIsAskedAgainOnDrop;
+    procedure TestADropAfterEscDoesNothing;
+    procedure TestAnEmptiedBarKeepsItsStripAndTakesWindowsBack;
+    procedure TestADropIsNotABarClick;
+    procedure TestAnIndexOnlyIconSurvivesTheMove;
   end;
 
 implementation
@@ -128,31 +142,49 @@ begin
   Result := FBar.ScreenToClient(AScreen);
 end;
 
-procedure TTyToolWindowCrossDragTests.StartDrag(AIndex: Integer);
+procedure TTyToolWindowCrossDragTests.StartDrag(AIndex: Integer; ASource: TBarAccess);
 var
   p: TPoint;
 begin
-  p := FBar.StripItemRect(AIndex).CenterPoint;
-  FBar.CallMouseDown(p.X, p.Y);
-  FBar.CallMouseMove(p.X + 10, p.Y);
-  AssertTrue('前提:拖起来了', FBar.IsDraggingForTest);
+  if ASource = nil then ASource := FBar;
+  p := ASource.StripItemRect(AIndex).CenterPoint;
+  ASource.CallMouseDown(p.X, p.Y);
+  ASource.CallMouseMove(p.X + 10, p.Y);
+  AssertTrue('前提:拖起来了', ASource.IsDraggingForTest);
 end;
 
-procedure TTyToolWindowCrossDragTests.MoveTo(const AScreen: TPoint);
+procedure TTyToolWindowCrossDragTests.MoveTo(const AScreen: TPoint; ASource: TBarAccess);
 var
   q: TPoint;
 begin
-  q := ToSourceClient(AScreen);
-  FBar.CallMouseMove(q.X, q.Y);
+  if ASource = nil then ASource := FBar;
+  q := ASource.ScreenToClient(AScreen);
+  ASource.CallMouseMove(q.X, q.Y);
 end;
 
-procedure TTyToolWindowCrossDragTests.ReleaseAt(const AScreen: TPoint);
+procedure TTyToolWindowCrossDragTests.ReleaseAt(const AScreen: TPoint; ASource: TBarAccess);
 var
   q: TPoint;
 begin
-  q := ToSourceClient(AScreen);
-  FBar.CallClick;          { LCL 在 MouseUp 之前调 Click }
-  FBar.CallMouseUp(q.X, q.Y);
+  if ASource = nil then ASource := FBar;
+  q := ASource.ScreenToClient(AScreen);
+  ASource.CallClick;          { LCL 在 MouseUp 之前调 Click }
+  ASource.CallMouseUp(q.X, q.Y);
+end;
+
+procedure TTyToolWindowCrossDragTests.DragDrop(AIndex: Integer; const AScreen: TPoint;
+  ASource: TBarAccess);
+begin
+  StartDrag(AIndex, ASource);
+  MoveTo(AScreen, ASource);
+  ReleaseAt(AScreen, ASource);
+end;
+
+procedure TTyToolWindowCrossDragTests.CountingVetoOnSecondAsk(Sender: TObject;
+  AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+begin
+  Inc(FCanCalls);
+  AAllow := FCanCalls < 2;
 end;
 
 function TTyToolWindowCrossDragTests.RightFirstCellTop: TPoint;
@@ -505,6 +537,119 @@ begin
   AssertTrue('无头:同步挪', FMgr.MoveWindow(FGit, FRight));
   AssertFalse('MoveWindow 取消此刻的拖动', FMgr.IsDragging);
   AssertEquals('源栏的手势取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+end;
+
+{ --- 提交(spec §9.5) ------------------------------------------------------------------ }
+
+procedure TTyToolWindowCrossDragTests.TestDroppingOnTheOtherStripMovesTheWindowThere;
+begin
+  FRight.Collapsed := True;
+  AlignForm;
+  LogBarEvents(FBar);
+  LogBarEvents(FRight);
+  FMgr.OnWindowMoved := @LogMoved;
+  FLog := '';
+  DragDrop(1, RightFirstCellTop);
+  AssertSame('到了右栏', TTyToolWindowBar(FRight), FSearch.Bar);
+  AssertSame('排在第一个', TTyToolWindow(FSearch), FRight.Windows[0]);
+  AssertSame('成为右栏当前页', TTyToolWindow(FSearch), FRight.ActiveWindow);
+  AssertFalse('右栏展开', FRight.Collapsed);
+  AssertSame('左栏回落到原位置上的下一个', TTyToolWindow(FGit), FBar.ActiveWindow);
+  AssertEquals('事件顺序同 MoveWindow', 'L.change;R.expand;R.change;moved(WSearch,L,1);', FLog);
+  AssertFalse('手势收尾了', FMgr.IsDragging);
+  AssertFalse('右栏的外来落点清掉', FRight.ForeignDropForTest);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestDroppingOnTheOtherContentAppends;
+begin
+  DragDrop(1, RightContent);
+  AssertSame('到了右栏', TTyToolWindowBar(FRight), FSearch.Bar);
+  AssertSame('排在末尾', TTyToolWindow(FSearch), FRight.Windows[1]);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestADropExpandsACollapsedTarget;
+begin
+  FRight.ExpandedSize := 260;
+  FRight.Collapsed := True;
+  AlignForm;
+  DragDrop(0, RightFirstCellTop);
+  AssertFalse('展开', FRight.Collapsed);
+  AssertEquals('展开到它的 ExpandedSize(推导值)', FRight.CallDerivedAxisPx, FRight.Width);
+  AssertEquals('推导值里内容项是 ExpandedSize', FRight.StripSizePx + FRight.EdgeSizePx
+    + 2 * FRight.ChromeInsetPx + 260, FRight.Width);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestDroppingOnTheEditorChangesNothing;
+begin
+  LogBarEvents(FBar);
+  LogBarEvents(FRight);
+  FMgr.OnWindowMoved := @LogMoved;
+  FLog := '';
+  DragDrop(1, EditorPoint);
+  AssertSame('还在左栏', TTyToolWindowBar(FBar), FSearch.Bar);
+  AssertSame('左栏当前页没变(也不是点击)', TTyToolWindow(FSearch), FBar.ActiveWindow);
+  AssertFalse('左栏没被收起(不是点击)', FBar.Collapsed);
+  AssertEquals('没有任何事件', '', FLog);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestTheTargetIsAskedAgainOnDrop;
+begin
+  FMgr.OnCanMoveWindow := @CountingVetoOnSecondAsk;
+  StartDrag(1);
+  MoveTo(RightFirstCellTop);
+  AssertTrue('前提:悬停时放行,有落点', FRight.ForeignDropForTest);
+  ReleaseAt(RightFirstCellTop);
+  AssertEquals('放下时又问了一次', 2, FCanCalls);
+  AssertSame('放下时否决:不挪', TTyToolWindowBar(FBar), FSearch.Bar);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestADropAfterEscDoesNothing;
+begin
+  StartDrag(1);
+  MoveTo(RightFirstCellTop);
+  FEditor.Perform(CN_KEYDOWN, VK_ESCAPE, 0);
+  ReleaseAt(RightFirstCellTop);
+  AssertSame('取消后松开:不挪', TTyToolWindowBar(FBar), FSearch.Bar);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestAnEmptiedBarKeepsItsStripAndTakesWindowsBack;
+begin
+  DragDrop(0, RightContent);
+  AlignForm;
+  DragDrop(0, RightContent);
+  AlignForm;
+  DragDrop(0, RightContent);
+  AlignForm;
+  AssertEquals('左栏拖空了', 0, FBar.WindowCount);
+  AssertFalse('拖空不写 Collapsed', FBar.Collapsed);
+  AssertEquals('只剩图标条', FBar.StripSizePx + 2 * FBar.ChromeInsetPx, FBar.Width);
+  { 从右栏拖一个回来,落在空的左栏图标条上。 }
+  DragDrop(0, ScreenOf(FBar, FBar.BarLayout.Cells.CenterPoint), FRight);
+  AssertEquals('空栏照样是目标:拖回来了', 1, FBar.WindowCount);
+  AssertSame('成为左栏当前页', FBar.Windows[0], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestADropIsNotABarClick;
+begin
+  FClicks := 0;
+  FBar.OnClick := @HandleClick;
+  DragDrop(1, RightFirstCellTop);
+  AssertSame('前提:挪过去了', TTyToolWindowBar(FRight), FSearch.Bar);
+  AssertEquals('栏的 OnClick 没触发', 0, FClicks);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestAnIndexOnlyIconSurvivesTheMove;
+var
+  list: TTyLucideImageList;
+begin
+  list := TTyLucideImageList.Create(FForm);
+  list.Names.Text := 'house' + LineEnding + 'folder';
+  FMgr.Images := list;
+  FSearch.ImageIndex := 1;
+  AssertEquals('前提:左栏按 manager 的列表解析', 1, FBar.ResolvedImageIndex(FSearch));
+  DragDrop(1, RightFirstCellTop);
+  AssertSame('前提:挪过去了', TTyToolWindowBar(FRight), FSearch.Bar);
+  AssertEquals('两侧共用 manager 的列表:那一格不变', 1, FRight.ResolvedImageIndex(FSearch));
 end;
 
 initialization

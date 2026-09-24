@@ -1200,6 +1200,10 @@ type
       out ASlot: Integer): TTyToolWindowBar;
     { 参与拖动的栏(源栏或此刻的目标栏)改了 Collapsed / Placement / Manager:取消。 }
     procedure BarChanged(ABar: TTyToolWindowBar);
+    { 拖放提交(spec §9.5):结构检查和 CanMoveWindow(放下时再问一次)都过才挪,**同步**,
+      窗体 Showing 了也不排队(源栏不在窗口里,LCL 在 MouseUp 之前已放掉捕获)。 }
+    function MoveFromDrop(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+      ASlot: Integer): Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -4740,6 +4744,7 @@ var
   rel: TTyToolWindowGestureRelease;
   commit: Boolean;
   idx, slot: Integer;
+  tgt, cross: TTyToolWindowBar;
 begin
   { 手势在继承之后收尾(spec §9.2);用户的 OnMouseUp 抛异常的话,残局在这里收掉再往外抛。 }
   try
@@ -4756,13 +4761,26 @@ begin
     FGesture.DisarmDesign;
     Exit;
   end;
-  { 拖动:在松开点重算落点 —— 要看手势窗口,所以在引擎收尾之前算(spec §9.2)。 }
+  { 拖动:在松开点重算落点 —— 要看手势窗口,所以在引擎收尾之前算(spec §9.2)。有 manager 的
+    侧栏问 manager:落点可能在另一侧栏上(spec §9.4)。 }
   slot := -1;
   commit := False;
+  cross := nil;
   if FGesture.State = twgsDragging then
   begin
-    slot := DropSlotAt(X, Y);
-    commit := (slot >= 0) and (IndexOfWindow(FGesture.Window) >= 0) and not IsNoOpSlot(slot);
+    if (FManager <> nil) and (FPlacement <> twpBottom) then
+    begin
+      tgt := FManager.DropTargetAt(Self, ClientToScreen(Point(X, Y)), slot);
+      if tgt <> Self then
+      begin
+        cross := tgt;               { nil = 没有目标:取消 }
+        if tgt = nil then slot := -1;
+      end;
+    end
+    else
+      slot := DropSlotAt(X, Y);
+    if cross = nil then
+      commit := (slot >= 0) and (IndexOfWindow(FGesture.Window) >= 0) and not IsNoOpSlot(slot);
   end;
   part := PartAt(X, Y, idx);
   if part = twbpItem then w := Windows[idx] else w := nil;
@@ -4784,7 +4802,10 @@ begin
           { FinalIndex := slot - Ord(slot > src):移走自己之后,后面的空隙往前挪一格。 }
           if slot > IndexOfWindow(rel.Window) then Dec(slot);
           ReorderWindow(rel.Window, slot);
-        end;
+        end
+        else if (cross <> nil) and (FManager <> nil) then
+          { 另一侧栏:最后一句(spec §9.2),之后不再碰 Self。 }
+          FManager.MoveFromDrop(rel.Window, cross, slot);
       end;
     twrClick:
       begin
@@ -6246,6 +6267,19 @@ end;
 function TTyToolWindowManager.IsDragging: Boolean;
 begin
   Result := FDragSource <> nil;
+end;
+
+function TTyToolWindowManager.MoveFromDrop(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+  ASlot: Integer): Boolean;
+var
+  src: TTyToolWindowBar;
+begin
+  { 这个窗口还有排着的移动也照做:拖动开始后它不会再被排队以外的路挪走,排着的那一项
+    执行时会重新检查。 }
+  Result := StructureAllows(AWindow, ATarget, src) and (src <> ATarget)
+    and CanMoveWindow(AWindow, ATarget);
+  { 跨栏的最终位置就是槽位本身(spec §9.4:移走的不在目标栏里,不减一)。 }
+  if Result then MoveNow(AWindow, ATarget, ASlot);
 end;
 
 procedure TTyToolWindowManager.BarChanged(ABar: TTyToolWindowBar);

@@ -157,6 +157,13 @@ type
     procedure TestAVetoAtExecutionDropsTheMoveSilently;
     procedure TestACaptureInsideTheWindowDelaysTheMoveOnce;
     procedure TestACaptureThatNeverLetsGoDelaysOnlyOnce;
+    { spec §9.5 / §9.9:拖放提交在 Showing 之后也同步;MoveNow 的焦点和事件时机。 }
+    procedure TestADropAfterShowingIsNotQueued;
+    procedure TestADropKeepsTheFocusInTheWindow;
+    procedure TestBarEventsAfterADropSeeTheWindowInPlace;
+  private
+    { 真实的 MouseDown / MouseMove / MouseUp:把 Search 的图标拖到右栏第一格上半松开。 }
+    procedure DragSearchToRight;
   end;
 
 implementation
@@ -1271,6 +1278,55 @@ begin
   { 只跑异步队列的一轮、不抽 OS 消息:一次 Application.ProcessMessages 可能跑两轮(消息
     分派里有人再进一次队列),而窗体不在前台时抽 OS 消息系统会收走捕获。 }
   TAppAccess(Application).ProcessAsyncCallQueue;
+end;
+
+type
+  { 受保护的鼠标入口开出来(真句柄夹具的栏是 TTyToolWindowBar 本身)。 }
+  TBarCrack = class(TTyToolWindowBar);
+
+procedure TTyToolWindowManagerLiveTests.DragSearchToRight;
+var
+  p, q: TPoint;
+  r: TRect;
+begin
+  p := FLeft.StripItemRect(1).CenterPoint;
+  TBarCrack(FLeft).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBarCrack(FLeft).MouseMove([ssLeft], p.X + 10, p.Y);
+  AssertTrue('前提:拖起来了', FLeft.IsDraggingForTest);
+  r := FRight.StripItemRect(0);
+  q := FLeft.ScreenToClient(FRight.ClientToScreen(Point(r.CenterPoint.X, r.Top + 4)));
+  TBarCrack(FLeft).MouseMove([ssLeft], q.X, q.Y);
+  AssertTrue('前提:右栏有落点', FRight.ForeignDropForTest);
+  TBarCrack(FLeft).MouseUp(mbLeft, [], q.X, q.Y);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestADropAfterShowingIsNotQueued;
+begin
+  DragSearchToRight;
+  AssertNothingRaised('拖放');
+  AssertSame('松开那一刻已经在右栏(拖放提交不排队)', FRight, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestADropKeepsTheFocusInTheWindow;
+begin
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在 Search 的编辑框里', FEdit, FForm.ActiveControl);
+  DragSearchToRight;
+  AssertNothingRaised('拖放');
+  AssertSame('前提:挪过去了', FRight, FSearch.Bar);
+  AssertSame('焦点还给编辑框', FEdit, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestBarEventsAfterADropSeeTheWindowInPlace;
+begin
+  FRight.Collapsed := True;
+  Pump;
+  FRight.OnChange := @RightChangeSeesBounds;
+  DragSearchToRight;
+  AssertNothingRaised('拖放');
+  AssertEquals('前提:发了一次', 'R.change;moved(WSearch,L,1);', FLog);
+  AssertTrue('OnChange 里读到的已经是右栏内容区(事件在 EnableAlign 之后)',
+    EqualRect(FRight.BarLayout.Content, FSeenBounds));
 end;
 
 procedure TTyToolWindowManagerLiveTests.TestADirectParentChangeKeepsTheFocus;
