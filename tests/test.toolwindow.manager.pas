@@ -160,6 +160,9 @@ type
     procedure TestAVetoAtExecutionDropsTheMoveSilently;
     procedure TestACaptureInsideTheWindowDelaysTheMoveOnce;
     procedure TestACaptureThatNeverLetsGoDelaysOnlyOnce;
+    { spec §9.7:排队的 MoveWindow / Load 在入口就取消拖动,不等排队项执行。 }
+    procedure TestAQueuedMoveCancelsTheDragAtOnce;
+    procedure TestAQueuedLoadCancelsTheDragAtOnce;
     { spec §9.5 / §9.9:拖放提交在 Showing 之后也同步;MoveNow 的焦点和事件时机。 }
     procedure TestADropAfterShowingIsNotQueued;
     procedure TestADropKeepsTheFocusInTheWindow;
@@ -186,6 +189,8 @@ type
     procedure BtnResets(Sender: TObject);
     { 真实的 MouseDown / MouseMove / MouseUp:把 Search 的图标拖到右栏第一格上半松开。 }
     procedure DragSearchToRight;
+    { 在左栏第一格按下、横拖过阈值(不松开)。 }
+    procedure StartDragOnLeft;
   end;
 
 implementation
@@ -1393,6 +1398,43 @@ begin
   TBarCrack(FLeft).MouseMove([ssLeft], q.X, q.Y);
   AssertTrue('前提:右栏有落点', FRight.ForeignDropForTest);
   TBarCrack(FLeft).MouseUp(mbLeft, [], q.X, q.Y);
+end;
+
+procedure TTyToolWindowManagerLiveTests.StartDragOnLeft;
+var
+  p: TPoint;
+begin
+  p := FLeft.StripItemRect(0).CenterPoint;
+  TBarCrack(FLeft).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBarCrack(FLeft).MouseMove([ssLeft], p.X + 10, p.Y);
+  AssertTrue('前提:拖起来了', FMgr.IsDragging);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAQueuedMoveCancelsTheDragAtOnce;
+begin
+  StartDragOnLeft;
+  AssertTrue(FMgr.MoveWindow(FSearch, FRight));
+  AssertEquals('前提:排着', 1, FMgr.QueuedCountForTest);
+  AssertSame('前提:还没挪', FLeft, FSearch.Bar);
+  AssertFalse('排队的 MoveWindow 在入口就取消拖动', FMgr.IsDragging);
+  AssertEquals('源栏的手势取消', Ord(twgsCancelled), Ord(FLeft.GestureStateForTest));
+  TBarCrack(FLeft).MouseUp(mbLeft, [], 0, 0);
+  Pump;
+  AssertNothingRaised('排队的移动');
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAQueuedLoadCancelsTheDragAtOnce;
+begin
+  StartDragOnLeft;
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline,WSearch|rightActive=WSearch|end'));
+  AssertEquals('前提:排着', 1, FMgr.QueuedCountForTest);
+  AssertFalse('排队的 Load 在入口就取消拖动', FMgr.IsDragging);
+  TBarCrack(FLeft).MouseUp(mbLeft, [], 0, 0);
+  Pump;
+  AssertNothingRaised('排队的 Load');
+  AssertSame('之后照样应用', FRight, FSearch.Bar);
 end;
 
 procedure TTyToolWindowManagerLiveTests.TestADropAfterShowingIsNotQueued;

@@ -562,6 +562,9 @@ type
     procedure SetTarget(ABar: TTyToolWindowBar; ASlot: Integer);
     { 这一次手势里拖过去行不行:在缓存里找,没有就问 manager 的 CanMoveWindow 并记下。 }
     function AllowedFor(ABar: TTyToolWindowBar): Boolean;
+    { 缓存里 ABar 的答案丢掉:它离开了 manager 或被释放,同一个地址之后可能是另一条栏。 }
+    procedure ForgetBar(ABar: TTyToolWindowBar);
+    function AllowedCount: Integer;
     property Target: TTyToolWindowBar read FTarget;
     { AWindow = nil 等于 DisarmDesign。 }
     procedure ArmDesign(AWindow: TTyToolWindow);
@@ -1080,6 +1083,8 @@ type
     function DragCursorForTest: TCursor;
     { 探针:拖动期间轮询捕获的计时器此刻在不在。 }
     function HasCaptureTimerForTest: Boolean;
+    { 探针:这一次手势里问过、记下答案的目标栏有几条(真实缓存的长度,不解引用)。 }
+    function AllowedCacheCountForTest: Integer;
     { 探针:此刻挂着处理器的兄弟有几个(真实列表的长度)。 }
     function WatchedSiblingCountForTest: Integer;
     procedure ActivateWindow(AWindow: TTyToolWindow);
@@ -4635,6 +4640,11 @@ begin
   Result := FGesture.HasCaptureTimer;
 end;
 
+function TTyToolWindowBar.AllowedCacheCountForTest: Integer;
+begin
+  Result := FGesture.AllowedCount;
+end;
+
 function TTyToolWindowBar.WatchedSiblingCountForTest: Integer;
 begin
   Result := Length(FWatched);
@@ -5265,6 +5275,9 @@ begin
   if (FManager <> nil) and (FPlacement <> twpBottom) then
   begin
     tgt := FManager.DropTargetAt(Self, ClientToScreen(Point(X, Y)), slot);
+    { 问 OnCanMoveWindow 的时候处理器可能把拖动取消了(CancelDrag、Load、改栏的 Collapsed……):
+      手势已经收尾,不再往任何一条栏上写落点。 }
+    if FGesture.State <> twgsDragging then Exit;
     if tgt = Self then
     begin
       FGesture.SetTarget(nil, -1);
@@ -6022,6 +6035,10 @@ end;
 procedure TTyToolWindowBar.SetManager(AValue: TTyToolWindowManager);
 begin
   if FManager = AValue then Exit;
+  { 本栏正在拖图标(spec §9.7:参与拖动的栏改了 Manager 就取消)。原来没有 manager 时这是栏内
+    调顺序:新 manager 不知道它在拖(FDragSource 只在进入拖动时记),CancelDrag 取消不到,落点
+    却要改问新 manager —— 一样取消。换掉旧 manager 的那一半 RemoveBar 里也会取消。 }
+  if FGesture.State = twgsDragging then ResetGesture(twgeCancel);
   { 流式 fixup 期间也会走到这里:绝不抛异常(spec §10.6)。冲突只是「不可用」,由 manager 现算。 }
   if FManager <> nil then
   begin
@@ -6171,13 +6188,31 @@ end;
 function TTyToolWindowGesture.AllowedFor(ABar: TTyToolWindowBar): Boolean;
 var
   i: Integer;
+  w: TTyToolWindow;
 begin
   for i := 0 to High(FAllowed) do
     if FAllowed[i].Bar = ABar then Exit(FAllowed[i].Allowed);
-  Result := (FBar.Manager <> nil) and FBar.Manager.CanMoveWindow(FWindow, ABar);
+  w := FWindow;
+  Result := (FBar.Manager <> nil) and FBar.Manager.CanMoveWindow(w, ABar);
+  { 处理器里把拖动取消了(或者这一次手势已经换成了别的):这份答案不属于此刻的手势,不记 ——
+    缓存只在进入拖动时清,记下的话会留给下一次手势。落点由调用方(DragTo)看状态不写。 }
+  if (FState <> twgsDragging) or (FWindow <> w) then Exit;
   SetLength(FAllowed, Length(FAllowed) + 1);
   FAllowed[High(FAllowed)].Bar := ABar;
   FAllowed[High(FAllowed)].Allowed := Result;
+end;
+
+procedure TTyToolWindowGesture.ForgetBar(ABar: TTyToolWindowBar);
+var
+  i: Integer;
+begin
+  for i := High(FAllowed) downto 0 do
+    if FAllowed[i].Bar = ABar then Delete(FAllowed, i, 1);
+end;
+
+function TTyToolWindowGesture.AllowedCount: Integer;
+begin
+  Result := Length(FAllowed);
 end;
 
 procedure TTyToolWindowGesture.SyncDeactivateHook;
@@ -6543,6 +6578,9 @@ var
   doc: TTyToolLayoutDoc;
 begin
   Result := True;
+  { 接受了的调用在入口就取消此刻的拖动(spec §9.7):排队的那一份要等抽消息才应用,这段时间里
+    用户不该还拖着一个马上要被挪走的窗口。同步的那一份 ApplyText 第 1 步还会再取消一次(幂等)。 }
+  CancelDrag;
   { 加载中(frame、继承窗体、Loaded 里调的):存成唯一的挂起计划,最后一个 Loaded 应用。 }
   if AnyParticipantLoading then
   begin
@@ -6873,14 +6911,16 @@ begin
   end;
 end;
 
-{ spec §9.4 的「IsVisible」,只看到窗体为止:拖动的时候源栏所在的窗体一定显示着,两边同一个
-  窗体,窗体自己那一级对两边一样。(IsVisible 把窗体也算进去,无头的窗体永远不可见。) }
+{ spec §9.4 的「IsVisible」,只看到顶层窗体为止:拖动的时候源栏所在的顶层窗体一定显示着,两边
+  同一个顶层窗体(GetParentForm 默认答顶层的),那一级对两边一样。(IsVisible 把窗体也算进去,
+  无头的窗体永远不可见。)嵌在别的控件里的窗体(Parent <> nil)不是那一级:它自己藏着,里面的栏
+  就看不见,照样往上查。 }
 function VisibleInForm(AControl: TControl): Boolean;
 var
   c: TControl;
 begin
   c := AControl;
-  while (c <> nil) and not (c is TCustomForm) do
+  while (c <> nil) and not ((c is TCustomForm) and (c.Parent = nil)) do
   begin
     if not c.IsControlVisible then Exit(False);
     c := c.Parent;
@@ -6962,8 +7002,9 @@ begin
   probes[0] := DropProbeOf(ASource);
   probes[0].IsSource := True;
   bars[0] := ASource;
-  { 源栏自己冲突时不再找别的候选(spec §9.4)。禁用的侧栏不是放置目标(开工前问题 1):
-    MoveWindow 这个 API 照常可用,只是拖放不往灰掉的栏里放。「可用」「同一个窗体」两条
+  { 源栏自己冲突时不再找别的候选(spec §9.4)。禁用的侧栏不是放置目标:MoveWindow 这个 API
+    照常可用,只是拖放不往用户看着是灰的栏里放(spec §9.4 候选栏要 IsVisible;禁用同理 ——
+    图标条画成 :disabled,落上去却挪得进去,用户会以为是 bug)。「可用」「同一个窗体」两条
     CanMoveWindow 的结构检查(AllowedFor)也会拒,这里先筛掉,不为不可能的目标建探测矩形。 }
   if IsBarUsable(ASource) then
     for i := 0 to High(FBars) do
@@ -6976,14 +7017,15 @@ begin
       SetLength(probes, n + 1);
       SetLength(bars, n + 1);
       probes[n] := DropProbeOf(b);
-      { 只问指针此刻落进去的那一条(每条每次手势只问一次,引擎缓存);别的答案用不上。 }
-      if PtInRect(probes[n].Visible, AScreen) then
-        probes[n].Allowed := ASource.FGesture.AllowedFor(b)
-      else
-        probes[n].Allowed := True;
+      { 先不问:命中哪一条再只问那一条(下面)。 }
+      probes[n].Allowed := True;
       bars[n] := b;
     end;
   i := TyToolWindowDropAt(probes, AScreen, ASlot);
+  { 只问命中的那一条(每条每次手势只问一次,引擎缓存):指针落在嵌套栏的洞里、源栏上、别处时
+    一条都不问 —— 按「指针在不在它的可见矩形里」问的话,洞里、叠在上面的源栏上都会去问底下那条。
+    问完之后手势可能已经被处理器收尾了,由调用方看引擎的状态;这里之后不再碰 Self。 }
+  if (i > 0) and not ASource.FGesture.AllowedFor(bars[i]) then i := -1;
   if i >= 0 then Result := bars[i] else ASlot := -1;
 end;
 
@@ -7011,6 +7053,9 @@ begin
     end;
   { 离开的是参与拖动的栏(源栏或此刻的目标栏):取消(spec §9.7)。 }
   BarChanged(ABar);
+  { 别的栏正在拖、问过它:答案丢掉。它离开 manager 之后不再是目标;被释放的话同一个地址之后
+    可能是另一条栏,缓存命中就是别人的答案。 }
+  if FDragSource <> nil then FDragSource.FGesture.ForgetBar(ABar);
   { 离开 manager 的栏不再是排队移动的目标。 }
   PurgeQueue(ABar);
 end;
@@ -7228,8 +7273,11 @@ begin
   item.Target := ATargetBar;
   item.Index := AIndex;
   { 这个窗口还有排着的移动:这一次(同栏也算)排在它后面,按调用顺序执行。执行时重新检查。 }
+  { 接受了的调用在入口就取消此刻的拖动(spec §9.7),排队的、同栏调顺序的也一样 —— 等到排队项
+    执行时才取消的话,这段时间里用户还拖着一个马上要被挪走的窗口。 }
   if HasQueued(AWindow) then
   begin
+    CancelDrag;
     Enqueue(item);
     Exit(True);
   end;
@@ -7237,10 +7285,12 @@ begin
   begin
     { 同一条栏就是调顺序:同步(不重建句柄),不问事件。-1 = 末尾。 }
     if AIndex < 0 then AIndex := MaxInt;
+    CancelDrag;
     src.ReorderWindow(AWindow, AIndex);
     Exit(True);
   end;
   if not CanMoveWindow(AWindow, ATargetBar) then Exit;
+  CancelDrag;
   if MustQueue(AWindow) then
     Enqueue(item)
   else

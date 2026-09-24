@@ -74,6 +74,19 @@ type
     procedure TestAnEmptiedBarKeepsItsStripAndTakesWindowsBack;
     procedure TestADropIsNotABarClick;
     procedure TestAnIndexOnlyIconSurvivesTheMove;
+    { OnCanMoveWindow 里取消了拖动:不写落点,答案不进缓存。 }
+    procedure TestAHandlerThatCancelsTheDragLeavesNoTarget;
+    { 问过的栏离开 manager / 被释放:缓存里它的答案丢掉。 }
+    procedure TestABarLeavingTheManagerIsForgottenByTheDrag;
+    { 没有 manager 的栏在拖(栏内调顺序)时挂上 manager:取消。 }
+    procedure TestSettingAManagerCancelsTheBarsOwnDrag;
+    { spec §9.7:同栏调顺序的 MoveWindow 也取消拖动。 }
+    procedure TestAReorderByMoveWindowCancelsTheDrag;
+    { 嵌在窗体里的窗体藏着:里面的栏不是目标。 }
+    procedure TestABarInAHiddenEmbeddedFormIsNoTarget;
+  private
+    procedure CancelInsideTheAsk(Sender: TObject; AWindow: TTyToolWindow;
+      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
   end;
 
 implementation
@@ -403,6 +416,8 @@ begin
   StartDrag(1);
   MoveTo(p);
   AssertNoDropAnywhere('嵌在右栏里的栏');
+  { 只问命中的那一条:落在洞里一条都不问(按「在不在它的可见矩形里」问的话会问右栏)。 }
+  AssertEquals('落在洞里:不问外面那条栏', 0, FCanCalls);
 end;
 
 { --- 反馈外观(spec §9.8) ------------------------------------------------------------- }
@@ -650,6 +665,117 @@ begin
   DragDrop(1, RightFirstCellTop);
   AssertSame('前提:挪过去了', TTyToolWindowBar(FRight), FSearch.Bar);
   AssertEquals('两侧共用 manager 的列表:那一格不变', 1, FRight.ResolvedImageIndex(FSearch));
+end;
+
+{ --- 处理器、缓存、取消的口径 -------------------------------------------------------- }
+
+procedure TTyToolWindowCrossDragTests.CancelInsideTheAsk(Sender: TObject; AWindow: TTyToolWindow;
+  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+begin
+  Inc(FCanCalls);
+  AAllow := True;
+  TTyToolWindowManager(Sender).CancelDrag;
+end;
+
+procedure TTyToolWindowCrossDragTests.TestAHandlerThatCancelsTheDragLeavesNoTarget;
+begin
+  FMgr.OnCanMoveWindow := @CancelInsideTheAsk;
+  StartDrag(1);
+  MoveTo(RightFirstCellTop);
+  AssertEquals('前提:问了一次', 1, FCanCalls);
+  AssertEquals('处理器取消了拖动', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+  AssertNoDropAnywhere('处理器里取消之后');
+  AssertEquals('这一份答案不进缓存(留给下一次手势就是别人的答案)', 0,
+    FBar.AllowedCacheCountForTest);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestABarLeavingTheManagerIsForgottenByTheDrag;
+begin
+  StartDrag(1);
+  MoveTo(RightFirstCellTop);
+  MoveTo(LeftStripCell(2));
+  AssertEquals('前提:右栏问过、记着', 1, FBar.AllowedCacheCountForTest);
+  AssertFalse('前提:此刻目标不是右栏', FRight.ForeignDropForTest);
+  FRight.Manager := nil;
+  AssertTrue('离开的不是参与拖动的栏:拖动照常', FMgr.IsDragging);
+  AssertEquals('离开 manager:它的答案丢掉', 0, FBar.AllowedCacheCountForTest);
+  FRight.Manager := FMgr;
+  MoveTo(RightFirstCellTop);
+  MoveTo(LeftStripCell(2));
+  AssertEquals('前提:又问过、记着', 1, FBar.AllowedCacheCountForTest);
+  FreeAndNil(FRight);
+  AssertTrue('被释放的不是参与拖动的栏:拖动照常', FMgr.IsDragging);
+  AssertEquals('被释放:它的答案丢掉(地址之后可能是另一条栏)', 0, FBar.AllowedCacheCountForTest);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestSettingAManagerCancelsTheBarsOwnDrag;
+var
+  nb: TBarAccess;
+begin
+  nb := NewBarOn(twpLeft, ['Debug', 'Tests', 'Todo']);
+  AssertTrue('前提:没有 manager', nb.Manager = nil);
+  StartDrag(0, nb);
+  AssertFalse('前提:manager 不知道它在拖', FMgr.IsDragging);
+  nb.Manager := FMgr;
+  AssertEquals('挂上 manager:栏自己的拖动取消', Ord(twgsCancelled), Ord(nb.GestureStateForTest));
+end;
+
+procedure TTyToolWindowCrossDragTests.TestAReorderByMoveWindowCancelsTheDrag;
+begin
+  StartDrag(1);
+  MoveTo(RightFirstCellTop);
+  AssertTrue('同栏调顺序:接受', FMgr.MoveWindow(FExplorer, FBar, 2));
+  AssertSame('前提:调了顺序', TTyToolWindow(FExplorer), FBar.Windows[2]);
+  AssertFalse('同栏的 MoveWindow 也取消拖动', FMgr.IsDragging);
+  AssertEquals('源栏的手势取消', Ord(twgsCancelled), Ord(FBar.GestureStateForTest));
+end;
+
+procedure TTyToolWindowCrossDragTests.TestABarInAHiddenEmbeddedFormIsNoTarget;
+var
+  ef: TForm;
+  r2: TTyToolWindowBar;
+  w: TTyToolWindow;
+  p: TPoint;
+  r: TRect;
+begin
+  { 右边那一格让给嵌入式窗体里的栏:本窗体的右栏离开 manager。 }
+  FRight.Manager := nil;
+  ef := TForm.CreateNew(nil);
+  try
+    ef.BorderStyle := bsNone;
+    ef.Parent := FForm;
+    ef.SetBounds(FRight.Left, FRight.Top, FRight.Width, FRight.Height);
+    r2 := TTyToolWindowBar.Create(ef);
+    r2.Placement := twpRight;
+    r2.Parent := ef;
+    r2.Controller := FCtl;
+    r2.Align := alNone;
+    r2.SetBounds(0, 0, FRight.Width, FRight.Height);
+    w := TTyToolWindow.Create(ef);
+    w.Parent := r2;
+    r2.Manager := FMgr;
+    AssertTrue('前提:它可用', FMgr.IsBarUsable(r2));
+    AssertTrue('前提:同一个顶层窗体', GetParentForm(r2) = FForm);
+    AssertTrue('前提:结构上挪得过去', FMgr.CanMoveWindow(FSearch, r2));
+    FCanCalls := 0;
+    r := r2.BarLayout.Content;
+    p := r2.ClientToScreen(r.CenterPoint);
+    { 对照:嵌入式窗体显示着时这一点就是它的内容区。 }
+    ef.Visible := True;
+    StartDrag(1);
+    MoveTo(p);
+    AssertTrue('对照:显示着的嵌入式窗体里的栏是目标', r2.ForeignDropForTest);
+    FBar.CallMouseUp(0, 0);
+    ef.Visible := False;
+    AssertFalse('前提:嵌入式窗体藏着', ef.Visible);
+    StartDrag(1);
+    MoveTo(p);
+    AssertFalse('藏着的嵌入式窗体里的栏不是目标', r2.ForeignDropForTest);
+    AssertEquals('禁止光标', Ord(crNoDrop), Ord(FBar.DragCursorForTest));
+    FBar.CallMouseUp(0, 0);
+  finally
+    ef.Free;
+  end;
 end;
 
 initialization
