@@ -1710,7 +1710,8 @@ begin
   AssertFalse('栏收起着,带着 Visible 进来的那页也得藏起来', w.Visible);
   AssertFalse('原来那页照样藏着', a.Visible);
   AssertTrue('进来不展开栏', FBar.Collapsed);
-  { 把另一条展开的栏的当前页挪进收起的栏:同一个缺口的真实入口。 }
+  { 把另一条展开的栏的当前页运行时直接挪进收起的栏:spec §3.2 的簿记把目标栏展开(C 期),
+    显示的只有它 —— 带着 Visible 进来的 w 照样藏着。 }
   b2 := TBarAccess.Create(FForm);
   b2.Parent := FForm;
   b2.Controller := FCtl;
@@ -1719,9 +1720,8 @@ begin
   AssertTrue('前提:它在原栏里显示着', x.Visible);
   x.Parent := FBar;
   AssertSame('挪进来的成为当前页', x, FBar.ActiveWindow);
-  AssertFalse('挪进收起的栏:藏起来', x.Visible);
-  FBar.Collapsed := False;
-  AssertTrue('展开时显示的是它', x.Visible);
+  AssertFalse('同类栏之间直接改 Parent:目标栏展开', FBar.Collapsed);
+  AssertTrue('显示的是它', x.Visible);
   AssertFalse('别的都藏着', a.Visible or w.Visible);
 end;
 

@@ -9,10 +9,10 @@ unit test.toolwindow.manager;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc, LMessages,
-  fpcunit, testregistry,
-  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
-  tyControls.ToolWindows.Layout,
+  Classes, SysUtils, StrUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc,
+  LMessages, fpcunit, testregistry,
+  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.Edit, tyControls.Button,
+  tyControls.ToolWindows, tyControls.ToolWindows.Layout,
   test.toolwindow.window, test.toolwindow.bar;
 
 type
@@ -78,6 +78,14 @@ type
     procedure TestAVetoedMoveChangesNothing;
     procedure TestEveryReorderReportsOnWindowMoved;
     procedure TestDesignTimeMoveWindowIsSilent;
+    { spec §3.2:运行时直接改 Parent 到同类栏的簿记。 }
+    procedure TestADirectParentChangeBooksTheMove;
+    procedure TestADirectParentChangeUnderOneManagerReportsTheMove;
+    procedure TestBarsOnDifferentManagersReportNoMove;
+    procedure TestAConflictingTargetStillTakesTheWindow;
+    procedure TestMoveWindowReportsExactlyOnce;
+    procedure TestDesignTimeAndLoadingParentChangesDoNotExpand;
+    procedure TestOrphansAreNotBooked;
   private
     FReenterTarget: TTyToolWindowBar;
     FReenterWindow: TTyToolWindow;
@@ -89,7 +97,48 @@ type
       ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
   end;
 
+  { 真句柄(焦点、Showing 之后的时机、队列)。夹具照 test.toolwindow.focus:本单元**自带**
+    widgetset 惰性初始化开关;窗体摆到 (-4000, -4000) 再 Visible := True + HandleNeeded;
+    Application.OnException 陷阱(消息里抛的异常不接住的话 LCL 弹模态框,runner 卡死)。
+    左栏 Explorer / Search(当前页 Search,正文里一个编辑框),右栏 Outline,都注册在 FMgr 上。 }
+  TTyToolWindowManagerLiveTests = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl: TTyStyleController;
+    FMgr: TTyToolWindowManager;
+    FLeft, FRight: TTyToolWindowBar;
+    FExplorer, FSearch, FOutline: TTyToolWindow;
+    FEdit: TTyEdit;
+    FPrevOnException: TExceptionEvent;
+    FTrapped: string;
+    FLog: string;
+    FSeenBounds: TRect;
+    procedure TrapException(Sender: TObject; E: Exception);
+    procedure AssertNothingRaised(const AWhere: string);
+    function NewWin(ABar: TTyToolWindowBar; const AName: string): TTyToolWindow;
+    { 抽消息(含 Application 的异步队列)。 }
+    procedure Pump(AMs: Integer = 100);
+    procedure RightChangeSeesBounds(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { spec §3.2:直接改 Parent 永远同步,窗体可见也一样。 }
+    procedure TestADirectParentChangeKeepsTheFocus;
+    procedure TestBarEventsSeeTheWindowAlreadyInPlace;
+  end;
+
 implementation
+
+var
+  ManagerWidgetSetReady: Boolean = False;
+
+procedure NeedManagerWidgetSet;
+begin
+  if ManagerWidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  ManagerWidgetSetReady := True;
+end;
 
 procedure TTyToolWindowManagerFixture.SetUp;
 begin
@@ -752,6 +801,250 @@ begin
   AssertEquals('不发任何事件', '', FLog);
 end;
 
+{ --- 直接改 Parent(spec §3.2) --------------------------------------------------------- }
+
+procedure TTyToolWindowManagerTests.TestADirectParentChangeBooksTheMove;
+var
+  l, r: TBarAccess;
+  b, c: TTyToolWindow;
+begin
+  l := NewBarOn(twpLeft, ['Explorer', 'Search', 'Git']);
+  r := NewBarOn(twpRight, ['Outline']);
+  r.Collapsed := True;
+  LogBarEvents(l);
+  LogBarEvents(r);
+  b := l.Windows[1];
+  c := l.Windows[2];
+  FLog := '';
+  b.Parent := r;
+  AssertSame('成为目标栏当前页', b, r.ActiveWindow);
+  AssertFalse('目标栏展开', r.Collapsed);
+  AssertSame('源栏回落', c, l.ActiveWindow);
+  AssertEquals('没有 manager:栏事件照 MoveWindow 的顺序', 'L.change;R.expand;R.change;', FLog);
+end;
+
+procedure TTyToolWindowManagerTests.TestADirectParentChangeUnderOneManagerReportsTheMove;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+begin
+  NewLeftRight(m, l, r);
+  FAllow := False;
+  l.Windows[1].Parent := r;
+  AssertEquals('同一 manager:多报一次 OnWindowMoved',
+    'L.change;R.expand;R.change;moved(WSearch,L,1);', FLog);
+  AssertEquals('不问否决', 0, FCanCalls);
+  AssertSame('照做了', r.Windows[1], r.ActiveWindow);
+end;
+
+procedure TTyToolWindowManagerTests.TestBarsOnDifferentManagersReportNoMove;
+var
+  m, m2: TTyToolWindowManager;
+  l, r: TBarAccess;
+begin
+  NewLeftRight(m, l, r);
+  m2 := NewManager;
+  m2.OnWindowMoved := @LogMoved;
+  r.Manager := m2;
+  FLog := '';
+  l.Windows[1].Parent := r;
+  AssertEquals('两个 manager:没有 OnWindowMoved', 'L.change;R.expand;R.change;', FLog);
+end;
+
+procedure TTyToolWindowManagerTests.TestAConflictingTargetStillTakesTheWindow;
+var
+  m: TTyToolWindowManager;
+  l, r, r2: TBarAccess;
+  b: TTyToolWindow;
+begin
+  NewLeftRight(m, l, r);
+  r2 := NewBarOn(twpRight, ['Debug']);
+  r2.Manager := m;
+  AssertFalse('前提:目标栏冲突', m.IsBarUsable(r));
+  b := l.Windows[1];
+  FLog := '';
+  b.Parent := r;
+  AssertSame('冲突不冲突都照做', TTyToolWindowBar(r), b.Bar);
+  AssertFalse('展开', r.Collapsed);
+  AssertEquals('照样报', 'L.change;R.expand;R.change;moved(WSearch,L,1);', FLog);
+end;
+
+procedure TTyToolWindowManagerTests.TestMoveWindowReportsExactlyOnce;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  p, n: Integer;
+begin
+  NewLeftRight(m, l, r);
+  m.MoveWindow(l.Windows[1], r);
+  n := 0;
+  p := Pos('moved(', FLog);
+  while p > 0 do
+  begin
+    Inc(n);
+    p := PosEx('moved(', FLog, p + 1);
+  end;
+  AssertEquals('MoveWindow 自己换父不再走一遍直接改 Parent 的簿记', 1, n);
+end;
+
+procedure TTyToolWindowManagerTests.TestDesignTimeAndLoadingParentChangesDoNotExpand;
+var
+  dl, dr: TBarAccess;
+  w: TTyToolWindow;
+  l, r: TBarAccess;
+begin
+  dl := NewDesignBar;
+  dr := NewDesignBar;
+  dr.Placement := twpRight;
+  w := NewWindowIn(dl, FDesignOwner);
+  NewWindowIn(dr, FDesignOwner);
+  dr.Collapsed := True;
+  w.Parent := dr;
+  AssertTrue('设计期:目标栏的 Collapsed 不被改', dr.Collapsed);
+  l := NewBarOn(twpLeft, ['Explorer', 'Search']);
+  r := NewBarOn(twpRight, ['Outline']);
+  r.BeginLoad;
+  try
+    r.Collapsed := True;
+    l.Windows[1].Parent := r;
+    AssertTrue('加载中:目标栏的 Collapsed 不被改', r.Collapsed);
+  finally
+    r.EndLoad;
+  end;
+end;
+
+procedure TTyToolWindowManagerTests.TestOrphansAreNotBooked;
+var
+  l, r: TBarAccess;
+  o: TProbeWindow;
+begin
+  l := NewBarOn(twpLeft, ['Explorer', 'Search']);
+  r := NewBarOn(twpRight, ['Outline']);
+  r.Collapsed := True;
+  o := TProbeWindow.Create(FForm);
+  o.Parent := FForm;
+  LogBarEvents(l);
+  LogBarEvents(r);
+  FLog := '';
+  o.Parent := r;
+  AssertTrue('孤儿进栏:不展开', r.Collapsed);
+  AssertEquals('孤儿进栏:只有注册即激活的那一次 OnChange', 'R.change;', FLog);
+  FLog := '';
+  l.Windows[1].Parent := nil;
+  AssertEquals('出栏到 nil:只有源栏回落', 'L.change;', FLog);
+end;
+
+{ --- 真句柄 --------------------------------------------------------------------------- }
+
+procedure TTyToolWindowManagerLiveTests.TrapException(Sender: TObject; E: Exception);
+begin
+  if FTrapped = '' then
+    FTrapped := E.ClassName + ': ' + E.Message;
+end;
+
+procedure TTyToolWindowManagerLiveTests.AssertNothingRaised(const AWhere: string);
+var
+  s: string;
+begin
+  if FTrapped = '' then Exit;
+  s := FTrapped;
+  FTrapped := '';
+  Fail(AWhere + ' raised on the real message path: ' + s);
+end;
+
+function TTyToolWindowManagerLiveTests.NewWin(ABar: TTyToolWindowBar;
+  const AName: string): TTyToolWindow;
+begin
+  Result := TTyToolWindow.Create(FForm);
+  Result.Name := AName;
+  Result.Caption := AName;
+  Result.Parent := ABar;
+end;
+
+procedure TTyToolWindowManagerLiveTests.Pump(AMs: Integer);
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  repeat
+    Application.ProcessMessages;
+    Sleep(5);
+  until GetTickCount64 - t0 >= QWord(AMs);
+end;
+
+procedure TTyToolWindowManagerLiveTests.SetUp;
+begin
+  NeedManagerWidgetSet;
+  FTrapped := '';
+  FLog := '';
+  FPrevOnException := Forms.Application.OnException;
+  Forms.Application.OnException := @TrapException;
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(-4000, -4000, 900, 500);
+  FCtl := TTyStyleController.Create(FForm);
+  FMgr := TTyToolWindowManager.Create(FForm);
+  FLeft := TTyToolWindowBar.Create(FForm);
+  FLeft.Name := 'L';
+  FLeft.Parent := FForm;
+  FLeft.Controller := FCtl;
+  FLeft.Manager := FMgr;
+  FRight := TTyToolWindowBar.Create(FForm);
+  FRight.Name := 'R';
+  FRight.Placement := twpRight;
+  FRight.Parent := FForm;
+  FRight.Controller := FCtl;
+  FRight.Manager := FMgr;
+  FExplorer := NewWin(FLeft, 'WExplorer');
+  FSearch := NewWin(FLeft, 'WSearch');
+  FEdit := TTyEdit.Create(FForm);
+  FEdit.Parent := FSearch;
+  FEdit.SetBounds(8, 40, 120, 26);
+  FOutline := NewWin(FRight, 'WOutline');
+  FLeft.ActiveWindow := FSearch;
+  FForm.Visible := True;
+  FForm.HandleNeeded;
+  Pump;
+  AssertTrue('前提:窗体显示着', FForm.Showing);
+  AssertTrue('前提:当前页里的编辑框聚焦得上', FEdit.CanFocus);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TearDown;
+begin
+  FForm.Free;
+  FForm := nil;
+  Forms.Application.OnException := FPrevOnException;
+end;
+
+procedure TTyToolWindowManagerLiveTests.RightChangeSeesBounds(Sender: TObject);
+begin
+  FSeenBounds := FSearch.BoundsRect;
+  FLog := FLog + 'R.change;';
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestADirectParentChangeKeepsTheFocus;
+begin
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在 Search 的编辑框里', FEdit, FForm.ActiveControl);
+  FSearch.Parent := FRight;
+  AssertNothingRaised('直接改 Parent');
+  AssertSame('前提:挪过去了', FRight, FSearch.Bar);
+  AssertSame('焦点还给编辑框', FEdit, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestBarEventsSeeTheWindowAlreadyInPlace;
+begin
+  FRight.Collapsed := True;
+  Pump;
+  FRight.OnChange := @RightChangeSeesBounds;
+  FSearch.Parent := FRight;
+  AssertNothingRaised('直接改 Parent');
+  AssertEquals('前提:发了一次', 'R.change;', FLog);
+  AssertFalse('前提:展开了', FRight.Collapsed);
+  AssertTrue('OnChange 里读到的已经是右栏内容区(事件在展开、对齐之后)',
+    EqualRect(FRight.BarLayout.Content, FSeenBounds));
+end;
+
 initialization
   RegisterTest(TTyToolWindowManagerTests);
+  RegisterTest(TTyToolWindowManagerLiveTests);
 end.
