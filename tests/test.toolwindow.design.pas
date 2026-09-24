@@ -3,6 +3,7 @@ unit test.toolwindow.design;
 
 { 工具窗口在设计器里的那一面(spec §3.2 / §10.6 / §11),全部无头:
   - 设计期孤儿(Parent 不是栏):显示出来、顶上一行提示、正文让位;运行时照旧藏着。
+  - Placement 冲突:设计期在冲突的栏底部让一行提示;Placement 集合一变,每条栏都重排、重画。
   设计期的栏和窗口照 C 期的写法:Owner 带 csDesigning、构造时传下来(FDesignOwner),
   走的是设计器放下控件的真实路径。夹具在 test.toolwindow.manager。 }
 
@@ -13,6 +14,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.Panel,
+  tyControls.StyleModel, tyControls.Painter, tyControls.StrConsts,
   tyControls.ToolWindows, tyControls.ToolWindows.Layout, tyControls.ToolWindows.Manager,
   test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager;
 
@@ -26,6 +28,9 @@ type
     function DesignPanel: TTyPanel;
     { 把窗口挪到设计期面板上,并给它一个确定的尺寸(对齐引擎无头不跑)。 }
     procedure Orphan(AWin: TProbeWindow);
+    { 设计期的 manager(Owner = FDesignOwner)和挂在它上面的一条设计期栏(一个窗口)。 }
+    function NewDesignManager: TTyToolWindowManager;
+    function DesignBarOn(APlacement: TTyToolWindowPlacement; AManager: TTyToolWindowManager): TBarAccess;
   published
     { spec §3.2:设计期孤儿。 }
     procedure TestAnInactiveWindowMovedOutDropsTheDesignFlag;
@@ -39,9 +44,27 @@ type
     procedure TestAnOrphanBackInItsBarIsTheCurrentPageAgain;
     procedure TestADesignTimeParentOfNilDoesNotRaise;
     procedure TestAnOrphanStreamsWithoutVisible;
+    { spec §10.6:设计期 Placement 冲突提示。 }
+    procedure TestConflictingBarsReserveANoteLine;
+    procedure TestTheActivePageStopsAboveTheConflictNote;
+    procedure TestNoConflictNoteAtRunTime;
+    procedure TestNoConflictWithoutASharedManager;
+    procedure TestTheConflictLineSitsAboveTheStrayLine;
+    procedure TestTheConflictNoteIsPainted;
+    procedure TestChangingPlacementRepaintsTheOtherBar;
+    procedure TestLeavingTheManagerRepaintsBothBars;
+    procedure TestJoiningTheManagerRepaintsTheOthers;
+    procedure TestFreeingABarRepaintsTheOther;
+    procedure TestFreeingTheManagerRepaintsEveryBar;
+    procedure TestJoiningWhileLoadingDoesNotRelayout;
+    procedure TestTheConflictTextFitsADefaultSideBar;
   end;
 
 implementation
+
+type
+  { ParentFont 是 protected:量字要用控件真正用的字号(同 test.toolwindow.bottom)。 }
+  TControlAccess = class(TControl);
 
 function BinaryToText(AStream: TMemoryStream): string;
 var
@@ -278,6 +301,273 @@ begin
   finally
     ms.Free;
   end;
+end;
+
+
+function TTyToolWindowDesignTests.NewDesignManager: TTyToolWindowManager;
+begin
+  if FDesignOwner = nil then
+  begin
+    FDesignOwner := TDesignOwner.Create(nil);
+    FDesignOwner.MarkDesigning;
+  end;
+  Result := TTyToolWindowManager.Create(FDesignOwner);
+end;
+
+function TTyToolWindowDesignTests.DesignBarOn(APlacement: TTyToolWindowPlacement;
+  AManager: TTyToolWindowManager): TBarAccess;
+begin
+  Result := NewDesignBar;
+  Result.Placement := APlacement;
+  if APlacement = twpBottom then Result.Width := 600 else Result.Height := 400;
+  NewWindowIn(Result, FDesignOwner);
+  if AManager <> nil then Result.Manager := AManager;
+end;
+
+procedure TTyToolWindowDesignTests.TestConflictingBarsReserveANoteLine;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  L: TTyToolWindowBarLayout;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  b := DesignBarOn(twpLeft, m);
+  L := a.BarLayout;
+  AssertFalse('A 有冲突提示行', IsRectEmpty(L.ConflictNote));
+  AssertEquals('行高 = --toolwindow-header-height', TyToolWindowHeaderHeightDef,
+    L.ConflictNote.Bottom - L.ConflictNote.Top);
+  AssertEquals('内容区停在提示行上面', L.ConflictNote.Top, L.Content.Bottom);
+  AssertFalse('B 同样有', IsRectEmpty(b.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestTheActivePageStopsAboveTheConflictNote;
+var
+  m: TTyToolWindowManager;
+  a: TBarAccess;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  DesignBarOn(twpLeft, m);
+  LayOut(a);
+  AssertTrue('当前页不盖提示行',
+    a.ActiveWindow.BoundsRect.Bottom <= a.BarLayout.ConflictNote.Top);
+end;
+
+procedure TTyToolWindowDesignTests.TestNoConflictNoteAtRunTime;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+begin
+  m := NewManager;
+  a := NewBarOn(twpLeft, ['A1']);
+  b := NewBarOn(twpLeft, ['B1']);
+  a.Manager := m;
+  b.Manager := m;
+  AssertFalse('前提:运行时照样冲突', m.IsBarUsable(a));
+  AssertTrue('运行时没有提示行', IsRectEmpty(a.BarLayout.ConflictNote));
+  AssertTrue('另一条也没有', IsRectEmpty(b.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestNoConflictWithoutASharedManager;
+var
+  a, b, c, d: TBarAccess;
+begin
+  a := DesignBarOn(twpLeft, nil);
+  b := DesignBarOn(twpLeft, nil);
+  AssertTrue('没有 manager:不冲突', IsRectEmpty(a.BarLayout.ConflictNote)
+    and IsRectEmpty(b.BarLayout.ConflictNote));
+  c := DesignBarOn(twpLeft, NewDesignManager);
+  d := DesignBarOn(twpLeft, NewDesignManager);
+  AssertTrue('各自一个 manager:不冲突', IsRectEmpty(c.BarLayout.ConflictNote)
+    and IsRectEmpty(d.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestTheConflictLineSitsAboveTheStrayLine;
+var
+  m: TTyToolWindowManager;
+  a: TBarAccess;
+  stray: TBodyChild;
+  L: TTyToolWindowBarLayout;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  DesignBarOn(twpLeft, m);
+  stray := TBodyChild.Create(FDesignOwner);
+  a.InsertControl(stray);
+  L := a.BarLayout;
+  AssertFalse('漏入提示行在', IsRectEmpty(L.StrayNote));
+  AssertFalse('冲突提示行在', IsRectEmpty(L.ConflictNote));
+  AssertEquals('冲突行紧贴在漏入行上面', L.StrayNote.Top, L.ConflictNote.Bottom);
+  AssertEquals('内容区停在冲突行上面', L.ConflictNote.Top, L.Content.Bottom);
+end;
+
+procedure TTyToolWindowDesignTests.TestTheConflictNoteIsPainted;
+var
+  m: TTyToolWindowManager;
+  a: TBarAccess;
+  L: TTyToolWindowBarLayout;
+  bmp: TBitmap;
+  pix, wipeLeft: Integer;
+begin
+  FCtl.StyleOverride := 'TyToolWindowBar { background: #FF00FF; }';
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  DesignBarOn(twpLeft, m);
+  L := a.BarLayout;
+  bmp := RenderRegion(a, a.ClientWidth, a.ClientHeight, L.ConflictNote, Wipe);
+  try
+    TallyPixels(bmp, Ground, Wipe, pix, wipeLeft);
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('提示行整块都画到', 0, wipeLeft);
+  AssertTrue('提示行里画了字', pix > 0);
+end;
+
+procedure TTyToolWindowDesignTests.TestChangingPlacementRepaintsTheOtherBar;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  inv, aln: Integer;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  b := DesignBarOn(twpLeft, m);
+  AssertFalse('前提:冲突', IsRectEmpty(a.BarLayout.ConflictNote));
+  inv := a.Invalidates;
+  aln := a.AlignCount;
+  b.Placement := twpRight;
+  AssertTrue('A 重画了', a.Invalidates > inv);
+  AssertTrue('A 重排了(提示行占内容区,只重画的话当前页还盖着旧位置)', a.AlignCount > aln);
+  AssertTrue('A 的提示没了', IsRectEmpty(a.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestLeavingTheManagerRepaintsBothBars;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  ia, ib, la, lb: Integer;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  b := DesignBarOn(twpLeft, m);
+  ia := a.Invalidates; la := a.AlignCount;
+  ib := b.Invalidates; lb := b.AlignCount;
+  b.Manager := nil;
+  AssertTrue('A 重画了', a.Invalidates > ia);
+  AssertTrue('A 重排了', a.AlignCount > la);
+  AssertTrue('A 的提示没了', IsRectEmpty(a.BarLayout.ConflictNote));
+  AssertTrue('B 自己也重画了', b.Invalidates > ib);
+  AssertTrue('B 自己也重排了', b.AlignCount > lb);
+  AssertTrue('B 的提示没了', IsRectEmpty(b.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestJoiningTheManagerRepaintsTheOthers;
+var
+  m: TTyToolWindowManager;
+  a, c: TBarAccess;
+  inv, aln: Integer;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  DesignBarOn(twpRight, m);
+  AssertTrue('前提:不冲突', IsRectEmpty(a.BarLayout.ConflictNote));
+  c := DesignBarOn(twpLeft, nil);
+  inv := a.Invalidates;
+  aln := a.AlignCount;
+  c.Manager := m;
+  AssertTrue('A 重画了', a.Invalidates > inv);
+  AssertTrue('A 重排了', a.AlignCount > aln);
+  AssertFalse('A 有提示了', IsRectEmpty(a.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestFreeingABarRepaintsTheOther;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  inv, aln: Integer;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  b := DesignBarOn(twpLeft, m);
+  inv := a.Invalidates;
+  aln := a.AlignCount;
+  b.Free;
+  AssertTrue('A 重画了', a.Invalidates > inv);
+  AssertTrue('A 重排了', a.AlignCount > aln);
+  AssertTrue('A 的提示没了', IsRectEmpty(a.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestFreeingTheManagerRepaintsEveryBar;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  ia, ib, la, lb: Integer;
+begin
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  b := DesignBarOn(twpLeft, m);
+  ia := a.Invalidates; la := a.AlignCount;
+  ib := b.Invalidates; lb := b.AlignCount;
+  m.Free;
+  AssertTrue('A 重画了', a.Invalidates > ia);
+  AssertTrue('A 重排了', a.AlignCount > la);
+  AssertTrue('B 重画了', b.Invalidates > ib);
+  AssertTrue('B 重排了', b.AlignCount > lb);
+  AssertTrue('提示都没了', IsRectEmpty(a.BarLayout.ConflictNote)
+    and IsRectEmpty(b.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestJoiningWhileLoadingDoesNotRelayout;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  la, lb: Integer;
+begin
+  { 流式 fixup 里 SetManager 挂上去(spec §10.6):不抛异常,也不因为 AddBar 重排 ——
+    加载中的冲突由栏的 Loaded 带上。 }
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, nil);
+  b := DesignBarOn(twpLeft, nil);
+  a.BeginLoad;
+  b.BeginLoad;
+  try
+    la := a.AlignCount;
+    lb := b.AlignCount;
+    a.Manager := m;
+    b.Manager := m;
+    AssertEquals('加载中 A 不因为挂 manager 重排', la, a.AlignCount);
+    AssertEquals('加载中 B 不因为挂 manager 重排', lb, b.AlignCount);
+  finally
+    a.EndLoad;
+    b.EndLoad;
+  end;
+  AssertFalse('加载完照样画提示', IsRectEmpty(a.BarLayout.ConflictNote));
+end;
+
+procedure TTyToolWindowDesignTests.TestTheConflictTextFitsADefaultSideBar;
+var
+  m: TTyToolWindowManager;
+  a: TBarAccess;
+  L: TTyToolWindowBarLayout;
+  S: TTyStyleSet;
+  bw, bh, rw, fs, room: Integer;
+begin
+  { 开工前问题 3 的文案:默认主题、96 PPI、ExpandedSize = 240 的设计期左栏里放得下,不出
+    省略号。两种量法取大(Painter.pas 的约定),同栏画提示用的字号。 }
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  DesignBarOn(twpLeft, m);
+  AssertEquals('前提:默认展开尺寸', 240, a.ExpandedSize);
+  L := a.BarLayout;
+  S := FCtl.Model.ResolveStyle(TyToolWindowNoteKey, '', [tysNormal]);
+  fs := TyResolveFontSize(S, TControlAccess(a).ParentFont, a.Font.Size, FCtl);
+  TyMeasureTextBlock(rsTyToolWindowBarConflict, S.FontName, fs, S.FontWeight, 96, 0, 0, bw, bh);
+  rw := TyMeasureRenderedTextWidth(rsTyToolWindowBarConflict, S.FontName, fs, S.FontWeight, 96);
+  if rw > bw then bw := rw;
+  room := L.ConflictNote.Right - L.ConflictNote.Left - 2 * TyToolWindowHeaderPadDef;
+  AssertTrue(Format('提示 %d px 放得进 %d px', [bw, room]), bw <= room);
 end;
 
 initialization

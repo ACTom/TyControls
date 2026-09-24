@@ -1031,6 +1031,10 @@ msgstr ""
 msgid "Not in a tool window"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowbarconflict
+msgid "Same Placement as another bar"
+msgstr ""
+
 #: tycontrols.strconsts.rstytoolwindowbarempty
 msgid "Add a tool window"
 msgstr ""

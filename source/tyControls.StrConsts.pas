@@ -295,6 +295,12 @@ resourcestring
     hidden at run time. Right-click it -> "Move Back into Bar" puts it back. }
   rsTyToolWindowOrphan =
     'Not in a tool window bar: hidden at run time';
+  { Drawn at design time in a line reserved at the bottom of a bar's content area when
+    another bar on the same TTyToolWindowManager has the same Placement. Every such bar is
+    left out of cross-bar drags, MoveWindow and layout strings; reordering inside it still
+    works. Short on purpose: a side bar is 240px wide by default. }
+  rsTyToolWindowBarConflict =
+    'Same Placement as another bar';
   { Hints on the bottom bar's tab row (TTyToolWindowBar.HeaderHint): the maximize button
     (its two states), the hide button that collapses the whole bottom bar, and the
     overflow button that lists the tabs that did not fit. }

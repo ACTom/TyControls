@@ -450,6 +450,10 @@ type
     { 设计期有漏进来的非窗口子控件:内容区底部让出来的一行提示(不让出来的话当前页整个
       盖在内容区上,提示一个像素都露不出来)。 }
     StrayNote: TRect;
+    { 设计期 Placement 冲突(spec §10.6):同一 manager 下另有一条栏 Placement 相同。内容区底部
+      再让出一行,叠在 StrayNote 上面 —— 当前页是窗口化子控件、盖满内容区,不让出来提示一个
+      像素都露不出来。 }
+    ConflictNote: TRect;
   end;
 
   { 栏上一个点落在哪个部件上(TTyToolWindowBar.PartAt)。图标和底栏标签共用 twbpItem、两种溢出
@@ -780,6 +784,12 @@ type
     function LayoutAt(const AClient: TRect; APPI: Integer): TTyToolWindowBarLayout;
     { 漏进来的非窗口子控件有几个(粘贴等途径;spec §6.1)。 }
     function StrayCount: Integer;
+    { 同一 manager 下另有一条栏 Placement 相同(manager 现算,IsBarUsable)。manager 正在释放时
+      不算。 }
+    function PlacementConflicts: Boolean;
+    { 冲突提示可能出现 / 消失了:它占内容区的一行,所以要重排再重画。只在设计期、不在加载 /
+      释放中做 —— 加载中的由 Loaded → Relayout 带上;运行时没有这行提示。 }
+    procedure ConflictMayHaveChanged;
   private
     { --- 底栏标题行(spec §7.2 / §7.3) --- }
     { 标签宽的缓存:只缓存量出来的宽(量字是贵的那一步),不缓存整份几何 —— 窗口顺序每次现取,
@@ -1214,6 +1224,9 @@ type
     function MovedEventAllowed(ASource: TTyToolWindowBar): Boolean;
     { 参与拖动的栏(源栏或此刻的目标栏)改了 Collapsed / Placement / Manager:取消。 }
     procedure BarChanged(ABar: TTyToolWindowBar);
+    { 注册栏的 Placement 集合变了(加进 / 摘掉一条栏、某条栏改了 Placement):每条栏的冲突提示
+      都可能出现或消失(spec §10.6)。可用性现算,这里只让它们按新答案重排、重画。 }
+    procedure PlacementsChanged;
   protected
     { 注册着的栏,注册顺序,无语义(「先注册的赢」不成立:fixup 倒序执行,spec §10.6)。 }
     FBars: array of TTyToolWindowBar;
@@ -1277,7 +1290,8 @@ type
     procedure BeforeDestruction; override;
     destructor Destroy; override;
     { 这条栏是不是可用:注册在本 manager 上,且没有别的注册栏和它 Placement 相同(spec §10.6)。
-      现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。 }
+      现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。
+      设计期的冲突提示也问它;Placement 集合一变,PlacementsChanged 让每条栏按新答案重排、重画。 }
     function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
     { 结构检查 + OnCanMoveWindow(spec §9.9)。同一条栏永远 True、不问事件;设计期不问事件。
       没有副作用:不取消拖动、不记默认布局、不动任何状态。 }
@@ -3542,6 +3556,20 @@ begin
     if not (Controls[i] is TTyToolWindow) then Inc(Result);
 end;
 
+function TTyToolWindowBar.PlacementConflicts: Boolean;
+begin
+  { 本栏在 manager 的表里时,IsBarUsable 答 False 只有冲突一种原因。 }
+  Result := (FManager <> nil) and not (csDestroying in FManager.ComponentState)
+    and not FManager.IsBarUsable(Self);
+end;
+
+procedure TTyToolWindowBar.ConflictMayHaveChanged;
+begin
+  if [csDesigning, csLoading, csDestroying] * ComponentState <> [csDesigning] then Exit;
+  Realign;
+  Invalidate;
+end;
+
 function TTyToolWindowBar.LayoutIn(const AClient: TRect): TTyToolWindowBarLayout;
 begin
   Result := LayoutAt(AClient, PPI);
@@ -3615,6 +3643,16 @@ begin
     if bandH > Result.Content.Bottom - Result.Content.Top then
       bandH := Result.Content.Bottom - Result.Content.Top;
     Result.StrayNote := Rect(Result.Content.Left, Result.Content.Bottom - bandH,
+      Result.Content.Right, Result.Content.Bottom);
+    Dec(Result.Content.Bottom, bandH);
+  end;
+  { 设计期 Placement 冲突:再往上让一行,叠在漏入提示那一行上面(spec §10.6)。 }
+  if (csDesigning in ComponentState) and PlacementConflicts then
+  begin
+    bandH := TokenPxAt(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+    if bandH > Result.Content.Bottom - Result.Content.Top then
+      bandH := Result.Content.Bottom - Result.Content.Top;
+    Result.ConflictNote := Rect(Result.Content.Left, Result.Content.Bottom - bandH,
       Result.Content.Right, Result.Content.Bottom);
     Dec(Result.Content.Bottom, bandH);
   end;
@@ -3879,8 +3917,9 @@ begin
       end;
     end;
 
-    { 设计期提示(LayoutIn 只在设计期给这两个框)。 }
-    if (L.EmptyNote.Right > L.EmptyNote.Left) or (L.StrayNote.Right > L.StrayNote.Left) then
+    { 设计期提示(LayoutIn 只在设计期给这三个框)。 }
+    if (L.EmptyNote.Right > L.EmptyNote.Left) or (L.StrayNote.Right > L.StrayNote.Left)
+       or (L.ConflictNote.Right > L.ConflictNote.Left) then
     begin
       partS := ActiveController.Model.ResolveStyle(TyToolWindowNoteKey, cls, [tysNormal]);
       pad := TokenPxAt(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
@@ -3893,6 +3932,11 @@ begin
       InflateRect(gr, -pad, 0);
       if (gr.Right > gr.Left) and (gr.Bottom > gr.Top) then
         P.DrawText(gr, rsTyToolWindowBarStray, partS.FontName, ResolveFontSize(partS),
+          partS.FontWeight, partS.TextColor, taLeftJustify, tlCenter, True);
+      gr := L.ConflictNote;
+      InflateRect(gr, -pad, 0);
+      if (gr.Right > gr.Left) and (gr.Bottom > gr.Top) then
+        P.DrawText(gr, rsTyToolWindowBarConflict, partS.FontName, ResolveFontSize(partS),
           partS.FontWeight, partS.TextColor, taLeftJustify, tlCenter, True);
     end;
     P.EndPaint;
@@ -5466,6 +5510,8 @@ begin
   { 参与拖动的栏(源栏或目标栏)改了 Placement:取消(spec §9.7)。 }
   if FManager <> nil then FManager.BarChanged(Self);
   FPlacement := AValue;
+  { 同一 manager 下每条栏的冲突提示都可能跟着变(本栏在表里,一起重排)。 }
+  if FManager <> nil then FManager.PlacementsChanged;
   { 流式加载时 Align 自己也在流里,不替它改。 }
   if not (csLoading in ComponentState) then
     Align := PlacementAlign;
@@ -6101,6 +6147,8 @@ begin
   FManager := nil;
   { 生效列表可能是它的 Images(spec §8)。 }
   ImagesChanged;
+  { 离开了 manager,冲突提示(有的话)没了。manager 被释放的那条路只走到这里。 }
+  ConflictMayHaveChanged;
 end;
 
 procedure TTyToolWindowBar.SetManager(AValue: TTyCustomToolWindowManager);
@@ -6124,6 +6172,8 @@ begin
   if AValue <> nil then AValue.AddBar(Self);
   { 生效列表可能跟着 manager 换了(spec §8)。 }
   ImagesChanged;
+  { 离开旧 manager 的这一条已经不在它的表里,旧表的 PlacementsChanged 轮不到本栏。 }
+  ConflictMayHaveChanged;
 end;
 
 procedure TTyToolWindowBar.SetController(AValue: TTyStyleController);
@@ -6700,6 +6750,7 @@ begin
   FBars[High(FBars)] := ABar;
   { 双向:栏被释放时本 manager 收到 opRemove,本 manager 被释放时栏收到。 }
   ABar.FreeNotification(Self);
+  PlacementsChanged;
 end;
 
 procedure TTyCustomToolWindowManager.RemoveBar(ABar: TTyToolWindowBar);
@@ -6719,6 +6770,17 @@ begin
   if FDragSource <> nil then FDragSource.FGesture.ForgetBar(ABar);
   { 离开 manager 的栏不再是排队移动的目标。 }
   BarRemoved(ABar);
+  { 留下的栏的冲突提示可能没了(释放那条路经 Notification 也走到这里)。 }
+  PlacementsChanged;
+end;
+
+procedure TTyCustomToolWindowManager.PlacementsChanged;
+var
+  i: Integer;
+begin
+  { 每条栏自己过滤设计期 / 加载 / 释放(ConflictMayHaveChanged)。 }
+  for i := 0 to High(FBars) do
+    FBars[i].ConflictMayHaveChanged;
 end;
 
 procedure TTyCustomToolWindowManager.Notification(AComponent: TComponent; Operation: TOperation);

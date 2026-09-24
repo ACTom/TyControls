@@ -619,6 +619,10 @@ msgstr "多余的操作区"
 msgid "Not in a tool window"
 msgstr "不在工具窗口里"
 
+#: tycontrols.strconsts.rstytoolwindowbarconflict
+msgid "Same Placement as another bar"
+msgstr "与另一条栏的 Placement 相同"
+
 #: tycontrols.strconsts.rstytoolwindowbarempty
 msgid "Add a tool window"
 msgstr "添加工具窗口"
