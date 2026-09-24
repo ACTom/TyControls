@@ -179,6 +179,8 @@ type
     procedure TestFreeingTheManagerInsideItsQueueTouchesItNoMore;
     { 排着的 WindowIndex 执行前同 StructureAllows 查加载 / 释放中:栏在加载中就丢弃。 }
     procedure TestAQueuedIndexOnALoadingBarIsDropped;
+    { 显示之后运行时加载进来一条栏:它的收尾不覆盖已经记下的默认布局。 }
+    procedure TestABarLoadedAfterShowingKeepsTheDefault;
     procedure TestAVetoAtExecutionDropsTheMoveSilently;
     procedure TestACaptureInsideTheWindowDelaysTheMoveOnce;
     procedure TestACaptureThatNeverLetsGoDelaysOnlyOnce;
@@ -1573,6 +1575,29 @@ begin
   finally
     if csLoading in FRight.ComponentState then TComponentCrack(FRight).Loaded;
   end;
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestABarLoadedAfterShowingKeepsTheDefault;
+var
+  b: TTyToolWindowBar;
+begin
+  { 显示之后第一次改动:默认布局记在改之前(左栏 240)。 }
+  FLeft.ExpandedSize := 300;
+  { 显示之后运行时建了一个带栏、指向本 manager 的 frame:那条栏的 Loaded 最后收尾。 }
+  b := TTyToolWindowBar.Create(FForm);
+  TComponentCrack(b).Loading;
+  b.Name := 'B';
+  b.Placement := twpBottom;
+  b.Parent := FForm;
+  b.Controller := FCtl;
+  b.Manager := FMgr;
+  NewWin(b, 'WProblems');
+  TComponentCrack(b).Loaded;
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertNothingRaised('Reset');
+  AssertEquals('Reset 回到显示之后第一次改动之前(新栏的收尾没有把默认布局换成此刻的样子)',
+    TyToolWindowDefaultExpandedSize, FLeft.ExpandedSize);
 end;
 
 procedure TTyToolWindowManagerLiveTests.MovedFreesTheManager(Sender: TObject;

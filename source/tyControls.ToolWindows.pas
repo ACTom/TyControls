@@ -212,11 +212,10 @@ type
     { 对外设 Visible 经栏路由(spec §3.3):运行时 True = 激活并展开,对当前页 False = 收起;
       设计期 True 只激活。栏自己切的(FBarSwitching)照写,并记探针。 }
     procedure SetVisible(Value: Boolean); override;
-    { spec §10.5 的收尾点之一(开工前问题 6):谁最后一个离开 csLoading 谁收尾。FPC 的读取器
-      读完一个组件连同它的子控件之后才把它加进 Loaded 列表(reader.inc:1004-1019),同一个流里
-      栏的 Loaded 总在它的窗口之后,这一句在那种情形下收不到尾;留着兜住窗口和它的栏不在同一批
-      Loaded 里的情形。 }
-    procedure Loaded; override;
+    { 窗口不重写 Loaded 去收 spec §10.5 的尾:FPC 的读取器先把子控件加进 Loaded 列表、再加父控件
+      (reader.inc:1004-1019),窗口的 Loaded 永远在它的栏之前,那时栏还在 csLoading,收不了尾。
+      窗口也不会跟它的栏分在两个流里(栏只收窗口,窗口的父控件在同一个流里)。收尾只靠 manager
+      和栏的 Loaded(TTyToolWindowManager.TryFinishLoading)。 }
     { 推送链的第二段:窗口 → **每一个**操作区。多出来的那些设计期要按它画提示。 }
     procedure SetController(AValue: TTyStyleController); override;
     { 有些 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求它们不发
@@ -1320,11 +1319,17 @@ type
     procedure NoteLayoutChanging(ABar: TTyToolWindowBar);
     { 挂起计划应用后的 OnLayoutApplied,推到加载结束之后。 }
     procedure LayoutAppliedAsync(Data: PtrInt);
-    { spec §10.5:最后一个离开 csLoading 的参与者(manager、注册栏、它们的窗口)调它。都不在
-      加载中了:记默认布局(加载进来的样子;用户调过 CaptureDefaultLayout 就不动它),再静默
-      应用挂起的计划,OnLayoutApplied 推到加载结束之后。继承窗体每一层读完都会走到这里,
-      默认布局取最后一层流进来的值。 }
+    { spec §10.5:最后一个离开 csLoading 的参与者(manager、注册栏)在自己的 Loaded 最后调它。
+      都不在加载中了:记默认布局(加载进来的样子;条件见实现处),再静默应用挂起的计划,
+      OnLayoutApplied 推到加载结束之后。继承窗体每一层读完都会走到这里,默认布局取最后一层
+      流进来的值。
+      **已知限制(继承窗体)**:祖先那一层加载中调的 Load / Reset,挂起计划在祖先层收尾时就
+      应用掉了;接着读子孙层,子孙层流进来的值(ExpandedSize、Collapsed、ActiveIndex、窗口
+      顺序……)照常写进去,会覆盖刚应用的布局,而计划已经清了,子孙层收尾时不会再应用一次。
+      要在继承窗体上读用户布局,请在 FormCreate 里调(那时所有层都读完了)。 }
     procedure TryFinishLoading;
+    { 栏所在的窗体此刻 Showing(没有注册栏答 False)。 }
+    function FormShowing: Boolean;
     { Load / Reset 此刻要排队:运行时、栏所在的窗体已经 Showing。 }
     function LayoutMustQueue: Boolean;
     { Load / Reset 的共同后半段(格式已查过):加载中挂起、Showing 之后排队、否则同步应用。 }
@@ -1334,7 +1339,7 @@ type
     function LayoutCallAllowed: Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    { spec §10.5:加载结束的收尾之一(另外两处是栏和窗口的 Loaded)。 }
+    { spec §10.5:加载结束的收尾之一(另一处是栏的 Loaded)。 }
     procedure Loaded; override;
   public
     destructor Destroy; override;
@@ -2044,15 +2049,6 @@ begin
     FNoDesignVisibleAtShow := csNoDesignVisible in ControlStyle;
     inherited SetVisible(False);
   end;
-end;
-
-procedure TTyToolWindow.Loaded;
-var
-  b: TTyToolWindowBar;
-begin
-  inherited Loaded;
-  b := Bar;
-  if (b <> nil) and (b.Manager <> nil) then b.Manager.TryFinishLoading;
 end;
 
 procedure TTyToolWindow.SetController(AValue: TTyStyleController);
@@ -6751,14 +6747,19 @@ begin
     and (FEventDepth = 0) and (FApplying = 0);
 end;
 
-function TTyToolWindowManager.LayoutMustQueue: Boolean;
+function TTyToolWindowManager.FormShowing: Boolean;
 var
   form: TCustomForm;
 begin
   Result := False;
-  if (csDesigning in ComponentState) or (Length(FBars) = 0) then Exit;
+  if Length(FBars) = 0 then Exit;
   form := GetParentForm(FBars[0]);
   Result := (form <> nil) and form.Showing;
+end;
+
+function TTyToolWindowManager.LayoutMustQueue: Boolean;
+begin
+  Result := not (csDesigning in ComponentState) and FormShowing;
 end;
 
 { Load / Reset 的共同后半段(格式已经查过):加载中挂起;Showing 之后排队;否则同步应用。 }
@@ -6872,8 +6873,16 @@ var
 begin
   if AnyParticipantLoading or ([csDesigning, csDestroying] * ComponentState <> []) then Exit;
   { 默认布局 = 流进来的值(LCL 先读完所有流、解析完所有引用,才开始第一个 Loaded,各 Loaded
-    的先后不影响)。继承窗体每一层都走到这里,取最后一层的;用户自己记过的不动。 }
-  if not FDefaultExplicit then
+    的先后不影响)。继承窗体每一层都走到这里,取最后一层的(那时窗体都还没显示);用户自己
+    记过的(CaptureDefaultLayout)不动。另外两种情形不记:
+    - 还没有注册栏(.lfm 里只有 manager,栏在 FormCreate 里用代码挂):记下的是空布局,之后
+      Reset 什么都恢复不了。不置「记过」,代码搭的那一套照代码搭的规矩记(第一次 Load / Reset
+      之前、Showing 之后第一次改动之前)。
+    - 窗体已经显示着、默认布局也记过了(显示之后运行时建了一个带栏、指向本 manager 的
+      frame):那一份是用户看见过、可能已经改过之后记的,新加进来的栏不该把它覆盖掉。
+      没记过就照记。 }
+  if not FDefaultExplicit and (Length(FBars) > 0)
+     and (not FDefaultCaptured or not FormShowing) then
   begin
     FDefaultText := SaveLayoutToString;
     FDefaultCaptured := True;

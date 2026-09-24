@@ -59,6 +59,8 @@ type
     procedure TestADirectParentChangeInsideTheBatchLeavesEveryBarWhole;
     { 某一条栏进批次时抛异常:进了门的都出门,没进门的不多解一层。 }
     procedure TestABarFailingToEnterTheBatchLeavesNoBarInIt;
+    { .lfm 里只有 manager、栏在 FormCreate 里用代码挂:Loaded 那一刻不记空布局。 }
+    procedure TestAStreamedManagerWithCodeBuiltBarsResetsToTheBuiltLayout;
     { 窗体还没显示(FormCreate 里读布局):第 7 步不抛异常、ActiveControl 不停在被藏起来的
       控件上,原控件还聚焦得上时还给它(所以这一步不能在没显示的窗体上跳过)。 }
     procedure TestTheFocusStepOnAHiddenFormIsSafeAndRestores;
@@ -80,6 +82,8 @@ implementation
 type
   { ParentFont 是 protected。 }
   TControlCrack = class(TControl);
+  { Loading / Loaded 是 protected:模拟「从 .lfm 读进来」。 }
+  TComponentCrack = class(TComponent);
 
   { 在 manager 析构、csDestroying 已经置上的时候调 Load / Reset。 }
   TLayoutOnFree = class(TComponent)
@@ -595,6 +599,33 @@ begin
     '|right=240,0|rightWins=WOutline|rightActive=WOutline|end'));
   AssertSame('前提:Search 回到左栏、是当前页', TTyToolWindow(Win('Search')), FLeft.ActiveWindow);
   AssertSame('原控件还聚焦得上:ActiveControl 还给它', TWinControl(e), FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestAStreamedManagerWithCodeBuiltBarsResetsToTheBuiltLayout;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  built: string;
+begin
+  { .lfm 里只有 manager:它的 Loaded 收尾那一刻一条栏都没有。 }
+  m := TTyToolWindowManager.Create(FForm);
+  TComponentCrack(m).Loading;
+  TComponentCrack(m).Loaded;
+  { FormCreate:代码挂栏、搭好(窗体还没显示,改的都算搭建)。 }
+  l := NewBarOn(twpLeft, ['Git', 'Debug']);
+  r := NewBarOn(twpRight, ['Tree']);
+  l.Manager := m;
+  r.Manager := m;
+  l.ExpandedSize := 222;
+  r.Collapsed := True;
+  built := m.SaveLayoutToString;
+  AssertTrue(m.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=200,1|leftWins=WDebug,WGit|leftActive=WGit' +
+    '|right=240,0|rightWins=WTree|rightActive=WTree|end'));
+  AssertTrue('前提:读进了别的样子', m.SaveLayoutToString <> built);
+  AssertTrue(m.ResetLayout);
+  AssertEquals('Reset 回到代码挂好的样子(不是 Loaded 那一刻的空布局)', built,
+    m.SaveLayoutToString);
 end;
 
 { --- 加载中挂起、收尾、默认布局(spec §10.5) ------------------------------------------ }
