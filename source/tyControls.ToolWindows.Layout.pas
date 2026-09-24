@@ -118,6 +118,32 @@ function TyToolWindowActionsFlow(const AItems: array of TTyToolWindowFlowItem;
 function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
   AVertical: Boolean; ACount: Integer): Integer;
 
+type
+  { 跨栏拖动的一个候选(spec §9.4),manager 每次移动现建。坐标一律**屏幕坐标**。 }
+  TTyToolWindowDropProbe = record
+    { 栏的 ClientRect 与每一级祖先 ClientRect 的交集。 }
+    Visible: TRect;
+    { 嵌在这条栏里面的别的栏:落在里面的点不算这个候选。 }
+    Holes: array of TRect;
+    { 图标条去掉界线的那一段。 }
+    Cells: TRect;
+    { 已排布的图标,ItemIndex 是窗口序号。 }
+    Slots: TTyToolWindowSlots;
+    Count: Integer;
+    IsSource: Boolean;
+    { 另一侧栏:CanMoveWindow 的答案。源栏忽略。 }
+    Allowed: Boolean;
+  end;
+  TTyToolWindowDropProbes = array of TTyToolWindowDropProbe;
+
+{ P 落在哪个候选上,-1 = 没有目标。按数组顺序找第一个 Visible 含 P(且不在 Holes 里)的候选:
+  在它的 Cells 里 → 按图标中点找空隙;源栏 Cells 之外 → 没有目标(源栏自己的内容区);
+  另一侧栏 Cells 之外 → 「最后一个已排布图标之后」那个空隙;另一侧栏被否决 → 没有目标。
+  ASlot 是窗口序号的槽位,-1 时无意义。调用方把源栏放在第一个。只管侧栏:底栏标签行的落点
+  在栏上(HeaderDropSlotIn),底栏也从不跨栏。 }
+function TyToolWindowDropAt(const AProbes: array of TTyToolWindowDropProbe; const P: TPoint;
+  out ASlot: Integer): Integer;
+
 { 图标条排布(竖直)。 }
 function TyToolWindowStripLayout(AStripWidth, AStripHeight, AItemSize, AOverflowSize: Integer;
   ACount, AActiveIndex: Integer): TTyToolWindowSlots;
@@ -516,6 +542,41 @@ begin
   end;
   if last < 0 then Exit(ACount);          { 全是空槽 }
   Result := ASlots[last].ItemIndex + 1;
+end;
+
+function TyToolWindowDropAt(const AProbes: array of TTyToolWindowDropProbe; const P: TPoint;
+  out ASlot: Integer): Integer;
+var
+  i, j: Integer;
+  inHole: Boolean;
+begin
+  ASlot := -1;
+  for i := 0 to High(AProbes) do
+  begin
+    if not PtInRect(AProbes[i].Visible, P) then Continue;
+    inHole := False;
+    for j := 0 to High(AProbes[i].Holes) do
+      if PtInRect(AProbes[i].Holes[j], P) then
+      begin
+        inHole := True;
+        Break;
+      end;
+    if inHole then Continue;
+    if PtInRect(AProbes[i].Cells, P) then
+      ASlot := TyToolWindowSlotAt(AProbes[i].Slots, P.X, P.Y, True, AProbes[i].Count)
+    else if AProbes[i].IsSource then
+      Exit(-1)                                 { 源栏自己的内容区:没有目标 }
+    else
+      { 「最后一个已排布图标之后」:同一个函数,指针放到条尾之外。 }
+      ASlot := TyToolWindowSlotAt(AProbes[i].Slots, P.X, High(Integer), True, AProbes[i].Count);
+    if not AProbes[i].IsSource and not AProbes[i].Allowed then
+    begin
+      ASlot := -1;
+      Exit(-1);
+    end;
+    Exit(i);
+  end;
+  Result := -1;
 end;
 
 function TyToolWindowStripLayout(AStripWidth, AStripHeight, AItemSize, AOverflowSize: Integer;

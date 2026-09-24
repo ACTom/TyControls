@@ -42,7 +42,20 @@ type
     procedure TestZoneAtAnswersNoneOffTheParts;
     procedure TestZoneAtOnASideRowIsAlwaysNone;
     procedure TestZoneAtNeverHitsAnEmptyPart;
+    { spec §9.4:跨栏命中(TyToolWindowDropAt),表 D1–D15。 }
+    procedure TestDropAtFindsSlotsOnTheSourceStrip;
+    procedure TestDropAtSourceContentIsNoTarget;
+    procedure TestDropAtOtherBarStripAndContent;
+    procedure TestDropAtAVetoedBarIsNoTarget;
+    procedure TestDropAtHolesAndNestedBars;
+    procedure TestDropAtMapsToWindowIndexes;
+    procedure TestDropAtClippedAndEmptyInputs;
   private
+    { 公共输入:源栏 S、另一侧栏 T(计划 Task 7 的表)。 }
+    function ProbeS: TTyToolWindowDropProbe;
+    function ProbeT: TTyToolWindowDropProbe;
+    procedure CheckDrop(const AMsg: string; const AProbes: array of TTyToolWindowDropProbe;
+      X, Y, AWantProbe, AWantSlot: Integer);
     procedure CheckRect(const AMsg: string; L, T, R, B: Integer; const ARect: TRect);
     { AExpected 是 (窗口序号, Left, Right) 三个一组;纵向一律 0..ARowH。 }
     procedure CheckTabs(const AMsg: string; const AGeom: TTyToolWindowHeaderGeom;
@@ -739,6 +752,137 @@ begin
     AssertFalse(Format('x=%d 不许命中宽 0 的标签', [x]), z = twzTab);
     AssertFalse(Format('x=%d 不许命中零宽的溢出按钮', [x]), z = twzOverflow);
   end;
+end;
+
+{ --- 跨栏命中(spec §9.4) ------------------------------------------------------------- }
+
+function Slot(AIndex, L, T, R, B: Integer): TTyToolWindowSlot;
+begin
+  Result.ItemIndex := AIndex;
+  Result.ItemRect := Rect(L, T, R, B);
+end;
+
+function TTyToolWindowGeometryTests.ProbeS: TTyToolWindowDropProbe;
+begin
+  Result := Default(TTyToolWindowDropProbe);
+  Result.Visible := Rect(0, 0, 200, 400);
+  Result.Cells := Rect(0, 0, 36, 400);
+  SetLength(Result.Slots, 2);
+  Result.Slots[0] := Slot(0, 0, 0, 36, 36);
+  Result.Slots[1] := Slot(1, 0, 36, 36, 72);
+  Result.Count := 2;
+  Result.IsSource := True;
+end;
+
+function TTyToolWindowGeometryTests.ProbeT: TTyToolWindowDropProbe;
+begin
+  Result := Default(TTyToolWindowDropProbe);
+  Result.Visible := Rect(600, 0, 800, 400);
+  Result.Cells := Rect(764, 0, 800, 400);
+  SetLength(Result.Slots, 1);
+  Result.Slots[0] := Slot(0, 764, 0, 800, 36);
+  Result.Count := 1;
+  Result.Allowed := True;
+end;
+
+procedure TTyToolWindowGeometryTests.CheckDrop(const AMsg: string;
+  const AProbes: array of TTyToolWindowDropProbe; X, Y, AWantProbe, AWantSlot: Integer);
+var
+  slot, got: Integer;
+begin
+  got := TyToolWindowDropAt(AProbes, Point(X, Y), slot);
+  AssertEquals(AMsg + ':候选', AWantProbe, got);
+  if AWantProbe >= 0 then AssertEquals(AMsg + ':槽位', AWantSlot, slot)
+  else AssertEquals(AMsg + ':没有目标时槽位 -1', -1, slot);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtFindsSlotsOnTheSourceStrip;
+begin
+  CheckDrop('D1 第一格上半', [ProbeS, ProbeT], 18, 10, 0, 0);
+  CheckDrop('D2 第二个图标中点之后', [ProbeS, ProbeT], 18, 60, 0, 2);
+  CheckDrop('D3 条尾空白 = 最后一个之后', [ProbeS, ProbeT], 18, 300, 0, 2);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtSourceContentIsNoTarget;
+var
+  n: TTyToolWindowDropProbe;
+begin
+  CheckDrop('D4 源栏内容区', [ProbeS, ProbeT], 100, 100, -1, -1);
+  { 后面还有一个候选盖着这一点(没登记成洞):源栏的内容区先截住,不许落到它上面。 }
+  n := ProbeT;
+  n.Visible := Rect(40, 100, 200, 200);
+  n.Cells := Rect(40, 100, 76, 200);
+  n.Slots := nil;
+  n.Count := 0;
+  CheckDrop('D4b 源栏内容区后面还有候选', [ProbeS, n], 120, 150, -1, -1);
+  CheckDrop('D9 编辑区', [ProbeS, ProbeT], 400, 200, -1, -1);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtOtherBarStripAndContent;
+begin
+  CheckDrop('D5 另一侧栏第一格上半', [ProbeS, ProbeT], 780, 10, 1, 0);
+  CheckDrop('D6 另一侧栏条尾', [ProbeS, ProbeT], 780, 300, 1, 1);
+  CheckDrop('D7 另一侧栏内容区 = 末尾空隙', [ProbeS, ProbeT], 650, 200, 1, 1);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtAVetoedBarIsNoTarget;
+var
+  t: TTyToolWindowDropProbe;
+begin
+  t := ProbeT;
+  t.Allowed := False;
+  CheckDrop('D8 被否决:条上', [ProbeS, t], 780, 10, -1, -1);
+  CheckDrop('D8 被否决:内容区', [ProbeS, t], 650, 200, -1, -1);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtHolesAndNestedBars;
+var
+  s, t, n: TTyToolWindowDropProbe;
+begin
+  t := ProbeT;
+  SetLength(t.Holes, 1);
+  t.Holes[0] := Rect(640, 100, 700, 150);
+  CheckDrop('D10 落在嵌套栏里', [ProbeS, t], 660, 120, -1, -1);
+  CheckDrop('D10 洞外照常', [ProbeS, t], 660, 200, 1, 1);
+  s := ProbeS;
+  SetLength(s.Holes, 1);
+  s.Holes[0] := Rect(40, 100, 200, 200);
+  n := ProbeT;
+  n.Visible := Rect(40, 100, 200, 200);
+  n.Cells := Rect(40, 100, 76, 200);
+  n.Slots := nil;
+  n.Count := 0;
+  CheckDrop('D15 嵌在源栏里的栏能当目标', [s, ProbeT, n], 120, 150, 2, 0);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtMapsToWindowIndexes;
+var
+  t: TTyToolWindowDropProbe;
+begin
+  t := ProbeT;
+  t.Count := 3;
+  t.Slots[0] := Slot(2, 764, 0, 800, 36);
+  CheckDrop('D11 条上:窗口序号不是排布序号', [ProbeS, t], 780, 10, 1, 2);
+  CheckDrop('D11 内容区:最后一个已排布之后', [ProbeS, t], 650, 200, 1, 3);
+  { 后两个被溢出收起、排在条上的是窗口 0:「最后一个已排布之后」是 1,不是窗口数。 }
+  t.Slots[0] := Slot(0, 764, 0, 800, 36);
+  CheckDrop('D11b 有溢出时内容区不是窗口数', [ProbeS, t], 650, 200, 1, 1);
+end;
+
+procedure TTyToolWindowGeometryTests.TestDropAtClippedAndEmptyInputs;
+var
+  t: TTyToolWindowDropProbe;
+  none: array of TTyToolWindowDropProbe;
+begin
+  t := ProbeT;
+  t.Count := 0;
+  t.Slots := nil;
+  CheckDrop('D12 空栏', [ProbeS, t], 650, 200, 1, 0);
+  t := ProbeT;
+  t.Visible := Rect(600, 0, 700, 400);
+  CheckDrop('D13 祖先裁掉了图标条', [ProbeS, t], 780, 10, -1, -1);
+  none := nil;
+  CheckDrop('D14 空数组', none, 10, 10, -1, -1);
 end;
 
 initialization
