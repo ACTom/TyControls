@@ -52,3 +52,23 @@ msgstr "编辑分组..."
 #: tycontrols.design.compeditors.rsdtcascedit
 msgid "Edit options..."
 msgstr "编辑选项..."
+
+#: tycontrols.design.compeditors.rsdttwnewwindow
+msgid "New Tool Window"
+msgstr "新建工具窗口"
+
+#: tycontrols.design.compeditors.rsdttwshowwindow
+msgid "Show Window"
+msgstr "显示窗口"
+
+#: tycontrols.design.compeditors.rsdttwaddactions
+msgid "Add Actions Area"
+msgstr "添加操作区"
+
+#: tycontrols.design.compeditors.rsdttwmoveotherside
+msgid "Move to Other Side Bar"
+msgstr "移到另一侧栏"
+
+#: tycontrols.design.compeditors.rsdttwmoveback
+msgid "Move Back into Bar"
+msgstr "移回栏里"

@@ -20,6 +20,11 @@ uses
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.ListGroupPanel, tyControls.PageControl, tyControls.TabSheet,
   tyControls.TreeView, tyControls.Cascader, tyControls.TreeSelect,
+  { Tool window bars / tool windows. Whether a verb applies, and the model half of each verb,
+    live in the runtime unit DesignRules (testable headless); this unit only does the IDE half. }
+  tyControls.ToolWindows, tyControls.ToolWindows.DesignRules,
+  { AddUndoAction takes its old / new values as variants. }
+  Variants,
   { rsDtIconNeedsFont is shared with the GlyphName property editor. }
   tyControls.Design.PropEditors;
 
@@ -125,6 +130,38 @@ type
     procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
   end;
 
+  { A tool window bar's context menu (spec §11): "New Tool Window" and "Show Window >".
+    TDefaultComponentEditor like TTyPageControlEditor: a double-click generates the default
+    event handler rather than running verb 0 (which would add a window on every double-click).
+    No "Delete Tool Window": Hook.DeletePersistent skips the inherited-component check, the
+    owner check and the undo record (designer.pp:3144-3179), so it could delete an inherited
+    window in a descendant form. The Delete key does it properly. }
+  TTyToolWindowBarEditor = class(TDefaultComponentEditor)
+  private
+    function Bar: TTyToolWindowBar;
+    procedure ShowWindowItemClick(Sender: TObject);
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+    procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
+  end;
+
+  { A tool window's context menu (spec §11): "Add Actions Area", "Move to Other Side Bar",
+    "Move Back into Bar >". Always the same three items, greyed when they do not apply, so the
+    menu does not shift under the user's hand. Whether an item applies and what it targets are
+    asked of tyControls.ToolWindows.DesignRules; nothing is decided here. }
+  TTyToolWindowEditor = class(TDefaultComponentEditor)
+  private
+    function Win: TTyToolWindow;
+    procedure MoveBackItemClick(Sender: TObject);
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+    procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
+  end;
+
   { Opens the node editor when a TTyTreeView is double-clicked in the designer.
 
     Descendants that own their own data (TTyShellTreeView) answer SupportsItemModel
@@ -194,6 +231,13 @@ resourcestring
   rsDtImgColEdit    = 'Edit images...';
   rsDtGroupsEdit    = 'Edit groups...';
   rsDtTreeEditNodes = 'Edit Nodes...';
+  { Tool window bars and tool windows (spec §11). Whether each verb applies is decided in the
+    runtime unit tyControls.ToolWindows.DesignRules, where it can be tested. }
+  rsDtTwNewWindow     = 'New Tool Window';
+  rsDtTwShowWindow    = 'Show Window';
+  rsDtTwAddActions    = 'Add Actions Area';
+  rsDtTwMoveOtherSide = 'Move to Other Side Bar';
+  rsDtTwMoveBack      = 'Move Back into Bar';
 
 { TTyIconBrowserComponentEditor }
 
@@ -574,6 +618,181 @@ begin
   end;
 end;
 
+{ TTyToolWindowBarEditor }
+
+function TTyToolWindowBarEditor.Bar: TTyToolWindowBar;
+begin
+  Result := Component as TTyToolWindowBar;
+end;
+
+function TTyToolWindowBarEditor.GetVerbCount: Integer;
+begin
+  Result := 2;
+end;
+
+function TTyToolWindowBarEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := rsDtTwNewWindow;
+    1: Result := rsDtTwShowWindow;
+  else
+    Result := '';
+  end;
+end;
+
+procedure TTyToolWindowBarEditor.ShowWindowItemClick(Sender: TObject);
+var
+  i: Integer;
+  W: TTyToolWindow;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  { Re-read the window list at click time (not in PrepareItem): a window can be deleted
+    while the menu is open. }
+  i := TMenuItem(Sender).MenuIndex;
+  if (i < 0) or (i >= Bar.WindowCount) then Exit;
+  W := Bar.Windows[i];
+  { Design time: activate only. The bar tells the designer and refreshes the inspector
+    itself (spec §5.1 step 6). }
+  Bar.ActiveWindow := W;
+  GetDesigner.SelectOnlyThisComponent(W);
+end;
+
+procedure TTyToolWindowBarEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
+var
+  i: Integer;
+  W: TTyToolWindow;
+  Item: TMenuItem;
+begin
+  inherited PrepareItem(Index, AnItem);
+  case Index of
+    0: AnItem.Enabled := TyToolWindowDesignCanAddWindow(Bar);
+    1: begin
+         AnItem.Enabled := Bar.WindowCount > 0;
+         for i := 0 to Bar.WindowCount - 1 do
+         begin
+           W := Bar.Windows[i];
+           Item := TMenuItem.Create(AnItem);
+           Item.Name := 'TyTwShow' + IntToStr(i);
+           Item.Caption := W.Name + ' "' + W.Caption + '"';
+           Item.OnClick := @ShowWindowItemClick;
+           AnItem.Add(Item);
+         end;
+       end;
+  end;
+end;
+
+procedure TTyToolWindowBarEditor.ExecuteVerb(Index: Integer);
+var
+  Hook: TPropertyEditorHook;
+  W: TTyToolWindow;
+begin
+  if Index <> 0 then Exit;     { "Show Window" is a submenu; its items do the work }
+  if not TyToolWindowDesignCanAddWindow(Bar) then Exit;
+  Hook := nil;
+  if not GetHook(Hook) then Exit;
+  W := TTyToolWindow.Create(Bar.Owner);
+  { Registering makes it the current page (the bar is not loading); a design-time switch
+    tells the designer. }
+  W.Parent := Bar;
+  W.Name := GetDesigner.CreateUniqueComponentName(W.ClassName);
+  W.Caption := W.Name;
+  Hook.PersistentAdded(W, True);
+  { PageControl's "Add Page" records no undo, so Ctrl+Z cannot take an added page away.
+    Dropping from the palette records it with this very call (designer.pp:788). }
+  GetDesigner.AddUndoAction(W, uopAdd, True, 'Name', '', W.Name);
+  Modified;
+end;
+
+{ TTyToolWindowEditor }
+
+function TTyToolWindowEditor.Win: TTyToolWindow;
+begin
+  Result := Component as TTyToolWindow;
+end;
+
+function TTyToolWindowEditor.GetVerbCount: Integer;
+begin
+  Result := 3;
+end;
+
+function TTyToolWindowEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := rsDtTwAddActions;
+    1: Result := rsDtTwMoveOtherSide;
+    2: Result := rsDtTwMoveBack;
+  else
+    Result := '';
+  end;
+end;
+
+procedure TTyToolWindowEditor.MoveBackItemClick(Sender: TObject);
+var
+  targets: TTyToolWindowBarArray;
+  i: Integer;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  { Recompute the candidates at click time (a bar can be deleted while the menu is open)
+    and pick by position, like TTyPageControlEditor.ShowPageMenuItemClick. }
+  targets := TyToolWindowDesignReturnTargets(Win);
+  i := TMenuItem(Sender).MenuIndex;
+  if (i < 0) or (i > High(targets)) then Exit;
+  if TyToolWindowDesignReturnToBar(Win, targets[i]) then
+  begin
+    Modified;
+    GetDesigner.SelectOnlyThisComponent(Win);
+  end;
+end;
+
+procedure TTyToolWindowEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
+var
+  targets: TTyToolWindowBarArray;
+  i: Integer;
+  Item: TMenuItem;
+begin
+  inherited PrepareItem(Index, AnItem);
+  case Index of
+    0: AnItem.Enabled := TyToolWindowDesignCanAddActions(Win);
+    1: AnItem.Enabled := TyToolWindowDesignOtherSide(Win) <> nil;
+    2: begin
+         targets := TyToolWindowDesignReturnTargets(Win);
+         AnItem.Enabled := Length(targets) > 0;
+         for i := 0 to High(targets) do
+         begin
+           Item := TMenuItem.Create(AnItem);
+           Item.Name := 'TyTwBack' + IntToStr(i);
+           Item.Caption := targets[i].Name;
+           Item.OnClick := @MoveBackItemClick;
+           AnItem.Add(Item);
+         end;
+       end;
+  end;
+end;
+
+procedure TTyToolWindowEditor.ExecuteVerb(Index: Integer);
+var
+  Hook: TPropertyEditorHook;
+  A: TTyToolWindowActions;
+begin
+  case Index of
+    0: begin
+         if not TyToolWindowDesignCanAddActions(Win) then Exit;
+         Hook := nil;
+         if not GetHook(Hook) then Exit;
+         A := Win.EnsureActions;
+         A.Name := GetDesigner.CreateUniqueComponentName(A.ClassName);
+         Hook.PersistentAdded(A, True);
+         GetDesigner.AddUndoAction(A, uopAdd, True, 'Name', '', A.Name);
+         Modified;
+       end;
+    1: { MoveWindow notifies the designer itself at design time (spec §11, C-phase
+         correction), so no Modified here. Not undoable: click it again to move back. }
+       if TyToolWindowDesignMoveToOtherSide(Win) then
+         GetDesigner.SelectOnlyThisComponent(Win);
+    { 2 is the "Move Back into Bar" submenu; its items do the work. }
+  end;
+end;
+
 { TTyTreeViewComponentEditor }
 
 function TTyTreeViewComponentEditor.Tree: TTyTreeView;
@@ -690,6 +909,10 @@ begin
   RegisterComponentEditor(TTyAdvanceChart, TTyAdvanceChartEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
+  // Tool window bars: New Tool Window / Show Window; tool windows: Add Actions Area / Move to
+  // Other Side Bar / Move Back into Bar (spec §11). Double-click still makes the default event.
+  RegisterComponentEditor(TTyToolWindowBar, TTyToolWindowBarEditor);
+  RegisterComponentEditor(TTyToolWindow, TTyToolWindowEditor);
   // Double-click a tree in the designer to open its node editor, the way LCL's own
   // TTreeView opens the "TreeView Items Editor". GetComponentEditor picks the
   // most-derived registration, so this also covers TTyShellTreeView -- the editor asks

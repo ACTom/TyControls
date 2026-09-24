@@ -45,3 +45,23 @@ msgstr ""
 msgid "Edit Nodes..."
 msgstr ""
 
+#: tycontrols.design.compeditors.rsdttwaddactions
+msgid "Add Actions Area"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttwmoveback
+msgid "Move Back into Bar"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttwmoveotherside
+msgid "Move to Other Side Bar"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttwnewwindow
+msgid "New Tool Window"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttwshowwindow
+msgid "Show Window"
+msgstr ""
+
