@@ -49,18 +49,21 @@ type
     Show: Boolean;
     Text: string;
     Subtext: string;
-    Box: TTyBoxSpec;
+    { THE BOX AS UPSTREAM'S MODEL HOLDS IT: the raw option values over the
+      defaults (left 'center', top 15), merged by mergeLayoutParam's
+      ignoreSize rule -- a right of its own nulls the default left. }
+    Box: TTyRawBox;
     { CSS order: top, right, bottom, left. Kept as four because `padding` takes
       the CSS short forms and collapsing them early would lose them. }
     Padding: array[0..3] of Double;
     ItemGap: Double;
     Align: TTyTitleAlign;
     VAlign: TTyTitleVAlign;
-    { WHAT THE OPTION SAID, not what it solved to. The auto-align rules read the
-      keyword rather than the number, so `left: 'center'` and `left: '50%'` --
-      the same place -- align differently. That is upstream's, and it is why
-      these are kept alongside the box rather than folded into it. }
-    LeftWord, RightWord, TopWord, BottomWord: string;
+    { WHAT THE MODEL SAYS, not what it solved to: `left || right` and
+      `top || bottom` of the merged box, as their strings. The auto-align
+      rules read the word rather than the number, so `left: 'center'` and
+      `left: '50%'` -- the same place -- align differently. }
+    WordH, WordV: string;
     HasBackground: Boolean;
     BorderWidth: Double;
     BorderRadii: TTyCornerRadii;
@@ -71,8 +74,11 @@ type
   TTyTitleLayout = record
     Valid: Boolean;
     HasSub: Boolean;
-    { The background box, padding included. }
+    { The background box, padding included -- and as upstream builds it, x, y,
+      width, height: the group's position plus its own local box less the
+      padding, and the block's size plus the padding. }
     Frame: TTyRectF;
+    FrameX, FrameY, FrameW, FrameH: Double;
     TextX, TextY: Double;
     SubX, SubY: Double;
     TextW, TextH: Double;
@@ -117,51 +123,12 @@ begin
   Result := AOption.ComponentCount('title');
 end;
 
-{ THE KEYWORD SWITCH, layout.ts:350-367, and the ONE place that turns an edge
-  word into a pinned edge.
-
-  It runs after both edges have been resolved as numbers and REPLACES that
-  answer, because `left: 'right'` does not mean `the left edge sits at 100%`
-  -- which is what a percentage alone answers, and which puts the block
-  entirely outside the container. It means `flush right`: the RIGHT edge is
-  pinned and the left one is free.
-
-  It consults `left` first and falls to `right` only when left is absent or
-  zero, so `left: 'right'` is the idiomatic way to put a title on the right
-  and `right: 10` on its own does NOT move it -- the default 'center' is
-  still in `left` and wins the test.
-
-  CALLED BY THE DEFAULT TOO. It used to be called only by the reader, with
-  the default pinning its own box beside the word it was derived from; the
-  second copy was then overwritten on every path that drew, and a mutant that
-  broke it changed nothing. One authority, run twice. }
-procedure ApplyEdgeWords(var ASpec: TTyTitleSpec);
-var w: string;
+{ title's defaultOption's box: `left: 'center'`, `top: 15`. }
+function DefaultBox: TTyRawBox;
 begin
-  w := ASpec.LeftWord;
-  if w = '' then w := ASpec.RightWord;
-  if (w = 'center') or (w = 'centre') or (w = 'middle') then
-  begin
-    ASpec.Box.Left := TyBoxCentre;
-    ASpec.Box.Right := TyBoxAuto;
-  end
-  else if w = 'right' then
-  begin
-    ASpec.Box.Left := TyBoxAuto;
-    ASpec.Box.Right := TyBoxPx(0);
-  end;
-  w := ASpec.TopWord;
-  if w = '' then w := ASpec.BottomWord;
-  if (w = 'middle') or (w = 'center') or (w = 'centre') then
-  begin
-    ASpec.Box.Top := TyBoxCentre;
-    ASpec.Box.Bottom := TyBoxAuto;
-  end
-  else if w = 'bottom' then
-  begin
-    ASpec.Box.Top := TyBoxAuto;
-    ASpec.Box.Bottom := TyBoxPx(0);
-  end;
+  Result := Default(TTyRawBox);
+  Result.Left := TyBoxRawStr('center');
+  Result.Top := TyBoxRawNum(cDefaultTop);
 end;
 
 function TyTitleSpecDefault: TTyTitleSpec;
@@ -170,81 +137,16 @@ begin
   Result.Show := True;
   Result.Text := '';
   Result.Subtext := '';
-  Result.Box := TyBoxSpec;
-  Result.Box.Top := TyBoxPx(cDefaultTop);
+  Result.Box := DefaultBox;
   for i := 0 to 3 do Result.Padding[i] := cDefaultPadding;
   Result.ItemGap := cDefaultItemGap;
   Result.Align := ttaAuto;
   Result.VAlign := ttvAuto;
-  Result.LeftWord := 'center';
-  Result.RightWord := '';
-  Result.TopWord := '';
-  Result.BottomWord := '';
+  Result.WordH := TyBoxWord(Result.Box.Left, Result.Box.Right);
+  Result.WordV := TyBoxWord(Result.Box.Top, Result.Box.Bottom);
   Result.HasBackground := False;
   Result.BorderWidth := 0;
   Result.BorderRadii := TyCornerRadii([]);
-  ApplyEdgeWords(Result);
-end;
-
-function ParseFloatIn(const AText: string; out AValue: Double): Boolean;
-var fs: TFormatSettings;
-begin
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  Result := TryStrToFloat(Trim(AText), AValue, fs);
-end;
-
-{ A box edge, plus the KEYWORD it was written as ('' when it was a number)
-  and whether the option mentioned it at all.
-
-  AN EXPLICIT null CLEARS IT rather than falling back to the default: that
-  is how a chart says `not this edge, the other one`, and treating it as
-  absent would leave the default `left: 'center'` in place and centre a
-  title that asked to be flush right. }
-function EdgeIn(ANode: TJSONObject; const AKey: string;
-  const ADefault: TTyBoxValue; out AWord: string;
-  out AGiven: Boolean): TTyBoxValue;
-var
-  d: TJSONData;
-  s: string;
-  v: Double;
-begin
-  Result := ADefault;
-  AWord := '';
-  AGiven := False;
-  if ANode = nil then Exit;
-  d := ANode.Find(AKey);
-  if d = nil then Exit;
-  AGiven := True;
-  if d.JSONType = jtNull then Exit(TyBoxAuto);
-  if d.JSONType = jtNumber then
-  begin
-    { A ZERO IS FALSY UPSTREAM, and the auto-align rules test truthiness. So
-      `left: 0` does not make the text left-aligned -- it falls through to
-      `right`, and with neither set the text ends up left-aligned anyway by a
-      different route. The word is left empty here to keep that distinction. }
-    AWord := '';
-    Exit(TyBoxPx(d.AsFloat));
-  end;
-  if d.JSONType <> jtString then Exit;
-  s := Trim(d.AsString);
-  if s = '' then Exit;
-  AWord := s;
-  if (s = 'center') or (s = 'centre') or (s = 'middle') then Exit(TyBoxCentre);
-  if (s = 'left') or (s = 'top') then Exit(TyBoxPx(0));
-  { 'right' and 'bottom' resolve to 100% here and are then OVERRIDDEN by the
-    keyword switch in the caller. Kept faithful rather than short-circuited
-    because the number is what a chart sees if it ever asks for the edge
-    without the switch -- and because upstream computes it too. }
-  if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
-  if s[Length(s)] = '%' then
-  begin
-    if ParseFloatIn(Copy(s, 1, Length(s) - 1), v) then Exit(TyBoxPercent(v));
-    AWord := '';
-    Exit;
-  end;
-  if ParseFloatIn(s, v) then Exit(TyBoxPx(v));
-  AWord := '';
 end;
 
 function StrIn(ANode: TJSONObject; const AKey: string): string;
@@ -267,9 +169,11 @@ begin
   Result := d.AsFloat;
 end;
 
+{ textAlign: 'middle' is read as 'center' (install.ts), and a word it does
+  not know -- `centre` among them -- is no alignment. }
 function AlignOf(const AText: string): TTyTitleAlign;
 begin
-  if (AText = 'center') or (AText = 'centre') or (AText = 'middle') then
+  if (AText = 'center') or (AText = 'middle') then
     Result := ttaCentre
   else if AText = 'right' then
     Result := ttaRight
@@ -334,8 +238,6 @@ function TyTitleSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyTitleSpec;
 var
   node: TJSONObject;
   d: TJSONData;
-  w: string;
-  given: Boolean;
 begin
   Result := TyTitleSpecDefault;
   if AOption = nil then Exit;
@@ -347,16 +249,9 @@ begin
   Result.Text := StrIn(node, 'text');
   Result.Subtext := StrIn(node, 'subtext');
 
-  Result.Box.Left := EdgeIn(node, 'left', Result.Box.Left, w, given);
-  if given then Result.LeftWord := w;
-  Result.Box.Right := EdgeIn(node, 'right', Result.Box.Right, w, given);
-  Result.RightWord := w;
-  Result.Box.Top := EdgeIn(node, 'top', Result.Box.Top, w, given);
-  Result.TopWord := w;
-  Result.Box.Bottom := EdgeIn(node, 'bottom', Result.Box.Bottom, w, given);
-  Result.BottomWord := w;
-
-  ApplyEdgeWords(Result);
+  Result.Box := TyMergeBoxIgnoreSize(node, DefaultBox);
+  Result.WordH := TyBoxWord(Result.Box.Left, Result.Box.Right);
+  Result.WordV := TyBoxWord(Result.Box.Top, Result.Box.Bottom);
 
   ReadPadding(node, Result.Padding);
   Result.ItemGap := NumIn(node, 'itemGap', Result.ItemGap);
@@ -382,9 +277,9 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
   APPI: Integer): TTyTitleLayout;
 var
-  spec: TTyBoxSpec;
-  box: TTyRectF;
-  gw, gh, gap: Double;
+  raw: TTyRawBox;
+  r: TTyXYWH;
+  gw, gh, gap, gx, gy, lx, ly: Double;
   pad: array[0..3] of Double;
   i: Integer;
   word_: string;
@@ -418,12 +313,15 @@ begin
   if Result.HasSub then gh := gh + gap + Result.SubH;
   if (gw <= 0) or (gh <= 0) then Exit;
 
-  spec := ASpec.Box;
-  spec.Width := TyBoxPx(gw);
-  spec.Height := TyBoxPx(gh);
-  box := TySolveBox(spec, TyFixedContainer(AContainer),
+  { getLayoutRect on the merged option with the measured block as the size }
+  raw := ASpec.Box;
+  raw.Width := TyBoxRawNum(gw);
+  raw.Height := TyBoxRawNum(gh);
+  r := TyGetLayoutRect(raw, AContainer.Left, AContainer.Top,
+    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top,
     [pad[0], pad[1], pad[2], pad[3]]);
-  if not TyRectFIsValid(box) then Exit;
+  gx := r.X;
+  gy := r.Y;
 
   Result.Align := ASpec.Align;
   Result.VAlign := ASpec.VAlign;
@@ -434,61 +332,54 @@ begin
     outside its own frame. }
   if Result.Align = ttaAuto then
   begin
-    word_ := ASpec.LeftWord;
-    if word_ = '' then word_ := ASpec.RightWord;
+    word_ := ASpec.WordH;
     Result.Align := AlignOf(word_);
     if Result.Align = ttaAuto then Result.Align := ttaLeft;
     if Result.Align = ttaRight then
-      box.Left := box.Left + TyRectFWidth(box)
+      gx := gx + r.W
     else if Result.Align = ttaCentre then
-      box.Left := box.Left + TyRectFWidth(box) / 2;
+      gx := gx + r.W / 2;
   end;
 
   if Result.VAlign = ttvAuto then
   begin
-    word_ := ASpec.TopWord;
-    if word_ = '' then word_ := ASpec.BottomWord;
+    word_ := ASpec.WordV;
     Result.VAlign := VAlignOf(word_);
     if Result.VAlign = ttvBottom then
-      box.Top := box.Top + TyRectFHeight(box)
+      gy := gy + r.H
     else if Result.VAlign = ttvMiddle then
-      box.Top := box.Top + TyRectFHeight(box) / 2;
+      gy := gy + r.H / 2;
     if Result.VAlign = ttvAuto then Result.VAlign := ttvTop;
   end;
 
-  Result.TextX := box.Left;
-  Result.TextY := box.Top;
-  Result.SubX := box.Left;
-  Result.SubY := box.Top + Result.TextH + gap;
+  Result.TextX := gx;
+  Result.TextY := gy;
+  Result.SubX := gx;
+  Result.SubY := gy + (Result.TextH + gap);
 
-  { The frame is the BLOCK plus the padding, wherever the alignment left the
-    anchor -- so it follows the text rather than staying where the box was
-    solved. }
+  { THE FRAME is the block plus the padding, wherever the alignment left the
+    anchor -- upstream's order: the group's own box (which the alignment
+    moved to -w/2 or -w) less the padding, then placed at the group. The
+    vertical half keeps the block whole: upstream aligns each line on its
+    own for middle and bottom, which is not done here. }
   case Result.Align of
-    ttaCentre: Result.Frame := TyRectF(box.Left - gw / 2, 0, box.Left + gw / 2, 0);
-    ttaRight: Result.Frame := TyRectF(box.Left - gw, 0, box.Left, 0);
+    ttaCentre: lx := -gw / 2;
+    ttaRight: lx := -gw;
   else
-    Result.Frame := TyRectF(box.Left, 0, box.Left + gw, 0);
+    lx := 0;
   end;
   case Result.VAlign of
-    ttvMiddle:
-      begin
-        Result.Frame.Top := box.Top - gh / 2;
-        Result.Frame.Bottom := box.Top + gh / 2;
-      end;
-    ttvBottom:
-      begin
-        Result.Frame.Top := box.Top - gh;
-        Result.Frame.Bottom := box.Top;
-      end;
+    ttvMiddle: ly := -gh / 2;
+    ttvBottom: ly := -gh;
   else
-    Result.Frame.Top := box.Top;
-    Result.Frame.Bottom := box.Top + gh;
+    ly := 0;
   end;
-  Result.Frame.Left := Result.Frame.Left - pad[3];
-  Result.Frame.Right := Result.Frame.Right + pad[1];
-  Result.Frame.Top := Result.Frame.Top - pad[0];
-  Result.Frame.Bottom := Result.Frame.Bottom + pad[2];
+  Result.FrameX := gx + (lx - pad[3]);
+  Result.FrameY := gy + (ly - pad[0]);
+  Result.FrameW := gw + pad[1] + pad[3];
+  Result.FrameH := gh + pad[0] + pad[2];
+  Result.Frame := TyRectF(Result.FrameX, Result.FrameY,
+    Result.FrameX + Result.FrameW, Result.FrameY + Result.FrameH);
 
   Result.Valid := True;
 end;

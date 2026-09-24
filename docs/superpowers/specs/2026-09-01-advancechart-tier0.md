@@ -2433,6 +2433,7 @@ title 和 legend 都靠它定位。加进**唯一那个求解器**,而不是在�
 
 顺带两个后果:`left: 'right'` 才是把标题放右边的惯用写法;
 而 `right: 10` 单独写**不会移动它**——默认的 `left: 'center'` 还在,而 switch 先看 left。
+**[第五十二批:错。上游用 mergeLayoutParam 的 ignoreSize 规则把选项并进默认值,选项自己写了 `right` 就把默认的 `left` 置成 null,`right: 10` 单独写照样把标题挪到右边。见 §86。]**
 
 ### 一个照抄的怪处
 
@@ -2717,6 +2718,7 @@ zrender 给描边路径的包围盒每边加半个笔宽。
   夹具自己的一个特性,把夹具本身废了。
 - `right: 10` 是**数字不是关键字**,所以「left 先还是 right 先」两种读法答案一样。
   要 `{left: 'left', right: 'right'}` 两边都写关键字才看得见。
+  **[第五十二批:合并之后 left、right 至多一个有值,这个读序对 title/legend 已不可观察。见 §86。]**
 - 边界比较 `>` 和 `>=`:两项 100、上限 100 的夹具**两种读法画出来一模一样**——
   第一项一旦挤爆,后面每一项都换行。要把上限放宽到 208,**让第二项正好落在线上**。
 - 折行修正项 `(-next.x + this.x)`:所有项 rect.x 都是 0 就分不出。要右对齐、
@@ -4899,6 +4901,7 @@ x/y 的包围盒——而 `circular` 和 `force` 的图**一个节点都不写**
   (`'Center'`、`'centre'` 不是词),以 `%` 结尾(去掉首尾空白之后)才是百分比,
   其余走 `parseFloat`;`null`、`''`、`'auto'` 是 NaN,`false` 是 0。
   共用的解析器会转小写、会接受 `centre`——对别的组件无害,对 graph 的框会挪位置,
+  **[第五十二批:对 title / legend 也不是无害的——`left: 'centre'` 上游是 x 5,不居中;两者已改用照抄的解析,见 §86。]**
   所以 graph 单独照抄一份。**`right/bottom/width/height` 在系列上没写时一路找到 option 根**
   (`getShallow` 不忽略父模型)——根上一个无关的 `width` 会改 graph 的框,上游就是这样。
 - **`preserveAspect`**(`contain`/`cover` 与两个对齐)补上了:框在自己里面再排一次。
@@ -6283,7 +6286,7 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
   **[第四十三批:指针像素已改用 clamp。]**
 - **K 线**:仍逐轴,没有 subPixelOptimize。
 - **轴断裂**:port 不建断裂,矩阵门控没查断裂。
-- title / legend 的 box 选项还没按 mergeLayoutParam 合并,只做了 grid。
+- title / legend 的 box 选项还没按 mergeLayoutParam 合并,只做了 grid。**[第五十二批已做,见 §86。]**
 
 ### 变异测试
 
@@ -6378,7 +6381,7 @@ Pascal 测试另外加比柱列的 offset 和 size。这 10 个随后全部被�
 - **旋转标签的矩形**:上游把组矩阵乘标签自身的变换,再分解、重组,旋转角因此差 1–6 ulp,±90° 时还要 V8 的 `tan`;port 直接用请求的旋转角。矩形差 ≤ 1.14e-13,在各用例容差内。`remRadian` 的写法也不同(差到 64 ulp,只影响这个矩阵)。
   **[第五十一批已做,见 §85。几处事实更正:分解后的旋转角差 ≤ 1.1e-15 rad;需要 V8 `tan` 的是请求角在 (−180°, −90°] ∪ [181°, 270°](顶部离零点的轴镜像),不是 ±90°;`remRadian` 两种写法最多差 1 ulp(2π),不是 64 ulp;不转的 y 轴标签也受影响——轴名称"占用区"经过同一矩阵,中间名称差 7.1e-15。]**
 - 刻度线、轴线像素的 `subPixelOptimizeLine`,以及 y 轴刻度两端的 `ct·c` 项:是绘制几何,亚像素。
-- 上游的 title / legend 选项合并(mergeLayoutParam)仍只做了 grid。
+- 上游的 title / legend 选项合并(mergeLayoutParam)仍只做了 grid。**[第五十二批已做,见 §86。]**
 
 ### 变异测试
 
@@ -6975,3 +6978,56 @@ tooltip 子行 → 旋转标签矩形的分解重组(连同 V8 的 `tan`)、titl
 ### 还在队列里
 
 title / legend 的 mergeLayoutParam(第五十二批,审计已完成)→ D9 数据解析对齐。
+
+## 86. Tier 1 第五十二批:title / legend 的 mergeLayoutParam 与照抄的 getLayoutRect(2026-09-24)
+
+标题和图例的位置,上游是"选项并进默认值,再按原始值 getLayoutRect"。port 以前各边单独读、共用的宽松解析器求解:默认的 `left: 'center'`、标题的 `top: 15`、图例的 `bottom: 15` 在用户写了对边之后仍然留着,于是 `right: 10` 不动、`bottom: 10` 不动。
+
+### 上游的做法
+
+- **合并**(`mergeLayoutParam`,title 和 legend 都走 `ignoreSize` 分支,滚动图例也是):选项**自己的** left(top)有值——不是 null、不是 `'auto'`——就把 right(bottom)置 null;否则自己的 right(bottom)有值就把 left(top)置 null;宽高不动。判断的是用户写的原值,在并进默认值之前;显式的 null 会留下来。
+- **解析**(`parsePositionOption`):四个词精确匹配,去掉 JS 空白后以 `%` 结尾才是百分比,其余字符串 `parseFloat`,null 与未写是 NaN,布尔是 0/1。所以 `'centre'`、`' center'`、`'Center'` 都是读不出的 NaN,`'10px'` 是 10,`true` 是 1。
+- **求解**(`getLayoutRect`):NaN 运算按上游顺序;关键字开关看合并后的 `left || right`、`top || bottom`;宽高的兜底;最后 `BoundingRect` 遇负宽翻到另一边。
+- **图例**解两次:第一次用选项自己的盒子(关键字照样生效)求折行空间;第二次用测得的大小求位置,测量值胜过写的宽高。`itemAlign` 看合并后的 `left === 'right'`。
+- **标题**:文字块大小作宽高;自动对齐按那两个词移位;背景是组的位置加上组内盒子减内边距。
+
+### port 以前
+
+- 不合并;`EdgeIn` 把 `'auto'`、读不出的值、布尔、带空格的词都当成默认值;`'centre'` 算关键字。
+- 关键字在折行求解之前就把盒子改写了,竖向 `bottom: 'bottom'` 的折行空间是整个高度(上游只剩 10)。
+- 共用求解器的运算顺序不同,只精确到两位小数;负宽度收成 0 而不是翻转。
+- `TestARightEdgeAloneDoesNotMoveTheLegend` 钉的正是这个 bug。
+
+### 做法
+
+- `Layout`:原始盒值 `TTyBoxRaw` / `TTyRawBox`(未写、null、数、字符串、布尔、其他),`TyMergeBoxIgnoreSize`、`TyBoxRawPos` / `TyBoxRawResolve`(parsePositionOption)、`TyBoxWord`(`a || b` 取字符串)、`TyGetLayoutRect`(逐句,含 margin 与翻转)。
+- `Title`:规格存合并后的原始盒子和两个词;删掉 `ApplyEdgeWords`、`EdgeIn`;布局走 `TyGetLayoutRect`;`textAlign` 不再认 `'centre'`;背景按上游顺序算出 x、y、宽、高(另存 `FrameX/Y/W/H`)。
+- `Legend`:同样的规格;公开 `TyLegendWrapRect`、`TyLegendPlaceRect` 两次求解,由 `TyLayoutLegend` 调用;折行上限直接用求出的宽高;`itemAlign` 读合并后的 left。
+
+### 基准
+
+- 新的 `tools/advchart-oracle/box-merge.js` → `advchart-box-merge.json`,400 × 300:24 个标题、16 个图例、1 个滚动图例;记下合并后的每个键(未写 / null / `'auto'` / 值)、按基数解析的结果、两个词、标题的测量、组位置、对齐与背景,图例每个名字的测量、折行空间、内容矩形、放置矩形、列数行数和 itemAlign。生成器内嵌逐句的 JS 副本逐位自查;18 个判别守卫,每个对应一个变异体。
+- `test.advchart.boxmerge`:合并结果与解析逐位;标题用夹具自己的宽高做查表测量器,组位置、对齐、背景逐位(竖直居中/底部只比 x 与宽,见偏差);图例折行空间与放置矩形逐位;接线测试走完整的 `TyLayoutLegend`,列数、行数和 itemAlign 与上游一致。
+
+### 被推翻的旧测试和旧说法
+
+- `test.advchart.legend.pas` `TestARightEdgeAloneDoesNotMoveTheLegend` → `TestARightEdgeAloneMovesTheLegend`:右边缘距右 10 减内边距,即 385 / 315。
+- `test.advchart.title.pas`:"`right: 0` 单独不动标题"的说明错,补钉 `right: 10` 会移动;"left 先读"的理由改为合并后不可观察;默认规格的断言改成原始盒子。
+- 设计日志里 §42 的 `right: 10` 不动、§45 的读序理由、§64 的"`centre` 对别的组件无害"、§76 与 §77 的"只做了 grid",原处都有标注。
+
+### 已知偏差
+
+- 标题 `top: 'middle'` / `'bottom'`:上游每行文字各自竖直对齐,port 整块对齐(背景的 y 与高度不同)。
+- 选项根上的 left/top 通过 `getShallow` 漏进组件:不做(画廊里没有)。
+- 第二次 `setOption` 的合并、滚动图例的翻页:port 没有这些路径。
+- grid 等其他盒子仍用共用求解器。
+
+### 变异测试
+
+21 个。20 个被杀,1 个等价:`x || 0` 把 −0 当成 −0 返回——坐标是 `0 + left + margin`,`0 + (−0)` 就是 +0,逐位相同。
+
+第一轮存活 5 个,补了 4 个上游用例:竖向 `right: 'right'`(itemAlign 读合并后的 left 而不是开关词)、`top: 'center'`、`right: '20% '`(先去空白再判百分号)、一个恰好让背景 x 的两种运算顺序舍入不同的标题("Budget",宽 57.42)。
+
+### 还在队列里
+
+D9 数据解析对齐(`'   '` → 0、`'0x10'` → 16、`'Infinity'` → ∞)。这是计划里的最后一项。

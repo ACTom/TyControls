@@ -140,6 +140,54 @@ function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
 function TySolveBoxXYWH(const ASpec: TTyBoxSpec;
   const AContainer: ITyBoxContainer): TTyXYWH;
 
+{ ---- a box as upstream's option holds it: title and legend ----
+
+  The shared solver above is kinder than upstream -- it trims, lower-cases,
+  takes `centre` and falls back to the default for a word it does not know.
+  Title and legend are placed by getLayoutRect on the RAW option values, so
+  they keep them raw: what was written, of which JSON kind. }
+type
+  TTyBoxRawKind = (brAbsent, brNull, brNumber, brString, brBool, brOther);
+  TTyBoxRaw = record
+    Kind: TTyBoxRawKind;
+    Num: Double;   // a number; a boolean's 0 or 1
+    Str: string;
+  end;
+  TTyRawBox = record
+    Left, Right, Top, Bottom, Width, Height: TTyBoxRaw;
+  end;
+  { parsePositionOption's answer before it meets a base. }
+  TTyPosKind = (tpkNaN, tpkPx, tpkPct);
+  TTyPos = record
+    Kind: TTyPosKind;
+    V: Double;
+  end;
+
+function TyBoxRawOf(AData: TJSONData): TTyBoxRaw;
+function TyBoxRawNum(AValue: Double): TTyBoxRaw;
+function TyBoxRawStr(const AText: string): TTyBoxRaw;
+{ mergeLayoutParam's ignoreSize branch, for a component laid out at init:
+  the six keys from the option (a JSON null included) or else ADefault; then
+  when the option's OWN left (top) has a value -- not null, not 'auto' -- the
+  right (bottom) becomes null, else when its own right (bottom) has one the
+  left (top) does. Width and height are never touched. }
+function TyMergeBoxIgnoreSize(ANode: TJSONObject;
+  const ADefault: TTyRawBox): TTyRawBox;
+{ parsePositionOption: the four words exactly, a trimmed string ending in
+  `%` a percentage, other strings parseFloat, null not-a-number, anything
+  else a unary plus. }
+function TyBoxRawPos(const A: TTyBoxRaw): TTyPos;
+{ That against its base: a percentage of it, a pixel count, or not-a-number. }
+function TyBoxRawResolve(const A: TTyBoxRaw; ABase: Double): Double;
+{ `a || b` as getLayoutRect's keyword switch sees it: the first truthy of the
+  two, as its string -- '' when it is no string. }
+function TyBoxWord(const A, B: TTyBoxRaw): string;
+{ getLayoutRect, line for line: NaN arithmetic in upstream's order, the
+  keyword switch, the width fallback, and BoundingRect's sign flip. AMargin
+  in CSS order. }
+function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
+  const AMargin: array of Double): TTyXYWH;
+
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
 
@@ -674,7 +722,7 @@ function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
 implementation
 
 uses tyControls.AdvChart.AxisName, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.AxisLabels;
+  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Data;
 
 type
   TTyFixedContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -1331,6 +1379,212 @@ begin
   end;
 end;
 
+
+{ ==================== getLayoutRect on raw values ==================== }
+
+function TyBoxRawOf(AData: TJSONData): TTyBoxRaw;
+begin
+  Result := Default(TTyBoxRaw);
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNull: Result.Kind := brNull;
+    jtNumber:
+      begin
+        Result.Kind := brNumber;
+        Result.Num := AData.AsFloat;
+      end;
+    jtString:
+      begin
+        Result.Kind := brString;
+        Result.Str := AData.AsString;
+      end;
+    jtBoolean:
+      begin
+        Result.Kind := brBool;
+        if AData.AsBoolean then Result.Num := 1 else Result.Num := 0;
+      end;
+  else
+    Result.Kind := brOther;
+  end;
+end;
+
+function TyBoxRawNum(AValue: Double): TTyBoxRaw;
+begin
+  Result := Default(TTyBoxRaw);
+  Result.Kind := brNumber;
+  Result.Num := AValue;
+end;
+
+function TyBoxRawStr(const AText: string): TTyBoxRaw;
+begin
+  Result := Default(TTyBoxRaw);
+  Result.Kind := brString;
+  Result.Str := AText;
+end;
+
+function TyMergeBoxIgnoreSize(ANode: TJSONObject;
+  const ADefault: TTyRawBox): TTyRawBox;
+
+  { The option's own value when it has the key, the default otherwise. }
+  function Pick(const AKey: string; const ADef: TTyBoxRaw): TTyBoxRaw;
+  var d: TJSONData;
+  begin
+    Result := ADef;
+    if ANode = nil then Exit;
+    d := ANode.Find(AKey);
+    if d <> nil then Result := TyBoxRawOf(d);
+  end;
+
+  { hasValue on the OPTION'S OWN value: `!= null && !== 'auto'`. }
+  function Own(const AKey: string): Boolean;
+  var d: TJSONData;
+  begin
+    Result := False;
+    if ANode = nil then Exit;
+    d := ANode.Find(AKey);
+    if (d = nil) or (d.JSONType = jtNull) then Exit;
+    if (d.JSONType = jtString) and (d.AsString = 'auto') then Exit;
+    Result := True;
+  end;
+
+var nul: TTyBoxRaw;
+begin
+  Result.Left := Pick('left', ADefault.Left);
+  Result.Right := Pick('right', ADefault.Right);
+  Result.Top := Pick('top', ADefault.Top);
+  Result.Bottom := Pick('bottom', ADefault.Bottom);
+  Result.Width := Pick('width', ADefault.Width);
+  Result.Height := Pick('height', ADefault.Height);
+  nul := Default(TTyBoxRaw);
+  nul.Kind := brNull;
+  if Own('left') then Result.Right := nul
+  else if Own('right') then Result.Left := nul;
+  if Own('top') then Result.Bottom := nul
+  else if Own('bottom') then Result.Top := nul;
+end;
+
+function TyBoxRawPos(const A: TTyBoxRaw): TTyPos;
+var s: string;
+begin
+  Result.Kind := tpkNaN;
+  Result.V := NaN;
+  case A.Kind of
+    brNumber, brBool:
+      begin
+        Result.Kind := tpkPx;
+        Result.V := A.Num;
+      end;
+    brString:
+      begin
+        s := A.Str;
+        if (s = 'center') or (s = 'middle') then s := '50%'
+        else if (s = 'left') or (s = 'top') then s := '0%'
+        else if (s = 'right') or (s = 'bottom') then s := '100%';
+        s := TyJsTrim(s);
+        if (s <> '') and (s[Length(s)] = '%') then Result.Kind := tpkPct
+        else Result.Kind := tpkPx;
+        if (A.Str = 'center') or (A.Str = 'middle') then Result.V := 50
+        else if (A.Str = 'left') or (A.Str = 'top') then Result.V := 0
+        else if (A.Str = 'right') or (A.Str = 'bottom') then Result.V := 100
+        else Result.V := TyJsParseFloat(A.Str);
+        if IsNan(Result.V) then Result.Kind := tpkNaN;
+      end;
+  end;
+end;
+
+{ One position against its base: `parseFloat(option) / 100 * base + 0`, a
+  pixel count, or not-a-number. }
+function TyBoxRawResolve(const A: TTyBoxRaw; ABase: Double): Double;
+var p: TTyPos;
+begin
+  p := TyBoxRawPos(A);
+  case p.Kind of
+    tpkPx: Result := p.V;
+    tpkPct: Result := p.V / 100 * ABase + 0;
+  else
+    Result := NaN;
+  end;
+end;
+
+function RawTruthy(const A: TTyBoxRaw): Boolean;
+begin
+  case A.Kind of
+    brNumber, brBool: Result := (not IsNan(A.Num)) and (A.Num <> 0);
+    brString: Result := A.Str <> '';
+    brOther: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+function TyBoxWord(const A, B: TTyBoxRaw): string;
+begin
+  Result := '';
+  if RawTruthy(A) then
+  begin
+    if A.Kind = brString then Result := A.Str;
+  end
+  else if B.Kind = brString then
+    Result := B.Str;
+end;
+
+{ `x || 0`: not-a-number and either nought are nought. }
+function OrZero(AV: Double): Double;
+begin
+  if IsNan(AV) or (AV = 0) then Result := 0 else Result := AV;
+end;
+
+function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
+  const AMargin: array of Double): TTyXYWH;
+var
+  left, top, right, bottom, w, h, vm, hm: Double;
+  m: array[0..3] of Double;
+  i: Integer;
+  wordH, wordV: string;
+begin
+  for i := 0 to 3 do
+    if i <= High(AMargin) then m[i] := AMargin[i] else m[i] := 0;
+  left := TyBoxRawResolve(ABox.Left, ACW);
+  top := TyBoxRawResolve(ABox.Top, ACH);
+  right := TyBoxRawResolve(ABox.Right, ACW);
+  bottom := TyBoxRawResolve(ABox.Bottom, ACH);
+  w := TyBoxRawResolve(ABox.Width, ACW);
+  h := TyBoxRawResolve(ABox.Height, ACH);
+  vm := m[2] + m[0];
+  hm := m[1] + m[3];
+  { a size from the two sides }
+  if IsNan(w) then w := ACW - right - hm - left;
+  if IsNan(h) then h := ACH - bottom - vm - top;
+  { a missing side from the other one }
+  if IsNan(left) then left := ACW - right - w - hm;
+  if IsNan(top) then top := ACH - bottom - h - vm;
+  { THE KEYWORD SWITCH on `left || right`, `top || bottom` }
+  wordH := TyBoxWord(ABox.Left, ABox.Right);
+  if wordH = 'center' then left := ACW / 2 - w / 2 - m[3]
+  else if wordH = 'right' then left := ACW - w - hm;
+  wordV := TyBoxWord(ABox.Top, ABox.Bottom);
+  if (wordV = 'middle') or (wordV = 'center') then top := ACH / 2 - h / 2 - m[0]
+  else if wordV = 'bottom' then top := ACH - h - vm;
+  left := OrZero(left);
+  top := OrZero(top);
+  if IsNan(w) then w := ACW - hm - left - OrZero(right);
+  if IsNan(h) then h := ACH - vm - top - OrZero(bottom);
+  Result.X := OrZero(ACX) + left + m[3];
+  Result.Y := OrZero(ACY) + top + m[0];
+  Result.W := w;
+  Result.H := h;
+  { new BoundingRect: a negative size flips the rect onto its other edge }
+  if Result.W < 0 then
+  begin
+    Result.X := Result.X + Result.W;
+    Result.W := -Result.W;
+  end;
+  if Result.H < 0 then
+  begin
+    Result.Y := Result.Y + Result.H;
+    Result.H := -Result.H;
+  end;
+end;
 
 { ==================== zrender's matrices ==================== }
 

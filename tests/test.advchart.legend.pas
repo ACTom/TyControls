@@ -63,7 +63,7 @@ type
     procedure TestAnEmptyNameBreaksTheLine;
     procedure TestAVerticalLegendStacks;
     procedure TestTheKeywordDecidesWhichEdgeIsPinned;
-    procedure TestARightEdgeAloneDoesNotMoveTheLegend;
+    procedure TestARightEdgeAloneMovesTheLegend;
     procedure TestAlignRightOnlyFollowsAVerticalLeftRight;
     procedure TestARightAlignedItemHangsLeftOfItsOwnOrigin;
     procedure TestTheFrameSurroundsTheItemsByItsPadding;
@@ -227,13 +227,14 @@ begin
     reading an option, so its box has to be pinned the way the reader would
     pin it. Two ways of spelling `centred` that only agree after a read is one
     of them being wrong half the time. }
+  { [Batch 52: the box is upstream's raw model now -- the default's own
+    values, which the solver reads the way it reads an option's.] }
   d := TyLegendSpecDefault;
-  AssertEquals('the word says centre', 'center', d.LeftWord);
-  AssertEquals('and so does the box', Ord(buCentre), Ord(d.Box.Left.Kind));
-  AssertEquals('with no competing right edge', Ord(buAuto),
+  AssertEquals('the box holds centre', 'center', d.Box.Left.Str);
+  AssertEquals('with no competing right edge', Ord(brAbsent),
     Ord(d.Box.Right.Kind));
-  AssertEquals('pinned to the bottom', Ord(buPx), Ord(d.Box.Bottom.Kind));
-  AssertEquals('fifteen up', 15.0, d.Box.Bottom.Value, Eps);
+  AssertEquals('pinned to the bottom', Ord(brNumber), Ord(d.Box.Bottom.Kind));
+  AssertEquals('fifteen up', 15.0, d.Box.Bottom.Num, Eps);
 end;
 
 procedure TAdvChartLegendTest.TestTheCatalogsFourStaleDefaultsAreNotUsed;
@@ -329,15 +330,20 @@ begin
   AssertEquals('and 70 wide as before', 325.0, lg.Content.Left, Eps);
 end;
 
-procedure TAdvChartLegendTest.TestARightEdgeAloneDoesNotMoveTheLegend;
-var lg, plain: TTyLegendLayout;
+procedure TAdvChartLegendTest.TestARightEdgeAloneMovesTheLegend;
+var lg: TTyLegendLayout;
 begin
   { The keyword switch consults `left` FIRST, and the default `left: 'center'`
     is still there -- so `right: 10` on its own loses the test and changes
-    nothing. It reads like a bug and it is upstream's behaviour. }
-  plain := Lay('{ "legend": { } }', ['abcd']);
+    nothing. It reads like a bug and it is upstream's behaviour.
+    [Batch 52: WRONG, and this test pinned the bug. Upstream merges the
+    option into the defaults with mergeLayoutParam's ignoreSize rule: a
+    right of the option's own nulls the default left, so there is no
+    'center' left to win. The legend ends ten in, less the padding.] }
   lg := Lay('{ "legend": { "right": 10 } }', ['abcd']);
-  AssertEquals('still centred', plain.Content.Left, lg.Content.Left, Eps);
+  AssertEquals('its right edge ten in, less the padding', 385.0,
+    lg.Content.Right, Eps);
+  AssertEquals('and 70 wide', 315.0, lg.Content.Left, Eps);
 end;
 
 procedure TAdvChartLegendTest.TestAlignRightOnlyFollowsAVerticalLeftRight;

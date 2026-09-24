@@ -159,10 +159,10 @@ type
 
   TTyLegendSpec = record
     Show: Boolean;
-    Box: TTyBoxSpec;
-    { WHAT THE OPTION SAID, not what it solved to -- `align: 'auto'` reads the
-      word rather than the number, and so does the edge-keyword switch. }
-    LeftWord, RightWord, TopWord, BottomWord: string;
+    { THE BOX AS UPSTREAM'S MODEL HOLDS IT: the raw option values over the
+      defaults (left 'center', bottom 15), merged by mergeLayoutParam's
+      ignoreSize rule. `width` and `height` are wrap limits, not sizes. }
+    Box: TTyRawBox;
     { CSS order: top, right, bottom, left. }
     Padding: array[0..3] of Double;
     Orient: TTyLegendOrient;
@@ -234,6 +234,17 @@ type
 function TyLegendCount(AOption: TTyChartOption): Integer;
 function TyLegendSpecDefault: TTyLegendSpec;
 function TyLegendSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyLegendSpec;
+
+{ THE TWO BOX SOLVES of LegendView.layout, both getLayoutRect on the merged
+  option with the padding as margin: the room the items may wrap in -- the
+  option's own box, keywords and all -- and the place of the block they
+  made, the measured size winning over any width or height written. In
+  device px. }
+function TyLegendWrapRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyRectF; APPI: Integer): TTyXYWH;
+function TyLegendPlaceRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyRectF; AMainW, AMainH: Double;
+  APPI: Integer): TTyXYWH;
 
 { The entries, in order. `legend.data` when it is an array -- INCLUDING an
   empty one, which is upstream's way of asking for no items at all -- and
@@ -411,14 +422,6 @@ begin
   Result := d.AsFloat;
 end;
 
-function ParseFloatIn(const AText: string; out AValue: Double): Boolean;
-var fs: TFormatSettings;
-begin
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  Result := TryStrToFloat(Trim(AText), AValue, fs);
-end;
-
 function RectUnion(const A, B: TTyRectF): TTyRectF;
 begin
   if not TyRectFIsValid(A) then Exit(B);
@@ -429,40 +432,6 @@ end;
 
 { ==================== the spec ==================== }
 
-{ THE KEYWORD SWITCH, layout.ts:352-367, the same authority the title uses and
-  for the same reason: `left: 'right'` does not put the left edge at 100%, it
-  pins the RIGHT edge. It consults `left` first and falls to `right` only when
-  left is absent, so `right: 10` on its own does NOT move a legend -- the
-  default `left: 'center'` is still there and wins the test. }
-procedure ApplyEdgeWords(var ASpec: TTyLegendSpec);
-var w: string;
-begin
-  w := ASpec.LeftWord;
-  if w = '' then w := ASpec.RightWord;
-  if (w = 'center') or (w = 'centre') or (w = 'middle') then
-  begin
-    ASpec.Box.Left := TyBoxCentre;
-    ASpec.Box.Right := TyBoxAuto;
-  end
-  else if w = 'right' then
-  begin
-    ASpec.Box.Left := TyBoxAuto;
-    ASpec.Box.Right := TyBoxPx(0);
-  end;
-  w := ASpec.TopWord;
-  if w = '' then w := ASpec.BottomWord;
-  if (w = 'middle') or (w = 'center') or (w = 'centre') then
-  begin
-    ASpec.Box.Top := TyBoxCentre;
-    ASpec.Box.Bottom := TyBoxAuto;
-  end
-  else if w = 'bottom' then
-  begin
-    ASpec.Box.Top := TyBoxAuto;
-    ASpec.Box.Bottom := TyBoxPx(0);
-  end;
-end;
-
 function TyLegendCount(AOption: TTyChartOption): Integer;
 begin
   Result := 0;
@@ -470,16 +439,19 @@ begin
   Result := AOption.ComponentCount('legend');
 end;
 
+{ legend's defaultOption's box: `left: 'center'`, `bottom: 15`. }
+function DefaultBox: TTyRawBox;
+begin
+  Result := Default(TTyRawBox);
+  Result.Left := TyBoxRawStr('center');
+  Result.Bottom := TyBoxRawNum(cDefaultBottom);
+end;
+
 function TyLegendSpecDefault: TTyLegendSpec;
 var i: Integer;
 begin
   Result.Show := True;
-  Result.Box := TyBoxSpec;
-  Result.Box.Bottom := TyBoxPx(cDefaultBottom);
-  Result.LeftWord := 'center';
-  Result.RightWord := '';
-  Result.TopWord := '';
-  Result.BottomWord := '';
+  Result.Box := DefaultBox;
   for i := 0 to 3 do Result.Padding[i] := cDefaultPadding;
   Result.Orient := tloHorizontal;
   Result.Align := tlaAuto;
@@ -493,53 +465,6 @@ begin
   Result.BorderWidth := 0;
   Result.BorderRadii := TyCornerRadii([]);
   Result.Z := cDefaultZ;
-  ApplyEdgeWords(Result);
-end;
-
-{ A box edge plus the KEYWORD it was written as, and whether the option
-  mentioned it at all. An explicit null clears the edge rather than leaving the
-  default in place -- that is how a chart says "not this edge, the other one". }
-function EdgeIn(ANode: TJSONObject; const AKey: string;
-  const ADefault: TTyBoxValue; out AWord: string;
-  out AGiven: Boolean): TTyBoxValue;
-var
-  d: TJSONData;
-  s: string;
-  v: Double;
-begin
-  Result := ADefault;
-  AWord := '';
-  AGiven := False;
-  if ANode = nil then Exit;
-  d := ANode.Find(AKey);
-  if d = nil then Exit;
-  AGiven := True;
-  if d.JSONType = jtNull then Exit(TyBoxAuto);
-  if d.JSONType = jtNumber then
-  begin
-    { A ZERO IS FALSY UPSTREAM and the keyword switch tests truthiness, so
-      `left: 0` does not count as having named an edge. The word is left empty
-      to keep that distinction. }
-    AWord := '';
-    Exit(TyBoxPx(d.AsFloat));
-  end;
-  if d.JSONType <> jtString then Exit;
-  s := Trim(d.AsString);
-  if s = '' then Exit;
-  AWord := s;
-  if (s = 'center') or (s = 'centre') or (s = 'middle') then Exit(TyBoxCentre);
-  if (s = 'left') or (s = 'top') then Exit(TyBoxPx(0));
-  if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
-  if s[Length(s)] = '%' then
-  begin
-    if ParseFloatIn(Copy(s, 1, Length(s) - 1), v) then Exit(TyBoxPercent(v));
-    AWord := '';
-    Exit;
-  end;
-  { A NUMERIC STRING IS A NUMBER. Three corpus files write `left: '100'`, and
-    parsePercent's final branch is parseFloat. }
-  if ParseFloatIn(s, v) then Exit(TyBoxPx(v));
-  AWord := '';
 end;
 
 procedure ReadPadding(ANode: TJSONObject; var APadding: array of Double);
@@ -609,21 +534,10 @@ begin
   d := node.Find('show');
   if (d <> nil) and (d.JSONType = jtBoolean) then Result.Show := d.AsBoolean;
 
-  Result.Box.Left := EdgeIn(node, 'left', Result.Box.Left, w, given);
-  if given then Result.LeftWord := w;
-  Result.Box.Right := EdgeIn(node, 'right', Result.Box.Right, w, given);
-  Result.RightWord := w;
-  Result.Box.Top := EdgeIn(node, 'top', Result.Box.Top, w, given);
-  Result.TopWord := w;
-  Result.Box.Bottom := EdgeIn(node, 'bottom', Result.Box.Bottom, w, given);
-  Result.BottomWord := w;
   { `legend.width` and `legend.height` are the WRAP LIMITS, not the drawn size:
     the second layout pass overwrites both with what the items measured. The
     comment saying so is at LegendModel.ts:251-254. }
-  Result.Box.Width := EdgeIn(node, 'width', Result.Box.Width, w, given);
-  Result.Box.Height := EdgeIn(node, 'height', Result.Box.Height, w, given);
-
-  ApplyEdgeWords(Result);
+  Result.Box := TyMergeBoxIgnoreSize(node, DefaultBox);
 
   ReadPadding(node, Result.Padding);
   if StrIn(node, 'orient') = 'vertical' then
@@ -1142,6 +1056,43 @@ begin
   end;
 end;
 
+{ The padding in device px, CSS order. }
+procedure PadOf(const ASpec: TTyLegendSpec; APPI: Integer; out APad: array of Double);
+var i: Integer; scale: Double;
+begin
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  for i := 0 to 3 do APad[i] := ASpec.Padding[i] * scale;
+end;
+
+function TyLegendWrapRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyRectF; APPI: Integer): TTyXYWH;
+var pad: array[0..3] of Double;
+begin
+  { THE OPTION'S OWN BOX, keywords and all: upstream solves the wrap room
+    with no size given, so `bottom: 'bottom'` on a vertical legend leaves the
+    height the switch computes from a not-a-number -- not the full height. }
+  PadOf(ASpec, APPI, pad);
+  Result := TyGetLayoutRect(ASpec.Box, AContainer.Left, AContainer.Top,
+    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, pad);
+end;
+
+function TyLegendPlaceRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyRectF; AMainW, AMainH: Double;
+  APPI: Integer): TTyXYWH;
+var
+  pad: array[0..3] of Double;
+  box: TTyRawBox;
+begin
+  { defaults({width, height}, params): the measured pair never goes missing,
+    so it wins over anything written. }
+  PadOf(ASpec, APPI, pad);
+  box := ASpec.Box;
+  box.Width := TyBoxRawNum(AMainW);
+  box.Height := TyBoxRawNum(AMainH);
+  Result := TyGetLayoutRect(box, AContainer.Left, AContainer.Top,
+    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, pad);
+end;
+
 function TyLayoutLegend(const ASpec: TTyLegendSpec;
   const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
   const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
@@ -1151,7 +1102,8 @@ var
   n, i: Integer;
   scale, iw, ih, gap, tgap: Double;
   pad: array[0..3] of Double;
-  maxBox, layoutBox, content: TTyRectF;
+  maxBox, layoutBox: TTyXYWH;
+  content: TTyRectF;
   spec2: TTyBoxSpec;
   rects: array of TTyRectF;
   newline: array of Boolean;
@@ -1182,7 +1134,8 @@ begin
   Result.Align := ASpec.Align;
   if Result.Align = tlaAuto then
   begin
-    if (ASpec.LeftWord = 'right') and (ASpec.Orient = tloVertical) then
+    if (ASpec.Box.Left.Kind = brString) and (ASpec.Box.Left.Str = 'right')
+      and (ASpec.Orient = tloVertical) then
       Result.Align := tlaRight
     else
       Result.Align := tlaLeft;
@@ -1191,9 +1144,7 @@ begin
   { THE FIRST OF TWO BOX SOLVES. This one answers "how much room is there",
     and only its SIZE is used -- as the wrap limit. The second one, further
     down, places the block that the wrap produced. }
-  maxBox := TySolveBox(ASpec.Box, TyFixedContainer(AContainer),
-    [pad[0], pad[1], pad[2], pad[3]]);
-  if not TyRectFIsValid(maxBox) then Exit;
+  maxBox := TyLegendWrapRect(ASpec, AContainer, APPI);
 
   SetLength(Result.Items, n);
   SetLength(rects, n);
@@ -1271,7 +1222,7 @@ begin
   end;
 
   BoxLayout(ASpec.Orient = tloHorizontal, rects, newline, gap,
-    TyRectFWidth(maxBox), TyRectFHeight(maxBox), px, py);
+    maxBox.W, maxBox.H, px, py);
 
   content := TyInvalidRectF;
   drawn := 0;
@@ -1291,17 +1242,12 @@ begin
   { THE SECOND SOLVE, and the measured size WINS over `legend.width`: upstream
     merges {width, height} with defaults(), which only fills in what is
     missing, and the measured pair is never missing. }
-  spec2 := ASpec.Box;
-  spec2.Width := TyBoxPx(mainW);
-  spec2.Height := TyBoxPx(mainH);
-  layoutBox := TySolveBox(spec2, TyFixedContainer(AContainer),
-    [pad[0], pad[1], pad[2], pad[3]]);
-  if not TyRectFIsValid(layoutBox) then Exit;
+  layoutBox := TyLegendPlaceRect(ASpec, AContainer, mainW, mainH, APPI);
 
   { The content group is shifted so that its own top-left lands on the solved
     corner, whatever negative overhang the items have. }
-  ox := layoutBox.Left - content.Left;
-  oy := layoutBox.Top - content.Top;
+  ox := layoutBox.X - content.Left;
+  oy := layoutBox.Y - content.Top;
 
   for i := 0 to n - 1 do
   begin
@@ -1317,8 +1263,8 @@ begin
     Result.Items[i] := it;
   end;
 
-  Result.Content := TyRectF(layoutBox.Left, layoutBox.Top,
-                            layoutBox.Left + mainW, layoutBox.Top + mainH);
+  Result.Content := TyRectF(layoutBox.X, layoutBox.Y,
+                            layoutBox.X + mainW, layoutBox.Y + mainH);
   Result.Frame := TyRectF(Result.Content.Left - pad[3],
                           Result.Content.Top - pad[0],
                           Result.Content.Right + pad[1],

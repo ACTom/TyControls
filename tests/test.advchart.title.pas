@@ -190,7 +190,10 @@ begin
 
   { LEFT IS READ FIRST, and only a title whose two words DISAGREE can say
     so. With both set to the same thing -- or only one set at all -- reading
-    them in either order gives the same answer. }
+    them in either order gives the same answer.
+    [Batch 52: the answer holds, the reason does not -- a left of its own
+    nulls the right when the option is merged, so there is no second word
+    left to read. The merge is held to upstream in test.advchart.boxmerge.] }
   AssertEquals('left wins over right', Ord(ttaLeft),
     Ord(Lay('{ "title": { "text": "abcd", "left": "left",'
       + ' "right": "right" } }').Align));
@@ -233,12 +236,21 @@ begin
     whole width -- so the anchor IS the right edge of the block. }
   { `left: 'right'` IS THE IDIOMATIC FORM, and `right: 0` on its own is not:
     the keyword switch consults `left` first and the default puts 'center'
-    there, so a title given only a right inset stays centred. }
+    there, so a title given only a right inset stays centred.
+    [Batch 52: WRONG -- a right of its own nulls the default left
+    (mergeLayoutParam's ignoreSize branch), so `right: 10` alone does move
+    the title. Pinned below.] }
   t := Lay('{ "title": { "text": "abcd", "left": "right" } }');
   AssertEquals('anchored by its right', Ord(ttaRight), Ord(t.Align));
   AssertEquals('at the right edge less the padding', 395.0, t.TextX, Eps);
   AssertEquals('and the frame ends there plus the padding', 400.0,
     t.Frame.Right, Eps);
+  { A RIGHT INSET ALONE moves it too: the merge nulls the default left, and
+    the word `left || right` is no longer 'center'. }
+  t := Lay('{ "title": { "text": "abcd", "right": 10 } }');
+  AssertEquals('a right inset alone: not centred', Ord(ttaLeft), Ord(t.Align));
+  AssertEquals('its block ends ten in, less the padding', 385.0,
+    t.TextX + t.TextW, Eps);
 end;
 
 procedure TAdvChartTitleTest.TestABottomTitleSitsOnTheBottomEdge;
@@ -367,11 +379,14 @@ begin
     would pin it. Two ways of expressing `centred` that only agree after a
     read is one of them being wrong half the time, and it is the half nobody
     looks at. }
+  { [Batch 52: the box is upstream's raw model now -- the default's own
+    values, which the solver reads the way it reads an option's.] }
   d := TyTitleSpecDefault;
-  AssertEquals('the word says centre', 'center', d.LeftWord);
-  AssertEquals('and so does the box', Ord(buCentre), Ord(d.Box.Left.Kind));
-  AssertEquals('with no competing right edge', Ord(buAuto),
+  AssertEquals('the word says centre', 'center', d.WordH);
+  AssertEquals('the box holds the word', 'center', d.Box.Left.Str);
+  AssertEquals('with no competing right edge', Ord(brAbsent),
     Ord(d.Box.Right.Kind));
+  AssertEquals('top is fifteen', 15.0, d.Box.Top.Num, 0);
 end;
 
 initialization
