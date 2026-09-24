@@ -1055,6 +1055,10 @@ msgstr ""
 msgid "More"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindoworphan
+msgid "Not in a tool window bar: hidden at run time"
+msgstr ""
+
 #: tycontrols.strconsts.rstytoolwindowrestore
 msgid "Restore"
 msgstr ""

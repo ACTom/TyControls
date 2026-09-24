@@ -290,6 +290,11 @@ resourcestring
     'Add a tool window';
   rsTyToolWindowBarStray =
     'Not a tool window: hidden at run time';
+  { Drawn at design time along the top of a TTyToolWindow whose parent is not a tool window
+    bar: undo of a delete re-creates it on the form, a paste can drop it anywhere. It stays
+    hidden at run time. Right-click it -> "Move Back into Bar" puts it back. }
+  rsTyToolWindowOrphan =
+    'Not in a tool window bar: hidden at run time';
   { Hints on the bottom bar's tab row (TTyToolWindowBar.HeaderHint): the maximize button
     (its two states), the hide button that collapses the whole bottom bar, and the
     overflow button that lists the tabs that did not fit. }

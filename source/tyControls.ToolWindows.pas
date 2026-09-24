@@ -152,6 +152,11 @@ type
     function HeaderHeightAt(APPI: Integer): Integer;
     function HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
     function ActionsPreferredSize(APPI: Integer): TSize;
+    { 设计期孤儿的提示行(spec §3.2),AClient 坐标:顶上一行,高 = --toolwindow-header-height
+      (跟栏的提示行、标题行是同一个「一行字加上下留白」的尺寸),钳在客户区里。不是设计期、
+      在栏里时为空矩形。AdjustClientRect 让位、RenderTo 画提示、OrphanNoteRect 答探针,
+      问的都是这一处。 }
+    function OrphanNoteRectIn(const AClient: TRect; APPI: Integer): TRect;
   private
     { --- 底栏标签行的输入(spec §3.6):当前页把标签行区域的输入转给栏。 --- }
     { 哪几个键的这一次按下落在标签行区域里:这个键的整次点击(MouseUp,左键还有 Click /
@@ -293,6 +298,8 @@ type
     function HeaderHeightPx: Integer;
     function HeaderRowRect: TRect;
     function BodyRect: TRect;
+    { 设计期孤儿提示的那一行(客户区坐标,按自己字体的 PPI);不是设计期孤儿时为空矩形。 }
+    function OrphanNoteRect: TRect;
     { 把焦点给正文里第一个可聚焦的控件(protected 的 SelectFirst 的公开包装,spec §3.1)。 }
     procedure FocusFirst;
     { 设计期 CM_MASKHITTEST 的答案,(X, Y) 是本窗口客户区坐标(spec §3.6 / §7.4):标签行区域
@@ -1874,11 +1881,24 @@ begin
   { 注册本身推 Controller;流式加载、设计器放下、代码里 Parent := 都走这一条。 }
   if NewParent is TTyToolWindowBar then
     TTyToolWindowBar(NewParent).RegisterWindow(Self)
-  else if [csDesigning, csDestroying] * ComponentState = [] then
-    { 运行时的孤儿(父控件不是栏)保持隐藏(spec §3.2):没有栏替它守「一次只显示一页」,
-      带着 Visible = True 挪出来的当前页会原样杵在新父控件上。设计期那一半(显示 + 提示)
-      归 D 期。 }
-    Visible := False;
+  else if not (csDestroying in ComponentState) then
+  begin
+    if csDesigning in ComponentState then
+    begin
+      { 设计期的孤儿(spec §3.2):撤销删除、粘贴等途径落到栏外的窗口要看得见,才能右键
+        「移回栏里」。先摘 csNoDesignVisible 再写 Visible(同 ShowWindowNow 的顺序)——
+        只摘标志不够:设计期的显示状态是 `Visible or (csDesigning and not csNoDesignVisible)`,
+        触发重算的是写 Visible,而孤儿的 Visible 往往已经是 False,写同值是空操作。
+        Visible 是 stored False,这一句不进 .lfm。回到栏里由栏的切页把标志加回去。
+        顶上那一行提示见 OrphanNoteRectIn,下面的 RelayoutHeader 让出它。 }
+      ControlStyle := ControlStyle - [csNoDesignVisible];
+      Visible := True;
+    end
+    else
+      { 运行时的孤儿保持隐藏:没有栏替它守「一次只显示一页」,带着 Visible = True 挪出来的
+        当前页会原样杵在新父控件上。 }
+      Visible := False;
+  end;
   { 标题行模式跟着父控件变(侧栏 / 底栏 / 孤儿),内缩量变了就得重排。 }
   if not (csDestroying in ComponentState) then
     RelayoutHeader;
@@ -1981,11 +2001,35 @@ begin
   AdjustClientRect(Result);
 end;
 
+function TTyToolWindow.OrphanNoteRect: TRect;
+begin
+  Result := OrphanNoteRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+end;
+
+function TTyToolWindow.OrphanNoteRectIn(const AClient: TRect; APPI: Integer): TRect;
+var
+  h: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if ([csDesigning, csDestroying] * ComponentState <> [csDesigning]) or (Bar <> nil) then Exit;
+  h := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
+    TyToolWindowHeaderHeightDef), APPI, 96);
+  if h > AClient.Bottom - AClient.Top then h := AClient.Bottom - AClient.Top;
+  if h <= 0 then Exit;
+  Result := Rect(AClient.Left, AClient.Top, AClient.Right, AClient.Top + h);
+end;
+
 procedure TTyToolWindow.AdjustClientRect(var ARect: TRect);
+var
+  n: TRect;
 begin
   inherited AdjustClientRect(ARect);
   { 正文从钳过的标题行底下开始 —— 跟画出来的那一条、摆操作区的那一条是同一处钳。 }
   ARect.Top := HeaderRowIn(ARect, Font.PixelsPerInch).Bottom;
+  { 设计期孤儿:顶上让出提示那一行。正文控件通常 alClient,不让出来的话提示一个像素都
+    露不出来(同栏的 StrayNote)。孤儿没有标题行,上一句不挪 Top。 }
+  n := OrphanNoteRectIn(ARect, Font.PixelsPerInch);
+  if n.Bottom > ARect.Top then ARect.Top := n.Bottom;
 end;
 
 function TTyToolWindow.ChildClassAllowed(ChildClass: TClass): Boolean;
@@ -2169,8 +2213,8 @@ end;
 procedure TTyToolWindow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, hdrS: TTyStyleSet;
-  R, hdr: TRect;
+  S, hdrS, noteS: TTyStyleSet;
+  R, hdr, note: TRect;
   g: TTyToolWindowHeaderGeom;
   fill: TTyFill;
   rule: Integer;
@@ -2215,6 +2259,18 @@ begin
     begin
       g := HeaderGeomAt(R, APPI);
       Bar.PaintHeader(Self, P, hdr, g, APPI);
+    end;
+    { 设计期孤儿的提示(spec §3.2):顶上让出来的那一行,写法照栏画 rsTyToolWindowBarStray。 }
+    note := OrphanNoteRectIn(R, APPI);
+    if note.Bottom > note.Top then
+    begin
+      noteS := ActiveController.Model.ResolveStyle(TyToolWindowNoteKey,
+        TyStyleClassFor(Self, StyleClass), [tysNormal]);
+      InflateRect(note, -MulDiv(ActiveController.Metric(TyToolWindowHeaderPadVar,
+        TyToolWindowHeaderPadDef), APPI, 96), 0);
+      if note.Right > note.Left then
+        P.DrawText(note, rsTyToolWindowOrphan, noteS.FontName, ResolveFontSize(noteS),
+          noteS.FontWeight, noteS.TextColor, taLeftJustify, tlCenter, True);
     end;
     P.EndPaint;
   finally
