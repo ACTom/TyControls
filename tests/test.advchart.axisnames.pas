@@ -667,20 +667,19 @@ begin
             Miss(Format('level %d, upstream %d', [got.Level, pass.Integers['level']]));
           if got.AnchorH <> AlignOf(nm.Strings['align']) then Miss('align');
           if got.AnchorV <> VAlignOf(nm.Strings['verticalAlign']) then Miss('verticalAlign');
-          if Abs(got.RotationRad - Num(nm, 'rotation')) > 1e-12 then
+          if got.RotationRad <> Num(nm, 'rotation') then
             Miss('rotation ' + Fmt(got.RotationRad));
-          { BEFORE ANY MOVE, to the bit; after one too when there was none. A
-            move is measured off the labels' boxes through upstream's
-            decomposed label matrix, whose 1e-16 shear is not ported yet. }
+          { TO THE BIT, before the move and after it, on a plot upstream's to
+            the bit. [Batch 51: a moved name was within tolerance while the
+            labels' boxes it is moved off missed zrender's decomposed matrix
+            -- the middle y names by 7.1e-15, through the occupied area.] }
           if exactPlot then Inc(exactNames);
-          moved := (nm.Find('translations') is TJSONArray)
-            and (nm.Arrays['translations'].Count > 0);
           if exactPlot and not ((got.AnchorX = NumAt(nm.Arrays['anchor'], 0))
             and (got.AnchorY = NumAt(nm.Arrays['anchor'], 1))) then
             Miss(Format('anchored at %s, %s; upstream %s, %s exactly',
               [Fmt(got.AnchorX), Fmt(got.AnchorY), nm.Arrays['anchorText'].Strings[0],
                nm.Arrays['anchorText'].Strings[1]]))
-          else if exactPlot and (not moved) and not ((got.X = NumAt(nm.Arrays['finalAnchor'], 0))
+          else if exactPlot and not ((got.X = NumAt(nm.Arrays['finalAnchor'], 0))
             and (got.Y = NumAt(nm.Arrays['finalAnchor'], 1))) then
             Miss(Format('at %s, %s; upstream %s, %s exactly', [Fmt(got.X), Fmt(got.Y),
               nm.Arrays['finalAnchorText'].Strings[0],
@@ -691,7 +690,10 @@ begin
               nm.Arrays['finalAnchorText'].Strings[0],
               nm.Arrays['finalAnchorText'].Strings[1]]));
           want := XYWHOf(nm.Objects['rect']);
-          if not (Near(got.Rect.X, want.X) and Near(got.Rect.Y, want.Y)
+          if exactPlot and not ((got.Rect.X = want.X) and (got.Rect.Y = want.Y)
+            and (got.Rect.W = want.W) and (got.Rect.H = want.H)) then
+            Miss('rect ' + RectStr(got.Rect) + ', upstream ' + RectStr(want) + ' exactly')
+          else if not (Near(got.Rect.X, want.X) and Near(got.Rect.Y, want.Y)
             and Near(got.Rect.W, want.W) and Near(got.Rect.H, want.H)) then
             Miss('rect ' + RectStr(got.Rect) + ', upstream ' + RectStr(want));
         end;
@@ -717,9 +719,8 @@ var
   cases: TJSONArray;
   cs: TJSONObject;
   c, g, bad, compared: Integer;
-  want: TTyXYWH;
+  want, pxywh: TTyXYWH;
   plot: TTyRectF;
-  tol: Double;
   report: string;
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
@@ -743,12 +744,12 @@ begin
     end;
     g := cs.Integers['grid'];
     want := XYWHOf(cs.Objects['rect']);
-    tol := Num(cs, 'tol');
     Inc(compared);
+    { To the bit, as x, y, width, height (batch 51). }
     plot := FBuild.Grid(g).PlotRect;
-    if (Abs(plot.Left - want.X) > tol) or (Abs(plot.Top - want.Y) > tol)
-      or (Abs((plot.Right - plot.Left) - want.W) > tol)
-      or (Abs((plot.Bottom - plot.Top) - want.H) > tol) then
+    pxywh := FBuild.Grid(g).PlotXYWH;
+    if (pxywh.X <> want.X) or (pxywh.Y <> want.Y)
+      or (pxywh.W <> want.W) or (pxywh.H <> want.H) then
     begin
       Inc(bad);
       if bad <= 30 then

@@ -29,6 +29,11 @@ function TyJsSin(AX: Double): Double;
 function TyJsCos(AX: Double): Double;
 function TyJsAtan(AX: Double): Double;
 function TyJsAtan2(AY, AX: Double): Double;
+{ Math.tan: fdlibm's s_tan.c and V8's __kernel_tan. zrender recomposes a
+  turned label's matrix from its decomposed skew, and a skew of 2 pi --
+  which a label turned past a quarter comes to -- is where FPC's Tan and
+  V8's part: `BCB1A60000000000` against `BCB1A62633145C07`. }
+function TyJsTan(AX: Double): Double;
 { Math.fround: the nearest single, ties to even, and past the largest single
   -- by half a unit of its last place -- an infinity. Upstream keeps a line's
   vertices in a Float32Array, so a vertex is this of the coordinate. }
@@ -48,6 +53,8 @@ var
   invpio2, pio2_1, pio2_1t, pio2_2, pio2_2t, pio2_3, pio2_3t: Double;
   S1, S2, S3, S4, S5, S6: Double;
   C1, C2, C3, C4, C5, C6: Double;
+  { k_tan.c }
+  TT: array[0..12] of Double;
   atanhi, atanlo: array[0..3] of Double;
   aT: array[0..10] of Double;
   pi_o_4, pi_o_2, pi_, pi_lo, tiny: Double;
@@ -231,6 +238,82 @@ begin
   hz := 0.5 * z - qx;
   a := 1 - qx;
   Result := a - (hz - (z * r - AX * AY));
+end;
+
+{ V8's __kernel_tan: tan of x + y on [-pi/4, pi/4]; AIY 1 for tan, -1 for
+  -1/tan. Line for line, the two careful -1/w reconstructions included. }
+function KTan(AX, AY: Double; AIY: Integer): Double;
+var
+  z, r, v, w, s, a, t: Double;
+  ix, hx: LongInt;
+  low: LongWord;
+begin
+  hx := HighWord(AX);
+  ix := hx and $7FFFFFFF;
+  if ix < $3E300000 then
+  begin
+    { x < 2^-28 }
+    low := LowWord(AX);
+    if ((LongWord(ix) or low) or LongWord(AIY + 1)) = 0 then
+      Exit(1 / Abs(AX));
+    if AIY = 1 then Exit(AX);
+    z := AX + AY;
+    w := z;
+    z := FromWords(HighWord(z), 0);
+    v := AY - (z - AX);
+    a := -1 / w;
+    t := FromWords(HighWord(a), 0);
+    s := 1 + t * z;
+    Exit(t + a * (s + t * v));
+  end;
+  if ix >= $3FE59428 then
+  begin
+    { |x| >= 0.6744 }
+    if hx < 0 then
+    begin
+      AX := -AX;
+      AY := -AY;
+    end;
+    z := pi_o_4 - AX;
+    w := atanlo[1] - AY;
+    AX := z + w;
+    AY := 0.0;
+  end;
+  z := AX * AX;
+  w := z * z;
+  r := TT[1] + w * (TT[3] + w * (TT[5] + w * (TT[7] + w * (TT[9] + w * TT[11]))));
+  v := z * (TT[2] + w * (TT[4] + w * (TT[6] + w * (TT[8] + w * (TT[10] + w * TT[12])))));
+  s := z * AX;
+  r := AY + z * (s * (r + v) + AY);
+  r := r + TT[0] * s;
+  w := AX + r;
+  if ix >= $3FE59428 then
+  begin
+    v := AIY;
+    Exit((1 - (SarLongint(hx, 30) and 2)) * (v - 2.0 * (AX - (w * w / (w + v) - r))));
+  end;
+  if AIY = 1 then Exit(w);
+  { -1/(x + r), accurately }
+  z := FromWords(HighWord(w), 0);
+  v := r - (z - AX);
+  a := -1 / w;
+  t := FromWords(HighWord(a), 0);
+  s := 1 + t * z;
+  Result := t + a * (s + t * v);
+end;
+
+function TyJsTan(AX: Double): Double;
+var
+  ix: LongInt;
+  n: Integer;
+  y0, y1: Double;
+begin
+  ix := HighWord(AX) and $7FFFFFFF;
+  if ix <= $3FE921FB then Exit(KTan(AX, 0, 1));
+  if ix >= $7FF00000 then Exit(NaN);
+  if not RemPio2(AX, n, y0, y1) then Exit(Tan(AX));
+  { 1 when n is even, -1 when it is odd }
+  Result := KTan(y0, y1, 1 - ((n and 1) shl 1));
 end;
 
 function TyJsSin(AX: Double): Double;
@@ -852,6 +935,19 @@ initialization
   C4 := FromBits(QWord($BE927E4F809C52AD));
   C5 := FromBits(QWord($3E21EE9EBDB4B1C4));
   C6 := FromBits(QWord($BDA8FAE9BE8838D4));
+  TT[0] := FromBits(QWord($3FD5555555555563));
+  TT[1] := FromBits(QWord($3FC111111110FE7A));
+  TT[2] := FromBits(QWord($3FABA1BA1BB341FE));
+  TT[3] := FromBits(QWord($3F9664F48406D637));
+  TT[4] := FromBits(QWord($3F8226E3E96E8493));
+  TT[5] := FromBits(QWord($3F6D6D22C9560328));
+  TT[6] := FromBits(QWord($3F57DBC8FEE08315));
+  TT[7] := FromBits(QWord($3F4344D8F2F26501));
+  TT[8] := FromBits(QWord($3F3026F71A8D1068));
+  TT[9] := FromBits(QWord($3F147E88A03792A6));
+  TT[10] := FromBits(QWord($3F12B80F32F0A7E9));
+  TT[11] := FromBits(QWord($BEF375CBDB605373));
+  TT[12] := FromBits(QWord($3EFB2A7074BF7AD4));
   atanhi[0] := FromBits(QWord($3FDDAC670561BB4F));
   atanhi[1] := FromBits(QWord($3FE921FB54442D18));
   atanhi[2] := FromBits(QWord($3FEF730BD281F69B));

@@ -35,6 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
      tyControls.AdvChart.BarLayout, tyControls.AdvChart.Layout,
+     tyControls.AdvChart.AxisName,
      tyControls.AdvanceChart;
 type
   TCoordAffineProbe = class(TTyAdvanceChart)
@@ -66,6 +67,7 @@ type
     procedure TearDown; override;
   published
     procedure TestEveryCoordinateLandsWhereUpstreamPutsIt;
+    procedure TestTheLabelMatrixIsUpstreams;
   end;
 
 implementation
@@ -237,7 +239,7 @@ var
   a, b, tickV: Double;
   e: TTyRange;
   arr, coords: TJSONArray;
-  i, k, p, built: Integer;
+  i, k, p, q, built: Integer;
   spec: PTyAxisLayoutSpec;
   lab: TJSONObject;
   hidden: Boolean;
@@ -326,6 +328,25 @@ begin
       lab.Find('x'));
     Same(Format('%s label %s y', [tag, Fmt(tickV)]), spec^.Placements[p].Y,
       lab.Find('y'));
+    { THE LABEL'S MATRIX, all six, as zrender recomposed it -- and its
+      decomposed rotation: its own where the 5e-5 gate left it unturned,
+      the axis' otherwise. }
+    if lab.Find('transform') is TJSONArray then
+    begin
+      if not spec^.Placements[p].HasM then
+        Miss(Format('%s label %s: no matrix here', [tag, Fmt(tickV)]))
+      else
+        for q := 0 to 5 do
+          Same(Format('%s label %s matrix[%d]', [tag, Fmt(tickV), q]),
+            spec^.Placements[p].M[q], lab.Arrays['transform'].Items[q]);
+      if lab.Find('rotation') <> nil then
+        Same(Format('%s label %s rotation', [tag, Fmt(tickV)]),
+          spec^.Placements[p].DecRotation, lab.Find('rotation'))
+      else if (AAxis.Find('labelRotation') <> nil)
+        and (AAxis.Find('labelRotation').JSONType = jtString) then
+        Same(Format('%s label %s rotation', [tag, Fmt(tickV)]),
+          spec^.Placements[p].DecRotation, AAxis.Find('labelRotation'));
+    end;
     hidden := (lab.Find('hidden') <> nil) and lab.Booleans['hidden'];
     if spec^.Placements[p].Shown = hidden then
       Miss(Format('%s label %s: hidden %s upstream', [tag, Fmt(tickV),
@@ -336,10 +357,10 @@ begin
   if (arr.Count > 0) and (AAxis.Find('labelRotation') <> nil)
     and (AAxis.Find('labelRotation').JSONType = jtString) then
   begin
-    Inc(FCompared);
-    if Abs(spec^.RotationRad - NumOf(AAxis.Find('labelRotation'))) > 1e-9 then
-      Miss(Format('%s: labels turned %s upstream, %s here', [tag,
-        Fmt(NumOf(AAxis.Find('labelRotation'))), Fmt(spec^.RotationRad)]));
+    { [Batch 51: the axis' requested turn was compared here within 1e-9 of
+      upstream's -- which is the DECOMPOSED rotation, a full turn away at
+      270 or 181 degrees. Each label's decomposed rotation is compared
+      exactly above.] }
     if (Length(spec^.Placements) > 0) then
     begin
       Inc(FCompared);
@@ -682,6 +703,70 @@ begin
   arr := AGrid.Arrays['probes'];
   for i := 0 to arr.Count - 1 do
     CheckProbe(cart, arr.Objects[i]);
+end;
+
+{ THE LABEL MATRIX ON ITS OWN, over every half degree from -360 to 360 on a
+  horizontal and a vertical axis, top and not: live zrender's recomposed
+  matrix -- the axis group's times the label's turn, decomposed and built
+  again -- against the port's primitives with the group at the origin, to
+  the bit. A turn past a quarter goes through V8's tan; the last row is
+  the 5e-5 gate, which leaves a label at the origin unturned. }
+procedure TAdvChartCoordAffineOracleTest.TestTheLabelMatrixIsUpstreams;
+var
+  rows, r: TJSONArray;
+  i, q, bad: Integer;
+  axisRot, req, c, t, lr: Double;
+  g, m, fm: TTyMat2D;
+  props: TTyTransformProps;
+  report: string;
+
+  function H(AIndex: Integer): Double;
+  begin
+    Result := NumOf(r.Items[AIndex]);
+  end;
+
+  function Bits(A: Double): QWord;
+  begin
+    Result := 0;
+    Move(A, Result, SizeOf(Result));
+  end;
+
+begin
+  rows := TJSONObject(FRoot).Arrays['labelMatrixSweep'];
+  bad := 0;
+  report := '';
+  for i := 0 to rows.Count - 1 do
+  begin
+    r := rows.Arrays[i];
+    axisRot := H(0);
+    req := H(3);
+    c := H(4);
+    t := H(5);
+    g := TyMatLocal(0, 0, axisRot);
+    lr := TyRemRadian(req - axisRot);
+    if TyNeedLocal(c, t, lr) then m := TyMatMul(g, TyMatLocal(c, t, lr))
+    else m := g;
+    props := TyMatDecompose(m);
+    fm := TyMatRecompose(props);
+    for q := 0 to 3 do
+      if Bits(fm[q]) <> Bits(H(6 + q)) then
+      begin
+        Inc(bad);
+        if bad <= 10 then
+          report := report + LineEnding + Format('  %s: F[%d] %s, upstream %s',
+            [r.Strings[12], q, Fmt(fm[q]), Fmt(H(6 + q))]);
+        Break;
+      end;
+    if (Bits(props.Rotation) <> Bits(H(10))) or (Bits(props.SkewX) <> Bits(H(11))) then
+    begin
+      Inc(bad);
+      if bad <= 10 then
+        report := report + LineEnding + Format('  %s: rotation %s skew %s, upstream %s %s',
+          [r.Strings[12], Fmt(props.Rotation), Fmt(props.SkewX), Fmt(H(10)), Fmt(H(11))]);
+    end;
+  end;
+  AssertTrue('enough rows', rows.Count >= 5000);
+  AssertEquals(IntToStr(bad) + ' of ' + IntToStr(rows.Count) + ' differ:' + report, 0, bad);
 end;
 
 procedure TAdvChartCoordAffineOracleTest.TestEveryCoordinateLandsWhereUpstreamPutsIt;

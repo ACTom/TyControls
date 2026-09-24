@@ -22,6 +22,7 @@ type
     procedure TearDown; override;
   published
     procedure TestSinAndCosAreV8sToTheBit;
+    procedure TestTanIsV8sToTheBit;
     procedure TestAtanIsV8sToTheBit;
     procedure TestAtan2IsV8sToTheBit;
     procedure TestTheRunTimeLibraryIsNot;
@@ -173,6 +174,32 @@ begin
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(rows.Count) + ' differ:' + report, 0, bad);
 end;
 
+procedure TAdvChartJsMathTest.TestTanIsV8sToTheBit;
+var
+  rows, r: TJSONArray;
+  i, bad: Integer;
+  x: Double;
+  report: string;
+begin
+  rows := TJSONObject(FRoot).Arrays['tan'];
+  bad := 0;
+  report := '';
+  for i := 0 to rows.Count - 1 do
+  begin
+    r := rows.Arrays[i];
+    x := FromHex(r.Strings[0]);
+    if not Same(TyJsTan(x), r.Strings[1]) then
+    begin
+      Inc(bad);
+      if bad <= 10 then
+        report := report + LineEnding + Format('  %s: tan %s, V8 %s',
+          [r.Strings[2], Hex(TyJsTan(x)), r.Strings[1]]);
+    end;
+  end;
+  AssertTrue('enough arguments', rows.Count >= 3000);
+  AssertEquals(IntToStr(bad) + ' of ' + IntToStr(rows.Count) + ' differ:' + report, 0, bad);
+end;
+
 procedure TAdvChartJsMathTest.TestTheRunTimeLibraryIsNot;
 var y, x, a: Double;
 begin
@@ -187,6 +214,10 @@ begin
   a := 2;
   AssertTrue('V8: sin 2', Hex(TyJsSin(a)) = '3fed18f6ead1b446');
   AssertTrue('the run-time library: not', Hex(Sin(a)) <> '3fed18f6ead1b446');
+  { tan 2 pi: the skew a label turned past a quarter is recomposed with }
+  a := FromHex('401921fb54442d18');
+  AssertTrue('V8: tan 2 pi', Hex(TyJsTan(a)) = 'bcb1a62633145c07');
+  AssertTrue('the run-time library: not', Hex(Tan(a)) <> 'bcb1a62633145c07');
 end;
 
 function PowLogPath: string;

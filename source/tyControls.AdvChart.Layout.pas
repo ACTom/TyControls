@@ -243,8 +243,22 @@ type
       again at paint time, because the measurement that reserved room for this
       label was made in that same weight. }
     Emphasis: Boolean;
+    { THE LABEL'S MATRIX AS ZRENDER ENDS UP WITH IT: the axis group's times
+      the label's own turn, decomposed into props and recomposed from them --
+      which is not the turn asked for, by a few units in the last place, and
+      at a skew of 2 pi goes through V8's tan. HasM False (the zero value)
+      means a hand-built spec, which keeps the plain turn. DecRotation is the
+      decomposed rotation, what upstream's element reports. }
+    M: TTyMat2D;
+    HasM: Boolean;
+    DecRotation: Double;
   end;
   TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
+
+  { Transformable's props after decomposeTransform, parentless, origin 0. }
+  TTyTransformProps = record
+    X, Y, Rotation, ScaleX, ScaleY, SkewX: Double;
+  end;
 
   { ONE TICK MARK, SPLIT LINE OR SPLIT-AREA EDGE, where the layout put it: the
     tick it stands for (a category axis' ordinal; the category past the last
@@ -560,6 +574,14 @@ function TyMatLocal(AX, AY, ARotation: Double): TTyMat2D;
 function TyMatMul(const A, B: TTyMat2D): TTyMat2D;
 { False, and the identity, for a matrix with no inverse }
 function TyMatInvert(const A: TTyMat2D; out AInverse: TTyMat2D): Boolean;
+{ Transformable.decomposeTransform on a parentless element with no origin --
+  its order of operations exactly. }
+function TyMatDecompose(const M: TTyMat2D): TTyTransformProps;
+{ Transformable.getLocalTransform from those props: [sx, 0, tan(skewX) sy,
+  sy], turned by the rotation, then moved. }
+function TyMatRecompose(const P: TTyTransformProps): TTyMat2D;
+{ needLocalTransform for a turn and a move: any of them past 5e-5. }
+function TyNeedLocal(AX, AY, ARotation: Double): Boolean;
 { BoundingRect.applyTransform: the rect round ARect's four corners }
 function TyRectApplyMat(const ARect: TTyXYWH; const M: TTyMat2D): TTyXYWH;
 { isBoundingRectAxisAligned }
@@ -1143,7 +1165,8 @@ begin
   padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
   ABare.LocalRect := TyXYWH(x0, y0, w, h);
   AMargin.LocalRect := TyRectExpand(ABare.LocalRect, padV, padH, padV, padH);
-  ABare.M := TyMatLocal(APlace.X, APlace.Y, ASpec.RotationRad);
+  if APlace.HasM then ABare.M := APlace.M
+  else ABare.M := TyMatLocal(APlace.X, APlace.Y, ASpec.RotationRad);
   AMargin.M := ABare.M;
   ABare.Rect := TyRectApplyMat(ABare.LocalRect, ABare.M);
   AMargin.Rect := TyRectApplyMat(AMargin.LocalRect, AMargin.M);
@@ -1339,6 +1362,46 @@ begin
   if ARotation <> 0 then Result := MatRotate(Result, ARotation);
   Result[4] := Result[4] + (0 + AX);
   Result[5] := Result[5] + (0 + AY);
+end;
+
+function TyMatDecompose(const M: TTyMat2D): TTyTransformProps;
+var sx, sy, r, sh: Double;
+begin
+  sx := M[0] * M[0] + M[1] * M[1];
+  sy := M[2] * M[2] + M[3] * M[3];
+  r := TyJsAtan2(M[1], M[0]);
+  sh := Pi / 2 + r - TyJsAtan2(M[3], M[2]);
+  sy := Sqrt(sy) * TyJsCos(sh);
+  sx := Sqrt(sx);
+  Result.SkewX := sh;
+  Result.Rotation := -r;
+  Result.X := M[4];
+  Result.Y := M[5];
+  Result.ScaleX := sx;
+  Result.ScaleY := sy;
+end;
+
+function TyMatRecompose(const P: TTyTransformProps): TTyMat2D;
+var k: Double;
+begin
+  if P.SkewX <> 0 then k := TyJsTan(P.SkewX) else k := 0;
+  Result[4] := 0;
+  Result[5] := 0;
+  Result[0] := P.ScaleX;
+  Result[3] := P.ScaleY;
+  Result[1] := 0 * P.ScaleX;
+  Result[2] := k * P.ScaleY;
+  { `rotation && rotate(...)`: a nought -- minus nought too -- turns nothing }
+  if P.Rotation <> 0 then Result := MatRotate(Result, P.Rotation);
+  Result[4] := Result[4] + (0 + P.X);
+  Result[5] := Result[5] + (0 + P.Y);
+end;
+
+function TyNeedLocal(AX, AY, ARotation: Double): Boolean;
+const cEps = 5e-5;
+begin
+  Result := (ARotation > cEps) or (ARotation < -cEps)
+    or (AX > cEps) or (AX < -cEps) or (AY > cEps) or (AY < -cEps);
 end;
 
 function TyMatMul(const A, B: TTyMat2D): TTyMat2D;
@@ -1796,16 +1859,6 @@ begin
   else Result := Trunc(iv) + 1;
 end;
 
-{ Into [0, 2*PI), which is upstream's remRadian and NOT the [-PI, PI) a
-  reader expects. The interval matters: a quarter turn CLOCKWISE comes back
-  as three quarters anticlockwise, which is on the far side of PI and so
-  lands in the other arm of the alignment rule below. }
-function RemRadian(AValue: Double): Double;
-const cTwoPi = 2 * Pi;
-begin
-  Result := AValue - Floor(AValue / cTwoPi) * cTwoPi;
-end;
-
 { WHICH POINT OF THE TEXT SITS ON THE ANCHOR -- upstream's
   AxisBuilder.innerTextLayout, whole.
 
@@ -1838,7 +1891,12 @@ var
   dir: Integer;
 begin
   if AxisIsHorizontal(ASpec.Side) then axisRot := 0 else axisRot := Pi / 2;
-  diff := RemRadian(ASpec.RotationRad - axisRot);
+  { Into [0, 2*PI) by upstream's remRadian -- JavaScript's % twice, not a
+    Floor, which is 1 ulp off -- and NOT the [-PI, PI) a reader expects. The
+    interval matters: a quarter turn CLOCKWISE comes back as three quarters
+    anticlockwise, which is on the far side of PI and so lands in the other
+    arm of the alignment rule below. }
+  diff := TyRemRadian(ASpec.RotationRad - axisRot);
   { Which side of the line the labels are on; `inside` puts them on the
     other one, and every anchor follows. }
   if ASpec.Side in [asBottom, asRight] then dir := 1 else dir := -1;
@@ -1885,6 +1943,8 @@ var
   byFrame: Boolean;
   fr: TTyAxisNameFrame;
   g, lm: TTyMat2D;
+  lr: Double;
+  props: TTyTransformProps;
 begin
   Result := nil;
   SetLength(Result, Length(ASpec.Labels));
@@ -1950,9 +2010,24 @@ begin
     Result[i].AnchorV := av;
     if byFrame then
     begin
-      lm := TyMatMul(g, TyMatLocal(ASpec.LocalCoords[i], t, 0));
+      { AxisBuilder: the label is a child of the axis group, at (c, t) and
+        turned by the requested angle less the axis' own; zrender multiplies
+        the two, and a turn or move within 5e-5 of nothing is no local
+        transform at all. The anchor is that product's translation. }
+      lr := TyRemRadian(ASpec.RotationRad - fr.Rotation);
+      if TyNeedLocal(ASpec.LocalCoords[i], t, lr) then
+        lm := TyMatMul(g, TyMatLocal(ASpec.LocalCoords[i], t, lr))
+      else
+        lm := g;
       Result[i].X := lm[4];
       Result[i].Y := lm[5];
+      { THEN THE LABEL IS TAKEN OUT OF THE GROUP -- decomposed to props and
+        recomposed from them -- and that matrix is the one its rect, its
+        overlap box and the name's occupied area are made with. }
+      props := TyMatDecompose(lm);
+      Result[i].M := TyMatRecompose(props);
+      Result[i].DecRotation := props.Rotation;
+      Result[i].HasM := True;
     end
     else
     case ASpec.Side of

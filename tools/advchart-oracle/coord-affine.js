@@ -48,13 +48,17 @@
 //     every split line upstream builds, before subPixelOptimizeLine and before
 //     showMinLine / showMaxLine drop the first / last; band-shifted by the
 //     splitLine model's own alignWithLabel),
-//     labels[] {tick, x, y, hidden?, transform, localRect} (the label element's
-//     x, y: recipe B; transform: the six numbers of its computed transform,
+//     labels[] {tick, x, y, hidden?, transform, localRect, rotation?} (the
+//     label element's x, y: recipe B; transform: the six numbers of its computed transform,
 //     or null; localRect: [x, y, width, height] of its text box with the
 //     label's textMargin, local to transform -- both as the builder's
-//     labelLayoutList holds them),
+//     labelLayoutList holds them; rotation? only on a label under the
+//     gate: local(c, t, layoutRotation) within 5e-5 of the identity, so the
+//     label keeps G's 2x2 and its own decomposed rotation, not the axis'),
 //     labelOffset, labelRotation (the first label element's rotation, the
-//     same on every label of the axis; null without labels), layoutRotation
+//     same on every label of the axis but those under the gate; null
+//     without such a label: the decomposed rotation, which can be a turn
+//     away from the requested one, e.g. -pi/2 for 270), layoutRotation
 //     (innerTextLayout's rotation, remRadian(labelRotate - axis rotation),
 //     the local rotation the anchor matrix is built with), align and
 //     verticalAlign (the label text's), onZeroOf ('y0' or null), onZeroCoord (the pixel of the
@@ -148,6 +152,32 @@
 // lowercase). Non-finite numbers are the strings 'Infinity', '-Infinity',
 // 'NaN'; a null input is null. The readable twins (xxxText) sit beside the
 // case- and axis-level numbers and the probes; the twin of -0 is '-0'.
+//
+// labelMatrixSweep (top level, beside cases): a rotated axis label's matrix
+// straight from live zrender elements, no chart (see sweepRows). F's 2x2, the
+// decomposed rotation and skewX depend only on axisRot and the requested
+// angle, so the rows pin the matrix primitives with G = local(0, 0, axisRot).
+// Each row is an array, doubles in hex:
+//   [0] axisRot    0 (x) or pi/2 (y)
+//   [1] onTop      boolean: the requested angle is -deg (a top axis off zero)
+//   [2] deg        axisLabel.rotate, degrees: -360..360 by 0.5, then 1e-7,
+//                  -1e-7 and 0.002 (354 is already in the steps)
+//   [3] req        (onTop ? -deg : deg) * pi / 180, as the builder computes it
+//   [4] c          the label's local x: 56
+//   [5] t          the label's local y: +8 (x, !onTop; y, onTop) or -8
+//   [6..9]         F[0], F[1], F[2], F[3]: the label's computed transform
+//   [10] rotation  the decomposed rotation (the label element's rotation)
+//   [11] skewX     the decomposed skewX (0, a few ulps, or ~2 pi)
+//   [12] name      readable: 'x 30', 'x top -90', 'y 181', ...
+// The 4 x 1444 sweep rows come first (axisRot, then onTop, then deg in that
+// order); the last row is the gate: 'gate x 0.002', c = 0, t = 0, whose local
+// rotation is under 5e-5, so zrender skips the local transform and F's 2x2 is
+// the identity. Self-checks (the run exits 1 on a miss): every row equals
+// labelMatrixAtU (labelMatrixU's recipe) on the live G, and the recipe on G =
+// local(0, 0, axisRot) with F = local(decomposed); the gate row's 2x2 is the
+// identity and the product without the gate is not; the production build
+// sweeps the same; at least one row reads tan(skewX) != skewX and at least
+// one F is not rotate(I, req).
 //
 //   node tools/advchart-oracle/coord-affine.js
 'use strict';
@@ -474,7 +504,12 @@ function labelLayoutU(ar, frame, onZero) {
 // AxisBuilder.ts:1563-1574 + the label's getComputedTransform (S3): the
 // product M = G * local(c, t, layoutRotation), decomposed, recomposed as F
 function labelMatrixU(ar, frame, lay, tickValue, hadOne) {
-  const M = zrUpdate(zrT({ x: localU(ar, tickValue), y: frame.t, rotation: lay.layoutRotation }), lay.G, true);
+  return labelMatrixAtU(lay.G, localU(ar, tickValue), frame.t, lay.layoutRotation, hadOne);
+}
+// the same from the local point (c, t) and the layout rotation: what the
+// labelMatrixSweep rows are checked against
+function labelMatrixAtU(G, c, t, layoutRotation, hadOne) {
+  const M = zrUpdate(zrT({ x: c, y: t, rotation: layoutRotation }), G, true);
   const d = zrDecompose(M);
   return { M, d, F: zrUpdate(zrT(d), null, hadOne) };
 }
@@ -989,16 +1024,20 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
         fail(3, lw(v) + ': ' + el.style.align + '/' + el.style.verticalAlign + ', innerTextLayout gives ' + lay.align + '/' + lay.verticalAlign);
       }
       if (!r.labels.length) {
-        r.labelRotation = el.rotation;
         r.layoutRotation = el[k].layoutRotation;
         r.align = el.style.align;
         r.verticalAlign = el.style.verticalAlign;
-      } else if (!same(el.rotation, r.labelRotation)) {
-        fail(3, lw(v) + ': rotation ' + text(el.rotation) + ' is not the axis\' ' + text(r.labelRotation));
+      }
+      // under the 5e-5 gate the label keeps G's rotation, not the axis' one
+      const gated = !zrNeedLocal(zrT({ x: localU(r, v), y: frame.t, rotation: lay.layoutRotation }));
+      if (!gated) {
+        if (r.labelRotation == null) r.labelRotation = el.rotation;
+        else if (!same(el.rotation, r.labelRotation)) fail(3, lw(v) + ': rotation ' + text(el.rotation) + ' is not the axis\' ' + text(r.labelRotation));
       }
       const lr = layout.localRect;
       lab.transform = live ? live.map(num) : null;
       lab.localRect = [num(lr.x), num(lr.y), num(lr.width), num(lr.height)];
+      if (gated) lab.rotation = num(el.rotation);
       r.labels.push(lab);
       tally(r.dim === 'x' ? el.x : el.y, labelQ(r, v, E, E0));
       // what the new cases pin (self-check 6 `pins`), counted per label
@@ -1014,6 +1053,21 @@ function runGrid(c, lib, chart, ecModel, gm, fail, disc) {
           if (differs(a[0], el.x) || differs(a[1], el.y)) pin('offsetOutOfT');
         }
         if (pinSet.has('inside') && r.labelInside && moved(Object.assign({}, r, { labelInside: false }))) pin('inside');
+        // the label matrix (the M cases): F's 2x2 against a port mutant's
+        const moves2 = m => !!live && !!m && [0, 1, 2, 3].some(i => differs(m[i], live[i]));
+        const c0 = localU(r, v);
+        if (pinSet.has('notRequested') && moves2(zrLocal(zrT({ x: el.x, y: el.y, rotation: lay.labelRotation })))) pin('notRequested');
+        if (pinSet.has('tanSkew') && U.d.skewX && Math.tan(U.d.skewX) !== U.d.skewX) pin('tanSkew');
+        if (pinSet.has('remFloor')) {
+          const p2 = 2 * Math.PI;
+          const q = lay.labelRotation - lay.axisRotation;
+          if (moves2(labelMatrixAtU(lay.G, c0, frame.t, q - Math.floor(q / p2) * p2, true).F)) pin('remFloor');
+        }
+        if (pinSet.has('rotationTurn') && Math.abs(el.rotation - lay.labelRotation) > Math.PI) pin('rotationTurn');
+        if (pinSet.has('gate') && lay.layoutRotation !== 0 && live && live[0] === 1 && live[1] === 0 && live[2] === 0 && live[3] === 1) {
+          const ungated = zrDecompose(zrMul(lay.G, zrLocal(zrT({ x: c0, y: frame.t, rotation: lay.layoutRotation }))));
+          if (moves2(zrLocal(zrT(ungated)))) pin('gate');
+        }
       }
     });
   });
@@ -1771,6 +1825,40 @@ add('L', '(x+w)-x != w and (y+h)-y != h: value x, category y inverse', { grid: X
   xAxis: VAL(), yAxis: CAT(5, { inverse: true, splitLine: { show: true } }),
   series: [bar([5.1, 3.3, 8.9, 1.7, 4.4])] }, pins('edgesNotSize', 'bandedMarks'));
 
+// M: the rotated label's matrix (batch 51 audit, S3.5). The recorded
+// transform is F = recompose(decompose(G * local(c, t, layoutRotation))), not
+// the requested rotation about the anchor; labelRotation is the decomposed
+// one. Pins (self-check 6, counted per label):
+//   notRequested  F's 2x2 is not rotate(I, labelRotation)'s (the port's
+//                 TyMatLocal(X, Y, requested))
+//   tanSkew       the decomposed skewX is ~2 pi, so F reads a tan that is
+//                 not the argument (V8's tan, not the run-time library's)
+//   remFloor      the layout rotation taken as r - floor(r / 2 pi) * 2 pi
+//                 instead of JS's (r % 2 pi + 2 pi) % 2 pi moves F
+//   rotationTurn  the decomposed rotation is a turn away from the requested
+//   gate          the label at the origin with margin 0 keeps G's 2x2
+//                 (identity): its local rotation is under 5e-5, so zrender
+//                 skips the local transform; the product would turn it
+const LBL = [2.2, 6.1, 1.7, 3.9, 7.3];
+add('M', 'C1 category x rotate 30', { grid: PCT, xAxis: CAT(5, { axisLabel: { rotate: 30 } }), yAxis: VAL(),
+  series: [line(LBL)] }, pins('notRequested', 'remFloor'));
+add('M', 'C2 category x rotate -90', { grid: PCT, xAxis: CAT(5, { axisLabel: { rotate: -90 } }), yAxis: VAL(),
+  series: [line(LBL)] }, pins('tanSkew'));
+add('M', 'C3 category x rotate 270', { grid: PCT, xAxis: CAT(5, { axisLabel: { rotate: 270 } }), yAxis: VAL(),
+  series: [line(LBL)] }, pins('tanSkew', 'rotationTurn'));
+add('M', 'C4 category x rotate 181', { grid: PCT, xAxis: CAT(5, { axisLabel: { rotate: 181 } }), yAxis: VAL(),
+  series: [line(LBL)] }, pins('tanSkew', 'rotationTurn', 'remFloor'));
+add('M', 'C5 category x rotate -135', { grid: PCT, xAxis: CAT(5, { axisLabel: { rotate: -135 } }), yAxis: VAL(),
+  series: [line(LBL)] }, pins('tanSkew', 'notRequested'));
+add('M', 'C6 value y rotate -90', { grid: PCT, xAxis: CAT(5), yAxis: VAL({ axisLabel: { rotate: -90 } }),
+  series: [line(LBL)] }, pins('tanSkew'));
+add('M', 'C7 top category x off zero rotate 90', { grid: PCT,
+  xAxis: CAT(5, { position: 'top', axisLine: { onZero: false }, axisLabel: { rotate: 90 } }), yAxis: VAL(),
+  series: [line(LBL)] }, pins('tanSkew', 'topNegates'));
+add('M', 'C8 value x min 0 rotate 0.002 margin 0', { grid: PCT,
+  xAxis: VAL({ min: 0, axisLabel: { rotate: 0.002, margin: 0 } }), yAxis: VAL({ min: 0 }),
+  series: [line([[0, 1.3], [37.1, 5.9], [81.7, 2.4]])] }, pins('gate'));
+
 // ---------- run, check and write ----------
 
 {
@@ -1848,7 +1936,102 @@ function recordOf(c) {
   return rec;
 }
 
-const out = { source: 'ECharts ' + echarts.version, cases: cases.map(recordOf) };
+// ---------- the label-matrix sweep ----------
+// Live zrender elements, no chart: AxisBuilder.ts:1563-1574 step for step on
+// a Group at (SWEEP_X, SWEEP_Y) turned by axisRot (the axis' transformGroup,
+// :553-558) and a reused Rect (_tmpLayoutEl, :1581): reset its transform
+// props, set x = c, y = t, rotation = the layout rotation, add, update,
+// remove, decompose, copy the 11 transform props onto a fresh Text and read
+// its getComputedTransform(). Checked, row by row, against labelMatrixAtU on
+// the same G, and against the same recipe on G = local(0, 0, axisRot) (the
+// matrix exists even when it is the identity) with F = local(decomposed) --
+// F's 2x2, the rotation and skewX do not read G's translation.
+const SWEEP_X = 120;
+const SWEEP_Y = 510;
+const SWEEP_C = 56;
+const TRANSFORM_PROPS = ['x', 'y', 'originX', 'originY', 'anchorX', 'anchorY', 'rotation', 'scaleX', 'scaleY', 'skewX', 'skewY'];
+function sweepRows(lib) {
+  const degs = [];
+  for (let k = -720; k <= 720; k++) degs.push(k / 2);
+  [1e-7, -1e-7, 0.002, 354].forEach(d => { if (!degs.some(e => same(e, d))) degs.push(d); });
+  const combos = [];
+  [0, Math.PI / 2].forEach(axisRot => [false, true].forEach(onTop => {
+    // bottom x +8, top x -8, left y -8, the y axis' other side +8
+    const t = ((axisRot === 0) !== onTop) ? 8 : -8;
+    degs.forEach(deg => combos.push({ axisRot, onTop, deg, c: SWEEP_C, t }));
+  }));
+  combos.push({ axisRot: 0, onTop: false, deg: 0.002, c: 0, t: 0, gate: true });
+  const reset = new lib.graphic.Rect();
+  const tmp = new lib.graphic.Rect();
+  const rows = [];
+  const fails = [];
+  combos.forEach(q => {
+    const raw = q.onTop ? -q.deg : q.deg;                                 // cartesianAxisHelper.ts:63-66
+    const req = ((raw != null ? raw : q.deg) || 0) * Math.PI / 180;       // AxisBuilder.ts:1369-1373
+    const lr = innerTextLayoutU(q.axisRot, req, 1).rotation;
+    const group = new lib.graphic.Group({ x: SWEEP_X, y: SWEEP_Y, rotation: q.axisRot });
+    group.updateTransform();
+    TRANSFORM_PROPS.forEach(k => { tmp[k] = reset[k]; });
+    tmp.x = q.c;
+    tmp.y = q.t;
+    tmp.rotation = lr;
+    group.add(tmp);
+    tmp.updateTransform();
+    group.remove(tmp);
+    tmp.decomposeTransform();
+    const label = new lib.graphic.Text({ style: { text: 'x' } });
+    TRANSFORM_PROPS.forEach(k => { label[k] = tmp[k]; });
+    const Fl = label.getComputedTransform();
+    const F = Fl ? Array.from(Fl) : [1, 0, 0, 1, 0, 0];
+    const name = (q.gate ? 'gate ' : '') + (q.axisRot ? 'y' : 'x') + (q.onTop ? ' top ' : ' ') + text(q.deg);
+    const f = msg => fails.push(name + ': ' + msg);
+    // against the transcription on the same G
+    const G = zrUpdate(zrT({ x: SWEEP_X, y: SWEEP_Y, rotation: q.axisRot }), null, false);
+    const U = labelMatrixAtU(G, q.c, q.t, lr, true);
+    if (!sameArr(U.F, Fl ? F : null)) f('F [' + textArr(F) + '], labelMatrixAtU gives [' + textArr(U.F) + ']');
+    if (!same(U.d.rotation, tmp.rotation) || !same(U.d.skewX, tmp.skewX)) f('the decomposed rotation or skewX is not labelMatrixAtU\'s');
+    if (!same(label.rotation, tmp.rotation)) f('the copy lost the rotation');
+    // against the recipe on G = local(0, 0, axisRot)
+    const G0 = zrLocal(zrT({ rotation: q.axisRot }));
+    const L = zrT({ x: q.c, y: q.t, rotation: lr });
+    const d0 = zrDecompose(zrNeedLocal(L) ? zrMul(G0, zrLocal(L)) : G0.slice());
+    const F0 = zrLocal(zrT(d0));
+    if (!sameArr(F0.slice(0, 4), F.slice(0, 4)) || !same(d0.rotation, tmp.rotation) || !same(d0.skewX, tmp.skewX)) {
+      f('G at the origin gives F [' + textArr(F0.slice(0, 4)) + '], rotation ' + text(d0.rotation) + ', skewX ' + text(d0.skewX));
+    }
+    if (q.gate) {
+      if (!(F[0] === 1 && F[1] === 0 && F[2] === 0 && F[3] === 1)) f('F\'s 2x2 is not the identity');
+      if (!(lr !== 0 && !zrNeedLocal(L))) f('the layout rotation is not under the gate');
+      const ungated = zrLocal(zrT(zrDecompose(zrMul(G0, zrLocal(L)))));
+      if (ungated.slice(0, 4).every((v, i) => same(v, F[i]))) f('the product without the gate gives the same F');
+    }
+    rows.push([num(q.axisRot), q.onTop, num(q.deg), num(req), num(q.c), num(q.t), num(F[0]), num(F[1]), num(F[2]), num(F[3]),
+      num(tmp.rotation), num(tmp.skewX), name]);
+  });
+  return { rows, fails };
+}
+const sweep = sweepRows(echarts);
+{
+  const p = sweepRows(PROD);
+  if (JSON.stringify(p.rows) !== JSON.stringify(sweep.rows)) sweep.fails.push('the production build sweeps differently');
+  // the sweep bites: F reads a tan that is not its argument, and F is not
+  // the requested rotation about the anchor
+  let tanRows = 0;
+  let notRequested = 0;
+  sweep.rows.forEach(r => {
+    const x = Buffer.from(r[11], 'hex').readDoubleBE(0);
+    if (x && Math.tan(x) !== x) tanRows++;
+    const R = zrRotate([1, 0, 0, 1, 0, 0], Buffer.from(r[3], 'hex').readDoubleBE(0));
+    if ([0, 1, 2, 3].some(i => hex(R[i]) !== r[6 + i])) notRequested++;
+  });
+  if (tanRows < 1) sweep.fails.push('no row reads a tan that is not its argument');
+  if (notRequested < 1) sweep.fails.push('every row is the requested rotation');
+  console.log('labelMatrixSweep: ' + sweep.rows.length + ' rows (' + tanRows + ' through tan(skewX) != skewX, '
+    + notRequested + ' not rotate(I, requested)), ' + sweep.fails.length + ' self-check failures');
+  sweep.fails.slice(0, 10).forEach(m => console.log('sweep self-check failed: ' + m));
+}
+
+const out = { source: 'ECharts ' + echarts.version, cases: cases.map(recordOf), labelMatrixSweep: sweep.rows };
 
 // A compact, deterministic writer: a value whose one-line JSON fits in 150
 // characters stays on one line. A number JSON.stringify would write as an
@@ -1889,6 +2072,10 @@ console.log('wrote', OUT, (out.cases.length - nDef - nDoc) + ' compared + ' + nD
 const unexpected = cases.filter(c => !c.deferred).filter(c => out.cases.find(o => o.name === c.name).deferred);
 if (unexpected.length) {
   console.log('FAILED: ' + unexpected.length + ' case(s) did not pass the self-checks');
+  process.exit(1);
+}
+if (sweep.fails.length) {
+  console.log('FAILED: the label-matrix sweep did not pass its self-checks');
   process.exit(1);
 }
 process.exit(0);

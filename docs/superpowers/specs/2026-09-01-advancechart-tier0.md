@@ -5715,6 +5715,7 @@ grid 的外边界收缩 → containShape(数值型基轴上的柱子)→ roam �
 1. **测宽**:zrender 那张表的 95 个比例从 dist 解码、以位模式写进 fixture;60 条字符串 × 字号的宽高,port 的 `TZrSsrMeasurer` 必须逐位相同。
 2. **收缩**:把上游自己的估算标签框和比例喂给 `TyOuterBoundsMargin` + `TyShrinkRect`,边距和最终矩形逐位相同(60 条)。
 3. **整条流水线**:读选项、格式化、稀疏、定位、旋转、加 textMargin、收缩,最终矩形在每条用例自己的容差内(约 4.5e-13;标签框经过 zrender 的变换矩阵,1.72 会变成 1.720000000000013)。64 条。
+   **[第五十一批:现在逐位。原因有二,都不是"矩阵舍入不同"那么笼统:标签矩阵要按 zrender 分解再重组;测试把 `Right - Left` 当宽度,118.16 + 421.84 − 118.16 = 421.84000000000003。见 §85。]**
 
 另有 23 条 deferred:坐标轴名称(5,**第三十八批已解除,见 §72**)、hideOverlap、类目自动间隔、fontSize、truncate/break、grid 盒子合并(10)、值轴稀疏(2)、containShape(1,**第四十一批已解除,见 §75**)。
 
@@ -6375,6 +6376,7 @@ Pascal 测试另外加比柱列的 offset 和 size。这 10 个随后全部被�
 ### 已知偏差
 
 - **旋转标签的矩形**:上游把组矩阵乘标签自身的变换,再分解、重组,旋转角因此差 1–6 ulp,±90° 时还要 V8 的 `tan`;port 直接用请求的旋转角。矩形差 ≤ 1.14e-13,在各用例容差内。`remRadian` 的写法也不同(差到 64 ulp,只影响这个矩阵)。
+  **[第五十一批已做,见 §85。几处事实更正:分解后的旋转角差 ≤ 1.1e-15 rad;需要 V8 `tan` 的是请求角在 (−180°, −90°] ∪ [181°, 270°](顶部离零点的轴镜像),不是 ±90°;`remRadian` 两种写法最多差 1 ulp(2π),不是 64 ulp;不转的 y 轴标签也受影响——轴名称"占用区"经过同一矩阵,中间名称差 7.1e-15。]**
 - 刻度线、轴线像素的 `subPixelOptimizeLine`,以及 y 轴刻度两端的 `ct·c` 项:是绘制几何,亚像素。
 - 上游的 title / legend 选项合并(mergeLayoutParam)仍只做了 grid。
 
@@ -6920,3 +6922,56 @@ tooltip 子行 → 旋转标签矩形的分解重组(连同 V8 的 `tan`)、titl
 ### 还在队列里
 
 遗留:旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并、D9 数据解析对齐。
+
+## 85. Tier 1 第五十一批:旋转标签矩阵的分解重组与 V8 的 `tan`(2026-09-24)
+
+上游的轴标签是轴组(Group)的子元素:组矩阵乘标签自身的平移和旋转,然后标签被取出来、`decomposeTransform` 成属性、再 `getLocalTransform` 重组。重组出的矩阵和"直接按请求角旋转"差几个 ulp,标签框、重叠框、轴名称的占用区都用它。port 以前直接用请求角。
+
+### 上游的做法
+
+- 标签局部旋转 `lr = remRadian(req − 轴旋转)`,JS 的 `%` 两次;局部矩阵 `local(c, t, lr)`;任何一项超过 5e-5 才有局部变换(`needLocalTransform`),否则就是组矩阵本身。
+- 分解(无父、原点 0,顺序照抄):`sx² = m0² + m1²`,`sy² = m2² + m3²`,`r = atan2(m1, m0)`,`sh = π/2 + r − atan2(m3, m2)`,`sy = √sy² · cos sh`,`sx = √sx²`;属性 `rotation = −r`,`skewX = sh`,平移取 m4、m5。
+- 重组:`[sx, 0·sx, tan(sh)·sy, sy, 0, 0]`,旋转非零才转,再加平移。`sh` 约为 2π 时 `tan` 要 V8 的:FPC `Tan(2π)` 是 `BCB1A60000000000`,V8 是 `BCB1A62633145C07`。
+
+### port 以前
+
+- `LabelBoxes` 用 `TyMatLocal(X, Y, 请求角)`;没有 needLocal 门;锚点的 `RemRadian` 用 Floor 写法。
+- `JsMath` 没有 `tan`。
+- 测试层面的容差:gridbounds、labelthinning 的绘图区和刻度、axisnames 移动过的名称与名称框、coordaffine 按 1e-9 比请求角——最后这条在 270°、181° 其实会差一整圈,只是没有用例。
+
+### 做法
+
+- `JsMath`:`TyJsTan`,逐句转写 V8 `ieee754.cc` 的 `tan` / `__kernel_tan`(系数写成位模式),归约沿用 `RemPio2`。
+- `Layout`:`TyMatDecompose`、`TyMatRecompose`、`TyNeedLocal`;标签位置记录加 `M`、`HasM`、`DecRotation`(零值是"手搭的规格,用旧路径");`byFrame` 循环里按上游算出 M、分解重组,锚点取乘积的平移;`LabelBoxes` 有 M 就用 M;`AnchorsFor` 改用 `TyRemRadian`,删掉 Floor 版。
+
+### 基准
+
+- `js-math.js` 加独立的 `tan` 数组:23,204 行(原有参数、fdlibm 的分支点、2π 与邻位、±π/2 邻位、kπ、0.6744 附近、2^-28、观测到的斜切值,加上核区间和整圈的种子随机扫描);`TestTanIsV8sToTheBit` 逐位比较,另钉 FPC `Tan(2π)` 不等于 V8。
+- `coord-affine.js`:
+  - 新增 `labelMatrixSweep`:横轴/纵轴 × 顶部与否 × −360°…360° 每半度,加三个特殊角和 5e-5 门的一行,共 5,777 行,由真 zrender 元素生成;`TestTheLabelMatrixIsUpstreams` 用 port 的原语逐位比较矩阵 2×2、分解后的旋转角和斜切。
+  - 新增 8 个图表用例(30°、−90°、270°、181°、−135°、y 轴 −90°、顶部离零点 90°、门);每个标签比较 6 个矩阵分量和分解后的旋转角,都逐位。
+- 容差全部去掉:gridbounds 改读 `PlotXYWH` 后 74/74 逐位;labelthinning 的绘图区、刻度、分割线、分割区域全部逐位,且要求每个用例的绘图区都逐位;axisnames 的名称旋转、移动后的锚点、名称框、网格矩形逐位。
+
+### 被推翻的旧测试
+
+- `test.advchart.coordaffine.pas`:轴的请求角按 1e-9 比上游的 `labelRotation`——那是分解后的角,270° 时差 2π。改为逐标签逐位比较分解后的角。
+- `test.advchart.gridbounds.pas`、`labelthinning.pas`、`axisnames.pas` 的容差和"矩阵舍入不同"的说明;原处都有标注。
+
+### 已知偏差
+
+- 画标签时仍用请求角(差 ≤ 1.1e-15 rad,亚像素)。
+- 分解后各属性都约为 0 时 zrender 重组为单位阵(标签锚在画布原点 5e-5 以内):不做。
+- 老式 containLabel 的旋转路径不经过这个矩阵(修正测试后已逐位)。
+
+### 变异测试
+
+16 个。12 个被杀,4 个等价:
+
+- 锚点对齐用的 `remRadian` 换回 Floor:两种写法最多差 1 ulp(2π),落不进对齐判定的 1e-4 分支边界;
+- 旋转为 ±0 时照样调用旋转:sin 0 = 0、cos 0 = 1,结果逐位相同;
+- 锚点取不带局部旋转的乘积:只有 0 < |c|、|t| ≤ 5e-5 时不同,没有夹具能到;
+- `tan` 核的一个系数改末位:那一项的变化约 1e-22,远低于结果的 ulp,两万多个参数都看不出。同一系数改在 2^-32 处的变异体被杀,说明系数确实接上了。
+
+### 还在队列里
+
+title / legend 的 mergeLayoutParam(第五十二批,审计已完成)→ D9 数据解析对齐。

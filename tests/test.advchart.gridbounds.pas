@@ -21,9 +21,12 @@ unit test.advchart.gridbounds;
      TyOuterBoundsMargin and TyShrinkRect must give upstream's margin and
      rect to the last bit;
   3. the whole pipeline -- options read, labels formatted, thinned, placed,
-     turned, padded, shrunk -- within the case's tolerance: a label box is
-     built from a rotation and a translation, and zrender's matrices round
-     differently (1.720000000000013 where the arithmetic says 1.72). }
+     turned, padded, shrunk -- bitwise too.
+     [Batch 51: this used to be within the case's tolerance, "zrender's
+     matrices round differently". Two causes, both gone: the label matrix is
+     now decomposed and recomposed as zrender does, and the rect is read as
+     x, y, width, height -- `Right - Left` is not the width it was built
+     from (118.16 + 421.84 - 118.16 = 421.84000000000003).] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
@@ -365,8 +368,7 @@ var
   cs: TJSONObject;
   c, g, bad, compared: Integer;
   want: TTyXYWH;
-  plot: TTyRectF;
-  tol: Double;
+  xywh: TTyXYWH;
   report: string;
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
@@ -391,7 +393,6 @@ begin
     g := 0;
     if cs.Find('grid') <> nil then g := cs.Integers['grid'];
     want := XYWHOf(cs.Objects['rect']);
-    tol := Num(cs, 'tol');
     Inc(compared);
     if g >= FBuild.GridCount then
     begin
@@ -399,10 +400,9 @@ begin
       report := report + LineEnding + '  ' + cs.Strings['name'] + ': no grid';
       Continue;
     end;
-    plot := FBuild.Grid(g).PlotRect;
-    if (Abs(plot.Left - want.X) > tol) or (Abs(plot.Top - want.Y) > tol)
-      or (Abs((plot.Right - plot.Left) - want.W) > tol)
-      or (Abs((plot.Bottom - plot.Top) - want.H) > tol) then
+    xywh := FBuild.Grid(g).PlotXYWH;
+    if (xywh.X <> want.X) or (xywh.Y <> want.Y)
+      or (xywh.W <> want.W) or (xywh.H <> want.H) then
     begin
       Inc(bad);
       if bad <= 30 then
@@ -410,9 +410,8 @@ begin
           [cs.Strings['name'], cs.Objects['rectText'].Strings['x'],
            cs.Objects['rectText'].Strings['y'],
            cs.Objects['rectText'].Strings['width'],
-           cs.Objects['rectText'].Strings['height'], Fmt(plot.Left),
-           Fmt(plot.Top), Fmt(plot.Right - plot.Left),
-           Fmt(plot.Bottom - plot.Top)]);
+           cs.Objects['rectText'].Strings['height'], Fmt(xywh.X),
+           Fmt(xywh.Y), Fmt(xywh.W), Fmt(xywh.H)]);
     end;
   end;
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(compared)

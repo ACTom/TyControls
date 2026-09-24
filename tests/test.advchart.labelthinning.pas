@@ -572,6 +572,7 @@ var
   wantRect: TTyXYWH;
   plot: TTyRectF;
   tol, iv: Double;
+  pxywh: TTyXYWH;
   report, why: string;
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
@@ -600,16 +601,17 @@ begin
         end;
       end;
       g := cs.Integers['grid'];
-      tol := Num(cs, 'tol');
+      tol := 0;
       why := '';
-      { THE RECT the grid was solved to }
+      { THE RECT the grid was solved to, to the bit (batch 51: the rotated
+        labels' boxes are zrender's decomposed matrices now). }
       wantRect := XYWHOf(cs.Objects['rect']);
       plot := FBuild.Grid(g).PlotRect;
-      if (Abs(plot.Left - wantRect.X) > tol) or (Abs(plot.Top - wantRect.Y) > tol)
-        or (Abs((plot.Right - plot.Left) - wantRect.W) > tol)
-        or (Abs((plot.Bottom - plot.Top) - wantRect.H) > tol) then
-        why := Format('rect %s,%s,%s,%s, upstream %s,%s,%s,%s', [Fmt(plot.Left),
-          Fmt(plot.Top), Fmt(plot.Right - plot.Left), Fmt(plot.Bottom - plot.Top),
+      pxywh := FBuild.Grid(g).PlotXYWH;
+      if (pxywh.X <> wantRect.X) or (pxywh.Y <> wantRect.Y)
+        or (pxywh.W <> wantRect.W) or (pxywh.H <> wantRect.H) then
+        why := Format('rect %s,%s,%s,%s, upstream %s,%s,%s,%s', [Fmt(pxywh.X),
+          Fmt(pxywh.Y), Fmt(pxywh.W), Fmt(pxywh.H),
           cs.Objects['rectText'].Strings['x'], cs.Objects['rectText'].Strings['y'],
           cs.Objects['rectText'].Strings['width'], cs.Objects['rectText'].Strings['height']]);
       axes := cs.Arrays['axes'];
@@ -675,16 +677,17 @@ begin
 end;
 
 { THE FURNITURE: every tick mark, split line and split area of every axis'
-  drawn pass -- the ticks it stands for and whether it is drawn exactly, where
-  it goes within the case's tolerance. }
+  drawn pass -- the ticks it stands for, whether it is drawn, and where it
+  goes, all exactly. [Batch 51: where it went was within the case's
+  tolerance while the rotated labels' boxes were a unit off.] }
 procedure TAdvChartLabelThinningOracleTest.TestEveryAxisDrawsTheFurnitureUpstreamDraws;
 var
   cases, axes, passes, vals, drawn, coords, rects, r: TJSONArray;
   cs, ax, ps, rec: TJSONObject;
-  c, a, g, k, bad, compared, closing, synced, areas, exactPlots: Integer;
+  c, a, g, k, bad, compared, closing, synced, areas, exactPlots, ran: Integer;
   axis: TTyAxis;
   spec: PTyAxisLayoutSpec;
-  tol, lo, hi, wlo, whi: Double;
+  lo, hi, wlo, whi: Double;
   why, report: string;
   exactPlot: Boolean;
   xywh, want: TTyXYWH;
@@ -704,11 +707,7 @@ var
       if AMarks[q].Value <> NumAt(vals, q) then
         Exit(Format('%s %d: tick %s, upstream %s', [AName, q, Fmt(AMarks[q].Value),
           Fmt(NumAt(vals, q))]));
-      { EXACT where the plot is upstream's to the bit; where rotated labels'
-        boxes -- a unit off in their turn until the decomposed matrix is
-        ported -- moved the shrink, within the case's tolerance }
-      if (exactPlot and (AMarks[q].Coord <> NumAt(coords, q)))
-        or (Abs(AMarks[q].Coord - NumAt(coords, q)) > tol) then
+      if AMarks[q].Coord <> NumAt(coords, q) then
         Exit(Format('%s %d: at %s, upstream %s', [AName, q, Fmt(AMarks[q].Coord),
           Fmt(NumAt(coords, q))]));
       if ACheckDrawn and (AMarks[q].Drawn <> drawn.Booleans[q]) then
@@ -726,6 +725,7 @@ begin
   synced := 0;
   areas := 0;
   exactPlots := 0;
+  ran := 0;
   report := '';
   for c := 0 to cases.Count - 1 do
   begin
@@ -743,7 +743,7 @@ begin
       end;
     end;
     g := cs.Integers['grid'];
-    tol := Num(cs, 'tol');
+    Inc(ran);
     xywh := FBuild.Grid(g).PlotXYWH;
     want := XYWHOf(cs.Objects['rect']);
     exactPlot := (xywh.X = want.X) and (xywh.Y = want.Y) and (xywh.W = want.W)
@@ -798,7 +798,7 @@ begin
             end;
             lo := Min(spec^.SplitAreaMarks[k].Coord, spec^.SplitAreaMarks[k + 1].Coord);
             hi := Max(spec^.SplitAreaMarks[k].Coord, spec^.SplitAreaMarks[k + 1].Coord);
-            if (Abs(lo - Min(wlo, whi)) > tol) or (Abs(hi - Max(wlo, whi)) > tol) then
+            if (lo <> Min(wlo, whi)) or (hi <> Max(wlo, whi)) then
             begin
               why := Format('%s area %d: %s..%s, upstream %s..%s', [ax.Strings['dim'],
                 k, Fmt(lo), Fmt(hi), Fmt(Min(wlo, whi)), Fmt(Max(wlo, whi))]);
@@ -818,8 +818,7 @@ begin
   AssertTrue(Format('banded ones (%d)', [closing]), closing >= 30);
   AssertTrue(Format('ticks hidden with their labels (%d)', [synced]), synced >= 5);
   AssertTrue(Format('split areas (%d)', [areas]), areas >= 4);
-  AssertTrue(Format('plots upstream''s to the bit (%d)', [exactPlots]),
-    exactPlots >= 80);
+  AssertEquals('every plot upstream''s to the bit', ran, exactPlots);
   AssertEquals(IntToStr(bad) + ' cases differ:' + report, 0, bad);
 end;
 
