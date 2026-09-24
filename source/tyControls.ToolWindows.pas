@@ -608,10 +608,13 @@ type
     FOnCollapse: TNotifyEvent;
     FOnExpand: TNotifyEvent;
     FImages: TCustomImageList;
+    { 注册到的 manager(spec §2 / §10.6);nil = 没有,只有栏内调顺序。 }
+    FManager: TTyToolWindowManager;
     { 变更 link **真正注册在**哪个列表上。它和 EffectiveImages 可以一时不同 —— 生效列表刚变、
       还没重新订阅的那一刻 —— 所以单记一份:注销要找的是 link 实际挂着的那一个。 }
     FSubscribedList: TCustomImageList;
     FImageLink: TChangeLink;
+    procedure SetManager(AValue: TTyToolWindowManager);
     procedure SetImages(AValue: TCustomImageList);
     { 让 link 跟上 EffectiveImages:**先**从旧列表注销,**再**注册到新列表并 FreeNotification。
       顺序反了(或者不注销),同一个 link 就同时挂在两个列表上,而 Sender 只记得后一个 ——
@@ -1061,6 +1064,9 @@ type
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
     { 窗口序号,跟随窗口身份:调顺序后当前页还是那个窗口,数值跟着变。 }
     property ActiveIndex: Integer read GetActiveIndex write SetActiveIndex default -1;
+    { 跨侧拖动、MoveWindow、布局保存的协调者(spec §2)。同一个 manager 下与别的栏 Placement
+      相同的每一条都不可用(spec §10.6),栏内调顺序照常。setter 在流式 fixup 里跑,从不抛异常。 }
+    property Manager: TTyToolWindowManager read FManager write SetManager;
     { 窗口图标的列表。对象查看器里窗口 ImageIndex 的下拉只看这一个(graphpropedits.pas:
       713-728),看不到 Manager.Images 回落 —— 只在 manager 上设列表时请设 ImageName。
       只设了 ImageIndex、没设 ImageName 的窗口要在两侧之间移动,就得用 manager 上的共享列表。 }
@@ -1076,11 +1082,22 @@ type
     property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
   end;
 
-  { 目前只是壳:栏的 Manager 属性要到 C 期才接线,但类名先占住,
-    免得测试和 .lfm 里先后写出两个名字。
-    继承 TTyComponent(不是 TComponent):全库非可视组件都从它来,它带着
-    对象查看器里那个只读 Version。 }
+  { 工具窗口栏的协调者(spec §2):可以不放。栏经 Manager 属性注册到它上面;跨侧拖动、
+    MoveWindow、布局保存都要它。非可视组件,从 TTyComponent 来(带对象查看器里的 Version)。
+    不支持放在数据模块里、栏分布在多个窗体上(spec §10.6)。 }
   TTyToolWindowManager = class(TTyComponent)
+  private
+    { 注册着的栏,注册顺序,无语义(「先注册的赢」不成立:fixup 倒序执行,spec §10.6)。 }
+    FBars: array of TTyToolWindowBar;
+    procedure AddBar(ABar: TTyToolWindowBar);
+    procedure RemoveBar(ABar: TTyToolWindowBar);
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    destructor Destroy; override;
+    { 这条栏是不是可用:注册在本 manager 上,且没有别的注册栏和它 Placement 相同(spec §10.6)。
+      现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。 }
+    function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
   end;
 
 { 图标条溢出菜单挂在哪、怎么对齐(栏客户区坐标):菜单往内容区那一侧开 —— 左栏从溢出按钮的
@@ -5482,6 +5499,9 @@ begin
     注销那一步跳过了,走到这里。 }
   if (Operation = opRemove) and (AComponent is TTyToolWindow) then
     UnregisterWindow(TTyToolWindow(AComponent));
+  { manager 被释放(或从 Owner 摘走):只清自己的引用,不回头调它 —— 它正在走,它的表由它自己清。 }
+  if (Operation = opRemove) and (AComponent = FManager) then
+    FManager := nil;
   { 列表被释放,或者只是从 Owner 里摘走(RemoveComponent 同样广播 opRemove,列表还活着):
     清引用,是订阅着的那一个就**当场**注销,再按生效列表重新订阅。注销不交给 Sync 去比
     差值:两种情形都必须注销 —— 摘走的那个活下来还会发变更、日后析构时要清自己的 link 表;
@@ -5494,6 +5514,22 @@ begin
     if AComponent = FSubscribedList then UnsubscribeImages;
     ImagesChanged;
   end;
+end;
+
+procedure TTyToolWindowBar.SetManager(AValue: TTyToolWindowManager);
+begin
+  if FManager = AValue then Exit;
+  { 流式 fixup 期间也会走到这里:绝不抛异常(spec §10.6)。冲突只是「不可用」,由 manager 现算。 }
+  if FManager <> nil then
+  begin
+    FManager.RemoveBar(Self);
+    { 双向挂的通知一起拆 —— 本栏和旧 manager 之间别无其他引用。旧 manager 正在释放时
+      它自己在清通知表,不碰。 }
+    if not (csDestroying in FManager.ComponentState) then
+      FManager.RemoveFreeNotification(Self);
+  end;
+  FManager := AValue;
+  if AValue <> nil then AValue.AddBar(Self);
 end;
 
 procedure TTyToolWindowBar.SetController(AValue: TTyStyleController);
@@ -5831,6 +5867,55 @@ begin
   end;
   { CaptureChanged 从不取消(Win32 上每次正常松开都会先到);捕获被别人抢走只有轮询抓得到。 }
   if FCaptureConfirmed and (GetCaptureControl <> FCapturer) then Reset(twgeCancel);
+end;
+
+{ --- TTyToolWindowManager -------------------------------------------------------- }
+
+destructor TTyToolWindowManager.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure TTyToolWindowManager.AddBar(ABar: TTyToolWindowBar);
+var
+  i: Integer;
+begin
+  for i := 0 to High(FBars) do
+    if FBars[i] = ABar then Exit;
+  SetLength(FBars, Length(FBars) + 1);
+  FBars[High(FBars)] := ABar;
+  { 双向:栏被释放时本 manager 收到 opRemove,本 manager 被释放时栏收到。 }
+  ABar.FreeNotification(Self);
+end;
+
+procedure TTyToolWindowManager.RemoveBar(ABar: TTyToolWindowBar);
+var
+  i: Integer;
+begin
+  for i := 0 to High(FBars) do
+    if FBars[i] = ABar then
+    begin
+      Delete(FBars, i, 1);
+      Break;
+    end;
+end;
+
+procedure TTyToolWindowManager.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent is TTyToolWindowBar) then
+    RemoveBar(TTyToolWindowBar(AComponent));
+end;
+
+function TTyToolWindowManager.IsBarUsable(ABar: TTyToolWindowBar): Boolean;
+var
+  i: Integer;
+begin
+  { 与别的注册栏 Placement 相同的**每一条**都不可用,不按先来后到(spec §10.6)。 }
+  Result := (ABar <> nil) and (ABar.Manager = Self);
+  if not Result then Exit;
+  for i := 0 to High(FBars) do
+    if (FBars[i] <> ABar) and (FBars[i].Placement = ABar.Placement) then Exit(False);
 end;
 
 procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;

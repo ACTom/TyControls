@@ -130,6 +130,10 @@ type
     procedure TestRoundTripKeepsWindowsOrderActiveAndSizes;
     procedure TestExpandedSizeStreamsOnBothSidesOfTheDefault;
     procedure TestAnInheritedFormKeepsTheWindowOrder;
+    { spec §10.6:栏的 Manager 引用往返;同 Placement 两条栏在两种流顺序下答案一样。 }
+    procedure TestTheManagerReferenceRoundTrips;
+    procedure TestSamePlacementBarsAreUnusableInEitherStreamOrder;
+    procedure TestAConflictWhileLoadingDoesNotRaise;
   end;
 
 implementation
@@ -1015,6 +1019,157 @@ begin
     e.Free;
     desc.Free;
     anc.Free;
+  end;
+end;
+
+{ --- manager 引用(spec §10.6) ----------------------------------------------------- }
+
+type
+  { Loading / Loaded 是 protected:模拟 fixup 期间的 setter。 }
+  TLoadingBar = class(TTyToolWindowBar)
+  public
+    procedure BeginLoad;
+    procedure EndLoad;
+  end;
+
+procedure TLoadingBar.BeginLoad;
+begin
+  Loading;
+end;
+
+procedure TLoadingBar.EndLoad;
+begin
+  Loaded;
+end;
+
+function NewNamedBar(AHost: TForm; const AName: string;
+  APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
+begin
+  Result := TTyToolWindowBar.Create(AHost);
+  Result.Name := AName;
+  Result.Placement := APlacement;
+  Result.Parent := AHost;
+end;
+
+procedure TTyToolWindowStreamingTests.TestTheManagerReferenceRoundTrips;
+var
+  src, dst: TForm;
+  ms: TMemoryStream;
+  m, dm: TTyToolWindowManager;
+  l, r, dl, dr: TTyToolWindowBar;
+  txt: string;
+begin
+  src := NewHost;
+  src.SetBounds(0, 0, 1000, 800);
+  dst := TToolWindowHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    m := TTyToolWindowManager.Create(src);
+    m.Name := 'Manager1';
+    l := NewNamedBar(src, 'BarL', twpLeft);
+    AddWindow(src, l, 'W1');
+    r := NewNamedBar(src, 'BarR', twpRight);
+    AddWindow(src, r, 'W2');
+    l.Manager := m;
+    r.Manager := m;
+    ms.WriteComponent(src);
+    txt := StreamText(ms);
+    AssertTrue('引用写进了流', Pos('Manager = Manager1', txt) > 0);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    dm := dst.FindComponent('Manager1') as TTyToolWindowManager;
+    dl := dst.FindComponent('BarL') as TTyToolWindowBar;
+    dr := dst.FindComponent('BarR') as TTyToolWindowBar;
+    AssertNotNull('manager 读回来了', dm);
+    AssertSame('左栏指向读回来的 manager', dm, dl.Manager);
+    AssertSame('右栏指向读回来的 manager', dm, dr.Manager);
+    AssertTrue('左栏可用', dm.IsBarUsable(dl));
+    AssertTrue('右栏可用', dm.IsBarUsable(dr));
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowStreamingTests.TestSamePlacementBarsAreUnusableInEitherStreamOrder;
+
+  procedure Check(AFirstIsA: Boolean);
+  var
+    src, dst: TForm;
+    ms: TMemoryStream;
+    m, dm: TTyToolWindowManager;
+    a, b: TTyToolWindowBar;
+    tag: string;
+  begin
+    if AFirstIsA then tag := '先 A 后 B: ' else tag := '先 B 后 A: ';
+    src := NewHost;
+    src.SetBounds(0, 0, 1000, 800);
+    dst := TToolWindowHostForm.CreateNew(nil);
+    ms := TMemoryStream.Create;
+    try
+      m := TTyToolWindowManager.Create(src);
+      m.Name := 'Manager1';
+      if AFirstIsA then
+      begin
+        a := NewNamedBar(src, 'BarA', twpLeft);
+        b := NewNamedBar(src, 'BarB', twpLeft);
+      end
+      else
+      begin
+        b := NewNamedBar(src, 'BarB', twpLeft);
+        a := NewNamedBar(src, 'BarA', twpLeft);
+      end;
+      AddWindow(src, a, 'WA');
+      AddWindow(src, b, 'WB');
+      a.Manager := m;
+      b.Manager := m;
+      ms.WriteComponent(src);
+      ms.Position := 0;
+      ms.ReadComponent(dst);
+      dm := dst.FindComponent('Manager1') as TTyToolWindowManager;
+      a := dst.FindComponent('BarA') as TTyToolWindowBar;
+      b := dst.FindComponent('BarB') as TTyToolWindowBar;
+      AssertSame(tag + 'A 注册上了', dm, a.Manager);
+      AssertSame(tag + 'B 注册上了', dm, b.Manager);
+      AssertFalse(tag + 'A 不可用', dm.IsBarUsable(a));
+      AssertFalse(tag + 'B 不可用', dm.IsBarUsable(b));
+    finally
+      ms.Free;
+      dst.Free;
+      src.Free;
+    end;
+  end;
+
+begin
+  Check(True);
+  Check(False);
+end;
+
+procedure TTyToolWindowStreamingTests.TestAConflictWhileLoadingDoesNotRaise;
+var
+  f: TForm;
+  m: TTyToolWindowManager;
+  a, b: TLoadingBar;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    m := TTyToolWindowManager.Create(f);
+    a := TLoadingBar.Create(f);
+    a.Parent := f;
+    b := TLoadingBar.Create(f);
+    b.Parent := f;
+    a.BeginLoad;
+    b.BeginLoad;
+    { fixup 里抛异常会中止整个窗体加载(spec §10.6):冲突只是「不可用」。 }
+    a.Manager := m;
+    b.Manager := m;
+    a.EndLoad;
+    b.EndLoad;
+    AssertSame('照样注册上了', m, b.Manager);
+    AssertFalse('冲突的两条都不可用', m.IsBarUsable(a) or m.IsBarUsable(b));
+  finally
+    f.Free;
   end;
 end;
 
