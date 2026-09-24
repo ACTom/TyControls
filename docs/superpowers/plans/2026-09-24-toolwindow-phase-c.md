@@ -1500,7 +1500,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/plans/2026-09-24-toolwindow-phase-c.md`
 - Modify: `docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md`
 
-- [ ] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
+- [x] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
 
 逐条对着代码查，每条记「在哪一行实现 / 为什么不需要」：
 
@@ -1517,7 +1517,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - §10.1–§10.7：逐节。
 - §13：`OnWindowMoved` 对 API 也发（有意偏离已实现）。
 
-- [ ] **Step 2: grep**
+- [x] **Step 2: grep**
 
 ```bash
 cd /d/Projects/ty-3.1 && for c in $(grep -hoE "^ +TyToolWindow[A-Za-z]+ += |^ +TyToolLayout[A-Za-z]+ += " source/tyControls.ToolWindows.pas source/tyControls.ToolWindows.Layout.pas source/tyControls.ToolWindows.LayoutText.pas | sed -E 's/^ +//; s/ +=.*//'); do n=$(grep -rwn "$c" source --include=*.pas | grep -vE "^[^:]+:[0-9]+: +$c +=" | wc -l); [ "$n" -eq 0 ] && echo "没人读: $c"; done; echo done
@@ -1530,7 +1530,7 @@ Expected：只打印 `done`。再核：
 - `grep -n "C 期\|空壳\|TODO" source/tyControls.ToolWindows*.pas tests/test.toolwindow.*.pas`：`C 期` 字样都改成现在的事实（栏析构、`EffectiveImages`、`BeginSilent`、`SwitchCore`、`Notification`、引擎、manager 的注释；测试里「C 期的布局应用」那几处改成指向真实的测试）。
 - 「B 期留给本期的 6 项」表逐项在代码里找到。
 
-- [ ] **Step 3: 跑全量**
+- [x] **Step 3: 跑全量**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && lazbuild -B tycontrols.lpk && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
@@ -1538,7 +1538,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && lazbuild -B tycontrols
 
 Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，总数 = Task 0 的基线 + 本期新增条数。红了先按 [[known-rare-suite-flake]]、[[suite-order-widgetset-init]]、[[canary-then-rebuild]] 排查是不是既有的偶发 / 顺序问题 / 二进制陈旧，再疑本期代码。
 
-- [ ] **Step 4: 抽查变异（每条三拍，必须红）**
+- [x] **Step 4: 抽查变异（每条三拍，必须红）**
 
 1. Task 4 的「去掉延后」（事件顺序串）。
 2. Task 6 的「`MustQueue` 恒 False」（按钮句柄那一条）。
@@ -1547,11 +1547,11 @@ Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，
 5. Task 12 的「`UnregisterWindow` 批次里照常回落」。
 6. Task 13 的「窗口的 `Loaded` 不调 `TryFinishLoading`」。
 
-- [ ] **Step 5: 整体代码质量审查**
+- [x] **Step 5: 整体代码质量审查**
 
 按执行方式，本期只在这里做一次：对 `git diff <Task 0 的 HEAD>..HEAD -- source/` 做一次代码质量审查（重复代码——`MoveNow` 和 `SetParent` 的簿记、`ApplyText` 的焦点那一段是否该合成一处；注释与代码不符；遗留的「C 期」字样；死字段 / 死方法；try/finally 成对）。审出来的问题修完再回到 Step 3 跑一次全量。
 
-- [ ] **Step 6: 把实现期的偏差写回 spec 原处**
+- [x] **Step 6: 把实现期的偏差写回 spec 原处**
 
 「开工前要定的问题」里用户拍板的每一条，和实现中新发现的每一处 spec 没写准的地方，都在 spec **原处**改并标「实现期修正（C 期）」——D 期读的是 spec，不是这份计划。至少要落的：
 
@@ -1564,13 +1564,15 @@ Expected：`Number of run tests` 那一行存在，errors / failures 都是 0，
 - §10.1（问题 14、20）；§10.2（问题 16）；§10.6（问题 17）；§11（问题 19：设计期 `MoveWindow` 自己通知设计器）；
 - §16 第 5、6 步标「已完成」，把本期留给 D 期的事写进第 7 步（设计期冲突提示要在哪几处重画、组件编辑器可以直接用 `IsBarUsable` / `CanMoveWindow`）。
 
-- [ ] **Step 7: 签收记录写进本计划末尾，提交**
+- [x] **Step 7: 签收记录写进本计划末尾，提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(toolwindows): phase C sign-off notes and spec corrections
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+**C 期签收**：已填，见本计划末尾「C 期签收（2026-09-24）」。
 
 ---
 
@@ -1660,3 +1662,18 @@ end;
 - Cocoa：临时光标；拖动事件是否一直发给按下的那个 view；
 - 各 widgetset：拖动中 Alt+Tab、`ShowModal`、弹出菜单抢走捕获后能否取消；换父控件后窗口里的原生子控件（IME 组字、光标）是否按文档说的那样丢状态；
 - 皮肤：17 个主题下目标栏的插入线看不看得见（尤其高对比度皮肤）。
+
+---
+
+## C 期签收（2026-09-24）
+
+- 全量 7666 条，errors / failures 0 / 0。
+- 提交区间：Task 0–13 `d56dee47..2d1266a5`；整体审查（规格核对 + 代码质量）的修复 `57c755fa..c7d3583a`（含把 `TTyToolWindowManager` 拆进新单元 `tyControls.ToolWindows.Manager`）。
+- 变异：Task 14 Step 4 的第 6 条（窗口的 `Loaded` 不调 `TryFinishLoading`）是等价变异——读取器里窗口的 `Loaded` 总在它的栏之前，那时收不了尾；窗口的 `Loaded` 重写已删，收尾只靠 manager 和栏（spec §10.5）。开工前问题 6 的建议因此没有采纳。
+- spec 写回：本次提交。开工前 20 条的拍板、Task 0–13 的偏差、收尾修复的偏差，都标「实现期修正 / 补（C 期）」写在原处；§16 第 5、6 步标「已完成（C 期）」。
+- 遗留，不阻塞：
+  - (a) 继承窗体上，祖先层加载中调的 Load / Reset 会被子孙层流进来的值覆盖；要在 FormCreate 里读用户布局（spec §10.5 的限制）。
+  - (b) 布局应用批次中途（某一页的 `OnShow` / `OnHide` 里）释放 manager 不保证不崩（spec §6.6）。
+  - (c) 只能真机验的见 spec §15，另加 C 期的两条：Win32 真实点击时捕获在按钮点击处理期间何时释放；前台窗口下抽消息时的捕获行为。
+
+**D 期开工前**：先读 spec §16 第 7、8 步——C 期留给设计期的（冲突提示在哪几处重画、组件编辑器用 `CanMoveWindow` / `IsBarUsable` / `MoveWindow`、`designtime/` 里还没有任何 ToolWindows 的注册、manager 要 uses 新单元）和留给文档的要点。
