@@ -34,7 +34,7 @@ uses
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.Ribbon,
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.SelectPath, tyControls.FilterComboBox,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.ImageCollection;
+  tyControls.ImageCollection, tyControls.ToolWindows;
 
 type
   TDesignEditorsTest = class(TTestCase)

@@ -18,7 +18,7 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
-  tyControls.AdvanceChart,
+  tyControls.AdvanceChart, tyControls.ToolWindows,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor, tyControls.Design.AdvChart.Editor;
 
@@ -736,6 +736,11 @@ begin
     you pick NAMES. Hide both; Names/DefaultSize/GlyphColor stay, they are the point. }
   RegisterPropertyEditor(TypeInfo(TTyImageCollection), TTyLucideImageList, 'Collection', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TTyIconFont), TTyLucideImageList, 'IconFont', THiddenPropertyEditor);
+  { A tool window's and an actions area's Controller is pushed down by the bar / the window and
+    never streamed (spec §3.1 / §4): an edit in the inspector would be overwritten by the next
+    push, so it is not shown. }
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyToolWindow, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyToolWindowActions, 'Controller', THiddenPropertyEditor);
   // Every TTyColor property ($AARRGGBB) gets a readable hex value + a colour picker on '...',
   // instead of a raw integer like 4278190080 nobody can fill (DefaultColor, GlyphColor, ...).
   RegisterPropertyEditor(TypeInfo(TTyColor), nil, '', TTyColorPropertyEditor);

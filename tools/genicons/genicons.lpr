@@ -918,8 +918,32 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 { TTyPopover: a bubble with a pointer that HOLDS controls — that is the whole gap it fills }
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
+{ TTyToolWindowBar: a window frame with an icon strip down its left edge (three small squares,
+  the top one in the accent colour = the current page) and the content area to its right }
+procedure GToolWindowBar(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Line(b,8.5,4,8.5,20,Ink);
+  FillRRect(b,4.5,6.5,7.5,9.5,0.8,Acc);
+  FillRRect(b,4.5,11,7.5,14,0.8,Ink);
+  FillRRect(b,4.5,15.5,7.5,18.5,0.8,Ink);
+  Line(b,11,8,18,8,Ink,1.2);
+  Line(b,11,11.5,16,11.5,Ink,1.2);
+end;
+
+{ TTyToolWindowManager: two side bars (left and right) with a two-way arrow between them —
+  a tool window can be moved from one side to the other }
+procedure GToolWindowManager(b: TBGRABitmap);
+begin
+  RRect(b,2.5,4,7.5,20,1.5,Ink);
+  RRect(b,16.5,4,21.5,20,1.5,Ink);
+  Line(b,9.5,12,14.5,12,Acc,1.8);
+  PolyL(b,[PointF(11,10),PointF(9.2,12),PointF(11,14)],Acc,1.8);
+  PolyL(b,[PointF(13,10),PointF(14.8,12),PointF(13,14)],Acc,1.8);
+end;
+
 const
-  Glyphs: array[0..165] of TGlyph = (
+  Glyphs: array[0..167] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1085,7 +1109,9 @@ const
     (Name:'TTyTransfer';          Draw:@GTransfer),
     (Name:'TTyTreeSelect';        Draw:@GTreeSelect),
     (Name:'TTyCascader';          Draw:@GCascader),
-    (Name:'TTyPopover';           Draw:@GPopover)
+    (Name:'TTyPopover';           Draw:@GPopover),
+    (Name:'TTyToolWindowBar';     Draw:@GToolWindowBar),
+    (Name:'TTyToolWindowManager'; Draw:@GToolWindowManager)
   );
 
 const

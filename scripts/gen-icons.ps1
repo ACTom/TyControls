@@ -29,7 +29,7 @@ $classes = @(
   'TTyScrollBox','TTyScrollPanel','TTyExPanel',
   'TTyGridPanel','TTyRelativePanel',
   'TTyToolBarEx','TTyControlBar','TTyCoolBar',
-  'TTyHeaderControl','TTyListGroupPanel',
+  'TTyHeaderControl','TTyListGroupPanel','TTyToolWindowBar','TTyToolWindowManager',
   # Phase 9 vector shapes
   'TTyShape','TTyStarShape','TTyArrow',
   # Phase 8 data views (pulled forward: Phase 7 depends on it)

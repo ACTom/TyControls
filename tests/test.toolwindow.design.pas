@@ -11,7 +11,7 @@ unit test.toolwindow.design;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LCLProc,
+  Classes, SysUtils, Types, TypInfo, Math, Controls, Forms, Graphics, LCLType, LCLProc,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.Panel,
@@ -40,6 +40,9 @@ type
       manager FM 上。 }
     procedure NewWorkbench;
     function NamedWindowIn(ABar: TTyToolWindowBar; const AName: string): TProbeWindow;
+    { IDE 放下一条栏:按设计器 PPI 缩放构造出来的宽高 → AutoAdjustLayout(96 → PPI) →
+      SetBounds → Parent :=。 }
+    function DropBar(APPI: Integer): TBarAccess;
   published
     { spec §3.2:设计期孤儿。 }
     procedure TestAnInactiveWindowMovedOutDropsTheDesignFlag;
@@ -82,6 +85,10 @@ type
     procedure TestOnlyOrphansHaveReturnTargets;
     procedure TestReturnToBarPutsTheOrphanBack;
     procedure TestReturnToBarRefusesAnythingElse;
+    { 开工前问题 16:照 IDE 放下控件的顺序(customformeditor.pp:1453-1506)放一条栏,
+      ExpandedSize 不被改掉。 }
+    procedure TestDroppingABarAt96KeepsTheDefaultSize;
+    procedure TestDroppingABarAt144KeepsTheDefaultSize;
 
   end;
 
@@ -852,6 +859,68 @@ begin
   AssertSame('还在面板上', TWinControl(DesignPanel), FExplorer.Parent);
   AssertFalse('不是孤儿', TyToolWindowDesignReturnToBar(FSearch, FR));
   AssertSame('还在左栏', TTyToolWindowBar(FL), FSearch.Bar);
+end;
+
+
+function TTyToolWindowDesignTests.DropBar(APPI: Integer): TBarAccess;
+var
+  w, h, savedX, savedY: Integer;
+  host: TTyPanel;
+begin
+  if FDesignOwner = nil then
+  begin
+    FDesignOwner := TDesignOwner.Create(nil);
+    FDesignOwner.MarkDesigning;
+  end;
+  { IDE 在 APPI 的屏幕上建组件:新控件的字体 PPI 取 ScreenInfo(TFont.Create),不是 96。 }
+  savedX := ScreenInfo.PixelsPerInchX;
+  savedY := ScreenInfo.PixelsPerInchY;
+  ScreenInfo.PixelsPerInchX := APPI;
+  ScreenInfo.PixelsPerInchY := APPI;
+  try
+    Result := TBarAccess.Create(FDesignOwner);
+  finally
+    ScreenInfo.PixelsPerInchX := savedX;
+    ScreenInfo.PixelsPerInchY := savedY;
+  end;
+  Result.Controller := FCtl;
+  { customformeditor.pp:1453-1506:构造出来的宽高按「96 设计」缩放到设计器 PPI →
+    AutoAdjustLayout(96 → PPI) → SetBounds → Parent :=。 }
+  w := MulDiv(Math.Max(5, Result.Width), APPI, 96);
+  h := MulDiv(Math.Max(5, Result.Height), APPI, 96);
+  Result.AutoAdjustLayout(lapAutoAdjustForDPI, 96, APPI, 0, 0);
+  Result.SetBounds(10, 10, w, h);
+  { 设计器里的父控件在 APPI 下(字体跟父控件走,ParentFont)。 }
+  host := TTyPanel.Create(FDesignOwner);
+  host.Font.PixelsPerInch := APPI;
+  host.Controller := FCtl;
+  host.SetBounds(0, 0, 800, 600);
+  host.Parent := FForm;
+  Result.Parent := host;
+end;
+
+procedure TTyToolWindowDesignTests.TestDroppingABarAt96KeepsTheDefaultSize;
+var
+  b: TBarAccess;
+  info: PPropInfo;
+begin
+  b := DropBar(96);
+  AssertEquals('ExpandedSize 还是 240', 240, b.ExpandedSize);
+  info := TypInfo.GetPropInfo(b, 'ExpandedSize');
+  AssertEquals('等于声明的 default:对象查看器里不加粗、不进 .lfm', info^.Default, b.ExpandedSize);
+end;
+
+procedure TTyToolWindowDesignTests.TestDroppingABarAt144KeepsTheDefaultSize;
+var
+  b: TBarAccess;
+  info: PPropInfo;
+begin
+  b := DropBar(144);
+  AssertEquals('前提:按设计器 PPI 调过', 144, b.Font.PixelsPerInch);
+  AssertEquals('ExpandedSize 还是 240', 240, b.ExpandedSize);
+  info := TypInfo.GetPropInfo(b, 'ExpandedSize');
+  AssertEquals('等于声明的 default', info^.Default, b.ExpandedSize);
+  AssertEquals('宽是按 240 在 144 PPI 下推导的,不是放大了两遍的', b.CallDerivedAxisPx, b.Width);
 end;
 
 initialization

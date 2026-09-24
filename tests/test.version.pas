@@ -42,6 +42,7 @@ uses
   tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
   tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar, tyControls.Steps,
   tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.ToggleSwitch,
+  tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.TrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
@@ -463,7 +464,8 @@ initialization
     TTySavePictureDialog, TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification,
     TTyIconBrowserDialog]);
   Reg([
-    TTyGridCell, TTyFormSurface, TTyForm, TTyDialog]);
+    TTyGridCell, TTyFormSurface, TTyForm, TTyDialog,
+    TTyToolWindowBar, TTyToolWindowManager, TTyToolWindow, TTyToolWindowActions]);
   { The BASE classes the Version property editor is registered on. They are never dropped on
     a form, so nothing else registers them — but InheritsFromAnEditorBase resolves them by
     name, and an unresolvable base would make that check quietly answer False for everything

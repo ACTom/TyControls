@@ -3487,9 +3487,14 @@ var
 begin
   { 只有设计器拖边这一种来源写回 ExpandedSize。推导(FDeriving)、DPI 缩放
     (FDpiAdjusting)、运行时、流式加载一律不写回 —— 否则收窄值会写回、DPI 会二次缩放,
-    低于 96 的 PPI 下推导出来的宽再反算回去还会差一个舍入。 }
+    低于 96 的 PPI 下推导出来的宽再反算回去还会差一个舍入。
+    还没有父控件的也不写回:从面板放下一条栏时,IDE 先 SetBounds 再设 Parent,宽高是把
+    「构造出来的宽」当成 96 设计值再按设计器 PPI 放大的(customformeditor.pp:1453-1506)——
+    而栏在构造里已经按屏幕 PPI 推导过,150% 下这就放大了两遍,写回的话 ExpandedSize 从 240
+    变成 380。拖边只能拖已经在窗体上的栏。 }
   if ([csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning])
-     and not FDeriving and not FDpiAdjusting and (Align = PlacementAlign) then
+     and not FDeriving and not FDpiAdjusting and (Align = PlacementAlign)
+     and (Parent <> nil) then
   begin
     m := Metrics;
     if FPlacement = twpBottom then
