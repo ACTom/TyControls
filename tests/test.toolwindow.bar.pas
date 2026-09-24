@@ -1710,7 +1710,7 @@ begin
   AssertFalse('栏收起着,带着 Visible 进来的那页也得藏起来', w.Visible);
   AssertFalse('原来那页照样藏着', a.Visible);
   AssertTrue('进来不展开栏', FBar.Collapsed);
-  { 把另一条展开的栏的当前页运行时直接挪进收起的栏:spec §3.2 的簿记把目标栏展开(C 期),
+  { 把另一条展开的栏的当前页运行时直接挪进收起的栏:spec §3.2 的簿记把目标栏展开,
     显示的只有它 —— 带着 Visible 进来的 w 照样藏着。 }
   b2 := TBarAccess.Create(FForm);
   b2.Parent := FForm;

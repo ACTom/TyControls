@@ -161,7 +161,26 @@ type
     procedure TestADropAfterShowingIsNotQueued;
     procedure TestADropKeepsTheFocusInTheWindow;
     procedure TestBarEventsAfterADropSeeTheWindowInPlace;
+    { spec §10.5:代码搭的 manager 在 Showing 之后第一次改布局之前记默认布局(开工前问题 2)。 }
+    procedure TestResetAfterAClickRestoresTheCurrentPage;
+    procedure TestResetAfterResizingRestoresTheSize;
+    procedure TestResetAfterCollapsingRestoresIt;
+    procedure TestResetAfterADragReorderRestoresTheOrder;
+    procedure TestResetAfterACrossDropRestoresTheSide;
+    procedure TestResetAfterADirectParentChangeRestoresTheSide;
+    { spec §10.5:Showing 之后 Load / Reset 排队。 }
+    procedure TestALoadAfterShowingIsQueued;
+    procedure TestAResetButtonInsideTheMovedWindowIsSafe;
+    procedure TestALoadReplacesAQueuedMove;
+    procedure TestACaptureInAMovingWindowDelaysTheLayoutOnce;
+    { spec §10.4 第 7 步 / §14:应用之后的焦点。 }
+    procedure TestFocusLeavesACollapsedBarForTheNextControl;
+    procedure TestFocusStaysInAMovedWindow;
+    procedure TestFocusFollowsIntoTheNewCurrentPage;
   private
+    { Tab 顺序在左栏前面 / 右栏后面的两个编辑框:分得清 SelectNext(栏) 和平台随手挑的第一个。 }
+    FBefore, FOutside: TTyEdit;
+    procedure BtnResets(Sender: TObject);
     { 真实的 MouseDown / MouseMove / MouseUp:把 Search 的图标拖到右栏第一格上半松开。 }
     procedure DragSearchToRight;
   end;
@@ -1021,6 +1040,9 @@ begin
   FForm.SetBounds(-4000, -4000, 900, 500);
   FCtl := TTyStyleController.Create(FForm);
   FMgr := TTyToolWindowManager.Create(FForm);
+  FBefore := TTyEdit.Create(FForm);
+  FBefore.Parent := FForm;
+  FBefore.SetBounds(400, 8, 120, 26);
   FLeft := TTyToolWindowBar.Create(FForm);
   FLeft.Name := 'L';
   FLeft.Parent := FForm;
@@ -1038,6 +1060,9 @@ begin
   FEdit.Parent := FSearch;
   FEdit.SetBounds(8, 40, 120, 26);
   FOutline := NewWin(FRight, 'WOutline');
+  FOutside := TTyEdit.Create(FForm);
+  FOutside.Parent := FForm;
+  FOutside.SetBounds(400, 60, 120, 26);
   FBtn := TTyButton.Create(FForm);
   FBtn.Parent := FSearch.EnsureActions;
   FBtn.OnClick := @BtnMovesSearch;
@@ -1327,6 +1352,210 @@ begin
   AssertEquals('前提:发了一次', 'R.change;moved(WSearch,L,1);', FLog);
   AssertTrue('OnChange 里读到的已经是右栏内容区(事件在 EnableAlign 之后)',
     EqualRect(FRight.BarLayout.Content, FSeenBounds));
+end;
+
+{ --- 默认布局的自动记录、排队、焦点(spec §10.4 / §10.5) --------------------------------- }
+
+procedure TTyToolWindowManagerLiveTests.BtnResets(Sender: TObject);
+var
+  h: THandle;
+begin
+  h := FBtn.Handle;
+  FClickAnswer := FMgr.ResetLayout;
+  FHandleKept := FBtn.HandleAllocated and (FBtn.Handle = h);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestResetAfterAClickRestoresTheCurrentPage;
+var
+  p: TPoint;
+begin
+  { 代码搭的 manager,没调过 Load / Reset / CaptureDefaultLayout:显示之后点另一个图标。 }
+  p := FLeft.StripItemRect(0).CenterPoint;
+  TBarCrack(FLeft).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBarCrack(FLeft).MouseUp(mbLeft, [], p.X, p.Y);
+  AssertSame('前提:点过去了', FExplorer, FLeft.ActiveWindow);
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertNothingRaised('Reset');
+  AssertSame('当前页回到点之前那一页', FSearch, FLeft.ActiveWindow);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestResetAfterResizingRestoresTheSize;
+begin
+  FLeft.ExpandedSize := 300;
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertEquals('尺寸回到改之前', TyToolWindowDefaultExpandedSize, FLeft.ExpandedSize);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestResetAfterCollapsingRestoresIt;
+begin
+  FLeft.Collapsed := True;
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertFalse('收起回到改之前', FLeft.Collapsed);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestResetAfterADragReorderRestoresTheOrder;
+var
+  p: TPoint;
+begin
+  p := FLeft.StripItemRect(0).CenterPoint;
+  TBarCrack(FLeft).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBarCrack(FLeft).MouseMove([ssLeft], p.X, p.Y + 80);
+  TBarCrack(FLeft).MouseUp(mbLeft, [], p.X, p.Y + 80);
+  AssertSame('前提:拖到了后面', FExplorer, FLeft.Windows[1]);
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertSame('顺序回到改之前', FExplorer, FLeft.Windows[0]);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestResetAfterACrossDropRestoresTheSide;
+begin
+  DragSearchToRight;
+  AssertSame('前提:拖过去了', FRight, FSearch.Bar);
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertSame('回到左栏', FLeft, FSearch.Bar);
+  AssertSame('左栏当前页也回来了', FSearch, FLeft.ActiveWindow);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestResetAfterADirectParentChangeRestoresTheSide;
+begin
+  FSearch.Parent := FRight;
+  AssertSame('前提:挪过去了', FRight, FSearch.Bar);
+  AssertTrue(FMgr.ResetLayout);
+  Pump;
+  AssertSame('回到左栏', FLeft, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestALoadAfterShowingIsQueued;
+const
+  S = 'TYTOOLLAYOUT/1|left=240,0|leftWins=WExplorer|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline,WSearch|rightActive=WSearch|end';
+begin
+  AssertTrue('接受了', FMgr.LoadLayoutFromString(S));
+  AssertSame('返回那一刻状态没变', FLeft, FSearch.Bar);
+  Pump;
+  AssertNothingRaised('排队的 Load');
+  AssertSame('抽消息之后应用了', FRight, FSearch.Bar);
+  AssertEquals('就是那一份', S, FMgr.SaveLayoutToString);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAResetButtonInsideTheMovedWindowIsSafe;
+begin
+  { 默认布局里 Search 在右栏;此刻在左栏,「恢复布局」按钮就在 Search 的操作区里。 }
+  FMgr.MoveWindow(FSearch, FRight);
+  Pump;
+  FMgr.CaptureDefaultLayout;
+  FMgr.MoveWindow(FSearch, FLeft);
+  Pump;
+  AssertSame('前提:Search 在左栏', FLeft, FSearch.Bar);
+  FBtn.OnClick := @BtnResets;
+  FHandleKept := False;
+  FClickAnswer := False;
+  ClickReal(FBtn);
+  AssertNothingRaised('按钮自己的点击里 ResetLayout');
+  AssertTrue('前提:OnClick 跑了、Reset 接受了', FClickAnswer);
+  AssertTrue('处理器返回前按钮的句柄没被销毁', FHandleKept);
+  Pump;
+  AssertNothingRaised('排队的 Reset');
+  AssertSame('抽消息之后生效', FRight, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestALoadReplacesAQueuedMove;
+begin
+  FMgr.MoveWindow(FSearch, FRight);
+  AssertEquals('前提:移动排着', 1, FMgr.QueuedCountForTest);
+  { 这一份不提 Search:它留在此刻所在的栏。 }
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer|leftActive=WExplorer|end'));
+  AssertEquals('排着的只剩布局', 1, FMgr.QueuedCountForTest);
+  Pump;
+  AssertNothingRaised('排队的 Load');
+  AssertSame('移动被覆盖:Search 还在左栏', FLeft, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestACaptureInAMovingWindowDelaysTheLayoutOnce;
+const
+  S = 'TYTOOLLAYOUT/1|left=240,0|leftWins=WExplorer|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline,WSearch|rightActive=WSearch|end';
+begin
+  AssertTrue(FMgr.LoadLayoutFromString(S));
+  SetCaptureControl(FBtn);
+  try
+    RunAsyncOnce;
+    AssertNothingRaised('第一轮');
+    AssertSame('前提:执行那一刻捕获还在', FBtn, GetCaptureControl);
+    AssertSame('捕获在要跨栏移动的 Search 里:再排一次,还没应用', FLeft, FSearch.Bar);
+    RunAsyncOnce;
+    AssertNothingRaised('第二轮');
+    AssertSame('第二轮捕获还在也照做(只再排一次)', FRight, FSearch.Bar);
+  finally
+    SetCaptureControl(nil);
+  end;
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFocusLeavesACollapsedBarForTheNextControl;
+begin
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在左栏当前页里', FEdit, FForm.ActiveControl);
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,1|leftWins=WExplorer,WSearch|leftActive=WSearch|end'));
+  Pump;
+  AssertNothingRaised('排队的 Load');
+  AssertTrue('前提:左栏收起了、当前页没变', FLeft.Collapsed and (FLeft.ActiveWindow = FSearch));
+  AssertTrue('焦点不是窗体本身', (FForm.ActiveControl <> nil) and (FForm.ActiveControl <> FForm));
+  AssertFalse('焦点不在藏起来的窗口里', FSearch.ContainsControl(FForm.ActiveControl));
+  AssertSame('交给 Tab 顺序里栏后面的那一个(SelectNext(栏)),不是平台挑的第一个',
+    FOutside, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFocusStaysInAMovedWindow;
+var
+  first: TTyEdit;
+begin
+  { 正文里 Tab 顺序第一个是另一个编辑框:「进当前页的正文」会落到它身上,分得清。 }
+  first := TTyEdit.Create(FForm);
+  first.Parent := FSearch;
+  first.SetBounds(8, 80, 120, 26);
+  first.TabOrder := 0;
+  Pump;
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在 Search 的编辑框里', FEdit, FForm.ActiveControl);
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline,WSearch|rightActive=WSearch|end'));
+  Pump;
+  AssertNothingRaised('排队的 Load');
+  AssertSame('前提:Search 到了右栏、是当前页', FSearch, FRight.ActiveWindow);
+  AssertSame('原控件还聚焦得上:还给它', FEdit, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFocusFollowsIntoTheNewCurrentPage;
+var
+  inOutline: TTyEdit;
+  headerBtn: TTyButton;
+begin
+  { Outline 标题行的操作区里一个按钮(Tab 顺序在正文前面):FocusFirst 跳过它落到正文,
+    SelectNext(右栏) 会先落到它 —— 分得清。 }
+  headerBtn := TTyButton.Create(FForm);
+  headerBtn.Parent := FOutline.EnsureActions;
+  inOutline := TTyEdit.Create(FForm);
+  inOutline.Parent := FOutline;
+  inOutline.SetBounds(8, 40, 120, 26);
+  Pump;
+  AssertTrue('前提:标题行的按钮聚焦得上', headerBtn.CanFocus);
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在 Search 的编辑框里', FEdit, FForm.ActiveControl);
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline,WSearch|rightActive=WOutline|end'));
+  Pump;
+  AssertNothingRaised('排队的 Load');
+  AssertSame('前提:Search 到了右栏、但当前页是 Outline', FOutline, FRight.ActiveWindow);
+  AssertSame('焦点进了右栏当前页的正文(FocusFirst),不在窗体本身', inOutline,
+    FForm.ActiveControl);
 end;
 
 procedure TTyToolWindowManagerLiveTests.TestADirectParentChangeKeepsTheFocus;

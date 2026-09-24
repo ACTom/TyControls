@@ -43,6 +43,16 @@ type
     procedure TestSaveWritesTheRestoredSizeWhileMaximized;
     { 开工前问题 14:从 manager 自己发的事件里重入 Load / Reset 答 False。 }
     procedure TestLoadOrResetFromTheManagersOwnEventsIsRefused;
+    { spec §10.5:加载中挂起、最后一个 Loaded 收尾、默认布局。 }
+    procedure TestALoadDuringStreamingWaitsForTheEnd;
+    procedure TestThePendingPlanIsSilentAndQueuesOnLayoutApplied;
+    procedure TestAManagerStreamedFirstIsFinishedByTheLastBar;
+    procedure TestOnlyTheLastPendingCallApplies;
+    procedure TestABadStringWhileLoadingIsRefusedAtOnce;
+    procedure TestTheStreamedLayoutIsTheDefault;
+    procedure TestAnInheritedFormResetsToTheDescendantsValues;
+    procedure TestACodeBuiltManagerCapturesBeforeTheFirstLoad;
+    procedure TestAnExplicitCaptureIsKeptByLoad;
   private
     FInner: Integer;      { -1 = 处理器没跑;0 / 1 = 处理器里那一次调用的答案 }
     procedure LoadFromApplied(Sender: TObject);
@@ -425,6 +435,378 @@ begin
   AssertEquals('OnWindowMoved 里 Reset:答 False', 0, FInner);
 end;
 
+{ --- 加载中挂起、收尾、默认布局(spec §10.5) ------------------------------------------ }
+
+var
+  { 流式化的根上的事件处理器数到这里(读回来的组件只能挂根上的方法)。 }
+  StreamedEvents: Integer;
+  StreamedApplied: Integer;
+
+type
+  { 读回来时它的 Loaded 调 Manager.LoadLayoutFromString(LayoutText)(再 Reset,如果要)。
+    是个控件:在窗体的流里排在栏前面(控件按 Controls 顺序写),它的 Loaded 先跑 —— 那时
+    栏、窗口、manager 全都还在 csLoading。 }
+  TLoadCaller = class(TControl)
+  private
+    FManager: TTyToolWindowManager;
+    FLayoutText: string;
+    FThenReset: Boolean;
+  protected
+    procedure Loaded; override;
+  public
+    class var LastLoad, LastReset: Boolean;
+  published
+    property Manager: TTyToolWindowManager read FManager write FManager;
+    property LayoutText: string read FLayoutText write FLayoutText;
+    property ThenReset: Boolean read FThenReset write FThenReset;
+  end;
+
+  TLayoutHostForm = class(TForm)
+  published
+    procedure CountEvent(Sender: TObject);
+    procedure CountApplied(Sender: TObject);
+  end;
+
+  { 非可视组件先写、控件后写(窗体和 frame 都是反过来的,见 customform.inc / customframe.inc
+    的 GetChildren):manager 第一个 Loaded,最后一个 Loaded 的是最后一条栏。 }
+  TManagerFirstRoot = class(TWinControl)
+  protected
+    procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
+  end;
+
+procedure TLoadCaller.Loaded;
+begin
+  inherited Loaded;
+  if FManager = nil then Exit;
+  if FLayoutText <> '' then LastLoad := FManager.LoadLayoutFromString(FLayoutText);
+  if FThenReset then LastReset := FManager.ResetLayout;
+end;
+
+procedure TLayoutHostForm.CountEvent(Sender: TObject);
+begin
+  Inc(StreamedEvents);
+end;
+
+procedure TLayoutHostForm.CountApplied(Sender: TObject);
+begin
+  Inc(StreamedApplied);
+end;
+
+procedure TManagerFirstRoot.GetChildren(Proc: TGetChildProc; Root: TComponent);
+var
+  i: Integer;
+begin
+  if Root = Self then
+    for i := 0 to ComponentCount - 1 do
+      if not Components[i].HasParent then Proc(Components[i]);
+  inherited GetChildren(Proc, Root);
+end;
+
+const
+  { 跟流进来的样子每一样都不同的一份。 }
+  UserLayout = 'TYTOOLLAYOUT/1' +
+    '|left=200,0|leftWins=WSearch,WExplorer|leftActive=WExplorer' +
+    '|right=300,0|rightWins=WOutline|rightActive=WOutline' +
+    '|bottom=150,1|bottomWins=WTerminal,WProblems,WOutput|bottomActive=WProblems|end';
+
+{ ARoot 里搭一套:manager 'Mgr'、三条栏和它们的窗口(流进来的值都不是出厂值),栏事件和窗口的
+  OnShow / OnHide 挂到根的 CountEvent 上(根是 TLayoutHostForm 时)。ACaller 不为 nil 时它
+  先建(排在栏前面)。答 manager。 }
+function BuildStreamSource(ARoot: TWinControl; ACaller: Boolean;
+  const AText: string; AThenReset: Boolean): TTyToolWindowManager;
+var
+  host: TLayoutHostForm;
+  caller: TLoadCaller;
+  mgr: TTyToolWindowManager;
+  l, r, b: TTyToolWindowBar;
+
+  function Bar(const AName: string; APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
+  begin
+    Result := TTyToolWindowBar.Create(ARoot);
+    Result.Name := AName;
+    Result.Placement := APlacement;
+    Result.Parent := ARoot;
+    Result.Manager := mgr;
+    if host <> nil then
+    begin
+      Result.OnChange := @host.CountEvent;
+      Result.OnCollapse := @host.CountEvent;
+      Result.OnExpand := @host.CountEvent;
+    end;
+  end;
+
+  procedure Win(ABar: TTyToolWindowBar; const AName: string);
+  var
+    w: TTyToolWindow;
+  begin
+    w := TTyToolWindow.Create(ARoot);
+    w.Name := AName;
+    w.Parent := ABar;
+    if host <> nil then
+    begin
+      w.OnShow := @host.CountEvent;
+      w.OnHide := @host.CountEvent;
+    end;
+  end;
+
+begin
+  if ARoot is TLayoutHostForm then host := TLayoutHostForm(ARoot) else host := nil;
+  ARoot.SetBounds(0, 0, 3000, 1000);
+  caller := nil;
+  if ACaller then
+  begin
+    caller := TLoadCaller.Create(ARoot);
+    caller.Name := 'Caller';
+    caller.Parent := ARoot;
+  end;
+  mgr := TTyToolWindowManager.Create(ARoot);
+  mgr.Name := 'Mgr';
+  if host <> nil then mgr.OnLayoutApplied := @host.CountApplied;
+  Result := mgr;
+  l := Bar('BarL', twpLeft);
+  Win(l, 'WExplorer');
+  Win(l, 'WSearch');
+  l.ActiveIndex := 1;
+  l.ExpandedSize := 250;
+  r := Bar('BarR', twpRight);
+  Win(r, 'WOutline');
+  r.Collapsed := True;
+  b := Bar('BarB', twpBottom);
+  Win(b, 'WProblems');
+  Win(b, 'WOutput');
+  Win(b, 'WTerminal');
+  b.ActiveIndex := 2;
+  if caller <> nil then
+  begin
+    caller.Manager := mgr;
+    caller.LayoutText := AText;
+    caller.ThenReset := AThenReset;
+  end;
+end;
+
+{ 写出去再读进 ADest(同一种根)。答读回来的 manager。 }
+function RoundTrip(ASource, ADest: TComponent): TTyToolWindowManager;
+var
+  ms: TMemoryStream;
+begin
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(ASource);
+    ms.Position := 0;
+    StreamedEvents := 0;
+    StreamedApplied := 0;
+    TLoadCaller.LastLoad := False;
+    TLoadCaller.LastReset := False;
+    ms.ReadComponent(ADest);
+  finally
+    ms.Free;
+  end;
+  Result := ADest.FindComponent('Mgr') as TTyToolWindowManager;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestALoadDuringStreamingWaitsForTheEnd;
+var
+  src, dst: TLayoutHostForm;
+  m: TTyToolWindowManager;
+begin
+  src := TLayoutHostForm.CreateNew(nil);
+  dst := TLayoutHostForm.CreateNew(nil);
+  try
+    BuildStreamSource(src, True, UserLayout, False);
+    m := RoundTrip(src, dst);
+    AssertTrue('加载中调的 Load 答 True(已接受、挂起)', TLoadCaller.LastLoad);
+    AssertEquals('读完之后布局就是那一份', UserLayout, m.SaveLayoutToString);
+  finally
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestThePendingPlanIsSilentAndQueuesOnLayoutApplied;
+var
+  src, dst: TLayoutHostForm;
+begin
+  src := TLayoutHostForm.CreateNew(nil);
+  dst := TLayoutHostForm.CreateNew(nil);
+  try
+    BuildStreamSource(src, True, UserLayout, False);
+    RoundTrip(src, dst);
+    AssertEquals('应用挂起计划:没有任何用户事件(栏事件、OnShow / OnHide)', 0, StreamedEvents);
+    AssertEquals('OnLayoutApplied 还没发(推到加载结束之后)', 0, StreamedApplied);
+    Application.ProcessMessages;
+    AssertEquals('抽消息之后恰好一次', 1, StreamedApplied);
+  finally
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestAManagerStreamedFirstIsFinishedByTheLastBar;
+var
+  src, dst: TManagerFirstRoot;
+  m: TTyToolWindowManager;
+begin
+  src := TManagerFirstRoot.Create(nil);
+  dst := TManagerFirstRoot.Create(nil);
+  try
+    BuildStreamSource(src, True, UserLayout, False);
+    m := RoundTrip(src, dst);
+    AssertTrue('前提:Load 在加载中调过', TLoadCaller.LastLoad);
+    { manager 写在最前,第一个 Loaded(那时别的都还在加载,收不了尾)。读取器在读完一个组件
+      (连同它的子控件)之后才把它加进 Loaded 列表(reader.inc:1004-1019),所以栏排在它的
+      窗口后面,最后一个 Loaded 的是最后一条栏 —— 它收尾。 }
+    AssertEquals('最后一个离开 csLoading 的收了尾', UserLayout, m.SaveLayoutToString);
+  finally
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestOnlyTheLastPendingCallApplies;
+var
+  src, dst: TLayoutHostForm;
+  m: TTyToolWindowManager;
+  streamed: string;
+begin
+  src := TLayoutHostForm.CreateNew(nil);
+  dst := TLayoutHostForm.CreateNew(nil);
+  try
+    streamed := BuildStreamSource(src, True, UserLayout, True).SaveLayoutToString;
+    m := RoundTrip(src, dst);
+    AssertTrue('前提:Reset 也答 True', TLoadCaller.LastReset);
+    AssertEquals('先 Load 后 Reset:只应用后一次(Reset = 流进来的样子)', streamed,
+      m.SaveLayoutToString);
+  finally
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestABadStringWhileLoadingIsRefusedAtOnce;
+var
+  src, dst: TLayoutHostForm;
+  m: TTyToolWindowManager;
+  streamed: string;
+begin
+  src := TLayoutHostForm.CreateNew(nil);
+  dst := TLayoutHostForm.CreateNew(nil);
+  try
+    streamed := BuildStreamSource(src, True, Copy(UserLayout, 1, Length(UserLayout) - 4),
+      False).SaveLayoutToString;
+    TLoadCaller.LastLoad := True;
+    m := RoundTrip(src, dst);
+    AssertFalse('加载中喂坏串:立即 False', TLoadCaller.LastLoad);
+    AssertEquals('加载结束后什么都没应用', streamed, m.SaveLayoutToString);
+    Application.ProcessMessages;
+    AssertEquals('也没有 OnLayoutApplied', 0, StreamedApplied);
+  finally
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestTheStreamedLayoutIsTheDefault;
+var
+  src, dst: TLayoutHostForm;
+  m: TTyToolWindowManager;
+  streamed: string;
+  l: TTyToolWindowBar;
+begin
+  src := TLayoutHostForm.CreateNew(nil);
+  dst := TLayoutHostForm.CreateNew(nil);
+  try
+    streamed := BuildStreamSource(src, False, '', False).SaveLayoutToString;
+    m := RoundTrip(src, dst);
+    AssertEquals('前提:读回来是流进来的样子', streamed, m.SaveLayoutToString);
+    l := dst.FindComponent('BarL') as TTyToolWindowBar;
+    l.Windows[1].WindowIndex := 0;
+    l.ActiveIndex := 1;
+    l.ExpandedSize := 199;
+    (dst.FindComponent('BarR') as TTyToolWindowBar).Collapsed := False;
+    AssertTrue('前提:改过了', m.SaveLayoutToString <> streamed);
+    AssertTrue(m.ResetLayout);
+    AssertEquals('Reset 回到流进来的顺序、当前页、尺寸、收起', streamed, m.SaveLayoutToString);
+  finally
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestAnInheritedFormResetsToTheDescendantsValues;
+var
+  anc, desc, e: TLayoutHostForm;
+  ancMS, descMS: TMemoryStream;
+  m: TTyToolWindowManager;
+  descText: string;
+  dl: TTyToolWindowBar;
+begin
+  anc := TLayoutHostForm.CreateNew(nil);
+  desc := TLayoutHostForm.CreateNew(nil);
+  e := TLayoutHostForm.CreateNew(nil);
+  ancMS := TMemoryStream.Create;
+  descMS := TMemoryStream.Create;
+  try
+    BuildStreamSource(anc, False, '', False);
+    ancMS.WriteComponent(anc);
+    ancMS.Position := 0;
+    ancMS.ReadComponent(desc);
+    { 子孙窗体:改顺序、尺寸、收起。 }
+    dl := desc.FindComponent('BarL') as TTyToolWindowBar;
+    dl.SetControlIndex(desc.FindComponent('WSearch') as TControl, 0);
+    dl.ExpandedSize := 222;
+    (desc.FindComponent('BarB') as TTyToolWindowBar).Collapsed := True;
+    descText := (desc.FindComponent('Mgr') as TTyToolWindowManager).SaveLayoutToString;
+    descMS.WriteDescendent(desc, anc);
+    { 加载子孙窗体 = 先读祖先那一份,再在同一个实例上读子孙那一份。 }
+    ancMS.Position := 0;
+    ancMS.ReadComponent(e);
+    descMS.Position := 0;
+    descMS.ReadComponent(e);
+    m := e.FindComponent('Mgr') as TTyToolWindowManager;
+    AssertEquals('前提:读回来是子孙窗体的样子', descText, m.SaveLayoutToString);
+    (e.FindComponent('BarR') as TTyToolWindowBar).Collapsed := False;
+    (e.FindComponent('BarL') as TTyToolWindowBar).ExpandedSize := 300;
+    AssertTrue(m.ResetLayout);
+    AssertEquals('Reset 回到子孙窗体流进来的值', descText, m.SaveLayoutToString);
+  finally
+    descMS.Free;
+    ancMS.Free;
+    e.Free;
+    desc.Free;
+    anc.Free;
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestACodeBuiltManagerCapturesBeforeTheFirstLoad;
+var
+  built: string;
+begin
+  { 「FormCreate」里:窗体还没 Showing,改的都算搭建。 }
+  FLeft.Collapsed := True;
+  FRight.ExpandedSize := 260;
+  Win('Search').WindowIndex := 0;
+  FMgr.MoveWindow(Win('Problems'), FBottom, 2);
+  built := FMgr.SaveLayoutToString;
+  AssertTrue(FMgr.LoadLayoutFromString(UserLayout));
+  AssertEquals('前提:读进了用户布局', UserLayout, FMgr.SaveLayoutToString);
+  AssertTrue(FMgr.ResetLayout);
+  AssertEquals('默认布局 = 搭好之后、读用户布局之前的样子', built, FMgr.SaveLayoutToString);
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestAnExplicitCaptureIsKeptByLoad;
+var
+  captured: string;
+begin
+  FLeft.ExpandedSize := 211;
+  FMgr.CaptureDefaultLayout;
+  captured := FMgr.SaveLayoutToString;
+  FRight.Collapsed := True;
+  AssertTrue(FMgr.LoadLayoutFromString(UserLayout));
+  AssertTrue(FMgr.ResetLayout);
+  AssertEquals('Reset 回到 CaptureDefaultLayout 那一刻', captured, FMgr.SaveLayoutToString);
+end;
+
 initialization
+  RegisterClasses([TLoadCaller]);
   RegisterTest(TTyToolWindowLayoutApplyTests);
 end.

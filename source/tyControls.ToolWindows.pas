@@ -3,7 +3,7 @@ unit tyControls.ToolWindows;
 
 { IDE 工作台的侧栏 / 底栏。设计定稿见
   docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md。
-  窗口、操作区、栏、栏的手势引擎(内部类)和 manager 的壳同在一个单元:窗口、操作区、栏
+  窗口、操作区、栏、栏的手势引擎(内部类)和 manager 同在一个单元:窗口、操作区、栏
   互相引用,引擎只服务栏,拆单元只会多一圈前向声明。 }
 
 interface
@@ -210,10 +210,16 @@ type
     { 对外设 Visible 经栏路由(spec §3.3):运行时 True = 激活并展开,对当前页 False = 收起;
       设计期 True 只激活。栏自己切的(FBarSwitching)照写,并记探针。 }
     procedure SetVisible(Value: Boolean); override;
+    { spec §10.5 的收尾点之一(开工前问题 6):谁最后一个离开 csLoading 谁收尾。FPC 的读取器
+      读完一个组件连同它的子控件之后才把它加进 Loaded 列表(reader.inc:1004-1019),同一个流里
+      栏的 Loaded 总在它的窗口之后,这一句在那种情形下收不到尾;留着兜住窗口和它的栏不在同一批
+      Loaded 里的情形。 }
+    procedure Loaded; override;
     { 推送链的第二段:窗口 → **每一个**操作区。多出来的那些设计期要按它画提示。 }
     procedure SetController(AValue: TTyStyleController); override;
     { 有些 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求它们不发
-      OnShow / OnHide:栏在 Loaded 里应用 ActiveIndex、C 期加载结束时应用挂起的布局计划。
+      OnShow / OnHide:栏在 Loaded 里应用 ActiveIndex、加载结束时 manager 应用挂起的布局计划
+      (TTyToolWindowManager.TryFinishLoading)。
       用户看得见的切页、收起、展开**照发**。唯一的调用者是 TTyToolWindowBar.BeginSilent /
       EndSilent,它把栏里的**每一个**窗口整批包起来(静默期间注册进来的也包上)。
       计数而不是布尔:布局应用会套着切页,一个布尔会被里层提前解除。
@@ -982,7 +988,8 @@ type
     { 静默批次(spec §6.6):Begin 与 End 之间,栏不发 OnChange / OnCollapse / OnExpand、
       不通知设计器,栏里**每一个**窗口不发 OnShow / OnHide —— 切页、收起、展开、窗口进出
       都算在这一批里。EventsAllowed 是栏这一侧唯一的闸。计数,可嵌套。
-      调用者:Loaded 应用 ActiveIndex(经 SwitchSilently);C 期应用挂起的布局计划。
+      调用者:Loaded 应用 ActiveIndex(经 SwitchSilently);manager 加载结束时应用挂起的
+      布局计划(TryFinishLoading,和布局批次 FLayoutBatch 一起包)。
       用户看得见的切换**不许**包进来。
       批次中途注册进来的窗口是这一批的一部分:注册时按当前层数补上静默,End 照样解除;
       中途离开的窗口在注销时把本栏加的那几层还掉 —— 否则它会带着静默去到别处,
@@ -1141,15 +1148,22 @@ type
     ASourceBar: TTyToolWindowBar; AOldIndex: Integer) of object;
 
   { manager 自己的异步队列里的一项(spec §9.9 / §10.5)。 }
-  TTyToolWindowQueuedKind = (twqMove, twqIndex);
+  TTyToolWindowQueuedKind = (twqMove, twqIndex, twqLayout);
   TTyToolWindowQueued = record
     Kind: TTyToolWindowQueuedKind;
-    Window: TTyToolWindow;
+    Window: TTyToolWindow;       { twqMove / twqIndex }
     Target: TTyToolWindowBar;    { twqMove }
     Index: Integer;
+    Text: string;                { twqLayout:要读的布局串 }
+    IsReset: Boolean;            { twqLayout:恢复默认布局,执行时取那一刻的默认布局 }
     { 捕获还在窗口里、已经再排过一次(只再排一次:按钮自己的点击处理那时早就返回了)。 }
     Requeued: Boolean;
+    { 已经执行过、或者执行前被作废了(RunQueue 正在跑的那一批里用)。 }
+    Dead: Boolean;
   end;
+
+  { 加载中调 Load / Reset 存下的唯一一份挂起计划(spec §10.5)。 }
+  TTyToolLayoutPending = (tlpNone, tlpLoad, tlpReset);
   TTyToolWindowQueue = array of TTyToolWindowQueued;
 
   { 布局串的三组各对应哪条可用栏、它的窗口(Controls 顺序)。没有可用栏的组是 nil。 }
@@ -1183,7 +1197,12 @@ type
       恢复 = 按这份串走同一条应用路径。 }
     FDefaultText: string;
     FDefaultCaptured: Boolean;
+    { 用户调过 CaptureDefaultLayout:之后加载结束也不再自动覆盖。 }
+    FDefaultExplicit: Boolean;
     FOnLayoutApplied: TNotifyEvent;
+    { 加载中调 Load / Reset 存下的唯一一份挂起计划(后来的覆盖前面的,spec §10.5)。 }
+    FPendingKind: TTyToolLayoutPending;
+    FPendingText: string;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1206,7 +1225,14 @@ type
     function HasQueued(AWindow: TTyToolWindow): Boolean;
     { 删掉 Window 或 Target 是 AComponent 的项(含正在执行的那一批里还没轮到的)。 }
     procedure PurgeQueue(AComponent: TComponent);
+    { 整个队列作废(排着的布局覆盖之前排队的计划和移动,spec §10.5)。 }
+    procedure ClearQueue;
+    { 没排过就 QueueAsyncCall(@RunQueue) 一次。 }
+    procedure PostQueue;
     procedure RunQueue(Data: PtrInt);
+    { 排着的 Load / Reset 执行:要跨栏移动的窗口里有捕获控件、又没再排过 → 再排一次;否则
+      重新解析(排着期间窗口可能变了)再应用。 }
+    procedure RunQueuedLayout(AItem: TTyToolWindowQueued);
     { 跨栏移动要排队:运行时、窗口所在窗体已经 Showing(同步换父会在窗口自己的按钮点击里
       销毁按钮的句柄,spec §9.9)。 }
     function MustQueue(AWindow: TTyToolWindow): Boolean;
@@ -1228,12 +1254,33 @@ type
     { spec §10.4 的批次:取消拖动、还原最大化、按计划挪窗口 / 调顺序 / 激活 / 设尺寸和收起、
       焦点、OnLayoutApplied。不问 OnCanMoveWindow、不发 OnWindowMoved 和栏事件;窗口的
       OnShow / OnHide 照常。 }
-    procedure ApplyText(const ADoc: TTyToolLayoutDoc);
+    procedure ApplyText(const ADoc: TTyToolLayoutDoc; AQueueEvent: Boolean = False);
+    { --- 时机(spec §10.5) --- }
+    { manager、任一注册栏、或它们的任一窗口还在 csLoading。 }
+    function AnyParticipantLoading: Boolean;
+    { 还没记过默认布局就记下此刻的样子。 }
+    procedure EnsureDefaultCaptured;
+    { 代码搭的 manager:窗体 Showing 之后第一次改动布局之前记默认布局(开工前问题 2:布局串里
+      存的每一样都算 —— 收起、尺寸、调顺序、跨栏、当前页)。调用方在**改之前**调。 }
+    procedure NoteLayoutChanging(ABar: TTyToolWindowBar);
+    { 挂起计划应用后的 OnLayoutApplied,推到加载结束之后。 }
+    procedure LayoutAppliedAsync(Data: PtrInt);
+    { spec §10.5:最后一个离开 csLoading 的参与者(manager、注册栏、它们的窗口)调它。都不在
+      加载中了:记默认布局(加载进来的样子;用户调过 CaptureDefaultLayout 就不动它),再静默
+      应用挂起的计划,OnLayoutApplied 推到加载结束之后。继承窗体每一层读完都会走到这里,
+      默认布局取最后一层流进来的值。 }
+    procedure TryFinishLoading;
+    { Load / Reset 此刻要排队:运行时、栏所在的窗体已经 Showing。 }
+    function LayoutMustQueue: Boolean;
+    { Load / Reset 的共同后半段(格式已查过):加载中挂起、Showing 之后排队、否则同步应用。 }
+    function StartLayout(AKind: TTyToolLayoutPending; const AText: string): Boolean;
     { Load / Reset 的门(spec §10.1 + 开工前问题 14):设计期、正在释放、没有注册栏、从本 manager
       的事件处理里重入,都答 False。 }
     function LayoutCallAllowed: Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { spec §10.5:加载结束的收尾之一(另外两处是栏和窗口的 Loaded)。 }
+    procedure Loaded; override;
   public
     destructor Destroy; override;
     { 这条栏是不是可用:注册在本 manager 上,且没有别的注册栏和它 Placement 相同(spec §10.6)。
@@ -1528,8 +1575,7 @@ begin
   begin
     { twhNone 也进缓存,键照常存(连同 mode)。在查键之前就 Exit(0) 的话,缓存和
       FHeaderPxMode 都停在上一次 —— 比如还在栏里时的 26 —— 于是 Invalidate 从此每次都
-      看见 0 <> 26、每次都整控件重排。C 期应用布局时窗口暂时脱离栏、跨栏移动的中间态
-      都会走到这里。 }
+      看见 0 <> 26、每次都整控件重排。窗口出栏到孤儿、跨栏移动的中间态都会走到这里。 }
     if mode = twhNone then
       FHeaderPxCache := 0
     else
@@ -1770,6 +1816,10 @@ begin
   begin
     src := TTyToolWindowBar(old);
     dst := TTyToolWindowBar(NewParent);
+    { 跨栏也是布局:改之前记默认布局(spec §10.5)。 }
+    if src.Manager <> nil then src.Manager.NoteLayoutChanging(src);
+    if (dst.Manager <> nil) and (dst.Manager <> src.Manager) then
+      dst.Manager.NoteLayoutChanging(dst);
     form := GetParentForm(dst);
     if form <> nil then focus := form.ActiveControl;
     oldIdx := src.IndexOfWindow(Self);
@@ -1851,6 +1901,15 @@ begin
     FNoDesignVisibleAtShow := csNoDesignVisible in ControlStyle;
     inherited SetVisible(False);
   end;
+end;
+
+procedure TTyToolWindow.Loaded;
+var
+  b: TTyToolWindowBar;
+begin
+  inherited Loaded;
+  b := Bar;
+  if (b <> nil) and (b.Manager <> nil) then b.Manager.TryFinishLoading;
 end;
 
 procedure TTyToolWindow.SetController(AValue: TTyStyleController);
@@ -5233,6 +5292,8 @@ procedure TTyToolWindowBar.ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer
 var
   old: Integer;
 begin
+  { 改之前(spec §10.5):调顺序也是布局。 }
+  if FManager <> nil then FManager.NoteLayoutChanging(Self);
   old := PlaceWindow(AWindow, AIndex);
   { 空操作(拖回原位、钳位之后没动)不报。SetChildOrder(流式、设计器)不经过这里,不报。
     布局应用的批次不报(它用 PlaceWindow,这一道防以后有人在批次里调 WindowIndex)。 }
@@ -5395,6 +5456,8 @@ begin
   if AValue < 0 then AValue := 0
   else if AValue > 99999 then AValue := 99999;
   if FExpandedSize = AValue then Exit;
+  { 改之前(spec §10.5):含拉宽边。 }
+  if FManager <> nil then FManager.NoteLayoutChanging(Self);
   FExpandedSize := AValue;
   Relayout;
   Invalidate;
@@ -5423,6 +5486,8 @@ var
   form: TCustomForm;
 begin
   if FCollapsed = AValue then Exit;
+  { 代码搭的 manager:Showing 之后第一次改布局之前记默认布局(spec §10.5)。 }
+  if FManager <> nil then FManager.NoteLayoutChanging(Self);
   { 收起之前先还原(spec §6.4):再展开时是还原的高度。 }
   if AValue then Maximized := False;
   { 拉宽中途 Collapsed 被别处改了:拉宽作废,ExpandedSize 回到起点(spec §6.3)。 }
@@ -5639,7 +5704,7 @@ begin
   if (FGesture.Capturer is TTyToolWindow) and (FGesture.Capturer <> FActive) then
     ResetGesture(twgeCancel);
   { 藏的是栏里**其余每一个**窗口,不只 AOld:带着 Visible = True 进来的窗口(从别的栏
-    挪过来、代码里先 Visible 再 Parent)、C 期应用布局挪进来的窗口,都不是「上一页」,
+    挪过来、代码里先 Visible 再 Parent)、布局应用挪进来的窗口,都不是「上一页」,
     只按 (新, 旧) 成对开关的话它们会一直杵在那里。已经藏着的再藏一次不改 Visible,
     也就不发 CM_VISIBLECHANGED —— 事件语义不变。只算注册过的:直接调 UnregisterWindow
     时离开的那个还在 Controls 里,回落不该去藏它(spec §5.2)。 }
@@ -5722,6 +5787,8 @@ begin
     Exit;
   end;
   if AWindow = FActive then Exit;
+  { 当前页也存在布局串里(开工前问题 2):改之前记默认布局。 }
+  if FManager <> nil then FManager.NoteLayoutChanging(Self);
   prev := FActive;
   SwitchCore(AWindow, prev, True);
   if FActive <> prev then DoChange;
@@ -5990,6 +6057,8 @@ begin
   for i := 0 to High(wins) do
     wins[i].RelayoutHeader;
   Relayout;
+  { spec §10.5:最后一句。谁最后一个离开 csLoading,谁收尾(manager 那边判)。 }
+  if FManager <> nil then FManager.TryFinishLoading;
 end;
 
 { --- TTyToolWindowGesture ------------------------------------------------------ }
@@ -6413,33 +6482,196 @@ begin
     and (FEventDepth = 0);
 end;
 
+function TTyToolWindowManager.LayoutMustQueue: Boolean;
+var
+  form: TCustomForm;
+begin
+  Result := False;
+  if (csDesigning in ComponentState) or (Length(FBars) = 0) then Exit;
+  form := GetParentForm(FBars[0]);
+  Result := (form <> nil) and form.Showing;
+end;
+
+{ Load / Reset 的共同后半段(格式已经查过):加载中挂起;Showing 之后排队;否则同步应用。 }
+function TTyToolWindowManager.StartLayout(AKind: TTyToolLayoutPending; const AText: string): Boolean;
+var
+  item: TTyToolWindowQueued;
+  doc: TTyToolLayoutDoc;
+begin
+  Result := True;
+  { 加载中(frame、继承窗体、Loaded 里调的):存成唯一的挂起计划,最后一个 Loaded 应用。 }
+  if AnyParticipantLoading then
+  begin
+    FPendingKind := AKind;
+    FPendingText := AText;
+    Exit;
+  end;
+  { FormCreate 里先搭好再读用户布局:记下的就是搭好的样子(spec §10.5)。 }
+  EnsureDefaultCaptured;
+  if LayoutMustQueue then
+  begin
+    { 同步应用会在窗口里的按钮自己的点击里销毁它的句柄(「恢复布局」按钮放在操作区里)。
+      覆盖之前排队的计划和移动。 }
+    ClearQueue;
+    item := Default(TTyToolWindowQueued);
+    item.Kind := twqLayout;
+    item.Text := AText;
+    item.IsReset := AKind = tlpReset;
+    Enqueue(item);
+    Exit;
+  end;
+  if AKind = tlpReset then
+    Result := TyToolLayoutParse(FDefaultText, doc)
+  else
+    Result := TyToolLayoutParse(AText, doc);
+  if Result then ApplyText(doc);
+end;
+
 function TTyToolWindowManager.LoadLayoutFromString(const AText: string): Boolean;
 var
   doc: TTyToolLayoutDoc;
 begin
+  { 格式先查(加载中也立即查,spec §10.5)。 }
   Result := LayoutCallAllowed and TyToolLayoutParse(AText, doc);
-  if Result then ApplyText(doc);
+  if Result then Result := StartLayout(tlpLoad, AText);
 end;
 
 procedure TTyToolWindowManager.CaptureDefaultLayout;
 begin
   FDefaultText := SaveLayoutToString;
   FDefaultCaptured := True;
+  FDefaultExplicit := True;
+end;
+
+procedure TTyToolWindowManager.EnsureDefaultCaptured;
+begin
+  if FDefaultCaptured then Exit;
+  FDefaultText := SaveLayoutToString;
+  FDefaultCaptured := True;
 end;
 
 function TTyToolWindowManager.ResetLayout: Boolean;
-var
-  doc: TTyToolLayoutDoc;
 begin
-  Result := LayoutCallAllowed;
-  if not Result then Exit;
-  if not FDefaultCaptured then CaptureDefaultLayout;
-  { 默认布局是自己写出来的串,一定解析得了;万一不能(不该发生)就什么都不做、答 False。 }
-  Result := TyToolLayoutParse(FDefaultText, doc);
-  if Result then ApplyText(doc);
+  Result := LayoutCallAllowed and StartLayout(tlpReset, '');
 end;
 
-procedure TTyToolWindowManager.ApplyText(const ADoc: TTyToolLayoutDoc);
+function TTyToolWindowManager.AnyParticipantLoading: Boolean;
+var
+  i, k: Integer;
+begin
+  Result := True;
+  if csLoading in ComponentState then Exit;
+  for i := 0 to High(FBars) do
+  begin
+    if csLoading in FBars[i].ComponentState then Exit;
+    for k := 0 to FBars[i].ControlCount - 1 do
+      if csLoading in FBars[i].Controls[k].ComponentState then Exit;
+  end;
+  Result := False;
+end;
+
+procedure TTyToolWindowManager.NoteLayoutChanging(ABar: TTyToolWindowBar);
+var
+  form: TCustomForm;
+begin
+  if FDefaultCaptured or (FApplying > 0) or (ABar = nil) then Exit;
+  if [csLoading, csDesigning, csDestroying] * (ComponentState + ABar.ComponentState) <> [] then
+    Exit;
+  { 窗体第一次 Showing 之前的改动算搭建(spec §10.5)。 }
+  form := GetParentForm(ABar);
+  if (form = nil) or not form.Showing then Exit;
+  EnsureDefaultCaptured;
+end;
+
+procedure TTyToolWindowManager.Loaded;
+begin
+  inherited Loaded;
+  TryFinishLoading;
+end;
+
+procedure TTyToolWindowManager.TryFinishLoading;
+var
+  kind: TTyToolLayoutPending;
+  text: string;
+  doc: TTyToolLayoutDoc;
+  bars: array of TTyToolWindowBar;
+  i: Integer;
+begin
+  if AnyParticipantLoading or ([csDesigning, csDestroying] * ComponentState <> []) then Exit;
+  { 默认布局 = 流进来的值(LCL 先读完所有流、解析完所有引用,才开始第一个 Loaded,各 Loaded
+    的先后不影响)。继承窗体每一层都走到这里,取最后一层的;用户自己记过的不动。 }
+  if not FDefaultExplicit then
+  begin
+    FDefaultText := SaveLayoutToString;
+    FDefaultCaptured := True;
+  end;
+  kind := FPendingKind;
+  if kind = tlpNone then Exit;
+  text := FPendingText;
+  FPendingKind := tlpNone;
+  FPendingText := '';
+  { Reset 用的是刚记下的默认布局。 }
+  if kind = tlpReset then text := FDefaultText;
+  if not TyToolLayoutParse(text, doc) then Exit;
+  { 这时窗体的 OnCreate 还没跑:批次内一个用户事件都不发(连 OnShow / OnHide),视同流式加载。 }
+  bars := Copy(FBars);
+  for i := 0 to High(bars) do bars[i].BeginSilent;
+  try
+    ApplyText(doc, True);
+  finally
+    for i := High(bars) downto 0 do bars[i].EndSilent;
+  end;
+end;
+
+procedure TTyToolWindowManager.LayoutAppliedAsync(Data: PtrInt);
+begin
+  if not Assigned(FOnLayoutApplied) then Exit;
+  Inc(FEventDepth);
+  try
+    FOnLayoutApplied(Self);
+  finally
+    Dec(FEventDepth);
+  end;
+end;
+
+procedure TTyToolWindowManager.RunQueuedLayout(AItem: TTyToolWindowQueued);
+var
+  text: string;
+  doc: TTyToolLayoutDoc;
+  bars: TTyToolLayoutBars;
+  wins: TTyToolLayoutWindows;
+  plan: TTyToolLayoutPlan;
+  cap: TControl;
+  side: TTyToolLayoutSide;
+  k: Integer;
+  w: TTyToolWindow;
+begin
+  if not LayoutCallAllowed then Exit;
+  if AItem.IsReset then text := FDefaultText else text := AItem.Text;
+  if not TyToolLayoutParse(text, doc) then Exit;
+  { 捕获在某个要跨栏移动的窗口里(按钮自己的点击处理还没走完):再排一次,只一次。 }
+  cap := GetCaptureControl;
+  if (cap <> nil) and not AItem.Requeued then
+  begin
+    plan := TyToolLayoutPlanFor(BuildWorld(bars, wins), doc);
+    for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+      for k := 0 to High(plan[side].Order) do
+      begin
+        if plan[side].Order[k].Side = side then Continue;
+        w := wins[plan[side].Order[k].Side][plan[side].Order[k].Index];
+        if (cap = w) or w.ContainsControl(cap) then
+        begin
+          AItem.Requeued := True;
+          AItem.Dead := False;
+          Enqueue(AItem);
+          Exit;
+        end;
+      end;
+  end;
+  ApplyText(doc);
+end;
+
+procedure TTyToolWindowManager.ApplyText(const ADoc: TTyToolLayoutDoc; AQueueEvent: Boolean);
 var
   bars: TTyToolLayoutBars;
   wins: TTyToolLayoutWindows;
@@ -6543,16 +6775,12 @@ begin
         b.ActiveWindow.FocusFirst;
     end;
   end;
-  { 8. 一次 OnLayoutApplied;处理器里再调 Load / Reset / MoveWindow 答 False。 }
-  if Assigned(FOnLayoutApplied) then
-  begin
-    Inc(FEventDepth);
-    try
-      FOnLayoutApplied(Self);
-    finally
-      Dec(FEventDepth);
-    end;
-  end;
+  { 8. 一次 OnLayoutApplied;处理器里再调 Load / Reset / MoveWindow 答 False。挂起计划在
+    加载结束时应用,那时窗体的 OnCreate 还没跑:推到之后(spec §10.4)。 }
+  if AQueueEvent then
+    Application.QueueAsyncCall(@LayoutAppliedAsync, 0)
+  else
+    LayoutAppliedAsync(0);
 end;
 
 procedure TTyToolWindowManager.BarChanged(ABar: TTyToolWindowBar);
@@ -6853,6 +7081,8 @@ begin
   { spec §9.7:MoveWindow 取消此刻的拖动(拖放提交走到这里时手势已经收尾了)。 }
   CancelDrag;
   src := AWindow.Bar;
+  { 改之前记默认布局(spec §10.5)。 }
+  NoteLayoutChanging(src);
   { spec §9.5:记下焦点控件和原来的窗口序号。 }
   form := GetParentForm(ATarget);
   if form <> nil then focus := form.ActiveControl else focus := nil;
@@ -6963,17 +7193,20 @@ begin
   Result := (form <> nil) and form.Showing;
 end;
 
+procedure TTyToolWindowManager.PostQueue;
+begin
+  if FQueuePosted then Exit;
+  FQueuePosted := True;
+  Application.QueueAsyncCall(@RunQueue, 0);
+end;
+
 procedure TTyToolWindowManager.Enqueue(const AItem: TTyToolWindowQueued);
 begin
   SetLength(FQueue, Length(FQueue) + 1);
   FQueue[High(FQueue)] := AItem;
-  AItem.Window.FreeNotification(Self);
+  if AItem.Window <> nil then AItem.Window.FreeNotification(Self);
   if AItem.Target <> nil then AItem.Target.FreeNotification(Self);
-  if not FQueuePosted then
-  begin
-    FQueuePosted := True;
-    Application.QueueAsyncCall(@RunQueue, 0);
-  end;
+  PostQueue;
 end;
 
 function TTyToolWindowManager.HasQueued(AWindow: TTyToolWindow): Boolean;
@@ -6985,7 +7218,7 @@ begin
   for i := 0 to High(FQueue) do
     if FQueue[i].Window = AWindow then Exit(True);
   for i := 0 to High(FRunning) do
-    if FRunning[i].Window = AWindow then Exit(True);
+    if not FRunning[i].Dead and (FRunning[i].Window = AWindow) then Exit(True);
 end;
 
 procedure TTyToolWindowManager.PurgeQueue(AComponent: TComponent);
@@ -6996,13 +7229,23 @@ begin
   for i := High(FQueue) downto 0 do
     if (FQueue[i].Window = AComponent) or (FQueue[i].Target = AComponent) then
       Delete(FQueue, i, 1);
-  { 正在执行的那一批:还没轮到的项作废(Window 置 nil 就是「跳过」)。 }
+  { 正在执行的那一批:还没轮到的项作废。 }
   for i := 0 to High(FRunning) do
     if (FRunning[i].Window = AComponent) or (FRunning[i].Target = AComponent) then
     begin
+      FRunning[i].Dead := True;
       FRunning[i].Window := nil;
       FRunning[i].Target := nil;
     end;
+end;
+
+procedure TTyToolWindowManager.ClearQueue;
+var
+  i: Integer;
+begin
+  FQueue := nil;
+  for i := 0 to High(FRunning) do
+    FRunning[i].Dead := True;
 end;
 
 procedure TTyToolWindowManager.RunQueue(Data: PtrInt);
@@ -7016,11 +7259,7 @@ begin
   { 执行中有人抽消息、又跑到这里:这一批还没完,下一轮再来。 }
   if FRunning <> nil then
   begin
-    if FQueue <> nil then
-    begin
-      FQueuePosted := True;
-      Application.QueueAsyncCall(@RunQueue, 0);
-    end;
+    if FQueue <> nil then PostQueue;
     Exit;
   end;
   FRunning := FQueue;
@@ -7029,10 +7268,11 @@ begin
     for i := 0 to High(FRunning) do
     begin
       it := FRunning[i];
-      if it.Window = nil then Continue;                { 执行中被 PurgeQueue 作废了 }
-      FRunning[i].Window := nil;                       { 轮到了:不再算「还排着」 }
-      FRunning[i].Target := nil;
+      if it.Dead then Continue;                        { 执行中被 PurgeQueue 作废了 }
+      FRunning[i].Dead := True;                        { 轮到了:不再算「还排着」 }
       case it.Kind of
+        twqLayout:
+          RunQueuedLayout(it);
         twqMove:
           begin
             { 捕获还在窗口里(按钮自己的点击处理还没走完):再排一次,只一次。 }
