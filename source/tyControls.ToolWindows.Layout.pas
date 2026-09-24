@@ -119,12 +119,14 @@ function TyToolWindowSlotAt(const ASlots: TTyToolWindowSlots; X, Y: Integer;
   AVertical: Boolean; ACount: Integer): Integer;
 
 type
+  TTyToolWindowRects = array of TRect;
+
   { 跨栏拖动的一个候选(spec §9.4),manager 每次移动现建。坐标一律**屏幕坐标**。 }
   TTyToolWindowDropProbe = record
     { 栏的 ClientRect 与每一级祖先 ClientRect 的交集。 }
     Visible: TRect;
     { 嵌在这条栏里面的别的栏:落在里面的点不算这个候选。 }
-    Holes: array of TRect;
+    Holes: TTyToolWindowRects;
     { 图标条去掉界线的那一段。 }
     Cells: TRect;
     { 已排布的图标,ItemIndex 是窗口序号。 }

@@ -471,12 +471,21 @@ type
     Snapped: Boolean;             { twrResize:松手时处在吸附排布 }
   end;
 
+  { 一次跨栏手势里问过的一条目标栏和答案(spec §9.4:每个目标栏每次手势只问一次)。 }
+  TTyToolWindowAllowedEntry = record
+    Bar: TTyToolWindowBar;
+    Allowed: Boolean;
+  end;
+
   { 栏的手势引擎(spec §9.2 / §9.7)。每条栏一个,栏构造时建、析构最后放。
     只管状态机、手势记录、资源和唯一的收尾入口;命中、落点、提交、悬停都在栏上。
-    内部类型:只给本单元的栏(C 期还有 manager)用,不是公开 API。 }
+    内部类型:只给本单元的栏和 manager 用,不是公开 API。 }
   TTyToolWindowGesture = class
   private
     FBar: TTyToolWindowBar;
+    { 跨栏拖动此刻的目标栏(另一侧栏);nil = 目标是源栏自己或者没有目标。反馈画在它身上。 }
+    FTarget: TTyToolWindowBar;
+    FAllowed: array of TTyToolWindowAllowedEntry;
     { --- 手势记录(spec §9.2)。每次按下新建一条:窗口记引用不记序号。 --- }
     FState: TTyToolWindowGestureState;
     FPart: TTyToolWindowBarPart;
@@ -542,6 +551,11 @@ type
       见 TTyToolWindowGestureEnd。 }
     procedure Reset(AReason: TTyToolWindowGestureEnd);
     procedure SetCursor(ACursor: TCursor);
+    { 换目标栏:旧的清外来落点、新的画 ASlot(ABar = nil 只清旧的)。 }
+    procedure SetTarget(ABar: TTyToolWindowBar; ASlot: Integer);
+    { 这一次手势里拖过去行不行:在缓存里找,没有就问 manager 的 CanMoveWindow 并记下。 }
+    function AllowedFor(ABar: TTyToolWindowBar): Boolean;
+    property Target: TTyToolWindowBar read FTarget;
     { AWindow = nil 等于 DisarmDesign。 }
     procedure ArmDesign(AWindow: TTyToolWindow);
     procedure DisarmDesign;
@@ -867,6 +881,11 @@ type
     { --- 拖动调顺序(spec §9.2 / §9.4 / §9.7) --- }
     { 插入槽(窗口序号 0..N);-1 = 没有目标(指针不在图标条上)。 }
     FDropSlot: Integer;
+    { 外来落点(spec §9.4):别的栏拖过来的窗口落在本栏,FDropSlot 是它的槽位。由源栏的引擎经
+      SetForeignDrop 写;有它时按槽位画线,不做空操作判断(跨栏没有空操作)。 }
+    FForeignDrop: Boolean;
+    { ASlot < 0 = 清掉。变了才 Invalidate;正在释放时只写字段。 }
+    procedure SetForeignDrop(ASlot: Integer);
     procedure DragTo(X, Y: Integer);
     { (X, Y) 上的插入槽:只有图标条算目标(源栏自己的内容区、别处都不是)。 }
     function DropSlotAt(X, Y: Integer): Integer;
@@ -1033,6 +1052,10 @@ type
     property HeaderHoverPartForTest: TTyToolWindowBarPart read FHeaderHoverPart;
     property HeaderHoverIndexForTest: Integer read FHeaderHoverIndex;
     property DropSlotForTest: Integer read FDropSlot;
+    { 探针:此刻是不是别的栏拖过来的外来落点。 }
+    property ForeignDropForTest: Boolean read FForeignDrop;
+    { 探针:引擎最近一次压的临时光标(拖动中就是此刻显示的那个)。 }
+    function DragCursorForTest: TCursor;
     { 探针:拖动期间轮询捕获的计时器此刻在不在。 }
     function HasCaptureTimerForTest: Boolean;
     { 探针:此刻挂着处理器的兄弟有几个(真实列表的长度)。 }
@@ -1141,6 +1164,9 @@ type
     FQueue: TTyToolWindowQueue;
     FRunning: TTyToolWindowQueue;
     FQueuePosted: Boolean;
+    { 正在拖图标的那条栏(spec §9.2「标记 manager 正在拖」);nil = 没在拖。由源栏的引擎写:
+      进入拖动时置上,收尾(ReleaseResources)时清。 }
+    FDragSource: TTyToolWindowBar;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1167,6 +1193,13 @@ type
     { 跨栏移动要排队:运行时、窗口所在窗体已经 Showing(同步换父会在窗口自己的按钮点击里
       销毁按钮的句柄,spec §9.9)。 }
     function MustQueue(AWindow: TTyToolWindow): Boolean;
+    { --- 跨栏拖动(spec §9.4 / §9.7)--- }
+    { 源栏 ASource 上拖着它手势里的窗口,屏幕点 AScreen 落在哪条栏的哪个槽位:答源栏自己、
+      另一侧栏,或 nil(没有目标)。每次现建探测矩形,交给 TyToolWindowDropAt。 }
+    function DropTargetAt(ASource: TTyToolWindowBar; const AScreen: TPoint;
+      out ASlot: Integer): TTyToolWindowBar;
+    { 参与拖动的栏(源栏或此刻的目标栏)改了 Collapsed / Placement / Manager:取消。 }
+    procedure BarChanged(ABar: TTyToolWindowBar);
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1186,6 +1219,10 @@ type
       AIndex: Integer = -1): Boolean;
     { 探针:队列里还有几项没执行(真实队列的长度)。 }
     function QueuedCountForTest: Integer;
+    { 取消此刻的图标拖动(spec §9.7);没在拖什么都不做。 }
+    procedure CancelDrag;
+    { 注册栏里有一条正在拖图标。 }
+    function IsDragging: Boolean;
   published
     { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
       没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
@@ -4678,6 +4715,10 @@ end;
 
 procedure TTyToolWindowBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
+  { spec §9.7:任何注册栏看到没有 ssLeft 的移动,别的栏上正在拖的就丢了松开 —— 取消。 }
+  if (FManager <> nil) and (FManager.FDragSource <> nil) and (FManager.FDragSource <> Self)
+     and not (ssLeft in Shift) then
+    FManager.CancelDrag;
   inherited MouseMove(Shift, X, Y);
   { 状态转移全在引擎里(丢了松开的取消、阈值、取消后等松开);这里只按答案做栏的那一半。 }
   case FGesture.Move(Shift, X, Y) of
@@ -5035,12 +5076,36 @@ var
   i: Integer;
 begin
   Result := -1;
-  if (FGesture.State <> twgsDragging) or (FDropSlot < 0) or IsNoOpSlot(FDropSlot) then Exit;
+  if FForeignDrop then
+  begin
+    { 别的栏拖过来的:跨栏没有空操作,有槽位就画。 }
+    if FDropSlot < 0 then Exit;
+  end
+  else if (FGesture.State <> twgsDragging) or (FDropSlot < 0) or IsNoOpSlot(FDropSlot) then Exit;
   { 空隙 k 画在「窗口 k 那一格」的上沿;最后一个之后画在最后一格的下沿。 }
   for i := 0 to High(L.Slots) do
     if L.Slots[i].ItemIndex = FDropSlot then Exit(L.Slots[i].ItemRect.Top);
   for i := 0 to High(L.Slots) do
     if L.Slots[i].ItemIndex = FDropSlot - 1 then Exit(L.Slots[i].ItemRect.Bottom);
+  { 空栏(条上一个图标都没有)照样是目标:线画在条的上沿。 }
+  if FForeignDrop then Result := L.Cells.Top;
+end;
+
+procedure TTyToolWindowBar.SetForeignDrop(ASlot: Integer);
+var
+  lit: Boolean;
+begin
+  lit := ASlot >= 0;
+  if not lit then ASlot := -1;
+  if (lit = FForeignDrop) and (ASlot = FDropSlot) then Exit;
+  FForeignDrop := lit;
+  FDropSlot := ASlot;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+function TTyToolWindowBar.DragCursorForTest: TCursor;
+begin
+  Result := FGesture.FCursor;
 end;
 
 procedure TTyToolWindowBar.SetDropSlot(ASlot: Integer);
@@ -5056,7 +5121,26 @@ end;
 procedure TTyToolWindowBar.DragTo(X, Y: Integer);
 var
   slot: Integer;
+  tgt: TTyToolWindowBar;
 begin
+  { 有 manager 的侧栏:问 manager(spec §9.4),答本栏、另一侧栏或没有目标。 }
+  if (FManager <> nil) and (FPlacement <> twpBottom) then
+  begin
+    tgt := FManager.DropTargetAt(Self, ClientToScreen(Point(X, Y)), slot);
+    if tgt = Self then
+    begin
+      FGesture.SetTarget(nil, -1);
+      SetDropSlot(slot);
+    end
+    else
+    begin
+      SetDropSlot(-1);
+      FGesture.SetTarget(tgt, slot);     { tgt 为 nil 时只清旧目标 }
+    end;
+    if tgt = nil then FGesture.SetCursor(crNoDrop) else FGesture.SetCursor(crDrag);
+    Exit;
+  end;
+  { 没有 manager:照 A 期只看自己的图标条。 }
   slot := DropSlotAt(X, Y);
   SetDropSlot(slot);
   { 不在图标条上 = 没有目标,在这里松开就是取消。 }
@@ -5177,6 +5261,8 @@ begin
   { 改 Placement 之前先还原(spec §6.4)。 }
   Maximized := False;
   ResetGesture(twgeCancel);
+  { 参与拖动的栏(源栏或目标栏)改了 Placement:取消(spec §9.7)。 }
+  if FManager <> nil then FManager.BarChanged(Self);
   FPlacement := AValue;
   { 流式加载时 Align 自己也在流里,不替它改。 }
   if not (csLoading in ComponentState) then
@@ -5277,6 +5363,8 @@ begin
   if AValue then Maximized := False;
   { 拉宽中途 Collapsed 被别处改了:拉宽作废,ExpandedSize 回到起点(spec §6.3)。 }
   ResetGesture(twgeCancel);
+  { 别的栏正拖着窗口、目标就是本栏:取消(spec §9.7)。 }
+  if FManager <> nil then FManager.BarChanged(Self);
   FCollapsed := AValue;
   { 只在运行时生效:流式加载时由 Loaded 统一应用;设计期永远按展开显示。 }
   if [csLoading, csDesigning, csDestroying] * ComponentState = [] then
@@ -5732,6 +5820,8 @@ begin
   { manager 被释放(或从 Owner 摘走):只清自己的引用,不回头调它 —— 它正在走,它的表由它自己清。 }
   if (Operation = opRemove) and (AComponent = FManager) then
   begin
+    { 拖到一半 manager 走了(spec §9.7「manager 的 opRemove」)。 }
+    ResetGesture(twgeCancel);
     FManager := nil;
     { 生效列表可能是它的 Images(spec §8)。 }
     ImagesChanged;
@@ -5756,6 +5846,7 @@ begin
   { 流式 fixup 期间也会走到这里:绝不抛异常(spec §10.6)。冲突只是「不可用」,由 manager 现算。 }
   if FManager <> nil then
   begin
+    { RemoveBar 里:参与拖动的栏换了 manager 就取消(spec §9.7),以它为目标的排队项删掉。 }
     FManager.RemoveBar(Self);
     { 双向挂的通知一起拆 —— 本栏和旧 manager 之间别无其他引用。旧 manager 正在释放时
       它自己在清通知表,不碰。 }
@@ -5882,6 +5973,30 @@ begin
   FreeResources;
   FBar.SetDropSlot(-1);
   SyncDeactivateHook;
+  { 跨栏的那一半:目标栏的外来落点、问过的答案、manager 的「正在拖」。 }
+  SetTarget(nil, -1);
+  FAllowed := nil;
+  if (FBar.Manager <> nil) and (FBar.Manager.FDragSource = FBar) then
+    FBar.Manager.FDragSource := nil;
+end;
+
+procedure TTyToolWindowGesture.SetTarget(ABar: TTyToolWindowBar; ASlot: Integer);
+begin
+  if (FTarget <> nil) and (FTarget <> ABar) then FTarget.SetForeignDrop(-1);
+  FTarget := ABar;
+  if ABar <> nil then ABar.SetForeignDrop(ASlot);
+end;
+
+function TTyToolWindowGesture.AllowedFor(ABar: TTyToolWindowBar): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FAllowed) do
+    if FAllowed[i].Bar = ABar then Exit(FAllowed[i].Allowed);
+  Result := (FBar.Manager <> nil) and FBar.Manager.CanMoveWindow(FWindow, ABar);
+  SetLength(FAllowed, Length(FAllowed) + 1);
+  FAllowed[High(FAllowed)].Bar := ABar;
+  FAllowed[High(FAllowed)].Allowed := Result;
 end;
 
 procedure TTyToolWindowGesture.SyncDeactivateHook;
@@ -5963,6 +6078,8 @@ begin
     TTimer(FCaptureTimer).OnTimer := @CaptureTimerTick;
     TTimer(FCaptureTimer).Enabled := True;
   end;
+  { manager 记下「正在拖」:任何注册栏、manager 自己都能取消它(spec §9.2 / §9.7)。 }
+  if FBar.Manager <> nil then FBar.Manager.FDragSource := FBar;
 end;
 
 function TTyToolWindowGesture.Move(AShift: TShiftState; X, Y: Integer): TTyToolWindowGestureMove;
@@ -6116,7 +6233,164 @@ begin
   FQueue := nil;
   FRunning := nil;
   FQueuePosted := False;
+  { 拖到一半 manager 被释放:源栏的手势作废(spec §9.7)。 }
+  CancelDrag;
   inherited Destroy;
+end;
+
+procedure TTyToolWindowManager.CancelDrag;
+begin
+  if FDragSource <> nil then FDragSource.ResetGesture(twgeCancel);
+end;
+
+function TTyToolWindowManager.IsDragging: Boolean;
+begin
+  Result := FDragSource <> nil;
+end;
+
+procedure TTyToolWindowManager.BarChanged(ABar: TTyToolWindowBar);
+begin
+  if (FDragSource <> nil) and (ABar <> nil)
+     and ((ABar = FDragSource) or (ABar = FDragSource.FGesture.Target)) then
+    CancelDrag;
+end;
+
+{ 控件客户区的屏幕矩形。没有句柄时 ClientToScreen 是父链 Left / Top 的累加,同一窗体上的
+  栏互相换算照样一致。 }
+function ClientScreenRect(AControl: TWinControl): TRect;
+var
+  p: TPoint;
+begin
+  p := AControl.ClientToScreen(Point(0, 0));
+  Result := Rect(p.X, p.Y, p.X + AControl.ClientWidth, p.Y + AControl.ClientHeight);
+end;
+
+{ spec §9.4:栏的 ClientRect 与每一级祖先 ClientRect 的交集(屏幕坐标)。 }
+function VisibleScreenRect(AControl: TWinControl): TRect;
+var
+  p: TWinControl;
+begin
+  Result := ClientScreenRect(AControl);
+  p := AControl.Parent;
+  while p <> nil do
+  begin
+    Types.IntersectRect(Result, Result, ClientScreenRect(p));
+    p := p.Parent;
+  end;
+end;
+
+{ spec §9.4 的「IsVisible」,只看到窗体为止:拖动的时候源栏所在的窗体一定显示着,两边同一个
+  窗体,窗体自己那一级对两边一样。(IsVisible 把窗体也算进去,无头的窗体永远不可见。) }
+function VisibleInForm(AControl: TControl): Boolean;
+var
+  c: TControl;
+begin
+  c := AControl;
+  while (c <> nil) and not (c is TCustomForm) do
+  begin
+    if not c.IsControlVisible then Exit(False);
+    c := c.Parent;
+  end;
+  Result := True;
+end;
+
+{ 嵌在 AParent 里面、看得见的别的栏(递归,嵌套栏里面的不再往下找):落在它们上面的点不算
+  AParent 这个候选。 }
+procedure CollectNestedBars(AParent: TWinControl; var AHoles: TTyToolWindowRects);
+var
+  i: Integer;
+  c: TControl;
+begin
+  for i := 0 to AParent.ControlCount - 1 do
+  begin
+    c := AParent.Controls[i];
+    if not (c is TWinControl) then Continue;
+    if c is TTyToolWindowBar then
+    begin
+      if VisibleInForm(c) then
+      begin
+        SetLength(AHoles, Length(AHoles) + 1);
+        AHoles[High(AHoles)] := ClientScreenRect(TWinControl(c));
+      end;
+    end
+    else
+      CollectNestedBars(TWinControl(c), AHoles);
+  end;
+end;
+
+{ 一条栏的探测矩形(屏幕坐标)。IsSource / Allowed 由调用方填。 }
+function DropProbeOf(ABar: TTyToolWindowBar): TTyToolWindowDropProbe;
+var
+  L: TTyToolWindowBarLayout;
+  o: TPoint;
+  holes: TTyToolWindowRects;
+  i: Integer;
+begin
+  Result := Default(TTyToolWindowDropProbe);
+  Result.Visible := VisibleScreenRect(ABar);
+  holes := nil;
+  CollectNestedBars(ABar, holes);
+  Result.Holes := holes;
+  L := ABar.BarLayout;
+  o := ABar.ClientToScreen(Point(0, 0));
+  Result.Cells := L.Cells;
+  Types.OffsetRect(Result.Cells, o.X, o.Y);
+  Result.Slots := Copy(L.Slots);
+  for i := 0 to High(Result.Slots) do
+    Types.OffsetRect(Result.Slots[i].ItemRect, o.X, o.Y);
+  Result.Count := ABar.WindowCount;
+end;
+
+function TTyToolWindowManager.DropTargetAt(ASource: TTyToolWindowBar; const AScreen: TPoint;
+  out ASlot: Integer): TTyToolWindowBar;
+var
+  probes: TTyToolWindowDropProbes;
+  bars: array of TTyToolWindowBar;
+  form: TCustomForm;
+  hit: TControl;
+  b: TTyToolWindowBar;
+  i, n: Integer;
+begin
+  Result := nil;
+  ASlot := -1;
+  form := GetParentForm(ASource);
+  { 非模态浮动窗体盖在上面(spec §9.4):有句柄时问 LCL 这一点上是谁;nil 就信几何。 }
+  if ASource.HandleAllocated then
+  begin
+    hit := FindControlAtPosition(AScreen, True);
+    if (hit <> nil) and (GetParentForm(hit) <> form) then Exit;
+  end;
+  { 源栏永远是第一个候选(栏内调顺序,冲突不冲突都一样)。 }
+  probes := nil;
+  bars := nil;
+  SetLength(probes, 1);
+  SetLength(bars, 1);
+  probes[0] := DropProbeOf(ASource);
+  probes[0].IsSource := True;
+  bars[0] := ASource;
+  { 源栏自己冲突时不再找别的候选(spec §9.4)。禁用的侧栏不是放置目标(开工前问题 1):
+    MoveWindow 这个 API 照常可用,只是拖放不往灰掉的栏里放。「可用」「同一个窗体」两条
+    CanMoveWindow 的结构检查(AllowedFor)也会拒,这里先筛掉,不为不可能的目标建探测矩形。 }
+  if IsBarUsable(ASource) then
+    for i := 0 to High(FBars) do
+    begin
+      b := FBars[i];
+      if (b = ASource) or (b.Placement = twpBottom) or not IsBarUsable(b)
+         or not VisibleInForm(b) or not b.IsEnabled or (csDestroying in b.ComponentState)
+         or (GetParentForm(b) <> form) then Continue;
+      n := Length(probes);
+      SetLength(probes, n + 1);
+      SetLength(bars, n + 1);
+      probes[n] := DropProbeOf(b);
+      { 只问指针此刻落进去的那一条(每条每次手势只问一次,引擎缓存);别的答案用不上。 }
+      if PtInRect(probes[n].Visible, AScreen) then
+        probes[n].Allowed := ASource.FGesture.AllowedFor(b)
+      else
+        probes[n].Allowed := True;
+      bars[n] := b;
+    end;
+  i := TyToolWindowDropAt(probes, AScreen, ASlot);
+  if i >= 0 then Result := bars[i] else ASlot := -1;
 end;
 
 procedure TTyToolWindowManager.AddBar(ABar: TTyToolWindowBar);
@@ -6141,6 +6415,8 @@ begin
       Delete(FBars, i, 1);
       Break;
     end;
+  { 离开的是参与拖动的栏(源栏或此刻的目标栏):取消(spec §9.7)。 }
+  BarChanged(ABar);
   { 离开 manager 的栏不再是排队移动的目标。 }
   PurgeQueue(ABar);
 end;
@@ -6267,6 +6543,8 @@ var
   oldIdx: Integer;
   srcEv, tgtEv: TTyToolWindowBarEvents;
 begin
+  { spec §9.7:MoveWindow 取消此刻的拖动(拖放提交走到这里时手势已经收尾了)。 }
+  CancelDrag;
   src := AWindow.Bar;
   { spec §9.5:记下焦点控件和原来的窗口序号。 }
   form := GetParentForm(ATarget);

@@ -200,6 +200,7 @@ uses
   test.toolwindow.actions, test.toolwindow.bar, test.toolwindow.images,
   test.toolwindow.focus, test.toolwindow.strip, test.toolwindow.edge,
   test.toolwindow.reorder, test.toolwindow.bottom, test.toolwindow.manager,
+  test.toolwindow.crossdrag,
   test.dpi.fontlatch,
   test.parity.datetime;
 
