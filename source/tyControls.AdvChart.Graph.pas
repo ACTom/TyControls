@@ -637,6 +637,10 @@ procedure TyGraphRemap(var ANodes: TTyGraphNodeArray;
   AView: TTyGraphView; AZoomed: Boolean; var ANodeScale: Double);
 
 const
+  { HOW FAR ABOVE ITS EDGES A NODE IS PAINTED: upstream's z2 of a node symbol
+    is 100 and of a line 0, so a hovered edge (lifted by ten) still passes
+    under every node. }
+  cTyGraphNodeZ2 = 100;
   { A THOUSAND SCREENS. A layout that is the author's arithmetic from end to end
     -- a friction of fifty, a repulsion of a million -- can put a node anywhere
     a Double reaches, and everything downstream squares distances. Past this a
@@ -679,6 +683,30 @@ type
     HasZoom: Boolean;
     Zoom, OriginX, OriginY: Double;
   end;
+
+{ ==================== focus ==================== }
+
+type
+  { What a hover leaves each element of a graph in. }
+  TTyGraphHoverState = (ghsNormal, ghsBlur, ghsEmphasis);
+  TTyGraphHoverStateArray = array of TTyGraphHoverState;
+
+{ UPSTREAM'S ecFocus SETS for one hovered element, as indices into ANodes and
+  AEdges -- which are upstream's dataIndex, the survivors in order. A node's
+  are its edges (a self-loop once) and both ends of each, so a node with no
+  edges has neither -- not even itself. An edge's are itself and its two
+  ends. }
+procedure TyGraphFocusSets(const ANodes: TTyGraphNodeArray;
+  const AEdges: TTyGraphEdgeArray; AHoverIsEdge: Boolean; AHoverIndex: Integer;
+  out ANodeSet, AEdgeSet: TTyIntegerArray);
+
+{ ONE GRAPH'S STATES under a hover: every element blurred when ABlur, then
+  the adjacency sets spared when AAdjacency -- the SETS of the graph that was
+  hovered, applied by index even to another graph, which is upstream's index
+  leak. The hovered element itself is the caller's to raise. }
+procedure TyGraphBlurStates(ANodeCount, AEdgeCount: Integer; ABlur,
+  AAdjacency: Boolean; const ANodeSet, AEdgeSet: TTyIntegerArray;
+  out ANodeStates, AEdgeStates: TTyGraphHoverStateArray);
 
 { The view after one action: the centre and zoom it leaves, written into
   AState and applied to AView. Nothing is laid out -- see TyGraphRemap. }
@@ -4165,6 +4193,69 @@ begin
   end;
 end;
 
+procedure TyGraphFocusSets(const ANodes: TTyGraphNodeArray;
+  const AEdges: TTyGraphEdgeArray; AHoverIsEdge: Boolean; AHoverIndex: Integer;
+  out ANodeSet, AEdgeSet: TTyIntegerArray);
+var j, n, m: Integer;
+
+  procedure AddNode(AI: Integer);
+  begin
+    SetLength(ANodeSet, n + 1);
+    ANodeSet[n] := AI;
+    Inc(n);
+  end;
+
+  procedure AddEdge(AI: Integer);
+  begin
+    SetLength(AEdgeSet, m + 1);
+    AEdgeSet[m] := AI;
+    Inc(m);
+  end;
+
+begin
+  ANodeSet := nil;
+  AEdgeSet := nil;
+  n := 0;
+  m := 0;
+  if AHoverIsEdge then
+  begin
+    if (AHoverIndex < 0) or (AHoverIndex > High(AEdges)) then Exit;
+    AddEdge(AHoverIndex);
+    AddNode(AEdges[AHoverIndex].Source);
+    AddNode(AEdges[AHoverIndex].Target);
+    Exit;
+  end;
+  if (AHoverIndex < 0) or (AHoverIndex > High(ANodes)) then Exit;
+  { EVERY EDGE THAT TOUCHES THE NODE, a self-loop once; the node itself
+    arrives only as an end of one of them. }
+  for j := 0 to High(AEdges) do
+    if (AEdges[j].Source = AHoverIndex) or (AEdges[j].Target = AHoverIndex) then
+    begin
+      AddEdge(j);
+      AddNode(AEdges[j].Source);
+      AddNode(AEdges[j].Target);
+    end;
+end;
+
+procedure TyGraphBlurStates(ANodeCount, AEdgeCount: Integer; ABlur,
+  AAdjacency: Boolean; const ANodeSet, AEdgeSet: TTyIntegerArray;
+  out ANodeStates, AEdgeStates: TTyGraphHoverStateArray);
+var i: Integer; s: TTyGraphHoverState;
+begin
+  SetLength(ANodeStates, ANodeCount);
+  SetLength(AEdgeStates, AEdgeCount);
+  if ABlur then s := ghsBlur else s := ghsNormal;
+  for i := 0 to ANodeCount - 1 do ANodeStates[i] := s;
+  for i := 0 to AEdgeCount - 1 do AEdgeStates[i] := s;
+  if not (ABlur and AAdjacency) then Exit;
+  for i := 0 to High(ANodeSet) do
+    if (ANodeSet[i] >= 0) and (ANodeSet[i] < ANodeCount) then
+      ANodeStates[ANodeSet[i]] := ghsNormal;
+  for i := 0 to High(AEdgeSet) do
+    if (AEdgeSet[i] >= 0) and (AEdgeSet[i] < AEdgeCount) then
+      AEdgeStates[AEdgeSet[i]] := ghsNormal;
+end;
+
 procedure TyGraphRoamStep(AView: TTyGraphView; const ASpec: TTyGraphSpec;
   const APayload: TTyGraphRoamPayload; var AState: TTyGraphRoamState);
 var c: TTyGraphCentre; z: Double;
@@ -4841,7 +4932,10 @@ var
     { SILENT, like the edge it belongs to: an arrowhead is part of the line's
       picture, not a second thing to point at. }
     e.Silent := True;
-    e.Datum := TyChartDatum(ASeriesIndex, -1);
+    { THE EDGE'S DATUM, and still silent: a hover never lands on an
+      arrowhead, but a blur or an emphasis of the edge takes its arrowheads
+      with it. [Revised in batch 46: the datum was (series, -1).] }
+    e.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[edgeAt].Row);
     AList.Add(e);
     Inc(Result);
   end;
@@ -4966,10 +5060,10 @@ begin
     el.Style.FillColor := fill;
     el.Style.Alpha := 1;
     el.Z := ASpec.Z;
-    { ABOVE ITS OWN EDGES, by one. They share a z and the list breaks the tie
-      by insertion, so the nodes would win anyway -- saying it here is what
-      keeps that true the day an edge is appended after a node. }
-    el.Z2 := ASpec.Z2 + 1;
+    { ABOVE ITS OWN EDGES, by upstream's hundred -- far enough that a hovered
+      edge, lifted by ten, still passes under every node. [Revised in batch
+      46: by one, which a lifted edge overtook.] }
+    el.Z2 := ASpec.Z2 + cTyGraphNodeZ2;
     el.Silent := False;
     { THE ROW IT WAS WRITTEN AT AS WELL: under a legend filter the two differ,
       and what a datum reports is the author's numbering. }

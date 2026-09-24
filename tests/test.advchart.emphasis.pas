@@ -13,7 +13,13 @@ unit test.advchart.emphasis;
   cache miss, no rebuild. That works because an emphasis GROWS or BRIGHTENS
   and therefore covers what it replaces -- which is a real constraint and is
   why blur is not here: dimming the OTHER marks means changing ink that is
-  already baked into the static bitmap. }
+  already baked into the static bitmap.
+
+  [Revised in batch 46: "covers what it replaces" is false for a translucent
+  mark (drawn twice it darkens) and for one under other marks (the copy
+  covers them), and a graph edge is both. A GRAPH's hover is therefore drawn
+  in the static layer, in place, blur and all -- see
+  test.advchart.graphfocus. Every other series keeps the overlay.] }
 interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      fpjson, jsonparser,

@@ -214,6 +214,9 @@ type
     function Add(const AElement: TTyChartElement): Integer;
     { The element at its INSERTION index. }
     function Element(AIndex: Integer): TTyChartElement;
+    { Replace it in place -- a state restyles an element after the list is
+      built. The paint order is worked out again. }
+    procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
     { The insertion index of the AIndex-th element in PAINT order (back first). }
     function PaintOrder(AIndex: Integer): Integer;
     { Topmost non-silent element containing the point, or -1. }
@@ -412,6 +415,14 @@ begin
   FItems[FCount] := AElement;
   Result := FCount;
   Inc(FCount);
+  FOrdered := False;
+end;
+
+procedure TTyPaintList.SetElement(AIndex: Integer;
+  const AElement: TTyChartElement);
+begin
+  if (AIndex < 0) or (AIndex >= FCount) then Exit;
+  FItems[AIndex] := AElement;
   FOrdered := False;
 end;
 

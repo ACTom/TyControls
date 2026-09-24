@@ -506,6 +506,24 @@ type
       const AHits: TTyAxisHitArray);
     { One element, lifted. False when this series has emphasis switched off or
       the element is not one that can be lifted. }
+    { ONE GRAPH ELEMENT'S emphasis AND blur, down its model chain: a node's
+      data item, then its category, then the series; an edge's link, then the
+      series. `focusNodeAdjacency`, the old spelling, counts at the series
+      when `emphasis.focus` says nothing. AIndex is into FGraphNodes /
+      FGraphEdges of ASlot. }
+    function GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
+      AIndex: Integer): TTyChartEmphasisSpec;
+    { THE HOVER, APPLIED TO THE GRAPHS IN THE LIST: every element of the
+      hovered graph -- and of every other graph its blurScope reaches --
+      blurred, the focus sets spared, and the hovered element raised IN
+      PLACE. A graph is not overlaid by PaintEmphasis: a translucent edge
+      drawn twice darkens, and a lifted copy would cover the nodes. }
+    procedure ApplyGraphHover(AList: TTyPaintList; APPI: Integer);
+    { True when the datum is on a laid-out graph. }
+    function IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
+    { The static layer again with the same build and the same list -- a
+      hover on a graph restyles what is already there. }
+    procedure RestyleStatic;
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
     { Every value of one datum as one string. Several go on ONE row joined by
@@ -3979,6 +3997,8 @@ begin
       moved later would leave its label behind. }
     if drawn > 0 then
       TyExpandLabels(list, specs, AMeasurer, APPI);
+    { AFTER THE LABELS, so a caption dims and rises with its node. }
+    if drawn > 0 then ApplyGraphHover(list, APPI);
     { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because
       its captions are ANSWERS rather than requests -- they arrive with a
       font and an anchor already on them, which is what the expansion exists
@@ -4663,6 +4683,256 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
+var slot: Integer;
+begin
+  Result := False;
+  if ADatum.SeriesIndex < 0 then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FGraphLaidOut)) and FGraphLaidOut[slot];
+end;
+
+procedure TTyAdvanceChart.RestyleStatic;
+begin
+  { THE CACHE ONLY. The list stays valid: its geometry is what the pointer is
+    still being tested against until the next paint rebuilds it. }
+  if FStatic <> nil then FStatic.Drop;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
+  AIndex: Integer): TTyChartEmphasisSpec;
+var
+  ser, d: TJSONData;
+  arr: TJSONArray;
+  sobj: TJSONObject;
+  cat, raw: Integer;
+
+  function ArrayOf(const AKey, AAlt: string): TJSONArray;
+  var x: TJSONData;
+  begin
+    Result := nil;
+    x := sobj.Find(AKey);
+    if not (x is TJSONArray) then x := sobj.Find(AAlt);
+    if x is TJSONArray then Result := TJSONArray(x);
+  end;
+
+begin
+  Result := TyChartEmphasisDefault;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (ser is TJSONObject) then Exit;
+  sobj := TJSONObject(ser);
+  Result := TyChartReadEmphasis(ser);
+  { THE OLD SPELLING, only where the new one is silent. Any value but null
+    turns it on -- even `false`. }
+  if not Result.HasFocus then
+  begin
+    d := sobj.Find('focusNodeAdjacency');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      Result.Focus := cfAdjacency;
+      Result.HasFocus := True;
+    end;
+  end;
+  if AIsEdge then
+  begin
+    if (AIndex < 0) or (AIndex > High(FGraphEdges[ASlot])) then Exit;
+    arr := ArrayOf('links', 'edges');
+    raw := FGraphEdges[ASlot][AIndex].Row;
+    if (arr <> nil) and (raw >= 0) and (raw < arr.Count) then
+      Result := TyChartMergeEmphasis(Result, TyChartReadEmphasis(arr.Items[raw]));
+    Exit;
+  end;
+  if (AIndex < 0) or (AIndex > High(FGraphNodes[ASlot])) then Exit;
+  { THE CATEGORY IS A MODEL PARENT of its nodes. }
+  cat := FGraphNodes[ASlot][AIndex].ModelCategory;
+  arr := ArrayOf('categories', 'categories');
+  if (arr <> nil) and (cat >= 0) and (cat < arr.Count) then
+    Result := TyChartMergeEmphasis(Result, TyChartReadEmphasis(arr.Items[cat]));
+  arr := ArrayOf('data', 'nodes');
+  raw := FGraphNodes[ASlot][AIndex].RawRow;
+  if (arr <> nil) and (raw >= 0) and (raw < arr.Count) then
+    Result := TyChartMergeEmphasis(Result, TyChartReadEmphasis(arr.Items[raw]));
+end;
+
+procedure TTyAdvanceChart.ApplyGraphHover(AList: TTyPaintList; APPI: Integer);
+var
+  hs, t, i, k, hover, si: Integer;
+  hoverEdge, blur, sameCs: Boolean;
+  spec, es: TTyChartEmphasisSpec;
+  nodeSet, edgeSet: TTyIntegerArray;
+  nstates, estates: array of TTyGraphHoverStateArray;
+  el: TTyChartElement;
+  st: TTyGraphHoverState;
+  isCaption: Boolean;
+  normal, res: TTyChartStyle;
+  states: TTyChartStateList;
+  ratio: Double;
+  edgeStroke: TTyChartColor;
+  edgeAlpha: Double;
+
+  function NodeByRow(ASlot, ARow: Integer): Integer;
+  var j: Integer;
+  begin
+    for j := 0 to High(FGraphNodes[ASlot]) do
+      if FGraphNodes[ASlot][j].Row = ARow then Exit(j);
+    Result := -1;
+  end;
+
+  function EdgeByRow(ASlot, ARow: Integer): Integer;
+  var j: Integer;
+  begin
+    for j := 0 to High(FGraphEdges[ASlot]) do
+      if FGraphEdges[ASlot][j].Row = ARow then Exit(j);
+    Result := -1;
+  end;
+
+  { The blurred opacity: the declared one, or the normal one times a tenth
+    -- except on an element whose emphasis is DISABLED, which upstream never
+    gives the computed blur style: only a declared opacity reaches it. }
+  function Blurred(ADeclared, ANormal: Double; ADisabled: Boolean): Double;
+  begin
+    if not IsNan(ADeclared) then Result := ADeclared
+    else if ADisabled then Result := ANormal
+    else Result := ANormal * TyChartBlurOpacityFactor;
+  end;
+
+begin
+  if (AList = nil) or not TyChartDatumValid(FTipDatum) then Exit;
+  if not IsGraphDatum(FTipDatum) then Exit;
+  hs := SlotOfSeries(FTipDatum.SeriesIndex);
+  hoverEdge := FTipDatum.IsEdge;
+  if hoverEdge then hover := EdgeByRow(hs, FTipDatum.DataIndex)
+  else hover := NodeByRow(hs, FTipDatum.DataIndex);
+  if hover < 0 then Exit;
+  spec := GraphEmphasisOf(hs, hoverEdge, hover);
+  { A DISABLED EMPHASIS IS NO HOVER AT ALL: nothing rises and nothing
+    dims. }
+  if spec.Disabled then Exit;
+  TyGraphFocusSets(FGraphNodes[hs], FGraphEdges[hs], hoverEdge, hover,
+    nodeSet, edgeSet);
+
+  { EVERY GRAPH'S STATES: blurred when the scope reaches it, the sets spared
+    under adjacency -- by index, in another graph too. }
+  SetLength(nstates, Length(FBindings));
+  SetLength(estates, Length(FBindings));
+  for t := 0 to High(FBindings) do
+  begin
+    if (t > High(FGraphLaidOut)) or not FGraphLaidOut[t] then Continue;
+    { A graph on a view owns its view; graphs on axes share a grid when they
+      share a cartesian. }
+    sameCs := (t = hs) or ((FGraphs[t] = nil) and (FGraphs[hs] = nil)
+      and (FBindings[t].Cart <> nil) and (FBindings[t].Cart = FBindings[hs].Cart));
+    blur := TyChartShouldBlur(spec.Focus, spec.BlurScope, t = hs, sameCs);
+    TyGraphBlurStates(Length(FGraphNodes[t]), Length(FGraphEdges[t]), blur,
+      spec.Focus = cfAdjacency, nodeSet, edgeSet, nstates[t], estates[t]);
+  end;
+  if hoverEdge then estates[hs][hover] := ghsEmphasis
+  else nstates[hs][hover] := ghsEmphasis;
+
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    si := el.Datum.SeriesIndex;
+    if si < 0 then Continue;
+    t := SlotOfSeries(si);
+    if (t < 0) or (t > High(nstates)) or (Length(nstates[t]) + Length(estates[t]) = 0)
+    then Continue;
+    if el.Datum.IsEdge then k := EdgeByRow(t, el.Datum.DataIndex)
+    else k := NodeByRow(t, el.Datum.DataIndex);
+    if k < 0 then Continue;
+    if el.Datum.IsEdge then st := estates[t][k] else st := nstates[t][k];
+    if st = ghsNormal then Continue;
+    es := GraphEmphasisOf(t, el.Datum.IsEdge, k);
+    isCaption := el.Caption.FontSizeLogical > 0;
+
+    if st = ghsBlur then
+    begin
+      { DIMMED, and nothing else: colour, size and order stay. }
+      if isCaption then
+        el.Style.Alpha := Blurred(es.BlurLabelOpacity, el.Style.Alpha, es.Disabled)
+      else if el.Datum.IsEdge then
+        el.Style.Alpha := Blurred(es.BlurLineOpacity, el.Style.Alpha, es.Disabled)
+      else
+        el.Style.Alpha := Blurred(es.BlurItemOpacity, el.Style.Alpha, es.Disabled);
+      AList.SetElement(i, el);
+      Continue;
+    end;
+
+    { ---- emphasis ---- }
+    states := Default(TTyChartStateList);
+    states.Emphasis := True;
+    if isCaption then
+    begin
+      { THE WORDS RISE WITH THEIR NODE, so it does not cover them. }
+      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+    end
+    else if el.Datum.IsEdge then
+    begin
+      { A LINE READS ONLY emphasis.lineStyle: its stroke lifted unless one is
+        declared, and a width and an opacity only if declared. Its
+        arrowheads take the stroke it ends up with as their fill. }
+      normal := TyChartNoStyle;
+      if el.Shape.Kind = cskPolyline then
+        TyChartSetColor(normal, cskStroke, el.Style.StrokeColor)
+      else
+        TyChartSetColor(normal, cskStroke, el.Style.FillColor);
+      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
+      res := TyChartResolveStyle(normal, es.Line, states);
+      edgeStroke := res.Color[cskStroke];
+      edgeAlpha := el.Style.Alpha;
+      if TyChartStyleHas(res, cskOpacity) then edgeAlpha := res.Num[cskOpacity];
+      if el.Shape.Kind = cskPolyline then
+      begin
+        el.Style.StrokeColor := edgeStroke;
+        if TyChartStyleHas(es.Line, cskLineWidth) then
+          el.Style.StrokeWidthLogical := es.Line.Num[cskLineWidth];
+      end
+      else
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := edgeStroke;
+      end;
+      el.Style.Alpha := edgeAlpha;
+      { UP BY TEN -- above the other edges, still under every node. }
+      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+    end
+    else
+    begin
+      { A NODE READS ONLY emphasis.itemStyle: its fill lifted unless one is
+        declared, a border if declared, and the symbol grown about its
+        centre. }
+      normal := TyChartNoStyle;
+      if el.Style.HasFill then TyChartSetColor(normal, cskFill, el.Style.FillColor);
+      if el.Style.StrokeColor <> 0 then
+        TyChartSetColor(normal, cskStroke, el.Style.StrokeColor);
+      if el.Style.StrokeWidthLogical > 0 then
+        TyChartSetNum(normal, cskLineWidth, el.Style.StrokeWidthLogical);
+      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
+      res := TyChartResolveStyle(normal, es.Item, states);
+      if TyChartStyleHas(res, cskFill) then
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := res.Color[cskFill];
+      end;
+      if TyChartStyleHas(res, cskStroke) then el.Style.StrokeColor := res.Color[cskStroke];
+      if TyChartStyleHas(res, cskLineWidth) then
+        el.Style.StrokeWidthLogical := res.Num[cskLineWidth];
+      if TyChartStyleHas(res, cskOpacity) then el.Style.Alpha := res.Num[cskOpacity];
+      if el.Shape.Kind in [cskCircle, cskEllipse] then
+        ratio := TyChartSymbolScaleRatio(es, el.Shape.R1)
+      else
+        ratio := TyChartSymbolScaleRatio(es,
+          (el.Shape.Bounds.Bottom - el.Shape.Bounds.Top) / 2);
+      if ratio <> 1 then el.Shape := TyScaleShape(el.Shape, ratio);
+      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+    end;
+    AList.SetElement(i, el);
+  end;
+  if APPI < 0 then ;
+end;
+
 function TTyAdvanceChart.EmphasiseElement(AIndex: Integer; APPI: Integer;
   out AElement: TTyChartElement): Boolean;
 var
@@ -4759,6 +5029,9 @@ var
   procedure Lift(AIndex: Integer);
   begin
     if AIndex < 0 then Exit;
+    { A GRAPH'S HOVER IS IN THE STATIC LAYER ALREADY -- see
+      ApplyGraphHover. }
+    if IsGraphDatum(FPaintList.Element(AIndex).Datum) then Exit;
     if not EmphasiseElement(AIndex, APPI, el) then Exit;
     { THE CAPTION IS DROPPED. A mark's words were expanded once, into a
       SEPARATE element, and the copy drawn here carries the request rather
@@ -5280,9 +5553,10 @@ var
   d: TTyChartDatumRef;
   spec: TTyTooltipSpec;
   el: Integer;
-  wasOn: Boolean;
+  wasOn, graphChanged: Boolean;
   dx, dy: Double;
 begin
+  graphChanged := False;
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
   { THE DRAG FIRST: the delta from where the pointer was last, wherever it is
@@ -5310,6 +5584,13 @@ begin
 
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
   d := HitTestAt(X, Y, el);
+  { A GRAPH'S HOVER LIVES IN THE STATIC LAYER, so a change of it -- onto a
+    graph element, off one, or from one to another -- draws that layer
+    again. A label's hit is its node's: they share the datum. }
+  if (IsGraphDatum(d) or IsGraphDatum(FTipDatum))
+    and ((d.SeriesIndex <> FTipDatum.SeriesIndex)
+      or (d.DataIndex <> FTipDatum.DataIndex) or (d.IsEdge <> FTipDatum.IsEdge)) then
+    graphChanged := True;
   FTipDatum := d;
   FTipElement := el;
   FTipX := X;
@@ -5330,14 +5611,16 @@ begin
     this asks for is a blit of the static layer plus one box; the gate the old
     TTyChart needed was compensating for a control that re-rendered everything
     from scratch each paint, and that is what the cache removed. }
-  if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) then
+  if graphChanged then RestyleStatic
+  else if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) then
     InvalidateFrame;
 end;
 
 procedure TTyAdvanceChart.MouseLeave;
-var wasOn: Boolean;
+var wasOn, wasGraph: Boolean;
 begin
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
+  wasGraph := IsGraphDatum(FTipDatum);
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   FTipHits := nil;
@@ -5345,7 +5628,8 @@ begin
     control answers with a repaint -- and a repaint before the hover was
     cleared would draw the tooltip one more time on the way out. }
   inherited MouseLeave;
-  if wasOn then InvalidateFrame;
+  if wasGraph then RestyleStatic
+  else if wasOn then InvalidateFrame;
 end;
 
 procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;

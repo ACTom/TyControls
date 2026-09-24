@@ -973,6 +973,7 @@ normal 不是谁「进入」的状态，是两个槽都空。
 **而「有覆盖用覆盖、没有用 series 的」这条规则只对 normal 正确。** 对另外三态错，且每一处都看得见：
 - **没写样式的 emphasis 不是「没样式」,是把正常色提亮**——库里每根柱子、每块饼、每个散点的默认悬停外观
 - **blur 的透明度是算出来的**(正常值 × 0.1),不是查出来的,否则绝大多数没声明透明度的元素根本不会变暗
+  **[第四十六批更正:声明了 `blur.*.opacity` 就用声明的值,不再乘 0.1,见 §80。]**
 - **z 提升来自任何 option 路径之外**——等着在 option 树里找它的移植永远找不到
 - **fill 优先于 stroke 提亮,且绝不同时**——形体和轮廓一起变亮读起来是「换了个颜色」而不是「高亮」
 
@@ -3946,6 +3947,7 @@ per-series 那个 `0.5` 才是像素——**半个像素**,不是半个类目。
 **这成立是因为强调要么变大要么变亮,因此盖得住它替换的东西**。
 这不是巧合而是约束,也正是 blur 不在这一批里的原因:
 把**其他** mark 调暗,意味着要改已经烤进静态位图的墨。
+**[第四十六批更正:对半透明的 mark(画两遍会变深)和压在别的 mark 下面的 mark(副本会盖住上面的)不成立,graph 的边两样都占。graph 的悬停因此改在静态层里原地画,blur 也在那里,见 §80。其他系列仍用叠加。]**
 
 顺带,这也修掉了上一批留下的观感债:阴影带画在柱子**上面**,
 而被悬停那一列的 mark 重新画一遍,正好把带子盖回去。
@@ -4001,6 +4003,7 @@ per-series 那个 `0.5` 才是像素——**半个像素**,不是半个类目。
 
 blur(要改静态层里的墨)、select 槽、`emphasis` 的逐数据项级联、
 `emphasis.label`,以及 focus/blurScope 虽然读进来了但还没有消费者。
+**[第四十六批:graph 系列的 blur、逐数据项级联、focus/blurScope 已做,见 §80;其他系列仍欠。]**
 
 ## 58. Tier 1 第二十四批:一根轴上四列(2026-09-14)
 
@@ -6550,3 +6553,76 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 还在队列里
 
 `focus: 'adjacency'` → 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。
+
+## 80. Tier 1 第四十六批:graph 的 `focus: 'adjacency'`,以及 graph 的 blur(2026-09-24)
+
+以前 port 的悬停只有 emphasis:在动态层里把被悬停的元素复制一份、提亮后叠在上面;blur 一概没有,`focus` 读进来了但没人用,`'adjacency'` 连读都读不到(当成 none)。这一批给 graph 系列补上完整的悬停:四种 focus、blurScope、逐数据项的级联、声明的 blur 透明度,并把 graph 的悬停改成在静态层里原地画。
+
+### 上游的做法
+
+- **focus 的取值**:假值和 `'none'` 是不开;`'series'`、`'adjacency'` 是它们自己;**其他任何真值**(`true`、`1`、`'foo'`、数组)都当 `'self'`。
+- **级联**:节点依次读数据项、类别、系列;边读 link、系列。`emphasis.focus / blurScope / disabled / scale` 和 `blur.*.opacity` 都走这条链。旧写法 `focusNodeAdjacency` 只在 `emphasis.focus` 没写时起作用,写成 `false` 也算开。
+- **悬停节点,adjacency**:这个节点 emphasis;它的边(自环算一次)和这些边两端的节点保持 normal——**不提亮、不放大**;系列里其余全部 blur。没有边的节点集合是空的,连它自己都不在里面,于是其余全部 blur。
+- **悬停边,adjacency**:这条边 emphasis,两端节点 normal,其余全 blur,**共用端点的边也 blur**。
+- **self**:除了被悬停的元素全部 blur;**series**:本系列不动,范围内的其他系列全 blur;**none**:只有被悬停的元素 emphasis。
+- **blurScope**:默认按坐标系(view 上的 graph 各有各的 view),`'series'` 只管本系列,`'global'` 管所有系列——另一个 graph 用**同一组下标**去解除 blur(上游的下标泄漏)。
+- **emphasis.disabled**:这个元素被悬停时什么都不发生;被别人的悬停 blur 时状态是 B,**外观不变**,只有声明了的 `blur.*.opacity` 才生效。
+- **外观**:
+  - blur:透明度 = 声明的 `blur.itemStyle / lineStyle / label.opacity`,没声明就是正常值 × 0.1(边默认 0.5 → 0.05);颜色、大小、层级不变。
+  - 节点 emphasis:只读 `emphasis.itemStyle`,填充色提亮(每个通道 ×1.1 取整,封顶 255),边框按声明;符号按 `max(1.1, 3/半高)` 放大;z2 +10。
+  - 边 emphasis:只读 `emphasis.lineStyle`,描边提亮,宽度和透明度只按声明,**不加宽**;z2 从 0 到 10,仍在所有节点(100)下面;箭头的填充跟着边的描边走。
+  - 标签跟着自己的节点 blur,悬停时在节点上面。
+- **悬停标签就是悬停它的节点**,哪怕标签在符号外面。
+
+### port 以前
+
+- `'adjacency'` 读成 none,`'foo'` 之类读成 none;只读系列层的 emphasis。
+- 没有 blur;声明的 blur 透明度会被 × 0.1 覆盖。
+- emphasis 是动态层里的叠加副本:半透明的边被画两遍,颜色比应有的深;提亮的边盖在它两端的节点上面。
+- 节点比边只高 1 层,z2 +10 的边会越过所有节点;箭头的 datum 是 (系列, -1),不跟着边变。
+
+### 做法
+
+- `Style`:`cfAdjacency`;focus 按真值规则解析;`TTyChartEmphasisSpec` 记下每个键是否写了(给级联用),并读同级的 `blur` 块;`TyChartMergeEmphasis` 做级联;`TyChartResolveStyle` 遇到声明的 blur 透明度就照用。
+- `Paint`:`TTyPaintList.SetElement`,原地替换元素。
+- `Graph`:节点 z2 改成边 +100(`cTyGraphNodeZ2`,与上游一致);箭头带边的 datum,仍然 silent;`TyGraphFocusSets`(上游的 ecFocus 集合)和 `TyGraphBlurStates`(先全 blur、再按下标解除)。
+- `AdvanceChart`:
+  - `GraphEmphasisOf` 走级联并认 `focusNodeAdjacency`。
+  - `ApplyGraphHover` 在标签展开之后、对整张列表按 hover 改样式:范围内的 graph 按集合算出 N/B/E,blur 只改透明度,emphasis 原地提亮、放大、抬层;disabled 的元素只吃声明的 blur。
+  - `PaintEmphasis` 跳过 graph 的元素。
+  - `MouseMove` / `MouseLeave`:悬停的 graph 元素变了就只丢静态缓存重画(`RestyleStatic`),构建和列表都保留,命中测试不中断。
+
+### 基准
+
+- `tools/advchart-oracle/focus-adjacency.js` → `advchart-graph-focus.json`:51 条,45 条比较,6 条只记录(笛卡尔 graph 连带柱子、`label.show: false`、悬停边标签、highlight / downplay、悬停图例、global 下悬空 link 的泄漏)。生成器自检:每个悬停点命中预期的元素且在 port 的命中规则下不会误中、离开等于静止、数值与状态一致、状态从选项独立重算一致、键是双射、两次生成逐字节相同;二十多个错误模型各自至少被一条记录区分开。
+- `test.advchart.graphfocus`:
+  - oracle 测试经控件自己的 `MouseMove` / `MouseLeave` 驱动,先比命中的元素,再从实际绘制的列表里逐项比较:每个节点的透明度、填充、边框、半宽,标签的透明度和它在节点之上,每条边的透明度、描边、宽度,每个箭头的透明度和填充;z2 按顺序比较(节点之间、边之间、每条边对每个节点)。
+  - 十二个单元测试,其中三个读像素,另有走缓存路径的离开、两次移动之间不重画仍命中、解析器保留声明的 blur 透明度:blur 的节点中心是填充色按 0.1 合成**一次**;高亮的边不盖住端点节点;半透明的高亮边只合成一次。期望值用 BGRA 自己的混合算(port 的画笔做 gamma 混合,和上游 canvas 不同,这是全局的既有差异)。
+
+### 被推翻的旧说法和旧测试
+
+- `test.advchart.emphasis.pas` 的文件头说"强调一定盖住它替换的东西",对 graph 的边不成立,原处有标注。
+- 本 spec 里三处(blur 透明度一律算出来、blur 不在那一批的理由、欠账清单)原处有标注。
+- `focus` 的未知字符串以前读成 none,现在按上游当 self。
+
+### 已知偏差
+
+- 其他系列的 blur 和 focus 仍没有做:它们照旧用叠加的 emphasis,`self` / `series` 也不会让别的柱子、扇区变暗。graph 和非 graph 系列之间的互相 blur(笛卡尔上 graph 连带柱子)不做。
+- highlight / downplay 动作、悬停图例联动高亮、`emphasis.label`(`label.show: false` 时悬停显示标签)、边标签、状态动画:不做。
+- 节点的 `itemStyle.opacity`、逐边的 `lineStyle`(除曲度外)仍不读,属于 normal 状态的欠账。
+- 边的命中容差是 4 个逻辑像素,不是 zrender 的描边阈值。
+- 坐标轴触发(`trigger: 'axis'`)时 graph 元素不再做叠加高亮。
+
+### 变异测试
+
+39 个,全部被杀。
+
+- 第一轮存活 4 个,都是测试缺口,补测试后杀掉:
+  - "声明的 blur 透明度又乘 0.1"在通用解析器里:graph 的路径不经过它,补了解析器的直接测试;
+  - "节点读到连线的 emphasis":节点本来没有边框时测试什么都不比,补了"上游没边框、这里也不能长出边框";
+  - "离开时不丢静态缓存":无头的 RenderTo 每次都重画,补了走 RenderCached 的测试;
+  - "重画时连列表一起丢掉":补了"两次移动之间不重画,第二次仍然命中"的测试。
+
+### 还在队列里
+
+内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。
