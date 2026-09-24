@@ -25,7 +25,7 @@ uses
   tyControls.AdvancedListBox, tyControls.CheckListBox, tyControls.ColorListBox,
   tyControls.FontListBox, tyControls.OfficeListBox, tyControls.ValueListEditor,
   tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.PageControl, tyControls.TabSet,
+  tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
   tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo,
   tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
@@ -323,7 +323,12 @@ begin
       expects `class(TParent)` walks straight past an interface list. The completeness guard
       below found it on the first run. That is the argument for deriving the population at
       run time in one line rather than parsing sources cleverly. }
-    TTyTitleBar);
+    TTyTitleBar,
+    { The tool window workbench. The bar is chrome whose icon strip is deliberately not a tab
+      stop (spec §6.7: every action has an API, there is no keyboard strip); a tool window is a
+      page (csNoFocus, like TTyTabSheet) whose body holds the real controls; the actions area
+      is a row that hosts buttons. }
+    TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions);
 end;
 
 procedure TTyFocusTabStopTest.SetUp;
