@@ -89,11 +89,17 @@ type
     procedure TestMoveWindowReportsExactlyOnce;
     procedure TestDesignTimeAndLoadingParentChangesDoNotExpand;
     procedure TestOrphansAreNotBooked;
+    { MoveWindow 和直接改 Parent 是同一条 CommitCrossMove:栏事件包在 FEventDepth 里。 }
+    procedure TestABarEventDuringADirectParentChangeCannotMoveAnother;
+    { 挪进收起着的栏:挪过去的窗口不多闪一对 OnHide / OnShow。 }
+    procedure TestMovingIntoACollapsedBarDoesNotFlashTheWindow;
   private
     FReenterTarget: TTyToolWindowBar;
     FReenterWindow: TTyToolWindow;
+    FReenterMgr: TTyToolWindowManager;
     { -1 = 处理器没跑过;0 / 1 = 处理器里那一次 MoveWindow 的答案。 }
     FReentered: Integer;
+    procedure ChangeThenMove(Sender: TObject);
     procedure MovedThenMoveAgain(Sender: TObject; AWindow: TTyToolWindow;
       ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
     procedure CanMoveThenMove(Sender: TObject; AWindow: TTyToolWindow;
@@ -1064,6 +1070,69 @@ begin
   FLog := '';
   l.Windows[1].Parent := nil;
   AssertEquals('出栏到 nil:只有源栏回落', 'L.change;', FLog);
+end;
+
+procedure TTyToolWindowManagerTests.ChangeThenMove(Sender: TObject);
+begin
+  LogBarChange(Sender);
+  if FReentered <> -1 then Exit;
+  FReentered := -2;
+  FReentered := Ord(FReenterMgr.MoveWindow(FReenterWindow, FReenterTarget));
+end;
+
+procedure TTyToolWindowManagerTests.TestABarEventDuringADirectParentChangeCannotMoveAnother;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  a: TTyToolWindow;
+begin
+  NewLeftRight(m, l, r);
+  a := l.Windows[0];
+  FReenterMgr := m;
+  FReenterWindow := a;
+  FReenterTarget := r;
+  FReentered := -1;
+  l.OnChange := @ChangeThenMove;
+  l.Windows[1].Parent := r;
+  AssertEquals('前提:源栏 OnChange 发了', 'L.change;R.expand;R.change;moved(WSearch,L,1);', FLog);
+  AssertEquals('直接改 Parent 的栏事件里 MoveWindow 答 False(同 MoveWindow 的事件)', 0, FReentered);
+  AssertSame('Explorer 没被挪', TTyToolWindowBar(l), a.Bar);
+end;
+
+procedure TTyToolWindowManagerTests.TestMovingIntoACollapsedBarDoesNotFlashTheWindow;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  i: Integer;
+begin
+  NewLeftRight(m, l, r);
+  for i := 0 to l.WindowCount - 1 do Watch(l.Windows[i]);
+  Watch(r.Windows[0]);
+  for i := 0 to l.WindowCount - 1 do
+  begin
+    l.Windows[i].OnShow := @HandleShowOrder;
+    l.Windows[i].OnHide := @HandleHideOrder;
+  end;
+  r.Windows[0].OnShow := @HandleShowOrder;
+  r.Windows[0].OnHide := @HandleHideOrder;
+  AssertTrue('前提:右栏收起着', r.Collapsed);
+  FOrder := '';
+  { Search 是左栏当前页、显示着:挪过去之后照样显示着,中间不许藏一下。 }
+  AssertTrue(m.MoveWindow(l.Windows[1], r));
+  AssertFalse('前提:右栏展开了', r.Collapsed);
+  AssertEquals('MoveWindow:只有左栏的回落页显示;Search 不闪', 'show WGit;', FOrder);
+  { 直接改 Parent 同一条路:Git 也是显示着过去。 }
+  r.Collapsed := True;
+  FOrder := '';
+  l.Windows[1].Parent := r;
+  AssertEquals('直接改 Parent:左栏回落页显示;Git 不闪', 'show WExplorer;', FOrder);
+  { 藏着的窗口(右栏的非当前页 Outline)挪进收起着的左栏:恰好显示一次。 }
+  r.Collapsed := False;
+  l.Collapsed := True;
+  AssertFalse('前提:Outline 藏着', r.Windows[0].Visible);
+  FOrder := '';
+  m.MoveWindow(r.Windows[0], l);
+  AssertEquals('藏着的窗口挪进收起的栏:显示恰好一次', 'show WOutline;', FOrder);
 end;
 
 { --- 真句柄 --------------------------------------------------------------------------- }

@@ -173,6 +173,8 @@ type
     procedure CMMaskHitTest(var Message: TCMHitTest); message CM_MASKHITTEST;
     { 运行时从一类栏直接挪到另一类栏(侧 ↔ 底)?见 SetParent。 }
     function MovesAcrossBarKinds(AOld, ANew: TWinControl): Boolean;
+    { 这一次改 Parent 是「运行时同类栏之间直接改 Parent」,要走 CommitCrossMove(spec §3.2)。 }
+    function BooksDirectMove(AOld, ANew: TWinControl): Boolean;
   private
     { MoveWindow / 布局应用自己换父时置上:SetParent 看见它就跳过「直接改 Parent」的簿记
       (spec §3.2),那些路径自己管激活、展开、事件。 }
@@ -204,8 +206,8 @@ type
     { 照 TTyTabSheet.SetParent:先记旧父控件 → 继承 → 从旧栏注销(任一方 csDestroying
       时跳过,释放那条路由 Notification 管)→ 注册到新栏 → 重排标题行(spec §3.2)。
       运行时从侧栏直接挪到底栏(或反过来)在继承之前抛 EInvalidOperation。运行时挪到另一条
-      同类栏照 MoveWindow 的簿记(目标栏展开、焦点还回去、事件按 spec §6.6 的顺序、同一
-      manager 下发 OnWindowMoved),不问否决。 }
+      同类栏跟 MoveWindow 走同一条 CommitCrossMove(目标栏激活并展开、焦点还回去、事件按
+      spec §6.6 的顺序、同一 manager 下发 OnWindowMoved),不问否决。 }
     procedure SetParent(NewParent: TWinControl); override;
     { 对外设 Visible 经栏路由(spec §3.3):运行时 True = 激活并展开,对当前页 False = 收起;
       设计期 True 只激活。栏自己切的(FBarSwitching)照写,并记探针。 }
@@ -735,6 +737,10 @@ type
     procedure SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
     { 一次静默切页 = BeginSilent + 切 + EndSilent(try/finally)的薄包装。 }
     procedure SwitchSilently(AWindow: TTyToolWindow);
+    { 跨栏移动的最后一步(CommitCrossMove):AWindow(已经在本栏里)成为当前页并展开;设计期
+      只激活。收起着时先按展开的样子切页、再撤收起 —— 先切再展开的话,带着 Visible 挪进来的
+      AWindow 会先被收起的切页藏一次、再被展开显示一次,多一对 OnHide / OnShow。 }
+    procedure ActivateExpanded(AWindow: TTyToolWindow);
     function EventsAllowed: Boolean;
     procedure DoChange;
   private
@@ -742,6 +748,8 @@ type
       只记进 FPendingEvents,由调用方在 EnableAlign、焦点恢复之后按顺序发(FireBarEvent)。 --- }
     FDeferEvents: Integer;
     FPendingEvents: TTyToolWindowBarEvents;
+    { ActivateExpanded 里:收起着的栏这一次切页按展开的样子切(显示目标、藏其余)。 }
+    FSwitchExpanded: Boolean;
     { > 0 = 布局应用的批次(spec §10.4):栏事件不发(EventsAllowed)、切页和收起跳过焦点那一步、
       当前页离开不回落(由计划统一激活)。窗口的 OnShow / OnHide 照常 —— 那是 BeginSilent 的事,
       两者互不替代(加载结束时应用挂起计划才两样一起包)。 }
@@ -1800,15 +1808,111 @@ begin
     and (Exempt * ANew.ComponentState = []);
 end;
 
-procedure TTyToolWindow.SetParent(NewParent: TWinControl);
+{ 取消 ABar 参与的图标拖动:有 manager 的问 manager(它知道此刻谁在拖),没有的看栏自己。 }
+procedure CancelBarDrag(ABar: TTyToolWindowBar);
+begin
+  if ABar.Manager <> nil then ABar.Manager.CancelDrag
+  else if ABar.FGesture.State = twgsDragging then ABar.ResetGesture(twgeCancel);
+end;
+
+{ 一次跨栏移动的实体,MoveWindow(经 MoveNow)和运行时直接改 Parent 共用(spec §3.2 / §9.5 /
+  §6.6):取消进行中的拖动 → 改之前记默认布局 → 记焦点和原序号 → 两条栏延后事件、停对齐 →
+  静默换父(FQuietMove:注册不即激活)→ 调到 AIndex(MaxInt = 末尾)→ 目标栏激活并展开 →
+  恢复对齐 → 焦点还回去 → 按 §6.6 的顺序发栏事件 → 两条栏在同一个 manager 下时发
+  OnWindowMoved。整段包在参与的 manager 的 FEventDepth 里:栏事件、OnWindowMoved、换父时
+  回落页的 OnShow / OnHide 的处理器里再调 MoveWindow / Load / Reset 都答 False。 }
+procedure CommitCrossMove(AWindow: TTyToolWindow; ASource, ATarget: TTyToolWindowBar;
+  AIndex: Integer);
 var
-  old: TWinControl;
-  src, dst: TTyToolWindowBar;
-  book: Boolean;
+  mSrc, mDst: TTyToolWindowManager;
+  same: Boolean;
   form: TCustomForm;
   focus: TWinControl;
   oldIdx: Integer;
   srcEv, dstEv: TTyToolWindowBarEvents;
+begin
+  mSrc := ASource.Manager;
+  mDst := ATarget.Manager;
+  same := (mSrc <> nil) and (mSrc = mDst);
+  if same then mDst := nil;
+  if mSrc <> nil then Inc(mSrc.FEventDepth);
+  if mDst <> nil then Inc(mDst.FEventDepth);
+  try
+    { spec §9.7:取消此刻的拖动(拖放提交走到这里时手势已经收尾了)。 }
+    CancelBarDrag(ASource);
+    CancelBarDrag(ATarget);
+    { 跨栏也是布局:改之前记默认布局(spec §10.5)。 }
+    if mSrc <> nil then mSrc.NoteLayoutChanging(ASource);
+    if mDst <> nil then mDst.NoteLayoutChanging(ATarget);
+    { spec §9.5:记下焦点控件和原来的窗口序号。 }
+    form := GetParentForm(ATarget);
+    if form <> nil then focus := form.ActiveControl else focus := nil;
+    oldIdx := ASource.IndexOfWindow(AWindow);
+    srcEv := [];
+    dstEv := [];
+    { 两条栏的事件先记下、最后按 spec §6.6 的顺序发:都在 EnableAlign 和焦点恢复之后。 }
+    ASource.BeginDeferEvents;
+    try
+      ATarget.BeginDeferEvents;
+      try
+        ASource.DisableAlign;
+        try
+          ATarget.DisableAlign;
+          try
+            { SetParent 里:从源栏注销并回落当前页、注册到目标栏、推 Controller、按目标栏的列表
+              解析图标。W 里所有句柄重建(LCL 换父控件的固有行为)。 }
+            AWindow.FQuietMove := True;
+            try
+              AWindow.Parent := ATarget;
+            finally
+              AWindow.FQuietMove := False;
+            end;
+            ATarget.PlaceWindow(AWindow, AIndex);
+            { W 成为目标栏的当前页并展开(设计期只激活,不写 Collapsed,同 ShowControl)。 }
+            ATarget.ActivateExpanded(AWindow);
+          finally
+            ATarget.EnableAlign;
+          end;
+        finally
+          ASource.EnableAlign;
+        end;
+      finally
+        dstEv := ATarget.EndDeferEvents;
+      end;
+    finally
+      srcEv := ASource.EndDeferEvents;
+    end;
+    RestoreMovedFocus(form, AWindow, focus);
+    { 设计期(D 期的组件编辑器经 MoveWindow):不发事件,通知设计器(同 ReorderWindow)。
+      直接改 Parent 在设计期不走这里。 }
+    if csDesigning in ATarget.ComponentState then
+    begin
+      OwnerFormDesignerModified(ATarget);
+      Exit;
+    end;
+    FireMovedBarEvents(ASource, ATarget, srcEv, dstEv);
+    if same then mSrc.WindowMoved(AWindow, ASource, oldIdx);
+  finally
+    if mDst <> nil then Dec(mDst.FEventDepth);
+    if mSrc <> nil then Dec(mSrc.FEventDepth);
+  end;
+end;
+
+function TTyToolWindow.BooksDirectMove(AOld, ANew: TWinControl): Boolean;
+begin
+  { 运行时同类栏之间直接改 Parent。MoveWindow / 布局应用自己换父时(FQuietMove)不算;
+    布局应用的批次里(某一页的 OnShow / OnHide 里用户直接改 Parent)也不算 —— 批次不发栏事件
+    和 OnWindowMoved、不自己展开,当前页由批次最后统一定(拦不住,只能不添乱)。 }
+  Result := (not FQuietMove) and (AOld <> ANew)
+    and (AOld is TTyToolWindowBar) and (ANew is TTyToolWindowBar)
+    and ([csLoading, csDesigning, csDestroying]
+         * (ComponentState + AOld.ComponentState + ANew.ComponentState) = [])
+    and (TTyToolWindowBar(AOld).FLayoutBatch = 0) and (TTyToolWindowBar(ANew).FLayoutBatch = 0);
+end;
+
+procedure TTyToolWindow.SetParent(NewParent: TWinControl);
+var
+  old: TWinControl;
 begin
   old := Parent;
   { spec §3.2:运行时侧栏和底栏之间不能直接改 Parent(标题行模式、布局串的键都不一样)——
@@ -1816,71 +1920,34 @@ begin
     读取器和设计器粘贴也经过它,而那两条路要放行(加载中 / 设计期豁免)。 }
   if MovesAcrossBarKinds(old, NewParent) then
     raise EInvalidOperation.Create(rsTyToolWindowCrossBarMove);
-  { spec §3.2:运行时同类栏之间直接改 Parent —— 照 MoveWindow 的簿记(目标栏展开、焦点还回去、
-    事件按同一顺序),不问否决。MoveWindow / 布局应用自己换父时(FQuietMove)不走这里。 }
-  book := (not FQuietMove) and (old <> NewParent)
-    and (old is TTyToolWindowBar) and (NewParent is TTyToolWindowBar)
-    and ([csLoading, csDesigning, csDestroying]
-         * (ComponentState + old.ComponentState + NewParent.ComponentState) = []);
-  { 布局应用的批次里(某一页的 OnShow / OnHide 里用户直接改 Parent):不簿记 —— 批次不发栏事件
-    和 OnWindowMoved、不自己展开,当前页由批次最后统一定(拦不住,只能不添乱)。 }
-  if book and ((TTyToolWindowBar(old).FLayoutBatch > 0)
-               or (TTyToolWindowBar(NewParent).FLayoutBatch > 0)) then
-    book := False;
-  src := nil;
-  dst := nil;
-  form := nil;
-  focus := nil;
-  oldIdx := -1;
-  srcEv := [];
-  dstEv := [];
-  if book then
+  { spec §3.2:运行时同类栏之间直接改 Parent —— 跟 MoveWindow 走同一条 CommitCrossMove(目标栏
+    激活并展开、焦点还回去、事件按同一顺序、同一 manager 下发 OnWindowMoved),不问否决。它自己
+    静默换父,换父那一句回到这里走下面的普通分支。
+    不排在这个窗口排着的移动后面(MoveWindow 会):Parent 是属性,赋值返回时它就得是新值;排着的
+    那几项执行时自己重新检查。 }
+  if BooksDirectMove(old, NewParent) then
   begin
-    src := TTyToolWindowBar(old);
-    dst := TTyToolWindowBar(NewParent);
-    { 跨栏也是布局:改之前记默认布局(spec §10.5)。 }
-    if src.Manager <> nil then src.Manager.NoteLayoutChanging(src);
-    if (dst.Manager <> nil) and (dst.Manager <> src.Manager) then
-      dst.Manager.NoteLayoutChanging(dst);
-    form := GetParentForm(dst);
-    if form <> nil then focus := form.ActiveControl;
-    oldIdx := src.IndexOfWindow(Self);
-    src.BeginDeferEvents;
-    dst.BeginDeferEvents;
+    CommitCrossMove(Self, TTyToolWindowBar(old), TTyToolWindowBar(NewParent), MaxInt);
+    Exit;
   end;
-  try
-    inherited SetParent(NewParent);
-    { 离开一条栏跟进入一条栏一样是窗口表的事件。任一方正在拆:释放那条路走栏的
-      Notification(opRemove),而旧栏这时可能已经拆了一半。 }
-    if (old <> NewParent) and (old is TTyToolWindowBar)
-       and not (csDestroying in ComponentState)
-       and not (csDestroying in old.ComponentState) then
-      TTyToolWindowBar(old).UnregisterWindow(Self);
-    { 注册本身推 Controller;流式加载、设计器放下、代码里 Parent := 都走这一条。 }
-    if NewParent is TTyToolWindowBar then
-      TTyToolWindowBar(NewParent).RegisterWindow(Self)
-    else if [csDesigning, csDestroying] * ComponentState = [] then
-      { 运行时的孤儿(父控件不是栏)保持隐藏(spec §3.2):没有栏替它守「一次只显示一页」,
-        带着 Visible = True 挪出来的当前页会原样杵在新父控件上。设计期那一半(显示 + 提示)
-        归 D 期。 }
-      Visible := False;
-    { 注册已经把它设成目标栏的当前页(注册即激活);再展开。 }
-    if book then dst.Collapsed := False;
-  finally
-    if book then
-    begin
-      dstEv := dst.EndDeferEvents;
-      srcEv := src.EndDeferEvents;
-    end;
-  end;
+  inherited SetParent(NewParent);
+  { 离开一条栏跟进入一条栏一样是窗口表的事件。任一方正在拆:释放那条路走栏的
+    Notification(opRemove),而旧栏这时可能已经拆了一半。 }
+  if (old <> NewParent) and (old is TTyToolWindowBar)
+     and not (csDestroying in ComponentState)
+     and not (csDestroying in old.ComponentState) then
+    TTyToolWindowBar(old).UnregisterWindow(Self);
+  { 注册本身推 Controller;流式加载、设计器放下、代码里 Parent := 都走这一条。 }
+  if NewParent is TTyToolWindowBar then
+    TTyToolWindowBar(NewParent).RegisterWindow(Self)
+  else if [csDesigning, csDestroying] * ComponentState = [] then
+    { 运行时的孤儿(父控件不是栏)保持隐藏(spec §3.2):没有栏替它守「一次只显示一页」,
+      带着 Visible = True 挪出来的当前页会原样杵在新父控件上。设计期那一半(显示 + 提示)
+      归 D 期。 }
+    Visible := False;
   { 标题行模式跟着父控件变(侧栏 / 底栏 / 孤儿),内缩量变了就得重排。 }
   if not (csDestroying in ComponentState) then
     RelayoutHeader;
-  if not book then Exit;
-  RestoreMovedFocus(form, Self, focus);
-  FireMovedBarEvents(src, dst, srcEv, dstEv);
-  if (src.Manager <> nil) and (src.Manager = dst.Manager) then
-    src.Manager.WindowMoved(Self, src, oldIdx);
 end;
 
 procedure TTyToolWindow.SetVisible(Value: Boolean);
@@ -5739,7 +5806,7 @@ begin
     也就不发 CM_VISIBLECHANGED —— 事件语义不变。只算注册过的:直接调 UnregisterWindow
     时离开的那个还在 Controls 里,回落不该去藏它(spec §5.2)。 }
   wins := WindowList(nil);
-  if CollapsedAtRunTime then
+  if CollapsedAtRunTime and not FSwitchExpanded then
   begin
     { 1. 收起着就到此为止(spec §5.3):一页都不显示,连目标一起藏。 }
     for i := 0 to High(wins) do
@@ -5792,6 +5859,29 @@ begin
   for i := 0 to High(FRegistered) do
     FRegistered[i].EndSilentVisibility;
   Dec(FSilent);
+end;
+
+procedure TTyToolWindowBar.ActivateExpanded(AWindow: TTyToolWindow);
+begin
+  if csDesigning in ComponentState then
+  begin
+    ActivateWindow(AWindow);
+    Exit;
+  end;
+  if FCollapsed and (AWindow <> FActive) then
+  begin
+    { 展开紧跟在后面:这一次切页照展开的样子显示 AWindow(带着 Visible 进来的就不再藏一次),
+      下面的展开再显示当前页时它已经显示着,不再发 OnShow。 }
+    FSwitchExpanded := True;
+    try
+      ActivateWindow(AWindow);
+    finally
+      FSwitchExpanded := False;
+    end;
+  end
+  else
+    ActivateWindow(AWindow);
+  Collapsed := False;
 end;
 
 procedure TTyToolWindowBar.BeginLayoutBatch;
@@ -7184,76 +7274,10 @@ end;
 
 procedure TTyToolWindowManager.MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
   AIndex: Integer);
-var
-  src: TTyToolWindowBar;
-  form: TCustomForm;
-  focus: TWinControl;
-  oldIdx: Integer;
-  srcEv, tgtEv: TTyToolWindowBarEvents;
 begin
-  { spec §9.7:MoveWindow 取消此刻的拖动(拖放提交走到这里时手势已经收尾了)。 }
-  CancelDrag;
-  src := AWindow.Bar;
-  { 改之前记默认布局(spec §10.5)。 }
-  NoteLayoutChanging(src);
-  { spec §9.5:记下焦点控件和原来的窗口序号。 }
-  form := GetParentForm(ATarget);
-  if form <> nil then focus := form.ActiveControl else focus := nil;
-  oldIdx := src.IndexOfWindow(AWindow);
-  if AIndex < 0 then AIndex := MaxInt;             { -1 = 末尾;PlaceWindow 钳到 N-1 }
-  srcEv := [];
-  tgtEv := [];
-  { 两条栏的事件先记下、最后按 spec §6.6 的顺序发:都在 EnableAlign 和焦点恢复之后。 }
-  src.BeginDeferEvents;
-  try
-    ATarget.BeginDeferEvents;
-    try
-      src.DisableAlign;
-      try
-        ATarget.DisableAlign;
-        try
-          { SetParent 里:从源栏注销并回落当前页、注册到目标栏、推 Controller、按目标栏的列表
-            解析图标。W 里所有句柄重建(LCL 换父控件的固有行为)。 }
-          { FQuietMove:直接改 Parent 的簿记(spec §3.2)不再做一遍。 }
-          AWindow.FQuietMove := True;
-          try
-            AWindow.Parent := ATarget;
-          finally
-            AWindow.FQuietMove := False;
-          end;
-          ATarget.PlaceWindow(AWindow, AIndex);
-          { W 成为目标栏的当前页并展开(设计期只激活,不写 Collapsed,同 ShowControl)。 }
-          ATarget.ActivateWindow(AWindow);
-          if not (csDesigning in ATarget.ComponentState) then
-            ATarget.Collapsed := False;
-        finally
-          ATarget.EnableAlign;
-        end;
-      finally
-        src.EnableAlign;
-      end;
-    finally
-      tgtEv := ATarget.EndDeferEvents;
-    end;
-  finally
-    srcEv := src.EndDeferEvents;
-  end;
-  RestoreMovedFocus(form, AWindow, focus);
-  if csDesigning in ComponentState then
-  begin
-    { 设计期(D 期的组件编辑器):不发事件,通知设计器(同 ReorderWindow)。 }
-    OwnerFormDesignerModified(ATarget);
-    Exit;
-  end;
-  Inc(FEventDepth);
-  try
-    FireMovedBarEvents(src, ATarget, srcEv, tgtEv);
-    { 已经在 FEventDepth 里,直接调处理器(门同 WindowMoved)。 }
-    if MovedEventAllowed(src) then
-      FOnWindowMoved(Self, AWindow, src, oldIdx);
-  finally
-    Dec(FEventDepth);
-  end;
+  { 跟运行时直接改 Parent 同一条路(spec §3.2 / §9.5)。-1 = 末尾;PlaceWindow 钳到 N-1。 }
+  if AIndex < 0 then AIndex := MaxInt;
+  CommitCrossMove(AWindow, AWindow.Bar, ATarget, AIndex);
 end;
 
 function TTyToolWindowManager.MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;

@@ -84,6 +84,8 @@ type
     procedure TestAReorderByMoveWindowCancelsTheDrag;
     { 嵌在窗体里的窗体藏着:里面的栏不是目标。 }
     procedure TestABarInAHiddenEmbeddedFormIsNoTarget;
+    { 直接改 Parent 跟 MoveWindow 同一条路:拖着别的窗口时也取消拖动。 }
+    procedure TestADirectParentChangeCancelsTheDrag;
   private
     procedure CancelInsideTheAsk(Sender: TObject; AWindow: TTyToolWindow;
       ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
@@ -776,6 +778,18 @@ begin
   finally
     ef.Free;
   end;
+end;
+
+procedure TTyToolWindowCrossDragTests.TestADirectParentChangeCancelsTheDrag;
+begin
+  StartDrag(0);
+  MoveTo(RightFirstCellTop);
+  AssertTrue('前提:拖着 Explorer', FMgr.IsDragging);
+  { 挪的是另一个窗口(Git):离开的不是手势的窗口,光靠注销收不了尾。 }
+  FGit.Parent := FRight;
+  AssertSame('前提:挪过去了', TTyToolWindowBar(FRight), FGit.Bar);
+  AssertFalse('直接改 Parent 也取消拖动', FMgr.IsDragging);
+  AssertNoDropAnywhere('直接改 Parent 之后');
 end;
 
 initialization
