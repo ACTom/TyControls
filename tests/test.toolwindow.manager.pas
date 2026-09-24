@@ -93,6 +93,16 @@ type
     procedure TestABarEventDuringADirectParentChangeCannotMoveAnother;
     { 挪进收起着的栏:挪过去的窗口不多闪一对 OnHide / OnShow。 }
     procedure TestMovingIntoACollapsedBarDoesNotFlashTheWindow;
+    { 在 MoveWindow 发的栏事件里释放 manager(spec §6.6 不许):之后不再碰它。 }
+    procedure TestFreeingTheManagerInABarEventTouchesItNoMore;
+    { 在 OnCanMoveWindow 里释放 manager:这一次不挪,之后不再碰它。 }
+    procedure TestFreeingTheManagerInOnCanMoveWindowTouchesItNoMore;
+  private
+    FDying: TTyToolWindowManager;
+    FDeadAddr: Pointer;
+    procedure ChangeFreesTheManager(Sender: TObject);
+    procedure CanMoveFreesTheManager(Sender: TObject; AWindow: TTyToolWindow;
+      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
   private
     FReenterTarget: TTyToolWindowBar;
     FReenterWindow: TTyToolWindow;
@@ -163,6 +173,12 @@ type
     procedure TestFreeingTheTargetDropsTheQueuedMove;
     procedure TestFreeingTheWindowDropsTheQueuedMove;
     procedure TestFreeingTheManagerDropsTheQueue;
+    { 队列执行中处理器抽消息:嵌套的 RunQueue 不自己重排(不空转),外层跑完补排。 }
+    procedure TestAPumpInsideTheQueueDoesNotSpin;
+    { 队列执行中处理器释放了 manager(spec §6.6 不许):之后不再碰它。 }
+    procedure TestFreeingTheManagerInsideItsQueueTouchesItNoMore;
+    { 排着的 WindowIndex 执行前同 StructureAllows 查加载 / 释放中:栏在加载中就丢弃。 }
+    procedure TestAQueuedIndexOnALoadingBarIsDropped;
     procedure TestAVetoAtExecutionDropsTheMoveSilently;
     procedure TestACaptureInsideTheWindowDelaysTheMoveOnce;
     procedure TestACaptureThatNeverLetsGoDelaysOnlyOnce;
@@ -197,6 +213,16 @@ type
     procedure DragSearchToRight;
     { 在左栏第一格按下、横拖过阈值(不松开)。 }
     procedure StartDragOnLeft;
+  private
+    FPumped: Boolean;
+    FNestedRuns: Integer;
+    FDeadAddr: Pointer;
+    procedure MovedPumps(Sender: TObject; AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar;
+      AOldIndex: Integer);
+    procedure MovedFreesTheManager(Sender: TObject; AWindow: TTyToolWindow;
+      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+    procedure MovedStartsLoadingTheTarget(Sender: TObject; AWindow: TTyToolWindow;
+      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
   end;
 
 implementation
@@ -209,6 +235,36 @@ begin
   if ManagerWidgetSetReady then Exit;
   Forms.Application.Initialize;
   ManagerWidgetSetReady := True;
+end;
+
+var
+  { 金丝雀:manager 在自己的事件处理器里被释放之后,把刚还掉的那一块马上借回来、填满。之后
+    谁再往死 manager 身上写(Dec(FEventDepth)、FRunning := nil……),这里就看得见 —— 只读
+    悬垂指针不一定当场 AV,写却会改掉借回来的字节。 }
+  Canary: PByte = nil;
+  CanarySize: Integer = 0;
+
+procedure PlantCanary;
+begin
+  CanarySize := TTyToolWindowManager.InstanceSize;
+  Canary := GetMem(CanarySize);
+  FillChar(Canary^, CanarySize, $A5);
+end;
+
+function CanaryIntact: Boolean;
+var
+  i: Integer;
+begin
+  Result := Canary <> nil;
+  if Result then
+    for i := 0 to CanarySize - 1 do
+      if Canary[i] <> $A5 then Exit(False);
+end;
+
+procedure DropCanary;
+begin
+  if Canary <> nil then FreeMem(Canary);
+  Canary := nil;
 end;
 
 procedure TTyToolWindowManagerFixture.SetUp;
@@ -1135,6 +1191,69 @@ begin
   AssertEquals('藏着的窗口挪进收起的栏:显示恰好一次', 'show WOutline;', FOrder);
 end;
 
+procedure TTyToolWindowManagerTests.ChangeFreesTheManager(Sender: TObject);
+begin
+  LogBarChange(Sender);
+  if FDying = nil then Exit;
+  FDeadAddr := Pointer(FDying);
+  FreeAndNil(FDying);
+  PlantCanary;
+end;
+
+procedure TTyToolWindowManagerTests.TestFreeingTheManagerInABarEventTouchesItNoMore;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+begin
+  NewLeftRight(m, l, r);
+  FDying := m;
+  l.OnChange := @ChangeFreesTheManager;
+  try
+    m.MoveWindow(l.Windows[1], r);
+    AssertTrue('前提:源栏 OnChange 里释放了 manager', FDying = nil);
+    AssertTrue('前提:释放掉的那一块被借回来了(不然这一条什么都测不到)',
+      Pointer(Canary) = FDeadAddr);
+    AssertTrue('处理器返回之后没有人再往死 manager 身上写', CanaryIntact);
+    AssertEquals('之后的栏事件照发(栏还活着),OnWindowMoved 不再发',
+      'L.change;R.expand;R.change;', FLog);
+    AssertTrue('栏的引用清掉了', (l.Manager = nil) and (r.Manager = nil));
+  finally
+    DropCanary;
+  end;
+end;
+
+procedure TTyToolWindowManagerTests.CanMoveFreesTheManager(Sender: TObject; AWindow: TTyToolWindow;
+  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+begin
+  AAllow := True;
+  if FDying = nil then Exit;
+  FDeadAddr := Pointer(FDying);
+  FreeAndNil(FDying);
+  PlantCanary;
+end;
+
+procedure TTyToolWindowManagerTests.TestFreeingTheManagerInOnCanMoveWindowTouchesItNoMore;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  b: TTyToolWindow;
+begin
+  NewLeftRight(m, l, r);
+  b := l.Windows[1];
+  FDying := m;
+  m.OnCanMoveWindow := @CanMoveFreesTheManager;
+  try
+    AssertFalse('manager 在问的时候没了:这一次不挪', m.MoveWindow(b, r));
+    AssertTrue('前提:OnCanMoveWindow 里释放了 manager', FDying = nil);
+    AssertTrue('前提:释放掉的那一块被借回来了(不然这一条什么都测不到)',
+      Pointer(Canary) = FDeadAddr);
+    AssertTrue('处理器返回之后没有人再往死 manager 身上写', CanaryIntact);
+    AssertSame('窗口还在左栏', TTyToolWindowBar(l), b.Bar);
+  finally
+    DropCanary;
+  end;
+end;
+
 { --- 真句柄 --------------------------------------------------------------------------- }
 
 procedure TTyToolWindowManagerLiveTests.TrapException(Sender: TObject; E: Exception);
@@ -1371,22 +1490,119 @@ end;
 
 procedure TTyToolWindowManagerLiveTests.TestFreeingTheManagerDropsTheQueue;
 var
-  dead: Pointer;
-  before: PtrUInt;
+  before: Integer;
 begin
   FMgr.MoveWindow(FSearch, FRight);
-  dead := Pointer(FMgr);
+  AssertEquals('前提:排着一项', 1, FMgr.QueuedCountForTest);
+  { 数的是 RunQueue 的真实入口(类变量,数的时候不碰实例)。析构没撤掉的话,Application 的异步
+    队列里还挂着「死 manager 的 RunQueue」,抽消息时它照样进来 —— 空队列跑在死对象上不一定
+    当场 AV,所以不靠 AV 判。 }
+  before := TTyToolWindowManager.RunQueueEntriesForTest;
   FreeAndNil(FMgr);
-  { 析构没撤掉的话,Application 的异步队列里还挂着「死 manager 的 RunQueue」:这里再按那个地址
-    撤一次(只比指针,不解引用),撤得到就会还掉一项的内存。空队列跑在死对象上不一定当场 AV,
-    所以不靠 AV 判。 }
-  before := GetFPCHeapStatus.CurrHeapUsed;
-  Application.RemoveAsyncCalls(TObject(dead));
-  AssertEquals('manager 析构已经撤掉了自己排的异步调用', before,
-    GetFPCHeapStatus.CurrHeapUsed);
   Pump;
   AssertNothingRaised('manager 被释放之后抽消息');
+  AssertEquals('manager 析构撤掉了自己排的异步调用:RunQueue 一次都没进来', before,
+    TTyToolWindowManager.RunQueueEntriesForTest);
   AssertSame('还在左栏', FLeft, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.MovedPumps(Sender: TObject; AWindow: TTyToolWindow;
+  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+var
+  before: Integer;
+begin
+  LogMoved(Sender, AWindow, ASourceBar, AOldIndex);
+  if FPumped then Exit;
+  FPumped := True;
+  { 处理器里抽三轮消息(弹模态框就是这样)。 }
+  before := TTyToolWindowManager.RunQueueEntriesForTest;
+  RunAsyncOnce;
+  RunAsyncOnce;
+  RunAsyncOnce;
+  FNestedRuns := TTyToolWindowManager.RunQueueEntriesForTest - before;
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAPumpInsideTheQueueDoesNotSpin;
+begin
+  FMgr.OnWindowMoved := @MovedPumps;
+  FPumped := False;
+  FNestedRuns := -1;
+  { 第一项执行时捕获在 Search 里:再排一次(已经排上了一次异步调用)。第二项执行时处理器抽消息。 }
+  AssertTrue(FMgr.MoveWindow(FSearch, FRight));
+  AssertTrue(FMgr.MoveWindow(FExplorer, FRight));
+  AssertEquals('前提:排着两项', 2, FMgr.QueuedCountForTest);
+  SetCaptureControl(FBtn);
+  try
+    RunAsyncOnce;
+  finally
+    SetCaptureControl(nil);
+  end;
+  AssertNothingRaised('第一轮');
+  AssertTrue('前提:处理器抽过消息', FPumped);
+  AssertSame('前提:Explorer 挪过去了', FRight, FExplorer.Bar);
+  AssertSame('前提:Search 再排了,还没挪', FLeft, FSearch.Bar);
+  AssertEquals('嵌套的 RunQueue 只进来那一次(再排排上的调用),自己不重排、不空转', 1, FNestedRuns);
+  Pump;
+  AssertNothingRaised('补排的那一轮');
+  AssertSame('外层跑完补排:Search 最后也挪过去了', FRight, FSearch.Bar);
+end;
+
+type
+  { Loading / Loaded 是 protected:模拟「栏在流式加载中」。 }
+  TComponentCrack = class(TComponent);
+
+procedure TTyToolWindowManagerLiveTests.MovedStartsLoadingTheTarget(Sender: TObject;
+  AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+begin
+  LogMoved(Sender, AWindow, ASourceBar, AOldIndex);
+  TComponentCrack(FRight).Loading;
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAQueuedIndexOnALoadingBarIsDropped;
+begin
+  FMgr.OnWindowMoved := @MovedStartsLoadingTheTarget;
+  AssertTrue(FMgr.MoveWindow(FSearch, FRight));
+  FSearch.WindowIndex := 0;
+  AssertEquals('前提:移动和调顺序都排着', 2, FMgr.QueuedCountForTest);
+  try
+    RunAsyncOnce;
+    AssertNothingRaised('排队的两项');
+    AssertSame('前提:先挪到右栏(末尾)', FRight, FSearch.Bar);
+    AssertTrue('前提:右栏此刻在加载中', csLoading in FRight.ComponentState);
+    AssertEquals('排着的调顺序执行时栏在加载中:丢弃', 1, FSearch.WindowIndex);
+  finally
+    if csLoading in FRight.ComponentState then TComponentCrack(FRight).Loaded;
+  end;
+end;
+
+procedure TTyToolWindowManagerLiveTests.MovedFreesTheManager(Sender: TObject;
+  AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+begin
+  LogMoved(Sender, AWindow, ASourceBar, AOldIndex);
+  if FMgr = nil then Exit;
+  FDeadAddr := Pointer(FMgr);
+  FreeAndNil(FMgr);
+  PlantCanary;
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFreeingTheManagerInsideItsQueueTouchesItNoMore;
+begin
+  FMgr.OnWindowMoved := @MovedFreesTheManager;
+  AssertTrue(FMgr.MoveWindow(FSearch, FRight));
+  AssertTrue(FMgr.MoveWindow(FExplorer, FRight));
+  AssertEquals('前提:排着两项', 2, FMgr.QueuedCountForTest);
+  try
+    RunAsyncOnce;
+    AssertNothingRaised('队列里释放 manager');
+    AssertTrue('前提:第一项的 OnWindowMoved 里释放了 manager', FMgr = nil);
+    AssertTrue('前提:释放掉的那一块被借回来了(不然这一条什么都测不到)',
+      Pointer(Canary) = FDeadAddr);
+    AssertTrue('处理器返回之后没有人再往死 manager 身上写', CanaryIntact);
+    AssertSame('第一项做了', FRight, FSearch.Bar);
+    AssertSame('第二项没做:manager 已经没了', FLeft, FExplorer.Bar);
+  finally
+    DropCanary;
+  end;
 end;
 
 procedure TTyToolWindowManagerLiveTests.TestAVetoAtExecutionDropsTheMoveSilently;

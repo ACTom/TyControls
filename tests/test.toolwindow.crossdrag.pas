@@ -86,8 +86,16 @@ type
     procedure TestABarInAHiddenEmbeddedFormIsNoTarget;
     { 直接改 Parent 跟 MoveWindow 同一条路:拖着别的窗口时也取消拖动。 }
     procedure TestADirectParentChangeCancelsTheDrag;
+    { 拖到一半目标栏被禁用 / 藏起来:下一次移动就不是目标,在那里松开不挪。 }
+    procedure TestATargetDisabledOrHiddenMidDragIsNoTarget;
+    { 放下时再问 OnCanMoveWindow,处理器里释放了 manager(spec §6.6 不许):不挪、不再碰它。 }
+    procedure TestFreeingTheManagerWhenAskedOnDropDoesNotMove;
   private
+    FDeadMgr: Pointer;
+    FCanary: PByte;
     procedure CancelInsideTheAsk(Sender: TObject; AWindow: TTyToolWindow;
+      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+    procedure FreeManagerOnTheDropAsk(Sender: TObject; AWindow: TTyToolWindow;
       ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
   end;
 
@@ -790,6 +798,69 @@ begin
   AssertSame('前提:挪过去了', TTyToolWindowBar(FRight), FGit.Bar);
   AssertFalse('直接改 Parent 也取消拖动', FMgr.IsDragging);
   AssertNoDropAnywhere('直接改 Parent 之后');
+end;
+
+procedure TTyToolWindowCrossDragTests.TestATargetDisabledOrHiddenMidDragIsNoTarget;
+var
+  p: TPoint;
+begin
+  p := RightFirstCellTop;
+  StartDrag(1);
+  MoveTo(p);
+  AssertTrue('前提:右栏有落点', FRight.ForeignDropForTest);
+  FRight.Enabled := False;
+  MoveTo(p);
+  AssertNoDropAnywhere('拖到一半右栏被禁用');
+  ReleaseAt(p);
+  AssertSame('在被禁用的右栏上松开:不挪', TTyToolWindowBar(FBar), FSearch.Bar);
+  FRight.Enabled := True;
+  StartDrag(1);
+  MoveTo(p);
+  AssertTrue('前提:右栏又有落点', FRight.ForeignDropForTest);
+  FRight.Visible := False;
+  MoveTo(p);
+  AssertNoDropAnywhere('拖到一半右栏被藏起来');
+  ReleaseAt(p);
+  AssertSame('在藏起来的右栏那里松开:不挪', TTyToolWindowBar(FBar), FSearch.Bar);
+end;
+
+procedure TTyToolWindowCrossDragTests.FreeManagerOnTheDropAsk(Sender: TObject;
+  AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+begin
+  Inc(FCanCalls);
+  AAllow := True;
+  { 悬停时放行;放下时再问的那一次里释放 manager。 }
+  if (FCanCalls < 2) or (FMgr = nil) then Exit;
+  FDeadMgr := Pointer(FMgr);
+  FreeAndNil(FMgr);
+  { 金丝雀:刚还掉的那一块马上借回来、填满,之后谁往死 manager 身上写就看得见。 }
+  FCanary := GetMem(TTyToolWindowManager.InstanceSize);
+  FillChar(FCanary^, TTyToolWindowManager.InstanceSize, $A5);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestFreeingTheManagerWhenAskedOnDropDoesNotMove;
+var
+  i: Integer;
+  intact: Boolean;
+begin
+  FCanary := nil;
+  FMgr.OnCanMoveWindow := @FreeManagerOnTheDropAsk;
+  StartDrag(1);
+  MoveTo(RightFirstCellTop);
+  AssertTrue('前提:悬停时放行,有落点', FRight.ForeignDropForTest);
+  try
+    ReleaseAt(RightFirstCellTop);
+    AssertTrue('前提:放下时再问的那一次里释放了 manager', FMgr = nil);
+    AssertTrue('前提:释放掉的那一块被借回来了(不然这一条什么都测不到)',
+      Pointer(FCanary) = FDeadMgr);
+    intact := True;
+    for i := 0 to TTyToolWindowManager.InstanceSize - 1 do
+      if FCanary[i] <> $A5 then intact := False;
+    AssertTrue('处理器返回之后没有人再往死 manager 身上写', intact);
+    AssertSame('manager 在放下时没了:不挪', TTyToolWindowBar(FBar), FSearch.Bar);
+  finally
+    if FCanary <> nil then FreeMem(FCanary);
+  end;
 end;
 
 initialization

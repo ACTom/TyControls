@@ -1185,6 +1185,15 @@ type
     Dead: Boolean;
   end;
 
+  { 派发 manager 事件那几处放在栈上的一格(内部类型,不是公开 API):处理器里把 manager 释放了
+    (spec §6.6 不许,但不许崩),析构把链上每一格的 Alive 置 False;处理器返回后只看这一格,
+    不碰 manager 身上的任何成员。 }
+  PTyToolWindowLife = ^TTyToolWindowLife;
+  TTyToolWindowLife = record
+    Alive: Boolean;
+    Prev: PTyToolWindowLife;
+  end;
+
   { 加载中调 Load / Reset 存下的唯一一份挂起计划(spec §10.5)。 }
   TTyToolLayoutPending = (tlpNone, tlpLoad, tlpReset);
   TTyToolWindowQueue = array of TTyToolWindowQueued;
@@ -1203,6 +1212,8 @@ type
     FImages: TCustomImageList;
     { > 0 = 正在发本 manager 的事件:处理器里再调 MoveWindow 答 False(spec §9.9)。 }
     FEventDepth: Integer;
+    { 栈上生命格的链头(见 TTyToolWindowLife)。 }
+    FLife: PTyToolWindowLife;
     FOnCanMoveWindow: TTyCanMoveWindowEvent;
     FOnWindowMoved: TTyWindowMovedEvent;
     { 排着的移动(spec §9.9),按调用顺序。FRunning 是 RunQueue 此刻正在执行的那一批:
@@ -1226,6 +1237,24 @@ type
     { 加载中调 Load / Reset 存下的唯一一份挂起计划(后来的覆盖前面的,spec §10.5)。 }
     FPendingKind: TTyToolLayoutPending;
     FPendingText: string;
+  private
+    { RunQueue 被调了几次,所有实例合计(探针 RunQueueEntriesForTest 的底;类变量,释放掉的
+      manager 上的调用也数得到,而且数的时候不碰那个实例)。 }
+    class var FRunQueueEntries: Integer;
+  private
+    { 生命格进链 / 出链(见 TTyToolWindowLife)。Leave 在格子已死时什么都不做 —— 那时 Self
+      是悬垂的。 }
+    procedure EnterLife(var ALife: TTyToolWindowLife);
+    procedure LeaveLife(var ALife: TTyToolWindowLife);
+    { 派发本 manager 的事件:生命格 + FEventDepth 一起进、一起出。 }
+    procedure EnterEvent(var ALife: TTyToolWindowLife);
+    procedure LeaveEvent(var ALife: TTyToolWindowLife);
+    { 一次移动的执行(MoveWindow 同步那一支、排队项执行时),结构检查已过。同栏 = 调顺序,
+      不问事件;跨栏先问 OnCanMoveWindow,AMayQueue 且要排队时排队。AIndex 已经换算好
+      (MaxInt = 末尾)。接受了就取消此刻的拖动。答 False = 跨栏被否决(或处理器里释放了本
+      manager)。 }
+    function ExecuteMove(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar; AIndex: Integer;
+      AMayQueue: Boolean): Boolean;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1276,7 +1305,10 @@ type
       out AWindows: TTyToolLayoutWindows): TTyToolLayoutWorld;
     { spec §10.4 的批次:取消拖动、还原最大化、按计划挪窗口 / 调顺序 / 激活 / 设尺寸和收起、
       焦点、OnLayoutApplied。不问 OnCanMoveWindow、不发 OnWindowMoved 和栏事件;窗口的
-      OnShow / OnHide 照常。 }
+      OnShow / OnHide 照常。
+      **批次中间窗口的 OnShow / OnHide 里不许释放本 manager、栏或窗口**(spec §6.6,用
+      Application.ReleaseComponent):批次之后还要按计划的快照接着做,这一段不设生命格 ——
+      MoveWindow / 队列 / 事件派发那几处设了(TTyToolWindowLife),处理器返回后不再碰本对象。 }
     procedure ApplyText(const ADoc: TTyToolLayoutDoc; AQueueEvent: Boolean = False);
     { --- 时机(spec §10.5) --- }
     { manager、任一注册栏、或它们的任一窗口还在 csLoading。 }
@@ -1323,6 +1355,8 @@ type
     function QueuedCountForTest: Integer;
     { 探针:注册表里记着几条栏(真实表的长度;不解引用任何一条)。 }
     function BarCountForTest: Integer;
+    { 探针:RunQueue 被调了几次,所有实例合计(真实入口的计数;释放掉的 manager 上的调用也数)。 }
+    class function RunQueueEntriesForTest: Integer;
     { 取消此刻的图标拖动(spec §9.7);没在拖什么都不做。 }
     procedure CancelDrag;
     { 注册栏里有一条正在拖图标。 }
@@ -1368,6 +1402,28 @@ uses
   tyControls.ImageCollection,   { TyTintBitmapAlpha / TyFadeBitmapAlpha:图标按状态着色 }
   tyControls.ImageDraw,  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子;TyRenderImage }
   tyControls.Menu;       { TTyPopupMenu:图标条的溢出菜单 }
+
+{ manager 队列里的一项(spec §9.9)。 }
+function NewQueued(AKind: TTyToolWindowQueuedKind; AWindow: TTyToolWindow;
+  ATarget: TTyToolWindowBar; AIndex: Integer): TTyToolWindowQueued;
+begin
+  Result := Default(TTyToolWindowQueued);
+  Result.Kind := AKind;
+  Result.Window := AWindow;
+  Result.Target := ATarget;
+  Result.Index := AIndex;
+end;
+
+{ 捕获此刻在 AWindow 里:窗口里某个按钮自己的点击处理还没走完,同步换父会在里面销毁它的句柄
+  (spec §9.9 / §10.5)。排队的移动和布局执行前问这一处。 }
+function CaptureInside(AWindow: TTyToolWindow): Boolean;
+var
+  cap: TControl;
+begin
+  cap := GetCaptureControl;
+  Result := (cap <> nil) and (AWindow <> nil)
+    and ((cap = AWindow) or AWindow.ContainsControl(cap));
+end;
 
 { --- TTyToolWindow ------------------------------------------------------------ }
 
@@ -1508,7 +1564,6 @@ end;
 procedure TTyToolWindow.SetWindowIndex(AValue: Integer);
 var
   b: TTyToolWindowBar;
-  item: TTyToolWindowQueued;
 begin
   b := Bar;
   if b = nil then Exit;
@@ -1516,11 +1571,7 @@ begin
     执行的移动会把这一次覆盖掉。 }
   if (b.Manager <> nil) and b.Manager.HasQueued(Self) then
   begin
-    item := Default(TTyToolWindowQueued);
-    item.Kind := twqIndex;
-    item.Window := Self;
-    item.Index := AValue;
-    b.Manager.Enqueue(item);
+    b.Manager.Enqueue(NewQueued(twqIndex, Self, nil, AValue));
     Exit;
   end;
   b.ReorderWindow(Self, AValue);
@@ -1820,11 +1871,13 @@ end;
   静默换父(FQuietMove:注册不即激活)→ 调到 AIndex(MaxInt = 末尾)→ 目标栏激活并展开 →
   恢复对齐 → 焦点还回去 → 按 §6.6 的顺序发栏事件 → 两条栏在同一个 manager 下时发
   OnWindowMoved。整段包在参与的 manager 的 FEventDepth 里:栏事件、OnWindowMoved、换父时
-  回落页的 OnShow / OnHide 的处理器里再调 MoveWindow / Load / Reset 都答 False。 }
+  回落页的 OnShow / OnHide 的处理器里再调 MoveWindow / Load / Reset 都答 False。处理器里把
+  manager 释放了(spec §6.6 不许)也不崩:生命格判死之后不再碰它。 }
 procedure CommitCrossMove(AWindow: TTyToolWindow; ASource, ATarget: TTyToolWindowBar;
   AIndex: Integer);
 var
   mSrc, mDst: TTyToolWindowManager;
+  lifeSrc, lifeDst: TTyToolWindowLife;
   same: Boolean;
   form: TCustomForm;
   focus: TWinControl;
@@ -1835,8 +1888,8 @@ begin
   mDst := ATarget.Manager;
   same := (mSrc <> nil) and (mSrc = mDst);
   if same then mDst := nil;
-  if mSrc <> nil then Inc(mSrc.FEventDepth);
-  if mDst <> nil then Inc(mDst.FEventDepth);
+  if mSrc <> nil then mSrc.EnterEvent(lifeSrc);
+  if mDst <> nil then mDst.EnterEvent(lifeDst);
   try
     { spec §9.7:取消此刻的拖动(拖放提交走到这里时手势已经收尾了)。 }
     CancelBarDrag(ASource);
@@ -1891,10 +1944,11 @@ begin
       Exit;
     end;
     FireMovedBarEvents(ASource, ATarget, srcEv, dstEv);
-    if same then mSrc.WindowMoved(AWindow, ASource, oldIdx);
+    { 前面任何一个处理器(回落页的 OnShow、栏事件)里把 manager 释放了:不再碰它。 }
+    if same and lifeSrc.Alive then mSrc.WindowMoved(AWindow, ASource, oldIdx);
   finally
-    if mDst <> nil then Dec(mDst.FEventDepth);
-    if mSrc <> nil then Dec(mSrc.FEventDepth);
+    if mDst <> nil then mDst.LeaveEvent(lifeDst);
+    if mSrc <> nil then mSrc.LeaveEvent(lifeSrc);
   end;
 end;
 
@@ -6531,7 +6585,18 @@ end;
 { --- TTyToolWindowManager -------------------------------------------------------- }
 
 destructor TTyToolWindowManager.Destroy;
+var
+  p: PTyToolWindowLife;
 begin
+  { 在自己的某个事件处理器里被释放(spec §6.6 不许):派发那几处栈上的生命格一律判死,
+    处理器返回后它们不再碰本对象。 }
+  p := FLife;
+  while p <> nil do
+  begin
+    p^.Alive := False;
+    p := p^.Prev;
+  end;
+  FLife := nil;
   { 队列里排的是本对象的方法:RemoveAsyncCalls 按方法所属的对象匹配。应用关停的后半段
     (AppDoNotCallAsyncQueue 置位之后)它会抛异常,那时队列也不会再跑了。 }
   if (Application <> nil) and not (AppDoNotCallAsyncQueue in Application.Flags) then
@@ -6542,6 +6607,33 @@ begin
   { 拖到一半 manager 被释放:源栏的手势作废(spec §9.7)。 }
   CancelDrag;
   inherited Destroy;
+end;
+
+procedure TTyToolWindowManager.EnterLife(var ALife: TTyToolWindowLife);
+begin
+  ALife.Alive := True;
+  ALife.Prev := FLife;
+  FLife := @ALife;
+end;
+
+procedure TTyToolWindowManager.LeaveLife(var ALife: TTyToolWindowLife);
+begin
+  { 已死:Self 是悬垂的,一个成员都不碰(非虚方法,调用本身不解引用 Self)。 }
+  if not ALife.Alive then Exit;
+  FLife := ALife.Prev;
+end;
+
+procedure TTyToolWindowManager.EnterEvent(var ALife: TTyToolWindowLife);
+begin
+  EnterLife(ALife);
+  Inc(FEventDepth);
+end;
+
+procedure TTyToolWindowManager.LeaveEvent(var ALife: TTyToolWindowLife);
+begin
+  if not ALife.Alive then Exit;
+  Dec(FEventDepth);
+  LeaveLife(ALife);
 end;
 
 procedure TTyToolWindowManager.CancelDrag;
@@ -6558,13 +6650,21 @@ function TTyToolWindowManager.MoveFromDrop(AWindow: TTyToolWindow; ATarget: TTyT
   ASlot: Integer): Boolean;
 var
   src: TTyToolWindowBar;
+  life: TTyToolWindowLife;
 begin
   { 这个窗口还有排着的移动也照做:拖动开始后它不会再被排队以外的路挪走,排着的那一项
     执行时会重新检查。 }
-  Result := StructureAllows(AWindow, ATarget, src) and (src <> ATarget)
-    and CanMoveWindow(AWindow, ATarget);
-  { 跨栏的最终位置就是槽位本身(spec §9.4:移走的不在目标栏里,不减一)。 }
-  if Result then MoveNow(AWindow, ATarget, ASlot);
+  Result := StructureAllows(AWindow, ATarget, src) and (src <> ATarget);
+  if not Result then Exit;
+  EnterLife(life);
+  try
+    { OnCanMoveWindow 里把本 manager 释放了:到此为止。 }
+    Result := CanMoveWindow(AWindow, ATarget) and life.Alive;
+    { 跨栏的最终位置就是槽位本身(spec §9.4:移走的不在目标栏里,不减一)。 }
+    if Result then MoveNow(AWindow, ATarget, ASlot);
+  finally
+    LeaveLife(life);
+  end;
 end;
 
 { --- 布局(spec §10) --- }
@@ -6685,8 +6785,7 @@ begin
     { 同步应用会在窗口里的按钮自己的点击里销毁它的句柄(「恢复布局」按钮放在操作区里)。
       覆盖之前排队的计划和移动。 }
     ClearQueue;
-    item := Default(TTyToolWindowQueued);
-    item.Kind := twqLayout;
+    item := NewQueued(twqLayout, nil, nil, 0);
     item.Text := AText;
     item.IsReset := AKind = tlpReset;
     Enqueue(item);
@@ -6801,13 +6900,15 @@ begin
 end;
 
 procedure TTyToolWindowManager.LayoutAppliedAsync(Data: PtrInt);
+var
+  life: TTyToolWindowLife;
 begin
   if not Assigned(FOnLayoutApplied) then Exit;
-  Inc(FEventDepth);
+  EnterEvent(life);
   try
     FOnLayoutApplied(Self);
   finally
-    Dec(FEventDepth);
+    LeaveEvent(life);
   end;
 end;
 
@@ -6818,7 +6919,6 @@ var
   bars: TTyToolLayoutBars;
   wins: TTyToolLayoutWindows;
   plan: TTyToolLayoutPlan;
-  cap: TControl;
   side: TTyToolLayoutSide;
   k: Integer;
   w: TTyToolWindow;
@@ -6826,9 +6926,9 @@ begin
   if not LayoutCallAllowed then Exit;
   if AItem.IsReset then text := FDefaultText else text := AItem.Text;
   if not TyToolLayoutParse(text, doc) then Exit;
-  { 捕获在某个要跨栏移动的窗口里(按钮自己的点击处理还没走完):再排一次,只一次。 }
-  cap := GetCaptureControl;
-  if (cap <> nil) and not AItem.Requeued then
+  { 捕获在某个要跨栏移动的窗口里(按钮自己的点击处理还没走完):再排一次,只一次。
+    没有捕获就不建计划。 }
+  if (GetCaptureControl <> nil) and not AItem.Requeued then
   begin
     plan := TyToolLayoutPlanFor(BuildWorld(bars, wins), doc);
     for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
@@ -6836,7 +6936,7 @@ begin
       begin
         if plan[side].Order[k].Side = side then Continue;
         w := wins[plan[side].Order[k].Side][plan[side].Order[k].Index];
-        if (cap = w) or w.ContainsControl(cap) then
+        if CaptureInside(w) then
         begin
           AItem.Requeued := True;
           AItem.Dead := False;
@@ -7234,6 +7334,7 @@ function TTyToolWindowManager.CanMoveWindow(AWindow: TTyToolWindow;
 var
   src: TTyToolWindowBar;
   allow: Boolean;
+  life: TTyToolWindowLife;
 begin
   Result := StructureAllows(AWindow, ATargetBar, src);
   if not Result then Exit;
@@ -7242,11 +7343,11 @@ begin
   allow := True;
   if Assigned(FOnCanMoveWindow) then
   begin
-    Inc(FEventDepth);
+    EnterEvent(life);
     try
       FOnCanMoveWindow(Self, AWindow, ATargetBar, allow);
     finally
-      Dec(FEventDepth);
+      LeaveEvent(life);
     end;
   end;
   Result := allow;
@@ -7262,21 +7363,23 @@ end;
 
 procedure TTyToolWindowManager.WindowMoved(AWindow: TTyToolWindow; ASource: TTyToolWindowBar;
   AOldIndex: Integer);
+var
+  life: TTyToolWindowLife;
 begin
   if not MovedEventAllowed(ASource) then Exit;
-  Inc(FEventDepth);
+  EnterEvent(life);
   try
     FOnWindowMoved(Self, AWindow, ASource, AOldIndex);
   finally
-    Dec(FEventDepth);
+    LeaveEvent(life);
   end;
 end;
 
 procedure TTyToolWindowManager.MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
   AIndex: Integer);
 begin
-  { 跟运行时直接改 Parent 同一条路(spec §3.2 / §9.5)。-1 = 末尾;PlaceWindow 钳到 N-1。 }
-  if AIndex < 0 then AIndex := MaxInt;
+  { 跟运行时直接改 Parent 同一条路(spec §3.2 / §9.5)。AIndex 已经是换算过的(MoveWindow 入口
+    把 -1 换成 MaxInt;拖放给的槽位不会是负的)。 }
   CommitCrossMove(AWindow, AWindow.Bar, ATarget, AIndex);
 end;
 
@@ -7284,42 +7387,55 @@ function TTyToolWindowManager.MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTy
   AIndex: Integer): Boolean;
 var
   src: TTyToolWindowBar;
-  item: TTyToolWindowQueued;
 begin
   Result := False;
   { 从本 manager 的事件处理里重入(spec §9.9);布局应用的批次里(某一页的 OnShow / OnHide)也一样:
     批次按自己的窗口快照做,中途被挪走的窗口会让它把别的栏的窗口当成本栏的当前页。 }
   if (FEventDepth > 0) or (FApplying > 0) then Exit;
   if not StructureAllows(AWindow, ATargetBar, src) then Exit;
-  item := Default(TTyToolWindowQueued);
-  item.Kind := twqMove;
-  item.Window := AWindow;
-  item.Target := ATargetBar;
-  item.Index := AIndex;
-  { 这个窗口还有排着的移动:这一次(同栏也算)排在它后面,按调用顺序执行。执行时重新检查。 }
-  { 接受了的调用在入口就取消此刻的拖动(spec §9.7),排队的、同栏调顺序的也一样 —— 等到排队项
+  { -1 = 末尾(PlaceWindow / ReorderWindow 钳到 N-1)。只在入口换算这一次:排着的项执行时、
+    MoveNow 里都拿换算过的值。 }
+  if AIndex < 0 then AIndex := MaxInt;
+  { 这个窗口还有排着的移动:这一次(同栏也算)排在它后面,按调用顺序执行。执行时重新检查。
+    接受了的调用在入口就取消此刻的拖动(spec §9.7),排队的、同栏调顺序的也一样 —— 等到排队项
     执行时才取消的话,这段时间里用户还拖着一个马上要被挪走的窗口。 }
   if HasQueued(AWindow) then
   begin
     CancelDrag;
-    Enqueue(item);
+    Enqueue(NewQueued(twqMove, AWindow, ATargetBar, AIndex));
     Exit(True);
   end;
-  if src = ATargetBar then
+  Result := ExecuteMove(AWindow, ATargetBar, AIndex, True);
+end;
+
+function TTyToolWindowManager.ExecuteMove(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+  AIndex: Integer; AMayQueue: Boolean): Boolean;
+var
+  src: TTyToolWindowBar;
+  life: TTyToolWindowLife;
+begin
+  src := AWindow.Bar;
+  if src = ATarget then
   begin
-    { 同一条栏就是调顺序:同步(不重建句柄),不问事件。-1 = 末尾。 }
-    if AIndex < 0 then AIndex := MaxInt;
+    { 同一条栏就是调顺序:同步(不重建句柄),不问事件。 }
     CancelDrag;
     src.ReorderWindow(AWindow, AIndex);
     Exit(True);
   end;
-  if not CanMoveWindow(AWindow, ATargetBar) then Exit;
-  CancelDrag;
-  if MustQueue(AWindow) then
-    Enqueue(item)
-  else
-    MoveNow(AWindow, ATargetBar, AIndex);
-  Result := True;
+  EnterLife(life);
+  try
+    Result := CanMoveWindow(AWindow, ATarget);
+    { OnCanMoveWindow 里把本 manager 释放了:到此为止,不再碰任何成员。 }
+    Result := Result and life.Alive;
+    if not Result then Exit;
+    CancelDrag;
+    if AMayQueue and MustQueue(AWindow) then
+      Enqueue(NewQueued(twqMove, AWindow, ATarget, AIndex))
+    else
+      MoveNow(AWindow, ATarget, AIndex);
+  finally
+    LeaveLife(life);
+  end;
 end;
 
 function TTyToolWindowManager.QueuedCountForTest: Integer;
@@ -7330,6 +7446,11 @@ end;
 function TTyToolWindowManager.BarCountForTest: Integer;
 begin
   Result := Length(FBars);
+end;
+
+class function TTyToolWindowManager.RunQueueEntriesForTest: Integer;
+begin
+  Result := FRunQueueEntries;
 end;
 
 function TTyToolWindowManager.MustQueue(AWindow: TTyToolWindow): Boolean;
@@ -7398,21 +7519,22 @@ begin
 end;
 
 procedure TTyToolWindowManager.RunQueue(Data: PtrInt);
+const
+  Busy = [csLoading, csDestroying];
 var
   it: TTyToolWindowQueued;
   src: TTyToolWindowBar;
-  cap: TControl;
   i: Integer;
+  life: TTyToolWindowLife;
 begin
+  Inc(FRunQueueEntries);
   FQueuePosted := False;
-  { 执行中有人抽消息、又跑到这里:这一批还没完,下一轮再来。 }
-  if FRunning <> nil then
-  begin
-    if FQueue <> nil then PostQueue;
-    Exit;
-  end;
+  { 执行中有人抽消息(处理器里弹了模态框……)、又跑到这里:这一批还没完。不在这里重排 —— 重排的
+    那一次在下一轮抽消息里又进来、又重排,模态框的消息循环就一直空转;外层跑完自己补排。 }
+  if FRunning <> nil then Exit;
   FRunning := FQueue;
   FQueue := nil;
+  EnterLife(life);
   try
     for i := 0 to High(FRunning) do
     begin
@@ -7423,33 +7545,33 @@ begin
         twqLayout:
           RunQueuedLayout(it);
         twqMove:
+          { 捕获还在窗口里(按钮自己的点击处理还没走完):再排一次,只一次。 }
+          if CaptureInside(it.Window) and not it.Requeued then
           begin
-            { 捕获还在窗口里(按钮自己的点击处理还没走完):再排一次,只一次。 }
-            cap := GetCaptureControl;
-            if (cap <> nil) and ((cap = it.Window) or it.Window.ContainsControl(cap))
-               and not it.Requeued then
-            begin
-              it.Requeued := True;
-              Enqueue(it);
-              Continue;
-            end;
-            { 排着期间什么都可能变了:重做全部检查,不过就静默丢弃(不发事件)。 }
-            if not StructureAllows(it.Window, it.Target, src) then Continue;
-            if src = it.Target then
-            begin
-              if it.Index < 0 then it.Index := MaxInt;
-              src.ReorderWindow(it.Window, it.Index);
-            end
-            else if CanMoveWindow(it.Window, it.Target) then
-              MoveNow(it.Window, it.Target, it.Index);
-          end;
+            it.Requeued := True;
+            Enqueue(it);
+          end
+          { 排着期间什么都可能变了:重做全部检查,不过就静默丢弃(不发事件)。 }
+          else if StructureAllows(it.Window, it.Target, src) then
+            ExecuteMove(it.Window, it.Target, it.Index, False);
         twqIndex:
-          if it.Window.Bar <> nil then
+          { 同 StructureAllows:窗口、它的栏、本 manager 都不在加载 / 释放中。 }
+          if (it.Window.Bar <> nil)
+             and (Busy * (ComponentState + it.Window.ComponentState
+                          + it.Window.Bar.ComponentState) = []) then
             it.Window.Bar.ReorderWindow(it.Window, it.Index);
       end;
+      { 某个处理器里把本 manager 释放了(spec §6.6 不许):立即退出,一个成员都不再碰。 }
+      if not life.Alive then Exit;
     end;
   finally
-    FRunning := nil;
+    if life.Alive then
+    begin
+      LeaveLife(life);
+      FRunning := nil;
+      { 执行中排进来的(再排的、处理器里新调的):这一批跑完,补排一轮。 }
+      if FQueue <> nil then PostQueue;
+    end;
   end;
 end;
 
