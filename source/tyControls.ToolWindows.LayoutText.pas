@@ -28,10 +28,48 @@ type
 
   TTyToolLayoutDoc = array[TTyToolLayoutSide] of TTyToolLayoutGroup;
 
+  { 程序此刻的一条可用栏(manager 装)。Names 按窗口顺序,空名 / 重名照实填 —— 找不到、
+    匹配到不止一个都由计划自己判。 }
+  TTyToolLayoutBarState = record
+    Usable: Boolean;          { 有这个 Placement 的可用栏 }
+    Names: TStringArray;
+    Active: Integer;          { 当前页的窗口序号,-1 = 没有 }
+  end;
+  TTyToolLayoutWorld = array[TTyToolLayoutSide] of TTyToolLayoutBarState;
+
+  { 一个窗口的身份 = 它此刻在哪条栏的第几个。 }
+  TTyToolLayoutRef = record
+    Side: TTyToolLayoutSide;
+    Index: Integer;
+  end;
+
+  TTyToolLayoutBarPlan = record
+    { 串里有这一组、这条栏可用:尺寸和收起才写。 }
+    Apply: Boolean;
+    Size: Integer;
+    Collapsed: Boolean;
+    { 应用之后这条栏的窗口顺序(已放置的在前,未放置的留在原栏、保持相对顺序)。 }
+    Order: array of TTyToolLayoutRef;
+    { Order 里的下标,-1 = 没有当前页。 }
+    Active: Integer;
+  end;
+  TTyToolLayoutPlan = array[TTyToolLayoutSide] of TTyToolLayoutBarPlan;
+
 { 整串合法才答 True 并填 ADoc;不合法答 False,ADoc 全是零值(Present 都为假)。 }
 function TyToolLayoutParse(const AText: string; out ADoc: TTyToolLayoutDoc): Boolean;
 { 按 left、right、bottom 的顺序只写 Present 的组。调用方保证名字合法、不重名。 }
 function TyToolLayoutFormat(const ADoc: TTyToolLayoutDoc): string;
+
+{ spec §10.3:格式对、但窗口变了时,保存的布局落到此刻的窗口上是什么样。只对 Usable 的栏
+  出计划(不可用的栏 Order 为空、Apply 为假、Active -1,调用方不碰它)。
+  - 在可用栏的窗口里按名字找(CompareText);找不到、匹配到不止一个 → 丢掉这个名字。
+  - 程序没有对应可用栏的组整组忽略,里面的名字算未放置。
+  - 名字列在另一类栏下(按窗口此刻所在的栏判侧 / 底)→ 未放置。
+  - 未放置的留在此刻的栏,排在已放置的后面,保持相对顺序。
+  - 当前页:保存的名字最终在这条栏里就用它;否则此刻的当前页还在就不变;否则第一个;
+    否则没有。缺组的栏也照这条回落。 }
+function TyToolLayoutPlanFor(const AWorld: TTyToolLayoutWorld;
+  const ADoc: TTyToolLayoutDoc): TTyToolLayoutPlan;
 
 implementation
 
@@ -193,6 +231,142 @@ begin
       + '|' + SideKey[side] + ActiveSuffix + '=' + ADoc[side].Active;
   end;
   Result := Result + '|end';
+end;
+
+function TyToolLayoutPlanFor(const AWorld: TTyToolLayoutWorld;
+  const ADoc: TTyToolLayoutDoc): TTyToolLayoutPlan;
+type
+  TEntry = record
+    Name: string;
+    Ref: TTyToolLayoutRef;
+    Dup: Boolean;
+  end;
+var
+  entries: array of TEntry;
+  { 每个窗口被哪一组放置了(按 entries 下标);未放置 = 不在里面。 }
+  placedBy: array of Boolean;
+  placedSide: array of TTyToolLayoutSide;
+  placed: array[TTyToolLayoutSide] of array of Integer;   { 按组内顺序,entries 下标 }
+  side, g: TTyToolLayoutSide;
+  i, j, k, e, n: Integer;
+  ref: TTyToolLayoutRef;
+
+  function EntryOf(ASide: TTyToolLayoutSide; AIndex: Integer): Integer;
+  var
+    x: Integer;
+  begin
+    for x := 0 to High(entries) do
+      if (entries[x].Ref.Side = ASide) and (entries[x].Ref.Index = AIndex) then Exit(x);
+    Result := -1;
+  end;
+
+  procedure AddRef(ASide: TTyToolLayoutSide; const ARef: TTyToolLayoutRef);
+  var
+    m: Integer;
+  begin
+    m := Length(Result[ASide].Order);
+    SetLength(Result[ASide].Order, m + 1);
+    Result[ASide].Order[m] := ARef;
+  end;
+
+begin
+  Result := Default(TTyToolLayoutPlan);
+  for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+    Result[side].Active := -1;
+  { 1. 名字索引:可用栏里每个有名字的窗口;同名(CompareText)的都记成重名。 }
+  entries := nil;
+  for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+  begin
+    if not AWorld[side].Usable then Continue;
+    for i := 0 to High(AWorld[side].Names) do
+    begin
+      if AWorld[side].Names[i] = '' then Continue;
+      n := Length(entries);
+      SetLength(entries, n + 1);
+      entries[n].Name := AWorld[side].Names[i];
+      entries[n].Ref.Side := side;
+      entries[n].Ref.Index := i;
+      entries[n].Dup := False;
+      for j := 0 to n - 1 do
+        if CompareText(entries[j].Name, entries[n].Name) = 0 then
+        begin
+          entries[j].Dup := True;
+          entries[n].Dup := True;
+        end;
+    end;
+  end;
+  placedBy := nil;
+  placedSide := nil;
+  SetLength(placedBy, Length(entries));
+  SetLength(placedSide, Length(entries));
+  { 2. 每个串里有、程序里也可用的组,按组内顺序放置。 }
+  for g := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+  begin
+    placed[g] := nil;
+    if not (ADoc[g].Present and AWorld[g].Usable) then Continue;
+    for i := 0 to High(ADoc[g].Names) do
+    begin
+      e := -1;
+      for j := 0 to High(entries) do
+        if CompareText(entries[j].Name, ADoc[g].Names[i]) = 0 then
+        begin
+          e := j;
+          Break;
+        end;
+      if (e < 0) or entries[e].Dup then Continue;
+      { 列在另一类栏下(一侧一底):未放置。 }
+      if (entries[e].Ref.Side = tlsBottom) <> (g = tlsBottom) then Continue;
+      placedBy[e] := True;
+      placedSide[e] := g;
+      SetLength(placed[g], Length(placed[g]) + 1);
+      placed[g][High(placed[g])] := e;
+    end;
+  end;
+  { 3、4、5. 每条可用栏:已放置的在前,此刻在这条栏里、谁都没放置的在后;当前页;尺寸。 }
+  for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+  begin
+    if not AWorld[side].Usable then Continue;
+    for i := 0 to High(placed[side]) do
+      AddRef(side, entries[placed[side][i]].Ref);
+    for i := 0 to High(AWorld[side].Names) do
+    begin
+      e := EntryOf(side, i);
+      if (e >= 0) and placedBy[e] then Continue;
+      ref.Side := side;
+      ref.Index := i;
+      AddRef(side, ref);
+    end;
+    { 当前页:保存的名字最终在这条栏里 → 它。 }
+    if ADoc[side].Present and (ADoc[side].Active <> '') then
+      for k := 0 to High(Result[side].Order) do
+      begin
+        e := EntryOf(Result[side].Order[k].Side, Result[side].Order[k].Index);
+        if (e >= 0) and placedBy[e] and (placedSide[e] = side)
+           and (CompareText(entries[e].Name, ADoc[side].Active) = 0) then
+        begin
+          Result[side].Active := k;
+          Break;
+        end;
+      end;
+    { 否则此刻的当前页还在 → 不变。 }
+    if (Result[side].Active < 0) and (AWorld[side].Active >= 0) then
+      for k := 0 to High(Result[side].Order) do
+        if (Result[side].Order[k].Side = side)
+           and (Result[side].Order[k].Index = AWorld[side].Active) then
+        begin
+          Result[side].Active := k;
+          Break;
+        end;
+    { 否则第一个;否则没有。 }
+    if (Result[side].Active < 0) and (Length(Result[side].Order) > 0) then
+      Result[side].Active := 0;
+    if ADoc[side].Present then
+    begin
+      Result[side].Apply := True;
+      Result[side].Size := ADoc[side].Size;
+      Result[side].Collapsed := ADoc[side].Collapsed;
+    end;
+  end;
 end;
 
 end.
