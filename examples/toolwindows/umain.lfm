@@ -1,0 +1,456 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 720
+  Top = 0
+  Width = 1100
+  Caption = 'Tool windows example'
+  ClientHeight = 720
+  ClientWidth = 1100
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  MenuBar = MainMenuBar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 720
+    Top = 0
+    Width = 1100
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1100
+      Align = alTop
+      Caption = 'Tool windows  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 752
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 834
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object MainMenuBar: TTyMenuBar
+      Left = 0
+      Height = 30
+      Top = 34
+      Width = 1100
+      Align = alTop
+      Menu = MainMenu1
+    end
+    object LeftBar: TTyToolWindowBar
+      Left = 0
+      Height = 656
+      Top = 64
+      Manager = ToolMgr
+      PopupMenu = StripMenu
+      ShowHint = True
+      OnChange = BarChange
+      OnContextPopup = SideBarContextPopup
+      object ExplorerWin: TTyToolWindow
+        Caption = 'Explorer'
+        ImageName = 'files'
+        StripHint = 'Explorer (files)'
+        object ExplorerActions: TTyToolWindowActions
+          object BtnResetLayout: TTySpeedButton
+            Left = 0
+            Height = 22
+            Top = 0
+            Width = 24
+            Hint = 'Reset layout'
+            ShowHint = True
+            StyleClass = 'ghost'
+            IconFont = LucideFont
+            GlyphName = 'rotate-ccw'
+            ShowCaption = False
+            OnClick = BtnResetLayoutClick
+          end
+        end
+        object ExplorerTree: TTyTreeView
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+          Items = <
+            item
+              Text = 'src'
+            end
+            item
+              Text = 'main.pas'
+              Level = 1
+            end
+            item
+              Text = 'workbench.pas'
+              Level = 1
+            end
+            item
+              Text = 'layout.pas'
+              Level = 1
+            end
+            item
+              Text = 'themes'
+            end
+            item
+              Text = 'light.tycss'
+              Level = 1
+            end
+            item
+              Text = 'README.md'
+            end>
+        end
+      end
+      object SearchWin: TTyToolWindow
+        Caption = 'Search'
+        ImageName = 'search'
+        StripHint = 'Search in files'
+        object SearchEdit: TTyEdit
+          Left = 0
+          Height = 28
+          Top = 26
+          Width = 240
+          Align = alTop
+          TextHint = 'Search'
+        end
+        object SearchList: TTyListBox
+          Left = 0
+          Height = 400
+          Top = 54
+          Width = 240
+          Align = alClient
+          Items.Strings = (
+            'main.pas: MoveWindow'
+            'workbench.pas: SaveLayoutToString'
+            'layout.pas: LoadLayoutFromString'
+          )
+        end
+      end
+    end
+    object RightBar: TTyToolWindowBar
+      Left = 820
+      Height = 656
+      Top = 64
+      Placement = twpRight
+      Align = alRight
+      Manager = ToolMgr
+      PopupMenu = StripMenu
+      ShowHint = True
+      OnChange = BarChange
+      OnContextPopup = SideBarContextPopup
+      object OutlineWin: TTyToolWindow
+        Caption = 'Outline'
+        ImageName = 'list-tree'
+        StripHint = 'Outline'
+        object OutlineActions: TTyToolWindowActions
+          object BtnOutlineMove: TTySpeedButton
+            Left = 0
+            Height = 22
+            Top = 0
+            Width = 24
+            Hint = 'Move to the other side'
+            ShowHint = True
+            StyleClass = 'ghost'
+            IconFont = LucideFont
+            GlyphName = 'arrow-left-right'
+            ShowCaption = False
+            OnClick = BtnOutlineMoveClick
+          end
+        end
+        object OutlineList: TTyListBox
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+          Items.Strings = (
+            'TMainForm'
+            '  FormCreate'
+            '  FormClose'
+            '  BtnOutlineMoveClick'
+            '  LoadLayoutFile'
+            '  SaveLayoutFile'
+          )
+        end
+      end
+    end
+    object EditorHost: TTyPanel
+      Left = 280
+      Height = 656
+      Top = 64
+      Width = 540
+      Align = alClient
+      object BottomBar: TTyToolWindowBar
+        Left = 0
+        Top = 446
+        Width = 540
+        Placement = twpBottom
+        Align = alBottom
+        ExpandedSize = 200
+        ActiveIndex = 1
+        Manager = ToolMgr
+        PopupMenu = PanelMenu
+        OnChange = BarChange
+        OnContextPopup = BottomBarContextPopup
+        OnCollapse = BottomBarCollapse
+        OnExpand = BottomBarExpand
+        object ProblemsWin: TTyToolWindow
+          Caption = 'Problems'
+          StripHint = 'Problems (no actions area)'
+          ShowHint = True
+          object ProblemsList: TTyListBox
+            Left = 0
+            Height = 150
+            Top = 40
+            Width = 540
+            Align = alClient
+            Items.Strings = (
+              'umain.pas(12): hint: unit not used'
+              'layout.pas(88): warning: variable might not be initialized'
+            )
+          end
+        end
+        object OutputWin: TTyToolWindow
+          Caption = 'Output'
+          StripHint = 'Output (event log)'
+          ShowHint = True
+          object OutputActions: TTyToolWindowActions
+            object OutputFilter: TTyEdit
+              Left = 0
+              Height = 24
+              Top = 0
+              Width = 140
+              TextHint = 'Filter'
+              OnChange = OutputFilterChange
+            end
+            object BtnOutputClear: TTySpeedButton
+              Left = 144
+              Height = 22
+              Top = 0
+              Width = 24
+              Hint = 'Clear'
+              StyleClass = 'ghost'
+              IconFont = LucideFont
+              GlyphName = 'trash-2'
+              ShowCaption = False
+              OnClick = BtnOutputClearClick
+            end
+          end
+          object OutputMemo: TTyMemo
+            Left = 0
+            Height = 150
+            Top = 40
+            Width = 540
+            Align = alClient
+            ReadOnly = True
+          end
+        end
+        object TerminalWin: TTyToolWindow
+          Caption = 'Terminal'
+          StripHint = 'Terminal'
+          ShowHint = True
+          object TerminalActions: TTyToolWindowActions
+            object BtnTermNew: TTySpeedButton
+              Left = 0
+              Height = 22
+              Top = 0
+              Width = 24
+              Hint = 'New terminal'
+              StyleClass = 'ghost'
+              IconFont = LucideFont
+              GlyphName = 'plus'
+              ShowCaption = False
+              OnClick = BtnTermNewClick
+            end
+            object BtnTermClose: TTySpeedButton
+              Left = 28
+              Height = 22
+              Top = 0
+              Width = 24
+              Hint = 'Close terminal'
+              StyleClass = 'ghost'
+              IconFont = LucideFont
+              GlyphName = 'x'
+              ShowCaption = False
+              OnClick = BtnTermCloseClick
+            end
+            object BtnTermMore: TTySpeedButton
+              Left = 56
+              Height = 22
+              Top = 0
+              Width = 24
+              Hint = 'More'
+              StyleClass = 'ghost'
+              IconFont = LucideFont
+              GlyphName = 'ellipsis'
+              ShowCaption = False
+              OnClick = BtnTermMoreClick
+            end
+          end
+          object TerminalMemo: TTyMemo
+            Left = 0
+            Height = 150
+            Top = 40
+            Width = 540
+            Align = alClient
+            ReadOnly = True
+            Lines.Strings = (
+              '$ lazbuild toolwindows_example.lpi'
+              'Linking toolwindows_example.exe'
+            )
+          end
+        end
+      end
+      object EditorMemo: TTyMemo
+        Left = 0
+        Height = 446
+        Top = 0
+        Width = 540
+        Align = alClient
+        Lines.Strings = (
+          'procedure TMainForm.FormCreate(Sender: TObject);'
+          'begin'
+          '  // Read the saved layout before the form shows: it applies at once.'
+          '  LoadLayoutFile;'
+          'end;'
+          ''
+          'procedure TMainForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);'
+          'begin'
+          '  SaveLayoutFile;'
+          'end;'
+        )
+      end
+    end
+  end
+  object ToolMgr: TTyToolWindowManager
+    Images = Icons
+    OnWindowMoved = ToolMgrWindowMoved
+    OnLayoutApplied = ToolMgrLayoutApplied
+    Left = 360
+    Top = 160
+  end
+  object Icons: TTyLucideImageList
+    Names.Strings = (
+      'files'
+      'search'
+      'list-tree'
+    )
+    Left = 420
+    Top = 160
+  end
+  object LucideFont: TTyLucideIconFont
+    Left = 480
+    Top = 160
+  end
+  object MainMenu1: TMainMenu
+    Left = 360
+    Top = 220
+    object MnuFile: TMenuItem
+      Caption = '&File'
+      object MnuFileExit: TMenuItem
+        Caption = 'E&xit'
+        OnClick = MnuFileExitClick
+      end
+    end
+    object MnuView: TMenuItem
+      Caption = '&View'
+      object MnuViewBottom: TMenuItem
+        Caption = '&Bottom Panel'
+        ShortCut = 16458
+        OnClick = MnuViewBottomClick
+      end
+      object MnuViewSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuViewDensity: TMenuItem
+        Caption = '&Density'
+        object MnuDensityClassic: TMenuItem
+          Caption = '&Classic'
+          GroupIndex = 1
+          RadioItem = True
+          OnClick = MnuDensityClassicClick
+        end
+        object MnuDensityModern: TMenuItem
+          Caption = '&Modern'
+          GroupIndex = 1
+          RadioItem = True
+          OnClick = MnuDensityModernClick
+        end
+      end
+    end
+    object MnuLayout: TMenuItem
+      Caption = '&Layout'
+      object MnuLayoutSave: TMenuItem
+        Caption = '&Save Layout'
+        OnClick = MnuLayoutSaveClick
+      end
+      object MnuLayoutLoad: TMenuItem
+        Caption = '&Load Layout'
+        OnClick = MnuLayoutLoadClick
+      end
+      object MnuLayoutReset: TMenuItem
+        Caption = '&Reset Layout'
+        OnClick = MnuLayoutResetClick
+      end
+    end
+    object MnuDiag: TMenuItem
+      Caption = '&Diagnostics'
+      object MnuDiagDialog: TMenuItem
+        Caption = 'Show a &Dialog in 3 s'
+        OnClick = MnuDiagDialogClick
+      end
+      object MnuDiagMenu: TMenuItem
+        Caption = 'Pop Up a &Menu in 3 s'
+        OnClick = MnuDiagMenuClick
+      end
+      object MnuDiagSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuDiagDisable: TMenuItem
+        Caption = 'Disable &Output Page'
+        OnClick = MnuDiagDisableClick
+      end
+    end
+  end
+  object StripMenu: TTyPopupMenu
+    Left = 420
+    Top = 220
+    object MnuStripMove: TMenuItem
+      Caption = 'Move to Other Side'
+      OnClick = MnuStripMoveClick
+    end
+  end
+  object PanelMenu: TTyPopupMenu
+    Left = 480
+    Top = 220
+    object MnuPanelMax: TMenuItem
+      Caption = 'Maximize'
+      OnClick = MnuPanelMaxClick
+    end
+    object MnuPanelHide: TMenuItem
+      Caption = 'Hide Panel'
+      OnClick = MnuPanelHideClick
+    end
+  end
+  object DiagTimer: TTimer
+    Enabled = False
+    Interval = 3000
+    OnTimer = DiagTimerTimer
+    Left = 540
+    Top = 220
+  end
+end

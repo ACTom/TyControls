@@ -16,6 +16,12 @@ FMT = re.compile(r'%(?:\*?[0-9.\-]*[sdufgxenpc]|%)')
 def specs(s):
     return [m for m in FMT.findall(s) if m != '%%']
 
+def joined(m):
+    """The value of a msgid / msgstr match: its first quoted piece plus every continuation line."""
+    if m is None:
+        return None
+    return m.group(1) + ''.join(re.findall(r'^"(.*)"[ \t]*$', m.group(2), re.M))
+
 def parse(path):
     text = io.open(path, encoding='utf-8').read()
     blocks = re.split(r'\n\s*\n', text)
@@ -26,12 +32,12 @@ def parse(path):
         if m: ident = m.group(1).strip()
         m = re.search(r'^#,\s*(.+)$', b, re.M)
         if m: flags = m.group(1)
-        mi = re.search(r'^msgid\s+"(.*)"\s*$', b, re.M)
-        ms = re.search(r'^msgstr\s+"(.*)"\s*$', b, re.M)
+        # gettext's multi-line form (msgid "" followed by bare "..." lines) is ONE value:
+        # join the continuation lines, or a long message reads as an empty msgid.
+        mi = re.search(r'^msgid\s+"(.*)"[ \t]*((?:\n"[^\n]*"[ \t]*)*)$', b, re.M)
+        ms = re.search(r'^msgstr\s+"(.*)"[ \t]*((?:\n"[^\n]*"[ \t]*)*)$', b, re.M)
         if mi is None and ms is None: continue
-        out.append((ident, flags,
-                    mi.group(1) if mi else None,
-                    ms.group(1) if ms else None))
+        out.append((ident, flags, joined(mi), joined(ms)))
     return out
 
 def main():
