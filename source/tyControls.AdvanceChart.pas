@@ -118,6 +118,11 @@ type
   end;
   TTyAxisHitArray = array of TTyAxisHit;
 
+  { A GRAPH ROAM, as upstream's `graphroam` event reports it: once per action,
+    whether a gesture or the API dispatched it, with the series it moved. }
+  TTyGraphRoamEvent = procedure(Sender: TObject;
+    const APayload: TTyGraphRoamPayload) of object;
+
   TTyAdvanceChart = class(TTyCustomControl)
   private
     FOption: TTyChartOption;
@@ -174,6 +179,21 @@ type
       outlive it. Cleared only when the option changes -- upstream keeps it on
       the series model, and a replaced option is new series models. }
     FGraphForce: array of TTyGraphForceState;
+    { WHAT EACH GRAPH'S ROAM LEFT, by SERIES index and outside the build for
+      the same reason as FGraphForce: upstream writes it back into the
+      series' option, so it survives a resize and a merge and goes only with
+      the option. }
+    FGraphRoam: array of TTyGraphRoamState;
+    { THE COMPENSATION SCALE each laid-out graph is drawn with, by slot. Set
+      by every layout and every zoom -- and NOT by a pan, which leaves it at
+      whatever the last zoom made it, exactly as upstream leaves its
+      elements' scale. }
+    FGraphNodeScale: array of Double;
+    { THE DRAG IN PROGRESS: the series a left press armed, or -1, and where
+      the pointer was last. }
+    FRoamSeries: Integer;
+    FRoamX, FRoamY: Integer;
+    FOnGraphRoam: TTyGraphRoamEvent;
     FFilterCats: TTyGraphCategoryArray;
     { Which store column feeds spoke j, per series. Its own array because the
       store is exactly as wide as the first data row while the spokes come from
@@ -596,6 +616,22 @@ type
       box, which is what the cache exists to make affordable. }
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    { THE ROAM GESTURES. A left press inside a graph's roam area arms a drag
+      that pans by every movement after it -- off the control too -- until
+      the left button comes up or the capture is lost; a wheel turn over the
+      area zooms about the pointer. A wheel no graph takes is answered False,
+      so the host scrolls. }
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    procedure CaptureChanged; override;
+    { The graph a gesture at (AX, AY) goes to: the first, in upstream's order
+      -- highest zlevel, then z, then the lowest series index -- whose roam
+      allows it and whose area holds the point. -1 when none does. }
+    function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -662,6 +698,28 @@ type
       say what colour each edge is drawn in. }
     function GraphInkOf(ASeriesIndex: Integer; out AInk: TTyGraphInk;
       out ASpec: TTyGraphSpec): Boolean;
+    { THE ROAM ACTIONS, upstream's `graphRoam` dispatched by hand: a pan by
+      (ADX, ADY) pixels, or a zoom by AScale about (AOriginX, AOriginY).
+      ASeriesIndex -1 moves every graph on a view. NOT gated by the series'
+      `roam` -- an action is an action. Nothing is laid out again: the
+      picture is remapped and repainted. False when no graph on a view was
+      moved -- nothing rendered yet, the series is not one, or a zoom that is
+      not a positive finite number. }
+    function GraphRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+    function GraphZoom(ASeriesIndex: Integer; AScale, AOriginX,
+      AOriginY: Double): Boolean;
+    function GraphDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+    { The centre and zoom as the OPTION now says them -- the series' own
+      until the first roam, what the roam wrote back after it. The zoom is
+      not clamped; GraphView(..).Zoom is the one the view uses. }
+    function GraphRoamState(ASeriesIndex: Integer; out ACentre: TTyGraphCentre;
+      out AZoom: Double): Boolean;
+    { The view itself, for a test to read the transform of. nil when the
+      series is not a laid-out graph on a view. Owned by the control and gone
+      at the next layout. }
+    function GraphView(ASeriesIndex: Integer): TTyGraphView;
+    { The compensation scale the graph is drawn with -- stale across pans. }
+    function GraphNodeScale(ASeriesIndex: Integer): Double;
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
     function LegendLayout(AIndex: Integer): TTyLegendLayout;
@@ -706,7 +764,9 @@ type
     property OnMouseDown;
     property OnMouseMove;
     property OnMouseUp;
+    property OnMouseWheel;
     property OnResize;
+    property OnGraphRoam: TTyGraphRoamEvent read FOnGraphRoam write FOnGraphRoam;
   end;
 
 implementation
@@ -730,6 +790,7 @@ begin
   Width := 320;
   Height := 200;
   TabStop := False;   { see the published declaration }
+  FRoamSeries := -1;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -796,6 +857,9 @@ begin
   FOptionText := AValue;
   FOption.SetOptionText(AValue);
   FGraphForce := nil;
+  { notMerge: new series models, so no roam survives either. }
+  FGraphRoam := nil;
+  FRoamSeries := -1;
   FDirty := True;
   Invalidate;
 end;
@@ -2190,6 +2254,202 @@ begin
   Result := True;
 end;
 
+function TTyAdvanceChart.GraphView(ASeriesIndex: Integer): TTyGraphView;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FGraphs)) then Exit;
+  Result := FGraphs[slot];
+end;
+
+function TTyAdvanceChart.GraphNodeScale(ASeriesIndex: Integer): Double;
+var slot: Integer;
+begin
+  Result := NaN;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FGraphNodeScale)) then Exit;
+  Result := FGraphNodeScale[slot];
+end;
+
+function TTyAdvanceChart.GraphRoamState(ASeriesIndex: Integer;
+  out ACentre: TTyGraphCentre; out AZoom: Double): Boolean;
+var slot: Integer;
+begin
+  ACentre := Default(TTyGraphCentre);
+  AZoom := NaN;
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FGraphs)) and (FGraphs[slot] <> nil);
+  if not Result then Exit;
+  if (ASeriesIndex <= High(FGraphRoam)) and FGraphRoam[ASeriesIndex].Valid then
+  begin
+    ACentre := FGraphRoam[ASeriesIndex].Centre;
+    AZoom := FGraphRoam[ASeriesIndex].Zoom;
+  end
+  else
+  begin
+    ACentre := FGraphSpecs[slot].Centre;
+    AZoom := FGraphSpecs[slot].Zoom;
+  end;
+end;
+
+function TTyAdvanceChart.GraphRoam(ASeriesIndex: Integer;
+  ADX, ADY: Double): Boolean;
+var p: TTyGraphRoamPayload;
+begin
+  p := Default(TTyGraphRoamPayload);
+  p.SeriesIndex := ASeriesIndex;
+  p.HasPan := True;
+  p.DX := ADX;
+  p.DY := ADY;
+  Result := GraphDispatchRoam(p);
+end;
+
+function TTyAdvanceChart.GraphZoom(ASeriesIndex: Integer; AScale, AOriginX,
+  AOriginY: Double): Boolean;
+var p: TTyGraphRoamPayload;
+begin
+  p := Default(TTyGraphRoamPayload);
+  p.SeriesIndex := ASeriesIndex;
+  p.HasZoom := True;
+  p.Zoom := AScale;
+  p.OriginX := AOriginX;
+  p.OriginY := AOriginY;
+  Result := GraphDispatchRoam(p);
+end;
+
+function TTyAdvanceChart.GraphDispatchRoam(
+  const APayload: TTyGraphRoamPayload): Boolean;
+var
+  i, si: Integer;
+  p: TTyGraphRoamPayload;
+begin
+  Result := False;
+  { A NEGATIVE OR NON-FINITE ZOOM IS REFUSED. Upstream mirrors the picture
+    through a rotation and then flips the sign back on the next step; that is
+    not a thing anybody asks for on purpose. }
+  if APayload.HasZoom and (IsNan(APayload.Zoom) or IsInfinite(APayload.Zoom)
+    or (APayload.Zoom <= 0)) then Exit;
+  if APayload.HasPan and (IsNan(APayload.DX) or IsNan(APayload.DY)) then Exit;
+  for i := 0 to High(FGraphs) do
+  begin
+    if FGraphs[i] = nil then Continue;
+    if (i > High(FGraphLaidOut)) or not FGraphLaidOut[i] then Continue;
+    si := FBindings[i].SeriesIndex;
+    if (APayload.SeriesIndex >= 0) and (si <> APayload.SeriesIndex) then
+      Continue;
+    if Length(FGraphRoam) <= si then SetLength(FGraphRoam, si + 1);
+    TyGraphRoamStep(FGraphs[i], FGraphSpecs[i], APayload, FGraphRoam[si]);
+    TyGraphRemap(FGraphNodes[i], FGraphEdges[i], FGraphSpecs[i], FGraphs[i],
+      APayload.HasZoom, FGraphNodeScale[i]);
+    Result := True;
+    if Assigned(FOnGraphRoam) then
+    begin
+      p := APayload;
+      p.SeriesIndex := si;
+      FOnGraphRoam(Self, p);
+    end;
+  end;
+  if not Result then Exit;
+  { A NEW PICTURE, NOT A NEW LAYOUT: the static layer goes, the build and
+    the force answer stay. The hover names an element of a list about to be
+    rebuilt. }
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  DropStatic;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+var
+  i, best: Integer;
+  sp, bs: TTyGraphSpec;
+  ok: Boolean;
+begin
+  Result := -1;
+  best := -1;
+  bs := Default(TTyGraphSpec);
+  for i := 0 to High(FGraphs) do
+  begin
+    if FGraphs[i] = nil then Continue;
+    if (i > High(FGraphLaidOut)) or not FGraphLaidOut[i] then Continue;
+    sp := FGraphSpecs[i];
+    if AZoom then ok := sp.Roam in [grmZoom, grmBoth]
+    else ok := sp.Roam in [grmPan, grmBoth];
+    if not ok then Continue;
+    if not (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY)) then Continue;
+    { HIGHER zlevel, THEN HIGHER z; A TIE GOES TO THE ONE FOUND FIRST. }
+    if (best < 0) or (sp.ZLevel > bs.ZLevel)
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
+        and (FBindings[i].SeriesIndex < FBindings[best].SeriesIndex)) then
+    begin
+      best := i;
+      bs := sp;
+    end;
+  end;
+  if best >= 0 then Result := FBindings[best].SeriesIndex;
+end;
+
+procedure TTyAdvanceChart.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  d: TTyChartDatumRef;
+  el, slot, k: Integer;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if csDesigning in ComponentState then Exit;
+  { A MIDDLE OR RIGHT PRESS NEITHER ARMS NOR DISARMS. }
+  if Button <> mbLeft then Exit;
+  FRoamSeries := -1;
+  { A PRESS ON A DRAGGABLE NODE IS THE NODE'S, not the view's. }
+  d := HitTestAt(X, Y, el);
+  if (d.SeriesIndex >= 0) and not d.IsEdge then
+  begin
+    slot := SlotOfSeries(d.SeriesIndex);
+    if (slot >= 0) and (slot <= High(FGraphNodes))
+      and (slot <= High(FGraphLaidOut)) and FGraphLaidOut[slot] then
+      for k := 0 to High(FGraphNodes[slot]) do
+        if (FGraphNodes[slot][k].Row = d.DataIndex)
+          and FGraphNodes[slot][k].Draggable then Exit;
+  end;
+  FRoamSeries := RoamSeriesAt(X, Y, False);
+  FRoamX := X;
+  FRoamY := Y;
+end;
+
+procedure TTyAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  if Button = mbLeft then FRoamSeries := -1;
+  inherited MouseUp(Button, Shift, X, Y);
+end;
+
+procedure TTyAdvanceChart.CaptureChanged;
+begin
+  { THE BUTTON CAME UP SOMEWHERE THIS CONTROL WILL NOT HEAR OF, or another
+    window took the mouse. Either way the drag is over. }
+  FRoamSeries := -1;
+  inherited CaptureChanged;
+end;
+
+function TTyAdvanceChart.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  s: Double;
+  si: Integer;
+begin
+  { THE HOST'S HANDLER FIRST, and one that takes the wheel keeps it. }
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result then Exit;
+  if csDesigning in ComponentState then Exit;
+  s := TyGraphWheelScale(WheelDelta);
+  if s = 0 then Exit;
+  si := RoamSeriesAt(MousePos.X, MousePos.Y, True);
+  if si < 0 then Exit;
+  Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+end;
+
 function TTyAdvanceChart.LegendLayoutCount: Integer;
 begin
   Result := Length(FLegends);
@@ -2238,6 +2498,7 @@ begin
   FGraphNodes := nil;
   FGraphEdges := nil;
   FGraphCats := nil;
+  FGraphNodeScale := nil;
 end;
 
 procedure TTyAdvanceChart.SolveGraphs(APPI: Integer);
@@ -2254,10 +2515,12 @@ begin
   SetLength(FGraphNodes, Length(FBindings));
   SetLength(FGraphEdges, Length(FBindings));
   SetLength(FGraphCats, Length(FBindings));
+  SetLength(FGraphNodeScale, Length(FBindings));
   for i := 0 to High(FBindings) do
   begin
     FGraphs[i] := nil;
     FGraphLaidOut[i] := False;
+    FGraphNodeScale[i] := 1;
     if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
     if not FBindings[i].Resolved then Continue;
     { A GRAPH THE LEGEND SWITCHED OFF IS NOT LAID OUT AT ALL -- upstream's
@@ -2304,10 +2567,13 @@ begin
       given a view it did not ask for. }
     if FBindings[i].CoordSysName <> 'view' then Continue;
     if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
+    if Length(FGraphRoam) <= si then SetLength(FGraphRoam, si + 1);
     { THE WHOLE PASS IS THE PURE UNIT'S, so the suite drives the same path this
       does rather than a copy of it. }
-    solved := TyGraphSolve(FOption, si, store, FLastRect, FGraphForce[si]);
+    solved := TyGraphSolve(FOption, si, store, FLastRect, FGraphForce[si],
+      FGraphRoam[si]);
     FGraphs[i] := solved.View;
+    FGraphNodeScale[i] := solved.NodeScale;
     FGraphLaidOut[i] := True;
     FGraphSpecs[i] := solved.Spec;
     FGraphNodes[i] := solved.Nodes;
@@ -3561,9 +3827,18 @@ begin
         if (i <= High(FGraphLaidOut)) and FGraphLaidOut[i] then
         begin
           gi := GraphInk(i);
-          Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
-            FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
-            gi, FStores[i], list));
+          { ON A VIEW THE SYMBOLS ARE SCALED as zrender composes them: the
+            view's overall scale times the compensation scale. }
+          if (i <= High(FGraphs)) and (FGraphs[i] <> nil) then
+            Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
+              FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
+              gi, FStores[i], list,
+              FGraphs[i].OverallScaleX * FGraphNodeScale[i],
+              FGraphs[i].OverallScaleY * FGraphNodeScale[i]))
+          else
+            Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
+              FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
+              gi, FStores[i], list));
           { AND ITS LABEL SPEC INTO THE TABLE THE EXPANSION READS. A mark
             carries only the WORDS; where they go and what they are drawn
             in is looked up by series index afterwards, so a branch that
@@ -5006,9 +5281,20 @@ var
   spec: TTyTooltipSpec;
   el: Integer;
   wasOn: Boolean;
+  dx, dy: Double;
 begin
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
+  { THE DRAG FIRST: the delta from where the pointer was last, wherever it is
+    now -- a drag that leaves the control keeps panning. }
+  if FRoamSeries >= 0 then
+  begin
+    dx := X - FRoamX;
+    dy := Y - FRoamY;
+    FRoamX := X;
+    FRoamY := Y;
+    GraphRoam(FRoamSeries, dx, dy);
+  end;
   spec := TyTooltipSpecOf(FOption, -1, -1);
   { NOTHING ABOUT THE TOOLTIP IS CHECKED HERE, and that is the point. What is
     under the pointer is a fact about geometry; whether a BOX is drawn for it

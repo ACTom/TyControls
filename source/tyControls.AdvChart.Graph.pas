@@ -96,6 +96,11 @@ type
     HasOwnFixed: Boolean;
     OwnFixed: Boolean;
     Pinned: Boolean;
+    { `draggable`, resolved along the same chain as `fixed`. There is no node
+      dragging here; a draggable node is one a press does not PAN from. }
+    HasOwnDraggable: Boolean;
+    OwnDraggable: Boolean;
+    Draggable: Boolean;
     PX, PY: Double;
     { '' means the series' own symbol. }
     SymbolName: string;
@@ -161,6 +166,15 @@ type
     HasStale: Boolean;
     StaleX, StaleY: Double;
     Row: Integer;
+    { ON A VIEW, the control point in DATA space as well -- what the ends are
+      trimmed against -- and the trimmed edge itself, in data space (T*) and
+      carried through the view (E*). CPX/CPY stay the untrimmed point.
+      HasEnds says the builder is to draw these rather than trim
+      the edge in pixels itself. }
+    DCPX, DCPY: Double;
+    HasEnds: Boolean;
+    TX1, TY1, TX2, TY2, TCPX, TCPY: Double;
+    EX1, EY1, EX2, EY2, ECPX, ECPY: Double;
   end;
   TTyGraphEdgeArray = array of TTyGraphEdge;
 
@@ -179,6 +193,8 @@ type
       `fixed` written here holds every one of them that did not say otherwise. }
     HasFixed: Boolean;
     Fixed: Boolean;
+    HasDraggable: Boolean;
+    Draggable: Boolean;
   end;
   TTyGraphCategoryArray = array of TTyGraphCategory;
 
@@ -198,6 +214,22 @@ type
   { `preserveAspect`: falsy is off, 'cover' is cover, and every other truthy
     value -- `true`, 'contain', a typo -- is contain. }
   TTyGraphPreserve = (gpaOff, gpaContain, gpaCover);
+
+  { `center`, the point of the DATA rectangle that sits in the middle of the
+    box. Has is False when the option is falsy -- null, absent, 0, '' -- and
+    the box's own centre is used. Each half is parsed the way the box's
+    positions are, except that a percentage is of the DATA rectangle's size
+    and is offset by its corner. Pct says the half was WRITTEN as a string
+    ending in a percent sign -- not a keyword -- because that is the one form a
+    roam writes back as a percentage. }
+  TTyGraphCentre = record
+    Has: Boolean;
+    X, Y: TTyGraphPos;
+    PctX, PctY: Boolean;
+  end;
+
+  { `roam`: which of the two gestures it switches on. }
+  TTyGraphRoamMode = (grmOff, grmPan, grmZoom, grmBoth);
 
   { The series' own options, minus the ones that belong to a later batch. }
   TTyGraphSpec = record
@@ -248,6 +280,20 @@ type
     LineColour: TTyChartColor;
     ColourBy: TTyGraphEdgeColourBy;
     Z, Z2: Integer;
+    ZLevel: Integer;
+    Draggable: Boolean;
+    { THE VIEW'S OWN OPTIONS. `center` and `scaleLimit` climb to the option
+      root when the series leaves them null -- neither has a series default --
+      while `zoom` (default 1) and `nodeScaleRatio` (read with the climb
+      switched off) never do. Zoom is the option as written, NOT clamped;
+      not-a-number where it is falsy. }
+    Centre: TTyGraphCentre;
+    Zoom: Double;
+    HasLimit: Boolean;
+    LimitMin, LimitMax: Double;
+    NodeScaleRatio: Double;
+    Roam: TTyGraphRoamMode;
+    RoamGlobal: Boolean;
   end;
 
   { A DATA RECTANGLE FITTED TO A PIXEL RECTANGLE, and nothing else.
@@ -263,10 +309,66 @@ type
   private
     FDataRect: TTyRectF;
     FViewRect: TTyRectF;
-    function ScaleX: Double;
-    function ScaleY: Double;
+    { The two rectangles as upstream's BoundingRects hold them -- a corner and
+      a size -- because a size recovered as right minus left is not always
+      the same Double. }
+    FData, FView: TTyXYWH;
+    { THE RAW TRANSFORM, the data rectangle fitted to the box, and its
+      inverse, both as zrender's matrix arithmetic leaves them. }
+    FSX, FSY, FRX, FRY: Double;
+    FRI0, FRI3, FRI4, FRI5: Double;
+    { THE ROAM: a zoom and a centre, and the limit the zoom is clamped by. }
+    FZoom: Double;
+    FCentre: TTyGraphCentre;
+    FHasLimit: Boolean;
+    FLimitMin, FLimitMax: Double;
+    { THE OVERALL TRANSFORM, roam times raw, and its inverse. }
+    FOSX, FOSY, FOX, FOY: Double;
+    FOI0, FOI3, FOI4, FOI5: Double;
+    FRoamX, FRoamY: Double;
+    procedure Rebuild;
   public
     constructor Create(const ADataRect, AViewRect: TTyRectF);
+    constructor CreateXYWH(const AData, AView: TTyXYWH);
+    { The zoom and the centre, as the option or a roam left them. The zoom is
+      `clamp(AZoom || 1) || 1` -- a zero or a not-a-number is one, before and
+      after the clamp. }
+    procedure SetRoam(const ACentre: TTyGraphCentre; AZoom: Double;
+      AHasLimit: Boolean; ALimitMin, ALimitMax: Double);
+    function Zoom: Double;
+    function Centre: TTyGraphCentre;
+    { The overall scale on each axis: the zoom times the raw fit. }
+    function OverallScaleX: Double;
+    function OverallScaleY: Double;
+    { WHERE A POINT OF DATA WOULD LAND WITH NO ROAM, which is what decides
+      whether it is too far away to draw -- a node a roam carried off to
+      the far side of the screen is still a node. }
+    function RawToPoint(AX, AY: Double): TTyPointF;
+    { THE COMPENSATION SCALE: how much a node's symbol is scaled so that a
+      zoom enlarges it by only ARatio of the zoom. `ARatio || 1`. }
+    function NodeScale(ARatio: Double): Double;
+    { A roam action on this view -- a pan by (ADX, ADY) when AHasPan, a zoom by
+      AScale about (AOX, AOY) when AHasZoom -- answering the centre and zoom
+      it leaves. The view is not changed; SetRoam them to apply. }
+    procedure ApplyRoam(AHasPan: Boolean; ADX, ADY: Double;
+      AHasZoom: Boolean; AScale, AOX, AOY: Double;
+      out ACentre: TTyGraphCentre; out AZoom: Double);
+    { The trigger area: the data rectangle carried through the overall
+      transform, which shrinks when the view is zoomed out. }
+    function TriggerRect: TTyXYWH;
+    function ContainTrigger(AX, AY: Double): Boolean;
+    function RawSX: Double;
+    function RawSY: Double;
+    function RawX: Double;
+    function RawY: Double;
+    function RawInv(AIndex: Integer): Double;
+    function OverallX: Double;
+    function OverallY: Double;
+    function OverallInv(AIndex: Integer): Double;
+    function RoamX: Double;
+    function RoamY: Double;
+    function DataXYWH: TTyXYWH;
+    function ViewXYWH: TTyXYWH;
     function CoordSysName: string;
     function DimCount: Integer;
     function GetRect: TTyRectF;
@@ -384,6 +486,9 @@ function TyGraphDataRect(const ANodes: TTyGraphNodeArray;
   aspect inside it -- and the other follows from the aspect. }
 function TyGraphViewRect(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
   AAspect: Double): TTyRectF;
+{ THE SAME BOX, as a corner and a size -- the form the view is built from. }
+function TyGraphViewXYWH(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
+  AAspect: Double): TTyXYWH;
 
 { `layout: 'none'`: every node is where the author put it, and a node the author
   did not place has no position at all. }
@@ -392,7 +497,7 @@ procedure TyGraphLayoutNone(var ANodes: TTyGraphNodeArray; AView: TTyGraphView);
 { `layout: 'circular'`: a ring inside the DATA rectangle, each node given an
   angular share of the turn in proportion to how wide its own symbol is. }
 procedure TyGraphLayoutCircular(var ANodes: TTyGraphNodeArray;
-  AView: TTyGraphView; const ASpec: TTyGraphSpec);
+  AView: TTyGraphView; const ASpec: TTyGraphSpec; ANodeScale: Double = 1);
 
 { Every node's `fixed`, resolved the way an item model resolves an option: the
   node's own if it wrote one, else its category's, else the series'. And every
@@ -508,6 +613,29 @@ procedure TyGraphEdgeGeometry(var AEdges: TTyGraphEdgeArray;
   unplaced. See cTyGraphFarPx. }
 procedure TyGraphSanitise(var ANodes: TTyGraphNodeArray);
 
+{ THE SAME ON A VIEW, asked of where the node would land with NO roam: a zoom
+  that carries a node a thousand screens away has not made it undrawable. }
+procedure TyGraphSanitiseView(var ANodes: TTyGraphNodeArray; AView: TTyGraphView);
+
+{ adjustEdge ON A VIEW: every edge pulled off the nodes whose end carries a
+  symbol, in DATA space, by the node's symbol size times half ANodeScale --
+  the compensation scale, which turns a pixel size into data units. From the
+  untrimmed edge every time. }
+procedure TyGraphTrimInView(var AEdges: TTyGraphEdgeArray;
+  const ANodes: TTyGraphNodeArray; const ASpec: TTyGraphSpec;
+  ANodeScale: Double);
+
+{ The trimmed edges through the view, into E* and the control point. }
+procedure TyGraphMapEdges(var AEdges: TTyGraphEdgeArray; AView: TTyGraphView);
+
+{ A ROAM STEP'S REDRAW, with no layout: every node through the view again,
+  sanitised, and every edge's trimmed ends mapped. AZoomed is a step that
+  carried a zoom -- the only kind that recomputes the compensation scale and
+  trims the edges again; a pan leaves both where the last one put them. }
+procedure TyGraphRemap(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
+  AView: TTyGraphView; AZoomed: Boolean; var ANodeScale: Double);
+
 const
   { A THOUSAND SCREENS. A layout that is the author's arithmetic from end to end
     -- a friction of fifty, a repulsion of a million -- can put a node anywhere
@@ -525,7 +653,42 @@ type
     Nodes: TTyGraphNodeArray;
     Edges: TTyGraphEdgeArray;
     View: TTyGraphView;
+    { The compensation scale the pass laid out with -- see
+      TTyGraphView.NodeScale. One on axes. }
+    NodeScale: Double;
   end;
+
+  { WHAT A ROAM LEFT, which outlives every relayout until the option is
+    replaced: upstream writes the centre and the zoom back into the series'
+    option. Valid is False until the first roam; then these beat the
+    option's own `center` and `zoom`. }
+  TTyGraphRoamState = record
+    Valid: Boolean;
+    Centre: TTyGraphCentre;
+    Zoom: Double;
+  end;
+
+  { ONE `graphroam` ACTION: a pan, a zoom about a point, or both. SeriesIndex
+    is -1 for an action that names no series, which moves every graph on a
+    view. A gesture produces exactly these, and the picture a gesture leaves
+    is the picture its actions leave when dispatched one by one. }
+  TTyGraphRoamPayload = record
+    SeriesIndex: Integer;
+    HasPan: Boolean;
+    DX, DY: Double;
+    HasZoom: Boolean;
+    Zoom, OriginX, OriginY: Double;
+  end;
+
+{ The view after one action: the centre and zoom it leaves, written into
+  AState and applied to AView. Nothing is laid out -- see TyGraphRemap. }
+procedure TyGraphRoamStep(AView: TTyGraphView; const ASpec: TTyGraphSpec;
+  const APayload: TTyGraphRoamPayload; var AState: TTyGraphRoamState);
+
+{ The wheel's zoom factor for an LCL WheelDelta: zrender's delta is a
+  notch per 120, and 1.1, 1.2 or 1.4 by how far it went -- inverted for a
+  turn the other way. Nought for a delta of nothing. }
+function TyGraphWheelScale(AWheelDelta: Integer): Double;
 
 { THE WHOLE LAYOUT PASS FOR ONE GRAPH ON A VIEW, in upstream's order: read the
   three collections, fit the data rectangle, solve the box, lay the nodes out,
@@ -542,6 +705,10 @@ type
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState): TTyGraphSolved;
+function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const AContainer: TTyRectF;
+  var AForce: TTyGraphForceState;
+  const ARoam: TTyGraphRoamState): TTyGraphSolved;
 
 { THE SAME PASS FOR A GRAPH ON AXES, and most of it is not there. Upstream
   lays such a graph out in one place for every coordinate system that is not
@@ -632,6 +799,14 @@ function TyBuildGraphMarks(ASeriesIndex: Integer;
   const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AStore: TTyDataStore; AList: TTyPaintList): Integer;
+{ ON A VIEW: every node's symbol scaled by ASymX across and ASymY down -- the
+  overall scale times the compensation scale, which is one only when the
+  view maps one data unit to one pixel. }
+function TyBuildGraphMarks(ASeriesIndex: Integer;
+  const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
+  const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
+  AStore: TTyDataStore; AList: TTyPaintList;
+  ASymX, ASymY: Double): Integer;
 
 implementation
 
@@ -639,25 +814,365 @@ implementation
 
 constructor TTyGraphView.Create(const ADataRect, AViewRect: TTyRectF);
 begin
+  CreateXYWH(TyXYWHOfRect(ADataRect), TyXYWHOfRect(AViewRect));
+end;
+
+constructor TTyGraphView.CreateXYWH(const AData, AView: TTyXYWH);
+begin
   inherited Create;
-  FDataRect := ADataRect;
-  FViewRect := AViewRect;
+  FData := AData;
+  FView := AView;
+  FDataRect := TyRectOfXYWH(AData);
+  FViewRect := TyRectOfXYWH(AView);
+  FZoom := 1;
+  FCentre := Default(TTyGraphCentre);
+  FHasLimit := False;
+  FLimitMin := 0;
+  FLimitMax := Infinity;
+  Rebuild;
 end;
 
-function TTyGraphView.ScaleX: Double;
-var w: Double;
+{ zrender's matrix.invert on the diagonal matrix [a, 0, 0, d, x, y], one
+  rounding per operation in upstream's order. The `0 * y` terms upstream also
+  computes only ever decide the sign of a zero, and are left out. }
+procedure InvertDiag(A, D, X, Y: Double; out I0, I3, I4, I5: Double);
+var det: Double;
 begin
-  w := FDataRect.Right - FDataRect.Left;
-  if (w = 0) or IsNan(w) or IsInfinite(w) then Exit(1);
-  Result := (FViewRect.Right - FViewRect.Left) / w;
+  det := A * D;
+  det := 1.0 / det;
+  I0 := D * det;
+  I3 := A * det;
+  I4 := (-(D * X)) * det;
+  I5 := (-(A * Y)) * det;
 end;
 
-function TTyGraphView.ScaleY: Double;
-var h: Double;
+function GraphClampZoom(AZoom: Double; AHasLimit: Boolean;
+  AMin, AMax: Double): Double;
 begin
-  h := FDataRect.Bottom - FDataRect.Top;
-  if (h = 0) or IsNan(h) or IsInfinite(h) then Exit(1);
-  Result := (FViewRect.Bottom - FViewRect.Top) / h;
+  Result := AZoom;
+  if AHasLimit then
+    Result := Math.Max(Math.Min(AMax, Result), AMin);
+end;
+
+{ One half of the centre, in the data rectangle's own units:
+  parsePositionOption against the rectangle's size, offset by its corner. }
+function CentreHalf(const APos: TTyGraphPos; ABase, AOffset: Double): Double;
+begin
+  case APos.Kind of
+    gpkPx: Result := APos.V;
+    gpkPct: Result := APos.V / 100 * ABase + AOffset;
+  else
+    Result := NaN;
+  end;
+end;
+
+procedure TTyGraphView.Rebuild;
+var
+  vcx, vcy, rcx, rcy, tx, ty, px, py, z: Double;
+  mask: TFPUExceptionMask;
+begin
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    { calculateTransform(dataRect, viewRect), decomposed: a scale on each axis
+      and the translate that carries the data corner to the box's corner. }
+    FSX := FView.W / FData.W;
+    FSY := FView.H / FData.H;
+    FRX := (-FData.X) * FSX + FView.X;
+    FRY := (-FData.Y) * FSY + FView.Y;
+    InvertDiag(FSX, FSY, FRX, FRY, FRI0, FRI3, FRI4, FRI5);
+
+    { THE ROAM: the centre carried into pixels by the raw transform, then
+      moved to the box's centre and scaled about it. }
+    vcx := FView.X + FView.W / 2;
+    vcy := FView.Y + FView.H / 2;
+    rcx := vcx;
+    rcy := vcy;
+    if FCentre.Has then
+    begin
+      px := CentreHalf(FCentre.X, FData.W, FData.X);
+      py := CentreHalf(FCentre.Y, FData.H, FData.Y);
+      rcx := FSX * px + FRX;
+      rcy := FSY * py + FRY;
+      { THE ZERO TERMS ARE NOT ALWAYS ZERO. zrender applies the full matrix,
+        `m[0]*x + m[2]*y + m[4]`, and nought times a half that is not finite
+        is not-a-number -- so one bad half takes BOTH with it. }
+      if IsNan(py) or IsInfinite(py) then rcx := NaN;
+      if IsNan(px) or IsInfinite(px) then rcy := NaN;
+    end;
+    z := FZoom;
+    tx := vcx - z * rcx;
+    ty := vcy - z * rcy;
+    FRoamX := tx;
+    FRoamY := ty;
+
+    { OVERALL = ROAM x RAW. }
+    FOSX := z * FSX;
+    FOSY := z * FSY;
+    FOX := z * FRX + tx;
+    FOY := z * FRY + ty;
+    InvertDiag(FOSX, FOSY, FOX, FOY, FOI0, FOI3, FOI4, FOI5);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+procedure TTyGraphView.SetRoam(const ACentre: TTyGraphCentre; AZoom: Double;
+  AHasLimit: Boolean; ALimitMin, ALimitMax: Double);
+var z: Double;
+begin
+  FCentre := ACentre;
+  FHasLimit := AHasLimit;
+  FLimitMin := ALimitMin;
+  FLimitMax := ALimitMax;
+  { `clamp(zoom || 1, limit) || 1`. }
+  z := AZoom;
+  if IsNan(z) or (z = 0) then z := 1;
+  z := GraphClampZoom(z, AHasLimit, ALimitMin, ALimitMax);
+  if IsNan(z) or (z = 0) then z := 1;
+  FZoom := z;
+  Rebuild;
+end;
+
+function TTyGraphView.Zoom: Double;
+begin
+  Result := FZoom;
+end;
+
+function TTyGraphView.Centre: TTyGraphCentre;
+begin
+  Result := FCentre;
+end;
+
+function TTyGraphView.OverallScaleX: Double;
+begin
+  Result := FOSX;
+end;
+
+function TTyGraphView.OverallScaleY: Double;
+begin
+  Result := FOSY;
+end;
+
+function TTyGraphView.RawToPoint(AX, AY: Double): TTyPointF;
+begin
+  Result := TyPointF(FSX * AX + FRX, FSY * AY + FRY);
+end;
+
+function TTyGraphView.NodeScale(ARatio: Double): Double;
+var r, s: Double;
+begin
+  { `nodeScaleRatio || 1` and `scaleX || 1`: a zero or a not-a-number is
+    one. }
+  r := ARatio;
+  if IsNan(r) or (r = 0) then r := 1;
+  s := FOSX;
+  if IsNan(s) or (s = 0) then s := 1;
+  Result := ((FZoom - 1) * r + 1) / s;
+end;
+
+procedure TTyGraphView.ApplyRoam(AHasPan: Boolean; ADX, ADY: Double;
+  AHasZoom: Boolean; AScale, AOX, AOY: Double;
+  out ACentre: TTyGraphCentre; out AZoom: Double);
+var
+  bx, by, bsx, bsy, oldZ, newZ, k, rsx, rx_, ry_, c0, c1, d0, d1: Double;
+  vcx, vcy: Double;
+  mask: TFPUExceptionMask;
+const
+  { Typed, so the comparison is against the Double upstream writes. }
+  cZoomEps: Double = 1e-6;
+
+  { toRoam: the overall transform times the raw inverse, decomposed. }
+  procedure ToRoam(ASX, ASY, AX, AY: Double; out RSX, RX, RY: Double);
+  begin
+    RSX := ASX * FRI0;
+    RX := ASX * FRI4 + AX;
+    RY := ASY * FRI5 + AY;
+  end;
+
+  { THE WRITE-BACK. A half last written as a percentage string goes back as
+    a percentage of the data rectangle; everything else -- a keyword, a
+    numeric string, a number -- goes back as a number. }
+  procedure Half(APct: Boolean; AV, AOff, AW: Double; out APos: TTyGraphPos;
+    out AIsPct: Boolean);
+  begin
+    AIsPct := APct and not (IsNan(AW) or (AW = 0));
+    if AIsPct then
+    begin
+      APos.Kind := gpkPct;
+      APos.V := (AV - AOff) / AW * 100;
+    end
+    else
+    begin
+      APos.Kind := gpkPx;
+      APos.V := AV;
+    end;
+  end;
+
+begin
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    bx := FOX;
+    by := FOY;
+    bsx := FOSX;
+    bsy := FOSY;
+    { THE ZOOM BEFORE THIS STEP, as the overall transform says it -- which is
+      the stored zoom only up to a rounding. }
+    oldZ := bsx * FRI0;
+    { A PAN ONLY WHEN BOTH HALVES ARE THERE. }
+    if AHasPan then
+    begin
+      bx := bx + ADX;
+      by := by + ADY;
+    end;
+    if AHasZoom then
+    begin
+      newZ := GraphClampZoom(oldZ * AScale, FHasLimit, FLimitMin, FLimitMax);
+      k := newZ / oldZ;
+      bx := bx - (AOX - bx) * (k - 1);
+      by := by - (AOY - by) * (k - 1);
+      bsx := bsx * k;
+      bsy := bsy * k;
+    end;
+    ToRoam(bsx, bsy, bx, by, rsx, rx_, ry_);
+    AZoom := rsx;
+    vcx := FView.X + FView.W / 2;
+    vcy := FView.Y + FView.H / 2;
+    if Abs(AZoom) > cZoomEps then
+    begin
+      c0 := (vcx - rx_) / AZoom;
+      c1 := (vcy - ry_) / AZoom;
+    end
+    else
+    begin
+      c0 := vcx;
+      c1 := vcy;
+    end;
+    d0 := FRI0 * c0 + FRI4;
+    d1 := FRI3 * c1 + FRI5;
+    ACentre.Has := True;
+    if FCentre.Has then
+    begin
+      Half(FCentre.PctX, d0, FData.X, FData.W, ACentre.X, ACentre.PctX);
+      Half(FCentre.PctY, d1, FData.Y, FData.H, ACentre.Y, ACentre.PctY);
+    end
+    else
+    begin
+      Half(False, d0, FData.X, FData.W, ACentre.X, ACentre.PctX);
+      Half(False, d1, FData.Y, FData.H, ACentre.Y, ACentre.PctY);
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TTyGraphView.TriggerRect: TTyXYWH;
+begin
+  Result.X := FData.X * FOSX + FOX;
+  Result.Y := FData.Y * FOSY + FOY;
+  Result.W := FData.W * FOSX;
+  Result.H := FData.H * FOSY;
+  { BoundingRect.applyTransform turns a negative size round. }
+  if IsNan(Result.W) or IsNan(Result.H) then Exit;
+  if Result.W < 0 then
+  begin
+    Result.X := Result.X + Result.W;
+    Result.W := -Result.W;
+  end;
+  if Result.H < 0 then
+  begin
+    Result.Y := Result.Y + Result.H;
+    Result.H := -Result.H;
+  end;
+end;
+
+function TTyGraphView.ContainTrigger(AX, AY: Double): Boolean;
+var r: TTyXYWH;
+begin
+  r := TriggerRect;
+  { A VIEW MADE OF NOT-A-NUMBER CONTAINS NOTHING -- every comparison upstream
+    makes against it is false. }
+  if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) or IsNan(AX)
+    or IsNan(AY) then Exit(False);
+  Result := (AX >= r.X) and (AX <= r.X + r.W)
+        and (AY >= r.Y) and (AY <= r.Y + r.H);
+end;
+
+function TTyGraphView.RawSX: Double;
+begin
+  Result := FSX;
+end;
+
+function TTyGraphView.RawSY: Double;
+begin
+  Result := FSY;
+end;
+
+function TTyGraphView.RawX: Double;
+begin
+  Result := FRX;
+end;
+
+function TTyGraphView.RawY: Double;
+begin
+  Result := FRY;
+end;
+
+function TTyGraphView.RawInv(AIndex: Integer): Double;
+begin
+  case AIndex of
+    0: Result := FRI0;
+    3: Result := FRI3;
+    4: Result := FRI4;
+    5: Result := FRI5;
+  else
+    Result := 0;
+  end;
+end;
+
+function TTyGraphView.RoamX: Double;
+begin
+  Result := FRoamX;
+end;
+
+function TTyGraphView.RoamY: Double;
+begin
+  Result := FRoamY;
+end;
+
+function TTyGraphView.DataXYWH: TTyXYWH;
+begin
+  Result := FData;
+end;
+
+function TTyGraphView.ViewXYWH: TTyXYWH;
+begin
+  Result := FView;
+end;
+
+function TTyGraphView.OverallX: Double;
+begin
+  Result := FOX;
+end;
+
+function TTyGraphView.OverallY: Double;
+begin
+  Result := FOY;
+end;
+
+function TTyGraphView.OverallInv(AIndex: Integer): Double;
+begin
+  case AIndex of
+    0: Result := FOI0;
+    3: Result := FOI3;
+    4: Result := FOI4;
+    5: Result := FOI5;
+  else
+    Result := 0;
+  end;
 end;
 
 function TTyGraphView.CoordSysName: string;
@@ -684,13 +1199,16 @@ function TTyGraphView.DataToPoint(const AData: array of Double): TTyPointF;
 begin
   Result := TyPointF(NaN, NaN);
   if Length(AData) < 2 then Exit;
-  { A PURE SCALE AND TRANSLATE, and the two axes scale INDEPENDENTLY. Upstream
-    fits the data rect to the view rect with `sx = b.width / a.width` and
-    `sy = b.height / a.height` and does not preserve the aspect here; keeping
-    it is a separate option nobody sets. }
-  Result := TyPointF(
-    (AData[0] - FDataRect.Left) * ScaleX + FViewRect.Left,
-    (AData[1] - FDataRect.Top) * ScaleY + FViewRect.Top);
+  { THROUGH THE OVERALL MATRIX, one multiply and one add per axis -- the way
+    zrender carries a point through a group's transform. The two axes scale
+    INDEPENDENTLY: upstream fits the data rect to the view rect with
+    `sx = b.width / a.width` and `sy = b.height / a.height`. [Revised in batch
+    45: this was `(d - left) * scale + viewLeft`, which rounds differently in
+    about a third of all coordinates.] }
+  Result := TyPointF(FOSX * AData[0] + FOX, FOSY * AData[1] + FOY);
+  { And the full matrix's zero terms: see Rebuild. }
+  if IsNan(AData[1]) or IsInfinite(AData[1]) then Result.X := NaN;
+  if IsNan(AData[0]) or IsInfinite(AData[0]) then Result.Y := NaN;
 end;
 
 function TTyGraphView.DataToLayout(const AData: array of Double): TTyCoordLayout;
@@ -709,22 +1227,21 @@ end;
 
 function TTyGraphView.PointToData(const APoint: TTyPointF;
   out AData: TTyDoubleArray): Boolean;
-var sx, sy: Double;
 begin
+  { THROUGH THE INVERTED MATRIX, not by dividing the forward map back out. }
   AData := nil;
-  sx := ScaleX;
-  sy := ScaleY;
-  if (sx = 0) or (sy = 0) then Exit(False);
+  if (FOSX = 0) or (FOSY = 0) or IsNan(FOI0) or IsNan(FOI3) then Exit(False);
   SetLength(AData, 2);
-  AData[0] := (APoint.X - FViewRect.Left) / sx + FDataRect.Left;
-  AData[1] := (APoint.Y - FViewRect.Top) / sy + FDataRect.Top;
+  AData[0] := FOI0 * APoint.X + FOI4;
+  AData[1] := FOI3 * APoint.Y + FOI5;
   Result := True;
 end;
 
 function TTyGraphView.ContainPoint(const APoint: TTyPointF): Boolean;
 begin
-  Result := (APoint.X >= FViewRect.Left) and (APoint.X <= FViewRect.Right)
-        and (APoint.Y >= FViewRect.Top) and (APoint.Y <= FViewRect.Bottom);
+  { THE DATA RECTANGLE WHERE THE ROAM HAS PUT IT, not the box: zoomed out,
+    the area that answers shrinks with the picture. }
+  Result := ContainTrigger(APoint.X, APoint.Y);
 end;
 
 function TTyGraphView.AxisCount: Integer;
@@ -839,6 +1356,16 @@ begin
   Result.LineColour := TTyChartColor($FF86878C);
   Result.Z := 2;
   Result.Z2 := 0;
+  Result.ZLevel := 0;
+  { `center: null`, `zoom: 1`, `nodeScaleRatio: 0.6`, `roam: false`. }
+  Result.Centre := Default(TTyGraphCentre);
+  Result.Zoom := 1;
+  Result.HasLimit := False;
+  Result.LimitMin := 0;
+  Result.LimitMax := Infinity;
+  Result.NodeScaleRatio := 0.6;
+  Result.Roam := grmOff;
+  Result.RoamGlobal := False;
 end;
 
 { `symbolSize` in either of its two forms, as pixels. A graph's is not a box
@@ -1240,6 +1767,120 @@ begin
   end;
 end;
 
+{ ONE HALF OF `center`: `centerOption[i]`, which on a string is its i-th
+  character and on anything that is not an array or a string is undefined. }
+function CentreItem(AData: TJSONData; AIndex: Integer;
+  out AWasPct: Boolean): TTyGraphPos;
+var item: TJSONData; s, t: string; owned: TJSONString;
+begin
+  AWasPct := False;
+  item := nil;
+  owned := nil;
+  if AData is TJSONArray then
+  begin
+    if AIndex < TJSONArray(AData).Count then item := TJSONArray(AData).Items[AIndex];
+  end
+  else if AData.JSONType = jtString then
+  begin
+    s := AData.AsString;
+    if AIndex < Length(s) then
+    begin
+      owned := TJSONString.Create(s[AIndex + 1]);
+      item := owned;
+    end;
+  end;
+  try
+    Result := GraphPosOf(item);
+    if (item <> nil) and (item.JSONType = jtString) then
+    begin
+      t := Trim(item.AsString);
+      AWasPct := (t <> '') and (t[Length(t)] = '%');
+    end;
+  finally
+    owned.Free;
+  end;
+end;
+
+{ The view's own options -- see TTyGraphSpec.Centre. }
+procedure ReadRoamOptions(ANode, ARoot: TJSONObject; var ASpec: TTyGraphSpec);
+var d, lim: TJSONData; v: Double; s: string;
+
+  function ModeOf(AValue: TJSONData): TTyGraphRoamMode;
+  begin
+    Result := grmOff;
+    if AValue = nil then Exit;
+    case AValue.JSONType of
+      { `controlType === true` -- a one is not true. }
+      jtBoolean: if AValue.AsBoolean then Result := grmBoth;
+      jtString:
+        begin
+          s := AValue.AsString;
+          if (s = 'move') or (s = 'pan') then Result := grmPan
+          else if (s = 'scale') or (s = 'zoom') then Result := grmZoom;
+        end;
+    end;
+  end;
+
+begin
+  { `center`: null climbs to the root, and a falsy answer is no centre. }
+  d := ShallowOf(ANode, ARoot, 'center');
+  if (d <> nil) and JsTruthy(d) then
+  begin
+    ASpec.Centre.Has := True;
+    ASpec.Centre.X := CentreItem(d, 0, ASpec.Centre.PctX);
+    ASpec.Centre.Y := CentreItem(d, 1, ASpec.Centre.PctY);
+  end;
+
+  { `zoom || 1`: a number or a boolean; anything falsy is one, and so is
+    anything this cannot read as a number. }
+  d := ANode.Find('zoom');
+  if d <> nil then
+  begin
+    v := JsNum(d);
+    if d.JSONType = jtNull then v := NaN;
+    ASpec.Zoom := v;
+  end;
+
+  { `scaleLimit`: any truthy value clamps, with `min || 0` and
+    `max || Infinity`. }
+  lim := ShallowOf(ANode, ARoot, 'scaleLimit');
+  if (lim <> nil) and JsTruthy(lim) then
+  begin
+    ASpec.HasLimit := True;
+    ASpec.LimitMin := 0;
+    ASpec.LimitMax := Infinity;
+    if lim is TJSONObject then
+    begin
+      v := JsNum(TJSONObject(lim).Find('min'));
+      if not (IsNan(v) or (v = 0)) then ASpec.LimitMin := v;
+      v := JsNum(TJSONObject(lim).Find('max'));
+      if not (IsNan(v) or (v = 0)) then ASpec.LimitMax := v;
+    end;
+  end;
+
+  { `nodeScaleRatio`, the series' own: a written null is read as nought, and
+    nought is one where it is used. }
+  d := ANode.Find('nodeScaleRatio');
+  if d <> nil then ASpec.NodeScaleRatio := JsNum(d);
+
+  { `roam`: absent is the default, false. A written null is `get`'s cue to
+    climb -- and nothing at the root either is `true`. }
+  d := ANode.Find('roam');
+  if d = nil then ASpec.Roam := grmOff
+  else if d.JSONType <> jtNull then ASpec.Roam := ModeOf(d)
+  else
+  begin
+    d := nil;
+    if ARoot <> nil then d := ARoot.Find('roam');
+    if (d = nil) or (d.JSONType = jtNull) then ASpec.Roam := grmBoth
+    else ASpec.Roam := ModeOf(d);
+  end;
+
+  d := ShallowOf(ANode, ARoot, 'roamTrigger');
+  ASpec.RoamGlobal := (d <> nil) and (d.JSONType = jtString)
+    and (d.AsString = 'global');
+end;
+
 function TyGraphSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyGraphSpec;
 var
   node, sub, root: TJSONObject;
@@ -1277,6 +1918,10 @@ begin
   Result.PreserveVAlign := StrIn(node, 'preserveAspectVerticalAlign', '');
 
   ReadForce(node, Result);
+  { `draggable: false` is a series default, so only a written null climbs --
+    and that climb is not followed here. }
+  d := node.Find('draggable');
+  Result.Draggable := (d <> nil) and JsTruthy(d);
   d := ShallowOf(node, root, 'fixed');
   if d <> nil then
   begin
@@ -1360,6 +2005,11 @@ begin
   d := node.Find('z2');
   if (d <> nil) and (d.JSONType = jtNumber) then
     Result.Z2 := TyRoundOpt(d.AsFloat, Result.Z2);
+  d := node.Find('zlevel');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    Result.ZLevel := TyRoundOpt(d.AsFloat, Result.ZLevel);
+
+  ReadRoamOptions(node, root, Result);
 end;
 
 { ==================== the three collections ==================== }
@@ -1420,6 +2070,12 @@ begin
     begin
       Result[i].HasFixed := True;
       Result[i].Fixed := JsTruthy(d);
+    end;
+    d := item.Find('draggable');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      Result[i].HasDraggable := True;
+      Result[i].Draggable := JsTruthy(d);
     end;
   end;
 end;
@@ -1558,6 +2214,9 @@ begin
     Result[i].Fixed := False;
     Result[i].OwnFixed := RowTruthy(AStore, raw, 'fixed', written);
     Result[i].HasOwnFixed := written;
+    Result[i].OwnDraggable := RowTruthy(AStore, raw, 'draggable', written);
+    Result[i].HasOwnDraggable := written;
+    Result[i].Draggable := False;
     Result[i].ModelCategory := -1;
     Result[i].PX := NaN;
     Result[i].PY := NaN;
@@ -2128,7 +2787,7 @@ end;
   no positions the aspect IS a not-a-number, and those steps are what produce
   the box. }
 procedure GraphLayoutRect(const AIn: TGraphBoxIn; AX, AY, ACW, ACH: Double;
-  out ARect: TTyRectF; out AW, AH: Double);
+  out ARect: TTyXYWH; out AW, AH: Double);
 var left, top, right, bottom, w, h: Double;
 begin
   left := ResolvePos(AIn.Left, ACW);
@@ -2191,18 +2850,23 @@ begin
 
   AW := w;
   AH := h;
-  ARect := TyRectF(OrZero(AX) + left, OrZero(AY) + top,
-                   OrZero(AX) + left + w, OrZero(AY) + top + h);
+  ARect := TyXYWH(OrZero(AX) + left, OrZero(AY) + top, w, h);
 end;
 
 function TyGraphViewRect(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
   AAspect: Double): TTyRectF;
+begin
+  Result := TyRectOfXYWH(TyGraphViewXYWH(ASpec, AContainer, AAspect));
+end;
+
+function TyGraphViewXYWH(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
+  AAspect: Double): TTyXYWH;
 var
   cw, ch, w, h, actual: Double;
   box, inner: TGraphBoxIn;
   wide, narrow, cover: Boolean;
 begin
-  Result := TyInvalidRectF;
+  Result := TyXYWHOfRect(TyInvalidRectF);
   if not TyRectFIsValid(AContainer) then Exit;
   cw := AContainer.Right - AContainer.Left;
   ch := AContainer.Bottom - AContainer.Top;
@@ -2271,7 +2935,7 @@ begin
       inner.AlignV := 'middle';
     end;
   end;
-  GraphLayoutRect(inner, Result.Left, Result.Top, w, h, Result, w, h);
+  GraphLayoutRect(inner, Result.X, Result.Y, w, h, Result, w, h);
 end;
 
 { ==================== the layouts ==================== }
@@ -2289,7 +2953,7 @@ begin
 end;
 
 procedure TyGraphLayoutCircular(var ANodes: TTyGraphNodeArray;
-  AView: TTyGraphView; const ASpec: TTyGraphSpec);
+  AView: TTyGraphView; const ASpec: TTyGraphSpec; ANodeScale: Double);
 var
   rect: TTyRectF;
   cx, cy, r, sumRadian, halfRemain, angle, sz, half: Double;
@@ -2331,6 +2995,11 @@ begin
       safe on a compiler where comparing against one raises. }
     if IsNan(sz) then sz := 2;
     if sz < 0 then sz := 0;
+    { AND THEN SCALED INTO DATA UNITS by the compensation scale, because the
+      ring is laid out in data space and the symbol is drawn at a size that
+      does not follow the zoom. At zoom one on a box the data already fills,
+      this is one. }
+    sz := sz * ANodeScale;
     half := ArcSin(Min(Double(1), sz / 2 / r));
     { A SYMBOL WIDER THAN THE RING takes a quarter turn to itself. Upstream
       reaches this by asking for the arcsine of something over one and getting
@@ -2407,6 +3076,16 @@ begin
         ANodes[i].Pinned := ACategories[c].Fixed
       else
         ANodes[i].Pinned := ASpec.HasFixed and ASpec.Fixed;
+    end;
+    if ANodes[i].HasOwnDraggable then
+      ANodes[i].Draggable := ANodes[i].OwnDraggable
+    else
+    begin
+      c := ANodes[i].ModelCategory;
+      if (c >= 0) and (c <= High(ACategories)) and ACategories[c].HasDraggable then
+        ANodes[i].Draggable := ACategories[c].Draggable
+      else
+        ANodes[i].Draggable := ASpec.Draggable;
     end;
   end;
   { AN EDGE'S PARENT IS THE SERIES and nothing between: there are no edge
@@ -3237,20 +3916,30 @@ var
     comes to. Only a point that IS a number but cannot be drawn takes the
     edge with it. }
   procedure Place(AI: Integer; AQX, AQY: Double);
-  var p: TTyPointF;
+  var p, raw: TTyPointF;
   begin
     if IsNan(AQX) or IsNan(AQY) then
     begin
       AEdges[AI].NaNCurve := True;
       Exit;
     end;
-    if AView = nil then p := TyPointF(AQX, AQY)
-    else p := AView.DataToPoint([AQX, AQY]);
-    if Drawable(p.X, p.Y) then
+    if AView = nil then
+    begin
+      p := TyPointF(AQX, AQY);
+      raw := p;
+    end
+    else
+    begin
+      p := AView.DataToPoint([AQX, AQY]);
+      raw := AView.RawToPoint(AQX, AQY);
+    end;
+    if Drawable(raw.X, raw.Y) then
     begin
       AEdges[AI].Curved := True;
       AEdges[AI].CPX := p.X;
       AEdges[AI].CPY := p.Y;
+      AEdges[AI].DCPX := AQX;
+      AEdges[AI].DCPY := AQY;
     end
     else
       AEdges[AI].Hidden := True;
@@ -3279,6 +3968,9 @@ begin
       AEdges[i].NaNCurve := False;
       AEdges[i].CPX := NaN;
       AEdges[i].CPY := NaN;
+      AEdges[i].DCPX := NaN;
+      AEdges[i].DCPY := NaN;
+      AEdges[i].HasEnds := False;
       a := AEdges[i].Source;
       b := AEdges[i].Target;
       if (a < 0) or (a > High(ANodes)) or (b < 0) or (b > High(ANodes)) then
@@ -3353,6 +4045,169 @@ begin
       ANodes[i].PX := NaN;
       ANodes[i].PY := NaN;
     end;
+end;
+
+procedure TyGraphSanitiseView(var ANodes: TTyGraphNodeArray; AView: TTyGraphView);
+var i: Integer; raw: TTyPointF; mask: TFPUExceptionMask;
+begin
+  if AView = nil then
+  begin
+    TyGraphSanitise(ANodes);
+    Exit;
+  end;
+  mask := MaskFP;
+  try
+    for i := 0 to High(ANodes) do
+    begin
+      raw := AView.RawToPoint(ANodes[i].X, ANodes[i].Y);
+      { Near enough unroamed, and a finite point after the roam. }
+      if not Drawable(raw.X, raw.Y) or IsNan(ANodes[i].PX)
+        or IsNan(ANodes[i].PY) or IsInfinite(ANodes[i].PX)
+        or IsInfinite(ANodes[i].PY) then
+      begin
+        ANodes[i].PX := NaN;
+        ANodes[i].PY := NaN;
+      end;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+{ A node's `symbolSize` as adjustEdge reads it -- getSymbolSize, the pair
+  averaged -- or nought when it is not a number. }
+function GraphNodeSymbolSize(const ASpec: TTyGraphSpec;
+  const ANodes: TTyGraphNodeArray; AIndex: Integer): Double;
+var w, h: Double;
+begin
+  Result := 0;
+  if (AIndex < 0) or (AIndex > High(ANodes)) then Exit;
+  if ANodes[AIndex].HasSize then
+  begin
+    w := ANodes[AIndex].SizeW;
+    h := ANodes[AIndex].SizeH;
+  end
+  else
+  begin
+    w := ASpec.Symbol.WidthPx;
+    h := ASpec.Symbol.HeightPx;
+  end;
+  if IsNan(w) or IsNan(h) then Exit;
+  Result := (w + h) / 2;
+end;
+
+procedure TyGraphTrimInView(var AEdges: TTyGraphEdgeArray;
+  const ANodes: TTyGraphNodeArray; const ASpec: TTyGraphSpec;
+  ANodeScale: Double);
+var
+  i, a, b: Integer;
+  p1, p2, cp: TTyPointF;
+  half: Double;
+  mask: TFPUExceptionMask;
+begin
+  { `scale /= 2`, once, and every distance is a size times that. }
+  half := ANodeScale / 2;
+  mask := MaskFP;
+  try
+    for i := 0 to High(AEdges) do
+    begin
+      AEdges[i].HasEnds := False;
+      a := AEdges[i].Source;
+      b := AEdges[i].Target;
+      if (a < 0) or (a > High(ANodes)) or (b < 0) or (b > High(ANodes)) then
+        Continue;
+      p1 := TyPointF(ANodes[a].X, ANodes[a].Y);
+      p2 := TyPointF(ANodes[b].X, ANodes[b].Y);
+      if AEdges[i].Curved then cp := TyPointF(AEdges[i].DCPX, AEdges[i].DCPY)
+      else cp := TyPointF(0, 0);
+      TyGraphTrimEdge(p1, p2, cp, AEdges[i].Curved,
+        GraphNodeSymbolSize(ASpec, ANodes, a) * half,
+        GraphNodeSymbolSize(ASpec, ANodes, b) * half,
+        (ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'),
+        (ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'));
+      AEdges[i].TX1 := p1.X;
+      AEdges[i].TY1 := p1.Y;
+      AEdges[i].TX2 := p2.X;
+      AEdges[i].TY2 := p2.Y;
+      AEdges[i].TCPX := cp.X;
+      AEdges[i].TCPY := cp.Y;
+      AEdges[i].HasEnds := True;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyGraphMapEdges(var AEdges: TTyGraphEdgeArray; AView: TTyGraphView);
+var i: Integer; p: TTyPointF; mask: TFPUExceptionMask;
+begin
+  if AView = nil then Exit;
+  mask := MaskFP;
+  try
+    for i := 0 to High(AEdges) do
+    begin
+      if not AEdges[i].HasEnds then Continue;
+      p := AView.DataToPoint([AEdges[i].TX1, AEdges[i].TY1]);
+      AEdges[i].EX1 := p.X;
+      AEdges[i].EY1 := p.Y;
+      p := AView.DataToPoint([AEdges[i].TX2, AEdges[i].TY2]);
+      AEdges[i].EX2 := p.X;
+      AEdges[i].EY2 := p.Y;
+      if AEdges[i].Curved then
+      begin
+        p := AView.DataToPoint([AEdges[i].TCPX, AEdges[i].TCPY]);
+        AEdges[i].ECPX := p.X;
+        AEdges[i].ECPY := p.Y;
+      end;
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyGraphRoamStep(AView: TTyGraphView; const ASpec: TTyGraphSpec;
+  const APayload: TTyGraphRoamPayload; var AState: TTyGraphRoamState);
+var c: TTyGraphCentre; z: Double;
+begin
+  if AView = nil then Exit;
+  AView.ApplyRoam(APayload.HasPan, APayload.DX, APayload.DY,
+    APayload.HasZoom, APayload.Zoom, APayload.OriginX, APayload.OriginY, c, z);
+  AState.Valid := True;
+  AState.Centre := c;
+  AState.Zoom := z;
+  AView.SetRoam(c, z, ASpec.HasLimit, ASpec.LimitMin, ASpec.LimitMax);
+end;
+
+function TyGraphWheelScale(AWheelDelta: Integer): Double;
+const
+  { Typed: an untyped 1.1 is a Single here. }
+  cSmall: Double = 1.1;
+  cMid: Double = 1.2;
+  cBig: Double = 1.4;
+var d, a, f: Double;
+begin
+  d := AWheelDelta / 120;
+  if d = 0 then Exit(0);
+  a := Abs(d);
+  if a > 3 then f := cBig
+  else if a > 1 then f := cMid
+  else f := cSmall;
+  if d > 0 then Result := f else Result := 1 / f;
+end;
+
+procedure TyGraphRemap(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
+  AView: TTyGraphView; AZoomed: Boolean; var ANodeScale: Double);
+begin
+  if AView = nil then Exit;
+  TyGraphLayoutNone(ANodes, AView);
+  TyGraphSanitiseView(ANodes, AView);
+  if AZoomed then
+  begin
+    ANodeScale := AView.NodeScale(ASpec.NodeScaleRatio);
+    TyGraphTrimInView(AEdges, ANodes, ASpec, ANodeScale);
+  end;
+  TyGraphMapEdges(AEdges, AView);
 end;
 
 { WHAT EVERY PASS STARTS FROM, whatever the graph is laid out on: the spec,
@@ -3435,8 +4290,18 @@ end;
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState): TTyGraphSolved;
+begin
+  Result := TyGraphSolve(AOption, ASeriesIndex, AStore, AContainer, AForce,
+    Default(TTyGraphRoamState));
+end;
+
+function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const AContainer: TTyRectF;
+  var AForce: TTyGraphForceState;
+  const ARoam: TTyGraphRoamState): TTyGraphSolved;
 var
   dataRect, viewRect: TTyRectF;
+  viewBox: TTyXYWH;
   aspect: Double;
   hasData, circ: Boolean;
   mask: TFPUExceptionMask;
@@ -3551,13 +4416,30 @@ begin
       re-fit the rest, and the force layout's random box and its centre of
       gravity still span the nodes nobody can see. }
     hasData := TyGraphDataRect(all, dataRect, aspect);
-    viewRect := TyGraphViewRect(Result.Spec, AContainer, aspect);
-    if not hasData then dataRect := viewRect;
-    Result.View := TTyGraphView.Create(dataRect, viewRect);
+    viewBox := TyGraphViewXYWH(Result.Spec, AContainer, aspect);
+    viewRect := TyRectOfXYWH(viewBox);
+    if hasData then
+      Result.View := TTyGraphView.CreateXYWH(TyXYWHOfRect(dataRect), viewBox)
+    else
+    begin
+      dataRect := viewRect;
+      Result.View := TTyGraphView.CreateXYWH(viewBox, viewBox);
+    end;
+    { THE ROAM, before any layout: the ring sizes its shares by the
+      compensation scale the zoom makes. A roam's own centre and zoom beat
+      the option's -- upstream wrote them back into it. }
+    if ARoam.Valid then
+      Result.View.SetRoam(ARoam.Centre, ARoam.Zoom, Result.Spec.HasLimit,
+        Result.Spec.LimitMin, Result.Spec.LimitMax)
+    else
+      Result.View.SetRoam(Result.Spec.Centre, Result.Spec.Zoom,
+        Result.Spec.HasLimit, Result.Spec.LimitMin, Result.Spec.LimitMax);
+    Result.NodeScale := Result.View.NodeScale(Result.Spec.NodeScaleRatio);
 
     case Result.Spec.Layout of
       glCircular:
-        TyGraphLayoutCircular(Result.Nodes, Result.View, Result.Spec);
+        TyGraphLayoutCircular(Result.Nodes, Result.View, Result.Spec,
+          Result.NodeScale);
       glForce:
         begin
           { WHERE THE INITIAL LAYOUT PUT EVERY SURVIVOR, taken before the
@@ -3597,7 +4479,9 @@ begin
     SolveSurvivorCurveness(Result, all, allEdges, circ,
       Result.Spec.Layout = glForce);
     TyGraphEdgeGeometry(Result.Edges, Result.Nodes, Result.View, circ);
-    TyGraphSanitise(Result.Nodes);
+    TyGraphSanitiseView(Result.Nodes, Result.View);
+    TyGraphTrimInView(Result.Edges, Result.Nodes, Result.Spec, Result.NodeScale);
+    TyGraphMapEdges(Result.Edges, Result.View);
   finally
     UnmaskFP(mask);
   end;
@@ -3654,6 +4538,7 @@ begin
     SolveSurvivorCurveness(Result, all, allEdges, False, False);
     TyGraphEdgeGeometry(Result.Edges, Result.Nodes, nil, False);
     TyGraphSanitise(Result.Nodes);
+    Result.NodeScale := 1;
   finally
     UnmaskFP(mask);
   end;
@@ -3877,6 +4762,16 @@ function TyBuildGraphMarks(ASeriesIndex: Integer;
   const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AStore: TTyDataStore; AList: TTyPaintList): Integer;
+begin
+  Result := TyBuildGraphMarks(ASeriesIndex, ASpec, ANodes, AEdges, AInk,
+    AStore, AList, 1, 1);
+end;
+
+function TyBuildGraphMarks(ASeriesIndex: Integer;
+  const ASpec: TTyGraphSpec; const ANodes: TTyGraphNodeArray;
+  const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
+  AStore: TTyDataStore; AList: TTyPaintList;
+  ASymX, ASymY: Double): Integer;
 var
   i, k, edgeAt: Integer;
   p1, p2, cp, pt, tan_: TTyPointF;
@@ -3983,10 +4878,20 @@ begin
     { AND NOW PULL THE ENDS OFF THE NODES, but only the ends that carry a
       symbol. An arrowhead placed on a node's centre is an arrowhead under a
       fifty-pixel disc, which is what this looked like before. }
-    TyGraphTrimEdge(p1, p2, cp, curved,
-      NodeRadius(AEdges[i].Source), NodeRadius(AEdges[i].Target),
-      (ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'),
-      (ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'));
+    { ON A VIEW THE LAYOUT PASS HAS DONE IT ALREADY, in data space -- the
+      only place a zoom can be undone -- and these are its ends. }
+    if AEdges[i].HasEnds then
+    begin
+      p1 := TyPointF(AEdges[i].EX1, AEdges[i].EY1);
+      p2 := TyPointF(AEdges[i].EX2, AEdges[i].EY2);
+      if curved then cp := TyPointF(AEdges[i].ECPX, AEdges[i].ECPY);
+      if IsNan(p1.X) or IsNan(p1.Y) or IsNan(p2.X) or IsNan(p2.Y) then Continue;
+    end
+    else
+      TyGraphTrimEdge(p1, p2, cp, curved,
+        NodeRadius(AEdges[i].Source), NodeRadius(AEdges[i].Target),
+        (ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'),
+        (ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'));
 
     if curved then
     begin
@@ -4044,6 +4949,13 @@ begin
     end;
     sz := Min(sym.WidthPx, sym.HeightPx);
     if IsNan(sz) or (sz <= 0) then Continue;
+    { THE SYMBOL'S HALF-EXTENTS as zrender composes them: the group's scale
+      times the compensation scale, then times the half size. }
+    if (ASymX <> 1) or (ASymY <> 1) then
+    begin
+      sym.WidthPx := ASymX * (sym.WidthPx / 2) * 2;
+      sym.HeightPx := ASymY * (sym.HeightPx / 2) * 2;
+    end;
 
     shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;

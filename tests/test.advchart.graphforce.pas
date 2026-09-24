@@ -111,11 +111,11 @@ const
     are the same Doubles, and a case the fixture marks exact is held to that:
     turning `/ d / d` into `/ (d * d)` moves nothing by a billionth and still
     has to fail. A case with a ring in it gets a billionth, because cosine and
-    sine are not correctly rounded in either runtime. PIXELS get a millionth:
-    upstream carries a point through a matrix and this port through a scale
-    and a translate, which round differently. }
+    sine are not correctly rounded in either runtime. PIXELS are held to the
+    same rule. [Revised in batch 45: pixels had a millionth, because this port
+    carried a point through a scale and a translate where upstream carries it
+    through a matrix; the view now uses the matrix.] }
   cDataTol = 1e-9;
-  cPixelTol = 1e-6;
 var
   sl: TStringList;
   root: TJSONData;
@@ -214,7 +214,7 @@ begin
                     solved.Nodes[i].X, solved.Nodes[i].Y, dataTol);
                   Pair('node ' + IntToStr(i) + ' in pixels',
                     want.Items[2].AsFloat, want.Items[3].AsFloat,
-                    solved.Nodes[i].PX, solved.Nodes[i].PY, cPixelTol);
+                    solved.Nodes[i].PX, solved.Nodes[i].PY, dataTol);
                 end;
 
             arr := ph.Arrays['edges'];
@@ -240,7 +240,7 @@ begin
                   else
                     Pair('edge ' + IntToStr(i) + ' control point',
                       want.Items[2].AsFloat, want.Items[3].AsFloat,
-                      solved.Edges[i].CPX, solved.Edges[i].CPY, cPixelTol);
+                      solved.Edges[i].CPX, solved.Edges[i].CPY, dataTol);
                 end;
           finally
             solved.View.Free;
