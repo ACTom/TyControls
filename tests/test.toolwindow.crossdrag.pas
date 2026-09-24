@@ -2,7 +2,7 @@ unit test.toolwindow.crossdrag;
 {$mode objfpc}{$H+}
 
 { 跨侧拖动(spec §9.2 / §9.4 / §9.7 / §9.8):悬停时的目标栏、插入线、光标、各种取消;
-  松开提交在 Task 9 那几条。夹具:窗体 800×600,左栏(FBar,Explorer / Search / Git,当前页
+  松开提交(spec §9.5)在「提交」那一段。夹具:窗体 800×600,左栏(FBar,Explorer / Search / Git,当前页
   Search)、右栏(Outline)、底栏(Problems / Output)、一个 alClient 的编辑区,都注册在一个
   manager 上;窗体的对齐引擎自己请一遍(无头不跑)。 }
 

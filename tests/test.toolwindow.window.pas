@@ -557,7 +557,8 @@ begin
   FWin.EndSilent;
   FWin.Visible := True;
   AssertEquals('退出抑制后照发', 1, FShows);
-  { 嵌套:C 期的布局应用会套着调 Task 5 的 ActivateWindow,里层收工不许解外层的抑制。 }
+  { 嵌套:栏按自己的静默层数给窗口补层(TTyToolWindowBar.BeginSilent 可嵌套,加载结束时应用
+    挂起计划就套在一层里),里层收工不许解外层的抑制。 }
   FWin.BeginSilent;
   FWin.BeginSilent;
   FWin.EndSilent;
@@ -778,7 +779,7 @@ procedure TTyToolWindowTests.TestAWindowThatLeftTheBarStopsRelayouting;
 begin
   { 在栏里算过一次(缓存 26、有效)之后离开栏:twhNone 若在查键之前就答 0,缓存和
     mode 键都停在 26 / twhSide,之后每次 Invalidate 都看见 0 <> 26,每次都整控件
-    重排。C 期应用布局时窗口暂时脱离栏、跨栏移动的中间态都会走到。 }
+    重排。窗口离开栏(Parent 改成栏以外的控件或 nil,成了孤儿)就会走到。 }
   FWin.SetBounds(0, 0, 200, 300);
   AssertTrue('在栏里有标题行', FWin.HeaderHeightPx > 0);
   FWin.Parent := FForm;

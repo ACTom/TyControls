@@ -191,7 +191,8 @@ type
     procedure TestADropAfterShowingIsNotQueued;
     procedure TestADropKeepsTheFocusInTheWindow;
     procedure TestBarEventsAfterADropSeeTheWindowInPlace;
-    { spec §10.5:代码搭的 manager 在 Showing 之后第一次改布局之前记默认布局(开工前问题 2)。 }
+    { spec §10.5:代码搭的 manager 在 Showing 之后第一次改布局之前记默认布局;「改布局」是布局串
+      里存的每一样(spec §10.2),当前页也算。 }
     procedure TestResetAfterAClickRestoresTheCurrentPage;
     procedure TestResetAfterResizingRestoresTheSize;
     procedure TestResetAfterCollapsingRestoresIt;

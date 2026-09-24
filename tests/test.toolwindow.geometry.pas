@@ -51,7 +51,7 @@ type
     procedure TestDropAtMapsToWindowIndexes;
     procedure TestDropAtClippedAndEmptyInputs;
   private
-    { 公共输入:源栏 S、另一侧栏 T(计划 Task 7 的表)。 }
+    { 公共输入:源栏 S、另一侧栏 T(spec §9.4 命中测试的几何:可见矩形、图标条、洞、槽位)。 }
     function ProbeS: TTyToolWindowDropProbe;
     function ProbeT: TTyToolWindowDropProbe;
     procedure CheckDrop(const AMsg: string; const AProbes: array of TTyToolWindowDropProbe;

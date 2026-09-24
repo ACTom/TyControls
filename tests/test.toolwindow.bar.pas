@@ -1748,7 +1748,8 @@ begin
   { 栏里除了当前页还有一页显示着:下一次切页之后只剩新的当前页显示。
     外部写 Visible 已经经栏路由(Task 10,写 True 就是激活它),造不出这个状态了 ——
     改从流式加载那条路造:加载中注册进来的窗口不切页,带着 Visible = True 进来就一直显示着
-    (C 期应用布局挪窗口也是这个样子)。守的仍是「切页时藏掉其余**每一个**窗口」:
+    (布局应用静默换父挪进来的窗口也是这样,靠之后那一次切页藏掉)。守的仍是「切页时藏掉其余
+    **每一个**窗口」:
     只藏 AOld 的话 a 留着。 }
   NewWindow;
   b := NewWindow;
@@ -1773,7 +1774,8 @@ var
   a, b, c: TProbeWindow;
   before: Integer;
 begin
-  { 一个静默批次(C 期的布局应用就是这样一批)里切页、收起、展开、窗口进出,
+  { 一个静默批次(加载结束时应用挂起的布局计划就是这样一批,TryFinishLoading;普通的
+    Load / Reset 不静默)里切页、收起、展开、窗口进出,
     一个用户事件都不发;批次结束后照常发。 }
   a := NewWindow;
   b := NewWindow;
@@ -1880,7 +1882,8 @@ procedure TTyToolWindowBarTests.TestLoadedHidesAShownPageSilently;
 var
   a, b, c: TProbeWindow;
 begin
-  { 窗口在加载**之前**就建好、显示着:继承窗体的第二遍加载、C 期的布局应用走的是这条路。
+  { 窗口在加载**之前**就建好、显示着:继承窗体的第二遍加载走的是这条路(第一遍挑好的那页
+    显示着,第二遍的 Loaded 再挑)。
     Loaded 把显示着的那一页藏起来,这一下也不许发 OnHide。 }
   a := NewWindow;
   b := NewWindow;

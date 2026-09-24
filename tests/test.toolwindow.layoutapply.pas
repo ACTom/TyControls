@@ -4,8 +4,9 @@ unit test.toolwindow.layoutapply;
 { 布局的保存 / 读取 / 恢复(spec §10.1 / §10.2 保存 / §10.4 / §10.7):同步应用的批次。
   夹具:左栏 Explorer / Search(当前页 Search)、右栏 Outline、底栏 Problems / Output / Terminal
   (当前页 Output),窗口的 Name 是 'W' + 标题,都注册在一个 manager 上;栏事件、OnWindowMoved
-  记进 FLog。无头的窗体永远不 Showing:Load / Reset 恒走同步那一支;挂起、排队、焦点在
-  Task 13 的那几条(真句柄的在 test.toolwindow.manager 的 Live 套件)。 }
+  记进 FLog。无头的窗体永远不 Showing:Load / Reset 恒走同步那一支。加载中挂起、收尾、默认
+  布局(spec §10.5)在本单元后半段(流式往返);Showing 之后的排队和焦点要真句柄,在
+  test.toolwindow.manager 的 Live 套件。 }
 
 interface
 
@@ -41,7 +42,7 @@ type
     procedure TestResetReturnsToTheCapturedLayout;
     procedure TestDpiChangesDoNotReachTheString;
     procedure TestSaveWritesTheRestoredSizeWhileMaximized;
-    { 开工前问题 14:从 manager 自己发的事件里重入 Load / Reset 答 False。 }
+    { 从 manager 自己发的事件里重入 Load / Reset 答 False(同 MoveWindow 的 spec §9.9)。 }
     procedure TestLoadOrResetFromTheManagersOwnEventsIsRefused;
     { spec §10.5:加载中挂起、最后一个 Loaded 收尾、默认布局。 }
     procedure TestALoadDuringStreamingWaitsForTheEnd;

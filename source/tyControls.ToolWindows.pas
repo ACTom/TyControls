@@ -1226,8 +1226,9 @@ type
     { --- 布局(spec §10) --- }
     { > 0 = 正在应用布局的批次。 }
     FApplying: Integer;
-    { 默认布局(ResetLayout 恢复的对象)存成一份布局串(开工前问题 15):记 = SaveLayoutToString,
-      恢复 = 按这份串走同一条应用路径。 }
+    { 默认布局(ResetLayout 恢复的对象)存成一份布局串:记 = SaveLayoutToString,恢复 = 按这份串
+      走 Load 那一条应用路径 —— 不另存一份状态快照,Reset 和 Load 的版本漂移规则(spec §10.3)、
+      批次和事件(§10.4)就是同一套。 }
     FDefaultText: string;
     FDefaultCaptured: Boolean;
     { 用户调过 CaptureDefaultLayout:之后加载结束也不再自动覆盖。 }
@@ -1314,8 +1315,9 @@ type
     function AnyParticipantLoading: Boolean;
     { 还没记过默认布局就记下此刻的样子。 }
     procedure EnsureDefaultCaptured;
-    { 代码搭的 manager:窗体 Showing 之后第一次改动布局之前记默认布局(开工前问题 2:布局串里
-      存的每一样都算 —— 收起、尺寸、调顺序、跨栏、当前页)。调用方在**改之前**调。 }
+    { 代码搭的 manager:窗体 Showing 之后第一次改动布局之前记默认布局(spec §10.5)。「改动」是
+      布局串里存的每一样(spec §10.2):收起、尺寸、调顺序、跨栏,还有当前页 —— 点图标换了页
+      之后 Reset 也要回得去。调用方在**改之前**调。 }
     procedure NoteLayoutChanging(ABar: TTyToolWindowBar);
     { 挂起计划应用后的 OnLayoutApplied,推到加载结束之后。 }
     procedure LayoutAppliedAsync(Data: PtrInt);
@@ -1334,8 +1336,9 @@ type
     function LayoutMustQueue: Boolean;
     { Load / Reset 的共同后半段(格式已查过):加载中挂起、Showing 之后排队、否则同步应用。 }
     function StartLayout(AKind: TTyToolLayoutPending; const AText: string): Boolean;
-    { Load / Reset 的门(spec §10.1 + 开工前问题 14):设计期、正在释放、没有注册栏、从本 manager
-      的事件处理里重入,都答 False。 }
+    { Load / Reset 的门(spec §10.1):设计期、正在释放、没有注册栏答 False;从本 manager 的事件
+      处理里重入、布局应用的批次里(某一页的 OnShow / OnHide)也答 False —— 跟 MoveWindow 的
+      重入规则(spec §9.9)同一个理由:外层还没做完,里层按半截的状态建计划。 }
     function LayoutCallAllowed: Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -5974,7 +5977,7 @@ begin
     Exit;
   end;
   if AWindow = FActive then Exit;
-  { 当前页也存在布局串里(开工前问题 2):改之前记默认布局。 }
+  { 当前页也存在布局串里(spec §10.2 的 pActive):改之前记默认布局(spec §10.5)。 }
   if FManager <> nil then FManager.NoteLayoutChanging(Self);
   prev := FActive;
   SwitchCore(AWindow, prev, True);
@@ -6780,7 +6783,10 @@ begin
     FPendingText := AText;
     Exit;
   end;
-  { FormCreate 里先搭好再读用户布局:记下的就是搭好的样子(spec §10.5)。 }
+  { 还没记过默认布局就记下此刻的样子(spec §10.5),在排队 / 应用之前:FormCreate 里搭好之后
+    第一次 Load / Reset,记下的就是搭好的样子;Showing 之后才第一次调的,此刻就是用户一直看着的
+    样子(那之前的每一次改动都会先经 NoteLayoutChanging 记)。排队的也在这里记,不等执行 ——
+    执行时已经是排着期间又改过的样子。 }
   EnsureDefaultCaptured;
   if LayoutMustQueue then
   begin

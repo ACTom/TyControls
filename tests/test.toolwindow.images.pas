@@ -509,7 +509,7 @@ var
   a: TTyLucideImageList;
   watcher: TFreeWatcher;
 begin
-  { 正在释放的列表不是生效列表 —— 栏自己的 opRemove 还没到时也不是(C 期回落
+  { 正在释放的列表不是生效列表 —— 栏自己的 opRemove 还没到时也不是(回落到
     Manager.Images 时,manager 清引用和栏收通知谁先谁后说不准)。观察者在栏之后登记
     FreeNotification,于是先于栏收到通知。 }
   a := NewList(nil, HouseFolder);
