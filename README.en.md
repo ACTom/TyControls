@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 163 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 168 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -33,7 +33,7 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 
 ## Features
 
-- **163 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
+- **168 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
 - **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
 - **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
 - **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
@@ -77,7 +77,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-163 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+168 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -213,7 +213,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyBreadcrumb` | Breadcrumb trail |
 | `TTyHeaderControl` | Standalone column header strip |
 
-### Containers & layout · `TyControls Containers` (20)
+### Containers & layout · `TyControls Containers` (22)
 
 | Control | Description |
 |---|---|
@@ -237,6 +237,8 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyListGroupPanel` | List container with group headers |
 | `TTyTitleBar` | Custom-drawn title bar, pairs with `TTyForm` |
 | `TTyEmpty` | Empty state: illustration + text + action button |
+| `TTyToolWindowBar` | IDE-style side or bottom bar; tool windows move between sides and the layout can be saved |
+| `TTyToolWindowManager` | Links the bars: dragging windows across, saving and restoring the layout |
 
 ### Data views · `TyControls Data Views` (10)
 
@@ -274,15 +276,17 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyRibbonGallery` | Gallery that expands into a popup grid |
 | `TTyRibbonBackstage` | Full-window backstage view |
 
-### Images & hints · `TyControls Images` (9)
+### Images & hints · `TyControls Images` (11)
 
 | Control | Description |
 |---|---|
 | `TTyIconFont` | Icon font: vector icons by codepoint or name, themed |
+| `TTyLucideIconFont` | The bundled Lucide icon font, ready to use |
 | `TTyCharImage` | Uses one icon-font glyph as an image |
 | `TTyImage` | Image control |
 | `TTyGlyphImageList` | Image list driven by an icon font |
 | `TTyImageCollection` | Multi-resolution image set, picked per DPI |
+| `TTyLucideImageList` | Image list of the bundled Lucide icons, picked by name |
 | `TTyVirtualImageList` | Renders any size on demand; it is a standard `TCustomImageList`, assignable to any control, addressable by image name |
 | `TTyHint` | Themed tooltip |
 | `TTyBalloonHint` | Balloon tooltip with a pointer |
@@ -297,7 +301,7 @@ CharImage1.GlyphName := 'house';
 
 The font is embedded in the unit — nothing to ship or install, and it costs nothing if you don't use it. `TTyLucideImageList` on the palette works as a drop-in image list. Licensed ISC / MIT with no attribution required at runtime; just ship [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release.
 
-### Shapes & charts · `TyControls Shapes & Charts` (4)
+### Shapes & charts · `TyControls Shapes & Charts` (5)
 
 | Control | Description |
 |---|---|
@@ -376,6 +380,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [rtl](examples/rtl/) | Right-to-left mirroring and bidirectional text |
 | [icons](examples/icons/) | Icon fonts |
 | [transitions](examples/transitions/) | Slide / fade transitions |
+| [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
 
 Thirty-plus single-control examples live under [examples/](examples/).
 

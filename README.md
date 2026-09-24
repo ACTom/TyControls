@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。168 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -33,7 +33,7 @@ Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **163 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
+- **168 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -77,7 +77,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-163 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+168 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -213,7 +213,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyBreadcrumb` | 面包屑导航 |
 | `TTyHeaderControl` | 独立列头条 |
 
-### 容器与布局 · `TyControls Containers`(20)
+### 容器与布局 · `TyControls Containers`(22)
 
 | 控件 | 说明 |
 |---|---|
@@ -237,6 +237,8 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyListGroupPanel` | 带分组标题的列表容器 |
 | `TTyTitleBar` | 自绘标题栏,配合 `TTyForm` |
 | `TTyEmpty` | 空状态:插画 + 文案 + 操作按钮 |
+| `TTyToolWindowBar` | IDE 式侧栏 / 底栏,工具窗口可拖到另一侧、布局可保存 |
+| `TTyToolWindowManager` | 工具窗口的跨侧拖动和布局保存 |
 
 ### 数据视图 · `TyControls Data Views`(10)
 
@@ -274,15 +276,17 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyRibbonGallery` | 图库,可展开成弹出网格 |
 | `TTyRibbonBackstage` | 全窗口后台视图 |
 
-### 图像与提示 · `TyControls Images`(9)
+### 图像与提示 · `TyControls Images`(11)
 
 | 控件 | 说明 |
 |---|---|
 | `TTyIconFont` | 图标字体:按码点或名字取矢量图标,随主题着色 |
+| `TTyLucideIconFont` | 内置的 Lucide 图标字体,放上就能用 |
 | `TTyCharImage` | 把一个图标字形当图片用 |
 | `TTyImage` | 图片控件 |
 | `TTyGlyphImageList` | 图标字体驱动的图像列表 |
 | `TTyImageCollection` | 多分辨率图像集,按 DPI 取图 |
+| `TTyLucideImageList` | 内置 Lucide 图标的图像列表,按名字选图 |
 | `TTyVirtualImageList` | 按需生成任意尺寸的图像列表;本身是标准 `TCustomImageList`,可赋给任何控件,支持按名字取图 |
 | `TTyHint` | 主题化提示气泡 |
 | `TTyBalloonHint` | 带箭头的气球提示 |
@@ -376,6 +380,7 @@ CharImage1.GlyphName := 'house';
 | [rtl](examples/rtl/) | 从右往左镜像与双向文本 |
 | [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
+| [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。
 
