@@ -1293,6 +1293,9 @@ type
       现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。
       设计期的冲突提示也问它;Placement 集合一变,PlacementsChanged 让每条栏按新答案重排、重画。 }
     function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
+    { 此刻 Placement 为 APlacement 的可用栏(spec §10.6:同 Placement 的都不可用,所以最多一条);
+      没有答 nil。现算。组件编辑器的「移到另一侧栏」、应用自己的「移到另一侧」菜单都问它。 }
+    function UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
     { 结构检查 + OnCanMoveWindow(spec §9.9)。同一条栏永远 True、不问事件;设计期不问事件。
       没有副作用:不取消拖动、不记默认布局、不动任何状态。 }
     function CanMoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar): Boolean;
@@ -1837,8 +1840,8 @@ begin
       srcEv := ASource.EndDeferEvents;
     end;
     RestoreMovedFocus(form, AWindow, focus);
-    { 设计期(D 期的组件编辑器经 MoveWindow):不发事件,通知设计器(同 ReorderWindow)。
-      直接改 Parent 在设计期不走这里。 }
+    { 设计期(组件编辑器的「移到另一侧栏」经 MoveWindow):不发事件,通知设计器(同
+      ReorderWindow)。直接改 Parent 在设计期不走这里。 }
     if csDesigning in ATarget.ComponentState then
     begin
       OwnerFormDesignerModified(ATarget);
@@ -6834,6 +6837,22 @@ begin
   if not Result then Exit;
   for i := 0 to High(FBars) do
     if (FBars[i] <> ABar) and (FBars[i].Placement = ABar.Placement) then Exit(False);
+end;
+
+function TTyCustomToolWindowManager.UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
+var
+  i, n: Integer;
+begin
+  { 同 Placement 的正好一条才可用(IsBarUsable 的同一条规则);释放中的不算。 }
+  Result := nil;
+  n := 0;
+  for i := 0 to High(FBars) do
+    if (FBars[i].Placement = APlacement) and not (csDestroying in FBars[i].ComponentState) then
+    begin
+      Inc(n);
+      Result := FBars[i];
+    end;
+  if n <> 1 then Result := nil;
 end;
 
 function TTyCustomToolWindowManager.StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;

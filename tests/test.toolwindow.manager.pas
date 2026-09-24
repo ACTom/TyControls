@@ -594,7 +594,7 @@ begin
   b.Manager := m;
   w := NewWindowIn(l, FDesignOwner);
   NewWindowIn(b, FDesignOwner);
-  { 运行时改 Parent 的豁免(设计期放行)不许漏进来:D 期的「移到另一侧栏」靠这一句拒。 }
+  { 运行时改 Parent 的豁免(设计期放行)不许漏进来:组件编辑器的「移到另一侧栏」靠这一句拒。 }
   AssertFalse('设计期 左 → 底 也不行', m.CanMoveWindow(w, b));
   AssertTrue('设计期 左 → 右 行', m.CanMoveWindow(w, r));
   AssertEquals('设计期不问事件', 0, FCanCalls);

@@ -4,6 +4,7 @@ unit test.toolwindow.design;
 { 工具窗口在设计器里的那一面(spec §3.2 / §10.6 / §11),全部无头:
   - 设计期孤儿(Parent 不是栏):显示出来、顶上一行提示、正文让位;运行时照旧藏着。
   - Placement 冲突:设计期在冲突的栏底部让一行提示;Placement 集合一变,每条栏都重排、重画。
+  - 组件编辑器的判定和模型操作(tyControls.ToolWindows.DesignRules)与 manager 的 UsableBar。
   设计期的栏和窗口照 C 期的写法:Owner 带 csDesigning、构造时传下来(FDesignOwner),
   走的是设计器放下控件的真实路径。夹具在 test.toolwindow.manager。 }
 
@@ -16,12 +17,16 @@ uses
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.Panel,
   tyControls.StyleModel, tyControls.Painter, tyControls.StrConsts,
   tyControls.ToolWindows, tyControls.ToolWindows.Layout, tyControls.ToolWindows.Manager,
+  tyControls.ToolWindows.DesignRules,
   test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager;
 
 type
   TTyToolWindowDesignTests = class(TTyToolWindowManagerFixture)
   private
     FPanel: TTyPanel;
+    FM: TTyToolWindowManager;
+    FL, FR, FB: TBarAccess;
+    FExplorer, FSearch, FOutline, FOutput: TProbeWindow;
     { 设计期栏里两个窗口:A 不是当前页(藏着、带 csNoDesignVisible),B 是当前页。 }
     function NewDesignPair(out A, B: TProbeWindow): TBarAccess;
     { 窗体上一个设计期面板(Owner = FDesignOwner),孤儿挪到这里。 }
@@ -31,6 +36,10 @@ type
     { 设计期的 manager(Owner = FDesignOwner)和挂在它上面的一条设计期栏(一个窗口)。 }
     function NewDesignManager: TTyToolWindowManager;
     function DesignBarOn(APlacement: TTyToolWindowPlacement; AManager: TTyToolWindowManager): TBarAccess;
+    { 左栏 L(Explorer、Search,当前页 Search)、右栏 R(Outline)、底栏 B(Output),都在设计期
+      manager FM 上。 }
+    procedure NewWorkbench;
+    function NamedWindowIn(ABar: TTyToolWindowBar; const AName: string): TProbeWindow;
   published
     { spec §3.2:设计期孤儿。 }
     procedure TestAnInactiveWindowMovedOutDropsTheDesignFlag;
@@ -58,6 +67,22 @@ type
     procedure TestFreeingTheManagerRepaintsEveryBar;
     procedure TestJoiningWhileLoadingDoesNotRelayout;
     procedure TestTheConflictTextFitsADefaultSideBar;
+    { spec §11:组件编辑器的判定(tyControls.ToolWindows.DesignRules)与 UsableBar。 }
+    procedure TestUsableBarAnswersEachSide;
+    procedure TestUsableBarIsNilWhileASideConflicts;
+    procedure TestOtherSideCrossesLeftAndRight;
+    procedure TestABottomWindowHasNoOtherSide;
+    procedure TestAConflictOnEitherSideHasNoOtherSide;
+    procedure TestABarWithoutAManagerHasNoOtherSide;
+    procedure TestAnInheritedWindowCannotMoveButCanGetActions;
+    procedure TestAFrameInstanceGreysEverything;
+    procedure TestAddActionsOnlyWhileThereIsNone;
+    procedure TestMoveToOtherSideGoesThroughMoveWindow;
+    procedure TestMoveToOtherSideRefusesABottomWindow;
+    procedure TestOnlyOrphansHaveReturnTargets;
+    procedure TestReturnToBarPutsTheOrphanBack;
+    procedure TestReturnToBarRefusesAnythingElse;
+
   end;
 
 implementation
@@ -65,6 +90,37 @@ implementation
 type
   { ParentFont 是 protected:量字要用控件真正用的字号(同 test.toolwindow.bottom)。 }
   TControlAccess = class(TControl);
+
+  { 继承窗体里的窗口(csAncestor)。 }
+  TAncestorWindow = class(TProbeWindow)
+  public
+    procedure MarkAncestor;
+  end;
+
+  { frame 实例:Owner 带 csInline(IDE 的 IsInInlined)。 }
+  TInlineOwner = class(TDesignOwner)
+  public
+    procedure MarkInline;
+  end;
+
+procedure TAncestorWindow.MarkAncestor;
+begin
+  SetAncestor(True);
+end;
+
+procedure TInlineOwner.MarkInline;
+begin
+  SetInline(True);
+end;
+
+var
+  { OwnerFormDesignerModified 是进程级钩子,只能数到全局上(同 test.toolwindow.bar)。 }
+  DesignPings: Integer;
+
+procedure CountDesignPing(AComponent: TComponent);
+begin
+  Inc(DesignPings);
+end;
 
 function BinaryToText(AStream: TMemoryStream): string;
 var
@@ -568,6 +624,234 @@ begin
   if rw > bw then bw := rw;
   room := L.ConflictNote.Right - L.ConflictNote.Left - 2 * TyToolWindowHeaderPadDef;
   AssertTrue(Format('提示 %d px 放得进 %d px', [bw, room]), bw <= room);
+end;
+
+
+function TTyToolWindowDesignTests.NamedWindowIn(ABar: TTyToolWindowBar;
+  const AName: string): TProbeWindow;
+begin
+  Result := NewWindowIn(ABar, FDesignOwner);
+  Result.Name := AName;
+end;
+
+procedure TTyToolWindowDesignTests.NewWorkbench;
+begin
+  FM := NewDesignManager;
+  FL := DesignBarOn(twpLeft, nil);
+  FL.Name := 'L';
+  FR := DesignBarOn(twpRight, nil);
+  FR.Name := 'R';
+  FB := DesignBarOn(twpBottom, nil);
+  FB.Name := 'B';
+  { DesignBarOn 各放了一个无名窗口;这里的四个有名字,放在后面。 }
+  FExplorer := NamedWindowIn(FL, 'Explorer');
+  FSearch := NamedWindowIn(FL, 'Search');
+  FOutline := NamedWindowIn(FR, 'Outline');
+  FOutput := NamedWindowIn(FB, 'Output');
+  FL.Manager := FM;
+  FR.Manager := FM;
+  FB.Manager := FM;
+end;
+
+procedure TTyToolWindowDesignTests.TestUsableBarAnswersEachSide;
+begin
+  NewWorkbench;
+  AssertSame('左', TTyToolWindowBar(FL), FM.UsableBar(twpLeft));
+  AssertSame('右', TTyToolWindowBar(FR), FM.UsableBar(twpRight));
+  AssertSame('底', TTyToolWindowBar(FB), FM.UsableBar(twpBottom));
+end;
+
+procedure TTyToolWindowDesignTests.TestUsableBarIsNilWhileASideConflicts;
+var
+  l2: TBarAccess;
+begin
+  NewWorkbench;
+  l2 := DesignBarOn(twpLeft, FM);
+  AssertNull('两条左栏:左边没有可用栏', FM.UsableBar(twpLeft));
+  AssertSame('右边不受影响', TTyToolWindowBar(FR), FM.UsableBar(twpRight));
+  l2.Free;
+  AssertSame('冲突解除,又是 L', TTyToolWindowBar(FL), FM.UsableBar(twpLeft));
+end;
+
+procedure TTyToolWindowDesignTests.TestOtherSideCrossesLeftAndRight;
+begin
+  NewWorkbench;
+  AssertSame('左 → 右', TTyToolWindowBar(FR), TyToolWindowDesignOtherSide(FExplorer));
+  AssertSame('右 → 左', TTyToolWindowBar(FL), TyToolWindowDesignOtherSide(FOutline));
+end;
+
+procedure TTyToolWindowDesignTests.TestABottomWindowHasNoOtherSide;
+begin
+  NewWorkbench;
+  AssertNull('底栏窗口不跨栏', TyToolWindowDesignOtherSide(FOutput));
+end;
+
+procedure TTyToolWindowDesignTests.TestAConflictOnEitherSideHasNoOtherSide;
+begin
+  NewWorkbench;
+  DesignBarOn(twpLeft, FM);
+  AssertNull('本栏冲突', TyToolWindowDesignOtherSide(FExplorer));
+  AssertNull('目标那一侧没有可用栏', TyToolWindowDesignOtherSide(FOutline));
+end;
+
+procedure TTyToolWindowDesignTests.TestABarWithoutAManagerHasNoOtherSide;
+var
+  d: TBarAccess;
+  w: TProbeWindow;
+begin
+  NewWorkbench;
+  d := DesignBarOn(twpLeft, nil);
+  w := NamedWindowIn(d, 'Lonely');
+  AssertNull('没有 manager', TyToolWindowDesignOtherSide(w));
+end;
+
+procedure TTyToolWindowDesignTests.TestAnInheritedWindowCannotMoveButCanGetActions;
+var
+  w: TAncestorWindow;
+begin
+  NewWorkbench;
+  w := TAncestorWindow.Create(FDesignOwner);
+  w.MarkAncestor;
+  w.Parent := FL;
+  AssertTrue('前提:csAncestor', csAncestor in w.ComponentState);
+  AssertNull('继承来的窗口不能换父', TyToolWindowDesignOtherSide(w));
+  AssertTrue('但能加操作区', TyToolWindowDesignCanAddActions(w));
+  { MoveWindow 本身会收它(设计期结构上放行):「移到另一侧栏」得先问 OtherSide。 }
+  AssertTrue('前提:MoveWindow 结构上放行', FM.CanMoveWindow(w, FR));
+  AssertFalse('「移到另一侧栏」不动它', TyToolWindowDesignMoveToOtherSide(w));
+  AssertSame('还在左栏', TTyToolWindowBar(FL), w.Bar);
+  Orphan(w);
+  AssertEquals('继承来的孤儿也不能移回', 0, Length(TyToolWindowDesignReturnTargets(w)));
+end;
+
+procedure TTyToolWindowDesignTests.TestAFrameInstanceGreysEverything;
+var
+  inl: TInlineOwner;
+  m2: TTyToolWindowManager;
+  frameBar: TBarAccess;
+  r2: TBarAccess;
+  fw: TProbeWindow;
+begin
+  NewWorkbench;
+  AssertTrue('前提:普通的栏能新建窗口', TyToolWindowDesignCanAddWindow(FL));
+  inl := TInlineOwner.Create(nil);
+  try
+    inl.MarkDesigning;
+    inl.MarkInline;
+    { frame 实例里一条左栏,右边一条普通的设计期栏,两条挂在同一个 manager 上:不看 frame
+      实例的话,「移到另一侧栏」会答 r2。 }
+    m2 := NewDesignManager;
+    frameBar := TBarAccess.Create(inl);
+    frameBar.Parent := FForm;
+    frameBar.Controller := FCtl;
+    frameBar.Font.PixelsPerInch := 96;
+    frameBar.Height := 400;
+    fw := TProbeWindow.Create(inl);
+    fw.Parent := frameBar;
+    frameBar.Manager := m2;
+    r2 := DesignBarOn(twpRight, m2);
+    AssertTrue('前提:frame 实例', TyToolWindowInInlined(frameBar) and TyToolWindowInInlined(fw));
+    AssertFalse('frame 实例里的栏不能新建窗口', TyToolWindowDesignCanAddWindow(frameBar));
+    AssertFalse('frame 实例里的窗口不能加操作区', TyToolWindowDesignCanAddActions(fw));
+    AssertNull('frame 实例里的窗口不能移动', TyToolWindowDesignOtherSide(fw));
+    AssertSame('前提:右边有可用栏', TTyToolWindowBar(r2), m2.UsableBar(twpRight));
+    AssertTrue('前提:结构上放行', m2.CanMoveWindow(fw, r2));
+  finally
+    inl.Free;
+  end;
+end;
+
+procedure TTyToolWindowDesignTests.TestAddActionsOnlyWhileThereIsNone;
+begin
+  NewWorkbench;
+  AssertTrue('没有操作区时可以加', TyToolWindowDesignCanAddActions(FExplorer));
+  FExplorer.EnsureActions;
+  AssertFalse('有了就灰掉', TyToolWindowDesignCanAddActions(FExplorer));
+end;
+
+procedure TTyToolWindowDesignTests.TestMoveToOtherSideGoesThroughMoveWindow;
+var
+  saved: TOwnerFormDesignerModifiedProc;
+begin
+  NewWorkbench;
+  FR.Collapsed := True;
+  FM.OnWindowMoved := @LogMoved;
+  LogBarEvents(FL);
+  LogBarEvents(FR);
+  LogBarEvents(FB);
+  FLog := '';
+  AssertSame('前提:L 的当前页是 Search', TTyToolWindow(FSearch), FL.ActiveWindow);
+  saved := OwnerFormDesignerModifiedProc;
+  OwnerFormDesignerModifiedProc := @CountDesignPing;
+  DesignPings := 0;
+  try
+    AssertTrue('挪过去了', TyToolWindowDesignMoveToOtherSide(FExplorer));
+    AssertTrue('通知了设计器', DesignPings >= 1);
+  finally
+    OwnerFormDesignerModifiedProc := saved;
+  end;
+  AssertSame('在右栏里', TTyToolWindowBar(FR), FExplorer.Bar);
+  AssertSame('成为右栏的当前页', TTyToolWindow(FExplorer), FR.ActiveWindow);
+  AssertTrue('设计期不写 Collapsed', FR.Collapsed);
+  AssertSame('左栏的当前页没动', TTyToolWindow(FSearch), FL.ActiveWindow);
+  AssertEquals('设计期不发任何事件', '', FLog);
+end;
+
+procedure TTyToolWindowDesignTests.TestMoveToOtherSideRefusesABottomWindow;
+begin
+  NewWorkbench;
+  AssertFalse('底栏窗口', TyToolWindowDesignMoveToOtherSide(FOutput));
+  AssertSame('还在底栏', TTyToolWindowBar(FB), FOutput.Bar);
+end;
+
+procedure TTyToolWindowDesignTests.TestOnlyOrphansHaveReturnTargets;
+var
+  t: TTyToolWindowBarArray;
+  inl: TInlineOwner;
+  frameBar: TBarAccess;
+begin
+  NewWorkbench;
+  AssertEquals('在栏里的窗口没有候选', 0, Length(TyToolWindowDesignReturnTargets(FExplorer)));
+  inl := TInlineOwner.Create(nil);
+  try
+    inl.MarkDesigning;
+    inl.MarkInline;
+    frameBar := TBarAccess.Create(inl);
+    frameBar.Parent := FForm;
+    Orphan(FExplorer);
+    t := TyToolWindowDesignReturnTargets(FExplorer);
+    AssertEquals('孤儿:同一个 Owner 的三条栏', 3, Length(t));
+    AssertSame('按 Components 顺序 1', TTyToolWindowBar(FL), t[0]);
+    AssertSame('按 Components 顺序 2', TTyToolWindowBar(FR), t[1]);
+    AssertSame('按 Components 顺序 3', TTyToolWindowBar(FB), t[2]);
+    AssertFalse('frame 实例里的栏不是候选', TyToolWindowDesignReturnToBar(FExplorer, frameBar));
+  finally
+    inl.Free;
+  end;
+end;
+
+procedure TTyToolWindowDesignTests.TestReturnToBarPutsTheOrphanBack;
+begin
+  NewWorkbench;
+  Orphan(FExplorer);
+  AssertTrue('放回右栏', TyToolWindowDesignReturnToBar(FExplorer, FR));
+  AssertSame('Parent 是右栏', TWinControl(FR), FExplorer.Parent);
+  AssertSame('成为当前页', TTyToolWindow(FExplorer), FR.ActiveWindow);
+  AssertTrue('孤儿提示没了', IsRectEmpty(FExplorer.OrphanNoteRect));
+end;
+
+procedure TTyToolWindowDesignTests.TestReturnToBarRefusesAnythingElse;
+var
+  other: TBarAccess;
+begin
+  NewWorkbench;
+  other := TBarAccess.Create(FForm);         { 不是孤儿的 Owner 拥有的栏 }
+  other.Parent := FForm;
+  Orphan(FExplorer);
+  AssertFalse('不在候选里的栏', TyToolWindowDesignReturnToBar(FExplorer, other));
+  AssertSame('还在面板上', TWinControl(DesignPanel), FExplorer.Parent);
+  AssertFalse('不是孤儿', TyToolWindowDesignReturnToBar(FSearch, FR));
+  AssertSame('还在左栏', TTyToolWindowBar(FL), FSearch.Bar);
 end;
 
 initialization
