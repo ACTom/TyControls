@@ -65,13 +65,18 @@ type
     { 写 Cursor、整栏 Invalidate 各发生几次。 }
     CursorWrites: Integer;
     Invalidates: Integer;
+    { 布局应用批次进门时抛异常(模拟某一条栏进批次失败)。 }
+    RaiseOnLayoutBatch: Boolean;
     { 真实的 PointerInClient(不看 FakePointer)。 }
     function CallRealPointerInClient(out APoint: TPoint): Boolean;
     function StripPressed: Integer;
     procedure CallCaptureChanged;
     procedure CallDoContextPopup(const APos: TPoint; var AHandled: Boolean);
     function CallGetPopupMenu: TPopupMenu;
+    { 对齐锁的层数(DisableAlign 一次加一层;protected 的 AutoSizingLockCount)。 }
+    function AlignLockForTest: Integer;
   protected
+    procedure BeginLayoutBatch; override;
     function PointerInClient(out APoint: TPoint): Boolean; override;
     function TickNow: QWord; override;
     procedure StartLclAutoDrag; override;
@@ -427,6 +432,17 @@ procedure TBarAccess.Invalidate;
 begin
   Inc(Invalidates);
   inherited Invalidate;
+end;
+
+procedure TBarAccess.BeginLayoutBatch;
+begin
+  if RaiseOnLayoutBatch then raise Exception.Create('probe: BeginLayoutBatch');
+  inherited BeginLayoutBatch;
+end;
+
+function TBarAccess.AlignLockForTest: Integer;
+begin
+  Result := AutoSizingLockCount;
 end;
 
 function TBarAccess.PointerInClient(out APoint: TPoint): Boolean;

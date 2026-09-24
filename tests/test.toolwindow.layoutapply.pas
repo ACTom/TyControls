@@ -53,8 +53,23 @@ type
     procedure TestAnInheritedFormResetsToTheDescendantsValues;
     procedure TestACodeBuiltManagerCapturesBeforeTheFirstLoad;
     procedure TestAnExplicitCaptureIsKeptByLoad;
+    { 批次里(某一页的 OnShow)的重入:MoveWindow / Load 答 False,CaptureDefaultLayout 不记,
+      直接改 Parent 不簿记,批次不把别的栏的窗口当成本栏的当前页。 }
+    procedure TestMoveLoadAndCaptureFromAPageEventInsideTheBatchAreRefused;
+    procedure TestADirectParentChangeInsideTheBatchLeavesEveryBarWhole;
+    { 某一条栏进批次时抛异常:进了门的都出门,没进门的不多解一层。 }
+    procedure TestABarFailingToEnterTheBatchLeavesNoBarInIt;
+    { 窗体还没显示(FormCreate 里读布局):第 7 步不抛异常、ActiveControl 不停在被藏起来的
+      控件上,原控件还聚焦得上时还给它(所以这一步不能在没显示的窗体上跳过)。 }
+    procedure TestTheFocusStepOnAHiddenFormIsSafeAndRestores;
   private
     FInner: Integer;      { -1 = 处理器没跑;0 / 1 = 处理器里那一次调用的答案 }
+    FInnerLoad: Integer;
+    FInnerDone: Boolean;
+    procedure ReenterFromShow(Sender: TObject);
+    procedure ReparentFromShow(Sender: TObject);
+    { 每条栏至多一页显示着、当前页就在这条栏里。 }
+    procedure AssertEveryBarWhole(const AMsg: string);
     procedure LoadFromApplied(Sender: TObject);
     procedure ResetFromMoved(Sender: TObject; AWindow: TTyToolWindow;
       ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
@@ -433,6 +448,153 @@ begin
   FMgr.OnWindowMoved := @ResetFromMoved;
   Win('Search').WindowIndex := 0;
   AssertEquals('OnWindowMoved 里 Reset:答 False', 0, FInner);
+end;
+
+{ --- 批次里的重入与异常(spec §10.4) ------------------------------------------------ }
+
+procedure TTyToolWindowLayoutApplyTests.ReenterFromShow(Sender: TObject);
+begin
+  if FInnerDone then Exit;
+  FInnerDone := True;
+  FInner := Ord(FMgr.MoveWindow(Win('Outline'), FLeft));
+  FInnerLoad := Ord(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1|end'));
+  FMgr.CaptureDefaultLayout;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.ReparentFromShow(Sender: TObject);
+begin
+  if FInnerDone then Exit;
+  FInnerDone := True;
+  Win('Outline').Parent := FLeft;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.AssertEveryBarWhole(const AMsg: string);
+var
+  bars: array[0..2] of TBarAccess;
+  i, k, shown: Integer;
+begin
+  bars[0] := FLeft;
+  bars[1] := FRight;
+  bars[2] := FBottom;
+  for i := 0 to 2 do
+  begin
+    shown := 0;
+    for k := 0 to bars[i].WindowCount - 1 do
+      if bars[i].Windows[k].Visible then Inc(shown);
+    AssertTrue(AMsg + ':' + bars[i].Name + ' 至多一页显示着', shown <= 1);
+    AssertTrue(AMsg + ':' + bars[i].Name + ' 的当前页就在它里面',
+      (bars[i].ActiveWindow = nil) or (bars[i].IndexOfWindow(bars[i].ActiveWindow) >= 0));
+  end;
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestMoveLoadAndCaptureFromAPageEventInsideTheBatchAreRefused;
+var
+  s0: string;
+begin
+  s0 := FMgr.SaveLayoutToString;
+  FInner := -1;
+  FInnerLoad := -1;
+  FInnerDone := False;
+  Win('Explorer').OnShow := @ReenterFromShow;
+  { 左栏换到 Explorer:它的 OnShow 在批次中间(5b 左栏切页)发。 }
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer,WSearch|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline|rightActive=WOutline|end'));
+  AssertTrue('前提:处理器跑了', FInnerDone);
+  AssertEquals('批次里 MoveWindow 答 False', 0, FInner);
+  AssertEquals('批次里 Load 答 False', 0, FInnerLoad);
+  AssertSame('Outline 没被挪', TTyToolWindowBar(FRight), Win('Outline').Bar);
+  AssertEveryBarWhole('批次之后');
+  { 默认布局是 Load 进门时记下的那一份,不是批次里应用了一半的样子。 }
+  Win('Explorer').OnShow := nil;
+  AssertTrue(FMgr.ResetLayout);
+  AssertEquals('批次里的 CaptureDefaultLayout 没有生效', s0, FMgr.SaveLayoutToString);
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestADirectParentChangeInsideTheBatchLeavesEveryBarWhole;
+begin
+  FInnerDone := False;
+  Win('Explorer').OnShow := @ReparentFromShow;
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer,WSearch|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline|rightActive=WOutline|end'));
+  AssertTrue('前提:处理器跑了', FInnerDone);
+  AssertSame('前提:直接改 Parent 拦不住', TTyToolWindowBar(FLeft), Win('Outline').Bar);
+  AssertEquals('批次里的直接改 Parent 不簿记:没有 OnWindowMoved,也没有栏事件', '', FLog);
+  AssertEveryBarWhole('批次之后');
+  AssertTrue('右栏空了,没有当前页(不是左栏的 Outline)', FRight.ActiveWindow = nil);
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestABarFailingToEnterTheBatchLeavesNoBarInIt;
+var
+  bars: array[0..2] of TBarAccess;
+  locks: array[0..2] of Integer;
+  i: Integer;
+  raised: Boolean;
+begin
+  bars[0] := FLeft;
+  bars[1] := FRight;
+  bars[2] := FBottom;
+  for i := 0 to 2 do locks[i] := bars[i].AlignLockForTest;
+  { 注册顺序 L、R、B:左栏进了门,右栏进门时抛。 }
+  FRight.RaiseOnLayoutBatch := True;
+  raised := False;
+  try
+    FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1|left=200,1|leftWins=WExplorer|leftActive=|end');
+  except
+    on Exception do raised := True;
+  end;
+  FRight.RaiseOnLayoutBatch := False;
+  AssertTrue('前提:抛出来了', raised);
+  for i := 0 to 2 do
+  begin
+    AssertEquals(bars[i].Name + ' 不在批次里', 0, bars[i].LayoutBatchForTest);
+    AssertEquals(bars[i].Name + ' 的对齐锁回到原样', locks[i], bars[i].AlignLockForTest);
+  end;
+  { 批次层数真的清了:用户看得见的收起照发事件。 }
+  FLog := '';
+  FLeft.Collapsed := True;
+  AssertEquals('之后的收起照常发事件', 'L.collapse;', FLog);
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestTheFocusStepOnAHiddenFormIsSafeAndRestores;
+var
+  e, after: TBodyChild;
+  raised: string;
+begin
+  e := TBodyChild.Create(FForm);
+  e.Parent := Win('Search');
+  e.TabStop := True;
+  { Tab 顺序里排在栏后面、聚焦得上的一个:显示着的窗体上焦点该交给它(SelectNext(栏))。 }
+  after := TBodyChild.Create(FForm);
+  after.Parent := FForm;
+  after.TabStop := True;
+  after.SetBounds(900, 10, 50, 20);
+  FForm.ActiveControl := e;
+  AssertFalse('前提:无头的窗体没显示(FormCreate 里读布局)', FForm.Showing);
+  AssertTrue('前提:两个都聚焦得上', e.CanFocus and after.CanFocus);
+  raised := '';
+  try
+    AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+      '|left=240,1|leftWins=WExplorer,WSearch|leftActive=WSearch|end'));
+  except
+    on x: Exception do raised := x.ClassName + ': ' + x.Message;
+  end;
+  { 没显示的窗体上 SelectNext 挑到 after 就 SetFocus,经 FocusControl 去聚焦窗体本身 —— 抛。 }
+  AssertEquals('没显示的窗体:读布局不因为搬焦点抛异常', '', raised);
+  AssertTrue('前提:左栏收起了,Search 藏着', FLeft.Collapsed and not e.CanFocus);
+  AssertFalse('ActiveControl 不停在藏起来的控件上', FForm.ActiveControl = e);
+  { 反过来:Search 跟着布局挪到右栏、仍是当前页 —— 换父时 LCL 清掉了 ActiveControl,第 7 步
+    要还给它(没显示的窗体也一样,否则窗体显示时焦点落到别处)。 }
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer|leftActive=WExplorer' +
+    '|right=240,0|rightWins=WOutline,WSearch|rightActive=WSearch|end'));
+  FForm.ActiveControl := e;
+  AssertTrue(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1' +
+    '|left=240,0|leftWins=WExplorer,WSearch|leftActive=WSearch' +
+    '|right=240,0|rightWins=WOutline|rightActive=WOutline|end'));
+  AssertSame('前提:Search 回到左栏、是当前页', TTyToolWindow(Win('Search')), FLeft.ActiveWindow);
+  AssertSame('原控件还聚焦得上:ActiveControl 还给它', TWinControl(e), FForm.ActiveControl);
 end;
 
 { --- 加载中挂起、收尾、默认布局(spec §10.5) ------------------------------------------ }

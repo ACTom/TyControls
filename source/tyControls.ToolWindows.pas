@@ -1001,6 +1001,11 @@ type
       从此都不发事件,而且没有一条断言会指向这里。 }
     procedure BeginSilent;
     procedure EndSilent;
+    { 布局应用批次(spec §10.4)的进门 / 出门:批次层数(FLayoutBatch)和对齐锁一起进、一起出。
+      manager 只对进了门的栏调 End(见 TTyToolWindowManager.ApplyText)。virtual:测试探针在
+      这里模拟某一条栏进门时抛异常。 }
+    procedure BeginLayoutBatch; virtual;
+    procedure EndLayoutBatch; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1063,6 +1068,8 @@ type
     function GestureStateForTest: TTyToolWindowGestureState;
     function IsEdgeDraggingForTest: Boolean;
     function IsDraggingForTest: Boolean;
+    { 探针:此刻在几层布局应用批次里(真实计数的只读视图)。 }
+    property LayoutBatchForTest: Integer read FLayoutBatch;
     { 探针:底栏标签行上悬停的部件和窗口序号 —— 真实字段的只读视图。 }
     property HeaderHoverPartForTest: TTyToolWindowBarPart read FHeaderHoverPart;
     property HeaderHoverIndexForTest: Integer read FHeaderHoverIndex;
@@ -1810,6 +1817,11 @@ begin
     and (old is TTyToolWindowBar) and (NewParent is TTyToolWindowBar)
     and ([csLoading, csDesigning, csDestroying]
          * (ComponentState + old.ComponentState + NewParent.ComponentState) = []);
+  { 布局应用的批次里(某一页的 OnShow / OnHide 里用户直接改 Parent):不簿记 —— 批次不发栏事件
+    和 OnWindowMoved、不自己展开,当前页由批次最后统一定(拦不住,只能不添乱)。 }
+  if book and ((TTyToolWindowBar(old).FLayoutBatch > 0)
+               or (TTyToolWindowBar(NewParent).FLayoutBatch > 0)) then
+    book := False;
   src := nil;
   dst := nil;
   form := nil;
@@ -5769,6 +5781,22 @@ begin
   Dec(FSilent);
 end;
 
+procedure TTyToolWindowBar.BeginLayoutBatch;
+begin
+  Inc(FLayoutBatch);
+  DisableAlign;
+end;
+
+procedure TTyToolWindowBar.EndLayoutBatch;
+begin
+  { 恢复对齐会重排,重排里用户的 OnResize 可能抛异常:层数照样还。 }
+  try
+    EnableAlign;
+  finally
+    if FLayoutBatch > 0 then Dec(FLayoutBatch);
+  end;
+end;
+
 procedure TTyToolWindowBar.SwitchSilently(AWindow: TTyToolWindow);
 begin
   BeginSilent;
@@ -6492,8 +6520,10 @@ end;
 
 function TTyToolWindowManager.LayoutCallAllowed: Boolean;
 begin
+  { FApplying:批次里某一页的 OnShow / OnHide 再调 Load / Reset —— 里层批次按外层还没做完的
+    样子建计划,外层接着按自己那份计划(窗口快照)做,两份计划叠在一起。 }
   Result := ([csDesigning, csDestroying] * ComponentState = []) and (Length(FBars) > 0)
-    and (FEventDepth = 0);
+    and (FEventDepth = 0) and (FApplying = 0);
 end;
 
 function TTyToolWindowManager.LayoutMustQueue: Boolean;
@@ -6552,6 +6582,8 @@ end;
 
 procedure TTyToolWindowManager.CaptureDefaultLayout;
 begin
+  { 批次里(某一页的 OnShow / OnHide)记下的是应用了一半的样子。 }
+  if FApplying > 0 then Exit;
   FDefaultText := SaveLayoutToString;
   FDefaultCaptured := True;
   FDefaultExplicit := True;
@@ -6622,6 +6654,9 @@ begin
   kind := FPendingKind;
   if kind = tlpNone then Exit;
   text := FPendingText;
+  { 应用之前就清:计划只应用一次。应用中途抛异常(某条栏进批次失败、重排里用户的 OnResize
+    抛……)这份计划就丢了,不留到下一次收尾再试 —— 下一次(继承窗体的下一层)时窗口已经是
+    另一个样子,半截的计划再应用一遍只会更乱。 }
   FPendingKind := tlpNone;
   FPendingText := '';
   { Reset 用的是刚记下的默认布局。 }
@@ -6696,7 +6731,7 @@ var
   focusWin, w, target: TTyToolWindow;
   b: TTyToolWindowBar;
   side: TTyToolLayoutSide;
-  i, k: Integer;
+  i, k, entered: Integer;
 begin
   { 1. 取消拖动。 }
   CancelDrag;
@@ -6715,14 +6750,17 @@ begin
   { 4. 计划;所有注册栏进批次、停对齐。 }
   plan := TyToolLayoutPlanFor(BuildWorld(bars, wins), ADoc);
   touched := Copy(FBars);
+  entered := 0;
   Inc(FApplying);
   try
-    for i := 0 to High(touched) do
-    begin
-      Inc(touched[i].FLayoutBatch);
-      touched[i].DisableAlign;
-    end;
     try
+      { 进了门的才出门:第 k 条进门时抛异常,finally 只还前 k 条 —— 按数组长度还的话,没进门的
+        那几条会多解一层对齐锁;而进门写在 try 外面的话,前 k 条从此停着对齐、批次层数卡在 1。 }
+      for i := 0 to High(touched) do
+      begin
+        touched[i].BeginLayoutBatch;
+        entered := i + 1;
+      end;
       { 5a. 窗口挪到各自的栏(自己换父:FQuietMove,不走直接改 Parent 的簿记、不注册即激活)。 }
       for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
       begin
@@ -6756,24 +6794,31 @@ begin
         if plan[side].Apply then b.ExpandedSize := plan[side].Size;
         if plan[side].Apply and plan[side].Collapsed then b.Collapsed := True;
         { 切页走 SwitchCore(不是 ActivateWindow):目标就是此刻的当前页时,带着 Visible 挪进来的
-          别的窗口照样要藏起来。批次里它不挪焦点。 }
-        b.SwitchCore(target, b.FActive, False);
+          别的窗口照样要藏起来。批次里它不挪焦点。
+          目标已经不在这条栏里:前面某一页的 OnShow 里用户直接改了它的 Parent(MoveWindow / Load
+          在批次里答 False,直接改 Parent 拦不住)—— 不切,切过去等于让本栏的当前页是别的栏的窗口。 }
+        if (target = nil) or (b.IndexOfWindow(target) >= 0) then
+          b.SwitchCore(target, b.FActive, False);
         if plan[side].Apply and not plan[side].Collapsed then b.Collapsed := False;
       end;
     finally
       { 6. 倒序恢复对齐、出批次。 }
-      for i := High(touched) downto 0 do
-      begin
-        touched[i].EnableAlign;
-        if touched[i].FLayoutBatch > 0 then Dec(touched[i].FLayoutBatch);
-      end;
+      for i := entered - 1 downto 0 do
+        touched[i].EndLayoutBatch;
     end;
   finally
     Dec(FApplying);
   end;
   { 7. 焦点(spec §10.4 第 7 步):原控件还聚焦得上就还给它;否则它原来所在的窗口现在在哪条栏,
     那条栏收起了或者没有能聚焦的当前页就交给 Tab 顺序里栏后面那一个,展开着就进当前页的正文。
-    原控件不在任何工具窗口里就不动。 }
+    原控件不在任何工具窗口里就不动。
+    窗体还没显示(FormCreate 里读布局)时这一步照做,而且安全:
+    - 被藏起来的控件不会留在 ActiveControl 上 —— 窗口藏起来、换父那一下 LCL 自己 RemoveFocus
+      清掉了(wincontrol.inc:8418-8420、6438);
+    - SelectNext / FocusFirst 在看不见的窗体上挑不到任何控件(FindNextControl 要 IsVisible,
+      wincontrol.inc:4658-4661),也就走不到会抛异常的 SetFocus → TCustomForm.SetFocus;
+    - 原控件还聚焦得上(跟着窗口挪到别的栏、仍是当前页)时把 ActiveControl 还给它 —— 换父时
+      LCL 已经把它清了,不还的话窗体显示时焦点落到别处。 }
   if (form <> nil) and (focus <> nil) then
   begin
     if focus.CanFocus then
@@ -7173,7 +7218,9 @@ var
   item: TTyToolWindowQueued;
 begin
   Result := False;
-  if FEventDepth > 0 then Exit;                       { 从事件处理里重入(spec §9.9) }
+  { 从本 manager 的事件处理里重入(spec §9.9);布局应用的批次里(某一页的 OnShow / OnHide)也一样:
+    批次按自己的窗口快照做,中途被挪走的窗口会让它把别的栏的窗口当成本栏的当前页。 }
+  if (FEventDepth > 0) or (FApplying > 0) then Exit;
   if not StructureAllows(AWindow, ATargetBar, src) then Exit;
   item := Default(TTyToolWindowQueued);
   item.Kind := twqMove;
