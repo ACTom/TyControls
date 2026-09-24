@@ -14,6 +14,9 @@ uses
 
 const
   TyToolLayoutTag = 'TYTOOLLAYOUT/1';
+  { 解析接受的最长布局串(字符数)。几十个窗口的布局串不过几百字节;上限挡住的是喂进来的
+    垃圾(读错了文件、配置被截成别的东西),超长直接答 False,不去切分。 }
+  TyToolLayoutMaxLength = 65536;
 
 type
   TTyToolLayoutSide = (tlsLeft, tlsRight, tlsBottom);
@@ -55,8 +58,12 @@ type
   end;
   TTyToolLayoutPlan = array[TTyToolLayoutSide] of TTyToolLayoutBarPlan;
 
-{ 整串合法才答 True 并填 ADoc;不合法答 False,ADoc 全是零值(Present 都为假)。 }
+{ 整串合法才答 True 并填 ADoc;不合法答 False,ADoc 全是零值(Present 都为假)。超过
+  TyToolLayoutMaxLength 的一律不合法。 }
 function TyToolLayoutParse(const AText: string; out ADoc: TTyToolLayoutDoc): Boolean;
+{ 存储层带进来的外壳去掉:开头的 UTF-8 BOM、结尾的空白(CR / LF / 空格 / Tab)——
+  TStringList.Text、写进文件再读回来都会带上。只去这两样,中间的照旧严格。 }
+function TyToolLayoutUnwrap(const AText: string): string;
 { 按 left、right、bottom 的顺序只写 Present 的组。调用方保证名字合法、不重名。 }
 function TyToolLayoutFormat(const ADoc: TTyToolLayoutDoc): string;
 
@@ -79,21 +86,109 @@ const
   WinsSuffix = 'Wins';
   ActiveSuffix = 'Active';
 
-{ 按 ASep 普通切分,保留空段(空段由调用方判)。 }
+{ 按 ASep 普通切分,保留空段(空段由调用方判)。先数段数、一次分配:逐段 SetLength + 1 是
+  平方级的拷贝。 }
 function SplitPlain(const S: string; ASep: Char): TStringArray;
 var
   i, start, n: Integer;
 begin
+  n := 1;
+  for i := 1 to Length(S) do
+    if S[i] = ASep then Inc(n);
   Result := nil;
+  SetLength(Result, n);
+  n := 0;
   start := 1;
   for i := 1 to Length(S) + 1 do
     if (i > Length(S)) or (S[i] = ASep) then
     begin
-      n := Length(Result);
-      SetLength(Result, n + 1);
       Result[n] := Copy(S, start, i - start);
+      Inc(n);
       start := i + 1;
     end;
+end;
+
+{ 按 CompareStr(逐字节,不看区域设置)升序排,自底向上归并。判重用:排好之后相等的必然相邻。 }
+procedure SortPlain(var A: TStringArray);
+var
+  buf: TStringArray;
+  width, lo, mid, hi, i, j, k, n: Integer;
+begin
+  n := Length(A);
+  if n < 2 then Exit;
+  buf := nil;
+  SetLength(buf, n);
+  width := 1;
+  while width < n do
+  begin
+    lo := 0;
+    while lo < n do
+    begin
+      mid := lo + width;
+      if mid > n then mid := n;
+      hi := lo + 2 * width;
+      if hi > n then hi := n;
+      i := lo;
+      j := mid;
+      k := lo;
+      while (i < mid) and (j < hi) do
+      begin
+        if CompareStr(A[j], A[i]) < 0 then
+        begin
+          buf[k] := A[j];
+          Inc(j);
+        end
+        else
+        begin
+          buf[k] := A[i];
+          Inc(i);
+        end;
+        Inc(k);
+      end;
+      while i < mid do
+      begin
+        buf[k] := A[i];
+        Inc(i);
+        Inc(k);
+      end;
+      while j < hi do
+      begin
+        buf[k] := A[j];
+        Inc(j);
+        Inc(k);
+      end;
+      lo := hi;
+    end;
+    for i := 0 to n - 1 do A[i] := buf[i];
+    width := width * 2;
+  end;
+end;
+
+{ 有没有两项相等(先排序,相等的相邻)。 }
+function HasDuplicate(const A: TStringArray): Boolean;
+var
+  s: TStringArray;
+  i: Integer;
+begin
+  { 动态数组按值传也共用同一块:拷一份再排,不动调用方的顺序。 }
+  s := Copy(A);
+  SortPlain(s);
+  for i := 1 to High(s) do
+    if s[i] = s[i - 1] then Exit(True);
+  Result := False;
+end;
+
+function TyToolLayoutUnwrap(const AText: string): string;
+const
+  Bom = #$EF#$BB#$BF;
+var
+  first, last: Integer;
+begin
+  first := 1;
+  if Copy(AText, 1, Length(Bom)) = Bom then first := Length(Bom) + 1;
+  last := Length(AText);
+  while (last >= first) and (AText[last] in [#9, #10, #13, ' ']) do Dec(last);
+  Result := Copy(AText, first, last - first + 1);
 end;
 
 { 1-5 位 '0'..'9',别的一概不认(' 240'、'$F0'、'+240'、'-1' 都拒;Grid 的 Trim + TryStrToInt
@@ -111,11 +206,10 @@ end;
 function TyToolLayoutParse(const AText: string; out ADoc: TTyToolLayoutDoc): Boolean;
 var
   d: TTyToolLayoutDoc;
-  segs, parts, names: TStringArray;
-  seen: array of string;
+  segs, parts, names, keys, all: TStringArray;
   have: array[TTyToolLayoutSide, 0..2] of Boolean;
   vals: array[TTyToolLayoutSide, 0..2] of string;
-  side, other: TTyToolLayoutSide;
+  side: TTyToolLayoutSide;
   i, j, k, p, n: Integer;
   key: string;
   found: Boolean;
@@ -124,23 +218,24 @@ begin
   Result := False;
   d := Default(TTyToolLayoutDoc);
   FillChar(have, SizeOf(have), 0);
+  { 0. 超长直接拒,不切分(见 TyToolLayoutMaxLength)。 }
+  if Length(AText) > TyToolLayoutMaxLength then Exit;
   { 1. 按 | 切;标签在头、end 在尾,中间不许再出现 end(截断在值中间的串过不了这一关)。 }
   segs := SplitPlain(AText, '|');
   if Length(segs) < 2 then Exit;
   if segs[0] <> TyToolLayoutTag then Exit;
   if segs[High(segs)] <> 'end' then Exit;
-  { 2. 中间每段:非空、有 =、key 非空、不重复。已知 key 记值,未知的忽略(以后加的 key)。 }
-  seen := nil;
+  { 2. 中间每段:非空、有 =、key 非空、不重复(区分大小写;排序后比相邻,不两两比)。已知 key
+    记值,未知的忽略(以后加的 key)。 }
+  keys := nil;
+  SetLength(keys, Length(segs) - 2);
   for i := 1 to High(segs) - 1 do
   begin
     if (segs[i] = '') or (segs[i] = 'end') then Exit;
     p := Pos('=', segs[i]);
     if p <= 1 then Exit;
     key := Copy(segs[i], 1, p - 1);
-    for j := 0 to High(seen) do
-      if seen[j] = key then Exit;
-    SetLength(seen, Length(seen) + 1);
-    seen[High(seen)] := key;
+    keys[i - 1] := key;
     for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
     begin
       k := -1;
@@ -154,6 +249,7 @@ begin
       end;
     end;
   end;
+  if HasDuplicate(keys) then Exit;
   for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
   begin
     { 3. 一组三个 key 全有或全无;不完整整串拒绝。 }
@@ -179,13 +275,17 @@ begin
     end;
     d[side].Names := names;
   end;
-  { 6. 名字在所有组里唯一(组件名不区分大小写)。 }
+  { 6. 名字在所有组里唯一(组件名不区分大小写,CompareText)。名字都过了 IsValidIdent,只有
+    ASCII:LowerCase 之后逐字节比就是 CompareText 的答案;排序后比相邻,不两两比。 }
+  all := nil;
   for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
+  begin
+    n := Length(all);
+    SetLength(all, n + Length(d[side].Names));
     for i := 0 to High(d[side].Names) do
-      for other := side to High(TTyToolLayoutSide) do
-        for j := 0 to High(d[other].Names) do
-          if ((other <> side) or (j > i))
-             and (CompareText(d[side].Names[i], d[other].Names[j]) = 0) then Exit;
+      all[n + i] := LowerCase(d[side].Names[i]);
+  end;
+  if HasDuplicate(all) then Exit;
   { 7. 当前页:空,或自己组里的一个名字(拼写取列表里的)。 }
   for side := Low(TTyToolLayoutSide) to High(TTyToolLayoutSide) do
   begin

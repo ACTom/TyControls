@@ -59,6 +59,8 @@ type
     procedure TestADirectParentChangeInsideTheBatchLeavesEveryBarWhole;
     { 某一条栏进批次时抛异常:进了门的都出门,没进门的不多解一层。 }
     procedure TestABarFailingToEnterTheBatchLeavesNoBarInIt;
+    { 从 TStringList.Text / 文件读回来的串:结尾换行、开头 BOM 照收,中间照旧严格。 }
+    procedure TestLoadToleratesTheStorageShell;
     { .lfm 里只有 manager、栏在 FormCreate 里用代码挂:Loaded 那一刻不记空布局。 }
     procedure TestAStreamedManagerWithCodeBuiltBarsResetsToTheBuiltLayout;
     { 窗体还没显示(FormCreate 里读布局):第 7 步不抛异常、ActiveControl 不停在被藏起来的
@@ -599,6 +601,39 @@ begin
     '|right=240,0|rightWins=WOutline|rightActive=WOutline|end'));
   AssertSame('前提:Search 回到左栏、是当前页', TTyToolWindow(Win('Search')), FLeft.ActiveWindow);
   AssertSame('原控件还聚焦得上:ActiveControl 还给它', TWinControl(e), FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowLayoutApplyTests.TestLoadToleratesTheStorageShell;
+const
+  Bom = #$EF#$BB#$BF;
+var
+  s, before: string;
+  sl: TStringList;
+begin
+  FMgr.MoveWindow(Win('Search'), FRight);
+  FBottom.ExpandedSize := 180;
+  s := FMgr.SaveLayoutToString;
+  FMgr.MoveWindow(Win('Search'), FLeft);
+  FBottom.ExpandedSize := 240;
+  before := FMgr.SaveLayoutToString;
+  AssertTrue('前提:状态挪离了 s', before <> s);
+  sl := TStringList.Create;
+  try
+    sl.Text := s;
+    AssertTrue('TStringList.Text(结尾带换行)读得进', FMgr.LoadLayoutFromString(sl.Text));
+    AssertEquals('读进来的就是 s', s, FMgr.SaveLayoutToString);
+  finally
+    sl.Free;
+  end;
+  AssertTrue(FMgr.LoadLayoutFromString(before));
+  AssertTrue('开头 BOM、结尾 CRLF 和空白读得进',
+    FMgr.LoadLayoutFromString(Bom + s + #13#10'  '#9));
+  AssertEquals('读进来的就是 s', s, FMgr.SaveLayoutToString);
+  AssertTrue(FMgr.LoadLayoutFromString(before));
+  AssertFalse('开头的空白照旧拒', FMgr.LoadLayoutFromString(' ' + s));
+  AssertFalse('中间的空白照旧拒',
+    FMgr.LoadLayoutFromString(StringReplace(s, '|end', ' |end', [])));
+  AssertEquals('拒了就什么都不改', before, FMgr.SaveLayoutToString);
 end;
 
 procedure TTyToolWindowLayoutApplyTests.TestAStreamedManagerWithCodeBuiltBarsResetsToTheBuiltLayout;

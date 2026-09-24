@@ -30,6 +30,12 @@ type
     procedure TestFormatWritesTheGroupsInOrder;
     procedure TestFormatRoundTrips;
     procedure TestEveryPrefixIsRejected;
+    { 长度上限:正好 TyToolLayoutMaxLength 的合法串照收,多一个字符就拒;超长的垃圾快速拒。 }
+    procedure TestTheLengthIsCapped;
+    { 判重改成排序后比相邻:很多 key / 名字时照样抓得到隔得很远的重复。 }
+    procedure TestManyKeysOrNamesStillCatchADuplicate;
+    { 存储层的外壳:开头的 BOM、结尾的空白去掉;中间、开头的空白照旧拒。解析本身不去。 }
+    procedure TestUnwrapStripsOnlyTheBomAndTrailingBlanks;
     { spec §10.3:版本漂移计划(表 P1–P14)。 }
     procedure TestPlanOfTheGoodStringOnItsOwnWorld;
     procedure TestPlanMovesNamedWindowsAcrossSides;
@@ -112,6 +118,70 @@ begin
       AssertEquals(AMsg + ':Names', A[side].Names[i], B[side].Names[i]);
     AssertEquals(AMsg + ':Active', A[side].Active, B[side].Active);
   end;
+end;
+
+{ --- 长度、判重、外壳 ------------------------------------------------------------------ }
+
+procedure TTyToolWindowLayoutTextTests.TestTheLengthIsCapped;
+const
+  Head = 'TYTOOLLAYOUT/1|left=240,0|leftWins=';
+  Tail = '|leftActive=|end';
+var
+  s: string;
+  d: TTyToolLayoutDoc;
+  t0: QWord;
+begin
+  { 一个很长的合法名字把整串撑到正好上限。 }
+  s := Head + 'W' + StringOfChar('x', TyToolLayoutMaxLength - Length(Head) - Length(Tail) - 1)
+    + Tail;
+  AssertEquals('前提:正好上限', TyToolLayoutMaxLength, Length(s));
+  AssertTrue('正好上限:照收', TyToolLayoutParse(s, d));
+  s := Head + 'W' + StringOfChar('x', TyToolLayoutMaxLength - Length(Head) - Length(Tail))
+    + Tail;
+  { 不用 CheckRejected:它把整串写进失败消息。 }
+  AssertFalse('多一个字符:拒', TyToolLayoutParse(s, d));
+  AssertFalse('拒时 doc 是零值', d[tlsLeft].Present);
+  { 几 MB 的垃圾(读错了文件):不切分,当场拒。 }
+  s := StringOfChar('|', 8 * 1024 * 1024);
+  t0 := GetTickCount64;
+  AssertFalse('8 MB 的分隔符:拒', TyToolLayoutParse(s, d));
+  AssertTrue('当场拒(不切分)', GetTickCount64 - t0 < 1000);
+end;
+
+procedure TTyToolWindowLayoutTextTests.TestManyKeysOrNamesStillCatchADuplicate;
+var
+  keys, names: string;
+  i: Integer;
+  d: TTyToolLayoutDoc;
+begin
+  keys := '';
+  for i := 1 to 3000 do keys := keys + '|k' + IntToStr(i) + '=v';
+  AssertTrue('前提:3000 个未知 key 照收',
+    TyToolLayoutParse('TYTOOLLAYOUT/1' + keys + '|end', d));
+  CheckRejected('第一个和最后一个 key 重复', 'TYTOOLLAYOUT/1' + keys + '|k1=w|end');
+  names := 'N1';
+  for i := 2 to 3000 do names := names + ',N' + IntToStr(i);
+  AssertTrue('前提:3000 个名字照收', TyToolLayoutParse('TYTOOLLAYOUT/1|left=240,0|leftWins=' +
+    names + '|leftActive=|end', d));
+  AssertEquals('前提:名字的顺序没被判重打乱', 'N1', d[tlsLeft].Names[0]);
+  AssertEquals('前提:名字的顺序没被判重打乱(末尾)', 'N3000', d[tlsLeft].Names[2999]);
+  CheckRejected('隔得很远、只差大小写的重名(跨组)', 'TYTOOLLAYOUT/1|left=240,0|leftWins=' +
+    names + '|leftActive=|bottom=1,0|bottomWins=n1|bottomActive=|end');
+end;
+
+procedure TTyToolWindowLayoutTextTests.TestUnwrapStripsOnlyTheBomAndTrailingBlanks;
+const
+  Bom = #$EF#$BB#$BF;
+begin
+  AssertEquals('结尾的换行', G, TyToolLayoutUnwrap(G + #13#10));
+  AssertEquals('结尾的各种空白', G, TyToolLayoutUnwrap(G + ' '#9#10#13' '#10));
+  AssertEquals('开头的 BOM', G, TyToolLayoutUnwrap(Bom + G));
+  AssertEquals('两样都有', G, TyToolLayoutUnwrap(Bom + G + LineEnding));
+  AssertEquals('开头的空白不去', ' ' + G, TyToolLayoutUnwrap(' ' + G));
+  AssertEquals('中间的不去', Bom + G, TyToolLayoutUnwrap(Bom + Bom + G));
+  AssertEquals('空串', '', TyToolLayoutUnwrap(''));
+  AssertEquals('只有外壳', '', TyToolLayoutUnwrap(Bom + #13#10));
+  CheckRejected('解析本身不去外壳', G + #13#10);
 end;
 
 { --- 接受(A1–A10) ----------------------------------------------------------------- }

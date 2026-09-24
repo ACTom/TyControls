@@ -1371,7 +1371,8 @@ type
       没有可用栏时是 TYTOOLLAYOUT/1|end。 }
     function SaveLayoutToString: string;
     { spec §10.1:格式错、设计期、正在释放、没有注册栏、从事件处理里重入 → False,什么都不改;
-      否则应用(一个批次)并答 True。格式错不抛异常。 }
+      否则应用(一个批次)并答 True。格式错不抛异常。开头的 UTF-8 BOM 和结尾的空白(CR / LF /
+      空格 / Tab)容忍(TyToolLayoutUnwrap),别处照旧严格。 }
     function LoadLayoutFromString(const AText: string): Boolean;
     { 恢复默认布局。还没记过默认布局就先记下此刻的样子。门同 LoadLayoutFromString。 }
     function ResetLayout: Boolean;
@@ -6802,10 +6803,13 @@ end;
 function TTyToolWindowManager.LoadLayoutFromString(const AText: string): Boolean;
 var
   doc: TTyToolLayoutDoc;
+  text: string;
 begin
-  { 格式先查(加载中也立即查,spec §10.5)。 }
-  Result := LayoutCallAllowed and TyToolLayoutParse(AText, doc);
-  if Result then Result := StartLayout(tlpLoad, AText);
+  { 存储层带进来的外壳(开头的 BOM、结尾的换行和空白:TStringList.Text、读回来的文件)先去掉,
+    中间照旧严格。格式先查(加载中也立即查,spec §10.5)。 }
+  text := TyToolLayoutUnwrap(AText);
+  Result := LayoutCallAllowed and TyToolLayoutParse(text, doc);
+  if Result then Result := StartLayout(tlpLoad, text);
 end;
 
 procedure TTyToolWindowManager.CaptureDefaultLayout;
