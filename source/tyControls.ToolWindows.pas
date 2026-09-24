@@ -646,6 +646,9 @@ type
     FSubscribedList: TCustomImageList;
     FImageLink: TChangeLink;
     procedure SetManager(AValue: TTyToolWindowManager);
+    { 和 manager 断开(manager 被释放、或两边之一从 Owner 摘走):取消拖动、清引用、生效列表
+      可能跟着变。不回头调 manager —— 从它的表里摘不摘由调用方定。 }
+    procedure DetachManager;
     procedure SetImages(AValue: TCustomImageList);
     { 让 link 跟上 EffectiveImages:**先**从旧列表注销,**再**注册到新列表并 FreeNotification。
       顺序反了(或者不注销),同一个 link 就同时挂在两个列表上,而 Sender 只记得后一个 ——
@@ -1298,6 +1301,8 @@ type
       AIndex: Integer = -1): Boolean;
     { 探针:队列里还有几项没执行(真实队列的长度)。 }
     function QueuedCountForTest: Integer;
+    { 探针:注册表里记着几条栏(真实表的长度;不解引用任何一条)。 }
+    function BarCountForTest: Integer;
     { 取消此刻的图标拖动(spec §9.7);没在拖什么都不做。 }
     procedure CancelDrag;
     { 注册栏里有一条正在拖图标。 }
@@ -5954,14 +5959,14 @@ begin
     注销那一步跳过了,走到这里。 }
   if (Operation = opRemove) and (AComponent is TTyToolWindow) then
     UnregisterWindow(TTyToolWindow(AComponent));
-  { manager 被释放(或从 Owner 摘走):只清自己的引用,不回头调它 —— 它正在走,它的表由它自己清。 }
+  { manager 被释放:只清自己的引用,不回头调它 —— 它正在走,它的表由它自己清。
+    只是从 Owner 摘走(RemoveComponent、InsertComponent 换 Owner):它还活着、表里还记着本栏,
+    而继承的 Notification 刚把两边的 FreeNotification 都拆了 —— 不从它的表里摘掉本栏,
+    本栏日后释放时它收不到通知,表里留下悬垂指针。所以两边一起断。 }
   if (Operation = opRemove) and (AComponent = FManager) then
   begin
-    { 拖到一半 manager 走了(spec §9.7「manager 的 opRemove」)。 }
-    ResetGesture(twgeCancel);
-    FManager := nil;
-    { 生效列表可能是它的 Images(spec §8)。 }
-    ImagesChanged;
+    if not (csDestroying in FManager.ComponentState) then FManager.RemoveBar(Self);
+    DetachManager;
   end;
   { 列表被释放,或者只是从 Owner 里摘走(RemoveComponent 同样广播 opRemove,列表还活着):
     清引用,是订阅着的那一个就**当场**注销,再按生效列表重新订阅。注销不交给 Sync 去比
@@ -5975,6 +5980,15 @@ begin
     if AComponent = FSubscribedList then UnsubscribeImages;
     ImagesChanged;
   end;
+end;
+
+procedure TTyToolWindowBar.DetachManager;
+begin
+  { 拖到一半 manager 走了(spec §9.7「manager 的 opRemove」)。 }
+  ResetGesture(twgeCancel);
+  FManager := nil;
+  { 生效列表可能是它的 Images(spec §8)。 }
+  ImagesChanged;
 end;
 
 procedure TTyToolWindowBar.SetManager(AValue: TTyToolWindowManager);
@@ -6957,10 +6971,19 @@ begin
 end;
 
 procedure TTyToolWindowManager.Notification(AComponent: TComponent; Operation: TOperation);
+var
+  b: TTyToolWindowBar;
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent is TTyToolWindowBar) then
-    RemoveBar(TTyToolWindowBar(AComponent));
+  begin
+    b := TTyToolWindowBar(AComponent);
+    RemoveBar(b);
+    { 栏只是从 Owner 摘走(RemoveComponent、InsertComponent 换 Owner),还活着、还指着本
+      manager:继承的 Notification 已经把两边的 FreeNotification 拆了,本 manager 日后释放时
+      它收不到通知 —— 这里替它断引用。 }
+    if (b.FManager = Self) and not (csDestroying in b.ComponentState) then b.DetachManager;
+  end;
   { 窗口、栏都可能在队列里(spec §9.9)。 }
   if Operation = opRemove then
     PurgeQueue(AComponent);
@@ -7181,6 +7204,11 @@ end;
 function TTyToolWindowManager.QueuedCountForTest: Integer;
 begin
   Result := Length(FQueue);
+end;
+
+function TTyToolWindowManager.BarCountForTest: Integer;
+begin
+  Result := Length(FBars);
 end;
 
 function TTyToolWindowManager.MustQueue(AWindow: TTyToolWindow): Boolean;

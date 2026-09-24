@@ -56,6 +56,9 @@ type
     procedure TestEveryBarSharingAPlacementIsUnusable;
     procedure TestLeavingTheManagerOrBeingFreedEndsAConflict;
     procedure TestFreeingTheManagerClearsEveryBar;
+    { 从 Owner 摘走(RemoveComponent / InsertComponent)时对方还活着:两边一起断。 }
+    procedure TestAManagerTakenFromItsOwnerLetsGoOfEveryBar;
+    procedure TestABarTakenFromItsOwnerLetsGoOfTheManager;
     procedure TestManagerIsAPublishedReference;
     { spec §9.9:CanMoveWindow / OnCanMoveWindow。 }
     procedure TestSideBarsCanTradeButNeverWithTheBottom;
@@ -397,6 +400,73 @@ begin
   { 比 nil,不比已释放的指针(地址会被立刻复用)。 }
   AssertTrue('左栏的引用清掉了', l.Manager = nil);
   AssertTrue('右栏的引用清掉了', r.Manager = nil);
+end;
+
+procedure TTyToolWindowManagerTests.TestAManagerTakenFromItsOwnerLetsGoOfEveryBar;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  list: TImageList;
+  other: TComponent;
+begin
+  m := NewManager;
+  l := NewBarOn(twpLeft, ['Explorer']);
+  r := NewBarOn(twpRight, ['Outline']);
+  l.Manager := m;
+  r.Manager := m;
+  { 继承的 Notification 在 opRemove 时双向拆 FreeNotification:manager 还记着栏的话,栏日后
+    释放它收不到通知。只数表长,不解引用表里的指针。 }
+  FForm.RemoveComponent(m);
+  list := TImageList.Create(nil);
+  try
+    AssertTrue('栏的引用清掉了', (l.Manager = nil) and (r.Manager = nil));
+    AssertEquals('manager 那边也不再记着任何一条栏', 0, m.BarCountForTest);
+    FreeAndNil(r);
+    AssertEquals('释放一条栏之后照样存得出来,不含它', 'TYTOOLLAYOUT/1|end', m.SaveLayoutToString);
+    m.Images := list;
+    AssertFalse('没有注册栏:Load 答 False', m.LoadLayoutFromString('TYTOOLLAYOUT/1|end'));
+  finally
+    m.Free;
+    list.Free;
+  end;
+  { 换 Owner:FPC 3.2.2 的 InsertComponent 不替你从旧 Owner 摘(compon.inc:601-611),
+    换 Owner 就是先 RemoveComponent 再 InsertComponent —— 断开发生在前一句。 }
+  m := NewManager;
+  l.Manager := m;
+  other := TComponent.Create(nil);
+  try
+    FForm.RemoveComponent(m);
+    other.InsertComponent(m);
+    AssertTrue('换 Owner:栏的引用清掉了', l.Manager = nil);
+    AssertEquals('换 Owner:manager 的表空了', 0, m.BarCountForTest);
+  finally
+    other.Free;
+  end;
+end;
+
+procedure TTyToolWindowManagerTests.TestABarTakenFromItsOwnerLetsGoOfTheManager;
+var
+  m: TTyToolWindowManager;
+  r: TBarAccess;
+begin
+  m := NewManager;
+  r := NewBarOn(twpRight, ['Outline']);
+  r.Manager := m;
+  FForm.RemoveComponent(r);
+  try
+    { 比 nil,不比 manager 的指针:下面释放了 manager 之后地址会被复用。 }
+    AssertTrue('栏的 Manager 清掉了', r.Manager = nil);
+    AssertEquals('manager 的表里也没有它', 0, m.BarCountForTest);
+    FreeAndNil(m);
+    r.Invalidate;
+    r.Collapsed := True;
+    r.Collapsed := False;
+    r.ExpandedSize := 250;
+    AssertTrue('manager 释放之后栏照常用,引用还是 nil', r.Manager = nil);
+  finally
+    { 没有 Owner 了:窗体释放时不会带走它。 }
+    r.Free;
+  end;
 end;
 
 procedure TTyToolWindowManagerTests.TestManagerIsAPublishedReference;
