@@ -948,12 +948,10 @@ type
     destructor Destroy; override;
     procedure Invalidate; override;
     { 图标解析用的列表:Images,为空时**读取时**回落到 Manager.Images(spec §8)。
-      栏眼下还没有 Manager 属性(manager 是空壳,C 期接线),所以此刻就是 Images。
-      正在释放的列表(csDestroying)不算生效列表,答 nil:它的 opRemove 到栏时,不管
-      Manager 那边清没清引用,重新订阅都不会又订回这个快死的列表。
-      C 期接 Manager 时:改这一处(FImages 为空时回落 Manager.Images,同样滤掉 csDestroying),
-      再在 Manager、Manager.Images 变化和 manager 被移除时调 ImagesChanged。别的不用动 ——
-      订阅和 FreeNotification 都跟着这里走(SyncImageSubscription),被释放 / 摘走的订阅列表
+      正在释放的列表和正在释放的 manager(csDestroying)都不算,答 nil / 不回落:它们的
+      opRemove 到栏时,对方清没清引用说不准,重新订阅都不会又订回快死的那一个。
+      Manager、Manager.Images 变化和 manager 被移除时都调 ImagesChanged;订阅和
+      FreeNotification 都跟着这里走(SyncImageSubscription),被释放 / 摘走的订阅列表
       Notification 按身份注销,不看它是 Images 还是 Manager.Images。 }
     function EffectiveImages: TCustomImageList;
     { 图标条要画的那一格:ImageName 非空就按名字在 EffectiveImages 里找,找不到是 -1
@@ -1089,8 +1087,12 @@ type
   private
     { 注册着的栏,注册顺序,无语义(「先注册的赢」不成立:fixup 倒序执行,spec §10.6)。 }
     FBars: array of TTyToolWindowBar;
+    FImages: TCustomImageList;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
+    procedure SetImages(AValue: TCustomImageList);
+    { 每条没在释放的注册栏的生效列表可能换了(spec §8)。 }
+    procedure NotifyImagesChanged;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1098,6 +1100,10 @@ type
     { 这条栏是不是可用:注册在本 manager 上,且没有别的注册栏和它 Placement 相同(spec §10.6)。
       现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。 }
     function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
+  published
+    { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
+      没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
+    property Images: TCustomImageList read FImages write SetImages;
   end;
 
 { 图标条溢出菜单挂在哪、怎么对齐(栏客户区坐标):菜单往内容区那一侧开 —— 左栏从溢出按钮的
@@ -2551,6 +2557,9 @@ end;
 function TTyToolWindowBar.EffectiveImages: TCustomImageList;
 begin
   Result := FImages;
+  if (Result = nil) and (FManager <> nil)
+     and not (csDestroying in FManager.ComponentState) then
+    Result := FManager.Images;
   if (Result <> nil) and (csDestroying in Result.ComponentState) then Result := nil;
 end;
 
@@ -5501,11 +5510,15 @@ begin
     UnregisterWindow(TTyToolWindow(AComponent));
   { manager 被释放(或从 Owner 摘走):只清自己的引用,不回头调它 —— 它正在走,它的表由它自己清。 }
   if (Operation = opRemove) and (AComponent = FManager) then
+  begin
     FManager := nil;
+    { 生效列表可能是它的 Images(spec §8)。 }
+    ImagesChanged;
+  end;
   { 列表被释放,或者只是从 Owner 里摘走(RemoveComponent 同样广播 opRemove,列表还活着):
     清引用,是订阅着的那一个就**当场**注销,再按生效列表重新订阅。注销不交给 Sync 去比
     差值:两种情形都必须注销 —— 摘走的那个活下来还会发变更、日后析构时要清自己的 link 表;
-    释放中的那个,C 期这一刻会改订 Manager.Images。先清 FImages 再注销,互相的
+    释放中的那个,这一刻可能改订 Manager.Images。先清 FImages 再注销,互相的
     FreeNotification 才撤得掉(继承的 TComponent.Notification 在 opRemove 时也撤一遍,幂等)。 }
   if (Operation = opRemove)
      and ((AComponent = FImages) or (AComponent = FSubscribedList)) then
@@ -5530,6 +5543,8 @@ begin
   end;
   FManager := AValue;
   if AValue <> nil then AValue.AddBar(Self);
+  { 生效列表可能跟着 manager 换了(spec §8)。 }
+  ImagesChanged;
 end;
 
 procedure TTyToolWindowBar.SetController(AValue: TTyStyleController);
@@ -5905,6 +5920,32 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent is TTyToolWindowBar) then
     RemoveBar(TTyToolWindowBar(AComponent));
+  { 列表被释放(或从 Owner 摘走):清引用,回落到它的栏重新订阅。栏自己也可能收到同一条
+    通知(它订阅着这个列表),谁先谁后说不准 —— 各清各的(csDestroying 过滤在 EffectiveImages)。 }
+  if (Operation = opRemove) and (AComponent = FImages) then
+  begin
+    FImages := nil;
+    NotifyImagesChanged;
+  end;
+end;
+
+procedure TTyToolWindowManager.SetImages(AValue: TCustomImageList);
+begin
+  if FImages = AValue then Exit;
+  { 旧列表的 FreeNotification 不拆:它之后的 opRemove 到这里时已经不是 FImages,什么都不做
+    —— 多一次通知无害,拆错一次是悬垂指针。 }
+  FImages := AValue;
+  if AValue <> nil then AValue.FreeNotification(Self);
+  NotifyImagesChanged;
+end;
+
+procedure TTyToolWindowManager.NotifyImagesChanged;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FBars) do
+    if not (csDestroying in FBars[i].ComponentState) then
+      FBars[i].ImagesChanged;
 end;
 
 function TTyToolWindowManager.IsBarUsable(ABar: TTyToolWindowBar): Boolean;

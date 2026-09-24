@@ -14,8 +14,9 @@ unit test.toolwindow.images;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Controls, Graphics, Forms, ImgList, fpcunit, testregistry,
-  tyControls.Controller, tyControls.ToolWindows, tyControls.Icons.Lucide;
+  Classes, SysUtils, Types, TypInfo, Controls, Graphics, Forms, ImgList, fpcunit, testregistry,
+  tyControls.Controller, tyControls.ToolWindows, tyControls.Icons.Lucide,
+  test.toolwindow.bar;
 
 type
   { 探针:数「栏被请求重画了几次」,记下「被通知了谁的 opRemove」,并开出流式加载的两个入口。 }
@@ -35,6 +36,18 @@ type
     procedure BeginLoad;
     procedure EndLoad;
     procedure FreeInstance; override;
+    procedure CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  { 在栏**之前**收到任意组件的 opRemove(后登记的先到),那一刻看栏的生效列表。 }
+  TAnyFreeWatcher = class(TComponent)
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    Bar: TTyToolWindowBar;
+    Target: TComponent;
+    Called: Boolean;
+    SeenEffective: TCustomImageList;
   end;
 
   { 开出 protected 的 MarkAsChanged。 }
@@ -79,6 +92,16 @@ type
     procedure TestAnIndexChangeRepaintsEvenWithoutANameToChange;
     procedure TestRunTimeIconAndHintChangesRepaintTheBar;
     procedure TestStripHintFallsBackToCaptionNeverToHint;
+    { spec §8:栏自己没有列表时读取时回落到 Manager.Images。 }
+    procedure TestABarWithoutAListReadsTheManagers;
+    procedure TestTheFallbackListPaintsTheStrip;
+    procedure TestTheBarsOwnListWinsOverTheManagers;
+    procedure TestAPendingIndexResolvesWhenTheManagerGetsAList;
+    procedure TestSwappingTheManagersListResubscribes;
+    procedure TestFreeingTheManagersListLeavesNoEffectiveList;
+    procedure TestFreeingTheManagerUnsubscribesItsList;
+    procedure TestLeavingTheManagerUnsubscribesItsList;
+    procedure TestAManagerBeingFreedIsNoFallback;
   end;
 
 implementation
@@ -121,6 +144,21 @@ begin
   CleanupInstance;
   FillChar(Pointer(Self)^, InstanceSize, 0);   { VMT 也清成 nil:任何虚调用都 AV }
   Corpse := Pointer(Self);
+end;
+
+procedure TImagesBar.CallRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TAnyFreeWatcher.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = Target) and (Bar <> nil) then
+  begin
+    Called := True;
+    SeenEffective := Bar.EffectiveImages;
+  end;
 end;
 
 procedure TFreeWatcher.Notification(AComponent: TComponent; Operation: TOperation);
@@ -180,7 +218,7 @@ begin
   if (FForm <> nil) and (FBar <> nil) then
     for i := FForm.ComponentCount - 1 downto 0 do
       if (FForm.Components[i] is TCustomImageList)
-         and (FForm.Components[i] <> FBar.Images) then
+         and (FForm.Components[i] <> FBar.EffectiveImages) then
       begin
         list := TCustomImageList(FForm.Components[i]);
         if ChangeReachesBar(list) then
@@ -574,6 +612,231 @@ begin
   w.StripHint := 'Files and folders';
   AssertEquals('设了 StripHint 就用它', 'Files and folders', FBar.StripHintText(w));
   AssertEquals('没有窗口就没有提示', '', FBar.StripHintText(nil));
+end;
+
+{ --- Manager.Images 回落(spec §8) -------------------------------------------------- }
+
+procedure TTyToolWindowImagesTests.TestABarWithoutAListReadsTheManagers;
+var
+  m: TTyToolWindowManager;
+  list: TTyLucideImageList;
+  w: TTyToolWindow;
+begin
+  list := NewList(FForm, HouseFolder);
+  m := TTyToolWindowManager.Create(FForm);
+  m.Images := list;
+  FBar.Manager := m;
+  w := NewWindow;
+  w.ImageName := 'folder';
+  AssertSame('栏没有列表:生效列表是 manager 的', list, FBar.EffectiveImages);
+  AssertEquals('名字在 manager 的列表里解析', 1, FBar.ResolvedImageIndex(w));
+  AssertEquals('ImageIndex 视图也是那一格', 1, w.ImageIndex);
+end;
+
+procedure TTyToolWindowImagesTests.TestTheFallbackListPaintsTheStrip;
+const
+  W = 300;
+  H = 400;
+var
+  m: TTyToolWindowManager;
+  w1, w2: TTyToolWindow;
+  cell: TRect;
+  bmp: TBitmap;
+  ink: Integer;
+begin
+  { 图标条钉成品红底、静止墨蓝(test.toolwindow.bar 的 StripTheme)。 }
+  FCtl.StyleOverride := StripTheme;
+  m := TTyToolWindowManager.Create(FForm);
+  m.Images := NewList(FForm, HouseFolder);
+  FBar.Manager := m;
+  w1 := NewWindow;
+  w1.ImageName := 'folder';
+  w2 := NewWindow;
+  FBar.ActiveWindow := w2;
+  cell := FBar.StripItemRect(0);
+  AssertTrue('前提:第一格排上了', not IsRectEmpty(cell));
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(cell.Right - cell.Left, cell.Bottom - cell.Top);
+    bmp.Canvas.Brush.Color := Wipe;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    FBar.CallRenderTo(bmp.Canvas, Rect(-cell.Left, -cell.Top, W - cell.Left, H - cell.Top), 96);
+    ink := CountInk(bmp, Ground, RestInk);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue('静止格里画出了 manager 列表里的图标', ink > 0);
+end;
+
+procedure TTyToolWindowImagesTests.TestTheBarsOwnListWinsOverTheManagers;
+var
+  m: TTyToolWindowManager;
+  own: TTyLucideImageList;
+  w: TTyToolWindow;
+begin
+  m := TTyToolWindowManager.Create(FForm);
+  m.Images := NewList(FForm, HouseFolder);
+  own := NewList(FForm, FolderHouse);
+  FBar.Images := own;
+  FBar.Manager := m;
+  w := NewWindow;
+  w.ImageName := 'folder';
+  AssertSame('栏自己的列表优先', own, FBar.EffectiveImages);
+  AssertEquals('按栏自己的列表解析', 0, FBar.ResolvedImageIndex(w));
+end;
+
+procedure TTyToolWindowImagesTests.TestAPendingIndexResolvesWhenTheManagerGetsAList;
+var
+  m: TTyToolWindowManager;
+  w: TTyToolWindow;
+begin
+  m := TTyToolWindowManager.Create(FForm);
+  FBar.Manager := m;
+  w := NewWindow;
+  w.ImageIndex := 1;
+  AssertEquals('前提:哪儿都没有列表,名字还空着', '', w.ImageName);
+  m.Images := NewList(FForm, HouseFolder);
+  AssertEquals('manager 拿到列表:挂起的序号换成名字', 'folder', w.ImageName);
+end;
+
+procedure TTyToolWindowImagesTests.TestSwappingTheManagersListResubscribes;
+var
+  m: TTyToolWindowManager;
+  a, b: TTyLucideImageList;
+  leak: Boolean;
+begin
+  a := NewList(nil, HouseFolder);
+  b := NewList(nil, FolderHouse);
+  leak := False;
+  m := TTyToolWindowManager.Create(FForm);
+  try
+    FBar.Manager := m;
+    m.Images := a;
+    AssertTrue('前提:manager 的列表的变更到栏', ChangeReachesBar(a));
+    m.Images := b;
+    if ChangeReachesBar(a) then
+    begin
+      { 故意泄漏 a、b(见单元头)。 }
+      leak := True;
+      Fail('换了 manager 的列表后旧列表的变更还到栏:link 没注销');
+    end;
+    AssertTrue('新列表的变更到栏', ChangeReachesBar(b));
+  finally
+    if not leak then
+    begin
+      a.Free;
+      m.Images := nil;
+      b.Free;
+    end;
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestFreeingTheManagersListLeavesNoEffectiveList;
+var
+  m: TTyToolWindowManager;
+  a: TTyLucideImageList;
+  watcher: TAnyFreeWatcher;
+begin
+  { 观察者在栏、manager 之后登记,先于它们收到列表的 opRemove:那一刻 manager 还引用着它。 }
+  a := NewList(nil, HouseFolder);
+  watcher := TAnyFreeWatcher.Create(nil);
+  m := TTyToolWindowManager.Create(FForm);
+  try
+    m.Images := a;
+    FBar.Manager := m;
+    watcher.Bar := FBar;
+    watcher.Target := a;
+    a.FreeNotification(watcher);
+    FreeAndNil(a);            { 这一句能返回就是「析构没死循环」 }
+    AssertTrue('前提:观察者收到了通知', watcher.Called);
+    AssertNull('释放中的 manager 列表不是生效列表', watcher.SeenEffective);
+    AssertNull('之后 manager 的引用清掉', m.Images);
+    AssertNull('栏没有生效列表', FBar.EffectiveImages);
+  finally
+    a.Free;
+    watcher.Free;
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestFreeingTheManagerUnsubscribesItsList;
+var
+  m: TTyToolWindowManager;
+  a: TTyLucideImageList;
+  leak: Boolean;
+begin
+  a := NewList(nil, HouseFolder);
+  leak := False;
+  try
+    m := TTyToolWindowManager.Create(FForm);
+    m.Images := a;
+    FBar.Manager := m;
+    AssertTrue('前提:到栏', ChangeReachesBar(a));
+    m.Free;
+    AssertNull('manager 走了:没有生效列表', FBar.EffectiveImages);
+    if ChangeReachesBar(a) then
+    begin
+      leak := True;
+      Fail('manager 被释放后它的列表的变更还到栏:link 没注销');
+    end;
+  finally
+    if not leak then a.Free;
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestLeavingTheManagerUnsubscribesItsList;
+var
+  m: TTyToolWindowManager;
+  a: TTyLucideImageList;
+  leak: Boolean;
+begin
+  a := NewList(nil, HouseFolder);
+  leak := False;
+  m := TTyToolWindowManager.Create(FForm);
+  try
+    m.Images := a;
+    FBar.Manager := m;
+    AssertTrue('前提:到栏', ChangeReachesBar(a));
+    FBar.Manager := nil;
+    AssertNull('离开 manager:没有生效列表', FBar.EffectiveImages);
+    if ChangeReachesBar(a) then
+    begin
+      leak := True;
+      Fail('离开 manager 后它的列表的变更还到栏:link 没注销');
+    end;
+  finally
+    if not leak then
+    begin
+      m.Images := nil;
+      a.Free;
+    end;
+  end;
+end;
+
+procedure TTyToolWindowImagesTests.TestAManagerBeingFreedIsNoFallback;
+var
+  m: TTyToolWindowManager;
+  a: TTyLucideImageList;
+  watcher: TAnyFreeWatcher;
+begin
+  { 观察者在栏之后登记到 manager 上,先于栏收到 manager 的 opRemove:那一刻栏还指着它、
+    它还引用着活的列表。 }
+  a := NewList(nil, HouseFolder);
+  watcher := TAnyFreeWatcher.Create(nil);
+  try
+    m := TTyToolWindowManager.Create(nil);
+    m.Images := a;
+    FBar.Manager := m;
+    watcher.Bar := FBar;
+    watcher.Target := m;
+    m.FreeNotification(watcher);
+    m.Free;
+    AssertTrue('前提:观察者收到了通知', watcher.Called);
+    AssertNull('正在释放的 manager 不回落', watcher.SeenEffective);
+  finally
+    watcher.Free;
+    a.Free;
+  end;
 end;
 
 initialization
