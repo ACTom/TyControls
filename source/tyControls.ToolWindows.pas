@@ -1112,6 +1112,18 @@ type
   TTyWindowMovedEvent = procedure(Sender: TObject; AWindow: TTyToolWindow;
     ASourceBar: TTyToolWindowBar; AOldIndex: Integer) of object;
 
+  { manager 自己的异步队列里的一项(spec §9.9 / §10.5)。 }
+  TTyToolWindowQueuedKind = (twqMove, twqIndex);
+  TTyToolWindowQueued = record
+    Kind: TTyToolWindowQueuedKind;
+    Window: TTyToolWindow;
+    Target: TTyToolWindowBar;    { twqMove }
+    Index: Integer;
+    { 捕获还在窗口里、已经再排过一次(只再排一次:按钮自己的点击处理那时早就返回了)。 }
+    Requeued: Boolean;
+  end;
+  TTyToolWindowQueue = array of TTyToolWindowQueued;
+
   { 工具窗口栏的协调者(spec §2):可以不放。栏经 Manager 属性注册到它上面;跨侧拖动、
     MoveWindow、布局保存都要它。非可视组件,从 TTyComponent 来(带对象查看器里的 Version)。
     不支持放在数据模块里、栏分布在多个窗体上(spec §10.6)。 }
@@ -1124,6 +1136,11 @@ type
     FEventDepth: Integer;
     FOnCanMoveWindow: TTyCanMoveWindowEvent;
     FOnWindowMoved: TTyWindowMovedEvent;
+    { 排着的移动(spec §9.9),按调用顺序。FRunning 是 RunQueue 此刻正在执行的那一批:
+      执行前把那一项的 Window 置 nil,PurgeQueue 也在这里清(执行中别的项的窗口被释放)。 }
+    FQueue: TTyToolWindowQueue;
+    FRunning: TTyToolWindowQueue;
+    FQueuePosted: Boolean;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1138,6 +1155,18 @@ type
     procedure WindowMoved(AWindow: TTyToolWindow; ASource: TTyToolWindowBar; AOldIndex: Integer);
     { 真正的一次跨栏移动(spec §9.5 的顺序)。调用方已经过了结构检查和 CanMoveWindow。 }
     procedure MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar; AIndex: Integer);
+    { --- 队列(spec §9.9)--- }
+    { 追加一项;窗口和目标栏各 FreeNotification(opRemove 时 PurgeQueue);没排过就
+      QueueAsyncCall 一次。 }
+    procedure Enqueue(const AItem: TTyToolWindowQueued);
+    { 这个窗口还有没执行的排队项(之后对它的 MoveWindow / WindowIndex 也进队列,按调用顺序)。 }
+    function HasQueued(AWindow: TTyToolWindow): Boolean;
+    { 删掉 Window 或 Target 是 AComponent 的项(含正在执行的那一批里还没轮到的)。 }
+    procedure PurgeQueue(AComponent: TComponent);
+    procedure RunQueue(Data: PtrInt);
+    { 跨栏移动要排队:运行时、窗口所在窗体已经 Showing(同步换父会在窗口自己的按钮点击里
+      销毁按钮的句柄,spec §9.9)。 }
+    function MustQueue(AWindow: TTyToolWindow): Boolean;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1150,9 +1179,13 @@ type
     function CanMoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar): Boolean;
     { 把 AWindow 挪到 ATargetBar 的窗口序号 AIndex(钳住;-1 = 末尾),spec §9.9。目标就是它
       现在的栏 = 调顺序(不问事件)。返回 False、什么都不改:结构检查不过、从本 manager 的事件
-      处理里重入、跨栏且 CanMoveWindow 为 False。设计期同步、不发事件、通知设计器。 }
+      处理里重入、跨栏且 CanMoveWindow 为 False。设计期同步、不发事件、通知设计器。
+      窗体已经 Showing 时跨栏移动排队(返回 True = 已接受,返回那一刻窗口还在旧栏);这个窗口
+      还有排着的移动时,同栏的也进同一个队列。排队的执行前重做全部检查,不过就静默丢弃。 }
     function MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
       AIndex: Integer = -1): Boolean;
+    { 探针:队列里还有几项没执行(真实队列的长度)。 }
+    function QueuedCountForTest: Integer;
   published
     { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
       没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
@@ -1321,9 +1354,22 @@ end;
 procedure TTyToolWindow.SetWindowIndex(AValue: Integer);
 var
   b: TTyToolWindowBar;
+  item: TTyToolWindowQueued;
 begin
   b := Bar;
-  if b <> nil then b.ReorderWindow(Self, AValue);
+  if b = nil then Exit;
+  { 这个窗口还有排着的移动:排在它后面,按调用顺序执行(spec §9.9)—— 当场调的话,之后
+    执行的移动会把这一次覆盖掉。 }
+  if (b.Manager <> nil) and b.Manager.HasQueued(Self) then
+  begin
+    item := Default(TTyToolWindowQueued);
+    item.Kind := twqIndex;
+    item.Window := Self;
+    item.Index := AValue;
+    b.Manager.Enqueue(item);
+    Exit;
+  end;
+  b.ReorderWindow(Self, AValue);
 end;
 
 function TTyToolWindow.GetActions: TTyToolWindowActions;
@@ -2660,13 +2706,10 @@ begin
   { 拖动 / 拉宽中被释放:临时光标弹掉、计时器放掉、拉宽标志清掉。拉宽 / 拖动期间装在
     Application 和 Screen 上的处理器,一个不留。 }
   ResetGesture(twgeDiscard);
+  { 排队的移动归 manager(队列里是 manager 的方法,RemoveAsyncCalls 按方法所属对象匹配,
+    这里撤不到):以本栏为目标的项由 manager 在 opRemove 里删。 }
   if Application <> nil then
-  begin
     Application.RemoveAllHandlersOfObject(Self);
-    { 本单元眼下没有 QueueAsyncCall;留着给 C 期:manager 排队的 MoveWindow 以本栏为目标时,
-      spec §9.7 要求栏析构时撤掉(先写在这里,C 期接队列时不用记得回来加)。 }
-    Application.RemoveAsyncCalls(Self);
-  end;
   if Screen <> nil then Screen.RemoveAllHandlersOfObject(Self);
   inherited Destroy;
   { 最后一句:继承析构里注销窗口还会经 UnregisterWindow 走到 ResetGesture。引擎挂在
@@ -6066,6 +6109,13 @@ end;
 
 destructor TTyToolWindowManager.Destroy;
 begin
+  { 队列里排的是本对象的方法:RemoveAsyncCalls 按方法所属的对象匹配。应用关停的后半段
+    (AppDoNotCallAsyncQueue 置位之后)它会抛异常,那时队列也不会再跑了。 }
+  if (Application <> nil) and not (AppDoNotCallAsyncQueue in Application.Flags) then
+    Application.RemoveAsyncCalls(Self);
+  FQueue := nil;
+  FRunning := nil;
+  FQueuePosted := False;
   inherited Destroy;
 end;
 
@@ -6091,6 +6141,8 @@ begin
       Delete(FBars, i, 1);
       Break;
     end;
+  { 离开 manager 的栏不再是排队移动的目标。 }
+  PurgeQueue(ABar);
 end;
 
 procedure TTyToolWindowManager.Notification(AComponent: TComponent; Operation: TOperation);
@@ -6098,6 +6150,9 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent is TTyToolWindowBar) then
     RemoveBar(TTyToolWindowBar(AComponent));
+  { 窗口、栏都可能在队列里(spec §9.9)。 }
+  if Operation = opRemove then
+    PurgeQueue(AComponent);
   { 列表被释放(或从 Owner 摘走):清引用,回落到它的栏重新订阅。栏自己也可能收到同一条
     通知(它订阅着这个列表),谁先谁后说不准 —— 各清各的(csDestroying 过滤在 EffectiveImages)。 }
   if (Operation = opRemove) and (AComponent = FImages) then
@@ -6277,20 +6332,151 @@ function TTyToolWindowManager.MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTy
   AIndex: Integer): Boolean;
 var
   src: TTyToolWindowBar;
+  item: TTyToolWindowQueued;
 begin
   Result := False;
   if FEventDepth > 0 then Exit;                       { 从事件处理里重入(spec §9.9) }
   if not StructureAllows(AWindow, ATargetBar, src) then Exit;
+  item := Default(TTyToolWindowQueued);
+  item.Kind := twqMove;
+  item.Window := AWindow;
+  item.Target := ATargetBar;
+  item.Index := AIndex;
+  { 这个窗口还有排着的移动:这一次(同栏也算)排在它后面,按调用顺序执行。执行时重新检查。 }
+  if HasQueued(AWindow) then
+  begin
+    Enqueue(item);
+    Exit(True);
+  end;
   if src = ATargetBar then
   begin
-    { 同一条栏就是调顺序:同步,不问事件。-1 = 末尾。 }
+    { 同一条栏就是调顺序:同步(不重建句柄),不问事件。-1 = 末尾。 }
     if AIndex < 0 then AIndex := MaxInt;
     src.ReorderWindow(AWindow, AIndex);
     Exit(True);
   end;
   if not CanMoveWindow(AWindow, ATargetBar) then Exit;
-  MoveNow(AWindow, ATargetBar, AIndex);
+  if MustQueue(AWindow) then
+    Enqueue(item)
+  else
+    MoveNow(AWindow, ATargetBar, AIndex);
   Result := True;
+end;
+
+function TTyToolWindowManager.QueuedCountForTest: Integer;
+begin
+  Result := Length(FQueue);
+end;
+
+function TTyToolWindowManager.MustQueue(AWindow: TTyToolWindow): Boolean;
+var
+  form: TCustomForm;
+begin
+  Result := False;
+  if csDesigning in ComponentState then Exit;
+  form := GetParentForm(AWindow);
+  Result := (form <> nil) and form.Showing;
+end;
+
+procedure TTyToolWindowManager.Enqueue(const AItem: TTyToolWindowQueued);
+begin
+  SetLength(FQueue, Length(FQueue) + 1);
+  FQueue[High(FQueue)] := AItem;
+  AItem.Window.FreeNotification(Self);
+  if AItem.Target <> nil then AItem.Target.FreeNotification(Self);
+  if not FQueuePosted then
+  begin
+    FQueuePosted := True;
+    Application.QueueAsyncCall(@RunQueue, 0);
+  end;
+end;
+
+function TTyToolWindowManager.HasQueued(AWindow: TTyToolWindow): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  if AWindow = nil then Exit;
+  for i := 0 to High(FQueue) do
+    if FQueue[i].Window = AWindow then Exit(True);
+  for i := 0 to High(FRunning) do
+    if FRunning[i].Window = AWindow then Exit(True);
+end;
+
+procedure TTyToolWindowManager.PurgeQueue(AComponent: TComponent);
+var
+  i: Integer;
+begin
+  if AComponent = nil then Exit;
+  for i := High(FQueue) downto 0 do
+    if (FQueue[i].Window = AComponent) or (FQueue[i].Target = AComponent) then
+      Delete(FQueue, i, 1);
+  { 正在执行的那一批:还没轮到的项作废(Window 置 nil 就是「跳过」)。 }
+  for i := 0 to High(FRunning) do
+    if (FRunning[i].Window = AComponent) or (FRunning[i].Target = AComponent) then
+    begin
+      FRunning[i].Window := nil;
+      FRunning[i].Target := nil;
+    end;
+end;
+
+procedure TTyToolWindowManager.RunQueue(Data: PtrInt);
+var
+  it: TTyToolWindowQueued;
+  src: TTyToolWindowBar;
+  cap: TControl;
+  i: Integer;
+begin
+  FQueuePosted := False;
+  { 执行中有人抽消息、又跑到这里:这一批还没完,下一轮再来。 }
+  if FRunning <> nil then
+  begin
+    if FQueue <> nil then
+    begin
+      FQueuePosted := True;
+      Application.QueueAsyncCall(@RunQueue, 0);
+    end;
+    Exit;
+  end;
+  FRunning := FQueue;
+  FQueue := nil;
+  try
+    for i := 0 to High(FRunning) do
+    begin
+      it := FRunning[i];
+      if it.Window = nil then Continue;                { 执行中被 PurgeQueue 作废了 }
+      FRunning[i].Window := nil;                       { 轮到了:不再算「还排着」 }
+      FRunning[i].Target := nil;
+      case it.Kind of
+        twqMove:
+          begin
+            { 捕获还在窗口里(按钮自己的点击处理还没走完):再排一次,只一次。 }
+            cap := GetCaptureControl;
+            if (cap <> nil) and ((cap = it.Window) or it.Window.ContainsControl(cap))
+               and not it.Requeued then
+            begin
+              it.Requeued := True;
+              Enqueue(it);
+              Continue;
+            end;
+            { 排着期间什么都可能变了:重做全部检查,不过就静默丢弃(不发事件)。 }
+            if not StructureAllows(it.Window, it.Target, src) then Continue;
+            if src = it.Target then
+            begin
+              if it.Index < 0 then it.Index := MaxInt;
+              src.ReorderWindow(it.Window, it.Index);
+            end
+            else if CanMoveWindow(it.Window, it.Target) then
+              MoveNow(it.Window, it.Target, it.Index);
+          end;
+        twqIndex:
+          if it.Window.Bar <> nil then
+            it.Window.Bar.ReorderWindow(it.Window, it.Index);
+      end;
+    end;
+  finally
+    FRunning := nil;
+  end;
 end;
 
 procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;

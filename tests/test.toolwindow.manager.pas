@@ -113,12 +113,31 @@ type
     FTrapped: string;
     FLog: string;
     FSeenBounds: TRect;
+    { Search 操作区里的按钮;它的 OnClick 调 MoveWindow(Search, 右)。 }
+    FBtn: TTyButton;
+    FHandleKept: Boolean;
+    FClickAnswer: Boolean;
+    FCanCount: Integer;
+    { OnCanMoveWindow 从第几次起答 False(0 = 一直放行)。 }
+    FDenyFrom: Integer;
     procedure TrapException(Sender: TObject; E: Exception);
     procedure AssertNothingRaised(const AWhere: string);
     function NewWin(ABar: TTyToolWindowBar; const AName: string): TTyToolWindow;
     { 抽消息(含 Application 的异步队列)。 }
     procedure Pump(AMs: Integer = 100);
     procedure RightChangeSeesBounds(Sender: TObject);
+    procedure LogChange(Sender: TObject);
+    procedure LogExpand(Sender: TObject);
+    procedure LogCollapse(Sender: TObject);
+    procedure LogMoved(Sender: TObject; AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar;
+      AOldIndex: Integer);
+    procedure CountCan(Sender: TObject; AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
+      var AAllow: Boolean);
+    procedure BtnMovesSearch(Sender: TObject);
+    { 异步队列只跑一轮(见实现处)。 }
+    procedure RunAsyncOnce;
+    { 真实的按下 / 松开消息点一下 AControl 的中心。 }
+    procedure ClickReal(AControl: TWinControl);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -126,6 +145,18 @@ type
     { spec §3.2:直接改 Parent 永远同步,窗体可见也一样。 }
     procedure TestADirectParentChangeKeepsTheFocus;
     procedure TestBarEventsSeeTheWindowAlreadyInPlace;
+    { spec §9.9:Showing 之后的跨栏 MoveWindow 排队。 }
+    procedure TestAMoveAfterShowingIsQueued;
+    procedure TestAMoveBeforeShowingIsSynchronous;
+    procedure TestAButtonInTheWindowCanMoveItsOwnWindow;
+    procedure TestWindowIndexWaitsBehindAQueuedMove;
+    procedure TestASameBarMoveWaitsBehindAQueuedMove;
+    procedure TestFreeingTheTargetDropsTheQueuedMove;
+    procedure TestFreeingTheWindowDropsTheQueuedMove;
+    procedure TestFreeingTheManagerDropsTheQueue;
+    procedure TestAVetoAtExecutionDropsTheMoveSilently;
+    procedure TestACaptureInsideTheWindowDelaysTheMoveOnce;
+    procedure TestACaptureThatNeverLetsGoDelaysOnlyOnce;
   end;
 
 implementation
@@ -1000,6 +1031,13 @@ begin
   FEdit.Parent := FSearch;
   FEdit.SetBounds(8, 40, 120, 26);
   FOutline := NewWin(FRight, 'WOutline');
+  FBtn := TTyButton.Create(FForm);
+  FBtn.Parent := FSearch.EnsureActions;
+  FBtn.OnClick := @BtnMovesSearch;
+  FCanCount := 0;
+  FDenyFrom := 0;
+  FMgr.OnCanMoveWindow := @CountCan;
+  FMgr.OnWindowMoved := @LogMoved;
   FLeft.ActiveWindow := FSearch;
   FForm.Visible := True;
   FForm.HandleNeeded;
@@ -1010,6 +1048,7 @@ end;
 
 procedure TTyToolWindowManagerLiveTests.TearDown;
 begin
+  SetCaptureControl(nil);
   FForm.Free;
   FForm := nil;
   Forms.Application.OnException := FPrevOnException;
@@ -1019,6 +1058,219 @@ procedure TTyToolWindowManagerLiveTests.RightChangeSeesBounds(Sender: TObject);
 begin
   FSeenBounds := FSearch.BoundsRect;
   FLog := FLog + 'R.change;';
+end;
+
+procedure TTyToolWindowManagerLiveTests.LogChange(Sender: TObject);
+begin
+  FLog := FLog + TComponent(Sender).Name + '.change;';
+end;
+
+procedure TTyToolWindowManagerLiveTests.LogExpand(Sender: TObject);
+begin
+  FLog := FLog + TComponent(Sender).Name + '.expand;';
+end;
+
+procedure TTyToolWindowManagerLiveTests.LogCollapse(Sender: TObject);
+begin
+  FLog := FLog + TComponent(Sender).Name + '.collapse;';
+end;
+
+procedure TTyToolWindowManagerLiveTests.LogMoved(Sender: TObject; AWindow: TTyToolWindow;
+  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+begin
+  FLog := FLog + Format('moved(%s,%s,%d);', [AWindow.Name, ASourceBar.Name, AOldIndex]);
+end;
+
+procedure TTyToolWindowManagerLiveTests.CountCan(Sender: TObject; AWindow: TTyToolWindow;
+  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+begin
+  Inc(FCanCount);
+  AAllow := (FDenyFrom = 0) or (FCanCount < FDenyFrom);
+end;
+
+procedure TTyToolWindowManagerLiveTests.BtnMovesSearch(Sender: TObject);
+var
+  h: THandle;
+begin
+  h := FBtn.Handle;
+  FClickAnswer := FMgr.MoveWindow(FSearch, FRight);
+  { 同步换父会在这里销毁按钮的句柄(它就在要挪的窗口里)。 }
+  FHandleKept := FBtn.HandleAllocated and (FBtn.Handle = h);
+end;
+
+procedure TTyToolWindowManagerLiveTests.ClickReal(AControl: TWinControl);
+var
+  p: PtrInt;
+begin
+  p := PtrInt(((AControl.Height div 2) shl 16) or ((AControl.Width div 2) and $FFFF));
+  AControl.Perform(LM_LBUTTONDOWN, MK_LBUTTON, p);
+  AControl.Perform(LM_LBUTTONUP, 0, p);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAMoveAfterShowingIsQueued;
+begin
+  FLeft.OnChange := @LogChange;
+  FRight.OnChange := @LogChange;
+  FRight.OnExpand := @LogExpand;
+  FRight.Collapsed := True;
+  Pump;
+  FLog := '';
+  AssertTrue('接受了', FMgr.MoveWindow(FSearch, FRight, 0));
+  AssertSame('返回那一刻还在左栏', FLeft, FSearch.Bar);
+  AssertEquals('还没有事件', '', FLog);
+  Pump;
+  AssertNothingRaised('排队的移动');
+  AssertSame('抽消息之后到了右栏', FRight, FSearch.Bar);
+  AssertEquals('事件照同步路径的顺序', 'L.change;R.expand;R.change;moved(WSearch,L,1);', FLog);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAMoveBeforeShowingIsSynchronous;
+begin
+  FForm.Visible := False;
+  Pump;
+  AssertFalse('前提:窗体没显示', FForm.Showing);
+  AssertTrue('接受了', FMgr.MoveWindow(FSearch, FRight));
+  AssertSame('窗体没 Showing:当场生效', FRight, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAButtonInTheWindowCanMoveItsOwnWindow;
+begin
+  Pump;
+  AssertTrue('前提:按钮有句柄', FBtn.HandleAllocated);
+  FHandleKept := False;
+  FClickAnswer := False;
+  ClickReal(FBtn);
+  AssertNothingRaised('按钮自己的点击里 MoveWindow');
+  AssertTrue('前提:OnClick 跑了、MoveWindow 接受了', FClickAnswer);
+  AssertTrue('处理器返回前按钮的句柄没被销毁', FHandleKept);
+  AssertSame('点击处理里还没挪', FLeft, FSearch.Bar);
+  Pump;
+  AssertNothingRaised('排队的移动');
+  AssertSame('抽消息之后到了右栏', FRight, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestWindowIndexWaitsBehindAQueuedMove;
+begin
+  FMgr.MoveWindow(FSearch, FRight, 0);
+  FSearch.WindowIndex := 1;
+  Pump;
+  AssertNothingRaised('排队的移动');
+  AssertSame('先挪到右栏', FRight, FSearch.Bar);
+  AssertEquals('再按调用顺序调顺序', 1, FSearch.WindowIndex);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestASameBarMoveWaitsBehindAQueuedMove;
+begin
+  FMgr.MoveWindow(FSearch, FRight, 0);
+  AssertTrue('同栏的也接受', FMgr.MoveWindow(FSearch, FLeft, 0));
+  AssertEquals('同栏的这一次也排着:当场没动', 1, FSearch.WindowIndex);
+  Pump;
+  AssertNothingRaised('排队的移动');
+  AssertSame('按调用顺序:先去右栏、再回左栏', FLeft, FSearch.Bar);
+  AssertEquals('回到第一个', 0, FSearch.WindowIndex);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFreeingTheTargetDropsTheQueuedMove;
+begin
+  FMgr.MoveWindow(FSearch, FRight);
+  AssertEquals('前提:排着一项', 1, FMgr.QueuedCountForTest);
+  FreeAndNil(FRight);
+  AssertEquals('目标栏被释放:以它为目标的排队项删掉了', 0, FMgr.QueuedCountForTest);
+  Pump;
+  AssertNothingRaised('目标栏被释放之后抽消息');
+  AssertSame('还在左栏', FLeft, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFreeingTheWindowDropsTheQueuedMove;
+begin
+  FMgr.MoveWindow(FSearch, FRight);
+  AssertEquals('前提:排着一项', 1, FMgr.QueuedCountForTest);
+  FreeAndNil(FSearch);
+  { 不删的话队列里留着悬垂指针 —— 执行时读的是已释放的内存,不一定当场 AV。 }
+  AssertEquals('窗口被释放:它的排队项删掉了', 0, FMgr.QueuedCountForTest);
+  Pump;
+  AssertNothingRaised('窗口被释放之后抽消息');
+  AssertEquals('右栏只有原来那一个', 1, FRight.WindowCount);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestFreeingTheManagerDropsTheQueue;
+var
+  dead: Pointer;
+  before: PtrUInt;
+begin
+  FMgr.MoveWindow(FSearch, FRight);
+  dead := Pointer(FMgr);
+  FreeAndNil(FMgr);
+  { 析构没撤掉的话,Application 的异步队列里还挂着「死 manager 的 RunQueue」:这里再按那个地址
+    撤一次(只比指针,不解引用),撤得到就会还掉一项的内存。空队列跑在死对象上不一定当场 AV,
+    所以不靠 AV 判。 }
+  before := GetFPCHeapStatus.CurrHeapUsed;
+  Application.RemoveAsyncCalls(TObject(dead));
+  AssertEquals('manager 析构已经撤掉了自己排的异步调用', before,
+    GetFPCHeapStatus.CurrHeapUsed);
+  Pump;
+  AssertNothingRaised('manager 被释放之后抽消息');
+  AssertSame('还在左栏', FLeft, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestAVetoAtExecutionDropsTheMoveSilently;
+begin
+  FLeft.OnChange := @LogChange;
+  FRight.OnChange := @LogChange;
+  FRight.OnExpand := @LogExpand;
+  FDenyFrom := 2;                    { 排队时放行,执行前再问一次时否决 }
+  AssertTrue('排队时放行', FMgr.MoveWindow(FSearch, FRight));
+  FLog := '';
+  Pump;
+  AssertNothingRaised('排队的移动');
+  AssertEquals('执行前又问了一次', 2, FCanCount);
+  AssertSame('被否决:还在左栏', FLeft, FSearch.Bar);
+  AssertEquals('静默丢弃:没有任何事件', '', FLog);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestACaptureInsideTheWindowDelaysTheMoveOnce;
+begin
+  FMgr.MoveWindow(FSearch, FRight);
+  SetCaptureControl(FBtn);
+  try
+    AssertSame('前提:捕获在窗口里的按钮上', FBtn, GetCaptureControl);
+    RunAsyncOnce;
+    AssertNothingRaised('第一轮');
+    AssertSame('前提:执行那一刻捕获还在', FBtn, GetCaptureControl);
+    AssertSame('捕获在窗口里:再排一次,还在左栏', FLeft, FSearch.Bar);
+  finally
+    SetCaptureControl(nil);
+  end;
+  Pump;
+  AssertNothingRaised('第二轮');
+  AssertSame('放掉捕获之后到了右栏', FRight, FSearch.Bar);
+end;
+
+procedure TTyToolWindowManagerLiveTests.TestACaptureThatNeverLetsGoDelaysOnlyOnce;
+begin
+  FMgr.MoveWindow(FSearch, FRight);
+  SetCaptureControl(FBtn);
+  try
+    RunAsyncOnce;
+    AssertSame('前提:第一轮再排了', FLeft, FSearch.Bar);
+    AssertSame('前提:捕获还在', FBtn, GetCaptureControl);
+    RunAsyncOnce;
+    AssertNothingRaised('第二轮');
+    AssertSame('第二轮捕获还在也照做', FRight, FSearch.Bar);
+  finally
+    SetCaptureControl(nil);
+  end;
+end;
+
+type
+  { ProcessAsyncCallQueue 是 protected。 }
+  TAppAccess = class(TApplication);
+
+procedure TTyToolWindowManagerLiveTests.RunAsyncOnce;
+begin
+  { 只跑异步队列的一轮、不抽 OS 消息:一次 Application.ProcessMessages 可能跑两轮(消息
+    分派里有人再进一次队列),而窗体不在前台时抽 OS 消息系统会收走捕获。 }
+  TAppAccess(Application).ProcessAsyncCallQueue;
 end;
 
 procedure TTyToolWindowManagerLiveTests.TestADirectParentChangeKeepsTheFocus;
@@ -1038,7 +1290,7 @@ begin
   FRight.OnChange := @RightChangeSeesBounds;
   FSearch.Parent := FRight;
   AssertNothingRaised('直接改 Parent');
-  AssertEquals('前提:发了一次', 'R.change;', FLog);
+  AssertEquals('前提:发了一次', 'R.change;moved(WSearch,L,1);', FLog);
   AssertFalse('前提:展开了', FRight.Collapsed);
   AssertTrue('OnChange 里读到的已经是右栏内容区(事件在展开、对齐之后)',
     EqualRect(FRight.BarLayout.Content, FSeenBounds));
