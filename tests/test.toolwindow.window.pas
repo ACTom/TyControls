@@ -117,6 +117,8 @@ type
     procedure TestAHeaderBorderPaintsABottomRuleTheActionsStayAbove;
     procedure TestTheBaseThemeHasNoHeaderRule;
     procedure TestAThemeThatAddsOnlyTheRuleRelayouts;
+    { StripHint 能被窗体翻译:LCL 只认类型正好是 TTranslateString 的属性。 }
+    procedure TestStripHintIsATranslateString;
   end;
 
 { 数一张画好的位图:非底色像素、残留底漆(见实现处)。栏的像素测试(test.toolwindow.bar)也用它。 }
@@ -134,6 +136,8 @@ type
     procedure TestTheManagerReferenceRoundTrips;
     procedure TestSamePlacementBarsAreUnusableInEitherStreamOrder;
     procedure TestAConflictWhileLoadingDoesNotRaise;
+    { StripHint 换成 TTranslateString 之后照样一字不差地往返(中文也是)。 }
+    procedure TestStripHintRoundTrips;
   end;
 
 implementation
@@ -1260,6 +1264,44 @@ begin
     一次裸 Invalidate,缓存键里没有底线的话它看不出来。 }
   FCtl.StyleOverride := 'TyToolWindowHeader { border-color: #FF0000; border-width: 2px; }';
   AssertTrue('只加了底线的主题也要重排', FWin.AlignCount > before);
+end;
+
+procedure TTyToolWindowTests.TestStripHintIsATranslateString;
+var
+  info: PPropInfo;
+begin
+  { LCL 的窗体翻译只走类型**正好是** TTranslateString 的属性(lcltranslator.pas:313);
+    声明成 string,设计器里填的提示永远进不了 .po。比的是类型信息的身份,不是名字。 }
+  info := TypInfo.GetPropInfo(TTyToolWindow, 'StripHint');
+  AssertNotNull('StripHint 是 published', info);
+  AssertTrue('类型正好是 TTranslateString',
+    info^.PropType = PTypeInfo(TypeInfo(TTranslateString)));
+end;
+
+procedure TTyToolWindowStreamingTests.TestStripHintRoundTrips;
+var
+  src, dst: TForm;
+  ms: TMemoryStream;
+  bar, dbar: TTyToolWindowBar;
+  w: TTyToolWindow;
+begin
+  src := NewHost;
+  dst := TToolWindowHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    bar := NewBar(src);
+    w := AddWindow(src, bar, 'W1');
+    w.StripHint := '资源管理器';
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    dbar := dst.FindComponent('Bar') as TTyToolWindowBar;
+    AssertEquals('提示一字不差地读回来', '资源管理器', dbar.Windows[0].StripHint);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
 end;
 
 initialization

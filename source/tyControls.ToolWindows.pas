@@ -95,7 +95,7 @@ type
     FImageIndex: Integer;         { 最近一次按序号写进来的值;名字给不出答案时的回落 }
     { 按序号写进来、还没换成名字的那一次(没有栏 / 栏没有列表 / 栏正在流式加载)。 }
     FImageIndexPending: Boolean;
-    FStripHint: string;
+    FStripHint: TTranslateString;
     { 图标条上对这个窗口最近一次**真正执行**的点击动作的时刻(栏的 TickNow;0 = 没有)。
       防抖按窗口记(spec §9.3):点 A 之后马上点 B 照常生效。 }
     FLastStripClick: QWord;
@@ -131,7 +131,7 @@ type
     function GetImageIndex: TImageIndex;
     procedure SetImageIndex(AValue: TImageIndex);
     procedure SetImageName(const AValue: string);
-    procedure SetStripHint(const AValue: string);
+    procedure SetStripHint(const AValue: TTranslateString);
     { 挂起的 ImageIndex 换成生效列表里那一格的名字(照 TTyTabSheet.ResolveImageIndex)。
       没挂起、没有栏、栏没有列表、栏正在流式加载 —— 都不动,留给之后那一次:
       加载中不解析,是因为这时候栏的列表引用谁先 fixup 上谁就是答案(spec §8),
@@ -327,8 +327,10 @@ type
       LCL 的 TImageIndexPropertyEditor 就会顺着 Parent = 栏 → Images 挂上下拉。 }
     property ImageIndex: TImageIndex read GetImageIndex write SetImageIndex
       stored ImageIndexIsStored default -1;
-    { 图标条提示;空的时候用 Caption,**不用 Hint**(见 TTyToolWindowBar.StripHintText)。 }
-    property StripHint: string read FStripHint write SetStripHint;
+    { 图标条提示;空的时候用 Caption,**不用 Hint**(见 TTyToolWindowBar.StripHintText)。
+      类型是 TTranslateString 不是 string:LCL 的窗体翻译只认类型正好是它的属性
+      (lcltranslator.pas:313),设计器里填的提示才进得了 .po(同 TTyRibbon.FileTabCaption)。 }
+    property StripHint: TTranslateString read FStripHint write SetStripHint;
     property StyleClass;
     { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
     property Controller stored False;
@@ -1387,7 +1389,7 @@ begin
   InvalidateBar;
 end;
 
-procedure TTyToolWindow.SetStripHint(const AValue: string);
+procedure TTyToolWindow.SetStripHint(const AValue: TTranslateString);
 begin
   if FStripHint = AValue then Exit;
   FStripHint := AValue;
