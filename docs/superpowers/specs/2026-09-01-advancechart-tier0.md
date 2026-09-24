@@ -6626,3 +6626,80 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 还在队列里
 
 内部标签的自动描边 → `scaleCalcAlign` → 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。
+
+## 81. Tier 1 第四十七批:标签的自动墨色与描边(halo)(2026-09-24)
+
+以前标签只有一个颜色:内部按宿主亮度三档取墨,外部取主题的墨,没有任何描边;字面量 `label.color`、`textBorderColor`、`textBorderWidth` 一概不读。这一批按 zrender 的规则补上描边,把判定"内部"的条件、悬停时的重新配墨和几处相关的既有偏差一起修掉。
+
+### 上游的做法
+
+- **是否算内部**:位置含 `inside` **并且宿主有填充**(`fill` 不是 null 也不是 `'none'`;`'transparent'` 和渐变都算有填充)。没有填充的宿主上的标签走外部分支。饼图只有 `inside` / `inner` 算内部(`center` 不算),漏斗是 `inner` / `inside` / `center` / `insideLeft` / `insideRight`。折线的默认位置是 `top`。
+- **内部墨色**:亮度 `(0.299r + 0.587g + 0.114b)·a/255`,大于 0.5 取 `#333`,大于 0.2 取 `#eee`,否则取 `#ccc`;渐变取 `#ccc`。与明暗模式无关。
+- **内部描边**:宿主填充色本身(含 alpha),只有在"底色是深色"与"墨色是第 0 档"一致时才有——浅底上给第 1、2 档描边,深底上给第 0 档描边;渐变没有;透明的描边等于没有。
+- **外部**:墨色按模式取主题的,描边是底色(不透明化)。
+- **宽度**:`textBorderWidth || 2`,写 0 也是 2。
+- **覆盖**:字面量 `label.color` 没有自动描边;`inherit` 取宿主色,也没有(漏斗例外:内部保留档位墨色并强制用宿主色描边,外部取宿主色、保留底色描边);`textBorderColor` 配上宽度就按它画,不管墨色;只写颜色不写宽度等于宽度 0,不画;`none` / `transparent` 去掉描边;标签有 `backgroundColor` 时没有自动描边。
+- **悬停**:宿主填充变成 `emphasis.itemStyle.color` 或提亮后的颜色,整套规则在新填充上重算,档位可能翻转;`emphasis.label.color` 在悬停时去掉描边。
+- **描边不加宽标签的包围盒**。先画描边后画字(`paint-order: stroke`)。
+
+### port 以前
+
+- 没有描边。
+- 无填充的宿主当作浅色背景取第 0 档墨色;pictorialBar 的目标矩形被当成无填充;渐变按第一个色标算亮度。
+- 三个内部墨色 token 是 `var(--on-surface)` / `var(--surface)`,深色皮肤里会翻过来,把浅色字放在浅色柱上。
+- 字面量 `label.color`、`textBorderColor`、`textBorderWidth` 不读;饼图和漏斗连 `inherit` 都不读。
+- 悬停的叠加层把宿主提亮后重画在上面,并丢掉了标签,内部标签被自己的柱子盖住。
+- 折线标签没有默认位置,落在符号内部。
+
+### 做法
+
+- `Labels`:`TyLabelInkBand`、`TyLabelInk`(墨色 + 描边颜色 + 宽度,一处决定)、`TyLabelInkEmphasis`、`TyLabelStampEmphasis`;`TyLabelAutoColour` 把无填充改走外部分支;展开标签时按最终位置(柱子的 `outside` 按每根柱子的朝向)判定内部,并把悬停时的墨色和描边预先算好放在 caption 上。`TTyLabelSpec` 加了底色、是否深色、`textBorder*`、背景、漏斗 `inherit`、悬停覆盖等字段。
+- `Paint`:caption 加 `StrokeColour` / `StrokeWidthLogical`(零值即无描边,图例、仪表盘等从不要描边的 caption 不受影响)、`HostTransparent`、`HasEmph` 与悬停时的三项。
+- `LabelOpt`:`TyLabelReadInk`,所有系列共用,读字面量颜色、`inherit`、`textBorderColor`、`textBorderWidth`、背景、`emphasis.label.color` / `textBorderWidth`、`emphasis.itemStyle.color`;饼图和漏斗的规格各带一份。
+- `Render`:描边在字形下面画——按描边半径(宽度的一半,按 PPI 换成设备像素)把文字用描边色在每个整数偏移处盖印一次,再画正文。
+- `AdvanceChart`:底色与是否深色(`LabelGround`,亮度按背景 1 计,小于 0.4 为深)交给所有标签规格;折线默认 `top`;悬停叠加层把宿主的标签用悬停墨色重画在提亮的宿主上面;graph 原地改。
+- 主题:三个内部墨色 token 改成不随模式变的 `#333333` / `#EEEEEE` / `#CCCCCC`,重跑了主题生成器(只动这三行)。
+- 顺带修的既有偏差:
+  - 柱子系列级 `itemStyle.color: 'none'` 以前落回主题颜色,现在是无填充。
+  - 饼图和漏斗读系列级 `itemStyle.color`(以前每一块都按色板取色)。
+  - 散点默认 `opacity: 0.8`(上游 ScatterSeries 的默认值,以前是不透明)。
+  - 只有一个点的折线段(包括被空值隔开的孤点)以前连符号和标签都不画,现在照画符号。
+
+### 基准
+
+- `tools/advchart-oracle/inside-label.js` → `advchart-inside-label.json`:72 条,67 条比较,2 条只记录(标签背景、全局 `textStyle`),3 条延期(`darkMode` 选项、rich 标签、alpha 恰好在 .5 上的取整)。包含亮度恰好是 0.5 和 0.2 的两个颜色(`#04c26d`、`#033992`),钉住严格大于和双精度的计算顺序。
+- `test.advchart.insidelabel`:
+  - 选择器层:每条记录都用控件同一个读取器读选项,逐字节比较墨色、描边颜色和宽度,深底也比。
+  - 集成层:浅底用例真实渲染,在控件实际生成的 caption 上比较墨色、描边、透明度和悬停时的墨色与描边(外部墨色是主题自己的,不比)。
+  - 像素:外部标签配红色描边时字形周围出现红色像素、不配时一个都没有,且包围盒不变。
+
+### 被推翻的旧测试
+
+- `test.advchart.labels.pas`:"无填充,所以取深色墨"改为取外部墨,原处有标注。
+
+### 已知偏差
+
+- 描边用整数偏移盖印模拟,不是真正的轮廓描边;半透明的描边在盖印重叠处会略深。
+- `darkMode`、图表级 `backgroundColor` 不读,底色和明暗来自皮肤。
+- rich 文本、标签背景框、全局 `textStyle`、`textBorderType` / `textShadow*`、显式描边加宽包围盒:不做。
+- 悬停时 `emphasis.label.position` 挪动标签:不做,标签留在原处。
+- alpha 按字节取整,`rgba(…, 0.5)` 落到另一档(保留)。
+
+### 变异测试
+
+44 个。40 个被杀,4 个等价。
+
+- 第一轮存活 7 个。补了三个测试后杀掉 3 个:
+  - `textBorderColor` 配宽度与标签背景去掉描边(选择器单元测试);
+  - 悬停后内部标签重画在提亮的柱子上(像素测试);
+  - 字形画在描边之上(逐像素比较有无描边时字形墨色不变;原来那个变异本身写错了,末尾的字形照样最后画,改写后被杀)。
+- "悬停不提亮"第一轮是因为编译不过才算被杀,改成能编译的写法后被测试杀掉。
+- **等价的 4 个**:
+  - 底色描边保留 alpha:皮肤底色总是不透明;
+  - 透明描边也画:透明的盖印什么都不画;
+  - 柱子 `outside` 标签按 spec 位置判内部:`outside` 映射到的位置本身就在外部;
+  - `textBorderColor: 'none'` 不提前返回:没解析出颜色时描边颜色是 0,透明,等于不画。
+
+### 还在队列里
+
+`scaleCalcAlign`(雷达指示器与 `alignTicks`)→ 原始值通道 → tooltip 子行。旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并视需要插进来。

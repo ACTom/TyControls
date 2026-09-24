@@ -343,6 +343,7 @@ begin
   spec.InsideColour[0] := $FF111111;   { on a light mark }
   spec.InsideColour[1] := $FF222222;   { on a mid mark }
   spec.InsideColour[2] := $FF333333;   { on a dark mark }
+  spec.OutsideColour := $FF445566;
 
   AssertEquals('white is over 0.5, so the dark ink', $FF111111,
     TyLabelAutoColour(spec, $FFFFFFFF, True, True));
@@ -361,9 +362,10 @@ begin
   AssertEquals('and grey 127 is under it', $FF222222,
     TyLabelAutoColour(spec, $FF7F7F7F, True, True));
 
-  { An unfilled mark says nothing about what is behind the words, so it is
-    treated as a light ground rather than guessed at. }
-  AssertEquals('no fill, so the dark ink', $FF111111,
+  { AN UNFILLED MARK MAKES THE LABEL AN OUTSIDE ONE: zrender asks whether
+    the host has a fill before anything inside. [Revised in batch 47: this
+    pinned the light band's ink.] }
+  AssertEquals('no fill, so the outside ink', spec.OutsideColour,
     TyLabelAutoColour(spec, 0, False, True));
 end;
 

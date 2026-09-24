@@ -85,6 +85,10 @@ type
       applies it inside the rotation, which this does not; noted where it is
       applied. }
     OffsetXLogical, OffsetYLogical: Double;
+    { The ink options -- `color`, `textBorderColor`, `textBorderWidth`, a
+      background -- read by the shared reader; the bands and the ground are
+      the control's. }
+    Ink: TTyLabelSpec;
     { A string template, the empty one included; see TTyLabelSpec. }
     Formatter: string;
     HasFormatter: Boolean;
@@ -139,6 +143,9 @@ type
       own ink for one that is not. }
     InsideColour: array[0..2] of TTyChartColor;
     OutsideColour: TTyChartColor;
+    { The ground, for the halos. }
+    Ground: TTyChartColor;
+    GroundDark: Boolean;
     { The guide line's ink and width. Upstream draws it in the slice's own
       colour, which is why it is not a theme key. }
     LineWidthLogical: Double;
@@ -178,6 +185,9 @@ begin
   { every field, so a flag added later starts False rather than wherever
     the stack left it }
   Result := Default(TTyPieLabelSpec);
+  { THE INK OPTIONS START AUTOMATIC -- a zero record would be a literal
+    colour of nought. }
+  Result.Ink := TyLabelSpecNone;
   Result.Show := True;                        { PieSeries.ts:269 }
   Result.Position := tplOuter;                { :271-272, 'outer' not 'outside' }
   Result.AlignTo := tpaNone;
@@ -293,6 +303,7 @@ begin
     Result.MinShowLabelDeg);
 
   node := ObjOf(series.Find('label'));
+  TyLabelReadInk(node, series, Result.Ink);
   if node <> nil then
   begin
     d := node.Find('show');
@@ -565,6 +576,8 @@ var
   el: TTyChartElement;
   fill: TTyChartColor;
   lbl: TTyLabelSpec;
+  ink, stroke: TTyChartColor;
+  strokeW: Double;
   pts: array[0..2] of TTyPointF;
 begin
   Result := 0;
@@ -576,12 +589,13 @@ begin
     chooser wants. A pie has no use for the rest of a label spec -- its
     geometry came from somewhere else entirely -- so only the colour fields
     are filled in. }
-  lbl := TyLabelSpecNone;
-  lbl.AutoColour := True;
+  lbl := ASpec.Ink;
   lbl.InsideColour[0] := AInk.InsideColour[0];
   lbl.InsideColour[1] := AInk.InsideColour[1];
   lbl.InsideColour[2] := AInk.InsideColour[2];
   lbl.OutsideColour := AInk.OutsideColour;
+  lbl.Ground := AInk.Ground;
+  lbl.GroundDark := AInk.GroundDark;
   percents := TyPieSectorPercents(ALayout, APercentPrecision);
 
   for i := 0 to High(ALayout.Sectors) do
@@ -642,8 +656,13 @@ begin
     el.Caption.FontName := AInk.FontName;
     el.Caption.FontSizeLogical := AInk.FontSizeLogical;
     el.Caption.FontWeight := AInk.FontWeight;
-    el.Caption.Colour := TyLabelAutoColour(lbl, fill, True,
-      ASpec.Position = tplInside);
+    TyLabelInk(lbl, fill, True, False, ASpec.Position = tplInside, ink, stroke,
+      strokeW);
+    TyLabelStampEmphasis(lbl, fill, True, False, ASpec.Position = tplInside,
+      el.Caption);
+    el.Caption.Colour := ink;
+    el.Caption.StrokeColour := stroke;
+    el.Caption.StrokeWidthLogical := strokeW;
     el.Caption.X := place.X;
     el.Caption.Y := place.Y;
     el.Caption.AnchorH := place.AnchorH;

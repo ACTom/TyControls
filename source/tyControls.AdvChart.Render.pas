@@ -176,13 +176,46 @@ begin
   Result.Bottom := Result.Top + Round(AH);
 end;
 
+procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
+  AInk: TTyColor; ADX, ADY: Integer); forward;
+
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
-  b: TTyRectF;
-  ink: TTyColor;
+  ink, halo: TTyColor;
+  r, rr: Double;
+  dx, dy, reach: Integer;
 begin
   if (P = nil) or (AElement.Caption.Text = '') then Exit;
   ink := CaptionInk(AElement.Caption.Colour, AElement.Style.Alpha);
+  { THE HALO FIRST, then the glyphs over it -- `paint-order: stroke`. A
+    stroke w wide and centred on the outline shows w/2 outside the glyph, so
+    the glyphs are stamped in the halo's colour at every whole-pixel offset
+    within that reach: a dilation, which is what the stroke amounts to at
+    these sizes. It never widens the caption's box. }
+  if (AElement.Caption.StrokeWidthLogical > 0)
+    and ((AElement.Caption.StrokeColour shr 24) <> 0) then
+  begin
+    halo := CaptionInk(AElement.Caption.StrokeColour, AElement.Style.Alpha);
+    r := AElement.Caption.StrokeWidthLogical / 2 * P.PPI / 96;
+    reach := Ceil(r);
+    rr := r * r + r;
+    for dy := -reach to reach do
+      for dx := -reach to reach do
+        if ((dx <> 0) or (dy <> 0)) and (dx * dx + dy * dy <= rr) then
+          DrawCaptionAt(P, AElement, halo, dx, dy);
+  end;
+  DrawCaptionAt(P, AElement, ink, 0, 0);
+end;
+
+{ The caption's glyphs, in one ink, moved by (ADX, ADY) device px. }
+procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
+  AInk: TTyColor; ADX, ADY: Integer);
+var
+  b: TTyRectF;
+  ink: TTyColor;
+  box: TRect;
+begin
+  ink := AInk;
   if AElement.Caption.RotationRad <> 0 then
   begin
     { NO RECT, so no clip and no ellipsis -- the rotated entry takes an anchor.
@@ -190,7 +223,8 @@ begin
       caption record says so where it is declared rather than here. }
     P.DrawTextRotated(AElement.Caption.Text, AElement.Caption.FontName,
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
-      AElement.Caption.X, AElement.Caption.Y, AElement.Caption.RotationRad,
+      AElement.Caption.X + ADX, AElement.Caption.Y + ADY,
+      AElement.Caption.RotationRad,
       TyAnchorToAlignment(AElement.Caption.AnchorH),
       TyAnchorToLayout(AElement.Caption.AnchorV));
     Exit;
@@ -201,19 +235,24 @@ begin
     question that already has one. }
   b := AElement.Shape.Bounds;
   if TyRectFIsValid(b) then
-    P.DrawText(Rect(Round(b.Left), Round(b.Top), Round(b.Right), Round(b.Bottom)),
+    P.DrawText(Rect(Round(b.Left) + ADX, Round(b.Top) + ADY,
+      Round(b.Right) + ADX, Round(b.Bottom) + ADY),
       AElement.Caption.Text, AElement.Caption.FontName,
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
       TyAnchorToAlignment(AElement.Caption.AnchorH),
       TyAnchorToLayout(AElement.Caption.AnchorV),
       AElement.Caption.Truncate)
   else
-    P.DrawText(CaptionBox(AElement.Caption, 0, 0),
+  begin
+    box := CaptionBox(AElement.Caption, 0, 0);
+    OffsetRect(box, ADX, ADY);
+    P.DrawText(box,
       AElement.Caption.Text, AElement.Caption.FontName,
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
       TyAnchorToAlignment(AElement.Caption.AnchorH),
       TyAnchorToLayout(AElement.Caption.AnchorV),
       AElement.Caption.Truncate);
+  end;
 end;
 
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);

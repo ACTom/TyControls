@@ -28,7 +28,7 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Data, tyControls.AdvChart.Paint,
-  tyControls.AdvChart.Labels;
+  tyControls.AdvChart.Labels, tyControls.AdvChart.Color;
 
 
 { The label block of the series in slot ASlot.
@@ -38,6 +38,12 @@ uses
   only `line` declares one and the rest fall to `inside`. }
 function TyLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyLabelSpec): TTyLabelSpec;
+
+{ THE INK HALF OF A LABEL BLOCK, shared by every series that reads one:
+  `color` (a literal or `inherit`), `textBorderColor`, `textBorderWidth`,
+  whether a `backgroundColor` was written, and the `emphasis.label` overrides
+  -- ASeries is the series node, whose `emphasis.label` is read. }
+procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
 
 { The words for one datum: upstream's getFormattedLabel.
 
@@ -220,18 +226,9 @@ begin
 
   { A COLOUR OF `inherit` IS NOT A COLOUR, it is the mark's own fill -- so it
     is recorded as a REQUEST and the expansion pass substitutes, because this
-    layer never learns what anything looks like.
-
-    A LITERAL COLOUR IS NOT READ AT ALL YET, and that is a gap rather than a
-    decision in disguise: nothing below AdvChart.Measure can parse '#ff0000',
-    and a CSS colour parser is its own piece of work. An option naming one
-    therefore keeps the automatic ink. }
-  s := StrIn(node, 'color');
-  if s = 'inherit' then
-  begin
-    Result.AutoColour := False;
-    Result.InheritColour := True;
-  end;
+    layer never learns what anything looks like. A literal one is read.
+    [Revised in batch 47: a literal colour was not read at all.] }
+  TyLabelReadInk(node, series, Result);
 
   { A STRING is a template, the empty one included; null is none, and falls
     back to the default text; anything else is not one this can use. }
@@ -255,6 +252,83 @@ begin
   else
     Result.FontWeight := TyRoundOpt(NumIn(node, 'fontWeight', Result.FontWeight),
       Result.FontWeight);
+end;
+
+procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
+var
+  s: string;
+  c: TTyChartColor;
+  d: TJSONData;
+  emph: TJSONObject;
+begin
+  if ALabel <> nil then
+  begin
+    s := StrIn(ALabel, 'color');
+    if s = 'inherit' then
+    begin
+      ASpec.AutoColour := False;
+      ASpec.InheritColour := True;
+    end
+    else if (s <> '') and (s <> 'auto') and TyTryParseChartColor(s, c) then
+    begin
+      ASpec.AutoColour := False;
+      ASpec.InheritColour := False;
+      ASpec.Colour := c;
+    end;
+
+    s := StrIn(ALabel, 'textBorderColor');
+    if s <> '' then
+    begin
+      ASpec.HasBorderColour := True;
+      if (s = 'none') or (s = 'transparent') then ASpec.BorderColourNone := True
+      else if s = 'inherit' then ASpec.BorderColourInherit := True
+      else if TyTryParseChartColor(s, c) then ASpec.BorderColour := c
+      else ASpec.BorderColourNone := True;
+    end;
+    d := ALabel.Find('textBorderWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      ASpec.HasBorderWidth := True;
+      ASpec.BorderWidthLogical := d.AsFloat;
+      if IsNan(ASpec.BorderWidthLogical) or IsInfinite(ASpec.BorderWidthLogical)
+        or (ASpec.BorderWidthLogical < 0) then ASpec.BorderWidthLogical := 0;
+    end;
+    d := ALabel.Find('backgroundColor');
+    ASpec.HasBackground := (d <> nil) and (d.JSONType = jtString)
+      and (d.AsString <> '') and (d.AsString <> 'none')
+      and (d.AsString <> 'transparent');
+  end;
+
+  { `emphasis.label` on the series, and the host's emphasis colour. }
+  if ASeries = nil then Exit;
+  emph := ObjOf(ASeries.Find('emphasis'));
+  if emph = nil then Exit;
+  d := ObjOf(emph.Find('itemStyle'));
+  if d <> nil then
+  begin
+    s := StrIn(TJSONObject(d), 'color');
+    if (s <> '') and (s <> 'inherit') and (s <> 'auto')
+      and TyTryParseChartColor(s, c) then
+    begin
+      ASpec.EmphHostHasColour := True;
+      ASpec.EmphHostColour := c;
+    end;
+  end;
+  emph := ObjOf(emph.Find('label'));
+  if emph = nil then Exit;
+  s := StrIn(emph, 'color');
+  if (s <> '') and (s <> 'inherit') and (s <> 'auto')
+    and TyTryParseChartColor(s, c) then
+  begin
+    ASpec.EmphHasColour := True;
+    ASpec.EmphColour := c;
+  end;
+  d := emph.Find('textBorderWidth');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat >= 0) then
+  begin
+    ASpec.EmphHasBorderWidth := True;
+    ASpec.EmphBorderWidthLogical := d.AsFloat;
+  end;
 end;
 
 { ==================== the formatter ==================== }

@@ -155,6 +155,23 @@ type
       ellipsis; upstream truncates rotated labels and this does not. Stated
       here rather than left for a caller to discover. }
     Truncate: Boolean;
+    { THE HALO: a stroke round the glyphs, drawn under them, LOGICAL px wide.
+      Zero is none -- which is what every caption that never asks for one
+      (a legend, a gauge, an axis) gets from the zero value. It does not
+      widen the caption's box. }
+    StrokeColour: TTyChartColor;
+    StrokeWidthLogical: Double;
+    { THE SAME THREE UNDER A HOVER, worked out when the caption is: the host's
+      fill lifted (or the emphasis colour it declares) can land in another
+      band, and the halo is the lifted fill. HasEmph False keeps the normal
+      ones. }
+    HasEmph: Boolean;
+    EmphColour, EmphStrokeColour: TTyChartColor;
+    EmphStrokeWidthLogical: Double;
+    { Set by a mark whose label host is FILLED BUT TRANSPARENT -- a pictorial
+      bar's target rect. Its ink is chosen as over a transparent fill, not as
+      over no fill at all. }
+    HostTransparent: Boolean;
   end;
 
   TTyChartElement = record

@@ -1240,10 +1240,13 @@ begin
     '   one is easier to read. Band 1 is therefore LIGHTER than band 2.' + LineEnding +
     '     band 0 -- a light mark, so dark ink' + LineEnding +
     '     band 1 -- a mid mark, so the brightest ink' + LineEnding +
-    '     band 2 -- a dark mark, so a softer light ink */' + LineEnding +
-    'TyAdvChartLabelOnLight { color: var(--on-surface); }' + LineEnding +
-    'TyAdvChartLabelOnMid   { color: var(--surface); }' + LineEnding +
-    'TyAdvChartLabelOnDark  { color: alpha(var(--surface), 0.80); }' + LineEnding +
+    '     band 2 -- a dark mark, so a softer light ink' + LineEnding +
+    '   FIXED VALUES, NOT THE SURFACE PAIR: the band is chosen by the MARK''s fill,' + LineEnding +
+    '   which does not change with the mode -- so the ink must not either, or a' + LineEnding +
+    '   dark skin puts light ink on a light bar. Upstream''s #333, #eee, #ccc. */' + LineEnding +
+    'TyAdvChartLabelOnLight { color: #333333; }' + LineEnding +
+    'TyAdvChartLabelOnMid   { color: #EEEEEE; }' + LineEnding +
+    'TyAdvChartLabelOnDark  { color: #CCCCCC; }' + LineEnding +
     '/* The legend. Upstream inks the words with tokens.color.secondary and greys a' + LineEnding +
     '   deselected item with tokens.color.disabled. This vocabulary has no disabled' + LineEnding +
     '   INK token -- only a disabled OPACITY -- so a switched-off item is the chart''s' + LineEnding +

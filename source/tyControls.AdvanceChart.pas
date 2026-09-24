@@ -244,6 +244,9 @@ type
       series and that is what keeps colours still across a legend click. }
     FSeriesColors: array of TTyChartColor;
     FSeriesColorKnown: array of Boolean;
+    { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
+      unwritten, which is the palette's. }
+    FSeriesColorNone: array of Boolean;
     { AND THE PALETTE PICK ITSELF, kept apart from the resolved colour
       because `auto` resolves to the PICK and not to the fill. A series that
       writes `itemStyle: { color: '#fff', borderColor: 'auto' }` is white
@@ -524,6 +527,8 @@ type
     { The static layer again with the same build and the same list -- a
       hover on a graph restyles what is already there. }
     procedure RestyleStatic;
+    { The chart's ground for label halos, and whether it counts as dark. }
+    procedure LabelGround(out AGround: TTyChartColor; out ADark: Boolean);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
     { Every value of one datum as one string. Several go on ONE row joined by
@@ -1932,12 +1937,14 @@ var
 begin
   FSeriesColors := nil;
   FSeriesColorKnown := nil;
+  FSeriesColorNone := nil;
   FSeriesPalette := nil;
   FSeriesPaletteKnown := nil;
   if FOption = nil then Exit;
   n := FOption.ComponentCount('series');
   SetLength(FSeriesColors, n);
   SetLength(FSeriesColorKnown, n);
+  SetLength(FSeriesColorNone, n);
   SetLength(FSeriesPalette, n);
   SetLength(FSeriesPaletteKnown, n);
   cur := TyPaletteStart(TyChartPaletteOf(FOption, -1, declared));
@@ -1991,7 +1998,12 @@ begin
       begin
         FSeriesColors[i] := key.Color;
         FSeriesColorKnown[i] := True;
-      end;
+      end
+      else
+        { WRITTEN AS `none`: no fill at all -- which also makes an inside
+          label an outside one. [Revised in batch 47: it fell through to the
+          theme's colour.] }
+        FSeriesColorNone[i] := True;
       Continue;
     end;
 
@@ -2081,7 +2093,12 @@ begin
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
   if not IsNan(item.Opacity) then
-    AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity));
+    AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity))
+  else if st = 'scatter' then
+    { A SCATTER'S SYMBOLS ARE FOUR FIFTHS OPAQUE unless told otherwise --
+      ScatterSeries' own default, which its labels inherit. [Revised in
+      batch 47: they were opaque.] }
+    AVisual.Alpha := 0.8;
   { THE RAMP, when the colour was an object rather than a string. The solid
     stays where it was -- SeriesColor already holds the first stop -- so a
     legend swatch and a tooltip marker go on working unchanged. }
@@ -2157,6 +2174,9 @@ begin
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesColorKnown))
     and FSeriesColorKnown[ASeriesIndex] then
     Exit(TTyColor(FSeriesColors[ASeriesIndex]));
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesColorNone))
+    and FSeriesColorNone[ASeriesIndex] then
+    Exit(0);
 
   Result := ThemeRampColor(ASeriesIndex);
 end;
@@ -2951,6 +2971,7 @@ begin
     model.ResolveStyle('TyAdvChartLabelOnMid', '', []).TextColor);
   Result.InsideColour[2] := TTyChartColor(
     model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
+  LabelGround(Result.Ground, Result.GroundDark);
 end;
 
 function TTyAdvanceChart.PerDatumColours(ASlot: Integer): TTyChartColorArray;
@@ -2962,6 +2983,8 @@ var
   cur: TTyPaletteCursor;
   declared: Boolean;
   nm: string;
+  d: TJSONData;
+  st: TTyOptStyle;
 begin
   { colorBy: 'data'. Each DATUM takes the next slot of the same nine-colour
     ramp a bar series cycles across series -- which is what makes a pie or a
@@ -2986,6 +3009,18 @@ begin
     nm := FStores[ASlot].GetNameByRaw(k);
     if nm = '' then nm := IntToStr(k);
     if TyPaletteTake(cur, nm, c) then Result[k] := c;
+  end;
+  { THE SERIES' OWN `itemStyle.color` beats the ramp for every datum -- it is
+    the parent of each datum's style. [Revised in batch 47: it was not read,
+    and every slice kept the ramp's colour.] }
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if d is TJSONObject then
+  begin
+    st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+    if st.Color.Written and not st.Color.IsAuto then
+      for k := 0 to rawN - 1 do
+        if st.Color.IsNone then Result[k] := 0
+        else Result[k] := st.Color.Color;
   end;
   { AND A DATUM THAT NAMED ITS OWN COLOUR KEEPS IT. `data: [{ value: 5,
     itemStyle: { color: '#c23531' } }]` is the commonest thing anybody writes
@@ -3746,7 +3781,12 @@ begin
   base.InsideColour[0] := TTyChartColor(lightS.TextColor);
   base.InsideColour[1] := TTyChartColor(midS.TextColor);
   base.InsideColour[2] := TTyChartColor(darkS.TextColor);
+  LabelGround(base.Ground, base.GroundDark);
   if ASlot > High(FBindings) then Exit(base);
+  { A LINE'S LABEL GOES ABOVE ITS POINT -- the one series type that declares
+    a default position; every other falls to `inside`. [Revised in batch 47:
+    a line's label sat inside its symbol.] }
+  if FBindings[ASlot].SeriesType = 'line' then base.Position := tlpTop;
   Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
 end;
 
@@ -3767,6 +3807,7 @@ begin
   Result.InsideColour[1] := TTyChartColor(midS.TextColor);
   Result.InsideColour[2] := TTyChartColor(darkS.TextColor);
   Result.OutsideColour := TTyChartColor(outS.TextColor);
+  LabelGround(Result.Ground, Result.GroundDark);
   { labelLine.lineStyle.width, PieSeries.ts:299 -- one logical pixel. }
   Result.LineWidthLogical := 1;
 end;
@@ -4683,6 +4724,19 @@ begin
   end;
 end;
 
+procedure TTyAdvanceChart.LabelGround(out AGround: TTyChartColor;
+  out ADark: Boolean);
+var a, l: Double;
+begin
+  AGround := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).Background.Color);
+  { zrender's lum with a background of ONE: what shows through a translucent
+    ground counts as white. Dark under 0.4. }
+  a := ((AGround shr 24) and $FF) / 255;
+  l := TyLabelLuminance(AGround) + (1 - a);
+  ADark := l < 0.4;
+end;
+
 function TTyAdvanceChart.IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
 var slot: Integer;
 begin
@@ -4865,8 +4919,15 @@ begin
     states.Emphasis := True;
     if isCaption then
     begin
-      { THE WORDS RISE WITH THEIR NODE, so it does not cover them. }
+      { THE WORDS RISE WITH THEIR NODE, so it does not cover them -- in the
+        ink the lifted node calls for. }
       el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+      if el.Caption.HasEmph then
+      begin
+        el.Caption.Colour := el.Caption.EmphColour;
+        el.Caption.StrokeColour := el.Caption.EmphStrokeColour;
+        el.Caption.StrokeWidthLogical := el.Caption.EmphStrokeWidthLogical;
+      end;
     end
     else if el.Datum.IsEdge then
     begin
@@ -5027,6 +5088,7 @@ var
   i, k, slot: Integer;
 
   procedure Lift(AIndex: Integer);
+  var j: Integer; cap: TTyChartElement;
   begin
     if AIndex < 0 then Exit;
     { A GRAPH'S HOVER IS IN THE STATIC LAYER ALREADY -- see
@@ -5038,6 +5100,22 @@ var
       than the answer -- rendering it would draw unplaced text at the origin. }
     el.Caption := Default(TTyElementCaption);
     list.Add(el);
+    { AND ITS ANSWER IS DRAWN AGAIN OVER IT, in the hover's ink -- otherwise
+      the lifted host covers its own inside label. [Revised in batch 47.] }
+    for j := 0 to FPaintList.Count - 1 do
+    begin
+      cap := FPaintList.Element(j);
+      if (cap.Caption.FontSizeLogical <= 0) or not cap.Caption.HasEmph then
+        Continue;
+      if (cap.Datum.SeriesIndex <> el.Datum.SeriesIndex)
+        or (cap.Datum.DataIndex <> el.Datum.DataIndex)
+        or (cap.Datum.IsEdge <> el.Datum.IsEdge) then Continue;
+      cap.Caption.Colour := cap.Caption.EmphColour;
+      cap.Caption.StrokeColour := cap.Caption.EmphStrokeColour;
+      cap.Caption.StrokeWidthLogical := cap.Caption.EmphStrokeWidthLogical;
+      cap.Z2 := el.Z2 + 1;
+      list.Add(cap);
+    end;
   end;
 
 begin

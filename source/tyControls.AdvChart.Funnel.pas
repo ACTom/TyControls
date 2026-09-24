@@ -132,6 +132,8 @@ type
       is an empty label -- and the datum's name, upstream's default, when not. }
     Formatter: string;
     HasFormatter: Boolean;
+    { The ink options, read by the shared reader. }
+    Ink: TTyLabelSpec;
   end;
 
   { What the words are drawn with. Resolved by the control, like every other
@@ -144,6 +146,8 @@ type
       ink for one outside. }
     InsideColour: array[0..2] of TTyChartColor;
     OutsideColour: TTyChartColor;
+    Ground: TTyChartColor;
+    GroundDark: Boolean;
   end;
 
 function TyFunnelLabelSpecDefault: TTyFunnelLabelSpec;
@@ -608,6 +612,8 @@ end;
 function TyFunnelLabelSpecDefault: TTyFunnelLabelSpec;
 begin
   Result := Default(TTyFunnelLabelSpec);
+  { Automatic, not a literal nought -- see the pie's. }
+  Result.Ink := TyLabelSpecNone;
   Result.Show := True;
   Result.Position := flpOuter;
   Result.LineShow := True;
@@ -629,6 +635,8 @@ begin
   node := TJSONObject(d);
 
   d := node.Find('label');
+  if d is TJSONObject then TyLabelReadInk(TJSONObject(d), node, Result.Ink)
+  else TyLabelReadInk(nil, node, Result.Ink);
   if d is TJSONObject then
   begin
     lbl := TJSONObject(d);
@@ -729,6 +737,8 @@ var
   el: TTyChartElement;
   box: TTyRectF;
   auto: TTyLabelSpec;
+  ink, stroke: TTyChartColor;
+  strokeW: Double;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or not ALayout.Valid then Exit;
@@ -905,13 +915,20 @@ begin
       one place: it tested `fill = 0` where the real rule asks whether the host
       has a fill at all, so an opaque BLACK band ($FF000000, which is not zero)
       took the light ground's ink. }
-    auto := TyLabelSpecNone;
-    auto.AutoColour := True;
+    auto := ASpec.Ink;
+    { A FUNNEL'S `inherit` IS ITS OWN: see TTyLabelSpec.FunnelInherit. }
+    auto.FunnelInherit := True;
     auto.OutsideColour := AInk.OutsideColour;
     auto.InsideColour[0] := AInk.InsideColour[0];
     auto.InsideColour[1] := AInk.InsideColour[1];
     auto.InsideColour[2] := AInk.InsideColour[2];
-    el.Caption.Colour := TyLabelAutoColour(auto, fill, fill <> 0, inside);
+    auto.Ground := AInk.Ground;
+    auto.GroundDark := AInk.GroundDark;
+    TyLabelInk(auto, fill, fill <> 0, False, inside, ink, stroke, strokeW);
+    TyLabelStampEmphasis(auto, fill, fill <> 0, False, inside, el.Caption);
+    el.Caption.Colour := ink;
+    el.Caption.StrokeColour := stroke;
+    el.Caption.StrokeWidthLogical := strokeW;
     el.Caption.X := textX;
     el.Caption.Y := textY;
     el.Caption.AnchorH := anchorH;

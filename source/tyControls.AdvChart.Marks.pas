@@ -1138,69 +1138,77 @@ var
     v: TTySeriesVisual;
     el: TTyChartElement;
   begin
-    if n < 2 then Exit;
-    SetLength(up, n);
-    for k := 0 to n - 1 do up[k] := pts[k];
-    up := StepPoints(up, baseHoriz, spec.Step);
-
-    if spec.HasArea then
+    if n < 1 then Exit;
+    { A RUN OF ONE POINT HAS NO LINE AND NO AREA, but it still has its
+      marker -- and so its label. Upstream draws every point's symbol
+      whatever the polyline makes of it. [Revised in batch 47: a lone
+      point drew nothing at all.] }
+    if n >= 2 then
     begin
-      SetLength(dn, n);
-      for k := 0 to n - 1 do dn[k] := lows[k];
-      { The lower edge is stepped the same way, or the belt would not follow
-        the line it belongs to. }
-      dn := StepPoints(dn, baseHoriz, spec.Step);
-      SetLength(poly, Length(up) + Length(dn));
-      for k := 0 to High(up) do poly[k] := up[k];
-      { Backwards, so the ring closes along the bottom instead of crossing. }
-      m := Length(up);
-      for k := High(dn) downto 0 do
+      SetLength(up, n);
+      for k := 0 to n - 1 do up[k] := pts[k];
+      up := StepPoints(up, baseHoriz, spec.Step);
+
+      if spec.HasArea then
       begin
-        poly[m] := dn[k];
-        Inc(m);
+        SetLength(dn, n);
+        for k := 0 to n - 1 do dn[k] := lows[k];
+        { The lower edge is stepped the same way, or the belt would not follow
+          the line it belongs to. }
+        dn := StepPoints(dn, baseHoriz, spec.Step);
+        SetLength(poly, Length(up) + Length(dn));
+        for k := 0 to High(up) do poly[k] := up[k];
+        { Backwards, so the ring closes along the bottom instead of crossing. }
+        m := Length(up);
+        for k := High(dn) downto 0 do
+        begin
+          poly[m] := dn[k];
+          Inc(m);
+        end;
+        v := AVisual;
+        v.Stroke := 0;
+        v.StrokeWidthLogical := 0;
+        { The area's OWN colour when it named one; the series' otherwise. }
+        if spec.HasAreaFill then v.Fill := spec.AreaFill;
+        { AND ITS OWN RAMP, which REPLACES the series' rather than adding to
+          it: an area that named a gradient is that gradient, whatever the
+          bars beside it are doing. }
+        v.FillGradient := spec.AreaGradient;
+        v.StrokeGradient := Default(TTyChartGradient);
+        el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
+        { The area's opacity REPLACES the series' -- it is a key on its own
+          block, not a second multiplier on the item's. }
+        el.Style.Alpha := spec.AreaOpacity;
+        { SILENT: the fill is decoration behind the line, and a pointer landing
+          on it should find the line, not the shading. }
+        el.Silent := True;
+        el.HasClip := True;
+        el.ClipRect := lineClip;
+        AList.Add(el);
+        Inc(Result);
       end;
+
+      { A LINE IS A STROKE, not a fill. The series colour arrives in Fill because
+        that is what a mark's colour is called; for this shape it is the pen. }
       v := AVisual;
-      v.Stroke := 0;
-      v.StrokeWidthLogical := 0;
-      { The area's OWN colour when it named one; the series' otherwise. }
-      if spec.HasAreaFill then v.Fill := spec.AreaFill;
-      { AND ITS OWN RAMP, which REPLACES the series' rather than adding to
-        it: an area that named a gradient is that gradient, whatever the
-        bars beside it are doing. }
-      v.FillGradient := spec.AreaGradient;
-      v.StrokeGradient := Default(TTyChartGradient);
-      el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
-      { The area's opacity REPLACES the series' -- it is a key on its own
-        block, not a second multiplier on the item's. }
-      el.Style.Alpha := spec.AreaOpacity;
-      { SILENT: the fill is decoration behind the line, and a pointer landing
-        on it should find the line, not the shading. }
-      el.Silent := True;
+      v.Fill := 0;
+      { A LINE IS A STROKE, so the ramp moves across with the colour. }
+      v.FillGradient := Default(TTyChartGradient);
+      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+      if v.Stroke = 0 then v.Stroke := AVisual.Fill;
+      if (v.StrokeGradient.Kind = cgkNone)
+        and (AVisual.FillGradient.Kind <> cgkNone) then
+        v.StrokeGradient := AVisual.FillGradient;
+      el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
+      { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
+        resolved width -- the default 2 was filled in a few lines up. }
+      el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
       el.HasClip := True;
       el.ClipRect := lineClip;
       AList.Add(el);
       Inc(Result);
-    end;
 
-    { A LINE IS A STROKE, not a fill. The series colour arrives in Fill because
-      that is what a mark's colour is called; for this shape it is the pen. }
-    v := AVisual;
-    v.Fill := 0;
-    { A LINE IS A STROKE, so the ramp moves across with the colour. }
-    v.FillGradient := Default(TTyChartGradient);
-    if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-    if v.Stroke = 0 then v.Stroke := AVisual.Fill;
-    if (v.StrokeGradient.Kind = cgkNone)
-      and (AVisual.FillGradient.Kind <> cgkNone) then
-      v.StrokeGradient := AVisual.FillGradient;
-    el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
-    { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
-      resolved width -- the default 2 was filled in a few lines up. }
-    el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
-    el.HasClip := True;
-    el.ClipRect := lineClip;
-    AList.Add(el);
-    Inc(Result);
+    end;
 
     { THE MARKERS GO ON LAST, so they sit over the line they belong to -- and
       they carry the DATUM, which the polyline cannot: one polyline is a whole
@@ -1829,6 +1837,9 @@ begin
     el.Silent := False;
     el.Datum := TyChartDatum(ABinding.SeriesIndex, i);
     el.Caption.Text := CaptionFor(AVisual, AStore, i);
+    { FILLED BUT TRANSPARENT, for its label: upstream's target rect has a
+      `transparent` fill, which counts as a fill. }
+    el.Caption.HostTransparent := True;
     AList.Add(el);
     Inc(Result);
 

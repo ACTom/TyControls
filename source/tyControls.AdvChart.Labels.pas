@@ -121,6 +121,33 @@ type
     InheritColour: Boolean;
     { Bands 0..2: the ink for a light host, a mid host and a dark host. }
     InsideColour: array[0..2] of TTyChartColor;
+    { THE GROUND the chart is drawn on, and whether it counts as dark
+      (luminance under 0.4). An outside label's halo is the ground; an inside
+      one's halo is its host's fill, and only when the ink is the band that
+      reads against that ground. }
+    Ground: TTyChartColor;
+    GroundDark: Boolean;
+    { `textBorderColor`: written, `none`/`transparent`, or `inherit`. }
+    HasBorderColour, BorderColourNone, BorderColourInherit: Boolean;
+    BorderColour: TTyChartColor;
+    { `textBorderWidth`, LOGICAL px. }
+    HasBorderWidth: Boolean;
+    BorderWidthLogical: Double;
+    { A label with its own `backgroundColor` gets no automatic halo. }
+    HasBackground: Boolean;
+    { A FUNNEL'S `inherit`, which upstream does not route through
+      inheritColor: inside it keeps the band ink and is FORCED a stroke in
+      the band's fill; outside it is the host's colour over the ground halo. }
+    FunnelInherit: Boolean;
+    { `emphasis.label.color` and `.textBorderWidth`: the hover's own. }
+    EmphHasColour: Boolean;
+    EmphColour: TTyChartColor;
+    EmphHasBorderWidth: Boolean;
+    EmphBorderWidthLogical: Double;
+    { `emphasis.itemStyle.color`: the hovered host's fill, when written;
+      otherwise it is the normal fill lifted. }
+    EmphHostHasColour: Boolean;
+    EmphHostColour: TTyChartColor;
     { What an OUTSIDE label is drawn in when the colour is automatic: the
       theme's own ink rather than anything derived from the mark. }
     OutsideColour: TTyChartColor;
@@ -193,6 +220,36 @@ function TyLabelLuminance(AColour: TTyChartColor): Double;
 function TyLabelAutoColour(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
   AHostHasFill, AInside: Boolean): TTyChartColor;
 
+{ Which of the three inside inks a host's fill takes: 0 over a light fill
+  (luminance above a half), 1 over a mid one (above a fifth), 2 over a dark
+  one -- and 2 over a gradient, which has no one colour to measure. }
+function TyLabelInkBand(AHostFill: TTyChartColor; AHostGradient: Boolean): Integer;
+
+{ THE WHOLE ANSWER for one caption: its ink, and its halo's colour and
+  LOGICAL width (0 for none). zrender's rule: a label is inside only over a
+  host that HAS a fill; inside, the ink is the band's and the halo is the
+  host's own fill -- only when the band is the one that reads against the
+  ground (a dark ground halos the light band, a light ground the others) and
+  never over a gradient; outside, the ink is the theme's and the halo is the
+  ground. A literal or inherited colour has no automatic halo;
+  `textBorderColor` with a width draws its own; a label background has none.
+  Two logical pixels unless `textBorderWidth` says more. }
+procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+
+{ Work out the hover's ink and halo for a caption now, from the host's fill
+  as a hover leaves it, and stamp them on ACaption (HasEmph). }
+procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  var ACaption: TTyElementCaption);
+
+{ THE SAME UNDER A HOVER: the host's fill is the lifted one, and
+  `emphasis.label.color` / `.textBorderWidth` override. }
+procedure TyLabelInkEmphasis(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+
 { Turn every stamped caption in AList into a second entry carrying the same
   datum.
 
@@ -207,6 +264,28 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 
 implementation
+
+uses tyControls.AdvChart.Style;
+
+procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  var ACaption: TTyElementCaption);
+var fill: TTyChartColor; grad: Boolean;
+begin
+  fill := AHostFill;
+  grad := AHostGradient;
+  if ASpec.EmphHostHasColour then
+  begin
+    fill := ASpec.EmphHostColour;
+    grad := False;
+  end
+  else if AHostHasFill and not grad then
+    fill := TyChartLiftColor(fill);
+  TyLabelInkEmphasis(ASpec, fill, AHostHasFill, grad, AInside,
+    ACaption.EmphColour, ACaption.EmphStrokeColour,
+    ACaption.EmphStrokeWidthLogical);
+  ACaption.HasEmph := True;
+end;
 
 function TyLabelSpecNone: TTyLabelSpec;
 var i: Integer;
@@ -402,13 +481,126 @@ begin
   { OUTSIDE is not derived from the mark at all -- upstream returns the theme's
     own ink, light or dark by mode, and never looks at what it is labelling. }
   if not AInside then Exit(ASpec.OutsideColour);
-  { An unfilled host tells you nothing about what is behind the text, so it is
-    treated as a light ground. Upstream's `pathFill !== 'none'` guard. }
-  if not AHostHasFill then Exit(ASpec.InsideColour[0]);
+  { AN UNFILLED HOST MAKES THE LABEL AN OUTSIDE ONE: zrender tests
+    `hasFill()` before it calls anything inside, so the caption takes the
+    theme's outside ink and the ground's halo. [Revised in batch 47: it took
+    the light band's ink.] }
+  if not AHostHasFill then Exit(ASpec.OutsideColour);
   lum := TyLabelLuminance(AHostFill);
   if lum > 0.5 then Exit(ASpec.InsideColour[0]);
   if lum > 0.2 then Exit(ASpec.InsideColour[1]);
   Result := ASpec.InsideColour[2];
+end;
+
+function TyLabelInkBand(AHostFill: TTyChartColor; AHostGradient: Boolean): Integer;
+var lum: Double;
+begin
+  if AHostGradient then Exit(2);
+  lum := TyLabelLuminance(AHostFill);
+  if lum > 0.5 then Result := 0
+  else if lum > 0.2 then Result := 1
+  else Result := 2;
+end;
+
+procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+var
+  inside, auto: Boolean;
+  band: Integer;
+  w: Double;
+  ground: TTyChartColor;
+
+  procedure Halo(AColour: TTyChartColor);
+  begin
+    { A STROKE THAT IS TRANSPARENT IS NONE -- zrender drops `transparent`
+      before it paints. }
+    if (AColour shr 24) = 0 then Exit;
+    AStroke := AColour;
+    AStrokeWidthLogical := w;
+  end;
+
+begin
+  AStroke := 0;
+  AStrokeWidthLogical := 0;
+  inside := AInside and AHostHasFill;
+  band := TyLabelInkBand(AHostFill, AHostGradient);
+  { `textBorderWidth || 2`: a nought is two. }
+  if ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0) then
+    w := ASpec.BorderWidthLogical
+  else
+    w := 2;
+  { THE GROUND AS A HALO, made opaque. }
+  ground := ASpec.Ground or $FF000000;
+
+  auto := False;
+  if ASpec.InheritColour and ASpec.FunnelInherit then
+  begin
+    if inside then AInk := ASpec.InsideColour[band] else AInk := AHostFill;
+  end
+  else if ASpec.InheritColour then AInk := AHostFill
+  else if not ASpec.AutoColour then AInk := ASpec.Colour
+  else
+  begin
+    auto := True;
+    if inside then AInk := ASpec.InsideColour[band]
+    else AInk := ASpec.OutsideColour;
+  end;
+
+  { A WRITTEN BORDER COLOUR IS ITS OWN STROKE, whatever the ink -- and with
+    no width written it is a stroke of no width, which draws nothing. }
+  if ASpec.HasBorderColour then
+  begin
+    if ASpec.BorderColourNone then Exit;
+    if not (ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0)) then Exit;
+    if ASpec.BorderColourInherit then Halo(AHostFill)
+    else Halo(ASpec.BorderColour);
+    Exit;
+  end;
+  if ASpec.HasBackground then Exit;
+
+  if ASpec.InheritColour and ASpec.FunnelInherit then
+  begin
+    { FORCED: the band's own fill, even over a light host. }
+    if inside then
+    begin
+      if not AHostGradient then Halo(AHostFill);
+    end
+    else
+      Halo(ground);
+    Exit;
+  end;
+  if not auto then Exit;
+  if inside then
+  begin
+    if AHostGradient then Exit;
+    if ASpec.GroundDark <> (band = 0) then Exit;
+    Halo(AHostFill);
+  end
+  else
+    Halo(ground);
+end;
+
+procedure TyLabelInkEmphasis(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+var s: TTyLabelSpec;
+begin
+  s := ASpec;
+  if ASpec.EmphHasColour then
+  begin
+    s.AutoColour := False;
+    s.InheritColour := False;
+    s.FunnelInherit := False;
+    s.Colour := ASpec.EmphColour;
+  end;
+  if ASpec.EmphHasBorderWidth then
+  begin
+    s.HasBorderWidth := True;
+    s.BorderWidthLogical := ASpec.EmphBorderWidthLogical;
+  end;
+  TyLabelInk(s, AHostFill, AHostHasFill, AHostGradient, AInside, AInk, AStroke,
+    AStrokeWidthLogical);
 end;
 
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
@@ -417,6 +609,9 @@ var
   i, n, si: Integer;
   host, cap: TTyChartElement;
   spec: TTyLabelSpec;
+  hostFill, ink, stroke: TTyChartColor;
+  hostHasFill: Boolean;
+  strokeW: Double;
   pos: TTyLabelPosition;
   bounds, box: TTyRectF;
   x, y, w, h, scale, dist: Double;
@@ -482,8 +677,25 @@ begin
     { NO FILL AND NO STROKE. The rectangle is there so the pointer can find
       the words, not so anything is painted in it -- a filled one would draw a
       solid block behind every label. }
-    cap.Caption.Colour := TyLabelAutoColour(spec, host.Style.FillColor,
-      host.Style.HasFill, TyLabelIsInside(spec.Position));
+    { THE INK AND THE HALO, from the host's fill -- a pictorial bar's target
+      counts as filled and transparent -- and from where the words ended up:
+      a bar's `outside` is not inside. }
+    hostFill := host.Style.FillColor;
+    hostHasFill := host.Style.HasFill;
+    if host.Caption.HostTransparent then
+    begin
+      hostFill := 0;
+      hostHasFill := True;
+    end;
+    TyLabelInk(spec, hostFill, hostHasFill,
+      host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+      TyLabelIsInside(pos), ink, stroke, strokeW);
+    cap.Caption.Colour := ink;
+    cap.Caption.StrokeColour := stroke;
+    cap.Caption.StrokeWidthLogical := strokeW;
+    TyLabelStampEmphasis(spec, hostFill, hostHasFill,
+      host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+      TyLabelIsInside(pos), cap.Caption);
     cap.Style.Alpha := host.Style.Alpha;
     cap.Z := host.Z;
     { ABOVE ITS OWN MARK. Without the lift the two tie on (Z, Z2) and fall back

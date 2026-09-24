@@ -1207,10 +1207,13 @@ TyAdvChartLabel { color: var(--on-surface); font-size: var(--font-size-base); }
    one is easier to read. Band 1 is therefore LIGHTER than band 2.
      band 0 -- a light mark, so dark ink
      band 1 -- a mid mark, so the brightest ink
-     band 2 -- a dark mark, so a softer light ink */
-TyAdvChartLabelOnLight { color: var(--on-surface); }
-TyAdvChartLabelOnMid   { color: var(--surface); }
-TyAdvChartLabelOnDark  { color: alpha(var(--surface), 0.80); }
+     band 2 -- a dark mark, so a softer light ink
+   FIXED VALUES, NOT THE SURFACE PAIR: the band is chosen by the MARK's fill,
+   which does not change with the mode -- so the ink must not either, or a
+   dark skin puts light ink on a light bar. Upstream's #333, #eee, #ccc. */
+TyAdvChartLabelOnLight { color: #333333; }
+TyAdvChartLabelOnMid   { color: #EEEEEE; }
+TyAdvChartLabelOnDark  { color: #CCCCCC; }
 /* The legend. Upstream inks the words with tokens.color.secondary and greys a
    deselected item with tokens.color.disabled. This vocabulary has no disabled
    INK token -- only a disabled OPACITY -- so a switched-off item is the chart's
