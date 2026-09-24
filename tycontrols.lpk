@@ -665,6 +665,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ToolWindows.Layout"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ToolWindows.LayoutText.pas"/>
+        <UnitName Value="tyControls.ToolWindows.LayoutText"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Shape.pas"/>
         <UnitName Value="tyControls.Shape"/>
       </Item>
