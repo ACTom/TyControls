@@ -221,7 +221,7 @@ begin
     { NO RECT, so no clip and no ellipsis -- the rotated entry takes an anchor.
       A truncating caption that is also rotated therefore overflows, and the
       caption record says so where it is declared rather than here. }
-    P.DrawTextRotated(AElement.Caption.Text, AElement.Caption.FontName,
+    P.DrawTextRotated(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
       AElement.Caption.X + ADX, AElement.Caption.Y + ADY,
       AElement.Caption.RotationRad,
@@ -237,7 +237,7 @@ begin
   if TyRectFIsValid(b) then
     P.DrawText(Rect(Round(b.Left) + ADX, Round(b.Top) + ADY,
       Round(b.Right) + ADX, Round(b.Bottom) + ADY),
-      AElement.Caption.Text, AElement.Caption.FontName,
+      TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
       TyAnchorToAlignment(AElement.Caption.AnchorH),
       TyAnchorToLayout(AElement.Caption.AnchorV),
@@ -247,7 +247,7 @@ begin
     box := CaptionBox(AElement.Caption, 0, 0);
     OffsetRect(box, ADX, ADY);
     P.DrawText(box,
-      AElement.Caption.Text, AElement.Caption.FontName,
+      TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
       AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
       TyAnchorToAlignment(AElement.Caption.AnchorH),
       TyAnchorToLayout(AElement.Caption.AnchorV),

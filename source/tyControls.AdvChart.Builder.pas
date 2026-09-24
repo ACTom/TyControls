@@ -1584,6 +1584,30 @@ begin
   end;
 end;
 
+{ A declared type by its option spelling; False for none or one unknown. }
+function DimTypeOfName(const AName: string; out AType: TTyDimType): Boolean;
+begin
+  Result := True;
+  if AName = 'ordinal' then AType := ddtOrdinal
+  else if AName = 'time' then AType := ddtTime
+  else if (AName = 'float') or (AName = 'number') then AType := ddtFloat
+  else if AName = 'int' then AType := ddtInt
+  else Result := False;
+end;
+
+{ Declared dimensions, by position: the name `{@name}` finds, the display
+  name a tooltip sub-row shows, the declared type. }
+procedure DeclareDims(AStore: TTyDataStore; const ADims: TTySourceDimArray);
+var k: Integer; t: TTyDimType;
+begin
+  for k := 0 to High(ADims) do
+  begin
+    if ADims[k].Name <> '' then AStore.SetRawDimName(k, ADims[k].Name);
+    if ADims[k].DisplayName <> '' then AStore.SetRawDimDisplay(k, ADims[k].DisplayName);
+    if DimTypeOfName(ADims[k].DimType, t) then AStore.SetRawDimType(k, t);
+  end;
+end;
+
 function RawNameTaken(AStore: TTyDataStore; const AName: string;
   ACount: Integer): Boolean;
 var p: Integer;
@@ -1639,6 +1663,13 @@ begin
     else
       pos := k;
     AStore.SetRawDimPos(k, pos);
+    { A WHISKER BOX'S ROW INDEX is the registry's dimension `base`; its value
+      columns are the DECLARED open, close, lowest, highest -- which is what
+      makes a candlestick's tooltip rows. }
+    if ADims[k].FromRowIndex and prepend then
+      AStore.SetRawDimDisplay(pos, 'base');
+    if (ADims[k].Coord <> '') and (pos >= 0) and (ADims[k].Name <> '') then
+      AStore.SetRawDimDisplay(pos, ADims[k].Name);
   end;
   { THE NAMES `{@name}` FINDS: the series' own `dimensions` when it has them
     -- which replace the coordinate names outright -- and otherwise each
@@ -1646,18 +1677,11 @@ begin
   d := node.Find('dimensions');
   if (d <> nil) and (d is TJSONArray) then
   begin
-    for k := 0 to TJSONArray(d).Count - 1 do
-    begin
-      cell := TJSONArray(d).Items[k];
-      txt := '';
-      if cell.JSONType = jtString then txt := cell.AsString
-      else if cell is TJSONObject then
-      begin
-        cell := TJSONObject(cell).Find('name');
-        if (cell <> nil) and (cell.JSONType = jtString) then txt := cell.AsString;
-      end;
-      if txt <> '' then AStore.SetRawDimName(k, txt);
-    end;
+    { DECLARED: each named one displays too, and its type is its own. }
+    DeclareDims(AStore, TySeriesDimsSource(AOption, ASeriesIndex).Dims);
+    src := TySeriesDetectedDimCount(arr);
+    if prepend then Inc(src);
+    AStore.RawWidth := Max(src, TJSONArray(d).Count);
   end
   else
   begin
@@ -1669,6 +1693,7 @@ begin
       which is how `{@value}` finds a scatter's third number. }
     src := TySeriesDetectedDimCount(arr);
     if prepend then Inc(src);
+    AStore.RawWidth := src;
     raw := -1;
     for pos := 0 to src - 1 do
     begin
@@ -1719,6 +1744,7 @@ begin
     if OptionIdName(TJSONObject(item).Find('id'), txt) then AStore.SetId(raw, txt);
     CollectOverrides(TJSONObject(item), AStore, raw, '', 0);
   end;
+  AStore.GuessRawOrdinals(True);
 end;
 
 function TyFillStoreFromSource(const ASource: TTyChartSource;
@@ -1749,6 +1775,8 @@ begin
       AStore.SetRawDimName(k, ASource.Dims[k].Name);
       named := True;
     end;
+  DeclareDims(AStore, ASource.Dims);
+  AStore.RawWidth := ASource.DimCount;
   for k := 0 to High(ADims) do
   begin
     col := -1;
@@ -1815,6 +1843,7 @@ begin
       end;
     end;
   end;
+  AStore.GuessRawOrdinals(False);
 end;
 
 { ==================== phase C ==================== }

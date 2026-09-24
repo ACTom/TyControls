@@ -356,6 +356,7 @@ var
   it: TTyRawItem;
   hasRaw: Boolean;
   cell: TTyDataValue;
+  lp: TTyIntegerArray;
 begin
   nameText := '';
   valueText := '';
@@ -371,7 +372,20 @@ begin
       name of its own -- a bare number on a category axis is labelled with
       its category, not with nothing. }
     nameText := AStore.GetItemName(ARow);
-    if (AValueDim >= 0) and (AValueDim < AStore.DimCount) then
+    if hasRaw and AStore.HasLabelPositions then
+    begin
+      { upstream's defaultedLabel: `encode.label`, or the last coordinate a
+        label suits -- none on a category-category chart. Several are
+        String()-ed and joined by ONE space, a gap as nothing. }
+      lp := AStore.LabelPositions;
+      for i := 0 to High(lp) do
+      begin
+        if i > 0 then valueText := valueText + ' ';
+        if TTyDataStore.RawCell(it, lp[i], cell) then
+          valueText := valueText + TyJsValueText(cell, '');
+      end;
+    end
+    else if (AValueDim >= 0) and (AValueDim < AStore.DimCount) then
     begin
       if hasRaw then
       begin

@@ -452,14 +452,19 @@ begin
   try
     sec := block.Blocks[0];
     AssertEquals('both series', 2, sec.BlockCount);
+    { EACH SERIES IS A HEADERLESS SECTION OF ITS OWN, holding its row (and a
+      candlestick's sub-rows) -- upstream's shape since batch 50, so `order`
+      moves a series and its sub-rows together. The row is one level down. }
+    AssertTrue('a series is a section', sec.Blocks[0].IsSection);
+    AssertTrue('without a header', sec.Blocks[0].NoHeader);
     { UPSTREAM PASSES `multipleSeries = true` HERE, which both suppresses the
       per-series header and SWITCHES the inline name from the item's to the
       series'. The category is already the section's header; repeating it on
       every row would say it once per series. }
-    AssertEquals('Sales', sec.Blocks[0].Name);
-    AssertEquals('60', sec.Blocks[0].Value);
-    AssertEquals('Cost', sec.Blocks[1].Name);
-    AssertEquals('50', sec.Blocks[1].Value);
+    AssertEquals('Sales', sec.Blocks[0].Blocks[0].Name);
+    AssertEquals('60', sec.Blocks[0].Blocks[0].Value);
+    AssertEquals('Cost', sec.Blocks[1].Blocks[0].Name);
+    AssertEquals('50', sec.Blocks[1].Blocks[0].Value);
   finally
     block.Free;
   end;
@@ -493,7 +498,7 @@ begin
     AssertEquals('one section', 1, block.BlockCount);
     AssertEquals('and only the near series is in it', 1,
                  block.Blocks[0].BlockCount);
-    AssertEquals('Near', block.Blocks[0].Blocks[0].Name);
+    AssertEquals('Near', block.Blocks[0].Blocks[0].Blocks[0].Name);
   finally
     block.Free;
   end;
@@ -523,7 +528,7 @@ begin
   try
     AssertTrue('there is content', block <> nil);
     AssertEquals('the far series was evicted', 1, block.Blocks[0].BlockCount);
-    AssertEquals('Near', block.Blocks[0].Blocks[0].Name);
+    AssertEquals('Near', block.Blocks[0].Blocks[0].Blocks[0].Name);
   finally
     block.Free;
   end;
@@ -552,7 +557,7 @@ begin
     AssertTrue('there is content', block <> nil);
     AssertEquals('only the series that reaches D', 1,
                  block.Blocks[0].BlockCount);
-    AssertEquals('Long', block.Blocks[0].Blocks[0].Name);
+    AssertEquals('Long', block.Blocks[0].Blocks[0].Blocks[0].Name);
   finally
     block.Free;
   end;
@@ -758,15 +763,15 @@ begin
     { Sales is 60 and Cost is 50, so ascending puts Cost first. `order` sorts
       the rows WITHIN a section and nothing else -- never axes, never
       coordinate systems -- and it runs after the sections are reversed. }
-    AssertEquals('Cost', block.Blocks[0].Blocks[0].Name);
-    AssertEquals('Sales', block.Blocks[0].Blocks[1].Name);
+    AssertEquals('Cost', block.Blocks[0].Blocks[0].Blocks[0].Name);
+    AssertEquals('Sales', block.Blocks[0].Blocks[1].Blocks[0].Name);
   finally
     block.Free;
   end;
   spec.Order := ttoValueDesc;
   block := FChart.AxisContent(hits, spec);
   try
-    AssertEquals('Sales', block.Blocks[0].Blocks[0].Name);
+    AssertEquals('Sales', block.Blocks[0].Blocks[0].Blocks[0].Name);
   finally
     block.Free;
   end;

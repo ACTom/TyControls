@@ -122,6 +122,16 @@ begin
   Result := (ACase.Find('deferred') <> nil) and ACase.Booleans['deferred'];
 end;
 
+{ THE AUTO SERIES NAME CARRIES A NUL (`series\u00000`), and fpjson's
+  scanner drops a `\u0000` -- it takes it for the first half of a surrogate
+  pair. So the fixture's text has its NULs turned into U+0001 before it is
+  parsed, and every text the port produces goes through this before it is
+  compared: the NUL is still compared, as that stand-in. }
+function Nul(const AText: string): string;
+begin
+  Result := StringReplace(AText, #0, #1, [rfReplaceAll]);
+end;
+
 { A JSON string or null, as the fixture writes a line's fields. }
 function StrOrNull(AData: TJSONData; out AIsNull: Boolean): string;
 begin
@@ -138,7 +148,7 @@ begin
   if ABlock = nil then Exit;
   if ABlock.IsSection then
   begin
-    if not ABlock.NoHeader then AOut.Add('~|' + ABlock.Header + '|~');
+    if not ABlock.NoHeader then AOut.Add('~|' + Nul(ABlock.Header) + '|~');
     for i := 0 to ABlock.BlockCount - 1 do Flatten(ABlock.Blocks[i], AOut);
     Exit;
   end;
@@ -150,7 +160,7 @@ begin
   end;
   if ABlock.NoName then n := '~' else n := ABlock.Name;
   if ABlock.NoValue then v := '~' else v := ABlock.Value;
-  AOut.Add(m + '|' + n + '|' + v);
+  AOut.Add(m + '|' + Nul(n) + '|' + Nul(v));
 end;
 
 procedure TAdvChartSeriesTextOracleTest.SetUp;
@@ -169,7 +179,7 @@ begin
   sl := TStringList.Create;
   try
     sl.LoadFromFile(FixturePath);
-    FRoot := GetJSON(sl.Text);
+    FRoot := GetJSON(StringReplace(sl.Text, '\u0000', '\u0001', [rfReplaceAll]));
   finally
     sl.Free;
   end;
@@ -267,7 +277,7 @@ begin
                 size is the label pass' request, not a second label }
               if (e.Caption.Text = '') or (e.Caption.FontSizeLogical <= 0) then
                 Continue;
-              got.Add(e.Caption.Text);
+              got.Add(Nul(e.Caption.Text));
             end;
           Inc(FCompared);
           if want.Text <> got.Text then
@@ -394,6 +404,7 @@ begin
       begin
         { A TEMPLATE: the text a reader sees, entities decoded. }
         TyChartResolveText(spec.Formatter, params, text);
+        text := Nul(text);
         if text <> cs.Strings['visible'] then
           Miss(cs, Format('"%s" upstream, "%s" here', [cs.Strings['visible'], text]));
         Continue;
@@ -469,7 +480,7 @@ begin
         for i := 0 to lst.Count - 1 do
           if (lst.Element(i).Caption.Text <> '')
             and (lst.Element(i).Caption.FontSizeLogical > 0) then
-            got.Add(lst.Element(i).Caption.Text);
+            got.Add(Nul(lst.Element(i).Caption.Text));
       Inc(FCompared);
       if want.Text <> got.Text then
         Miss(cs, Format('[%s] upstream, [%s] here',
@@ -485,13 +496,13 @@ end;
 procedure TAdvChartSeriesTextOracleTest.TestLabels;
 begin
   CheckLabels;
-  Verdict(336);
+  Verdict(365);
 end;
 
 procedure TAdvChartSeriesTextOracleTest.TestTooltips;
 begin
   CheckTooltips;
-  Verdict(72);
+  Verdict(117);
 end;
 
 procedure TAdvChartSeriesTextOracleTest.TestGauges;
@@ -513,7 +524,7 @@ begin
   finally
     DefaultFormatSettings := saved;
   end;
-  Verdict(422);
+  Verdict(496);
 end;
 
 initialization

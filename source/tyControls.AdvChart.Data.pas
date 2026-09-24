@@ -80,6 +80,25 @@ type
     Cells: TTyDataValueArray;
   end;
 
+  { What upstream's dimension record says about ONE POSITION of the raw item,
+    beyond its name. A DISPLAY NAME exists only where somebody DECLARED the
+    dimension -- series `dimensions`, a dataset header or `dimensions`, a
+    candlestick's open/close/lowest/highest -- never for a generated `value`
+    or a coordinate's own name; its presence is what turns a tooltip into
+    sub-rows. A TYPE is the declared one, or `ordinal` where upstream's
+    guessOrdinal would say so.
+
+    Not kept: upstream's `otherDims.tooltip: false` on a whisker box's row
+    index. It hides a dimension only from the tooltip dimensions -- which for
+    a whisker box are its four or five value columns unless `encode.tooltip`
+    names them, and a named one is shown. So it can never hide anything. }
+  TTyRawDimInfo = record
+    Display: string;
+    HasDisplay: Boolean;
+    DimType: TTyDimType;
+    HasType: Boolean;
+  end;
+
   { Which values an extent is allowed to see. defPositive is the log axis'
     requirement -- zero and negatives have no logarithm, and an extent that
     included them would hand the log mapper a domain it cannot map. }
@@ -268,9 +287,14 @@ type
     FRawItems: array of TTyRawItem; // lazily sized, like the names
     FRawDimNames: TTyStringArray;
     FRawDimPos: array of Integer; // per store dimension; -1 = no position
+    FRawDimInfo: array of TTyRawDimInfo; // per raw position
+    FTipPos, FLabelPos: array of Integer;
+    FHasTipPos, FHasLabelPos: Boolean;
+    FRawWidth: Integer;
     FOvrHead: array of Integer;   // per raw row, -1 = no overrides
     FOvr: array of TOvr;
     FOvrCount: Integer;
+    procedure GrowRawDimInfo(APos: Integer);
     procedure Grow(AWanted: Integer);
     procedure InvalidateExtents;
     { Any append retires the inverted index: it is sized to the category count
@@ -302,6 +326,8 @@ type
     function DimsOfCoord(const ACoord: string): TTyIntegerArray;
     { Say that ADim feeds ACoord. }
     procedure SetDimCoord(ADim: Integer; const ACoord: string);
+    { The coordinate SetDimCoord gave the column; '' for an ordinary one. }
+    function DimCoord(ADim: Integer): string;
     function DimName(ADim: Integer): string;
     function DimType(ADim: Integer): TTyDimType;
     { The category list of an ordinal dimension, from an axis' `data`.
@@ -408,6 +434,29 @@ type
       index moves it. Unset, a dimension is at its own index; -1 is none. }
     procedure SetRawDimPos(ADim, APos: Integer);
     function RawDimPos(ADim: Integer): Integer;
+    { ---- what each raw position is (see TTyRawDimInfo) ---- }
+    procedure SetRawDimDisplay(APos: Integer; const AName: string);
+    procedure SetRawDimType(APos: Integer; AType: TTyDimType);
+    function RawDimInfo(APos: Integer): TTyRawDimInfo;
+    { The type a position prints by: the store column reading it, else the
+      declared or guessed one, else a number. }
+    function RawPosType(APos: Integer): TTyDimType;
+    { upstream's guessOrdinal for every position no column reads and nobody
+      typed: `ordinal` when the first telling value among the first five
+      items is text that is no number and not '-'. AOriginal: a series' own
+      data, where an item that is not an array ends the guess. }
+    procedure GuessRawOrdinals(AOriginal: Boolean);
+    { upstream's defaultedTooltip and defaultedLabel, as raw positions. Unset,
+      a consumer keeps its own rule; set EMPTY, there are none. }
+    procedure SetTooltipPositions(const APos: TTyIntegerArray);
+    procedure SetLabelPositions(const APos: TTyIntegerArray);
+    function TooltipPositions: TTyIntegerArray;
+    function LabelPositions: TTyIntegerArray;
+    function HasTooltipPositions: Boolean;
+    function HasLabelPositions: Boolean;
+    { How many positions upstream's data HAS dimensions for -- item 0's
+      width, or the table's; a cell past it belongs to no dimension. }
+    property RawWidth: Integer read FRawWidth write FRawWidth;
     function RawDimName(APos: Integer): string;
     { `{@key}` to a position (getDimensionIndex): `[n]` as a number, a
       declared name, a numeric-looking key as a number; not-a-number when
@@ -1230,6 +1279,12 @@ begin
   FDims[ADim].Coord := ACoord;
 end;
 
+function TTyDataStore.DimCoord(ADim: Integer): string;
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then Exit('');
+  Result := FDims[ADim].Coord;
+end;
+
 function TTyDataStore.DimName(ADim: Integer): string;
 begin
   if (ADim < 0) or (ADim > High(FDims)) then Exit('');
@@ -1498,6 +1553,12 @@ begin
   FRawItems := nil;
   FRawDimNames := nil;
   FRawDimPos := nil;
+  FRawDimInfo := nil;
+  FTipPos := nil;
+  FLabelPos := nil;
+  FHasTipPos := False;
+  FHasLabelPos := False;
+  FRawWidth := 0;
   FOvrHead := nil;
   FOvr := nil;
   FOvrCount := 0;
@@ -1690,6 +1751,150 @@ begin
     for i := i to ADim do FRawDimPos[i] := i;
   end;
   FRawDimPos[ADim] := APos;
+end;
+
+procedure TTyDataStore.GrowRawDimInfo(APos: Integer);
+var i: Integer;
+begin
+  if APos <= High(FRawDimInfo) then Exit;
+  i := Length(FRawDimInfo);
+  SetLength(FRawDimInfo, APos + 1);
+  for i := i to APos do FRawDimInfo[i] := Default(TTyRawDimInfo);
+end;
+
+procedure TTyDataStore.SetRawDimDisplay(APos: Integer; const AName: string);
+begin
+  if APos < 0 then Exit;
+  GrowRawDimInfo(APos);
+  FRawDimInfo[APos].Display := AName;
+  FRawDimInfo[APos].HasDisplay := True;
+end;
+
+procedure TTyDataStore.SetRawDimType(APos: Integer; AType: TTyDimType);
+begin
+  if APos < 0 then Exit;
+  GrowRawDimInfo(APos);
+  FRawDimInfo[APos].DimType := AType;
+  FRawDimInfo[APos].HasType := True;
+end;
+
+function TTyDataStore.RawDimInfo(APos: Integer): TTyRawDimInfo;
+begin
+  if (APos >= 0) and (APos <= High(FRawDimInfo)) then Result := FRawDimInfo[APos]
+  else Result := Default(TTyRawDimInfo);
+end;
+
+function TTyDataStore.RawPosType(APos: Integer): TTyDimType;
+var k: Integer;
+begin
+  { A COLUMN READING IT decides -- the coordinate system's type outranks
+    the source's, as upstream's createDimensions has it. }
+  for k := 0 to DimCount - 1 do
+    if RawDimPos(k) = APos then Exit(DimType(k));
+  if (APos >= 0) and (APos <= High(FRawDimInfo)) and FRawDimInfo[APos].HasType then
+    Exit(FRawDimInfo[APos].DimType);
+  Result := ddtFloat;
+end;
+
+procedure TTyDataStore.GuessRawOrdinals(AOriginal: Boolean);
+var
+  width, p, i, k, n: Integer;
+  it: TTyRawItem;
+  c: TTyDataValue;
+  read, verdict, decided: Boolean;
+  num: Double;
+  mask: TFPUExceptionMask;
+begin
+  if FRawItems = nil then Exit;
+  n := Min(5, FRawCount);
+  width := Length(FRawDimNames);
+  for i := 0 to n - 1 do
+  begin
+    it := RawItemByRaw(i);
+    if Length(it.Cells) > width then width := Length(it.Cells);
+  end;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exPrecision]);
+  try
+    for p := 0 to width - 1 do
+    begin
+      read := False;
+      for k := 0 to DimCount - 1 do
+        if RawDimPos(k) = p then read := True;
+      if read or RawDimInfo(p).HasType then Continue;
+      verdict := False;
+      decided := False;
+      for i := 0 to n - 1 do
+      begin
+        it := RawItemByRaw(i);
+        if it.Shape in [rshArray, rshObject] then
+        begin
+          if p > High(it.Cells) then Continue;
+          c := it.Cells[p];
+        end
+        else if AOriginal then
+          Break // a non-array item: upstream answers "not ordinal"
+        else
+          Continue;
+        { detectValue: a finite Number() that is not '' -- not ordinal;
+          other text but '-' -- ordinal; anything else tells nothing. }
+        case c.Kind of
+          dvkNumber:
+            if not (IsNan(c.Num) or IsInfinite(c.Num)) then decided := True;
+          dvkBool:
+            decided := True;
+          dvkText:
+            begin
+              num := TyJsToNumber(c.Text);
+              if (c.Text <> '') and not (IsNan(num) or IsInfinite(num)) then
+                decided := True
+              else if c.Text <> '-' then
+              begin
+                decided := True;
+                verdict := True;
+              end;
+            end;
+        end;
+        if decided then Break;
+      end;
+      if verdict then SetRawDimType(p, ddtOrdinal);
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+procedure TTyDataStore.SetTooltipPositions(const APos: TTyIntegerArray);
+begin
+  FTipPos := Copy(APos);
+  FHasTipPos := True;
+end;
+
+procedure TTyDataStore.SetLabelPositions(const APos: TTyIntegerArray);
+begin
+  FLabelPos := Copy(APos);
+  FHasLabelPos := True;
+end;
+
+function TTyDataStore.TooltipPositions: TTyIntegerArray;
+begin
+  Result := Copy(FTipPos);
+end;
+
+function TTyDataStore.LabelPositions: TTyIntegerArray;
+begin
+  Result := Copy(FLabelPos);
+end;
+
+function TTyDataStore.HasTooltipPositions: Boolean;
+begin
+  Result := FHasTipPos;
+end;
+
+function TTyDataStore.HasLabelPositions: Boolean;
+begin
+  Result := FHasLabelPos;
 end;
 
 function TTyDataStore.RawDimPos(ADim: Integer): Integer;

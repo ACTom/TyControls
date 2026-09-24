@@ -66,6 +66,9 @@ type
     Name: string;
     { `dimensions: [{ name: 'x', type: 'time' }]`. '' when nobody said. }
     DimType: string;
+    { `displayName`, or failing that the name: what a tooltip sub-row calls
+      the dimension. '' only for a dimension with no name at all. }
+    DisplayName: string;
   end;
   TTySourceDimArray = array of TTySourceDim;
 
@@ -97,6 +100,14 @@ type
   TTySeriesEncode = record
     Given: Boolean;
     Columns: array of Integer;
+    { Parallel to Columns: the coordinate was WRITTEN in `encode` -- even as
+      -1, which asks for no mapping. An unwritten one takes the next unclaimed
+      dimension (TyEncodeFillUnclaimed). }
+    Explicit: array of Boolean;
+    { `encode.tooltip` and `encode.label`, every entry resolved (unresolved
+      ones dropped) -- upstream's defaultedTooltip / defaultedLabel when
+      non-empty. }
+    Tooltip, Labels: array of Integer;
     { `itemName` and `seriesName`: where a row's own name and the series' own
       name come from. -1 for neither. Only the FIRST entry of each is used --
       upstream reads slot 0 and ignores the rest. }
@@ -186,6 +197,17 @@ function TySeriesDatasetIndex(AOption: TTyChartOption;
 function TyEncodeOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ASource: TTyChartSource;
   const ACoordDims: TTyCoordDimArray): TTySeriesEncode;
+
+{ upstream's createDimensions for a GIVEN encode: every coordinate not
+  written in it takes, in coordinate order, the first dimension below
+  ADimCount that no coordinate holds yet. `encode: {y: 2}` on a table reads
+  x from 0; `encode: {tooltip: [2]}` leaves x on 0 and y on 1. }
+procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+
+{ A series' own `dimensions`, as a source that names things but holds
+  nothing -- what an encode name on series data is looked up against. }
+function TySeriesDimsSource(AOption: TTyChartOption;
+  ASeriesIndex: Integer): TTyChartSource;
 
 { The default encode for a series on an axis coordinate system, and the pass
   that advances ACursor.
@@ -413,7 +435,13 @@ begin
     if (nm <> nil) and (nm.JSONType = jtString) then Result[i].Name := nm.AsString;
     nm := obj.Find('type');
     if (nm <> nil) and (nm.JSONType = jtString) then Result[i].DimType := nm.AsString;
+    nm := obj.Find('displayName');
+    if (nm <> nil) and (nm.JSONType = jtString) then Result[i].DisplayName := nm.AsString;
   end;
+  { normalizeDimensionsOption: a named dimension's display name defaults to
+    its name. }
+  for i := 0 to High(Result) do
+    if Result[i].DisplayName = '' then Result[i].DisplayName := Result[i].Name;
 end;
 
 { The keys of the first object row, in order. Upstream collects from the first
@@ -487,6 +515,7 @@ begin
       begin
         named[i].Name := Result.Keyed.Names[i];
         named[i].DimType := '';
+        named[i].DisplayName := named[i].Name;
       end;
     end;
     Result.Dims := named;
@@ -552,6 +581,11 @@ begin
   end;
 
   Result.Dims := named;
+  { A NAMED DIMENSION DISPLAYS AS ITS NAME, whoever named it -- the header,
+    the object rows' keys, or `dimensions`. }
+  for i := 0 to High(Result.Dims) do
+    if Result.Dims[i].DisplayName = '' then
+      Result.Dims[i].DisplayName := Result.Dims[i].Name;
   if Length(Result.Dims) > Result.DimCount then
     Result.DimCount := Length(Result.Dims);
   Result.Valid := True;
@@ -716,7 +750,12 @@ var i: Integer;
 begin
   Result := Default(TTySeriesEncode);
   SetLength(Result.Columns, ACount);
-  for i := 0 to ACount - 1 do Result.Columns[i] := -1;
+  SetLength(Result.Explicit, ACount);
+  for i := 0 to ACount - 1 do
+  begin
+    Result.Columns[i] := -1;
+    Result.Explicit[i] := False;
+  end;
   Result.ItemName := -1;
   Result.SeriesName := -1;
 end;
@@ -742,6 +781,74 @@ begin
   if AValue.JSONType = jtString then Exit(TySourceDimIndexOf(ASource, AValue.AsString));
 end;
 
+{ Every entry of an encode value, resolved: a number an index, a string a
+  name; an entry that resolves to nothing, or a negative index, dropped. }
+function EncodeList(AValue: TJSONData;
+  const ASource: TTyChartSource): TTyIntegerArray;
+var
+  arr: TJSONArray;
+  i, v: Integer;
+
+  procedure One(AItem: TJSONData);
+  begin
+    v := -1;
+    if AItem = nil then Exit;
+    if AItem.JSONType = jtNumber then v := TyRoundOpt(AItem.AsFloat)
+    else if AItem.JSONType = jtString then v := TySourceDimIndexOf(ASource, AItem.AsString);
+    if v < 0 then Exit;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := v;
+  end;
+
+begin
+  Result := nil;
+  if AValue = nil then Exit;
+  if AValue is TJSONArray then
+  begin
+    arr := TJSONArray(AValue);
+    for i := 0 to arr.Count - 1 do One(arr.Items[i]);
+  end
+  else
+    One(AValue);
+end;
+
+procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+var
+  i, j, avail: Integer;
+  used: Boolean;
+begin
+  if not AEnc.Given then Exit;
+  avail := 0;
+  for i := 0 to High(AEnc.Columns) do
+  begin
+    if (i <= High(AEnc.Explicit)) and AEnc.Explicit[i] then Continue;
+    if AEnc.Columns[i] >= 0 then Continue;
+    repeat
+      used := False;
+      for j := 0 to High(AEnc.Columns) do
+        if AEnc.Columns[j] = avail then used := True;
+      if used then Inc(avail);
+    until not used;
+    if avail < ADimCount then
+    begin
+      AEnc.Columns[i] := avail;
+      Inc(avail);
+    end;
+  end;
+end;
+
+function TySeriesDimsSource(AOption: TTyChartOption;
+  ASeriesIndex: Integer): TTyChartSource;
+var node: TJSONObject;
+begin
+  Result := Default(TTyChartSource);
+  if AOption = nil then Exit;
+  node := ObjOf(AOption.ComponentAt('series', ASeriesIndex));
+  if node = nil then Exit;
+  Result.Dims := ReadDimensions(node.Find('dimensions'));
+  Result.DimCount := Length(Result.Dims);
+end;
+
 function TyEncodeOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ASource: TTyChartSource;
   const ACoordDims: TTyCoordDimArray): TTySeriesEncode;
@@ -765,8 +872,14 @@ begin
   for i := 0 to High(ACoordDims) do
   begin
     d := enc.Find(ACoordDims[i].Name);
-    if d <> nil then Result.Columns[i] := EncodeValue(d, ASource);
+    if d <> nil then
+    begin
+      Result.Columns[i] := EncodeValue(d, ASource);
+      Result.Explicit[i] := True;
+    end;
   end;
+  Result.Tooltip := EncodeList(enc.Find('tooltip'), ASource);
+  Result.Labels := EncodeList(enc.Find('label'), ASource);
   d := enc.Find('itemName');
   if d <> nil then Result.ItemName := EncodeValue(d, ASource);
   d := enc.Find('seriesName');

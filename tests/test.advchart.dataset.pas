@@ -57,6 +57,7 @@ type
     procedure TestTheNameBasedDefaultPicksANameAndAValue;
     procedure TestADeclaredTypeEndsTheOrdinalQuestion;
     procedure TestASourceWithNoReaderAnswersNothing;
+    procedure TestAGivenEncodeFillsWhatItLeavesOut;
     procedure TestASeriesOverrulesTheTableAboutHowToReadIt;
   end;
 
@@ -591,6 +592,34 @@ begin
   sc := Src('{ "dataset": { "sourceHeader": false, '
     + '"source": [["1"],["2"]] } }');
   AssertFalse('a numeric string is not a category', TySourceDimIsOrdinal(sc, 0));
+end;
+
+{ upstream's createDimensions for a GIVEN encode: an unwritten coordinate
+  takes, in coordinate order, the first dimension nobody holds -- but one
+  written as -1 asks for NO mapping and is left alone, and it does not
+  count as holding anything. }
+procedure TAdvChartDatasetTest.TestAGivenEncodeFillsWhatItLeavesOut;
+var enc: TTySeriesEncode;
+begin
+  enc := Default(TTySeriesEncode);
+  enc.Given := True;
+  SetLength(enc.Columns, 3);
+  SetLength(enc.Explicit, 3);
+  enc.Columns[0] := -1;  enc.Explicit[0] := True;   // x: -1
+  enc.Columns[1] := 0;   enc.Explicit[1] := True;   // y: 0
+  enc.Columns[2] := -1;  enc.Explicit[2] := False;  // unwritten
+  TyEncodeFillUnclaimed(enc, 4);
+  AssertEquals('a written -1 stays unmapped', -1, enc.Columns[0]);
+  AssertEquals('a written index stays', 0, enc.Columns[1]);
+  AssertEquals('the unwritten one takes the first free', 1, enc.Columns[2]);
+  { Past the width there is nothing to take. }
+  enc.Columns[2] := -1;
+  TyEncodeFillUnclaimed(enc, 1);
+  AssertEquals('nothing free below the width', -1, enc.Columns[2]);
+  { Not given: the defaulter's business, untouched. }
+  enc.Given := False;
+  TyEncodeFillUnclaimed(enc, 4);
+  AssertEquals('an encode not given is not filled', -1, enc.Columns[2]);
 end;
 
 procedure TAdvChartDatasetTest.TestASourceWithNoReaderAnswersNothing;

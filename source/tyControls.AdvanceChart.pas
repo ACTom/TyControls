@@ -475,7 +475,18 @@ type
     function AxisDimOf(AAxis: TTyAxis): string;
     { Rewrite ADims for a series type that declares more than one value per
       datum. A no-op for every other type. }
-    procedure SeriesDataEncode(ASlot: Integer; var ADims: TTySeriesDimArray);
+    procedure SeriesDataEncode(ASlot: Integer; var ADims: TTySeriesDimArray;
+      out AEnc: TTySeriesEncode);
+    { upstream's defaultedLabel and defaultedTooltip for one axis series,
+      into its store as raw positions. }
+    procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+    { The series' MODEL name -- what `{a}` and a handler's seriesName print:
+      as written, '' when written '', and the auto name `series\0<index>`
+      when not written at all. SeriesNameOf is the DISPLAY name, '' then. }
+    function SeriesModelName(ASeriesIndex: Integer): string;
+    { A radar's own item tooltip: headed by the item, a row per indicator. }
+    function RadarTooltip(ASlot, ARow: Integer; const AColor: TTyChartColor;
+      const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     procedure MultiValueDims(const ABinding: TTySeriesBinding;
       var ADims: TTySeriesDimArray);
     { The legend's elements, into the chart's own paint list. }
@@ -534,11 +545,12 @@ type
     procedure LabelGround(out AGround: TTyChartColor; out ADark: Boolean);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
-    { Every value of one datum as one string. Several go on ONE row joined by
-      two spaces, which is upstream's richText spelling of the list html joins
-      with two non-breaking spaces -- and it is the branch a candlestick
-      always takes. The sub-row form, a small dot per dimension on its own
-      line, is the other branch and is not built yet. }
+    { Every value of one datum as one string, for a store that kept no raw
+      item or chose no tooltip dimensions (TipCellsOf answers the rest).
+      Several go on ONE row joined by two spaces, which is upstream's
+      richText spelling of the list html joins with two non-breaking spaces.
+      [Batch 50: a candlestick does NOT take this branch upstream -- its
+      dimensions have display names, so it gets a sub-row per value.] }
     function ValuesText(const AParams: TTyChartCallbackParams): string;
     { The colour of the thing a datum was drawn as, taken from the element
       that drew it. Asks the paint list rather than the series so a per-datum
@@ -1128,8 +1140,9 @@ begin
     ds := FSeriesDataset[i];
     if ds < 0 then
     begin
-      SeriesDataEncode(i, dims);
+      SeriesDataEncode(i, dims, enc);
       TyFillSeriesStore(FOption, i, dims, st);
+      ResolveTextDims(enc, st);
       Continue;
     end;
     { THE COORDINATES, AS THE ENCODE RULES SEE THEM: a name and whether the
@@ -1157,8 +1170,12 @@ begin
       cur := TyEncodeCursorFor(cursors, ds, FSources[i].LayoutBy);
       enc := TyDefaultEncodeAxis(cursors[cur], coord);
     end;
+    { A GIVEN ENCODE FILLS WHAT IT LEAVES OUT from the next free columns --
+      `encode: {tooltip: [2]}` still draws x from 0 and y from 1. }
+    if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
     FEncodes[i] := enc;
     TyFillStoreFromSource(FSources[i], enc, dims, st);
+    ResolveTextDims(enc, st);
     Continue;
   end;
   { AFTER THE STORES AND BEFORE EVERYTHING THAT COUNTS. A pie legend names
@@ -1339,7 +1356,7 @@ var
   begin
     if AMeasurer = nil then
     begin
-      AW := APainter.MeasureText(AText, AStyle.FontName,
+      AW := APainter.MeasureText(TyInkText(AText), AStyle.FontName,
         ResolveFontSize(AStyle), AStyle.FontWeight).cx;
       AH := APainter.MeasureText('Wg', AStyle.FontName,
         ResolveFontSize(AStyle), AStyle.FontWeight).cy;
@@ -2693,7 +2710,7 @@ begin
     series shows, its VALUE (on a cartesian graph, the value axis' column). }
   Result.Label_ := LabelSpecFor(ASlot, '{b}');
   Result.Label_.DefaultText := tldValue;
-  Result.SeriesName := SeriesNameOf(FBindings[ASlot].SeriesIndex);
+  Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
   { THE c PLACEHOLDER IS THE VALUE COLUMN on a view and the value AXIS' column on axes,
     where there is no column called value at all. }
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
@@ -3629,14 +3646,17 @@ end;
   Only the plain coordinate columns -- a multi-value series places its own,
   and a row-index column reads no element at all. }
 procedure TTyAdvanceChart.SeriesDataEncode(ASlot: Integer;
-  var ADims: TTySeriesDimArray);
+  var ADims: TTySeriesDimArray; out AEnc: TTySeriesEncode);
 var
   coord: TTyCoordDimArray;
-  enc: TTySeriesEncode;
   k: Integer;
+  plain: Boolean;
+  node: TJSONObject;
+  d: TJSONData;
 begin
+  plain := True;
   for k := 0 to High(ADims) do
-    if (ADims[k].Coord <> '') or (ADims[k].SourceSlot > 0) then Exit;
+    if (ADims[k].Coord <> '') or (ADims[k].SourceSlot > 0) then plain := False;
   coord := nil;
   SetLength(coord, Length(ADims));
   for k := 0 to High(ADims) do
@@ -3644,13 +3664,102 @@ begin
     coord[k].Name := ADims[k].Name;
     coord[k].Ordinal := ADims[k].Kind = ddtOrdinal;
   end;
-  enc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
-    Default(TTyChartSource), coord);
-  if not enc.Given then Exit;
+  { A NAME IN `encode` IS ONE OF THE SERIES' OWN `dimensions`. }
+  AEnc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
+    TySeriesDimsSource(FOption, FBindings[ASlot].SeriesIndex), coord);
+  if (not AEnc.Given) or not plain then Exit;
+  { EVERY COORDINATE `encode` DOES NOT NAME takes the next element nobody
+    holds, up to the width item 0 declares. }
+  node := nil;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if d is TJSONObject then node := TJSONObject(d);
+  d := nil;
+  if node <> nil then d := node.Find('data');
+  if (d <> nil) and (d is TJSONArray) then
+    TyEncodeFillUnclaimed(AEnc, TySeriesDetectedDimCount(TJSONArray(d)));
   for k := 0 to High(ADims) do
-    if (k <= High(enc.Columns)) and (enc.Columns[k] >= 0)
+    if (k <= High(AEnc.Columns)) and (AEnc.Columns[k] >= 0)
       and not ADims[k].FromRowIndex then
-      ADims[k].SourceSlot := enc.Columns[k] + 1;
+      ADims[k].SourceSlot := AEnc.Columns[k] + 1;
+end;
+
+procedure TTyAdvanceChart.ResolveTextDims(const AEnc: TTySeriesEncode;
+  AStore: TTyDataStore);
+var
+  k, p, best: Integer;
+  lab, tip: TTyIntegerArray;
+  t: TTyDimType;
+
+  procedure AddSorted(var A: TTyIntegerArray; AValue: Integer);
+  var i: Integer;
+  begin
+    for i := 0 to High(A) do if A[i] = AValue then Exit;
+    SetLength(A, Length(A) + 1);
+    i := High(A);
+    while (i > 0) and (A[i - 1] > AValue) do
+    begin
+      A[i] := A[i - 1];
+      Dec(i);
+    end;
+    A[i] := AValue;
+  end;
+
+begin
+  if AStore = nil then Exit;
+  { THE LABEL: `encode.label` when it names anything; otherwise the LAST
+    coordinate column, by position, whose type a label suits -- neither a
+    category nor a time. Upstream's comment: y is what people look at. A
+    category-category chart has none, and its label is empty. }
+  lab := nil;
+  if Length(AEnc.Labels) > 0 then lab := Copy(AEnc.Labels)
+  else
+  begin
+    best := -1;
+    for k := 0 to AStore.DimCount - 1 do
+    begin
+      p := AStore.RawDimPos(k);
+      if p < 0 then Continue;
+      t := AStore.DimType(k);
+      if (t = ddtOrdinal) or (t = ddtTime) then Continue;
+      if p > best then best := p;
+    end;
+    if best >= 0 then
+    begin
+      SetLength(lab, 1);
+      lab[0] := best;
+    end;
+  end;
+  { THE TOOLTIP: `encode.tooltip`; else the columns a type marks as its
+    tooltip -- a candlestick's four values; else the label's. }
+  tip := nil;
+  if Length(AEnc.Tooltip) > 0 then tip := Copy(AEnc.Tooltip)
+  else
+  begin
+    for k := 0 to AStore.DimCount - 1 do
+      if (AStore.DimCoord(k) <> '') and (AStore.RawDimPos(k) >= 0) then
+        AddSorted(tip, AStore.RawDimPos(k));
+    if Length(tip) = 0 then tip := Copy(lab);
+  end;
+  AStore.SetLabelPositions(lab);
+  AStore.SetTooltipPositions(tip);
+end;
+
+function TTyAdvanceChart.SeriesModelName(ASeriesIndex: Integer): string;
+var
+  d: TJSONData;
+  node: TJSONObject;
+begin
+  Result := '';
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', ASeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find('name');
+  { WRITTEN: as written, '' included -- only an unwritten name is replaced. }
+  if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+    Exit(SeriesNameOf(ASeriesIndex));
+  Result := SeriesNameOf(ASeriesIndex);
+  if Result = '' then Result := TyChartSeriesDefaultName(ASeriesIndex);
 end;
 
 procedure TTyAdvanceChart.MultiValueDims(const ABinding: TTySeriesBinding;
@@ -3996,7 +4105,7 @@ begin
           Inc(drawn, TyBuildFunnelLabels(FBindings[i], FFunnels[i],
             TyFunnelLabelSpecOf(FOption, FBindings[i].SeriesIndex,
               TyFunnelLabelSpecDefault),
-            FunnelLabelInk, fv.Fills, FStores[i], SeriesNameOf(i),
+            FunnelLabelInk, fv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim), AMeasurer, APPI, list));
         end;
         Continue;
@@ -4016,7 +4125,7 @@ begin
           Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i],
             TyPieLabelSpecOf(FOption, FBindings[i].SeriesIndex,
               TyPieLabelSpecDefault),
-            PieLabelInk, pv.Fills, FStores[i], SeriesNameOf(i),
+            PieLabelInk, pv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim),
             FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));
         end;
@@ -4074,7 +4183,7 @@ begin
       v.LabelValueDim := -1;
       if (FBindings[i].ValueAxis <> nil) and (FStores[i] <> nil) then
         v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim);
-      v.SeriesName := SeriesNameOf(FBindings[i].SeriesIndex);
+      v.SeriesName := SeriesModelName(FBindings[i].SeriesIndex);
       if Length(specs) <= FBindings[i].SeriesIndex then
         SetLength(specs, FBindings[i].SeriesIndex + 1);
       specs[FBindings[i].SeriesIndex] := v.Label_;
@@ -4374,7 +4483,7 @@ begin
   slot := SlotOfSeries(ADatum.SeriesIndex);
   if slot < 0 then Exit;
   Result.SeriesType := FBindings[slot].SeriesType;
-  Result.SeriesName := SeriesNameOf(ADatum.SeriesIndex);
+  Result.SeriesName := SeriesModelName(ADatum.SeriesIndex);
   if slot > High(FStores) then Exit;
   st := FStores[slot];
   if st = nil then Exit;
@@ -4478,16 +4587,189 @@ begin
   end;
 end;
 
+type
+  { One series' tooltip cells, upstream's defaultSeriesFormatTooltip: the
+    texts (inline, joined by two spaces, or one per sub-row), the sub-rows'
+    names, and what `order` sorts the series by. Valid False: the store kept
+    no raw item or chose no tooltip dimensions, and the caller keeps its own
+    rule. }
+  TTyTipCells = record
+    Valid, MultiLine: Boolean;
+    Texts, Names: TTyStringArray;
+    Sort: TTyDataValue;
+  end;
+
+{ makeValueReadable with a type: a TIME is formatted
+  `yyyy-MM-dd HH:mm:ss`, in UTC under `useUTC` -- a number as epoch ms, text
+  through the date parser (local unless it says otherwise) -- and anything
+  that is no date falls to the untyped rules. }
+function TipReadable(const ACell: TTyDataValue; AType: TTyDimType;
+  AUTC: Boolean): string;
+var ms: Double; ok: Boolean;
+begin
+  if AType = ddtTime then
+  begin
+    ok := False;
+    ms := NaN;
+    case ACell.Kind of
+      dvkNumber, dvkBool:
+        if not (IsNan(ACell.Num) or IsInfinite(ACell.Num)) then
+        begin
+          ms := TyJsRound(ACell.Num);
+          ok := True;
+        end;
+      dvkText:
+        ok := TyParseDateMs(ACell.Text, ms, False);
+    end;
+    if ok and not IsNan(ms) then
+      Exit(TyFormatTime(ms, '{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}', AUTC));
+    AType := ddtFloat;
+  end;
+  Result := TyReadableCell(ACell, AType);
+end;
+
+function TipCellsOf(AStore: TTyDataStore; ARow: Integer;
+  AUTC: Boolean): TTyTipCells;
+var
+  raw: TTyRawItem;
+  pos: TTyIntegerArray;
+  n, i: Integer;
+  info: TTyRawDimInfo;
+  c: TTyDataValue;
+  haveFirst: Boolean;
+
+  procedure Put(APos: Integer; const ACell: TTyDataValue);
+  var k: Integer;
+  begin
+    info := AStore.RawDimInfo(APos);
+    k := Length(Result.Texts);
+    SetLength(Result.Texts, k + 1);
+    SetLength(Result.Names, k + 1);
+    Result.Texts[k] := TipReadable(ACell, AStore.RawPosType(APos), AUTC);
+    Result.Names[k] := '';
+    if info.HasDisplay then Result.Names[k] := info.Display;
+    if not haveFirst then
+    begin
+      Result.Sort := ACell;
+      haveFirst := True;
+    end;
+  end;
+
+begin
+  Result := Default(TTyTipCells);
+  if (AStore = nil) or not AStore.HasTooltipPositions then Exit;
+  raw := AStore.RawItem(ARow);
+  if raw.Shape = rshNone then Exit;
+  Result.Valid := True;
+  haveFirst := False;
+  pos := AStore.TooltipPositions;
+  n := Length(pos);
+  if (n > 1) or ((raw.Shape = rshArray) and (n = 0)) then
+  begin
+    { SUB-ROWS WHEN ANY POSITION OF THE ITEM HAS A DISPLAY NAME -- every
+      position the item has, shown or not; one a short item lacks does not
+      count. }
+    if raw.Shape = rshArray then
+      for i := 0 to Min(High(raw.Cells), AStore.RawWidth - 1) do
+      begin
+        info := AStore.RawDimInfo(i);
+        if info.HasDisplay then Result.MultiLine := True;
+      end;
+    if n > 0 then
+      for i := 0 to n - 1 do
+      begin
+        if not TTyDataStore.RawCell(raw, pos[i], c) then c := Default(TTyDataValue);
+        Put(pos[i], c);
+      end
+    else
+      { NO TOOLTIP DIMENSION: every element the data has a dimension for. }
+      for i := 0 to Min(High(raw.Cells), AStore.RawWidth - 1) do
+        Put(i, raw.Cells[i]);
+    { upstream sorts on the first INLINE value -- which a sub-row series has
+      none of. }
+    if Result.MultiLine then Result.Sort := Default(TTyDataValue);
+  end
+  else if n = 1 then
+  begin
+    if not TTyDataStore.RawCell(raw, pos[0], c) then c := Default(TTyDataValue);
+    SetLength(Result.Texts, 1);
+    SetLength(Result.Names, 1);
+    Result.Texts[0] := TipReadable(c, AStore.RawPosType(pos[0]), AUTC);
+    Result.Sort := c;
+  end
+  else
+  begin
+    { NOTHING TO CHOOSE FROM and no array: the value itself, untyped. }
+    c := Default(TTyDataValue);
+    if raw.Shape = rshScalar then c := raw.Scalar;
+    SetLength(Result.Texts, 1);
+    SetLength(Result.Names, 1);
+    Result.Texts[0] := TipReadable(c, ddtFloat, AUTC);
+    Result.Sort := c;
+  end;
+end;
+
+function TipInline(const ACells: TTyTipCells): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(ACells.Texts) do
+  begin
+    if i > 0 then Result := Result + '  ';
+    Result := Result + ACells.Texts[i];
+  end;
+end;
+
+{ A sub-row's name as upstream prints it: makeValueReadable(name, 'ordinal'),
+  so a dimension with no display name reads '-'. }
+function TipRowName(const AName: string): string;
+begin
+  Result := TyReadableCell(TyDataText(AName), ddtOrdinal);
+end;
+
+function TTyAdvanceChart.RadarTooltip(ASlot, ARow: Integer;
+  const AColor: TTyChartColor; const ASpec: TTyTooltipSpec): TTyTooltipBlock;
+var
+  st: TTyDataStore;
+  spec: TTyRadarSpec;
+  nm: string;
+  j: Integer;
+  v: Double;
+begin
+  st := FStores[ASlot];
+  { HEADED BY THE ITEM, or the series when the item has no name -- the
+    model's name, auto name included -- and never hidden: a blank reads '-'. }
+  nm := st.GetItemName(ARow);
+  if nm = '' then nm := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  nm := TipRowName(nm);
+  Result := TTyTooltipBlock.CreateSection(nm, False);
+  { A ROW PER INDICATOR, the PARSED value, sorted by `order` even in an item
+    tooltip -- the radar's section asks for it. }
+  spec := TyRadarSpecOf(FOption, FBindings[ASlot].RadarIndex);
+  for j := 0 to High(spec.Indicators) do
+  begin
+    if j >= st.DimCount then Break;
+    v := st.Get(j, ARow);
+    Result.Add(TTyTooltipBlock.CreateNameValue(ttmSubItem, AColor,
+      TipRowName(spec.Indicators[j].Name), False, TyTooltipValueText(v),
+      False)).SortParam := v;
+  end;
+  if ASpec.HasOrder then Result.SortBlocks(ASpec.Order);
+end;
+
 function TTyAdvanceChart.TooltipContent(const ADatum: TTyChartDatumRef;
   const ASpec: TTyTooltipSpec): TTyTooltipBlock;
 var
   p: TTyChartCallbackParams;
   seriesName, inlineName, valueText: string;
   haveValue: Boolean;
+  slot, i: Integer;
+  cells: TTyTipCells;
 begin
   Result := nil;
   p := TooltipParams(ADatum);
-  seriesName := p.SeriesName;
+  { The DISPLAY name heads the section: an unnamed series has none. }
+  seriesName := SeriesNameOf(ADatum.SeriesIndex);
   inlineName := p.Name;
   haveValue := Length(p.Values) > 0;
   valueText := ValuesText(p);
@@ -4507,6 +4789,23 @@ begin
       inlineName, False, valueText, not haveValue));
     Exit;
   end;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if (slot >= 0) and (FBindings[slot].RadarIndex >= 0) and (slot <= High(FStores))
+    and (FStores[slot] <> nil) and (ADatum.DataIndex >= 0)
+    and (ADatum.DataIndex < FStores[slot].Count) then
+    Exit(RadarTooltip(slot, ADatum.DataIndex, p.Color, ASpec));
+  cells := Default(TTyTipCells);
+  if (slot >= 0) and (slot <= High(FStores)) and (ADatum.DataIndex >= 0)
+    and (FStores[slot] <> nil) and (ADatum.DataIndex < FStores[slot].Count) then
+    cells := TipCellsOf(FStores[slot], ADatum.DataIndex,
+      (FOption <> nil) and FOption.GetBool('useUTC', False));
+  if cells.Valid then
+  begin
+    { SUB-ROWS: the item's own row keeps its name and an EMPTY value -- a
+      value cell with nothing in it, not no value cell. }
+    if cells.MultiLine then valueText := '' else valueText := TipInline(cells);
+    haveValue := True;
+  end;
   if (Trim(inlineName) = '') and not haveValue and (Trim(seriesName) = '') then
     Exit;
 
@@ -4523,6 +4822,12 @@ begin
   Result := TTyTooltipBlock.CreateSection(seriesName, False);
   Result.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
     inlineName, False, valueText, not haveValue));
+  { THE SUB-ROWS ARE SIBLINGS of the item row, after it, small-dotted in the
+    series' colour. }
+  if cells.MultiLine then
+    for i := 0 to High(cells.Texts) do
+      Result.Add(TTyTooltipBlock.CreateNameValue(ttmSubItem, p.Color,
+        TipRowName(cells.Names[i]), False, cells.Texts[i], False));
 end;
 
 function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
@@ -5443,7 +5748,9 @@ var
   header, valueText: string;
   d: TTyChartDatumRef;
   p: TTyChartCallbackParams;
-  rows: Integer;
+  rows, j: Integer;
+  cells: TTyTipCells;
+  sub: TTyTooltipBlock;
 begin
   { A HEADERLESS ROOT HOLDING ONE SECTION PER AXIS, each holding one row per
     surviving series. Three layers, and the shape is what decides the spacing
@@ -5473,14 +5780,30 @@ begin
         FStores[slot].GetRawIndex(row));
       p := TooltipParams(d);
       if Length(p.Values) = 0 then Continue;
-      valueText := ValuesText(p);
+      cells := TipCellsOf(FStores[slot], row,
+        (FOption <> nil) and FOption.GetBool('useUTC', False));
+      if not cells.Valid then valueText := ValuesText(p)
+      else if cells.MultiLine then valueText := ''
+      else valueText := TipInline(cells);
+      { EACH SERIES IS ITS OWN HEADERLESS SECTION -- its row and its sub-rows
+        together, so `order` and `seriesDesc` move them as one. It is what
+        `order` sorts, keyed on the series' first inline RAW value. }
+      sub := TTyTooltipBlock.CreateSection('', True);
+      if cells.Valid then sub.SortCell := cells.Sort
+      else sub.SortParam := p.Values[0];
       { UNDER AN AXIS TRIGGER THE INLINE NAME IS THE SERIES NAME, not the item
         name -- upstream passes `multipleSeries = true`, which both suppresses
         the per-series header AND switches the name. The item name is already
         the section's header, so repeating it on every row would say the
-        category once per series. }
-      section.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
-        p.SeriesName, False, valueText, False)).SortParam := p.Values[0];
+        category once per series. It is the DISPLAY name: an unnamed series'
+        row has none. }
+      sub.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
+        SeriesNameOf(FBindings[slot].SeriesIndex), False, valueText, False));
+      if cells.MultiLine then
+        for j := 0 to High(cells.Texts) do
+          sub.Add(TTyTooltipBlock.CreateNameValue(ttmSubItem, p.Color,
+            TipRowName(cells.Names[j]), False, cells.Texts[j], False));
+      section.Add(sub);
       Inc(rows);
     end;
     { `order` SORTS THE ROWS WITHIN ONE SECTION and nothing else. Upstream sets
@@ -5683,7 +6006,7 @@ begin
                  Round(box.Left + padL + lines[i].Runs[j].X
                        + lines[i].Runs[j].W) + 1,
                  Round(lineTop + lineH)),
-            lines[i].Runs[j].Text, lines[i].Runs[j].FontName,
+            TyInkText(lines[i].Runs[j].Text), lines[i].Runs[j].FontName,
             lines[i].Runs[j].FontSizeLogical, lines[i].Runs[j].FontWeight,
             TTyColor(lines[i].Runs[j].Colour), taLeftJustify, tlCenter, False);
         end;

@@ -5533,13 +5533,16 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 
 ### 已知偏差
 
-- **原始值通道**:store 只存解析后的 Double。原始字符串(`'12.50'`)、布尔、`null` 和 `undefined` 的文字、数组和 dataset 行的 `{c}`、objectRows,都要能回头查原始 JSON。
+- **原始值通道**:**[第四十九批已做,见 §83。]** store 只存解析后的 Double。原始字符串(`'12.50'`)、布尔、`null` 和 `undefined` 的文字、数组和 dataset 行的 `{c}`、objectRows,都要能回头查原始 JSON。
   `{@维度}` 对标量数据项的回退也在这里:上游一个标量项对任何维度名、任何 `[n]` 都答它自己的值,这要知道原始项是不是数组。
 - **tooltip 子行**:K 线的 open/close/lowest/highest、雷达每个指标一行、`displayName`、`encode.tooltip`。
+  **[第五十批已做,见 §84。]**
 - 雷达的数据标签没有实现;雷达环上的标签还是 `TyChartNumToStr`,要和 scaleCalcAlign 一起做。
   **[第四十八批:环上的标签改成刻度标签(千分位),见 §82。]**
 - `encode.label` 和 defaultedLabel 维度规则(类目-类目、时间-类目的散点没有默认标签)。
+  **[第五十批已做,见 §84。]**
 - 未命名系列的自动名 `series\0N`:要先决定怎么画一个 NUL。
+  **[第五十批:文字里保留 NUL,度量和绘制时去掉,和浏览器一样什么也不画,见 §84。]**
 - 仪表盘 `splitNumber: 0`:上游印 NaN,port 有意画最小值(gauge 测试钉着)。
 - **柱子几何,下一批**:fixture 里的堆叠用例暴露了两个问题。
   - 柱子从坐标轴的 min 画起,不是从 0(上游 `getValueAxisStart`)。数据全为正时两者重合,有负值就画错。
@@ -6839,3 +6842,81 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 还在队列里
 
 tooltip 子行 → 旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并、D9 数据解析对齐。
+
+## 84. Tier 1 第五十批:tooltip 子行、encode.tooltip / encode.label、默认维度、自动系列名(2026-09-24)
+
+上游的 tooltip 不是"一个数值格":一个系列可以有好几行,标签也不总是值轴那一列。port 以前一律取值轴那列、多个值用两个空格连成一行,K 线四个数挤在一行里,雷达只显示最后一个指标。
+
+### 上游的做法
+
+- **哪些维度进 tooltip**(`dimensionHelper.ts`):`encode.tooltip` 非空就用它;否则类型声明的 tooltip 维(K 线的 open/close/lowest/highest、箱线图的 min…max);再否则跟标签走。
+- **哪些维度进标签**:`encode.label` 非空就用它;否则**按位置最后一个**不是类目也不是时间的坐标维,至多一个。类目-类目、时间-类目、时间-时间的散点没有默认标签。多个维度各自 `String()` 后用**一个**空格连,缺值是空串。
+- **三个分支**(`seriesFormatTooltip.ts`):
+  - 多于一个 tooltip 维,或没有 tooltip 维而原始值是数组:逐个格子;原始项的**任何一个位置**(显示与否、短项没有的不算)带 `displayName` 就改成子行——物品行的值是空串(有值格、只是空),下面每维一行小圆点,名字是 displayName,没有就是 `-`;否则两个空格连成一行。
+  - 恰好一个:那一格。
+  - 没有 tooltip 维、原始值也不是数组:值本身,不带类型。
+- **displayName** 只来自**声明**:系列 `dimensions`(名字即显示名,可另写 `displayName`)、数据集表头或 `dataset.dimensions`、类型注册的维度名(K 线、箱线图,行号前插时那一维叫 `base`)。生成的 `value`/`value0`、坐标名都不算。
+- **没声明类型的额外维度**按 `guessOrdinal` 猜:前五项里第一个能说明问题的值是非数字文本(`'-'` 不算)就是类目;原始数据遇到非数组项就停,答"不是类目"。类目格原样印、不加千分位。
+- **时间格**:`yyyy-MM-dd HH:mm:ss`,`useUTC` 时按 UTC;不带时区的文本按本地时间解析。
+- **给出 encode 时没写的坐标**按坐标顺序取第一个没被占的维度;写成 `-1` 的不映射,也不占位。
+- **轴触发**:每个系列是一个无头 section,装着它的行和子行;`order` 排的是这些 section,排序键是系列的**第一个内联原始值**(有子行的系列没有键)。
+- **排序比较器**(`SortOrderComparator`):能读成数的在前(Infinity 算);其余不可比,排到尾;但两个都是文本时按文本比,文本对非文本时文本算 0——所以文本总在数和其余之间。
+- **雷达**自己的 tooltip:section 以数据项名为头(空则用系列的模型名,再空则 `-`,从不隐藏),每个指标一行小圆点、值是解析后的数;物品触发下 `order` 也生效。
+- **系列名两种**:显示名(没写就是空,决定头、轴行名、图例)和模型名(没写是 `series\0<序号>`,写了 `''` 就是 `''`),`{a}`、处理器的 `seriesName` 用模型名。
+
+### port 以前
+
+- tooltip 值取值轴那列;多值两空格一行;没有 `ttmSubItem`;雷达走通用路径。
+- 标签取值轴那列:类目-类目的散点标出类目、时间-类目标出日期。
+- `encode.tooltip` / `encode.label` 不读;`encode` 的列表只取第一个;`displayName` 不读。
+- 数据集给了部分 encode 时,没写的坐标整列为空(`encode: {tooltip: [2]}` 整张图没东西)。
+- 排序键是 Double:文本全算 NaN,`'abc'`、`'abd'` 按原顺序;有子行的 K 线按 open 排。
+- 未命名系列的 `{a}` 是空。
+
+### 做法
+
+- `Tooltip`:块的排序键改成原始格 `SortCell`(`SortParam` 保留为数值写法);`TyTooltipCompare` 照搬比较器。
+- `Data`:每个原始位置的信息表(显示名、声明类型)、`RawPosType`(读它的列的类型 > 声明 > 猜测 > 数)、`GuessRawOrdinals`、tooltip / 标签位置表、`RawWidth`、`DimCoord`。
+- `Dataset`:源维度带 `DisplayName`;encode 记下哪些坐标写过、`tooltip` / `label` 列表全部解析;`TyEncodeFillUnclaimed`;`TySeriesDimsSource`(原始数据上 encode 的名字按系列 `dimensions` 解析)。
+- `Builder`:声明维度填名字、显示名、类型;K 线类型维度名作显示名,前插的行号叫 `base`;填完猜类目。
+- `AdvanceChart`:
+  - `SeriesDataEncode` 读系列 `dimensions` 解析名字,并补位没写的坐标;数据集路径同样补位。
+  - `ResolveTextDims` 按上游规则定标签和 tooltip 位置。
+  - `TipCellsOf` 算三个分支、子行、排序键,时间格按 `useUTC` 格式化;`TooltipContent`、`AxisTooltipContent` 按上游的块树搭;`RadarTooltip`。
+  - `SeriesModelName`:`{a}`(标签、饼、漏斗、graph)和参数的 `SeriesName` 用它;头和轴行名仍用显示名。
+- `LabelOpt`:store 有标签位置表时按位置取格、一个空格连。
+- `Measure` / `Render`:`TyInkText` 在度量和绘制时去掉 NUL。
+
+### 基准
+
+- `series-text.js` 解除 12 条 deferred,新增 N1–N20 及变异测试后补的 8 条判别用例、10 个抽查。现在标签 90 例、tooltip 117 例、仪表盘 14 例;还 deferred 的只剩 3 条(两条 D9 解析、仪表盘 `splitNumber: 0`)。时间用例都写 `useUTC: true`。
+- **fpjson 会吞掉 `\u0000`**(扫描器把它当代理对的前半),自动名的 NUL 读不进来。运行器解析前把 `\u0000` 换成 `\u0001`,port 的输出也把 NUL 映射成它再比较,NUL 仍被逐字比较。
+- `test.advchart.subrows`:未命名系列的 `[{a}]` 标签和名叫 `series0` 的系列,标签框一样宽、渲染逐像素相同。
+- `test.advchart.dataset`:`TyEncodeFillUnclaimed` 的单元测试(写成 `-1` 的不补、不占位)。
+
+### 被推翻的旧测试和旧说法
+
+- `test.advchart.axispointer.pas`:轴触发的行原来直接在轴 section 下,现在每个系列多一层无头 section;测试改为多下钻一层,并断言那一层是无头 section。原处有标注。
+- `AdvanceChart.pas` 里 `ValuesText` 的注释说"K 线总走这一支":上游 K 线的维度有显示名,走子行。原处有标注。
+- 审计里"基轴的 `tooltip: false` 要实现"一条:上游用例表明,`encode.tooltip` 点名 base 时它照样显示(encode 先写进 otherDims,类型的默认值不覆盖),而不点名时 base 根本进不了 tooltip 维——这个标志永远藏不掉任何东西。实现过又删了,见变异测试。
+
+### 已知偏差
+
+- D9 解析对齐(`'   '`、`'0x10'`、`'Infinity'`):单独一批。
+- 仪表盘 `splitNumber: 0`:有意保留。
+- 不带时区的日期文本按**本地时间**解析(上游也是),`useUTC` 只管输出;所以这类用例依赖机器时区,fixture 在 UTC+8 下生成。
+- 极坐标、热力图的默认维度(port 没有这两种);`encode.y` 等列表只用第一个;`tooltip.valueFormatter`;箱线图的渲染和物品 tooltip。
+- 两层带头的轴 section(gap level 2)没有用例覆盖,行为没动。
+
+### 变异测试
+
+50 个,全部被杀。
+
+- 第一轮存活 9 个,逐个补上:
+  - 文本对空值/布尔的排序、`'-'` 不说明类型、原始数据的标量首项终止猜测、原始数据的部分 encode 补位、声明的类目类型、类目-类目里比第 0 项长的项、时间-时间的标量项走无类型分支:各补一条上游用例;
+  - 写成 `-1` 的坐标不补位:`TyEncodeFillUnclaimed` 单元测试;
+  - K 线行号的 `tooltip: false`:补的上游用例反而表明 `encode.tooltip` 点名时 base 照样显示,且不点名时 base 进不了 tooltip 维——整个机制不可达,连同它的 3 个变异体一起删掉,改为给行号维起名 `base`(新变异体被杀)。
+
+### 还在队列里
+
+遗留:旋转标签矩形的分解重组(连同 V8 的 `tan`)、title / legend 的布局合并、D9 数据解析对齐。

@@ -5793,8 +5793,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
-   "why": "encode and the defaulted label dimension",
    "series": [
     {
      "seriesIndex": 0,
@@ -5856,8 +5854,6 @@
     ],
     "animation": false
    },
-   "deferred": true,
-   "why": "encode and the defaulted label dimension",
    "series": [
     {
      "seriesIndex": 0,
@@ -5915,8 +5911,519 @@
     ],
     "animation": false
    },
-   "deferred": true,
-   "why": "encode and the defaulted label dimension",
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        ""
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        ""
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar encode.label [0,1]",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "label": [
+        0,
+        1
+       ]
+      },
+      "data": [
+       [
+        "A",
+        1234.5
+       ],
+       [
+        "B",
+        "12.50"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A 1234.5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B 12.50"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scatter dimensions p,q,r + encode.label ['r','p']",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "dimensions": [
+       "p",
+       "q",
+       "r"
+      ],
+      "encode": {
+       "x": "p",
+       "y": "q",
+       "label": [
+        "r",
+        "p"
+       ]
+      },
+      "data": [
+       [
+        1,
+        2,
+        "z"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "z 1"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scalar bar encode.label [0,1]",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "label": [
+        0,
+        1
+       ]
+      },
+      "data": [
+       5,
+       null
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5 5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": false,
+       "texts": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar encode.label [2,1] on ['A',5,null]",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "y": 1,
+       "label": [
+        2,
+        1
+       ]
+      },
+      "data": [
+       [
+        "A",
+        5,
+        null
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        " 5"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset bar encode {x:0}",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "1"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "3"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dataset bar encode {y:2}",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "y": 2
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "2"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "scatter encode {y: 0}: x takes element 1",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "encode": {
+       "y": 0
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "2"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "time-time scatter useUTC",
+   "option": {
+    "useUTC": true,
+    "xAxis": {
+     "type": "time"
+    },
+    "yAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "TT",
+      "data": [
+       [
+        "2020-01-01",
+        1577923200000
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        ""
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "cat-time scatter useUTC: no label, both cells",
+   "option": {
+    "useUTC": true,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "CT",
+      "data": [
+       [
+        "a",
+        "2020-01-01"
+       ],
+       [
+        "b",
+        1577923200000
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
    "series": [
     {
      "seriesIndex": 0,
@@ -5966,12 +6473,111 @@
     ],
     "animation": false
    },
-   "deferred": true,
-   "why": "the unnamed series' auto name",
    "series": [
     {
      "seriesIndex": 0,
      "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "[series\u00000]"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "bar name '': {a} empty",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "formatter": "[{a}]"
+      }
+     },
+     {
+      "type": "bar",
+      "name": "",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "formatter": "[{a}]"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "[series\u00000]"
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "[]"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "unnamed pie {a}",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       {
+        "name": "x",
+        "value": 1
+       }
+      ],
+      "label": {
+       "formatter": "[{a}]"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "pie",
      "items": [
       {
        "dataIndex": 0,
@@ -10848,8 +11454,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "sub-row tooltips",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 1,
@@ -10929,8 +11533,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "sub-row tooltips",
    "trigger": "axis",
    "category": "d1",
    "lines": [
@@ -10967,6 +11569,241 @@
    ],
    "text": "{__EC_aUTo_16|d1}\n{__EC_aUTo_1|}  {__EC_aUTo_2|K}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|open}{__EC_aUTo_6|4,000.5}\n{__EC_aUTo_7|}  {__EC_aUTo_8|close}{__EC_aUTo_9|1,234.25}\n{__EC_aUTo_10|}  {__EC_aUTo_11|lowest}{__EC_aUTo_12|1,000}\n{__EC_aUTo_13|}  {__EC_aUTo_14|highest}{__EC_aUTo_15|5,000}",
    "visible": "d1\n  K\n  open4,000.5\n  close1,234.25\n  lowest1,000\n  highest5,000"
+  },
+  {
+   "name": "candlestick unnamed: item, no header",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "d0",
+      "d1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        4000.5,
+        1234.25,
+        1000,
+        5000
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "d1",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "open",
+     "value": "4,000.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "close",
+     "value": "1,234.25"
+    },
+    {
+     "marker": "subItem",
+     "name": "lowest",
+     "value": "1,000"
+    },
+    {
+     "marker": "subItem",
+     "name": "highest",
+     "value": "5,000"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|d1}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|open}{__EC_aUTo_6|4,000.5}\n{__EC_aUTo_7|}  {__EC_aUTo_8|close}{__EC_aUTo_9|1,234.25}\n{__EC_aUTo_10|}  {__EC_aUTo_11|lowest}{__EC_aUTo_12|1,000}\n{__EC_aUTo_13|}  {__EC_aUTo_14|highest}{__EC_aUTo_15|5,000}",
+   "visible": "  d1\n  open4,000.5\n  close1,234.25\n  lowest1,000\n  highest5,000"
+  },
+  {
+   "name": "candlestick unnamed: axis, a noName row",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "d0",
+      "d1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        4000.5,
+        1234.25,
+        1000,
+        5000
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "axis",
+   "category": "d1",
+   "lines": [
+    {
+     "marker": null,
+     "name": "d1",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "open",
+     "value": "4,000.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "close",
+     "value": "1,234.25"
+    },
+    {
+     "marker": "subItem",
+     "name": "lowest",
+     "value": "1,000"
+    },
+    {
+     "marker": "subItem",
+     "name": "highest",
+     "value": "5,000"
+    }
+   ],
+   "text": "{__EC_aUTo_15|d1}\n{__EC_aUTo_1|}  {__EC_aUTo_2|}\n{__EC_aUTo_3|}  {__EC_aUTo_4|open}{__EC_aUTo_5|4,000.5}\n{__EC_aUTo_6|}  {__EC_aUTo_7|close}{__EC_aUTo_8|1,234.25}\n{__EC_aUTo_9|}  {__EC_aUTo_10|lowest}{__EC_aUTo_11|1,000}\n{__EC_aUTo_12|}  {__EC_aUTo_13|highest}{__EC_aUTo_14|5,000}",
+   "visible": "d1\n  \n  open4,000.5\n  close1,234.25\n  lowest1,000\n  highest5,000"
+  },
+  {
+   "name": "boxplot axis: min..max rows",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "b0",
+      "b1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "name": "Bx",
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        850,
+        1234.5,
+        1500,
+        1800,
+        2000
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "axis",
+   "category": "b1",
+   "lines": [
+    {
+     "marker": null,
+     "name": "b1",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "Bx",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "min",
+     "value": "850"
+    },
+    {
+     "marker": "subItem",
+     "name": "Q1",
+     "value": "1,234.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "median",
+     "value": "1,500"
+    },
+    {
+     "marker": "subItem",
+     "name": "Q3",
+     "value": "1,800"
+    },
+    {
+     "marker": "subItem",
+     "name": "max",
+     "value": "2,000"
+    }
+   ],
+   "text": "{__EC_aUTo_19|b1}\n{__EC_aUTo_1|}  {__EC_aUTo_2|Bx}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|min}{__EC_aUTo_6|850}\n{__EC_aUTo_7|}  {__EC_aUTo_8|Q1}{__EC_aUTo_9|1,234.5}\n{__EC_aUTo_10|}  {__EC_aUTo_11|median}{__EC_aUTo_12|1,500}\n{__EC_aUTo_13|}  {__EC_aUTo_14|Q3}{__EC_aUTo_15|1,800}\n{__EC_aUTo_16|}  {__EC_aUTo_17|max}{__EC_aUTo_18|2,000}",
+   "visible": "b1\n  Bx\n  min850\n  Q11,234.5\n  median1,500\n  Q31,800\n  max2,000"
   },
   {
    "name": "radar item: one row per indicator",
@@ -11018,8 +11855,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "sub-row tooltips",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -11098,8 +11933,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "sub-row tooltips",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 1,
@@ -11127,6 +11960,240 @@
    ],
    "text": "{__EC_aUTo_10|R}\n{__EC_aUTo_1|}  {__EC_aUTo_2|A}{__EC_aUTo_3|1}\n{__EC_aUTo_4|}  {__EC_aUTo_5|B}{__EC_aUTo_6|2}\n{__EC_aUTo_7|}  {__EC_aUTo_8|C}{__EC_aUTo_9|3}",
    "visible": "R\n  A1\n  B2\n  C3"
+  },
+  {
+   "name": "radar item valueAsc",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 20000
+      },
+      {
+       "name": "B",
+       "max": 10
+      },
+      {
+       "name": "C",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "name": "R",
+      "data": [
+       {
+        "name": "r",
+        "value": [
+         12345.5,
+         0.30000000000000004,
+         "-"
+        ]
+       },
+       {
+        "value": [
+         "12.50",
+         " 5 ",
+         3
+        ]
+       }
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueAsc"
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "r",
+     "value": null
+    },
+    {
+     "marker": "subItem",
+     "name": "B",
+     "value": "0.30000000000000004"
+    },
+    {
+     "marker": "subItem",
+     "name": "A",
+     "value": "12,345.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "C",
+     "value": "-"
+    }
+   ],
+   "text": "{__EC_aUTo_10|r}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|0.30000000000000004}\n{__EC_aUTo_4|}  {__EC_aUTo_5|A}{__EC_aUTo_6|12,345.5}\n{__EC_aUTo_7|}  {__EC_aUTo_8|C}{__EC_aUTo_9|-}",
+   "visible": "r\n  B0.30000000000000004\n  A12,345.5\n  C-"
+  },
+  {
+   "name": "radar name '' + unnamed item: header -",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 20000
+      },
+      {
+       "name": "B",
+       "max": 10
+      },
+      {
+       "name": "C",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "name": "",
+      "data": [
+       {
+        "name": "r",
+        "value": [
+         12345.5,
+         0.30000000000000004,
+         "-"
+        ]
+       },
+       {
+        "value": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "-",
+     "value": null
+    },
+    {
+     "marker": "subItem",
+     "name": "A",
+     "value": "1"
+    },
+    {
+     "marker": "subItem",
+     "name": "B",
+     "value": "2"
+    },
+    {
+     "marker": "subItem",
+     "name": "C",
+     "value": "3"
+    }
+   ],
+   "text": "{__EC_aUTo_10|-}\n{__EC_aUTo_1|}  {__EC_aUTo_2|A}{__EC_aUTo_3|1}\n{__EC_aUTo_4|}  {__EC_aUTo_5|B}{__EC_aUTo_6|2}\n{__EC_aUTo_7|}  {__EC_aUTo_8|C}{__EC_aUTo_9|3}",
+   "visible": "-\n  A1\n  B2\n  C3"
+  },
+  {
+   "name": "radar unnamed series: header is the auto name",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 20000
+      },
+      {
+       "name": "B",
+       "max": 10
+      },
+      {
+       "name": "C",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "name": "r",
+        "value": [
+         12345.5,
+         0.30000000000000004,
+         "-"
+        ]
+       },
+       {
+        "value": [
+         "12.50",
+         " 5 ",
+         3
+        ]
+       }
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "series\u00000",
+     "value": null
+    },
+    {
+     "marker": "subItem",
+     "name": "A",
+     "value": "12.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "B",
+     "value": "5"
+    },
+    {
+     "marker": "subItem",
+     "name": "C",
+     "value": "3"
+    }
+   ],
+   "text": "{__EC_aUTo_10|series\u00000}\n{__EC_aUTo_1|}  {__EC_aUTo_2|A}{__EC_aUTo_3|12.5}\n{__EC_aUTo_4|}  {__EC_aUTo_5|B}{__EC_aUTo_6|5}\n{__EC_aUTo_7|}  {__EC_aUTo_8|C}{__EC_aUTo_9|3}",
+   "visible": "series\u00000\n  A12.5\n  B5\n  C3"
   },
   {
    "name": "scatter encode.tooltip [1, 0]",
@@ -11163,8 +12230,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "encode.tooltip and displayName",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -11228,8 +12293,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "encode.tooltip and displayName",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -11257,6 +12320,751 @@
    ],
    "text": "{__EC_aUTo_9|E}\n{__EC_aUTo_1|}  {__EC_aUTo_2|}\n{__EC_aUTo_3|}  {__EC_aUTo_4|XX}{__EC_aUTo_5|10}\n{__EC_aUTo_6|}  {__EC_aUTo_7|YY}{__EC_aUTo_8|20}",
    "visible": "E\n  \n  XX10\n  YY20"
+  },
+  {
+   "name": "scatter displayName on a dim not shown: sub-rows named -",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "E",
+      "encode": {
+       "tooltip": [
+        0,
+        1
+       ]
+      },
+      "dimensions": [
+       null,
+       null,
+       {
+        "name": "z",
+        "displayName": "Z"
+       }
+      ],
+      "data": [
+       [
+        10,
+        20,
+        30
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "E",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "-",
+     "value": "10"
+    },
+    {
+     "marker": "subItem",
+     "name": "-",
+     "value": "20"
+    }
+   ],
+   "text": "{__EC_aUTo_9|E}\n{__EC_aUTo_1|}  {__EC_aUTo_2|}\n{__EC_aUTo_3|}  {__EC_aUTo_4|-}{__EC_aUTo_5|10}\n{__EC_aUTo_6|}  {__EC_aUTo_7|-}{__EC_aUTo_8|20}",
+   "visible": "E\n  \n  -10\n  -20"
+  },
+  {
+   "name": "scatter raw shorter than the named dim: inline",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "E",
+      "encode": {
+       "tooltip": [
+        0,
+        1
+       ]
+      },
+      "dimensions": [
+       null,
+       null,
+       {
+        "name": "z",
+        "displayName": "Z"
+       }
+      ],
+      "data": [
+       [
+        10,
+        20
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "E",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "10  20"
+    }
+   ],
+   "text": "{__EC_aUTo_3|E}\n{__EC_aUTo_1|}  {__EC_aUTo_2|10  20}",
+   "visible": "E\n  10  20"
+  },
+  {
+   "name": "dataset header + encode {tooltip:[1,2]}: item",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "tooltip": [
+        1,
+        2
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "x",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "a",
+     "value": "1"
+    },
+    {
+     "marker": "subItem",
+     "name": "b",
+     "value": "2"
+    }
+   ],
+   "text": "{__EC_aUTo_10|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|x}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|a}{__EC_aUTo_6|1}\n{__EC_aUTo_7|}  {__EC_aUTo_8|b}{__EC_aUTo_9|2}",
+   "visible": "S\n  x\n  a1\n  b2"
+  },
+  {
+   "name": "dataset header + encode {tooltip:[1,2]}: axis x",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "tooltip": [
+        1,
+        2
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "axis",
+   "category": "x",
+   "lines": [
+    {
+     "marker": null,
+     "name": "x",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "a",
+     "value": "1"
+    },
+    {
+     "marker": "subItem",
+     "name": "b",
+     "value": "2"
+    }
+   ],
+   "text": "{__EC_aUTo_10|x}\n{__EC_aUTo_1|}  {__EC_aUTo_2|S}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|a}{__EC_aUTo_6|1}\n{__EC_aUTo_7|}  {__EC_aUTo_8|b}{__EC_aUTo_9|2}",
+   "visible": "x\n  S\n  a1\n  b2"
+  },
+  {
+   "name": "dataset without header + encode.tooltip [1,2]: inline",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        1,
+        2
+       ]
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "x",
+     "value": "1  2"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|x}{__EC_aUTo_3|1  2}",
+   "visible": "S\n  x1  2"
+  },
+  {
+   "name": "dataset bar encode {x:0}: item 0",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "x",
+     "value": "1"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|x}{__EC_aUTo_3|1}",
+   "visible": "S\n  x1"
+  },
+  {
+   "name": "dataset bar encode {y:2}: item 0",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "a",
+       "b"
+      ],
+      [
+       "x",
+       1,
+       2
+      ],
+      [
+       "y",
+       3,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "y": 2
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "x",
+     "value": "2"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|x}{__EC_aUTo_3|2}",
+   "visible": "S\n  x2"
+  },
+  {
+   "name": "encode.tooltip [2,1], column 2 guessed ordinal",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "E",
+      "encode": {
+       "tooltip": [
+        2,
+        1
+       ]
+      },
+      "data": [
+       [
+        1,
+        2,
+        "q"
+       ],
+       [
+        3,
+        4.5,
+        1234.5
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "E",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "1234.5  4.5"
+    }
+   ],
+   "text": "{__EC_aUTo_3|E}\n{__EC_aUTo_1|}  {__EC_aUTo_2|1234.5  4.5}",
+   "visible": "E\n  1234.5  4.5"
+  },
+  {
+   "name": "bar encode.label [0,1]: item 0",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "label": [
+        0,
+        1
+       ]
+      },
+      "data": [
+       [
+        "A",
+        1234.5
+       ],
+       [
+        "B",
+        "12.50"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "A",
+     "value": "A  1,234.5"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|A}{__EC_aUTo_3|A  1,234.5}",
+   "visible": "S\n  AA  1,234.5"
+  },
+  {
+   "name": "bar encode.label [0,1]: axis A",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "label": [
+        0,
+        1
+       ]
+      },
+      "data": [
+       [
+        "A",
+        1234.5
+       ],
+       [
+        "B",
+        "12.50"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S",
+     "value": "A  1,234.5"
+    }
+   ],
+   "text": "{__EC_aUTo_4|A}\n{__EC_aUTo_1|}  {__EC_aUTo_2|S}{__EC_aUTo_3|A  1,234.5}",
+   "visible": "A\n  SA  1,234.5"
+  },
+  {
+   "name": "scatter dimensions p,q,r + encode.label ['r','p']: item",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "dimensions": [
+       "p",
+       "q",
+       "r"
+      ],
+      "encode": {
+       "x": "p",
+       "y": "q",
+       "label": [
+        "r",
+        "p"
+       ]
+      },
+      "data": [
+       [
+        1,
+        2,
+        "z"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "r",
+     "value": "z"
+    },
+    {
+     "marker": "subItem",
+     "name": "p",
+     "value": "1"
+    }
+   ],
+   "text": "{__EC_aUTo_9|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|}\n{__EC_aUTo_3|}  {__EC_aUTo_4|r}{__EC_aUTo_5|z}\n{__EC_aUTo_6|}  {__EC_aUTo_7|p}{__EC_aUTo_8|1}",
+   "visible": "S\n  \n  rz\n  p1"
   },
   {
    "name": "scatter category-category item",
@@ -11299,8 +13107,6 @@
      "transitionDuration": 0
     }
    },
-   "deferred": true,
-   "why": "the defaulted value of a category-category series",
    "trigger": "item",
    "seriesIndex": 0,
    "dataIndex": 0,
@@ -11318,6 +13124,1203 @@
    ],
    "text": "{__EC_aUTo_4|CC}\n{__EC_aUTo_1|}  {__EC_aUTo_2|a}{__EC_aUTo_3|a  u}",
    "visible": "CC\n  aa  u"
+  },
+  {
+   "name": "cat-cat scalar item: none branch",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "u",
+      "v"
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "CC",
+      "data": [
+       [
+        "a",
+        "u"
+       ],
+       {
+        "value": [
+         "b",
+         "v"
+        ],
+        "name": "own"
+       },
+       1
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 2,
+   "lines": [
+    {
+     "marker": null,
+     "name": "CC",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "b",
+     "value": "1"
+    }
+   ],
+   "text": "{__EC_aUTo_4|CC}\n{__EC_aUTo_1|}  {__EC_aUTo_2|b}{__EC_aUTo_3|1}",
+   "visible": "CC\n  b1"
+  },
+  {
+   "name": "category-category: an item longer than item 0",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "u",
+      "v"
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        "a",
+        "u"
+       ],
+       [
+        "b",
+        "v",
+        "extra"
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "b",
+     "value": "b  v"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|b}{__EC_aUTo_3|b  v}",
+   "visible": "  bb  v"
+  },
+  {
+   "name": "scatter encode {y: 0}: item 0",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "encode": {
+       "y": 0
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": "item",
+     "name": null,
+     "value": "2"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|2}",
+   "visible": "  2"
+  },
+  {
+   "name": "guessed type: a leading \"-\" tells nothing",
+   "option": {
+    "dataset": {
+     "sourceHeader": false,
+     "source": [
+      [
+       "a",
+       1,
+       "-"
+      ],
+      [
+       "b",
+       2,
+       1234.5
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        2
+       ]
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "b",
+     "value": "1,234.5"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|b}{__EC_aUTo_3|1,234.5}",
+   "visible": "  b1,234.5"
+  },
+  {
+   "name": "guessed type: a scalar first item ends the guess",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "dimensions": [
+       "x",
+       "y",
+       "z"
+      ],
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        2
+       ]
+      },
+      "data": [
+       5,
+       [
+        1,
+        2,
+        "q"
+       ],
+       [
+        3,
+        4,
+        1234.5
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 2,
+   "lines": [
+    {
+     "marker": "item",
+     "name": null,
+     "value": "1,234.5"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|1,234.5}",
+   "visible": "  1,234.5"
+  },
+  {
+   "name": "declared ordinal type on an extra column",
+   "option": {
+    "dataset": {
+     "dimensions": [
+      "p",
+      "a",
+      {
+       "name": "b",
+       "type": "ordinal"
+      }
+     ],
+     "source": [
+      [
+       "x",
+       1,
+       1234.5
+      ],
+      [
+       "y",
+       2,
+       5
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        2
+       ]
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "x",
+     "value": "1234.5"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|x}{__EC_aUTo_3|1234.5}",
+   "visible": "  x1234.5"
+  },
+  {
+   "name": "candlestick encode.tooltip [0, 1]: the row index is a row named base",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "d0",
+      "d1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "tooltip": [
+        0,
+        1
+       ]
+      },
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        40,
+        35,
+        30,
+        50
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "d0",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "base",
+     "value": "0"
+    },
+    {
+     "marker": "subItem",
+     "name": "open",
+     "value": "20"
+    }
+   ],
+   "text": "{__EC_aUTo_1|}  {__EC_aUTo_2|d0}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|base}{__EC_aUTo_6|0}\n{__EC_aUTo_7|}  {__EC_aUTo_8|open}{__EC_aUTo_9|20}",
+   "visible": "  d0\n  base0\n  open20"
+  },
+  {
+   "name": "time-time scatter useUTC: item",
+   "option": {
+    "useUTC": true,
+    "xAxis": {
+     "type": "time"
+    },
+    "yAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "TT",
+      "data": [
+       [
+        "2020-01-01",
+        1577923200000
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "TT",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "2019-12-31 16:00:00  2020-01-02 00:00:00"
+    }
+   ],
+   "text": "{__EC_aUTo_3|TT}\n{__EC_aUTo_1|}  {__EC_aUTo_2|2019-12-31 16:00:00  2020-01-02 00:00:00}",
+   "visible": "TT\n  2019-12-31 16:00:00  2020-01-02 00:00:00"
+  },
+  {
+   "name": "time-time scalar item: none branch untyped",
+   "option": {
+    "useUTC": true,
+    "xAxis": {
+     "type": "time"
+    },
+    "yAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "TS",
+      "data": [
+       1577836800000
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "TS",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "1,577,836,800,000"
+    }
+   ],
+   "text": "{__EC_aUTo_3|TS}\n{__EC_aUTo_1|}  {__EC_aUTo_2|1,577,836,800,000}",
+   "visible": "TS\n  1,577,836,800,000"
+  },
+  {
+   "name": "cat-time scatter useUTC: item 1, both cells",
+   "option": {
+    "useUTC": true,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "CT",
+      "data": [
+       [
+        "a",
+        "2020-01-01"
+       ],
+       [
+        "b",
+        1577923200000
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "CT",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "b",
+     "value": "b  2020-01-02 00:00:00"
+    }
+   ],
+   "text": "{__EC_aUTo_4|CT}\n{__EC_aUTo_1|}  {__EC_aUTo_2|b}{__EC_aUTo_3|b  2020-01-02 00:00:00}",
+   "visible": "CT\n  bb  2020-01-02 00:00:00"
+  },
+  {
+   "name": "raw-string sort valueAsc",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S0",
+      "data": [
+       "12.50"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S1",
+      "data": [
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "data": [
+       "abc"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S3",
+      "data": [
+       "abd"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S4",
+      "data": [
+       null
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueAsc"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S1",
+     "value": "3"
+    },
+    {
+     "marker": "item",
+     "name": "S0",
+     "value": "12.5"
+    },
+    {
+     "marker": "item",
+     "name": "S2",
+     "value": "abc"
+    },
+    {
+     "marker": "item",
+     "name": "S3",
+     "value": "abd"
+    },
+    {
+     "marker": "item",
+     "name": "S4",
+     "value": "-"
+    }
+   ],
+   "text": "{__EC_aUTo_20|A}\n{__EC_aUTo_5|}  {__EC_aUTo_6|S1}{__EC_aUTo_7|3}\n{__EC_aUTo_8|}  {__EC_aUTo_9|S0}{__EC_aUTo_10|12.5}\n{__EC_aUTo_11|}  {__EC_aUTo_12|S2}{__EC_aUTo_13|abc}\n{__EC_aUTo_14|}  {__EC_aUTo_15|S3}{__EC_aUTo_16|abd}\n{__EC_aUTo_17|}  {__EC_aUTo_18|S4}{__EC_aUTo_19|-}",
+   "visible": "A\n  S13\n  S012.5\n  S2abc\n  S3abd\n  S4-"
+  },
+  {
+   "name": "raw-string sort valueDesc",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S0",
+      "data": [
+       "12.50"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S1",
+      "data": [
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "data": [
+       "abc"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S3",
+      "data": [
+       "abd"
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S4",
+      "data": [
+       null
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueDesc"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S0",
+     "value": "12.5"
+    },
+    {
+     "marker": "item",
+     "name": "S1",
+     "value": "3"
+    },
+    {
+     "marker": "item",
+     "name": "S3",
+     "value": "abd"
+    },
+    {
+     "marker": "item",
+     "name": "S2",
+     "value": "abc"
+    },
+    {
+     "marker": "item",
+     "name": "S4",
+     "value": "-"
+    }
+   ],
+   "text": "{__EC_aUTo_20|A}\n{__EC_aUTo_5|}  {__EC_aUTo_6|S0}{__EC_aUTo_7|12.5}\n{__EC_aUTo_8|}  {__EC_aUTo_9|S1}{__EC_aUTo_10|3}\n{__EC_aUTo_11|}  {__EC_aUTo_12|S3}{__EC_aUTo_13|abd}\n{__EC_aUTo_14|}  {__EC_aUTo_15|S2}{__EC_aUTo_16|abc}\n{__EC_aUTo_17|}  {__EC_aUTo_18|S4}{__EC_aUTo_19|-}",
+   "visible": "A\n  S012.5\n  S13\n  S3abd\n  S2abc\n  S4-"
+  },
+  {
+   "name": "sort: a string before a gap and a boolean, valueAsc",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S0",
+      "data": [
+       {
+        "value": null
+       }
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S1",
+      "data": [
+       true
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "data": [
+       "abc"
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueAsc"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S2",
+     "value": "abc"
+    },
+    {
+     "marker": "item",
+     "name": "S0",
+     "value": "-"
+    },
+    {
+     "marker": "item",
+     "name": "S1",
+     "value": "true"
+    }
+   ],
+   "text": "{__EC_aUTo_12|A}\n{__EC_aUTo_3|}  {__EC_aUTo_4|S2}{__EC_aUTo_5|abc}\n{__EC_aUTo_6|}  {__EC_aUTo_7|S0}{__EC_aUTo_8|-}\n{__EC_aUTo_9|}  {__EC_aUTo_10|S1}{__EC_aUTo_11|true}",
+   "visible": "A\n  S2abc\n  S0-\n  S1true"
+  },
+  {
+   "name": "sort: a string before a gap and a boolean, valueDesc",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S0",
+      "data": [
+       {
+        "value": null
+       }
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S1",
+      "data": [
+       true
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "S2",
+      "data": [
+       "abc"
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueDesc"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "S2",
+     "value": "abc"
+    },
+    {
+     "marker": "item",
+     "name": "S0",
+     "value": "-"
+    },
+    {
+     "marker": "item",
+     "name": "S1",
+     "value": "true"
+    }
+   ],
+   "text": "{__EC_aUTo_12|A}\n{__EC_aUTo_3|}  {__EC_aUTo_4|S2}{__EC_aUTo_5|abc}\n{__EC_aUTo_6|}  {__EC_aUTo_7|S0}{__EC_aUTo_8|-}\n{__EC_aUTo_9|}  {__EC_aUTo_10|S1}{__EC_aUTo_11|true}",
+   "visible": "A\n  S2abc\n  S0-\n  S1true"
+  },
+  {
+   "name": "candlestick + line, valueAsc: candle last",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "d0",
+      "d1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        4000.5,
+        1234.25,
+        1000,
+        5000
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       1,
+       99999
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueAsc"
+    }
+   },
+   "trigger": "axis",
+   "category": "d1",
+   "lines": [
+    {
+     "marker": null,
+     "name": "d1",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "L",
+     "value": "99,999"
+    },
+    {
+     "marker": "item",
+     "name": "K",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "open",
+     "value": "4,000.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "close",
+     "value": "1,234.25"
+    },
+    {
+     "marker": "subItem",
+     "name": "lowest",
+     "value": "1,000"
+    },
+    {
+     "marker": "subItem",
+     "name": "highest",
+     "value": "5,000"
+    }
+   ],
+   "text": "{__EC_aUTo_20|d1}\n{__EC_aUTo_2|}  {__EC_aUTo_3|L}{__EC_aUTo_4|99,999}\n{__EC_aUTo_5|}  {__EC_aUTo_6|K}{__EC_aUTo_7|}\n{__EC_aUTo_8|}  {__EC_aUTo_9|open}{__EC_aUTo_10|4,000.5}\n{__EC_aUTo_11|}  {__EC_aUTo_12|close}{__EC_aUTo_13|1,234.25}\n{__EC_aUTo_14|}  {__EC_aUTo_15|lowest}{__EC_aUTo_16|1,000}\n{__EC_aUTo_17|}  {__EC_aUTo_18|highest}{__EC_aUTo_19|5,000}",
+   "visible": "d1\n  L99,999\n  K\n  open4,000.5\n  close1,234.25\n  lowest1,000\n  highest5,000"
+  },
+  {
+   "name": "sub-row series between bars, valueDesc",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       5
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        1,
+        2
+       ]
+      },
+      "dimensions": [
+       "c",
+       "v",
+       "w"
+      ],
+      "data": [
+       [
+        "A",
+        1234.5,
+        7
+       ]
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "C",
+      "data": [
+       "12.50"
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "valueDesc"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "C",
+     "value": "12.5"
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "5"
+    },
+    {
+     "marker": "item",
+     "name": "L",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "v",
+     "value": "1,234.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "w",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_18|A}\n{__EC_aUTo_3|}  {__EC_aUTo_4|C}{__EC_aUTo_5|12.5}\n{__EC_aUTo_6|}  {__EC_aUTo_7|B}{__EC_aUTo_8|5}\n{__EC_aUTo_9|}  {__EC_aUTo_10|L}{__EC_aUTo_11|}\n{__EC_aUTo_12|}  {__EC_aUTo_13|v}{__EC_aUTo_14|1,234.5}\n{__EC_aUTo_15|}  {__EC_aUTo_16|w}{__EC_aUTo_17|7}",
+   "visible": "A\n  C12.5\n  B5\n  L\n  v1,234.5\n  w7"
+  },
+  {
+   "name": "sub-row series between bars, seriesDesc",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       5
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        1,
+        2
+       ]
+      },
+      "dimensions": [
+       "c",
+       "v",
+       "w"
+      ],
+      "data": [
+       [
+        "A",
+        1234.5,
+        7
+       ]
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "C",
+      "data": [
+       "12.50"
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "order": "seriesDesc"
+    }
+   },
+   "trigger": "axis",
+   "category": "A",
+   "lines": [
+    {
+     "marker": null,
+     "name": "A",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "C",
+     "value": "12.5"
+    },
+    {
+     "marker": "item",
+     "name": "L",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "v",
+     "value": "1,234.5"
+    },
+    {
+     "marker": "subItem",
+     "name": "w",
+     "value": "7"
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "5"
+    }
+   ],
+   "text": "{__EC_aUTo_18|A}\n{__EC_aUTo_3|}  {__EC_aUTo_4|C}{__EC_aUTo_5|12.5}\n{__EC_aUTo_6|}  {__EC_aUTo_7|L}{__EC_aUTo_8|}\n{__EC_aUTo_9|}  {__EC_aUTo_10|v}{__EC_aUTo_11|1,234.5}\n{__EC_aUTo_12|}  {__EC_aUTo_13|w}{__EC_aUTo_14|7}\n{__EC_aUTo_15|}  {__EC_aUTo_16|B}{__EC_aUTo_17|5}",
+   "visible": "A\n  C12.5\n  L\n  v1,234.5\n  w7\n  B5"
   },
   {
    "name": "axis template over three series, the third unnamed",
@@ -11366,8 +14369,6 @@
      "formatter": "{a}|{b}|{c}|{a0}|{c0}|{a1}|{c1}|{a2}|{c2}|{c3}|{d}|{@[0]}|{c}"
     }
    },
-   "deferred": true,
-   "why": "the unnamed series' auto name",
    "trigger": "axis",
    "category": "B",
    "lines": [
@@ -11379,6 +14380,45 @@
    ],
    "text": "S1|B|2|{a0}|{c0}|S2||series\u00002|6|{c3}|{d}|{@[0]}|{c}",
    "visible": "S1|B|2|{a0}|{c0}|S2||series\u00002|6|{c3}|{d}|{@[0]}|{c}"
+  },
+  {
+   "name": "unnamed pie template [{a}]",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       {
+        "name": "x",
+        "value": 1
+       }
+      ],
+      "label": {
+       "formatter": "[{a}]"
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0,
+     "formatter": "[{a}]"
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": null,
+     "value": null
+    }
+   ],
+   "text": "[series\u00000]",
+   "visible": "[series\u00000]"
   }
  ],
  "gauge": [

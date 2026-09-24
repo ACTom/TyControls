@@ -33,7 +33,7 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
-  tyControls.AdvChart.Measure;
+  tyControls.AdvChart.Measure, tyControls.AdvChart.Data;
 
 type
   { `'none'` blocks a series-item tooltip and nothing else -- upstream lets a
@@ -98,9 +98,8 @@ type
   end;
 
   { A dot, its size decided by which row it belongs to. `ttmSubItem` is the
-    small one a multi-value row uses; nothing in this batch emits it, and it is
-    declared because the marker's size table is upstream's and splitting the
-    table later is how the two halves drift apart. }
+    small one a sub-row uses -- one per dimension of a candlestick, a radar,
+    or a series whose dimensions have display names. }
   TTyTooltipMarker = (ttmNone, ttmItem, ttmSubItem);
 
   { THE MARKUP TREE, which is what upstream's default content actually is.
@@ -126,8 +125,10 @@ type
     FNoName: Boolean;
     FValue: string;
     FNoValue: Boolean;
-    FSortParam: Double;
+    FSortCell: TTyDataValue;
     FBlocks: array of TTyTooltipBlock;
+    function GetSortParam: Double;
+    procedure SetSortParam(AValue: Double);
     function GetBlock(AIndex: Integer): TTyTooltipBlock;
     function GetBlockCount: Integer;
   public
@@ -169,11 +170,12 @@ type
     property NoName: Boolean read FNoName;
     property Value: string read FValue;
     property NoValue: Boolean read FNoValue;
-    { What `order` sorts on: the series' FIRST inline value, raw, not the
-      string that was rendered from it. NaN means this block has none -- which
-      every section has, and every row built by a series that overrides its own
-      tooltip markup. }
-    property SortParam: Double read FSortParam write FSortParam;
+    { What `order` sorts on: the series' FIRST inline value, RAW -- '12.50'
+      as the text it was written as, not the string rendered from it. A gap
+      (dvkNone) means this block has none, which a sub-row series has too.
+      SortParam is the same key as a number (NaN when it is not one). }
+    property SortCell: TTyDataValue read FSortCell write FSortCell;
+    property SortParam: Double read GetSortParam write SetSortParam;
     property BlockCount: Integer read GetBlockCount;
     property Blocks[AIndex: Integer]: TTyTooltipBlock read GetBlock; default;
   end;
@@ -317,7 +319,62 @@ begin
   { `noHeader: !trim(header)` upstream -- an all-blank header is no header,
     and the caller is not asked to remember that. }
   FNoHeader := ANoHeader or (Trim(AHeader) = '');
-  FSortParam := NaN;
+  FSortCell := Default(TTyDataValue);
+end;
+
+function TTyTooltipBlock.GetSortParam: Double;
+begin
+  if FSortCell.Kind = dvkNumber then Result := FSortCell.Num else Result := NaN;
+end;
+
+procedure TTyTooltipBlock.SetSortParam(AValue: Double);
+begin
+  FSortCell := Default(TTyDataValue);
+  FSortCell.Kind := dvkNumber;
+  FSortCell.Num := AValue;
+end;
+
+{ upstream's SortOrderComparator.evaluate, as a sign: a NUMBER is what
+  numericToNumber reads (Infinity counts); anything else is incomparable and
+  goes to the tail -- except that two non-numbers which are both TEXT compare
+  as text, and a text against a non-text incomparable counts as 0, so every
+  string sits between the numbers and the rest in both directions. }
+function TyTooltipCompare(const A, B: TTyDataValue; ADesc: Boolean): Integer;
+var
+  av, bv, inc: Double;
+  aNot, bNot: Boolean;
+  lt: Integer;
+  mask: TFPUExceptionMask;
+begin
+  if ADesc then lt := 1 else lt := -1;
+  if ADesc then inc := NegInfinity else inc := Infinity;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exPrecision]);
+  try
+    av := TyJsNumericToNumber(A);
+    bv := TyJsNumericToNumber(B);
+    aNot := IsNan(av);
+    bNot := IsNan(bv);
+    if aNot then av := inc;
+    if bNot then bv := inc;
+    if aNot and bNot then
+    begin
+      if (A.Kind = dvkText) and (B.Kind = dvkText) then
+      begin
+        if A.Text < B.Text then Exit(lt);
+        if A.Text > B.Text then Exit(-lt);
+        Exit(0);
+      end;
+      if A.Kind = dvkText then av := 0;
+      if B.Kind = dvkText then bv := 0;
+    end;
+    if av < bv then Result := lt
+    else if av > bv then Result := -lt
+    else Result := 0;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
 end;
 
 procedure TTyTooltipBlock.Reverse;
@@ -337,15 +394,11 @@ var
   i, j: Integer;
   key: TTyTooltipBlock;
 
-  { Does A come before B? NaN is last in both directions. }
+  { Does A come strictly before B? }
   function Before(A, B: TTyTooltipBlock): Boolean;
-  var av, bv: Double;
   begin
-    av := A.SortParam;
-    bv := B.SortParam;
-    if IsNan(av) then Exit(False);
-    if IsNan(bv) then Exit(True);
-    if AOrder = ttoValueAsc then Result := av < bv else Result := av > bv;
+    Result := TyTooltipCompare(A.SortCell, B.SortCell,
+      AOrder <> ttoValueAsc) < 0;
   end;
 
 begin
@@ -386,7 +439,7 @@ begin
   FNoName := ANoName or (Trim(AName) = '');
   FValue := AValue;
   FNoValue := ANoValue;
-  FSortParam := NaN;
+  FSortCell := Default(TTyDataValue);
   { NO COLOUR, NO MARKER. Upstream's first line is `if (!color) return ''` --
     a colourless item draws no dot rather than a default-coloured one. }
   if AMarkerColour = 0 then FMarker := ttmNone;

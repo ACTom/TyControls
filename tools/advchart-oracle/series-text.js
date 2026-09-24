@@ -45,18 +45,29 @@
 //             and the axis labels: the silent Texts _renderTicks adds straight
 //             to the view's group, one per split, in tick order.
 //
+// What the cases cover, beyond each series type's defaults: the raw value as
+// written (scalars, strings, booleans, objects, null against missing,
+// datasets in every layout); templates and their {@...} corners; the
+// defaulted label and tooltip dimensions (encode.label, encode.tooltip,
+// category-category, time and category-time series, a dataset encode that
+// leaves coordinates unclaimed, an extra column guessed ordinal); the
+// multi-line tooltip (displayName sub-rows, candlestick and boxplot value
+// rows, radar indicator rows) in item and axis tooltips, and the axis
+// tooltip's order over raw strings and sub-row series; the unnamed series'
+// auto name 'series\0' + index against a written ''. A case with time values
+// sets useUTC, so what it prints does not depend on the machine's zone.
+//
 // A case marked deferred depends on something the port does not keep or draw
-// yet (sub-row tooltips, encode, the unnamed series' auto name, the parse of a
-// raw string into the number drawn, ...). Its upstream answer is recorded all
-// the same, so a later batch only has to take the flag off; why says what it
-// waits for.
+// yet (the parse of a raw string into the number drawn, a documented gauge
+// deviation). Its upstream answer is recorded all the same, so a later batch
+// only has to take the flag off; why says what it waits for.
 //
 // Spot checks (the fixture is not written and the run exits 1 when one
 // fails): a handful of recorded answers are compared with what separate
 // probes of the same build printed -- the raw-value cases' scalar fallback,
 // null against a missing value, arrays joined, datasets, the tooltip cell's
-// reparse. They guard the harness, not the port. Outside the script: run
-// twice and diff.
+// reparse, sub-rows, the sort over raw strings, a time cell. They guard the
+// harness, not the port. Outside the script: run twice and diff.
 //
 // Math.random is replaced by a constant BEFORE the library loads (the builds
 // capture it at load time). TooltipMarkupStyleCreator starts naming its rich
@@ -460,23 +471,69 @@ label("bar: '   ' and '0x10' are drawn", catX(['A', 'B', 'C'], [
   { type: 'bar', name: 'S', data: ['   ', '0x10', 5], label: { show: true } },
 ]), deferredFor('parse parity (D9)'));
 
-// deferred: encode and the defaulted label dimension
-const ENCODE = 'encode and the defaulted label dimension';
+// encode.label and the defaulted label dimension: the last coordinate that is
+// neither ordinal nor time, so none for category-category or time-category;
+// several dims join with one space, a null as ''
 label('scatter encode.label [0, 1]', valueXY([
   { type: 'scatter', name: 'Sc', encode: { label: [0, 1] }, data: [[10, 20.5], [3, 4]], label: { show: true } },
-]), deferredFor(ENCODE));
+]));
 label('scatter category-category: no default label', {
   xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['u', 'v'] },
   series: [{ type: 'scatter', name: 'CC', data: [['a', 'u'], [1, 1]], label: { show: true } }],
-}, deferredFor(ENCODE));
+});
 label('scatter time-category: no default label', {
   xAxis: { type: 'time' }, yAxis: { type: 'category', data: ['a', 'b'] },
   series: [{ type: 'scatter', name: 'TC', data: [['2020-01-01', 'a'], ['2020-01-02', 'b']], label: { show: true } }],
-}, deferredFor(ENCODE));
-// deferred: the unnamed series' auto name 'series\0' + index
-const AUTONAME = "the unnamed series' auto name";
-label('bar unnamed series: {a}', catX(['A'], [{ type: 'bar', data: [5], label: { show: true, formatter: '[{a}]' } }]),
-  deferredFor(AUTONAME));
+});
+label('bar encode.label [0,1]', catX(['A', 'B'], [{
+  type: 'bar', name: 'S', encode: { label: [0, 1] }, data: [['A', 1234.5], ['B', '12.50']], label: { show: true },
+}]));
+// a string entry names a declared dimension
+const pqr = () => valueXY([{
+  type: 'scatter', name: 'S', dimensions: ['p', 'q', 'r'], encode: { x: 'p', y: 'q', label: ['r', 'p'] },
+  data: [[1, 2, 'z']], label: { show: true },
+}]);
+label("scatter dimensions p,q,r + encode.label ['r','p']", pqr());
+// a scalar item answers every position; a null cell joins as ''
+label('scalar bar encode.label [0,1]', catX(['A', 'B'], [{
+  type: 'bar', name: 'S', encode: { label: [0, 1] }, data: [5, null], label: { show: true },
+}]));
+label("bar encode.label [2,1] on ['A',5,null]", catX(['A'], [{
+  type: 'bar', name: 'S', encode: { y: 1, label: [2, 1] }, data: [['A', 5, null]], label: { show: true },
+}]));
+// a dataset encode that claims one coordinate: the other takes the next
+// unused column
+const dsEncode = encode => ({
+  dataset: { source: [['p', 'a', 'b'], ['x', 1, 2], ['y', 3, 4]] }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', name: 'S', encode, label: { show: true } }],
+});
+label('dataset bar encode {x:0}', dsEncode({ x: 0 }));
+label('dataset bar encode {y:2}', dsEncode({ y: 2 }));
+// a series encode that claims y alone on an array item: x takes element 1,
+// the first one y left free, not element 0
+const scatterEncodeY0 = () => valueXY([
+  { type: 'scatter', encode: { y: 0 }, data: [[1, 2], [3, 4]], label: { show: true } },
+]);
+label('scatter encode {y: 0}: x takes element 1', scatterEncodeY0());
+// time cells: no default label
+const timeTime = () => ({
+  useUTC: true, xAxis: { type: 'time' }, yAxis: { type: 'time' },
+  series: [{ type: 'scatter', name: 'TT', data: [['2020-01-01', 1577923200000]], label: { show: true } }],
+});
+label('time-time scatter useUTC', timeTime());
+const catTime = () => ({
+  useUTC: true, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'time' },
+  series: [{ type: 'scatter', name: 'CT', data: [['a', '2020-01-01'], ['b', 1577923200000]], label: { show: true } }],
+});
+label('cat-time scatter useUTC: no label, both cells', catTime());
+// the unnamed series' auto name 'series\0' + index; a written '' stays ''
+label('bar unnamed series: {a}', catX(['A'], [{ type: 'bar', data: [5], label: { show: true, formatter: '[{a}]' } }]));
+label("bar name '': {a} empty", catX(['A'], [
+  { type: 'bar', data: [5], label: { show: true, formatter: '[{a}]' } },
+  { type: 'bar', name: '', data: [5], label: { show: true, formatter: '[{a}]' } },
+]));
+const unnamedPie = () => ({ series: [{ type: 'pie', data: [{ name: 'x', value: 1 }], label: { formatter: '[{a}]' } }] });
+label('unnamed pie {a}', unnamedPie());
 
 // ---------- tooltips ----------
 
@@ -715,31 +772,156 @@ itemTip('pie item true', pieRaw(), 0, 1);
 // deferred: '   ' is Number('   ') = 0, a bar with a tooltip
 itemTip("bar item '   '", catX(['A', 'B', 'C'], [{ type: 'bar', name: 'S', data: ['   ', '0x10', 5] }]), 0, 0, null,
   deferredFor('parse parity (D9)'));
-// deferred: sub-row tooltips
-const SUBROWS = 'sub-row tooltips';
-itemTip('candlestick item: open/close/lowest/highest rows', candle(), 0, 1, null, deferredFor(SUBROWS));
-axisTip('candlestick axis: open/close/lowest/highest rows', candle(), 'd1', null, deferredFor(SUBROWS));
+// Sub-rows: a candlestick's open/close/lowest/highest and a boxplot's
+// min..max. The item row keeps an empty value cell; unnamed, the item tooltip
+// has no header and the axis row no name.
+itemTip('candlestick item: open/close/lowest/highest rows', candle(), 0, 1);
+axisTip('candlestick axis: open/close/lowest/highest rows', candle(), 'd1');
+const candleUnnamed = () => catX(['d0', 'd1'], [{ type: 'candlestick', data: [[20, 34, 10, 38], [4000.5, 1234.25, 1000, 5000]] }]);
+itemTip('candlestick unnamed: item, no header', candleUnnamed(), 0, 1);
+axisTip('candlestick unnamed: axis, a noName row', candleUnnamed(), 'd1');
+axisTip('boxplot axis: min..max rows', catX(['b0', 'b1'], [
+  { type: 'boxplot', name: 'Bx', data: [[1, 2, 3, 4, 5], [850, 1234.5, 1500, 1800, 2000]] },
+]), 'b1');
+// Radar: one sub-row per indicator, the parsed value; the header is the item
+// name, else the series' model name ('-' when that is ''); order sorts the
+// rows even in an item tooltip.
 const radar = () => ({
   radar: { indicator: [{ name: 'A', max: 20000 }, { name: 'B', max: 10 }, { name: 'C', max: 10 }] },
   series: [{ type: 'radar', name: 'R', data: [{ name: 'r', value: [12345.5, 0.1 + 0.2, '-'] }, { value: [1, 2, 3] }] }],
 });
-itemTip('radar item: one row per indicator', radar(), 0, 0, null, deferredFor(SUBROWS));
-itemTip('radar item unnamed: the series name heads it', radar(), 0, 1, null, deferredFor(SUBROWS));
-// deferred: encode.tooltip and displayName
+itemTip('radar item: one row per indicator', radar(), 0, 0);
+itemTip('radar item unnamed: the series name heads it', radar(), 0, 1);
+const radarRaw = () => ({
+  radar: { indicator: [{ name: 'A', max: 20000 }, { name: 'B', max: 10 }, { name: 'C', max: 10 }] },
+  series: [{ type: 'radar', name: 'R', data: [{ name: 'r', value: [12345.5, 0.1 + 0.2, '-'] }, { value: ['12.50', ' 5 ', 3] }] }],
+});
+itemTip('radar item valueAsc', radarRaw(), 0, 0, { order: 'valueAsc' });
+const radarEmptyName = radarRaw();
+radarEmptyName.series[0].name = '';
+radarEmptyName.series[0].data[1] = { value: [1, 2, 3] };
+itemTip("radar name '' + unnamed item: header -", radarEmptyName, 0, 1);
+const radarUnnamed = radarRaw();
+delete radarUnnamed.series[0].name;
+itemTip('radar unnamed series: header is the auto name', radarUnnamed, 0, 1);
+// encode.tooltip and displayName. More than one tooltip dim turns into
+// sub-rows when any position the raw item has carries a declared name, shown
+// or not; an unnamed sub-row is '-'. Generated names do not count.
 itemTip('scatter encode.tooltip [1, 0]', valueXY([
   { type: 'scatter', name: 'E', encode: { tooltip: [1, 0] }, data: [[10, 20]] },
-]), 0, 0, null, deferredFor('encode.tooltip and displayName'));
+]), 0, 0);
 itemTip('scatter displayName rows', valueXY([{
   type: 'scatter', name: 'E', encode: { tooltip: [0, 1] },
   dimensions: [{ name: 'x', displayName: 'XX' }, { name: 'y', displayName: 'YY' }], data: [[10, 20]],
-}]), 0, 0, null, deferredFor('encode.tooltip and displayName'));
-// deferred: the defaulted value of a category-category series
+}]), 0, 0);
+itemTip('scatter displayName on a dim not shown: sub-rows named -', valueXY([{
+  type: 'scatter', name: 'E', encode: { tooltip: [0, 1] },
+  dimensions: [null, null, { name: 'z', displayName: 'Z' }], data: [[10, 20, 30]],
+}]), 0, 0);
+itemTip('scatter raw shorter than the named dim: inline', valueXY([{
+  type: 'scatter', name: 'E', encode: { tooltip: [0, 1] },
+  dimensions: [null, null, { name: 'z', displayName: 'Z' }], data: [[10, 20]],
+}]), 0, 0);
+itemTip('dataset header + encode {tooltip:[1,2]}: item', dsEncode({ tooltip: [1, 2] }), 0, 0);
+axisTip('dataset header + encode {tooltip:[1,2]}: axis x', dsEncode({ tooltip: [1, 2] }), 'x');
+itemTip('dataset without header + encode.tooltip [1,2]: inline', {
+  dataset: { source: [['x', 1, 2], ['y', 3, 4]] }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', name: 'S', encode: { x: 0, y: 1, tooltip: [1, 2] } }],
+}, 0, 0);
+itemTip('dataset bar encode {x:0}: item 0', dsEncode({ x: 0 }), 0, 0);
+itemTip('dataset bar encode {y:2}: item 0', dsEncode({ y: 2 }), 0, 0);
+// an extra column whose first sample is a non-numeric string is ordinal: its
+// cell prints as written, no commas
+itemTip('encode.tooltip [2,1], column 2 guessed ordinal', valueXY([{
+  type: 'scatter', name: 'E', encode: { tooltip: [2, 1] }, data: [[1, 2, 'q'], [3, 4.5, 1234.5]],
+}]), 0, 1);
+// encode.label feeds the tooltip dims too
+const barEncodeLabel = () => catX(['A', 'B'], [{
+  type: 'bar', name: 'S', encode: { label: [0, 1] }, data: [['A', 1234.5], ['B', '12.50']], label: { show: true },
+}]);
+itemTip('bar encode.label [0,1]: item 0', barEncodeLabel(), 0, 0);
+axisTip('bar encode.label [0,1]: axis A', barEncodeLabel(), 'A');
+itemTip("scatter dimensions p,q,r + encode.label ['r','p']: item", pqr(), 0, 0);
+// no tooltip dims: every raw position, or the scalar itself; time cells
+// print as dates
 itemTip('scatter category-category item', {
   xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['u', 'v'] },
   series: [{ type: 'scatter', name: 'CC', data: [['a', 'u'], [1, 1]] }],
-}, 0, 0, null, deferredFor('the defaulted value of a category-category series'));
-// deferred: the unnamed series' auto name
-axisTip('axis template over three series, the third unnamed', three(true), 'B', { formatter: threeTpl }, deferredFor(AUTONAME));
+}, 0, 0);
+itemTip('cat-cat scalar item: none branch', {
+  xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['u', 'v'] },
+  series: [{ type: 'scatter', name: 'CC', data: [['a', 'u'], { value: ['b', 'v'], name: 'own' }, 1] }],
+}, 0, 2);
+// (A scalar 1234.5 in place of the 1 above has no tooltip: it is ordinal
+// index 1234.5 on both axes, far off the grid, so it has no element.)
+// The none branch prints the two coordinate dims, not the hovered item's
+// whole length.
+itemTip('category-category: an item longer than item 0', {
+  xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['u', 'v'] },
+  series: [{ type: 'scatter', data: [['a', 'u'], ['b', 'v', 'extra']] }],
+}, 0, 1);
+itemTip('scatter encode {y: 0}: item 0', scatterEncodeY0(), 0, 0);
+// The type guess of an extra column: '-' tells nothing and the guess reads
+// on; a scalar first item ends the guess (nothing ordinal seen); a declared
+// type wins over the cells.
+itemTip('guessed type: a leading "-" tells nothing', {
+  dataset: { sourceHeader: false, source: [['a', 1, '-'], ['b', 2, 1234.5]] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', encode: { x: 0, y: 1, tooltip: [2] } }],
+}, 0, 1);
+itemTip('guessed type: a scalar first item ends the guess', valueXY([{
+  type: 'scatter', dimensions: ['x', 'y', 'z'], encode: { x: 0, y: 1, tooltip: [2] },
+  data: [5, [1, 2, 'q'], [3, 4, 1234.5]],
+}]), 0, 2);
+itemTip('declared ordinal type on an extra column', {
+  dataset: { dimensions: ['p', 'a', { name: 'b', type: 'ordinal' }], source: [['x', 1, 1234.5], ['y', 2, 5]] },
+  xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', encode: { x: 0, y: 1, tooltip: [2] } }],
+}, 0, 0);
+// A four-value candlestick item has its row index prepended as dim 0
+// ('base'): encode.tooltip [0, 1] counts from that index, so the rows are
+// base (the index) and open.
+itemTip('candlestick encode.tooltip [0, 1]: the row index is a row named base', catX(['d0', 'd1'], [{
+  type: 'candlestick', encode: { tooltip: [0, 1] }, data: [[20, 34, 10, 38], [40, 35, 30, 50]],
+}]), 0, 0);
+itemTip('time-time scatter useUTC: item', timeTime(), 0, 0);
+// A SCALAR item on two time axes: no tooltip dimension and no array, so the
+// value itself, untyped -- a number with commas, not a date and not as written.
+itemTip('time-time scalar item: none branch untyped', {
+  useUTC: true, xAxis: { type: 'time' }, yAxis: { type: 'time' },
+  series: [{ type: 'scatter', name: 'TS', data: [1577836800000] }],
+}, 0, 0);
+itemTip('cat-time scatter useUTC: item 1, both cells', catTime(), 0, 1);
+// The axis tooltip's order: numbers first, then raw strings compared as
+// strings, then the rest; a series with sub-rows (no sort key) goes last and
+// moves with its rows.
+const rawSort = () => catX(['A'], [
+  { type: 'bar', name: 'S0', data: ['12.50'] }, { type: 'bar', name: 'S1', data: [3] },
+  { type: 'bar', name: 'S2', data: ['abc'] }, { type: 'bar', name: 'S3', data: ['abd'] }, { type: 'bar', name: 'S4', data: [null] },
+]);
+axisTip('raw-string sort valueAsc', rawSort(), 'A', { order: 'valueAsc' });
+axisTip('raw-string sort valueDesc', rawSort(), 'A', { order: 'valueDesc' });
+// a raw string sorts before a gap and a boolean in both directions
+const stringGapBool = () => catX(['A'], [
+  { type: 'bar', name: 'S0', data: [{ value: null }] }, { type: 'bar', name: 'S1', data: [true] },
+  { type: 'bar', name: 'S2', data: ['abc'] },
+]);
+axisTip('sort: a string before a gap and a boolean, valueAsc', stringGapBool(), 'A', { trigger: 'axis', order: 'valueAsc' });
+axisTip('sort: a string before a gap and a boolean, valueDesc', stringGapBool(), 'A', { trigger: 'axis', order: 'valueDesc' });
+axisTip('candlestick + line, valueAsc: candle last', catX(['d0', 'd1'], [
+  { type: 'candlestick', name: 'K', data: [[20, 34, 10, 38], [4000.5, 1234.25, 1000, 5000]] },
+  { type: 'line', name: 'L', data: [1, 99999] },
+]), 'd1', { order: 'valueAsc' });
+const subRowsBetween = () => catX(['A'], [
+  { type: 'bar', name: 'B', data: [5] },
+  { type: 'line', name: 'L', encode: { x: 0, y: 1, tooltip: [1, 2] }, dimensions: ['c', 'v', 'w'], data: [['A', 1234.5, 7]] },
+  { type: 'bar', name: 'C', data: ['12.50'] },
+]);
+axisTip('sub-row series between bars, valueDesc', subRowsBetween(), 'A', { order: 'valueDesc' });
+axisTip('sub-row series between bars, seriesDesc', subRowsBetween(), 'A', { order: 'seriesDesc' });
+// the unnamed series' auto name
+axisTip('axis template over three series, the third unnamed', three(true), 'B', { formatter: threeTpl });
+itemTip('unnamed pie template [{a}]', unnamedPie(), 0, 0, { formatter: '[{a}]' });
 
 // ---------- gauge ----------
 
@@ -829,11 +1011,14 @@ const out = {
 
 // ---------- spot checks ----------
 
-// What separate probes of the same build printed (wf49 probes a1, a2, P1-P7):
-// a label case as its items' texts ('/' between labels, '#' for an item not
-// drawn), per series; a tooltip as its visible text or its value cells.
+// What separate probes of the same build printed (wf49 probes a1, a2, P1-P7;
+// wf50 probes a1, a2, P1-P3): a label case as its items' texts ('/' between
+// labels, '#' for an item not drawn), per series; a tooltip as its visible
+// text, its value cells, its row names or its lines as [marker, name, value].
 const itemTexts = r => r.series.map(s => s.items.map(i => (i.drawn ? i.texts.join('/') : '#')));
 const cells = r => r.lines.slice(1).map(l => l.value);
+const rowNames = r => r.lines.slice(1).map(l => l.name);
+const rows = r => r.lines.map(l => [l.marker, l.name, l.value]);
 const SPOT = [
   ['labels', 'bar raw zoo: default labels', itemTexts, [['12.50', ' 5 ', '1e3', 'true', 'false', '12.50', 'true',
     '#', '#', '#', '#', '#', '0', '1e+21']]],
@@ -858,6 +1043,20 @@ const SPOT = [
     '12.50| 5 |1e3|true|false|-|abc||Infinity|0x10||'],
   ['tooltips', 'objectRows item template {c}', r => r.visible, '[object Object]'],
   ['tooltips', 'keyedColumns item template {c}', r => r.visible, 'x,12.50'],
+  ['labels', 'scatter encode.label [0, 1]', itemTexts, [['10 20.5', '3 4']]],
+  ['labels', 'scatter time-category: no default label', itemTexts, [['', '']]],
+  ['labels', 'bar unnamed series: {a}', itemTexts, [['[series\u00000]']]],
+  ['tooltips', 'candlestick item: open/close/lowest/highest rows', rows, [[null, 'K', null], ['item', 'd1', ''],
+    ['subItem', 'open', '4,000.5'], ['subItem', 'close', '1,234.25'], ['subItem', 'lowest', '1,000'],
+    ['subItem', 'highest', '5,000']]],
+  ['tooltips', 'radar item: one row per indicator', rows, [[null, 'r', null], ['subItem', 'A', '12,345.5'],
+    ['subItem', 'B', '0.30000000000000004'], ['subItem', 'C', '-']]],
+  ['tooltips', 'scatter encode.tooltip [1, 0]', cells, ['20  10']],
+  ['tooltips', 'scatter category-category item', cells, ['a  u']],
+  ['tooltips', 'scatter displayName on a dim not shown: sub-rows named -', r => rows(r).slice(1),
+    [['item', null, ''], ['subItem', '-', '10'], ['subItem', '-', '20']]],
+  ['tooltips', 'raw-string sort valueDesc', rowNames, ['S0', 'S1', 'S3', 'S2', 'S4']],
+  ['tooltips', 'time-time scatter useUTC: item', cells, ['2019-12-31 16:00:00  2020-01-02 00:00:00']],
 ];
 const spotFails = [];
 for (const [section, name, read, want] of SPOT) {
