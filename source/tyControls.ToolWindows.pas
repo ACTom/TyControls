@@ -434,6 +434,10 @@ type
   TTyToolWindowBarPart = (twbpNone, twbpItem, twbpOverflow, twbpEdge,
     twbpMaximize, twbpCollapse, twbpSeparator);
 
+  { MoveWindow / 直接改 Parent 期间先记下、之后按 spec §6.6 的顺序发的栏事件。 }
+  TTyToolWindowBarEvent = (twbeChange, twbeExpand, twbeCollapse);
+  TTyToolWindowBarEvents = set of TTyToolWindowBarEvent;
+
   { 图标条手势引擎的状态(spec §9.2)。Cancelled 之后的松开什么都不做,也不算点击。 }
   TTyToolWindowGestureState = (twgsIdle, twgsArmed, twgsDragging, twgsCancelled);
 
@@ -700,6 +704,20 @@ type
     procedure SwitchSilently(AWindow: TTyToolWindow);
     function EventsAllowed: Boolean;
     procedure DoChange;
+  private
+    { --- 延后事件(spec §6.6 的 MoveWindow 发送顺序)。> 0 时 DoChange 和 SetCollapsed 的事件
+      只记进 FPendingEvents,由调用方在 EnableAlign、焦点恢复之后按顺序发(FireBarEvent)。 --- }
+    FDeferEvents: Integer;
+    FPendingEvents: TTyToolWindowBarEvents;
+    { 调用方必须 try/finally 配对。 }
+    procedure BeginDeferEvents;
+    { 降到 0 时交还记下的事件并清空;没降到 0 交还空集(外层还在延后)。钳在 0。 }
+    function EndDeferEvents: TTyToolWindowBarEvents;
+    { 过一遍 EventsAllowed 再调对应的处理器。 }
+    procedure FireBarEvent(AEvent: TTyToolWindowBarEvent);
+    { 栏内调顺序的实体(不发 OnWindowMoved):钳到 0..N-1、换算成 Controls 下标。答挪之前的
+      窗口序号;不在本栏或没挪动答 -1。 }
+    function PlaceWindow(AWindow: TTyToolWindow; AIndex: Integer): Integer;
     { 长度 token 按给定 PPI 换成设备像素,负的按 0。 }
     function TokenPxAt(const AName: string; ADefault, APPI: Integer): Integer;
     { 栏自己那几项主题尺寸按给定 PPI 现算(不缓存);Metrics 是按自己字体 PPI 的那一份的缓存。 }
@@ -853,8 +871,8 @@ type
     procedure ResetGesture(AReason: TTyToolWindowGestureEnd);
     { 插入线的那一行(栏坐标 y);没有线答 -1。 }
     function DropLineY(const L: TTyToolWindowBarLayout): Integer;
-    { 栏内调顺序:WindowIndex 和拖放提交的唯一一条路。钳到 0..N-1;窗口序号换算成
-      Controls 下标(spec §2)。 }
+    { 栏内调顺序:WindowIndex、图标 / 标签拖放提交、同栏 MoveWindow 的唯一一条路。
+      PlaceWindow 真的挪了就经 manager 发 OnWindowMoved(spec §6.6)。 }
     procedure ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
     procedure SetStripHover(AIndex: Integer; AOverflow: Boolean);
     procedure UpdateHoverAt(X, Y: Integer);
@@ -1083,6 +1101,10 @@ type
   { spec §9.9:跨栏移动之前问一次(拖动悬停、放下、MoveWindow、排队的移动执行前)。 }
   TTyCanMoveWindowEvent = procedure(Sender: TObject; AWindow: TTyToolWindow;
     ATargetBar: TTyToolWindowBar; var AAllow: Boolean) of object;
+  { spec §6.6:运行时窗口的栏或索引真正变了之后(手势、MoveWindow、WindowIndex、同一 manager 下
+    直接改 Parent)。AOldIndex 是它在 ASourceBar 里原来的窗口序号。 }
+  TTyWindowMovedEvent = procedure(Sender: TObject; AWindow: TTyToolWindow;
+    ASourceBar: TTyToolWindowBar; AOldIndex: Integer) of object;
 
   { 工具窗口栏的协调者(spec §2):可以不放。栏经 Manager 属性注册到它上面;跨侧拖动、
     MoveWindow、布局保存都要它。非可视组件,从 TTyComponent 来(带对象查看器里的 Version)。
@@ -1095,6 +1117,7 @@ type
     { > 0 = 正在发本 manager 的事件:处理器里再调 MoveWindow 答 False(spec §9.9)。 }
     FEventDepth: Integer;
     FOnCanMoveWindow: TTyCanMoveWindowEvent;
+    FOnWindowMoved: TTyWindowMovedEvent;
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1103,6 +1126,12 @@ type
     { spec §9.9 的结构检查(不问事件)。ASource 出参是窗口此刻的栏。 }
     function StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
       out ASource: TTyToolWindowBar): Boolean;
+    { 发 OnWindowMoved 的门:manager 和源栏都不在设计 / 加载 / 释放中(spec §6.6)。 }
+    function MovedEventAllowed(ASource: TTyToolWindowBar): Boolean;
+    { 发 OnWindowMoved(spec §6.6),包在 FEventDepth 里:处理器里再调 MoveWindow 答 False。 }
+    procedure WindowMoved(AWindow: TTyToolWindow; ASource: TTyToolWindowBar; AOldIndex: Integer);
+    { 真正的一次跨栏移动(spec §9.5 的顺序)。调用方已经过了结构检查和 CanMoveWindow。 }
+    procedure MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar; AIndex: Integer);
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1113,11 +1142,17 @@ type
     { 结构检查 + OnCanMoveWindow(spec §9.9)。同一条栏永远 True、不问事件;设计期不问事件。
       没有副作用:不取消拖动、不记默认布局、不动任何状态。 }
     function CanMoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar): Boolean;
+    { 把 AWindow 挪到 ATargetBar 的窗口序号 AIndex(钳住;-1 = 末尾),spec §9.9。目标就是它
+      现在的栏 = 调顺序(不问事件)。返回 False、什么都不改:结构检查不过、从本 manager 的事件
+      处理里重入、跨栏且 CanMoveWindow 为 False。设计期同步、不发事件、通知设计器。 }
+    function MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
+      AIndex: Integer = -1): Boolean;
   published
     { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
       没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
     property Images: TCustomImageList read FImages write SetImages;
     property OnCanMoveWindow: TTyCanMoveWindowEvent read FOnCanMoveWindow write FOnCanMoveWindow;
+    property OnWindowMoved: TTyWindowMovedEvent read FOnWindowMoved write FOnWindowMoved;
   end;
 
 { 图标条溢出菜单挂在哪、怎么对齐(栏客户区坐标):菜单往内容区那一侧开 —— 左栏从溢出按钮的
@@ -4916,10 +4951,11 @@ begin
   if slot < 0 then FGesture.SetCursor(crNoDrop) else FGesture.SetCursor(crDrag);
 end;
 
-procedure TTyToolWindowBar.ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
+function TTyToolWindowBar.PlaceWindow(AWindow: TTyToolWindow; AIndex: Integer): Integer;
 var
   cur, n: Integer;
 begin
+  Result := -1;
   cur := IndexOfWindow(AWindow);
   if cur < 0 then Exit;
   n := WindowCount;
@@ -4932,6 +4968,45 @@ begin
   InvalidateHeader;
   if [csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning] then
     OwnerFormDesignerModified(Self);
+  Result := cur;
+end;
+
+procedure TTyToolWindowBar.ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
+var
+  old: Integer;
+begin
+  old := PlaceWindow(AWindow, AIndex);
+  { 空操作(拖回原位、钳位之后没动)不报。SetChildOrder(流式、设计器)不经过这里,不报。 }
+  if (old >= 0) and (FManager <> nil) then
+    FManager.WindowMoved(AWindow, Self, old);
+end;
+
+procedure TTyToolWindowBar.BeginDeferEvents;
+begin
+  Inc(FDeferEvents);
+end;
+
+function TTyToolWindowBar.EndDeferEvents: TTyToolWindowBarEvents;
+begin
+  Result := [];
+  if FDeferEvents <= 0 then Exit;
+  Dec(FDeferEvents);
+  if FDeferEvents > 0 then Exit;
+  Result := FPendingEvents;
+  FPendingEvents := [];
+end;
+
+procedure TTyToolWindowBar.FireBarEvent(AEvent: TTyToolWindowBarEvent);
+begin
+  if not EventsAllowed then Exit;
+  case AEvent of
+    twbeChange:
+      if Assigned(FOnChange) then FOnChange(Self);
+    twbeExpand:
+      if Assigned(FOnExpand) then FOnExpand(Self);
+    twbeCollapse:
+      if Assigned(FOnCollapse) then FOnCollapse(Self);
+  end;
 end;
 
 procedure TTyToolWindowBar.CMDesignHitTest(var Message: TCMDesignHitTest);
@@ -5071,6 +5146,12 @@ end;
 
 procedure TTyToolWindowBar.DoChange;
 begin
+  { 延后期间只记下来,由 MoveWindow / 直接改 Parent 的簿记按顺序发。 }
+  if FDeferEvents > 0 then
+  begin
+    Include(FPendingEvents, twbeChange);
+    Exit;
+  end;
   if EventsAllowed and Assigned(FOnChange) then FOnChange(Self);
 end;
 
@@ -5108,8 +5189,15 @@ begin
     Relayout;
     Invalidate;
   end;
+  { 延后期间只记下来(见 BeginDeferEvents)。同一次延后里先收起后展开两个都记着,由调用方
+    按顺序发 —— 眼下没有这种路径。 }
+  if FDeferEvents > 0 then
+  begin
+    if AValue then Include(FPendingEvents, twbeCollapse)
+    else Include(FPendingEvents, twbeExpand);
+  end
   { 事件只由 EventsAllowed 一处把关(设计期、加载中、静默批次都不发)。 }
-  if EventsAllowed then
+  else if EventsAllowed then
   begin
     if AValue then
     begin
@@ -6024,6 +6112,115 @@ begin
     end;
   end;
   Result := allow;
+end;
+
+function TTyToolWindowManager.MovedEventAllowed(ASource: TTyToolWindowBar): Boolean;
+const
+  Quiet = [csDesigning, csLoading, csDestroying];
+begin
+  Result := Assigned(FOnWindowMoved) and (ASource <> nil)
+    and (Quiet * (ComponentState + ASource.ComponentState) = []);
+end;
+
+procedure TTyToolWindowManager.WindowMoved(AWindow: TTyToolWindow; ASource: TTyToolWindowBar;
+  AOldIndex: Integer);
+begin
+  if not MovedEventAllowed(ASource) then Exit;
+  Inc(FEventDepth);
+  try
+    FOnWindowMoved(Self, AWindow, ASource, AOldIndex);
+  finally
+    Dec(FEventDepth);
+  end;
+end;
+
+procedure TTyToolWindowManager.MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+  AIndex: Integer);
+var
+  src: TTyToolWindowBar;
+  form: TCustomForm;
+  focus: TWinControl;
+  oldIdx: Integer;
+  srcEv, tgtEv: TTyToolWindowBarEvents;
+begin
+  src := AWindow.Bar;
+  { spec §9.5:记下焦点控件和原来的窗口序号。 }
+  form := GetParentForm(ATarget);
+  if form <> nil then focus := form.ActiveControl else focus := nil;
+  oldIdx := src.IndexOfWindow(AWindow);
+  if AIndex < 0 then AIndex := MaxInt;             { -1 = 末尾;PlaceWindow 钳到 N-1 }
+  srcEv := [];
+  tgtEv := [];
+  { 两条栏的事件先记下、最后按 spec §6.6 的顺序发:都在 EnableAlign 和焦点恢复之后。 }
+  src.BeginDeferEvents;
+  try
+    ATarget.BeginDeferEvents;
+    try
+      src.DisableAlign;
+      try
+        ATarget.DisableAlign;
+        try
+          { SetParent 里:从源栏注销并回落当前页、注册到目标栏、推 Controller、按目标栏的列表
+            解析图标。W 里所有句柄重建(LCL 换父控件的固有行为)。 }
+          AWindow.Parent := ATarget;
+          ATarget.PlaceWindow(AWindow, AIndex);
+          { W 成为目标栏的当前页并展开(设计期只激活,不写 Collapsed,同 ShowControl)。 }
+          ATarget.ActivateWindow(AWindow);
+          if not (csDesigning in ATarget.ComponentState) then
+            ATarget.Collapsed := False;
+        finally
+          ATarget.EnableAlign;
+        end;
+      finally
+        src.EnableAlign;
+      end;
+    finally
+      tgtEv := ATarget.EndDeferEvents;
+    end;
+  finally
+    srcEv := src.EndDeferEvents;
+  end;
+  { 焦点原来在 W 里:还给它(换父控件时 LCL 把它挪走了)。 }
+  if (focus <> nil) and AWindow.ContainsControl(focus) and focus.CanFocus then
+    form.ActiveControl := focus;
+  if csDesigning in ComponentState then
+  begin
+    { 设计期(D 期的组件编辑器):不发事件,通知设计器(同 ReorderWindow)。 }
+    OwnerFormDesignerModified(ATarget);
+    Exit;
+  end;
+  Inc(FEventDepth);
+  try
+    { 源栏从不发 OnCollapse(拖空不写 Collapsed)。 }
+    if twbeChange in srcEv then src.FireBarEvent(twbeChange);
+    if twbeExpand in tgtEv then ATarget.FireBarEvent(twbeExpand);
+    if twbeChange in tgtEv then ATarget.FireBarEvent(twbeChange);
+    { 已经在 FEventDepth 里,直接调处理器(门同 WindowMoved)。 }
+    if MovedEventAllowed(src) then
+      FOnWindowMoved(Self, AWindow, src, oldIdx);
+  finally
+    Dec(FEventDepth);
+  end;
+end;
+
+function TTyToolWindowManager.MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
+  AIndex: Integer): Boolean;
+var
+  src: TTyToolWindowBar;
+begin
+  Result := False;
+  if FEventDepth > 0 then Exit;                       { 从事件处理里重入(spec §9.9) }
+  if not StructureAllows(AWindow, ATargetBar, src) then Exit;
+  if src = ATargetBar then
+  begin
+    { 同一条栏就是调顺序:同步,不问事件。-1 = 末尾。 }
+    if AIndex < 0 then AIndex := MaxInt;
+    src.ReorderWindow(AWindow, AIndex);
+    Exit(True);
+  end;
+  if not CanMoveWindow(AWindow, ATargetBar) then Exit;
+  MoveNow(AWindow, ATargetBar, AIndex);
+  Result := True;
 end;
 
 procedure TyToolWindowOverflowMenuAnchor(const AOverflow: TRect;
