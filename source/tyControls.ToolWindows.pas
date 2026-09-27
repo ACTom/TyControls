@@ -701,6 +701,8 @@ type
     FOnChange: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
     FOnExpand: TNotifyEvent;
+    { 一侧没有窗口时整条隐藏(spec §6.9,E 期)。构造值 True,同 published 的 default。 }
+    FHideWhenEmpty: Boolean;
     FImages: TCustomImageList;
     { 注册到的 manager(spec §2 / §10.6);nil = 没有,只有栏内调顺序。 }
     FManager: TTyCustomToolWindowManager;
@@ -732,6 +734,8 @@ type
     { 栏里每个窗口挂起的 ImageIndex 换成名字;加载中、析构中不做(见 TTyToolWindow.ResolveImageIndex)。 }
     procedure ResolvePendingImageIndexes;
     procedure SetPlacement(AValue: TTyToolWindowPlacement);
+    { 值变了且不在加载中:重推尺寸、重画(spec §6.9)。 }
+    procedure SetHideWhenEmpty(AValue: Boolean);
     procedure SetExpandedSize(AValue: Integer);
     procedure SetCollapsed(AValue: Boolean);
     function GetActiveIndex: Integer;
@@ -1237,6 +1241,9 @@ type
     { 栏此刻是不是替当前页画标签行、收它的输入(spec §3.7「让出标签行」):运行时、底栏、有当前
       页、当前页**自己的** Enabled = False、栏没收起。 }
     function HostsTabRow: Boolean;
+    { 此刻按「一侧没有窗口」隐藏(spec §6.9):运行时、侧栏、HideWhenEmpty、没有窗口(漏入的
+      非窗口子控件运行时本来就藏着,不算)。推导宽 0,不写 Visible。 }
+    function HiddenAsEmpty: Boolean;
     { 「当前页的标签行此刻在谁身上」一处答(spec §3.7):宿主控件、行矩形(宿主客户区)、几何
       (行内)。HeaderZoneAt(nil, …)、PartAt、OverflowWindows、溢出菜单锚点、InvalidateHeader、
       按下态和插入线的捕获者判断都问它。见 TTyToolWindowTabRowHost。 }
@@ -1284,6 +1291,10 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnCollapse: TNotifyEvent read FOnCollapse write FOnCollapse;
     property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
+    { 一侧没有窗口时整条隐藏(推导宽度为 0,Visible 不动),默认开;只对侧栏起作用 —— 底栏没有
+      窗口时本来就高 0。设计期永远不隐藏。隐藏的栏照样可用(IsBarUsable / UsableBar /
+      MoveWindow),拖动时在它的位置显示放置预览(spec §6.9 / §9.8)。 }
+    property HideWhenEmpty: Boolean read FHideWhenEmpty write SetHideWhenEmpty default True;
   end;
 
   { spec §9.9:跨栏移动之前问一次(拖动悬停、放下、MoveWindow、排队的移动执行前)。 }
@@ -3082,6 +3093,7 @@ begin
   ControlStyle := ControlStyle + [csAcceptsControls, csTripleClicks, csQuadClicks];
   FPlacement := twpLeft;
   FExpandedSize := TyToolWindowDefaultExpandedSize;
+  FHideWhenEmpty := True;
   FLoadingActiveIndex := -1;
   FBottomActionsPx := -1;
   FHeaderHoverIndex := -1;
@@ -3311,6 +3323,12 @@ begin
     and (FCollapsed or (WindowCount = 0) or EdgeSnapped);
 end;
 
+function TTyToolWindowBar.HiddenAsEmpty: Boolean;
+begin
+  Result := FHideWhenEmpty and (FPlacement <> twpBottom)
+    and not (csDesigning in ComponentState) and (WindowCount = 0);
+end;
+
 function TTyToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
   if FPlacement = twpBottom then
@@ -3320,6 +3338,9 @@ begin
   end
   else
   begin
+    { 一侧没有窗口、整条隐藏(spec §6.9):连图标条和 chrome 都不算。内容项本来就是 0
+      (SizesAsCollapsed),所以推导宽 0;参加 §6.2 分空间时固定部分也是 0。 }
+    if HiddenAsEmpty then Exit(0);
     Result := AM.Strip + 2 * AM.Chrome;
     if not SizesAsCollapsed then Inc(Result, AM.Edge);
   end;
@@ -3724,8 +3745,13 @@ begin
   end
   else
   begin
-    lo := m.Strip + 2 * m.Chrome;
-    if not SizesAsCollapsed then Inc(lo, m.Edge + m.ContentMin);
+    { 隐藏的侧栏(spec §6.9)下限也是 0,否则 LCL 把宽 0 钳回图标条宽。 }
+    if HiddenAsEmpty then lo := 0
+    else
+    begin
+      lo := m.Strip + 2 * m.Chrome;
+      if not SizesAsCollapsed then Inc(lo, m.Edge + m.ContentMin);
+    end;
     if lo > MinWidth then MinWidth := lo;
   end;
 end;
@@ -3790,6 +3816,9 @@ var
 
 begin
   Result := Default(TTyToolWindowBarLayout);
+  { 一侧没有窗口、整条隐藏(spec §6.9):全是空矩形 —— 没有像素也就没有命中、提示、右键。
+    设计期不会走到这里(HiddenAsEmpty 设计期恒假)。 }
+  if HiddenAsEmpty then Exit;
   if APPI = PPI then m := Metrics else m := MetricsAt(APPI);
   R := AClient;
   InflateRect(R, -m.Chrome, -m.Chrome);
@@ -6225,6 +6254,15 @@ begin
         Top := v - Height;
       end;
   end;
+end;
+
+procedure TTyToolWindowBar.SetHideWhenEmpty(AValue: Boolean);
+begin
+  if FHideWhenEmpty = AValue then Exit;
+  FHideWhenEmpty := AValue;
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  Relayout;
+  Invalidate;
 end;
 
 procedure TTyToolWindowBar.SetExpandedSize(AValue: Integer);

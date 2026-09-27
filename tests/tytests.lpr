@@ -202,6 +202,7 @@ uses
   test.toolwindow.reorder, test.toolwindow.bottom, test.toolwindow.manager,
   test.toolwindow.crossdrag, test.toolwindow.layouttext, test.toolwindow.layoutapply,
   test.toolwindow.design, test.toolwindow.disabled, test.toolwindow.badge,
+  test.toolwindow.hide,
   test.dpi.fontlatch,
   test.parity.datetime;
 

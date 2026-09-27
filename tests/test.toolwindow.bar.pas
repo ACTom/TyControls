@@ -75,6 +75,8 @@ type
     function CallGetPopupMenu: TPopupMenu;
     { 真实的 DoMouseWheel(protected),只转发。 }
     function CallDoMouseWheel(const APos: TPoint): Boolean;
+    { 真实的 ConstrainedResize(protected),只转发。 }
+    procedure CallConstrainedResize(var AMinW, AMinH, AMaxW, AMaxH: TConstraintSize);
     { 对齐锁的层数(DisableAlign 一次加一层;protected 的 AutoSizingLockCount)。 }
     function AlignLockForTest: Integer;
   protected
@@ -407,6 +409,11 @@ end;
 function TBarAccess.CallDoMouseWheel(const APos: TPoint): Boolean;
 begin
   Result := DoMouseWheel([], -120, APos);
+end;
+
+procedure TBarAccess.CallConstrainedResize(var AMinW, AMinH, AMaxW, AMaxH: TConstraintSize);
+begin
+  ConstrainedResize(AMinW, AMinH, AMaxW, AMaxH);
 end;
 
 procedure TBarAccess.CallCaptureChanged;
@@ -757,7 +764,10 @@ var
   d: TBarAccess;
 begin
   FBar.ExpandedSize := 200;
-  AssertEquals('运行时没有窗口 = 只剩图标条', StripPx, FBar.Width);
+  { E 期(spec §6.9):默认 HideWhenEmpty,空侧栏整条隐藏;关掉才是「只剩图标条」。 }
+  AssertEquals('运行时没有窗口 = 默认整条隐藏(宽 0)', 0, FBar.Width);
+  FBar.HideWhenEmpty := False;
+  AssertEquals('HideWhenEmpty 关掉:只剩图标条', StripPx, FBar.Width);
   { 设计器放下的空栏:零宽 / 只剩图标条的话,既画不出提示也难点中(spec §5.4)。 }
   d := NewDesignBar;
   AssertEquals('设计期没有窗口也按展开算',
