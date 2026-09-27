@@ -86,7 +86,8 @@
 
 14. **示例由实现 agent 手写、不编；主控在 Task 7 末尾编、冒烟，把报错交回实现 agent 在同一个任务里修完。** 实现 agent 能做的静态检查：`scripts/check-lfm-props.py`、`scripts/check-example-po.py`、`TEnglishFitTest`、`TSkinFitTest`（这两个扫全部 example 的 .lfm）。
 
-15. **「移到另一侧栏」不记撤销。** spec §11 没要求；`MoveWindow` 设计期那条路（C 期）也没有撤销。控件文档写明「这一步不能 Ctrl+Z，再点一次移回来」。
+15. ~~**「移到另一侧栏」不记撤销。** spec §11 没要求；`MoveWindow` 设计期那条路（C 期）也没有撤销。控件文档写明「这一步不能 Ctrl+Z，再点一次移回来」。~~
+    **实现期修正（D 期收尾，`3e0d81cf`）**：两个移动菜单项都记一条 Parent 的撤销（照 IDE 组件树换父），撤销后窗口回到原栏末尾、成为当前页；见 spec §11。
 
 16. **从面板放下栏时 `ExpandedSize` 可能被改掉——先写测试，红了再修。**
     IDE 放下控件的顺序是：宽 = `Max(5, 构造出来的 Width)` 按设计器 PPI 缩放 → `AutoAdjustLayout(96 → 设计器 PPI)` → `SetBounds(...)` → `Parent :=`（`ide/customformeditor.pp:1453-1506`）。栏的 `SetBounds` 在设计期会把宽写回 `ExpandedSize`（A 期），150% 下两边各自取整差一个像素，就可能写回 239 或 241，对象查看器里 `ExpandedSize` 加粗。无头照这个顺序模拟一遍就知道（Task 5）。
@@ -1098,7 +1099,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/plans/2026-09-24-toolwindow-phase-d.md`
 - Modify: `docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md`
 
-- [ ] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
+- [x] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
 
 逐条对着代码查，每条记「在哪一行实现 / 为什么不需要」：
 
@@ -1110,7 +1111,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - §11：栏编辑器两项、窗口编辑器三项；「新建工具窗口」的步骤和顺序（含 `AddUndoAction`）；「添加操作区」同样记撤销；可用性全部问 `DesignRules`；csAncestor、frame 实例灰掉；不提供「删除工具窗口」。
 - §16 第 7 步 C 期补的四条、第 8 步的文档要点（Task 8 Step 1 第 9 节逐条对）和 i18n 清单（孤儿提示、「添加工具窗口」、冲突提示、多余操作区提示、非窗口子控件提示、最大化、还原、收起、更多、组件编辑器菜单项——前面的 A / B 期已有，本期补齐后逐个在 pot 和 zh_CN.po 里找到）。
 
-- [ ] **Step 2: grep**
+- [x] **Step 2: grep**
 
 ```bash
 cd /d/Projects/ty-3.1 && grep -n "D 期" source/tyControls.ToolWindows*.pas tests/test.toolwindow.*.pas; for f in TyToolWindowInInlined TyToolWindowDesignCanAddWindow TyToolWindowDesignCanAddActions TyToolWindowDesignOtherSide TyToolWindowDesignMoveToOtherSide TyToolWindowDesignReturnTargets TyToolWindowDesignReturnToBar UsableBar; do printf '%s: src=%s dt=%s tests=%s ex=%s\n' $f $(grep -rlw $f source | wc -l) $(grep -rlw $f designtime | wc -l) $(grep -rlw $f tests | wc -l) $(grep -rlw $f examples | wc -l); done
@@ -1118,7 +1119,7 @@ cd /d/Projects/ty-3.1 && grep -n "D 期" source/tyControls.ToolWindows*.pas test
 
 Expected：`D 期` 字样都改成了现在的事实（注释里「设计期那一半归 D 期」之类）；`DesignRules` 的每个函数**在 `designtime/` 里有人调**（dt 列 ≥ 1，[[built-not-wired-is-the-default-failure]]）、在 `tests/` 里有人测；`UsableBar` 在 `designtime/`（经 `DesignRules`）和 `examples/` 里都有人用。
 
-- [ ] **Step 3: 跑全量**
+- [x] **Step 3: 跑全量**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
@@ -1126,7 +1127,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests
 
 Expected：errors / failures 都是 0，总数 = Task 0 的基线 + 本期新增条数。红了先按 [[known-rare-suite-flake]]、[[suite-order-widgetset-init]]、[[canary-then-rebuild]] 排查。
 
-- [ ] **Step 4: 【主控执行】三个产物各编一遍**
+- [x] **Step 4: 【主控执行】三个产物各编一遍**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk && lazbuild -B tycontrols_dt.lpk && rm -rf examples/toolwindows/lib && lazbuild -B examples/toolwindows/toolwindows_example.lpi && git status --short languages/
@@ -1134,7 +1135,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk && lazbuild -B tycontrols_dt
 
 Expected：三个都编过，`languages/` 干净。
 
-- [ ] **Step 5: 抽查变异（每条三拍，必须红）**
+- [x] **Step 5: 抽查变异（每条三拍，必须红）**
 
 1. Task 2 的「`SetParent` 设计期那一支只摘标志不写 `Visible`」。
 2. Task 3 的「`SetPlacement` 不调 `PlacementsChanged`」。
@@ -1142,11 +1143,11 @@ Expected：三个都编过，`languages/` 干净。
 4. Task 4 的「`OtherSide` 不查 csAncestor」。
 5. Task 4 的「`ReturnTargets` 不排除 frame 实例」。
 
-- [ ] **Step 6: 整体代码质量审查**
+- [x] **Step 6: 整体代码质量审查**
 
 对 `git diff <Task 0 的 HEAD>..HEAD -- source/ designtime/` 做一次：组件编辑器里有没有偷偷自己判可用性（应当全问 `DesignRules`）；三种提示行（漏入子控件、冲突、孤儿）的画法是否该合成一个小函数；注释与代码不符；遗留的「D 期」字样；try/finally 成对。审出来的问题修完回到 Step 3。
 
-- [ ] **Step 7: 把实现期的偏差写回 spec 原处**
+- [x] **Step 7: 把实现期的偏差写回 spec 原处**
 
 「开工前要定的问题」里用户拍板的每一条、实现中新发现的每一处 spec 没写准的地方，都在 spec **原处**改并标「实现期修正（D 期）」。至少要落的：
 
@@ -1154,11 +1155,11 @@ Expected：三个都编过，`languages/` 干净。
 - §3.2（问题 2、8、10：孤儿铺满父控件、顶上让一行、摘标志后写 `Visible`）；
 - §6.1（问题 16：放下栏的尺寸，看 Task 5 Step 1 的结论）；
 - §9.9 / §10.6（问题 5：`UsableBar`；问题 8、9：冲突提示让一行、在哪几处重排）；
-- §11（问题 1：菜单项固定、灰掉；问题 7：判定在 `DesignRules`；问题 15：「移到另一侧栏」不记撤销）；
+- §11（问题 1：菜单项固定、灰掉；问题 7：判定在 `DesignRules`；问题 15：~~「移到另一侧栏」不记撤销~~ 收尾改成两个移动菜单项都记撤销）；
 - §15 加一条「D 期落地、待真机」指向本计划末尾的验收表；
 - §16 第 7、8 步标「已完成（D 期）」。
 
-- [ ] **Step 8: 签收记录写进本计划末尾，提交**
+- [x] **Step 8: 签收记录写进本计划末尾，提交**
 
 签收记录写：全量条数、提交区间、变异抽查结果、spec 写回、遗留；再给发版时用的 CHANGELOG 草稿一行（只写用户可感知的：「新增：IDE 式侧栏 / 底栏 `TTyToolWindowBar` 与 `TTyToolWindowManager`：图标条 / 标签切换、左右侧互拖、底栏最大化、布局保存与恢复，设计器里可直接新建和移动工具窗口」）。
 
@@ -1195,22 +1196,22 @@ D 期是工作台的里程碑：下面是 spec §15 全部「只能真机验」�
 | # | 验什么 | 怎么操作 | 期望 |
 |---|---|---|---|
 | 1 | 面板图标 | 看「TyControls Containers」页；系统缩放 100% / 150% / 200% 各看一眼 | 栏和 manager 两个按钮有图标、不糊 |
-| 2 | 放下栏的尺寸 | 从面板点一下放一条栏到空白窗体上（150% 缩放下再放一次） | 左侧一条带图标条的栏；对象查看器里 `ExpandedSize` 是 240、不加粗 |
+| 2 | 放下栏的尺寸 | 从面板点一下放一条栏到空白窗体上（150% 缩放下再放一次） | 左侧一条带图标条的栏；对象查看器里 `ExpandedSize` 正好 240（不是 239 / 241 / 380）、不加粗。拖一个矩形放下也一样：拖出的宽被忽略，栏按 240 推导（已知，spec §6.1） |
 | 3 | 改 `Placement` | 对象查看器里改成 `twpRight` / `twpBottom` | `Align` 跟着变，栏挪到父控件那一侧的最外边 |
 | 4 | 新建工具窗口 + 撤销 | 栏右键「新建工具窗口」；再 `Ctrl+Z` | 新窗口成为当前页、名字和标题一样、窗体标题出现「*」；撤销后窗口没了 |
 | 5 | 设计期点图标 / 标签切页 | 两个窗口，点另一个图标；底栏点另一个标签 | 松开时切页，对象查看器的 `ActiveIndex` 跟着变 |
 | 6 | 标签行让位给栏 | 底栏：点标签行后面的空白处 | 选中的是栏，不是当前页窗口 |
-| 7 | 「显示 ▸」 | 栏右键 → 显示 ▸ → 挑一个窗口 | 切过去并选中它 |
-| 8 | 移到另一侧栏 | 左、右两条侧栏 + manager；左栏窗口右键「移到另一侧栏」；底栏窗口右键看同一项 | 窗口到了右栏、成为当前页、窗体标题出现「*」；底栏窗口上这一项是灰的 |
+| 7 | 「显示窗口 ▸」（英文 IDE：`Show Window ▸`） | 栏右键 → 显示窗口 ▸ → 挑一个窗口 | 切过去并选中它；子菜单每项是「名字 "标题"」 |
+| 8 | 移到另一侧栏 + 撤销 | 左、右两条侧栏 + manager；左栏窗口右键「移到另一侧栏」；再 `Ctrl+Z`；底栏窗口右键看同一项 | 窗口到了右栏、成为当前页、窗体标题出现「*」；撤销后回到左栏，排在**末尾**、成为当前页（原来的序号不还原，已知）；底栏窗口上这一项是灰的 |
 | 9 | 添加操作区 | 窗口右键「添加操作区」，往里拖一个按钮；再右键看同一项 | 操作区出现在标题行右端，按钮在里面；第二次这一项是灰的 |
 | 10 | Placement 冲突提示 | 把右栏的 `Placement` 改成 `twpLeft`；再改回来 | 两条栏底部立刻出现「与另一条栏的 Placement 相同」，不用点一下才刷新；改回来立刻消失 |
-| 11 | 撤销删除 → 孤儿 | 选中一个窗口按 Delete，再 `Ctrl+Z` | 窗口出现在窗体上、顶上一行「不在工具窗口栏里，运行时隐藏」；右键「移回栏里 ▸」挑原来的栏，回去并成为当前页 |
+| 11 | 撤销删除 → 孤儿 | 选中一个窗口按 Delete，再 `Ctrl+Z` | 窗口出现在窗体上、顶上一行「不在工具窗口栏里，运行时隐藏」；右键「移回栏里 ▸」挑原来的栏，回去并成为当前页（排在末尾）；再 `Ctrl+Z`，又成孤儿 |
 | 12 | 粘贴 | 复制一个窗口；点侧栏图标条（选中栏）再粘贴；再选中当前页窗口的正文粘贴一次 | 第一次进了栏；第二次落在窗口里，显示成孤儿提示 |
 | 13 | 继承窗体 | 新建一个继承自 `umain` 的窗体，在继承来的窗口上右键 | 「移到另一侧栏」灰；往继承来的栏里「新建工具窗口」可以 |
 | 14 | frame 实例 | 新建一个 frame 放一条栏和两个窗口，再把 frame 放到窗体上，右键 frame 里的栏和窗口 | 新建 / 添加 / 移动三类菜单项都是灰的 |
 | 15 | `Controller` 隐藏 | 选中窗口、选中操作区看对象查看器 | 没有 `Controller`；栏上有 |
 | 16 | 保存再打开 | 调过顺序、换过当前页、有一个孤儿的窗体保存、关掉、再打开 | 顺序、当前页、孤儿都还在 |
-| 17 | 组件树里选中藏着的窗口 | 在对象查看器的组件树里点一个非当前页的窗口 | 不会切过去（LCL 设计器不调 `ShowControl`，文档写了）；记下实际表现 |
+| 17 | 组件树里选中藏着的窗口 | 在对象查看器的组件树里点一个非当前页的窗口 | 不会切过去（LCL 设计器不调 `ShowControl`，文档写了；**据 Lazarus 源码推断，以真机为准**）；记下实际表现 |
 | 18 | 中文 IDE | Lazarus 切到中文重启，右键栏和窗口 | 菜单项是中文 |
 
 ### 二、运行时（`examples/toolwindows`）
@@ -1227,10 +1228,10 @@ D 期是工作台的里程碑：下面是 spec §15 全部「只能真机验」�
 | 26 | 拖动中弹模态框 | 各 widgetset | Diagnostics › Show a Dialog in 3 s，马上去拖一个图标别松手 | 对话框弹出时拖动取消；关掉对话框后没有残留的插入线或光标 |
 | 27 | 拖动中弹菜单 | 各 widgetset | Diagnostics › Pop Up a Menu in 3 s，同上 | 同上 |
 | 28 | 捕获期间离开 | Win32 | 按住图标（不超过阈值）移出栏再移回来松开 | 按阈值内松开算点击，图标悬停状态不乱 |
-| 29 | 窗口里的按钮移动自己 | Win32 优先 | 点 Outline 操作区的「⇆」 | Outline 到了另一侧，程序不崩；日志先是「返回 True、还在旧栏」，再是 `moved` |
-| 30 | 窗口里的按钮恢复布局 | Win32 优先 | 先把布局弄乱，再点 Explorer 操作区的「↺」 | 恢复到启动时的样子，程序不崩 |
-| 31 | 布局存取 | | 拖乱、收起一侧、调宽、换当前页 → Layout › Save → 再弄乱 → Load；再 Reset；再关掉程序重开 | Load 回到存的样子；Reset 回到 .lfm 的样子；重开回到关之前的样子 |
-| 32 | 底栏最大化 / 收起 | | 标签行的最大化按钮、收起按钮；标签右键菜单；View › Bottom Panel（Ctrl+J） | 最大化压掉编辑区、还原回原高；收起后界面上没有底栏，Ctrl+J 叫回来 |
+| 29 | 窗口里的按钮移动自己 | Win32 优先 | 点 Outline 操作区的双向箭头按钮（提示 `Move to the other side`） | Outline 到了另一侧，程序不崩；日志先是 `MoveWindow returned True; Outline is in RightBar right now`（返回 True、还在旧栏），再是 `moved OutlineWin from RightBar (#0)` |
+| 30 | 窗口里的按钮恢复布局 | Win32 优先 | 先把布局弄乱，再点 Explorer 操作区的逆时针箭头按钮（提示 `Reset layout`） | 恢复到启动时的样子，程序不崩 |
+| 31 | 布局存取 | | 拖乱、收起一侧、调宽、换当前页 → Layout › Save Layout → 再弄乱 → Layout › Load Layout；再 Layout › Reset Layout；再关掉程序重开 | Load 回到存的样子；Reset 回到 .lfm 的样子；重开回到关之前的样子 |
+| 32 | 底栏最大化 / 收起 | | 标签行的最大化按钮、收起按钮；标签右键菜单（Maximize / Restore、Hide Panel）；View › Bottom Panel（Ctrl+J） | 最大化压掉编辑区、还原回原高；收起后界面上没有底栏，Ctrl+J 叫回来 |
 | 33 | 拉宽与吸附 | | 拖侧栏和底栏的边；拖到很窄再松手；拖回来 | 实时变宽；拖到内容下限一半以下松手 = 收起；拖回来不收起 |
 | 34 | 右键菜单 | | 侧栏图标上右键「Move to Other Side」；图标条空白处右键 | 图标上弹菜单、能移；空白处不弹栏的菜单 |
 | 35 | 溢出 | | 把窗体缩矮、缩窄到图标 / 标签放不下 | 出现溢出按钮；左栏菜单往右开、右栏往左开、底栏往下开 |
@@ -1247,6 +1248,15 @@ D 期是工作台的里程碑：下面是 spec §15 全部「只能真机验」�
 
 ---
 
-## D 期签收（待填）
+## D 期签收（2026-09-27）
 
-Task 10 Step 8 填：全量条数、提交区间、变异抽查、spec 写回、遗留、CHANGELOG 草稿。
+- **全量**：7715 条，errors 0 / failures 0（C 期签收 7666）。
+- **提交区间**：Task 0–9 `1baf26e2..40db6c60`；整体审查后的修复 `3f968bbf..a95523dd`。
+- **编译**：主控编过运行时包 `tycontrols.lpk`、设计期包 `tycontrols_dt.lpk`、示例 `examples/toolwindows`，均 0 错。
+- **i18n**：工具窗口的 11 条 resourcestring 在 `tyControls.StrConsts.pot` 和 `tycontrols.strconsts.zh_CN.po` 里齐全；`tyControls.Design.CompEditors.pot` 和编出来的 rsj 一致。
+- **spec 写回**：§2、§3.1、§3.2、§6.1、§9.9、§10.6、§11、§15、§16 原处标「实现期修正 / 补（D 期）」。开工前问题 15（「移到另一侧栏」不记撤销）已被收尾推翻：两个移动菜单项都记撤销。
+- **真机**：待用户按上面的「真机验收表」逐项做。
+- **遗留**（不阻塞）：
+  - M-5「栏 `Loaded` 不 `Relayout`」在冲突提示那条测试上是等价变异（LCL 自己的 `Loaded → LoadedAll → AdjustSize` 也会重排），那一句守的是推导宽度，由 `TestExpandedSizeStreamsOnBothSidesOfTheDefault` 杀。
+  - 中间提交没有逐个单独编译验证，只验了 HEAD。
+- **CHANGELOG 草稿**（发版时用）：新增：IDE 式侧栏 / 底栏 `TTyToolWindowBar` 与 `TTyToolWindowManager`：图标条 / 标签切换、左右侧互拖、底栏最大化、布局保存与恢复，设计器里可直接新建和移动工具窗口。

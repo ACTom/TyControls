@@ -41,6 +41,7 @@
 | `TTyToolWindowManager` | 不可见组件，可以不放：跨侧拖动、布局保存 | 组件面板上有；栏的 `Manager` 属性指向它 |
 
 - `initialization` 里对四个类 `RegisterClass`；设计期包里栏和 manager `RegisterComponents`，窗口和操作区 `RegisterNoIcon`。
+  **实现期补（D 期）**：面板分页是 `TyControls Containers`，和 `TTyPageControl` / `TTyTabSheet` 放一起。
 - 单元加进 `tycontrols.lpk`（搜索路径能编过不代表进了包，见 [[new-unit-missing-from-lpk]]）；组件编辑器和属性编辑器在 `tycontrols_dt.lpk`，要单独编。
 - **实现期修正（A 期）**：纯几何函数和它们的类型（`twh*` 枚举、`TTyToolWindowHeaderInput` / `TTyToolWindowHeaderGeom` 等记录）在 `source/tyControls.ToolWindows.Layout.pas`，也已进 `tycontrols.lpk`。Pascal 的 uses 不传递，代码里用到 `twh*` 或这些记录，要自己在 uses 里加这个单元。
 - **实现期修正（A 期）**：样式键在代码里一律写 `TyToolWindow*Key` 常量（~~底栏那几个 B 期接线时再加，§16~~ **实现期修正（B 期）**：底栏的五个——`TabRow`、`Tab`、`TabIndicator`、`Button`、`Separator`——也已加上）。
@@ -50,6 +51,7 @@
   - 基类 `TTyCustomToolWindowManager` 在 `ToolWindows.pas`：注册表、拖动状态（正在拖的源栏）、`Images`、`OnCanMoveWindow` / `OnWindowMoved`、结构检查、`IsBarUsable` / `CanMoveWindow` / `CancelDrag` / `IsDragging`，还有一次跨栏移动的提交（protected；拖放提交、`MoveWindow`、直接改 Parent 都走它）。
   - `TTyToolWindowManager` 在新单元 `source/tyControls.ToolWindows.Manager.pas`（已进 .lpk）：`MoveWindow` 和队列、跨栏命中的探测、布局的保存 / 读取 / 恢复和时机、`OnLayoutApplied`。它的 `RegisterClass` 也在这个单元的 `initialization` 里。
   - 栏的 `Manager` 属性类型是基类。代码里经 `Bar.Manager` 调 `MoveWindow` / `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` 要转型成 `TTyToolWindowManager`；窗体上直接引用 manager 组件的不受影响。用到 manager 的单元要 uses `tyControls.ToolWindows.Manager`。
+- **实现期补（D 期）**：组件编辑器的判定和模型操作在新单元 `source/tyControls.ToolWindows.DesignRules.pas`（已进 `tycontrols.lpk`）。放运行时包是因为设计期包不进测试构建，写在 `designtime/` 里就测不到；组件编辑器只做 IDE 那一半（§11）。
 - **实现期修正（A 期）**：栏的析构第一句先调 `Destroying`。直接 `Free` 时 csDestroying 要到继承析构里才置上，先置好，后面的手势收尾就只清标志，不在拆到一半的栏上重排、重画。
 - 名字已查过不重名。`TTyActivityBar`（不定进度条）和 `ToolGroup`（`TTyToolGroupPanel`）已被占用，避开。
 
@@ -69,7 +71,8 @@
 
 - 构造：`ControlStyle + [csAcceptsControls, csDesignFixedBounds, csNoDesignVisible, csNoFocus, csTripleClicks, csQuadClicks]`；`Align := alClient`；`Visible := False`。**构造里什么都不自动建**（csLoading 翻倍坑，见 GridPanel）。
   多击两个标志的理由：底栏标题行的按下落在窗口的句柄上，LCL 数点击次数看的是收到消息的那个窗口化控件（`controls.pp:3280-3290`）；不加的话第三次按下被还原成普通按下，又生效一次。
-- published：`Caption`、`ImageName: string`、`ImageIndex: TImageIndex`（`stored (ImageName = '') and (ImageIndex >= 0)`，default -1）、`StripHint: string`、`StyleClass`、`OnShow`、`OnHide`。
+- published：`Caption`、`ImageName: string`、`ImageIndex: TImageIndex`（`stored (ImageName = '') and (ImageIndex >= 0)`，default -1）、~~`StripHint: string`~~ `StripHint: TTranslateString`、`StyleClass`、`OnShow`、`OnHide`。
+  **实现期修正（D 期）**：LCL 的窗体翻译只认类型**正好是** `TTranslateString` 的属性（`lcltranslator.pas:313`），声明成 `string`，设计器里填的图标条提示永远翻译不了。赋值兼容，对象查看器里没有差别。
 - `Left / Top / Width / Height / TabOrder / Visible` 重新声明为 `stored False`。
 - **`Controller` 由栏推送，不写进 .lfm**。它在基类 `TTyCustomControl` 上已经 published（`Base.pas:452`），子类撤不掉。
   做法：在 published 段重新声明 `property Controller stored False;`；设计期包里用 `THiddenPropertyEditor` 把窗口和操作区的 `Controller` 从对象查看器里藏起来（先例 `Design.PropEditors.pas:730-738`）。
@@ -83,7 +86,12 @@
 - `ChildClassAllowed` 拒绝 `TTyToolWindow` 和 `TTyToolWindowBar`（防止窗口套窗口）。
 - `SetParent` 照 `TTyTabSheet.SetParent`：从旧栏注销（任一方 csDestroying 时跳过）、注册到新栏、推 Controller、`RelayoutHeader`。
   **实现期修正（A 期）**：注册 / 注销是栏的 protected `RegisterWindow` / `UnregisterWindow`，内部簿记，不对外公开。
-- **孤儿模式**（Parent 不是栏）：设计期去掉 csNoDesignVisible、显示出来，并用 `TyToolWindowNote` 画一行提示（resourcestring）。运行时保持隐藏。（**实现期修正（A 期）**：设计期这一半归 D 期，见 §16。）
+- **孤儿模式**（Parent 不是栏）：设计期去掉 csNoDesignVisible、显示出来，并用 `TyToolWindowNote` 画一行提示（resourcestring）。运行时保持隐藏。（**实现期修正（A 期）**：设计期这一半归 D 期，见 §16。**实现期补（D 期）**：已完成，见下。）
+  **实现期修正（D 期）**，设计期孤儿的样子：
+  - 保持 `alClient` 铺满父控件（撤销删除后父控件就是窗体）。孤儿是要马上处理掉的错误状态，铺满不会看漏；改成固定尺寸就得给窗口加 bounds 的存储规则，不值得。
+  - 先摘 `csNoDesignVisible`，再写 `Visible := True`。只摘标志不够：设计期的显示状态是 `Visible or (csDesigning and not csNoDesignVisible)`，触发重算的是写 `Visible`，而孤儿的 `Visible` 往往已经是 False，写同值是空操作。`Visible` 是 stored False，这一句不进 .lfm；回到栏里由栏切页把标志加回去。
+  - `AdjustClientRect` 顶上让出一行，高 = `--toolwindow-header-height`（按 PPI 缩放），提示画在这一行里。只画不让的话 alClient 的正文盖住它，一个像素都露不出来。公开探针 `OrphanNoteRect`（客户区坐标，不是设计期孤儿时为空矩形）。
+  - 孤儿的操作区摆在这一行下面（正文区左上角，按 raw 首选尺寸）。
   **实现期修正（A 期）**：运行时藏起来那一下照常发 `OnHide`（原来显示着的话）；`Parent := nil` 也算孤儿，同样藏。
   HeaderMode = none：标题行高 0，`CustomAlignPosition` 不调 `Bar`，操作区按 raw 首选尺寸放在左上角。
   **不在 `CheckNewParent` 里 raise**：源码上读取器会经过它，但 `designtime/tyControls.Design.pas:211-216` 记着真机结果——设计器粘贴不经过能挂守卫的 SetParent；在读取器里抛异常还会中止整个撤销。
@@ -278,8 +286,11 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   - `AutoAdjustLayout` 在继承之后按新 PPI 重新推。
 - **最小尺寸**由重写 `ConstrainedResize` 给，和推导走同一个分支。下面的"收起或没有窗口"只指运行时，设计期不算收起，没有窗口也按展开算。侧栏：收起或没有窗口 = 图标条 + 2×chrome，否则 = 图标条 + 2×chrome + 边缘区 + content-min；底栏：收起或没有窗口 = 0，否则 = 2×chrome + 边缘区 + content-min。**不去写用户的 `Constraints`**。
 - **设计器里拖栏的边改大小**：只有 csDesigning、非 csLoading，并且不在栏自己推导尺寸（`FDeriving`）或 `AutoAdjustLayout`（`FDpiAdjusting`）期间的 `SetBounds`，才去掉图标条、边缘区、chrome，再 `UnscaleI` 写回 `ExpandedSize`（**实现期修正（A 期）**：还要 `Align` 等于 Placement 要求的那个；改成 alClient 之类时宽高由父控件决定，不写回）。其他来源的 `SetBounds`（推导、收窄、DPI、Align）一律不写回，否则收窄值会写回、DPI 会二次缩放。
+  **实现期修正（D 期）**：还要求 `Parent <> nil`。从面板放下栏时，IDE 先 `SetBounds` 再设 `Parent`（`customformeditor.pp:1453-1506`），宽是把「构造出来的宽」当 96 设计值再按设计器 PPI 放大的；栏在构造里已经按屏幕 PPI 推导过一次，150% 下等于放大两遍，写回的话 `ExpandedSize` 从 240 变成 380。副作用：放下时拖出的矩形宽度被忽略，栏按 `ExpandedSize` 推导。
 - **栏自己的主题钩子**：栏按 ~~`(PPI, model identity, ThemeVersion, RTL, Placement)`~~ **实现期修正（A 期）**：`(PPI, model identity, ThemeVersion, Placement, StyleClass, StyleOverride)` 缓存图标条宽、边缘区宽和 chrome；在 `Invalidate` 重写里、继承的 `AutoAdjustLayout` 之后各查一次，变了就带重入保护重推尺寸并 `Realign`（理由同 §3.4）。
   （修正的理由：栏的几何一律按物理方向，不看 RTL；样式类和 StyleOverride 改了只会来一次裸 `Invalidate`，所以要进键。`Invalidate` 比的是上一次推导**真正用过**的值，不是缓存——缓存谁读都会刷新；PPI 单独比。）
+  **实现期修正（D 期）**：比较的量里加上设计期提示行高（`--toolwindow-header-height`，metrics 字段 `NoteRow`，漏入子控件和冲突提示那一行都用它）。只换了这个 token 的主题，栏宽不变，对齐引擎不会自己重排。兄弟栏的 `Relayout` 经 `DeriveSiblings` 会先推导本栏、把 `FLaid` 刷成新值，本栏自己的 `Invalidate` 就看不出变化了——所以 `DeriveSize` 发现 `NoteRow` 变了，自己补一次对齐。
+- **实现期补（D 期）**：栏 `Loaded` 里的 `Relayout` 管的是推导宽度。设计期提示行（漏入、冲突）加载完的重排不靠它，LCL 自己的 `Loaded → LoadedAll → AdjustSize` 就会做。
 - **边框**：窗口从不画栏的边框。栏的类型键在基础主题里没有边框和圆角；皮肤给栏加了边框时，栏的 `AdjustClientRect` 按**静止态**样式内缩：`TyChromeInsetLogical(ResolveStyle(类型键, TyStyleClassFor(Self, StyleClass), [tysNormal]) 叠上 StyleOverride)`。不用 `CurrentStyle`：它带 hover / active，内缩量会随状态变（`Base.pas:574-576`），而悬停只 Invalidate、不 Realign。分隔线画在栏自己的边缘区里，窗口盖不到。
 
 ### 6.2 空间不够时的收窄
@@ -654,6 +665,8 @@ TTyToolWindow
 
 **实现期修正（C 期）**：manager 上另加 `function IsBarUsable(ABar: TTyToolWindowBar): Boolean`（§10.6）。`CanMoveWindow` / `CancelDrag` / `IsDragging` / `IsBarUsable`、`Images` 和两个移动事件在基类 `TTyCustomToolWindowManager` 上，`MoveWindow` 在 `TTyToolWindowManager` 上（§2）。
 
+**实现期补（D 期）**：基类再加 public `function UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar`——此刻这个 Placement 的可用栏，没有答 nil，现算。同 Placement 的都不可用，所以最多一条；就是 `IsBarUsable` 答 True 的那一条，两者同一条规则（释放中的栏见 §10.6）。组件编辑器找「另一侧那条栏」、示例的「移到另一侧」右键菜单都问它（注册表 `FBars` 是 protected，外面够不着）。
+
 **`MoveWindow`**：
 
 - `AIndex` 是在目标栏窗口里的最终位置，钳住；-1 表示末尾。目标是同一条栏就是调顺序。
@@ -817,8 +830,15 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
   - 不按"先注册的赢"：引用 fixup 按 .lfm 里的**倒序**执行（`sllist.inc:91-96`，`reader.inc:750`），先注册的其实是流里最后一个。
   - ~~在 `SetManager`、`SetPlacement`、`opRemove` 时重新检查。~~
     **实现期修正（C 期）**：可用性现算、不缓存（`IsBarUsable`）——注册栏最多几条，现算比记得在三处失效可靠。这三处只负责取消涉及的拖动（§9.7）；设计期冲突提示的重画归 D 期（§16 第 7 步）。
+  - **实现期修正（D 期）**：释放中的栏自己不可用，也不再占它那一侧——从 csDestroying 置上到 opRemove 把它从表里摘掉之间，留下的那一条就已经可用。`IsBarUsable` 和 `UsableBar`（§9.9）同一条规则。
   - **不抛异常**：这些 setter 在 fixup 期间执行，在里面抛异常会中止整个窗体加载（`reader.inc:734-786`，没有恢复）。
   - 设计期冲突的栏用 `TyToolWindowNote` 画一行提示。
+    **实现期修正（D 期）**：
+    - 提示在内容区底部让出一行（高同漏入子控件那一行，§6.1），叠在漏入那一行**上面**，两行互不重叠。只画不让的话当前页盖满内容区，提示露不出来。
+    - 让出一行改的是 `AdjustClientRect` 的答案，所以「重画」= `Realign` + `Invalidate`，不能只 `Invalidate`。
+    - 调用点：manager 的 `AddBar` / `RemoveBar` 末尾、栏的 `SetPlacement` 改完之后，经 manager 的 `PlacementsChanged` 重排同一 manager 下**所有**栏；`SetManager` / `DetachManager`（manager 被释放走这条）里栏重排自己——离开旧 manager 的那一条已经不在它的表里。
+    - 只在设计期、不在加载 / 释放中做；加载中的冲突加载完带上（§6.1 栏 `Loaded` 那条）。
+    - 「冲突」= 栏有 manager、两者都不在释放中、`IsBarUsable` 答 False；释放中的栏不算冲突。
 - 不支持：manager 放在数据模块里、栏分布在多个窗体上（文档写明）。
 
 ### 10.7 不保存
@@ -834,7 +854,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 
 - "新建工具窗口"：`Create(Bar.Owner)`；`Parent := Bar`；`CreateUniqueComponentName`；`Caption := Name`；激活；`Hook.PersistentAdded`；`GetDesigner.AddUndoAction(NewComp, uopAdd, True, 'Name', '', NewComp.Name)`；`Modified`。
   照抄 PageControl 的"添加页"不记撤销，Ctrl+Z 删不掉加出来的东西（`designer.pp:788` 是面板拖放记撤销的地方）。
-- "显示 ▸" 子菜单列出所有窗口（设计期只激活）。
+- ~~"显示 ▸"~~ **实现期修正（D 期）**："显示窗口 ▸"（`Show Window`）子菜单列出所有窗口（设计期只激活），点了顺带在设计器里选中那个窗口；栏里没有窗口时灰掉。
 - **不提供"删除工具窗口"**：`Hook.DeletePersistent` 跳过继承组件检查、Owner 检查和撤销记录（`designer.pp:3144-3179`），在子孙窗体里能删掉继承来的窗口、把子孙窗体弄坏。用 Delete 键删。
 
 **窗口的组件编辑器**：
@@ -842,10 +862,19 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 - "添加操作区"（已有时灰掉）：同样 `PersistentAdded` + `AddUndoAction`。
 - "移到另一侧栏"（只有侧栏窗口；本栏不冲突、`Bar.Manager` 下另一侧有不冲突的栏才可用；csAncestor 的窗口灰掉）：调 `MoveWindow`。
   **实现期修正（C 期）**：可不可用直接问 `CanMoveWindow` / `IsBarUsable`；`MoveWindow` 在设计期自己通知设计器（§9.9），菜单项不用再补。`Bar.Manager` 是基类类型，调 `MoveWindow` 要转型（§2）。
+  **实现期修正（D 期）**：目标 = `Manager.UsableBar(另一侧)`，再问 `CanMoveWindow`。目标栏也不能在 frame 实例里（它挂在窗体的 manager 上时 `CanMoveWindow` 看不出这一条，往 frame 实例里放组件不行）。
 - "移回栏里 ▸"（只有孤儿）。
+  **实现期补（D 期）**：候选 = 窗口 `Owner.Components` 里不在加载 / 释放中的栏，按 `Components` 顺序；侧栏、底栏都算（孤儿没有「原来那一类」）。frame 实例里的栏归 frame 实例拥有，本来就不在候选里。窗口本身继承来的、在 frame 实例里的，没有候选。
+- **实现期修正（D 期）**，两个移动菜单项都记一条撤销（~~计划开工前问题 15：「移到另一侧栏」不记撤销~~）：`AddUndoAction(Win, uopChange, True, 'Parent', 旧.Name, 新.Name)`，照 IDE 组件树换父的写法（`componenttreeview.pas:409-410`）。设计器回放就是 `Parent := 按名字找回的控件`，走栏自己的 `SetParent`：
+  - 撤销「移到另一侧栏」，窗口回到原栏的**末尾**、成为当前页，原来的序号不还原；
+  - 撤销「移回栏里」，窗口又成孤儿；
+  - 旧父控件或新父控件按名字找不回来（没名字、不归窗口的 Owner 所有，比如 frame 实例里的控件）时不记。
 
 **规则**：
 
+- **实现期修正（D 期）**：菜单项位置固定——栏两项，窗口三项，不适用就灰掉，不隐藏；底栏窗口上灰掉的「移到另一侧栏」本身就在说底栏不能跨。「添加操作区」在窗口已有操作区、在加载 / 释放中时灰掉；「新建工具窗口」在栏加载 / 释放中时灰掉。
+- **实现期修正（D 期）**：两个编辑器都继承 `TDefaultComponentEditor`（同 `TTyPageControlEditor`），双击栏 / 窗口生成默认事件处理器，不执行第 0 项——否则双击栏就多出一个窗口。
+- **实现期修正（D 期）**：可用性和模型操作全在 `tyControls.ToolWindows.DesignRules`（§2）：`TyToolWindowInInlined`、`TyToolWindowDesignCanAddWindow`、`TyToolWindowDesignCanAddActions`、`TyToolWindowDesignOtherSide`、`TyToolWindowDesignMoveToOtherSide`、`TyToolWindowDesignReturnTargets`、`TyToolWindowDesignReturnToBar`。组件编辑器只做 IDE 那一半（起名、`PersistentAdded`、`AddUndoAction`、`Modified`、选中），不自己再判——两处判定会漂开。
 - frame 实例里（`IsInInlined`）所有添加和移动菜单项都灰掉——不能往 frame 实例里加组件（`componenteditors.pas:178-183`）；继承来的控件不能换父（`customformeditor.pp:1667-1669`）。子孙窗体里往继承来的栏加窗口、往继承来的窗口加操作区仍然可以。
 - 窗口顺序 = `Controls` 顺序，栏重写 `SetChildOrder`（§6.1）。
 - 设计期点图标的手势：武装记窗口引用、不记序号；`LM_CANCELMODE`、设计期 `MouseLeave`、捕获被别人拿走都解除武装（**实现期修正（A 期）**，详见 §6.5）。
@@ -1020,6 +1049,7 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
 - **皮肤**：17 个主题下的标题行、标签下划线、图标着色；高对比度皮肤下插入线是否看得见。
 - **实现期补（B 期）**，B 期落地、待真机的：窗口的 `CM_MASKHITTEST` 在标签行让位给栏（Lazarus IDE；判定本身已由 `DesignMaskAnswerAt` 无头钉住，待验的是设计器真的落到栏上）；底栏溢出菜单从按钮底边往下开的位置（GTK3 / Qt Wayland）；标签行溢出、最大化 / 还原、收起的字形是否清晰（Linux / macOS）。
 - **实现期补（C 期）**，C 期落地、待真机的：Win32 真实点击时，捕获在按钮点击处理期间什么时候释放（排队的移动和布局「只再排一次」靠它）；前台窗口下抽消息时的捕获行为；跨栏拖动经过别的栏、编辑区时的光标（各 widgetset）；拖出源栏后移动事件的坐标（GTK3，跨栏命中全靠它）；换父后窗口里原生子控件（IME 组字、光标）是否按文档说的丢状态；17 个主题下目标栏的插入线看不看得见。
+- **实现期补（D 期）**，D 期落地、待真机的：组件面板图标、放下栏的尺寸、两个组件编辑器（菜单项、灰掉、撤销）、孤儿和冲突提示、`Controller` 隐藏、继承窗体和 frame 实例，以及 `examples/toolwindows` 里上面各条的运行时走查。逐项见 `docs/superpowers/plans/2026-09-24-toolwindow-phase-d.md` 末尾的「真机验收表」（43 项）。
 
 ---
 
@@ -1040,14 +1070,22 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
    - `MoveWindow` / `CanMoveWindow` 的侧 ↔ 底拒绝~~复用窗口 `MovesAcrossBarKinds` 的判据（§3.2）~~ **实现期修正（C 期）**：拆出 `BarKindsDiffer`（只看 Placement 一侧一底，不带豁免），`MovesAcrossBarKinds` = 它 + 加载 / 设计 / 释放中的豁免；manager 只用前者（§9.9）。
    - 布局应用第 2 步（§10.4）直接 `Maximized := False`。
 6. **布局保存**（补上 `TryFinishLoading`）。**已完成（C 期）。**
-7. **设计期**：组件编辑器、属性编辑器（隐藏 `Controller`）、孤儿提示、面板图标。
+7. **设计期**：组件编辑器、属性编辑器（隐藏 `Controller`）、孤儿提示、面板图标。**已完成（D 期）。**
    **实现期修正（A 期）**，归这一步（D 期）的：§3.2 设计期的孤儿窗口——去掉 `csNoDesignVisible`、画提示、resourcestring。
    **实现期补（C 期）**，C 期留给这一步（D 期）的：
    - Placement 冲突是现算的（§10.6），没有缓存可失效：`SetManager`、`SetPlacement`、manager 的 `AddBar` / `RemoveBar` 时，同一 manager 下**所有**栏都要重画冲突提示。
    - 组件编辑器用 `CanMoveWindow` / `IsBarUsable` 判可用，调 `MoveWindow`（设计期同步、自己通知设计器，§9.9）；csAncestor 的窗口灰掉。`Bar.Manager` 是基类类型，要转型（§2）。
    - 四个类的 `RegisterComponents` / `RegisterNoIcon` 和面板图标：`designtime/` 目前完全没有 ToolWindows 的注册。manager 的注册要 uses 新单元 `tyControls.ToolWindows.Manager`。
-8. **示例 + 文档**：示例用 `.lfm` + `TTyTitleBar` + 换肤；类 IDE：左侧资源管理器 / 搜索，右侧大纲，底栏问题 / 输出（操作区放筛选框和清除）/ 终端（新建、关闭、更多），中间 `TTyMemo`；菜单里保存 / 读取 / 恢复布局、显示 / 隐藏底栏。
+   **实现期补（D 期）**：上面四条都已做完；冲突提示的重排见 §10.6，判定单元见 §2 / §11，孤儿见 §3.2。
+8. **示例 + 文档**：示例用 `.lfm` + `TTyTitleBar` + 换肤；类 IDE：左侧资源管理器 / 搜索，右侧大纲，底栏问题 / 输出（操作区放筛选框和清除）/ 终端（新建、关闭、更多），中间 `TTyMemo`；菜单里保存 / 读取 / 恢复布局、显示 / 隐藏底栏。**已完成（D 期）。**
    `docs/controls/toolwindows.md`、README（.md + .en.md）。
+   **实现期补（D 期）**，示例另加的：
+   - Diagnostics 菜单：3 秒后弹模态框、3 秒后弹菜单、禁用 / 启用 Output 页——§15 的「拖动中 ShowModal / 弹菜单能否取消」「禁用当前页后标签行点击落到哪里」没有这几个开关没法在真机上做。
+   - 窗口操作区里两个「在自己窗口里调 API」的按钮：Outline 的「移到另一侧」、Explorer 的「恢复默认布局」（§9.9 / §10.5 排队那条路只有真机点得出来）。
+   - View 菜单里的密度（Classic / Modern）。
+   - 布局文件放在 `GetAppConfigDir(False)` 下（`toolwindows.layout`），FormCreate 读、FormClose 存；菜单里的保存 / 读取 / 恢复另外保留，方便不重启就验。
+   - 侧栏图标右键「移到另一侧」用栏的 `OnContextPopup`（`ContextWindow` + `UsableBar` + `MoveWindow`）；底栏标签右键是最大化 / 还原、收起面板。
+   - README 的控件数按组件面板注册数算（168）。
    i18n 的 resourcestring：孤儿提示、"添加工具窗口"、Placement 冲突提示、多余操作区提示、非窗口子控件提示、最大化、还原、收起、更多、组件编辑器菜单项。
    **实现期补（C 期）**，C 期留给这一步的文档要点：
    - 排队时 `MoveWindow` 返回后 `W.Bar` 还是旧栏（§9.9）。
