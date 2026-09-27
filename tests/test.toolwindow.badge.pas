@@ -43,6 +43,25 @@ type
     procedure TestChangingTheBadgeRepaintsTheBar;
     procedure TestTheBadgeTravelsWithItsWindow;
     procedure TestADisabledWindowKeepsItsBadgeColour;
+    { --- Task 6:底栏标签的角标、溢出菜单(spec §7.3 / §8.1) --- }
+    procedure TestABadgeWidensItsTabByTheGapAndThePill;
+    procedure TestTheTabWidthCacheKeysOnTheBadge;
+    procedure TestTheTabWidthCacheKeysOnTheEventsAnswer;
+    procedure TestThePillFollowsTheCaption;
+    procedure TestThePillLeadsTheCaptionRightToLeft;
+    procedure TestATruncatedActiveTabKeepsItsPill;
+    procedure TestABadgeOnAnotherPageRepaintsTheActivePage;
+    procedure TestAWiderTabMovesTheActionsAndTheOverflow;
+    procedure TestTheOverflowMenuCarriesTheBadge;
+    procedure TestTheTabHintCarriesNoNumber;
+  private
+    { 一条底栏:Problems / Output / Terminal,当前页 Output;标签行钉色 + 角标哨兵。 }
+    procedure NewBadgeBottomBar;
+    { 测试这边照同一套公开函数现算的胶囊宽(数字模式),按 96 PPI。 }
+    function ExpectedPillWidth(const AText: string): Integer;
+    function TabWidth(AIndex: Integer): Integer;
+    { ARect 里落在「品红底上盖一层 AInk」那条混合线上的像素的外接框(算法同 CountIn)。 }
+    function InkSpan(ABmp: TBitmap; const ARect: TRect; AInk: TColor): TRect;
   end;
 
 implementation
@@ -436,6 +455,299 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ --- Task 6 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowBadgeTests.NewBadgeBottomBar;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  FCtl.StyleOverride := BottomTheme + BadgeTheme;
+end;
+
+function TTyToolWindowBadgeTests.ExpectedPillWidth(const AText: string): Integer;
+var
+  S: TTyStyleSet;
+  fs, tw, th, rw, zw, zh, minPx: Integer;
+  sz: TSize;
+begin
+  S := FCtl.Model.ResolveStyle(TyToolWindowBadgeKey, '', [tysNormal]);
+  AssertTrue('前提:角标的字号由主题给', tpFontSize in S.Present);
+  fs := S.FontSize;
+  TyMeasureTextBlock(AText, S.FontName, fs, S.FontWeight, 96, 0, 0, tw, th);
+  rw := TyMeasureRenderedTextWidth(AText, S.FontName, fs, S.FontWeight, 96);
+  if rw > tw then tw := rw;
+  TyMeasureTextBlock('0', S.FontName, fs, S.FontWeight, 96, 0, 0, zw, zh);
+  minPx := FCtl.Metric(TyBadgeMinSizeVar, TyBadgeMinSize);
+  sz := TyBadgeSize(tw, zh, S.Padding.Left, S.Padding.Top, minPx, False,
+    FCtl.Metric(TyBadgeDotSizeVar, TyBadgeDotSize));
+  Result := sz.cx;
+end;
+
+function TTyToolWindowBadgeTests.TabWidth(AIndex: Integer): Integer;
+var
+  r: TRect;
+begin
+  r := TabRectOf(ActiveGeom, AIndex);
+  Result := r.Right - r.Left;
+end;
+
+function TTyToolWindowBadgeTests.InkSpan(ABmp: TBitmap; const ARect: TRect;
+  AInk: TColor): TRect;
+var
+  re: TBGRABitmap;
+  g, k, px: TBGRAPixel;
+  x, y, c, best: Integer;
+  gv, kv, pv: array[0..2] of Integer;
+  a: Double;
+  ok, any: Boolean;
+begin
+  Result := Rect(0, 0, 0, 0);
+  any := False;
+  g := ColorToBGRA(ColorToRGB(Ground));
+  k := ColorToBGRA(ColorToRGB(AInk));
+  gv[0] := g.red; gv[1] := g.green; gv[2] := g.blue;
+  kv[0] := k.red; kv[1] := k.green; kv[2] := k.blue;
+  best := 0;
+  for c := 1 to 2 do
+    if Abs(kv[c] - gv[c]) > Abs(kv[best] - gv[best]) then best := c;
+  re := TBGRABitmap.Create(ABmp);
+  try
+    for y := ARect.Top to ARect.Bottom - 1 do
+      for x := ARect.Left to ARect.Right - 1 do
+      begin
+        if (x < 0) or (y < 0) or (x >= re.Width) or (y >= re.Height) then Continue;
+        px := re.GetPixel(x, y);
+        pv[0] := px.red; pv[1] := px.green; pv[2] := px.blue;
+        a := (pv[best] - gv[best]) / (kv[best] - gv[best]);
+        if (a <= 0.01) or (a > 1.02) then Continue;
+        ok := True;
+        for c := 0 to 2 do
+          if Abs(gv[c] + a * (kv[c] - gv[c]) - pv[c]) > 3 then ok := False;
+        if not ok then Continue;
+        if not any then
+        begin
+          Result := Rect(x, y, x + 1, y + 1);
+          any := True;
+        end
+        else
+        begin
+          if x < Result.Left then Result.Left := x;
+          if y < Result.Top then Result.Top := y;
+          if x + 1 > Result.Right then Result.Right := x + 1;
+          if y + 1 > Result.Bottom then Result.Bottom := y + 1;
+        end;
+      end;
+  finally
+    re.Free;
+  end;
+end;
+
+procedure TTyToolWindowBadgeTests.TestABadgeWidensItsTabByTheGapAndThePill;
+var
+  w0, w1, w2: Integer;
+begin
+  NewBadgeBottomBar;
+  w0 := TabWidth(0);
+  w1 := TabWidth(1);
+  w2 := TabWidth(2);
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  AssertEquals('Problems 宽 = 原宽 + header-gap + 胶囊宽(同一套量法)',
+    w0 + FCtl.Metric(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef) + ExpectedPillWidth('3'),
+    TabWidth(0));
+  AssertEquals('Output 不变', w1, TabWidth(1));
+  AssertEquals('Terminal 不变', w2, TabWidth(2));
+end;
+
+procedure TTyToolWindowBadgeTests.TestTheTabWidthCacheKeysOnTheBadge;
+var
+  w3: Integer;
+begin
+  NewBadgeBottomBar;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  w3 := TabWidth(0);
+  FWins[0].BadgeValue := 150;
+  AssertTrue('只改 BadgeValue(标题不动):标签宽跟着变', TabWidth(0) > w3);
+end;
+
+procedure TTyToolWindowBadgeTests.TestTheTabWidthCacheKeysOnTheEventsAnswer;
+var
+  w3: Integer;
+begin
+  NewBadgeBottomBar;
+  FWins[0].OnBadgeDisplay := @HandleBadge;
+  FBadgeMode := 0;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  w3 := TabWidth(0);
+  FBadgeMode := 5;           { 事件把文字改成 'many',BadgeValue 没动 }
+  FWins[0].Invalidate;
+  AssertTrue('缓存键记的是事件之后的文字', TabWidth(0) > w3);
+end;
+
+procedure TTyToolWindowBadgeTests.TestThePillFollowsTheCaption;
+var
+  bmp: TBitmap;
+  r, pill, ink: TRect;
+  w: TProbeWindow;
+begin
+  NewBadgeBottomBar;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  w := FWins[1];
+  r := TabRectOf(ActiveGeom, 0);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    pill := SpanOf(bmp, BadgeInk);
+    ink := InkSpan(bmp, r, RestInk);
+    AssertTrue('前提:胶囊画了', pill.Right > pill.Left);
+    AssertTrue('前提:标题画了', ink.Right > ink.Left);
+    AssertTrue('胶囊在 Problems 标签里', (pill.Left >= r.Left) and (pill.Right <= r.Right));
+    AssertTrue('LTR:胶囊在标题右边', pill.Left > ink.Right - 1);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBadgeTests.TestThePillLeadsTheCaptionRightToLeft;
+var
+  bmp: TBitmap;
+  r, pill, ink: TRect;
+  w: TProbeWindow;
+begin
+  NewBadgeBottomBar;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  w := FWins[1];
+  w.BiDiMode := bdRightToLeft;
+  AssertTrue('前提:当前页从右往左', w.IsRightToLeft);
+  r := TabRectOf(ActiveGeom, 0);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    pill := SpanOf(bmp, BadgeInk);
+    ink := InkSpan(bmp, r, RestInk);
+    AssertTrue('前提:胶囊画了', pill.Right > pill.Left);
+    AssertTrue('前提:标题画了', ink.Right > ink.Left);
+    AssertTrue('RTL:胶囊在标题左边', pill.Right < ink.Left + 1);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBadgeTests.TestATruncatedActiveTabKeepsItsPill;
+var
+  bmp: TBitmap;
+  wide, r: TRect;
+  w: TProbeWindow;
+begin
+  NewBadgeBottomBar;
+  FWins[1].ShowBadge := True;
+  FWins[1].BadgeValue := 7;
+  wide := TabRectOf(ActiveGeom, 1);
+  FBar.Width := 130;
+  Relayout;
+  w := FWins[1];
+  r := TabRectOf(ActiveGeom, 1);
+  AssertTrue('前提:当前页的标签被截了', r.Right - r.Left < wide.Right - wide.Left);
+  bmp := RenderPage(w, w.ClientWidth, w.ClientHeight, 96);
+  try
+    AssertTrue('截标题,胶囊保留', ExactIn(bmp, r, BadgeInk) > 0);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBadgeTests.TestABadgeOnAnotherPageRepaintsTheActivePage;
+begin
+  NewBadgeBottomBar;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  ArmActive(FWins[1]);
+  FWins[0].BadgeValue := 4;
+  AssertTrue('别的页的角标变了:当前页的标签行要重渲染',
+    FWins[1].CacheWouldRender(FWins[1].ClientWidth, FWins[1].ClientHeight));
+end;
+
+procedure TTyToolWindowBadgeTests.TestAWiderTabMovesTheActionsAndTheOverflow;
+var
+  wdt, i: Integer;
+  hidden: TTyToolWindowPlan;
+  found: Boolean;
+begin
+  NewBadgeBottomBar;
+  AddActionsKid(FWins[1], 30, 20);
+  Relayout;
+  { 找到「刚好放得下全部标签」的宽:再窄一个像素就有溢出。 }
+  wdt := 600;
+  repeat
+    Dec(wdt);
+    FBar.Width := wdt;
+    Relayout;
+  until (Length(FBar.OverflowWindows) > 0) or (wdt < 150);
+  AssertTrue('前提:窄到出现溢出', Length(FBar.OverflowWindows) > 0);
+  FBar.Width := wdt + 1;
+  Relayout;
+  AssertEquals('前提:宽一个像素就全放得下', 0, Length(FBar.OverflowWindows));
+  FWins[1].AlignCount := 0;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 150;
+  hidden := FBar.OverflowWindows;
+  found := False;
+  for i := 0 to High(hidden) do
+    if hidden[i] = 2 then found := True;
+  AssertTrue('Problems 变宽:Terminal 挤进溢出', found);
+  AssertFalse('溢出按钮出现', IsRectEmpty(ActiveGeom.Overflow));
+  AssertTrue('当前页被请了重排(操作区跟上,不是只重画)', FWins[1].AlignCount > 0);
+end;
+
+procedure TTyToolWindowBadgeTests.TestTheOverflowMenuCarriesTheBadge;
+var
+  i: Integer;
+  hidden: TTyToolWindowPlan;
+  found: Boolean;
+
+  function TerminalCaption: string;
+  var
+    k: Integer;
+  begin
+    Result := '<missing>';
+    ClickAt(FWins[1], ActiveGeom.Overflow.CenterPoint);
+    AssertNotNull('前提:建了菜单', FBar.OverflowMenu);
+    for k := 0 to FBar.OverflowMenu.Items.Count - 1 do
+      if FBar.OverflowMenu.Items[k].Tag = PtrInt(FWins[2]) then
+        Result := FBar.OverflowMenu.Items[k].Caption;
+  end;
+
+begin
+  NewBadgeBottomBar;
+  FWins[2].ShowBadge := True;
+  FWins[2].BadgeValue := 7;
+  FBar.Width := 160;
+  Relayout;
+  hidden := FBar.OverflowWindows;
+  found := False;
+  for i := 0 to High(hidden) do
+    if hidden[i] = 2 then found := True;
+  AssertTrue('前提:Terminal 收进了溢出', found);
+  AssertEquals('数字', 'Terminal (7)', TerminalCaption);
+  FWins[2].BadgeDot := True;
+  AssertEquals('圆点', 'Terminal ' + #$E2#$80#$A2, TerminalCaption);
+  FWins[2].ShowBadge := False;
+  AssertEquals('不显示角标', 'Terminal', TerminalCaption);
+end;
+
+procedure TTyToolWindowBadgeTests.TestTheTabHintCarriesNoNumber;
+var
+  txt: string;
+  r: TRect;
+begin
+  NewBadgeBottomBar;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  AssertTrue('标签上有提示', FBar.HeaderHint(FWins[1], TabCentre(0).X, TabCentre(0).Y, txt, r));
+  AssertEquals('提示不带数字(仍是 StripHint / Caption)', 'Problems', txt);
 end;
 
 initialization

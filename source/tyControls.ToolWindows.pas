@@ -854,11 +854,20 @@ type
     FTabCacheOverride: string;
     FTabCacheRestFs: Integer;
     FTabCacheSelFs: Integer;
+    { 键的一部分(E 期,spec §7.3 / §8.1):每个窗口此刻的角标显示,和标题那一组同一个循环逐项比
+      —— 记的是事件应用之后的答案,不是 BadgeValue(事件可以改文字)。见 BadgeCacheKey。 }
+    FTabCacheBadges: array of string;
     FTabCacheWidths: TTyToolWindowWidths;
     { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」两份样式量的较大者(spec §7.3;
-      每份又是 Painter 的两种量法取大),再加 2 × tab-pad。空标题也有 2 × tab-pad。 }
+      每份又是 Painter 的两种量法取大),再加 2 × tab-pad。空标题也有 2 × tab-pad。有角标的
+      再加 header-gap + 胶囊宽(BadgeSizeAt,画胶囊问的是同一处)。 }
     function TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
     function MeasureTabWidths(const AWins: TTyToolWindowArray; APPI: Integer): TTyToolWindowWidths;
+    { 标签宽缓存键里一个窗口的角标那一项:不显示 ''、圆点 #1'dot'(不会是真文字的串)、
+      数字 '#' + 文字。 }
+    function BadgeCacheKey(AWindow: TTyToolWindow): string;
+    { 只清标签宽缓存的标志(角标变了,spec §8.1)。 }
+    procedure TabWidthsChanged;
     { 标签行竖分隔线的线宽(设备像素):TyToolWindowSeparator 解析出可见边框时按 border-width
       缩放、至少 1;否则 0(槽宽 = 2 × gap + 线宽,spec §7.3)。 }
     function SeparatorLinePx(APPI: Integer): Integer;
@@ -1545,7 +1554,15 @@ var
 begin
   b := Bar;
   if (b = nil) or (csDestroying in b.ComponentState) then Exit;
-  b.Invalidate;
+  if b.Placement = twpBottom then
+  begin
+    { 标签宽变了:丢标签宽缓存(键里本来也有角标,这里再清一次不花钱),重画标签行 —— 当前页的
+      Invalidate 里 B 期收尾的漂移检查会把操作区跟上(spec §3.4)。 }
+    b.TabWidthsChanged;
+    b.InvalidateHeader;
+  end
+  else
+    b.Invalidate;
 end;
 
 function TTyToolWindow.BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
@@ -4223,7 +4240,10 @@ function TTyToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
 var
   cls: string;
   restS, selS: TTyStyleSet;
-  i, pad, w, sw: Integer;
+  bsz: TSize;
+  btxt: string;
+  bdot: Boolean;
+  i, pad, gap, w, sw: Integer;
 
   function TextPx(const AText: string; const AStyle: TTyStyleSet): Integer;
   var
@@ -4243,6 +4263,7 @@ begin
   restS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysNormal]);
   selS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysSelected]);
   pad := TokenPxAt(TyToolWindowTabPadVar, TyToolWindowTabPadDef, APPI);
+  gap := TokenPxAt(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI);
   Result := nil;
   SetLength(Result, Length(AWins));
   for i := 0 to High(AWins) do
@@ -4252,8 +4273,26 @@ begin
     w := TextPx(AWins[i].Caption, restS);
     sw := TextPx(AWins[i].Caption, selS);
     if sw > w then w := sw;
+    { 角标(spec §8.1):标签 = [tab-pad][标题][header-gap][胶囊][tab-pad]。 }
+    bsz := BadgeSizeAt(AWins[i], APPI, btxt, bdot);
+    if bsz.cx > 0 then Inc(w, gap + bsz.cx);
     Result[i] := w + 2 * pad;
   end;
+end;
+
+function TTyToolWindowBar.BadgeCacheKey(AWindow: TTyToolWindow): string;
+var
+  txt: string;
+  dot: Boolean;
+begin
+  if not AWindow.BadgeDisplay(txt, dot) then Result := ''
+  else if dot then Result := #1'dot'
+  else Result := '#' + txt;
+end;
+
+procedure TTyToolWindowBar.TabWidthsChanged;
+begin
+  FTabCacheValid := False;
 end;
 
 function TTyToolWindowBar.TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
@@ -4279,7 +4318,8 @@ begin
     and (Length(FTabCacheWins) = Length(wins));
   if hit then
     for i := 0 to High(wins) do
-      if (FTabCacheWins[i] <> wins[i]) or (FTabCacheCaps[i] <> wins[i].Caption) then
+      if (FTabCacheWins[i] <> wins[i]) or (FTabCacheCaps[i] <> wins[i].Caption)
+         or (FTabCacheBadges[i] <> BadgeCacheKey(wins[i])) then
       begin
         hit := False;
         Break;
@@ -4290,8 +4330,13 @@ begin
     FTabCacheWins := wins;
     FTabCacheCaps := nil;
     SetLength(FTabCacheCaps, Length(wins));
+    FTabCacheBadges := nil;
+    SetLength(FTabCacheBadges, Length(wins));
     for i := 0 to High(wins) do
+    begin
       FTabCacheCaps[i] := wins[i].Caption;
+      FTabCacheBadges[i] := BadgeCacheKey(wins[i]);
+    end;
     FTabCachePPI := APPI;
     FTabCacheAnchor := TObject(mdl);
     FTabCacheVer := ver;
@@ -4665,7 +4710,11 @@ var
   r, box, gr: TRect;
   fill: TTyFill;
   wins: TTyToolWindowArray;
-  pad, indPx, glyphPx, line, active, i, idx, bandTop, bandBottom, dropPx: Integer;
+  tbox: TRect;
+  bsz: TSize;
+  btxt: string;
+  bdot: Boolean;
+  pad, gap, bx, by, indPx, glyphPx, line, active, i, idx, bandTop, bandBottom, dropPx: Integer;
 
   { 部件矩形换到画笔坐标(行在窗口里的位置)。 }
   function Place(const ARect: TRect): TRect;
@@ -4718,6 +4767,7 @@ begin
     (RTL 只镜像一次),这里只按矩形画;文字的阅读方向由画笔自己的 RTL 管。 }
   cls := TyStyleClassFor(Self, StyleClass);
   pad := TokenPxAt(TyToolWindowTabPadVar, TyToolWindowTabPadDef, APPI);
+  gap := TokenPxAt(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI);
   indPx := TokenPxAt(TyToolWindowIndicatorSizeVar, TyToolWindowIndicatorSizeDef, APPI);
   glyphPx := TokenPxAt(TyToolWindowGlyphSizeVar, TyToolWindowGlyphSizeDef, APPI);
   fill := Default(TTyFill);
@@ -4748,8 +4798,27 @@ begin
     InflateRect(box, -pad, 0);
     if box.Right > box.Left then
     begin
-      if wins[idx].Caption <> '' then
-        APainter.DrawText(box, wins[idx].Caption, S.FontName, ResolveFontSize(S),
+      { 角标(spec §8.1):从文字框的阅读终点一侧切出 header-gap + 胶囊宽(LTR 切右边、RTL 切左边
+        —— 几何按当前页的读写方向镜像过);切完文字框还放得下才画胶囊,放不下就只画标题。
+        被截的标签先截标题(省略号),胶囊保留。胶囊按行高垂直居中,贴着标题一侧。 }
+      tbox := box;
+      bsz := BadgeSizeAt(wins[idx], APPI, btxt, bdot);
+      if bsz.cx > 0 then
+      begin
+        if AWindow.IsRightToLeft then Inc(tbox.Left, gap + bsz.cx)
+        else Dec(tbox.Right, gap + bsz.cx);
+        if tbox.Right >= tbox.Left then
+        begin
+          if AWindow.IsRightToLeft then bx := tbox.Left - gap - bsz.cx
+          else bx := tbox.Right + gap;
+          by := r.Top + (r.Bottom - r.Top - bsz.cy) div 2;
+          DrawBadgeIn(APainter, wins[idx], Rect(bx, by, bx + bsz.cx, by + bsz.cy), APPI);
+        end
+        else
+          tbox := box;
+      end;
+      if (wins[idx].Caption <> '') and (tbox.Right > tbox.Left) then
+        APainter.DrawText(tbox, wins[idx].Caption, S.FontName, ResolveFontSize(S),
           S.FontWeight, S.TextColor, taCenter, tlCenter, True);
       { 下划线贴标签底边,横向跨文字框;粗细 0 = 不画。 }
       if (idx = active) and (indPx > 0) then
@@ -5688,6 +5757,9 @@ var
   host: TWinControl;
   pt: TPoint;
   menuAlign: TPopupAlignment;
+  w: TTyToolWindow;
+  btxt: string;
+  bdot: Boolean;
   i: Integer;
 begin
   hidden := OverflowWindows;
@@ -5699,7 +5771,12 @@ begin
   for i := 0 to High(hidden) do
   begin
     item := TMenuItem.Create(FOverflowMenu);
-    item.Caption := Windows[hidden[i]].Caption;
+    { 角标跟着进菜单(spec §8.1):收进溢出的窗口在行上看不见,数字也丢了的话用户不知道那里有
+      东西。数字写成「Problems (3)」,圆点写成「Problems •」。 }
+    w := Windows[hidden[i]];
+    if not w.BadgeDisplay(btxt, bdot) then item.Caption := w.Caption
+    else if bdot then item.Caption := w.Caption + ' ' + #$E2#$80#$A2
+    else item.Caption := w.Caption + ' (' + btxt + ')';
     item.Tag := PtrInt(Windows[hidden[i]]);
     { 禁用窗口那一项灰掉、点不了(spec §3.7)。 }
     item.Enabled := Windows[hidden[i]].Enabled;
