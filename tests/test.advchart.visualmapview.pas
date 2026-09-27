@@ -81,6 +81,8 @@ constructor TVmvMeasurer.Create;
 begin
   inherited Create;
   Names := TStringList.Create;
+  { 'low' and 'Low' are two strings }
+  Names.CaseSensitive := True;
 end;
 
 destructor TVmvMeasurer.Destroy;

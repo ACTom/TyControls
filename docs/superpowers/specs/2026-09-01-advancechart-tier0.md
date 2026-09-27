@@ -7351,3 +7351,47 @@ B4:分段型(`splitNumber`/`pieces`/`categories`、`reformIntervals`、`findPiec
 ### 下一批
 
 B4b:PiecewiseView(每段一个符号加标签、两端文字、`showLabel` 规则、视图倒序、`layout.box` 的下一矩形项、背景、`positionGroup`)。
+
+## 93. Tier 1 第五十九批:分段型 visualMap 的组件视图(B4b)(2026-09-27)
+
+PiecewiseView 的静态画面:每段一个条目(符号加标签)、两端文字、`layout.box` 排列、背景和整体定位。交互(点击切换选中、悬停联动)不在这一批。
+
+### 上游的做法
+
+- **条目**:每段一组,`createSymbol(符号, 0, 0, itemWidth, itemHeight, 颜色)`。符号和颜色是 `getControllerVisual(代表值, …)`:控制器视觉值,状态按代表值自己的状态(不强制),颜色从 `contentColor` 起,不透明度不并进颜色。类别段的代表值是类别名。
+- **标签**:`showLabel` 写了就照写的,否则只在没有 `text` 时显示。x 为 `align === 'right' ? -textGap : itemWidth + textGap`,y 为 itemHeight 的一半;`align` 取 `textStyle.align`,否则取条目对齐;垂直对齐默认 middle;不透明度取 `textStyle.opacity`,否则 outOfRange 时 0.5。
+- **条目对齐**:竖向走 `helper.getItemAlign`(和连续型同一个函数),横向是 `align`,`auto` 当 left。
+- **顺序**:`horizontal ? inverse : !inverse` 时段表倒过来(竖向默认高值在上);否则把两端文字倒过来。两端文字各自成组,空字符串不画;显示标签时贴条目对齐那一侧,否则居中在条目宽度中点。
+- **`layout.box`**:按子组的包围盒一个接一个排,每一步是 `rect.height + (-next.rect.y + rect.y)` 再加 itemGap——后一项只在子组的包围盒不从 0 开始时非零,也就是两端文字(文字矩形从 1 起)挨着条目的地方。
+- **背景与定位**:和连续型相同——背景按排好后的整组包围盒加 padding,定位用含背景(边框有宽度时连笔宽)的包围盒。
+- **符号包围盒**:圆是 `cx ± r`(`r = min(w, h) / 2`,所以 20.3 × 14.1 的圆 x 是 3.1000000000000005),圆角矩形由直线段和四个 1/4 圆弧(`r = min(w, h) / 4`)求得,矩形 `(x + w) - x`。
+
+### port 以前
+
+- 分段型组件什么都不画。
+
+### 做法
+
+- `TTyVmViewSpec` 增加分段型字段:`Piecewise`(子类型照模型判断)、`ItemGap`、`showLabel`、`selectedMode`(为假时元素静默)、`textStyle` 的 align / verticalAlign / opacity;分段型的 itemHeight 默认 14。
+- 新增 `TTyVmItem` 和 `LayoutPiecewise`,`TyLayoutVisualMap` 按子类型分派;连续型的 getItemAlign 抽成共用的 `AutoItemAlign`。
+- `TyVmSymbolRect` 用已有的 `PathRect`/`FromArc` 构造圆和圆角矩形的路径算包围盒。
+- 画的时候每个条目用 `TyBuildSymbolInBox` 画符号,标签的不透明度乘到文字颜色的 alpha 上。
+
+### 基准
+
+- 连续型视图 oracle 加 V3e(见变异测试)。
+- 沿用 `advchart-visualmap-piecewise.json`(第 58 批的 oracle 本来就记录了视图)。`test.advchart.visualmappiecewiseview` 对所有显示的分段组件逐位比较:条目对齐、是否带标签、两端文字、每个子组的类型、段号、位置、包围盒,符号类型、框、颜色、包围盒,标签的文字、锚点、对齐、不透明度、矩形,两次包围盒、背景、组位置;每个标签和两端文字都要在全局坐标处画出、alpha 对。
+- 测试用的表测量器原先是大小写不敏感的 `TStringList`,"low" 查到了 "Low" 的宽度;两个视图测试的测量器都改成大小写敏感。
+
+### 变异测试
+
+25 个,全杀。第一轮一个存活:连续型改调共用的 `AutoItemAlign` 时量的是条长还是条宽——连续型 oracle 没有落在中线附近的例子;`visualmap-view.js` 补了 V3e(竖向 left 320:按宽 20 在左,按长 140 会判到右)。
+
+### 已知偏差
+
+- 点击切换选中、悬停联动没有移植;`selectedMode` 只决定元素是否静默。
+- 圆、圆角矩形、矩形以外的符号,包围盒取条目框。
+
+### 下一批
+
+visualMap 系列到此完成(B1–B4)。下一步回到画廊缺口清单挑下一个系列。

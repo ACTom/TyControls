@@ -2,7 +2,9 @@ unit tyControls.AdvChart.VisualMapView;
 {$mode objfpc}{$H+}
 { A continuous visualMap's own picture: the bar, its two gradients, the end
   texts, the handles and their labels, the background -- ContinuousView and
-  VisualMapView as they lay the component out before anyone touches it.
+  VisualMapView as they lay the component out before anyone touches it. And a
+  piecewise one's: an item per piece (its symbol and label), the ends texts,
+  stacked by layout.box -- PiecewiseView. [Batch 59.]
 
   THE ARITHMETIC IS ZRENDER'S, not a picture of it. Where the component sits
   is decided by the bounding rect of what it drew, and that rect is built the
@@ -60,6 +62,16 @@ type
     Content, Inactive: TTyVisualColor;
     TextColour, BorderColour, BackgroundColour, HandleStroke: TTyChartColor;
     FontSize: Integer;
+    { PIECEWISE: the item gap, `showLabel` as written, whether a click
+      selects (not silent), and textStyle's align / verticalAlign / opacity
+      ('' and HasTextOpacity False when unset) }
+    Piecewise: Boolean;
+    ItemGap: Double;
+    HasShowLabel, ShowLabel: Boolean;
+    Silent: Boolean;
+    TextAlign, TextVAlign: string;
+    HasTextOpacity: Boolean;
+    TextOpacity: Double;
   end;
 
   { One text as zrender places it, in the view group's coordinates. }
@@ -82,6 +94,24 @@ type
     Label_: TTyVmText;
   end;
   TTyVmHandleArray = array of TTyVmHandle;
+
+  { One child of a piecewise view group: an ends text, or a piece's item --
+    its symbol in (0, 0, itemWidth, itemHeight) and its label. X, Y: where
+    layout.box put the child; Rect: the child's own bounding rect. }
+  TTyVmItem = record
+    IsText: Boolean;
+    PieceIndex: Integer;
+    X, Y: Double;
+    Rect: TTyXYWH;
+    Symbol: string;
+    SymbolBox, SymbolRect: TTyXYWH;
+    Fill: TTyVisualColor;
+    HasLabel: Boolean;
+    { the label, or the ends text }
+    Label_: TTyVmText;
+    LabelOpacity: Double;
+  end;
+  TTyVmItemArray = array of TTyVmItem;
 
   TTyVisualMapLayout = record
     Valid: Boolean;
@@ -106,6 +136,13 @@ type
     Background: TTyXYWH;
     BBoxBackground, BBoxPosition: TTyXYWH;
     Show: Boolean;
+    { PIECEWISE: the children in drawn order, whether the items carry a
+      label, and the ends text in view order }
+    Piecewise: Boolean;
+    Items: TTyVmItemArray;
+    ShowLabel: Boolean;
+    EndsText: array[0..1] of string;
+    HasEnds: Boolean;
   end;
 
   TTyVisualMapInk = record
@@ -116,6 +153,11 @@ type
 
 function TyVisualMapViewSpecOf(AOption: TTyChartOption;
   AIndex: Integer): TTyVmViewSpec;
+
+{ zrender's bounding rect of a symbol built by createSymbol in ABox: a
+  circle's from its arc, a round rect's from its lines and corner arcs, a
+  rect's (x + w) - x; anything else is its box }
+function TyVmSymbolRect(const ASymbol: string; const ABox: TTyXYWH): TTyXYWH;
 
 { ContinuousView._buildView through positionGroup. AModel is the completed
   model (its controller visuals colour the bar); AContent the colour a
@@ -150,7 +192,8 @@ const
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Color;
+     tyControls.AdvChart.Data, tyControls.AdvChart.Color,
+     tyControls.AdvChart.Complete, tyControls.AdvChart.Symbol;
 
 { ==================== small things ==================== }
 
@@ -216,6 +259,19 @@ begin
   else Result := nil;
 end;
 
+function JsTruthyOf(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber: Result := (A.AsFloat <> 0) and not IsNan(A.AsFloat);
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
 { parseFloat of an option value: a number as is, a string's prefix }
 function ParseFloatOf(A: TJSONData): Double;
 begin
@@ -251,9 +307,16 @@ begin
   Result.HandleIcon := TyVmDefaultHandleIcon;
   Result.HandleLineWidth := 2;
   Result.Z := 4;
+  Result.ItemGap := 10;
   if AOption = nil then Exit;
   node := ObjOf(AOption.ComponentAt('visualMap', AIndex));
   if node = nil then Exit;
+  { the subtype, as the model decides it }
+  d := node.Find('type');
+  if (d <> nil) and (d.JSONType = jtString) then
+    Result.Piecewise := d.AsString = 'piecewise'
+  else
+    Result.Piecewise := TyOptDefaultSubType('visualMap', node) = 'piecewise';
   d := node.Find('show');
   Result.Show := not ((d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean);
   d := node.Find('orient');
@@ -263,11 +326,24 @@ begin
   Result.Inverse := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
   d := node.Find('align');
   if (d <> nil) and (d.JSONType = jtString) then Result.Align := d.AsString;
-  { resetItemSize: parseFloat of each, NaN falling back to 20 x 140 }
+  { resetItemSize: parseFloat of each, NaN falling back to the defaults --
+    20 x 140 continuous, 20 x 14 piecewise }
   Result.ItemW := ParseFloatOf(node.Find('itemWidth'));
   if IsNan(Result.ItemW) then Result.ItemW := 20;
   Result.ItemH := ParseFloatOf(node.Find('itemHeight'));
-  if IsNan(Result.ItemH) then Result.ItemH := 140;
+  if IsNan(Result.ItemH) then
+    if Result.Piecewise then Result.ItemH := 14 else Result.ItemH := 140;
+  d := node.Find('itemGap');
+  if (d <> nil) and (d.JSONType = jtNumber) then Result.ItemGap := d.AsFloat;
+  { showLabel read without its parent; selectedMode falsy is silent }
+  d := node.Find('showLabel');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.HasShowLabel := True;
+    Result.ShowLabel := JsTruthyOf(d);
+  end;
+  d := node.Find('selectedMode');
+  Result.Silent := (d <> nil) and not JsTruthyOf(d);
   { normalizeCssArray(padding || 0) }
   d := node.Find('padding');
   if d <> nil then
@@ -365,6 +441,16 @@ begin
     end;
     d := ts.Find('fontSize');
     if (d <> nil) and (d.JSONType = jtNumber) then Result.FontSize := Round(d.AsFloat);
+    d := ts.Find('align');
+    if (d <> nil) and (d.JSONType = jtString) then Result.TextAlign := d.AsString;
+    d := ts.Find('verticalAlign');
+    if (d <> nil) and (d.JSONType = jtString) then Result.TextVAlign := d.AsString;
+    d := ts.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      Result.HasTextOpacity := True;
+      Result.TextOpacity := d.AsFloat;
+    end;
   end;
 end;
 
@@ -890,6 +976,63 @@ begin
   Result := PathRect(segs);
 end;
 
+function TyVmSymbolRect(const ASymbol: string; const ABox: TTyXYWH): TTyXYWH;
+var
+  segs: TZrSegArray;
+  x, y, w, h, r, cx, cy: Double;
+
+  procedure Seg(ACmd: TZrCmd; const AV: array of Double);
+  var k, n: Integer;
+  begin
+    n := Length(segs);
+    SetLength(segs, n + 1);
+    segs[n] := Default(TZrSeg);
+    segs[n].Cmd := ACmd;
+    for k := 0 to High(AV) do segs[n].V[k] := AV[k];
+  end;
+
+  { PathProxy.arc: centre, radii, the start and the SWEEP, clockwise }
+  procedure Arc(ACX, ACY, AR, AStart, AEnd: Double);
+  begin
+    Seg(zcA, [ACX, ACY, AR, AR, AStart, AEnd - AStart, 0, 1]);
+  end;
+
+begin
+  x := ABox.X;
+  y := ABox.Y;
+  w := ABox.W;
+  h := ABox.H;
+  segs := nil;
+  if ASymbol = 'circle' then
+  begin
+    { symbolShapeMakers.circle: r = min(w, h) / 2 about the box's centre;
+      Circle.buildPath moves to (cx + r, cy) and arcs the whole turn }
+    cx := x + w / 2;
+    cy := y + h / 2;
+    r := Min(w, h) / 2;
+    Seg(zcM, [cx + r, cy]);
+    Arc(cx, cy, r, 0, Pi * 2);
+    Exit(PathRect(segs));
+  end;
+  if ASymbol = 'roundRect' then
+  begin
+    { r = min(w, h) / 4; roundRectHelper's lines and quarter arcs }
+    r := Min(w, h) / 4;
+    Seg(zcM, [x + r, y]);
+    Seg(zcL, [x + w - r, y]);
+    if r <> 0 then Arc(x + w - r, y + r, r, -Pi / 2, 0);
+    Seg(zcL, [x + w, y + h - r]);
+    if r <> 0 then Arc(x + w - r, y + h - r, r, 0, Pi / 2);
+    Seg(zcL, [x + r, y + h]);
+    if r <> 0 then Arc(x + r, y + h - r, r, Pi / 2, Pi);
+    Seg(zcL, [x, y + r]);
+    if r <> 0 then Arc(x + r, y + r, r, Pi, Pi * 1.5);
+    Exit(PathRect(segs));
+  end;
+  { a rect path, and every other shape's own box }
+  Result := XYWH(x, y, (x + w) - x, (y + h) - y);
+end;
+
 { ==================== texts ==================== }
 
 function AdjustX(AX, AW: Double; AAlign: TTyTextAnchorH): Double;
@@ -1080,6 +1223,273 @@ begin
   Result := XYWH(mnX, mnY, mxX - mnX, mxY - mnY);
 end;
 
+{ helper.getItemAlign: `align` as written, else left / right (top / bottom
+  when horizontal) by which half of the canvas the component's centre falls
+  in, the component measured as ten long and AItemW across }
+function AutoItemAlign(const AView: TTyVmViewSpec; AItemW, ACanvasW,
+  ACanvasH: Double; const APad: array of Double): string;
+var
+  b: TTyRawBox;
+  rr: TTyXYWH;
+  m: Double;
+begin
+  if (AView.Align <> '') and (AView.Align <> 'auto') then Exit(AView.Align);
+  b := Default(TTyRawBox);
+  if not AView.Horizontal then
+  begin
+    b.Top := TyBoxRawNum(0);
+    b.Bottom.Kind := brNull;
+    b.Height := TyBoxRawNum(10);
+    b.Left := AView.Box.Left;
+    b.Right := AView.Box.Right;
+    b.Width := TyBoxRawNum(AItemW);
+  end
+  else
+  begin
+    b.Left := TyBoxRawNum(0);
+    b.Right.Kind := brNull;
+    b.Width := TyBoxRawNum(10);
+    b.Top := AView.Box.Top;
+    b.Bottom := AView.Box.Bottom;
+    b.Height := TyBoxRawNum(AItemW);
+  end;
+  rr := TyGetLayoutRect(b, 0, 0, ACanvasW, ACanvasH, APad);
+  if not AView.Horizontal then
+  begin
+    m := APad[3];
+    if IsNan(m) or (m = 0) then m := 0;
+    if Lt(m + rr.X + rr.W * 0.5, ACanvasW * 0.5) then Result := 'left'
+    else Result := 'right';
+  end
+  else
+  begin
+    m := APad[0];
+    if IsNan(m) or (m = 0) then m := 0;
+    if Lt(m + rr.Y + rr.H * 0.5, ACanvasH * 0.5) then Result := 'top'
+    else Result := 'bottom';
+  end;
+end;
+
+{ renderBackground's Rect, as the position bbox reads it: (x + w) - x
+  through fromLine, grown by the pen when the border has a width }
+function BackgroundRect(const ABg: TTyXYWH; ABorder: Double): TTyXYWH;
+begin
+  Result := ABg;
+  Result.W := (Result.X + Result.W) - Result.X;
+  Result.H := (Result.Y + Result.H) - Result.Y;
+  if ABorder > 0 then
+  begin
+    Result.W := Result.W + ABorder;
+    Result.H := Result.H + ABorder;
+    Result.X := Result.X - ABorder / 2;
+    Result.Y := Result.Y - ABorder / 2;
+  end;
+end;
+
+function Translate(AX, AY: Double): TTyMat2D;
+begin
+  Result := MatIdentity;
+  Result[4] := AX;
+  Result[5] := AY;
+end;
+
+{ PiecewiseView.doRender through positionGroup }
+function LayoutPiecewise(const AModel: TTyVisualMapSpec;
+  const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
+  ACanvasW, ACanvasH, AScale: Double; const AMeasurer: ITyTextMeasurer;
+  const AInk: TTyVisualMapInk): TTyVisualMapLayout;
+var
+  L: TTyVisualMapLayout;
+  i0, i1, gap, tgap, x, y, nextV, move, rv: Double;
+  pad: array[0..3] of Double;
+  itemAlign, text, lalign, lvalign: string;
+  reverseList, have: Boolean;
+  order: array of Integer;
+  k, n, p: Integer;
+  it: TTyVmItem;
+  s: TTyVisualMapSpec;
+  row: TTyVisualRow;
+  st: TTyVisualState;
+  bb, r: TTyXYWH;
+  box: TTyRawBox;
+
+  procedure Push(const AItem: TTyVmItem);
+  begin
+    n := Length(L.Items);
+    SetLength(L.Items, n + 1);
+    L.Items[n] := AItem;
+  end;
+
+  { _renderEndsText: nothing for an empty text }
+  procedure EndsText(const AText: string);
+  var e: TTyVmItem; ex: Double; ah: TTyTextAnchorH; hv: Boolean;
+  begin
+    if AText = '' then Exit;
+    e := Default(TTyVmItem);
+    e.IsText := True;
+    e.PieceIndex := -1;
+    if L.ShowLabel then
+    begin
+      if itemAlign = 'right' then ex := i0 else ex := 0;
+      ah := WordH(itemAlign);
+    end
+    else
+    begin
+      ex := i0 / 2;
+      ah := tahCentre;
+    end;
+    e.Label_ := MakeText(AText, ex, i1 / 2, ah, tavMiddle, AMeasurer, AInk);
+    e.LabelOpacity := 1;
+    hv := False;
+    Accumulate(e.Rect, hv, e.Label_.Rect, MatIdentity);
+    Push(e);
+  end;
+
+begin
+  L := Default(TTyVisualMapLayout);
+  L.Index := AModel.Index;
+  L.Show := AView.Show;
+  L.Piecewise := True;
+  Result := L;
+  if not AView.Show then Exit;
+  L.Horizontal := AView.Horizontal;
+  i0 := AView.ItemW * AScale;
+  i1 := AView.ItemH * AScale;
+  L.ItemW := i0;
+  L.ItemH := i1;
+  for k := 0 to 3 do pad[k] := AView.Padding[k] * AScale;
+  gap := AView.ItemGap * AScale;
+  tgap := AView.TextGap * AScale;
+
+  { _getItemAlign: vertical asks helper.getItemAlign, horizontal is `align`
+    or left }
+  if not AView.Horizontal then
+    itemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad)
+  else if (AView.Align = '') or (AView.Align = 'auto') then
+    itemAlign := 'left'
+  else
+    itemAlign := AView.Align;
+  L.ItemAlign := itemAlign;
+  { showLabel: as written, else only when there is no text }
+  if AView.HasShowLabel then L.ShowLabel := AView.ShowLabel
+  else L.ShowLabel := not AView.HasText;
+
+  { _getViewData: the list reversed when `horizontal ? inverse : !inverse`,
+    the ends text reversed otherwise }
+  reverseList := AView.Horizontal = AView.Inverse;
+  SetLength(order, Length(AModel.Pieces));
+  for k := 0 to High(order) do
+    if reverseList then order[k] := High(order) - k else order[k] := k;
+  L.HasEnds := AView.HasText;
+  if AView.HasText then
+  begin
+    if reverseList then
+    begin
+      L.EndsText[0] := AView.Text[0];
+      L.EndsText[1] := AView.Text[1];
+    end
+    else
+    begin
+      L.EndsText[0] := AView.Text[1];
+      L.EndsText[1] := AView.Text[0];
+    end;
+  end;
+
+  if L.HasEnds then EndsText(L.EndsText[0]);
+  s := AModel;
+  s.States := AModel.Controller;
+  for k := 0 to High(order) do
+  begin
+    p := order[k];
+    it := Default(TTyVmItem);
+    it.PieceIndex := p;
+    { the representative value -- a category's text -- and its state }
+    if AModel.Pieces[p].HasValue and AModel.Pieces[p].ValueIsStr
+      and AModel.IsCategory then
+    begin
+      rv := NaN;
+      text := AModel.Pieces[p].ValueStr;
+    end
+    else
+    begin
+      rv := TyVisualRepresent(AModel.Pieces[p]);
+      text := TyJsNumberToString(rv);
+    end;
+    st := TyVisualValueState(AModel, rv, text);
+    { getControllerVisual(representValue, 'symbol' | 'color'): the
+      controller visuals of the value's own state, over contentColor }
+    row := Default(TTyVisualRow);
+    row.Color := AContent;
+    TyVisualApply(s, st, rv, text, row, False);
+    if row.SymbolSet then it.Symbol := row.Symbol else it.Symbol := 'roundRect';
+    it.Fill := row.Color;
+    it.SymbolBox := XYWH(0, 0, i0, i1);
+    it.SymbolRect := TyVmSymbolRect(it.Symbol, it.SymbolBox);
+    have := False;
+    Accumulate(it.Rect, have, it.SymbolRect, MatIdentity);
+    it.HasLabel := L.ShowLabel;
+    if L.ShowLabel then
+    begin
+      if AView.TextAlign <> '' then lalign := AView.TextAlign else lalign := itemAlign;
+      if AView.TextVAlign <> '' then lvalign := AView.TextVAlign else lvalign := 'middle';
+      if lalign = 'right' then x := -tgap else x := i0 + tgap;
+      it.Label_ := MakeText(AModel.Pieces[p].Text, x, i1 / 2, WordH(lalign),
+        WordV(lvalign), AMeasurer, AInk);
+      if AView.HasTextOpacity then it.LabelOpacity := AView.TextOpacity
+      else if st = tvsOutOfRange then it.LabelOpacity := 0.5
+      else it.LabelOpacity := 1;
+      Accumulate(it.Rect, have, it.Label_.Rect, MatIdentity);
+    end;
+    Push(it);
+  end;
+  if L.HasEnds then EndsText(L.EndsText[1]);
+
+  { layout.box: each child after the last, by its rect and the NEXT one's
+    offset, a gap between }
+  x := 0;
+  y := 0;
+  for k := 0 to High(L.Items) do
+  begin
+    r := L.Items[k].Rect;
+    if L.Horizontal then
+    begin
+      move := r.W;
+      if k < High(L.Items) then move := r.W + (-L.Items[k + 1].Rect.X + r.X);
+      nextV := x + move;
+    end
+    else
+    begin
+      move := r.H;
+      if k < High(L.Items) then move := r.H + (-L.Items[k + 1].Rect.Y + r.Y);
+      nextV := y + move;
+    end;
+    L.Items[k].X := x;
+    L.Items[k].Y := y;
+    if L.Horizontal then x := nextV + gap else y := nextV + gap;
+  end;
+
+  { renderBackground: the group's rect, padded }
+  have := False;
+  bb := XYWH(0, 0, 0, 0);
+  for k := 0 to High(L.Items) do
+    Accumulate(bb, have, L.Items[k].Rect, Translate(L.Items[k].X, L.Items[k].Y));
+  L.BBoxBackground := bb;
+  L.Background := XYWH(bb.X - pad[3], bb.Y - pad[0], bb.W + pad[3] + pad[1],
+    bb.H + pad[0] + pad[2]);
+  Accumulate(bb, have, BackgroundRect(L.Background, AView.BorderWidth), MatIdentity);
+  L.BBoxPosition := bb;
+
+  { positionGroup, as the continuous view }
+  box := AView.Box;
+  box.Width := TyBoxRawNum(bb.W);
+  box.Height := TyBoxRawNum(bb.H);
+  r := TyGetLayoutRect(box, 0, 0, ACanvasW, ACanvasH, [0, 0, 0, 0]);
+  L.GroupX := 0 + (r.X - bb.X);
+  L.GroupY := 0 + (r.Y - bb.Y);
+  L.Valid := True;
+  Result := L;
+end;
+
 function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
   const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
   ACanvasW, ACanvasH, AScale: Double; const AMeasurer: ITyTextMeasurer;
@@ -1095,50 +1505,6 @@ var
   k: Integer;
   word: string;
   inStops: TTyVisualGradStopArray;
-
-  { getItemAlign }
-  function ItemAlign: string;
-  var
-    b: TTyRawBox;
-    rr: TTyXYWH;
-    m: Double;
-  begin
-    if (AView.Align <> '') and (AView.Align <> 'auto') then Exit(AView.Align);
-    b := Default(TTyRawBox);
-    if not AView.Horizontal then
-    begin
-      b.Top := TyBoxRawNum(0);
-      b.Bottom.Kind := brNull;
-      b.Height := TyBoxRawNum(10);
-      b.Left := AView.Box.Left;
-      b.Right := AView.Box.Right;
-      b.Width := TyBoxRawNum(i0);
-    end
-    else
-    begin
-      b.Left := TyBoxRawNum(0);
-      b.Right.Kind := brNull;
-      b.Width := TyBoxRawNum(10);
-      b.Top := AView.Box.Top;
-      b.Bottom := AView.Box.Bottom;
-      b.Height := TyBoxRawNum(i0);
-    end;
-    rr := TyGetLayoutRect(b, 0, 0, ACanvasW, ACanvasH, pad);
-    if not AView.Horizontal then
-    begin
-      m := pad[3];
-      if IsNan(m) or (m = 0) then m := 0;
-      if Lt(m + rr.X + rr.W * 0.5, ACanvasW * 0.5) then Result := 'left'
-      else Result := 'right';
-    end
-    else
-    begin
-      m := pad[0];
-      if IsNan(m) or (m = 0) then m := 0;
-      if Lt(m + rr.Y + rr.H * 0.5, ACanvasH * 0.5) then Result := 'top'
-      else Result := 'bottom';
-    end;
-  end;
 
   { the handles at AEnds: thumbs in the bar, labels in the view group }
   procedure PlaceHandles(const AEnds: array of Double);
@@ -1255,6 +1621,9 @@ begin
   L.Index := AModel.Index;
   L.Show := AView.Show;
   Result := L;
+  if AModel.SubType = 'piecewise' then
+    Exit(LayoutPiecewise(AModel, AView, AContent, ACanvasW, ACanvasH, AScale,
+      AMeasurer, AInk));
   if not AView.Show then Exit;
   if AModel.SubType <> 'continuous' then Exit;
   L.Horizontal := AView.Horizontal;
@@ -1287,7 +1656,7 @@ begin
       AModel.Extent1, 0, i1, True);
 
   { the bar group, one of four }
-  L.ItemAlign := ItemAlign;
+  L.ItemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad);
   vertical := not AView.Horizontal;
   left := L.ItemAlign = 'left';
   bottom := L.ItemAlign = 'bottom';
@@ -1448,7 +1817,7 @@ var
     Inc(Result);
   end;
 
-  procedure Text(const AText: TTyVmText);
+  procedure Text(const AText: TTyVmText; AOpacity: Double = 1);
   var r: TTyXYWH;
   begin
     if AText.Text = '' then Exit;
@@ -1461,6 +1830,10 @@ var
     el.Caption.FontSizeLogical := AInk.FontSizeLogical;
     el.Caption.FontWeight := AInk.FontWeight;
     el.Caption.Colour := AInk.Text;
+    { an out-of-range item's label at half: the opacity on the colour }
+    if AOpacity <> 1 then
+      el.Caption.Colour := (AInk.Text and $00FFFFFF)
+        or (Cardinal(Round((AInk.Text shr 24) * AOpacity)) shl 24);
     el.Caption.X := AText.X + G[4];
     el.Caption.Y := AText.Y + G[5];
     el.Caption.AnchorH := AText.AlignH;
@@ -1474,6 +1847,55 @@ var
   bg: TTyXYWH;
   pr: TTyXYWH;
   cxl, cyl, cx, cy, sw, sh: Double;
+
+  { a piecewise child: the symbol in its box, the label or the ends text;
+    SILENT unless a click would select }
+  procedure Item(const AItem: TTyVmItem);
+  var
+    spec: TTySymbolSpec;
+    empty: Boolean;
+    path: string;
+    ox, oy: Double;
+  begin
+    ox := T[4] + AItem.X;
+    oy := T[5] + AItem.Y;
+    if not AItem.IsText then
+    begin
+      spec := Default(TTySymbolSpec);
+      spec.Kind := TySymbolKindOf(AItem.Symbol, empty, path);
+      spec.Empty := empty;
+      spec.PathData := path;
+      spec.WidthPx := AItem.SymbolBox.W;
+      spec.HeightPx := AItem.SymbolBox.H;
+      if (spec.Kind <> tsyNone) and AItem.Fill.Defined then
+      begin
+        el := Blank;
+        el.Silent := AView.Silent;
+        el.Shape := TyBuildSymbolInBox(spec, TyRectF(ox + AItem.SymbolBox.X,
+          oy + AItem.SymbolBox.Y, ox + AItem.SymbolBox.X + AItem.SymbolBox.W,
+          oy + AItem.SymbolBox.Y + AItem.SymbolBox.H));
+        if empty then
+        begin
+          el.Style.StrokeColor := TyVisualToChart(AItem.Fill);
+          el.Style.StrokeWidthLogical := 2;
+          el.Style.HasFill := True;
+          el.Style.FillColor := AInk.Background or $FF000000;
+        end
+        else
+        begin
+          el.Style.HasFill := True;
+          el.Style.FillColor := TyVisualToChart(AItem.Fill);
+        end;
+        el.Style.Alpha := 1;
+        AList.Add(el);
+        Inc(Result);
+      end;
+      if not AItem.HasLabel then Exit;
+    end;
+    G := Translate(ox, oy);
+    Text(AItem.Label_, AItem.LabelOpacity);
+  end;
+
 begin
   Result := 0;
   if not ALayout.Valid then Exit;
@@ -1505,6 +1927,11 @@ begin
     el.Style.Alpha := 1;
     AList.Add(el);
     Inc(Result);
+  end;
+  if ALayout.Piecewise then
+  begin
+    for h := 0 to High(ALayout.Items) do Item(ALayout.Items[h]);
+    Exit;
   end;
   G := MatMul(T, ALayout.Bar);
   { A RECTANGLE over the whole length is the clip itself, rounded; anything

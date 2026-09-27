@@ -827,6 +827,8 @@ const CASES = [
     option: barOpt(V({ left: 380, text: ['H', 'L'] })) },
   { id: 'V3c', groups: ['V3'], note: 'vertical left 370: right only through the extra margin term (15 + 385 + 10 >= 400; without the term 395 < 400)',
     option: barOpt(V({ left: 370 })) },
+  { id: 'V3e', groups: ['V3'], note: 'vertical left 320: LEFT, the auto align measures itemWidth (15 + 335 + 10 < 400), not itemHeight (15 + 335 + 70 >= 400)',
+    option: barOpt(V({ left: 320 })) },
   { id: 'V3d', groups: ['V3'], note: 'vertical right 10, calculable: the handle labels align right', option: barOpt(V({ right: 10, calculable: true })) },
   { id: 'V4a', groups: ['V4'], note: 'horizontal inverse (row 1, auto align bottom), text, calculable',
     option: barOpt(V({ orient: 'horizontal', inverse: true, left: 'center', text: ['High', 'Low'], calculable: true })) },
