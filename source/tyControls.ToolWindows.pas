@@ -15,6 +15,7 @@ uses
   Forms,     { TCustomForm:拖动期间 Screen 的「活动窗体换了」处理器 }
   tyControls.Types, tyControls.Base, tyControls.Component, tyControls.Painter,
   tyControls.StyleModel, tyControls.Controller, tyControls.StrConsts,
+  tyControls.Button,   { TTyBadgeDisplayEvent、TyBidiFlipBadgePosition:角标照 TTyButton(spec §8.1) }
   tyControls.ToolWindows.Layout;      { 纯规则 / 几何:标题行、图标条、槽位、阈值 }
 
 const
@@ -188,6 +189,18 @@ type
     { MoveWindow / 布局应用自己换父时置上:SetParent 看见它就跳过「直接改 Parent」的簿记
       (spec §3.2),那些路径自己管激活、展开、事件。 }
     FQuietMove: Boolean;
+  private
+    { --- 角标(spec §8.1,E 期)。数字由窗口内容决定,所以在窗口上;窗口换栏,角标跟着走。 --- }
+    FShowBadge: Boolean;
+    FBadgeValue: Integer;
+    FBadgeDot: Boolean;
+    FOnBadgeDisplay: TTyBadgeDisplayEvent;
+    procedure SetShowBadge(AValue: Boolean);
+    procedure SetBadgeValue(AValue: Integer);
+    procedure SetBadgeDot(AValue: Boolean);
+    { 角标变了:侧栏重画;底栏丢标签宽缓存、重画标签行(标签宽变了,B 期收尾的漂移检查会把
+      当前页的操作区跟上)。 }
+    procedure BadgeChanged;
   protected
     FPaintCache: TTyPaintCache;      { protected:测试要能问「重渲染了没有」 }
     { > 0 = 这一批 Visible 切换不算「显示 / 隐藏」,见 BeginSilentVisibility。 }
@@ -328,6 +341,9 @@ type
       栏切页必须先改这个标志再写 Visible(spec §5.1 第 2、3 步),顺序无头看不出来,
       只能从这里钉(TestDesignVisibleFlagIsSetBeforeVisible)。 }
     property NoDesignVisibleAtLastShow: Boolean read FNoDesignVisibleAtShow;
+    { 此刻画不画角标、画什么(事件已经应用过,spec §8.1)。AText 在圆点模式下是 ''。
+      没开 ShowBadge 时不调事件。 }
+    function BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
   published
     property Caption;
     { 图标条上的图标**按名字** —— 持久键,在所在栏的 EffectiveImages 里解析。列表是本库的
@@ -358,6 +374,14 @@ type
       而这两个事件就从 CM_VISIBLECHANGED 发,名字、签名、触发边都同 TCustomPage。 }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
+    { 角标(spec §8.1),名字和语义照 TTyButton:ShowBadge 是总开关,开着时 0 也显示;> 99 显示
+      '99+';OnBadgeDisplay 可以改文字或藏起来(会被频繁调用 —— 量标签宽、画、命中都可能问 ——
+      不许有副作用;它的答案变了请自己 Invalidate)。BadgeDot 画一个圆点代替数字。侧栏画在图标
+      右上角,底栏画在标签标题后面。不进布局串。 }
+    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
+    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
+    property BadgeDot: Boolean read FBadgeDot write SetBadgeDot default False;
+    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
   end;
 
   { 标题行尾端的操作区(spec §4)。只由组件编辑器的「添加操作区」或 EnsureActions 建,
@@ -863,6 +887,18 @@ type
       当前页停在旧边界里、盖着标签行);当前页 RelayoutHeader;栏和当前页都重画;进行中的
       标签行手势取消(拉宽不算)。加载 / 释放中不做。 }
     procedure TabRowHostMayHaveChanged;
+  private
+    { --- 角标(spec §8.1,E 期) --- }
+    { 角标的尺寸(设备像素,按 APPI)和文字;不画时 (0, 0)。文字宽按标签的量法(两种量法取大),
+      高按 '0',交给 TyBadgeSize —— 量标签宽和画胶囊都问这里,两边差一个像素胶囊就压到下一个
+      标签上,而且不会红。样式取 TyToolWindowBadge 静止态(不看禁用,同 TTyButton 的徽标);
+      内边距、--badge-min-size、--badge-dot-size 按 APPI。 }
+    function BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer; out AText: string;
+      out ADot: Boolean): TSize;
+    { 在 ABox(画笔坐标,尺寸来自 BadgeSizeAt)里画 AWindow 的角标;不画就什么都不做。圆点画成圆,
+      数字画胶囊(圆角照 TTyButton.DrawBadge:主题没给圆角就半高),文字用 ASmallCrisp。 }
+    procedure DrawBadgeIn(APainter: TTyPainter; AWindow: TTyToolWindow; const ABox: TRect;
+      APPI: Integer);
   private
     { 标签行上悬停的部件和(标签时)窗口序号;没有悬停是 (twbpNone, -1)。标签行的悬停只在
       当前页上,所以记在栏上一份就够。 }
@@ -1392,6 +1428,7 @@ uses
   BGRABitmap, BGRABitmapTypes,  { 图标条:渲染出来的图标是调用方持有的 BGRA 位图 }
   tyControls.ImageCollection,   { TyTintBitmapAlpha / TyFadeBitmapAlpha:图标按状态着色 }
   tyControls.ImageDraw,  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子;TyRenderImage }
+  tyControls.Badge,      { TyBadgeText / TyBadgeSize / TyBadgeCornerPos:角标的字和尺寸 }
   tyControls.Menu;       { TTyPopupMenu:图标条的溢出菜单 }
 
 { --- TTyToolWindow ------------------------------------------------------------ }
@@ -1479,6 +1516,56 @@ begin
   if FStripHint = AValue then Exit;
   FStripHint := AValue;
   InvalidateBar;
+end;
+
+procedure TTyToolWindow.SetShowBadge(AValue: Boolean);
+begin
+  if FShowBadge = AValue then Exit;
+  FShowBadge := AValue;
+  BadgeChanged;
+end;
+
+procedure TTyToolWindow.SetBadgeValue(AValue: Integer);
+begin
+  if FBadgeValue = AValue then Exit;
+  FBadgeValue := AValue;
+  BadgeChanged;
+end;
+
+procedure TTyToolWindow.SetBadgeDot(AValue: Boolean);
+begin
+  if FBadgeDot = AValue then Exit;
+  FBadgeDot := AValue;
+  BadgeChanged;
+end;
+
+procedure TTyToolWindow.BadgeChanged;
+var
+  b: TTyToolWindowBar;
+begin
+  b := Bar;
+  if (b = nil) or (csDestroying in b.ComponentState) then Exit;
+  b.Invalidate;
+end;
+
+function TTyToolWindow.BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
+var
+  vis: Boolean;
+begin
+  AText := '';
+  ADot := FBadgeDot;
+  if not FShowBadge then Exit(False);
+  { 圆点也先给数字:事件看得到,画的时候不用。 }
+  AText := TyBadgeText(FBadgeValue, False);
+  vis := True;
+  if Assigned(FOnBadgeDisplay) then FOnBadgeDisplay(Self, FBadgeValue, AText, vis);
+  if ADot then
+  begin
+    AText := '';
+    Result := vis;
+  end
+  else
+    Result := vis and (AText <> '');
 end;
 
 procedure TTyToolWindow.ResolveImageIndex;
@@ -3888,6 +3975,10 @@ var
   states: TTyStateSet;
   wins: TTyToolWindowArray;
   w: TTyToolWindow;
+  bsz: TSize;
+  bpt: TPoint;
+  btxt: string;
+  bdot: Boolean;
   i, idx, glyphPx, indPx, bw, pad: Integer;
 begin
   P := TTyPainter.Create;
@@ -3978,6 +4069,16 @@ begin
               gr := Rect(cell.Right - indPx, cell.Top, cell.Right, cell.Bottom);
             P.FillBackground(gr, partS.Background, 0);
           end;
+        end;
+        { 角标(spec §8.1):图标格右上角,按画笔的读写方向镜像(同 TTyButton);在图标和指示条
+          之后画 —— 在最上面。栏收起时照画(图标条还在)。 }
+        bsz := BadgeSizeAt(w, APPI, btxt, bdot);
+        if bsz.cx > 0 then
+        begin
+          bpt := TyBadgeCornerPos(cell, bsz.cx, bsz.cy,
+            TokenPxAt(TyBadgeInsetVar, TyBadgeInset, APPI),
+            TyBidiFlipBadgePosition(bpTopRight, P.RightToLeft));
+          DrawBadgeIn(P, w, Rect(bpt.X, bpt.Y, bpt.X + bsz.cx, bpt.Y + bsz.cy), APPI);
         end;
       end;
 
@@ -4306,6 +4407,65 @@ begin
     FActive.RelayoutHeader;
   Invalidate;
   InvalidateHeader;
+end;
+
+function TTyToolWindowBar.BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer;
+  out AText: string; out ADot: Boolean): TSize;
+var
+  S: TTyStyleSet;
+  fs, tw, th, rw, zw, zh, minPx, dotPx: Integer;
+begin
+  Result := Size(0, 0);
+  AText := '';
+  ADot := False;
+  if (AWindow = nil) or not AWindow.BadgeDisplay(AText, ADot) then Exit;
+  S := ActiveController.Model.ResolveStyle(TyToolWindowBadgeKey,
+    TyStyleClassFor(Self, StyleClass), [tysNormal]);
+  { 没有主题规则就不画(同 TTyButton 的徽标)。 }
+  if not (tpBackground in S.Present) then Exit;
+  minPx := TokenPxAt(TyBadgeMinSizeVar, TyBadgeMinSize, APPI);
+  if minPx < 1 then minPx := 1;
+  dotPx := TokenPxAt(TyBadgeDotSizeVar, TyBadgeDotSize, APPI);
+  if ADot then Exit(TyBadgeSize(0, 0, 0, 0, minPx, True, dotPx));
+  fs := ResolveFontSize(S);
+  { 两种量法取大(Painter.pas 的约定,同 MeasureTabWidths):只按画布量,渲染器多出一个像素。 }
+  TyMeasureTextBlock(AText, S.FontName, fs, S.FontWeight, APPI, 0, 0, tw, th);
+  rw := TyMeasureRenderedTextWidth(AText, S.FontName, fs, S.FontWeight, APPI);
+  if rw > tw then tw := rw;
+  { 高按一个稳定的参考字形('0'),同 TTyButton.DrawBadge。 }
+  TyMeasureTextBlock('0', S.FontName, fs, S.FontWeight, APPI, 0, 0, zw, zh);
+  Result := TyBadgeSize(tw, zh, MulDiv(S.Padding.Left, APPI, 96),
+    MulDiv(S.Padding.Top, APPI, 96), minPx, False, dotPx);
+end;
+
+procedure TTyToolWindowBar.DrawBadgeIn(APainter: TTyPainter; AWindow: TTyToolWindow;
+  const ABox: TRect; APPI: Integer);
+var
+  S: TTyStyleSet;
+  txt: string;
+  dot: Boolean;
+  r: TRect;
+  half, themedR, rLogical: Integer;
+begin
+  if (ABox.Right <= ABox.Left) or (ABox.Bottom <= ABox.Top) then Exit;
+  if (AWindow = nil) or not AWindow.BadgeDisplay(txt, dot) then Exit;
+  S := ActiveController.Model.ResolveStyle(TyToolWindowBadgeKey,
+    TyStyleClassFor(Self, StyleClass), [tysNormal]);
+  if not (tpBackground in S.Present) then Exit;
+  { 胶囊:主题没给圆角就半高,给了更小的就用主题的(TTyButton.DrawBadge 的做法);圆点是正圆。
+    FillBackground 收的是逻辑半径。 }
+  half := APainter.Unscale((ABox.Bottom - ABox.Top) div 2);
+  themedR := TyEffectiveCorners(S).TL;
+  if dot or (themedR <= 0) then rLogical := half
+  else rLogical := TyClampRadius(themedR, half);
+  APainter.FillBackground(ABox, S.Background, TyUniformCorners(rLogical));
+  if dot or (txt = '') then Exit;
+  { 文字框四边各放 1 个像素(同 TTyButton.DrawBadge:有的 widgetset 小号粗体画出来比量的大一丝,
+    DrawText 按框裁剪会削掉字边);胶囊本身不变。 }
+  r := ABox;
+  InflateRect(r, APainter.Scale(1), APainter.Scale(1));
+  APainter.DrawText(r, txt, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
+    taCenter, tlCenter, False, 0, True);
 end;
 
 function TTyToolWindowBar.HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
