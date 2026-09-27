@@ -23,12 +23,13 @@ function TyToolWindowInInlined(AComponent: TComponent): Boolean;
   可以(spec §11)。 }
 function TyToolWindowDesignCanAddWindow(ABar: TTyToolWindowBar): Boolean;
 
-{ 「添加操作区」:窗口还没有操作区(Actions = nil)、不在 frame 实例里。继承来的窗口可以加。 }
+{ 「添加操作区」:窗口还没有操作区(Actions = nil)、不在 frame 实例里、不在加载 / 释放中
+  (同 CanAddWindow)。继承来的窗口可以加。 }
 function TyToolWindowDesignCanAddActions(AWindow: TTyToolWindow): Boolean;
 
 { 「移到另一侧栏」的目标:窗口在侧栏里、不是继承来的(csAncestor)、不在 frame 实例里,所在栏
-  有 manager,manager 下另一侧(左 ↔ 右)有可用栏(UsableBar),且 CanMoveWindow 答 True
-  (它管本栏冲突、同一窗体、加载 / 释放中);否则 nil。 }
+  有 manager,manager 下另一侧(左 ↔ 右)有可用栏(UsableBar)、那条栏也不在 frame 实例里,
+  且 CanMoveWindow 答 True(它管本栏冲突、同一窗体、加载 / 释放中);否则 nil。 }
 function TyToolWindowDesignOtherSide(AWindow: TTyToolWindow): TTyToolWindowBar;
 
 { 执行「移到另一侧栏」:目标为 nil、manager 不是 TTyToolWindowManager 答 False;否则
@@ -67,7 +68,8 @@ end;
 function TyToolWindowDesignCanAddActions(AWindow: TTyToolWindow): Boolean;
 begin
   Result := (AWindow <> nil) and (AWindow.Actions = nil)
-    and not TyToolWindowInInlined(AWindow);
+    and not TyToolWindowInInlined(AWindow)
+    and (Busy * AWindow.ComponentState = []);
 end;
 
 function TyToolWindowDesignOtherSide(AWindow: TTyToolWindow): TTyToolWindowBar;
@@ -87,6 +89,9 @@ begin
     Exit;                          { 底栏窗口不跨栏 }
   end;
   Result := src.Manager.UsableBar(side);
+  { 目标栏在 frame 实例里(它挂在窗体的 manager 上):往 frame 实例里放组件不行
+    (componenteditors.pas:178-183),CanMoveWindow 看不出这一条。 }
+  if (Result <> nil) and TyToolWindowInInlined(Result) then Exit(nil);
   { 本栏冲突、不在同一窗体、加载 / 释放中:CanMoveWindow 一处答。设计期它不问事件。 }
   if (Result <> nil) and not src.Manager.CanMoveWindow(AWindow, Result) then Result := nil;
 end;

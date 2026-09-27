@@ -79,7 +79,9 @@ type
     procedure TestABarWithoutAManagerHasNoOtherSide;
     procedure TestAnInheritedWindowCannotMoveButCanGetActions;
     procedure TestAFrameInstanceGreysEverything;
+    procedure TestABarInAFrameInstanceIsNoOtherSide;
     procedure TestAddActionsOnlyWhileThereIsNone;
+    procedure TestAddActionsWaitsOutLoadingAndFreeing;
     procedure TestMoveToOtherSideGoesThroughMoveWindow;
     procedure TestMoveToOtherSideRefusesABottomWindow;
     procedure TestOnlyOrphansHaveReturnTargets;
@@ -97,6 +99,9 @@ implementation
 type
   { ParentFont 是 protected:量字要用控件真正用的字号(同 test.toolwindow.bottom)。 }
   TControlAccess = class(TControl);
+
+  { Loading / Loaded 是 protected:模拟窗口自己在流式加载中。 }
+  TComponentAccess = class(TComponent);
 
   { 继承窗体里的窗口(csAncestor)。 }
   TAncestorWindow = class(TProbeWindow)
@@ -774,12 +779,66 @@ begin
   end;
 end;
 
+procedure TTyToolWindowDesignTests.TestABarInAFrameInstanceIsNoOtherSide;
+var
+  inl: TInlineOwner;
+  frameBar: TBarAccess;
+begin
+  { 反过来:窗口在窗体上的栏里,另一侧那条栏在 frame 实例里、挂在窗体的 manager 上。往 frame
+    实例里放组件不行,CanMoveWindow 却看不出来。 }
+  NewWorkbench;
+  FR.Manager := nil;
+  inl := TInlineOwner.Create(nil);
+  try
+    inl.MarkDesigning;
+    inl.MarkInline;
+    frameBar := TBarAccess.Create(inl);
+    frameBar.Parent := FForm;
+    frameBar.Controller := FCtl;
+    frameBar.Font.PixelsPerInch := 96;
+    frameBar.Placement := twpRight;
+    frameBar.Height := 400;
+    frameBar.Manager := FM;
+    AssertTrue('前提:frame 实例', TyToolWindowInInlined(frameBar));
+    AssertSame('前提:右边的可用栏就是它', TTyToolWindowBar(frameBar), FM.UsableBar(twpRight));
+    AssertTrue('前提:结构上放行', FM.CanMoveWindow(FExplorer, frameBar));
+    AssertNull('frame 实例里的栏不是目标', TyToolWindowDesignOtherSide(FExplorer));
+    AssertFalse('「移到另一侧栏」不动它', TyToolWindowDesignMoveToOtherSide(FExplorer));
+    AssertSame('还在左栏', TTyToolWindowBar(FL), FExplorer.Bar);
+  finally
+    inl.Free;
+  end;
+end;
+
 procedure TTyToolWindowDesignTests.TestAddActionsOnlyWhileThereIsNone;
 begin
   NewWorkbench;
   AssertTrue('没有操作区时可以加', TyToolWindowDesignCanAddActions(FExplorer));
   FExplorer.EnsureActions;
   AssertFalse('有了就灰掉', TyToolWindowDesignCanAddActions(FExplorer));
+end;
+
+procedure TTyToolWindowDesignTests.TestAddActionsWaitsOutLoadingAndFreeing;
+var
+  w: TProbeWindow;
+begin
+  { 同「新建工具窗口」(CanAddWindow):加载 / 释放中的窗口不往里加东西。 }
+  NewWorkbench;
+  AssertTrue('前提:平常可以加', TyToolWindowDesignCanAddActions(FExplorer));
+  TComponentAccess(FExplorer).Loading;
+  try
+    AssertFalse('加载中灰掉', TyToolWindowDesignCanAddActions(FExplorer));
+  finally
+    TComponentAccess(FExplorer).Loaded;
+  end;
+  AssertTrue('加载完又可以', TyToolWindowDesignCanAddActions(FExplorer));
+  w := NamedWindowIn(FL, 'Doomed');
+  w.Destroying;
+  try
+    AssertFalse('释放中灰掉', TyToolWindowDesignCanAddActions(w));
+  finally
+    w.Free;
+  end;
 end;
 
 procedure TTyToolWindowDesignTests.TestMoveToOtherSideGoesThroughMoveWindow;
