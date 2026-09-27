@@ -59,6 +59,28 @@ type
     procedure TestPartAtFindsTabsInTheYieldedRow;
     procedure TestOverflowWindowsSurviveTheYield;
     procedure TestTheOverflowMenuAnchorsOnTheYieldedRow;
+    { --- Task 3:让出标签行 —— 输入(spec §3.7、§6.8 E 期补) --- }
+    procedure TestClickingATabInTheYieldedRowSwitches;
+    procedure TestAReleaseOnAnotherTabInTheYieldedRowIsNotAClick;
+    procedure TestTheYieldedButtonsCollapseAndMaximize;
+    procedure TestTheYieldedOverflowOpensTheMenu;
+    procedure TestDraggingATabInTheYieldedRowReorders;
+    procedure TestTheInsertLinePaintsInTheYieldedRow;
+    procedure TestAPressedTabInTheYieldedRowPaintsPressed;
+    procedure TestTheYieldedRowMapsBarCoordinatesIntoTheRow;
+    procedure TestHoverOnTheYieldedRowAndLeave;
+    procedure TestHintsOnTheYieldedRow;
+    procedure TestRightClicksOnTheYieldedRow;
+    procedure TestTheWheelIsSwallowedOnTheYieldedRow;
+    procedure TestAClickOnTheDisabledPageBodyDoesNotClickTheBar;
+    procedure TestTheRowGoesBackToThePageAfterSwitchingAway;
+  private
+    { 栏坐标上按下、Click、松开(LCL 的顺序)。 }
+    procedure ClickRow(const APos: TPoint);
+    { 让出行里一个不在任何部件上的点(标签后面、操作区前面),栏坐标。 }
+    function RowBlank: TPoint;
+    { 让栏回答 APos(栏坐标)上的 CM_HINTSHOW。 }
+    function AskBarHint(const APos: TPoint; out AInfo: THintInfo): PtrInt;
   private
     { Task 2 / 3 的底栏:Problems / Output / Terminal,当前页 Output;Output 的操作区 30×20、
       Terminal 的 30×40(统一行高高过 token,地雷 3 的变异才分得开)。记下禁用前的行高、
@@ -617,6 +639,257 @@ begin
   AssertTrue('挂在栏上', host = TWinControl(FBar));
   AssertEquals('锚在溢出按钮左沿', r.Left, pt.X);
   AssertEquals('从按钮底边往下开', r.Bottom, pt.Y);
+end;
+
+{ --- Task 3 --------------------------------------------------------------------- }
+
+const
+  { #FF7F00(TColor 是 $BBGGRR):插入线、按下态的哨兵。 }
+  Sentinel = TColor($007FFF);
+
+procedure TTyToolWindowDisabledTests.ClickRow(const APos: TPoint);
+begin
+  FBar.CallMouseDown(APos.X, APos.Y);
+  FBar.CallClick;
+  FBar.CallMouseUp(APos.X, APos.Y);
+end;
+
+function TTyToolWindowDisabledTests.RowBlank: TPoint;
+var
+  h: TTyToolWindowTabRowHost;
+  i, x, idx: Integer;
+begin
+  h := FBar.TabRowHost;
+  x := h.Geom.TabArea.Left;
+  for i := 0 to High(h.Geom.Tabs) do
+    if h.Geom.Tabs[i].ItemRect.Right > x then x := h.Geom.Tabs[i].ItemRect.Right;
+  AssertTrue('前提:标签后面还有空白', h.Geom.TabArea.Right - x > 4);
+  Result := Point(h.Row.Left + (x + h.Geom.TabArea.Right) div 2,
+    h.Row.Top + (h.Row.Bottom - h.Row.Top) div 2);
+  AssertEquals('前提:空白上没有部件', Ord(twbpNone), Ord(FBar.PartAt(Result.X, Result.Y, idx)));
+end;
+
+function TTyToolWindowDisabledTests.AskBarHint(const APos: TPoint; out AInfo: THintInfo): PtrInt;
+begin
+  FillChar(AInfo, SizeOf(AInfo), 0);
+  AInfo.HintControl := FBar;
+  AInfo.CursorPos := APos;
+  AInfo.HintStr := '<untouched>';
+  Result := FBar.Perform(CM_HINTSHOW, 0, PtrInt(@AInfo));
+end;
+
+procedure TTyToolWindowDisabledTests.TestClickingATabInTheYieldedRowSwitches;
+begin
+  NewYieldingBar;
+  FBar.OnChange := @HandleChange;
+  ResetCounts;
+  ClickRow(RowTabCentre(2));
+  AssertSame('点让出行里的 Terminal:切过去', FWins[2], FBar.ActiveWindow);
+  AssertEquals('一次 OnChange', 1, FChanges);
+end;
+
+procedure TTyToolWindowDisabledTests.TestAReleaseOnAnotherTabInTheYieldedRowIsNotAClick;
+var
+  a, b: TPoint;
+begin
+  NewYieldingBar;
+  a := RowTabCentre(2);
+  b := RowTabCentre(0);
+  FBar.CallMouseDown(a.X, a.Y);
+  FBar.CallMouseUp(b.X, b.Y);
+  AssertSame('按在 Terminal、松在 Problems:不切', FWins[1], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheYieldedButtonsCollapseAndMaximize;
+begin
+  NewYieldingBar;
+  ClickRow(RowToBar(FBar.TabRowHost.Geom.Collapse).CenterPoint);
+  AssertTrue('收起按钮:收起', FBar.Collapsed);
+  FBar.Collapsed := False;
+  Relayout;
+  AssertTrue('前提:展开后又让出', FBar.HostsTabRow);
+  ClickRow(RowToBar(FBar.TabRowHost.Geom.Maximize).CenterPoint);
+  AssertTrue('最大化按钮:最大化', FBar.Maximized);
+  Relayout;
+  ClickRow(RowToBar(FBar.TabRowHost.Geom.Maximize).CenterPoint);
+  AssertFalse('再点:还原', FBar.Maximized);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheYieldedOverflowOpensTheMenu;
+begin
+  NewYieldingBar(False);
+  FBar.Width := 220;
+  Relayout;
+  FWins[1].Enabled := False;
+  Relayout;
+  AssertTrue('前提:有收进溢出的', Length(FBar.OverflowWindows) > 0);
+  ClickRow(RowToBar(FBar.TabRowHost.Geom.Overflow).CenterPoint);
+  AssertNotNull('溢出按钮:建了菜单', FBar.OverflowMenu);
+  AssertEquals('菜单项 = 收进去的个数', Length(FBar.OverflowWindows), FBar.OverflowMenu.Items.Count);
+end;
+
+procedure TTyToolWindowDisabledTests.TestDraggingATabInTheYieldedRowReorders;
+var
+  p: TPoint;
+  r: TRect;
+begin
+  NewYieldingBar;
+  p := RowTabCentre(0);
+  FBar.CallMouseDown(p.X, p.Y);
+  FBar.CallMouseMove(p.X + TyToolWindowDragThreshold(96) + 4, p.Y);
+  AssertTrue('拖起来了', FBar.IsDraggingForTest);
+  r := RowToBar(TabRectOf(FBar.TabRowHost.Geom, 2));
+  p := Point(r.Right - 3, (r.Top + r.Bottom) div 2);
+  FBar.CallMouseMove(p.X, p.Y);
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertSame('第 0 个:Output', FWins[1], FBar.Windows[0]);
+  AssertSame('第 1 个:Terminal', FWins[2], FBar.Windows[1]);
+  AssertSame('第 2 个:Problems', FWins[0], FBar.Windows[2]);
+  AssertSame('当前页仍是 Output', FWins[1], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheInsertLinePaintsInTheYieldedRow;
+var
+  p: TPoint;
+  r: TRect;
+  h: TTyToolWindowTabRowHost;
+  bmp: TBitmap;
+begin
+  NewYieldingBar;
+  FCtl.StyleOverride := BottomTheme + ' :root { --toolwindow-drop-color: #FF7F00; }';
+  p := RowTabCentre(0);
+  FBar.CallMouseDown(p.X, p.Y);
+  FBar.CallMouseMove(p.X + TyToolWindowDragThreshold(96) + 4, p.Y);
+  r := RowToBar(TabRectOf(FBar.TabRowHost.Geom, 2));
+  p := Point(r.Right - 3, (r.Top + r.Bottom) div 2);
+  FBar.CallMouseMove(p.X, p.Y);
+  AssertEquals('前提:落点是最后一个之后', 3, FBar.DropSlotForTest);
+  h := FBar.TabRowHost;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, h.Row, Wipe);
+  try
+    AssertTrue('插入线画在让出行里', ExactIn(bmp, Rect(0, 0, bmp.Width, bmp.Height), Sentinel) > 0);
+  finally
+    bmp.Free;
+  end;
+  FBar.CallMouseUp(p.X, p.Y);
+end;
+
+procedure TTyToolWindowDisabledTests.TestAPressedTabInTheYieldedRowPaintsPressed;
+var
+  p: TPoint;
+  h: TTyToolWindowTabRowHost;
+  bmp: TBitmap;
+begin
+  NewYieldingBar;
+  { 基础主题的标签没有 :active 底色;这里给一个哨兵,看的是「按下态有没有传到标签」。 }
+  FCtl.StyleOverride := BottomTheme + ' TyToolWindowTab:active { background: #FF7F00; }';
+  p := RowTabCentre(2);
+  FBar.CallMouseDown(p.X, p.Y);
+  h := FBar.TabRowHost;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, h.Row, Wipe);
+  try
+    AssertTrue('按下的 Terminal 画按下态', ExactIn(bmp, TabRectOf(h.Geom, 2), Sentinel) > 0);
+    AssertEquals('Problems 没有', 0, ExactIn(bmp, TabRectOf(h.Geom, 0), Sentinel));
+  finally
+    bmp.Free;
+  end;
+  FBar.CallMouseUp(0, 0);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheYieldedRowMapsBarCoordinatesIntoTheRow;
+var
+  h: TTyToolWindowTabRowHost;
+  r: TRect;
+  rowH, yLocal: Integer;
+begin
+  NewYieldingBar;
+  h := FBar.TabRowHost;
+  rowH := h.Row.Bottom - h.Row.Top;
+  AssertTrue('前提:行不在栏顶(前面有边缘区 / chrome)', h.Row.Top > 0);
+  r := TabRectOf(h.Geom, 2);
+  { 标签下半部:行内 y 大于「行高 − Row.Top」,直接拿栏坐标查行内几何就落到行外。 }
+  yLocal := r.Bottom - 2;
+  AssertTrue('前提:点够低', yLocal >= rowH - h.Row.Top);
+  ClickRow(Point(h.Row.Left + (r.Left + r.Right) div 2, h.Row.Top + yLocal));
+  AssertSame('按行内坐标命中 Terminal', FWins[2], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestHoverOnTheYieldedRowAndLeave;
+var
+  p: TPoint;
+begin
+  NewYieldingBar;
+  p := RowTabCentre(0);
+  FBar.CallMouseMove(p.X, p.Y, []);
+  AssertEquals('悬停在 Problems 上', Ord(twbpItem), Ord(FBar.HeaderHoverPartForTest));
+  AssertEquals('序号 0', 0, FBar.HeaderHoverIndexForTest);
+  FBar.CallMouseLeave;
+  AssertEquals('离开清掉', Ord(twbpNone), Ord(FBar.HeaderHoverPartForTest));
+end;
+
+procedure TTyToolWindowDisabledTests.TestHintsOnTheYieldedRow;
+var
+  info: THintInfo;
+begin
+  NewYieldingBar;
+  FBar.Hint := 'bar hint';
+  AssertEquals('标签上显示', 0, AskBarHint(RowTabCentre(2), info));
+  AssertEquals('Terminal 的提示是 Caption', 'Terminal', info.HintStr);
+  AskBarHint(RowToBar(FBar.TabRowHost.Geom.Maximize).CenterPoint, info);
+  AssertEquals('最大化按钮', rsTyToolWindowMaximize, info.HintStr);
+  AssertEquals('空白:不显示', 1, AskBarHint(RowBlank, info));
+  AssertEquals('空白:不回落到栏自己的 Hint', '<untouched>', info.HintStr);
+end;
+
+procedure TTyToolWindowDisabledTests.TestRightClicksOnTheYieldedRow;
+var
+  handled: Boolean;
+begin
+  NewYieldingBar;
+  handled := False;
+  FBar.CallDoContextPopup(RowTabCentre(2), handled);
+  AssertSame('标签上:ContextWindow = Terminal', FWins[2], FBar.ContextWindow);
+  handled := False;
+  FBar.CallDoContextPopup(RowBlank, handled);
+  AssertTrue('行内空白:吞掉', handled);
+  AssertNull('行内空白:没有 ContextWindow', FBar.ContextWindow);
+  handled := False;
+  FBar.CallDoContextPopup(FBar.BarLayout.Edge.CenterPoint, handled);
+  AssertFalse('边缘区:不吞(冒泡到窗体)', handled);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheWheelIsSwallowedOnTheYieldedRow;
+begin
+  NewYieldingBar;
+  AssertTrue('让出行上的滚轮吞掉', FBar.CallDoMouseWheel(RowTabCentre(0)));
+end;
+
+procedure TTyToolWindowDisabledTests.TestAClickOnTheDisabledPageBodyDoesNotClickTheBar;
+var
+  p: TPoint;
+begin
+  NewYieldingBar;
+  FBar.OnClick := @HandleClick;
+  FClicks := 0;
+  p := FWins[1].BoundsRect.CenterPoint;
+  ClickRow(p);
+  AssertEquals('禁用页正文上的按下落到栏:栏的 OnClick 不响', 0, FClicks);
+  FWins[1].Enabled := True;
+  Relayout;
+  p := FWins[1].BoundsRect.CenterPoint;
+  ClickRow(p);
+  AssertEquals('对照:页启用时同一处直接调栏,OnClick 照响', 1, FClicks);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheRowGoesBackToThePageAfterSwitchingAway;
+begin
+  NewYieldingBar;
+  ClickRow(RowTabCentre(0));
+  AssertSame('切到 Problems', FWins[0], FBar.ActiveWindow);
+  AssertFalse('收回了', FBar.HostsTabRow);
+  Relayout;
+  ClickAt(FWins[0], TabCentre(2));
+  AssertSame('页上的标签行照常:切到 Terminal', FWins[2], FBar.ActiveWindow);
 end;
 
 initialization

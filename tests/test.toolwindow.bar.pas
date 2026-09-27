@@ -73,6 +73,8 @@ type
     procedure CallCaptureChanged;
     procedure CallDoContextPopup(const APos: TPoint; var AHandled: Boolean);
     function CallGetPopupMenu: TPopupMenu;
+    { 真实的 DoMouseWheel(protected),只转发。 }
+    function CallDoMouseWheel(const APos: TPoint): Boolean;
     { 对齐锁的层数(DisableAlign 一次加一层;protected 的 AutoSizingLockCount)。 }
     function AlignLockForTest: Integer;
   protected
@@ -400,6 +402,11 @@ end;
 function TBarAccess.CallGetPopupMenu: TPopupMenu;
 begin
   Result := GetPopupMenu;
+end;
+
+function TBarAccess.CallDoMouseWheel(const APos: TPoint): Boolean;
+begin
+  Result := DoMouseWheel([], -120, APos);
 end;
 
 procedure TBarAccess.CallCaptureChanged;
