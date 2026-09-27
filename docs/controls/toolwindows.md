@@ -139,10 +139,12 @@ end
 |---|---|---|
 | 栏 `OnChange` | 运行时当前页换了窗口（点击、代码、`MoveWindow`、直接改 Parent、当前页离开本栏） | 设计期；加载中和 `Loaded`；布局应用；只是调顺序 |
 | 栏 `OnCollapse` / `OnExpand` | 运行时 `Collapsed` 真的变了 | 设计期；加载中；布局应用 |
-| 窗口 `OnShow` / `OnHide` | 运行时显示 / 藏起（切页、收起、展开）；普通的布局读取里照发 | 设计期；启动时栏在 `Loaded` 里显示的那一页 |
+| 窗口 `OnShow` / `OnHide` | 运行时显示 / 藏起（切页、收起、展开）；普通的布局读取里照发 | 设计期；启动时栏在 `Loaded` 里显示的那一页；加载结束时应用挂起布局的那一批（见下） |
 | manager `OnCanMoveWindow` | 跨栏：拖到某条栏上、松开、调 `MoveWindow`、排队的移动执行前 | 同栏调顺序；直接改 Parent；布局应用；设计期 |
 | manager `OnWindowMoved` | 运行时窗口的栏或序号真的变了：手势、`MoveWindow`、`WindowIndex`、同一 manager 下直接改 Parent | 加载中；设计期；读布局 / 恢复默认 |
-| manager `OnLayoutApplied` | `LoadLayoutFromString` / `ResetLayout` 应用完一次 | — |
+| manager `OnLayoutApplied` | `LoadLayoutFromString` / `ResetLayout` 应用完一次；挂起布局在加载结束时应用的，推迟到加载结束之后（排进消息队列）再发 | — |
+
+**挂起的布局**：还在加载中（frame 刚建出来、继承窗体、某个 `Loaded` 里）就调 `LoadLayoutFromString` / `ResetLayout`，布局先存着，等 manager 和所有栏都加载完再应用。这时窗体的 `OnCreate` 还没跑，所以这一批当作流式加载的一部分：窗口的 `OnShow` / `OnHide` 一个都不发，`OnLayoutApplied` 推到加载结束之后才发。处理器里就能放心用 FormCreate 里才建的对象。
 
 `MoveWindow` 的发送顺序：源栏 `OnChange`（窗口原来是当前页时）→ 目标栏 `OnExpand`（原来收起时）→ 目标栏 `OnChange` → `OnWindowMoved`。都在窗口挪好、焦点还回去之后发。
 
@@ -153,24 +155,33 @@ end
 - `OnCanMoveWindow` 里把 `AAllow` 设成 False 就能否决：拖到那条栏上时不画插入线，显示禁止光标。
 - 没有 manager 的栏只能栏内调顺序。
 
-**排队**：窗体已经显示时，跨栏的 `MoveWindow` 不当场做，而是排到消息循环里（返回 True 表示「已接受」）。这是为了让操作区里的按钮能移动自己所在的窗口：同步换父会在按钮自己的点击处理里销毁它的句柄。所以**排队时 `MoveWindow` 返回之后 `W.Bar` 还是旧栏**，挪好了会发 `OnWindowMoved`。FormCreate 里调、设计期调、同栏调顺序都是同步的。
+**排队**：窗体已经显示时，跨栏的 `MoveWindow` 不当场做，而是排到消息循环里（返回 True 表示「已接受」）。这是为了让操作区里的按钮能移动自己所在的窗口：同步换父会在按钮自己的点击处理里销毁它的句柄。所以**排队时 `MoveWindow` 返回之后 `W.Bar` 还是旧栏**，挪好了会发 `OnWindowMoved`。FormCreate 里调、设计期调、同栏调顺序都是同步的；只有一个例外：这个窗口还有排着的移动时，同栏调顺序也排进队列，按调用的先后执行。
 
 ## 6. 布局保存
 
 | 方法 | 说明 |
 |---|---|
 | `SaveLayoutToString` | 每一侧的尺寸、是否收起、窗口顺序、当前页，存成一行字符串 |
-| `LoadLayoutFromString(S)` | 读回来。格式不对答 False，什么都不改，不抛异常 |
-| `ResetLayout` | 回到默认布局（从 .lfm 加载的，就是 .lfm 里的样子） |
+| `LoadLayoutFromString(S)` | 读回来。答 False 就是什么都没改，不抛异常：格式不对；设计期；manager 上还没有注册任何栏；在 manager 的事件处理器里（`OnCanMoveWindow`、`OnWindowMoved`、`OnLayoutApplied`，以及跨栏移动时发的栏事件和窗口 `OnShow` / `OnHide`）；在应用布局的那一批里（某一页的 `OnShow` / `OnHide`） |
+| `ResetLayout` | 回到默认布局（从 .lfm 加载的，就是 .lfm 里的样子）。答 False 的情形同上，只是没有格式这一条 |
 | `CaptureDefaultLayout` | 把此刻的样子记成默认布局 |
 
 **在 FormCreate 里读**用户上次的布局，在 FormClose（或 OnDestroy 之前）存：
 
 ```pascal
 procedure TMainForm.FormCreate(Sender: TObject);
+var
+  sl: TStringList;
 begin
-  if FileExists(LayoutFile) then
-    ToolMgr.LoadLayoutFromString(ReadFileToString(LayoutFile));
+  if not FileExists(LayoutFile) then Exit;
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(LayoutFile);
+    // TStringList.Text 末尾多出来的换行 LoadLayoutFromString 自己会去掉
+    ToolMgr.LoadLayoutFromString(sl.Text);
+  finally
+    sl.Free;
+  end;
 end;
 ```
 
@@ -194,16 +205,16 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 - 从「TyControls Containers」页放一条栏和一个 manager 到窗体上，栏的 `Manager` 指向它。在对象查看器里改 `Placement`，栏自己挪到那一边。
 - **栏的右键菜单**
   - 「新建工具窗口」：建一个窗口放进栏里，成为当前页，名字和标题一样。`Ctrl+Z` 能撤掉。
-  - 「显示 ▸」：列出所有窗口，挑一个切过去并选中它。
+  - 「显示窗口 ▸」：列出所有窗口，挑一个切过去并选中它。
 - **窗口的右键菜单**（三项固定，不适用的灰掉）
   - 「添加操作区」：给窗口建一个操作区，往里拖按钮、筛选框。已经有了就灰掉。
-  - 「移到另一侧栏」：只有侧栏窗口能用，另一侧要有同一个 manager 下的可用栏。**这一步不能 `Ctrl+Z`**，再点一次就移回来。
-  - 「移回栏里 ▸」：只有孤儿窗口（见下）能用，挑一条栏放回去。
-- 在 frame 实例里，新建、添加、移动这几项都是灰的；继承来的窗口不能「移到另一侧栏」，但可以往继承来的栏里新建窗口、往继承来的窗口里添加操作区。
+  - 「移到另一侧栏」：只有侧栏窗口能用，另一侧要有同一个 manager 下的可用栏。能 `Ctrl+Z`，但窗口回到原来那条栏时排在最后、成为当前页，原来的位置不还原。
+  - 「移回栏里 ▸」：只有孤儿窗口（见下）能用，挑一条栏放回去。`Ctrl+Z` 把它放回原来的父控件，又成了孤儿。
+- 在 frame 实例里，新建、添加、移动这几项都是灰的；另一侧那条栏在 frame 实例里（它挂在窗体的 manager 上）时，「移到另一侧栏」也是灰的；继承来的窗口不能「移到另一侧栏」，但可以往继承来的栏里新建窗口、往继承来的窗口里添加操作区。
 - 设计期点图标（侧栏）或标签（底栏）就切页，对象查看器里的 `ActiveIndex` 跟着变。
-- 在对象查看器的组件树里选中一个藏着的窗口，不会自动切过去。用栏的「显示 ▸」或者点它的图标。
+- 在对象查看器的组件树里选中一个藏着的窗口，多半不会切过去：照 Lazarus 源码看，设计器选中控件时不调 `ShowControl`（以真机为准）。要切页，用栏的「显示窗口 ▸」或者点它的图标。
 - **孤儿窗口**：不在栏里的窗口。删掉一个窗口再 `Ctrl+Z`，它会被建到**窗体**上（Lazarus 撤销时只找窗体的直接子控件）。设计期它铺满父控件，顶上一行写着「不在工具窗口栏里，运行时隐藏」；右键「移回栏里 ▸」放回去。运行时孤儿一直藏着。
-- **Placement 冲突**：同一个 manager 下有两条栏 `Placement` 相同时，两条栏底部都会出现一行「与另一条栏的 Placement 相同」，改开就消失。
+- **Placement 冲突**：同一个 manager 下有两条栏 `Placement` 相同时，两条栏底部都会出现一行「与另一条栏的 Placement 相同」，改成不同的 `Placement` 就消失。
 - **粘贴要先选中栏**：侧栏点图标条，底栏点标签行后面的空白处或拉宽边。选中的是当前页窗口的正文时，粘贴会落进窗口里。
 - 窗口和操作区在对象查看器里没有 `Controller`，它们用栏的。
 
@@ -266,6 +277,11 @@ end
 - 拖空的侧栏保留图标条（VS Code 整块藏起来）。
 - 一侧只显示一个窗口，不做上下 / 左右分屏（JetBrains 可以）。
 - 不做：边缘靠近弹出、图标 / 标签上的数字徽标、每个窗口各记一个尺寸、键盘操作图标条、浮动 / 独立窗口、跨窗体拖动、内置右键菜单、从标题行拖动窗口。
+
+和库里其他控件的习惯也有两处不同：
+
+- 图标和标签松开才切。库里单纯做切换的控件（`TTySegmented`、`TTyTabSet` 这类标签条、`TTyPagination`）是按下就切；这里按下之后可能是要拖，所以等松开。TreeView、Grid 的表头点击也改成了松开才算。
+- `OnWindowMoved` 对 `MoveWindow`、改 `WindowIndex` 也发。Grid 的 `OnRowMove`、TreeView 的 `OnNodeMoved`、标签条的 `OnReorder` 只在手势里发；这里是想给程序一个「布局变了」的信号，比如拿来自动保存。
 
 ## 11. 示例
 
