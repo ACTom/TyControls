@@ -435,6 +435,15 @@ type
 
   TTyToolWindowArray = array of TTyToolWindow;
 
+  { 当前页的标签行此刻在谁身上(spec §3.7,E 期)。Host = nil:不是底栏、没有当前页或行高 0。
+    Row 是 Host 客户区坐标;Geom 是行内坐标(行左上角为原点)。平时 Host 是当前页(行在它客户区
+    原点);当前页被禁用时 Host 是栏(行 = BarLayout.TabRow)。 }
+  TTyToolWindowTabRowHost = record
+    Host: TWinControl;
+    Row: TRect;
+    Geom: TTyToolWindowHeaderGeom;
+  end;
+
   { 栏自己的几何,栏客户区坐标,**一处算**(TTyToolWindowBar.LayoutIn):AdjustClientRect 取
     Content、绘制取全部、图标条的命中(PartAt)取 Slots / Overflow。空矩形 = 没有这个部件。 }
   TTyToolWindowBarLayout = record
@@ -459,6 +468,10 @@ type
       再让出一行,叠在 StrayNote 上面 —— 当前页是窗口化子控件、盖满内容区,不让出来提示一个
       像素都露不出来。 }
     ConflictNote: TRect;
+    { 运行时底栏的当前页被禁用:栏在内容区顶上让出来、自己画的标签行(spec §3.7)。
+      禁用的页收不到鼠标(Win32 / GTK / Qt / Cocoa 各有各的原因,spec §3.7 根因),标签行
+      只能长在栏自己的像素里。其余时候为空。 }
+    TabRow: TRect;
   end;
 
   { 栏上一个点落在哪个部件上(TTyToolWindowBar.PartAt)。图标和底栏标签共用 twbpItem、两种溢出
@@ -834,6 +847,20 @@ type
       变了,就对**当前页**重排标题行。非当前页在切页第 4 步 RelayoutHeader 时现取。 }
     procedure ActionsSizeChanged;
   private
+    { --- 让出标签行(spec §3.7,E 期) --- }
+    { 上一次按哪种样子排过(让出 / 没让出):TabRowHostMayHaveChanged 比它。 }
+    FTabRowHosted: Boolean;
+    { 底栏统一行高(spec §3.4),按 APPI。token 自己取(TokenPxAt),不读窗口的 HeaderTokenPx
+      缓存 —— 那是窗口在自己的 Invalidate 里察觉换主题的唯一一条边,谁先读就是谁的。 }
+    function BottomRowHeightAt(APPI: Integer): Integer;
+    { 标签行此刻长在谁身上(只答控件,不算几何):按下态、插入线的「捕获者是不是宿主」用它。
+      底栏以外 nil。 }
+    function TabRowHostControl: TWinControl;
+    { 让不让出变了:让出 / 收回那一行改的是 AdjustClientRect 的答案,要 Realign(只重画的话
+      当前页停在旧边界里、盖着标签行);当前页 RelayoutHeader;栏和当前页都重画;进行中的
+      标签行手势取消(拉宽不算)。加载 / 释放中不做。 }
+    procedure TabRowHostMayHaveChanged;
+  private
     { 标签行上悬停的部件和(标签时)窗口序号;没有悬停是 (twbpNone, -1)。标签行的悬停只在
       当前页上,所以记在栏上一份就够。 }
     FHeaderHoverPart: TTyToolWindowBarPart;
@@ -1148,6 +1175,13 @@ type
       的一套尺度)。只有栏一个实现、只有窗口一个调用方,所以是栏上的普通方法,不另立接口;
       放 public 是给测试直接问的。 --- }
     function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+    { 栏此刻是不是替当前页画标签行、收它的输入(spec §3.7「让出标签行」):运行时、底栏、有当前
+      页、当前页**自己的** Enabled = False、栏没收起。 }
+    function HostsTabRow: Boolean;
+    { 「当前页的标签行此刻在谁身上」一处答(spec §3.7):宿主控件、行矩形(宿主客户区)、几何
+      (行内)。HeaderZoneAt(nil, …)、PartAt、OverflowWindows、溢出菜单锚点、InvalidateHeader、
+      按下态和插入线的捕获者判断都问它。见 TTyToolWindowTabRowHost。 }
+    function TabRowHost: TTyToolWindowTabRowHost;
     { 底栏统一行高里操作区那一项:栏里所有窗口操作区 raw 首选高的最大值(spec §3.4)。 }
     function HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
     function HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
@@ -1634,6 +1668,9 @@ var
   actionsPx: Integer;
 begin
   if HeaderMode = twhNone then Exit(0);
+  { 栏让出了标签行(当前页被禁用,spec §3.7):页自己不再留标题行,正文从页顶开始、操作区
+    摆成空的。行高没变,只是长到了栏里。 }
+  if (HeaderMode = twhBottom) and IsActive and Bar.HostsTabRow then Exit(0);
   if APPI = Font.PixelsPerInch then Result := HeaderTokenPx
   else Result := MulDiv(ActiveController.Metric(TyToolWindowHeaderHeightVar,
     TyToolWindowHeaderHeightDef), APPI, 96);
@@ -3679,6 +3716,17 @@ begin
   else
     ClampRect(Result.Edge);
 
+  { 当前页禁用:内容区顶上让出一行给标签行(spec §3.7),行高同没让出时 —— 标签行不跳。 }
+  if HostsTabRow then
+  begin
+    bandH := BottomRowHeightAt(APPI);
+    if bandH > Result.Content.Bottom - Result.Content.Top then
+      bandH := Result.Content.Bottom - Result.Content.Top;
+    Result.TabRow := Rect(Result.Content.Left, Result.Content.Top,
+      Result.Content.Right, Result.Content.Top + bandH);
+    Inc(Result.Content.Top, bandH);
+  end;
+
   { 设计期有漏进来的子控件:内容区底部让出一行提示。行高借标题行的 token —— 它本来就是
     「一行字加上下留白」的尺寸。 }
   if (csDesigning in ComponentState) and (StrayCount > 0) then
@@ -3808,6 +3856,8 @@ begin
   end;
   if FPlacement = twpBottom then InvalidateHeader
   else Invalidate;
+  { 底栏当前页:禁用 / 启用就是让出 / 收回标签行(spec §3.7)。 }
+  if AWindow = FActive then TabRowHostMayHaveChanged;
 end;
 
 procedure TTyToolWindowBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -3995,6 +4045,13 @@ begin
       end;
     end;
 
+    { 让出来的标签行(spec §3.7):当前页被禁用,栏在自己的像素里画它 —— 不受页的 opacity
+      影响(栏没禁用)。几何照当前页的算(操作区那一格按首选宽留着),让出前后标签不重排。 }
+    if (L.TabRow.Right > L.TabRow.Left) and (L.TabRow.Bottom > L.TabRow.Top) and (FActive <> nil) then
+      PaintHeader(FActive, P, L.TabRow,
+        HeaderGeometry(FActive, L.TabRow.Right - L.TabRow.Left, L.TabRow.Bottom - L.TabRow.Top, APPI),
+        APPI);
+
     { 设计期提示(LayoutIn 只在设计期给这三个框)。 }
     if (L.EmptyNote.Right > L.EmptyNote.Left) or (L.StrayNote.Right > L.StrayNote.Left)
        or (L.ConflictNote.Right > L.ConflictNote.Left) then
@@ -4166,6 +4223,77 @@ begin
   else Result := twhSide;
 end;
 
+function TTyToolWindowBar.HostsTabRow: Boolean;
+begin
+  { 设计期不让出:设计期 LCL 不禁用句柄(wincontrol.inc:6758),页照常收得到。收起时高 0,
+    本来就没有这一行。「禁用」看页自己的 Enabled(地雷:IsEnabled 顺着父链算,栏一禁用全都答假)。 }
+  Result := (FPlacement = twpBottom) and (FActive <> nil) and not FActive.Enabled
+    and not (csDesigning in ComponentState) and not FCollapsed;
+end;
+
+function TTyToolWindowBar.BottomRowHeightAt(APPI: Integer): Integer;
+var
+  a: Integer;
+begin
+  Result := TokenPxAt(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+  a := HeaderActionsHeight(nil, APPI);
+  if a > Result then Result := a;
+  if Result < 1 then Result := 1;
+end;
+
+function TTyToolWindowBar.TabRowHost: TTyToolWindowTabRowHost;
+var
+  L: TTyToolWindowBarLayout;
+begin
+  Result := Default(TTyToolWindowTabRowHost);
+  if (FPlacement <> twpBottom) or (FActive = nil) then Exit;
+  { PPI 与 FActive.Font.PixelsPerInch 在推送之后是同一个数;两支各用各的是照搬原来的调用点
+    (栏画自己按栏的 PPI、页按自己字体的),别顺手统一。 }
+  if HostsTabRow then
+  begin
+    L := BarLayout;
+    if L.TabRow.Bottom <= L.TabRow.Top then Exit;
+    Result.Host := Self;
+    Result.Row := L.TabRow;
+    Result.Geom := HeaderGeometry(FActive, L.TabRow.Right - L.TabRow.Left,
+      L.TabRow.Bottom - L.TabRow.Top, PPI);
+  end
+  else
+  begin
+    Result.Row := FActive.HeaderRowRect;
+    if Result.Row.Bottom <= Result.Row.Top then Exit;
+    Result.Host := FActive;
+    Result.Geom := FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
+      FActive.Font.PixelsPerInch);
+  end;
+end;
+
+function TTyToolWindowBar.TabRowHostControl: TWinControl;
+begin
+  if FPlacement <> twpBottom then Result := nil
+  else if HostsTabRow then Result := Self
+  else Result := FActive;
+end;
+
+procedure TTyToolWindowBar.TabRowHostMayHaveChanged;
+var
+  now: Boolean;
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  now := HostsTabRow;
+  if now = FTabRowHosted then Exit;
+  FTabRowHosted := now;
+  { 标签行换了宿主:进行中的标签行手势跟着失效(捕获者、坐标系都不是原来那个了);拉宽不算。 }
+  if (FGesture <> nil) and not FGesture.Resizing
+     and (FGesture.Part in [twbpItem, twbpOverflow, twbpMaximize, twbpCollapse]) then
+    ResetGesture(twgeCancel);
+  Realign;
+  if (FActive <> nil) and not (csDestroying in FActive.ComponentState) then
+    FActive.RelayoutHeader;
+  Invalidate;
+  InvalidateHeader;
+end;
+
 function TTyToolWindowBar.HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
 var
   wins: TTyToolWindowArray;
@@ -4194,6 +4322,12 @@ begin
   if FActionsNotifying or (FActive = nil) then Exit;
   FActionsNotifying := True;
   try
+    { 标签行让到了栏里(spec §3.7):行高是栏的内容区扣掉的,得栏重排。 }
+    if HostsTabRow then
+    begin
+      Realign;
+      Invalidate;
+    end;
     FActive.RelayoutHeader;
   finally
     FActionsNotifying := False;
@@ -4325,10 +4459,16 @@ end;
 
 procedure TTyToolWindowBar.InvalidateHeader;
 begin
+  if (FPlacement <> twpBottom) or (csDestroying in ComponentState) then Exit;
+  { 标签行让到了栏里(当前页被禁用,spec §3.7):画在栏自己的像素里,栏没有绘制缓存,
+    重画栏就够。 }
+  if HostsTabRow then
+  begin
+    Invalidate;
+    Exit;
+  end;
   { 当前页正在释放(它的注销会走到这里):不碰它。 }
-  if (FPlacement = twpBottom) and (FActive <> nil)
-     and not (csDestroying in ComponentState)
-     and not (csDestroying in FActive.ComponentState) then
+  if (FActive <> nil) and not (csDestroying in FActive.ComponentState) then
     FActive.Invalidate;
 end;
 
@@ -4510,27 +4650,40 @@ end;
 function TTyToolWindowBar.HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer;
   out AIndex: Integer; out ARect: TRect): TTyToolWindowZone;
 var
-  w: TTyToolWindow;
   g: TTyToolWindowHeaderGeom;
+  h: TTyToolWindowTabRowHost;
   ox, oy, i: Integer;
 begin
   AIndex := -1;
   ARect := Rect(0, 0, 0, 0);
   Result := twzNone;
-  w := AWindow;
   ox := 0;
   oy := 0;
-  if w = nil then
+  if AWindow = nil then
   begin
-    { 栏坐标:窗口是栏的直接子控件,它的 Left / Top 就是它在栏客户区里的位置。 }
-    w := FActive;
-    if w = nil then Exit;
-    ox := w.Left;
-    oy := w.Top;
+    { 栏坐标:标签行在谁身上一处答(TabRowHost)。栏当宿主时行就在栏客户区里(Row);当前页
+      当宿主时,页是栏的直接子控件,它的 Left / Top 就是它在栏客户区里的位置,行在它客户区原点。 }
+    h := TabRowHost;
+    if h.Host = nil then Exit;
+    if h.Host = TWinControl(Self) then
+    begin
+      ox := h.Row.Left;
+      oy := h.Row.Top;
+    end
+    else
+    begin
+      ox := FActive.Left + h.Row.Left;
+      oy := FActive.Top + h.Row.Top;
+    end;
+    g := h.Geom;
+  end
+  else
+  begin
+    if AWindow.HeaderMode <> twhBottom then Exit;
+    { 页转来的:标题行从客户区原点开始,行内坐标就是窗口客户区坐标。 }
+    g := AWindow.HeaderGeomAt(Rect(0, 0, AWindow.ClientWidth, AWindow.ClientHeight),
+      AWindow.Font.PixelsPerInch);
   end;
-  if w.HeaderMode <> twhBottom then Exit;
-  { 标题行从客户区原点开始,行内坐标就是窗口客户区坐标。 }
-  g := w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight), w.Font.PixelsPerInch);
   Result := TyToolWindowZoneAt(g, X - ox, Y - oy, AIndex);
   case Result of
     twzTab:
@@ -4733,8 +4886,9 @@ var
 begin
   AIndex := -1;
   Result := twbpNone;
-  { 底栏:标签行在当前页里,栏坐标经当前页换算(HeaderZoneAt(nil, …))。运行时栏自己收不到
-    标签行上的按下(当前页盖着),这一段服务栏坐标的查询:WindowAtPos、右键、设计期命中。 }
+  { 底栏:标签行在当前页里、或者当前页被禁用时让到了栏里(spec §3.7),栏坐标按 TabRowHost
+    换算(HeaderZoneAt(nil, …))。平时栏自己收不到标签行上的按下(当前页盖着),这一段服务栏坐标
+    的查询:WindowAtPos、右键、设计期命中;让出的那一行是栏自己的像素,按下也经这里认部件。 }
   if (FPlacement = twpBottom) and (FActive <> nil) then
   begin
     Result := PartOfZone(HeaderZoneAt(nil, X, Y, i, r));
@@ -4781,18 +4935,19 @@ end;
 function TTyToolWindowBar.OverflowWindows: TTyToolWindowPlan;
 var
   L: TTyToolWindowBarLayout;
+  h: TTyToolWindowTabRowHost;
   shown: array of Boolean;
   i, n: Integer;
 begin
   Result := nil;
   n := WindowCount;
   if n = 0 then Exit;
-  { 底栏:收进去的是当前页此刻标签行几何里的 Hidden(没有当前页时空)。 }
+  { 底栏:收进去的是当前页此刻标签行几何里的 Hidden(没有当前页、没有标签行时空)。标签行在
+    谁身上问 TabRowHost:让出之后页里行高 0,问页就一个都放不下了。 }
   if FPlacement = twpBottom then
   begin
-    if FActive <> nil then
-      Result := Copy(FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
-        FActive.Font.PixelsPerInch).Hidden);
+    h := TabRowHost;
+    if h.Host <> nil then Result := Copy(h.Geom.Hidden);
     Exit;
   end;
   L := BarLayout;
@@ -5271,21 +5426,25 @@ function TTyToolWindowBar.OverflowMenuAnchorIn(out APoint: TPoint;
   out AAlignment: TPopupAlignment): TWinControl;
 var
   r: TRect;
+  h: TTyToolWindowTabRowHost;
 begin
   { 菜单贴着溢出按钮开(锚点和对齐方式一处算,见 TyToolWindowOverflowMenuAnchor)。
-    底栏的溢出按钮在当前页的标签行里:矩形是当前页的坐标,换屏幕坐标用当前页;读写方向
-    也取当前页的 —— 那一行几何就是按它镜像的,取栏的话两者不一致时锚到镜像前的那一侧。 }
+    底栏的溢出按钮在标签行里,标签行在谁身上问 TabRowHost:平时是当前页,当前页被禁用时是栏
+    (spec §3.7)。矩形换成宿主客户区坐标,换屏幕坐标用宿主;读写方向取当前页的 —— 那一行几何
+    就是按它镜像的,取栏的话两者不一致时锚到镜像前的那一侧。 }
   if FPlacement = twpBottom then
   begin
-    Result := FActive;
+    h := TabRowHost;
+    Result := h.Host;
+    if Result = nil then Result := FActive;
     if Result = nil then
     begin
       APoint := Point(0, 0);
       AAlignment := paLeft;
       Exit;
     end;
-    r := FActive.HeaderGeomAt(Rect(0, 0, FActive.ClientWidth, FActive.ClientHeight),
-      FActive.Font.PixelsPerInch).Overflow;
+    r := h.Geom.Overflow;
+    if h.Host <> nil then Types.OffsetRect(r, h.Row.Left, h.Row.Top);
     TyToolWindowOverflowMenuAnchor(r, FPlacement, FActive.IsRightToLeft, APoint, AAlignment);
   end
   else
@@ -5748,6 +5907,8 @@ begin
     end;
     Relayout;
     Invalidate;
+    { 收起时没有标签行,展开回来当前页若还禁用就再让出来(spec §3.7)。 }
+    TabRowHostMayHaveChanged;
   end;
   { 延后期间只记下来(见 BeginDeferEvents)。同一次延后里先收起后展开两个都记着,由调用方
     按顺序发 —— 眼下没有这种路径。 }
@@ -5960,6 +6121,8 @@ begin
   { 4(续). 当前页被强制留在条上,切页可能换掉条上排的是哪几个图标:按指针此刻的位置
     重查悬停,不然悬停停在切页前那一格上。设计期不做悬停。 }
   RecheckHover;
+  { 新的当前页可能是禁用的、旧的可能是:标签行在谁身上跟着变(spec §3.7)。 }
+  TabRowHostMayHaveChanged;
   { 6. 设计期切页改了一个 published 值:两声都要(见 TTyCustomTabStrip 同一处)。
     静默那一批(Loaded 应用 ActiveIndex)是打开窗体,不是改了它。 }
   if FSilent = 0 then
@@ -6114,6 +6277,7 @@ begin
   ActionsSizeChanged;
   { 标签多了一个。 }
   InvalidateHeader;
+  TabRowHostMayHaveChanged;
   if FActive <> prev then DoChange;
 end;
 
@@ -6206,6 +6370,8 @@ begin
   Invalidate;
   ActionsSizeChanged;
   InvalidateHeader;
+  { 走的是禁用的当前页、又没有回落页:标签行不再让出(spec §3.7)。 }
+  TabRowHostMayHaveChanged;
   if FActive <> prev then DoChange;
 end;
 
@@ -6343,6 +6509,8 @@ begin
   for i := 0 to High(wins) do
     wins[i].RelayoutHeader;
   Relayout;
+  { .lfm 里流进来一个 Enabled = False 的当前页:标签行让到栏里(spec §3.7)。 }
+  TabRowHostMayHaveChanged;
   { spec §10.5:最后一句。谁最后一个离开 csLoading,谁收尾(manager 那边判)。 }
   if FManager <> nil then FManager.TryFinishLoading;
 end;

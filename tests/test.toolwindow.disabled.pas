@@ -44,6 +44,33 @@ type
     procedure TestTheOverflowItemOfADisabledWindowIsGreyAndInert;
     procedure TestDisablingAWindowRepaintsTheSideBar;
     procedure TestDisablingAnotherPageRepaintsTheActivePage;
+    { --- Task 2:让出标签行 —— 布局与绘制(spec §3.7 机制 ②) --- }
+    procedure TestADisabledPageYieldsTheTabRowToTheBar;
+    procedure TestTheYieldedPageKeepsNoHeaderRowAndTheBodyStays;
+    procedure TestTheYieldedRowKeepsEveryTabInPlace;
+    procedure TestReEnablingTakesTheRowBack;
+    procedure TestDisablingTheCurrentPageAsksForARelayout;
+    procedure TestSwitchingPagesYieldsAndTakesBack;
+    procedure TestACollapsedBarYieldsNothing;
+    procedure TestADesignTimeBarYieldsNothing;
+    procedure TestASideBarYieldsNothing;
+    procedure TestTheBarPaintsTheYieldedRowAtFullInk;
+    procedure TestRenamingAPageRepaintsTheYieldedRow;
+    procedure TestPartAtFindsTabsInTheYieldedRow;
+    procedure TestOverflowWindowsSurviveTheYield;
+    procedure TestTheOverflowMenuAnchorsOnTheYieldedRow;
+  private
+    { Task 2 / 3 的底栏:Problems / Output / Terminal,当前页 Output;Output 的操作区 30×20、
+      Terminal 的 30×40(统一行高高过 token,地雷 3 的变异才分得开)。记下禁用前的行高、
+      正文在栏里的顶、当前页几何、内容区;然后禁用 Output、排一遍。 }
+    FH0, FT0: Integer;
+    FG0: TTyToolWindowHeaderGeom;
+    FContent0: TRect;
+    procedure NewYieldingBar(ADisable: Boolean = True);
+    { 让出行里窗口 AIndex 的标签中心,栏坐标。 }
+    function RowTabCentre(AIndex: Integer): TPoint;
+    { 让出行里某个部件矩形(行内坐标)换成栏坐标。 }
+    function RowToBar(const ARect: TRect): TRect;
   end;
 
 implementation
@@ -327,6 +354,269 @@ begin
   FWins[1].Enabled := False;
   AssertTrue('底栏:别的页禁用了,当前页的标签行要重渲染',
     FWins[0].CacheWouldRender(FWins[0].ClientWidth, FWins[0].ClientHeight));
+end;
+
+{ --- Task 2 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowDisabledTests.NewYieldingBar(ADisable: Boolean);
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  AddActionsKid(FWins[1], 30, 20);
+  AddActionsKid(FWins[2], 30, 40);
+  Relayout;
+  FH0 := FWins[1].HeaderHeightPx;
+  AssertTrue('前提:统一行高高过 token', FH0 > TyToolWindowHeaderHeightDef);
+  FT0 := FWins[1].Top + FWins[1].BodyRect.Top;
+  FG0 := ActiveGeom;
+  FContent0 := FBar.BarLayout.Content;
+  if ADisable then
+  begin
+    FWins[1].Enabled := False;
+    Relayout;
+  end;
+end;
+
+function TTyToolWindowDisabledTests.RowToBar(const ARect: TRect): TRect;
+var
+  h: TTyToolWindowTabRowHost;
+begin
+  h := FBar.TabRowHost;
+  AssertTrue('前提:标签行在栏上', h.Host = TWinControl(FBar));
+  Result := ARect;
+  Types.OffsetRect(Result, h.Row.Left, h.Row.Top);
+end;
+
+function TTyToolWindowDisabledTests.RowTabCentre(AIndex: Integer): TPoint;
+begin
+  Result := RowToBar(TabRectOf(FBar.TabRowHost.Geom, AIndex)).CenterPoint;
+end;
+
+procedure TTyToolWindowDisabledTests.TestADisabledPageYieldsTheTabRowToTheBar;
+var
+  L: TTyToolWindowBarLayout;
+begin
+  NewYieldingBar;
+  AssertTrue('当前页禁用:栏让出标签行', FBar.HostsTabRow);
+  L := FBar.BarLayout;
+  AssertEquals('行高 = 禁用前的统一行高(含操作区,不只 token)', FH0, L.TabRow.Bottom - L.TabRow.Top);
+  AssertEquals('行在内容区原来的顶上', FContent0.Top, L.TabRow.Top);
+  AssertEquals('行横跨内容区', FContent0.Left, L.TabRow.Left);
+  AssertEquals('行横跨内容区(右)', FContent0.Right, L.TabRow.Right);
+  AssertEquals('内容区从行下面开始', L.TabRow.Bottom, L.Content.Top);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheYieldedPageKeepsNoHeaderRowAndTheBodyStays;
+var
+  w: TProbeWindow;
+  act: TTyToolWindowActions;
+  body, a, x: TRect;
+begin
+  NewYieldingBar;
+  w := FWins[1];
+  AssertEquals('页不再留标题行', 0, w.HeaderHeightPx);
+  AssertEquals('正文从页顶开始', 0, w.BodyRect.Top);
+  AssertEquals('页在行下面', FBar.BarLayout.TabRow.Bottom, w.Top);
+  AssertEquals('正文在栏里的位置不变(行高两边一个算法)', FT0, w.Top + w.BodyRect.Top);
+  act := w.Actions;
+  AssertNotNull('前提:页有操作区', act);
+  body := w.BodyRect;
+  a := act.BoundsRect;
+  AssertTrue('操作区摆成空的,不压在正文上',
+    (a.Bottom <= a.Top) or not Types.IntersectRect(x, a, body));
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheYieldedRowKeepsEveryTabInPlace;
+var
+  h: TTyToolWindowTabRowHost;
+  i: Integer;
+begin
+  NewYieldingBar;
+  h := FBar.TabRowHost;
+  AssertTrue('宿主是栏', h.Host = TWinControl(FBar));
+  AssertTrue('行 = BarLayout.TabRow', EqualRect(FBar.BarLayout.TabRow, h.Row));
+  AssertEquals('标签个数不变', Length(FG0.Tabs), Length(h.Geom.Tabs));
+  for i := 0 to High(FG0.Tabs) do
+  begin
+    AssertEquals(Format('第 %d 个标签的窗口不变', [i]), FG0.Tabs[i].ItemIndex, h.Geom.Tabs[i].ItemIndex);
+    AssertTrue(Format('第 %d 个标签的矩形不变(不重排)', [i]),
+      EqualRect(FG0.Tabs[i].ItemRect, h.Geom.Tabs[i].ItemRect));
+  end;
+  AssertTrue('前提:操作区那一格不是空的', FG0.Actions.Right > FG0.Actions.Left);
+  AssertEquals('操作区那一格照留', FG0.Actions.Right - FG0.Actions.Left,
+    h.Geom.Actions.Right - h.Geom.Actions.Left);
+end;
+
+procedure TTyToolWindowDisabledTests.TestReEnablingTakesTheRowBack;
+var
+  L: TTyToolWindowBarLayout;
+begin
+  NewYieldingBar;
+  FWins[1].Enabled := True;
+  Relayout;
+  AssertFalse('启用回来:不再让出', FBar.HostsTabRow);
+  L := FBar.BarLayout;
+  AssertTrue('TabRow 空', L.TabRow.Bottom <= L.TabRow.Top);
+  AssertEquals('页的标题行回来了', FH0, FWins[1].HeaderHeightPx);
+  AssertTrue('宿主回到当前页', FBar.TabRowHost.Host = TWinControl(FWins[1]));
+end;
+
+procedure TTyToolWindowDisabledTests.TestDisablingTheCurrentPageAsksForARelayout;
+var
+  inv: Integer;
+begin
+  NewYieldingBar(False);
+  FBar.AlignCount := 0;
+  FWins[1].AlignCount := 0;
+  inv := FBar.Invalidates;
+  FWins[1].Enabled := False;
+  AssertTrue('让出:栏(或当前页)被请了重排', (FBar.AlignCount > 0) or (FWins[1].AlignCount > 0));
+  AssertTrue('栏重画', FBar.Invalidates > inv);
+end;
+
+procedure TTyToolWindowDisabledTests.TestSwitchingPagesYieldsAndTakesBack;
+begin
+  NewYieldingBar;
+  FBar.AlignCount := 0;
+  FBar.ActiveWindow := FWins[0];
+  AssertFalse('切到启用的页:收回', FBar.HostsTabRow);
+  AssertTrue('栏被请了重排', FBar.AlignCount > 0);
+  FBar.ActiveWindow := FWins[1];
+  AssertTrue('切回禁用的页:再让出', FBar.HostsTabRow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestACollapsedBarYieldsNothing;
+var
+  L: TTyToolWindowBarLayout;
+begin
+  NewYieldingBar;
+  FBar.Collapsed := True;
+  AssertFalse('收起时不让出', FBar.HostsTabRow);
+  L := FBar.BarLayout;
+  AssertTrue('TabRow 空', L.TabRow.Bottom <= L.TabRow.Top);
+  FBar.Collapsed := False;
+  AssertTrue('展开回来再让出', FBar.HostsTabRow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestADesignTimeBarYieldsNothing;
+var
+  b: TBarAccess;
+  a, c: TProbeWindow;
+begin
+  b := NewDesignBar;
+  b.Placement := twpBottom;
+  b.Width := 600;
+  a := NewWindowIn(b, FDesignOwner);
+  c := NewWindowIn(b, FDesignOwner);
+  b.ActiveWindow := a;
+  AssertTrue('前提:设计期', csDesigning in a.ComponentState);
+  AssertNotNull('前提:有第二个窗口', c);
+  a.Enabled := False;
+  AssertFalse('设计期不让出', b.HostsTabRow);
+  AssertTrue('TabRow 空', b.BarLayout.TabRow.Bottom <= b.BarLayout.TabRow.Top);
+end;
+
+procedure TTyToolWindowDisabledTests.TestASideBarYieldsNothing;
+var
+  L: TTyToolWindowBarLayout;
+begin
+  NewSideBar;
+  FSide[0].Enabled := False;
+  AssertFalse('侧栏不让出', FBar.HostsTabRow);
+  L := FBar.BarLayout;
+  AssertTrue('TabRow 空', L.TabRow.Bottom <= L.TabRow.Top);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheBarPaintsTheYieldedRowAtFullInk;
+var
+  h: TTyToolWindowTabRowHost;
+  bmp: TBitmap;
+begin
+  NewYieldingBar;
+  { 页自己的 :disabled opacity 钉成 1:下面要看的是「页画没画标签行」,不是它有多淡。 }
+  FCtl.StyleOverride := BottomTheme + MutedGreen + ' TyToolWindow:disabled { opacity: 1; }';
+  h := FBar.TabRowHost;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, h.Row, Wipe);
+  try
+    AssertTrue('Problems:静止墨', InkIn(bmp, TabRectOf(h.Geom, 0), RestInk) > 0);
+    AssertTrue('Terminal:静止墨', InkIn(bmp, TabRectOf(h.Geom, 2), RestInk) > 0);
+    AssertTrue('Output(禁用的当前页):禁用墨', InkIn(bmp, TabRectOf(h.Geom, 1), DisInk) > 0);
+    AssertTrue('下划线是原色(栏没禁用,不淡)', ExactIn(bmp, TabRectOf(h.Geom, 1), clBlack) > 0);
+    AssertTrue('最大化按钮是静止墨', InkIn(bmp, h.Geom.Maximize, RestInk) > 0);
+    AssertEquals('最大化按钮没有禁用墨', 0, InkIn(bmp, h.Geom.Maximize, DisInk));
+  finally
+    bmp.Free;
+  end;
+  bmp := RenderPage(FWins[1], FWins[1].ClientWidth, FWins[1].ClientHeight, 96);
+  try
+    AssertEquals('页自己不画标签行:没有静止墨', 0,
+      InkIn(bmp, Rect(0, 0, FWins[1].ClientWidth, FH0), RestInk));
+    AssertEquals('页自己不画标签行:没有禁用墨', 0,
+      InkIn(bmp, Rect(0, 0, FWins[1].ClientWidth, FH0), DisInk));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowDisabledTests.TestRenamingAPageRepaintsTheYieldedRow;
+var
+  inv: Integer;
+begin
+  NewYieldingBar;
+  inv := FBar.Invalidates;
+  FWins[0].Caption := 'Problems and warnings';
+  AssertTrue('让出期间标签行画在栏里:改标题要重画栏', FBar.Invalidates > inv);
+end;
+
+procedure TTyToolWindowDisabledTests.TestPartAtFindsTabsInTheYieldedRow;
+var
+  c: TPoint;
+  idx: Integer;
+begin
+  NewYieldingBar;
+  c := RowTabCentre(2);
+  AssertEquals('栏坐标里认得出 Terminal 的标签', Ord(twbpItem), Ord(FBar.PartAt(c.X, c.Y, idx)));
+  AssertEquals('序号 2', 2, idx);
+  AssertSame('WindowAtPos 答 Terminal', FWins[2], FBar.WindowAtPos(c.X, c.Y));
+  c := RowToBar(FBar.TabRowHost.Geom.Collapse).CenterPoint;
+  AssertEquals('收起按钮', Ord(twbpCollapse), Ord(FBar.PartAt(c.X, c.Y, idx)));
+end;
+
+procedure TTyToolWindowDisabledTests.TestOverflowWindowsSurviveTheYield;
+var
+  before, after: TTyToolWindowPlan;
+  i: Integer;
+begin
+  NewYieldingBar(False);
+  FBar.Width := 220;
+  Relayout;
+  before := FBar.OverflowWindows;
+  AssertTrue('前提:有收进溢出的', Length(before) > 0);
+  FWins[1].Enabled := False;
+  Relayout;
+  after := FBar.OverflowWindows;
+  AssertEquals('让出前后收进去的一样多', Length(before), Length(after));
+  for i := 0 to High(before) do
+    AssertEquals(Format('第 %d 个', [i]), before[i], after[i]);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheOverflowMenuAnchorsOnTheYieldedRow;
+var
+  host: TWinControl;
+  pt: TPoint;
+  al: TPopupAlignment;
+  r: TRect;
+begin
+  NewYieldingBar(False);
+  FBar.Width := 220;
+  Relayout;
+  FWins[1].Enabled := False;
+  Relayout;
+  r := RowToBar(FBar.TabRowHost.Geom.Overflow);
+  AssertTrue('前提:有溢出按钮', r.Right > r.Left);
+  host := FBar.OverflowMenuAnchorIn(pt, al);
+  AssertTrue('挂在栏上', host = TWinControl(FBar));
+  AssertEquals('锚在溢出按钮左沿', r.Left, pt.X);
+  AssertEquals('从按钮底边往下开', r.Bottom, pt.Y);
 end;
 
 initialization
