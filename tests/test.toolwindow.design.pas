@@ -82,6 +82,7 @@ type
     procedure TestABarInAFrameInstanceIsNoOtherSide;
     procedure TestAddActionsOnlyWhileThereIsNone;
     procedure TestAddActionsWaitsOutLoadingAndFreeing;
+    procedure TestABarBeingFreedNoLongerHoldsItsSide;
     procedure TestMoveToOtherSideGoesThroughMoveWindow;
     procedure TestMoveToOtherSideRefusesABottomWindow;
     procedure TestOnlyOrphansHaveReturnTargets;
@@ -838,6 +839,38 @@ begin
     AssertFalse('释放中灰掉', TyToolWindowDesignCanAddActions(w));
   finally
     w.Free;
+  end;
+end;
+
+procedure TTyToolWindowDesignTests.TestABarBeingFreedNoLongerHoldsItsSide;
+var
+  l2, r2: TBarAccess;
+begin
+  { 从 csDestroying 置上到 opRemove 把它摘出表之间,IsBarUsable 和 UsableBar 答同一件事:
+    释放中的栏不可用,也不再和留下的那条冲突。 }
+  NewWorkbench;
+  l2 := DesignBarOn(twpLeft, FM);
+  AssertFalse('前提:冲突', FM.IsBarUsable(FL));
+  l2.Destroying;
+  try
+    AssertTrue('留下的那条可用了', FM.IsBarUsable(FL));
+    AssertFalse('释放中的那条不可用', FM.IsBarUsable(l2));
+    AssertSame('UsableBar 答同一条', TTyToolWindowBar(FL), FM.UsableBar(twpLeft));
+    AssertTrue('留下的那条不再有冲突提示', IsRectEmpty(FL.BarLayout.ConflictNote));
+    AssertTrue('释放中的那条也不画冲突提示', IsRectEmpty(l2.BarLayout.ConflictNote));
+  finally
+    l2.Free;
+  end;
+  { 一侧只剩一条、它正在释放:这一侧没有可用栏。 }
+  FR.Manager := nil;
+  r2 := DesignBarOn(twpRight, FM);
+  AssertSame('前提:右边只有它', TTyToolWindowBar(r2), FM.UsableBar(twpRight));
+  r2.Destroying;
+  try
+    AssertFalse('释放中的独一条也不可用', FM.IsBarUsable(r2));
+    AssertNull('右边没有可用栏', FM.UsableBar(twpRight));
+  finally
+    r2.Free;
   end;
 end;
 

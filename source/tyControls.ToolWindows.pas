@@ -1289,7 +1289,8 @@ type
     { 在自己的某个事件处理器里被释放(spec §6.6 不许):先于任何析构把栈上的生命格判死。 }
     procedure BeforeDestruction; override;
     destructor Destroy; override;
-    { 这条栏是不是可用:注册在本 manager 上,且没有别的注册栏和它 Placement 相同(spec §10.6)。
+    { 这条栏是不是可用:注册在本 manager 上、不在释放中,且没有别的(不在释放中的)注册栏和它
+      Placement 相同(spec §10.6)。
       现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。
       设计期的冲突提示也问它;Placement 集合一变,PlacementsChanged 让每条栏按新答案重排、重画。 }
     function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
@@ -3566,8 +3567,10 @@ end;
 
 function TTyToolWindowBar.PlacementConflicts: Boolean;
 begin
-  { 本栏在 manager 的表里时,IsBarUsable 答 False 只有冲突一种原因。 }
+  { 本栏在 manager 的表里、不在释放中时,IsBarUsable 答 False 只有冲突一种原因。释放中的栏
+    IsBarUsable 也答 False,但那不是冲突 —— 先排除掉。 }
   Result := (FManager <> nil) and not (csDestroying in FManager.ComponentState)
+    and not (csDestroying in ComponentState)
     and not FManager.IsBarUsable(Self);
 end;
 
@@ -6837,27 +6840,25 @@ function TTyCustomToolWindowManager.IsBarUsable(ABar: TTyToolWindowBar): Boolean
 var
   i: Integer;
 begin
-  { 与别的注册栏 Placement 相同的**每一条**都不可用,不按先来后到(spec §10.6)。 }
-  Result := (ABar <> nil) and (ABar.Manager = Self);
+  { 与别的注册栏 Placement 相同的**每一条**都不可用,不按先来后到(spec §10.6)。
+    释放中的栏已经在走:它自己不可用,也不再占着它那一侧 —— 从 csDestroying 置上到
+    opRemove 把它从表里摘掉之间,留下的那一条就已经可用(UsableBar 同一条规则)。 }
+  Result := (ABar <> nil) and (ABar.Manager = Self)
+    and not (csDestroying in ABar.ComponentState);
   if not Result then Exit;
   for i := 0 to High(FBars) do
-    if (FBars[i] <> ABar) and (FBars[i].Placement = ABar.Placement) then Exit(False);
+    if (FBars[i] <> ABar) and (FBars[i].Placement = ABar.Placement)
+       and not (csDestroying in FBars[i].ComponentState) then Exit(False);
 end;
 
 function TTyCustomToolWindowManager.UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
 var
-  i, n: Integer;
+  i: Integer;
 begin
-  { 同 Placement 的正好一条才可用(IsBarUsable 的同一条规则);释放中的不算。 }
-  Result := nil;
-  n := 0;
+  { 就是 IsBarUsable 答 True 的那一条:同 Placement、不在释放中的正好一条。 }
   for i := 0 to High(FBars) do
-    if (FBars[i].Placement = APlacement) and not (csDestroying in FBars[i].ComponentState) then
-    begin
-      Inc(n);
-      Result := FBars[i];
-    end;
-  if n <> 1 then Result := nil;
+    if (FBars[i].Placement = APlacement) and IsBarUsable(FBars[i]) then Exit(FBars[i]);
+  Result := nil;
 end;
 
 function TTyCustomToolWindowManager.StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
