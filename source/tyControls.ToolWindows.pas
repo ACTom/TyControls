@@ -201,6 +201,10 @@ type
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
+    { 窗口自己的 Enabled 变了(spec §3.7):图标 / 标签的样子、手势、底栏的「让出标签行」都跟着
+      变,交给栏。先调继承 —— LCL 在那里禁用 / 启用原生句柄、挪走焦点(wincontrol.inc:6753-6763),
+      不调就是 [[swallowed-cm-message-inherited]]。 }
+    procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
     { 全库 76 处 RenderTo 里 71 处是 protected,两个近亲 TTyTabSheet / TTyCard 也是:
       画自己不是给外面用的接口。测试走探针子类。 }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -883,8 +887,15 @@ type
       (WatchSiblings)都会重推。 }
     function MaximizedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
-      收起时当前图标不画 :selected(spec §5.3)。 }
-    function StripItemStates(AIndex: Integer): TTyStateSet;
+      收起时当前图标不画 :selected(spec §5.3)。AWindow 是第 AIndex 个窗口,由调用方一次取好
+      (绘制循环里逐格现数窗口表就是 O(N²))。 }
+    function StripItemStates(AIndex: Integer; AWindow: TTyToolWindow): TTyStateSet;
+    { 用户能不能点它切过去、按住它拖(spec §3.7):看窗口**自己的** Enabled —— IsEnabled 顺着
+      父链算,栏一禁用全都答假,当前页的例外就被栏的禁用误触发了。栏自己禁用另有一道闸。 }
+    function WindowClickable(AWindow: TTyToolWindow): Boolean;
+    { 窗口的 Enabled 变了:正武装 / 拖着它、或捕获在它身上的手势取消;它的悬停清掉;重画。
+      底栏当前页的「让出标签行」也在这里对一遍。 }
+    procedure WindowEnabledChanged(AWindow: TTyToolWindow);
     { 溢出按钮的状态:disabled / hover / active。 }
     function OverflowStates: TTyStateSet;
   private
@@ -2195,6 +2206,16 @@ procedure TTyToolWindow.CMBiDiModeChanged(var Msg: TLMessage);
 begin
   inherited;
   RelayoutHeader;
+end;
+
+procedure TTyToolWindow.CMEnabledChanged(var Message: TLMessage);
+var
+  b: TTyToolWindowBar;
+begin
+  inherited;
+  b := Bar;
+  if (b <> nil) and not (csDestroying in b.ComponentState) then
+    b.WindowEnabledChanged(Self);
 end;
 
 procedure TTyToolWindow.CMVisibleChanged(var Msg: TLMessage);
@@ -3744,21 +3765,49 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyToolWindowBar.StripItemStates(AIndex: Integer): TTyStateSet;
+function TTyToolWindowBar.StripItemStates(AIndex: Integer; AWindow: TTyToolWindow): TTyStateSet;
 begin
   Result := [];
-  if (AIndex = IndexOfWindow(FActive)) and not CollapsedAtRunTime then
+  if (AWindow <> nil) and (AWindow = FActive) and not CollapsedAtRunTime then
     Include(Result, tysSelected);
-  { 禁用时保留 :selected(同 TTySegmented):灰掉的栏也得看得出哪一页是当前页。
-    悬停、按下它不接。 }
-  if not Enabled then
-    Include(Result, tysDisabled)
-  else
+  { 禁用时保留 :selected(同 TTySegmented):灰掉的栏也得看得出哪一页是当前页。窗口自己被禁用
+    同样画 :disabled(spec §3.7)。 }
+  if not Enabled or not WindowClickable(AWindow) then
+    Include(Result, tysDisabled);
+  { 悬停、按下:栏启用,且窗口可点 —— 或者它就是当前页。禁用的当前页仍然点一下收起 / 展开
+    (收起是栏的动作,不许被困住,spec §3.7),所以它照样接悬停和按下,只是不能拖。 }
+  if Enabled and (WindowClickable(AWindow) or ((AWindow <> nil) and (AWindow = FActive))) then
   begin
     if AIndex = FStripHover then Include(Result, tysHover);
     if AIndex = FStripPressed then Include(Result, tysActive);
   end;
   if Result = [] then Include(Result, tysNormal);
+end;
+
+function TTyToolWindowBar.WindowClickable(AWindow: TTyToolWindow): Boolean;
+begin
+  Result := (AWindow <> nil) and AWindow.Enabled;
+end;
+
+procedure TTyToolWindowBar.WindowEnabledChanged(AWindow: TTyToolWindow);
+var
+  idx: Integer;
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  idx := IndexOfWindow(AWindow);
+  if idx < 0 then Exit;
+  if not AWindow.Enabled then
+  begin
+    { 手势窗口或捕获者被禁用(spec §3.7):取消。拖着的松开不调顺序,武装着的松开不算点击。 }
+    if (FGesture <> nil) and ((FGesture.Window = AWindow) or (FGesture.Capturer = AWindow)) then
+      ResetGesture(twgeCancel);
+    { 它身上的悬停清掉(当前页例外:它照样接悬停)。 }
+    if (AWindow <> FActive) and (FStripHover = idx) then SetStripHover(-1, FOverflowHover);
+    if (FHeaderHoverPart = twbpItem) and (FHeaderHoverIndex = idx) then
+      SetHeaderHover(twbpNone, -1);
+  end;
+  if FPlacement = twpBottom then InvalidateHeader
+  else Invalidate;
 end;
 
 procedure TTyToolWindowBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -3773,6 +3822,8 @@ var
   fill: TTyFill;
   ink: TTyColor;
   states: TTyStateSet;
+  wins: TTyToolWindowArray;
+  w: TTyToolWindow;
   i, idx, glyphPx, indPx, bw, pad: Integer;
 begin
   P := TTyPainter.Create;
@@ -3813,17 +3864,21 @@ begin
       list := EffectiveImages;
       glyphPx := TokenPxAt(TyToolWindowGlyphSizeVar, TyToolWindowGlyphSizeDef, APPI);
       indPx := TokenPxAt(TyToolWindowStripIndicatorSizeVar, TyToolWindowStripIndicatorSizeDef, APPI);
+      { 窗口表取一次:Windows[] 每问一次都数一遍 Controls。 }
+      wins := WindowList(nil);
       for i := 0 to High(L.Slots) do
       begin
         cell := L.Slots[i].ItemRect;
         if (cell.Right <= cell.Left) or (cell.Bottom <= cell.Top) then Continue;
-        states := StripItemStates(L.Slots[i].ItemIndex);
+        if (L.Slots[i].ItemIndex < 0) or (L.Slots[i].ItemIndex > High(wins)) then Continue;
+        w := wins[L.Slots[i].ItemIndex];
+        states := StripItemStates(L.Slots[i].ItemIndex, w);
         itemS := ActiveController.Model.ResolveStyle(TyToolWindowStripItemKey, cls, states);
         if tpBackground in itemS.Present then
           P.FillBackground(cell, itemS.Background, 0);
         { 图标序号只从 ResolvedImageIndex 来:窗口的 ImageIndex 在名字找不到时会退回写过的
           序号,而 spec §8 要的是「找不到就不画」。 }
-        idx := ResolvedImageIndex(Windows[L.Slots[i].ItemIndex]);
+        idx := ResolvedImageIndex(w);
         if (list <> nil) and (idx >= 0) and (glyphPx > 0) then
         begin
           bmp := TyRenderImage(list, idx, glyphPx, APPI, False);
@@ -4178,8 +4233,10 @@ begin
   Result := [];
   if AIndex = AActiveIndex then Include(Result, tysSelected);
   { 禁用时保留 :selected(同图标条):灰掉的栏也得看得出哪一页是当前页。禁用看 IsEnabled
-    (父控件被禁用也算)—— 跟 HeaderMouseDown 收不收按下是同一个判断。 }
-  if not IsEnabled then
+    (父控件被禁用也算)—— 跟 HeaderMouseDown 收不收按下是同一个判断。窗口自己被禁用
+    (spec §3.7)同样画 :disabled、不接悬停和按下 —— 是不是当前页都一样:底栏点当前页的标签
+    本来什么都不做。 }
+  if not IsEnabled or not WindowClickable(AItem) then
     Include(Result, tysDisabled)
   else if not (tysSelected in Result) then
   begin
@@ -4504,8 +4561,13 @@ begin
   ResetGesture(twgeDiscard);
   zone := HeaderZoneAt(AWindow, X, Y, idx, r);
   case zone of
-    { 按下只武装,什么都不激活(spec §9.3「为什么松开才切」)。标签是拖动把手。 }
-    twzTab: FGesture.Press(twbpItem, Windows[idx], True, AWindow, X, Y, Shift);
+    { 按下只武装,什么都不激活(spec §9.3「为什么松开才切」)。标签是拖动把手 —— 禁用窗口的
+      标签不是,也不武装(点了不切,spec §3.7)。 }
+    twzTab:
+      begin
+        if not WindowClickable(Windows[idx]) then Exit;
+        FGesture.Press(twbpItem, Windows[idx], True, AWindow, X, Y, Shift);
+      end;
     twzOverflow, twzMaximize, twzCollapse:
       FGesture.Press(PartOfZone(zone), nil, False, AWindow, X, Y, Shift);
   else
@@ -4534,6 +4596,8 @@ begin
     twgmHover:
       begin
         zone := TyToolWindowZoneAt(AGeom, X, Y, idx);
+        { 禁用窗口的标签不接悬停(spec §3.7)。 }
+        if (zone = twzTab) and not WindowClickable(Windows[idx]) then zone := twzNone;
         SetHeaderHover(PartOfZone(zone), idx);
       end;
     twgmDragStart:
@@ -4841,6 +4905,13 @@ begin
   { 设计期不做悬停:设计期控件收不到 enter / leave(spec §7.4)。 }
   if csDesigning in ComponentState then Exit;
   part := PartAt(X, Y, idx);
+  { 禁用窗口的图标 / 标签不接悬停(spec §3.7);侧栏的当前页例外 —— 它照样点一下收起。 }
+  if (part = twbpItem) and not WindowClickable(Windows[idx])
+     and ((FPlacement = twpBottom) or (Windows[idx] <> FActive)) then
+  begin
+    part := twbpNone;
+    idx := -1;
+  end;
   if FPlacement = twpBottom then
   begin
     { 底栏的标签、溢出、按钮在当前页的标签行里,悬停记在标签行那一份上。 }
@@ -4877,6 +4948,9 @@ var
   now: QWord;
 begin
   if IndexOfWindow(AWindow) < 0 then Exit;
+  { 禁用窗口点了不切(spec §3.7);当前页例外 —— 收起 / 展开是栏的动作。按下那一道闸已经挡过,
+    这里兜的是「按下之后才被禁用」:WindowEnabledChanged 已经取消了手势,再挡一次不花钱。 }
+  if not WindowClickable(AWindow) and (AWindow <> FActive) then Exit;
   { 防抖:距离这个窗口上一次真正执行的点击不到 300 ms 就忽略 —— 慢速双击(系统默认
     500 ms 内的第二次按下才标 ssDouble,而那条路有多击标记挡着)之外,GTK3 不下发三击
     消息,三击靠这里(spec §9.3)。被忽略的那一下**不**刷新时间戳:窗口从上一次真正
@@ -4903,6 +4977,8 @@ begin
     已经走了。菜单项不受防抖限制(spec §6.5)。 }
   w := TTyToolWindow(PtrUInt(TMenuItem(Sender).Tag));
   if IndexOfWindow(w) < 0 then Exit;
+  { 菜单开着的时候它被禁用了(菜单项在建菜单那一刻就灰了,spec §3.7)。 }
+  if not w.Enabled then Exit;
   ActivateWindow(w);
   Collapsed := False;
 end;
@@ -4912,6 +4988,7 @@ var
   part: TTyToolWindowBarPart;
   idx: Integer;
   inStrip: Boolean;
+  w: TTyToolWindow;
 begin
   { 每次按下都新建一条记录。上一次手势丢了松开留下的一切 —— 临时光标、处理器、计时器、
     拉到一半的边 —— 在这里一次收干净,而且在继承之前:用户的 OnMouseDown 看到的是
@@ -4945,7 +5022,11 @@ begin
       (之后可以拖),但阈值以内松开永远不算点击(spec §9.2);溢出按钮不是拖动把手。 }
     if part = twbpItem then
     begin
-      FGesture.Press(part, Windows[idx], True, Self, X, Y, Shift);
+      w := Windows[idx];
+      { 禁用窗口的图标(spec §3.7):只吞(SwallowClick 上面已经置了),不武装。禁用的当前页
+        例外:照样点一下收起 / 展开,但不是拖动把手。 }
+      if not WindowClickable(w) and (w <> FActive) then Exit;
+      FGesture.Press(part, w, WindowClickable(w), Self, X, Y, Shift);
       FStripPressed := idx;
     end
     else
@@ -5172,6 +5253,8 @@ begin
     item := TMenuItem.Create(FOverflowMenu);
     item.Caption := Windows[hidden[i]].Caption;
     item.Tag := PtrInt(Windows[hidden[i]]);
+    { 禁用窗口那一项灰掉、点不了(spec §3.7)。 }
+    item.Enabled := Windows[hidden[i]].Enabled;
     item.OnClick := @OverflowItemClick;
     FOverflowMenu.Items.Add(item);
   end;

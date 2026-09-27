@@ -208,15 +208,10 @@ type
     procedure Narrow;
   end;
 
-implementation
-
-type
-  { ParentFont 在 TControl 上是 protected。 }
-  TControlAccess = class(TControl);
-
 const
   { 标签行钉成品红底(窗口本身也是)、静止墨蓝、选中墨黄、下划线黑、分隔线青
-    (不用绿:绿是夹具的底漆 Wipe)。 }
+    (不用绿:绿是夹具的底漆 Wipe)。E 期的禁用 / 角标测试(test.toolwindow.disabled、
+    test.toolwindow.badge)也用它。 }
   BottomTheme = ':root { --toolwindow-bg: #FF00FF; --toolwindow-header-bg: #FF00FF;' +
     ' --toolwindow-tab-ink: #0000FF; --toolwindow-tab-ink-selected: #FFFF00;' +
     ' --toolwindow-indicator-color: #000000; }' +
@@ -225,6 +220,18 @@ const
 
 { ARect(位图坐标,钳进位图)里有多少像素:AExact 时恰好是 AInk;否则落在「AGround 上盖一层
   半透明 AInk」那条混合线上(含实心,不含纯底色,算法同 CountInk)。 }
+function CountIn(ABmp: TBitmap; const ARect: TRect; AGround, AInk: TColor;
+  AExact: Boolean): Integer;
+function ExactIn(ABmp: TBitmap; const ARect: TRect; AColor: TColor): Integer;
+function InkIn(ABmp: TBitmap; const ARect: TRect; AInk: TColor): Integer;
+function Area(const ARect: TRect): Integer;
+
+implementation
+
+type
+  { ParentFont 在 TControl 上是 protected。 }
+  TControlAccess = class(TControl);
+
 function CountIn(ABmp: TBitmap; const ARect: TRect; AGround, AInk: TColor;
   AExact: Boolean): Integer;
 var
