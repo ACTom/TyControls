@@ -85,6 +85,8 @@ type
     procedure TestABarBeingFreedNoLongerHoldsItsSide;
     procedure TestTheNoteRowFollowsTheHeaderHeightToken;
     procedure TestTheNoteRowFollowsTheTokenWithoutASibling;
+    procedure TestUndoingAMoveIsAPlainParentChange;
+    procedure TestUndoingAReturnMakesAnOrphanAgain;
     procedure TestMoveToOtherSideGoesThroughMoveWindow;
     procedure TestMoveToOtherSideRefusesABottomWindow;
     procedure TestOnlyOrphansHaveReturnTargets;
@@ -912,6 +914,41 @@ begin
   FCtl.StyleOverride := ':root { --toolwindow-header-height: 40px; }';
   AssertEquals('提示行按新 token', 40, a.BarLayout.ConflictNote.Bottom - a.BarLayout.ConflictNote.Top);
   AssertTrue('栏重排了', a.AlignCount > aln);
+end;
+
+procedure TTyToolWindowDesignTests.TestUndoingAMoveIsAPlainParentChange;
+var
+  n: Integer;
+begin
+  { 「移到另一侧栏」记一条撤销(Parent,旧栏名 → 新栏名)。设计器回放就是一句
+    Parent := FindComponent(名字)(designer.pp:1487-1504):照样经 SetParent 注册 / 注销,
+    簿记不乱;回去的窗口排在原栏末尾、成为当前页。 }
+  NewWorkbench;
+  n := FL.WindowCount;
+  AssertTrue('前提:挪过去了', TyToolWindowDesignMoveToOtherSide(FExplorer));
+  FExplorer.Parent := FL;                          { 撤销 }
+  AssertSame('回到左栏', TTyToolWindowBar(FL), FExplorer.Bar);
+  AssertEquals('左栏窗口数复原', n, FL.WindowCount);
+  AssertEquals('排在末尾', n - 1, FL.IndexOfWindow(FExplorer));
+  AssertSame('成为左栏当前页', TTyToolWindow(FExplorer), FL.ActiveWindow);
+  AssertEquals('右栏里没有它了', -1, FR.IndexOfWindow(FExplorer));
+  AssertSame('右栏回落到原来那页', TTyToolWindow(FOutline), FR.ActiveWindow);
+  FExplorer.Parent := FR;                          { 重做 }
+  AssertSame('重做又到右栏', TTyToolWindowBar(FR), FExplorer.Bar);
+  AssertEquals('左栏里没有它了', -1, FL.IndexOfWindow(FExplorer));
+end;
+
+procedure TTyToolWindowDesignTests.TestUndoingAReturnMakesAnOrphanAgain;
+begin
+  { 「移回栏里」的撤销:Parent 回到孤儿原来的容器。 }
+  NewWorkbench;
+  Orphan(FExplorer);
+  AssertTrue('前提:放回右栏', TyToolWindowDesignReturnToBar(FExplorer, FR));
+  FExplorer.Parent := DesignPanel;                 { 撤销 }
+  AssertNull('又是孤儿', FExplorer.Bar);
+  AssertEquals('右栏里没有它了', -1, FR.IndexOfWindow(FExplorer));
+  AssertTrue('孤儿看得见', FExplorer.Visible and not (csNoDesignVisible in FExplorer.ControlStyle));
+  AssertFalse('孤儿提示又有了', IsRectEmpty(FExplorer.OrphanNoteRect));
 end;
 
 procedure TTyToolWindowDesignTests.TestMoveToOtherSideGoesThroughMoveWindow;

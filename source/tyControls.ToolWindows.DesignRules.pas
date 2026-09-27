@@ -34,7 +34,7 @@ function TyToolWindowDesignOtherSide(AWindow: TTyToolWindow): TTyToolWindowBar;
 
 { 执行「移到另一侧栏」:目标为 nil、manager 不是 TTyToolWindowManager 答 False;否则
   MoveWindow(设计期同步、不问 OnCanMoveWindow、不发事件、自己通知设计器,spec §9.9)。
-  Bar.Manager 是基类类型,这里转型(spec §2)。 }
+  Bar.Manager 是基类类型,这里转型(spec §2)。撤销由调用方记(同「移回栏里」)。 }
 function TyToolWindowDesignMoveToOtherSide(AWindow: TTyToolWindow): Boolean;
 
 { 「移回栏里 ▸」的候选:只有孤儿(Parent 不是栏)才有;窗口不是继承来的、不在 frame 实例里、
@@ -45,7 +45,8 @@ function TyToolWindowDesignReturnTargets(AWindow: TTyToolWindow): TTyToolWindowB
 
 { 执行「移回栏里」:ABar 必须在候选里,否则答 False、什么都不改。Parent := ABar —— 设计期
   直接改 Parent 不走 CommitCrossMove(BooksDirectMove 排除设计期),注册即成为当前页。
-  设计器由调用方通知(Modified)。 }
+  设计器由调用方通知(Modified),撤销也由调用方记(一条 Parent 的 uopChange,同 IDE 组件树
+  换父;回放就是再改一次 Parent,回到原来的栏时排在末尾、成为当前页)。 }
 function TyToolWindowDesignReturnToBar(AWindow: TTyToolWindow; ABar: TTyToolWindowBar): Boolean;
 
 implementation

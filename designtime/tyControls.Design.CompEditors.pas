@@ -155,6 +155,8 @@ type
   private
     function Win: TTyToolWindow;
     procedure MoveBackItemClick(Sender: TObject);
+    { One undo step for a reparent done by "Move to Other Side Bar" / "Move Back into Bar". }
+    procedure RecordParentUndo(AOldParent, ANewParent: TWinControl);
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
@@ -646,8 +648,13 @@ var
   W: TTyToolWindow;
 begin
   if not (Sender is TMenuItem) then Exit;
-  { Re-read the window list at click time (not in PrepareItem): a window can be deleted
-    while the menu is open. }
+  { GetDesigner is just whatever the editor was created with (componenteditors.pas:670-673).
+    The IDE's two popups (the form designer's, the object inspector's component tree) always
+    pass one (designer.pp, objectinspector.pp:5043-5056), but nothing promises it;
+    without it there is nothing to select into. }
+  if GetDesigner = nil then Exit;
+  { The item carries only its position. Re-read the window list and bounds-check here instead
+    of trusting what PrepareItem saw. }
   i := TMenuItem(Sender).MenuIndex;
   if (i < 0) or (i >= Bar.WindowCount) then Exit;
   W := Bar.Windows[i];
@@ -726,19 +733,46 @@ begin
   end;
 end;
 
+procedure TTyToolWindowEditor.RecordParentUndo(AOldParent, ANewParent: TWinControl);
+
+  { Undo / redo find the parent again by name: the root itself, or root.FindComponent
+    (designer.pp:1495-1498). Anything else (no parent at all, a control inside a frame
+    instance) would come back as nil. }
+  function Findable(AParent: TWinControl): Boolean;
+  begin
+    Result := (AParent <> nil) and (AParent.Name <> '')
+      and ((AParent = Win.Owner) or (AParent.Owner = Win.Owner));
+  end;
+
+begin
+  { The same record the component tree writes when it reparents a control
+    (componenttreeview.pas:409-410). Undo replays it as a plain Parent := <found by name>
+    (designer.pp:1487-1504), which goes through the bar's SetParent like any other design-time
+    reparent: the window comes back as the current page at the end of its old bar -- its old
+    position there is not restored. }
+  if not (Findable(AOldParent) and Findable(ANewParent)) then Exit;
+  GetDesigner.AddUndoAction(Win, uopChange, True, 'Parent', AOldParent.Name, ANewParent.Name);
+end;
+
 procedure TTyToolWindowEditor.MoveBackItemClick(Sender: TObject);
 var
   targets: TTyToolWindowBarArray;
   i: Integer;
+  oldParent: TWinControl;
 begin
   if not (Sender is TMenuItem) then Exit;
-  { Recompute the candidates at click time (a bar can be deleted while the menu is open)
-    and pick by position, like TTyPageControlEditor.ShowPageMenuItemClick. }
+  { GetDesigner is just whatever the editor was created with (componenteditors.pas:670-673);
+    the IDE always passes one, but nothing promises it. }
+  if GetDesigner = nil then Exit;
+  { The item carries only its position. Recompute the candidates and bounds-check here instead
+    of trusting what PrepareItem saw, like TTyPageControlEditor.ShowPageMenuItemClick. }
   targets := TyToolWindowDesignReturnTargets(Win);
   i := TMenuItem(Sender).MenuIndex;
   if (i < 0) or (i > High(targets)) then Exit;
+  oldParent := Win.Parent;
   if TyToolWindowDesignReturnToBar(Win, targets[i]) then
   begin
+    RecordParentUndo(oldParent, targets[i]);
     Modified;
     GetDesigner.SelectOnlyThisComponent(Win);
   end;
@@ -773,6 +807,7 @@ procedure TTyToolWindowEditor.ExecuteVerb(Index: Integer);
 var
   Hook: TPropertyEditorHook;
   A: TTyToolWindowActions;
+  oldBar: TTyToolWindowBar;
 begin
   case Index of
     0: begin
@@ -785,10 +820,17 @@ begin
          GetDesigner.AddUndoAction(A, uopAdd, True, 'Name', '', A.Name);
          Modified;
        end;
-    1: { MoveWindow notifies the designer itself at design time (spec §11, C-phase
-         correction), so no Modified here. Not undoable: click it again to move back. }
-       if TyToolWindowDesignMoveToOtherSide(Win) then
-         GetDesigner.SelectOnlyThisComponent(Win);
+    1: begin
+         { MoveWindow notifies the designer itself at design time (spec §11, C-phase
+           correction), so no Modified here. }
+         if GetDesigner = nil then Exit;
+         oldBar := Win.Bar;
+         if TyToolWindowDesignMoveToOtherSide(Win) then
+         begin
+           RecordParentUndo(oldBar, Win.Bar);
+           GetDesigner.SelectOnlyThisComponent(Win);
+         end;
+       end;
     { 2 is the "Move Back into Bar" submenu; its items do the work. }
   end;
 end;
