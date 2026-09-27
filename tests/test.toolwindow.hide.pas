@@ -136,6 +136,13 @@ begin
   AssertTrue('没有排图标的那一段', IsRectEmpty(L.Cells));
   AssertTrue('没有边缘区', IsRectEmpty(L.Edge));
   AssertTrue('没有内容区', IsRectEmpty(L.Content));
+  { 宽被外面硬塞成非 0(用户改了 Align、约束……):隐藏的栏照样一个像素都不排。 }
+  b.Width := 200;
+  AssertEquals('前提:宽塞进去了', 200, b.Width);
+  L := b.BarLayout;
+  AssertTrue('非 0 宽也没有图标条', IsRectEmpty(L.Strip));
+  AssertTrue('非 0 宽也没有边缘区', IsRectEmpty(L.Edge));
+  AssertTrue('非 0 宽也没有内容区', IsRectEmpty(L.Content));
 end;
 
 procedure TTyToolWindowHideTests.TestAKeptEmptyBarShowsItsStrip;

@@ -76,6 +76,10 @@ type
     procedure TestTheWheelIsSwallowedOnTheYieldedRow;
     procedure TestAClickOnTheDisabledPageBodyDoesNotClickTheBar;
     procedure TestTheRowGoesBackToThePageAfterSwitchingAway;
+    { 标签行换了宿主(代码切到启用的页、禁用的页被启用):栏上武装着的标签行手势作废,
+      之后栏上的松开不算点击(计划开工前问题 17)。 }
+    procedure TestSwitchingInCodeCancelsAPressOnTheYieldedRow;
+    procedure TestReEnablingCancelsAPressOnTheYieldedRow;
   private
     { 栏坐标上按下、Click、松开(LCL 的顺序)。 }
     procedure ClickRow(const APos: TPoint);
@@ -170,6 +174,10 @@ begin
   ReleaseAway;
   AssertSame('前提:对照那一次没调顺序', FSide[1], FBar.Windows[1]);
   FSide[1].Enabled := False;
+  FBar.Clock := FBar.Clock + 1000;
+  FBar.CallMouseDown(FBar.StripItemRect(1).CenterPoint.X, FBar.StripItemRect(1).CenterPoint.Y);
+  AssertEquals('禁用窗口的图标:按下只吞,不武装', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  ReleaseAway;
   PressAndPull(1);
   AssertFalse('禁用窗口的图标不是拖动把手', FBar.IsDraggingForTest);
   ReleaseAway;
@@ -501,7 +509,8 @@ begin
   FWins[1].AlignCount := 0;
   inv := FBar.Invalidates;
   FWins[1].Enabled := False;
-  AssertTrue('让出:栏(或当前页)被请了重排', (FBar.AlignCount > 0) or (FWins[1].AlignCount > 0));
+  { 要的是栏重排:让出那一行改的是栏的 AdjustClientRect(当前页自己那一边的漂移检查只重排页)。 }
+  AssertTrue('让出:栏被请了重排', FBar.AlignCount > 0);
   AssertTrue('栏重画', FBar.Invalidates > inv);
 end;
 
@@ -900,6 +909,37 @@ begin
   Relayout;
   ClickAt(FWins[0], TabCentre(2));
   AssertSame('页上的标签行照常:切到 Terminal', FWins[2], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestSwitchingInCodeCancelsAPressOnTheYieldedRow;
+var
+  p: TPoint;
+begin
+  NewYieldingBar;
+  p := RowTabCentre(2);
+  FBar.CallMouseDown(p.X, p.Y);
+  AssertEquals('前提:武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  FBar.ActiveWindow := FWins[0];
+  AssertFalse('前提:收回了', FBar.HostsTabRow);
+  AssertEquals('标签行换了宿主:手势作废', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  FBar.CallClick;
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertSame('之后栏上的松开不算点击', FWins[0], FBar.ActiveWindow);
+end;
+
+procedure TTyToolWindowDisabledTests.TestReEnablingCancelsAPressOnTheYieldedRow;
+var
+  p: TPoint;
+begin
+  NewYieldingBar;
+  p := RowTabCentre(2);
+  FBar.CallMouseDown(p.X, p.Y);
+  AssertEquals('前提:武装着', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
+  FWins[1].Enabled := True;
+  AssertEquals('启用回来、标签行回到页上:手势作废', Ord(twgsIdle), Ord(FBar.GestureStateForTest));
+  FBar.CallClick;
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertSame('之后栏上的松开不算点击', FWins[1], FBar.ActiveWindow);
 end;
 
 initialization
