@@ -203,7 +203,7 @@ msgstr "%s：已展开"
 #: umain.rsmovedfmt
 #, object-pascal-format
 msgid "moved %s from %s (#%d)"
-msgstr "已移动 %s，来自 %s（第 %d 个）"
+msgstr "%s 从 %s 移走（原序号 %d）"
 
 #: umain.rslayoutapplied
 msgid "layout applied"
@@ -220,7 +220,7 @@ msgstr "还没有保存过布局"
 
 #: umain.rslayoutrejected
 msgid "the saved layout was not applied"
-msgstr "保存的布局没有应用"
+msgstr "没能应用保存的布局"
 
 #: umain.rslayouterrorfmt
 #, object-pascal-format
@@ -263,7 +263,7 @@ msgstr "一个弹出菜单"
 
 #: umain.rsdiagdialog
 msgid "This dialog opened in the middle of whatever you were doing. A drag in progress should have been cancelled."
-msgstr "这个对话框是在你操作途中弹出来的。正在进行的拖动应当已经取消。"
+msgstr "这个对话框是在你操作途中弹出来的。要是你正拖着图标，这时拖动应该已经取消了。"
 
 #: umain.rsdiagdisabledfmt
 #, object-pascal-format

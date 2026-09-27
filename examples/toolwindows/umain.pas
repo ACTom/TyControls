@@ -199,12 +199,17 @@ begin
   // Initial checks live here, not in the .lfm (a streamed Checked would fire handlers early).
   MnuDensityClassic.Checked := TyDefaultController.Density = tdClassic;
   MnuDensityModern.Checked := TyDefaultController.Density = tdModern;
-  MnuViewBottom.Checked := not BottomBar.Collapsed;
   FLogLines := TStringList.Create;
   Log(rsReady);
   // Read the user's layout in FormCreate: the form is not showing yet, so it applies at once.
-  // The page that is current at start-up gets no OnShow -- fill windows in here as well.
+  // The pages made current while the .lfm loaded got no OnShow; the layout fires OnShow /
+  // OnHide only for the pages it shows or hides. A window that fills itself in OnShow needs
+  // filling here too.
   LoadLayoutFile;
+  // After the layout, not before: it may have collapsed the bottom bar, and a layout fires no
+  // OnCollapse / OnExpand. ToolMgrLayoutApplied does the same for later loads and resets; this
+  // line covers the first run, when there is no layout file.
+  MnuViewBottom.Checked := not BottomBar.Collapsed;
 end;
 
 procedure TMainForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
@@ -308,6 +313,9 @@ end;
 
 procedure TMainForm.ToolMgrLayoutApplied(Sender: TObject);
 begin
+  // A layout (Load / Reset) fires no OnCollapse / OnExpand: whatever mirrors the bars' state
+  // is brought up to date here, once, after the whole layout is in place.
+  MnuViewBottom.Checked := not BottomBar.Collapsed;
   Log(rsLayoutApplied);
 end;
 
