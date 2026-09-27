@@ -7,6 +7,37 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.0-RC2] — 2026-09-27
+
+Every issue reported against the RC has been addressed. Still a release candidate: if nothing new comes in, this content becomes 3.0.0 final.
+
+### Added
+
+- `TTyStringGrid` input validation: when `OnValidateCell` refuses a value the editor stays on its cell until the value is fixed or abandoned with `Esc`; when focus leaves the grid altogether, `OnInvalidEditExit` decides whether to abandon or keep the edit (abandon by default). Demonstrated on the grid example's Events page.
+- The `system` theme follows the desktop's light/dark scheme and accent on Qt5 / Qt6 builds; GTK builds do not probe and keep the default look.
+
+### Changed
+
+- `TTyTransfer`'s middle buttons now draw chevrons (`>` / `>>` / `<` / `<<`), the doubled mark reading as one glyph.
+
+### Fixed
+
+- Switching to the `system` theme on Linux raised `List index out of bounds`.
+- Following the system appearance on macOS no longer spawns a subprocess every 750 ms.
+- Under modern density and skins with taller buttons (aero, for one), a message dialog's buttons hung out of the bottom strip; the file dialog's navigation buttons overlapped; rows laid out at a fixed stride in the find, font, colour, path, image-collection and structure editors clipped or overlapped.
+- `TTyDateTimePicker`'s dropdown calendar was hardcoded to the classic 240×220, cramped under modern density and at high DPI; it now follows the theme's row height.
+- `TTySteps` centres a horizontal step's title under its own marker, and the connector runs marker to marker.
+- `TTyRibbon`'s large tiles were only an edit box tall under modern density; they now have their own theme size, `--ribbon-tile-height`.
+- Windows XP: the system's blue frame on the left, right and bottom edges is gone, and opening a menu or dropdown no longer flashes the system caption over the window.
+- `TTyStringGrid`'s spin, slider, memo, calculator, pick-list and date editors can now be abandoned with `Esc` (only the text and mask editors could).
+- On a controller with a `ThemeName`, clearing or replacing `StyleOverride` had no effect, and the modern density pack stayed after switching back to classic.
+- `TTySparkline`'s baseline floated up when the minimum was a large positive value.
+- `TTyStringGrid`: dragging a column divider through the body selected a block of cells; pressing on a divider, or double-clicking it, sorted as well. Sorting now fires on release, and a press on a divider, a release elsewhere, or a column drag does not count as a click.
+- `TTyTreeView`: double-clicking a column header expanded, collapsed or edited the last node clicked; a header click now sorts only when pressed and released on the same section.
+- `WindowState = wsMaximized` set in the designer had no effect at run time (on Windows it could fill the whole monitor over the taskbar; on Linux nothing happened); the first show now maximizes to the work area, exactly as the caption button does.
+- A title bar's `ShowMinimize` / `ShowMaximize` / `ShowClose` set to False in the designer still showed the buttons at start-up; they are now a second gate beside the form's `BorderIcons`, either one hides the button, and the form's sync no longer overwrites the bar's setting.
+- With the maximize button hidden, a title-bar double-click, Aero Snap to the top edge and Win+Up still maximized; if any of `Resizable`, `biMaximize` in `BorderIcons` or the bar's `ShowMaximize` is off, all of them are now off too, while a maximized window can still restore.
+
 ## [3.0.0-RC] — 2026-08-31
 
 Every issue reported against the Beta has been addressed; this is the release candidate for 3.0. From here the 3.0 line takes bug fixes only (the `3.0-fixes` branch).
