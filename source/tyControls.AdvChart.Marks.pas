@@ -41,7 +41,7 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
-  tyControls.AdvChart.Color,
+  tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
@@ -188,6 +188,16 @@ type
     LabelValueDim: Integer;
     { `{a}`. The option's own series name, resolved by the control. }
     SeriesName: string;
+    { WHAT A visualMap WROTE ON EACH DATUM, by raw index; nil when none
+      targets this series. Applied before the datum's own itemStyle.color,
+      which still wins, and its opacity REPLACES the series' Alpha. }
+    VisualRows: TTyVisualRowArray;
+    { A LINE'S PEN AND AREA when a visualMap gave it a visualMeta on x or y:
+      one colour or a global gradient in device px, instead of the series
+      colour. The two flags say which of them take it -- an authored
+      lineStyle.color keeps the pen, an authored areaStyle.color the area. }
+    VisualLine: TTyVisualLineFill;
+    VisualLineStroke, VisualLineArea: Boolean;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
@@ -453,6 +463,10 @@ begin
     and the renderer would look absent rather than unconfigured. }
   Result.Pictorial := TyPictorialSpecDefault;
   Result.EmptyFill := 0;
+  Result.VisualRows := nil;
+  Result.VisualLine := Default(TTyVisualLineFill);
+  Result.VisualLineStroke := False;
+  Result.VisualLineArea := False;
 end;
 
 { The value the area falls back to where nothing is stacked underneath.
@@ -566,7 +580,7 @@ begin
     AVisual.LabelValueDim, 0, False);
 end;
 
-{ THIS ROW'S OWN COLOUR, when the author gave it one.
+{ THIS ROW'S OWN COLOUR AND OPACITY, when the author gave them.
 
   `data: [1, 2, { value: 3, itemStyle: { color: 'red' } }]` is how a single
   bar or a single slice is picked out, and it is the commonest reason a
@@ -578,10 +592,37 @@ end;
   the series level follows. }
 function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
-var v: TTyDataValue; c: TTyChartColor;
+var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
 begin
   Result := AVisual;
   if AStore = nil then Exit;
+  { THE VISUAL PIPELINE FIRST, then the datum's own style over it: upstream's
+    visualMap encoding is stage 4000 and the item style 4500. A colour the
+    mapping left undefined paints nothing, and an opacity it wrote replaces
+    the series' rather than multiplying it. }
+  if AVisual.VisualRows <> nil then
+  begin
+    raw := AStore.GetRawIndex(ARow);
+    if (raw >= 0) and (raw <= High(AVisual.VisualRows)) then
+    begin
+      vr := AVisual.VisualRows[raw];
+      if vr.ColorSet then
+      begin
+        Result.Fill := TyVisualToChart(vr.Color);
+        Result.FillGradient := Default(TTyChartGradient);
+      end;
+      if vr.OpacitySet and not IsNan(vr.Opacity) then
+        Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
+    end;
+  end;
+  { THE ITEM'S OWN OPACITY REPLACES the series' and the visualMap's alike --
+    upstream extends the item style over both. [Batch 54: it was not read.] }
+  if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.opacity')) then
+  begin
+    v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.opacity'));
+    if (v.Kind = dvkNumber) and not IsNan(v.Num) then
+      Result.Alpha := Min(Double(1), Max(Double(0), v.Num));
+  end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
   v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.color'));
   if v.Kind <> dvkText then Exit;
@@ -1141,6 +1182,38 @@ var
            or IsInfinite(AP.X) or IsInfinite(AP.Y);
   end;
 
+  { LineView's visualColor in place of the series colour: one colour, or the
+    gradient with its first stop as the solid. }
+  procedure ApplyVisualLine(var V: TTySeriesVisual; AFill: Boolean);
+  var c: TTyChartColor; g: TTyChartGradient;
+  begin
+    case AVisual.VisualLine.Kind of
+      vlfSolid:
+        begin
+          c := TyVisualToChart(AVisual.VisualLine.Solid);
+          g := Default(TTyChartGradient);
+        end;
+      vlfGradient:
+        begin
+          g := TyVisualLineGradient(AVisual.VisualLine);
+          c := 0;
+          if Length(g.Stops) > 0 then c := g.Stops[0].Color;
+        end;
+    else
+      Exit;
+    end;
+    if AFill then
+    begin
+      V.Fill := c;
+      V.FillGradient := g;
+    end
+    else
+    begin
+      V.Stroke := c;
+      V.StrokeGradient := g;
+    end;
+  end;
+
   { One run, from the points gathered so far. The AREA goes in FIRST so the
     line is drawn over its own fill rather than under it -- the paint list
     breaks ties by insertion order, so first in is furthest back. }
@@ -1189,6 +1262,8 @@ var
           bars beside it are doing. }
         v.FillGradient := spec.AreaGradient;
         v.StrokeGradient := Default(TTyChartGradient);
+        { A visualMap's gradient, unless the area named its own colour. }
+        if AVisual.VisualLineArea then ApplyVisualLine(v, True);
         el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
         { The area's opacity REPLACES the series' -- it is a key on its own
           block, not a second multiplier on the item's. }
@@ -1213,6 +1288,8 @@ var
       if (v.StrokeGradient.Kind = cgkNone)
         and (AVisual.FillGradient.Kind <> cgkNone) then
         v.StrokeGradient := AVisual.FillGradient;
+      { A visualMap's gradient, unless lineStyle named the pen's colour. }
+      if AVisual.VisualLineStroke then ApplyVisualLine(v, False);
       el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
       { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
         resolved width -- the default 2 was filled in a few lines up. }
@@ -1379,11 +1456,12 @@ begin
     shape := TyBuildSymbol(spec, p.X, p.Y);
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
 
-    v := AVisual;
     { AN `empty` SYMBOL IS STROKED, NOT FILLED -- upstream strokes it in the
       series colour and fills it with the theme's background, and a line symbol
-      is stroked too. Both are the same rule: the colour is the pen. }
-    v.Fill := RowVisual(AVisual, AStore, i).Fill;
+      is stroked too. Both are the same rule: the colour is the pen.
+      [Batch 54: the whole row, not only its fill -- a visualMap's opacity is
+      the row's too.] }
+    v := RowVisual(AVisual, AStore, i);
     if spec.Empty or (spec.Kind = tsyLine) then
     begin
       v.Stroke := v.Fill;

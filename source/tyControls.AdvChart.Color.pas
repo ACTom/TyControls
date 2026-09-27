@@ -34,6 +34,16 @@ type
 function TyTryParseChartColor(const AText: string;
   out AColor: TTyChartColor): Boolean;
 
+{ The same grammar, answering zrender's own four numbers rather than a packed
+  colour: what `parse()` hands a visual mapping. The ALPHA STAYS A DOUBLE --
+  `rgba(0,0,180,0.4)` packed is 102/255, and a ramp between two such colours
+  interpolates 0.4, not the byte -- and a three-argument `rgba()` is Number()
+  of each argument, unclamped, which is upstream's own shape for it.
+  TyTryParseChartColor is this, packed: channels and alpha rounded the way
+  Math.round rounds. }
+function TyTryParseCssRgba(const AText: string;
+  out AR, AG, AB, AA: Double): Boolean;
+
 { `none` is not a colour and is not in the keyword table: it means DO NOT PAINT.
   Upstream checks it before any parse and distinguishes it from `transparent`,
   which paints nothing but still hit-tests and still contributes a bounding
@@ -181,6 +191,8 @@ function TyStyleDrawsWithStroke(const ASeriesType: string): Boolean;
 
 implementation
 
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.Data;
+
 type
   TNamedColor = record
     N: string;
@@ -326,10 +338,14 @@ begin
   end;
 end;
 
+{ zrender's clampCssByte, which is Math.round -- half UP, not FPC's banker's
+  Round: `rgb(30%,0,0)` is 76.5 and comes out 77, and so does the green of
+  `hsl(30,100%,30%)`.
+  [Batch 54: this was Round, which gave 76 for both.] }
 function ClampByte(AValue: Double): Cardinal;
 begin
   if IsNan(AValue) then Exit(0);
-  AValue := Round(AValue);
+  AValue := TyJsRound(AValue);
   if AValue < 0 then AValue := 0;
   if AValue > 255 then AValue := 255;
   Result := Cardinal(Trunc(AValue));
@@ -398,23 +414,34 @@ begin
   Result := Normalise(AText) = 'none';
 end;
 
-function TyTryParseChartColor(const AText: string;
-  out AColor: TTyChartColor): Boolean;
+function TyTryParseCssRgba(const AText: string;
+  out AR, AG, AB, AA: Double): Boolean;
 var
   s, fname, body2: string;
   op, ep, i, n: Integer;
   parts: TStringList;
-  ok, ok2: Boolean;
+  ok: Boolean;
   iv: Integer;
   nib: array[0..3] of Integer;
-  h, sat, lum, m1, m2, alpha: Double;
+  h, sat, lum, m1, m2: Double;
+  named: TTyChartColor;
 begin
-  AColor := 0;
+  AR := 0;
+  AG := 0;
+  AB := 0;
+  AA := 1;
   Result := False;
   s := Normalise(AText);
   if s = '' then Exit;
 
-  if LookupNamed(s, AColor) then Exit(True);
+  if LookupNamed(s, named) then
+  begin
+    AR := (named shr 16) and $FF;
+    AG := (named shr 8) and $FF;
+    AB := named and $FF;
+    AA := ((named shr 24) and $FF) / 255;
+    Exit(True);
+  end;
 
   if s[1] = '#' then
   begin
@@ -433,12 +460,12 @@ begin
         nib[i] := HexNibble(s[i + 2], ok);
         if not ok then Exit;
       end;
-      { Each nibble doubled -- exactly nibble * 17, and for the alpha nibble
-        n/15 and (n*17)/255 agree bit for bit, so #abcd and #aabbccdd are the
-        same colour. }
-      if n = 5 then alpha := nib[3] * 17 else alpha := 255;
-      AColor := Pack(Cardinal(nib[0] * 17), Cardinal(nib[1] * 17),
-                     Cardinal(nib[2] * 17), Cardinal(Trunc(alpha)));
+      { Each nibble doubled -- exactly nibble * 17. The alpha nibble is n/15,
+        as upstream divides it, and packs to the same byte as #aabbccdd. }
+      AR := nib[0] * 17;
+      AG := nib[1] * 17;
+      AB := nib[2] * 17;
+      if n = 5 then AA := nib[3] / 15 else AA := 1;
       Exit(True);
     end;
     for i := 2 to n do
@@ -447,12 +474,13 @@ begin
       if not ok then Exit;
     end;
     iv := StrToInt('$' + Copy(s, 2, 6));
+    AR := (iv shr 16) and $FF;
+    AG := (iv shr 8) and $FF;
+    AB := iv and $FF;
     if n = 9 then
-      alpha := StrToInt('$' + Copy(s, 8, 2))
+      AA := StrToInt('$' + Copy(s, 8, 2)) / 255
     else
-      alpha := 255;
-    AColor := Pack(Cardinal((iv shr 16) and $FF), Cardinal((iv shr 8) and $FF),
-                   Cardinal(iv and $FF), Cardinal(Trunc(alpha)));
+      AA := 1;
     Exit(True);
   end;
 
@@ -479,29 +507,33 @@ begin
         ships one of those in its own parallel defaults, so a parser that
         refuses it fails on a stock chart. }
       if (fname = 'rgba') and (n <> 3) and (n <> 4) then
+        Exit(True);
+      { `rgba(r,g,b)` IS NOT `rgb(r,g,b)` upstream: it is Number() of each
+        argument, unrounded and unclamped, and the alpha is 1. }
+      if (fname = 'rgba') and (n = 3) then
       begin
-        AColor := Pack(0, 0, 0, 255);
+        AR := TyJsToNumber(parts[0]);
+        AG := TyJsToNumber(parts[1]);
+        AB := TyJsToNumber(parts[2]);
+        { Upstream lets NaN through here and paints with it; this one falls
+          back. }
+        if IsNan(AR) or IsNan(AG) or IsNan(AB) then Exit;
         Exit(True);
       end;
       if n < 3 then Exit;
-      alpha := 255;
       if n >= 4 then
       begin
-        alpha := CssFloat(Trim(parts[3]), ok) * 255;
+        AA := CssFloat(Trim(parts[3]), ok);
         if not ok then Exit;
       end;
-      AColor := Pack(
-        Cardinal(Trunc(CssInt(Trim(parts[0]), ok))),
-        Cardinal(Trunc(CssInt(Trim(parts[1]), ok2))),
-        Cardinal(Trunc(CssInt(Trim(parts[2]), ok))),
-        Cardinal(Round(alpha)));
       { Any unreadable channel and the whole thing is not a colour. Upstream
         lets NaN through here and paints with it; this one falls back. }
-      for i := 0 to 2 do
-      begin
-        CssInt(Trim(parts[i]), ok);
-        if not ok then Exit;
-      end;
+      AR := CssInt(Trim(parts[0]), ok);
+      if not ok then Exit;
+      AG := CssInt(Trim(parts[1]), ok);
+      if not ok then Exit;
+      AB := CssInt(Trim(parts[2]), ok);
+      if not ok then Exit;
       Exit(True);
     end;
 
@@ -520,23 +552,33 @@ begin
       if not ok then Exit;
       lum := CssFloat(Trim(parts[2]), ok);
       if not ok then Exit;
-      alpha := 255;
       if n = 4 then
       begin
-        alpha := CssFloat(Trim(parts[3]), ok) * 255;
+        AA := CssFloat(Trim(parts[3]), ok);
         if not ok then Exit;
       end;
       if lum <= 0.5 then m2 := lum * (sat + 1) else m2 := lum + sat - lum * sat;
       m1 := lum * 2 - m2;
-      AColor := Pack(ClampByte(HueToRgb(m1, m2, h + 1 / 3) * 255),
-                     ClampByte(HueToRgb(m1, m2, h) * 255),
-                     ClampByte(HueToRgb(m1, m2, h - 1 / 3) * 255),
-                     Cardinal(Round(alpha)));
+      AR := ClampByte(HueToRgb(m1, m2, h + 1 / 3) * 255);
+      AG := ClampByte(HueToRgb(m1, m2, h) * 255);
+      AB := ClampByte(HueToRgb(m1, m2, h - 1 / 3) * 255);
       Exit(True);
     end;
   finally
     parts.Free;
   end;
+end;
+
+function TyTryParseChartColor(const AText: string;
+  out AColor: TTyChartColor): Boolean;
+var r, g, b, a: Double;
+begin
+  AColor := 0;
+  Result := TyTryParseCssRgba(AText, r, g, b, a);
+  if not Result then Exit;
+  { The alpha packed the way the channels are: Math.round, not banker's --
+    0.3 is 76.5 of a byte, and that is 77. }
+  AColor := Pack(ClampByte(r), ClampByte(g), ClampByte(b), ClampByte(a * 255));
 end;
 
 { ==================== the palette ==================== }

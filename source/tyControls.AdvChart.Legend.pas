@@ -26,6 +26,9 @@ unit tyControls.AdvChart.Legend;
     must also set the control's dirty flag and drop the static layer, because a
     plain repaint runs neither Rebuild nor Relayout and the filter below would
     never re-run.
+    [Stale since the tooltip batches: the paint list IS hit-tested now --
+    HitTestAt serves the tooltip and the hover. The click itself is still not
+    here, and the rest of this paragraph stands.]
 
     What IS here is everything decided before anyone clicks: `legend.selected`,
     the `selectedMode: 'single'` resolution that upstream performs AT LOAD, the
@@ -56,6 +59,10 @@ unit tyControls.AdvChart.Legend;
     all of them at once; reading one block early would mean a legend that obeys
     `legend.textStyle.color` while the series beside it ignores
     `series.itemStyle.color`.
+    [Stale: the palette row landed (AdvChart.Color) and the series' colours,
+    a visualMap's included, are read from the option now; the legend reads
+    whether it has a `backgroundColor`. Its own text, inactive and swatch
+    colours are still the theme's.]
 
   THE FILTER, and where it lives. `TyLegendHides` is the whole rule this unit
   contributes; the control applies it, because what a switched-off name MEANS

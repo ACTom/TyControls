@@ -3213,7 +3213,7 @@ radar 一样。端口原来默认 1,而且注释还专门写着「上游没有�
 
 ### 不在这一批里
 
-渐变和图案(自己一行)、`decal`、`visualMap`、`brush`、颜色回调、`colorLayer`、
+渐变和图案(自己一行)、`decal`、`visualMap`(**[编码见 §88]**)、`brush`、颜色回调、`colorLayer`、
 `colorBy: 'data'` 的**独立**游标(饼现在按原始行取同一条色板,顺序对、作用域还没分家)。
 
 一条**明确拒绝**的:**逐数据项的颜色回调**。上游 `dataStyleTask` 里没有 `isFunction`
@@ -5149,6 +5149,7 @@ single 模式的图例、没有 data 的类目轴、有名字的节点、带值�
 ### 已知偏差
 
 - `graph-life-expectancy` 的节点颜色来自 visualMap(还没有),这里是系列色。
+  **[visualMap 的编码第五十四批已有(§88);graph 节点色还没接,排在 B3。]**
 - 节点的 `itemStyle.borderColor/borderWidth` 不画,每个数据项自己的 `label`(那三个年份标签)不读,图例色块没有 2px 边框。view 上的 graph 也一样。
 - 内部标签的自动描边没有:上游给 inside 文字加一圈 2px 宿主色描边,溢出节点的白字靠它看得见。这里 "Very Loooong Thu" 溢出的部分白底白字。全库的问题。
 - `{c}` 在轴上读值轴那一列;上游是原始值,值数组会整个拼出来。两个目标示例都不用。
@@ -7089,3 +7090,64 @@ store 里的一个格子,上游是 `parseDataValue`:除了恰好的空串,文字
 ### 队列
 
 计划里的任务到这里全部完成。
+
+## 88. Tier 1 第五十四批:visualMap 编码(B1)(2026-09-27)
+
+计划队列清空后按画廊缺口重数,visualMap 34 个文件、排第一(toolbox 39 多是装饰,不挡渲染)。整个系列分四批:B1 模型与连续映射的编码,B2 连续型组件的静态视图,B3 其余通道与逐数据项的系列,B4 分段型。本批是 B1,组件本身还不画。
+
+以前 port 里没有任何地方读 `visualMap`:没写 `type` 的会被诊断成"没有类型",子树不校验;颜色全靠 visualMap 的图(`line-gradient`、`dataset-encode0` 的柱子)画成一个系列色,诊断却说一切正常。
+
+### 上游的做法
+
+- **子类型**:没写 `type` 时,`!categories && (!(pieces ? pieces.length > 0 : splitNumber > 0) || calculable)` 是 continuous,否则 piecewise。按 JavaScript 的真值算:`categories: []` 是 piecewise,`pieces: []` 不是。
+- **模型**:extent 是 `asc([min ?? 0, max ?? 200])`;range 没写就是 extent,写了先升序、再夹进 extent。`unboundedRange` 默认 true,这时默认 range 下超出 extent 的值、NaN 都算 inRange。
+- **补全**:`target` 和选项自己的 `inRange`/`outOfRange` **逐键**合并,不覆盖——target 已有的键在前,缺的键**追加在后**,所以键的顺序也就是之后施加的顺序。ec2 的 `color`(高到低)在没有 inRange 时反转成 inRange;再没有就用根上的 `gradientColor`。`inRange: {color: null}` 不补,颜色是 undefined。没有 outOfRange 时按 inRange 的键依次补"失效值",颜色旁边再补 `opacity: [0, 0]`。
+- **施加顺序**:`prepareVisualTypes` 用的比较函数不是全序,结果取决于 V8 的排序。n < 64 时 V8 是一段 run(降序就反转)再二分插入。`[color, opacity]` 排成 `[opacity, color]`,`[color, opacity, colorHue]` 排成 `[colorHue, opacity, color]`——色相先上、再被颜色盖掉。
+- **映射**:值先 `linearMap(v, extent, [0, 1], clamp)`,NaN 一路是 NaN;颜色用 zrender 的 `fastLerp`:0..1 之外(含 NaN)是 undefined,通道 `Math.round`,**alpha 不取整**;数值通道是 `linearMap(n, [0, 1], 值对, clamp)`,单个值补成一对(颜色和符号除外)。
+- **优先级**:系列样式(2000)→ 各 visualMap 按组件顺序(4000,数据项写了 `visualMap: false` 就跳过)→ 数据项自己的 itemStyle(4500)。所以数据项的颜色赢,visualMap 的 opacity **替换**系列的。
+- **visualMeta**:取值 `e0` 起每次**累加** `(e1 − e0) / 200`,`i ≤ 200 && v < e1`,最后补 `e1`;range 内外两组合并,颜色从系列色出发、opacity 变成颜色的 alpha。
+- **折线渐变**(`getVisualGradient`):取最后一个维度落在 x/y 上的 visualMeta,值换成画布坐标,首大于尾就连 outerColors 一起反转;按**画布**宽高裁剪(切点插值颜色);两端各外扩 10px;offset 按跨度归一,两头补 outerColors;global 渐变。`lineStyle.color` 写了线不用它,`areaStyle.color` 写了面积不用它。
+- **默认维度**:最后一个不是计算列的维度——横向柱是 y 的类目序号,堆叠线是原始 y 不是累加值,散点 `[x, y, v]` 是第三列,dataset 是最后一列。
+
+### port 以前
+
+- 什么都不读;没写类型的 visualMap 报"没有类型"。
+- 颜色解析用 FPC 的银行家舍入:`rgb(30%,0,0)` 是 76(上游 77),alpha 解析时就量化成 8 位。
+
+### 做法
+
+- 新单元 `VisualMap`:`TTyVisualColor`(zrender 的四个 double 加 undefined)、`fastLerp`、`modifyHSL`/`modifyAlpha`、JS 语义的 `linearMap`(NaN 直通)、照抄 V8 的 `TyPrepareVisualTypes`、模型读取与补全(在 JSON 副本上做逐键合并)、值状态、施加、取值(店里有这一列就读店,否则按原始格子解析)、visualMeta、折线渐变。所有可能碰 NaN 的比较都走 JavaScript 语义的 `Lt/Le/Gt/Ge`——FPC 的比较遇 NaN 会抛异常。
+- `Color`:新增 `TyTryParseCssRgba`,把原来的解析改成它加打包;通道和 alpha 打包都用 `Math.round`;`rgba(r,g,b)` 三参数按上游是 `Number()`。
+- `Complete`/`Diagnose`:`TyOptDefaultSubType`,没写类型的 visualMap 按默认子类型校验,也不再报"没有类型"。
+- 控件:`SolveVisualMaps` 在系列配色之后、堆叠之前(默认维度要排除计算列);每个系列每行一条视觉记录。默认色带取主题 accent(`TyAdvChartSeries1`)——上游取主题第一色,这里的主题就是皮肤;根上写了 `gradientColor` 就用它。
+- `Marks`:`RowVisual` 先施加视觉行、再让数据项的 `itemStyle.color` 覆盖;行 opacity 替换系列 alpha;映射出的颜色清掉系列渐变;散点取整行而不只是填充色。折线的线与面积在没写自己颜色时用 visualMeta 的渐变或单色。
+- tooltip 的色点走同一条行视觉,所以是数据项的颜色。
+- 数据项自己的 `itemStyle.opacity` 现在读了,盖过系列的和 visualMap 的(以前完全不读)。
+- 诊断:连续型的组件还不画(`rsTyChartVisualMapNotDrawn`),分段型还不映射(`rsTyChartVisualMapPiecewise`),en/zh_CN 都加了。
+
+### 基准
+
+- `tools/advchart-oracle/visualmap-encode.js` → `advchart-visualmap-encode.json`:52 条解析、14 条 `fastLerp`、60 组排序(和真的 `Array.prototype.sort` 比,其中 6 组是 8 个键以上、专门区分"保留 run 但线性插入")、14 条子类型、3 组取值序列,30 个图:组件补全后的键序与施加顺序、每行颜色(zrender 的四个数,alpha 精确)和 opacity、visualMeta、折线与面积的渐变(坐标、offset、颜色逐位)、tooltip 色点。
+- `test.advchart.visualmap`:逐位比较;图上的元素另按量化后的颜色和 alpha 再比一遍。测试给选项写上上游的调色板和 `gradientColor`,主题换成 accent 的那一步单独测。
+
+### 已知偏差
+
+- 组件本身不画(B2);分段型不映射(B4)。
+- `symbol`、`symbolSize`、`liftZ`、`decal` 不施加;折线的符号仍是系列色;饼、漏斗、雷达、仪表盘、图例按数据项取色的路径不看 visualMap;graph 节点色(B3)。
+- 店外的维度按数值解析;上游若是 ordinal 类型会给类目序号。
+- 颜色 `rgba(0,0,0,0)` 量化成 0,等于不填充:画出来一样,但上游透明填充仍可命中。
+- `rgba()` 里读不出的通道:上游带着 NaN 继续画,这里退回主题色。
+
+### 变异测试
+
+56 个。55 个被杀;1 个等价:`fastLerp` 的 alpha 不夹取——两端 alpha 在解析时已夹进 [0, 1],插值出不了界。
+
+第一轮 7 个存活,补上之后全杀:
+- "未定义画成黑色":测试用被测的 `TyVisualToChart` 算期望值,自己跟自己比;改成测试里独立打包。
+- "保留 run、只把二分换成线性":只有 8 个键以上的列表分得开,oracle 补了 6 组。
+- "行 opacity 乘而不替换"、"映射色保留系列渐变"、"散点只取填充色"、"取第一个 visualMeta":oracle 补 K6c(系列渐变 + opacity 0.5 + 数据项 opacity 0.3)、K6d(散点)、K9g(y、x 两个 meta)。
+- 顺带发现数据项的 `itemStyle.opacity` 从来没读过,补上并加了变异。
+
+### 下一批
+
+B2:连续型组件的静态视图(对齐、四种矩阵、101 段渐变的圆角条、端点文字、静态手柄、背景、`positionGroup`),主题键 `TyAdvChartVisualMap*`。

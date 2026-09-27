@@ -239,6 +239,17 @@ function TyOptCompletionDetail(const ATextBeforeCaret, AItem: string): string;
 function TyOptSearch(const AText: string; AList: TStrings;
   ALimit: Integer = 0): Integer;
 
+{ ---- untyped elements ---- }
+{ The type an element that wrote none gets, where ECharts registers a
+  subtype defaulter for its main type; '' where it does not. Only
+  `visualMap` has one here: continuous unless it names categories, or
+  pieces (non-empty) or a positive splitNumber without `calculable`. The
+  test is JavaScript's, truthiness and all -- `categories: []` is
+  piecewise, `pieces: []` is not.
+  [dataZoom has one upstream too ('slider'); it is not probed, so not here.] }
+function TyOptDefaultSubType(const AMainType: string;
+  AElement: TJSONObject): string;
+
 { ---- validation ---- }
 { Every option in the tree that the catalog does not recognise, plus every
   enumerated option set to a value outside its list. Order is the tree's own, so
@@ -250,7 +261,7 @@ implementation
 uses
   { Only for the editor vocabulary below; kept out of the interface uses so this
     unit's public face still names only the AdvChart layer. }
-  tyControls.StrConsts;
+  tyControls.StrConsts, Math, tyControls.AdvChart.Data;
 
 function TyOptStrAt(AIndex: Integer): string;
 begin
@@ -391,6 +402,58 @@ end;
 function TyOptVariant(ANode: Integer; const ATag: string): Integer;
 begin
   Result := EdgeNamed(ANode, '=' + ATag);
+end;
+
+function JsTruthy(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber: Result := (A.AsFloat <> 0) and not IsNan(A.AsFloat);
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ `x > 0`, the operand coerced the way JavaScript coerces it. }
+function JsPositive(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNumber: Result := A.AsFloat > 0;
+    jtString: Result := TyJsToNumber(A.AsString) > 0;
+    jtBoolean: Result := A.AsBoolean;
+  else
+    Result := False;
+  end;
+end;
+
+function TyOptDefaultSubType(const AMainType: string;
+  AElement: TJSONObject): string;
+var pieces: TJSONData; split: Boolean;
+begin
+  Result := '';
+  if (AElement = nil) or (AMainType <> 'visualMap') then Exit;
+  { `pieces ? pieces.length > 0 : splitNumber > 0` }
+  pieces := AElement.Find('pieces');
+  if JsTruthy(pieces) then
+  begin
+    case pieces.JSONType of
+      jtArray: split := TJSONArray(pieces).Count > 0;
+      jtString: split := True;
+    else
+      split := False;
+    end;
+  end
+  else
+    split := JsPositive(AElement.Find('splitNumber'));
+  if (not JsTruthy(AElement.Find('categories')))
+    and ((not split) or JsTruthy(AElement.Find('calculable'))) then
+    Result := 'continuous'
+  else
+    Result := 'piecewise';
 end;
 
 { Split 'series-line' into 'series' + 'line'. Property names never contain a
@@ -904,6 +967,8 @@ begin
       if TyOptIsVariantContainer(ANode) then
       begin
         tag := TJSONObject(AData).Get('type', '');
+        if tag = '' then
+          tag := TyOptDefaultSubType(APath, TJSONObject(AData));
         variant := TyOptVariant(ANode, tag);
         if variant >= 0 then
           WalkObject(TJSONObject(AData), variant, APath, C);
@@ -920,7 +985,12 @@ begin
           begin
             tag := '';
             if arr.Items[i].JSONType = jtObject then
+            begin
               tag := TJSONObject(arr.Items[i]).Get('type', '');
+              { a type ECharts would have filled in is not a missing one }
+              if tag = '' then
+                tag := TyOptDefaultSubType(APath, TJSONObject(arr.Items[i]));
+            end;
             variant := TyOptVariant(ANode, tag);
             { An unstated or unknown type is not reported as an unknown option:
               the value itself may be perfectly good and it is the TYPE that is

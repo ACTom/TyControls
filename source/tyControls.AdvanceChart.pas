@@ -39,7 +39,7 @@ uses
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pictorial,
-  tyControls.AdvChart.Color,
+  tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -246,6 +246,14 @@ type
       series and that is what keeps colours still across a legend click. }
     FSeriesColors: array of TTyChartColor;
     FSeriesColorKnown: array of Boolean;
+    { THE visualMap COMPONENTS, completed, and what they wrote: per binding
+      slot, one row per raw datum (nil when none targets the slot) and the
+      continuous components' visualMetas, in component order. The line fill
+      is solved on the laid-out axes, per slot, at the last render. }
+    FVisualSpecs: TTyVisualMapSpecArray;
+    FVisualRows: array of TTyVisualRowArray;
+    FVisualMetas: array of TTyVisualMetaArray;
+    FVisualLines: array of TTyVisualLineFill;
     { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
       unwritten, which is the palette's. }
     FSeriesColorNone: array of Boolean;
@@ -361,6 +369,9 @@ type
       landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
       that restyles the accent gets a matching chart for nothing. }
     procedure SolveSeriesColors;
+    procedure SolveVisualMaps;
+    procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
+      APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
       because a pie's slices and a chart's series both cycle it, and they
       index it by different things. }
@@ -724,6 +735,16 @@ type
       out AElement: Integer): TTyChartDatumRef; overload;
     { For a test or a designer to look inside. nil until the first build. }
     property Build: TTyChartBuild read FBuild;
+    { THE visualMap MODEL AS THE LAST BUILD SOLVED IT: the completed
+      components, what they wrote on the datum at ARawIndex of series
+      ASeriesIndex, that series' visualMetas, and the fill its line took at
+      the last render. False / empty where there is none. }
+    function VisualMapCount: Integer;
+    function VisualMapSpec(AIndex: Integer): TTyVisualMapSpec;
+    function VisualRow(ASeriesIndex, ARawIndex: Integer;
+      out ARow: TTyVisualRow): Boolean;
+    function VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
+    function VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
     { THE GRAPH SERIES ASeriesIndex, AS THE LAST RENDER LAID IT OUT: the nodes
       the legend kept -- in the order they were written, with their pixel
       positions -- the edges between them, and each node's fill. False when
@@ -1201,6 +1222,10 @@ begin
     second must not depend on the first or a legend click would repaint
     the whole chart. }
   SolveSeriesColors;
+  { AFTER the colours, because a partial colour visual starts from the series
+    colour, and BEFORE the stacks: the default dimension is the last one that
+    is not a calculation, and the stack columns are calculations. }
+  SolveVisualMaps;
   TyIndexSeries(FBindings, FIndex);
   { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
     whose axis was sized from the raw values draws off the top of its plot. }
@@ -2080,6 +2105,213 @@ begin
       end;
     end;
   end;
+end;
+
+procedure TTyAdvanceChart.SolveVisualMaps;
+var
+  i, k, n, raw, col, dimIndex: Integer;
+  spec: TTyVisualMapSpec;
+  st: TTyDataStore;
+  sid: string;
+  d: TJSONData;
+  baseColor: TTyVisualColor;
+  values: TTyDoubleArray;
+  rows: TTyVisualRowArray;
+  meta: TTyVisualMeta;
+  offKey: Integer;
+  ov: TTyDataValue;
+  ramp: TTyVisualColorArray;
+begin
+  FVisualSpecs := nil;
+  FVisualRows := nil;
+  FVisualMetas := nil;
+  FVisualLines := nil;
+  n := TyVisualMapCount(FOption);
+  if n = 0 then Exit;
+  { THE FALLBACK RAMP IS THE SKIN'S. Upstream derives it from its theme's
+    first colour; the theme here is the .tycss accent, which is series slot
+    one -- so an unconfigured visualMap is drawn in the skin's colour. A root
+    `gradientColor` still wins. }
+  ramp := TyVisualDefaultRamp(TTyChartColor(ThemeRampColor(0)));
+  SetLength(FVisualSpecs, n);
+  for k := 0 to n - 1 do
+  begin
+    FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp);
+    if FVisualSpecs[k].SubType = 'piecewise' then
+      FBuild.Note(Format(rsTyChartVisualMapPiecewise, [k]))
+    else if (FVisualSpecs[k].SubType = 'continuous') and FVisualSpecs[k].Show then
+      FBuild.Note(Format(rsTyChartVisualMapNotDrawn, [k]));
+  end;
+  SetLength(FVisualRows, Length(FBindings));
+  SetLength(FVisualMetas, Length(FBindings));
+  SetLength(FVisualLines, Length(FBindings));
+  offKey := TyOverrideKey('visualMap');
+  for i := 0 to High(FBindings) do
+  begin
+    if i > High(FStores) then Break;
+    st := FStores[i];
+    if st = nil then Continue;
+    sid := '';
+    d := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then sid := d.AsString;
+    end;
+    baseColor := TyVisualFromChart(TTyChartColor(
+      SeriesColor(FBindings[i].SeriesIndex)));
+    rows := nil;
+    { IN COMPONENT ORDER: a second visualMap on the same series starts from
+      what the first one wrote }
+    for k := 0 to n - 1 do
+    begin
+      spec := FVisualSpecs[k];
+      { piecewise is a later batch; it writes nothing yet }
+      if spec.SubType <> 'continuous' then Continue;
+      if not TyVisualMapTargets(spec, FBindings[i].SeriesIndex, sid) then Continue;
+      values := TyVisualSeriesValues(st,
+        TyVisualMapDimFor(spec, FBindings[i].SeriesIndex, sid), col, dimIndex);
+      if rows = nil then
+      begin
+        SetLength(rows, st.RawCount);
+        for raw := 0 to High(rows) do
+        begin
+          rows[raw] := Default(TTyVisualRow);
+          rows[raw].Color := baseColor;
+          rows[raw].Opacity := NaN;
+        end;
+      end;
+      for raw := 0 to High(rows) do
+      begin
+        { `visualMap: false` on the item opts it out of every component }
+        if st.HasOverrideByRaw(raw, offKey) then
+        begin
+          ov := st.GetOverrideByRaw(raw, offKey);
+          if (ov.Kind = dvkBool) and (ov.Num = 0) then Continue;
+        end;
+        TyVisualApply(spec, TyVisualValueState(spec, values[raw]),
+          values[raw], rows[raw], False);
+      end;
+      if dimIndex >= 0 then
+      begin
+        meta := TyVisualMetaOf(spec, baseColor);
+        meta.Dimension := dimIndex;
+        meta.CoordDim := '';
+        if col >= 0 then
+        begin
+          meta.CoordDim := st.DimCoord(col);
+          if meta.CoordDim = '' then meta.CoordDim := st.DimName(col);
+          if (meta.CoordDim <> 'x') and (meta.CoordDim <> 'y') then
+            meta.CoordDim := '';
+        end;
+        SetLength(FVisualMetas[i], Length(FVisualMetas[i]) + 1);
+        FVisualMetas[i][High(FVisualMetas[i])] := meta;
+      end;
+    end;
+    FVisualRows[i] := rows;
+  end;
+end;
+
+procedure TTyAdvanceChart.ApplyVisualMaps(var AVisual: TTySeriesVisual;
+  ASlot, APPI: Integer);
+var
+  k: Integer;
+  node: TJSONObject;
+  d: TJSONData;
+  axis: TTyAxis;
+  metas: TTyVisualMetaArray;
+  origin, len: Double;
+begin
+  if (ASlot < 0) or (ASlot > High(FVisualRows)) then Exit;
+  AVisual.VisualRows := FVisualRows[ASlot];
+  if APPI <= 0 then Exit;
+  FVisualLines[ASlot] := Default(TTyVisualLineFill);
+  { A LINE ONLY, and on a grid: LineView's getVisualGradient, from the LAST
+    visualMeta whose dimension is x or y }
+  if FBindings[ASlot].SeriesType <> 'line' then Exit;
+  if not FBindings[ASlot].HasAxes then Exit;
+  if (ASlot > High(FStores)) or (FStores[ASlot] = nil)
+    or (FStores[ASlot].Count = 0) then Exit;
+  metas := FVisualMetas[ASlot];
+  k := High(metas);
+  while (k >= 0) and (metas[k].CoordDim = '') do Dec(k);
+  if k < 0 then Exit;
+  axis := nil;
+  if (FBindings[ASlot].BaseAxis <> nil)
+    and (FBindings[ASlot].BaseAxis.Dim = metas[k].CoordDim) then
+    axis := FBindings[ASlot].BaseAxis
+  else if (FBindings[ASlot].ValueAxis <> nil)
+    and (FBindings[ASlot].ValueAxis.Dim = metas[k].CoordDim) then
+    axis := FBindings[ASlot].ValueAxis;
+  if axis = nil then Exit;
+  { CLIPPED TO THE CANVAS, not to the plot: api.getWidth() / getHeight() }
+  if metas[k].CoordDim = 'x' then
+  begin
+    origin := FLastRect.Left;
+    len := FLastRect.Right - FLastRect.Left;
+  end
+  else
+  begin
+    origin := FLastRect.Top;
+    len := FLastRect.Bottom - FLastRect.Top;
+  end;
+  FVisualLines[ASlot] := TyVisualLineFillOf(metas[k], axis, origin, len,
+    APPI / 96);
+  AVisual.VisualLine := FVisualLines[ASlot];
+  { the pen keeps an authored lineStyle.color, the area an authored
+    areaStyle.color -- `defaults(style, {stroke: visualColor})` }
+  AVisual.VisualLineStroke := True;
+  AVisual.VisualLineArea := True;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if (d <> nil) and (d.JSONType = jtObject) then
+  begin
+    node := TJSONObject(d);
+    AVisual.VisualLineStroke := not TyReadOptStyle(node, 'lineStyle').Color.Written;
+    AVisual.VisualLineArea := not TyReadOptStyle(node, 'areaStyle').Color.Written;
+  end;
+end;
+
+function TTyAdvanceChart.VisualMapCount: Integer;
+begin
+  Result := Length(FVisualSpecs);
+end;
+
+function TTyAdvanceChart.VisualMapSpec(AIndex: Integer): TTyVisualMapSpec;
+begin
+  Result := Default(TTyVisualMapSpec);
+  if (AIndex >= 0) and (AIndex <= High(FVisualSpecs)) then
+    Result := FVisualSpecs[AIndex];
+end;
+
+function TTyAdvanceChart.VisualRow(ASeriesIndex, ARawIndex: Integer;
+  out ARow: TTyVisualRow): Boolean;
+var slot: Integer;
+begin
+  ARow := Default(TTyVisualRow);
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FVisualRows)) then Exit;
+  if (ARawIndex < 0) or (ARawIndex > High(FVisualRows[slot])) then Exit;
+  ARow := FVisualRows[slot][ARawIndex];
+  Result := True;
+end;
+
+function TTyAdvanceChart.VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FVisualMetas)) then
+    Result := FVisualMetas[slot];
+end;
+
+function TTyAdvanceChart.VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
+var slot: Integer;
+begin
+  Result := Default(TTyVisualLineFill);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FVisualLines)) then
+    Result := FVisualLines[slot];
 end;
 
 procedure TTyAdvanceChart.ApplyOptStyle(var AVisual: TTySeriesVisual;
@@ -4133,6 +4365,7 @@ begin
       end;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
       ApplyOptStyle(v, FBindings[i].SeriesIndex);
+      ApplyVisualMaps(v, i, APPI);
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
       v.Candle := CandleVisual(FBindings[i].SeriesIndex);
@@ -4425,6 +4658,8 @@ begin
   end;
   v := TySeriesVisual(TTyChartColor(SeriesColor(ADatum.SeriesIndex)));
   ApplyOptStyle(v, ADatum.SeriesIndex);
+  { the marker is the ITEM's colour, so what a visualMap wrote on it too }
+  ApplyVisualMaps(v, slot, 0);
   Result := v.Fill;
   if (slot <= High(FStores)) and (FStores[slot] <> nil)
     and (ADatum.DataIndex >= 0) and (ADatum.DataIndex < FStores[slot].Count) then

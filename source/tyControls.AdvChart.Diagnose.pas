@@ -220,6 +220,8 @@ begin
         el := AOption.ComponentAt(path, j);
         if (el = nil) or not (el is TJSONObject) then Continue;
         if TJSONObject(el).Get('type', '') <> '' then Continue;
+        { ECharts gives an untyped visualMap its type itself }
+        if TyOptDefaultSubType(path, TJSONObject(el)) <> '' then Continue;
         if not TyOptVariantTags(lk.Node, tags) then Continue;
         list := tags.CommaText;
         Add(C, odkNoSeriesType, path + '[' + IntToStr(j) + ']',

@@ -906,6 +906,16 @@ msgstr "%s[%d].type：“%s”不是 value、category、time 或 log 之一，�
 msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
 msgstr "xAxis 与 yAxis 只有一个：没有生成 grid，两条轴都不会画"
 
+#: tycontrols.strconsts.rstychartvisualmapnotdrawn
+#, object-pascal-format
+msgid "visualMap[%d]: its colours are applied to the data, but the component itself is not drawn yet"
+msgstr "visualMap[%d]：颜色已经映射到数据上，组件本身还画不出来"
+
+#: tycontrols.strconsts.rstychartvisualmappiecewise
+#, object-pascal-format
+msgid "visualMap[%d]: piecewise mapping is not supported yet, so its series keep their own colours"
+msgstr "visualMap[%d]：分段映射还不支持，相关系列保持原来的颜色"
+
 #: tycontrols.strconsts.rstychartxaxisnogrid
 #, object-pascal-format
 msgid "xAxis[%d] names no grid, so it is not drawn"
