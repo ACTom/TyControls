@@ -65,6 +65,8 @@ end
 | `TyToolWindowSeparator` | 底栏标题行里固定按钮前的竖线（border-color + border-width） |
 | `TyToolWindowDropIndicator` | 拖放插入线 |
 | `TyToolWindowNote` | 设计期提示（孤儿窗口、没有窗口、Placement 冲突、多余操作区、非窗口子控件） |
+| `TyToolWindowBadge` | 角标：侧栏图标右上角、底栏标签标题后面的胶囊或圆点 |
+| `TyToolWindowDropZone` | 拖动时隐藏那一侧显示的放置区域；`:hover` = 指针在里面，松手就放到这里 |
 
 颜色 token（light.tycss 里的默认值）：
 
@@ -82,10 +84,14 @@ end
 | `--toolwindow-edge-color` / `--toolwindow-edge-color-hover` | `var(--border)` / `var(--accent)` |
 | `--toolwindow-overlay-hover` / `--toolwindow-overlay-active` | `var(--overlay-hover)` / `alpha(var(--on-surface), 0.20)` |
 | `--toolwindow-drop-color` | `var(--accent)` |
+| `--toolwindow-badge-bg` / `--toolwindow-badge-ink` | `var(--accent)` / `var(--on-accent)` |
+| `--toolwindow-dropzone-bg` / `--toolwindow-dropzone-bg-hover` | `alpha(var(--toolwindow-drop-color), 0.10)` / `alpha(var(--toolwindow-drop-color), 0.22)` |
 
 长度 token（密度块，现代密度另有一套值）：`--toolwindow-header-height`、`-header-pad`、`-header-gap`、`-tab-pad`、`-tab-area-min`、`-indicator-size`、`-strip-indicator-size`（0 = 不画）、`-button-size`、`-glyph-size`、`-content-min`、`-strip-size`、`-strip-item-size`、`-edge-size`、`-drop-size`。
 
 皮肤一般只调 token，不用重写基础规则。
+
+角标的默认颜色和 `TyBadge` 一样，但不跟着皮肤自己写的 `TyBadge` 规则走：要改角标，调 `--toolwindow-badge-*` 或写 `TyToolWindowBadge`。尺寸 token 和 `TyBadge` 共用（`--badge-inset`、`--badge-min-size`、`--badge-dot-size`）。
 
 ## 3. 属性与方法
 
@@ -96,6 +102,7 @@ end
 | `Placement` | `twpLeft`（默认）/ `twpRight` / `twpBottom`。改它顺带把 `Align` 设成对应值、把栏挪到父控件同侧的最外边。运行时栏里有窗口时，侧 ↔ 底的改动被忽略 |
 | `ExpandedSize` | 展开时沿栏轴向的内容尺寸，**96 DPI 下的逻辑像素**，默认 240。侧栏不含图标条和拉宽边，底栏含标签行。空间不够时这一次排布会收窄，但不写回它 |
 | `Collapsed` | 收起（默认 False）。只在运行时生效，设计期永远按展开显示。侧栏收起后剩图标条，底栏高度变成 0 |
+| `HideWhenEmpty` | 侧栏没有窗口时整条隐藏（默认 True），见 §7。对底栏没有效果 |
 | `ActiveIndex` / `ActiveWindow` | 当前页。`ActiveIndex` 跟着窗口走：调顺序后当前页还是那个窗口，序号跟着变。代码设当前页不改 `Collapsed` |
 | `Manager` | 指向 `TTyToolWindowManager`（属性类型是基类 `TTyCustomToolWindowManager`） |
 | `Images` | 图标列表；为空时回落到 `Manager.Images` |
@@ -111,6 +118,11 @@ end
 | `Caption` | 侧栏是标题行里的标题，底栏是标签文字 |
 | `ImageName` / `ImageIndex` | 图标条上的图标。`ImageName` 是持久键，`ImageIndex` 是它的视图 |
 | `StripHint` | 图标和标签的提示，空的时候用 `Caption`。类型是 `TTranslateString`，窗体的 .po 能翻译它 |
+| `ShowBadge` | 角标的总开关（默认 False）。开着时 0 也显示，见 §6 |
+| `BadgeValue` | 角标上的数字；大于 99 显示 `99+` |
+| `BadgeDot` | 画一个圆点代替数字 |
+| `OnBadgeDisplay` | 显示之前改文字或藏起来，同 `TTyButton` 的同名事件 |
+| `BadgeDisplay(文字, 圆点)` | 此刻画不画角标、画什么（事件已经算进去） |
 | `WindowIndex` | 在栏里排第几，可写（写 = 调顺序）；不进 .lfm |
 | `Bar` / `IsActive` / `Actions` / `EnsureActions` | 所在的栏；是不是当前页；第一个操作区；没有就建一个 |
 | `FocusFirst` | 把焦点给正文里第一个能聚焦的控件（跳过操作区） |
@@ -127,9 +139,9 @@ end
 | `MoveWindow(W, 目标栏, 序号 = -1)` | 把窗口挪到另一条栏（或同一条栏里调顺序）。-1 = 末尾。答 False 表示什么都没改 |
 | `CanMoveWindow(W, 目标栏)` | 结构检查 + `OnCanMoveWindow`，没有副作用 |
 | `UsableBar(Placement)` | 此刻这一侧的可用栏；没有答 nil。「移到另一侧」就问它要目标 |
-| `IsBarUsable(栏)` | 这条栏可不可用（见 §9 Placement 冲突） |
+| `IsBarUsable(栏)` | 这条栏可不可用（见 §12 Placement 冲突） |
 | `CancelDrag` / `IsDragging` | 取消此刻的图标拖动；有没有在拖 |
-| `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` / `CaptureDefaultLayout` | 见 §6 |
+| `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` / `CaptureDefaultLayout` | 见 §9 |
 | `Images` | 两侧共用的图标列表 |
 | `OnCanMoveWindow` / `OnWindowMoved` / `OnLayoutApplied` | 见 §4 |
 
@@ -157,7 +169,46 @@ end
 
 **排队**：窗体已经显示时，跨栏的 `MoveWindow` 不当场做，而是排到消息循环里（返回 True 表示「已接受」）。这是为了让操作区里的按钮能移动自己所在的窗口：同步换父会在按钮自己的点击处理里销毁它的句柄。所以**排队时 `MoveWindow` 返回之后 `W.Bar` 还是旧栏**，挪好了会发 `OnWindowMoved`。FormCreate 里调、设计期调、同栏调顺序都是同步的；只有一个例外：这个窗口还有排着的移动时，同栏调顺序也排进队列，按调用的先后执行。
 
-## 6. 布局保存
+## 6. 角标
+
+工具窗口可以带一个角标，告诉用户「这里有东西」：侧栏画在图标右上角，底栏画在标签标题后面。属性在窗口上，窗口挪到另一侧，角标跟着走。
+
+- 规矩照 `TTyButton` 的徽标：`ShowBadge` 开着就显示，0 也显示。想在 0 时藏起来，写 `ShowBadge := n > 0`，或者在 `OnBadgeDisplay` 里把 `AVisible` 设成 False。
+- 超过 99 显示 `99+`，负数照原样。
+- `BadgeDot` 只画一个圆点，适合「有新内容」这种不说多少的提示。
+- `OnBadgeDisplay` 可以改文字（比如写成 `new`）或者藏起来。它会被频繁调用，量标签宽、画、命中都会问，处理器里不要有副作用。它的答案变了控件不知道，请自己调窗口的 `Invalidate`，或者重新赋一次 `BadgeValue`。
+- 底栏的标签会跟着变宽：标题、间隔、胶囊依次排开。标签被截时先截标题，胶囊保留。
+- 收进溢出菜单的窗口，菜单项带上角标：数字写成 `Problems (3)`，圆点写成 `Problems •`。
+- 提示不带数字，仍是 `StripHint`（空的时候 `Caption`）。
+- 窗口禁用时角标照常颜色；整条栏禁用时跟着一起变淡。
+- 角标照常存进 .lfm，不进布局串。
+
+## 7. 一侧没有窗口时
+
+侧栏里的窗口都挪走以后，这一侧默认整条隐藏：宽度变成 0，图标条也不留，编辑区跟着变宽。`Visible` 不动，栏还在原来的位置上。
+
+- 拖动工具窗口时，隐藏的那一侧会出现一块放置区域，宽度就是这条栏展开时的宽，上面写着「放到右侧栏」（或左侧栏）。拖进去它会亮，松手窗口就过去，这一侧重新出现，窗口成为当前页。
+- 隐藏的栏照样可用：「移到另一侧」菜单、`UsableBar`、`MoveWindow` 都照常，挪一个窗口过去它就出现。
+- 想留着图标条，把 `HideWhenEmpty` 设成 False：空栏只剩图标条，照旧可以往图标条上拖。
+- 隐藏时不改 `Collapsed` 和 `ExpandedSize`，窗口回来时按原来的尺寸显示（`MoveWindow` 和拖放本来就会展开目标栏）。
+- 读布局时某一侧变空就隐藏、变非空就出现，不用另外处理。
+- 底栏不受影响：没有窗口时它的高度本来就是 0。这个属性对底栏没有效果，对象查看器里照样能看到。
+- 设计期永远不隐藏，空栏照旧写着「添加工具窗口」。
+
+## 8. 禁用工具窗口
+
+把 `TTyToolWindow` 的 `Enabled` 设成 False，禁用的是这一页的内容，不会把用户困在这一页里。
+
+- 正文和操作区跟着禁用（LCL 本来就这样）。
+- 它的图标或标签变灰，没有悬停，点了不切过去，也拖不动；溢出菜单里它那一项也是灰的。
+- 右键菜单、提示照常；代码照常能切过去（`ActiveWindow`、`MoveWindow`、读布局）。
+- **当前页被禁用时**
+  - 底栏：标签行照常能用，点别的标签切过去、溢出、最大化、收起、拖别的标签调顺序都行。这一页的操作区在禁用期间看不见（标签行这时由栏来画，操作区是页的子控件，没地方放），启用后回来。
+  - 侧栏：别的图标照常切；点当前页自己那个灰图标照样收起、展开，只是拖不动。
+- 看的是窗口自己的 `Enabled`。整条栏（或者它的父控件）被禁用是另一回事：整条栏变灰，什么都不接。
+- Win32 上点禁用页的正文，这一下会落到栏上：栏的 `OnClick` 不会触发，`OnMouseDown` / `OnMouseUp` 会。GTK、Cocoa 上这一下直接丢掉。
+
+## 9. 布局保存
 
 | 方法 | 说明 |
 |---|---|
@@ -200,7 +251,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 
 不保存的：底栏最大化；窗口里的内容（筛选框文字、终端会话、滚动位置）。
 
-## 7. 设计器里使用
+## 10. 设计器里使用
 
 - 从「TyControls Containers」页放一条栏和一个 manager 到窗体上，栏的 `Manager` 指向它。在对象查看器里改 `Placement`，栏自己挪到那一边。
 - **栏的右键菜单**
@@ -218,7 +269,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 - **粘贴要先选中栏**：侧栏点图标条，底栏点标签行后面的空白处或拉宽边。选中的是当前页窗口的正文时，粘贴会落进窗口里。
 - 窗口和操作区在对象查看器里没有 `Controller`，它们用栏的。
 
-## 8. 流式化
+## 11. 流式化
 
 ```
 object BottomBar: TTyToolWindowBar
@@ -247,11 +298,10 @@ end
 - 窗口的 `Left`、`Top`、`Width`、`Height`、`TabOrder`、`Visible`、`Controller` 不进 .lfm；栏沿轴向的那一边（侧栏的 `Width`、底栏的 `Height`）也不进，由 `ExpandedSize` 推出来。
 - 窗口顺序就是它们在 `Controls` 里的顺序，也就是 .lfm 里的先后。
 
-## 9. 注意事项
+## 12. 注意事项
 
 - `Controller` 由栏推给窗口、窗口再推给操作区。代码里直接赋给窗口的值会被下一次推送盖掉，要换主题请设栏的 `Controller`。
 - 图标条的提示跟着栏的 `ShowHint`，底栏标签的提示跟着各窗口的 `ShowHint`。提示文字用 `StripHint`，**不要用 `Hint`**：窗口的 `Hint` 会冒到它里面所有没设 `Hint` 的控件上。
-- 要禁用一页，禁用正文里的控件，**不要禁用 `TTyToolWindow` 本身**。底栏的标签行由当前页接收输入，当前页禁用后标签、溢出、最大化、收起都会失灵。
 - 操作区上的 `AutoSize`、`ChildSizing`、`BorderSpacing` 不起作用。
 - 启动时显示出来的当前页收不到 `OnShow`。首次填充内容请放在 FormCreate 里。
 - `OnExit` 里不要把焦点设回被藏起来的窗口里的控件。
@@ -262,27 +312,31 @@ end
 - 排队时 `MoveWindow` 返回之后 `W.Bar` 还是旧栏（§5）。
 - 窗体显示之后调的 `LoadLayoutFromString` / `ResetLayout` 也会排队；排着的布局执行时会盖掉这段时间里的同步改动，也会顶掉已经排着的移动。
 - 跨栏移动（`MoveWindow`、拖放、读布局、恢复默认）会重建窗口里所有控件的句柄：输入法组字、光标位置、原生子窗口的状态都不保留。
-- 改了名的窗口当成新窗口（§6）；翻译 `Caption` 不影响布局。
+- 改了名的窗口当成新窗口（§9）；翻译 `Caption` 不影响布局。
 - `Bar.Manager` 是基类类型。经它调 `MoveWindow` 或布局方法要转型成 `TTyToolWindowManager`，或者直接用窗体上的 manager 字段；用到 manager 的单元要 uses `tyControls.ToolWindows.Manager`。
 - 继承窗体上读用户布局，请在 FormCreate 里调：祖先层加载中调的会被子孙层流进来的值盖掉。
 - 同一个 manager 下 `Placement` 相同的栏都不可用：不参与跨栏拖动、`MoveWindow` 和布局保存，栏内调顺序照常。
 - 不支持：manager 放在数据模块里、栏分布在多个窗体上。
 - 删掉一个工具窗口或操作区后撤销 / 重做，它会被建到**窗体**上：窗口显示成孤儿，右键「移回栏里 ▸」；操作区用 IDE 的「改变父控件」放回窗口。
 
-## 10. 和 VS Code / JetBrains 的差异
+## 13. 和 VS Code / JetBrains 的差异
 
 - 两侧都有图标条（VS Code 右侧栏用标题行里的标签切换）。
 - 侧栏和底栏之间不能互拖（VS Code 三处互通）。
 - 图标和标签都在松开时切换，不在按下时。
-- 拖空的侧栏保留图标条（VS Code 整块藏起来）。
+- 拖空的侧栏默认整条隐藏（`HideWhenEmpty`），拖动一开始那一侧就显示放置区域，不等指针靠近边缘；不拖动时不会弹出来。
 - 一侧只显示一个窗口，不做上下 / 左右分屏（JetBrains 可以）。
-- 不做：边缘靠近弹出、图标 / 标签上的数字徽标、每个窗口各记一个尺寸、键盘操作图标条、浮动 / 独立窗口、跨窗体拖动、内置右键菜单、从标题行拖动窗口。
+- 不做：不拖动时指针靠近边缘弹出隐藏的栏、每个窗口各记一个尺寸、键盘操作图标条、浮动 / 独立窗口、跨窗体拖动、内置右键菜单、从标题行拖动窗口。
 
 和库里其他控件的习惯也有两处不同：
 
 - 图标和标签松开才切。库里单纯做切换的控件（`TTySegmented`、`TTyTabSet` 这类标签条、`TTyPagination`）是按下就切；这里按下之后可能是要拖，所以等松开。TreeView、Grid 的表头点击也改成了松开才算。
 - `OnWindowMoved` 对 `MoveWindow`、改 `WindowIndex` 也发。Grid 的 `OnRowMove`、TreeView 的 `OnNodeMoved`、标签条的 `OnReorder` 只在手势里发；这里是想给程序一个「布局变了」的信号，比如拿来自动保存。
 
-## 11. 示例
+## 14. 示例
 
-`examples/toolwindows`：一个类 IDE 窗体，左边 Explorer / Search，右边 Outline，编辑区下面 Problems / Output / Terminal。能跨侧拖、最大化和收起底栏、保存 / 读取 / 恢复布局（关掉再开回到上次的样子）、换肤、换密度；Output 页里是事件日志，Diagnostics 菜单用来在真机上试拖动中弹对话框、弹菜单、禁用当前页这几种情况。
+`examples/toolwindows`：一个类 IDE 窗体，左边 Explorer / Search，右边 Outline，编辑区下面 Problems / Output / Terminal。能跨侧拖、最大化和收起底栏、保存 / 读取 / 恢复布局（关掉再开回到上次的样子）、换肤、换密度；Output 页里是事件日志。
+
+- 角标：Search 图标和 Problems 标签上各有一个数字；Output 不是正在看的那一页时来了日志，标签后面亮一个圆点，切过去就灭。
+- 把 Outline 拖到左边，右栏整条隐藏；再拖一个图标，右边就出现放置区域，松手右栏回来。
+- Diagnostics 菜单用来在真机上试这几种情况：拖动中弹对话框、弹菜单；禁用 Output 页（标签行照常能切走）；禁用 Search 窗口；给 Problems 加 45（点三次到 `99+`，标签变宽、后面的标签挤进溢出菜单）。
