@@ -55,7 +55,7 @@ type
     procedure TestARunTimeOrphanStaysHiddenWithNoNote;
     procedure TestAnOrphanBackInItsBarIsTheCurrentPageAgain;
     procedure TestADesignTimeParentOfNilDoesNotRaise;
-    procedure TestAnOrphanStreamsWithoutVisible;
+    procedure TestAHiddenPageStreamsWithoutVisible;
     { spec §10.6:设计期 Placement 冲突提示。 }
     procedure TestConflictingBarsReserveANoteLine;
     procedure TestTheActivePageStopsAboveTheConflictNote;
@@ -344,23 +344,24 @@ begin
   AssertNull('当前页也摘得下来', b.Parent);
 end;
 
-procedure TTyToolWindowDesignTests.TestAnOrphanStreamsWithoutVisible;
+procedure TTyToolWindowDesignTests.TestAHiddenPageStreamsWithoutVisible;
 var
   a, b: TProbeWindow;
   ms: TMemoryStream;
   txt: string;
 begin
-  { 设计期孤儿的 Visible 被写成 True,但它是 stored False:不进 .lfm。整棵设计期窗体无头
-    建不起来(设计期的 TForm 要句柄),这里只流孤儿自己 —— 写的是同一份 published 表。 }
+  { Visible 是 stored False:栏里的非当前页 Visible = False,不能进 .lfm。要流的是**藏着的**
+    那一页 —— TControl.Visible 声明 default True,Visible = True 的窗口(当前页、设计期孤儿)
+    写不写都一样不进流,流它什么也证明不了。整棵设计期窗体无头建不起来(设计期的 TForm
+    要句柄),这里只流这一页自己 —— 写的是同一份 published 表。 }
   NewDesignPair(a, b);
-  Orphan(a);
-  AssertTrue('前提:孤儿显示着', a.Visible);
+  AssertFalse('前提:非当前页藏着', a.Visible);
   ms := TMemoryStream.Create;
   try
     ms.WriteComponent(a);
     txt := BinaryToText(ms);
     AssertTrue('前提:写出来的是这个窗口', Pos('object A: TProbeWindow', txt) > 0);
-    AssertEquals('Visible 不进 .lfm', 0, Pos('Visible', txt));
+    AssertEquals('Visible = False 也不进 .lfm', 0, Pos('Visible', txt));
   finally
     ms.Free;
   end;
@@ -606,7 +607,12 @@ begin
     a.EndLoad;
     b.EndLoad;
   end;
-  AssertFalse('加载完照样画提示', IsRectEmpty(a.BarLayout.ConflictNote));
+  { 加载完的重排有两处来源:LCL 自己的 Loaded(TControl.Loaded → LoadedAll → AdjustSize)
+    和栏 Loaded 里的 Relayout。所以「Loaded 不 Relayout」对这一条是等价变异 —— 提示行照样
+    让得出来;那一句守的是推导宽度,由 TestExpandedSizeStreamsOnBothSidesOfTheDefault 杀。 }
+  AssertFalse('前提:加载完有提示行', IsRectEmpty(a.BarLayout.ConflictNote));
+  AssertTrue('A 加载完重排过(提示行才让得出来)', a.AlignCount > la);
+  AssertTrue('B 加载完重排过', b.AlignCount > lb);
 end;
 
 procedure TTyToolWindowDesignTests.TestTheConflictTextFitsADefaultSideBar;
@@ -902,25 +908,24 @@ end;
 procedure TTyToolWindowDesignTests.TestDroppingABarAt96KeepsTheDefaultSize;
 var
   b: TBarAccess;
-  info: PPropInfo;
 begin
+  { 对照组:96 PPI 下 IDE 的放大是恒等的,SetBounds 给的宽就是构造时推出来的宽,写不写回
+    都是 240。它只说明放下这条路径(SetBounds、AutoAdjustLayout、Parent :=)在不换算时不动
+    ExpandedSize;「还没有父控件不写回」要靠 144 那一条区分。 }
   b := DropBar(96);
-  AssertEquals('ExpandedSize 还是 240', 240, b.ExpandedSize);
-  info := TypInfo.GetPropInfo(b, 'ExpandedSize');
-  AssertEquals('等于声明的 default:对象查看器里不加粗、不进 .lfm', info^.Default, b.ExpandedSize);
+  AssertEquals('ExpandedSize 还是 240(声明的 default)', 240, b.ExpandedSize);
 end;
 
 procedure TTyToolWindowDesignTests.TestDroppingABarAt144KeepsTheDefaultSize;
 var
   b: TBarAccess;
-  info: PPropInfo;
 begin
+  { 144 PPI:栏构造时已经按屏幕 PPI 推过宽,IDE 又把它当 96 设计值放大一遍再 SetBounds ——
+    这时还没有父控件,写回的话 ExpandedSize 变成 380,对象查看器里加粗、进 .lfm。宽不另外
+    断言:SetParent 之后栏按此刻的 ExpandedSize 重推,Width 永远等于推导值,区分不了。 }
   b := DropBar(144);
   AssertEquals('前提:按设计器 PPI 调过', 144, b.Font.PixelsPerInch);
-  AssertEquals('ExpandedSize 还是 240', 240, b.ExpandedSize);
-  info := TypInfo.GetPropInfo(b, 'ExpandedSize');
-  AssertEquals('等于声明的 default', info^.Default, b.ExpandedSize);
-  AssertEquals('宽是按 240 在 144 PPI 下推导的,不是放大了两遍的', b.CallDerivedAxisPx, b.Width);
+  AssertEquals('ExpandedSize 还是 240(声明的 default)', 240, b.ExpandedSize);
 end;
 
 initialization
