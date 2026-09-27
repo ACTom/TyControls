@@ -639,6 +639,14 @@ msgstr "收起"
 msgid "A tool window cannot move between a side bar and a bottom bar"
 msgstr "工具窗口不能在侧栏和底栏之间直接移动"
 
+#: tycontrols.strconsts.rstytoolwindowdropleft
+msgid "Drop here to show the left side bar"
+msgstr "放到左侧栏"
+
+#: tycontrols.strconsts.rstytoolwindowdropright
+msgid "Drop here to show the right side bar"
+msgstr "放到右侧栏"
+
 #: tycontrols.strconsts.rstytoolwindowmaximize
 msgid "Maximize"
 msgstr "最大化"

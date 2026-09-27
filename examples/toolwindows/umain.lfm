@@ -119,6 +119,8 @@ object MainForm: TMainForm
         Caption = 'Search'
         ImageName = 'search'
         StripHint = 'Search in files'
+        ShowBadge = True
+        BadgeValue = 3
         object SearchEdit: TTyEdit
           Left = 0
           Height = 28
@@ -212,6 +214,8 @@ object MainForm: TMainForm
           Caption = 'Problems'
           StripHint = 'Problems (no actions area)'
           ShowHint = True
+          ShowBadge = True
+          BadgeValue = 2
           object ProblemsList: TTyListBox
             Left = 0
             Height = 150
@@ -228,6 +232,8 @@ object MainForm: TMainForm
           Caption = 'Output'
           StripHint = 'Output (event log)'
           ShowHint = True
+          BadgeDot = True
+          OnShow = OutputWinShow
           object OutputActions: TTyToolWindowActions
             object OutputFilter: TTyEdit
               Left = 0
@@ -423,6 +429,17 @@ object MainForm: TMainForm
       object MnuDiagDisable: TMenuItem
         Caption = 'Disable &Output Page'
         OnClick = MnuDiagDisableClick
+      end
+      object MnuDiagDisableSearch: TMenuItem
+        Caption = 'Disable &Search Window'
+        OnClick = MnuDiagDisableSearchClick
+      end
+      object MnuDiagSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuDiagBadge: TMenuItem
+        Caption = 'Add 45 &Problems'
+        OnClick = MnuDiagBadgeClick
       end
     end
   end

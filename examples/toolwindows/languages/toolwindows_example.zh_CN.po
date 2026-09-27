@@ -163,6 +163,14 @@ msgstr "3 秒后弹出菜单(&M)"
 msgid "Disable &Output Page"
 msgstr "禁用输出页(&O)"
 
+#: tmainform.mnudiagdisablesearch.caption
+msgid "Disable &Search Window"
+msgstr "禁用搜索窗口(&S)"
+
+#: tmainform.mnudiagbadge.caption
+msgid "Add 45 &Problems"
+msgstr "问题数加 45(&P)"
+
 #: tmainform.mnustripmove.caption
 msgid "Move to Other Side"
 msgstr "移到另一侧"
@@ -269,6 +277,16 @@ msgstr "这个对话框是在你操作途中弹出来的。要是你正拖着图
 #, object-pascal-format
 msgid "Output page enabled = %s"
 msgstr "输出页 Enabled = %s"
+
+#: umain.rsdiagsearchfmt
+#, object-pascal-format
+msgid "Search window enabled = %s"
+msgstr "搜索窗口 Enabled = %s"
+
+#: umain.rsdiagbadgefmt
+#, object-pascal-format
+msgid "Problems badge = %d"
+msgstr "问题角标 = %d"
 
 #: umain.rstermnew
 msgid "(a real app would open a new terminal here)"

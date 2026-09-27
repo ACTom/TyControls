@@ -14,7 +14,13 @@ unit umain;
       and Explorer's "reset layout". Once the form is showing, those calls are queued -- the
       Output log shows MoveWindow returning while Outline is still in its old bar.
     - the Diagnostics menu exists for checks only a real machine can make: a modal dialog or a
-      popup menu opening in the middle of a drag, and a disabled current page.
+      popup menu opening in the middle of a drag, a disabled current page (its tab row still
+      switches, collapses and maximizes), a disabled side window, and a badge that grows to 99+.
+    - badges: Search's icon and Problems' tab carry a number (set in the .lfm); Output shows a
+      dot when a log line arrives while it is not the page you are looking at, and the dot goes
+      out when you switch to it.
+    - drag Outline to the left bar and the right bar hides (HideWhenEmpty); drag any icon again
+      and a drop zone shows where the right bar would open -- release in it and the bar is back.
   Every event goes to the Output page's log. The window, the bars, their windows and every
   menu are designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is event handlers,
   theme setup and the layout file. }
@@ -90,6 +96,9 @@ type
     MnuDiagMenu: TMenuItem;
     MnuDiagSep1: TMenuItem;
     MnuDiagDisable: TMenuItem;
+    MnuDiagDisableSearch: TMenuItem;
+    MnuDiagSep2: TMenuItem;
+    MnuDiagBadge: TMenuItem;
     StripMenu: TTyPopupMenu;
     MnuStripMove: TMenuItem;
     PanelMenu: TTyPopupMenu;
@@ -111,6 +120,9 @@ type
     procedure MnuDiagDialogClick(Sender: TObject);
     procedure MnuDiagMenuClick(Sender: TObject);
     procedure MnuDiagDisableClick(Sender: TObject);
+    procedure MnuDiagDisableSearchClick(Sender: TObject);
+    procedure MnuDiagBadgeClick(Sender: TObject);
+    procedure OutputWinShow(Sender: TObject);
     procedure DiagTimerTimer(Sender: TObject);
     procedure SideBarContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     procedure MnuStripMoveClick(Sender: TObject);
@@ -179,6 +191,8 @@ resourcestring
   rsDiagDialog      = 'This dialog opened in the middle of whatever you were doing. ' +
                       'A drag in progress should have been cancelled.';
   rsDiagDisabledFmt = 'Output page enabled = %s';
+  rsDiagSearchFmt   = 'Search window enabled = %s';
+  rsDiagBadgeFmt    = 'Problems badge = %d';
   rsTermNew         = '(a real app would open a new terminal here)';
   rsTermClose       = '(a real app would close this terminal here)';
   rsTermMore        = '(a real app would show more terminal actions here)';
@@ -245,6 +259,15 @@ begin
   if FLogLines = nil then Exit;
   FLogLines.Add(S);
   RefreshLog;
+  // A new line while Output is not the page being looked at: light its dot (BadgeDot is set in
+  // the .lfm, ShowBadge switches it). OutputWinShow puts it out again.
+  if not OutputWin.IsActive or BottomBar.Collapsed then
+    OutputWin.ShowBadge := True;
+end;
+
+procedure TMainForm.OutputWinShow(Sender: TObject);
+begin
+  OutputWin.ShowBadge := False;
 end;
 
 procedure TMainForm.RefreshLog;
@@ -542,11 +565,30 @@ end;
 
 procedure TMainForm.MnuDiagDisableClick(Sender: TObject);
 begin
-  // The docs say: disable the controls in a page, never the tool window itself. This shows why
-  // -- with the current page disabled, the tab row it draws stops answering too.
+  // A disabled page never traps the user: its body and actions area go dead (the actions area
+  // is not shown while it is disabled), but the tab row keeps working -- switch to another tab,
+  // collapse, maximize. The Output tab itself greys out and cannot be clicked back to.
   OutputWin.Enabled := not OutputWin.Enabled;
   MnuDiagDisable.Checked := not OutputWin.Enabled;
   Log(Format(rsDiagDisabledFmt, [BoolToStr(OutputWin.Enabled, True)]));
+end;
+
+procedure TMainForm.MnuDiagDisableSearchClick(Sender: TObject);
+begin
+  // A disabled side window: its icon greys out, takes no hover and neither switches nor drags;
+  // right-click still offers "Move to Other Side". If Search is the current page, clicking its
+  // grey icon still collapses and expands the bar.
+  SearchWin.Enabled := not SearchWin.Enabled;
+  MnuDiagDisableSearch.Checked := not SearchWin.Enabled;
+  Log(Format(rsDiagSearchFmt, [BoolToStr(SearchWin.Enabled, True)]));
+end;
+
+procedure TMainForm.MnuDiagBadgeClick(Sender: TObject);
+begin
+  // Three clicks reach 99+: the tab widens, and the tabs after it move into the overflow menu,
+  // which lists them with their badges.
+  ProblemsWin.BadgeValue := ProblemsWin.BadgeValue + 45;
+  Log(Format(rsDiagBadgeFmt, [ProblemsWin.BadgeValue]));
 end;
 
 end.
