@@ -7395,3 +7395,56 @@ PiecewiseView 的静态画面:每段一个条目(符号加标签)、两端文字
 ### 下一批
 
 visualMap 系列到此完成(B1–B4)。下一步回到画廊缺口清单挑下一个系列。
+
+## 94. Tier 1 第六十批:dataZoom 的处理层(C1)(2026-09-27)
+
+dataZoom 的模型、窗口、过滤和轴范围钉点。slider 组件的画面在 C2,交互在之后。
+
+### 上游的做法
+
+- **类型与目标**:不写 type 的 dataZoom 是 slider。目标轴:写了 `xAxisIndex`/`yAxisIndex`(或 id、`'all'`)就用写的;否则按 orient 取第一根 x(纵向取 y)轴加同一网格里的同向轴,再不行取第一根类目轴。orient 不写时,第一个目标维是 y 才是纵向。
+- **宿主**:一根轴只归第一个指向它的 dataZoom;后面指向同一根轴的 dataZoom 自己的 start/end 被忽略,显示宿主的窗口。
+- **toolbox 的 select**:`toolbox.feature.dataZoom` 写了就给每根 x 轴、再每根 y 轴各追加一个 select 型 dataZoom(排在作者写的后面),全窗口,filterMode 取 feature 的。它们不画东西,但会接管作者没指向的轴并按全窗口过滤。
+- **取值方式**:每一端分别看 percent 还是 value——只写了一个就用那个;都写了看 `rangeMode`,没有就用 percent。读的是作者写的原值,不是合并后的默认值。
+- **窗口**:百分比按轴的原始范围(nice 之前:数据、min/max、boundaryGap、含零、柱子起点)线性换算;反过来的一对交换;越界的窗口由 `sliderMove` 整体平移、保持跨度(`-10..50` 成 `0..60`);`minSpan`/`maxSpan` 等把跨度夹进范围。由百分比算出的值按轴像素跨度求精度(`getAcceptableTickPrecision(窗口, 像素, 0.5)`,类目和时间为 0)用 toFixed 取整;正好 0%/100% 的一端取原始范围的端点。`percentInverted` 由取整后的值反算。
+- **alignTicks**:对齐到另一根轴、且那根轴也由同一个 dataZoom 控制时,这根轴最后算,用那根轴的 `percentInverted` 当 start/end——zrender 的 `defaults` 保留目标的键,所以它盖过自己写的 start/end。
+- **钉点**:不在 0%/100% 的一端成为固定的轴端(fixMM 和 zoomFixMM),nice 不再外扩它;在 0%/100% 的一端照常 nice。被缩放的轴只在 reset 时建一次原始范围,之后不再从过滤后的数据重算。containShape 不加宽被钉住的一端;alignTicks 只要有一端被钉就两端都当固定。
+- **过滤**(按 dataZoom 声明顺序,先 reset 本 dataZoom 的所有轴再过滤):`filter` 每一维都在窗口里或是 NaN 才保留;`weakFilter` 某一维在窗口里、或跨过窗口才保留,全 NaN 的行删掉;`empty` 把窗口外的值换成 NaN,行留着,另一根轴不跟着变;`none` 不过滤。维度是 `mapDimensionsAll`——堆叠系列的原值和堆叠结果两维都过滤,所以按堆叠和缩放时底下的系列可能一行不剩。后一个 dataZoom 的原始范围按前一个过滤后的数据算。
+- **顺序**:dataZoom 在 1000,堆叠(900)和轴统计(920,柱宽的最小间距)之后——堆叠和间距都按未过滤的数据。
+
+### port 以前
+
+- dataZoom 完全没有接线,带 dataZoom 的图照全量数据画;编辑器还把不写 type 的 dataZoom 报成"没有类型"。
+- 笛卡尔标记的 `RawDataIndex` 直接等于视图下标——store 一旦被过滤,逐项 tooltip 和回调会指错行。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.DataZoom`:模型(目标、宿主、取值方式、select 型)、`TyDzSliderMove`、`TyDzCalculateWindow`、`TyDzParse`(类目名、时间字符串、对数 sanitize)。
+- `Series`:把数据并集加原始范围抽成 `TyAxisNoZoomExtent`,dataZoom 和最终定轴共用一份;`TyApplyAxisExtents` 新增带 `TTyAxisZoom` 的重载,被缩放的轴复用 reset 时的原始范围再加钉点;containShape 跳过钉住的一端;alignTicks 的固定端按"有一端被钉就两端固定";`TyAxisAlignTo`、`TyAxisDataDims` 导出;`TyLiPosMinGap` 改读原始行。
+- `Data`:`EmptyOutside`(允许类目列,关掉 RawMin/RawMax 快路径);`SelectRange` 遇 NaN 边界不再抛异常。
+- `AdvanceChart`:`SolveDataZooms` 放在堆叠之后、定轴之前;公开 `DataZoomCount`/`DataZoomSpec`/`AxisZoom`/`SeriesStore`。
+- `Marks`:标记建完后按 store 的 `GetRawIndex` 补 `RawDataIndex`。
+- `Complete`:dataZoom 的子类型默认 slider。
+
+### 基准
+
+- `tools/advchart-oracle/datazoom-window.js` 真跑 ECharts 6.1,72 个用例(窗口 W、目标与宿主 T、对齐 A、过滤 F、画廊 10 个),自检 23 条守卫。`test.advchart.datazoomwindow` 逐位比较:每个 dataZoom 的子类型、方向、目标、宿主、取值方式、filterMode、窗口的 value/percent/percentInverted/精度;每根轴的宿主、原始范围、钉点、最终范围、间隔、主刻度;每个系列留下的行及其原始下标、`empty` 后的值,以及柱、散点、折线实际画出的位置(柱按 plot 裁剪后比较)。
+- 延后的用例打开了:contain-shape 的 dataZoom 用例进 G10(外加一个"最小间距在窗口外"的用例,证明柱宽按未过滤数据);scale-align 的 E10 改为端到端,另加 E10b、E10c 检查"一端被钉两端固定";visualmappiecewise 去掉了 line-aqi 的豁免。
+
+### 变异测试
+
+39 个,全杀。第一轮 3 个存活,各补一个 oracle 用例:
+- W12d:`minSpan` 和 `minValueSpan` 同时写,值跨度优先;
+- A3:要对齐的轴在目标里排在前面,仍要最后算;
+- W14b:boundaryGap 30%、`splitNumber: 20`、窗口 0–50——0% 那端用过滤前测的原始范围(20),从留下的行重测会是 35。
+
+### 已知偏差
+
+- 折线的 `sampling`(lttb 等)没有移植:area-simple 按采样前的行比较。
+- `smooth` 折线画成直线段,不比较它的顶点。
+- 这个测试不给测量表,轴标签宽度和上游不同时 plot 位置会变,那样的用例不比较画出的位置(窗口、范围、刻度照比)。
+- 选项里写 NaN 无法用 JSON 表达,按 null 处理(对记录到的用例结果相同)。
+
+### 下一批
+
+C2:slider 的静态画面(位置、背景、数据阴影、填充、手柄、移动条、标签)和新的主题键。

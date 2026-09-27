@@ -96,7 +96,8 @@
 //
 // Per case:
 //   name, kind ('radar'|'cartesian'), scope ('B' radar | 'C' cartesian |
-//   'out': unit level only), canvas {w, h}, option (as run, animation false),
+//   'out': unit level only -- none at present; E10 was one until the port
+//   had dataZoom), canvas {w, h}, option (as run, animation false),
 //   build ('dev'|'prod'), devError (prod only)
 //   documentary, note     recorded for the reader
 //   deferred, why         a self-check failed by design
@@ -111,7 +112,12 @@
 //     alignTo       'dummy' (radar) | 'y0' ...
 //     input         effMM [hex,hex] (makeFinal, pow space on a log axis;
 //                   NaN = 7ff8000000000000), fix [b,b] (fixMM || any
-//                   zoomFixMM), incl0, isLog, base (hex), reversed
+//                   zoomFixMM: axisAlignTicks.ts:161-165, either end pinned
+//                   by a dataZoom fixes both), fixMM [b,b] (makeFinal's,
+//                   zoom pins included), zoomFixMM [b,b], zoomPercent,
+//                   zoomValue [hex,hex] | null (the dataZoom window over the
+//                   axis: its axis proxy's getWindow(); null without one),
+//                   incl0, isLog, base (hex), reversed
 //                   (tggAxInv), px (hex, the span align saw), splitNumber
 //                   (radar n, else null), refTicks[], refExpTicks[] (hex),
 //                   refInterval (hex)
@@ -125,7 +131,8 @@
 //                   t0, t1, seg, validExt, passes and exhausted are the
 //                   recipe's; everything else is read from upstream
 //     pxFinal       (cartesian) the final pixel span, documentary
-//     text          String(v) twins ('-0' for -0, 'NaN'): effMM, px, base,
+//     text          String(v) twins ('-0' for -0, 'NaN'): effMM, zoomPercent,
+//                   zoomValue, px, base,
 //                   refInterval, t0, t1, validExt, extent, outerExtent,
 //                   interval, intervalPrecision, niceExtent, ticks,
 //                   outerTicks, tickCoords
@@ -136,7 +143,11 @@
 //     from `input` alone, Object.is on every number, labels string-equal; a
 //     radar axis is also recomputed from the OPTION (raw rule + splitNumber)
 //     and must give the same input and out; a cartesian px must equal the
-//     option rect's span, and the rect Grid#update started from
+//     option rect's span, and the rect Grid#update started from; the zoom
+//     rule (AxisProxy.reset sets zoomMM only for an end off 0% / 100%;
+//     makeFinal pins it: effMM i = window value i, fixMM i = zoomFixMM i =
+//     true) gives zoomFixMM from zoomPercent, every pinned effMM end is its
+//     zoomValue bit for bit, and fix is fixMM || either zoomFixMM
 //   2 twins: parseFloat(text) has the bits of the hex beside it
 //   3 invariants: ticks.length === intervalCount + 1 + (ext0 < ne0) + (ext1 >
 //     last) unless interval is 0 (then []); radar intervalCount ===
@@ -486,17 +497,47 @@ function radarLinesDrawn(chart) {
   return n;
 }
 
-function readAxis(axis, extra) {
+// The dataZoom window over an axis model: the first dataZoom whose targets
+// include it (the axis has one proxy, whichever dataZoom hosts it).
+function zoomWindowOf(ecModel, dim, index) {
+  let win = null;
+  ecModel.eachComponent('dataZoom', dz => {
+    if (win) return;
+    const proxy = dz.getAxisProxy(dim, index);
+    if (proxy) {
+      const w = proxy.getWindow();
+      win = { percent: w.percent.slice(), value: w.value.slice() };
+    }
+  });
+  return win;
+}
+// AxisProxy.ts reset: zoomMM i is set only for an end off 0% / 100%;
+// makeFinal pins such an end (zoomFixMM i = true).
+function zoomRule(percent, value) {
+  const zoomMM = [null, null];
+  if (percent) {
+    if (percent[0] !== 0) zoomMM[0] = value[0];
+    if (percent[1] !== 100) zoomMM[1] = value[1];
+  }
+  return { zoomMM, zoomFixMM: zoomMM.map(v => v != null) };
+}
+// axisAlignTicks.ts:161-165: either end zoom-pinned fixes both ends
+const alignFix = (fixMM, zoomFixMM) => {
+  const any = !M.zoomOneSided && (zoomFixMM[0] || zoomFixMM[1]);
+  return [!!(fixMM[0] || any), !!(fixMM[1] || any)];
+};
+
+function readAxis(axis, extra, win) {
   const scale = axis.scale;
   const isLog = scale.type === 'log';
   const lin = isLog ? scale.intervalStub : scale;
   const cfg = lin.getConfig();
   const fin = scale.rawExtentInfo.makeFinal();
-  const zoomAny = fin.zoomFixMM[0] || fin.zoomFixMM[1];
   return {
     input: {
-      effMM: fin.effMM.slice(), fix: [!!(fin.fixMM[0] || zoomAny), !!(fin.fixMM[1] || zoomAny)], incl0: !!fin.incl0, isLog,
-      base: isLog ? scale.base : 10, reversed: !!fin.tggAxInv,
+      effMM: fin.effMM.slice(), fix: alignFix(fin.fixMM, fin.zoomFixMM), fixMM: fin.fixMM.map(b => !!b),
+      zoomFixMM: fin.zoomFixMM.map(b => !!b), zoomPercent: win ? win.percent : null, zoomValue: win ? win.value : null,
+      incl0: !!fin.incl0, isLog, base: isLog ? scale.base : 10, reversed: !!fin.tggAxInv,
     },
     up: {
       extent: lin.getExtent(), outerExtent: isLog ? scale.getExtent() : null, interval: cfg.interval,
@@ -562,7 +603,7 @@ function run(c, lib) {
         if (!ax.__alignTo) return;
         const ref = ax.__alignTo;
         const refLin = ref.scale.type === 'log' ? ref.scale.intervalStub : ref.scale;
-        const a = readAxis(ax, null);
+        const a = readAxis(ax, null, zoomWindowOf(ecModel, ax.dim, ax.model.componentIndex));
         const ent = entry.px.get(ax);
         a.path = axisName(ax);
         a.alignTo = axisName(ref);
@@ -767,12 +808,17 @@ cart('E9', {
   yAxis: [{ type: 'value', splitNumber: 3 }, { type: 'value', alignTicks: true }],
   series: [{ type: 'line', data: R4V }, { type: 'line', yAxisIndex: 1, data: T1 }],
 });
-cart('E10', {
-  xAxis: { type: 'category', data: CAT.slice(0, 4) },
-  yAxis: [{ type: 'value' }, { type: 'value', alignTicks: true }],
-  dataZoom: [{ type: 'inside', yAxisIndex: [0, 1], start: 10, end: 90 }],
-  series: [{ type: 'line', data: R4V }, { type: 'line', yAxisIndex: 1, data: T1 }],
-}, { scope: 'out', note: 'dataZoom pins both ends (zoomFixMM): unit level only, no end-to-end (audit SS4)' });
+function zoomed(name, start, end, note) {
+  cart(name, {
+    xAxis: { type: 'category', data: CAT.slice(0, 4) },
+    yAxis: [{ type: 'value' }, { type: 'value', alignTicks: true }],
+    dataZoom: [{ type: 'inside', yAxisIndex: [0, 1], start, end }],
+    series: [{ type: 'line', data: R4V }, { type: 'line', yAxisIndex: 1, data: T1 }],
+  }, { note });
+}
+zoomed('E10', 10, 90, 'dataZoom pins both ends (zoomFixMM) at the window values: the both-fixed branch (audit SS4)');
+zoomed('E10b', 0, 90, 'dataZoom pins the max end only, and that fixes BOTH ends for the align (axisAlignTicks.ts:161-165): the both-fixed branch from [0, 21.33]');
+zoomed('E10c', 10, 100, 'dataZoom pins the min end only, and that fixes BOTH ends for the align: the both-fixed branch');
 cart('E12', {
   xAxis: { type: 'category', data: CAT.slice(0, 4) },
   yAxis: [{ type: 'value' }, { type: 'value', alignTicks: true, scale: true }],
@@ -827,6 +873,7 @@ const GUARDS = [
   ['noExtraInc', ['SN1-MIXED'], 'no increaseInterval after the 50th failed pass'],
   ['finalPx', ['OB-74'], 'the final (outerBounds) pixel span in place of the option rect'],
   ['devicePx', ['R2-a-sn7'], 'device pixels (x1.5, PPI 144) in place of CSS pixels'],
+  ['zoomOneSided', ['E10b', 'E10c'], 'a dataZoom pin fixes only its own end (not both) for the align'],
 ];
 
 // ---------- run, check and write ----------
@@ -867,7 +914,7 @@ function mutatedOut(a, kind) {
   let px = a.input.px;
   if (M.finalPx) px = a.pxFinal;
   if (M.devicePx) px *= 1.5;
-  return recompute(Object.assign({}, a.input, { px }), null);
+  return recompute(Object.assign({}, a.input, { px, fix: alignFix(a.input.fixMM, a.input.zoomFixMM) }), null);
 }
 
 function generate() {
@@ -913,6 +960,15 @@ function generate() {
       } else {
         if (!same(a.input.px, a.optionSpan)) f1.push(a.path + ': align px ' + a.input.px + ' != option rect span ' + a.optionSpan);
         if (a.expectInverse !== up.inverse) f1.push(a.path + ': inverse ' + up.inverse + ' != option xor reversed');
+        // the zoom rule: zoomFixMM from the window, pinned ends at its values
+        const z = zoomRule(a.input.zoomPercent, a.input.zoomValue);
+        if (!sameArr(z.zoomFixMM.map(Number), a.input.zoomFixMM.map(Number)))
+          f1.push(a.path + ': zoomFixMM ' + JSON.stringify(a.input.zoomFixMM) + ', the zoom rule gives ' + JSON.stringify(z.zoomFixMM));
+        [0, 1].forEach(i => {
+          if (z.zoomMM[i] != null && !same(z.zoomMM[i], a.input.effMM[i]))
+            f1.push(a.path + ': pinned effMM ' + i + ' is ' + a.input.effMM[i] + ', the window gives ' + z.zoomMM[i]);
+          if (z.zoomFixMM[i] && !a.input.fixMM[i]) f1.push(a.path + ': zoom-pinned end ' + i + ' is not in fixMM');
+        });
       }
       // 3: invariants
       if (up.interval === 0) {
@@ -930,7 +986,8 @@ function generate() {
       const inp = a.input;
       const o = {
         path: a.path, alignTo: a.alignTo,
-        input: { effMM: hexArr(inp.effMM), fix: inp.fix, incl0: inp.incl0, isLog: inp.isLog, base: hex(inp.base), reversed: inp.reversed,
+        input: { effMM: hexArr(inp.effMM), fix: inp.fix, fixMM: inp.fixMM, zoomFixMM: inp.zoomFixMM,
+          zoomPercent: hexArr(inp.zoomPercent), zoomValue: hexArr(inp.zoomValue), incl0: inp.incl0, isLog: inp.isLog, base: hex(inp.base), reversed: inp.reversed,
           px: hex(inp.px), splitNumber: inp.splitNumber, refTicks: hexArr(inp.refTicks), refExpTicks: hexArr(inp.refExpTicks), refInterval: hex(inp.refInterval) },
         out: { t0: hex(mine.t0), t1: hex(mine.t1), seg: mine.seg, validExt: hexArr(mine.validExt), extent: hexArr(up.extent), outerExtent: hexArr(up.outerExtent),
           interval: hex(up.interval), intervalPrecision: isNaN(up.intervalPrecision) ? null : hex(up.intervalPrecision), intervalCount: up.intervalCount,
@@ -938,13 +995,13 @@ function generate() {
           passes: mine.passes, exhausted: mine.exhausted, inverse: up.inverse },
       };
       if (c.kind === 'cartesian') o.pxFinal = hex(a.pxFinal);
-      o.text = { effMM: textArr(inp.effMM), px: text(inp.px), base: text(inp.base), refInterval: text(inp.refInterval), t0: text(mine.t0), t1: text(mine.t1),
+      o.text = { effMM: textArr(inp.effMM), zoomPercent: textArr(inp.zoomPercent), zoomValue: textArr(inp.zoomValue), px: text(inp.px), base: text(inp.base), refInterval: text(inp.refInterval), t0: text(mine.t0), t1: text(mine.t1),
         validExt: textArr(mine.validExt), extent: textArr(up.extent), outerExtent: textArr(up.outerExtent), interval: text(up.interval),
         intervalPrecision: text(up.intervalPrecision), niceExtent: textArr(up.niceExtent), ticks: textArr(up.ticks), outerTicks: textArr(up.outerTicks),
         tickCoords: textArr(up.tickCoords) };
       if (c.kind === 'cartesian') o.text.pxFinal = text(a.pxFinal);
       // 2: every twin parses back to the bits beside it
-      const pairs = [[o.input.effMM, o.text.effMM], [o.input.px, o.text.px], [o.input.base, o.text.base], [o.input.refInterval, o.text.refInterval],
+      const pairs = [[o.input.effMM, o.text.effMM], [o.input.zoomPercent, o.text.zoomPercent], [o.input.zoomValue, o.text.zoomValue], [o.input.px, o.text.px], [o.input.base, o.text.base], [o.input.refInterval, o.text.refInterval],
         [o.out.t0, o.text.t0], [o.out.t1, o.text.t1], [o.out.validExt, o.text.validExt], [o.out.extent, o.text.extent],
         [o.out.outerExtent, o.text.outerExtent], [o.out.interval, o.text.interval], [o.out.niceExtent, o.text.niceExtent],
         [o.out.ticks, o.text.ticks], [o.out.outerTicks, o.text.outerTicks], [o.out.tickCoords, o.text.tickCoords]];

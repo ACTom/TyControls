@@ -391,6 +391,11 @@ type
       a back door that skipped parsing would let an ordinal column hold
       something that is not an ordinal index. }
     procedure SetCalculated(ADim, ARawIndex: Integer; AValue: Double);
+    { dataZoom's `empty` mode: every value of ADim in the view outside
+      [AMin, AMax] becomes not-a-number -- the row stays, with a gap where
+      the value was. An ordinal dimension too: a gap is legal in any
+      column. }
+    procedure EmptyOutside(ADim: Integer; AMin, AMax: Double);
 
     { ---- reading ---- }
     { Rows in the current view. }
@@ -1478,6 +1483,29 @@ begin
   InvalidateExtents;
 end;
 
+procedure TTyDataStore.EmptyOutside(ADim: Integer; AMin, AMax: Double);
+var
+  i, raw: Integer;
+  v: Double;
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then Exit;
+  { seriesData.map(dim, v => v >= min && v <= max ? v : NaN), over the rows
+    in view }
+  for i := 0 to FCount - 1 do
+  begin
+    if FFiltered then raw := FIndices[i] else raw := i;
+    v := FCols[ADim][raw];
+    if IsNan(v) then Continue;
+    if (v < AMin) or (v > AMax) or IsNan(AMin) or IsNan(AMax) then
+      FCols[ADim][raw] := NaN;
+  end;
+  { the same two staleness hazards SetCalculated names: the extent cache and
+    the RawMin/RawMax fast path -- and an ordinal's inverted index }
+  FDims[ADim].HasCalculated := True;
+  InvalidateExtents;
+  if FDims[ADim].Kind = ddtOrdinal then RetireInverted;
+end;
+
 procedure TTyDataStore.InvalidateExtents;
 var
   i: Integer;
@@ -2256,7 +2284,9 @@ begin
       v := FCols[ARanges[k].Dim][raw];
       { NaN passes. See the declaration: a gap is data. }
       if IsNan(v) then Continue;
-      if (v < ARanges[k].Min) or (v > ARanges[k].Max) then
+      { a not-a-number bound admits no number: `v >= NaN` is false }
+      if IsNan(ARanges[k].Min) or IsNan(ARanges[k].Max)
+        or (v < ARanges[k].Min) or (v > ARanges[k].Max) then
       begin
         ok := False;
         Break;

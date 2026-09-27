@@ -28,6 +28,11 @@
 //                          then never computes a mapping for it)
 //     zoomFixMM            rawExtentInfo._i.zoomFixMM: a dataZoom end that is
 //                          not at 0% / 100% pins that end of the mapping
+//     zoomPercent, zoomValue   the dataZoom window over this axis (its axis
+//                          proxy's getWindow(): percent and value), or null
+//                          when no dataZoom targets it. Transcription inputs:
+//                          self-check 7 derives zoomFixMM and the pinned
+//                          effective ends from them
 //     effective            scale.getExtent(): ticks, onZero and clamp read it
 //     mapping              scale.getExtentUnsafe(MAPPING) or null: normalize,
 //                          dataToCoord, the band span and the affine matrix read
@@ -84,9 +89,18 @@
 //   5 onZero: getAxesOnZeroOf equals the rule over effective extents and
 //     `discouraged`.
 //   6 ctnShp: the flag equals the rule over the option and the series.
+//   7 zoom: AxisProxy.reset sets zoomMM[i] = window value i for an end whose
+//     percent is not exactly 0 (start) / 100 (end); makeFinal pins such an
+//     end (effMM[i] = zoomMM[i], fixMM[i] = zoomFixMM[i] = true) and the nice
+//     step leaves a pinned end alone. So zoomFixMM equals [percent0 !== 0,
+//     percent1 !== 100] ([false, false] without a dataZoom) and every pinned
+//     effective end equals its window value bit for bit. Self-check 1 feeds
+//     this derived zoomFixMM (not the one read) to the mapping prediction,
+//     which leaves a pinned end unwidened on a non-ordinal axis.
 //
-// A deferred case depends on something the port does not have (alignTicks,
-// dataZoom, candlestick widening); its upstream answer is recorded all the same.
+// A deferred case depends on something the port does not have (alignTicks on
+// a base axis, candlestick widening); its upstream answer is recorded all the
+// same.
 // A documentary case (default outerBounds, pxInit != pxFinal) is compared on
 // ctnShp, effective and mapping only: its final rect is the grid-bounds
 // oracle's question. logTolerance marks the log cases, whose ends go through
@@ -249,6 +263,33 @@ function bandOf(axis, gap, linSpan, pxSpan) {
     out.w2 = out.w * linSpan / pxSpan;
   }
   return out;
+}
+
+// R-zoom: AxisProxy.ts reset (setZoomMM only off 0% / 100%) and
+// scaleRawExtentInfo.ts makeFinal (a set zoomMM end pins effMM and zoomFixMM).
+// win: { percent, value } or null. Returns { zoomMM, zoomFixMM }.
+function zoomRule(win) {
+  const zoomMM = [null, null];
+  if (win) {
+    if (win.percent[0] !== 0) zoomMM[0] = win.value[0];
+    if (win.percent[1] !== 100) zoomMM[1] = win.value[1];
+  }
+  return { zoomMM, zoomFixMM: zoomMM.map(v => v != null) };
+}
+
+// The dataZoom window over an axis: the first dataZoom whose targets include
+// it (the axis has one proxy, whichever dataZoom hosts it).
+function zoomWindowOf(ecModel, axis) {
+  let win = null;
+  ecModel.eachComponent('dataZoom', dz => {
+    if (win) return;
+    const proxy = dz.getAxisProxy(axis.dim, axis.model.componentIndex);
+    if (proxy) {
+      const w = proxy.getWindow();
+      win = { percent: w.percent.slice(), value: w.value.slice() };
+    }
+  });
+  return win;
 }
 
 const linOf = (scale, v) => (scale.type === 'log' ? Math.log(v) / Math.log(scale.base) : v);
@@ -431,6 +472,7 @@ function run(c, lib) {
         ctnShp: !!info._i.ctnShp,
         aligned: !!axis.__alignTo,
         zoomFixMM: info._i.zoomFixMM.slice(),
+        zoomWindow: zoomWindowOf(ecModel, axis),
         effective: scale.getExtent().slice(),
         mapping: (m => (m ? m.slice() : null))(scale.getExtentUnsafe(MAPPING, null)),
         px: axis.getExtent().slice(),
@@ -459,6 +501,21 @@ function run(c, lib) {
       if (want !== r.ctnShp) fail(6, r.dim + r.index + ': ctnShp is ' + r.ctnShp + ', the rule gives ' + want);
     });
 
+    // check 7: zoomFixMM and the pinned ends from the dataZoom window
+    axes.forEach(axis => {
+      const r = recs.get(axis);
+      const z = zoomRule(r.zoomWindow);
+      r.zoomFixMMRule = z.zoomFixMM;
+      if (z.zoomFixMM[0] !== r.zoomFixMM[0] || z.zoomFixMM[1] !== r.zoomFixMM[1]) {
+        fail(7, r.dim + r.index + ': zoomFixMM ' + JSON.stringify(r.zoomFixMM) + ', the rule gives ' + JSON.stringify(z.zoomFixMM));
+      }
+      [0, 1].forEach(i => {
+        if (z.zoomMM[i] != null && !same(z.zoomMM[i], r.effective[i])) {
+          fail(7, r.dim + r.index + ': pinned end ' + i + ' is ' + r.effective[i] + ', the window gives ' + z.zoomMM[i]);
+        }
+      });
+    });
+
     // check 1: the mapping from pxInit (and not from pxFinal where they differ)
     let discriminating = false;
     axes.forEach(axis => {
@@ -468,7 +525,7 @@ function run(c, lib) {
       const pxFinal = axis.dim === 'x' ? rect.width : rect.height;
       let p = { perKey: r.keys.map(() => null), sup: null, mapping: null, mappingLin: null };
       // an aligned axis goes through scaleCalcAlign, which never adopts a mapping
-      if (r.ctnShp && !r.aligned) p = predictMapping(axis, r.keys, r.effective, effLin, r.zoomFixMM, pxInit);
+      if (r.ctnShp && !r.aligned) p = predictMapping(axis, r.keys, r.effective, effLin, r.zoomFixMMRule, pxInit);
       r.keys.forEach((k, i) => { k.w2 = p.perKey[i]; });
       r.supplement = p.sup;
       r.discouraged = !!p.sup;
@@ -481,7 +538,7 @@ function run(c, lib) {
           + JSON.stringify(textArr(p.mappingLin)));
       }
       if (r.ctnShp && !r.aligned && pxInit !== pxFinal) {
-        const q = predictMapping(axis, r.keys, r.effective, effLin, r.zoomFixMM, pxFinal);
+        const q = predictMapping(axis, r.keys, r.effective, effLin, r.zoomFixMMRule, pxFinal);
         if (!sameArr(q.mapping, p.mapping)) {
           discriminating = true;
           if (sameArr(q.mapping, r.mapping)) fail(1, r.dim + r.index + ': pxFinal reproduces the mapping too');
@@ -813,16 +870,22 @@ add('G9', 'affine percent grid, both inverse, 505x452', vv([bar([[2.8, 4.85], [4
 add('G9', 'affine percent grid, scale, both inverse, 744x495', vv([bar(G9D)], { scale: true, inverse: true }, { inverse: true },
   { grid: PCT }), Object.assign({ W: 744, H: 495 }, G9));
 
+// G10: dataZoom. An end off 0% / 100% is pinned at the window value
+// (zoomFixMM): the nice step and the containShape widening leave it alone,
+// and bars past it are clipped; an end at 0% / 100% widens as usual.
+const DZ = [[1, 5], [2, -3], [4, 2], [6, 1], [8, 3]];
+const dz = (start, end) => ({ dataZoom: [{ type: 'inside', start, end }] });
+add('G10', 'dataZoom inside 0-50', vv([bar(DZ)], null, null, dz(0, 50)));
+add('G10', 'dataZoom inside 10-90', vv([bar(DZ)], null, null, dz(10, 90)));
+add('G10', 'dataZoom inside 0-50, the smallest gap outside the window',
+  vv([bar([[1, 5], [2, -3], [3.5, 2], [6, 1], [6.25, 3]])], null, null, dz(0, 50)),
+  { note: 'the band is the smallest gap of the RAW data (0.25, between 6 and 6.25, both filtered out), not of the window (1)' });
+
 // deferred: upstream's answer recorded, the port has no such thing yet
 add('D', 'alignTicks on a base axis', {
   xAxis: [VAL(), VAL({ alignTicks: true })], yAxis: VAL(),
   series: [bar([[1, 5], [2, 3], [4, 2]]), bar([[3, 5], [5, 3], [9, 2]], { xAxisIndex: 1 })],
 }, deferred('alignTicks: the aligned base axis x1 gets no mapping (scaleCalcAlign never adopts one); the port has no alignTicks'));
-const DZ = [[1, 5], [2, -3], [4, 2], [6, 1], [8, 3]];
-add('D', 'dataZoom inside 0-50', vv([bar(DZ)], null, null, { dataZoom: [{ type: 'inside', start: 0, end: 50 }] }),
-  deferred('dataZoom: the end that is not at 100% pins that end of the mapping (zoomFixMM); the port has no dataZoom'));
-add('D', 'dataZoom inside 10-90', vv([bar(DZ)], null, null, { dataZoom: [{ type: 'inside', start: 10, end: 90 }] }),
-  deferred('dataZoom: both ends pinned, no mapping; the port has no dataZoom'));
 add('D', 'candlestick on a value base', vv([{ type: 'candlestick', data: [[1, 2, 3, 1, 4], [2, 3, 2, 1, 4], [4, 2, 3, 1, 5]] }]),
   deferred('candlestick widens its base axis too; the port\'s candlestick uses a fixed 8 px band and no containShape'));
 
@@ -836,7 +899,7 @@ add('D', 'candlestick on a value base', vv([{ type: 'candlestick', data: [[1, 2,
   }
 }
 
-const CHECKS = [1, 2, 3, 4, 5, 6];
+const CHECKS = [1, 2, 3, 4, 5, 6, 7];
 const tally = {};
 CHECKS.forEach(k => { tally[k] = [0, 0]; });
 const failed = [];
@@ -853,6 +916,10 @@ function axisOut(r) {
     ctnShp: r.ctnShp,
     aligned: r.aligned,
     zoomFixMM: r.zoomFixMM,
+    zoomPercent: r.zoomWindow ? hexArr(r.zoomWindow.percent) : null,
+    zoomPercentText: r.zoomWindow ? textArr(r.zoomWindow.percent) : null,
+    zoomValue: r.zoomWindow ? hexArr(r.zoomWindow.value) : null,
+    zoomValueText: r.zoomWindow ? textArr(r.zoomWindow.value) : null,
     effective: hexArr(r.effective),
     effectiveText: textArr(r.effective),
     mapping: hexArr(r.mapping),
@@ -897,10 +964,8 @@ function recordOf(c) {
     rec.deferred = true;
     rec.why = c.deferred ? c.deferred + (miss ? '; and ' + miss : '') : miss;
   }
-  if (c.documentary) {
-    rec.documentary = true;
-    rec.note = c.note;
-  }
+  if (c.documentary) rec.documentary = true;
+  if (c.note) rec.note = c.note;
   if (c.logTolerance) rec.logTolerance = true;
   if (r.discriminating) rec.discriminating = true;
   if (r.productionBuild) rec.productionBuild = true;

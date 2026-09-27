@@ -41,6 +41,7 @@ uses
   tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
   tyControls.AdvChart.VisualMapView,
+  tyControls.AdvChart.DataZoom,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -252,6 +253,16 @@ type
       continuous components' visualMetas, in component order. The line fill
       is solved on the laid-out axes, per slot, at the last render. }
     FVisualSpecs: TTyVisualMapSpecArray;
+    { dataZoom: the models, the axes each one hosts with the raw extent its
+      window was measured on, and the windows (by hosted axis). }
+    FZoomSpecs: TTyDataZoomSpecArray;
+    FAxisZooms: TTyAxisZoomArray;
+    FZoomWindows: array of TTyDzWindow;
+    FZoomHost: array of Integer;
+    { weakFilter's predicate state }
+    FWfStore: TTyDataStore;
+    FWfCols: TTyIntegerArray;
+    FWfLo, FWfHi: Double;
     FVisualRows: array of TTyVisualRowArray;
     FVisualMetas: array of TTyVisualMetaArray;
     FVisualLines: array of TTyVisualLineFill;
@@ -375,6 +386,8 @@ type
       that restyles the accent gets a matching chart for nothing. }
     procedure SolveSeriesColors;
     procedure SolveVisualMaps;
+    procedure SolveDataZooms;
+    function WeakKeep(ARawIndex: Integer): Boolean;
     procedure SolveVisualMapViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
@@ -757,6 +770,16 @@ type
     { THE COMPONENT AIndex AS THE LAST RENDER LAID IT OUT: Valid is False
       when it is hidden, piecewise, or nothing has rendered. }
     function VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
+    { THE dataZoom MODELS AS THE LAST BUILD SOLVED THEM, and the window on an
+      axis: False when no dataZoom hosts that axis. AHost is the dataZoom
+      that owns it. }
+    function DataZoomCount: Integer;
+    function DataZoomSpec(AIndex: Integer): TTyDataZoomSpec;
+    function AxisZoom(const AMainType: string; AAxisIndex: Integer;
+      out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
+    { The rows of series ASeriesIndex as the last build left them -- filtered
+      by the dataZooms. nil when there is no such series. }
+    function SeriesStore(ASeriesIndex: Integer): TTyDataStore;
     { THE GRAPH SERIES ASeriesIndex, AS THE LAST RENDER LAID IT OUT: the nodes
       the legend kept -- in the order they were written, with their pixel
       positions -- the edges between them, and each node's fill. False when
@@ -1242,8 +1265,188 @@ begin
   { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
     whose axis was sized from the raw values draws off the top of its plot. }
   FStacks := TySolveStacks(FOption, FBindings, FStores);
+  { AFTER THE STACKS AND BEFORE THE EXTENTS -- upstream's dataZoom runs at
+    1000, after the stack (900): the sums are the unzoomed ones, and the
+    axis not zoomed is sized from the rows the zoom left. }
+  SolveDataZooms;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
-    FLastPPI);
+    FLastPPI, FAxisZooms);
+end;
+
+function TTyAdvanceChart.WeakKeep(ARawIndex: Integer): Boolean;
+var
+  k: Integer;
+  v: Double;
+  hasValue, leftOut, rightOut: Boolean;
+begin
+  { weakFilter: in the window on some dimension, or straddling it; a row
+    with no value at all goes }
+  hasValue := False;
+  leftOut := False;
+  rightOut := False;
+  for k := 0 to High(FWfCols) do
+  begin
+    v := FWfStore.GetByRaw(FWfCols[k], ARawIndex);
+    if IsNan(v) then Continue;
+    { a not-a-number window end compares false both ways, as in JavaScript }
+    if (not IsNan(FWfLo)) and (not IsNan(FWfHi)) and (v >= FWfLo) and (v <= FWfHi) then
+      Exit(True);
+    hasValue := True;
+    if (not IsNan(FWfLo)) and (v < FWfLo) then leftOut := True;
+    if (not IsNan(FWfHi)) and (v > FWfHi) then rightOut := True;
+  end;
+  Result := hasValue and leftOut and rightOut;
+end;
+
+procedure TTyAdvanceChart.SolveDataZooms;
+var
+  n, i, t, k, c, si, first: Integer;
+  spec: TTyDataZoomSpec;
+  ax: TTyAxis;
+  z: TTyAxisZoom;
+  win: TTyDzWindow;
+  any, hosted: Boolean;
+  px: Double;
+  feeders, cols: TTyIntegerArray;
+  ranges: array of TTyDimRange;
+  sel: TTyDataZoomSpecArray;
+  pass: Integer;
+  alignTo: TTyAxis;
+  alignWin: Integer;
+  use: TTyDataZoomSpec;
+begin
+  FZoomSpecs := nil;
+  FAxisZooms := nil;
+  FZoomWindows := nil;
+  FZoomHost := nil;
+  if FBuild = nil then Exit;
+  n := TyDataZoomCount(FOption);
+  SetLength(FZoomSpecs, n);
+  for i := 0 to n - 1 do
+    FZoomSpecs[i] := TyDataZoomSpecOf(FOption, i, FBuild);
+  { the toolbox's select dataZooms after the author's }
+  sel := TyDataZoomSelectSpecs(FOption, FBuild, n);
+  if Length(sel) > 0 then
+  begin
+    SetLength(FZoomSpecs, n + Length(sel));
+    for i := 0 to High(sel) do FZoomSpecs[n + i] := sel[i];
+    n := Length(FZoomSpecs);
+  end;
+  if n = 0 then Exit;
+  { IN COMPONENT ORDER: each dataZoom resets the axes it hosts -- the FIRST
+    dataZoom to target an axis owns it; a later one on the same axis shows
+    the owner's window and has its own ignored -- then filters them, and the
+    next one measures the rows this one left. }
+  for i := 0 to n - 1 do
+  begin
+    spec := FZoomSpecs[i];
+    if (spec.SubType = '') or spec.NoTarget then Continue;
+    first := Length(FAxisZooms);
+    { TWO PASSES: an axis that aligns its ticks to another this dataZoom
+      also drives is reset last, from that one's percentInverted window --
+      which wins over its own start / end (zrender's defaults keeps the
+      target's keys) }
+    for pass := 0 to 1 do
+    for t := 0 to High(spec.Targets) do
+    begin
+      ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+      if ax = nil then Continue;
+      alignTo := TyAxisAlignTo(FOption, FBuild, ax);
+      if (alignTo <> nil) and not TyDzTargets(spec, alignTo.Dim, alignTo.ComponentIndex) then
+        alignTo := nil;
+      if (alignTo <> nil) <> (pass = 1) then Continue;
+      hosted := False;
+      for k := 0 to High(FAxisZooms) do
+        if FAxisZooms[k].Axis = ax then hosted := True;
+      if hosted then Continue;
+      use := spec;
+      if alignTo <> nil then
+      begin
+        alignWin := -1;
+        for k := 0 to High(FAxisZooms) do
+          if FAxisZooms[k].Axis = alignTo then alignWin := k;
+        if alignWin >= 0 then
+          for k := 0 to 1 do
+          begin
+            use.Percent[k].Given := True;
+            use.Percent[k].IsStr := False;
+            use.Percent[k].Num := FZoomWindows[alignWin].PercentInverted[k];
+          end;
+      end;
+      z := Default(TTyAxisZoom);
+      z.Axis := ax;
+      z.Raw := TyAxisNoZoomExtent(FOption, FBindings, FStores, FStacks, FIndex,
+        ax, spec.Targets[t].Dim + 'Axis', any);
+      z.Any := any;
+      { the axis' pixel span as the grid's own box lays it out, CSS px }
+      px := ax.PxLength;
+      if FLastPPI > 0 then px := px * 96 / FLastPPI;
+      win := TyDzCalculateWindow(use, ax, z.Raw.Lo, z.Raw.Hi, px);
+      z.ZoomLo := NaN;
+      z.ZoomHi := NaN;
+      { an end at exactly 0% or 100% is left to nice freely (`!== 0`: a
+        not-a-number pins, and pins nothing but a blank) }
+      if IsNan(win.Percent[0]) or (win.Percent[0] <> 0) then z.ZoomLo := win.Value[0];
+      if IsNan(win.Percent[1]) or (win.Percent[1] <> 100) then z.ZoomHi := win.Value[1];
+      k := Length(FAxisZooms);
+      SetLength(FAxisZooms, k + 1);
+      SetLength(FZoomWindows, k + 1);
+      SetLength(FZoomHost, k + 1);
+      FAxisZooms[k] := z;
+      FZoomWindows[k] := win;
+      FZoomHost[k] := i;
+    end;
+    { then filter what it hosts, with the window's values }
+    for k := first to High(FAxisZooms) do
+    begin
+      if spec.FilterMode = dzfNone then Continue;
+      ax := FAxisZooms[k].Axis;
+      win := FZoomWindows[k];
+      feeders := FIndex.SeriesOnAxis(ax);
+      for c := 0 to High(feeders) do
+      begin
+        si := feeders[c];
+        if (si < 0) or (si > High(FStores)) or (FStores[si] = nil) then Continue;
+        if FBindings[si].CoordSysName <> 'cartesian2d' then Continue;
+        if si <= High(FStacks) then
+          cols := TyAxisDataDims(FStores[si], ax, FBindings[si], FStacks[si])
+        else
+          cols := TyAxisDataDims(FStores[si], ax, FBindings[si], Default(TTySeriesStack));
+        if Length(cols) = 0 then Continue;
+        case spec.FilterMode of
+          dzfFilter:
+            begin
+              { dimension by dimension: a row stays when every one is in the
+                window or not a number }
+              SetLength(ranges, Length(cols));
+              for t := 0 to High(cols) do
+              begin
+                ranges[t].Dim := cols[t];
+                ranges[t].Min := win.Value[0];
+                ranges[t].Max := win.Value[1];
+              end;
+              FStores[si].SelectRange(ranges);
+            end;
+          dzfWeakFilter:
+            begin
+              FWfStore := FStores[si];
+              FWfCols := cols;
+              FWfLo := win.Value[0];
+              FWfHi := win.Value[1];
+              try
+                FStores[si].FilterSelf(@WeakKeep);
+              finally
+                FWfStore := nil;
+              end;
+            end;
+          dzfEmpty:
+            { the other axis is NOT resized: only this axis' values go }
+            for t := 0 to High(cols) do
+              FStores[si].EmptyOutside(cols[t], win.Value[0], win.Value[1]);
+        end;
+      end;
+    end;
+  end;
 end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
@@ -2356,6 +2559,49 @@ begin
   Result := Default(TTyVisualMapLayout);
   if (AIndex >= 0) and (AIndex <= High(FVisualLayouts)) then
     Result := FVisualLayouts[AIndex];
+end;
+
+function TTyAdvanceChart.DataZoomCount: Integer;
+begin
+  Result := Length(FZoomSpecs);
+end;
+
+function TTyAdvanceChart.DataZoomSpec(AIndex: Integer): TTyDataZoomSpec;
+begin
+  Result := Default(TTyDataZoomSpec);
+  if (AIndex >= 0) and (AIndex <= High(FZoomSpecs)) then Result := FZoomSpecs[AIndex];
+end;
+
+function TTyAdvanceChart.AxisZoom(const AMainType: string; AAxisIndex: Integer;
+  out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
+var
+  ax: TTyAxis;
+  k: Integer;
+begin
+  Result := False;
+  AZoom := Default(TTyAxisZoom);
+  AWindow := Default(TTyDzWindow);
+  AHost := -1;
+  if FBuild = nil then Exit;
+  ax := FBuild.Axis(AMainType, AAxisIndex);
+  if ax = nil then Exit;
+  for k := 0 to High(FAxisZooms) do
+    if FAxisZooms[k].Axis = ax then
+    begin
+      AZoom := FAxisZooms[k];
+      AWindow := FZoomWindows[k];
+      AHost := FZoomHost[k];
+      Exit(True);
+    end;
+end;
+
+function TTyAdvanceChart.SeriesStore(ASeriesIndex: Integer): TTyDataStore;
+var k: Integer;
+begin
+  Result := nil;
+  for k := 0 to High(FBindings) do
+    if (FBindings[k].SeriesIndex = ASeriesIndex) and (k <= High(FStores)) then
+      Exit(FStores[k]);
 end;
 
 function TTyAdvanceChart.VisualMapCount: Integer;

@@ -849,10 +849,6 @@ var
 
 begin
   si := ASeries.Integers['index'];
-  { KNOWN: line-aqi's dataZoom is not ported, so its value axis spans the
-    unfiltered data (0..500, not 0..400) and every stop lands elsewhere; the
-    visualMeta itself is held above }
-  if FName = 'G-line-aqi' then Exit;
   fill := FChart.VisualLineFill(si);
   if not ASeries.Booleans['lineStyleColorWritten']
     and (ASeries.Find('polyline').JSONType = jtObject) then

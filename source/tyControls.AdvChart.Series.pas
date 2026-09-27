@@ -271,7 +271,52 @@ function TyLiPosMinGap(const AStores: array of TTyDataStore;
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
-  APPI: Integer = 96);
+  APPI: Integer = 96); overload;
+
+type
+  { A dataZoom's hold on one axis. Raw is the raw extent measured when the
+    window was worked out -- upstream builds an axis' raw extent info ONCE
+    per update, so a zoomed axis keeps that one and is not re-measured from
+    the rows the zoom has since filtered away. ZoomLo / ZoomHi are the
+    window's ends, not-a-number where the window reaches 0% or 100% and that
+    end nices as if there were no zoom. }
+  TTyAxisZoom = record
+    Axis: TTyAxis;
+    Raw: TTyAxisRawExtent;
+    Any: Boolean;
+    ZoomLo, ZoomHi: Double;
+  end;
+  TTyAxisZoomArray = array of TTyAxisZoom;
+
+{ The same with dataZoom's pins: a pinned end is the window's own, fixed --
+  no nice step rounds it out and no half bar widens it. }
+procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  APPI: Integer; const AZooms: TTyAxisZoomArray); overload;
+
+{ axis.__alignTo: the axis AAxis aligns its ticks to, or nil -- per grid and
+  direction, walking the number axes in reverse index order, the last that
+  does not ask for alignTicks is the reference (the first to ask when all
+  do), and every other asker aligns to it. }
+function TyAxisAlignTo(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  AAxis: TTyAxis): TTyAxis;
+
+{ data.mapDimensionsAll(axisDim): every column of the store on AAxis -- a
+  stacked series' own value AND its stack result on its value axis, four on
+  a candlestick's. What a dataZoom filters. }
+function TyAxisDataDims(AStore: TTyDataStore; AAxis: TTyAxis;
+  const ABinding: TTySeriesBinding; const AStack: TTySeriesStack): TTyIntegerArray;
+
+{ scaleRawExtentInfo for AAxis over the stores AS THEY STAND: the union of
+  what its series put on it -- a stack's total on its value axis, a log
+  axis' positive values -- and TyAxisRawExtent over that. What a dataZoom
+  measures its percents against, and what TyApplyAxisExtents starts from.
+  AAny: some series gave an extent. }
+function TyAxisNoZoomExtent(AOption: TTyChartOption;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  AAxis: TTyAxis; const AMainType: string; out AAny: Boolean): TTyAxisRawExtent;
 
 implementation
 
@@ -768,9 +813,12 @@ begin
     if (si < 0) or (si > High(AStores)) or (AStores[si] = nil) then Continue;
     col := AStores[si].DimIndexOf(AAxis.Dim);
     if col < 0 then Continue;
-    for r := 0 to AStores[si].Count - 1 do
+    { THE RAW ROWS: upstream's axis statistics run at 920, before the
+      dataZoom filter (1000) -- a zoom does not change a bar's width.
+      [Batch 60: this read the view, which the zoom had narrowed.] }
+    for r := 0 to AStores[si].RawCount - 1 do
     begin
-      v := AStores[si].Get(col, r);
+      v := AStores[si].GetByRaw(col, r);
       if IsNan(v) or IsInfinite(v) then Continue;
       { A log axis' TransformIn answers not-a-number at or under zero, which
         is upstream's `v > 0` filter. }
@@ -1248,15 +1296,187 @@ begin
   end;
 end;
 
+function TyAxisAlignTo(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  AAxis: TTyAxis): TTyAxis;
+var
+  g: TTyGridBuild;
+  horiz: Boolean;
+  k, cnt: Integer;
+  ax, ref: TTyAxis;
+  main: string;
+  askers: array of TTyAxis;
+  isAsker: Boolean;
+
+  function Numeric(A: TTyAxis): Boolean;
+  begin
+    Result := (A <> nil) and (A.Scale is TTyIntervalScale)
+      and not (A.Scale is TTyTimeScale);
+  end;
+
+  function Asks(A: TTyAxis): Boolean;
+  var node: TJSONObject; d: TJSONData;
+  begin
+    Result := False;
+    node := ObjAt(AOption, main, A.ComponentIndex);
+    if node = nil then Exit;
+    d := node.Find('alignTicks');
+    if (d = nil) or not JsTruthyOf(d) then Exit;
+    d := node.Find('interval');
+    Result := (d = nil) or (d.JSONType = jtNull);
+  end;
+
+begin
+  Result := nil;
+  if (ABuild = nil) or (AAxis = nil) or not Numeric(AAxis) then Exit;
+  if (AAxis.GridIndex < 0) or (AAxis.GridIndex >= ABuild.GridCount) then Exit;
+  g := ABuild.Grid(AAxis.GridIndex);
+  horiz := AAxis.Dim = 'x';
+  if horiz then main := 'xAxis' else main := 'yAxis';
+  if horiz then cnt := g.XAxisCount else cnt := g.YAxisCount;
+  ref := nil;
+  askers := nil;
+  for k := cnt - 1 downto 0 do
+  begin
+    if horiz then ax := g.XAxis(k) else ax := g.YAxis(k);
+    if not Numeric(ax) then Continue;
+    if Asks(ax) then
+    begin
+      SetLength(askers, Length(askers) + 1);
+      askers[High(askers)] := ax;
+    end
+    else
+      ref := ax;
+  end;
+  if (ref = nil) and (Length(askers) > 0) then
+  begin
+    ref := askers[High(askers)];
+    SetLength(askers, Length(askers) - 1);
+  end;
+  if ref = nil then Exit;
+  isAsker := False;
+  for k := 0 to High(askers) do
+    if askers[k] = AAxis then isAsker := True;
+  if isAsker then Result := ref;
+end;
+
+function TyAxisDataDims(AStore: TTyDataStore; AAxis: TTyAxis;
+  const ABinding: TTySeriesBinding; const AStack: TTySeriesStack): TTyIntegerArray;
+var n: Integer;
+begin
+  Result := ColumnsForAxis(AStore, AAxis);
+  if AStack.Stacked and (AStack.ResultCol >= 0) and (AAxis = ABinding.ValueAxis) then
+  begin
+    n := Length(Result);
+    SetLength(Result, n + 1);
+    Result[n] := AStack.ResultCol;
+  end;
+end;
+
+function TyAxisNoZoomExtent(AOption: TTyChartOption;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  AAxis: TTyAxis; const AMainType: string; out AAny: Boolean): TTyAxisRawExtent;
+var
+  k, c, si: Integer;
+  cols: TTyIntegerArray;
+  feeders: TTyIntegerArray;
+  lo, hi, dlo, dhi: Double;
+  filter: TTyExtentFilter;
+  requireStart: Boolean;
+begin
+  AAny := False;
+  { A CATEGORY AXIS' RANGE is its categories, first to last -- read off the
+    axis, never computed from the values, so a name the data never mentions
+    still gets a band and a bar chart does not shuffle when a value goes
+    missing -- unless min and max narrow it, or widen it past either end,
+    which upstream lets them do. It goes through the raw extent below with
+    the number axes, in its ordinal mode.
+
+    But the count has to be read AFTER the rows are in. An axis with no
+    `data` of its own collects its categories while the store parses, and
+    until this ran the extent was the one fixed during construction, when the
+    list was empty: one band across the whole plot with every point stacked
+    on it. This is the one place the extent comes from, asked once the list
+    is full.
+    [Revised in batch 44: this set [0, n - 1] and returned before min and
+    max were read.] }
+  if AAxis.AxisType = atLog then filter := defPositive else filter := defNone;
+
+  requireStart := False;
+  lo := Infinity;
+  hi := NegInfinity;
+  feeders := AIndex.SeriesOnAxis(AAxis);
+  for k := 0 to High(feeders) do
+  begin
+    si := feeders[k];
+    { A BAR WANTS ITS BASE IN VIEW: upstream's __requireStartValue, on the
+      bar's value axis and nowhere else. }
+    if (si >= 0) and (si <= High(ABindings))
+      and ((ABindings[si].SeriesType = 'bar')
+        or (ABindings[si].SeriesType = 'pictorialBar'))
+      and (ABindings[si].ValueAxis = AAxis) then
+      requireStart := True;
+    if (si < 0) or (si > High(AStores)) then Continue;
+    cols := ColumnsForAxis(AStores[si], AAxis);
+    { A STACKED SERIES CONTRIBUTES ITS TOTAL, not its own value. Upstream
+      gets this for free -- the stack-result dimension is registered under
+      the VALUE coord dim, so anything unioning that coord dim picks it up,
+      while the stacked-over dimension is deliberately given its own coord
+      dim so it stays OUT of the extent. Here the columns are found by axis
+      dimension name, which one column can only have one of, so the swap is
+      made explicitly.
+
+      Without it the axis is sized from the largest single value while the
+      chart draws the sum of them, and every stack taller than its biggest
+      member runs off the top of the plot. Nothing raises. }
+    if (si <= High(AStacks)) and AStacks[si].Stacked
+      and (AStacks[si].ResultCol >= 0) and (AAxis = ABindings[si].ValueAxis) then
+    begin
+      SetLength(cols, 1);
+      cols[0] := AStacks[si].ResultCol;
+    end;
+    for c := 0 to High(cols) do
+    begin
+      if cols[c] < 0 then Continue;
+      if not AStores[si].DataExtent(cols[c], dlo, dhi, filter) then Continue;
+      AAny := True;
+      { unionExtentFromExtent: a series whose extent has an infinite end
+        adds NOTHING -- upstream drops it whole, so one 'Infinity' blanks
+        only an axis nothing else is on. }
+      if IsInfinite(dlo) or IsInfinite(dhi) or (dlo > dhi) then Continue;
+      if dlo < lo then lo := dlo;
+      if dhi > hi then hi := dhi;
+    end;
+  end;
+  { THE RAW EXTENT, UPSTREAM'S ORDER. No data is not-a-number from here on --
+    the data loop left the ends at their infinities -- and min, max,
+    boundaryGap, zero, a backwards pair and startValue all happen in
+    scaleRawExtentInfo's sequence, in TyAxisRawExtent. }
+  if AAxis.AxisType = atCategory then requireStart := False;
+  Result := TyAxisRawExtent(ObjAt(AOption, AMainType, AAxis.ComponentIndex),
+    AAxis, lo, hi, requireStart);
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
   APPI: Integer);
+begin
+  TyApplyAxisExtents(AOption, ABuild, ABindings, AStores, AStacks, AIndex,
+    APPI, nil);
+end;
+
+procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
+  APPI: Integer; const AZooms: TTyAxisZoomArray);
 var
   g, a: Integer;
   ax: TTyAxis;
   alignTo: TTyAxis;
   aligners: array of TTyAxis;
+  { the axis being done: its ends a dataZoom pinned (zoomFixMM) }
+  zoomFixLo, zoomFixHi: Boolean;
 
   { A BAR OF THIS TYPE IS LAID OUT ALONG AAxis -- upstream's statistics key,
     which exists for a series the legend has switched off and for one with no
@@ -1359,8 +1579,12 @@ var
         TyRange(Min(e.Start, e.Start + sup0), Max(e.Stop, e.Stop + sup1)))
     else
     begin
-      lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
-      hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
+      { AN END A dataZoom PINNED IS NOT WIDENED: the axis ends exactly at the
+        window, and a bar past it is clipped }
+      if zoomFixLo then lo := e.Start
+      else lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
+      if zoomFixHi then hi := e.Stop
+      else hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
       if (lo < e.Start) or (hi > e.Stop) then
         AAxis.Scale.SetExtent2(sekMapping, TyRange(lo, hi));
     end;
@@ -1398,95 +1622,51 @@ var
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string;
     AAlignTo: TTyAxis; AAlignPx: Double);
   var
-    k, c, si: Integer;
-    cols: TTyIntegerArray;
+    k, zi: Integer;
     node: TJSONObject;
     d: TJSONData;
     ivl, split: Double;
     minor: Integer;
     minorSplit: Integer;
-    wantMinor, requireStart: Boolean;
+    wantMinor: Boolean;
     sub2: TJSONData;
-    feeders: TTyIntegerArray;
-    lo, hi, dlo, dhi, minIvl, maxIvl: Double;
+    lo, hi, minIvl, maxIvl: Double;
     any: Boolean;
-    filter: TTyExtentFilter;
     raw: TTyAxisRawExtent;
     ctnShp: Boolean;
   begin
     if AAxis = nil then Exit;
     node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
     ctnShp := WantsContainShape(AAxis, node);
-    { A CATEGORY AXIS' RANGE is its categories, first to last -- read off the
-      axis, never computed from the values, so a name the data never mentions
-      still gets a band and a bar chart does not shuffle when a value goes
-      missing -- unless min and max narrow it, or widen it past either end,
-      which upstream lets them do. It goes through the raw extent below with
-      the number axes, in its ordinal mode.
-
-      But the count has to be read AFTER the rows are in. An axis with no
-      `data` of its own collects its categories while the store parses, and
-      until this ran the extent was the one fixed during construction, when the
-      list was empty: one band across the whole plot with every point stacked
-      on it. This is the one place the extent comes from, asked once the list
-      is full.
-      [Revised in batch 44: this set [0, n - 1] and returned before min and
-      max were read.] }
-    if AAxis.AxisType = atLog then filter := defPositive else filter := defNone;
-
-    any := False;
-    requireStart := False;
-    lo := Infinity;
-    hi := NegInfinity;
-    feeders := AIndex.SeriesOnAxis(AAxis);
-    for k := 0 to High(feeders) do
+    zoomFixLo := False;
+    zoomFixHi := False;
+    zi := -1;
+    for k := 0 to High(AZooms) do
+      if AZooms[k].Axis = AAxis then zi := k;
+    if zi >= 0 then
     begin
-      si := feeders[k];
-      { A BAR WANTS ITS BASE IN VIEW: upstream's __requireStartValue, on the
-        bar's value axis and nowhere else. }
-      if (si >= 0) and (si <= High(ABindings))
-        and ((ABindings[si].SeriesType = 'bar')
-          or (ABindings[si].SeriesType = 'pictorialBar'))
-        and (ABindings[si].ValueAxis = AAxis) then
-        requireStart := True;
-      if (si < 0) or (si > High(AStores)) then Continue;
-      cols := ColumnsForAxis(AStores[si], AAxis);
-      { A STACKED SERIES CONTRIBUTES ITS TOTAL, not its own value. Upstream
-        gets this for free -- the stack-result dimension is registered under
-        the VALUE coord dim, so anything unioning that coord dim picks it up,
-        while the stacked-over dimension is deliberately given its own coord
-        dim so it stays OUT of the extent. Here the columns are found by axis
-        dimension name, which one column can only have one of, so the swap is
-        made explicitly.
-
-        Without it the axis is sized from the largest single value while the
-        chart draws the sum of them, and every stack taller than its biggest
-        member runs off the top of the plot. Nothing raises. }
-      if (si <= High(AStacks)) and AStacks[si].Stacked
-        and (AStacks[si].ResultCol >= 0) and (AAxis = ABindings[si].ValueAxis) then
+      { THE RAW EXTENT THE WINDOW WAS MEASURED ON, not one re-measured from
+        the rows the zoom has filtered -- then makeFinal: a pinned end is the
+        window's, fixed. (A log end is never at or under zero here: the
+        window lies inside a sanitized extent.) }
+      raw := AZooms[zi].Raw;
+      any := AZooms[zi].Any;
+      if not IsNan(AZooms[zi].ZoomLo) then
       begin
-        SetLength(cols, 1);
-        cols[0] := AStacks[si].ResultCol;
+        raw.Lo := AZooms[zi].ZoomLo;
+        raw.FixLo := True;
+        zoomFixLo := True;
       end;
-      for c := 0 to High(cols) do
+      if not IsNan(AZooms[zi].ZoomHi) then
       begin
-        if cols[c] < 0 then Continue;
-        if not AStores[si].DataExtent(cols[c], dlo, dhi, filter) then Continue;
-        any := True;
-        { unionExtentFromExtent: a series whose extent has an infinite end
-          adds NOTHING -- upstream drops it whole, so one 'Infinity' blanks
-          only an axis nothing else is on. }
-        if IsInfinite(dlo) or IsInfinite(dhi) or (dlo > dhi) then Continue;
-        if dlo < lo then lo := dlo;
-        if dhi > hi then hi := dhi;
+        raw.Hi := AZooms[zi].ZoomHi;
+        raw.FixHi := True;
+        zoomFixHi := True;
       end;
-    end;
-    { THE RAW EXTENT, UPSTREAM'S ORDER. No data is not-a-number from here on --
-      the data loop left the ends at their infinities -- and min, max,
-      boundaryGap, zero, a backwards pair and startValue all happen in
-      scaleRawExtentInfo's sequence, in TyAxisRawExtent. }
-    if AAxis.AxisType = atCategory then requireStart := False;
-    raw := TyAxisRawExtent(node, AAxis, lo, hi, requireStart);
+    end
+    else
+      raw := TyAxisNoZoomExtent(AOption, ABindings, AStores, AStacks, AIndex,
+        AAxis, AMainType, any);
     if (not any) and (AAxis.AxisType = atTime) and raw.Blank then
     begin
       { A TIME AXIS WITH NOTHING ON IT SHOWS TODAY, which is upstream's
@@ -1619,8 +1799,8 @@ var
         the grid. A reference with nothing to align to nices instead. }
       else if (AAlignTo <> nil) and (AAlignTo.Scale is TTyIntervalScale)
         and TTyIntervalScale(AAxis.Scale).AlignTo(
-          TTyIntervalScale(AAlignTo.Scale), raw.FixLo, raw.FixHi, raw.Incl0,
-          AAlignPx) then
+          TTyIntervalScale(AAlignTo.Scale), raw.FixLo or zoomFixLo or zoomFixHi,
+          raw.FixHi or zoomFixLo or zoomFixHi, raw.Incl0, AAlignPx) then
       else
         TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
       { AFTER Niceify: it is the major interval that gets subdivided, and

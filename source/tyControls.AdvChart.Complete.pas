@@ -241,12 +241,12 @@ function TyOptSearch(const AText: string; AList: TStrings;
 
 { ---- untyped elements ---- }
 { The type an element that wrote none gets, where ECharts registers a
-  subtype defaulter for its main type; '' where it does not. Only
-  `visualMap` has one here: continuous unless it names categories, or
-  pieces (non-empty) or a positive splitNumber without `calculable`. The
-  test is JavaScript's, truthiness and all -- `categories: []` is
-  piecewise, `pieces: []` is not.
-  [dataZoom has one upstream too ('slider'); it is not probed, so not here.] }
+  subtype defaulter for its main type; '' where it does not. `visualMap`:
+  continuous unless it names categories, or pieces (non-empty) or a
+  positive splitNumber without `calculable`. The test is JavaScript's,
+  truthiness and all -- `categories: []` is piecewise, `pieces: []` is not.
+  `dataZoom`: always a slider. [Batch 60: dataZoom was left out, and an
+  untyped one was reported as having no type.] }
 function TyOptDefaultSubType(const AMainType: string;
   AElement: TJSONObject): string;
 
@@ -435,7 +435,10 @@ function TyOptDefaultSubType(const AMainType: string;
 var pieces: TJSONData; split: Boolean;
 begin
   Result := '';
-  if (AElement = nil) or (AMainType <> 'visualMap') then Exit;
+  if AElement = nil then Exit;
+  { dataZoom: registerSubTypeDefaulter('dataZoom', () => 'slider') }
+  if AMainType = 'dataZoom' then Exit('slider');
+  if AMainType <> 'visualMap' then Exit;
   { `pieces ? pieces.length > 0 : splitNumber > 0` -- after the preprocessor
     renamed ec2's splitList, which it does only when there is no `pieces` }
   if (AElement.IndexOfName('splitList') >= 0) and (AElement.IndexOfName('pieces') < 0) then

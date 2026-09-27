@@ -2154,12 +2154,14 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const AStack: TTySeriesStack;
   const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
 var
-  colX, colY: Integer;
+  colX, colY, first, k: Integer;
   build: TTyMarkBuilder;
+  el: TTyChartElement;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) then Exit;
   if not ABinding.Resolved then Exit;
+  first := AList.Count;
   { No axes is a legitimate resolved state -- a pie is not on any -- and this
     unit only knows how to draw on a cartesian. }
   if (not ABinding.HasAxes) or (ABinding.Cart = nil) then Exit;
@@ -2185,6 +2187,20 @@ begin
   build := RendererFor(ABinding.SeriesType);
   if build <> nil then
     Result := build(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  { THE RAW ROW BESIDE THE VIEW ROW. The builders address the view; once a
+    dataZoom has filtered the store the two differ, and a tooltip or a
+    callback reading RawDataIndex would name the wrong datum. Filled here,
+    once, for everything this series added. [Batch 60: every cartesian
+    mark carried its view index in both fields.] }
+  if AStore.IsFiltered then
+    for k := first to AList.Count - 1 do
+    begin
+      el := AList.Element(k);
+      if (el.Datum.SeriesIndex <> ABinding.SeriesIndex) or (el.Datum.DataIndex < 0)
+        or el.Datum.IsEdge then Continue;
+      el.Datum.RawDataIndex := AStore.GetRawIndex(el.Datum.DataIndex);
+      AList.SetElement(k, el);
+    end;
 end;
 
 end.
