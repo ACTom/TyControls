@@ -16,9 +16,10 @@ unit umain;
     - the Diagnostics menu exists for checks only a real machine can make: a modal dialog or a
       popup menu opening in the middle of a drag, a disabled current page (its tab row still
       switches, collapses and maximizes), a disabled side window, and a badge that grows to 99+.
-    - badges: Search's icon and Problems' tab carry a number (set in the .lfm); Output shows a
-      dot when a log line arrives while it is not the page you are looking at, and the dot goes
-      out when you switch to it.
+    - badges: Search's icon and the Problems and Terminal tabs carry a number (set in the .lfm);
+      Output shows a dot when a new log line arrives while it is not the page you are looking at,
+      and the dot goes out when you switch to it. Switching the bottom panel's own pages or
+      collapsing / expanding it also writes a line, but that is not news: it lights nothing.
     - drag Outline to the left bar and the right bar hides (HideWhenEmpty); drag any icon again
       and a drop zone shows where the right bar would open -- release in it and the bar is back.
   Every event goes to the Output page's log. The window, the bars, their windows and every
@@ -149,7 +150,10 @@ type
       OnContextPopup, which fires before the bar pops its PopupMenu up). }
     FStripWindow: TTyToolWindow;
     FStripTarget: TTyToolWindowBar;
-    procedure Log(const S: string);
+    { ANews = False: a line the demo writes about what you just did to the bottom panel itself
+      (switched its page, collapsed or expanded it) -- it is logged, but it does not light
+      Output's dot. }
+    procedure Log(const S: string; ANews: Boolean = True);
     procedure RefreshLog;
     { Caption of the panel menu's first item follows the bottom bar's state. }
     procedure UpdatePanelMenu;
@@ -254,14 +258,14 @@ end;
 
 { ---- log ---- }
 
-procedure TMainForm.Log(const S: string);
+procedure TMainForm.Log(const S: string; ANews: Boolean);
 begin
   if FLogLines = nil then Exit;
   FLogLines.Add(S);
   RefreshLog;
   // A new line while Output is not the page being looked at: light its dot (BadgeDot is set in
   // the .lfm, ShowBadge switches it). OutputWinShow puts it out again.
-  if not OutputWin.IsActive or BottomBar.Collapsed then
+  if ANews and (not OutputWin.IsActive or BottomBar.Collapsed) then
     OutputWin.ShowBadge := True;
 end;
 
@@ -311,20 +315,21 @@ begin
   // Not fired at start-up, at design time or while a layout is applied.
   b := Sender as TTyToolWindowBar;
   if b.ActiveWindow <> nil then nm := b.ActiveWindow.Name else nm := rsNoWindow;
-  Log(Format(rsActiveFmt, [b.Name, nm]));
+  // Switching away from Output is the user looking elsewhere, not something new to read there.
+  Log(Format(rsActiveFmt, [b.Name, nm]), b <> BottomBar);
 end;
 
 procedure TMainForm.BottomBarCollapse(Sender: TObject);
 begin
   // The tab row's hide button and a snap-collapse on the edge land here too.
   MnuViewBottom.Checked := False;
-  Log(Format(rsCollapsedFmt, [BottomBar.Name]));
+  Log(Format(rsCollapsedFmt, [BottomBar.Name]), False);
 end;
 
 procedure TMainForm.BottomBarExpand(Sender: TObject);
 begin
   MnuViewBottom.Checked := True;
-  Log(Format(rsExpandedFmt, [BottomBar.Name]));
+  Log(Format(rsExpandedFmt, [BottomBar.Name]), False);
 end;
 
 procedure TMainForm.ToolMgrWindowMoved(Sender: TObject; AWindow: TTyToolWindow;
@@ -586,7 +591,7 @@ end;
 procedure TMainForm.MnuDiagBadgeClick(Sender: TObject);
 begin
   // Three clicks reach 99+: the tab widens, and the tabs after it move into the overflow menu,
-  // which lists them with their badges.
+  // which lists them with their badges (Terminal carries one: "Terminal (1)").
   ProblemsWin.BadgeValue := ProblemsWin.BadgeValue + 45;
   Log(Format(rsDiagBadgeFmt, [ProblemsWin.BadgeValue]));
 end;

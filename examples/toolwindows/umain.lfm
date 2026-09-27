@@ -206,6 +206,7 @@ object MainForm: TMainForm
         ActiveIndex = 1
         Manager = ToolMgr
         PopupMenu = PanelMenu
+        ShowHint = True
         OnChange = BarChange
         OnContextPopup = BottomBarContextPopup
         OnCollapse = BottomBarCollapse
@@ -269,6 +270,8 @@ object MainForm: TMainForm
           Caption = 'Terminal'
           StripHint = 'Terminal'
           ShowHint = True
+          ShowBadge = True
+          BadgeValue = 1
           object TerminalActions: TTyToolWindowActions
             object BtnTermNew: TTySpeedButton
               Left = 0
