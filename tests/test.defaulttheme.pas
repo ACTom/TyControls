@@ -123,6 +123,8 @@ begin
     AssertBg('TyToolWindow', []);
     AssertBg('TyToolWindowBar', []);
     AssertBg('TyToolWindowStrip', []);
+    AssertBg('TyToolWindowBadge', []);
+    AssertBg('TyToolWindowDropZone', []);
   finally
     m.Free;
   end;

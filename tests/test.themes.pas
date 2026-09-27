@@ -588,7 +588,7 @@ begin
 end;
 
 const
-  GGRID: array[0..220] of string = (
+  GGRID: array[0..222] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -675,7 +675,8 @@ const
     'TyToolWindowStripIndicator|', 'TyToolWindowEdge|', 'TyToolWindowHeader|',
     'TyToolWindowActions|', 'TyToolWindowTabRow|', 'TyToolWindowTab|',
     'TyToolWindowTabIndicator|', 'TyToolWindowOverflow|', 'TyToolWindowButton|',
-    'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|');
+    'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
+    'TyToolWindowBadge|', 'TyToolWindowDropZone|');
 
   GMETRICS: array[0..124] of string = (
     '--alert-close-gap',

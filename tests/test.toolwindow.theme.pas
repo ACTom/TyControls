@@ -14,6 +14,10 @@ type
     procedure TestEveryLengthTokenIsDeclaredAndEqualsTheControlDefault;
     procedure TestSurfaceKeysReachEveryBuiltinTheme;
     procedure TestSelectedInkDiffersFromRest;
+    { E 期(spec §12):角标、放置预览两个键。 }
+    procedure TestBadgeAndDropZoneReachEveryBuiltinTheme;
+    procedure TestTheBadgeDefaultsToTheTyBadgeTokens;
+    procedure TestTheBadgeColourGoesThroughItsToken;
   end;
 
 implementation
@@ -127,6 +131,84 @@ begin
     CheckKey('TyToolWindowTab', '标签行');
   finally
     m.Free;
+  end;
+end;
+
+function SameFill(const A, B: TTyFill): Boolean;
+begin
+  Result := (A.Kind = B.Kind) and (A.Color = B.Color);
+end;
+
+procedure TTyToolWindowThemeTests.TestBadgeAndDropZoneReachEveryBuiltinTheme;
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  badge, zone, zoneHot: TTyStyleSet;
+  i, md: Integer;
+  mode, where: string;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    AssertTrue('有内置主题可查', Length(names) > 0);
+    for i := 0 to High(names) do
+      for md := 0 to 1 do
+      begin
+        if md = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+        where := names[i] + '/' + mode + ': ';
+        badge := c.Model.ResolveStyle(TyToolWindowBadgeKey, '', [tysNormal]);
+        AssertTrue(where + '角标要有底色', (tpBackground in badge.Present)
+          and (badge.Background.Kind <> tfkNone));
+        AssertTrue(where + '角标要有墨色', tpTextColor in badge.Present);
+        zone := c.Model.ResolveStyle(TyToolWindowDropZoneKey, '', [tysNormal]);
+        zoneHot := c.Model.ResolveStyle(TyToolWindowDropZoneKey, '', [tysHover]);
+        AssertTrue(where + '放置预览要有底色', (tpBackground in zone.Present)
+          and (zone.Background.Kind <> tfkNone));
+        AssertTrue(where + '放置预览要有边框色', tpBorderColor in zone.Present);
+        AssertTrue(where + '放置预览的 :hover 底色要和静止态不同',
+          not SameFill(zone.Background, zoneHot.Background));
+      end;
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyToolWindowThemeTests.TestTheBadgeDefaultsToTheTyBadgeTokens;
+var
+  m: TTyStyleModel;
+  tw, tb: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(ThemePath('light.tycss'));
+    tw := m.ResolveStyle(TyToolWindowBadgeKey, '', [tysNormal]);
+    tb := m.ResolveStyle('TyBadge', '', [tysNormal]);
+    AssertTrue('底色同 TyBadge(--accent)', SameFill(tb.Background, tw.Background));
+    AssertTrue('墨色同 TyBadge(--on-accent)', tb.TextColor = tw.TextColor);
+    AssertEquals('字重同 TyBadge', tb.FontWeight, tw.FontWeight);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTyToolWindowThemeTests.TestTheBadgeColourGoesThroughItsToken;
+var
+  c: TTyStyleController;
+  before, after: TTyStyleSet;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    before := c.Model.ResolveStyle(TyToolWindowBadgeKey, '', [tysNormal]);
+    c.StyleOverride := ':root { --toolwindow-badge-bg: #123456; }';
+    after := c.Model.ResolveStyle(TyToolWindowBadgeKey, '', [tysNormal]);
+    AssertFalse('皮肤改 --toolwindow-badge-bg,角标底色跟着变',
+      SameFill(before.Background, after.Background));
+    AssertTrue('就是那个颜色', after.Background.Color = TTyColor($FF123456));
+  finally
+    c.Free;
   end;
 end;
 

@@ -74,6 +74,10 @@
   --toolwindow-edge-color:          var(--border);
   --toolwindow-edge-color-hover:    var(--accent);
   --toolwindow-drop-color:          var(--accent);
+  --toolwindow-badge-bg:            var(--accent);
+  --toolwindow-badge-ink:           var(--on-accent);
+  --toolwindow-dropzone-bg:         alpha(var(--toolwindow-drop-color), 0.10);
+  --toolwindow-dropzone-bg-hover:   alpha(var(--toolwindow-drop-color), 0.22);
   --toolwindow-overlay-hover:       var(--overlay-hover);
   --toolwindow-overlay-active:      alpha(var(--on-surface), 0.20);
 
@@ -1284,6 +1288,17 @@ TyToolWindowButton:disabled { color: var(--muted); }
 TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }
 TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }
 TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }
+/* 工具窗口的角标(图标右上角、标签标题后面的胶囊)。写法照 TyBadge,默认值也是那套通用 token;
+   自己一个键,皮肤调 --toolwindow-badge-* 或直接写这个键。尺寸 token 共用 --badge-*。 */
+TyToolWindowBadge { background: var(--toolwindow-badge-bg); color: var(--toolwindow-badge-ink);
+                    border-radius: var(--radius-round); font-size: var(--font-size-base);
+                    font-weight: var(--font-weight-bold); padding: var(--pad-badge); }
+/* 隐藏侧栏的放置预览(拖动时出现)。底色带透明度:预览是不透明的子窗口,代码先铺栏的底色再叠
+   这一层。:hover = 指针在里面、它是此刻的目标。 */
+TyToolWindowDropZone       { background: var(--toolwindow-dropzone-bg); color: var(--toolwindow-ink);
+                             border-color: var(--toolwindow-drop-color);
+                             border-width: var(--input-border-width); }
+TyToolWindowDropZone:hover { background: var(--toolwindow-dropzone-bg-hover); }
 
 /* ── Keys the CODE resolves that this file deliberately does NOT define ─────────────────
    Not drift — each of these is an OPT-IN hook whose painter has an explicit fallback, and

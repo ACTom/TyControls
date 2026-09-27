@@ -71,6 +71,9 @@ const
   TyToolWindowEdgeKey            = 'TyToolWindowEdge';
   TyToolWindowDropIndicatorKey   = 'TyToolWindowDropIndicator';
   TyToolWindowNoteKey            = 'TyToolWindowNote';
+  { E 期(spec §12):图标 / 标签上的角标、隐藏侧栏的放置预览。 }
+  TyToolWindowBadgeKey           = 'TyToolWindowBadge';
+  TyToolWindowDropZoneKey        = 'TyToolWindowDropZone';
 
   { 点击防抖(毫秒)。拖动阈值在 tyControls.ToolWindows.Layout。 }
   TyToolWindowClickGuardMs    = 300;

@@ -107,6 +107,10 @@ begin
     '  --toolwindow-edge-color:          var(--border);' + LineEnding +
     '  --toolwindow-edge-color-hover:    var(--accent);' + LineEnding +
     '  --toolwindow-drop-color:          var(--accent);' + LineEnding +
+    '  --toolwindow-badge-bg:            var(--accent);' + LineEnding +
+    '  --toolwindow-badge-ink:           var(--on-accent);' + LineEnding +
+    '  --toolwindow-dropzone-bg:         alpha(var(--toolwindow-drop-color), 0.10);' + LineEnding +
+    '  --toolwindow-dropzone-bg-hover:   alpha(var(--toolwindow-drop-color), 0.22);' + LineEnding +
     '  --toolwindow-overlay-hover:       var(--overlay-hover);' + LineEnding +
     '  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.20);' + LineEnding +
     '' + LineEnding +
@@ -1317,6 +1321,17 @@ begin
     'TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }' + LineEnding +
     'TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* 工具窗口的角标(图标右上角、标签标题后面的胶囊)。写法照 TyBadge,默认值也是那套通用 token;' + LineEnding +
+    '   自己一个键,皮肤调 --toolwindow-badge-* 或直接写这个键。尺寸 token 共用 --badge-*。 */' + LineEnding +
+    'TyToolWindowBadge { background: var(--toolwindow-badge-bg); color: var(--toolwindow-badge-ink);' + LineEnding +
+    '                    border-radius: var(--radius-round); font-size: var(--font-size-base);' + LineEnding +
+    '                    font-weight: var(--font-weight-bold); padding: var(--pad-badge); }' + LineEnding +
+    '/* 隐藏侧栏的放置预览(拖动时出现)。底色带透明度:预览是不透明的子窗口,代码先铺栏的底色再叠' + LineEnding +
+    '   这一层。:hover = 指针在里面、它是此刻的目标。 */' + LineEnding +
+    'TyToolWindowDropZone       { background: var(--toolwindow-dropzone-bg); color: var(--toolwindow-ink);' + LineEnding +
+    '                             border-color: var(--toolwindow-drop-color);' + LineEnding +
+    '                             border-width: var(--input-border-width); }' + LineEnding +
+    'TyToolWindowDropZone:hover { background: var(--toolwindow-dropzone-bg-hover); }' + LineEnding +
     '' + LineEnding +
     '/* ── Keys the CODE resolves that this file deliberately does NOT define ─────────────────' + LineEnding +
     '   Not drift — each of these is an OPT-IN hook whose painter has an explicit fallback, and' + LineEnding +
