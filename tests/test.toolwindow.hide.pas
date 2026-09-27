@@ -423,7 +423,11 @@ end;
 
 function TTyToolWindowHideTests.EditorPoint: TPoint;
 begin
-  Result := FEditor.ClientToScreen(Point(FEditor.ClientWidth div 2, FEditor.ClientHeight div 2));
+  { 靠左的一点:编辑区右边那一截被右侧的放置预览盖着(预览就是展开后的右栏那么宽)。 }
+  Result := FEditor.ClientToScreen(Point(10, FEditor.ClientHeight div 2));
+  AssertFalse('前提:这一点不在预览里', (FRight <> nil) and (FRight.DropPreview <> nil)
+    and FRight.DropPreview.Visible
+    and PtInRect(FRight.DropPreview.BoundsRect, FForm.ScreenToClient(Result)));
 end;
 
 function TTyToolWindowHideTests.ShownWidthOfRight: Integer;
@@ -697,11 +701,15 @@ procedure TTyToolWindowHideTests.TestThePreviewTextFitsTheDefaultWidth;
   var
     b: TBarAccess;
     S: TTyStyleSet;
+    r: TRect;
     fs, tw, th, rw, pad, avail: Integer;
   begin
     b := NewEmptyBar(APlacement);
-    b.FakeClock := False;
     AssertEquals('前提:默认展开尺寸', 240, b.ExpandedSize);
+    { 右栏要先被对齐引擎摆到窗体右边(宽 0 的栏,预览从它的位置往左展开)。 }
+    r := FForm.ClientRect;
+    TFormAccess(FForm).AdjustClientRect(r);
+    TFormAccess(FForm).AlignControls(nil, r);
     S := FCtl.Model.ResolveStyle(TyToolWindowDropZoneKey, '', [tysNormal]);
     fs := TyResolveFontSize(S, True, 0, FCtl);
     TyMeasureTextBlock(AText, S.FontName, fs, S.FontWeight, 96, 0, 0, tw, th);

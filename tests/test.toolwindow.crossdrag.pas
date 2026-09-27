@@ -445,7 +445,9 @@ begin
   AssertEquals('右栏:插入线横跨图标条', TyToolWindowDropSizeDef * w, DropInkIn(FRight));
   AssertEquals('左栏图标条里没有线', 0, DropInkIn(FBar));
   FBar.CallMouseUp(0, 0);
-  { 空的右栏(Outline 挪走)照样画线。 }
+  { 空的右栏(Outline 挪走)照样画线 —— 留着图标条的那种(HideWhenEmpty = False);隐藏的空栏
+    用放置预览代替插入线,在 test.toolwindow.hide。 }
+  FRight.HideWhenEmpty := False;
   FOutline.Parent := FBar;
   AlignForm;
   AssertEquals('前提:右栏空了', 0, FRight.WindowCount);
@@ -640,6 +642,9 @@ end;
 
 procedure TTyToolWindowCrossDragTests.TestAnEmptiedBarKeepsItsStripAndTakesWindowsBack;
 begin
+  { 保留图标条是 HideWhenEmpty = False 的样子(E 期,spec §6.9);默认的整条隐藏 + 放置预览在
+    test.toolwindow.hide。 }
+  FBar.HideWhenEmpty := False;
   DragDrop(0, RightContent);
   AlignForm;
   DragDrop(0, RightContent);

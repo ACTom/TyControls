@@ -26,6 +26,8 @@ type
     procedure ClickSide(AIndex: Integer);
     { 在第 AIndex 格图标上按下,往右挪过拖动阈值(不松开)。 }
     procedure PressAndPull(AIndex: Integer);
+    { 在内容区里松开:不是落点(拖着的就取消),也不在任何图标上(武装着的不算点击)。 }
+    procedure ReleaseAway;
   published
     { --- Task 1:图标 / 标签认窗口的 Enabled --- }
     procedure TestADisabledIconDoesNotSwitch;
@@ -131,6 +133,11 @@ begin
   ClickIcon(AIndex);
 end;
 
+procedure TTyToolWindowDisabledTests.ReleaseAway;
+begin
+  FBar.CallMouseUp(FBar.ClientWidth - 10, FBar.ClientHeight - 10);
+end;
+
 procedure TTyToolWindowDisabledTests.PressAndPull(AIndex: Integer);
 var
   p: TPoint;
@@ -160,11 +167,12 @@ begin
   NewSideBar;
   PressAndPull(1);
   AssertTrue('对照:启用时拖得起来', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(0, 0);
+  ReleaseAway;
+  AssertSame('前提:对照那一次没调顺序', FSide[1], FBar.Windows[1]);
   FSide[1].Enabled := False;
   PressAndPull(1);
   AssertFalse('禁用窗口的图标不是拖动把手', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(0, 0);
+  ReleaseAway;
 end;
 
 procedure TTyToolWindowDisabledTests.TestADisabledIconTakesNoHover;
@@ -198,7 +206,9 @@ begin
   bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight, FBar.StripItemRect(2), Wipe);
   try
     AssertTrue('Git:静止墨', CountInk(bmp, Ground, RestInk) > 0);
-    AssertEquals('Git:没有禁用墨', 0, CountInk(bmp, Ground, DisInk));
+    { 静止墨的抗锯齿边缘极淡的几个像素会落进绿那条混合线的容差里(同 TestADisabledBarGreysItsIcons
+      的说明):按比例比,不钉 0。 }
+    AssertTrue('Git:没有禁用墨', CountInk(bmp, Ground, DisInk) < CountInk(bmp, Ground, RestInk) div 4);
   finally
     bmp.Free;
   end;
@@ -228,7 +238,7 @@ begin
   FSide[0].Enabled := False;
   PressAndPull(0);
   AssertFalse('禁用的当前页能点、不能拖', FBar.IsDraggingForTest);
-  FBar.CallMouseUp(0, 0);
+  ReleaseAway;
 end;
 
 procedure TTyToolWindowDisabledTests.TestOtherIconsStillSwitchAwayFromADisabledPage;

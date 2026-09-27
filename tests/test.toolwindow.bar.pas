@@ -889,6 +889,8 @@ var
   c: Integer;
 begin
   FCtl.StyleOverride := 'TyToolWindowBar { border-width: 2px; }';
+  { 这里看的是几何按 Placement 摆;空侧栏默认整条隐藏(E 期,spec §6.9),留着图标条。 }
+  FBar.HideWhenEmpty := False;
   c := FBar.ChromeInsetPx;
   AssertTrue('前提:有 chrome', c > 0);
   r := Rect(0, 0, W, H);
@@ -1152,7 +1154,7 @@ begin
   a.Free;
   AssertNull('都没了就是 nil', FBar.ActiveWindow);
   AssertEquals('空栏的 ActiveIndex 是 -1', -1, FBar.ActiveIndex);
-  AssertEquals('运行时空栏只剩图标条', StripPx, FBar.Width);
+  AssertEquals('运行时空侧栏默认整条隐藏(E 期,spec §6.9)', 0, FBar.Width);
 end;
 
 procedure TTyToolWindowBarTests.TestAReparentedActiveWindowFallsBackWithoutBeingHidden;
@@ -1570,12 +1572,13 @@ begin
   { 上限 99999 在 96 PPI 下是 10 万像素宽 —— LCL 设计期不许 Width >= 10000
     (control.inc:4315)。压到 8 PPI:拖到 9000px 反算是 107964,钳到 99999,
     推回来是 3 + 8333 = 8336px —— 再按 spec §6.2 收窄(设计期一样):800 宽的窗体减去
-    运行时那条空栏的图标条 36、本栏的图标条 3(边缘区 4 在 8 PPI 下是 0),内容只剩 761。 }
+    本栏的图标条 3(边缘区 4 在 8 PPI 下是 0),内容只剩 797。运行时那条空栏整条隐藏
+    (E 期,spec §6.9),固定部分是 0,不再扣它的图标条。 }
   d.Font.PixelsPerInch := 8;
   d.SetBounds(d.Left, d.Top, 9000, d.Height);
   AssertEquals('写回钳到 99999(布局串的 1-5 位)', 99999, d.ExpandedSize);
   AssertEquals('宽按钳过的值推,再收窄进窗体', MulDiv(StripPx, 8, 96) + MulDiv(EdgePx, 8, 96)
-    + (800 - StripPx - MulDiv(StripPx, 8, 96) - MulDiv(EdgePx, 8, 96)), d.Width);
+    + (800 - MulDiv(StripPx, 8, 96) - MulDiv(EdgePx, 8, 96)), d.Width);
 end;
 
 procedure TTyToolWindowBarTests.TestChangingTheControllerOrTheStyleClassRederivesTheSize;
@@ -1970,7 +1973,7 @@ end;
 procedure TTyToolWindowBarTests.TestOnChangeFromANewWindowSeesTheNewWidth;
 begin
   FBar.ExpandedSize := 200;
-  AssertEquals('前提:运行时空栏只剩图标条', StripPx, FBar.Width);
+  AssertEquals('前提:运行时空侧栏整条隐藏(E 期)', 0, FBar.Width);
   FBar.OnChange := @HandleChangeWidth;
   FWidthAtChange := -1;
   NewWindow;
