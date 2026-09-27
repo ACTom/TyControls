@@ -26,7 +26,15 @@ object MainForm: TMainForm
       Width = 1100
       Align = alTop
       Caption = 'Tool windows  · TyControls'
-      TitleAlignment = taLeftJustify
+      TitleAlignment = taCenter
+      object MainMenuBar: TTyMenuBar
+        Left = 4
+        Height = 26
+        Top = 4
+        Width = 220
+        Menu = MainMenu1
+        AutoSizeWidth = True
+      end
       object DarkSwitch: TTyToggleSwitch
         Left = 752
         Height = 24
@@ -44,14 +52,6 @@ object MainForm: TMainForm
         Anchors = [akTop, akRight]
         OnChange = ThemeComboChange
       end
-    end
-    object MainMenuBar: TTyMenuBar
-      Left = 0
-      Height = 30
-      Top = 34
-      Width = 1100
-      Align = alTop
-      Menu = MainMenu1
     end
     object LeftBar: TTyToolWindowBar
       Left = 0
