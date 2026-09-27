@@ -7151,3 +7151,52 @@ store 里的一个格子,上游是 `parseDataValue`:除了恰好的空串,文字
 ### 下一批
 
 B2:连续型组件的静态视图(对齐、四种矩阵、101 段渐变的圆角条、端点文字、静态手柄、背景、`positionGroup`),主题键 `TyAdvChartVisualMap*`。
+
+## 89. Tier 1 第五十五批:连续型 visualMap 组件的静态视图(B2)(2026-09-27)
+
+B1 让颜色落到了数据上,组件本身还不画。这一批把连续型组件画出来:渐变条、两端文字、手柄与手柄标签、背景,以及整个组件放在哪。交互(拖手柄、悬停指示器、hoverLink)不在这一批。
+
+### 上游的做法
+
+- **对齐**(`getItemAlign`):`align` 写了且不是 `auto` 就用它;否则把组件当成一根宽 `itemWidth` 的条,在画布上按 `left/right`(竖向)或 `top/bottom`(横向)求一次 `getLayoutRect`,padding 当 margin,再判断 `margin + x + w/2 < W/2`——padding 在这里**算了两遍**。
+- **条组的变换**,四种之一:横向不反转是 `rotation π/2`、`scaleX` 由 bottom 决定,横向反转是 `−π/2` 且符号相反,竖向不反转 `scaleY −1`,竖向反转不翻 y;竖向的 `scaleX` 由 left 决定。旋转用 `Math.cos(π/2) = 6.123e-17`,不是 0——`dataset-encode0` 的 "High Score" 因此落在 `y = −9.999999999999991`。
+- **两段条**:outOfRange 铺满 `[0, itemHeight]`,inRange 在 `linearMap(区间, extent, [0, itemHeight], clamp)` 之间;都是非全局线性渐变 `(0,0)→(0,1)`,101 个采样点,采样值是 `v0 + step * i`(**乘**,不是累加),颜色来自**控制器**的视觉(按键合并后补上失效色、`symbol`、`symbolSize`,施加顺序同样是 V8 的排序),起点是 `contentColor`,opacity 转成 alpha。
+- **两端文字**:`text[1]` 在低端、`text[0]` 在高端,点是 `[itemWidth/2, −textGap]` 或 `[itemWidth/2, itemHeight + textGap]` 经条组变换;对齐方向用 `transformDirection` 变换 bottom/top。
+- **手柄**(`calculable`):`handleSize` 是 `itemWidth` 的百分比;图标是 `path://` 药丸,保持比例放进方框;描边宽度是 `handleStyle.borderWidth × 2`、不随缩放;标签在 `[handleSize, 0]` 经手柄变换,文字是 `toFixed(precision)`。6.1.0 发行版**不**推开重叠的两个标签(源码树里有,发行版没有)。
+- **背景**:组件先按"草图"(inRange 铺满、手柄在两端)画一遍,背景是那时的包围盒加 padding;再画真实状态。
+- **定位**(`positionGroup`):真实状态的包围盒(含背景;边框有宽度时含半个线宽)按盒子参数在画布上求位置,**没有 margin**。
+- **包围盒的算法**是 zrender 的:每个子元素的矩形经自己的局部变换,按添加顺序合并——第一个与**自己**合并,所以宽是 `(x + w) − x`;手柄标签最先加入;从 SVG 字符串建的图标路径存进 Float32Array(圆弧的圆心分两次存储、两次取整),多边形的路径数据是普通数组;文字矩形是 TSpan 在行中线上的矩形。
+
+### 做法
+
+- 新单元 `VisualMapView`:视图参数读取(`itemWidth/itemHeight` 按 `parseFloat`,padding 按 CSS 展开,盒子按 ignoreSize 合并,作者写的颜色优先于主题)、`getItemAlign`、四种条组矩阵、101 段渐变、两端文字、手柄与标签、zrender 的 float32 图标管线(解析、`processArc`、`calculateTransform`、`transformPath`、`fromArc`)、包围盒、背景、定位,以及画成元素。
+- `VisualMap`:模型多了控制器的视觉(`ControllerKeys`/`Controller`);`TyVisualMapSpecOf` 多一个失效色参数。
+- 控件:布局在 `Relayout` 里、图例之后;元素和图例一起进同一张绘制表,`z` 默认 4、全部 silent;`VisualMapLayout(i)` 供测试和宿主读取。连续型不再报"组件没画"(那条资源串删掉了),分段型仍报。
+- 主题:`TyAdvChartVisualMap`(文字)、`...Inactive`(未选中段)、`...Border`、`...Background`(透明)、`...Handle`(手柄描边取表面色);`contentColor` 默认是主题 accent。重新生成了 `DefaultTheme.pas` 和 `Css.Catalog.pas`。
+- 部分区间的 inRange 条:裁成条的矩形,不是圆角矩形(已知偏差)。
+
+### 基准
+
+- `tools/advchart-oracle/visualmap-view.js` → `advchart-visualmap-view.json`:31 个图、32 个组件(含画廊的 `dataset-encode0`、`calendar-charts`、`heatmap-cartesian` 原文),每个组件记录推导出的对齐、条组矩阵、区间与手柄端点、两段条的点和渐变、文字与手柄标签(位置、对齐、矩形)、手柄矩阵与矩形、背景、两次包围盒、组位置;文字宽度来自 zrender 自己的度量表。18 个自检变异全部变红。第一轮变异后补了四个例子:三项 padding、`textGap 0.1` 与小数 padding(文字矩形的 `(y − h/2 + h/2) − h/2`)、小数条宽的横向条和手柄、只有 opacity 没有颜色的 inRange(条是 `contentColor` 加 alpha 渐变)。
+- `test.advchart.visualmapview`:用夹具的度量表替换控件的文字度量,逐位比较;文字另查绘制表里是否在全局位置画出。
+
+### 已知偏差
+
+- 交互、悬停指示器、hoverLink 没有。
+- 控制器 `symbolSize` 不是 `itemWidth` 时条是梯形、手柄会缩放——这里仍按矩形(B3)。
+- 部分区间的 inRange 条没有圆角裁剪。
+- 自定义图标里的曲线(C/Q)按控制点估包围盒,比 zrender 的精确极值大;默认图标只有直线和圆弧,逐位一致。
+- 文字只支持单行;`textStyle.align/verticalAlign` 覆盖不读。
+
+### 变异测试
+
+41 个。37 个被杀;4 个等价:
+- 控制器补的 `symbol`/`symbolSize` 键:对最多六个类型的全部 28 960 种键序搜过,补不补都不改变颜色类型之间的先后(它们给 B3 用);
+- 草图里的 inRange 条按真实区间画:它在铺满的 outOfRange 条里面,合并后的矩形不变;
+- 背景矩形的 `(x + w) − x`、第一个子元素和自己合并:都只在矩形单独出现时起作用,而经过 `applyTransform` 的矩形宽本来就是 `max − min`,再加减一次 `x` 数值不变。代码照上游写,没有例子能区分。
+
+第一轮还抓到一个真错:多边形的矩形起初按 float32 算,上游的多边形路径数据是普通数组(只有从 SVG 字符串建的路径才进 Float32Array),部分区间的矩形上游是 68.6,这里是 68.5999984741211。改掉,并把两段条的矩形加进比较。
+
+### 下一批
+
+B3:其余通道(colorHue/Saturation/Lightness/Alpha、symbol、symbolSize、liftZ)、控制器 symbolSize 让条成梯形、折线符号取行颜色、饼/漏斗/雷达/仪表盘/图例按数据项取色、graph 节点色。

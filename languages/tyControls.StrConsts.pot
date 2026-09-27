@@ -746,11 +746,6 @@ msgstr ""
 msgid "series[%d] has no type, so it is not drawn"
 msgstr ""
 
-#: tycontrols.strconsts.rstychartvisualmapnotdrawn
-#, object-pascal-format
-msgid "visualMap[%d]: its colours are applied to the data, but the component itself is not drawn yet"
-msgstr ""
-
 #: tycontrols.strconsts.rstychartvisualmappiecewise
 #, object-pascal-format
 msgid "visualMap[%d]: piecewise mapping is not supported yet, so its series keep their own colours"

@@ -917,6 +917,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.VisualMap"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.VisualMapView.pas"/>
+        <UnitName Value="tyControls.AdvChart.VisualMapView"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Render.pas"/>
         <UnitName Value="tyControls.AdvChart.Render"/>
       </Item>

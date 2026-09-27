@@ -40,6 +40,7 @@ uses
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
+  tyControls.AdvChart.VisualMapView,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -254,6 +255,10 @@ type
     FVisualRows: array of TTyVisualRowArray;
     FVisualMetas: array of TTyVisualMetaArray;
     FVisualLines: array of TTyVisualLineFill;
+    { AND THE COMPONENTS' OWN PICTURES: what each one's option says it looks
+      like, and where the last layout put it. }
+    FVisualViews: array of TTyVmViewSpec;
+    FVisualLayouts: array of TTyVisualMapLayout;
     { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
       unwritten, which is the palette's. }
     FSeriesColorNone: array of Boolean;
@@ -370,6 +375,10 @@ type
       that restyles the accent gets a matching chart for nothing. }
     procedure SolveSeriesColors;
     procedure SolveVisualMaps;
+    procedure SolveVisualMapViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
+    function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
+    function BuildVisualMaps(AList: TTyPaintList): Integer;
     procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
       APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
@@ -745,6 +754,9 @@ type
       out ARow: TTyVisualRow): Boolean;
     function VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
     function VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
+    { THE COMPONENT AIndex AS THE LAST RENDER LAID IT OUT: Valid is False
+      when it is hidden, piecewise, or nothing has rendered. }
+    function VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
     { THE GRAPH SERIES ASeriesIndex, AS THE LAST RENDER LAID IT OUT: the nodes
       the legend kept -- in the order they were written, with their pixel
       positions -- the edges between them, and each node's fill. False when
@@ -1278,6 +1290,7 @@ begin
   SolveGraphs(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
+  SolveVisualMapViews(AMeasurer, APPI);
   FDirty := False;
 end;
 
@@ -2134,13 +2147,24 @@ begin
     `gradientColor` still wins. }
   ramp := TyVisualDefaultRamp(TTyChartColor(ThemeRampColor(0)));
   SetLength(FVisualSpecs, n);
+  SetLength(FVisualViews, n);
+  SetLength(FVisualLayouts, n);
   for k := 0 to n - 1 do
   begin
-    FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp);
+    FVisualViews[k] := TyVisualMapViewSpecOf(FOption, k);
+    FVisualLayouts[k] := Default(TTyVisualMapLayout);
+    { the controller's colour for a state it was given nothing for:
+      `inactiveColor` as written, the theme's otherwise }
+    if FVisualViews[k].HasInactive then
+      FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp,
+        FVisualViews[k].Inactive)
+    else
+      FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp,
+        TyVisualFromChart(TTyChartColor(ActiveController.Model.ResolveStyle(
+          'TyAdvChartVisualMapInactive', '', []).TextColor)));
+    { [Batch 55: a continuous one is drawn now; the note went.] }
     if FVisualSpecs[k].SubType = 'piecewise' then
-      FBuild.Note(Format(rsTyChartVisualMapPiecewise, [k]))
-    else if (FVisualSpecs[k].SubType = 'continuous') and FVisualSpecs[k].Show then
-      FBuild.Note(Format(rsTyChartVisualMapNotDrawn, [k]));
+      FBuild.Note(Format(rsTyChartVisualMapPiecewise, [k]));
   end;
   SetLength(FVisualRows, Length(FBindings));
   SetLength(FVisualMetas, Length(FBindings));
@@ -2269,6 +2293,70 @@ begin
     AVisual.VisualLineStroke := not TyReadOptStyle(node, 'lineStyle').Color.Written;
     AVisual.VisualLineArea := not TyReadOptStyle(node, 'areaStyle').Color.Written;
   end;
+end;
+
+function TTyAdvanceChart.VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
+begin
+  { `contentColor` as written; upstream's default is its first theme colour,
+    which here is the skin's accent -- series slot one }
+  if AView.HasContent then Exit(AView.Content);
+  Result := TyVisualFromChart(TTyChartColor(ThemeRampColor(0)));
+end;
+
+function TTyAdvanceChart.VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartVisualMap', '', []);
+  Result.FontName := st.FontName;
+  Result.FontSizeLogical := ResolveFontSize(st);
+  if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
+  Result.FontWeight := st.FontWeight;
+  if AView.HasText_ then Result.Text := AView.TextColour
+  else Result.Text := TTyChartColor(st.TextColor);
+  if AView.HasBorder then Result.Border := AView.BorderColour
+  else Result.Border := TTyChartColor(
+    model.ResolveStyle('TyAdvChartVisualMapBorder', '', []).BorderColor);
+  if AView.HasBackground then Result.Background := AView.BackgroundColour
+  else Result.Background := TTyChartColor(
+    model.ResolveStyle('TyAdvChartVisualMapBackground', '', []).Background.Color);
+  if AView.HasHandleStroke then Result.HandleStroke := AView.HandleStroke
+  else Result.HandleStroke := TTyChartColor(
+    model.ResolveStyle('TyAdvChartVisualMapHandle', '', []).BorderColor);
+end;
+
+procedure TTyAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var k: Integer;
+begin
+  for k := 0 to High(FVisualLayouts) do
+  begin
+    FVisualLayouts[k] := Default(TTyVisualMapLayout);
+    if (k > High(FVisualSpecs)) or (k > High(FVisualViews)) then Break;
+    FVisualLayouts[k] := TyLayoutVisualMap(FVisualSpecs[k], FVisualViews[k],
+      VisualMapContent(FVisualViews[k]), FLastRect.Right - FLastRect.Left,
+      FLastRect.Bottom - FLastRect.Top, APPI / 96, AMeasurer,
+      VisualMapInk(FVisualViews[k]));
+  end;
+end;
+
+function TTyAdvanceChart.BuildVisualMaps(AList: TTyPaintList): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  for k := 0 to High(FVisualLayouts) do
+    if (k <= High(FVisualViews)) and FVisualLayouts[k].Valid then
+      Inc(Result, TyBuildVisualMapMarks(FVisualLayouts[k], FVisualViews[k],
+        VisualMapInk(FVisualViews[k]), FLastRect.Left, FLastRect.Top, AList));
+end;
+
+function TTyAdvanceChart.VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
+begin
+  Result := Default(TTyVisualMapLayout);
+  if (AIndex >= 0) and (AIndex <= High(FVisualLayouts)) then
+    Result := FVisualLayouts[AIndex];
 end;
 
 function TTyAdvanceChart.VisualMapCount: Integer;
@@ -4436,6 +4524,7 @@ begin
       font and an anchor already on them, which is what the expansion exists
       to supply. A MARK appended here would silently lose its label. }
     Inc(drawn, BuildLegends(APPI, list));
+    Inc(drawn, BuildVisualMaps(list));
     Result := drawn;
   end;
 end;

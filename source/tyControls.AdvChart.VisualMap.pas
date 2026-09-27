@@ -48,6 +48,8 @@ type
     Nums: TTyDoubleArray;
   end;
   TTyVisualMappingArray = array of TTyVisualMapping;
+  TTyVisualStateKeys = array[TTyVisualState] of TTyStringArray;
+  TTyVisualStateMaps = array[TTyVisualState] of TTyVisualMappingArray;
 
   { `dimension`: a store index or a dimension name. }
   TTyVisualDim = record
@@ -84,8 +86,15 @@ type
     Dim: TTyVisualDim;
     { the completed target, per state: the keys as the object holds them,
       and the mappings in the order they are applied }
-    Keys: array[TTyVisualState] of TTyStringArray;
-    States: array[TTyVisualState] of TTyVisualMappingArray;
+    Keys: TTyVisualStateKeys;
+    States: TTyVisualStateMaps;
+    { THE CONTROLLER'S, which is what the component draws its own bar in: the
+      same option states merged under `controller`, a missing state the
+      inactive colour, and a symbol and a size appended -- which matters,
+      because the order the types are applied in is V8's sort of the WHOLE
+      key list. }
+    ControllerKeys: TTyVisualStateKeys;
+    Controller: TTyVisualStateMaps;
   end;
   TTyVisualMapSpecArray = array of TTyVisualMapSpec;
 
@@ -168,9 +177,15 @@ function TyPrepareVisualTypes(const ATypes: TTyStringArray): TTyStringArray;
 
 { ---- the model ---- }
 function TyVisualMapCount(AOption: TTyChartOption): Integer;
-{ ARamp is the fallback gradient; a root `gradientColor` wins over it. }
+{ ARamp is the fallback gradient; a root `gradientColor` wins over it.
+  AInactive is the controller's colour for a state it was given nothing
+  for -- `inactiveColor`, written or the theme's. The three-argument form
+  uses upstream's own #cfd2d7. }
 function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
-  const ARamp: TTyVisualColorArray): TTyVisualMapSpec;
+  const ARamp: TTyVisualColorArray): TTyVisualMapSpec; overload;
+function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
+  const ARamp: TTyVisualColorArray;
+  const AInactive: TTyVisualColor): TTyVisualMapSpec; overload;
 function TyVisualMapTargets(const ASpec: TTyVisualMapSpec;
   ASeriesIndex: Integer; const ASeriesId: string): Boolean;
 function TyVisualMapDimFor(const ASpec: TTyVisualMapSpec;
@@ -696,8 +711,10 @@ begin
   end;
 end;
 
-procedure ReadStates(ATarget: TJSONObject; var ASpec: TTyVisualMapSpec);
-const cNames: array[TTyVisualState] of string = ('inRange', 'outOfRange');
+const cStateNames: array[TTyVisualState] of string = ('inRange', 'outOfRange');
+
+procedure ReadStates(ATarget: TJSONObject; var AKeys: TTyVisualStateKeys;
+  var AStates: TTyVisualStateMaps);
 var
   st: TTyVisualState;
   obj: TJSONObject;
@@ -706,15 +723,15 @@ var
 begin
   for st := Low(TTyVisualState) to High(TTyVisualState) do
   begin
-    ASpec.Keys[st] := nil;
-    ASpec.States[st] := nil;
-    obj := ObjOf(ATarget.Find(cNames[st]));
+    AKeys[st] := nil;
+    AStates[st] := nil;
+    obj := ObjOf(ATarget.Find(cStateNames[st]));
     if obj = nil then Continue;
-    SetLength(ASpec.Keys[st], obj.Count);
+    SetLength(AKeys[st], obj.Count);
     valid := nil;
     for i := 0 to obj.Count - 1 do
     begin
-      ASpec.Keys[st][i] := obj.Names[i];
+      AKeys[st][i] := obj.Names[i];
       if TyVisualIsValidType(obj.Names[i]) then
       begin
         n := Length(valid);
@@ -723,9 +740,9 @@ begin
       end;
     end;
     order := TyPrepareVisualTypes(valid);
-    SetLength(ASpec.States[st], Length(order));
+    SetLength(AStates[st], Length(order));
     for i := 0 to High(order) do
-      ASpec.States[st][i] := MappingOf(order[i], obj.Find(order[i]));
+      AStates[st][i] := MappingOf(order[i], obj.Find(order[i]));
   end;
 end;
 
@@ -813,13 +830,59 @@ end;
 
 function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
   const ARamp: TTyVisualColorArray): TTyVisualMapSpec;
+begin
+  Result := TyVisualMapSpecOf(AOption, AIndex, ARamp,
+    TyVisualRgba(207, 210, 215, 1));
+end;
+
+function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
+  const ARamp: TTyVisualColorArray;
+  const AInactive: TTyVisualColor): TTyVisualMapSpec;
 var
-  node, target, base, st, absent: TJSONObject;
-  d, root, ramp, inRange: TJSONData;
-  arr: TJSONArray;
+  node, target, controller, base, st, absent: TJSONObject;
+  d: TJSONData;
   i: Integer;
   e0, e1, r0, r1, t: Double;
   defa: TJSONData;
+  vs: TTyVisualState;
+
+  { completeSingle: ec2's high-to-low `color`, then the gradient }
+  procedure CompleteSingle(AObj: TJSONObject);
+  var
+    inRange, root, ramp, c: TJSONData;
+    arr: TJSONArray;
+    so: TJSONObject;
+    k: Integer;
+  begin
+    inRange := AObj.Find('inRange');
+    c := node.Find('color');
+    if (c <> nil) and (c.JSONType = jtArray) and not Truthy(inRange) then
+    begin
+      arr := TJSONArray.Create;
+      for k := TJSONArray(c).Count - 1 downto 0 do
+        arr.Add(TJSONArray(c).Items[k].Clone);
+      so := TJSONObject.Create;
+      so.Add('color', arr);
+      SetKey(AObj, 'inRange', so);
+      inRange := so;
+    end;
+    if not Truthy(inRange) then
+    begin
+      root := AOption.Find('gradientColor');
+      if root <> nil then
+        ramp := root.Clone
+      else
+      begin
+        arr := TJSONArray.Create;
+        for k := 0 to High(ARamp) do arr.Add(TyVisualCss(ARamp[k]));
+        ramp := arr;
+      end;
+      so := TJSONObject.Create;
+      so.Add('color', ramp);
+      SetKey(AObj, 'inRange', so);
+    end;
+  end;
+
 begin
   Result := Default(TTyVisualMapSpec);
   Result.Index := AIndex;
@@ -895,6 +958,11 @@ begin
     target := TJSONObject(d.Clone)
   else
     target := TJSONObject.Create;
+  d := node.Find('controller');
+  if (d <> nil) and (d.JSONType = jtObject) then
+    controller := TJSONObject(d.Clone)
+  else
+    controller := TJSONObject.Create;
   base := TJSONObject.Create;
   try
     d := node.Find('inRange');
@@ -902,35 +970,9 @@ begin
     d := node.Find('outOfRange');
     if (d <> nil) then base.Add('outOfRange', d.Clone);
     MergeKeep(target, base);
-
-    { completeSingle: ec2's high-to-low `color`, then the gradient }
-    inRange := target.Find('inRange');
-    d := node.Find('color');
-    if (d <> nil) and (d.JSONType = jtArray) and not Truthy(inRange) then
-    begin
-      arr := TJSONArray.Create;
-      for i := TJSONArray(d).Count - 1 downto 0 do
-        arr.Add(TJSONArray(d).Items[i].Clone);
-      st := TJSONObject.Create;
-      st.Add('color', arr);
-      SetKey(target, 'inRange', st);
-      inRange := st;
-    end;
-    if not Truthy(inRange) then
-    begin
-      root := AOption.Find('gradientColor');
-      if root <> nil then
-        ramp := root.Clone
-      else
-      begin
-        arr := TJSONArray.Create;
-        for i := 0 to High(ARamp) do arr.Add(TyVisualCss(ARamp[i]));
-        ramp := arr;
-      end;
-      st := TJSONObject.Create;
-      st.Add('color', ramp);
-      SetKey(target, 'inRange', st);
-    end;
+    MergeKeep(controller, base);
+    CompleteSingle(target);
+    CompleteSingle(controller);
 
     { completeInactive: an absent outOfRange gets every inRange type's
       inactive value, and a colour an opacity of nought beside it }
@@ -950,10 +992,33 @@ begin
           absent.Add('opacity', TJSONArray.Create([0, 0]));
       end;
     end;
-    ReadStates(target, Result);
+    ReadStates(target, Result.Keys, Result.States);
+
+    { completeController: a missing state is the inactive colour; a symbol
+      and a size are appended where none is written. Their VALUES are a
+      later batch -- only their place in the key list matters here. }
+    for vs := Low(TTyVisualState) to High(TTyVisualState) do
+    begin
+      if not Truthy(controller.Find(cStateNames[vs])) then
+      begin
+        st := TJSONObject.Create;
+        st.Add('color', TJSONArray.Create([TyVisualCss(AInactive)]));
+        SetKey(controller, cStateNames[vs], st);
+      end;
+      st := ObjOf(controller.Find(cStateNames[vs]));
+      if st = nil then Continue;
+      d := st.Find('symbol');
+      if (d = nil) or (d.JSONType = jtNull) then
+        SetKey(st, 'symbol', TJSONArray.Create(['roundRect']));
+      d := st.Find('symbolSize');
+      if (d = nil) or (d.JSONType = jtNull) then
+        SetKey(st, 'symbolSize', TJSONArray.Create([0, 0]));
+    end;
+    ReadStates(controller, Result.ControllerKeys, Result.Controller);
   finally
     base.Free;
     target.Free;
+    controller.Free;
   end;
 end;
 

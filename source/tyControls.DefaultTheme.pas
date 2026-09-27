@@ -1257,6 +1257,17 @@ begin
     'TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }' + LineEnding +
     'TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartLegendBackground { background: var(--surface); }' + LineEnding +
+    '/* A visualMap''s own picture. Upstream inks its texts with tokens.color.' + LineEnding +
+    '   secondary, the bar''s inactive stretch and the frame with a pale grey, the' + LineEnding +
+    '   handles'' rims white and the box transparent. The inactive stretch is the' + LineEnding +
+    '   chart''s own ink faded, like a switched-off legend item; the rim is the' + LineEnding +
+    '   surface, so a handle reads as cut out of whatever it sits on. The frame is' + LineEnding +
+    '   drawn only when the option gives it a width. */' + LineEnding +
+    'TyAdvChartVisualMap { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartVisualMapInactive { color: alpha(var(--on-surface), 0.2); }' + LineEnding +
+    'TyAdvChartVisualMapBorder { border-color: var(--border); }' + LineEnding +
+    'TyAdvChartVisualMapBackground { background: transparent; }' + LineEnding +
+    'TyAdvChartVisualMapHandle { border-color: var(--surface); }' + LineEnding +
     '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
     '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
     '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +
