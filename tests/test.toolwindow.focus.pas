@@ -72,6 +72,9 @@ type
     { 换主题只改了按钮尺寸 / 标签区下限 / 分隔线粗细,行高不变:当前页的操作区照样被真的挪到
       新几何上(对齐引擎要真句柄才会跑)。 }
     procedure TestAThemeChangeMovesTheBottomActions;
+    { spec §5.3 / §3.7(整体审查 4):禁用含焦点的当前页,焦点照收起那一路交给栏后面的控件,
+      不掉到窗体本身;焦点不在里面就不动它。 }
+    procedure TestDisablingThePageWithTheFocusMovesTheFocusOut;
   end;
 
 implementation
@@ -502,6 +505,23 @@ begin
   Check('分隔线粗细(覆写层)',
     ':root { --toolwindow-button-size: 30px; --toolwindow-tab-area-min: 700px; }' +
     ' TyToolWindowSeparator { border-color: #000000; border-width: 5px; }');
+end;
+
+procedure TTyToolWindowFocusTests.TestDisablingThePageWithTheFocusMovesTheFocusOut;
+begin
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在当前页里', FEdit, FForm.ActiveControl);
+  FWin.Enabled := False;
+  AssertNothingRaised('Enabled := False');
+  AssertTrue('焦点不许掉到窗体本身', (FForm.ActiveControl <> nil) and
+    (FForm.ActiveControl <> FForm));
+  AssertFalse('焦点不留在禁用的页里', FWin.ContainsControl(FForm.ActiveControl));
+  AssertSame('同收起那一路:交给 Tab 顺序里栏后面的那一个', FOutside, FForm.ActiveControl);
+  FWin.Enabled := True;
+  FBefore.SetFocus;
+  AssertSame('前提:焦点在栏外', FBefore, FForm.ActiveControl);
+  FWin.Enabled := False;
+  AssertSame('焦点不在里面:一动不动', FBefore, FForm.ActiveControl);
 end;
 
 initialization

@@ -219,7 +219,8 @@ type
     procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
     { 窗口自己的 Enabled 变了(spec §3.7):图标 / 标签的样子、手势、底栏的「让出标签行」都跟着
       变,交给栏。先调继承 —— LCL 在那里禁用 / 启用原生句柄、挪走焦点(wincontrol.inc:6753-6763),
-      不调就是 [[swallowed-cm-message-inherited]]。 }
+      不调就是 [[swallowed-cm-message-inherited]]。禁用时焦点原来在里面:照收起那一路交给栏后面
+      的控件(spec §5.3),不让它掉到窗体本身。 }
     procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
     { 全库 76 处 RenderTo 里 71 处是 protected,两个近亲 TTyTabSheet / TTyCard 也是:
       画自己不是给外面用的接口。测试走探针子类。 }
@@ -344,6 +345,10 @@ type
     { 此刻画不画角标、画什么(事件已经应用过,spec §8.1)。AText 在圆点模式下是 ''。
       没开 ShowBadge 时不调事件。 }
     function BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
+    { OnBadgeDisplay 的答案变了(它看的外部状态变了,BadgeValue / ShowBadge / BadgeDot 都没动):
+      控件自己看不出来,调这一句。侧栏重画图标条;底栏丢标签宽缓存、重画标签行(当前页的,或让出时
+      栏自己的)—— 跟改这三个属性走的是同一条路。 }
+    procedure InvalidateBadge;
   published
     property Caption;
     { 图标条上的图标**按名字** —— 持久键,在所在栏的 EffectiveImages 里解析。列表是本库的
@@ -376,8 +381,9 @@ type
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
     { 角标(spec §8.1),名字和语义照 TTyButton:ShowBadge 是总开关,开着时 0 也显示;> 99 显示
       '99+';OnBadgeDisplay 可以改文字或藏起来(会被频繁调用 —— 量标签宽、画、命中都可能问 ——
-      不许有副作用;它的答案变了请自己 Invalidate)。BadgeDot 画一个圆点代替数字。侧栏画在图标
-      右上角,底栏画在标签标题后面。不进布局串。 }
+      不许有副作用;它的答案变了请调 InvalidateBadge —— 窗口自己的 Invalidate 不够:非当前页藏着,
+      角标画在栏或当前页里)。BadgeDot 画一个圆点代替数字。侧栏画在图标右上角,底栏画在标签标题
+      后面。不进布局串。 }
     property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
     property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
     property BadgeDot: Boolean read FBadgeDot write SetBadgeDot default False;
@@ -455,7 +461,11 @@ type
   { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome、
     内容区下限、设计期提示行高。下限也在这里:推导按它钳内容项,只换
     --toolwindow-content-min 的主题也得重推。提示行高(借 --toolwindow-header-height)同理:
-    设计期的漏入 / 冲突提示行从内容区底部扣,只换它的主题也得重排。 }
+    设计期的漏入 / 冲突提示行从内容区底部扣,只换它的主题也得重排。
+    NoteRow 在运行时还兼一份差事:它就是 --toolwindow-header-height 这个 token,而让出来的标签行
+    (spec §3.7,BottomRowHeightAt = max(这个 token, 操作区))也从内容区顶上扣 —— 只换这个 token
+    的主题,栏的 Invalidate 比 FLaid.NoteRow 看出来、重排,让出行跟着变高 / 变矮。不另设一项:
+    同一个 token 记两份,两份只会一起变。 }
   TTyToolWindowBarMetrics = record
     Strip, Edge, Chrome, ContentMin, NoteRow: Integer;
   end;
@@ -660,6 +670,9 @@ type
       rsTyToolWindowDropLeft、右栏 rsTyToolWindowDropRight),左右各缩一个 header-pad,放不下出
       省略号。不做绘制缓存:只在拖动中存在,重画少。 }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { Paint 用的密度:栏的(预览的宽、pad、字号都按栏的尺度算 —— 宽来自栏的推导);没有栏时
+      自己字体的。预览挂在栏的父控件上,自己的字体 PPI 跟栏的不一定一样。 }
+    function PaintPPI: Integer;
   public
     constructor CreateFor(ABar: TTyToolWindowBar);
     procedure Paint; override;
@@ -722,6 +735,9 @@ type
     { 挂着显隐 / 改尺寸处理器的兄弟(同一父控件里的非栏控件),见 WatchSiblings。每个都
       FreeNotification 过:它被释放时从这里摘掉,不留悬垂。 }
     FWatched: array of TControl;
+    { 沿轴尺寸变成 0 那一刻紧挨着的内侧同向兄弟(对齐排序里排在栏后面的第一个);从 0 回来时
+      ApplyAxisSize 把排序键摆到它外面。FreeNotification 过,被释放 / 摘走时 Notification 清掉。 }
+    FZeroInner: TControl;
     FOnChange: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
     FOnExpand: TNotifyEvent;
@@ -806,6 +822,10 @@ type
     { Placement 要求的 Align(左 → alLeft,右 → alRight,底 → alBottom)。 }
     function PlacementAlign: TAlign;
     procedure DeriveSize;
+    { 把沿轴尺寸设成 AValue(推导的唯一写入口):外沿(LCL 对齐排序的键)不动、往编辑区一侧长;
+      从 0 回来时排序键摆到变成 0 那一刻紧挨着的内侧同向兄弟外面(见实现处)。尺寸没变什么都
+      不做。 }
+    procedure ApplyAxisSize(AValue: Integer);
     procedure Relayout;
     { Controls 顺序里的窗口,去掉 AExcept(可为 nil)。非窗口子控件(粘贴等途径漏进来的)
       不计入任何序号。 }
@@ -868,7 +888,7 @@ type
     { 标签宽的缓存:只缓存量出来的宽(量字是贵的那一步),不缓存整份几何 —— 窗口顺序每次现取,
       设计器「移到最前 / 最后」直接调非虚的 SetControlIndex,戳记不到。键 = 此刻
       「(窗口引用, Caption) 按 Controls 顺序」的快照逐项比 + (PPI, model 身份, 主题版本,
-      样式类, StyleOverride, 两种状态**解析后**的字号)。字号取量字真正用的那个
+      样式类, StyleOverride, 三种状态**解析后**的字号)。字号取量字真正用的那个
       (ResolveFontSize:样式的 font-size、非 ParentFont 时自己的 Font.Size、主题基准字号
       依次回落)—— 只记 Font.Size 的话,ParentFont 一翻、Font.Size 没变而字号换了一个来源,
       缓存照样命中。只缓存自己字体的 PPI 那一份,别的 PPI 现量。 }
@@ -882,11 +902,12 @@ type
     FTabCacheOverride: string;
     FTabCacheRestFs: Integer;
     FTabCacheSelFs: Integer;
+    FTabCacheDisFs: Integer;
     { 键的一部分(E 期,spec §7.3 / §8.1):每个窗口此刻的角标显示,和标题那一组同一个循环逐项比
       —— 记的是事件应用之后的答案,不是 BadgeValue(事件可以改文字)。见 BadgeCacheKey。 }
     FTabCacheBadges: array of string;
     FTabCacheWidths: TTyToolWindowWidths;
-    { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」两份样式量的较大者(spec §7.3;
+    { 按窗口顺序,每个标签要的宽:标题取「静止态」「选中态」「禁用态」三份样式量的最大者(spec §7.3;
       每份又是 Painter 的两种量法取大),再加 2 × tab-pad。空标题也有 2 × tab-pad。有角标的
       再加 header-gap + 胶囊宽(BadgeSizeAt,画胶囊问的是同一处)。 }
     function TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
@@ -924,6 +945,12 @@ type
       当前页停在旧边界里、盖着标签行);当前页 RelayoutHeader;栏和当前页都重画;进行中的
       标签行手势取消(拉宽不算)。加载 / 释放中不做。 }
     procedure TabRowHostMayHaveChanged;
+    { 栏坐标 AP 落在禁用的当前页的边界里(它看得见、自己的 Enabled = False):Win32 上点禁用页,
+      按下落到栏上(spec §3.7 根因第 1 条)。 }
+    function InDisabledActivePage(const AP: TPoint): Boolean;
+    { 这一下按下不算「按在栏上」:让出来的标签行里(空白也算),或禁用的当前页的边界里。
+      MouseDown 吞 Click / DblClick、BeginAutoDrag 挡 LCL 自动拖动问的都是这一处。 }
+    function SwallowPress(const AP: TPoint): Boolean;
   private
     { --- 角标(spec §8.1,E 期) --- }
     { 角标的尺寸(设备像素,按 APPI)和文字;不画时 (0, 0)。文字宽按标签的量法(两种量法取大),
@@ -932,10 +959,12 @@ type
       内边距、--badge-min-size、--badge-dot-size 按 APPI。 }
     function BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer; out AText: string;
       out ADot: Boolean): TSize;
-    { 在 ABox(画笔坐标,尺寸来自 BadgeSizeAt)里画 AWindow 的角标;不画就什么都不做。圆点画成圆,
-      数字画胶囊(圆角照 TTyButton.DrawBadge:主题没给圆角就半高),文字用 ASmallCrisp。 }
-    procedure DrawBadgeIn(APainter: TTyPainter; AWindow: TTyToolWindow; const ABox: TRect;
-      APPI: Integer);
+    { 在 ABox(画笔坐标)里画角标。ABox、AText、ADot 都是同一次 BadgeSizeAt 的答案 —— 不再问
+      OnBadgeDisplay:一次绘制里事件只答一次,量的和画的就不会是两个答案(事件是用户代码,两次之间
+      它看的外部状态可能变了)。ABox 为空就什么都不做。圆点画成圆,数字画胶囊(圆角照
+      TTyButton.DrawBadge:主题没给圆角就半高),文字用 ASmallCrisp。 }
+    procedure DrawBadgeIn(APainter: TTyPainter; const ABox: TRect; const AText: string;
+      ADot: Boolean);
   private
     { --- 隐藏侧栏的放置预览(spec §9.8,E 期) --- }
     FDropPreview: TTyToolWindowDropPreview;
@@ -945,8 +974,13 @@ type
       2 × chrome + 边缘区 + 按 §6.2 收窄后的内容。别的栏照常按自己的真实状态参加分空间 ——
       不另写一份推导公式(两份会漂开)。 }
     function ShownAxisPx: Integer;
-    { 按 DropPreviewRect 显示预览(没建过就建);矩形为空就收掉。manager 进入拖动时调。 }
+    { 按 DropPreviewRect 显示预览(没建过就建);矩形为空就收掉。manager 进入拖动时调;拖动中
+      栏换了父控件 / 父控件改了尺寸时 manager 再调一次,那时保留亮不亮。 }
     procedure ShowDropPreview;
+    { 预览这个窗口化控件擦除时铺的颜色(ARect 是它的矩形):栏的底色 —— 纯色原样、渐变取两端的
+      中间色;图片 / 九宫格给不出一个颜色,退到图标条的底色;都给不出答 False(不设,擦成父控件的
+      颜色)。 }
+    function DropPreviewEraseColor(const ARect: TRect; out AColor: TColor): Boolean;
     { 收掉(不释放,下次拖动复用)。 }
     procedure HideDropPreview;
     procedure SetDropPreviewHot(AOn: Boolean);
@@ -1277,7 +1311,7 @@ type
       放 public 是给测试直接问的。 --- }
     function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
     { 栏此刻是不是替当前页画标签行、收它的输入(spec §3.7「让出标签行」):运行时、底栏、有当前
-      页、当前页**自己的** Enabled = False、栏没收起。 }
+      页、当前页**自己的** Enabled = False、栏没收起、拉宽边没吸附着(吸附 = 按收起排布,高 0)。 }
     function HostsTabRow: Boolean;
     { 此刻按「一侧没有窗口」隐藏(spec §6.9):运行时、侧栏、HideWhenEmpty、没有窗口(漏入的
       非窗口子控件运行时本来就藏着,不算)。推导宽 0,不写 Visible。 }
@@ -1303,7 +1337,6 @@ type
       out ARect: TRect): TTyToolWindowZone;
     procedure HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
-    procedure HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState; X, Y: Integer);
     procedure HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
     procedure HeaderMouseLeave(AWindow: TTyToolWindow);
@@ -1501,6 +1534,7 @@ uses
   tyControls.ImageCollection,   { TyTintBitmapAlpha / TyFadeBitmapAlpha:图标按状态着色 }
   tyControls.ImageDraw,  { TyImageIndexOfName / TyImageNameOfIndex:名字 ↔ 格子;TyRenderImage }
   tyControls.Badge,      { TyBadgeText / TyBadgeSize / TyBadgeCornerPos:角标的字和尺寸 }
+  tyControls.Css.Values, { TyMix:渐变底的放置预览取中间色当擦除色 }
   tyControls.Menu;       { TTyPopupMenu:图标条的溢出菜单 }
 
 { --- TTyToolWindow ------------------------------------------------------------ }
@@ -1626,6 +1660,11 @@ begin
   end
   else
     b.Invalidate;
+end;
+
+procedure TTyToolWindow.InvalidateBadge;
+begin
+  BadgeChanged;
 end;
 
 function TTyToolWindow.BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
@@ -2429,11 +2468,27 @@ end;
 procedure TTyToolWindow.CMEnabledChanged(var Message: TLMessage);
 var
   b: TTyToolWindowBar;
+  form: TCustomForm;
+  focusIn: Boolean;
 begin
-  inherited;
   b := Bar;
+  { 禁用含焦点的页:继承那一句里 LCL 把 ActiveControl 置 nil(RemoveFocus → DefocusControl,
+    customform.inc:901-910),焦点掉到窗体本身、快捷键全部失灵 —— 跟收起那一路是同一个问题
+    (spec §5.3)。所以「焦点原来在不在里面」要在继承之前记。设计期不管焦点。 }
+  focusIn := (b <> nil) and not Enabled and not (csDesigning in ComponentState)
+    and ([csLoading, csDestroying] * b.ComponentState = []) and b.FocusIsInside(Self);
+  inherited;
   if (b <> nil) and not (csDestroying in b.ComponentState) then
     b.WindowEnabledChanged(Self);
+  { 照收起那一路:交给 Tab 顺序里栏后面的那一个(SelectNext(栏),TTyToolWindowBar.SetCollapsed)。
+    不看继承之后 ActiveControl 是不是 nil:Win32 上禁用含焦点的句柄,继承返回时 ActiveControl
+    已经不是 nil、也不是栏后面那一个(test.toolwindow.focus 实测)—— 平台挑的去处不是 spec §5.3
+    要的。 }
+  if focusIn then
+  begin
+    form := GetParentForm(b);
+    if form <> nil then form.SelectNext(b, True, True);
+  end;
 end;
 
 procedure TTyToolWindow.CMVisibleChanged(var Msg: TLMessage);
@@ -3424,7 +3479,7 @@ end;
 procedure TTyToolWindowBar.ShowDropPreview;
 var
   r: TRect;
-  S: TTyStyleSet;
+  c: TColor;
 begin
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
   r := DropPreviewRect;
@@ -3437,16 +3492,41 @@ begin
   FDropPreview.Controller := Controller;
   { 窗口化控件擦除时先铺自己的 Color([[windowed-ghost-erases-to-parent-color]]):设成栏的底色,
     显示那一瞬间不闪一块父控件的颜色。 }
-  S := ActiveController.Model.ResolveStyle(TyToolWindowBarKey, TyStyleClassFor(Self, StyleClass),
-    [tysNormal]);
-  if (tpBackground in S.Present) and (S.Background.Kind = tfkSolid) then
-    FDropPreview.Color := TyColorToLCL(S.Background.Color);
+  if DropPreviewEraseColor(r, c) then FDropPreview.Color := c;
+  { 已经显示着(拖动中重新摆一次:栏换了父控件、父控件改了尺寸)就保留亮不亮 —— 亮是 manager
+    的落点给的,落点没变它不会再来设一次。 }
+  if not FDropPreview.Visible then FDropPreview.Hot := False;
   { 每次都设:栏可能换过父控件。 }
   FDropPreview.Parent := Parent;
   FDropPreview.BoundsRect := r;
-  FDropPreview.Hot := False;
   FDropPreview.Visible := True;
   FDropPreview.BringToFront;
+end;
+
+function TTyToolWindowBar.DropPreviewEraseColor(const ARect: TRect; out AColor: TColor): Boolean;
+
+  function FromKey(const AKey: string): Boolean;
+  var
+    S: TTyStyleSet;
+  begin
+    Result := False;
+    S := ActiveController.Model.ResolveStyle(AKey, TyStyleClassFor(Self, StyleClass), [tysNormal]);
+    if not (tpBackground in S.Present)
+       or not (S.Background.Kind in [tfkSolid, tfkLinearGradient]) then Exit;
+    { 渐变取两端的中间色(近似正中那一点 —— 离整块最远的那一点误差最小,同 Base 里
+      TyFillCentreColor 的理由;擦除色只在显示那一瞬间露面,不用逐位对上画出来的那一条)。 }
+    if S.Background.Kind = tfkSolid then
+      AColor := TyColorToLCL(S.Background.Color)
+    else
+      AColor := TyColorToLCL(TyMix(S.Background.GradFrom, S.Background.GradTo, 50));
+    Result := True;
+  end;
+
+begin
+  { 栏的底色(纯色 / 渐变);图片、九宫格皮肤给不出一个颜色,退到图标条的底色 —— 同一条栏上
+    另一块大面积的底;都给不出就不设(擦成父控件的颜色,之后预览自己整块铺满)。 }
+  AColor := clNone;
+  Result := FromKey(TyToolWindowBarKey) or FromKey(TyToolWindowStripKey);
 end;
 
 procedure TTyToolWindowBar.HideDropPreview;
@@ -3650,6 +3730,9 @@ var
 begin
   c := FWatched[AIndex];
   Delete(FWatched, AIndex, 1);
+  { 下面要撤掉互相的 FreeNotification,FZeroInner 靠的也是它:一起放掉(它离开了父控件或正在
+    释放,本来也不再是排序的对手)。 }
+  if c = FZeroInner then FZeroInner := nil;
   { 正在释放的那个:它的处理器表跟着它走,互相的 FreeNotification 由它的析构清。 }
   if csDestroying in c.ComponentState then Exit;
   c.RemoveHandlerOnVisibleChanged(@SiblingChanged);
@@ -3744,8 +3827,7 @@ begin
     FLaidPPI := PPI;
     FLaidValid := True;
     v := DerivedAxisPx(m);
-    if FPlacement = twpBottom then Height := v
-    else Width := v;
+    ApplyAxisSize(v);
     { 同轴的另一条栏按比例分的那一份也跟着变(spec §6.2)。它们各自的 FDeriving 挡住回调。 }
     DeriveSiblings(Parent);
   finally
@@ -3753,6 +3835,113 @@ begin
   end;
   { Relayout 里接着就 Realign,不重复请。 }
   if noteMoved and not FRelayouting then Realign;
+end;
+
+procedure TTyToolWindowBar.ApplyAxisSize(AValue: Integer);
+var
+  p: TWinControl;
+  c, best: TControl;
+  nl, nt, nw, nh, cur, key, i: Integer;
+
+  { LCL 的对齐排序键(wincontrol.inc:2522-2546):左 = Left(小的在外),右 = 右沿、底 = 底沿
+    (大的在外)。 }
+  function KeyOf(L, T, W, H: Integer): Integer;
+  begin
+    case FPlacement of
+      twpRight: Result := L + W;
+      twpBottom: Result := T + H;
+    else
+      Result := L;
+    end;
+  end;
+
+  function KeyOfControl(AControl: TControl): Integer;
+  begin
+    Result := KeyOf(AControl.Left, AControl.Top, AControl.Width, AControl.Height);
+  end;
+
+  { AKey1 比 AKey2 靠外。 }
+  function Outside(AKey1, AKey2: Integer): Boolean;
+  begin
+    if FPlacement = twpLeft then Result := AKey1 < AKey2
+    else Result := AKey1 > AKey2;
+  end;
+
+  { 同一父控件里、同向对齐、看得见的兄弟(对齐排序的对手)。 }
+  function Rival(AControl: TControl): Boolean;
+  begin
+    Result := (AControl <> Self) and (AControl.Align = Align) and AControl.IsControlVisible;
+  end;
+
+begin
+  nl := Left;
+  nt := Top;
+  nw := Width;
+  nh := Height;
+  { 排序键那一边(外沿)不动,尺寸往编辑区那一侧长 / 缩(同 TCustomSplitter 对 akRight / akBottom
+    的做法,customsplitter.inc:203-212)。只改宽高的话右栏 / 底栏的外沿跟着挪:展开、从宽 0 回来时
+    右沿越过外侧的同向兄弟(活动条、状态栏),排序就把栏排到它们外面去了。左栏的键就是 Left,本来
+    就不动。 }
+  case FPlacement of
+    twpRight:
+      begin
+        cur := Width;
+        nl := Left + Width - AValue;
+        nw := AValue;
+      end;
+    twpBottom:
+      begin
+        cur := Height;
+        nt := Top + Height - AValue;
+        nh := AValue;
+      end;
+  else
+    cur := Width;
+    nw := AValue;
+  end;
+  if AValue = cur then Exit;
+  p := Parent;
+  if (p <> nil) and (Align = PlacementAlign) then
+  begin
+    { 宽 0(侧栏一侧没有窗口、底栏空了或收起)时栏跟紧挨着它的内侧同向兄弟外沿重合,排序键相同。
+      相等时 LCL 看 BaseBounds、再看对齐顺序(同上),都不跟着栏的意思走 —— 运行时窗体比设计时窄,
+      内侧兄弟的 BaseBounds 就可能「更靠外」,几次对齐之后宽 0 的栏落到它里面去(看不见,不要紧),
+      等它回来时就排错了。所以:变成 0 的这一刻记下紧挨着的内侧兄弟(这时栏还有宽,谁在里面一清二楚);
+      从 0 回来的这一刻把排序键摆到它外面一格。 }
+    if (cur > 0) and (AValue = 0) then
+    begin
+      key := KeyOf(Left, Top, Width, Height);
+      best := nil;
+      for i := 0 to p.ControlCount - 1 do
+      begin
+        c := p.Controls[i];
+        if not Rival(c) or not Outside(key, KeyOfControl(c)) then Continue;
+        if (best = nil) or Outside(KeyOfControl(c), KeyOfControl(best)) then best := c;
+      end;
+      FZeroInner := best;
+      if best <> nil then best.FreeNotification(Self);
+    end
+    else if (cur = 0) and (AValue > 0) then
+    begin
+      if (FZeroInner <> nil) and (FZeroInner.Parent = p) and Rival(FZeroInner)
+         and not Outside(KeyOf(nl, nt, nw, nh), KeyOfControl(FZeroInner)) then
+      begin
+        { 把键摆到记下的那个兄弟外面一格(这个数只是排序键,对齐引擎排一遍就改掉,不留缝)。 }
+        key := KeyOfControl(FZeroInner);
+        case FPlacement of
+          twpRight: nl := key + 1 - nw;
+          twpBottom: nt := key + 1 - nh;
+        else
+          nl := key - 1;
+        end;
+      end;
+      FZeroInner := nil;
+    end;
+    { 没记下内侧兄弟(生来就是空的、那时它在最里面)时排序键照样可能跟谁相同:不另外挪。下面这一句
+      SetBounds 更新栏的 BaseBounds、把它挪到父控件对齐顺序的最前面(UpdateAlignIndex),键和
+      BaseBounds 都相同时 LCL 按这个顺序排,先排的就是外面那个 —— 正是栏。 }
+  end;
+  SetBounds(nl, nt, nw, nh);
 end;
 
 procedure TTyToolWindowBar.Relayout;
@@ -4261,7 +4450,7 @@ begin
           bpt := TyBadgeCornerPos(cell, bsz.cx, bsz.cy,
             TokenPxAt(TyBadgeInsetVar, TyBadgeInset, APPI),
             TyBidiFlipBadgePosition(bpTopRight, P.RightToLeft));
-          DrawBadgeIn(P, w, Rect(bpt.X, bpt.Y, bpt.X + bsz.cx, bpt.Y + bsz.cy), APPI);
+          DrawBadgeIn(P, Rect(bpt.X, bpt.Y, bpt.X + bsz.cx, bpt.Y + bsz.cy), btxt, bdot);
         end;
       end;
 
@@ -4405,7 +4594,7 @@ function TTyToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
   APPI: Integer): TTyToolWindowWidths;
 var
   cls: string;
-  restS, selS: TTyStyleSet;
+  restS, selS, disS: TTyStyleSet;
   bsz: TSize;
   btxt: string;
   bdot: Boolean;
@@ -4428,16 +4617,21 @@ begin
   cls := TyStyleClassFor(Self, StyleClass);
   restS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysNormal]);
   selS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysSelected]);
+  disS := ActiveController.Model.ResolveStyle(TyToolWindowTabKey, cls, [tysDisabled]);
   pad := TokenPxAt(TyToolWindowTabPadVar, TyToolWindowTabPadDef, APPI);
   gap := TokenPxAt(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI);
   Result := nil;
   SetLength(Result, Length(AWins));
   for i := 0 to High(AWins) do
   begin
-    { 两种状态取大(spec §7.3):皮肤只让选中态加粗时,按静止态量会截当前标签,按各自
-      状态量则切页时整行重排。 }
+    { 三种状态取大(spec §7.3):皮肤只让选中态加粗时,按静止态量会截当前标签,按各自
+      状态量则切页时整行重排。:disabled 同理(E 期):窗口禁用 / 启用、栏或它的父控件被禁用
+      (整行画 :disabled)时标签不许跳、不许被截 —— 所以不管此刻谁禁用着,每个标签都量它,
+      宽也就跟 Enabled 无关,缓存键里不用记。 }
     w := TextPx(AWins[i].Caption, restS);
     sw := TextPx(AWins[i].Caption, selS);
+    if sw > w then w := sw;
+    sw := TextPx(AWins[i].Caption, disS);
     if sw > w then w := sw;
     { 角标(spec §8.1):标签 = [tab-pad][标题][header-gap][胶囊][tab-pad]。 }
     bsz := BadgeSizeAt(AWins[i], APPI, btxt, bdot);
@@ -4468,7 +4662,7 @@ var
   ver: Cardinal;
   cls: string;
   hit: Boolean;
-  i, restFs, selFs: Integer;
+  i, restFs, selFs, disFs: Integer;
 begin
   wins := WindowList(nil);
   if APPI <> PPI then Exit(MeasureTabWidths(wins, APPI));
@@ -4477,10 +4671,11 @@ begin
   cls := TyStyleClassFor(Self, StyleClass);
   restFs := ResolveFontSize(mdl.ResolveStyle(TyToolWindowTabKey, cls, [tysNormal]));
   selFs := ResolveFontSize(mdl.ResolveStyle(TyToolWindowTabKey, cls, [tysSelected]));
+  disFs := ResolveFontSize(mdl.ResolveStyle(TyToolWindowTabKey, cls, [tysDisabled]));
   { 快照每次现取,逐项比(见 FTabCacheValid)。 }
   hit := FTabCacheValid and (FTabCachePPI = APPI) and (FTabCacheAnchor = TObject(mdl))
     and (FTabCacheVer = ver) and (FTabCacheClass = cls) and (FTabCacheOverride = StyleOverride)
-    and (FTabCacheRestFs = restFs) and (FTabCacheSelFs = selFs)
+    and (FTabCacheRestFs = restFs) and (FTabCacheSelFs = selFs) and (FTabCacheDisFs = disFs)
     and (Length(FTabCacheWins) = Length(wins));
   if hit then
     for i := 0 to High(wins) do
@@ -4510,6 +4705,7 @@ begin
     FTabCacheOverride := StyleOverride;
     FTabCacheRestFs := restFs;
     FTabCacheSelFs := selFs;
+    FTabCacheDisFs := disFs;
     FTabCacheValid := True;
   end;
   { 拷一份出去:动态数组赋值共享存储,调用方改了会改到缓存。 }
@@ -4552,9 +4748,11 @@ end;
 function TTyToolWindowBar.HostsTabRow: Boolean;
 begin
   { 设计期不让出:设计期 LCL 不禁用句柄(wincontrol.inc:6758),页照常收得到。收起时高 0,
-    本来就没有这一行。「禁用」看页自己的 Enabled(地雷:IsEnabled 顺着父链算,栏一禁用全都答假)。 }
+    本来就没有这一行;拉宽边正吸附着(按收起排布,SizesAsCollapsed)同样高 0 —— 两种一个口径,
+    TabRowHost / TabRowHostControl 都经这里,不会一个答栏、一个答没有。「禁用」看页自己的
+    Enabled(地雷:IsEnabled 顺着父链算,栏一禁用全都答假)。 }
   Result := (FPlacement = twpBottom) and (FActive <> nil) and not FActive.Enabled
-    and not (csDesigning in ComponentState) and not FCollapsed;
+    and not (csDesigning in ComponentState) and not FCollapsed and not EdgeSnapped;
 end;
 
 function TTyToolWindowBar.BottomRowHeightAt(APPI: Integer): Integer;
@@ -4620,6 +4818,17 @@ begin
   InvalidateHeader;
 end;
 
+function TTyToolWindowBar.InDisabledActivePage(const AP: TPoint): Boolean;
+begin
+  Result := (FActive <> nil) and not FActive.Enabled and FActive.Visible
+    and PtInRect(FActive.BoundsRect, AP);
+end;
+
+function TTyToolWindowBar.SwallowPress(const AP: TPoint): Boolean;
+begin
+  Result := (HostsTabRow and PtInRect(BarLayout.TabRow, AP)) or InDisabledActivePage(AP);
+end;
+
 function TTyToolWindowBar.BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer;
   out AText: string; out ADot: Boolean): TSize;
 var
@@ -4649,17 +4858,14 @@ begin
     MulDiv(S.Padding.Top, APPI, 96), minPx, False, dotPx);
 end;
 
-procedure TTyToolWindowBar.DrawBadgeIn(APainter: TTyPainter; AWindow: TTyToolWindow;
-  const ABox: TRect; APPI: Integer);
+procedure TTyToolWindowBar.DrawBadgeIn(APainter: TTyPainter; const ABox: TRect;
+  const AText: string; ADot: Boolean);
 var
   S: TTyStyleSet;
-  txt: string;
-  dot: Boolean;
   r: TRect;
   half, themedR, rLogical: Integer;
 begin
   if (ABox.Right <= ABox.Left) or (ABox.Bottom <= ABox.Top) then Exit;
-  if (AWindow = nil) or not AWindow.BadgeDisplay(txt, dot) then Exit;
   S := ActiveController.Model.ResolveStyle(TyToolWindowBadgeKey,
     TyStyleClassFor(Self, StyleClass), [tysNormal]);
   if not (tpBackground in S.Present) then Exit;
@@ -4667,15 +4873,15 @@ begin
     FillBackground 收的是逻辑半径。 }
   half := APainter.Unscale((ABox.Bottom - ABox.Top) div 2);
   themedR := TyEffectiveCorners(S).TL;
-  if dot or (themedR <= 0) then rLogical := half
+  if ADot or (themedR <= 0) then rLogical := half
   else rLogical := TyClampRadius(themedR, half);
   APainter.FillBackground(ABox, S.Background, TyUniformCorners(rLogical));
-  if dot or (txt = '') then Exit;
+  if ADot or (AText = '') then Exit;
   { 文字框四边各放 1 个像素(同 TTyButton.DrawBadge:有的 widgetset 小号粗体画出来比量的大一丝,
     DrawText 按框裁剪会削掉字边);胶囊本身不变。 }
   r := ABox;
   InflateRect(r, APainter.Scale(1), APainter.Scale(1));
-  APainter.DrawText(r, txt, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
+  APainter.DrawText(r, AText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
     taCenter, tlCenter, False, 0, True);
 end;
 
@@ -4978,7 +5184,7 @@ begin
           if AWindow.IsRightToLeft then bx := tbox.Left - gap - bsz.cx
           else bx := tbox.Right + gap;
           by := r.Top + (r.Bottom - r.Top - bsz.cy) div 2;
-          DrawBadgeIn(APainter, wins[idx], Rect(bx, by, bx + bsz.cx, by + bsz.cy), APPI);
+          DrawBadgeIn(APainter, Rect(bx, by, bx + bsz.cx, by + bsz.cy), btxt, bdot);
         end
         else
           tbox := box;
@@ -5281,14 +5487,6 @@ begin
     AWindow.ClientHeight), AWindow.Font.PixelsPerInch)), Button, Shift, X, Y);
 end;
 
-procedure TTyToolWindowBar.HeaderMouseMove(AWindow: TTyToolWindow; Shift: TShiftState;
-  X, Y: Integer);
-begin
-  if AWindow = nil then Exit;
-  HeaderMoveIn(AWindow, AWindow.HeaderGeomAt(Rect(0, 0, AWindow.ClientWidth,
-    AWindow.ClientHeight), AWindow.Font.PixelsPerInch), Shift, X, Y);
-end;
-
 procedure TTyToolWindowBar.HeaderMoveIn(AWindow: TTyToolWindow;
   const AGeom: TTyToolWindowHeaderGeom; Shift: TShiftState; X, Y: Integer);
 begin
@@ -5512,6 +5710,9 @@ begin
       Relayout;                                   { 吸附排布还回「展开」 }
   end;
   Invalidate;
+  { 吸附着收尾:引擎已经清了吸附标志,让出行按此刻的样子对一遍(松开时接着 Collapsed := True,
+    那一句再对一遍)。 }
+  if AWasSnapped then TabRowHostMayHaveChanged;
 end;
 
 procedure TTyToolWindowBar.GestureCleared(ATabRow: Boolean);
@@ -5587,8 +5788,11 @@ var
   now: QWord;
 begin
   if IndexOfWindow(AWindow) < 0 then Exit;
-  { 禁用窗口点了不切(spec §3.7);当前页例外 —— 收起 / 展开是栏的动作。按下那一道闸已经挡过,
-    这里兜的是「按下之后才被禁用」:WindowEnabledChanged 已经取消了手势,再挡一次不花钱。 }
+  { 禁用窗口点了不切(spec §3.7);当前页例外 —— 收起 / 展开是栏的动作。按下那一道闸已经挡过
+    「按下时就禁用着」的,这里还有一条它挡不住:按在禁用的**当前页**上(合法:点它收起),松开之前
+    代码把当前页换走了 —— 手势照样武装在它身上,松开在它的图标上就是一次点击,而它此刻已经不是
+    当前页,不挡就切回一个禁用窗口。切页不取消条上的手势(换当前页不是作废理由,点别的图标照常),
+    所以只能在这里挡。「按下之后才被禁用」那一条 WindowEnabledChanged 已经取消了手势。 }
   if not WindowClickable(AWindow) and (AWindow <> FActive) then Exit;
   { 防抖:距离这个窗口上一次真正执行的点击不到 300 ms 就忽略 —— 慢速双击(系统默认
     500 ms 内的第二次按下才标 ssDouble,而那条路有多击标记挡着)之外,GTK3 不下发三击
@@ -5640,10 +5844,7 @@ begin
   { 吞 Click / DblClick:按在部件上;按在让出来的标签行里(空白也算,同页那一路);或者按在禁用的
     当前页的边界里 —— Win32 上点禁用页的正文,按下落到栏(spec §3.7 根因第 1 条;GTK / Cocoa 上
     这一下直接丢)。栏的 OnMouseDown / OnMouseUp 挡不住:它们在继承里先发。 }
-  FGesture.SwallowClick := (part <> twbpNone)
-    or (HostsTabRow and PtInRect(BarLayout.TabRow, Point(X, Y)))
-    or ((FActive <> nil) and not FActive.Enabled and FActive.Visible
-        and PtInRect(FActive.BoundsRect, Point(X, Y)));
+  FGesture.SwallowClick := (part <> twbpNone) or SwallowPress(Point(X, Y));
   { 兜底:DragMode = dmAutomatic 时 LCL 在这之前就调过 BeginAutoDrag(见 WndProc)。那边按
     记下的按下位置挡;万一没挡住(程序里直接调的、按下消息没带坐标的),这里撤掉。 }
   inStrip := PtInRect(BarLayout.Strip, Point(X, Y));
@@ -5870,6 +6071,10 @@ begin
   if FAutoDragPosValid then p := FAutoDragPos
   else if not PointerInClient(p) then p := Point(-1, -1);
   if PtInRect(BarLayout.Strip, p) or (PartAt(p.X, p.Y, idx) <> twbpNone) then Exit;
+  { 让出来的标签行(空白也算,同页那一路 TTyToolWindow.BeginAutoDrag)、禁用的当前页的边界
+    (Win32 上点禁用页的正文,按下落到栏,spec §3.7):都不是「按在栏上」,MouseDown 吞点击问的
+    是同一处(SwallowPress)。 }
+  if SwallowPress(p) then Exit;
   StartLclAutoDrag;
 end;
 
@@ -6009,6 +6214,9 @@ procedure TTyToolWindowBar.CMEnabledChanged(var Message: TLMessage);
 begin
   inherited;
   if not Enabled then ResetGesture(twgeCancel);
+  { 拖动中被禁用的隐藏侧栏不再是放置目标(manager 的 IsCrossCandidate):预览当场收掉,不等指针
+    再动一下(spec §9.8)。 }
+  if not Enabled then HideDropPreview;
   { 标签行跟着灰掉 / 恢复(它画在当前页里)。 }
   InvalidateHeader;
 end;
@@ -6017,6 +6225,8 @@ procedure TTyToolWindowBar.CMVisibleChanged(var Message: TLMessage);
 begin
   inherited;
   if not Visible then ResetGesture(twgeCancel);
+  { 同上:藏起来的栏不是放置目标。 }
+  if not Visible then HideDropPreview;
   { 看得见的栏才参与分空间:同轴的另一条要重分。 }
   if [csLoading, csDestroying] * ComponentState = [] then DeriveSiblings(Parent);
 end;
@@ -6086,6 +6296,8 @@ begin
     Relayout;
     Invalidate;
   end;
+  { 吸附 / 回来:让出行跟着没了 / 回来(HostsTabRow 的口径含吸附)。 }
+  if wasSnapped <> FGesture.Snapped then TabRowHostMayHaveChanged;
 end;
 
 function TTyToolWindowBar.IsDraggingForTest: Boolean;
@@ -6305,6 +6517,15 @@ begin
         info^.CursorPos.X + 1, info^.CursorPos.Y + 1);
       Message.Result := 1;
     end;
+    Exit;
+  end;
+  { 禁用的当前页的边界里(Win32 上指针在禁用页上,提示请求落到栏,spec §3.7):那不是「指着栏」,
+    不显示栏自己的 Hint。挪一下就重新问。 }
+  if (info <> nil) and InDisabledActivePage(info^.CursorPos) then
+  begin
+    info^.CursorRect := Rect(info^.CursorPos.X, info^.CursorPos.Y,
+      info^.CursorPos.X + 1, info^.CursorPos.Y + 1);
+    Message.Result := 1;
     Exit;
   end;
   if (info <> nil) and StripHintAt(info^.CursorPos.X, info^.CursorPos.Y, txt, r) then
@@ -6951,6 +7172,7 @@ begin
   if (Operation = opRemove) and (AComponent is TControl) then
     for i := High(FWatched) downto 0 do
       if FWatched[i] = AComponent then UnwatchAt(i);
+  if (Operation = opRemove) and (AComponent = FZeroInner) then FZeroInner := nil;
   { 窗口被释放(含设计期删除):LCL 在 SetParent(nil) 时它已经 csDestroying,
     注销那一步跳过了,走到这里。 }
   if (Operation = opRemove) and (AComponent is TTyToolWindow) then
@@ -7075,8 +7297,9 @@ begin
   for i := 0 to High(wins) do
     wins[i].RelayoutHeader;
   Relayout;
-  { .lfm 里流进来一个 Enabled = False 的当前页:标签行让到栏里(spec §3.7)。 }
-  TabRowHostMayHaveChanged;
+  { .lfm 里流进来一个 Enabled = False 的当前页:标签行让到栏里(spec §3.7)—— 上面的 SwitchSilently
+    已经做了(SwitchCore 最后一步 TabRowHostMayHaveChanged,那时 csLoading 已经清了),这里不再
+    调一次。 }
   { spec §10.5:最后一句。谁最后一个离开 csLoading,谁收尾(manager 那边判)。 }
   if FManager <> nil then FManager.TryFinishLoading;
 end;
@@ -7470,9 +7693,16 @@ begin
   end;
 end;
 
+function TTyToolWindowDropPreview.PaintPPI: Integer;
+begin
+  if FBar <> nil then Result := FBar.PPI
+  else Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
 procedure TTyToolWindowDropPreview.Paint;
 begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+  RenderTo(Canvas, ClientRect, PaintPPI);
 end;
 
 { --- TTyCustomToolWindowManager -------------------------------------------------- }

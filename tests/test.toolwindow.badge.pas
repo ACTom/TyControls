@@ -54,6 +54,13 @@ type
     procedure TestAWiderTabMovesTheActionsAndTheOverflow;
     procedure TestTheOverflowMenuCarriesTheBadge;
     procedure TestTheTabHintCarriesNoNumber;
+    { --- 整体审查(E 期) --- }
+    { OnBadgeDisplay 的答案变了(外部状态,三个属性都没动):InvalidateBadge 让栏 / 当前页重画。
+      侧栏、底栏各一条,都是非当前页的角标。 }
+    procedure TestInvalidateBadgeRepaintsTheSideBarForANonCurrentWindow;
+    procedure TestInvalidateBadgeRepaintsTheActivePageForAnotherTab;
+    { 一次绘制里每个带角标的窗口,事件只答一次:量和画用的是同一个答案。 }
+    procedure TestOnePaintAsksTheEventOncePerBadge;
   private
     { 一条底栏:Problems / Output / Terminal,当前页 Output;标签行钉色 + 角标哨兵。 }
     procedure NewBadgeBottomBar;
@@ -748,6 +755,75 @@ begin
   FWins[0].BadgeValue := 3;
   AssertTrue('标签上有提示', FBar.HeaderHint(FWins[1], TabCentre(0).X, TabCentre(0).Y, txt, r));
   AssertEquals('提示不带数字(仍是 StripHint / Caption)', 'Problems', txt);
+end;
+
+{ --- 整体审查 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowBadgeTests.TestInvalidateBadgeRepaintsTheSideBarForANonCurrentWindow;
+var
+  inv: Integer;
+  bmp: TBitmap;
+begin
+  NewSideBar;
+  FSide[1].OnBadgeDisplay := @HandleBadge;
+  FBadgeMode := 1;                 { 事件藏起来 }
+  FSide[1].ShowBadge := True;
+  FSide[1].BadgeValue := 5;
+  bmp := RenderCell(FBar, 1);
+  try
+    AssertEquals('前提:事件藏着,不画', 0, ExactIn(bmp, Rect(0, 0, bmp.Width, bmp.Height), BadgeInk));
+  finally
+    bmp.Free;
+  end;
+  { 外部状态变了:事件改答「显示」,三个属性一个都没动。 }
+  FBadgeMode := 0;
+  inv := FBar.Invalidates;
+  FSide[1].InvalidateBadge;
+  AssertTrue('InvalidateBadge:栏重画(Search 不是当前页,它自己藏着)', FBar.Invalidates > inv);
+  bmp := RenderCell(FBar, 1);
+  try
+    AssertTrue('重画出来的格里有角标', ExactIn(bmp, Rect(0, 0, bmp.Width, bmp.Height), BadgeInk) > 0);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyToolWindowBadgeTests.TestInvalidateBadgeRepaintsTheActivePageForAnotherTab;
+var
+  w3: Integer;
+begin
+  NewBadgeBottomBar;
+  FWins[0].OnBadgeDisplay := @HandleBadge;
+  FBadgeMode := 0;
+  FWins[0].ShowBadge := True;
+  FWins[0].BadgeValue := 3;
+  w3 := TabWidth(0);
+  ArmActive(FWins[1]);
+  FBadgeMode := 5;                 { 事件改答 'many':外部状态变了,BadgeValue 没动 }
+  FWins[0].InvalidateBadge;
+  AssertTrue('Problems 不是当前页:它的角标画在当前页的标签行里,当前页要重渲染',
+    FWins[1].CacheWouldRender(FWins[1].ClientWidth, FWins[1].ClientHeight));
+  AssertTrue('标签宽跟上事件的新答案', TabWidth(0) > w3);
+end;
+
+procedure TTyToolWindowBadgeTests.TestOnePaintAsksTheEventOncePerBadge;
+var
+  bmp: TBitmap;
+begin
+  NewSideBar;
+  FSide[1].OnBadgeDisplay := @HandleBadge;
+  FBadgeMode := 0;
+  FSide[1].ShowBadge := True;
+  FSide[1].BadgeValue := 5;
+  FBadgeCalls := 0;
+  bmp := RenderRegion(FBar, FBar.ClientWidth, FBar.ClientHeight,
+    Rect(0, 0, FBar.ClientWidth, FBar.ClientHeight), Wipe);
+  try
+    AssertTrue('前提:角标画了', ExactIn(bmp, Rect(0, 0, bmp.Width, bmp.Height), BadgeInk) > 0);
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('整条栏画一遍:Search 的事件只问一次(量的和画的是同一个答案)', 1, FBadgeCalls);
 end;
 
 initialization

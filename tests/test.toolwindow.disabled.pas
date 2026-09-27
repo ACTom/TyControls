@@ -80,6 +80,21 @@ type
       之后栏上的松开不算点击(计划开工前问题 17)。 }
     procedure TestSwitchingInCodeCancelsAPressOnTheYieldedRow;
     procedure TestReEnablingCancelsAPressOnTheYieldedRow;
+    { --- 整体审查(E 期) --- }
+    { 按在禁用的当前页图标上(合法:点它收起),松开之前代码把当前页换走:松开在原图标上不许切回
+      那个禁用窗口(StripClick 的那道闸,审查 1.1b)。 }
+    procedure TestACodeSwitchBeforeTheReleaseDoesNotSwitchBackToADisabledWindow;
+    { .lfm 里流进来一个禁用的当前页:加载完就让出;之后启用,栏请重排、页回到原边界。 }
+    procedure TestAStreamedDisabledCurrentPageYieldsAndTakesBack;
+    { 让出行的空白、禁用页的边界里:都不起栏的 LCL 自动拖动(同吞点击的那一处)。 }
+    procedure TestTheYieldedRowAndTheDisabledPageStartNoLclDrag;
+    { 指针在禁用的当前页上:不显示栏自己的 Hint。 }
+    procedure TestTheDisabledPageShowsNotTheBarsHint;
+    { 标签宽按静止、选中、禁用三种样子取最宽:禁用 / 启用不跳,禁用态更宽的字也放得下。 }
+    procedure TestTabsAreMeasuredAtTheWidestOfRestingSelectedAndDisabled;
+    { 拉宽边吸附着(按收起排布,高 0):不让出标签行 —— HostsTabRow / TabRowHost 一个口径;拖回来
+      又让出。 }
+    procedure TestASnappedEdgeYieldsNoRowAndDraggingBackYieldsAgain;
   private
     { 栏坐标上按下、Click、松开(LCL 的顺序)。 }
     procedure ClickRow(const APos: TPoint);
@@ -102,6 +117,38 @@ type
   end;
 
 implementation
+
+type
+  { 流式化的根,和流进来的栏(数「对齐引擎被请了几次」、自己请一遍对齐 —— 同 TBarAccess,
+    那个名字别的单元也有,不拿它注册)。 }
+  TDisabledHostForm = class(TForm)
+  end;
+  TYieldStreamBar = class(TTyToolWindowBar)
+  public
+    AlignCount: Integer;
+    procedure AdjustSize; override;
+    procedure CallAlignControls;
+    procedure CallMouseDown(X, Y: Integer);
+  end;
+
+procedure TYieldStreamBar.AdjustSize;
+begin
+  Inc(AlignCount);
+  inherited AdjustSize;
+end;
+
+procedure TYieldStreamBar.CallMouseDown(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [ssLeft], X, Y);
+end;
+
+procedure TYieldStreamBar.CallAlignControls;
+var
+  r: TRect;
+begin
+  r := ClientRect;
+  AlignControls(nil, r);
+end;
 
 const
   { CSS #00FF00:基础主题的 :disabled 取 --muted(同 TestADisabledParentGreysTheTabRow 的理由:
@@ -942,6 +989,190 @@ begin
   AssertSame('之后栏上的松开不算点击', FWins[1], FBar.ActiveWindow);
 end;
 
+{ --- 整体审查 --------------------------------------------------------------------- }
+
+procedure TTyToolWindowDisabledTests.TestACodeSwitchBeforeTheReleaseDoesNotSwitchBackToADisabledWindow;
+var
+  p: TPoint;
+begin
+  NewSideBar;
+  FSide[0].Enabled := False;
+  FBar.Clock := FBar.Clock + 1000;
+  p := FBar.StripItemRect(0).CenterPoint;
+  FBar.CallMouseDown(p.X, p.Y);
+  AssertEquals('前提:禁用的当前页的图标按下武装着(点它收起是合法的)', Ord(twgsArmed),
+    Ord(FBar.GestureStateForTest));
+  FBar.ActiveWindow := FSide[1];
+  AssertSame('前提:代码换走了当前页', FSide[1], FBar.ActiveWindow);
+  ResetCounts;
+  p := FBar.StripItemRect(0).CenterPoint;
+  FBar.CallClick;
+  FBar.CallMouseUp(p.X, p.Y);
+  AssertSame('在原图标上松开:不切回禁用窗口', FSide[1], FBar.ActiveWindow);
+  AssertFalse('也不收起', FBar.Collapsed);
+  AssertEquals('没有 OnChange', 0, FChanges);
+end;
+
+procedure TTyToolWindowDisabledTests.TestAStreamedDisabledCurrentPageYieldsAndTakesBack;
+var
+  src, dst: TForm;
+  ms: TMemoryStream;
+  bar: TYieldStreamBar;
+  dbar: TYieldStreamBar;
+  w1, w2, dw2: TTyToolWindow;
+  L: TTyToolWindowBarLayout;
+  content0: TRect;
+  p: TPoint;
+begin
+  src := TDisabledHostForm.CreateNew(nil);
+  src.Name := 'HostForm1';
+  dst := TDisabledHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    bar := TYieldStreamBar.Create(src);
+    bar.Name := 'Bar';
+    bar.Placement := twpBottom;
+    bar.Parent := src;
+    bar.Width := 600;
+    w1 := TTyToolWindow.Create(src);
+    w1.Name := 'W1';
+    w1.Caption := 'Problems';
+    w1.Parent := bar;
+    w2 := TTyToolWindow.Create(src);
+    w2.Name := 'W2';
+    w2.Caption := 'Output';
+    w2.Parent := bar;
+    bar.ActiveWindow := w2;
+    w2.Enabled := False;
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    dbar := dst.FindComponent('Bar') as TYieldStreamBar;
+    dw2 := dst.FindComponent('W2') as TTyToolWindow;
+    AssertSame('前提:当前页读回来是 Output', dw2, dbar.ActiveWindow);
+    AssertFalse('前提:它读回来是禁用的', dw2.Enabled);
+    AssertTrue('加载完就让出标签行', dbar.HostsTabRow);
+    AssertTrue('标签行在栏上', dbar.TabRowHost.Host = TWinControl(dbar));
+    L := dbar.BarLayout;
+    AssertTrue('让出的那一行有高', L.TabRow.Bottom > L.TabRow.Top);
+    dbar.CallAlignControls;
+    AssertEquals('页在让出行下面', L.TabRow.Bottom, dw2.Top);
+    content0 := L.Content;
+    content0.Top := L.TabRow.Top;          { 让出之前的内容区 }
+    { 在让出行的 Problems 标签上按下:手势武装在栏上。启用之后标签行回到页上,栏得知道「宿主
+      换了」、把它作废 —— 栏只拿「上一次按哪种样子排过」比,加载时没记下「让出着」的话,启用时
+      它以为什么都没变。 }
+    p := TabRectOf(dbar.TabRowHost.Geom, 0).CenterPoint;
+    dbar.CallMouseDown(L.TabRow.Left + p.X, L.TabRow.Top + p.Y);
+    AssertEquals('前提:让出行上的按下武装着', Ord(twgsArmed), Ord(dbar.GestureStateForTest));
+    dbar.AlignCount := 0;
+    dw2.Enabled := True;
+    AssertEquals('启用:标签行换了宿主,栏上的手势作废(加载时记下了「让出着」)', Ord(twgsIdle),
+      Ord(dbar.GestureStateForTest));
+    AssertTrue('启用:栏被请了重排(让出行收回,内容区变了)', dbar.AlignCount > 0);
+    AssertFalse('不再让出', dbar.HostsTabRow);
+    L := dbar.BarLayout;
+    AssertTrue('TabRow 空', L.TabRow.Bottom <= L.TabRow.Top);
+    dbar.CallAlignControls;
+    AssertEquals('页回到原来的边界:内容区顶', content0.Top, dw2.Top);
+    AssertEquals('页回到原来的边界:内容区底', content0.Bottom, dw2.Top + dw2.Height);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheYieldedRowAndTheDisabledPageStartNoLclDrag;
+var
+  p: TPoint;
+begin
+  NewYieldingBar;
+  FBar.DragMode := dmAutomatic;
+  FBar.FakePointer := True;
+  FBar.FakePoint := RowBlank;
+  FBar.AutoDragStarts := 0;
+  FBar.CallBeginAutoDrag;
+  AssertEquals('让出行的空白上不起 LCL 拖动', 0, FBar.AutoDragStarts);
+  p := FWins[1].BoundsRect.CenterPoint;
+  FBar.FakePoint := p;
+  FBar.CallBeginAutoDrag;
+  AssertEquals('禁用页的边界里(Win32 上按下落到栏)不起', 0, FBar.AutoDragStarts);
+  FWins[1].Enabled := True;
+  Relayout;
+  FBar.FakePoint := FWins[1].BoundsRect.CenterPoint;
+  FBar.CallBeginAutoDrag;
+  AssertEquals('对照:页启用时同一处直接调栏,照常起', 1, FBar.AutoDragStarts);
+end;
+
+procedure TTyToolWindowDisabledTests.TestTheDisabledPageShowsNotTheBarsHint;
+var
+  info: THintInfo;
+begin
+  NewYieldingBar;
+  FBar.Hint := 'bar hint';
+  FBar.ShowHint := True;
+  AssertEquals('禁用页的边界里:不显示', 1, AskBarHint(FWins[1].BoundsRect.CenterPoint, info));
+  AssertEquals('不回落到栏自己的 Hint', '<untouched>', info.HintStr);
+  FWins[1].Enabled := True;
+  Relayout;
+  AssertEquals('对照:页启用时同一处走继承(显示)', 0,
+    AskBarHint(FWins[1].BoundsRect.CenterPoint, info));
+end;
+
+procedure TTyToolWindowDisabledTests.TestTabsAreMeasuredAtTheWidestOfRestingSelectedAndDisabled;
+var
+  S: TTyStyleSet;
+  fs, tw, th, rw, pad, before: Integer;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  { 禁用态的字号远大于静止 / 选中态:按那两种量的话,禁用的标签画出来被截。 }
+  FCtl.StyleOverride := BottomTheme + ' TyToolWindowTab:disabled { font-size: 30px; }';
+  Relayout;
+  S := FCtl.Model.ResolveStyle(TyToolWindowTabKey, '', [tysDisabled]);
+  AssertTrue('前提:禁用态的字号由主题给', tpFontSize in S.Present);
+  fs := S.FontSize;
+  TyMeasureTextBlock('Problems', S.FontName, fs, S.FontWeight, 96, 0, 0, tw, th);
+  rw := TyMeasureRenderedTextWidth('Problems', S.FontName, fs, S.FontWeight, 96);
+  if rw > tw then tw := rw;
+  pad := FCtl.Metric(TyToolWindowTabPadVar, TyToolWindowTabPadDef);
+  before := TabRectOf(ActiveGeom, 0).Right - TabRectOf(ActiveGeom, 0).Left;
+  AssertTrue(Format('Problems 的标签宽放得下禁用态的字(宽 %d,字 %d + 2 × %d)', [before, tw, pad]),
+    before >= tw + 2 * pad);
+  FWins[0].Enabled := False;
+  Relayout;
+  AssertEquals('禁用它:标签不跳', before,
+    TabRectOf(ActiveGeom, 0).Right - TabRectOf(ActiveGeom, 0).Left);
+end;
+
+procedure TTyToolWindowDisabledTests.TestASnappedEdgeYieldsNoRowAndDraggingBackYieldsAgain;
+var
+  e, s, q: TPoint;
+  h: TTyToolWindowTabRowHost;
+begin
+  NewYieldingBar;
+  AssertTrue('前提:让出着', FBar.HostsTabRow);
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  AssertTrue('前提:拉宽中', FBar.IsEdgeDraggingForTest);
+  { 底栏往下拉(向下为缩小),拉过 content-min 的一半:吸附。 }
+  { 拉宽按屏幕坐标算位移(栏自己在挪):每一步把同一个屏幕点换回栏此刻的客户区坐标。 }
+  s := FBar.ClientToScreen(e);
+  q := FBar.ScreenToClient(Point(s.X, s.Y + FBar.Height));
+  FBar.CallMouseMove(q.X, q.Y);
+  AssertEquals('前提:吸附着,按收起排布(高 0)', 0, FBar.Height);
+  AssertFalse('吸附着不让出(同收起)', FBar.HostsTabRow);
+  h := FBar.TabRowHost;
+  AssertTrue('TabRowHost 同一个口径:行不在栏上', h.Host <> TWinControl(FBar));
+  q := FBar.ScreenToClient(s);
+  FBar.CallMouseMove(q.X, q.Y);
+  AssertTrue('拖回来:又让出', FBar.HostsTabRow);
+  AssertTrue('标签行回到栏上', FBar.TabRowHost.Host = TWinControl(FBar));
+  q := FBar.ScreenToClient(s);
+  FBar.CallMouseUp(q.X, q.Y);
+end;
+
 initialization
+  RegisterClasses([TDisabledHostForm, TYieldStreamBar]);
   RegisterTest(TTyToolWindowDisabledTests);
 end.

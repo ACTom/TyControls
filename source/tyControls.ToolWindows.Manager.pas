@@ -149,6 +149,9 @@ type
     function IsCrossCandidate(ASource, ABar: TTyToolWindowBar): Boolean;
     { 进入拖动:给每条「隐藏着的候选侧栏」显示放置预览;收尾:全部收掉(spec §9.8)。 }
     procedure DragSourceChanged(ASource: TTyToolWindowBar); override;
+    { 拖动中(DropTargetAt 每次都调):显示着的预览对一遍 —— 不再是隐藏的候选就收掉,还是就跟上
+      栏此刻的父控件和矩形。 }
+    procedure SyncDropPreviews(ASource: TTyToolWindowBar);
     function QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean; override;
     { 离开的栏:排队的移动不再以它为目标;它的放置预览收掉。 }
     procedure BarRemoved(ABar: TTyToolWindowBar); override;
@@ -792,6 +795,9 @@ var
 begin
   Result := nil;
   ASlot := -1;
+  { 预览在进入拖动时摆一次;拖动中候选栏变了(被禁用、父控件藏起来 / 禁用、跟别的栏冲突、换了
+    父控件、父控件改了尺寸)要跟上。每次移动、松开都经这里,顺手对一遍。 }
+  SyncDropPreviews(ASource);
   form := GetParentForm(ASource);
   { 非模态浮动窗体盖在上面(spec §9.4):有句柄时问 LCL 这一点上是谁;nil 就信几何。 }
   if ASource.HandleAllocated then
@@ -830,6 +836,27 @@ begin
     问完之后手势可能已经被处理器收尾了,由调用方看引擎的状态;这里之后不再碰 Self。 }
   if (i > 0) and not DragAllows(ASource, bars[i]) then i := -1;
   if i >= 0 then Result := bars[i] else ASlot := -1;
+end;
+
+procedure TTyToolWindowManager.SyncDropPreviews(ASource: TTyToolWindowBar);
+var
+  i: Integer;
+  b: TTyToolWindowBar;
+  pv: TTyToolWindowDropPreview;
+begin
+  for i := 0 to High(FBars) do
+  begin
+    b := FBars[i];
+    if csDestroying in b.ComponentState then Continue;
+    pv := b.DropPreview;
+    if (pv = nil) or not pv.Visible then Continue;
+    { 不再是候选(或者不再隐藏)就收掉;还是就按此刻的位置重摆(亮不亮保留)。拖动中才冒出来的
+      隐藏候选(比如别的窗口刚被挪走)不补 —— 预览只在进入拖动时显示。 }
+    if not (IsCrossCandidate(ASource, b) and b.HiddenAsEmpty) then
+      BarHideDropPreview(b)
+    else if (pv.Parent <> b.Parent) or not EqualRect(pv.BoundsRect, b.DropPreviewRect) then
+      BarShowDropPreview(b);
+  end;
 end;
 
 function TTyToolWindowManager.IsCrossCandidate(ASource, ABar: TTyToolWindowBar): Boolean;
