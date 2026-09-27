@@ -422,10 +422,11 @@ type
   end;
 
   { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome、
-    内容区下限。下限也在这里:推导按它钳内容项,只换 --toolwindow-content-min 的主题
-    也得重推。 }
+    内容区下限、设计期提示行高。下限也在这里:推导按它钳内容项,只换
+    --toolwindow-content-min 的主题也得重推。提示行高(借 --toolwindow-header-height)同理:
+    设计期的漏入 / 冲突提示行从内容区底部扣,只换它的主题也得重排。 }
   TTyToolWindowBarMetrics = record
-    Strip, Edge, Chrome, ContentMin: Integer;
+    Strip, Edge, Chrome, ContentMin, NoteRow: Integer;
   end;
 
   TTyToolWindowArray = array of TTyToolWindow;
@@ -3063,6 +3064,7 @@ begin
   else Result.Strip := TokenPxAt(TyToolWindowStripSizeVar, TyToolWindowStripSizeDef, APPI);
   Result.Edge := TokenPxAt(TyToolWindowEdgeSizeVar, TyToolWindowEdgeSizeDef, APPI);
   Result.ContentMin := TokenPxAt(TyToolWindowContentMinVar, TyToolWindowContentMinDef, APPI);
+  Result.NoteRow := TokenPxAt(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
   { **静止态**样式:TyChromeInsetLogical 按状态解析后的样式量(焦点环比边框宽),拿
     CurrentStyle 的话悬停一下内缩量就变 —— 而悬停只 Invalidate、不 Realign,窗口会
     停在旧的客户区里。本控件的 StyleOverride 照样叠上(spec §6.1)。 }
@@ -3393,14 +3395,20 @@ procedure TTyToolWindowBar.DeriveSize;
 var
   m: TTyToolWindowBarMetrics;
   v: Integer;
+  noteMoved: Boolean;
 begin
   if FDeriving or FDpiAdjusting
      or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  noteMoved := False;
   FDeriving := True;
   try
     { 推导要扣的兄弟一个不漏地挂上(新来的兄弟在这一刻才被看见)。 }
     WatchSiblings;
     m := Metrics;
+    { 设计期提示行高变了:宽不变,对齐引擎不会自己再排。换主题时兄弟栏的 Relayout 经
+      DeriveSiblings 先走到这里、把 FLaid 刷成新值,本栏自己的 Invalidate 就看不出来了 ——
+      所以在这里就请一次对齐。 }
+    noteMoved := FLaidValid and (m.NoteRow <> FLaid.NoteRow);
     FLaid := m;
     FLaidPPI := PPI;
     FLaidValid := True;
@@ -3412,6 +3420,8 @@ begin
   finally
     FDeriving := False;
   end;
+  { Relayout 里接着就 Realign,不重复请。 }
+  if noteMoved and not FRelayouting then Realign;
 end;
 
 procedure TTyToolWindowBar.Relayout;
@@ -3450,13 +3460,15 @@ begin
     比的是上一次推导**用过**的那一份(FLaid),不是缓存 —— 见 FLaid 的声明。
     **不**在这里问窗口的标题行高:那是窗口自己的缓存,先替它读掉,窗口的 Invalidate
     就看不出主题变了 —— 缓存谁先读就是谁的,换主题的那一次裸 Invalidate 广播到谁先、谁后
-    看注册顺序,不能假定窗口总在栏前面。 }
+    看注册顺序,不能假定窗口总在栏前面。设计期提示行高(NoteRow)读的是 token 本身,
+    进栏自己的 Metrics,不碰窗口的缓存。 }
   if FLaidValid and not FRelayouting and not FDpiAdjusting
      and ([csLoading, csDestroying] * ComponentState = []) then
   begin
     m := Metrics;
     if (m.Strip <> FLaid.Strip) or (m.Edge <> FLaid.Edge) or (m.Chrome <> FLaid.Chrome)
-       or (m.ContentMin <> FLaid.ContentMin) or (PPI <> FLaidPPI) then
+       or (m.ContentMin <> FLaid.ContentMin) or (m.NoteRow <> FLaid.NoteRow)
+       or (PPI <> FLaidPPI) then
       Relayout;
   end;
   inherited Invalidate;
@@ -3650,7 +3662,7 @@ begin
     「一行字加上下留白」的尺寸。 }
   if (csDesigning in ComponentState) and (StrayCount > 0) then
   begin
-    bandH := TokenPxAt(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+    bandH := m.NoteRow;
     if bandH > Result.Content.Bottom - Result.Content.Top then
       bandH := Result.Content.Bottom - Result.Content.Top;
     Result.StrayNote := Rect(Result.Content.Left, Result.Content.Bottom - bandH,
@@ -3660,7 +3672,7 @@ begin
   { 设计期 Placement 冲突:再往上让一行,叠在漏入提示那一行上面(spec §10.6)。 }
   if (csDesigning in ComponentState) and PlacementConflicts then
   begin
-    bandH := TokenPxAt(TyToolWindowHeaderHeightVar, TyToolWindowHeaderHeightDef, APPI);
+    bandH := m.NoteRow;
     if bandH > Result.Content.Bottom - Result.Content.Top then
       bandH := Result.Content.Bottom - Result.Content.Top;
     Result.ConflictNote := Rect(Result.Content.Left, Result.Content.Bottom - bandH,

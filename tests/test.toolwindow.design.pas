@@ -83,6 +83,8 @@ type
     procedure TestAddActionsOnlyWhileThereIsNone;
     procedure TestAddActionsWaitsOutLoadingAndFreeing;
     procedure TestABarBeingFreedNoLongerHoldsItsSide;
+    procedure TestTheNoteRowFollowsTheHeaderHeightToken;
+    procedure TestTheNoteRowFollowsTheTokenWithoutASibling;
     procedure TestMoveToOtherSideGoesThroughMoveWindow;
     procedure TestMoveToOtherSideRefusesABottomWindow;
     procedure TestOnlyOrphansHaveReturnTargets;
@@ -872,6 +874,44 @@ begin
   finally
     r2.Free;
   end;
+end;
+
+procedure TTyToolWindowDesignTests.TestTheNoteRowFollowsTheHeaderHeightToken;
+var
+  m: TTyToolWindowManager;
+  a: TBarAccess;
+  aln: Integer;
+begin
+  { 提示行借 --toolwindow-header-height。换主题只带来一次裸 Invalidate:只改这一项的话,
+    栏要自己看出来并重排,否则当前页还停在旧的提示行上面。 }
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  DesignBarOn(twpLeft, m);
+  AssertEquals('前提:默认行高', TyToolWindowHeaderHeightDef,
+    a.BarLayout.ConflictNote.Bottom - a.BarLayout.ConflictNote.Top);
+  aln := a.AlignCount;
+  FCtl.StyleOverride := ':root { --toolwindow-header-height: 40px; }';
+  AssertEquals('提示行按新 token', 40, a.BarLayout.ConflictNote.Bottom - a.BarLayout.ConflictNote.Top);
+  AssertTrue('栏重排了', a.AlignCount > aln);
+end;
+
+procedure TTyToolWindowDesignTests.TestTheNoteRowFollowsTheTokenWithoutASibling;
+var
+  m: TTyToolWindowManager;
+  a, b: TBarAccess;
+  aln: Integer;
+begin
+  { 同上,但冲突的另一条栏在别的父控件里:没有兄弟栏的推导替它先走一遍,只能靠栏自己的
+    Invalidate 比出提示行高变了。 }
+  m := NewDesignManager;
+  a := DesignBarOn(twpLeft, m);
+  b := DesignBarOn(twpLeft, m);
+  b.Parent := DesignPanel;
+  AssertFalse('前提:冲突', IsRectEmpty(a.BarLayout.ConflictNote));
+  aln := a.AlignCount;
+  FCtl.StyleOverride := ':root { --toolwindow-header-height: 40px; }';
+  AssertEquals('提示行按新 token', 40, a.BarLayout.ConflictNote.Bottom - a.BarLayout.ConflictNote.Top);
+  AssertTrue('栏重排了', a.AlignCount > aln);
 end;
 
 procedure TTyToolWindowDesignTests.TestMoveToOtherSideGoesThroughMoveWindow;
