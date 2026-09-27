@@ -1255,6 +1255,7 @@ D 期是工作台的里程碑：下面是 spec §15 全部「只能真机验」�
 - **编译**：主控编过运行时包 `tycontrols.lpk`、设计期包 `tycontrols_dt.lpk`、示例 `examples/toolwindows`，均 0 错。
 - **i18n**：工具窗口的 11 条 resourcestring 在 `tyControls.StrConsts.pot` 和 `tycontrols.strconsts.zh_CN.po` 里齐全；`tyControls.Design.CompEditors.pot` 和编出来的 rsj 一致。
 - **spec 写回**：§2、§3.1、§3.2、§6.1、§9.9、§10.6、§11、§15、§16 原处标「实现期修正 / 补（D 期）」。开工前问题 15（「移到另一侧栏」不记撤销）已被收尾推翻：两个移动菜单项都记撤销。
+- **变异抽查（Step 5）**：第 1–4 条在 Task 2–4 实现时逐条做过、都红；第 5 条不适用（`ReturnTargets` 只扫 `Owner.Components`，frame 实例里的栏本来就不在候选里，那句排除是死代码，没写）。收尾修复批次每条修复另做了变异。
 - **真机**：待用户按上面的「真机验收表」逐项做。
 - **遗留**（不阻塞）：
   - M-5「栏 `Loaded` 不 `Relayout`」在冲突提示那条测试上是等价变异（LCL 自己的 `Loaded → LoadedAll → AdjustSize` 也会重排），那一句守的是推导宽度，由 `TestExpandedSizeStreamsOnBothSidesOfTheDefault` 杀。
