@@ -15,9 +15,10 @@ unit tyControls.AdvChart.VisualMapView;
   "sketch" upstream renders first), the group placed from the final one.
 
   NOT HERE: dragging, hovering and the hover indicator (interaction is a
-  later batch); a controller symbolSize other than the item width (the bar
-  stays a rectangle); a rounded clip of a partial in-range bar (it is clipped
-  to the bar's rectangle). The 6.1.0 build this follows does not push
+  later batch); a rounded clip of a partial in-range bar (it is clipped to
+  the bar's rectangle). The controller's symbolSize IS here: it makes the bar
+  a trapezoid and scales the handles. [Batch 56: the bar was always a
+  rectangle.] The 6.1.0 build this follows does not push
   overlapping handle labels apart, and neither does this.
 
   PURE: option in, geometry out, and marks from the geometry. }
@@ -1034,15 +1035,29 @@ begin
   Push(A1, 1);
 end;
 
-function BarPoints(AItemW, AE0, AE1: Double): TTyPointFArray;
+{ getControllerVisual(v, 'symbolSize', {forceState}), CSS px }
+function ControllerSize(const AModel: TTyVisualMapSpec; AState: TTyVisualState;
+  AValue, AItemW: Double): Double;
+var
+  s: TTyVisualMapSpec;
+  row: TTyVisualRow;
 begin
-  { _createBarPoints with the controller size at the item width: a
-    rectangle }
+  s := AModel;
+  s.States := AModel.Controller;
+  row := Default(TTyVisualRow);
+  TyVisualApply(s, AState, AValue, row, False);
+  if row.SizeSet then Result := row.Size else Result := AItemW;
+end;
+
+{ _createBarPoints: the controller's size at each end narrows the bar from
+  the item's own edge }
+function BarPoints(AItemW, ASize0, ASize1, AE0, AE1: Double): TTyPointFArray;
+begin
   SetLength(Result, 4);
-  Result[0] := TyPointF(AItemW - AItemW, AE0);
+  Result[0] := TyPointF(AItemW - ASize0, AE0);
   Result[1] := TyPointF(AItemW, AE0);
   Result[2] := TyPointF(AItemW, AE1);
-  Result[3] := TyPointF(AItemW - AItemW, AE1);
+  Result[3] := TyPointF(AItemW - ASize1, AE1);
 end;
 
 { a Polygon's rect: its path data stays a plain array -- only a proxy built
@@ -1071,7 +1086,7 @@ function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
   const AInk: TTyVisualMapInk): TTyVisualMapLayout;
 var
   L: TTyVisualMapLayout;
-  i0, i1, gap, hs, t, ex, ey, lw, lineScale: Double;
+  i0, i1, gap, hs, t, ex, ey, lw, lineScale, outS0, outS1, inS0, inS1: Double;
   pad: array[0..3] of Double;
   box: TTyRawBox;
   r, bb, iconBox: TTyXYWH;
@@ -1130,19 +1145,25 @@ var
   var
     h: Integer;
     th: TTyMat2D;
-    lx, ly: Double;
+    lx, ly, val, ss: Double;
     align: TTyTextAnchorH;
+    dir: string;
   begin
     if not AView.Calculable then Exit;
     SetLength(L.Handles, 2);
     for h := 0 to 1 do
     begin
       L.Handles[h] := Default(TTyVmHandle);
-      { symbolSize = the item width: x at its middle, scale 1 }
+      { the controller's size at the value under the handle -- its own
+        state, not a forced one: scaled to it, centred on the bar's edge
+        side }
+      val := TyVmLinearMap(AEnds[h], 0, i1, AModel.Extent0, AModel.Extent1, True);
+      ss := ControllerSize(AModel, TyVisualValueState(AModel, val), val,
+        AView.ItemW) * AScale;
       th := MatIdentity;
-      th[0] := i0 / i0;
-      th[3] := i0 / i0;
-      th[4] := i0 - i0 / 2;
+      th[0] := ss / i0;
+      th[3] := ss / i0;
+      th[4] := i0 - ss / 2;
       th[5] := AEnds[h];
       L.Handles[h].Local := th;
       L.Handles[h].Thumb := MatMul(L.Bar, th);
@@ -1169,8 +1190,13 @@ var
       L.Handles[h].Rect := r;
       { the label: [handleSize, 0] through the thumb }
       MatApply(L.Handles[h].Thumb, hs, 0, lx, ly);
+      { a horizontal bar's labels sit off the bar by the thumb's shortfall }
       if AView.Horizontal then
-        ly := ly + 0;
+      begin
+        dir := TyVmTransformDirection('left', L.Bar);
+        if (dir = 'left') or (dir = 'top') then ly := ly + (i0 - ss) / 2
+        else ly := ly + (i0 - ss) / -2;
+      end;
       if not AView.Horizontal then
         align := WordH(TyVmTransformDirection('left', L.Bar))
       else
@@ -1314,10 +1340,17 @@ begin
     end;
   end;
 
+  { the controller's size at the bars' ends: the out-of-range bar over the
+    extent, the in-range one over the interval, each state forced }
+  outS0 := ControllerSize(AModel, tvsOutOfRange, AModel.Extent0, AView.ItemW) * AScale;
+  outS1 := ControllerSize(AModel, tvsOutOfRange, AModel.Extent1, AView.ItemW) * AScale;
+  inS0 := ControllerSize(AModel, tvsInRange, L.Interval[0], AView.ItemW) * AScale;
+  inS1 := ControllerSize(AModel, tvsInRange, L.Interval[1], AView.ItemW) * AScale;
+
   { THE SKETCH: the whole length, for the background }
-  L.OutPoints := BarPoints(i0, 0, i1);
+  L.OutPoints := BarPoints(i0, outS0, outS1, 0, i1);
   L.OutRect := PolyRect(L.OutPoints);
-  L.InPoints := BarPoints(i0, 0, i1);
+  L.InPoints := BarPoints(i0, inS0, inS1, 0, i1);
   L.InRect := PolyRect(L.InPoints);
   PlaceHandles([0, i1]);
   bb := GroupRect(False);
@@ -1326,7 +1359,7 @@ begin
     bb.H + pad[0] + pad[2]);
 
   { THE FINAL VIEW }
-  L.InPoints := BarPoints(i0, L.HandleEnds[0], L.HandleEnds[1]);
+  L.InPoints := BarPoints(i0, inS0, inS1, L.HandleEnds[0], L.HandleEnds[1]);
   L.InRect := PolyRect(L.InPoints);
   PlaceHandles(L.HandleEnds);
   bb := GroupRect(True);
@@ -1358,6 +1391,8 @@ var
     Result := Default(TTyChartElement);
     Result.Z := AView.Z;
     Result.Silent := True;
+    { no datum: the component is not a series' row }
+    Result.Datum := TyChartDatum(-1, -1);
   end;
 
   function GlobalRect(const ARect: TTyXYWH; const M: TTyMat2D): TTyRectF;
@@ -1472,9 +1507,13 @@ begin
     Inc(Result);
   end;
   G := MatMul(T, ALayout.Bar);
-  Bar(ALayout.OutPoints, ALayout.OutRect, ALayout.OutStops, True);
+  { A RECTANGLE over the whole length is the clip itself, rounded; anything
+    else -- a partial range, a trapezoid -- is the polygon, clipped square }
+  Bar(ALayout.OutPoints, ALayout.OutRect, ALayout.OutStops,
+    (ALayout.OutPoints[0].X = 0) and (ALayout.OutPoints[3].X = 0));
   Bar(ALayout.InPoints, ALayout.InRect, ALayout.InStops,
-    (ALayout.HandleEnds[0] <= 0) and (ALayout.HandleEnds[1] >= ALayout.ItemH));
+    (ALayout.HandleEnds[0] <= 0) and (ALayout.HandleEnds[1] >= ALayout.ItemH)
+    and (ALayout.InPoints[0].X = 0) and (ALayout.InPoints[3].X = 0));
   { the handles: the icon at its box, turned with the bar }
   for h := 0 to High(ALayout.Handles) do
   begin

@@ -46,6 +46,8 @@ type
     Kind: string;
     Colors: TTyVisualColorArray;
     Nums: TTyDoubleArray;
+    { `symbol`: the names, not paired }
+    Strs: TTyStringArray;
   end;
   TTyVisualMappingArray = array of TTyVisualMapping;
   TTyVisualStateKeys = array[TTyVisualState] of TTyStringArray;
@@ -104,6 +106,13 @@ type
     Color: TTyVisualColor;
     OpacitySet: Boolean;
     Opacity: Double;
+    { the symbol's name and size (CSS px), and liftZ }
+    SymbolSet: Boolean;
+    Symbol: string;
+    SizeSet: Boolean;
+    Size: Double;
+    LiftZSet: Boolean;
+    LiftZ: Double;
   end;
   TTyVisualRowArray = array of TTyVisualRow;
 
@@ -699,7 +708,15 @@ begin
         Result.Colors[i] := TyVisualParsedStop(list.Items[i]);
       Exit;
     end;
-    if (list.Count = 1) and (AType <> 'symbol') then list.Add(list.Items[0].Clone);
+    if AType = 'symbol' then
+    begin
+      SetLength(Result.Strs, list.Count);
+      for i := 0 to list.Count - 1 do
+        if list.Items[i].JSONType in [jtString, jtNumber] then
+          Result.Strs[i] := list.Items[i].AsString;
+      Exit;
+    end;
+    if list.Count = 1 then list.Add(list.Items[0].Clone);
     SetLength(Result.Nums, list.Count);
     for i := 0 to list.Count - 1 do
       if list.Items[i].JSONType = jtNumber then
@@ -845,6 +862,8 @@ var
   e0, e1, r0, r1, t: Double;
   defa: TJSONData;
   vs: TTyVisualState;
+  symExists, sizeExists: TJSONData;
+  itemW, mx: Double;
 
   { completeSingle: ec2's high-to-low `color`, then the gradient }
   procedure CompleteSingle(AObj: TJSONObject);
@@ -950,6 +969,12 @@ begin
 
   ReadTargets(node, Result);
   Result.Dim := DimOf(node.Find('dimension'));
+  { resetItemSize's width, for the controller's sizes }
+  itemW := NaN;
+  d := node.Find('itemWidth');
+  if (d <> nil) and (d.JSONType = jtNumber) then itemW := d.AsFloat
+  else if (d <> nil) and (d.JSONType = jtString) then itemW := TyJsParseFloat(d.AsString);
+  if IsNan(itemW) then itemW := 20;
 
   { completeVisualOption, on a copy: target merged with the option's own
     states, per key and without overwriting }
@@ -994,25 +1019,89 @@ begin
     end;
     ReadStates(target, Result.Keys, Result.States);
 
-    { completeController: a missing state is the inactive colour; a symbol
-      and a size are appended where none is written. Their VALUES are a
-      later batch -- only their place in the key list matters here. }
+    { completeController: a missing state is the inactive colour; a missing
+      symbol or size is the other state's, else a round rect the item width
+      square; `none` is the round rect; every size rescaled so the largest is
+      the item width; and, continuous, a size pair that differs starts at a
+      third of its end. What either state wrote is looked for BEFORE any
+      state is filled in. }
+    symExists := nil;
+    sizeExists := nil;
     for vs := Low(TTyVisualState) to High(TTyVisualState) do
     begin
-      if not Truthy(controller.Find(cStateNames[vs])) then
-      begin
-        st := TJSONObject.Create;
-        st.Add('color', TJSONArray.Create([TyVisualCss(AInactive)]));
-        SetKey(controller, cStateNames[vs], st);
-      end;
       st := ObjOf(controller.Find(cStateNames[vs]));
       if st = nil then Continue;
-      d := st.Find('symbol');
-      if (d = nil) or (d.JSONType = jtNull) then
-        SetKey(st, 'symbol', TJSONArray.Create(['roundRect']));
-      d := st.Find('symbolSize');
-      if (d = nil) or (d.JSONType = jtNull) then
-        SetKey(st, 'symbolSize', TJSONArray.Create([0, 0]));
+      if (symExists = nil) and Truthy(st.Find('symbol')) then
+        symExists := st.Find('symbol');
+      if (sizeExists = nil) and Truthy(st.Find('symbolSize')) then
+        sizeExists := st.Find('symbolSize');
+    end;
+    if symExists <> nil then symExists := symExists.Clone;
+    if sizeExists <> nil then sizeExists := sizeExists.Clone;
+    try
+      for vs := Low(TTyVisualState) to High(TTyVisualState) do
+      begin
+        if not Truthy(controller.Find(cStateNames[vs])) then
+        begin
+          st := TJSONObject.Create;
+          st.Add('color', TJSONArray.Create([TyVisualCss(AInactive)]));
+          SetKey(controller, cStateNames[vs], st);
+        end;
+        st := ObjOf(controller.Find(cStateNames[vs]));
+        if st = nil then Continue;
+        d := st.Find('symbol');
+        if (d = nil) or (d.JSONType = jtNull) then
+        begin
+          if symExists <> nil then SetKey(st, 'symbol', symExists.Clone)
+          else SetKey(st, 'symbol', TJSONArray.Create(['roundRect']));
+        end;
+        d := st.Find('symbolSize');
+        if (d = nil) or (d.JSONType = jtNull) then
+        begin
+          if sizeExists <> nil then SetKey(st, 'symbolSize', sizeExists.Clone)
+          else SetKey(st, 'symbolSize', TJSONArray.Create([itemW, itemW]));
+        end;
+        { `none` filtered to the default symbol }
+        d := st.Find('symbol');
+        if (d <> nil) and (d.JSONType = jtArray) then
+          for i := 0 to TJSONArray(d).Count - 1 do
+            if (TJSONArray(d).Items[i].JSONType = jtString)
+              and (TJSONArray(d).Items[i].AsString = 'none') then
+              TJSONArray(d).Items[i] := TJSONString.Create('roundRect');
+        { normalise the size to [0, itemW] by its largest value }
+        d := st.Find('symbolSize');
+        if d <> nil then
+        begin
+          mx := NegInfinity;
+          if d.JSONType = jtArray then
+          begin
+            for i := 0 to TJSONArray(d).Count - 1 do
+              if (TJSONArray(d).Items[i].JSONType = jtNumber)
+                and (TJSONArray(d).Items[i].AsFloat > mx) then
+                mx := TJSONArray(d).Items[i].AsFloat;
+            for i := 0 to TJSONArray(d).Count - 1 do
+              if TJSONArray(d).Items[i].JSONType = jtNumber then
+                TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
+                  TJSONArray(d).Items[i].AsFloat, 0, mx, 0, itemW, True));
+            { ContinuousModel: a pair that differs starts at a third }
+            if (Result.SubType = 'continuous') and (TJSONArray(d).Count >= 2)
+              and (TJSONArray(d).Items[0].JSONType = jtNumber)
+              and (TJSONArray(d).Items[1].JSONType = jtNumber)
+              and (TJSONArray(d).Items[0].AsFloat <> TJSONArray(d).Items[1].AsFloat) then
+              TJSONArray(d).Items[0] := TJSONFloatNumber.Create(
+                TJSONArray(d).Items[1].AsFloat / 3);
+          end
+          else if d.JSONType = jtNumber then
+          begin
+            mx := d.AsFloat;
+            SetKey(st, 'symbolSize', TJSONFloatNumber.Create(
+              TyVmLinearMap(mx, 0, mx, 0, itemW, True)));
+          end;
+        end;
+      end;
+    finally
+      symExists.Free;
+      sizeExists.Free;
     end;
     ReadStates(controller, Result.ControllerKeys, Result.Controller);
   finally
@@ -1122,7 +1211,29 @@ begin
         ARow.ColorSet := True;
       end;
     end;
-    { symbol, symbolSize, liftZ and decal are later batches }
+    if AForMeta then Continue;
+    if m.Kind = 'symbol' then
+    begin
+      { doMapToArray: the name at Math.round of the normalised value spread
+        over the list }
+      if Length(m.Strs) = 0 then Continue;
+      v := TyJsRound(TyVmLinearMap(n, 0, 1, 0, Length(m.Strs) - 1, True));
+      if IsNan(v) or (v < 0) or (v > High(m.Strs)) then Continue;
+      ARow.Symbol := m.Strs[Trunc(v)];
+      ARow.SymbolSet := True;
+    end
+    else if m.Kind = 'symbolSize' then
+    begin
+      ARow.Size := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
+      ARow.SizeSet := True;
+    end
+    else if m.Kind = 'liftZ' then
+    begin
+      { doMapFixed for every method: the first value, never interpolated }
+      ARow.LiftZ := PairAt(m.Nums, 0);
+      ARow.LiftZSet := True;
+    end;
+    { decal is not drawn }
   end;
 end;
 

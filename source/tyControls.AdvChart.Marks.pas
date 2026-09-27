@@ -634,6 +634,36 @@ begin
   if TyTryParseChartColor(v.Text, c) then Result.Fill := c;
 end;
 
+{ THE SYMBOL A visualMap WROTE ON THIS ROW over the series' own: its name,
+  its size, and liftZ, which lifts the mark in the paint order. }
+function RowSymbol(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer; const ASpec: TTySymbolSpec; out ALift: Double): TTySymbolSpec;
+var
+  raw: Integer;
+  vr: TTyVisualRow;
+  e: Boolean;
+  p: string;
+begin
+  Result := ASpec;
+  ALift := 0;
+  if (AVisual.VisualRows = nil) or (AStore = nil) then Exit;
+  raw := AStore.GetRawIndex(ARow);
+  if (raw < 0) or (raw > High(AVisual.VisualRows)) then Exit;
+  vr := AVisual.VisualRows[raw];
+  if vr.SymbolSet then
+  begin
+    Result.Kind := TySymbolKindOf(vr.Symbol, e, p);
+    Result.Empty := e;
+    Result.PathData := p;
+  end;
+  if vr.SizeSet and not IsNan(vr.Size) then
+  begin
+    Result.WidthPx := vr.Size;
+    Result.HeightPx := vr.Size;
+  end;
+  if vr.LiftZSet and not IsNan(vr.LiftZ) then ALift := vr.LiftZ;
+end;
+
 { HOW FAR OUTSIDE A MARK STILL COUNTS, in LOGICAL px -- the hit test scales it
   by PPI, the shapes are already device px.
 
@@ -1029,22 +1059,29 @@ var
     sh: TTyChartShape;
     sv: TTySeriesVisual;
     el: TTyChartElement;
+    rs: TTySymbolSpec;
+    lift: Double;
   begin
     Result := False;
-    sh := TyBuildSymbol(AVisual.Symbol, AP.X, AP.Y);
+    rs := RowSymbol(AVisual, AStore, ARow, AVisual.Symbol, lift);
+    if rs.Kind = tsyNone then Exit;
+    sh := TyBuildSymbol(rs, AP.X, AP.Y);
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
-    sv := AVisual;
-    { An `empty` marker is a RING: the series colour becomes the pen and the
-      hole is the theme's own ground. A line's default symbol is emptyCircle,
-      so this is the ordinary case rather than the exception. }
-    if AVisual.Symbol.Empty or (AVisual.Symbol.Kind = tsyLine) then
+    { THE ROW'S COLOUR, not the series': a visualMap's, or the datum's own
+      itemStyle.color. [Batch 56: every marker was the series colour.] }
+    sv := RowVisual(AVisual, AStore, ARow);
+    { An `empty` marker is a RING: the colour becomes the pen and the hole is
+      the theme's own ground. A line's default symbol is emptyCircle, so this
+      is the ordinary case rather than the exception. }
+    if rs.Empty or (rs.Kind = tsyLine) then
     begin
-      sv.Stroke := AVisual.Fill;
+      sv.Stroke := sv.Fill;
       if sv.StrokeWidthLogical <= 0 then sv.StrokeWidthLogical := 2;
-      if AVisual.Symbol.Kind = tsyLine then sv.Fill := 0
+      if rs.Kind = tsyLine then sv.Fill := 0
       else sv.Fill := AVisual.EmptyFill;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
+    el.Z2 := el.Z2 + Round(lift);
     el.HitSlopLogical := cHitSlopSymbolLogical;
     el.Caption.Text := CaptionFor(AVisual, AStore, ARow);
     AList.Add(el);
@@ -1399,9 +1436,9 @@ function BuildScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, sizeCol, valCol: Integer;
-  x, y, sz: Double;
+  x, y, sz, lift: Double;
   p: TTyPointF;
-  spec: TTySymbolSpec;
+  spec, rs: TTySymbolSpec;
   shape: TTyChartShape;
   v: TTySeriesVisual;
   el: TTyChartElement;
@@ -1453,7 +1490,10 @@ begin
       end;
     end;
 
-    shape := TyBuildSymbol(spec, p.X, p.Y);
+    { a visualMap's symbol, size and lift over the series' }
+    rs := RowSymbol(AVisual, AStore, i, spec, lift);
+    if rs.Kind = tsyNone then Continue;
+    shape := TyBuildSymbol(rs, p.X, p.Y);
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
 
     { AN `empty` SYMBOL IS STROKED, NOT FILLED -- upstream strokes it in the
@@ -1462,14 +1502,15 @@ begin
       [Batch 54: the whole row, not only its fill -- a visualMap's opacity is
       the row's too.] }
     v := RowVisual(AVisual, AStore, i);
-    if spec.Empty or (spec.Kind = tsyLine) then
+    if rs.Empty or (rs.Kind = tsyLine) then
     begin
       v.Stroke := v.Fill;
       if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-      if spec.Kind = tsyLine then v.Fill := 0
+      if rs.Kind = tsyLine then v.Fill := 0
       else v.Fill := AVisual.EmptyFill;
     end;
     el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+    el.Z2 := el.Z2 + Round(lift);
     el.HitSlopLogical := cHitSlopSymbolLogical;
     el.Caption.Text := CaptionFor(AVisual, AStore, i);
     AList.Add(el);
