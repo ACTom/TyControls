@@ -7291,3 +7291,63 @@ B3b:饼、漏斗、雷达、仪表盘按数据项取色(调色板在 visualMap �
 ### 下一批
 
 B4:分段型(`splitNumber`/`pieces`/`categories`、`reformIntervals`、`findPieceIndex`、分段 visualMeta、`PiecewiseView`)。
+
+## 92. Tier 1 第五十八批:分段型 visualMap 的模型与编码(B4a)(2026-09-27)
+
+分段型 visualMap 的三种模式、选中表、补全、映射、逐行编码和 visualMeta。组件视图在 B4b。
+
+### 上游的做法
+
+- **模式**:`pieces` 非空走 pieces,否则 `categories` 为真走 categories,否则 splitNumber。预处理器先把 ec2 的 `splitList` 改名成 `pieces`(仅当没有 `pieces` 键),把段里的 `start`/`end` 改成 `min`/`max`(仅当没有 `min`/`max` 键);类型推断看的是改名后的 `pieces`。
+- **splitNumber**:步长 `(max - min) / splitNumber`,精度从 `precision` 起往上加,直到 `toFixed` 不改变步长,最多到 5,**写回** `option.precision`,段文字按写回后的精度;段端点是**累加**的 `curr += step`,最后一段止于 max。`minOpen`/`maxOpen` 各加一个开区间段。
+- **pieces**:每个边界依次试 `gte/gt/min`(`lte/lt/max`),**每试一次**都改写闭合标志和 useMinMax,找不到就是 ±∞ 且闭合;`min` 配开放的上界、`max` 配开放的下界时那一端改开。两端相等且都闭合的段带 `value`。竖向且未反向(或横向且反向)时先整体倒序,再 `reformIntervals`:V8 对短数组的排序(降序游程翻转 + 二分插入),扫描时被前一段盖住的端点拉齐,被压成非双闭点的段**删掉**,它的原始下标也从选中表里消失。
+- **categories**:段就是类别,竖向且未反向时倒序;映射方法是 `category`,`categoryMap` 按 `option.categories` 原顺序建,没有视觉值的类别从表里删掉、落到默认槽。
+- **选中表**:键是段的原始下标(类别模式是类别名);没写的键算选中;`selectedMode: 'single'` 只留第一个。
+- **状态**:值所在的段(不找最近)被选中才是 inRange,不在任何段里是 outOfRange。
+- **映射**:分段型的归一化是**最近段**的下标摊到 [0, 1];inRange 时段自己的视觉值优先(`getSpecifiedVisual`,不找最近),outOfRange 的段没有视觉值;liftZ 在任何方法下都取第一个值。visualMeta 里的不透明度借 `colorAlpha` 的名义查段视觉值。
+- **补全**:某段写了、而选项和 target 的两个状态都没有的视觉类型,在选项的两个状态里补上 visualDefault 的 active/inactive 值——状态因此存在,completeSingle 不再补默认颜色。`!!option.categories` 为真时默认值取列表最后一个元素(标量),控制器缺省的颜色、符号、尺寸也是标量;默认符号是 `itemSymbol`。
+- **类别值**:比较的是值的字符串形式;非坐标轴的字符串列里存的是原字符串,坐标轴的列存序号,所以类别轴上的维度永远匹配不上。映射给出 undefined 的不透明度时,样式里的 opacity 被写成 undefined,盖掉散点默认的 0.8,按 1 绘制。
+- **visualMeta**:类别模式没有。其余模式把段表两端补上 `[-∞, 首段下界]`、`[末段上界, +∞]`,段之间的空隙补一对 outOfRange 色标,每段按代表值着色——有限段两个色标,开区间段进 outerColors。代表值:值段取值,`[-∞, +∞]` 取 0,其余取中点(开区间段因此是 ±∞)。
+
+### port 以前
+
+- 分段型只记一条"尚未支持"的诊断,系列保留原色。
+
+### 做法
+
+- `TTyVisualMapSpec` 增加 `Mode`、`Pieces`、`Selected`、`Categories`、`Precision`、`Formatter`、`IsCategory`;`TTyVisualMapping` 增加 `Method`、按类别的 `CatVals`/`CatDefault`、`UsePieces`。
+- `BuildPieces`/`ReformIntervals`/`V8SortPieces`/`BuildSelected` 照上游三种 resetMethods 逐句移植;`TyVisualFindPiece`、`TyVisualRepresent` 公开。
+- `TyVisualValueState`、`TyVisualApply` 各加一个带值文本的重载;旧签名对分段型用 `TyJsNumberToString` 转发。`TyVisualSeriesValues` 的新重载同时给出每行的文本:非坐标轴列里的字符串原样保留。
+- `TyVisualMetaOf` 对分段型走 `PiecewiseMeta`;直线的渐变沿用连续型的裁剪与构造。
+- 补全在 `TyVisualMapSpecOf` 里:段视觉类型补全、类别默认值、控制器标量默认、`itemSymbol`。
+- `SolveVisualMaps` 不再跳过分段型;诊断 `rsTyChartVisualMapPiecewise` 删除(含 .pot/.po)。
+- 预处理器的两处改名在 `EffectivePieces` 和段边界读取处就地做,子类型推断同样认 `splitList`。
+
+### 基准
+
+- `tools/advchart-oracle/visualmap-piecewise.js` 真跑 ECharts 6.1,45 个用例:splitNumber(S1–S9、P2、P3)、pieces(P4–P21)、categories(C1–C4)、视图用例的编码部分(V1–V9)、直线(L1、L2),以及画廊 area-pieces、line-sections、line-aqi、candlestick-brush、calendar-heatmap。
+- `test.advchart.visualmappiecewise` 逐位比较:模式、范围、写回的精度、类别;每段的键、原始下标、区间与闭合、值、文字、段视觉值、选中、代表值与状态;选中表的键集合;target 与控制器每个状态的键、应用顺序、每个映射的方法、视觉值(类别按下标与默认槽)、hasSpecialVisual;每行每个 visualMap 的段、最近段、状态,行的颜色、不透明度、符号、尺寸,柱与散点实际绘制的颜色和 alpha;visualMeta 的色标与 outerColors;折线与面积的渐变。
+
+### 变异测试
+
+48 个,44 杀、4 个等价。第一轮 8 个存活,补了四个 oracle 用例:
+- P19:同一下界、闭合不同的两段,排序靠闭合标志分先后(也杀掉"pieces 不倒序");
+- P20:单独的 `{min: 10}`,下端改开;
+- P21:`{gte: 5, lte: 5}` 成为值段;
+- P18:值段作为最近段(见下,等价)。
+
+等价的四个:
+- 值段的最近段更新:pieces 模式的值段同时带 `[v, v]` 区间,区间那一遍做同样的更新;类别模式从不找最近段。
+- 低端补段:补上的 `[-∞, 首段下界]` 和缺口填充给出同一对 outOfRange 值。
+- `[-∞, +∞]` 的代表值 0:只在没有段时出现,那时任何值都不在段里。
+- 值段的代表值:`(v + v) / 2 = v`。
+
+### 已知偏差
+
+- line-aqi 的 dataZoom 没有移植,值轴按未过滤的数据取 0..500(上游 0..400),渐变坐标不同;visualMeta 本身逐位相同,测试只豁免这一条折线比较。
+- `formatter` 只支持字符串;函数形式不适用于 JSON 选项。
+- 段值或类别写成对象、数组、布尔等非标量时的上游怪行为(例如把数组当颜色)不复刻。
+
+### 下一批
+
+B4b:PiecewiseView(每段一个符号加标签、两端文字、`showLabel` 规则、视图倒序、`layout.box` 的下一矩形项、背景、`positionGroup`)。

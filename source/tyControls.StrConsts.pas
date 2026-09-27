@@ -371,8 +371,6 @@ resourcestring
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
-  rsTyChartVisualMapPiecewise =
-    'visualMap[%d]: piecewise mapping is not supported yet, so its series keep their own colours';
 
   // --- AdvanceChart: the option editor's own vocabulary ---
   // Shown in the design-time editor's status line and its completion popup.

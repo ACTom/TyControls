@@ -2129,6 +2129,7 @@ var
   d: TJSONData;
   baseColor: TTyVisualColor;
   values: TTyDoubleArray;
+  texts: TTyStringArray;
   rows: TTyVisualRowArray;
   meta: TTyVisualMeta;
   offKey: Integer;
@@ -2162,9 +2163,7 @@ begin
       FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp,
         TyVisualFromChart(TTyChartColor(ActiveController.Model.ResolveStyle(
           'TyAdvChartVisualMapInactive', '', []).TextColor)));
-    { [Batch 55: a continuous one is drawn now; the note went.] }
-    if FVisualSpecs[k].SubType = 'piecewise' then
-      FBuild.Note(Format(rsTyChartVisualMapPiecewise, [k]));
+    { [Batch 58: a piecewise one encodes now; its note went.] }
   end;
   SetLength(FVisualRows, Length(FBindings));
   SetLength(FVisualMetas, Length(FBindings));
@@ -2190,11 +2189,11 @@ begin
     for k := 0 to n - 1 do
     begin
       spec := FVisualSpecs[k];
-      { piecewise is a later batch; it writes nothing yet }
-      if spec.SubType <> 'continuous' then Continue;
       if not TyVisualMapTargets(spec, FBindings[i].SeriesIndex, sid) then Continue;
+      { with each value's text: what a category or a string piece matches }
       values := TyVisualSeriesValues(st,
-        TyVisualMapDimFor(spec, FBindings[i].SeriesIndex, sid), col, dimIndex);
+        TyVisualMapDimFor(spec, FBindings[i].SeriesIndex, sid), col, dimIndex,
+        texts);
       if rows = nil then
       begin
         SetLength(rows, st.RawCount);
@@ -2213,8 +2212,8 @@ begin
           ov := st.GetOverrideByRaw(raw, offKey);
           if (ov.Kind = dvkBool) and (ov.Num = 0) then Continue;
         end;
-        TyVisualApply(spec, TyVisualValueState(spec, values[raw]),
-          values[raw], rows[raw], False);
+        TyVisualApply(spec, TyVisualValueState(spec, values[raw], texts[raw]),
+          values[raw], texts[raw], rows[raw], False);
       end;
       if dimIndex >= 0 then
       begin

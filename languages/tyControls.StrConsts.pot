@@ -746,11 +746,6 @@ msgstr ""
 msgid "series[%d] has no type, so it is not drawn"
 msgstr ""
 
-#: tycontrols.strconsts.rstychartvisualmappiecewise
-#, object-pascal-format
-msgid "visualMap[%d]: piecewise mapping is not supported yet, so its series keep their own colours"
-msgstr ""
-
 #: tycontrols.strconsts.rstychartxaxisnogrid
 #, object-pascal-format
 msgid "xAxis[%d] names no grid, so it is not drawn"

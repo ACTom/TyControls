@@ -41,6 +41,41 @@ type
 
   TTyVisualState = (tvsInRange, tvsOutOfRange);
 
+  { how a mapping turns a value into a place in its visual list }
+  TTyVisualMethod = (tvmLinear, tvmPiecewise, tvmCategory);
+
+  { one written visual value: a number or a string, or nothing }
+  TTyVisualPieceVisual = record
+    Kind: string;
+    Defined: Boolean;
+    IsNum: Boolean;
+    Num: Double;
+    Str: string;
+  end;
+  TTyVisualPieceVisualArray = array of TTyVisualPieceVisual;
+
+  { one piece of a piecewise visualMap, as the model holds it }
+  TTyVisualPiece = record
+    HasInterval: Boolean;
+    Lo, Hi: Double;
+    Close0, Close1: Integer;
+    HasValue: Boolean;
+    Value: Double;
+    { a category, or a value written as a string }
+    ValueIsStr: Boolean;
+    ValueStr: string;
+    Text: string;
+    { the original index; -1 for a category }
+    Index: Integer;
+    { the `selected` map's key }
+    Key: string;
+    { the piece's own visuals (`color`, `symbol`, ...) }
+    Visuals: TTyVisualPieceVisualArray;
+  end;
+  TTyVisualPieceArray = array of TTyVisualPiece;
+
+  TTyPiecewiseMode = (tpmSplitNumber, tpmPieces, tpmCategories);
+
   { One visual type of one state: its parsed colour stops, or its numbers. }
   TTyVisualMapping = record
     Kind: string;
@@ -48,6 +83,15 @@ type
     Nums: TTyDoubleArray;
     { `symbol`: the names, not paired }
     Strs: TTyStringArray;
+    Method: TTyVisualMethod;
+    { tvmCategory: the visual at each category's index (Defined False where
+      none was written -- such a category maps to the default slot), and the
+      default slot itself }
+    Cats: TTyStringArray;
+    CatVals: TTyVisualPieceVisualArray;
+    CatDefault: TTyVisualPieceVisual;
+    { tvmPiecewise in range: a piece's own visual wins }
+    UsePieces: Boolean;
   end;
   TTyVisualMappingArray = array of TTyVisualMapping;
   TTyVisualStateKeys = array[TTyVisualState] of TTyStringArray;
@@ -97,6 +141,16 @@ type
       key list. }
     ControllerKeys: TTyVisualStateKeys;
     Controller: TTyVisualStateMaps;
+    { PIECEWISE: the pieces in the model's order, which are selected, the
+      categories as written, and the precision after splitNumber's write-back }
+    Mode: TTyPiecewiseMode;
+    Pieces: TTyVisualPieceArray;
+    Selected: array of Boolean;
+    Categories: TTyStringArray;
+    Precision: Integer;
+    Formatter: string;
+    { `!!option.categories`: the defaults' shape, and no visualMeta }
+    IsCategory: Boolean;
   end;
   TTyVisualMapSpecArray = array of TTyVisualMapSpec;
 
@@ -200,18 +254,34 @@ function TyVisualMapTargets(const ASpec: TTyVisualMapSpec;
 function TyVisualMapDimFor(const ASpec: TTyVisualMapSpec;
   ASeriesIndex: Integer; const ASeriesId: string): TTyVisualDim;
 function TyVisualValueState(const ASpec: TTyVisualMapSpec;
-  AValue: Double): TTyVisualState;
+  AValue: Double): TTyVisualState; overload;
+{ AText: the value as JavaScript prints it, which is what a category is
+  matched against }
+function TyVisualValueState(const ASpec: TTyVisualMapSpec; AValue: Double;
+  const AText: string): TTyVisualState; overload;
 { Apply AState's mappings to ARow for AValue. AForMeta: the visualMeta's
   colour, where an opacity becomes the colour's alpha. }
 procedure TyVisualApply(const ASpec: TTyVisualMapSpec; AState: TTyVisualState;
-  AValue: Double; var ARow: TTyVisualRow; AForMeta: Boolean);
+  AValue: Double; var ARow: TTyVisualRow; AForMeta: Boolean); overload;
+procedure TyVisualApply(const ASpec: TTyVisualMapSpec; AState: TTyVisualState;
+  AValue: Double; const AText: string; var ARow: TTyVisualRow;
+  AForMeta: Boolean); overload;
+{ VisualMapping.findPieceIndex: -1 for none }
+function TyVisualFindPiece(const APieces: TTyVisualPieceArray; AValue: Double;
+  const AText: string; AClosest: Boolean): Integer;
+{ PiecewiseModel.getRepresentValue for a non-category piece }
+function TyVisualRepresent(const APiece: TTyVisualPiece): Double;
 
 { ---- one series ---- }
 { The value each raw row is mapped by. AStoreCol is the store column read,
   or -1 when the dimension is not in the store and the raw cell is parsed;
   ADimIndex is upstream's dimension index, -1 when it resolves to none. }
 function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;
-  out AStoreCol, ADimIndex: Integer): TTyDoubleArray;
+  out AStoreCol, ADimIndex: Integer): TTyDoubleArray; overload;
+{ and each value as JavaScript's String() of it -- a category's own text
+  where the item wrote one }
+function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;
+  out AStoreCol, ADimIndex: Integer; out ATexts: TTyStringArray): TTyDoubleArray; overload;
 
 { ---- the continuous visualMeta ---- }
 function TyVmStopValues(AE0, AE1: Double): TTyDoubleArray;
@@ -591,6 +661,19 @@ begin
   else Result := nil;
 end;
 
+{ JavaScript's `x + ''` of an option value }
+function JsStrOf(A: TJSONData): string;
+begin
+  Result := '';
+  if A = nil then Exit;
+  case A.JSONType of
+    jtNumber: Result := TyJsNumberToString(A.AsFloat);
+    jtString: Result := A.AsString;
+    jtBoolean: if A.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+  end;
+end;
+
 function NumOf(A: TJSONData): Double;
 begin
   Result := NaN;
@@ -600,6 +683,592 @@ begin
     jtString: Result := TyJsToNumber(A.AsString);
     jtBoolean: if A.AsBoolean then Result := 1 else Result := 0;
     jtNull: Result := 0;
+  end;
+end;
+
+{ ==================== piecewise ==================== }
+
+{ the visual types in VisualMapping.visualHandlers order: what
+  retrieveVisuals and listVisualTypes walk }
+const
+  cHandlerOrder: array[0..9] of string = ('color', 'colorHue',
+    'colorSaturation', 'colorLightness', 'colorAlpha', 'decal', 'opacity',
+    'liftZ', 'symbol', 'symbolSize');
+
+function PieceVisualOf(AData: TJSONData): TTyVisualPieceVisual;
+begin
+  Result := Default(TTyVisualPieceVisual);
+  Result.Num := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber:
+      begin
+        Result.Defined := True;
+        Result.IsNum := True;
+        Result.Num := AData.AsFloat;
+      end;
+    jtString:
+      begin
+        Result.Defined := True;
+        Result.Str := AData.AsString;
+        Result.Num := TyJsToNumber(AData.AsString);
+      end;
+  end;
+end;
+
+{ `a <= b` when the end is closed, `a < b` when it is open }
+function LittleThan(AClose: Integer; A, B: Double): Boolean;
+begin
+  if AClose <> 0 then Result := Le(A, B) else Result := Lt(A, B);
+end;
+
+function TyVisualFindPiece(const APieces: TTyVisualPieceArray; AValue: Double;
+  const AText: string; AClosest: Boolean): Integer;
+var
+  i, possible: Integer;
+  best: Double;
+
+  procedure Update(AEnd: Double; AIndex: Integer);
+  var d: Double;
+  begin
+    d := Abs(AEnd - AValue);
+    if Lt(d, best) then
+    begin
+      best := d;
+      possible := AIndex;
+    end;
+  end;
+
+begin
+  possible := -1;
+  best := Infinity;
+  { a value piece first: the number, or a string equal to the value's }
+  for i := 0 to High(APieces) do
+    if APieces[i].HasValue then
+    begin
+      if APieces[i].ValueIsStr then
+      begin
+        if APieces[i].ValueStr = AText then Exit(i);
+      end
+      else if Le(APieces[i].Value, AValue) and Ge(APieces[i].Value, AValue) then
+        Exit(i);
+      { Math.abs(pieceValue - value): a string piece value coerced }
+      if AClosest then
+        Update(APieces[i].Value, i);
+    end;
+  for i := 0 to High(APieces) do
+  begin
+    if not APieces[i].HasInterval then Continue;
+    with APieces[i] do
+    begin
+      if IsInfinite(Lo) and (Lo < 0) then
+      begin
+        if LittleThan(Close1, AValue, Hi) then Exit(i);
+      end
+      else if IsInfinite(Hi) and (Hi > 0) then
+      begin
+        if LittleThan(Close0, Lo, AValue) then Exit(i);
+      end
+      else if LittleThan(Close0, Lo, AValue) and LittleThan(Close1, AValue, Hi) then
+        Exit(i);
+    end;
+    if AClosest then
+    begin
+      Update(APieces[i].Lo, i);
+      Update(APieces[i].Hi, i);
+    end;
+  end;
+  if not AClosest then Exit(-1);
+  if IsInfinite(AValue) and (AValue > 0) then Exit(High(APieces));
+  if IsInfinite(AValue) and (AValue < 0) then
+  begin
+    if Length(APieces) > 0 then Exit(0) else Exit(-1);
+  end;
+  Result := possible;
+end;
+
+{ reformIntervals' comparator: a before b }
+function PieceLittle(const A, B: TTyVisualPiece; AEnd: Integer): Boolean;
+var av, bv: Double; ac, bc: Integer;
+begin
+  if AEnd = 0 then
+  begin
+    av := A.Lo; bv := B.Lo; ac := A.Close0; bc := B.Close0;
+  end
+  else
+  begin
+    av := A.Hi; bv := B.Hi; ac := A.Close1; bc := B.Close1;
+  end;
+  if Lt(av, bv) then Exit(True);
+  if not (Le(av, bv) and Ge(av, bv)) then Exit(False);
+  if AEnd = 0 then
+    Result := (ac - bc = 1) or PieceLittle(A, B, 1)
+  else
+    Result := ac - bc = -1;
+end;
+
+function PieceCmp(const A, B: TTyVisualPiece): Integer;
+begin
+  if PieceLittle(A, B, 0) then Result := -1 else Result := 1;
+end;
+
+{ Array.prototype.sort on V8 for a short list: one run from the start
+  (reversed when it descends), then binary insertion -- the same procedure
+  TyPrepareVisualTypes transcribes, here over pieces }
+procedure V8SortPieces(var A: TTyVisualPieceArray);
+var
+  n, runEnd, lo, hi, left, right, mid, i: Integer;
+  pivot, t: TTyVisualPiece;
+begin
+  n := Length(A);
+  if n < 2 then Exit;
+  runEnd := 2;
+  if PieceCmp(A[1], A[0]) < 0 then
+  begin
+    while (runEnd < n) and (PieceCmp(A[runEnd], A[runEnd - 1]) < 0) do Inc(runEnd);
+    lo := 0;
+    hi := runEnd - 1;
+    while lo < hi do
+    begin
+      t := A[lo];
+      A[lo] := A[hi];
+      A[hi] := t;
+      Inc(lo);
+      Dec(hi);
+    end;
+  end
+  else
+    while (runEnd < n) and (PieceCmp(A[runEnd], A[runEnd - 1]) >= 0) do Inc(runEnd);
+  for i := runEnd to n - 1 do
+  begin
+    pivot := A[i];
+    left := 0;
+    right := i;
+    while left < right do
+    begin
+      mid := left + ((right - left) shr 1);
+      if PieceCmp(pivot, A[mid]) < 0 then right := mid else left := mid + 1;
+    end;
+    for mid := i downto left + 1 do A[mid] := A[mid - 1];
+    A[left] := pivot;
+  end;
+end;
+
+{ util/number reformIntervals: sorted, then swept -- an end at or behind
+  the sweep is pulled up to it, and a point left without both ends closed is
+  spliced out. The sweep keeps what a spliced piece set. }
+procedure ReformIntervals(var APieces: TTyVisualPieceArray);
+var
+  curr: Double;
+  currClose, i, lg, k: Integer;
+  v: Double;
+begin
+  V8SortPieces(APieces);
+  curr := NegInfinity;
+  currClose := 1;
+  i := 0;
+  while i < Length(APieces) do
+  begin
+    for lg := 0 to 1 do
+    begin
+      if lg = 0 then v := APieces[i].Lo else v := APieces[i].Hi;
+      if Le(v, curr) then
+      begin
+        if lg = 0 then
+        begin
+          APieces[i].Lo := curr;
+          APieces[i].Close0 := 1 - currClose;
+        end
+        else
+        begin
+          APieces[i].Hi := curr;
+          APieces[i].Close1 := 1;
+        end;
+      end;
+      if lg = 0 then
+      begin
+        curr := APieces[i].Lo;
+        currClose := APieces[i].Close0;
+      end
+      else
+      begin
+        curr := APieces[i].Hi;
+        currClose := APieces[i].Close1;
+      end;
+    end;
+    if Le(APieces[i].Lo, APieces[i].Hi) and Ge(APieces[i].Lo, APieces[i].Hi)
+      and (APieces[i].Close0 * APieces[i].Close1 <> 1) then
+    begin
+      for k := i to High(APieces) - 1 do APieces[k] := APieces[k + 1];
+      SetLength(APieces, Length(APieces) - 1);
+    end
+    else
+      Inc(i);
+  end;
+end;
+
+{ formatValueText: a number to its precision, the ends of the data bound
+  as 'min' and 'max', an interval with its edge symbols, a string
+  formatter's {value} and {value2} }
+function FormatPieceText(AIsInterval: Boolean; A0, A1: Double;
+  const ACategory: string; AIsCategory: Boolean; APrecision: Integer;
+  const AFormatter: string; const AEdge0, AEdge1: string): string;
+
+  function Fixed(V: Double): string;
+  begin
+    if IsInfinite(V) and (V < 0) then Exit('min');
+    if IsInfinite(V) then Exit('max');
+    Result := TyJsToFixedStr(V, Min(APrecision, 20));
+  end;
+
+var t0, t1: string; p: Integer;
+begin
+  if AIsCategory then
+  begin
+    t0 := ACategory;
+    t1 := ACategory;
+  end
+  else if AIsInterval then
+  begin
+    t0 := Fixed(A0);
+    t1 := Fixed(A1);
+  end
+  else
+  begin
+    t0 := Fixed(A0);
+    t1 := t0;
+  end;
+  if AFormatter <> '' then
+  begin
+    Result := AFormatter;
+    p := Pos('{value}', Result);
+    if p > 0 then Result := Copy(Result, 1, p - 1) + t0 + Copy(Result, p + 7, MaxInt);
+    p := Pos('{value2}', Result);
+    if p > 0 then Result := Copy(Result, 1, p - 1) + t1 + Copy(Result, p + 8, MaxInt);
+    Exit;
+  end;
+  if AIsInterval then
+  begin
+    if IsInfinite(A0) and (A0 < 0) then Result := AEdge0 + ' ' + t1
+    else if IsInfinite(A1) and (A1 > 0) then Result := AEdge1 + ' ' + t0
+    else Result := t0 + ' - ' + t1;
+  end
+  else
+    Result := t0;
+end;
+
+{ parseInt(x, 10) of a number or a string }
+function JsParseIntOf(A: TJSONData): Double;
+var s: string; i: Integer; neg: Boolean; v: Double;
+begin
+  Result := NaN;
+  if A = nil then Exit;
+  if A.JSONType = jtNumber then s := TyJsNumberToString(A.AsFloat)
+  else if A.JSONType = jtString then s := A.AsString
+  else Exit;
+  s := TyJsTrim(s);
+  i := 1;
+  neg := False;
+  if (i <= Length(s)) and (s[i] in ['+', '-']) then
+  begin
+    neg := s[i] = '-';
+    Inc(i);
+  end;
+  if (i > Length(s)) or not (s[i] in ['0'..'9']) then Exit;
+  v := 0;
+  while (i <= Length(s)) and (s[i] in ['0'..'9']) do
+  begin
+    v := v * 10 + (Ord(s[i]) - Ord('0'));
+    Inc(i);
+  end;
+  if neg then v := -v;
+  Result := v;
+end;
+
+procedure PushPiece(var APieces: TTyVisualPieceArray; ALo, AHi: Double;
+  AClose0, AClose1: Integer);
+var n: Integer;
+begin
+  n := Length(APieces);
+  SetLength(APieces, n + 1);
+  APieces[n] := Default(TTyVisualPiece);
+  APieces[n].HasInterval := True;
+  APieces[n].Lo := ALo;
+  APieces[n].Hi := AHi;
+  APieces[n].Close0 := AClose0;
+  APieces[n].Close1 := AClose1;
+  APieces[n].Index := -1;
+  APieces[n].Value := NaN;
+end;
+
+{ visualMapPreprocessor: ec2's `splitList` is `pieces` when there is no
+  `pieces` key at all }
+function EffectivePieces(ANode: TJSONObject): TJSONData;
+begin
+  if (ANode.IndexOfName('splitList') >= 0) and (ANode.IndexOfName('pieces') < 0) then
+    Result := ANode.Find('splitList')
+  else
+    Result := ANode.Find('pieces');
+end;
+
+{ the three resetMethods, into ASpec.Pieces }
+procedure BuildPieces(ANode: TJSONObject; var ASpec: TTyVisualMapSpec);
+var
+  d, pd, e: TJSONData;
+  arr: TJSONArray;
+  po: TJSONObject;
+  i, k, lg, n, prec: Integer;
+  sn, step, curr, mx: Double;
+  piece: TTyVisualPiece;
+  names: array[0..1, 0..2] of string;
+  edge0, edge1: string;
+  useMinMax: array[0..1] of Boolean;
+  found: Boolean;
+  vertical, inverse: Boolean;
+
+  procedure Reverse(var A: TTyVisualPieceArray);
+  var a0, b0: Integer; t: TTyVisualPiece;
+  begin
+    a0 := 0;
+    b0 := High(A);
+    while a0 < b0 do
+    begin
+      t := A[a0];
+      A[a0] := A[b0];
+      A[b0] := t;
+      Inc(a0);
+      Dec(b0);
+    end;
+  end;
+
+begin
+  ASpec.Pieces := nil;
+  { normalizeReverse: `orient === 'vertical' ? !inverse : inverse`, the
+    orient 'vertical' by default }
+  d := ANode.Find('orient');
+  vertical := (d = nil) or (d.JSONType = jtNull)
+    or ((d.JSONType = jtString) and (d.AsString = 'vertical'));
+  inverse := Truthy(ANode.Find('inverse'));
+  d := ANode.Find('precision');
+  if (d <> nil) and (d.JSONType = jtNumber) then prec := Trunc(d.AsFloat) else prec := 0;
+  d := ANode.Find('formatter');
+  if (d <> nil) and (d.JSONType = jtString) then ASpec.Formatter := d.AsString;
+
+  { _determineMode: pieces (a non-empty list), else categories, else
+    splitNumber }
+  pd := EffectivePieces(ANode);
+  d := ANode.Find('categories');
+  if (pd <> nil) and (pd.JSONType = jtArray) and (TJSONArray(pd).Count > 0) then
+    ASpec.Mode := tpmPieces
+  else if Truthy(d) then
+    ASpec.Mode := tpmCategories
+  else
+    ASpec.Mode := tpmSplitNumber;
+
+  case ASpec.Mode of
+    tpmSplitNumber:
+      begin
+        prec := Min(prec, 20);
+        d := ANode.Find('splitNumber');
+        if (d = nil) or (d.JSONType = jtNull) then sn := 5 else sn := JsParseIntOf(d);
+        if not IsNan(sn) then sn := Max(sn, 1);
+        step := (ASpec.Extent1 - ASpec.Extent0) / sn;
+        { the precision grows until the step survives toFixed, up to 5 }
+        while (not (Le(TyJsToNumber(TyJsToFixedStr(step, prec)), step)
+          and Ge(TyJsToNumber(TyJsToFixedStr(step, prec)), step))) and (prec < 5) do
+          Inc(prec);
+        step := TyJsToNumber(TyJsToFixedStr(step, prec));
+        d := ANode.Find('minOpen');
+        if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+          PushPiece(ASpec.Pieces, NegInfinity, ASpec.Extent0, 0, 0);
+        { ACCUMULATED: each end is the last plus the step }
+        curr := ASpec.Extent0;
+        i := 0;
+        while (not IsNan(sn)) and (i < sn) do
+        begin
+          if i = sn - 1 then mx := ASpec.Extent1 else mx := curr + step;
+          PushPiece(ASpec.Pieces, curr, mx, 1, 1);
+          curr := curr + step;
+          Inc(i);
+        end;
+        d := ANode.Find('maxOpen');
+        if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+          PushPiece(ASpec.Pieces, ASpec.Extent1, Infinity, 0, 0);
+        ReformIntervals(ASpec.Pieces);
+        for i := 0 to High(ASpec.Pieces) do
+        begin
+          ASpec.Pieces[i].Index := i;
+          ASpec.Pieces[i].Key := IntToStr(i);
+          ASpec.Pieces[i].Text := FormatPieceText(True, ASpec.Pieces[i].Lo,
+            ASpec.Pieces[i].Hi, '', False, prec, ASpec.Formatter, '<', '>');
+        end;
+      end;
+    tpmCategories:
+      begin
+        if d.JSONType = jtArray then
+        begin
+          arr := TJSONArray(d);
+          SetLength(ASpec.Categories, arr.Count);
+          for i := 0 to arr.Count - 1 do
+          begin
+            ASpec.Categories[i] := JsStrOf(arr.Items[i]);
+            n := Length(ASpec.Pieces);
+            SetLength(ASpec.Pieces, n + 1);
+            ASpec.Pieces[n] := Default(TTyVisualPiece);
+            ASpec.Pieces[n].HasValue := True;
+            ASpec.Pieces[n].ValueIsStr := True;
+            ASpec.Pieces[n].ValueStr := ASpec.Categories[i];
+            ASpec.Pieces[n].Value := NaN;
+            ASpec.Pieces[n].Index := -1;
+            ASpec.Pieces[n].Key := ASpec.Categories[i];
+            ASpec.Pieces[n].Text := FormatPieceText(False, 0, 0, ASpec.Categories[i],
+              True, prec, ASpec.Formatter, '', '');
+          end;
+        end;
+        { normalizeReverse }
+        if vertical <> inverse then Reverse(ASpec.Pieces);
+      end;
+    tpmPieces:
+      begin
+        arr := TJSONArray(pd);
+        names[0, 0] := 'gte'; names[0, 1] := 'gt'; names[0, 2] := 'min';
+        names[1, 0] := 'lte'; names[1, 1] := 'lt'; names[1, 2] := 'max';
+        for i := 0 to arr.Count - 1 do
+        begin
+          piece := Default(TTyVisualPiece);
+          piece.Index := i;
+          piece.Key := IntToStr(i);
+          piece.Value := NaN;
+          e := arr.Items[i];
+          po := nil;
+          if e.JSONType = jtObject then po := TJSONObject(e);
+          if (po <> nil) and (po.Find('label') <> nil) and (po.Find('label').JSONType <> jtNull) then
+            piece.Text := JsStrOf(po.Find('label'));
+          if (po = nil) or (po.IndexOfName('value') >= 0) then
+          begin
+            { a value piece: [v, v], both ends closed }
+            if po = nil then e := arr.Items[i] else e := po.Find('value');
+            piece.HasValue := True;
+            if e.JSONType = jtString then
+            begin
+              piece.ValueIsStr := True;
+              piece.ValueStr := e.AsString;
+              piece.Value := TyJsToNumber(e.AsString);
+            end
+            else if e.JSONType = jtNumber then
+              piece.Value := e.AsFloat;
+            piece.HasInterval := True;
+            piece.Lo := piece.Value;
+            piece.Hi := piece.Value;
+            piece.Close0 := 1;
+            piece.Close1 := 1;
+          end
+          else
+          begin
+            piece.HasInterval := True;
+            for lg := 0 to 1 do
+            begin
+              { EVERY ATTEMPT sets the close flag and useMinMax, found or not:
+                a missing bound ends on 'min'/'max' -- closed, useMinMax }
+              useMinMax[lg] := False;
+              mx := NaN;
+              found := False;
+              for k := 0 to 2 do
+              begin
+                e := po.Find(names[lg, k]);
+                { the preprocessor: ec2's start / end are min / max when
+                  there is no min / max key }
+                if (k = 2) and (po.IndexOfName(names[lg, k]) < 0) then
+                  if lg = 0 then e := po.Find('start') else e := po.Find('end');
+                if lg = 0 then piece.Close0 := Ord(k <> 1) else piece.Close1 := Ord(k <> 1);
+                useMinMax[lg] := k = 2;
+                if (e <> nil) and (e.JSONType <> jtNull) then
+                begin
+                  if e.JSONType = jtNumber then mx := e.AsFloat
+                  else mx := TyJsToNumber(e.AsString);
+                  found := True;
+                  Break;
+                end;
+              end;
+              if not found then
+              begin
+                if lg = 0 then mx := NegInfinity else mx := Infinity;
+              end;
+              if lg = 0 then piece.Lo := mx else piece.Hi := mx;
+            end;
+            if useMinMax[0] and IsInfinite(piece.Hi) and (piece.Hi > 0) then piece.Close0 := 0;
+            if useMinMax[1] and IsInfinite(piece.Lo) and (piece.Lo < 0) then piece.Close1 := 0;
+            if Le(piece.Lo, piece.Hi) and Ge(piece.Lo, piece.Hi)
+              and (piece.Close0 = 1) and (piece.Close1 = 1) then
+            begin
+              piece.HasValue := True;
+              piece.Value := piece.Lo;
+            end;
+          end;
+          { retrieveVisuals: the piece's own visual keys }
+          if po <> nil then
+            for k := 0 to High(cHandlerOrder) do
+              if po.IndexOfName(cHandlerOrder[k]) >= 0 then
+              begin
+                n := Length(piece.Visuals);
+                SetLength(piece.Visuals, n + 1);
+                piece.Visuals[n] := PieceVisualOf(po.Find(cHandlerOrder[k]));
+                piece.Visuals[n].Kind := cHandlerOrder[k];
+              end;
+          n := Length(ASpec.Pieces);
+          SetLength(ASpec.Pieces, n + 1);
+          ASpec.Pieces[n] := piece;
+        end;
+        if vertical <> inverse then Reverse(ASpec.Pieces);
+        ReformIntervals(ASpec.Pieces);
+        for i := 0 to High(ASpec.Pieces) do
+          if ASpec.Pieces[i].Text = '' then
+          begin
+            if ASpec.Pieces[i].Close1 <> 0 then edge0 := '≤' else edge0 := '<';
+            if ASpec.Pieces[i].Close0 <> 0 then edge1 := '≥' else edge1 := '>';
+            { `+value`, a string value too }
+            if ASpec.Pieces[i].HasValue then
+              ASpec.Pieces[i].Text := FormatPieceText(False, ASpec.Pieces[i].Value, 0,
+                '', False, prec, ASpec.Formatter, edge0, edge1)
+            else
+              ASpec.Pieces[i].Text := FormatPieceText(True, ASpec.Pieces[i].Lo,
+                ASpec.Pieces[i].Hi, '', False, prec, ASpec.Formatter, edge0, edge1);
+          end;
+      end;
+  end;
+  ASpec.Precision := prec;
+end;
+
+{ _resetSelected: the written map, every missing key selected, and single
+  mode keeping only the first selected }
+procedure BuildSelected(ANode: TJSONObject; var ASpec: TTyVisualMapSpec);
+var
+  sel: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+  single, hasSel: Boolean;
+begin
+  SetLength(ASpec.Selected, Length(ASpec.Pieces));
+  sel := ObjOf(ANode.Find('selected'));
+  for i := 0 to High(ASpec.Pieces) do
+  begin
+    ASpec.Selected[i] := True;
+    if sel <> nil then
+    begin
+      d := sel.Find(ASpec.Pieces[i].Key);
+      if d <> nil then ASpec.Selected[i] := Truthy(d);
+    end;
+  end;
+  d := ANode.Find('selectedMode');
+  single := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'single');
+  if single then
+  begin
+    hasSel := False;
+    for i := 0 to High(ASpec.Pieces) do
+      if ASpec.Selected[i] then
+      begin
+        if hasSel then ASpec.Selected[i] := False else hasSel := True;
+      end;
   end;
 end;
 
@@ -652,8 +1321,19 @@ begin
 end;
 
 { `inactive` in visualDefault; nil where there is none. }
-function InactiveDefault(const AType: string): TJSONData;
+function InactiveDefault(const AType: string; ACategory: Boolean = False): TJSONData;
 begin
+  if ACategory then
+  begin
+    { visualDefault.get(.., isCategory): the list's last element }
+    if AType = 'color' then Exit(TJSONString.Create('rgba(0,0,0,0)'));
+    if (AType = 'colorHue') or (AType = 'colorSaturation')
+      or (AType = 'colorLightness') or (AType = 'colorAlpha')
+      or (AType = 'opacity') or (AType = 'symbolSize') then
+      Exit(TJSONIntegerNumber.Create(0));
+    if AType = 'symbol' then Exit(TJSONString.Create('none'));
+    Exit(nil);
+  end;
   if AType = 'color' then Exit(TJSONArray.Create(['rgba(0,0,0,0)']));
   if (AType = 'colorHue') or (AType = 'colorSaturation')
     or (AType = 'colorLightness') or (AType = 'colorAlpha')
@@ -661,6 +1341,29 @@ begin
     Exit(TJSONArray.Create([0, 0]));
   if AType = 'symbol' then Exit(TJSONArray.Create(['none']));
   Result := nil;
+end;
+
+{ visualDefault's `active` column, for a type a piece names that no state
+  does }
+function ActiveDefault(const AType: string; ACategory: Boolean): TJSONData;
+var a: TJSONArray;
+begin
+  Result := nil;
+  if AType = 'color' then a := TJSONArray.Create(['#006edd', '#e0ffff'])
+  else if AType = 'colorHue' then a := TJSONArray.Create([0, 360])
+  else if AType = 'colorSaturation' then a := TJSONArray.Create([0.3, 1])
+  else if AType = 'colorLightness' then a := TJSONArray.Create([0.9, 0.5])
+  else if (AType = 'colorAlpha') or (AType = 'opacity') then a := TJSONArray.Create([0.3, 1])
+  else if AType = 'symbol' then a := TJSONArray.Create(['circle', 'roundRect', 'diamond'])
+  else if AType = 'symbolSize' then a := TJSONArray.Create([10, 50])
+  else Exit;
+  if ACategory then
+  begin
+    Result := a.Items[a.Count - 1].Clone;
+    a.Free;
+  end
+  else
+    Result := a;
 end;
 
 procedure SetKey(AObj: TJSONObject; const AKey: string; AValue: TJSONData);
@@ -691,13 +1394,48 @@ begin
   end;
 end;
 
-function MappingOf(const AType: string; AVisual: TJSONData): TTyVisualMapping;
+function MappingOf(const AType: string; AVisual: TJSONData;
+  AMethod: TTyVisualMethod; const ACats: TTyStringArray): TTyVisualMapping;
 var
   list: TJSONArray;
-  i: Integer;
+  i, k: Integer;
+  o: TJSONObject;
 begin
   Result := Default(TTyVisualMapping);
   Result.Kind := AType;
+  Result.Method := AMethod;
+  if AMethod = tvmCategory then
+  begin
+    { preprocessForSpecifiedCategory: an array by index, an object by
+      category name (an unknown name to the default slot), a single value
+      the default slot; a category with no visual is dropped from the map }
+    Result.Cats := Copy(ACats);
+    SetLength(Result.CatVals, Length(ACats));
+    Result.CatDefault := PieceVisualOf(nil);
+    if AVisual <> nil then
+      case AVisual.JSONType of
+        jtArray:
+          for i := 0 to Min(TJSONArray(AVisual).Count, Length(ACats)) - 1 do
+            Result.CatVals[i] := PieceVisualOf(TJSONArray(AVisual).Items[i]);
+        jtObject:
+          begin
+            o := TJSONObject(AVisual);
+            for i := 0 to o.Count - 1 do
+            begin
+              k := Length(ACats) - 1;
+              while (k >= 0) and (ACats[k] <> o.Names[i]) do Dec(k);
+              if k >= 0 then Result.CatVals[k] := PieceVisualOf(o.Items[i])
+              else Result.CatDefault := PieceVisualOf(o.Items[i]);
+            end;
+          end;
+        jtNull: ;
+      else
+        Result.CatDefault := PieceVisualOf(AVisual);
+      end;
+    for i := 0 to High(Result.CatVals) do Result.CatVals[i].Kind := AType;
+    Result.CatDefault.Kind := AType;
+    Exit;
+  end;
   list := VisualList(AVisual);
   try
     if AType = 'color' then
@@ -731,7 +1469,8 @@ end;
 const cStateNames: array[TTyVisualState] of string = ('inRange', 'outOfRange');
 
 procedure ReadStates(ATarget: TJSONObject; var AKeys: TTyVisualStateKeys;
-  var AStates: TTyVisualStateMaps);
+  var AStates: TTyVisualStateMaps; AMethod: TTyVisualMethod;
+  const ACats: TTyStringArray);
 var
   st: TTyVisualState;
   obj: TJSONObject;
@@ -759,7 +1498,11 @@ begin
     order := TyPrepareVisualTypes(valid);
     SetLength(AStates[st], Length(order));
     for i := 0 to High(order) do
-      AStates[st][i] := MappingOf(order[i], obj.Find(order[i]));
+    begin
+      AStates[st][i] := MappingOf(order[i], obj.Find(order[i]), AMethod, ACats);
+      { out of range, the pieces carry no visual of their own }
+      AStates[st][i].UsePieces := (AMethod = tvmPiecewise) and (st = tvsInRange);
+    end;
   end;
 end;
 
@@ -864,6 +1607,101 @@ var
   vs: TTyVisualState;
   symExists, sizeExists: TJSONData;
   itemW, mx: Double;
+  isCat: Boolean;
+  method: TTyVisualMethod;
+  defSymbol: string;
+
+  { PiecewiseModel.completeVisualOption: a visual type some piece writes
+    that no state of the option or its target has gets visualDefault's
+    active / inactive values in the OPTION's states -- which then exist, so
+    completeSingle adds no default colour to a state made here }
+  procedure CompletePieceTypes(ABase: TJSONObject);
+  var
+    pd, tg: TJSONData;
+    types: TTyStringArray;
+    k, j: Integer;
+    exists: Boolean;
+    s: TTyVisualState;
+    so: TJSONObject;
+    dv: TJSONData;
+
+    function InTypes(const AType: string): Boolean;
+    var q: Integer;
+    begin
+      for q := 0 to High(types) do
+        if types[q] = AType then Exit(True);
+      Result := False;
+    end;
+
+    function Has(AObj: TJSONObject; AState: TTyVisualState; const AType: string): Boolean;
+    var o: TJSONObject;
+    begin
+      Result := False;
+      if AObj = nil then Exit;
+      o := ObjOf(AObj.Find(cStateNames[AState]));
+      Result := (o <> nil) and (o.IndexOfName(AType) >= 0);
+    end;
+
+  begin
+    pd := EffectivePieces(node);
+    if (pd = nil) or (pd.JSONType <> jtArray) then Exit;
+    types := nil;
+    for k := 0 to TJSONArray(pd).Count - 1 do
+    begin
+      if TJSONArray(pd).Items[k].JSONType <> jtObject then Continue;
+      for j := 0 to High(cHandlerOrder) do
+        if (TJSONObject(TJSONArray(pd).Items[k]).IndexOfName(cHandlerOrder[j]) >= 0)
+          and not InTypes(cHandlerOrder[j]) then
+        begin
+          SetLength(types, Length(types) + 1);
+          types[High(types)] := cHandlerOrder[j];
+        end;
+    end;
+    tg := node.Find('target');
+    for k := 0 to High(types) do
+    begin
+      exists := False;
+      for s := Low(TTyVisualState) to High(TTyVisualState) do
+        exists := exists or Has(ABase, s, types[k]) or Has(ObjOf(tg), s, types[k]);
+      if exists then Continue;
+      for s := Low(TTyVisualState) to High(TTyVisualState) do
+      begin
+        so := ObjOf(ABase.Find(cStateNames[s]));
+        if so = nil then
+        begin
+          so := TJSONObject.Create;
+          SetKey(ABase, cStateNames[s], so);
+        end;
+        if s = tvsInRange then dv := ActiveDefault(types[k], isCat)
+        else dv := InactiveDefault(types[k], isCat);
+        { `undefined` for a type with no default }
+        if dv = nil then dv := TJSONNull.Create;
+        SetKey(so, types[k], dv);
+      end;
+    end;
+  end;
+
+  { mapVisual over an array's elements, an object's values, or the one value }
+  procedure NoneToDefault(AState: TJSONObject);
+  var dd: TJSONData; k: Integer;
+  begin
+    dd := AState.Find('symbol');
+    if dd = nil then Exit;
+    case dd.JSONType of
+      jtArray:
+        for k := 0 to TJSONArray(dd).Count - 1 do
+          if (TJSONArray(dd).Items[k].JSONType = jtString)
+            and (TJSONArray(dd).Items[k].AsString = 'none') then
+            TJSONArray(dd).Items[k] := TJSONString.Create(defSymbol);
+      jtObject:
+        for k := 0 to TJSONObject(dd).Count - 1 do
+          if (TJSONObject(dd).Items[k].JSONType = jtString)
+            and (TJSONObject(dd).Items[k].AsString = 'none') then
+            TJSONObject(dd).Items[k] := TJSONString.Create(defSymbol);
+      jtString:
+        if dd.AsString = 'none' then SetKey(AState, 'symbol', TJSONString.Create(defSymbol));
+    end;
+  end;
 
   { completeSingle: ec2's high-to-low `color`, then the gradient }
   procedure CompleteSingle(AObj: TJSONObject);
@@ -969,6 +1807,26 @@ begin
 
   ReadTargets(node, Result);
   Result.Dim := DimOf(node.Find('dimension'));
+
+  { PIECEWISE: the pieces, the selected map, and the mapping method --
+    `category` in categories mode only, while every default follows
+    `!!option.categories` }
+  isCat := False;
+  method := tvmLinear;
+  defSymbol := 'roundRect';
+  if Result.SubType = 'piecewise' then
+  begin
+    isCat := Truthy(node.Find('categories'));
+    Result.IsCategory := isCat;
+    BuildPieces(node, Result);
+    BuildSelected(node, Result);
+    if Result.Mode = tpmCategories then method := tvmCategory
+    else method := tvmPiecewise;
+    { getItemSymbol: the option's, 'roundRect' by default; `|| 'roundRect'` }
+    d := node.Find('itemSymbol');
+    if (d = nil) or (d.JSONType = jtNull) then defSymbol := 'roundRect'
+    else if Truthy(d) then defSymbol := JsStrOf(d);
+  end;
   { resetItemSize's width, for the controller's sizes }
   itemW := NaN;
   d := node.Find('itemWidth');
@@ -994,6 +1852,7 @@ begin
     if (d <> nil) then base.Add('inRange', d.Clone);
     d := node.Find('outOfRange');
     if (d <> nil) then base.Add('outOfRange', d.Clone);
+    if Result.SubType = 'piecewise' then CompletePieceTypes(base);
     MergeKeep(target, base);
     MergeKeep(controller, base);
     CompleteSingle(target);
@@ -1009,7 +1868,7 @@ begin
       for i := 0 to st.Count - 1 do
       begin
         if not TyVisualIsValidType(st.Names[i]) then Continue;
-        defa := InactiveDefault(st.Names[i]);
+        defa := InactiveDefault(st.Names[i], isCat);
         if defa = nil then Continue;
         SetKey(absent, st.Names[i], defa);
         if (st.Names[i] = 'color') and (absent.IndexOfName('opacity') < 0)
@@ -1017,7 +1876,7 @@ begin
           absent.Add('opacity', TJSONArray.Create([0, 0]));
       end;
     end;
-    ReadStates(target, Result.Keys, Result.States);
+    ReadStates(target, Result.Keys, Result.States, method, Result.Categories);
 
     { completeController: a missing state is the inactive colour; a missing
       symbol or size is the other state's, else a round rect the item width
@@ -1044,7 +1903,8 @@ begin
         if not Truthy(controller.Find(cStateNames[vs])) then
         begin
           st := TJSONObject.Create;
-          st.Add('color', TJSONArray.Create([TyVisualCss(AInactive)]));
+          if isCat then st.Add('color', TyVisualCss(AInactive))
+          else st.Add('color', TJSONArray.Create([TyVisualCss(AInactive)]));
           SetKey(controller, cStateNames[vs], st);
         end;
         st := ObjOf(controller.Find(cStateNames[vs]));
@@ -1053,21 +1913,18 @@ begin
         if (d = nil) or (d.JSONType = jtNull) then
         begin
           if symExists <> nil then SetKey(st, 'symbol', symExists.Clone)
-          else SetKey(st, 'symbol', TJSONArray.Create(['roundRect']));
+          else if isCat then SetKey(st, 'symbol', TJSONString.Create(defSymbol))
+          else SetKey(st, 'symbol', TJSONArray.Create([defSymbol]));
         end;
         d := st.Find('symbolSize');
         if (d = nil) or (d.JSONType = jtNull) then
         begin
           if sizeExists <> nil then SetKey(st, 'symbolSize', sizeExists.Clone)
+          else if isCat then SetKey(st, 'symbolSize', TJSONFloatNumber.Create(itemW))
           else SetKey(st, 'symbolSize', TJSONArray.Create([itemW, itemW]));
         end;
         { `none` filtered to the default symbol }
-        d := st.Find('symbol');
-        if (d <> nil) and (d.JSONType = jtArray) then
-          for i := 0 to TJSONArray(d).Count - 1 do
-            if (TJSONArray(d).Items[i].JSONType = jtString)
-              and (TJSONArray(d).Items[i].AsString = 'none') then
-              TJSONArray(d).Items[i] := TJSONString.Create('roundRect');
+        NoneToDefault(st);
         { normalise the size to [0, itemW] by its largest value }
         d := st.Find('symbolSize');
         if d <> nil then
@@ -1091,6 +1948,18 @@ begin
               TJSONArray(d).Items[0] := TJSONFloatNumber.Create(
                 TJSONArray(d).Items[1].AsFloat / 3);
           end
+          else if d.JSONType = jtObject then
+          begin
+            { a categories object: every value, by the largest }
+            for i := 0 to TJSONObject(d).Count - 1 do
+              if (TJSONObject(d).Items[i].JSONType = jtNumber)
+                and (TJSONObject(d).Items[i].AsFloat > mx) then
+                mx := TJSONObject(d).Items[i].AsFloat;
+            for i := 0 to TJSONObject(d).Count - 1 do
+              if TJSONObject(d).Items[i].JSONType = jtNumber then
+                TJSONObject(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
+                  TJSONObject(d).Items[i].AsFloat, 0, mx, 0, itemW, True));
+          end
           else if d.JSONType = jtNumber then
           begin
             mx := d.AsFloat;
@@ -1103,7 +1972,8 @@ begin
       symExists.Free;
       sizeExists.Free;
     end;
-    ReadStates(controller, Result.ControllerKeys, Result.Controller);
+    ReadStates(controller, Result.ControllerKeys, Result.Controller, method,
+      Result.Categories);
   finally
     base.Free;
     target.Free;
@@ -1156,12 +2026,40 @@ function TyVisualValueState(const ASpec: TTyVisualMapSpec;
   AValue: Double): TTyVisualState;
 var ub: Boolean;
 begin
+  if ASpec.SubType = 'piecewise' then
+    Exit(TyVisualValueState(ASpec, AValue, TyJsNumberToString(AValue)));
   ub := ASpec.Unbounded;
   if ((ub and Le(ASpec.Range0, ASpec.Extent0)) or Le(ASpec.Range0, AValue))
     and ((ub and Ge(ASpec.Range1, ASpec.Extent1)) or Le(AValue, ASpec.Range1)) then
     Result := tvsInRange
   else
     Result := tvsOutOfRange;
+end;
+
+function TyVisualValueState(const ASpec: TTyVisualMapSpec; AValue: Double;
+  const AText: string): TTyVisualState;
+var p: Integer;
+begin
+  if ASpec.SubType <> 'piecewise' then Exit(TyVisualValueState(ASpec, AValue));
+  { PiecewiseModel.getValueState: the piece the value is in -- no closest --
+    and whether its key is selected; no piece is out of range }
+  p := TyVisualFindPiece(ASpec.Pieces, AValue, AText, False);
+  if (p >= 0) and (p <= High(ASpec.Selected)) and ASpec.Selected[p] then
+    Result := tvsInRange
+  else
+    Result := tvsOutOfRange;
+end;
+
+function TyVisualRepresent(const APiece: TTyVisualPiece): Double;
+begin
+  if APiece.HasValue then Exit(APiece.Value);
+  if not APiece.HasInterval then Exit(NaN);
+  { [-Infinity, Infinity] is 0; an open end stays infinite }
+  if IsInfinite(APiece.Lo) and (APiece.Lo < 0) and IsInfinite(APiece.Hi)
+    and (APiece.Hi > 0) then
+    Result := 0
+  else
+    Result := (APiece.Lo + APiece.Hi) / 2;
 end;
 
 function PairAt(const ANums: TTyDoubleArray; AIndex: Integer): Double;
@@ -1171,26 +2069,160 @@ end;
 
 procedure TyVisualApply(const ASpec: TTyVisualMapSpec; AState: TTyVisualState;
   AValue: Double; var ARow: TTyVisualRow; AForMeta: Boolean);
+begin
+  if ASpec.SubType = 'piecewise' then
+    TyVisualApply(ASpec, AState, AValue, TyJsNumberToString(AValue), ARow, AForMeta)
+  else
+    TyVisualApply(ASpec, AState, AValue, '', ARow, AForMeta);
+end;
+
+procedure TyVisualApply(const ASpec: TTyVisualMapSpec; AState: TTyVisualState;
+  AValue: Double; const AText: string; var ARow: TTyVisualRow;
+  AForMeta: Boolean);
 var
-  i: Integer;
+  i, pIdx, sp, ci: Integer;
   n, v: Double;
   m: TTyVisualMapping;
+  pv: TTyVisualPieceVisual;
+  c: TTyVisualColor;
+
+  { getSpecifiedVisual: the piece the value is in (no closest) and ITS
+    visual of the mapping's type -- `colorAlpha` for the visualMeta's
+    `__alphaForOpacity` stand-in }
+  function Specified(const AKind: string): Boolean;
+  var k: Integer;
+  begin
+    Result := False;
+    if not m.UsePieces or (sp < 0) then Exit;
+    for k := 0 to High(ASpec.Pieces[sp].Visuals) do
+      if ASpec.Pieces[sp].Visuals[k].Kind = AKind then
+      begin
+        pv := ASpec.Pieces[sp].Visuals[k];
+        Exit(pv.Defined);
+      end;
+  end;
+
+  { the category normaliser: categoryMap[value], which the preprocess
+    emptied of every category whose visual is null; -1 is the default slot }
+  function CatIndex: Integer;
+  var k: Integer;
+  begin
+    Result := -1;
+    for k := High(m.Cats) downto 0 do
+      if m.Cats[k] = AText then
+      begin
+        Result := k;
+        Break;
+      end;
+    if Result < 0 then Exit;
+    for k := 0 to High(m.Cats) do
+      if (m.Cats[k] = AText) and not m.CatVals[k].Defined then Exit(-1);
+  end;
+
+  function ColorOf(const APv: TTyVisualPieceVisual): TTyVisualColor;
+  begin
+    if not APv.Defined or APv.IsNum or not TyVisualTryParse(APv.Str, Result) then
+      Result := TyVisualUndefined;
+  end;
+
 begin
-  { the linear normaliser, clamped, over the EXTENT -- not the range }
-  n := TyVmLinearMap(AValue, ASpec.Extent0, ASpec.Extent1, 0, 1, True);
+  n := NaN;
+  sp := -1;
+  if (ASpec.SubType = 'piecewise') and (ASpec.Mode <> tpmCategories) then
+  begin
+    { the piecewise normaliser: the piece index -- the CLOSEST piece when
+      the value is in none -- spread over [0, 1] }
+    pIdx := TyVisualFindPiece(ASpec.Pieces, AValue, AText, True);
+    if pIdx >= 0 then
+      n := TyVmLinearMap(pIdx, 0, Length(ASpec.Pieces) - 1, 0, 1, True);
+    sp := TyVisualFindPiece(ASpec.Pieces, AValue, AText, False);
+  end
+  else if ASpec.SubType <> 'piecewise' then
+    { the linear normaliser, clamped, over the EXTENT -- not the range }
+    n := TyVmLinearMap(AValue, ASpec.Extent0, ASpec.Extent1, 0, 1, True);
   for i := 0 to High(ASpec.States[AState]) do
   begin
     m := ASpec.States[AState][i];
+    if m.Method = tvmCategory then
+    begin
+      { doMapCategory: the visual at the index, the default slot for -1;
+        liftZ is doMapFixed, the first element }
+      ci := CatIndex;
+      if m.Kind = 'liftZ' then
+      begin
+        if AForMeta or (Length(m.CatVals) = 0) or not m.CatVals[0].Defined then Continue;
+        pv := m.CatVals[0];
+      end
+      else if ci >= 0 then pv := m.CatVals[ci]
+      else pv := m.CatDefault;
+      if m.Kind = 'color' then
+      begin
+        ARow.Color := ColorOf(pv);
+        ARow.ColorSet := True;
+        Continue;
+      end;
+      v := pv.Num;
+      if not pv.Defined then v := NaN;
+      if (m.Kind = 'opacity') or (m.Kind = 'colorAlpha') or (m.Kind = 'colorHue')
+        or (m.Kind = 'colorSaturation') or (m.Kind = 'colorLightness') then
+      begin
+        if (m.Kind = 'opacity') and not AForMeta then
+        begin
+          { UNDEFINED IS STILL WRITTEN: the style's opacity becomes
+            undefined, over a series default such as a scatter's 0.8, and
+            the element draws at 1 }
+          if IsNan(v) then v := 1;
+          ARow.Opacity := v;
+          ARow.OpacitySet := True;
+        end
+        else if not IsNan(v) then
+        begin
+          if (m.Kind = 'colorAlpha') or (m.Kind = 'opacity') then
+            ARow.Color := TyVisualModifyAlpha(ARow.Color, v)
+          else if m.Kind = 'colorHue' then
+            ARow.Color := TyVisualModifyHSL(ARow.Color, v, 0, 0, True, False, False)
+          else if m.Kind = 'colorSaturation' then
+            ARow.Color := TyVisualModifyHSL(ARow.Color, 0, v, 0, False, True, False)
+          else
+            ARow.Color := TyVisualModifyHSL(ARow.Color, 0, 0, v, False, False, True);
+          ARow.ColorSet := True;
+        end;
+        Continue;
+      end;
+      if AForMeta then Continue;
+      if m.Kind = 'symbol' then
+      begin
+        ARow.SymbolSet := pv.Defined;
+        if pv.IsNum then ARow.Symbol := TyJsNumberToString(pv.Num)
+        else ARow.Symbol := pv.Str;
+      end
+      else if m.Kind = 'symbolSize' then
+      begin
+        ARow.Size := v;
+        ARow.SizeSet := not IsNan(v);
+      end
+      else if m.Kind = 'liftZ' then
+      begin
+        ARow.LiftZ := v;
+        ARow.LiftZSet := not IsNan(v);
+      end;
+      Continue;
+    end;
     if m.Kind = 'color' then
     begin
-      ARow.Color := TyVisualFastLerp(n, m.Colors);
+      if Specified('color') then ARow.Color := ColorOf(pv)
+      else ARow.Color := TyVisualFastLerp(n, m.Colors);
       ARow.ColorSet := True;
       Continue;
     end;
     if (m.Kind = 'opacity') or (m.Kind = 'colorAlpha') or (m.Kind = 'colorHue')
       or (m.Kind = 'colorSaturation') or (m.Kind = 'colorLightness') then
     begin
-      v := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
+      if ((m.Kind = 'opacity') and AForMeta and Specified('colorAlpha'))
+        or (not ((m.Kind = 'opacity') and AForMeta) and Specified(m.Kind)) then
+        v := pv.Num
+      else
+        v := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
       { the visualMeta draws with a gradient, which has no opacity: the
         opacity becomes the colour's alpha (`__alphaForOpacity`) }
       if (m.Kind = 'opacity') and not AForMeta then
@@ -1214,6 +2246,13 @@ begin
     if AForMeta then Continue;
     if m.Kind = 'symbol' then
     begin
+      if Specified('symbol') then
+      begin
+        if pv.IsNum then ARow.Symbol := TyJsNumberToString(pv.Num)
+        else ARow.Symbol := pv.Str;
+        ARow.SymbolSet := True;
+        Continue;
+      end;
       { doMapToArray: the name at Math.round of the normalised value spread
         over the list }
       if Length(m.Strs) = 0 then Continue;
@@ -1224,12 +2263,15 @@ begin
     end
     else if m.Kind = 'symbolSize' then
     begin
-      ARow.Size := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
+      if Specified('symbolSize') then ARow.Size := pv.Num
+      else ARow.Size := TyVmLinearMap(n, 0, 1, PairAt(m.Nums, 0), PairAt(m.Nums, 1), True);
       ARow.SizeSet := True;
     end
     else if m.Kind = 'liftZ' then
     begin
-      { doMapFixed for every method: the first value, never interpolated }
+      { doMapFixed for every method: the first value, never interpolated;
+        no value is no lift }
+      if IsNan(PairAt(m.Nums, 0)) then Continue;
       ARow.LiftZ := PairAt(m.Nums, 0);
       ARow.LiftZSet := True;
     end;
@@ -1293,6 +2335,26 @@ begin
       Result[raw] := NaN;
 end;
 
+function TyVisualSeriesValues(AStore: TTyDataStore; const ADim: TTyVisualDim;
+  out AStoreCol, ADimIndex: Integer; out ATexts: TTyStringArray): TTyDoubleArray;
+var
+  raw: Integer;
+  cell: TTyDataValue;
+begin
+  Result := TyVisualSeriesValues(AStore, ADim, AStoreCol, ADimIndex);
+  SetLength(ATexts, Length(Result));
+  for raw := 0 to High(Result) do
+  begin
+    ATexts[raw] := TyJsNumberToString(Result[raw]);
+    { AN ORDINAL COLUMN NO AXIS READS keeps the string as written -- what a
+      category is matched against; an axis's column holds its ordinals }
+    if (AStoreCol < 0) and (ADimIndex >= 0)
+      and TTyDataStore.RawCell(AStore.RawItemByRaw(raw), ADimIndex, cell)
+      and (cell.Kind = dvkText) then
+      ATexts[raw] := cell.Text;
+  end;
+end;
+
 { ==================== the continuous visualMeta ==================== }
 
 function TyVmStopValues(AE0, AE1: Double): TTyDoubleArray;
@@ -1325,6 +2387,90 @@ begin
   Result[n] := AE1;
 end;
 
+{ PiecewiseModel.getVisualMeta: none for categories; else the piece list
+  supplemented with [-Infinity, first low] and [last high, Infinity], every
+  gap an outOfRange pair, each interval coloured at its representative value
+  -- a finite one as two stops, an open one as an outer colour }
+function PiecewiseMeta(const ASpec: TTyVisualMapSpec;
+  const ASeriesColor: TTyVisualColor): TTyVisualMeta;
+var
+  lows, highs: TTyDoubleArray;
+  i, n: Integer;
+  curr: Double;
+
+  procedure Add(ALo, AHi: Double);
+  var k: Integer;
+  begin
+    k := Length(lows);
+    SetLength(lows, k + 1);
+    SetLength(highs, k + 1);
+    lows[k] := ALo;
+    highs[k] := AHi;
+  end;
+
+  procedure SetStop(ALo, AHi: Double; AGiven: Boolean; AState: TTyVisualState);
+  var
+    p: TTyVisualPiece;
+    rv: Double;
+    row: TTyVisualRow;
+    k: Integer;
+  begin
+    p := Default(TTyVisualPiece);
+    p.HasInterval := True;
+    p.Lo := ALo;
+    p.Hi := AHi;
+    rv := TyVisualRepresent(p);
+    if not AGiven then AState := TyVisualValueState(ASpec, rv);
+    row := Default(TTyVisualRow);
+    row.Color := ASeriesColor;
+    TyVisualApply(ASpec, AState, rv, row, True);
+    if IsInfinite(ALo) and (ALo < 0) then
+      Result.Outer0 := row.Color
+    else if IsInfinite(AHi) and (AHi > 0) then
+      Result.Outer1 := row.Color
+    else
+    begin
+      k := Length(Result.Stops);
+      SetLength(Result.Stops, k + 2);
+      Result.Stops[k].Value := ALo;
+      Result.Stops[k].Color := row.Color;
+      Result.Stops[k + 1].Value := AHi;
+      Result.Stops[k + 1].Color := row.Color;
+    end;
+  end;
+
+begin
+  Result := Default(TTyVisualMeta);
+  Result.VisualMap := ASpec.Index;
+  Result.Dimension := -1;
+  { outerColors ['', '']: nothing }
+  Result.Outer0 := TyVisualUndefined;
+  Result.Outer1 := TyVisualUndefined;
+  if ASpec.IsCategory then Exit;
+  lows := nil;
+  highs := nil;
+  n := Length(ASpec.Pieces);
+  if n = 0 then
+    Add(NegInfinity, Infinity)
+  else
+  begin
+    if not (IsInfinite(ASpec.Pieces[0].Lo) and (ASpec.Pieces[0].Lo < 0)) then
+      Add(NegInfinity, ASpec.Pieces[0].Lo);
+    for i := 0 to n - 1 do
+      Add(ASpec.Pieces[i].Lo, ASpec.Pieces[i].Hi);
+    if not (IsInfinite(ASpec.Pieces[n - 1].Hi) and (ASpec.Pieces[n - 1].Hi > 0)) then
+      Add(ASpec.Pieces[n - 1].Hi, Infinity);
+  end;
+  curr := NegInfinity;
+  for i := 0 to High(lows) do
+  begin
+    { fulfil the gap }
+    if Gt(lows[i], curr) then SetStop(curr, lows[i], True, tvsOutOfRange);
+    SetStop(lows[i], highs[i], False, tvsInRange);
+    curr := highs[i];
+  end;
+end;
+
 function TyVisualMetaOf(const ASpec: TTyVisualMapSpec;
   const ASeriesColor: TTyVisualColor): TTyVisualMeta;
 var
@@ -1350,6 +2496,11 @@ begin
   Result := Default(TTyVisualMeta);
   Result.VisualMap := ASpec.Index;
   Result.Dimension := -1;
+  if ASpec.SubType = 'piecewise' then
+  begin
+    Result := PiecewiseMeta(ASpec, ASeriesColor);
+    Exit;
+  end;
   oVals := TyVmStopValues(ASpec.Extent0, ASpec.Extent1);
   iVals := TyVmStopValues(ASpec.Range0, ASpec.Range1);
   oLen := Length(oVals);

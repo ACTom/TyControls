@@ -436,8 +436,12 @@ var pieces: TJSONData; split: Boolean;
 begin
   Result := '';
   if (AElement = nil) or (AMainType <> 'visualMap') then Exit;
-  { `pieces ? pieces.length > 0 : splitNumber > 0` }
-  pieces := AElement.Find('pieces');
+  { `pieces ? pieces.length > 0 : splitNumber > 0` -- after the preprocessor
+    renamed ec2's splitList, which it does only when there is no `pieces` }
+  if (AElement.IndexOfName('splitList') >= 0) and (AElement.IndexOfName('pieces') < 0) then
+    pieces := AElement.Find('splitList')
+  else
+    pieces := AElement.Find('pieces');
   if JsTruthy(pieces) then
   begin
     case pieces.JSONType of
