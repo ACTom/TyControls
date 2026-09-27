@@ -143,7 +143,14 @@ type
       另一侧栏,或 nil(没有目标)。每次现建探测矩形,交给 TyToolWindowDropAt。 }
     function DropTargetAt(ASource: TTyToolWindowBar; const AScreen: TPoint;
       out ASlot: Integer): TTyToolWindowBar; override;
+    { ABar 是不是 ASource 此刻的跨栏候选(spec §9.4):不是源栏、不是底栏、可用、看得见、启用、
+      不在释放中、同一个窗体。命中测试(DropTargetAt)和放置预览(DragSourceChanged)问的都是
+      这一处 —— 两处各写一遍会漂开。不问 CanMoveWindow(那要等指针进去才问)。 }
+    function IsCrossCandidate(ASource, ABar: TTyToolWindowBar): Boolean;
+    { 进入拖动:给每条「隐藏着的候选侧栏」显示放置预览;收尾:全部收掉(spec §9.8)。 }
+    procedure DragSourceChanged(ASource: TTyToolWindowBar); override;
     function QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean; override;
+    { 离开的栏:排队的移动不再以它为目标;它的放置预览收掉。 }
     procedure BarRemoved(ABar: TTyToolWindowBar); override;
   public
     destructor Destroy; override;
@@ -231,6 +238,7 @@ end;
 procedure TTyToolWindowManager.BarRemoved(ABar: TTyToolWindowBar);
 begin
   PurgeQueue(ABar);
+  if not (csDestroying in ABar.ComponentState) then BarHideDropPreview(ABar);
 end;
 
 function TTyToolWindowManager.QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean;
@@ -682,6 +690,24 @@ begin
   end;
 end;
 
+{ 同上,矩形由调用方给:ARect 是 AParent 客户区坐标(隐藏栏的放置预览,spec §9.4 E 期补),
+  换成屏幕坐标,再和 AParent 及每一级祖先的屏幕客户区求交。 }
+function VisibleScreenRectOf(AParent: TWinControl; const ARect: TRect): TRect;
+var
+  p: TWinControl;
+  o: TPoint;
+begin
+  o := AParent.ClientToScreen(Point(0, 0));
+  Result := ARect;
+  Types.OffsetRect(Result, o.X, o.Y);
+  p := AParent;
+  while p <> nil do
+  begin
+    Types.IntersectRect(Result, Result, ClientScreenRect(p));
+    p := p.Parent;
+  end;
+end;
+
 { spec §9.4 的「IsVisible」,只看到顶层窗体为止:拖动的时候源栏所在的顶层窗体一定显示着,两边
   同一个顶层窗体(GetParentForm 默认答顶层的),那一级对两边一样。(IsVisible 把窗体也算进去,
   无头的窗体永远不可见。)嵌在别的控件里的窗体(Parent <> nil)不是那一级:它自己藏着,里面的栏
@@ -732,6 +758,14 @@ var
   i: Integer;
 begin
   Result := Default(TTyToolWindowDropProbe);
+  { 隐藏的侧栏(spec §6.9,宽 0,ClientRect 永远点不中):探测矩形是放置预览的矩形(spec §9.4
+    E 期补);没有图标条、没有已排图标、没有洞 —— 落进来就是空栏的「最后一个之后」,slot 0。 }
+  if ABar.HiddenAsEmpty then
+  begin
+    if ABar.Parent <> nil then
+      Result.Visible := VisibleScreenRectOf(ABar.Parent, ABar.DropPreviewRect);
+    Exit;
+  end;
   Result.Visible := VisibleScreenRect(ABar);
   holes := nil;
   CollectNestedBars(ABar, holes);
@@ -781,9 +815,7 @@ begin
     for i := 0 to High(FBars) do
     begin
       b := FBars[i];
-      if (b = ASource) or (b.Placement = twpBottom) or not IsBarUsable(b)
-         or not VisibleInForm(b) or not b.IsEnabled or (csDestroying in b.ComponentState)
-         or (GetParentForm(b) <> form) then Continue;
+      if not IsCrossCandidate(ASource, b) then Continue;
       n := Length(probes);
       SetLength(probes, n + 1);
       SetLength(bars, n + 1);
@@ -798,6 +830,36 @@ begin
     问完之后手势可能已经被处理器收尾了,由调用方看引擎的状态;这里之后不再碰 Self。 }
   if (i > 0) and not DragAllows(ASource, bars[i]) then i := -1;
   if i >= 0 then Result := bars[i] else ASlot := -1;
+end;
+
+function TTyToolWindowManager.IsCrossCandidate(ASource, ABar: TTyToolWindowBar): Boolean;
+begin
+  { 禁用的侧栏不是放置目标:MoveWindow 这个 API 照常可用,只是拖放不往用户看着是灰的栏里放
+    (spec §9.4 候选栏要 IsVisible;禁用同理)。「可用」「同一个窗体」两条 CanMoveWindow 的结构
+    检查也会拒,这里先筛掉,不为不可能的目标建探测矩形、显示预览。 }
+  Result := (ASource <> nil) and (ABar <> nil) and (ABar <> ASource)
+    and (ABar.Placement <> twpBottom) and IsBarUsable(ABar)
+    and VisibleInForm(ABar) and ABar.IsEnabled and not (csDestroying in ABar.ComponentState)
+    and (GetParentForm(ABar) = GetParentForm(ASource));
+end;
+
+procedure TTyToolWindowManager.DragSourceChanged(ASource: TTyToolWindowBar);
+var
+  i: Integer;
+  b: TTyToolWindowBar;
+  show: Boolean;
+begin
+  inherited DragSourceChanged(ASource);
+  { 只有侧栏图标的拖动跨栏(spec §9.1);源栏自己冲突时没有别的候选(同 DropTargetAt)。 }
+  show := (ASource <> nil) and (ASource.Placement <> twpBottom) and IsBarUsable(ASource)
+    and not (csDestroying in ComponentState);
+  for i := 0 to High(FBars) do
+  begin
+    b := FBars[i];
+    if csDestroying in b.ComponentState then Continue;
+    if show and IsCrossCandidate(ASource, b) and b.HiddenAsEmpty then BarShowDropPreview(b)
+    else BarHideDropPreview(b);
+  end;
 end;
 
 { --- MoveWindow 与队列(spec §9.9) --- }

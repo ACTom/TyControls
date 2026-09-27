@@ -313,6 +313,11 @@ resourcestring
     key differ between the two kinds. }
   rsTyToolWindowCrossBarMove =
     'A tool window cannot move between a side bar and a bottom bar';
+  { Drawn in the drop zone that stands in for a hidden (empty) side bar while a tool window is
+    being dragged: releasing inside it moves the window there and the bar appears. Must fit a
+    side bar's default width (240 logical px). }
+  rsTyToolWindowDropLeft  = 'Drop here to show the left side bar';
+  rsTyToolWindowDropRight = 'Drop here to show the right side bar';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

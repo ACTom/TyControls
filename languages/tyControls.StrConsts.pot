@@ -1051,6 +1051,14 @@ msgstr ""
 msgid "A tool window cannot move between a side bar and a bottom bar"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowdropleft
+msgid "Drop here to show the left side bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowdropright
+msgid "Drop here to show the right side bar"
+msgstr ""
+
 #: tycontrols.strconsts.rstytoolwindowmaximize
 msgid "Maximize"
 msgstr ""

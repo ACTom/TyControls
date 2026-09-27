@@ -643,6 +643,30 @@ type
     property DesignWindow: TTyToolWindow read FDesignWindow;
   end;
 
+  { 隐藏侧栏的放置预览(spec §9.8,E 期):拖动时在隐藏的那一侧、按那条栏展开后的宽显示一块。
+    有句柄的子控件,不是顶层窗口(Wayland 不让程序定位顶层窗口);不透明、不拿焦点、不参加
+    对齐(alNone)、不是栏的兄弟监听对象。拖动期间捕获在源栏上,它收不到鼠标,命中全靠
+    manager 的几何(spec §9.4)。Owner = nil,由栏持有、栏析构时释放;只在运行时建,不进 .lfm。 }
+  TTyToolWindowDropPreview = class(TTyCustomControl)
+  private
+    FBar: TTyToolWindowBar;
+    FHot: Boolean;
+    procedure SetHot(AValue: Boolean);
+  protected
+    { TyToolWindowDropZone。 }
+    function GetStyleTypeKey: string; override;
+    { 先铺栏的底色(TyToolWindowBar 静止态 background —— 预览是不透明的,DropZone 的底色带
+      透明度),再按 TyToolWindowDropZone(Hot 时 :hover)画底色和边框,正中一行文字(左栏
+      rsTyToolWindowDropLeft、右栏 rsTyToolWindowDropRight),左右各缩一个 header-pad,放不下出
+      省略号。不做绘制缓存:只在拖动中存在,重画少。 }
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  public
+    constructor CreateFor(ABar: TTyToolWindowBar);
+    procedure Paint; override;
+    { 指针在里面、它是此刻的目标(spec §9.8)。变了才重画。 }
+    property Hot: Boolean read FHot write SetHot;
+  end;
+
   TTyToolWindowBar = class(TTyCustomControl)
   private
     { 注册过的窗口(集合,顺序不算数)。**窗口顺序永远就是 Controls 顺序**(spec §6.1),
@@ -912,6 +936,20 @@ type
       数字画胶囊(圆角照 TTyButton.DrawBadge:主题没给圆角就半高),文字用 ASmallCrisp。 }
     procedure DrawBadgeIn(APainter: TTyPainter; AWindow: TTyToolWindow; const ABox: TRect;
       APPI: Integer);
+  private
+    { --- 隐藏侧栏的放置预览(spec §9.8,E 期) --- }
+    FDropPreview: TTyToolWindowDropPreview;
+    { 只在 ShownAxisPx 里置位:SizesAsCollapsed / HiddenAsEmpty 按「有一个窗口、展开着」答。 }
+    FAssumeShown: Boolean;
+    { 这条栏有一个窗口、展开着时推导出来的轴向尺寸(放置预览的宽,spec §9.8):图标条 +
+      2 × chrome + 边缘区 + 按 §6.2 收窄后的内容。别的栏照常按自己的真实状态参加分空间 ——
+      不另写一份推导公式(两份会漂开)。 }
+    function ShownAxisPx: Integer;
+    { 按 DropPreviewRect 显示预览(没建过就建);矩形为空就收掉。manager 进入拖动时调。 }
+    procedure ShowDropPreview;
+    { 收掉(不释放,下次拖动复用)。 }
+    procedure HideDropPreview;
+    procedure SetDropPreviewHot(AOn: Boolean);
   private
     { 标签行上悬停的部件和(标签时)窗口序号;没有悬停是 (twbpNone, -1)。标签行的悬停只在
       当前页上,所以记在栏上一份就够。 }
@@ -1244,6 +1282,12 @@ type
     { 此刻按「一侧没有窗口」隐藏(spec §6.9):运行时、侧栏、HideWhenEmpty、没有窗口(漏入的
       非窗口子控件运行时本来就藏着,不算)。推导宽 0,不写 Visible。 }
     function HiddenAsEmpty: Boolean;
+    { 放置预览此刻该在的矩形,父控件客户区坐标(spec §9.8):从栏此刻的位置向编辑区一侧展开
+      ShownAxisPx,钳进父控件调整后的客户区。不是隐藏的侧栏、没有父控件时为空。manager 的
+      命中测试拿它当这条栏的探测矩形(spec §9.4)。 }
+    function DropPreviewRect: TRect;
+    { 放置预览控件(只读);没建过是 nil。 }
+    property DropPreview: TTyToolWindowDropPreview read FDropPreview;
     { 「当前页的标签行此刻在谁身上」一处答(spec §3.7):宿主控件、行矩形(宿主客户区)、几何
       (行内)。HeaderZoneAt(nil, …)、PartAt、OverflowWindows、溢出菜单锚点、InvalidateHeader、
       按下态和插入线的捕获者判断都问它。见 TTyToolWindowTabRowHost。 }
@@ -1331,6 +1375,8 @@ type
     { 正在拖图标的那条栏(spec §9.2「标记 manager 正在拖」);nil = 没在拖。由源栏的引擎写:
       进入拖动时置上,收尾(ReleaseResources)时清。 }
     FDragSource: TTyToolWindowBar;
+    { FDragSource 只经这里写:值变了就调 DragSourceChanged(E 期,放置预览要跟着)。 }
+    procedure SetDragSource(ABar: TTyToolWindowBar);
     procedure AddBar(ABar: TTyToolWindowBar);
     procedure RemoveBar(ABar: TTyToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
@@ -1382,6 +1428,12 @@ type
     function QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean; virtual;
     { 一条栏离开了本 manager(注销、被释放、从 Owner 摘走):它不再是排队移动的目标。 }
     procedure BarRemoved(ABar: TTyToolWindowBar); virtual;
+    { 「正在拖」变了(进入拖动 / 手势收尾,E 期):ASource 是此刻在拖的栏,nil = 不拖了。
+      TTyToolWindowManager 在这里显示 / 收掉隐藏侧栏的放置预览(spec §9.8)。基类什么都不做。 }
+    procedure DragSourceChanged(ASource: TTyToolWindowBar); virtual;
+    { 放置预览(spec §9.8):显示 / 收掉 ABar 的那一块。 }
+    procedure BarShowDropPreview(ABar: TTyToolWindowBar);
+    procedure BarHideDropPreview(ABar: TTyToolWindowBar);
     { --- 给派生类动栏 / 窗口内部状态的窗口(栏和窗口的私有成员只在本单元看得见)。 --- }
     { 这一次手势里拖到 ATarget 行不行(引擎缓存,每条目标栏每次手势只问一次)。 }
     function DragAllows(ASource, ATarget: TTyToolWindowBar): Boolean;
@@ -3124,6 +3176,12 @@ begin
   { 拖动 / 拉宽中被释放:临时光标弹掉、计时器放掉、拉宽标志清掉。拉宽 / 拖动期间装在
     Application 和 Screen 上的处理器,一个不留。 }
   ResetGesture(twgeDiscard);
+  { 放置预览(Owner = nil,由本栏持有;它的 Parent 是别的控件):先摘 Parent 再释放。 }
+  if FDropPreview <> nil then
+  begin
+    FDropPreview.Parent := nil;
+    FreeAndNil(FDropPreview);
+  end;
   { 排队的移动归 manager(队列里是 manager 的方法,RemoveAsyncCalls 按方法所属对象匹配,
     这里撤不到):以本栏为目标的项由 manager 在 opRemove 里删。 }
   if Application <> nil then
@@ -3318,15 +3376,89 @@ end;
 
 function TTyToolWindowBar.SizesAsCollapsed: Boolean;
 begin
-  { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。 }
-  Result := not (csDesigning in ComponentState)
+  { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。
+    算放置预览的宽时(FAssumeShown,只在 ShownAxisPx 里)按「有一个窗口、展开着」答。 }
+  Result := not FAssumeShown and not (csDesigning in ComponentState)
     and (FCollapsed or (WindowCount = 0) or EdgeSnapped);
 end;
 
 function TTyToolWindowBar.HiddenAsEmpty: Boolean;
 begin
-  Result := FHideWhenEmpty and (FPlacement <> twpBottom)
+  { FAssumeShown:算放置预览的宽时按「有一个窗口」答(只在 ShownAxisPx 里置位)。 }
+  Result := FHideWhenEmpty and (FPlacement <> twpBottom) and not FAssumeShown
     and not (csDesigning in ComponentState) and (WindowCount = 0);
+end;
+
+function TTyToolWindowBar.ShownAxisPx: Integer;
+begin
+  FAssumeShown := True;
+  try
+    Result := DerivedAxisPx(Metrics);
+  finally
+    FAssumeShown := False;
+  end;
+end;
+
+function TTyToolWindowBar.DropPreviewRect: TRect;
+var
+  p: TWinControl;
+  r: TRect;
+  w: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  p := Parent;
+  if (p = nil) or not HiddenAsEmpty then Exit;
+  w := ShownAxisPx;
+  if w <= 0 then Exit;
+  { 从栏此刻的位置(宽 0,Left / Top / Height 是它出现时的位置)向编辑区一侧展开。 }
+  if FPlacement = twpRight then
+    Result := Rect(Left + Width - w, Top, Left + Width, Top + Height)
+  else
+    Result := Rect(Left, Top, Left + w, Top + Height);
+  { 钳进父控件调整后的客户区。 }
+  r := p.ClientRect;
+  TWinControlAccess(p).AdjustClientRect(r);
+  if not Types.IntersectRect(Result, Result, r) then Result := Rect(0, 0, 0, 0);
+end;
+
+procedure TTyToolWindowBar.ShowDropPreview;
+var
+  r: TRect;
+  S: TTyStyleSet;
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  r := DropPreviewRect;
+  if IsRectEmpty(r) then
+  begin
+    HideDropPreview;
+    Exit;
+  end;
+  if FDropPreview = nil then FDropPreview := TTyToolWindowDropPreview.CreateFor(Self);
+  FDropPreview.Controller := Controller;
+  { 窗口化控件擦除时先铺自己的 Color([[windowed-ghost-erases-to-parent-color]]):设成栏的底色,
+    显示那一瞬间不闪一块父控件的颜色。 }
+  S := ActiveController.Model.ResolveStyle(TyToolWindowBarKey, TyStyleClassFor(Self, StyleClass),
+    [tysNormal]);
+  if (tpBackground in S.Present) and (S.Background.Kind = tfkSolid) then
+    FDropPreview.Color := TyColorToLCL(S.Background.Color);
+  { 每次都设:栏可能换过父控件。 }
+  FDropPreview.Parent := Parent;
+  FDropPreview.BoundsRect := r;
+  FDropPreview.Hot := False;
+  FDropPreview.Visible := True;
+  FDropPreview.BringToFront;
+end;
+
+procedure TTyToolWindowBar.HideDropPreview;
+begin
+  if FDropPreview = nil then Exit;
+  FDropPreview.Hot := False;
+  FDropPreview.Visible := False;
+end;
+
+procedure TTyToolWindowBar.SetDropPreviewHot(AOn: Boolean);
+begin
+  if (FDropPreview <> nil) and FDropPreview.Visible then FDropPreview.Hot := AOn;
 end;
 
 function TTyToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
@@ -3492,8 +3624,10 @@ begin
   for i := 0 to p.ControlCount - 1 do
   begin
     c := p.Controls[i];
-    { 栏之间已经互相通知(DeriveSiblings、CMVisibleChanged),不再挂。 }
-    if (c = Self) or (c is TTyToolWindowBar) or (csDestroying in c.ComponentState) then Continue;
+    { 栏之间已经互相通知(DeriveSiblings、CMVisibleChanged),不再挂。放置预览(spec §6.2 E 期补)
+      alNone、不影响分空间,挂上只会让每次显示 / 隐藏多一轮推导。 }
+    if (c = Self) or (c is TTyToolWindowBar) or (c is TTyToolWindowDropPreview)
+       or (csDestroying in c.ComponentState) then Continue;
     known := False;
     for k := 0 to High(FWatched) do
       if FWatched[k] = c then
@@ -3632,6 +3766,9 @@ begin
   finally
     FRelayouting := False;
   end;
+  { 放置预览显示着,而这条栏不再隐藏了(来了窗口、HideWhenEmpty 关了):收掉(spec §9.8)。 }
+  if (FDropPreview <> nil) and FDropPreview.Visible and not HiddenAsEmpty then
+    HideDropPreview;
 end;
 
 procedure TTyToolWindowBar.Invalidate;
@@ -6004,7 +6141,10 @@ begin
   if (lit = FForeignDrop) and (ASlot = FDropSlot) then Exit;
   FForeignDrop := lit;
   FDropSlot := ASlot;
-  if not (csDestroying in ComponentState) then Invalidate;
+  if csDestroying in ComponentState then Exit;
+  { 隐藏的栏没有像素、不画插入线:把放置预览切到 :hover(spec §9.8)。 }
+  if HiddenAsEmpty then SetDropPreviewHot(lit)
+  else Invalidate;
 end;
 
 function TTyToolWindowBar.DragCursorForTest: TCursor;
@@ -6996,7 +7136,7 @@ begin
   SetTarget(nil, -1);
   FAllowed := nil;
   if (FBar.Manager <> nil) and (FBar.Manager.FDragSource = FBar) then
-    FBar.Manager.FDragSource := nil;
+    FBar.Manager.SetDragSource(nil);
 end;
 
 procedure TTyToolWindowGesture.SetTarget(ABar: TTyToolWindowBar; ASlot: Integer);
@@ -7116,7 +7256,7 @@ begin
     TTimer(FCaptureTimer).Enabled := True;
   end;
   { manager 记下「正在拖」:任何注册栏、manager 自己都能取消它(spec §9.2 / §9.7)。 }
-  if FBar.Manager <> nil then FBar.Manager.FDragSource := FBar;
+  if FBar.Manager <> nil then FBar.Manager.SetDragSource(FBar);
 end;
 
 function TTyToolWindowGesture.Move(AShift: TShiftState; X, Y: Integer): TTyToolWindowGestureMove;
@@ -7262,6 +7402,79 @@ begin
   if FCaptureConfirmed and (GetCaptureControl <> FCapturer) then Reset(twgeCancel);
 end;
 
+{ --- TTyToolWindowDropPreview ---------------------------------------------------- }
+
+constructor TTyToolWindowDropPreview.CreateFor(ABar: TTyToolWindowBar);
+begin
+  inherited Create(nil);
+  FBar := ABar;
+  ControlStyle := ControlStyle + [csNoFocus, csNoDesignVisible, csOpaque] - [csAcceptsControls];
+  TabStop := False;
+  Align := alNone;
+  Visible := False;
+end;
+
+function TTyToolWindowDropPreview.GetStyleTypeKey: string;
+begin
+  Result := TyToolWindowDropZoneKey;
+end;
+
+procedure TTyToolWindowDropPreview.SetHot(AValue: Boolean);
+begin
+  if FHot = AValue then Exit;
+  FHot := AValue;
+  Invalidate;
+end;
+
+procedure TTyToolWindowDropPreview.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  R, tr: TRect;
+  barS, zoneS: TTyStyleSet;
+  cls, txt: string;
+  rtl: Boolean;
+  pad: Integer;
+begin
+  P := TTyPainter.Create;
+  try
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    rtl := (FBar <> nil) and FBar.IsRightToLeft;
+    P.BeginPaint(ACanvas, ARect, APPI, rtl);
+    if FBar <> nil then cls := TyStyleClassFor(FBar, FBar.StyleClass)
+    else cls := '';
+    { 1. 栏的底色:预览是不透明的子窗口,DropZone 的底色带透明度,叠在它上面才是「栏的颜色
+      淡淡地提亮一层」。 }
+    barS := ActiveController.Model.ResolveStyle(TyToolWindowBarKey, cls, [tysNormal]);
+    if tpBackground in barS.Present then P.FillBackground(R, barS.Background, 0);
+    { 2. DropZone 的底色和边框;Hot = :hover。 }
+    if FHot then
+      zoneS := ActiveController.Model.ResolveStyle(TyToolWindowDropZoneKey, cls, [tysHover])
+    else
+      zoneS := ActiveController.Model.ResolveStyle(TyToolWindowDropZoneKey, cls, [tysNormal]);
+    TyDrawFrameUnderlay(P, R, zoneS);
+    TyDrawFrameChrome(Self, P, R, zoneS);
+    { 3. 正中一行文字。 }
+    if (FBar <> nil) and (FBar.Placement = twpRight) then txt := rsTyToolWindowDropRight
+    else txt := rsTyToolWindowDropLeft;
+    pad := MulDiv(ActiveController.Metric(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef),
+      APPI, 96);
+    if pad < 0 then pad := 0;
+    tr := R;
+    InflateRect(tr, -pad, 0);
+    if (tr.Right > tr.Left) and (tr.Bottom > tr.Top) then
+      P.DrawText(tr, txt, zoneS.FontName, ResolveFontSize(zoneS), zoneS.FontWeight,
+        zoneS.TextColor, taCenter, tlCenter, True);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyToolWindowDropPreview.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
 { --- TTyCustomToolWindowManager -------------------------------------------------- }
 
 procedure TTyCustomToolWindowManager.BeforeDestruction;
@@ -7381,6 +7594,27 @@ end;
 
 procedure TTyCustomToolWindowManager.BarRemoved(ABar: TTyToolWindowBar);
 begin
+end;
+
+procedure TTyCustomToolWindowManager.DragSourceChanged(ASource: TTyToolWindowBar);
+begin
+end;
+
+procedure TTyCustomToolWindowManager.SetDragSource(ABar: TTyToolWindowBar);
+begin
+  if FDragSource = ABar then Exit;
+  FDragSource := ABar;
+  DragSourceChanged(ABar);
+end;
+
+procedure TTyCustomToolWindowManager.BarShowDropPreview(ABar: TTyToolWindowBar);
+begin
+  ABar.ShowDropPreview;
+end;
+
+procedure TTyCustomToolWindowManager.BarHideDropPreview(ABar: TTyToolWindowBar);
+begin
+  ABar.HideDropPreview;
 end;
 
 { --- 给派生类的内部操作 --- }
