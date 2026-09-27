@@ -2986,7 +2986,7 @@ end;
 
 function TTyAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
 var
-  i, si: Integer;
+  i, si, raw: Integer;
   base: TTyChartColor;
   cols: TTyGraphCatColours;
   store: TTyDataStore;
@@ -3019,8 +3019,21 @@ begin
   SetLength(Result.NodeFills, Length(FGraphNodes[ASlot]));
   SetLength(Result.EdgeEndFills, Length(FGraphNodes[ASlot]));
   for i := 0 to High(FGraphNodes[ASlot]) do
+  begin
     Result.NodeFills[i] := TyGraphNodeFill(FGraphNodes[ASlot][i], cols,
       Length(FGraphCats[ASlot]), base, store, Result.EdgeEndFills[i]);
+    { A visualMap's colour over the category's and the series' -- the
+      category visual runs before the encoding -- and under the node's own }
+    raw := FGraphNodes[ASlot][i].RawRow;
+    if (ASlot <= High(FVisualRows)) and (raw >= 0)
+      and (raw <= High(FVisualRows[ASlot])) and FVisualRows[ASlot][raw].ColorSet
+      and not ((store <> nil) and store.HasOverrideByRaw(raw,
+        TyOverrideKey('itemStyle.color'))) then
+    begin
+      Result.NodeFills[i] := TyVisualToChart(FVisualRows[ASlot][raw].Color);
+      Result.EdgeEndFills[i] := Result.NodeFills[i];
+    end;
+  end;
 
   { A NODE'S LABEL IS ITS NAME, and the graph is the only series here whose
     default formatter says so: `label.formatter: '{b}'` is in its own
@@ -3170,6 +3183,7 @@ end;
 
 function TTyAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
 var
+  k: Integer;
   node: TJSONObject;
   d: TJSONData;
   ls, ar: TJSONObject;
@@ -3177,6 +3191,14 @@ var
 begin
   Result := TyRadarVisual(SeriesColor(ASlot));
   Result.Fills := PerDatumColours(ASlot);
+  { a visualMap's symbolSize per ring }
+  if (ASlot <= High(FVisualRows)) and (FVisualRows[ASlot] <> nil) then
+  begin
+    SetLength(Result.Sizes, Length(FVisualRows[ASlot]));
+    for k := 0 to High(FVisualRows[ASlot]) do
+      if FVisualRows[ASlot][k].SizeSet then Result.Sizes[k] := FVisualRows[ASlot][k].Size
+      else Result.Sizes[k] := NaN;
+  end;
   Result.EmptyFill := TTyChartColor(
     ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
       [tysNormal]).Background.Color);
@@ -3342,6 +3364,8 @@ var
   nm: string;
   d: TJSONData;
   st: TTyOptStyle;
+  mapped: array of Boolean;
+  asked: Integer;
 begin
   { colorBy: 'data'. Each DATUM takes the next slot of the same nine-colour
     ramp a bar series cycles across series -- which is what makes a pie or a
@@ -3359,9 +3383,23 @@ begin
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
     rawN := FStores[ASlot].RawCount;
   SetLength(Result, rawN);
+  SetLength(mapped, rawN);
+  { A visualMap's colour FIRST: upstream's per-data palette runs after the
+    encoding (priority 4500) and passes over any datum a colour channel
+    wrote, so only the rest ask the palette -- in the order they ask, not
+    by row. [Batch 57: the palette went to every row by row index.] }
+  asked := 0;
   for k := 0 to rawN - 1 do
   begin
-    Result[k] := TTyChartColor(ThemeRampColor(k));
+    mapped[k] := (ASlot <= High(FVisualRows)) and (k <= High(FVisualRows[ASlot]))
+      and FVisualRows[ASlot][k].ColorSet;
+    if mapped[k] then
+    begin
+      Result[k] := TyVisualToChart(FVisualRows[ASlot][k].Color);
+      Continue;
+    end;
+    Result[k] := TTyChartColor(ThemeRampColor(asked));
+    Inc(asked);
     if Length(pal) = 0 then Continue;
     nm := FStores[ASlot].GetNameByRaw(k);
     if nm = '' then nm := IntToStr(k);
@@ -3376,7 +3414,9 @@ begin
     st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
     if st.Color.Written and not st.Color.IsAuto then
       for k := 0 to rawN - 1 do
-        if st.Color.IsNone then Result[k] := 0
+        { the visual colour was worked out FROM this one; it stands }
+        if mapped[k] then Continue
+        else if st.Color.IsNone then Result[k] := 0
         else Result[k] := st.Color.Color;
   end;
   { AND A DATUM THAT NAMED ITS OWN COLOUR KEEPS IT. `data: [{ value: 5,
@@ -3420,6 +3460,17 @@ begin
   n := Length(FPies[ASlot].Sectors);
   if n < 1 then n := 1;
   SetLength(Result.Fills, n);
+  { AND A visualMap's OPACITY, which a pie keeps (a funnel does not) }
+  SetLength(Result.Alphas, n);
+  for k := 0 to n - 1 do
+  begin
+    Result.Alphas[k] := NaN;
+    if k > High(FPies[ASlot].Sectors) then Continue;
+    raw := FPies[ASlot].Sectors[k].RawIndex;
+    if (ASlot <= High(FVisualRows)) and (raw >= 0)
+      and (raw <= High(FVisualRows[ASlot])) and FVisualRows[ASlot][raw].OpacitySet then
+      Result.Alphas[k] := FVisualRows[ASlot][raw].Opacity;
+  end;
   for k := 0 to n - 1 do
   begin
     { KEYED ON THE RAW ROW, NOT THE SECTOR. The two are the same number only
@@ -3783,6 +3834,20 @@ begin
             Result[i].Colour := perRaw[k]
           else
             Result[i].Colour := TTyChartColor(SeriesColor(k));
+          { A TRANSPARENT DATUM IS SHOWN AT A FIFTH, as the category chip
+            above is -- but the swatch still carries the datum's own opacity,
+            so a slice a visualMap put out of range (colour and opacity both
+            nought) stays invisible there too. }
+          if (LongWord(Result[i].Colour) shr 24) = 0 then
+            Result[i].Colour := TTyChartColor(
+              (LongWord(Result[i].Colour) and $00FFFFFF) or $33000000);
+          if (j <= High(FVisualRows)) and (k <= High(FVisualRows[j]))
+            and FVisualRows[j][k].OpacitySet
+            and not IsNan(FVisualRows[j][k].Opacity) then
+          begin
+            Result[i].HasOpacity := True;
+            Result[i].Opacity := FVisualRows[j][k].Opacity;
+          end;
           Result[i].LineColour := Result[i].Colour;
           Result[i].DefaultIcon := TyLegendDefaultIcon(
             FBindings[j].SeriesType, SeriesSymbolWord(j));

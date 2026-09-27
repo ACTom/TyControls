@@ -128,6 +128,15 @@ begin
     Result.WidthPx := cScatterSymbolSize;
     Result.HeightPx := cScatterSymbolSize;
   end
+  else if ASeriesType = 'radar' then
+  begin
+    { RadarSeries writes NO symbol, only symbolSize 8, and RadarView falls
+      back to a solid 'circle'. [Batch 57: a radar took the line's hollow
+      six-pixel ring.] }
+    Result.Empty := False;
+    Result.WidthPx := 8;
+    Result.HeightPx := 8;
+  end
   else
   begin
     { LineSeries: symbol 'emptyCircle', symbolSize 6. EMPTY, which is why an

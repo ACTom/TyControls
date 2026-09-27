@@ -161,6 +161,10 @@ type
       found in the filtered data "will display as gray", so that is what this
       does. }
     Greyed: Boolean;
+    { THE DATUM'S OWN OPACITY, for a swatch standing for a datum: a
+      visualMap's. HasOpacity False is opaque. }
+    HasOpacity: Boolean;
+    Opacity: Double;
   end;
   TTyLegendSourceArray = array of TTyLegendSource;
 
@@ -212,6 +216,9 @@ type
     { The item's own rectangle -- icon and words together, ink overhang
       included. This is what the wrap measured and what a click will hit. }
     Bounds: TTyRectF;
+    { the datum's opacity on its swatch }
+    HasOpacity: Boolean;
+    Opacity: Double;
   end;
   TTyLegendItemArray = array of TTyLegendItem;
 
@@ -1190,6 +1197,8 @@ begin
     ResolveIcon(ASpec, AEntries[i], src, it.Icon, it.OwnIcon);
     it.Colour := src.Colour;
     it.LineColour := src.LineColour;
+    it.HasOpacity := src.HasOpacity;
+    it.Opacity := src.Opacity;
     { `lineStyle.width: 'auto'` is resolved by whoever filled the source in --
       it is the one rule here that needs to know whether the SERIES draws a
       line, and this unit does not. Zero means no rule. }
@@ -1417,6 +1426,8 @@ begin
     else if kind <> tsyNone then
     begin
       el := Icon(kind, empty, path, it.IconBox);
+      if it.HasOpacity then
+        el.Style.Alpha := Min(Double(1), Max(Double(0), it.Opacity));
       AList.Add(el);
       Inc(Result);
     end;

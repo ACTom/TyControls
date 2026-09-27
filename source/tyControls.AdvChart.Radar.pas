@@ -228,6 +228,8 @@ type
     Area: TTyChartColor;
     AreaOpacity: Double;
     Symbol: TTySymbolSpec;
+    { per raw row: a visualMap's symbolSize, NaN where none }
+    Sizes: TTyDoubleArray;
     EmptyFill: TTyChartColor;
     Z: Integer;
     Z2: Integer;
@@ -1326,6 +1328,7 @@ var
   v: Double;
   el: TTyChartElement;
   sym: TTyChartShape;
+  rowSym: TTySymbolSpec;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or (ARadar = nil) then Exit;
@@ -1399,10 +1402,16 @@ begin
     AList.Add(el);
     Inc(Result);
 
+    rowSym := AVisual.Symbol;
+    if (raw >= 0) and (raw <= High(AVisual.Sizes)) and not IsNan(AVisual.Sizes[raw]) then
+    begin
+      rowSym.WidthPx := AVisual.Sizes[raw];
+      rowSym.HeightPx := AVisual.Sizes[raw];
+    end;
     if AVisual.Symbol.Kind <> tsyNone then
       for i := 0 to m - 1 do
       begin
-        sym := TyBuildSymbol(AVisual.Symbol, pts[i].X, pts[i].Y);
+        sym := TyBuildSymbol(rowSym, pts[i].X, pts[i].Y);
         if not TyRectFIsValid(TyShapeBounds(sym)) then Continue;
         el := TyChartElement(sym);
         el.Style.HasFill := True;

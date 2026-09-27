@@ -145,6 +145,8 @@ type
     hand over as many as it likes. }
   TTyPieVisual = record
     Fills: array of TTyChartColor;
+    { per sector: a visualMap's opacity, NaN where none was written }
+    Alphas: TTyDoubleArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
     { showEmptyCircle's ring, drawn when nothing else is. }
@@ -907,6 +909,8 @@ begin
       el.Style.FillColor := AVisual.EmptyFill;
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+    if (i <= High(AVisual.Alphas)) and not IsNan(AVisual.Alphas[i]) then
+      el.Style.Alpha := Min(Double(1), Max(Double(0), AVisual.Alphas[i]));
     el.Z := AVisual.Z;
     el.Z2 := AVisual.Z2;
     el.Silent := False;
