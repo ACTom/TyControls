@@ -69,6 +69,9 @@ type
     FDirty: array of Boolean;
     FFrameBg: Cardinal;
     FColorSig: Cardinal;
+    { 这一帧的 259 色快照:行绘制器每格要问两三次颜色,经 Core 问一次要走覆盖表和色表的
+      键比较,一屏几万次;画之前抄一份,画的时候查数组 }
+    FFrameColors: array[0..258] of Cardinal;
     { 度量:规格记录与它的键(便宜的字符串,先比键,变了才解析规格) }
     FSpec: TTyTermFontSpec;
     FSpecKey: string;
@@ -174,6 +177,7 @@ type
     function CursorViewRow: Integer;
     function CursorShapeNow: TTyTermCursorShape;
     function ColorSignature: Cardinal;
+    function FrameColor(AIndex: Integer): Cardinal;
     procedure PaintFrame(APPI: Integer);
     procedure PaintPreedit(APPI: Integer);
     { 闪烁、同步输出 }
@@ -1054,10 +1058,22 @@ function TTyTerminalView.ColorSignature: Cardinal;
 var
   i: Integer;
 begin
-  { OSC 4 / 10 / 11 / 12 改了覆盖色,Core 没有专门的事件;整屏的颜色签名变了就全部重画 }
+  { OSC 4 / 10 / 11 / 12 改了覆盖色,Core 没有专门的事件;整屏的颜色签名变了就全部重画。
+    顺手抄下这一帧的色快照(FrameColor)。 }
   Result := 2166136261;
   for i := 0 to 258 do
-    Result := (Result xor FCore.ResolveColor(i)) * 16777619;
+  begin
+    FFrameColors[i] := FCore.ResolveColor(i);
+    Result := (Result xor FFrameColors[i]) * 16777619;
+  end;
+end;
+
+function TTyTerminalView.FrameColor(AIndex: Integer): Cardinal;
+begin
+  if (AIndex >= 0) and (AIndex <= 258) then
+    Result := FFrameColors[AIndex]
+  else
+    Result := 0;
 end;
 
 { ---- 绘制 --------------------------------------------------------------------------- }
@@ -1126,7 +1142,7 @@ begin
     { 行绘制器的这一帧参数 }
     FRowPainter.Metrics := FMetrics;
     FRowPainter.Spec := FSpec;
-    FRowPainter.Resolver := @FCore.ResolveColor;
+    FRowPainter.Resolver := @FrameColor;
     FRowPainter.GlyphCache := FGlyphCache;
     FRowPainter.Rasterizer := FRasterizer;
     FRowPainter.DrawBoldBright := FDrawBoldBright;
