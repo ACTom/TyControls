@@ -912,6 +912,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Terminal.Buffer.pas"/>
         <UnitName Value="tyControls.Terminal.Buffer"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Core.pas"/>
+        <UnitName Value="tyControls.Terminal.Core"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
