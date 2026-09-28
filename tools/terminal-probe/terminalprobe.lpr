@@ -102,10 +102,20 @@ begin
   Result := Trim(Result);
 end;
 
+{ a whole number for an option, or a message and exit code 1 }
+function IntArg(const AName, AValue: string; AMin: Integer): Integer;
+begin
+  if not TryStrToInt(AValue, Result) or (Result < AMin) then
+  begin
+    WriteLn(Format('%s wants a whole number of at least %d, not "%s"', [AName, AMin, AValue]));
+    Halt(1);
+  end;
+end;
+
 var
   path, arg, act: string;
   cols, rows, scrollback, chunk, i, k: Integer;
-  convertEol, scrollbackToo, isCast: Boolean;
+  convertEol, scrollbackToo, isCast, known: Boolean;
   version: TTyUnicodeVersion;
   input: RawByteString;
   core: TTyTerminalCore;
@@ -137,15 +147,24 @@ begin
       or (arg = '--chunk') or (arg = '--unicode')) then
     begin
       Inc(i);
-      if arg = '--cols' then cols := StrToInt(ParamStr(i))
-      else if arg = '--rows' then rows := StrToInt(ParamStr(i))
-      else if arg = '--scrollback' then scrollback := StrToInt(ParamStr(i))
-      else if arg = '--chunk' then chunk := StrToInt(ParamStr(i))
+      if arg = '--cols' then cols := IntArg(arg, ParamStr(i), 1)
+      else if arg = '--rows' then rows := IntArg(arg, ParamStr(i), 1)
+      else if arg = '--scrollback' then scrollback := IntArg(arg, ParamStr(i), 0)
+      else if arg = '--chunk' then chunk := IntArg(arg, ParamStr(i), 1)
       else
       begin
+        known := False;
         for v := Low(TTyUnicodeVersion) to High(TTyUnicodeVersion) do
           if TyUnicodeVersionName(v) = ParamStr(i) then
+          begin
             version := v;
+            known := True;
+          end;
+        if not known then
+        begin
+          WriteLn('--unicode wants 6, 11, 15 or 15-graphemes, not "', ParamStr(i), '"');
+          Halt(1);
+        end;
       end;
     end
     else

@@ -591,9 +591,9 @@ begin
   p := Pos('## xterm.js', notice);
   AssertTrue('the notice has an xterm.js section', p > 0);
   heading := Copy(notice, p, Pos(#10, Copy(notice, p, MaxInt)));
-  AssertTrue('its heading names the core unit', Pos('tyControls.Terminal.Core.pas', heading) > 0);
-  AssertTrue('its heading names the parser unit', Pos('tyControls.Terminal.Parser.pas', heading) > 0);
-  AssertTrue('its heading names the buffer unit', Pos('tyControls.Terminal.Buffer.pas', heading) > 0);
+  { every file of the port by name, the generated charset tables included }
+  for i := 0 to High(Units) do
+    AssertTrue('its heading names ' + Units[i], Pos(ExtractFileName(Units[i]), heading) > 0);
   AssertTrue('the notice credits the test fixtures', Pos('### Test fixtures', notice) > 0);
 end;
 

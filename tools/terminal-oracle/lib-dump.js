@@ -103,9 +103,10 @@ const PORTED = [
     'common/buffer/AttributeData', 'common/buffer/CellData', 'common/buffer/Constants',
     'common/buffer/BufferSet', 'common/buffer/Marker', 'common/CircularList',
     'common/InputHandler', 'common/CoreTerminal', 'common/WindowsMode', 'common/data/Charsets',
+    'common/data/EscapeSequences',
     'common/services/BufferService', 'common/services/CoreService',
     'common/services/CharsetService', 'common/services/MouseStateService',
-    'common/services/OscLinkService', 'common/Color', 'headless/Terminal',
+    'common/services/OscLinkService', 'common/Color', 'headless/Terminal', 'headless/public/Terminal',
   ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
 ];
 

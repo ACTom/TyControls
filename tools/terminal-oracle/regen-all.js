@@ -36,15 +36,16 @@ if (before.length) {
   process.exit(1);
 }
 
-// In dependency order. A script not written yet is skipped, so the list can name
-// the whole phase while it is being built.
+// In dependency order. Every one must exist: a missing script would otherwise leave
+// its fixtures as they are and report "clean".
 const SCRIPTS = ['gen-unicode-tables.js', 'unicode-cases.js', 'parser-cases.js', 'buffer-cases.js',
   'gen-terminal-charsets.js', 'core-cases.js', 'escape-files.js', 'fuzz.js', 'recordings.js'];
+const missing = SCRIPTS.filter(s => !fs.existsSync(path.join(__dirname, s)));
+if (missing.length) {
+  console.error('generator scripts missing: ' + missing.join(', '));
+  process.exit(1);
+}
 for (const s of SCRIPTS) {
-  if (!fs.existsSync(path.join(__dirname, s))) {
-    console.log(`skip ${s} (not written yet)`);
-    continue;
-  }
   console.log('==', s);
   cp.execFileSync(process.execPath, [path.join(__dirname, s)], { stdio: 'inherit' });
 }
