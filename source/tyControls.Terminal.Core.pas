@@ -486,7 +486,8 @@ type
     procedure ClearScrollback;                           { headless Terminal.clear }
     function ResolveColor(AIndex: Integer): Cardinal;
     function HasColorOverride(AIndex: Integer): Boolean;
-    { pure queries for the tests and the renderer }
+    { FOR THE TESTS (pure queries; the fixtures compare them with upstream's
+      internals, nothing uses them at run time) }
     function CharsetOfG(AG: Integer): TTyTermCharsetId;
     function CharsetKey(AId: TTyTermCharsetId): string;  { first designation of a table; '' for 0 }
     function WindowTitleStack: TStringDynArray;
@@ -554,7 +555,10 @@ type
     property OnScrollbackCleared: TNotifyEvent read FOnScrollbackCleared write FOnScrollbackCleared;
   end;
 
-{ The built-in monotonic clock, milliseconds. }
+{ The built-in clock, milliseconds: QueryPerformanceCounter on Windows,
+  mach_absolute_time on macOS, GetTickCount64 elsewhere (CLOCK_MONOTONIC on Linux
+  and FreeBSD; FPC 3.2.2 falls back to gettimeofday on the other Unixes, which is
+  not monotonic). }
 function TyTermDefaultClock: Double;
 { XParseColor.ts:23-56 parseColor; channels 0..255. }
 function TyTermParseXColor(const ASpec: string; out R, G, B: Integer): Boolean;
@@ -738,28 +742,76 @@ begin
     + Channel(ARgb and $FF) * 0.0722;
 end;
 
-function TyTermDefaultClock: Double;
 {$IFDEF MSWINDOWS}
 var
+  GQpcFrequency: Double = 0;             { counts per second, asked once }
+
+function TyTermDefaultClock: Double;
+var
   c, f: Int64;
-  count, freq: Double;
+  count: Double;
 begin
   { GetTickCount64 steps by ~15.6 ms here, coarser than the 12 ms budget }
+  if GQpcFrequency = 0 then
+  begin
+    f := 1;
+    QueryPerformanceFrequency(f);
+    if f <= 0 then
+      f := 1;
+    GQpcFrequency := f;
+  end;
   c := 0;
-  f := 1;
   QueryPerformanceCounter(c);
-  QueryPerformanceFrequency(f);
-  { Double variables: "c * 1000.0" would take the literal as a Single and lose the
+  { a Double variable: "c * 1000.0" would take the literal as a Single and lose the
     milliseconds of a counter in the trillions }
   count := c;
-  freq := f;
-  Result := count / freq * 1000;
+  Result := count / GQpcFrequency * 1000;
 end;
 {$ELSE}
+{$IFDEF DARWIN}
+{ FPC 3.2.2's GetTickCount64 is gettimeofday on Darwin (rtl/unix/sysutils.pp: only
+  Linux and FreeBSD get CLOCK_MONOTONIC), which jumps with the wall clock. The RTL
+  declares no mach timer, so the two libSystem calls are declared here. }
+type
+  TTyMachTimebase = record
+    Numer, Denom: Cardinal;
+  end;
+
+function mach_absolute_time: QWord; cdecl; external 'c' name 'mach_absolute_time';
+function mach_timebase_info(var AInfo: TTyMachTimebase): Integer; cdecl; external 'c' name 'mach_timebase_info';
+
+var
+  GMachNsPerTick: Double = 0;
+
+function TyTermDefaultClock: Double;
+var
+  tb: TTyMachTimebase;
+  n, d, t: Double;
 begin
-  { FPC's GetTickCount64 on Unix is clock_gettime(CLOCK_MONOTONIC), 1 ms }
+  if GMachNsPerTick = 0 then
+  begin
+    tb.Numer := 1;
+    tb.Denom := 1;
+    if (mach_timebase_info(tb) <> 0) or (tb.Denom = 0) or (tb.Numer = 0) then
+    begin
+      tb.Numer := 1;
+      tb.Denom := 1;
+    end;
+    n := tb.Numer;
+    d := tb.Denom;
+    GMachNsPerTick := n / d;
+  end;
+  t := mach_absolute_time;
+  Result := t * GMachNsPerTick / 1000000;
+end;
+{$ELSE}
+function TyTermDefaultClock: Double;
+begin
+  { clock_gettime(CLOCK_MONOTONIC) on Linux and FreeBSD, 1 ms; gettimeofday on the
+    other Unixes (FPC 3.2.2, rtl/unix/sysutils.pp) }
   Result := GetTickCount64;
 end;
+{$ENDIF}
 {$ENDIF}
 
 { ---- TTyTermCharsetHandler ------------------------------------------------------------ }
@@ -1658,7 +1710,9 @@ begin
   ScrollLines(-Buffer.YDisp);
 end;
 
-{ headless Terminal.ts:101-112: the cursor's line becomes the first line }
+{ headless Terminal.ts:101-112: the cursor's line becomes the first line. The slot
+  store takes the new reference before it drops the old one, so moving the cursor
+  row into slot 0 needs no pin. }
 procedure TTyTerminalCore.ClearScrollback;
 var
   buf: TTyTerminalBuffer;
@@ -1670,15 +1724,7 @@ begin
   buf.ClearAllMarkers;
   row := buf.Lines.Get(buf.YBase + buf.Y);
   if row <> nil then
-  begin
-    { pinned: storing it in slot 0 can release the line that held it there }
-    row.AddRef;
-    try
-      buf.Lines.SetItem(0, row);
-    finally
-      row.Release;
-    end;
-  end;
+    buf.Lines.SetItem(0, row);
   buf.Lines.Length := 1;
   buf.YDisp := 0;
   buf.YBase := 0;
@@ -2054,7 +2100,7 @@ begin
   MarkDirty(buf.Y);
 end;
 
-{ _setCursor, :885-897, the sums in Int64 (a parameter can be 2^31 - 1) }
+{ _setCursor, :900-911, the sums in Int64 (a parameter can be 2^31 - 1) }
 procedure TTyTerminalCore.SetCursor(AX, AY: Int64);
 var
   buf: TTyTerminalBuffer;
@@ -2075,7 +2121,7 @@ begin
   MarkDirty(buf.Y);
 end;
 
-{ _moveCursor, :902-907 }
+{ _moveCursor, :916-921 }
 procedure TTyTerminalCore.MoveCursor(AX, AY: Int64);
 begin
   RestrictCursor;

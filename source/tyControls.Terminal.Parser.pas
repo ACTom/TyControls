@@ -380,13 +380,14 @@ type
     procedure Reset;
     property CurrentState: TTyTermParserState read FCurrentState;
     property PrecedingJoinState: TTyUnicodeCharProps read FPrecedingJoinState write FPrecedingJoinState;
-    { Pure query for the bounds tests: UTF-16 units the first string handler of the
-      running OSC holds, 0 when there is none. }
+    { FOR THE TESTS (a pure query, nothing uses it at run time): UTF-16 units the
+      first string handler of the running OSC holds, 0 when there is none. }
     property OscPayloadLength: Int64 read GetOscPayloadLength;
   end;
 
 function TyTerminalFunctionId(const APrefix, AIntermediates: string; AFinal: Char): TTyTerminalFunctionId;
-{ Pure query: entry AIndex of the transition table built at start-up. }
+{ FOR THE TESTS (a pure query): entry AIndex of the transition table built at
+  start-up. }
 function TyTermTransition(AIndex: Integer): Word;
 
 { utf32ToString, with UTF-8 output. A code point above U+10FFFF or in the surrogate

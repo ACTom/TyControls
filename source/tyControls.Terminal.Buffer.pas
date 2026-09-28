@@ -36,12 +36,15 @@ unit tyControls.Terminal.Buffer;
     Pinned in this unit: BufferService.Scroll's blank line (the service's cache).
     Buffer.Resize only touches lines between ring changes, and the link table holds
     markers, not lines. Pinned in tyControls.Terminal.Core: print's current and old
-    row, and the cursor row that ClearScrollback moves to the top.
+    row. (A slot store takes the new reference before it drops the old one, so
+    moving a line to another slot of the same ring needs no pin.)
   - Markers are reference counted too: the buffer holds one while a marker is live,
     the link table one per marker it lists; a marker disposed is dropped by both.
   - Reflow is phase 5: IsReflowEnabled is always False, so the buffer resizes the
     way xterm.js does for an old ConPTY -- narrower columns keep the longer lines,
-    wider ones pad them, nothing is rewrapped.
+    wider ones pad them, nothing is rewrapped. Resize already asks IsReflowEnabled
+    at upstream's place; phase 5 fills in Reflow and gives the getter upstream's
+    rule.
   - BufferService lives here, not in the core, so the buffer layer can be held to
     upstream on its own (the core owns one).
 
@@ -202,7 +205,8 @@ type
     destructor Destroy; override;
     procedure AddRef;
     procedure Release;                     { frees at zero }
-    class function LiveCount: Integer;     { pure query, leak guard }
+    { FOR THE TESTS (a pure query): lines alive in the process, the leak guard. }
+    class function LiveCount: Integer;
     function GetWidth(ACol: Integer): Integer;
     function HasWidth(ACol: Integer): Boolean;
     function GetFg(ACol: Integer): Cardinal;
@@ -215,8 +219,11 @@ type
     function IsCombined(ACol: Integer): Boolean;
     function GetChars(ACol: Integer): string;          { getString, UTF-8 }
     function IsProtected(ACol: Integer): Boolean;
-    { The combined text of ACol if the table has an entry (flag or not). }
+    { The combined text of ACol when its cell says it is combined; False (and '')
+      otherwise, even when the table still holds a stale entry -- upstream reads the
+      map only behind the flag, so a stale entry is never an answer. }
     function CombinedEntry(ACol: Integer; out AText: string): Boolean;
+    { The same for the extended attributes, behind the cell's HAS_EXTENDED bit. }
     function ExtendedEntry(ACol: Integer; out AExt: TTyTerminalExtAttrs): Boolean;
     { Same length, wrap flag, cell words, and combined text / extended attributes
       where the cells say so (the core's REP fast-forward). }
@@ -372,6 +379,8 @@ type
     FScrollTop, FScrollBottom: Integer;
     FTabs: array of Boolean;
     FMarkers: TFPList;
+    FSnapshot: TFPList;                    { MarkerSnapshot's list, reused }
+    FSnapshotBusy: Boolean;
     FCols, FRows: Integer;
     FIsClearing: Boolean;
     FHasScrollback: Boolean;
@@ -385,6 +394,8 @@ type
     procedure LinesDelete(AIndex, AAmount: Integer);
     procedure MarkerDisposed(Sender: TObject);
     function MarkerSnapshot: TFPList;
+    procedure ReleaseSnapshot(AList: TFPList);
+    procedure Reflow(ANewCols, ANewRows: Integer);
     function GetHasScrollback: Boolean;
     function GetIsCursorInViewport: Boolean;
     function GetMarker(AIndex: Integer): TTyTerminalMarker;
@@ -1068,7 +1079,7 @@ function TTyTerminalLine.CombinedEntry(ACol: Integer; out AText: string): Boolea
 var
   i: Integer;
 begin
-  Result := CombinedIndex(ACol, i);
+  Result := (Word0(ACol) and TyTermContentIsCombinedMask <> 0) and CombinedIndex(ACol, i);
   if Result then
     AText := FCombined[i].Text
   else
@@ -1079,7 +1090,7 @@ function TTyTerminalLine.ExtendedEntry(ACol: Integer; out AExt: TTyTerminalExtAt
 var
   i: Integer;
 begin
-  Result := ExtendedIndex(ACol, i);
+  Result := (GetBg(ACol) and TyTermBgHasExtended <> 0) and ExtendedIndex(ACol, i);
   if Result then
     AExt := FExtended[i].Ext
   else
@@ -1571,8 +1582,10 @@ function TTyTerminalLine.TranslateToString(ATrimRight: Boolean; AStartCol, AEndC
 var
   isCanonical: Boolean;
   content, cp: Cardinal;
-  w: Integer;
+  w, col, size: Integer;
   s: string;
+  p: PChar;
+  pass: Integer;
 begin
   isCanonical := (AStartCol = 0) and (AEndCol = -1);
   if isCanonical and FCacheValid then
@@ -1589,23 +1602,53 @@ begin
   if ATrimRight and (GetTrimmedLength < AEndCol) then
     AEndCol := GetTrimmedLength;
   Result := '';
-  while AStartCol < AEndCol do
+  { two passes over the same cells: the size, then the bytes into one allocation }
+  size := 0;
+  p := nil;
+  for pass := 0 to 1 do
   begin
-    content := Word0(AStartCol);
-    cp := content and TyTermContentCodepointMask;
-    if content and TyTermContentIsCombinedMask <> 0 then
+    if pass = 1 then
     begin
-      CombinedEntry(AStartCol, s);
-      Result := Result + s;
-    end
-    else if cp <> 0 then
-      Result := Result + CpToUtf8(cp)
-    else
-      Result := Result + ' ';
-    w := content shr TyTermContentWidthShift;
-    if w = 0 then
-      w := 1;                              { always advance by at least 1 }
-    Inc(AStartCol, w);
+      if size = 0 then
+        Break;
+      SetLength(Result, size);
+      p := PChar(Result);
+    end;
+    col := AStartCol;
+    while col < AEndCol do
+    begin
+      content := Word0(col);
+      cp := content and TyTermContentCodepointMask;
+      if content and TyTermContentIsCombinedMask <> 0 then
+      begin
+        CombinedEntry(col, s);
+        if pass = 0 then
+          Inc(size, System.Length(s))
+        else if s <> '' then
+        begin
+          Move(s[1], p^, System.Length(s));
+          Inc(p, System.Length(s));
+        end;
+      end
+      else if cp <> 0 then
+      begin
+        if pass = 0 then
+          Inc(size, TyUnicodeUtf8Size(cp))
+        else
+          Inc(p, TyUnicodeUtf8Encode(cp, p));
+      end
+      else if pass = 0 then
+        Inc(size)
+      else
+      begin
+        p^ := ' ';
+        Inc(p);
+      end;
+      w := content shr TyTermContentWidthShift;
+      if w = 0 then
+        w := 1;                            { always advance by at least 1 }
+      Inc(col, w);
+    end;
   end;
   if isCanonical then
   begin
@@ -1968,6 +2011,7 @@ destructor TTyTerminalBuffer.Destroy;
 begin
   ClearAllMarkers;                         { upstream disposes them with the buffer }
   FMarkers.Free;
+  FSnapshot.Free;
   FLines.Free;
   inherited Destroy;
 end;
@@ -2059,6 +2103,12 @@ end;
 function TTyTerminalBuffer.GetIsReflowEnabled: Boolean;
 begin
   Result := False;
+end;
+
+{ Buffer.ts _reflow (:318-) with BufferReflow.ts: phase 5. Resize calls it where
+  upstream does, behind IsReflowEnabled, which answers False until then. }
+procedure TTyTerminalBuffer.Reflow(ANewCols, ANewRows: Integer);
+begin
 end;
 
 function TTyTerminalBuffer.GetLine(AAbsRow: Integer): TTyTerminalLine;
@@ -2165,7 +2215,15 @@ begin
     FScrollTop := 0;
   end;
   FScrollBottom := ANewRows - 1;
-  { IsReflowEnabled: always False in phase 2, see GetIsReflowEnabled }
+  { :258-268 -- never taken before phase 5 (GetIsReflowEnabled) }
+  if IsReflowEnabled then
+  begin
+    Reflow(ANewCols, ANewRows);
+    { trim the ends of the lines when the columns shrank }
+    if FCols > ANewCols then
+      for i := 0 to FLines.Length - 1 do
+        FLines.Get(i).Resize(ANewCols, nullCell);
+  end;
   FCols := ANewCols;
   FRows := ANewRows;
   { ybase + y stays within the lines }
@@ -2381,12 +2439,23 @@ begin
 end;
 
 { Upstream's markers each subscribe to the list, in creation order; the buffer runs
-  the same handlers over a pinned copy of its live markers. }
+  the same handlers over a pinned copy of its live markers. The copy's list is kept
+  and reused (a scroll with markers would otherwise allocate one per line); a
+  snapshot taken while another is in use gets a list of its own. }
 function TTyTerminalBuffer.MarkerSnapshot: TFPList;
 var
   i: Integer;
 begin
-  Result := TFPList.Create;
+  if FSnapshotBusy then
+    Result := TFPList.Create
+  else
+  begin
+    if FSnapshot = nil then
+      FSnapshot := TFPList.Create;
+    Result := FSnapshot;
+    Result.Clear;
+    FSnapshotBusy := True;
+  end;
   for i := 0 to FMarkers.Count - 1 do
     if TTyTerminalMarker(FMarkers[i]).FGeneration = FGeneration then
     begin
@@ -2395,13 +2464,19 @@ begin
     end;
 end;
 
-procedure ReleaseSnapshot(AList: TFPList);
+procedure TTyTerminalBuffer.ReleaseSnapshot(AList: TFPList);
 var
   i: Integer;
 begin
   for i := 0 to AList.Count - 1 do
     TTyTerminalMarker(AList[i]).Release;
-  AList.Free;
+  if AList = FSnapshot then
+  begin
+    AList.Clear;
+    FSnapshotBusy := False;
+  end
+  else
+    AList.Free;
 end;
 
 procedure TTyTerminalBuffer.LinesTrim(AAmount: Integer);                     { :640-646 }
