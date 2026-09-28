@@ -47,6 +47,12 @@ const lineCases = [
   line('line-replace-protect', L1(10), [...txt('A', 0, 'ab'), ...txt('A', 2, 'cd', { fg: 0, bg: PROT }), ...txt('A', 4, '中', { fg: 0, bg: PROT }),
     ...txt('A', 6, '中'), ...txt('A', 8, 'ef'), ['replaceCells', 'A', 1, 7, nul(), true], ['replaceCells', 'A', 5, 9, nul(), true],
     ['replaceCells', 'A', 0, 10, nul(), true], ...probeAll('A', 10)]),
+  // the end fix looks at the protection of the cell AT end: a wide lead and its stub
+  // protected differently tell end from end - 1
+  line('line-replace-protect-stub', L1(8), [...txt('A', 0, 'ab'), ['setCellFromCodepoint', 'A', 2, 0x4E2D, 2, { fg: 0, bg: PROT }],
+    ['setCellFromCodepoint', 'A', 3, 0, 0, A0], ['replaceCells', 'A', 0, 3, nul(), true], ...probeAll('A', 4),
+    ['setCellFromCodepoint', 'A', 4, 0x4E2D, 2, A0], ['setCellFromCodepoint', 'A', 5, 0, 0, { fg: 0, bg: PROT }],
+    ['replaceCells', 'A', 0, 5, nul(), true], ...probeAll('A', 8)]),
   line('line-replace-end-beyond', L1(8), [...txt('A', 0, 'abcdefgh'), ['replaceCells', 'A', 3, 99999999999, nul(0, 0x1000005), false],
     ...txt('A', 0, 'abcdefgh'), ['replaceCells', 'A', 5, 2147483648, nul(), true]]),
   line('line-combine-empty', L1(6), [['addCodepointToCell', 'A', 1, 0x301, 0], ['addCodepointToCell', 'A', 2, 0x301, 2],
