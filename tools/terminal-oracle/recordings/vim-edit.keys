@@ -16,6 +16,9 @@ vim -u DEFAULTS -i NONE -N f.txt
 #key Escape
 #raw :syntax on
 #key Enter
+#raw :colorscheme habamax
+#key Enter
+#sleep 0.3
 #raw /fox
 #key Enter
 #raw nn

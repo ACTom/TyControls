@@ -32,12 +32,16 @@ EOF
 # the nested tmux: no status line (it would show the host name and the clock), and
 # the same bare shell -- a login shell would read /etc/profile and put user@host
 # into the prompt
-printf 'set -g status off\nset -g default-command "bash --norc --noprofile"\n' > "$home/inner.conf"
+printf 'set -g status off\nset -g default-terminal xterm-256color\nset -g default-command "bash --norc --noprofile"\n' > "$home/inner.conf"
+# the recording tmux itself: its panes' TERM is default-terminal ("screen" when
+# unset), and that decides what the programs send -- xterm-256color, the terminal
+# being emulated, so 256-colour SGR (38;5) reaches the recording
+printf 'set -g status off\nset -g default-terminal xterm-256color\n' > "$home/outer.conf"
 rm -f "$out"
 T="tmux -L tyrec"
 $T kill-server 2>/dev/null || true
 env -i HOME="$home" PATH=/usr/bin:/bin TERM=xterm-256color LANG=C.UTF-8 PS1='$ ' \
-  $T -f /dev/null new-session -d -s tyrec -x "$width" -y "$height" \
+  $T -f "$home/outer.conf" new-session -d -s tyrec -x "$width" -y "$height" \
   "cd $home; sleep 1; export PS1='\$ '; exec bash --norc --noprofile"
 $T set-option -t tyrec status off
 $T pipe-pane -o -t tyrec "python3 '$here/wsl-record-pipe.py' $width $height > '$out'"
