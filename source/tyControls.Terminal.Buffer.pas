@@ -2011,7 +2011,7 @@ end;
 procedure TTyTerminalBuffer.Resize(ANewCols, ANewRows: Integer);             { :160-286 }
 var
   nullCell: TTyTerminalCellData;
-  newMaxLength, i, y, addToY, amountToTrim, maxY: Integer;
+  newMaxLength, i, row, addToY, amountToTrim, maxY: Integer;
   windows: Boolean;
 begin
   nullCell := GetNullCell(TyTermDefaultAttr);
@@ -2029,7 +2029,7 @@ begin
     if FRows < ANewRows then
     begin
       windows := (FOptions.WindowsPty.Backend <> twpNone) or (FOptions.WindowsPty.BuildNumber <> 0);
-      for y := FRows to ANewRows - 1 do
+      for row := FRows to ANewRows - 1 do
         if FLines.Length < ANewRows + FYBase then
         begin
           if windows then
@@ -2048,7 +2048,7 @@ begin
         end;
     end
     else
-      for y := FRows downto ANewRows + 1 do
+      for row := FRows downto ANewRows + 1 do
         if FLines.Length > ANewRows + FYBase then
         begin
           if FLines.Length > FYBase + FY + 1 then
