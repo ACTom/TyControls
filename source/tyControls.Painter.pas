@@ -655,8 +655,10 @@ implementation
       the BGRA surface -- but TBGRADefaultBitmap.GetFontRenderer feeds FIVE
       fields to the renderer, and the fifth, FontOrientation, is never assigned
       here.
-    * TyConfigureMeasureFont sets Name, Size and Style on the LCL canvas, and
-      never Quality, Orientation, CharSet or Pitch.
+    * TyConfigureMeasureFont sets Name, Height and Style on the LCL canvas, and
+      never Quality, Orientation, CharSet or Pitch. (Nor PixelsPerInch, which
+      stays at the screen's as of the moment the surface was made -- and does not
+      matter, because the height it is given is a pixel count: see TyFontHeightPx.)
 
   What actually makes a shared surface safe is that NOTHING IN THIS LIBRARY EVER
   WRITES those fields on these two surfaces. FontOrientation has one would-be
