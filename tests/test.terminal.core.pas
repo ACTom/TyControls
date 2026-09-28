@@ -56,6 +56,27 @@ type
     procedure TestXtVersionConstant;
   end;
 
+  { The write queue has no upstream oracle (headless cannot observe slices): these
+    are WriteBuffer.ts's rules read one by one, under a scripted clock. }
+  TTyTerminalWriteQueueTests = class(TTestCase)
+  published
+    procedure TestWriteQueuesAndAsksOnce;
+    procedure TestProcessDrainsAndReports;
+    procedure TestSliceStopsBetweenChunksAtTheBudget;
+    procedure TestOneBigChunkIsNotSplit;
+    procedure TestCallbacksRunInOrder;
+    procedure TestCallbackMayWriteAgain;
+    procedure TestFirstWriteAfterInputParsesAtOnce;
+    procedure TestFiftyMegabytesRaises;
+    procedure TestWriteSyncParsesQueuedFirst;
+    procedure TestResizeFlushesFirst;
+    procedure TestResizeFlushDoesNotReparse;
+    procedure TestSlicedEqualsWhole;
+    procedure TestOtherThreadsAreRefused;
+    procedure TestDestroyDropsPending;
+    procedure TestDefaultClockMoves;
+  end;
+
 implementation
 
 uses
@@ -780,7 +801,489 @@ begin
   end;
 end;
 
+{ ---- TTyTerminalWriteQueueTests ---------------------------------------------------- }
+
+type
+  { a clock that answers a script, repeating its last value; or steps by Step }
+  TQueueRig = class
+  public
+    Core: TTyTerminalCore;
+    Script: array of Double;
+    Pos: Integer;
+    Step: Double;
+    Current: Double;
+    Requests: Integer;
+    Done: array of PtrInt;
+    SeenOnDone: TStringList;           { line 0 as each callback saw it }
+    WriteAgainTag: PtrInt;
+    constructor Create(ACols: Integer = 20; ARows: Integer = 6);
+    destructor Destroy; override;
+    function Clock: Double;
+    procedure OnRequest(Sender: TObject);
+    procedure OnDone(Sender: TObject; ATag: PtrInt);
+    function Line0: string;
+    procedure SetScript(const AValues: array of Double);
+  end;
+
+constructor TQueueRig.Create(ACols, ARows: Integer);
+begin
+  inherited Create;
+  SeenOnDone := TStringList.Create;
+  WriteAgainTag := -1;
+  Core := TTyTerminalCore.Create(ACols, ARows);
+  Core.Clock := @Clock;
+  Core.OnProcessRequest := @OnRequest;
+end;
+
+destructor TQueueRig.Destroy;
+begin
+  Core.Free;
+  SeenOnDone.Free;
+  inherited Destroy;
+end;
+
+function TQueueRig.Clock: Double;
+begin
+  if Length(Script) > 0 then
+  begin
+    if Pos <= High(Script) then
+      Result := Script[Pos]
+    else
+      Result := Script[High(Script)];
+    Inc(Pos);
+  end
+  else
+  begin
+    Current := Current + Step;
+    Result := Current;
+  end;
+end;
+
+procedure TQueueRig.SetScript(const AValues: array of Double);
+var
+  i: Integer;
+begin
+  Script := nil;
+  SetLength(Script, Length(AValues));
+  for i := 0 to High(AValues) do
+    Script[i] := AValues[i];
+  Pos := 0;
+end;
+
+procedure TQueueRig.OnRequest(Sender: TObject);
+begin
+  Inc(Requests);
+end;
+
+procedure TQueueRig.OnDone(Sender: TObject; ATag: PtrInt);
+begin
+  SetLength(Done, Length(Done) + 1);
+  Done[High(Done)] := ATag;
+  SeenOnDone.Add(Line0);
+  if ATag = WriteAgainTag then
+    Core.Write('z');
+end;
+
+function TQueueRig.Line0: string;
+begin
+  Result := Core.Buffer.Lines.Get(Core.Buffer.YBase).TranslateToString(True, 0, Core.Cols);
+end;
+
+procedure TTyTerminalWriteQueueTests.TestWriteQueuesAndAsksOnce;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.Core.Write('a');
+    r.Core.Write('b');
+    AssertEquals('asked once', 1, r.Requests);
+    AssertEquals('only queued', '', r.Line0);
+    AssertEquals('pending', 2, r.Core.PendingBytes);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestProcessDrainsAndReports;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.Core.Write('a');
+    r.Core.Write('b');
+    r.SetScript([0, 1, 2]);
+    AssertFalse('nothing left', r.Core.ProcessPending);
+    AssertEquals('ab', r.Line0);
+    AssertEquals('pending', 0, r.Core.PendingBytes);
+    r.Core.Write('c');
+    AssertEquals('an empty queue asks again', 2, r.Requests);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestSliceStopsBetweenChunksAtTheBudget;
+var
+  r: TQueueRig;
+  i: Integer;
+begin
+  r := TQueueRig.Create;
+  try
+    for i := 1 to 5 do
+      r.Core.Write('x');
+    AssertEquals(1, r.Requests);
+    { the start, then after each chunk }
+    r.SetScript([0, 5, 11, 12, 13]);
+    AssertTrue('something left', r.Core.ProcessPending);
+    AssertEquals('three chunks: 12 - 0 >= 12 after the third', 'xxx', r.Line0);
+    AssertEquals('the slice does not ask by itself', 1, r.Requests);
+    AssertEquals('pending', 2, r.Core.PendingBytes);
+    AssertFalse('the rest', r.Core.ProcessPending);
+    AssertEquals('xxxxx', r.Line0);
+    AssertEquals('pending', 0, r.Core.PendingBytes);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestOneBigChunkIsNotSplit;
+var
+  r: TQueueRig;
+  s: RawByteString;
+begin
+  r := TQueueRig.Create;
+  try
+    s := StringOfChar('x', 1024 * 1024);
+    r.Core.Write(s);
+    r.Step := 100;
+    AssertFalse('one chunk, whole', r.Core.ProcessPending);
+    AssertEquals('pending', 0, r.Core.PendingBytes);
+    AssertEquals(StringOfChar('x', 20), r.Line0);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestCallbacksRunInOrder;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.Core.Write('A', @r.OnDone, 1);
+    r.Core.Write('B', @r.OnDone, 2);
+    r.Core.Write('C', @r.OnDone, 3);
+    r.SetScript([0, 5, 12, 12]);
+    AssertTrue(r.Core.ProcessPending);
+    AssertEquals('two callbacks in the first slice', 2, Length(r.Done));
+    AssertEquals(1, r.Done[0]);
+    AssertEquals(2, r.Done[1]);
+    r.SetScript([0, 1]);
+    AssertFalse(r.Core.ProcessPending);
+    AssertEquals(3, Length(r.Done));
+    AssertEquals(3, r.Done[2]);
+    AssertEquals('each callback sees its chunk and not the next', 'A,AB,ABC', r.SeenOnDone.CommaText);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestCallbackMayWriteAgain;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.WriteAgainTag := 1;
+    r.Core.Write('a', @r.OnDone, 1);
+    r.Core.Write('b');
+    r.SetScript([0]);
+    AssertFalse('the new chunk goes in the same slice', r.Core.ProcessPending);
+    AssertEquals('no second request: the queue was not empty', 1, r.Requests);
+    AssertEquals('abz', r.Line0);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestFirstWriteAfterInputParsesAtOnce;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.SetScript([0]);
+    r.Core.Input('k', True);
+    r.Core.Write('ab', @r.OnDone, 7);
+    AssertEquals('parsed at once', 'ab', r.Line0);
+    AssertEquals('callback called', 1, Length(r.Done));
+    AssertEquals('nothing asked', 0, r.Requests);
+    r.Core.Write('c');
+    AssertEquals('the next one only queues', 'ab', r.Line0);
+    AssertEquals(1, r.Requests);
+    r.Core.ProcessPending;
+    r.Core.Input('k', False);
+    r.Core.Write('d');
+    AssertEquals('not user input: queued', 'abc', r.Line0);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestFiftyMegabytesRaises;
+var
+  r: TQueueRig;
+  s: RawByteString;
+  i: Integer;
+  raised: Boolean;
+begin
+  r := TQueueRig.Create;
+  try
+    s := StringOfChar('y', 1000000);
+    for i := 1 to 50 do
+      r.Core.Write(s);
+    AssertEquals(Int64(50000000), r.Core.PendingBytes);
+    r.Core.Write(s);                     { 50,000,000 is not more than the limit }
+    AssertEquals(Int64(51000000), r.Core.PendingBytes);
+    raised := False;
+    try
+      r.Core.Write(s);
+    except
+      on ETyTerminalWriteOverflow do raised := True;
+    end;
+    AssertTrue('past 50 MB', raised);
+    AssertEquals('nothing added', Int64(51000000), r.Core.PendingBytes);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestWriteSyncParsesQueuedFirst;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.Core.Write('a', @r.OnDone, 1);
+    r.Core.WriteSync('b');
+    AssertEquals('ab', r.Line0);
+    AssertEquals('the queued callback ran', 1, Length(r.Done));
+    AssertEquals('pending', 0, r.Core.PendingBytes);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestResizeFlushesFirst;
+var
+  r: TQueueRig;
+  wp: TTyTerminalWindowsPty;
+begin
+  r := TQueueRig.Create(20, 6);
+  try
+    wp.Backend := twpConPty;
+    wp.BuildNumber := 19044;
+    r.Core.WindowsPty := wp;
+    r.Core.Write(StringOfChar('x', 25));
+    r.Core.Resize(10, 6);
+    AssertEquals('wrapped at the old 20 columns', StringOfChar('x', 20),
+      r.Core.Buffer.Lines.Get(0).TranslateToString(True, 0, 20));
+    AssertEquals(StringOfChar('x', 5), r.Core.Buffer.Lines.Get(1).TranslateToString(True, 0, 20));
+    AssertTrue(r.Core.Buffer.Lines.Get(1).IsWrapped);
+    AssertEquals(10, r.Core.Cols);
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestResizeFlushDoesNotReparse;
+var
+  r: TQueueRig;
+  wp: TTyTerminalWindowsPty;
+begin
+  r := TQueueRig.Create(20, 6);
+  try
+    wp.Backend := twpConPty;
+    wp.BuildNumber := 19044;
+    r.Core.WindowsPty := wp;
+    r.Core.Write('A', @r.OnDone, 1);
+    r.Core.Write('B');
+    r.Core.Write('C');
+    r.SetScript([0, 12]);
+    AssertTrue('A only', r.Core.ProcessPending);
+    AssertEquals('A', r.Line0);
+    r.Core.Resize(30, 6);
+    AssertEquals('upstream parses A again here (AABC)', 'ABC', r.Line0);
+    AssertEquals('A''s callback once', 1, Length(r.Done));
+  finally
+    r.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestSlicedEqualsWhole;
+var
+  m: TTyTermMisses;
+  fx: TTyTermFixtures;
+  cases: TFPList;
+  c: TJSONObject;
+  palette: TJSONArray;
+  i, k: Integer;
+  input: RawByteString;
+  h: TTyTermHarness;
+  rig: TQueueRig;
+begin
+  m := TTyTermMisses.Create;
+  try
+    fx := TyTermLoadFixtures('core-escape', m);
+    cases := TyTermAllCases(fx);
+    try
+      c := nil;
+      for i := 0 to cases.Count - 1 do
+        if TJSONObject(cases[i]).Strings['id'] = 't0504-vim.in' then
+          c := TJSONObject(cases[i]);
+      AssertNotNull('t0504-vim.in in the fixture', c);
+      palette := fx[0].Arrays['palette'];
+      input := TyTermBase64Bytes(c.Arrays['steps'].Objects[0].Strings['write']);
+      { sliced: 97-byte writes, one chunk per slice }
+      h := TTyTermHarness.Create(c, palette);
+      rig := TQueueRig.Create;
+      try
+        rig.Step := 100;
+        h.Core.Clock := @rig.Clock;
+        k := 1;
+        while k <= Length(input) do
+        begin
+          h.Core.Write(Copy(input, k, 97));
+          Inc(k, 97);
+        end;
+        i := 0;
+        while h.Core.ProcessPending do
+          Inc(i);
+        AssertTrue('many slices', i > 10);
+        TyTermCompareState(h, c.Objects['expect'], 'sliced', True, m);
+      finally
+        h.Free;
+        rig.Free;
+      end;
+      { whole, through WriteSync }
+      h := TTyTermHarness.Create(c, palette);
+      try
+        h.Core.WriteSync(input);
+        TyTermCompareState(h, c.Objects['expect'], 'whole', False, m);
+      finally
+        h.Free;
+      end;
+    finally
+      cases.Free;
+      TyTermFreeFixtures(fx);
+    end;
+    AssertEquals(m.Text, 0, m.Count);
+    AssertTrue('compared', m.Compared > 2 * 80 * 25);
+  finally
+    m.Free;
+  end;
+end;
+
+type
+  TOtherThread = class(TThread)
+  public
+    Core: TTyTerminalCore;
+    Classes_: array[0..3] of string;
+    procedure Execute; override;
+  end;
+
+procedure TOtherThread.Execute;
+
+  procedure Try_(AIndex: Integer; AKind: Integer);
+  var
+    b: Byte;
+  begin
+    Classes_[AIndex] := '(none)';
+    b := Ord('a');
+    try
+      case AKind of
+        0: Core.Write('a');
+        1: Core.Write(b, 1);
+        2: Core.WriteSync('a');
+      else
+        Core.ProcessPending;
+      end;
+    except
+      on E: Exception do Classes_[AIndex] := E.ClassName;
+    end;
+  end;
+
+begin
+  Try_(0, 0);
+  Try_(1, 1);
+  Try_(2, 2);
+  Try_(3, 3);
+end;
+
+procedure TTyTerminalWriteQueueTests.TestOtherThreadsAreRefused;
+var
+  core: TTyTerminalCore;
+  t: TOtherThread;
+  i: Integer;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  t := TOtherThread.Create(True);
+  try
+    t.Core := core;
+    t.FreeOnTerminate := False;
+    t.Start;
+    t.WaitFor;
+    for i := 0 to 3 do
+      AssertEquals(Format('entry %d', [i]), 'EInvalidOperation', t.Classes_[i]);
+    AssertEquals('nothing queued', 0, core.PendingBytes);
+    AssertEquals('nothing parsed', '', core.Buffer.Lines.Get(0).TranslateToString(True, 0, 20));
+  finally
+    t.Free;
+    core.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestDestroyDropsPending;
+var
+  r: TQueueRig;
+  base, calls: Integer;
+begin
+  base := TTyTerminalLine.LiveCount;
+  r := TQueueRig.Create;
+  r.Core.Write('a', @r.OnDone, 1);
+  r.Core.Write('b', @r.OnDone, 2);
+  r.Core.Write('c', @r.OnDone, 3);
+  r.Core.Free;
+  r.Core := nil;
+  calls := Length(r.Done);
+  r.Free;
+  AssertEquals('no callback for dropped chunks', 0, calls);
+  AssertEquals('lines freed', base, TTyTerminalLine.LiveCount);
+end;
+
+procedure TTyTerminalWriteQueueTests.TestDefaultClockMoves;
+var
+  t1, t2: Double;
+  core: TTyTerminalCore;
+begin
+  t1 := TyTermDefaultClock;
+  Sleep(20);
+  t2 := TyTermDefaultClock;
+  AssertTrue(Format('milliseconds that move (%.3f)', [t2 - t1]), (t2 - t1 >= 10) and (t2 - t1 <= 1000));
+  core := TTyTerminalCore.Create(20, 5);
+  try
+    core.Write('a');
+    AssertFalse('the built-in clock slices too', core.ProcessPending);
+    AssertEquals('a', core.Buffer.Lines.Get(0).TranslateToString(True, 0, 20));
+  finally
+    core.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyTerminalCoreOracleTests);
   RegisterTest(TTyTerminalCoreTests);
+  RegisterTest(TTyTerminalWriteQueueTests);
 end.
