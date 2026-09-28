@@ -175,7 +175,7 @@ uses
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
-  test.dpi.dialogs,
+  test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime;
 
 type
