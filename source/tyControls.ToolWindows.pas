@@ -6,7 +6,9 @@ unit tyControls.ToolWindows;
   窗口、操作区、栏、栏的手势引擎(内部类)和 manager 的基类 TTyCustomToolWindowManager 同在
   一个单元:它们互相调对方的私有成员(注册 / 注销、切页、静默换父、拖动状态……),分开的话这些
   成员都得公开。manager 本身(MoveWindow、队列、布局的保存 / 读取 / 时机、跨栏拖动的命中测试)
-  在 tyControls.ToolWindows.Manager,只经基类的 protected 方法碰栏和窗口的内部。 }
+  在 tyControls.ToolWindows.Manager,只经基类的 protected 方法碰栏和窗口的内部。
+  实现段里两块 include 进来:角标(tyControls.ToolWindows.Badge.inc)、隐藏侧栏的放置预览
+  (tyControls.ToolWindows.DropPreview.inc)—— 它们同样要碰私有成员,所以不拆成单元。 }
 
 interface
 
@@ -1624,68 +1626,7 @@ begin
   InvalidateBar;
 end;
 
-procedure TTyToolWindow.SetShowBadge(AValue: Boolean);
-begin
-  if FShowBadge = AValue then Exit;
-  FShowBadge := AValue;
-  BadgeChanged;
-end;
-
-procedure TTyToolWindow.SetBadgeValue(AValue: Integer);
-begin
-  if FBadgeValue = AValue then Exit;
-  FBadgeValue := AValue;
-  BadgeChanged;
-end;
-
-procedure TTyToolWindow.SetBadgeDot(AValue: Boolean);
-begin
-  if FBadgeDot = AValue then Exit;
-  FBadgeDot := AValue;
-  BadgeChanged;
-end;
-
-procedure TTyToolWindow.BadgeChanged;
-var
-  b: TTyToolWindowBar;
-begin
-  b := Bar;
-  if (b = nil) or (csDestroying in b.ComponentState) then Exit;
-  if b.Placement = twpBottom then
-  begin
-    { 标签宽变了:丢标签宽缓存(键里本来也有角标,这里再清一次不花钱),重画标签行 —— 当前页的
-      Invalidate 里 B 期收尾的漂移检查会把操作区跟上(spec §3.4)。 }
-    b.TabWidthsChanged;
-    b.InvalidateHeader;
-  end
-  else
-    b.Invalidate;
-end;
-
-procedure TTyToolWindow.InvalidateBadge;
-begin
-  BadgeChanged;
-end;
-
-function TTyToolWindow.BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
-var
-  vis: Boolean;
-begin
-  AText := '';
-  ADot := FBadgeDot;
-  if not FShowBadge then Exit(False);
-  { 圆点也先给数字:事件看得到,画的时候不用。 }
-  AText := TyBadgeText(FBadgeValue, False);
-  vis := True;
-  if Assigned(FOnBadgeDisplay) then FOnBadgeDisplay(Self, FBadgeValue, AText, vis);
-  if ADot then
-  begin
-    AText := '';
-    Result := vis;
-  end
-  else
-    Result := vis and (AText <> '');
-end;
+{$I tyControls.ToolWindows.Badge.inc}
 
 procedure TTyToolWindow.ResolveImageIndex;
 var
@@ -3444,103 +3385,6 @@ begin
     and not (csDesigning in ComponentState) and (WindowCount = 0);
 end;
 
-function TTyToolWindowBar.ShownAxisPx: Integer;
-begin
-  FAssumeShown := True;
-  try
-    Result := DerivedAxisPx(Metrics);
-  finally
-    FAssumeShown := False;
-  end;
-end;
-
-function TTyToolWindowBar.DropPreviewRect: TRect;
-var
-  p: TWinControl;
-  r: TRect;
-  w: Integer;
-begin
-  Result := Rect(0, 0, 0, 0);
-  p := Parent;
-  if (p = nil) or not HiddenAsEmpty then Exit;
-  w := ShownAxisPx;
-  if w <= 0 then Exit;
-  { 从栏此刻的位置(宽 0,Left / Top / Height 是它出现时的位置)向编辑区一侧展开。 }
-  if FPlacement = twpRight then
-    Result := Rect(Left + Width - w, Top, Left + Width, Top + Height)
-  else
-    Result := Rect(Left, Top, Left + w, Top + Height);
-  { 钳进父控件调整后的客户区。 }
-  r := p.ClientRect;
-  TWinControlAccess(p).AdjustClientRect(r);
-  if not Types.IntersectRect(Result, Result, r) then Result := Rect(0, 0, 0, 0);
-end;
-
-procedure TTyToolWindowBar.ShowDropPreview;
-var
-  r: TRect;
-  c: TColor;
-begin
-  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  r := DropPreviewRect;
-  if IsRectEmpty(r) then
-  begin
-    HideDropPreview;
-    Exit;
-  end;
-  if FDropPreview = nil then FDropPreview := TTyToolWindowDropPreview.CreateFor(Self);
-  FDropPreview.Controller := Controller;
-  { 窗口化控件擦除时先铺自己的 Color([[windowed-ghost-erases-to-parent-color]]):设成栏的底色,
-    显示那一瞬间不闪一块父控件的颜色。 }
-  if DropPreviewEraseColor(r, c) then FDropPreview.Color := c;
-  { 已经显示着(拖动中重新摆一次:栏换了父控件、父控件改了尺寸)就保留亮不亮 —— 亮是 manager
-    的落点给的,落点没变它不会再来设一次。 }
-  if not FDropPreview.Visible then FDropPreview.Hot := False;
-  { 每次都设:栏可能换过父控件。 }
-  FDropPreview.Parent := Parent;
-  FDropPreview.BoundsRect := r;
-  FDropPreview.Visible := True;
-  FDropPreview.BringToFront;
-end;
-
-function TTyToolWindowBar.DropPreviewEraseColor(const ARect: TRect; out AColor: TColor): Boolean;
-
-  function FromKey(const AKey: string): Boolean;
-  var
-    S: TTyStyleSet;
-  begin
-    Result := False;
-    S := ActiveController.Model.ResolveStyle(AKey, TyStyleClassFor(Self, StyleClass), [tysNormal]);
-    if not (tpBackground in S.Present)
-       or not (S.Background.Kind in [tfkSolid, tfkLinearGradient]) then Exit;
-    { 渐变取两端的中间色(近似正中那一点 —— 离整块最远的那一点误差最小,同 Base 里
-      TyFillCentreColor 的理由;擦除色只在显示那一瞬间露面,不用逐位对上画出来的那一条)。 }
-    if S.Background.Kind = tfkSolid then
-      AColor := TyColorToLCL(S.Background.Color)
-    else
-      AColor := TyColorToLCL(TyMix(S.Background.GradFrom, S.Background.GradTo, 50));
-    Result := True;
-  end;
-
-begin
-  { 栏的底色(纯色 / 渐变);图片、九宫格皮肤给不出一个颜色,退到图标条的底色 —— 同一条栏上
-    另一块大面积的底;都给不出就不设(擦成父控件的颜色,之后预览自己整块铺满)。 }
-  AColor := clNone;
-  Result := FromKey(TyToolWindowBarKey) or FromKey(TyToolWindowStripKey);
-end;
-
-procedure TTyToolWindowBar.HideDropPreview;
-begin
-  if FDropPreview = nil then Exit;
-  FDropPreview.Hot := False;
-  FDropPreview.Visible := False;
-end;
-
-procedure TTyToolWindowBar.SetDropPreviewHot(AOn: Boolean);
-begin
-  if (FDropPreview <> nil) and FDropPreview.Visible then FDropPreview.Hot := AOn;
-end;
-
 function TTyToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
   if FPlacement = twpBottom then
@@ -4827,62 +4671,6 @@ end;
 function TTyToolWindowBar.SwallowPress(const AP: TPoint): Boolean;
 begin
   Result := (HostsTabRow and PtInRect(BarLayout.TabRow, AP)) or InDisabledActivePage(AP);
-end;
-
-function TTyToolWindowBar.BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer;
-  out AText: string; out ADot: Boolean): TSize;
-var
-  S: TTyStyleSet;
-  fs, tw, th, rw, zw, zh, minPx, dotPx: Integer;
-begin
-  Result := Size(0, 0);
-  AText := '';
-  ADot := False;
-  if (AWindow = nil) or not AWindow.BadgeDisplay(AText, ADot) then Exit;
-  S := ActiveController.Model.ResolveStyle(TyToolWindowBadgeKey,
-    TyStyleClassFor(Self, StyleClass), [tysNormal]);
-  { 没有主题规则就不画(同 TTyButton 的徽标)。 }
-  if not (tpBackground in S.Present) then Exit;
-  minPx := TokenPxAt(TyBadgeMinSizeVar, TyBadgeMinSize, APPI);
-  if minPx < 1 then minPx := 1;
-  dotPx := TokenPxAt(TyBadgeDotSizeVar, TyBadgeDotSize, APPI);
-  if ADot then Exit(TyBadgeSize(0, 0, 0, 0, minPx, True, dotPx));
-  fs := ResolveFontSize(S);
-  { 两种量法取大(Painter.pas 的约定,同 MeasureTabWidths):只按画布量,渲染器多出一个像素。 }
-  TyMeasureTextBlock(AText, S.FontName, fs, S.FontWeight, APPI, 0, 0, tw, th);
-  rw := TyMeasureRenderedTextWidth(AText, S.FontName, fs, S.FontWeight, APPI);
-  if rw > tw then tw := rw;
-  { 高按一个稳定的参考字形('0'),同 TTyButton.DrawBadge。 }
-  TyMeasureTextBlock('0', S.FontName, fs, S.FontWeight, APPI, 0, 0, zw, zh);
-  Result := TyBadgeSize(tw, zh, MulDiv(S.Padding.Left, APPI, 96),
-    MulDiv(S.Padding.Top, APPI, 96), minPx, False, dotPx);
-end;
-
-procedure TTyToolWindowBar.DrawBadgeIn(APainter: TTyPainter; const ABox: TRect;
-  const AText: string; ADot: Boolean);
-var
-  S: TTyStyleSet;
-  r: TRect;
-  half, themedR, rLogical: Integer;
-begin
-  if (ABox.Right <= ABox.Left) or (ABox.Bottom <= ABox.Top) then Exit;
-  S := ActiveController.Model.ResolveStyle(TyToolWindowBadgeKey,
-    TyStyleClassFor(Self, StyleClass), [tysNormal]);
-  if not (tpBackground in S.Present) then Exit;
-  { 胶囊:主题没给圆角就半高,给了更小的就用主题的(TTyButton.DrawBadge 的做法);圆点是正圆。
-    FillBackground 收的是逻辑半径。 }
-  half := APainter.Unscale((ABox.Bottom - ABox.Top) div 2);
-  themedR := TyEffectiveCorners(S).TL;
-  if ADot or (themedR <= 0) then rLogical := half
-  else rLogical := TyClampRadius(themedR, half);
-  APainter.FillBackground(ABox, S.Background, TyUniformCorners(rLogical));
-  if ADot or (AText = '') then Exit;
-  { 文字框四边各放 1 个像素(同 TTyButton.DrawBadge:有的 widgetset 小号粗体画出来比量的大一丝,
-    DrawText 按框裁剪会削掉字边);胶囊本身不变。 }
-  r := ABox;
-  InflateRect(r, APainter.Scale(1), APainter.Scale(1));
-  APainter.DrawText(r, AText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
-    taCenter, tlCenter, False, 0, True);
 end;
 
 function TTyToolWindowBar.HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
@@ -7625,85 +7413,7 @@ begin
   if FCaptureConfirmed and (GetCaptureControl <> FCapturer) then Reset(twgeCancel);
 end;
 
-{ --- TTyToolWindowDropPreview ---------------------------------------------------- }
-
-constructor TTyToolWindowDropPreview.CreateFor(ABar: TTyToolWindowBar);
-begin
-  inherited Create(nil);
-  FBar := ABar;
-  ControlStyle := ControlStyle + [csNoFocus, csNoDesignVisible, csOpaque] - [csAcceptsControls];
-  TabStop := False;
-  Align := alNone;
-  Visible := False;
-end;
-
-function TTyToolWindowDropPreview.GetStyleTypeKey: string;
-begin
-  Result := TyToolWindowDropZoneKey;
-end;
-
-procedure TTyToolWindowDropPreview.SetHot(AValue: Boolean);
-begin
-  if FHot = AValue then Exit;
-  FHot := AValue;
-  Invalidate;
-end;
-
-procedure TTyToolWindowDropPreview.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-var
-  P: TTyPainter;
-  R, tr: TRect;
-  barS, zoneS: TTyStyleSet;
-  cls, txt: string;
-  rtl: Boolean;
-  pad: Integer;
-begin
-  P := TTyPainter.Create;
-  try
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    rtl := (FBar <> nil) and FBar.IsRightToLeft;
-    P.BeginPaint(ACanvas, ARect, APPI, rtl);
-    if FBar <> nil then cls := TyStyleClassFor(FBar, FBar.StyleClass)
-    else cls := '';
-    { 1. 栏的底色:预览是不透明的子窗口,DropZone 的底色带透明度,叠在它上面才是「栏的颜色
-      淡淡地提亮一层」。 }
-    barS := ActiveController.Model.ResolveStyle(TyToolWindowBarKey, cls, [tysNormal]);
-    if tpBackground in barS.Present then P.FillBackground(R, barS.Background, 0);
-    { 2. DropZone 的底色和边框;Hot = :hover。 }
-    if FHot then
-      zoneS := ActiveController.Model.ResolveStyle(TyToolWindowDropZoneKey, cls, [tysHover])
-    else
-      zoneS := ActiveController.Model.ResolveStyle(TyToolWindowDropZoneKey, cls, [tysNormal]);
-    TyDrawFrameUnderlay(P, R, zoneS);
-    TyDrawFrameChrome(Self, P, R, zoneS);
-    { 3. 正中一行文字。 }
-    if (FBar <> nil) and (FBar.Placement = twpRight) then txt := rsTyToolWindowDropRight
-    else txt := rsTyToolWindowDropLeft;
-    pad := MulDiv(ActiveController.Metric(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef),
-      APPI, 96);
-    if pad < 0 then pad := 0;
-    tr := R;
-    InflateRect(tr, -pad, 0);
-    if (tr.Right > tr.Left) and (tr.Bottom > tr.Top) then
-      P.DrawText(tr, txt, zoneS.FontName, ResolveFontSize(zoneS), zoneS.FontWeight,
-        zoneS.TextColor, taCenter, tlCenter, True);
-    P.EndPaint;
-  finally
-    P.Free;
-  end;
-end;
-
-function TTyToolWindowDropPreview.PaintPPI: Integer;
-begin
-  if FBar <> nil then Result := FBar.PPI
-  else Result := Font.PixelsPerInch;
-  if Result <= 0 then Result := 96;
-end;
-
-procedure TTyToolWindowDropPreview.Paint;
-begin
-  RenderTo(Canvas, ClientRect, PaintPPI);
-end;
+{$I tyControls.ToolWindows.DropPreview.inc}
 
 { --- TTyCustomToolWindowManager -------------------------------------------------- }
 
