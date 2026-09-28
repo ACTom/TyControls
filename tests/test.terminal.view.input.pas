@@ -10,7 +10,8 @@ interface
 uses
   Classes, SysUtils, Types, Math, Forms, Controls, Graphics, LCLType, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Terminal.Core,
+  tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Terminal.Buffer,
+  tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal, tyControls.Edit,
   test.terminal.keyboard, test.terminal.view;
 
