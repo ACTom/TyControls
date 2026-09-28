@@ -146,13 +146,8 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    // TyConfigureTextFont (which the paint path goes through) bolds at weight >= 600.
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    // The measuring twin of TyConfigureTextFont, which the paint path goes through.
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     // Caption verbatim -- RenderTo never calls TyParseMnemonic, so an '&' is a drawn glyph.
     AWidth := Meas.Canvas.TextWidth(Caption);
     // A stable reference glyph: an empty caption still measures as one line.

@@ -360,12 +360,7 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
     // 用固定的参考字形取行高:标题为空时也仍然是一行的高度。
     AHeight := Meas.Canvas.TextHeight('Ag');
@@ -671,12 +666,7 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
     AHeight := Meas.Canvas.TextHeight('Ag');
     if AWidth < 0 then AWidth := 0;

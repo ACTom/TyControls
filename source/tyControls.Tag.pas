@@ -271,12 +271,7 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidthPx := Meas.Canvas.TextWidth(Caption);
     // A stable reference glyph: an empty caption still sizes the pill to one line.
     AHeightPx := Meas.Canvas.TextHeight('Ag');

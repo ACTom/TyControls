@@ -382,6 +382,25 @@ function TyVecPoint(AX, AY: Double): TTyVecPoint;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 
+{ The height, in DEVICE PIXELS, of a theme font size at APPI -- the character (em) height, the
+  number BGRA calls FontHeight and LCL calls a NEGATIVE Font.Height. The ONE place a font size
+  becomes pixels: the drawing side and the measuring side both take it from here, because they
+  did not use to, and that was the HiDPI defect reported as ACTom/TyControls#2.
+
+  Drawing always computed exactly this. Measuring wrote `Font.Size := MulDiv(size, APPI, 96)`
+  instead -- POINTS, which an LCL TFont turns into pixels with ITS OWN PixelsPerInch, and a
+  freshly created TBitmap's font is born at the SCREEN's PPI (font.inc, TFont.Create). So the
+  PPI went in twice. Measured, for a 9px theme size:
+
+      screen PPI   drawn   measured
+          96         12       12      the two agree, which is what hid it
+         144         18       28      150%: line pitch and wrap width 1.5x too large
+         168         21       37      175%: every size floor 1.75x too large
+          72         12        9      the headless test runner: 25% too SMALL
+
+  A pixel height has no PPI left in it to get wrong. }
+function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
+
 // Shared font setup so text measurement (in controls) matches text drawing
 // (in TTyPainter.DrawText) exactly: same BGRA engine, same height semantics.
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
@@ -427,9 +446,12 @@ function TyIsCJKCodepoint(AValue: Cardinal): Boolean;
   would eventually stop agreeing. }
 procedure TySplitTextLines(const AText: string; ALines: TStrings);
 { Put the font a resolved style asks for onto a MEASUREMENT canvas: the effective family
-  (theme font-family, else TyFallbackFontName), the PPI-scaled size, bold above weight 600.
-  Every MeasureCaption in the library carries its own copy of these four lines; they are the
-  reason a measured width matches the drawn glyphs, so they belong in one place. }
+  (theme font-family, else TyFallbackFontName), the pixel height TyFontHeightPx gives the
+  drawing side too, bold above weight 600.
+  EVERY caption measurement on an LCL canvas goes through here -- the twelve units that
+  used to carry their own copy of these lines now call it -- and tests/test.dpi.measurefont
+  scans source/ so that a copy cannot come back: a copy is how the measuring font and the
+  drawn font came to disagree at every PPI but 96. }
 procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 { The font's own line box on an already-configured canvas. Measured from a fixed reference
@@ -505,11 +527,15 @@ function TyMeasureRenderedTextWidth(const AText, AFontName: string;
                                     fqFineAntialiasing (see also
                                     memory/bgra-small-text-blur-linux). Constant per
                                     binary, so it cannot make an entry stale.
-   12. Screen.PixelsPerInch          reaches the LCL path through TFont.Size->Height on the
-                                    scratch TBitmap. LCL samples it once at startup and
-                                    never revises it, so it is a process constant. (It is
-                                    also the subject of the §5 latch in the DPI plan -- a
-                                    defect one layer BELOW this library, unchanged here.)
+   12. Screen.PixelsPerInch          NOT AN INPUT ANY MORE. It used to reach the LCL path
+                                    through TFont.Size->Height on the scratch TBitmap,
+                                    whose font is born at the screen's PPI -- and that was
+                                    the HiDPI defect of ACTom/TyControls#2, not a harmless
+                                    process constant. TyConfigureMeasureFont now writes a
+                                    pixel Height, which has no PPI left in it;
+                                    tests/test.dpi.measurefont varies ScreenInfo to pin it.
+                                    (The §5 latch in the DPI plan is a different path and
+                                    still reads it -- one layer BELOW this library.)
 
   FOLD OR KEY RAW -- the rule applied above, stated so the next edit follows it: key the
   RAW parameter when the parameter alone determines what the font engine is configured
@@ -1015,6 +1041,14 @@ begin
   end;
 end;
 
+function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
+begin
+  Result := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  { Never 0: an LCL Font.Height of 0 does not mean "invisible", it means "the default size",
+    which would measure a caption nobody is going to draw. }
+  if Result < 1 then Result := 1;
+end;
+
 procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
@@ -1022,7 +1056,12 @@ begin
   // drawn -- TyConfigureTextFont falls back the same way on the drawing side.
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ACanvas.Font.Name := TyEffectiveFontName(AFontName);
-  ACanvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
+  { Height, in pixels, NEGATIVE (= character height, what BGRA's FontHeight means) -- never
+    Size. Size is points, and the canvas font converts points with its own PixelsPerInch,
+    which is the screen's: see TyFontHeightPx for what that did at 150% and 175%.
+    Font.PixelsPerInch is deliberately left alone: TFont.SetPixelsPerInch RESCALES a non-zero
+    Height, so touching it after this line would put the PPI back in a second time. }
+  ACanvas.Font.Height := -TyFontHeightPx(AFontSizeLogical, APPI);
   if AWeight >= 600 then
     ACanvas.Font.Style := [fsBold]
   else
@@ -1130,7 +1169,7 @@ begin
   // A missing font-size (0) would render invisible text; fall back to a visible default.
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ABmp.FontName := TyEffectiveFontName(AFontName);
-  ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  ABmp.FontHeight := TyFontHeightPx(AFontSizeLogical, APPI);
   // Text quality is a WIDGETSET choice. fqFineAntialiasing only stays crisp where BGRABitmap runs
   // its OWN 3x supersampler -- the Win32 LCL font backend. On Qt/GTK it renders BLANK (diagnostic on
   // Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on Cocoa it silently drops to single-pass
