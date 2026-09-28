@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾），实现期修正已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；两期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -68,6 +68,13 @@
 - 名字已查：`source/` 下没有 `tyControls.Unicode*`、`tyControls.Terminal*`，也没有任何 wcwidth / EastAsian / grapheme 代码。
 - 组件面板只注册 `TTyTerminalView`，放 `TyControls Edits` 分页、挨着 `TTyMemo`（`designtime/tyControls.Design.pas:143-146`）；`TTyTerminalCore` 不是组件（§7.1）。
 
+**实现期修正（2 期）**：
+- ~~`services/{Buffer,…}Service.ts` 在 Core~~ `BufferService` 放在 Buffer 单元：它只管滚动、视口、改尺寸，放在下层 2b 才能单独对上游比；Core 持有一个。
+- 新增生成物 `source/tyControls.Terminal.Charsets.inc`（`gen-terminal-charsets.js` 从上游 `CHARSETS` dump，别名保留），和 `Unicode.Width.Data.inc` 一样不进 `.lpk`。
+- 测试辅助单元 `tests/test.terminal.oracle.pas`：读夹具、驱动 Core、逐项比较，自身不注册测试。
+- `Unicode.Width` 多了三个纯函数 `TyUnicodeUtf8Size` / `TyUnicodeUtf8Encode` / `TyUnicodeCodepointToUtf8`：终端几个单元只有这一份 UTF-8 编码器（码位越界或落在代理区编成 U+FFFD）。JavaScript 空白判断只在 Buffer 一份（`TyTermIsJsWhitespace`）。
+- Core 的实现拆成三个 include：`tyControls.Terminal.Core.Services.inc`（CoreService / 字符集 / 鼠标 / 颜色焦点 / 选项）、`…Core.InputHandler.inc`（全部控制序列处理器）、`…Core.WriteQueue.inc`（写入队列与重入）；照 `ToolWindows.*.inc` 的先例不进 `.lpk`，notices 标题和发版守卫逐个列名。
+
 ### 2.2 不移植的上游部分
 
 DOM 渲染器与 WebGL 渲染器、`Viewport`（浏览器滚动）、`AccessibilityManager`、`CompositionHelper`（浏览器输入法）、`Linkifier` 的 DOM 部分、所有 addon 的 UI 部分。
@@ -100,11 +107,25 @@ LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessag
 
 测试和无头使用走 `Core.WriteSync`（照 `WriteBuffer.writeSync`，`:106`），当场解析完。
 
+**实现期修正（2 期）**：
+- ~~一片最多跑 12ms~~ 12ms 在**块与块之间**检查，一个大块整块解析完才让出（上游同样，`WriteBuffer.ts:224-297`）；块内切片是 5 期的事。
+- 排片：Core 加 `OnProcessRequest`——队列从空变非空时发，同一时间最多一个待处理请求（照上游 `cancelAndSet` 只留一个定时器）；控件在里面 `Application.QueueAsyncCall`，回调里调 `ProcessPending`，返回 True 再排下一片。
+- 时钟 `Clock` 可注入（毫秒，带小数）。默认：Windows 用 `QueryPerformanceCounter`（频率只取一次）；macOS 用 `mach_absolute_time`（FPC 3.2.2 在 Darwin 上的 `GetTickCount64` 是 `gettimeofday`，会跟着墙钟跳；RTL 没声明 mach 计时器，单元里自己声明）；Linux / FreeBSD 用 `GetTickCount64`（`CLOCK_MONOTONIC`）；其余 Unix 同样走 `GetTickCount64`，FPC 那里是 `gettimeofday`。
+- 线程检查：`Write` 两个重载、`WriteSync`、`ProcessPending`、`Resize`、`Reset`、`Input`、四个 `Scroll*`、`ClearScrollback`、`TriggerMouseEvent`、`ReportFocus`、`NotifyColorSchemeChanged`、`EndSynchronizedOutput`，非主线程一律 `EInvalidOperation`。
+- 积压判定照上游用 `>`：超过 50,000,000 **字节**（队列按字节计）抛 `ETyTerminalWriteOverflow`（新类，宿主可单独捕获；上游抛普通 `Error`）。另加一条：没处理的块超过 100,000 个也抛同一个异常。`Write('')` 不带回调直接忽略，带回调照常入队（回调的意义是「前面的都处理完了」）。
+- 取块时**先推进偏移、再解析、再回调**，块的数据当场释放；处理器抛异常时这一块算已处理（不会重解析），它的回调照样调（宿主按回调做流量控制，不能少一次），剩下的块留在队里并重新 `OnProcessRequest`。上游的 `writeSync` 这时会永远停在「同步写中」。
+- `WriteSync` 和 `Resize` 前的清空都从第一个没处理的块开始（修上游让出后改尺寸重复解析，§15）。
+- **重入**：所有事件都在解析中同步发（`OnScroll`、`OnData`、`OnBell`、`OnTitleChange`、`OnOsc`、`OnRefreshRows`……），`Resize` / `Reset` 执行中也会发事件。事件里调 `Resize`、`Reset`、`WriteSync` 不报错，而是记下来，等这一块解析完、它的回调跑完再按调用顺序执行，`Resize` 只保留最后一次；`ProcessPending` 这时直接返回 False，Core 忙完后若还有东西会重新请求。结果和「事件返回后再调用」相同，不会重复解析，也不会有缓冲在处理器底下被换掉。3 期控件的常见路径（滚动条出现 → 改尺寸、模态框里跑消息循环）靠这一条不出事。
+
 ### 3.2 脏行与重画
 
 - 核心每改一行就把行号并进脏区间（上游 `_dirtyRowTracker.markDirty`，`InputHandler.ts:534`），解析完一片后发一次 `OnRefreshRows(First, Last)`。
 - 控件只 `Invalidate` 这几行的矩形；操作系统合并无效区，一帧最多画一次。上游同样只记 `[start, end]` 区间、一帧画一次（`xterm:src/browser/RenderDebouncer.ts:34-51`）。
 - **同步输出（DECSET 2026）**：模式开着时只攒脏行不画，关掉时一起画；1 秒没关就强制关掉再画（`xterm:src/browser/services/RenderService.ts:22`、`:162-167`、`:359-363`）。
+
+**实现期修正（2 期）**：
+- `OnRefreshRows` 每解析完一块发一次（区间算法照 `InputHandler.ts:474-484`）；处理器抛异常时也照发，这一块改过的行不会漏画。
+- 2026 的「攒着不画」是控件的事，Core 只维护模式。1 秒超时的入口是 `Core.EndSynchronizedOutput`：清掉 2026、整屏 `OnRefreshRows`、发 `OnModesChange`（照上游超时回调）；3 期控件的 1 秒计时器调它。
 
 ### 3.3 输出：`OnData` 交字节
 
@@ -217,6 +238,10 @@ function TyUnicodeVersionName(AVersion: TTyUnicodeVersion): string;      // '6' 
 - **处理器注册**：打印、执行（C0 / C1）、CSI、ESC、OSC、DCS、APC 各一张表；键 = 前缀 + 中间字节 + 终止字节，同上游 `_collect << 8 | final`（`:717`）。处理器返回 `Boolean`，false 继续找下一个（上游的回退链）。
 - **每次最多喂 131072 个码位**（`MAX_PARSEBUFFER_LENGTH`，`InputHandler.ts:45`），超出的分段喂。
 
+**实现期修正（2 期）**：
+- ~~131072 个码位~~ 131072 **字节**：上游按输入单元切，字节输入的单元就是字节（`InputHandler.ts:458-468`）；解码器的半截序列和 `PrecedingJoinState` 跨切口保留。
+- U+FEFF（BOM）不论出现在哪，照上游解码器丢弃（`TextDecoder.ts:195`、`:293`）。
+
 ### 5.2 有界
 
 | 上限 | 值 | 出处 | 超出时 |
@@ -228,6 +253,11 @@ function TyUnicodeVersionName(AVersion: TTyUnicodeVersion): string;      // '6' 
 | OSC / DCS / APC 载荷 | 10,000,000 | `parser/Constants.ts:65-67`；`OscParser.ts:196-237` | 标记超限，结束时处理器收到失败、不执行 |
 
 坏序列、超长序列的测试断言的就是这几条：喂完之后内存和状态都在上限以内，后续正常序列照常工作（§13.4）。
+
+**实现期修正（2 期）**：
+- 载荷上限按 **UTF-16 单元**计（码位 > U+FFFF 记 2），判定用 `>`（`StringBuilder.ts:55-61`）：10,000,000 单元还收，多一个就不收。Pascal 存 UTF-8，计数照 UTF-16。
+- OSC 编号在 Int64 里饱和累加，不回绕（上游是 JS 浮点）；超过 `High(Integer)` 的编号不命中任何处理器，也不交 `OnOsc`。
+- 解析器以外也有界：REP 快进（§7.2、§15）、IL / DL / SU / SD / CHT / CBT 的循环钳到还可能改变状态的遍数、链接表上限、`Scrollback` 上限（§6.2）、写入队列的块数上限（§3.1）；没挂 `OnOsc` 时未处理 OSC 的载荷根本不收集（§7.4）。
 
 ### 5.3 接口草案
 
@@ -264,6 +294,12 @@ type
 
 注销：上游返回 `IDisposable`；Pascal 版 `Register*` 返回一个整数句柄，`Unregister(AHandle)` 撤销。
 
+**实现期修正（2 期）**：
+- 回退处理器全套：执行、CSI、ESC、OSC、DCS、APC 各一个 `Set*HandlerFallback`，打印处理器可设可清（`SetPrintHandler` / `ClearPrintHandler`），外加错误处理器 `SetErrorHandler` / `ClearErrorHandler`；`Clear*Handler` 对应上游的删除。
+- `IOscHandler.end` / `IApcHandler.end` 在 Pascal 是保留字，叫 `Finish`；`IDcsHandler.unhook` 叫 `Unhook`。
+- 注册进来的处理器对象归解析器所有：`Unregister`、`Clear*` 或解析器析构时释放；正在用的（解析中注销自己、清掉正在进行的 OSC 那条链）延后到解析返回或解析器析构，那条链照上游继续服务眼下这个序列。不存在或已注销的句柄是空操作。
+- `OscPayloadLength`、`TyTermTransition` 是给测试的纯查询，注释标明。
+
 ---
 
 ## 6. `tyControls.Terminal.Buffer`
@@ -287,6 +323,14 @@ type
 - 标记（`Marker.ts`）：挂在某一行上、随滚动移动、行被挤掉时作废。控件用它记住选区的锚点；宿主可用来做 shell 集成的命令边界。
 - 链接表：OSC 8 的 `id` + URI → 链接号，格子上存链接号（`OscLinkService.ts`）。
 - **重新折行**（5 期）：宽度变化时按 `IsWrapped` 重排主缓冲（`BufferReflow.ts`、`Buffer.ts:258-259`）；备用缓冲不折。Windows ConPTY 版本号低于 21376 时上游**关掉折行**（`Buffer.ts:310-316`）并打开「行尾不是空白就当折行」的启发（`CoreTerminal.ts:279-289`、`WindowsMode.ts:9-26`）——本机 Windows 10 LTSC 2021 是 19044，正好落在这条线下面。控件照移植，由宿主告诉 Core 后端和版本号（`WindowsPty`，§7.2、§7.6）。
+
+**实现期修正（2 期）**：
+- 行和标记都带非原子引用计数（`AddRef` / `Release`，归零释放；Core 只在主线程）。环形表每个槽位、`BufferService` 的缓存空行各持一份；跨一次表修改还要用的行显式钉住（打印的当前行和折行前的旧行）。槽位写入先加新引用再减旧引用，所以把一行挪到同一表的另一个槽位不必钉。`Pop` 和缩短长度后，越界槽位的引用保留到被覆盖，和上游数组一样。标记由缓冲持一份、链接表每列一次持一份。
+- 行表起点照上游只在 `push` / `recycle` 取模，`splice` / `trimStart` / `shift` 不取模，用 Int64 存——`Get(-1)` 因此和上游答得一样。
+- `Clear` 换新行表时缓冲的代号加一，旧代号的标记从此不再随行移动（上游它们还订阅着旧表）。
+- 2–4 期折行恒关：`IsReflowEnabled` 恒 False，但 `Resize` 已经在上游的位置读它、调 `Reflow`（空实现）并在变窄时截短行——5 期只填 `Reflow`、把开关换成上游规则。改列数的基准用例都在 `windowsPty = {conpty, 19044}` 下（上游这时同样不折）。
+- `Scrollback` 上限 100000（`TyTermMaxScrollback`）：环形表按容量一次分配指针数组，上游的 JS 数组是稀疏的，给 10^9 会直接分配 8GB。选上限而不是按需增长：多一行判断、不碰环形表的下标算法。更大的值按上限取，负数照上游抛异常。
+- OSC 8 链接表最多 10000 条、`id` + URI 合计 16MB（`TyTermMaxLinks`、`TyTermMaxLinkBytes`），再多就丢最老的（格子上留着的号从此查不到，按无链接画）；链接号改 Int64，注册超过 2^31 次仍然递增有序。上游两样都无界（§15）。
 
 ### 6.3 接口草案
 
@@ -320,6 +364,15 @@ type
 
   TTyTerminalBufferSet = class  // Normal, Alt, Active, IsAlt, OnActivate
 ```
+
+**实现期修正（2 期）**（§6.1、§6.3）：
+- `TranslateToString` 连缓存一起移植，缓存的答案可观察：先要不去尾的、再要去尾的，上游对缓存做 JS `trimEnd()`，会连写进去的空格和别的 JS 空白一起去掉，和按「去尾长度」算的结果不同，照上游。实现用两遍扫描、一次分配。
+- 行的 `Resize` 返回值照上游「`cleanupMemory` 能不能省内存」，按分配容量算（缩短不释放、变长够用就复用）；内存回收调度本身没有可观察行为，不移植。
+- 制表位表保留列数以外的旧键（上游不删），导出时按数值排序。
+- 字符集替换只取映射串的第一个 UTF-16 单元（上游 `charCodeAt(0)`），表由脚本 dump。
+- 组合文本、扩展属性的稀疏表只在格子标志位说有时才读：`CombinedEntry` / `ExtendedEntry` 先看标志位，残留的旧条目永远不是答案（上游也只在标志位后面查表）。
+- `TTyTerminalExtAttrs.UrlId` 是 Int64（链接号，§6.2）。
+- `LiveCount`（行、标记、链接条目各一个）、`SlotLine`、`SeedNextIdForTest` 是给测试的，注释标明。
 
 ---
 
@@ -355,20 +408,42 @@ type
 
 **选项**：照 `DEFAULT_OPTIONS`（`OptionsService.ts:12-61`）里和核心有关的那部分——`Scrollback`（1000）、`TabStopWidth`（8）、`ConvertEol`（false）、`ScrollOnUserInput`（true）、`ReadOnly`（= `disableStdin`，false）、`WindowOptions`（全关）、`VtExtensions`（kitty 键盘 false、win32-input-mode false、SGR 221/222 true、颜色主题查询 true，`typings/xterm.d.ts:465-505`）、`WindowsPty`（空）、`UnicodeVersion`、`AmbiguousWide`。
 
+**实现期修正（2 期）**：
+- 选项补四个（核心代码读它们）：`CursorStyle` / `CursorBlink`（DECRQSS `" q"` 的应答、DECRQM 12 读选项值）、`ScrollOnEraseInDisplay`（ED 2 的分支，默认 false）、`AllowSetCursorBlink`（上游 `quirks.allowSetCursorBlink`，默认 false）。`termName` 固定 `'xterm'`，不开放。`Scrollback` 有上限 100000（§6.2）。
+- 1004：打开的那一刻按 Core 记住的焦点立即报一次（浏览器层的行为，`CoreBrowserTerminal.ts:1124-1130`）。`Focused` 初值 **True**（和上游浏览器层起步时的假设一致）：3 期控件建好后必须按实际焦点调一次 `ReportFocus`，否则一个没焦点的终端在程序打开 1004 时会报「有焦点」。
+- XTWINOPS 14t / 16t 要像素，Core 只发 `OnWindowOptionsReport(Sender, AKind)`，由控件应答；默认 `WindowOptions = []` 走不到。18t / 22t / 23t Core 自己处理。
+- DECCOLM（`CSI ? 3 h/l`，要 `twoSetWinLines`）改到 132 / 80 列后发 `OnResize`，和 `Resize` 同一个事件（上游 `BufferService.onResize` → `onResize`）。
+- `OnIconNameChange`（上游只存不发）和 `OnModesChange`（上游没有，每条改了模式的序列发一次）是新增事件。
+- REP 按次数精确打印，靠快进保证耗时有界（§15）。
+
 ### 7.3 颜色请求
 
 OSC 4 / 10 / 11 / 12 设置和查询、OSC 104 / 110 / 111 / 112 复位（`InputHandler.ts:293-325`）。上游核心只发事件，由浏览器层拿主题色应答或改色（`CoreBrowserTerminal.ts:211-258`）。
 我们把**覆盖表**放在 Core：程序设置的颜色存成「第 n 色 → RGB」，复位就删掉；查询时 Core 问控件要基准色（事件 `OnQueryBaseColor`），有覆盖用覆盖。渲染取色也走同一处：覆盖表优先，其次主题。
 颜色主题查询（`CSI ? 996 n`）照上游用前景 / 背景亮度比较决定报深 / 浅（`CoreBrowserTerminal.ts:261-`）。主题切换时控件调 `Core.NotifyColorSchemeChanged`，开了 2031 就发通知。
 
+**实现期修正（2 期）**：
+- 2031 开着时，**每一次** OSC 设色、复位色都报一次明暗（上游 `modifyColors` / `restoreColor` 都发 `onChangeColors`，`CoreBrowserTerminal.ts:526-531`）。
+- `NotifyColorSchemeChanged` 先清空覆盖表（上游换主题重建整张色表，OSC 覆盖色随之丢掉，`ThemeService.ts:80-139`），再按 2031 报明暗。RIS 不清覆盖表（上游 `reset` 不碰 ThemeService）。
+- 没挂 `OnQueryBaseColor` 就没有主题可答：OSC 4 / 10 / 11 / 12 的查询、`CSI ? 996 n`、2031 的通知一律不应答，和上游 headless 一致；设色、复位照常记进覆盖表。焦点报告不受影响。
+
 ### 7.4 未处理的 OSC
 
 核心注册的 OSC 只有 0 / 1 / 2 / 4 / 8 / 10 / 11 / 12 / 104 / 110 / 111 / 112（`InputHandler.ts:286-325`）。52 由控件注册（§9.6.3）。其余一律进 `OnOsc(Ident, Data, var Handled)`——7（当前目录）、133 / 633（shell 集成）、1337 等由宿主处理。宿主也可以直接 `Core.Parser.RegisterOscHandler`。
+
+**实现期修正（2 期）**：
+- ~~`OnOsc(Ident, Data, var Handled)`~~ `OnOsc(Sender, AIdent, AData)`：Core 对未处理的 OSC 本来就没有默认动作，`Handled` 无处可用，删掉。
+- 只交 0..`High(Integer)` 的编号（没有编号的 OSC 是 -1，也不交）。载荷和字符串处理器同一个上限，成功结束才交。
+- OSC 开始时没挂 `OnOsc` 就不收集载荷（中途才挂上的那一个也不交），没人听不花内存。
 
 ### 7.5 鼠标协议状态
 
 照 `MouseStateService`（`xterm:src/common/services/MouseStateService.ts`）：五种协议及其过滤（`:13-82`）、事件码（`:92-113`）、三种编码（`:121-151`；默认编码超过 223 就不报，`:133-135`）。
 上报前的过滤照浏览器层 `_triggerMouseEvent`（`MouseService.ts:497-545`）：去掉无意义组合、坐标转 1 起、移动事件按格（像素编码按像素）去重、协议限制、编码。控件把 LCL 鼠标事件换成 `TTyTerminalMouseEvent` 交给 `Core.TriggerMouseEvent`，Core 决定发不发、发什么。
+
+**实现期修正（2 期）**：
+- `RestrictMouseEvent` / `EncodeMouseEvent` 是上游 `MouseStateService` 的两个纯函数，收 **1 起**坐标（和上游一样），直接对上游比（`core-cases.js` 的鼠标夹具）。
+- `TriggerMouseEvent` 本批提前到 2 期（原计划 4 期），3 期起控件不必自己路由：收 0 起的格子和设备像素；出界、滚轮 + 移动、无键 + 非移动、非滚轮 + 左右，一律 False；转 1 起；移动与上一个事件相同（按格，SGR-像素按像素，连同键、动作、修饰键）就丢；协议限制；编码；默认编码走二进制（不滚到底、不算用户输入，上游 `triggerBinaryEvent`），其余走 `triggerDataEvent(报告, true)`（滚到底、下一次 `Write` 当场解析）。编码放不下（默认编码超过 223）时照上游仍返回 True、记为上一个事件。`Reset` 清掉上一个事件（上游 `mouseService.reset`）。上游这一段是浏览器代码，没有基准，逐条写判据测试。
 
 ### 7.6 接口草案
 
@@ -445,6 +520,14 @@ type
     property  OnRequestScrollToBottom: TNotifyEvent;
   end;
 ```
+
+**实现期修正（2 期）**：实际接口（`source/tyControls.Terminal.Core.pas`）比上面多出、改动的：
+- 写入：`ProcessPending(ABudgetMs = 12)`、`PendingBytes`、`Clock`、`OnProcessRequest`（§3.1）；`ETyTerminalWriteOverflow`。
+- ~~`OnScroll: TNotifyEvent`~~ `OnScroll(Sender, AYDisp)`：带视口位置，和上游 `onScroll` 一致。
+- 新增：`ScrollPages`（页数 × 行数在 Int64 里算、钳进 Integer）、`IconName`、`Links`（OSC 8 链接表）、`HasColorOverride`（纯查询）、`Focused`（只读，初值 True，§7.2）、`EndSynchronizedOutput`（§3.2）、`TriggerMouseEvent`（§7.5）、`OnResize(Sender, ACols, ARows)`（`Resize` 与 DECCOLM）、`OnScrollbackCleared`（ED 3 真清掉了滚回时、`ClearScrollback` 每次）、`OnWindowOptionsReport`（§7.2）、`OnIconNameChange`、`OnModesChange`、`CursorStyle` / `CursorBlink` / `ScrollOnEraseInDisplay` / `AllowSetCursorBlink`（§7.2）。
+- `OnOsc` 去掉 `var AHandled`（§7.4）。
+- 给测试的只读查询（`CharsetOfG`、`CharsetKey`、`WindowTitleStack`、`IconNameStack`、`KittyStacks`、`KittyFlags` 等、`IsCursorInitialized`、`GLevel`、`CurrentAttr`、`EraseAttr`、`BufferService`）集中在一处，注释标明「FOR THE TESTS」。
+- 事件全部同步发，大多在解析中；事件里调 `Resize` / `Reset` / `WriteSync` 会被延后到这一块处理完，`ProcessPending` 直接返回 False（§3.1）。接口注释写明。
 
 ---
 
@@ -840,6 +923,11 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - 1 期实际的文件：`lib-dump.js`（上游加载、钉版本、Buffer 池修法、变体切换、区间编码、写文件与 2MB 上限、生成物登记 `GENERATED`）、`gen-unicode-tables.js`、`unicode-cases.js`、`cases/unicode.js`（手写序列与串，只有输入）、`regen-all.js`（重跑全部生成脚本；只许 `GENERATED` 里的文件变，带 `--expect-clean` 时一个字节都不许变；期末审查加了一条：运行前工作区必须干净，否则手改和生成改分不开）、`unicode-license.txt`（Unicode License v3 原文，从 unicode.org 取）。
 - 三份夹具：`terminal-unicode-width.json`（六个变体全码位 `wcwidth` 的区间表 + 越界探针）、`terminal-unicode-join.json`（六个变体 × 九个前驱的全码位 `charProperties` 区间表）、`terminal-unicode-cases.json`（手写序列、代表码位两两 / 三连、串宽）。格式写在 `unicode-cases.js` 头部，不用 §13.3（那是 2 期缓冲夹具的格式）。实际体积约 42KB / 642KB / 699KB。
 
+**实现期修正（2 期）**：
+- 2 期多出的脚本：`lib-term.js`（建终端、跑步骤、导出整份状态、合成应答器、种子随机数、REP 快进标记）、`buffer-cases.js`（缓冲层操作脚本）、`gen-terminal-charsets.js`（§2.1）、`wsl-record.sh` + `wsl-record-pipe.py`（WSL 里用 tmux 录制，§13.4）；手写输入 `cases/parser.js`、`cases/buffer.js`、`cases/core-hand.js`。鼠标限制 / 编码的直接比较并进 `core-cases.js`；`mouse-cases.js` 留给 4 期的控件侧事件转换。
+- `lib-dump.js` 的过期构建检查 `PORTED` 覆盖 2 期移植的全部源文件（含 `data/EscapeSequences.ts`、`headless/public/Terminal.ts`）；`regen-all.js` 缺任何一个生成脚本就报错，不再跳过。
+- Pascal 测试：`test.terminal.oracle.pas`（辅助单元）、`test.terminal.parser.pas`、`test.terminal.buffer.pas`、`test.terminal.core.pas`；探针 `tools/terminal-probe`（参数写错给出明确的错误）。
+
 Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + 'terminal-<name>.json'`，`fpjson` 解析（`D:/Projects/ty-advchart/tests/test.advchart.bargeometry.pas:62-66`、`:131-134`）。
 夹具里有 NUL 字节时解析前要处理（[[fpjson-drops-u0000]]）——所以字节一律 base64 存，不用 JSON 字符串。
 
@@ -895,6 +983,12 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - `modes` 的字段名和 headless `IModes` 对齐，多出的（鼠标编码、DECSCUSR 状态）从 `_core` 读。
 - 数字都在 32 位以内，不用 AdvChart 的 IEEE 位模式写法。
 
+**实现期修正（2 期）**（细则在 2 期计划「夹具格式」）：
+- `cells` 的第 4 个槽位是**游程**（连续相同的格数）；`combined` 存码位数组；「长度等于列数、不折行、全是默认空格、无组合无扩展」的行省略，其余全导出；制表位导出为真的键、按数值排序；单个文件超 1.8MB 自动分片 `terminal-<kind>-<n>.json`，Pascal 侧查分片连号。
+- 导出比原稿多：`isUserScrolling`、kitty 键盘状态、`cursorInitialized`、两个可被序列改的选项终值、字符集 G0–G3 与 GL、保存的光标（含字符集）、标记行号、标题栈、链接表、解析器状态与连接状态、各事件的计数与列表，以及本批加的 **`curAttr` / `eraseAttr`**（`{fg, bg, ext: [ext, urlId, 下划线色, 变体偏移]}`，接下来要写的字符和要擦的格子用的属性）。
+- 用例可带 `ignore`：顶层字段名的列表，Pascal 比较时跳过。只用于有文档的偏离——REP 快进不发被跳过那段的 `OnScroll`（§15），`lib-term.js` 看到 REP 次数大到可能快进（`> 2 × 环形表容量 + 行数 + 2`）就自动标 `["scrolls"]`。
+- **合成应答器每个核心用例都挂**（不只 `synthesized` 类）：Pascal Core 总会答颜色、明暗、1004 焦点，随机字节和录制里一旦出现这些查询，两边才对得上；调色板 259 项随夹具走。
+
 ### 13.4 夹具来源与覆盖
 
 | 来源 | 内容 | 期 |
@@ -913,6 +1007,11 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 | 网址识别 | 上游 `strictUrlRegex` 在 node 里直接跑（§9.8） | 4 |
 | 重新折行 | `resize` 步骤前后的缓冲，含 `windowsPty` 两种设置 | 5 |
 
+**实现期修正（2 期）**：
+- 序列文件~~上游跳过的几个照跳~~**全比、不跳**：76 个 `.in` 加 3 个停用的 `.in_`，共 79 个；上游跳过的 5 个理由是「和真 xterm 的输出对不上」，我们比的是上游本身，理由不成立。从 git 对象读（工作区在 `autocrlf` 下是 CRLF），80×25、`convertEol: true`（代替真 PTY 的 ONLCR）。
+- 录制：本机 WSL `Ubuntu` 里用 tmux 脚本化驱动 8 个程序（vim、less、htop、`git log --color`、`ls --color`、python REPL、tmux 分屏、`cat` 中英文表情文件），`env -i` 清空环境、不带用户名和主机名。本批把 tmux 的 `default-terminal` 设成 `xterm-256color`（原来是 tmux 默认的 `screen`，程序只发 8 色）后全部重录，vim 用 `habamax` 配色，录到了 `38;5` 序列。ConPTY 的录制 4 期补。
+- 超长：IL / DL / SU / SD 的 2^31 次上游跑不完，改由 Pascal 的耗时守卫证明（参数 2^31−1 与 1000 结果相同、很快返回）；夹具里用 1000 证明钳制等价。REP 用几倍环形表容量的次数（十几种形态：宽字符、字形簇、区旗、上下边距、光标在边距外、不折行、插入模式、用户上翻、备用屏、链接、属性、ConPTY 无滚回）由上游逐个打印出期望值，证明快进与逐个打印相同。
+
 ### 13.5 夹具纪律（AdvChart 的教训照搬）
 
 出处：`D:/Projects/ty-advchart/docs/superpowers/specs/2026-09-01-advancechart-tier0.md:4785-4792`、[[advchart-upstream-oracle]]。
@@ -924,6 +1023,12 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 5. **复用路径也要比**：每个用例在 Pascal 侧跑两遍——一次 `Reset` 后重跑、一次新建 Core——结果都要对（照 AdvChart「先 Invalidate 再画一次」那条）。
 6. **上游自己崩的输入**没有答案：删掉用例并在脚本里记一行。
 7. **生成可复现**：脚本不读时间、不用未种子化的随机数；重跑脚本 `git diff` 应为空。
+
+**实现期修正（2 期）**：
+- 第 5 条的「复用路径」期望值**由 node 实际 `reset()` 后在同一实例上重跑生成**：headless 的 `reset()` 不是全复位（标题、链接号、隐藏的光标都留着），不能假设和新建一样；相同就记 `"afterReset": "same"`。
+- 第 3 条的归一化只有 XTVERSION 一处；合成应答挂在 node 侧，不算归一化。
+- 8. **每个判据单独一个用例**（本期期末审查的教训）：同一个用例里后面的步骤会把前面的结果盖掉（IL 之后又 DL、一个 ECH 之后又一个、DECSTBM 之后又一个），钳制「减 1」这类变异就测不出来。钳制类用例在内容不全是空白的屏幕上做，做完立刻结束，结果留在导出的状态里。
+- 9. 每个用例的核心全部释放后，行、标记、链接条目的存活数必须回到用例开始前（泄漏守卫，每用例一次）。
 
 ### 13.6 3–5 期
 
@@ -946,6 +1051,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **Unicode 数据**：15 的表源自 Unicode 字符数据库，另加 Unicode 许可（Unicode License v3）声明；原文 1 期从 unicode.org 取（§17 实现问题 10）。
 - **实现期修正（1 期）**：`addon-unicode-graphemes` 的 `UnicodeProperties.ts`（字形簇规则 `shouldJoin` / `_shouldJoin` 和 15 表数据）由外部项目 PerBothner/unicode-properties 生成（addon `README.md:7`）。该项目许可已核实为 **MIT**（仓库 `LICENSE` 首行 `Copyright 2018`，正文与 xterm.js 的 MIT 逐字相同、只是折行不同；GitHub 标 `MIT`），兼容，规则照移植、不必按 UAX #29 自写。单元头、`.inc` 头、`THIRD-PARTY-NOTICES.md` 的 xterm.js 一节都写了出处；notices 把它的版权行和 xterm.js 的几行并列、共用同一段 MIT 正文，发版守卫 `TheThirdPartyNoticeCoversTheUnicodeWidthPort` 查这一行。§4.2 理由 2 说的「没有许可头」仍然成立，只是文件本身没写，来源项目有许可。
 - **测试夹具**：`escape_sequence_files` 的输入来自 xterm.js 仓库（MIT），其中部分期望文本注明取自另一个项目（`NOTES` 的「text used from … vt100-parser」一行）；我们只取 `.in` 输入、期望值由上游生成，但输入字节进了夹具，在 notices 里加「测试夹具」一小节（§17 实现问题 9）。
+- **实现期修正（2 期）**：`MarkLodato/vt100-parser` 许可已核实为 MIT（`Copyright (c) 2010 Mark Lodato`），它的 `test/` 与 xterm.js 的 76 个 `.in` 有 48 个同名，notices 的「Test fixtures」一小节写明部分输入最初出自那里并附其版权行。xterm.js 一节的版权行照上游 `LICENSE` 补了「`Copyright (c) 2014-2026, The xterm.js authors`」一行；Fabrice Bellard（jslinux）的版权只在 Core 单元头说明来历（上游 `LICENSE` 不列它）。notices 标题逐个列出移植的文件（含 `Charsets.inc` 和 Core 的三个 include），发版守卫逐个查。
 
 ---
 
@@ -963,6 +1069,17 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 解析处理器全同步（§2.2）。
 - 程序接管鼠标时 Ctrl+单击仍开链接、覆盖键+右键弹菜单（§9.5.2、§9.8）。
 - 闪烁文字不闪（上游默认也不闪，只是没有开关）。
+
+**实现期修正（2 期）**，2 期新增的偏离：
+- **REP**：上游先分配「次数 × 文本」再打印，次数一大就不返回、没有答案。~~Pascal 钳到 2^20 次~~ 我们按次数精确打印，靠快进保证耗时有界：输出把整个环形表（行数 + 滚回）翻过一遍以上后，状态随重复的周期循环，整周期跳过；行、光标、`ybase` / `ydisp`、环形表起点都和逐个打印相同，只是被跳过那段滚动**不发 `OnScroll`**。几倍环形表容量的次数由上游逐个打印出期望值证明等价。唯一跳不过去的是每次重复都把码位堆进同一格（孤立的组合符反复重复）：同一行上、既不滚动也不换行地打了 2^20 个码位后停止。耗时与次数无关，约为「环形表容量 × 被重复文本的长度」。
+- 修上游「一片因时间预算停下后改尺寸，已处理的块再解析一遍」的 bug：`WriteSync` 和改尺寸前的清空都从第一个没处理的块开始（§3.1）。
+- 写入队列的异常安全、块数上限、事件里调用的延后（§3.1）是我们加的；上游在处理器抛异常后会停在「同步写中」。
+- 颜色、明暗、焦点的应答在 Core 里（上游在浏览器层，headless 不应答）；没挂 `OnQueryBaseColor` 时颜色与明暗不应答，和 headless 一致（§7.3）。
+- 新增事件：`OnIconNameChange`、`OnModesChange`、`OnProcessRequest`、`OnWindowOptionsReport`、`OnScrollbackCleared`、`OnResize`（上游有 `onResize`，这里照发）；`TriggerMouseEvent` 和 `EndSynchronizedOutput` 把浏览器层的两段逻辑搬进 Core。
+- 码位编 UTF-8 时，越界或代理区的码位写成 U+FFFD（上游会生成孤立代理或乱码；解码器本来不会产出这种码位）。
+- `Scrollback` 上限 100000（§6.2）。
+- 2–4 期不重新折行：改列数时走上游「老 ConPTY」那条路径（§6.2），5 期接上。
+- OSC 8 链接表最多 10000 条、16MB，再多丢最老的；链接号 Int64（§6.2）。
 
 **不做**（以后要再单独立项）：
 
@@ -1013,17 +1130,17 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 
 ### 17.2 实现层面的（计划里定，不必问）
 
-1. `TTyTerminalCore` 用 `TObject`（§7.1）。
-2. 非主线程 `Write` 抛 `EInvalidOperation`（§3.5）。
+1. `TTyTerminalCore` 用 `TObject`（§7.1）。**已完成（2 期）**。
+2. 非主线程 `Write` 抛 `EInvalidOperation`（§3.5）。**已完成（2 期）**：扩到全部公开入口（§3.1）。
 3. 字形遮罩做法由 E2 定，默认（a）（§10.3）。
 4. 字体回退由 E1 定，缺 CJK 时加 `--terminal-font-family-wide`（§10.3）。
 5. Unicode 表的存放：15 表 dump 成区间数组 + 二分；6 / 11 的 BMP 部分建 64K 字节查表（同上游，`UnicodeV11.ts:197-211`），在 `initialization` 里建。**已完成（1 期）**：15 表存原始 `getInfo`，`wcwidth` / `charProperties` 由移植逻辑现算；6 / 11 的 BMP 外也走区间二分。
-6. 解析器转移表在 `initialization` 里照上游代码生成（§5.1），不写成常量数组。
-7. 组合内容的稀疏存储：每行一个按列号排序的小数组（行里组合格很少），不上字典。
-8. 录制文件每份 ≤ 256KB，夹具 JSON 单个 ≤ 2MB；超了就拆用例。**夹具部分已完成（1 期）**：`writeFixture` 超 2MB 就报错；录制 2 期起。
-9. `escape_sequence_files` 进夹具前核对那份外部来源的许可（§14）。
+6. 解析器转移表在 `initialization` 里照上游代码生成（§5.1），不写成常量数组。**已完成（2 期）**：4257 项与上游逐项相同。
+7. 组合内容的稀疏存储：每行一个按列号排序的小数组（行里组合格很少），不上字典。**已完成（2 期）**：组合文本和扩展属性各一个，只在标志位说有时才读。
+8. 录制文件每份 ≤ 256KB，夹具 JSON 单个 ≤ 2MB；超了就拆用例。**夹具部分已完成（1 期）**：`writeFixture` 超 2MB 就报错；录制 2 期起。**已完成（2 期）**：超 1.8MB 自动分片；8 份录制最大约 13KB，`recordings.js` 超 256KB 报错。
+9. `escape_sequence_files` 进夹具前核对那份外部来源的许可（§14）。**已完成（2 期）**：vt100-parser 为 MIT，notices 已写（§14）。
 10. Unicode 许可原文 1 期从 unicode.org 取（§14）。**已完成（1 期）**：`tools/terminal-oracle/unicode-license.txt`，已抄进 `THIRD-PARTY-NOTICES.md`。
-11. XTVERSION 的字符串格式：`TyControls(3.1.0)`，版本取 `TyVersion` 常量（`source/tyControls.Types.pas:111`）。
+11. XTVERSION 的字符串格式：`TyControls(3.1.0)`，版本取 `TyVersion` 常量（`source/tyControls.Types.pas:111`）。**已完成（2 期）**：Core 不能用 LCL 单元，常量 `TyTermLibraryVersion` 另存一份，测试守着两者相等。
 
 ---
 
