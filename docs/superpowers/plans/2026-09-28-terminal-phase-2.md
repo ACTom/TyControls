@@ -931,7 +931,7 @@ Expected：`clean`。
 
 各任务变异表：J3–J5（Task 1）、P*（Task 2–5）、B*（Task 6–9）、C*（Task 10–18）、W*（Task 19–20）、R4–R5（Task 22）。JS 侧的变异改完跑对应的生成脚本或冒烟命令、确认失败后改回，并且 `regen-all.js --expect-clean` 仍然 `clean`。结果逐条记进签收记录；没红的当场补强。
 
-- [ ] **Step 6: 【主控执行】编一次运行时包**（`.lpk` 清单改了）——待主控编包，见签收记录
+- [x] **Step 6: 【主控执行】编一次运行时包**（`.lpk` 清单改了）——主控已编，见签收记录
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; git status --short
@@ -1014,7 +1014,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - **C11**（ED 3 在备用屏也清 `isUserScrolling`）：备用屏没有滚回，`lines.length - rows` 恒为 0，那个分支走不到。
   - **C38**（`ClearScrollback` 不钉住光标行）：槽位写入先加新引用再减旧引用，钉住是多余的；本批已删掉钉住，现在的代码就是这条变异。
   - **J5a**（`dumpState` 去掉制表位的数值排序）：制表位对象的键都是整数形，JS 的 `Object.keys` 按规范就以数值升序枚举，排序是冗余的（[[index-keyed-string-sort-trap]] 的坑在这里碰不到，排序留着作防护）。
-- **编包**：待主控编包（`tycontrols.lpk`；本批只在 `source/` 加了三个 Core 的 include，按先例不进清单，包清单没改）。
+- **编包**：主控在 `455dae38` 上 `lazbuild -B` 编过 `tycontrols.lpk` 和 `tycontrols_dt.lpk`，均 0 错（2026-09-29）。
 - **规格核对与审查**：两轮期末审查（规格核对 + 代码质量）提出的 29 条全部处理，结果写在各提交说明里；按 spec 逐条核的「实现期修正（2 期）」清单全部写回原处。
 - **spec 写回**（标「实现期修正（2 期）」）：§2.1、§3.1、§3.2、§5.1、§5.2、§5.3、§6.1 / §6.3、§6.2、§7.2、§7.3、§7.4、§7.5、§7.6、§13.2、§13.3、§13.4、§13.5、§14、§15、§17.2 第 1、2、6、7、8、9、11 条；状态行。
 - **执行中的违规记录**：
