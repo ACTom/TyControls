@@ -246,6 +246,8 @@ procedure GSpinEdit(b: TBGRABitmap); begin RRect(b,3,7,15,17,2,Ink); Line(b,6,9.
   caret — that decimal point is the whole difference between it and TTySpinEdit. }
 procedure GFloatSpinEdit(b: TBGRABitmap); begin RRect(b,3,7,15,17,2,Ink); Line(b,6,10,6,14,Acc,1.6); FillCirc(b,8.4,13.6,0.95,Acc); Line(b,11,10,11,14,Acc,1.6); Line(b,15,7,15,17,Ink); PolyL(b,[PointF(16.5,11),PointF(18,9.5),PointF(19.5,11)],Ink); PolyL(b,[PointF(16.5,13),PointF(18,14.5),PointF(19.5,13)],Ink); end;
 procedure GMemo(b: TBGRABitmap); begin RRect(b,3,3,21,21,2,Ink); Line(b,6,8,17,8,Ink); Line(b,6,12,17,12,Ink); Line(b,6,16,13,16,Ink); end;
+{ terminal: a window with a title strip, a > prompt and an underscore cursor, two short output lines }
+procedure GTerminal(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,8,21,8,Ink); Line(b,6,11,8,13,Acc); Line(b,8,13,6,15,Acc); Line(b,10,15,13,15,Acc); Line(b,6,18,11,18,Ink); Line(b,13,18,18,18,Ink); end;
 procedure GTitleBar(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Ink); FillCirc(b,15,6.5,0.9,Ink); FillCirc(b,17,6.5,0.9,Ink); FillCirc(b,19,6.5,0.9,Acc); end;
 procedure GMenuBar(b: TBGRABitmap); begin RRect(b,3,6,21,12,2,Ink); Line(b,6,9,8,9,Acc); Line(b,10,9,12,9,Ink); Line(b,14,9,16,9,Ink); end;
 procedure GStyleController(b: TBGRABitmap); begin RRect(b,4,4,20,20,3,Ink); FillPolyG(b,[PointF(5,19),PointF(19,19),PointF(5,5)],Acc); end;
@@ -943,7 +945,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..167] of TGlyph = (
+  Glyphs: array[0..168] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1029,6 +1031,7 @@ const
     (Name:'TTySpinEdit';        Draw:@GSpinEdit),
     (Name:'TTyFloatSpinEdit';   Draw:@GFloatSpinEdit),
     (Name:'TTyMemo';            Draw:@GMemo),
+    (Name:'TTyTerminalView';    Draw:@GTerminal),
     (Name:'TTyTitleBar';        Draw:@GTitleBar),
     (Name:'TTyMenuBar';         Draw:@GMenuBar),
     (Name:'TTyStyleController';  Draw:@GStyleController),
