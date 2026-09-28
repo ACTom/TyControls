@@ -232,6 +232,298 @@ type
     property RefCount: Integer read FRefCount;
   end;
 
+  TTyTermListEvent = procedure(AIndex, AAmount: Integer) of object;
+  TTyTermTrimEvent = procedure(AAmount: Integer) of object;
+
+  { CircularList<IBufferLine>, CircularList.ts:45-262. Every slot holds a reference
+    (the unit header); Get borrows. The start index is kept the way upstream keeps
+    it -- reduced after push / recycle, not after splice, trimStart or shift -- so
+    that Get(-1) answers what upstream answers. Slots past Length keep their lines
+    until overwritten, as upstream's array does. Events fire in upstream's order
+    (splice: delete, insert, trim). }
+  TTyTerminalLineList = class
+  private
+    FArray: array of TTyTerminalLine;
+    FMaxLength: Integer;
+    FStartIndex: Int64;
+    FLength: Integer;
+    FOnInsert: TTyTermListEvent;
+    FOnDelete: TTyTermListEvent;
+    FOnTrim: TTyTermTrimEvent;
+    function Cyclic(AIndex: Int64): Int64; inline;
+    procedure Store(ASlot: Int64; ALine: TTyTerminalLine);
+    procedure SetMaxLength(AValue: Integer);
+    procedure SetLengthValue(AValue: Integer);
+    function GetIsFull: Boolean;
+    procedure DoTrim(AAmount: Integer);
+  public
+    constructor Create(AMaxLength: Integer);
+    destructor Destroy; override;
+    function Get(AIndex: Integer): TTyTerminalLine;               { borrowed; nil outside }
+    procedure SetItem(AIndex: Integer; ALine: TTyTerminalLine);   { takes a reference }
+    procedure SetItemOwned(AIndex: Integer; ALine: TTyTerminalLine);   { and drops the caller's }
+    procedure Push(ALine: TTyTerminalLine);
+    procedure PushOwned(ALine: TTyTerminalLine);
+    { Raises EInvalidOperation unless full (upstream throws). The line stays in its
+      slot and is borrowed. }
+    function Recycle: TTyTerminalLine;
+    function Pop: TTyTerminalLine;                                 { borrowed }
+    procedure Splice(AStart, ADeleteCount: Integer; const AItems: array of TTyTerminalLine);
+    procedure SpliceOwned(AStart, ADeleteCount: Integer; ALine: TTyTerminalLine);
+    procedure TrimStart(ACount: Integer);
+    { Raises EArgumentOutOfRangeException where upstream throws. }
+    procedure ShiftElements(AStart, ACount, AOffset: Integer);
+    function SlotLine(ASlot: Integer): TTyTerminalLine;           { pure query, leak guard }
+    property Length: Integer read FLength write SetLengthValue;
+    property MaxLength: Integer read FMaxLength write SetMaxLength;
+    property IsFull: Boolean read GetIsFull;
+    property OnInsert: TTyTermListEvent read FOnInsert write FOnInsert;
+    property OnDelete: TTyTermListEvent read FOnDelete write FOnDelete;
+    property OnTrim: TTyTermTrimEvent read FOnTrim write FOnTrim;
+  end;
+
+  { Marker.ts; reference counted (unit header). }
+  TTyTerminalMarker = class
+  private
+    class var GNextId: Integer;
+  private
+    FId: Integer;
+    FLine: Integer;
+    FIsDisposed: Boolean;
+    FListeners: array of TNotifyEvent;
+    FRefCount: Integer;
+    FGeneration: Integer;
+    FTag: TObject;
+  public
+    constructor Create(ALine: Integer);
+    procedure AddRef;
+    procedure Release;
+    { Idempotent: sets IsDisposed and Line -1, then calls the listeners in the order
+      they were added. }
+    procedure Dispose;
+    procedure AddDisposeListener(AHandler: TNotifyEvent);
+    procedure RemoveDisposeListener(AHandler: TNotifyEvent);
+    property Id: Integer read FId;
+    property Line: Integer read FLine write FLine;
+    property IsDisposed: Boolean read FIsDisposed;
+    property Tag: TObject read FTag write FTag;
+  end;
+
+  TTyTermWindowsPtyBackend = (twpNone, twpConPty, twpWinPty);
+  TTyTerminalWindowsPty = record
+    Backend: TTyTermWindowsPtyBackend;
+    BuildNumber: Integer;                  { 0 = not given }
+  end;
+  { 0 = none (upstream undefined); the others index the core's charset table }
+  TTyTermCharsetId = type Byte;
+  TTyTermCharsetIds = array of TTyTermCharsetId;
+  TTyTermCursorStyleOption = (tcoBlock, tcoUnderline, tcoBar);   { options.cursorStyle }
+  TTyTermYDispEvent = procedure(AYDisp: Integer) of object;
+  TTyTermResizeEvent = procedure(ACols, ARows: Integer; AColsChanged, ARowsChanged: Boolean) of object;
+
+  { The OptionsService subset the buffer and the core read (defaults as upstream's
+    DEFAULT_OPTIONS). WindowOptions / VtExtensions / the Unicode version live in the
+    core. }
+  TTyTerminalOptions = class
+  public
+    Scrollback: Integer;
+    TabStopWidth: Integer;
+    ConvertEol: Boolean;
+    ScrollOnUserInput: Boolean;
+    DisableStdin: Boolean;
+    ScrollOnEraseInDisplay: Boolean;
+    ReflowCursorLine: Boolean;
+    CursorBlink: Boolean;
+    AllowSetCursorBlink: Boolean;
+    CursorStyle: TTyTermCursorStyleOption;
+    WindowsPty: TTyTerminalWindowsPty;
+    constructor Create;
+  end;
+
+  TTyTerminalBufferService = class;
+
+  { Buffer.ts:29-672 without _reflow* (phase 5). }
+  TTyTerminalBuffer = class
+  private
+    FLines: TTyTerminalLineList;
+    FYDisp, FYBase, FY, FX: Integer;
+    FScrollTop, FScrollBottom: Integer;
+    FTabs: array of Boolean;
+    FMarkers: TFPList;
+    FCols, FRows: Integer;
+    FIsClearing: Boolean;
+    FHasScrollback: Boolean;
+    FGeneration: Integer;
+    FOptions: TTyTerminalOptions;
+    FService: TTyTerminalBufferService;
+    procedure NewLines;
+    function GetCorrectBufferLength(ARows: Integer): Integer;
+    procedure LinesTrim(AAmount: Integer);
+    procedure LinesInsert(AIndex, AAmount: Integer);
+    procedure LinesDelete(AIndex, AAmount: Integer);
+    procedure MarkerDisposed(Sender: TObject);
+    function MarkerSnapshot: TFPList;
+    function GetHasScrollback: Boolean;
+    function GetIsCursorInViewport: Boolean;
+    function GetMarker(AIndex: Integer): TTyTerminalMarker;
+    function GetMarkerCount: Integer;
+    function GetLength: Integer;
+    function GetIsReflowEnabled: Boolean;
+  public
+    SavedX, SavedY: Integer;
+    SavedAttr: TTyTerminalAttrData;        { upstream savedCurAttrData }
+    SavedCharset: TTyTermCharsetId;
+    SavedCharsets: TTyTermCharsetIds;      { a copy (upstream slice()); 0 = undefined }
+    SavedGLevel: Integer;
+    SavedOriginMode: Boolean;
+    SavedWraparoundMode: Boolean;
+    constructor Create(AHasScrollback: Boolean; AOptions: TTyTerminalOptions; AService: TTyTerminalBufferService);
+    destructor Destroy; override;
+    function GetLine(AAbsRow: Integer): TTyTerminalLine;          { borrowed }
+    { Always True; AFirst / ALast as upstream's first / last. }
+    function GetWrappedRangeForLine(AAbsRow: Integer; out AFirst, ALast: Integer): Boolean;
+    { The marker is borrowed: AddRef it to keep it past its disposal. }
+    function AddMarker(AAbsRow: Integer): TTyTerminalMarker;
+    procedure ClearMarkers(AAbsRow: Integer);
+    procedure ClearAllMarkers;
+    function GetNullCell: TTyTerminalCellData; overload;
+    function GetNullCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData; overload;
+    function GetWhitespaceCell: TTyTerminalCellData; overload;
+    function GetWhitespaceCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData; overload;
+    { A new line, refcount 1, owned by the caller (unit header). }
+    function GetBlankLine(const AAttr: TTyTerminalAttrData; AIsWrapped: Boolean = False): TTyTerminalLine;
+    procedure FillViewportRows; overload;
+    procedure FillViewportRows(const AAttr: TTyTerminalAttrData); overload;
+    procedure Clear;
+    procedure Resize(ANewCols, ANewRows: Integer);
+    procedure SetupTabStops(AFrom: Integer = -1);      { -1 = upstream's undefined }
+    function PrevStop(AX: Integer = MaxInt): Integer;  { MaxInt = this.x }
+    function NextStop(AX: Integer = MaxInt): Integer;
+    function HasTab(ACol: Integer): Boolean;
+    procedure SetTab(ACol: Integer; AOn: Boolean);     { off = upstream's delete }
+    procedure ClearAllTabs;
+    { Every set tab, ascending -- keys beyond the columns included (upstream keeps them). }
+    function TabStops: TIntegerDynArray;
+    function TranslateBufferLineToString(AAbsRow: Integer; ATrimRight: Boolean;
+      AStartCol: Integer = 0; AEndCol: Integer = -1): string;
+    property Lines: TTyTerminalLineList read FLines;
+    property Markers[AIndex: Integer]: TTyTerminalMarker read GetMarker;
+    property MarkerCount: Integer read GetMarkerCount;
+    property YBase: Integer read FYBase write FYBase;
+    property YDisp: Integer read FYDisp write FYDisp;
+    property X: Integer read FX write FX;
+    property Y: Integer read FY write FY;
+    property ScrollTop: Integer read FScrollTop write FScrollTop;
+    property ScrollBottom: Integer read FScrollBottom write FScrollBottom;
+    property HasScrollback: Boolean read GetHasScrollback;
+    property IsCursorInViewport: Boolean read GetIsCursorInViewport;
+    property Length: Integer read GetLength;           { Lines.Length }
+    { Phase 2: always False (phase 5 wires BufferReflow). }
+    property IsReflowEnabled: Boolean read GetIsReflowEnabled;
+  end;
+
+  TTyTermBufferActivateEvent = procedure(AActive, AInactive: TTyTerminalBuffer) of object;
+
+  { BufferSet.ts }
+  TTyTerminalBufferSet = class
+  private
+    FNormal, FAlt, FActive: TTyTerminalBuffer;
+    FOptions: TTyTerminalOptions;
+    FService: TTyTerminalBufferService;
+    FOnBufferActivate: TTyTermBufferActivateEvent;
+    function GetIsAlt: Boolean;
+  public
+    constructor Create(AOptions: TTyTerminalOptions; AService: TTyTerminalBufferService);
+    destructor Destroy; override;
+    procedure Reset;
+    procedure ActivateNormalBuffer;
+    procedure ActivateAltBuffer; overload;
+    procedure ActivateAltBuffer(const AFill: TTyTerminalAttrData); overload;
+    procedure Resize(ANewCols, ANewRows: Integer);
+    procedure SetupTabStops(AFrom: Integer = -1);
+    property Normal: TTyTerminalBuffer read FNormal;
+    property Alt: TTyTerminalBuffer read FAlt;
+    property Active: TTyTerminalBuffer read FActive;
+    property IsAlt: Boolean read GetIsAlt;
+    property OnBufferActivate: TTyTermBufferActivateEvent read FOnBufferActivate write FOnBufferActivate;
+  end;
+
+  { services/BufferService.ts, here rather than in the core (unit header). }
+  TTyTerminalBufferService = class
+  private
+    FOptions: TTyTerminalOptions;
+    FCols, FRows: Integer;
+    FBuffers: TTyTerminalBufferSet;
+    FIsUserScrolling: Boolean;
+    FCachedBlankLine: TTyTerminalLine;
+    FOnScroll: TTyTermYDispEvent;
+    FOnResize: TTyTermResizeEvent;
+    FOnBufferActivate: TTyTermBufferActivateEvent;
+    procedure BuffersActivated(AActive, AInactive: TTyTerminalBuffer);
+    function GetBuffer: TTyTerminalBuffer;
+  public
+    constructor Create(AOptions: TTyTerminalOptions; ACols, ARows: Integer);   { min 2 x 1 }
+    destructor Destroy; override;
+    procedure Resize(ACols, ARows: Integer);
+    procedure Reset;
+    procedure Scroll(const AEraseAttr: TTyTerminalAttrData; AIsWrapped: Boolean = False);
+    procedure ScrollLines(ADisp: Integer; ASuppressScrollEvent: Boolean = False);
+    { option-change reactions, BufferSet.ts:36-37 }
+    procedure ScrollbackChanged;
+    procedure TabStopWidthChanged;
+    property Cols: Integer read FCols;
+    property Rows: Integer read FRows;
+    property Buffers: TTyTerminalBufferSet read FBuffers;
+    property Buffer: TTyTerminalBuffer read GetBuffer;
+    property IsUserScrolling: Boolean read FIsUserScrolling write FIsUserScrolling;
+    property Options: TTyTerminalOptions read FOptions;
+    property OnScroll: TTyTermYDispEvent read FOnScroll write FOnScroll;
+    property OnResize: TTyTermResizeEvent read FOnResize write FOnResize;
+    { after OnScroll, for the core }
+    property OnBufferActivate: TTyTermBufferActivateEvent read FOnBufferActivate write FOnBufferActivate;
+  end;
+
+  TTyTerminalLinkData = record                { IOscLinkData }
+    Id: string;
+    HasId: Boolean;
+    Uri: string;
+  end;
+
+  TTyTermLinkEntry = class
+  public
+    LinkId: Integer;
+    Data: TTyTerminalLinkData;
+    Key: string;
+    Markers: TFPList;
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  { services/OscLinkService.ts. Link numbers start at 1 and are never reused, reset
+    or not. }
+  TTyTerminalOscLinks = class
+  private
+    FService: TTyTerminalBufferService;
+    FNextId: Integer;
+    FEntries: TFPList;                     { by link id, ascending }
+    FKeys: array of string;                { entries with an id, by key }
+    FKeyEntries: array of TTyTermLinkEntry;
+    FKeyCount: Integer;
+    function FindEntry(ALinkId: Integer; out AIndex: Integer): Boolean;
+    function FindKey(const AKey: string; out AIndex: Integer): Boolean;
+    procedure AttachMarker(AEntry: TTyTermLinkEntry; AMarker: TTyTerminalMarker);
+    procedure MarkerDisposed(Sender: TObject);
+  public
+    constructor Create(AService: TTyTerminalBufferService);
+    destructor Destroy; override;
+    function RegisterLink(const AData: TTyTerminalLinkData): Integer;
+    procedure AddLineToLink(ALinkId, AAbsRow: Integer);
+    function GetLinkData(ALinkId: Integer; out AData: TTyTerminalLinkData): Boolean;
+    function LinkIds: TIntegerDynArray;                  { ascending }
+    function LinkLines(ALinkId: Integer): TIntegerDynArray;   { marker lines, in entry order }
+    property NextId: Integer read FNextId;
+  end;
+
 { The cell constructors of CellData / Buffer.getNullCell / getWhitespaceCell. }
 function TyTermCellFromCodepoint(ACode: Cardinal; AWidth: Integer; const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
 function TyTermNullCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
@@ -1260,6 +1552,1307 @@ begin
     FCacheValid := True;
     FCacheTrimmed := ATrimRight;
   end;
+end;
+
+{ ---- TTyTerminalLineList (CircularList.ts) ---------------------------------------- }
+
+constructor TTyTerminalLineList.Create(AMaxLength: Integer);
+begin
+  inherited Create;
+  FMaxLength := AMaxLength;
+  SetLength(FArray, AMaxLength);
+end;
+
+destructor TTyTerminalLineList.Destroy;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FArray) do
+    if FArray[i] <> nil then
+      FArray[i].Release;
+  inherited Destroy;
+end;
+
+function TTyTerminalLineList.Cyclic(AIndex: Int64): Int64;                   { :259-261 }
+begin
+  if FMaxLength = 0 then
+    Exit(-1);
+  Result := (FStartIndex + AIndex) mod FMaxLength;   { negative stays negative, as % }
+end;
+
+{ The one way into a slot: the new line gains a reference before the old one loses
+  its own, so storing a line over itself is safe. }
+procedure TTyTerminalLineList.Store(ASlot: Int64; ALine: TTyTerminalLine);
+var
+  old: TTyTerminalLine;
+begin
+  if (ASlot < 0) or (ASlot >= System.Length(FArray)) then
+    Exit;
+  if ALine <> nil then
+    ALine.AddRef;
+  old := FArray[ASlot];
+  FArray[ASlot] := ALine;
+  if old <> nil then
+    old.Release;
+end;
+
+procedure TTyTerminalLineList.DoTrim(AAmount: Integer);
+begin
+  if Assigned(FOnTrim) then
+    FOnTrim(AAmount);
+end;
+
+procedure TTyTerminalLineList.SetMaxLength(AValue: Integer);                 { :70-85 }
+var
+  newArray: array of TTyTerminalLine;
+  i, n: Integer;
+  slot: Int64;
+begin
+  if FMaxLength = AValue then
+    Exit;
+  newArray := nil;
+  SetLength(newArray, AValue);
+  n := FLength;
+  if AValue < n then
+    n := AValue;
+  for i := 0 to n - 1 do
+  begin
+    slot := Cyclic(i);
+    if slot >= 0 then
+    begin
+      newArray[i] := FArray[slot];
+      if newArray[i] <> nil then
+        newArray[i].AddRef;
+    end;
+  end;
+  for i := 0 to High(FArray) do
+    if FArray[i] <> nil then
+      FArray[i].Release;
+  FArray := newArray;
+  FMaxLength := AValue;
+  FStartIndex := 0;
+end;
+
+{ upstream clears the new slots by RAW index, not through the start index }
+procedure TTyTerminalLineList.SetLengthValue(AValue: Integer);               { :91-98 }
+var
+  i: Integer;
+begin
+  if AValue > FLength then
+    for i := FLength to AValue - 1 do
+      if i < FMaxLength then
+        Store(i, nil);
+  FLength := AValue;
+end;
+
+function TTyTerminalLineList.GetIsFull: Boolean;
+begin
+  Result := FLength = FMaxLength;
+end;
+
+function TTyTerminalLineList.Get(AIndex: Integer): TTyTerminalLine;          { :108-110 }
+var
+  slot: Int64;
+begin
+  slot := Cyclic(AIndex);
+  if (slot < 0) or (slot >= System.Length(FArray)) then
+    Result := nil
+  else
+    Result := FArray[slot];
+end;
+
+procedure TTyTerminalLineList.SetItem(AIndex: Integer; ALine: TTyTerminalLine);
+begin                                                                        { :120-122 }
+  Store(Cyclic(AIndex), ALine);
+end;
+
+procedure TTyTerminalLineList.SetItemOwned(AIndex: Integer; ALine: TTyTerminalLine);
+begin
+  SetItem(AIndex, ALine);
+  ALine.Release;
+end;
+
+procedure TTyTerminalLineList.Push(ALine: TTyTerminalLine);                  { :129-137 }
+begin
+  Store(Cyclic(FLength), ALine);
+  if FLength = FMaxLength then
+  begin
+    FStartIndex := (FStartIndex + 1) mod FMaxLength;
+    DoTrim(1);
+  end
+  else
+    Inc(FLength);
+end;
+
+procedure TTyTerminalLineList.PushOwned(ALine: TTyTerminalLine);
+begin
+  Push(ALine);
+  ALine.Release;
+end;
+
+function TTyTerminalLineList.Recycle: TTyTerminalLine;                       { :144-151 }
+begin
+  if FLength <> FMaxLength then
+    raise EInvalidOperation.Create('Can only recycle when the buffer is full');
+  FStartIndex := (FStartIndex + 1) mod FMaxLength;
+  DoTrim(1);
+  Result := Get(FLength - 1);
+end;
+
+function TTyTerminalLineList.Pop: TTyTerminalLine;                           { :164-166 }
+begin
+  Result := Get(FLength - 1);
+  Dec(FLength);
+end;
+
+procedure TTyTerminalLineList.Splice(AStart, ADeleteCount: Integer; const AItems: array of TTyTerminalLine);
+var
+  i, n, countToTrim: Integer;
+begin                                                                        { :177-207 }
+  n := System.Length(AItems);
+  if ADeleteCount <> 0 then
+  begin
+    for i := AStart to FLength - ADeleteCount - 1 do
+      Store(Cyclic(i), Get(i + ADeleteCount));
+    Dec(FLength, ADeleteCount);
+    if Assigned(FOnDelete) then
+      FOnDelete(AStart, ADeleteCount);
+  end;
+  for i := FLength - 1 downto AStart do
+    Store(Cyclic(i + n), Get(i));
+  for i := 0 to n - 1 do
+    Store(Cyclic(AStart + i), AItems[i]);
+  if (n > 0) and Assigned(FOnInsert) then
+    FOnInsert(AStart, n);
+  if FLength + n > FMaxLength then
+  begin
+    countToTrim := FLength + n - FMaxLength;
+    Inc(FStartIndex, countToTrim);
+    FLength := FMaxLength;
+    DoTrim(countToTrim);
+  end
+  else
+    Inc(FLength, n);
+end;
+
+procedure TTyTerminalLineList.SpliceOwned(AStart, ADeleteCount: Integer; ALine: TTyTerminalLine);
+begin
+  Splice(AStart, ADeleteCount, [ALine]);
+  ALine.Release;
+end;
+
+procedure TTyTerminalLineList.TrimStart(ACount: Integer);                    { :213-220 }
+begin
+  if ACount > FLength then
+    ACount := FLength;
+  Inc(FStartIndex, ACount);
+  Dec(FLength, ACount);
+  DoTrim(ACount);
+end;
+
+procedure TTyTerminalLineList.ShiftElements(AStart, ACount, AOffset: Integer);   { :222-251 }
+var
+  i, expandListBy: Integer;
+begin
+  if ACount <= 0 then
+    Exit;
+  if (AStart < 0) or (AStart >= FLength) then
+    raise EArgumentOutOfRangeException.Create('start argument out of range');
+  if AStart + AOffset < 0 then
+    raise EArgumentOutOfRangeException.Create('Cannot shift elements in list beyond index 0');
+  if AOffset > 0 then
+  begin
+    for i := ACount - 1 downto 0 do
+      SetItem(AStart + i + AOffset, Get(AStart + i));
+    expandListBy := AStart + ACount + AOffset - FLength;
+    if expandListBy > 0 then
+    begin
+      Inc(FLength, expandListBy);
+      while FLength > FMaxLength do
+      begin
+        Dec(FLength);
+        Inc(FStartIndex);
+        DoTrim(1);
+      end;
+    end;
+  end
+  else
+    for i := 0 to ACount - 1 do
+      SetItem(AStart + i + AOffset, Get(AStart + i));
+end;
+
+function TTyTerminalLineList.SlotLine(ASlot: Integer): TTyTerminalLine;
+begin
+  if (ASlot < 0) or (ASlot > High(FArray)) then
+    Result := nil
+  else
+    Result := FArray[ASlot];
+end;
+
+{ ---- TTyTerminalMarker (Marker.ts) ------------------------------------------------ }
+
+constructor TTyTerminalMarker.Create(ALine: Integer);
+begin
+  inherited Create;
+  Inc(GNextId);
+  FId := GNextId;
+  FLine := ALine;
+  FRefCount := 1;
+end;
+
+procedure TTyTerminalMarker.AddRef;
+begin
+  Inc(FRefCount);
+end;
+
+procedure TTyTerminalMarker.Release;
+begin
+  Dec(FRefCount);
+  if FRefCount <= 0 then
+    Free;
+end;
+
+procedure TTyTerminalMarker.Dispose;                                         { :27-37 }
+var
+  snapshot: array of TNotifyEvent;
+  i: Integer;
+begin
+  if FIsDisposed then
+    Exit;
+  AddRef;                                  { a listener may drop the last other reference }
+  try
+    FIsDisposed := True;
+    FLine := -1;
+    snapshot := Copy(FListeners);
+    for i := 0 to High(snapshot) do
+      snapshot[i](Self);
+    FListeners := nil;
+  finally
+    Release;
+  end;
+end;
+
+procedure TTyTerminalMarker.AddDisposeListener(AHandler: TNotifyEvent);
+begin
+  SetLength(FListeners, System.Length(FListeners) + 1);
+  FListeners[High(FListeners)] := AHandler;
+end;
+
+procedure TTyTerminalMarker.RemoveDisposeListener(AHandler: TNotifyEvent);
+var
+  i, k: Integer;
+begin
+  for i := 0 to High(FListeners) do
+    if (TMethod(FListeners[i]).Code = TMethod(AHandler).Code)
+      and (TMethod(FListeners[i]).Data = TMethod(AHandler).Data) then
+    begin
+      for k := i to High(FListeners) - 1 do
+        FListeners[k] := FListeners[k + 1];
+      SetLength(FListeners, System.Length(FListeners) - 1);
+      Exit;
+    end;
+end;
+
+{ ---- TTyTerminalOptions ----------------------------------------------------------- }
+
+constructor TTyTerminalOptions.Create;
+begin
+  inherited Create;
+  Scrollback := 1000;
+  TabStopWidth := 8;
+  ScrollOnUserInput := True;
+  CursorStyle := tcoBlock;
+end;
+
+{ ---- TTyTerminalBuffer (Buffer.ts) ------------------------------------------------ }
+
+constructor TTyTerminalBuffer.Create(AHasScrollback: Boolean; AOptions: TTyTerminalOptions;
+  AService: TTyTerminalBufferService);
+begin                                                                        { :55-71 }
+  inherited Create;
+  FHasScrollback := AHasScrollback;
+  FOptions := AOptions;
+  FService := AService;
+  FCols := AService.Cols;
+  FRows := AService.Rows;
+  FMarkers := TFPList.Create;
+  SavedAttr := TyTermDefaultAttr;
+  SavedWraparoundMode := True;
+  NewLines;
+  FScrollTop := 0;
+  FScrollBottom := FRows - 1;
+  SetupTabStops;
+end;
+
+destructor TTyTerminalBuffer.Destroy;
+begin
+  ClearAllMarkers;                         { upstream disposes them with the buffer }
+  FMarkers.Free;
+  FLines.Free;
+  inherited Destroy;
+end;
+
+procedure TTyTerminalBuffer.NewLines;
+begin
+  FLines.Free;
+  FLines := TTyTerminalLineList.Create(GetCorrectBufferLength(FRows));
+  FLines.OnTrim := @LinesTrim;
+  FLines.OnInsert := @LinesInsert;
+  FLines.OnDelete := @LinesDelete;
+  { markers made before now listened to the old list upstream and stop moving }
+  Inc(FGeneration);
+end;
+
+function TTyTerminalBuffer.GetCorrectBufferLength(ARows: Integer): Integer;  { :118-126 }
+var
+  n: Int64;
+begin
+  if not FHasScrollback then
+    Exit(ARows);
+  n := Int64(ARows) + FOptions.Scrollback;
+  if n > High(Integer) then
+    n := High(Integer);
+  Result := Integer(n);
+end;
+
+function TTyTerminalBuffer.GetNullCell: TTyTerminalCellData;
+begin
+  Result := TyTermNullCell(TyTermDefaultAttr);
+end;
+
+function TTyTerminalBuffer.GetNullCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
+begin
+  Result := TyTermNullCell(AAttr);
+end;
+
+function TTyTerminalBuffer.GetWhitespaceCell: TTyTerminalCellData;
+begin
+  Result := TyTermWhitespaceCell(TyTermDefaultAttr);
+end;
+
+function TTyTerminalBuffer.GetWhitespaceCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
+begin
+  Result := TyTermWhitespaceCell(AAttr);
+end;
+
+function TTyTerminalBuffer.GetBlankLine(const AAttr: TTyTerminalAttrData; AIsWrapped: Boolean): TTyTerminalLine;
+begin                                                                        { :99-101 }
+  Result := TTyTerminalLine.Create(FService.Cols, TyTermNullCell(AAttr), AIsWrapped);
+end;
+
+function TTyTerminalBuffer.GetHasScrollback: Boolean;
+begin
+  Result := FHasScrollback and (FLines.MaxLength > FRows);
+end;
+
+function TTyTerminalBuffer.GetIsCursorInViewport: Boolean;
+var
+  rel: Integer;
+begin
+  rel := FYBase + FY - FYDisp;
+  Result := (rel >= 0) and (rel < FRows);
+end;
+
+function TTyTerminalBuffer.GetMarker(AIndex: Integer): TTyTerminalMarker;
+begin
+  Result := TTyTerminalMarker(FMarkers[AIndex]);
+end;
+
+function TTyTerminalBuffer.GetMarkerCount: Integer;
+begin
+  Result := FMarkers.Count;
+end;
+
+function TTyTerminalBuffer.GetLength: Integer;
+begin
+  Result := FLines.Length;
+end;
+
+{ Phase 5: with windowsPty.buildNumber given, hasScrollback and conpty and
+  >= 21376, otherwise hasScrollback (Buffer.ts:310-316); then Resize runs
+  _reflow and trims the lines (:258-268). Until then it is the path upstream takes
+  for an old ConPTY. }
+function TTyTerminalBuffer.GetIsReflowEnabled: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyTerminalBuffer.GetLine(AAbsRow: Integer): TTyTerminalLine;
+begin
+  Result := FLines.Get(AAbsRow);
+end;
+
+procedure TTyTerminalBuffer.FillViewportRows;
+begin
+  FillViewportRows(TyTermDefaultAttr);
+end;
+
+procedure TTyTerminalBuffer.FillViewportRows(const AAttr: TTyTerminalAttrData);
+var
+  i: Integer;
+begin                                                                        { :131-139 }
+  if FLines.Length = 0 then
+    for i := 1 to FRows do
+      FLines.PushOwned(GetBlankLine(AAttr));
+end;
+
+procedure TTyTerminalBuffer.Clear;                                           { :144-153 }
+begin
+  FYDisp := 0;
+  FYBase := 0;
+  FY := 0;
+  FX := 0;
+  NewLines;
+  FScrollTop := 0;
+  FScrollBottom := FRows - 1;
+  SetupTabStops;
+end;
+
+procedure TTyTerminalBuffer.Resize(ANewCols, ANewRows: Integer);             { :160-286 }
+var
+  nullCell: TTyTerminalCellData;
+  newMaxLength, i, y, addToY, amountToTrim, maxY: Integer;
+  windows: Boolean;
+begin
+  nullCell := GetNullCell(TyTermDefaultAttr);
+  { grow the ring first, so there is room for what follows }
+  newMaxLength := GetCorrectBufferLength(ANewRows);
+  if newMaxLength > FLines.MaxLength then
+    FLines.MaxLength := newMaxLength;
+  if FLines.Length > 0 then
+  begin
+    { wider: every line now (narrower waits for the reflow, which phase 2 lacks) }
+    if FCols < ANewCols then
+      for i := 0 to FLines.Length - 1 do
+        FLines.Get(i).Resize(ANewCols, nullCell);
+    addToY := 0;
+    if FRows < ANewRows then
+    begin
+      windows := (FOptions.WindowsPty.Backend <> twpNone) or (FOptions.WindowsPty.BuildNumber <> 0);
+      for y := FRows to ANewRows - 1 do
+        if FLines.Length < ANewRows + FYBase then
+        begin
+          if windows then
+            { conpty reprints the screen; once in the scrollback a line stays there }
+            FLines.PushOwned(TTyTerminalLine.Create(ANewCols, nullCell, False))
+          else if (FYBase > 0) and (FLines.Length <= FYBase + FY + addToY + 1) then
+          begin
+            { room above and no empty line below the cursor: scroll up }
+            Dec(FYBase);
+            Inc(addToY);
+            if FYDisp > 0 then
+              Dec(FYDisp);
+          end
+          else
+            FLines.PushOwned(TTyTerminalLine.Create(ANewCols, nullCell, False));
+        end;
+    end
+    else
+      for y := FRows downto ANewRows + 1 do
+        if FLines.Length > ANewRows + FYBase then
+        begin
+          if FLines.Length > FYBase + FY + 1 then
+            FLines.Pop                     { a blank line below the cursor }
+          else
+          begin
+            Inc(FYBase);                   { the cursor line: scroll down }
+            Inc(FYDisp);
+          end;
+        end;
+    { shrink the ring last: trim the top, not the bottom }
+    if newMaxLength < FLines.MaxLength then
+    begin
+      amountToTrim := FLines.Length - newMaxLength;
+      if amountToTrim > 0 then
+      begin
+        FLines.TrimStart(amountToTrim);
+        if FYBase - amountToTrim > 0 then FYBase := FYBase - amountToTrim else FYBase := 0;
+        if FYDisp - amountToTrim > 0 then FYDisp := FYDisp - amountToTrim else FYDisp := 0;
+        if SavedY - amountToTrim > 0 then SavedY := SavedY - amountToTrim else SavedY := 0;
+      end;
+      FLines.MaxLength := newMaxLength;
+    end;
+    { keep the cursor on screen }
+    if ANewCols - 1 < FX then FX := ANewCols - 1;
+    if ANewRows - 1 < FY then FY := ANewRows - 1;
+    if addToY <> 0 then
+      Inc(FY, addToY);
+    if ANewCols - 1 < SavedX then SavedX := ANewCols - 1;
+    FScrollTop := 0;
+  end;
+  FScrollBottom := ANewRows - 1;
+  { IsReflowEnabled: always False in phase 2, see GetIsReflowEnabled }
+  FCols := ANewCols;
+  FRows := ANewRows;
+  { ybase + y stays within the lines }
+  if FLines.Length > 0 then
+  begin
+    maxY := FLines.Length - FYBase - 1;
+    if maxY < 0 then
+      maxY := 0;
+    if maxY < FY then
+      FY := maxY;
+  end;
+end;
+
+function TTyTerminalBuffer.TranslateBufferLineToString(AAbsRow: Integer; ATrimRight: Boolean;
+  AStartCol, AEndCol: Integer): string;
+var
+  line: TTyTerminalLine;
+begin                                                                        { :549-555 }
+  line := FLines.Get(AAbsRow);
+  if line = nil then
+    Exit('');
+  Result := line.TranslateToString(ATrimRight, AStartCol, AEndCol);
+end;
+
+function TTyTerminalBuffer.GetWrappedRangeForLine(AAbsRow: Integer; out AFirst, ALast: Integer): Boolean;
+var
+  line: TTyTerminalLine;
+begin                                                                        { :557-569 }
+  AFirst := AAbsRow;
+  ALast := AAbsRow;
+  while AFirst > 0 do
+  begin
+    line := FLines.Get(AFirst);
+    if (line = nil) or not line.IsWrapped then
+      Break;
+    Dec(AFirst);
+  end;
+  while ALast + 1 < FLines.Length do
+  begin
+    line := FLines.Get(ALast + 1);
+    if (line = nil) or not line.IsWrapped then
+      Break;
+    Inc(ALast);
+  end;
+  Result := True;
+end;
+
+function TTyTerminalBuffer.HasTab(ACol: Integer): Boolean;
+begin
+  Result := (ACol >= 0) and (ACol <= High(FTabs)) and FTabs[ACol];
+end;
+
+procedure TTyTerminalBuffer.SetTab(ACol: Integer; AOn: Boolean);
+var
+  i, old: Integer;
+begin
+  if ACol < 0 then
+    Exit;
+  if ACol > High(FTabs) then
+  begin
+    if not AOn then
+      Exit;
+    old := System.Length(FTabs);
+    SetLength(FTabs, ACol + 1);
+    for i := old to ACol do
+      FTabs[i] := False;
+  end;
+  FTabs[ACol] := AOn;
+end;
+
+procedure TTyTerminalBuffer.ClearAllTabs;
+begin
+  FTabs := nil;
+end;
+
+function TTyTerminalBuffer.TabStops: TIntegerDynArray;
+var
+  i, n: Integer;
+begin
+  Result := nil;
+  SetLength(Result, System.Length(FTabs));
+  n := 0;
+  for i := 0 to High(FTabs) do
+    if FTabs[i] then
+    begin
+      Result[n] := i;
+      Inc(n);
+    end;
+  SetLength(Result, n);
+end;
+
+procedure TTyTerminalBuffer.SetupTabStops(AFrom: Integer);                   { :575-588 }
+var
+  i: Integer;
+begin
+  if AFrom <> -1 then
+  begin
+    i := AFrom;
+    if not HasTab(i) then
+      i := PrevStop(i);
+  end
+  else
+  begin
+    ClearAllTabs;
+    i := 0;
+  end;
+  while i < FCols do
+  begin
+    SetTab(i, True);
+    Inc(i, FOptions.TabStopWidth);
+  end;
+end;
+
+function TTyTerminalBuffer.PrevStop(AX: Integer): Integer;                   { :594-598 }
+begin
+  if AX = MaxInt then
+    AX := FX;
+  repeat
+    Dec(AX);
+    if HasTab(AX) then
+      Break;
+  until not (AX > 0);
+  if AX >= FCols then
+    Result := FCols - 1
+  else if AX < 0 then
+    Result := 0
+  else
+    Result := AX;
+end;
+
+function TTyTerminalBuffer.NextStop(AX: Integer): Integer;                   { :604-608 }
+begin
+  if AX = MaxInt then
+    AX := FX;
+  repeat
+    Inc(AX);
+    if HasTab(AX) then
+      Break;
+  until not (AX < FCols);
+  if AX >= FCols then
+    Result := FCols - 1
+  else if AX < 0 then
+    Result := 0
+  else
+    Result := AX;
+end;
+
+procedure TTyTerminalBuffer.ClearMarkers(AAbsRow: Integer);                  { :614-623 }
+var
+  i: Integer;
+  m: TTyTerminalMarker;
+begin
+  FIsClearing := True;
+  try
+    i := 0;
+    while i < FMarkers.Count do
+    begin
+      m := TTyTerminalMarker(FMarkers[i]);
+      if m.Line = AAbsRow then
+      begin
+        m.Dispose;
+        FMarkers.Delete(i);
+        m.Release;
+      end
+      else
+        Inc(i);
+    end;
+  finally
+    FIsClearing := False;
+  end;
+end;
+
+procedure TTyTerminalBuffer.ClearAllMarkers;                                 { :628-635 }
+var
+  i: Integer;
+  list: TFPList;
+begin
+  FIsClearing := True;
+  list := TFPList.Create;
+  try
+    list.Assign(FMarkers);
+    for i := 0 to list.Count - 1 do
+      TTyTerminalMarker(list[i]).Dispose;
+    FMarkers.Clear;
+    for i := 0 to list.Count - 1 do
+      TTyTerminalMarker(list[i]).Release;
+  finally
+    list.Free;
+    FIsClearing := False;
+  end;
+end;
+
+function TTyTerminalBuffer.AddMarker(AAbsRow: Integer): TTyTerminalMarker;   { :637-665 }
+begin
+  Result := TTyTerminalMarker.Create(AAbsRow);  { the buffer's reference }
+  Result.FGeneration := FGeneration;
+  FMarkers.Add(Result);
+  Result.AddDisposeListener(@MarkerDisposed);
+end;
+
+procedure TTyTerminalBuffer.MarkerDisposed(Sender: TObject);                 { :667-671 }
+var
+  i: Integer;
+begin
+  if FIsClearing then
+    Exit;
+  i := FMarkers.IndexOf(Sender);
+  if i >= 0 then
+  begin
+    FMarkers.Delete(i);
+    TTyTerminalMarker(Sender).Release;
+  end;
+end;
+
+{ Upstream's markers each subscribe to the list, in creation order; the buffer runs
+  the same handlers over a pinned copy of its live markers. }
+function TTyTerminalBuffer.MarkerSnapshot: TFPList;
+var
+  i: Integer;
+begin
+  Result := TFPList.Create;
+  for i := 0 to FMarkers.Count - 1 do
+    if TTyTerminalMarker(FMarkers[i]).FGeneration = FGeneration then
+    begin
+      Result.Add(FMarkers[i]);
+      TTyTerminalMarker(FMarkers[i]).AddRef;
+    end;
+end;
+
+procedure ReleaseSnapshot(AList: TFPList);
+var
+  i: Integer;
+begin
+  for i := 0 to AList.Count - 1 do
+    TTyTerminalMarker(AList[i]).Release;
+  AList.Free;
+end;
+
+procedure TTyTerminalBuffer.LinesTrim(AAmount: Integer);                     { :640-646 }
+var
+  snap: TFPList;
+  i: Integer;
+  m: TTyTerminalMarker;
+begin
+  if FMarkers.Count = 0 then
+    Exit;
+  snap := MarkerSnapshot;
+  try
+    for i := 0 to snap.Count - 1 do
+    begin
+      m := TTyTerminalMarker(snap[i]);
+      if m.IsDisposed then
+        Continue;
+      m.Line := m.Line - AAmount;
+      if m.Line < 0 then
+        m.Dispose;
+    end;
+  finally
+    ReleaseSnapshot(snap);
+  end;
+end;
+
+procedure TTyTerminalBuffer.LinesInsert(AIndex, AAmount: Integer);           { :647-651 }
+var
+  snap: TFPList;
+  i: Integer;
+  m: TTyTerminalMarker;
+begin
+  if FMarkers.Count = 0 then
+    Exit;
+  snap := MarkerSnapshot;
+  try
+    for i := 0 to snap.Count - 1 do
+    begin
+      m := TTyTerminalMarker(snap[i]);
+      if m.IsDisposed then
+        Continue;
+      if m.Line >= AIndex then
+        m.Line := m.Line + AAmount;
+    end;
+  finally
+    ReleaseSnapshot(snap);
+  end;
+end;
+
+procedure TTyTerminalBuffer.LinesDelete(AIndex, AAmount: Integer);           { :652-662 }
+var
+  snap: TFPList;
+  i: Integer;
+  m: TTyTerminalMarker;
+begin
+  if FMarkers.Count = 0 then
+    Exit;
+  snap := MarkerSnapshot;
+  try
+    for i := 0 to snap.Count - 1 do
+    begin
+      m := TTyTerminalMarker(snap[i]);
+      if m.IsDisposed then
+        Continue;
+      { inside the deleted range: gone }
+      if (m.Line >= AIndex) and (m.Line < AIndex + AAmount) then
+        m.Dispose;
+      { after it: move up }
+      if m.Line > AIndex then
+        m.Line := m.Line - AAmount;
+    end;
+  finally
+    ReleaseSnapshot(snap);
+  end;
+end;
+
+{ ---- TTyTerminalBufferSet (BufferSet.ts) ------------------------------------------ }
+
+constructor TTyTerminalBufferSet.Create(AOptions: TTyTerminalOptions; AService: TTyTerminalBufferService);
+begin                                                                        { :29-38 }
+  inherited Create;
+  FOptions := AOptions;
+  FService := AService;
+  Reset;
+end;
+
+destructor TTyTerminalBufferSet.Destroy;
+begin
+  FNormal.Free;
+  FAlt.Free;
+  inherited Destroy;
+end;
+
+procedure TTyTerminalBufferSet.Reset;                                        { :40-56 }
+var
+  old: TTyTerminalBuffer;
+begin
+  { the old buffer goes as the new one takes its place (MutableDisposable) }
+  old := FNormal;
+  FNormal := TTyTerminalBuffer.Create(True, FOptions, FService);
+  old.Free;
+  FNormal.FillViewportRows;
+  { the alt buffer never has scrollback }
+  old := FAlt;
+  FAlt := TTyTerminalBuffer.Create(False, FOptions, FService);
+  old.Free;
+  FActive := FNormal;
+  if Assigned(FOnBufferActivate) then
+    FOnBufferActivate(FNormal, FAlt);
+  SetupTabStops;
+end;
+
+procedure TTyTerminalBufferSet.ActivateNormalBuffer;                         { :82-98 }
+begin
+  if FActive = FNormal then
+    Exit;
+  FNormal.X := FAlt.X;
+  FNormal.Y := FAlt.Y;
+  { the alt buffer is cleared on the way back, it is always new when activated }
+  FAlt.ClearAllMarkers;
+  FAlt.Clear;
+  FActive := FNormal;
+  if Assigned(FOnBufferActivate) then
+    FOnBufferActivate(FNormal, FAlt);
+end;
+
+procedure TTyTerminalBufferSet.ActivateAltBuffer;
+begin
+  ActivateAltBuffer(TyTermDefaultAttr);
+end;
+
+procedure TTyTerminalBufferSet.ActivateAltBuffer(const AFill: TTyTerminalAttrData);
+begin                                                                        { :103-117 }
+  if FActive = FAlt then
+    Exit;
+  FAlt.FillViewportRows(AFill);
+  FAlt.X := FNormal.X;
+  FAlt.Y := FNormal.Y;
+  FActive := FAlt;
+  if Assigned(FOnBufferActivate) then
+    FOnBufferActivate(FAlt, FNormal);
+end;
+
+procedure TTyTerminalBufferSet.Resize(ANewCols, ANewRows: Integer);          { :124-128 }
+begin
+  FNormal.Resize(ANewCols, ANewRows);
+  FAlt.Resize(ANewCols, ANewRows);
+  SetupTabStops(ANewCols);
+end;
+
+procedure TTyTerminalBufferSet.SetupTabStops(AFrom: Integer);
+begin
+  FNormal.SetupTabStops(AFrom);
+  FAlt.SetupTabStops(AFrom);
+end;
+
+function TTyTerminalBufferSet.GetIsAlt: Boolean;
+begin
+  Result := FActive = FAlt;
+end;
+
+{ ---- TTyTerminalBufferService (BufferService.ts) ---------------------------------- }
+
+constructor TTyTerminalBufferService.Create(AOptions: TTyTerminalOptions; ACols, ARows: Integer);
+begin                                                                        { :36-47 }
+  inherited Create;
+  FOptions := AOptions;
+  if ACols < TyTermMinimumCols then ACols := TyTermMinimumCols;
+  if ARows < TyTermMinimumRows then ARows := TyTermMinimumRows;
+  FCols := ACols;
+  FRows := ARows;
+  FBuffers := TTyTerminalBufferSet.Create(AOptions, Self);
+  { subscribed after the set's first reset, as upstream }
+  FBuffers.OnBufferActivate := @BuffersActivated;
+end;
+
+destructor TTyTerminalBufferService.Destroy;
+begin
+  FBuffers.Free;
+  if FCachedBlankLine <> nil then
+    FCachedBlankLine.Release;
+  inherited Destroy;
+end;
+
+procedure TTyTerminalBufferService.BuffersActivated(AActive, AInactive: TTyTerminalBuffer);
+begin
+  if Assigned(FOnScroll) then
+    FOnScroll(AActive.YDisp);
+  if Assigned(FOnBufferActivate) then
+    FOnBufferActivate(AActive, AInactive);
+end;
+
+function TTyTerminalBufferService.GetBuffer: TTyTerminalBuffer;
+begin
+  Result := FBuffers.Active;
+end;
+
+procedure TTyTerminalBufferService.Resize(ACols, ARows: Integer);            { :49-56 }
+var
+  colsChanged, rowsChanged: Boolean;
+begin
+  colsChanged := FCols <> ACols;
+  rowsChanged := FRows <> ARows;
+  FCols := ACols;
+  FRows := ARows;
+  FBuffers.Resize(ACols, ARows);
+  if Assigned(FOnResize) then
+    FOnResize(ACols, ARows, colsChanged, rowsChanged);
+end;
+
+procedure TTyTerminalBufferService.Reset;                                    { :58-61 }
+begin
+  FBuffers.Reset;
+  FIsUserScrolling := False;
+end;
+
+procedure TTyTerminalBufferService.Scroll(const AEraseAttr: TTyTerminalAttrData; AIsWrapped: Boolean);
+var
+  buf: TTyTerminalBuffer;
+  newLine: TTyTerminalLine;
+  topRow, bottomRow, h: Integer;
+  willTrim: Boolean;
+begin                                                                        { :68-126 }
+  buf := Buffer;
+  newLine := FCachedBlankLine;
+  if (newLine = nil) or (newLine.Length <> FCols) or (newLine.GetFg(0) <> AEraseAttr.Fg)
+    or (newLine.GetBg(0) <> AEraseAttr.Bg) then
+  begin
+    newLine := buf.GetBlankLine(AEraseAttr, AIsWrapped);
+    if FCachedBlankLine <> nil then
+      FCachedBlankLine.Release;
+    FCachedBlankLine := newLine;           { the service's reference (pinned) }
+  end;
+  newLine.IsWrapped := AIsWrapped;
+  topRow := buf.YBase + buf.ScrollTop;
+  bottomRow := buf.YBase + buf.ScrollBottom;
+  if buf.ScrollTop = 0 then
+  begin
+    willTrim := buf.Lines.IsFull;
+    if bottomRow = buf.Lines.Length - 1 then
+    begin
+      if willTrim then
+        buf.Lines.Recycle.CopyFrom(newLine, True)
+      else
+        buf.Lines.PushOwned(newLine.Clone(True));
+    end
+    else
+      buf.Lines.SpliceOwned(bottomRow + 1, 0, newLine.Clone(True));
+    { ybase and ydisp move only while nothing is trimmed }
+    if not willTrim then
+    begin
+      buf.YBase := buf.YBase + 1;
+      if not FIsUserScrolling then
+        buf.YDisp := buf.YDisp + 1;
+    end
+    else if FIsUserScrolling then
+    begin
+      { full and scrolled up: keep the text still unless ydisp is at the top }
+      if buf.YDisp - 1 > 0 then buf.YDisp := buf.YDisp - 1 else buf.YDisp := 0;
+    end;
+  end
+  else
+  begin
+    { a top margin: shift in place, nothing reaches the scrollback }
+    h := bottomRow - topRow + 1;
+    buf.Lines.ShiftElements(topRow + 1, h - 1, -1);
+    buf.Lines.SetItemOwned(bottomRow, newLine.Clone(True));
+  end;
+  if not FIsUserScrolling then
+    buf.YDisp := buf.YBase;
+  if Assigned(FOnScroll) then
+    FOnScroll(buf.YDisp);
+end;
+
+procedure TTyTerminalBufferService.ScrollLines(ADisp: Integer; ASuppressScrollEvent: Boolean);
+var
+  buf: TTyTerminalBuffer;
+  oldYDisp, v: Integer;
+begin                                                                        { :135-157 }
+  buf := Buffer;
+  if ADisp < 0 then
+  begin
+    if buf.YDisp = 0 then
+      Exit;
+    FIsUserScrolling := True;
+  end
+  else if Int64(ADisp) + buf.YDisp >= buf.YBase then
+    FIsUserScrolling := False;
+  oldYDisp := buf.YDisp;
+  v := buf.YDisp + ADisp;
+  if v > buf.YBase then v := buf.YBase;
+  if v < 0 then v := 0;
+  buf.YDisp := v;
+  if oldYDisp = buf.YDisp then
+    Exit;
+  if (not ASuppressScrollEvent) and Assigned(FOnScroll) then
+    FOnScroll(buf.YDisp);
+end;
+
+procedure TTyTerminalBufferService.ScrollbackChanged;
+begin
+  FBuffers.Resize(FCols, FRows);
+end;
+
+procedure TTyTerminalBufferService.TabStopWidthChanged;
+begin
+  FBuffers.SetupTabStops;
+end;
+
+{ ---- TTyTerminalOscLinks (OscLinkService.ts) -------------------------------------- }
+
+constructor TTyTermLinkEntry.Create;
+begin
+  inherited Create;
+  Markers := TFPList.Create;
+end;
+
+destructor TTyTermLinkEntry.Destroy;
+begin
+  Markers.Free;
+  inherited Destroy;
+end;
+
+constructor TTyTerminalOscLinks.Create(AService: TTyTerminalBufferService);
+begin
+  inherited Create;
+  FService := AService;
+  FNextId := 1;
+  FEntries := TFPList.Create;
+end;
+
+destructor TTyTerminalOscLinks.Destroy;
+var
+  i, k: Integer;
+  e: TTyTermLinkEntry;
+  m: TTyTerminalMarker;
+begin
+  for i := 0 to FEntries.Count - 1 do
+  begin
+    e := TTyTermLinkEntry(FEntries[i]);
+    for k := 0 to e.Markers.Count - 1 do
+    begin
+      m := TTyTerminalMarker(e.Markers[k]);
+      m.RemoveDisposeListener(@MarkerDisposed);
+      m.Release;
+    end;
+    e.Free;
+  end;
+  FEntries.Free;
+  inherited Destroy;
+end;
+
+function TTyTerminalOscLinks.FindEntry(ALinkId: Integer; out AIndex: Integer): Boolean;
+var
+  lo, hi, mid, id: Integer;
+begin
+  lo := 0;
+  hi := FEntries.Count - 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) shr 1;
+    id := TTyTermLinkEntry(FEntries[mid]).LinkId;
+    if id = ALinkId then
+    begin
+      AIndex := mid;
+      Exit(True);
+    end;
+    if id < ALinkId then lo := mid + 1 else hi := mid - 1;
+  end;
+  AIndex := lo;
+  Result := False;
+end;
+
+function TTyTerminalOscLinks.FindKey(const AKey: string; out AIndex: Integer): Boolean;
+var
+  lo, hi, mid, c: Integer;
+begin
+  lo := 0;
+  hi := FKeyCount - 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) shr 1;
+    c := CompareStr(FKeys[mid], AKey);
+    if c = 0 then
+    begin
+      AIndex := mid;
+      Exit(True);
+    end;
+    if c < 0 then lo := mid + 1 else hi := mid - 1;
+  end;
+  AIndex := lo;
+  Result := False;
+end;
+
+procedure TTyTerminalOscLinks.AttachMarker(AEntry: TTyTermLinkEntry; AMarker: TTyTerminalMarker);
+begin
+  AMarker.AddRef;                          { the entry's reference }
+  AMarker.Tag := AEntry;
+  AEntry.Markers.Add(AMarker);
+  AMarker.AddDisposeListener(@MarkerDisposed);
+end;
+
+function TTyTerminalOscLinks.RegisterLink(const AData: TTyTerminalLinkData): Integer;
+var
+  buf: TTyTerminalBuffer;
+  e: TTyTermLinkEntry;
+  key: string;
+  k, i: Integer;
+begin                                                                        { :31-68 }
+  buf := FService.Buffer;
+  if not AData.HasId then
+  begin
+    { a link without an id is only ever registered once }
+    e := TTyTermLinkEntry.Create;
+    e.Data := AData;
+    e.LinkId := FNextId;
+    Inc(FNextId);
+    AttachMarker(e, buf.AddMarker(buf.YBase + buf.Y));
+    FEntries.Add(e);
+    Exit(e.LinkId);
+  end;
+  key := AData.Id + ';;' + AData.Uri;
+  if FindKey(key, k) then
+  begin
+    AddLineToLink(FKeyEntries[k].LinkId, buf.YBase + buf.Y);
+    Exit(FKeyEntries[k].LinkId);
+  end;
+  e := TTyTermLinkEntry.Create;
+  e.Data := AData;
+  e.Key := key;
+  e.LinkId := FNextId;
+  Inc(FNextId);
+  AttachMarker(e, buf.AddMarker(buf.YBase + buf.Y));
+  if FKeyCount = System.Length(FKeys) then
+  begin
+    SetLength(FKeys, FKeyCount * 2 + 4);
+    SetLength(FKeyEntries, FKeyCount * 2 + 4);
+  end;
+  for i := FKeyCount downto k + 1 do
+  begin
+    FKeys[i] := FKeys[i - 1];
+    FKeyEntries[i] := FKeyEntries[i - 1];
+  end;
+  FKeys[k] := key;
+  FKeyEntries[k] := e;
+  Inc(FKeyCount);
+  FEntries.Add(e);
+  Result := e.LinkId;
+end;
+
+procedure TTyTerminalOscLinks.AddLineToLink(ALinkId, AAbsRow: Integer);
+var
+  i, k: Integer;
+  e: TTyTermLinkEntry;
+begin                                                                        { :70-80 }
+  if not FindEntry(ALinkId, i) then
+    Exit;
+  e := TTyTermLinkEntry(FEntries[i]);
+  for k := 0 to e.Markers.Count - 1 do
+    if TTyTerminalMarker(e.Markers[k]).Line = AAbsRow then
+      Exit;
+  AttachMarker(e, FService.Buffer.AddMarker(AAbsRow));
+end;
+
+function TTyTerminalOscLinks.GetLinkData(ALinkId: Integer; out AData: TTyTerminalLinkData): Boolean;
+var
+  i: Integer;
+begin
+  Result := FindEntry(ALinkId, i);
+  if Result then
+    AData := TTyTermLinkEntry(FEntries[i]).Data
+  else
+  begin
+    AData.Id := '';
+    AData.HasId := False;
+    AData.Uri := '';
+  end;
+end;
+
+procedure TTyTerminalOscLinks.MarkerDisposed(Sender: TObject);               { :90-102 }
+var
+  m: TTyTerminalMarker;
+  e: TTyTermLinkEntry;
+  i, k: Integer;
+begin
+  m := TTyTerminalMarker(Sender);
+  e := TTyTermLinkEntry(m.Tag);
+  if e = nil then
+    Exit;
+  i := e.Markers.IndexOf(m);
+  if i = -1 then
+    Exit;
+  e.Markers.Delete(i);
+  m.Tag := nil;
+  m.Release;
+  if e.Markers.Count = 0 then
+  begin
+    if e.Data.HasId and FindKey(e.Key, k) then
+    begin
+      for i := k to FKeyCount - 2 do
+      begin
+        FKeys[i] := FKeys[i + 1];
+        FKeyEntries[i] := FKeyEntries[i + 1];
+      end;
+      Dec(FKeyCount);
+      FKeys[FKeyCount] := '';
+    end;
+    if FindEntry(e.LinkId, i) then
+      FEntries.Delete(i);
+    e.Free;
+  end;
+end;
+
+function TTyTerminalOscLinks.LinkIds: TIntegerDynArray;
+var
+  i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, FEntries.Count);
+  for i := 0 to FEntries.Count - 1 do
+    Result[i] := TTyTermLinkEntry(FEntries[i]).LinkId;
+end;
+
+function TTyTerminalOscLinks.LinkLines(ALinkId: Integer): TIntegerDynArray;
+var
+  i, k: Integer;
+  e: TTyTermLinkEntry;
+begin
+  Result := nil;
+  if not FindEntry(ALinkId, i) then
+    Exit;
+  e := TTyTermLinkEntry(FEntries[i]);
+  SetLength(Result, e.Markers.Count);
+  for k := 0 to e.Markers.Count - 1 do
+    Result[k] := TTyTerminalMarker(e.Markers[k]).Line;
 end;
 
 end.
