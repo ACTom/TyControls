@@ -146,6 +146,7 @@ type
     procedure TestClickInThePaintedFieldSelectsThatField;
     procedure TestClickInThePaintedFieldSelectsThatFieldRightAligned;
     procedure TestCheckBoxColumnMovesThePaintedFieldsAndTheClicks;
+    procedure TestTheCheckBoxSlopIsLogicalPx;
   end;
 
   TChangeCounter = class
@@ -2270,6 +2271,43 @@ begin
   FPicker.GetPreferredSize(wLocale, hLocale);
   AssertTrue(Format('width follows the name source: locale(W*30)=%d must exceed '
     + 'translation(September)=%d', [wLocale, wTrans]), wLocale > wTrans);
+end;
+
+procedure TDateTimeLayoutTest.TestTheCheckBoxSlopIsLogicalPx;
+{ The check box is small, so a press just beside it still counts: 2 LOGICAL px of slop on
+  every side. It was 2 device px, which at 175% is a box 21 px across with a margin of one
+  logical pixel. (ACTom/TyControls#2) }
+
+  function Toggles(APPI, ABeside: Integer): Boolean;
+  var
+    p: TTyDateTimePickerProbe;
+    r: TTyDateTimeRects;
+  begin
+    p := TTyDateTimePickerProbe.Create(nil);
+    try
+      p.Font.PixelsPerInch := APPI;
+      p.SetBounds(0, 0, MulDiv(300, APPI, 96), MulDiv(28, APPI, 96));
+      p.Kind := dtkDate;
+      p.DateFormat := 'yyyy-mm-dd';
+      p.DateTime := EncodeDate(2026, 6, 15);
+      p.ShowCheckBox := True;
+      p.Checked := True;
+      r := p.RectsForTest;
+      if IsRectEmpty(r.CheckBox) then
+        raise Exception.Create('precondition: the picker has a check box');
+      p.SimMouseDown(r.CheckBox.Right + ABeside, (r.CheckBox.Top + r.CheckBox.Bottom) div 2);
+      Result := not p.Checked;
+    finally
+      p.Free;
+    end;
+  end;
+
+begin
+  AssertTrue('precondition: the pixel after the box is on it at 96 PPI', Toggles(96, 1));
+  AssertFalse('precondition: three pixels after it is not', Toggles(96, 3));
+  AssertTrue('at 168 PPI the slop is 2 logical px, 4 on the screen: three pixels after the'
+    + ' box is on it', Toggles(168, 3));
+  AssertFalse('and five is not', Toggles(168, 5));
 end;
 
 initialization

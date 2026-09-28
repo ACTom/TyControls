@@ -25,6 +25,9 @@ type
     constructor Create(ACollection: TCollection); override;
   published
     property Text: TCaption read FText write SetText;
+    { LOGICAL px, like every other size a designer types into this library: the bar scales
+      it by its PPI where it lays the panels out (TTyStatusBar.PanelWidthsPx). A value <= 0
+      still means "take what is left". }
     property Width: Integer read FWidth write SetWidth default 50;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     { psOwnerDraw makes this cell the application's: the bar paints the panel background and
@@ -90,6 +93,9 @@ type
       paint a cell without stealing the application's event slot. }
     procedure DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect); virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The panels' widths in DEVICE px at APPI -- what the paint and the hit test both lay
+      the cells out from. }
+    function PanelWidthsPx(APPI: Integer): TIntegerDynArray;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -324,18 +330,32 @@ end;
 function TTyStatusBar.PanelAtPos(X, Y: Integer): Integer;
 var
   rects: TTyRectArray;
-  ws: array of Integer;
+  ws: TIntegerDynArray;
   i: Integer;
 begin
   Result := -1;
   if FSimplePanel or (FPanels.Count = 0) then Exit;
   if (Y < 0) or (Y >= ClientHeight) then Exit;
-  SetLength(ws, FPanels.Count);
-  for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
+  ws := PanelWidthsPx(Font.PixelsPerInch);
   rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(CStatusBarPadX, Font.PixelsPerInch, 96),
     IsRightToLeft);
   for i := 0 to High(rects) do
     if (X >= rects[i].Left) and (X < rects[i].Right) then Exit(i);
+end;
+
+function TTyStatusBar.PanelWidthsPx(APPI: Integer): TIntegerDynArray;
+var
+  i: Integer;
+begin
+  { ONE function for the hit test and the paint, so the cell that is drawn is the cell that
+    is pointed at. The panel widths are logical px and used to go in RAW beside a ClientWidth
+    and a padding that are device px -- the same number only at 96 PPI, so at 175% a panel
+    designed 120 wide stayed 120 px while its text grew to 1.75x and was cut off. }
+  Result := nil;
+  if APPI <= 0 then APPI := 96;
+  SetLength(Result, FPanels.Count);
+  for i := 0 to FPanels.Count - 1 do
+    Result[i] := MulDiv(FPanels[i].Width, APPI, 96);
 end;
 
 procedure TTyStatusBar.Paint;
@@ -348,7 +368,7 @@ var
   W, H, i, padX, sepW, fs, bw, gx, gy, k: Integer;
   bg, grip: TTyFill;
   rects: TTyRectArray;
-  ws: array of Integer;
+  ws: TIntegerDynArray;
   rtl: Boolean;
   sep, gripBox: TRect;
 begin
@@ -383,8 +403,7 @@ begin
       P.DrawText(Rect(padX, 0, W - padX, H), FSimpleText, S.FontName, fs, S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True)
     else
     begin
-      SetLength(ws, FPanels.Count);
-      for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
+      ws := PanelWidthsPx(APPI);
       rects := TyStatusPanelRects(ws, W, padX, rtl);
       sepW := P.Scale(1); if sepW < 1 then sepW := 1;
       for i := 0 to High(rects) do
@@ -426,7 +445,7 @@ begin
         gy := gripBox.Bottom - P.Scale(3) - k*P.Scale(4);
         sep := Rect(gx, gy, gx + P.Scale(2), gy + P.Scale(2));
         if rtl then sep := BidiFlipRect(sep, gripBox, True);
-        P.FillBackground(sep, grip, P.Scale(1));
+        P.FillBackground(sep, grip, 1);   // the radius is LOGICAL: the painter scales it
       end;
     end;
     P.EndPaint;

@@ -2693,7 +2693,8 @@ begin
   end
   else
   begin
-    Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick, FClickCount);
+    Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY,
+      FLastClickTick, FClickCount, Font.PixelsPerInch);
     if Clicks = 2 then
     begin
       SelectWordAtLineCol(FCaretLine, FCaretCol);   // double-click: word under the pointer

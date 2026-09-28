@@ -2289,6 +2289,10 @@ type
     property InlineEditor: TTyEdit read FEditor;
     { 筛选行的编辑器。与上面那个是**两个**控件 —— 见字段处的说明。 }
     property FilterEditor: TTyEdit read FFilterEditor;
+    { 列头筛选下拉的面板:**只建不显示**。显示要开一个真窗口,而面板里每个数都是
+      代码摆出来的 —— protected 暴露给测试,好在没有窗口的地方量它。 }
+    procedure EnsureFilterDropDown;
+    property FilterDropDownPanel: TTyPanel read FFilterPanel;
     { protected 暴露给测试 —— 回车/Esc 的分派是筛选行唯一的键盘契约。 }
     procedure FilterEditorKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -7374,15 +7378,17 @@ begin
     if w <= 0 then Continue;
     if (l >= M.ClientW) or (l + w <= 0) then Continue;
 
-    { 每列一个输入位。内缩一点,让它看起来是个可以打字的框而不是一格表头。 }
-    inner := Rect(l + 2, ATop + 2, l + w - 2, ATop + h - 2);
+    { 每列一个输入位。内缩一点,让它看起来是个可以打字的框而不是一格表头。
+      内缩量是逻辑像素:BeginFilterEdit 把真正的编辑框摆在同一个矩形上,两边用同一个
+      ScaleI(2),画出来的框和点出来的框才是同一个。 }
+    inner := Rect(l + ScaleI(2), ATop + ScaleI(2), l + w - ScaleI(2), ATop + h - ScaleI(2));
     if inner.Right <= inner.Left then Continue;
     if tpBorderColor in fs.Present then
       P.StrokeBorder(inner, 0, 1, fs.BorderColor);
 
     txt := FilterRowText(i);
     if txt = '' then Continue;
-    DrawCellText(P, Rect(inner.Left + 4, inner.Top, inner.Right - 4, inner.Bottom),
+    DrawCellText(P, Rect(inner.Left + ScaleI(4), inner.Top, inner.Right - ScaleI(4), inner.Bottom),
       txt, fs.FontName, ResolveFontSize(fs), fs.FontWeight,
       ink, taLeftJustify, tlCenter);
   end;
@@ -9117,7 +9123,7 @@ begin
   end;
   if (hit.Part = ghpHeader) and (hit.Col >= 0)
      and ShowsFilterButton(hit.Col)
-     and PtInRect(HeaderFilterRect(hit.Col, ScaleI(Header.Height)), Point(X, Y)) then
+     and PtInRect(HeaderFilterRect(hit.Col, HeaderHeightPx), Point(X, Y)) then
   begin
     ShowColumnFilterDropDown(hit.Col);
     Exit;
@@ -9926,14 +9932,18 @@ begin
   if FEditing and not TryEndEdit(True) then begin RefocusEditor; Exit; end;   { 拦下的编辑上面不开筛选框 }
   if FFilterEditCol >= 0 then EndFilterEdit(True);
 
-  bandTop := ScaleI(Header.Height) + GroupBandHeightPx;
+  { HeaderHeightPx, the one source for the band's height: the raw Header.Height is only
+    its floor -- density and an auto-height caption raise it -- and the filter row is
+    PAINTED below the band as it really is. }
+  bandTop := HeaderHeightPx + GroupBandHeightPx;
   h := FilterRowHeightPx;
   l := ColumnLeftPx(ACol);
   w := ColumnWidthPx(ACol);
   if w <= 0 then Exit;
 
   FFilterEditCol := ACol;
-  FFilterEditor.SetBounds(l + 2, bandTop + 2, w - 4, h - 4);
+  FFilterEditor.SetBounds(l + ScaleI(2), bandTop + ScaleI(2), w - 2 * ScaleI(2),
+    h - 2 * ScaleI(2));
   { 先摆好位置再灌值 —— 灌值会触发 OnChange,而它要用到 FFilterEditCol。 }
   FFilterEditor.Text := FilterText(ACol);
   FFilterEditor.Visible := True;
@@ -10462,9 +10472,10 @@ begin
   fill := Default(TTyFill);
   fill.Kind := tfkSolid;
   fill.Color := c;
-  P.FillBackground(sw, fill, ScaleI(2));
+  { 圆角半径是逻辑像素,画家自己缩放;传 ScaleI(2) 就缩放了两次。 }
+  P.FillBackground(sw, fill, 2);
   { 描一圈边,免得浅色块在浅色底上看不见边界。 }
-  P.StrokeBorder(sw, ScaleI(2), 1, AFrame.BorderColor);
+  P.StrokeBorder(sw, 2, 1, AFrame.BorderColor);
 end;
 
 procedure TTyStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
@@ -10480,8 +10491,8 @@ begin
   if (idx < 0) or (idx >= TyImageCount(FImages)) then Exit;
 
   sz := ScaleI(16);
-  if sz > (r.Bottom - r.Top) - 2 then sz := (r.Bottom - r.Top) - 2;
-  if sz > (r.Right - r.Left) - 2 then sz := (r.Right - r.Left) - 2;
+  if sz > (r.Bottom - r.Top) - ScaleI(2) then sz := (r.Bottom - r.Top) - ScaleI(2);
+  if sz > (r.Right - r.Left) - ScaleI(2) then sz := (r.Right - r.Left) - ScaleI(2);
   if sz <= 0 then Exit;
   cx := (r.Left + r.Right) div 2;
   cy := (r.Top + r.Bottom) div 2;
@@ -11458,8 +11469,8 @@ begin
   r := CellVisibleRect(ACol, ARow);
   if IsRectEmpty(r) then Exit;
   box := ScaleI(14);
-  if box > (r.Bottom - r.Top) - 2 then box := (r.Bottom - r.Top) - 2;
-  if box > (r.Right - r.Left) - 2 then box := (r.Right - r.Left) - 2;
+  if box > (r.Bottom - r.Top) - ScaleI(2) then box := (r.Bottom - r.Top) - ScaleI(2);
+  if box > (r.Right - r.Left) - ScaleI(2) then box := (r.Right - r.Left) - ScaleI(2);
   if box <= 0 then Exit;
   cx := (r.Left + r.Right) div 2;
   cy := (r.Top + r.Bottom) div 2;
@@ -11757,9 +11768,72 @@ begin
   FFilterList.Invalidate;
 end;
 
+procedure TTyStringGrid.EnsureFilterDropDown;
+var
+  pad, y, bh, sw: Integer;
+begin
+  if FFilterPopup <> nil then Exit;
+  FFilterPopup := TTyPopover.Create(Self);
+  { Popover.Content 只收**一个**控件,而且不按子控件自动定尺寸 ——
+    所以自己摆一个固定尺寸的面板。 }
+  FFilterPanel := TTyPanel.Create(FFilterPopup);
+  { 面板此刻还没有父控件 —— 弹层显示时才收养它 —— 所以它的 PPI 还是出生时的 96,
+    里面的控件会按 96 算自己的尺寸下限,而下面是按网格的 PPI 在摆。先把 PPI 交给它。 }
+  FFilterPanel.Font.PixelsPerInch := Font.PixelsPerInch;
+  { 下面每个数都是 96 PPI 的设计值,经 ScaleI 变成设备像素:这个面板是代码摆出来的,
+    没有任何 DPI pass 会替它缩放。高度在摆完之后按最后一行的真实位置定。 }
+  FFilterPanel.Width := ScaleI(232);
+  FFilterPanel.Height := ScaleI(306);
+
+  FFilterSearch := TTyEdit.Create(FFilterPanel);
+  FFilterSearch.Parent := FFilterPanel;
+  FFilterSearch.TextHint := rsGridFilterSearchHint;
+  FFilterSearch.OnChange := @FilterSearchChanged;
+
+  FFilterSelAll := TTyCheckBox.Create(FFilterPanel);
+  FFilterSelAll.Parent := FFilterPanel;
+  FFilterSelAll.Caption := rsGridFilterSelectAll;
+  FFilterSelAll.OnClick := @FilterSelectAllClick;
+
+  FFilterList := TTyGridFilterList.Create(FFilterPanel);
+  FFilterList.Parent := FFilterPanel;
+  FFilterList.OnClickCheck := @FilterItemChecked;
+
+  FFilterOk := TTyButton.Create(FFilterPanel);
+  FFilterOk.Parent := FFilterPanel;
+  FFilterOk.Caption := rsGridFilterOk;
+  FFilterOk.OnClick := @FilterOkClick;
+
+  FFilterCancel := TTyButton.Create(FFilterPanel);
+  FFilterCancel.Parent := FFilterPanel;
+  FFilterCancel.Caption := rsGridFilterCancel;
+  FFilterCancel.OnClick := @FilterCancelClick;
+
+  pad := ScaleI(8);
+  sw := FFilterPanel.Width - 2 * pad;
+  bh := ScaleI(26);
+  y := pad;
+  { 每一行从上一行**真实的**底边往下排:SetBounds 会把控件夹到它自己的尺寸下限,
+    按字面高度累加的话,下一行就压在上一行上。 }
+  FFilterSearch.SetBounds(pad, y, sw, bh);
+  y := FFilterSearch.Top + FFilterSearch.Height + ScaleI(6);
+  FFilterSelAll.SetBounds(pad, y, sw, ScaleI(20));
+  y := FFilterSelAll.Top + FFilterSelAll.Height + ScaleI(4);
+  FFilterList.SetBounds(pad, y, sw, ScaleI(200));
+  y := FFilterList.Top + FFilterList.Height + ScaleI(8);
+  FFilterOk.SetBounds(FFilterPanel.Width - pad - 2 * ScaleI(68) - ScaleI(6), y,
+    ScaleI(68), bh);
+  FFilterCancel.SetBounds(FFilterPanel.Width - pad - ScaleI(68), y, ScaleI(68), bh);
+  FFilterPanel.Height := Max(FFilterOk.Top + FFilterOk.Height,
+    FFilterCancel.Top + FFilterCancel.Height) + pad;
+
+  FFilterPopup.Content := FFilterPanel;
+  FFilterPopup.OnHide := @FilterPopupClosed;
+end;
+
 procedure TTyStringGrid.ShowColumnFilterDropDown(ACol: Integer);
 var
-  i, pad, y, bh, sw: Integer;
+  i: Integer;
   allowed: TStringList;
   scr: TRect;
   l, w: Integer;
@@ -11773,52 +11847,7 @@ begin
     FFilterPopup.Hide;
   end;
 
-  if FFilterPopup = nil then
-  begin
-    FFilterPopup := TTyPopover.Create(Self);
-    { Popover.Content 只收**一个**控件,而且不按子控件自动定尺寸 ——
-      所以自己摆一个固定尺寸的面板。 }
-    FFilterPanel := TTyPanel.Create(FFilterPopup);
-    FFilterPanel.Width := 232;
-    FFilterPanel.Height := 306;
-
-    FFilterSearch := TTyEdit.Create(FFilterPanel);
-    FFilterSearch.Parent := FFilterPanel;
-    FFilterSearch.TextHint := rsGridFilterSearchHint;
-    FFilterSearch.OnChange := @FilterSearchChanged;
-
-    FFilterSelAll := TTyCheckBox.Create(FFilterPanel);
-    FFilterSelAll.Parent := FFilterPanel;
-    FFilterSelAll.Caption := rsGridFilterSelectAll;
-    FFilterSelAll.OnClick := @FilterSelectAllClick;
-
-    FFilterList := TTyGridFilterList.Create(FFilterPanel);
-    FFilterList.Parent := FFilterPanel;
-    FFilterList.OnClickCheck := @FilterItemChecked;
-
-    FFilterOk := TTyButton.Create(FFilterPanel);
-    FFilterOk.Parent := FFilterPanel;
-    FFilterOk.Caption := rsGridFilterOk;
-    FFilterOk.OnClick := @FilterOkClick;
-
-    FFilterCancel := TTyButton.Create(FFilterPanel);
-    FFilterCancel.Parent := FFilterPanel;
-    FFilterCancel.Caption := rsGridFilterCancel;
-    FFilterCancel.OnClick := @FilterCancelClick;
-
-    pad := 8;
-    sw := FFilterPanel.Width - 2 * pad;
-    bh := 26;
-    y := pad;
-    FFilterSearch.SetBounds(pad, y, sw, bh);   Inc(y, bh + 6);
-    FFilterSelAll.SetBounds(pad, y, sw, 20);   Inc(y, 24);
-    FFilterList.SetBounds(pad, y, sw, 200);    Inc(y, 208);
-    FFilterOk.SetBounds(FFilterPanel.Width - pad - 2 * 68 - 6, y, 68, bh);
-    FFilterCancel.SetBounds(FFilterPanel.Width - pad - 68, y, 68, bh);
-
-    FFilterPopup.Content := FFilterPanel;
-    FFilterPopup.OnHide := @FilterPopupClosed;
-  end;
+  EnsureFilterDropDown;
   FFilterPopup.Controller := Self.Controller;
   FFilterPanel.Controller := Self.Controller;
   FFilterSearch.Controller := Self.Controller;
@@ -11850,7 +11879,7 @@ begin
   l := ColumnLeftPx(ACol);
   w := ColumnWidthPx(ACol);
   scr.TopLeft := ClientToScreen(Point(l, 0));
-  scr.BottomRight := ClientToScreen(Point(l + w, ScaleI(Header.Height)));
+  scr.BottomRight := ClientToScreen(Point(l + w, HeaderHeightPx));
   FFilterPopup.ShowAt(scr);
 end;
 

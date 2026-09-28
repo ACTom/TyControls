@@ -791,12 +791,7 @@ begin
     // GDI measurement canvas carrying the card font — mirrors TTyLabel.MeasureCaption so the
     // wrap breaks at the same widths the painter later draws.
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     raw.Text := FMessage;            // authored lines (CR/LF)
     for i := 0 to raw.Count - 1 do
     begin

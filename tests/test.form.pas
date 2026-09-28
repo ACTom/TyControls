@@ -287,6 +287,7 @@ type
     procedure TestFreeingControllerNilsProperty;
     procedure TestTitleBarDragArmsViaEngine;
     procedure TestTitleBarTopZoneDoesNotArmDrag;
+    procedure TestTheResizeZoneFollowsTheFormsPPI;
     procedure TestDblClickMaximizeToggles;
     procedure TestResizableDefaultsTrue;
     procedure TestResizableRoundTrips;
@@ -294,6 +295,11 @@ type
     procedure TestNonResizableEdgePressDoesNotStartResize;
     procedure TestNonResizableDisablesMaxButton;
     procedure TestNonResizableGatesMaximize;
+    { The maximize gestures follow the button: no button, no double-click maximize. }
+    procedure TestHiddenMaxButtonGatesTheDoubleClick;
+    procedure TestBorderIconsWithoutMaximizeGateTheDoubleClick;
+    procedure TestHiddenMaxButtonStillRestoresAMaximizedWindow;
+    procedure TestCanMaximizeIsTheButtonsPresence;
   end;
 
   { Bugs #2 + #3 — the maximized window's chrome.
@@ -303,16 +309,28 @@ type
       #3 a maximized window must still be draggable: the drag tears it loose (restores it under
          the pointer) and continues, which is what every native title bar does. }
   TMaximizedChromeTest = class(TTestCase)
+  private
+    FShows: Integer;
+    procedure CountShow(Sender: TObject);
   published
     procedure TestMaximizedPressArmsDrag;
     procedure TestMaximizedDragRestoresUnderPointer;
     procedure TestMaximizedClickBelowThresholdKeepsMaximized;
+    procedure TestTheDragThresholdIsLogicalPx;
     procedure TestNativeMaximizeAdoptedByChrome;
     procedure TestNativeRestoreClearsMaximized;
     procedure TestMinimizeKeepsMaximizedState;
     procedure TestEngineMaximizeSurvivesRestoredReport;
     procedure TestNativeMaximizeRestoresThroughWindowState;
     procedure TestDesigningIgnoresWindowStateReport;
+    { A designer-set WindowState = wsMaximized: adopted by the engine on first show. }
+    procedure TestStreamedMaximizedStateIsAdoptedOnFirstShow;
+    procedure TestAdoptionPrecedesInheritedDoShow;
+    procedure TestAdoptedMaximizeRestoresToTheDesignedBounds;
+    procedure TestNormalWindowStateShowsAsDesigned;
+    procedure TestDesignSurfaceKeepsTheStreamedWindowState;
+    procedure TestFixedWindowIsNotMaximizedByItsWindowState;
+    procedure TestReshowingAMaximizedFormKeepsItsRestoreRect;
   end;
 
   { FIX #1: the photo backdrop must (re)build on theme-apply WITHOUT a paint cycle.
@@ -389,6 +407,11 @@ type
     procedure TestCloseOnly;
     procedure TestResizableFalseHidesMaximize;
     procedure TestEmptyBorderIconsHidesAllRuntime;
+    { The bar's own switches survive the form's sync: a designer-set ShowMaximize=False is
+      streamed into the bar BEFORE Loaded re-syncs from BorderIcons, and used to be overwritten. }
+    procedure TestBarSwitchSurvivesTheFormsSync;
+    procedure TestBorderIconsStillGateAnExplicitlyShownButton;
+    procedure TestSwitchReadsTheUsersValueNotTheEffectiveVisibility;
   end;
 
   { A title bar belonging to another form cannot be associated. }
@@ -478,6 +501,10 @@ type
     { Replay what the widgetset reports after an OS-driven size change (LM_SIZE ->
       TScrollingWinControl.WMSize -> Resizing), which is how Aero Snap reaches the chrome. }
     procedure InjectResizing(AState: TWindowState);
+    { Run the form's own first-show entry (the protected DoShow) headlessly. Every step in it
+      that needs a handle is guarded, so this exercises exactly the path CMShowingChanged
+      takes before the widgetset reads WindowState. }
+    procedure InjectDoShow;
     { Drive the form's own (protected) mouse entry points headlessly — exactly the path
       the widgetset uses — so the engine's resize gating can be exercised without a handle. }
     procedure InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -535,6 +562,7 @@ function TTyFormAccess.EngineResizing: Boolean; begin Result := FEngine.Resizing
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
 function TTyFormAccess.Engine: TTyChromeEngine; begin Result := FEngine; end;
 procedure TTyFormAccess.InjectResizing(AState: TWindowState); begin Resizing(AState); end;
+procedure TTyFormAccess.InjectDoShow; begin DoShow; end;
 
 procedure TTyFormAccess.InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin MouseDown(Button, Shift, X, Y); end;
@@ -1922,6 +1950,39 @@ begin
   end;
 end;
 
+procedure TTyFormTest.TestTheResizeZoneFollowsTheFormsPPI;
+{ The zone is 6 LOGICAL px. It was used as 6 device px wherever the form was, so at 175% the
+  edge to grab was a little over half as deep as the one the design asked for -- on a screen
+  where the pointer is no more precise. (ACTom/TyControls#2) }
+var F: TTyFormAccess;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Font.PixelsPerInch := 96;
+    AssertEquals('at 96 PPI the zone is the number itself', 6, F.Engine.BorderZonePx);
+    {$IFDEF LCLWin32}
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 8);
+    AssertTrue('precondition: 8 px down is BELOW the zone at 96 PPI, so it drags the window',
+      F.EngineDragging);
+    {$ENDIF}
+  finally
+    F.Free;
+  end;
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Font.PixelsPerInch := 168;
+    AssertEquals('at 168 PPI it is 6 logical px', MulDiv(6, 168, 96), F.Engine.BorderZonePx);
+    {$IFDEF LCLWin32}
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 8);
+    AssertFalse('8 px down is still ON the resize edge at 168 PPI', F.EngineDragging);
+    {$ENDIF}
+  finally
+    F.Free;
+  end;
+end;
+
 procedure TTyFormTest.TestDblClickMaximizeToggles;
 var F: TTyFormAccess;
 begin
@@ -2038,6 +2099,90 @@ begin
   end;
 end;
 
+procedure TTyFormTest.TestHiddenMaxButtonGatesTheDoubleClick;
+var F: TTyFormAccess;
+begin
+  { ShowMaximize=False hides the button; the title-bar double-click must be refused too. On a
+    native window the two are one fact -- no maximize box, no double-click maximize -- and the
+    gate used to look at Resizable alone, so a window with its button hidden still maximized. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertTrue('precondition: the double-click maximizes while the button shows', F.EngineMaximized);
+    F.Engine.ToggleMaximize;
+    AssertFalse('precondition: restored', F.EngineMaximized);
+    F.TB.ShowMaximize := False;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('double-click refused once the button is hidden', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestBorderIconsWithoutMaximizeGateTheDoubleClick;
+var F: TTyFormAccess;
+begin
+  { The same through BorderIcons: no biMaximize, no button, no double-click maximize. This gap
+    predates the bar switch. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.BorderIcons := [biSystemMenu, biMinimize];
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('double-click refused without biMaximize', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestHiddenMaxButtonStillRestoresAMaximizedWindow;
+var F: TTyFormAccess;
+begin
+  { Hiding the button on an already-maximized window must not trap it: the double-click still
+    restores. The gate refuses the way IN only, as it always did for Resizable=False. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertTrue('precondition: maximized', F.EngineMaximized);
+    F.TB.ShowMaximize := False;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('restored despite the hidden button', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestCanMaximizeIsTheButtonsPresence;
+var F: TTyFormAccess;
+begin
+  { One answer for the gestures and the button: CanMaximize flips exactly when the caption
+    button appears or disappears, for each of the three conditions. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    AssertTrue('default: yes', F.CanMaximize);
+    AssertTrue('and the button shows', F.TB.MaxButton.Visible);
+    F.Resizable := False;
+    AssertFalse('fixed window: no', F.CanMaximize);
+    AssertFalse('fixed window: button gone', F.TB.MaxButton.Visible);
+    F.Resizable := True;
+    F.BorderIcons := [biSystemMenu, biMinimize];
+    AssertFalse('no biMaximize: no', F.CanMaximize);
+    AssertFalse('no biMaximize: button gone', F.TB.MaxButton.Visible);
+    F.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+    F.TB.ShowMaximize := False;
+    AssertFalse('switch off: no', F.CanMaximize);
+    AssertFalse('switch off: button gone', F.TB.MaxButton.Visible);
+    F.TB.ShowMaximize := True;
+    AssertTrue('all three back: yes', F.CanMaximize);
+    AssertTrue('button back', F.TB.MaxButton.Visible);
+  finally
+    F.Free;
+  end;
+end;
+
 { TMaximizedChromeTest }
 
 procedure TMaximizedChromeTest.TestMaximizedPressArmsDrag;
@@ -2105,6 +2250,38 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TMaximizedChromeTest.TestTheDragThresholdIsLogicalPx;
+{ How far the pointer may wander during a click before it counts as a drag: 4 LOGICAL px.
+  As 4 device px it was a little over half of that at 175%, on a screen where a hand is no
+  steadier -- so a double-click on a maximized caption tore the window loose instead of
+  restoring it. (ACTom/TyControls#2) }
+
+  function TornLooseBy(APPI, ATravel: Integer): Boolean;
+  var F: TTyFormAccess;
+  begin
+    F := TTyFormAccess.CreateNew(nil);
+    try
+      F.MakeTitleBar;
+      F.Font.PixelsPerInch := APPI;
+      F.SetBounds(0, 0, 1000, 800);
+      F.Engine.SavedBounds := Rect(120, 90, 520, 390);
+      F.SetEngineMaximized(True);
+      F.Engine.TitleBarDragBegin(Point(500, 10));
+      F.Engine.TitleBarDragUpdate(Point(500 + ATravel, 10));
+      Result := not F.EngineMaximized;
+    finally
+      F.Free;
+    end;
+  end;
+
+begin
+  AssertFalse('precondition: 4 px of travel is still a click at 96 PPI', TornLooseBy(96, 4));
+  AssertTrue('precondition: 6 px is a drag there', TornLooseBy(96, 6));
+  AssertFalse('6 px on a 168-PPI screen is 3.4 logical px: still a click',
+    TornLooseBy(168, 6));
+  AssertTrue('8 px is past the 7 the threshold comes to', TornLooseBy(168, 8));
 end;
 
 procedure TMaximizedChromeTest.TestNativeMaximizeAdoptedByChrome;
@@ -2209,6 +2386,176 @@ begin
     F.SetDesigning(True, False);
     F.InjectResizing(wsMaximized);
     AssertFalse('design surface state left alone', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.CountShow(Sender: TObject);
+begin
+  Inc(FShows);
+end;
+
+procedure TMaximizedChromeTest.TestStreamedMaximizedStateIsAdoptedOnFirstShow;
+var
+  F: TTyFormAccess;
+  want: TRect;
+begin
+  { A designer-set WindowState = wsMaximized used to reach the widgetset untouched, as
+    ShowWindow(SW_SHOWMAXIMIZED) on a borderless WS_POPUP: the whole monitor, taskbar
+    included, on Windows; ignored outright by GTK/Qt window managers; and the chrome never
+    heard of it either way. The first show now hands it to the engine's own work-area
+    maximize -- through the real entry, DoShow -- and takes it away from the widgetset. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;      // what the .lfm streams, or code sets before Show
+    F.InjectDoShow;
+    AssertTrue('engine maximized by the first show', F.EngineMaximized);
+    AssertFalse('the engine''s own maximize, not the window manager''s', F.Engine.NativeMaximized);
+    AssertEquals('state handed off: the widgetset must not maximize a popup',
+      Ord(wsNormal), Ord(F.WindowState));
+    want := TyMaximizedBounds(Screen.WorkAreaRect);
+    AssertTrue(Format('bounds fill the work area (got %d,%d %dx%d; want %d,%d %dx%d)',
+      [F.Left, F.Top, F.Width, F.Height,
+       want.Left, want.Top, want.Right - want.Left, want.Bottom - want.Top]),
+      (F.Left = want.Left) and (F.Top = want.Top)
+      and (F.Width = want.Right - want.Left) and (F.Height = want.Bottom - want.Top));
+    AssertTrue('caption button shows restore', F.TB.MaxButton.Kind = cbkRestore);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestAdoptionPrecedesInheritedDoShow;
+var F: TTyFormAccess;
+begin
+  { The hand-off happens BEFORE inherited DoShow. TCustomForm.DoShow skips OnShow on a FIRST
+    show that is still maximized (customform.inc:1003) and leaves it to a later resize pass;
+    normalised first, OnShow fires here, once, like any other form's, and already sees the
+    maximized bounds. The "first show" flag is raised only by the streaming constructor
+    (TCustomForm.Create, not CreateNew) -- which is how every designed form is built, and why
+    this test builds its form that way: on a CreateNew form the flag is never set and the
+    order is invisible (the first version of this assertion sat on a CreateNew form and
+    stayed green with the call moved after inherited). }
+  F := TTyFormAccess.Create(nil);    // no .lfm resource: RequireDerivedFormResource is off
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.OnShow := @CountShow;
+    FShows := 0;
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    AssertTrue('precondition: adopted', F.EngineMaximized);
+    AssertEquals('OnShow fired once, on this show, not deferred', 1, FShows);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestAdoptedMaximizeRestoresToTheDesignedBounds;
+var F: TTyFormAccess;
+begin
+  { The reason to go through the engine rather than the OS: it remembers where to go back to.
+    A window the OS showed maximized from the start had no normal-sized rect on record. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    F.Engine.ToggleMaximize;           // the caption button / the title-bar double-click
+    AssertFalse('restored', F.EngineMaximized);
+    AssertEquals('left', 10, F.Left);
+    AssertEquals('top', 10, F.Top);
+    AssertEquals('width', 400, F.Width);
+    AssertEquals('height', 300, F.Height);
+    AssertTrue('caption button back to maximize', F.TB.MaxButton.Kind = cbkMax);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestNormalWindowStateShowsAsDesigned;
+var F: TTyFormAccess;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.InjectDoShow;
+    AssertFalse('a normal window is not maximized by its show', F.EngineMaximized);
+    AssertEquals('width untouched', 400, F.Width);
+    AssertEquals('height untouched', 300, F.Height);
+    AssertEquals('state untouched', Ord(wsNormal), Ord(F.WindowState));
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestDesignSurfaceKeepsTheStreamedWindowState;
+var F: TTyFormAccess;
+begin
+  { At design time the value is the user's: the Object Inspector shows it and the .lfm saves
+    it. Normalising it there would drop the setting on the next save; maximizing would take
+    the IDE's design surface with it. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetDesigning(True, False);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    AssertEquals('streamed value kept for the OI and the .lfm', Ord(wsMaximized), Ord(F.WindowState));
+    AssertFalse('design surface not maximized', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestFixedWindowIsNotMaximizedByItsWindowState;
+var F: TTyFormAccess;
+begin
+  { Resizable=False means "cannot maximize" everywhere else -- the button is hidden, the
+    double-click is refused -- so a streamed wsMaximized gets the same answer. It is still
+    normalised: left alone, the widgetset would maximize the fixed window behind the chrome. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Resizable := False;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    AssertFalse('fixed window stays unmaximized', F.EngineMaximized);
+    AssertEquals('and the widgetset is not asked to either', Ord(wsNormal), Ord(F.WindowState));
+    AssertEquals('width untouched', 400, F.Width);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestReshowingAMaximizedFormKeepsItsRestoreRect;
+var
+  F: TTyFormAccess;
+  saved: TRect;
+begin
+  { DoShow re-fires on every hide/show. A form hidden while engine-maximized and shown again
+    with WindowState set back to wsMaximized must not maximize again from its maximized
+    bounds: that would overwrite the saved rect with the work area -- maximized but not
+    restorable, the very defect SyncNativeMaximized guards against on the OS side. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.WindowState := wsMaximized;
+    F.InjectDoShow;
+    saved := F.Engine.SavedBounds;
+    F.WindowState := wsMaximized;      // set again while hidden, then shown again
+    F.InjectDoShow;
+    AssertTrue('still maximized', F.EngineMaximized);
+    AssertEquals('restore rect not overwritten: left', saved.Left, F.Engine.SavedBounds.Left);
+    AssertEquals('restore rect not overwritten: width', 400,
+      F.Engine.SavedBounds.Right - F.Engine.SavedBounds.Left);
   finally
     F.Free;
   end;
@@ -2514,6 +2861,61 @@ begin
     AssertFalse('no max', f.TB.MaxButton.Visible);
     f.BorderIcons := [biSystemMenu];
     AssertTrue('close restored', f.TB.CloseButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestBarSwitchSurvivesTheFormsSync;
+var f: TTyForm;
+begin
+  { The designer streams ShowMaximize=False into the bar; then the form's Loaded -- and every
+    BorderIcons / Resizable write after it -- re-syncs from BorderIcons, which still carries
+    biMaximize, and used to WRITE the switch back to True. The user's False must survive every
+    one of those syncs, and the switch must still read False afterwards. }
+  f := MakeFormWithBar;
+  try
+    f.TitleBar.ShowMaximize := False;                        // what the .lfm streams into the bar
+    f.TitleBar.ShowMinimize := False;
+    f.BorderIcons := [biSystemMenu, biMinimize, biMaximize]; // Loaded's sync: same value, re-pushed
+    f.Resizable := False;                                    // two more syncs
+    f.Resizable := True;
+    AssertFalse('max stays hidden through the syncs', f.TitleBar.MaxButton.Visible);
+    AssertFalse('min stays hidden through the syncs', f.TitleBar.MinButton.Visible);
+    AssertTrue('close untouched', f.TitleBar.CloseButton.Visible);
+    AssertFalse('the switch still reads the user''s value', f.TitleBar.ShowMaximize);
+    AssertFalse('so does the other', f.TitleBar.ShowMinimize);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestBorderIconsStillGateAnExplicitlyShownButton;
+var f: TTyForm;
+begin
+  { The other direction: a switch left (or set) True does not conjure a button the window does
+    not offer. BorderIcons without biMaximize hides it whatever the bar says. }
+  f := MakeFormWithBar;
+  try
+    f.TitleBar.ShowMaximize := True;
+    f.BorderIcons := [biSystemMenu, biMinimize];
+    AssertFalse('no biMaximize -> hidden despite the switch', f.TitleBar.MaxButton.Visible);
+    f.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+    AssertTrue('offered again -> shown again; the switch was True all along',
+      f.TitleBar.MaxButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestSwitchReadsTheUsersValueNotTheEffectiveVisibility;
+var f: TTyForm;
+begin
+  { ShowMinimize must answer with the user's switch, not with what is on screen: if it echoed
+    the effective visibility, a form that hides the button through BorderIcons would make the
+    switch read False, the .lfm would save that False, and restoring biMinimize later would find
+    the button still hidden by a switch nobody set. }
+  f := MakeFormWithBar;
+  try
+    f.BorderIcons := [biSystemMenu];
+    AssertFalse('button hidden by the window', f.TitleBar.MinButton.Visible);
+    AssertTrue('switch still True: the user never touched it', f.TitleBar.ShowMinimize);
+    f.BorderIcons := [biSystemMenu, biMinimize];
+    AssertTrue('offered again -> visible again', f.TitleBar.MinButton.Visible);
   finally f.Free; end;
 end;
 

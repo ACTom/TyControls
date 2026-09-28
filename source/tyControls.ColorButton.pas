@@ -262,17 +262,13 @@ begin
   // Measure what is DRAWN, not what is stored: with ShowAccelChar on, '&Save' paints as
   // 'Save', and reserving the ampersand's width would leave a gap AutoSize never fills.
   if Caption <> '' then ResolveCaptionText(txt, mp);
-  // 与 TTyButton.MeasureCaption 同一套量法(同样的字体名回落、同样的 MulDiv 字号缩放、
-  // 同样的粗体阈值),只是量的字符串换成了真正会被画出来的十六进制色值。
+  // 与 TTyButton.MeasureCaption 同一套量法(同一个 TyConfigureMeasureFont:字体名回落、
+  // 像素字高、粗体阈值都在那里),只是量的字符串换成了真正会被画出来的十六进制色值。
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), APPI, 96);
-    if AStyle.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, APPI);
     Result := Meas.Canvas.TextWidth(txt);
     if Result < 0 then Result := 0;
   finally

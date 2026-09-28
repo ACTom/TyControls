@@ -138,7 +138,8 @@ type
     property Text: string read FText write SetText;
     { Start a new row at this band even when it would fit on the current one. }
     property Break: Boolean read FBreak write SetBreak default False;
-    { Assigned logical width; 0 = auto, meaning the hosted control's own width. }
+    { Assigned LOGICAL width; 0 = auto, meaning the hosted control's own width. The hosted
+      control is given this width at the bar's PPI: 200 here is a 350 px band at 175%. }
     property Width: Integer read FWidth write SetWidth default 0;
     { The floor a resize -- and now a rejoin squeeze -- may never take the band below. 0 falls
       back to the bar's DefaultBandMinWidth. ONE floor for both gestures: TyCoolBandResize and
@@ -203,6 +204,11 @@ type
                                        // gesture is a MOVE (see TyCoolBandSeamOwner).
     FDragStartX: Integer;             // mouse X (device px) at grab
     FDragStartW: Integer;             // the SEAM OWNER's logical width at grab
+    { Along the row's run, between the band model (LOGICAL px: Width, MinWidth, MaxWidth,
+      DefaultBandMinWidth) and the hosted controls and the packer (device px). Every crossing
+      goes through one of these two. }
+    function RunPx(ALogical: Integer): Integer;
+    function RunLogical(ADevice: Integer): Integer;
     function BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
     procedure SetShowText(AValue: Boolean);
     procedure SetVertical(AValue: Boolean);
@@ -851,6 +857,10 @@ begin
   begin
     bar := nil;
     if Collection is TTyCoolBands then bar := TTyCoolBands(Collection).OwnerBar;
+    { The band's width is LOGICAL and the control's is device px. Written across unscaled,
+      a band the designer made 200 wide was 350 px after LCL's pass at 175% and snapped back
+      to 200 px the moment its gripper was touched. }
+    if bar <> nil then AValue := bar.RunPx(AValue);
     if (bar <> nil) and bar.Vertical then FControl.Height := AValue
     else FControl.Width := AValue;
   end;
@@ -946,6 +956,16 @@ function TTyCoolBar.GripperWidthPx: Integer;
 begin
   Result := MulDiv(GripperWidth, Font.PixelsPerInch, 96);   // inherited from TTyControlBar
   if Result < 0 then Result := 0;
+end;
+
+function TTyCoolBar.RunPx(ALogical: Integer): Integer;
+begin
+  Result := MulDiv(ALogical, Font.PixelsPerInch, 96);
+end;
+
+function TTyCoolBar.RunLogical(ADevice: Integer): Integer;
+begin
+  Result := MulDiv(ADevice, 96, Font.PixelsPerInch);
 end;
 
 
@@ -1057,7 +1077,8 @@ begin
   if b = nil then Exit;
   Result := b.MaxWidth;
   if not b.AutoMaxWidth then Exit;
-  cap := BandContentCap(ACtl);
+  { The answer is LOGICAL, like MaxWidth; what the control declares is device px. }
+  cap := RunLogical(BandContentCap(ACtl));
   if (cap > 0) and ((Result <= 0) or (cap < Result)) then Result := cap;
 end;
 
@@ -1188,8 +1209,10 @@ begin
   bmp := TBitmap.Create;
   try
     bmp.SetSize(1, 1);
-    bmp.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
-    bmp.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), Font.PixelsPerInch, 96);
+    // The weight too: the band caption is DRAWN with AStyle.FontWeight, and a bold caption
+    // measured as regular reserves a lead narrower than its own ink.
+    TyConfigureMeasureFont(bmp.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, Font.PixelsPerInch);
     Result := bmp.Canvas.TextWidth(AText);
   finally
     bmp.Free;
@@ -1427,8 +1450,8 @@ begin
   if ACtl = nil then Exit;
   { Routed through the band MODEL, not poked straight into the control: the packer re-measures
     the child on every pass, so a value the model does not hold would be undone by the first
-    relayout that touched it. }
-  SetBandWidth(ACtl, AValue);
+    relayout that touched it. AValue is the packer's, device px; the model is logical. }
+  SetBandWidth(ACtl, RunLogical(AValue));
   { ...and then forced onto the control even when the model already held that number. A
     relayout can have CLAMPED the child (TyCoolBarPack narrows a band that would run off the end
     of its row), which leaves model and control disagreeing, and TTyCoolBand.SetWidth
@@ -1492,7 +1515,7 @@ begin
   for i := 0 to n - 1 do
   begin
     ext[i]   := BandRunExtent(ctls[rowIdx[i]]);
-    mins[i]  := BandMinWidth(ctls[rowIdx[i]]);
+    mins[i]  := RunPx(BandMinWidth(ctls[rowIdx[i]]));   // the floor is logical, the row is not
     leads[i] := BandLeadPx(ctls[rowIdx[i]]);
   end;
 
@@ -1629,10 +1652,12 @@ begin
   FDragMode := cdNone;   // undecided until the pointer commits to an axis
   if FDragSeam <> nil then
   begin
+    { LOGICAL either way: the drag works in the model's units. An unsized band starts from
+      where it IS -- its extent along the run, so its height in a vertical bar. }
     if GetBandWidth(FDragSeam) > 0 then
       FDragStartW := GetBandWidth(FDragSeam)
     else
-      FDragStartW := FDragSeam.Width;
+      FDragStartW := RunLogical(BandRunExtent(FDragSeam));
   end
   else
     FDragStartW := 0;

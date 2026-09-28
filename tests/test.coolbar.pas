@@ -142,6 +142,13 @@ type
     procedure TestAutoMaxWidthTakesWhicheverCeilingBindsFirst;
     procedure TestAutoMaxWidthHonoursTheControlsOwnConstraint;
     procedure TestABandWithNoControlIsNeverInTheLayout;
+    // the band model is LOGICAL px; the controls and the pointer are not (ACTom/TyControls#2)
+    procedure TestABandsWidthIsLogicalPx;
+    procedure TestAGripperDragFollowsThePointerAt175Percent;
+    procedure TestAnUnsizedBandIsDraggedFromWhereItIs;
+    procedure TestTheBandFloorIsLogicalPxToo;
+    procedure TestTheContentCapIsReportedInTheModelsUnits;
+    procedure TestARejoinSqueezesDownToTheFloorAt175Percent;
   end;
 
 implementation
@@ -157,6 +164,13 @@ function TCoolBarAccess.LeadPx(ACtl: TControl): Integer;    begin Result := Band
 procedure TCoolBarAccess.CallMouseDown(X, Y: Integer);      begin MouseDown(mbLeft, [ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseMove(X, Y: Integer);      begin MouseMove([ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseUp(X, Y: Integer);        begin MouseUp(mbLeft, [], X, Y); end;
+
+{ The pitch the packer advances by from one row to the next, device px. }
+function RowPitchPx(CB: TTyCoolBar): Integer;
+begin
+  Result := MulDiv(CB.BandHeight, CB.Font.PixelsPerInch, 96)
+    + MulDiv(CB.BandSpacing, CB.Font.PixelsPerInch, 96);
+end;
 
 { TDeclaredWidthPanel }
 procedure TDeclaredWidthPanel.SetDeclared(AValue: Integer);
@@ -1574,6 +1588,190 @@ begin
     CB.BandMaxWidth(nil));
   AssertEquals('and so is its content cap', 0, CB.ContentCap(nil));
   if b = nil then ;
+end;
+
+{ ── the band model at a PPI other than 96 ──────────────────────────────────────
+  Width, MinWidth, MaxWidth and DefaultBandMinWidth are LOGICAL px -- they are what the
+  designer shows and the .lfm stores. The hosted controls, the packer and the pointer are
+  device px. The two met unconverted in five places, and at 96 PPI nobody could tell:
+
+    * a band given Width 200 made its control 200 px wide, where LCL's DPI pass had made the
+      same band 350 -- so the band snapped back to 200 px the moment its gripper was touched;
+    * the drag turned the pointer's travel into logical px (rightly) and wrote the result
+      into the control as device px, so the seam moved 57 px for every 100 the pointer did;
+    * an unsized band started the drag from its DEVICE width, read as logical;
+    * the content cap -- what the hosted control declares, device px -- was compared with the
+      logical width being dragged, so a band stopped at 57% of its content;
+    * the rejoin squeezed a row down to floors that were 24 device px, not 24 logical.
+
+  All of them are the identity at 96, which is why every test above runs at 96 and passes
+  either way. These run at 168. }
+
+const
+  HIPPI = 168;     // 175%
+
+procedure TCoolBarControlTest.TestABandsWidthIsLogicalPx;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := HIPPI;
+  b := MakeBand(CB, 0, 0, 80, 30);
+  CB.SetBandWidth(b, 140);
+  AssertEquals('the band keeps the number it was given', 140, CB.GetBandWidth(b));
+  AssertEquals('and its control is that many LOGICAL px wide', MulDiv(140, HIPPI, 96), b.Width);
+end;
+
+procedure TCoolBarControlTest.TestAGripperDragFollowsThePointerAt175Percent;
+var CB: TCoolBarAccess; b0, b1: TControl; L, T, grip, w0: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := HIPPI;
+  CB.SetBounds(0, 0, 900, 200);
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  grip := CB.GripPx;
+  b0 := MakeBand(CB, L + grip, T, 140, 52);
+  b1 := MakeBand(CB, L + 350, T, 140, 52);
+  CB.SetBandWidth(b0, 80);
+  w0 := b0.Width;
+  AssertEquals('precondition: 80 logical px is 140 px on this screen', 140, w0);
+
+  { b1's gripper is the strip immediately left of b1, and the seam it moves is b0's. }
+  CB.CallMouseDown(L + 350 - grip div 2, T + 26);
+  CB.CallMouseMove(L + 350 - grip div 2 + 70, T + 26);       // the pointer travels 70 px
+  AssertTrue(Format('the seam travels with the pointer: the band was %d px wide, the pointer'
+    + ' moved 70, the band is %d', [w0, b0.Width]), Abs(b0.Width - (w0 + 70)) <= 1);
+  AssertEquals('and the model has it in its own units: 80 + 70 px of travel at 175%', 120,
+    CB.GetBandWidth(b0));
+  CB.CallMouseUp(L + 350 - grip div 2 + 70, T + 26);
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestAnUnsizedBandIsDraggedFromWhereItIs;
+var CB: TCoolBarAccess; b0, b1: TControl; L, T, grip: Integer;
+begin
+  { No Width was ever assigned, so the drag starts from the control as it stands -- 140 px,
+    which is 80 logical. Read as 140 LOGICAL, the first pixel of travel made it 245 px. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := HIPPI;
+  CB.SetBounds(0, 0, 900, 200);
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  grip := CB.GripPx;
+  b0 := MakeBand(CB, L + grip, T, 140, 52);
+  b1 := MakeBand(CB, L + 350, T, 140, 52);
+  AssertEquals('precondition: no width assigned', 0, CB.GetBandWidth(b0));
+
+  CB.CallMouseDown(L + 350 - grip div 2, T + 26);
+  CB.CallMouseMove(L + 350 - grip div 2 + 70, T + 26);
+  CB.CallMouseUp(L + 350 - grip div 2 + 70, T + 26);
+  AssertTrue(Format('140 px and 70 px of travel: the band is %d px wide', [b0.Width]),
+    Abs(b0.Width - 210) <= 1);
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestTheBandFloorIsLogicalPxToo;
+var CB: TCoolBarAccess; b0, b1: TControl; L, T, grip: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := HIPPI;
+  CB.SetBounds(0, 0, 900, 200);
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  grip := CB.GripPx;
+  b0 := MakeBand(CB, L + grip, T, 140, 52);
+  b1 := MakeBand(CB, L + 350, T, 140, 52);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandMinWidth(b0, 50);
+  CB.CallMouseDown(L + 350 - grip div 2, T + 26);
+  CB.CallMouseMove(L + 350 - grip div 2 - 800, T + 26);      // far past the floor
+  CB.CallMouseUp(L + 350 - grip div 2 - 800, T + 26);
+  AssertEquals('the drag stops at the floor', 50, CB.GetBandWidth(b0));
+  AssertEquals('which is 50 LOGICAL px of control', MulDiv(50, HIPPI, 96), b0.Width);
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestTheContentCapIsReportedInTheModelsUnits;
+var CB: TCoolBarAccess; b0: TDeclaredWidthPanel; b1: TControl; L, T, grip: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := HIPPI;
+  CB.SetBounds(0, 0, 900, 200);
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  grip := CB.GripPx;
+  b0 := TDeclaredWidthPanel.Create(CB);
+  b0.Parent := CB;
+  b0.SetBounds(L + grip, T, 140, 52);
+  b0.Declared := 210;                           // what the content wants, in ITS px
+  b1 := MakeBand(CB, L + 350, T, 140, 52);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandAutoMaxWidth(b0, True);
+  AssertEquals('precondition: the control declares 210 px', 210, CB.ContentCap(b0));
+  AssertEquals('which is a ceiling of 120 in the units MaxWidth is in', 120,
+    CB.BandMaxWidth(b0));
+
+  CB.CallMouseDown(L + 350 - grip div 2, T + 26);
+  CB.CallMouseMove(L + 350 - grip div 2 + 600, T + 26);      // far past the content
+  CB.CallMouseUp(L + 350 - grip div 2 + 600, T + 26);
+  AssertEquals('the band grew to its content and stopped there', 210, b0.Width);
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestARejoinSqueezesDownToTheFloorAt175Percent;
+var
+  CB: TCoolBarAccess; b0, b1: TControl;
+  L, T, grip, step, avail, w0, lead, need, floorPx: Integer;
+begin
+  { The user's gesture -- drag a band that overflowed back up onto the row -- on a row that
+    can take it back only if b0 gives up width. How far b0 may be squeezed is its floor, 100
+    LOGICAL px here: 175 px on this screen. The row below needs b0 down at 170, so the
+    rejoin has to be REFUSED. With the floor read as 100 device px it went through. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := HIPPI;
+  CB.SetBounds(0, 0, 600, 300);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  grip := CB.GripPx;
+  lead := CB.LeadPx(nil);
+  step := RowPitchPx(CB);
+  avail := CB.ContentBox.Right - CB.ContentBox.Left;
+  floorPx := MulDiv(100, HIPPI, 96);
+  AssertEquals('precondition: the floor is 175 px on this screen', 175, floorPx);
+  { b1 is 100 px; the row has room for it when b0 is 170 px wide. }
+  need := 170;
+  w0 := need + 60;
+  b0 := MakeBand(CB, L + grip, T, w0, MulDiv(26, HIPPI, 96));
+  b1 := MakeBand(CB, L + grip, T + step, avail - (lead + need) - (lead) - MulDiv(3, HIPPI, 96),
+    MulDiv(26, HIPPI, 96));
+  CB.SetBandMinWidth(b0, 100);
+  AssertTrue('precondition: b1 is a band of a sensible width', b1.Width > 40);
+
+  CB.CallMouseDown(L + grip div 2, T + step + 10);
+  CB.CallMouseMove(L + grip + w0 - 5, T + 10);
+  CB.CallMouseUp(L + grip + w0 - 5, T + 10);
+  AssertEquals('b0 cannot be taken below its floor, so nothing was taken from it', w0,
+    b0.Width);
+
+  { The same row and the same gesture with a floor that does leave the room. }
+  CB.SetBandMinWidth(b0, 90);                   // 158 px (157.5)
+  CB.CallMouseDown(L + grip div 2, T + step + 10);
+  CB.CallMouseMove(L + grip + w0 - 5, T + 10);
+  CB.CallMouseUp(L + grip + w0 - 5, T + 10);
+  AssertTrue(Format('...and with a floor of 90 logical px the row makes the room: b0 is %d'
+    + ' px wide, it had to come down to %d', [b0.Width, need]), Abs(b0.Width - need) <= 1);
+  AssertTrue(Format('and the model was told in ITS units: %d px is %d logical, it holds %d',
+    [need, MulDiv(need, 96, HIPPI), CB.GetBandWidth(b0)]),
+    Abs(CB.GetBandWidth(b0) - MulDiv(need, 96, HIPPI)) <= 1);
 end;
 
 initialization

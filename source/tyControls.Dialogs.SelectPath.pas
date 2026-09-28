@@ -155,8 +155,8 @@ constructor TTySelectPathForm.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   Resizable := True;
-  Constraints.MinWidth  := 320;
-  Constraints.MinHeight := 320;
+  Constraints.MinWidth  := Px(320);
+  Constraints.MinHeight := Px(320);
   FPaths := TStringList.Create;
   BuildIcons;
   FTree := TTyTreeView.Create(Self);
@@ -456,17 +456,22 @@ const Gap = 8;
 var r: TRect; x, w, editH: Integer;
 begin
   if FTree = nil then Exit;
+  { Every number below is a 96-PPI design number and goes through Px: see TTyDialog.Px. }
   r := ContentRect;
-  x := r.Left + TyDlgPad;
-  w := (r.Right - r.Left) - 2*TyDlgPad;
+  x := r.Left + Px(TyDlgPad);
+  w := (r.Right - r.Left) - 2 * Px(TyDlgPad);
   { Density-aware like every other field -- the sibling IconBrowser already reads it this
     way; this one kept the classic literal and came up short under modern density. }
-  editH := TyDensityHeight(Controller, TyDlgEditH);
-  { Path field across the top, tree fills the rest. }
+  editH := Px(TyDensityHeight(Controller, TyDlgEditH));
+  { Path field across the top, tree fills the rest. The tree starts below the field AS IT
+    IS, not as it was asked to be: SetBounds clamps a control up to its own floor. }
   if FPathEdit <> nil then
-    FPathEdit.SetBounds(x, r.Top + TyDlgPad, w, editH);
-  FTree.SetBounds(x, r.Top + TyDlgPad + editH + Gap, w,
-    (r.Bottom - r.Top) - 2*TyDlgPad - editH - Gap);
+  begin
+    FPathEdit.SetBounds(x, r.Top + Px(TyDlgPad), w, editH);
+    editH := FPathEdit.Height;
+  end;
+  FTree.SetBounds(x, r.Top + Px(TyDlgPad) + editH + Px(Gap), w,
+    (r.Bottom - r.Top) - 2 * Px(TyDlgPad) - editH - Px(Gap));
 end;
 
 procedure TTySelectPathForm.SetDirectory(const APath: string);
@@ -525,7 +530,7 @@ begin
   Result.FNewBtn := btn;
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(360, 420);
+  Result.AutoSizeToContent(Result.Px(360), Result.Px(420));
   Result.LayoutContent;
 end;
 

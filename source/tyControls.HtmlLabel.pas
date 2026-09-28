@@ -69,6 +69,8 @@ type
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    { Wrapping: the width is an input, not a result -- same rule as TTyLabel. }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
@@ -567,6 +569,12 @@ begin
   for ii := 0 to High(FLayout) do
     if (FLayout[ii].Run.Href <> '') and PtInRect(FLayout[ii].Rect, pt) then
       Exit(FLayout[ii].Run.Href);
+end;
+
+procedure TTyHtmlLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+begin
+  inherited ShouldAutoAdjust(AWidth, AHeight);
+  if AutoSize and FWordWrap then AWidth := True;
 end;
 
 procedure TTyHtmlLabel.CalculatePreferredSize(var PreferredWidth,

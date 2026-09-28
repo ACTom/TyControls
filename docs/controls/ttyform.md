@@ -73,7 +73,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TitleHeight` | `Integer` | `32` | 标题栏高度（逻辑像素）。写入时重新布局顶部条带（`TitleBar.Height`）。 |
-| `BorderIcons` | `TBorderIcons` | `[biSystemMenu, biMinimize, biMaximize]` | 决定标题栏按钮：`biSystemMenu`→关闭、`biMinimize`→最小化、`biMaximize`→最大化（仅当 `Resizable`）。变更时即时同步到关联的标题栏。 |
+| `BorderIcons` | `TBorderIcons` | `[biSystemMenu, biMinimize, biMaximize]` | 决定窗口**提供**哪些标题栏按钮：`biSystemMenu`→关闭、`biMinimize`→最小化、`biMaximize`→最大化（仅当 `Resizable`）。变更时即时同步到关联的标题栏。标题栏自己的 `ShowMinimize`/`ShowMaximize`/`ShowClose` 是另一道门：按钮只在两边都允许时显示，这里的同步不覆盖它们。 |
 | `Resizable` | `Boolean` | `True` | 是否允许边缘拖拽缩放；同时门控最大化按钮（`False` 时即使含 `biMaximize` 也隐藏最大化）。 |
 | `BorderStyle` | `TFormBorderStyle` | `bsNone` | **锁定** `bsNone`（无边框自绘窗）：对象查看器中隐藏，赋任何值都归正为 `bsNone`。 |
 
@@ -223,6 +223,8 @@ Form1.StyleOverride := '';                                         // 恢复主�
 6. **设计期标题栏皮肤未换肤：** 见第 6 节——这是 tyControls 全库一致的设计期行为，不是缺陷。
 7. **最大化避让任务栏：** 引擎 `ToggleMaximize` 使用当前显示器工作区（`Screen.MonitorFromWindow(...).WorkareaRect`），最大化窗口自然避让任务栏。
 8. **原生窗口行为：** Windows Aero Snap（贴边平铺 + 拖到顶端最大化）**已实现**——标题栏拖拽交给系统的原生标题栏移动循环，窗口样式也换成 shell 认可的普通顶层窗口样式；系统自己发起的最大化（Aero Snap / Win+↑ / 任务栏菜单）会被窗框采纳，最大化后仍可拖动（拖动即还原并继续跟随鼠标）。Vista/Win7 与固定尺寸（`Resizable := False`）窗口不参与。Windows DWM 原生投影阴影与圆角**已实现**（见第 8 节「窗口圆角与原生投影阴影」）。
+9. **设计期 `WindowState = wsMaximized` 走引擎最大化：** `.lfm` 里（或显示前代码里）设的 `wsMaximized`，首次显示时由窗框交给引擎的工作区最大化——和标题栏最大化按钮同一条路：避让任务栏、记住还原矩形、按钮变还原、圆角变方角——同时把 `WindowState` 复位成 `wsNormal`。不接管的话，widgetset 会对一个无边框 `WS_POPUP` 窗口发 `SW_SHOWMAXIMIZED`：Windows 上铺满整个显示器、连任务栏一起盖住，GTK/Qt 的窗口管理器则直接忽略。所以运行期读 `WindowState` 得到的是 `wsNormal`，与点按钮最大化后一致。`Resizable = False` 的窗口照旧不最大化（与按钮规则一致），只复位状态；设计器里不动这个值。
+10. **最大化手势跟着按钮走：** 双击标题栏、Windows 的贴顶 / Win+↑（`WS_MAXIMIZEBOX`）能不能最大化，判据和最大化按钮在不在是同一个（`CanMaximize`）：`Resizable`，且 `BorderIcons` 含 `biMaximize`，且标题栏 `ShowMaximize`。三者任一为否，按钮消失，手势也一并关闭，与原生窗口去掉最大化框的语义一致；已经最大化的窗口仍可还原，不会卡死。
 
 ## 11. 相关文档
 

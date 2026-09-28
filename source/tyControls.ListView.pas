@@ -3277,10 +3277,11 @@ begin
                       cellR.Right - margin, M.HeaderH - ScaleI(2));
       if sortR.Right > sortR.Left then
       begin
+        { The thickness is LOGICAL: DrawGlyph scales it. ScaleI(1) was scaled twice. }
         if FSortDirection = sdAscending then
-          P.DrawGlyph(sortR, tgArrowUp, tc, ScaleI(1), 1)
+          P.DrawGlyph(sortR, tgArrowUp, tc, 1, 1)
         else
-          P.DrawGlyph(sortR, tgArrowDown, tc, ScaleI(1), 1);
+          P.DrawGlyph(sortR, tgArrowDown, tc, 1, 1);
       end;
     end;
 

@@ -196,7 +196,9 @@ begin
         if cellH > 0 then
         begin
           ctx := P.Bitmap.Canvas2D;
-          ringW := Math.Max(2, P.Scale(2));
+          { LOGICAL: StrokeBorder scales its width. P.Scale(2) here was scaled twice, a
+            7 px ring at 175%. }
+          ringW := 2;
           for i := 0 to ColorCount - 1 do
           begin
             col := i mod FColumns;

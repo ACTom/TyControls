@@ -202,7 +202,7 @@ begin
 
   pad := P.Scale(4);
   sz := (ARowRect.Bottom - ARowRect.Top) - 2 * pad;
-  if sz < 6 then sz := 6;
+  if sz < P.Scale(6) then sz := P.Scale(6);
   boxTop := ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top) - sz) div 2;
   boxR := Rect(ARowRect.Left + pad, boxTop, ARowRect.Left + pad + sz, boxTop + sz);
 

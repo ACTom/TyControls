@@ -6,6 +6,11 @@ uses
   BGRABitmap, BGRABitmapTypes, BGRAGradientScanner,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Painter, tyControls.IconFont;
+const
+  { The PPI every size in this library is WRITTEN at: a theme metric, the Width and Height
+    a constructor gives its control, the numbers a designer stores in a form file. It is
+    also the PPI a control is born at -- see SetParent on TTyGraphicControl. }
+  TyDesignPPI = 96;
 type
   ITyStyleable = interface
     ['{A1B2C3D4-0001-0002-0003-000000000001}']
@@ -181,6 +186,52 @@ type
       through CM_PARENTFONTCHANGED, and TyResolveFontSize ignores Font.Size entirely while
       ParentFont is True -- but see the plan before assuming that stays true. }
     procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
+    { ===== HiDPI: THE PPI A CONTROL IS BORN AT, AND WHEN IT LEARNS BETTER =========
+      (ACTom/TyControls#2, the second half. Twin on TTyCustomControl.)
+
+      This library scales with Font.PixelsPerInch, and LCL creates every TFont carrying the
+      SCREEN's PPI (font.inc, TFont.Create). Whatever a control works out from that font
+      before somebody corrects it is worked out at the screen's scale -- while the numbers
+      it is applied to are still 96-PPI numbers: the Width and Height its own constructor
+      wrote, the bounds a caller is about to give it, the form it is about to join (a
+      scaled form stays in its design space until TCustomForm.AfterConstruction runs the
+      DPI pass).
+
+      At 96 PPI the two agree and nothing shows. At 175% a button's constructor worked out
+      a 42 px height floor for a box it had just made 30 px tall, LCL clamped the box to
+      42, and the DPI pass then multiplied the CLAMPED box by 1.75: 74 px where 53 was
+      meant. A scroll bar multiplied its 12 px thickness by 1.75 in the constructor and the
+      pass multiplied it again. A form read from a file escaped -- LCL does not clamp while
+      reading and puts every font back at the design PPI when the read is complete
+      (TCustomForm.Loaded, FixDesignFontsPPIWithChildren) -- but whatever CODE created did
+      not, and that includes every internal child a composite builds in its constructor.
+
+      Two rules, and both are what LCL itself does for a form's own font:
+        - a control is BORN in the design space: its font starts at 96, silently
+          (TCustomDesignControl.Create does the same for a scaled form's);
+        - it takes its PARENT's PPI when it is parented. LCL already does that for a
+          ParentFont child (CM_PARENTFONTCHANGED, "PixelsPerInch isn't assigned");
+          SetParent covers the child whose font was touched, which would otherwise sit at
+          96 on a form that was scaled long ago.
+      From there on LCL's DPI pass is the only thing that moves it. }
+    procedure SetParent(AParent: TWinControl); override;
+    { ===== HiDPI: WHICH AXES THE DPI PASS SCALES ON AN AUTO-SIZED CONTROL ========
+      (Twin on TTyCustomControl.)
+
+      LCL's pass leaves an AutoSize control's Width and Height alone, on the grounds that
+      the control is about to re-fit itself at the new PPI (TControl.ShouldAutoAdjust). That
+      is true of an axis AutoSize decides -- and most controls here decide only ONE. A push
+      button, a check box, a toggle switch propose a width and answer 0 for the height,
+      because the height belongs to whoever lays the row out; a wrapping label takes its
+      width as given and works out only how tall that makes it. The axis nobody re-fits was
+      simply never scaled: at 175% an auto-sized button stayed 30 px tall beside 53 px
+      neighbours, and an auto-sized wrapping label kept its 96-PPI width, broke its text
+      into twice the lines and ran into whatever stood below it.
+
+      So the question is put to the control: an axis it has no preferred size on is an
+      axis the pass has to scale. LCL makes the same split by hand for the controls it
+      knows (TCustomEdit and TCustomComboBox scale their width whatever AutoSize says). }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;
     procedure MouseLeave; override;
@@ -316,6 +367,12 @@ type
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     { The SECOND latch. Twin of the one on TTyGraphicControl -- read it there. }
     procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
+    { Born in the design space, the parent's PPI on parenting. Twin of the one on
+      TTyGraphicControl -- read it there. }
+    procedure SetParent(AParent: TWinControl); override;
+    { The axes AutoSize does not decide are scaled by the DPI pass. Twin of the one on
+      TTyGraphicControl -- read it there. }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     {$IFDEF LCLGTK3}
     { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
       hands its remaining clear a colour to work with, ONCE per theme change. }
@@ -641,10 +698,70 @@ end;
 
 { TTyGraphicControl }
 
+{ Put a just-created control's font in the design space WITHOUT telling anyone: with the
+  handler off there is no FontChanged, so ParentFont keeps its default and nothing is
+  invalidated or measured on the way. The height is still 0 ("no size chosen") this early,
+  so there is nothing for the PPI change to rescale either. }
+procedure TyBornAtDesignPPI(AFont: TFont);
+var
+  saved: TNotifyEvent;
+begin
+  if AFont.PixelsPerInch = TyDesignPPI then Exit;
+  saved := AFont.OnChange;
+  AFont.OnChange := nil;
+  try
+    AFont.PixelsPerInch := TyDesignPPI;
+  finally
+    AFont.OnChange := saved;
+  end;
+end;
+
+{ The PPI a child should take from AParent on being parented, or 0 for "leave it".
+  Not while reading: a form file's controls are all put at the design PPI by
+  TCustomForm.Loaded, in one go, and a parent met half-way through the read may not have
+  been yet. }
+function TyParentPPIToAdopt(AChild: TControl; AParent: TWinControl): Integer;
+begin
+  Result := 0;
+  if AParent = nil then Exit;
+  if AChild.ComponentState * [csLoading, csReading, csDestroying] <> [] then Exit;
+  if AParent.Font.PixelsPerInch <= 0 then Exit;
+  if AParent.Font.PixelsPerInch = AChild.Font.PixelsPerInch then Exit;
+  Result := AParent.Font.PixelsPerInch;
+end;
+
 constructor TTyGraphicControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyBornAtDesignPPI(Font);     // see SetParent's declaration
   ActiveController.RegisterStyleable(Self);
+end;
+
+procedure TTyGraphicControl.SetParent(AParent: TWinControl);
+var
+  ppi: Integer;
+begin
+  inherited SetParent(AParent);
+  { A ParentFont child has its parent's PPI already -- TWinControl.InsertControl sent it
+    CM_PARENTFONTCHANGED -- so this only ever acts on a child whose font was touched. }
+  ppi := TyParentPPIToAdopt(Self, AParent);
+  if ppi > 0 then
+    Font.PixelsPerInch := ppi;
+end;
+
+procedure TTyGraphicControl.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+var
+  pw, ph: Integer;
+begin
+  inherited ShouldAutoAdjust(AWidth, AHeight);     // both: not AutoSize
+  if not AutoSize then Exit;
+  { Only whether there IS an opinion is read, never what it says, so it does not matter
+    that the font is half-way through the pass when this is asked. }
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw <= 0 then AWidth := True;
+  if ph <= 0 then AHeight := True;
 end;
 
 function TTyGraphicControl.GetVersion: string;
@@ -1716,11 +1833,37 @@ end;
 constructor TTyCustomControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyBornAtDesignPPI(Font);     // see SetParent's declaration on TTyGraphicControl
   // Render to one offscreen buffer and blit once: eliminates the background-erase
   // flash on every repaint (notably the 530ms caret-blink Invalidate). Pixel output
   // is unchanged; only the on-screen WMPaint path is affected (RenderTo bypasses it).
   DoubleBuffered := True;
   ActiveController.RegisterStyleable(Self);
+end;
+
+procedure TTyCustomControl.SetParent(AParent: TWinControl);
+var
+  ppi: Integer;
+begin
+  inherited SetParent(AParent);
+  // See the TTyGraphicControl twin.
+  ppi := TyParentPPIToAdopt(Self, AParent);
+  if ppi > 0 then
+    Font.PixelsPerInch := ppi;
+end;
+
+procedure TTyCustomControl.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+var
+  pw, ph: Integer;
+begin
+  // See the TTyGraphicControl twin.
+  inherited ShouldAutoAdjust(AWidth, AHeight);
+  if not AutoSize then Exit;
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw <= 0 then AWidth := True;
+  if ph <= 0 then AHeight := True;
 end;
 
 function TTyCustomControl.GetVersion: string;

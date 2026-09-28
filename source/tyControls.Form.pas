@@ -96,6 +96,16 @@ type
     FButtonWidthPPI: Integer;
     FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
+    { The bar's own per-button switches (published ShowMinimize/ShowMaximize/ShowClose) and the
+      set of buttons the WINDOW offers (an associated TTyForm derives it from BorderIcons +
+      Resizable and pushes it through OfferedButtons; a standalone bar offers all three). A
+      button is visible only when both say so. Two fields rather than one because the form used
+      to WRITE the switches from its side, which threw away a False the designer had streamed
+      into the bar: the .lfm said hide, the form said show, and the form spoke last. }
+    FShowMinimize, FShowMaximize, FShowClose: Boolean;
+    FOffered: TTyCaptionButtonFlags;
+    procedure ApplyButtonVisibility;
+    procedure SetOfferedButtons(AValue: TTyCaptionButtonFlags);
     procedure SetCaption(const AValue: TCaption);
     procedure SetButtonWidth(AValue: Integer);
     procedure SetTitleAlignment(AValue: TAlignment);
@@ -146,6 +156,11 @@ type
     property MinButton: TTyCaptionButton read FMinButton;
     property MaxButton: TTyCaptionButton read FMaxButton;
     property CloseButton: TTyCaptionButton read FCloseButton;
+    { Which buttons the window OFFERS. TTyForm.SyncCaptionButtons sets it from BorderIcons +
+      Resizable; it gates the switches rather than replacing them (see ShowMinimize). All three
+      by default, so a standalone bar shows whatever its switches say. Not published: it is the
+      window's fact, not the bar's, and streaming it would let the two disagree. }
+    property OfferedButtons: TTyCaptionButtonFlags read FOffered write SetOfferedButtons;
     { Where the caption cluster and the content zone are right now, for the bar's live client
       size. Public because a host that wants to place something in the bar has to be able to ask
       ONE authority which side the buttons are on -- and because that is the only way a test can
@@ -167,8 +182,12 @@ type
     property Align;
     property Anchors;
     property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
-    { Per-button visibility for a STANDALONE title bar (not associated with a TTyForm).
-      When associated, the owning form drives these from its BorderIcons + Resizable. }
+    { Per-button switches. On a STANDALONE bar they are the whole story. Associated with a
+      TTyForm, the form additionally decides which buttons the WINDOW offers (BorderIcons +
+      Resizable, see OfferedButtons) and a button shows only when both agree: a designer-set
+      ShowMaximize=False hides the button on a maximizable window, while BorderIcons without
+      biMaximize hides it whatever the switch says. The switch keeps the user's value either
+      way, so the Object Inspector and the .lfm round-trip it. }
     property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
     property ShowClose: Boolean read GetShowClose write SetShowClose default True;
@@ -199,6 +218,10 @@ type
       TCustomForm for the generic engine; default True for a non-TTyForm host). The
       edge hit-test routes through this so a fixed window never starts a resize. }
     function FormResizable: Boolean;
+    { Whether a user gesture may maximize the window -- TTyForm.CanMaximize, i.e. the same
+      three conditions that put the maximize button on the bar. Default True for a
+      non-TTyForm host. Gates the way IN only: a maximized window may always restore. }
+    function FormMaximizable: Boolean;
     { Whether the engine's MANUAL (BoundsRect-drag) edge resize is active. False on Windows —
       there the native WS_THICKFRAME + WM_NCHITTEST own resize, so the manual path is disabled
       to avoid double-handling (see tyControls.Win32WS); elsewhere it follows FormResizable.
@@ -247,9 +270,20 @@ type
       right. }
     procedure NoteInstalledPPI(APPI: Integer);
     procedure ToggleMaximize;
+    { The engine's OWN maximize: fill the current monitor's work area, remembering the bounds
+      to come back to. ToggleMaximize's maximize half, and what TTyForm hands a
+      WindowState = wsMaximized to on first show (AdoptInitialWindowState) -- one path, so a
+      designer-set maximize and a caption-button maximize cannot differ. }
+    procedure MaximizeToWorkArea;
     property Form: TCustomForm read FForm write FForm;
     property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
+    { The resize hot zone along the window's edges, LOGICAL px. BorderZonePx is what every
+      hit test and the GTK/Qt gutter use: the same zone at the form's PPI, so the edge is
+      as easy to grab at 175% as it is at 100%. }
     property BorderZone: Integer read FBorderZone write FBorderZone;
+    function BorderZonePx: Integer;
+    { A LOGICAL length in device px at the form's PPI (96 when there is no form yet). }
+    function ScalePx(ALogical: Integer): Integer;
     property Maximized: Boolean read FMaximized write FMaximized;
     { Whether the current maximize is the window manager's (see FNativeMaximize). }
     property NativeMaximized: Boolean read FNativeMaximize;
@@ -389,6 +423,11 @@ type
     procedure CMMouseEnter(var Message: TLMessage); message CM_MOUSEENTER;
     procedure Activate; override;
     {$ENDIF}
+    { A WindowState = wsMaximized that reaches the first show -- streamed from the .lfm (the
+      designer's setting) or assigned in code before Show -- is handed to the chrome engine's
+      own work-area maximize and taken away from the widgetset. Called at the top of DoShow;
+      the implementation says why neither half, nor the order, is optional. }
+    procedure AdoptInitialWindowState;
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
     { Re-derive the title bar's height AFTER LCL has scaled the form for a new monitor.
 
@@ -426,6 +465,12 @@ type
       when CaptionAction = tcaRollUp. }
     procedure ToggleRollUp;
     property RolledUp: Boolean read FRolledUp;
+    { Whether a user gesture may maximize this window: Resizable, offered by BorderIcons, and
+      not switched off on the bar -- the three conditions that put the maximize button on the
+      title bar, so the button's presence, the title-bar double-click and the OS gestures
+      (WS_MAXIMIZEBOX: Aero Snap to the top edge, Win+Up) always agree, as they do on a native
+      window that has no maximize box. A window that is already maximized may always restore. }
+    function CanMaximize: Boolean;
     { The fully-resolved chrome style this window is rendered from: the active theme's TyForm
       token with StyleOverride merged on top — exactly what ApplyWindowEffects and the
       background paint consume. Falls back to the built-in default controller when no
@@ -1027,6 +1072,12 @@ begin
   // Height follows the density axis: classic 32 (byte-identical); modern --titlebar-height when a
   // modern controller is already active at construction. Streamed forms associate the controller AFTER
   // this ctor, so TTyForm.ApplyChromeTheme re-derives the bar height once its controller is applied.
+  { All switched on and all offered: the buttons are created visible below, so this state and
+    theirs agree without a visibility pass. }
+  FShowMinimize := True;
+  FShowMaximize := True;
+  FShowClose := True;
+  FOffered := [cbfMinimize, cbfMaximize, cbfClose];
   SetBounds(0, 0, 200, TyTitleBarHeightFor(ActiveController));
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -1097,37 +1148,72 @@ begin
   Invalidate;
 end;
 
+{ The getters answer with the SWITCH, not with the button on screen. A button the window does
+  not offer is hidden while its switch stays True; echoing the visibility instead would make the
+  switch read False, the .lfm would save that False, and offering the button again later would
+  find it still hidden by a switch nobody set. }
 function TTyTitleBar.GetShowMinimize: Boolean;
-begin Result := (FMinButton = nil) or FMinButton.Visible; end;
+begin Result := FShowMinimize; end;
 
 function TTyTitleBar.GetShowMaximize: Boolean;
-begin Result := (FMaxButton = nil) or FMaxButton.Visible; end;
+begin Result := FShowMaximize; end;
 
 function TTyTitleBar.GetShowClose: Boolean;
-begin Result := (FCloseButton = nil) or FCloseButton.Visible; end;
+begin Result := FShowClose; end;
 
 procedure TTyTitleBar.SetShowMinimize(AValue: Boolean);
 begin
-  if FMinButton = nil then Exit;
-  if FMinButton.Visible = AValue then Exit;
-  FMinButton.Visible := AValue;
-  LayoutButtons;
+  if FShowMinimize = AValue then Exit;
+  FShowMinimize := AValue;
+  ApplyButtonVisibility;
 end;
 
 procedure TTyTitleBar.SetShowMaximize(AValue: Boolean);
 begin
-  if FMaxButton = nil then Exit;
-  if FMaxButton.Visible = AValue then Exit;
-  FMaxButton.Visible := AValue;
-  LayoutButtons;
+  if FShowMaximize = AValue then Exit;
+  FShowMaximize := AValue;
+  ApplyButtonVisibility;
+  { This switch feeds the window's WS_MAXIMIZEBOX (TTyForm.CanMaximize), so a flip at run time
+    refreshes the native NC strategy. FEngine is nil while streaming and at design time; the
+    first show applies the strategy then, with the streamed value. }
+  if (FEngine <> nil) and (FEngine.Form is TTyForm) then
+    TTyForm(FEngine.Form).ApplyResizeStrategy;
 end;
 
 procedure TTyTitleBar.SetShowClose(AValue: Boolean);
 begin
-  if FCloseButton = nil then Exit;
-  if FCloseButton.Visible = AValue then Exit;
-  FCloseButton.Visible := AValue;
-  LayoutButtons;
+  if FShowClose = AValue then Exit;
+  FShowClose := AValue;
+  ApplyButtonVisibility;
+end;
+
+procedure TTyTitleBar.SetOfferedButtons(AValue: TTyCaptionButtonFlags);
+begin
+  if FOffered = AValue then Exit;
+  FOffered := AValue;
+  ApplyButtonVisibility;
+end;
+
+{ visible = switch AND offered, for each button; the cluster is re-laid only when something
+  actually changed (a re-sync with the same answer must not cost a layout pass). }
+procedure TTyTitleBar.ApplyButtonVisibility;
+var
+  touched: Boolean;   { not "changed": that name is already taken up the inheritance chain }
+
+  procedure Put(ABtn: TTyCaptionButton; AWanted: Boolean);
+  begin
+    if ABtn = nil then Exit;
+    if ABtn.Visible = AWanted then Exit;
+    ABtn.Visible := AWanted;
+    touched := True;
+  end;
+
+begin
+  touched := False;
+  Put(FMinButton,   FShowMinimize and (cbfMinimize in FOffered));
+  Put(FMaxButton,   FShowMaximize and (cbfMaximize in FOffered));
+  Put(FCloseButton, FShowClose    and (cbfClose    in FOffered));
+  if touched then LayoutButtons;
 end;
 
 function TTyTitleBar.CapMarginPx: Integer;
@@ -1350,7 +1436,7 @@ begin
   // would be an ugly thick frame), so the OS can't resize from the top edge. Grab the top
   // FBorderZone px ourselves and hand a NATIVE top-resize to the OS instead of starting a drag.
   if (Button = mbLeft) and (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
+     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx) then
   begin
     TyNcBeginTopResize(GetParentForm(Self));
     Exit;
@@ -1367,7 +1453,7 @@ begin
   {$IFDEF LCLWin32}
   // Show the N-S resize cursor over the top hot-zone (matches the MouseDown top-resize above).
   if (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
+     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx) then
     Cursor := crSizeNS
   else
     Cursor := crDefault;
@@ -1405,10 +1491,33 @@ begin
   FMaximized := False;
 end;
 
+function TTyChromeEngine.ScalePx(ALogical: Integer): Integer;
+var
+  ppi: Integer;
+begin
+  ppi := 96;
+  if FForm <> nil then ppi := FForm.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(ALogical, ppi, 96);
+end;
+
+function TTyChromeEngine.BorderZonePx: Integer;
+begin
+  Result := ScalePx(FBorderZone);
+end;
+
 function TTyChromeEngine.FormResizable: Boolean;
 begin
   if FForm is TTyForm then
     Result := TTyForm(FForm).Resizable
+  else
+    Result := True;
+end;
+
+function TTyChromeEngine.FormMaximizable: Boolean;
+begin
+  if FForm is TTyForm then
+    Result := TTyForm(FForm).CanMaximize
   else
     Result := True;
 end;
@@ -1497,13 +1606,13 @@ end;
 
 procedure TTyChromeEngine.TitleBarDragUpdate(const ACursor: TPoint);
 const
-  DragThreshold = 4;   // px the pointer must travel before the drag leaves the press site
+  DragThreshold = 4;   // LOGICAL px the pointer must travel before the drag leaves the press site
 var
   Moved: Boolean;
 begin
   if (not FDragging) or (FForm = nil) then Exit;
-  Moved := (Abs(ACursor.X - FDragStart.X) > DragThreshold)
-        or (Abs(ACursor.Y - FDragStart.Y) > DragThreshold);
+  Moved := (Abs(ACursor.X - FDragStart.X) > ScalePx(DragThreshold))
+        or (Abs(ACursor.Y - FDragStart.Y) > ScalePx(DragThreshold));
   if FMaximized then
   begin
     { Tearing a maximized window loose — what every native title bar does, and what this window
@@ -1575,7 +1684,7 @@ begin
   if (Button <> mbLeft) or (FForm = nil) or FMaximized then
     Exit;
   FResizeHit := TyResizeHitFor(ManualResizeEnabled, Rect(0, 0, FForm.Width, FForm.Height),
-    Point(X, Y), FBorderZone);
+    Point(X, Y), BorderZonePx);
   if FResizeHit <> bhNone then
   begin
     FResizing := True;
@@ -1599,7 +1708,7 @@ begin
   if not FResizing then
   begin
     FForm.Cursor := TyResizeCursor(TyResizeHitFor(ManualResizeEnabled,
-      Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), FBorderZone));
+      Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), BorderZonePx));
     Exit;
   end;
   M := FForm.ClientToScreen(Point(X, Y));
@@ -1617,17 +1726,18 @@ begin
     bhBottomLeft: begin B.Left := B.Left + DX; B.Bottom := B.Bottom + DY; end;
     bhBottomRight: begin B.Right := B.Right + DX; B.Bottom := B.Bottom + DY; end;
   end;
-  if B.Right - B.Left < 80 then
+  { The smallest window a drag may leave, 80 x 60 LOGICAL px. }
+  if B.Right - B.Left < ScalePx(80) then
     case FResizeHit of
-      bhLeft, bhTopLeft, bhBottomLeft: B.Left := B.Right - 80;
+      bhLeft, bhTopLeft, bhBottomLeft: B.Left := B.Right - ScalePx(80);
     else
-      B.Right := B.Left + 80;
+      B.Right := B.Left + ScalePx(80);
     end;
-  if B.Bottom - B.Top < 60 then
+  if B.Bottom - B.Top < ScalePx(60) then
     case FResizeHit of
-      bhTop, bhTopLeft, bhTopRight: B.Top := B.Bottom - 60;
+      bhTop, bhTopLeft, bhTopRight: B.Top := B.Bottom - ScalePx(60);
     else
-      B.Bottom := B.Top + 60;
+      B.Bottom := B.Top + ScalePx(60);
     end;
   FForm.BoundsRect := B;
 end;
@@ -1770,20 +1880,20 @@ begin
 end;
 
 procedure TTyChromeEngine.ToggleMaximize;
-var
-  Wa: TRect;
-  Mon: TMonitor;
 begin
   if FForm = nil then
     Exit;
   // A double-click that maximizes presses the title bar first (arming a drag); cancel it so a
   // trailing MouseMove can't move the just-maximized window.
   FDragging := False;
-  // A fixed (non-resizable) window can't maximize. This gates BOTH entry points
-  // (the title-bar double-click via TitleBarDblClick and the max button); the button
-  // is also disabled when not resizable (SetResizable). When already maximized,
-  // still allow the restore branch so a window can't get stuck maximized.
-  if (not FormResizable) and (not FMaximized) then
+  // A window that offers no maximize button can't be maximized by a gesture either. This gates
+  // BOTH entry points (the title-bar double-click via TitleBarDblClick and the max button) on
+  // TTyForm.CanMaximize -- Resizable, biMaximize, the bar's ShowMaximize -- the three
+  // conditions that put the button there, so the gesture and the button never disagree (it
+  // used to look at Resizable alone, and a window with its button hidden still maximized on a
+  // double-click). When already maximized, still allow the restore branch so a window can't
+  // get stuck maximized.
+  if (not FormMaximizable) and (not FMaximized) then
     Exit;
   if FMaximized then
   begin
@@ -1803,19 +1913,31 @@ begin
     end;
   end
   else
-  begin
-    FSavedBounds := FForm.BoundsRect;
-    { Screen.MonitorFromWindow can return nil (an off-screen / not-yet-mapped handle,
-      or a multi-monitor edge case); guard it so double-click-to-maximize can't AV —
-      fall back to the primary monitor's work area. }
+    MaximizeToWorkArea;
+end;
+
+procedure TTyChromeEngine.MaximizeToWorkArea;
+var
+  Wa: TRect;
+  Mon: TMonitor;
+begin
+  if FForm = nil then
+    Exit;
+  FSavedBounds := FForm.BoundsRect;
+  { Screen.MonitorFromWindow can return nil (an off-screen / not-yet-mapped handle,
+    or a multi-monitor edge case); guard it so double-click-to-maximize can't AV —
+    fall back to the primary monitor's work area. Asked before the handle exists
+    (headless), the primary work area is all there is; asking for the Handle would
+    create one as a side effect. }
+  Mon := nil;
+  if FForm.HandleAllocated then
     Mon := Screen.MonitorFromWindow(FForm.Handle);
-    if Mon <> nil then
-      Wa := Mon.WorkareaRect
-    else
-      Wa := Screen.WorkAreaRect;
-    FForm.BoundsRect := TyMaximizedBounds(Wa);
-    ApplyMaximizedState(True, False);
-  end;
+  if Mon <> nil then
+    Wa := Mon.WorkareaRect
+  else
+    Wa := Screen.WorkAreaRect;
+  FForm.BoundsRect := TyMaximizedBounds(Wa);
+  ApplyMaximizedState(True, False);
 end;
 
 { TTyForm }
@@ -2148,12 +2270,12 @@ begin
   // here because this override only compiles on the GTK/Qt widgetsets that require it.
   if FEngine <> nil then
   begin
-    zone := FEngine.BorderZone;
+    zone := FEngine.BorderZonePx;
     maxed := FEngine.Maximized;
   end
   else
   begin
-    zone := 6;
+    zone := MulDiv(6, Font.PixelsPerInch, 96);
     maxed := False;
   end;
   ARect := TyResizeGutterRect(ARect, zone, FResizable, maxed, True);
@@ -2254,13 +2376,18 @@ begin
 end;
 
 procedure TTyForm.SyncCaptionButtons;
-var flags: TTyCaptionButtonFlags;
 begin
   if FTitleBar = nil then Exit;
-  flags := TyResolveCaptionButtons(BorderIcons, FResizable);
-  FTitleBar.ShowMinimize := cbfMinimize in flags;
-  FTitleBar.ShowMaximize := cbfMaximize in flags;
-  FTitleBar.ShowClose    := cbfClose in flags;
+  { OFFER, do not write the switches. The bar's ShowMinimize/ShowMaximize/ShowClose are the
+    user's -- a designer-set False streams into the bar before Loaded runs this -- and writing
+    them from here is exactly what used to throw that False away on every start. }
+  FTitleBar.OfferedButtons := TyResolveCaptionButtons(BorderIcons, FResizable);
+end;
+
+function TTyForm.CanMaximize: Boolean;
+begin
+  Result := FResizable and (biMaximize in BorderIcons)
+    and ((FTitleBar = nil) or FTitleBar.ShowMaximize);
 end;
 
 procedure TTyForm.ApplyResizeStrategy;
@@ -2277,7 +2404,8 @@ begin
   if HandleAllocated then
   begin
     if FTitleBar <> nil then capH := FTitleBar.Height else capH := 0;
-    if FEngine <> nil then zone := FEngine.BorderZone else zone := 6;
+    if FEngine <> nil then zone := FEngine.BorderZonePx
+    else zone := MulDiv(6, Font.PixelsPerInch, 96);
     // A rolled-up (window-shade) window drops WS_THICKFRAME: its sizing border enforces an OS
     // minimum window height that would otherwise leave a content sliver under the title bar, and
     // a collapsed window needs no edge-resize anyway. Restored when unrolled.
@@ -2300,7 +2428,7 @@ begin
     maxed := (FEngine <> nil) and FEngine.Maximized;
     TyNcApplyResize(Self, resiz, zone, capH,
       maxed,                                    // engine (work-area) maximize -> no NC inset
-      resiz and (biMaximize in BorderIcons),    // allow native maximize (WS_MAXIMIZEBOX)
+      CanMaximize and not FRolledUp,            // allow native maximize (WS_MAXIMIZEBOX): the button's presence
       noFrame);
     // The full-frame-eat above leaves the surface covering every pixel, so without this the
     // form is never hit-tested and the window cannot be edge-resized with the mouse at all.
@@ -2677,6 +2805,9 @@ end;
 
 procedure TTyForm.DoShow;
 begin
+  { Before inherited: TCustomForm.DoShow reads WindowState (it skips OnShow on a first show
+    that is still maximized), and the widgetset reads it the moment this returns. }
+  AdoptInitialWindowState;
   inherited DoShow;
   {$IFDEF LCLCOCOA}
   // macOS multi-monitor fix. LCL's (0,0) is the top-left of the virtual-desktop UNION (the top of
@@ -2699,6 +2830,33 @@ begin
   if (not (csDesigning in ComponentState)) and HandleAllocated then
     ApplyResizeStrategy;
   ApplyWindowEffects;
+end;
+
+procedure TTyForm.AdoptInitialWindowState;
+begin
+  { Design time keeps the streamed value: the Object Inspector shows it, the .lfm saves it,
+    and the design surface must not be maximized. }
+  if csDesigning in ComponentState then Exit;
+  if WindowState <> wsMaximized then Exit;
+  if FEngine = nil then Exit;
+  { WHY THE ENGINE. This is a borderless window, and the maximize the widgetset would do
+    (ShowHide -> ShowWindow(SW_SHOWMAXIMIZED); TCustomForm.Show repeats it) is aimed at a
+    plain WS_POPUP at this moment -- the thick frame only arrives in ApplyResizeStrategy.
+    Windows then fills the whole monitor, taskbar included; GTK/Qt window managers ignore
+    the request for an undecorated window altogether; and the chrome learns of it only if an
+    OS size report happens to come back. The engine's maximize is the caption button's:
+    work-area bounds, a rect to restore to, the restore glyph, square corners.
+    WHY THIS ORDER. SetWindowState shows the window at once while Showing is True
+    (customform.inc:1813), so the bounds are applied first and the window appears maximized
+    rather than flashing at the designed size. And the state must be normal before DoShow
+    returns: CMShowingChanged runs inherited -- the widgetset's ShowHide, which reads it --
+    right after (customform.inc:585).
+    A fixed (Resizable=False) window cannot maximize, the same answer the caption button and
+    the double-click give; it is only put back to normal. An already-maximized engine (DoShow
+    re-fires on every show) is left alone so the saved rect survives. }
+  if FResizable and not FEngine.Maximized then
+    FEngine.MaximizeToWorkArea;
+  WindowState := wsNormal;
 end;
 
 initialization

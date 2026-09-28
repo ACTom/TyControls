@@ -398,6 +398,11 @@ type
       existing bar changes height. Protected because TTyToolBarEx lays its own row out and
       must use the SAME pad, or the two bars would sit their tools at different heights. }
     function ContentPadY: Integer;
+    { The PPI this bar lays its tools out at. ButtonHeight, ButtonWidth, ButtonSpacing,
+      Indent and ContentPadY are all LOGICAL px; the layout multiplies each by this over 96
+      before it meets a child's size, which is device px. One function because TTyToolBarEx
+      lays its own row out and must scale by the same number. }
+    function LayoutPPI: Integer;
     { The device-px height of the bottom hairline RenderTo strokes at APPI -- the bar's only
       painted border. Extracted from RenderTo (which is still its only caller for drawing) so
       the LAYOUT can read the same number: a tool button is a WINDOWED child, so it paints
@@ -1551,6 +1556,12 @@ begin
   if Result < 0 then Result := 0;
 end;
 
+function TTyToolBar.LayoutPPI: Integer;
+begin
+  Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
 function TTyToolBar.BottomBorderPx(APPI: Integer): Integer;
 var S: TTyStyleSet;
 begin
@@ -1766,7 +1777,10 @@ begin
   if not (ACtl is TTyToolButton) then Exit(ACtl.Width);   // LCL floors only tool buttons
   btn := TTyToolButton(ACtl);
   nat := btn.BarNaturalWidth;
-  Result := TyToolFloorWidth(nat, GetButtonWidth, btn.Style, btn.AutoSize);
+  // ButtonWidth is logical px ("same units as ButtonHeight"); the width it floors is a
+  // child's real one, in device px.
+  Result := TyToolFloorWidth(nat, MulDiv(GetButtonWidth, LayoutPPI, 96), btn.Style,
+    btn.AutoSize);
   { Record the lend NOW, against the natural width just read — the SetBounds that applies
     Result follows in the same pass. For a button the pass then hides instead (the Ex bar's
     overflow set), Width keeps the natural value, the equality test fails, and the stale
@@ -1804,6 +1818,7 @@ var
   wrapAfter: array of Boolean;
   breaks: TBooleanDynArray;
   newH, bh, padY: Integer;
+  ppi, indentPx, spacingPx: Integer;
   rowShift, limitH, contentBottom, bottomBorder: Integer;
 begin
   // re-entrancy guard: Height assignment at the end triggers another AlignControls call
@@ -1835,15 +1850,23 @@ begin
       it -- so a row sized purely from ButtonHeight left the child overflowing DOWNWARD out
       of its slot: it covered the bar's bottom border and stopped lining up with the children
       that did fit. Take the tallest floor in the row first, then lay out against that. }
-    bh := GetButtonHeight;
+    { The bar's own knobs are LOGICAL px -- ButtonHeight follows --control-height, the pad is
+      a theme token, Indent and ButtonSpacing are what the designer typed -- and everything
+      they meet below is DEVICE px: ClientWidth, a child's width, a child's floor. They used
+      to go in raw, which is the same number only at 96 PPI: at 175% the buttons stood 1.75x
+      taller in rows still pitched for 96. Scaled here, once, for the whole pass. }
+    ppi := LayoutPPI;
+    indentPx := MulDiv(FIndent, ppi, 96);
+    spacingPx := MulDiv(FButtonSpacing, ppi, 96);
+    bh := MulDiv(GetButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
       if kids[i].Constraints.MinHeight > bh then bh := kids[i].Constraints.MinHeight;
-    padY := ContentPadY;
+    padY := MulDiv(ContentPadY, ppi, 96);
     { LCL's TRAILING Wrap -> the solver's LEADING break, through the one function that shift
       lives in. With no tool button carrying Wrap the result is all-False, which the solver
       reads exactly as the break-free overload did — so an existing bar does not move a pixel. }
     breaks := TyToolWrapToBreakBefore(wrapAfter);
-    rects := TyToolbarLayout(sizes, breaks, ClientWidth, FIndent, padY, FButtonSpacing, bh, FWrapable, rows);
+    rects := TyToolbarLayout(sizes, breaks, ClientWidth, indentPx, padY, spacingPx, bh, FWrapable, rows);
 
     { ROW SHIFT -- keep the LAST row out of the strip RenderTo strokes the bottom hairline into.
 
@@ -1862,7 +1885,7 @@ begin
       For an auto-growing bar those differ, and using the stale one would squeeze the rows up
       for one frame and let them spring back on the next -- a visible twitch on every relayout,
       and a single ForceLayout in a test would read the transient. }
-    newH := padY*2 + rows*bh + (rows-1)*FButtonSpacing;
+    newH := padY*2 + rows*bh + (rows-1)*spacingPx;
     limitH := ClientHeight;
     if (Align in [alTop, alBottom]) and (rows > 0) then
       Inc(limitH, newH - Height);      { the grow at the end of this pass, applied in advance }
@@ -1872,7 +1895,7 @@ begin
     begin
       { The last row's bottom: every child is centred INSIDE its row and clamped to bh (see the
         loop), so the row's own bottom bounds all of them. }
-      contentBottom := padY + rows*bh + (rows-1)*FButtonSpacing;
+      contentBottom := padY + rows*bh + (rows-1)*spacingPx;
       rowShift := contentBottom - (limitH - bottomBorder);
       if rowShift < 0 then rowShift := 0;
       { Never above the top edge. rects[0].Top is padY, so padY is the whole budget. When the

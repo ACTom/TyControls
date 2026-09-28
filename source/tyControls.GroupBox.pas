@@ -242,10 +242,10 @@ begin
       MeasBmp := TBitmap.Create;
       try
         MeasBmp.SetSize(1, 1);
-        MeasBmp.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-        // Measure with the same effective size the caption is drawn at, so the
+        // Measure with the same effective size AND weight the caption is drawn at, so the
         // erased band matches the now-readable text (ResolveFontSize fallback).
-        MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
+        TyConfigureMeasureFont(MeasBmp.Canvas, S.FontName, ResolveFontSize(S),
+          S.FontWeight, APPI);
         TextW := MeasBmp.Canvas.TextWidth(disp);
       finally
         MeasBmp.Free;

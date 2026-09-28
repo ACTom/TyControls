@@ -136,10 +136,10 @@ end;
 
 function TTyToolBarEx.ChevronWidthPx: Integer;
 begin
-  // The chevron's cell width, in the SAME units the base layout works in (ClientWidth /
-  // Indent / ButtonSpacing are all treated as logical px by TyToolbarLayout, and match
-  // device px at PPI 96). A compact fixed cell like the ribbon's "more" button.
-  Result := 30;
+  // The chevron's cell width in DEVICE px, as its name says: 30 logical, a compact fixed
+  // cell like the ribbon's "more" button. It used to be the bare 30, on the grounds that
+  // the layout "matches device px at PPI 96" -- which is the only PPI it matched at.
+  Result := MulDiv(30, LayoutPPI, 96);
 end;
 
 function TTyToolBarEx.IsInternalChild(AControl: TControl): Boolean;
@@ -178,6 +178,7 @@ end;
 procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
   i, n, visCount, x, chevW, padY, rowH, rowTop, bottomBorder: Integer;
+  ppi, indentPx, spacingPx: Integer;
   kids: array of TControl;
   widths: array of Integer;
   ctl: TControl;
@@ -259,8 +260,15 @@ begin
       widths[i] := EffectiveToolWidth(kids[i]);
     end;
 
+    { The same scaling the base layout does, for the same reason: Indent, ButtonSpacing,
+      ButtonHeight and the pad are logical px, the widths and ClientWidth beside them are
+      device px. }
+    ppi := LayoutPPI;
+    indentPx := MulDiv(Indent, ppi, 96);
+    spacingPx := MulDiv(ButtonSpacing, ppi, 96);
+
     chevW := ChevronWidthPx;
-    visCount := TyToolbarOverflowCount(widths, ClientWidth - Indent, chevW);
+    visCount := TyToolbarOverflowCount(widths, ClientWidth - indentPx, chevW);
     if visCount > n then visCount := n;
 
     // Place the lead (fitting) buttons; hide + record the overflow set.
@@ -268,7 +276,7 @@ begin
     { Indent is the LEADING gap, ContentPadY the vertical one -- the base stopped conflating
       the two and this override has to stop too, or a bar with a non-default Indent would sit
       its tools at one height here and another there. }
-    padY := ContentPadY;
+    padY := MulDiv(ContentPadY, ppi, 96);
 
     { ROW HEIGHT — ButtonHeight is what the bar ASKS for; a child may refuse to be that short.
       A control whose caption decides its size publishes Constraints.MinHeight and SetBounds
@@ -277,7 +285,7 @@ begin
       and so re-opened the very defect the base closed -- a clamped-taller button overflowed its
       slot downward and left the row ragged. Same bug shape as the StyleClass one above: the
       base was fixed, the override that duplicates its layout was not. }
-    rowH := ButtonHeight;
+    rowH := MulDiv(ButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
       if kids[i].Constraints.MinHeight > rowH then rowH := kids[i].Constraints.MinHeight;
 
@@ -294,7 +302,7 @@ begin
       rowTop := ClientHeight - bottomBorder - rowH;
     if rowTop < 0 then rowTop := 0;
 
-    x := Indent;
+    x := indentPx;
     for i := 0 to n - 1 do
     begin
       kids[i].Align := alNone;
@@ -304,7 +312,7 @@ begin
         // base bar's SetBounds, and the two are equal until ButtonWidth is set.
         kids[i].SetBounds(x, rowTop, widths[i], rowH);
         kids[i].Visible := True;
-        Inc(x, widths[i] + ButtonSpacing);
+        Inc(x, widths[i] + spacingPx);
       end
       else
       begin
@@ -320,7 +328,7 @@ begin
       { The chevron shares the row's box, not its own -- it sat at (padY, ButtonHeight) while
         the tools beside it could be taller, so it drifted off the row's centre line the moment
         a caption forced the row up. }
-      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, rowTop, chevW, rowH);
+      FMoreBtn.SetBounds(ClientWidth - chevW - indentPx, rowTop, chevW, rowH);
       FMoreBtn.Visible := True;
       FMoreBtn.BringToFront;
     end
@@ -333,7 +341,7 @@ end;
 
 procedure TTyToolBarEx.MoreClick(Sender: TObject);
 var
-  i, x, y, w, maxW, itemH, pad, gap: Integer;
+  i, x, y, w, maxW, itemH, pad, gap, ppi: Integer;
   tl: TPoint;
 begin
   if Length(FOverflow) = 0 then Exit;
@@ -352,15 +360,23 @@ begin
     FPopup.OnPopupClose := @PopupClosed;
   end;
 
-  pad := 4;
-  gap := ButtonSpacing;
-  itemH := ButtonHeight;
+  { Device px, like the row they came from. The stride has to be the height the items will
+    really HAVE: SetBounds clamps a button up to its own floor, so a flyout pitched at the
+    bare ButtonHeight stacked its items on top of one another as soon as the floor was the
+    taller of the two -- which at 175% it always is. }
+  ppi := LayoutPPI;
+  pad := MulDiv(4, ppi, 96);
+  gap := MulDiv(ButtonSpacing, ppi, 96);
+  itemH := MulDiv(ButtonHeight, ppi, 96);
+  for i := 0 to High(FPopupItems) do
+    if (FPopupItems[i] <> nil) and (FPopupItems[i].Constraints.MinHeight > itemH) then
+      itemH := FPopupItems[i].Constraints.MinHeight;
 
   // Stack the overflow buttons vertically in the popup; keep their own OnClick intact.
   maxW := 0;
   for i := 0 to High(FPopupItems) do
     if (FPopupItems[i] <> nil) and (FPopupItems[i].Width > maxW) then maxW := FPopupItems[i].Width;
-  if maxW <= 0 then maxW := 80;
+  if maxW <= 0 then maxW := MulDiv(80, ppi, 96);
 
   x := pad;
   y := pad;

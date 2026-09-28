@@ -79,6 +79,12 @@ type
     procedure ApplyColor(AColor: TTyColor; AFromPicker: Boolean = False);
   protected
     procedure Paint; override;                 // draws the preview swatch (GUI)
+    { The preview band is a RECT this form paints, not a control -- so LCL's DPI pass, which
+      scales every control the constructor laid out, knows nothing about it. It is scaled
+      here, by the same proportions, or the band stays where 96 PPI put it while everything
+      around it moves. }
+    procedure DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
+      const AXProportion, AYProportion: Double); override;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     function CurrentColor: TTyColor;
@@ -93,6 +99,8 @@ type
     function PickerHue: Single;
     function PickerSat: Single;
     function PickerVal: Single;
+    { Where the preview band is painted, in client px. Test/introspection seam. }
+    function PreviewRect: TRect;
     { The quick-pick grid, so a host can extend the palette (AddColor). }
     property Swatches: TTyColorGrid read FSwatches;
   end;
@@ -181,8 +189,11 @@ begin
       if (tpBorderColor in bodyS.Present) and (bodyS.BorderWidth > 0) then
         P.StrokeBorder(Rect(0, 0, w, h), 0, bodyS.BorderWidth, bodyS.BorderColor);
       ix := Round(FSat * Max(1, w - 1)); iy := Round((1 - FVal) * Max(1, h - 1));
-      mw := Max(1, P.Scale(2));
-      P.StrokeBorder(Rect(ix - 5, iy - 5, ix + 6, iy + 6), 6, mw, bodyS.TextColor);
+      { The ring's box is device px, its radius and its width are LOGICAL: StrokeBorder
+        scales those two itself. }
+      mw := 2;
+      P.StrokeBorder(Rect(ix - P.Scale(5), iy - P.Scale(5), ix + P.Scale(6), iy + P.Scale(6)),
+        6, mw, bodyS.TextColor);
     end;
     P.EndPaint;
   finally P.Free; end;
@@ -233,7 +244,8 @@ begin
       if (tpBorderColor in bodyS.Present) and (bodyS.BorderWidth > 0) then
         P.StrokeBorder(Rect(0, 0, w, h), 0, bodyS.BorderWidth, bodyS.BorderColor);
       iy := Round(FHue / 360 * Max(1, h - 1));
-      P.StrokeBorder(Rect(0, iy - 1, w, iy + 2), 0, Max(1, P.Scale(2)), bodyS.TextColor);
+      P.StrokeBorder(Rect(0, iy - P.Scale(1), w, iy + P.Scale(2)), 0, 2,
+        bodyS.TextColor);
     end;
     P.EndPaint;
   finally P.Free; end;
@@ -305,7 +317,7 @@ var
     Result := TTyLabel.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, AWidth, 20);
+    Result.SetBounds(ALeft, ATop, AWidth, Px(20));
   end;
 
   function MkSpin(AMin, AMax, ALeft, ATop, AWidth, AHeight: Integer): TTySpinEdit;
@@ -323,9 +335,9 @@ var
   var
   cx: Integer;
   begin
-    cx := colX + AIndex * (cellW + CellGap);
+    cx := colX + AIndex * (cellW + Px(CellGap));
     MkLabel(ACaption, cx, ATop + labelTop, labelW);
-    Result := MkSpin(AMin, AMax, cx + labelW + LblGap, ATop, spinW, spinH);
+    Result := MkSpin(AMin, AMax, cx + labelW + Px(LblGap), ATop, spinW, spinH);
   end;
 
 begin
@@ -333,25 +345,27 @@ begin
   Caption := rsDlgColorTitle;   // title bar text (builders may override via ACaption)
   FColor := $FF000000;
   r := ContentRect;
-  x0 := r.Left + TyDlgPad;
-  y0 := r.Top + TyDlgPad;
+  x0 := r.Left + Px(TyDlgPad);
+  y0 := r.Top + Px(TyDlgPad);
   // Spin/edit height follows the density axis: classic 30 (= TyDlgEditH), modern --control-height.
-  spinW := 56; spinH := TyDensityHeight(nil, TyDlgEditH); rowH := spinH + RowGap; labelW := 14;
+  { Every number below is a 96-PPI design number and goes through Px: see TTyDialog.Px. }
+  spinW := Px(56); spinH := Px(TyDensityHeight(nil, TyDlgEditH)); rowH := spinH + Px(RowGap);
+  labelW := Px(14);
   // labels are 20px tall; nudge them so their text baseline centres against the (density) spin.
-  labelTop := (spinH - 20) div 2;
-  cellW := labelW + LblGap + spinW;                 // full width of one label+spin cell
+  labelTop := (spinH - Px(20)) div 2;
+  cellW := labelW + Px(LblGap) + spinW;                 // full width of one label+spin cell
 
   // Picker: HSV square + hue bar, top-left.
   FSquare := TTyHSVSquare.Create(Self);
   FSquare.Parent := Self;
-  FSquare.SetBounds(x0, y0, SquareSz, SquareSz);
+  FSquare.SetBounds(x0, y0, Px(SquareSz), Px(SquareSz));
   FHueBar := TTyHueBar.Create(Self);
   FHueBar.Parent := Self;
-  FHueBar.SetBounds(x0 + SquareSz + PickGap, y0, HueW, SquareSz);
+  FHueBar.SetBounds(x0 + Px(SquareSz) + Px(PickGap), y0, Px(HueW), Px(SquareSz));
 
   // Right editor column starts after the hue bar. Every row shares the same
   // 4-cell grid so Hex / RGB / CMYK / Alpha align on the same left edges.
-  colX := x0 + SquareSz + PickGap + HueW + ColGap;
+  colX := x0 + Px(SquareSz) + Px(PickGap) + Px(HueW) + Px(ColGap);
 
   { Hex row: label + a wide edit spanning three cells.
     The label CANNOT reuse labelW. That is 14px, sized for the single letters R/G/B/C/M/Y/K,
@@ -364,12 +378,12 @@ begin
     re-fit -- Width would still be the 14 it was created with, which is how the label first
     came out clipped to a single 十. }
   hexLbl.MeasureCaption(Font.PixelsPerInch, 0, hexLblW, hexLblH);
-  hexLblW := Max(labelW, hexLblW + 2);
+  hexLblW := Max(labelW, hexLblW + Px(2));
   hexLbl.Width := hexLblW;
   FHex := TTyEdit.Create(Self);
   FHex.Parent := Self;
-  FHex.SetBounds(colX + hexLblW + LblGap, y0,
-    3 * cellW + 2 * CellGap - hexLblW - LblGap, spinH);
+  FHex.SetBounds(colX + hexLblW + Px(LblGap), y0,
+    3 * cellW + 2 * Px(CellGap) - hexLblW - Px(LblGap), spinH);
 
   // RGB row.
   FR := MkCell('R', 0, 255, 0, y0 + rowH);
@@ -385,15 +399,15 @@ begin
   // Alpha row: keep the full "Alpha" label (resourcestring), spin aligned to the
   // grid's second cell so it lines up under G / M.
   MkLabel(rsDlgAlpha, colX, y0 + 3*rowH + labelTop, cellW);
-  FA := MkSpin(0, 255, colX + (cellW + CellGap), y0 + 3*rowH, spinW, spinH);
+  FA := MkSpin(0, 255, colX + (cellW + Px(CellGap)), y0 + 3*rowH, spinW, spinH);
 
   // Right column spans the widest row (the 4-cell CMYK row); overall content width
   // is from the left edge to whichever of the picker / editor column reaches further.
-  colRight := colX + 4 * cellW + 3 * CellGap;
-  contentRight := Max(x0 + SquareSz + PickGap + HueW, colRight);
+  colRight := colX + 4 * cellW + 3 * Px(CellGap);
+  contentRight := Max(x0 + Px(SquareSz) + Px(PickGap) + Px(HueW), colRight);
   // Bottom of the top band: the taller of the fixed-size picker and the four editor rows
   // (a modern --control-height can push the Alpha row past the square).
-  pickerBottom := Max(y0 + SquareSz, y0 + 3*rowH + spinH);
+  pickerBottom := Max(y0 + Px(SquareSz), y0 + 3*rowH + spinH);
 
   // Quick-pick swatches: a full-width labelled grid of common colours beneath the picker.
   // TTyColorGrid divides its client rect into cells (ClientWidth div Columns by
@@ -402,8 +416,8 @@ begin
   { swTop is read back off the section label, floored at the designed SecLblH: a theme that
     gives TyLabel padding (or a bigger font) makes the label taller than SecLblH, and a
     literal stride would drop the swatch grid on top of it. }
-  swLbl := MkLabel(rsDlgBasicColors, x0, pickerBottom + SecGap, SecLblW);
-  swTop := pickerBottom + SecGap + SecLblH;
+  swLbl := MkLabel(rsDlgBasicColors, x0, pickerBottom + Px(SecGap), Px(SecLblW));
+  swTop := pickerBottom + Px(SecGap) + Px(SecLblH);
   if swLbl.Top + swLbl.Height > swTop then swTop := swLbl.Top + swLbl.Height;
   FSwatches := TTyColorGrid.Create(Self);
   FSwatches.Parent := Self;
@@ -411,13 +425,13 @@ begin
   AddQuickPickColors(FSwatches);
   swRows := (FSwatches.ColorCount + SwCols - 1) div SwCols;
   swCellW := (contentRight - x0) div SwCols;
-  FSwatches.SetBounds(x0, swTop, swCellW * SwCols, SwCellH * swRows);
-  swBottom := swTop + SwCellH * swRows;
+  FSwatches.SetBounds(x0, swTop, swCellW * SwCols, Px(SwCellH) * swRows);
+  swBottom := swTop + Px(SwCellH) * swRows;
 
   // Preview: a full-width labelled swatch band beneath the quick-pick grid.
-  MkLabel(rsDlgPreview, x0, swBottom + SecGap, SecLblW);
-  previewTop := swBottom + SecGap + SecLblH;
-  FPreviewRect := Rect(x0, previewTop, contentRight, previewTop + PrevH);
+  MkLabel(rsDlgPreview, x0, swBottom + Px(SecGap), Px(SecLblW));
+  previewTop := swBottom + Px(SecGap) + Px(SecLblH);
+  FPreviewRect := Rect(x0, previewTop, contentRight, previewTop + Px(PrevH));
 
   // Wire change handlers AFTER creation so no premature fires occur.
   FSquare.OnChange := @PickerChanged;
@@ -437,8 +451,18 @@ begin
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
   // content spans left edge -> whichever column reaches furthest right, down to the
   // preview swatch bottom.
-  AutoSizeToContent(contentRight - x0, (FPreviewRect.Bottom + TyDlgPad) - r.Top);
+  AutoSizeToContent(contentRight - x0, (FPreviewRect.Bottom + Px(TyDlgPad)) - r.Top);
   SetColorValue(FColor);   // seed all views from the model
+end;
+
+procedure TTyColorForm.DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
+  const AXProportion, AYProportion: Double);
+begin
+  inherited DoAutoAdjustLayout(AMode, AXProportion, AYProportion);
+  if AMode in [lapAutoAdjustWithoutHorizontalScrolling, lapAutoAdjustForDPI] then
+    FPreviewRect := Rect(Round(FPreviewRect.Left * AXProportion),
+      Round(FPreviewRect.Top * AYProportion), Round(FPreviewRect.Right * AXProportion),
+      Round(FPreviewRect.Bottom * AYProportion));
 end;
 
 procedure TTyColorForm.SetColorValue(AColor: TTyColor);
@@ -474,6 +498,9 @@ begin Result := FSquare.Sat; end;
 
 function TTyColorForm.PickerVal: Single;
 begin Result := FSquare.Val; end;
+
+function TTyColorForm.PreviewRect: TRect;
+begin Result := FPreviewRect; end;
 
 { Re-seed every view from FColor.
 
@@ -594,7 +621,7 @@ begin
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
     // checkerboard behind the swatch so alpha reads as transparency.
-    cell := 8;
+    cell := Max(1, Px(8));
     fill := Default(TTyFill); fill.Kind := tfkSolid;
     i := FPreviewRect.Top;
     while i < FPreviewRect.Bottom do
