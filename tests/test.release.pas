@@ -62,6 +62,7 @@ type
     procedure EveryDesignTimeUnitIsShipped;
     procedure TheThirdPartyNoticeShipsWithTheFontItLicenses;
     procedure TheThirdPartyNoticeCoversTheUnicodeWidthPort;
+    procedure TheThirdPartyNoticeCoversTheTerminalPort;
     procedure EveryAssetAShippedThemeReferencesIsShipped;
     procedure BothScriptsShipTheSameTrees;
     procedure TheChartOptionEditorStaysAShell;
@@ -564,6 +565,36 @@ begin
     "Copyright 2018"); its copyright line has to travel with the others. }
   AssertTrue('and carries the unicode-properties copyright line',
     Pos('Copyright 2018 (unicode-properties', notice) > 0);
+end;
+
+procedure TReleaseManifestTest.TheThirdPartyNoticeCoversTheTerminalPort;
+const
+  Units: array[0..3] of string = ('source/tyControls.Terminal.Parser.pas',
+    'source/tyControls.Terminal.Buffer.pas', 'source/tyControls.Terminal.Core.pas',
+    'source/tyControls.Terminal.Charsets.inc');
+var
+  notice, heading: string;
+  i, p: Integer;
+begin
+  { Hardcoded for the same reason as the width guard above: nothing declares the licence
+    obligation. The three terminal units are ported from xterm.js (MIT) and the charset
+    include is dumped from it; both release scripts ship source/ whole today, so this
+    guards against a later filter that would ship the units without their notice -- or
+    a notice whose heading forgets a unit. The test-fixtures note credits the escape
+    sequence files the oracle feeds (spec 14). }
+  for i := 0 to High(Units) do
+  begin
+    AssertTrue(Units[i] + ' ships (ps1)', IsShipped(FPs1, Units[i]));
+    AssertTrue(Units[i] + ' ships (sh)', IsShipped(FSh, Units[i]));
+  end;
+  notice := ReadScript(RepoRoot + 'THIRD-PARTY-NOTICES.md');
+  p := Pos('## xterm.js', notice);
+  AssertTrue('the notice has an xterm.js section', p > 0);
+  heading := Copy(notice, p, Pos(#10, Copy(notice, p, MaxInt)));
+  AssertTrue('its heading names the core unit', Pos('tyControls.Terminal.Core.pas', heading) > 0);
+  AssertTrue('its heading names the parser unit', Pos('tyControls.Terminal.Parser.pas', heading) > 0);
+  AssertTrue('its heading names the buffer unit', Pos('tyControls.Terminal.Buffer.pas', heading) > 0);
+  AssertTrue('the notice credits the test fixtures', Pos('### Test fixtures', notice) > 0);
 end;
 
 procedure TReleaseManifestTest.EveryAssetAShippedThemeReferencesIsShipped;
