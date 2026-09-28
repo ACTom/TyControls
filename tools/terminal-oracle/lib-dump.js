@@ -34,16 +34,32 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const MAX_FIXTURE_BYTES = 2 * 1024 * 1024; // spec 17.2 #8
 
 // Every file a generator writes, repo-relative. regen-all.js fails when anything
-// else changes.
+// else changes. An entry is an exact path or a RegExp over the repo-relative path:
+// the phase 2 fixtures are cut into numbered parts by writeFixture, so their exact
+// names vary with their size.
 const GENERATED = [
   'source/tyControls.Unicode.Width.Data.inc',
   'tests/fixtures/terminal-unicode-width.json',
   'tests/fixtures/terminal-unicode-join.json',
   'tests/fixtures/terminal-unicode-cases.json',
+  'source/tyControls.Terminal.Charsets.inc',
+  /^tests\/fixtures\/terminal-(parser|buffer|core)-[a-z0-9-]+\.json$/,
 ];
+
+function isGenerated(rel) {
+  return GENERATED.some(g => (typeof g === 'string' ? g === rel : g.test(rel)));
+}
 
 function git(args) {
   return cp.execFileSync('git', ['-C', XTERM, ...args], { encoding: 'utf8' }).trim();
+}
+
+// A file of the pinned commit as git stores it -- NOT the working tree: with
+// core.autocrlf the checkout of test/fixtures/escape_sequence_files holds CRLF, so
+// reading the file would make the fixtures depend on the machine's git settings.
+// upstreamInfo() has already proved HEAD is the pinned commit and the tree clean.
+function gitBlob(rel) {
+  return cp.execFileSync('git', ['-C', XTERM, 'show', 'HEAD:' + rel], { maxBuffer: 64 * 1024 * 1024 });
 }
 
 function upstreamInfo() {
@@ -78,6 +94,19 @@ const PORTED = [
     `addons/addon-unicode-graphemes/${OUT_DIR}/UnicodeGraphemeProvider.js`],
   ['addons/addon-unicode-graphemes/src/third-party/UnicodeProperties.ts',
     `addons/addon-unicode-graphemes/${OUT_DIR}/third-party/UnicodeProperties.js`],
+  // phase 2: parser, buffer, core (Color.ts for relativeLuminance, copied by the
+  // colour-scheme responder in lib-term.js and by the core)
+  ...['common/parser/EscapeSequenceParser', 'common/parser/Params', 'common/parser/OscParser',
+    'common/parser/DcsParser', 'common/parser/ApcParser', 'common/parser/Constants',
+    'common/StringBuilder', 'common/input/TextDecoder', 'common/input/WriteBuffer',
+    'common/input/XParseColor', 'common/buffer/Buffer', 'common/buffer/BufferLine',
+    'common/buffer/AttributeData', 'common/buffer/CellData', 'common/buffer/Constants',
+    'common/buffer/BufferSet', 'common/buffer/Marker', 'common/CircularList',
+    'common/InputHandler', 'common/CoreTerminal', 'common/WindowsMode', 'common/data/Charsets',
+    'common/services/BufferService', 'common/services/CoreService',
+    'common/services/CharsetService', 'common/services/MouseStateService',
+    'common/services/OscLinkService', 'common/Color', 'headless/Terminal',
+  ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
 ];
 
 function checkBuildFresh() {
@@ -171,7 +200,7 @@ function checkTrieDecode(up) {
 // report it modified although `git diff` is empty -- regen-all.js would call a
 // byte-identical rerun dirty.
 function writeGenerated(rel, text) {
-  if (!GENERATED.includes(rel)) throw new Error(rel + ' is not listed in GENERATED');
+  if (!isGenerated(rel)) throw new Error(rel + ' is not listed in GENERATED');
   const f = path.join(ROOT, rel);
   if (fs.existsSync(f) && fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n') === text) {
     console.log('unchanged', rel, text.length, 'bytes');
@@ -181,14 +210,71 @@ function writeGenerated(rel, text) {
   console.log('wrote', rel, text.length, 'bytes');
 }
 
+const SPLIT_BYTES = 1800000; // a fixture with "cases" is cut above this (2 MB cap, margin)
+const FIXTURE_DIR = path.join(ROOT, 'tests', 'fixtures');
+
+// The files NAME may have been written as before -- the single file and the numbered
+// parts name-<n>.json -- minus KEEP. Only files isGenerated() accepts are returned.
+function otherShapes(name, keep) {
+  const base = name.replace(/\.json$/, '');
+  return fs.readdirSync(FIXTURE_DIR).filter(f => {
+    if (keep.includes(f) || !isGenerated('tests/fixtures/' + f)) return false;
+    if (f === name) return true;
+    return f.startsWith(base + '-') && /^[0-9]+\.json$/.test(f.slice(base.length + 1));
+  });
+}
+
+// NAME is a file name under tests/fixtures. An object with a "cases" array whose
+// JSON exceeds SPLIT_BYTES is cut, in case order, into name-1.json, name-2.json ...
+// each with the same shell and "part" / "parts" filled in; otherwise it is one file
+// with part 1 of 1. What an earlier run left in the other shape (single <-> parts,
+// fewer parts than last time) is deleted, so a stale part cannot survive. Objects
+// without "cases" (the phase 1 fixtures) keep the plain 2 MB check.
 function writeFixture(name, obj) {
-  const text = JSON.stringify(obj) + '\n';
-  if (text.length > MAX_FIXTURE_BYTES) throw new Error(`${name}: ${text.length} bytes, cap ${MAX_FIXTURE_BYTES}`);
-  writeGenerated(`tests/fixtures/${name}`, text);
+  if (!Array.isArray(obj.cases)) {
+    const text = JSON.stringify(obj) + '\n';
+    if (Buffer.byteLength(text) > MAX_FIXTURE_BYTES) throw new Error(`${name}: ${Buffer.byteLength(text)} bytes, cap ${MAX_FIXTURE_BYTES}`);
+    writeGenerated(`tests/fixtures/${name}`, text);
+    return;
+  }
+  const shell = Object.assign({}, obj);
+  delete shell.cases;
+  const withParts = (part, parts, cases) => JSON.stringify(Object.assign({}, shell, { part, parts, cases })) + '\n';
+  const whole = withParts(1, 1, obj.cases);
+  const written = [];
+  if (Buffer.byteLength(whole) <= SPLIT_BYTES) {
+    writeGenerated(`tests/fixtures/${name}`, whole);
+    written.push(name);
+  } else {
+    const shellBytes = Buffer.byteLength(withParts(999, 999, []));
+    const groups = [];
+    let cur = [], size = shellBytes;
+    for (const c of obj.cases) {
+      const n = Buffer.byteLength(JSON.stringify(c)) + 1;
+      if (shellBytes + n > SPLIT_BYTES) throw new Error(`${name}: case ${c.id} alone is ${n} bytes -- split the case`);
+      if (cur.length && size + n > SPLIT_BYTES) { groups.push(cur); cur = []; size = shellBytes; }
+      cur.push(c);
+      size += n;
+    }
+    if (cur.length) groups.push(cur);
+    const base = name.replace(/\.json$/, '');
+    groups.forEach((g, k) => {
+      const f = `${base}-${k + 1}.json`;
+      const text = withParts(k + 1, groups.length, g);
+      if (Buffer.byteLength(text) > MAX_FIXTURE_BYTES) throw new Error(`${f}: ${Buffer.byteLength(text)} bytes, cap ${MAX_FIXTURE_BYTES}`);
+      writeGenerated(`tests/fixtures/${f}`, text);
+      written.push(f);
+    });
+  }
+  for (const f of otherShapes(name, written)) {
+    fs.unlinkSync(path.join(FIXTURE_DIR, f));
+    console.log('removed', 'tests/fixtures/' + f);
+  }
+  return written;
 }
 
 module.exports = {
-  XTERM, PIN, ROOT, GENERATED, VARIANTS,
+  XTERM, OUT_DIR, PIN, ROOT, GENERATED, VARIANTS,
   upstreamInfo, loadUpstream, makeTerminal, useVariant, runsOf, checkTrieDecode,
-  writeGenerated, writeFixture,
+  writeGenerated, writeFixture, isGenerated, gitBlob,
 };
