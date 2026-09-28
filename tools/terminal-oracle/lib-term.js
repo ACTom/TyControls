@@ -252,11 +252,15 @@ function dumpLineOnly(line, cols, keepDefault) {
     const last = c[c.length - 1];
     if (last && last[0] === content && last[1] === fg && last[2] === bg) last[3]++;
     else c.push([content, fg, bg, 1]);
-    if (content & 0x200000) { comb[i] = cps(line._combined[i]); hasComb = true; }
+    // A flag without its side-table entry is possible (copyFrom / clone with blank on
+    // a line that had combined or extended cells): exported as null.
+    if (content & 0x200000) {
+      comb[i] = line._combined[i] === undefined ? null : cps(line._combined[i]);
+      hasComb = true;
+    }
     if (bg & 0x10000000) {
       const e = line._extendedAttrs[i];
-      if (!e) throw new Error('HAS_EXTENDED without an entry at col ' + i);
-      ext[i] = [e.ext >>> 0, e.urlId, e.underlineColor >>> 0, e.underlineVariantOffset];
+      ext[i] = e ? [e.ext >>> 0, e.urlId, e.underlineColor >>> 0, e.underlineVariantOffset] : null;
       hasExt = true;
     }
   }
