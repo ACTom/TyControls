@@ -69,6 +69,7 @@ type
     procedure EveryUnitOnDiskIsListedInItsPackage;
     procedure EveryTestUnitThatRegistersTestsIsLinked;
     procedure TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
+    procedure TheExampleRecordingsMatchTheOracle;
   end;
 
 implementation
@@ -706,6 +707,57 @@ begin
   finally
     files.Free;
     lpr.Free;
+  end;
+end;
+
+procedure TReleaseManifestTest.TheExampleRecordingsMatchTheOracle;
+var
+  oracle, example: TStringList;
+  i, same: Integer;
+  a, b: TMemoryStream;
+  first, dir: string;
+begin
+  { The terminal example ships copies of the oracle's recordings (tools/terminal-oracle/
+    recordings) so the release package is self-contained. A copy that drifts -- one side
+    re-recorded, the other not -- would replay something the fixtures no longer hold.
+    Every example recording must also be asciicast v2 and free of \u0000: the example's
+    reader (fpjson) drops that escape. }
+  dir := RepoRoot + 'examples' + PathDelim + 'terminal' + PathDelim + 'recordings' + PathDelim;
+  oracle := FindAllFiles(RepoRoot + 'tools' + PathDelim + 'terminal-oracle' + PathDelim + 'recordings', '*.cast', False);
+  example := FindAllFiles(dir, '*.cast', False);
+  a := TMemoryStream.Create;
+  b := TMemoryStream.Create;
+  try
+    AssertTrue('the oracle has recordings', oracle.Count >= 8);
+    same := 0;
+    for i := 0 to oracle.Count - 1 do
+    begin
+      AssertTrue(ExtractFileName(oracle[i]) + ' is copied into the example',
+        FileExists(dir + ExtractFileName(oracle[i])));
+      a.LoadFromFile(oracle[i]);
+      b.LoadFromFile(dir + ExtractFileName(oracle[i]));
+      AssertTrue(ExtractFileName(oracle[i]) + ': the two copies are byte for byte the same',
+        (a.Size = b.Size) and CompareMem(a.Memory, b.Memory, a.Size));
+      Inc(same);
+    end;
+    AssertEquals('every oracle recording compared', oracle.Count, same);
+    AssertTrue('the example has its own recordings too', example.Count > oracle.Count);
+    for i := 0 to example.Count - 1 do
+      with TStringList.Create do
+      try
+        LoadFromFile(example[i]);
+        if Count > 0 then first := Strings[0] else first := '';
+        AssertTrue(ExtractFileName(example[i]) + ' starts with an asciicast v2 header',
+          Pos('"version": 2', first) > 0);
+        AssertEquals(ExtractFileName(example[i]) + ' holds no \u0000', 0, Pos('\u0000', Text));
+      finally
+        Free;
+      end;
+  finally
+    a.Free;
+    b.Free;
+    oracle.Free;
+    example.Free;
   end;
 end;
 

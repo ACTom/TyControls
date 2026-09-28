@@ -1,0 +1,122 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-terminal_example 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyTerminalView example"
+msgstr "TTyTerminalView 示例"
+
+#: tmainform.bar.caption
+msgid "Terminal replay  · TyControls"
+msgstr "终端回放  · TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblrecording.caption
+msgid "Recording:"
+msgstr "录制："
+
+#: tmainform.btnopen.caption
+msgid "Open..."
+msgstr "打开…"
+
+#: tmainform.btnopen.hint
+msgid "Open another asciicast v2 recording"
+msgstr "打开别的 asciicast v2 录制"
+
+#: tmainform.btnplay.caption
+msgid "Play"
+msgstr "播放"
+
+#: tmainform.btnstep.caption
+msgid "Step"
+msgstr "单步"
+
+#: tmainform.btnstep.hint
+msgid "Write the next output event"
+msgstr "写入下一段输出"
+
+#: tmainform.lblspeed.caption
+msgid "Speed:"
+msgstr "速度："
+
+#: tmainform.btnfit.caption
+msgid "Fit to recording"
+msgstr "按录制尺寸"
+
+#: tmainform.btnfit.hint
+msgid "Size the window so the grid is the recording's"
+msgstr "调整窗口，让网格和录制时一样大"
+
+#: tmainform.chkreadonly.caption
+msgid "Read-only"
+msgstr "只读"
+
+#: tmainform.chkecho.caption
+msgid "Local echo"
+msgstr "本地回显"
+
+#: tmainform.lblunicode.caption
+msgid "Unicode:"
+msgstr "Unicode："
+
+#: tmainform.chkambiguous.caption
+msgid "Ambiguous wide"
+msgstr "歧义字符算宽"
+
+#: tmainform.lblfontsize.caption
+msgid "Font size:"
+msgstr "字号："
+
+#: tmainform.dlgopen.title
+msgid "Open a recording"
+msgstr "打开录制"
+
+# --- resourcestrings ---
+
+#: uasciicast.rsnotv2
+#, object-pascal-format
+msgid "%s is not an asciicast v2 recording"
+msgstr "%s 不是 asciicast v2 录制"
+
+#: umain.rsgridfmt
+#, object-pascal-format
+msgid "%d x %d"
+msgstr "%d × %d"
+
+#: umain.rsnorecording
+msgid "No recording"
+msgstr "没有录制"
+
+#: umain.rspause
+msgid "Pause"
+msgstr "暂停"
+
+#: umain.rsplay
+msgid "Play"
+msgstr "播放"
+
+#: umain.rsprogressfmt
+#, object-pascal-format
+msgid "Event %d / %d · %.1f s"
+msgstr "事件 %d / %d · %.1f 秒"
+
+#: umain.rsreadonlyhint
+msgid "Switch read-only off to see the bytes of each key here."
+msgstr "关掉「只读」，按键的字节就显示在这里。"
+
+#: umain.rsrecordingsizefmt
+#, object-pascal-format
+msgid "%s: recorded at %d x %d"
+msgstr "%s：录制尺寸 %d × %d"

@@ -1,0 +1,272 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 640
+  Top = 0
+  Width = 980
+  Caption = 'TTyTerminalView example'
+  ClientHeight = 640
+  ClientWidth = 980
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 640
+    Top = 0
+    Width = 980
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 980
+      Align = alTop
+      Caption = 'Terminal replay  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 632
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 714
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object Tools1: TTyPanel
+      Left = 0
+      Height = 40
+      Top = 34
+      Width = 980
+      Align = alTop
+      Caption = ''
+      object LblRecording: TTyLabel
+        Left = 10
+        Height = 20
+        Top = 11
+        Width = 76
+        Caption = 'Recording:'
+      end
+      object CmbRecording: TTyComboBox
+        Left = 92
+        Height = 26
+        Top = 7
+        Width = 190
+        OnChange = RecordingChange
+      end
+      object BtnOpen: TTyButton
+        Left = 292
+        Height = 28
+        Top = 6
+        Width = 84
+        AutoSize = True
+        Caption = 'Open...'
+        Hint = 'Open another asciicast v2 recording'
+        ShowHint = True
+        OnClick = OpenClick
+      end
+      object BtnPlay: TTyButton
+        Left = 396
+        Height = 28
+        Top = 6
+        Width = 76
+        AutoSize = True
+        Caption = 'Play'
+        StyleClass = 'primary'
+        OnClick = PlayClick
+      end
+      object BtnStep: TTyButton
+        Left = 492
+        Height = 28
+        Top = 6
+        Width = 76
+        AutoSize = True
+        Caption = 'Step'
+        Hint = 'Write the next output event'
+        ShowHint = True
+        OnClick = StepClick
+      end
+      object LblSpeed: TTyLabel
+        Left = 588
+        Height = 20
+        Top = 11
+        Width = 50
+        Caption = 'Speed:'
+      end
+      object CmbSpeed: TTyComboBox
+        Left = 644
+        Height = 26
+        Top = 7
+        Width = 120
+        ItemIndex = 1
+        Items.Strings = (
+          '0.5x'
+          '1x'
+          '2x'
+          '4x'
+          'All at once'
+        )
+      end
+      object BtnFit: TTyButton
+        Left = 784
+        Height = 28
+        Top = 6
+        Width = 150
+        AutoSize = True
+        Caption = 'Fit to recording'
+        Hint = 'Size the window so the grid is the recording''s'
+        ShowHint = True
+        OnClick = FitClick
+      end
+    end
+    object Tools2: TTyPanel
+      Left = 0
+      Height = 40
+      Top = 74
+      Width = 980
+      Align = alTop
+      Caption = ''
+      object ChkReadOnly: TTyCheckBox
+        Left = 10
+        Height = 24
+        Top = 8
+        Width = 110
+        AutoSize = True
+        Caption = 'Read-only'
+        Checked = True
+        OnClick = ReadOnlyClick
+      end
+      object ChkEcho: TTyCheckBox
+        Left = 140
+        Height = 24
+        Top = 8
+        Width = 120
+        AutoSize = True
+        Caption = 'Local echo'
+      end
+      object LblUnicode: TTyLabel
+        Left = 284
+        Height = 20
+        Top = 11
+        Width = 64
+        Caption = 'Unicode:'
+      end
+      object CmbUnicode: TTyComboBox
+        Left = 354
+        Height = 26
+        Top = 7
+        Width = 140
+        ItemIndex = 1
+        Items.Strings = (
+          '6'
+          '11'
+          '15'
+          '15-graphemes'
+        )
+        OnChange = UnicodeChange
+      end
+      object ChkAmbiguous: TTyCheckBox
+        Left = 514
+        Height = 24
+        Top = 8
+        Width = 160
+        AutoSize = True
+        Caption = 'Ambiguous wide'
+        OnClick = AmbiguousClick
+      end
+      object LblFontSize: TTyLabel
+        Left = 700
+        Height = 20
+        Top = 11
+        Width = 70
+        Caption = 'Font size:'
+      end
+      object SpnFontSize: TTySpinEdit
+        Left = 776
+        Height = 26
+        Top = 7
+        Width = 76
+        MinValue = 6
+        MaxValue = 32
+        Value = 9
+        OnChange = FontSizeChange
+      end
+    end
+    object Status: TTyStatusBar
+      Left = 0
+      Height = 24
+      Top = 616
+      Width = 980
+      Align = alBottom
+      Panels = <
+        item
+          Text = ''
+          Width = 0
+          Alignment = taLeftJustify
+        end
+        item
+          Text = ''
+          Width = 110
+          Alignment = taCenter
+        end
+        item
+          Text = ''
+          Width = 320
+          Alignment = taLeftJustify
+        end>
+    end
+    object Keys: TTyMemo
+      Left = 690
+      Height = 502
+      Top = 114
+      Width = 290
+      Align = alRight
+      ReadOnly = True
+      ScrollBars = ssAutoVertical
+      WordWrap = False
+    end
+    object Split: TTySplitter
+      Left = 684
+      Height = 502
+      Top = 114
+      Width = 6
+      Align = alRight
+      MinSize = 120
+      ResizeStyle = rsUpdate
+    end
+    object Term: TTyTerminalView
+      Left = 0
+      Height = 502
+      Top = 114
+      Width = 684
+      Align = alClient
+      ReadOnly = True
+      OnData = TermData
+      OnGridResize = TermGridResize
+      OnTitleChange = TermTitleChange
+    end
+  end
+  object DlgOpen: TTyOpenDialog
+    Title = 'Open a recording'
+    Filter = 'asciicast (*.cast)|*.cast|All files (*.*)|*.*'
+    Left = 40
+    Top = 160
+  end
+  object Player: TTimer
+    Enabled = False
+    Interval = 15
+    OnTimer = PlayerTimer
+    Left = 100
+    Top = 160
+  end
+end
