@@ -900,6 +900,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.AdvanceChart.pas"/>
         <UnitName Value="tyControls.AdvanceChart"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Unicode.Width.pas"/>
+        <UnitName Value="tyControls.Unicode.Width"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
