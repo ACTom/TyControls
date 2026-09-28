@@ -25,6 +25,7 @@ type
     procedure TestTanIsV8sToTheBit;
     procedure TestAtanIsV8sToTheBit;
     procedure TestAtan2IsV8sToTheBit;
+    procedure TestAcosIsV8sToTheBit;
     procedure TestTheRunTimeLibraryIsNot;
     procedure TestFroundIsMathFround;
     procedure TestPowAndLogAreV8sToTheBit;
@@ -172,6 +173,40 @@ begin
   end;
   AssertTrue('enough pairs', rows.Count >= 3000);
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(rows.Count) + ' differ:' + report, 0, bad);
+end;
+
+{ Math.acos: fdlibm's e_acos.c. FPC's ArcCos parts from it on about a
+  quarter of the arguments in [-1, 1], by an ulp. }
+procedure TAdvChartJsMathTest.TestAcosIsV8sToTheBit;
+var
+  rows, r: TJSONArray;
+  i, bad, rtl: Integer;
+  x: Double;
+  report: string;
+begin
+  rows := TJSONObject(FRoot).Arrays['acos'];
+  bad := 0;
+  rtl := 0;
+  report := '';
+  for i := 0 to rows.Count - 1 do
+  begin
+    r := rows.Arrays[i];
+    x := FromHex(r.Strings[0]);
+    if not Same(TyJsAcos(x), r.Strings[1]) then
+    begin
+      Inc(bad);
+      if bad <= 10 then
+        report := report + LineEnding + Format('  %s: %s, V8 %s',
+          [r.Strings[2], Hex(TyJsAcos(x)), r.Strings[1]]);
+    end;
+    { past a subnormal, where FPC's ArcCos overflows outright }
+    if (not IsNan(x)) and (Abs(x) <= 1) and (Abs(x) > 1e-300)
+      and not Same(ArcCos(x), r.Strings[1]) then Inc(rtl);
+  end;
+  AssertTrue('enough arguments', rows.Count >= 3000);
+  AssertEquals(IntToStr(bad) + ' of ' + IntToStr(rows.Count) + ' differ:' + report, 0, bad);
+  { and the run-time library does not, which is why this exists }
+  AssertTrue(Format('ArcCos parts from V8 somewhere (%d)', [rtl]), rtl > 100);
 end;
 
 procedure TAdvChartJsMathTest.TestTanIsV8sToTheBit;

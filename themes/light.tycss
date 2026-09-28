@@ -1235,6 +1235,20 @@ TyAdvChartVisualMapInactive { color: alpha(var(--on-surface), 0.2); }
 TyAdvChartVisualMapBorder { border-color: var(--border); }
 TyAdvChartVisualMapBackground { background: transparent; }
 TyAdvChartVisualMapHandle { border-color: var(--surface); }
+/* A slider dataZoom. Upstream tints the whole component from its accent: a
+   pale frame, the window filled with the accent at a fifth, handles white
+   with a pale rim, the brush's move bar the accent at half with a white
+   grip, and the data shadow grey outside the window and bluer inside it.
+   Here the accent is the skin's own, the grey is the ink faded, and white
+   is the surface. The labels beside the handles take the muted ink. */
+TyAdvChartDataZoom { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartDataZoomBorder { border-color: var(--border); }
+TyAdvChartDataZoomBackground { background: transparent; }
+TyAdvChartDataZoomFiller { background: alpha(var(--accent), 0.2); }
+TyAdvChartDataZoomHandle { background: var(--surface); border-color: alpha(var(--accent), 0.35); }
+TyAdvChartDataZoomMoveHandle { background: alpha(var(--accent), 0.5); color: var(--surface); }
+TyAdvChartDataZoomShadow { background: alpha(var(--on-surface), 0.06); border-color: alpha(var(--on-surface), 0.3); }
+TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.55); }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

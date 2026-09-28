@@ -925,6 +925,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.DataZoom"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.ZrPath.pas"/>
+        <UnitName Value="tyControls.AdvChart.ZrPath"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.DataZoomView.pas"/>
+        <UnitName Value="tyControls.AdvChart.DataZoomView"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Render.pas"/>
         <UnitName Value="tyControls.AdvChart.Render"/>
       </Item>

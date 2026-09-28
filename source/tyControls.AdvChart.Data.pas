@@ -288,6 +288,9 @@ type
   private
     FDims: array of TDim;
     FCols: array of TTyDoubleArray;
+    { A column as parsed, kept the first time EmptyOutside writes over it --
+      nil for every column nothing has emptied. }
+    FPristine: array of TTyDoubleArray;
     FRawCount: Integer;
     FCapacity: Integer;
     FIndices: array of Integer;
@@ -408,6 +411,10 @@ type
     function IndexOfRawIndex(ARawIndex: Integer): Integer;
     function Get(ADim, AIndex: Integer): Double;
     function GetByRaw(ADim, ARawIndex: Integer): Double;
+    { THE VALUE AS PARSED, before a dataZoom's `empty` wrote not-a-number over
+      it: upstream's getRawData() is a separate store the filter never
+      touches, and a slider's data shadow reads that one. }
+    function GetOriginalByRaw(ADim, ARawIndex: Integer): Double;
     { The category name behind an ordinal value; '' for a gap or a dimension
       that is not ordinal. }
     function GetOrdinalText(ADim, AIndex: Integer): string;
@@ -1489,6 +1496,8 @@ var
   v: Double;
 begin
   if (ADim < 0) or (ADim > High(FDims)) then Exit;
+  if Length(FPristine) < Length(FDims) then SetLength(FPristine, Length(FDims));
+  if FPristine[ADim] = nil then FPristine[ADim] := Copy(FCols[ADim], 0, FRawCount);
   { seriesData.map(dim, v => v >= min && v <= max ? v : NaN), over the rows
     in view }
   for i := 0 to FCount - 1 do
@@ -1633,6 +1642,7 @@ begin
   FCount := 0;
   FIndices := nil;
   FFiltered := False;
+  FPristine := nil;
   FIds := nil;
   FNames := nil;
   FRawItems := nil;
@@ -1722,6 +1732,16 @@ begin
   if (ADim < 0) or (ADim > High(FDims)) then Exit(NaN);
   if (ARawIndex < 0) or (ARawIndex >= FRawCount) then Exit(NaN);
   Result := FCols[ADim][ARawIndex];
+end;
+
+function TTyDataStore.GetOriginalByRaw(ADim, ARawIndex: Integer): Double;
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then Exit(NaN);
+  if (ARawIndex < 0) or (ARawIndex >= FRawCount) then Exit(NaN);
+  if (ADim <= High(FPristine)) and (FPristine[ADim] <> nil) then
+    Result := FPristine[ADim][ARawIndex]
+  else
+    Result := FCols[ADim][ARawIndex];
 end;
 
 function TTyDataStore.GetOrdinalText(ADim, AIndex: Integer): string;

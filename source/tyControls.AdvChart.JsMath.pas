@@ -29,6 +29,10 @@ function TyJsSin(AX: Double): Double;
 function TyJsCos(AX: Double): Double;
 function TyJsAtan(AX: Double): Double;
 function TyJsAtan2(AY, AX: Double): Double;
+{ Math.acos: fdlibm's e_acos.c, as V8's ieee754::acos. zrender's arc
+  parser measures the angle between two radii with it, so an SVG icon's
+  arcs start where upstream's do only through this. }
+function TyJsAcos(AX: Double): Double;
 { Math.tan: fdlibm's s_tan.c and V8's __kernel_tan. zrender recomposes a
   turned label's matrix from its decomposed skew, and a skew of 2 pi --
   which a label turned past a quarter comes to -- is where FPC's Tan and
@@ -408,6 +412,62 @@ begin
   if id < 0 then Exit(AX - AX * (s1_ + s2_));
   z := atanhi[id] - ((AX * (s1_ + s2_) - atanlo[id]) - AX);
   if hx < 0 then Result := -z else Result := z;
+end;
+
+function TyJsAcos(AX: Double): Double;
+var
+  hx, ix: LongInt;
+  z, p, q, r, w, s, c, df, pi_, pio2Hi, pio2Lo: Double;
+
+  function PQ(AZ: Double): Double;
+  begin
+    p := AZ * (FromBits(QWord($3FC5555555555555)) + AZ * (FromBits(QWord($BFD4D61203EB6F7D))
+      + AZ * (FromBits(QWord($3FC9C1550E884455)) + AZ * (FromBits(QWord($BFA48228B5688F3B))
+      + AZ * (FromBits(QWord($3F49EFE07501B288)) + AZ * FromBits(QWord($3F023DE10DFDF709)))))));
+    q := 1.0 + AZ * (FromBits(QWord($C0033A271C8A2D4B)) + AZ * (FromBits(QWord($40002AE59C598AC8))
+      + AZ * (FromBits(QWord($BFE6066C1B8D0159)) + AZ * FromBits(QWord($3FB3B8C5B12E9282)))));
+    Result := p / q;
+  end;
+
+begin
+  pi_ := FromBits(QWord($400921FB54442D18));
+  pio2Hi := FromBits(QWord($3FF921FB54442D18));
+  pio2Lo := FromBits(QWord($3C91A62633145C07));
+  hx := HighWord(AX);
+  ix := hx and $7FFFFFFF;
+  if ix >= $3FF00000 then
+  begin
+    { |x| = 1 exactly, or past it: not a number }
+    if ((ix - $3FF00000) or LongInt(LowWord(AX))) = 0 then
+    begin
+      if hx > 0 then Exit(0.0);
+      Exit(pi_ + 2.0 * pio2Lo);
+    end;
+    Exit(NaN);
+  end;
+  if ix < $3FE00000 then
+  begin
+    { |x| < 0.5 }
+    if ix <= $3C600000 then Exit(pio2Hi + pio2Lo);
+    z := AX * AX;
+    r := PQ(z);
+    Exit(pio2Hi - (AX - (pio2Lo - AX * r)));
+  end;
+  if hx < 0 then
+  begin
+    z := (1.0 + AX) * 0.5;
+    r := PQ(z);
+    s := Sqrt(z);
+    w := r * s - pio2Lo;
+    Exit(pi_ - 2.0 * (s + w));
+  end;
+  z := (1.0 - AX) * 0.5;
+  s := Sqrt(z);
+  df := FromWords(HighWord(s), 0);
+  c := (z - df * df) / (s + df);
+  r := PQ(z);
+  w := r * s + c;
+  Result := 2.0 * (df + w);
 end;
 
 function TyJsAtan2(AY, AX: Double): Double;

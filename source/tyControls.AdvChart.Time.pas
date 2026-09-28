@@ -86,6 +86,13 @@ function TyTimeUnitOf(AMs: Double; AUTC: Boolean): TTyTimeUnit;
   The axis reads as a sequence because each tick says only as much as it has
   to. }
 function TyTimeLabel(const ATick: TTyTimeTick; AUTC: Boolean): string;
+{ TimeScale.getLabel: AMs in fullLeveledFormatter's template for the
+  default precision of the bottom unit the ticks over [AMinMs, AMaxMs]
+  were chosen at -- a day for a year or a month, the second for the rest.
+  (Upstream's millisecond template is out of reach: the interval table has
+  no millisecond row, so the bottom unit is never finer than a second.) }
+function TyTimeFullLabel(AMs, AMinMs, AMaxMs: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
 
 // Expand a template. The tokens are upstream's, brace-delimited at both ends:
 //   {yyyy} {yy} {Q} {MMMM} {MMM} {MM} {M} {dd} {d} {eeee} {ee} {e}
@@ -795,6 +802,35 @@ begin
     Result := Result + rep;
     i := j + 1;
   end;
+end;
+
+function TyTimeFullLabel(AMs, AMinMs, AMaxMs: Double; ASplitNumber: Integer;
+  AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
+var
+  lo, hi, approx: Double;
+  u: TTyTimeUnit;
+begin
+  { calcNiceTicks' _minLevelUnit, as TyTimeTicks picks it }
+  lo := AMinMs;
+  hi := AMaxMs;
+  u := ttuSecond;
+  if not (IsNan(lo) or IsNan(hi) or IsInfinite(lo) or IsInfinite(hi)) then
+  begin
+    if hi - lo <= 0 then
+    begin
+      lo := lo - cOneDay;
+      hi := hi + cOneDay;
+    end;
+    if ASplitNumber < 1 then ASplitNumber := 6;
+    approx := (hi - lo) / ASplitNumber;
+    if (AMinInterval > 0) and (approx < AMinInterval) then approx := AMinInterval;
+    if (AMaxInterval > 0) and (approx > AMaxInterval) then approx := AMaxInterval;
+    u := PrimaryOf(BottomSpanFor(approx));
+  end;
+  if u in [ttuYear, ttuMonth] then
+    Result := TyFormatTime(AMs, '{yyyy}-{MM}-{dd}', AUTC)
+  else
+    Result := TyFormatTime(AMs, '{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}', AUTC);
 end;
 
 function TyTimeLabel(const ATick: TTyTimeTick; AUTC: Boolean): string;

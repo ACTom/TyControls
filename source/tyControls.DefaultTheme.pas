@@ -1268,6 +1268,20 @@ begin
     'TyAdvChartVisualMapBorder { border-color: var(--border); }' + LineEnding +
     'TyAdvChartVisualMapBackground { background: transparent; }' + LineEnding +
     'TyAdvChartVisualMapHandle { border-color: var(--surface); }' + LineEnding +
+    '/* A slider dataZoom. Upstream tints the whole component from its accent: a' + LineEnding +
+    '   pale frame, the window filled with the accent at a fifth, handles white' + LineEnding +
+    '   with a pale rim, the brush''s move bar the accent at half with a white' + LineEnding +
+    '   grip, and the data shadow grey outside the window and bluer inside it.' + LineEnding +
+    '   Here the accent is the skin''s own, the grey is the ink faded, and white' + LineEnding +
+    '   is the surface. The labels beside the handles take the muted ink. */' + LineEnding +
+    'TyAdvChartDataZoom { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartDataZoomBorder { border-color: var(--border); }' + LineEnding +
+    'TyAdvChartDataZoomBackground { background: transparent; }' + LineEnding +
+    'TyAdvChartDataZoomFiller { background: alpha(var(--accent), 0.2); }' + LineEnding +
+    'TyAdvChartDataZoomHandle { background: var(--surface); border-color: alpha(var(--accent), 0.35); }' + LineEnding +
+    'TyAdvChartDataZoomMoveHandle { background: alpha(var(--accent), 0.5); color: var(--surface); }' + LineEnding +
+    'TyAdvChartDataZoomShadow { background: alpha(var(--on-surface), 0.06); border-color: alpha(var(--on-surface), 0.3); }' + LineEnding +
+    'TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.55); }' + LineEnding +
     '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
     '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
     '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +

@@ -7448,3 +7448,50 @@ dataZoom 的模型、窗口、过滤和轴范围钉点。slider 组件的画面�
 ### 下一批
 
 C2:slider 的静态画面(位置、背景、数据阴影、填充、手柄、移动条、标签)和新的主题键。
+
+## 95. Tier 1 第六十一批:slider dataZoom 的静态画面(C2)(2026-09-29)
+
+slider 组件第一次渲染后的样子:位置、窗口两端、背景、数据阴影、填充、边框、两个手柄、移动条及其图标、两个标签,和它们的绘制顺序。交互在 C3。
+
+### 上游的做法
+
+- **位置**(`_resetLocation`):box 按 `mergeLayoutParam` 合并到 slider 的默认值上(`right/top/width/height` 为占位 `'ph'`,`left/bottom` 为 null;作者写了两个就只留那两个,写了一个就补上默认里的第一个),再把 `'ph'` 换成默认位置:横向在网格下方(`right = W − 网格 x − 网格宽`,`top = H − 30 − 15 − 7`,其中 7 是**常量**,不读 `moveHandleSize`,关掉 brushSelect 时为 0),纵向在网格右侧(`right = 15`,`top = 网格 y`)。网格取第一根目标轴所在网格**排好标签之后**的矩形;极坐标等没有矩形的取画布中间五分之三。然后走 `getLayoutRect`。
+- **窗口两端**(`_resetInterval`):用代表轴的 `percent`(不是 `percentInverted`)线性映射到 `[0, 长度]`。
+- **手柄**:图标既不是内置符号、也不含 `path://`/`image://` 时补上 `path://`;在 `(−1, 0, 2, 2)` 里按比例居中(`makePath` 'center'),多于 11 个数的路径数据按 float32 存(解析一次、拟合时点存一次、圆弧圆心存两次)。手柄高 = `handleSize` 相对粗细的百分比,宽 = 图标宽高比 × 高。放在窗口两端**往里一像素**。
+- **移动条**(brushSelect):`y = 粗细 − 0.5`、高 `moveHandleSize`、圆角 `[0, 0, 2, 2]`;图标边长为条高的 0.8,居中于窗口。还有一块不可见的拖动区。
+- **数据阴影**:第一根目标轴上第一个 line/bar/candlestick/scatter 系列(`showDataShadow: true` 时任何系列),读**原始**数据(不经过 dataZoom 过滤、不采样;K 线取 open)。横坐标是**累加**的步长(时间轴按时间戳比例),`round(行数/长度)` 行取一行,跳过的行照样走步长;纵向按数据范围上下各放宽 30% 映射到粗细;空值落到底线再断开。三组(窗口左、窗口内、窗口右)各一个多边形加一条折线,用剪裁区分段,中间一组用 `selectedDataBackground`。
+- **组的位置**(`_positionGroup`):读 slider 组包围盒时 `_updateView` 还没跑——手柄未缩放停在 0、填充和移动条宽度为 0、移动图标在 0。包围盒按 zrender 算:折线没有填充,描边按 `max(线宽, 5)` 撑大;手柄的 `strokeNoScale` 在没有全局变换时线宽比例为 1。然后按方向和反向翻转/旋转(横向 y 翻转,纵向转 90°;另一根轴反向时不翻;本轴反向时 x 镜像),视图组平移到"位置 − 翻转后包围盒的左上角"。所以默认 slider 比网格靠右 2.8px。
+- **标签**:在视图组里,放在窗口两端外侧半个手柄宽加 5px;横向左右对齐、纵向上下对齐(由 `transformDirection` 决定)。文字:`showDetail` 关掉为空;类目轴取类目名、时间轴取刻度自己的完整日期(最细单位是年/月时到日,否则到秒),数值轴按 `labelPrecision`(默认取窗口的 valuePrecision)toFixed;`labelFormatter` 字符串只换第一个 `{value}`。默认不可见(`handleLabel.show`)。
+- **绘制顺序**:遍历顺序上按 z2 稳定排序——背景 −40、阴影多边形 −20、阴影折线 −19、填充/边框/移动条/图标 0、手柄 5、标签 10;文字为空的标签不画、排在最后。
+
+### port 以前
+
+- slider 什么都不画;时间刻度没有 `getLabel`;`empty` 过滤就地改写数据列,读不到原值。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.ZrPath`:zrender PathProxy 的静态部分——SVG 路径解析(含 processArc)、toStatic 的 float32、`transformPath`、`makePath` 居中拟合、内置符号、圆角矩形、`subPixelOptimize`、精确包围盒(三次/二次曲线极值、圆弧四分点)、描边膨胀、组包围盒累加、局部变换。
+- 新单元 `tyControls.AdvChart.DataZoomView`:选项解析、box 合并、`TyLayoutDzSlider`(两个时刻的元素、翻转矩阵、组位置、剪裁、标签、绘制顺序)、`TyBuildDzSliderMarks`。布局在局部屏蔽浮点陷阱下算(零跨度的轴上游照样除以 0),出口处洗掉非有限值。
+- `JsMath` 加 `TyJsAcos`(fdlibm e_acos.c,V8 同款)。`Time` 加 `TyTimeFullLabel`,`TTyTimeScale.GetLabel`。`Data` 在 `EmptyOutside` 第一次改写某列时留一份原值,`GetOriginalByRaw` 读它。
+- `AdvanceChart`:`SolveDataZoomViews` 在 Relayout 末尾(网格排好之后);`BuildDataZooms` 在绘制表最后;公开 `DataZoomSliderLayout`。
+- 主题键 `TyAdvChartDataZoom`(标签)、`…Border`、`…Background`、`…Filler`、`…Handle`、`…MoveHandle`(`color` 是移动图标)、`…Shadow`、`…ShadowSelected`,都从 accent/surface/on-surface 派生。作者写的颜色优先;写了颜色没写透明度时用上游默认透明度(阴影 0.2/0.3,移动条 0.5),用主题色时透明度在颜色里。
+
+### 基准
+
+- `tools/advchart-oracle/datazoom-slider.js` 真跑 ECharts 6.1,54 张图 52 个 slider,自检 19 条守卫。测量表除了 slider 自己的标签,还记下画布上所有文字和各轴的标签,这样 containLabel 的网格和上游落在同一处(mix-zoom-on-value 起初就是差在这里)。
+- `test.advchart.datazoomslider` 逐位比较:网格矩形、位置、长度粗细、窗口两端、手柄宽高、移动条高、阴影的两个范围和全部点、slider 组矩阵、`_positionGroup` 读到的每个子元素矩形和局部矩阵、组位置、三个阴影组的剪裁和矩形,每个元素的局部/全局矩阵、包围盒、形状或路径数据(逐条命令逐个参数)、数据长度,两个标签的文字/位置/对齐/矩形,最终矩形和绘制顺序。另有绘制测试(剪裁区、主题填充色、作者的颜色和线宽、默认透明度)。
+
+### 变异测试
+
+61 个。第一轮 7 个存活:
+- 补 3 个 oracle 用例杀掉 4 个:D10c(手柄图标带转过的椭圆大弧、移动图标是半圆:圆弧过四分点)、D23(inside 用 `empty` 清空 y 轴窗口外的值,阴影仍读原值——两个"阴影读到被清空的行"的变异)、D24(第一个系列是 pictorialBar,阴影取第二个折线)。
+- 3 个等价:网格按组件下标找、去掉 Break 结果相同;内置符号只用 0、±π/2、π、1.5π,归一化前后一样;圆弧解析里的 acos 换成 FPC 的 `ArcCos`——带圆弧的图标都超过 11 个数、存成 float32,一个 ulp 的差别被抹掉。`TyJsAcos` 本身由 jsmath 测试钉住:js-math oracle 新增 3025 个 V8 的 acos 值(随机值加 fdlibm 的分支边界),FPC 的 `ArcCos` 在其中约四分之一上差一个 ulp,在最小次正规数上直接溢出。
+
+### 已知偏差
+
+- 自定义手柄图标在翻转时按旋转画,不做镜像(默认图标上下近似对称,看不出)。
+- `pin`、`arrow`、图片图标的包围盒取符号框。
+
+### 下一批
+
+C3:slider 的拖动、点击、刷选和悬停标签,inside 的滚轮缩放和拖动平移,dataZoom 动作(联动的 dataZoom 一起变)。

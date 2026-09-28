@@ -23,6 +23,12 @@
 //            big-argument branch), 2^-28 and its neighbours -- and the skews
 //            a rotated axis label's decompose leaves (bcb0..., bca0...,
 //            bcc0..., bc91a62633145c07). No x twice.
+//   acos     [x, acos, text]             drawn after everything above, so the
+//            other arrays are unchanged: 3000 x in [-1, 1], then the edges
+//            fdlibm's e_acos.c branches on -- +-1, +-0, +-0.5 and their
+//            neighbours, +-2^-57 and its neighbours -- and a few outside
+//            (NaN). zrender's arc parser takes the angle between two radii
+//            with it.
 const fs = require('fs');
 const path = require('path');
 
@@ -119,6 +125,22 @@ for (const x of [TWO_PI, Math.PI / 2, -Math.PI / 2, 0.6744, Math.pow(2, -28)]) {
 }
 if (hex(TWO_PI) !== '401921fb54442d18') throw new Error('js-math: 2 pi is not 401921fb54442d18');
 
+const acosArgs = [];
+for (let i = 0; i < 3000; i++) acosArgs.push(trnd() * 2 - 1);
+for (const x of [1, -1, 0, 0.5, -0.5, Math.pow(2, -57), -Math.pow(2, -57)]) {
+  acosArgs.push(x, step(x, -1, 1), step(x, 1, 1));
+}
+acosArgs.push(-0, 1.0000001, -1.0000001, NaN);
+const acosSeen = new Set();
+const acos = [];
+for (const x of acosArgs) {
+  const k = hex(x);
+  if (acosSeen.has(k)) continue;
+  acosSeen.add(k);
+  acos.push([k, hex(Math.acos(x)), String(x)]);
+}
+if (acos.length < 3000) throw new Error('js-math: too few acos rows');
+
 const out = {
   source: 'node ' + process.version + ' (V8 ' + process.versions.v8 + ') Math',
   unary: unary.filter(x => !(Math.abs(x) > 823550)).map(x => [hex(x), hex(Math.sin(x)),
@@ -127,6 +149,7 @@ const out = {
   atanOnly: unary.filter(x => Math.abs(x) > 823550).map(x => [hex(x), hex(Math.atan(x)), String(x)]),
   atan2: pairs.map(([y, x]) => [hex(y), hex(x), hex(Math.atan2(y, x)), String(y) + ', ' + String(x)]),
   tan,
+  acos,
 };
 const file = path.join(__dirname, '..', '..', 'tests', 'fixtures', 'advchart-js-math.json');
 fs.writeFileSync(file, JSON.stringify(out, null, 0) + '\n');

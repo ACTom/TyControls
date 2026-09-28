@@ -41,7 +41,7 @@ uses
   tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
   tyControls.AdvChart.VisualMapView,
-  tyControls.AdvChart.DataZoom,
+  tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -270,6 +270,9 @@ type
       like, and where the last layout put it. }
     FVisualViews: array of TTyVmViewSpec;
     FVisualLayouts: array of TTyVisualMapLayout;
+    { a slider dataZoom's own picture, by the author's dataZoom index }
+    FDzViews: array of TTyDzSliderSpec;
+    FDzLayouts: array of TTyDzSliderLayout;
     { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
       unwritten, which is the palette's. }
     FSeriesColorNone: array of Boolean;
@@ -392,6 +395,10 @@ type
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
+    procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    function DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
+    function DataZoomInput(AIndex: Integer; out AIn: TTyDzSliderInput): Boolean;
+    function BuildDataZooms(AList: TTyPaintList): Integer;
     procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
       APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
@@ -775,6 +782,9 @@ type
       that owns it. }
     function DataZoomCount: Integer;
     function DataZoomSpec(AIndex: Integer): TTyDataZoomSpec;
+    { THE SLIDER AIndex AS THE LAST RENDER LAID IT OUT: Valid is False when
+      it is hidden, has no target, is not a slider, or nothing has rendered. }
+    function DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
     function AxisZoom(const AMainType: string; AAxisIndex: Integer;
       out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
     { The rows of series ASeriesIndex as the last build left them -- filtered
@@ -1494,6 +1504,9 @@ begin
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
+  { AFTER THE GRIDS: a slider sits under (or beside) the grid it drives,
+    by the rect the labels left it }
+  SolveDataZoomViews(AMeasurer, APPI);
   FDirty := False;
 end;
 
@@ -2559,6 +2572,219 @@ begin
   Result := Default(TTyVisualMapLayout);
   if (AIndex >= 0) and (AIndex <= High(FVisualLayouts)) then
     Result := FVisualLayouts[AIndex];
+end;
+
+function TTyAdvanceChart.DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartDataZoom', '', []);
+  Result.FontName := st.FontName;
+  Result.FontSizeLogical := ResolveFontSize(st);
+  if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
+  Result.FontWeight := st.FontWeight;
+  Result.Text := TTyChartColor(st.TextColor);
+  Result.Filler := TTyChartColor(
+    model.ResolveStyle('TyAdvChartDataZoomFiller', '', []).Background.Color);
+  Result.Frame := TTyChartColor(
+    model.ResolveStyle('TyAdvChartDataZoomBorder', '', []).BorderColor);
+  Result.Background := TTyChartColor(
+    model.ResolveStyle('TyAdvChartDataZoomBackground', '', []).Background.Color);
+  st := model.ResolveStyle('TyAdvChartDataZoomHandle', '', []);
+  Result.HandleFill := TTyChartColor(st.Background.Color);
+  Result.HandleStroke := TTyChartColor(st.BorderColor);
+  st := model.ResolveStyle('TyAdvChartDataZoomMoveHandle', '', []);
+  Result.MoveHandle := TTyChartColor(st.Background.Color);
+  Result.MoveIcon := TTyChartColor(st.TextColor);
+  st := model.ResolveStyle('TyAdvChartDataZoomShadow', '', []);
+  Result.ShadowArea[0] := TTyChartColor(st.Background.Color);
+  Result.ShadowLine[0] := TTyChartColor(st.BorderColor);
+  st := model.ResolveStyle('TyAdvChartDataZoomShadowSelected', '', []);
+  Result.ShadowArea[1] := TTyChartColor(st.Background.Color);
+  Result.ShadowLine[1] := TTyChartColor(st.BorderColor);
+end;
+
+function TTyAdvanceChart.DataZoomInput(AIndex: Integer;
+  out AIn: TTyDzSliderInput): Boolean;
+var
+  spec: TTyDataZoomSpec;
+  view: TTyDzSliderSpec;
+  scale, v: Double;
+  t, k, rep, firstRec, c, slot, thisCol, otherCol, r, g: Integer;
+  ax, first, other: TTyAxis;
+  feeders, cols: TTyIntegerArray;
+  b: TTySeriesBinding;
+  store: TTyDataStore;
+  otherDim: string;
+  grid: TTyGridBuild;
+  found: Boolean;
+begin
+  Result := False;
+  AIn := Default(TTyDzSliderInput);
+  if (FBuild = nil) or (AIndex > High(FZoomSpecs)) or (AIndex > High(FDzViews)) then Exit;
+  spec := FZoomSpecs[AIndex];
+  view := FDzViews[AIndex];
+  if (spec.SubType <> 'slider') or spec.NoTarget then Exit;
+  if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
+  AIn.CanvasW := (FLastRect.Right - FLastRect.Left) / scale;
+  AIn.CanvasH := (FLastRect.Bottom - FLastRect.Top) / scale;
+  AIn.Horizontal := spec.Orient <> 'vertical';
+  { findRepresentativeAxisProxy: the first target this dataZoom hosts, else
+    the first target at all }
+  first := nil;
+  rep := -1;
+  firstRec := -1;
+  for t := 0 to High(spec.Targets) do
+  begin
+    ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+    if ax = nil then Continue;
+    if first = nil then first := ax;
+    for k := 0 to High(FAxisZooms) do
+      if FAxisZooms[k].Axis = ax then
+      begin
+        if (rep < 0) and (FZoomHost[k] = AIndex) then rep := k;
+        if firstRec < 0 then firstRec := k;
+      end;
+  end;
+  if rep < 0 then rep := firstRec;
+  if (first = nil) or (rep < 0) then Exit;
+  AIn.Inverse := first.Inverse;
+  { the first target's grid, as the labels left it }
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    grid := FBuild.Grid(g);
+    if grid.ComponentIndex = first.GridIndex then
+    begin
+      AIn.HasCoordRect := True;
+      AIn.CoordRect.X := (grid.PlotXYWH.X - FBuild.Viewport.Left) / scale;
+      AIn.CoordRect.Y := (grid.PlotXYWH.Y - FBuild.Viewport.Top) / scale;
+      AIn.CoordRect.W := grid.PlotXYWH.W / scale;
+      AIn.CoordRect.H := grid.PlotXYWH.H / scale;
+      Break;
+    end;
+  end;
+  for k := 0 to 1 do
+  begin
+    AIn.Percent[k] := FZoomWindows[rep].Percent[k];
+    AIn.Value[k] := FZoomWindows[rep].Value[k];
+  end;
+  AIn.ValuePrecision := FZoomWindows[rep].Precision;
+  ax := FAxisZooms[rep].Axis;
+  { a category or time axis says its ends in the scale's own words }
+  if ax.AxisType = atCategory then
+  begin
+    AIn.LabelIsScale := True;
+    for k := 0 to 1 do
+    begin
+      v := AIn.Value[k];
+      if IsNan(v) then Continue;
+      v := TyJsRound(v);
+      if (v >= 0) and (v < ax.Categories.Count) then
+        AIn.ScaleLabel[k] := ax.Categories.CategoryAt(Trunc(v));
+    end;
+  end
+  else if (ax.AxisType = atTime) and (ax.Scale is TTyTimeScale) then
+  begin
+    AIn.LabelIsScale := True;
+    for k := 0 to 1 do
+      if not IsNan(AIn.Value[k]) then
+        AIn.ScaleLabel[k] := TTyTimeScale(ax.Scale).GetLabel(TyJsRound(AIn.Value[k]));
+  end;
+  { THE DATA SHADOW: the first series on a target axis that can cast one --
+    a line, bar, candlestick or scatter, or any when showDataShadow is true
+    -- read RAW, before any dataZoom filtered or emptied it }
+  if view.ShowShadow = 0 then Exit(True);
+  found := False;
+  for t := 0 to High(spec.Targets) do
+  begin
+    if found then Break;
+    ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+    if ax = nil then Continue;
+    feeders := FIndex.SeriesOnAxis(ax);
+    for c := 0 to High(feeders) do
+    begin
+      slot := feeders[c];
+      if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores)) then Continue;
+      b := FBindings[slot];
+      if (view.ShowShadow <> 1) and (b.SeriesType <> 'line') and (b.SeriesType <> 'bar')
+        and (b.SeriesType <> 'candlestick') and (b.SeriesType <> 'scatter') then Continue;
+      found := True;
+      if ax.Dim = 'x' then otherDim := 'y'
+      else if ax.Dim = 'y' then otherDim := 'x'
+      else otherDim := '';
+      other := nil;
+      if otherDim <> '' then
+        if ax = b.XAxis then other := b.YAxis else other := b.XAxis;
+      AIn.OtherAxisInverse := (other <> nil) and other.Inverse;
+      store := FStores[slot];
+      if store = nil then Break;
+      cols := store.DimsOfCoord(ax.Dim);
+      if Length(cols) > 0 then thisCol := cols[0] else thisCol := -1;
+      otherCol := -1;
+      { a candlestick's shadow is its open }
+      if b.SeriesType = 'candlestick' then otherCol := store.DimIndexOf('open');
+      if (otherCol < 0) and (otherDim <> '') then
+      begin
+        cols := store.DimsOfCoord(otherDim);
+        if Length(cols) > 0 then otherCol := cols[0];
+      end;
+      if otherCol < 0 then Break;
+      AIn.HasShadow := True;
+      AIn.IsTime := ax.AxisType = atTime;
+      SetLength(AIn.ThisVals, store.RawCount);
+      SetLength(AIn.OtherVals, store.RawCount);
+      for r := 0 to store.RawCount - 1 do
+      begin
+        if thisCol >= 0 then AIn.ThisVals[r] := store.GetOriginalByRaw(thisCol, r)
+        else AIn.ThisVals[r] := r;
+        AIn.OtherVals[r] := store.GetOriginalByRaw(otherCol, r);
+      end;
+      Break;
+    end;
+  end;
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.SolveDataZoomViews(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var
+  n, k: Integer;
+  inp: TTyDzSliderInput;
+begin
+  n := TyDataZoomCount(FOption);
+  SetLength(FDzViews, n);
+  SetLength(FDzLayouts, n);
+  for k := 0 to n - 1 do
+  begin
+    FDzLayouts[k] := Default(TTyDzSliderLayout);
+    FDzViews[k] := TyDzSliderSpecOf(FOption, k);
+  end;
+  for k := 0 to n - 1 do
+    if DataZoomInput(k, inp) then
+      FDzLayouts[k] := TyLayoutDzSlider(FDzViews[k], inp, AMeasurer,
+        DataZoomInk(FDzViews[k]));
+end;
+
+function TTyAdvanceChart.BuildDataZooms(AList: TTyPaintList): Integer;
+var
+  k: Integer;
+  scale: Double;
+begin
+  Result := 0;
+  if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
+  for k := 0 to High(FDzLayouts) do
+    if (k <= High(FDzViews)) and FDzLayouts[k].Valid then
+      Inc(Result, TyBuildDzSliderMarks(FDzLayouts[k], FDzViews[k],
+        DataZoomInk(FDzViews[k]), FLastRect.Left, FLastRect.Top, scale, AList));
+end;
+
+function TTyAdvanceChart.DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
+begin
+  Result := Default(TTyDzSliderLayout);
+  if (AIndex >= 0) and (AIndex <= High(FDzLayouts)) then
+    Result := FDzLayouts[AIndex];
 end;
 
 function TTyAdvanceChart.DataZoomCount: Integer;
@@ -4835,6 +5061,7 @@ begin
       to supply. A MARK appended here would silently lose its label. }
     Inc(drawn, BuildLegends(APPI, list));
     Inc(drawn, BuildVisualMaps(list));
+    Inc(drawn, BuildDataZooms(list));
     Result := drawn;
   end;
 end;
