@@ -1482,6 +1482,1035 @@ begin
     Result := Copy(FKittyMainStack);
 end;
 
-{@@TASK16@@}
+{ ==== InputHandler: parse, print, controls, cursor, erase, scroll ================================== }
+
+{ parse, InputHandler.ts:430-485, without the async resume. The input is cut every
+  131072 BYTES (MAX_PARSEBUFFER_LENGTH counts input units, and a byte is the unit
+  here); the decoder and precedingJoinState carry across the cuts. }
+procedure TTyTerminalCore.Parse(const AData: RawByteString);
+var
+  buf: TTyTerminalBuffer;
+  cursorStartX, cursorStartY, total, i, chunk, len, viewportStart, viewportEnd: Integer;
+begin
+  buf := Buffer;
+  cursorStartX := buf.X;
+  cursorStartY := buf.Y;
+  total := Length(AData);
+  chunk := Min(total, TyTermMaxParseBuffer);
+  if Length(FParseBuffer) < chunk then
+    SetLength(FParseBuffer, chunk);
+  { which rows the parse changes }
+  ClearRange;
+  i := 0;
+  while i < total do
+  begin
+    chunk := Min(TyTermMaxParseBuffer, total - i);
+    len := FDecoder.Decode(AData[i + 1], chunk, FParseBuffer);
+    FParser.Parse(FParseBuffer, len);
+    Inc(i, chunk);
+  end;
+  buf := Buffer;
+  if (buf.X <> cursorStartX) or (buf.Y <> cursorStartY) then
+    if Assigned(FOnCursorMove) then
+      FOnCursorMove(Self);
+  { the rows that changed, relative to the viewport (ydisp), not to ybase }
+  viewportEnd := FDirtyEnd + (buf.YBase - buf.YDisp);
+  viewportStart := FDirtyStart + (buf.YBase - buf.YDisp);
+  if viewportStart < Rows then
+    if Assigned(FOnRefreshRows) then
+      FOnRefreshRows(Self, Min(viewportStart, Rows - 1), Min(viewportEnd, Rows - 1));
+end;
+
+procedure TTyTerminalCore.PrintHandler(const AData: array of Cardinal; AStart, AEnd: Integer);
+begin
+  DoPrint(AData, AStart, AEnd, 1);
+end;
+
+{ print, InputHandler.ts:517-661. ARepeat runs the same text that many times in ONE
+  call, which is what REP's single print of the repeated text is upstream -- without
+  building the repeated array (REP up to 2^20 times). The current row, and the old
+  row across a wrap, are pinned: a scroll can drop them from the ring while print
+  still writes to them, as upstream keeps writing to a detached line. }
+procedure TTyTerminalCore.DoPrint(const AData: array of Cardinal; AStart, AEnd: Integer; ARepeat: Integer);
+var
+  buf: TTyTerminalBuffer;
+  bufferRow, oldRow, ln: TTyTerminalLine;
+  charset: TTyTermCharsetId;
+  cols, r, pos, chWidth, oldWidth, oldCol, offset, delta: Integer;
+  code, m: Cardinal;
+  wraparound, insert, shouldJoin: Boolean;
+  precedingJoinState, currentInfo: TTyUnicodeCharProps;
+  total: Int64;
+  linkId: Integer;
+begin
+  charset := FCharset;
+  cols := Cols;
+  wraparound := FWraparound;
+  insert := FInsertMode;
+  buf := Buffer;
+  bufferRow := buf.Lines.Get(buf.YBase + buf.Y);
+  if bufferRow = nil then
+    Exit;
+  bufferRow.AddRef;
+  oldRow := nil;
+  try
+    MarkDirty(buf.Y);
+    total := Int64(AEnd - AStart) * ARepeat;
+    { overwriting the second cell of a wide character: reset the first }
+    if (buf.X <> 0) and (total > 0) and (bufferRow.GetWidth(buf.X - 1) = 2) then
+      bufferRow.SetCellFromCodepoint(buf.X - 1, 0, 1, FCurAttr);
+    precedingJoinState := FParser.PrecedingJoinState;
+    for r := 1 to ARepeat do
+      for pos := AStart to AEnd - 1 do
+      begin
+        code := AData[pos];
+        { soft hyphen: a zero-width layout hint, ignored (:546-548) }
+        if code = $AD then
+          Continue;
+        { charset replacement, ASCII only }
+        if (code < 127) and (charset <> 0) and (code >= $20) then
+        begin
+          m := TyTermCharsetMap[charset, code];
+          if m <> 0 then
+            code := m;
+        end;
+        currentInfo := TyUnicodeCharProperties(code, precedingJoinState, FUnicodeVersion, FAmbiguousWide);
+        chWidth := TyUnicodePropsWidth(currentInfo);
+        shouldJoin := TyUnicodePropsShouldJoin(currentInfo);
+        if shouldJoin then
+          oldWidth := TyUnicodePropsWidth(precedingJoinState)
+        else
+          oldWidth := 0;
+        precedingJoinState := currentInfo;
+        linkId := FCurAttr.Extended.UrlId;
+        if linkId <> 0 then
+          FLinks.AddLineToLink(linkId, buf.YBase + buf.Y);
+
+        { the character does not fit: wrap (DECAWM) or stay in the last cell }
+        if buf.X + chWidth - oldWidth > cols then
+        begin
+          if wraparound then
+          begin
+            oldRow := bufferRow;             { the pin moves with it }
+            bufferRow := nil;
+            oldCol := buf.X - oldWidth;
+            buf.X := oldWidth;
+            buf.Y := buf.Y + 1;
+            if buf.Y = buf.ScrollBottom + 1 then
+            begin
+              buf.Y := buf.Y - 1;
+              FBufferService.Scroll(EraseAttrData, True);
+            end
+            else
+            begin
+              if buf.Y >= Rows then
+                buf.Y := Rows - 1;
+              { an existing line (the initial viewport): mark it wrapped }
+              ln := buf.Lines.Get(buf.YBase + buf.Y);
+              if ln <> nil then
+                ln.IsWrapped := True;
+            end;
+            bufferRow := buf.Lines.Get(buf.YBase + buf.Y);
+            if bufferRow = nil then
+              Exit;
+            bufferRow.AddRef;
+            { a combining character widened the last one: move it to the new line }
+            if oldWidth > 0 then
+              bufferRow.CopyCellsFrom(oldRow, oldCol, 0, oldWidth, False);
+            { clear what is left to the right }
+            while oldCol < cols do
+            begin
+              oldRow.SetCellFromCodepoint(oldCol, 0, 1, FCurAttr);
+              Inc(oldCol);
+            end;
+            oldRow.Release;
+            oldRow := nil;
+          end
+          else
+          begin
+            buf.X := cols - 1;
+            { a wide character that does not fit the last cell is dropped }
+            if chWidth = 2 then
+              Continue;
+          end;
+        end;
+
+        { a joining character goes onto the previous cell }
+        if shouldJoin and (buf.X <> 0) then
+        begin
+          { after a wide character the empty stub sits in between }
+          if bufferRow.GetWidth(buf.X - 1) <> 0 then
+            offset := 1
+          else
+            offset := 2;
+          bufferRow.AddCodepointToCell(buf.X - offset, code, chWidth);
+          delta := chWidth - oldWidth;
+          while delta > 0 do
+          begin
+            bufferRow.SetCellFromCodepoint(buf.X, 0, 0, FCurAttr);
+            buf.X := buf.X + 1;
+            Dec(delta);
+          end;
+          Continue;
+        end;
+
+        { insert mode: shift right; a wide character pushed into the last cell is lost }
+        if insert then
+        begin
+          bufferRow.InsertCells(buf.X, chWidth - oldWidth, buf.GetNullCell(FCurAttr));
+          if bufferRow.GetWidth(cols - 1) = 2 then
+            bufferRow.SetCellFromCodepoint(cols - 1, TyTermNullCellCode, TyTermNullCellWidth, FCurAttr);
+        end;
+
+        bufferRow.SetCellFromCodepoint(buf.X, code, chWidth, FCurAttr);
+        buf.X := buf.X + 1;
+        { the cells after a wide character: empty stubs of width 0 }
+        if chWidth > 0 then
+        begin
+          Dec(chWidth);
+          while chWidth > 0 do
+          begin
+            bufferRow.SetCellFromCodepoint(buf.X, 0, 0, FCurAttr);
+            buf.X := buf.X + 1;
+            Dec(chWidth);
+          end;
+        end;
+      end;
+    FParser.PrecedingJoinState := precedingJoinState;
+    { a lone second half of a wide character right of the cursor: reset it }
+    if (buf.X < cols) and (total > 0) and (bufferRow.GetWidth(buf.X) = 0)
+      and not bufferRow.HasContent(buf.X) then
+      bufferRow.SetCellFromCodepoint(buf.X, 0, 1, FCurAttr);
+    MarkDirty(buf.Y);
+  finally
+    if bufferRow <> nil then
+      bufferRow.Release;
+    if oldRow <> nil then
+      oldRow.Release;
+  end;
+end;
+
+{ _eraseAttrData, :3441-3445: only the background colour of the current attributes }
+function TTyTerminalCore.EraseAttrData: TTyTerminalAttrData;
+begin
+  FEraseAttr.Bg := FEraseAttr.Bg and not Cardinal(TyTermAttrCmMask or $FFFFFF);
+  FEraseAttr.Bg := FEraseAttr.Bg or (FCurAttr.Bg and not Cardinal($FC000000));
+  Result := FEraseAttr;
+end;
+
+function ClampInt(AValue: Int64): Integer; inline;
+begin
+  if AValue > High(Integer) then
+    Result := High(Integer)
+  else if AValue < Low(Integer) then
+    Result := Low(Integer)
+  else
+    Result := Integer(AValue);
+end;
+
+{ _restrictCursor, :873-880 }
+procedure TTyTerminalCore.RestrictCursor(AMaxCol: Integer);
+var
+  buf: TTyTerminalBuffer;
+begin
+  buf := Buffer;
+  if AMaxCol = -1 then
+    AMaxCol := Cols - 1;
+  buf.X := Min(AMaxCol, Max(0, buf.X));
+  if FOrigin then
+    buf.Y := Min(buf.ScrollBottom, Max(buf.ScrollTop, buf.Y))
+  else
+    buf.Y := Min(Rows - 1, Max(0, buf.Y));
+  MarkDirty(buf.Y);
+end;
+
+{ _setCursor, :885-897, the sums in Int64 (a parameter can be 2^31 - 1) }
+procedure TTyTerminalCore.SetCursor(AX, AY: Int64);
+var
+  buf: TTyTerminalBuffer;
+begin
+  buf := Buffer;
+  MarkDirty(buf.Y);
+  if FOrigin then
+  begin
+    buf.X := ClampInt(AX);
+    buf.Y := ClampInt(buf.ScrollTop + AY);
+  end
+  else
+  begin
+    buf.X := ClampInt(AX);
+    buf.Y := ClampInt(AY);
+  end;
+  RestrictCursor;
+  MarkDirty(buf.Y);
+end;
+
+{ _moveCursor, :902-907 }
+procedure TTyTerminalCore.MoveCursor(AX, AY: Int64);
+begin
+  RestrictCursor;
+  SetCursor(Buffer.X + AX, Buffer.Y + AY);
+end;
+
+function P0or1(AParams: TTyTerminalParams): Integer; inline;
+begin
+  Result := AParams[0];
+  if Result = 0 then
+    Result := 1;
+end;
+
+function TTyTerminalCore.Bell: Boolean;                                      { :727-730 }
+begin
+  if Assigned(FOnBell) then
+    FOnBell(Self);
+  Result := True;
+end;
+
+function TTyTerminalCore.LineFeed: Boolean;                                  { :742-771 }
+var
+  buf: TTyTerminalBuffer;
+  line: TTyTerminalLine;
+begin
+  buf := Buffer;
+  MarkDirty(buf.Y);
+  if FOptions.ConvertEol then
+    buf.X := 0;
+  buf.Y := buf.Y + 1;
+  if buf.Y = buf.ScrollBottom + 1 then
+  begin
+    buf.Y := buf.Y - 1;
+    FBufferService.Scroll(EraseAttrData);
+  end
+  else if buf.Y >= Rows then
+    buf.Y := Rows - 1
+  else
+  begin
+    { an explicit line feed: this line is not a wrapped continuation }
+    line := buf.Lines.Get(buf.YBase + buf.Y);
+    if line <> nil then
+      line.IsWrapped := False;
+  end;
+  { at the end of the line, do not wrap on to the next one }
+  if buf.X >= Cols then
+    buf.X := buf.X - 1;
+  MarkDirty(buf.Y);
+  { onLineFeed: the Windows heuristic listens first (CoreTerminal.ts:293) }
+  if FWindowsHeuristics then
+    UpdateWindowsModeWrappedState;
+  if Assigned(FOnLineFeed) then
+    FOnLineFeed(Self);
+  Result := True;
+end;
+
+function TTyTerminalCore.CarriageReturn: Boolean;                            { :777-780 }
+begin
+  Buffer.X := 0;
+  Result := True;
+end;
+
+function TTyTerminalCore.Backspace: Boolean;                                 { :793-845 }
+var
+  buf: TTyTerminalBuffer;
+  line: TTyTerminalLine;
+begin
+  buf := Buffer;
+  if not FReverseWraparound then
+  begin
+    RestrictCursor;
+    if buf.X > 0 then
+      buf.X := buf.X - 1;
+    Exit(True);
+  end;
+  { reverse wrap-around: x may be cols here to reach the last cell }
+  RestrictCursor(Cols);
+  if buf.X > 0 then
+    buf.X := buf.X - 1
+  else
+  begin
+    { only a soft wrap is undone, within the margins, never into the scrollback }
+    line := buf.Lines.Get(buf.YBase + buf.Y);
+    if (buf.X = 0) and (buf.Y > buf.ScrollTop) and (buf.Y <= buf.ScrollBottom)
+      and (line <> nil) and line.IsWrapped then
+    begin
+      line.IsWrapped := False;
+      buf.Y := buf.Y - 1;
+      buf.X := Cols - 1;
+      { an empty cell left by a wide character that wrapped early: one more back }
+      line := buf.Lines.Get(buf.YBase + buf.Y);
+      if (line <> nil) and line.HasWidth(buf.X) and not line.HasContent(buf.X) then
+        buf.X := buf.X - 1;
+    end;
+  end;
+  RestrictCursor;
+  Result := True;
+end;
+
+function TTyTerminalCore.Tab: Boolean;                                       { :850-860 }
+begin
+  if Buffer.X >= Cols then
+    Exit(True);
+  Buffer.X := Buffer.NextStop;
+  Result := True;
+end;
+
+function TTyTerminalCore.ShiftOut: Boolean;
+begin
+  SetGLevel(1);
+  Result := True;
+end;
+
+function TTyTerminalCore.ShiftIn: Boolean;
+begin
+  SetGLevel(0);
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorUp(AParams: TTyTerminalParams): Boolean;     { :930-940 }
+var
+  diffToTop: Integer;
+begin
+  diffToTop := Buffer.Y - Buffer.ScrollTop;
+  if diffToTop >= 0 then
+    MoveCursor(0, -Min(Int64(diffToTop), P0or1(AParams)))
+  else
+    MoveCursor(0, -Int64(P0or1(AParams)));
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorDown(AParams: TTyTerminalParams): Boolean;   { :948-958 }
+var
+  diffToBottom: Integer;
+begin
+  diffToBottom := Buffer.ScrollBottom - Buffer.Y;
+  if diffToBottom >= 0 then
+    MoveCursor(0, Min(Int64(diffToBottom), P0or1(AParams)))
+  else
+    MoveCursor(0, P0or1(AParams));
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorForward(AParams: TTyTerminalParams): Boolean;
+begin
+  MoveCursor(P0or1(AParams), 0);
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorBackward(AParams: TTyTerminalParams): Boolean;
+begin
+  MoveCursor(-Int64(P0or1(AParams)), 0);
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorNextLine(AParams: TTyTerminalParams): Boolean;
+begin
+  CursorDown(AParams);
+  Buffer.X := 0;
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorPrecedingLine(AParams: TTyTerminalParams): Boolean;
+begin
+  CursorUp(AParams);
+  Buffer.X := 0;
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorCharAbsolute(AParams: TTyTerminalParams): Boolean;
+begin
+  SetCursor(Int64(P0or1(AParams)) - 1, Buffer.Y);
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorPosition(AParams: TTyTerminalParams): Boolean;  { :1036-1045 }
+var
+  col: Int64;
+begin
+  if AParams.Length >= 2 then
+  begin
+    col := AParams[1];
+    if col = 0 then col := 1;
+    col := col - 1;
+  end
+  else
+    col := 0;
+  SetCursor(col, Int64(P0or1(AParams)) - 1);
+  Result := True;
+end;
+
+function TTyTerminalCore.CharPosAbsolute(AParams: TTyTerminalParams): Boolean;
+begin
+  SetCursor(Int64(P0or1(AParams)) - 1, Buffer.Y);
+  Result := True;
+end;
+
+function TTyTerminalCore.HPositionRelative(AParams: TTyTerminalParams): Boolean;
+begin
+  MoveCursor(P0or1(AParams), 0);
+  Result := True;
+end;
+
+function TTyTerminalCore.LinePosAbsolute(AParams: TTyTerminalParams): Boolean;
+begin
+  SetCursor(Buffer.X, Int64(P0or1(AParams)) - 1);
+  Result := True;
+end;
+
+function TTyTerminalCore.VPositionRelative(AParams: TTyTerminalParams): Boolean;
+begin
+  MoveCursor(0, P0or1(AParams));
+  Result := True;
+end;
+
+function TTyTerminalCore.HVPosition(AParams: TTyTerminalParams): Boolean;
+begin
+  CursorPosition(AParams);
+  Result := True;
+end;
+
+function TTyTerminalCore.TabClear(AParams: TTyTerminalParams): Boolean;     { :1109-1119 }
+begin
+  case AParams[0] of
+    0: Buffer.SetTab(Buffer.X, False);
+    3: Buffer.ClearAllTabs;
+  end;
+  Result := True;
+end;
+
+{ CHT / CBT, :1125-1150. The count is clamped to the columns: every stop is reached
+  by then and later passes stay put (unit header). }
+function TTyTerminalCore.CursorForwardTab(AParams: TTyTerminalParams): Boolean;
+var
+  p: Integer;
+begin
+  if Buffer.X >= Cols then
+    Exit(True);
+  p := Min(P0or1(AParams), Cols);
+  while p > 0 do
+  begin
+    Buffer.X := Buffer.NextStop;
+    Dec(p);
+  end;
+  Result := True;
+end;
+
+function TTyTerminalCore.CursorBackwardTab(AParams: TTyTerminalParams): Boolean;
+var
+  p: Integer;
+begin
+  if Buffer.X >= Cols then
+    Exit(True);
+  p := Min(P0or1(AParams), Cols);
+  while p > 0 do
+  begin
+    Buffer.X := Buffer.PrevStop;
+    Dec(p);
+  end;
+  Result := True;
+end;
+
+function TTyTerminalCore.SelectProtected(AParams: TTyTerminalParams): Boolean;   { :1158-1163 }
+var
+  p: Integer;
+begin
+  p := AParams[0];
+  if p = 1 then
+    FCurAttr.Bg := FCurAttr.Bg or TyTermBgProtected;
+  if (p = 2) or (p = 0) then
+    FCurAttr.Bg := FCurAttr.Bg and not Cardinal(TyTermBgProtected);
+  Result := True;
+end;
+
+procedure TTyTerminalCore.EraseInBufferLine(AY, AStart: Integer; AEnd: Int64; AClearWrap: Boolean;
+  ARespectProtect: Boolean);
+var
+  line: TTyTerminalLine;
+begin                                                                        { :1175-1190 }
+  line := Buffer.Lines.Get(Buffer.YBase + AY);
+  if line = nil then
+    Exit;
+  line.ReplaceCells(AStart, AEnd, Buffer.GetNullCell(EraseAttrData), ARespectProtect);
+  if AClearWrap then
+    line.IsWrapped := False;
+end;
+
+procedure TTyTerminalCore.ResetBufferLine(AY: Integer; ARespectProtect: Boolean);
+var
+  line: TTyTerminalLine;
+begin                                                                        { :1196-1203 }
+  line := Buffer.Lines.Get(Buffer.YBase + AY);
+  if line <> nil then
+  begin
+    line.Fill(Buffer.GetNullCell(EraseAttrData), ARespectProtect);
+    FBufferService.Buffer.ClearMarkers(Buffer.YBase + AY);
+    line.IsWrapped := False;
+  end;
+end;
+
+function TTyTerminalCore.EraseInDisplay(AParams: TTyTerminalParams; ARespectProtect: Boolean): Boolean;
+var
+  buf: TTyTerminalBuffer;
+  j, scrollBackSize: Integer;
+  found: Boolean;
+  line: TTyTerminalLine;
+begin                                                                        { :1229-1305 }
+  buf := Buffer;
+  RestrictCursor(Cols);
+  case AParams[0] of
+    0:
+      begin
+        j := buf.Y;
+        MarkDirty(j);
+        EraseInBufferLine(j, buf.X, Cols, buf.X = 0, ARespectProtect);
+        Inc(j);
+        while j < Rows do
+        begin
+          ResetBufferLine(j, ARespectProtect);
+          Inc(j);
+        end;
+        MarkDirty(j);
+      end;
+    1:
+      begin
+        j := buf.Y;
+        MarkDirty(j);
+        { the front of the line and everything above: this line is not wrapped now }
+        EraseInBufferLine(j, 0, Int64(buf.X) + 1, True, ARespectProtect);
+        if buf.X + 1 >= Cols then
+        begin
+          { the whole line went: the next one cannot be a continuation. Upstream
+            indexes lines.get(j + 1) without ybase; kept as it is. }
+          line := buf.Lines.Get(j + 1);
+          if line <> nil then
+            line.IsWrapped := False;
+        end;
+        while j > 0 do
+        begin
+          Dec(j);
+          ResetBufferLine(j, ARespectProtect);
+        end;
+        MarkDirty(0);
+      end;
+    2:
+      if FOptions.ScrollOnEraseInDisplay then
+      begin
+        { push the screen, down to its last non-empty row, into the scrollback }
+        j := Rows;
+        MarkRangeDirty(0, j - 1);
+        found := False;
+        while j > 0 do
+        begin
+          Dec(j);
+          line := buf.Lines.Get(buf.YBase + j);
+          if (line <> nil) and (line.GetTrimmedLength <> 0) then
+          begin
+            found := True;
+            Break;
+          end;
+        end;
+        if not found then
+          j := -1;
+        while j >= 0 do
+        begin
+          FBufferService.Scroll(EraseAttrData);
+          Dec(j);
+        end;
+      end
+      else
+      begin
+        j := Rows;
+        MarkDirty(j - 1);
+        while j > 0 do
+        begin
+          Dec(j);
+          ResetBufferLine(j, ARespectProtect);
+        end;
+        MarkDirty(0);
+      end;
+    3:
+      begin
+        { the scrollback: everything above the viewport }
+        scrollBackSize := buf.Lines.Length - Rows;
+        if scrollBackSize > 0 then
+        begin
+          buf.Lines.TrimStart(scrollBackSize);
+          buf.YBase := Max(buf.YBase - scrollBackSize, 0);
+          buf.YDisp := Max(buf.YDisp - scrollBackSize, 0);
+          { isUserScrolling belongs to the normal buffer's viewport }
+          if buf = Buffers.Normal then
+            FBufferService.IsUserScrolling := False;
+          { upstream then fires InputHandler.onScroll(0), which nothing listens to
+            outside the browser: no OnScroll here }
+        end;
+      end;
+  end;
+  Result := True;
+end;
+
+function TTyTerminalCore.EraseInDisplayCsi(AParams: TTyTerminalParams): Boolean;
+begin
+  Result := EraseInDisplay(AParams, False);
+end;
+
+function TTyTerminalCore.EraseInDisplayProtected(AParams: TTyTerminalParams): Boolean;
+begin
+  Result := EraseInDisplay(AParams, True);
+end;
+
+function TTyTerminalCore.EraseInLine(AParams: TTyTerminalParams; ARespectProtect: Boolean): Boolean;
+var
+  buf: TTyTerminalBuffer;
+begin                                                                        { :1324-1340 }
+  buf := Buffer;
+  RestrictCursor(Cols);
+  case AParams[0] of
+    0: EraseInBufferLine(buf.Y, buf.X, Cols, buf.X = 0, ARespectProtect);
+    1: EraseInBufferLine(buf.Y, 0, Int64(buf.X) + 1, False, ARespectProtect);
+    2: EraseInBufferLine(buf.Y, 0, Cols, True, ARespectProtect);
+  end;
+  MarkDirty(buf.Y);
+  Result := True;
+end;
+
+function TTyTerminalCore.EraseInLineCsi(AParams: TTyTerminalParams): Boolean;
+begin
+  Result := EraseInLine(AParams, False);
+end;
+
+function TTyTerminalCore.EraseInLineProtected(AParams: TTyTerminalParams): Boolean;
+begin
+  Result := EraseInLine(AParams, True);
+end;
+
+{ IL, :1350-1373. The count is clamped to the lines from the cursor to the bottom
+  margin: by then the region is blank and later passes change nothing. }
+function TTyTerminalCore.InsertLines(AParams: TTyTerminalParams): Boolean;
+var
+  buf: TTyTerminalBuffer;
+  p, row, scrollBottomRowsOffset, scrollBottomAbsolute: Integer;
+begin
+  buf := Buffer;
+  RestrictCursor;
+  p := P0or1(AParams);
+  if (buf.Y > buf.ScrollBottom) or (buf.Y < buf.ScrollTop) then
+    Exit(True);
+  row := buf.YBase + buf.Y;
+  scrollBottomRowsOffset := Rows - 1 - buf.ScrollBottom;
+  scrollBottomAbsolute := Rows - 1 + buf.YBase - scrollBottomRowsOffset + 1;
+  p := Min(p, buf.ScrollBottom - buf.Y + 1);
+  while p > 0 do
+  begin
+    { blankLine(true): xterm and linux blank with the erase attributes }
+    buf.Lines.Splice(scrollBottomAbsolute - 1, 1, []);
+    buf.Lines.SpliceOwned(row, 0, buf.GetBlankLine(EraseAttrData));
+    Dec(p);
+  end;
+  MarkRangeDirty(buf.Y, buf.ScrollBottom);
+  buf.X := 0;
+  Result := True;
+end;
+
+{ DL, :1383-1405, clamped as IL }
+function TTyTerminalCore.DeleteLines(AParams: TTyTerminalParams): Boolean;
+var
+  buf: TTyTerminalBuffer;
+  p, row, j: Integer;
+begin
+  buf := Buffer;
+  RestrictCursor;
+  p := P0or1(AParams);
+  if (buf.Y > buf.ScrollBottom) or (buf.Y < buf.ScrollTop) then
+    Exit(True);
+  row := buf.YBase + buf.Y;
+  j := Rows - 1 - buf.ScrollBottom;
+  j := Rows - 1 + buf.YBase - j;
+  p := Min(p, buf.ScrollBottom - buf.Y + 1);
+  while p > 0 do
+  begin
+    buf.Lines.Splice(row, 1, []);
+    buf.Lines.SpliceOwned(j, 0, buf.GetBlankLine(EraseAttrData));
+    Dec(p);
+  end;
+  MarkRangeDirty(buf.Y, buf.ScrollBottom);
+  buf.X := 0;
+  Result := True;
+end;
+
+function TTyTerminalCore.InsertChars(AParams: TTyTerminalParams): Boolean;   { :1412-1425 }
+var
+  line: TTyTerminalLine;
+begin
+  RestrictCursor;
+  line := Buffer.Lines.Get(Buffer.YBase + Buffer.Y);
+  if line <> nil then
+  begin
+    line.InsertCells(Buffer.X, P0or1(AParams), Buffer.GetNullCell(EraseAttrData));
+    MarkDirty(Buffer.Y);
+  end;
+  Result := True;
+end;
+
+function TTyTerminalCore.DeleteChars(AParams: TTyTerminalParams): Boolean;   { :1432-1445 }
+var
+  line: TTyTerminalLine;
+begin
+  RestrictCursor;
+  line := Buffer.Lines.Get(Buffer.YBase + Buffer.Y);
+  if line <> nil then
+  begin
+    line.DeleteCells(Buffer.X, P0or1(AParams), Buffer.GetNullCell(EraseAttrData));
+    MarkDirty(Buffer.Y);
+  end;
+  Result := True;
+end;
+
+{ SU, :1464-1474, clamped to the region height (unit header) }
+function TTyTerminalCore.ScrollUp(AParams: TTyTerminalParams): Boolean;
+var
+  buf: TTyTerminalBuffer;
+  p: Integer;
+begin
+  buf := Buffer;
+  p := Min(P0or1(AParams), Max(buf.ScrollBottom - buf.ScrollTop + 1, 0));
+  while p > 0 do
+  begin
+    buf.Lines.Splice(buf.YBase + buf.ScrollTop, 1, []);
+    buf.Lines.SpliceOwned(buf.YBase + buf.ScrollBottom, 0, buf.GetBlankLine(EraseAttrData));
+    Dec(p);
+  end;
+  MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  Result := True;
+end;
+
+{ SD, :1480-1490: the new lines take the DEFAULT attributes, not the erase ones }
+function TTyTerminalCore.ScrollDown(AParams: TTyTerminalParams): Boolean;
+var
+  buf: TTyTerminalBuffer;
+  p: Integer;
+begin
+  buf := Buffer;
+  p := Min(P0or1(AParams), Max(buf.ScrollBottom - buf.ScrollTop + 1, 0));
+  while p > 0 do
+  begin
+    buf.Lines.Splice(buf.YBase + buf.ScrollBottom, 1, []);
+    buf.Lines.SpliceOwned(buf.YBase + buf.ScrollTop, 0, buf.GetBlankLine(TyTermDefaultAttr));
+    Dec(p);
+  end;
+  MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  Result := True;
+end;
+
+function TTyTerminalCore.ScrollLeft(AParams: TTyTerminalParams): Boolean;   { :1510-1523 }
+var
+  buf: TTyTerminalBuffer;
+  p, y: Integer;
+  line: TTyTerminalLine;
+begin
+  buf := Buffer;
+  if (buf.Y > buf.ScrollBottom) or (buf.Y < buf.ScrollTop) then
+    Exit(True);
+  p := P0or1(AParams);
+  for y := buf.ScrollTop to buf.ScrollBottom do
+  begin
+    line := buf.Lines.Get(buf.YBase + y);
+    if line = nil then Continue;
+    line.DeleteCells(0, p, buf.GetNullCell(EraseAttrData));
+    line.IsWrapped := False;
+  end;
+  MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  Result := True;
+end;
+
+function TTyTerminalCore.ScrollRight(AParams: TTyTerminalParams): Boolean;  { :1543-1556 }
+var
+  buf: TTyTerminalBuffer;
+  p, y: Integer;
+  line: TTyTerminalLine;
+begin
+  buf := Buffer;
+  if (buf.Y > buf.ScrollBottom) or (buf.Y < buf.ScrollTop) then
+    Exit(True);
+  p := P0or1(AParams);
+  for y := buf.ScrollTop to buf.ScrollBottom do
+  begin
+    line := buf.Lines.Get(buf.YBase + y);
+    if line = nil then Continue;
+    line.InsertCells(0, p, buf.GetNullCell(EraseAttrData));
+    line.IsWrapped := False;
+  end;
+  MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  Result := True;
+end;
+
+function TTyTerminalCore.InsertColumns(AParams: TTyTerminalParams): Boolean;   { :1564-1577 }
+var
+  buf: TTyTerminalBuffer;
+  p, y: Integer;
+  line: TTyTerminalLine;
+begin
+  buf := Buffer;
+  if (buf.Y > buf.ScrollBottom) or (buf.Y < buf.ScrollTop) then
+    Exit(True);
+  p := P0or1(AParams);
+  for y := buf.ScrollTop to buf.ScrollBottom do
+  begin
+    line := buf.Lines.Get(buf.YBase + y);
+    if line = nil then Continue;
+    line.InsertCells(buf.X, p, buf.GetNullCell(EraseAttrData));
+    line.IsWrapped := False;
+  end;
+  MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  Result := True;
+end;
+
+function TTyTerminalCore.DeleteColumns(AParams: TTyTerminalParams): Boolean;   { :1585-1598 }
+var
+  buf: TTyTerminalBuffer;
+  p, y: Integer;
+  line: TTyTerminalLine;
+begin
+  buf := Buffer;
+  if (buf.Y > buf.ScrollBottom) or (buf.Y < buf.ScrollTop) then
+    Exit(True);
+  p := P0or1(AParams);
+  for y := buf.ScrollTop to buf.ScrollBottom do
+  begin
+    line := buf.Lines.Get(buf.YBase + y);
+    if line = nil then Continue;
+    line.DeleteCells(buf.X, p, buf.GetNullCell(EraseAttrData));
+    line.IsWrapped := False;
+  end;
+  MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  Result := True;
+end;
+
+{ ECH, :1614-1626: x + n in Int64, so a 20-digit count erases to the end }
+function TTyTerminalCore.EraseChars(AParams: TTyTerminalParams): Boolean;
+var
+  line: TTyTerminalLine;
+begin
+  RestrictCursor;
+  line := Buffer.Lines.Get(Buffer.YBase + Buffer.Y);
+  if line <> nil then
+  begin
+    line.ReplaceCells(Buffer.X, Int64(Buffer.X) + P0or1(AParams), Buffer.GetNullCell(EraseAttrData));
+    MarkDirty(Buffer.Y);
+  end;
+  Result := True;
+end;
+
+{ REP, :1654-1678: the text of the cell before the cursor, printed again. Upstream
+  builds text x count code points and prints them in one call; this prints the text
+  count times in one call (DoPrint), count capped at 2^20 (unit header). }
+function TTyTerminalCore.RepeatPrecedingCharacter(AParams: TTyTerminalParams): Boolean;
+var
+  joinState: TTyUnicodeCharProps;
+  count, chWidth, x, i: Integer;
+  row: TTyTerminalLine;
+  cps: TIntegerDynArray;
+  data: array of Cardinal;
+begin
+  joinState := FParser.PrecedingJoinState;
+  if joinState = 0 then
+    Exit(True);
+  count := Min(P0or1(AParams), TyTermRepeatLimit);
+  chWidth := TyUnicodePropsWidth(joinState);
+  x := Buffer.X - chWidth;
+  row := Buffer.Lines.Get(Buffer.YBase + Buffer.Y);
+  if row = nil then
+    Exit(True);
+  cps := TyTermUtf8Codepoints(row.GetChars(x));
+  data := nil;
+  SetLength(data, Length(cps));
+  for i := 0 to High(cps) do
+    data[i] := Cardinal(cps[i]);
+  DoPrint(data, 0, Length(data), count);
+  Result := True;
+end;
+
+{ DECALN, :3470-3494 }
+function TTyTerminalCore.ScreenAlignmentPattern: Boolean;
+var
+  cell: TTyTerminalCellData;
+  yOffset: Integer;
+  line: TTyTerminalLine;
+begin
+  cell.Content := (Cardinal(1) shl TyTermContentWidthShift) or Ord('E');
+  cell.Fg := FCurAttr.Fg;
+  cell.Bg := FCurAttr.Bg;
+  cell.Ext.RawExt := 0;                  { a new CellData's own, empty, extended attributes }
+  cell.Ext.UrlId := 0;
+  cell.Combined := '';
+  SetCursor(0, 0);
+  for yOffset := 0 to Rows - 1 do
+  begin
+    line := Buffer.Lines.Get(Buffer.YBase + Buffer.Y + yOffset);
+    if line <> nil then
+    begin
+      line.Fill(cell);
+      line.IsWrapped := False;
+    end;
+  end;
+  MarkAllDirty;
+  SetCursor(0, 0);
+  Result := True;
+end;
+
+{ IND, :3366-3378 }
+function TTyTerminalCore.Index: Boolean;
+var
+  buf: TTyTerminalBuffer;
+begin
+  buf := Buffer;
+  RestrictCursor;
+  buf.Y := buf.Y + 1;
+  if buf.Y = buf.ScrollBottom + 1 then
+  begin
+    buf.Y := buf.Y - 1;
+    FBufferService.Scroll(EraseAttrData);
+  end
+  else if buf.Y >= Rows then
+    buf.Y := Rows - 1;
+  RestrictCursor;
+  Result := True;
+end;
+
+function TTyTerminalCore.NextLine: Boolean;                                  { :3287-3291 }
+begin
+  Buffer.X := 0;
+  Index;
+  Result := True;
+end;
+
+function TTyTerminalCore.TabSet: Boolean;                                    { :3389-3392 }
+begin
+  Buffer.SetTab(Buffer.X, True);
+  Result := True;
+end;
+
+{ RI, :3400-3419 }
+function TTyTerminalCore.ReverseIndex: Boolean;
+var
+  buf: TTyTerminalBuffer;
+  h: Integer;
+begin
+  buf := Buffer;
+  RestrictCursor;
+  if buf.Y = buf.ScrollTop then
+  begin
+    { at the top margin: the region moves down, a blank line comes in on top }
+    h := buf.ScrollBottom - buf.ScrollTop;
+    buf.Lines.ShiftElements(buf.YBase + buf.Y, h, 1);
+    buf.Lines.SetItemOwned(buf.YBase + buf.Y, buf.GetBlankLine(EraseAttrData));
+    MarkRangeDirty(buf.ScrollTop, buf.ScrollBottom);
+  end
+  else
+  begin
+    buf.Y := buf.Y - 1;
+    RestrictCursor;
+  end;
+  Result := True;
+end;
+
+{@@TASK17@@}
 
 end.
