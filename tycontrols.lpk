@@ -904,6 +904,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Unicode.Width.pas"/>
         <UnitName Value="tyControls.Unicode.Width"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Parser.pas"/>
+        <UnitName Value="tyControls.Terminal.Parser"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
