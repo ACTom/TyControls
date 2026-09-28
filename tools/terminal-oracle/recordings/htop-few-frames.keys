@@ -1,0 +1,6 @@
+sleep 300 & sleep 301 & clear
+htop -d 5 -p $$,$(jobs -p | paste -sd,)
+#sleep 2
+#key q
+#sleep 0.5
+kill %1 %2

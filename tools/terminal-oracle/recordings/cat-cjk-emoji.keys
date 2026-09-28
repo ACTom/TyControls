@@ -1,0 +1,6 @@
+printf '中文字符测试，全角标点：「引号」、句号。\nかな カナ 한국어 텍스트\n表情 😀 😃 👍🏽 ❤️ ☺️\n家庭 👨‍👩‍👧‍👦 旗 🇨🇳 🇯🇵 🇺🇸\n组合 é ñ ü a\xcc\x81 o\xcc\x88 n\xcc\x83\n宽窄 ＡＢＣ abc １２３ 123\n' > u.txt
+clear
+cat u.txt
+#sleep 0.5
+cat u.txt u.txt
+#sleep 0.5

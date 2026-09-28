@@ -1,0 +1,18 @@
+seq 1 200 | sed 's/^/entry /' > g.txt
+clear
+less g.txt
+#sleep 0.8
+#key Space
+#sleep 0.3
+#key Space
+#sleep 0.3
+#key b
+#raw /entry 150
+#key Enter
+#sleep 0.5
+#key G
+#sleep 0.3
+#key g
+#sleep 0.3
+#key q
+#sleep 0.5
