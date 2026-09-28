@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：设计定稿中（待用户审），分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议），分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -964,6 +964,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 ## 17. 开工前要定的问题
 
 ### 17.1 要问用户的
+
+> **已定（2026-09-28）**：用户回复「按你说的做」，以下 11 条全部按建议。另：用户明确不想引入第三方库——Unicode 表编译进库（§4.2），运行时不依赖 ICU 或任何外部库。
 
 1. **默认 Unicode 版本**。建议 `tuv11`：6 太老，表情和很多 CJK 扩展区都算错；15-graphemes 上游自称实验性（`addons/addon-unicode-graphemes/README.md:3`）。
 2. **6 / 11 版本下 `AmbiguousWide` 怎么办**。建议不起作用、文档写明，这样每种组合都有上游基准（§4.3）。
