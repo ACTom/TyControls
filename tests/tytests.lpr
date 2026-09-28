@@ -167,6 +167,7 @@ uses
   test.advchart.series,
   test.advchart.style,
   test.advancechart,
+  test.unicode.width,
   test.transitions,
   test.htmllabel,
   test.shape,
