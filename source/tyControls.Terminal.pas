@@ -167,6 +167,7 @@ type
     function GridCellRect(ACol, ARow: Integer; const AInsets: TRect): TRect;
     procedure WriteDesignPreview;
     { 脏行 }
+    procedure HoldRows(AFirst, ALast: Integer);
     procedure DirtyRows(AFirst, ALast: Integer);
     procedure DirtyAll;
     procedure DirtyCursorRows;
@@ -448,44 +449,10 @@ end;
 
 procedure TTyTerminalView.CoreRefreshRows(Sender: TObject; AFirst, ALast: Integer);
 begin
-  { 同步输出开着:攒起来,不失效;计时器从**第一次攒行**起算(RenderService.ts 的
-    bufferRows,_timeout ??=),模式打开本身不起表 }
-  if FCore.Modes.SynchronizedOutput then
-  begin
-    if FSyncHolding then
-    begin
-      FSyncFirst := Min(FSyncFirst, AFirst);
-      FSyncLast := Max(FSyncLast, ALast);
-    end
-    else
-    begin
-      FSyncHolding := True;
-      FSyncFirst := AFirst;
-      FSyncLast := ALast;
-    end;
-    if FSyncTimer = nil then
-    begin
-      FSyncTimer := TTimer.Create(nil);
-      FSyncTimer.Enabled := False;
-      FSyncTimer.Interval := SyncTimeoutMs;
-      FSyncTimer.OnTimer := @SyncTimerFired;
-    end;
-    if not FSyncTimer.Enabled then
-      FSyncTimer.Enabled := True;
-    Exit;
-  end;
-  { 模式关了:攒着的并进来一起画 }
-  if FSyncHolding then
-  begin
-    AFirst := Min(AFirst, FSyncFirst);
-    ALast := Max(ALast, FSyncLast);
-    FSyncHolding := False;
-    FSyncFirst := -1;
-    FSyncLast := -1;
-    if FSyncTimer <> nil then FSyncTimer.Enabled := False;
-  end;
+  { 同步输出开着:DirtyRows 攒起来,不失效(见 HoldRows);关着:连同攒着的一起画 }
   DirtyRows(AFirst, ALast);
-  NoteActivity;
+  if not FCore.Modes.SynchronizedOutput then
+    NoteActivity;
 end;
 
 procedure TTyTerminalView.CoreTitle(Sender: TObject; const AText: string);
@@ -770,7 +737,7 @@ function TTyTerminalView.ResolveFontSpec(APPI: Integer): TTyTermFontSpec;
 var
   ovr, st: TTyStyleSet;
   model: TTyStyleModel;
-  name, wide: string;
+  fname, wide: string;
   size: Integer;
 begin
   { 顺序(开工前问题二第 6 条):StyleOverride > 显式 Font > TyTerminal 规则 > token > monospace。
@@ -779,15 +746,15 @@ begin
   ovr := OverrideStyle;
   st := CurrentStyle;
   if (tpFontName in ovr.Present) and (ovr.FontName <> '') then
-    name := ovr.FontName
+    fname := ovr.FontName
   else if (not ParentFont) and (Font.Name <> '') and not SameText(Font.Name, 'default') then
-    name := Font.Name
+    fname := Font.Name
   else if (tpFontName in st.Present) and (st.FontName <> '') then
-    name := st.FontName
+    fname := st.FontName
   else
-    name := Trim(model.RawVar('--terminal-font-family'));
-  if (name = '') or SameText(name, 'monospace') then
-    name := PlatformMonospace;
+    fname := Trim(model.RawVar('--terminal-font-family'));
+  if (fname = '') or SameText(fname, 'monospace') then
+    fname := PlatformMonospace;
   wide := Trim(model.RawVar('--terminal-font-family-wide'));
   if SameText(wide, 'monospace-wide') then
     wide := PlatformMonospaceWide;
@@ -800,7 +767,7 @@ begin
   else
     size := TyEffectiveFontSizeLogical(0);
   Result := Default(TTyTermFontSpec);
-  Result.MainName := name;
+  Result.MainName := fname;
   Result.WideName := wide;
   Result.SizeLogical := size;
   if APPI <= 0 then APPI := 96;
@@ -859,7 +826,7 @@ end;
 
 procedure TTyTerminalView.UpdateGrid;
 var
-  ppi, cols, rows, barW: Integer;
+  ppi, nc, nr, barW: Integer;
   ins: TRect;
 begin
   if (FCore = nil) or (Parent = nil) then Exit;
@@ -871,16 +838,16 @@ begin
   barW := ScrollBarWidth(ppi);
   UpdateScrollBar(ppi);
   { 条宽恒扣(地雷 6);设计期也扣,设计器和运行时同一网格 }
-  cols := Max(TyTermMinimumCols, (ClientWidth - ins.Left - ins.Right - barW) div FMetrics.CellW);
-  rows := Max(TyTermMinimumRows, (ClientHeight - ins.Top - ins.Bottom) div FMetrics.CellH);
-  if (cols <> FCore.Cols) or (rows <> FCore.Rows) then
+  nc := Max(TyTermMinimumCols, (ClientWidth - ins.Left - ins.Right - barW) div FMetrics.CellW);
+  nr := Max(TyTermMinimumRows, (ClientHeight - ins.Top - ins.Bottom) div FMetrics.CellH);
+  if (nc <> FCore.Cols) or (nr <> FCore.Rows) then
     { OnResize 回来做其余的事(地雷 7:在 Core 的事件里调会被延后,以 OnResize 为准) }
-    FCore.Resize(cols, rows)
+    FCore.Resize(nc, nr)
   else if not FGridAnnounced then
   begin
     { 加载完成后的第一次排版,尺寸没变也发一次(spec §9.2) }
     FGridAnnounced := True;
-    if Assigned(FOnGridResize) then FOnGridResize(Self, cols, rows);
+    if Assigned(FOnGridResize) then FOnGridResize(Self, nc, nr);
   end;
   WriteDesignPreview;
 end;
@@ -966,10 +933,52 @@ begin
   LCLIntf.InvalidateRect(Handle, @r, False);
 end;
 
+procedure TTyTerminalView.HoldRows(AFirst, ALast: Integer);
+begin
+  { 同步输出(2026)开着:每一次要重画的行都攒起来——Core 报的脏行、光标行、滚动带来的
+    整屏(上游这些全经 RenderService.refreshRows,开着 2026 就进 bufferRows)。计时器从
+    **第一次攒行**起算(_timeout ??=),模式打开本身不起表。 }
+  if FSyncHolding then
+  begin
+    FSyncFirst := Min(FSyncFirst, AFirst);
+    FSyncLast := Max(FSyncLast, ALast);
+  end
+  else
+  begin
+    FSyncHolding := True;
+    FSyncFirst := AFirst;
+    FSyncLast := ALast;
+  end;
+  if FSyncTimer = nil then
+  begin
+    FSyncTimer := TTimer.Create(nil);
+    FSyncTimer.Enabled := False;
+    FSyncTimer.Interval := SyncTimeoutMs;
+    FSyncTimer.OnTimer := @SyncTimerFired;
+  end;
+  if not FSyncTimer.Enabled then
+    FSyncTimer.Enabled := True;
+end;
+
 procedure TTyTerminalView.DirtyRows(AFirst, ALast: Integer);
 var
   r: Integer;
 begin
+  if FCore.Modes.SynchronizedOutput then
+  begin
+    HoldRows(AFirst, ALast);
+    Exit;
+  end;
+  { 模式关了:攒着的并进来一起画 }
+  if FSyncHolding then
+  begin
+    AFirst := Min(AFirst, FSyncFirst);
+    ALast := Max(ALast, FSyncLast);
+    FSyncHolding := False;
+    FSyncFirst := -1;
+    FSyncLast := -1;
+    if FSyncTimer <> nil then FSyncTimer.Enabled := False;
+  end;
   if AFirst < 0 then AFirst := 0;
   if ALast > High(FDirty) then ALast := High(FDirty);
   if ALast < AFirst then Exit;
@@ -980,9 +989,13 @@ end;
 
 procedure TTyTerminalView.DirtyAll;
 begin
+  if FCore.Modes.SynchronizedOutput then
+  begin
+    HoldRows(0, FCore.Rows - 1);
+    Exit;
+  end;
   FAllDirty := True;
-  if Length(FDirty) > 0 then
-    InvalidateRows(0, High(FDirty));
+  DirtyRows(0, FCore.Rows - 1);
 end;
 
 function TTyTerminalView.CursorViewRow: Integer;
