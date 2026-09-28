@@ -40,10 +40,12 @@ function digestCps(list) {
 }
 
 // A string or a code point array: kept as it is up to 256 code points, otherwise
-// replaced by { n: code points, h: digest }. A string keeps being a string.
+// replaced by { n: code points, h: digest }. A string keeps being a string -- unless
+// it holds U+0000, which fpjson drops from a JSON string: then it is written as its
+// code point array (the Pascal side reads both shapes the same way).
 function digestable(x) {
   const list = typeof x === 'string' ? cps(x) : Array.from(x);
-  if (list.length <= 256) return x;
+  if (list.length <= 256) return typeof x === 'string' && x.includes('\u0000') ? list : x;
   return { n: list.length, h: digestCps(list) };
 }
 
