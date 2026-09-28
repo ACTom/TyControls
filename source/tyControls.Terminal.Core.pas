@@ -305,7 +305,7 @@ type
 
     { ---- InputHandler: parse, print, controls, cursor, erase, scroll (Task 16) ---- }
     procedure Parse(const AData: RawByteString);
-    procedure DoPrint(const AData: array of Cardinal; AStart, AEnd: Integer; ARepeat: Integer);
+    procedure DoPrint(const AData: array of Cardinal; AStart, AEnd: Integer; ARepeat: Int64);
     procedure PrintHandler(const AData: array of Cardinal; AStart, AEnd: Integer);
     function EraseAttrData: TTyTerminalAttrData;
     procedure RestrictCursor(AMaxCol: Integer = -1);
@@ -1756,20 +1756,34 @@ end;
 
 { print, InputHandler.ts:517-661. ARepeat runs the same text that many times in ONE
   call, which is what REP's single print of the repeated text is upstream -- without
-  building the repeated array (REP up to 2^20 times). The current row, and the old
-  row across a wrap, are pinned: a scroll can drop them from the ring while print
-  still writes to them, as upstream keeps writing to a detached line. }
-procedure TTyTerminalCore.DoPrint(const AData: array of Cardinal; AStart, AEnd: Integer; ARepeat: Integer);
+  building the repeated array. The current row, and the old row across a wrap, are
+  pinned: a scroll can drop them from the ring while print still writes to them, as
+  upstream keeps writing to a detached line.
+
+  REP's fast-forward (unit header). At the end of each repetition the state that
+  decides the rest is the cursor (x, y) and the join state: the text is the same
+  every time, so equal keys at two repetitions r1 < r2 repeat forever with period
+  p = r2 - r1 (Brent's search: a snapshot at r = 2, 4, 8 ...). Two cases:
+  - the p repetitions scrolled (sp > 0 scrolls): y is the bottom margin throughout
+    and every wrap scrolls a fresh line in. After 2 x ring + rows more scrolls every
+    line the ring holds, ybase and ydisp are what the last repetitions made them, so
+    whole periods past that are skipped; the ring's start index is advanced by the
+    skipped scrolls, as the push / recycle / splice they stand for would have.
+  - none scrolled: only the cursor's line was written. When it also equals its
+    snapshot, the state itself repeats and the remaining repetitions are reduced
+    modulo p. When it keeps changing (code points piling onto one cell) the
+    repetitions stop after TyTermRepeatLimit code points on that line. }
+procedure TTyTerminalCore.DoPrint(const AData: array of Cardinal; AStart, AEnd: Integer; ARepeat: Int64);
 var
   buf: TTyTerminalBuffer;
-  bufferRow, oldRow, ln: TTyTerminalLine;
+  bufferRow, oldRow, ln, snapLine: TTyTerminalLine;
   charset: TTyTermCharsetId;
-  ncols, r, pos, chWidth, oldWidth, oldCol, offset, delta: Integer;
+  ncols, pos, chWidth, oldWidth, oldCol, offset, delta, yBefore, snapX, snapY: Integer;
   code, m: Cardinal;
-  wraparound, insert, shouldJoin: Boolean;
-  precedingJoinState, currentInfo: TTyUnicodeCharProps;
-  total: Int64;
-  linkId: Integer;
+  wraparound, insert, shouldJoin, hasText, tracking, haveSnap, ffDone: Boolean;
+  precedingJoinState, currentInfo, snapJoin: TTyUnicodeCharProps;
+  linkId: Int64;
+  r, reps, scrolls, stall, snapRep, snapScrolls, snapLimit, p, sp, need, target, periods, skipped: Int64;
 begin
   charset := FCharset;
   ncols := Cols;
@@ -1781,16 +1795,36 @@ begin
     Exit;
   bufferRow.AddRef;
   oldRow := nil;
+  snapLine := nil;
   try
     MarkDirty(buf.Y);
-    total := Int64(AEnd - AStart) * ARepeat;
+    hasText := (AEnd > AStart) and (ARepeat > 0);
+    reps := ARepeat;
+    if not hasText then
+      reps := 0;
+    tracking := reps > 1;
+    scrolls := 0;
+    stall := 0;
+    skipped := 0;
+    haveSnap := False;
+    ffDone := False;
+    snapRep := 0;
+    snapScrolls := 0;
+    snapLimit := 1;
+    snapX := 0;
+    snapY := 0;
+    snapJoin := 0;
     { overwriting the second cell of a wide character: reset the first }
-    if (buf.X <> 0) and (total > 0) and (bufferRow.GetWidth(buf.X - 1) = 2) then
+    if (buf.X <> 0) and hasText and (bufferRow.GetWidth(buf.X - 1) = 2) then
       bufferRow.SetCellFromCodepoint(buf.X - 1, 0, 1, FCurAttr);
     precedingJoinState := FParser.PrecedingJoinState;
-    for r := 1 to ARepeat do
+    r := 0;
+    while r < reps do
+    begin
+      Inc(r);
       for pos := AStart to AEnd - 1 do
       begin
+        Inc(stall);
         code := AData[pos];
         { soft hyphen: a zero-width layout hint, ignored (:546-548) }
         if code = $AD then
@@ -1823,16 +1857,21 @@ begin
             bufferRow := nil;
             oldCol := buf.X - oldWidth;
             buf.X := oldWidth;
+            yBefore := buf.Y;
             buf.Y := buf.Y + 1;
             if buf.Y = buf.ScrollBottom + 1 then
             begin
               buf.Y := buf.Y - 1;
               FBufferService.Scroll(EraseAttrData, True);
+              Inc(scrolls);
+              stall := 0;
             end
             else
             begin
               if buf.Y >= Rows then
                 buf.Y := Rows - 1;
+              if buf.Y <> yBefore then
+                stall := 0;
               { an existing line (the initial viewport): mark it wrapped }
               ln := buf.Lines.Get(buf.YBase + buf.Y);
               if ln <> nil then
@@ -1904,9 +1943,63 @@ begin
           end;
         end;
       end;
+
+      { ---- the end of one repetition: the REP fast-forward (above) ---- }
+      if tracking and (r < reps) then
+      begin
+        if stall > TyTermRepeatLimit then
+          reps := r                        { piling onto one line: stop here }
+        else if (r >= 2) and not ffDone then
+        begin
+          if haveSnap and (buf.X = snapX) and (buf.Y = snapY) and (precedingJoinState = snapJoin) then
+          begin
+            p := r - snapRep;
+            sp := scrolls - snapScrolls;
+            if sp > 0 then
+            begin
+              { at least 2 x ring + rows more scrolls are printed for real }
+              need := 2 * Int64(buf.Lines.MaxLength) + Rows + 2;
+              target := r + ((need + sp - 1) div sp) * p;
+              if target < reps then
+              begin
+                periods := (reps - target) div p;
+                reps := reps - periods * p;
+                skipped := periods * sp;
+              end;
+              ffDone := True;
+            end
+            else if bufferRow.SameCells(snapLine) then
+            begin
+              reps := r + (reps - r) mod p;
+              ffDone := True;
+            end;
+          end;
+          if not ffDone and (not haveSnap or (r - snapRep >= snapLimit)) then
+          begin
+            if haveSnap then
+              snapLimit := snapLimit * 2;
+            haveSnap := True;
+            snapRep := r;
+            snapScrolls := scrolls;
+            snapX := buf.X;
+            snapY := buf.Y;
+            snapJoin := precedingJoinState;
+            if snapLine <> nil then
+              snapLine.Release;
+            snapLine := nil;
+            snapLine := bufferRow.Clone;
+          end;
+        end;
+      end;
+    end;
+    { the skipped scrolls' effect on the ring's start index: push / recycle reduce
+      it modulo the length (top margin 0, bottom margin the last row), a splice below
+      a lower margin does not, a shift inside a top margin leaves it }
+    if (skipped > 0) and (buf.ScrollTop = 0) then
+      buf.Lines.AdvanceStart(skipped, buf.ScrollBottom = Rows - 1);
     FParser.PrecedingJoinState := precedingJoinState;
     { a lone second half of a wide character right of the cursor: reset it }
-    if (buf.X < ncols) and (total > 0) and (bufferRow.GetWidth(buf.X) = 0)
+    if (buf.X < ncols) and hasText and (bufferRow.GetWidth(buf.X) = 0)
       and not bufferRow.HasContent(buf.X) then
       bufferRow.SetCellFromCodepoint(buf.X, 0, 1, FCurAttr);
     MarkDirty(buf.Y);
@@ -1915,6 +2008,8 @@ begin
       bufferRow.Release;
     if oldRow <> nil then
       oldRow.Release;
+    if snapLine <> nil then
+      snapLine.Release;
   end;
 end;
 
@@ -2204,15 +2299,17 @@ begin
   Result := True;
 end;
 
-{ CHT / CBT, :1125-1150. The count is clamped to the columns: every stop is reached
-  by then and later passes stay put (unit header). }
+{ CHT / CBT, :1125-1150. Each pass that can still move moves at least one column
+  (NextStop / PrevStop stop at the last / first column), so the count is clamped to
+  the columns right of the cursor (CHT) or left of it (CBT); later passes stay put
+  (unit header). }
 function TTyTerminalCore.CursorForwardTab(AParams: TTyTerminalParams): Boolean;
 var
   p: Integer;
 begin
   if Buffer.X >= Cols then
     Exit(True);
-  p := Min(P0or1(AParams), Cols);
+  p := Min(P0or1(AParams), Cols - 1 - Buffer.X);
   while p > 0 do
   begin
     Buffer.X := Buffer.NextStop;
@@ -2227,7 +2324,7 @@ var
 begin
   if Buffer.X >= Cols then
     Exit(True);
-  p := Min(P0or1(AParams), Cols);
+  p := Min(P0or1(AParams), Buffer.X);
   while p > 0 do
   begin
     Buffer.X := Buffer.PrevStop;
@@ -2631,25 +2728,30 @@ end;
 
 { REP, :1654-1678: the text of the cell before the cursor, printed again. Upstream
   builds text x count code points and prints them in one call; this prints the text
-  count times in one call (DoPrint), count capped at 2^20 (unit header). }
+  count times in one call (DoPrint), fast-forwarded (unit header). }
 function TTyTerminalCore.RepeatPrecedingCharacter(AParams: TTyTerminalParams): Boolean;
 var
   joinState: TTyUnicodeCharProps;
   count, chWidth, x, i: Integer;
   row: TTyTerminalLine;
+  text: string;
   cps: TIntegerDynArray;
   data: array of Cardinal;
 begin
   joinState := FParser.PrecedingJoinState;
   if joinState = 0 then
     Exit(True);
-  count := Min(P0or1(AParams), TyTermRepeatLimit);
+  count := P0or1(AParams);
   chWidth := TyUnicodePropsWidth(joinState);
   x := Buffer.X - chWidth;
   row := Buffer.Lines.Get(Buffer.YBase + Buffer.Y);
   if row = nil then
     Exit(True);
-  cps := TyTermUtf8Codepoints(row.GetChars(x));
+  { no reference to the cell's text stays behind: appending to that same cell
+    while printing then grows it in place }
+  text := row.GetChars(x);
+  cps := TyTermUtf8Codepoints(text);
+  text := '';
   data := nil;
   SetLength(data, Length(cps));
   for i := 0 to High(cps) do

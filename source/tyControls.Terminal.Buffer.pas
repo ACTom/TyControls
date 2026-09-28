@@ -205,6 +205,9 @@ type
     { The combined text of ACol if the table has an entry (flag or not). }
     function CombinedEntry(ACol: Integer; out AText: string): Boolean;
     function ExtendedEntry(ACol: Integer; out AExt: TTyTerminalExtAttrs): Boolean;
+    { Same length, wrap flag, cell words, and combined text / extended attributes
+      where the cells say so (the core's REP fast-forward). }
+    function SameCells(ALine: TTyTerminalLine): Boolean;
     procedure LoadCell(ACol: Integer; var ACell: TTyTerminalCellData);
     function GetExtended(ACol: Integer): TTyTerminalExtAttrs;
     procedure SetCell(ACol: Integer; const ACell: TTyTerminalCellData);
@@ -273,7 +276,13 @@ type
     procedure TrimStart(ACount: Integer);
     { Raises EArgumentOutOfRangeException where upstream throws. }
     procedure ShiftElements(AStart, ACount, AOffset: Integer);
-    function SlotLine(ASlot: Integer): TTyTerminalLine;           { pure query, leak guard }
+    { A full ring only: the start index becomes AStart + ADelta (reduced modulo the
+      length when AReduce, as push and recycle keep it) and the lines move to the
+      slots that keep every index answering the same line. No event, no reference
+      change. The core's REP fast-forward stands in for ADelta skipped scrolls. }
+    procedure AdvanceStart(ADelta: Int64; AReduce: Boolean);
+    { FOR THE TESTS (a pure query): the line in raw slot ASlot, the leak guard. }
+    function SlotLine(ASlot: Integer): TTyTerminalLine;
     property Length: Integer read FLength write SetLengthValue;
     property MaxLength: Integer read FMaxLength write SetMaxLength;
     property IsFull: Boolean read GetIsFull;
@@ -1055,6 +1064,37 @@ begin
   end;
 end;
 
+function TTyTerminalLine.SameCells(ALine: TTyTerminalLine): Boolean;
+var
+  col: Integer;
+  a, b: string;
+  ea, eb: TTyTerminalExtAttrs;
+begin
+  Result := False;
+  if (ALine = nil) or (ALine.FLength <> FLength) or (ALine.FIsWrapped <> FIsWrapped) then
+    Exit;
+  if (FLength > 0) and not CompareMem(@FData[0], @ALine.FData[0], FLength * 3 * SizeOf(Cardinal)) then
+    Exit;
+  for col := 0 to FLength - 1 do
+  begin
+    if FData[col * 3] and TyTermContentIsCombinedMask <> 0 then
+    begin
+      CombinedEntry(col, a);
+      ALine.CombinedEntry(col, b);
+      if a <> b then
+        Exit;
+    end;
+    if FData[col * 3 + 2] and TyTermBgHasExtended <> 0 then
+    begin
+      ExtendedEntry(col, ea);
+      ALine.ExtendedEntry(col, eb);
+      if (ea.RawExt <> eb.RawExt) or (ea.UrlId <> eb.UrlId) then
+        Exit;
+    end;
+  end;
+  Result := True;
+end;
+
 function TTyTerminalLine.GetWidth(ACol: Integer): Integer;
 begin
   Result := Word0(ACol) shr TyTermContentWidthShift;
@@ -1191,7 +1231,7 @@ end;
 procedure TTyTerminalLine.AddCodepointToCell(ACol: Integer; ACodepoint: Cardinal; AWidth: Integer);
 var
   content: Cardinal;
-  s: string;
+  i: Integer;
 begin                                                                        { :268-293 }
   FCacheValid := False;
   if (ACol < 0) or (ACol >= FLength) then
@@ -1199,9 +1239,12 @@ begin                                                                        { :
   content := FData[ACol * 3];
   if content and TyTermContentIsCombinedMask <> 0 then
   begin
-    { already combined: append }
-    CombinedEntry(ACol, s);
-    PutCombined(ACol, s + CpToUtf8(ACodepoint));
+    { already combined: append -- in place, so a long run of combining marks grows
+      the text the way upstream's += does, not by copying it once per mark }
+    if CombinedIndex(ACol, i) then
+      FCombined[i].Text := FCombined[i].Text + CpToUtf8(ACodepoint)
+    else
+      PutCombined(ACol, CpToUtf8(ACodepoint));
   end
   else
   begin
@@ -1772,6 +1815,25 @@ begin
   else
     for i := 0 to ACount - 1 do
       SetItem(AStart + i + AOffset, Get(AStart + i));
+end;
+
+procedure TTyTerminalLineList.AdvanceStart(ADelta: Int64; AReduce: Boolean);
+var
+  moved: array of TTyTerminalLine;
+  i: Integer;
+  newStart: Int64;
+begin
+  if (ADelta = 0) or (FMaxLength = 0) or (FLength <> FMaxLength) then
+    Exit;
+  newStart := FStartIndex + ADelta;
+  if AReduce then
+    newStart := newStart mod FMaxLength;
+  moved := nil;
+  SetLength(moved, FMaxLength);
+  for i := 0 to FMaxLength - 1 do
+    moved[(newStart + i) mod FMaxLength] := FArray[Cyclic(i)];
+  FArray := moved;
+  FStartIndex := newStart;
 end;
 
 function TTyTerminalLineList.SlotLine(ASlot: Integer): TTyTerminalLine;
