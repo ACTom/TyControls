@@ -62,6 +62,7 @@ type
   published
     procedure TestWriteQueuesAndAsksOnce;
     procedure TestProcessDrainsAndReports;
+    procedure TestAnOutstandingRequestIsNotRepeated;
     procedure TestSliceStopsBetweenChunksAtTheBudget;
     procedure TestOneBigChunkIsNotSplit;
     procedure TestCallbacksRunInOrder;
@@ -922,6 +923,29 @@ begin
     AssertEquals('pending', 0, r.Core.PendingBytes);
     r.Core.Write('c');
     AssertEquals('an empty queue asks again', 2, r.Requests);
+  finally
+    r.Free;
+  end;
+end;
+
+{ upstream's cancelAndSet keeps one timer: a queue emptied by WriteSync while a
+  request is still out does not ask a second time when it fills again }
+procedure TTyTerminalWriteQueueTests.TestAnOutstandingRequestIsNotRepeated;
+var
+  r: TQueueRig;
+begin
+  r := TQueueRig.Create;
+  try
+    r.Core.Write('a');
+    r.Core.WriteSync('b');
+    AssertEquals('drained', 0, r.Core.PendingBytes);
+    r.Core.Write('c');
+    AssertEquals('still the one request', 1, r.Requests);
+    r.SetScript([0, 1, 2]);
+    AssertFalse('nothing left', r.Core.ProcessPending);
+    AssertEquals('abc', r.Line0);
+    r.Core.Write('d');
+    AssertEquals('asks again once the slice ran', 2, r.Requests);
   finally
     r.Free;
   end;

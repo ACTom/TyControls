@@ -88,6 +88,11 @@ const hand = [
   c1('vpa-vpr-hpr', CSI + '4dx' + CSI + '2ey' + CSI + '3az' + CSI + '99ew'),
   c1('cursor-huge-params', ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'd', 'e', 'a', '`', 'f'].map(f => CSI + '3;3H' + CSI + digits20 + f + 'x').join('')
     + CSI + digits20 + ';' + digits20 + 'Hy'),
+  // one relative move each: x or y plus 2^31 - 1 must not wrap (a later absolute move
+  // in cursor-huge-params lands on the same cell and hides it)
+  c1('cursor-huge-cuf', CSI + '3;3H' + CSI + digits20 + 'Cx'),
+  c1('cursor-huge-hpr', CSI + '3;3H' + CSI + digits20 + 'ax'),
+  c1('cursor-huge-vpr', CSI + '3;3H' + CSI + digits20 + 'ex'),
   c1('origin-mode', CSI + '3;5r' + CSI + '?6h' + CSI + '2;3Hx' + CSI + '9;9Hy' + CSI + 'Az' + CSI + '?6lw'),  // :889-921, :1972-1975
   c1('decsc-decrc', CSI + '1;31m' + CSI + '2;3H' + E + '7' + CSI + '0m' + CSI + '?7l' + CSI + 'Ha' + E + '8b' + CSI + '?6h' + CSI + 's' + CSI + '?6l' + CSI + '5;5Hc' + CSI + 'ud'),
   cs('decrc-without-save', [lines(10), CSI + '3;3H' + E + '8x']),
@@ -114,6 +119,7 @@ const hand = [
   cs('su-sd', [fill(), CSI + '2S' + CSI + 'T' + CSI + '2;4r' + CSI + 'S' + CSI + '2T']),
   cs('su-sd-1000', [fill(), CSI + '2;4r' + CSI + '1000S' + CSI + '1000T' + CSI + 'r' + CSI + '1000S' + CSI + '1000^']),
   cs('sd-default-attr', [fill(), CSI + '44m' + CSI + '2T' + CSI + '2S']),   // :1489
+  cs('sd-default-attr-alone', [fill(), CSI + '44m' + CSI + '2T']),           // the SU above scrolls SD's lines away
   cs('sl-sr', [fill(), CSI + '2 @' + CSI + '2 A' + CSI + '2;3r' + CSI + '5;1H' + CSI + ' @' + CSI + '2;1H' + CSI + '3 A']),
   cs('decic-decdc', [fill(), CSI + '1;3H' + CSI + "2'}" + CSI + "2'~" + CSI + '2;4r' + CSI + '6;1H' + CSI + "'}"]),
   c1('cht-cbt', CSI + 'Ia' + CSI + '3Ib' + CSI + '1000Ic' + CSI + 'Zd' + CSI + '3Z' + CSI + '1000Ze', { cols: 40 }),  // :1125-1150
@@ -194,6 +200,8 @@ const hand = [
   c1('sgr-color-truncated', CSI + '38;5ma' + CSI + '38;2;1;2mb' + CSI + '38:2mc' + CSI + '38md' + CSI + '48:5me'),
   c1('sgr-color-then-more', CSI + '38;5;1;1ma' + CSI + '0;38;2;1;2;3;4mb' + CSI + '0;38:5:3;4mc' + CSI + '38;5;' + digits20 + 'md'),
   c1('sgr-underline-styles', ['4:0', '4:1', '4:2', '4:3', '4:4', '4:5', '4:9', '4:', '21', '24', '4:3;58:5:9', '59', '4', '58;2;1;2;3', '0'].map((p, i) => CSI + p + 'm' + String.fromCharCode(65 + i)).join(''), { cols: 20 }),
+  // 6, 7 and 13 fit the 3-bit style field unchanged or as 5; 9 happens to store as 1
+  c1('sgr-underline-out-of-range', ['4:6', '4:7', '4:13'].map((p, i) => CSI + p + 'm' + String.fromCharCode(65 + i)).join('')),
   c1('sgr-underline-with-link', OSC + '8;;http://x' + BEL + CSI + '4:3ma' + CSI + '4:1mb' + OSC + '8;;' + BEL + 'c' + CSI + '0md'),
   c1('sgr-33-params', CSI + Array.from({ length: 34 }, (_, i) => (i < 31 ? '0' : i === 31 ? '1' : '3')).join(';') + 'mx'),
   // ---- replies :1706-1777, :2743-2795, :3519-3537, :2936-2983 ----
@@ -224,6 +232,7 @@ const hand = [
   c1('osc8-trim', OSC + '8; id=x ;http://a' + BEL + 'a' + OSC + '8;;' + BEL + OSC + '8;id=x;http://a' + BEL + 'b'),
   c1('osc8-wrap', OSC + '8;;u' + BEL + 'abcdefghijklmn' + OSC + '8;;' + BEL, { cols: 10 }),
   c1('osc8-reuse', OSC + '8;id=q;u' + BEL + 'a' + OSC + '8;;' + BEL + '\r\n' + OSC + '8;id=q;u' + BEL + 'b' + OSC + '8;;' + BEL + 'c'),
+  c1('osc8-same-id-other-uri', OSC + '8;id=q;u' + BEL + 'a' + OSC + '8;;' + BEL + OSC + '8;id=q;v' + BEL + 'b' + OSC + '8;;' + BEL),
   c1('osc8-scrolled-out', OSC + '8;;u' + BEL + 'a' + OSC + '8;id=k;v' + BEL + 'b' + OSC + '8;;' + BEL + '\r\n'.repeat(10) + OSC + '8;id=k;v' + BEL + 'c', { options: { scrollback: 2 } }),
   c1('osc8-semicolon-uri', OSC + '8;;http://a;b;c' + BEL + 'x' + OSC + '8;;' + BEL),
   // ---- resets :2816-2835, :3427-3438, headless Terminal.ts:122-132 ----
