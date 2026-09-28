@@ -101,9 +101,13 @@ type
       Key: string;
       Glyph: TTyTermGlyph;
       Prev, Next: TNode;
+      Ascii: Integer;                { slot in FAscii, -1 = none }
     end;
   private
     FMap: specialize TDictionary<string, TNode>;
+    { printable ASCII, one cell, the main font: the bulk of any screen, looked up without
+      building a key string (the same entries as FMap, never more) }
+    FAscii: array[0..95 * 4 - 1] of TNode;
     FHead, FTail: TNode;             { head = most recently used }
     FCapacity: Integer;
     FHits, FMisses: Integer;
@@ -115,6 +119,9 @@ type
     destructor Destroy; override;
     { nil = not cached; a hit moves the entry to the front }
     function Find(const AKey: TTyTermGlyphKey): TTyTermGlyph;
+    { Find for a one-cell printable ASCII character in the main font (32..126); the same
+      counting and the same recency as Find }
+    function FindAscii(ACode: Integer; ABold, AItalic: Boolean): TTyTermGlyph;
     { takes ownership; an entry for the same key is replaced }
     procedure Add(const AKey: TTyTermGlyphKey; AGlyph: TTyTermGlyph);
     procedure Clear;
@@ -412,6 +419,35 @@ begin
   Result := FMap.Count;
 end;
 
+function AsciiSlot(const AKey: TTyTermGlyphKey): Integer;
+begin
+  Result := -1;
+  if (Length(AKey.Text) = 1) and (AKey.Text[1] >= #32) and (AKey.Text[1] <= #126)
+    and (AKey.Cells = 1) and (AKey.Font = tfkMain) then
+    Result := (Ord(AKey.Text[1]) - 32) * 4 + Ord(AKey.Bold) + 2 * Ord(AKey.Italic);
+end;
+
+function TTyTermGlyphCache.FindAscii(ACode: Integer; ABold, AItalic: Boolean): TTyTermGlyph;
+var
+  node: TNode;
+begin
+  node := nil;
+  if (ACode >= 32) and (ACode <= 126) then
+    node := FAscii[(ACode - 32) * 4 + Ord(ABold) + 2 * Ord(AItalic)];
+  if node = nil then
+  begin
+    Inc(FMisses);
+    Exit(nil);
+  end;
+  Inc(FHits);
+  if node <> FHead then
+  begin
+    Unlink(node);
+    PushFront(node);
+  end;
+  Result := node.Glyph;
+end;
+
 function TTyTermGlyphCache.Find(const AKey: TTyTermGlyphKey): TTyTermGlyph;
 var
   node: TNode;
@@ -452,12 +488,15 @@ begin
     old := FTail;
     Unlink(old);
     FMap.Remove(old.Key);
+    if old.Ascii >= 0 then FAscii[old.Ascii] := nil;
     old.Glyph.Free;
     old.Free;
   end;
   node := TNode.Create;
   node.Key := k;
   node.Glyph := AGlyph;
+  node.Ascii := AsciiSlot(AKey);
+  if node.Ascii >= 0 then FAscii[node.Ascii] := node;
   FMap.Add(k, node);
   PushFront(node);
 end;
@@ -477,6 +516,7 @@ begin
   FHead := nil;
   FTail := nil;
   FMap.Clear;
+  FillChar(FAscii, SizeOf(FAscii), 0);
 end;
 
 { ---- rasterizer ------------------------------------------------------------------ }
@@ -756,7 +796,9 @@ var
   cp: Cardinal;
   w: Integer;
   attr: TTyTerminalAttrData;
+  asciiMissed: Boolean;
 begin
+  asciiMissed := False;
   if not ALine.HasContent(ACol) then Exit;
   w := ALine.GetWidth(ACol);
   if w <= 0 then Exit;
@@ -767,16 +809,35 @@ begin
       TyTermRgbToPixel(AInk), Metrics, Spec.PPI);
     Exit;
   end;
-  key.Text := ALine.GetChars(ACol);
-  if (key.Text = '') or (key.Text = ' ') then Exit;
   attr := Default(TTyTerminalAttrData);
   attr.Fg := ALine.GetFg(ACol);
   attr.Bg := ALine.GetBg(ACol);
+  if (cp = 32) and not ALine.IsCombined(ACol) then Exit;
+  if (w = 1) and (cp > 32) and (cp <= 126) and not ALine.IsCombined(ACol) then
+  begin
+    { the common case, without a key string }
+    glyph := GlyphCache.FindAscii(cp, attr.IsBold, attr.IsItalic);
+    if glyph <> nil then
+    begin
+      TyTermBlendMask(ABmp, AX + glyph.OffsetX, AY + glyph.OffsetY, glyph.Mask, AInk, AClip);
+      Exit;
+    end;
+    key.Text := Chr(cp);
+    asciiMissed := True;
+  end
+  else
+  begin
+    key.Text := ALine.GetChars(ACol);
+    if (key.Text = '') or (key.Text = ' ') then Exit;
+  end;
   key.Bold := attr.IsBold;
   key.Italic := attr.IsItalic;
   key.Cells := w;
   if (w >= 2) and (Spec.WideName <> '') then key.Font := tfkWide else key.Font := tfkMain;
-  glyph := GlyphCache.Find(key);
+  if asciiMissed then
+    glyph := nil                     { FindAscii already counted the miss }
+  else
+    glyph := GlyphCache.Find(key);
   if glyph = nil then
   begin
     glyph := Rasterizer.Rasterize(key, Spec, Metrics);
