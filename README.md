@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。168 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -33,7 +33,7 @@ Lazarus 自绘控件库。168 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **168 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
+- **169 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -77,7 +77,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-168 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+169 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -111,12 +111,13 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyTag` | 可关闭的标签胶囊 |
 | `TTyBadge` | 数字 / 圆点角标,可吸附到任意控件 |
 
-### 文本与数值输入 · `TyControls Edits`(14)
+### 文本与数值输入 · `TyControls Edits`(15)
 
 | 控件 | 说明 |
 |---|---|
 | `TTyEdit` | 单行文本框:选区、剪贴板、词级导航 |
 | `TTyMemo` | 多行文本框 |
+| `TTyTerminalView` | 终端:画程序输出、把按键编码交给宿主,照 xterm.js |
 | `TTySpinEdit` | 整数微调框 |
 | `TTyFloatSpinEdit` | 小数微调框,步长可小于 1 |
 | `TTyNumericEdit` | 只接受数字的输入框,失焦时千分位格式化 |
@@ -381,6 +382,7 @@ CharImage1.GlyphName := 'house';
 | [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
+| [terminal](examples/terminal/) | 终端回放:asciicast 录制、换肤、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。
 
