@@ -215,6 +215,23 @@ type
           96 on a form that was scaled long ago.
       From there on LCL's DPI pass is the only thing that moves it. }
     procedure SetParent(AParent: TWinControl); override;
+    { ===== HiDPI: WHICH AXES THE DPI PASS SCALES ON AN AUTO-SIZED CONTROL ========
+      (Twin on TTyCustomControl.)
+
+      LCL's pass leaves an AutoSize control's Width and Height alone, on the grounds that
+      the control is about to re-fit itself at the new PPI (TControl.ShouldAutoAdjust). That
+      is true of an axis AutoSize decides -- and most controls here decide only ONE. A push
+      button, a check box, a toggle switch propose a width and answer 0 for the height,
+      because the height belongs to whoever lays the row out; a wrapping label takes its
+      width as given and works out only how tall that makes it. The axis nobody re-fits was
+      simply never scaled: at 175% an auto-sized button stayed 30 px tall beside 53 px
+      neighbours, and an auto-sized wrapping label kept its 96-PPI width, broke its text
+      into twice the lines and ran into whatever stood below it.
+
+      So the question is put to the control: an axis it has no preferred size on is an
+      axis the pass has to scale. LCL makes the same split by hand for the controls it
+      knows (TCustomEdit and TCustomComboBox scale their width whatever AutoSize says). }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;
     procedure MouseLeave; override;
@@ -353,6 +370,9 @@ type
     { Born in the design space, the parent's PPI on parenting. Twin of the one on
       TTyGraphicControl -- read it there. }
     procedure SetParent(AParent: TWinControl); override;
+    { The axes AutoSize does not decide are scaled by the DPI pass. Twin of the one on
+      TTyGraphicControl -- read it there. }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     {$IFDEF LCLGTK3}
     { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
       hands its remaining clear a colour to work with, ONCE per theme change. }
@@ -663,6 +683,21 @@ begin
   ppi := TyParentPPIToAdopt(Self, AParent);
   if ppi > 0 then
     Font.PixelsPerInch := ppi;
+end;
+
+procedure TTyGraphicControl.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+var
+  pw, ph: Integer;
+begin
+  inherited ShouldAutoAdjust(AWidth, AHeight);     // both: not AutoSize
+  if not AutoSize then Exit;
+  { Only whether there IS an opinion is read, never what it says, so it does not matter
+    that the font is half-way through the pass when this is asked. }
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw <= 0 then AWidth := True;
+  if ph <= 0 then AHeight := True;
 end;
 
 function TTyGraphicControl.GetVersion: string;
@@ -1683,6 +1718,20 @@ begin
   ppi := TyParentPPIToAdopt(Self, AParent);
   if ppi > 0 then
     Font.PixelsPerInch := ppi;
+end;
+
+procedure TTyCustomControl.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+var
+  pw, ph: Integer;
+begin
+  // See the TTyGraphicControl twin.
+  inherited ShouldAutoAdjust(AWidth, AHeight);
+  if not AutoSize then Exit;
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw <= 0 then AWidth := True;
+  if ph <= 0 then AHeight := True;
 end;
 
 function TTyCustomControl.GetVersion: string;

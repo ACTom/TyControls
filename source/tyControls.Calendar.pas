@@ -1295,8 +1295,9 @@ begin
           TodayRingColor := TodayRingStyle.Background.Color
         else
           TodayRingColor := S.TextColor;
-        TodayRingW := P.Scale(1);
-        if TodayRingW < 1 then TodayRingW := 1;
+        { LOGICAL: StrokeBorder scales its width. Handed P.Scale(1) the ring was scaled
+          twice -- 4 px at 175% where every other 1 px line is 2. }
+        TodayRingW := 1;
         P.StrokeBorder(CellRect, 0, TodayRingW, TodayRingColor);
       end;
 

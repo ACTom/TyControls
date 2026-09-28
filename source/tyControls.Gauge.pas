@@ -2,7 +2,7 @@ unit tyControls.Gauge;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, ExtCtrls,
+  Classes, SysUtils, Types, Math, Controls, Graphics, ExtCtrls, LCLType,
   BGRABitmapTypes, BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel,
   tyControls.Animation;
@@ -267,7 +267,11 @@ procedure TTyGauge.DrawValueText(P: TTyPainter; const R: TRect; AColor: TTyColor
 var fs: Integer;
 begin
   if not FShowValue then Exit;
-  fs := Math.Max(9, (R.Bottom - R.Top) div 6);
+  { A sixth of the dial -- but the dial is measured in DEVICE px and DrawText takes a
+    LOGICAL size, which it scales by the PPI itself. Handed the device number, it scaled a
+    size that was already scaled: at 175% the figure came out 1.75x too large and ran out
+    of the ring it is supposed to sit in. }
+  fs := Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI));
   P.DrawText(R, Format(FValueFormat, [FValue]), Font.Name, fs, 700, AColor,
     taCenter, tlCenter, False);
 end;

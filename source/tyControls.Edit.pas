@@ -1968,7 +1968,8 @@ begin
       { The click sequence, counted here because LCL has no native triple-click and only
         marks the 2nd press with ssDouble. 2 = word, 3 = line (the whole single-line text);
         1 (and a wrapped 4+) is a plain caret placement. }
-      Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick, FClickCount);
+      Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY,
+        FLastClickTick, FClickCount, Font.PixelsPerInch);
       if Clicks = 2 then
       begin
         // Double-click: select the word under the pointer (was: select all).

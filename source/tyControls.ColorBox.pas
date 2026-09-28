@@ -412,7 +412,7 @@ begin
     sw := P.Scale(AColorRectWidth)              // pinned width: a colour BAR, not a square
   else
     sw := (ARect.Bottom - ARect.Top) - 2 * pad; // square swatch, height-derived
-  if sw < 4 then sw := 4;
+  if sw < P.Scale(4) then sw := P.Scale(4);
   maxSw := (ARect.Right - ARect.Left) - 2 * pad;
   if sw > maxSw then sw := maxSw;
   if sw < 1 then Exit;

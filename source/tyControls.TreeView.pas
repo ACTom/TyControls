@@ -5437,14 +5437,15 @@ begin
                 ctRadioButton:
                 begin
                   { Draw circle only — no square box (FIX 4: prevents corner artifact) }
+                  { The radius is LOGICAL -- the painter scales it -- and the box is device px. }
                   if tpBackground in cbStyle.Present then
-                    P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
+                    P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2)
                   else
-                    P.FillBackground(cbBoxRect, S.Background, cbBoxSize div 2);
+                    P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2);
                   if tpBorderColor in cbStyle.Present then
-                    P.StrokeBorder(cbBoxRect, cbBoxSize div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
+                    P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
                   else
-                    P.StrokeBorder(cbBoxRect, cbBoxSize div 2, 1, S.BorderColor);
+                    P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, 1, S.BorderColor);
                   if node^.CheckState = csChecked then
                   begin
                     if tpTextColor in cbStyle.Present then
@@ -5722,13 +5723,13 @@ begin
             begin
               { Draw circle only — no square box (FIX 4: prevents corner artifact) }
               if tpBackground in cbStyle.Present then
-                P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
+                P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2)
               else
-                P.FillBackground(cbBoxRect, S.Background, cbBoxSize div 2);
+                P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2);
               if tpBorderColor in cbStyle.Present then
-                P.StrokeBorder(cbBoxRect, cbBoxSize div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
+                P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
               else
-                P.StrokeBorder(cbBoxRect, cbBoxSize div 2, 1, S.BorderColor);
+                P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, 1, S.BorderColor);
               if node^.CheckState = csChecked then
               begin
                 if tpTextColor in cbStyle.Present then

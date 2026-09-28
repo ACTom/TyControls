@@ -287,6 +287,7 @@ type
     procedure TestFreeingControllerNilsProperty;
     procedure TestTitleBarDragArmsViaEngine;
     procedure TestTitleBarTopZoneDoesNotArmDrag;
+    procedure TestTheResizeZoneFollowsTheFormsPPI;
     procedure TestDblClickMaximizeToggles;
     procedure TestResizableDefaultsTrue;
     procedure TestResizableRoundTrips;
@@ -315,6 +316,7 @@ type
     procedure TestMaximizedPressArmsDrag;
     procedure TestMaximizedDragRestoresUnderPointer;
     procedure TestMaximizedClickBelowThresholdKeepsMaximized;
+    procedure TestTheDragThresholdIsLogicalPx;
     procedure TestNativeMaximizeAdoptedByChrome;
     procedure TestNativeRestoreClearsMaximized;
     procedure TestMinimizeKeepsMaximizedState;
@@ -1948,6 +1950,39 @@ begin
   end;
 end;
 
+procedure TTyFormTest.TestTheResizeZoneFollowsTheFormsPPI;
+{ The zone is 6 LOGICAL px. It was used as 6 device px wherever the form was, so at 175% the
+  edge to grab was a little over half as deep as the one the design asked for -- on a screen
+  where the pointer is no more precise. (ACTom/TyControls#2) }
+var F: TTyFormAccess;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Font.PixelsPerInch := 96;
+    AssertEquals('at 96 PPI the zone is the number itself', 6, F.Engine.BorderZonePx);
+    {$IFDEF LCLWin32}
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 8);
+    AssertTrue('precondition: 8 px down is BELOW the zone at 96 PPI, so it drags the window',
+      F.EngineDragging);
+    {$ENDIF}
+  finally
+    F.Free;
+  end;
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Font.PixelsPerInch := 168;
+    AssertEquals('at 168 PPI it is 6 logical px', MulDiv(6, 168, 96), F.Engine.BorderZonePx);
+    {$IFDEF LCLWin32}
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 8);
+    AssertFalse('8 px down is still ON the resize edge at 168 PPI', F.EngineDragging);
+    {$ENDIF}
+  finally
+    F.Free;
+  end;
+end;
+
 procedure TTyFormTest.TestDblClickMaximizeToggles;
 var F: TTyFormAccess;
 begin
@@ -2215,6 +2250,38 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TMaximizedChromeTest.TestTheDragThresholdIsLogicalPx;
+{ How far the pointer may wander during a click before it counts as a drag: 4 LOGICAL px.
+  As 4 device px it was a little over half of that at 175%, on a screen where a hand is no
+  steadier -- so a double-click on a maximized caption tore the window loose instead of
+  restoring it. (ACTom/TyControls#2) }
+
+  function TornLooseBy(APPI, ATravel: Integer): Boolean;
+  var F: TTyFormAccess;
+  begin
+    F := TTyFormAccess.CreateNew(nil);
+    try
+      F.MakeTitleBar;
+      F.Font.PixelsPerInch := APPI;
+      F.SetBounds(0, 0, 1000, 800);
+      F.Engine.SavedBounds := Rect(120, 90, 520, 390);
+      F.SetEngineMaximized(True);
+      F.Engine.TitleBarDragBegin(Point(500, 10));
+      F.Engine.TitleBarDragUpdate(Point(500 + ATravel, 10));
+      Result := not F.EngineMaximized;
+    finally
+      F.Free;
+    end;
+  end;
+
+begin
+  AssertFalse('precondition: 4 px of travel is still a click at 96 PPI', TornLooseBy(96, 4));
+  AssertTrue('precondition: 6 px is a drag there', TornLooseBy(96, 6));
+  AssertFalse('6 px on a 168-PPI screen is 3.4 logical px: still a click',
+    TornLooseBy(168, 6));
+  AssertTrue('8 px is past the 7 the threshold comes to', TornLooseBy(168, 8));
 end;
 
 procedure TMaximizedChromeTest.TestNativeMaximizeAdoptedByChrome;

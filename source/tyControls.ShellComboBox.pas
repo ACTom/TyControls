@@ -165,7 +165,7 @@ begin
   if (AImages <> nil) and (AGlyphIndex >= 0) and (AGlyphIndex < AImages.Count) then
   begin
     sz := rowH - P.Scale(8);
-    if sz < 8 then sz := 8;
+    if sz < P.Scale(8) then sz := P.Scale(8);
     bmp := AImages.CachedIndex(AGlyphIndex, sz);   { borrowed; do NOT free }
     if bmp <> nil then
       P.Bitmap.PutImage(x, ARect.Top + ((rowH - bmp.Height) div 2), bmp,

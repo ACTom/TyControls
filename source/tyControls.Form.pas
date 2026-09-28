@@ -277,7 +277,13 @@ type
     procedure MaximizeToWorkArea;
     property Form: TCustomForm read FForm write FForm;
     property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
+    { The resize hot zone along the window's edges, LOGICAL px. BorderZonePx is what every
+      hit test and the GTK/Qt gutter use: the same zone at the form's PPI, so the edge is
+      as easy to grab at 175% as it is at 100%. }
     property BorderZone: Integer read FBorderZone write FBorderZone;
+    function BorderZonePx: Integer;
+    { A LOGICAL length in device px at the form's PPI (96 when there is no form yet). }
+    function ScalePx(ALogical: Integer): Integer;
     property Maximized: Boolean read FMaximized write FMaximized;
     { Whether the current maximize is the window manager's (see FNativeMaximize). }
     property NativeMaximized: Boolean read FNativeMaximize;
@@ -1430,7 +1436,7 @@ begin
   // would be an ugly thick frame), so the OS can't resize from the top edge. Grab the top
   // FBorderZone px ourselves and hand a NATIVE top-resize to the OS instead of starting a drag.
   if (Button = mbLeft) and (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
+     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx) then
   begin
     TyNcBeginTopResize(GetParentForm(Self));
     Exit;
@@ -1447,7 +1453,7 @@ begin
   {$IFDEF LCLWin32}
   // Show the N-S resize cursor over the top hot-zone (matches the MouseDown top-resize above).
   if (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
+     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx) then
     Cursor := crSizeNS
   else
     Cursor := crDefault;
@@ -1483,6 +1489,21 @@ begin
   inherited Create;
   FBorderZone := 6;
   FMaximized := False;
+end;
+
+function TTyChromeEngine.ScalePx(ALogical: Integer): Integer;
+var
+  ppi: Integer;
+begin
+  ppi := 96;
+  if FForm <> nil then ppi := FForm.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(ALogical, ppi, 96);
+end;
+
+function TTyChromeEngine.BorderZonePx: Integer;
+begin
+  Result := ScalePx(FBorderZone);
 end;
 
 function TTyChromeEngine.FormResizable: Boolean;
@@ -1585,13 +1606,13 @@ end;
 
 procedure TTyChromeEngine.TitleBarDragUpdate(const ACursor: TPoint);
 const
-  DragThreshold = 4;   // px the pointer must travel before the drag leaves the press site
+  DragThreshold = 4;   // LOGICAL px the pointer must travel before the drag leaves the press site
 var
   Moved: Boolean;
 begin
   if (not FDragging) or (FForm = nil) then Exit;
-  Moved := (Abs(ACursor.X - FDragStart.X) > DragThreshold)
-        or (Abs(ACursor.Y - FDragStart.Y) > DragThreshold);
+  Moved := (Abs(ACursor.X - FDragStart.X) > ScalePx(DragThreshold))
+        or (Abs(ACursor.Y - FDragStart.Y) > ScalePx(DragThreshold));
   if FMaximized then
   begin
     { Tearing a maximized window loose — what every native title bar does, and what this window
@@ -1663,7 +1684,7 @@ begin
   if (Button <> mbLeft) or (FForm = nil) or FMaximized then
     Exit;
   FResizeHit := TyResizeHitFor(ManualResizeEnabled, Rect(0, 0, FForm.Width, FForm.Height),
-    Point(X, Y), FBorderZone);
+    Point(X, Y), BorderZonePx);
   if FResizeHit <> bhNone then
   begin
     FResizing := True;
@@ -1687,7 +1708,7 @@ begin
   if not FResizing then
   begin
     FForm.Cursor := TyResizeCursor(TyResizeHitFor(ManualResizeEnabled,
-      Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), FBorderZone));
+      Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), BorderZonePx));
     Exit;
   end;
   M := FForm.ClientToScreen(Point(X, Y));
@@ -1705,17 +1726,18 @@ begin
     bhBottomLeft: begin B.Left := B.Left + DX; B.Bottom := B.Bottom + DY; end;
     bhBottomRight: begin B.Right := B.Right + DX; B.Bottom := B.Bottom + DY; end;
   end;
-  if B.Right - B.Left < 80 then
+  { The smallest window a drag may leave, 80 x 60 LOGICAL px. }
+  if B.Right - B.Left < ScalePx(80) then
     case FResizeHit of
-      bhLeft, bhTopLeft, bhBottomLeft: B.Left := B.Right - 80;
+      bhLeft, bhTopLeft, bhBottomLeft: B.Left := B.Right - ScalePx(80);
     else
-      B.Right := B.Left + 80;
+      B.Right := B.Left + ScalePx(80);
     end;
-  if B.Bottom - B.Top < 60 then
+  if B.Bottom - B.Top < ScalePx(60) then
     case FResizeHit of
-      bhTop, bhTopLeft, bhTopRight: B.Top := B.Bottom - 60;
+      bhTop, bhTopLeft, bhTopRight: B.Top := B.Bottom - ScalePx(60);
     else
-      B.Bottom := B.Top + 60;
+      B.Bottom := B.Top + ScalePx(60);
     end;
   FForm.BoundsRect := B;
 end;
@@ -2248,12 +2270,12 @@ begin
   // here because this override only compiles on the GTK/Qt widgetsets that require it.
   if FEngine <> nil then
   begin
-    zone := FEngine.BorderZone;
+    zone := FEngine.BorderZonePx;
     maxed := FEngine.Maximized;
   end
   else
   begin
-    zone := 6;
+    zone := MulDiv(6, Font.PixelsPerInch, 96);
     maxed := False;
   end;
   ARect := TyResizeGutterRect(ARect, zone, FResizable, maxed, True);
@@ -2382,7 +2404,8 @@ begin
   if HandleAllocated then
   begin
     if FTitleBar <> nil then capH := FTitleBar.Height else capH := 0;
-    if FEngine <> nil then zone := FEngine.BorderZone else zone := 6;
+    if FEngine <> nil then zone := FEngine.BorderZonePx
+    else zone := MulDiv(6, Font.PixelsPerInch, 96);
     // A rolled-up (window-shade) window drops WS_THICKFRAME: its sizing border enforces an OS
     // minimum window height that would otherwise leave a content sliver under the title bar, and
     // a collapsed window needs no edge-resize anyway. Restored when unrolled.

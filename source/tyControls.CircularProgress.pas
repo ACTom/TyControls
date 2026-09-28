@@ -2,7 +2,7 @@ unit tyControls.CircularProgress;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, ExtCtrls,
+  Classes, SysUtils, Types, Math, Controls, Graphics, ExtCtrls, LCLType,
   BGRABitmapTypes, BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel,
   tyControls.Animation, tyControls.Gauge;
@@ -235,8 +235,10 @@ begin
     if FShowValue then
     begin
       pct := TyGaugeFraction(FPosition, FMin, FMax) * 100;
+      { A sixth of the ring, turned back into a LOGICAL size: the ring is device px and
+        DrawText scales what it is given. See TTyGauge.DrawValueText. }
       P.DrawText(R, Format(FValueFormat, [pct]), Font.Name,
-        Math.Max(9, (R.Bottom - R.Top) div 6), 700, trackS.TextColor,
+        Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI)), 700, trackS.TextColor,
         taCenter, tlCenter, False);
     end;
     P.EndPaint;

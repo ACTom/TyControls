@@ -445,7 +445,7 @@ begin
         gy := gripBox.Bottom - P.Scale(3) - k*P.Scale(4);
         sep := Rect(gx, gy, gx + P.Scale(2), gy + P.Scale(2));
         if rtl then sep := BidiFlipRect(sep, gripBox, True);
-        P.FillBackground(sep, grip, P.Scale(1));
+        P.FillBackground(sep, grip, 1);   // the radius is LOGICAL: the painter scales it
       end;
     end;
     P.EndPaint;
