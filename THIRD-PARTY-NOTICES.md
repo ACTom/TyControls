@@ -70,7 +70,7 @@ rather than duplicated here so it cannot drift from the upstream file.
 
 ---
 
-## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Core.Services.inc`, `source/tyControls.Terminal.Core.InputHandler.inc`, `source/tyControls.Terminal.Core.WriteQueue.inc`, `source/tyControls.Terminal.Charsets.inc`
+## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Core.Services.inc`, `source/tyControls.Terminal.Core.InputHandler.inc`, `source/tyControls.Terminal.Core.WriteQueue.inc`, `source/tyControls.Terminal.Charsets.inc`, `source/tyControls.Terminal.Keyboard.pas`, `source/tyControls.Terminal.Render.pas`, `source/tyControls.Terminal.CustomGlyphs.inc`
 
 Upstream: <https://github.com/xtermjs/xterm.js> · pinned at 6.0.0, commit `c58ea3637f39`.
 
@@ -78,6 +78,15 @@ The width unit and the three terminal units (the core with its three include fil
 ported from xterm.js, and the two other include files are generated from it: the width tables are dumped from the upstream build by
 `tools/terminal-oracle/gen-unicode-tables.js`, the character set tables by
 `tools/terminal-oracle/gen-terminal-charsets.js`.
+
+The terminal view's parts come from the same code base: the keyboard unit is ported from
+`src/common/input/Keyboard.ts`, `src/browser/Clipboard.ts` and the third-level-shift test of
+`src/browser/CoreBrowserTerminal.ts`; the renderer resolves colours as
+`src/browser/renderer/dom/DomRendererRowFactory.ts` does and draws box-drawing and block
+characters as the WebGL addon's `CustomGlyphRasterizer.ts` does, from the definitions
+`tools/terminal-oracle/gen-terminal-glyphs.js` dumps out of `CustomGlyphDefinitions.ts` into
+the include. Their copyright lines (2014, 2016, 2018, 2021, 2023, and the addon's own
+`LICENSE`, 2018) all name the xterm.js authors, whom the lines below already cover.
 
 **You ship this if you `uses tyControls.Unicode.Width` or any `tyControls.Terminal*` unit**
 (the terminal units use the width unit). The tables are constants inside the units, so smart
