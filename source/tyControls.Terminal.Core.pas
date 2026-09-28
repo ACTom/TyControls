@@ -650,13 +650,18 @@ function TyTermDefaultClock: Double;
 {$IFDEF MSWINDOWS}
 var
   c, f: Int64;
+  count, freq: Double;
 begin
   { GetTickCount64 steps by ~15.6 ms here, coarser than the 12 ms budget }
   c := 0;
   f := 1;
   QueryPerformanceCounter(c);
   QueryPerformanceFrequency(f);
-  Result := c * 1000.0 / f;
+  { Double variables: "c * 1000.0" would take the literal as a Single and lose the
+    milliseconds of a counter in the trillions }
+  count := c;
+  freq := f;
+  Result := count / freq * 1000;
 end;
 {$ELSE}
 begin
@@ -1284,16 +1289,16 @@ end;
 procedure TTyTerminalCore.UpdateWindowsModeWrappedState;
 var
   buf: TTyTerminalBuffer;
-  line, nextLine: TTyTerminalLine;
+  line, below: TTyTerminalLine;
   code: Cardinal;
 begin
   buf := Buffer;
   line := buf.Lines.Get(buf.YBase + buf.Y - 1);
-  nextLine := buf.Lines.Get(buf.YBase + buf.Y);
-  if (nextLine <> nil) and (line <> nil) then
+  below := buf.Lines.Get(buf.YBase + buf.Y);
+  if (below <> nil) and (line <> nil) then
   begin
     code := line.GetCodePoint(Cols - 1);
-    nextLine.IsWrapped := (code <> TyTermNullCellCode) and (code <> TyTermWhitespaceCellCode);
+    below.IsWrapped := (code <> TyTermNullCellCode) and (code <> TyTermWhitespaceCellCode);
   end;
 end;
 
@@ -1536,7 +1541,7 @@ var
   buf: TTyTerminalBuffer;
   bufferRow, oldRow, ln: TTyTerminalLine;
   charset: TTyTermCharsetId;
-  cols, r, pos, chWidth, oldWidth, oldCol, offset, delta: Integer;
+  ncols, r, pos, chWidth, oldWidth, oldCol, offset, delta: Integer;
   code, m: Cardinal;
   wraparound, insert, shouldJoin: Boolean;
   precedingJoinState, currentInfo: TTyUnicodeCharProps;
@@ -1544,7 +1549,7 @@ var
   linkId: Integer;
 begin
   charset := FCharset;
-  cols := Cols;
+  ncols := Cols;
   wraparound := FWraparound;
   insert := FInsertMode;
   buf := Buffer;
@@ -1587,7 +1592,7 @@ begin
           FLinks.AddLineToLink(linkId, buf.YBase + buf.Y);
 
         { the character does not fit: wrap (DECAWM) or stay in the last cell }
-        if buf.X + chWidth - oldWidth > cols then
+        if buf.X + chWidth - oldWidth > ncols then
         begin
           if wraparound then
           begin
@@ -1618,7 +1623,7 @@ begin
             if oldWidth > 0 then
               bufferRow.CopyCellsFrom(oldRow, oldCol, 0, oldWidth, False);
             { clear what is left to the right }
-            while oldCol < cols do
+            while oldCol < ncols do
             begin
               oldRow.SetCellFromCodepoint(oldCol, 0, 1, FCurAttr);
               Inc(oldCol);
@@ -1628,7 +1633,7 @@ begin
           end
           else
           begin
-            buf.X := cols - 1;
+            buf.X := ncols - 1;
             { a wide character that does not fit the last cell is dropped }
             if chWidth = 2 then
               Continue;
@@ -1658,8 +1663,8 @@ begin
         if insert then
         begin
           bufferRow.InsertCells(buf.X, chWidth - oldWidth, buf.GetNullCell(FCurAttr));
-          if bufferRow.GetWidth(cols - 1) = 2 then
-            bufferRow.SetCellFromCodepoint(cols - 1, TyTermNullCellCode, TyTermNullCellWidth, FCurAttr);
+          if bufferRow.GetWidth(ncols - 1) = 2 then
+            bufferRow.SetCellFromCodepoint(ncols - 1, TyTermNullCellCode, TyTermNullCellWidth, FCurAttr);
         end;
 
         bufferRow.SetCellFromCodepoint(buf.X, code, chWidth, FCurAttr);
@@ -1678,7 +1683,7 @@ begin
       end;
     FParser.PrecedingJoinState := precedingJoinState;
     { a lone second half of a wide character right of the cursor: reset it }
-    if (buf.X < cols) and (total > 0) and (bufferRow.GetWidth(buf.X) = 0)
+    if (buf.X < ncols) and (total > 0) and (bufferRow.GetWidth(buf.X) = 0)
       and not bufferRow.HasContent(buf.X) then
       bufferRow.SetCellFromCodepoint(buf.X, 0, 1, FCurAttr);
     MarkDirty(buf.Y);
