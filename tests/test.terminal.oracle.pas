@@ -56,7 +56,8 @@ function TyTermDigest(const ACps: array of Cardinal): Cardinal;
 function TyTermUtf8ToCps(const S: string): TTyTermCps;
 function TyTermDigestUtf8(const S: string): Cardinal;
 { The canonical text of a payload: up to 256 code points, the code points with
-  everything outside printable ASCII written as \x{HEX}; more, "n=<count> h=<digest>". }
+  everything outside printable ASCII (and the backslash and quote) written as a
+  backslash, x and the hex number in braces; more, "n=<count> h=<digest>". }
 function TyTermCanonCps(const ACps: array of Cardinal): string;
 function TyTermCanonUtf8(const S: string): string;
 { The same canonical text for a fixture value: a string, an array of code points,
