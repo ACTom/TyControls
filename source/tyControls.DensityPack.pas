@@ -163,6 +163,7 @@ begin
     '  --tab-padding: 20px;' + LineEnding +
     '  --tag-close-size: 18px;' + LineEnding +
     '  --tag-gap: 6px;' + LineEnding +
+    '  --terminal-pad: 8px;' + LineEnding +
     { A title bar hosts controls, so it cannot BE one control tall: at --control-height
       (38) a hosted combo or menu button fills it edge to edge and any top offset spills
       out the bottom, which is how the Ant Design example's theme picker lost its lower

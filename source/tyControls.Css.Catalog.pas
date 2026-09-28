@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (228 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (256 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (232 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (253 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..227] of string = (
+  TyCatalogTokens: array[0..255] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -201,6 +201,34 @@ const
     '--tab-padding',
     '--tag-close-size',
     '--tag-gap',
+    '--terminal-ansi-0',
+    '--terminal-ansi-1',
+    '--terminal-ansi-10',
+    '--terminal-ansi-11',
+    '--terminal-ansi-12',
+    '--terminal-ansi-13',
+    '--terminal-ansi-14',
+    '--terminal-ansi-15',
+    '--terminal-ansi-2',
+    '--terminal-ansi-3',
+    '--terminal-ansi-4',
+    '--terminal-ansi-5',
+    '--terminal-ansi-6',
+    '--terminal-ansi-7',
+    '--terminal-ansi-8',
+    '--terminal-ansi-9',
+    '--terminal-bg',
+    '--terminal-cursor',
+    '--terminal-cursor-ink',
+    '--terminal-cursor-width',
+    '--terminal-fg',
+    '--terminal-font-family',
+    '--terminal-font-family-wide',
+    '--terminal-link',
+    '--terminal-pad',
+    '--terminal-selection-bg',
+    '--terminal-selection-bg-inactive',
+    '--terminal-underline-width',
     '--titlebar-bg',
     '--titlebar-padding',
     '--tool-rule-alpha',
@@ -248,7 +276,7 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..231] of string = (
+  TyCatalogTypeKeys: array[0..252] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -442,6 +470,27 @@ const
     'TyTabSheet',
     'TyTag',
     'TyTagClose',
+    'TyTerminal',
+    'TyTerminalAnsi0',
+    'TyTerminalAnsi1',
+    'TyTerminalAnsi10',
+    'TyTerminalAnsi11',
+    'TyTerminalAnsi12',
+    'TyTerminalAnsi13',
+    'TyTerminalAnsi14',
+    'TyTerminalAnsi15',
+    'TyTerminalAnsi2',
+    'TyTerminalAnsi3',
+    'TyTerminalAnsi4',
+    'TyTerminalAnsi5',
+    'TyTerminalAnsi6',
+    'TyTerminalAnsi7',
+    'TyTerminalAnsi8',
+    'TyTerminalAnsi9',
+    'TyTerminalCursor',
+    'TyTerminalLink',
+    'TyTerminalPreedit',
+    'TyTerminalSelection',
     'TyTextHint',
     'TyTextSelection',
     'TyTitleBar',

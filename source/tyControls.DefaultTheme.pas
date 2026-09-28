@@ -114,6 +114,40 @@ begin
     '  --toolwindow-overlay-hover:       var(--overlay-hover);' + LineEnding +
     '  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.20);' + LineEnding +
     '' + LineEnding +
+    '  /* 终端(TTyTerminalView)。底色只引用皮肤已经定义好的 surface 令牌。16 色每个只写一处,' + LineEnding +
+    '     用三参数 on():底色亮(Rec.601 亮度 > 0.5)取第二个,暗取第三个。暗底是 xterm.js 的' + LineEnding +
+    '     Tango 原值;亮底那套由 tools/terminal-oracle/light-palette.js 用 xterm.js 自己的' + LineEnding +
+    '     ensureContrastRatio 把同一色相压暗到对白底 4.5:1(0、7、8、15 不动),那个脚本的' + LineEnding +
+    '     --check 守着这里的数。字体族两个令牌只给控件用 RawVar 读(font-family 不求值 var()),' + LineEnding +
+    '     monospace / monospace-wide 由控件换成平台字体;不要在规则里 var() 引用它们。' + LineEnding +
+    '     字号没有自己的令牌:长度的 var() 只解一层(令牌的值再是 var() 就成了字面串),规则直接' + LineEnding +
+    '     写 var(--font-size-base),跟着密度走;皮肤要单调终端字号就写 TyTerminal 的 font-size。 */' + LineEnding +
+    '  --terminal-bg:                    var(--surface);' + LineEnding +
+    '  --terminal-fg:                    var(--on-surface);' + LineEnding +
+    '  --terminal-cursor:                var(--on-surface);' + LineEnding +
+    '  --terminal-cursor-ink:            var(--terminal-bg);' + LineEnding +
+    '  --terminal-selection-bg:          alpha(var(--accent), 0.35);' + LineEnding +
+    '  --terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18);' + LineEnding +
+    '  --terminal-link:                  var(--accent);' + LineEnding +
+    '  --terminal-ansi-0:  on(var(--terminal-bg), #2e3436, #2e3436);' + LineEnding +
+    '  --terminal-ansi-1:  on(var(--terminal-bg), #cc0000, #cc0000);' + LineEnding +
+    '  --terminal-ansi-2:  on(var(--terminal-bg), #3f7c04, #4e9a06);' + LineEnding +
+    '  --terminal-ansi-3:  on(var(--terminal-bg), #8e7400, #c4a000);' + LineEnding +
+    '  --terminal-ansi-4:  on(var(--terminal-bg), #3465a4, #3465a4);' + LineEnding +
+    '  --terminal-ansi-5:  on(var(--terminal-bg), #75507b, #75507b);' + LineEnding +
+    '  --terminal-ansi-6:  on(var(--terminal-bg), #047a7c, #06989a);' + LineEnding +
+    '  --terminal-ansi-7:  on(var(--terminal-bg), #d3d7cf, #d3d7cf);' + LineEnding +
+    '  --terminal-ansi-8:  on(var(--terminal-bg), #555753, #555753);' + LineEnding +
+    '  --terminal-ansi-9:  on(var(--terminal-bg), #d72424, #ef2929);' + LineEnding +
+    '  --terminal-ansi-10: on(var(--terminal-bg), #50831c, #8ae234);' + LineEnding +
+    '  --terminal-ansi-11: on(var(--terminal-bg), #756d24, #fce94f);' + LineEnding +
+    '  --terminal-ansi-12: on(var(--terminal-bg), #517396, #729fcf);' + LineEnding +
+    '  --terminal-ansi-13: on(var(--terminal-bg), #8b6687, #ad7fa8);' + LineEnding +
+    '  --terminal-ansi-14: on(var(--terminal-bg), #1c8383, #34e2e2);' + LineEnding +
+    '  --terminal-ansi-15: on(var(--terminal-bg), #eeeeec, #eeeeec);' + LineEnding +
+    '  --terminal-font-family:           monospace;' + LineEnding +
+    '  --terminal-font-family-wide:      monospace-wide;' + LineEnding +
+    '' + LineEnding +
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
@@ -305,6 +339,9 @@ begin
     '  --tab-padding: 12px;' + LineEnding +
     '  --tag-close-size: 14px;' + LineEnding +
     '  --tag-gap: 4px;' + LineEnding +
+    '  --terminal-cursor-width: 1px;' + LineEnding +
+    '  --terminal-pad: 4px;' + LineEnding +
+    '  --terminal-underline-width: 1px;' + LineEnding +
     '  --titlebar-padding: 8px;' + LineEnding +
     '  --toolwindow-button-size: 22px;' + LineEnding +
     '  --toolwindow-content-min: 120px;' + LineEnding +
@@ -737,6 +774,36 @@ begin
     'TyMemo:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyMemo:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '' + LineEnding +
+    '/* 终端。默认无边框,所以没有 :focus 规则;选区前景不写(spec §11「写了才用」)。 */' + LineEnding +
+    'TyTerminal {' + LineEnding +
+    '  background: var(--terminal-bg);' + LineEnding +
+    '  color: var(--terminal-fg);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  padding: var(--terminal-pad);' + LineEnding +
+    '}' + LineEnding +
+    'TyTerminal:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTerminalCursor { background: var(--terminal-cursor); color: var(--terminal-cursor-ink); }' + LineEnding +
+    'TyTerminalSelection { background: var(--terminal-selection-bg-inactive); }' + LineEnding +
+    'TyTerminalSelection:focus { background: var(--terminal-selection-bg); }' + LineEnding +
+    'TyTerminalAnsi0 { color: var(--terminal-ansi-0); }' + LineEnding +
+    'TyTerminalAnsi1 { color: var(--terminal-ansi-1); }' + LineEnding +
+    'TyTerminalAnsi2 { color: var(--terminal-ansi-2); }' + LineEnding +
+    'TyTerminalAnsi3 { color: var(--terminal-ansi-3); }' + LineEnding +
+    'TyTerminalAnsi4 { color: var(--terminal-ansi-4); }' + LineEnding +
+    'TyTerminalAnsi5 { color: var(--terminal-ansi-5); }' + LineEnding +
+    'TyTerminalAnsi6 { color: var(--terminal-ansi-6); }' + LineEnding +
+    'TyTerminalAnsi7 { color: var(--terminal-ansi-7); }' + LineEnding +
+    'TyTerminalAnsi8 { color: var(--terminal-ansi-8); }' + LineEnding +
+    'TyTerminalAnsi9 { color: var(--terminal-ansi-9); }' + LineEnding +
+    'TyTerminalAnsi10 { color: var(--terminal-ansi-10); }' + LineEnding +
+    'TyTerminalAnsi11 { color: var(--terminal-ansi-11); }' + LineEnding +
+    'TyTerminalAnsi12 { color: var(--terminal-ansi-12); }' + LineEnding +
+    'TyTerminalAnsi13 { color: var(--terminal-ansi-13); }' + LineEnding +
+    'TyTerminalAnsi14 { color: var(--terminal-ansi-14); }' + LineEnding +
+    'TyTerminalAnsi15 { color: var(--terminal-ansi-15); }' + LineEnding +
+    'TyTerminalLink { color: var(--terminal-link); }' + LineEnding +
+    'TyTerminalPreedit { background: var(--terminal-bg); color: var(--terminal-fg); border-color: var(--accent); }' + LineEnding +
     '' + LineEnding +
     'TyTextSelection { background: var(--selection); }' + LineEnding +
     'TyTextHint      { color: var(--muted); }' + LineEnding +
