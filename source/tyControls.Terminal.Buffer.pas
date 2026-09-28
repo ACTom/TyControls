@@ -315,6 +315,7 @@ type
   TTyTerminalMarker = class
   private
     class var GNextId: Integer;
+    class var GLiveCount: Integer;
   private
     FId: Integer;
     FLine: Integer;
@@ -325,8 +326,11 @@ type
     FTag: TObject;
   public
     constructor Create(ALine: Integer);
+    destructor Destroy; override;
     procedure AddRef;
     procedure Release;
+    { FOR THE TESTS (a pure query): markers alive in the process, the leak guard. }
+    class function LiveCount: Integer;
     { Idempotent: sets IsDisposed and Line -1, then calls the listeners in the order
       they were added. }
     procedure Dispose;
@@ -524,6 +528,8 @@ type
   end;
 
   TTyTermLinkEntry = class
+  private
+    class var GLiveCount: Integer;
   public
     LinkId: Int64;
     Data: TTyTerminalLinkData;
@@ -531,6 +537,8 @@ type
     Markers: TFPList;
     constructor Create;
     destructor Destroy; override;
+    { FOR THE TESTS (a pure query): link entries alive in the process, the leak guard. }
+    class function LiveCount: Integer;
   end;
 
   { services/OscLinkService.ts. Link numbers start at 1 and are never reused, reset
@@ -1917,10 +1925,22 @@ end;
 constructor TTyTerminalMarker.Create(ALine: Integer);
 begin
   inherited Create;
+  Inc(GLiveCount);
   Inc(GNextId);
   FId := GNextId;
   FLine := ALine;
   FRefCount := 1;
+end;
+
+destructor TTyTerminalMarker.Destroy;
+begin
+  Dec(GLiveCount);
+  inherited Destroy;
+end;
+
+class function TTyTerminalMarker.LiveCount: Integer;
+begin
+  Result := GLiveCount;
 end;
 
 procedure TTyTerminalMarker.AddRef;
@@ -2792,13 +2812,20 @@ end;
 constructor TTyTermLinkEntry.Create;
 begin
   inherited Create;
+  Inc(GLiveCount);
   Markers := TFPList.Create;
 end;
 
 destructor TTyTermLinkEntry.Destroy;
 begin
   Markers.Free;
+  Dec(GLiveCount);
   inherited Destroy;
+end;
+
+class function TTyTermLinkEntry.LiveCount: Integer;
+begin
+  Result := GLiveCount;
 end;
 
 constructor TTyTerminalOscLinks.Create(AService: TTyTerminalBufferService);

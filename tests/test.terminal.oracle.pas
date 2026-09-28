@@ -135,12 +135,17 @@ type
   end;
 
 { Every field of the plan's state against AExpect. AVariant skips renders and
-  cursorMoves, which follow the number of parse calls. }
+  cursorMoves, which follow the number of parse calls. AIgnore: the case's "ignore"
+  list -- top-level fields a documented difference makes incomparable (REP's
+  fast-forward sends no OnScroll for the scrolls it skips: "scrolls"). }
 procedure TyTermCompareState(AHarness: TTyTermHarness; AExpect: TJSONObject; const ACaseId: string;
-  AVariant: Boolean; AMisses: TTyTermMisses);
+  AVariant: Boolean; AMisses: TTyTermMisses; AIgnore: TJSONArray = nil);
 { New core, run, compare; Reset on the same core, run again, compare with afterReset;
-  then each variant on a new core. Returns the comparisons it made. }
+  then each variant on a new core. Returns the comparisons it made. Every line,
+  marker and link entry the case made must be gone once its cores are: one miss
+  each otherwise (the leak guard). }
 function TyTermRunCase(ACase: TJSONObject; AFilePalette: TJSONArray; AMisses: TTyTermMisses): Int64;
+function TyTermAttrJson(const AAttr: TTyTerminalAttrData): TJSONObject;
 { The UTF-8 bytes of the reply stream with our XTVERSION name swapped for the
   placeholder the node side uses (spec 13.5 #3). }
 function TyTermNormalizeData(const AData: RawByteString): RawByteString;
@@ -828,7 +833,8 @@ end;
 
 function TyTermLinksJson(ALinks: TTyTerminalOscLinks): TJSONArray;
 var
-  ids, lns: TIntegerDynArray;
+  ids: TInt64DynArray;
+  lns: TIntegerDynArray;
   i, k: Integer;
   o: TJSONObject;
   a: TJSONArray;
@@ -1154,8 +1160,27 @@ begin
     Result := TJSONString.Create(ACore.CharsetKey(AId));
 end;
 
+function TyTermAttrJson(const AAttr: TTyTerminalAttrData): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.Add('fg', Int64(AAttr.Fg));
+  Result.Add('bg', Int64(AAttr.Bg));
+  Result.Add('ext', TyTermExtQuadJson(AAttr.Extended));
+end;
+
+function Ignored(AIgnore: TJSONArray; const AName: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  if AIgnore <> nil then
+    for i := 0 to AIgnore.Count - 1 do
+      if AIgnore.Strings[i] = AName then
+        Exit(True);
+end;
+
 procedure TyTermCompareState(AHarness: TTyTermHarness; AExpect: TJSONObject; const ACaseId: string;
-  AVariant: Boolean; AMisses: TTyTermMisses);
+  AVariant: Boolean; AMisses: TTyTermMisses; AIgnore: TJSONArray);
 var
   core: TTyTerminalCore;
   got: TJSONObject;
@@ -1229,6 +1254,8 @@ begin
       arr.Add(KeyOrNull(core, core.CharsetOfG(k)));
     charset.Add('g', arr);
     got.Add('charset', charset);
+    got.Add('curAttr', TyTermAttrJson(core.CurrentAttr));
+    got.Add('eraseAttr', TyTermAttrJson(core.EraseAttr));
     got.Add('title', TyTermDigestableJson(core.Title));
     got.Add('iconName', TyTermDigestableJson(core.IconName));
     arr := TJSONArray.Create;
@@ -1266,6 +1293,8 @@ begin
     begin
       if AVariant and ((got.Names[i] = 'renders') or (got.Names[i] = 'cursorMoves')) then
         Continue;
+      if Ignored(AIgnore, got.Names[i]) then
+        Continue;
       want := AExpect.Find(got.Names[i]);
       TyTermCompareJson(want, got.Items[i], ACaseId, got.Names[i], AMisses);
     end;
@@ -1289,24 +1318,30 @@ var
   id: string;
   before: Int64;
   after: TJSONData;
-  variants: TJSONArray;
-  k: Integer;
+  variants, ignore: TJSONArray;
+  k, lines0, markers0, links0: Integer;
 begin
   before := AMisses.Compared;
   id := ACase.Strings['id'];
+  ignore := nil;
+  if ACase.Find('ignore') <> nil then
+    ignore := ACase.Arrays['ignore'];
+  lines0 := TTyTerminalLine.LiveCount;
+  markers0 := TTyTerminalMarker.LiveCount;
+  links0 := TTyTermLinkEntry.LiveCount;
   h := TTyTermHarness.Create(ACase, AFilePalette);
   try
     h.Run(ACase.Arrays['steps']);
-    TyTermCompareState(h, ACase.Objects['expect'], id, False, AMisses);
+    TyTermCompareState(h, ACase.Objects['expect'], id, False, AMisses, ignore);
     { the same core again after Reset (spec 13.5 #5) }
     h.Core.Reset;
     h.ClearRecord;
     h.Run(ACase.Arrays['steps']);
     after := ACase.Find('afterReset');
     if (after = nil) or (after.JSONType = jtString) then
-      TyTermCompareState(h, ACase.Objects['expect'], id + ' after Reset', False, AMisses)
+      TyTermCompareState(h, ACase.Objects['expect'], id + ' after Reset', False, AMisses, ignore)
     else
-      TyTermCompareState(h, TJSONObject(after), id + ' after Reset', False, AMisses);
+      TyTermCompareState(h, TJSONObject(after), id + ' after Reset', False, AMisses, ignore);
   finally
     h.Free;
   end;
@@ -1318,12 +1353,20 @@ begin
       h := TTyTermHarness.Create(ACase, AFilePalette);
       try
         h.Run(ACase.Arrays['steps'], variants.Objects[k]);
-        TyTermCompareState(h, ACase.Objects['expect'], Format('%s variant %d', [id, k]), True, AMisses);
+        TyTermCompareState(h, ACase.Objects['expect'], Format('%s variant %d', [id, k]), True, AMisses, ignore);
       finally
         h.Free;
       end;
     end;
   end;
+  { the leak guard: nothing the case made outlives its cores }
+  AMisses.AddCompared(3);
+  if TTyTerminalLine.LiveCount <> lines0 then
+    AMisses.Add(id, 'lines alive after the cores went', IntToStr(lines0), IntToStr(TTyTerminalLine.LiveCount));
+  if TTyTerminalMarker.LiveCount <> markers0 then
+    AMisses.Add(id, 'markers alive after the cores went', IntToStr(markers0), IntToStr(TTyTerminalMarker.LiveCount));
+  if TTyTermLinkEntry.LiveCount <> links0 then
+    AMisses.Add(id, 'link entries alive after the cores went', IntToStr(links0), IntToStr(TTyTermLinkEntry.LiveCount));
   Result := AMisses.Compared - before;
 end;
 

@@ -111,18 +111,41 @@ const hand = [
   c1('el-2', 'abcdefghij' + CSI + '1;5H' + CSI + '2K'),
   c1('el-clears-wrapped', 'abcdefghijklmnopqrstuvw' + CSI + '2;1H' + CSI + 'K' + CSI + '3;4H' + CSI + '2K', { cols: 10 }),  // :1324-1340
   c1('decsca-decsel-decsed', 'ab' + CSI + '1"qcd' + CSI + '0"qef\r\ngh' + CSI + '1"qij' + CSI + '2"qkl' + CSI + '1;1H' + CSI + '?K' + CSI + '2;3H' + CSI + '?J' + CSI + 'K'),  // :1158-1163
-  c1('ech', 'abcdefghij' + CSI + '1;3H' + CSI + 'X' + CSI + '1;5H' + CSI + '3X' + CSI + '1;3H' + CSI + digits20 + 'X'),  // :1614-1626
+  // ECH :1614-1626, one erase per case so no later one covers an earlier one
+  c1('ech-default', 'abcdefghij' + CSI + '1;3H' + CSI + 'X'),
+  c1('ech-3', 'abcdefghij' + CSI + '1;5H' + CSI + '3X'),
+  c1('ech-huge', 'abcdefghij' + CSI + '1;3H' + CSI + digits20 + 'X'),
   c1('bce', CSI + '44mabc' + CSI + '1;2H' + CSI + 'K' + CSI + '2;1H' + CSI + '2X' + CSI + 'L' + CSI + '@' + CSI + 'J'),  // :3441-3445
   c1('ich-dch', 'a中b中c' + CSI + '1;3H' + CSI + '@' + CSI + '1;2H' + CSI + 'P' + CSI + '1;5H' + CSI + '2P'),
-  cs('il-dl', [fill(), CSI + '2;4r' + CSI + '3;1H' + CSI + 'L' + CSI + '2M' + CSI + '6;1H' + CSI + 'L' + CSI + '1;1H' + CSI + 'M']),
-  cs('il-dl-1000', [fill(), CSI + '2;5r' + CSI + '3;1H' + CSI + '1000L' + CSI + '4;1Hx' + CSI + '1000M']),
+  // IL / DL / SU / SD :1350-1490. One operation per case, on a screen full of text,
+  // so each clamp is tight: one pass fewer leaves a line of text in view.
+  cs('il-in-region', [fill(), CSI + '2;4r' + CSI + '3;1H' + CSI + 'L']),
+  cs('dl-in-region', [fill(), CSI + '2;4r' + CSI + '3;1H' + CSI + '2M']),
+  cs('il-below-region', [fill(), CSI + '2;4r' + CSI + '6;1H' + CSI + 'L']),
+  cs('dl-above-region', [fill(), CSI + '2;4r' + CSI + '1;1H' + CSI + 'M']),
+  cs('il-1000', [fill(), CSI + '2;5r' + CSI + '3;1H' + CSI + '1000L']),
+  cs('dl-1000', [fill(), CSI + '2;5r' + CSI + '3;1H' + CSI + '1000M']),
+  cs('il-1000-full', [fill(), CSI + '2;1H' + CSI + '1000L']),
+  cs('dl-1000-full', [fill(), CSI + '2;1H' + CSI + '1000M']),
   cs('su-sd', [fill(), CSI + '2S' + CSI + 'T' + CSI + '2;4r' + CSI + 'S' + CSI + '2T']),
-  cs('su-sd-1000', [fill(), CSI + '2;4r' + CSI + '1000S' + CSI + '1000T' + CSI + 'r' + CSI + '1000S' + CSI + '1000^']),
+  cs('su-1000-region', [fill(), CSI + '2;4r' + CSI + '1000S']),
+  cs('sd-1000-region', [fill(), CSI + '2;4r' + CSI + '1000T']),
+  cs('su-1000-full', [fill(), CSI + '1000S']),
+  cs('sd-1000-caret', [fill(), CSI + '1000^']),
   cs('sd-default-attr', [fill(), CSI + '44m' + CSI + '2T' + CSI + '2S']),   // :1489
   cs('sd-default-attr-alone', [fill(), CSI + '44m' + CSI + '2T']),           // the SU above scrolls SD's lines away
   cs('sl-sr', [fill(), CSI + '2 @' + CSI + '2 A' + CSI + '2;3r' + CSI + '5;1H' + CSI + ' @' + CSI + '2;1H' + CSI + '3 A']),
   cs('decic-decdc', [fill(), CSI + '1;3H' + CSI + "2'}" + CSI + "2'~" + CSI + '2;4r' + CSI + '6;1H' + CSI + "'}"]),
-  c1('cht-cbt', CSI + 'Ia' + CSI + '3Ib' + CSI + '1000Ic' + CSI + 'Zd' + CSI + '3Z' + CSI + '1000Ze', { cols: 40 }),  // :1125-1150
+  // CHT / CBT :1125-1150, one per case. With a stop on every column each pass moves
+  // one column, so reaching the far edge takes exactly the clamp's passes.
+  c1('cht-1', CSI + 'Ia', { cols: 40 }),
+  c1('cht-3', CSI + '3Ib', { cols: 40 }),
+  c1('cht-1000', CSI + '1000Ic', { cols: 40 }),
+  c1('cbt-1', CSI + '1;35H' + CSI + 'Zd', { cols: 40 }),
+  c1('cbt-3', CSI + '1;35H' + CSI + '3Zd', { cols: 40 }),
+  c1('cbt-1000', CSI + '1;35H' + CSI + '1000Ze', { cols: 40 }),
+  c1('cht-1000-every-column', CSI + '3g' + Array.from({ length: 12 }, (_, i) => CSI + (i + 1) + 'G' + E + 'H').join('') + CSI + '1G' + CSI + '1000Ix', { cols: 12 }),
+  c1('cbt-1000-every-column', CSI + '3g' + Array.from({ length: 12 }, (_, i) => CSI + (i + 1) + 'G' + E + 'H').join('') + CSI + '12G' + CSI + '1000Zx', { cols: 12 }),
   c1('cht-at-end', 'abcdefghij' + CSI + 'Ix' + CSI + 'Zy', { cols: 10 }),
   c1('rep-ascii', 'a' + CSI + '3b'),                                       // :1654-1678
   c1('rep-wide', '中' + CSI + '2b'),
@@ -132,6 +155,34 @@ const hand = [
   c1('rep-zero', 'a' + CSI + '0b'),
   c1('rep-wrap', 'abcdefghx' + CSI + '5b', { cols: 10 }),
   c1('rep-nowrap-wide', CSI + '?7l中' + CSI + '9b', { cols: 10 }),
+  // REP's fast-forward: counts of several times the ring (10 lines of 10 cells here),
+  // printed by upstream one by one. The Pascal core skips whole periods and sends
+  // no OnScroll for the scrolls it skips, hence "ignore": the rest must be equal.
+  ...[
+    ['rep-ff-ascii', 'a' + CSI + '537b'],
+    ['rep-ff-ascii-long', 'a' + CSI + '12345b'],
+    ['rep-ff-two-rows', lines(3) + '\r\nx' + CSI + '1234b'],
+    ['rep-ff-wide-odd', '中' + CSI + '777b', { cols: 9 }],
+    ['rep-ff-graphemes', 'é' + CSI + '611b', { options: { unicodeVersion: '15-graphemes', scrollback: 6 } }],
+    ['rep-ff-flag', '\u{1F1E8}\u{1F1F3}' + CSI + '401b', { options: { unicodeVersion: '15-graphemes', scrollback: 6 } }],
+    ['rep-ff-region-top', lines(4) + CSI + '2;3r' + CSI + '2;1Ha' + CSI + '700b'],
+    ['rep-ff-region-bottom', lines(4) + CSI + '1;3r' + CSI + '3;1Ha' + CSI + '900b'],
+    ['rep-ff-below-region', lines(4) + CSI + '1;2r' + CSI + '4;1Ha' + CSI + '700b'],
+    ['rep-ff-nowrap', CSI + '?7lab' + CSI + '5000b'],
+    ['rep-ff-nowrap-combining', CSI + '?7lxxxxxxxxxé' + CSI + '3000b', { options: { unicodeVersion: '15-graphemes', scrollback: 6 } }],
+    ['rep-ff-insert', lines(4) + CSI + '4h' + CSI + '2;3Ha' + CSI + '800b'],
+    ['rep-ff-alt', CSI + '?1049ha' + CSI + '900b'],
+    ['rep-ff-link', OSC + '8;;u' + BEL + 'a' + CSI + '900b' + OSC + '8;;' + BEL],
+    ['rep-ff-attrs', CSI + '1;31;44ma' + CSI + '650b' + CSI + '0m'],
+    ['rep-ff-conpty-no-scrollback', 'a' + CSI + '537b' + CSI + 'H' + CSI + 'H', { options: { scrollback: 0, windowsPty: WPTY } }],
+    ['rep-grow-one-cell', '́' + CSI + '50b', { options: { unicodeVersion: '15-graphemes', scrollback: 6 } }],
+    // the ring's start index after skipped scrolls: with no scrollback, the old-ConPTY
+    // heuristic on row 0 reads lines.get(-1), which is the last line unless the start
+    // index is 0. A full last row and an unwrapped row 0 make that visible; four
+    // counts one scroll apart put the start on every value.
+    ...[1999, 2009, 2019, 2029].map(n => ['rep-ff-ring-start-' + n,
+      'a' + CSI + n + 'b' + CSI + '1;1H' + CSI + '2K' + CSI + 'H', { options: { scrollback: 0, windowsPty: WPTY } }]),
+  ].map(([id, s, extra]) => c1(id, s, Object.assign({ cols: 10, rows: 4, options: { scrollback: 6 }, ignore: ['scrolls'] }, extra || {}))),
   c1('decaln', 'abcdefghijklmnop' + CSI + '31;44m' + CSI + '3;3H' + E + '#8' + CSI + '0mx', { cols: 10 }),  // :3470-3494
   cs('ri-top-margin', [fill(), CSI + '2;5r' + CSI + '2;1H' + E + 'M' + E + 'M']),  // :3366-3419
   cs('ri-mid', [fill(), CSI + '4;1H' + E + 'Mx' + CSI + '1;1H' + E + 'My']),
@@ -139,7 +190,12 @@ const hand = [
   c1('nel', 'ab' + E + 'Ec' + E + 'E'),
   // ---- scroll region :2890-2905 and scrollback ----
   c1('decstbm-valid', 'abc' + CSI + '2;4rx'),
-  c1('decstbm-invalid', 'abc' + CSI + '3;99rx' + CSI + '3;0ry' + CSI + '4;4rz' + CSI + '5;3rw' + CSI + 'rv'),
+  // each ends with the region it set (or kept) exported
+  c1('decstbm-bottom-past', 'abc' + CSI + '3;99rx'),
+  c1('decstbm-bottom-zero', 'abc' + CSI + '3;0ry'),
+  c1('decstbm-equal', 'abc' + CSI + '2;5r' + CSI + '4;4rz'),
+  c1('decstbm-reversed', 'abc' + CSI + '2;5r' + CSI + '5;3rw'),
+  c1('decstbm-reset', 'abc' + CSI + '2;4r' + CSI + 'rv'),
   c1('lf-in-region', CSI + '2;4r' + CSI + '4;1Ha\nb\nc'),
   c1('lf-region-top-0', CSI + '1;4r' + CSI + '4;1Ha\nb\nc'),
   c1('scrollback-full', lines(20), { options: { scrollback: 3 } }),
@@ -288,7 +344,7 @@ const long = [
   cs('long-apc-over', [E + '_G', ...many('a', 10000001), ST, tail]),
   cs('long-sos', [E + 'X', ...many('a', 11000000), ST, tail]),
   cs('long-print', [...many('x', 1048576), tail], { cols: 80, rows: 25, options: { scrollback: 100 } }),
-  cs('long-rep-cap', ['a' + CSI + '1048576b', tail], { cols: 40, rows: 6, options: { scrollback: 20 } }),
+  cs('long-rep-cap', ['a' + CSI + '1048576b', tail], { cols: 40, rows: 6, options: { scrollback: 20 }, ignore: ['scrolls'] }),
   // (no 2^31-count IL / DL / SU / SD: upstream loops that many times and never
   // returns; il-dl-1000 and su-sd-1000 show the clamp is equivalent)
   cs('long-osc-fallback', [OSC + '777;', ...many('b', 300000), BEL, tail]),

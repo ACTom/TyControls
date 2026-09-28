@@ -46,6 +46,9 @@ async function build(list, source, withVariants) {
     if (src.options) c.options = src.options;
     T.normalizeOptions(c);
     if (src.synth) c.synth = src.synth;
+    // top-level state fields a documented difference makes incomparable (the
+    // Pascal comparer skips them; see TyTermCompareState)
+    if (src.ignore) c.ignore = src.ignore;
     c.steps = src.steps.map(convertStep);
     if (withVariants && c.steps.length === 1 && c.steps[0].write !== undefined) {
       const len = T.unb64(c.steps[0].write).length;

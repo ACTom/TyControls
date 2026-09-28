@@ -46,6 +46,7 @@ type
     procedure TestIdentifierRules;
     procedure TestIdentToString;
     procedure TestUnregister;
+    procedure TestHandlersGoneDuringAParse;
     procedure TestHandlersFreedWithTheParser;
     procedure TestCodepointsToUtf8;
     procedure TestDecoderLeavesNothingBehindAfterClear;
@@ -975,6 +976,83 @@ destructor TCountedApc.Destroy;
 begin
   Inc(GFreed);
   inherited Destroy;
+end;
+
+type
+  { an OSC handler's data sink that can take its own handler out mid-parse }
+  TOscDropper = class
+  public
+    Parser: TTyTerminalParser;
+    Handle: Integer;
+    Drop: Boolean;
+    Seen: string;
+    FreedInside: Integer;
+    function OnData(const AData: string): Boolean;
+  end;
+
+function TOscDropper.OnData(const AData: string): Boolean;
+begin
+  Seen := Seen + AData;
+  if Drop then
+  begin
+    Parser.Unregister(Handle);
+    FreedInside := GFreed;
+  end;
+  Result := True;
+end;
+
+function Cps(const S: string): TTyTermCps;
+begin
+  Result := TyTermUtf8ToCps(S);
+end;
+
+{ DisposeObject / DisposeList's deferred paths (Parser.pas "A handler object
+  leaves the parser", "A cleared chain"): a handler that unregisters itself while
+  it runs is freed only once the parse returns; a chain cleared while its OSC is
+  still open keeps serving that OSC and lives until the parser goes. }
+procedure TTyTerminalParserTests.TestHandlersGoneDuringAParse;
+var
+  p: TTyTerminalParser;
+  d: TOscDropper;
+  data: TTyTermCps;
+begin
+  GFreed := 0;
+  p := TTyTerminalParser.Create;
+  d := TOscDropper.Create;
+  try
+    d.Parser := p;
+    d.Drop := True;
+    d.Handle := p.RegisterOscHandler(7, TCountedOsc.Create(@d.OnData));
+    data := Cps(#27']7;x'#7);
+    p.Parse(data, Length(data));
+    AssertEquals('it ran', 'x', d.Seen);
+    AssertEquals('not freed while it was running', 0, d.FreedInside);
+    AssertEquals('freed once the parse returned', 1, GFreed);
+    data := Cps(#27']7;again'#7);
+    p.Parse(data, Length(data));
+    AssertEquals('gone for good', 'x', d.Seen);
+
+    { a chain cleared in the middle of its OSC }
+    d.Drop := False;
+    d.Seen := '';
+    GFreed := 0;
+    p.RegisterOscHandler(8, TCountedOsc.Create(@d.OnData));
+    data := Cps(#27']8;ab');
+    p.Parse(data, Length(data));
+    p.ClearOscHandler(8);
+    AssertEquals('kept while its OSC is open', 0, GFreed);
+    data := Cps('cd'#7);
+    p.Parse(data, Length(data));
+    AssertEquals('the open OSC still reaches it (upstream''s orphaned array)', 'abcd', d.Seen);
+    AssertEquals('still kept', 0, GFreed);
+    data := Cps(#27']8;later'#7);
+    p.Parse(data, Length(data));
+    AssertEquals('a new OSC 8 finds no handler', 'abcd', d.Seen);
+  finally
+    p.Free;
+    d.Free;
+  end;
+  AssertEquals('freed with the parser', 1, GFreed);
 end;
 
 procedure TTyTerminalParserTests.TestIdentifierRules;

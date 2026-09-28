@@ -14,9 +14,15 @@ unit test.terminal.core;
   Every test asserts how many comparisons it made.
 
   TTyTerminalCoreTests are direct checks of what upstream has no oracle for: colour
-  parsing tables, the host OSC hook, mode-change and icon events, the REP cap,
-  window reports, theme changes, read-only, the no-LCL rule, lines freed with the
-  core and the XTVERSION string. }
+  parsing tables, the host OSC hook, mode-change and icon events, REP's fast-forward
+  and its stop, the loop clamps at 2^31, window reports, theme changes, colour
+  replies without a theme, read-only, the no-LCL rule, lines / markers / links freed
+  with the core, the XTVERSION string, the resize, scrollback-cleared and
+  synchronized-output entries, TriggerMouseEvent, and the bounds on scrollback,
+  links, link numbers and scroll counts.
+
+  TTyTerminalReentryTests call the core from its own events and make handlers and
+  callbacks raise. }
 
 interface
 
@@ -47,13 +53,38 @@ type
     procedure TestUnhandledOscGoesToTheHost;
     procedure TestModesChangeFiresOncePerSequence;
     procedure TestIconNameEvent;
-    procedure TestRepBeyondTheCapEqualsTheCap;
+    procedure TestRepHugeCountEqualsPlainText;
+    procedure TestRepPilingOntoOneCellStops;
+    procedure TestHugeLoopCountsReturnAtOnce;
     procedure TestWindowReportsAskTheHost;
     procedure TestThemeChangeDropsOverrides;
+    procedure TestColorQueriesNeedABaseColor;
     procedure TestReadOnlySendsNothing;
     procedure TestCoreUnitsDoNotUseTheLcl;
     procedure TestNoLineOutlivesTheCore;
     procedure TestXtVersionConstant;
+    procedure TestGridResizeEvent;
+    procedure TestScrollbackClearedEvent;
+    procedure TestEndSynchronizedOutput;
+    procedure TestTriggerMouseEvent;
+    procedure TestScrollbackIsCapped;
+    procedure TestLinkTableIsBounded;
+    procedure TestLinkNumbersPastHighInteger;
+    procedure TestScrollOverflowSaturates;
+  end;
+
+  { Calls from events while the core is busy (unit header of the core): each is
+    carried out after the chunk, and the result equals making the call afterwards. }
+  TTyTerminalReentryTests = class(TTestCase)
+  published
+    procedure TestResizeFromOnScroll;
+    procedure TestWriteSyncFromOnTitleChange;
+    procedure TestResetFromOnBell;
+    procedure TestProcessPendingFromOnData;
+    procedure TestResizeFromOnResize;
+    procedure TestHandlerExceptionInWriteSync;
+    procedure TestCallbackExceptionInASlice;
+    procedure TestExceptionInAFlushKeepsTheRest;
   end;
 
   { The write queue has no upstream oracle (headless cannot observe slices): these
@@ -76,6 +107,8 @@ type
     procedure TestOtherThreadsAreRefused;
     procedure TestDestroyDropsPending;
     procedure TestDefaultClockMoves;
+    procedure TestEmptyWritesAndTheChunkBound;
+    procedure TestAParsedChunkIsReleased;
   end;
 
 implementation
@@ -403,7 +436,7 @@ type
     Data: RawByteString;
     constructor Create;
     destructor Destroy; override;
-    procedure OnOsc(Sender: TObject; AIdent: Integer; const AData: string; var AHandled: Boolean);
+    procedure OnOsc(Sender: TObject; AIdent: Integer; const AData: string);
     function HostHandler(const AData: string): Boolean;
     procedure OnModes(Sender: TObject);
     procedure OnTitle(Sender: TObject; const AText: string);
@@ -431,10 +464,9 @@ begin
   inherited Destroy;
 end;
 
-procedure TOscSink.OnOsc(Sender: TObject; AIdent: Integer; const AData: string; var AHandled: Boolean);
+procedure TOscSink.OnOsc(Sender: TObject; AIdent: Integer; const AData: string);
 begin
   Log.Add(IntToStr(AIdent) + '=' + AData);
-  AHandled := True;
 end;
 
 function TOscSink.HostHandler(const AData: string): Boolean;
@@ -499,6 +531,15 @@ begin
     core.WriteSync(#27']1337;x'#7);
     AssertEquals('the host''s own handler', 'x', Trim(sink.HostLog.Text));
     AssertEquals('and not OnOsc', 0, sink.Log.Count);
+    { nobody listening as the OSC starts: its payload is not collected, so a listener
+      that turns up halfway gets nothing }
+    core.OnOsc := nil;
+    core.WriteSync(#27']7;abc');
+    core.OnOsc := @sink.OnOsc;
+    core.WriteSync('def'#7);
+    AssertEquals('an OSC begun unheard stays unheard', 0, sink.Log.Count);
+    core.WriteSync(#27']7;next'#7);
+    AssertEquals('the next one is heard', '7=next', Trim(sink.Log.Text));
   finally
     core.Free;
     sink.Free;
@@ -551,65 +592,171 @@ begin
   end;
 end;
 
-procedure TTyTerminalCoreTests.TestRepBeyondTheCapEqualsTheCap;
-
-  function Make(const ACount: string): TTyTerminalCore;
+function CountOf(const ANeedle, AHay: RawByteString): Integer;
+var
+  p: Integer;
+begin
+  Result := 0;
+  p := Pos(ANeedle, AHay);
+  while p > 0 do
   begin
-    Result := TTyTerminalCore.Create(20, 4);
-    Result.Scrollback := 10;
-    Result.WriteSync('a'#27'[' + ACount + 'b');
+    Inc(Result);
+    p := PosEx(ANeedle, AHay, p + Length(ANeedle));
   end;
+end;
 
-  procedure Same(A, B: TTyTerminalCore; const AWhat: string; var ACompared: Integer);
-  var
-    r, c: Integer;
-    la, lb: TTyTerminalLine;
+{ '' when both cores hold the same screens (the active buffer: every line's cells,
+  combined text and wrap flag, the cursor, ybase, ydisp, the line count); otherwise
+  the first difference. ACompared counts the cells looked at. }
+function ScreenDiff(A, B: TTyTerminalCore; var ACompared: Int64): string;
+var
+  r, c: Integer;
+  la, lb: TTyTerminalLine;
+  sa, sb: string;
+begin
+  Result := '';
+  if (A.Cols <> B.Cols) or (A.Rows <> B.Rows) then
+    Exit(Format('size %dx%d vs %dx%d', [A.Cols, A.Rows, B.Cols, B.Rows]));
+  if A.Buffers.IsAlt <> B.Buffers.IsAlt then
+    Exit('active buffer');
+  if (A.Buffer.X <> B.Buffer.X) or (A.Buffer.Y <> B.Buffer.Y) then
+    Exit(Format('cursor (%d,%d) vs (%d,%d)', [A.Buffer.X, A.Buffer.Y, B.Buffer.X, B.Buffer.Y]));
+  if (A.Buffer.YBase <> B.Buffer.YBase) or (A.Buffer.YDisp <> B.Buffer.YDisp) then
+    Exit(Format('ybase/ydisp %d/%d vs %d/%d', [A.Buffer.YBase, A.Buffer.YDisp, B.Buffer.YBase, B.Buffer.YDisp]));
+  if A.Buffer.Lines.Length <> B.Buffer.Lines.Length then
+    Exit(Format('lines %d vs %d', [A.Buffer.Lines.Length, B.Buffer.Lines.Length]));
+  for r := 0 to A.Buffer.Lines.Length - 1 do
   begin
-    AssertEquals(AWhat + ' x', A.Buffer.X, B.Buffer.X);
-    AssertEquals(AWhat + ' y', A.Buffer.Y, B.Buffer.Y);
-    AssertEquals(AWhat + ' ybase', A.Buffer.YBase, B.Buffer.YBase);
-    AssertEquals(AWhat + ' ydisp', A.Buffer.YDisp, B.Buffer.YDisp);
-    AssertEquals(AWhat + ' lines', A.Buffer.Lines.Length, B.Buffer.Lines.Length);
-    for r := 0 to A.Buffer.Lines.Length - 1 do
+    la := A.Buffer.Lines.Get(r);
+    lb := B.Buffer.Lines.Get(r);
+    if (la = nil) or (lb = nil) then
     begin
-      la := A.Buffer.Lines.Get(r);
-      lb := B.Buffer.Lines.Get(r);
-      for c := 0 to 19 do
+      if la <> lb then
+        Exit(Format('row %d: a missing line', [r]));
+      Continue;
+    end;
+    if la.IsWrapped <> lb.IsWrapped then
+      Exit(Format('row %d wrap', [r]));
+    for c := 0 to A.Cols - 1 do
+    begin
+      Inc(ACompared);
+      if (la.GetContent(c) <> lb.GetContent(c)) or (la.GetFg(c) <> lb.GetFg(c)) or (la.GetBg(c) <> lb.GetBg(c)) then
+        Exit(Format('row %d col %d: "%s" vs "%s"', [r, c, la.TranslateToString(True), lb.TranslateToString(True)]));
+      la.CombinedEntry(c, sa);
+      lb.CombinedEntry(c, sb);
+      if sa <> sb then
+        Exit(Format('row %d col %d combined text', [r, c]));
+    end;
+  end;
+end;
+
+{ REP's fast-forward (unit header of the core): a count of 2^31 - 1 finishes at once
+  and equals the same characters written out -- as many as it takes to turn the
+  ring over many times, and congruent to the REP's count modulo the period of the
+  line (20 'a's; 9 wide characters in 19 columns). The written-out text never goes
+  near REP's code. }
+procedure TTyTerminalCoreTests.TestRepHugeCountEqualsPlainText;
+
+  procedure Check(const AText: RawByteString; ACols, APerLine: Integer; const AWhat: string);
+  var
+    rep, plain: TTyTerminalCore;
+    total, n, compared: Int64;
+    t0: QWord;
+    s: RawByteString;
+    diff: string;
+  begin
+    rep := TTyTerminalCore.Create(ACols, 4);
+    plain := TTyTerminalCore.Create(ACols, 4);
+    try
+      rep.Scrollback := 10;
+      plain.Scrollback := 10;
+      t0 := GetTickCount64;
+      rep.WriteSync(AText + #27'[2147483647b');
+      AssertTrue(AWhat + ': 2^31 - 1 repetitions return at once (30 s is generous)', GetTickCount64 - t0 < 30000);
+      total := Int64(1) + 2147483647;      { the character itself, then the repetitions }
+      n := Int64(APerLine) * 100 + total mod APerLine;
+      s := '';
+      while n > 0 do
       begin
-        Inc(ACompared);
-        AssertEquals(Format('%s row %d col %d content', [AWhat, r, c]), la.GetContent(c), lb.GetContent(c));
-        AssertEquals(Format('%s row %d col %d fg', [AWhat, r, c]), la.GetFg(c), lb.GetFg(c));
-        AssertEquals(Format('%s row %d col %d bg', [AWhat, r, c]), la.GetBg(c), lb.GetBg(c));
+        s := s + AText;
+        Dec(n);
       end;
+      plain.WriteSync(s);
+      compared := 0;
+      diff := ScreenDiff(plain, rep, compared);
+      AssertEquals(AWhat + ': ' + diff, '', diff);
+      AssertEquals(AWhat + ': every cell compared', Int64(plain.Buffer.Lines.Length) * ACols, compared);
+    finally
+      rep.Free;
+      plain.Free;
     end;
   end;
 
-var
-  cap, over, huge: TTyTerminalCore;
-  n: Integer;
-  t0: QWord;
 begin
-  cap := Make('1048576');
-  over := Make('1048577');
-  t0 := GetTickCount64;
-  huge := Make('2147483647');
+  Check('a', 20, 20, 'one cell');
+  Check(#$E4#$B8#$AD, 19, 9, 'wide in an odd width');
+end;
+
+{ The one case the fast-forward cannot shorten: every repetition piles its code
+  points onto the same cell (a lone combining mark repeated under '15-graphemes').
+  It stops after TyTermRepeatLimit code points on the line -- here 1 + (limit + 1)
+  marks in cell 0 -- in bounded time, with the cursor where it was. }
+procedure TTyTerminalCoreTests.TestRepPilingOntoOneCellStops;
+var
+  core: TTyTerminalCore;
+  t0: QWord;
+  text: string;
+begin
+  core := TTyTerminalCore.Create(20, 4);
   try
-    AssertTrue('the huge count returns quickly', GetTickCount64 - t0 < 5000);
-    n := 0;
-    Same(cap, over, 'cap+1', n);
-    AssertEquals('every cell compared', cap.Buffer.Lines.Length * 20, n);
-    n := 0;
-    Same(cap, huge, '2^31-1', n);
-    AssertEquals('every cell compared', cap.Buffer.Lines.Length * 20, n);
-    { and the cap is not a no-op: one short of it lands elsewhere }
-    over.Free;
-    over := Make('1048575');
-    AssertTrue('one less moves the cursor differently',
-      (over.Buffer.X <> cap.Buffer.X) or (over.Buffer.Y <> cap.Buffer.Y));
+    core.UnicodeVersion := tuv15Graphemes;
+    core.WriteSync(#$CC#$81);              { U+0301 at column 0: a cell of its own }
+    AssertEquals('the mark took one cell', 1, core.Buffer.X);
+    t0 := GetTickCount64;
+    core.WriteSync(#27'[2147483647b');
+    AssertTrue('bounded (30 s is generous)', GetTickCount64 - t0 < 30000);
+    text := core.Buffer.Lines.Get(0).GetChars(0);
+    AssertEquals('marks in cell 0', TyTermRepeatLimit + 2, Length(TyTermUtf8Codepoints(text)));
+    AssertEquals('the cursor did not move', 1, core.Buffer.X);
+    AssertEquals('nor the line', 0, core.Buffer.Y);
   finally
-    cap.Free;
-    over.Free;
-    huge.Free;
+    core.Free;
+  end;
+end;
+
+{ IL, DL, SU, SD, CHT and CBT with a count of 2^31 - 1 return at once and leave what
+  a count of 1000 leaves: every pass past the clamp was a no-op. Without a clamp the
+  loop runs 2^31 times -- the test then does not finish, which is the failure. }
+procedure TTyTerminalCoreTests.TestHugeLoopCountsReturnAtOnce;
+const
+  Fill = 'line 0 aaaa'#13#10'line 1 bbbb'#13#10'line 2 cccc'#13#10'line 3 dddd'#13#10'line 4 eeee'#13#10'line 5 ffff';
+  Finals: array[0..6] of Char = ('L', 'M', 'S', 'T', '^', 'I', 'Z');
+  Setups: array[0..6] of string = (#27'[2;5r'#27'[3;1H', #27'[2;5r'#27'[3;1H', #27'[2;5r', #27'[2;5r',
+    #27'[2;5r', #27'[1;1H', #27'[1;20H');
+var
+  i: Integer;
+  huge, ref: TTyTerminalCore;
+  t0: QWord;
+  compared: Int64;
+  diff: string;
+begin
+  for i := 0 to High(Finals) do
+  begin
+    huge := TTyTerminalCore.Create(20, 6);
+    ref := TTyTerminalCore.Create(20, 6);
+    try
+      t0 := GetTickCount64;
+      huge.WriteSync(Fill + Setups[i] + #27'[2147483647' + Finals[i] + 'x');
+      AssertTrue(Finals[i] + ': returns at once (30 s is generous)', GetTickCount64 - t0 < 30000);
+      ref.WriteSync(Fill + Setups[i] + #27'[1000' + Finals[i] + 'x');
+      compared := 0;
+      diff := ScreenDiff(ref, huge, compared);
+      AssertEquals(Finals[i] + ': ' + diff, '', diff);
+      AssertTrue(Finals[i] + ': compared', compared >= 6 * 20);
+    finally
+      huge.Free;
+      ref.Free;
+    end;
   end;
 end;
 
@@ -658,6 +805,40 @@ begin
     core.NotifyColorSchemeChanged;
     AssertFalse('a new theme drops it', core.HasColorOverride(1));
     AssertEquals('the base colour again', base, core.ResolveColor(1));
+  finally
+    core.Free;
+    sink.Free;
+  end;
+end;
+
+{ No OnQueryBaseColor, no theme: the core answers no colour query, no colour-scheme
+  query and sends no 2031 report, as headless xterm.js. With one, it answers. }
+procedure TTyTerminalCoreTests.TestColorQueriesNeedABaseColor;
+const
+  Queries = #27']4;1;?'#7#27']10;?'#7#27']11;?'#7#27']12;?'#7#27'[?996n'
+    + #27'[?2031h'#27']4;2;#102030'#7#27']104;2'#7;
+var
+  core: TTyTerminalCore;
+  sink: TOscSink;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  sink := TOscSink.Create;
+  try
+    core.OnData := @sink.OnData;
+    core.WriteSync(Queries);
+    AssertEquals('nothing without a base colour', '', sink.Data);
+    core.WriteSync(#27']4;3;#102030'#7);
+    AssertTrue('a set still takes, it just reports nothing', core.HasColorOverride(3));
+    AssertEquals('still nothing', '', sink.Data);
+    core.WriteSync(#27'[?1004h');
+    AssertEquals('focus is not a colour: still reported', #27'[I', sink.Data);
+    sink.Data := '';
+    core.WriteSync(#27'[?1004l'#27'[?2031l');
+    core.OnQueryBaseColor := @sink.OnColor;
+    core.WriteSync(Queries);
+    AssertEquals('with one: four colour answers', 4, CountOf(#27']', sink.Data));
+    AssertEquals('the 996 answer and a 2031 report per change', 3, CountOf(#27'[?997;', sink.Data));
+    AssertTrue('an OSC 11 answer', Pos(#27']11;rgb:', sink.Data) > 0);
   finally
     core.Free;
     sink.Free;
@@ -743,7 +924,7 @@ end;
 
 procedure TTyTerminalCoreTests.TestNoLineOutlivesTheCore;
 var
-  base: Integer;
+  base, markers, links: Integer;
   core: TTyTerminalCore;
   fx: TTyTermFixtures;
   m: TTyTermMisses;
@@ -769,6 +950,8 @@ begin
   end;
   AssertTrue('the vim recording was found', Length(input) > 1000);
   base := TTyTerminalLine.LiveCount;
+  markers := TTyTerminalMarker.LiveCount;
+  links := TTyTermLinkEntry.LiveCount;
   core := TTyTerminalCore.Create(80, 25);
   try
     core.Scrollback := 50;
@@ -781,10 +964,15 @@ begin
     core.WriteSync(#27'[?1049hin alt'#27'[?1049l');
     core.WriteSync(input);
     AssertTrue('lines exist meanwhile', TTyTerminalLine.LiveCount > base);
+    core.WriteSync(#27']8;id=k;v'#7'link'#27']8;;'#7);
+    AssertTrue('markers exist meanwhile', TTyTerminalMarker.LiveCount > markers);
+    AssertTrue('link entries exist meanwhile', TTyTermLinkEntry.LiveCount > links);
   finally
     core.Free;
   end;
   AssertEquals('every line freed with the core', base, TTyTerminalLine.LiveCount);
+  AssertEquals('every marker freed with the core', markers, TTyTerminalMarker.LiveCount);
+  AssertEquals('every link entry freed with the core', links, TTyTermLinkEntry.LiveCount);
 end;
 
 procedure TTyTerminalCoreTests.TestXtVersionConstant;
@@ -802,6 +990,691 @@ begin
   finally
     core.Free;
     sink.Free;
+  end;
+end;
+
+type
+  TEventSink = class
+  public
+    Resizes: TStringList;
+    Cleared, ModeChanges, ScrollRequests: Integer;
+    Refreshes: TStringList;
+    Data: RawByteString;
+    constructor Create;
+    destructor Destroy; override;
+    procedure OnResize(Sender: TObject; ACols, ARows: Integer);
+    procedure OnCleared(Sender: TObject);
+    procedure OnModes(Sender: TObject);
+    procedure OnRows(Sender: TObject; AFirst, ALast: Integer);
+    procedure OnData(Sender: TObject; const AData: RawByteString);
+    procedure OnScrollRequest(Sender: TObject);
+  end;
+
+constructor TEventSink.Create;
+begin
+  inherited Create;
+  Resizes := TStringList.Create;
+  Refreshes := TStringList.Create;
+end;
+
+destructor TEventSink.Destroy;
+begin
+  Resizes.Free;
+  Refreshes.Free;
+  inherited Destroy;
+end;
+
+procedure TEventSink.OnResize(Sender: TObject; ACols, ARows: Integer);
+begin
+  Resizes.Add(Format('%dx%d', [ACols, ARows]));
+end;
+
+procedure TEventSink.OnCleared(Sender: TObject);
+begin
+  Inc(Cleared);
+end;
+
+procedure TEventSink.OnModes(Sender: TObject);
+begin
+  Inc(ModeChanges);
+end;
+
+procedure TEventSink.OnRows(Sender: TObject; AFirst, ALast: Integer);
+begin
+  Refreshes.Add(Format('%d-%d', [AFirst, ALast]));
+end;
+
+procedure TEventSink.OnData(Sender: TObject; const AData: RawByteString);
+begin
+  Data := Data + AData;
+end;
+
+procedure TEventSink.OnScrollRequest(Sender: TObject);
+begin
+  Inc(ScrollRequests);
+end;
+
+{ BufferService.onResize reaches the host as OnResize: Resize, and DECCOLM under
+  twoSetWinLines (132 then 80 columns); DECCOLM without the option does nothing }
+procedure TTyTerminalCoreTests.TestGridResizeEvent;
+var
+  core: TTyTerminalCore;
+  sink: TEventSink;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  sink := TEventSink.Create;
+  try
+    core.OnResize := @sink.OnResize;
+    core.Resize(30, 7);
+    AssertEquals('Resize', '30x7', sink.Resizes.CommaText);
+    core.Resize(30, 7);
+    AssertEquals('the same size: nothing', 1, sink.Resizes.Count);
+    core.WriteSync(#27'[?3h');
+    AssertEquals('DECCOLM is off by default', 1, sink.Resizes.Count);
+    core.WindowOptions := [twoSetWinLines];
+    core.WriteSync(#27'[?3h');
+    AssertEquals('132 columns', '30x7,132x7', sink.Resizes.CommaText);
+    AssertEquals(132, core.Cols);
+    core.WriteSync(#27'[?3l');
+    AssertEquals('80 columns', '30x7,132x7,80x7', sink.Resizes.CommaText);
+    AssertEquals(80, core.Cols);
+  finally
+    core.Free;
+    sink.Free;
+  end;
+end;
+
+{ ED 3 with scrollback and ClearScrollback both tell the host; ED 3 with nothing to
+  clear does not }
+procedure TTyTerminalCoreTests.TestScrollbackClearedEvent;
+var
+  core: TTyTerminalCore;
+  sink: TEventSink;
+  i: Integer;
+begin
+  core := TTyTerminalCore.Create(20, 3);
+  sink := TEventSink.Create;
+  try
+    core.OnScrollbackCleared := @sink.OnCleared;
+    core.WriteSync(#27'[3J');
+    AssertEquals('no scrollback yet: no event', 0, sink.Cleared);
+    for i := 1 to 10 do
+      core.WriteSync('line'#13#10);
+    AssertTrue('scrollback now', core.Buffer.YBase > 0);
+    core.WriteSync(#27'[3J');
+    AssertEquals('ED 3', 1, sink.Cleared);
+    AssertEquals('gone', 0, core.Buffer.YBase);
+    for i := 1 to 10 do
+      core.WriteSync('line'#13#10);
+    core.ClearScrollback;
+    AssertEquals('ClearScrollback', 2, sink.Cleared);
+  finally
+    core.Free;
+    sink.Free;
+  end;
+end;
+
+{ the 1-second timeout of DECSET 2026 (RenderService.ts:359-363): mode off, the whole
+  screen refreshed, a mode change; nothing when the mode is not on }
+procedure TTyTerminalCoreTests.TestEndSynchronizedOutput;
+var
+  core: TTyTerminalCore;
+  sink: TEventSink;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  sink := TEventSink.Create;
+  try
+    core.OnModesChange := @sink.OnModes;
+    core.OnRefreshRows := @sink.OnRows;
+    core.WriteSync(#27'[?2026h');
+    AssertTrue('on', core.Modes.SynchronizedOutput);
+    sink.ModeChanges := 0;
+    sink.Refreshes.Clear;
+    core.EndSynchronizedOutput;
+    AssertFalse('off', core.Modes.SynchronizedOutput);
+    AssertEquals('the whole screen', '0-4', sink.Refreshes.CommaText);
+    AssertEquals('a mode change', 1, sink.ModeChanges);
+    core.EndSynchronizedOutput;
+    AssertEquals('not on: nothing', 1, sink.Refreshes.Count);
+    AssertEquals('not on: no mode change', 1, sink.ModeChanges);
+  finally
+    core.Free;
+    sink.Free;
+  end;
+end;
+
+function MouseAt(ACol, ARow: Integer; AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+  AX: Integer = 0; AY: Integer = 0): TTyTerminalMouseEvent;
+begin
+  Result.Col := ACol;
+  Result.Row := ARow;
+  Result.X := AX;
+  Result.Y := AY;
+  Result.Button := AButton;
+  Result.Action := AAction;
+  Result.Shift := False;
+  Result.Alt := False;
+  Result.Ctrl := False;
+end;
+
+{ MouseService._triggerMouseEvent (MouseService.ts:497-545), read one rule at a time }
+procedure TTyTerminalCoreTests.TestTriggerMouseEvent;
+var
+  core: TTyTerminalCore;
+  sink: TEventSink;
+  i: Integer;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  sink := TEventSink.Create;
+  try
+    core.OnData := @sink.OnData;
+    core.OnRequestScrollToBottom := @sink.OnScrollRequest;
+    AssertFalse('no protocol: nothing', core.TriggerMouseEvent(MouseAt(0, 0, tmbLeft, tmaDown)));
+    core.WriteSync(#27'[?1000h');
+    AssertTrue('VT200 press', core.TriggerMouseEvent(MouseAt(0, 0, tmbLeft, tmaDown)));
+    AssertEquals('0-based in, 1-based out', #27'[M'#32#33#33, sink.Data);
+    sink.Data := '';
+    AssertFalse('past the last column', core.TriggerMouseEvent(MouseAt(20, 0, tmbLeft, tmaDown)));
+    AssertFalse('past the last row', core.TriggerMouseEvent(MouseAt(0, 5, tmbLeft, tmaDown)));
+    AssertFalse('before the first', core.TriggerMouseEvent(MouseAt(-1, 0, tmbLeft, tmaDown)));
+    AssertFalse('wheel + move', core.TriggerMouseEvent(MouseAt(1, 1, tmbWheel, tmaMove)));
+    AssertFalse('no button + press', core.TriggerMouseEvent(MouseAt(1, 1, tmbNone, tmaDown)));
+    AssertFalse('button + left', core.TriggerMouseEvent(MouseAt(1, 1, tmbLeft, tmaLeft)));
+    AssertEquals('none of them sent', '', sink.Data);
+    { routing: the default encoding is binary -- no jump to the bottom -- the others
+      are user input (triggerDataEvent(report, true)) }
+    for i := 1 to 10 do
+      core.WriteSync('line'#13#10);
+    core.ScrollLines(-2);
+    AssertTrue('scrolled up', core.Buffer.YDisp < core.Buffer.YBase);
+    core.TriggerMouseEvent(MouseAt(2, 3, tmbLeft, tmaDown));
+    AssertEquals('binary report', #27'[M'#32#35#36, sink.Data);
+    AssertTrue('binary: still scrolled up', core.Buffer.YDisp < core.Buffer.YBase);
+    AssertEquals('binary: no scroll request', 0, sink.ScrollRequests);
+    sink.Data := '';
+    core.WriteSync(#27'[?1006h');
+    core.TriggerMouseEvent(MouseAt(2, 3, tmbLeft, tmaDown));
+    AssertEquals('SGR report', #27'[<0;3;4M', sink.Data);
+    AssertEquals('SGR: user input scrolls to the bottom', core.Buffer.YBase, core.Buffer.YDisp);
+    AssertEquals('SGR: a scroll request', 1, sink.ScrollRequests);
+    { moves: once per cell, or per pixel under SGR-pixels }
+    core.WriteSync(#27'[?1003h');
+    sink.Data := '';
+    AssertTrue('first move', core.TriggerMouseEvent(MouseAt(4, 1, tmbNone, tmaMove, 40, 17)));
+    AssertFalse('the same cell again', core.TriggerMouseEvent(MouseAt(4, 1, tmbNone, tmaMove, 41, 18)));
+    AssertTrue('another cell', core.TriggerMouseEvent(MouseAt(5, 1, tmbNone, tmaMove, 50, 18)));
+    AssertEquals('two moves', #27'[<35;5;2M'#27'[<35;6;2M', sink.Data);
+    core.WriteSync(#27'[?1016h');
+    sink.Data := '';
+    AssertTrue('pixels: first', core.TriggerMouseEvent(MouseAt(5, 1, tmbNone, tmaMove, 51, 18)));
+    AssertTrue('pixels: same cell, another pixel', core.TriggerMouseEvent(MouseAt(5, 1, tmbNone, tmaMove, 52, 18)));
+    AssertFalse('pixels: the same pixel', core.TriggerMouseEvent(MouseAt(5, 1, tmbNone, tmaMove, 52, 18)));
+    AssertEquals('pixel reports', #27'[<35;51;18M'#27'[<35;52;18M', sink.Data);
+    { read-only: passes the filters, sends nothing }
+    core.ReadOnly := True;
+    sink.Data := '';
+    AssertTrue('read-only still passes', core.TriggerMouseEvent(MouseAt(1, 1, tmbLeft, tmaDown)));
+    AssertEquals('read-only sends nothing', '', sink.Data);
+  finally
+    core.Free;
+    sink.Free;
+  end;
+end;
+
+{ the ring allocates its slots up front: Scrollback stops at TyTermMaxScrollback }
+procedure TTyTerminalCoreTests.TestScrollbackIsCapped;
+var
+  core: TTyTerminalCore;
+  raised: Boolean;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  try
+    core.Scrollback := 500000000;
+    AssertEquals('the maximum', TyTermMaxScrollback, core.Scrollback);
+    AssertEquals('the ring', 5 + TyTermMaxScrollback, core.Buffer.Lines.MaxLength);
+    core.Scrollback := TyTermMaxScrollback - 1;
+    AssertEquals('below it: as given', TyTermMaxScrollback - 1, core.Scrollback);
+    raised := False;
+    try
+      core.Scrollback := -1;
+    except
+      on EArgumentException do raised := True;
+    end;
+    AssertTrue('negative raises (upstream''s check)', raised);
+  finally
+    core.Free;
+  end;
+end;
+
+{ past TyTermMaxLinks links, or TyTermMaxLinkBytes of ids and URIs, the oldest go }
+procedure TTyTerminalCoreTests.TestLinkTableIsBounded;
+var
+  core: TTyTerminalCore;
+  s: RawByteString;
+  i: Integer;
+  d: TTyTerminalLinkData;
+  ids: TInt64DynArray;
+  big: string;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  try
+    s := '';
+    for i := 1 to TyTermMaxLinks + 5 do
+      s := s + #27']8;;u' + IntToStr(i) + #7'x'#27']8;;'#7;
+    core.WriteSync(s);
+    AssertEquals('at most', TyTermMaxLinks, core.Links.Count);
+    AssertFalse('the oldest went', core.Links.GetLinkData(1, d));
+    AssertFalse('the fifth oldest went', core.Links.GetLinkData(5, d));
+    AssertTrue('the sixth stays', core.Links.GetLinkData(6, d));
+    AssertEquals('u6', d.Uri);
+    AssertTrue('the newest stays', core.Links.GetLinkData(TyTermMaxLinks + 5, d));
+    ids := core.Links.LinkIds;
+    AssertEquals('ascending from 6', 6, ids[0]);
+    AssertEquals('to the newest', TyTermMaxLinks + 5, ids[High(ids)]);
+    { bytes: 1 MB URIs, twenty of them }
+    core.Reset;
+    big := StringOfChar('q', 1024 * 1024);
+    s := '';
+    for i := 1 to 20 do
+      s := s + #27']8;;' + big + IntToStr(i) + #7'y'#27']8;;'#7;
+    core.WriteSync(s);
+    AssertTrue('within the byte bound', core.Links.Bytes <= TyTermMaxLinkBytes);
+    AssertTrue('the newest kept', core.Links.Count > 0);
+    ids := core.Links.LinkIds;
+    core.Links.GetLinkData(ids[High(ids)], d);
+    AssertEquals('the newest is the last written', big + '20', d.Uri);
+  finally
+    core.Free;
+  end;
+end;
+
+{ link numbers are Int64: past High(Integer) they keep counting up, the table stays
+  in order and a cell carries the big number }
+procedure TTyTerminalCoreTests.TestLinkNumbersPastHighInteger;
+var
+  core: TTyTerminalCore;
+  ids: TInt64DynArray;
+  d: TTyTerminalLinkData;
+  e: TTyTerminalExtAttrs;
+  i: Integer;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  try
+    core.Links.SeedNextIdForTest(Int64(High(Integer)) - 1);
+    core.WriteSync(#27']8;;a'#7'1'#27']8;;'#7#27']8;;b'#7'2'#27']8;;'#7#27']8;;c'#7'3'#27']8;;'#7);
+    ids := core.Links.LinkIds;
+    AssertEquals('three', 3, Length(ids));
+    for i := 0 to 2 do
+      AssertEquals('number ' + IntToStr(i), Int64(High(Integer)) - 1 + i, ids[i]);
+    AssertTrue('found past High(Integer)', core.Links.GetLinkData(Int64(High(Integer)) + 1, d));
+    AssertEquals('c', d.Uri);
+    AssertTrue('the cell holds it', core.Buffer.Lines.Get(0).ExtendedEntry(2, e));
+    AssertEquals('the cell''s number', Int64(High(Integer)) + 1, e.UrlId);
+  finally
+    core.Free;
+  end;
+end;
+
+{ ScrollLines / ScrollPages with extreme counts clamp to the scrollback's ends: the
+  sums are Int64, nothing wraps round }
+procedure TTyTerminalCoreTests.TestScrollOverflowSaturates;
+var
+  core: TTyTerminalCore;
+  i: Integer;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  try
+    for i := 1 to 30 do
+      core.WriteSync('line'#13#10);
+    AssertTrue('scrollback', core.Buffer.YBase > 0);
+    core.ScrollLines(-3);
+    core.ScrollLines(High(Integer));
+    AssertEquals('to the bottom', core.Buffer.YBase, core.Buffer.YDisp);
+    core.ScrollLines(Low(Integer));
+    AssertEquals('to the top', 0, core.Buffer.YDisp);
+    core.ScrollPages(High(Integer));
+    AssertEquals('pages to the bottom', core.Buffer.YBase, core.Buffer.YDisp);
+    core.ScrollPages(Low(Integer));
+    AssertEquals('pages to the top', 0, core.Buffer.YDisp);
+  finally
+    core.Free;
+  end;
+end;
+
+{ ---- TTyTerminalReentryTests ----------------------------------------------------- }
+
+type
+  { calls the core from its events, once each (Action picks which) }
+  TReentrySink = class
+  public
+    Core: TTyTerminalCore;
+    Action: Integer;          { 1 Resize on scroll, 2 WriteSync on title, 3 Reset on bell,
+                                4 ProcessPending on data, 5 Resize on resize,
+                                6 raise on bell, 7 raise in a write callback }
+    Fired: Integer;
+    NestedResult: Boolean;
+    Requests: Integer;
+    Rows: Integer;
+    Data: RawByteString;
+    Tick, Step: Double;       { the clock: Tick, then Step further each call }
+    procedure OnScroll(Sender: TObject; AYDisp: Integer);
+    procedure OnTitle(Sender: TObject; const AText: string);
+    procedure OnBell(Sender: TObject);
+    procedure OnData(Sender: TObject; const AData: RawByteString);
+    procedure OnResize(Sender: TObject; ACols, ARows: Integer);
+    procedure OnRows(Sender: TObject; AFirst, ALast: Integer);
+    procedure OnRequest(Sender: TObject);
+    procedure OnDone(Sender: TObject; ATag: PtrInt);
+    function Clock: Double;
+  end;
+
+procedure TReentrySink.OnScroll(Sender: TObject; AYDisp: Integer);
+begin
+  if (Action = 1) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    Core.Resize(15, 4);
+  end;
+end;
+
+procedure TReentrySink.OnTitle(Sender: TObject; const AText: string);
+begin
+  if (Action = 2) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    Core.WriteSync('X');
+  end;
+end;
+
+procedure TReentrySink.OnBell(Sender: TObject);
+begin
+  if (Action = 3) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    Core.Reset;
+  end
+  else if (Action = 6) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    raise Exception.Create('bell handler');
+  end;
+end;
+
+procedure TReentrySink.OnData(Sender: TObject; const AData: RawByteString);
+begin
+  Data := Data + AData;
+  if (Action = 4) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    NestedResult := Core.ProcessPending;
+  end;
+end;
+
+procedure TReentrySink.OnResize(Sender: TObject; ACols, ARows: Integer);
+begin
+  if (Action = 5) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    Core.Resize(ACols + 1, ARows);         { a host that adjusts: after this one }
+  end;
+end;
+
+procedure TReentrySink.OnRows(Sender: TObject; AFirst, ALast: Integer);
+begin
+  Inc(Rows);
+end;
+
+procedure TReentrySink.OnRequest(Sender: TObject);
+begin
+  Inc(Requests);
+end;
+
+procedure TReentrySink.OnDone(Sender: TObject; ATag: PtrInt);
+begin
+  if (Action = 7) and (Fired = 0) then
+  begin
+    Inc(Fired);
+    raise Exception.Create('write callback');
+  end;
+end;
+
+function TReentrySink.Clock: Double;
+begin
+  Result := Tick;                          { Step 0: a slice never runs out of time }
+  Tick := Tick + Step;
+end;
+
+function NewReentry(AAction: Integer; ACols: Integer = 20; ARows: Integer = 4): TReentrySink;
+begin
+  Result := TReentrySink.Create;
+  Result.Action := AAction;
+  Result.Core := TTyTerminalCore.Create(ACols, ARows);
+  Result.Core.OnScroll := @Result.OnScroll;
+  Result.Core.OnTitleChange := @Result.OnTitle;
+  Result.Core.OnBell := @Result.OnBell;
+  Result.Core.OnData := @Result.OnData;
+  Result.Core.OnResize := @Result.OnResize;
+  Result.Core.OnRefreshRows := @Result.OnRows;
+  Result.Core.OnProcessRequest := @Result.OnRequest;
+  Result.Core.Clock := @Result.Clock;
+end;
+
+procedure FreeReentry(ASink: TReentrySink);
+begin
+  ASink.Core.Free;
+  ASink.Free;
+end;
+
+procedure AssertSameScreen(const AWhat: string; A, B: TTyTerminalCore);
+var
+  compared: Int64;
+  diff: string;
+begin
+  compared := 0;
+  diff := ScreenDiff(A, B, compared);
+  TAssert.AssertEquals(AWhat + ': ' + diff, '', diff);
+  TAssert.AssertTrue(AWhat + ': compared', compared > 0);
+end;
+
+const
+  SixLines = 'one'#13#10'two'#13#10'three'#13#10'four'#13#10'five'#13#10'six';
+  LongLines = 'one 345678901234567'#13#10'two 345678901234567'#13#10'three 5678901234567'#13#10
+    + 'four 45678901234567'#13#10'five 45678901234567'#13#10'six 345678901234567';
+
+{ OnScroll fires in the middle of printing; a Resize there waits for the chunk and
+  then equals a Resize made after WriteSync returned }
+procedure TTyTerminalReentryTests.TestResizeFromOnScroll;
+var
+  s: TReentrySink;
+  ref: TTyTerminalCore;
+begin
+  s := NewReentry(1);
+  ref := TTyTerminalCore.Create(20, 4);
+  try
+    { lines longer than the new width: printed at 15 columns they would wrap }
+    s.Core.WriteSync(LongLines);
+    AssertEquals('fired', 1, s.Fired);
+    ref.WriteSync(LongLines);
+    ref.Resize(15, 4);
+    AssertEquals('resized', 15, s.Core.Cols);
+    AssertSameScreen('as if called afterwards', ref, s.Core);
+    AssertEquals('nothing parsed twice', 1, CountOf('six', s.Core.Buffer.TranslateBufferLineToString(
+      s.Core.Buffer.YBase + s.Core.Buffer.Y, True)));
+  finally
+    FreeReentry(s);
+    ref.Free;
+  end;
+end;
+
+procedure TTyTerminalReentryTests.TestWriteSyncFromOnTitleChange;
+var
+  s: TReentrySink;
+  ref: TTyTerminalCore;
+begin
+  s := NewReentry(2);
+  ref := TTyTerminalCore.Create(20, 4);
+  try
+    s.Core.WriteSync('ab'#27']2;t'#7'cd');
+    AssertEquals('fired', 1, s.Fired);
+    AssertEquals('the title chunk, then X', 'abcdX', s.Core.Buffer.TranslateBufferLineToString(0, True));
+    ref.WriteSync('ab'#27']2;t'#7'cd');
+    ref.WriteSync('X');
+    AssertSameScreen('as if called afterwards', ref, s.Core);
+  finally
+    FreeReentry(s);
+    ref.Free;
+  end;
+  { in a slice whose budget runs out after that chunk: WriteSync still keeps its
+    word once the chunk is done -- everything queued, then X, parsed at once }
+  s := NewReentry(2);
+  try
+    s.Step := 20;
+    s.Core.Write('ab'#27']2;t'#7'cd');
+    s.Core.Write('ef');
+    AssertFalse('nothing left after the chunk', s.Core.ProcessPending);
+    AssertEquals('the rest, then X', 'abcdefX', s.Core.Buffer.TranslateBufferLineToString(0, True));
+  finally
+    FreeReentry(s);
+  end;
+end;
+
+procedure TTyTerminalReentryTests.TestResetFromOnBell;
+var
+  s: TReentrySink;
+  ref: TTyTerminalCore;
+begin
+  s := NewReentry(3);
+  ref := TTyTerminalCore.Create(20, 4);
+  try
+    s.Core.WriteSync(SixLines + #7'after');
+    AssertEquals('fired', 1, s.Fired);
+    ref.WriteSync(SixLines + #7'after');
+    ref.Reset;
+    AssertSameScreen('as if called afterwards', ref, s.Core);
+    s.Core.WriteSync('more');
+    ref.WriteSync('more');
+    AssertSameScreen('and it goes on the same', ref, s.Core);
+  finally
+    FreeReentry(s);
+    ref.Free;
+  end;
+end;
+
+{ a modal loop in a handler can run the host's scheduled ProcessPending: it returns
+  False at once, the running slice finishes, nothing is parsed twice }
+procedure TTyTerminalReentryTests.TestProcessPendingFromOnData;
+var
+  s: TReentrySink;
+begin
+  s := NewReentry(4);
+  try
+    s.Core.Write('ab'#27'[5ncd');
+    s.Core.Write('ef');
+    AssertFalse('the slice drains the queue', s.Core.ProcessPending);
+    AssertEquals('fired', 1, s.Fired);
+    AssertFalse('the nested call did nothing', s.NestedResult);
+    AssertEquals('each byte once', 'abcdef', s.Core.Buffer.TranslateBufferLineToString(0, True));
+    AssertEquals('one reply', #27'[0n', s.Data);
+    AssertEquals('empty queue', 0, s.Core.PendingBytes);
+  finally
+    FreeReentry(s);
+  end;
+end;
+
+{ OnResize fires while the core is resizing: a Resize from there comes after }
+procedure TTyTerminalReentryTests.TestResizeFromOnResize;
+var
+  s: TReentrySink;
+begin
+  s := NewReentry(5);
+  try
+    s.Core.Resize(30, 6);
+    AssertEquals('fired', 1, s.Fired);
+    AssertEquals('the host''s adjustment last', 31, s.Core.Cols);
+    AssertEquals(6, s.Core.Rows);
+  finally
+    FreeReentry(s);
+  end;
+end;
+
+{ a handler raises: the exception reaches WriteSync's caller, the rows the chunk
+  changed are still reported, and the next write goes on from there -- the failed
+  chunk is not parsed again }
+procedure TTyTerminalReentryTests.TestHandlerExceptionInWriteSync;
+var
+  s: TReentrySink;
+  raised: Boolean;
+begin
+  s := NewReentry(6);
+  try
+    raised := False;
+    try
+      s.Core.WriteSync('a'#7'b');
+    except
+      on E: Exception do raised := E.Message = 'bell handler';
+    end;
+    AssertTrue('raised through', raised);
+    AssertEquals('dirty rows reported', 1, s.Rows);
+    s.Core.WriteSync('c');
+    AssertEquals('on from there, nothing twice', 'ac', s.Core.Buffer.TranslateBufferLineToString(0, True));
+    AssertEquals('empty queue', 0, s.Core.PendingBytes);
+  finally
+    FreeReentry(s);
+  end;
+end;
+
+{ a write callback raises in a slice: the rest stays queued and is asked for again }
+procedure TTyTerminalReentryTests.TestCallbackExceptionInASlice;
+var
+  s: TReentrySink;
+  raised: Boolean;
+begin
+  s := NewReentry(7);
+  try
+    s.Core.Write('A', @s.OnDone);
+    s.Core.Write('B');
+    AssertEquals('asked once', 1, s.Requests);
+    raised := False;
+    try
+      s.Core.ProcessPending;
+    except
+      on E: Exception do raised := E.Message = 'write callback';
+    end;
+    AssertTrue('raised through', raised);
+    AssertEquals('asked again', 2, s.Requests);
+    AssertEquals('B waits', 1, s.Core.PendingBytes);
+    AssertFalse('the rest', s.Core.ProcessPending);
+    AssertEquals('each once', 'AB', s.Core.Buffer.TranslateBufferLineToString(0, True));
+  finally
+    FreeReentry(s);
+  end;
+end;
+
+{ WriteSync's flush meets a raising handler: what is behind the chunk stays queued
+  for a slice, instead of being dropped or leaving the flush stuck }
+procedure TTyTerminalReentryTests.TestExceptionInAFlushKeepsTheRest;
+var
+  s: TReentrySink;
+  raised: Boolean;
+begin
+  s := NewReentry(6);
+  try
+    s.Core.Write('P');
+    s.Core.Write('Q'#7);
+    s.Core.Write('R');
+    raised := False;
+    try
+      s.Core.WriteSync('S');
+    except
+      on E: Exception do raised := E.Message = 'bell handler';
+    end;
+    AssertTrue('raised through', raised);
+    AssertEquals('R and S wait', 2, s.Core.PendingBytes);
+    AssertTrue('a slice asked for', s.Requests >= 1);
+    AssertFalse('the rest', s.Core.ProcessPending);
+    AssertEquals('each once, in order', 'PQRS', s.Core.Buffer.TranslateBufferLineToString(0, True));
+  finally
+    FreeReentry(s);
   end;
 end;
 
@@ -1213,40 +2086,56 @@ begin
   end;
 end;
 
+const
+  ThreadEntries = 15;
+
 type
   TOtherThread = class(TThread)
   public
     Core: TTyTerminalCore;
-    Classes_: array[0..3] of string;
+    Classes_: array[0..ThreadEntries - 1] of string;
     procedure Execute; override;
   end;
 
 procedure TOtherThread.Execute;
 
-  procedure Try_(AIndex: Integer; AKind: Integer);
+  procedure Try_(AKind: Integer);
   var
     b: Byte;
+    ev: TTyTerminalMouseEvent;
   begin
-    Classes_[AIndex] := '(none)';
+    Classes_[AKind] := '(none)';
     b := Ord('a');
+    ev := MouseAt(0, 0, tmbLeft, tmaDown);
     try
       case AKind of
         0: Core.Write('a');
         1: Core.Write(b, 1);
         2: Core.WriteSync('a');
+        3: Core.ProcessPending;
+        4: Core.Resize(30, 8);
+        5: Core.Reset;
+        6: Core.Input('a');
+        7: Core.ScrollLines(-1);
+        8: Core.ScrollPages(-1);
+        9: Core.ScrollToBottom;
+        10: Core.ScrollToTop;
+        11: Core.ClearScrollback;
+        12: Core.TriggerMouseEvent(ev);
+        13: Core.ReportFocus(False);
       else
-        Core.ProcessPending;
+        Core.EndSynchronizedOutput;
       end;
     except
-      on E: Exception do Classes_[AIndex] := E.ClassName;
+      on E: Exception do Classes_[AKind] := E.ClassName;
     end;
   end;
 
+var
+  k: Integer;
 begin
-  Try_(0, 0);
-  Try_(1, 1);
-  Try_(2, 2);
-  Try_(3, 3);
+  for k := 0 to ThreadEntries - 1 do
+    Try_(k);
 end;
 
 procedure TTyTerminalWriteQueueTests.TestOtherThreadsAreRefused;
@@ -1262,10 +2151,11 @@ begin
     t.FreeOnTerminate := False;
     t.Start;
     t.WaitFor;
-    for i := 0 to 3 do
+    for i := 0 to ThreadEntries - 1 do
       AssertEquals(Format('entry %d', [i]), 'EInvalidOperation', t.Classes_[i]);
     AssertEquals('nothing queued', 0, core.PendingBytes);
     AssertEquals('nothing parsed', '', core.Buffer.Lines.Get(0).TranslateToString(True, 0, 20));
+    AssertEquals('not resized', 20, core.Cols);
   finally
     t.Free;
     core.Free;
@@ -1290,6 +2180,65 @@ begin
   AssertEquals('lines freed', base, TTyTerminalLine.LiveCount);
 end;
 
+{ Write('') alone is nothing; with a callback it is queued, for its callback. The
+  chunks waiting are bounded like their bytes. }
+procedure TTyTerminalWriteQueueTests.TestEmptyWritesAndTheChunkBound;
+var
+  r: TQueueRig;
+  i: Integer;
+  raised: Boolean;
+begin
+  r := TQueueRig.Create;
+  try
+    r.Core.Write('');
+    AssertEquals('nothing asked', 0, r.Requests);
+    r.Core.Write('', @r.OnDone, 5);
+    AssertEquals('a callback: queued', 1, r.Requests);
+    r.SetScript([0]);
+    AssertFalse(r.Core.ProcessPending);
+    AssertEquals('its callback ran', 1, Length(r.Done));
+    AssertEquals(5, r.Done[0]);
+    for i := 1 to TyTermMaxPendingChunks do
+      r.Core.Write('x');
+    raised := False;
+    try
+      r.Core.Write('x');
+    except
+      on ETyTerminalWriteOverflow do raised := True;
+    end;
+    AssertTrue('one chunk too many', raised);
+    AssertEquals('the bound held', Int64(TyTermMaxPendingChunks), r.Core.PendingBytes);
+    AssertFalse('they all parse', r.Core.ProcessPending);
+    r.Core.Write('x');
+    AssertEquals('and room again', 1, r.Core.PendingBytes);
+  finally
+    r.Free;
+  end;
+end;
+
+{ a chunk's bytes are let go of as soon as it is parsed, not when the queue empties }
+procedure TTyTerminalWriteQueueTests.TestAParsedChunkIsReleased;
+var
+  r: TQueueRig;
+  s: RawByteString;
+  before, after: PtrUInt;
+begin
+  r := TQueueRig.Create;
+  try
+    s := StringOfChar(#0, 8 * 1024 * 1024);   { NUL: parsed and ignored, quick }
+    r.Core.Write(s);
+    s := '';                               { the queue holds the only reference }
+    r.Core.Write('z');
+    before := GetFPCHeapStatus.CurrHeapUsed;
+    r.SetScript([0, 20]);                  { one chunk, then the budget is spent }
+    AssertTrue('z still waits', r.Core.ProcessPending);
+    after := GetFPCHeapStatus.CurrHeapUsed;
+    AssertTrue(Format('8 MB given back (%d -> %d)', [before, after]), Int64(before) - Int64(after) > 7 * 1024 * 1024);
+  finally
+    r.Free;
+  end;
+end;
+
 procedure TTyTerminalWriteQueueTests.TestDefaultClockMoves;
 var
   t1, t2: Double;
@@ -1312,5 +2261,6 @@ end;
 initialization
   RegisterTest(TTyTerminalCoreOracleTests);
   RegisterTest(TTyTerminalCoreTests);
+  RegisterTest(TTyTerminalReentryTests);
   RegisterTest(TTyTerminalWriteQueueTests);
 end.

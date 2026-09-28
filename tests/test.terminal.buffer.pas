@@ -568,7 +568,7 @@ begin
           ld.HasId := a.Items[1].JSONType <> jtNull;
           if ld.HasId then ld.Id := a.Strings[1] else ld.Id := '';
           ld.Uri := a.Strings[2];
-          got := TJSONIntegerNumber.Create(links.RegisterLink(ld));
+          got := TJSONInt64Number.Create(links.RegisterLink(ld));
         end
         else if name = 'addLineToLink' then
           links.AddLineToLink(a.Integers[1], a.Integers[2])

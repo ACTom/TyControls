@@ -499,6 +499,8 @@ type
     property IsCursorInitialized: Boolean read FIsCursorInitialized;
     property GLevel: Integer read FGLevel;
     property CurrentAttr: TTyTerminalAttrData read FCurAttr;
+    { the erase attributes as last worked out (upstream _eraseAttrDataInternal) }
+    property EraseAttr: TTyTerminalAttrData read FEraseAttr;
     property BufferService: TTyTerminalBufferService read FBufferService;
 
     property PendingBytes: Int64 read FPendingData;

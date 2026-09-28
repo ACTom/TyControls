@@ -324,6 +324,13 @@ function dumpLinks(term) {
 
 const PROTOCOLS = { NONE: 'NONE', X10: 'X10', VT200: 'VT200', DRAG: 'DRAG', ANY: 'ANY' };
 
+// An AttributeData as { fg, bg, ext: [ext, urlId, underlineColor, underlineVariantOffset] }
+// -- the same four the line export gives an extended cell.
+function dumpAttr(a) {
+  const e = a.extended;
+  return { fg: a.fg >>> 0, bg: a.bg >>> 0, ext: [e.ext >>> 0, e.urlId, e.underlineColor >>> 0, e.underlineVariantOffset] };
+}
+
 function dumpState(up, term, rec) {
   const core = term._core;
   const ih = core._inputHandler;
@@ -349,6 +356,8 @@ function dumpState(up, term, rec) {
     },
     options: { convertEol: core.optionsService.rawOptions.convertEol, cursorBlink: core.optionsService.rawOptions.cursorBlink },
     charset: { glevel: cs.glevel, g: [0, 1, 2, 3].map(g => charsetKey(up, cs.charsets[g])) },
+    // the attributes the next character and the next erase take
+    curAttr: dumpAttr(ih._curAttrData), eraseAttr: dumpAttr(ih._eraseAttrDataInternal),
     title: digestable(ih._windowTitle), iconName: digestable(ih._iconName),
     titleStacks: [ih._windowTitleStack.map(digestable), ih._iconNameStack.map(digestable)],
     bells: rec.bells, lineFeeds: rec.lineFeeds, cursorMoves: rec.cursorMoves,
@@ -360,11 +369,37 @@ function dumpState(up, term, rec) {
 
 // ---- running a case --------------------------------------------------------------
 
+// REP's fast-forward in the Pascal core (tyControls.Terminal.Core, DoPrint) skips
+// whole periods of scrolls and sends no OnScroll for them. It can only skip once a
+// REP's count passes 2 x ring + rows + 2 (the scrolls it prints for real first; a
+// repetition scrolls at most once), so a case with such a REP gets "ignore":
+// ["scrolls"] -- the rest of its state must still be equal. Watched through a CSI b
+// handler that looks and passes on (returns false).
+function watchRep(term) {
+  const w = { fastForward: false };
+  term._core._inputHandler._parser.registerCsiHandler({ final: 'b' }, params => {
+    const count = params.params[0] || 1;
+    const buf = term._core.buffer;
+    if (count > 2 * buf.lines.maxLength + term.rows + 2) w.fastForward = true;
+    return false;
+  });
+  return w;
+}
+
+function markIgnore(c, w) {
+  if (!w.fastForward) return;
+  const list = c.ignore || [];
+  if (!list.includes('scrolls')) list.push('scrolls');
+  c.ignore = list;
+}
+
 async function runCase(up, c, palette = DEFAULT_PALETTE) {
   const term = makeCaseTerminal(up, c);
   const holder = attachRecorders(term);
   const synth = attachSynth(term, (c.synth && c.synth.palette) || palette, c.synth && c.synth.focused !== undefined ? c.synth.focused : true);
+  const rep = watchRep(term);
   await runSteps(up, term, synth, c.steps);
+  markIgnore(c, rep);
   const expect = dumpState(up, term, holder.cur);
   term.reset();
   holder.cur = newRecord();
@@ -439,6 +474,6 @@ module.exports = {
   L, b64, unb64, utf8, cps, digestCps, digestable, prng,
   DEFAULT_OPTIONS, DEFAULT_PALETTE, fullOptions, normalizeOptions, writeCoreFixture,
   loadUpstream, makeCaseTerminal, attachRecorders, newRecord, attachSynth, runSteps,
-  dumpLineOnly, dumpBuffer, dumpLinks, dumpState, charsetKey,
+  dumpLineOnly, dumpBuffer, dumpLinks, dumpState, dumpAttr, charsetKey,
   runCase, checkVariants, variantView, cutPieces, randomCuts, relativeLuminance, rgbString,
 };
