@@ -71,6 +71,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { LOGICAL px: the drag scales it by the splitter's PPI before it is compared with the
+      pane, whose size is device px. Raw, 30 meant a 30 px pane at every scaling -- at 175%
+      barely half of what it meant at 100%. }
     property MinSize: Integer read FMinSize write SetMinSize default 30;
     { Drag a pane past MinSize and it closes, instead of sticking at MinSize with the
       pointer running on without it. Without this there is NO gesture that collapses a
@@ -322,7 +325,8 @@ begin
   if Vertical then maxSize := Parent.ClientWidth - Width else maxSize := Parent.ClientHeight - Height;
   { AutoSnap must reach the shared negotiator, or the band previews a size the release
     will not honour -- the preview and the commit have to come from one clamp. }
-  ANewSize := TySplitterNewSize(Align, FStartSize, ADelta, FMinSize, maxSize, FAutoSnap);
+  ANewSize := TySplitterNewSize(Align, FStartSize, ADelta,
+    MulDiv(FMinSize, Font.PixelsPerInch, 96), maxSize, FAutoSnap);
   accept := True;
   if Assigned(FOnCanResize) then FOnCanResize(Self, ANewSize, accept);
   Result := accept;

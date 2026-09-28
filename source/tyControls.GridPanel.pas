@@ -99,6 +99,12 @@ type
     function  CellIndex(ACol, ARow: Integer): Integer;
     procedure EnsureCells;           // create/destroy cells to match Count, preserve in-bounds
     procedure DiscardProvisionalCells;  // free the constructor-seeded default cells
+    { The tracks of both axes, solved for AClient in DEVICE px. Spacing and an absolute
+      track are logical px ("a fixed logical-px length"); the client rect they are solved
+      against is device px, so both are scaled by the panel's PPI first. ONE solver for the
+      layout and for the design-time guides, so the guides are drawn where the cells are. }
+    procedure SolveTracks(const AClient: TRect;
+      out AColW, ARowH, AColX, ARowY: TTyGridIntArray);
     procedure Relayout;
   protected
     function  GetStyleTypeKey: string; override;
@@ -580,10 +586,32 @@ begin
   EnsureCells;
 end;
 
+procedure TTyGridPanel.SolveTracks(const AClient: TRect;
+  out AColW, ARowH, AColX, ARowY: TTyGridIntArray);
+var
+  cols, rows: TTyGridTracks;
+  ppi, spacingPx, i: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  cols := TyParseGridTracks(FColumnSizes, FColumnCount);
+  rows := TyParseGridTracks(FRowSizes, FRowCount);
+  { Only the ABSOLUTE tracks carry a length; a percentage and a star share are ratios of
+    whatever the client is, and the client is device px already. }
+  for i := 0 to High(cols) do
+    if cols[i].Kind = tgtAbsolute then cols[i].Value := MulDiv(cols[i].Value, ppi, 96);
+  for i := 0 to High(rows) do
+    if rows[i].Kind = tgtAbsolute then rows[i].Value := MulDiv(rows[i].Value, ppi, 96);
+  spacingPx := MulDiv(FSpacing, ppi, 96);
+  AColW := TyGridTrackSizes(AClient.Right - AClient.Left, spacingPx, cols);
+  ARowH := TyGridTrackSizes(AClient.Bottom - AClient.Top, spacingPx, rows);
+  AColX := TyGridTrackOrigins(AColW, spacingPx);
+  ARowY := TyGridTrackOrigins(ARowH, spacingPx);
+end;
+
 procedure TTyGridPanel.Relayout;
 var
   cr: TRect;
-  cols, rows: TTyGridTracks;
   colW, rowH, colX, rowY: TTyGridIntArray;
   i: Integer;
   cell: TTyGridCell;
@@ -595,12 +623,7 @@ begin
   FInLayout := True;
   try
     cr := ClientRect;
-    cols := TyParseGridTracks(FColumnSizes, FColumnCount);
-    rows := TyParseGridTracks(FRowSizes, FRowCount);
-    colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, cols);
-    rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, rows);
-    colX := TyGridTrackOrigins(colW, FSpacing);
-    rowY := TyGridTrackOrigins(rowH, FSpacing);
+    SolveTracks(cr, colW, rowH, colX, rowY);
     for i := 0 to High(FCells) do
     begin
       cell := TTyGridCell(FCells[i]);
@@ -621,19 +644,13 @@ end;
 procedure TTyGridPanel.Paint;
 var
   cr: TRect;
-  cols, rows: TTyGridTracks;
   colW, rowH, colX, rowY: TTyGridIntArray;
   i, x, y: Integer;
 begin
   inherited Paint;
   if not (csDesigning in ComponentState) then Exit;   // guides are design-time only
   cr := ClientRect;
-  cols := TyParseGridTracks(FColumnSizes, FColumnCount);
-  rows := TyParseGridTracks(FRowSizes, FRowCount);
-  colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, cols);
-  rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, rows);
-  colX := TyGridTrackOrigins(colW, FSpacing);
-  rowY := TyGridTrackOrigins(rowH, FSpacing);
+  SolveTracks(cr, colW, rowH, colX, rowY);
   Canvas.Pen.Style := psDot;
   Canvas.Pen.Color := clGray;
   for i := 0 to High(colX) do

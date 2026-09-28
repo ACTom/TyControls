@@ -129,8 +129,9 @@ type
     { Number of children that currently carry a rule set. Exposed for tests. }
     function RuledChildCount: Integer;
   published
-    { Gap in px inserted between siblings on the position rules (RightOf/LeftOf/Above/
-      Below). Edge-align and parent-align rules are NOT offset by it. }
+    { Gap in LOGICAL px inserted between siblings on the position rules (RightOf/LeftOf/
+      Above/Below); the layout scales it by the panel's PPI, like the padding beside it.
+      Edge-align and parent-align rules are NOT offset by it. }
     property Spacing: Integer read GetSpacing write SetSpacing stored FSpacingExplicit;
     property Align;
     property Anchors;
@@ -504,7 +505,10 @@ begin
   end;
 
   cr := ContentRect;
-  positions := TyRelativeSolve(items, cr, GetSpacing);
+  { Spacing is logical px (it follows the theme's --spacing until pinned); the children's
+    sizes and the content rect it is solved with are device px. ContentRect scales its
+    padding the same way. }
+  positions := TyRelativeSolve(items, cr, MulDiv(GetSpacing, Font.PixelsPerInch, 96));
 
   FInLayout := True;
   try
