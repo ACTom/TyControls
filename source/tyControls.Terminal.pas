@@ -232,6 +232,8 @@ type
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     { 输入法提交的整段文字:当作键入发给程序 }
     procedure HandleImeCommit(const ACommitUtf8: string);
@@ -1654,6 +1656,71 @@ begin
   FCore.Input(UTF8Key, True);
   NoteActivity;
   UTF8Key := '';
+end;
+
+{ ---- 鼠标 --------------------------------------------------------------------------- }
+
+function TTyTerminalView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+var
+  notches, i, dir: Integer;
+  ev: TTyTerminalMouseEvent;
+  cell: TPoint;
+  ins: TRect;
+begin
+  { 宿主的 OnMouseWheel 先拿;它处理了就到此为止 }
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result or not Enabled then Exit;
+  { 每满 ±120 出一格,同号的余数留着,反向时清零;一格都不满也吃掉这点位移 }
+  if (FWheelAccum <> 0) and ((FWheelAccum > 0) <> (WheelDelta > 0)) then
+    FWheelAccum := 0;
+  Inc(FWheelAccum, WheelDelta);
+  notches := FWheelAccum div 120;
+  FWheelAccum := FWheelAccum - notches * 120;
+  Result := True;
+  if notches = 0 then Exit;
+  if notches > 0 then dir := 1 else dir := -1;
+  for i := 1 to Abs(notches) do
+  begin
+    { MouseService.ts:250-292:程序要滚轮事件就上报;否则有滚回就滚 3 行;再否则
+      (备用屏、AlternateScroll)发方向键 }
+    if FCore.Modes.MouseProtocol <> tmpNone then
+    begin
+      cell := CellAt(MousePos.X, MousePos.Y);
+      ins := ContentInsets(Font.PixelsPerInch);
+      ev := Default(TTyTerminalMouseEvent);
+      ev.Col := cell.X;
+      ev.Row := cell.Y;
+      ev.X := Max(0, MousePos.X - ins.Left);
+      ev.Y := Max(0, MousePos.Y - ins.Top);
+      ev.Button := tmbWheel;
+      if dir > 0 then ev.Action := tmaUp else ev.Action := tmaDown;
+      ev.Shift := ssShift in Shift;
+      ev.Alt := ssAlt in Shift;
+      ev.Ctrl := ssCtrl in Shift;
+      if FCore.TriggerMouseEvent(ev) then Continue;
+    end;
+    if FCore.Buffer.HasScrollback then
+      FCore.ScrollLines(-3 * dir)
+    else if FAlternateScroll then
+    begin
+      if FCore.Modes.ApplicationCursorKeys then
+      begin
+        if dir > 0 then FCore.Input(#27'OA', True) else FCore.Input(#27'OB', True);
+      end
+      else if dir > 0 then
+        FCore.Input(#27'[A', True)
+      else
+        FCore.Input(#27'[B', True);
+    end;
+  end;
+end;
+
+procedure TTyTerminalView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  { 点一下取焦点;本期不上报、不选择(4 期) }
+  if CanFocus and not Focused then
+    SetFocus;
 end;
 
 procedure TTyTerminalView.HandleImeCommit(const ACommitUtf8: string);
