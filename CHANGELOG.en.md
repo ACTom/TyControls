@@ -7,6 +7,27 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.0-RC3] — 2026-09-28
+
+Fixes a batch of layout errors under high-DPI scaling (150%, 175%; [#2](https://github.com/ACTom/TyControls/issues/2)) and blurry text on Windows. Still a release candidate: if nothing new comes in, this content becomes 3.0.0 final.
+
+### Changed
+
+- Text on Windows advances by whole pixels: in a Chinese font with no bold face of its own, bold text is 1 px wider per character, so a button with a hardcoded width may need widening or `AutoSize`.
+
+### Fixed
+
+- Text in every control on Windows looked softer and lighter than the text Windows draws; it is now as crisp and as heavy as the system's ClearType, without the colour fringes.
+- At 150% and 175% scaling, text was measured at twice the DPI: labels spread their lines too far apart and wrapped early, and buttons and other controls came out taller and wider than designed, so rows of them overlapped. Controls created in code were affected too.
+- At high DPI, a control with `AutoSize` on scaled in one direction only: a button's height and a wrapping label's width stayed at 100%, and the label wrapped into twice as many lines.
+- A tool bar's `Indent` / `ButtonSpacing` / `ButtonHeight` / `ButtonWidth`, `TTyToolBarEx`'s overflow button and flyout, the `Spacing` of tool group, grid and relative panels, a status panel's `Width` and a splitter's `MinSize` did not scale at high DPI, so children crowded together or ran into each other.
+- `TTyCoolBar`: at high DPI a band snapped back to its 100% width as soon as its gripper was touched, the seam lagged behind the pointer while dragging, and `AutoMaxWidth` stopped a band at just over half its content.
+- The built-in dialogs kept 100% margins, columns and gaps at high DPI: the file dialog's navigation buttons lay over its file list, the font dialog's check boxes over its colour button, the editors' buttons ran out of the window, and messages wrapped at half their width.
+- `TTyStringGrid`: the column filter drop-down did not scale at high DPI, and under modern density the filter row's editor opened over the column captions.
+- `TTyShellListView` gave most of its width to the first column at high DPI and pushed the last two out of view.
+- At high DPI, the figure in a gauge or circular progress was too big and stood out of the ring, and the calendar's today ring, the colour grid's selection ring, the list view's sort arrow, the ribbon's key tips, the status bar's grip and the tree's radio mark were drawn too thick or too large.
+- The window's resize border, the smallest size a manual resize leaves, the drag threshold on a title bar, and the tolerance of a triple click and of the date picker's check box were only a little over half as forgiving at 175% as at 100%.
+
 ## [3.0.0-RC2] — 2026-09-27
 
 Every issue reported against the RC has been addressed. Still a release candidate: if nothing new comes in, this content becomes 3.0.0 final.
