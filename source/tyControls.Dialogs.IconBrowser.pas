@@ -590,8 +590,10 @@ begin
   inherited CreateNew(AOwner, Num);
   Caption := rsDlgIconBrowserTitle;
   Resizable := True;
-  Constraints.MinWidth := 420;
-  Constraints.MinHeight := 320;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. }
+  Constraints.MinWidth := Px(420);
+  Constraints.MinHeight := Px(320);
   FAll := TStringList.Create;
 
   FSearch := TTyEdit.Create(Self);
@@ -611,7 +613,7 @@ begin
 
   AddButton(rsMsgBtnOK, mrOK, True, False);
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  AutoSizeToContent(560, 420);
+  AutoSizeToContent(Px(560), Px(420));
   LayoutContent;
   UpdateStatus;
 end;
@@ -752,14 +754,15 @@ var r: TRect; x, w, editH, statusH: Integer;
 begin
   if FGrid = nil then Exit;      { Resize can fire before construction finishes }
   r := ContentRect;
-  x := r.Left + TyDlgPad;
-  w := (r.Right - r.Left) - 2 * TyDlgPad;
-  editH := TyDensityHeight(nil, TyDlgEditH);
-  statusH := 20;
-  FSearch.SetBounds(x, r.Top + TyDlgPad, w, editH);
-  FStatus.SetBounds(x, r.Bottom - TyDlgPad - statusH, w, statusH);
-  FGrid.SetBounds(x, r.Top + TyDlgPad + editH + Gap, w,
-    (r.Bottom - r.Top) - 2 * TyDlgPad - editH - statusH - 2 * Gap);
+  x := r.Left + Px(TyDlgPad);
+  w := (r.Right - r.Left) - 2 * Px(TyDlgPad);
+  editH := Px(TyDensityHeight(nil, TyDlgEditH));
+  statusH := Px(20);
+  FSearch.SetBounds(x, r.Top + Px(TyDlgPad), w, editH);
+  editH := FSearch.Height;         // what it became: SetBounds clamps up to the field's floor
+  FStatus.SetBounds(x, r.Bottom - Px(TyDlgPad) - statusH, w, statusH);
+  FGrid.SetBounds(x, r.Top + Px(TyDlgPad) + editH + Px(Gap), w,
+    (r.Bottom - r.Top) - 2 * Px(TyDlgPad) - editH - statusH - 2 * Px(Gap));
 end;
 
 { ============================================================ entry points =========== }

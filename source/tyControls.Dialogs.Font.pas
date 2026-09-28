@@ -117,16 +117,16 @@ var
     Result := TTyLabel.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, AWidth, cLabelH);
+    Result.SetBounds(ALeft, ATop, AWidth, Px(cLabelH));
   end;
 
   { The y under ALabel -- its real bottom plus the gap, never tighter than the designed
     cLabelH + cLabelGap, so a lean theme keeps the original spacing exactly. }
   function LabelBottom(ALabel: TTyLabel; ATop: Integer): Integer;
   begin
-    Result := ATop + cLabelH + cLabelGap;
-    if (ALabel <> nil) and (ALabel.Top + ALabel.Height + cLabelGap > Result) then
-      Result := ALabel.Top + ALabel.Height + cLabelGap;
+    Result := ATop + Px(cLabelH) + Px(cLabelGap);
+    if (ALabel <> nil) and (ALabel.Top + ALabel.Height + Px(cLabelGap) > Result) then
+      Result := ALabel.Top + ALabel.Height + Px(cLabelGap);
   end;
 
   function MkCheck(const ACaption: string; ALeft, ATop: Integer): TTyCheckBox;
@@ -134,48 +134,50 @@ var
     Result := TTyCheckBox.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, cColW, cCheckH);
+    Result.SetBounds(ALeft, ATop, Px(cColW), Px(cCheckH));
   end;
 
   { Where the row after AControl starts: its real bottom, but never tighter than the
     designed stride, so a lean theme keeps the original spacing exactly. }
   function NextRow(AControl: TControl; ACurrentY: Integer): Integer;
   begin
-    Result := AControl.Top + AControl.Height + (cCheckStep - cCheckH);
-    if Result < ACurrentY + cCheckStep then Result := ACurrentY + cCheckStep;
+    Result := AControl.Top + AControl.Height + (Px(cCheckStep) - Px(cCheckH));
+    if Result < ACurrentY + Px(cCheckStep) then Result := ACurrentY + Px(cCheckStep);
   end;
 
 begin
   inherited CreateNew(AOwner, Num);
   Resizable := True;
-  Constraints.MinWidth := 460;
-  Constraints.MinHeight := 360;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. }
+  Constraints.MinWidth := Px(460);
+  Constraints.MinHeight := Px(360);
   FColorValue := clWindowText;
 
   r := ContentRect;
-  x0 := r.Left + TyDlgPad;
-  y0 := r.Top + TyDlgPad;
-  colX := x0 + cListW + cColGap;
+  x0 := r.Left + Px(TyDlgPad);
+  y0 := r.Top + Px(TyDlgPad);
+  colX := x0 + Px(cListW) + Px(cColGap);
 
   // Left column: family label + list. Height is finalized in LayoutContent so it
   // stretches to just above the preview strip; seed a reasonable initial height.
-  FFamilyLabel := MkLabel(rsDlgFontFamily, x0, y0, cListW);
+  FFamilyLabel := MkLabel(rsDlgFontFamily, x0, y0, Px(cListW));
   FList := TTyFontListBox.Create(Self);
   FList.Parent := Self;
   { The list starts under the label the same way -- read back, floored at the designed gap. }
-  FList.SetBounds(x0, LabelBottom(FFamilyLabel, y0), cListW, cListMinH);
+  FList.SetBounds(x0, LabelBottom(FFamilyLabel, y0), Px(cListW), Px(cListMinH));
 
   // Right column, top group: "Size" label + spin on one baseline-aligned row.
   y := y0;
-  MkLabel(rsDlgFontSize, colX, y + ((TyDlgEditH - cLabelH) div 2), cSizeLblW);
+  MkLabel(rsDlgFontSize, colX, y + ((Px(TyDlgEditH) - Px(cLabelH)) div 2), Px(cSizeLblW));
   FSize := TTySpinEdit.Create(Self);
   FSize.Parent := Self;
   FSize.MinValue := 1;
   FSize.MaxValue := 999;
-  FSize.SetBounds(colX + cSizeLblW + 8, y, cSizeSpinW, TyDlgEditH);
+  FSize.SetBounds(colX + Px(cSizeLblW) + Px(8), y, Px(cSizeSpinW), Px(TyDlgEditH));
 
   // Right column, style group: four checks with an even vertical rhythm.
-  Inc(y, TyDlgEditH + cSectionGap);
+  Inc(y, Px(TyDlgEditH) + Px(cSectionGap));
   { cCheckStep is a MINIMUM stride, not the stride: TTyCheckBox floors its height on the
     theme's font, padding and --checkbox-size, LCL enforces that floor inside SetBounds, and a
     box taller than 28 would land under the next one. Step by whatever the box actually is. }
@@ -188,18 +190,18 @@ begin
   FStrike := MkCheck(rsDlgFontStrike, colX, y);
 
   // Right column, color group.
-  Inc(y, cCheckH + cSectionGap);
+  Inc(y, Px(cCheckH) + Px(cSectionGap));
   FColorBtn := TTyButton.Create(Self);
   FColorBtn.Parent := Self;
   FColorBtn.Caption := rsDlgFontColor;
-  FColorBtn.SetBounds(colX, y, cColW, cBtnH);
+  FColorBtn.SetBounds(colX, y, Px(cColW), Px(cBtnH));
   FColorBtn.OnClick := @ColorBtnClick;
 
   // Preview strip spans the full content width along the bottom (finalized by
   // LayoutContent); seed it here so AutoSizeToContent can size the form.
-  FPreviewRect := Rect(x0, y0 + cLabelH + cLabelGap + cListMinH + cSectionGap,
-    r.Right - TyDlgPad,
-    y0 + cLabelH + cLabelGap + cListMinH + cSectionGap + cPreviewH);
+  FPreviewRect := Rect(x0, y0 + Px(cLabelH) + Px(cLabelGap) + Px(cListMinH) + Px(cSectionGap),
+    r.Right - Px(TyDlgPad),
+    y0 + Px(cLabelH) + Px(cLabelGap) + Px(cListMinH) + Px(cSectionGap) + Px(cPreviewH));
 
   // The sample text is drawn by the FORM's Paint, so a child control invalidating
   // itself repaints none of it — every input that feeds the sample has to ask the
@@ -218,8 +220,8 @@ begin
 
   // Content extents: left list column + gap + right column vs. the preview strip
   // running the full width; whichever is taller/wider drives the form size.
-  contentW := cListW + cColGap + cColW;
-  contentH := (FPreviewRect.Bottom - y0) + TyDlgPad;
+  contentW := Px(cListW) + Px(cColGap) + Px(cColW);
+  contentH := (FPreviewRect.Bottom - y0) + Px(TyDlgPad);
   AutoSizeToContent(contentW, contentH);
   LayoutContent;
 end;
@@ -285,16 +287,16 @@ begin
   r := ContentRect;
   // Anchor the preview strip to the bottom of the content area and stretch the
   // family list down to sit just above it, keeping a clear separating gap.
-  FPreviewRect := Rect(r.Left + TyDlgPad, r.Bottom - TyDlgPad - cPreviewH,
-    r.Right - TyDlgPad, r.Bottom - TyDlgPad);
+  FPreviewRect := Rect(r.Left + Px(TyDlgPad), r.Bottom - Px(TyDlgPad) - Px(cPreviewH),
+    r.Right - Px(TyDlgPad), r.Bottom - Px(TyDlgPad));
   { The runtime relayout has to honour the same read-back rule the constructor does, or it
     quietly puts the literal stride back and drops the list onto its own label. }
-  listTop := r.Top + TyDlgPad + cLabelH + cLabelGap;
+  listTop := r.Top + Px(TyDlgPad) + Px(cLabelH) + Px(cLabelGap);
   if (FFamilyLabel <> nil)
-     and (FFamilyLabel.Top + FFamilyLabel.Height + cLabelGap > listTop) then
-    listTop := FFamilyLabel.Top + FFamilyLabel.Height + cLabelGap;
-  FList.SetBounds(r.Left + TyDlgPad, listTop,
-    cListW, Max(cListMinH, FPreviewRect.Top - listTop - cSectionGap));
+     and (FFamilyLabel.Top + FFamilyLabel.Height + Px(cLabelGap) > listTop) then
+    listTop := FFamilyLabel.Top + FFamilyLabel.Height + Px(cLabelGap);
+  FList.SetBounds(r.Left + Px(TyDlgPad), listTop,
+    Px(cListW), Max(Px(cListMinH), FPreviewRect.Top - listTop - Px(cSectionGap)));
 end;
 
 procedure TTyFontForm.Paint;
@@ -326,7 +328,7 @@ begin
     style.Layout := tlTop;
     style.SingleLine := True;
     style.Clipping := True;
-    P.Bitmap.TextRect(FPreviewRect, FPreviewRect.Left + 4, FPreviewRect.Top + 4,
+    P.Bitmap.TextRect(FPreviewRect, FPreviewRect.Left + Px(4), FPreviewRect.Top + Px(4),
       rsDlgFontSample, style, TyColorToBGRA(TyColorFromLCL(FColorValue, 255)));
     P.EndPaint;
   finally P.Free; end;
