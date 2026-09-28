@@ -14,7 +14,9 @@
     Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
     Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
     Copyright (c) 2023, The xterm.js authors (https://github.com/xtermjs/xterm.js)
-  The '15' table derives from the Unicode Character Database, Unicode License v3.
+  The '15' table data came to the addon from the unicode-properties project
+  (https://github.com/PerBothner/unicode-properties, MIT, Copyright 2018), which
+  generates it from the Unicode Character Database (Unicode License v3).
   Full texts: THIRD-PARTY-NOTICES.md. }
 
 const

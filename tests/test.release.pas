@@ -560,6 +560,10 @@ begin
   AssertTrue('so the notice has an xterm.js section', Pos('## xterm.js', notice) > 0);
   AssertTrue('and the Unicode License v3 text', Pos('UNICODE LICENSE V3', notice) > 0);
   AssertTrue('and names the pinned xterm.js commit', Pos('c58ea36', notice) > 0);
+  { The join rules and the '15' data reach xterm.js from unicode-properties (MIT,
+    "Copyright 2018"); its copyright line has to travel with the others. }
+  AssertTrue('and carries the unicode-properties copyright line',
+    Pos('Copyright 2018 (unicode-properties', notice) > 0);
 end;
 
 procedure TReleaseManifestTest.EveryAssetAShippedThemeReferencesIsShipped;

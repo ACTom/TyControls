@@ -67,7 +67,9 @@ const header = [
   ``,
   `Derived from xterm.js, MIT:`,
   ...copyright.map(s => '  ' + s),
-  `The '15' table derives from the Unicode Character Database, Unicode License v3.`,
+  `The '15' table data came to the addon from the unicode-properties project`,
+  `(https://github.com/PerBothner/unicode-properties, MIT, Copyright 2018), which`,
+  `generates it from the Unicode Character Database (Unicode License v3).`,
   `Full texts: THIRD-PARTY-NOTICES.md.`,
 ];
 for (const line of header) if (/[{}]/.test(line)) throw new Error('a brace in the header would open a nested comment: ' + line);

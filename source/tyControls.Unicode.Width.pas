@@ -10,9 +10,11 @@ unit tyControls.Unicode.Width;
     addons/addon-unicode11/src/UnicodeV11.ts                        version '11'
     addons/addon-unicode-graphemes/src/UnicodeGraphemeProvider.ts   '15', '15-graphemes'
     addons/addon-unicode-graphemes/src/third-party/UnicodeProperties.ts
-      -- the join rules only (shouldJoin / _shouldJoin); the addon took them from the
-         unicode-properties project. The trie decoder is not ported: the tables in
-         the .inc are dumped from upstream by tools/terminal-oracle/gen-unicode-tables.js.
+      -- the join rules only (shouldJoin / _shouldJoin). The addon took these rules, and
+         the '15' table data, from the unicode-properties project
+         (https://github.com/PerBothner/unicode-properties, MIT, Copyright 2018). The
+         trie decoder is not ported: the tables in the .inc are dumped from upstream by
+         tools/terminal-oracle/gen-unicode-tables.js.
     src/common/services/UnicodeService.ts                           packing, string width
 
     Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
@@ -20,6 +22,7 @@ unit tyControls.Unicode.Width;
     Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
     Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
     Copyright (c) 2023, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+    Copyright 2018 (unicode-properties)
   MIT; the full text is in THIRD-PARTY-NOTICES.md. The '15' table derives from the
   Unicode Character Database (Unicode License v3, same file).
 
