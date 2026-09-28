@@ -61,6 +61,7 @@ type
     procedure EveryFileThePackagesNameIsShipped;
     procedure EveryDesignTimeUnitIsShipped;
     procedure TheThirdPartyNoticeShipsWithTheFontItLicenses;
+    procedure TheThirdPartyNoticeCoversTheUnicodeWidthPort;
     procedure EveryAssetAShippedThemeReferencesIsShipped;
     procedure BothScriptsShipTheSameTrees;
     procedure TheChartOptionEditorStaysAShell;
@@ -540,6 +541,25 @@ begin
   AssertTrue('so THIRD-PARTY-NOTICES.md must too (sh)',
     IsShipped(FSh, 'THIRD-PARTY-NOTICES.md'));
   AssertTrue('and the notice file exists', FileExists(RepoRoot + 'THIRD-PARTY-NOTICES.md'));
+end;
+
+procedure TReleaseManifestTest.TheThirdPartyNoticeCoversTheUnicodeWidthPort;
+var
+  notice: string;
+begin
+  { Hardcoded on purpose, for the same reason as the Lucide guard above: no manifest
+    declares a licence obligation. tyControls.Unicode.Width is ported from xterm.js (MIT)
+    and its generated .inc carries a table derived from the Unicode Character Database
+    (Unicode License v3); shipping them obliges THIRD-PARTY-NOTICES.md to carry both
+    texts. The commit is checked too, so a notice left behind by a later re-pin shows. }
+  AssertTrue('the width unit ships (ps1)', IsShipped(FPs1, 'source/tyControls.Unicode.Width.pas'));
+  AssertTrue('the width unit ships (sh)', IsShipped(FSh, 'source/tyControls.Unicode.Width.pas'));
+  AssertTrue('its generated tables ship (ps1)', IsShipped(FPs1, 'source/tyControls.Unicode.Width.Data.inc'));
+  AssertTrue('its generated tables ship (sh)', IsShipped(FSh, 'source/tyControls.Unicode.Width.Data.inc'));
+  notice := ReadScript(RepoRoot + 'THIRD-PARTY-NOTICES.md');
+  AssertTrue('so the notice has an xterm.js section', Pos('## xterm.js', notice) > 0);
+  AssertTrue('and the Unicode License v3 text', Pos('UNICODE LICENSE V3', notice) > 0);
+  AssertTrue('and names the pinned xterm.js commit', Pos('c58ea36', notice) > 0);
 end;
 
 procedure TReleaseManifestTest.EveryAssetAShippedThemeReferencesIsShipped;
