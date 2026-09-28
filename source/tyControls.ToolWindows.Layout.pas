@@ -142,7 +142,7 @@ type
   在它的 Cells 里 → 按图标中点找空隙;源栏 Cells 之外 → 没有目标(源栏自己的内容区);
   另一侧栏 Cells 之外 → 「最后一个已排布图标之后」那个空隙;另一侧栏被否决 → 没有目标。
   ASlot 是窗口序号的槽位,-1 时无意义。调用方把源栏放在第一个。只管侧栏:底栏标签行的落点
-  在栏上(HeaderDropSlotIn),底栏也从不跨栏。 }
+  在栏上(RowDropSlot),底栏也从不跨栏。 }
 function TyToolWindowDropAt(const AProbes: array of TTyToolWindowDropProbe; const P: TPoint;
   out ASlot: Integer): Integer;
 
