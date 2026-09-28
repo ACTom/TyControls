@@ -68,6 +68,12 @@ function TyUnicodeStringCellWidth(const AUtf8: string; AVersion: TTyUnicodeVersi
   AAmbiguousWide: Boolean): Integer;
 { '6' '11' '15' '15-graphemes' -- upstream's activeVersion strings. }
 function TyUnicodeVersionName(AVersion: TTyUnicodeVersion): string;
+{ The one UTF-8 encoder of the terminal units: the bytes of ACodepoint, a surrogate or
+  anything past U+10FFFF written as U+FFFD. TyUnicodeUtf8Size is how many bytes
+  TyUnicodeUtf8Encode writes at ADest (1..4); the string form wraps both. }
+function TyUnicodeUtf8Size(ACodepoint: Cardinal): Integer;
+function TyUnicodeUtf8Encode(ACodepoint: Cardinal; ADest: PChar): Integer;
+function TyUnicodeCodepointToUtf8(ACodepoint: Cardinal): string;
 
 implementation
 
@@ -403,6 +409,62 @@ begin
   else
     Result := '15-graphemes';
   end;
+end;
+
+function TyUnicodeUtf8Size(ACodepoint: Cardinal): Integer;
+begin
+  if (ACodepoint > $10FFFF) or ((ACodepoint >= $D800) and (ACodepoint <= $DFFF)) then
+    Result := 3                            { U+FFFD }
+  else if ACodepoint < $80 then
+    Result := 1
+  else if ACodepoint < $800 then
+    Result := 2
+  else if ACodepoint < $10000 then
+    Result := 3
+  else
+    Result := 4;
+end;
+
+function TyUnicodeUtf8Encode(ACodepoint: Cardinal; ADest: PChar): Integer;
+var
+  c: Cardinal;
+begin
+  c := ACodepoint;
+  if (c > $10FFFF) or ((c >= $D800) and (c <= $DFFF)) then
+    c := $FFFD;
+  if c < $80 then
+  begin
+    ADest[0] := Chr(c);
+    Result := 1;
+  end
+  else if c < $800 then
+  begin
+    ADest[0] := Chr($C0 or (c shr 6));
+    ADest[1] := Chr($80 or (c and $3F));
+    Result := 2;
+  end
+  else if c < $10000 then
+  begin
+    ADest[0] := Chr($E0 or (c shr 12));
+    ADest[1] := Chr($80 or ((c shr 6) and $3F));
+    ADest[2] := Chr($80 or (c and $3F));
+    Result := 3;
+  end
+  else
+  begin
+    ADest[0] := Chr($F0 or (c shr 18));
+    ADest[1] := Chr($80 or ((c shr 12) and $3F));
+    ADest[2] := Chr($80 or ((c shr 6) and $3F));
+    ADest[3] := Chr($80 or (c and $3F));
+    Result := 4;
+  end;
+end;
+
+function TyUnicodeCodepointToUtf8(ACodepoint: Cardinal): string;
+begin
+  Result := '';
+  SetLength(Result, TyUnicodeUtf8Size(ACodepoint));
+  TyUnicodeUtf8Encode(ACodepoint, PChar(Result));
 end;
 
 procedure ExpandBmp(const AStarts: array of Cardinal; const AWidths: array of Byte;

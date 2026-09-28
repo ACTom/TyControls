@@ -803,60 +803,18 @@ end;
 function TyTerminalCodepointsToUtf8(const AData: array of Cardinal; AStart, AEnd: Integer): string;
 var
   i, n: Integer;
-  c: Cardinal;
   p: PChar;
 begin
+  Result := '';
   n := 0;
   for i := AStart to AEnd - 1 do
-  begin
-    c := AData[i];
-    if (c > $10FFFF) or ((c >= $D800) and (c <= $DFFF)) then
-      Inc(n, 3)
-    else if c < $80 then
-      Inc(n)
-    else if c < $800 then
-      Inc(n, 2)
-    else if c < $10000 then
-      Inc(n, 3)
-    else
-      Inc(n, 4);
-  end;
+    Inc(n, TyUnicodeUtf8Size(AData[i]));
   SetLength(Result, n);
   if n = 0 then
     Exit;
   p := PChar(Result);
   for i := AStart to AEnd - 1 do
-  begin
-    c := AData[i];
-    if (c > $10FFFF) or ((c >= $D800) and (c <= $DFFF)) then
-      c := $FFFD;
-    if c < $80 then
-    begin
-      p^ := Chr(c);
-      Inc(p);
-    end
-    else if c < $800 then
-    begin
-      p[0] := Chr($C0 or (c shr 6));
-      p[1] := Chr($80 or (c and $3F));
-      Inc(p, 2);
-    end
-    else if c < $10000 then
-    begin
-      p[0] := Chr($E0 or (c shr 12));
-      p[1] := Chr($80 or ((c shr 6) and $3F));
-      p[2] := Chr($80 or (c and $3F));
-      Inc(p, 3);
-    end
-    else
-    begin
-      p[0] := Chr($F0 or (c shr 18));
-      p[1] := Chr($80 or ((c shr 12) and $3F));
-      p[2] := Chr($80 or ((c shr 6) and $3F));
-      p[3] := Chr($80 or (c and $3F));
-      Inc(p, 4);
-    end;
-  end;
+    Inc(p, TyUnicodeUtf8Encode(AData[i], p));
 end;
 
 function TyTerminalUtf16Length(const AData: array of Cardinal; AStart, AEnd: Integer): Integer;

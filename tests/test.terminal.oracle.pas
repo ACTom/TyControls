@@ -347,17 +347,10 @@ begin
   Result := TyTermDigest(TyTermUtf8ToCps(S));
 end;
 
+{ the terminal units' one encoder (tyControls.Unicode.Width) }
 function TyTermCpUtf8(c: Cardinal): string;
 begin
-  if c < $80 then
-    Result := Chr(c)
-  else if c < $800 then
-    Result := Chr($C0 or (c shr 6)) + Chr($80 or (c and $3F))
-  else if c < $10000 then
-    Result := Chr($E0 or (c shr 12)) + Chr($80 or ((c shr 6) and $3F)) + Chr($80 or (c and $3F))
-  else
-    Result := Chr($F0 or (c shr 18)) + Chr($80 or ((c shr 12) and $3F))
-      + Chr($80 or ((c shr 6) and $3F)) + Chr($80 or (c and $3F));
+  Result := TyUnicodeCodepointToUtf8(c);
 end;
 
 function TyTermCanonCps(const ACps: array of Cardinal): string;

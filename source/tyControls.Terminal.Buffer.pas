@@ -530,6 +530,8 @@ function TyTermNullCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
 function TyTermWhitespaceCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
 { UTF-8 -> code points (the decoder's input is valid UTF-8; nothing else reaches it). }
 function TyTermUtf8Codepoints(const S: string): TIntegerDynArray;
+{ ECMAScript WhiteSpace + LineTerminator: what trim / trimEnd drop. }
+function TyTermIsJsWhitespace(c: Cardinal): Boolean;
 { JavaScript's String.prototype.trimEnd over UTF-8. }
 function TyTermJsTrimEnd(const S: string): string;
 
@@ -540,17 +542,9 @@ implementation
 
 { ---- small helpers ---------------------------------------------------------------- }
 
-function CpToUtf8(c: Cardinal): string;
+function CpToUtf8(c: Cardinal): string; inline;
 begin
-  if c < $80 then
-    Result := Chr(c)
-  else if c < $800 then
-    Result := Chr($C0 or (c shr 6)) + Chr($80 or (c and $3F))
-  else if c < $10000 then
-    Result := Chr($E0 or (c shr 12)) + Chr($80 or ((c shr 6) and $3F)) + Chr($80 or (c and $3F))
-  else
-    Result := Chr($F0 or (c shr 18)) + Chr($80 or ((c shr 12) and $3F))
-      + Chr($80 or ((c shr 6) and $3F)) + Chr($80 or (c and $3F));
+  Result := TyUnicodeCodepointToUtf8(c);
 end;
 
 function TyTermUtf8Codepoints(const S: string): TIntegerDynArray;
@@ -584,8 +578,7 @@ begin
   SetLength(Result, n);
 end;
 
-{ ECMAScript WhiteSpace + LineTerminator }
-function IsJsWhitespace(c: Cardinal): Boolean;
+function TyTermIsJsWhitespace(c: Cardinal): Boolean;
 begin
   case c of
     $09..$0D, $20, $A0, $1680, $2000..$200A, $2028, $2029, $202F, $205F, $3000, $FEFF:
@@ -619,7 +612,7 @@ begin
       c := (c shl 6) or (Ord(S[p]) and $3F);
       Inc(p);
     end;
-    if not IsJsWhitespace(c) then
+    if not TyTermIsJsWhitespace(c) then
       Break;
     { step back over that code point }
     p := e;

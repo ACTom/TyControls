@@ -3510,17 +3510,6 @@ var
   c: Cardinal;
   b: Byte;
   cps: TIntegerDynArray;
-
-  function IsWs(c: Cardinal): Boolean;
-  begin
-    case c of
-      $09..$0D, $20, $A0, $1680, $2000..$200A, $2028, $2029, $202F, $205F, $3000, $FEFF:
-        Result := True;
-    else
-      Result := False;
-    end;
-  end;
-
 begin
   Result := TyTermJsTrimEnd(S);
   p := 1;
@@ -3534,7 +3523,7 @@ begin
     cps := TyTermUtf8Codepoints(Copy(Result, p, e));
     if Length(cps) = 0 then Break;
     c := Cardinal(cps[0]);
-    if not IsWs(c) then Break;
+    if not TyTermIsJsWhitespace(c) then Break;
     Inc(p, e);
   end;
   Result := Copy(Result, p, MaxInt);
