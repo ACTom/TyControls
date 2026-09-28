@@ -18,7 +18,7 @@ uses
   tyControls.StyleModel, tyControls.Painter, tyControls.StrConsts,
   tyControls.ToolWindows, tyControls.ToolWindows.Layout, tyControls.ToolWindows.Manager,
   tyControls.ToolWindows.DesignRules,
-  test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager;
+  test.toolwindow.window, test.toolwindow.bar, test.toolwindow.manager, test.dpi.support;
 
 type
   TTyToolWindowDesignTests = class(TTyToolWindowManagerFixture)
@@ -96,6 +96,7 @@ type
       ExpandedSize 不被改掉。 }
     procedure TestDroppingABarAt96KeepsTheDefaultSize;
     procedure TestDroppingABarAt144KeepsTheDefaultSize;
+    procedure TestDroppingABarAt126KeepsTheDefaultSize;
 
   end;
 
@@ -1039,7 +1040,7 @@ end;
 
 function TTyToolWindowDesignTests.DropBar(APPI: Integer): TBarAccess;
 var
-  w, h, savedX, savedY: Integer;
+  w, h, savedPPI: Integer;
   host: TTyPanel;
 begin
   if FDesignOwner = nil then
@@ -1047,16 +1048,14 @@ begin
     FDesignOwner := TDesignOwner.Create(nil);
     FDesignOwner.MarkDesigning;
   end;
-  { IDE 在 APPI 的屏幕上建组件:新控件的字体 PPI 取 ScreenInfo(TFont.Create),不是 96。 }
-  savedX := ScreenInfo.PixelsPerInchX;
-  savedY := ScreenInfo.PixelsPerInchY;
-  ScreenInfo.PixelsPerInchX := APPI;
-  ScreenInfo.PixelsPerInchY := APPI;
+  { IDE 在 APPI 的屏幕上建组件。Ty 控件不管屏幕 PPI,构造出来一律按 96 设计(TyBornAtDesignPPI),
+    挂上父控件才接父控件的 PPI;这里照样模拟屏幕,守的是「不依赖屏幕 PPI」这一点。 }
+  savedPPI := TyTestScreenPPI;
+  TyTestSimulateScreen(APPI);
   try
     Result := TBarAccess.Create(FDesignOwner);
   finally
-    ScreenInfo.PixelsPerInchX := savedX;
-    ScreenInfo.PixelsPerInchY := savedY;
+    TyTestSimulateScreen(savedPPI);
   end;
   Result.Controller := FCtl;
   { customformeditor.pp:1453-1506:构造出来的宽高按「96 设计」缩放到设计器 PPI →
@@ -1067,10 +1066,12 @@ begin
   Result.SetBounds(10, 10, w, h);
   { 设计器里的父控件在 APPI 下(字体跟父控件走,ParentFont)。 }
   host := TTyPanel.Create(FDesignOwner);
-  host.Font.PixelsPerInch := APPI;
   host.Controller := FCtl;
   host.SetBounds(0, 0, 800, 600);
   host.Parent := FForm;
+  { 挂上父控件之后再定 PPI:Ty 控件在 SetParent 里接父控件的 PPI(TyParentPPIToAdopt),
+    先设的值会被窗体的 96 盖掉。 }
+  host.Font.PixelsPerInch := APPI;
   Result.Parent := host;
 end;
 
@@ -1079,8 +1080,7 @@ var
   b: TBarAccess;
 begin
   { 对照组:96 PPI 下 IDE 的放大是恒等的,SetBounds 给的宽就是构造时推出来的宽,写不写回
-    都是 240。它只说明放下这条路径(SetBounds、AutoAdjustLayout、Parent :=)在不换算时不动
-    ExpandedSize;「还没有父控件不写回」要靠 144 那一条区分。 }
+    都是 240。「还没有父控件不写回」要靠 126 那一条区分。 }
   b := DropBar(96);
   AssertEquals('ExpandedSize 还是 240(声明的 default)', 240, b.ExpandedSize);
 end;
@@ -1089,11 +1089,24 @@ procedure TTyToolWindowDesignTests.TestDroppingABarAt144KeepsTheDefaultSize;
 var
   b: TBarAccess;
 begin
-  { 144 PPI:栏构造时已经按屏幕 PPI 推过宽,IDE 又把它当 96 设计值放大一遍再 SetBounds ——
-    这时还没有父控件,写回的话 ExpandedSize 变成 380,对象查看器里加粗、进 .lfm。宽不另外
-    断言:SetParent 之后栏按此刻的 ExpandedSize 重推,Width 永远等于推导值,区分不了。 }
+  { 150% 缩放下放一条栏,ExpandedSize 必须还是 240。原先的故障(构造时按屏幕 PPI 推过宽、IDE
+    再放大一遍 → 380)已经被 TyBornAtDesignPPI 从根上消掉:构造出来的宽本来就是 96 设计值,
+    IDE 放大后恰好等于栏自己在 144 下推出的宽,SetBounds 走不进写回。所以这一条只是整条路径
+    的集成检查,区分不了「没有父控件不写回」那道守卫——那道守卫由 126 那一条守。 }
   b := DropBar(144);
   AssertEquals('前提:按设计器 PPI 调过', 144, b.Font.PixelsPerInch);
+  AssertEquals('ExpandedSize 还是 240(声明的 default)', 240, b.ExpandedSize);
+end;
+
+procedure TTyToolWindowDesignTests.TestDroppingABarAt126KeepsTheDefaultSize;
+var
+  b: TBarAccess;
+begin
+  { 非标准缩放(131%):IDE 按 96→126 放大构造出来的宽,和栏自己在 126 下推出的宽差一个舍入。
+    没有父控件时若写回,ExpandedSize 会变成 239 或 241、对象查看器里加粗、进 .lfm。
+    这一条守「还没有父控件不写回」:把那道守卫去掉必须红。 }
+  b := DropBar(126);
+  AssertEquals('前提:按设计器 PPI 调过', 126, b.Font.PixelsPerInch);
   AssertEquals('ExpandedSize 还是 240(声明的 default)', 240, b.ExpandedSize);
 end;
 
