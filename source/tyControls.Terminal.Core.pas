@@ -68,10 +68,13 @@ unit tyControls.Terminal.Core;
     queries from them, falling back to OnQueryBaseColor. A set or a restore reports
     the colour scheme when DECSET 2031 is on; RIS leaves the overrides alone; the
     host's NotifyColorSchemeChanged (a new theme) drops them all -- the browser
-    layer's ThemeService semantics.
-  - Mouse: only the protocol state and the two pure functions RestrictMouseEvent /
-    EncodeMouseEvent; turning LCL mouse events into reports is the control's job
-    (phase 4).
+    layer's ThemeService semantics. With no OnQueryBaseColor there is no theme to
+    answer from, and the core answers no colour query, no colour-scheme query and
+    sends no 2031 report -- as headless xterm.js.
+  - Mouse: the protocol state, RestrictMouseEvent / EncodeMouseEvent (1-based
+    coordinates, as upstream's) and TriggerMouseEvent, the browser layer's
+    _triggerMouseEvent (0-based in, filtered, de-duplicated, routed). Turning LCL
+    mouse events into TTyTerminalMouseEvent is the control's job (phase 4).
   - The screen-reader branches of print and tab are not ported (no accessibility
     layer, spec 15). }
 
@@ -103,9 +106,10 @@ type
   TTyTerminalDataEvent  = procedure(Sender: TObject; const AData: RawByteString) of object;
   TTyTerminalTextEvent  = procedure(Sender: TObject; const AText: string) of object;
   TTyTerminalRowsEvent  = procedure(Sender: TObject; AFirst, ALast: Integer) of object;
-  TTyTerminalOscEvent   = procedure(Sender: TObject; AIdent: Integer; const AData: string;
-                            var AHandled: Boolean) of object;
+  { An OSC no handler took; the core does nothing else with it. }
+  TTyTerminalOscEvent   = procedure(Sender: TObject; AIdent: Integer; const AData: string) of object;
   TTyTerminalWriteDone  = procedure(Sender: TObject; ATag: PtrInt) of object;
+  TTyTerminalResizeEvent = procedure(Sender: TObject; ACols, ARows: Integer) of object;
   { AIndex: 0..255 palette, 256 foreground, 257 background, 258 cursor }
   TTyTerminalColorQuery = procedure(Sender: TObject; AIndex: Integer; out ARgb: Cardinal) of object;
   TTyTerminalScrollEvent = procedure(Sender: TObject; AYDisp: Integer) of object;
@@ -214,7 +218,8 @@ type
     FDirtyStart, FDirtyEnd: Integer;
     FOscData: TTyLimitedStringBuilder;   { the payload of an OSC no handler took }
     FOscDataHitLimit: Boolean;
-    { colours and focus }
+    FOscCollecting: Boolean;             { OnOsc was assigned when the OSC started }
+    { colours, focus, mouse }
     FOverrides: array[0..258] of TTyTermColorOverride;
     FFocused: Boolean;
     FLastMouse: TTyTerminalMouseEvent;   { MouseService._lastEvent }
@@ -247,11 +252,14 @@ type
     FOnRequestScrollToBottom: TNotifyEvent;
     FOnProcessRequest: TNotifyEvent;
     FOnWindowOptionsReport: TTyTerminalWindowReportEvent;
+    FOnResize: TTyTerminalResizeEvent;
+    FOnScrollbackCleared: TNotifyEvent;
 
     { wiring }
     procedure RegisterHandlers;
     procedure BufferScrolled(AYDisp: Integer);
     procedure BufferActivated(AActive, AInactive: TTyTerminalBuffer);
+    procedure BufferResized(ACols, ARows: Integer; AColsChanged, ARowsChanged: Boolean);
     function GetBuffer: TTyTerminalBuffer;
     function GetBuffers: TTyTerminalBufferSet;
     function GetCols: Integer;
@@ -259,6 +267,7 @@ type
     { CoreService / CharsetService / MouseStateService }
     procedure CoreServiceReset;
     procedure TriggerDataEvent(const AData: RawByteString; AWasUserInput: Boolean = False);
+    procedure TriggerBinaryEvent(const AData: RawByteString);
     procedure CharsetReset;
     procedure SetGLevel(AG: Integer);
     procedure SetGCharset(AG: Integer; ACharset: TTyTermCharsetId);
@@ -448,11 +457,25 @@ type
     function ProcessPending(ABudgetMs: Integer = TyTermWriteTimeoutMs): Boolean;
     { input from the control }
     procedure Input(const AData: RawByteString; AWasUserInput: Boolean = True);
+    { MouseStateService.restrictMouseEvent / encodeMouseEvent: Col / Row 1-BASED
+      here, as upstream's (TriggerMouseEvent converts). }
     function RestrictMouseEvent(var AEvent: TTyTerminalMouseEvent): Boolean;
     { '' when suppressed (the default encoding past 223) }
     function EncodeMouseEvent(const AEvent: TTyTerminalMouseEvent): RawByteString;
+    { MouseService._triggerMouseEvent (MouseService.ts:497-545): Col / Row 0-based
+      cells, X / Y device pixels. Out of the grid or a meaningless button and action:
+      False. Then 1-based, a move equal to the last event (by cell, by pixel under
+      SGR-pixels) dropped, the protocol applied, the report encoded and sent -- the
+      default encoding as binary (no scroll to bottom), the others as user input.
+      True when the event passed every filter (even if the encoding had no room). }
+    function TriggerMouseEvent(const AEvent: TTyTerminalMouseEvent): Boolean;
+    { Also remembered for DECSET 1004, which reports it at once. Focused starts True:
+      the control reports its real focus as soon as it has one. }
     procedure ReportFocus(AFocused: Boolean);
     procedure NotifyColorSchemeChanged;
+    { RenderService's 1-second timeout of DECSET 2026 (RenderService.ts:359-363):
+      mode 2026 off, the whole screen refreshed. The control's timer calls it. }
+    procedure EndSynchronizedOutput;
     { size and state }
     procedure Resize(ACols, ARows: Integer);             { min 2 x 1; flushes pending first }
     procedure Reset;                                     { headless Terminal.reset }
@@ -522,6 +545,11 @@ type
     property OnProcessRequest: TNotifyEvent read FOnProcessRequest write FOnProcessRequest;
     { CSI 14 t / 16 t with the matching window option: the control answers in pixels }
     property OnWindowOptionsReport: TTyTerminalWindowReportEvent read FOnWindowOptionsReport write FOnWindowOptionsReport;
+    { the grid changed size: Resize, and DECCOLM (CSI ? 3 h / l with twoSetWinLines)
+      -- the host resizes its PTY (BufferService.onResize) }
+    property OnResize: TTyTerminalResizeEvent read FOnResize write FOnResize;
+    { the scrollback went: ED 3 (when it held lines) and ClearScrollback }
+    property OnScrollbackCleared: TNotifyEvent read FOnScrollbackCleared write FOnScrollbackCleared;
   end;
 
 { The built-in monotonic clock, milliseconds. }
@@ -746,6 +774,7 @@ begin
   FBufferService := TTyTerminalBufferService.Create(FOptions, ACols, ARows);
   FBufferService.OnScroll := @BufferScrolled;
   FBufferService.OnBufferActivate := @BufferActivated;
+  FBufferService.OnResize := @BufferResized;
   FLinks := TTyTerminalOscLinks.Create(FBufferService);
   FParser := TTyTerminalParser.Create;
   FDecoder := TTyUtf8Decoder.Create;
@@ -925,6 +954,13 @@ begin
     FOnBufferActivate(Self);
 end;
 
+{ BufferService.onResize, forwarded as onResize (CoreTerminal.ts:147) }
+procedure TTyTerminalCore.BufferResized(ACols, ARows: Integer; AColsChanged, ARowsChanged: Boolean);
+begin
+  if Assigned(FOnResize) then
+    FOnResize(Self, ACols, ARows);
+end;
+
 function TTyTerminalCore.GetBuffer: TTyTerminalBuffer;
 begin
   Result := FBufferService.Buffer;
@@ -985,6 +1021,16 @@ begin                                                                        { :
   end;
   if AWasUserInput then
     FDidUserInput := True;               { CoreTerminal.ts:151 -> WriteBuffer.handleUserInput }
+  if Assigned(FOnData) then
+    FOnData(Self, AData);
+end;
+
+{ triggerBinaryEvent, CoreService.ts:97-104: the default mouse encoding's bytes, no
+  scroll to the bottom, no user input }
+procedure TTyTerminalCore.TriggerBinaryEvent(const AData: RawByteString);
+begin
+  if FOptions.DisableStdin then
+    Exit;
   if Assigned(FOnData) then
     FOnData(Self, AData);
 end;
@@ -1163,6 +1209,55 @@ begin
   end;
 end;
 
+{ _equalEvents, MouseService.ts:557-570 }
+function SameMouseEvent(const A, B: TTyTerminalMouseEvent; APixels: Boolean): Boolean;
+begin
+  if APixels then
+    Result := (A.X = B.X) and (A.Y = B.Y)
+  else
+    Result := (A.Col = B.Col) and (A.Row = B.Row);
+  Result := Result and (A.Button = B.Button) and (A.Action = B.Action) and (A.Ctrl = B.Ctrl)
+    and (A.Alt = B.Alt) and (A.Shift = B.Shift);
+end;
+
+{ _triggerMouseEvent, MouseService.ts:497-545 }
+function TTyTerminalCore.TriggerMouseEvent(const AEvent: TTyTerminalMouseEvent): Boolean;
+var
+  e: TTyTerminalMouseEvent;
+  report: RawByteString;
+begin
+  CheckThread('TriggerMouseEvent');
+  e := AEvent;
+  if (e.Col < 0) or (e.Col >= Cols) or (e.Row < 0) or (e.Row >= Rows) then
+    Exit(False);
+  { nonsense combinations of button and action }
+  if (e.Button = tmbWheel) and (e.Action = tmaMove) then
+    Exit(False);
+  if (e.Button = tmbNone) and (e.Action <> tmaMove) then
+    Exit(False);
+  if (e.Button <> tmbWheel) and (e.Action in [tmaLeft, tmaRight]) then
+    Exit(False);
+  { reports are 1-based }
+  Inc(e.Col);
+  Inc(e.Row);
+  { a move only when it lands on another cell (another pixel under SGR-pixels) }
+  if (e.Action = tmaMove) and FHasLastMouse and SameMouseEvent(FLastMouse, e, FMouseEncoding = tmeSgrPixels) then
+    Exit(False);
+  if not RestrictMouseEvent(e) then
+    Exit(False);
+  report := EncodeMouseEvent(e);
+  if report <> '' then
+  begin
+    if FMouseEncoding = tmeDefault then
+      TriggerBinaryEvent(report)
+    else
+      TriggerDataEvent(report, True);
+  end;
+  FLastMouse := e;
+  FHasLastMouse := True;
+  Result := True;
+end;
+
 { ---- colours and focus ----------------------------------------------------------------------- }
 
 function TTyTerminalCore.ResolveColor(AIndex: Integer): Cardinal;
@@ -1181,11 +1276,14 @@ begin
   Result := (AIndex >= 0) and (AIndex <= 258) and FOverrides[AIndex].IsSet;
 end;
 
-{ CoreBrowserTerminal.ts:238-240 }
+{ CoreBrowserTerminal.ts:238-240. Without OnQueryBaseColor there is no theme to
+  answer from: no reply, as headless xterm.js (unit header). }
 procedure TTyTerminalCore.ReportColor(AIndex: Integer);
 var
   ident: string;
 begin
+  if not Assigned(FOnQueryBaseColor) then
+    Exit;
   case AIndex of
     ColorFg: ident := '10';
     ColorBg: ident := '11';
@@ -1223,11 +1321,13 @@ begin
     ReportColorScheme;
 end;
 
-{ CoreBrowserTerminal.ts:261-268 }
+{ CoreBrowserTerminal.ts:261-268; silent without OnQueryBaseColor, as ReportColor }
 procedure TTyTerminalCore.ReportColorScheme;
 var
   mode: Integer;
 begin
+  if not Assigned(FOnQueryBaseColor) then
+    Exit;
   if TyTermRelativeLuminance(ResolveColor(ColorBg)) < TyTermRelativeLuminance(ResolveColor(ColorFg)) then
     mode := 1
   else
@@ -1239,6 +1339,7 @@ procedure TTyTerminalCore.NotifyColorSchemeChanged;
 var
   i: Integer;
 begin
+  CheckThread('NotifyColorSchemeChanged');
   { a new theme rebuilds the whole colour set upstream: the overrides go }
   for i := 0 to High(FOverrides) do
     FOverrides[i].IsSet := False;
@@ -1257,9 +1358,24 @@ end;
 { CoreBrowserTerminal.ts:305-331 }
 procedure TTyTerminalCore.ReportFocus(AFocused: Boolean);
 begin
+  CheckThread('ReportFocus');
   FFocused := AFocused;
   if FSendFocus then
     ReportFocusNow;
+end;
+
+{ SynchronizedOutputHandler's timeout, RenderService.ts:359-363 }
+procedure TTyTerminalCore.EndSynchronizedOutput;
+var
+  before: TTyTerminalModes;
+begin
+  CheckThread('EndSynchronizedOutput');
+  if not FSynchronizedOutput then
+    Exit;
+  before := GetModes;
+  FSynchronizedOutput := False;
+  RefreshAll;                            { _onTimeout: _fullRefresh }
+  ModesChangedSince(before);
 end;
 
 { ---- DirtyRowTracker ---------------------------------------------------------------------------- }
@@ -1498,6 +1614,7 @@ begin
   CoreServiceReset;
   SetMouseProtocol(tmpNone);             { mouseStateService.reset }
   FMouseEncoding := tmeDefault;
+  FHasLastMouse := False;                { mouseService.reset: _lastEvent = null }
   ModesChangedSince(before);
 end;
 
@@ -1554,6 +1671,8 @@ begin
   { straight to onScroll, not through the buffer service: no dirty rows }
   if Assigned(FOnScroll) then
     FOnScroll(Self, buf.YDisp);
+  if Assigned(FOnScrollbackCleared) then
+    FOnScrollbackCleared(Self);
 end;
 
 procedure TTyTerminalCore.Input(const AData: RawByteString; AWasUserInput: Boolean);
@@ -2248,7 +2367,10 @@ begin                                                                        { :
           if buf = Buffers.Normal then
             FBufferService.IsUserScrolling := False;
           { upstream then fires InputHandler.onScroll(0), which nothing listens to
-            outside the browser: no OnScroll here }
+            outside the browser: no OnScroll here. The host learns it from
+            OnScrollbackCleared (ours). }
+          if Assigned(FOnScrollbackCleared) then
+            FOnScrollbackCleared(Self);
         end;
       end;
   end;
@@ -3759,24 +3881,26 @@ begin
 end;
 
 { An OSC no handler took (spec 7.4): the payload is collected with the same limit
-  as a string handler and handed to OnOsc when it ends well. Numbers past
-  High(Integer), and the -1 of an OSC without a number, never reach the host. }
+  as a string handler and handed to OnOsc when it ends well -- only when OnOsc was
+  assigned as the OSC started, so nobody listening costs nothing. Numbers past
+  High(Integer), and the -1 of an OSC without a number, never reach the host. The
+  core has no default action for these: OnOsc is all there is. }
 procedure TTyTerminalCore.OscFallback(AIdent: Int64; AAction: TTyTermSubAction; const APayload: string;
   ASuccess: Boolean);
 var
   cps: TIntegerDynArray;
   data: array of Cardinal;
   i: Integer;
-  handled: Boolean;
 begin
   case AAction of
     tsaStart:
       begin
         FOscData.Reset;
         FOscDataHitLimit := False;
+        FOscCollecting := Assigned(FOnOsc);
       end;
     tsaPut:
-      if not FOscDataHitLimit then
+      if FOscCollecting and not FOscDataHitLimit then
       begin
         cps := TyTermUtf8Codepoints(APayload);
         data := nil;
@@ -3788,14 +3912,12 @@ begin
       end;
     tsaEnd:
       begin
-        if ASuccess and not FOscDataHitLimit and (AIdent >= 0) and (AIdent <= High(Integer))
-          and Assigned(FOnOsc) then
-        begin
-          handled := False;
-          FOnOsc(Self, Integer(AIdent), FOscData.Text, handled);
-        end;
+        if FOscCollecting and ASuccess and not FOscDataHitLimit and (AIdent >= 0)
+          and (AIdent <= High(Integer)) and Assigned(FOnOsc) then
+          FOnOsc(Self, Integer(AIdent), FOscData.Text);
         FOscData.Reset;
         FOscDataHitLimit := False;
+        FOscCollecting := False;
       end;
   end;
 end;
