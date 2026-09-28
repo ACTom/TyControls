@@ -1184,7 +1184,8 @@ begin
         cursorCol := -1;
       FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
         FCore.Cols, cursorCol, shape);
-      if (r = cursorRow) and FInPreedit and (FPreedit <> '') then
+      { 组字串画在光标所在的视口行上,不管光标此刻显不显示(闪烁、DECTCEM) }
+      if FInPreedit and (FPreedit <> '') and (r = CursorViewRow) then
         PaintPreedit(APPI);
     end;
     FAllDirty := False;
@@ -1234,7 +1235,7 @@ begin
   if tpBorderColor in st.Present then line := Cardinal(st.BorderColor) and $FFFFFF;
   ins := ContentInsets(APPI);
   x := ins.Left + Min(FCore.Buffer.X, FCore.Cols - 1) * FMetrics.CellW;
-  y := ins.Top + FCore.Buffer.Y * FMetrics.CellH;
+  y := ins.Top + CursorViewRow * FMetrics.CellH;
   cells := TyUnicodeStringCellWidth(FPreedit, UnicodeVersion, AmbiguousWide);
   cells := Max(1, Min(cells, FCore.Cols - Min(FCore.Buffer.X, FCore.Cols - 1)));
   w := cells * FMetrics.CellW;
