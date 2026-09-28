@@ -168,7 +168,7 @@ uses
   test.advchart.style,
   test.advancechart,
   test.unicode.width,
-  test.terminal.oracle, test.terminal.parser,
+  test.terminal.oracle, test.terminal.parser, test.terminal.buffer,
   test.transitions,
   test.htmllabel,
   test.shape,
