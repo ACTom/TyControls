@@ -54,6 +54,12 @@
   - `TTyToolWindowManager` 在新单元 `source/tyControls.ToolWindows.Manager.pas`（已进 .lpk）：`MoveWindow` 和队列、跨栏命中的探测、布局的保存 / 读取 / 恢复和时机、`OnLayoutApplied`。它的 `RegisterClass` 也在这个单元的 `initialization` 里。
   - 栏的 `Manager` 属性类型是基类。代码里经 `Bar.Manager` 调 `MoveWindow` / `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` 要转型成 `TTyToolWindowManager`；窗体上直接引用 manager 组件的不受影响。用到 manager 的单元要 uses `tyControls.ToolWindows.Manager`。
 - **实现期补（D 期）**：组件编辑器的判定和模型操作在新单元 `source/tyControls.ToolWindows.DesignRules.pas`（已进 `tycontrols.lpk`）。放运行时包是因为设计期包不进测试构建，写在 `designtime/` 里就测不到；组件编辑器只做 IDE 那一半（§11）。
+- **实现期补（E 期）**：角标和放置预览的实现拆在两个 include 文件里（`{$I}`，不是单元）：`source/tyControls.ToolWindows.Badge.inc`、`source/tyControls.ToolWindows.DropPreview.inc`。它们要碰栏和窗口的私有成员，栏的声明里又有预览的字段，拆成单元就得互相引用。`.lpk` 不列 include 文件（先例 `Icons.Lucide.License.inc`）。
+- **实现期补（E 期）**：manager 基类加了三样，给放置预览用（§9.8）：
+  - private `SetDragSource`：引擎进入拖动、收尾都经它写「正在拖的源栏」，不再直接赋值；值变了才往下通知。
+  - protected virtual `DragSourceChanged(ASource)`：基类什么都不做，`TTyToolWindowManager` 在这里显示 / 收掉隐藏侧栏的预览。
+  - protected `BarShowDropPreview` / `BarHideDropPreview`：派生类经它们动栏的预览（栏的私有成员只在本单元看得见）。
+  - 跨栏候选的条件抽成 `TTyToolWindowManager` 的 protected `IsCrossCandidate`，命中测试和预览问的是同一处（§9.4）。
 - **实现期修正（A 期）**：栏的析构第一句先调 `Destroying`。直接 `Free` 时 csDestroying 要到继承析构里才置上，先置好，后面的手势收尾就只清标志，不在拆到一半的栏上重排、重画。
 - 名字已查过不重名。`TTyActivityBar`（不定进度条）和 `ToolGroup`（`TTyToolGroupPanel`）已被占用，避开。
 
@@ -177,12 +183,14 @@
 - 正文和操作区跟着禁用（LCL 本来的行为，不另做）。
 - 它的图标 / 标签画 `:disabled`（墨色 `--muted`，主题规则 A / B 期已有）；是当前页的另加 `:selected`。
 - **点它不切过去**：图标、标签都不接悬停、按下；溢出菜单里它那一项灰掉。
+  **实现期补（E 期）**：只管运行时。设计期点禁用窗口的图标 / 标签照样切页——设计期 LCL 不禁用句柄，设计器里也得能选到它、改它的属性。
 - 不是拖动把手：不能拖着调顺序，也不能拖到另一侧。`MoveWindow`、`WindowIndex`、右键菜单（栏照常设 `ContextWindow`，应用自己决定）照常。
 - 提示照常（`StripHint`，空的时候 `Caption`）。
 - 代码照常能把它设成当前页（§3.3）。
 - **当前页被禁用时**：
   - 底栏：标签行照常——点别的标签切过去、溢出、最大化 / 还原、收起、拖别的标签调顺序都能用。机制见下面「让出标签行」。
   - 侧栏：图标条本来就在栏自己的像素里（§6.5），别的图标照常切；**当前页自己的图标仍然点一下收起 / 展开**——收起是栏的动作，不是窗口的，用户要求收起不能被困住。这个图标画 `:selected` + `:disabled`，接悬停和按下，但不是拖动把手。拉宽边照常。
+  - **实现期补（E 期）**：焦点在被禁用的页里时，照收起那一路（§5.3）交给 `SelectNext(栏)`（窗口的 `CM_ENABLEDCHANGED`，调继承之前记下焦点在不在里面）。只要焦点原来在里面就挪，不看继承之后 `ActiveControl` 是不是 nil：Win32 上继承返回时平台已经把 `ActiveControl` 挑到了别处，又不是栏后面那一个。侧栏、底栏一样。
 - 正在进行的手势：手势窗口或捕获者被禁用 → 取消（`ResetGesture(twgeCancel)`）。
 
 **根因**（按 `superpowers:systematic-debugging` 只读调查；能读源码的写了行号，其余标「待真机」）：
@@ -207,18 +215,23 @@
 | ④ 页的句柄不跟着禁用 | 重写 `CM_ENABLEDCHANGED` 不调继承，或禁用后再把自己的句柄启用 | — | 各 widgetset 往下传禁用的方式不同，GTK 上把父控件启用回来子控件就跟着活了，内容不再禁用；`InitializeWnd` 建句柄时还会再禁用一次（`win32winapi.inc:1236-1240` 的注释）；又是 [[swallowed-cm-message-inherited]]。否决 |
 | ⑤ 当前页被禁用就自动切走 | — | — | 用户没要；代码设的当前页被偷偷换掉。否决 |
 
-**让出标签行**（机制 ②，细则）。E 期计划按 ② 写；计划的开工前问题 1（禁用期间操作区看不见）用户不接受的话改走 ①，这一段作废。
+**让出标签行**（机制 ②，细则）。~~E 期计划按 ② 写；计划的开工前问题 1（禁用期间操作区看不见）用户不接受的话改走 ①，这一段作废。~~
+**实现期修正（E 期）**：最终用的就是 ②。开工前问题 1（禁用期间操作区看不见）用户接受，问题 9 主控定 ②。
 
 - 条件 =「让出」：运行时、底栏、有当前页、当前页 `Enabled = False`、栏没收起（收起时高 0，本来就没有这一行）。设计期不让出（设计期 LCL 不禁用句柄，`wincontrol.inc:6758`）。
+  **实现期修正（E 期）**：拉宽边正吸附收起（`EdgeSnapped`，按收起排布、高 0）时也不让出，和收起一个口径。`TabRowHost` / `TabRowHostControl` 都问同一个判断（`HostsTabRow`），不会一个答栏、一个答没有。
 - 行高 = 底栏统一行高（§3.4：token 项与所有页操作区的 raw 首选高取大），和不让出时一样，切换时标签行不跳。栏算它时自己取 token（`TokenPxAt`），不读页的 `HeaderTokenPx` 缓存（那是页察觉换主题的唯一一条边，§3.4）。
 - 栏的 `LayoutIn` 多一个矩形 `TabRow`（栏客户区坐标）：内容区顶上一行，钳进内容区；`Content.Top` 下移同样的高。
 - 页：让出期间 `HeaderHeightAt` 答 0（`HeaderMode` 仍是 bottom）。正文从页顶开始，操作区摆成空矩形（看不见），页不画标签行，`InTabRowRegion` 永远假。
 - 几何：`HeaderGeometry(当前页, 行宽, 行高, PPI)` 照旧——操作区那一格按它的首选宽留着、画成标签行底色，所以让出前后标签不重排、溢出集合不变。
 - 画：栏在自己的 `RenderTo` 里对 `TabRow` 调 `PaintHeader`，不受页的 opacity 影响（栏没禁用）。
 - 输入：栏自己的 `MouseDown / MouseMove / MouseUp` 在 `TabRow` 里走同一套标签行手势（按下只武装、同一部件松开才生效、标签拖动调顺序、捕获者是栏）；`MouseLeave` 清悬停；提示（标签、溢出、最大化 / 还原、收起）、右键（标签上照 §6.8 设 `ContextWindow`，行内其他地方吞掉、不冒泡到窗体）、滚轮吞掉——和 §3.6 当前页那一路一致。
+  **实现期补（E 期）**：让出行的提示走栏自己的 `CM_HINTSHOW`，所以跟的是**栏**的 `ShowHint`，不是当前页的（LCL 只给 `ShowHint` 为真的控件发这条消息）；示例的底栏设了 `ShowHint = True`。行内空白答 1：不显示，也不回落到栏自己的 `Hint`。
 - 「当前页的标签行此刻在谁身上」一处答（宿主控件 + 行矩形 + 几何）：当前页（行在它客户区原点）或栏（`TabRow`）。`HeaderZoneAt(nil, …)`、`PartAt`、`OverflowWindows`、溢出菜单锚点、`InvalidateHeader`、按下态和插入线的「捕获者」判断都问它。
 - 时机：窗口的 `CM_ENABLEDCHANGED`（先调继承）通知所在的栏；栏在切页（`SwitchCore`）、收起 / 展开之后也对一遍。让不让变了就 `Realign` + `Invalidate` + 当前页 `RelayoutHeader`。
+  **实现期修正（E 期）**：另外几处也对一遍：`RegisterWindow` / `UnregisterWindow`（禁用的当前页离开、又没有回落页时收回）；拉宽吸附收起、从吸附拖回来、吸附着收尾。加载完不另对：`Loaded` 应用 `ActiveIndex` 走 `SwitchCore`，它的最后一步就是这一下（那时 csLoading 已清），`Loaded` 里原来那一句已删。让不让变了，还要取消进行中的标签行手势（§9.7 E 期修正）。
 - Win32 上点禁用页的正文，按下落到栏（根因第 1 条）：栏在当前页禁用、点落在它的边界里时吞掉 `Click` / `DblClick`；栏的 `OnMouseDown` / `OnMouseUp` 挡不住（它们在继承里先发），文档写明。GTK / Cocoa 上这一下直接丢，栏什么都收不到。**待真机**。
+  **实现期修正（E 期）**：吞的范围是整条让出行（含标签之间、行尾的空白）加上禁用当前页的边界，一处判（`SwallowPress`；按在部件上的本来就吞）。同一范围里也不起 LCL 自动拖动（`DragMode = dmAutomatic` 时的 `BeginAutoDrag`）；禁用页边界里不显示栏自己的 `Hint`（`CM_HINTSHOW` 答 1，挪一下重问）——那不是「指着栏」。
 
 ---
 
@@ -340,6 +353,9 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   - 侧栏 `Width` / 底栏 `Height` 重新声明为 stored False（用 stored 函数按 Placement 判断）。
   - 有效内容 = `MulDiv(ExpandedSize, PPI, 96)`（**实现期修正（A 期）**：推导时就钳到 content-min，和 `ConstrainedResize` 的下限是同一个数，免得对齐引擎悄悄钳开），排布时按 §6.2 收窄。**收窄只影响这一次排布，不写回 `ExpandedSize`**——否则在 FormCreate 里（DPI 缩放和窗体尺寸都还不是最终值）一收，用户的宽度就永久变小了。
   - `AutoAdjustLayout` 在继承之后按新 PPI 重新推。
+  - **实现期修正（E 期）**，推导出来的尺寸只经一个入口写回控件（`ApplyAxisSize`）。这是 E 期新加的两条规则：
+    - 右栏、底栏**外沿固定**，尺寸往编辑区那一侧长 / 缩（照 LCL `TCustomSplitter` 对 akRight / akBottom 的做法，`customsplitter.inc:203-212`）。原因：LCL 的对齐排序看的是外沿（`wincontrol.inc:2522-2546`：左栏看 `Left`，右栏看右沿，底栏看底沿，都是越外越先排）。只改宽高的话外沿跟着挪，展开、从 0 回来时右沿 / 底沿越过外侧的同向兄弟（活动条、状态栏），栏就被排到它们外面去了。左栏的排序键就是 `Left`，本来不动。
+    - 尺寸变 0 时，记下紧挨着的内侧同向兄弟（`FZeroInner`，挂 `FreeNotification`，被释放或摘走时清掉）；从 0 回来时把排序键摆到它外面一格。这个值只是排序键，对齐引擎排一遍就覆盖，不留缝。原因：尺寸 0 的栏和紧挨着的内侧兄弟外沿重合，在 LCL `InsertBefore` 里打平，打平时看 `BaseBounds` 和对齐顺序，不跟栏的意思走——运行时窗体比设计时窄，几次对齐之后尺寸 0 的栏可能落到兄弟里面去（看不见，不要紧），回来时就排错了。没记下（生来就是空的，那时它在最里面）就不挪。
 - **最小尺寸**由重写 `ConstrainedResize` 给，和推导走同一个分支。下面的"收起或没有窗口"只指运行时，设计期不算收起，没有窗口也按展开算。侧栏：收起或没有窗口 = 图标条 + 2×chrome，否则 = 图标条 + 2×chrome + 边缘区 + content-min；底栏：收起或没有窗口 = 0，否则 = 2×chrome + 边缘区 + content-min。**不去写用户的 `Constraints`**。
 - **设计器里拖栏的边改大小**：只有 csDesigning、非 csLoading，并且不在栏自己推导尺寸（`FDeriving`）或 `AutoAdjustLayout`（`FDpiAdjusting`）期间的 `SetBounds`，才去掉图标条、边缘区、chrome，再 `UnscaleI` 写回 `ExpandedSize`（**实现期修正（A 期）**：还要 `Align` 等于 Placement 要求的那个；改成 alClient 之类时宽高由父控件决定，不写回）。其他来源的 `SetBounds`（推导、收窄、DPI、Align）一律不写回，否则收窄值会写回、DPI 会二次缩放。
   **实现期修正（D 期）**：还要求 `Parent <> nil`。从面板放下栏时，IDE 先 `SetBounds` 再设 `Parent`（`customformeditor.pp:1453-1506`），宽是把「构造出来的宽」当 96 设计值再按设计器 PPI 放大的；栏在构造里已经按屏幕 PPI 推导过一次，150% 下等于放大两遍，写回的话 `ExpandedSize` 从 240 变成 380。副作用：放下时拖出的矩形宽度被忽略，栏按 `ExpandedSize` 推导。
@@ -364,6 +380,7 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   - ~~非栏兄弟改尺寸不会通知栏，要等下一次父控件 resize 或栏自己重推。~~
     **实现期修正（B 期收尾）**：栏给父控件里每个非栏兄弟挂显隐（`AddHandlerOnVisibleChanged`）和改边界（`AddHandlerOnChangeBounds`）处理器并 `FreeNotification`，兄弟藏起、露出、改尺寸都重推。每次推导先对一遍：已离开父控件的摘掉，新来的挂上；兄弟被释放或从 Owner 摘走（`opRemove`）、栏析构时摘掉。栏之间本来就互相通知，不挂。
     **限制**：LCL 不通知「来了一个兄弟」，新兄弟要等下一次推导才挂上。有 alClient 编辑区时，兄弟进出引起的重排会改编辑区的边界、带动一次推导，一般场景跟得上。
+- **实现期补（E 期）**：收窄后的尺寸同样经 `ApplyAxisSize` 写回（§6.1 E 期修正），右栏、底栏收窄时外沿不动。
 - **E 期补（2026-09-27 用户拍板）**：隐藏的侧栏（§6.9）仍然参加分空间（看得见、Align 对），但固定部分和要的内容都是 0，另一侧照「放得下就各用各的」拿满。拖动时放置预览的宽（§9.8）按「这条栏有一个窗口、展开着」算，别的参与者照常扣；这个假设只在算预览时成立，不影响真实推导。放置预览是父控件的子控件，但不是栏的兄弟监听对象（它 `alNone`、不影响分空间，挂上只会让每次显示 / 隐藏多一轮推导）。
 
 ### 6.3 拉宽边
@@ -397,6 +414,7 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
   **实现期修正（A 期）**：菜单往内容区那一侧开——左栏从溢出按钮右沿往右，右栏从左沿往左。`TPopupAlignment` 是按阅读顺序算的量，菜单的 RTL 又跟着栏走（`PopupComponent` 是栏），所以 `(右栏) xor RTL` 时用 paRight，否则 paLeft。锚点和对齐由纯函数 `TyToolWindowOverflowMenuAnchor` 一处算。
 - 条上的部件在栏自己的像素里，栏直接处理输入，不需要代画。
 - **E 期新增（2026-09-27 用户拍板）**：禁用窗口的图标画 `:disabled`、不接悬停按下、点了不切、拖不起来；是当前页的例外——仍然点一下收起 / 展开（§3.7）。溢出菜单里禁用窗口那一项灰掉，点不了。图标右上角画角标（§8.1），栏收起时照画。
+  **实现期补（E 期）**：图标格的状态一处答：`StripItemStates(AIndex, AWindow)`，窗口由调用方一次取好（绘制循环里逐格现数窗口表就是 O(N²)）。「能不能点、能不能拖」看窗口**自己的** `Enabled`（`WindowClickable`）：`IsEnabled` 顺着父链算，栏一禁用，当前页的例外就被误触发。栏自己禁用另有一道闸。
 - 设计期点图标切换当前页。应答规则照 `TabStrip`（`TabStrip.pas:2232-2248`）：按下和拖动回答 1，松开回答 0 交还（[[designer-hittest-gesture-consistency]]）。
   **切换时机不照 TabStrip**（它按下就切，`:2307`）：切换写在 `CM_DESIGNHITTEST` 的松开分支里，先切换再回答 0——回答 0 之后设计器不会再调 `MouseUp`（`designer.pp:2486-2494`）。和 §7.4 底栏同一写法。
   **实现期修正（A 期）**：武装时记被按下的窗口引用，不记序号——武装期间别的窗口被删，序号全挪了。`LM_CANCELMODE`、设计期 `MouseLeave`、捕获被别人拿走（`CaptureChanged`）都解除武装；否则这一次的松开丢了，之后随便一条不带按键的命中测试都会被当成松开，切页并通知设计器。
@@ -459,7 +477,7 @@ published `Collapsed: Boolean`（default False）：流式存取，**只在运�
 标签行的像素属于当前页（窗口化子控件自己拥有那块像素），操作区又必须是窗口的子控件（§1 #4），
 所以当前页替栏画标签、溢出按钮、分隔线、固定按钮，输入转给栏；悬停、按下、溢出集合、最大化状态都存在栏上。
 
-- 栏**忽略非当前页窗口转来的 `HeaderMouseMove` / `HeaderMouseLeave`**：切换后旧页迟到的 leave 不许清掉 §5.1 第 4 步重算的悬停。
+- 栏**忽略非当前页窗口转来的 `HeaderMouseMove` / `HeaderMouseLeave`**：切换后旧页迟到的 leave 不许清掉 §5.1 第 4 步重算的悬停。（**实现期修正（E 期）**：移动改经 `HeaderMoveIn` 转，同一条规则，见 §7.2。）
 - **实现期补（B 期收尾）**，绘制缓存：栏的 `InvalidateHeader` 只丢当前页的缓存，藏着的页画过的标签行没人管，所以一页被栏显示出来之前（`ShowWindowNow`）统一丢它的缓存（§5.3）。显示是低频事件，丢得起。
 - **E 期例外（2026-09-27 用户拍板）**：当前页 `Enabled = False` 时（运行时），标签行不由它代画，改由栏在内容区顶上让出来的一行里自己画、自己收输入（§3.7「让出标签行」）——禁用的页收不到鼠标。这时 `InvalidateHeader` 重画栏。
 
@@ -497,6 +515,14 @@ HeaderHint(W; X, Y; out AText: string; out ARect: TRect): Boolean;
 HeaderContextPopup(W; X, Y);
 ```
 
+**实现期修正（E 期）**：当前页禁用时标签行由栏自己收（§3.7），标签行手势从「按窗口」改成「按宿主」：
+
+- 核心是栏上的私有方法 `RowDown` / `RowMove` / `RowUp` / `RowHintAt` / `RowDropSlot` / `RowDragIn`，入参是宿主记录 `TTyToolWindowTabRowHost`（宿主控件、行矩形、行内几何）加宿主客户区坐标；几何命中前减掉行的左上角。
+- 页转发来的，经 `PageRowHost(W, Geom)` 包成宿主（行在页客户区原点，两套坐标相等，原来那一路行为不变）；栏在让出行里自己收的，直接用 `TabRowHost`。
+- `HeaderMouseDown` / `HeaderMouseUp` / `HeaderMouseLeave` / `HeaderCancelMode` / `HeaderHint` / `HeaderContextPopup` 仍是页转发的入口。`HeaderMouseMove` 已删：页的 `MouseMove` 本来就排了一份几何，改调私有的 `HeaderMoveIn(W, Geom, Shift, X, Y)`，不再排第二遍。
+- `HeaderHint(nil, …)`（栏坐标）经 `TabRowHost` 找行：页当宿主时把行挪到页在栏里的位置。
+- 原来的 `HeaderDropSlotAt` / `HeaderDropSlotIn`、`HeaderDragIn` 换成 `RowDropSlot` / `RowDragIn`（§9.4）。
+
 ~~全部接受 `W = nil`，表示栏坐标（没有窗口时栏自己画自己）。~~
 **实现期修正（B 期）**：`W = nil` 只表示「栏坐标、当前页的标题行」，给栏自己的查询用；栏不自画标题行（§5.4）。
 
@@ -522,12 +548,14 @@ HeaderContextPopup(W; X, Y);
   - 分隔线槽宽 = 2 × `header-gap` + 线宽（§12）。
   - 标签宽 = 标题按静止态、选中态各量一次取大，再加 2 × `tab-pad`。
     **E 期修正（2026-09-27 用户拍板）**：有角标（§8.1）的标签再加 `header-gap` + 胶囊宽；标签宽缓存的键加上每个窗口的角标显示（显不显示、圆点、文字）。
+    **实现期修正（E 期）**：标题按静止、选中、**禁用**三种样式各量一次取大。窗口禁用 / 启用、栏或它的父控件被禁用（整行画 `:disabled`）时标签不许跳、不许被截；每个标签都这么量，宽就和此刻谁禁用着无关，缓存键里不记 `Enabled`，只加上禁用态解析后的字号。
   - 行太窄放不下时，放不下的那一截钳在 [0, 行宽] 内。
 
 ### 7.4 手势
 
 - 运行时：按下标签只武装；**在同一个标签上松开才切换**（LCL 在 Click / MouseUp 之前已经放掉捕获，`control.inc:2827-2846`）。溢出、最大化、收起在同一部件内松开才生效。点当前页的标签什么都不做。
   **E 期补（2026-09-27 用户拍板）**：禁用窗口的标签不武装、不接悬停（点了不切、也拖不动，§3.7）；溢出、最大化、收起是栏的部件，不跟着窗口禁用。当前页禁用时这一套由栏在让出的那一行里收（§3.7），捕获者是栏。
+  **实现期修正（E 期）**：两条路走同一套 `RowDown` / `RowMove` / `RowUp`，只是宿主不同（§7.2 E 期修正）。
 - 带多击标记的按下（§9.2）在溢出、最大化、收起上不生效。
 - 拖过阈值就是调顺序（§9），不切换。
 - 设计期：`CM_DESIGNHITTEST` 只在标签上和武装期间回答 1；松开分支里先切换，再回答 0。溢出、最大化、收起在设计期回答 0（它们改模型且没有撤销）。设计期不做悬停（设计期控件收不到 enter / leave，`application.inc:604-605`）。
@@ -562,21 +590,23 @@ HeaderContextPopup(W; X, Y);
 |---|---|
 | `ShowBadge: Boolean`（default False） | 总开关。开着时 0 也显示（`TTyButton` 的规矩；`TTyBadge` 是 0 默认藏，不照它） |
 | `BadgeValue: Integer`（default 0） | 数字。`> 99` 显示 `rsBadgeOverflow`（'99+'），负数照原样（同 `TyBadgeText`） |
-| `BadgeDot: Boolean`（default False） | 画一个 `--badge-dot-size` 的圆点代替数字（`TTyBadge.Dot` 的概念；`TTyButton` 没有，名字按它的 `Badge*` 前缀起）。仍受 `ShowBadge` 和事件的 `AVisible` 管。**待用户确认要不要**（计划开工前问题） |
-| `OnBadgeDisplay: TTyBadgeDisplayEvent` | 就是 `tyControls.Button` 的那个类型 `(Sender; AValue; var AText; var AVisible)`。先算好默认文字、`AVisible := True`，事件可以改文字或藏起来；数字模式下文字为空也不画；圆点模式下文字不用 |
+| `BadgeDot: Boolean`（default False） | 画一个 `--badge-dot-size` 的圆点代替数字（`TTyBadge.Dot` 的概念；`TTyButton` 没有，名字按它的 `Badge*` 前缀起）。仍受 `ShowBadge` 和事件的 `AVisible` 管。~~**待用户确认要不要**（计划开工前问题）~~ **实现期修正（E 期）**：要（开工前问题 4）；示例里 Output 的「有新日志」用它 |
+| `OnBadgeDisplay: TTyBadgeDisplayEvent` | 就是 `tyControls.Button` 的那个类型 `(Sender; AValue; var AText; var AVisible)`。先算好默认文字、`AVisible := True`，事件可以改文字或藏起来；数字模式下文字为空也不画；圆点模式下文字不用。**实现期补（E 期）**：圆点模式下事件拿到的 `AText` 也是数字文字，事件返回之后才清空 |
 
 - 没有 `BadgePosition`：位置由栏定（下面）。
 - 不进布局串（§10.7）；published，照常进 .lfm。设计期也画（对象查看器里改了立刻看得到）。
 - `OnBadgeDisplay` 每次量标签宽、画、命中都可能被调，处理器必须没有副作用（文档写明）。
-- 改了任何一项：窗口通知所在的栏——侧栏 `Invalidate`；底栏丢标签宽缓存、`InvalidateHeader`（标签宽变了，B 期收尾的漂移检查会把当前页的操作区跟上，§3.4）。事件的答案变了没有通知，由应用在数据变化时调 `Invalidate`（或者重新赋一次 `BadgeValue`）。
+  **实现期补（E 期）**：画一个角标只问一次事件——量胶囊和画胶囊共用同一次 `BadgeSizeAt` 的答案（文字、圆点、尺寸），画的时候不再问一遍。量标签宽另问一次（结果进缓存）。
+- 改了任何一项：窗口通知所在的栏——侧栏 `Invalidate`；底栏丢标签宽缓存、`InvalidateHeader`（标签宽变了，B 期收尾的漂移检查会把当前页的操作区跟上，§3.4）。~~事件的答案变了没有通知，由应用在数据变化时调 `Invalidate`（或者重新赋一次 `BadgeValue`）。~~
+  **实现期修正（E 期）**：公开 `TTyToolWindow.InvalidateBadge`，事件的答案变了由应用调它，走的是和改属性同一条路。窗口自己的 `Invalidate` 不够：非当前页藏着，角标画在栏或当前页里。
 
 **画法**（尺寸和字形全部复用 `tyControls.Badge`：`TyBadgeText`、`TyBadgeSize`、`TyBadgeCornerPos`，以及 `TTyButton` 的 RTL 镜像 `TyBidiFlipBadgePosition`；样式键 `TyToolWindowBadge`，§12）：
 
 - **侧栏图标**：在图标格（`Slots[i].ItemRect`）的右上角，`TyBadgeCornerPos(格, 宽, 高, --badge-inset, TyBidiFlipBadgePosition(bpTopRight, 画笔的 RTL))`，就是 `TTyButton` 把徽标放在自己客户区角上的那套。画在图标和指示条之后（在最上面）。栏收起时照画（图标条还在）。收进溢出菜单的窗口，角标见下面的溢出菜单。
-- **底栏标签**：跟在标题文字后面的小胶囊。标签 = `[tab-pad][标题][header-gap][胶囊][tab-pad]`，胶囊在行里垂直居中；RTL 时几何整体镜像（胶囊到标题左边）。胶囊是标签的一部分：命中、拖动、下划线都按整个标签。当前页标签被截时先截标题（省略号），胶囊保留；文字框连胶囊都放不下时不画胶囊。
+- **底栏标签**：跟在标题文字后面的小胶囊。标签 = `[tab-pad][标题][header-gap][胶囊][tab-pad]`，胶囊在行里垂直居中；RTL 时几何整体镜像（胶囊到标题左边）。胶囊是标签的一部分：命中、拖动、下划线都按整个标签。当前页标签被截时先截标题（省略号），胶囊保留；文字框连胶囊都放不下时不画胶囊。**实现期补（E 期）**：胶囊在标题哪一侧按当前页的 `IsRightToLeft` 定，和标签行几何的镜像同一个来源，不看栏的。
 - 不看禁用：角标照常用 `TyToolWindowBadge` 的静止态画（同 `TTyButton` 的徽标只解析静止态）；栏被禁用时随栏的 opacity 一起变淡。
-- **溢出菜单**：菜单项标题带上角标（数字 `Problems (3)`，圆点 `Problems •`）。**待用户确认**（计划开工前问题）。
-- **提示**：不带数字，仍是 `StripHint` / `Caption`。**待用户确认**（计划开工前问题）。
+- **溢出菜单**：菜单项标题带上角标（数字 `Problems (3)`，圆点 `Problems •`）。~~**待用户确认**（计划开工前问题）。~~ **实现期修正（E 期）**：带（开工前问题 5）。
+- **提示**：不带数字，仍是 `StripHint` / `Caption`。~~**待用户确认**（计划开工前问题）。~~ **实现期修正（E 期）**：不带（开工前问题 6）；想带的应用自己改 `StripHint`。
 
 ---
 
@@ -665,6 +695,7 @@ HeaderContextPopup(W; X, Y);
   - `IsVisible` 只查到窗体这一级，不查顶层窗体本身（拖动时它一定显示着，两边又是同一个；无头的窗体永远不可见）。嵌在别的控件里的窗体不算这一级，照样往上查到顶层。
   - 底栏不是候选。
   **E 期补（2026-09-27 用户拍板）**：隐藏的侧栏（§6.9，宽 0）也是候选，条件同上（可用、`IsEnabled`、同一窗体、不在释放中、不是源栏）。它的探测矩形不用 ClientRect（宽 0，永远点不中），而用**放置预览的矩形**（§9.8，换屏幕坐标，同样和预览父控件及每一级祖先的 ClientRect 求交）；`Cells` 为空。落进来就是空栏的「最后一个之后」：slot = 0。`TyToolWindowDropAt` 不用改——它按数组顺序找第一个含 P 的候选，源栏排第一，预览盖到源栏上的那一块仍归源栏。`CanMoveWindow` 照旧只在指针进入时问一次；否决了就是没有目标、`crNoDrop`，预览保持静止态。
+  **实现期补（E 期）**：「是不是候选」一处写，`TTyToolWindowManager` 的 protected `IsCrossCandidate(源栏, 栏)`（不是源栏、不是底栏、可用、看得见、`IsEnabled`、不在释放中、同一窗体；不问 `CanMoveWindow`）。命中测试和放置预览（§9.8）都问它，两处各写一遍会漂开。
 - 没有 manager 时只有源栏自己。
 
 对每个候选：
@@ -684,7 +715,7 @@ HeaderContextPopup(W; X, Y);
 - 其他所有地方（源栏自己的内容、底栏、编辑区、别的窗体、窗体外）：没有目标，`crNoDrop`；在这里松开就是取消。
 
 **底栏标签的落点**：只算源底栏的**标签行区域**（§3.6 定义），按阅读顺序在**可见标签**之间找空隙；RTL 下先把指针镜像一次再扫。可见标签 k 之前的空隙映射到那个窗口的索引，最后一个可见标签之后映射到它的索引 + 1。底栏的正文、边缘区和底栏外都没有目标，显示 `crNoDrop`，在这里松开就是取消。
-**实现期修正（C 期）**：纯函数 `TyToolWindowDropAt`（在 `.Layout`）只管侧栏候选（源侧栏 + 其他侧栏）。底栏标签的落点仍在栏上（`HeaderDropSlotIn`，B 期做的）；底栏永远不跨栏，manager 不参与。
+**实现期修正（C 期）**：纯函数 `TyToolWindowDropAt`（在 `.Layout`）只管侧栏候选（源侧栏 + 其他侧栏）。底栏标签的落点仍在栏上（~~`HeaderDropSlotIn`~~ **实现期修正（E 期）**：`RowDropSlot`，按标签行宿主算，§7.2；B 期做的）；底栏永远不跨栏，manager 不参与。
 
 **空操作与最终索引**：同一条栏且映射后的 slot 为 src 或 src+1 → 空操作（`crDrag`，不画线）。`FinalIndex := slot - Ord(同栏 and (slot > src))`。
 
@@ -729,6 +760,10 @@ HeaderContextPopup(W; X, Y);
   **实现期修正（B 期）**：底栏上捕获者（当前页）和手势窗口（按下的那个标签）可以是两个窗口。捕获者离开本栏（释放、改 Parent）也收尾，否则引擎记着一个已释放的捕获者——B 期实测出来并修掉的 bug。
   **实现期补（C 期）**：从 Owner 摘走 manager 或栏（`RemoveComponent`）也会广播 opRemove，这时两边完整拆离。FPC 继承的 opRemove 已经把双向的 FreeNotification 拆了，不拆离的话日后一方释放，另一方收不到通知，留下悬垂指针。
 - **实现期补（B 期收尾）**：代码切页（`SwitchCore`）时，引擎的捕获者是一个窗口、又不是新的当前页（即旧页）——取消。旧页的标签行已经看不见了，不取消的话旧页上的松开会按看不见的几何调顺序或收起。
+  **实现期修正（E 期）**，当前页禁用时标签行由栏让出来收（§3.7），捕获者可以是底栏自己：
+  - 引擎 `Reset` 判「这是不是标签行手势」（收尾后要重画标签行的按下态）从「捕获者是一页」扩到「捕获者是底栏自己、按下的是标签 / 溢出 / 最大化 / 收起」。
+  - 代码切页照旧只在捕获者是**一页**、又不是新当前页时取消。在两个禁用页之间切换，行一直在栏上、原处，不取消。
+  - 标签行换了宿主（当前页禁用 / 启用、切页或收起 / 展开引起让出或收回）时取消进行中的标签行手势：捕获者和坐标系都不是原来那个了。拉宽不算，照常进行。
 - **实现期补（A 期）**：栏被禁用或隐藏。
 - **实现期补（A 期）**：用户的 `OnMouseUp` 抛异常——先取消手势，再把异常往外抛。
 - `MoveWindow`、`LoadLayoutFromString`、`ResetLayout`，或参与的栏改了 `Collapsed / Placement / Manager`。
@@ -752,9 +787,18 @@ HeaderContextPopup(W; X, Y);
   **E 期例外（2026-09-27 用户拍板）**：隐藏的侧栏用「放置预览」代替插入线，见下。
 - **放置预览（E 期新增（2026-09-27 用户拍板））**：
   - 什么时候有：侧栏图标进入 Dragging（§9.2）时，manager 给每条「隐藏着的候选侧栏」（§9.4 的条件，不问 `CanMoveWindow`——那要等指针进入才问）各显示一块；手势以任何原因收尾（`ResetGesture`）时全部收掉。底栏标签的拖动不跨栏，不显示。
+    **实现期补（E 期）**：「正在拖」只经 manager 基类的 `SetDragSource` 写，值变了才调虚方法 `DragSourceChanged`；`TTyToolWindowManager` 在那里按 `IsCrossCandidate`（§9.4）经 `BarShowDropPreview` / `BarHideDropPreview` 显示 / 收掉（§2）。
+    **实现期修正（E 期）**，拖动中候选变了：
+    - 候选栏被禁用、藏起：栏的 `CMEnabledChanged` / `CMVisibleChanged` 当场收掉预览，不等指针再动。
+    - 其余变化（父控件藏起 / 禁用、和别的栏冲突、栏换了父控件、父控件改尺寸）由 manager 的 `SyncDropPreviews` 在每次移动、松开时（`DropTargetAt` 第一句）对一遍：不再是隐藏的候选就收掉；还是就按此刻的父控件和矩形重摆，亮不亮保留。
+    - 拖动中才变空的一侧不补出预览：预览只在进入拖动时显示（控件文档已写；遗留，不阻塞）。
   - 在哪：隐藏栏的父控件里，从它此刻的位置向编辑区一侧展开——左栏 `Rect(Left, Top, Left + w, Top + Height)`，右栏 `Rect(Left + Width − w, Top, Left + Width, Top + Height)`（此时 `Width` = 0）；w = 这条栏「有一个窗口、展开着」时推导出来的宽（图标条 + 2×chrome + 边缘区 + 按 §6.2 收窄后的内容），钳进父控件调整后的客户区。
+    **实现期补（E 期）**：`Collapsed = True` 的隐藏栏也按展开的宽算（落进来之后本来就展开，§9.5）。实现是栏上的标志 `FAssumeShown`，只在 `ShownAxisPx` 里置位，期间 `SizesAsCollapsed` 和 `HiddenAsEmpty` 都答「有窗口、展开」，不另写一份推导公式。
   - 是什么：一个**有句柄的子控件**（Parent = 隐藏栏的父控件），不透明，`BringToFront` 盖在编辑区上。**不做半透明的顶层窗口**：Wayland 不让程序定位顶层窗口。不拿焦点、`alNone` 不参加对齐、不是栏的兄弟监听对象（§6.2）；拖动期间捕获在源栏上，它收不到鼠标，命中全靠 manager 的几何（§9.4）。Owner = nil，由那条栏持有、栏析构时释放；只在运行时建，不进 .lfm。
-  - 画：先铺栏的底色（`TyToolWindowBar` 静止态 background——预览是不透明的，`TyToolWindowDropZone` 的底色带透明度），再按 `TyToolWindowDropZone` 画底色和边框；指针在里面、它就是此刻的目标时用 `:hover` 态。正中一行文字：左栏 `rsTyToolWindowDropLeft`、右栏 `rsTyToolWindowDropRight`（resourcestring，文案见计划开工前问题），放不下出省略号。
+  - 画：先铺栏的底色（`TyToolWindowBar` 静止态 background——预览是不透明的，`TyToolWindowDropZone` 的底色带透明度），再按 `TyToolWindowDropZone` 画底色和边框；指针在里面、它就是此刻的目标时用 `:hover` 态。正中一行文字：左栏 `rsTyToolWindowDropLeft`、右栏 `rsTyToolWindowDropRight`（resourcestring，~~文案见计划开工前问题~~ **实现期修正（E 期）**：文案按开工前问题 7 定为 `Drop here to show the left side bar` / `Drop here to show the right side bar`，中文「放到左侧栏」/「放到右侧栏」），放不下出省略号。
+    **实现期补（E 期）**：
+    - 按栏的 PPI 画（`PaintPPI`；没有栏时退到自己字体的 PPI）。
+    - 擦除色：窗口化控件擦除时先铺自己的 `Color`（[[windowed-ghost-erases-to-parent-color]]），显示前设成 `DropPreviewEraseColor`——栏的底色是纯色取原色，渐变取两端的中间色；图片、九宫格给不出一个颜色，退到图标条的底色；都给不出就不设。显示那一瞬间不闪一块父控件的颜色。
   - 目标栏的「外来落点」（`SetForeignDrop`）对隐藏的栏不画插入线（它没有像素），改成把预览切到 `:hover`。
   - 松手在预览里：提交走 §9.5（`MoveFromDrop` → `MoveWindow`）；收尾先收掉预览，再提交。栏有了窗口、推导出宽度出现，窗口成为当前页并展开。
 - 不照抄 TreeView 的拖放标记：它借了 `TyTreeNode:selected` 的颜色、写死 alpha、插入符号没按 DPI 缩放。
@@ -780,6 +824,8 @@ TTyToolWindow
 **实现期修正（C 期）**：manager 上另加 `function IsBarUsable(ABar: TTyToolWindowBar): Boolean`（§10.6）。`CanMoveWindow` / `CancelDrag` / `IsDragging` / `IsBarUsable`、`Images` 和两个移动事件在基类 `TTyCustomToolWindowManager` 上，`MoveWindow` 在 `TTyToolWindowManager` 上（§2）。
 
 **实现期补（D 期）**：基类再加 public `function UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar`——此刻这个 Placement 的可用栏，没有答 nil，现算。同 Placement 的都不可用，所以最多一条；就是 `IsBarUsable` 答 True 的那一条，两者同一条规则（释放中的栏见 §10.6）。组件编辑器找「另一侧那条栏」、示例的「移到另一侧」右键菜单都问它（注册表 `FBars` 是 protected，外面够不着）。
+
+**实现期补（E 期）**：公开接口不变。基类里给放置预览加的 `SetDragSource`（private）、`DragSourceChanged` / `BarShowDropPreview` / `BarHideDropPreview`（protected）和 `TTyToolWindowManager.IsCrossCandidate`（protected）见 §2、§9.4、§9.8。
 
 **`MoveWindow`**：
 
@@ -1174,12 +1220,13 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
 - **皮肤**：17 个主题下的标题行、标签下划线、图标着色；高对比度皮肤下插入线是否看得见。
 - **实现期补（B 期）**，B 期落地、待真机的：窗口的 `CM_MASKHITTEST` 在标签行让位给栏（Lazarus IDE；判定本身已由 `DesignMaskAnswerAt` 无头钉住，待验的是设计器真的落到栏上）；底栏溢出菜单从按钮底边往下开的位置（GTK3 / Qt Wayland）；标签行溢出、最大化 / 还原、收起的字形是否清晰（Linux / macOS）。
 - **实现期补（C 期）**，C 期落地、待真机的：Win32 真实点击时，捕获在按钮点击处理期间什么时候释放（排队的移动和布局「只再排一次」靠它）；前台窗口下抽消息时的捕获行为；跨栏拖动经过别的栏、编辑区时的光标（各 widgetset）；拖出源栏后移动事件的坐标（GTK3，跨栏命中全靠它）；换父后窗口里原生子控件（IME 组字、光标）是否按文档说的丢状态；17 个主题下目标栏的插入线看不看得见。
-- **实现期补（D 期）**，D 期落地、待真机的：组件面板图标、放下栏的尺寸、两个组件编辑器（菜单项、灰掉、撤销）、孤儿和冲突提示、`Controller` 隐藏、继承窗体和 frame 实例，以及 `examples/toolwindows` 里上面各条的运行时走查。逐项见 `docs/superpowers/plans/2026-09-24-toolwindow-phase-d.md` 末尾的「真机验收表」（43 项）。
+- **实现期补（D 期）**，D 期落地、待真机的：组件面板图标、放下栏的尺寸、两个组件编辑器（菜单项、灰掉、撤销）、孤儿和冲突提示、`Controller` 隐藏、继承窗体和 frame 实例，以及 `examples/toolwindows` 里上面各条的运行时走查。逐项见 `docs/superpowers/plans/2026-09-24-toolwindow-phase-d.md` 末尾的「真机验收表」（43 项）。（**实现期修正（E 期）**：已并入合并验收表，见下一条。）
 - **E 期新增（2026-09-27）**，待真机的：
   - 禁用子窗口的鼠标去向（§3.7 根因）：Win32 按下到栏（文档 + 惯例，没有源码）；GTK 不敏感控件吞掉按键事件（凭 GTK 源码记忆）；Qt 冒不冒泡到栏（取决于 LCL 动态设的 `WA_NoMousePropagation`）。修复后这三条都不再影响结果（让出的那一行是栏自己的像素），但 Win32 上点禁用页正文时栏的 `OnMouseDown` / `OnMouseUp` 会触发、GTK / Cocoa 上不会，要真机确认。
   - 放置预览（§9.8）：拖动中（Win32 捕获、GTK grab、Qt、Cocoa）新建并显示一个子窗口会不会打断拖动；叠放在编辑区之上是否正确；GTK3 / Qt 在 Wayland 下的位置。
   - 角标：Linux / macOS 下小字是否清晰（`TTyButton` 的徽标用 `ASmallCrisp` 超采样，这里照抄）；17 个主题下角标和预览的颜色。
-  - 逐项见 `docs/superpowers/plans/2026-09-27-toolwindow-phase-e.md` 末尾的「补充真机验收项」。
+  - ~~逐项见 `docs/superpowers/plans/2026-09-27-toolwindow-phase-e.md` 末尾的「补充真机验收项」。~~
+    **实现期修正（E 期）**：D 期 43 项和 E 期补充项已合成一张表、从 1 连续编号，逐项见 `docs/superpowers/plans/2026-09-28-toolwindow-acceptance.md`。
 
 ---
 
@@ -1226,7 +1273,7 @@ Lazarus 撤销时只存父控件名字，用 `FForm.FindChildControl` 找——�
    - `Bar.Manager` 是基类类型，调 `MoveWindow` / 布局方法要转型（§2）。
    - 继承窗体上读用户布局要在 FormCreate 里调（§10.5 的限制）。
    - 示例菜单里的保存 / 读取 / 恢复布局。
-9. **E 期（真机验收后的第一批，2026-09-27 用户拍板）**：计划 `docs/superpowers/plans/2026-09-27-toolwindow-phase-e.md`。
+9. **E 期（真机验收后的第一批，2026-09-27 用户拍板）**：计划 `docs/superpowers/plans/2026-09-27-toolwindow-phase-e.md`。**已完成（E 期）。** 真机验收见 `docs/superpowers/plans/2026-09-28-toolwindow-acceptance.md`。
    - 禁用的工具窗口：标签 / 图标认窗口的 `Enabled`；当前页禁用时底栏让出标签行（§3.7）。示例的 Diagnostics › Disable Output Page 保留，用来验这一条；文档删掉「别禁用窗口本身」，改写成新语义。
    - 角标（§8.1）：属性、侧栏图标、底栏标签、溢出菜单、主题键 `TyToolWindowBadge`。
    - 一侧没有窗口时隐藏（§6.9）和放置预览（§9.4、§9.8）：`HideWhenEmpty`、主题键 `TyToolWindowDropZone`、两条 resourcestring。

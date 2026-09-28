@@ -1227,7 +1227,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/plans/2026-09-27-toolwindow-phase-e.md`
 - Modify: `docs/superpowers/specs/2026-09-17-toolwindow-workbench-design.md`
 
-- [ ] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
+- [x] **Step 1: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
 
 逐条对着代码查，每条记「在哪一行实现 / 为什么不需要」：
 
@@ -1241,7 +1241,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - §9.8：预览的出现 / 收掉时机、位置、控件性质、画法、`Hot`、松手提交。
 - §12：两个键、四个 token、写在 light.tycss。
 
-- [ ] **Step 2: grep**
+- [x] **Step 2: grep**
 
 ```bash
 cd /d/Projects/ty-3.1 && grep -n "Task [0-9]* 接上\|Task [0-9]* 改成" source/tyControls.ToolWindows*.pas; for f in HostsTabRow TabRowHost HiddenAsEmpty DropPreviewRect BadgeDisplay IsCrossCandidate DragSourceChanged BottomRowHeightAt BadgeSizeAt; do printf '%s: src=%s tests=%s\n' $f $(grep -rlw $f source | wc -l) $(grep -rlw $f tests | wc -l); done; grep -rn "rsTyToolWindowDrop" source examples | wc -l
@@ -1249,7 +1249,7 @@ cd /d/Projects/ty-3.1 && grep -n "Task [0-9]* 接上\|Task [0-9]* 改成" source
 
 Expected：没有残留的「Task N 接上」之类的临时注释；每个名字在 `source/` 里有人用（src ≥ 1，[[built-not-wired-is-the-default-failure]]）、在 `tests/` 里有人测；两条文案在 `source/` 里被画预览的代码引用。
 
-- [ ] **Step 3: 跑全量**
+- [x] **Step 3: 跑全量**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --all --format=plain > /tmp/all.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/all.txt
@@ -1257,7 +1257,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests
 
 Expected：errors / failures 都是 0，总数 = Task 0 的基线 + 本期新增条数。红了先按 [[known-rare-suite-flake]]、[[suite-order-widgetset-init]]、[[canary-then-rebuild]] 排查。
 
-- [ ] **Step 4: 【主控执行】编包、编示例、冒烟、po 核对**
+- [x] **Step 4: 【主控执行】编包、编示例、冒烟、po 核对**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/pkg.txt 2>&1; tail -2 /tmp/pkg.txt && rm -rf examples/toolwindows/lib && lazbuild -B examples/toolwindows/toolwindows_example.lpi > /tmp/ex.txt 2>&1; grep -iE "error|fatal" /tmp/ex.txt | head; tail -2 /tmp/ex.txt; git status --short languages/
@@ -1265,7 +1265,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/pkg.txt 2>&1; tail -2
 
 然后：`powershell -File scripts/smoke-launch-examples.ps1`（toolwindows 要起得来）；`python scripts/example-rsj2po.py examples/toolwindows toolwindows_example <只含 {} 的 json>` 不报 ERROR；`languages/` 有出入以生成的为准另提交一次。主控自己开一次示例：启动不崩、Search 和 Problems 有角标、把 Outline 拖到左边右栏消失、再拖一个图标看到右侧预览。**只到这里**，完整走查留给用户（本计划末尾的表）。设计期包没改，不用编 `tycontrols_dt.lpk`。
 
-- [ ] **Step 5: 抽查变异（每条三拍，必须红）**
+- [x] **Step 5: 抽查变异（每条三拍，必须红）**
 
 1. Task 1：`WindowClickable` 改成恒真。
 2. Task 2：`HeaderHeightAt` 里「让出答 0」那一句删掉。
@@ -1274,11 +1274,11 @@ cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/pkg.txt 2>&1; tail -2
 5. Task 7：`ConstrainedResize` 不看 `HiddenAsEmpty`。
 6. Task 8：`DropProbeOf` 对隐藏栏仍用 `ClientRect`。
 
-- [ ] **Step 6: 整体代码质量审查**
+- [x] **Step 6: 整体代码质量审查**
 
 对 `git diff <Task 0 的 HEAD>..HEAD -- source/` 做一次：「标签行在谁身上」是不是全都问 `TabRowHost` / `TabRowHostControl`（grep `FActive.HeaderGeomAt`、`Capturer = AWindow`，剩下的每一处要说得出为什么）；角标是不是只有 `BadgeSizeAt` 一处量；候选条件是不是只有 `IsCrossCandidate` 一处；注释与代码不符；try/finally 成对；`FAssumeShown` 只在 `ShownAxisPx` 里置位。审出来的问题修完回到 Step 3。
 
-- [ ] **Step 7: 把实现期的偏差写回 spec 原处**
+- [x] **Step 7: 把实现期的偏差写回 spec 原处**
 
 开工前问题里用户改了的每一条、实现中新发现的每一处 spec 没写准的地方，都在 spec **原处**改并标「实现期修正（E 期）」。至少要落的：
 
@@ -1288,7 +1288,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/pkg.txt 2>&1; tail -2
 - §9.8：预览文案（问题 7）。
 - §15 E 期那一条指向本计划末尾的表；§16 第 9 步标「已完成（E 期）」。
 
-- [ ] **Step 8: 签收记录写进本计划末尾，提交**
+- [x] **Step 8: 签收记录写进本计划末尾，提交**
 
 签收记录写：全量条数、提交区间、变异抽查结果、spec 写回、遗留；再给发版时用的 CHANGELOG 草稿（只写用户可感知的，一句话一条，按新增 / 修复归组）：
 - 新增：工具窗口可以带角标（数字或圆点），侧栏画在图标右上角、底栏画在标签标题后面。
@@ -1314,6 +1314,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ---
 
 ## 补充真机验收项（给用户）
+
+> **已合并（2026-09-28）**：下面这张表和 D 期的 43 项已合成一张、从 1 连续编号，给用户用的是 `docs/superpowers/plans/2026-09-28-toolwindow-acceptance.md`。这里留作原始记录。
 
 D 期的 43 项照旧有效，**第 38 项被下面的 38′ 替换**；新增 44–56。「平台」一列写的是**必须**在哪验；空着的在手头的 Win32 上验一遍就行。验之前主控已经 `lazbuild -B tycontrols.lpk` 并编好了示例。
 
@@ -1342,3 +1344,23 @@ D 期的 43 项照旧有效，**第 38 项被下面的 38′ 替换**；新增 4
 | 56 | 换肤看角标和预览 | | 17 个主题逐个切，亮 / 暗都切，每个主题看一眼角标、拖一次看预览 | 角标数字看得清（高对比度皮肤重点看）；预览底色和边框看得见、文字看得清 |
 
 发现问题照分支标准修（先证实、写守卫、看着变红、变异、全量）；先问「这个 example 不存在，这个行为还算不算错」——是才改 `source/`，只是示例想要点别的就改示例（[[example-content-two-purposes]]）。
+
+---
+
+## E 期签收（2026-09-28）
+
+- **全量**：7835 条，errors 0 / failures 0（D 期签收 7715）。
+- **提交区间**：Task 0–10 `9868ec41..c6141de8`；整体审查后的修复 `c9b1c549..4c1dcd58`。
+- **编译**：主控编过运行时包 `tycontrols.lpk`、设计期包 `tycontrols_dt.lpk`、示例 `examples/toolwindows`，均 0 错。
+- **变异**：
+  - 实现轮 69 条：62 条首轮红；5 条补强测试后红（`c6141de8`）；2 条当时判等价。其中 1.1b 经整体审查判定**不等价**，已补测试——修法是保留 `StripClick` 里那道闸（按在禁用的当前页上合法，松开前代码把当前页换走，不挡就切回一个禁用窗口）。
+  - 修复轮 14 条，全红。
+  - `Loaded` 里那一句 `TabRowHostMayHaveChanged` 等价（`Loaded` 应用 `ActiveIndex` 走 `SwitchCore`，最后一步已经做了），已删。
+- **执行方式的调整**：用户中途要求改成整期只编译、跑测试一次，变异集中到期末做（计划原文是每个任务跑它的相关 suite）。
+- **spec 写回**：§2、§3.7、§6.1、§6.2、§6.5、§7.1、§7.2、§7.3、§7.4、§8.1、§9.4、§9.7、§9.8、§9.9、§15、§16 第 9 步，原处标「实现期修正 / 补（E 期）」。开工前问题 1、4–7、9 的结论已写成定论；新规则（右栏 / 底栏外沿固定、从 0 回来时排到记下的内侧兄弟外面）写在 §6.1。
+- **真机**：待用户按合并验收表 `docs/superpowers/plans/2026-09-28-toolwindow-acceptance.md` 逐项做（D 期 43 项与本期补充项合成一张，60 项）。
+- **遗留**（不阻塞）：拖动中才变空的一侧不补出放置预览，下一次拖动才有（控件文档已写）。
+- **CHANGELOG 草稿**（发版时用）：
+  - 新增：工具窗口可以带角标（数字或圆点），侧栏画在图标右上角、底栏画在标签标题后面。
+  - 新增：侧栏没有窗口时整条隐藏，拖动工具窗口时在那一侧显示放置区域（`HideWhenEmpty`）。
+  - 修复：当前页被禁用后，底栏的标签、最大化、收起还能用，不会被困在这一页。

@@ -1187,6 +1187,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## 真机验收表（给用户）
 
+> **已合并（2026-09-28）**：这张表和 E 期的补充项已合成一张、从 1 连续编号（第 38 项换成 E 期的 38′），给用户用的是 `docs/superpowers/plans/2026-09-28-toolwindow-acceptance.md`。这里留作原始记录。
+
 D 期是工作台的里程碑：下面是 spec §15 全部「只能真机验」的项，加上 D 期新出来的。**大部分在 `examples/toolwindows` 里做**；IDE 那一组用 Lazarus 打开 `examples/toolwindows/toolwindows_example.lpi`，在设计器里打开 `umain.lfm` 做。验之前主控已经 `lazbuild -B tycontrols.lpk`、装好 `tycontrols_dt.lpk` 并重启了 Lazarus。
 
 「平台」一列写的是**必须**在哪验；空着的在手头的 Win32 上验一遍就行。
