@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议），分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾），实现期修正已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -139,6 +139,11 @@ LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessag
 - 宽度打包格式：`state << 3 | width << 1 | shouldJoin`（`UnicodeService.ts:19-30`）；15-graphemes 的 state 是字形簇断点类别（GB 规则 6–13 的简化版，`UnicodeProperties.ts:112-143`；没有 GB9c，GB11 只看前一个是不是 ZWJ）。
 - 15 的 provider 把 U+FE0F（VS16）强制算宽（`UnicodeGraphemeProvider.ts:37`）。
 
+**实现期修正（1 期）**：实跑上游又看到两条不直观的行为，照搬（§13.5 第 2 条）：
+- **`15`（不带 graphemes）不连接组合符**：provider 把小于 2 的 `w` 一律改成 1（`UnicodeGraphemeProvider.ts:35-40`），非 graphemes 分支 `charInfo = w === 0 ? 1 : 0` 于是恒为 0（`:46`）。组合符在 `15` 下自占一格、宽 1，而同一码位的 `wcwidth` 是 0；`"é"` 在 `15` 下串宽 2，`6` / `11` / `15-graphemes` 下是 1。
+- **`15` / `15-graphemes` 下控制字符和 U+200D 的 `wcwidth` 是 1**（trie 把 Control 归 `Other`、宽度类 normal），`6` / `11` 下是 0。打印路径不会把 C0 送进来，查表函数照上游答。
+- 用户结论：照搬上游，3 期控件文档写明「要字形簇就选 `15-graphemes`，`15` 不连接组合符」。
+
 ### 4.2 决定：从上游 dump 生成，不从 Unicode 官方数据生成
 
 脚本 `tools/terminal-oracle/gen-unicode-tables.js` 在 node 里加载上游的四个 provider，对 0..0x10FFFF 每个码位取 `wcwidth` 和 15 表的原始 `getInfo`，压成区间表，写出 `source/tyControls.Unicode.Width.Data.inc`。
@@ -150,12 +155,20 @@ LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessag
 
 「和 shell 的 wcwidth 对上」靠**选对版本**：宿主按目标系统选 6 / 11 / 15（§9.1 `UnicodeVersion`），控件不猜。
 
-生成的 `.inc` 进库、进 git；脚本头部写明上游路径、commit、生成时间。表有改动时重跑脚本，`git diff` 必须只动 `.inc`。
+生成的 `.inc` 进库、进 git；~~脚本头部写明上游路径、commit、生成时间~~。表有改动时重跑脚本，`git diff` 必须只动 `.inc`。
+
+**实现期修正（1 期）**：
+- 「写生成时间」和 §13.5 第 7 条「重跑 `git diff` 为空」冲突。生成物头部改写上游版本、完整 commit 和**上游提交日期**（`git log -1 --format=%cs`，现为 2026-08-30），不写墙钟时间，也不写本机路径（换台机器生成物不该变）；上游路径只出现在 `lib-dump.js` 的注释和默认值里。
+- 实际区间数：`6` 309 段、`11` 888 段、`15` 原始 `getInfo` 2269 段（取值 20 种、最大 `0x3b`，放进 `Byte`）。
+- `core.autocrlf = true` 下检出的是 CRLF，脚本写的是 LF：内容没变也会被 `git status` 报成改动。`writeGenerated` 先按 LF 比较，**内容不变就不重写**。
+- `.inc` 头部另注明 `15` 表数据经 addon 取自 unicode-properties（§14）。
 
 ### 4.3 ambiguous 宽度
 
 - 15 / 15-graphemes：照上游，`AmbiguousWide = True` 等于把 provider 的 `ambiguousCharsAreWide` 设为 true（`UnicodeGraphemeProvider.ts:13`、`:37`、`:67`）。node 脚本可以直接改这个字段，所以两种设置都有期望值。
-- 6 / 11：上游没有这类数据。**建议**：这两个版本下 `AmbiguousWide` 不起作用，文档写明（待拍板，§17 用户问题 2）。另一种做法是借 15 表的 ambiguous 类，但那就没有上游基准了。
+- 6 / 11：上游没有这类数据。**建议**：这两个版本下 `AmbiguousWide` 不起作用，文档写明（~~待拍板~~ 已定，§17.1 第 2 条）。另一种做法是借 15 表的 ambiguous 类，但那就没有上游基准了。
+
+**实现期修正（1 期）**：U+0301 这类组合符在 15 表里本身是 ambiguous。打开 `AmbiguousWide` 后，`e` + U+0301 在 `15` 下宽 3（组合符不连接、自占两格，§4.1），在 `15-graphemes` 下宽 2（连接后宽取 2，减去前一个的 1）。用户结论：照搬上游，3 期控件文档写明。
 
 ### 4.4 接口草案
 
@@ -178,6 +191,13 @@ function TyUnicodeVersionName(AVersion: TTyUnicodeVersion): string;      // '6' 
 ```
 
 纯函数、无全局状态（查表数据是常量）。`TTyUnicodeVersion` 的名字和上游 `activeVersion` 字符串一一对应，夹具里写字符串。
+
+**实现期修正（1 期）**：
+- 签名照上面原样实现。「无全局状态」的准确说法：`6` / `11` 的 BMP 在单元 `initialization` 里展开成两张 64K 字节表（§17.2 第 5 条），之后只读；多线程读是安全的。
+- `getStringCellWidth` 的行号是 `UnicodeService.ts:67-101`（不是 `:67-95`）。
+- **输入按 WTF-8 读**：上游循环的是 UTF-16 单元，标准 UTF-8 装不下孤立代理。三字节编码的 U+D800..U+DFFF 解成那个孤立单元，UCS-2 回退因此够得着；两个这样的三字节序列（CESU-8 写法的代理对）在上游循环里照样合成一对，和单元序列一致。
+- **其他非法字节**：每个出错的首字节出一个 U+FFFD、只吃这一个字节（截断、超长编码含三 / 四字节的超长形式、后续字节不是续字节、超过 U+10FFFF 都算）。上游没有这类输入，判据是相对的：和同样多的 U+FFFD 一样宽。
+- **越界码位**（> U+10FFFF）：`6` / `11` 的 `wcwidth` 答 1，`15` / `15-graphemes` 也是 1（trie 答 `errorValue` 0，归 `Other`、宽度类 normal）。三个越界常量由脚本从上游问出、写进 `.inc`。
 
 ### 4.5 测试（1 期）
 
@@ -798,6 +818,13 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - `write` 是异步的（§3.1），脚本每步都等回调。
 - 本机 node v22.22.2（`node --version`），xterm.js checkout 目前没有 `node_modules`，1 期第一步就是装好、跑通。
 
+**实现期修正（1 期）**：
+- **node 下 15 表解码是坏的**。`third-party/UnicodeProperties.ts` 的 `_dec` 有 `Buffer` 时用 `Buffer.from(s, 'base64')`，node 的小 Buffer 从 8KB 共享池里切，`byteOffset` 不是 0；`unicode-trie.ts` 用 `new DataView(data.buffer)` 读头，**忽略了 `byteOffset`**，读到池里的垃圾：补充平面的 `getInfo` 全是 0（表情不宽、区旗不连），还会分配约 1.8GB，结果随池里内容变、不可复现。浏览器走 `atob` 分支，是对的。修法：`lib-dump.js` **第一行** `Buffer.poolSize = 0`（加载任何上游模块之前），Buffer 不再走池；再由 `checkTrieDecode` 从同一段 base64 的干净副本独立解码一遍，逐码位和 addon 的 `getInfo` 对照，不一致就中止。基准因此取的是浏览器里的行为。
+- 用 `out/`（`tsgo` 产物）。上游自己的单元测试已改用 `npm run esbuild` 的 `out-esbuild/`，`out/` 仍可加载，`XTERM_OUT` 留作备选。
+- ~~加载：`NODE_PATH=<XTERM>/out node tools/terminal-oracle/<x>.js`~~ `NODE_PATH` 在 `lib-dump.js` 里设（`process.env.NODE_PATH` + `Module._initPaths()`），命令行不带环境变量前缀——前缀是 POSIX 写法，PowerShell 不认。上游路径仍可用 `XTERM_ROOT` 覆盖。
+- 依赖只装在 xterm.js checkout 里：`npm ci --ignore-scripts`（`node-pty` 是原生模块、我们用不到）、`npm run build`。`tools/terminal-oracle/` 不是 npm 包，没有 `package.json` / `node_modules`，脚本只用 node 内置模块。
+- 钉版本：`package.json` 版本、HEAD 前缀对不上，或 checkout 有已跟踪文件的改动，就拒绝。期末审查补了一条：钉的是源码 commit，跑的却是构建产物，所以移植涉及的五个源文件任何一个比它的产物新（构建后又切过 commit），也拒绝，提示重新 `npm run build`。
+
 ### 13.2 目录
 
 | 路径 | 内容 |
@@ -808,6 +835,10 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 | `tests/fixtures/terminal-<name>.json` | 生成的夹具（输入 + 期望值），照 AdvChart 的平铺命名（`tests/fixtures/advchart-*.json`） |
 | `tests/test.unicode.width.pas`、`tests/test.terminal.parser.pas`、`…buffer.pas`、`…core.pas`、`…keyboard.pas`、`…mouse.pas` | 基准比对 |
 | `tests/test.terminal.view.*.pas` | 3–5 期控件测试 |
+
+**实现期修正（1 期）**：
+- 1 期实际的文件：`lib-dump.js`（上游加载、钉版本、Buffer 池修法、变体切换、区间编码、写文件与 2MB 上限、生成物登记 `GENERATED`）、`gen-unicode-tables.js`、`unicode-cases.js`、`cases/unicode.js`（手写序列与串，只有输入）、`regen-all.js`（重跑全部生成脚本；只许 `GENERATED` 里的文件变，带 `--expect-clean` 时一个字节都不许变；期末审查加了一条：运行前工作区必须干净，否则手改和生成改分不开）、`unicode-license.txt`（Unicode License v3 原文，从 unicode.org 取）。
+- 三份夹具：`terminal-unicode-width.json`（六个变体全码位 `wcwidth` 的区间表 + 越界探针）、`terminal-unicode-join.json`（六个变体 × 九个前驱的全码位 `charProperties` 区间表）、`terminal-unicode-cases.json`（手写序列、代表码位两两 / 三连、串宽）。格式写在 `unicode-cases.js` 头部，不用 §13.3（那是 2 期缓冲夹具的格式）。实际体积约 42KB / 642KB / 699KB。
 
 Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + 'terminal-<name>.json'`，`fpjson` 解析（`D:/Projects/ty-advchart/tests/test.advchart.bargeometry.pas:62-66`、`:131-134`）。
 夹具里有 NUL 字节时解析前要处理（[[fpjson-drops-u0000]]）——所以字节一律 base64 存，不用 JSON 字符串。
@@ -913,6 +944,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **移植单元头部**写：移植自 xterm.js 6.0.0（commit、源文件路径），版权行照抄 `LICENSE:1-3`，「MIT，全文见 THIRD-PARTY-NOTICES.md」。addon 移植的部分另写 addon 自己的版权行（`addons/addon-unicode11/LICENSE:1`：2019；`addons/addon-unicode-graphemes/LICENSE:1`：2023）。自定义字形表（§10.5）同理。
 - **`THIRD-PARTY-NOTICES.md` 加一节**，格式照 Lucide 那节（`:12-`）：`## xterm.js — <单元列表>`、上游地址和钉住的 commit、「用了 `tyControls.Terminal*` / `tyControls.Unicode.Width` 才要带」、MIT 全文。
 - **Unicode 数据**：15 的表源自 Unicode 字符数据库，另加 Unicode 许可（Unicode License v3）声明；原文 1 期从 unicode.org 取（§17 实现问题 10）。
+- **实现期修正（1 期）**：`addon-unicode-graphemes` 的 `UnicodeProperties.ts`（字形簇规则 `shouldJoin` / `_shouldJoin` 和 15 表数据）由外部项目 PerBothner/unicode-properties 生成（addon `README.md:7`）。该项目许可已核实为 **MIT**（仓库 `LICENSE` 首行 `Copyright 2018`，正文与 xterm.js 的 MIT 逐字相同、只是折行不同；GitHub 标 `MIT`），兼容，规则照移植、不必按 UAX #29 自写。单元头、`.inc` 头、`THIRD-PARTY-NOTICES.md` 的 xterm.js 一节都写了出处；notices 把它的版权行和 xterm.js 的几行并列、共用同一段 MIT 正文，发版守卫 `TheThirdPartyNoticeCoversTheUnicodeWidthPort` 查这一行。§4.2 理由 2 说的「没有许可头」仍然成立，只是文件本身没写，来源项目有许可。
 - **测试夹具**：`escape_sequence_files` 的输入来自 xterm.js 仓库（MIT），其中部分期望文本注明取自另一个项目（`NOTES` 的「text used from … vt100-parser」一行）；我们只取 `.in` 输入、期望值由上游生成，但输入字节进了夹具，在 notices 里加「测试夹具」一小节（§17 实现问题 9）。
 
 ---
@@ -985,12 +1017,12 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 2. 非主线程 `Write` 抛 `EInvalidOperation`（§3.5）。
 3. 字形遮罩做法由 E2 定，默认（a）（§10.3）。
 4. 字体回退由 E1 定，缺 CJK 时加 `--terminal-font-family-wide`（§10.3）。
-5. Unicode 表的存放：15 表 dump 成区间数组 + 二分；6 / 11 的 BMP 部分建 64K 字节查表（同上游，`UnicodeV11.ts:197-211`），在 `initialization` 里建。
+5. Unicode 表的存放：15 表 dump 成区间数组 + 二分；6 / 11 的 BMP 部分建 64K 字节查表（同上游，`UnicodeV11.ts:197-211`），在 `initialization` 里建。**已完成（1 期）**：15 表存原始 `getInfo`，`wcwidth` / `charProperties` 由移植逻辑现算；6 / 11 的 BMP 外也走区间二分。
 6. 解析器转移表在 `initialization` 里照上游代码生成（§5.1），不写成常量数组。
 7. 组合内容的稀疏存储：每行一个按列号排序的小数组（行里组合格很少），不上字典。
-8. 录制文件每份 ≤ 256KB，夹具 JSON 单个 ≤ 2MB；超了就拆用例。
+8. 录制文件每份 ≤ 256KB，夹具 JSON 单个 ≤ 2MB；超了就拆用例。**夹具部分已完成（1 期）**：`writeFixture` 超 2MB 就报错；录制 2 期起。
 9. `escape_sequence_files` 进夹具前核对那份外部来源的许可（§14）。
-10. Unicode 许可原文 1 期从 unicode.org 取（§14）。
+10. Unicode 许可原文 1 期从 unicode.org 取（§14）。**已完成（1 期）**：`tools/terminal-oracle/unicode-license.txt`，已抄进 `THIRD-PARTY-NOTICES.md`。
 11. XTVERSION 的字符串格式：`TyControls(3.1.0)`，版本取 `TyVersion` 常量（`source/tyControls.Types.pas:111`）。
 
 ---

@@ -182,7 +182,7 @@ cd /d/Projects/ty-3.1/tests && ./tytests-term.exe --all --format=plain > /tmp/te
 **Files:**
 - Create: `tools/terminal-oracle/unicode-license.txt`（Step 5，主控）
 
-- [ ] **Step 1: 确认起点**
+- [x] **Step 1: 确认起点**
 
 ```bash
 cd /d/Projects/ty-3.1 && git status --short && git branch --show-current && git log --oneline -1
@@ -190,7 +190,7 @@ cd /d/Projects/ty-3.1 && git status --short && git branch --show-current && git 
 
 Expected：工作区干净，分支 `feat/terminal`，HEAD 是本计划的提交或其后。
 
-- [ ] **Step 2: 【主控执行】装依赖并构建上游**
+- [x] **Step 2: 【主控执行】装依赖并构建上游**
 
 ```bash
 cd /d/Projects/xterm.js && git status --short && git rev-parse HEAD && node --version && npm --version
@@ -208,7 +208,7 @@ git status --short
 
 Expected：`exit 0`；七个文件都在；`git status --short` 仍为空。
 
-- [ ] **Step 3: 【主控执行】冒烟：headless + 两个 addon + Buffer 池**
+- [x] **Step 3: 【主控执行】冒烟：headless + 两个 addon + Buffer 池**
 
 ```bash
 cd /d/Projects/xterm.js && NODE_PATH=./out node -e "
@@ -231,19 +231,19 @@ Expected：第一行 `6,11,15,15-graphemes 15-graphemes`；第二行 `2 2 2`。
 
 `out/` 加载失败（`Cannot find module` 之类）时：`npm run esbuild`，把上面的 `./out` 换成 `./out-esbuild`、`/out/` 换成 `/out-esbuild/` 再试；成功的话 Task 1 的 `OUT_DIR` 默认值改成 `out-esbuild`，并在 Task 7 写回 spec §13.1。
 
-- [ ] **Step 4: 编译并跑全量，记下基线条数**（实现 agent 做）
+- [x] **Step 4: 编译并跑全量，记下基线条数**（实现 agent 做）
 
 用「跑测试的固定套路」的全量命令（先 `lazbuild -B tests/tytests.lpi`、拷成 `tytests-term.exe`）。条数记进草稿，Task 7 签收时写进本计划末尾。**有红就停**。
 
-- [ ] **Step 5: 【主控执行】取 Unicode 许可原文**
+- [x] **Step 5: 【主控执行】取 Unicode 许可原文**
 
 从 `https://www.unicode.org/license.txt` 取全文，原样存成 `tools/terminal-oracle/unicode-license.txt`（LF，文件末尾一个换行）。核对第一行是 `UNICODE LICENSE V3`；不是的话停下来，看 unicode.org 的 `https://www.unicode.org/copyright.html` 现在指向哪一份，把结论写进草稿。
 
-- [ ] **Step 6: 【主控执行】看一眼 unicode-properties 的许可**（开工前问题 12）
+- [x] **Step 6: 【主控执行】看一眼 unicode-properties 的许可**（开工前问题 12）
 
 `https://github.com/PerBothner/unicode-properties` 的 LICENSE。结论（许可名、是否兼容 MIT）写进草稿；不兼容时通知 Task 3 的执行者按 UAX #29 自写 `JoinRule`。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add tools/terminal-oracle/unicode-license.txt && git commit -m "chore(terminal): the Unicode License v3 text, fetched from unicode.org
@@ -261,7 +261,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `tools/terminal-oracle/lib-dump.js`
 
-- [ ] **Step 1: 写 `lib-dump.js`**
+- [x] **Step 1: 写 `lib-dump.js`**
 
 用 Write 工具（地雷 7）。完整内容：
 
@@ -423,7 +423,7 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 2: 冒烟**（需要 Task 0 Step 2 已经做完）
+- [x] **Step 2: 冒烟**（需要 Task 0 Step 2 已经做完）
 
 ```bash
 cd /d/Projects/ty-3.1 && node -e "const L=require('./tools/terminal-oracle/lib-dump.js'); const up=L.loadUpstream(); L.checkTrieDecode(up); const t=L.makeTerminal(up); console.log(up.info, L.useVariant(t, L.VARIANTS[4]).getStringCellWidth('\u{1F1E8}\u{1F1F3}')); t.dispose(); process.exit(0)"
@@ -438,7 +438,7 @@ Expected：打印 `{ name: 'xterm.js', version: '6.0.0', commit: 'c58ea36…'(40
 | J1 | 删掉第一行 `Buffer.poolSize = 0;` | Step 2 的命令抛「the Buffer pool fix is not in effect」或「U+1F600 is not wide」 |
 | J2 | `PIN.commitPrefix` 改成 `'0000000'` | 抛 `pinned` |
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add tools/terminal-oracle/lib-dump.js && git commit -m "feat(terminal): oracle plumbing that loads the pinned xterm.js build
@@ -460,7 +460,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `tools/terminal-oracle/gen-unicode-tables.js`
 - Create (generated): `source/tyControls.Unicode.Width.Data.inc`
 
-- [ ] **Step 1: 写脚本**（Write 工具）
+- [x] **Step 1: 写脚本**（Write 工具）
 
 ```js
 // Writes source/tyControls.Unicode.Width.Data.inc: the three width tables of
@@ -559,7 +559,7 @@ term.dispose();
 process.exit(0);
 ```
 
-- [ ] **Step 2: 生成并核对**
+- [x] **Step 2: 生成并核对**
 
 ```bash
 cd /d/Projects/ty-3.1 && node tools/terminal-oracle/gen-unicode-tables.js && head -30 source/tyControls.Unicode.Width.Data.inc && node tools/terminal-oracle/gen-unicode-tables.js > /dev/null && git status --short
@@ -569,7 +569,7 @@ Expected：`runs: 6 309 11 888 15 2269`（核实记录 6）；头部没有本机
 
 **判据 / 变异（期末做）：** 见 Task 5 的 U1、U17；J1 也会让本脚本中止。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add tools/terminal-oracle/gen-unicode-tables.js source/tyControls.Unicode.Width.Data.inc && git commit -m "feat(terminal): width tables dumped from xterm.js 6.0.0
@@ -590,7 +590,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `source/tyControls.Unicode.Width.pas`
 - Modify: `tycontrols.lpk`（`<Files>` 末尾，`source/tyControls.AdvanceChart.pas` 那一项之后）
 
-- [ ] **Step 1: 写单元**
+- [x] **Step 1: 写单元**
 
 单元头（照 spec §14）：移植自 xterm.js 6.0.0（commit `c58ea3637f39` 全 40 位由 `.inc` 头部给出，单元头写前 12 位）；源文件 `src/common/input/UnicodeV6.ts`、`addons/addon-unicode11/src/UnicodeV11.ts`、`addons/addon-unicode-graphemes/src/UnicodeGraphemeProvider.ts`、`…/third-party/UnicodeProperties.ts`（规则部分，出处 unicode-properties，开工前问题 12）、`src/common/services/UnicodeService.ts`；版权行照抄 `xterm:LICENSE:1-3` 和两个 addon 的 `LICENSE:1`；「MIT，全文见 THIRD-PARTY-NOTICES.md」。再用一段话写清三个不直观的地方：核实记录 8（`15` 不连接）、10（15 下控制字符宽 1）、开工前问题 10（WTF-8）。
 
@@ -954,7 +954,7 @@ end.
 
 执行者要自己核的三处（照上游源码逐行对，别凭这里的代码）：`CharProps15` 对 `UnicodeGraphemeProvider.ts:24-56`；`LegacyCharProps` 对 `UnicodeV6.ts:132-145`；`TyUnicodeStringCellWidth` 对 `UnicodeService.ts:67-101`。对不上以上游为准，并在提交信息里写一句。
 
-- [ ] **Step 2: 加进 `.lpk`**
+- [x] **Step 2: 加进 `.lpk`**
 
 在 `tycontrols.lpk` 的 `<Files>` 里 `source/tyControls.AdvanceChart.pas` 那个 `<Item>` 之后加（用编辑工具，地雷 8）：
 
@@ -969,7 +969,7 @@ end.
 
 **判据 / 变异**：本单元的判据就是 Task 5 的两个测试类，变异表（U1–U20）也在 Task 5，期末做。
 
-- [ ] **Step 3: 提交**（不编译，编译错误留给 Task 7 集中修）
+- [x] **Step 3: 提交**（不编译，编译错误留给 Task 7 集中修）
 
 ```bash
 cd /d/Projects/ty-3.1 && git add source/tyControls.Unicode.Width.pas tycontrols.lpk && git commit -m "feat(terminal): tyControls.Unicode.Width, character widths ported from xterm.js
@@ -993,7 +993,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `tools/terminal-oracle/regen-all.js`
 - Create (generated): `tests/fixtures/terminal-unicode-width.json`、`terminal-unicode-join.json`、`terminal-unicode-cases.json`
 
-- [ ] **Step 1: 写 `cases/unicode.js`**（只有输入，spec §13.2；Write 工具）
+- [x] **Step 1: 写 `cases/unicode.js`**（只有输入，spec §13.2；Write 工具）
 
 导出 `{ sequences, strings, extraReps }`。`sequences` 每项 `{ id, codepoints }`，`strings` 每项 `{ id, units }`（UTF-16 单元数组——JSON 装不下孤立代理，所以不用字符串）。至少包含下表（id 用表里的名字）：
 
@@ -1031,7 +1031,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 `extraReps`：`[0x41, 0x200D, 0xFE0E, 0xFE0F, 0x1F1E6, 0x4E00, 0x1F600, 0x301]`。
 
-- [ ] **Step 2: 写 `unicode-cases.js`**（Write 工具）
+- [x] **Step 2: 写 `unicode-cases.js`**（Write 工具）
 
 要求（照写即可，代码结构执行者定）：
 
@@ -1067,7 +1067,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 7. 输出前数一下：三份夹具字节数、`reps` 个数、`pairs` / `triples` 条数，打印出来；`writeFixture` 超 2MB 会自己报错。
 8. 末尾 `term.dispose(); process.exit(0);`。
 
-- [ ] **Step 3: 写 `regen-all.js`**（Write 工具）
+- [x] **Step 3: 写 `regen-all.js`**（Write 工具）
 
 ```js
 // Reruns every oracle generator and checks the working tree afterwards: only the
@@ -1096,7 +1096,7 @@ if (process.argv.includes('--expect-clean') && changed.length) {
 console.log(changed.length ? 'changed (generated only): ' + changed.join(', ') : 'clean');
 ```
 
-- [ ] **Step 4: 生成并核对**
+- [x] **Step 4: 生成并核对**
 
 ```bash
 cd /d/Projects/ty-3.1 && node tools/terminal-oracle/unicode-cases.js && ls -l tests/fixtures/terminal-unicode-*.json
@@ -1104,7 +1104,7 @@ cd /d/Projects/ty-3.1 && node tools/terminal-oracle/unicode-cases.js && ls -l te
 
 Expected：三份夹具都 ≤ 2MB（预估：width 约 60KB、join 约 1.2MB、cases 约 1MB）；打印的 `reps` 个数不超过 28（20 个取值代表 + 8 个 `extraReps`，去重后）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add tools/terminal-oracle/cases/unicode.js tools/terminal-oracle/unicode-cases.js tools/terminal-oracle/regen-all.js tests/fixtures/terminal-unicode-width.json tests/fixtures/terminal-unicode-join.json tests/fixtures/terminal-unicode-cases.json && git commit -m "test(terminal): upstream answers for every code point, join state and string width
@@ -1120,7 +1120,7 @@ generators and fails if anything but a listed output changed.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: 重跑确认可复现**（提交之后跑，否则本任务的新脚本会被当成「不是生成物的改动」）
+- [x] **Step 6: 重跑确认可复现**（提交之后跑，否则本任务的新脚本会被当成「不是生成物的改动」）
 
 ```bash
 cd /d/Projects/ty-3.1 && node tools/terminal-oracle/regen-all.js --expect-clean
@@ -1223,9 +1223,9 @@ Expected：`clean`（`.inc` 和三份夹具重新生成后与已提交的字节�
 | `#$F4#$90#$80#$80`（> U+10FFFF） | = 四个 U+FFFD 的串宽 |
 | `#$ED#$B8#$80` `a`（WTF-8 孤立低代理 DE00） | = `TestStringCellWidth` 里 `lone-low` 那条的期望（从夹具读，不写死） |
 
-- [ ] **Step 1: 写测试单元**，`initialization` 里 `RegisterTest(TTyUnicodeWidthOracleTests); RegisterTest(TTyUnicodeWidthTests);`
-- [ ] **Step 2: 登记到 `tests/tytests.lpr`**（编辑工具）
-- [ ] **Step 3: 提交**（不编译）
+- [x] **Step 1: 写测试单元**，`initialization` 里 `RegisterTest(TTyUnicodeWidthOracleTests); RegisterTest(TTyUnicodeWidthTests);`
+- [x] **Step 2: 登记到 `tests/tytests.lpr`**（编辑工具）
+- [x] **Step 3: 提交**（不编译）
 
 ```bash
 cd /d/Projects/ty-3.1 && git add tests/test.unicode.width.pas tests/tytests.lpr && git commit -m "test(terminal): unicode widths held to xterm.js code point by code point
@@ -1274,7 +1274,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `THIRD-PARTY-NOTICES.md`
 - Modify: `tests/test.release.pas`
 
-- [ ] **Step 1: `THIRD-PARTY-NOTICES.md` 加一节**（放在 Lucide 那节之后，格式照它，spec §14）
+- [x] **Step 1: `THIRD-PARTY-NOTICES.md` 加一节**（放在 Lucide 那节之后，格式照它，spec §14）
 
 内容要点（英文，照 Lucide 节的语气，[[doc-writing-native-tone]]）：
 
@@ -1285,7 +1285,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - 一句：字形簇规则经 xterm.js 的 addon 取自 unicode-properties 项目（按 Task 0 Step 6 的结论写它的许可；兼容 MIT 就写一句出处，不兼容就写「规则按 UAX #29 自写」——那种情况下 Task 3 已经改写）。
 - 子标题 `### Unicode data`：`'15'` 表源自 Unicode Character Database；Unicode License v3 全文，**从 `tools/terminal-oracle/unicode-license.txt` 原样复制**进代码块。
 
-- [ ] **Step 2: `tests/test.release.pas` 加一条守卫**
+- [x] **Step 2: `tests/test.release.pas` 加一条守卫**
 
 `TReleaseManifestTest` 新增 published 方法 `TheThirdPartyNoticeCoversTheUnicodeWidthPort`，照 `TheThirdPartyNoticeShipsWithTheFontItLicenses` 的写法（它说明了「这是有意写死的字面量」，新方法同样写一段注释说明为什么）。判据：
 
@@ -1296,7 +1296,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 同一文件含 `UNICODE LICENSE V3` | R2：删掉 Unicode 许可代码块 → 红 |
 | 同一文件含 `c58ea36` | — |
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add THIRD-PARTY-NOTICES.md tests/test.release.pas && git commit -m "docs(terminal): xterm.js and Unicode data notices for the width tables
@@ -1318,13 +1318,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/superpowers/specs/2026-09-28-terminal-view-design.md`（写回）
 - 修复时按需改 Task 1–6 的文件
 
-- [ ] **Step 1: 一次编译 + 本期 suite + 全量**
+- [x] **Step 1: 一次编译 + 本期 suite + 全量**
 
 「跑测试的固定套路」两条命令。Expected：`TTyUnicodeWidthOracleTests`、`TTyUnicodeWidthTests`、`TReleaseManifestTest` 都 0 / 0；全量 errors / failures 为 0，总数 = Task 0 基线 + 本期新增条数。记下 `TestCharPropertiesAfterEveryPreceding` 打印的用时。
 
 编译错、红了就集中修：每修一处，先确认是移植错还是夹具错——**以上游为准**，对照上游源码行号；修完回到本步从头跑。全量红而单跑绿，按 [[suite-order-widgetset-init]]、[[canary-then-rebuild]] 排查。修复提交信息写 `fix(terminal): ...`，每个问题一个提交。
 
-- [ ] **Step 2: 重跑生成，确认可复现**
+- [x] **Step 2: 重跑生成，确认可复现**
 
 ```bash
 cd /d/Projects/ty-3.1 && node tools/terminal-oracle/regen-all.js --expect-clean
@@ -1332,7 +1332,7 @@ cd /d/Projects/ty-3.1 && node tools/terminal-oracle/regen-all.js --expect-clean
 
 Expected：`clean`。
 
-- [ ] **Step 3: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
+- [x] **Step 3: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]）
 
 逐条记「在哪一行实现 / 为什么不需要」：
 
@@ -1347,11 +1347,11 @@ Expected：`clean`。
 - §14：单元头、`.inc` 头、`THIRD-PARTY-NOTICES.md` 两节。
 - §17.2：第 5、8、10 条。
 
-- [ ] **Step 4: 集中变异**（每条三拍，必须红）
+- [x] **Step 4: 集中变异**（每条三拍，必须红）
 
 Task 5 变异表 U1–U20、Task 6 的 R1–R2、Task 1 的 J1–J2（JS 侧：改完跑 Task 1 Step 2 的命令，必须抛；改回）。卡死的按进程号结束（地雷 5）。结果逐条记进签收记录；没红的当场补强。
 
-- [ ] **Step 5: 【主控执行】编一次运行时包**（`.lpk` 清单改了）
+- [x] **Step 5: 【主控执行】编一次运行时包**（`.lpk` 清单改了）
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; git status --short
@@ -1359,11 +1359,11 @@ cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; ta
 
 Expected：编过；`git status` 没有变化（`languages/` 不动——本期没有 resourcestring）。报错路径里出现别的树 = 注册权被抢，重编一次（[[parallel-agent-worktree-hazards]]）。
 
-- [ ] **Step 6: 整体代码质量审查**
+- [x] **Step 6: 整体代码质量审查**
 
 对 `git diff <Task 0 的 HEAD>..HEAD` 做一次：移植函数与上游逐行对照（Task 3 Step 1 点名的三处 + `JoinRule` / `ShouldJoin15` / `WcWidth15`），注释行号引用对得上；`lib-dump.js` 之外没有脚本直接 `require` 上游；`GENERATED` 与实际写出的文件一致；夹具读空时每个测试都会红（计数断言）；`.inc` 头部没有本机路径和日期以外的可变内容；等价变异的理由站得住。审出来的问题修完回到 Step 1。
 
-- [ ] **Step 7: 写回 spec 原处，标「实现期修正（1 期）」**
+- [x] **Step 7: 写回 spec 原处，标「实现期修正（1 期）」**
 
 至少：
 
@@ -1375,7 +1375,7 @@ Expected：编过；`git status` 没有变化（`languages/` 不动——本期�
 - §14：unicode-properties 的出处与许可结论（开工前问题 12）。
 - §17.2 第 5、8、10 条标「已完成（1 期）」。
 
-- [ ] **Step 8: 签收记录写进本计划末尾，提交**
+- [x] **Step 8: 签收记录写进本计划末尾，提交**
 
 写：全量条数（基线 → 签收）、提交区间、Oracle suite 用时、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、遗留、给 2 期的交接（`lib-dump.js` 已有什么可复用、`GENERATED` 要登记新夹具、2 期夹具格式按 spec §13.3）。本期没有真机项，不出验收表。
 
@@ -1393,3 +1393,28 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - `node tools/terminal-oracle/regen-all.js --expect-clean` 打印 `clean`：重跑两个生成脚本，仓库一个字节不变。
 - `THIRD-PARTY-NOTICES.md` 有 xterm.js 与 Unicode 数据两节。
 - 没有界面，没有真机项。
+
+---
+
+## 1 期签收（2026-09-28）
+
+- **全量**：7931 条，errors 0 / failures 0（期末修复后 `lazbuild -B` 重编、`tytests-term.exe --all` 重定向到文件）。本期新增的两个测试类 11 条、`TReleaseManifestTest` 1 条都在里面；修复只在已有测试里加断言，条数不变。`TestCharPropertiesAfterEveryPreceding`：60,162,048 次比较、4.0 秒。
+- **提交区间**：`23420bb8..`本签收提交。实现 `b9a220f4..fbbf238c`；期末审查修复 `4ac1aca6`（unicode-properties 署名）、`b586b252`（非法 UTF-8 测试补强）、`107ecf6a`（基准脚本拒绝过期构建和脏工作区）。
+- **生成可复现**：`node tools/terminal-oracle/regen-all.js --expect-clean` 打印 `clean`（区间数 6 = 309、11 = 888、15 = 2269；reps 26、pairs 4056、triples 35152）。
+- **变异**：
+  - 计划列的 U1–U20、R1–R2、J1–J2 全红（实现期末由主控跑）。等价的四条理由核过：`LegacyCharProps` 的 `>` / `>=`、`Info15` 越界判断、`else if w = 0`、`RunIndex` 去掉 `+ 1`（死循环）。
+  - 审查新增：`Wtf8ToUnits` 三条守卫——`$E0` 的 `lo := $A0`、`$F0` 的 `lo := $90`、后续续字节的范围检查——原测试下**三条同时删掉仍全绿**；补测试后逐条单独删，`TestMalformedUtf8` 都红（`E0 80 80` 期望 3 得 0、`F0 80 80 80` 期望 4 得 0、`E4 B8 'a'` 期望 3 得 2）。
+  - R3：删掉 notices 里 unicode-properties 的版权行 → `TheThirdPartyNoticeCoversTheUnicodeWidthPort` 红。
+  - JS：把 `addon-unicode11/out/UnicodeV11.js` 的 mtime 调到源文件之前 → `loadUpstream` 抛「the build is stale」；同时去掉 `checkBuildFresh()` 调用 → 过期构建被静默加载（证明是这条检查在拦）；mtime 已还原。`regen-all.js` 在脏工作区上拒绝启动并列出文件。
+- **编包**：主控编过 `tycontrols.lpk` 和 dt 包，均 0 错。之后单元只改了头部注释（`4ac1aca6`、`b586b252`），`tytests` 全量重编通过。
+- **许可**：PerBothner/unicode-properties 为 MIT（主控核实：`LICENSE` 首行 `Copyright 2018`，GitHub `spdx_id` = MIT；审查时逐字对照，正文与 xterm.js 的 MIT 相同、只是折行不同）。`JoinRule` / `ShouldJoin15` 照移植，不必自写。
+- **规格核对与审查**：spec §2.1、§4.1–§4.5、§13.1、§13.2、§13.5、§14、§17.2 逐条对了代码和脚本；`CharProps15` / `LegacyCharProps` / `TyUnicodeStringCellWidth` / `JoinRule` / `ShouldJoin15` / `WcWidth15` 与上游逐行对照，注释里的行号都对。只有 `lib-dump.js` 加载上游；`GENERATED` 与实际写出的文件一致。公开函数目前只在 `tests/` 里有调用，1 期本来没有使用方，属预期；单元里没有死代码（`uses SysUtils` 是 spec §2.1 定的，暂未用到）。
+- **spec 写回**（标「实现期修正（1 期）」）：§4.1、§4.2、§4.3、§4.4、§13.1、§13.2、§14、§17.2 第 5 / 8 / 10 条。
+- **遗留**：
+  - 开工前问题 1、2 的结论（`15` 不连接组合符、ambiguous 下 `é` 宽 3 / 2）要写进 3 期的控件文档。
+  - 开工前问题 3（给上游报 node 下 15 表解码的 bug）由用户决定，我们不代发。
+  - 本期没有真机项，不出验收表。
+- **给 2 期的交接**：
+  - `lib-dump.js` 可直接复用：`loadUpstream` / `makeTerminal` / `useVariant` / `runsOf` / `writeFixture`。新夹具要登记进 `GENERATED`，新脚本加进 `regen-all.js` 的 `SCRIPTS`。
+  - `checkBuildFresh` 的 `PORTED` 只列了 1 期移植的五个源文件；2 期移植解析器、缓冲、核心时，把对应的 `.ts` / 产物对加进去，否则过期构建拦不住。
+  - 2 期夹具格式按 spec §13.3；字节一律 base64（§13.2）。
