@@ -143,6 +143,7 @@ var
   rects: TTyRectArray;
   cr: TRect;
   ctl: TControl;
+  ppi, spacingPx, rowH: Integer;
 begin
   // Re-entrancy guard: SetBounds on the children can loop back through AlignControls.
   if FInLayout then
@@ -180,9 +181,20 @@ begin
     // they drop below the caption band (else they paint over the group caption).
     cr := ClientRect;
     AdjustClientRect(cr);             // TTyGroupBox insets Top below the caption band
-    rects := TyToolFlowRects(cr, sizes, FSpacing, FButtonHeight);
+    { Spacing and ButtonHeight are LOGICAL px, as their declarations say; the client rect
+      and the children's widths beside them are device px. And the row is as tall as the
+      tallest child will really BE: SetBounds clamps a button up to its own floor, so rows
+      pitched at the bare ButtonHeight ran into one another as soon as the floor was the
+      taller of the two. }
+    ppi := Font.PixelsPerInch;
+    if ppi <= 0 then ppi := 96;
+    spacingPx := MulDiv(FSpacing, ppi, 96);
+    rowH := MulDiv(FButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
-      list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, FButtonHeight);
+      if list[i].Constraints.MinHeight > rowH then rowH := list[i].Constraints.MinHeight;
+    rects := TyToolFlowRects(cr, sizes, spacingPx, rowH);
+    for i := 0 to n - 1 do
+      list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, rowH);
   finally
     FInLayout := False;
   end;
@@ -194,7 +206,7 @@ begin
   Result.Parent := Self;
   Result.StyleClass := 'ghost';      // ribbon-group tool look
   Result.Caption := ACaption;
-  Result.Height := FButtonHeight;
+  Result.Height := MulDiv(FButtonHeight, Font.PixelsPerInch, 96);
   // Buttons added via AddButton are the USER's controls: do NOT mark csNoDesignVisible.
   if Assigned(AOnClick) then Result.OnClick := AOnClick;
   Relayout;
