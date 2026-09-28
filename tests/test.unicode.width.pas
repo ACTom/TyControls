@@ -28,11 +28,12 @@ type
     FBad: Integer;
     FCompared: Int64;
     FReport: string;
-    procedure SetUp; override;
     procedure Miss(const AVariant: string; ACp, APreceding: Cardinal; AWant, AGot: Int64);
     procedure MissText(const AWhat: string);
     procedure AssertNoMiss(const AWhat: string);
     procedure CheckRunShape(const AWhat: string; ARuns: TJSONArray);
+  protected
+    procedure SetUp; override;
   published
     procedure TestFixturesComeFromThePinnedUpstream;
     procedure TestWcWidthOfEveryCodepoint;
@@ -135,6 +136,7 @@ var
   o: TJSONObject;
   i: Integer;
 begin
+  Result := nil;
   arr := ARoot.Arrays['variants'];
   SetLength(Result, arr.Count);
   for i := 0 to arr.Count - 1 do
