@@ -513,6 +513,8 @@ type
     property Parser: TTyTerminalParser read FParser;
     property Links: TTyTerminalOscLinks read FLinks;
     { options }
+    { 0..TyTermMaxScrollback: a larger value is taken as the maximum, a negative one
+      raises (upstream's check) }
     property Scrollback: Integer read GetScrollback write SetScrollback;
     property TabStopWidth: Integer read GetTabStopWidth write SetTabStopWidth;
     property ConvertEol: Boolean index 0 read GetOptBool write SetOptBool;
@@ -581,6 +583,16 @@ const
     (C: '('; G: 0), (C: ')'; G: 1), (C: '*'; G: 2), (C: '+'; G: 3), (C: '-'; G: 1), (C: '.'; G: 2));
 
 { ---- pure helpers ------------------------------------------------------------------- }
+
+function ClampInt(AValue: Int64): Integer; inline;
+begin
+  if AValue > High(Integer) then
+    Result := High(Integer)
+  else if AValue < Low(Integer) then
+    Result := Low(Integer)
+  else
+    Result := Integer(AValue);
+end;
 
 function TyTermMouseActionCode(AAction: TTyTerminalMouseAction): Integer;
 begin
@@ -1489,6 +1501,9 @@ procedure TTyTerminalCore.SetScrollback(AValue: Integer);
 begin
   if AValue < 0 then
     raise EArgumentException.CreateFmt('scrollback cannot be less than 0, value: %d', [AValue]);
+  { the ring allocates its slots up front (unit header of the buffer) }
+  if AValue > TyTermMaxScrollback then
+    AValue := TyTermMaxScrollback;
   if FOptions.Scrollback = AValue then
     Exit;
   FOptions.Scrollback := AValue;
@@ -1626,7 +1641,9 @@ end;
 
 procedure TTyTerminalCore.ScrollPages(APages: Integer);
 begin
-  ScrollLines(APages * (Rows - 1));
+  CheckThread('ScrollPages');
+  { pages x rows in Int64: a huge page count scrolls to the end, it does not wrap }
+  ScrollLines(ClampInt(Int64(APages) * (Rows - 1)));
 end;
 
 procedure TTyTerminalCore.ScrollToBottom;
@@ -2021,17 +2038,7 @@ begin
   Result := FEraseAttr;
 end;
 
-function ClampInt(AValue: Int64): Integer; inline;
-begin
-  if AValue > High(Integer) then
-    Result := High(Integer)
-  else if AValue < Low(Integer) then
-    Result := Low(Integer)
-  else
-    Result := Integer(AValue);
-end;
-
-{ _restrictCursor, :873-880 }
+{ _restrictCursor, :889-895 }
 procedure TTyTerminalCore.RestrictCursor(AMaxCol: Integer);
 var
   buf: TTyTerminalBuffer;

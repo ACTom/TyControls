@@ -45,6 +45,15 @@ unit tyControls.Terminal.Buffer;
   - BufferService lives here, not in the core, so the buffer layer can be held to
     upstream on its own (the core owns one).
 
+  WHAT DIFFERS ON PURPOSE (design spec 15):
+
+  - Scrollback stops at TyTermMaxScrollback: the ring allocates its slots up front,
+    where upstream's JavaScript array is sparse.
+  - The link table keeps at most TyTermMaxLinks links and TyTermMaxLinkBytes of
+    ids and URIs; past that the oldest link is dropped (its cells then carry a
+    number that answers nothing). Upstream grows without end.
+  - Link numbers are Int64, so they stay in order past 2^31 registrations.
+
   The combined text and the extended attributes of a line are small arrays sorted by
   column, read only when the cell's flag says so -- like upstream's sparse objects,
   an entry can outlive its cell and is simply never read. }
@@ -86,6 +95,10 @@ const  { buffer/Constants.ts:36-157, names upper-camel with a TyTerm prefix, val
   TyTermMaxBufferSize = 4294967295;        { Buffer.ts:20 }
   TyTermMinimumCols = 2;                   { BufferService.ts MINIMUM_COLS }
   TyTermMinimumRows = 1;
+  { ours (unit header): the largest Scrollback, and the link table's bounds }
+  TyTermMaxScrollback = 100000;
+  TyTermMaxLinks = 10000;
+  TyTermMaxLinkBytes = 16 * 1024 * 1024;
 
 type
   TTyTermUnderlineStyle = (tusNone, tusSingle, tusDouble, tusCurly, tusDotted, tusDashed);
@@ -94,7 +107,7 @@ type
     payload field is only used by the image addon and is not ported. }
   TTyTerminalExtAttrs = record
     RawExt: Cardinal;                      { upstream _ext }
-    UrlId: Integer;
+    UrlId: Int64;                          { a link number (unit header) }
     function Ext: Cardinal;                { the getter: DASHED forced while UrlId <> 0 }
     function UnderlineStyle: Integer;
     procedure SetUnderlineStyle(AValue: Integer);
@@ -476,6 +489,7 @@ type
     procedure Resize(ACols, ARows: Integer);
     procedure Reset;
     procedure Scroll(const AEraseAttr: TTyTerminalAttrData; AIsWrapped: Boolean = False);
+    { ydisp + ADisp is summed in Int64: any Integer is a valid ADisp }
     procedure ScrollLines(ADisp: Integer; ASuppressScrollEvent: Boolean = False);
     { option-change reactions, BufferSet.ts:36-37 }
     procedure ScrollbackChanged;
@@ -500,7 +514,7 @@ type
 
   TTyTermLinkEntry = class
   public
-    LinkId: Integer;
+    LinkId: Int64;
     Data: TTyTerminalLinkData;
     Key: string;
     Markers: TFPList;
@@ -509,28 +523,39 @@ type
   end;
 
   { services/OscLinkService.ts. Link numbers start at 1 and are never reused, reset
-    or not. }
+    or not; Int64, so they stay ascending however many links come. At most
+    TyTermMaxLinks entries and TyTermMaxLinkBytes of ids and URIs are kept: a new
+    link past either drops the oldest ones (unit header). }
   TTyTerminalOscLinks = class
   private
     FService: TTyTerminalBufferService;
-    FNextId: Integer;
+    FNextId: Int64;
     FEntries: TFPList;                     { by link id, ascending }
     FKeys: array of string;                { entries with an id, by key }
     FKeyEntries: array of TTyTermLinkEntry;
     FKeyCount: Integer;
-    function FindEntry(ALinkId: Integer; out AIndex: Integer): Boolean;
+    FBytes: Int64;                         { Length(Id) + Length(Uri) of every entry }
+    function FindEntry(ALinkId: Int64; out AIndex: Integer): Boolean;
     function FindKey(const AKey: string; out AIndex: Integer): Boolean;
     procedure AttachMarker(AEntry: TTyTermLinkEntry; AMarker: TTyTerminalMarker);
     procedure MarkerDisposed(Sender: TObject);
+    procedure DropEntry(AEntry: TTyTermLinkEntry);
+    procedure DropOldest(AKeep: TTyTermLinkEntry);
+    function GetCount: Integer;
   public
     constructor Create(AService: TTyTerminalBufferService);
     destructor Destroy; override;
-    function RegisterLink(const AData: TTyTerminalLinkData): Integer;
-    procedure AddLineToLink(ALinkId, AAbsRow: Integer);
-    function GetLinkData(ALinkId: Integer; out AData: TTyTerminalLinkData): Boolean;
-    function LinkIds: TIntegerDynArray;                  { ascending }
-    function LinkLines(ALinkId: Integer): TIntegerDynArray;   { marker lines, in entry order }
-    property NextId: Integer read FNextId;
+    function RegisterLink(const AData: TTyTerminalLinkData): Int64;
+    procedure AddLineToLink(ALinkId: Int64; AAbsRow: Integer);
+    function GetLinkData(ALinkId: Int64; out AData: TTyTerminalLinkData): Boolean;
+    function LinkIds: TInt64DynArray;                    { ascending }
+    function LinkLines(ALinkId: Int64): TIntegerDynArray;   { marker lines, in entry order }
+    { FOR THE TESTS: start numbering at AValue (the Int64 range guard). }
+    procedure SeedNextIdForTest(AValue: Int64);
+    property NextId: Int64 read FNextId;
+    property Count: Integer read GetCount;
+    { Length(Id) + Length(Uri) summed over the entries kept. }
+    property Bytes: Int64 read FBytes;
   end;
 
 { The cell constructors of CellData / Buffer.getNullCell / getWhitespaceCell. }
@@ -1964,7 +1989,11 @@ var
 begin
   if not FHasScrollback then
     Exit(ARows);
-  n := Int64(ARows) + FOptions.Scrollback;
+  { the core clamps the option already; a buffer used on its own gets the same bound }
+  if FOptions.Scrollback > TyTermMaxScrollback then
+    n := Int64(ARows) + TyTermMaxScrollback
+  else
+    n := Int64(ARows) + FOptions.Scrollback;
   if n > High(Integer) then
     n := High(Integer);
   Result := Integer(n);
@@ -2650,7 +2679,8 @@ end;
 procedure TTyTerminalBufferService.ScrollLines(ADisp: Integer; ASuppressScrollEvent: Boolean);
 var
   buf: TTyTerminalBuffer;
-  oldYDisp, v: Integer;
+  oldYDisp: Integer;
+  v: Int64;
 begin                                                                        { :135-157 }
   buf := Buffer;
   if ADisp < 0 then
@@ -2662,10 +2692,10 @@ begin                                                                        { :
   else if Int64(ADisp) + buf.YDisp >= buf.YBase then
     FIsUserScrolling := False;
   oldYDisp := buf.YDisp;
-  v := buf.YDisp + ADisp;
+  v := Int64(buf.YDisp) + ADisp;         { Low(Integer) or High(Integer) must not wrap }
   if v > buf.YBase then v := buf.YBase;
   if v < 0 then v := 0;
-  buf.YDisp := v;
+  buf.YDisp := Integer(v);
   if oldYDisp = buf.YDisp then
     Exit;
   if (not ASuppressScrollEvent) and Assigned(FOnScroll) then
@@ -2725,9 +2755,10 @@ begin
   inherited Destroy;
 end;
 
-function TTyTerminalOscLinks.FindEntry(ALinkId: Integer; out AIndex: Integer): Boolean;
+function TTyTerminalOscLinks.FindEntry(ALinkId: Int64; out AIndex: Integer): Boolean;
 var
-  lo, hi, mid, id: Integer;
+  lo, hi, mid: Integer;
+  id: Int64;
 begin
   lo := 0;
   hi := FEntries.Count - 1;
@@ -2775,7 +2806,71 @@ begin
   AMarker.AddDisposeListener(@MarkerDisposed);
 end;
 
-function TTyTerminalOscLinks.RegisterLink(const AData: TTyTerminalLinkData): Integer;
+function TTyTerminalOscLinks.GetCount: Integer;
+begin
+  Result := FEntries.Count;
+end;
+
+procedure TTyTerminalOscLinks.SeedNextIdForTest(AValue: Int64);
+begin
+  FNextId := AValue;
+end;
+
+{ An entry that lost its last marker, or is dropped for room: out of the key index,
+  out of the list, freed. }
+procedure TTyTerminalOscLinks.DropEntry(AEntry: TTyTermLinkEntry);
+var
+  i, k: Integer;
+  list: array of TTyTerminalMarker;
+begin
+  if AEntry.Markers.Count > 0 then
+  begin
+    { disposing the markers takes the entry out (MarkerDisposed, last one) }
+    list := nil;
+    SetLength(list, AEntry.Markers.Count);
+    for i := 0 to High(list) do
+    begin
+      list[i] := TTyTerminalMarker(AEntry.Markers[i]);
+      list[i].AddRef;
+    end;
+    for i := 0 to High(list) do
+      list[i].Dispose;
+    for i := 0 to High(list) do
+      list[i].Release;
+    Exit;
+  end;
+  if AEntry.Data.HasId and FindKey(AEntry.Key, k) and (FKeyEntries[k] = AEntry) then
+  begin
+    for i := k to FKeyCount - 2 do
+    begin
+      FKeys[i] := FKeys[i + 1];
+      FKeyEntries[i] := FKeyEntries[i + 1];
+    end;
+    Dec(FKeyCount);
+    FKeys[FKeyCount] := '';
+  end;
+  if FindEntry(AEntry.LinkId, i) then
+    FEntries.Delete(i);
+  Dec(FBytes, System.Length(AEntry.Data.Id) + System.Length(AEntry.Data.Uri));
+  AEntry.Free;
+end;
+
+{ Past TyTermMaxLinks entries or TyTermMaxLinkBytes, the oldest go (lowest number
+  first); AKeep, the one just registered, always stays. }
+procedure TTyTerminalOscLinks.DropOldest(AKeep: TTyTermLinkEntry);
+var
+  e: TTyTermLinkEntry;
+begin
+  while (FEntries.Count > TyTermMaxLinks) or ((FBytes > TyTermMaxLinkBytes) and (FEntries.Count > 1)) do
+  begin
+    e := TTyTermLinkEntry(FEntries[0]);
+    if e = AKeep then
+      e := TTyTermLinkEntry(FEntries[1]);
+    DropEntry(e);
+  end;
+end;
+
+function TTyTerminalOscLinks.RegisterLink(const AData: TTyTerminalLinkData): Int64;
 var
   buf: TTyTerminalBuffer;
   e: TTyTermLinkEntry;
@@ -2792,6 +2887,8 @@ begin                                                                        { :
     Inc(FNextId);
     AttachMarker(e, buf.AddMarker(buf.YBase + buf.Y));
     FEntries.Add(e);
+    Inc(FBytes, System.Length(AData.Id) + System.Length(AData.Uri));
+    DropOldest(e);
     Exit(e.LinkId);
   end;
   key := AData.Id + ';;' + AData.Uri;
@@ -2820,10 +2917,12 @@ begin                                                                        { :
   FKeyEntries[k] := e;
   Inc(FKeyCount);
   FEntries.Add(e);
+  Inc(FBytes, System.Length(AData.Id) + System.Length(AData.Uri));
+  DropOldest(e);
   Result := e.LinkId;
 end;
 
-procedure TTyTerminalOscLinks.AddLineToLink(ALinkId, AAbsRow: Integer);
+procedure TTyTerminalOscLinks.AddLineToLink(ALinkId: Int64; AAbsRow: Integer);
 var
   i, k: Integer;
   e: TTyTermLinkEntry;
@@ -2837,7 +2936,7 @@ begin                                                                        { :
   AttachMarker(e, FService.Buffer.AddMarker(AAbsRow));
 end;
 
-function TTyTerminalOscLinks.GetLinkData(ALinkId: Integer; out AData: TTyTerminalLinkData): Boolean;
+function TTyTerminalOscLinks.GetLinkData(ALinkId: Int64; out AData: TTyTerminalLinkData): Boolean;
 var
   i: Integer;
 begin
@@ -2856,7 +2955,7 @@ procedure TTyTerminalOscLinks.MarkerDisposed(Sender: TObject);               { :
 var
   m: TTyTerminalMarker;
   e: TTyTermLinkEntry;
-  i, k: Integer;
+  i: Integer;
 begin
   m := TTyTerminalMarker(Sender);
   e := TTyTermLinkEntry(m.Tag);
@@ -2869,24 +2968,10 @@ begin
   m.Tag := nil;
   m.Release;
   if e.Markers.Count = 0 then
-  begin
-    if e.Data.HasId and FindKey(e.Key, k) then
-    begin
-      for i := k to FKeyCount - 2 do
-      begin
-        FKeys[i] := FKeys[i + 1];
-        FKeyEntries[i] := FKeyEntries[i + 1];
-      end;
-      Dec(FKeyCount);
-      FKeys[FKeyCount] := '';
-    end;
-    if FindEntry(e.LinkId, i) then
-      FEntries.Delete(i);
-    e.Free;
-  end;
+    DropEntry(e);
 end;
 
-function TTyTerminalOscLinks.LinkIds: TIntegerDynArray;
+function TTyTerminalOscLinks.LinkIds: TInt64DynArray;
 var
   i: Integer;
 begin
@@ -2896,7 +2981,7 @@ begin
     Result[i] := TTyTermLinkEntry(FEntries[i]).LinkId;
 end;
 
-function TTyTerminalOscLinks.LinkLines(ALinkId: Integer): TIntegerDynArray;
+function TTyTerminalOscLinks.LinkLines(ALinkId: Int64): TIntegerDynArray;
 var
   i, k: Integer;
   e: TTyTermLinkEntry;
