@@ -33,6 +33,10 @@ type
     procedure Paint; override;
     procedure Click; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
+    { A WRAPPING label takes its width as given: the width is where the text wraps, and the
+      preferred size is only what that width makes of it. So its width is never re-fitted,
+      AutoSize or not, and LCL's DPI pass has to scale it -- see the base's declaration. }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     { Clamp the label so it can never be smaller than the text it must draw. A hand-set
@@ -320,6 +324,12 @@ begin
     wrapW := 0;
   TyMeasureTextBlock(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
     wrapW, TyLineHeight(ActiveController), AWidthPx, AHeightPx);
+end;
+
+procedure TTyLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+begin
+  inherited ShouldAutoAdjust(AWidth, AHeight);
+  if AutoSize and FWordWrap then AWidth := True;
 end;
 
 procedure TTyLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;

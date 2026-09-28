@@ -947,7 +947,7 @@ begin
       bx := (hr.Left + hr.Right) div 2 - cw div 2;
       by := hr.Bottom - P.Scale(2) - cw;          // a small chip near the tab's bottom
       if tpBackground in chipS.Present then
-        P.FillBackground(Rect(bx, by, bx + cw, by + cw), chipS.Background, P.Scale(3));
+        P.FillBackground(Rect(bx, by, bx + cw, by + cw), chipS.Background, 3);   // the radius is LOGICAL
       P.DrawText(Rect(bx, by, bx + cw, by + cw), key, chipS.FontName, 8,
         chipS.FontWeight, chipS.TextColor, taCenter, tlCenter, False);
     end;

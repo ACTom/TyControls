@@ -2499,9 +2499,9 @@ begin
     { ── Checkbox area click ─────────────────────────────────────────────── }
     if FShowCheckBox then
     begin
-      { Expand hit area slightly (easy to miss tiny box) }
-      CbBoxR := Rect(L.CheckBox.Left - 2, L.CheckBox.Top - 2,
-                     L.CheckBox.Right + 2, L.CheckBox.Bottom + 2);
+      { Expand hit area slightly (easy to miss tiny box): 2 LOGICAL px a side. }
+      CbBoxR := L.CheckBox;
+      InflateRect(CbBoxR, MulDiv(2, Font.PixelsPerInch, 96), MulDiv(2, Font.PixelsPerInch, 96));
       if PtInRect(CbBoxR, Point(X, Y)) then
       begin
         { Through the property, so the notification happens in one place. }

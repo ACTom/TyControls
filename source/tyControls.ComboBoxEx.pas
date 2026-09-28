@@ -833,7 +833,7 @@ begin
   if (FImages <> nil) and (AImageIndex >= 0) and (AImageIndex < TyImageCount(FImages)) then
   begin
     sz := (ARect.Bottom - ARect.Top) - P.Scale(6);
-    if sz < 8 then sz := 8;
+    if sz < P.Scale(8) then sz := P.Scale(8);
     TyBlitImage(P.Bitmap, FImages, AImageIndex,
       x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, P.Scale(96), False);
     x := x + sz + P.Scale(4);
@@ -866,7 +866,7 @@ begin
   if (FImages = nil) or (imgIdx < 0) or (imgIdx >= TyImageCount(FImages)) then Exit;
   if (AItem.OverlayImageIndex < 0) or (AItem.OverlayImageIndex >= TyImageCount(FImages)) then Exit;
   sz := (R.Bottom - R.Top) - P.Scale(6);
-  if sz < 8 then sz := 8;
+  if sz < P.Scale(8) then sz := P.Scale(8);
   x := R.Left + P.Scale(4);
   y := R.Top + ((R.Bottom - R.Top - sz) div 2);
   TyBlitImage(P.Bitmap, FImages, AItem.OverlayImageIndex, x, y, sz, P.Scale(96), False);

@@ -99,6 +99,7 @@ type
     procedure TestMouseDragSelects;
     procedure TestDoubleClickSelectsAll;
     procedure TestTripleClickSelectsAll;
+    procedure TestTripleClickHasLogicalSlop;
     procedure TestShiftClickExtendsSelection;
     procedure TestContextMenuStateSeam;
     procedure TestCopyToClipboard;
@@ -898,6 +899,37 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TEditTest.TestTripleClickHasLogicalSlop;
+{ The third press counts when it lands within 4 LOGICAL px of the second: 7 px on a 168-PPI
+  screen. The helper is tested where it lives (test.dpi.controls); this is that the EDIT
+  tells it which screen it is on. (ACTom/TyControls#2) }
+
+  function SelectedAfter(APPI, AAway: Integer): Integer;
+  var
+    F: TCustomForm;
+    E: TTyEditAccess;
+  begin
+    F := TCustomForm.CreateNew(nil);
+    try
+      E := TTyEditAccess.Create(F);
+      E.Parent := F;
+      E.Font.PixelsPerInch := APPI;
+      E.SetBounds(0, 0, MulDiv(200, APPI, 96), MulDiv(30, APPI, 96));
+      E.Text := 'Hello World';
+      E.SimulateMouseDown(9, 9, [ssDouble]);
+      E.SimulateMouseDown(9 + AAway, 9, []);
+      Result := E.SelLength;
+    finally
+      F.Free;
+    end;
+  end;
+
+begin
+  AssertEquals('precondition: 6 px away is a new click at 96 PPI', 0, SelectedAfter(96, 6));
+  AssertEquals('6 px away on a 168-PPI screen is the third press: the whole line', 11,
+    SelectedAfter(168, 6));
 end;
 
 procedure TEditTest.TestShiftClickExtendsSelection;

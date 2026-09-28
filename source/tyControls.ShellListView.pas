@@ -24,7 +24,7 @@ unit tyControls.ShellListView;
 interface
 
 uses
-  Classes, SysUtils, Math, Graphics, LazFileUtils, FileUtil,
+  Classes, SysUtils, Math, Graphics, LCLType, LazFileUtils, FileUtil,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Columns, tyControls.ImageCollection, tyControls.FileSystem,
   tyControls.ListView, tyControls.TreeView, tyControls.StrConsts;
@@ -976,7 +976,11 @@ begin
   if not FAutoSizeCols then Exit;
   n := Header.Columns.Count;
   if (n = 0) or (n <> Length(FColWeights)) then Exit;
-  avail := ClientWidth;
+  { A column's Width is LOGICAL px -- the list scales it where it lays the columns out --
+    and the pane is device px. Shared out in device px, the columns were scaled a second
+    time when they were used: at 175% the first column alone took most of the pane and the
+    last two were pushed out of it. }
+  avail := MulDiv(ClientWidth, 96, Font.PixelsPerInch);
   if avail <= 0 then Exit;      { not laid out yet -- the next Resize will do it }
 
   sum := 0;

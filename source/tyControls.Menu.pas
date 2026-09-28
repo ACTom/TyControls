@@ -1477,7 +1477,7 @@ begin
               and (FRows[i].ImageIndex < TyImageCount(FImages)) then
       begin
         iconSz := leftSlot - P.Scale(2);
-        if iconSz < 8 then iconSz := 8;
+        if iconSz < P.Scale(8) then iconSz := P.Scale(8);
         { In-layer, both branches: our own list renders the vector exactly at iconSz, a foreign
           list is materialised. Centred in the iconSz slot the check glyph would have used. }
         TyBlitImage(P.Bitmap, FImages, FRows[i].ImageIndex,
