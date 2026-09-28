@@ -677,12 +677,14 @@ var
   b: TBGRABitmap;
   h0, misses: Integer;
 begin
+  { ParentFont off first, at the theme's size, so what changes below is the size alone }
+  F.View.ParentFont := False;
+  F.View.Font.Size := 9;
   F.View.WriteSync('a');
   b := Snap;
   b.Free;
   h0 := F.View.CellMetrics.CellH;
   misses := F.View.Cache.Misses;
-  F.View.ParentFont := False;
   F.View.Font.Size := 16;
   b := Snap;
   b.Free;

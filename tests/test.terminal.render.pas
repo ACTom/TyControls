@@ -152,6 +152,10 @@ begin
   Row('RGB bold', RGB($123456) or TyTermFgBold, RGB($654321), noExt, True, $123456, $654321);
   Row('default inverse', TyTermFgInverse, 0, noExt, True, Pal(257), Pal(256));
   Row('P16 inverse', P16(1) or TyTermFgInverse, P16(4), noExt, True, Pal(4), Pal(1));
+  { modes that differ: inverse swaps the MODE with the value (a value-only swap reads the
+    palette index 0 as a P16 colour and the default background as ... default) }
+  Row('P16 over default, inverse', P16(1) or TyTermFgInverse, 0, noExt, True, Pal(257), Pal(1));
+  Row('RGB over default, inverse', RGB($123456) or TyTermFgInverse, 0, noExt, True, Pal(257), $123456);
   Row('inverse then bold', P16(1) or TyTermFgInverse or TyTermFgBold, P16(2), noExt, True, Pal(10), Pal(1));
   Row('dim', RGB($FF0000), RGB($000000) or TyTermBgDim, noExt, True, $800000, $000000, -1, True);
   Row('hidden', P16(3) or TyTermFgInvisible, 0, noExt, True, Pal(3), Pal(257), -1, False, True);

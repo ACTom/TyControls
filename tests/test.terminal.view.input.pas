@@ -634,6 +634,9 @@ begin
   F.View.ImeReplaceText(0, 2, #$E4#$B8#$AD);
   F.View.ImeEnd;
   AssertEquals('sent once, at the end', 'E4 B8 AD', Hex);
+  { a second end (a driver that closes twice) must not send the text again }
+  F.View.ImeEnd;
+  AssertEquals('not sent again', 'E4 B8 AD', Hex);
   b := F.Render;
   try
     AssertEquals('gone after the session', 0, MarkPixels(b));
