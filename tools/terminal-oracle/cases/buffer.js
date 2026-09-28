@@ -133,7 +133,7 @@ const bufferCases = [
   bufs('scroll-splice', 6, 4, { scrollback: 3 }, [['text', 0, 0, 'a'], ['text', 3, 0, 'z'], ['setMargins', 0, 1], ...scrolls(2), ['setMargins', 0, 3], ...scrolls(1)]),
   bufs('scroll-region-shift', 6, 5, { scrollback: 3 }, [['text', 1, 0, 'r1'], ['text', 2, 0, 'r2'], ['text', 3, 0, 'r3'], ['setMargins', 1, 3], ...scrolls(2, { fg: 0, bg: 0x1000001 })]),
   bufs('scroll-user-scrolling', 6, 3, { scrollback: 3 }, [...scrolls(3), ['scrollLines', -2], ...scrolls(1), ['scrollLines', -5], ...scrolls(3), ['scrollLines', 9], ...scrolls(1)]),
-  bufs('scroll-cached-blank', 6, 3, { scrollback: 6 }, [...scrolls(2, { fg: 0, bg: 0x1000002 }), ...scrolls(1, { fg: 0, bg: 0x1000002 }, true), ...scrolls(1, { fg: 0, bg: 0x1000004 }),
+  bufs('scroll-cached-blank', 6, 3, { scrollback: 6, windowsPty: WPTY }, [...scrolls(2, { fg: 0, bg: 0x1000002 }), ...scrolls(1, { fg: 0, bg: 0x1000002 }, true), ...scrolls(1, { fg: 0, bg: 0x1000004 }),
     ...scrolls(1, { fg: 0x1000001, bg: 0x1000004 }), ['resize', 7, 3], ...scrolls(1, { fg: 0x1000001, bg: 0x1000004 })]),
   bufs('lines-scroll', 6, 3, { scrollback: 5 }, [...scrolls(4), ['scrollLines', -1], ['scrollLines', -2], ['scrollLines', -9], ['scrollLines', 0], ['scrollLines', 2], ['scrollLines', 9], ['scrollLines', 1]]),
   bufs('rows-grow-scrollup', 6, 3, { scrollback: 5 }, [['text', 0, 0, 'l0'], ['setXY', 0, 2], ...scrolls(3), ['text', 5, 0, 'cur'], ['resize', 6, 5], ['resize', 6, 8]]),
@@ -144,7 +144,8 @@ const bufferCases = [
   bufs('cols-change-windowspty', 8, 3, { scrollback: 3, windowsPty: WPTY }, [['text', 0, 0, 'abcdefgh'], ['text', 1, 0, 'xy'], ['resize', 5, 3], ['resize', 11, 3], ['setXY', 7, 1], ['resize', 4, 3]]),
   bufs('maxlength-trim', 6, 3, { scrollback: 6 }, [['text', 0, 0, 'l0'], ['addMarker', 0], ['addMarker', 2], ['addMarker', 5], ...scrolls(5), ['setYdisp', 2], ['saveY', 4],
     ['setOption', 'scrollback', 2], ['setOption', 'scrollback', 0], ['setOption', 'scrollback', 4]]),
-  bufs('resize-cursor-clamp', 8, 4, { scrollback: 2 }, [['setXY', 7, 3], ['saveX', 6], ['setMargins', 1, 2], ['resize', 5, 2], ['resize', 3, 4]]),
+  // columns change: only under an old ConPTY, where upstream does not reflow (phase 5)
+  bufs('resize-cursor-clamp', 8, 4, { scrollback: 2, windowsPty: WPTY }, [['setXY', 7, 3], ['saveX', 6], ['setMargins', 1, 2], ['resize', 5, 2], ['resize', 3, 4]]),
   bufs('alt-activate', 6, 3, { scrollback: 3 }, [['setXY', 3, 1], ['activateAlt', { fg: 0, bg: 0x1000006 }], ['text', 0, 0, 'alt'], ['setXY', 4, 2]]),
   bufs('alt-activate-twice', 6, 3, {}, [['activateAlt', null], ['setXY', 2, 2], ['activateAlt', { fg: 0, bg: 0x1000001 }]]),
   bufs('alt-back', 6, 3, { scrollback: 2 }, [['activateAlt', null], ['addMarker', 1], ['text', 1, 0, 'x'], ['setXY', 5, 2], ['activateNormal'], ['activateNormal'], ['activateAlt', null]]),
