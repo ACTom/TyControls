@@ -812,6 +812,19 @@ begin
       if times[j] < times[i] then begin tmp := times[i]; times[i] := times[j]; times[j] := tmp; end;
   WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawTime: 200 x 60 full repaint (with the blit), median %.1f ms',
     [times[2]]));
+  { the same without the blit: rows into the kept surface only }
+  for k := 0 to 4 do
+  begin
+    F.View.DrawBoldTextInBrightColors := not F.View.DrawBoldTextInBrightColors;
+    t0 := TyTermDefaultClock;
+    F.View.Render(nil, Rect(0, 0, F.View.ClientWidth, F.View.ClientHeight), F.View.Font.PixelsPerInch);
+    times[k] := TyTermDefaultClock - t0;
+  end;
+  for i := 0 to 4 do
+    for j := i + 1 to 4 do
+      if times[j] < times[i] then begin tmp := times[i]; times[i] := times[j]; times[j] := tmp; end;
+  WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawTime: the same, rows only (no blit), median %.1f ms',
+    [times[2]]));
   AssertTrue('measured', times[2] >= 0);
 end;
 
