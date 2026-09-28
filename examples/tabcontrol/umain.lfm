@@ -159,12 +159,12 @@ object MainForm: TMainForm
       Left = 108
       Height = 30
       Top = 356
-      Width = 84
+      Width = 86
       Caption = 'Appearance'
       OnClick = GotoAppearance
     end
     object BtnAbout: TTyButton
-      Left = 200
+      Left = 202
       Height = 30
       Top = 356
       Width = 84
@@ -172,7 +172,7 @@ object MainForm: TMainForm
       OnClick = GotoAbout
     end
     object BtnAddPage: TTyButton
-      Left = 300
+      Left = 302
       Height = 30
       Top = 356
       Width = 120
@@ -181,7 +181,7 @@ object MainForm: TMainForm
       OnClick = AddNewPage
     end
     object BtnRemovePage: TTyButton
-      Left = 428
+      Left = 430
       Height = 30
       Top = 356
       Width = 116

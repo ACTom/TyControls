@@ -5,7 +5,7 @@ unit test.painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, LazUTF8, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter;
 
@@ -34,6 +34,8 @@ type
     procedure TestBorderPixelColor;
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
+    procedure TestTextIsInkedAsWindowsInksIt;
+    procedure TestDrawnTextEndsWhereItWasMeasured;
     procedure TestDrawGlyphAllKinds;
     procedure TestChevronLeftIsTheApexMirrorOfChevronRight;
     procedure TestNineSliceCenterRegion;
@@ -227,6 +229,171 @@ begin
         Inc(hits);
     end;
   AssertTrue('glyph pixels rendered', hits > 0);
+end;
+
+{ TEXT IS INKED AS WINDOWS INKS IT.
+  Three renderings were shipped or tried and each looked wrong next to the text Windows
+  draws in the same window: six-times-and-shrink (soft and light), GDI grayscale at the real
+  size (crisp, but both axes hinted: Microsoft YaHei's strokes snapped sideways and turned
+  blocky), BGRA's ClearType (coloured, and lighter). What the eye compares is how much ink a
+  line lays down and how much of it is solid -- so that is what is compared, against GDI's
+  own ClearType drawing the same string in the same font, black on white and white on black.
+  Each of the three rejected renderings misses one of the two by far more than the margin. }
+procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
+
+  { Coverage of every pixel: 0 = paper, 1 = ink. }
+  procedure Measure(const ACov: array of Single; out AMass, ASolid: Double);
+  var
+    i, ink, solid: Integer;
+  begin
+    AMass := 0;
+    ink := 0;
+    solid := 0;
+    for i := 0 to High(ACov) do
+      if ACov[i] > 0.05 then
+      begin
+        AMass := AMass + ACov[i];
+        Inc(ink);
+        if ACov[i] > 0.75 then Inc(solid);
+      end;
+    if ink > 0 then ASolid := solid / ink else ASolid := 0;
+  end;
+
+  procedure Compare(const AFont: string; APPI: Integer; ALightInk: Boolean);
+  const
+    CText = 'Illuminate Tabs TStrings 按住 Alt 显示助记下划线 跳到对应标签';
+  var
+    w, h, x, y, n: Integer;
+    ours, theirs: array of Single;
+    b: TBitmap;
+    shot: TBGRABitmap;
+    p: TBGRAPixel;
+    m1, s1, m2, s2: Double;
+    ink: TTyColor;
+    what: string;
+  begin
+    w := MulDiv(700, APPI, 96);
+    h := MulDiv(28, APPI, 96);
+    SetLength(ours, w * h);
+    SetLength(theirs, w * h);
+    if ALightInk then ink := TyRGBA(255, 255, 255, 255) else ink := TyRGBA(0, 0, 0, 255);
+    { Ours: the painter, on its own transparent surface -- alpha IS coverage. }
+    MakePainter(w, h, APPI);
+    try
+      FPainter.DrawText(Rect(0, 0, w, h), CText, AFont, 9, 400, ink, taLeftJustify, tlCenter,
+        False);
+      for y := 0 to h - 1 do
+        for x := 0 to w - 1 do
+          ours[y * w + x] := PixelAt(x, y).alpha / 255;
+    finally
+      FreePainter;
+    end;
+    { Theirs: GDI's ClearType, in the same font at the same pixel height. }
+    b := TBitmap.Create;
+    try
+      b.PixelFormat := pf24bit;
+      b.SetSize(w, h);
+      if ALightInk then b.Canvas.Brush.Color := clBlack else b.Canvas.Brush.Color := clWhite;
+      b.Canvas.FillRect(0, 0, w, h);
+      b.Canvas.Font.Name := AFont;
+      b.Canvas.Font.Height := -TyFontHeightPx(9, APPI);
+      b.Canvas.Font.Quality := fqCleartypeNatural;
+      if ALightInk then b.Canvas.Font.Color := clWhite else b.Canvas.Font.Color := clBlack;
+      b.Canvas.Brush.Style := bsClear;
+      b.Canvas.TextOut(0, 2, CText);
+      shot := TBGRABitmap.Create(b);
+      try
+        for y := 0 to h - 1 do
+          for x := 0 to w - 1 do
+          begin
+            p := shot.GetPixel(x, y);
+            n := (p.red + p.green + p.blue) div 3;
+            if ALightInk then theirs[y * w + x] := n / 255
+            else theirs[y * w + x] := 1 - n / 255;
+          end;
+      finally
+        shot.Free;
+      end;
+    finally
+      b.Free;
+    end;
+    Measure(ours, m1, s1);
+    Measure(theirs, m2, s2);
+    what := Format('%s, %d PPI, %s ink: ours lays down %.0f of ink, %.2f of it solid;'
+      + ' Windows %.0f, %.2f', [AFont, APPI, BoolToStr(ALightInk, 'light', 'dark'),
+      m1, s1, m2, s2]);
+    AssertTrue('precondition: Windows drew the text -- ' + what, m2 > 100);
+    AssertTrue('as much ink as Windows lays down -- ' + what, Abs(m1 - m2) <= 0.08 * m2);
+    AssertTrue('as much of it solid -- ' + what, Abs(s1 - s2) <= 0.06);
+  end;
+
+begin
+  {$IFDEF LCLWin32}
+  Compare('Microsoft YaHei UI', 96, False);
+  Compare('Microsoft YaHei UI', 168, False);
+  Compare('Segoe UI', 96, False);
+  Compare('Segoe UI', 168, False);
+  Compare('Microsoft YaHei UI', 168, True);
+  Compare('Segoe UI', 96, True);
+  {$ELSE}
+  Ignore('the renderer is chosen per widgetset; this compares the Win32 one with GDI');
+  {$ENDIF}
+end;
+
+{ DRAWN TEXT ENDS WHERE IT WAS MEASURED.
+  Carets, ellipses and AutoSize widths are all laid out from MeasureText, so the glyphs have
+  to land on it. On Windows the measuring side asks GDI's DrawText, and a renderer can draw
+  the run with a call that lays it out differently: TextOut does not kern the pairs DrawText
+  kerns (a line of AV/To/Ty in Segoe UI: 145 px measured, 159 drawn), and TCanvas.TextRect
+  renames an unnamed font 'default', which is another face. So the line is kerned, and it is
+  drawn in a named font and in an unnamed one -- the test runner's own font. }
+procedure TPainterTest.TestDrawnTextEndsWhereItWasMeasured;
+
+  procedure Check(const AFont: string; APPI: Integer);
+  const
+    CText = 'AVAVAVAVAV To Ty Wa Yo LT';
+  var
+    sz: TSize;
+    w, h, x, y, right: Integer;
+  begin
+    w := MulDiv(400, APPI, 96);
+    h := MulDiv(30, APPI, 96);
+    MakePainter(w, h, APPI);
+    try
+      sz := FPainter.MeasureText(CText, AFont, 9, 400);
+      FPainter.DrawText(Rect(0, 0, w, h), CText, AFont, 9, 400, TyRGBA(0, 0, 0, 255),
+        taLeftJustify, tlCenter, False);
+      right := 0;
+      for y := 0 to h - 1 do
+        for x := 0 to w - 1 do
+          if (PixelAt(x, y).alpha > 60) and (x + 1 > right) then right := x + 1;
+    finally
+      FreePainter;
+    end;
+    AssertTrue(Format('precondition: "%s" at %d PPI measured inside the surface (%d of %d)',
+      [AFont, APPI, sz.cx, w]), (sz.cx > 0) and (sz.cx < w - 20));
+    AssertTrue(Format('"%s" at %d PPI: the ink ends at %d, the measured line at %d',
+      [AFont, APPI, right, sz.cx]), Abs(right - sz.cx) <= 2);
+  end;
+
+var
+  saved: string;
+begin
+  {$IFDEF LCLWin32}
+  saved := TyFallbackFontName;
+  TyFallbackFontName := '';
+  try
+    Check('Segoe UI', 96);
+    Check('Segoe UI', 168);
+    Check('', 96);
+    Check('', 168);
+  finally
+    TyFallbackFontName := saved;
+  end;
+  {$ELSE}
+  Ignore('the renderer is chosen per widgetset; this checks the Win32 one against GDI''s measure');
+  if saved = '' then ;
+  {$ENDIF}
 end;
 
 procedure TPainterTest.TestDrawGlyphAllKinds;

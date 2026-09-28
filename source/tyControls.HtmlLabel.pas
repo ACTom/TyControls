@@ -352,7 +352,8 @@ begin
   if sz <= 0 then sz := TyFallbackFontSize;
   ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := MulDiv(Round(sz * 96 / 72), APPI, 96);
-  ABmp.FontQuality := fqFineAntialiasing;
+  ABmp.FontQuality := TyTextFontQuality;   // the painter's answer, not a copy of an old one
+  TyUseTextRenderer(ABmp);
   fs := [];
   if ARun.Bold then Include(fs, fsBold);
   if ARun.Italic then Include(fs, fsItalic);

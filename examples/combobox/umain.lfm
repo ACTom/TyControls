@@ -114,7 +114,7 @@ object MainForm: TMainForm
       Left = 24
       Height = 28
       Top = 226
-      Width = 160
+      Width = 163
       Caption = 'Open / close the list'
       OnClick = BtnToggleListClick
     end
