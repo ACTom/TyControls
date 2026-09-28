@@ -231,6 +231,10 @@ type
     procedure DoExit; override;
     procedure MouseEnter; override;
     procedure MouseLeave; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { 输入法提交的整段文字:当作键入发给程序 }
+    procedure HandleImeCommit(const ACommitUtf8: string);
     { 调度的缝:默认 Application.QueueAsyncCall(设计期不排片) }
     procedure ScheduleSlice; virtual;
     { 失效几行(视口行):有句柄时 InvalidateRect 那几行的并集。子类覆盖必须调 inherited。 }
@@ -1510,6 +1514,153 @@ end;
 procedure TTyTerminalView.PasteFromClipboard;
 begin
   Paste(ReadClipboardText);
+end;
+
+{ ---- 键盘 --------------------------------------------------------------------------- }
+
+{ 能打出字符的键:留给字符事件。KeyDown 里发不得、也清零不得——键盘布局只有 widgetset 知道
+  (美式表查出来的 Key 只对美式键盘对),而 Win32 上 KeyDown 清零会吞掉随后的 WM_CHAR。
+  上游的对应处:Keyboard.ts:365-368(无修饰、keyCode >= 48、恰一个 UTF-16 单元的键按 ev.key
+  发)与 CoreBrowserTerminal.ts:898-903(A-Z 留给 keypress);空格上游 keydown 本来就不发。 }
+function KeyWaitsForItsCharacter(const AEvent: TTyTerminalKeyEvent): Boolean;
+begin
+  Result := not AEvent.Ctrl and not AEvent.Alt and not AEvent.Meta
+    and (((AEvent.KeyCode >= 48) and (TyTermJsLength(AEvent.Key) = 1)) or (AEvent.KeyCode = VK_SPACE));
+end;
+
+procedure TTyTerminalView.KeyDown(var Key: Word; Shift: TShiftState);
+type
+  TKeyAction = (kaNone, kaSend, kaCopy, kaPaste, kaPageUp, kaPageDown, kaTop, kaBottom);
+var
+  ev: TTyTerminalKeyEvent;
+  r: TTyTerminalKeyResult;
+  act: TKeyAction;
+  pass, ctrl, alt, meta, shf: Boolean;
+begin
+  { 宿主的 OnKeyDown 先拿到;它清了零就到此为止 }
+  inherited KeyDown(Key, Shift);
+  FKeyDownHandled := False;
+  FLastKeyShift := Shift;
+  if Key = 0 then Exit;
+  { 输入法正在组字(CompositionHelper.ts:117-131 同一个意思):不动 }
+  if (Key = TyVkImeProcess) or (Key = VK_PROCESSKEY) then Exit;
+  ev := TyTerminalKeyEventFromLCL(Key, Shift);
+  ctrl := ssCtrl in Shift;
+  alt := ssAlt in Shift;
+  meta := ssMeta in Shift;
+  shf := ssShift in Shift;
+  r := Default(TTyTerminalKeyResult);
+  act := kaNone;
+  { 本地动作先认:复制、粘贴(Ctrl+C 永远发给程序,macOS 上是 Cmd+C / Cmd+V) }
+  if FIsMac then
+  begin
+    if meta and not ctrl and not alt and not shf then
+      if Key = Ord('C') then act := kaCopy
+      else if Key = Ord('V') then act := kaPaste;
+  end
+  else if not meta and not alt then
+  begin
+    if ctrl and shf and (Key = Ord('C')) then act := kaCopy
+    else if ctrl and shf and (Key = Ord('V')) then act := kaPaste
+    else if ctrl and not shf and (Key = VK_INSERT) then act := kaCopy
+    else if shf and not ctrl and (Key = VK_INSERT) then act := kaPaste;
+  end;
+  { Shift+Home / Shift+End:滚回到顶、到底 }
+  if (act = kaNone) and shf and not ctrl and not alt and not meta then
+    if Key = VK_HOME then act := kaTop
+    else if Key = VK_END then act := kaBottom;
+  if act = kaNone then
+  begin
+    r := TyTerminalEvaluateKey(ev, FCore.Modes.ApplicationCursorKeys, FIsMac, FMacOptionIsMeta);
+    case r.Kind of
+      tkrPageUp: act := kaPageUp;
+      tkrPageDown: act := kaPageDown;
+      tkrSelectAll: ;                  { 选区在 4 期:本期不算动作,不吞 }
+    else
+      begin
+        { 第三层 Shift(AltGr、macOS Option):字符留给 UTF8KeyPress,上游 return true }
+        if TyTerminalIsThirdLevelShift(ev, FIsMac, FIsWindows, FMacOptionIsMeta, False) then Exit;
+        if KeyWaitsForItsCharacter(ev) then Exit;
+        if r.Key <> '' then act := kaSend;
+      end;
+    end;
+  end;
+  { 没有动作:Key 原样往下走(窗体快捷键、Tab 导航照常) }
+  if act = kaNone then Exit;
+  { 有动作:先问宿主要不要放行给窗体 }
+  pass := False;
+  if Assigned(FOnShortcutQuery) then
+    FOnShortcutQuery(Self, Key, Shift, pass);
+  if pass then Exit;
+  case act of
+    kaSend:
+      begin
+        { ReadOnly 不在这里判断:Core 把 OnData 挡掉(上游 disableStdin 同样挡在
+          triggerDataEvent 里),本地动作照常 }
+        FCore.Input(r.Key, True);
+        NoteActivity;
+      end;
+    kaCopy: CopyToClipboard;
+    kaPaste: PasteFromClipboard;
+    kaPageUp: FCore.ScrollLines(-(FCore.Rows - 1));     { 上游 rows - 1,CoreBrowserTerminal.ts:873-878 }
+    kaPageDown: FCore.ScrollLines(FCore.Rows - 1);
+    kaTop: FCore.ScrollToTop;
+    kaBottom: FCore.ScrollToBottom;
+  end;
+  Key := 0;
+  FKeyDownHandled := True;
+end;
+
+procedure TTyTerminalView.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  full: string;
+  ev: TTyTerminalKeyEvent;
+begin
+  { GTK3 把输入法的提交截断成一个 TUTF8Char 送来:整段还在 widgetset 手里,取那一段
+    (Edit.pas 同一个绕行;其他 widgetset 上返回空串) }
+  full := TyImeTakeCommit(UTF8Key);
+  if full <> '' then
+  begin
+    HandleImeCommit(full);
+    UTF8Key := '';
+    Exit;
+  end;
+  inherited UTF8KeyPress(UTF8Key);
+  if UTF8Key = '' then Exit;
+  { KeyDown 已经把这个键的字节发了:widgetset 还送来的字符丢掉(上游 _keyDownHandled) }
+  if FKeyDownHandled then
+  begin
+    FKeyDownHandled := False;
+    UTF8Key := '';
+    Exit;
+  end;
+  { 带着 Ctrl / Alt / Meta 打出来的字符,除非是第三层 Shift,都不发(CoreBrowserTerminal.ts
+    :980-985) }
+  if [ssCtrl, ssAlt, ssMeta] * FLastKeyShift <> [] then
+  begin
+    ev := TyTerminalKeyEventFromLCL(0, FLastKeyShift);
+    if not TyTerminalIsThirdLevelShift(ev, FIsMac, FIsWindows, FMacOptionIsMeta, True) then
+    begin
+      UTF8Key := '';
+      Exit;
+    end;
+  end;
+  { 控制字符只可能是 KeyDown 已经处理过、widgetset 又送来的那一份 }
+  if (Length(UTF8Key) = 1) and ((UTF8Key[1] < #32) or (UTF8Key[1] = #127)) then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  FCore.Input(UTF8Key, True);
+  NoteActivity;
+  UTF8Key := '';
+end;
+
+procedure TTyTerminalView.HandleImeCommit(const ACommitUtf8: string);
+begin
+  if ACommitUtf8 = '' then Exit;
+  FCore.Input(ACommitUtf8, True);
+  NoteActivity;
 end;
 
 procedure TTyTerminalView.CopyToClipboard;
