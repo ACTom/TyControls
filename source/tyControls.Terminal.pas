@@ -237,6 +237,12 @@ type
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     { 输入法提交的整段文字:当作键入发给程序 }
     procedure HandleImeCommit(const ACommitUtf8: string);
+    { 输入法候选窗的锚:光标所在的格子(宽字符不扩,候选窗只要一个锚点;视口不在底部时仍按
+      光标所在的屏幕行算——候选窗跟光标,不跟视口) }
+    function ImeCaretCell: TRect;
+    function GetImeCaretRect: TRect;
+    procedure InitializeWnd; override;
+    procedure DestroyWnd; override;
     { 调度的缝:默认 Application.QueueAsyncCall(设计期不排片) }
     procedure ScheduleSlice; virtual;
     { 失效几行(视口行):有句柄时 InvalidateRect 那几行的并集。子类覆盖必须调 inherited。 }
@@ -1721,6 +1727,36 @@ begin
   { 点一下取焦点;本期不上报、不选择(4 期) }
   if CanFocus and not Focused then
     SetFocus;
+end;
+
+{ ---- 输入法 ------------------------------------------------------------------------- }
+
+procedure TTyTerminalView.InitializeWnd;
+begin
+  inherited InitializeWnd;
+  { Qt / GTK2 的库内钩子(提交整段、不被 TUTF8Char 截断;候选窗跟着光标);Win32、Cocoa
+    上返回 nil。设计期不装。 }
+  if csDesigning in ComponentState then Exit;
+  TyImeUninstall(FImeHook);
+  FImeHook := TyImeInstall(Self, @HandleImeCommit, @GetImeCaretRect);
+end;
+
+procedure TTyTerminalView.DestroyWnd;
+begin
+  TyImeUninstall(FImeHook);
+  inherited DestroyWnd;
+end;
+
+function TTyTerminalView.ImeCaretCell: TRect;
+begin
+  Result := CellRect(Min(FCore.Buffer.X, FCore.Cols - 1), FCore.Buffer.Y);
+end;
+
+function TTyTerminalView.GetImeCaretRect: TRect;
+begin
+  if (not HandleAllocated) or (not FHasFocus) then
+    Exit(Rect(0, 0, 0, 0));
+  Result := FImeCaretRect;
 end;
 
 procedure TTyTerminalView.HandleImeCommit(const ACommitUtf8: string);
