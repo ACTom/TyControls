@@ -70,12 +70,12 @@ rather than duplicated here so it cannot drift from the upstream file.
 
 ---
 
-## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Charsets.inc`
+## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Core.Services.inc`, `source/tyControls.Terminal.Core.InputHandler.inc`, `source/tyControls.Terminal.Core.WriteQueue.inc`, `source/tyControls.Terminal.Charsets.inc`
 
 Upstream: <https://github.com/xtermjs/xterm.js> · pinned at 6.0.0, commit `c58ea3637f39`.
 
-The width unit and the three terminal units are ported from xterm.js, and the two include
-files are generated from it: the width tables are dumped from the upstream build by
+The width unit and the three terminal units (the core with its three include files) are
+ported from xterm.js, and the two other include files are generated from it: the width tables are dumped from the upstream build by
 `tools/terminal-oracle/gen-unicode-tables.js`, the character set tables by
 `tools/terminal-oracle/gen-terminal-charsets.js`.
 

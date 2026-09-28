@@ -569,9 +569,10 @@ end;
 
 procedure TReleaseManifestTest.TheThirdPartyNoticeCoversTheTerminalPort;
 const
-  Units: array[0..3] of string = ('source/tyControls.Terminal.Parser.pas',
+  Units: array[0..6] of string = ('source/tyControls.Terminal.Parser.pas',
     'source/tyControls.Terminal.Buffer.pas', 'source/tyControls.Terminal.Core.pas',
-    'source/tyControls.Terminal.Charsets.inc');
+    'source/tyControls.Terminal.Core.Services.inc', 'source/tyControls.Terminal.Core.InputHandler.inc',
+    'source/tyControls.Terminal.Core.WriteQueue.inc', 'source/tyControls.Terminal.Charsets.inc');
 var
   notice, heading: string;
   i, p: Integer;
