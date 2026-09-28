@@ -40,12 +40,29 @@ unit tyControls.Terminal.Core;
     title, the link-number counter, a hidden cursor and the parser state. RIS
     (ESC c) is the same plus a parser reset. Do not "fix" either into a full reset;
     the fixtures hold both.
-  - REP stops at 2^20 repeats. Upstream allocates repeats x text before printing and
-    never returns for a huge count, so beyond the cap there is no upstream answer;
-    up to it the result is upstream's bit for bit. This is a deliberate difference.
-  - IL, DL, SU, SD, CHT and CBT clamp their loop count to the region height or the
-    column count. Every pass past that is a no-op upstream, so the clamp changes
-    nothing but the time (upstream takes seconds for 99999 and never finishes 2^31).
+  - Events fire synchronously, in the middle of parsing (OnScroll, OnData, OnBell,
+    OnTitleChange, OnOsc, OnRefreshRows ...), and while Resize / Reset run. A host
+    that calls Resize, Reset or WriteSync from such an event is not refused: the
+    call is noted and carried out once the chunk (with its write callback) is done
+    -- in call order, only the last Resize kept. ProcessPending called then returns
+    False at once and the core asks again afterwards. Nothing is parsed twice and no
+    buffer goes away under a running handler.
+  - The write queue survives an exception from a handler or a callback: the chunk
+    that raised counts as parsed, its dirty rows are still reported, and what is
+    left asks for another slice.
+  - REP prints its text count times, exactly -- bounded in time, not by capping the
+    count: once the output has turned over the whole ring (rows + scrollback) the
+    state repeats with the period the repetitions found, so whole periods are
+    skipped (the lines, the cursor and the ring's start index come out as printing
+    them one by one would; the OnScroll events of the skipped scrolls are not sent).
+    Upstream allocates repeats x text before printing and gives no answer for a
+    huge count. A REP whose repetitions only pile code points onto one cell stops
+    after TyTermRepeatLimit code points on that line.
+  - IL, DL, SU, SD, CHT and CBT clamp their loop count to the passes that can still
+    change something: the lines from the cursor (or the region) to the bottom
+    margin, the columns left of or right of the cursor. Every pass past that is a
+    no-op upstream, so the clamp changes nothing but the time (upstream takes
+    seconds for 99999 and never finishes 2^31).
   - Coordinates plus parameters are summed in Int64 (a parameter can be 2^31 - 1).
   - Colours: the core keeps the overrides set by OSC 4 / 10 / 11 / 12 and answers
     queries from them, falling back to OnQueryBaseColor. A set or a restore reports
@@ -72,7 +89,11 @@ const
   TyTermWriteTimeoutMs = 12;              { WriteBuffer.ts:27 }
   TyTermWriteBufferLengthThreshold = 50;  { WriteBuffer.ts:28 }
   TyTermStackLimit = 10;                  { InputHandler.ts:47 }
-  TyTermRepeatLimit = 1048576;            { REP cap, unit header }
+  { REP: code points printed on one line, without a scroll or a new line, after
+    which the repetitions stop (unit header) }
+  TyTermRepeatLimit = 1048576;
+  { ours: queued chunks not yet parsed; one more raises like the byte watermark }
+  TyTermMaxPendingChunks = 100000;
 
 type
   { More than 50 MB waiting: the host is not doing flow control (upstream throws a
@@ -147,6 +168,14 @@ type
     Rgb: Cardinal;
   end;
 
+  { a Resize / Reset / WriteSync asked for while the core was busy (unit header) }
+  TTyTermDeferredKind = (tdkResize, tdkReset, tdkWriteSync);
+  TTyTermDeferred = record
+    Kind: TTyTermDeferredKind;
+    Cols, Rows: Integer;
+    Data: RawByteString;
+  end;
+
   TTyTerminalCore = class
   private
     FOptions: TTyTerminalOptions;
@@ -188,6 +217,13 @@ type
     { colours and focus }
     FOverrides: array[0..258] of TTyTermColorOverride;
     FFocused: Boolean;
+    FLastMouse: TTyTerminalMouseEvent;   { MouseService._lastEvent }
+    FHasLastMouse: Boolean;
+    { re-entry (unit header): > 0 while parsing, resizing or resetting }
+    FBusy: Integer;
+    FDeferred: array of TTyTermDeferred;
+    FDeferredCount: Integer;
+    FRerequest: Boolean;                 { ProcessPending came while busy }
     { the old-ConPTY heuristics }
     FWindowsHeuristics: Boolean;
     FWindowsCsiHandle: Integer;
@@ -351,6 +387,7 @@ type
     function SetGLevel2: Boolean;
     function SetGLevel3: Boolean;
     function FullReset: Boolean;
+    procedure DoReset;
     procedure InputHandlerReset;
     function RequestStatusString(const AData: string; AParams: TTyTerminalParams): Boolean;
     function OscTitleAndIcon(const AData: string): Boolean;
@@ -381,18 +418,33 @@ type
     function NowMs: Double;
     procedure RequestProcess;
     procedure Enqueue(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
+    procedure ProcessOneChunk;
     procedure InnerWrite(ABudgetMs: Integer; out AMore: Boolean);
     procedure FlushSync;
     procedure ClearQueue;
+    { re-entry }
+    procedure Defer(AKind: TTyTermDeferredKind; ACols, ARows: Integer; const AData: RawByteString);
+    procedure RunDeferred;
+    procedure AfterDrive;
   public
     constructor Create(ACols, ARows: Integer);
     destructor Destroy; override;
-    { writing: only on the main thread (EInvalidOperation otherwise) }
+    { Every method and property: the main thread only (spec 3.5). Write, WriteSync,
+      ProcessPending, Resize, Reset, Input, the Scroll* methods, ClearScrollback,
+      TriggerMouseEvent, ReportFocus, NotifyColorSchemeChanged and
+      EndSynchronizedOutput raise EInvalidOperation on another thread. }
+    { writing. Write('') without a callback is ignored; with one it is queued (its
+      callback runs after everything before it). More than TyTermDiscardWatermark
+      bytes or TyTermMaxPendingChunks chunks waiting: ETyTerminalWriteOverflow. }
     procedure Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone = nil; ATag: PtrInt = 0); overload;
     procedure Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone = nil; ATag: PtrInt = 0); overload;
+    { Parses what is queued, then AData. Called from an event while the core is busy
+      it only takes note, and runs once the current chunk is done (unit header). }
     procedure WriteSync(const AData: RawByteString);
     { One slice: chunks until the budget is spent, checked between chunks. True when
-      something is left -- the caller schedules the next slice. }
+      something is left -- the caller schedules the next slice. Called while the
+      core is busy (from an event, a modal loop in a handler) it returns False at
+      once; the core raises OnProcessRequest again when it is done. }
     function ProcessPending(ABudgetMs: Integer = TyTermWriteTimeoutMs): Boolean;
     { input from the control }
     procedure Input(const AData: RawByteString; AWasUserInput: Boolean = True);
@@ -452,7 +504,7 @@ type
     property WindowOptions: TTyTerminalWindowOptions read FWindowOptions write FWindowOptions;
     property VtExtensions: TTyTerminalVtExtensions read FVtExtensions write FVtExtensions;
     property CursorStyle: TTyTermCursorStyleOption read GetCursorStyle write SetCursorStyle;
-    { events }
+    { events -- all synchronous, most of them in the middle of parsing (unit header) }
     property OnData: TTyTerminalDataEvent read FOnData write FOnData;
     property OnRefreshRows: TTyTerminalRowsEvent read FOnRefreshRows write FOnRefreshRows;
     property OnTitleChange: TTyTerminalTextEvent read FOnTitleChange write FOnTitleChange;
@@ -710,6 +762,8 @@ var
   i: Integer;
 begin
   ClearQueue;                            { pending chunks are dropped, callbacks not called }
+  FDeferred := nil;
+  FDeferredCount := 0;
   FParser.Free;
   { the buffers dispose their markers, which the link table listens to }
   FBufferService.Free;
@@ -1386,6 +1440,12 @@ end;
 
 procedure TTyTerminalCore.Resize(ACols, ARows: Integer);
 begin
+  CheckThread('Resize');
+  if FBusy > 0 then
+  begin
+    Defer(tdkResize, ACols, ARows, '');  { from an event: after the chunk (unit header) }
+    Exit;
+  end;
   { headless Terminal.ts:90-96, then CoreTerminal.ts:187-200 }
   if (ACols = Cols) and (ARows = Rows) then
     Exit;
@@ -1393,12 +1453,40 @@ begin
   if ARows < TyTermMinimumRows then ARows := TyTermMinimumRows;
   { pending writes are parsed at the old size first }
   FlushSync;
-  FBufferService.Resize(ACols, ARows);
+  Inc(FBusy);
+  try
+    FBufferService.Resize(ACols, ARows);
+  finally
+    Dec(FBusy);
+  end;
+  RunDeferred;
+  AfterDrive;
 end;
 
-{ headless Terminal.ts:122-132 -> CoreTerminal.ts:270-276. Partial on purpose (unit
-  header): not the parser, the title, the link numbers, a hidden cursor. }
+{ headless Terminal.ts:122-132. From an event while the core is busy it waits for
+  the chunk to finish, like Resize. }
 procedure TTyTerminalCore.Reset;
+begin
+  CheckThread('Reset');
+  if FBusy > 0 then
+  begin
+    Defer(tdkReset, 0, 0, '');
+    Exit;
+  end;
+  Inc(FBusy);
+  try
+    DoReset;
+  finally
+    Dec(FBusy);
+  end;
+  RunDeferred;
+  AfterDrive;
+end;
+
+{ CoreTerminal.ts:270-276 (and CoreBrowserTerminal.reset's mouse reset, :1110).
+  Partial on purpose (unit header): not the parser, the title, the link numbers, a
+  hidden cursor. RIS and DECCOLM run it from inside the parse. }
+procedure TTyTerminalCore.DoReset;
 var
   before: TTyTerminalModes;
 begin
@@ -1415,6 +1503,7 @@ end;
 
 procedure TTyTerminalCore.ScrollLines(ADelta: Integer);
 begin
+  CheckThread('ScrollLines');
   FBufferService.ScrollLines(ADelta);
 end;
 
@@ -1425,11 +1514,13 @@ end;
 
 procedure TTyTerminalCore.ScrollToBottom;
 begin
+  CheckThread('ScrollToBottom');
   ScrollLines(Buffer.YBase - Buffer.YDisp);
 end;
 
 procedure TTyTerminalCore.ScrollToTop;
 begin
+  CheckThread('ScrollToTop');
   ScrollLines(-Buffer.YDisp);
 end;
 
@@ -1440,6 +1531,7 @@ var
   row: TTyTerminalLine;
   i: Integer;
 begin
+  CheckThread('ClearScrollback');
   buf := Buffer;
   buf.ClearAllMarkers;
   row := buf.Lines.Get(buf.YBase + buf.Y);
@@ -1466,6 +1558,7 @@ end;
 
 procedure TTyTerminalCore.Input(const AData: RawByteString; AWasUserInput: Boolean);
 begin
+  CheckThread('Input');
   TriggerDataEvent(AData, AWasUserInput);
 end;
 
@@ -1491,39 +1584,50 @@ end;
 
 { parse, InputHandler.ts:430-485, without the async resume. The input is cut every
   131072 BYTES (MAX_PARSEBUFFER_LENGTH counts input units, and a byte is the unit
-  here); the decoder and precedingJoinState carry across the cuts. }
+  here); the decoder and precedingJoinState carry across the cuts. The core is busy
+  throughout, the closing events included, so a handler cannot parse, resize or
+  reset under it (unit header); the closing events fire even when a handler raised,
+  so the rows it changed are still reported. }
 procedure TTyTerminalCore.Parse(const AData: RawByteString);
 var
   buf: TTyTerminalBuffer;
   cursorStartX, cursorStartY, total, i, chunk, len, viewportStart, viewportEnd: Integer;
 begin
-  buf := Buffer;
-  cursorStartX := buf.X;
-  cursorStartY := buf.Y;
-  total := Length(AData);
-  chunk := Min(total, TyTermMaxParseBuffer);
-  if Length(FParseBuffer) < chunk then
-    SetLength(FParseBuffer, chunk);
-  { which rows the parse changes }
-  ClearRange;
-  i := 0;
-  while i < total do
-  begin
-    chunk := Min(TyTermMaxParseBuffer, total - i);
-    len := FDecoder.Decode(AData[i + 1], chunk, FParseBuffer);
-    FParser.Parse(FParseBuffer, len);
-    Inc(i, chunk);
+  Inc(FBusy);
+  try
+    buf := Buffer;
+    cursorStartX := buf.X;
+    cursorStartY := buf.Y;
+    total := Length(AData);
+    chunk := Min(total, TyTermMaxParseBuffer);
+    if Length(FParseBuffer) < chunk then
+      SetLength(FParseBuffer, chunk);
+    { which rows the parse changes }
+    ClearRange;
+    try
+      i := 0;
+      while i < total do
+      begin
+        chunk := Min(TyTermMaxParseBuffer, total - i);
+        len := FDecoder.Decode(AData[i + 1], chunk, FParseBuffer);
+        FParser.Parse(FParseBuffer, len);
+        Inc(i, chunk);
+      end;
+    finally
+      buf := Buffer;
+      if (buf.X <> cursorStartX) or (buf.Y <> cursorStartY) then
+        if Assigned(FOnCursorMove) then
+          FOnCursorMove(Self);
+      { the rows that changed, relative to the viewport (ydisp), not to ybase }
+      viewportEnd := FDirtyEnd + (buf.YBase - buf.YDisp);
+      viewportStart := FDirtyStart + (buf.YBase - buf.YDisp);
+      if viewportStart < Rows then
+        if Assigned(FOnRefreshRows) then
+          FOnRefreshRows(Self, Min(viewportStart, Rows - 1), Min(viewportEnd, Rows - 1));
+    end;
+  finally
+    Dec(FBusy);
   end;
-  buf := Buffer;
-  if (buf.X <> cursorStartX) or (buf.Y <> cursorStartY) then
-    if Assigned(FOnCursorMove) then
-      FOnCursorMove(Self);
-  { the rows that changed, relative to the viewport (ydisp), not to ybase }
-  viewportEnd := FDirtyEnd + (buf.YBase - buf.YDisp);
-  viewportStart := FDirtyStart + (buf.YBase - buf.YDisp);
-  if viewportStart < Rows then
-    if Assigned(FOnRefreshRows) then
-      FOnRefreshRows(Self, Min(viewportStart, Rows - 1), Min(viewportEnd, Rows - 1));
 end;
 
 procedure TTyTerminalCore.PrintHandler(const AData: array of Cardinal; AStart, AEnd: Integer);
@@ -2573,8 +2677,8 @@ begin
       3:
         if twoSetWinLines in FWindowOptions then
         begin
-          FBufferService.Resize(132, Rows);
-          Reset;                         { onRequestReset -> headless reset }
+          FBufferService.Resize(132, Rows);   { fires OnResize }
+          DoReset;                       { onRequestReset -> headless reset }
         end;
       6:
         begin
@@ -2645,8 +2749,8 @@ begin
       3:
         if twoSetWinLines in FWindowOptions then
         begin
-          FBufferService.Resize(80, Rows);
-          Reset;
+          FBufferService.Resize(80, Rows);    { fires OnResize }
+          DoReset;
         end;
       6:
         begin
@@ -3344,7 +3448,7 @@ end;
 function TTyTerminalCore.FullReset: Boolean;
 begin
   FParser.Reset;
-  Reset;
+  DoReset;                               { inside the parse: not the deferring Reset }
   Result := True;
 end;
 
@@ -3836,19 +3940,25 @@ begin
   FPendingData := 0;
 end;
 
-{ write, :152-182 }
+{ write, :152-182. Ours on top: an empty write without a callback is nothing, and
+  the number of chunks waiting is bounded like their bytes (spec 3.1). }
 procedure TTyTerminalCore.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 var
   more: Boolean;
 begin
   CheckThread('Write');
+  if (AData = '') and not Assigned(AOnDone) then
+    Exit;
   if FPendingData > TyTermDiscardWatermark then
     raise ETyTerminalWriteOverflow.Create('write data discarded, use flow control to avoid losing data');
+  if FQueueCount - FBufferOffset >= TyTermMaxPendingChunks then
+    raise ETyTerminalWriteOverflow.Create('write discarded: too many chunks waiting, use flow control');
   if FQueueCount = 0 then
   begin
     FBufferOffset := 0;
-    { the first write after user input is parsed at once: echo latency }
-    if FDidUserInput then
+    { the first write after user input is parsed at once: echo latency -- not while
+      the core is busy (an event's own Write), which would parse inside a parse }
+    if FDidUserInput and (FBusy = 0) and not FIsSyncWriting then
     begin
       FDidUserInput := False;
       Enqueue(AData, AOnDone, ATag);
@@ -3874,47 +3984,76 @@ begin
   Write(s, AOnDone, ATag);
 end;
 
+{ One chunk off the queue: the offset moves past it and its bytes leave the count
+  BEFORE it is parsed, so neither an exception nor a nested flush can parse it
+  twice; the queue lets go of its data at once. Then its callback -- also when a
+  handler raised, a host counting callbacks for flow control must not lose one --
+  then what an event asked for while it was parsed (unit header). }
+procedure TTyTerminalCore.ProcessOneChunk;
+var
+  item: TTyTermQueueItem;
+begin
+  item := FQueue[FBufferOffset];
+  FQueue[FBufferOffset].Data := '';
+  FQueue[FBufferOffset].OnDone := nil;
+  Inc(FBufferOffset);
+  Dec(FPendingData, Length(item.Data));
+  try
+    Parse(item.Data);
+  finally
+    if Assigned(item.OnDone) then
+      item.OnDone(Self, item.Tag);
+  end;
+  RunDeferred;
+end;
+
 { _innerWrite, :219-315: whole chunks until the budget is spent -- checked between
-  chunks, so one big chunk is never cut (splitting inside a chunk is phase 5).
-  Unlike upstream the offset moves past a chunk before its callback runs, so a
-  callback that calls WriteSync does not parse that chunk again. }
+  chunks, so one big chunk is never cut (splitting inside a chunk is phase 5). An
+  exception from a handler or a callback leaves the rest queued and asks for
+  another slice (upstream's timer would simply be gone). }
 procedure TTyTerminalCore.InnerWrite(ABudgetMs: Integer; out AMore: Boolean);
 var
   start: Double;
-  item: TTyTermQueueItem;
   i, n: Integer;
+  ok: Boolean;
 begin
+  AMore := False;
+  ok := False;
   start := NowMs;
-  while FQueueCount > FBufferOffset do
-  begin
-    item := FQueue[FBufferOffset];
-    Parse(item.Data);
-    Inc(FBufferOffset);
-    Dec(FPendingData, Length(item.Data));
-    if Assigned(item.OnDone) then
-      item.OnDone(Self, item.Tag);
-    if NowMs - start >= ABudgetMs then
-      Break;
-  end;
-  if FQueueCount > FBufferOffset then
-  begin
-    { drop the processed chunks once there are many of them }
-    if FBufferOffset > TyTermWriteBufferLengthThreshold then
+  try
+    while FQueueCount > FBufferOffset do
     begin
-      n := FQueueCount - FBufferOffset;
-      for i := 0 to n - 1 do
-        FQueue[i] := FQueue[FBufferOffset + i];
-      for i := n to FQueueCount - 1 do
-        FQueue[i].Data := '';
-      FQueueCount := n;
-      FBufferOffset := 0;
+      ProcessOneChunk;
+      if NowMs - start >= ABudgetMs then
+        Break;
     end;
-    AMore := True;
-  end
-  else
-  begin
-    ClearQueue;
-    AMore := False;
+    ok := True;
+  finally
+    if FQueueCount > FBufferOffset then
+    begin
+      { drop the processed chunks once there are many of them }
+      if FBufferOffset > TyTermWriteBufferLengthThreshold then
+      begin
+        n := FQueueCount - FBufferOffset;
+        for i := 0 to n - 1 do
+          FQueue[i] := FQueue[FBufferOffset + i];
+        for i := n to FQueueCount - 1 do
+        begin
+          FQueue[i].Data := '';
+          FQueue[i].OnDone := nil;
+        end;
+        FQueueCount := n;
+        FBufferOffset := 0;
+      end;
+      AMore := True;
+      if not ok then
+        RequestProcess;
+    end
+    else
+      ClearQueue;
+    if not ok and (FDeferredCount > 0) then
+      RequestProcess;
+    AfterDrive;
   end;
 end;
 
@@ -3922,43 +4061,124 @@ function TTyTerminalCore.ProcessPending(ABudgetMs: Integer): Boolean;
 begin
   CheckThread('ProcessPending');
   FProcessRequested := False;
+  if (FBusy > 0) or FIsSyncWriting then
+  begin
+    { from inside a parse or a flush (an event, a modal loop in a handler): the
+      running loop is not entered twice; the core asks again when it is done }
+    FRerequest := True;
+    Exit(False);
+  end;
+  RunDeferred;
   InnerWrite(ABudgetMs, Result);
   { the caller schedules the next slice: no OnProcessRequest from here }
 end;
 
 { writeSync, :106-150 (maxSubsequentCalls not ported). Upstream shifts from index 0,
   which parses again the chunks a slice already did when a slice stopped midway; here
-  it starts at the first unprocessed chunk (a deliberate difference). }
+  it starts at the first unprocessed chunk (a deliberate difference). An empty
+  AData only flushes. From an event while the core is busy: noted, run after the
+  chunk (unit header). }
 procedure TTyTerminalCore.WriteSync(const AData: RawByteString);
 begin
   CheckThread('WriteSync');
-  Enqueue(AData, nil, 0);
+  if FBusy > 0 then
+  begin
+    Defer(tdkWriteSync, 0, 0, AData);
+    Exit;
+  end;
+  if AData <> '' then
+    Enqueue(AData, nil, 0);
   if FIsSyncWriting then
     Exit;                                { a callback's own WriteSync: the loop below takes it }
   FlushSync;
 end;
 
 { flushSync, :71-101, from the first unprocessed chunk (see WriteSync); Resize runs
-  it so pending output is parsed at the old size }
+  it so pending output is parsed at the old size. After an exception what is left
+  stays queued for the next slice (upstream would stay "sync writing" for good). }
 procedure TTyTerminalCore.FlushSync;
 var
-  item: TTyTermQueueItem;
+  ok: Boolean;
 begin
-  if FIsSyncWriting then
+  if (FBusy > 0) or FIsSyncWriting then
     Exit;
   FIsSyncWriting := True;
+  ok := False;
   try
     while FBufferOffset < FQueueCount do
-    begin
-      item := FQueue[FBufferOffset];
-      Inc(FBufferOffset);
-      Parse(item.Data);
-      if Assigned(item.OnDone) then
-        item.OnDone(Self, item.Tag);
-    end;
+      ProcessOneChunk;
+    ok := True;
   finally
-    ClearQueue;
     FIsSyncWriting := False;
+    if FBufferOffset >= FQueueCount then
+      ClearQueue
+    else
+      RequestProcess;
+    if not ok and (FDeferredCount > 0) then
+      RequestProcess;
+    AfterDrive;
+  end;
+end;
+
+{ ---- re-entry: calls from events while the core is busy (unit header) ---- }
+
+procedure TTyTerminalCore.Defer(AKind: TTyTermDeferredKind; ACols, ARows: Integer; const AData: RawByteString);
+var
+  i, k: Integer;
+begin
+  { only the last Resize counts, at the place of its call }
+  if AKind = tdkResize then
+  begin
+    k := 0;
+    for i := 0 to FDeferredCount - 1 do
+      if FDeferred[i].Kind <> tdkResize then
+      begin
+        FDeferred[k] := FDeferred[i];
+        Inc(k);
+      end;
+    for i := k to FDeferredCount - 1 do
+      FDeferred[i].Data := '';
+    FDeferredCount := k;
+  end;
+  if FDeferredCount = Length(FDeferred) then
+    SetLength(FDeferred, FDeferredCount * 2 + 4);
+  FDeferred[FDeferredCount].Kind := AKind;
+  FDeferred[FDeferredCount].Cols := ACols;
+  FDeferred[FDeferredCount].Rows := ARows;
+  FDeferred[FDeferredCount].Data := AData;
+  Inc(FDeferredCount);
+end;
+
+{ In call order, each through its public method (the core is idle again). One that
+  raises leaves the rest for later. }
+procedure TTyTerminalCore.RunDeferred;
+var
+  d: TTyTermDeferred;
+  i: Integer;
+begin
+  while (FBusy = 0) and (FDeferredCount > 0) do
+  begin
+    d := FDeferred[0];
+    for i := 0 to FDeferredCount - 2 do
+      FDeferred[i] := FDeferred[i + 1];
+    Dec(FDeferredCount);
+    FDeferred[FDeferredCount].Data := '';
+    case d.Kind of
+      tdkResize: Resize(d.Cols, d.Rows);
+      tdkReset: Reset;
+      tdkWriteSync: WriteSync(d.Data);
+    end;
+  end;
+end;
+
+{ ProcessPending came while the core was busy: ask again now that it is not }
+procedure TTyTerminalCore.AfterDrive;
+begin
+  if FRerequest and (FBusy = 0) and not FIsSyncWriting then
+  begin
+    FRerequest := False;
+    if (FQueueCount > FBufferOffset) or (FDeferredCount > 0) then
+      RequestProcess;
   end;
 end;
 
