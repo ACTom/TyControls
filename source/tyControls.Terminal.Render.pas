@@ -39,7 +39,7 @@ unit tyControls.Terminal.Render;
 interface
 
 uses
-  SysUtils, Classes, Math, Types, Graphics, Generics.Collections,
+  SysUtils, Classes, Math, Types, Graphics, LCLType, Generics.Collections,
   BGRABitmap, BGRABitmapTypes, BGRAGrayscaleMask, BGRABlend, BGRACanvas2D,
   tyControls.Painter, tyControls.Terminal.Buffer;
 
