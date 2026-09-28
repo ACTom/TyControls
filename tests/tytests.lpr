@@ -3,7 +3,7 @@ program tytests;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, consoletestrunner, tyControls.Painter, tyControls.Controller,
+  Interfaces, consoletestrunner, Graphics, Forms, tyControls.Painter, tyControls.Controller,
   tyControls.Calendar,
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
   test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.glyph, test.skins, test.fontcascade, test.darktext, test.painter, test.controller,
@@ -233,6 +233,16 @@ begin
   // restore, as test.chart does for the numeric separators. Both knobs are
   // plain globals precisely so tests can inject them.
   TyLocaleFirstDayOfWeek := wdSunday;
+  // FOURTH: the SCREEN. LCL creates every TFont at ScreenInfo's PPI, a form built with
+  // CreateNew keeps the one it was born with, and its ParentFont children take it over --
+  // so the screen decides the PPI of every control a test did not pin. Nothing in this
+  // console process ever initialises ScreenInfo, which left it at the LCL default of 72:
+  // a desktop nobody has, on which every unpinned form laid itself out at 75%. Make it the
+  // 96-PPI desktop the expectations in these suites are written for. A test that is ABOUT
+  // another scaling sets these itself and puts them back (tests/test.dpi.measurefont).
+  ScreenInfo.PixelsPerInchX := 96;
+  ScreenInfo.PixelsPerInchY := 96;
+  Screen.UpdateScreen;
   Application := TTyTestRunner.Create(nil);
   Application.Initialize;
   Application.Title := 'TyControls Test Runner';
