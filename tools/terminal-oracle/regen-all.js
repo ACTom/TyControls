@@ -3,19 +3,43 @@
 // not even those (spec 4.2: a rerun against the same upstream must leave
 // `git diff` empty).
 //
+// The tree must be clean before the run -- otherwise a change made by hand could
+// not be told from one the generators made. Commit or stash first.
+//
 //   node tools/terminal-oracle/regen-all.js [--expect-clean]
 'use strict';
 const cp = require('child_process');
 const path = require('path');
 const L = require('./lib-dump.js');
 
+// Paths git reports as changed or untracked, repo-relative with forward slashes.
+// -z: no quoting of unusual names; a rename record carries its source as an extra
+// NUL-terminated field, skipped here.
+function changedFiles() {
+  const fields = cp.execFileSync('git', ['-C', L.ROOT, 'status', '--porcelain', '-z'], { encoding: 'utf8' })
+    .split('\0');
+  const out = [];
+  for (let k = 0; k < fields.length; k++) {
+    const f = fields[k];
+    if (!f) continue;
+    out.push(f.slice(3));
+    if (f[0] === 'R' || f[0] === 'C') k++;
+  }
+  return out;
+}
+
+const before = changedFiles();
+if (before.length) {
+  console.error('the tree is not clean before the run (commit or stash first):\n  ' + before.join('\n  '));
+  process.exit(1);
+}
+
 const SCRIPTS = ['gen-unicode-tables.js', 'unicode-cases.js'];
 for (const s of SCRIPTS) {
   console.log('==', s);
   cp.execFileSync(process.execPath, [path.join(__dirname, s)], { stdio: 'inherit' });
 }
-const changed = cp.execFileSync('git', ['-C', L.ROOT, 'status', '--porcelain'], { encoding: 'utf8' })
-  .split(/\r?\n/).filter(Boolean).map(l => l.slice(3).replace(/\\/g, '/'));
+const changed = changedFiles();
 const stray = changed.filter(f => !L.GENERATED.includes(f));
 if (stray.length) { console.error('changed but not a generated file:\n  ' + stray.join('\n  ')); process.exit(1); }
 if (process.argv.includes('--expect-clean') && changed.length) {

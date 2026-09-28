@@ -7,8 +7,9 @@
 // XTERM_ROOT overrides the checkout path; XTERM_OUT the output folder ('out' by
 // default; 'out-esbuild' if the tsgo output ever stops loading in node).
 //
-// Pinned: package.json version 6.0.0 and HEAD c58ea36... A different checkout, or a
-// dirty one, is refused -- the port and the oracle must be the same code.
+// Pinned: package.json version 6.0.0 and HEAD c58ea36... A different checkout, a
+// dirty one, or a build older than the sources we port, is refused -- the port and
+// the oracle must be the same code.
 //
 // THE BUFFER POOL. addon-unicode-graphemes decodes its trie with
 // Buffer.from(base64) and then reads the header through new DataView(data.buffer),
@@ -46,7 +47,11 @@ function git(args) {
 }
 
 function upstreamInfo() {
-  const pkg = JSON.parse(fs.readFileSync(path.join(XTERM, 'package.json'), 'utf8'));
+  const pkgFile = path.join(XTERM, 'package.json');
+  if (!fs.existsSync(pkgFile)) {
+    throw new Error(`no xterm.js checkout at ${XTERM} -- set XTERM_ROOT (on Windows a native path, D:/..., not Git Bash's /d/...)`);
+  }
+  const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
   const commit = git(['rev-parse', 'HEAD']);
   if (pkg.version !== PIN.version) throw new Error(`xterm.js at ${XTERM} is ${pkg.version}, pinned ${PIN.version}`);
   if (!commit.startsWith(PIN.commitPrefix)) throw new Error(`xterm.js HEAD ${commit}, pinned ${PIN.commitPrefix}`);
@@ -61,8 +66,33 @@ function need(rel) {
   return require(f);
 }
 
+// The pin checks the SOURCE commit, but what runs is the build output. A build left
+// over from another commit (checked out after `npm run build`) would pass the pin and
+// answer for the wrong code, so every source we port must be older than its output.
+// Git rewrites a file's mtime when a checkout changes it, which is what this catches.
+const PORTED = [
+  ['src/common/input/UnicodeV6.ts', `${OUT_DIR}/common/input/UnicodeV6.js`],
+  ['src/common/services/UnicodeService.ts', `${OUT_DIR}/common/services/UnicodeService.js`],
+  ['addons/addon-unicode11/src/UnicodeV11.ts', `addons/addon-unicode11/${OUT_DIR}/UnicodeV11.js`],
+  ['addons/addon-unicode-graphemes/src/UnicodeGraphemeProvider.ts',
+    `addons/addon-unicode-graphemes/${OUT_DIR}/UnicodeGraphemeProvider.js`],
+  ['addons/addon-unicode-graphemes/src/third-party/UnicodeProperties.ts',
+    `addons/addon-unicode-graphemes/${OUT_DIR}/third-party/UnicodeProperties.js`],
+];
+
+function checkBuildFresh() {
+  for (const [src, out] of PORTED) {
+    const s = path.join(XTERM, src), o = path.join(XTERM, out);
+    if (!fs.existsSync(o)) throw new Error(`missing ${o} -- run npm ci && npm run build in ${XTERM}`);
+    if (fs.statSync(s).mtimeMs > fs.statSync(o).mtimeMs) {
+      throw new Error(`${out} is older than ${src} -- the build is stale; rerun npm run build in ${XTERM}`);
+    }
+  }
+}
+
 function loadUpstream() {
   const info = upstreamInfo();
+  checkBuildFresh();
   process.env.NODE_PATH = path.join(XTERM, OUT_DIR);
   Module._initPaths(); // the addons require('common/...') through NODE_PATH
   require.resolve('common/services/UnicodeService'); // throws if the alias does not resolve
