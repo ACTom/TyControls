@@ -47,12 +47,12 @@ object MainForm: TMainForm
       Left = 16
       Height = 30
       Top = 46
-      Width = 96
+      Width = 100
       Caption = 'Up one level'
       OnClick = BtnUpClick
     end
     object ChkHidden: TTyCheckBox
-      Left = 126
+      Left = 130
       Height = 22
       Top = 50
       Width = 100
@@ -60,7 +60,7 @@ object MainForm: TMainForm
       OnChange = ChkHiddenChange
     end
     object ChkGroup: TTyCheckBox
-      Left = 238
+      Left = 242
       Height = 22
       Top = 50
       Width = 120
@@ -68,7 +68,7 @@ object MainForm: TMainForm
       OnChange = ChkGroupChange
     end
     object ChkFoldersFirst: TTyCheckBox
-      Left = 370
+      Left = 374
       Height = 22
       Top = 50
       Width = 110
@@ -77,7 +77,7 @@ object MainForm: TMainForm
       OnChange = ChkFoldersFirstChange
     end
     object ChkMulti: TTyCheckBox
-      Left = 492
+      Left = 496
       Height = 22
       Top = 50
       Width = 110
@@ -86,7 +86,7 @@ object MainForm: TMainForm
       OnChange = ChkMultiChange
     end
     object BtnRefresh: TTyButton
-      Left = 614
+      Left = 618
       Height = 30
       Top = 46
       Width = 90
@@ -94,14 +94,14 @@ object MainForm: TMainForm
       OnClick = BtnRefreshClick
     end
     object LblView: TTyLabel
-      Left = 718
+      Left = 722
       Height = 20
       Top = 50
       Width = 44
       Caption = 'View:'
     end
     object ViewCombo: TTyComboBox
-      Left = 766
+      Left = 770
       Height = 30
       Top = 46
       Width = 150

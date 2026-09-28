@@ -261,6 +261,17 @@ function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 
+{ How TEXT is rasterized on this widgetset -- the one answer, for every surface that draws
+  words (the painter, the HTML label). Icons drawn from an icon font are pictures, not text,
+  and keep their own supersampled quality. See the implementation for why each branch. }
+function TyTextFontQuality: TBGRAFontQuality;
+
+{ Put the library's text renderer on ABmp. On Win32 that is a renderer that draws text the
+  way Windows lays it out and shapes it -- see TTyGdiTextRenderer; elsewhere it leaves BGRA's
+  own. TyConfigureTextFont calls it, so every bitmap configured for text has it; a surface
+  that configures a font by hand must call it too. }
+procedure TyUseTextRenderer(ABmp: TBGRABitmap);
+
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
 // few LCL-canvas caption-width measures (GroupBox/TabControl) go through this so
@@ -371,10 +382,9 @@ function TyMeasureRenderedTextWidth(const AText, AFontName: string;
                                     (tyControls.Controller.pas:602), so keying the raw
                                     parameter would be a genuine theme-staleness hole.
    10. the process font registry     NOT keyable -- see TyInvalidateTextMeasureCache.
-   11. the widgetset text engine     compile-time -- the LCLQt/LCLGtk conditional in
-                                    TyConfigureTextFont picks fqSystemClearType over
-                                    fqFineAntialiasing (see also
-                                    memory/bgra-small-text-blur-linux). Constant per
+   11. the widgetset text engine     compile-time -- TyTextFontQuality picks the
+                                    rasterizer per widgetset (fqSystem on Win32,
+                                    fqSystemClearType elsewhere). Constant per
                                     binary, so it cannot make an entry stale.
    12. Screen.PixelsPerInch          NOT AN INPUT ANY MORE. It used to reach the LCL path
                                     through TFont.Size->Height on the scratch TBitmap,
@@ -484,6 +494,9 @@ var
   TyTextMeasureCacheEnabled: Boolean = True;
 
 implementation
+
+uses
+  LCLIntf, BGRAText;
 
 function TyEffectiveFontName(const AName: string): string;
 begin
@@ -944,6 +957,192 @@ begin
   end;
 end;
 
+function TyTextFontQuality: TBGRAFontQuality;
+begin
+  { Qt, GTK and Cocoa: the native text renderer (fqSystemClearType). fqFineAntialiasing renders
+    BLANK on Qt/GTK (diagnostic on Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on
+    Cocoa it silently drops to single-pass fqSystem for text > ~13px (SYSTEM_RENDERER_IS_FINE, see
+    DrawTextSupersampled below), so CJK came out jagged and thin. The native path is also the one
+    that runs the OS font-substitution cascade a Latin UI font (macOS San Francisco) needs to
+    fill CJK glyphs.
+
+    Win32: fqSystem, which TTyGdiTextRenderer turns into ClearType's shapes laid down in grey
+    -- see there. Rotated text is the one thing that renderer hands back to BGRA. }
+  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLCocoa)}
+  Result := fqSystemClearType;
+  {$ELSE}
+  Result := fqSystem;
+  {$ENDIF}
+end;
+
+{$IFDEF LCLWin32}
+type
+  { TEXT ON WINDOWS, AS WINDOWS DRAWS IT.
+
+    Three ways to put a caption on a BGRA surface were tried against the text Windows draws in
+    the same window, and each was wrong in its own way:
+
+      fqFineAntialiasing   GDI at six times the size, box-filtered down. The hinting is done
+                           for a font six times too big, so no stem lands on the pixel grid:
+                           every stroke two grey pixels. Soft and light -- "blurry".
+      fqSystem             GDI's grayscale antialiasing at the real size. Crisp, but GDI then
+                           hints BOTH axes, and Microsoft YaHei's hinting is written for
+                           ClearType, which hints only the vertical: strokes snap sideways to
+                           whole pixels, their weights go uneven, the glyphs turn blocky.
+                           "Ugly", and rightly.
+      fqSystemClearType    the right shapes, but a SUBPIXEL mask: colour fringes on a coloured
+                           or translucent surface, and BGRA's compositing of it both fringes
+                           more and inks lighter than the OS's.
+
+    What Windows draws is the third one's SHAPES -- hinted vertically only, so horizontal
+    strokes are crisp and the glyph keeps its form -- at the weight ClearType gives them. This
+    renderer draws exactly that: GDI renders the run in ClearType, black on white, the three
+    subpixel coverages are averaged into one grey, and that grey is laid down in the ink colour
+    with the same non-gamma blend GDI uses. (Black on white serves light ink too: GDI's
+    ClearType covers a light-on-dark run within half a percent of the dark-on-light one.)
+    Measured on a line of 9pt YaHei: the ink it lays down is the ink native ClearType lays
+    down (1403 against 1404 at 100%, 3697 against 3697 at 175%), and so is the share of solid
+    pixels; there is no colour, so a transparent surface or an accent button is safe.
+
+    Layout is GDI's own, and it is the layout the measuring side reports: the run is drawn by
+    the very DrawText call BGRA measures it with (DT_CALCRECT dropped), on the same font in the
+    same quality, so the kerning, the right-to-left reading and the mnemonic prefix a
+    TextSize or TextFitInfo answer includes are in the glyphs, and a caret placed on measured
+    advances sits on them. Not TCanvas.TextOut, which does not kern the pairs DrawText kerns;
+    not TCanvas.TextRect, which silently renames an unnamed font 'default' -- a different
+    face from the one measured, and a run a fifth wider than its caret positions. Rotated,
+    textured and self-underlined text go to BGRA's own path. }
+  TTyGdiTextRenderer = class(TLCLFontRenderer)
+  protected
+    procedure UpdateFont; override;
+    { The measuring side, answered for the run exactly as it is drawn. }
+    function RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
+    procedure InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
+      AOrientation: integer; sUTF8: string; c: TBGRAPixel; texture: IBGRAScanner;
+      align: TAlignment; AShowPrefix: boolean = false; ARightToLeft: boolean = false); override;
+  end;
+
+  TTyCanvasAccess = class(TCanvas);
+
+function TTyGdiTextRenderer.RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
+begin
+  { BGRA's own Win32 run style (BGRADefaultTextOutStyle, which the unit does not export):
+    the one its TextSize measures every unrotated run with. }
+  FillChar(Result, SizeOf(Result), 0);
+  Result.SingleLine := True;
+  Result.Alignment := taLeftJustify;
+  Result.Layout := tlTop;
+  Result.RightToLeft := ARightToLeft;
+  Result.ShowPrefix := AShowPrefix;
+end;
+
+procedure TTyGdiTextRenderer.UpdateFont;
+begin
+  inherited UpdateFont;
+  { The measuring side reads this font too: TextSize and TextFitInfo must answer in the
+    advances the drawing side lays the glyphs out with. }
+  FFont.Quality := fqCleartypeNatural;
+end;
+
+procedure TTyGdiTextRenderer.InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
+  AOrientation: integer; sUTF8: string; c: TBGRAPixel; texture: IBGRAScanner;
+  align: TAlignment; AShowPrefix: boolean; ARightToLeft: boolean);
+var
+  sz: TSize;
+  ofsX: Single;
+  ox, oy, mx, my, w, h, px, py, dy, cov, a: Integer;
+  flags: Cardinal;
+  r: TRect;
+  tmp: TBitmap;
+  shot: TBGRABitmap;
+  row: PBGRAPixel;
+  ink: TBGRAPixel;
+begin
+  if sUTF8 = '' then Exit;
+  if (AOrientation mod 3600 <> 0) or (texture <> nil) or FOwnUnderline then
+  begin
+    inherited InternalTextOutAngle(ADest, x, y, AOrientation, sUTF8, c, texture, align,
+      AShowPrefix, ARightToLeft);
+    Exit;
+  end;
+  if c.alpha = 0 then Exit;
+  UpdateFont;
+  sz := InternalTextSizeStyle(sUTF8, RunStyle(ARightToLeft, AShowPrefix), MaxLongint);
+  if (sz.cx <= 0) or (sz.cy <= 0) then Exit;
+  case align of
+    taCenter: ofsX := sz.cx / 2;
+    taRightJustify: ofsX := sz.cx;
+  else
+    ofsX := 0;
+  end;
+  { Rounded half up, as BGRA's own path places a run: a fractional pen position (a bidi
+    layout advances by fractions) lands on the pixel it always did. }
+  ox := Floor(x - ofsX + 0.5);
+  oy := Floor(y + 0.5);
+  { Room for what overhangs the advance box: an italic's lean, a swash, ClearType's bleed. }
+  mx := sz.cy div 2 + 2;
+  my := sz.cy div 4 + 2;
+  w := sz.cx + 2 * mx;
+  h := sz.cy + 2 * my;
+  tmp := TBitmap.Create;
+  try
+    tmp.PixelFormat := pf24bit;
+    tmp.SetSize(w, h);
+    tmp.Canvas.Brush.Color := clWhite;
+    tmp.Canvas.FillRect(0, 0, w, h);
+    tmp.Canvas.Font := FFont;
+    TTyCanvasAccess(tmp.Canvas).RequiredState([csHandleValid, csFontValid]);
+    SetBkMode(tmp.Canvas.Handle, TRANSPARENT);
+    SetTextColor(tmp.Canvas.Handle, 0);
+    { The flags BGRA's BitmapTextExtentStyle measures RunStyle with, less DT_CALCRECT. }
+    flags := DT_SINGLELINE or DT_NOCLIP;
+    if ARightToLeft then flags := flags or DT_RTLREADING;
+    if not AShowPrefix then flags := flags or DT_NOPREFIX;
+    r := Rect(mx, my, w, h);
+    tmp.Canvas.Changing;
+    LCLIntf.DrawText(tmp.Canvas.Handle, PChar(sUTF8), Length(sUTF8), r, flags);
+    tmp.Canvas.Changed;   // what TCanvas's own text calls do: the image is read back next
+    shot := TBGRABitmap.Create(tmp);
+  finally
+    tmp.Free;
+  end;
+  try
+    ink := c;
+    for py := 0 to h - 1 do
+    begin
+      dy := oy - my + py;
+      if (dy < ADest.ClipRect.Top) or (dy >= ADest.ClipRect.Bottom) then Continue;
+      row := shot.ScanLine[py];
+      for px := 0 to w - 1 do
+      begin
+        cov := 255 - (row[px].red + row[px].green + row[px].blue) div 3;
+        if cov > 0 then
+        begin
+          a := cov * c.alpha div 255;
+          if a > 0 then
+          begin
+            ink.alpha := a;
+            ADest.FastBlendPixel(ox - mx + px, dy, ink);   // clipped against ClipRect there
+          end;
+        end;
+      end;
+    end;
+  finally
+    shot.Free;
+  end;
+end;
+{$ENDIF}
+
+procedure TyUseTextRenderer(ABmp: TBGRABitmap);
+begin
+  {$IFDEF LCLWin32}
+  if not (ABmp.FontRenderer is TTyGdiTextRenderer) then
+    ABmp.FontRenderer := TTyGdiTextRenderer.Create;
+  {$ELSE}
+  if ABmp = nil then ;
+  {$ENDIF}
+end;
+
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
@@ -951,20 +1150,8 @@ begin
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := TyFontHeightPx(AFontSizeLogical, APPI);
-  // Text quality is a WIDGETSET choice. fqFineAntialiasing only stays crisp where BGRABitmap runs
-  // its OWN 3x supersampler -- the Win32 LCL font backend. On Qt/GTK it renders BLANK (diagnostic on
-  // Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on Cocoa it silently drops to single-pass
-  // fqSystem for text > ~13px (see SYSTEM_RENDERER_IS_FINE by DrawTextSupersampled below), so CJK comes
-  // out jagged/thin with hairline strokes dropping. So ONLY Win32 keeps fqFineAntialiasing; every other
-  // widgetset -- Qt, GTK, and Cocoa -- uses the native text renderer (fqSystemClearType), which is also
-  // the path that runs the OS font-substitution cascade a Latin UI font (macOS San Francisco) needs to
-  // fill CJK glyphs. (Cocoa was previously grouped with Win32 on an assumption extrapolated from the
-  // Windows+Qt6 run, never tested on a Mac; a real macOS run shows that CJK jagged + glyphs missing.)
-  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLCocoa)}
-  ABmp.FontQuality := fqSystemClearType;
-  {$ELSE}
-  ABmp.FontQuality := fqFineAntialiasing;
-  {$ENDIF}
+  ABmp.FontQuality := TyTextFontQuality;
+  TyUseTextRenderer(ABmp);
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
 end;
 

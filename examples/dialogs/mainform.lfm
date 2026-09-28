@@ -158,14 +158,14 @@ object DialogsMainForm: TDialogsMainForm
         Left = 160
         Height = 32
         Top = 100
-        Width = 140
+        Width = 142
         TabOrder = 9
         OnClick = BtnReplaceClick
         Controller = TyController
         Caption = 'Replace (modeless)'
       end
       object BtnProgress: TTyButton
-        Left = 308
+        Left = 310
         Height = 32
         Top = 100
         Width = 140
@@ -175,7 +175,7 @@ object DialogsMainForm: TDialogsMainForm
         Caption = 'Progress'
       end
       object BtnAbout: TTyButton
-        Left = 456
+        Left = 458
         Height = 32
         Top = 100
         Width = 140
@@ -265,14 +265,14 @@ object DialogsMainForm: TDialogsMainForm
         Left = 160
         Height = 32
         Top = 56
-        Width = 140
+        Width = 142
         TabOrder = 5
         OnClick = BtnSelectPathRootedClick
         Controller = TyController
         Caption = 'Select path (root)'
       end
       object BtnCloseFind: TTyButton
-        Left = 308
+        Left = 310
         Height = 32
         Top = 56
         Width = 140
@@ -282,7 +282,7 @@ object DialogsMainForm: TDialogsMainForm
         Caption = 'Close find'
       end
       object BtnCustomDialog: TTyButton
-        Left = 456
+        Left = 458
         Height = 32
         Top = 56
         Width = 140

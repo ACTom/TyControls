@@ -71,7 +71,7 @@ object MainForm: TMainForm
       Left = 164
       Height = 34
       Top = 96
-      Width = 120
+      Width = 128
       Caption = 'Reset to default'
       StyleClass = 'ghost'
       Enabled = False
