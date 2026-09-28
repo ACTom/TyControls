@@ -253,6 +253,9 @@ function TySavePreviewDialog(var AFileName, ADefaultExt: string): Boolean;
 
 implementation
 
+uses
+  Math;
+
 { The rsFd* / rsPvCannotPreview strings live in tyControls.StrConsts (already in uses)
   so they share the central package .po like every other user-facing string. }
 
@@ -309,8 +312,11 @@ begin
   Resizable := True;
   { Roughly double the old ~560 min width: the right-hand file list was far too narrow
     (real-machine testing), so the whole dialog opens wide + a little taller. }
-  Constraints.MinWidth  := 900;
-  Constraints.MinHeight := 460;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. (A splitter's MinSize is the exception -- that property is logical px and
+    the splitter scales it itself.) }
+  Constraints.MinWidth  := Px(900);
+  Constraints.MinHeight := Px(460);
 
   FSaveMode := False;
   FPreviewMode := False;
@@ -341,15 +347,15 @@ begin
   FTree := TTyShellTreeView.Create(Self);
   FTree.Parent := FMidPanel;
   FTree.Align := alLeft;
-  FTree.Width := 190;             { narrow-ish -> more room for the file list }
+  FTree.Width := Px(190);         { narrow-ish -> more room for the file list }
   FTree.Left := 0;
   FTree.OnPathChange := @TreePathChange;
 
   FSplitTree := TTySplitter.Create(Self);
   FSplitTree.Parent := FMidPanel;
   FSplitTree.Align := alLeft;
-  FSplitTree.Left := 190;         { sorts after the tree -> sits to its right }
-  FSplitTree.Width := 6;
+  FSplitTree.Left := Px(190);     { sorts after the tree -> sits to its right }
+  FSplitTree.Width := Px(6);
   FSplitTree.MinSize := 120;      { min tree width }
 
   FList := TTyShellListView.Create(Self);
@@ -437,14 +443,14 @@ begin
     FPreview := TTyPreviewBox.Create(Self);
     FPreview.Parent := FMidPanel;
     FPreview.Align := alRight;
-    FPreview.Width := 220;
+    FPreview.Width := Px(220);
     FPreview.Left := 10000;
 
     FSplitPrev := TTySplitter.Create(Self);
     FSplitPrev.Parent := FMidPanel;
     FSplitPrev.Align := alRight;
     FSplitPrev.Left := 9990;      { sorts just left of the preview }
-    FSplitPrev.Width := 6;
+    FSplitPrev.Width := Px(6);
     FSplitPrev.MinSize := 140;    { min preview width }
   end;
   if FPreview <> nil then
@@ -805,7 +811,7 @@ var
 begin
   if (FList = nil) or (FMidPanel = nil) then Exit;   { called during construction, before children exist }
   cr := ContentRect;
-  pad := TyDlgPad;
+  pad := Px(TyDlgPad);
   x0 := cr.Left + pad;
   w  := (cr.Right - cr.Left) - 2 * pad;
 
@@ -816,34 +822,35 @@ begin
     and the three nav buttons then step by what they ACTUALLY became: a TTySpeedButton floors
     its own width on the theme, LCL enforces that inside SetBounds, and a literal
     RowH + NavGap stride left the squares overlapping by the difference. }
-  fieldH := TyDensityHeight(Controller, RowH);
-  navX := TyRunItem(FBtnBack, x0, y, fieldH, fieldH, NavGap);
-  navX := TyRunItem(FBtnFwd, navX, y, fieldH, fieldH, NavGap);
-  navX := TyRunItem(FBtnUp, navX, y, fieldH, fieldH, Gap);
-  FViewCombo.SetBounds((cr.Right - pad) - ViewW, y, ViewW, fieldH);   { view switch on the right }
+  fieldH := Px(TyDensityHeight(Controller, RowH));
+  navX := TyRunItem(FBtnBack, x0, y, fieldH, fieldH, Px(NavGap));
+  navX := TyRunItem(FBtnFwd, navX, y, fieldH, fieldH, Px(NavGap));
+  navX := TyRunItem(FBtnUp, navX, y, fieldH, fieldH, Px(Gap));
+  FViewCombo.SetBounds((cr.Right - pad) - Px(ViewW), y, Px(ViewW), fieldH);   { view switch on the right }
   lookInX := navX;
-  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - ViewW - Gap) - lookInX, fieldH);
+  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - Px(ViewW) - Px(Gap)) - lookInX, fieldH);
 
   { Bottom row -- ONE row now (Windows Open/Save idiom): the file-name edit fills the left,
     the file-type combo is a fixed-width field to its RIGHT. Collapsing what used to be two
     stacked rows hands the freed vertical space to the list. The right cluster
     ([File type:][combo]) is anchored to the right edge; the name edit stretches to meet it. }
   yRow := cr.Bottom - pad - fieldH;
-  filterX := (cr.Right - pad) - FilterW;
-  FFilter.SetBounds(filterX, yRow, FilterW, fieldH);
-  filterLblX := filterX - Gap - LblW;
-  FLblFilter.SetBounds(filterLblX, yRow + (fieldH - LblH) div 2, LblW, LblH);
-  FLblName.SetBounds(x0, yRow + (fieldH - LblH) div 2, LblW, LblH);
-  nameX := x0 + LblW + Gap;
-  nameW := (filterLblX - Gap) - nameX;
-  if nameW < 80 then nameW := 80;   { never collapse the name edit even on a very narrow dialog }
+  filterX := (cr.Right - pad) - Px(FilterW);
+  FFilter.SetBounds(filterX, yRow, Px(FilterW), fieldH);
+  filterLblX := filterX - Px(Gap) - Px(LblW);
+  FLblFilter.SetBounds(filterLblX, yRow + (fieldH - Px(LblH)) div 2, Px(LblW), Px(LblH));
+  FLblName.SetBounds(x0, yRow + (fieldH - Px(LblH)) div 2, Px(LblW), Px(LblH));
+  nameX := x0 + Px(LblW) + Px(Gap);
+  nameW := (filterLblX - Px(Gap)) - nameX;
+  if nameW < Px(80) then nameW := Px(80);   { never collapse the name edit even on a very narrow dialog }
   FNameEdit.SetBounds(nameX, yRow, nameW, fieldH);
 
   { Middle band: the host panel fills between the look-in row and the single name/type row;
     LCL alignment + the two splitters lay out tree | list | preview inside it. }
-  midTop := y + RowH + Gap;
-  midH := (yRow - Gap) - midTop;
-  if midH < 60 then midH := 60;
+  { Below the look-in row AS IT IS: the fields may have been raised to their own floor. }
+  midTop := y + Math.Max(fieldH, FLookIn.Height) + Px(Gap);
+  midH := (yRow - Px(Gap)) - midTop;
+  if midH < Px(60) then midH := Px(60);
   FMidPanel.SetBounds(x0, midTop, w, midH);
 end;
 
@@ -884,9 +891,9 @@ begin
     because the file list was far too cramped. A preview pane needs room of its own ON TOP of
     that so the list is not squeezed to share the width with the preview. }
   if APreviewMode then
-    Result.AutoSizeToContent(920 + 220 + 8, 420)
+    Result.AutoSizeToContent(Result.Px(920 + 220 + 8), Result.Px(420))
   else
-    Result.AutoSizeToContent(920, 420);
+    Result.AutoSizeToContent(Result.Px(920), Result.Px(420));
   Result.LayoutContent;
 end;
 

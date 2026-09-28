@@ -2,7 +2,7 @@ unit tyControls.Dialogs;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
+  Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms, LCLType,
   tyControls.Types, tyControls.Form, tyControls.Base, tyControls.Controller,
   tyControls.Button, tyControls.Panel,
   tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
@@ -69,7 +69,21 @@ type
       ADefault: Boolean = False; ACancel: Boolean = False): TTyButton;
     procedure LayoutButtonBar;
     function ContentRect: TRect;
+    { AContentW / AContentH are DEVICE px, like everything a builder measures. }
     procedure AutoSizeToContent(AContentW, AContentH: Integer);
+    { A LOGICAL length in device px at this dialog's PPI.
+
+      A dialog is laid out by CODE, from numbers written for 96 PPI -- TyDlgPad, the 88 px
+      button, the 320 px edit -- and it is laid out AFTER its form was constructed, by which
+      time LCL has taken the (still empty) form to the monitor's PPI. So no DPI pass ever
+      sees those numbers: they have to be scaled where they are used. Every layout number
+      in a dialog goes through here; a measured one (a caption, a control's own floor) is
+      device px already and does not.
+
+      For a dialog that builds itself INSIDE its constructor the form is still at 96 and
+      this is the identity -- the pass that follows scales the finished layout, as it would
+      a designed form's. Either way the same code is right. }
+    function Px(ALogical: Integer): Integer;
     // Esc / programmatic cancel -> FCancelResult. (The title-bar X closes the
     // modal and returns mrCancel via LCL's default; it does not call this.)
     procedure CancelDialog;
@@ -433,6 +447,13 @@ begin
   FTitle.Align := alTop;              // dock as the top caption strip
   FTitle.Caption := Caption;          // seed (usually '' here; builders set Caption later)
   TitleBar := FTitle;                 // -> SetTitleBar: engine + close-button wiring
+  { The bar is born at its LOGICAL height, and whatever a builder places below it is placed
+    against the height it has. In a scaled application this form is still at 96 PPI here, so
+    this is the identity and LCL's pass takes the bar to the monitor's PPI with the rest. In
+    one that is not scaled the form is at the screen's PPI from the start and no pass ever
+    comes -- but ApplyChromeTheme does, at show time, and grew the bar over content that had
+    been laid out under a 32 px one. }
+  FTitle.Height := Px(FTitle.Height);
   FButtonBar := TTyPanel.Create(nil);
   FButtonBar.Parent := Self;
   FButtonBar.Align := alBottom;
@@ -532,6 +553,15 @@ begin
   LayoutButtonBar;
 end;
 
+function TTyDialog.Px(ALogical: Integer): Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(ALogical, ppi, 96);
+end;
+
 { The height one dialog button wants RIGHT NOW. Three inputs, largest wins:
 
     - cDlgBtnH, the classic box, so classic density under a lean theme is unchanged;
@@ -543,11 +573,14 @@ end;
   That third input is why a literal can never work here: LCL ENFORCES a control's constraint
   whatever we pass to SetBounds. Forcing 30 did not keep the button 30 -- it centred it as if
   it were 30 while LCL drew it taller, so a roomy skin (aero) at modern density hung the
-  button out of the bottom of the strip. Asking the button is the only honest input. }
+  button out of the bottom of the strip. Asking the button is the only honest input.
+
+  The first two are LOGICAL px and go through Px; the third is the button's own floor, which
+  it derived at its own PPI -- device px already. }
 function TTyDialog.ButtonHeight: Integer;
 var i: Integer;
 begin
-  Result := TyDensityHeight(Controller, cDlgBtnH);   // nil Controller -> the default one
+  Result := Px(TyDensityHeight(Controller, cDlgBtnH));   // nil Controller -> the default one
   for i := 0 to High(FButtons) do
     if FButtons[i].Constraints.MinHeight > Result then
       Result := FButtons[i].Constraints.MinHeight;
@@ -555,7 +588,7 @@ end;
 
 function TTyDialog.ButtonBarHeight: Integer;
 begin
-  Result := ButtonHeight + 2 * cDlgBarPadV;
+  Result := ButtonHeight + 2 * Px(cDlgBarPadV);
 end;
 
 procedure TTyDialog.LayoutButtonBar;
@@ -565,18 +598,19 @@ begin
   h := ButtonHeight;
   { The strip grows with what it has to hold. Guarded because assigning the height runs the
     form's align pass, which comes back through Resize -> here. }
-  if FButtonBar.Height <> h + 2 * cDlgBarPadV then
-    FButtonBar.Height := h + 2 * cDlgBarPadV;
+  if FButtonBar.Height <> h + 2 * Px(cDlgBarPadV) then
+    FButtonBar.Height := h + 2 * Px(cDlgBarPadV);
   sizes := nil;
   SetLength(sizes, Length(FButtons));
   for i := 0 to High(FButtons) do
   begin
     { Width has the same three inputs; a long caption under a big font wants more than 88. }
-    w := cDlgBtnW;
+    w := Px(cDlgBtnW);
     if FButtons[i].Constraints.MinWidth > w then w := FButtons[i].Constraints.MinWidth;
     sizes[i] := Size(w, h);
   end;
-  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, cDlgBarMargin, cDlgBarSpacing);
+  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, Px(cDlgBarMargin),
+    Px(cDlgBarSpacing));
   y := (FButtonBar.ClientHeight - h) div 2;
   for i := 0 to High(FButtons) do
     FButtons[i].SetBounds(rects[i].Left, y, rects[i].Right - rects[i].Left, h);
@@ -584,7 +618,7 @@ end;
 
 function TTyDialog.BottomGutter: Integer;
 begin
-  if Resizable then Result := 2 else Result := 0;
+  if Resizable then Result := Px(2) else Result := 0;
 end;
 
 function TTyDialog.ContentRect: TRect;
@@ -601,11 +635,12 @@ begin
     feed the minimum window width -- both used to be computed from the literals the layout no
     longer uses, so a taller/wider button would have been sized out of the window. }
   LayoutButtonBar;
-  totalBtn := cDlgBarMargin;
-  for i := 0 to High(FButtons) do totalBtn := totalBtn + FButtons[i].Width + cDlgBarSpacing;
+  totalBtn := Px(cDlgBarMargin);
+  for i := 0 to High(FButtons) do
+    totalBtn := totalBtn + FButtons[i].Width + Px(cDlgBarSpacing);
   w := AContentW; if totalBtn > w then w := totalBtn;
-  ClientWidth := w + 32;
-  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + 16;
+  ClientWidth := w + Px(32);
+  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + Px(16);
   LayoutButtonBar;   // re-place the buttons in the final width
 end;
 
@@ -659,15 +694,15 @@ begin
   else
     fill.Color := TyRGB(0, 112, 192);               // #0070C0 blue (info / confirm)
   end;
-  d := 28;                                          // ~28px circle
-  cx := 14;                                         // icon column left
-  cy := TitleHeight + 12;                           // aligns with the label top
+  d := Px(28);                                      // ~28px circle
+  cx := Px(14);                                     // icon column left
+  cy := TitleHeight + Px(12);                       // aligns with the label top
   circle := Rect(cx, cy, cx + d, cy + d);
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    // Circle = square with a half-side radius.
-    P.FillBackground(circle, fill, TyUniformCorners(d div 2));
+    // Circle = square with a half-side radius. The RADIUS is logical: the painter scales it.
+    P.FillBackground(circle, fill, TyUniformCorners(28 div 2));
     // Symbol centred in white (contrast against every semantic colour above).
     P.DrawText(circle, FMsgSymbol, Font.Name, 14, 700, TyRGB(255, 255, 255),
       taCenter, tlCenter, False, 0, False);
@@ -755,17 +790,17 @@ begin
   // Wrap at the WIDEST column we allow, and see how wide the text actually turned out: mw is
   // the widest resulting line. That one measure gives the natural column for any message —
   // no px threshold, which would mean different things at 96 and 144 dpi.
-  lbl.MeasureCaption(ppi, cMsgTextMaxW, mw, mh);
+  lbl.MeasureCaption(ppi, Result.Px(cMsgTextMaxW), mw, mh);
   textW := mw;
-  if textW < cMsgTextMinW then textW := cMsgTextMinW;   // a one-liner keeps the familiar dialog
-  if textW > cMsgTextMaxW then textW := cMsgTextMaxW;
+  if textW < Result.Px(cMsgTextMinW) then textW := Result.Px(cMsgTextMinW);   // a one-liner keeps the familiar dialog
+  if textW > Result.Px(cMsgTextMaxW) then textW := Result.Px(cMsgTextMaxW);
   // Re-measure AT the chosen column: the wrap points move with the width, so the height is
   // not proportional and cannot be derived from the first measure.
   lbl.MeasureCaption(ppi, textW, mw, mh);
   textH := mh;
-  if textH > cMsgTextMaxH then textH := cMsgTextMaxH;
+  if textH > Result.Px(cMsgTextMaxH) then textH := Result.Px(cMsgTextMaxH);
   if textH < 1 then textH := 1;
-  lbl.SetBounds(cMsgIconCol, Result.TitleHeight + 12, textW, textH);
+  lbl.SetBounds(Result.Px(cMsgIconCol), Result.TitleHeight + Result.Px(12), textW, textH);
   def := ordered[0];
   // Esc / title-bar X both dismiss the message dialog to mrCancel (FCancelResult stays
   // the CreateNew default); ACancel is left for custom TTyDialog subclasses to use.
@@ -777,8 +812,8 @@ begin
   // Size the dialog to the text, not the other way round. The content is at least the icon
   // column tall; AutoSizeToContent already widens for the button bar when that is wider.
   contentH := textH;
-  if contentH < cMsgIconH then contentH := cMsgIconH;
-  Result.AutoSizeToContent(cMsgIconCol + textW + 4, contentH);
+  if contentH < Result.Px(cMsgIconH) then contentH := Result.Px(cMsgIconH);
+  Result.AutoSizeToContent(Result.Px(cMsgIconCol) + textW + Result.Px(4), contentH);
 end;
 
 // Show a built dialog modally and free it (leak-safe). Shared by the globals + the component.
@@ -827,7 +862,7 @@ end;
 { Input dialog }
 
 // Places a wrapped prompt label at the top of the content area (parented to ADlg).
-// Returns the y (in dialog client coords) just below the prompt.
+// Returns the y (in dialog client coords) just below the prompt. AWidth is device px.
 function TyPlacePrompt(ADlg: TTyDialog; const APrompt: string; AWidth: Integer): Integer;
 var lbl: TTyLabel; r: TRect;
 begin
@@ -839,22 +874,26 @@ begin
   { 20 is a floor, 6 the gap -- the row the NEXT control starts on is read back off the label,
     because a theme that gives TyLabel padding (or simply a bigger font) makes it taller than
     the 20 asked for while a literal 26 stride would not move, putting the input on top of it. }
-  Result := TyStackRow(lbl, r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20, 6);
+  Result := TyStackRow(lbl, r.Left + ADlg.Px(TyDlgPad), r.Top + ADlg.Px(TyDlgPad), AWidth,
+    ADlg.Px(20), ADlg.Px(6));
 end;
 
 function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;
-var y: Integer;
+var y, pad, editW, editH: Integer;
 begin
   Result := TTyDialog.CreateNew(Application);
   Result.Caption := ACaption;
-  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  pad := Result.Px(TyDlgPad);
+  editW := Result.Px(TyDlgEditW);
+  editH := Result.Px(TyDlgEditH);
+  y := TyPlacePrompt(Result, APrompt, editW);
   AEdit := TTyEdit.Create(Result);
   AEdit.Parent := Result;
   AEdit.Text := ADefault;
-  AEdit.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  AEdit.SetBounds(Result.ContentRect.Left + pad, y, editW, editH);
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
+  Result.AutoSizeToContent(editW + pad, y + editH + pad - Result.ContentRect.Top);
 end;
 
 function TyInputResult(AEdit: TTyEdit; const ADefault: string; AResult: TModalResult): string;
@@ -898,18 +937,21 @@ end;
 { Password dialog }
 
 function TyBuildPasswordDialog(const ACaption, APrompt, APasswordChar: string; out AEdit: TTyEdit): TTyDialog;
-var y: Integer;
+var y, pad, editW, editH: Integer;
 begin
   Result := TTyDialog.CreateNew(Application);
   Result.Caption := ACaption;
-  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  pad := Result.Px(TyDlgPad);
+  editW := Result.Px(TyDlgEditW);
+  editH := Result.Px(TyDlgEditH);
+  y := TyPlacePrompt(Result, APrompt, editW);
   AEdit := TTyEdit.Create(Result);
   AEdit.Parent := Result;
   AEdit.PasswordChar := APasswordChar;
-  AEdit.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  AEdit.SetBounds(Result.ContentRect.Left + pad, y, editW, editH);
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
+  Result.AutoSizeToContent(editW + pad, y + editH + pad - Result.ContentRect.Top);
 end;
 
 function TyPasswordBox(const ACaption, APrompt: string): string;
@@ -957,8 +999,8 @@ var r: TRect;
 begin
   if FMemo = nil then Exit;
   r := ContentRect;
-  FMemo.SetBounds(r.Left + TyDlgPad, FPromptBottom,
-    (r.Right - r.Left) - 2*TyDlgPad, r.Bottom - FPromptBottom - TyDlgPad);
+  FMemo.SetBounds(r.Left + Px(TyDlgPad), FPromptBottom,
+    (r.Right - r.Left) - 2 * Px(TyDlgPad), r.Bottom - FPromptBottom - Px(TyDlgPad));
 end;
 
 { Text dialog free functions }
@@ -969,9 +1011,9 @@ begin
   Result := TTyTextDialogForm.CreateNew(Application);
   Result.Resizable := True;
   Result.Caption := ACaption;
-  Result.Constraints.MinWidth := 320;
-  Result.Constraints.MinHeight := 220;
-  y := TyPlacePrompt(Result, APrompt, 380);
+  Result.Constraints.MinWidth := Result.Px(320);
+  Result.Constraints.MinHeight := Result.Px(220);
+  y := TyPlacePrompt(Result, APrompt, Result.Px(380));
   Result.FPromptBottom := y;
   AMemo := TTyMemo.Create(Result);
   AMemo.Parent := Result;
@@ -979,7 +1021,7 @@ begin
   Result.FMemo := AMemo;
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(420, 260 - Result.ContentRect.Top);  // roomy default
+  Result.AutoSizeToContent(Result.Px(420), Result.Px(260) - Result.ContentRect.Top);  // roomy default
   Result.LayoutContent;   // place the memo into the content area
 end;
 
@@ -1020,23 +1062,25 @@ end;
 
 function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
   AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
-var f: TTySelectValueForm; y, listH: Integer;
+var f: TTySelectValueForm; y, listH, pad, editW: Integer;
 begin
   f := TTySelectValueForm.CreateNew(Application);
   Result := f;
   Result.Caption := ACaption;
-  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  pad := Result.Px(TyDlgPad);
+  editW := Result.Px(TyDlgEditW);
+  y := TyPlacePrompt(Result, APrompt, editW);
   AList := TTyListBox.Create(Result);
   AList.Parent := Result;
   if AItems <> nil then AList.Items.Assign(AItems);
   if (AInitialIndex >= 0) and (AInitialIndex < AList.Items.Count) then
     AList.ItemIndex := AInitialIndex;
-  listH := 160;
-  AList.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, listH);
+  listH := Result.Px(160);
+  AList.SetBounds(Result.ContentRect.Left + pad, y, editW, listH);
   AList.OnDblClick := @f.ListDblClick;   // double-click a row confirms
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + listH + TyDlgPad - Result.ContentRect.Top);
+  Result.AutoSizeToContent(editW + pad, y + listH + pad - Result.ContentRect.Top);
 end;
 
 function TySelectValueResult(AList: TTyListBox; AInitialIndex: Integer;

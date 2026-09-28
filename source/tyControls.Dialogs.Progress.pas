@@ -76,18 +76,19 @@ implementation
 procedure TTyProgressForm.Build(ACancelable: Boolean);
 var r: TRect; x0, y, contentW: Integer;
 begin
+  { Every number below is a 96-PPI design number and goes through Px: see TTyDialog.Px. }
   r := ContentRect;
-  x0 := r.Left + TyDlgPad;
-  y := r.Top + TyDlgPad;
-  contentW := 360;
+  x0 := r.Left + Px(TyDlgPad);
+  y := r.Top + Px(TyDlgPad);
+  contentW := Px(360);
 
   FLabel := TTyLabel.Create(Self);
   FLabel.Parent := Self;
   // Fixed-width status line: don't auto-resize/relayout (and repaint) on every text
   // change — that is a flicker source when SetProgress is called in a tight loop.
   FLabel.AutoSize := False;
-  FLabel.SetBounds(x0, y, contentW, 20);
-  Inc(y, 28);
+  FLabel.SetBounds(x0, y, contentW, Px(20));
+  Inc(y, Px(28));
 
   FBar := TTyProgressBar.Create(Self);
   FBar.Parent := Self;
@@ -96,8 +97,8 @@ begin
   // every call, just churns repaints of this graphic control against the loop —
   // seen as the text/bar "flicker". Snap directly to each reported position instead.
   FBar.AnimationsEnabled := False;
-  FBar.SetBounds(x0, y, contentW, 20);
-  Inc(y, 28);
+  FBar.SetBounds(x0, y, contentW, Px(20));
+  Inc(y, Px(28));
 
   if ACancelable then
   begin
@@ -105,7 +106,7 @@ begin
     FCancelBtn.OnClick := @CancelClick;
   end;
 
-  AutoSizeToContent(contentW + TyDlgPad, (y - r.Top) + TyDlgPad);
+  AutoSizeToContent(contentW + Px(TyDlgPad), (y - r.Top) + Px(TyDlgPad));
 end;
 
 procedure TTyProgressForm.UpdateView(APos, AMin, AMax: Integer; const AText: string);

@@ -194,6 +194,7 @@ uses
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers,
+  test.dpi.dialogs,
   test.parity.datetime;
 
 type

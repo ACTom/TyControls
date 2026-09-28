@@ -126,7 +126,7 @@ var
     Result := TTyLabel.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, AWidth, 20);
+    Result.SetBounds(ALeft, ATop, AWidth, Px(20));
   end;
 
   function MkCheck(const ACaption: string; ALeft, ATop: Integer): TTyCheckBox;
@@ -134,40 +134,41 @@ var
     Result := TTyCheckBox.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, 160, 22);
+    Result.SetBounds(ALeft, ATop, Px(160), Px(22));
   end;
 
 begin
   FWithReplace := AWithReplace;
   if AWithReplace then Caption := rsDlgReplaceTitle
   else Caption := rsDlgFindTitle;
+  { Every number below is a 96-PPI design number and goes through Px: see TTyDialog.Px. }
   r := ContentRect;
-  x0 := r.Left + TyDlgPad;
-  y := r.Top + TyDlgPad;
-  editX := x0 + 100;
-  editW := TyDlgEditW;
+  x0 := r.Left + Px(TyDlgPad);
+  y := r.Top + Px(TyDlgPad);
+  editX := x0 + Px(100);
+  editW := Px(TyDlgEditW);
 
-  MkLabel(rsDlgFindWhat, x0, y + 4, 96);
+  MkLabel(rsDlgFindWhat, x0, y + Px(4), Px(96));
   FFindEdit := TTyEdit.Create(Self);
   FFindEdit.Parent := Self;
-  FFindEdit.SetBounds(editX, y, editW, TyDlgEditH);
-  Inc(y, TyDlgEditH + 8);
+  FFindEdit.SetBounds(editX, y, editW, Px(TyDlgEditH));
+  y := FFindEdit.Top + FFindEdit.Height + Px(8);
 
   if AWithReplace then
   begin
-    MkLabel(rsDlgReplaceWith, x0, y + 4, 96);
+    MkLabel(rsDlgReplaceWith, x0, y + Px(4), Px(96));
     FReplaceEdit := TTyEdit.Create(Self);
     FReplaceEdit.Parent := Self;
-    FReplaceEdit.SetBounds(editX, y, editW, TyDlgEditH);
-    Inc(y, TyDlgEditH + 8);
+    FReplaceEdit.SetBounds(editX, y, editW, Px(TyDlgEditH));
+    y := FReplaceEdit.Top + FReplaceEdit.Height + Px(8);
   end;
 
   { The stride is the box's own height + 4, not a literal 26: TTyCheckBox floors its height on
     the theme's font, padding and --checkbox-size, LCL enforces that floor inside SetBounds, and
     at modern density the boxes outgrow 26 and eat each other. }
-  FMatchCase := MkCheck(rsDlgMatchCase, x0, y); y := FMatchCase.Top + FMatchCase.Height + 4;
-  FWholeWord := MkCheck(rsDlgWholeWord, x0, y); y := FWholeWord.Top + FWholeWord.Height + 4;
-  FSearchUp  := MkCheck(rsDlgSearchUp,  x0, y); y := FSearchUp.Top + FSearchUp.Height + 4;
+  FMatchCase := MkCheck(rsDlgMatchCase, x0, y); y := FMatchCase.Top + FMatchCase.Height + Px(4);
+  FWholeWord := MkCheck(rsDlgWholeWord, x0, y); y := FWholeWord.Top + FWholeWord.Height + Px(4);
+  FSearchUp  := MkCheck(rsDlgSearchUp,  x0, y); y := FSearchUp.Top + FSearchUp.Height + Px(4);
 
   // Action buttons: AddButton(caption, mrNone) is non-closing (mrNone never sets
   // Form.ModalResult) yet still lands on the auto-laid-out button bar. OnClick
@@ -180,7 +181,7 @@ begin
   end;
   b := AddButton(rsMsgBtnClose, mrNone); b.OnClick := @CloseClick;
 
-  AutoSizeToContent((editX - r.Left) + editW + TyDlgPad, (y - r.Top) + TyDlgPad);
+  AutoSizeToContent((editX - r.Left) + editW + Px(TyDlgPad), (y - r.Top) + Px(TyDlgPad));
 end;
 
 procedure TTyFindForm.SyncFrom(const AFindText, AReplaceText: string; AOptions: TFindOptions);
