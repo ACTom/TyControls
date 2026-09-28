@@ -57,6 +57,10 @@ type
     procedure ImeBegin;
     procedure ImeEnd;
     procedure ImeReplaceText(AStart, ALen: Integer; const AText: string);
+    function ImeAnchor: TRect;
+    procedure ImeCommit(const AText: string);
+    { 无头测试跑不到 LCL 的对齐:自己调一次(传没扣过的客户区矩形) }
+    procedure AlignNow;
   end;
 
   { 一个测试一个;SetUp 里建,TearDown 里 Free。 }
@@ -334,6 +338,24 @@ end;
 procedure TTyTerminalViewProbe.ImeReplaceText(AStart, ALen: Integer; const AText: string);
 begin
   ImeReplace(AStart, ALen, AText);
+end;
+
+function TTyTerminalViewProbe.ImeAnchor: TRect;
+begin
+  Result := ImeCaretCell;
+end;
+
+procedure TTyTerminalViewProbe.ImeCommit(const AText: string);
+begin
+  HandleImeCommit(AText);
+end;
+
+procedure TTyTerminalViewProbe.AlignNow;
+var
+  r: TRect;
+begin
+  r := Rect(0, 0, ClientWidth, ClientHeight);
+  AlignControls(nil, r);
 end;
 
 { ---- 夹具 --------------------------------------------------------------------------- }
