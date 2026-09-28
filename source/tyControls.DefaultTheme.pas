@@ -1282,6 +1282,11 @@ begin
     'TyAdvChartDataZoomMoveHandle { background: alpha(var(--accent), 0.5); color: var(--surface); }' + LineEnding +
     'TyAdvChartDataZoomShadow { background: alpha(var(--on-surface), 0.06); border-color: alpha(var(--on-surface), 0.3); }' + LineEnding +
     'TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.55); }' + LineEnding +
+    '/* Under the pointer (or while a handle is dragged) a handle''s rim darkens' + LineEnding +
+    '   and the move bar firms up; a brush across the body is the accent faded. */' + LineEnding +
+    'TyAdvChartDataZoomHandle:hover { background: var(--surface); border-color: alpha(var(--accent), 0.55); }' + LineEnding +
+    'TyAdvChartDataZoomMoveHandle:hover { background: alpha(var(--accent), 0.8); color: var(--surface); }' + LineEnding +
+    'TyAdvChartDataZoomBrush { background: alpha(var(--accent), 0.3); }' + LineEnding +
     '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
     '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
     '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +

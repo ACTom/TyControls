@@ -7495,3 +7495,58 @@ slider 组件第一次渲染后的样子:位置、窗口两端、背景、数据
 ### 下一批
 
 C3:slider 的拖动、点击、刷选和悬停标签,inside 的滚轮缩放和拖动平移,dataZoom 动作(联动的 dataZoom 一起变)。
+
+## 96. Tier 1 第六十二批:dataZoom 的交互(C3)(2026-09-29)
+
+slider 的拖动、点击、刷选、悬停标签,inside 的滚轮缩放和拖动平移,dataZoom 动作和它的联动,以及两条派发路径共用的节流。dataZoom 系列到此完成。
+
+### 上游的做法
+
+- **事件顺序**(zrender Handler):mousemove 时先对旧目标发 mouseout,再发 mousemove(Draggable 的拖动、roam 的平移、刷选都在这里),最后对新目标发 mouseover。所以快速拖动的第一下手柄就离开了指针,mouseout 在"正在拖"之前到达,标签先被藏起来;拖起来之后再离开就不藏。命中测试从顶往下:手柄(悬停的那个 z2 升到 15)、移动区(不可见但照样命中)、没开刷选时的填充、点击面板;slider 的 z 为 4,高于系列。
+- **点击规则**:按下和抬起必须落在同一个元素上,点击点离按下点不超过 4px;点击送给点击点下面的元素——刷选之后手柄可能已经移到那里。
+- **拖动**(`_onDragMove`):屏幕位移经过 slider 组局部矩阵的**逆矩阵**(纵向时 cos(π/2)=6.1e-17 不是 0),取 x 分量,`sliderMove` 移一端(zoomLock 时整体),min/maxSpan 取**宿主** dataZoom 的、换成像素。`realtime` 时每次变化都派发;否则拖动中不派发、标签按"视图区间会得到的窗口"写(宿主是值模式的那端退回数据端点),松手才派发——松手即使没动也派发。
+- **点击面板**:窗口中心移到点击处,跨度不变,越界夹住。
+- **刷选**(brushSelect,默认开):按下点击面板开始,移动时刷选框从起点到当前点(终点夹在 slider 内),松开时不到 200ms 且宽度不足 5px 算点击,否则刷选框成为新窗口(再过一遍 min/maxSpan)。刷选框在新的按下时**不清除**,只有视图重建才清——所以之后一次不动的点击会把上一次的刷选框再套用一遍(BRUSH-STALE)。
+- **标签**:悬停手柄、移动区(或没开刷选时的填充)、拖动中显示 `emphasis.handleLabel.show`(默认 true),其余时候是 `handleLabel.show`。移动条的高亮是两个位:移动区自己的悬停,和标签显示。
+- **动作**:`{type: 'dataZoom', start, end}` 按共享坐标轴找出所有联动的 dataZoom(传递),全部 `setRawRange`:两端都成百分比、值清空,取值方式变 percent。然后**同步**更新;发起的 slider 保留自己的端点(交叉后可能是降序)、刷选框和状态,其他 slider 按窗口重建,inside 的区间每次渲染都取窗口。
+- **inside**:每个网格一个 roam 控制器,管这个网格上所有 inside;网格里有一个 inside 能缩放就挂滚轮(全部 zoomLock 时滚轮整个没有,`moveOnMouseWheel` 也跟着没了;缩放处理本身不读 zoomLock),全部禁用就没有控制器。指针在网格矩形里(闭区间)才处理,滚轮不论缩没缩都拦下。缩放系数按 `|delta|` 取 1.1/1.2/1.4,以指针在当前区间里对应的百分比为中心;平移按指针位移占网格边长的比例乘区间跨度,x 轴默认反号、y 轴同号、反向轴再反;`moveOnMouseWheel` 的步长 0.05/0.15/0.4 个跨度。修饰键设置(`'shift'` 等)要对应按键按下才生效。禁用的 inside 照样算区间(视图区间会漂),只是不派发。
+- **节流**('fixRate'):默认 100ms(动画开且更新时长大于 0,否则 20)。距上次执行不足间隔的调用延到"上次执行 + 间隔"时再跑,用最新的参数;slider 的延后调用读执行时的区间。滚轮缩放和滚动平移在同一毫秒各派发一次时,第二次就被延后。
+
+### port 以前
+
+- dataZoom 只有静态画面,指针不起作用;`TabStop` 的注释说 dataZoom 落地时要改成可获得焦点。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.DataZoomAct`:节流、`_updateInterval`、滚轮系数和滚动步长、方向信息、inside 的缩放和平移、交互选项解析、行为设置判断,以及动作、slider 视图状态的记录类型。
+- `DataZoomView`:布局接受视图状态(保留的端点和区间、标签显隐、手柄和移动条高亮、刷选框);悬停的手柄 z2 升 10、换悬停颜色,移动条高亮,刷选框画在 slider 组最后。
+- `AdvanceChart`:
+  - `setRawRange` 的窗口按 dataZoom 保存,重建时写进模型;每次重建都按上游规则重置视图状态(发起动作的 slider 除外)。
+  - 指针入口 `DataZoomPointer`(按下、移动、抬起、点击、滚轮),按 zrender 的顺序分派;MouseDown/MouseMove/MouseUp/DoMouseWheel 接到它上面,滚轮进了网格就不再交给 graph。
+  - 派发同步重排;公开 `DispatchDataZoom` 和 `OnDataZoom` 事件;节流用可注入的时钟(`DataZoomNow`/`DataZoomTick`),平时由 TTimer 驱动。
+  - 光标:手柄是左右/上下调整,移动区是手形、拖动时是移动,刷选面板是十字,其余的可点元素是手形;不是 dataZoom 时还原宿主自己的光标。
+  - 只有 slider 状态真的变了才重画视图。
+- 主题键 `TyAdvChartDataZoomHandle:hover`、`TyAdvChartDataZoomMoveHandle:hover`、`TyAdvChartDataZoomBrush`。
+- `TabStop` 保持 False,注释里标明:上游 dataZoom 只有指针交互,没有键盘绑定,原先的理由不成立。
+
+### 基准
+
+- `tools/advchart-oracle/datazoom-interact.js` 用 zrender 真的 Handler 喂合成指针事件,时钟和定时器是假的(只在事件之间走),66 个场景、523 步,自带 JS 转写逐步复现,17 条守卫。oracle 里的 JS 转写就是上游规则的逐条说明。
+- `test.advchart.datazoominteract` 逐步回放:每一步比较派发的动作(条数、是否批量、是否延后、每项的 dataZoom 和起止)、是否拦截、悬停目标和光标,每个 dataZoom 的取值方式和窗口,slider 的端点、区间、拖动态、刷选态、标签显隐和文字、刷选框、手柄和移动条高亮,inside 的区间。另有 API 联动测试和经由控件自己的鼠标处理函数的测试。
+
+### 变异测试
+
+47 个。第一轮 8 个存活:
+- 补 5 个 oracle 场景杀掉 5 个:CLICK-SPLIT(移动区按下、往下 3px 在面板上抬起——按下和抬起不是同一元素,点击作废)、BRUSH-CLAMP0(刷选越过左端)、CHAIN2(第二遍才找到的联动)、SPANS-HOST(非宿主 slider 拖动,按宿主 inside 的 minSpan 夹住)、HOVER-OVERLAP(两手柄重叠,悬停的那个 z2 升高仍是目标)。
+- 真实鼠标测试改成精确断言,杀掉"一格滚轮当 100"的;节流函数加单元测试(定时器晚到时仍记到期时刻),杀掉"延后执行记触发时刻"的。
+- 1 个等价:点击面板的越界检查——能命中面板的点本来就在面板里。
+
+### 已知偏差
+
+- 悬停时手柄和移动条的样式按主题键画,不读作者的 `emphasis.handleStyle`/`emphasis.moveHandleStyle`。
+- 指针被别的窗口夺走(CaptureChanged)时按"在最后位置抬起"结束拖动,上游没有对应的事件。
+- 触摸的双指缩放没有移植。
+
+### 下一批
+
+dataZoom 系列完成(C1–C3)。下一步回画廊缺口清单挑下一个系列。

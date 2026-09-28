@@ -25,7 +25,7 @@ unit tyControls.AdvanceChart;
   the chart follows a skin instead of looking pasted onto one. }
 interface
 uses
-  Classes, SysUtils, Math, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Math, Types, Controls, Graphics, LCLType, ExtCtrls,
   BGRABitmap,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
@@ -42,6 +42,7 @@ uses
   tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
   tyControls.AdvChart.VisualMapView,
   tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
+  tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.ZrPath,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -124,6 +125,21 @@ type
     whether a gesture or the API dispatched it, with the series it moved. }
   TTyGraphRoamEvent = procedure(Sender: TObject;
     const APayload: TTyGraphRoamPayload) of object;
+
+  { A dataZoom ACTION, as upstream's `datazoom` event reports it: once per
+    action, from a gesture, the throttle's timer or DispatchDataZoom. }
+  TTyDataZoomEvent = procedure(Sender: TObject; const AAction: TTyDzAction) of object;
+
+  { What the pointer is over, as zrender's findHover answers for a slider:
+    one of its non-silent elements, some other element of the chart (a
+    series mark), or nothing. }
+  TTyDzTargetKind = (dtkNone, dtkSlider, dtkOther);
+  TTyDzTarget = record
+    Kind: TTyDzTargetKind;
+    Slider: Integer;
+    Role: TTyDzRole;
+  end;
+  TTyDzPointer = (dpMove, dpDown, dpUp, dpClick, dpWheel);
 
   TTyAdvanceChart = class(TTyCustomControl)
   private
@@ -273,6 +289,34 @@ type
     { a slider dataZoom's own picture, by the author's dataZoom index }
     FDzViews: array of TTyDzSliderSpec;
     FDzLayouts: array of TTyDzSliderLayout;
+    { dataZoom INTERACTION, by the author's dataZoom index: the window
+      setRawRange left (percents), how each answers the pointer, each
+      slider view's own state, each inside's view range }
+    FDzRawHas: array of Boolean;
+    FDzRawStart, FDzRawStop: TTyDoubleArray;
+    FDzInteract: array of TTyDzInteractSpec;
+    FDzState: array of TTyDzSliderState;
+    FDzInLo, FDzInHi: TTyDoubleArray;
+    { a roam controller's throttle and its latest batch, by grid }
+    FDzRoamThrottle: array of TTyDzThrottle;
+    FDzRoamBatch: array of TTyDzActionItemArray;
+    { the slider whose own action is being rendered, -1 for none }
+    FDzFrom: Integer;
+    { the pointer: what it is over, what the press was on and where, the
+      dragged element and its last point, the grid being panned }
+    FDzHover, FDzDownTarget, FDzUpTarget, FDzDrag: TTyDzTarget;
+    FDzHasDown: Boolean;
+    FDzDownX, FDzDownY, FDzDragX, FDzDragY, FDzPanX, FDzPanY: Double;
+    FDzPanGrid: Integer;
+    { the last pointer position, device px }
+    FDzLastX, FDzLastY: Double;
+    FDzCursor: string;
+    FDzBaseCursor: TCursor;
+    FDzHasBaseCursor: Boolean;
+    { the clock: NaN is the machine's, a number a test's }
+    FDzNow: Double;
+    FDzTimer: TTimer;
+    FOnDataZoom: TTyDataZoomEvent;
     { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
       unwritten, which is the palette's. }
     FSeriesColorNone: array of Boolean;
@@ -396,6 +440,39 @@ type
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
     procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    { ---- dataZoom interaction ---- }
+    function DzRepresentative(AIndex: Integer): Integer;
+    procedure DzRenderStates;
+    function DzScale: Double;
+    function DzClock: Double;
+    function DzGridRect(AGrid: Integer): TTyXYWH;
+    function DzGridContains(AGrid: Integer; AX, AY: Double): Boolean;
+    function DzGridInsides(AGrid: Integer): TTyIntegerArray;
+    function DzControlType(AGrid: Integer): Integer;
+    function DzFindTarget(AX, AY: Double): TTyDzTarget;
+    function DzHits(ASlider: Integer; ARole: TTyDzRole; AX, AY: Double): Boolean;
+    procedure DzToSlider(ASlider: Integer; AX, AY: Double; out LX, LY: Double);
+    function DzSpans(AIndex: Integer; out AMin, AMax: Double): Boolean;
+    procedure DzShowDataInfo(AIndex: Integer; AEmphasis: Boolean);
+    procedure DzMouseOut(const ATarget: TTyDzTarget);
+    procedure DzMouseOver(const ATarget: TTyDzTarget);
+    procedure DzDragMove(AIndex, AHandle: Integer; ADX, ADY: Double);
+    procedure DzDragEnd(AIndex: Integer);
+    procedure DzClickPanel(AIndex: Integer; AX, AY: Double);
+    procedure DzBrushMove(AIndex: Integer; AX, AY: Double);
+    procedure DzBrushEnd(AIndex: Integer);
+    procedure DzSliderDispatch(AIndex: Integer; ARealtime: Boolean);
+    procedure DzRunSliderAction(AIndex: Integer; ADeferred: Boolean);
+    function DzRoam(AGrid: Integer; const AKind: string; AShift: TShiftState;
+      AOldX, AOldY, ANewX, ANewY, AScale, AScroll: Double): Boolean;
+    procedure DzRoamDispatch(AGrid: Integer; const AItems: TTyDzActionItemArray);
+    procedure DzDispatch(const AAction: TTyDzAction);
+    procedure DzViewUpdate;
+    function DzStateKey: string;
+    procedure DzSyncLayout;
+    procedure DzApplyCursor;
+    procedure DzArmTimer;
+    procedure DzTimerFired(Sender: TObject);
     function DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
     function DataZoomInput(AIndex: Integer; out AIn: TTyDzSliderInput): Boolean;
     function BuildDataZooms(AList: TTyPaintList): Integer;
@@ -785,6 +862,26 @@ type
     { THE SLIDER AIndex AS THE LAST RENDER LAID IT OUT: Valid is False when
       it is hidden, has no target, is not a slider, or nothing has rendered. }
     function DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
+    { THE dataZoom ACTION, upstream's dispatchAction({type: 'dataZoom',
+      dataZoomIndex, start, end}): the percent window goes on dataZoom AIndex
+      and on every dataZoom linked to it through a shared axis, and the chart
+      follows at once. False when there is no such dataZoom. }
+    function DispatchDataZoom(AIndex: Integer; AStart, AEnd: Double): Boolean;
+    { THE POINTER, as the mouse handlers feed it: device px on this control.
+      Answers whether upstream would have stopped the event (a wheel in a
+      zooming grid, a drag). Public so a test can drive a gesture step by
+      step, with the click as a step of its own. }
+    function DataZoomPointer(AKind: TTyDzPointer; AX, AY: Double;
+      AShift: TShiftState; AZrDelta: Double): Boolean;
+    { The throttle's timer: every deferred dispatch due by ANow (ms) runs. }
+    procedure DataZoomTick(ANow: Double);
+    { the state behind the pointer, for a test }
+    function DataZoomSliderState(AIndex: Integer): TTyDzSliderState;
+    function DataZoomInsideRange(AIndex: Integer; out ALo, AHi: Double): Boolean;
+    function DataZoomHoverName: string;
+    property DataZoomCursorName: string read FDzCursor;
+    { ms; NaN (the default) is the machine's clock }
+    property DataZoomNow: Double read FDzNow write FDzNow;
     function AxisZoom(const AMainType: string; AAxisIndex: Integer;
       out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
     { The rows of series ASeriesIndex as the last build left them -- filtered
@@ -862,9 +959,12 @@ type
       A chart with no keyboard behaviour that took focus on click would pull it
       off whatever the user was editing and then do nothing with it. Being
       WINDOWED is what makes focus possible later; it is not a reason to take it
-      now. When dataZoom, brush or a keyboard tooltip land, this flips to True
+      now. When a brush or a keyboard tooltip lands, this flips to True
       and the class moves to the focusable table -- which the tables in
-      test.focus.tabstop.pas will force somebody to decide rather than drift. }
+      test.focus.tabstop.pas will force somebody to decide rather than drift.
+      [Batch 62: dataZoom landed and did NOT flip it. Upstream's dataZoom is
+      pointer-only -- drag, click, brush, wheel -- with no key binding at all,
+      so the reason this line once gave for it no longer holds.] }
     property TabStop default False;
     property Visible;
     property OnClick;
@@ -875,6 +975,7 @@ type
     property OnMouseWheel;
     property OnResize;
     property OnGraphRoam: TTyGraphRoamEvent read FOnGraphRoam write FOnGraphRoam;
+    property OnDataZoom: TTyDataZoomEvent read FOnDataZoom write FOnDataZoom;
   end;
 
 implementation
@@ -899,6 +1000,9 @@ begin
   Height := 200;
   TabStop := False;   { see the published declaration }
   FRoamSeries := -1;
+  FDzFrom := -1;
+  FDzPanGrid := -1;
+  FDzNow := NaN;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -912,6 +1016,7 @@ begin
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
+  FreeAndNil(FDzTimer);
   inherited Destroy;
 end;
 
@@ -968,6 +1073,17 @@ begin
   { notMerge: new series models, so no roam survives either. }
   FGraphRoam := nil;
   FRoamSeries := -1;
+  { nor a zoom: the dataZooms are new models, read from what was written }
+  FDzRawHas := nil;
+  FDzRawStart := nil;
+  FDzRawStop := nil;
+  FDzState := nil;
+  FDzRoamThrottle := nil;
+  FDzRoamBatch := nil;
+  FDzHover := Default(TTyDzTarget);
+  FDzDrag := Default(TTyDzTarget);
+  FDzHasDown := False;
+  FDzPanGrid := -1;
   FDirty := True;
   Invalidate;
 end;
@@ -1279,6 +1395,9 @@ begin
     1000, after the stack (900): the sums are the unzoomed ones, and the
     axis not zoomed is sized from the rows the zoom left. }
   SolveDataZooms;
+  { EVERY RENDER IS A RENDER OF THE VIEWS: a slider rebuilds from the window
+    unless the action was its own, an inside takes the window again }
+  DzRenderStates;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
     FLastPPI, FAxisZooms);
 end;
@@ -1332,8 +1451,32 @@ begin
   if FBuild = nil then Exit;
   n := TyDataZoomCount(FOption);
   SetLength(FZoomSpecs, n);
+  { setRawRange's windows survive a rebuild; a count that changed drops
+    them }
+  if Length(FDzRawHas) <> n then
+  begin
+    SetLength(FDzRawHas, n);
+    SetLength(FDzRawStart, n);
+    SetLength(FDzRawStop, n);
+    for i := 0 to n - 1 do FDzRawHas[i] := False;
+  end;
   for i := 0 to n - 1 do
+  begin
     FZoomSpecs[i] := TyDataZoomSpecOf(FOption, i, FBuild);
+    { AN ACTION'S WINDOW: both ends as percents, the values cleared, so
+      both ends read in percent mode }
+    if FDzRawHas[i] then
+      for k := 0 to 1 do
+      begin
+        FZoomSpecs[i].Percent[k] := Default(TTyDzArg);
+        FZoomSpecs[i].Percent[k].Given := True;
+        if k = 0 then FZoomSpecs[i].Percent[k].Num := FDzRawStart[i]
+        else FZoomSpecs[i].Percent[k].Num := FDzRawStop[i];
+        FZoomSpecs[i].Value[k] := Default(TTyDzArg);
+        FZoomSpecs[i].Value[k].Num := NaN;
+        FZoomSpecs[i].Mode[k] := dzmPercent;
+      end;
+  end;
   { the toolbox's select dataZooms after the author's }
   sel := TyDataZoomSelectSpecs(FOption, FBuild, n);
   if Length(sel) > 0 then
@@ -2604,15 +2747,24 @@ begin
   st := model.ResolveStyle('TyAdvChartDataZoomShadowSelected', '', []);
   Result.ShadowArea[1] := TTyChartColor(st.Background.Color);
   Result.ShadowLine[1] := TTyChartColor(st.BorderColor);
+  st := model.ResolveStyle('TyAdvChartDataZoomHandle', '', [tysHover]);
+  Result.HandleHoverFill := TTyChartColor(st.Background.Color);
+  Result.HandleHoverStroke := TTyChartColor(st.BorderColor);
+  Result.MoveHandleHover := TTyChartColor(
+    model.ResolveStyle('TyAdvChartDataZoomMoveHandle', '', [tysHover]).Background.Color);
+  Result.Brush := TTyChartColor(
+    model.ResolveStyle('TyAdvChartDataZoomBrush', '', []).Background.Color);
 end;
 
 function TTyAdvanceChart.DataZoomInput(AIndex: Integer;
   out AIn: TTyDzSliderInput): Boolean;
 var
-  spec: TTyDataZoomSpec;
+  spec, hostSpec: TTyDataZoomSpec;
   view: TTyDzSliderSpec;
-  scale, v: Double;
-  t, k, rep, firstRec, c, slot, thisCol, otherCol, r, g: Integer;
+  scale, v, px: Double;
+  t, k, rep, c, slot, thisCol, otherCol, r, g: Integer;
+  st: TTyDzSliderState;
+  nrWin: TTyDzWindow;
   ax, first, other: TTyAxis;
   feeders, cols: TTyIntegerArray;
   b: TTySeriesBinding;
@@ -2631,24 +2783,15 @@ begin
   AIn.CanvasW := (FLastRect.Right - FLastRect.Left) / scale;
   AIn.CanvasH := (FLastRect.Bottom - FLastRect.Top) / scale;
   AIn.Horizontal := spec.Orient <> 'vertical';
-  { findRepresentativeAxisProxy: the first target this dataZoom hosts, else
-    the first target at all }
   first := nil;
-  rep := -1;
-  firstRec := -1;
   for t := 0 to High(spec.Targets) do
   begin
     ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
     if ax = nil then Continue;
-    if first = nil then first := ax;
-    for k := 0 to High(FAxisZooms) do
-      if FAxisZooms[k].Axis = ax then
-      begin
-        if (rep < 0) and (FZoomHost[k] = AIndex) then rep := k;
-        if firstRec < 0 then firstRec := k;
-      end;
+    first := ax;
+    Break;
   end;
-  if rep < 0 then rep := firstRec;
+  rep := DzRepresentative(AIndex);
   if (first = nil) or (rep < 0) then Exit;
   AIn.Inverse := first.Inverse;
   { the first target's grid, as the labels left it }
@@ -2672,6 +2815,52 @@ begin
   end;
   AIn.ValuePrecision := FZoomWindows[rep].Precision;
   ax := FAxisZooms[rep].Axis;
+  { THE VIEW'S OWN STATE }
+  if AIndex <= High(FDzState) then
+  begin
+    st := FDzState[AIndex];
+    if st.Built then
+    begin
+      AIn.HasEnds := True;
+      for k := 0 to 1 do
+      begin
+        AIn.Ends[k] := st.Ends[k];
+        AIn.ViewRange[k] := st.Range[k];
+      end;
+    end;
+    AIn.HasLabelState := True;
+    AIn.LabelsShown := st.LabelsShown;
+    AIn.HandleHover[0] := st.HandleHover[0];
+    AIn.HandleHover[1] := st.HandleHover[1];
+    AIn.MoveHover := st.MoveBits <> 0;
+    AIn.HasBrush := st.HasBrush and not st.BrushIgnored;
+    AIn.BrushX := st.BrushX;
+    AIn.BrushW := st.BrushW;
+    { _updateView(nonRealtime): the labels say the window the view's range
+      WOULD give, worked out with the host's range modes }
+    if st.NonRealtime and st.Built and (FZoomHost[rep] >= 0)
+      and (FZoomHost[rep] <= High(FZoomSpecs)) then
+    begin
+      { calculateDataWindow({start, end}): no startValue / endValue, so an
+        end the host reads in value mode falls back to the data's end }
+      hostSpec := FZoomSpecs[FZoomHost[rep]];
+      for k := 0 to 1 do
+      begin
+        hostSpec.Percent[k] := Default(TTyDzArg);
+        hostSpec.Percent[k].Given := True;
+        hostSpec.Percent[k].Num := st.Range[k];
+        hostSpec.Value[k] := Default(TTyDzArg);
+        hostSpec.Value[k].Num := NaN;
+      end;
+      px := ax.PxLength;
+      if FLastPPI > 0 then px := px * 96 / FLastPPI;
+      nrWin := TyDzCalculateWindow(hostSpec, ax, FAxisZooms[rep].Raw.Lo,
+        FAxisZooms[rep].Raw.Hi, px);
+      AIn.Value[0] := nrWin.Value[0];
+      AIn.Value[1] := nrWin.Value[1];
+      AIn.ValuePrecision := nrWin.Precision;
+    end;
+  end;
   { a category or time axis says its ends in the scale's own words }
   if ax.AxisType = atCategory then
   begin
@@ -2763,8 +2952,19 @@ begin
   end;
   for k := 0 to n - 1 do
     if DataZoomInput(k, inp) then
+    begin
       FDzLayouts[k] := TyLayoutDzSlider(FDzViews[k], inp, AMeasurer,
         DataZoomInk(FDzViews[k]));
+      { _resetInterval, once: the view keeps these until it is rebuilt }
+      if (k <= High(FDzState)) and FDzLayouts[k].Valid and not FDzState[k].Built then
+      begin
+        FDzState[k].Built := True;
+        FDzState[k].Ends[0] := FDzLayouts[k].HandleEnds[0];
+        FDzState[k].Ends[1] := FDzLayouts[k].HandleEnds[1];
+        FDzState[k].Range[0] := FDzLayouts[k].Range[0];
+        FDzState[k].Range[1] := FDzLayouts[k].Range[1];
+      end;
+    end;
 end;
 
 function TTyAdvanceChart.BuildDataZooms(AList: TTyPaintList): Integer;
@@ -2779,6 +2979,1029 @@ begin
       Inc(Result, TyBuildDzSliderMarks(FDzLayouts[k], FDzViews[k],
         DataZoomInk(FDzViews[k]), FLastRect.Left, FLastRect.Top, scale, AList));
 end;
+
+{ ==================== dataZoom interaction ==================== }
+
+{ findRepresentativeAxisProxy: the first target this dataZoom hosts, else
+  the first target at all -- as an index into the hosted axes }
+function TTyAdvanceChart.DzRepresentative(AIndex: Integer): Integer;
+var
+  spec: TTyDataZoomSpec;
+  t, k, firstRec: Integer;
+  ax: TTyAxis;
+begin
+  Result := -1;
+  if (FBuild = nil) or (AIndex < 0) or (AIndex > High(FZoomSpecs)) then Exit;
+  spec := FZoomSpecs[AIndex];
+  firstRec := -1;
+  for t := 0 to High(spec.Targets) do
+  begin
+    ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+    if ax = nil then Continue;
+    for k := 0 to High(FAxisZooms) do
+      if FAxisZooms[k].Axis = ax then
+      begin
+        if (Result < 0) and (FZoomHost[k] = AIndex) then Result := k;
+        if firstRec < 0 then firstRec := k;
+      end;
+  end;
+  if Result < 0 then Result := firstRec;
+end;
+
+{ Every view rendered: a slider not the source of this action is rebuilt --
+  its ends from the window again, the brush gone, the labels back to
+  handleLabel.show, no emphasis; the drag and the pointer's place survive --
+  and every inside takes its range from the window. }
+procedure TTyAdvanceChart.DzRenderStates;
+var
+  n, i, rep: Integer;
+  keepDrag, keepOver: Boolean;
+  keepThrottle: TTyDzThrottle;
+  keepPending: Boolean;
+begin
+  n := TyDataZoomCount(FOption);
+  if Length(FDzState) <> n then SetLength(FDzState, n);
+  SetLength(FDzInteract, n);
+  SetLength(FDzInLo, n);
+  SetLength(FDzInHi, n);
+  for i := 0 to n - 1 do
+  begin
+    FDzInteract[i] := TyDzInteractSpecOf(FOption, i);
+    if i <> FDzFrom then
+    begin
+      keepDrag := FDzState[i].Dragging;
+      keepOver := FDzState[i].OverArea;
+      keepThrottle := FDzState[i].Throttle;
+      keepPending := FDzState[i].PendingRealtime;
+      FDzState[i] := Default(TTyDzSliderState);
+      FDzState[i].Dragging := keepDrag;
+      FDzState[i].OverArea := keepOver;
+      FDzState[i].Throttle := keepThrottle;
+      FDzState[i].PendingRealtime := keepPending;
+      FDzState[i].LabelsShown := TyDzSliderSpecOf(FOption, i).LabelShow;
+    end;
+    FDzInLo[i] := NaN;
+    FDzInHi[i] := NaN;
+    rep := DzRepresentative(i);
+    if rep >= 0 then
+    begin
+      FDzInLo[i] := FZoomWindows[rep].Percent[0];
+      FDzInHi[i] := FZoomWindows[rep].Percent[1];
+    end;
+  end;
+  if (FBuild <> nil) and (Length(FDzRoamThrottle) <> FBuild.GridCount) then
+  begin
+    SetLength(FDzRoamThrottle, FBuild.GridCount);
+    SetLength(FDzRoamBatch, FBuild.GridCount);
+  end;
+end;
+
+function TTyAdvanceChart.DzScale: Double;
+begin
+  if FLastPPI > 0 then Result := FLastPPI / 96 else Result := 1;
+end;
+
+function TTyAdvanceChart.DzClock: Double;
+begin
+  if IsNan(FDzNow) then Result := GetTickCount64 else Result := FDzNow;
+end;
+
+function TTyAdvanceChart.DzGridRect(AGrid: Integer): TTyXYWH;
+var g: TTyGridBuild; s: Double;
+begin
+  g := FBuild.Grid(AGrid);
+  s := DzScale;
+  Result.X := (g.PlotXYWH.X - FBuild.Viewport.Left) / s;
+  Result.Y := (g.PlotXYWH.Y - FBuild.Viewport.Top) / s;
+  Result.W := g.PlotXYWH.W / s;
+  Result.H := g.PlotXYWH.H / s;
+end;
+
+{ Cartesian2D.containPoint: each axis' closed extent, the y one measured
+  from the bottom }
+function TTyAdvanceChart.DzGridContains(AGrid: Integer; AX, AY: Double): Boolean;
+var r: TTyXYWH; lx, ly: Double;
+begin
+  r := DzGridRect(AGrid);
+  lx := AX - r.X;
+  ly := r.H - AY + r.Y;
+  Result := (lx >= 0) and (lx <= r.W) and (ly >= 0) and (ly <= r.H);
+end;
+
+{ the inside dataZooms with an axis on this grid, in component order }
+function TTyAdvanceChart.DzGridInsides(AGrid: Integer): TTyIntegerArray;
+var
+  i, t: Integer;
+  ax: TTyAxis;
+  gi: Integer;
+begin
+  Result := nil;
+  if (FBuild = nil) or (AGrid < 0) or (AGrid >= FBuild.GridCount) then Exit;
+  gi := FBuild.Grid(AGrid).ComponentIndex;
+  for i := 0 to Min(High(FZoomSpecs), High(FDzInteract)) do
+  begin
+    if (FZoomSpecs[i].SubType <> 'inside') or FZoomSpecs[i].NoTarget then Continue;
+    for t := 0 to High(FZoomSpecs[i].Targets) do
+    begin
+      ax := FBuild.Axis(FZoomSpecs[i].Targets[t].Dim + 'Axis',
+        FZoomSpecs[i].Targets[t].AxisIndex);
+      if (ax <> nil) and (ax.GridIndex = gi) then
+      begin
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)] := i;
+        Break;
+      end;
+    end;
+  end;
+end;
+
+{ mergeControllerParams: the strongest of the insides -- 2 zooms and moves,
+  1 moves only (zoomLock), 0 disabled -- or -1 for no controller }
+function TTyAdvanceChart.DzControlType(AGrid: Integer): Integer;
+var ins: TTyIntegerArray; k, v: Integer;
+begin
+  Result := -1;
+  ins := DzGridInsides(AGrid);
+  for k := 0 to High(ins) do
+  begin
+    if FDzInteract[ins[k]].Disabled then v := 0
+    else if FDzInteract[ins[k]].ZoomLock then v := 1
+    else v := 2;
+    if v > Result then Result := v;
+  end;
+end;
+
+{ a point on the canvas (CSS px) into the slider group's own coordinates:
+  transformCoordToLocal, the inverse of its global matrix }
+procedure TTyAdvanceChart.DzToSlider(ASlider: Integer; AX, AY: Double;
+  out LX, LY: Double);
+var
+  L: TTyDzSliderLayout;
+  G, inv: TTyMat2D;
+begin
+  L := FDzLayouts[ASlider];
+  G := TyMatMul(TyZrLocal(1, 1, 0, L.GroupX, L.GroupY), TyMatMul(L.SG, TyMatIdentity));
+  if not TyMatInvert(G, inv) then
+  begin
+    LX := NaN;
+    LY := NaN;
+    Exit;
+  end;
+  LX := inv[0] * AX + inv[2] * AY + inv[4];
+  LY := inv[1] * AX + inv[3] * AY + inv[5];
+end;
+
+function TTyAdvanceChart.DzHits(ASlider: Integer; ARole: TTyDzRole; AX, AY: Double): Boolean;
+var
+  L: TTyDzSliderLayout;
+  e: TTyDzElement;
+  M, inv: TTyMat2D;
+  lx, ly, lw: Double;
+  r: TTyXYWH;
+begin
+  Result := False;
+  L := FDzLayouts[ASlider];
+  e := L.Kids[ARole];
+  if not e.Present then Exit;
+  M := TyDzGlobal(L, ARole);
+  if not TyMatInvert(M, inv) then Exit;
+  lx := inv[0] * AX + inv[2] * AY + inv[4];
+  ly := inv[1] * AX + inv[3] * AY + inv[5];
+  if ARole in [dzrHandle0, dzrHandle1] then
+  begin
+    { rectHover: the bounding rect, the stroke grown by strokeNoScale's line
+      scale -- the handle's own now it has a global transform }
+    if IsNan(FDzViews[ASlider].Handle.LineWidth) then lw := 1
+    else lw := FDzViews[ASlider].Handle.LineWidth;
+    r := TyZrStrokeRect(e.PathRect, e.DataLen, True, True, lw,
+      Sqrt(Abs(M[0] * M[3] - M[2] * M[1])));
+  end
+  else
+    r := e.Shape;
+  Result := (lx >= r.X) and (lx <= r.X + r.W) and (ly >= r.Y) and (ly <= r.Y + r.H);
+end;
+
+{ findHover over the sliders' non-silent elements, topmost first: the
+  handles (a hovered one raised above the other), the move zone, the filler
+  when it is the move zone, the click panel; then any other element of the
+  chart }
+function TTyAdvanceChart.DzFindTarget(AX, AY: Double): TTyDzTarget;
+var
+  res: TTyDzTarget;
+  i, el: Integer;
+  st: TTyDzSliderState;
+  order: array[0..1] of TTyDzRole;
+  k: Integer;
+  d: TTyChartDatumRef;
+  s: Double;
+
+  function Hit(ARole: TTyDzRole): Boolean;
+  begin
+    Result := DzHits(i, ARole, AX, AY);
+    if Result then
+    begin
+      res.Kind := dtkSlider;
+      res.Slider := i;
+      res.Role := ARole;
+    end;
+  end;
+
+begin
+  Result := Default(TTyDzTarget);
+  res := Default(TTyDzTarget);
+  s := DzScale;
+  if (AX < 0) or (AY < 0) or (AX > (FLastRect.Right - FLastRect.Left) / s)
+    or (AY > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
+  for i := High(FDzLayouts) downto 0 do
+  begin
+    if not FDzLayouts[i].Valid then Continue;
+    if i <= High(FDzState) then st := FDzState[i] else st := Default(TTyDzSliderState);
+    if st.HandleHover[0] and not st.HandleHover[1] then
+    begin
+      order[0] := dzrHandle0;
+      order[1] := dzrHandle1;
+    end
+    else
+    begin
+      order[0] := dzrHandle1;
+      order[1] := dzrHandle0;
+    end;
+    for k := 0 to 1 do
+      if Hit(order[k]) then Exit(res);
+  end;
+  for i := High(FDzLayouts) downto 0 do
+  begin
+    if not FDzLayouts[i].Valid then Continue;
+    if FDzViews[i].BrushSelect then
+    begin
+      if Hit(dzrMoveZone) then Exit(res);
+    end
+    else if Hit(dzrFiller) then Exit(res);
+    if Hit(dzrClickPanel) then Exit(res);
+  end;
+  d := HitTestAt(Round(AX * s + FLastRect.Left), Round(AY * s + FLastRect.Top), el);
+  { a line's own path is silent upstream (triggerLineEvent false): only its
+    symbols are targets }
+  if TyChartDatumValid(d) and not ((FPaintList <> nil) and (el >= 0)
+    and (el < FPaintList.Count) and (FPaintList.Element(el).Shape.Kind = cskPolyline)) then
+    Result.Kind := dtkOther;
+end;
+
+function SameDzTarget(const A, B: TTyDzTarget): Boolean;
+begin
+  Result := (A.Kind = B.Kind) and ((A.Kind <> dtkSlider)
+    or ((A.Slider = B.Slider) and (A.Role = B.Role)));
+end;
+
+{ the axis proxy's spans: the HOST dataZoom's options, in percent }
+function TTyAdvanceChart.DzSpans(AIndex: Integer; out AMin, AMax: Double): Boolean;
+var
+  rep, host: Integer;
+  sp: TTyDzSpans;
+begin
+  AMin := NaN;
+  AMax := NaN;
+  rep := DzRepresentative(AIndex);
+  Result := rep >= 0;
+  if not Result then Exit;
+  host := FZoomHost[rep];
+  if (host < 0) or (host > High(FZoomSpecs)) then Exit;
+  sp := TyDzSpansOf(FZoomSpecs[host], FAxisZooms[rep].Axis, FAxisZooms[rep].Raw.Lo,
+    FAxisZooms[rep].Raw.Hi);
+  AMin := sp.MinSpan;
+  AMax := sp.MaxSpan;
+end;
+
+{ _showDataInfo: on a hover or while dragging the emphasis label setting,
+  else the normal one; the move bar is highlighted with them }
+procedure TTyAdvanceChart.DzShowDataInfo(AIndex: Integer; AEmphasis: Boolean);
+var toShow: Boolean;
+begin
+  if AEmphasis or FDzState[AIndex].Dragging then
+    toShow := FDzInteract[AIndex].EmphasisLabelShow
+  else
+    toShow := FDzViews[AIndex].LabelShow;
+  FDzState[AIndex].LabelsShown := toShow;
+  if FDzViews[AIndex].BrushSelect then
+    if toShow then FDzState[AIndex].MoveBits := FDzState[AIndex].MoveBits or 2
+    else FDzState[AIndex].MoveBits := FDzState[AIndex].MoveBits and not 2;
+end;
+
+procedure TTyAdvanceChart.DzMouseOut(const ATarget: TTyDzTarget);
+var i: Integer;
+begin
+  if ATarget.Kind <> dtkSlider then Exit;
+  i := ATarget.Slider;
+  if i > High(FDzState) then Exit;
+  case ATarget.Role of
+    dzrHandle0, dzrHandle1:
+      begin
+        FDzState[i].OverArea := False;
+        DzShowDataInfo(i, False);
+        FDzState[i].HandleHover[Ord(ATarget.Role) - Ord(dzrHandle0)] := False;
+      end;
+    dzrMoveZone, dzrFiller:
+      begin
+        FDzState[i].OverArea := False;
+        DzShowDataInfo(i, False);
+        if ATarget.Role = dzrMoveZone then
+          FDzState[i].MoveBits := FDzState[i].MoveBits and not 1;
+      end;
+  end;
+end;
+
+procedure TTyAdvanceChart.DzMouseOver(const ATarget: TTyDzTarget);
+var i: Integer;
+begin
+  if ATarget.Kind <> dtkSlider then Exit;
+  i := ATarget.Slider;
+  if i > High(FDzState) then Exit;
+  case ATarget.Role of
+    dzrHandle0, dzrHandle1:
+      begin
+        FDzState[i].OverArea := True;
+        DzShowDataInfo(i, True);
+        FDzState[i].HandleHover[Ord(ATarget.Role) - Ord(dzrHandle0)] := True;
+      end;
+    dzrMoveZone, dzrFiller:
+      begin
+        FDzState[i].OverArea := True;
+        DzShowDataInfo(i, True);
+        if ATarget.Role = dzrMoveZone then
+          FDzState[i].MoveBits := FDzState[i].MoveBits or 1;
+      end;
+  end;
+end;
+
+{ _onDragMove: the screen delta through the INVERSE of the slider group's
+  local matrix, then _updateInterval; realtime dispatches }
+procedure TTyAdvanceChart.DzDragMove(AIndex, AHandle: Integer; ADX, ADY: Double);
+var
+  inv: TTyMat2D;
+  v, mn, mx: Double;
+  moved: Boolean;
+begin
+  FDzState[AIndex].Dragging := True;
+  if not TyMatInvert(FDzLayouts[AIndex].SG, inv) then Exit;
+  v := inv[0] * ADX + inv[2] * ADY + inv[4];
+  DzSpans(AIndex, mn, mx);
+  if FDzInteract[AIndex].ZoomLock then AHandle := -1;
+  moved := TyDzUpdateInterval(FDzState[AIndex].Ends, FDzLayouts[AIndex].L, v,
+    AHandle, mn, mx, FDzState[AIndex].Range, True);
+  FDzState[AIndex].NonRealtime := not FDzInteract[AIndex].Realtime;
+  if moved and FDzInteract[AIndex].Realtime then DzSliderDispatch(AIndex, True);
+end;
+
+{ _onDragEnd }
+procedure TTyAdvanceChart.DzDragEnd(AIndex: Integer);
+begin
+  FDzState[AIndex].Dragging := False;
+  if not FDzState[AIndex].OverArea then DzShowDataInfo(AIndex, False);
+  if not FDzInteract[AIndex].Realtime then DzSliderDispatch(AIndex, False);
+end;
+
+{ _onClickPanel: the window's centre to the click, keeping the span }
+procedure TTyAdvanceChart.DzClickPanel(AIndex: Integer; AX, AY: Double);
+var
+  lx, ly, centre, mn, mx: Double;
+  moved: Boolean;
+begin
+  DzToSlider(AIndex, AX, AY, lx, ly);
+  if (lx < 0) or (lx > FDzLayouts[AIndex].L) or (ly < 0) or (ly > FDzLayouts[AIndex].T) then Exit;
+  centre := (FDzState[AIndex].Ends[0] + FDzState[AIndex].Ends[1]) / 2;
+  DzSpans(AIndex, mn, mx);
+  moved := TyDzUpdateInterval(FDzState[AIndex].Ends, FDzLayouts[AIndex].L,
+    lx - centre, -1, mn, mx, FDzState[AIndex].Range, True);
+  FDzState[AIndex].NonRealtime := False;
+  if moved then DzSliderDispatch(AIndex, False);
+end;
+
+{ _updateBrushRect }
+procedure TTyAdvanceChart.DzBrushMove(AIndex: Integer; AX, AY: Double);
+var ex, ey, sx, sy: Double;
+begin
+  FDzState[AIndex].HasBrush := True;
+  FDzState[AIndex].BrushIgnored := False;
+  DzToSlider(AIndex, AX, AY, ex, ey);
+  DzToSlider(AIndex, FDzState[AIndex].BrushStartX, FDzState[AIndex].BrushStartY, sx, sy);
+  { max(min(size, x), 0) on the double: Math.Max of a double and an
+    integer literal takes the Single overload }
+  if ex > FDzLayouts[AIndex].L then ex := FDzLayouts[AIndex].L;
+  if ex < 0 then ex := 0;
+  FDzState[AIndex].BrushX := sx;
+  FDzState[AIndex].BrushW := ex - sx;
+end;
+
+{ _onBrushEnd: a short quick brush is a click; else the brush is the new
+  window -- from the LAST brush rect, which a new press never cleared }
+procedure TTyAdvanceChart.DzBrushEnd(AIndex: Integer);
+var
+  mn, mx, mnPx, mxPx, L: Double;
+begin
+  if not FDzState[AIndex].Brushing then Exit;
+  FDzState[AIndex].Brushing := False;
+  if not FDzState[AIndex].HasBrush then Exit;
+  FDzState[AIndex].BrushIgnored := True;
+  if (DzClock - FDzState[AIndex].BrushStartTime < 200)
+    and (Abs(FDzState[AIndex].BrushW) < 5) then Exit;
+  L := FDzLayouts[AIndex].L;
+  FDzState[AIndex].Ends[0] := FDzState[AIndex].BrushX;
+  FDzState[AIndex].Ends[1] := FDzState[AIndex].BrushX + FDzState[AIndex].BrushW;
+  DzSpans(AIndex, mn, mx);
+  mnPx := NaN;
+  mxPx := NaN;
+  if not IsNan(mn) then mnPx := TyDzLinearMap(mn, 0, 100, 0, L, True);
+  if not IsNan(mx) then mxPx := TyDzLinearMap(mx, 0, 100, 0, L, True);
+  TyDzSliderMove(0, FDzState[AIndex].Ends, 0, L, 0, mnPx, mxPx);
+  TyDzRangeOfEnds(FDzState[AIndex].Ends, L, FDzState[AIndex].Range[0],
+    FDzState[AIndex].Range[1]);
+  FDzState[AIndex].NonRealtime := False;
+  DzSliderDispatch(AIndex, False);
+end;
+
+{ _dispatchZoomAction, through the view's throttle }
+procedure TTyAdvanceChart.DzSliderDispatch(AIndex: Integer; ARealtime: Boolean);
+begin
+  if TyDzThrottleCall(FDzState[AIndex].Throttle, DzClock, FDzInteract[AIndex].Throttle) then
+    DzRunSliderAction(AIndex, False)
+  else
+  begin
+    FDzState[AIndex].PendingRealtime := ARealtime;
+    DzArmTimer;
+  end;
+end;
+
+procedure TTyAdvanceChart.DzRunSliderAction(AIndex: Integer; ADeferred: Boolean);
+var a: TTyDzAction;
+begin
+  a := Default(TTyDzAction);
+  a.Deferred := ADeferred;
+  a.FromSlider := AIndex;
+  SetLength(a.Items, 1);
+  a.Items[0].DataZoomIndex := AIndex;
+  { the range as it is when the call runs }
+  a.Items[0].Start := FDzState[AIndex].Range[0];
+  a.Items[0].Stop := FDzState[AIndex].Range[1];
+  DzDispatch(a);
+end;
+
+{ One roam event on a grid: every inside of it that the behaviour allows
+  works out its range from its own view range; the ones not disabled that
+  moved go in the batch. AKind 'zoom', 'pan' or 'scrollMove'. }
+function TTyAdvanceChart.DzRoam(AGrid: Integer; const AKind: string;
+  AShift: TShiftState; AOldX, AOldY, ANewX, ANewY, AScale, AScroll: Double): Boolean;
+var
+  ins: TTyIntegerArray;
+  k, d, t: Integer;
+  setting: string;
+  ax, axis: TTyAxis;
+  dir: TTyDzDirection;
+  r: array[0..1] of Double;
+  mn, mx: Double;
+  moved: Boolean;
+  items: TTyDzActionItemArray;
+begin
+  Result := False;
+  items := nil;
+  ins := DzGridInsides(AGrid);
+  for k := 0 to High(ins) do
+  begin
+    d := ins[k];
+    if AKind = 'zoom' then setting := FDzInteract[d].ZoomOnMouseWheel
+    else if AKind = 'pan' then setting := FDzInteract[d].MoveOnMouseMove
+    else setting := FDzInteract[d].MoveOnMouseWheel;
+    if not TyDzBehaviour(setting, ssShift in AShift, ssCtrl in AShift,
+      ssAlt in AShift, ssMeta in AShift) then Continue;
+    { the dataZoom's first target axis on this grid }
+    axis := nil;
+    for t := 0 to High(FZoomSpecs[d].Targets) do
+    begin
+      ax := FBuild.Axis(FZoomSpecs[d].Targets[t].Dim + 'Axis',
+        FZoomSpecs[d].Targets[t].AxisIndex);
+      if (ax <> nil) and (ax.GridIndex = FBuild.Grid(AGrid).ComponentIndex) then
+      begin
+        axis := ax;
+        Break;
+      end;
+    end;
+    if axis = nil then Continue;
+    r[0] := FDzInLo[d];
+    r[1] := FDzInHi[d];
+    if AKind = 'zoom' then
+    begin
+      dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
+        0, 0, ANewX, ANewY);
+      DzSpans(d, mn, mx);
+      moved := TyDzInsideZoom(r, dir, AScale, mn, mx);
+    end
+    else
+    begin
+      dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
+        AOldX, AOldY, ANewX, ANewY);
+      if AKind = 'pan' then moved := TyDzInsideMove(r, TyDzPanDelta(r, dir))
+      else moved := TyDzInsideMove(r, TyDzScrollMoveDelta(r, dir, AScroll));
+    end;
+    FDzInLo[d] := r[0];
+    FDzInHi[d] := r[1];
+    if moved and not FDzInteract[d].Disabled then
+    begin
+      SetLength(items, Length(items) + 1);
+      items[High(items)].DataZoomIndex := d;
+      items[High(items)].Start := r[0];
+      items[High(items)].Stop := r[1];
+    end;
+  end;
+  if Length(items) > 0 then
+  begin
+    DzRoamDispatch(AGrid, items);
+    Result := True;
+  end;
+end;
+
+{ the roam's dispatch, through the grid's throttle at the first inside's
+  rate; a deferred one sends the latest batch }
+procedure TTyAdvanceChart.DzRoamDispatch(AGrid: Integer; const AItems: TTyDzActionItemArray);
+var
+  ins: TTyIntegerArray;
+  rate: Double;
+  a: TTyDzAction;
+begin
+  ins := DzGridInsides(AGrid);
+  rate := 100;
+  if Length(ins) > 0 then rate := FDzInteract[ins[0]].Throttle;
+  FDzRoamBatch[AGrid] := AItems;
+  if TyDzThrottleCall(FDzRoamThrottle[AGrid], DzClock, rate) then
+  begin
+    a := Default(TTyDzAction);
+    a.Batch := True;
+    a.FromSlider := -1;
+    a.Items := AItems;
+    DzDispatch(a);
+  end
+  else
+    DzArmTimer;
+end;
+
+{ THE ACTION: setRawRange on the named dataZooms and every one linked to
+  them through a shared axis, then one update, the views rendered with the
+  payload -- the source slider keeps its view }
+procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction);
+var
+  n, it, i, j, t, u: Integer;
+  found: array of Boolean;
+  keys: array of string;
+  more, linked: Boolean;
+
+  procedure Mark(AIdx: Integer);
+  var tt: Integer;
+  begin
+    found[AIdx] := True;
+    for tt := 0 to High(FZoomSpecs[AIdx].Targets) do
+    begin
+      SetLength(keys, Length(keys) + 1);
+      keys[High(keys)] := FZoomSpecs[AIdx].Targets[tt].Dim
+        + IntToStr(FZoomSpecs[AIdx].Targets[tt].AxisIndex);
+    end;
+  end;
+
+begin
+  n := Min(Length(FDzRawHas), Length(FZoomSpecs));
+  for it := 0 to High(AAction.Items) do
+  begin
+    i := AAction.Items[it].DataZoomIndex;
+    if (i < 0) or (i >= n) then Continue;
+    { findEffectedDataZooms }
+    SetLength(found, n);
+    for j := 0 to n - 1 do found[j] := False;
+    keys := nil;
+    Mark(i);
+    repeat
+      more := False;
+      for j := 0 to n - 1 do
+      begin
+        if found[j] then Continue;
+        linked := False;
+        for t := 0 to High(FZoomSpecs[j].Targets) do
+          for u := 0 to High(keys) do
+            if keys[u] = FZoomSpecs[j].Targets[t].Dim
+              + IntToStr(FZoomSpecs[j].Targets[t].AxisIndex) then linked := True;
+        if linked then
+        begin
+          Mark(j);
+          more := True;
+        end;
+      end;
+    until not more;
+    for j := 0 to n - 1 do
+      if found[j] then
+      begin
+        FDzRawHas[j] := True;
+        FDzRawStart[j] := AAction.Items[it].Start;
+        FDzRawStop[j] := AAction.Items[it].Stop;
+      end;
+  end;
+  if AAction.Batch then FDzFrom := -1 else FDzFrom := AAction.FromSlider;
+  try
+    DzSyncLayout;
+  finally
+    FDzFrom := -1;
+  end;
+  if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
+end;
+
+{ what the views draw from the slider states: a pointer event that leaves
+  it unchanged repaints nothing }
+function TTyAdvanceChart.DzStateKey: string;
+var
+  i: Integer;
+  s: TTyDzSliderState;
+begin
+  Result := '';
+  for i := 0 to High(FDzState) do
+  begin
+    s := FDzState[i];
+    Result := Result + Format('%g,%g,%g,%g,%d%d%d%d%d,%d,%d%d,%g,%g;', [s.Ends[0],
+      s.Ends[1], s.Range[0], s.Range[1], Ord(s.LabelsShown), Ord(s.NonRealtime),
+      Ord(s.HandleHover[0]), Ord(s.HandleHover[1]), Ord(s.Dragging), s.MoveBits,
+      Ord(s.HasBrush), Ord(s.BrushIgnored), s.BrushX, s.BrushW]);
+  end;
+end;
+
+{ the views again, from the state and the window as they are }
+procedure TTyAdvanceChart.DzViewUpdate;
+begin
+  if (FBuild = nil) or (FLastPPI <= 0) then Exit;
+  SolveDataZoomViews(NewTextMeasurer(FLastPPI), FLastPPI);
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  DropStatic;
+  inherited Invalidate;
+end;
+
+{ AN ACTION IS SYNCHRONOUS upstream: the model, the axes and every view are
+  new before dispatchAction returns -- so the click that follows a brush
+  finds the handles where the brush put them }
+procedure TTyAdvanceChart.DzSyncLayout;
+begin
+  if FLastPPI <= 0 then
+  begin
+    FDirty := True;
+    inherited Invalidate;
+    Exit;
+  end;
+  Relayout(nil, FLastRect, FLastPPI, NewTextMeasurer(FLastPPI));
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  DropStatic;
+  inherited Invalidate;
+end;
+
+procedure TTyAdvanceChart.DzApplyCursor;
+var c: TCursor;
+begin
+  if FDzCursor = 'ew-resize' then c := crSizeWE
+  else if FDzCursor = 'ns-resize' then c := crSizeNS
+  else if FDzCursor = 'crosshair' then c := crCross
+  else if (FDzCursor = 'grab') or (FDzCursor = 'pointer') then c := crHandPoint
+  else if FDzCursor = 'grabbing' then c := crSizeAll
+  else
+  begin
+    { 'default': the host's own cursor back }
+    if FDzHasBaseCursor then Cursor := FDzBaseCursor;
+    FDzHasBaseCursor := False;
+    Exit;
+  end;
+  if not FDzHasBaseCursor then
+  begin
+    FDzBaseCursor := Cursor;
+    FDzHasBaseCursor := True;
+  end;
+  Cursor := c;
+end;
+
+procedure TTyAdvanceChart.DzArmTimer;
+var
+  due, now_: Double;
+  i: Integer;
+  any: Boolean;
+begin
+  { a test drives the clock itself }
+  if not IsNan(FDzNow) then Exit;
+  any := False;
+  due := MaxDouble;
+  for i := 0 to High(FDzState) do
+    if FDzState[i].Throttle.Armed then
+    begin
+      any := True;
+      due := Math.Min(due, FDzState[i].Throttle.Due);
+    end;
+  for i := 0 to High(FDzRoamThrottle) do
+    if FDzRoamThrottle[i].Armed then
+    begin
+      any := True;
+      due := Math.Min(due, FDzRoamThrottle[i].Due);
+    end;
+  if not any then
+  begin
+    if FDzTimer <> nil then FDzTimer.Enabled := False;
+    Exit;
+  end;
+  if FDzTimer = nil then
+  begin
+    FDzTimer := TTimer.Create(nil);
+    FDzTimer.OnTimer := @DzTimerFired;
+  end;
+  now_ := DzClock;
+  FDzTimer.Enabled := False;
+  FDzTimer.Interval := Math.Max(1, Ceil(due - now_));
+  FDzTimer.Enabled := True;
+end;
+
+procedure TTyAdvanceChart.DzTimerFired(Sender: TObject);
+begin
+  FDzTimer.Enabled := False;
+  DataZoomTick(DzClock);
+end;
+
+procedure TTyAdvanceChart.DataZoomTick(ANow: Double);
+var
+  i, best, kind: Integer;
+  due: Double;
+  a: TTyDzAction;
+begin
+  { every run due by now, the earliest first }
+  repeat
+    best := -1;
+    kind := 0;
+    due := MaxDouble;
+    for i := 0 to High(FDzState) do
+      if FDzState[i].Throttle.Armed and (FDzState[i].Throttle.Due <= ANow)
+        and (FDzState[i].Throttle.Due < due) then
+      begin
+        best := i;
+        kind := 0;
+        due := FDzState[i].Throttle.Due;
+      end;
+    for i := 0 to High(FDzRoamThrottle) do
+      if FDzRoamThrottle[i].Armed and (FDzRoamThrottle[i].Due <= ANow)
+        and (FDzRoamThrottle[i].Due < due) then
+      begin
+        best := i;
+        kind := 1;
+        due := FDzRoamThrottle[i].Due;
+      end;
+    if best < 0 then Break;
+    if kind = 0 then
+    begin
+      TyDzThrottleFire(FDzState[best].Throttle, ANow);
+      DzRunSliderAction(best, True);
+    end
+    else
+    begin
+      TyDzThrottleFire(FDzRoamThrottle[best], ANow);
+      a := Default(TTyDzAction);
+      a.Batch := True;
+      a.Deferred := True;
+      a.FromSlider := -1;
+      a.Items := FDzRoamBatch[best];
+      DzDispatch(a);
+    end;
+  until False;
+  DzArmTimer;
+end;
+
+function TTyAdvanceChart.DispatchDataZoom(AIndex: Integer; AStart, AEnd: Double): Boolean;
+var a: TTyDzAction;
+begin
+  Result := (AIndex >= 0) and (AIndex < Length(FDzRawHas)) and not IsNan(AStart)
+    and not IsNan(AEnd);
+  if not Result then Exit;
+  a := Default(TTyDzAction);
+  a.FromSlider := -1;
+  SetLength(a.Items, 1);
+  a.Items[0].DataZoomIndex := AIndex;
+  a.Items[0].Start := AStart;
+  a.Items[0].Stop := AEnd;
+  DzDispatch(a);
+end;
+
+function TTyAdvanceChart.DataZoomPointer(AKind: TTyDzPointer; AX, AY: Double;
+  AShift: TShiftState; AZrDelta: Double): Boolean;
+var
+  x, y, s, dx, dy: Double;
+  t: TTyDzTarget;
+  g, i, ct: Integer;
+  any: Boolean;
+  key: string;
+begin
+  Result := False;
+  if (FBuild = nil) or (csDesigning in ComponentState) then Exit;
+  any := False;
+  for i := 0 to High(FZoomSpecs) do
+    if (FZoomSpecs[i].SubType = 'slider') or (FZoomSpecs[i].SubType = 'inside') then
+      any := True;
+  if not any or (Length(FDzState) = 0) then Exit;
+  s := DzScale;
+  x := (AX - FLastRect.Left) / s;
+  y := (AY - FLastRect.Top) / s;
+  FDzLastX := AX;
+  FDzLastY := AY;
+  key := DzStateKey;
+  case AKind of
+    dpMove:
+      begin
+        t := DzFindTarget(x, y);
+        { the Handler's own cursor: the target's, else the default }
+        FDzCursor := 'default';
+        if (t.Kind = dtkSlider) then
+          case t.Role of
+            dzrHandle0, dzrHandle1:
+              if FDzLayouts[t.Slider].Horizontal then FDzCursor := 'ew-resize'
+              else FDzCursor := 'ns-resize';
+            dzrMoveZone, dzrFiller:
+              if FDzState[t.Slider].Dragging and (FDzDrag.Kind = dtkSlider)
+                and (FDzDrag.Role in [dzrMoveZone, dzrFiller]) then FDzCursor := 'grabbing'
+              else FDzCursor := 'grab';
+            dzrClickPanel:
+              { zrender's own default for an element that answers the
+                pointer }
+              if FDzViews[t.Slider].BrushSelect then FDzCursor := 'crosshair'
+              else FDzCursor := 'pointer';
+          end
+        else if t.Kind = dtkOther then
+          FDzCursor := 'pointer';
+        { mouseout to the old target, then the move -- Draggable, the roam,
+          the brush -- then mouseover to the new one }
+        if not SameDzTarget(t, FDzHover) then DzMouseOut(FDzHover);
+        if FDzDrag.Kind = dtkSlider then
+        begin
+          dx := x - FDzDragX;
+          dy := y - FDzDragY;
+          FDzDragX := x;
+          FDzDragY := y;
+          if FDzDrag.Role in [dzrHandle0, dzrHandle1] then
+            DzDragMove(FDzDrag.Slider, Ord(FDzDrag.Role) - Ord(dzrHandle0), dx, dy)
+          else
+          begin
+            DzDragMove(FDzDrag.Slider, -1, dx, dy);
+            FDzCursor := 'grabbing';
+          end;
+          Result := True;
+        end;
+        if FDzPanGrid >= 0 then
+        begin
+          FDzCursor := 'grabbing';
+          if FDzPanGrid < FBuild.GridCount then
+          begin
+            ct := FDzPanGrid;
+            dx := FDzPanX;
+            dy := FDzPanY;
+            FDzPanX := x;
+            FDzPanY := y;
+            { preventDefaultMouseMove: every inside of the grid must allow it }
+            Result := True;
+            for i in DzGridInsides(ct) do
+              if not FDzInteract[i].PreventDefaultMouseMove then Result := False;
+            DzRoam(ct, 'pan', AShift, dx, dy, x, y, 1, 0);
+          end;
+        end
+        else if t.Kind = dtkNone then
+          for g := 0 to FBuild.GridCount - 1 do
+            if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then
+            begin
+              FDzCursor := 'grab';
+              Break;
+            end;
+        for i := 0 to High(FDzState) do
+          if FDzState[i].Brushing then
+          begin
+            DzBrushMove(i, x, y);
+            Result := True;
+          end;
+        if not SameDzTarget(t, FDzHover) then DzMouseOver(t);
+        FDzHover := t;
+        DzApplyCursor;
+        if DzStateKey <> key then DzViewUpdate;
+      end;
+    dpDown:
+      begin
+        t := DzFindTarget(x, y);
+        FDzDownTarget := t;
+        FDzUpTarget := t;
+        FDzHasDown := True;
+        FDzDownX := x;
+        FDzDownY := y;
+        { the click panel's mousedown starts a brush }
+        if (t.Kind = dtkSlider) and (t.Role = dzrClickPanel)
+          and FDzViews[t.Slider].BrushSelect then
+        begin
+          FDzState[t.Slider].BrushStartX := x;
+          FDzState[t.Slider].BrushStartY := y;
+          FDzState[t.Slider].Brushing := True;
+          FDzState[t.Slider].BrushStartTime := DzClock;
+        end;
+        { Draggable: a handle, or the move zone }
+        FDzDrag := Default(TTyDzTarget);
+        if (t.Kind = dtkSlider) and ((t.Role in [dzrHandle0, dzrHandle1, dzrMoveZone])
+          or ((t.Role = dzrFiller) and not FDzViews[t.Slider].BrushSelect)) then
+        begin
+          FDzDrag := t;
+          FDzDragX := x;
+          FDzDragY := y;
+          if t.Role in [dzrMoveZone, dzrFiller] then DzShowDataInfo(t.Slider, True);
+        end;
+        { the roam controller: not on a draggable element, inside a grid
+          that moves }
+        FDzPanGrid := -1;
+        if FDzDrag.Kind = dtkNone then
+          for g := 0 to FBuild.GridCount - 1 do
+            if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then
+            begin
+              FDzPanGrid := g;
+              FDzPanX := x;
+              FDzPanY := y;
+              Break;
+            end;
+        if DzStateKey <> key then DzViewUpdate;
+      end;
+    dpUp:
+      begin
+        FDzUpTarget := DzFindTarget(x, y);
+        if FDzDrag.Kind = dtkSlider then
+        begin
+          i := FDzDrag.Slider;
+          FDzDrag := Default(TTyDzTarget);
+          DzDragEnd(i);
+        end;
+        FDzPanGrid := -1;
+        for i := 0 to High(FDzState) do
+          if FDzState[i].Brushing then DzBrushEnd(i);
+        if DzStateKey <> key then DzViewUpdate;
+      end;
+    dpClick:
+      begin
+        { zrender's click rule: the press and the release on one element,
+          the click within four pixels of the press }
+        if not FDzHasDown then Exit;
+        FDzHasDown := False;
+        if not SameDzTarget(FDzDownTarget, FDzUpTarget) then Exit;
+        if Sqrt(Sqr(x - FDzDownX) + Sqr(y - FDzDownY)) > 4 then Exit;
+        t := DzFindTarget(x, y);
+        if (t.Kind = dtkSlider) and (t.Role = dzrClickPanel) then
+        begin
+          DzClickPanel(t.Slider, x, y);
+          if DzStateKey <> key then DzViewUpdate;
+        end;
+      end;
+    dpWheel:
+      begin
+        if AZrDelta = 0 then Exit;
+        for g := 0 to FBuild.GridCount - 1 do
+        begin
+          if DzControlType(g) < 2 then Continue;
+          if not DzGridContains(g, x, y) then Continue;
+          { stopped whether or not anything zooms }
+          Result := True;
+          DzRoam(g, 'zoom', AShift, 0, 0, x, y, TyDzWheelScale(AZrDelta), 0);
+          if (g < FBuild.GridCount) then
+            DzRoam(g, 'scrollMove', AShift, 0, 0, x, y, 1, TyDzScrollDelta(AZrDelta));
+        end;
+      end;
+  end;
+end;
+
+function TTyAdvanceChart.DataZoomSliderState(AIndex: Integer): TTyDzSliderState;
+begin
+  Result := Default(TTyDzSliderState);
+  if (AIndex >= 0) and (AIndex <= High(FDzState)) then Result := FDzState[AIndex];
+end;
+
+function TTyAdvanceChart.DataZoomInsideRange(AIndex: Integer; out ALo, AHi: Double): Boolean;
+begin
+  ALo := NaN;
+  AHi := NaN;
+  Result := (AIndex >= 0) and (AIndex <= High(FDzInLo));
+  if not Result then Exit;
+  ALo := FDzInLo[AIndex];
+  AHi := FDzInHi[AIndex];
+end;
+
+function TTyAdvanceChart.DataZoomHoverName: string;
+const
+  cNames: array[TTyDzRole] of string = ('background', 'clickPanel', 'filler',
+    'frame', 'handle0', 'handle1', 'moveHandle', 'moveHandleIcon', 'moveZone',
+    'shadow0', 'shadow1', 'shadow2', 'shadowPolygon0', 'shadowPolygon1',
+    'shadowPolygon2', 'shadowPolyline0', 'shadowPolyline1', 'shadowPolyline2',
+    'label0', 'label1');
+begin
+  case FDzHover.Kind of
+    dtkSlider: Result := 'dz' + IntToStr(FDzHover.Slider) + '.' + cNames[FDzHover.Role];
+    dtkOther: Result := 'other';
+  else
+    Result := '';
+  end;
+end;
+
 
 function TTyAdvanceChart.DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
 begin
@@ -3269,6 +4492,11 @@ begin
         if (FGraphNodes[slot][k].Row = d.DataIndex)
           and FGraphNodes[slot][k].Draggable then Exit;
   end;
+  { A PRESS ON A dataZoom (a handle, the move bar, the slider body, a
+    zooming grid) is the dataZoom's }
+  DataZoomPointer(dpDown, X, Y, Shift, 0);
+  if (FDzDrag.Kind = dtkSlider) or (FDzPanGrid >= 0)
+    or ((FDzDownTarget.Kind = dtkSlider) and (FDzDownTarget.Role = dzrClickPanel)) then Exit;
   FRoamSeries := RoamSeriesAt(X, Y, False);
   FRoamX := X;
   FRoamY := Y;
@@ -3277,15 +4505,25 @@ end;
 procedure TTyAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
-  if Button = mbLeft then FRoamSeries := -1;
+  if Button = mbLeft then
+  begin
+    FRoamSeries := -1;
+    { zrender's mouseup, then the DOM click at the same point }
+    DataZoomPointer(dpUp, X, Y, Shift, 0);
+    DataZoomPointer(dpClick, X, Y, Shift, 0);
+  end;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
 procedure TTyAdvanceChart.CaptureChanged;
 begin
   { THE BUTTON CAME UP SOMEWHERE THIS CONTROL WILL NOT HEAR OF, or another
-    window took the mouse. Either way the drag is over. }
+    window took the mouse. Either way the drag is over. A dataZoom's ends as
+    a mouseup where the pointer was last would end it -- its commit and all;
+    the widgetset's own mouseup, when it follows, finds nothing to end. }
   FRoamSeries := -1;
+  if (FDzDrag.Kind <> dtkNone) or (FDzPanGrid >= 0) then
+    DataZoomPointer(dpUp, FDzLastX, FDzLastY, [], 0);
   inherited CaptureChanged;
 end;
 
@@ -3299,6 +4537,9 @@ begin
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result then Exit;
   if csDesigning in ComponentState then Exit;
+  { a wheel in a zooming grid is the dataZoom's, and stopped there }
+  if DataZoomPointer(dpWheel, MousePos.X, MousePos.Y, Shift,
+    TyDzZrDelta(WheelDelta)) then Exit(True);
   s := TyGraphWheelScale(WheelDelta);
   if s = 0 then Exit;
   si := RoamSeriesAt(MousePos.X, MousePos.Y, True);
@@ -6899,6 +8140,7 @@ begin
     FRoamY := Y;
     GraphRoam(FRoamSeries, dx, dy);
   end;
+  DataZoomPointer(dpMove, X, Y, Shift, 0);
   spec := TyTooltipSpecOf(FOption, -1, -1);
   { NOTHING ABOUT THE TOOLTIP IS CHECKED HERE, and that is the point. What is
     under the pointer is a fact about geometry; whether a BOX is drawn for it
@@ -6954,6 +8196,13 @@ begin
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   FTipHits := nil;
+  { the pointer left the canvas: a mouseout to what it was over }
+  if FDzHover.Kind <> dtkNone then
+  begin
+    DzMouseOut(FDzHover);
+    FDzHover := Default(TTyDzTarget);
+    DzViewUpdate;
+  end;
   { INHERITED LAST. The base class ends in PointerStateChanged, which this
     control answers with a repaint -- and a repaint before the hover was
     cleared would draw the tooltip one more time on the way out. }

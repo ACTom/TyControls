@@ -20,9 +20,12 @@ unit tyControls.AdvChart.DataZoomView;
   THE DATA SHADOW IS THE RAW DATA, unfiltered and unsampled, as upstream
   reads getRawData(): the caller hands the two columns over.
 
-  NOT HERE: dragging a handle, the filler or the move bar, and the brush
-  (interaction is a later batch); a mirrored custom handle icon is drawn
-  turned, not mirrored.
+  THE VIEW'S OWN STATE COMES IN FROM THE CHART [batch 62]: after its own
+  action a slider keeps the ends it was dragged to (descending after a
+  cross), the labels a hover or a drag showed, the handle and move-bar
+  emphasis, and the brush rect. Without it the ends are the window's.
+
+  NOT HERE: a mirrored custom handle icon is drawn turned, not mirrored.
 
   PURE: the option and the chart's answers in, geometry out, and marks from
   the geometry. }
@@ -72,7 +75,7 @@ type
       where the option has no such key }
     Box: TTyRawBox;
     { the author's colours and widths }
-    Filler, Frame, Background, Handle, MoveHandle: TTyDzStyleSpec;
+    Filler, Frame, Background, Handle, MoveHandle, Brush: TTyDzStyleSpec;
     ShadowArea, ShadowLine: array[0..1] of TTyDzStyleSpec;
     HasText: Boolean;
     TextColour: TTyChartColor;
@@ -100,6 +103,16 @@ type
     OtherAxisInverse: Boolean;
     IsTime: Boolean;
     ThisVals, OtherVals: TTyDoubleArray;
+    { THE VIEW'S STATE: the ends and range it kept (HasEnds False: from the
+      window), the labels' visibility (HasLabelState False: handleLabel.show),
+      the hover emphasis and the brush rect, sliderGroup-local }
+    HasEnds: Boolean;
+    Ends, ViewRange: array[0..1] of Double;
+    HasLabelState, LabelsShown: Boolean;
+    HandleHover: array[0..1] of Boolean;
+    MoveHover: Boolean;
+    HasBrush: Boolean;
+    BrushX, BrushW: Double;
   end;
 
   TTyDzRole = (dzrBackground, dzrClickPanel, dzrFiller, dzrFrame, dzrHandle0,
@@ -170,6 +183,11 @@ type
       text }
     Paint: TTyDzRoleArray;
     Painted: Integer;
+    { the emphasis and the brush, as the input gave them }
+    HandleHover: array[0..1] of Boolean;
+    MoveHover: Boolean;
+    HasBrush: Boolean;
+    BrushX, BrushW: Double;
   end;
 
   TTyDzInk = record
@@ -178,6 +196,8 @@ type
     FontSizeLogical, FontWeight: Integer;
     Filler, Frame, Background, HandleFill, HandleStroke, MoveHandle,
       MoveIcon: TTyChartColor;
+    { a hovered handle, a highlighted move bar, the brush }
+    HandleHoverFill, HandleHoverStroke, MoveHandleHover, Brush: TTyChartColor;
     ShadowArea, ShadowLine: array[0..1] of TTyChartColor;
   end;
 
@@ -225,6 +245,23 @@ uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Symbol, tyControls.AdvChart.DataZoom;
 
 { ==================== small things ==================== }
+
+const
+  { a DOUBLE one: a bare real literal is a Single in FPC, and so is Math's
+    Max of a double and an integer literal }
+  One: Double = 1;
+
+function JMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
+end;
+
+function JMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
 
 function XYWH(AX, AY, AW, AH: Double): TTyXYWH;
 begin
@@ -420,6 +457,9 @@ begin
   end;
   StyleOf(ObjOf(node.Find('moveHandleStyle')), 'color', 'borderColor', 'borderWidth',
     Result.MoveHandle);
+  Result.Brush := BlankStyle;
+  StyleOf(ObjOf(node.Find('brushStyle')), 'color', 'borderColor', 'borderWidth',
+    Result.Brush);
   o := ObjOf(node.Find('dataBackground'));
   if o <> nil then
   begin
@@ -683,7 +723,9 @@ begin
   if IsNan(v) then s := ''
   else if AIn.LabelIsScale then s := AIn.ScaleLabel[AEnd]
   else if (not IsNan(p)) and (not IsInfinite(p)) then
-    s := TyJsToFixedStr(v, Trunc(Math.Min(Math.Max(0, p), 20)))
+    { min(max(0, p), 20) on the double: Math's overloads with an integer
+      literal would take the Single one }
+    s := TyJsToFixedStr(v, Trunc(JMax(JMin(p, 20.0 * One), 0.0 * One)))
   else
     s := TyJsNumberToString(v);
   if not ASpec.HasFormatter then Exit(s);
@@ -820,7 +862,7 @@ var
       if AFinal then e.Local := TyZrLocal(1, 1, 0, hi[0] + (hi[1] - hi[0]) / 2, iconY)
       else e.Local := TyZrLocal(1, 1, 0, 0, iconY);
       AKids[dzrMoveHandleIcon] := e;
-      expand := Math.Min(T / 2, Math.Max(mh, 10));
+      expand := JMin(T / 2, JMax(mh, 10.0 * One));
       if AFinal then fs := XYWH(hi[0], T - expand, hi[1] - hi[0], mh + expand)
       else fs := XYWH(0, T - expand, 0, mh + expand);
       AKids[dzrMoveZone] := RectKid(fs, False, [], False, False, 1);
@@ -923,12 +965,24 @@ begin
   end;
   Result.L := L;
   Result.T := T;
-  { _resetInterval: the PERCENT window, not the inverted one }
+  { _resetInterval: the PERCENT window, not the inverted one -- unless the
+    view kept its own ends }
   for k := 0 to 1 do
-  begin
-    Result.Range[k] := AIn.Percent[k];
-    Result.HandleEnds[k] := TyDzLinearMap(AIn.Percent[k], 0, 100, 0, L, True);
-  end;
+    if AIn.HasEnds then
+    begin
+      Result.Range[k] := AIn.ViewRange[k];
+      Result.HandleEnds[k] := AIn.Ends[k];
+    end
+    else
+    begin
+      Result.Range[k] := AIn.Percent[k];
+      Result.HandleEnds[k] := TyDzLinearMap(AIn.Percent[k], 0, 100, 0, L, True);
+    end;
+  for k := 0 to 1 do Result.HandleHover[k] := AIn.HandleHover[k];
+  Result.MoveHover := AIn.MoveHover;
+  Result.HasBrush := AIn.HasBrush;
+  Result.BrushX := AIn.BrushX;
+  Result.BrushW := AIn.BrushW;
   if Result.HandleEnds[0] > Result.HandleEnds[1] then
   begin
     hi[0] := Result.HandleEnds[1];
@@ -1029,7 +1083,8 @@ begin
       Result.Labels[k].AlignV := WordV(dir);
       Result.Labels[k].AlignH := tahCentre;
     end;
-    Result.Labels[k].Visible := ASpec.LabelShow;
+    if AIn.HasLabelState then Result.Labels[k].Visible := AIn.LabelsShown
+    else Result.Labels[k].Visible := ASpec.LabelShow;
     if Result.Labels[k].Text = '' then
       Result.Labels[k].Rect := XYWH(0, 0, 0, 0)
     else
@@ -1057,8 +1112,9 @@ begin
     paints nothing and goes last }
   for role := Low(TTyDzRole) to High(TTyDzRole) do z2[role] := 0;
   z2[dzrBackground] := -40;
-  z2[dzrHandle0] := 5;
-  z2[dzrHandle1] := 5;
+  { a hovered handle rises by ten (the emphasis state's z2) }
+  z2[dzrHandle0] := 5 + 10 * Ord(AIn.HandleHover[0]);
+  z2[dzrHandle1] := 5 + 10 * Ord(AIn.HandleHover[1]);
   z2[dzrLabel0] := 10;
   z2[dzrLabel1] := 10;
   for k := 0 to 2 do
@@ -1216,7 +1272,8 @@ var
       dzrBackground: Result.Z2 := -40;
       dzrShadowPolygon0..dzrShadowPolygon2: Result.Z2 := -20;
       dzrShadowPolyline0..dzrShadowPolyline2: Result.Z2 := -19;
-      dzrHandle0, dzrHandle1: Result.Z2 := 5;
+      dzrHandle0: Result.Z2 := 5 + 10 * Ord(ALayout.HandleHover[0]);
+      dzrHandle1: Result.Z2 := 5 + 10 * Ord(ALayout.HandleHover[1]);
       dzrLabel0, dzrLabel1: Result.Z2 := 10;
     else
       Result.Z2 := 0;
@@ -1391,17 +1448,28 @@ begin
       dzrHandle0, dzrHandle1:
         begin
           el := Blank(role);
-          Symbol(ASpec.HandleIcon, e, Dev(role),
-            Ink(ASpec.Handle, True, AInk.HandleFill, 1),
-            Ink(ASpec.Handle, False, AInk.HandleStroke, 1), True,
-            LineWidthOr(ASpec.Handle, 1));
+          { the emphasis colours are upstream's own, not the author's
+            normal ones }
+          if ALayout.HandleHover[Ord(role) - Ord(dzrHandle0)] then
+            Symbol(ASpec.HandleIcon, e, Dev(role), AInk.HandleHoverFill,
+              AInk.HandleHoverStroke, True, LineWidthOr(ASpec.Handle, 1))
+          else
+            Symbol(ASpec.HandleIcon, e, Dev(role),
+              Ink(ASpec.Handle, True, AInk.HandleFill, 1),
+              Ink(ASpec.Handle, False, AInk.HandleStroke, 1), True,
+              LineWidthOr(ASpec.Handle, 1));
         end;
       dzrMoveHandle:
         begin
           el := Blank(role);
           el.Shape := RectShape(e.Shape, True, e.R, Dev(role));
           el.Style.HasFill := True;
-          el.Style.FillColor := Ink(ASpec.MoveHandle, True, AInk.MoveHandle, 0.5);
+          if ALayout.MoveHover and not ASpec.MoveHandle.HasFill then
+            el.Style.FillColor := AInk.MoveHandleHover
+          else if ALayout.MoveHover then
+            el.Style.FillColor := WithOpacity(ASpec.MoveHandle.Fill, 0.8)
+          else
+            el.Style.FillColor := Ink(ASpec.MoveHandle, True, AInk.MoveHandle, 0.5);
           if ASpec.MoveHandle.HasStroke then
           begin
             el.Style.StrokeColor := WithOpacity(ASpec.MoveHandle.Stroke,
@@ -1443,6 +1511,18 @@ begin
           Inc(Result);
         end;
     end;
+  end;
+  { the brush rect, added to the slider group last: silent, over the body }
+  if ALayout.HasBrush and (not IsNan(ALayout.BrushW)) then
+  begin
+    el := Blank(dzrBackground);
+    el.Z2 := 0;
+    el.Shape := TyShapeRect(DevRect(XYWH(ALayout.BrushX, 0, ALayout.BrushW, ALayout.T),
+      Dev(dzrBackground)));
+    el.Style.HasFill := True;
+    el.Style.FillColor := Ink(ASpec.Brush, True, AInk.Brush, 0.3);
+    AList.Add(el);
+    Inc(Result);
   end;
 end;
 
