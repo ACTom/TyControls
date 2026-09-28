@@ -38,7 +38,7 @@ uses
   Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LCLType,
   IntfGraphics, FPimage, FileUtil, TypInfo,
   fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
-  test.designregistry, test.version,
+  test.designregistry, test.version, test.dpi.support,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.Base, tyControls.Button, tyControls.CheckBox, tyControls.ToggleSwitch,
   tyControls.GroupBox, tyControls.TabStrip, tyControls.TabSet, tyControls.TyLabel;
@@ -1068,61 +1068,11 @@ end;
 
 { ===== and it must stay one function ======================================== }
 
-{ Pascal source with comments and string literals blanked out, so that prose ABOUT a
-  construct cannot be taken for the construct. Brace comments NEST in this dialect, and the
-  units under scan do use that. }
+{ Comments and literals blanked out: prose ABOUT a construct is not the construct. The
+  scanner is shared with the other source guards (test.dpi.support). }
 function CodeOnly(const S: string): string;
-var
-  i, n, depth: Integer;
-  sb: TStringBuilder;
 begin
-  sb := TStringBuilder.Create;
-  try
-    i := 1;
-    n := Length(S);
-    while i <= n do
-    begin
-      if S[i] = '{' then
-      begin
-        depth := 1;
-        Inc(i);
-        while (i <= n) and (depth > 0) do
-        begin
-          if S[i] = '{' then Inc(depth)
-          else if S[i] = '}' then Dec(depth);
-          Inc(i);
-        end;
-        sb.Append(' ');
-      end
-      else if (S[i] = '(') and (i < n) and (S[i + 1] = '*') then
-      begin
-        Inc(i, 2);
-        while (i < n) and not ((S[i] = '*') and (S[i + 1] = ')')) do Inc(i);
-        Inc(i, 2);
-        sb.Append(' ');
-      end
-      else if (S[i] = '/') and (i < n) and (S[i + 1] = '/') then
-      begin
-        while (i <= n) and (S[i] <> #10) do Inc(i);
-        sb.Append(' ');
-      end
-      else if S[i] = '''' then
-      begin
-        Inc(i);
-        while (i <= n) and (S[i] <> '''') do Inc(i);
-        Inc(i);
-        sb.Append(' ');
-      end
-      else
-      begin
-        sb.Append(S[i]);
-        Inc(i);
-      end;
-    end;
-    Result := sb.ToString;
-  finally
-    sb.Free;
-  end;
+  Result := TyTestCodeOnly(S);
 end;
 
 { How many times ACode ASSIGNS the Size or the Height of something whose name ends in Font:
