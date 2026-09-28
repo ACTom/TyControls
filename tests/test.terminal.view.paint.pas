@@ -9,7 +9,7 @@ unit test.terminal.view.paint;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Forms, Controls, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, Forms, Controls, Graphics, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Terminal.Core, tyControls.Terminal.Render, tyControls.Terminal,
   test.terminal.view;
@@ -159,6 +159,8 @@ var
   b: TBGRABitmap;
   w, h: Integer;
 begin
+  { the cursor (an outline, unfocused) would be the one thing on an empty screen }
+  F.View.WriteSync(#27'[?25l');
   b := Snap;
   try
     w := b.Width;
@@ -172,8 +174,11 @@ begin
   F.View.StyleOverride := 'border-width: 1px; border-color: #00ff00;';
   b := Snap;
   try
-    AssertEquals('left edge', IntToHex($00FF00, 6), IntToHex(Rgb(b.GetPixel(0, h div 2)), 6));
-    AssertEquals('top edge', IntToHex($00FF00, 6), IntToHex(Rgb(b.GetPixel(w div 2, 0)), 6));
+    { the library strokes a border antialiased: the edge pixel is green-dominated, not exact }
+    AssertTrue('left edge is the border: ' + IntToHex(Rgb(b.GetPixel(0, h div 2)), 6),
+      (b.GetPixel(0, h div 2).green > 150) and (b.GetPixel(0, h div 2).green > 2 * b.GetPixel(0, h div 2).red));
+    AssertTrue('top edge is the border: ' + IntToHex(Rgb(b.GetPixel(w div 2, 0)), 6),
+      (b.GetPixel(w div 2, 0).green > 150) and (b.GetPixel(w div 2, 0).green > 2 * b.GetPixel(w div 2, 0).red));
     AssertEquals('inside the ring', IntToHex(Bg, 6), IntToHex(Rgb(b.GetPixel(w div 2, h div 2)), 6));
     AssertEquals('no sentinel', 0, CountIn(b, Rect(0, 0, w, h), $FF00FF));
   finally
@@ -255,7 +260,7 @@ procedure TTyTerminalViewPaintTests.TestAWideCharacterTakesTwoCells;
 var
   b: TBGRABitmap;
 begin
-  F.View.WriteSync(#$E4#$B8#$AD'X');
+  F.View.WriteSync(#27'[?25l'#$E4#$B8#$AD'X');
   b := Snap;
   try
     AssertTrue('ink in cell 0', InkIn(b, F.View.CellRect(0, 0), Bg));
@@ -273,7 +278,7 @@ var
   s: Integer;
   r, band: TRect;
   m: TTyTermCellMetrics;
-  top, bottom, x, y, segs, run, longest4, longest5, t0: Integer;
+  top, bottom, x, y, segs, gapRun, longest4, longest5, t0: Integer;
   prev, ink: Boolean;
   tops: array of Integer;
   allSame: Boolean;
@@ -324,16 +329,16 @@ begin
       if s in [4, 5] then
       begin
         band := Rect(r.Left, r.Top + m.UnderlineY, r.Right, r.Top + m.UnderlineY + m.LineW);
-        run := 0;
+        gapRun := 0;
         t0 := 0;
         for x := band.Left to band.Right - 1 do
           if Rgb(b.GetPixel(x, band.Top)) = Bg then
           begin
-            Inc(run);
-            if run > t0 then t0 := run;
+            Inc(gapRun);
+            if gapRun > t0 then t0 := gapRun;
           end
           else
-            run := 0;
+            gapRun := 0;
         AssertTrue(Format('style %d has gaps', [s]), t0 > 0);
         if s = 4 then longest4 := t0 else longest5 := t0;
       end;
