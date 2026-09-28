@@ -378,7 +378,7 @@ type
 
     { ---- the write queue (Task 19) ---- }
     procedure CheckThread(const AMethod: string);
-    function Now: Double;
+    function NowMs: Double;
     procedure RequestProcess;
     procedure Enqueue(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
     procedure InnerWrite(ABudgetMs: Integer; out AMore: Boolean);
@@ -3793,6 +3793,179 @@ begin
   Result := True;
 end;
 
-{@@TASK19@@}
+{ ==== the write queue: WriteBuffer.ts without the promise / lastTime branches =========== }
+
+{ spec 3.5: every entry point of the queue refuses other threads before touching it }
+procedure TTyTerminalCore.CheckThread(const AMethod: string);
+begin
+  if GetCurrentThreadId <> MainThreadID then
+    raise EInvalidOperation.Create('TTyTerminalCore.' + AMethod + ' must be called from the main thread');
+end;
+
+function TTyTerminalCore.NowMs: Double;
+begin
+  if Assigned(FClock) then
+    Result := FClock()
+  else
+    Result := TyTermDefaultClock;
+end;
+
+{ at most one request outstanding (upstream's cancelAndSet keeps one timer) }
+procedure TTyTerminalCore.RequestProcess;
+begin
+  if FProcessRequested then
+    Exit;
+  FProcessRequested := True;
+  if Assigned(FOnProcessRequest) then
+    FOnProcessRequest(Self);
+end;
+
+procedure TTyTerminalCore.Enqueue(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
+begin
+  if FQueueCount = Length(FQueue) then
+    SetLength(FQueue, FQueueCount * 2 + 8);
+  FQueue[FQueueCount].Data := AData;
+  FQueue[FQueueCount].OnDone := AOnDone;
+  FQueue[FQueueCount].Tag := ATag;
+  Inc(FQueueCount);
+  Inc(FPendingData, Length(AData));
+end;
+
+procedure TTyTerminalCore.ClearQueue;
+var
+  i: Integer;
+begin
+  for i := 0 to FQueueCount - 1 do
+    FQueue[i].Data := '';
+  FQueueCount := 0;
+  FBufferOffset := 0;
+  FPendingData := 0;
+end;
+
+{ write, :152-182 }
+procedure TTyTerminalCore.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
+var
+  more: Boolean;
+begin
+  CheckThread('Write');
+  if FPendingData > TyTermDiscardWatermark then
+    raise ETyTerminalWriteOverflow.Create('write data discarded, use flow control to avoid losing data');
+  if FQueueCount = 0 then
+  begin
+    FBufferOffset := 0;
+    { the first write after user input is parsed at once: echo latency }
+    if FDidUserInput then
+    begin
+      FDidUserInput := False;
+      Enqueue(AData, AOnDone, ATag);
+      InnerWrite(TyTermWriteTimeoutMs, more);
+      if more then
+        RequestProcess;                  { _innerWrite schedules the rest itself }
+      Exit;
+    end;
+    RequestProcess;
+  end;
+  Enqueue(AData, AOnDone, ATag);
+end;
+
+procedure TTyTerminalCore.Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
+var
+  s: RawByteString;
+begin
+  CheckThread('Write');
+  s := '';
+  SetLength(s, ACount);
+  if ACount > 0 then
+    Move(ABuf, s[1], ACount);
+  Write(s, AOnDone, ATag);
+end;
+
+{ _innerWrite, :219-315: whole chunks until the budget is spent -- checked between
+  chunks, so one big chunk is never cut (splitting inside a chunk is phase 5).
+  Unlike upstream the offset moves past a chunk before its callback runs, so a
+  callback that calls WriteSync does not parse that chunk again. }
+procedure TTyTerminalCore.InnerWrite(ABudgetMs: Integer; out AMore: Boolean);
+var
+  start: Double;
+  item: TTyTermQueueItem;
+  i, n: Integer;
+begin
+  start := NowMs;
+  while FQueueCount > FBufferOffset do
+  begin
+    item := FQueue[FBufferOffset];
+    Parse(item.Data);
+    Inc(FBufferOffset);
+    Dec(FPendingData, Length(item.Data));
+    if Assigned(item.OnDone) then
+      item.OnDone(Self, item.Tag);
+    if NowMs - start >= ABudgetMs then
+      Break;
+  end;
+  if FQueueCount > FBufferOffset then
+  begin
+    { drop the processed chunks once there are many of them }
+    if FBufferOffset > TyTermWriteBufferLengthThreshold then
+    begin
+      n := FQueueCount - FBufferOffset;
+      for i := 0 to n - 1 do
+        FQueue[i] := FQueue[FBufferOffset + i];
+      for i := n to FQueueCount - 1 do
+        FQueue[i].Data := '';
+      FQueueCount := n;
+      FBufferOffset := 0;
+    end;
+    AMore := True;
+  end
+  else
+  begin
+    ClearQueue;
+    AMore := False;
+  end;
+end;
+
+function TTyTerminalCore.ProcessPending(ABudgetMs: Integer): Boolean;
+begin
+  CheckThread('ProcessPending');
+  FProcessRequested := False;
+  InnerWrite(ABudgetMs, Result);
+  { the caller schedules the next slice: no OnProcessRequest from here }
+end;
+
+{ writeSync, :106-150 (maxSubsequentCalls not ported). Upstream shifts from index 0,
+  which parses again the chunks a slice already did when a slice stopped midway; here
+  it starts at the first unprocessed chunk (a deliberate difference). }
+procedure TTyTerminalCore.WriteSync(const AData: RawByteString);
+begin
+  CheckThread('WriteSync');
+  Enqueue(AData, nil, 0);
+  if FIsSyncWriting then
+    Exit;                                { a callback's own WriteSync: the loop below takes it }
+  FlushSync;
+end;
+
+{ flushSync, :71-101, from the first unprocessed chunk (see WriteSync); Resize runs
+  it so pending output is parsed at the old size }
+procedure TTyTerminalCore.FlushSync;
+var
+  item: TTyTermQueueItem;
+begin
+  if FIsSyncWriting then
+    Exit;
+  FIsSyncWriting := True;
+  try
+    while FBufferOffset < FQueueCount do
+    begin
+      item := FQueue[FBufferOffset];
+      Inc(FBufferOffset);
+      Parse(item.Data);
+      if Assigned(item.OnDone) then
+        item.OnDone(Self, item.Tag);
+    end;
+  finally
+    ClearQueue;
+    FIsSyncWriting := False;
+  end;
+end;
 
 end.
