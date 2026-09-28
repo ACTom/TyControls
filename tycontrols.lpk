@@ -920,6 +920,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Terminal.Keyboard.pas"/>
         <UnitName Value="tyControls.Terminal.Keyboard"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Render.pas"/>
+        <UnitName Value="tyControls.Terminal.Render"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
