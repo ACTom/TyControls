@@ -740,9 +740,21 @@ begin
       AssertEquals(FixedVariants[v].Id + ': empty', 0, W(''));
       AssertEquals(FixedVariants[v].Id + ': a stray FF', W(fffd), W(#$FF));
       AssertEquals(FixedVariants[v].Id + ': a truncated sequence', W(fffd + fffd), W(#$E4#$B8));
+      AssertEquals(FixedVariants[v].Id + ': a truncated sequence at the end', W('a' + fffd), W('a'#$C3));
       AssertEquals(FixedVariants[v].Id + ': an overlong encoding', W(fffd + fffd), W(#$C0#$80));
+      { The two lead bytes whose first continuation has a narrower range: without it,
+        E0 80 80 reads as U+0000 and F0 80 80 80 as U+0000 too. }
+      AssertEquals(FixedVariants[v].Id + ': an overlong three-byte form', W(fffd + fffd + fffd), W(#$E0#$80#$80));
+      AssertEquals(FixedVariants[v].Id + ': an overlong four-byte form',
+        W(fffd + fffd + fffd + fffd), W(#$F0#$80#$80#$80));
+      { A later continuation byte is checked too: E4 B8 'a' is not U+4E21 swallowing the 'a'. }
+      AssertEquals(FixedVariants[v].Id + ': a bad second continuation byte', W(fffd + fffd + 'a'), W(#$E4#$B8'a'));
       AssertEquals(FixedVariants[v].Id + ': a lone continuation byte', W(fffd + 'a'), W(#$80'a'));
       AssertEquals(FixedVariants[v].Id + ': beyond U+10FFFF', W(fffd + fffd + fffd + fffd), W(#$F4#$90#$80#$80));
+      { WTF-8 reads each three-byte surrogate as one unit, so a pair written as two of
+        them (CESU-8) meets upstream's loop as the pair it is. }
+      AssertEquals(FixedVariants[v].Id + ': a surrogate pair as two three-byte forms',
+        W(Wtf8Of([$1F600])), W(#$ED#$A0#$BD#$ED#$B8#$80));
       AssertEquals(FixedVariants[v].Id + ': WTF-8 lone low surrogate, as upstream',
         loneLow.Integers[FixedVariants[v].Id], W(#$ED#$B8#$80'a'));
     end;

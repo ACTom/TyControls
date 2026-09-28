@@ -26,20 +26,23 @@ unit tyControls.Unicode.Width;
   MIT; the full text is in THIRD-PARTY-NOTICES.md. The '15' table derives from the
   Unicode Character Database (Unicode License v3, same file).
 
-  THREE THINGS THAT LOOK WRONG AND ARE UPSTREAM'S ANSWER, kept so every result matches
+  FOUR THINGS THAT LOOK WRONG AND ARE UPSTREAM'S ANSWER, kept so every result matches
   xterm.js bit for bit (tests/test.unicode.width.pas holds them to the oracle):
 
   - '15' without graphemes never joins. The provider widens every w below 2 to 1, and
     its non-grapheme branch joins only when w is 0, so a combining mark takes a cell of
     its own there: 'e' + U+0301 is 2 cells wide, while its wcwidth is 0. Choose
     '15-graphemes' to get combining marks and clusters.
+  - U+0301 and many other combining marks are East Asian ambiguous in the '15' table.
+    With AAmbiguousWide, 'e' + U+0301 is 3 cells under '15' and 2 under '15-graphemes'.
   - Under '15', C0/C1 controls and U+200D have wcwidth 1 (the trie files them as
     Other / normal width); '6' and '11' say 0. The print path never sends C0 here.
   - TyUnicodeStringCellWidth takes UTF-8, but upstream loops over UTF-16 units and has
     a UCS-2 fallback for lone surrogates. To reach it, the input is read as WTF-8: a
-    three-byte sequence for U+D800..U+DFFF gives that lone surrogate unit. Any other
-    malformed byte gives one U+FFFD and consumes only that byte (upstream never sees
-    such input, so there is nothing to match there). }
+    three-byte sequence for U+D800..U+DFFF gives that lone surrogate unit (so a pair
+    written as two such sequences meets the loop as a pair, as the units would). Any
+    other malformed byte gives one U+FFFD and consumes only that byte (upstream never
+    sees such input, so there is nothing to match there). }
 
 interface
 
