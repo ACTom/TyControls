@@ -2249,8 +2249,11 @@ begin
   Inc(PreferredWidth, MulDiv(EffSize, PPI, 96) div 2 + 2);
 
   PreferredHeight := MulDiv(S.Padding.Top + S.Padding.Bottom, PPI, 96) + TextH;
-  if PreferredHeight < TyDensityHeight(ActiveController, 24) then
-    PreferredHeight := TyDensityHeight(ActiveController, 24);
+  { The density height is LOGICAL px and everything it is compared with here is device px.
+    Raw, the floor was the same 24 px at every scaling: at 200% an auto-sized picker came
+    out 40 tall -- the height of its text -- beside fields that were 48. }
+  if PreferredHeight < MulDiv(TyDensityHeight(ActiveController, 24), PPI, 96) then
+    PreferredHeight := MulDiv(TyDensityHeight(ActiveController, 24), PPI, 96);
 end;
 
 { ── Keyboard ─────────────────────────────────────────────────────────────── }

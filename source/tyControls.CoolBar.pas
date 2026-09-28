@@ -1188,8 +1188,10 @@ begin
   bmp := TBitmap.Create;
   try
     bmp.SetSize(1, 1);
-    bmp.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
-    bmp.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), Font.PixelsPerInch, 96);
+    // The weight too: the band caption is DRAWN with AStyle.FontWeight, and a bold caption
+    // measured as regular reserves a lead narrower than its own ink.
+    TyConfigureMeasureFont(bmp.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, Font.PixelsPerInch);
     Result := bmp.Canvas.TextWidth(AText);
   finally
     bmp.Free;

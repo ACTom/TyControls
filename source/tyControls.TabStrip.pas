@@ -802,8 +802,10 @@ begin
   MeasBmp := TBitmap.Create;
   try
     MeasBmp.SetSize(1, 1);
-    MeasBmp.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
-    MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), APPI, 96);
+    // The weight too: the caption is DRAWN with TabStyle.FontWeight, and a bold caption
+    // measured as regular makes a tab narrower than its own ink.
+    TyConfigureMeasureFont(MeasBmp.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, APPI);
     Result := MeasBmp.Canvas.TextWidth(ACaption);
   finally
     MeasBmp.Free;

@@ -167,10 +167,7 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(AFontName);
-    Meas.Canvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
-    if AWeight >= 600 then Meas.Canvas.Font.Style := [fsBold]
-    else Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, AFontName, AFontSizeLogical, AWeight, APPI);
     Result := Meas.Canvas.TextHeight('Ag');
     if Result < 1 then Result := 1;
   finally
@@ -421,20 +418,18 @@ begin
   Lines := TStringList.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
     if FTitle <> '' then
     begin
-      Meas.Canvas.Font.Size := MulDiv(fs + 1, APPI, 96);
-      Meas.Canvas.Font.Style := [fsBold];
+      // The title's own font, whatever the style's weight: one size up and bold, the same
+      // (fs + 1, 700) the paint pass hands DrawText.
+      TyConfigureMeasureFont(Meas.Canvas, S.FontName, fs + 1, 700, APPI);
       w := Meas.Canvas.TextWidth(FTitle);
       if w > maxW then maxW := w;
       titleH := Meas.Canvas.TextHeight('Ag') + MulDiv(CGapLogical, APPI, 96);
     end;
     if FDescription <> '' then
     begin
-      Meas.Canvas.Font.Size := MulDiv(fs, APPI, 96);
-      if S.FontWeight >= 600 then Meas.Canvas.Font.Style := [fsBold]
-      else Meas.Canvas.Font.Style := [];
+      TyConfigureMeasureFont(Meas.Canvas, S.FontName, fs, S.FontWeight, APPI);
       lh := Meas.Canvas.TextHeight('Ag');
       Lines.Text := FDescription;
       if Lines.Count = 0 then Lines.Add('');

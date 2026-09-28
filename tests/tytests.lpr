@@ -174,7 +174,7 @@ uses
   test.alert, test.notification, test.empty, test.segmented,
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,
-  test.dpi.fontlatch,
+  test.dpi.fontlatch, test.dpi.measurefont,
   test.parity.datetime;
 
 type

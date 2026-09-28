@@ -112,12 +112,7 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
-    Meas.Canvas.Font.Size := MulDiv(fs, APPI, 96);
-    if AStyle.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, AStyle.FontName, fs, AStyle.FontWeight, APPI);
     ALineHPx := Meas.Canvas.TextHeight('Ag');
     if ALineHPx < 1 then ALineHPx := 1;
     for i := 0 to ALines.Count - 1 do
