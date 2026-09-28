@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 530
   Top = 0
-  Width = 420
+  Width = 428
   Caption = 'TTyListBox example'
   ClientHeight = 530
-  ClientWidth = 420
+  ClientWidth = 428
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -14,14 +14,14 @@ object MainForm: TMainForm
     Left = 0
     Height = 530
     Top = 0
-    Width = 420
+    Width = 428
     TabOrder = 0
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 420
+      Width = 428
       Align = alTop
       Caption = 'TTyListBox  ·  TyControls'
       TitleAlignment = taLeftJustify
@@ -78,12 +78,12 @@ object MainForm: TMainForm
       Left = 16
       Height = 30
       Top = 332
-      Width = 132
+      Width = 142
       Caption = 'Pin height 24 / 32'
       OnClick = ToggleHeight
     end
     object BtnSelAll: TTyButton
-      Left = 158
+      Left = 168
       Height = 30
       Top = 332
       Width = 120
@@ -91,10 +91,10 @@ object MainForm: TMainForm
       OnClick = DoSelectAll
     end
     object BtnClear: TTyButton
-      Left = 288
+      Left = 298
       Height = 30
       Top = 332
-      Width = 120
+      Width = 121
       Caption = 'Clear selection'
       OnClick = DoClear
     end
@@ -102,20 +102,20 @@ object MainForm: TMainForm
       Left = 16
       Height = 30
       Top = 370
-      Width = 120
+      Width = 128
       Caption = 'Scroll to row 20'
       OnClick = DoScroll
     end
     object BtnAlternate: TTyButton
-      Left = 146
+      Left = 154
       Height = 30
       Top = 370
-      Width = 120
+      Width = 128
       Caption = 'Select every 2nd'
       OnClick = DoAlternate
     end
     object BtnWide: TTyButton
-      Left = 276
+      Left = 292
       Height = 30
       Top = 370
       Width = 132

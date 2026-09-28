@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 220
   Height = 660
   Top = 100
-  Width = 720
+  Width = 731
   Caption = 'TyControls — file dialogs (plain / picture / preview, six variants)'
   ClientHeight = 660
-  ClientWidth = 720
+  ClientWidth = 731
   Font.Height = -12
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -15,14 +15,14 @@ object MainForm: TMainForm
     Left = 0
     Height = 660
     Top = 0
-    Width = 720
+    Width = 731
     TabOrder = 0
     Align = alClient
     object TitleBar1: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 720
+      Width = 731
       Align = alTop
       Caption = 'File dialogs  ·  TyControls'
       TitleAlignment = taLeftJustify
@@ -56,12 +56,12 @@ object MainForm: TMainForm
       Left = 16
       Height = 32
       Top = 72
-      Width = 138
+      Width = 149
       Caption = 'Open (multi-select)'
       OnClick = BtnOpenClick
     end
     object BtnSave: TTyButton
-      Left = 164
+      Left = 175
       Height = 32
       Top = 72
       Width = 130
@@ -69,7 +69,7 @@ object MainForm: TMainForm
       OnClick = BtnSaveClick
     end
     object ChkVetoSave: TTyCheckBox
-      Left = 308
+      Left = 319
       Height = 24
       Top = 76
       Width = 404

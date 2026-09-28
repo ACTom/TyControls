@@ -1722,10 +1722,15 @@ begin
 end;
 
 procedure TEditTest.TestRenderedTextShiftsWithScroll;
-{ Narrow edit (80px), long text (40×'W'), white background, black text.
+{ Narrow edit (80px), long text, white background, black text.
   Render at HOME (scroll=0) and after END (scrolled).
   The two bitmaps must differ in the content area (scroll shifted content).
-  Also verify effective caret is within visible range after END. }
+  Also verify effective caret is within visible range after END.
+
+  The text is NOT one letter forty times. A run of identical glyphs is periodic, and once
+  text is hinted at its real size every 'W' advances by a whole number of pixels -- so a
+  scroll that happens to be a multiple of that advance draws exactly the picture it
+  started from, and "the render changed" fails for a scroll that worked. }
 var
   F: TCustomForm;
   E: TTyEditAccess;
@@ -1746,7 +1751,7 @@ begin
     E.Parent := F;
     E.Controller := Ctl;
     E.SetBounds(0, 0, 80, 24);
-    E.Text := StringOfChar('W', 40);
+    E.Text := 'W0a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8s9';
     E.CaretPos := 0;
     AssertEquals('Pre: ScrollX = 0 at HOME', 0, E.ScrollX);
 
