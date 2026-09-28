@@ -10,7 +10,7 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
   tyControls.DateTimePicker, tyControls.CalcEdit,
-  tyControls.Grid.Layout;
+  tyControls.Grid.Layout, tyControls.Panel;
 
 type
   TTyGridControlTest = class(TTestCase)
@@ -316,6 +316,8 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
+    procedure TestFilterEditorSitsInTheBandThatIsPainted;
+    procedure TestFilterDropDownIsLaidOutInLogicalPx;
     procedure TestCsvStreamRoundTrip;
     procedure TestClearContentsRangeIsUndoable;
     procedure TestRangeLimitedExport;
@@ -1409,6 +1411,8 @@ type
     function  InkColumnOfFirstGlyph(ARow: Integer): Integer;
     function  FilterEditorVisible: Boolean;
     function  FilterEditorBounds: TRect;
+    { 列头筛选下拉的面板,只建不显示(显示要开真窗口)。 }
+    function  FilterDropDownPanelForTest: TTyPanel;
     procedure SetFilterEditorText(const AText: string);
     procedure PressKeyInFilterEditor(AKey: Word);
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
@@ -1600,6 +1604,12 @@ end;
 function TStrGridAccess.FilterEditorBounds: TRect;
 begin
   Result := FilterEditor.BoundsRect;
+end;
+
+function TStrGridAccess.FilterDropDownPanelForTest: TTyPanel;
+begin
+  EnsureFilterDropDown;
+  Result := FilterDropDownPanel;
 end;
 
 procedure TStrGridAccess.SetFilterEditorText(const AText: string);
@@ -10328,6 +10338,136 @@ begin
   G.PressKeyInFilterEditor(VK_ESCAPE);
   AssertEquals('Esc 之后仍是上一条过滤', 5, G.DisplayRowCount);
   AssertEquals('原文也没被改掉', '>500', G.FilterText(1));
+end;
+
+{ 筛选编辑器要落在**画出来的**那条带里 —— 在 175% 下、在现代密度下都是。
+                                                              (ACTom/TyControls#2)
+  从前有两处各错一点,100% + 经典密度下两处都恰好看不出来:
+
+    * 带的位置按 ScaleI(Header.Height) 算。Header.Height 只是列头高度的**下限** ——
+      现代密度把它抬到 --header-height,自适应高度的标题也会把它撑高 —— 而筛选行是
+      画在**真实的**列头下面的。于是编辑器开在列头里,盖住了标题。
+    * 编辑器相对带内缩 2 px,写的是字面量。画的那个框也是字面量 2,所以两边一致地
+      错:175% 下框贴着带边,字却大了 1.75 倍。
+
+  带的位置用**命中测试**去找 —— 指针怎么认这条带,这里就怎么认 —— 不重算一遍公式:
+  重算一遍的测试只会跟着实现一起错。 }
+procedure TTyStringGridTest.TestFilterEditorSitsInTheBandThatIsPainted;
+var
+  G: TStrGridAccess;
+  r, y, bandTop, bandBottom, inset: Integer;
+  eb: TRect;
+begin
+  FCtl.LoadThemeCssAdditive(':root { --header-height: 36; }');
+  FCtl.Density := tdModern;
+  G := MakeStrGrid(FForm, FCtl);
+  G.Font.PixelsPerInch := 168;
+  G.SetBounds(0, 0, 700, 525);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[1, r] := IntToStr((r + 1) * 100);
+  G.ShowFilterRow := True;
+
+  bandTop := -1;
+  bandBottom := -1;
+  for y := 0 to G.Height - 1 do
+    if G.HitAt(G.ColLeft(1) + 10, y).Part = ghpFilterRow then
+    begin
+      if bandTop < 0 then bandTop := y;
+      bandBottom := y + 1;
+    end;
+  AssertTrue('前置:命中测试找得到筛选行', bandTop >= 0);
+  AssertTrue(Format('前置:现代密度下列头比 Header.Height 高(带顶 %d,ScaleI(Header.Height) = %d)',
+    [bandTop, G.ScaleForTest(G.Header.Height)]), bandTop > G.ScaleForTest(G.Header.Height));
+
+  G.ClickAt(G.ColLeft(1) + 10, (bandTop + bandBottom) div 2);
+  AssertTrue('点了就该开出筛选编辑器', G.FilterEditorVisible);
+  eb := G.FilterEditorBounds;
+  inset := G.ScaleForTest(2);
+  AssertEquals('前置:2 个逻辑像素在这块屏幕上是 4', 4, inset);
+  AssertEquals('编辑器的顶 = 带顶 + 2 逻辑像素', bandTop + inset, eb.Top);
+  AssertEquals('编辑器的左 = 列左 + 2 逻辑像素', G.ColLeft(1) + inset, eb.Left);
+  AssertTrue(Format('编辑器不越过带底(带 %d..%d,编辑器 %d..%d)',
+    [bandTop, bandBottom, eb.Top, eb.Bottom]), eb.Bottom <= bandBottom + 1);
+end;
+
+{ 列头筛选下拉是代码摆出来的:面板 232 x 306、按钮 68 x 26、间距 8 / 6 / 4 ——
+  全是 96 PPI 的设计值,而且是弹层**显示之后**才有父窗口,没有任何 DPI pass 碰得到它。
+  原样用的话,175% 下是一个 232 px 宽的面板装着 1.75 倍大的字。
+
+  这里量的是"175% 下的面板 = 100% 下的面板 x 1.75"。 }
+procedure TTyStringGridTest.TestFilterDropDownIsLaidOutInLogicalPx;
+
+  function Layout(APPI: Integer): TStringList;
+  var
+    G: TStrGridAccess;
+    p: TTyPanel;
+    i: Integer;
+  begin
+    Result := TStringList.Create;
+    G := MakeStrGrid(FForm, FCtl);
+    G.Font.PixelsPerInch := APPI;
+    p := G.FilterDropDownPanelForTest;
+    Result.Add(Format('panel|0|0|%d|%d', [p.Width, p.Height]));
+    for i := 0 to p.ControlCount - 1 do
+    begin
+      { 面板建好时还没有父窗口,它的 PPI 是自己出生时的 96;里面的控件跟着它。
+        不先把网格的 PPI 交给面板,这些控件就按 96 算自己的尺寸下限、按 96 画字,
+        直到弹层显示的那一刻才改过来 —— 而布局是在那之前摆的。 }
+      AssertEquals(p.Controls[i].ClassName + ' 要和网格同一个 PPI', APPI,
+        p.Controls[i].Font.PixelsPerInch);
+      Result.Add(Format('%s|%d|%d|%d|%d', [p.Controls[i].ClassName, p.Controls[i].Left,
+        p.Controls[i].Top, p.Controls[i].Width, p.Controls[i].Height]));
+    end;
+    G.Free;
+  end;
+
+var
+  lo, hi, a, b, bad: TStringList;
+  i, k, v, v2, want, tol: Integer;
+  what: string;
+const
+  CField: array[1..4] of string = ('x', 'y', 'w', 'h');
+begin
+  lo := Layout(96);
+  hi := Layout(168);
+  a := TStringList.Create;
+  b := TStringList.Create;
+  bad := TStringList.Create;
+  try
+    a.Delimiter := '|';
+    a.StrictDelimiter := True;
+    b.Delimiter := '|';
+    b.StrictDelimiter := True;
+    AssertEquals('前置:面板里有搜索框、全选、列表和两个按钮', 6, lo.Count);
+    AssertEquals('两种缩放下是同一批控件', lo.Count, hi.Count);
+    for i := 0 to lo.Count - 1 do
+    begin
+      a.DelimitedText := lo[i];
+      b.DelimitedText := hi[i];
+      what := '';
+      for k := 1 to 4 do
+      begin
+        v := StrToInt(a[k]);
+        v2 := StrToInt(b[k]);
+        want := MulDiv(v, 168, 96);
+        tol := 6;
+        if Abs(want) * 8 div 100 > tol then tol := Abs(want) * 8 div 100;
+        if Abs(v2 - want) > tol then
+          what := what + Format(' %s %d -> %d(应为 %d)', [CField[k], v, v2, want]);
+      end;
+      if what <> '' then bad.Add(a[0] + ':' + what);
+    end;
+    AssertEquals('168 PPI 下的筛选下拉不是 96 PPI 下那个的 1.75 倍:' + LineEnding + bad.Text,
+      0, bad.Count);
+  finally
+    bad.Free;
+    b.Free;
+    a.Free;
+    hi.Free;
+    lo.Free;
+  end;
 end;
 
 { P3.6:删一列要撤得回来 —— 连**那一列的全部身份**一起。
