@@ -199,7 +199,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 |---|---|
 | `TTyTrackBar` | Slider |
 | `TTyProgressBar` | Progress bar |
-| `TTyScrollBar` | Scroll bar |
+| `TTyScrollBar` | Scroll bar; can fade out when idle, per theme or per control (`AutoHide`) |
 | `TTyStatusBar` | Status bar |
 | `TTyToolBar` | Toolbar |
 | `TTyToolButton` | Toolbar button: six styles (command / toggle / dropdown / grouped / separator, …) |

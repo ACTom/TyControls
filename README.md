@@ -199,7 +199,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 |---|---|
 | `TTyTrackBar` | 滑块 |
 | `TTyProgressBar` | 进度条 |
-| `TTyScrollBar` | 滚动条 |
+| `TTyScrollBar` | 滚动条:可随主题或按控件设置闲置时自动淡出(`AutoHide`) |
 | `TTyStatusBar` | 状态栏 |
 | `TTyToolBar` | 工具条 |
 | `TTyToolButton` | 工具条按钮:命令 / 开关 / 下拉 / 分组 / 分隔等六种样式 |
