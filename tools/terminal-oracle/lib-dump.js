@@ -44,6 +44,10 @@ const GENERATED = [
   'tests/fixtures/terminal-unicode-cases.json',
   'source/tyControls.Terminal.Charsets.inc',
   /^tests\/fixtures\/terminal-(parser|buffer|core)-[a-z0-9-]+\.json$/,
+  // phase 3: keyboard and paste (keyboard-cases.js), the renderer's glyph table and
+  // palette (gen-terminal-glyphs.js, view-cases.js)
+  /^tests\/fixtures\/terminal-keyboard(-[0-9]+)?\.json$/,
+  'tests/fixtures/terminal-paste.json',
 ];
 
 function isGenerated(rel) {
@@ -107,6 +111,9 @@ const PORTED = [
     'common/services/BufferService', 'common/services/CoreService',
     'common/services/CharsetService', 'common/services/MouseStateService',
     'common/services/OscLinkService', 'common/Color', 'headless/Terminal', 'headless/public/Terminal',
+    // phase 3: the keyboard, paste and the third-level shift test (CoreBrowserTerminal
+    // loads in node: nothing at its top level touches the DOM), the default palette
+    'common/input/Keyboard', 'browser/Clipboard', 'browser/Types', 'browser/CoreBrowserTerminal',
   ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
 ];
 
