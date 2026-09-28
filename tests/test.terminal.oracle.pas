@@ -14,7 +14,8 @@ unit test.terminal.oracle;
 interface
 
 uses
-  Classes, SysUtils, Types, fpjson, jsonparser, base64, tyControls.Terminal.Buffer;
+  Classes, SysUtils, Types, fpjson, jsonparser, base64, tyControls.Unicode.Width,
+  tyControls.Terminal.Parser, tyControls.Terminal.Buffer, tyControls.Terminal.Core;
 
 const
   TyTermPinnedCommitPrefix = 'c58ea36';
@@ -99,6 +100,51 @@ procedure TyTermCompareBuffer(ABuf: TTyTerminalBuffer; AJson: TJSONObject; ACols
 function TyTermLinksJson(ALinks: TTyTerminalOscLinks): TJSONArray;
 { Compare two JSON values as one comparison; the texts go into the miss. }
 procedure TyTermCompareJson(AWant, AGot: TJSONData; const ACaseId, APath: string; AMisses: TTyTermMisses);
+
+{ ---- core layer (Task 18) ---- }
+
+type
+  { A core built from a fixture case, with recorders on its events and the palette
+    answering OnQueryBaseColor -- what lib-term.js's makeCaseTerminal,
+    attachRecorders and attachSynth are on the node side. }
+  TTyTermHarness = class
+  private
+    FPalette: array of Cardinal;
+    procedure OnData(Sender: TObject; const AData: RawByteString);
+    procedure OnBell(Sender: TObject);
+    procedure OnLineFeed(Sender: TObject);
+    procedure OnCursorMove(Sender: TObject);
+    procedure OnTitle(Sender: TObject; const AText: string);
+    procedure OnRender(Sender: TObject; AFirst, ALast: Integer);
+    procedure OnScrolled(Sender: TObject; AYDisp: Integer);
+    procedure OnQueryColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
+    procedure SetPalette(AArr: TJSONArray);
+  public
+    Core: TTyTerminalCore;
+    Data: RawByteString;
+    Bells, LineFeeds, CursorMoves: Integer;
+    Titles: TStringList;
+    Renders: array of TPoint;
+    Scrolls: array of Integer;
+    constructor Create(ACase: TJSONObject; AFilePalette: TJSONArray);
+    destructor Destroy; override;
+    procedure ClearRecord;
+    procedure SetOption(const AName: string; AValue: TJSONData);
+    { AVariant nil: the steps as they are; otherwise the single write cut up }
+    procedure Run(ASteps: TJSONArray; AVariant: TJSONObject = nil);
+  end;
+
+{ Every field of the plan's state against AExpect. AVariant skips renders and
+  cursorMoves, which follow the number of parse calls. }
+procedure TyTermCompareState(AHarness: TTyTermHarness; AExpect: TJSONObject; const ACaseId: string;
+  AVariant: Boolean; AMisses: TTyTermMisses);
+{ New core, run, compare; Reset on the same core, run again, compare with afterReset;
+  then each variant on a new core. Returns the comparisons it made. }
+function TyTermRunCase(ACase: TJSONObject; AFilePalette: TJSONArray; AMisses: TTyTermMisses): Int64;
+{ The UTF-8 bytes of the reply stream with our XTVERSION name swapped for the
+  placeholder the node side uses (spec 13.5 #3). }
+function TyTermNormalizeData(const AData: RawByteString): RawByteString;
+function TyTermUnicodeVersionOf(const AName: string): TTyUnicodeVersion;
 
 implementation
 
@@ -811,6 +857,481 @@ begin
     o.Add('lines', a);
     Result.Add(o);
   end;
+end;
+
+{ ---- core layer ------------------------------------------------------------------------ }
+
+function TyTermUnicodeVersionOf(const AName: string): TTyUnicodeVersion;
+var
+  v: TTyUnicodeVersion;
+begin
+  for v := Low(TTyUnicodeVersion) to High(TTyUnicodeVersion) do
+    if TyUnicodeVersionName(v) = AName then
+      Exit(v);
+  raise Exception.Create('unknown Unicode version ' + AName);
+end;
+
+function TyTermNormalizeData(const AData: RawByteString): RawByteString;
+const
+  Ours = 'TyControls(' + TyTermLibraryVersion + ')';
+begin
+  Result := StringReplace(AData, Ours, #0'VERSION'#0, [rfReplaceAll]);
+end;
+
+constructor TTyTermHarness.Create(ACase: TJSONObject; AFilePalette: TJSONArray);
+var
+  opts, synth: TJSONObject;
+  i: Integer;
+begin
+  inherited Create;
+  Titles := TStringList.Create;
+  Core := TTyTerminalCore.Create(ACase.Get('cols', 20), ACase.Get('rows', 6));
+  synth := nil;
+  if ACase.Find('synth') <> nil then
+    synth := ACase.Objects['synth'];
+  if (synth <> nil) and (synth.Find('palette') <> nil) then
+    SetPalette(synth.Arrays['palette'])
+  else
+    SetPalette(AFilePalette);
+  if ACase.Find('options') <> nil then
+  begin
+    opts := ACase.Objects['options'];
+    for i := 0 to opts.Count - 1 do
+      SetOption(opts.Names[i], opts.Items[i]);
+  end;
+  Core.OnData := @OnData;
+  Core.OnBell := @OnBell;
+  Core.OnLineFeed := @OnLineFeed;
+  Core.OnCursorMove := @OnCursorMove;
+  Core.OnTitleChange := @OnTitle;
+  Core.OnRefreshRows := @OnRender;
+  Core.OnScroll := @OnScrolled;
+  Core.OnQueryBaseColor := @OnQueryColor;
+  { 1004 is off: nothing is sent }
+  Core.ReportFocus((synth = nil) or synth.Get('focused', True));
+end;
+
+destructor TTyTermHarness.Destroy;
+begin
+  Core.Free;
+  Titles.Free;
+  inherited Destroy;
+end;
+
+procedure TTyTermHarness.SetPalette(AArr: TJSONArray);
+var
+  i: Integer;
+begin
+  FPalette := nil;
+  SetLength(FPalette, AArr.Count);
+  for i := 0 to AArr.Count - 1 do
+    FPalette[i] := Cardinal(AArr.Int64s[i]);
+end;
+
+procedure TTyTermHarness.ClearRecord;
+begin
+  Data := '';
+  Bells := 0;
+  LineFeeds := 0;
+  CursorMoves := 0;
+  Titles.Clear;
+  Renders := nil;
+  Scrolls := nil;
+end;
+
+procedure TTyTermHarness.OnData(Sender: TObject; const AData: RawByteString);
+begin
+  Data := Data + AData;
+end;
+
+procedure TTyTermHarness.OnBell(Sender: TObject);
+begin
+  Inc(Bells);
+end;
+
+procedure TTyTermHarness.OnLineFeed(Sender: TObject);
+begin
+  Inc(LineFeeds);
+end;
+
+procedure TTyTermHarness.OnCursorMove(Sender: TObject);
+begin
+  Inc(CursorMoves);
+end;
+
+procedure TTyTermHarness.OnTitle(Sender: TObject; const AText: string);
+begin
+  Titles.Add(AText);
+end;
+
+procedure TTyTermHarness.OnRender(Sender: TObject; AFirst, ALast: Integer);
+begin
+  SetLength(Renders, Length(Renders) + 1);
+  Renders[High(Renders)] := Point(AFirst, ALast);
+end;
+
+procedure TTyTermHarness.OnScrolled(Sender: TObject; AYDisp: Integer);
+begin
+  SetLength(Scrolls, Length(Scrolls) + 1);
+  Scrolls[High(Scrolls)] := AYDisp;
+end;
+
+procedure TTyTermHarness.OnQueryColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
+begin
+  if (AIndex >= 0) and (AIndex <= High(FPalette)) then
+    ARgb := FPalette[AIndex]
+  else
+    ARgb := 0;
+end;
+
+{ the plan's option names -> core properties }
+procedure TTyTermHarness.SetOption(const AName: string; AValue: TJSONData);
+var
+  o: TJSONObject;
+  i: Integer;
+  wp: TTyTerminalWindowsPty;
+  wo: TTyTerminalWindowOptions;
+  ve: TTyTerminalVtExtensions;
+  n: string;
+  opt: TTyTermWindowOption;
+const
+  WindowOptionNames: array[TTyTermWindowOption] of string = ('restoreWin', 'minimizeWin', 'setWinPosition',
+    'setWinSizePixels', 'raiseWin', 'lowerWin', 'refreshWin', 'setWinSizeChars', 'maximizeWin',
+    'fullscreenWin', 'getWinState', 'getWinPosition', 'getWinSizePixels', 'getScreenSizePixels',
+    'getCellSizePixels', 'getWinSizeChars', 'getScreenSizeChars', 'getIconTitle', 'getWinTitle',
+    'pushTitle', 'popTitle', 'setWinLines');
+begin
+  if AName = 'scrollback' then Core.Scrollback := AValue.AsInteger
+  else if AName = 'tabStopWidth' then Core.TabStopWidth := AValue.AsInteger
+  else if AName = 'convertEol' then Core.ConvertEol := AValue.AsBoolean
+  else if AName = 'scrollOnUserInput' then Core.ScrollOnUserInput := AValue.AsBoolean
+  else if AName = 'disableStdin' then Core.ReadOnly := AValue.AsBoolean
+  else if AName = 'scrollOnEraseInDisplay' then Core.ScrollOnEraseInDisplay := AValue.AsBoolean
+  else if AName = 'cursorBlink' then Core.CursorBlink := AValue.AsBoolean
+  else if AName = 'allowSetCursorBlink' then Core.AllowSetCursorBlink := AValue.AsBoolean
+  else if AName = 'ambiguousWide' then Core.AmbiguousWide := AValue.AsBoolean
+  else if AName = 'unicodeVersion' then Core.UnicodeVersion := TyTermUnicodeVersionOf(AValue.AsString)
+  else if AName = 'cursorStyle' then
+  begin
+    n := AValue.AsString;
+    if n = 'underline' then Core.CursorStyle := tcoUnderline
+    else if n = 'bar' then Core.CursorStyle := tcoBar
+    else Core.CursorStyle := tcoBlock;
+  end
+  else if AName = 'windowsPty' then
+  begin
+    wp.Backend := twpNone;
+    wp.BuildNumber := 0;
+    if AValue.JSONType = jtObject then
+    begin
+      o := TJSONObject(AValue);
+      if o.Get('backend', '') = 'conpty' then wp.Backend := twpConPty
+      else if o.Get('backend', '') = 'winpty' then wp.Backend := twpWinPty;
+      wp.BuildNumber := o.Get('buildNumber', 0);
+    end;
+    Core.WindowsPty := wp;
+  end
+  else if AName = 'windowOptions' then
+  begin
+    wo := [];
+    for i := 0 to AValue.Count - 1 do
+      for opt := Low(TTyTermWindowOption) to High(TTyTermWindowOption) do
+        if WindowOptionNames[opt] = AValue.Items[i].AsString then
+          Include(wo, opt);
+    Core.WindowOptions := wo;
+  end
+  else if AName = 'vtExtensions' then
+  begin
+    o := TJSONObject(AValue);
+    ve := Core.VtExtensions;
+    for i := 0 to o.Count - 1 do
+    begin
+      n := o.Names[i];
+      if n = 'kittyKeyboard' then
+      begin
+        if o.Items[i].AsBoolean then Include(ve, tveKittyKeyboard) else Exclude(ve, tveKittyKeyboard);
+      end
+      else if n = 'win32InputMode' then
+      begin
+        if o.Items[i].AsBoolean then Include(ve, tveWin32InputMode) else Exclude(ve, tveWin32InputMode);
+      end
+      else if n = 'kittySgrBoldFaintControl' then
+      begin
+        if o.Items[i].AsBoolean then Include(ve, tveKittySgrBoldFaint) else Exclude(ve, tveKittySgrBoldFaint);
+      end
+      else if n = 'colorSchemeQuery' then
+      begin
+        if o.Items[i].AsBoolean then Include(ve, tveColorSchemeQuery) else Exclude(ve, tveColorSchemeQuery);
+      end;
+    end;
+    Core.VtExtensions := ve;
+  end
+  else
+    raise Exception.Create('unknown option ' + AName);
+end;
+
+procedure TTyTermHarness.Run(ASteps: TJSONArray; AVariant: TJSONObject);
+var
+  k, t, prev, cut: Integer;
+  s: TJSONObject;
+  bytes: RawByteString;
+  cuts: TJSONData;
+  o: TJSONObject;
+begin
+  if AVariant <> nil then
+  begin
+    { one write, cut up: every piece its own parse call }
+    bytes := TyTermBase64Bytes(ASteps.Objects[0].Strings['write']);
+    cuts := AVariant.Find('cuts');
+    if cuts.JSONType = jtString then
+    begin
+      for k := 1 to Length(bytes) do
+        Core.WriteSync(bytes[k]);
+    end
+    else
+    begin
+      prev := 0;
+      for k := 0 to cuts.Count - 1 do
+      begin
+        cut := cuts.Items[k].AsInteger;
+        Core.WriteSync(Copy(bytes, prev + 1, cut - prev));
+        prev := cut;
+      end;
+      Core.WriteSync(Copy(bytes, prev + 1, MaxInt));
+    end;
+    Exit;
+  end;
+  for k := 0 to ASteps.Count - 1 do
+  begin
+    s := ASteps.Objects[k];
+    if s.Find('write') <> nil then
+      Core.WriteSync(TyTermBase64Bytes(s.Strings['write']))
+    else if s.Find('writeRepeat') <> nil then
+    begin
+      o := s.Objects['writeRepeat'];
+      bytes := TyTermBase64Bytes(o.Strings['b64']);
+      for t := 1 to o.Integers['times'] do
+        Core.WriteSync(bytes);
+    end
+    else if s.Find('resize') <> nil then
+      Core.Resize(s.Arrays['resize'].Integers[0], s.Arrays['resize'].Integers[1])
+    else if s.Find('input') <> nil then
+      Core.Input(TyTermBase64Bytes(s.Strings['input']), s.Booleans['user'])
+    else if s.Find('reset') <> nil then
+      Core.Reset
+    else if s.Find('clear') <> nil then
+      Core.ClearScrollback
+    else if s.Find('scrollLines') <> nil then
+      Core.ScrollLines(s.Integers['scrollLines'])
+    else if s.Find('scrollToTop') <> nil then
+      Core.ScrollToTop
+    else if s.Find('scrollToBottom') <> nil then
+      Core.ScrollToBottom
+    else if s.Find('setOption') <> nil then
+    begin
+      o := s.Objects['setOption'];
+      for t := 0 to o.Count - 1 do
+        SetOption(o.Names[t], o.Items[t]);
+    end
+    else if s.Find('focus') <> nil then
+      Core.ReportFocus(s.Booleans['focus'])
+    else if s.Find('theme') <> nil then
+    begin
+      SetPalette(s.Arrays['theme']);
+      Core.NotifyColorSchemeChanged;
+    end
+    else
+      raise Exception.Create('unknown step ' + s.AsJSON);
+  end;
+end;
+
+var
+  GKeyCore: TTyTerminalCore;
+
+function HarnessCharsetKey(AId: TTyTermCharsetId): string;
+begin
+  Result := GKeyCore.CharsetKey(AId);
+end;
+
+function KeyOrNull(ACore: TTyTerminalCore; AId: TTyTermCharsetId): TJSONData;
+begin
+  if AId = 0 then
+    Result := TJSONNull.Create
+  else
+    Result := TJSONString.Create(ACore.CharsetKey(AId));
+end;
+
+procedure TyTermCompareState(AHarness: TTyTermHarness; AExpect: TJSONObject; const ACaseId: string;
+  AVariant: Boolean; AMisses: TTyTermMisses);
+var
+  core: TTyTerminalCore;
+  got: TJSONObject;
+  modes, charset, opts: TJSONObject;
+  arr, a2: TJSONArray;
+  m: TTyTerminalModes;
+  i, k: Integer;
+  want: TJSONData;
+  s: string;
+  stacks: TStringDynArray;
+  ints: TIntegerDynArray;
+const
+  Protocols: array[TTyTerminalMouseProtocol] of string = ('NONE', 'X10', 'VT200', 'DRAG', 'ANY');
+  Encodings: array[TTyTerminalMouseEncoding] of string = ('DEFAULT', 'SGR', 'SGR_PIXELS');
+  Styles: array[TTyTermCursorRequest] of string = ('', 'block', 'underline', 'bar');
+begin
+  core := AHarness.Core;
+  GKeyCore := core;
+  got := TJSONObject.Create;
+  try
+    if core.Buffers.IsAlt then s := 'alt' else s := 'normal';
+    got.Add('active', s);
+    got.Add('isUserScrolling', core.BufferService.IsUserScrolling);
+    m := core.Modes;
+    modes := TJSONObject.Create;
+    modes.Add('applicationCursorKeys', m.ApplicationCursorKeys);
+    modes.Add('applicationKeypad', m.ApplicationKeypad);
+    modes.Add('bracketedPaste', m.BracketedPaste);
+    modes.Add('insert', m.Insert);
+    modes.Add('origin', m.Origin);
+    modes.Add('reverseWraparound', m.ReverseWraparound);
+    modes.Add('sendFocus', m.SendFocus);
+    modes.Add('showCursor', m.ShowCursor);
+    modes.Add('synchronizedOutput', m.SynchronizedOutput);
+    modes.Add('win32Input', m.Win32Input);
+    modes.Add('wraparound', m.Wraparound);
+    modes.Add('colorSchemeUpdates', m.ColorSchemeUpdates);
+    modes.Add('mouseProtocol', Protocols[m.MouseProtocol]);
+    modes.Add('mouseEncoding', Encodings[m.MouseEncoding]);
+    if m.CursorRequest = tcrDefault then modes.Add('cursorStyle', TJSONNull.Create)
+    else modes.Add('cursorStyle', Styles[m.CursorRequest]);
+    case m.BlinkRequest of
+      tbrDefault: modes.Add('cursorBlink', TJSONNull.Create);
+      tbrOn: modes.Add('cursorBlink', True);
+    else
+      modes.Add('cursorBlink', False);
+    end;
+    modes.Add('kittyFlags', core.KittyFlags);
+    arr := TJSONArray.Create;
+    arr.Add(core.KittyMainFlags);
+    arr.Add(core.KittyAltFlags);
+    for k := 0 to 1 do
+    begin
+      a2 := TJSONArray.Create;
+      ints := core.KittyStacks(k = 1);
+      for i := 0 to High(ints) do
+        a2.Add(ints[i]);
+      arr.Add(a2);
+    end;
+    modes.Add('kittyStacks', arr);
+    modes.Add('cursorInitialized', core.IsCursorInitialized);
+    got.Add('modes', modes);
+    opts := TJSONObject.Create;
+    opts.Add('convertEol', core.ConvertEol);
+    opts.Add('cursorBlink', core.CursorBlink);
+    got.Add('options', opts);
+    charset := TJSONObject.Create;
+    charset.Add('glevel', core.GLevel);
+    arr := TJSONArray.Create;
+    for k := 0 to 3 do
+      arr.Add(KeyOrNull(core, core.CharsetOfG(k)));
+    charset.Add('g', arr);
+    got.Add('charset', charset);
+    got.Add('title', TyTermDigestableJson(core.Title));
+    got.Add('iconName', TyTermDigestableJson(core.IconName));
+    arr := TJSONArray.Create;
+    a2 := TJSONArray.Create;
+    stacks := core.WindowTitleStack;
+    for i := 0 to High(stacks) do
+      a2.Add(TyTermDigestableJson(stacks[i]));
+    arr.Add(a2);
+    a2 := TJSONArray.Create;
+    stacks := core.IconNameStack;
+    for i := 0 to High(stacks) do
+      a2.Add(TyTermDigestableJson(stacks[i]));
+    arr.Add(a2);
+    got.Add('titleStacks', arr);
+    got.Add('bells', AHarness.Bells);
+    got.Add('lineFeeds', AHarness.LineFeeds);
+    got.Add('cursorMoves', AHarness.CursorMoves);
+    arr := TJSONArray.Create;
+    for i := 0 to AHarness.Titles.Count - 1 do
+      arr.Add(TyTermDigestableJson(AHarness.Titles[i]));
+    got.Add('titles', arr);
+    arr := TJSONArray.Create;
+    for i := 0 to High(AHarness.Renders) do
+      arr.Add(TJSONArray.Create([AHarness.Renders[i].X, AHarness.Renders[i].Y]));
+    got.Add('renders', arr);
+    arr := TJSONArray.Create;
+    for i := 0 to High(AHarness.Scrolls) do
+      arr.Add(AHarness.Scrolls[i]);
+    got.Add('scrolls', arr);
+    got.Add('links', TyTermLinksJson(core.Links));
+    got.Add('parserState', Ord(core.Parser.CurrentState));
+    got.Add('joinState', Int64(core.Parser.PrecedingJoinState));
+
+    for i := 0 to got.Count - 1 do
+    begin
+      if AVariant and ((got.Names[i] = 'renders') or (got.Names[i] = 'cursorMoves')) then
+        Continue;
+      want := AExpect.Find(got.Names[i]);
+      TyTermCompareJson(want, got.Items[i], ACaseId, got.Names[i], AMisses);
+    end;
+    { the reply bytes, normalised }
+    AMisses.AddCompared;
+    if TyTermBase64Bytes(AExpect.Strings['data']) <> TyTermNormalizeData(AHarness.Data) then
+      AMisses.Add(ACaseId, 'data', EncodeStringBase64(TyTermBase64Bytes(AExpect.Strings['data'])),
+        EncodeStringBase64(TyTermNormalizeData(AHarness.Data)) + ' (base64)');
+    TyTermCompareBuffer(core.Buffers.Normal, AExpect.Objects['buffers'].Objects['normal'], core.Cols,
+      ACaseId, 'normal', AMisses, @HarnessCharsetKey);
+    TyTermCompareBuffer(core.Buffers.Alt, AExpect.Objects['buffers'].Objects['alt'], core.Cols,
+      ACaseId, 'alt', AMisses, @HarnessCharsetKey);
+  finally
+    got.Free;
+  end;
+end;
+
+function TyTermRunCase(ACase: TJSONObject; AFilePalette: TJSONArray; AMisses: TTyTermMisses): Int64;
+var
+  h: TTyTermHarness;
+  id: string;
+  before: Int64;
+  after: TJSONData;
+  variants: TJSONArray;
+  k: Integer;
+begin
+  before := AMisses.Compared;
+  id := ACase.Strings['id'];
+  h := TTyTermHarness.Create(ACase, AFilePalette);
+  try
+    h.Run(ACase.Arrays['steps']);
+    TyTermCompareState(h, ACase.Objects['expect'], id, False, AMisses);
+    { the same core again after Reset (spec 13.5 #5) }
+    h.Core.Reset;
+    h.ClearRecord;
+    h.Run(ACase.Arrays['steps']);
+    after := ACase.Find('afterReset');
+    if (after = nil) or (after.JSONType = jtString) then
+      TyTermCompareState(h, ACase.Objects['expect'], id + ' after Reset', False, AMisses)
+    else
+      TyTermCompareState(h, TJSONObject(after), id + ' after Reset', False, AMisses);
+  finally
+    h.Free;
+  end;
+  if ACase.Find('variants') <> nil then
+  begin
+    variants := ACase.Arrays['variants'];
+    for k := 0 to variants.Count - 1 do
+    begin
+      h := TTyTermHarness.Create(ACase, AFilePalette);
+      try
+        h.Run(ACase.Arrays['steps'], variants.Objects[k]);
+        TyTermCompareState(h, ACase.Objects['expect'], Format('%s variant %d', [id, k]), True, AMisses);
+      finally
+        h.Free;
+      end;
+    end;
+  end;
+  Result := AMisses.Compared - before;
 end;
 
 end.
