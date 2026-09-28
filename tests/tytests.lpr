@@ -169,7 +169,7 @@ uses
   test.advancechart,
   test.unicode.width,
   test.terminal.oracle, test.terminal.parser, test.terminal.buffer, test.terminal.core,
-  test.terminal.keyboard, test.terminal.render,
+  test.terminal.keyboard, test.terminal.render, test.terminal.view,
   test.transitions,
   test.htmllabel,
   test.shape,
