@@ -1,0 +1,4 @@
+lib/
+fontprobe-out/
+*.exe
+fontprobe
