@@ -40,7 +40,7 @@ if (before.length) {
 // its fixtures as they are and report "clean".
 const SCRIPTS = ['gen-unicode-tables.js', 'unicode-cases.js', 'parser-cases.js', 'buffer-cases.js',
   'gen-terminal-charsets.js', 'core-cases.js', 'escape-files.js', 'fuzz.js', 'recordings.js',
-  'keyboard-cases.js'];
+  'keyboard-cases.js', 'gen-terminal-glyphs.js', 'view-cases.js'];
 const missing = SCRIPTS.filter(s => !fs.existsSync(path.join(__dirname, s)));
 if (missing.length) {
   console.error('generator scripts missing: ' + missing.join(', '));

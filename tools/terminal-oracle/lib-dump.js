@@ -48,6 +48,8 @@ const GENERATED = [
   // palette (gen-terminal-glyphs.js, view-cases.js)
   /^tests\/fixtures\/terminal-keyboard(-[0-9]+)?\.json$/,
   'tests/fixtures/terminal-paste.json',
+  'source/tyControls.Terminal.CustomGlyphs.inc',
+  'tests/fixtures/terminal-view-palette.json',
 ];
 
 function isGenerated(rel) {
@@ -115,6 +117,9 @@ const PORTED = [
     // loads in node: nothing at its top level touches the DOM), the default palette
     'common/input/Keyboard', 'browser/Clipboard', 'browser/Types', 'browser/CoreBrowserTerminal',
   ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
+  // phase 3: the box-drawing and block glyphs the WebGL addon draws itself
+  ['addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts',
+    `addons/addon-webgl/${OUT_DIR}/customGlyphs/CustomGlyphDefinitions.js`],
 ];
 
 function checkBuildFresh() {
