@@ -242,7 +242,8 @@ const hand = [
   // ---- resize: CoreTerminal.ts:187-200, headless :90-96, Buffer.resize ----
   cs('resize-rows', [lines(10) + CSI + '4;3H', { resize: [20, 3] }, 'x', { resize: [20, 8] }, 'y', { resize: [20, 2] }, CSI + 'Hz', { resize: [20, 9] }]),
   cs('resize-rows-no-scrollback', [lines(4), { resize: [20, 3] }, { resize: [20, 7] }, 'q'], { options: { scrollback: 0 } }),
-  cs('resize-min', ['abc', { resize: [1, 0] }, 'x']),
+  // the column count changes: an old ConPTY, where upstream does not reflow (phase 5)
+  cs('resize-min', ['abc', { resize: [1, 0] }, 'x'], { options: { windowsPty: WPTY } }),
   cs('resize-same', ['abc', { resize: [20, 6] }, 'x']),
   cs('resize-in-alt', [lines(3) + CSI + '?1049hx', { resize: [20, 4] }, 'y', { resize: [20, 8] }, CSI + '?1049lz']),
   cs('resize-cols-winpty', [lines(6), { resize: [10, 6] }, 'x', { resize: [30, 6] }, 'y'], { options: { windowsPty: WPTY } }),

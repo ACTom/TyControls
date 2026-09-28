@@ -162,8 +162,11 @@ begin
               m.AddCompared(2);
               if h.Core.Parser.OscPayloadLength <> 0 then
                 m.Add(c.Strings['id'], 'OscPayloadLength after the case', '0', IntToStr(h.Core.Parser.OscPayloadLength));
+              { what the terminal keeps on purpose: the screens, and a title that fit
+                under the limit (held by the core and by the harness's title list) }
               allowed := (Int64(h.Core.Buffers.Normal.Lines.Length) + h.Core.Buffers.Alt.Lines.Length)
-                * h.Core.Cols * 64 + 1024 * 1024;
+                * h.Core.Cols * 64 + 1024 * 1024 + Length(h.Core.Title) + Length(h.Core.IconName)
+                + Length(h.Titles.Text);
               if Int64(GetFPCHeapStatus.CurrHeapUsed) - heap > allowed then
                 m.Add(c.Strings['id'], 'heap growth', '<= ' + IntToStr(allowed),
                   IntToStr(Int64(GetFPCHeapStatus.CurrHeapUsed) - heap));
