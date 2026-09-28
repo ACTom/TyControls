@@ -136,9 +136,18 @@ function checkTrieDecode(up) {
   if (up.UC.getInfo(0x1F600) >> 4 !== 3) throw new Error('U+1F600 is not wide in the 15 table');
 }
 
+// A file whose text is unchanged is left alone, line endings included: with
+// core.autocrlf the checkout holds CRLF, and rewriting it as LF makes git status
+// report it modified although `git diff` is empty -- regen-all.js would call a
+// byte-identical rerun dirty.
 function writeGenerated(rel, text) {
   if (!GENERATED.includes(rel)) throw new Error(rel + ' is not listed in GENERATED');
-  fs.writeFileSync(path.join(ROOT, rel), text);
+  const f = path.join(ROOT, rel);
+  if (fs.existsSync(f) && fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n') === text) {
+    console.log('unchanged', rel, text.length, 'bytes');
+    return;
+  }
+  fs.writeFileSync(f, text);
   console.log('wrote', rel, text.length, 'bytes');
 }
 
