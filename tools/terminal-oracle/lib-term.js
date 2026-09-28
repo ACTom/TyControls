@@ -206,14 +206,17 @@ function attachSynth(term, palette, focused) {
   };
 }
 
+// A write step is one WriteBuffer chunk, parsed before the next step runs -- the
+// same parse call term.write(data, callback) makes once its timer fires; writeSync
+// makes it without waiting for a timer per chunk (thousands of them for a byte-by-
+// byte variant).
 async function runSteps(up, term, synthApi, steps) {
   for (const s of steps) {
     if (s.write !== undefined) {
-      const b = unb64(s.write);
-      await new Promise(r => term.write(b, r));
+      term._core.writeSync(unb64(s.write));
     } else if (s.writeRepeat) {
       const b = unb64(s.writeRepeat.b64);
-      for (let k = 0; k < s.writeRepeat.times; k++) await new Promise(r => term.write(b, r));
+      for (let k = 0; k < s.writeRepeat.times; k++) term._core.writeSync(b);
     } else if (s.resize) term.resize(s.resize[0], s.resize[1]);
     else if (s.input !== undefined) term.input(new TextDecoder().decode(unb64(s.input)), s.user);
     else if (s.reset) term.reset();
@@ -399,9 +402,9 @@ function randomCuts(rnd, len, n) {
 }
 
 // Only for a case whose steps are exactly one write: every variant, fed in pieces
-// (one term.write per piece, or writeSync with SYNC), must give the same state as
-// EXPECT apart from variantView's two fields.
-async function checkVariants(up, c, expect, sync = false) {
+// (one parse call per piece; writeSync, or term.write when SYNC is false), must give
+// the same state as EXPECT apart from variantView's two fields.
+async function checkVariants(up, c, expect, sync = true) {
   if (!c.variants) return;
   if (c.steps.length !== 1 || c.steps[0].write === undefined) throw new Error(c.id + ': variants need a single write');
   const bytes = unb64(c.steps[0].write);
