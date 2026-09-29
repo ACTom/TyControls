@@ -37,6 +37,10 @@ type
     procedure TestTrimmedLinesFollowsReflow;
     procedure TestReflowCursorLineProperty;
     procedure TestDeepScrollbackReflowIsQuick;
+    procedure TestNarrowingAFullScrollbackKeepsThePrompt;
+    procedure TestAHundredThousandLinesReflowInLinearTime;
+    procedure TestNarrowerAgainGivesTheMemoryBack;
+    procedure TestTheBlockCopyMatchesTheCellCopy;
   end;
 
 implementation
@@ -220,7 +224,8 @@ begin
         JsonIntsText(t.Arrays['result']), got);
       Inc(compared);
     end;
-    AssertTrue('cases read', arr.Count >= 20);
+    { the cases reflow-cases.js writes, counted there: a fixture that lost some is red }
+    AssertEquals('cases read', 27, arr.Count);
     AssertEquals('compared', arr.Count, compared);
   finally
     u.Free;
@@ -250,7 +255,7 @@ begin
       AssertEquals(Format('case %d', [i]), t.Integers['result'], got);
       Inc(compared);
     end;
-    AssertTrue('cases read', arr.Count >= 5);
+    AssertEquals('cases read', 7, arr.Count);
     AssertEquals('compared', arr.Count, compared);
   finally
     u.Free;
@@ -290,7 +295,7 @@ begin
         list.Free;
       end;
     end;
-    AssertTrue('cases read', arr.Count >= 6);
+    AssertEquals('cases read', 8, arr.Count);
     k := 0;
     for i := 0 to arr.Count - 1 do
       Inc(k, 1 + arr.Objects[i].Arrays['after'].Count);
@@ -335,7 +340,7 @@ begin
         list.Free;
       end;
     end;
-    AssertTrue('cases read', arr.Count >= 6);
+    AssertEquals('cases read', 8, arr.Count);
     AssertEquals('compared', 3 * arr.Count, compared);
   finally
     rec.Free;
@@ -599,6 +604,175 @@ begin
     AssertTrue(Format('120 -> 200 (%.1f ms) within twice 200 -> 120 (%.1f ms)', [wide, narrow]), wide < 2 * narrow + 20);
   finally
     core.Free;
+  end;
+end;
+
+{ Upstream's _reflowSmaller writes a run's new lines below index 0 once the ring's
+  start has moved (Buffer.ts:504-510), and the ring wraps them onto the LAST lines: a
+  full scrollback narrowed turned the prompt row into the line pushed out at the top.
+  Not copied (unit header, spec 15): the prompt stays the last row, the cursor on it. }
+procedure TTyTerminalReflowTests.TestNarrowingAFullScrollbackKeepsThePrompt;
+var
+  core: TTyTerminalCore;
+  data: RawByteString;
+  i: Integer;
+  buf: TTyTerminalBuffer;
+begin
+  data := '';
+  for i := 0 to 19 do
+    data := data + StringOfChar(Chr(Ord('A') + i), 12) + #13#10;
+  data := data + '$ ';
+  core := TTyTerminalCore.Create(20, 3);
+  try
+    core.Scrollback := 5;
+    core.WriteSync(data);
+    core.Resize(5, 3);
+    buf := core.Buffer;
+    AssertEquals('the cursor row is the prompt', '$ ',
+      buf.GetLine(buf.YBase + buf.Y).TranslateToString(True));
+    AssertEquals('the last line is the prompt', '$ ',
+      buf.GetLine(buf.Lines.Length - 1).TranslateToString(True));
+    AssertEquals('above it the end of the last output', 'TT',
+      buf.GetLine(buf.Lines.Length - 2).TranslateToString(True));
+  finally
+    core.Free;
+  end;
+end;
+
+{ Filled with (Rows + Scrollback) lines of 100 columns, 120 -> 70 -> 120 columns, at
+  10 000 and at 100 000 lines of scrollback: a reflow that grew faster than the number
+  of lines (a splice per run, a search per line) is ten times slower per line at the
+  larger size; this one stays within three times (the ring's lines are touched once
+  each), and the larger one within a generous bound. }
+procedure TTyTerminalReflowTests.TestAHundredThousandLinesReflowInLinearTime;
+
+  function Measure(AScrollback: Integer; out ALines: Integer): Double;
+  var
+    core: TTyTerminalCore;
+    line, data: RawByteString;
+    i: Integer;
+    t: Double;
+  begin
+    line := '';
+    for i := 0 to 99 do
+      line := line + Chr(Ord('a') + i mod 26);
+    line := line + #13#10;
+    data := '';
+    SetLength(data, 0);
+    for i := 1 to AScrollback + 40 do
+      data := data + line;
+    core := TTyTerminalCore.Create(120, 40);
+    try
+      core.Scrollback := AScrollback;
+      core.WriteSync(data);
+      data := '';
+      ALines := core.Buffer.Lines.Length;          { full before the first reflow }
+      t := TyTermDefaultClock;
+      core.Resize(70, 40);
+      core.Resize(120, 40);
+      Result := TyTermDefaultClock - t;
+    finally
+      core.Free;
+    end;
+  end;
+
+var
+  small, big: Double;
+  n1, n2, attempt: Integer;
+begin
+  for attempt := 1 to 2 do
+  begin
+    small := Measure(10000, n1);
+    big := Measure(100000, n2);
+    if big <= 3 * 10 * small + 50 then Break;
+  end;
+  WriteLn(Format('  (reflow 120 -> 70 -> 120: %d lines %.1f ms, %d lines %.1f ms)', [n1, small, n2, big]));
+  AssertTrue(Format('the ring is full (%d, %d lines)', [n1, n2]), (n1 = 10040) and (n2 = 100040));
+  AssertTrue(Format('100 000 lines %.1f ms within 3 x 10 x %.1f ms + 50', [big, small]), big <= 3 * 10 * small + 50);
+  AssertTrue(Format('100 000 lines %.1f ms < 10 s', [big]), big < 10000);
+end;
+
+{ Wider, then narrower again: upstream cuts every line's allocation back to its cells
+  (cleanupMemory, from Buffer.resize's _memoryCleanupQueue). 10 000 lines at 80 columns
+  widened to 400 hold five times the cells; back at 80 the heap is where it was. }
+procedure TTyTerminalReflowTests.TestNarrowerAgainGivesTheMemoryBack;
+var
+  core: TTyTerminalCore;
+  data: RawByteString;
+  i: Integer;
+  h0, h1, h2: Int64;
+begin
+  data := '';
+  for i := 1 to 10040 do
+    data := data + 'line ' + IntToStr(i) + #13#10;
+  core := TTyTerminalCore.Create(80, 40);
+  try
+    core.Scrollback := 10000;
+    core.WriteSync(data);
+    data := '';
+    h0 := GetFPCHeapStatus.CurrHeapUsed;
+    core.Resize(400, 40);
+    h1 := GetFPCHeapStatus.CurrHeapUsed;
+    core.Resize(80, 40);
+    h2 := GetFPCHeapStatus.CurrHeapUsed;
+    WriteLn(Format('  (10 040 lines: %.1f MB at 80, %.1f MB at 400, %.1f MB back at 80)',
+      [h0 / 1048576, h1 / 1048576, h2 / 1048576]));
+    AssertTrue(Format('wider took more (%d -> %d)', [h0, h1]), h1 - h0 > 20 * 1048576);
+    AssertTrue(Format('narrower gave it back (%d -> %d, started at %d)', [h1, h2, h0]), h2 - h0 < 2 * 1048576);
+  finally
+    core.Free;
+  end;
+end;
+
+{ CopyCellsFrom moves a run of plain cells in one block; the answer must be the
+  cell-by-cell one: forward and backward, within one line both ways, and with combined
+  text or extended attributes in the run (those go cell by cell). }
+procedure TTyTerminalReflowTests.TestTheBlockCopyMatchesTheCellCopy;
+var
+  src, a, short: TTyTerminalLine;
+  attr: TTyTerminalAttrData;
+  k: Integer;
+begin
+  src := TTyTerminalLine.CreateDefault(20);
+  a := TTyTerminalLine.CreateDefault(20);
+  short := TTyTerminalLine.CreateDefault(5);
+  try
+    attr := TyTermDefaultAttr;
+    for k := 0 to 19 do
+    begin
+      attr.Fg := Cardinal(k);
+      src.SetCellFromCodepoint(k, Cardinal(Ord('a') + k), 1, attr);
+    end;
+    { plain: one block, the attributes along }
+    a.CopyCellsFrom(src, 3, 5, 10, False);
+    AssertEquals('the cells', StringOfChar(' ', 5) + 'defghijklm' + StringOfChar(' ', 5), a.TranslateToString(False));
+    AssertEquals('their attributes', src.GetFg(3), a.GetFg(5));
+    AssertEquals('to the last', src.GetFg(12), a.GetFg(14));
+    AssertEquals('none past it', 0, a.GetFg(15));
+    { within one line: to the right (the backward order) and to the left (forward) }
+    a.CopyFrom(src);
+    a.CopyCellsFrom(a, 0, 4, 12, True);
+    AssertEquals('within a line, to the right', 'abcdabcdefghijklqrst', a.TranslateToString(False));
+    a.CopyFrom(src);
+    a.CopyCellsFrom(a, 6, 2, 10, False);
+    AssertEquals('within a line, to the left', 'abghijklmnopmnopqrst', a.TranslateToString(False));
+    { a source shorter than the run: the cells past its end come out empty (0) }
+    for k := 0 to 4 do
+      short.SetCellFromCodepoint(k, Cardinal(Ord('v') + k), 1, attr);
+    a.CopyFrom(src);
+    a.CopyCellsFrom(short, 0, 0, 8, False);
+    AssertEquals('the short line''s cells', 'vwxyz', Copy(a.TranslateToString(False), 1, 5));
+    for k := 5 to 7 do
+      AssertEquals(Format('cell %d past its end', [k]), 0, a.GetContent(k));
+    { combined text in the run: cell by cell, the combined text moved along }
+    src.AddCodepointToCell(4, $301, 0);
+    a.Fill(TyTermNullCell(TyTermDefaultAttr));
+    a.CopyCellsFrom(src, 2, 0, 5, False);
+    AssertEquals('combined text moved', 'cde' + #$CC#$81 + 'fg', a.TranslateToString(True));
+  finally
+    src.Release;
+    a.Release;
+    short.Release;
   end;
 end;
 

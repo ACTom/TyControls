@@ -238,8 +238,10 @@ bufferCases.push(
   // should remove the correct amount of rows when reflowing larger
   RS('larger-removes-the-right-rows', {}, [['resize', 10, 10], ['setXY', 0, 2], ['text', 0, 0, 'abcdefghij'], ['text', 1, 0, '0123456789'],
     ['resize', 2, 10], ['resize', 10, 10]]),
-  // should transfer combined char data over to reflowed lines
-  RS('combined-data-moves', {}, [['resize', 4, 3], ['setXY', 0, 2], ['text', 0, 0, 'abc'], ['cells', 0, 3, [[0x1F601, 1]]], ['resize', 2, 3]]),
+  // should transfer combined char data over to reflowed lines (upstream stores the emoji as
+  // combined data -- a surrogate pair; here a mark joined to it makes the cell's combined data)
+  RS('combined-data-moves', {}, [['resize', 4, 3], ['setXY', 0, 2], ['text', 0, 0, 'abc'], ['cells', 0, 3, [[0x1F601, 1]]],
+    ['combine', 0, 3, 0x301], ['resize', 2, 3]]),
   RS('combining-mark-moves', {}, [['resize', 6, 5], ['setXY', 0, 3], ['text', 0, 0, 'abcde'], ['combine', 0, 4, 0x301], ['text', 1, 0, 'fg'],
     ['setWrapped', 1, true], ['resize', 3, 5], ['resize', 7, 5]]),
   // should adjust markers when reflowing

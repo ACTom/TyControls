@@ -77,6 +77,11 @@ const CASES = [
   // ---- 7. a full scrollback ---------------------------------------------------------
   cs('full-scrollback-5-narrow', [lines(12) + '\r\n$ ', R(12, 6)], { cols: 40, rows: 6, options: { scrollback: 5 } }),
   cs('full-scrollback-10-narrow', [lines(20) + '\r\n$ ', R(9, 6), R(40, 6)], { cols: 40, rows: 6, options: { scrollback: 10 } }),
+  // the ring's start is past 0 when it narrows: upstream would write a run's new lines
+  // below index 0, onto the last lines (the prompt row became the top line pushed out);
+  // the oracle runs with that write guarded, as the port does (lib-dump.js)
+  cs('full-scrollback-narrow-keeps-the-prompt', [Array.from({ length: 20 }, (_, i) => String.fromCharCode(65 + i).repeat(12)).join('\r\n') + '\r\n$ ', R(5, 3)],
+    { cols: 20, rows: 3, options: { scrollback: 5 } }),
   cs('scrolled-up-narrow', [lines(20) + '\r\n$ ', { scrollLines: -3 }, R(15, 6)], { cols: 40, rows: 6, options: { scrollback: 30 } }),
   cs('scrolled-up-widen', [lines(20) + '\r\n$ ', R(15, 6), { scrollLines: -3 }, R(40, 6)], { cols: 40, rows: 6, options: { scrollback: 30 } }),
 

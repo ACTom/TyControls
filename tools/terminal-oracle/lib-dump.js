@@ -156,11 +156,38 @@ function checkBuildFresh() {
   }
 }
 
+// ONE UPSTREAM BUG IS NOT PORTED (phase 5): narrowing a full scrollback,
+// Buffer._reflowSmaller lays the new lines out with `this.lines.set(i--, ...)`
+// (src/common/buffer/Buffer.ts:504-510), and i goes below 0 when the ring has been
+// trimmed; CircularList wraps the negative index onto the LAST lines, so the prompt row
+// turns into the line pushed out at the top. The port does not write there (design
+// spec 15), and the oracle must answer for the same code: the build's Buffer.js is
+// loaded with that one statement guarded -- in memory, the checkout is not touched.
+// The statement must be found exactly once, or the build is not the one we patch.
+const REFLOW_NEGATIVE_INDEX = {
+  from: 'this.lines.set(i--, nextToInsert.newLines[nextI]);',
+  to: '{ const __at = i--; if (__at >= 0) this.lines.set(__at, nextToInsert.newLines[nextI]); }',
+};
+function patchReflowNegativeIndex() {
+  const file = require.resolve(path.join(XTERM, OUT_DIR, 'common', 'buffer', 'Buffer.js'));
+  if (require.cache[file]) throw new Error('Buffer.js was loaded before the reflow patch');
+  const text = fs.readFileSync(file, 'utf8');
+  const hits = text.split(REFLOW_NEGATIVE_INDEX.from).length - 1;
+  if (hits !== 1) throw new Error(`the reflow patch expects one "${REFLOW_NEGATIVE_INDEX.from}" in ${file}, found ${hits}`);
+  const m = new Module(file, module);
+  m.filename = file;
+  m.paths = Module._nodeModulePaths(path.dirname(file));
+  m._compile(text.replace(REFLOW_NEGATIVE_INDEX.from, REFLOW_NEGATIVE_INDEX.to), file);
+  m.loaded = true;
+  require.cache[file] = m;
+}
+
 function loadUpstream() {
   const info = upstreamInfo();
   checkBuildFresh();
   process.env.NODE_PATH = path.join(XTERM, OUT_DIR);
   Module._initPaths(); // the addons require('common/...') through NODE_PATH
+  if (!process.env.XTERM_UNPATCHED) patchReflowNegativeIndex();
   require.resolve('common/services/UnicodeService'); // throws if the alias does not resolve
   const g = `addons/addon-unicode-graphemes/${OUT_DIR}`;
   return {

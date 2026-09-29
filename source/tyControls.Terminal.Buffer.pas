@@ -53,8 +53,15 @@ unit tyControls.Terminal.Buffer;
     and wider ones pad them, as upstream does for an old ConPTY.
   - TyTermReflowSmallerGetNewLineLengths raises EArgumentOutOfRangeException where
     upstream would loop for ever (one column and a wide character at a cut,
-    BufferReflow.ts:175-177). The core never gets there (at least two columns);
-    only the buffer used on its own can.
+    BufferReflow.ts:175-177), and where upstream reads past its array and throws a
+    TypeError: past the wrapped lines (Buffer.Reflow.inc, the lengths' loop) and a run
+    with fewer lines than it needs (the narrowing's copy loop). The core never gets
+    there (at least two columns); only the buffer used on its own can.
+  - One upstream bug is not copied: narrowing a full scrollback, _reflowSmaller's
+    layout writes a run's new lines below index 0 (Buffer.ts:504-510, lines.set(i--)),
+    which the ring wraps onto the last lines -- the prompt row turns into the pushed-out
+    top line. Here a line that would land below index 0 is not written (design spec 15;
+    the oracle runs upstream with the same guard patched in).
   - BufferService lives here, not in the core, so the buffer layer can be held to
     upstream on its own (the core owns one).
 
@@ -191,7 +198,7 @@ type
     class var GNextSerial: Int64;
   private
     FSerial: Int64;
-    FRevision: Cardinal;
+    FRevision: QWord;                      { never wraps: a long session's bottom row is changed billions of times }
     FData: array of Cardinal;              { the whole allocation: upstream's ArrayBuffer }
     FLength: Integer;                      { cells in use: _data is FLength * 3 of it }
     FCombined: array of TTyTermComboEntry;
@@ -254,6 +261,9 @@ type
     procedure ReplaceCells(AStart: Integer; AEnd: Int64; const AFill: TTyTerminalCellData;
       ARespectProtect: Boolean = False);
     function Resize(ACols: Integer; const AFill: TTyTerminalCellData): Boolean;
+    { cleanupMemory, BufferLine.ts:439-446: an allocation more than twice what the cells
+      use is cut down to them. True = it was. }
+    function CleanupMemory: Boolean;
     procedure Fill(const AFill: TTyTerminalCellData; ARespectProtect: Boolean = False);
     procedure CopyFrom(ALine: TTyTerminalLine; ABlank: Boolean = False);
     function Clone(ABlank: Boolean = False): TTyTerminalLine;   { refcount 1, owned by caller }
@@ -272,7 +282,7 @@ type
       moves on with every change to the cells -- not with IsWrapped, which draws
       nothing. }
     property Serial: Int64 read FSerial;
-    property Revision: Cardinal read FRevision;
+    property Revision: QWord read FRevision;
     property Length: Integer read FLength;
     property RefCount: Integer read FRefCount;
   end;
@@ -495,7 +505,8 @@ type
     property HasScrollback: Boolean read GetHasScrollback;
     property IsCursorInViewport: Boolean read GetIsCursorInViewport;
     property Length: Integer read GetLength;           { Lines.Length }
-    { Phase 2: always False (phase 5 wires BufferReflow). }
+    { Buffer.ts:310-316 _isReflowEnabled (unit header): a new column count rewraps the
+      lines when True }
     property IsReflowEnabled: Boolean read GetIsReflowEnabled;
     { The lines ever trimmed off this buffer's top: every OnTrim of its ring adds its
       amount. A pure query; a selection kept in buffer rows catches up by the
@@ -1476,8 +1487,9 @@ end;
 
 { The answer is upstream's "would cleanupMemory free anything" over the size of the
   allocation (its ArrayBuffer): a shrink keeps the allocation, a grow reuses it when
-  it is big enough. Upstream schedules a clean-up from it (_memoryCleanupQueue);
-  that is a memory optimisation with nothing observable and is not ported. }
+  it is big enough. The buffer's Resize counts the answers and, as upstream schedules
+  its _memoryCleanupQueue, cuts the lines down with CleanupMemory -- at once, not in
+  idle batches (nothing observable but the memory). }
 function TTyTerminalLine.Resize(ACols: Integer; const AFill: TTyTerminalCellData): Boolean;
 var
   cells, i, k, oldLength: Integer;
@@ -1519,6 +1531,13 @@ begin                                                                        { :
     FExtendedCount := k;
   end;
   Result := Int64(cells) * 4 * 2 < Int64(System.Length(FData)) * 4;
+end;
+
+function TTyTerminalLine.CleanupMemory: Boolean;
+begin                                                                        { :439-446 }
+  Result := Int64(FLength) * 3 * 4 * 2 < Int64(System.Length(FData)) * 4;
+  if Result then
+    SetLength(FData, FLength * 3);         { FPC keeps the cells; the rest is given back }
 end;
 
 procedure TTyTerminalLine.Fill(const AFill: TTyTerminalCellData; ARespectProtect: Boolean);
@@ -1642,9 +1661,30 @@ procedure TTyTerminalLine.CopyCellsFrom(ASrc: TTyTerminalLine; ASrcCol, ADestCol
   end;
 
 var
-  c: Integer;
+  c, k: Integer;
+  plain: Boolean;
 begin                                                                        { :522-540 }
   Touch;
+  { the same result in one block move: every cell inside both lines, none of the source's
+    flagged for combined text or extended attributes (One would touch no map),
+    and a copy within one line moving the way One's order moves it }
+  plain := (ALength > 0) and (ASrcCol >= 0) and (ADestCol >= 0)
+    and (ASrcCol + ALength <= ASrc.FLength) and (ADestCol + ALength <= FLength)
+    and ((ASrc <> Self) or (AApplyInReverse and (ADestCol >= ASrcCol))
+      or ((not AApplyInReverse) and (ADestCol <= ASrcCol)));
+  if plain then
+    for k := ASrcCol to ASrcCol + ALength - 1 do
+      if (ASrc.FData[k * 3] and TyTermContentIsCombinedMask <> 0)
+        or (ASrc.FData[k * 3 + 2] and TyTermBgHasExtended <> 0) then
+      begin
+        plain := False;
+        Break;
+      end;
+  if plain then
+  begin
+    Move(ASrc.FData[ASrcCol * 3], FData[ADestCol * 3], ALength * 3 * SizeOf(Cardinal));
+    Exit;
+  end;
   if AApplyInReverse then
     for c := ALength - 1 downto 0 do
       One(c)
@@ -2249,10 +2289,12 @@ end;
 procedure TTyTerminalBuffer.Resize(ANewCols, ANewRows: Integer);             { :160-286 }
 var
   nullCell: TTyTerminalCellData;
-  newMaxLength, i, row, addToY, amountToTrim, maxY: Integer;
+  newMaxLength, i, row, addToY, amountToTrim, maxY, dirtyMemoryLines: Integer;
   windows: Boolean;
 begin
   nullCell := GetNullCell(TyTermDefaultAttr);
+  { the lines left with an allocation more than twice their cells (:164-165) }
+  dirtyMemoryLines := 0;
   { grow the ring first, so there is room for what follows }
   newMaxLength := GetCorrectBufferLength(ANewRows);
   if newMaxLength > FLines.MaxLength then
@@ -2262,7 +2304,8 @@ begin
     { wider: every line now (narrower waits for the reflow, which cuts them after it) }
     if FCols < ANewCols then
       for i := 0 to FLines.Length - 1 do
-        FLines.Get(i).Resize(ANewCols, nullCell);
+        if FLines.Get(i).Resize(ANewCols, nullCell) then
+          Inc(dirtyMemoryLines);
     addToY := 0;
     if FRows < ANewRows then
     begin
@@ -2327,7 +2370,8 @@ begin
     { trim the ends of the lines when the columns shrank }
     if FCols > ANewCols then
       for i := 0 to FLines.Length - 1 do
-        FLines.Get(i).Resize(ANewCols, nullCell);
+        if FLines.Get(i).Resize(ANewCols, nullCell) then
+          Inc(dirtyMemoryLines);
   end;
   FCols := ANewCols;
   FRows := ANewRows;
@@ -2340,6 +2384,12 @@ begin
     if maxY < FY then
       FY := maxY;
   end;
+  { :279-285 -- more than a tenth of the lines hold too much: give it back. Upstream does
+    it in idle batches of 100 (_batchedMemoryCleanup); here at once (unit header) }
+  if dirtyMemoryLines > FLines.Length div 10 then
+    for i := 0 to FLines.Length - 1 do
+      if FLines.Get(i) <> nil then
+        FLines.Get(i).CleanupMemory;
 end;
 
 function TTyTerminalBuffer.TranslateBufferLineToString(AAbsRow: Integer; ATrimRight: Boolean;

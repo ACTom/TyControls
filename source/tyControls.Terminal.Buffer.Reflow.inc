@@ -529,7 +529,11 @@ begin                                                                        { :
             addedLines := toInsert[nextToInsertIndex].NewLines;
             for nextI := High(addedLines) downto 0 do
             begin
-              FLines.SetItem(i, addedLines[nextI]);
+              { upstream writes below index 0 here (lines.set(i--)), and its ring wraps
+                that onto the last lines: a full scrollback narrowed lost its bottom rows
+                to the lines pushed out at the top. Not copied (unit header, spec 15) }
+              if i >= 0 then
+                FLines.SetItem(i, addedLines[nextI]);
               Dec(i);
             end;
             Inc(i);
