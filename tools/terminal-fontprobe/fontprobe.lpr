@@ -18,14 +18,15 @@ program fontprobe;
         in its colours, (c) drawn black on white at 1x and taken as coverage -- each
         compared with TTyPainter.DrawText (how the rest of the library draws text) in
         three colour pairs; then the time to rasterize 95 ASCII glyphs in 4 styles
-        cold, and to repaint a 200 x 60 grid from cached masks.
+        cold, and to repaint a 200 x 60 grid from cached masks -- by hand, and again
+        through the control's own rasterizer and row painter.
 
   Not part of the package; the numbers go into the phase 3 plan's experiment record. }
 
 uses
   Interfaces, SysUtils, Classes, Math, Types, Graphics, FPWritePNG,
   BGRABitmap, BGRABitmapTypes, BGRAGrayscaleMask, BGRABlend,
-  tyControls.Types, tyControls.Painter, tyControls.Terminal.Core;
+  tyControls.Types, tyControls.Painter, tyControls.Terminal.Core, tyControls.Terminal.Render;
 
 const
   {$IFDEF MSWINDOWS}
@@ -410,6 +411,132 @@ begin
   end;
 end;
 
+type
+  { a dark theme's colours for the row painter }
+  TPaletteSource = class
+    function Color(AIndex: Integer): Cardinal;
+  end;
+
+function TPaletteSource.Color(AIndex: Integer): Cardinal;
+begin
+  case AIndex of
+    256: Result := $CCCCCC;
+    257: Result := $1E1E1E;
+  else
+    Result := TyTermDefaultPaletteColor(AIndex);
+  end;
+end;
+
+{ The same two numbers through what the control really runs: TTyTermGlyphRasterizer
+  (the scratch surface and its font kept between glyphs) for the cold fill, and
+  TTyTermRowPainter over a core's lines for the warm repaint -- backgrounds, the cache
+  look-ups, the tint, the lines, as a frame does them (no blit). Then a screen with
+  tmux's borders, drawn glyphs from the cache. }
+procedure RunE2Control(APPI: Integer);
+var
+  spec: TTyTermFontSpec;
+  m: TTyTermCellMetrics;
+  r: TTyTermGlyphRasterizer;
+  cache: TTyTermGlyphCache;
+  p: TTyTermRowPainter;
+  core: TTyTerminalCore;
+  key: TTyTermGlyphKey;
+  bmp: TBGRABitmap;
+  times: array[0..4] of Double;
+  t0: Double;
+  rep, st, ch: Integer;
+  s: RawByteString;
+  pal: TPaletteSource;
+
+  procedure Screen(ABorders: Boolean);
+  var
+    row, col: Integer;
+  begin
+    s := #27'[H';
+    for row := 0 to 59 do
+    begin
+      for col := 0 to 199 do
+        if ABorders and (row = 30) then s := s + #$E2#$94#$80
+        else if ABorders and (col = 100) then s := s + #$E2#$94#$82
+        else s := s + Chr(33 + (row * 200 + col) mod 94);
+      if row < 59 then s := s + #13#10;
+    end;
+    core.WriteSync(s);
+  end;
+
+  function Repaint: Double;
+  var
+    i, n: Integer;
+  begin
+    for i := 0 to 59 do
+      p.PaintRow(bmp, 0, i * m.CellH, core.Buffer.GetLine(core.Buffer.YBase + i), 200, -1, tcpNone);
+    for n := 0 to 4 do
+    begin
+      t0 := TyTermDefaultClock;
+      for i := 0 to 59 do
+        p.PaintRow(bmp, 0, i * m.CellH, core.Buffer.GetLine(core.Buffer.YBase + i), 200, -1, tcpNone);
+      times[n] := TyTermDefaultClock - t0;
+    end;
+    Result := Median5(times);
+  end;
+
+begin
+  spec := Default(TTyTermFontSpec);
+  spec.MainName := MainFont;
+  spec.SizeLogical := 9;
+  spec.PPI := APPI;
+  spec.LineHeightPercent := 100;
+  spec.UnderlineWidthLogical := 1;
+  spec.CursorWidthLogical := 1;
+  m := TyTermMeasureCell(spec);
+  for rep := 0 to 4 do
+  begin
+    r := TTyTermGlyphRasterizer.Create;
+    try
+      t0 := TyTermDefaultClock;
+      for st := 0 to 3 do
+        for ch := 32 to 126 do
+        begin
+          key := Default(TTyTermGlyphKey);
+          key.Text := Chr(ch);
+          key.Bold := st and 1 <> 0;
+          key.Italic := st and 2 <> 0;
+          key.Cells := 1;
+          r.Rasterize(key, spec, m).Free;
+        end;
+      times[rep] := TyTermDefaultClock - t0;
+    finally
+      r.Free;
+    end;
+  end;
+  WriteLn(Format('the control''s rasterizer, cold fill of 380: median %.1f ms (%.3f ms each)',
+    [Median5(times), Median5(times) / 380]));
+  pal := TPaletteSource.Create;
+  r := TTyTermGlyphRasterizer.Create;
+  cache := TTyTermGlyphCache.Create;
+  p := TTyTermRowPainter.Create;
+  core := TTyTerminalCore.Create(200, 60);
+  bmp := TBGRABitmap.Create(200 * m.CellW, 60 * m.CellH);
+  try
+    p.Metrics := m;
+    p.Spec := spec;
+    p.Resolver := @pal.Color;
+    p.GlyphCache := cache;
+    p.Rasterizer := r;
+    Screen(False);
+    WriteLn(Format('the control''s row painter, warm repaint of 200 x 60 ASCII (no blit): median %.1f ms', [Repaint]));
+    Screen(True);
+    WriteLn(Format('the same with tmux''s borders (259 drawn cells): median %.1f ms', [Repaint]));
+  finally
+    bmp.Free;
+    core.Free;
+    p.Free;
+    cache.Free;
+    r.Free;
+    pal.Free;
+  end;
+end;
+
 procedure RunE2;
 const
   PPIs: array[0..1] of Integer = (96, 144);
@@ -632,6 +759,7 @@ begin
       grid.Free;
     end;
     for ch := 0 to 94 do FreeAndNil(masks[ch]);
+    RunE2Control(PPIs[k]);
   end;
 end;
 
