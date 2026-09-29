@@ -220,7 +220,7 @@ type
       那条、指针在不在控件里、上次悬停用的修饰键 }
     FDetectUrls, FAllowNonHttpLinks: Boolean;
     FOnLinkActivate: TTyTerminalLinkEvent;
-    FHover, FDownLink: TTyTermLink;
+    FHoverLink, FDownLink: TTyTermLink;
     FHoverValid: Boolean;
     FHoverShift: TShiftState;
     FMouseInside: Boolean;
@@ -399,7 +399,7 @@ type
     { 悬停:指针在网格里、按着链接键、不在拖选 -> 指针下的链接,变了就重画涉及的行 }
     procedure UpdateHover(X, Y: Integer; Shift: TShiftState);
     { FOR THE TESTS:悬停的链接 }
-    property HoverLink: TTyTermLink read FHover;
+    property HoverLink: TTyTermLink read FHoverLink;
     property HoverValid: Boolean read FHoverValid;
     { FOR THE TESTS }
     function DragTimerActive: Boolean;
@@ -1950,12 +1950,12 @@ begin
       { 悬停链接落在这一行上的那一段(1 起、闭区间、缓冲行) }
       FRowPainter.LinkFrom := 0;
       FRowPainter.LinkTo := 0;
-      if FHoverValid and (buf.YDisp + r + 1 >= FHover.Range.StartY) and (buf.YDisp + r + 1 <= FHover.Range.EndY) then
+      if FHoverValid and (buf.YDisp + r + 1 >= FHoverLink.Range.StartY) and (buf.YDisp + r + 1 <= FHoverLink.Range.EndY) then
       begin
-        if buf.YDisp + r + 1 = FHover.Range.StartY then
-          FRowPainter.LinkFrom := FHover.Range.StartX - 1;
-        if buf.YDisp + r + 1 = FHover.Range.EndY then
-          FRowPainter.LinkTo := FHover.Range.EndX
+        if buf.YDisp + r + 1 = FHoverLink.Range.StartY then
+          FRowPainter.LinkFrom := FHoverLink.Range.StartX - 1;
+        if buf.YDisp + r + 1 = FHoverLink.Range.EndY then
+          FRowPainter.LinkTo := FHoverLink.Range.EndX
         else
           FRowPainter.LinkTo := FCore.Cols;
       end;
@@ -2961,14 +2961,14 @@ begin
       valid := LinkAt(cell.X, cell.Y, link);
     end;
   end;
-  if (valid = FHoverValid) and (not valid or TyTermLinkEquals(link, FHover)) then
+  if (valid = FHoverValid) and (not valid or TyTermLinkEquals(link, FHoverLink)) then
     Exit;
   if FHoverValid then
-    DirtyLinkRows(FHover);
-  FHover := link;
+    DirtyLinkRows(FHoverLink);
+  FHoverLink := link;
   FHoverValid := valid;
   if FHoverValid then
-    DirtyLinkRows(FHover);
+    DirtyLinkRows(FHoverLink);
 end;
 
 { ---- OSC 52 ------------------------------------------------------------------------ }
@@ -2977,7 +2977,7 @@ end;
   它;这里同步问宿主,应答的顺序同样不乱。应答不是用户输入(不清选区、不滚到底)。 }
 function TTyTerminalView.HandleOsc52(const AData: string): Boolean;
 var
-  pc, pd, text: string;
+  pc, pd, txt: string;
   allow: Boolean;
 begin
   Result := True;
@@ -2989,21 +2989,21 @@ begin
   begin
     if FOsc52 <> to52ReadWrite then
       Exit;
-    text := ReadClipboardText;
+    txt := ReadClipboardText;
     allow := False;
     if Assigned(FOnOsc52) then
-      FOnOsc52(Self, False, pc, text, allow);
+      FOnOsc52(Self, False, pc, txt, allow);
     if allow then
-      FCore.Input(TyTermOsc52Reply(pc, text), False);
+      FCore.Input(TyTermOsc52Reply(pc, txt), False);
   end
   else
   begin
-    text := TyTermOsc52Decode(pd);
+    txt := TyTermOsc52Decode(pd);
     allow := True;
     if Assigned(FOnOsc52) then
-      FOnOsc52(Self, True, pc, text, allow);
+      FOnOsc52(Self, True, pc, txt, allow);
     if allow then
-      WriteClipboardText(text);
+      WriteClipboardText(txt);
   end;
 end;
 
