@@ -32,6 +32,7 @@ type
     procedure TestExtAttrsAccessors;
     procedure TestLinesAreFreedWhenTheirOwnersGo;
     procedure TestTabStopsKeepStaleKeys;
+    procedure TestTrimmedLinesCountsEveryTrim;
   end;
 
 implementation
@@ -853,6 +854,34 @@ begin
     svc.Resize(10, 3);
     tabs := svc.Buffer.TabStops;
     AssertEquals('stale keys kept', '0,8,12,16', Text(tabs));
+  finally
+    svc.Free;
+    opts.Free;
+  end;
+end;
+
+{ Every trim of the normal buffer's ring counts, with or without markers (phase 4:
+  a selection follows by the difference). 5 rows and 3 of scrollback: 15 scrolls fill
+  the ring (3) and trim 12. }
+procedure TTyTerminalBufferTests.TestTrimmedLinesCountsEveryTrim;
+var
+  opts: TTyTerminalOptions;
+  svc: TTyTerminalBufferService;
+  i: Integer;
+begin
+  opts := TTyTerminalOptions.Create;
+  opts.Scrollback := 3;
+  svc := TTyTerminalBufferService.Create(opts, 20, 5);
+  try
+    AssertEquals('no markers', 0, svc.Buffer.MarkerCount);
+    AssertEquals('nothing yet', 0, svc.Buffer.TrimmedLines);
+    for i := 1 to 15 do
+      svc.Scroll(TyTermDefaultAttr);
+    AssertEquals('12 trimmed', 12, svc.Buffer.TrimmedLines);
+    { ED 3 (InputHandler.eraseInDisplay) drops the scrollback with trimStart }
+    svc.Buffer.Lines.TrimStart(3);
+    AssertEquals('and 3 more', 15, svc.Buffer.TrimmedLines);
+    AssertEquals('the alternate buffer is its own', 0, svc.Buffers.Alt.TrimmedLines);
   finally
     svc.Free;
     opts.Free;

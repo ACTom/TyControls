@@ -71,6 +71,7 @@ type
     procedure TestLinkTableIsBounded;
     procedure TestLinkNumbersPastHighInteger;
     procedure TestScrollOverflowSaturates;
+    procedure TestUserInputIsAnnouncedBeforeData;
   end;
 
   { Calls from events while the core is busy (unit header of the core): each is
@@ -1215,6 +1216,61 @@ begin
     sink.Data := '';
     AssertTrue('read-only still passes', core.TriggerMouseEvent(MouseAt(1, 1, tmbLeft, tmaDown)));
     AssertEquals('read-only sends nothing', '', sink.Data);
+  finally
+    core.Free;
+    sink.Free;
+  end;
+end;
+
+type
+  { the order OnUserInput and OnData come in }
+  TOrderSink = class
+  public
+    Log: string;
+    procedure OnUser(Sender: TObject);
+    procedure OnData(Sender: TObject; const AData: RawByteString);
+  end;
+
+procedure TOrderSink.OnUser(Sender: TObject);
+begin
+  Log := Log + 'user,';
+end;
+
+procedure TOrderSink.OnData(Sender: TObject; const AData: RawByteString);
+begin
+  Log := Log + 'data,';
+end;
+
+{ CoreService.triggerDataEvent (:74-95): onUserInput before onData, only for user
+  input, never while stdin is disabled }
+procedure TTyTerminalCoreTests.TestUserInputIsAnnouncedBeforeData;
+var
+  core: TTyTerminalCore;
+  sink: TOrderSink;
+begin
+  core := TTyTerminalCore.Create(20, 5);
+  sink := TOrderSink.Create;
+  try
+    core.OnUserInput := @sink.OnUser;
+    core.OnData := @sink.OnData;
+    core.Input('a', True);
+    AssertEquals('typing', 'user,data,', sink.Log);
+    sink.Log := '';
+    core.Input('a', False);
+    AssertEquals('a reply', 'data,', sink.Log);
+    sink.Log := '';
+    core.ReadOnly := True;
+    core.Input('a', True);
+    AssertEquals('read-only: nothing', '', sink.Log);
+    core.ReadOnly := False;
+    core.WriteSync(#27'[?1000h'#27'[?1006h');
+    sink.Log := '';
+    core.TriggerMouseEvent(MouseAt(1, 1, tmbLeft, tmaDown));
+    AssertEquals('an SGR report is user input', 'user,data,', sink.Log);
+    core.WriteSync(#27'[?1006l');
+    sink.Log := '';
+    core.TriggerMouseEvent(MouseAt(2, 1, tmbLeft, tmaDown));
+    AssertEquals('the default encoding is binary', 'data,', sink.Log);
   finally
     core.Free;
     sink.Free;

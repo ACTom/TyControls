@@ -169,8 +169,8 @@ begin
   Result := hi;
 end;
 
-{ the userinfo percent-encode set (URL standard): C0, space, " # < > ? ` { } / : ; = @
-  [ \ ] ^ | and everything past ~ }
+// the userinfo percent-encode set (URL standard): C0, space, " # < > ? ` { } / : ; = @
+// [ \ ] ^ | and everything past ~
 function InUserinfoSet(c: Cardinal): Boolean;
 begin
   case c of

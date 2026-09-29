@@ -43,6 +43,8 @@ begin                                                                        { :
       FOnRequestScrollToBottom(Self);
     ScrollToBottom;                      { CoreTerminal.ts:150 }
   end;
+  if AWasUserInput and Assigned(FOnUserInput) then
+    FOnUserInput(Self);                  { :86-89, before onData }
   if AWasUserInput then
     FDidUserInput := True;               { CoreTerminal.ts:151 -> WriteBuffer.handleUserInput }
   if Assigned(FOnData) then

@@ -259,6 +259,7 @@ type
     FOnWindowOptionsReport: TTyTerminalWindowReportEvent;
     FOnResize: TTyTerminalResizeEvent;
     FOnScrollbackCleared: TNotifyEvent;
+    FOnUserInput: TNotifyEvent;
 
     { wiring }
     procedure RegisterHandlers;
@@ -564,6 +565,11 @@ type
     property OnResize: TTyTerminalResizeEvent read FOnResize write FOnResize;
     { the scrollback went: ED 3 (when it held lines) and ClearScrollback }
     property OnScrollbackCleared: TNotifyEvent read FOnScrollbackCleared write FOnScrollbackCleared;
+    { CoreService.onUserInput (CoreService.ts:86-89): data the user made (keys, a paste,
+      a mouse report the encoding sends as user input) is about to go out -- after the
+      scroll to the bottom, before OnData; never while ReadOnly. The control takes it
+      (it clears the selection). }
+    property OnUserInput: TNotifyEvent read FOnUserInput write FOnUserInput;
   end;
 
 { The built-in clock, milliseconds: QueryPerformanceCounter on Windows,

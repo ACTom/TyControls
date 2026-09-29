@@ -389,6 +389,7 @@ type
     FIsClearing: Boolean;
     FHasScrollback: Boolean;
     FGeneration: Integer;
+    FTrimmedLines: Int64;
     FOptions: TTyTerminalOptions;
     FService: TTyTerminalBufferService;
     procedure NewLines;
@@ -457,6 +458,12 @@ type
     property Length: Integer read GetLength;           { Lines.Length }
     { Phase 2: always False (phase 5 wires BufferReflow). }
     property IsReflowEnabled: Boolean read GetIsReflowEnabled;
+    { The lines ever trimmed off this buffer's top: every OnTrim of its ring adds its
+      amount. A pure query; a selection kept in buffer rows catches up by the
+      difference (phase 4). The core's REP fast-forward skips scrolls without ring
+      events, so it is not counted there -- only after at least 2 x the ring's length
+      of real ones, which a selection does not outlive. }
+    property TrimmedLines: Int64 read FTrimmedLines;
   end;
 
   TTyTermBufferActivateEvent = procedure(AActive, AInactive: TTyTerminalBuffer) of object;
@@ -2505,6 +2512,7 @@ var
   i: Integer;
   m: TTyTerminalMarker;
 begin
+  Inc(FTrimmedLines, AAmount);
   if FMarkers.Count = 0 then
     Exit;
   snap := MarkerSnapshot;
