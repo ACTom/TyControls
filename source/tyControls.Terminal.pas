@@ -1001,7 +1001,7 @@ var
   st, bare, cur, bareCur: TTyStyleSet;
   i: Integer;
   instFg, instBg, themeFg, themeBg, c: Cardinal;
-  focused: Boolean;
+  inFocus: Boolean;
 begin
   model := ActiveController.Model;
   cls := TyStyleClassFor(Self, StyleClass);
@@ -1020,18 +1020,18 @@ begin
   { 选区:无状态是失焦那一色、:focus 是聚焦那一色(TyTerminalSelection,alpha 保留);前景
     只在主题给了 color 时才换(spec §11「写了才用」:基础层不写,17 个主题都不写——
     tpTextColor 在 Present 里就是规则写了) }
-  for focused := False to True do
+  for inFocus := False to True do
   begin
-    if focused then
+    if inFocus then
       st := model.ResolveStyle('TyTerminalSelection', cls, [tysFocused])
     else
       st := model.ResolveStyle('TyTerminalSelection', cls, []);
     if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then
-      FSelBg[focused] := st.Background.Color
+      FSelBg[inFocus] := st.Background.Color
     else
-      FSelBg[focused] := TTyColor(($5A shl 24) or instFg);
-    FSelHasInk[focused] := tpTextColor in st.Present;
-    FSelInk[focused] := TermFgOf(st, instFg);
+      FSelBg[inFocus] := TTyColor(($5A shl 24) or instFg);
+    FSelHasInk[inFocus] := tpTextColor in st.Present;
+    FSelInk[inFocus] := TermFgOf(st, instFg);
   end;
   FLinkRgb := TermFgOf(model.ResolveStyle('TyTerminalLink', cls, []), instFg);
   { 0..15 取实例的类;16..255 公式;颜色一律 RGB、丢 alpha;缺了退到 Tango,不抛 }
