@@ -349,6 +349,7 @@ var
   cache: TTyTermContrastCache;
   res: Cardinal;
   adj: Boolean;
+  k: Integer;
 begin
   cache := TTyTermContrastCache.Create;
   try
@@ -371,6 +372,12 @@ begin
     cache.Clear;
     AssertEquals('cleared', 0, cache.Count);
     AssertFalse('nothing after Clear', cache.Find($111111, $222222, res, adj));
+    { bounded (upstream's is not): a true-colour stream makes a pair per colour }
+    for k := 0 to 3 * TyTermContrastCacheMax do
+      cache.Put($101010, Cardinal(k), Cardinal(k) xor $FFFFFF, True);
+    AssertTrue(Format('at most %d pairs (%d)', [TyTermContrastCacheMax, cache.Count]),
+      cache.Count <= TyTermContrastCacheMax);
+    AssertTrue('the last one kept', cache.Find($101010, Cardinal(3 * TyTermContrastCacheMax), res, adj));
   finally
     cache.Free;
   end;

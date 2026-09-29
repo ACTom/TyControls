@@ -81,6 +81,7 @@ type
     { 5 期:行复用 }
     procedure TestIncrementalEqualsFullRepaint;
     procedure TestMarkedTextFollowsAHiddenCursor;
+    procedure TestARowCutByTheFrameIsNotMoved;
     procedure TestScrollingPaintsOnlyWhatChanged;
     procedure TestAFrameChangeRepaintsEveryRow;
     procedure TestSyncOutputStillHoldsRows;
@@ -1671,6 +1672,60 @@ procedure TTyTerminalViewPaintTests.TestIncrementalEqualsFullRepaint;
 begin
   RunIncremental(96, 20260929);
   RunIncremental(144, 7);
+end;
+
+{ A frame shorter than the grid (a grid still waiting to be applied): the last row is cut
+  by the frame's bottom, its lower part never drawn. It must not be kept or moved: a
+  scroll that moved it up would show the part nobody drew. Incremental = full over the
+  whole frame. }
+procedure TTyTerminalViewPaintTests.TestARowCutByTheFrameIsNotMoved;
+var
+  a, b: TBGRABitmap;
+  bmp: TBitmap;
+  w, h, x, y, k, bad: Integer;
+
+  function Shot: TBGRABitmap;
+  begin
+    bmp.Canvas.Brush.Color := RGBToColor(255, 0, 255);
+    bmp.Canvas.FillRect(0, 0, w, h);
+    F.View.Render(bmp.Canvas, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+    Result := TBGRABitmap.Create(bmp);
+  end;
+
+begin
+  { every row written, the cursor hidden: a scroll moves the last row up unchanged }
+  F.View.WriteSync(#27'[?25l');
+  for k := 0 to F.View.Rows - 1 do
+    F.View.WriteSync(#27'[' + IntToStr(k + 1) + ';1H' + 'line ' + IntToStr(k) + ' ' + StringOfChar(Chr(Ord('a') + k), 12));
+  w := F.View.ClientWidth;
+  { the frame ends halfway down the last row }
+  h := F.Pad + (F.View.Rows - 1) * F.View.CellMetrics.CellH + F.View.CellMetrics.CellH div 2 + F.Pad;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(w, h);
+    a := Shot;
+    a.Free;
+    F.View.WriteSync(#27'[1S');
+    a := Shot;
+    try
+      F.View.Forget;
+      b := Shot;
+      try
+        bad := 0;
+        for y := 0 to h - 1 do
+          for x := 0 to w - 1 do
+            if Rgb(a.GetPixel(x, y)) <> Rgb(b.GetPixel(x, y)) then Inc(bad);
+        AssertEquals('pixels the incremental frame got wrong', 0, bad);
+      finally
+        b.Free;
+      end;
+    finally
+      a.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
 end;
 
 { Marked text is drawn at the cursor's column whether the cursor shows or not (a blink's
