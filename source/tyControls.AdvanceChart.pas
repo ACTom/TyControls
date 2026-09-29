@@ -43,7 +43,7 @@ uses
   tyControls.AdvChart.VisualMapView,
   tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
   tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.ZrPath,
-  tyControls.AdvChart.Marker,
+  tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -294,6 +294,8 @@ type
       markArea as the last layout solved them. Solved in Relayout, after the
       bars, because an end on a bar sits on its bar within the band. }
     FMarkers: TTyMkSeriesArray;
+    { each series' markLine pictures, index-parallel to FBindings }
+    FMarkLinePics: array of TTyMkLinePicArray;
     { dataZoom INTERACTION, by the author's dataZoom index: the window
       setRawRange left (percents), how each answers the pointer, each
       slider view's own state, each inside's view range }
@@ -446,6 +448,9 @@ type
     function BuildVisualMaps(AList: TTyPaintList): Integer;
     procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveMarkers(APPI: Integer);
+    function MarkerSeriesColorCss(ASlot: Integer): string;
+    procedure MarkerGround(out ABackground: string; out AIsDark: Boolean);
+    function BuildMarkers(const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
     { ---- dataZoom interaction ---- }
     function DzRepresentative(AIndex: Integer): Integer;
     procedure DzRenderStates;
@@ -873,6 +878,9 @@ type
       a cartesian grid, is switched off by the legend, or nothing has
       rendered. }
     function MarkerLayout(ASeriesIndex: Integer; AKind: TTyMarkerKind): TTyMkBlock;
+    { THE markLine PICTURES of a series as the last layout drew them, one per
+      surviving line in data order; empty when there are none. }
+    function MarkLinePictures(ASeriesIndex: Integer): TTyMkLinePicArray;
     { THE dataZoom ACTION, upstream's dispatchAction({type: 'dataZoom',
       dataZoomIndex, start, end}): the percent window goes on dataZoom AIndex
       and on every dataZoom linked to it through a shared axis, and the chart
@@ -2424,6 +2432,18 @@ begin
       So `{ color: '#fff', borderColor: 'auto' }` is a white bar with a
       border in the palette colour, and it costs a slot. }
     hasAuto := key.IsAuto or other.IsAuto;
+
+    { A TYPE WHOSE DEFAULTS NAME THE COLOUR takes no slot either: the style
+      task reads itemStyle through the series' defaultOption, and a
+      candlestick's says '#eb5454' -- so a bar beside it takes the palette's
+      FIRST colour, not its second. [Batch 65: the bar took the second, and
+      its markers with it.] }
+    if (st = 'candlestick') and (not key.Written) and (not hasAuto) then
+    begin
+      FSeriesColors[i] := TTyChartColor($FFEB5454);
+      FSeriesColorKnown[i] := True;
+      Continue;
+    end;
 
     if key.Written and not hasAuto then
     begin
@@ -4043,9 +4063,12 @@ var
   kind: TTyMarkerKind;
   ax: TTyAxis;
   scale: Double;
+  pin: TTyMkPicInput;
 begin
   FMarkers := nil;
   SetLength(FMarkers, Length(FBindings));
+  FMarkLinePics := nil;
+  SetLength(FMarkLinePics, Length(FBindings));
   if APPI <= 0 then APPI := 96;
   scale := APPI / 96;
   for i := 0 to High(FBindings) do
@@ -4124,7 +4147,99 @@ begin
       FMarkers[i].Blocks[kind] := TyMarkerSolve(kind, TJSONObject(node),
         TJSONObject(nd), ctx);
     end;
+    { THE PICTURE of every markLine, from the layout just solved }
+    if FMarkers[i].Blocks[mkLine].Present then
+    begin
+      pin := Default(TTyMkPicInput);
+      pin.SeriesColor := MarkerSeriesColorCss(i);
+      nd := TJSONObject(node).Find('name');
+      if (nd <> nil) and (nd.JSONType = jtString) then
+        pin.SeriesName := TyMkOf(nd)
+      else
+        pin.SeriesName := TyMkUndef;
+      nd := FOption.Find('textStyle');
+      if (nd <> nil) and (nd.JSONType = jtObject) then pin.TextStyle := TJSONObject(nd);
+      MarkerGround(pin.Background, pin.IsDark);
+      pin.Scale := scale;
+      FMarkLinePics[i] := TyMkLinePictures(FMarkers[i].Blocks[mkLine], pin);
+    end;
   end;
+end;
+
+{ upstream's series style colour as a css string: what the author wrote in
+  itemStyle.color, candlestick's own default, else the palette's }
+function TTyAdvanceChart.MarkerSeriesColorCss(ASlot: Integer): string;
+var
+  node, d: TJSONData;
+  c: TTyColor;
+begin
+  Result := '';
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if (node <> nil) and (node.JSONType = jtObject) then
+  begin
+    d := TJSONObject(node).Find('itemStyle');
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('color');
+      if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString);
+    end;
+  end;
+  c := SeriesColor(FBindings[ASlot].SeriesIndex);
+  if (c shr 24) = $FF then
+    Result := '#' + LowerCase(IntToHex(c and $FFFFFF, 6))
+  else
+    Result := 'rgba(' + IntToStr((c shr 16) and $FF) + ',' + IntToStr((c shr 8) and $FF)
+      + ',' + IntToStr(c and $FF) + ',' + TyJsNumberToString((c shr 24) / 255) + ')';
+end;
+
+{ THE GROUND upstream's marker label halo is made of: the option's
+  backgroundColor, else 'transparent' -- and dark by the option's darkMode
+  when it says, else by zrender's own luminance test }
+procedure TTyAdvanceChart.MarkerGround(out ABackground: string; out AIsDark: Boolean);
+var
+  d: TJSONData;
+begin
+  d := FOption.Find('backgroundColor');
+  if (d <> nil) and (d.JSONType = jtString) then
+    ABackground := d.AsString
+  else
+    { UPSTREAM'S GROUND, 'transparent', not the skin's: the picture is
+      upstream's answer, and the paint takes the halo from the skin anyway }
+    ABackground := 'transparent';
+  d := FOption.Find('darkMode');
+  if (d <> nil) and (d.JSONType = jtBoolean) then AIsDark := d.AsBoolean
+  else AIsDark := TyMkGroundIsDark(ABackground);
+end;
+
+function TTyAdvanceChart.MarkLinePictures(ASeriesIndex: Integer): TTyMkLinePicArray;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FMarkLinePics)) then Exit;
+  Result := FMarkLinePics[slot];
+end;
+
+function TTyAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
+  AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  ink: TTyMkInk;
+  st: TTyStyleSet;
+  dark: Boolean;
+begin
+  Result := 0;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  ink.FontName := st.FontName;
+  ink.FontSizeLogical := ResolveFontSize(st);
+  ink.FontWeight := st.FontWeight;
+  ink.Text := TTyChartColor(st.TextColor);
+  LabelGround(ink.Halo, dark);
+  for i := 0 to High(FMarkLinePics) do
+    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
+      Inc(Result, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,
+        AMeasurer, AList));
 end;
 
 function TTyAdvanceChart.DataZoomCount: Integer;
@@ -6422,6 +6537,9 @@ begin
       its captions are ANSWERS rather than requests -- they arrive with a
       font and an anchor already on them, which is what the expansion exists
       to supply. A MARK appended here would silently lose its label. }
+    { MARKERS arrive as answers too: their labels are placed by Line.ts's own
+      table, not by the expansion }
+    Inc(drawn, BuildMarkers(AMeasurer, list));
     Inc(drawn, BuildLegends(APPI, list));
     Inc(drawn, BuildVisualMaps(list));
     Inc(drawn, BuildDataZooms(list));

@@ -29,6 +29,9 @@
 //            neighbours, +-2^-57 and its neighbours -- and a few outside
 //            (NaN). zrender's arc parser takes the angle between two radii
 //            with it.
+//   asin     [x, asin, text]             after acos, the same way: 3000 x,
+//            e_asin.c's edges (+-1, +-0.5, +-0.975, +-2^-27 and neighbours)
+//            and a few outside. The pin symbol's shoulder.
 const fs = require('fs');
 const path = require('path');
 
@@ -141,6 +144,25 @@ for (const x of acosArgs) {
 }
 if (acos.length < 3000) throw new Error('js-math: too few acos rows');
 
+// asin: drawn after acos, so nothing above moves. 3000 x in [-1, 1], then the
+// edges e_asin.c branches on: +-1, +-0.5, +-0.975 (0x3FEF3333), +-2^-27 and
+// their neighbours, and a few outside. The pin symbol's shoulder angle.
+const asinArgs = [];
+for (let i = 0; i < 3000; i++) asinArgs.push(trnd() * 2 - 1);
+for (const x of [1, -1, 0, 0.5, -0.5, 0.975, -0.975, Math.pow(2, -27), -Math.pow(2, -27)]) {
+  asinArgs.push(x, step(x, -1, 1), step(x, 1, 1));
+}
+asinArgs.push(-0, 1.0000001, -1.0000001, NaN);
+const asinSeen = new Set();
+const asin = [];
+for (const x of asinArgs) {
+  const k = hex(x);
+  if (asinSeen.has(k)) continue;
+  asinSeen.add(k);
+  asin.push([k, hex(Math.asin(x)), String(x)]);
+}
+if (asin.length < 3000) throw new Error('js-math: too few asin rows');
+
 const out = {
   source: 'node ' + process.version + ' (V8 ' + process.versions.v8 + ') Math',
   unary: unary.filter(x => !(Math.abs(x) > 823550)).map(x => [hex(x), hex(Math.sin(x)),
@@ -150,6 +172,7 @@ const out = {
   atan2: pairs.map(([y, x]) => [hex(y), hex(x), hex(Math.atan2(y, x)), String(y) + ', ' + String(x)]),
   tan,
   acos,
+  asin,
 };
 const file = path.join(__dirname, '..', '..', 'tests', 'fixtures', 'advchart-js-math.json');
 fs.writeFileSync(file, JSON.stringify(out, null, 0) + '\n');

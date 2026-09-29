@@ -26,6 +26,7 @@ type
     procedure TestAtanIsV8sToTheBit;
     procedure TestAtan2IsV8sToTheBit;
     procedure TestAcosIsV8sToTheBit;
+    procedure TestAsinIsV8sToTheBit;
     procedure TestTheRunTimeLibraryIsNot;
     procedure TestFroundIsMathFround;
     procedure TestPowAndLogAreV8sToTheBit;
@@ -177,6 +178,34 @@ end;
 
 { Math.acos: fdlibm's e_acos.c. FPC's ArcCos parts from it on about a
   quarter of the arguments in [-1, 1], by an ulp. }
+{ Math.asin: fdlibm's e_asin.c -- the pin symbol's shoulder angle.
+  [Batch 65] }
+procedure TAdvChartJsMathTest.TestAsinIsV8sToTheBit;
+var
+  rows, r: TJSONArray;
+  i, bad: Integer;
+  x: Double;
+  report: string;
+begin
+  rows := TJSONObject(FRoot).Arrays['asin'];
+  bad := 0;
+  report := '';
+  for i := 0 to rows.Count - 1 do
+  begin
+    r := rows.Arrays[i];
+    x := FromHex(r.Strings[0]);
+    if not Same(TyJsAsin(x), r.Strings[1]) then
+    begin
+      Inc(bad);
+      if bad <= 10 then
+        report := report + LineEnding + Format('  %s: %s, V8 %s',
+          [r.Strings[2], Hex(TyJsAsin(x)), r.Strings[1]]);
+    end;
+  end;
+  AssertTrue('enough arguments', rows.Count >= 3000);
+  AssertEquals(IntToStr(bad) + ' of ' + IntToStr(rows.Count) + ' differ:' + report, 0, bad);
+end;
+
 procedure TAdvChartJsMathTest.TestAcosIsV8sToTheBit;
 var
   rows, r: TJSONArray;

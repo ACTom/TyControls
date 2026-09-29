@@ -38,6 +38,8 @@ function TyZrDataLength(const APath: TTyZrPath): Integer;
 { ---- building, as the proxy's own methods do ---- }
 procedure TyZrMoveTo(var APath: TTyZrPath; AX, AY: Double);
 procedure TyZrLineTo(var APath: TTyZrPath; AX, AY: Double);
+{ bezierCurveTo }
+procedure TyZrCubic(var APath: TTyZrPath; AX1, AY1, AX2, AY2, AX, AY: Double);
 { PathProxy.arc: the angles normalised first (normalizeArcAngles) }
 procedure TyZrArc(var APath: TTyZrPath; ACX, ACY, AR, AStart, AEnd: Double;
   AAnti: Boolean);
@@ -166,6 +168,11 @@ end;
 procedure TyZrLineTo(var APath: TTyZrPath; AX, AY: Double);
 begin
   Add(APath, zrL, [AX, AY]);
+end;
+
+procedure TyZrCubic(var APath: TTyZrPath; AX1, AY1, AX2, AY2, AX, AY: Double);
+begin
+  Add(APath, zrC, [AX1, AY1, AX2, AY2, AX, AY]);
 end;
 
 { PathProxy's modPI2: the angle's multiple of pi, rounded to 1e-8 }
@@ -925,6 +932,7 @@ function TyZrSymbol(const AType: string; AX, AY, AW, AH: Double): TTyZrPath;
 var
   t: string;
   cx, cy, r, hw, hh, size: Double;
+  px, py, pw, ph, dy, pcy, ang, dx, tanX, tanY, cpLen, cpLen2: Double;
 begin
   Result := nil;
   t := AType;
@@ -942,8 +950,54 @@ begin
   end
   else if t = 'roundRect' then
   begin
+    { Rect.buildPath: a radius of nought is a plain rect command }
     r := JMin(AW, AH) / 4;
-    TyZrRoundRect(Result, AX, AY, AW, AH, r, r, r, r);
+    if (r = 0) or IsNan(r) then TyZrRect(Result, AX, AY, AW, AH)
+    else TyZrRoundRect(Result, AX, AY, AW, AH, r, r, r, r);
+  end
+  else if t = 'line' then
+  begin
+    { a zrender Line across the box's middle, no sub-pixel step on a proxy }
+    TyZrMoveTo(Result, AX, AY + AH / 2);
+    TyZrLineTo(Result, AX + AW, AY + AH / 2);
+  end
+  else if t = 'pin' then
+  begin
+    { the maker puts (x, y) at the box CENTRE: the cusp, with the head above
+      it. [Batch 65] }
+    px := AX + AW / 2;
+    py := AY + AH / 2;
+    pw := AW / 5 * 3;
+    ph := JMax(pw, AH);
+    r := pw / 2;
+    dy := r * r / (ph - r);
+    pcy := py - ph + r + dy;
+    ang := TyJsAsin(dy / r);
+    dx := TyJsCos(ang) * r;
+    tanX := TyJsSin(ang);
+    tanY := TyJsCos(ang);
+    cpLen := r * 0.6;
+    cpLen2 := r * 0.7;
+    TyZrMoveTo(Result, px - dx, pcy + dy);
+    TyZrArc(Result, px, pcy, r, Pi - ang, Pi * 2 + ang, False);
+    TyZrCubic(Result, px + dx - tanX * cpLen, pcy + dy + tanY * cpLen, px, py - cpLen2,
+      px, py);
+    TyZrCubic(Result, px, py - cpLen2, px - dx + tanX * cpLen, pcy + dy + tanY * cpLen,
+      px - dx, pcy + dy);
+    TyZrClose(Result);
+  end
+  else if t = 'arrow' then
+  begin
+    { the TIP at the box centre, the body a whole height below it }
+    px := AX + AW / 2;
+    py := AY + AH / 2;
+    dx := AW / 3 * 2;
+    TyZrMoveTo(Result, px, py);
+    TyZrLineTo(Result, px + dx, py + AH);
+    TyZrLineTo(Result, px, py + AH / 4 * 3);
+    TyZrLineTo(Result, px - dx, py + AH);
+    TyZrLineTo(Result, px, py);
+    TyZrClose(Result);
   end
   else if t = 'square' then
   begin
@@ -968,8 +1022,8 @@ begin
     TyZrClose(Result);
   end
   else
-    { rect, and the shapes whose curves are not transcribed here (pin,
-      arrow, an image): their box }
+    { rect, and any name symbol.ts does not know: SymbolClz.buildPath draws
+      a rect for it }
     TyZrRect(Result, AX, AY, AW, AH);
 end;
 

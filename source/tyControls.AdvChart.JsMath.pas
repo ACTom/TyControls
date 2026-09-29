@@ -37,6 +37,9 @@ function TyJsAcos(AX: Double): Double;
   turned label's matrix from its decomposed skew, and a skew of 2 pi --
   which a label turned past a quarter comes to -- is where FPC's Tan and
   V8's part: `BCB1A60000000000` against `BCB1A62633145C07`. }
+{ Math.asin: fdlibm's e_asin.c, which V8 carries. The pin symbol's shoulder
+  angle is one. [Batch 65] }
+function TyJsAsin(AX: Double): Double;
 function TyJsTan(AX: Double): Double;
 { Math.fround: the nearest single, ties to even, and past the largest single
   -- by half a unit of its last place -- an infinity. Upstream keeps a line's
@@ -468,6 +471,63 @@ begin
   r := PQ(z);
   w := r * s + c;
   Result := 2.0 * (df + w);
+end;
+
+function TyJsAsin(AX: Double): Double;
+var
+  hx, ix: LongInt;
+  t, w, p, q, c, r, s, pio2Hi, pio2Lo, pio4Hi: Double;
+
+  procedure PQ(AT: Double);
+  begin
+    p := AT * (FromBits(QWord($3FC5555555555555)) + AT * (FromBits(QWord($BFD4D61203EB6F7D))
+      + AT * (FromBits(QWord($3FC9C1550E884455)) + AT * (FromBits(QWord($BFA48228B5688F3B))
+      + AT * (FromBits(QWord($3F49EFE07501B288)) + AT * FromBits(QWord($3F023DE10DFDF709)))))));
+    q := 1.0 + AT * (FromBits(QWord($C0033A271C8A2D4B)) + AT * (FromBits(QWord($40002AE59C598AC8))
+      + AT * (FromBits(QWord($BFE6066C1B8D0159)) + AT * FromBits(QWord($3FB3B8C5B12E9282)))));
+  end;
+
+begin
+  pio2Hi := FromBits(QWord($3FF921FB54442D18));
+  pio2Lo := FromBits(QWord($3C91A62633145C07));
+  pio4Hi := FromBits(QWord($3FE921FB54442D18));
+  hx := HighWord(AX);
+  ix := hx and $7FFFFFFF;
+  if ix >= $3FF00000 then
+  begin
+    { |x| = 1: plus or minus a quarter turn; past it: not a number }
+    if ((ix - $3FF00000) or LongInt(LowWord(AX))) = 0 then
+      Exit(AX * pio2Hi + AX * pio2Lo);
+    Exit(NaN);
+  end;
+  if ix < $3FE00000 then
+  begin
+    { |x| < 0.5; under 2^-27 the answer is x itself }
+    if ix < $3E400000 then Exit(AX);
+    t := AX * AX;
+    PQ(t);
+    w := p / q;
+    Exit(AX + AX * w);
+  end;
+  w := 1.0 - Abs(AX);
+  t := w * 0.5;
+  PQ(t);
+  s := Sqrt(t);
+  if ix >= $3FEF3333 then
+  begin
+    w := p / q;
+    t := pio2Hi - (2.0 * (s + s * w) - pio2Lo);
+  end
+  else
+  begin
+    w := FromWords(HighWord(s), 0);
+    c := (t - w * w) / (s + w);
+    r := p / q;
+    p := 2.0 * s * r - (pio2Lo - 2.0 * c);
+    q := pio4Hi - 2.0 * w;
+    t := pio4Hi - (p - q);
+  end;
+  if hx > 0 then Result := t else Result := -t;
 end;
 
 function TyJsAtan2(AY, AX: Double): Double;

@@ -7647,3 +7647,51 @@ dataZoom 做完后按画廊重数缺口:还不画的系列类型里 custom 13(`r
 ### 下一批
 
 M2:markLine 的画面(线段、两端符号、标签位置和墨色)。
+
+## 99. Tier 1 第六十五批:markLine 的画面(M2,2026-09-29)
+
+M1 给出了每条线的两端;这一批把它画出来:线段、两端符号、标签。
+
+### 上游的做法
+
+- **合并出来的线条目**:线的 `lineStyle`、`label`、`z2` 读自 `{type, valueIndex, value}` 依次并入起点、终点条目的结果(不覆盖、对象逐键合并)——起点没写而终点写了的 `lineStyle`/`label` 会作用到线上;终点的 `itemStyle` 不参与。顶层 markLine 同样是它自己的选项并在默认值上。
+- **线段**:颜色 `lineStyle.color`,否则起点的填充色(起点 `itemStyle.color` → 系列 markLine → 顶层 markLine → 系列色;K 线的系列色是默认的 `#eb5454`)。zrender 的 Line 在两端 `round(2x)` 相同时把**两端都**贴到起点算出的半像素上(宽 0 不贴;`round(0.4)` 当偶数宽)。虚线 `dashed` 是 `[4w, 2w]`、`dotted` 是 `[w]`,数字和数组原样、不乘线宽。
+- **符号**:按整尺寸建(不是单位框缩放),盒子 `(-w/2 + 偏移, -h/2 + 偏移, w, h)`,偏移的百分比按尺寸算。给了非 NaN 的 `symbolRotate`(0 也算)就不再按切线转;否则起点 `π/2 − atan2(ty, tx)`、终点 `−π/2 − atan2(ty, tx)`。箭头的尖和 pin 的尖都在盒子中心——也就是端点上。填充是线的颜色;`empty*` 是线色描边、白填充、线宽 2;`line` 符号只描边;不认识的名字画成矩形;`square` 取短边、靠盒子左上。
+- **标签**:默认文字是合并条目的 value(`round(v, 10)`,数字字符串先转数),没有 value 用 name,都没有是空串(不画)。`formatter` 的 `{a}{b}{c}` 各只替换**第一次**出现。位置表照 Line.ts:`start`/`end` 在端点外 `distance` 处,对齐看方向分量**严格**大于 0.8;`inside*`/`middle` 沿线转、`dir` 看切线的 x,旋转中心(origin)设在线上;不认识的位置落在原点。作者的 `align`/`verticalAlign` 覆盖算出来的,`'middle'` 对齐归一成 `'center'`,不认识的归成 left/top。`label.rotate` 替换线的转角,`label.offset` 平移并把旋转中心改为 `-offset`。
+- **墨色**:没写颜色时外侧墨 `#333`(暗色 `#ccc`),外加地面色的光晕(宽 2);地面是选项的 `backgroundColor`(否则 transparent),暗不暗看 `darkMode`,否则看亮度 < 0.4。写了颜色就没有自动光晕;`color: 'inherit'` 取线色;不透明度默认跟 `lineStyle.opacity`。
+- **z2**:标签的 z2 是**整个系列所有线**里到它为止出现过的最大 z2 加 2。
+
+### port 以前
+
+- markLine 只有 M1 的数字,不画。
+- K 线没写颜色时占了色板第一个位置,旁边的柱子拿到第二个颜色(上游是第一个)。
+- `TyZrSymbol` 把 pin、arrow、line 当矩形;`roundRect` 半径为 0 时仍走圆角路径。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.MarkerView`:合并视图(对象列表、先有键者胜、对象逐键合并)、`TyMkLinePictures` 逐字转写上面各条,出每条线的画面记录(线段路径与样式、两个符号的盒子/转角/变换/路径/颜色、标签的文字/位置/旋转中心/变换/对齐/字体/样式/墨色/z2);`TyBuildMarkLines` 把它变成绘制元素:线段用虚线折线,符号用 zrender 路径(圆弧转三次曲线),标签是带锚点和转角的答案标题。作者写的颜色原样用;上游的默认墨色和光晕换成皮肤的标签色和地面色(主题可定制原则)。标注元素暂时静默(标注的提示框还没移植)。
+- `ZrPath`:`TyZrSymbol` 补 line、pin、arrow,`roundRect` 半径 0 退回矩形;`TyZrCubic`。`JsMath` 加 `TyJsAsin`(fdlibm e_asin.c,pin 的肩角要逐位)。
+- 图表:`SolveMarkers` 算完布局就算画面,`MarkLinePictures(seriesIndex)` 读出;`BuildSeriesList` 在图例之前加入标注元素。`SolveSeriesColors`:K 线没写颜色时取 `#eb5454`、不占色板位。
+
+### 基准
+
+- `tools/advchart-oracle/markers-line.js`(代理写)真跑 ECharts 6.1,57 个用例(45 合成 + 12 画廊)、281 条线、35 条守卫:默认符号、四个方向的对角线、0.8 的边界、反向轴、零长线、半像素(线宽 1/2/3/0/0.4/1.5)、各种虚线、颜色回退链、全部符号类型与覆盖、12 个标签位置在横竖斜和从右往左的线上、距离标量与数对、对齐覆盖与归一、`label.rotate`/`offset`、默认文字与 formatter、字体、暗色地面、z/z2、图例隐藏、NaN 端点、柱。
+- `test.advchart.markline` 逐字段比较画面记录(颜色按解析后的四个数比);没写 `color` 的选项注入上游 v6 默认色板,因为端口的默认颜色按设计来自皮肤。另有一个检查绘制列表里确有线段、两个符号和标签的测试。
+
+### 变异测试
+
+49 个。第一轮 8 个存活:
+- 等价 1 个:两端各自做半像素——结果只取决于 `round(2x)`,两端相同时答案必然相同。
+- 变异本身写错 2 个(`symbolRotate: 0` 改完仍是 0;formatter 只改了第二遍循环而第一遍只换了一个),重写后被 V2 杀掉。
+- 夹具没覆盖的 4 个:补 V1(顶层 markLine 的 `label`/`lineStyle` 不是对象,合并时作者的键挡住默认值——没有标签)杀 1 个;V2(系列级 `symbolRotate: 0`、`[10, 0]` 的 roundRect、重复的 `{c}{b}`、低于 5e-5 的标签偏移)杀 2 个;asin 的分支由 js-math oracle 新增的 3031 行 `Math.asin` 和 `TestAsinIsV8sToTheBit` 杀掉。
+- pin 的肩角换成 FPC 的 ArcSin 在这批夹具上看不出差别(pin 在 markLine 里少见),留给 M3——pin 是 markPoint 的默认符号。
+
+### 已知偏差
+
+- 上游的默认墨色(`#333`/`#ccc`)和光晕按选项地面算,端口画的时候换成皮肤的标签色和地面色;画面记录里仍是上游的值。
+- 标注没有提示框和悬停强调(线宽 3),元素静默。
+- 标签的富文本、背景框没有移植;字体按皮肤,作者给的字号和粗细才生效。
+
+### 下一批
+
+M3:markPoint 的画面(pin 的单位框缩放、inside 标签在 0.4 高处)。
