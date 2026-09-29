@@ -406,3 +406,19 @@ msgstr "关于"
 #: tycontrols.strconsts.rsdlgbasiccolors
 msgid "Basic colors"
 msgstr "基本颜色"
+
+#: tycontrols.strconsts.rsterminalmenuclear
+msgid "Clear"
+msgstr "清屏"
+
+#: tycontrols.strconsts.rstextmenucopy
+msgid "Copy"
+msgstr "复制"
+
+#: tycontrols.strconsts.rstextmenupaste
+msgid "Paste"
+msgstr "粘贴"
+
+#: tycontrols.strconsts.rstextmenuselectall
+msgid "Select All"
+msgstr "全选"

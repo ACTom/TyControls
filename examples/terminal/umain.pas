@@ -26,6 +26,18 @@ unit umain;
   Switching recordings drops what the old one still had queued (Core.DiscardPending)
   instead of parsing it first.
 
+  SHELL MODE. Pick "Shell" and the terminal runs a real program: cmd (or PowerShell,
+  pwsh, wsl where they are found) through ConPTY on Windows, the login shell elsewhere.
+  The three things a host does are the same three, in ushell: keys go to the PTY on a
+  writer thread, the PTY's output is read on a reader thread and written into the
+  terminal with a callback that holds a fast program back (flow control), and the grid
+  size goes to the PTY. The PTY units -- uptysession, uptywin, uptyunix, ushell -- live
+  here in the example, not in the library (spec 12.2). "Log PTY output" lists the first
+  4 KB the PTY sends in the panel, in hex: what ConPTY asks the terminal for at start.
+  Ctrl+click (Cmd+click) a web address or an OSC 8 link: the example asks before it
+  opens a browser, and opens only http and https. OSC 52 is off unless picked; a
+  program may then set the clipboard, and must ask before reading it.
+
   The window, the terminal and every control are designed in umain.lfm (a TTyForm +
   TTyTitleBar); the code here is event handlers, the player and theme setup. }
 
@@ -34,12 +46,13 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LazUTF8,
+  Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LazUTF8, LCLIntf, Dialogs,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.ComboBox, tyControls.CheckBox,
   tyControls.ToggleSwitch, tyControls.SpinEdit, tyControls.Memo, tyControls.Splitter,
   tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.FileDialog,
-  tyControls.Unicode.Width, tyControls.Terminal.Core, tyControls.Terminal, uasciicast;
+  tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal,
+  uasciicast, uptysession, uptywin, uptyunix, ushell;
 
 type
   TMainForm = class(TTyForm)
@@ -48,6 +61,17 @@ type
     Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
     Tools1: TTyPanel;
+    CmbMode: TTyComboBox;
+    Tools3: TTyPanel;
+    LblCommand: TTyLabel;
+    CmbCommand: TTyComboBox;
+    BtnStart: TTyButton;
+    ChkLogPty: TTyCheckBox;
+    Tools4: TTyPanel;
+    ChkCopyOnSelect: TTyCheckBox;
+    ChkDetectUrls: TTyCheckBox;
+    LblOsc52: TTyLabel;
+    CmbOsc52: TTyComboBox;
     LblRecording: TTyLabel;
     CmbRecording: TTyComboBox;
     BtnOpen: TTyButton;
@@ -89,6 +113,23 @@ type
     procedure TermData(Sender: TObject; const AData: RawByteString);
     procedure TermTitleChange(Sender: TObject; const AText: string);
     procedure TermGridResize(Sender: TObject; ACols, ARows: Integer);
+    procedure ModeChange(Sender: TObject);
+    procedure StartClick(Sender: TObject);
+    procedure CopyOnSelectClick(Sender: TObject);
+    procedure DetectUrlsClick(Sender: TObject);
+    procedure Osc52Change(Sender: TObject);
+    procedure TermLinkActivate(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
+    procedure TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
+      var AText: string; var AAllow: Boolean);
+  private
+    FShell: TTerminalShell;
+    FLogged: Integer;
+    procedure FillCommands;
+    procedure EnterReplay;
+    procedure StartShell;
+    procedure ShellData(Sender: TObject; const AData: RawByteString);
+    procedure ShellOutput(Sender: TObject; const AData: RawByteString);
+    procedure ShellExit(Sender: TObject);
   private
     FCast: TAsciicast;
     FPlayer: TAsciicastPlayer;
@@ -121,10 +162,26 @@ resourcestring
   rsRecordingSizeFmt = '%s: recorded at %d x %d';
   rsSpeedAllAtOnce = 'All at once';
   rsWriteFailedFmt = 'Playback stopped: %s';
+  rsModeReplay = 'Replay';
+  rsModeShell = 'Shell';
+  rsStart = 'Start';
+  rsRestart = 'Restart';
+  rsLogStopped = '(stopped logging: 4 KB shown)';
+  rsOsc52Off = 'Off';
+  rsOsc52Write = 'Write only';
+  rsOsc52ReadWrite = 'Read and write';
+  rsOpenLinkFmt = 'Open %s?';
+  rsLinkNotOpenedFmt = 'Not opened (only http and https): %s';
+  rsClipboardSetFmt = 'The program set the clipboard (%d characters)';
+  rsAllowClipboardRead = 'The program asks to read the clipboard. Allow it?';
+  rsShellExitedStatusFmt = 'Shell exited (%d)';
+  rsShellFailedFmt = 'Could not start: %s';
 
 const
   { the key panel keeps the last this many lines }
   KeyLinesMax = 1000;
+  { "Log PTY output" lists at most this many bytes of one session }
+  PtyLogMax = 4096;
 
 function RecordingsDir: string;
 var
@@ -203,13 +260,22 @@ begin
   else
     Status.Panels[0].Text := rsNoRecording;
   BtnPlay.Caption := rsPlay;
-  { the combo's items live in the .lfm; the one that is words is translated here }
+  { the combos' items live in the .lfm; the ones that are words are translated here }
   CmbSpeed.Items[4] := rsSpeedAllAtOnce;
+  CmbMode.Items[0] := rsModeReplay;
+  CmbMode.Items[1] := rsModeShell;
+  CmbOsc52.Items[0] := rsOsc52Off;
+  CmbOsc52.Items[1] := rsOsc52Write;
+  CmbOsc52.Items[2] := rsOsc52ReadWrite;
+  BtnStart.Caption := rsStart;
+  FillCommands;
   AddKeyLine(rsReadOnlyHint);
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
+  { the shell first: its threads and its pending pump go before anything they touch }
+  FreeAndNil(FShell);
   Player.Enabled := False;
   FFiles.Free;
   FPlayer.Free;
@@ -432,6 +498,170 @@ end;
 procedure TMainForm.TermGridResize(Sender: TObject; ACols, ARows: Integer);
 begin
   Status.Panels[1].Text := Format(rsGridFmt, [ACols, ARows]);
+end;
+
+{ ---- Shell mode ---------------------------------------------------------------------- }
+
+{ Windows: %COMSPEC% first (always there, starts fastest), then PowerShell, and pwsh /
+  wsl where the PATH has them. Elsewhere: the login shell. }
+procedure TMainForm.FillCommands;
+var
+  sh: string;
+begin
+  CmbCommand.Items.Clear;
+  {$IFDEF MSWINDOWS}
+  sh := GetEnvironmentVariable('COMSPEC');
+  if sh = '' then sh := 'cmd.exe';
+  CmbCommand.Items.Add(sh);
+  CmbCommand.Items.Add('powershell.exe');
+  if FileSearch('pwsh.exe', GetEnvironmentVariable('PATH')) <> '' then
+    CmbCommand.Items.Add('pwsh.exe');
+  if FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) <> '' then
+    CmbCommand.Items.Add('wsl.exe');
+  {$ELSE}
+  sh := GetEnvironmentVariable('SHELL');
+  if sh = '' then sh := '/bin/sh';
+  CmbCommand.Items.Add(sh + ' -l');
+  {$ENDIF}
+  CmbCommand.ItemIndex := 0;
+  CmbCommand.Text := CmbCommand.Items[0];
+end;
+
+procedure TMainForm.ModeChange(Sender: TObject);
+begin
+  if CmbMode.ItemIndex = 1 then
+  begin
+    StopPlaying;
+    Term.Core.DiscardPending;
+    Term.Reset;
+    { right under Tools2 and above Tools4: same-side aligned siblings go by Top }
+    Tools3.Top := Tools4.Top - 1;
+    Tools3.Visible := True;
+    StartShell;
+  end
+  else
+    EnterReplay;
+end;
+
+procedure TMainForm.EnterReplay;
+var
+  none: TTyTerminalWindowsPty;
+begin
+  FreeAndNil(FShell);
+  Tools3.Visible := False;
+  Term.ReadOnly := ChkReadOnly.Checked;
+  none.Backend := twpNone;
+  none.BuildNumber := 0;
+  Term.Core.WindowsPty := none;
+  BtnStart.Caption := rsStart;
+  if FCast.FileName <> '' then
+    LoadCast(FCast.FileName);
+end;
+
+procedure TMainForm.StartShell;
+var
+  backend: TPtyBackend;
+  err: string;
+begin
+  FreeAndNil(FShell);
+  {$IFDEF MSWINDOWS}
+  backend := TConPtyBackend.Create;
+  {$ELSE}
+  backend := TUnixPtyBackend.Create;
+  {$ENDIF}
+  FShell := TTerminalShell.Create(Term, backend);
+  FShell.OnData := @ShellData;
+  FShell.OnOutput := @ShellOutput;
+  FShell.OnExit := @ShellExit;
+  FLogged := 0;
+  if not FShell.Start(CmbCommand.Text, err) then
+  begin
+    FreeAndNil(FShell);
+    Status.Panels[0].Text := Format(rsShellFailedFmt, [err]);
+    CmbMode.ItemIndex := 0;
+    EnterReplay;
+    Exit;
+  end;
+  Status.Panels[0].Text := CmbCommand.Text;
+  BtnStart.Caption := rsRestart;
+  Term.SetFocus;
+end;
+
+procedure TMainForm.StartClick(Sender: TObject);
+begin
+  Term.Core.DiscardPending;
+  Term.Reset;
+  StartShell;
+end;
+
+procedure TMainForm.ShellData(Sender: TObject; const AData: RawByteString);
+begin
+  AddKeyLine(Describe(AData));
+end;
+
+{ the first 4 KB of what the PTY sends, in hex (what ConPTY asks for at start) }
+procedure TMainForm.ShellOutput(Sender: TObject; const AData: RawByteString);
+var
+  n: Integer;
+begin
+  if not ChkLogPty.Checked or (FLogged >= PtyLogMax) then Exit;
+  n := Length(AData);
+  if n > PtyLogMax - FLogged then n := PtyLogMax - FLogged;
+  AddKeyLine('< ' + Describe(Copy(AData, 1, n)));
+  Inc(FLogged, n);
+  if FLogged >= PtyLogMax then
+    AddKeyLine(rsLogStopped);
+end;
+
+procedure TMainForm.ShellExit(Sender: TObject);
+begin
+  Status.Panels[0].Text := Format(rsShellExitedStatusFmt, [FShell.ExitCode]);
+  BtnStart.Caption := rsRestart;
+end;
+
+procedure TMainForm.CopyOnSelectClick(Sender: TObject);
+begin
+  Term.CopyOnSelect := ChkCopyOnSelect.Checked;
+end;
+
+procedure TMainForm.DetectUrlsClick(Sender: TObject);
+begin
+  Term.DetectUrls := ChkDetectUrls.Checked;
+end;
+
+procedure TMainForm.Osc52Change(Sender: TObject);
+begin
+  if CmbOsc52.ItemIndex >= 0 then
+    Term.Osc52 := TTyTerminalOsc52Policy(CmbOsc52.ItemIndex);
+end;
+
+{ The control opens nothing: the host decides. Here, like xterm.js's own OSC 8 default:
+  ask first, and only http and https. }
+procedure TMainForm.TermLinkActivate(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
+var
+  lower: string;
+begin
+  lower := LowerCase(AUri);
+  if (Copy(lower, 1, 7) = 'http://') or (Copy(lower, 1, 8) = 'https://') then
+  begin
+    if TyMessageDlg(Format(rsOpenLinkFmt, [AUri]), mtConfirmation, [mbYes, mbNo]) = mrYes then
+      OpenURL(AUri);
+  end
+  else
+    Status.Panels[0].Text := Format(rsLinkNotOpenedFmt, [AUri]);
+end;
+
+{ OSC 52: a write is let through and shown; a read needs a yes }
+procedure TMainForm.TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
+  var AText: string; var AAllow: Boolean);
+begin
+  if AWrite then
+  begin
+    AAllow := True;
+    Status.Panels[0].Text := Format(rsClipboardSetFmt, [UTF8Length(AText)]);
+  end
+  else
+    AAllow := TyMessageDlg(rsAllowClipboardRead, mtConfirmation, [mbYes, mbNo]) = mrYes;
 end;
 
 procedure TMainForm.UpdateProgress;

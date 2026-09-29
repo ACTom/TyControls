@@ -1,0 +1,18 @@
+{
+  "umain.rsallowclipboardread": "程序要求读取剪贴板。允许吗？",
+  "umain.rsclipboardsetfmt": "程序设置了剪贴板（%d 个字符）",
+  "umain.rslinknotopenedfmt": "未打开（只打开 http 和 https）：%s",
+  "umain.rslogstopped": "（已停止记录：已显示 4 KB）",
+  "umain.rsmodereplay": "回放",
+  "umain.rsmodeshell": "Shell",
+  "umain.rsopenlinkfmt": "打开 %s？",
+  "umain.rsosc52off": "关",
+  "umain.rsosc52readwrite": "读写",
+  "umain.rsosc52write": "只写",
+  "umain.rsrestart": "重启",
+  "umain.rsshellexitedstatusfmt": "Shell 已退出（%d）",
+  "umain.rsshellfailedfmt": "无法启动：%s",
+  "umain.rsstart": "启动",
+  "uptywin.rsconptyunavailable": "这个版本的 Windows 没有伪控制台（ConPTY），需要 Windows 10 1809 或更新的版本。",
+  "ushell.rsshellexited": "进程已退出，退出码 %d"
+}

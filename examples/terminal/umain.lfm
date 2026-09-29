@@ -51,22 +51,36 @@ object MainForm: TMainForm
       Width = 980
       Align = alTop
       Caption = ''
-      object LblRecording: TTyLabel
+      object CmbMode: TTyComboBox
         Left = 10
+        Height = 26
+        Top = 7
+        Width = 100
+        Hint = 'Replay a recording, or run a real shell in the terminal'
+        ItemIndex = 0
+        Items.Strings = (
+          'Replay'
+          'Shell'
+        )
+        ShowHint = True
+        OnChange = ModeChange
+      end
+      object LblRecording: TTyLabel
+        Left = 120
         Height = 20
         Top = 11
         Width = 76
         Caption = 'Recording:'
       end
       object CmbRecording: TTyComboBox
-        Left = 92
+        Left = 202
         Height = 26
         Top = 7
-        Width = 190
+        Width = 150
         OnChange = RecordingChange
       end
       object BtnOpen: TTyButton
-        Left = 292
+        Left = 362
         Height = 28
         Top = 6
         Width = 84
@@ -77,7 +91,7 @@ object MainForm: TMainForm
         OnClick = OpenClick
       end
       object BtnPlay: TTyButton
-        Left = 396
+        Left = 456
         Height = 28
         Top = 6
         Width = 76
@@ -87,7 +101,7 @@ object MainForm: TMainForm
         OnClick = PlayClick
       end
       object BtnStep: TTyButton
-        Left = 492
+        Left = 542
         Height = 28
         Top = 6
         Width = 76
@@ -98,17 +112,17 @@ object MainForm: TMainForm
         OnClick = StepClick
       end
       object LblSpeed: TTyLabel
-        Left = 588
+        Left = 628
         Height = 20
         Top = 11
         Width = 50
         Caption = 'Speed:'
       end
       object CmbSpeed: TTyComboBox
-        Left = 644
+        Left = 684
         Height = 26
         Top = 7
-        Width = 120
+        Width = 100
         ItemIndex = 1
         Items.Strings = (
           '0.5x'
@@ -119,7 +133,7 @@ object MainForm: TMainForm
         )
       end
       object BtnFit: TTyButton
-        Left = 784
+        Left = 794
         Height = 28
         Top = 6
         Width = 150
@@ -214,6 +228,106 @@ object MainForm: TMainForm
         OnClick = PasteClick
       end
     end
+    object Tools3: TTyPanel
+      Left = 0
+      Height = 40
+      Top = 114
+      Width = 980
+      Align = alTop
+      Caption = ''
+      Visible = False
+      object LblCommand: TTyLabel
+        Left = 10
+        Height = 20
+        Top = 11
+        Width = 76
+        AutoSize = True
+        Caption = 'Command:'
+      end
+      object CmbCommand: TTyComboBox
+        Left = 96
+        Height = 26
+        Top = 7
+        Width = 300
+        Hint = 'The program to run; pick one or type a command line'
+        ShowHint = True
+        Style = csDropDown
+      end
+      object BtnStart: TTyButton
+        Left = 408
+        Height = 28
+        Top = 6
+        Width = 84
+        AutoSize = True
+        Caption = 'Start'
+        Hint = 'Start the command, or start it again'
+        ShowHint = True
+        StyleClass = 'primary'
+        OnClick = StartClick
+      end
+      object ChkLogPty: TTyCheckBox
+        Left = 512
+        Height = 24
+        Top = 8
+        Width = 160
+        AutoSize = True
+        Caption = 'Log PTY output'
+        Hint = 'Show the first 4 KB the PTY sends in the panel on the right, in hex'
+        ShowHint = True
+      end
+    end
+    object Tools4: TTyPanel
+      Left = 0
+      Height = 40
+      Top = 154
+      Width = 980
+      Align = alTop
+      Caption = ''
+      object ChkCopyOnSelect: TTyCheckBox
+        Left = 10
+        Height = 24
+        Top = 8
+        Width = 140
+        AutoSize = True
+        Caption = 'Copy on select'
+        OnClick = CopyOnSelectClick
+      end
+      object ChkDetectUrls: TTyCheckBox
+        Left = 170
+        Height = 24
+        Top = 8
+        Width = 190
+        AutoSize = True
+        Caption = 'Detect web addresses'
+        Checked = True
+        Hint = 'Ctrl+click (Cmd+click on macOS) a web address to open it'
+        ShowHint = True
+        OnClick = DetectUrlsClick
+      end
+      object LblOsc52: TTyLabel
+        Left = 384
+        Height = 20
+        Top = 11
+        Width = 60
+        AutoSize = True
+        Caption = 'OSC 52:'
+      end
+      object CmbOsc52: TTyComboBox
+        Left = 450
+        Height = 26
+        Top = 7
+        Width = 160
+        Hint = 'What a program may do with the clipboard'
+        ItemIndex = 0
+        Items.Strings = (
+          'Off'
+          'Write only'
+          'Read and write'
+        )
+        ShowHint = True
+        OnChange = Osc52Change
+      end
+    end
     object Status: TTyStatusBar
       Left = 0
       Height = 24
@@ -239,8 +353,8 @@ object MainForm: TMainForm
     end
     object Keys: TTyMemo
       Left = 690
-      Height = 502
-      Top = 114
+      Height = 422
+      Top = 194
       Width = 290
       Align = alRight
       ReadOnly = True
@@ -249,8 +363,8 @@ object MainForm: TMainForm
     end
     object Split: TTySplitter
       Left = 684
-      Height = 502
-      Top = 114
+      Height = 422
+      Top = 194
       Width = 6
       Align = alRight
       MinSize = 120
@@ -258,14 +372,19 @@ object MainForm: TMainForm
     end
     object Term: TTyTerminalView
       Left = 0
-      Height = 502
-      Top = 114
+      Height = 422
+      Top = 194
       Width = 684
       Align = alClient
       ReadOnly = True
+      CopyOnSelect = False
+      DetectUrls = True
+      Osc52 = to52Off
       OnData = TermData
       OnGridResize = TermGridResize
       OnTitleChange = TermTitleChange
+      OnLinkActivate = TermLinkActivate
+      OnOsc52 = TermOsc52
     end
   end
   object DlgOpen: TTyOpenDialog

@@ -11,7 +11,8 @@ interface
 
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.Terminal.Core, tyControls.Terminal, uasciicast, test.terminal.view;
+  tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, test.terminal.view,
+  test.terminal.pty;
 
 type
   TTyTerminalExampleTests = class(TTestCase)
@@ -34,6 +35,8 @@ type
     procedure TestOneChunkInFlight;
     procedure TestACallbackFromBeforeARewindIsIgnored;
     procedure TestAllAtOnceIntoARealTerminal;
+    procedure TestTheShellUnitsCompileInTheTests;
+    procedure TestTheExampleProjectListsItsUnits;
   end;
 
 implementation
@@ -276,6 +279,50 @@ begin
     FreeAndNil(View);
     l.Free;
     c.Free;
+  end;
+end;
+
+{ the Shell mode's units are on the test project's path and build with it }
+procedure TTyTerminalExampleTests.TestTheShellUnitsCompileInTheTests;
+var
+  fx: TTyTermViewFixture;
+  sh: TTerminalShell;
+  s: TPtySession;
+begin
+  fx := TTyTermViewFixture.Create;
+  try
+    sh := TTerminalShell.Create(fx.View, TFakePty.Create);
+    try
+      AssertTrue('a shell has a session', sh.Session <> nil);
+      AssertFalse('not running before Start', sh.Running);
+    finally
+      sh.Free;
+    end;
+    s := TPtySession.Create(TFakePty.Create);
+    s.Free;
+  finally
+    fx.Free;
+  end;
+  AssertTrue('the exit line takes the code', Pos('%d', rsShellExited) > 0);
+end;
+
+{ terminal_example.lpi lists the four PTY units (an example built by lazbuild only
+  compiles what the project names or its units use) }
+procedure TTyTerminalExampleTests.TestTheExampleProjectListsItsUnits;
+const
+  Units: array[0..3] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas');
+var
+  l: TStringList;
+  i: Integer;
+begin
+  l := TStringList.Create;
+  try
+    l.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim + 'terminal'
+      + PathDelim + 'terminal_example.lpi');
+    for i := 0 to High(Units) do
+      AssertTrue(Units[i] + ' is in the project', Pos('<Filename Value="' + Units[i] + '"/>', l.Text) > 0);
+  finally
+    l.Free;
   end;
 end;
 

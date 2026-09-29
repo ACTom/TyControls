@@ -91,6 +91,54 @@ msgstr "把剪贴板粘贴进终端（同 Ctrl+Shift+V）"
 msgid "Open a recording"
 msgstr "打开录制"
 
+#: tmainform.cmbmode.hint
+msgid "Replay a recording, or run a real shell in the terminal"
+msgstr "回放录制，或者在终端里运行真正的 shell"
+
+#: tmainform.lblcommand.caption
+msgid "Command:"
+msgstr "命令："
+
+#: tmainform.cmbcommand.hint
+msgid "The program to run; pick one or type a command line"
+msgstr "要运行的程序：选一个，或者输入命令行"
+
+#: tmainform.btnstart.caption
+msgid "Start"
+msgstr "启动"
+
+#: tmainform.btnstart.hint
+msgid "Start the command, or start it again"
+msgstr "启动命令，或者重新启动"
+
+#: tmainform.chklogpty.caption
+msgid "Log PTY output"
+msgstr "记录 PTY 输出"
+
+#: tmainform.chklogpty.hint
+msgid "Show the first 4 KB the PTY sends in the panel on the right, in hex"
+msgstr "把 PTY 发来的前 4 KB 以十六进制显示在右侧面板"
+
+#: tmainform.chkcopyonselect.caption
+msgid "Copy on select"
+msgstr "选中即复制"
+
+#: tmainform.chkdetecturls.caption
+msgid "Detect web addresses"
+msgstr "识别网址"
+
+#: tmainform.chkdetecturls.hint
+msgid "Ctrl+click (Cmd+click on macOS) a web address to open it"
+msgstr "按住 Ctrl（macOS 上是 Cmd）单击网址即可打开"
+
+#: tmainform.lblosc52.caption
+msgid "OSC 52:"
+msgstr "OSC 52："
+
+#: tmainform.cmbosc52.hint
+msgid "What a program may do with the clipboard"
+msgstr "程序可以对剪贴板做什么"
+
 # --- resourcestrings ---
 
 #: uasciicast.rsnotv2
@@ -137,3 +185,73 @@ msgstr "一次喂完"
 #, object-pascal-format
 msgid "Playback stopped: %s"
 msgstr "回放已停止：%s"
+
+#: umain.rsallowclipboardread
+msgid "The program asks to read the clipboard. Allow it?"
+msgstr "程序要求读取剪贴板。允许吗？"
+
+#: umain.rsclipboardsetfmt
+#, object-pascal-format
+msgid "The program set the clipboard (%d characters)"
+msgstr "程序设置了剪贴板（%d 个字符）"
+
+#: umain.rslinknotopenedfmt
+#, object-pascal-format
+msgid "Not opened (only http and https): %s"
+msgstr "未打开（只打开 http 和 https）：%s"
+
+#: umain.rslogstopped
+msgid "(stopped logging: 4 KB shown)"
+msgstr "（已停止记录：已显示 4 KB）"
+
+#: umain.rsmodereplay
+msgid "Replay"
+msgstr "回放"
+
+#: umain.rsmodeshell
+msgid "Shell"
+msgstr "Shell"
+
+#: umain.rsopenlinkfmt
+#, object-pascal-format
+msgid "Open %s?"
+msgstr "打开 %s？"
+
+#: umain.rsosc52off
+msgid "Off"
+msgstr "关"
+
+#: umain.rsosc52readwrite
+msgid "Read and write"
+msgstr "读写"
+
+#: umain.rsosc52write
+msgid "Write only"
+msgstr "只写"
+
+#: umain.rsrestart
+msgid "Restart"
+msgstr "重启"
+
+#: umain.rsshellexitedstatusfmt
+#, object-pascal-format
+msgid "Shell exited (%d)"
+msgstr "Shell 已退出（%d）"
+
+#: umain.rsshellfailedfmt
+#, object-pascal-format
+msgid "Could not start: %s"
+msgstr "无法启动：%s"
+
+#: umain.rsstart
+msgid "Start"
+msgstr "启动"
+
+#: ushell.rsshellexited
+#, object-pascal-format
+msgid "Process exited with code %d"
+msgstr "进程已退出，退出码 %d"
+
+#: uptywin.rsconptyunavailable
+msgid "This version of Windows has no pseudo console (ConPTY); Windows 10 1809 or later is needed."
+msgstr "这个版本的 Windows 没有伪控制台（ConPTY），需要 Windows 10 1809 或更新的版本。"
