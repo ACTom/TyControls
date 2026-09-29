@@ -4,6 +4,8 @@
 // code points U+2500-259F.
 //
 // TyTermGlyphIndex[cp]: first part, part count (0 = none).
+// TyTermGlyphPatternPeriodY: the least common multiple of the pattern heights (a
+//   row moved by a multiple of it keeps its shade phase).
 // TyTermGlyphParts[p]: kind (0 block, 1 pattern, 2 path), stroke width (0 = filled),
 //   first number in TyTermGlyphData, how many.
 // TyTermGlyphData, per kind:
@@ -24,6 +26,7 @@ const
   TyTermGlyphLast = $259F;
   TyTermGlyphPartCount = 210;
   TyTermGlyphDataCount = 3754;
+  TyTermGlyphPatternPeriodY = 2;
   TyTermGlyphIndex: array[TyTermGlyphFirst..TyTermGlyphLast, 0..1] of Word = (
     (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1),
     (8, 1), (9, 1), (10, 1), (11, 1), (12, 1), (13, 2), (15, 2), (17, 1),

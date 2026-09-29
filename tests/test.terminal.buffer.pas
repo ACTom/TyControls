@@ -33,6 +33,9 @@ type
     procedure TestLinesAreFreedWhenTheirOwnersGo;
     procedure TestTabStopsKeepStaleKeys;
     procedure TestTrimmedLinesCountsEveryTrim;
+    { phase 5: the row reuse's key }
+    procedure TestEveryMutationBumpsTheRevision;
+    procedure TestSerialsAreNeverReused;
   end;
 
 implementation
@@ -909,6 +912,94 @@ begin
   finally
     svc.Free;
     opts.Free;
+  end;
+end;
+
+{ Every public method that changes the cells moves the revision on (the view keys a
+  painted row by it); IsWrapped draws nothing and does not. }
+procedure TTyTerminalBufferTests.TestEveryMutationBumpsTheRevision;
+var
+  a, b: TTyTerminalLine;
+  list: TTyTerminalLineList;
+  cell: TTyTerminalCellData;
+  rev: Cardinal;
+  serial: Int64;
+
+  procedure Moved(const AWhat: string);
+  begin
+    AssertTrue(AWhat + ' moves the revision on', a.Revision <> rev);
+    rev := a.Revision;
+  end;
+
+begin
+  a := TTyTerminalLine.CreateDefault(10);
+  b := TTyTerminalLine.CreateDefault(10);
+  try
+    cell := TyTermCellFromCodepoint(Ord('x'), 1, TyTermDefaultAttr);
+    b.SetCell(0, cell);
+    rev := a.Revision;
+    a.SetCell(1, cell);
+    Moved('SetCell');
+    a.SetCellFromCodepoint(2, Ord('y'), 1, TyTermDefaultAttr);
+    Moved('SetCellFromCodepoint');
+    a.AddCodepointToCell(2, $301, 0);
+    Moved('AddCodepointToCell');
+    a.InsertCells(0, 1, TyTermNullCell(TyTermDefaultAttr));
+    Moved('InsertCells');
+    a.DeleteCells(0, 1, TyTermNullCell(TyTermDefaultAttr));
+    Moved('DeleteCells');
+    a.ReplaceCells(0, 3, TyTermNullCell(TyTermDefaultAttr));
+    Moved('ReplaceCells');
+    a.Resize(12, TyTermNullCell(TyTermDefaultAttr));
+    Moved('Resize');
+    a.Fill(cell);
+    Moved('Fill');
+    a.CopyFrom(b);
+    Moved('CopyFrom');
+    a.CopyCellsFrom(b, 0, 3, 2, False);
+    Moved('CopyCellsFrom');
+    a.IsWrapped := True;
+    AssertEquals('IsWrapped draws nothing: the revision stays', rev, a.Revision);
+  finally
+    a.Release;
+    b.Release;
+  end;
+  { a full ring recycles its top line for the new bottom one: the same object, its
+    serial kept, its cells replaced -- the revision says so }
+  list := TTyTerminalLineList.Create(2);
+  try
+    list.PushOwned(TTyTerminalLine.CreateDefault(4));
+    list.PushOwned(TTyTerminalLine.CreateDefault(4));
+    list.Get(0).SetCellFromCodepoint(0, Ord('q'), 1, TyTermDefaultAttr);
+    serial := list.Get(0).Serial;
+    rev := list.Get(0).Revision;
+    a := list.Recycle;
+    AssertEquals('the same line', serial, a.Serial);
+    a.CopyFrom(list.Get(0), True);
+    AssertTrue('recycled and copied over: a new revision', a.Revision <> rev);
+  finally
+    list.Free;
+  end;
+end;
+
+{ A freed line's address goes to the next one (assertsame-freed-pointer-trap); its
+  serial never does. }
+procedure TTyTerminalBufferTests.TestSerialsAreNeverReused;
+var
+  i: Integer;
+  line: TTyTerminalLine;
+  last: Int64;
+begin
+  last := -1;
+  for i := 1 to 10000 do
+  begin
+    line := TTyTerminalLine.CreateDefault(4);
+    try
+      AssertTrue('strictly increasing', line.Serial > last);
+      last := line.Serial;
+    finally
+      line.Release;
+    end;
   end;
 end;
 

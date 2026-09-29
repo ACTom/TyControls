@@ -78,6 +78,11 @@ type
     procedure ImeCommit(const AText: string);
     { 无头测试跑不到 LCL 的对齐:自己调一次(传没扣过的客户区矩形) }
     procedure AlignNow;
+    { 5 期:行复用 }
+    function KeyOf(AViewRow: Integer): TTyTermRowKey;
+    function MovedLast: Integer;
+    function PaintedLast: Integer;
+    procedure Forget;
   public
     { 4 期:鼠标、选区、菜单、PRIMARY、指针形状 }
     MenuShows: Integer;
@@ -467,6 +472,26 @@ end;
 function TTyTerminalViewProbe.RowsPending: Boolean;
 begin
   Result := RowsLeftToPaint;
+end;
+
+function TTyTerminalViewProbe.KeyOf(AViewRow: Integer): TTyTermRowKey;
+begin
+  Result := RowKeyOf(AViewRow);
+end;
+
+function TTyTerminalViewProbe.MovedLast: Integer;
+begin
+  Result := RowsMovedLastFrame;
+end;
+
+function TTyTerminalViewProbe.PaintedLast: Integer;
+begin
+  Result := RowsPaintedLastFrame;
+end;
+
+procedure TTyTerminalViewProbe.Forget;
+begin
+  ForgetPaintedRows;
 end;
 
 function TTyTerminalViewProbe.Bar: TTyScrollBar;

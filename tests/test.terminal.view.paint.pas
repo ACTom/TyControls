@@ -9,7 +9,7 @@ unit test.terminal.view.paint;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Forms, Controls, Graphics, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, StrUtils, Types, Math, Forms, Controls, Graphics, LCLType, LCLIntf, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.Render, tyControls.Terminal, test.terminal.view;
@@ -19,7 +19,9 @@ type
   private
     F: TTyTermViewFixture;
     FClockMs: Double;
+    FClockStep: Double;
     function Clock: Double;
+    procedure RunIncremental(APPI: Integer; ASeed: Cardinal);
     function Snap: TBGRABitmap;
     function CellIs(B: TBGRABitmap; ACol, ARow: Integer; ARgb: Cardinal): Boolean;
     function CountIn(B: TBGRABitmap; const R: TRect; ARgb: Cardinal): Integer;
@@ -76,6 +78,12 @@ type
     procedure TestAWrappedLinkIsUnderlinedOnBothRows;
     { 5 期:折行 }
     procedure TestAReflowRepaintsEveryRow;
+    { 5 期:行复用 }
+    procedure TestIncrementalEqualsFullRepaint;
+    procedure TestScrollingPaintsOnlyWhatChanged;
+    procedure TestAFrameChangeRepaintsEveryRow;
+    procedure TestSyncOutputStillHoldsRows;
+    procedure TestRowsChangedOutsideTheClipAreInvalidated;
   end;
 
 implementation
@@ -112,6 +120,7 @@ end;
 
 function TTyTerminalViewPaintTests.Clock: Double;
 begin
+  FClockMs := FClockMs + FClockStep;
   Result := FClockMs;
 end;
 
@@ -1475,6 +1484,269 @@ begin
   finally
     b.Free;
   end;
+end;
+
+{ ---- 5 期:行复用 ------------------------------------------------------------------------ }
+
+function Utf8Of(u: Cardinal): RawByteString;
+begin
+  if u < $80 then Result := Chr(u)
+  else if u < $800 then Result := Chr($C0 or (u shr 6)) + Chr($80 or (u and $3F))
+  else if u < $10000 then Result := Chr($E0 or (u shr 12)) + Chr($80 or ((u shr 6) and $3F)) + Chr($80 or (u and $3F))
+  else Result := Chr($F0 or (u shr 18)) + Chr($80 or ((u shr 12) and $3F)) + Chr($80 or ((u shr 6) and $3F))
+    + Chr($80 or (u and $3F));
+end;
+
+{ 200 seeded steps of everything that changes rows -- text, shades, colours, inverse,
+  scroll regions, SU / SD, IL / DL, ED 2, the alternate screen, a big REP, the viewport
+  scrolled both ways, selections, a hovered link, focus, the blink, synchronized
+  output. After each: frames drawn the incremental way until nothing is left to paint
+  (the rasterizing budget is tiny and the clock moves, so rows come out incomplete
+  and must be finished later), then the same state painted from nothing. The two
+  pictures must be the same byte for byte (not while synchronized output holds rows
+  back: then the screen is meant to lag). The cell height is odd, so a shaded row
+  moved by one row changes its pattern's phase. }
+procedure TTyTerminalViewPaintTests.RunIncremental(APPI: Integer; ASeed: Cardinal);
+var
+  seed: Cardinal;
+
+  function Rnd(N: Integer): Integer;
+  begin
+    seed := seed xor (seed shl 13);
+    seed := seed xor (seed shr 17);
+    seed := seed xor (seed shl 5);
+    Result := Integer(seed mod Cardinal(N));
+  end;
+
+  function Text(N: Integer): RawByteString;
+  var
+    k: Integer;
+  begin
+    Result := '';
+    for k := 1 to N do
+      case Rnd(12) of
+        0: Result := Result + Utf8Of($4E00 + Cardinal(Rnd(50)));
+        1: Result := Result + Utf8Of($1F600 + Cardinal(Rnd(10)));
+        2: Result := Result + Utf8Of($2591 + Cardinal(Rnd(3)));
+        3: Result := Result + #27'[' + IntToStr(31 + Rnd(7)) + 'm';
+        4: Result := Result + #27'[7m';
+        5: Result := Result + #27'[0m';
+        6: Result := Result + ' http://a.io/x ';
+      else
+        Result := Result + Chr(Ord('a') + Rnd(26));
+      end;
+  end;
+
+var
+  lh, step, op, tries, x, y, bad, rows, cols: Integer;
+  a, b: TBGRABitmap;
+  pa, pb: TBGRAPixel;
+begin
+  F.View.Font.PixelsPerInch := APPI;
+  F.View.RasterBudgetMs := 0.01;
+  FClockStep := 1;
+  { an odd cell height (the shade's period is 2) }
+  lh := 100;
+  repeat
+    F.View.LineHeightPercent := lh;
+    F.SizeTo(30, 8);
+    b := F.Render;
+    b.Free;
+    if Odd(F.View.CellMetrics.CellH) then Break;
+    Inc(lh);
+  until lh > 150;
+  AssertTrue('an odd cell height', Odd(F.View.CellMetrics.CellH));
+  rows := F.View.Rows;
+  cols := F.View.Cols;
+  seed := ASeed;
+  for step := 1 to 200 do
+  begin
+    op := Rnd(14);
+    case op of
+      0: F.View.WriteSync(Text(1 + Rnd(40)) + IfThen(Rnd(2) = 0, #13#10, ''));
+      1: F.View.WriteSync(StringOfChar(' ', Rnd(4)) + Utf8Of($2591) + Utf8Of($2592) + Utf8Of($2593)
+        + Utf8Of($2593) + Utf8Of($2592) + #13#10);
+      2: F.View.WriteSync(#27'[2;5r'#27'[5;1H'#10#10 + Text(5) + #27'[r');
+      3: if Rnd(2) = 0 then F.View.WriteSync(#27'[2S') else F.View.WriteSync(#27'[1T');
+      4: if Rnd(2) = 0 then F.View.WriteSync(#27'[3;1H'#27'[2L') else F.View.WriteSync(#27'[2;1H'#27'[1M');
+      5: F.View.WriteSync(#27'[2J');
+      6: if Rnd(2) = 0 then F.View.WriteSync(#27'[?1049h' + Text(10)) else F.View.WriteSync(#27'[?1049l');
+      7: F.View.WriteSync('q'#27'[' + IntToStr(30 + Rnd(300)) + 'b');
+      8: if Rnd(2) = 0 then F.View.ScrollLines(-1 - Rnd(3)) else F.View.ScrollLines(1 + Rnd(3));
+      9: if Rnd(2) = 0 then F.View.Select(Rnd(cols), F.View.Core.Buffer.YDisp + Rnd(rows), 1 + Rnd(40))
+         else F.View.ClearSelection;
+      10: if Rnd(2) = 0 then F.View.MoveTo([ssCtrl], F.View.CellCenter(Rnd(cols), Rnd(rows)))
+          else F.View.MoveTo([], F.View.CellCenter(Rnd(cols), Rnd(rows)));
+      11: if Rnd(2) = 0 then F.View.Enter else F.View.Leave;
+      12: F.View.Tick(FClockMs);
+    else
+      if Rnd(2) = 0 then F.View.WriteSync(#27'[?2026h') else F.View.WriteSync(#27'[?2026l');
+    end;
+    { incremental, until every row is painted whole }
+    a := nil;
+    tries := 0;
+    repeat
+      a.Free;
+      a := F.Render;
+      Inc(tries);
+    until (not F.View.RowsPending) or (tries > 400);
+    try
+      AssertFalse(Format('seed %d step %d: rows left after 400 frames', [ASeed, step]), F.View.RowsPending);
+      if F.View.HeldRows.X >= 0 then
+        Continue;                          { synchronized output: the screen lags on purpose }
+      { the same state from nothing, without a budget }
+      F.View.Forget;
+      F.View.RasterBudgetMs := 0;
+      b := F.Render;
+      F.View.RasterBudgetMs := 0.01;
+      try
+        bad := -1;
+        for y := 0 to a.Height - 1 do
+        begin
+          for x := 0 to a.Width - 1 do
+          begin
+            pa := a.GetPixel(x, y);
+            pb := b.GetPixel(x, y);
+            if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue) then
+            begin
+              bad := x;
+              Break;
+            end;
+          end;
+          if bad >= 0 then
+            Fail(Format('seed %d step %d (op %d, %d PPI): incremental <> repaint at (%d, %d), row %d: %.2x%.2x%.2x vs %.2x%.2x%.2x',
+              [ASeed, step, op, APPI, bad, y, (y - F.Pad) div F.View.CellMetrics.CellH, pa.red, pa.green, pa.blue,
+              pb.red, pb.green, pb.blue]));
+        end;
+      finally
+        b.Free;
+      end;
+    finally
+      a.Free;
+    end;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestIncrementalEqualsFullRepaint;
+begin
+  RunIncremental(96, 20260929);
+  RunIncremental(144, 7);
+end;
+
+procedure TTyTerminalViewPaintTests.TestScrollingPaintsOnlyWhatChanged;
+var
+  b: TBGRABitmap;
+  i: Integer;
+begin
+  F.SizeTo(20, 12);
+  for i := 0 to 11 do
+    F.View.WriteSync('line ' + IntToStr(i) + #13#10);
+  b := Snap;
+  b.Free;
+  for i := 12 to 31 do
+  begin
+    F.View.WriteSync('line ' + IntToStr(i) + #13#10);
+    b := Snap;
+    b.Free;
+    AssertTrue(Format('line %d: %d rows painted', [i, F.View.PaintedLast]), F.View.PaintedLast <= 3);
+    AssertTrue(Format('line %d: %d rows moved', [i, F.View.MovedLast]), F.View.MovedLast >= F.View.Rows - 3);
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestAFrameChangeRepaintsEveryRow;
+var
+  b: TBGRABitmap;
+
+  procedure Frame(const AWhat: string);
+  begin
+    b := Snap;
+    b.Free;
+    AssertEquals(AWhat + ': every row', F.View.Rows, F.View.PaintedLast);
+  end;
+
+begin
+  F.View.WriteSync('some text'#13#10'and more');
+  F.View.Select(0, 0, 5);
+  b := Snap;
+  b.Free;
+  b := Snap;
+  b.Free;
+  AssertEquals('nothing changed: nothing painted', 0, F.View.PaintedLast);
+  F.View.Enter;
+  Frame('focused');
+  F.View.Leave;
+  Frame('unfocused');
+  F.Ctl.Mode := 'dark';
+  Frame('another theme');
+  F.View.LetterSpacing := 1;
+  F.SizeTo(20, 5);
+  Frame('another letter spacing');
+end;
+
+{ 2026 holds rows back: a frame drawn for another reason (an Invalidate) leaves the
+  grid as it was }
+procedure TTyTerminalViewPaintTests.TestSyncOutputStillHoldsRows;
+var
+  b0, b1: TBGRABitmap;
+  x, y: Integer;
+begin
+  F.View.WriteSync('before'#13#10'row two');
+  b0 := Snap;
+  try
+    F.View.WriteSync(#27'[?2026h'#27'[Hafter!'#13#10'ROW TWO'#27'[3;1Hthree');
+    AssertTrue('held', F.View.HeldRows.X >= 0);
+    F.View.Invalidate;
+    b1 := Snap;
+    try
+      for y := 0 to b0.Height - 1 do
+        for x := 0 to b0.Width - 1 do
+          if b0.GetPixel(x, y) <> b1.GetPixel(x, y) then
+            Fail(Format('the held grid changed at (%d, %d)', [x, y]));
+    finally
+      b1.Free;
+    end;
+  finally
+    b0.Free;
+  end;
+  F.View.WriteSync(#27'[?2026l');
+  b1 := Snap;
+  b1.Free;
+  AssertEquals('released', 'after!', F.RowText(0));
+  AssertTrue('and painted', F.View.PaintedLast > 0);
+end;
+
+{ a row painted outside the canvas's clip (rows 0-9 here) is invalidated, so the next
+  paint puts it on the screen }
+procedure TTyTerminalViewPaintTests.TestRowsChangedOutsideTheClipAreInvalidated;
+var
+  bmp: TBitmap;
+  b: TBGRABitmap;
+  i, w, h: Integer;
+  found: Boolean;
+begin
+  F.SizeTo(20, 60);
+  for i := 0 to 59 do
+    F.View.WriteSync('row ' + IntToStr(i) + IfThen(i < 59, #13#10, ''));
+  b := Snap;
+  b.Free;
+  F.View.WriteSync(#27'[51;1HZZ');
+  F.View.ClearInvalidated;
+  w := F.View.ClientWidth;
+  h := F.View.ClientHeight;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(w, h);
+    LCLIntf.IntersectClipRect(bmp.Canvas.Handle, 0, 0, w, F.Pad + 10 * F.View.CellMetrics.CellH);
+    F.View.Render(bmp.Canvas, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+  finally
+    bmp.Free;
+  end;
+  found := False;
+  for i := 0 to High(F.View.Invalidated) do
+    if (F.View.Invalidated[i].X <= 50) and (F.View.Invalidated[i].Y >= 50) then
+      found := True;
+  AssertTrue('row 50 invalidated', found);
 end;
 
 initialization

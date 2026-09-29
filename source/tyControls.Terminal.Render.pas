@@ -194,6 +194,7 @@ type
     FFrameStart: Double;
     FRasterized: Integer;
     FRowComplete: Boolean;
+    FRowUsesYPhase: Boolean;
     function MayRasterize: Boolean;
     procedure DrawGlyphAt(ABmp: TBGRABitmap; ALine: TTyTerminalLine; ACol, AX, AY: Integer;
       AInk: Cardinal; const AClip: TRect);
@@ -237,6 +238,10 @@ type
     { FOR THE TESTS: rows painted so far; glyphs rasterized this frame }
     property RowsPainted: Integer read FRowsPainted;
     property RasterizedThisFrame: Integer read FRasterized;
+    { the last row painted drew a shade (a pattern tiled from the surface's origin):
+      its pixels hold only where its phase comes out the same (phase 5, the view's row
+      reuse; TyTermGlyphPeriodY) }
+    property RowUsesYPhase: Boolean read FRowUsesYPhase;
   end;
 
 { The cell for a font (design spec 10.2); not cached here -- the caller keys it. }
@@ -260,6 +265,9 @@ function TyTermResolveCellColors(AFg, ABg: Cardinal; const AExt: TTyTerminalExtA
   AResolve: TTyTermColorResolver; ADrawBoldBright: Boolean): TTyTermCellColors;
 { U+2500-259F, the range the control draws itself in phase 3 }
 function TyTermIsCustomGlyph(ACodepoint: Cardinal): Boolean;
+{ The least common multiple of the shade patterns' heights (CustomGlyphs.inc): a row
+  of pixels holding a shade keeps its look when moved by a multiple of it. }
+function TyTermGlyphPeriodY: Integer;
 { One drawn glyph, filling ACellRect's cell in AColor. APPI scales the stroke width
   as upstream's devicePixelRatio. Through the mask (TyTermRasterizeCustomGlyph +
   TyTermBlendMaskGamma), uncached: a fresh mask each call. }
@@ -818,6 +826,24 @@ begin
     and (TyTermGlyphIndex[ACodepoint, 1] > 0);
 end;
 
+function TyTermGlyphPeriodY: Integer;
+begin
+  Result := TyTermGlyphPatternPeriodY;
+end;
+
+{ a drawn glyph with a pattern part: its pixels depend on the cell's place }
+function GlyphHasPattern(ACodepoint: Cardinal): Boolean;
+var
+  first, p: Integer;
+begin
+  Result := False;
+  if not TyTermIsCustomGlyph(ACodepoint) then Exit;
+  first := TyTermGlyphIndex[ACodepoint, 0];
+  for p := first to first + TyTermGlyphIndex[ACodepoint, 1] - 1 do
+    if TyTermGlyphParts[p, 0] = 1 then
+      Exit(True);
+end;
+
 { translateArgs: cell units to pixels, rounded to the nearest half pixel unless 0
   (Math.round is half up: Floor(v + 0.5)), then the cell offset. }
 function TranslateArg(AValue: Double; ASize: Integer; AOffset: Integer): Single;
@@ -1160,6 +1186,8 @@ begin
   if (not combined) and TyTermIsCustomGlyph(cp) then
   begin
     { drawn, not a font's: one mask per code point, cell size and shade phase }
+    if GlyphHasPattern(cp) then
+      FRowUsesYPhase := True;
     TyTermCustomGlyphPhase(cp, AX, AY, px, py);
     code := TyTermCustomGlyphKey(cp, w, px, py, Metrics.CellW, Metrics.CellH, Spec.PPI);
     glyph := GlyphCache.FindCode(code);
@@ -1327,6 +1355,7 @@ var
 
 begin
   FRowComplete := True;
+  FRowUsesYPhase := False;
   Result := True;
   if ACols <= 0 then Exit;
   clip := Rect(AX, AY, AX + ACols * Metrics.CellW, AY + Metrics.CellH);

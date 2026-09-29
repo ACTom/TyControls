@@ -19,8 +19,13 @@ unit tyControls.Terminal;
     OnScrollbackCleared、OnUserInput。宿主可以自己挂的是 OnIconNameChange、OnLineFeed、
     OnRequestScrollToBottom(只是通知:Core 自己滚到底),或者 Core.Parser.Register*Handler。
   - 解析一次(AsyncSlice、WriteSync、Write)里 Core 可能滚几千次、改几次色:这期间滚动只记
-    「整屏脏」「滚动条待同步」,颜色签名不看;解析返回后(EndDrive)统一失效、同步一次,
+    「网格待失效」「滚动条待同步」,颜色签名不看;解析返回后(EndDrive)统一失效、同步一次,
     签名变了(OSC 4 / 10 / 11 / 104 …)整窗失效——内边距也是 257 号色。
+  - 行复用(5 期):每个视口行按(行对象的 Serial、Revision、压在这一行上的选区 / 悬停链接 /
+    光标 / 组字串)记一个键。一帧里键和上一帧同一行相同就不动,和上一帧另一行相同就把
+    那一行的像素搬过来(画了阴影 ░▒▓ 的行只按图案纵向周期的整数倍搬),都不是才画。
+    帧级参数(色表、度量、聚焦、粗体变亮……)一变,全部键作废、整屏重画。滚动不再整屏
+    标脏,只失效网格区让 Paint 贴一次。同步输出攒着的时候不搬也不画。
   - 帧率:距上次绘制不到一帧(16 ms)就接着跑下一片,不让出给 WM_PAINT;一帧里光栅化新
     字形有时间预算,没画完的行留脏、下一帧整行重画。
   - 焦点跟 LM_SETFOCUS / LM_KILLFOCUS(切到别的程序也算失焦),DoEnter / DoExit 也照报,
@@ -90,6 +95,22 @@ type
   TTyTerminalOsc52Event = procedure(Sender: TObject; AWrite: Boolean; const ASelection: string;
     var AText: string; var AAllow: Boolean) of object;
 
+  { 5 期:行复用。压在一行上的东西(按字段比,不用哈希):选区列段 [SelFrom, SelTo)、悬停链接
+    列段 [LinkFrom, LinkTo)、光标(列,不显示时 -1;形状)、组字串(在这一行时) }
+  TTyTermRowOverlay = record
+    SelFrom, SelTo, LinkFrom, LinkTo, CursorCol: Integer;
+    CursorShape: TTyTermCursorShape;
+    Preedit: string;
+  end;
+  { 一行像素的键。Serial / Revision 来自 TTyTerminalLine(没有行:0 / 0);YPhase:这一行画了
+    阴影图案;Valid:这一行的像素是按这个键画全的 }
+  TTyTermRowKey = record
+    Serial: Int64;
+    Revision: Cardinal;
+    Overlay: TTyTermRowOverlay;
+    YPhase, Valid: Boolean;
+  end;
+
   { 终端。右键菜单是自建的四项(不实现 ITyTextEditActions:那是给编辑框六项菜单设计的)。 }
   TTyTerminalView = class(TTyCustomControl, ITyImeEditable, ITyScrollBarFrameHost)
   private
@@ -102,6 +123,11 @@ type
     FSurfaceW, FSurfaceH: Integer;
     FFrameDirty, FAllDirty: Boolean;
     FDirty: array of Boolean;
+    { 行复用:上一帧每个视口行的键、帧级参数的签名、这一帧新算的键、搬行的草稿 }
+    FRowKeys, FNewKeys: array of TTyTermRowKey;
+    FFrameKey: string;
+    FMoveScratch: array of TBGRAPixel;
+    FRowsMoved, FRowsPaintedFrame: Integer;
     { 上一次画外框时的外框样式签名(含状态:悬停、按下、聚焦) }
     FFrameSig: Cardinal;
     FFrameSigValid: Boolean;
@@ -302,6 +328,8 @@ type
     procedure PaintFrame(APPI: Integer);
     procedure BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer);
     procedure PaintPreedit(APPI: Integer);
+    { 行复用:AFrom[r] >= 0 的行从上一帧的第 AFrom[r] 行搬过来(先把源行都拷进草稿) }
+    procedure MoveRows(const AFrom: TIntegerDynArray; const AInsets: TRect);
     { 闪烁、同步输出 }
     function EffectiveBlink: Boolean;
     procedure UpdateBlinkTimer;
@@ -499,6 +527,12 @@ type
     procedure ImeReplace(AStart, ALen: Integer; const AText: string);
     { FOR THE TESTS }
     function RowsPainted: Integer;
+    { FOR THE TESTS(5 期):上一帧每个视口行的键;这一帧搬了几行、画了几行;下一帧当作
+      整屏都没画过(对照「增量 = 整屏」) }
+    function RowKeyOf(AViewRow: Integer): TTyTermRowKey;
+    property RowsMovedLastFrame: Integer read FRowsMoved;
+    property RowsPaintedLastFrame: Integer read FRowsPaintedFrame;
+    procedure ForgetPaintedRows;
     function GlyphCache: TTyTermGlyphCache;
     function Metrics: TTyTermCellMetrics;
     function FontSpec: TTyTermFontSpec;
@@ -835,7 +869,8 @@ begin
     FBarPending := True;
     Exit;
   end;
-  DirtyAll;
+  { 行复用:行的像素按键认,滚动只要网格区失效一次(同步输出开着就攒着) }
+  DirtyRows(0, FCore.Rows - 1);
   SyncScrollBar;
 end;
 
@@ -981,7 +1016,7 @@ begin
   if FScrollPending then
   begin
     FScrollPending := False;
-    DirtyAll;
+    DirtyRows(0, FCore.Rows - 1);
   end;
   if FBarPending then
   begin
@@ -1880,6 +1915,16 @@ begin
   {$ENDIF}
 end;
 
+{ 两个键画出来的像素一样:行对象、它的修订号、压在上面的东西都相同(上一帧那个键得是画全的) }
+function SameRowKey(const APrev, ANew: TTyTermRowKey): Boolean;
+begin
+  Result := APrev.Valid and ANew.Valid and (APrev.Serial = ANew.Serial) and (APrev.Revision = ANew.Revision)
+    and (APrev.Overlay.SelFrom = ANew.Overlay.SelFrom) and (APrev.Overlay.SelTo = ANew.Overlay.SelTo)
+    and (APrev.Overlay.LinkFrom = ANew.Overlay.LinkFrom) and (APrev.Overlay.LinkTo = ANew.Overlay.LinkTo)
+    and (APrev.Overlay.CursorCol = ANew.Overlay.CursorCol) and (APrev.Overlay.CursorShape = ANew.Overlay.CursorShape)
+    and (APrev.Overlay.Preedit = ANew.Overlay.Preedit);
+end;
+
 procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 
   function Frame(ARgb: Cardinal): Cardinal;
@@ -1892,14 +1937,18 @@ procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: I
   end;
 
 var
-  w, h, r, cursorRow, cursorCol, sa, sb: Integer;
+  w, h, r, s, cursorRow, period: Integer;
   sel: TTyColor;
   buf: TTyTerminalBuffer;
   ins, clip, part: TRect;
   shape: TTyTermCursorShape;
   sig: Cardinal;
   ime: TRect;
-  incomplete: Boolean;
+  incomplete, allNew, holding: Boolean;
+  frameKey: string;
+  line: TTyTerminalLine;
+  rowAction: array of Byte;             { 0 不动,1 从别的行搬,2 画 }
+  moved: TIntegerDynArray;
 begin
   FInRender := True;
   try
@@ -1968,51 +2017,158 @@ begin
       SetLength(FDirty, FCore.Rows);
       FAllDirty := True;
     end;
-    incomplete := False;
-    for r := 0 to FCore.Rows - 1 do
+    { 帧级参数:色表(含禁用预混)、度量与字体、PPI、列数、聚焦(选区两色跟着它)、粗体变亮、
+      网格的位置。任何一个变了,上一帧的键全部作废(主题换了经 EnsureThemeCurrent 整屏) }
+    frameKey := IntToHex(FPremixSig, 8) + '|' + FSpecKey + '|' + IntToStr(APPI) + '|' + IntToStr(FCore.Cols)
+      + '|' + BoolToStr(FHasFocus, '1', '0') + BoolToStr(FDrawBoldBright, '1', '0')
+      + '|' + IntToStr(ins.Left) + ',' + IntToStr(ins.Top);
+    if FAllDirty or (frameKey <> FFrameKey) or (Length(FRowKeys) <> FCore.Rows) then
     begin
-      if not (FAllDirty or FDirty[r]) then Continue;
-      FDirty[r] := False;
-      if ins.Top + r * FMetrics.CellH >= h then Continue;
-      if r = cursorRow then
-        cursorCol := Min(buf.X, FCore.Cols - 1)
-      else
-        cursorCol := -1;
-      { 选区按缓冲行(视口滚了它跟着字走) }
-      if FSelection.RowSpan(buf.YDisp + r, sa, sb) then
-      begin
-        FRowPainter.SelFrom := sa;
-        FRowPainter.SelTo := sb;
-      end
-      else
-      begin
-        FRowPainter.SelFrom := 0;
-        FRowPainter.SelTo := 0;
-      end;
-      { 悬停链接落在这一行上的那一段(1 起、闭区间、缓冲行) }
-      FRowPainter.LinkFrom := 0;
-      FRowPainter.LinkTo := 0;
-      if FHoverValid and (buf.YDisp + r + 1 >= FHoverLink.Range.StartY) and (buf.YDisp + r + 1 <= FHoverLink.Range.EndY) then
-      begin
-        if buf.YDisp + r + 1 = FHoverLink.Range.StartY then
-          FRowPainter.LinkFrom := FHoverLink.Range.StartX - 1;
-        if buf.YDisp + r + 1 = FHoverLink.Range.EndY then
-          FRowPainter.LinkTo := FHoverLink.Range.EndX
-        else
-          FRowPainter.LinkTo := FCore.Cols;
-      end;
-      if not FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
-        FCore.Cols, cursorCol, shape) then
-      begin
-        { 光栅化超了这一帧的预算:这一行缺字,留脏,下一帧整行重画 }
-        FDirty[r] := True;
-        incomplete := True;
-      end;
-      { 组字串画在光标所在的视口行上,不管光标此刻显不显示(闪烁、DECTCEM) }
-      if FInPreedit and (FPreedit <> '') and (r = CursorViewRow) then
-        PaintPreedit(APPI);
-    end;
+      SetLength(FRowKeys, FCore.Rows);
+      for r := 0 to High(FRowKeys) do
+        FRowKeys[r].Valid := False;
+      FFrameKey := frameKey;
+      allNew := True;
+    end
+    else
+      allNew := False;
     FAllDirty := False;
+    for r := 0 to High(FDirty) do
+      FDirty[r] := False;
+    FRowsMoved := 0;
+    FRowsPaintedFrame := 0;
+    { 这一帧每个视口行的键 }
+    if Length(FNewKeys) <> FCore.Rows then
+      SetLength(FNewKeys, FCore.Rows);
+    for r := 0 to FCore.Rows - 1 do
+      with FNewKeys[r] do
+      begin
+        line := buf.GetLine(buf.YDisp + r);
+        if line <> nil then
+        begin
+          Serial := line.Serial;
+          Revision := line.Revision;
+        end
+        else
+        begin
+          Serial := 0;
+          Revision := 0;
+        end;
+        { 选区按缓冲行(视口滚了它跟着字走) }
+        if not FSelection.RowSpan(buf.YDisp + r, Overlay.SelFrom, Overlay.SelTo) then
+        begin
+          Overlay.SelFrom := 0;
+          Overlay.SelTo := 0;
+        end;
+        { 悬停链接落在这一行上的那一段(1 起、闭区间、缓冲行) }
+        Overlay.LinkFrom := 0;
+        Overlay.LinkTo := 0;
+        if FHoverValid and (buf.YDisp + r + 1 >= FHoverLink.Range.StartY) and (buf.YDisp + r + 1 <= FHoverLink.Range.EndY) then
+        begin
+          if buf.YDisp + r + 1 = FHoverLink.Range.StartY then
+            Overlay.LinkFrom := FHoverLink.Range.StartX - 1;
+          if buf.YDisp + r + 1 = FHoverLink.Range.EndY then
+            Overlay.LinkTo := FHoverLink.Range.EndX
+          else
+            Overlay.LinkTo := FCore.Cols;
+        end;
+        if r = cursorRow then
+        begin
+          Overlay.CursorCol := Min(buf.X, FCore.Cols - 1);
+          Overlay.CursorShape := shape;
+        end
+        else
+        begin
+          Overlay.CursorCol := -1;
+          Overlay.CursorShape := tcpNone;
+        end;
+        { 组字串画在光标所在的视口行上,不管光标此刻显不显示(闪烁、DECTCEM) }
+        if FInPreedit and (FPreedit <> '') and (r = CursorViewRow) then
+          Overlay.Preedit := FPreedit
+        else
+          Overlay.Preedit := '';
+        YPhase := False;
+        Valid := True;
+      end;
+    { 同步输出攒着(3 期「攒着的一起画」):不搬也不画,只贴图——帧级变化照旧整屏 }
+    if FSyncHolding and not allNew then
+      holding := True
+    else
+      holding := False;
+    moved := nil;
+    if not holding then
+    begin
+      SetLength(rowAction, FCore.Rows);
+      SetLength(moved, FCore.Rows);
+      period := TyTermGlyphPeriodY;
+      for r := 0 to FCore.Rows - 1 do
+      begin
+        moved[r] := -1;
+        if ins.Top + r * FMetrics.CellH >= h then
+        begin
+          rowAction[r] := 0;                  { 在表面外:不画,键作废 }
+          FNewKeys[r].Valid := False;
+          Continue;
+        end;
+        if SameRowKey(FRowKeys[r], FNewKeys[r]) then
+        begin
+          rowAction[r] := 0;
+          FNewKeys[r].YPhase := FRowKeys[r].YPhase;
+          Continue;
+        end;
+        rowAction[r] := 2;
+        for s := 0 to FCore.Rows - 1 do
+          if (s <> r) and SameRowKey(FRowKeys[s], FNewKeys[r])
+            and ((not FRowKeys[s].YPhase) or ((r - s) * FMetrics.CellH mod period = 0)) then
+          begin
+            rowAction[r] := 1;
+            moved[r] := s;
+            FNewKeys[r].YPhase := FRowKeys[s].YPhase;
+            Break;
+          end;
+      end;
+      MoveRows(moved, ins);
+      incomplete := False;
+      for r := 0 to FCore.Rows - 1 do
+      begin
+        if rowAction[r] <> 2 then Continue;
+        FRowPainter.SelFrom := FNewKeys[r].Overlay.SelFrom;
+        FRowPainter.SelTo := FNewKeys[r].Overlay.SelTo;
+        FRowPainter.LinkFrom := FNewKeys[r].Overlay.LinkFrom;
+        FRowPainter.LinkTo := FNewKeys[r].Overlay.LinkTo;
+        if not FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
+          FCore.Cols, FNewKeys[r].Overlay.CursorCol, FNewKeys[r].Overlay.CursorShape) then
+        begin
+          { 光栅化超了这一帧的预算:这一行缺字,键作废,下一帧整行重画 }
+          FDirty[r] := True;
+          FNewKeys[r].Valid := False;
+          incomplete := True;
+        end;
+        FNewKeys[r].YPhase := FRowPainter.RowUsesYPhase;
+        Inc(FRowsPaintedFrame);
+        if FNewKeys[r].Overlay.Preedit <> '' then
+          PaintPreedit(APPI);
+      end;
+      for r := 0 to FCore.Rows - 1 do
+      begin
+        if rowAction[r] = 1 then Inc(FRowsMoved);
+        FRowKeys[r] := FNewKeys[r];
+      end;
+      { 画了或搬了、却不在这次画布裁剪区里的行:补一次失效,下一次 Paint 把它贴上去 }
+      if ACanvas <> nil then
+      begin
+        clip := ACanvas.ClipRect;
+        if not IsRectEmpty(clip) then
+          for r := 0 to FCore.Rows - 1 do
+            if (rowAction[r] <> 0) and ((ARect.Top + ins.Top + r * FMetrics.CellH < clip.Top)
+              or (ARect.Top + ins.Top + (r + 1) * FMetrics.CellH > clip.Bottom)
+              or (ARect.Left + ins.Left < clip.Left)
+              or (ARect.Left + ins.Left + FCore.Cols * FMetrics.CellW > clip.Right)) then
+              InvalidateRows(r, r);
+      end;
+    end
+    else
+      incomplete := False;
     FPaintedCursorRow := cursorRow;
     SelectionViewRows(FSelDrawnFirst, FSelDrawnLast);
     if incomplete and not FRepaintQueued and not (csDesigning in ComponentState) then
@@ -2047,6 +2203,44 @@ begin
   finally
     FInRender := False;
   end;
+end;
+
+procedure TTyTerminalView.MoveRows(const AFrom: TIntegerDynArray; const AInsets: TRect);
+var
+  r, y, k, w, h, sy, dy, cnt: Integer;
+begin
+  cnt := 0;
+  for r := 0 to High(AFrom) do
+    if AFrom[r] >= 0 then Inc(cnt);
+  if cnt = 0 then Exit;
+  w := Min(FCore.Cols * FMetrics.CellW, FSurface.Width - AInsets.Left);
+  h := FMetrics.CellH;
+  if w <= 0 then Exit;
+  if Length(FMoveScratch) < cnt * h * w then
+    SetLength(FMoveScratch, cnt * h * w);
+  { 源行先全部拷进草稿:一行的目标可能是另一行的源(地雷 11:自下而上存的位图也按
+    ScanLine 逐像素行拷,不在原地重叠拷) }
+  k := 0;
+  for r := 0 to High(AFrom) do
+    if AFrom[r] >= 0 then
+      for y := 0 to h - 1 do
+      begin
+        sy := AInsets.Top + AFrom[r] * h + y;
+        if (sy >= 0) and (sy < FSurface.Height) then
+          Move((FSurface.ScanLine[sy] + AInsets.Left)^, FMoveScratch[k * w], w * SizeOf(TBGRAPixel));
+        Inc(k);
+      end;
+  k := 0;
+  for r := 0 to High(AFrom) do
+    if AFrom[r] >= 0 then
+      for y := 0 to h - 1 do
+      begin
+        dy := AInsets.Top + r * h + y;
+        if (dy >= 0) and (dy < FSurface.Height) then
+          Move(FMoveScratch[k * w], (FSurface.ScanLine[dy] + AInsets.Left)^, w * SizeOf(TBGRAPixel));
+        Inc(k);
+      end;
+  FSurface.InvalidateBitmap;
 end;
 
 procedure TTyTerminalView.PaintPreedit(APPI: Integer);
@@ -2950,6 +3144,22 @@ end;
 function TTyTerminalView.RowsPainted: Integer;
 begin
   Result := FRowPainter.RowsPainted;
+end;
+
+function TTyTerminalView.RowKeyOf(AViewRow: Integer): TTyTermRowKey;
+begin
+  if (AViewRow >= 0) and (AViewRow <= High(FRowKeys)) then
+    Result := FRowKeys[AViewRow]
+  else
+    Result := Default(TTyTermRowKey);
+end;
+
+procedure TTyTerminalView.ForgetPaintedRows;
+var
+  r: Integer;
+begin
+  for r := 0 to High(FRowKeys) do
+    FRowKeys[r].Valid := False;
 end;
 
 function TTyTerminalView.GlyphCache: TTyTermGlyphCache;

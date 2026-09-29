@@ -188,7 +188,10 @@ type
   TTyTerminalLine = class
   private
     class var GLiveCount: Integer;
+    class var GNextSerial: Int64;
   private
+    FSerial: Int64;
+    FRevision: Cardinal;
     FData: array of Cardinal;              { the whole allocation: upstream's ArrayBuffer }
     FLength: Integer;                      { cells in use: _data is FLength * 3 of it }
     FCombined: array of TTyTermComboEntry;
@@ -209,6 +212,8 @@ type
     procedure PutCp(ACol: Integer; ACodepoint: Cardinal; AWidth: Integer; AFg, ABg: Cardinal;
       const AExt: TTyTerminalExtAttrs);
     function Word0(ACol: Integer): Cardinal; inline;
+    { every change to the cells: the text cache goes, the revision moves on }
+    procedure Touch; inline;
   public
     constructor Create(ACols: Integer; const AFill: TTyTerminalCellData; AIsWrapped: Boolean = False);
     constructor CreateDefault(ACols: Integer; AIsWrapped: Boolean = False);   { NULL cells }
@@ -261,6 +266,13 @@ type
     function TranslateToString(ATrimRight: Boolean = False; AStartCol: Integer = 0;
       AEndCol: Integer = -1): string;
     property IsWrapped: Boolean read FIsWrapped write FIsWrapped;
+    { Pure queries (phase 5): the control knows a row's pixels have not changed by
+      these two. Serial is taken from a class counter when the line is made and never
+      repeats (an address does: a freed line's is handed to the next one); Revision
+      moves on with every change to the cells -- not with IsWrapped, which draws
+      nothing. }
+    property Serial: Int64 read FSerial;
+    property Revision: Cardinal read FRevision;
     property Length: Integer read FLength;
     property RefCount: Integer read FRefCount;
   end;
@@ -1006,6 +1018,8 @@ var
 begin                                                                        { :82-93 }
   inherited Create;
   Inc(GLiveCount);
+  Inc(GNextSerial);
+  FSerial := GNextSerial;
   FRefCount := 1;
   FIsWrapped := AIsWrapped;
   if ACols < 0 then
@@ -1042,6 +1056,12 @@ end;
 class function TTyTerminalLine.LiveCount: Integer;
 begin
   Result := GLiveCount;
+end;
+
+procedure TTyTerminalLine.Touch;
+begin
+  FCacheValid := False;
+  Inc(FRevision);
 end;
 
 function TTyTerminalLine.Word0(ACol: Integer): Cardinal;
@@ -1291,7 +1311,7 @@ end;
 
 procedure TTyTerminalLine.SetCell(ACol: Integer; const ACell: TTyTerminalCellData);
 begin                                                                        { :233-244 }
-  FCacheValid := False;
+  Touch;
   if (ACol < 0) or (ACol >= FLength) then
     Exit;                                  { a typed array ignores the write }
   if ACell.Content and TyTermContentIsCombinedMask <> 0 then
@@ -1306,7 +1326,7 @@ end;
 procedure TTyTerminalLine.PutCp(ACol: Integer; ACodepoint: Cardinal; AWidth: Integer;
   AFg, ABg: Cardinal; const AExt: TTyTerminalExtAttrs);
 begin                                                                        { :251-260 }
-  FCacheValid := False;
+  Touch;
   if (ACol < 0) or (ACol >= FLength) then
     Exit;
   if ABg and TyTermBgHasExtended <> 0 then
@@ -1327,7 +1347,7 @@ var
   content: Cardinal;
   i: Integer;
 begin                                                                        { :268-293 }
-  FCacheValid := False;
+  Touch;
   if (ACol < 0) or (ACol >= FLength) then
     Exit;
   content := FData[ACol * 3];
@@ -1367,7 +1387,7 @@ var
   n: Integer;
   cell: TTyTerminalCellData;
 begin                                                                        { :295-321 }
-  FCacheValid := False;
+  Touch;
   if FLength = 0 then
     Exit;                                  { pos % 0 is NaN upstream: nothing is written }
   APos := APos mod FLength;
@@ -1398,7 +1418,7 @@ var
   i, n: Integer;
   cell: TTyTerminalCellData;
 begin                                                                        { :323-348 }
-  FCacheValid := False;
+  Touch;
   if FLength = 0 then
     Exit;
   APos := APos mod FLength;
@@ -1426,7 +1446,7 @@ end;
 procedure TTyTerminalLine.ReplaceCells(AStart: Integer; AEnd: Int64; const AFill: TTyTerminalCellData;
   ARespectProtect: Boolean);
 begin                                                                        { :350-381 }
-  FCacheValid := False;
+  Touch;
   if ARespectProtect then
   begin
     if (AStart <> 0) and (GetWidth(AStart - 1) = 2) and not IsProtected(AStart - 1) then
@@ -1462,7 +1482,7 @@ function TTyTerminalLine.Resize(ACols: Integer; const AFill: TTyTerminalCellData
 var
   cells, i, k, oldLength: Integer;
 begin                                                                        { :390-431 }
-  FCacheValid := False;
+  Touch;
   if ACols = FLength then
     Exit(Int64(FLength) * 3 * 4 * 2 < Int64(System.Length(FData)) * 4);
   cells := ACols * 3;
@@ -1505,7 +1525,7 @@ procedure TTyTerminalLine.Fill(const AFill: TTyTerminalCellData; ARespectProtect
 var
   i: Integer;
 begin                                                                        { :450-466 }
-  FCacheValid := False;
+  Touch;
   if ARespectProtect then
   begin
     for i := 0 to FLength - 1 do
@@ -1552,7 +1572,7 @@ begin                                                                        { :
       they end up empty either way }
     ClearSparse;
     FCache := '';
-    FCacheValid := False;
+    Touch;
     Exit;
   end;
   if FLength <> ALine.FLength then
@@ -1565,7 +1585,7 @@ begin                                                                        { :
   else
     CopySparseMapsFrom(ALine);
   FCache := '';
-  FCacheValid := False;
+  Touch;
   FIsWrapped := ALine.FIsWrapped;
 end;
 
@@ -1624,7 +1644,7 @@ procedure TTyTerminalLine.CopyCellsFrom(ASrc: TTyTerminalLine; ASrcCol, ADestCol
 var
   c: Integer;
 begin                                                                        { :522-540 }
-  FCacheValid := False;
+  Touch;
   if AApplyInReverse then
     for c := ALength - 1 downto 0 do
       One(c)
