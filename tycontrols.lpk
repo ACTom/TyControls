@@ -928,6 +928,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Terminal.pas"/>
         <UnitName Value="tyControls.Terminal"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Selection.pas"/>
+        <UnitName Value="tyControls.Terminal.Selection"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
