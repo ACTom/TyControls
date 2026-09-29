@@ -17,7 +17,14 @@ unit umain;
   "Fit to recording" asks the terminal how big a client area the recording's grid
   needs (SizeForGrid) and grows or shrinks the window by the difference. Read-only is
   on at start: the recordings are output only, and a key typed into them goes nowhere;
-  switch it off and every key's bytes show in the panel on the right.
+  switch it off and every key's bytes show in the panel on the right ("Paste" sends
+  the clipboard the way a paste shortcut does).
+
+  The player (uasciicast) writes with flow control -- one chunk in the terminal's queue
+  at a time, the next when the terminal's write callback says the last is parsed -- so
+  "All at once" on a big recording neither freezes the window nor overflows the queue.
+  Switching recordings drops what the old one still had queued (Core.DiscardPending)
+  instead of parsing it first.
 
   The window, the terminal and every control are designed in umain.lfm (a TTyForm +
   TTyTitleBar); the code here is event handlers, the player and theme setup. }
@@ -49,6 +56,7 @@ type
     LblSpeed: TTyLabel;
     CmbSpeed: TTyComboBox;
     BtnFit: TTyButton;
+    BtnPaste: TTyButton;
     Tools2: TTyPanel;
     ChkReadOnly: TTyCheckBox;
     ChkEcho: TTyCheckBox;
@@ -72,6 +80,7 @@ type
     procedure PlayClick(Sender: TObject);
     procedure StepClick(Sender: TObject);
     procedure FitClick(Sender: TObject);
+    procedure PasteClick(Sender: TObject);
     procedure PlayerTimer(Sender: TObject);
     procedure ReadOnlyClick(Sender: TObject);
     procedure UnicodeChange(Sender: TObject);
@@ -82,15 +91,17 @@ type
     procedure TermGridResize(Sender: TObject; ACols, ARows: Integer);
   private
     FCast: TAsciicast;
+    FPlayer: TAsciicastPlayer;
     FFiles: TStringList;
-    FNext: Integer;           { the next event to write }
-    FPlayedMs: Double;        { recording time reached }
     FLastTick: Double;
+    FFailed: Boolean;         { a write failed: stop, and say so once }
     procedure LoadCast(const AFileName: string);
     procedure StopPlaying;
-    procedure WriteNext;
+    procedure PlayerWrite(Sender: TObject; const AData: RawByteString; ATag: PtrInt);
+    procedure TermWriteDone(Sender: TObject; ATag: PtrInt);
     function Speed: Double;
     procedure UpdateProgress;
+    procedure AddKeyLine(const S: string);
   end;
 
 var
@@ -108,6 +119,12 @@ resourcestring
   rsNoRecording = 'No recording';
   rsReadOnlyHint = 'Switch read-only off to see the bytes of each key here.';
   rsRecordingSizeFmt = '%s: recorded at %d x %d';
+  rsSpeedAllAtOnce = 'All at once';
+  rsWriteFailedFmt = 'Playback stopped: %s';
+
+const
+  { the key panel keeps the last this many lines }
+  KeyLinesMax = 1000;
 
 function RecordingsDir: string;
 var
@@ -165,6 +182,8 @@ begin
   ApplyChromeTheme(TyDefaultController);
 
   FCast := TAsciicast.Create;
+  FPlayer := TAsciicastPlayer.Create(FCast);
+  FPlayer.OnWrite := @PlayerWrite;
   FFiles := TStringList.Create;
   FFiles.Sorted := True;
   if FindFirst(RecordingsDir + '*.cast', faAnyFile, sr) = 0 then
@@ -184,14 +203,16 @@ begin
   else
     Status.Panels[0].Text := rsNoRecording;
   BtnPlay.Caption := rsPlay;
-  Keys.Lines.Add(rsReadOnlyHint);
-  ActiveControl := Term;
+  { the combo's items live in the .lfm; the one that is words is translated here }
+  CmbSpeed.Items[4] := rsSpeedAllAtOnce;
+  AddKeyLine(rsReadOnlyHint);
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   Player.Enabled := False;
   FFiles.Free;
+  FPlayer.Free;
   FCast.Free;
 end;
 
@@ -214,22 +235,26 @@ end;
 procedure TMainForm.LoadCast(const AFileName: string);
 begin
   StopPlaying;
+  { what the old recording still has queued is dropped, not parsed first; its write
+    callback would carry the old tag and is ignored after the Rewind }
+  Term.Core.DiscardPending;
   try
-    FCast.LoadFromFile(AFileName);
+    FCast.LoadFromFile(AFileName);        { a file that does not load leaves FCast as it was }
   except
     on E: Exception do
     begin
+      FPlayer.Rewind;
       TyShowMessage(E.Message);
       Exit;
     end;
   end;
+  FPlayer.Rewind;
+  FFailed := False;
   { a fresh screen and no scrollback, then wait at the start }
   Term.Reset;
   Term.Clear;
   Term.WriteSync(#27'[H'#27'[2J');
-  FNext := 0;
-  FPlayedMs := 0;
-  Keys.Lines.Add(Format(rsRecordingSizeFmt, [ExtractFileName(AFileName), FCast.Width, FCast.Height]));
+  AddKeyLine(Format(rsRecordingSizeFmt, [ExtractFileName(AFileName), FCast.Width, FCast.Height]));
   UpdateProgress;
 end;
 
@@ -272,50 +297,56 @@ begin
     StopPlaying;
     Exit;
   end;
-  if FNext >= FCast.Count then
+  if FPlayer.Finished then
     LoadCast(FCast.FileName);
+  FFailed := False;
   FLastTick := TyTermDefaultClock;
   Player.Enabled := True;
   BtnPlay.Caption := rsPause;
   Term.SetFocus;
 end;
 
-procedure TMainForm.WriteNext;
+{ The player's chunk: Write only queues (the terminal parses in slices from the message
+  loop, so a big recording never blocks the window); the callback hands the tag back to
+  the player, which then writes the next chunk. A write that fails (the queue is full,
+  a handler raised) stops the playback and is reported once. }
+procedure TMainForm.PlayerWrite(Sender: TObject; const AData: RawByteString; ATag: PtrInt);
 begin
-  { Write only queues: the terminal parses in slices from the message loop, so a big
-    recording never blocks the window }
-  Term.Write(FCast[FNext].Data);
-  FPlayedMs := FCast[FNext].Time * 1000;
-  Inc(FNext);
+  try
+    Term.Write(AData, @TermWriteDone, ATag);
+  except
+    on E: Exception do
+    begin
+      StopPlaying;
+      if not FFailed then
+      begin
+        FFailed := True;
+        TyShowMessage(Format(rsWriteFailedFmt, [E.Message]));
+      end;
+    end;
+  end;
+end;
+
+procedure TMainForm.TermWriteDone(Sender: TObject; ATag: PtrInt);
+begin
+  FPlayer.ChunkDone(ATag);
 end;
 
 procedure TMainForm.StepClick(Sender: TObject);
 begin
   StopPlaying;
-  if FNext < FCast.Count then
-    WriteNext;
+  FPlayer.Step;
   UpdateProgress;
 end;
 
 procedure TMainForm.PlayerTimer(Sender: TObject);
 var
-  now_, s: Double;
+  now_: Double;
 begin
   now_ := TyTermDefaultClock;
-  s := Speed;
-  if s < 0 then
-    while FNext < FCast.Count do WriteNext
-  else
-  begin
-    FPlayedMs := FPlayedMs + (now_ - FLastTick) * s;
-    while (FNext < FCast.Count) and (FCast[FNext].Time * 1000 <= FPlayedMs) do
-    begin
-      Term.Write(FCast[FNext].Data);
-      Inc(FNext);
-    end;
-  end;
+  FPlayer.Advance(now_ - FLastTick, Speed);
   FLastTick := now_;
-  if FNext >= FCast.Count then StopPlaying;
+  if FPlayer.Finished and not FPlayer.InFlight then StopPlaying;
   UpdateProgress;
 end;
 
@@ -333,10 +364,18 @@ begin
     SetBounds(Left, Top, Width + dw, Height + dh);
 end;
 
+procedure TMainForm.PasteClick(Sender: TObject);
+begin
+  { the same path as Ctrl+Shift+V: bracketed when the program asked for it, then out
+    through OnData (the key panel) }
+  Term.PasteFromClipboard;
+  Term.SetFocus;
+end;
+
 procedure TMainForm.ReadOnlyClick(Sender: TObject);
 begin
   Term.ReadOnly := ChkReadOnly.Checked;
-  if Term.ReadOnly then Keys.Lines.Add(rsReadOnlyHint);
+  if Term.ReadOnly then AddKeyLine(rsReadOnlyHint);
   Term.SetFocus;
 end;
 
@@ -359,10 +398,28 @@ begin
   Term.Font.Size := SpnFontSize.Value;
 end;
 
+procedure TMainForm.AddKeyLine(const S: string);
+var
+  i: Integer;
+begin
+  { a bounded panel: holding a key down for a minute must not grow it without end }
+  if Keys.Lines.Count >= KeyLinesMax then
+  begin
+    Keys.Lines.BeginUpdate;
+    try
+      for i := 1 to KeyLinesMax div 5 do
+        Keys.Lines.Delete(0);
+    finally
+      Keys.Lines.EndUpdate;
+    end;
+  end;
+  Keys.Lines.Add(S);
+  Keys.CaretPos := MaxInt;
+end;
+
 procedure TMainForm.TermData(Sender: TObject; const AData: RawByteString);
 begin
-  Keys.Lines.Add(Describe(AData));
-  Keys.CaretPos := MaxInt;
+  AddKeyLine(Describe(AData));
   if ChkEcho.Checked then
     Term.Write(AData);
 end;
@@ -381,8 +438,8 @@ procedure TMainForm.UpdateProgress;
 var
   t: Double;
 begin
-  if FNext > 0 then t := FCast[FNext - 1].Time else t := 0;
-  Status.Panels[0].Text := Format(rsProgressFmt, [FNext, FCast.Count, t]);
+  if FPlayer.Next > 0 then t := FCast[FPlayer.Next - 1].Time else t := 0;
+  Status.Panels[0].Text := Format(rsProgressFmt, [FPlayer.Next, FCast.Count, t]);
 end;
 
 end.

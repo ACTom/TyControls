@@ -6,6 +6,7 @@ object MainForm: TMainForm
   Caption = 'TTyTerminalView example'
   ClientHeight = 640
   ClientWidth = 980
+  ActiveControl = Term
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -200,6 +201,17 @@ object MainForm: TMainForm
         MaxValue = 32
         Value = 9
         OnChange = FontSizeChange
+      end
+      object BtnPaste: TTyButton
+        Left = 872
+        Height = 28
+        Top = 6
+        Width = 80
+        AutoSize = True
+        Caption = 'Paste'
+        Hint = 'Paste the clipboard into the terminal (what Ctrl+Shift+V does)'
+        ShowHint = True
+        OnClick = PasteClick
       end
     end
     object Status: TTyStatusBar

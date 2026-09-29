@@ -79,6 +79,14 @@ msgstr "歧义字符算宽"
 msgid "Font size:"
 msgstr "字号："
 
+#: tmainform.btnpaste.caption
+msgid "Paste"
+msgstr "粘贴"
+
+#: tmainform.btnpaste.hint
+msgid "Paste the clipboard into the terminal (what Ctrl+Shift+V does)"
+msgstr "把剪贴板粘贴进终端（同 Ctrl+Shift+V）"
+
 #: tmainform.dlgopen.title
 msgid "Open a recording"
 msgstr "打开录制"
@@ -120,3 +128,12 @@ msgstr "关掉「只读」，按键的字节就显示在这里。"
 #, object-pascal-format
 msgid "%s: recorded at %d x %d"
 msgstr "%s：录制尺寸 %d × %d"
+
+#: umain.rsspeedallatonce
+msgid "All at once"
+msgstr "一次喂完"
+
+#: umain.rswritefailedfmt
+#, object-pascal-format
+msgid "Playback stopped: %s"
+msgstr "回放已停止：%s"
