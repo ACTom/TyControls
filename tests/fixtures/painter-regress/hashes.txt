@@ -292,10 +292,10 @@ ex-examples-tabset-umain-96 520 372 D1FB0EF4A944EDF7
 ex-examples-tabset-umain-120 650 465 11BCC7AABF0A0919
 ex-examples-tabset-umain-144 780 558 D6E3A9F36CDFCAEF
 ex-examples-tabset-umain-192 1040 744 27638411541F5E41
-ex-examples-terminal-umain-96 980 640 794ADD7ECDBC188C
-ex-examples-terminal-umain-120 1225 800 F6B5C770AC11C150
-ex-examples-terminal-umain-144 1470 960 B9F7A91C4A4CBD61
-ex-examples-terminal-umain-192 1960 1280 E1FADDD982307E0F
+ex-examples-terminal-umain-96 980 640 BAC39482E3729989
+ex-examples-terminal-umain-120 1225 800 A5ADA0F234AA3B6B
+ex-examples-terminal-umain-144 1470 960 7BB63037F437148A
+ex-examples-terminal-umain-192 1960 1280 7BE1F717E6654039
 ex-examples-theming-umain-96 470 760 8F0E5B13B1FD553B
 ex-examples-theming-umain-120 588 950 6BD1CD1AA550D997
 ex-examples-theming-umain-144 705 1140 D499A86EF9D9F18C
