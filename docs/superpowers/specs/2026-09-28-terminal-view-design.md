@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；两期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；三期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -47,6 +47,10 @@
 7. **ambiguous 宽度只有 Unicode 15 那张表有数据**：6、11 两张表只有「组合 / 宽」两类（`UnicodeV6.ts`、`addons/addon-unicode11/src/UnicodeV11.ts`）；15 的表带 `CHARWIDTH_EA_AMBIGUOUS` 一类（`addons/addon-unicode-graphemes/src/third-party/UnicodeProperties.ts:38-41`），开关是 provider 上的公开字段 `ambiguousCharsAreWide`（`UnicodeGraphemeProvider.ts:13`），但**不在 addon 的公开类型里**（`addons/addon-unicode-graphemes/typings/addon-unicode-graphemes.d.ts` 只有构造、activate、dispose）。见 §4.3。
 8. **OSC 52 不在核心里**，在 `addon-clipboard`（`xterm:addons/addon-clipboard/src/ClipboardAddon.ts:20`）；**OSC 4/10/11/12 的查询应答、颜色主题查询应答在浏览器层**（`xterm:src/browser/CoreBrowserTerminal.ts:211-258`、`:261-`），headless 不应答。这几类的期望值要在 node 脚本里补一层（§13.4）。
 
+**实现期修正（3 期）**：
+9. **上游按键不看应用小键盘模式**（DECKPAM / `CSI ? 66 h`）：`evaluateKeyboardEvent`（`Keyboard.ts:38-380`）只收应用光标模式，`applicationKeypad` 只在 InputHandler 里记下、DECRQM 照报，浏览器层没有按键读它。小键盘数字和运算符一律按 `ev.key` 发字符。我们照上游（开工前问题一第 1 条的结论）。
+10. **第三层 Shift 有三项**（`CoreBrowserTerminal.ts:937-948`）：macOS 上 Option 且不当 Meta；Windows 上 Ctrl+Alt；Windows 上 `getModifierState('AltGraph')`（LCL 的 `ssAltGr`）。按下事件里另要 `keyCode` 为 0 或 > 47（方向键、退格不算），字符事件里不看 keyCode——所以判定分按下 / 字符两种（§8.4 的 `AKeyPress`）。
+
 ---
 
 ## 2. 组成
@@ -74,6 +78,12 @@
 - 测试辅助单元 `tests/test.terminal.oracle.pas`：读夹具、驱动 Core、逐项比较，自身不注册测试。
 - `Unicode.Width` 多了三个纯函数 `TyUnicodeUtf8Size` / `TyUnicodeUtf8Encode` / `TyUnicodeCodepointToUtf8`：终端几个单元只有这一份 UTF-8 编码器（码位越界或落在代理区编成 U+FFFD）。JavaScript 空白判断只在 Buffer 一份（`TyTermIsJsWhitespace`）。
 - Core 的实现拆成三个 include：`tyControls.Terminal.Core.Services.inc`（CoreService / 字符集 / 鼠标 / 颜色焦点 / 选项）、`…Core.InputHandler.inc`（全部控制序列处理器）、`…Core.WriteQueue.inc`（写入队列与重入）；照 `ToolWindows.*.inc` 的先例不进 `.lpk`，notices 标题和发版守卫逐个列名。
+
+**实现期修正（3 期）**：
+- 新增单元 `tyControls.Terminal.Render`：不依赖控件的渲染部件——单元格度量、256 色表、格子颜色解析、字形遮罩与缓存、自绘字形、一行的绘制器，可单独测。依赖 `Terminal.Buffer`、`Painter`（字体配置）、BGRABitmap；不引 `Controls` / `Forms`。
+- 新增生成物 `tyControls.Terminal.CustomGlyphs.inc`（`gen-terminal-glyphs.js` 从上游 `CustomGlyphDefinitions.ts` dump，U+2500–259F），由 `Terminal.Render` include，不进 `.lpk`。
+- 依赖方向：`Terminal.Keyboard` 只有 `SysUtils` / `Classes` / `LCLType`；`Terminal.Render` 不引控件；控件单元 `tyControls.Terminal` 引全部。三个新单元都进运行时包。
+- `ITyTextEditActions`、选区、链接都在 4 期，控件本期只实现两个接口（§9）。
 
 ### 2.2 不移植的上游部分
 
@@ -126,6 +136,13 @@ LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessag
 **实现期修正（2 期）**：
 - `OnRefreshRows` 每解析完一块发一次（区间算法照 `InputHandler.ts:474-484`）；处理器抛异常时也照发，这一块改过的行不会漏画。
 - 2026 的「攒着不画」是控件的事，Core 只维护模式。1 秒超时的入口是 `Core.EndSynchronizedOutput`：清掉 2026、整屏 `OnRefreshRows`、发 `OnModesChange`（照上游超时回调）；3 期控件的 1 秒计时器调它。
+
+**实现期修正（3 期）**，控件侧：
+- `OnRefreshRows` 报的已经是**视口行**（Core 在解析结尾换算，同上游 `InputHandler.parse`），控件直接用。
+- 同步输出开着时，要重画的一切都进暂存：Core 报的脏行、光标行、闪烁翻转、滚动带来的整屏（上游这些都经 `refreshRows` 进 `bufferRows`）。1 秒计时器从**第一次**暂存起算，模式打开本身不起表；只暂存视口里的行——用户上翻超过一屏时，光标行不在视口，打开 2026 也不起表，回到底部或键入把视口拉回底部才起。
+- 一次解析（`AsyncSlice`、`WriteSync`、`Write` 当场解析那次）里 Core 可能滚几千次：`OnScroll` 只记「整屏脏、滚动条待同步」，解析返回后统一失效、同步一次。
+- 颜色变了整窗重画：解析前后比 259 色的签名，变了（OSC 4 / 10 / 11 / 12 / 104 / 110 …）就整窗失效——257 号色也是内边距的底色（照上游 `onChangeColors → _fullRefresh`，`RenderService.ts:120`）。
+- 帧率上限：距上次绘制不到 16 ms 就接着跑下一片，不让出给 `WM_PAINT`；一帧里光栅化新字形有时间预算（10 ms），超出的字形不画、那一行留脏，下一帧整行重画（每帧至少画一个新字形）。
 
 ### 3.3 输出：`OnData` 交字节
 
@@ -427,6 +444,12 @@ OSC 4 / 10 / 11 / 12 设置和查询、OSC 104 / 110 / 111 / 112 复位（`Input
 - `NotifyColorSchemeChanged` 先清空覆盖表（上游换主题重建整张色表，OSC 覆盖色随之丢掉，`ThemeService.ts:80-139`），再按 2031 报明暗。RIS 不清覆盖表（上游 `reset` 不碰 ThemeService）。
 - 没挂 `OnQueryBaseColor` 就没有主题可答：OSC 4 / 10 / 11 / 12 的查询、`CSI ? 996 n`、2031 的通知一律不应答，和上游 headless 一致；设色、复位照常记进覆盖表。焦点报告不受影响。
 
+**实现期修正（3 期）**，控件侧：
+- 色表（`OnQueryBaseColor` 答的那一份）：0–15 取主题的 `TyTerminalAnsi<n>`，16–255 按上游公式算，256 / 257 取 `TyTerminal` 的前景 / 底色，258 取 `TyTerminalCursor` 的底色；颜色一律取 RGB、丢 alpha；缺了退到 Tango / 黑白，不抛。
+- 色表按**本实例的无状态样式**取：类型键 + 实例的 `StyleClass`，`TyTerminal` 再叠 `StyleOverride`；不跟悬停、聚焦、禁用走（禁用在绘制时预混，§11）。实例换了底（类或覆盖改了 `background`），16 色的 token（`on(var(--terminal-bg), …)`）拿这个实例的底色重新求一次，深底就换成深底那套——只在这一色确实来自 token 时（类没有另写它）；光标色、光标下的字色默认就是前景、底色，也跟着实例的前景、底色换。
+- ~~换主题时控件调 `NotifyColorSchemeChanged`~~ 只有色表真变了（换明暗、换配色）才调；改内边距、字体的主题变化不调（它会清掉程序设的覆盖色）。第一次建色表不算变化。在绘制里才发现的主题变化不当场调（它会发 `OnData`），记下来经消息循环再调。
+- 程序改了颜色时整窗重画，见 §3.2 的控件侧修正。
+
 ### 7.4 未处理的 OSC
 
 核心注册的 OSC 只有 0 / 1 / 2 / 4 / 8 / 10 / 11 / 12 / 104 / 110 / 111 / 112（`InputHandler.ts:286-325`）。52 由控件注册（§9.6.3）。其余一律进 `OnOsc(Ident, Data, var Handled)`——7（当前目录）、133 / 633（shell 集成）、1337 等由宿主处理。宿主也可以直接 `Core.Parser.RegisterOscHandler`。
@@ -572,6 +595,11 @@ function TyTerminalIsThirdLevelShift(const AEvent: TTyTerminalKeyEvent; AIsMac, 
 function TyTerminalPrepareTextForPaste(const AText: string; ABracketed: Boolean): RawByteString;
 ```
 
+**实现期修正（3 期）**：
+- `TTyTerminalKeyEvent` 加 `AltGraph: Boolean`（`getModifierState('AltGraph')`，LCL 的 `ssAltGr`）；`TyTerminalIsThirdLevelShift` 加最后一个参数 `AKeyPress: Boolean`——按下事件（False）另要 keyCode 为 0 或 > 47，字符事件（True）不看（§1.1 第 10 条）。
+- 输入法处理中的键在 `KeyDown` 里直接放过、不问宿主：LCL 的 `VK_PROCESSKEY`（$E7）和库里的 `TyVkImeProcess = $E5`（Win32 输入法实际送来的 229）两个都认。
+- 平台常量 `TyTerminalIsMac` / `TyTerminalIsWindows` 按平台（不是 widgetset）取。
+
 ---
 
 ## 9. 控件 `TTyTerminalView`
@@ -580,6 +608,8 @@ function TyTerminalPrepareTextForPaste(const AText: string; ABracketed: Boolean)
 （基类 `source/tyControls.Base.pas:330`；三个接口见 §9.6、§9.9、§9.7。）
 
 构造：`ControlStyle + [csOpaque, csDoubleClicks, csTripleClicks]`，`TabStop := True`，建 `FCore`。**构造里不建滚动条**，第一次排布时再建（照 `TTyMemo.UpdateScrollBar`，`source/tyControls.Memo.pas:2372-2504`）。
+
+**实现期修正（3 期）**：~~`class(TTyCustomControl, ITyTextEditActions, ITyImeEditable, ITyScrollBarFrameHost)`~~ 本期只实现 `ITyImeEditable`、`ITyScrollBarFrameHost` 两个接口；`ITyTextEditActions`（右键菜单）和选区一起在 4 期加。构造里另设 `DoubleBuffered := False`（整面由表面位图贴，§10.1）。
 
 ### 9.1 published 属性
 
@@ -616,6 +646,12 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 
 运行时只读：`Core`、`Cols`、`Rows`、`Title`、`SelectionText`、`HasSelection`。
 
+**实现期修正（3 期）**：
+- 本期 published 的是：`Scrollback`（负数按 0，上限 100000 由 Core 钳）、`CursorStyle`、`CursorInactiveStyle`、`CursorBlink`、`AmbiguousWide`、`UnicodeVersion`、`MacOptionIsMeta`、`AlternateScroll`、`DrawBoldTextInBrightColors`、`ReadOnly`、`ConvertEol`、`TabStopWidth`（小于 1 按 1）、`ScrollOnUserInput`、`ScrollBarAutoHide`、`LineHeightPercent`（钳到 100–300；上游小于 1 抛异常）、`LetterSpacing`（钳到 −10–50），外加 `TabStop` 默认 True、`Align`、`Anchors`、`ParentFont`。
+- 4 期再加：`SelectionOverrideKey`、`Osc52`、`WordSeparators`、`CopyOnSelect`、`DetectUrls`；5 期：`MinimumContrastRatio`。后加 published 属性不破坏已有的 `.lfm`。
+- 运行时只读本期只有 `Core`、`Cols`、`Rows`、`Title`；`SelectionText`、`HasSelection` 在 4 期。
+- published 默认值 = 构造值由本控件自己的 RTTI 测试逐个守（全局守卫只查 `TabStop`）。
+
 ### 9.2 事件
 
 | 事件 | 签名 | 何时 |
@@ -630,9 +666,16 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 | `OnSelectionChange` | `(Sender)` | 选区变了 |
 | `OnShortcutQuery` | `(Sender; Key: Word; Shift: TShiftState; var APassToApplication: Boolean)` | 终端要吞这个键之前问一次（§9.4） |
 
+**实现期修正（3 期）**：~~`OnOsc` 带 `var AHandled`~~ `OnOsc(Sender, AIdent, AData)`，和 Core 同签名（§7.4：Core 对未处理的 OSC 没有默认动作）。本期有 `OnData`、`OnGridResize`、`OnTitleChange`、`OnBell`、`OnOsc`、`OnShortcutQuery` 六个；`OnLinkActivate`、`OnOsc52`、`OnSelectionChange` 在 4 期。
+
 ### 9.3 公开方法
 
 `Write`（两个重载，转 `Core.Write` 并负责排片）、`WriteSync`、`Paste(const AText)`（走粘贴编码）、`Input(const AText)`（当作键入）、`Clear`（清滚回）、`Reset`、`ScrollLines` / `ScrollPages` / `ScrollToTop` / `ScrollToBottom`、`SelectAll` / `ClearSelection` / `Select(ACol, AAbsRow, ALength)` / `SelectLines`、`CopyToClipboard` / `PasteFromClipboard`、`CellAt(X, Y): TPoint`、`CellRect(ACol, ARow): TRect`。
+
+**实现期修正（3 期）**：
+- 新增 `SizeForGrid(ACols, ARows): TSize`：给定网格要多大的客户区（内边距、条宽都算进去）；示例「按录制尺寸」和想固定 80 × 24 的宿主用它。
+- `CopyToClipboard` 本期是空操作（没有选区）；`SelectAll` / `ClearSelection` / `Select` / `SelectLines` 和选区一起在 4 期。
+- Core 加了 `DiscardPending`：丢掉还没解析的块、不调它们的回调（宿主自己要丢的，流控计数跟着重来；上游 `WriteBuffer` 没有）。回放示例换录制时用。
 
 ### 9.4 键盘
 
@@ -642,6 +685,13 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - **复制粘贴快捷键**：Windows / Linux 上 Ctrl+Shift+C / Ctrl+Shift+V、Ctrl+Insert / Shift+Insert；macOS 上 Cmd+C / Cmd+V。Ctrl+C 不劫持（它是中断）（§17 问题 5）。
 - **本地翻页**：Shift+PgUp / PgDn 翻滚回（`Keyboard.ts:207-225`），Shift+Home / End 到顶 / 到底（定稿时新加）。
 - 用户键入时，若视口不在底部且 `ScrollOnUserInput`，滚回底部（`CoreService.ts:80-84`）；有选区就清掉（上游挂在「用户输入」事件上，`xterm:src/browser/services/SelectionService.ts:139-143`）。
+
+**实现期修正（3 期）**：
+- ~~`TyTerminalEvaluateKey` 有结果的键都吞~~ 能出字符的键（无修饰、keyCode ≥ 48 且 `key` 恰一个 UTF-16 单元，外加空格）在 `KeyDown` 里**不发、不清零**，等字符事件：键盘布局只有 widgetset 知道，而 Win32 上 `KeyDown` 清零会吞掉随后的 `WM_CHAR`（`lcl:interfaces/win32/win32callback.inc`）。上游同样把这些键留给 keypress（`Keyboard.ts:365-368`、`CoreBrowserTerminal.ts:898-903`）。
+- `KeyDown` 已经发了字节的键，控件自己记 `FKeyDownHandled`，`UTF8KeyPress` 见到就丢（上游 `_keyDownHandled`），不靠 widgetset 的行为；`KeyUp` 也清零——字符没来（widgetset 不送），不能让它吞掉下一个键的字符。
+- `tkrSelectAll`（macOS Cmd+A）本期不算动作、不吞：选区在 4 期。
+- Shift+Home / Shift+End 保留「到顶 / 到底」，是和上游不同的本地动作（上游这两个键照常发给程序），进 §15，真机验收看 PSReadLine / nano 里的取舍。
+- 带 Ctrl / Alt / Meta 打出来的字符，除非是第三层 Shift，都不发（`CoreBrowserTerminal.ts:980-985`）；控制字符只可能是 `KeyDown` 处理过、widgetset 又送来的那一份，丢掉。
 
 ### 9.5 鼠标
 
@@ -673,6 +723,12 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - 缓冲**有滚回**：滚视口，每格 3 行（同 `TTyMemo`，`Memo.pas:2769-2789`）。
 - 缓冲**没有滚回**（备用屏，或 `Scrollback = 0`）且 `AlternateScroll`：每格发一个上 / 下方向键，按应用光标模式选 `ESC O A` / `ESC [ A`（`MouseService.ts:262-290`）。
 - 这就是「1007」的行为，但做成属性、**不认** DECSET 1007——上游不认（§1.1 第 2 条），认了的话 DECRQM 1007 的应答就和上游不一致（§17 问题 7）。
+
+**实现期修正（3 期）**（§9.5.3、§9.5.4）：
+- 本期只做竖向滚轮；横向（`DoMouseWheelLeft/Right`）在 4 期。
+- 每满 ±120 出一格，同号的余数留着，方向反过来时余数清零；一格都不满也算处理了（吃掉这点位移）。宿主的 `OnMouseWheel` 先拿，它处理了就到此为止。
+- Shift+滚轮照上游：不上报、不发方向键（`MouseService.ts:459` 的 `_consumeWheelEvent` 对 shiftKey 答 0 行）；滚回在 Windows / Linux 上是横滚（`scrollableElement.ts:394`，终端没有横向可滚，事件交还父控件），macOS 上照常竖滚。
+- 上报的像素坐标钳在网格里（0 到 列数 × 格宽 − 1，行同理；上游钳到画布宽高 − 1，`MouseCoordsService.ts:38-39`），格子由 `CellAt` 钳。
 
 #### 9.5.5 本地选择
 
@@ -710,8 +766,10 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - 自己建一根 `TTyScrollBar`，照 `TTyMemo`：`Parent := Self`、`Align := alRight`、`TabStop := False`、`csNoDesignVisible`、宽度取 `--scrollbar-size`、`AutoHide := ScrollBarAutoHide`（`Memo.pas:2384`、`:2410-2420`）。
 - 实现 `ITyScrollBarFrameHost`（`source/tyControls.ScrollBar.pas:61-73`），滚动条替控件画外框那一段。
 - `Max` 是**最大位置**不是内容高度：`Max = 缓冲行数 − 视口行数`（[[scrollbar-max-is-position-not-content]]）。
-- 备用屏没有滚回，滚动条禁用（AutoHide 时藏起）；切回主屏恢复。
+- 备用屏没有滚回，滚动条禁用~~（AutoHide 时藏起）~~；切回主屏恢复。
 - 新输出到来：视口在底部就跟着走；不在底部就不动（上游同，`YDisp` 只在 `YDisp = YBase` 时跟随）。
+
+**实现期修正（3 期）**：条宽**一直扣**——网格宽 = 客户区 − 内边距 − 条宽，备用屏里、`Scrollback = 0` 时条只是禁用、不拿掉（自动隐藏的主题下淡掉，留一条空白），列数不随主屏 / 备用屏变化，进出 vim 不会给程序多发一次改尺寸（开工前问题一第 2 条）。滚动条的同步在一次解析里只做一次（§3.2）。
 
 ### 9.8 链接
 
@@ -732,11 +790,24 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - GTK3 没有候选窗定位（库内现状，`source/tyControls.Gtk3WS.pas:96-111` 只取回完整提交串），终端同样没有。
 - 已知限制：LCL `TUTF8Char = String[7]`（`lcl:lcltype.pp:63`）会截断输入法提交串，库内各 widgetset 的钩子就是为绕开它；`UTF8KeyPress` 里仍要调 `TyImeTakeCommit`（照 `Edit.pas:2210`）。
 
+**实现期修正（3 期）**：
+- 输入法从 4 期挪到 3 期（开工前问题二第 2 条）：提交通路、候选窗定位、macOS 组字串都在本期，真机验收期末一次。
+- 候选窗锚在**光标所在的屏幕行**的格子上（宽字符不扩）；视口不在底部时仍按光标行算——候选窗跟光标，不跟视口。锚是上一帧画出来的那个格子（用这一帧的度量）；没聚焦、没句柄、还没画过一帧时答空矩形。
+- Win32：系统候选窗的位置按线程记，在别的控件里打过字就被挪走——所以照 `Memo.pas:4464` **每帧**都设 `TySetImeCaretPos`（聚焦时），聚焦的那一刻作废缓存的锚并先按上一次的格子设一次。
+- macOS：照 `Edit.pas` 接 `TTyCocoaImeHandler`——构造时建（LCL-Cocoa 在建句柄时发 `LM_IM_COMPOSITION` 问），消息里答它；`ImeCaretBoundClient` 答和候选窗同一个矩形。不在组字会话里时 `ImeReplace` 就是一次提交（LCL-Cocoa 对死键不开会话直接调 `IMEInsertFinalText`，后面不跟 `IMESessionEnd`），当场发出、不留在组字串里，会话结束也不会再发一遍。未在真机上跑过。
+- 组字时不滚到底（上游输入法按键时会滚，`CoreBrowserTerminal.ts:857-861`；组字串画在光标行上，视口在别处就看不见；进 §15，真机验收看要不要补）。
+
 ### 9.10 焦点、光标闪烁、设计期
 
 - `DoEnter` / `DoExit`：`Core.ReportFocus`；重画光标（聚焦时实心，失焦按 `CursorInactiveStyle`）。
 - 闪烁：懒建 `TTimer`（照 `Edit.pas:574-590`），周期 600ms（上游 WebGL 渲染器的值，`addons/addon-webgl/src/CursorBlinkStateManager.ts:13`）；5 分钟没有输入输出就停在「显示」（上游 `CURSOR_BLINK_IDLE_TIMEOUT`，`src/browser/renderer/shared/Constants.ts:12`）。每次只标光标所在行脏。
 - 设计期（`csDesigning`）：不建计时器、不建滚动条；画几行示例文字，覆盖 16 色和粗体 / 下划线，方便在设计器里看主题效果。
+
+**实现期修正（3 期）**：
+- Core 出生时 `Focused = True`，控件构造里马上 `ReportFocus(False)`，一个没焦点的终端在程序打开 1004 时报「没有焦点」。
+- ~~`DoEnter` / `DoExit`：`Core.ReportFocus`~~ 焦点跟**系统焦点**：`LM_SETFOCUS` / `LM_KILLFOCUS`（切到别的程序也算失焦）和 `DoEnter` / `DoExit` 都进同一个入口，重复的一路什么都不做；驱动 1004 报告、光标形状（失焦样式）和闪烁计时器。上游看的是 textarea 的 focus / blur，也就是系统焦点。
+- 点击取焦点：哪个键点下去都取（中键、右键也是在跟终端打交道；基类只认左键），同基类守着 `TabStop`、`SetFocus` 包 `try … except`。
+- 悬停、按下、聚焦时基类整控件失效：外框样式（含状态）没变就不重贴整张表面，变了才重画外框（连同各行）。
 
 ---
 
@@ -750,12 +821,21 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - 缓存不经 `TBitmap` 中转；万一要中转，用 pf24bit（[[opaque-device-cache-pf24bit]]：pf32bit 在 GTK2 上整块黑）。
 - 5 期：整屏上滚时先把缓存内容整体上移，只画新露出的行。
 
+**实现期修正（3 期）**：
+- ~~视口大小的行缓存位图~~ 一张**客户区大小**的表面位图（外框 + 内边距 + 网格）：外框和内边距只在主题、尺寸、颜色、外框状态变化时经 `TTyPainter.BeginPaintOn` 画一次，脏行直接画进网格区，`Paint` 只贴画布的裁剪区。位图按 64 像素的块向上取整、只长不缩：拖着改尺寸不每次重建。
+- 贴图（本批）：Win32 从位图的 DIB 带源偏移直接 `StretchDIBits`，不经 `GetPart` 复制一份；别的 widgetset 仍走 BGRA 的 `DrawPart`（零拷贝的路子要各平台真机核实）。构造里 `DoubleBuffered := False`：整面都是贴上去的，LCL 的双缓冲再垫一张整窗位图只是多拷一遍。悬停、按下、聚焦的整控件失效只在外框样式变了时才放行（§9.10）。
+- 禁用时整块按 `TyTerminal:disabled` 的 opacity 朝父控件底色预混（色表、外框、内边距，§11）。
+
 ### 10.2 单元格度量
 
 - 字号 → 像素：`TyFontHeightPx(Size, PPI)`（`Painter.pas:1174` 同一换算）。
 - 格宽：量 32 个 `W` 的总宽除以 32（上游量 `W`，`xterm:src/browser/services/CharSizeService.ts:86`、`:115`），向上取整到整数设备像素，再加 `LetterSpacing`（按 DPI 缩放）。整数格宽保证网格对齐。
 - 格高：BGRA 字体度量的 `Lineheight`（`bgra:bgrabitmaptypes.pas:412-425`）× `LineHeightPercent`，向上取整；基线取同一记录的 `Baseline`。
 - 格子数 = (客户区 − 内边距 − 滚动条) / 格尺寸，向下取整；变了就 `Core.Resize` + `OnGridResize`。
+
+**实现期修正（3 期）**：
+- Win32 实测（E1，Consolas 9 / 12 pt × 96 / 144 PPI）：`Lineheight` = `TextSize('Ag').cy` = CJK 字的 `TextSize` 高，格高 14 / 22 / 19 / 28 像素，CJK 的墨迹都在格内；度量没定义时退到 `TextSize('Ag').cy`。
+- 字号、字体、DPI、主题任一变了都立即重排：`Font` 改了（`FontChanged` / `CM_PARENTFONTCHANGED`）马上排；谁问出来的度量变了（`CellRect`、`CellAt`、`SizeForGrid`、14t 应答）也排——查询不吞掉「格子变了」这个信号；在绘制里只记下，经 `QueueAsyncCall` 延后。
 
 ### 10.3 字体
 
@@ -778,6 +858,18 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
   - 默认选（a）：缓存键不带颜色，命中率高；Linux / macOS 小字发虚（[[bgra-small-text-blur-linux]]）正好由超采样治。
   - 超采样的代价（每个字形 9 倍面积光栅化 + 重采样，`Painter.pas:2102-2143`）只在**第一次**画某个字形时付，之后命中缓存。终端的字形集合小、重复率高，这是缓存让超采样付得起的原因。
 
+**实现期修正（3 期）**，E1（Win32 已跑，`tools/terminal-fontprobe --e1`）：
+- Consolas 经系统字体链接把中文、日文假名画在格子里：前进宽度正好 2.00 格，墨迹不出格、不被截；韩文 1.3–1.5 格、U+20000 1.7–2.1 格（照样按 2 格画，比格子窄的居中不动）。所以 Windows 上 `monospace-wide` 换成**空串**（交给系统替换）。候选宽字体 Microsoft YaHei 反而在 9 pt 下让 U+20000、表情的墨迹出格，不用。
+- 表情：有字形，但只有单色轮廓（GDI 文字管线不画彩色字形）——已知限制，§15 保持「彩色表情不做」。
+- Powerline（U+E0A0、U+E0B0）：Consolas 缺字（无墨），5 期定是否自绘。
+- 框线、块元素：字体的字形上下都出格（本来就自绘，§10.5）。
+- macOS / Linux 没在真机上跑：`monospace-wide` 先按证据给 `PingFang SC` / `Noto Sans CJK SC`，进真机验收。
+
+E2（Win32 已跑，`--e2`；数字是本批修复后重跑的）：
+- ~~默认选（a）~~ 选**做法（c）**：库自己的文字管线在 1× 下黑字白底画一遍，覆盖率 = 255 − 灰度（通道平均），缓存不带颜色，着色时用和 `TTyGdiTextRenderer` 同一个非伽马混合。（a）在 Win32 上把用户否掉的「虚」带回来（实心占比 0.3% / 8.5%，参照 12.4% / 21.0%），不选。
+- 画质：（c）对参照（`TTyPainter.DrawText` 同底色同前景）的有墨像素平均差 0.19–0.43（每通道 0–255，三组颜色、96 / 144 PPI）；同一遮罩换成 BGRA `FillMask` 的伽马混合（`dmDrawWithTransparency`）差 15.8–27.0。自写混合循环和 `FillMask` 线性混合结果相同、快约 2.5 倍（200 × 60 整屏 7.6 对 20.0 ms、144 PPI 13.9 对 32.3 ms）。
+- 耗时（控件自己的光栅器和行绘制器）：冷填充 95 个 ASCII × 4 种样式 380 次约 710 ms（每个 1.87 ms，96 / 144 PPI 相同；花在库的 Win32 文字渲染器每次新建位图再转换上，`Painter.pas`）；热缓存 200 × 60 整屏重画（只画行，不贴）96 PPI 10.1 ms、144 PPI 16.4 ms，满屏 tmux 框线同样 10.0 / 16.4 ms。控件里连贴图的整屏重画 11.8 ms（ASCII、tmux 框线、mc 双线框都在 12 ms 左右；修复前框线靠每格两张整面剪裁遮罩，tmux 2.5 s、mc 5.3 s）。冷填充在控件里按帧摊开（§3.2 的光栅化预算），380 个字形约 900 ms、68 帧，每帧不超过预算。
+
 ### 10.4 字形缓存
 
 - 键：簇的 UTF-8 串 + 粗体 + 斜体 + 占格数（1 / 2）+ 用哪个字体（主 / 宽）。颜色不进键（按 E2 的（a））。
@@ -785,9 +877,19 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - 容量：4096 项，满了按最近最少使用淘汰（定稿时新加）。字体、字号、DPI、`AmbiguousWide` 变了整个清空。
 - 空格和空格子不进缓存。
 
+**实现期修正（3 期）**：
+- 键里不含颜色（E2 选了（c））。一格的可打印 ASCII 走快速路径：按码位、粗体、斜体直接查一张 380 项的表，不拼键串。
+- 光栅化出来没有墨的字形（零宽空格之类）照样缓存（遮罩为空），~~不进缓存~~ 只有空格和空格子不进。
+- 本批：单个码位（非 ASCII、非组合）用 64 位整数键（码位、粗体、斜体、占格数、字体），不每格每帧拼字符串；只有多码位的簇和输入法的组字串用字符串键，格数单独占两个字节编码（原来和标志挤在一个半字节里，1 格和 17 格撞键）。
+- 本批：自绘字形（§10.5）也进同一个缓存，键 = 码位、占格数、格宽、格高、PPI，阴影图案 ░▒▓ 另加相位（格子左上角对图案周期取模，图案从表面原点铺）。
+
 ### 10.5 自绘字形
 
 制表符（U+2500–257F）和块元素（U+2580–259F）不用字体画，按单元格几何自己画，保证相邻格连成线（上游 WebGL 渲染器默认这么做，`addons/addon-webgl/typings/addon-webgl.d.ts:54-75`；定义表 `addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts`，MIT，可移植数据）。3 期做这两段；盲文、Powerline、Legacy Computing 5 期再定。
+
+**实现期修正（3 期）**：
+- 路径坐标取整后**只裁不钳**：上游对这些字形传 `clampToCell = false`（`CustomGlyphRasterizer.ts:734`），画出格的部分按格子裁掉。
+- 本批：每个自绘字形只画一次——白色画在比格子大一圈的透明小位图上、Canvas2D 裁到格子，alpha 就是覆盖率遮罩，进字形缓存（§10.4）；着色时用 Canvas2D 画形状的同一个伽马混合（全覆盖直接是那个颜色）。原来直接在表面上画、每格两张整面大小的剪裁遮罩。和直接画比：全部 160 个字形 × 两种格子 × 两种 PPI × 两种底色里，0.03% 的像素差 1（一个字形两段笔画重叠的半覆盖像素，原来混两次、现在合成一次再混），其余逐像素相同。
 
 ### 10.6 属性
 
@@ -803,6 +905,11 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 | 隐藏 | 不画字形 |
 | 闪烁（SGR 5） | 不闪，照常画（上游默认 `blinkIntervalDuration: 0` 也不闪，`OptionsService.ts:17`） |
 | 线宽 | 按 DPI 缩放，至少 1 设备像素 |
+
+**实现期修正（3 期）**：
+- 下划线的默认颜色是**暗淡处理之后**的前景（`DomRendererRowFactory.ts:313-320`）；调色板下划线色在粗体且小于 8 时同样加 8。
+- 下划线（点、虚、波浪）按整段画，图样按**绝对 x** 定相位，跨格连续；阴影 ░▒▓ 同样按表面原点铺。
+- 隐藏（SGR 8）的格子在块光标下也不露字（上游把隐藏的格子当空格画，`DomRendererRowFactory.ts:302-306`）。
 
 ### 10.7 光标
 
@@ -855,6 +962,14 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 改完：跑 `scripts/gen-defaulttheme.ps1`（先验忠实度，[[gen-defaulttheme-eats-handwritten-code]]）、`scripts/gen-tycss-catalog.ps1`；键和 token 加进 `tests/test.themes.pas` 的 GGRID（`:591`）/ GMETRICS（`:681`），重铺 golden；加一条跨 17 个主题 × 明暗的 resolve 测试，断言 16 色都解析得出；浅底那套（我们配的）断言对白底对比度达到 §17 问题 4 的标准，深底那套照搬上游、只记录不断言（Tango 的 0 号 `#2e3436` 在纯黑底上只有约 1.7:1，这是上游的设计，不是我们的错）。
 
+**实现期修正（3 期）**：
+- ~~`:focused`~~ 主题的聚焦伪类叫 `:focus`（`Css.Parser.pas`），`TyTerminalSelection:focus` 是聚焦时的选区。
+- ~~`font-family`、`font-size` 写在 `TyTerminal` 规则里~~ `font-family` 不经 `var()` 求值（`StyleModel.pas` 直接存原文），所以基础层规则**不写** `font-family`，控件自己 `RawVar('--terminal-font-family')` 读 token；`TyTerminal` 规则里写了 `font-family` 的皮肤照样生效（顺序见 §10.3）。~~`--terminal-font-size`~~ 删掉：字号走 `font-size: var(--font-size-base)`，跟着密度，皮肤要单调就写 `TyTerminal` 的 `font-size`。
+- 三参数 `on()` 看的是 **Rec.601 亮度**（> 0.5 取第二个参数，恰好 0.5 算深，`Css.Values.pas`），不是 WCAG 相对亮度。
+- 浅底 16 色实际值（`tools/terminal-oracle/light-palette.js` 用上游 `ensureContrastRatio` 对白底 4.5:1 算出，`--check` 守着 `light.tycss`）：1 `#cc0000`、2 `#3f7c04`、3 `#8e7400`、4 `#3465a4`、5 `#75507b`、6 `#047a7c`、9 `#d72424`、10 `#50831c`、11 `#756d24`、12 `#517396`、13 `#8b6687`、14 `#1c8383`；0 / 7 / 8 / 15 照 Tango。
+- `:disabled` 用 opacity：本批实现——禁用时色表（259 色）、光标下的字色、外框底色和边框色都按 `TyTerminal:disabled` 的 opacity 朝父控件底色预混，缓存键里有 `Enabled`；程序问颜色（OSC 10 / 11）答的仍是原色。注意皮肤若改写了 `TyTerminal` 规则，基础层的 `:disabled` 不再继承（皮肤层按键整条覆盖），要连 `:disabled` 一起写。
+- 浅底对比度：公式对**白底**达标（最差 3 号 4.52:1）；落到各皮肤实际的 `--surface` 上，3 号色最差 xp 3.70、macos 3.82、breeze 3.96、office 4.04、win10 4.07、showcase 4.12、material3 / ubuntu 4.33。主控决定暂按（c）维持现状，交 5 期 `MinimumContrastRatio` 兜底；最终验收时用截图请用户在（a）以最暗浅底重算、（b）终端底色改用更白的 token、（c）维持 三者中定（§17.1 第 4 条）。
+
 ---
 
 ## 12. 示例 `examples/terminal`
@@ -866,6 +981,12 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - **回放**：打开录制文件，按原节奏 / 加速 / 一次喂完播放；`ReadOnly = True`。录制格式建议 asciicast v2（每行一个 JSON：头部含宽高，事件 `[时间, "o", 数据]`；本机没有 asciinema 源码可核，格式以其官方文档为准，§17 问题 11）。示例自带几段录制（`examples/terminal/recordings/`）。3 期另加一个「键码面板」：把 `OnData` 的字节以十六进制列出来，回放模式下验键盘编码。
 - **真 shell**（4 期）：Windows 起 `cmd` / `powershell`，Linux / macOS 起 `$SHELL`；菜单里可以改命令行。
 - 菜单：打开录制、回放速度、新建 shell、复制 / 粘贴、字号、Unicode 版本、ambiguous 宽度、OSC 52 策略、换肤、明暗。
+
+**实现期修正（3 期）**，示例实际的样子（`examples/terminal`，本期只有回放）：
+- ~~菜单~~ 两排工具条代替菜单：录制下拉（`recordings/` 里的文件）、打开…、播放 / 暂停、单步、速度（0.5× / 1× / 2× / 4× / 一次喂完）、按录制尺寸；只读、本地回显、Unicode 版本、歧义字符算宽、字号、粘贴。标题栏里换肤下拉和暗色开关。右侧键码面板（`TTyMemo`，按键的十六进制和可读写法，只留最近 1000 行），中间分隔条，底部状态栏（进度、网格尺寸、标题）。新建 shell、复制、OSC 52 策略在 4 期。
+- 录制拷进示例自己的 `recordings/`（2 期的 8 份 + 16 色样例 `palette.cast`），发布包自成一体；发版守卫查两处同名文件字节相同。
+- 回放带流控：一次只让一块在终端队列里，写回调到了再写下一块，「一次喂完」按 64 KB 一块喂，不会撑爆队列；写入失败就停播放、只提示一次。换录制时先 `Core.DiscardPending` 丢掉旧录制还没解析的数据，不先同步解析完。读录制先解析到局部、成功才替换，失败保留原来的；头部宽高钳到 2–500 × 1–300；照 `idle_time_limit` 缩短长停顿。
+- 「按录制尺寸」经 `SizeForGrid` 算出客户区，窗口按差值放大缩小（原样再设同一矩形是空操作）。
 
 ### 12.2 PTY 单元（只在示例里）
 
@@ -927,6 +1048,12 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - 2 期多出的脚本：`lib-term.js`（建终端、跑步骤、导出整份状态、合成应答器、种子随机数、REP 快进标记）、`buffer-cases.js`（缓冲层操作脚本）、`gen-terminal-charsets.js`（§2.1）、`wsl-record.sh` + `wsl-record-pipe.py`（WSL 里用 tmux 录制，§13.4）；手写输入 `cases/parser.js`、`cases/buffer.js`、`cases/core-hand.js`。鼠标限制 / 编码的直接比较并进 `core-cases.js`；`mouse-cases.js` 留给 4 期的控件侧事件转换。
 - `lib-dump.js` 的过期构建检查 `PORTED` 覆盖 2 期移植的全部源文件（含 `data/EscapeSequences.ts`、`headless/public/Terminal.ts`）；`regen-all.js` 缺任何一个生成脚本就报错，不再跳过。
 - Pascal 测试：`test.terminal.oracle.pas`（辅助单元）、`test.terminal.parser.pas`、`test.terminal.buffer.pas`、`test.terminal.core.pas`；探针 `tools/terminal-probe`（参数写错给出明确的错误）。
+
+**实现期修正（3 期）**：
+- 新脚本：`keyboard-cases.js`（+ 手写输入 `cases/keyboard.js`；美式布局表只有这一份真源）、`gen-terminal-glyphs.js`（→ `CustomGlyphs.inc`）、`view-cases.js`（上游 256 色表）、`light-palette.js`（浅底 16 色，`--check` 核 `light.tycss`）；`regen-all.js` 与 `lib-dump.js` 的 `PORTED` / `GENERATED` 跟着加。
+- 新夹具：`terminal-keyboard.json`、`terminal-paste.json`、`terminal-view-palette.json`。
+- 新测试单元：`test.terminal.keyboard.pas`（对上游逐位）、`test.terminal.render.pas`（渲染部件）、`test.terminal.view.pas`（属性、事件接线、调度、焦点、主题、网格；另导出探针类和夹具）、`test.terminal.view.paint.pas`（像素与性能）、`test.terminal.view.input.pas`（键盘、滚轮、滚动条、输入法）、`test.terminal.view.theme.pas`（17 个主题 × 明暗）、`test.terminal.example.pas`（示例的录制读取与流控回放；测试工程的搜索路径加了 `examples/terminal`）。
+- 工具：`tools/terminal-fontprobe`（E1 / E2，`--e1` / `--e2`），`tools/terminal-shots`（验收截图：离屏建控件、`RenderTo` 画进位图存 PNG，17 个主题 × 明暗的彩色 ls 与 16 色样例、几段录制、放大的色样，连同 `index.md` 写进 `docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`）。两个都直接引用 `source/`、不经 `.lpk`，不进包。
 
 Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + 'terminal-<name>.json'`，`fpjson` 解析（`D:/Projects/ty-advchart/tests/test.advchart.bargeometry.pas:62-66`、`:131-134`）。
 夹具里有 NUL 字节时解析前要处理（[[fpjson-drops-u0000]]）——所以字节一律 base64 存，不用 JSON 字符串。
@@ -1052,6 +1179,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **实现期修正（1 期）**：`addon-unicode-graphemes` 的 `UnicodeProperties.ts`（字形簇规则 `shouldJoin` / `_shouldJoin` 和 15 表数据）由外部项目 PerBothner/unicode-properties 生成（addon `README.md:7`）。该项目许可已核实为 **MIT**（仓库 `LICENSE` 首行 `Copyright 2018`，正文与 xterm.js 的 MIT 逐字相同、只是折行不同；GitHub 标 `MIT`），兼容，规则照移植、不必按 UAX #29 自写。单元头、`.inc` 头、`THIRD-PARTY-NOTICES.md` 的 xterm.js 一节都写了出处；notices 把它的版权行和 xterm.js 的几行并列、共用同一段 MIT 正文，发版守卫 `TheThirdPartyNoticeCoversTheUnicodeWidthPort` 查这一行。§4.2 理由 2 说的「没有许可头」仍然成立，只是文件本身没写，来源项目有许可。
 - **测试夹具**：`escape_sequence_files` 的输入来自 xterm.js 仓库（MIT），其中部分期望文本注明取自另一个项目（`NOTES` 的「text used from … vt100-parser」一行）；我们只取 `.in` 输入、期望值由上游生成，但输入字节进了夹具，在 notices 里加「测试夹具」一小节（§17 实现问题 9）。
 - **实现期修正（2 期）**：`MarkLodato/vt100-parser` 许可已核实为 MIT（`Copyright (c) 2010 Mark Lodato`），它的 `test/` 与 xterm.js 的 76 个 `.in` 有 48 个同名，notices 的「Test fixtures」一小节写明部分输入最初出自那里并附其版权行。xterm.js 一节的版权行照上游 `LICENSE` 补了「`Copyright (c) 2014-2026, The xterm.js authors`」一行；Fabrice Bellard（jslinux）的版权只在 Core 单元头说明来历（上游 `LICENSE` 不列它）。notices 标题逐个列出移植的文件（含 `Charsets.inc` 和 Core 的三个 include），发版守卫逐个查。
+- **实现期修正（3 期）**：notices 的 xterm.js 一节标题加了三个文件——`tyControls.Terminal.Keyboard.pas`（`Keyboard.ts`、`Clipboard.ts` 的粘贴两函数、第三层 Shift 判定）、`tyControls.Terminal.Render.pas`（颜色解析、256 色表、自绘字形的光栅化逻辑）、`tyControls.Terminal.CustomGlyphs.inc`（自绘字形数据，出自 `addon-webgl`，另列 addon 的版权行 2018 / 2021）。控件单元 `tyControls.Terminal.pas` 是自己写的，只照上游的逻辑、单元头注明出处行号。
 
 ---
 
@@ -1081,6 +1209,15 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 2–4 期不重新折行：改列数时走上游「老 ConPTY」那条路径（§6.2），5 期接上。
 - OSC 8 链接表最多 10000 条、16MB，再多丢最老的；链接号 Int64（§6.2）。
 
+**实现期修正（3 期）**，3 期新增的偏离：
+- Shift+Home / Shift+End 是本地的「到顶 / 到底」（上游照常发给程序）：PSReadLine、nano 里用它们选到行首 / 行尾的，在这个终端里做不到；真机验收时定去留（§9.4）。
+- 14t / 16t 的窗口、格子尺寸应答报**设备像素**（上游 CSS 像素，同 1016）。
+- 比格子宽的字形横向压缩进格子（上游 `rescaleOverlappingGlyphs` 默认关）。
+- 输入法组字时不滚到底：输入法处理中的键在 `KeyDown` 里直接放过；上游这时若 `scrollOnUserInput` 就先滚到底（`CoreBrowserTerminal.ts:857-861`）。
+- Kitty 键盘协议、win32-input-mode 控件不编码，所以两个扩展一律屏蔽：程序查询时不报支持，宿主改了 `Core.VtExtensions` 也在下一次解析前关掉（上游选项打开就报）。
+- Shift+滚轮在 Windows / Linux 上不滚滚回、事件交还父控件（上游是横滚，终端没有横向可滚），效果相同。
+- `Core.DiscardPending`（丢掉未解析的块、不调回调）是新增的（§9.3）。
+
 **不做**（以后要再单独立项）：
 
 - 屏幕阅读器（§1.1 第 1 条：LCL 默认构建里没有任何 widgetset 桥接）。
@@ -1108,6 +1245,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **性能**（5 期）：`cat` 大文件、`yes`、全屏 htop 刷新时的 CPU 和帧率，四个 widgetset 各一次。
 - **皮肤**：17 个主题 × 明暗下 16 色、选区、光标、链接下划线看不看得清。
 
+**实现期修正（3 期）**：E1、E2 在 Win32 上已经跑过（结论与数字见 §10.3），Qt6 / GTK2 / Cocoa 仍待真机；3 期的真机验收项汇总在 3 期计划末尾（截图在 `docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`）。
+
 ---
 
 ## 17. 开工前要定的问题
@@ -1120,6 +1259,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 2. **6 / 11 版本下 `AmbiguousWide` 怎么办**。建议不起作用、文档写明，这样每种组合都有上游基准（§4.3）。
 3. **字体从哪来**。建议：主题键 `TyTerminal` 的 font-family / font-size（token 默认 `monospace` + 基础字号），实例覆盖按「字体覆盖通道」需求的规则就地实现（`ParentFont = False` 且字段非出厂值才生效），那个需求落地后并入公共 helper（§10.3）。
 4. **16 色默认值**。深底用 xterm.js 的 Tango（已核实，`xterm:src/browser/Types.ts:183-203`）。浅底那套建议：同色相、逐色调暗到对白底对比度 ≥ 4.5:1（0 黑、7 白、8 亮黑、15 亮白除外），3 期用脚本算出后写死进 light.tycss，出 17 主题截图给你拍板。
+   **实现期修正（3 期）**：按公式做了，字面「对白底 ≥ 4.5:1」达标（最差 3 号 4.52:1）；但各皮肤的浅底不是纯白，3 号色落到实际 `--surface` 上最差 xp 3.70:1、macos 3.82、breeze 3.96（其余 ≥ 4.04）。主控决定暂按（c）维持，5 期 `MinimumContrastRatio` 兜底；最终验收时看截图（`docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`，含 xp / macos / breeze 的 3 号色放大样例和 7 / 15 号色放大样例）请用户在（a）以最暗浅底重算、（b）终端底色改用更白的 token、（c）维持 三者中定；7 / 15 在浅底上几乎看不见，同一次定要不要调。
 5. **复制粘贴快捷键**。建议 Win / Linux：Ctrl+Shift+C / V 和 Ctrl+Insert / Shift+Insert；macOS：Cmd+C / V；Ctrl+C 永远发给程序。
 6. **Tab 和窗体快捷键**。终端默认吞掉 Tab 和所有有编码的键，焦点只能靠鼠标或宿主放行的键离开；`OnShortcutQuery` 让宿主逐键放行（§9.4）。要不要给一个默认放行的键（比如 Ctrl+Tab）？建议不给，交宿主。
 7. **1007**。建议只做属性 `AlternateScroll`、不认 DECSET 1007，保持和上游逐位一致（§9.5.4）。
@@ -1127,6 +1267,11 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 9. **Linux PRIMARY 和 `CopyOnSelect`**。建议 Linux 上选完总是写 PRIMARY、中键粘贴 PRIMARY；`CopyOnSelect`（写系统剪贴板）默认关。
 10. **列选择**。建议 4 期照上游做 Alt+拖动（macOS 上 Option 是覆盖键时不做）。
 11. **回放格式**。建议 asciicast v2，示例和基准脚本共用同一批录制。
+
+**实现期修正（3 期）**，3 期开工前问题一的三条结论（按建议执行、已告知用户，最终验收时可改）：
+1. 应用小键盘模式（DECKPAM）不影响小键盘，照上游（§1.1 第 9 条）。
+2. 滚动条的宽度一直留着，列数不随主屏 / 备用屏变（§9.7）。
+3. 浅底 16 色里 7 / 15 照已定的不调，截图里放大一张给用户定（第 4 条的修正，连同 3 号色在各皮肤浅底上的取舍）。
 
 ### 17.2 实现层面的（计划里定，不必问）
 
@@ -1169,6 +1314,11 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - `examples/terminal` 回放模式 + 键码面板；`docs/controls/terminal.md`；README 控件数。
 - i18n：右键菜单的「清屏」、示例菜单项。
 - **做完能看到**：示例里播放 vim / htop / 彩色 `ls` 的录制，画面和真终端一致，换 17 个皮肤和明暗 16 色都看得清；按键在键码面板里显示正确的字节；滚回和滚动条可用。
+
+**实现期修正（3 期）**，3 / 4 期边界：
+- 挪进 3 期：输入法（提交通路、候选窗定位、macOS 组字串）；粘贴编码（含括号粘贴，纯函数随键盘单元对上游比；4 期只剩真机验收）。
+- 挪到 4 期：右键菜单（`ITyTextEditActions`）连同「清屏」和它的 resourcestring、i18n——和选区一起做；复制快捷键 3 期照吞、`CopyToClipboard` 空操作。
+- 4 期接上：选区（字符 / 词 / 行 / 列、自动滚动、锚点跟随）、链接、`WriteClipboardText`（本期只有读剪贴板在用）、主题键 `TyTerminalSelection`、`TyTerminalLink` 与对应 token（本期已写进基础层、测试断言解析得出，但还没有东西用它们）、鼠标全套经 `Core.TriggerMouseEvent`、PTY 示例。
 
 ### 4 期：真 shell、鼠标、选区、输入法、链接、括号粘贴
 
