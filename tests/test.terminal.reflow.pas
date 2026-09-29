@@ -593,6 +593,10 @@ begin
     { a generous bound (the plan's question two #14): a quadratic reflow takes seconds }
     AssertTrue(Format('200 -> 120 took %.1f ms', [narrow]), narrow < 1000);
     AssertTrue(Format('120 -> 200 took %.1f ms', [wide]), wide < 1000);
+    { and relative to the same run: widening moves fewer lines than narrowing makes (about
+      half its time); removing the emptied rows one splice at a time instead of one new
+      layout (quadratic) made it five times the narrowing }
+    AssertTrue(Format('120 -> 200 (%.1f ms) within twice 200 -> 120 (%.1f ms)', [wide, narrow]), wide < 2 * narrow + 20);
   finally
     core.Free;
   end;
