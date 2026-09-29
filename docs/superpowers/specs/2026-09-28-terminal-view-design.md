@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；三期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；四期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -51,6 +51,12 @@
 9. **上游按键不看应用小键盘模式**（DECKPAM / `CSI ? 66 h`）：`evaluateKeyboardEvent`（`Keyboard.ts:38-380`）只收应用光标模式，`applicationKeypad` 只在 InputHandler 里记下、DECRQM 照报，浏览器层没有按键读它。小键盘数字和运算符一律按 `ev.key` 发字符。我们照上游（开工前问题一第 1 条的结论）。
 10. **第三层 Shift 有三项**（`CoreBrowserTerminal.ts:937-948`）：macOS 上 Option 且不当 Meta；Windows 上 Ctrl+Alt；Windows 上 `getModifierState('AltGraph')`（LCL 的 `ssAltGr`）。按下事件里另要 `keyCode` 为 0 或 > 47（方向键、退格不算），字符事件里不看 keyCode——所以判定分按下 / 字符两种（§8.4 的 `AKeyPress`）。
 
+**实现期修正（4 期）**：
+11. **上游选区记坐标，不记标记**：`selectionStart` / `selectionEnd` 是 `[列边界, 绝对行]`，输出把行挤出头部时只靠 `onTrim` 减行号（`SelectionModel.ts:123-144`），插删行故意不跟（`SelectionService.ts:780-783`）。§9.5.5 照此改。
+12. **上游复制本来就用平台换行**：`SelectionService.ts:259` 是 `isWindows ? '\r\n' : '\n'`，和 FPC 的 `LineEnding` 一样，不是偏离（§9.6.1、§15 照此改）。
+13. **上游的链接比原先写的多一层过滤**：网址正则的每个匹配还要过 `isUrl`——`new URL` 解得出、且原文以规范化后的「协议//用户@主机:端口」开头（`WebLinkProvider.ts:44-55`）；OSC 8 在没有 `allowNonHttpProtocols` 时，非 http(s) 的链接在提供者里就不返回（`OscLinkProvider.ts:64-75`：不下划线、不能点），不是激活时才拒绝。§9.8 照此改。
+14. **上游悬停不要修饰键**：指针移到链接上就下划线、变手形，单击（按下和抬起在同一条链接上）就激活（`Linkifier.ts:217-233`、`:246-310`）。我们要按着 Ctrl（macOS Cmd），是偏离，进 §15。
+
 ---
 
 ## 2. 组成
@@ -84,6 +90,11 @@
 - 新增生成物 `tyControls.Terminal.CustomGlyphs.inc`（`gen-terminal-glyphs.js` 从上游 `CustomGlyphDefinitions.ts` dump，U+2500–259F），由 `Terminal.Render` include，不进 `.lpk`。
 - 依赖方向：`Terminal.Keyboard` 只有 `SysUtils` / `Classes` / `LCLType`；`Terminal.Render` 不引控件；控件单元 `tyControls.Terminal` 引全部。三个新单元都进运行时包。
 - `ITyTextEditActions`、选区、链接都在 4 期，控件本期只实现两个接口（§9）。
+
+**实现期修正（4 期）**：
+- 新增两个纯逻辑单元，都进运行时包、不引 LCL：`tyControls.Terminal.Selection`（`SelectionService.ts` / `SelectionModel.ts` 的非 DOM 部分——取词、取行、拖动、trim、选区文本；像素到选区点、拖动滚速；OSC 52 编解码）、`tyControls.Terminal.Links`（网址扫描与 `isUrl`、OSC 8 段、去重叠、命中判定）。依赖只有 `SysUtils`、`Classes`、`Types`、`Terminal.Buffer`、`Unicode.Width`，Links 另引 Selection（链接范围的类型）。
+- 控件单元长到约 3700 行，鼠标路由、选区胶水、链接、OSC 52、右键菜单五段原样搬进 include（`tyControls.Terminal.View.Mouse / Selection / Links / Osc52 / Menu.inc`），照 Core 的做法不进 `.lpk`。控件是自己写的，这五个也不进 notices 标题；发版守卫查它们随包发出。
+- PTY 单元仍只在示例里，四个：`uptysession`、`uptywin`、`uptyunix`、`ushell`（§12.2）。
 
 ### 2.2 不移植的上游部分
 
@@ -391,6 +402,8 @@ type
 - `TTyTerminalExtAttrs.UrlId` 是 Int64（链接号，§6.2）。
 - `LiveCount`（行、标记、链接条目各一个）、`SlotLine`、`SeedNextIdForTest` 是给测试的，注释标明。
 
+**实现期修正（4 期）**：`TTyTerminalBuffer` 加纯查询 `TrimmedLines: Int64`——环形表每次 `OnTrim` 把行数累加上去，选区按差值追（§9.5.5），不在缓冲上挂事件。Core 的 REP 快进跳过的那段滚动不发环形表事件，所以不计；快进要先真滚过两倍环形表长度才起作用，选区活不过那么久。
+
 ---
 
 ## 7. `tyControls.Terminal.Core`
@@ -552,6 +565,8 @@ type
 - 给测试的只读查询（`CharsetOfG`、`CharsetKey`、`WindowTitleStack`、`IconNameStack`、`KittyStacks`、`KittyFlags` 等、`IsCursorInitialized`、`GLevel`、`CurrentAttr`、`EraseAttr`、`BufferService`）集中在一处，注释标明「FOR THE TESTS」。
 - 事件全部同步发，大多在解析中；事件里调 `Resize` / `Reset` / `WriteSync` 会被延后到这一块处理完，`ProcessPending` 直接返回 False（§3.1）。接口注释写明。
 
+**实现期修正（4 期）**：Core 加 `OnUserInput: TNotifyEvent`（上游 `CoreService.onUserInput`，`CoreService.ts:86-89`）：`TriggerDataEvent` 在 `AWasUserInput` 时发，顺序照上游——先滚到底，再 `OnUserInput`，再 `OnData`；`ReadOnly` 时整个早退、不发。控件接管它（清选区），宿主别改写。
+
 ---
 
 ## 8. `tyControls.Terminal.Keyboard`
@@ -611,6 +626,8 @@ function TyTerminalPrepareTextForPaste(const AText: string; ABracketed: Boolean)
 
 **实现期修正（3 期）**：~~`class(TTyCustomControl, ITyTextEditActions, ITyImeEditable, ITyScrollBarFrameHost)`~~ 本期只实现 `ITyImeEditable`、`ITyScrollBarFrameHost` 两个接口；`ITyTextEditActions`（右键菜单）和选区一起在 4 期加。构造里另设 `DoubleBuffered := False`（整面由表面位图贴，§10.1）。
 
+**实现期修正（4 期）**：~~`ITyTextEditActions`（右键菜单）和选区一起在 4 期加~~ 4 期也不实现 `ITyTextEditActions`：那个接口是给编辑框的六项菜单（撤销、重做、剪切……）设计的，`TTyTextEditMenu` 没有加项的口子；终端自建四项菜单（§9.6.4）。~~`csTripleClicks`~~ 多击不靠它（§9.5.5）。构造里设 `CaptureMouseButtons := [mbLeft, mbMiddle, mbRight]`（§9.5.2）。
+
 ### 9.1 published 属性
 
 default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮点属性没法写 `default`，用 `stored` 函数。
@@ -652,6 +669,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - 运行时只读本期只有 `Core`、`Cols`、`Rows`、`Title`；`SelectionText`、`HasSelection` 在 4 期。
 - published 默认值 = 构造值由本控件自己的 RTTI 测试逐个守（全局守卫只查 `TabStop`）。
 
+**实现期修正（4 期）**：4 期 published 的是 `SelectionOverrideKey`、`Osc52`、`WordSeparators`（`stored` 函数，构造值不写进 `.lfm`）、`CopyOnSelect`、`DetectUrls`，外加 `AllowNonHttpLinks: Boolean = False`（非 http(s) 的 OSC 8 算不算链接，§9.8）。运行时只读的 `SelectionText`、`HasSelection` 也在本期。
+
 ### 9.2 事件
 
 | 事件 | 签名 | 何时 |
@@ -668,6 +687,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 
 **实现期修正（3 期）**：~~`OnOsc` 带 `var AHandled`~~ `OnOsc(Sender, AIdent, AData)`，和 Core 同签名（§7.4：Core 对未处理的 OSC 没有默认动作）。本期有 `OnData`、`OnGridResize`、`OnTitleChange`、`OnBell`、`OnOsc`、`OnShortcutQuery` 六个；`OnLinkActivate`、`OnOsc52`、`OnSelectionChange` 在 4 期。
 
+**实现期修正（4 期）**：这三个本期加上（4 期任务里写的 `OnLinkClick` 以本节的 `OnLinkActivate` 为准）。`OnOsc52` 在解析中间同步发：宿主可以弹模态框，**不能在里面释放控件**；事件抛出的异常控件吞掉（§9.6.3）。
+
 ### 9.3 公开方法
 
 `Write`（两个重载，转 `Core.Write` 并负责排片）、`WriteSync`、`Paste(const AText)`（走粘贴编码）、`Input(const AText)`（当作键入）、`Clear`（清滚回）、`Reset`、`ScrollLines` / `ScrollPages` / `ScrollToTop` / `ScrollToBottom`、`SelectAll` / `ClearSelection` / `Select(ACol, AAbsRow, ALength)` / `SelectLines`、`CopyToClipboard` / `PasteFromClipboard`、`CellAt(X, Y): TPoint`、`CellRect(ACol, ARow): TRect`。
@@ -676,6 +697,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - 新增 `SizeForGrid(ACols, ARows): TSize`：给定网格要多大的客户区（内边距、条宽都算进去）；示例「按录制尺寸」和想固定 80 × 24 的宿主用它。
 - `CopyToClipboard` 本期是空操作（没有选区）；`SelectAll` / `ClearSelection` / `Select` / `SelectLines` 和选区一起在 4 期。
 - Core 加了 `DiscardPending`：丢掉还没解析的块、不调它们的回调（宿主自己要丢的，流控计数跟着重来；上游 `WriteBuffer` 没有）。回放示例换录制时用。
+
+**实现期修正（4 期）**：`SelectAll` / `ClearSelection` / `Select` / `SelectLines`、`CopyToClipboard`（有选区才写）本期接上。`Select(ACol, AAbsRow, ALength)` 在入口把参数钳进缓冲——列 0..`Cols`、行 0..最后一行、长度 0..到缓冲末尾（上游不查；长度太大时「起点 + 长度」会溢出）。
 
 ### 9.4 键盘
 
@@ -692,6 +715,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - `tkrSelectAll`（macOS Cmd+A）本期不算动作、不吞：选区在 4 期。
 - Shift+Home / Shift+End 保留「到顶 / 到底」，是和上游不同的本地动作（上游这两个键照常发给程序），进 §15，真机验收看 PSReadLine / nano 里的取舍。
 - 带 Ctrl / Alt / Meta 打出来的字符，除非是第三层 Shift，都不发（`CoreBrowserTerminal.ts:980-985`）；控制字符只可能是 `KeyDown` 处理过、widgetset 又送来的那一份，丢掉。
+
+**实现期修正（4 期）**：~~`tkrSelectAll` 本期不算动作、不吞~~ 接上了：macOS Cmd+A 全选、吞键，算一次选择结束（PRIMARY、`CopyOnSelect` 照 §9.6.2）。复制快捷键照吞，有选区才写剪贴板，没有选区什么都不写（不把剪贴板清空）。
 
 ### 9.5 鼠标
 
@@ -713,6 +738,12 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - 按键：左 / 中 / 右三键；第 4、5 键不报（上游 `but > WHEEL` 直接丢，`:162-164`）。
 - 修饰键：Shift / Alt / Ctrl 照事件码（`MouseStateService.ts:85-89`、`:92`）。
 
+**实现期修正（4 期）**：
+- ~~上报时覆盖键本身不算进修饰位——只有它是 Alt 时要剥掉~~ 按着覆盖键时按键、拖动、抬起一律本地处理、根本不上报，剥修饰位无处可用；滚轮照上游带着修饰位上报（上游只在 `mouseEventsRequireAlt` 时剥，滚轮也不剥，`MouseService.ts:175-179`）。
+- 路在按下那一刻定（上报 / 本地选择 / 链接 / 中键 PRIMARY / 无），拖动、抬起一直走它，直到所有键松开；中途松开覆盖键、Ctrl 不换路（`MouseService.ts:224-249`；选区服务的 mousemove 监听 `stopImmediatePropagation`）。上报路上别的键按下也照报。
+- ~~上报期间用 LCL 鼠标捕获~~ 捕获要显式开三键：LCL 默认只捕获左键（`CaptureMouseButtons = [mbLeft]`，`lcl:controls.pp:1794-1795`），中键、右键拖出控件收不到移动。
+- **抬起丢了**（期末审查后新定）：上游在 document 上等抬起，总能等到；LCL 里捕获会被拿走（Alt+Tab、模态框、别的控件 `SetCapture`），抬起也可能落在别的窗口上。控件覆盖 `CaptureChanged` 与 `DoExit`：这次按下要的键确实已经松开（`GetKeyState`）就照 `MouseUp` 收尾——停自动滚、选区松开（PRIMARY、`CopyOnSelect` 照常）、上报路替程序补发抬起（报在最后知道的位置）、路复位；链接不激活、中键不粘贴。键还按着就先不动，抬起也许还会落回来。LCL 的抬起消息自己先放捕获，`CaptureChanged` 先于 `MouseUp` 到（`lcl:include/control.inc:2824-2848`），那一次不算丢。同一个键又按下时它上次的抬起还没来过，也先收尾。各 widgetset 的 `GetKeyState` 对鼠标键答得对不对要真机（第 60 项）。
+
 #### 9.5.3 滚轮上报
 
 - 竖向：LCL `DoMouseWheel`，累计 `WheelDelta` 到 ±120 为一格，每格上报一次（上游按像素累计行数，`MouseService.ts:454-490`；我们按 LCL 的「格」换算，定稿时新加）。
@@ -730,6 +761,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - Shift+滚轮照上游：不上报、不发方向键（`MouseService.ts:459` 的 `_consumeWheelEvent` 对 shiftKey 答 0 行）；滚回在 Windows / Linux 上是横滚（`scrollableElement.ts:394`，终端没有横向可滚，事件交还父控件），macOS 上照常竖滚。
 - 上报的像素坐标钳在网格里（0 到 列数 × 格宽 − 1，行同理；上游钳到画布宽高 − 1，`MouseCoordsService.ts:38-39`），格子由 `CellAt` 钳。
 
+**实现期修正（4 期）**（§9.5.3）：~~控件覆盖 `DoMouseWheelLeft` / `DoMouseWheelRight`~~ 这两个拿不到 `WheelDelta`（`controls.pp:1538-1539`），照竖向按 ±120 累计要覆盖 `DoMouseWheelHorz` 本身，余数和竖向各记各的。程序不收就交还父控件（终端没有横向可滚）：没开上报；或者协议不收滚轮——X10 只报按下，开着上报也不收（`RestrictMouseEvent` 答否，期末审查后补的）；或者满格的那一下没报出去（`TriggerMouseEvent` 答否，比如指针在内边距里）。
+
 #### 9.5.5 本地选择
 
 - 单击拖动：按字符选；双击选词（`WordSeparators`，`SelectionService.ts:1034-1041`）；三击选整行，含折行的连续行（`getWrappedRangeForLine`，`:1047-1057`）。多击用 LCL 的 `ssDouble` / `ssTriple`（`csTripleClicks`，`lcl:controls.pp:306`）。
@@ -739,6 +772,15 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - 选区锚在缓冲行上（标记，§6.2），新输出把行顶上去时选区跟着走（上游 `_handleTrim`，`:386-391`）；行被挤出滚回就清掉选区。
 - 清选区的时机照上游：用户输入（上一节）、行数变化（`:157-162`）、程序打开鼠标上报（上游此时停用选择并清空，`:173-176`、`CoreBrowserTerminal.ts:621-624`；覆盖键仍可新选，`SelectionService.ts:471-478`）、切换主备屏。
 
+**实现期修正（4 期）**：
+- ~~选区锚在缓冲行上（标记，§6.2）~~ 照上游记坐标（§1.1 第 11 条）：列是 0..`Cols` 的**边界**、行是缓冲的绝对行。缓冲的 `TrimmedLines`（§6.3）在选区建立时记下读数，每次用之前（解析返回后、绘制前、每个鼠标入口）按差值整体上移，终点减成负的就清、起点减成负的改成 `[0, 0]`（`SelectionModel.ts:123-144`）。插删行不跟（上游故意的）。
+- ~~多击用 LCL 的 `ssDouble` / `ssTriple`（`csTripleClicks`）~~ 用库的 `TyMultiClickCount`（`ssDouble` 认第二击，时间窗 + 距离认第三击；没有 widgetset 标第三击），和 Edit / Memo 一致。
+- 选区点按**像素中心**算：`x = ⌊(2·px + 格宽) / (2·格宽)⌋` 钳到 0..`Cols`，点在一格的右半就从下一格的边界算（上游 `getCoords(…, isSelection = true)`，`Mouse.ts:40-49`，喂 `px + 0.5`）；上报用的格子仍是整除再钳。
+- 自动滚的 50 像素按 PPI 缩放（`MulDiv(50, PPI, 96)`）；滚速公式照上游，`Math.round` 写成 `Floor(x + 0.5)`。
+- 双击时指针下有链接（OSC 8，或 `DetectUrls` 开时识别出的网址）就选整条（上游 `_selectWordAtCursor`），不要求按 Ctrl。
+- 取词沿折行上下接：上游每接一行递归一层（`:952-978`），折了几万行的一个词会把栈用完；这里写成两个循环，结果相同（期末审查后改的）。
+- 清选区的时机：用户输入（Core 的 `OnUserInput`，§7.6）；行数变了（列数变不清）；换缓冲（含 RIS、`Reset`，它们都发 `OnBufferActivate`）；程序的鼠标上报协议**每次换成开着的一种**都清（上游每次协议变化都走 `disable()`，`MouseService.ts:380-393`——1000 换 1002 也清，关掉不清；期末审查前只在从无到有时清）；清滚回——最后这条是我们加的（上游 `clear()` 不清，`CoreBrowserTerminal.ts:1075-1089`），进 §15。
+
 ### 9.6 选区与剪贴板
 
 #### 9.6.1 复制
@@ -746,9 +788,13 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 `SelectionText`：逐行 `TranslateToString(True, …)`；折行的行之间不加换行，其他行之间加 `LineEnding`（定稿时新加：上游浏览器层用 `\n`，Windows 上贴进记事本要 CRLF）。
 剪贴板直接用 LCL `Clipbrd`（库里 `TTyEdit` / `TTyMemo` 也是，`Edit.pas:1841`、`:1846`），读写走两个 virtual 方法，测试可以替换（照 `Edit.pas:260-261`）。
 
+**实现期修正（4 期）**：~~（定稿时新加：上游浏览器层用 `\n`，Windows 上贴进记事本要 CRLF）~~ 上游本来就是平台换行（§1.1 第 12 条），不是偏离。另：NBSP 换成空格；列选区每行取 `[左, 右)`、不看折行，起终列相同是空串。选区文字分两遍拼——先算总长，再一次填好（期末审查后改的：原来逐行把字符串加长，一万行的选区是平方级）；测试守着一万行（一半是一个折了五千行的长行）1 秒内。
+
 #### 9.6.2 Linux PRIMARY
 
 X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘贴 PRIMARY（程序没接管鼠标时）。Wayland 下是否可用要真机（§16）。建议做（§17 问题 9）。
+
+**实现期修正（4 期）**：写入时机是「一次选择结束」：松开左键、双击、三击、Shift+单击扩展、全选之后，选区非空才算（xterm 的惯例；上游浏览器层拖动中每步重写 textarea，那是浏览器的机制）。~~选完写 `PrimarySelection`~~ 期末审查后改成**按需提供**：只登记「有、是文字」（`SetSupportedFormats` + `OnRequest`，SynEdit 的做法），别的程序来要时才取此刻的选区文字；PRIMARY 和 `CopyOnSelect` 都不要时根本不拼文字。控件释放时交出所有权。平台按平台判定（Unix 且非 macOS），不按 widgetset；Wayland 待真机。
 
 #### 9.6.3 OSC 52
 
@@ -757,9 +803,16 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - `to52Write`：写请求先发 `OnOsc52`（宿主可改文本、可拒绝），`AAllow` 默认 True；读请求丢弃。
 - `to52ReadWrite`：读请求也发 `OnOsc52`，`AAllow` 默认 **False**（读剪贴板是隐私问题，宿主要显式同意）。
 
+**实现期修正（4 期）**：
+- ~~base64 写~~ 解码照上游在 node 下实际走的路：`atob`（WHATWG 的宽容 base64：去掉 ASCII 空白、`=` 可省，长度模 4 余 1 或有非法字符就失败）+ `TextDecoder`（UTF-8，坏序列按最长前缀换 U+FFFD，开头的 BOM 去掉）；解不出来写空串（`ClipboardAddon.ts:54-66`、`:104-124`）。
+- 在解析中间同步问宿主：上游读剪贴板是 Promise、解析器停住等它，同步发才能让应答不乱序。应答走 `Core.Input(…, False)`，不算用户输入：不清选区、不滚到底。控件注册的处理器在 `to52Off` 时也吞掉，不进 `OnOsc`。
+- 异常隔离（期末审查后新定）：宿主的事件、读写剪贴板（别的程序占着时 LCL 会抛）抛出的异常在处理器里吞掉，这一条作罢——冒出 `Parse` 会丢掉这一块剩下的字节。宿主不能在事件里释放控件。
+
 #### 9.6.4 右键菜单
 
 实现 `ITyTextEditActions`（`source/tyControls.TextMenu.pas:25-45`），复用 `TTyTextEditMenu`（`:67`）：复制、粘贴、全选可用；剪切、撤销、重做灰掉（`TeIsReadOnly` 答 True，`TeCanUndo` / `TeCanRedo` 答 False）。另加「清屏」一项（定稿时新加；resourcestring）。设了 `PopupMenu` 就用它。
+
+**实现期修正（4 期）**：~~实现 `ITyTextEditActions`，复用 `TTyTextEditMenu`~~ 那个菜单固定六项、没有加项的口子。终端自建四项（复制、粘贴、分隔线、全选、清屏），用同一个主题化的 `TTyPopupMenu`；复制、粘贴、全选沿用库里已有的三个字串，只新增「清屏」。没有选区时复制灰；`ReadOnly` 或剪贴板里没有文字时粘贴灰——只问有没有文字（`TyClipboardHasText`），不把剪贴板整段读出来（期末审查后改的）。设了 `PopupMenu` 就由 LCL 弹宿主的。这次右键报给了程序就不弹；各 widgetset 的菜单消息先后不同，菜单先于按下到时按当前的协议和修饰键现算。菜单键弹在光标格左下角；Shift+F10 是有编码的键，照常先发给程序，之后弹不弹看 widgetset（真机第 61 项）。macOS 右键在选区外先选中指针下的词（上游 `rightClickSelectsWord: isMac`），宿主设了 `PopupMenu` 也一样（期末审查后改的）。
 
 ### 9.7 滚回与滚动条
 
@@ -777,6 +830,13 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - 悬停：按住 Ctrl（macOS Cmd）时，指针下的链接画下划线（`TyTerminalLink`），光标变手形。
 - 激活：Ctrl+单击（macOS Cmd+单击）发 `OnLinkActivate`；控件自己不打开任何东西。上游 OSC 8 默认处理还会弹确认框（`OscLinkProvider.ts:183`），并默认拒绝非 http(s) 协议（`:64`）——这些是宿主的事，示例里演示。
 - 程序接管鼠标时，Ctrl+单击仍然优先当链接（定稿时新加：不然全屏程序里的链接点不开）。
+
+**实现期修正（4 期）**：
+- ~~用 FPC `RegExpr` 改写~~ JS 的 `\s` 含 Unicode 空白（中文全角空格会截断网址）、正则没有 `u` 标志、按 UTF-16 单元走，`RegExpr` 两样都对不上：改成在 UTF-16 串上手写的扫描器，照正则的回溯走（`TyTermNextUrlMatch`）。每个匹配再过 `isUrl`（§1.1 第 13 条）：`TyTermParseUrlPrefix` 是 WHATWG URL 解析器里 http / https 用得到的那部分，另有一个带 `ANonAsciiHost` 的重载（主机含非 ASCII 时告诉调用方，§15）；`TyTermIsUrl` 对非 http(s) 一律答否。
+- ~~上游 OSC 8 默认拒绝非 http(s) 协议（`:64`）~~ 在提供者里就不返回（§1.1 第 13 条）。加 published `AllowNonHttpLinks`（默认 False，照上游）；打开后全交宿主，`OnLinkActivate` 带原样 URI。
+- 悬停与激活要按 Ctrl（macOS Cmd），是偏离（§1.1 第 14 条，§15）。按下和抬起在同一条链接上才发 `OnLinkActivate`（`Linkifier.ts:220-233`）。
+- 缓冲还不重新折行（5 期），一行可能比网格长：网址的下标回映射按 `ACols` 截断——上游重新折行后行本来就是这个长度；5 期接上折行，这个参数就不再起作用。
+- 同一行第一次悬停的结果和上游不同，进 §15。
 
 ### 9.9 输入法
 
@@ -970,6 +1030,11 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - `:disabled` 用 opacity：本批实现——禁用时色表（259 色）、光标下的字色、外框底色和边框色都按 `TyTerminal:disabled` 的 opacity 朝父控件底色预混，缓存键里有 `Enabled`；程序问颜色（OSC 10 / 11）答的仍是原色。注意皮肤若改写了 `TyTerminal` 规则，基础层的 `:disabled` 不再继承（皮肤层按键整条覆盖），要连 `:disabled` 一起写。
 - 浅底对比度：公式对**白底**达标（最差 3 号 4.52:1）；落到各皮肤实际的 `--surface` 上，3 号色最差 xp 3.70、macos 3.82、breeze 3.96、office 4.04、win10 4.07、showcase 4.12、material3 / ubuntu 4.33。主控决定暂按（c）维持现状，交 5 期 `MinimumContrastRatio` 兜底；最终验收时用截图请用户在（a）以最暗浅底重算、（b）终端底色改用更白的 token、（c）维持 三者中定（§17.1 第 4 条）。
 
+**实现期修正（4 期）**：
+- ~~`TyTerminalSelection` 的 `background` 叠在格子底色上~~ 期末审查后改成照上游：选区色带着它的透明度先在**主题底色**上混成不透明（上游 `selectionBackgroundOpaque` / `selectionInactiveBackgroundOpaque`，`ThemeService.ts:87-90`），再**替换**选中格的底色（`DomRendererRowFactory.ts:380-386`）——叠在格子自己的底色上时，反显格、亮底色格上的选区几乎看不见。宽字符按它的第一列算，整字选中或整字不选（`:112`、`:160`；列选区起点落在宽字符后半时那个字不选）。禁用时混好的不透明色再按 `:disabled` 的 opacity 预混。
+- 选区前景「写了才用」按 `tpTextColor in Present` 判断；基础层和 17 个主题都没给 `TyTerminalSelection` 写 `color`，选中的字保持原色。
+- ~~`--terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18)`~~ 改成 `0.3`（上游默认选区的透明度）：0.18 在浅底上只比底色深一点，失焦的选区几乎看不出来。守卫 `TestTheSelectionStandsOutOnEveryTheme`：17 个主题 × 明暗，混好的选区色对底色的 WCAG 对比度——失焦 ≥ 1.70（改后实测最差 1.80，macos 浅色；0.18 时最差约 1.5，守卫会红）、聚焦 ≥ 1.25（实测最差 1.27，office 深色：强调色和深底亮度相近，靠色相区分，亮度比看不出来；聚焦色本期不动，这条只防皮肤再改坏）。选区是叠在字后面的色块，不照 WCAG 非文字的 3:1——那会要一个把字盖住的选区。
+
 ---
 
 ## 12. 示例 `examples/terminal`
@@ -988,6 +1053,12 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - 回放带流控：一次只让一块在终端队列里，写回调到了再写下一块，「一次喂完」按 64 KB 一块喂，不会撑爆队列；写入失败就停播放、只提示一次。换录制时先 `Core.DiscardPending` 丢掉旧录制还没解析的数据，不先同步解析完。读录制先解析到局部、成功才替换，失败保留原来的；头部宽高钳到 2–500 × 1–300；照 `idle_time_limit` 缩短长停顿。
 - 「按录制尺寸」经 `SizeForGrid` 算出客户区，窗口按差值放大缩小（原样再设同一矩形是空操作）。
 
+**实现期修正（4 期）**，示例实际的样子：
+- 工具条最前面加模式下拉（`CmbMode`：回放 / Shell）。切到 Shell 多出一排（`Tools3`）：命令下拉、启动 / 重启、「记录 PTY 输出」（把 PTY 发来的前 4 KB 以十六进制列进键码面板，看 ConPTY 启动时要了什么）。另一排（`Tools4`）两种模式共用：`CopyOnSelect`、`DetectUrls`、OSC 52 策略。
+- 命令列表：Windows 上 `%COMSPEC%`（默认：一定在、起得最快）、`powershell.exe`，PATH 里找得到才列 `pwsh.exe`、`wsl.exe`；Linux / macOS 上 `$SHELL -l`（没有就 `/bin/sh -l`）。可以手改。
+- 程序退出：它写的全部显示完，再打一行暗色的「进程已退出，退出码 n」；终端回到只读，按键不再入队（期末审查后补的）。Windows 的退出码是 DWORD，按 `Int64` 存，4294967295 不和「不知道」（−1）混。
+- Ctrl+单击链接：示例先问再开，只开 http / https；OSC 52 读剪贴板要用户点头。
+
 ### 12.2 PTY 单元（只在示例里）
 
 | 单元 | 平台 | 要点 |
@@ -998,14 +1069,34 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 `OnGridResize` → 改 PTY 尺寸；`OnData` → 写 PTY；进程退出 → 在终端里打一行提示。
 
+**实现期修正（4 期）**：
+
+| 单元 | 要点 |
+|---|---|
+| `uptysession.pas` | ~~`uptythread.pas`~~ 会话：读线程、写线程、加锁队列、背压、一批一次唤醒、收尾线程。只引 `Classes`、`SysUtils`、`SyncObjs`，WSL 的控制台测试直接用 |
+| `uptywin.pas` | ConPTY + 退出等待线程；`STARTF_USESTDHANDLES` 带空句柄（不带时，宿主被重定向的标准句柄会传给子进程，子进程写到那里、不进伪控制台）；`COORD` 按 `DWORD` 打包传；构建号用 `RtlGetVersion` |
+| `uptyunix.pas` | ~~`forkpty`~~ `posix_openpt` / `grantpt` / `unlockpt` / `ptsname`（libc 里都有，自己声明；不链 libutil——Linux 上要装开发包才链得上）|
+| `ushell.pas` | 把会话接到 `TTyTerminalView`：`OnData` → 写、`OnGridResize` → 改尺寸、输出按 `Write` 回调记账、退出一行、设 `Core.WindowsPty` |
+
+- ~~写 PTY 在主线程~~ 在写线程上写：大段粘贴不卡界面。
+- 命令一律 `/bin/sh -c "<命令行>"`，前面不加 `exec`（列表、管道、`exit 7` 这类内建命令都要 shell 来解析）；环境变量用示例自己的，`TERM=xterm-256color`、`COLORTERM=truecolor`，去掉 `LINES` / `COLUMNS`（尺寸从 PTY 来）。
+- `fork` 之后子进程只做异步信号安全的系统调用。期末审查后补了三件：信号屏蔽字清空；1–31 号信号恢复 `SIG_DFL`（被忽略的信号会跨 `execve` 传下去，宿主忽略 SIGPIPE 的话 `yes | head -1` 里的 `yes` 就死不掉）；3 到软上限（最多 65536）的描述符全关。
+- 等读写用 `poll`；macOS 的 `poll()` 不支持字符设备，对主端可能答 `POLLNVAL`，第一次见到就改用 `select`（WSL 里强制走过一遍 select 路径；macOS 待真机，第 59 项）。
+- **关闭不在主线程上等**（期末审查后改的）：19044 上 `ClosePseudoConsole` 会在调用它的线程上阻塞——24H2 之前它要等输出读完、程序退出，程序在 `CTRL_CLOSE_EVENT` 处理里可以耗 5 秒——原来有一条路在主线程上调它。照 node-pty 的做法，`ClosePseudoConsole` 只由退出等待线程调，它等「程序退出」或「关闭事件」两者之一。宿主关闭（`Close` / `Free`）只做不阻塞的几件事：读线程改为丢弃、写线程停、取消卡住的写、不再唤醒宿主、置关闭事件，然后立即返回；剩下的交给会话自己的收尾线程——等伪控制台关掉、程序退出（上限 3 秒），超时按**句柄** `TerminateProcess`（这也让卡住的 `ClosePseudoConsole` 返回，再等 2 秒），再中断两个线程直到都退出（上限 3 秒），最后关句柄、释放。读线程关闭期间一直在读（丢弃）：伪控制台要等输出读完才关。Unix 同理：宿主关闭只发 SIGHUP，收尾线程等子进程（上限 3 秒）、不走就 SIGKILL。停不下来的（线程卡死，或杀了进程 `ClosePseudoConsole` 也不返回）连同它用的东西一起留着——是泄漏，不是挂死，也不是释放后再用。会话对象本身只是句柄，释放它就是关闭、立即返回。程序退出时对还在收尾的会话有上限地等一次（`PtyWaitForFinishers`，约 9 秒封顶）。
+- 读线程抛异常也算结束：照样唤醒宿主、打退出行（退出码不知道）。写线程退出（管道断了）之后 `Write` 不再往队列里加。
+
 ### 12.3 流量控制（5 期）
 
 读线程在待写字节超过高水位（建议 1MB）时停读，等 `Write` 回调把积压降到低水位（建议 256KB）以下再读。这是上游文档推荐的做法（`WriteBuffer.ts:12-19` 的注释要求宿主做流控）。
+
+**实现期修正（4 期）**：~~5 期~~ 流控提前到本期（4 期任务要求），落在示例的会话里：读线程在「读了、终端还没解析完」的字节超过高水位 1 MB 时停读，`Write` 回调把它降到 256 KB 以下再读；一次读 64 KB。关闭时读线程改为丢弃、不再等背压。5 期仍做控件侧的 `Write` 回调顺序测试和性能。
 
 ### 12.4 ConPTY 的两件事
 
 - **版本号**：示例用 `RtlGetVersion` 取 Windows 构建号，设 `Core.WindowsPty := (twpConPty, 构建号)`。低于 21376 时核心关折行、开折行启发（§6.2）。
 - **win32-input-mode**：ConPTY 启动时会不会发 `CSI ? 9001 h`、发了之后要求终端怎么报键，出处是上游注释里链接的微软规格（`InputHandler.ts:2043`），本机没有源码可核；控件默认不开这个扩展（§7.2），键盘按普通 VT 发。列入后期（§15），真机上先观察 ConPTY 实际发了什么（§16）。
+
+**实现期修正（4 期）**：ConPTY 下的鼠标控件不用另做：控制台程序打开鼠标输入时，ConPTY 应该向终端要标准的 1000 / 1002 / 1003 / 1006，再把终端报上来的 SGR 序列转成控制台的鼠标事件，终端这边就是本期的标准上报。这段出自对 ConPTY 行为的了解，本机没有源码可核，列为真机项（示例的「记录 PTY 输出」看它实际发了什么）。win32-input-mode 本期不做（§15）。
 
 ---
 
@@ -1054,6 +1145,13 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - 新夹具：`terminal-keyboard.json`、`terminal-paste.json`、`terminal-view-palette.json`。
 - 新测试单元：`test.terminal.keyboard.pas`（对上游逐位）、`test.terminal.render.pas`（渲染部件）、`test.terminal.view.pas`（属性、事件接线、调度、焦点、主题、网格；另导出探针类和夹具）、`test.terminal.view.paint.pas`（像素与性能）、`test.terminal.view.input.pas`（键盘、滚轮、滚动条、输入法）、`test.terminal.view.theme.pas`（17 个主题 × 明暗）、`test.terminal.example.pas`（示例的录制读取与流控回放；测试工程的搜索路径加了 `examples/terminal`）。
 - 工具：`tools/terminal-fontprobe`（E1 / E2，`--e1` / `--e2`），`tools/terminal-shots`（验收截图：离屏建控件、`RenderTo` 画进位图存 PNG，17 个主题 × 明暗的彩色 ls 与 16 色样例、几段录制、放大的色样，连同 `index.md` 写进 `docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`）。两个都直接引用 `source/`、不经 `.lpk`，不进包。
+
+**实现期修正（4 期）**：
+- 新脚本：`selection-cases.js`（+ `cases/selection.js`）、`url-cases.js`（网址、`isUrl`、OSC 8、去重叠，+ `cases/links.js`）、`clipboard-cases.js`（OSC 52）、`mouse-cases.js`（`_sendEvent` 的事件映射、`getCoords` 两种、拖动滚速）；`conpty-cast.py`（ConPTY 录制转 asciicast，§13.4）。`regen-all.js` 与 `lib-dump.js` 的 `PORTED` / `GENERATED` 跟着加。
+- 新夹具：`terminal-selection.json`、`terminal-links.json`、`terminal-osc52.json`、`terminal-mouse-events.json`；`terminal-core-recording.json` 多了两份 ConPTY 录制。
+- 新测试单元：`test.terminal.selection.pas`、`test.terminal.links.pas`（对上游）、`test.terminal.view.mouse.pas`、`test.terminal.view.links.pas`、`test.terminal.pty.pas`（会话、背压、关闭与收尾、ConPTY；「不肯跟着控制台走的程序」由测试程序自己带 `--ty-pty-helper` 起来当）。
+- 工具：`tools/terminal-ptytest`（WSL 里用 `fpc` 直接编的控制台程序，跑 Unix 后端，12 例）、`tools/terminal-conpty-record`（经示例的会话录 ConPTY）、`tools/terminal-shots --phase4`（选区、列选区、链接悬停的验收截图，存 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`）。
+- 像素测试：~~整体关掉光栅预算（`RasterBudgetMs := 0`）~~ 期末审查后改成冻结时钟——预算照常开着、每个字形都走那个判断，只是读到的时间不动，永远不超；要墙上时间的计时测试自己把时钟换回来。
 
 Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + 'terminal-<name>.json'`，`fpjson` 解析（`D:/Projects/ty-advchart/tests/test.advchart.bargeometry.pas:62-66`、`:131-134`）。
 夹具里有 NUL 字节时解析前要处理（[[fpjson-drops-u0000]]）——所以字节一律 base64 存，不用 JSON 字符串。
@@ -1139,6 +1237,10 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 录制：本机 WSL `Ubuntu` 里用 tmux 脚本化驱动 8 个程序（vim、less、htop、`git log --color`、`ls --color`、python REPL、tmux 分屏、`cat` 中英文表情文件），`env -i` 清空环境、不带用户名和主机名。本批把 tmux 的 `default-terminal` 设成 `xterm-256color`（原来是 tmux 默认的 `screen`，程序只发 8 色）后全部重录，vim 用 `habamax` 配色，录到了 `38;5` 序列。ConPTY 的录制 4 期补。
 - 超长：IL / DL / SU / SD 的 2^31 次上游跑不完，改由 Pascal 的耗时守卫证明（参数 2^31−1 与 1000 结果相同、很快返回）；夹具里用 1000 证明钳制等价。REP 用几倍环形表容量的次数（十几种形态：宽字符、字形簇、区旗、上下边距、光标在边距外、不折行、插入模式、用户上翻、备用屏、链接、属性、ConPTY 无滚回）由上游逐个打印出期望值，证明快进与逐个打印相同。
 
+**实现期修正（4 期）**：
+- 鼠标、网址两行本期完成（`mouse-cases.js`、`url-cases.js`）。
+- ConPTY 的录制本期补上：经示例的会话（`TConPtyBackend`）在本机（19044）录了 `cmd /c` 与 `powershell -NoProfile -Command` 各一段（`recordings/conpty-cmd.cast`、`conpty-powershell.cast`；命令行在同名 `.cmdline` 里，可以重录）。ConPTY 发的第一条 OSC 0 带程序的全路径，转换时只留文件名；转换脚本见到用户名、机器名、个人目录就拒绝。它们和 WSL 录的一样喂上游、逐步比，也拷进了示例。
+
 ### 13.5 夹具纪律（AdvChart 的教训照搬）
 
 出处：`D:/Projects/ty-advchart/docs/superpowers/specs/2026-09-01-advancechart-tier0.md:4785-4792`、[[advchart-upstream-oracle]]。
@@ -1180,6 +1282,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **测试夹具**：`escape_sequence_files` 的输入来自 xterm.js 仓库（MIT），其中部分期望文本注明取自另一个项目（`NOTES` 的「text used from … vt100-parser」一行）；我们只取 `.in` 输入、期望值由上游生成，但输入字节进了夹具，在 notices 里加「测试夹具」一小节（§17 实现问题 9）。
 - **实现期修正（2 期）**：`MarkLodato/vt100-parser` 许可已核实为 MIT（`Copyright (c) 2010 Mark Lodato`），它的 `test/` 与 xterm.js 的 76 个 `.in` 有 48 个同名，notices 的「Test fixtures」一小节写明部分输入最初出自那里并附其版权行。xterm.js 一节的版权行照上游 `LICENSE` 补了「`Copyright (c) 2014-2026, The xterm.js authors`」一行；Fabrice Bellard（jslinux）的版权只在 Core 单元头说明来历（上游 `LICENSE` 不列它）。notices 标题逐个列出移植的文件（含 `Charsets.inc` 和 Core 的三个 include），发版守卫逐个查。
 - **实现期修正（3 期）**：notices 的 xterm.js 一节标题加了三个文件——`tyControls.Terminal.Keyboard.pas`（`Keyboard.ts`、`Clipboard.ts` 的粘贴两函数、第三层 Shift 判定）、`tyControls.Terminal.Render.pas`（颜色解析、256 色表、自绘字形的光栅化逻辑）、`tyControls.Terminal.CustomGlyphs.inc`（自绘字形数据，出自 `addon-webgl`，另列 addon 的版权行 2018 / 2021）。控件单元 `tyControls.Terminal.pas` 是自己写的，只照上游的逻辑、单元头注明出处行号。
+- **实现期修正（4 期）**：notices 的 xterm.js 一节标题加两个单元——`tyControls.Terminal.Selection.pas`（`SelectionService.ts`、`SelectionModel.ts`，外加 `addon-clipboard` 的 OSC 52 规则）、`tyControls.Terminal.Links.pas`（`addon-web-links` 的 `WebLinkProvider.ts` / `WebLinksAddon.ts`，`OscLinkProvider.ts`、`Linkifier.ts`）；两个 addon 自己的版权行（addon-web-links 2017、addon-clipboard 2023）并进那一节，发版守卫逐个查标题。控件拆出来的五个 include 是自己写的，不进标题。i18n：终端菜单的「Clear」和图片集合对话框的「Clear」同一个 msgid，库和示例的 `.po` 里各带 `msgctxt`，各有各的译文。
 
 ---
 
@@ -1192,7 +1295,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - `AlternateScroll` 属性可关（上游无条件，§1.1 第 2 条）；仍不认 DECSET 1007。
 - XTVERSION 报库名（§7.2）。
 - 1016 报设备像素（§9.5.1）。
-- 复制时行尾用平台换行（§9.6.1）。
+- ~~复制时行尾用平台换行（§9.6.1）~~（4 期核实不是偏离，§1.1 第 12 条）。
 - `OnData` 合并了 `onData` / `onBinary`（§3.3）。
 - 解析处理器全同步（§2.2）。
 - 程序接管鼠标时 Ctrl+单击仍开链接、覆盖键+右键弹菜单（§9.5.2、§9.8）。
@@ -1217,6 +1320,17 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - Kitty 键盘协议、win32-input-mode 控件不编码，所以两个扩展一律屏蔽：程序查询时不报支持，宿主改了 `Core.VtExtensions` 也在下一次解析前关掉（上游选项打开就报）。
 - Shift+滚轮在 Windows / Linux 上不滚滚回、事件交还父控件（上游是横滚，终端没有横向可滚），效果相同。
 - `Core.DiscardPending`（丢掉未解析的块、不调回调）是新增的（§9.3）。
+
+**实现期修正（4 期）**，4 期新增的偏离：
+- 链接悬停、激活要按 Ctrl（macOS Cmd）；上游悬停就下划线、单击就激活（§1.1 第 14 条）。
+- 非 http(s) 的 OSC 8 链接默认不算（照上游）；`AllowNonHttpLinks` 这个属性是我们加的，打开后全交宿主。
+- 不做 IDNA：主机含非 ASCII 的网址不算链接（上游转 punycode 后前缀比不上，结果相同）；OSC 8 的协议检查对这种主机按「解得出」算（上游 UTS 46 会拒掉少数字符，我们不查）；`xn--` 标签不校验 punycode。
+- 同一行第一次悬停：上游在去掉重叠之前就挑链接（`Linkifier.ts:133-146`、`:175-215`），第一次悬停可能挑中一个和别处 OSC 8 链接重叠的网址，指针移开再回来就挑不中了；我们总在去掉重叠之后挑，结果不随悬停的先后变。
+- 清滚回（`OnScrollbackCleared`）也清选区：上游 `clear()` 不清（`CoreBrowserTerminal.ts:1075-1089`），选区会指着别的行。
+- 同一个鼠标协议重复 DECSET（比如连发两次 `?1000h`）上游也清选区（`activeProtocol` 的 setter 每次都发事件）；我们只在协议真变了时清（Core 只在模式真变时发 `OnModesChange`）。
+- 抬起丢了时照松开收尾、替程序补发抬起（§9.5.2）；上游挂在 document 上的监听总能等到抬起，没有这种情况。
+- 中键：Windows / macOS 上程序没接管鼠标时什么都不做（Linux X11 上粘贴 PRIMARY）。
+- 选区：期末审查前是「叠在格子底色上」，是偏离；已改回上游的「替换成不透明的选区色」（§11），不再是偏离。
 
 **不做**（以后要再单独立项）：
 
@@ -1247,6 +1361,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 
 **实现期修正（3 期）**：E1、E2 在 Win32 上已经跑过（结论与数字见 §10.3），Qt6 / GTK2 / Cocoa 仍待真机；3 期的真机验收项汇总在 3 期计划末尾（截图在 `docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`）。
 
+**实现期修正（4 期）**：4 期的真机验收项接着 3 期编号，汇总在 4 期计划末尾（第 32–55 项，期末审查后加了第 56–65 项：关闭 / 重启的冻结时长、Win11 24H2 无残留、退出与关闭同时发生、macOS 的 `POLLNVAL`、失去捕获、Shift+F10、子进程的信号与描述符、失焦选区看不看得见、X10 横向滚轮、ConPTY 录制在新版本上的差异）；截图在 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`。
+
 ---
 
 ## 17. 开工前要定的问题
@@ -1272,6 +1388,14 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 1. 应用小键盘模式（DECKPAM）不影响小键盘，照上游（§1.1 第 9 条）。
 2. 滚动条的宽度一直留着，列数不随主屏 / 备用屏变（§9.7）。
 3. 浅底 16 色里 7 / 15 照已定的不调，截图里放大一张给用户定（第 4 条的修正，连同 3 号色在各皮肤浅底上的取舍）。
+
+**实现期修正（4 期）**，4 期开工前问题一的六条结论（按建议执行、已告知用户，最终验收时可改）：
+1. 右键菜单终端自建四项（复制、粘贴、全选、清屏），不实现 `ITyTextEditActions`、不改 `TextMenu.pas`；设了 `PopupMenu` 用宿主的（§9.6.4）。
+2. 非 http(s) 的 OSC 8 默认不算链接，照上游；`AllowNonHttpLinks` 打开后全交宿主（§9.8）。
+3. macOS 右键在选区外先选中那个词，照上游，不加属性。
+4. Windows 默认 `%COMSPEC%`，另列 `powershell.exe`，找得到才列 `pwsh.exe`、`wsl.exe`；Linux / macOS 用 `$SHELL -l`（§12.1）。
+5. 程序没接管鼠标时，Windows / macOS 上中键什么都不做；Linux 粘贴 PRIMARY。
+6. 双击在链接上选整条链接，照上游，不要求按 Ctrl（§9.5.5）。
 
 ### 17.2 实现层面的（计划里定，不必问）
 
@@ -1326,6 +1450,11 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 鼠标全套（§9.5；`mouse-cases.js`）、选区（字符 / 词 / 行 / 列、自动滚动、锚点跟随）、PRIMARY、`CopyOnSelect`、右键菜单、OSC 52 三种策略。
 - 输入法（§9.9）、链接（OSC 8 + 网址识别、悬停、Ctrl+单击）、括号粘贴。
 - **做完能看到**：示例里跑 cmd / pwsh / bash / zsh；vim 和 htop 里鼠标可点可拖、Shift（macOS Option）拖动仍能本地选中复制；中文输入候选窗在光标处；Ctrl+单击链接弹出宿主的确认。真机验收表覆盖 §16 的 ConPTY、键盘、输入法、剪贴板、鼠标各项。
+
+**实现期修正（4 期）**，4 / 5 期边界：
+- 流控从 5 期挪进 4 期（示例会话的高低水位，§12.3）；5 期仍有控件侧的 `Write` 回调顺序测试和性能。
+- ConPTY 的录制在 4 期补上了（§13.4）。
+- 留给 5 期：重新折行（接上后网址回映射的 `ACols` 截断不再起作用，§9.8）；冷启动时光栅化新字形慢（根因在共享单元 `Painter.pas` 的 `TTyGdiTextRenderer`，要改须用户拍板）；`MinimumContrastRatio`。
 
 ### 5 期：重新折行、流量控制、性能、最低对比度
 
