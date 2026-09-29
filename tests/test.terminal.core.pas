@@ -88,6 +88,8 @@ type
     procedure TestHandlerExceptionInWriteSync;
     procedure TestCallbackExceptionInASlice;
     procedure TestExceptionInAFlushKeepsTheRest;
+    { phase 5: slicing inside a chunk }
+    procedure TestAResizeFromAnEventWaitsForTheWholeChunk;
   end;
 
   { The write queue has no upstream oracle (headless cannot observe slices): these
@@ -98,7 +100,14 @@ type
     procedure TestProcessDrainsAndReports;
     procedure TestAnOutstandingRequestIsNotRepeated;
     procedure TestSliceStopsBetweenChunksAtTheBudget;
-    procedure TestOneBigChunkIsNotSplit;
+    { phase 5: a chunk is sliced between its 128 KB pieces (TestOneBigChunkIsNotSplit
+      pinned the phase 2 answer: one chunk, whole) }
+    procedure TestABigChunkIsSlicedBetweenPieces;
+    procedure TestSlicedInsideAChunkEqualsWhole;
+    procedure TestResizeMidChunkParsesTheRestFirst;
+    procedure TestWriteSyncMidChunk;
+    procedure TestDiscardMidChunk;
+    procedure TestAHandlerRaisingMidChunk;
     procedure TestCallbacksRunInOrder;
     procedure TestCallbackMayWriteAgain;
     procedure TestFirstWriteAfterInputParsesAtOnce;
@@ -1756,6 +1765,9 @@ type
     Done: array of PtrInt;
     SeenOnDone: TStringList;           { line 0 as each callback saw it }
     WriteAgainTag: PtrInt;
+    Renders: Integer;
+    PendingAtDone, ParsedAtDone: Int64;
+    procedure OnRender(Sender: TObject; AFirst, ALast: Integer);
     constructor Create(ACols: Integer = 20; ARows: Integer = 6);
     destructor Destroy; override;
     function Clock: Double;
@@ -1773,6 +1785,12 @@ begin
   Core := TTyTerminalCore.Create(ACols, ARows);
   Core.Clock := @Clock;
   Core.OnProcessRequest := @OnRequest;
+  Core.OnRefreshRows := @OnRender;
+end;
+
+procedure TQueueRig.OnRender(Sender: TObject; AFirst, ALast: Integer);
+begin
+  Inc(Renders);
 end;
 
 destructor TQueueRig.Destroy;
@@ -1820,6 +1838,8 @@ begin
   SetLength(Done, Length(Done) + 1);
   Done[High(Done)] := ATag;
   SeenOnDone.Add(Line0);
+  PendingAtDone := Core.PendingBytes;
+  ParsedAtDone := Core.HeadChunkParsed;
   if ATag = WriteAgainTag then
     Core.Write('z');
 end;
@@ -1911,21 +1931,309 @@ begin
   end;
 end;
 
-procedure TTyTerminalWriteQueueTests.TestOneBigChunkIsNotSplit;
+{ 1 MB is eight 128 KB pieces. The clock moves 5 ms a read: the slice reads it at the
+  start and after each piece -- 5, 10, 15 ms in, so three pieces, then it stops. }
+procedure TTyTerminalWriteQueueTests.TestABigChunkIsSlicedBetweenPieces;
 var
   r: TQueueRig;
   s: RawByteString;
+  slices: Integer;
 begin
   r := TQueueRig.Create;
   try
     s := StringOfChar('x', 1024 * 1024);
-    r.Core.Write(s);
-    r.Step := 100;
-    AssertFalse('one chunk, whole', r.Core.ProcessPending);
+    r.Core.Write(s, @r.OnDone, 9);
+    r.Step := 5;
+    AssertTrue('the chunk is not done', r.Core.ProcessPending);
+    AssertEquals('three pieces parsed', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    AssertEquals('no callback yet', 0, Length(r.Done));
+    AssertEquals('the pending bytes drop piece by piece', Int64(1024 * 1024 - 3 * TyTermMaxParseBuffer),
+      r.Core.PendingBytes);
+    AssertEquals('one parse call (refresh) per piece', 3, r.Renders);
+    slices := 1;
+    while r.Core.ProcessPending do
+      Inc(slices);
+    Inc(slices);
+    AssertEquals('three slices: three, three and two pieces', 3, slices);
+    AssertEquals('the callback once', 1, Length(r.Done));
+    AssertEquals('its tag', 9, r.Done[0]);
+    AssertEquals('after the last piece: nothing pending', 0, r.PendingAtDone);
+    AssertEquals('after the last piece: the chunk left the queue', 0, r.ParsedAtDone);
+    AssertEquals('eight refreshes', 8, r.Renders);
     AssertEquals('pending', 0, r.Core.PendingBytes);
     AssertEquals(StringOfChar('x', 20), r.Line0);
   finally
     r.Free;
+  end;
+end;
+
+{ a multi-byte character across the first cut (the decoder carries it), then real
+  programs' output repeated past several pieces: parsed a piece per slice, the screen
+  is the one a single WriteSync of the same bytes gives }
+procedure TTyTerminalWriteQueueTests.TestSlicedInsideAChunkEqualsWhole;
+var
+  m: TTyTermMisses;
+  fx: TTyTermFixtures;
+  cases: TFPList;
+  c: TJSONObject;
+  steps: TJSONArray;
+  i, k, slices: Integer;
+  one, data: RawByteString;
+  r: TQueueRig;
+  ref: TTyTerminalCore;
+begin
+  m := TTyTermMisses.Create;
+  try
+    fx := TyTermLoadFixtures('core-recording', m);
+    cases := TyTermAllCases(fx);
+    try
+      AssertTrue('recordings', cases.Count >= 8);
+      for i := 0 to cases.Count - 1 do
+      begin
+        c := TJSONObject(cases[i]);
+        steps := c.Arrays['steps'];
+        one := '';
+        for k := 0 to steps.Count - 1 do
+          if steps.Objects[k].Find('write') <> nil then
+            one := one + TyTermBase64Bytes(steps.Objects[k].Strings['write']);
+        data := StringOfChar('.', TyTermMaxParseBuffer - 1) + #$E4#$B8#$AD;
+        while Length(data) < 3 * TyTermMaxParseBuffer + 1000 do
+          data := data + one;
+        r := TQueueRig.Create(c.Integers['cols'], c.Integers['rows']);
+        ref := TTyTerminalCore.Create(c.Integers['cols'], c.Integers['rows']);
+        try
+          r.Step := 20;
+          r.Core.Write(data, @r.OnDone, 1);
+          slices := 0;
+          while r.Core.ProcessPending do
+            Inc(slices);
+          AssertTrue(c.Strings['id'] + ': a slice per piece', slices >= 3);
+          AssertEquals(c.Strings['id'] + ': one callback', 1, Length(r.Done));
+          ref.WriteSync(data);
+          AssertSameScreen(c.Strings['id'] + ': sliced = whole', ref, r.Core);
+          AssertEquals(c.Strings['id'] + ': the title', ref.Title, r.Core.Title);
+        finally
+          r.Free;
+          ref.Free;
+        end;
+      end;
+    finally
+      cases.Free;
+      TyTermFreeFixtures(fx);
+    end;
+  finally
+    m.Free;
+  end;
+end;
+
+{ six bytes a line, so a piece ends at the start of a line }
+function LinesOfText(ABytes: Integer): RawByteString;
+var
+  n: Integer;
+begin
+  Result := '';
+  n := 0;
+  while Length(Result) < ABytes do
+  begin
+    Result := Result + 'l' + IntToStr(n mod 10) + 'ne'#13#10;
+    Inc(n);
+  end;
+  SetLength(Result, ABytes);
+end;
+
+{ half the chunk parsed, then a Resize: the rest at the old size first, the callback,
+  then the new size -- as a whole-chunk WriteSync and a Resize after it }
+procedure TTyTerminalWriteQueueTests.TestResizeMidChunkParsesTheRestFirst;
+var
+  r: TQueueRig;
+  ref: TTyTerminalCore;
+  s: RawByteString;
+begin
+  r := TQueueRig.Create(20, 6);
+  ref := TTyTerminalCore.Create(20, 6);
+  try
+    s := LinesOfText(1024 * 1024) + 'the last line, longer than twenty columns';
+    r.Core.Write(s, @r.OnDone, 1);
+    r.Step := 5;
+    AssertTrue(r.Core.ProcessPending);
+    AssertEquals('three pieces', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    r.Core.Resize(40, 10);
+    AssertEquals('the callback once', 1, Length(r.Done));
+    AssertEquals('the chunk done', 0, r.Core.HeadChunkParsed);
+    AssertEquals('resized', 40, r.Core.Cols);
+    ref.WriteSync(s);
+    ref.Resize(40, 10);
+    AssertSameScreen('as a whole chunk, then the resize', ref, r.Core);
+  finally
+    r.Free;
+    ref.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestWriteSyncMidChunk;
+var
+  r: TQueueRig;
+  ref: TTyTerminalCore;
+  s: RawByteString;
+begin
+  r := TQueueRig.Create(20, 6);
+  ref := TTyTerminalCore.Create(20, 6);
+  try
+    s := LinesOfText(1024 * 1024);
+    r.Core.Write(s, @r.OnDone, 1);
+    r.Step := 5;
+    AssertTrue(r.Core.ProcessPending);
+    AssertEquals('three pieces', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    r.Core.WriteSync('x');
+    AssertEquals('the callback once', 1, Length(r.Done));
+    AssertEquals('nothing pending', 0, r.Core.PendingBytes);
+    ref.WriteSync(s);
+    ref.WriteSync('x');
+    AssertSameScreen('the rest of the chunk, then x', ref, r.Core);
+  finally
+    r.Free;
+    ref.Free;
+  end;
+end;
+
+procedure TTyTerminalWriteQueueTests.TestDiscardMidChunk;
+var
+  r: TQueueRig;
+  x0: Integer;
+begin
+  r := TQueueRig.Create(20, 6);
+  try
+    r.Core.Write(LinesOfText(1024 * 1024), @r.OnDone, 1);
+    r.Step := 5;
+    AssertTrue(r.Core.ProcessPending);
+    AssertEquals('three pieces', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    r.Core.DiscardPending;
+    AssertEquals('no callback', 0, Length(r.Done));
+    AssertEquals('nothing pending', 0, r.Core.PendingBytes);
+    AssertEquals('no half chunk', 0, r.Core.HeadChunkParsed);
+    x0 := r.Core.Buffer.X;
+    r.Core.Write('abc');
+    AssertFalse('parsed', r.Core.ProcessPending);
+    AssertEquals('from its start, where the cursor was', 'abc',
+      r.Core.Buffer.GetLine(r.Core.Buffer.YBase + r.Core.Buffer.Y).TranslateToString(True, x0, x0 + 3));
+  finally
+    r.Free;
+  end;
+end;
+
+type
+  { a bell handler that raises the first time; callbacks counted; a Resize from the
+    title event }
+  TPieceSink = class
+  public
+    Core: TTyTerminalCore;
+    Tick, Step: Double;
+    Raised, Dones: Integer;
+    ColsAtDone: Integer;
+    ResizeOnTitle: Boolean;
+    function Clock: Double;
+    procedure OnBell(Sender: TObject);
+    procedure OnDone(Sender: TObject; ATag: PtrInt);
+    procedure OnTitle(Sender: TObject; const AText: string);
+  end;
+
+function TPieceSink.Clock: Double;
+begin
+  Result := Tick;
+  Tick := Tick + Step;
+end;
+
+procedure TPieceSink.OnBell(Sender: TObject);
+begin
+  if Raised = 0 then
+  begin
+    Inc(Raised);
+    raise Exception.Create('bell handler');
+  end;
+end;
+
+procedure TPieceSink.OnDone(Sender: TObject; ATag: PtrInt);
+begin
+  Inc(Dones);
+  ColsAtDone := Core.Cols;
+end;
+
+procedure TPieceSink.OnTitle(Sender: TObject; const AText: string);
+begin
+  if ResizeOnTitle then
+    Core.Resize(30, 8);
+end;
+
+{ the second piece raises: the exception comes out of the slice, the chunk's callback
+  comes once, the rest of the chunk counts as parsed; the next chunk goes on }
+procedure TTyTerminalWriteQueueTests.TestAHandlerRaisingMidChunk;
+var
+  s: TPieceSink;
+  data: RawByteString;
+  raised: Boolean;
+  all: string;
+  r: Integer;
+begin
+  s := TPieceSink.Create;
+  s.Core := TTyTerminalCore.Create(20, 6);
+  try
+    s.Core.OnBell := @s.OnBell;
+    s.Core.Clock := @s.Clock;
+    s.Step := 5;
+    data := LinesOfText(TyTermMaxParseBuffer + 600) + #7 + LinesOfText(TyTermMaxParseBuffer)
+      + 'NEVERSEEN' + LinesOfText(2 * TyTermMaxParseBuffer);
+    s.Core.Write(data, @s.OnDone, 1);
+    s.Core.Write('NEXT');
+    raised := False;
+    try
+      s.Core.ProcessPending;
+    except
+      on E: Exception do raised := E.Message = 'bell handler';
+    end;
+    AssertTrue('raised through the slice', raised);
+    AssertEquals('the callback once', 1, s.Dones);
+    AssertEquals('only the next chunk waits', 4, s.Core.PendingBytes);
+    AssertEquals('no half chunk', 0, s.Core.HeadChunkParsed);
+    AssertFalse('the next chunk', s.Core.ProcessPending);
+    all := '';
+    for r := 0 to s.Core.Buffer.Lines.Length - 1 do
+      all := all + s.Core.Buffer.TranslateBufferLineToString(r, True) + '|';
+    AssertTrue('NEXT parsed', Pos('NEXT', all) > 0);
+    AssertEquals('the rest of the raising chunk was not', 0, Pos('NEVERSEEN', all));
+    AssertEquals('each callback once', 1, s.Dones);
+  finally
+    s.Core.Free;
+    s.Free;
+  end;
+end;
+
+{ an event in the first piece asks for a Resize: it waits for the whole chunk (not
+  the end of the slice), and the chunk's callback still sees the old size }
+procedure TTyTerminalReentryTests.TestAResizeFromAnEventWaitsForTheWholeChunk;
+var
+  s: TPieceSink;
+  more: Boolean;
+begin
+  s := TPieceSink.Create;
+  s.Core := TTyTerminalCore.Create(20, 6);
+  try
+    s.Core.OnTitleChange := @s.OnTitle;
+    s.Core.Clock := @s.Clock;
+    s.ResizeOnTitle := True;
+    s.Step := 5;
+    s.Core.Write(#27']0;t'#7 + LinesOfText(4 * TyTermMaxParseBuffer), @s.OnDone, 1);
+    more := s.Core.ProcessPending;
+    AssertTrue('half the chunk', more);
+    AssertTrue('stopped inside it', s.Core.HeadChunkParsed > 0);
+    AssertEquals('not resized between pieces', 20, s.Core.Cols);
+    while s.Core.ProcessPending do ;
+    AssertEquals('the callback once', 1, s.Dones);
+    AssertEquals('the callback saw the old size', 20, s.ColsAtDone);
+    AssertEquals('resized after the chunk', 30, s.Core.Cols);
+    AssertEquals(8, s.Core.Rows);
+  finally
+    s.Core.Free;
+    s.Free;
   end;
 end;
 
@@ -2293,7 +2601,10 @@ begin
     s := '';                               { the queue holds the only reference }
     r.Core.Write('z');
     before := GetFPCHeapStatus.CurrHeapUsed;
-    r.SetScript([0, 20]);                  { one chunk, then the budget is spent }
+    { the whole chunk -- 64 pieces of 128 KB (phase 5 slices between them), the clock
+      read at the start and after each -- then the budget is spent }
+    r.SetScript([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20]);
     AssertTrue('z still waits', r.Core.ProcessPending);
     after := GetFPCHeapStatus.CurrHeapUsed;
     AssertTrue(Format('8 MB given back (%d -> %d)', [before, after]), Int64(before) - Int64(after) > 7 * 1024 * 1024);

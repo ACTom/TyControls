@@ -11,6 +11,13 @@
   reset under it (unit header); the closing events fire even when a handler raised,
   so the rows it changed are still reported. }
 procedure TTyTerminalCore.Parse(const AData: RawByteString);
+begin
+  ParseRange(AData, 1, Length(AData));
+end;
+
+{ The write queue hands a chunk over one piece at a time (unit header): each piece is
+  one call here, the decoder's half sequence carried to the next. }
+procedure TTyTerminalCore.ParseRange(const AData: RawByteString; AStart, ACount: Integer);
 var
   buf: TTyTerminalBuffer;
   cursorStartX, cursorStartY, total, i, chunk, len, viewportStart, viewportEnd: Integer;
@@ -20,7 +27,7 @@ begin
     buf := Buffer;
     cursorStartX := buf.X;
     cursorStartY := buf.Y;
-    total := Length(AData);
+    total := ACount;
     chunk := Min(total, TyTermMaxParseBuffer);
     if Length(FParseBuffer) < chunk then
       SetLength(FParseBuffer, chunk);
@@ -31,7 +38,7 @@ begin
       while i < total do
       begin
         chunk := Min(TyTermMaxParseBuffer, total - i);
-        len := FDecoder.Decode(AData[i + 1], chunk, FParseBuffer);
+        len := FDecoder.Decode(AData[AStart + i], chunk, FParseBuffer);
         FParser.Parse(FParseBuffer, len);
         Inc(i, chunk);
       end;

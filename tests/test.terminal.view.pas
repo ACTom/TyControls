@@ -185,7 +185,13 @@ type
     procedure ResizeFromTitle(Sender: TObject; const AText: string);
   private
     FSelChanges: Integer;
+    FTitlesAtDone: array of string;
+    FResizeAtTag: PtrInt;
+    FMarkRan: Boolean;
+    FPendingAtMark: Int64;
     procedure SelChanged(Sender: TObject);
+    procedure DoneWithTitle(Sender: TObject; ATag: PtrInt);
+    procedure MarkRan(Data: PtrInt);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -231,6 +237,10 @@ type
     procedure TestTheViewRewrapsLikeTheCore;
     procedure TestAReflowingResizeClearsTheSelection;
     procedure TestTheScrollBarFollowsReflow;
+    { 5 期:流量控制(真消息循环) }
+    procedure TestWriteCallbacksComeInOrderThroughTheView;
+    procedure TestAResizeInsideAViewCallback;
+    procedure TestAHugeWriteYieldsToTheMessageLoop;
   end;
 
 const
@@ -1803,6 +1813,100 @@ begin
   AssertEquals('80: three rows each again', 30 * 3 + 1, buf.Lines.Length);
   AssertEquals('80: the bar''s last position', buf.Lines.Length - F.View.Rows, F.View.Bar.Max);
   AssertEquals('80: the thumb', buf.YDisp, F.View.Bar.Position);
+end;
+
+{ ---- 5 期:流量控制 ---------------------------------------------------------------------- }
+
+procedure TTyTerminalViewTests.DoneWithTitle(Sender: TObject; ATag: PtrInt);
+var
+  sz: TSize;
+begin
+  SetLength(FDone, Length(FDone) + 1);
+  FDone[High(FDone)] := ATag;
+  SetLength(FTitlesAtDone, Length(FTitlesAtDone) + 1);
+  FTitlesAtDone[High(FTitlesAtDone)] := F.View.Title;
+  if ATag = FResizeAtTag then
+  begin
+    sz := F.View.SizeForGrid(40, 10);
+    F.View.SetBounds(F.View.Left, F.View.Top, sz.cx, sz.cy);
+  end;
+end;
+
+procedure TTyTerminalViewTests.MarkRan(Data: PtrInt);
+begin
+  FMarkRan := True;
+  FPendingAtMark := F.View.Core.PendingBytes;
+end;
+
+{ Chunk k: filler of a size between 1 byte and 300 KB, then an OSC 0 naming it. Its
+  callback must come after all of it and before any of the next. }
+function TitledChunk(K: Integer): RawByteString;
+begin
+  Result := StringOfChar('a', 1 + (K * 6151) mod (300 * 1024)) + #27']0;' + IntToStr(K) + #7;
+end;
+
+procedure TTyTerminalViewTests.TestWriteCallbacksComeInOrderThroughTheView;
+var
+  k: Integer;
+  t0: QWord;
+begin
+  TyTermNeedWidgetSet;
+  F.View.PassSlices := True;
+  FResizeAtTag := -1;
+  for k := 1 to 50 do
+    F.View.Write(TitledChunk(k), @DoneWithTitle, k);
+  t0 := GetTickCount64;
+  while (Length(FDone) < 50) and (GetTickCount64 - t0 < 10000) do
+    Forms.Application.ProcessMessages;
+  AssertEquals('every callback', 50, Length(FDone));
+  for k := 1 to 50 do
+  begin
+    AssertEquals('in order', k, FDone[k - 1]);
+    AssertEquals(Format('callback %d: its own data parsed, not the next', [k]), IntToStr(k), FTitlesAtDone[k - 1]);
+  end;
+  AssertTrue('through more than one slice', F.View.SliceCalls > 1);
+end;
+
+{ the third callback resizes the control: the grid changes at once (the queue is
+  flushed first), the other callbacks still come once each, in order }
+procedure TTyTerminalViewTests.TestAResizeInsideAViewCallback;
+var
+  k: Integer;
+  t0: QWord;
+begin
+  TyTermNeedWidgetSet;
+  F.View.PassSlices := True;
+  FResizeAtTag := 3;
+  for k := 1 to 10 do
+    F.View.Write(TitledChunk(k), @DoneWithTitle, k);
+  t0 := GetTickCount64;
+  while (Length(FDone) < 10) and (GetTickCount64 - t0 < 10000) do
+    Forms.Application.ProcessMessages;
+  AssertEquals('every callback', 10, Length(FDone));
+  for k := 1 to 10 do
+    AssertEquals('in order', k, FDone[k - 1]);
+  AssertEquals('resized', 40, F.View.Cols);
+  AssertEquals(10, F.View.Rows);
+end;
+
+{ one 20 MB write: the message loop gets turns while it is parsed (an async call queued
+  right after it runs with bytes still pending), and its callback comes once }
+procedure TTyTerminalViewTests.TestAHugeWriteYieldsToTheMessageLoop;
+var
+  t0: QWord;
+begin
+  TyTermNeedWidgetSet;
+  F.View.PassSlices := True;
+  FMarkRan := False;
+  F.View.Write(StringOfChar('x', 20 * 1024 * 1024), @WriteDone, 1);
+  Forms.Application.QueueAsyncCall(@MarkRan, 0);
+  t0 := GetTickCount64;
+  while (Length(FDone) < 1) and (GetTickCount64 - t0 < 30000) do
+    Forms.Application.ProcessMessages;
+  AssertTrue('the marker ran', FMarkRan);
+  AssertTrue('while the write was still being parsed', FPendingAtMark > 0);
+  AssertEquals('the callback once', 1, Length(FDone));
+  AssertEquals('nothing left', 0, F.View.Core.PendingBytes);
 end;
 
 initialization

@@ -55,6 +55,15 @@ unit tyControls.Terminal.Core;
   - The write queue survives an exception from a handler or a callback: the chunk
     that raised counts as parsed, its dirty rows are still reported, and what is
     left asks for another slice.
+  - A chunk is parsed in pieces of TyTermMaxParseBuffer bytes and the time budget is
+    checked between pieces, not only between chunks, so one huge Write does not hold
+    the thread (upstream parses a chunk in one go, WriteBuffer.ts:224-297: a
+    deliberate difference, spec 15). Each piece is one parse call (its own
+    OnCursorMove / OnRefreshRows); the state afterwards is the whole chunk's. A
+    chunk's callback comes once, after its last piece; calls made from events wait
+    for it too; PendingBytes drops piece by piece; a flush (WriteSync, Resize) goes
+    on from the piece a slice stopped at; DiscardPending drops the half-parsed chunk
+    without its callback.
   - REP prints its text count times, exactly -- bounded in time, not by capping the
     count: once the output has turned over the whole ring (rows + scrollback) the
     state repeats with the period the repetitions found, so whole periods are
@@ -242,6 +251,10 @@ type
     FQueueCount: Integer;
     FBufferOffset: Integer;
     FPendingData: Int64;
+    { bytes of the head chunk already parsed (a slice may stop inside a chunk), and a
+      count of queue clears (a nested DiscardPending is seen by the running piece) }
+    FChunkPos: Integer;
+    FQueueGen: Cardinal;
     FIsSyncWriting: Boolean;
     FDidUserInput: Boolean;
     FProcessRequested: Boolean;
@@ -311,6 +324,8 @@ type
 
     { ---- InputHandler: parse, print, controls, cursor, erase, scroll (Task 16) ---- }
     procedure Parse(const AData: RawByteString);
+    { bytes [AStart, AStart + ACount) of AData (1-based): one parse call }
+    procedure ParseRange(const AData: RawByteString; AStart, ACount: Integer);
     procedure DoPrint(const AData: array of Cardinal; AStart, AEnd: Integer; ARepeat: Int64);
     procedure PrintHandler(const AData: array of Cardinal; AStart, AEnd: Integer);
     function EraseAttrData: TTyTerminalAttrData;
@@ -514,6 +529,8 @@ type
     property BufferService: TTyTerminalBufferService read FBufferService;
 
     property PendingBytes: Int64 read FPendingData;
+    { FOR THE TESTS (a pure query): the bytes of the head chunk parsed so far }
+    property HeadChunkParsed: Integer read FChunkPos;
     property Clock: TTyTerminalClock read FClock write FClock;
     property Focused: Boolean read FFocused;
     property Cols: Integer read GetCols;

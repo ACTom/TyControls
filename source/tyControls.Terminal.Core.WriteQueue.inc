@@ -50,6 +50,9 @@ begin
   FQueueCount := 0;
   FBufferOffset := 0;
   FPendingData := 0;
+  { a half-parsed head goes with the rest, without its callback }
+  FChunkPos := 0;
+  Inc(FQueueGen);
 end;
 
 { write, :152-182. Ours on top: an empty write without a callback is nothing, and
@@ -96,33 +99,67 @@ begin
   Write(s, AOnDone, ATag);
 end;
 
-{ One chunk off the queue: the offset moves past it and its bytes leave the count
-  BEFORE it is parsed, so neither an exception nor a nested flush can parse it
-  twice; the queue lets go of its data at once. Then its callback -- also when a
-  handler raised, a host counting callbacks for flow control must not lose one --
-  then what an event asked for while it was parsed (unit header). }
+{ The next piece of the head chunk: at most TyTermMaxParseBuffer bytes from where the
+  last piece stopped (unit header). The position and the byte count move BEFORE the
+  piece is parsed, so neither an exception nor a nested flush can parse it twice. The
+  last piece takes the chunk off the queue first (the queue lets go of its data), then
+  its callback -- also when a handler raised, a host counting callbacks for flow
+  control must not lose one -- then what an event asked for while the chunk was
+  parsed. A handler raising in an earlier piece: the rest of the chunk counts as
+  parsed, the same way. }
 procedure TTyTerminalCore.ProcessOneChunk;
 var
   item: TTyTermQueueItem;
+  data: RawByteString;
+  head, start, n: Integer;
+  gen: Cardinal;
+  last, ok: Boolean;
+
+  procedure TakeHead;
+  begin
+    item := FQueue[head];
+    FQueue[head].Data := '';
+    FQueue[head].OnDone := nil;
+    Inc(FBufferOffset);
+    FChunkPos := 0;
+  end;
+
 begin
-  item := FQueue[FBufferOffset];
-  FQueue[FBufferOffset].Data := '';
-  FQueue[FBufferOffset].OnDone := nil;
-  Inc(FBufferOffset);
-  Dec(FPendingData, Length(item.Data));
+  head := FBufferOffset;
+  data := FQueue[head].Data;             { our own reference: a nested clear lets go of the slot's }
+  item := Default(TTyTermQueueItem);
+  start := FChunkPos;
+  n := Min(TyTermMaxParseBuffer, Length(data) - start);
+  Inc(FChunkPos, n);
+  Dec(FPendingData, n);
+  last := FChunkPos >= Length(data);
+  if last then
+    TakeHead;
+  gen := FQueueGen;
+  ok := False;
   try
-    Parse(item.Data);
+    ParseRange(data, start + 1, n);
+    ok := True;
   finally
-    if Assigned(item.OnDone) then
+    { a handler raised in an earlier piece: the rest counts as parsed -- unless the
+      queue was cleared under the piece (DiscardPending from an event) }
+    if (not last) and (not ok) and (gen = FQueueGen) and (FBufferOffset = head) and (head < FQueueCount) then
+    begin
+      Dec(FPendingData, Length(data) - FChunkPos);
+      TakeHead;
+      last := True;
+    end;
+    if last and Assigned(item.OnDone) then
       item.OnDone(Self, item.Tag);
   end;
-  RunDeferred;
+  if last then
+    RunDeferred;
 end;
 
-{ _innerWrite, :219-315: whole chunks until the budget is spent -- checked between
-  chunks, so one big chunk is never cut (splitting inside a chunk is phase 5). An
-  exception from a handler or a callback leaves the rest queued and asks for
-  another slice (upstream's timer would simply be gone). }
+{ _innerWrite, :219-315: pieces of chunks until the budget is spent -- checked between
+  pieces, so one big chunk is cut too (unit header; upstream checks between chunks
+  only). An exception from a handler or a callback leaves the rest queued and asks
+  for another slice (upstream's timer would simply be gone). }
 procedure TTyTerminalCore.InnerWrite(ABudgetMs: Integer; out AMore: Boolean);
 var
   start: Double;
@@ -275,6 +312,9 @@ var
   d: TTyTermDeferred;
   i: Integer;
 begin
+  { half a chunk parsed: what its events asked for waits for its last piece }
+  if FChunkPos > 0 then
+    Exit;
   while (FBusy = 0) and (FDeferredCount > 0) do
   begin
     d := FDeferred[0];
