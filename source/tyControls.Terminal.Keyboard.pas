@@ -554,7 +554,7 @@ end;
 
 function TyTerminalPrepareTextForPaste(const AText: string; ABracketed: Boolean): RawByteString;
 var
-  i, n: Integer;
+  i, n, esc, k: Integer;
   s: RawByteString;
 begin
   { /\r?\n/g -> \r: a CR LF or a lone LF becomes one CR, a lone CR stays }
@@ -577,14 +577,29 @@ begin
   SetLength(s, n);
   if not ABracketed then
     Exit(s);
-  { ESC -> U+241B, so pasted text cannot end the bracket itself }
-  Result := C0_ESC + '[200~';
-  for i := 1 to Length(s) do
+  { ESC -> U+241B, so pasted text cannot end the bracket itself; one allocation: the
+    length is known once the escapes are counted }
+  esc := 0;
+  for i := 1 to n do
+    if s[i] = C0_ESC then Inc(esc);
+  Result := '';
+  SetLength(Result, 6 + n + 2 * esc + 6);
+  Move(PChar(C0_ESC + '[200~')^, Result[1], 6);
+  k := 7;
+  for i := 1 to n do
     if s[i] = C0_ESC then
-      Result := Result + #$E2#$90#$9B
+    begin
+      Result[k] := #$E2;
+      Result[k + 1] := #$90;
+      Result[k + 2] := #$9B;
+      Inc(k, 3);
+    end
     else
-      Result := Result + s[i];
-  Result := Result + C0_ESC + '[201~';
+    begin
+      Result[k] := s[i];
+      Inc(k);
+    end;
+  Move(PChar(C0_ESC + '[201~')^, Result[k], 6);
 end;
 
 end.
