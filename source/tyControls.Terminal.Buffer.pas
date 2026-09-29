@@ -13,7 +13,9 @@ unit tyControls.Terminal.Buffer;
     src/common/buffer/BufferLine.ts     TTyTerminalLine
     src/common/CircularList.ts          TTyTerminalLineList
     src/common/buffer/Marker.ts         TTyTerminalMarker
-    src/common/buffer/Buffer.ts         TTyTerminalBuffer (reflow not yet, see below)
+    src/common/buffer/Buffer.ts         TTyTerminalBuffer
+    src/common/buffer/BufferReflow.ts   the reflow functions, with Buffer.ts's _reflow*
+                                        in tyControls.Terminal.Buffer.Reflow.inc
     src/common/buffer/BufferSet.ts      TTyTerminalBufferSet
     src/common/services/BufferService.ts   TTyTerminalBufferService
     src/common/services/OscLinkService.ts  TTyTerminalOscLinks
@@ -33,18 +35,26 @@ unit tyControls.Terminal.Buffer;
     ring is pinned with AddRef. A new line starts at 1 and belongs to whoever made
     it: after handing it to the ring (Push / SetItem / Splice) that owner releases
     its own reference -- the *Owned helpers do both.
-    Pinned in this unit: BufferService.Scroll's blank line (the service's cache).
-    Buffer.Resize only touches lines between ring changes, and the link table holds
-    markers, not lines. Pinned in tyControls.Terminal.Core: print's current and old
-    row. (A slot store takes the new reference before it drops the old one, so
-    moving a line to another slot of the same ring needs no pin.)
+    Pinned in this unit: BufferService.Scroll's blank line (the service's cache), and
+    during a reflow every line being rearranged -- the reflow lays the ring out again
+    as a whole, and growing its length clears slots by their raw index, which can
+    hold lines still to be moved (upstream keeps them in a JavaScript array). The
+    link table holds markers, not lines. Pinned in tyControls.Terminal.Core: print's
+    current and old row. (A slot store takes the new reference before it drops the
+    old one, so moving a line to another slot of the same ring needs no pin.)
   - Markers are reference counted too: the buffer holds one while a marker is live,
     the link table one per marker it lists; a marker disposed is dropped by both.
-  - Reflow is phase 5: IsReflowEnabled is always False, so the buffer resizes the
-    way xterm.js does for an old ConPTY -- narrower columns keep the longer lines,
-    wider ones pad them, nothing is rewrapped. Resize already asks IsReflowEnabled
-    at upstream's place; phase 5 fills in Reflow and gives the getter upstream's
-    rule.
+  - Reflow follows upstream's rule (Buffer.ts:310-316): the normal buffer rewraps on
+    a new column count unless a Windows PTY build number is given and it is not a
+    ConPTY of 21376 or later -- the field FHasScrollback decides, not the
+    HasScrollback getter, so a normal buffer with Scrollback 0 rewraps too; the
+    alternate buffer never does. The run holding the cursor stays as it is unless
+    Options.ReflowCursorLine. Where it is off, narrower columns keep the longer lines
+    and wider ones pad them, as upstream does for an old ConPTY.
+  - TyTermReflowSmallerGetNewLineLengths raises EArgumentOutOfRangeException where
+    upstream would loop for ever (one column and a wide character at a cut,
+    BufferReflow.ts:175-177). The core never gets there (at least two columns);
+    only the buffer used on its own can.
   - BufferService lives here, not in the core, so the buffer layer can be held to
     upstream on its own (the core owns one).
 
@@ -294,6 +304,12 @@ type
     procedure Splice(AStart, ADeleteCount: Integer; const AItems: array of TTyTerminalLine);
     procedure SpliceOwned(AStart, ADeleteCount: Integer; ALine: TTyTerminalLine);
     procedure TrimStart(ACount: Integer);
+    { onInsertEmitter / onDeleteEmitter / onTrimEmitter.fire (CircularList.ts:49-54,
+      public upstream): the reflow tells the listeners about the lines it laid out
+      again. Only the event; the list is not touched. }
+    procedure NotifyInsert(AIndex, AAmount: Integer);
+    procedure NotifyDelete(AIndex, AAmount: Integer);
+    procedure NotifyTrim(AAmount: Integer);
     { Raises EArgumentOutOfRangeException where upstream throws. }
     procedure ShiftElements(AStart, ACount, AOffset: Integer);
     { A full ring only: the start index becomes AStart + ADelta (reduced modulo the
@@ -309,6 +325,14 @@ type
     property OnInsert: TTyTermListEvent read FOnInsert write FOnInsert;
     property OnDelete: TTyTermListEvent read FOnDelete write FOnDelete;
     property OnTrim: TTyTermTrimEvent read FOnTrim write FOnTrim;
+  end;
+
+  { The reflow's arrays of lines (upstream BufferLine[]); borrowed, not counted. }
+  TTyTermLineArray = array of TTyTerminalLine;
+  { BufferReflow.ts INewLayoutResult }
+  TTyTermReflowLayout = record
+    Layout: TIntegerDynArray;
+    CountRemoved: Integer;
   end;
 
   { Marker.ts; reference counted (unit header). }
@@ -375,7 +399,7 @@ type
 
   TTyTerminalBufferService = class;
 
-  { Buffer.ts:29-672 without _reflow* (phase 5). }
+  { Buffer.ts:29-672; _reflow* in tyControls.Terminal.Buffer.Reflow.inc. }
   TTyTerminalBuffer = class
   private
     FLines: TTyTerminalLineList;
@@ -401,6 +425,9 @@ type
     function MarkerSnapshot: TFPList;
     procedure ReleaseSnapshot(AList: TFPList);
     procedure Reflow(ANewCols, ANewRows: Integer);
+    procedure ReflowLarger(ANewCols, ANewRows: Integer);
+    procedure ReflowLargerAdjustViewport(ANewCols, ANewRows, ACountRemoved: Integer);
+    procedure ReflowSmaller(ANewCols, ANewRows: Integer);
     function GetHasScrollback: Boolean;
     function GetIsCursorInViewport: Boolean;
     function GetMarker(AIndex: Integer): TTyTerminalMarker;
@@ -585,6 +612,22 @@ type
   end;
 
 { The cell constructors of CellData / Buffer.getNullCell / getWhitespaceCell. }
+{ BufferReflow.ts, public for the tests (the buffer's reflow uses them too). The line
+  arguments are borrowed. }
+{ :25-110 -- [index, count] pairs of the rows a wider reflow removes; moves the cells }
+function TyTermReflowLargerGetLinesToRemove(ALines: TTyTerminalLineList; AOldCols, ANewCols,
+  ABufferAbsoluteY: Integer; const ANullCell: TTyTerminalCellData; AReflowCursorLine: Boolean): TIntegerDynArray;
+{ :116-145 -- sends the list's delete events }
+function TyTermReflowLargerCreateNewLayout(ALines: TTyTerminalLineList;
+  const AToRemove: TIntegerDynArray): TTyTermReflowLayout;
+{ :151-163 }
+procedure TyTermReflowLargerApplyNewLayout(ALines: TTyTerminalLineList; const ALayout: TIntegerDynArray);
+{ :179-213; raises EArgumentOutOfRangeException where upstream loops for ever (unit header) }
+function TyTermReflowSmallerGetNewLineLengths(const AWrapped: TTyTermLineArray;
+  AOldCols, ANewCols: Integer): TIntegerDynArray;
+{ :215-229 }
+function TyTermGetWrappedLineTrimmedLength(const ALines: TTyTermLineArray; AIndex, ACols: Integer): Integer;
+
 function TyTermCellFromCodepoint(ACode: Cardinal; AWidth: Integer; const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
 function TyTermNullCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
 function TyTermWhitespaceCell(const AAttr: TTyTerminalAttrData): TTyTerminalCellData;
@@ -1869,6 +1912,23 @@ begin
   DoTrim(ACount);
 end;
 
+procedure TTyTerminalLineList.NotifyInsert(AIndex, AAmount: Integer);
+begin
+  if Assigned(FOnInsert) then
+    FOnInsert(AIndex, AAmount);
+end;
+
+procedure TTyTerminalLineList.NotifyDelete(AIndex, AAmount: Integer);
+begin
+  if Assigned(FOnDelete) then
+    FOnDelete(AIndex, AAmount);
+end;
+
+procedure TTyTerminalLineList.NotifyTrim(AAmount: Integer);
+begin
+  DoTrim(AAmount);
+end;
+
 procedure TTyTerminalLineList.ShiftElements(AStart, ACount, AOffset: Integer);   { :222-251 }
 var
   i, expandListBy: Integer;
@@ -2123,19 +2183,16 @@ begin
   Result := FLines.Length;
 end;
 
-{ Phase 5: with windowsPty.buildNumber given, hasScrollback and conpty and
-  >= 21376, otherwise hasScrollback (Buffer.ts:310-316); then Resize runs
-  _reflow and trims the lines (:258-268). Until then it is the path upstream takes
-  for an old ConPTY. }
+{ Buffer.ts:310-316: a build number given (0 = not given, JavaScript's falsy) --
+  only a ConPTY of 21376 or later; otherwise always. The FIELD, not the
+  HasScrollback getter (that one also wants maxLength > rows). }
 function TTyTerminalBuffer.GetIsReflowEnabled: Boolean;
 begin
-  Result := False;
-end;
-
-{ Buffer.ts _reflow (:318-) with BufferReflow.ts: phase 5. Resize calls it where
-  upstream does, behind IsReflowEnabled, which answers False until then. }
-procedure TTyTerminalBuffer.Reflow(ANewCols, ANewRows: Integer);
-begin
+  if FOptions.WindowsPty.BuildNumber <> 0 then
+    Result := FHasScrollback and (FOptions.WindowsPty.Backend = twpConPty)
+      and (FOptions.WindowsPty.BuildNumber >= 21376)
+  else
+    Result := FHasScrollback;
 end;
 
 function TTyTerminalBuffer.GetLine(AAbsRow: Integer): TTyTerminalLine;
@@ -2182,7 +2239,7 @@ begin
     FLines.MaxLength := newMaxLength;
   if FLines.Length > 0 then
   begin
-    { wider: every line now (narrower waits for the reflow, which phase 2 lacks) }
+    { wider: every line now (narrower waits for the reflow, which cuts them after it) }
     if FCols < ANewCols then
       for i := 0 to FLines.Length - 1 do
         FLines.Get(i).Resize(ANewCols, nullCell);
@@ -2242,7 +2299,8 @@ begin
     FScrollTop := 0;
   end;
   FScrollBottom := ANewRows - 1;
-  { :258-268 -- never taken before phase 5 (GetIsReflowEnabled) }
+  { :258-268 -- the reflow (Buffer.Reflow.inc) sees the old FCols: it measures the
+    wrapped runs by it }
   if IsReflowEnabled then
   begin
     Reflow(ANewCols, ANewRows);
@@ -3104,5 +3162,7 @@ begin
   for k := 0 to e.Markers.Count - 1 do
     Result[k] := TTyTerminalMarker(e.Markers[k]).Line;
 end;
+
+{$I tyControls.Terminal.Buffer.Reflow.inc}
 
 end.
