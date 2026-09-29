@@ -185,6 +185,13 @@ begin
   { the caller schedules the next slice: no OnProcessRequest from here }
 end;
 
+procedure TTyTerminalCore.DiscardPending;
+begin
+  CheckThread('DiscardPending');
+  { a slice or a flush running further up the stack sees an empty queue and stops }
+  ClearQueue;
+end;
+
 { writeSync, :106-150 (maxSubsequentCalls not ported). Upstream shifts from index 0,
   which parses again the chunks a slice already did when a slice stopped midway; here
   it starts at the first unprocessed chunk (a deliberate difference). An empty

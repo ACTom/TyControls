@@ -460,6 +460,10 @@ type
       core is busy (from an event, a modal loop in a handler) it returns False at
       once; the core raises OnProcessRequest again when it is done. }
     function ProcessPending(ABudgetMs: Integer = TyTermWriteTimeoutMs): Boolean;
+    { Drops every chunk not parsed yet, WITHOUT calling their callbacks -- the host asked
+      for it (a replay switching recordings, a session reset), so its own flow-control
+      count restarts with it. Not in upstream (WriteBuffer has no such call). }
+    procedure DiscardPending;
     { input from the control }
     procedure Input(const AData: RawByteString; AWasUserInput: Boolean = True);
     { MouseStateService.restrictMouseEvent / encodeMouseEvent: Col / Row 1-BASED
