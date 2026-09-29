@@ -584,6 +584,7 @@ msgid "(Select all)"
 msgstr "(全选)"
 
 #: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
 msgid "Clear"
 msgstr "清屏"
 
@@ -867,6 +868,7 @@ msgid "Move Down"
 msgstr "下移"
 
 #: tycontrols.strconsts.rsdlgimgcolclear
+msgctxt "tycontrols.strconsts.rsdlgimgcolclear"
 msgid "Clear"
 msgstr "清空"
 

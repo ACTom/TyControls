@@ -220,6 +220,7 @@ msgid "Add…"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgimgcolclear
+msgctxt "tycontrols.strconsts.rsdlgimgcolclear"
 msgid "Clear"
 msgstr ""
 
@@ -670,6 +671,7 @@ msgid "slice() needs 4 values: %s"
 msgstr ""
 
 #: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
 msgid "Clear"
 msgstr ""
 
