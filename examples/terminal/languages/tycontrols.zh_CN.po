@@ -408,6 +408,7 @@ msgid "Basic colors"
 msgstr "基本颜色"
 
 #: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
 msgid "Clear"
 msgstr "清屏"
 
