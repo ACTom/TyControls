@@ -32,23 +32,23 @@ begin
       Exit;
     end;
   end;
-  if PopupMenu <> nil then Exit;
-  if keyboard then
-  begin
-    buf := FCore.Buffer;
-    cur := CellRect(Min(buf.X, FCore.Cols - 1), EnsureRange(CursorViewRow, 0, FCore.Rows - 1));
-    MousePos := Point(cur.Left, cur.Bottom);
-  end
-  else if FIsMac then
+  if not keyboard and FIsMac then
   begin
     { macOS 惯例(上游 rightClickSelectsWord: isMac):右键在选区外先选中那个词(指针下有链接
-      就选整条) }
+      就选整条)——宿主的 PopupMenu 也是(上游选词在弹哪个菜单之前,Clipboard.ts:83-96) }
     SyncSelectionTrim;
     cell := CellAt(MousePos.X, MousePos.Y);
     if LinkAt(cell.X, cell.Y, link) then
       FSelection.RightClickSelect(SelPointAt(MousePos.X, MousePos.Y), @link.Range)
     else
       FSelection.RightClickSelect(SelPointAt(MousePos.X, MousePos.Y));
+  end;
+  if PopupMenu <> nil then Exit;
+  if keyboard then
+  begin
+    buf := FCore.Buffer;
+    cur := CellRect(Min(buf.X, FCore.Cols - 1), EnsureRange(CursorViewRow, 0, FCore.Rows - 1));
+    MousePos := Point(cur.Left, cur.Bottom);
   end;
   ShowContextMenu(MousePos);
   Handled := True;
@@ -79,7 +79,8 @@ begin
     FMenuClear := Add(rsTerminalMenuClear, @MenuClearClick);
   end;
   FMenuCopy.Enabled := HasSelection;
-  FMenuPaste.Enabled := not ReadOnly and (ReadClipboardText <> '');
+  { 只问「有没有文字」,不把整段读出来(剪贴板里可能是几兆) }
+  FMenuPaste.Enabled := not ReadOnly and ClipboardHasText;
   FMenuSelectAll.Enabled := True;
   FMenuClear.Enabled := True;
 end;

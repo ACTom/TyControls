@@ -31,9 +31,18 @@ unit tyControls.Terminal.Links;
     IPv4 hosts in their canonical form, percent-decoded domains checked for forbidden
     code points and lower-cased, the port (default ports dropped). Any other scheme is
     answered as parsed and not http -- all a caller asks of it.
-  - The Linkifier checks the first hover of a line before it removes overlapping
-    links and later hovers after; TyTermFindLinkAt always looks after (the control
-    has no line cache whose state would decide it).
+
+  WHAT DIFFERS IN RESULT (design spec 15):
+
+  - The first hover over a line. Upstream's Linkifier picks the link under the pointer
+    as the providers' answers come in, before it removes the ones that overlap
+    (Linkifier.ts:133-146 and :175-215: the check runs, then _removeIntersectingLinks);
+    later hovers over the same line read the line cache, after. So on the first hover
+    a web address under the pointer that overlaps an OSC 8 link elsewhere on the line is
+    found and underlined; move the pointer off and back, and it is not. TyTermFindLinkAt
+    always looks after the overlaps are gone (the control keeps no per-line cache whose
+    state would decide it): no link there, every time. Kept -- upstream's answer
+    depends on the hover's history, ours does not.
 
   WHAT DIFFERS ON PURPOSE (design spec 15):
 

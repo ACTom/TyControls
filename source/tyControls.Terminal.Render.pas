@@ -186,6 +186,7 @@ type
       C: TTyTermCellColors;
       Ul: Integer;                 { underline style, 0 none }
       Strike, Over: Boolean;
+      Sel: Boolean;                { in the selection (a wide character: its first column) }
     end;
   private
     FRowsPainted: Integer;
@@ -213,13 +214,16 @@ type
       paints it again, whole, next frame. At least one glyph is drawn every frame. }
     RasterBudgetMs: Double;
     Clock: TTyTermClock;
-    { Set by the caller before every row (PaintRow does not clear them). The selected
-      columns [SelFrom, SelTo) (SelFrom >= SelTo: none) get SelColor laid over their own
-      background -- it may be translucent -- and, when SelHasInk, SelInk ($RRGGBB) as
-      their text colour. The hovered link's columns [LinkFrom, LinkTo) get a single
-      underline in LinkColor, over the cells' own lines. }
+    { Set by the caller before every row (PaintRow does not clear them). A cell in the
+      selected columns [SelFrom, SelTo) (SelFrom >= SelTo: none) -- a wide character by
+      its first column, both halves together (DomRendererRowFactory.ts:112, :160) -- has
+      its background REPLACED by SelBg ($RRGGBB, the selection colour already made opaque
+      on the theme's background: DomRendererRowFactory.ts:380-386), whatever its own was
+      (inverse, a bright background); when SelHasInk, SelInk ($RRGGBB) is its text colour.
+      The hovered link's columns [LinkFrom, LinkTo) get a single underline in LinkColor,
+      over the cells' own lines. }
     SelFrom, SelTo: Integer;
-    SelColor: TBGRAPixel;
+    SelBg: Cardinal;
     SelInk: Cardinal;
     SelHasInk: Boolean;
     LinkFrom, LinkTo: Integer;
@@ -243,8 +247,10 @@ function TyTermDefaultPaletteColor(AIndex: Integer): Cardinal;
 { $RRGGBB -> an opaque pixel: the one conversion between the two }
 function TyTermRgbToPixel(ARgb: Cardinal): TBGRAPixel;
 { AOver laid on the opaque ABg ($RRGGBB): per channel (bg x (255 - a) + over x a + 127)
-  div 255 -- the selection's colour on a cell's background (upstream makes the selection
-  colour opaque on the theme's background the same way, ThemeService.ts:87-90) }
+  div 255. The view makes the theme's selection colour opaque with it, on the theme's
+  background, once per frame -- upstream's selectionBackgroundOpaque /
+  selectionInactiveBackgroundOpaque (ThemeService.ts:87-90) -- and the row painter puts
+  that in place of a selected cell's background (SelBg), never over it. }
 function TyTermBlendOver(ABg: Cardinal; const AOver: TBGRAPixel): Cardinal;
 { DomRendererRowFactory.ts:313-320, :342-460, the colour part: inverse swaps modes
   and values; default colours read 256 / 257; bold brightens palette colours below 8
@@ -1297,7 +1303,7 @@ end;
 function TTyTermRowPainter.PaintRow(ABmp: TBGRABitmap; AX, AY: Integer; ALine: TTyTerminalLine;
   ACols: Integer; ACursorCol: Integer; ACursorShape: TTyTermCursorShape): Boolean;
 var
-  c, runStart, x0, n, w, cw, cy, lw, kind, sf, st: Integer;
+  c, runStart, x0, n, w, cw, cy, lw, kind, sf, st, owner: Integer;
   clip, cell: TRect;
   attr: TTyTerminalAttrData;
   ext: TTyTerminalExtAttrs;
@@ -1358,11 +1364,20 @@ begin
     FInfo[c].Strike := attr.IsStrikethrough;
     FInfo[c].Over := attr.IsOverline;
   end;
-  { the selection over the cells' own backgrounds }
+  { the selection takes the place of the cells' own backgrounds (not laid over them: an
+    inverse cell or one on a bright background would hide it); a wide character is in
+    it or not by its first column, both halves alike }
   sf := Max(SelFrom, 0);
   st := Min(SelTo, ACols);
-  for c := sf to st - 1 do
-    FInfo[c].C.Bg := TyTermBlendOver(FInfo[c].C.Bg, SelColor);
+  for c := 0 to ACols - 1 do
+  begin
+    owner := c;
+    if (c > 0) and (ALine <> nil) and (c < ALine.Length) and (ALine.GetWidth(c) = 0) then
+      owner := c - 1;
+    FInfo[c].Sel := (owner >= sf) and (owner < st);
+    if FInfo[c].Sel then
+      FInfo[c].C.Bg := SelBg;
+  end;
   runStart := 0;
   for c := 1 to ACols do
     if (c = ACols) or (FInfo[c].C.Bg <> FInfo[runStart].C.Bg) then
@@ -1377,7 +1392,7 @@ begin
       if not FInfo[c].C.Invisible then
       begin
         { a theme's selection colour for the text only where the theme gives one }
-        if SelHasInk and (c >= sf) and (c < st) then
+        if SelHasInk and FInfo[c].Sel then
           ink := SelInk
         else
           ink := FInfo[c].C.Fg;

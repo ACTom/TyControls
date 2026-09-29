@@ -26,6 +26,7 @@ type
     PassSlices: Boolean;
     Invalidated: array of TPoint;
     ClipText: string;
+    ClipRaises: Boolean;              { the clipboard is held by another program }
     ClipReads, ClipWrites: Integer;
     ClipWritten: string;
     WholeInvalidates: Integer;
@@ -82,10 +83,15 @@ type
     MenuShows: Integer;
     MenuShownAt: TPoint;
     PrimaryText: string;
-    PrimaryWrites: Integer;
-    PrimaryWritten: string;
+    PrimaryOffers: Integer;
     FakeShift: TShiftState;
     UseFakeShift: Boolean;
+    { the mouse buttons "held" as the view asks (HeldMouseButtons) }
+    FakeButtons: TShiftState;
+    UseFakeButtons: Boolean;
+    { MouseUp loses the capture first, as LCL's button-up message does }
+    LoseCaptureInUp: Boolean;
+    ClipHasTextAsks: Integer;
     LastTempCursor: TCursor;
     TempCursorSets: Integer;
     procedure Down(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); overload;
@@ -103,7 +109,14 @@ type
     { the menu built and its Enabled set as for a popup now }
     function MenuItem(AIndex: Integer): TMenuItem;
     function ReadPrimaryText: string; override;
-    procedure WritePrimaryText(const S: string); override;
+    procedure OfferPrimary; override;
+    { what a PRIMARY request would get now }
+    function PrimaryNow: string;
+    function ClipboardHasText: Boolean; override;
+    function HeldMouseButtons: TShiftState; override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { the capture taken away (Alt+Tab, a modal dialog) }
+    procedure LoseCapture;
     function CurrentShiftState: TShiftState; override;
     procedure SetTempCursor(Value: TCursor); override;
     procedure TickDrag;
@@ -272,12 +285,16 @@ end;
 function TTyTerminalViewProbe.ReadClipboardText: string;
 begin
   Inc(ClipReads);
+  if ClipRaises then
+    raise Exception.Create('the clipboard is busy');
   Result := ClipText;
 end;
 
 procedure TTyTerminalViewProbe.WriteClipboardText(const S: string);
 begin
   Inc(ClipWrites);
+  if ClipRaises then
+    raise Exception.Create('the clipboard is busy');
   ClipWritten := S;
 end;
 
@@ -572,10 +589,40 @@ begin
   Result := PrimaryText;
 end;
 
-procedure TTyTerminalViewProbe.WritePrimaryText(const S: string);
+procedure TTyTerminalViewProbe.OfferPrimary;
 begin
-  Inc(PrimaryWrites);
-  PrimaryWritten := S;
+  Inc(PrimaryOffers);
+end;
+
+function TTyTerminalViewProbe.PrimaryNow: string;
+begin
+  Result := PrimaryRequestText;
+end;
+
+function TTyTerminalViewProbe.ClipboardHasText: Boolean;
+begin
+  Inc(ClipHasTextAsks);
+  Result := ClipText <> '';
+end;
+
+function TTyTerminalViewProbe.HeldMouseButtons: TShiftState;
+begin
+  if UseFakeButtons then
+    Result := FakeButtons
+  else
+    Result := inherited HeldMouseButtons;
+end;
+
+procedure TTyTerminalViewProbe.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if LoseCaptureInUp then
+    CaptureChanged;
+  inherited MouseUp(Button, Shift, X, Y);
+end;
+
+procedure TTyTerminalViewProbe.LoseCapture;
+begin
+  CaptureChanged;
 end;
 
 function TTyTerminalViewProbe.CurrentShiftState: TShiftState;

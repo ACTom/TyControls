@@ -9,7 +9,7 @@ unit test.terminal.view.links;
 interface
 
 uses
-  Classes, SysUtils, Types, Forms, Controls, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Forms, Controls, LCLType, LMessages, fpcunit, testregistry,
   tyControls.Terminal.Links, tyControls.Terminal, test.terminal.keyboard, test.terminal.view;
 
 type
@@ -23,6 +23,8 @@ type
     FTextSet: Boolean;
     procedure OnLink(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
     procedure OnOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
+      var AText: string; var AAllow: Boolean);
+    procedure OnOsc52Raises(Sender: TObject; AWrite: Boolean; const ASelection: string;
       var AText: string; var AAllow: Boolean);
     function V: TTyTerminalViewProbe;
     procedure CtrlClick(const P: TPoint);
@@ -45,6 +47,9 @@ type
     procedure TestOsc52WriteAsksTheHost;
     procedure TestOsc52ReadNeedsConsent;
     procedure TestOsc52SurvivesAReset;
+    { 4 期期末审查 }
+    procedure TestACtrlClickSurvivesTheCaptureGoingFirst;
+    procedure TestOsc52ExceptionsStayInside;
   end;
 
 function TyTermOsc8(const AUri, AText: RawByteString): RawByteString;
@@ -92,6 +97,13 @@ begin
   if FAllowAnswer = 0 then AAllow := False;
   if FAllowAnswer = 1 then AAllow := True;
   if FTextSet then AText := FTextAnswer;
+end;
+
+procedure TTyTerminalViewLinkTests.OnOsc52Raises(Sender: TObject; AWrite: Boolean; const ASelection: string;
+  var AText: string; var AAllow: Boolean);
+begin
+  FOscCalls.Add('raised');
+  raise Exception.Create('the host raises');
 end;
 
 function TTyTerminalViewLinkTests.V: TTyTerminalViewProbe;
@@ -291,6 +303,47 @@ begin
   V.Osc52 := to52Write;
   V.WriteSync(#27']52;c;aGVsbG8='#7);
   AssertEquals('still handled after a reset', 'hello', V.ClipWritten);
+end;
+
+{ LCL's button-up message lets the capture go before it calls MouseUp: that capture
+  change is the release itself, not a lost one -- the Ctrl+click still opens the link }
+procedure TTyTerminalViewLinkTests.TestACtrlClickSurvivesTheCaptureGoingFirst;
+var
+  p: TPoint;
+begin
+  V.WriteSync(Url);
+  V.UseFakeButtons := True;
+  V.FakeButtons := [];
+  V.LoseCaptureInUp := True;
+  p := V.CellCenter(8, 0);
+  V.MoveTo([ssCtrl], p);
+  V.Down(mbLeft, [ssLeft, ssCtrl], p);
+  V.Perform(LM_LBUTTONUP, MK_CONTROL, PtrInt((p.Y shl 16) or (p.X and $FFFF)));
+  AssertEquals('activated', 1, FLinks.Count);
+  AssertEquals('https://example.com|url', FLinks[0]);
+  AssertTrue('free', V.MouseRoute = mrNone);
+end;
+
+{ the OSC 52 handler runs inside Parse: what the host's event or the clipboard raises
+  stays in it -- the rest of the chunk is still parsed, nothing reaches the writer }
+procedure TTyTerminalViewLinkTests.TestOsc52ExceptionsStayInside;
+begin
+  V.Osc52 := to52ReadWrite;
+  V.OnOsc52 := @OnOsc52Raises;
+  V.WriteSync(#27']52;c;aGk='#7'after');
+  AssertEquals('the host was asked', 1, FOscCalls.Count);
+  AssertEquals('the rest of the chunk: parsed', 'after', F.RowText(0));
+  AssertEquals('nothing written', 0, V.ClipWrites);
+  V.WriteSync(#13#10#27']52;c;?'#7'again');
+  AssertEquals('a read too', 'again', F.RowText(1));
+  AssertEquals('no answer', '', F.Data);
+  { the clipboard itself raising }
+  V.OnOsc52 := @OnOsc52;
+  FAllowAnswer := 1;
+  V.ClipRaises := True;
+  V.WriteSync(#13#10#27']52;c;?'#7'third'#27']52;c;aGk='#7'fourth');
+  AssertEquals('reading a busy clipboard', 'thirdfourth', F.RowText(2));
+  AssertEquals('no answer', '', F.Data);
 end;
 
 initialization

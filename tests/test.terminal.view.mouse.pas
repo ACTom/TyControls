@@ -64,6 +64,17 @@ type
     procedure TestRightClickKeepsTheSelection;
     procedure TestRightClickSelectsAWordOnTheMac;
     procedure TestPointerShapes;
+    { 4 期期末审查 }
+    procedure TestALostReleaseIsFinished;
+    procedure TestAPressWhoseReleaseWentElsewhere;
+    procedure TestX10HandsTheSidewaysWheelBack;
+    procedure TestEveryProtocolChangeClearsTheSelection;
+    procedure TestSelectIsClamped;
+    procedure TestTheMenuDoesNotReadTheClipboard;
+    procedure TestTheMacSelectsAWordForTheHostsMenuToo;
+    procedure TestPrimaryIsOfferedNotBuilt;
+    procedure TestCopyingTenThousandRowsIsQuick;
+    procedure TestAWordWrappedOverManyRows;
   end;
 
 implementation
@@ -544,8 +555,8 @@ begin
   V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
   V.MoveTo([ssLeft], V.CellLeft(4, 0));
   V.Up(mbLeft, [], V.CellLeft(4, 0));
-  AssertEquals('X11: the primary selection written on release', 1, V.PrimaryWrites);
-  AssertEquals('hell', V.PrimaryWritten);
+  AssertEquals('X11: the selection is offered as PRIMARY on release', 1, V.PrimaryOffers);
+  AssertEquals('its text is given when asked', 'hell', V.PrimaryNow);
   V.PrimaryText := 'pasted';
   Reset;
   V.ClickAt(mbMiddle, [], V.CellCenter(3, 2));
@@ -564,7 +575,7 @@ begin
   V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
   V.MoveTo([ssLeft], V.CellLeft(3, 0));
   V.Up(mbLeft, [], V.CellLeft(3, 0));
-  AssertEquals('elsewhere: not written', 1, V.PrimaryWrites);
+  AssertEquals('elsewhere: not offered', 1, V.PrimaryOffers);
   Reset;
   V.ClickAt(mbMiddle, [], V.CellCenter(3, 2));
   AssertEquals('elsewhere: the middle button does nothing', '', Hex);
@@ -713,6 +724,218 @@ begin
   V.Cursor := crHelp;
   V.MoveTo([], V.CellCenter(5, 1));
   AssertEquals('the host''s cursor', Ord(crHelp), Ord(V.LastTempCursor));
+end;
+
+{ ---- 4 期期末审查 ------------------------------------------------------------------- }
+
+{ the release never comes (the capture was taken: Alt+Tab, a modal dialog): once the
+  buttons are up, the press is finished as a release would -- not before }
+procedure TTyTerminalViewMouseTests.TestALostReleaseIsFinished;
+begin
+  V.WriteSync('hello world');
+  V.CopyOnSelect := True;
+  V.UseFakeButtons := True;
+  { a drag, then the capture goes while the button is still down: nothing yet }
+  V.FakeButtons := [ssLeft];
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  AssertTrue('selecting', V.MouseRoute = mrSelect);
+  AssertTrue('the drag timer runs', V.DragTimerOn);
+  V.LoseCapture;
+  AssertTrue('the button is still down: the press goes on', V.MouseRoute = mrSelect);
+  AssertEquals('not finished', 0, V.ClipWrites);
+  { the button came up somewhere else }
+  V.FakeButtons := [];
+  V.LoseCapture;
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  AssertFalse('the drag timer stopped', V.DragTimerOn);
+  AssertFalse('the selection is not dragging any more', V.Sel.Dragging);
+  AssertEquals('finished as a release: CopyOnSelect wrote it', 1, V.ClipWrites);
+  AssertEquals('hell', V.ClipWritten);
+  { reported: the program gets the release it would have got }
+  V.WriteSync(Sgr1006);
+  V.FakeButtons := [ssLeft];
+  V.Down(mbLeft, [ssLeft], V.CellCenter(2, 1));
+  Reset;
+  V.FakeButtons := [];
+  V.LoseCapture;
+  AssertEquals('the release is reported', Sgr(0, 2, 1, False), Hex);
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  { focus lost the same way }
+  V.WriteSync(#27'[?1000l');
+  V.FakeButtons := [ssLeft];
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 1));
+  V.FakeButtons := [];
+  V.Leave;
+  AssertTrue('focus lost with the button up: finished', V.MouseRoute = mrNone);
+  { the next press routes afresh }
+  V.WriteSync(Sgr1006);
+  Reset;
+  V.Down(mbLeft, [ssLeft], V.CellCenter(3, 1));
+  AssertEquals('a new press is reported', Sgr(0, 3, 1, True), Hex);
+end;
+
+{ no capture event at all, the release just went to another window: the next press of
+  the same button finishes the old one first }
+procedure TTyTerminalViewMouseTests.TestAPressWhoseReleaseWentElsewhere;
+begin
+  V.WriteSync(Sgr1006);
+  V.Down(mbLeft, [ssLeft], V.CellCenter(2, 1));
+  Reset;
+  V.Down(mbLeft, [ssLeft], V.CellCenter(5, 1));
+  AssertEquals('the lost release, then the new press',
+    Sgr(0, 2, 1, False) + ' ' + Sgr(0, 5, 1, True), Hex);
+  Reset;
+  V.Up(mbLeft, [], V.CellCenter(5, 1));
+  AssertEquals('and its own release', Sgr(0, 5, 1, False), Hex);
+  AssertTrue('free', V.MouseRoute = mrNone);
+end;
+
+{ X10 reports presses only: the sideways wheel is not the program's, it goes to the
+  parent -- a half notch too }
+procedure TTyTerminalViewMouseTests.TestX10HandsTheSidewaysWheelBack;
+begin
+  V.WriteSync(#27'[?9h');
+  AssertFalse('X10: handed back', V.WheelHorz([], -120, V.CellCenter(1, 1)));
+  AssertFalse('half a notch too', V.WheelHorz([], 60, V.CellCenter(1, 1)));
+  AssertEquals('nothing sent', '', Hex);
+  V.WriteSync(#27'[?9l'#27'[?1000h');
+  AssertTrue('1000: taken', V.WheelHorz([], -120, V.CellCenter(1, 1)));
+  AssertTrue('something sent', Hex <> '');
+end;
+
+{ upstream disables (and clears) the selection on every protocol change that leaves one
+  on (MouseService.ts:380-393), not only the first }
+procedure TTyTerminalViewMouseTests.TestEveryProtocolChangeClearsTheSelection;
+begin
+  V.WriteSync('hello world');
+  V.WriteSync(#27'[?1000h');
+  V.Select(0, V.Core.Buffer.YBase, 5);
+  AssertTrue('selected under 1000', V.HasSelection);
+  V.WriteSync(#27'[?1002h');
+  AssertFalse('1000 -> 1002: cleared', V.HasSelection);
+  V.Select(0, V.Core.Buffer.YBase, 5);
+  V.WriteSync(#27'[?1003h');
+  AssertFalse('1002 -> 1003: cleared', V.HasSelection);
+  V.Select(0, V.Core.Buffer.YBase, 5);
+  V.WriteSync(#27'[?1003l');
+  AssertTrue('switched off: kept', V.HasSelection);
+end;
+
+procedure TTyTerminalViewMouseTests.TestSelectIsClamped;
+var
+  p: TTyTermSelPoint;
+  last: Integer;
+begin
+  V.WriteSync('hello');
+  last := V.Core.Buffer.Lines.Length - 1;
+  V.Select(0, V.Core.Buffer.YBase, MaxInt);
+  AssertTrue('a selection', V.HasSelection);
+  AssertTrue('it has an end', V.Sel.FinalEnd(p));
+  AssertTrue(Format('the end is in the buffer (row %d of %d)', [p.Row, last]), (p.Row >= 0) and (p.Row <= last));
+  AssertTrue(Format('the end column is on the grid (%d)', [p.Col]), (p.Col >= 0) and (p.Col <= V.Cols));
+  AssertEquals('everything to the end', 'hello', Copy(V.SelectionText, 1, 5));
+  V.Select(-5, -3, 3);
+  AssertEquals('from the top left', 'hel', V.SelectionText);
+  V.Select(MaxInt, MaxInt, 5);
+  AssertFalse('past the end: nothing', V.HasSelection);
+  V.Select(1, V.Core.Buffer.YBase, -4);
+  AssertFalse('a negative length: nothing', V.HasSelection);
+end;
+
+procedure TTyTerminalViewMouseTests.TestTheMenuDoesNotReadTheClipboard;
+var
+  reads: Integer;
+begin
+  V.ClipText := 'a very long clipboard';
+  reads := V.ClipReads;
+  AssertTrue('something to paste', V.MenuItem(1).Enabled);
+  AssertEquals('the clipboard was not read', reads, V.ClipReads);
+  AssertTrue('only asked whether there is text', V.ClipHasTextAsks > 0);
+end;
+
+{ macOS selects the word under a right click before the menu -- the host's too }
+procedure TTyTerminalViewMouseTests.TestTheMacSelectsAWordForTheHostsMenuToo;
+begin
+  V.SetPlatform(True, False);
+  V.PopupMenu := TPopupMenu.Create(F.Form);
+  V.WriteSync('foo bar    baz');
+  V.ClickAt(mbRight, [], V.CellCenter(5, 0));
+  AssertFalse('the host''s menu: left to LCL', V.ContextPopup(V.CellCenter(5, 0)));
+  AssertEquals('ours not shown', 0, V.MenuShows);
+  AssertEquals('the word is selected for it', 'bar', V.SelectionText);
+end;
+
+{ X11: the release only offers PRIMARY; the text is made when someone asks -- and not
+  at all when neither PRIMARY nor CopyOnSelect wants it }
+procedure TTyTerminalViewMouseTests.TestPrimaryIsOfferedNotBuilt;
+var
+  builds: Integer;
+begin
+  V.WriteSync('hello world');
+  builds := V.Sel.TextBuilds;
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  V.Up(mbLeft, [], V.CellLeft(4, 0));
+  AssertEquals('neither wanted: the text was not made', builds, V.Sel.TextBuilds);
+  V.SetPrimaryPlatform(True);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  V.Up(mbLeft, [], V.CellLeft(4, 0));
+  AssertEquals('offered', 1, V.PrimaryOffers);
+  AssertEquals('still not made', builds, V.Sel.TextBuilds);
+  AssertEquals('made when asked', 'hell', V.PrimaryNow);
+  AssertEquals('once', builds + 1, V.Sel.TextBuilds);
+end;
+
+{ ten thousand rows -- half of them one line wrapped over them all -- copied: two passes
+  over the rows, not a string grown row by row. THE BOUND, 1000 ms: the text is about
+  200 KB; see the sign-off for the time measured, the quadratic build it replaced took
+  seconds }
+procedure TTyTerminalViewMouseTests.TestCopyingTenThousandRowsIsQuick;
+const
+  Plain = 5000;
+  Wrapped = 5000;
+var
+  s: RawByteString;
+  i: Integer;
+  t0, took: QWord;
+  t: string;
+begin
+  V.Scrollback := Plain + Wrapped + 100;
+  s := '';
+  for i := 1 to Plain do
+    s := s + StringOfChar('p', 19) + #13#10;
+  V.WriteSync(s);
+  { one line over Wrapped rows }
+  V.WriteSync(StringOfChar('w', Wrapped * V.Cols) + #13#10);
+  V.SelectAll;
+  t0 := GetTickCount64;
+  t := V.SelectionText;
+  took := GetTickCount64 - t0;
+  AssertEquals('every plain row is there', Plain,
+    (Length(t) - Wrapped * V.Cols) div (19 + Length(LineEnding)));
+  AssertTrue('the wrapped line is one line', Pos(StringOfChar('w', Wrapped * V.Cols), t) > 0);
+  AssertTrue(Format('copied within 1000 ms (%d ms)', [took]), took < 1000);
+end;
+
+{ a double click in a word wrapped over twenty thousand rows takes the whole word:
+  upstream follows it up and down one recursion per row; here two loops (a stack as
+  deep as the word is long is not something a click should need) }
+procedure TTyTerminalViewMouseTests.TestAWordWrappedOverManyRows;
+const
+  N = 20000;
+var
+  t: string;
+begin
+  V.Scrollback := N + 100;
+  V.WriteSync(StringOfChar('w', N * V.Cols) + #13#10 + 'next');
+  V.ScrollLines(-(N div 2));
+  V.ClickAt(mbLeft, [], V.CellCenter(5, 2));
+  V.ClickAt(mbLeft, [ssDouble], V.CellCenter(5, 2));
+  t := V.SelectionText;
+  AssertEquals('the whole word', N * V.Cols, Length(t));
+  AssertEquals('and nothing else', StringOfChar('w', N * V.Cols), t);
 end;
 
 initialization

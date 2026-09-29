@@ -66,27 +66,37 @@ end;
 
 { 横向滚轮:LCL 的 DoMouseWheelLeft / Right 拿不到 WheelDelta(DoMouseWheelHorz 按正负分过去),
   照竖向按 ±120 累计要覆盖这一层。程序要了滚轮就报 66 / 67(左 / 右);没要就交还父控件——
-  终端没有横向可滚。 }
+  终端没有横向可滚。「要了」看协议收不收滚轮(X10 只报按下:开着上报也不收),再看这一格
+  到底报出去没有(TriggerMouseEvent 的返回值:指针在内边距里也不报)。 }
 function TTyTerminalView.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
 var
   notches, i: Integer;
+  probe: TTyTerminalMouseEvent;
+  reported: Boolean;
 begin
   Result := inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos);
   if Result or not Enabled or (csDesigning in ComponentState) then Exit;
   if not Reporting then
+    Exit(False);
+  probe := MakeMouseEvent(tmbWheel, tmaLeft, MousePos.X, MousePos.Y, Shift);
+  if not FCore.RestrictMouseEvent(probe) then
     Exit(False);
   if (FHorzAccum <> 0) and ((FHorzAccum > 0) <> (WheelDelta > 0)) then
     FHorzAccum := 0;
   Inc(FHorzAccum, WheelDelta);
   notches := FHorzAccum div 120;
   FHorzAccum := FHorzAccum - notches * 120;
-  Result := True;
+  { 一格都不满:吃掉这点位移,等凑满 }
+  if notches = 0 then
+    Exit(True);
   { LCL:WheelDelta < 0 是向左(DoMouseWheelHorz 分给 DoMouseWheelLeft) }
+  reported := False;
   for i := 1 to Abs(notches) do
     if notches < 0 then
-      ReportMouse(tmbWheel, tmaLeft, MousePos.X, MousePos.Y, Shift)
+      reported := ReportMouse(tmbWheel, tmaLeft, MousePos.X, MousePos.Y, Shift) or reported
     else
-      ReportMouse(tmbWheel, tmaRight, MousePos.X, MousePos.Y, Shift);
+      reported := ReportMouse(tmbWheel, tmaRight, MousePos.X, MousePos.Y, Shift) or reported;
+  Result := reported;
 end;
 
 function TyTerminalMouseButtonFor(AAction: TTyTerminalMouseAction; AButton: TMouseButton;
@@ -137,12 +147,12 @@ begin
   Result.Ctrl := ssCtrl in Shift;
 end;
 
-procedure TTyTerminalView.ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
-  X, Y: Integer; Shift: TShiftState);
+function TTyTerminalView.ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+  X, Y: Integer; Shift: TShiftState): Boolean;
 begin
   { 第 4、5 键上游是 NONE + 按下 / 抬起,被 TriggerMouseEvent 滤掉:不报 }
-  if (AButton = tmbNone) and (AAction <> tmaMove) then Exit;
-  FCore.TriggerMouseEvent(MakeMouseEvent(AButton, AAction, X, Y, Shift));
+  if (AButton = tmbNone) and (AAction <> tmaMove) then Exit(False);
+  Result := FCore.TriggerMouseEvent(MakeMouseEvent(AButton, AAction, X, Y, Shift));
 end;
 
 function TTyTerminalView.OverrideIsAlt: Boolean;
@@ -210,8 +220,13 @@ begin
     except
     end;
   if csDesigning in ComponentState then Exit;
-  FLastMousePos := Point(X, Y);
   SyncSelectionTrim;
+  { 同一个键又按下了,它上次的抬起却没来过(落在别的窗口上,捕获也没拦住):那次按下先收尾
+    (抬起报在上次知道的位置) }
+  if ((FRoute = mrReport) and (Button in FReportHeld))
+    or ((FRoute in [mrSelect, mrLink, mrPrimary]) and (Button = FRouteButton)) then
+    ForgetPress;
+  FLastMousePos := Point(X, Y);
   { Ctrl(macOS Cmd)+单击链接:链接优先,程序接管了鼠标也一样(spec §9.8);不上报、不选择 }
   if (FRoute = mrNone) and (Button = mbLeft) and LinkKeyHeld(Shift) then
   begin
@@ -283,6 +298,101 @@ begin
   FMouseInside := True;
   UpdateHover(X, Y, Shift);
   UpdatePointer(Shift);
+end;
+
+function MouseButtonShift(AButton: TMouseButton): TShiftState;
+begin
+  case AButton of
+    mbLeft: Result := [ssLeft];
+    mbMiddle: Result := [ssMiddle];
+    mbRight: Result := [ssRight];
+  else
+    Result := [];
+  end;
+end;
+
+function TTyTerminalView.RouteButtonsHeld: Boolean;
+var
+  held: TShiftState;
+  b: TMouseButton;
+begin
+  held := HeldMouseButtons;
+  if FRoute = mrReport then
+  begin
+    for b := Low(TMouseButton) to High(TMouseButton) do
+      if (b in FReportHeld) and (MouseButtonShift(b) * held <> []) then
+        Exit(True);
+    Exit(False);
+  end;
+  Result := MouseButtonShift(FRouteButton) * held <> [];
+end;
+
+procedure TTyTerminalView.ForgetPress;
+var
+  rt: TTyTerminalMouseRoute;
+  b: TMouseButton;
+  sh: TShiftState;
+begin
+  rt := FRoute;
+  FRoute := mrNone;
+  StopDragTimer;
+  case rt of
+    mrReport:
+      begin
+        { 上游在 document 上等抬起,总能等到;这里等不到了,替程序补上它会收到的抬起(报在
+          最后知道的位置,带此刻的修饰键) }
+        sh := CurrentShiftState;
+        for b := Low(TMouseButton) to High(TMouseButton) do
+          if b in FReportHeld then
+            ReportMouse(TyTerminalMouseButtonFor(tmaUp, b, sh), tmaUp, FLastMousePos.X, FLastMousePos.Y, sh);
+        FReportHeld := [];
+        FRightReported := False;
+      end;
+    mrSelect:
+      SelectionRelease;
+  end;
+end;
+
+{ LCL 的抬起:先放捕获(CaptureChanged 在这里就到),再 MouseUp。记下「在抬起里」,这时的
+  捕获变化交给随后的 MouseUp }
+procedure TTyTerminalView.WMLButtonUp(var Message: TLMLButtonUp);
+begin
+  FInButtonUp := True;
+  try
+    inherited WMLButtonUp(Message);
+  finally
+    FInButtonUp := False;
+  end;
+end;
+
+procedure TTyTerminalView.WMMButtonUp(var Message: TLMMButtonUp);
+begin
+  FInButtonUp := True;
+  try
+    inherited WMMButtonUp(Message);
+  finally
+    FInButtonUp := False;
+  end;
+end;
+
+procedure TTyTerminalView.WMRButtonUp(var Message: TLMRButtonUp);
+begin
+  FInButtonUp := True;
+  try
+    inherited WMRButtonUp(Message);
+  finally
+    FInButtonUp := False;
+  end;
+end;
+
+{ 捕获被拿走(Alt+Tab、模态框、别的控件 SetCapture):路要的键已经松开,抬起就不会再来了;
+  还按着的话,抬起也许还会落回这里,先不动 }
+procedure TTyTerminalView.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  if FInButtonUp or (FRoute = mrNone) or (csDesigning in ComponentState) then Exit;
+  if RouteButtonsHeld then Exit;
+  ForgetPress;
 end;
 
 procedure TTyTerminalView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

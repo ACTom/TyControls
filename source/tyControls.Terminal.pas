@@ -85,7 +85,8 @@ type
   TTyTerminalOsc52Policy = (to52Off, to52Write, to52ReadWrite);
   { 程序要写(AWrite)或读剪贴板。ASelection 是程序给的 Pc 原样(控件不按它选剪贴板)。写:
     AText 是解出来的文字,宿主可以改,AAllow 默认 True;读:AText 是剪贴板现在的内容,宿主可以
-    改,AAllow 默认 False(宿主不说行就不给)。同步发,在解析中间:宿主可以在这里弹模态框 }
+    改,AAllow 默认 False(宿主不说行就不给)。同步发,在解析中间:宿主可以在这里弹模态框,
+    **不能释放控件**(也不能关它所在的窗体);事件抛出的异常控件吞掉,这一条作罢 }
   TTyTerminalOsc52Event = procedure(Sender: TObject; AWrite: Boolean; const ASelection: string;
     var AText: string; var AAllow: Boolean) of object;
 
@@ -202,6 +203,9 @@ type
     FRouteButton: TMouseButton;
     FReportHeld: set of TMouseButton;
     FRightReported, FRightLocal: Boolean;
+    { 在 LCL 的抬起消息里(它先放捕获、CaptureChanged 先于 MouseUp 到):这时的捕获变化不是
+      「抬起丢了」 }
+    FInButtonUp: Boolean;
     FSelectionOverrideKey: TTyTerminalSelectionOverrideKey;
     FLastMousePos: TPoint;
     { 选区:上游 SelectionService 的非 DOM 部分;缓冲的 TrimmedLines 读数;上次画到的视口
@@ -340,10 +344,15 @@ type
     function Reporting: Boolean;
     function MakeMouseEvent(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
       X, Y: Integer; Shift: TShiftState): TTyTerminalMouseEvent;
-    procedure ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
-      X, Y: Integer; Shift: TShiftState);
+    function ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+      X, Y: Integer; Shift: TShiftState): Boolean;
     function OverrideIsAlt: Boolean;
     procedure UpdatePointer(Shift: TShiftState);
+    { 这次按下的路要的键还按着没有(HeldMouseButtons) }
+    function RouteButtonsHeld: Boolean;
+    { 抬起丢了(捕获被拿走、失焦,键已经不在了):照 MouseUp 收尾——停自动滚、选区松开、
+      上报路补发抬起、路复位;链接不激活、PRIMARY 不粘贴 }
+    procedure ForgetPress;
     { 选区 }
     procedure SelectionChanged(Sender: TObject);
     procedure SelectionRedraw(Sender: TObject);
@@ -371,17 +380,32 @@ type
     procedure MenuPasteClick(Sender: TObject);
     procedure MenuSelectAllClick(Sender: TObject);
     procedure MenuClearClick(Sender: TObject);
+    { PRIMARY 按需:有人要时才取选区的文字(LCL 的 OnRequest,FormatID = 0 是丢了所有权) }
+    procedure PrimaryRequest(const RequestedFormatID: TClipboardFormat; Data: TStream);
   protected
     { 平台标志:按平台(不是 widgetset)取;受保护,测试可以改成别的平台 }
     FIsMac, FIsWindows: Boolean;
     { 用不用 X11 的 PRIMARY(TyTerminalUsesPrimary);测试可以改 }
     FUsesPrimary: Boolean;
     function ReadPrimaryText: string; virtual;
-    procedure WritePrimaryText(const S: string); virtual;
+    { 选区成了 PRIMARY:只登记「有、是文字」,文字等有人要时才取(PrimaryRequestText);默认
+      走 LCL 的 PrimarySelection.OnRequest(SynEdit 的做法) }
+    procedure OfferPrimary; virtual;
+    { 有人要 PRIMARY 时给的:此刻的选区文字 }
+    function PrimaryRequestText: string;
+    { 剪贴板里有没有文字(弹菜单时判「粘贴」,不读整段);默认 TyClipboardHasText }
+    function ClipboardHasText: Boolean; virtual;
+    { 此刻实际按着的鼠标键(ssLeft / ssMiddle / ssRight);默认按 GetKeyState 问 }
+    function HeldMouseButtons: TShiftState; virtual;
+    { 捕获被拿走:不在 LCL 的抬起消息里、路要的键也不在了,就是抬起丢了(ForgetPress) }
+    procedure CaptureChanged; override;
+    procedure WMLButtonUp(var Message: TLMLButtonUp); message LM_LBUTTONUP;
+    procedure WMMButtonUp(var Message: TLMMButtonUp); message LM_MBUTTONUP;
+    procedure WMRButtonUp(var Message: TLMRButtonUp); message LM_RBUTTONUP;
     { 选区追上被挤出头部的行(缓冲 TrimmedLines 的差值) }
     procedure SyncSelectionTrim;
-    { 一次选择结束(松开、双击、三击、Shift 扩展、全选):选区非空就写 PRIMARY 与
-      (CopyOnSelect 时)剪贴板 }
+    { 一次选择结束(松开、双击、三击、Shift 扩展、全选):选区非空就登记 PRIMARY(文字按需)、
+      CopyOnSelect 时写剪贴板;两样都不要就不取文字 }
     procedure FinishSelection;
     { 自动滚计时器的回调转到这里;测试直接调 }
     procedure DragScrollTick;
@@ -744,6 +768,9 @@ begin
     FSelection.OnChange := nil;
     FSelection.OnRedraw := nil;
   end;
+  { 还拿着 PRIMARY:交出去(OnRequest 指着本对象的方法) }
+  if FUsesPrimary and (PrimarySelection.OnRequest = @PrimaryRequest) then
+    PrimarySelection.OnRequest := nil;
   FreeAndNil(FSelection);
   FreeAndNil(FMenu);
   FreeAndNil(FCore);
@@ -827,10 +854,12 @@ begin
   { DECSCUSR、DECTCEM:光标行重画;程序要不要闪烁也在这里变 }
   DirtyCursorRows;
   UpdateBlinkTimer;
-  { 程序打开鼠标上报:上游 _syncMouseModeState -> SelectionService.disable() 清选区
-    (MouseService.ts:380-393) }
+  { 程序换了鼠标上报协议、换完是开着的:上游每次协议变化都走 _syncMouseModeState ->
+    SelectionService.disable() 清选区(MouseService.ts:380-393;1000 换 1002 也清),关掉
+    不清。上游同一协议重复 DECSET 也清(activeProtocol 的 setter 每次都发);Core 只在模式
+    真变了才发 OnModesChange,这一条我们不清(spec §15) }
   p := FCore.Modes.MouseProtocol;
-  if (FLastProtocol = tmpNone) and (p <> tmpNone) then
+  if (p <> FLastProtocol) and (p <> tmpNone) then
     ClearSelection;
   FLastProtocol := p;
 end;
@@ -1846,7 +1875,7 @@ procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: I
 
   function Frame(ARgb: Cardinal): Cardinal;
   begin
-    { 禁用时朝父控件底色预混(色表同一个方向);选区色的 alpha 不动 }
+    { 禁用时朝父控件底色预混(色表同一个方向) }
     if FPremixAlpha < 255 then
       Result := PremixRgb(ARgb, FPremixBase, FPremixAlpha)
     else
@@ -1855,7 +1884,7 @@ procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: I
 
 var
   w, h, r, cursorRow, cursorCol, sa, sb: Integer;
-  selRgb: Cardinal;
+  sel: TTyColor;
   buf: TTyTerminalBuffer;
   ins, clip, part: TRect;
   shape: TTyTermCursorShape;
@@ -1907,10 +1936,13 @@ begin
     FRowPainter.CursorWidthPx := Max(1, MulDiv(FSpec.CursorWidthLogical, APPI, 96));
     FRowPainter.RasterBudgetMs := FRasterBudgetMs;
     FRowPainter.Clock := @NowMs;
-    { 选区与链接:聚焦 / 失焦两色,禁用时预混 }
-    selRgb := Frame(Cardinal(FSelBg[FHasFocus]) and $FFFFFF);
-    FRowPainter.SelColor := BGRA((selRgb shr 16) and $FF, (selRgb shr 8) and $FF, selRgb and $FF,
-      TyAlphaOf(FSelBg[FHasFocus]));
+    { 选区与链接:聚焦 / 失焦两色。选区色先带着它的 alpha 在主题底色上混成不透明(上游
+      selectionBackgroundOpaque / selectionInactiveBackgroundOpaque,ThemeService.ts:87-90),
+      禁用时再预混;行绘制器拿它**替换**选中格的底色(DomRendererRowFactory.ts:380-386),
+      反显格、亮底色格上的选区也看得见 }
+    sel := FSelBg[FHasFocus];
+    FRowPainter.SelBg := Frame(TyTermBlendOver(FPalette[257],
+      BGRA(TyRedOf(sel), TyGreenOf(sel), TyBlueOf(sel), TyAlphaOf(sel))));
     FRowPainter.SelHasInk := FSelHasInk[FHasFocus];
     FRowPainter.SelInk := Frame(FSelInk[FHasFocus]);
     FRowPainter.LinkColor := Frame(FLinkRgb);
@@ -2104,6 +2136,9 @@ begin
     FStateChange := False;
   end;
   SetHasFocus(False);
+  { 失焦时一次按下还没收尾,而它的键已经松开(抬起落到了别处):照 MouseUp 收尾 }
+  if (FRoute <> mrNone) and not (csDesigning in ComponentState) and not RouteButtonsHeld then
+    ForgetPress;
 end;
 
 procedure TTyTerminalView.WMSetFocus(var Message: TLMSetFocus);
@@ -2407,9 +2442,43 @@ begin
   Result := PrimarySelection.AsText;
 end;
 
-procedure TTyTerminalView.WritePrimaryText(const S: string);
+procedure TTyTerminalView.OfferPrimary;
+var
+  fmt: TClipboardFormat;
 begin
-  PrimarySelection.AsText := S;
+  if PrimarySelection.OnRequest = @PrimaryRequest then Exit;
+  fmt := CF_TEXT;
+  PrimarySelection.SetSupportedFormats(1, @fmt);
+  PrimarySelection.OnRequest := @PrimaryRequest;
+end;
+
+function TTyTerminalView.PrimaryRequestText: string;
+begin
+  SyncSelectionTrim;
+  Result := FSelection.Text(LineEnding);
+end;
+
+procedure TTyTerminalView.PrimaryRequest(const RequestedFormatID: TClipboardFormat; Data: TStream);
+var
+  t: string;
+begin
+  if (RequestedFormatID = 0) or (Data = nil) then Exit;
+  t := PrimaryRequestText;
+  if t <> '' then
+    Data.Write(t[1], Length(t));
+end;
+
+function TTyTerminalView.ClipboardHasText: Boolean;
+begin
+  Result := TyClipboardHasText;
+end;
+
+function TTyTerminalView.HeldMouseButtons: TShiftState;
+begin
+  Result := [];
+  if GetKeyState(VK_LBUTTON) < 0 then Include(Result, ssLeft);
+  if GetKeyState(VK_MBUTTON) < 0 then Include(Result, ssMiddle);
+  if GetKeyState(VK_RBUTTON) < 0 then Include(Result, ssRight);
 end;
 
 procedure TTyTerminalView.PasteFromClipboard;

@@ -99,6 +99,7 @@ type
     FOldStart, FOldEnd: TTyTermSelPoint;
     FOldStartAlias, FOldEndAlias: TTyTermOldAlias;
     FOnChange, FOnRedraw: TNotifyEvent;
+    FTextBuilds: Integer;
     function Cols: Integer;
     function Buffer: TTyTerminalBuffer;
     procedure Redraw;
@@ -122,6 +123,9 @@ type
     function IsClickInSelection(const P: TTyTermSelPoint): Boolean;
     function IsCharWordSeparator(ALine: TTyTerminalLine; ACol: Integer): Boolean;
     function ConvertViewportColToCharacterIndex(ALine: TTyTerminalLine; AX: Integer): Integer;
+    { _getWordAt without its two recursions: the word on this row only }
+    function GetWordAtRow(const P: TTyTermSelPoint; AAllowWhitespaceOnly: Boolean;
+      out AStart, ALength: Integer): Boolean;
     function GetWordAt(const P: TTyTermSelPoint; AAllowWhitespaceOnly, AFollowAbove,
       AFollowBelow: Boolean; out AStart, ALength: Integer): Boolean;
     procedure SelectWordAt(const P: TTyTermSelPoint; AAllowWhitespaceOnly: Boolean);
@@ -173,6 +177,8 @@ type
     property OnRedraw: TNotifyEvent read FOnRedraw write FOnRedraw;
     { FOR THE TESTS }
     property Model: TTyTermSelectionModel read FModel;
+    { how many times Text built the selection's text }
+    property TextBuilds: Integer read FTextBuilds;
   end;
 
 const
@@ -545,24 +551,36 @@ end;
 function TTyTermSelection.Text(const ALineSep: string): string;
 var
   s, e: TTyTermSelPoint;
-  rows: array of string;
-  n, i, startCol, endCol, firstEnd: Integer;
+  pieces: array of string;
+  joins: array of Boolean;
+  n, i, startCol, endCol, firstEnd, total, at: Integer;
   line: TTyTerminalLine;
-  t: string;
 
-  procedure Add(const AText: string);
+  { one row's piece; AJoin: a wrapped row goes on the one before it, no separator }
+  procedure Add(const AText: string; AJoin: Boolean);
   begin
-    if n = Length(rows) then
-      SetLength(rows, n * 2 + 4);
-    rows[n] := AText;
+    if n = Length(pieces) then
+    begin
+      SetLength(pieces, n * 2 + 16);
+      SetLength(joins, n * 2 + 16);
+    end;
+    { NBSP as a space: a piece is whole UTF-8, so piece by piece is the same as on the
+      joined text }
+    if Pos(#$C2#$A0, AText) > 0 then
+      pieces[n] := StringReplace(AText, #$C2#$A0, ' ', [rfReplaceAll])
+    else
+      pieces[n] := AText;
+    joins[n] := AJoin and (n > 0);
     Inc(n);
   end;
 
 begin                                                                        { :203-262 }
+  Inc(FTextBuilds);
   if not FModel.FinalStart(s) or not FModel.FinalEnd(e) then
     Exit('');
   n := 0;
-  rows := nil;
+  pieces := nil;
+  joins := nil;
   if FMode = tsmColumn then
   begin
     { a zero-width column is nothing }
@@ -579,37 +597,46 @@ begin                                                                        { :
       endCol := s.Col;
     end;
     for i := s.Row to e.Row do
-      Add(Buffer.TranslateBufferLineToString(i, True, startCol, endCol));
+      Add(Buffer.TranslateBufferLineToString(i, True, startCol, endCol), False);
   end
   else
   begin
     if s.Row = e.Row then firstEnd := e.Col else firstEnd := -1;
-    Add(Buffer.TranslateBufferLineToString(s.Row, True, s.Col, firstEnd));
+    Add(Buffer.TranslateBufferLineToString(s.Row, True, s.Col, firstEnd), False);
     for i := s.Row + 1 to e.Row - 1 do
     begin
       line := Buffer.Lines.Get(i);
-      t := Buffer.TranslateBufferLineToString(i, True);
-      if (line <> nil) and line.IsWrapped then
-        rows[n - 1] := rows[n - 1] + t
-      else
-        Add(t);
+      Add(Buffer.TranslateBufferLineToString(i, True), (line <> nil) and line.IsWrapped);
     end;
     if s.Row <> e.Row then
     begin
       line := Buffer.Lines.Get(e.Row);
-      t := Buffer.TranslateBufferLineToString(e.Row, True, 0, e.Col);
-      if (line <> nil) and line.IsWrapped then
-        rows[n - 1] := rows[n - 1] + t
-      else
-        Add(t);
+      Add(Buffer.TranslateBufferLineToString(e.Row, True, 0, e.Col), (line <> nil) and line.IsWrapped);
     end;
   end;
-  Result := '';
+  { two passes: the length first, then one string filled in (a ten-thousand-row
+    selection would otherwise be rebuilt row by row) }
+  total := 0;
   for i := 0 to n - 1 do
   begin
-    if i > 0 then
-      Result := Result + ALineSep;
-    Result := Result + StringReplace(rows[i], #$C2#$A0, ' ', [rfReplaceAll]);
+    Inc(total, Length(pieces[i]));
+    if (i > 0) and not joins[i] then
+      Inc(total, Length(ALineSep));
+  end;
+  SetLength(Result, total);
+  at := 1;
+  for i := 0 to n - 1 do
+  begin
+    if (i > 0) and not joins[i] and (ALineSep <> '') then
+    begin
+      Move(ALineSep[1], Result[at], Length(ALineSep));
+      Inc(at, Length(ALineSep));
+    end;
+    if pieces[i] <> '' then
+    begin
+      Move(pieces[i][1], Result[at], Length(pieces[i]));
+      Inc(at, Length(pieces[i]));
+    end;
   end;
 end;
 
@@ -722,14 +749,14 @@ begin
   end;
 end;
 
-{ _getWordAt :833-981 }
-function TTyTermSelection.GetWordAt(const P: TTyTermSelPoint; AAllowWhitespaceOnly, AFollowAbove,
-  AFollowBelow: Boolean; out AStart, ALength: Integer): Boolean;
+{ _getWordAt :833-950, the row itself }
+function TTyTermSelection.GetWordAtRow(const P: TTyTermSelPoint; AAllowWhitespaceOnly: Boolean;
+  out AStart, ALength: Integer): Boolean;
 var
-  line, prevLine, nextLine: TTyTerminalLine;
+  line: TTyTerminalLine;
   s: UnicodeString;
   startIndex, endIndex, charOffset, leftWide, rightWide, leftLong, rightLong: Integer;
-  startCol, endCol, len, c, ws, wl: Integer;
+  startCol, endCol, len, c: Integer;
 begin
   AStart := 0;
   ALength := 0;
@@ -824,30 +851,65 @@ begin
 
   if not AAllowWhitespaceOnly and SliceIsBlank(s, startIndex, endIndex) then
     Exit(False);
+  Result := True;
+end;
+
+{ _getWordAt :833-981. Upstream recurses once per wrapped row the word runs across
+  (:952-978: upwards with followAbove only, downwards with followBelow only); a word
+  wrapped over thousands of rows would take as deep a stack, so the two chains are
+  walked in loops here. The sums are the same: each row above adds (cols - its word's
+  start), each row below its word's length, and a row is followed on only while its
+  own word (before any following) touches the edge. }
+function TTyTermSelection.GetWordAt(const P: TTyTermSelPoint; AAllowWhitespaceOnly, AFollowAbove,
+  AFollowBelow: Boolean; out AStart, ALength: Integer): Boolean;
+var
+  line, other: TTyTerminalLine;
+  c, row, ws, wl, wordStart, wordEnd, grow: Integer;
+begin
+  Result := GetWordAtRow(P, AAllowWhitespaceOnly, AStart, ALength);
+  if not Result then
+    Exit;
+  c := Cols;
+  { the word ends where the row's own word ends, whatever is added above }
+  wordEnd := AStart + ALength;
 
   { the word runs on from the wrapped line above }
   if AFollowAbove then
-    if (AStart = 0) and (line.GetCodePoint(0) <> 32) then
+  begin
+    grow := 0;
+    row := P.Row;
+    wordStart := AStart;
+    line := Buffer.Lines.Get(row);
+    while (line <> nil) and (wordStart = 0) and (line.GetCodePoint(0) <> 32) do
     begin
-      prevLine := Buffer.Lines.Get(P.Row - 1);
-      if (prevLine <> nil) and line.IsWrapped and (prevLine.GetCodePoint(c - 1) <> 32) then
-        if GetWordAt(SelPoint(c - 1, P.Row - 1), False, True, False, ws, wl) then
-        begin
-          Dec(AStart, c - ws);
-          Inc(ALength, c - ws);
-        end;
+      other := Buffer.Lines.Get(row - 1);
+      if (other = nil) or not line.IsWrapped or (other.GetCodePoint(c - 1) = 32) then Break;
+      if not GetWordAtRow(SelPoint(c - 1, row - 1), False, ws, wl) then Break;
+      Inc(grow, c - ws);
+      Dec(row);
+      line := other;
+      wordStart := ws;
     end;
+    Dec(AStart, grow);
+    Inc(ALength, grow);
+  end;
 
   { ... and on into the wrapped line below }
   if AFollowBelow then
-    if (AStart + ALength = c) and (line.GetCodePoint(c - 1) <> 32) then
+  begin
+    row := P.Row;
+    line := Buffer.Lines.Get(row);
+    while (line <> nil) and (wordEnd = c) and (line.GetCodePoint(c - 1) <> 32) do
     begin
-      nextLine := Buffer.Lines.Get(P.Row + 1);
-      if (nextLine <> nil) and nextLine.IsWrapped and (nextLine.GetCodePoint(0) <> 32) then
-        if GetWordAt(SelPoint(0, P.Row + 1), False, False, True, ws, wl) then
-          Inc(ALength, wl);
+      other := Buffer.Lines.Get(row + 1);
+      if (other = nil) or not other.IsWrapped or (other.GetCodePoint(0) = 32) then Break;
+      if not GetWordAtRow(SelPoint(0, row + 1), False, ws, wl) then Break;
+      Inc(ALength, wl);
+      Inc(row);
+      line := other;
+      wordEnd := ws + wl;
     end;
-  Result := True;
+  end;
 end;
 
 procedure TTyTermSelection.SelectWordAt(const P: TTyTermSelPoint; AAllowWhitespaceOnly: Boolean);

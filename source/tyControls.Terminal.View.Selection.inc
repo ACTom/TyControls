@@ -136,16 +136,15 @@ begin
 end;
 
 procedure TTyTerminalView.FinishSelection;
-var
-  t: string;
 begin
   SyncSelectionTrim;
   if not FSelection.HasSelection then Exit;
-  t := FSelection.Text(LineEnding);
+  { PRIMARY 只登记,文字等有人要时再取(一万行的选区松手时不必拼一遍);CopyOnSelect 才
+    现在就要文字 }
   if FUsesPrimary then
-    WritePrimaryText(t);
+    OfferPrimary;
   if FCopyOnSelect then
-    WriteClipboardText(t);
+    WriteClipboardText(FSelection.Text(LineEnding));
 end;
 
 procedure TTyTerminalView.StartDragTimer;
@@ -202,9 +201,22 @@ begin
   FSelection.Clear;
 end;
 
+{ 宿主给的数钳进缓冲:列 0..Cols、行 0..最后一行、长度 0..到缓冲末尾(上游不查;长度
+  太大时「起点 + 长度」会溢出) }
 procedure TTyTerminalView.Select(ACol, AAbsRow, ALength: Integer);
+var
+  last: Integer;
+  room: Int64;
 begin
   SyncSelectionTrim;
+  last := Max(FCore.Buffer.Lines.Length - 1, 0);
+  ACol := EnsureRange(ACol, 0, FCore.Cols);
+  AAbsRow := EnsureRange(AAbsRow, 0, last);
+  room := Int64(last - AAbsRow + 1) * FCore.Cols - ACol;
+  if ALength < 0 then
+    ALength := 0
+  else if ALength > room then
+    ALength := Integer(room);
   FSelection.SetSelection(ACol, AAbsRow, ALength);
 end;
 

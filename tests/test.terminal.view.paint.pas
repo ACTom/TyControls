@@ -69,6 +69,8 @@ type
     procedure TestTheSelectionScrollsWithTheText;
     procedure TestOnlyTouchedRowsRepaint;
     procedure TestADisabledSelectionIsDimmed;
+    procedure TestTheSelectionReplacesTheCellsBackground;
+    procedure TestAWideCharacterIsSelectedByItsFirstColumn;
     { 4 期:链接下划线 }
     procedure TestAHoveredLinkIsUnderlined;
     procedure TestAWrappedLinkIsUnderlinedOnBothRows;
@@ -92,10 +94,12 @@ begin
   F := TTyTermViewFixture.Create;
   F.SizeTo(20, 5);
   { a pixel test wants the whole frame: under load the 10 ms budget for new glyphs
-    runs out and leaves a row (or a glyph) for the next frame. The timing tests set it
-    back. }
-  F.View.RasterBudgetMs := 0;
+    would run out on the wall clock and leave a row (or a glyph) for the next frame. The
+    budget stays on -- its branch runs on every glyph -- and the clock it reads stands
+    still (FClockMs), so it never runs out. The timing test that wants the wall clock
+    takes it back (Core.Clock := nil). }
   FClockMs := 100000;
+  F.View.Core.Clock := @Clock;
 end;
 
 procedure TTyTerminalViewPaintTests.TearDown;
@@ -892,6 +896,7 @@ begin
   { 95 printable ASCII x regular, bold, italic, bold italic: 380 glyphs never drawn }
   F.SizeTo(100, 8);
   F.View.RasterBudgetMs := 10;                 { the control's default: spread over frames }
+  F.View.Core.Clock := nil;                    { on the wall clock (SetUp froze it) }
   s := #27'[H';
   for st := 0 to 3 do
   begin
@@ -1353,15 +1358,82 @@ begin
   AssertTrue('the parent has a colour', TyResolveParentBg(F.View, pc));
   base := Cardinal(pc) and $FFFFFF;
   over := SelOver(F.Ctl, False);
-  rgb := Mix((Cardinal(over.red) shl 16) or (Cardinal(over.green) shl 8) or over.blue, base, a);
-  over := BGRA((rgb shr 16) and $FF, (rgb shr 8) and $FF, rgb and $FF, over.alpha);
+  { the selection made opaque on the theme's ground, then dimmed like every colour }
+  rgb := Mix(TyTermBlendOver(Bg, over), base, a);
   F.View.Select(2, F.View.Core.Buffer.YBase, 3);
   F.View.Enabled := False;
   b := Snap;
   try
-    AssertTrue(Format('the selection dimmed over the dimmed ground (%s)',
-      [IntToHex(TyTermBlendOver(Mix(Bg, base, a), over), 6)]),
-      CellIs(b, 3, 0, TyTermBlendOver(Mix(Bg, base, a), over)));
+    AssertTrue(Format('the opaque selection dimmed (%s)', [IntToHex(rgb, 6)]), CellIs(b, 3, 0, rgb));
+  finally
+    b.Free;
+  end;
+end;
+
+{ upstream paints a selected cell in the opaque selection colour in place of its own
+  background (DomRendererRowFactory.ts:380-386): on an inverse cell and on a bright one
+  the selection is the same colour as on the ground -- laid over them it would vanish }
+procedure TTyTerminalViewPaintTests.TestTheSelectionReplacesTheCellsBackground;
+var
+  b: TBGRABitmap;
+  c: Integer;
+  sel: Cardinal;
+begin
+  F.View.WriteSync(#27'[?25l'#27'[7m  '#27'[0m'#27'[48;2;255;255;0m  '#27'[0m');
+  sel := TyTermBlendOver(Bg, SelOver(F.Ctl, False));
+  b := Snap;
+  try
+    AssertFalse('an inverse cell is not the ground', CellIs(b, 0, 0, Bg));
+    AssertTrue('a yellow cell', CellIs(b, 2, 0, $FFFF00));
+  finally
+    b.Free;
+  end;
+  F.View.Select(0, F.View.Core.Buffer.YBase, 5);
+  b := Snap;
+  try
+    for c := 0 to 4 do
+      AssertTrue(Format('cell %d: the selection colour, whatever was under it', [c]), CellIs(b, c, 0, sel));
+  finally
+    b.Free;
+  end;
+end;
+
+{ a wide character is in the selection by its first column, both halves alike
+  (DomRendererRowFactory.ts:112 skips the second half, :160 asks for the first): a
+  column that starts on its second half leaves it out, one that ends on its first half
+  takes it whole. U+3000 (ideographic space) is wide and has no ink: the whole cell is
+  the colour under it. }
+procedure TTyTerminalViewPaintTests.TestAWideCharacterIsSelectedByItsFirstColumn;
+var
+  b: TBGRABitmap;
+  sel: Cardinal;
+begin
+  F.View.WriteSync(#27'[?25l'#13#10'a'#$E3#$80#$80'b');
+  AssertEquals('the wide cell', 2, F.View.Core.Buffer.Lines.Get(F.View.Core.Buffer.YBase + 1).GetWidth(1));
+  sel := TyTermBlendOver(Bg, SelOver(F.Ctl, False));
+  { columns [2, 4): from row 0 (plain) down onto the second half on row 1 }
+  F.View.Down(mbLeft, [ssLeft, ssAlt], F.View.CellLeft(2, 0));
+  F.View.MoveTo([ssLeft, ssAlt], F.View.CellLeft(4, 1));
+  F.View.Up(mbLeft, [ssAlt], F.View.CellLeft(4, 1));
+  b := Snap;
+  try
+    AssertTrue('row 0, column 2: selected', CellIs(b, 2, 0, sel));
+    AssertTrue('row 1, the wide character''s first half: not', CellIs(b, 1, 1, Bg));
+    AssertTrue('row 1, its second half: not either', CellIs(b, 2, 1, Bg));
+  finally
+    b.Free;
+  end;
+  { columns [1, 2): from the first half on row 1 up to row 0 (a drag that ended ON a
+    second half would move on past it) -- the character whole }
+  F.View.Down(mbLeft, [ssLeft, ssAlt], F.View.CellLeft(1, 1));
+  F.View.MoveTo([ssLeft, ssAlt], F.View.CellLeft(2, 0));
+  F.View.Up(mbLeft, [ssAlt], F.View.CellLeft(2, 0));
+  b := Snap;
+  try
+    AssertTrue('row 0, column 1: selected', CellIs(b, 1, 0, sel));
+    AssertTrue('row 0, column 2: not', CellIs(b, 2, 0, Bg));
+    AssertTrue('row 1, the first half: selected', CellIs(b, 1, 1, sel));
+    AssertTrue('row 1, the second half with it', CellIs(b, 2, 1, sel));
   finally
     b.Free;
   end;
