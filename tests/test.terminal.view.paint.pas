@@ -1202,7 +1202,8 @@ var
   c: Integer;
   unfocused, focused: Cardinal;
 begin
-  F.View.WriteSync(#27'[?25l');
+  { the cursor off the selection's row: a focus change repaints the cursor row anyway }
+  F.View.WriteSync(#27'[?25l'#27'[5;1H');
   unfocused := TyTermBlendOver(Bg, SelOver(F.Ctl, False));
   focused := TyTermBlendOver(Bg, SelOver(F.Ctl, True));
   AssertTrue('the two selection colours differ', unfocused <> focused);
@@ -1232,13 +1233,15 @@ procedure TTyTerminalViewPaintTests.TestSelectedTextKeepsItsColourUnlessTheTheme
 var
   b: TBGRABitmap;
 begin
-  F.View.WriteSync(#27'[?25l'#$E2#$96#$88);
+  { a coloured block: the instance foreground would pass for "kept" if the default
+    theme's missing selection colour fell back to it }
+  F.View.WriteSync(#27'[?25l'#27'[38;2;0;170;0m'#$E2#$96#$88);
   F.View.Select(0, F.View.Core.Buffer.YBase, 1);
   F.View.Enter;
   b := Snap;
   try
-    AssertTrue('the block keeps the foreground (the default theme gives no selection colour for text)',
-      CellIs(b, 0, 0, Fg));
+    AssertTrue('the block keeps its colour (the default theme gives no selection colour for text)',
+      CellIs(b, 0, 0, $00AA00));
   finally
     b.Free;
   end;

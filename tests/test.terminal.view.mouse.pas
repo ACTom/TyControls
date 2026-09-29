@@ -610,6 +610,13 @@ begin
   AssertTrue('reported', F.Data <> '');
   AssertTrue('handled', V.ContextPopup(V.CellCenter(1, 1)));
   AssertEquals('no menu', 0, V.MenuShows);
+  { Shift pressed between the reported press and the menu: the press went to the
+    program all the same -- it is the press that decides, not the key now }
+  V.UseFakeShift := True;
+  V.FakeShift := [ssShift];
+  V.ClickAt(mbRight, [], V.CellCenter(1, 1));
+  AssertTrue('handled again', V.ContextPopup(V.CellCenter(1, 1)));
+  AssertEquals('still no menu', 0, V.MenuShows);
 end;
 
 procedure TTyTerminalViewMouseTests.TestTheMenuBeforeThePress;
