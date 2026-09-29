@@ -69,6 +69,9 @@ type
     procedure TestTheSelectionScrollsWithTheText;
     procedure TestOnlyTouchedRowsRepaint;
     procedure TestADisabledSelectionIsDimmed;
+    { 4 期:链接下划线 }
+    procedure TestAHoveredLinkIsUnderlined;
+    procedure TestAWrappedLinkIsUnderlinedOnBothRows;
   end;
 
 implementation
@@ -1086,6 +1089,84 @@ begin
   finally
     F.View.Controller := F.Ctl;
     c.Free;
+  end;
+end;
+
+{ ---- 4 期:链接下划线 ------------------------------------------------------------------ }
+
+{ the link colour's pixels in the underline band (UnderlineY, LineW rows) of a cell }
+function LinkBand(ATest: TTyTerminalViewPaintTests; B: TBGRABitmap; AView: TTyTerminalViewProbe;
+  ACol, ARow: Integer; ALink: Cardinal): Integer;
+var
+  r: TRect;
+  m: TTyTermCellMetrics;
+  x, y: Integer;
+begin
+  r := AView.CellRect(ACol, ARow);
+  m := AView.CellMetrics;
+  Result := 0;
+  for y := r.Top + m.UnderlineY to r.Top + m.UnderlineY + m.LineW - 1 do
+    for x := r.Left to r.Right - 1 do
+      if Rgb(B.GetPixel(x, y)) = ALink then Inc(Result);
+end;
+
+procedure TTyTerminalViewPaintTests.TestAHoveredLinkIsUnderlined;
+var
+  b: TBGRABitmap;
+  c, full: Integer;
+  link: Cardinal;
+  m: TTyTermCellMetrics;
+begin
+  F.SizeTo(40, 5);
+  F.View.SetPlatform(False, True);
+  F.View.WriteSync(#27'[?25l' + 'see https://example.com now');
+  link := F.ThemeFg('TyTerminalLink');
+  AssertTrue('the link colour is not the text''s', link <> Fg);
+  F.View.MoveTo([ssCtrl], F.View.CellCenter(8, 0));
+  AssertTrue('hovering', F.View.HoverOn);
+  m := F.View.CellMetrics;
+  b := Snap;
+  try
+    for c := 4 to 22 do
+    begin
+      full := (F.View.CellRect(c, 0).Right - F.View.CellRect(c, 0).Left) * m.LineW;
+      AssertEquals(Format('cell %d: the underline band is the link colour', [c]), full,
+        LinkBand(Self, b, F.View, c, 0, link));
+    end;
+    AssertEquals('before the address: none', 0, LinkBand(Self, b, F.View, 3, 0, link));
+    AssertEquals('after it: none', 0, LinkBand(Self, b, F.View, 23, 0, link));
+  finally
+    b.Free;
+  end;
+  F.View.KeyUpNow(VK_CONTROL, []);
+  AssertFalse('Ctrl let go', F.View.HoverOn);
+  b := Snap;
+  try
+    for c := 4 to 22 do
+      AssertEquals(Format('cell %d: no underline any more', [c]), 0, LinkBand(Self, b, F.View, c, 0, link));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestAWrappedLinkIsUnderlinedOnBothRows;
+var
+  b: TBGRABitmap;
+  link: Cardinal;
+begin
+  F.View.SetPlatform(False, True);
+  F.View.WriteSync(#27'[?25l' + 'aaa http://example.com/abcdef x');
+  link := F.ThemeFg('TyTerminalLink');
+  F.View.MoveTo([ssCtrl], F.View.CellCenter(8, 0));
+  AssertTrue('hovering', F.View.HoverOn);
+  AssertEquals('two rows', F.View.HoverNow.Range.StartY + 1, F.View.HoverNow.Range.EndY);
+  b := Snap;
+  try
+    AssertTrue('the first row', LinkBand(Self, b, F.View, 10, 0, link) > 0);
+    AssertTrue('the second row', LinkBand(Self, b, F.View, 3, 1, link) > 0);
+    AssertEquals('the second row stops with the address', 0, LinkBand(Self, b, F.View, 12, 1, link));
+  finally
+    b.Free;
   end;
 end;
 

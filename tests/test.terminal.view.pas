@@ -16,7 +16,8 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.StyleModel,
   tyControls.ScrollBar, tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  tyControls.Terminal.Render, tyControls.Terminal.Selection, tyControls.Terminal, test.terminal.keyboard;
+  tyControls.Terminal.Render, tyControls.Terminal.Selection, tyControls.Terminal.Links, tyControls.Terminal,
+  test.terminal.keyboard;
 
 type
   TTyTerminalViewProbe = class(TTyTerminalView)
@@ -114,6 +115,12 @@ type
     function CellLeft(ACol, ARow: Integer): TPoint;
     function CellCenter(ACol, ARow: Integer): TPoint;
     function CellRight(ACol, ARow: Integer): TPoint;
+    { 4 期:悬停的链接 }
+    function HoverOn: Boolean;
+    function HoverNow: TTyTermLink;
+    { KeyUp(AKey, AShift) with a copy of the key }
+    procedure KeyUpNow(AKey: Word; AShift: TShiftState);
+    procedure KeyDownNow(AKey: Word; AShift: TShiftState);
   end;
 
   { 一个测试一个;SetUp 里建,TearDown 里 Free。 }
@@ -632,6 +639,26 @@ var
 begin
   r := CellRect(ACol, ARow);
   Result := Point(r.Right - 1 - (r.Right - r.Left) div 4, (r.Top + r.Bottom) div 2);
+end;
+
+function TTyTerminalViewProbe.HoverOn: Boolean;
+begin
+  Result := HoverValid;
+end;
+
+function TTyTerminalViewProbe.HoverNow: TTyTermLink;
+begin
+  Result := HoverLink;
+end;
+
+procedure TTyTerminalViewProbe.KeyUpNow(AKey: Word; AShift: TShiftState);
+begin
+  KeyUp(AKey, AShift);
+end;
+
+procedure TTyTerminalViewProbe.KeyDownNow(AKey: Word; AShift: TShiftState);
+begin
+  KeyDown(AKey, AShift);
 end;
 
 { ---- 夹具 --------------------------------------------------------------------------- }
