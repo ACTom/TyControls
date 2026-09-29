@@ -327,6 +327,30 @@ object MainForm: TMainForm
         ShowHint = True
         OnChange = Osc52Change
       end
+      object LblContrast: TTyLabel
+        Left = 630
+        Height = 20
+        Top = 11
+        Width = 118
+        AutoSize = True
+        Caption = 'Minimum contrast:'
+      end
+      object CmbContrast: TTyComboBox
+        Left = 760
+        Height = 26
+        Top = 7
+        Width = 80
+        Hint = 'Push text colours off their background until they reach this contrast ratio (1 = off)'
+        ItemIndex = 0
+        Items.Strings = (
+          '1'
+          '3'
+          '4.5'
+          '7'
+        )
+        ShowHint = True
+        OnChange = ContrastChange
+      end
     end
     object Status: TTyStatusBar
       Left = 0

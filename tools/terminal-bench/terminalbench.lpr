@@ -465,21 +465,23 @@ end;
 procedure BenchPaint;
 const
   Frames = 50;
-  PPIs: array[0..1] of Integer = (96, 144);
+  PPIs: array[0..2] of Integer = (96, 144, 96);
+  Contrast: array[0..2] of Double = (1, 1, 4.5);
 var
   o: TOffscreen;
   k, f: Integer;
   t: Double;
   times: TDoubles;
-  res: array[0..1] of Double;
-  mx: array[0..1] of Double;
+  res: array[0..2] of Double;
+  mx: array[0..2] of Double;
 begin
-  for k := 0 to 1 do
+  for k := 0 to 2 do
   begin
     o := NewOffscreen(200, 60, PPIs[k]);
     try
+      o.View.MinimumContrastRatio := Contrast[k];
       o.View.WriteSync(ScreenText);
-      o.View.Shot(o.Bmp, o.PPI);                   { warm-up: every glyph into the cache }
+      o.View.Shot(o.Bmp, o.PPI);                   { warm-up: every glyph (and colour pair) into the cache }
       times := nil;
       for f := 1 to Frames do
       begin
@@ -500,7 +502,8 @@ begin
   WriteLn;
   WriteLn('| 96 PPI | 144 PPI | 96 PPI, contrast 4.5 |');
   WriteLn('|---|---|---|');
-  WriteLn(Format('| %s (%s) | %s (%s) | - |', [Ms(res[0]), Ms(mx[0]), Ms(res[1]), Ms(mx[1])]));
+  WriteLn(Format('| %s (%s) | %s (%s) | %s (%s) |', [Ms(res[0]), Ms(mx[0]), Ms(res[1]), Ms(mx[1]), Ms(res[2]),
+    Ms(mx[2])]));
   WriteLn;
 end;
 

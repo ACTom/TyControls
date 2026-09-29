@@ -156,6 +156,9 @@ type
     { 帧率上限与光栅化预算 }
     FLastPaintMs: Double;
     FRasterBudgetMs: Double;
+    { 最低对比度(5 期):钳过的值;两份缓存(常规 / 暗淡减半),色表签名一变一起清 }
+    FMinContrast: Double;
+    FContrastCache, FHalfContrastCache: TTyTermContrastCache;
     FRepaintQueued: Boolean;
     { 内边距 + 边框:按 (模型, 版本, 类, 覆盖, PPI, 状态) 缓存 }
     FInsets: TRect;
@@ -408,6 +411,8 @@ type
     function GetHasSelection: Boolean;
     procedure SetWordSeparators(const AValue: string);
     function WordSeparatorsStored: Boolean;
+    procedure SetMinContrast(AValue: Double);
+    function MinimumContrastRatioStored: Boolean;
     { 链接 }
     function LinkKeyHeld(Shift: TShiftState): Boolean;
     procedure DirtyLinkRows(const ALink: TTyTermLink);
@@ -546,6 +551,9 @@ type
     property RowsPaintedLastFrame: Integer read FRowsPaintedFrame;
     procedure ForgetPaintedRows;
     function GlyphCache: TTyTermGlyphCache;
+    { FOR THE TESTS(5 期):最低对比度的两份缓存 }
+    function ContrastCache: TTyTermContrastCache;
+    function HalfContrastCache: TTyTermContrastCache;
     function Metrics: TTyTermCellMetrics;
     function FontSpec: TTyTermFontSpec;
     function SurfaceBitmap: TBGRABitmap;
@@ -625,6 +633,13 @@ type
     property SelectionOverrideKey: TTyTerminalSelectionOverrideKey read FSelectionOverrideKey
       write FSelectionOverrideKey default tsoDefault;
     property WordSeparators: string read FWordSeparators write SetWordSeparators stored WordSeparatorsStored;
+    { 最低对比度(xterm.js minimumContrastRatio):1 = 不调(默认,OptionsService.ts:43);大于 1
+      时字色按上游 ensureContrastRatio 推离画出来的底色,暗淡的字按一半;框线块元素、
+      Powerline、块光标下的字、链接下划线、显式下划线色不动。写入时照上游钳到 1..21、
+      一位小数(NaN、无穷按 1)。Double 而非 Single:1.3 存成 Single 回读是 1.2999999523,
+      边界上的比较会和上游不同 }
+    property MinimumContrastRatio: Double read FMinContrast write SetMinContrast
+      stored MinimumContrastRatioStored;
     property CopyOnSelect: Boolean read FCopyOnSelect write FCopyOnSelect default False;
     property DetectUrls: Boolean read FDetectUrls write SetDetectUrls default True;
     { OSC 8 里不是 http / https 的 URI(file://、ssh://)算不算链接:默认不算(上游没有
@@ -743,6 +758,9 @@ begin
   FSyncFirst := -1;
   FSyncLast := -1;
   FGlyphCache := TTyTermGlyphCache.Create;
+  FMinContrast := 1;
+  FContrastCache := TTyTermContrastCache.Create;
+  FHalfContrastCache := TTyTermContrastCache.Create;
   FRasterizer := TTyTermGlyphRasterizer.Create;
   FRowPainter := TTyTermRowPainter.Create;
   FCore := TTyTerminalCore.Create(80, 24);
@@ -823,6 +841,8 @@ begin
   FreeAndNil(FCore);
   FreeAndNil(FRowPainter);
   FreeAndNil(FGlyphCache);
+  FreeAndNil(FContrastCache);
+  FreeAndNil(FHalfContrastCache);
   FreeAndNil(FRasterizer);
   FreeAndNil(FSurface);
   FreeAndNil(FCocoaIme);
@@ -2032,6 +2052,9 @@ begin
     begin
       FColorSig := FPremixSig;
       FFrameDirty := True;
+      { 上游换主题清对比度缓存(ThemeService.ts:136) }
+      FContrastCache.Clear;
+      FHalfContrastCache.Clear;
     end;
     if FFrameDirty then
       PaintFrame(APPI);
@@ -2057,6 +2080,9 @@ begin
     FRowPainter.SelHasInk := FSelHasInk[FHasFocus];
     FRowPainter.SelInk := Frame(FSelInk[FHasFocus]);
     FRowPainter.LinkColor := Frame(FLinkRgb);
+    FRowPainter.MinContrast := FMinContrast;
+    FRowPainter.ContrastCache := FContrastCache;
+    FRowPainter.HalfContrastCache := FHalfContrastCache;
     FRowPainter.BeginFrame;
     ins := ContentInsets(APPI);
     buf := FCore.Buffer;
@@ -2071,10 +2097,12 @@ begin
       FAllDirty := True;
     end;
     { 帧级参数:色表(含禁用预混)、度量与字体、PPI、列数、聚焦(选区两色跟着它)、粗体变亮、
-      网格的位置。任何一个变了,上一帧的键全部作废(主题换了经 EnsureThemeCurrent 整屏) }
+      网格的位置、最低对比度。任何一个变了,上一帧的键全部作废(主题换了经
+      EnsureThemeCurrent 整屏) }
     frameKey := IntToHex(FPremixSig, 8) + '|' + FSpecKey + '|' + IntToStr(APPI) + '|' + IntToStr(FCore.Cols)
       + '|' + BoolToStr(FHasFocus, '1', '0') + BoolToStr(FDrawBoldBright, '1', '0')
-      + '|' + IntToStr(ins.Left) + ',' + IntToStr(ins.Top);
+      + '|' + IntToStr(ins.Left) + ',' + IntToStr(ins.Top)
+      + '|' + IntToHex(PQWord(@FMinContrast)^, 16);
     if FAllDirty or (frameKey <> FFrameKey) or (Length(FRowKeys) <> FCore.Rows) then
     begin
       SetLength(FRowKeys, FCore.Rows);
@@ -3065,6 +3093,24 @@ begin
   DirtyAll;
 end;
 
+procedure TTyTerminalView.SetMinContrast(AValue: Double);
+var
+  v: Double;
+begin
+  v := TyTermClampContrastRatio(AValue);
+  if v = FMinContrast then Exit;
+  FMinContrast := v;
+  { 缓存的答案是按旧比值算的 }
+  FContrastCache.Clear;
+  FHalfContrastCache.Clear;
+  DirtyAll;
+end;
+
+function TTyTerminalView.MinimumContrastRatioStored: Boolean;
+begin
+  Result := FMinContrast <> 1;
+end;
+
 procedure TTyTerminalView.SetDrawBoldBright(AValue: Boolean);
 begin
   if FDrawBoldBright = AValue then Exit;
@@ -3225,6 +3271,16 @@ end;
 function TTyTerminalView.GlyphCache: TTyTermGlyphCache;
 begin
   Result := FGlyphCache;
+end;
+
+function TTyTerminalView.ContrastCache: TTyTermContrastCache;
+begin
+  Result := FContrastCache;
+end;
+
+function TTyTerminalView.HalfContrastCache: TTyTermContrastCache;
+begin
+  Result := FHalfContrastCache;
 end;
 
 function TTyTerminalView.Metrics: TTyTermCellMetrics;

@@ -59,6 +59,9 @@ type
     function IsWindowsFlag: Boolean;
     function PaintedRows: Integer;
     function Cache: TTyTermGlyphCache;
+    { 5 期:最低对比度的两份缓存 }
+    function Contrast: TTyTermContrastCache;
+    function HalfContrast: TTyTermContrastCache;
     function CellMetrics: TTyTermCellMetrics;
     function Spec: TTyTermFontSpec;
     function BlinkOn: Boolean;
@@ -248,6 +251,8 @@ type
     procedure TestAHugeWriteYieldsToTheMessageLoop;
     { 5 期:有窗口时连续改尺寸合并成最后那一次;要网格的入口先应用 }
     procedure TestResizesCoalesceToTheLast;
+    { 5 期:最低对比度属性 }
+    procedure TestMinimumContrastRatioProperty;
   end;
 
 const
@@ -276,6 +281,9 @@ const
 function TyTermNeedWidgetSet: Boolean;
 
 implementation
+
+uses
+  fpjson, test.terminal.oracle;
 
 var
   WidgetSetUp: Boolean = False;
@@ -444,6 +452,16 @@ end;
 function TTyTerminalViewProbe.Cache: TTyTermGlyphCache;
 begin
   Result := GlyphCache;
+end;
+
+function TTyTerminalViewProbe.Contrast: TTyTermContrastCache;
+begin
+  Result := ContrastCache;
+end;
+
+function TTyTerminalViewProbe.HalfContrast: TTyTermContrastCache;
+begin
+  Result := HalfContrastCache;
 end;
 
 function TTyTerminalViewProbe.CellMetrics: TTyTermCellMetrics;
@@ -1983,6 +2001,54 @@ begin
   Forms.Application.ProcessMessages;
   AssertEquals('back where it was: no event', 0, Length(F.Grids));
   AssertEquals('cols kept', 23, F.View.Cols);
+end;
+
+procedure TTyTerminalViewTests.TestMinimumContrastRatioProperty;
+var
+  v: TTyTerminalView;
+  miss: TTyTermMisses;
+  fx: TTyTermFixtures;
+  arr: TJSONArray;
+  i: Integer;
+  got: Double;
+begin
+  v := TTyTerminalView.Create(nil);
+  try
+    AssertEquals('1 when made', 1.0, v.MinimumContrastRatio, 0);
+    AssertFalse('1 is not stored', IsStoredProp(v, 'MinimumContrastRatio'));
+    v.MinimumContrastRatio := 4.5;
+    AssertTrue('4.5 is stored', IsStoredProp(v, 'MinimumContrastRatio'));
+    AssertEquals('4.5', 4.5, v.MinimumContrastRatio, 0);
+    { upstream's own clamp, value by value, the bits (terminal-contrast.json) }
+    miss := TTyTermMisses.Create;
+    try
+      fx := TyTermLoadFixtures('contrast', miss);
+      try
+        AssertEquals(miss.Text, 0, miss.Count);
+        arr := fx[0].Arrays['clamp'];
+        for i := 0 to arr.Count - 1 do
+        begin
+          v.MinimumContrastRatio := arr.Arrays[i].Floats[0];
+          got := v.MinimumContrastRatio;
+          miss.AddCompared;
+          if PQWord(@got)^ <> StrToQWord('$' + arr.Arrays[i].Strings[1]) then
+            miss.Add(arr.Arrays[i].Items[0].AsString, 'MinimumContrastRatio', arr.Arrays[i].Strings[1],
+              LowerCase(IntToHex(PQWord(@got)^, 16)));
+        end;
+        AssertEquals(miss.Text, 0, miss.Count);
+        AssertEquals('every value', arr.Count, miss.Compared);
+      finally
+        TyTermFreeFixtures(fx);
+      end;
+    finally
+      miss.Free;
+    end;
+    v.MinimumContrastRatio := NaN;
+    AssertEquals('NaN reads 1', 1.0, v.MinimumContrastRatio, 0);
+    AssertFalse('and is not stored', IsStoredProp(v, 'MinimumContrastRatio'));
+  finally
+    v.Free;
+  end;
 end;
 
 initialization

@@ -32,6 +32,7 @@ type
     procedure TestTheCacheHitsOnceWarm;
     procedure TestTheLongestSliceStaysNearTheBudget;
     procedure TestAFullRepaintIsNotSlower;
+    procedure TestContrastCostsLittle;
   end;
 
 { At least ABytes of whole mixed lines (tools/terminal-bench's MixedText). }
@@ -436,6 +437,52 @@ begin
     SortDoubles(times);
     WriteLn(Format('  (200 x 60 full repaint, warm: median %.1f ms)', [(times[9] + times[10]) / 2]));
     AssertTrue(Format('median %.1f ms <= 30 ms', [(times[9] + times[10]) / 2]), (times[9] + times[10]) / 2 <= 30);
+  finally
+    bmp.Free;
+    fx.Free;
+  end;
+end;
+
+procedure TTyTerminalPerfTests.TestContrastCostsLittle;
+var
+  fx: TTyTermViewFixture;
+  bmp: TBitmap;
+  times: array[0..19] of Double;
+  med: array[0..1] of Double;
+  k, w, h, pass: Integer;
+  t0: Double;
+begin
+  fx := TTyTermViewFixture.Create;
+  bmp := TBitmap.Create;
+  try
+    fx.View.RasterBudgetMs := 0;
+    fx.SizeTo(200, 60);
+    { a screen of mixed text: 16, 256 and true colours every few words }
+    fx.View.WriteSync(TyTermMixedText(40000) + #27'[?25l');
+    w := fx.View.ClientWidth;
+    h := fx.View.ClientHeight;
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(w, h);
+    for pass := 0 to 1 do
+    begin
+      if pass = 0 then fx.View.MinimumContrastRatio := 1 else fx.View.MinimumContrastRatio := 4.5;
+      { warm: the glyphs and, at 4.5, the colour pairs }
+      fx.View.Render(bmp.Canvas, Rect(0, 0, w, h), fx.View.Font.PixelsPerInch);
+      fx.View.Forget;
+      fx.View.Render(bmp.Canvas, Rect(0, 0, w, h), fx.View.Font.PixelsPerInch);
+      for k := 0 to High(times) do
+      begin
+        fx.View.Forget;
+        t0 := TyTermDefaultClock;
+        fx.View.Render(bmp.Canvas, Rect(0, 0, w, h), fx.View.Font.PixelsPerInch);
+        times[k] := TyTermDefaultClock - t0;
+      end;
+      SortDoubles(times);
+      med[pass] := (times[9] + times[10]) / 2;
+    end;
+    AssertTrue('pairs were cached', fx.View.Contrast.Count > 0);
+    WriteLn(Format('  (200 x 60 full repaint, warm: %.1f ms at 1, %.1f ms at 4.5)', [med[0], med[1]]));
+    AssertTrue(Format('at 4.5 %.1f ms <= 1.3 x %.1f ms', [med[1], med[0]]), med[1] <= 1.3 * med[0]);
   finally
     bmp.Free;
     fx.Free;

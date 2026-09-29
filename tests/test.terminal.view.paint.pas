@@ -84,6 +84,14 @@ type
     procedure TestAFrameChangeRepaintsEveryRow;
     procedure TestSyncOutputStillHoldsRows;
     procedure TestRowsChangedOutsideTheClipAreInvalidated;
+    { 5 期:最低对比度(颜色用下划线那一行验:整条纯色,不受字形抗锯齿影响) }
+    procedure TestContrastAdjustsTheForeground;
+    procedure TestDimHalvesTheRatio;
+    procedure TestExcludedGlyphsKeepTheirColour;
+    procedure TestSelectionIsTheGroundForContrast;
+    procedure TestInverseUsesThePaintedColours;
+    procedure TestCursorInkAndLinksKeepTheirColour;
+    procedure TestTheCachesClearWithThePalette;
   end;
 
 implementation
@@ -1747,6 +1755,237 @@ begin
     if (F.View.Invalidated[i].X <= 50) and (F.View.Invalidated[i].Y >= 50) then
       found := True;
   AssertTrue('row 50 invalidated', found);
+end;
+
+{ ---- 5 期:最低对比度 ---------------------------------------------------------------- }
+
+const
+  { a pale grey on a paler one: 1.2:1 }
+  LowFg = $AAAAAA;
+  LowBg = $BBBBBB;
+  LowText = #27'[?25l'#27'[4;38;2;170;170;170;48;2;187;187;187m' + 'Ab    ' + #27'[0m';
+
+{ the underline's colour in cell ACol of row ARow: the middle of its first row }
+function UnderlineAt(B: TBGRABitmap; AView: TTyTerminalViewProbe; ACol, ARow: Integer): Cardinal;
+var
+  r: TRect;
+begin
+  r := AView.CellRect(ACol, ARow);
+  Result := Rgb(B.GetPixel((r.Left + r.Right) div 2, r.Top + AView.CellMetrics.UnderlineY));
+end;
+
+function Ensured(ABg, AFg: Cardinal; ARatio: Double): Cardinal;
+begin
+  if not TyTermEnsureContrastRatio(ABg, AFg, ARatio, Result) then Result := AFg;
+end;
+
+function HalfWay(AFg, ABg: Cardinal): Cardinal;
+begin
+  Result := (((((AFg shr 16) and $FF) + ((ABg shr 16) and $FF) + 1) div 2) shl 16)
+    or (((((AFg shr 8) and $FF) + ((ABg shr 8) and $FF) + 1) div 2) shl 8)
+    or (((AFg and $FF) + (ABg and $FF) + 1) div 2);
+end;
+
+procedure TTyTerminalViewPaintTests.TestContrastAdjustsTheForeground;
+var
+  b: TBGRABitmap;
+  want: Cardinal;
+begin
+  F.View.WriteSync(LowText);
+  b := Snap;
+  try
+    AssertEquals('at 1 the colour is the text''s', IntToHex(LowFg, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+  AssertTrue('upstream adjusts this pair', TyTermEnsureContrastRatio(LowBg, LowFg, 4.5, want));
+  F.View.MinimumContrastRatio := 4.5;
+  b := Snap;
+  try
+    AssertEquals('at 4.5 upstream''s answer', IntToHex(want, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+    AssertEquals('the background is kept', IntToHex(LowBg, 6),
+      IntToHex(Rgb(b.GetPixel(F.View.CellRect(3, 0).Left + 1, F.View.CellRect(3, 0).Top + 1)), 6));
+  finally
+    b.Free;
+  end;
+  F.View.MinimumContrastRatio := 1;
+  b := Snap;
+  try
+    AssertEquals('back at 1', IntToHex(LowFg, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestDimHalvesTheRatio;
+var
+  b: TBGRABitmap;
+  want: Cardinal;
+begin
+  F.View.WriteSync(#27'[2m' + LowText);
+  F.View.MinimumContrastRatio := 4.5;
+  { half the ratio against the painted ground, then dimmed over it }
+  want := HalfWay(Ensured(LowBg, LowFg, 2.25), LowBg);
+  AssertTrue('not what the full ratio would give', want <> HalfWay(Ensured(LowBg, LowFg, 4.5), LowBg));
+  AssertTrue('not what dimming first would give', want <> Ensured(LowBg, HalfWay(LowFg, LowBg), 2.25));
+  b := Snap;
+  try
+    AssertEquals('faint text', IntToHex(want, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+  AssertTrue('the faint cache has the pair', F.View.HalfContrast.Count > 0);
+end;
+
+procedure TTyTerminalViewPaintTests.TestExcludedGlyphsKeepTheirColour;
+var
+  b: TBGRABitmap;
+begin
+  F.View.WriteSync(#27'[?25l'#27'[38;2;170;170;170;48;2;187;187;187m'#$E2#$96#$88#$E2#$94#$80'A'#27'[0m');
+  F.View.MinimumContrastRatio := 4.5;
+  b := Snap;
+  try
+    AssertTrue('the full block keeps its colour', CellIs(b, 0, 0, LowFg));
+    AssertTrue('the line keeps its colour', CountIn(b, F.View.CellRect(1, 0), LowFg) > 0);
+    AssertEquals('and nothing of the adjusted one', 0, CountIn(b, F.View.CellRect(1, 0), Ensured(LowBg, LowFg, 4.5)));
+    AssertTrue('a letter next to them is adjusted', CountIn(b, F.View.CellRect(2, 0), Ensured(LowBg, LowFg, 4.5)) > 0);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestSelectionIsTheGroundForContrast;
+var
+  b: TBGRABitmap;
+  sel: Cardinal;
+begin
+  F.View.WriteSync(LowText);
+  F.View.MinimumContrastRatio := 4.5;
+  F.View.Select(0, F.View.Core.Buffer.YBase, 6);
+  F.View.Enter;
+  sel := TyTermBlendOver(Bg, SelOver(F.Ctl, True));
+  b := Snap;
+  try
+    AssertTrue('the selection is painted', CellIs(b, 4, 1, Bg) and (Rgb(b.GetPixel(F.View.CellRect(3, 0).Left, F.View.CellRect(3, 0).Top)) = sel));
+    AssertTrue('measured against the selection, not the cell''s own ground',
+      Ensured(sel, LowFg, 4.5) <> Ensured(LowBg, LowFg, 4.5));
+    AssertEquals('the underline', IntToHex(Ensured(sel, LowFg, 4.5), 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+  { a theme's selection text colour is the one adjusted }
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminalSelection:focus { color: #ff0000; }'#10;
+  sel := TyTermBlendOver(Bg, SelOver(F.Ctl, True));
+  b := Snap;
+  try
+    AssertEquals('the selection''s text colour, adjusted', IntToHex(Ensured(sel, $FF0000, 4.5), 6),
+      IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestInverseUsesThePaintedColours;
+var
+  b: TBGRABitmap;
+  want: Cardinal;
+begin
+  { the theme's text lighter than its ground: the painted reading darkens first, the DOM's
+    (the text on itself) lightens first -- two different answers (with the text darker
+    than the ground both readings end at the same colour) }
+  F.View.StyleOverride := 'color: #888888; background: #777777;';
+  F.View.WriteSync(#27'[?25l'#27'[7;4m' + 'Ab    ' + #27'[0m');
+  F.View.MinimumContrastRatio := 4.5;
+  { inverse with the default colours: painted on the theme's text colour, in the theme's
+    background (WebGL's _resolveForegroundRgba), not the foreground on itself (DOM) }
+  want := Ensured($888888, $777777, 4.5);
+  AssertTrue('the two readings differ', want <> Ensured($888888, $888888, 4.5));
+  b := Snap;
+  try
+    AssertEquals('the painted ground', IntToHex($888888, 6),
+      IntToHex(Rgb(b.GetPixel(F.View.CellRect(3, 0).Left + 1, F.View.CellRect(3, 0).Top + 1)), 6));
+    AssertEquals('the underline', IntToHex(want, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestCursorInkAndLinksKeepTheirColour;
+var
+  b: TBGRABitmap;
+  link, adjusted: Cardinal;
+  full, c: Integer;
+  m: TTyTermCellMetrics;
+begin
+  { the block cursor on a pale letter: the letter in the cursor's ink, as it is }
+  F.View.WriteSync(#27'[38;2;170;170;170;48;2;187;187;187m' + 'HHHH' + #27'[0m' + #27'[1;2H');
+  F.View.MinimumContrastRatio := 4.5;
+  F.View.Enter;
+  adjusted := Ensured(LowBg, LowFg, 4.5);
+  b := Snap;
+  try
+    AssertTrue('the cursor is a block', CountIn(b, F.View.CellRect(1, 0), CursorBg) > 0);
+    AssertTrue('the letter under it is in the cursor''s ink', CountIn(b, F.View.CellRect(1, 0), CursorInk) > 0);
+    AssertEquals('not in the adjusted colour', 0, CountIn(b, F.View.CellRect(1, 0), adjusted));
+    AssertTrue('the letter beside it is adjusted', CountIn(b, F.View.CellRect(2, 0), adjusted) > 0);
+  finally
+    b.Free;
+  end;
+  { a hovered link's underline stays the link colour }
+  F.View.WriteSync(#27'[2J'#27'[H'#27'[?25l'#27'[38;2;170;170;170;48;2;187;187;187m' + 'see https://example.com now'
+    + #27'[0m');
+  F.SizeTo(40, 5);
+  F.View.SetPlatform(False, True);
+  link := F.ThemeFg('TyTerminalLink');
+  F.View.MoveTo([ssCtrl], F.View.CellCenter(8, 0));
+  AssertTrue('hovering', F.View.HoverOn);
+  m := F.View.CellMetrics;
+  b := Snap;
+  try
+    for c := 4 to 22 do
+    begin
+      full := (F.View.CellRect(c, 0).Right - F.View.CellRect(c, 0).Left) * m.LineW;
+      AssertEquals(Format('cell %d: the link colour', [c]), full, LinkBand(Self, b, F.View, c, 0, link));
+    end;
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestTheCachesClearWithThePalette;
+var
+  b: TBGRABitmap;
+  res: Cardinal;
+  adj: Boolean;
+  ground: Cardinal;
+begin
+  { the default ground under a pale underlined text }
+  F.View.WriteSync(#27'[?25l'#27'[4;38;2;170;170;170m' + 'Ab    ' + #27'[0m');
+  F.View.MinimumContrastRatio := 4.5;
+  ground := Bg;
+  b := Snap;
+  b.Free;
+  AssertTrue('the cache has an answer', F.View.Contrast.Count > 0);
+  AssertTrue('for the old ground', F.View.Contrast.Find(ground, LowFg, res, adj));
+  F.View.StyleOverride := 'background: #bbbbbb;';
+  b := Snap;
+  try
+    AssertFalse('the old ground''s answers are gone', F.View.Contrast.Find(ground, LowFg, res, adj));
+    AssertTrue('the new ground''s is there', F.View.Contrast.Find(LowBg, LowFg, res, adj));
+    AssertEquals('the underline: the new ground''s answer', IntToHex(Ensured(LowBg, LowFg, 4.5), 6),
+      IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+  F.View.MinimumContrastRatio := 7;
+  AssertEquals('a new ratio empties the cache', 0, F.View.Contrast.Count);
+  AssertEquals('and the faint one', 0, F.View.HalfContrast.Count);
+  b := Snap;
+  try
+    AssertEquals('the underline at 7', IntToHex(Ensured(LowBg, LowFg, 7), 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
 end;
 
 initialization

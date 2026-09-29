@@ -23,6 +23,8 @@ type
     procedure TestSelectionFollowsFocus;
     procedure TestTheSelectionStandsOutOnEveryTheme;
     procedure TestTheFontTokensAreReadRaw;
+    { 5 期:最低对比度兜得住每个主题的 16 色 }
+    procedure TestContrastLiftsTheSixteenColours;
   end;
 
 implementation
@@ -185,6 +187,52 @@ begin
         WriteLn(line);
       end;
     AssertTrue('at least one light ground was checked', light > 0);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalViewThemeTests.TestContrastLiftsTheSixteenColours;
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, m, n, checked: Integer;
+  ground, col, lifted: Cardinal;
+  after: Double;
+
+  function Ratio(A, B: Cardinal): Double;
+  begin
+    Result := TyTermContrastRatio(TyTermRelativeLuminance(A), TyTermRelativeLuminance(B));
+  end;
+
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    checked := 0;
+    WriteLn('TTyTerminalViewThemeTests: colour 3 on the light grounds of xp / macos / breeze, before and after 4.5');
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        AssertTrue('the ground resolves', Bg(c.Model, 'TyTerminal', ground));
+        for n := 0 to 15 do
+          if (n in [1..6]) or (n in [9..14]) then
+          begin
+            AssertTrue(Fg(c.Model, 'TyTerminalAnsi' + IntToStr(n), col));
+            if not TyTermEnsureContrastRatio(ground, col, 4.5, lifted) then lifted := col;
+            after := Ratio(ground, lifted);
+            Inc(checked);
+            AssertTrue(Format('%s/%s ansi %d on #%s: %.2f:1 after 4.5', [names[i], c.Mode, n, IntToHex(ground, 6), after]),
+              after >= 4.5);
+            if (n = 3) and (m = 0) and ((names[i] = 'xp') or (names[i] = 'macos') or (names[i] = 'breeze')) then
+              WriteLn(Format('  %-8s ground #%s  #%s %.2f:1 -> #%s %.2f:1', [names[i], IntToHex(ground, 6),
+                IntToHex(col, 6), Ratio(ground, col), IntToHex(lifted, 6), after]));
+          end;
+      end;
+    AssertEquals('every theme, both modes, twelve colours', Length(names) * 2 * 12, checked);
   finally
     c.Free;
   end;

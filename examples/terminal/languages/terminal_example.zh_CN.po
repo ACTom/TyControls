@@ -139,6 +139,14 @@ msgstr "OSC 52："
 msgid "What a program may do with the clipboard"
 msgstr "程序可以对剪贴板做什么"
 
+#: tmainform.lblcontrast.caption
+msgid "Minimum contrast:"
+msgstr "最低对比度："
+
+#: tmainform.cmbcontrast.hint
+msgid "Push text colours off their background until they reach this contrast ratio (1 = off)"
+msgstr "把字色推离底色，直到达到这个对比度（1 = 不调）"
+
 # --- resourcestrings ---
 
 #: uasciicast.rsnotv2

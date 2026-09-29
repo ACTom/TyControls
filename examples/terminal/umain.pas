@@ -72,6 +72,8 @@ type
     ChkDetectUrls: TTyCheckBox;
     LblOsc52: TTyLabel;
     CmbOsc52: TTyComboBox;
+    LblContrast: TTyLabel;
+    CmbContrast: TTyComboBox;
     LblRecording: TTyLabel;
     CmbRecording: TTyComboBox;
     BtnOpen: TTyButton;
@@ -118,6 +120,7 @@ type
     procedure CopyOnSelectClick(Sender: TObject);
     procedure DetectUrlsClick(Sender: TObject);
     procedure Osc52Change(Sender: TObject);
+    procedure ContrastChange(Sender: TObject);
     procedure TermLinkActivate(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
     procedure TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
       var AText: string; var AAllow: Boolean);
@@ -636,6 +639,18 @@ procedure TMainForm.Osc52Change(Sender: TObject);
 begin
   if CmbOsc52.ItemIndex >= 0 then
     Term.Osc52 := TTyTerminalOsc52Policy(CmbOsc52.ItemIndex);
+end;
+
+{ 1 = off; 4.5 is WCAG AA for text. The items are numbers with a point, read the same
+  whatever the system's decimal separator. }
+procedure TMainForm.ContrastChange(Sender: TObject);
+var
+  fs: TFormatSettings;
+begin
+  if CmbContrast.ItemIndex < 0 then Exit;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  Term.MinimumContrastRatio := StrToFloatDef(CmbContrast.Items[CmbContrast.ItemIndex], 1, fs);
 end;
 
 { The control opens nothing: the host decides. Here, like xterm.js's own OSC 8 default:

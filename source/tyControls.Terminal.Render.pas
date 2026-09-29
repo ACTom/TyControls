@@ -81,6 +81,8 @@ type
 
   TTyTermCellColors = record
     Fg, Bg, Underline: Cardinal;    { $RRGGBB }
+    FgRaw: Cardinal;                { the foreground before dim (minimum contrast starts from it) }
+    UnderlineIsDefault: Boolean;    { no underline colour of its own: it follows the text }
     Dim, Invisible: Boolean;
   end;
 
@@ -208,6 +210,7 @@ type
   private type
     TCellInfo = record
       C: TTyTermCellColors;
+      Ink: Cardinal;               { the glyph's colour, selection and minimum contrast done }
       Ul: Integer;                 { underline style, 0 none }
       Strike, Over: Boolean;
       Sel: Boolean;                { in the selection (a wide character: its first column) }
@@ -253,6 +256,15 @@ type
     SelHasInk: Boolean;
     LinkFrom, LinkTo: Integer;
     LinkColor: Cardinal;
+    { Minimum contrast (the view's MinimumContrastRatio); <= 1 = off, the colours as they
+      are. Above 1 a cell's text colour is pushed off its painted background
+      (TyTermEnsureContrastRatio; faint text at half the ratio, then dimmed) --
+      DomRendererRowFactory.ts:494-521 / TextureAtlas.ts:354-466 -- and the strikethrough,
+      overline and a default underline follow it. Box, block and powerline glyphs, the
+      text under a block cursor, a link's underline and an underline colour of its own
+      keep their colours. The caches (the view owns them) may be nil: computed each time. }
+    MinContrast: Double;
+    ContrastCache, HalfContrastCache: TTyTermContrastCache;
     { the budget runs from here }
     procedure BeginFrame;
     { ACursorCol -1: no cursor on this row. ALine nil: an empty row. False: a glyph was
@@ -610,6 +622,14 @@ begin
   Result := BGRA((ARgb shr 16) and $FF, (ARgb shr 8) and $FF, ARgb and $FF, 255);
 end;
 
+{ faint text: the foreground at half opacity over the background, per channel rounded up }
+function DimMix(AFg, ABg: Cardinal): Cardinal;
+begin
+  Result := (((((AFg shr 16) and $FF) + ((ABg shr 16) and $FF) + 1) div 2) shl 16)
+    or (((((AFg shr 8) and $FF) + ((ABg shr 8) and $FF) + 1) div 2) shl 8)
+    or (((AFg and $FF) + (ABg and $FF) + 1) div 2);
+end;
+
 function TyTermResolveCellColors(AFg, ABg: Cardinal; const AExt: TTyTerminalExtAttrs;
   AResolve: TTyTermColorResolver; ADrawBoldBright: Boolean): TTyTermCellColors;
 var
@@ -653,16 +673,16 @@ begin
     if inverse then Result.Fg := AResolve(257) else Result.Fg := AResolve(256);
   end;
   { dim: the foreground at half opacity over the background }
+  Result.FgRaw := Result.Fg;
   if attr.IsDim then
   begin
-    Result.Fg := (((((Result.Fg shr 16) and $FF) + ((Result.Bg shr 16) and $FF) + 1) div 2) shl 16)
-      or (((((Result.Fg shr 8) and $FF) + ((Result.Bg shr 8) and $FF) + 1) div 2) shl 8)
-      or (((Result.Fg and $FF) + (Result.Bg and $FF) + 1) div 2);
+    Result.Fg := DimMix(Result.Fg, Result.Bg);
     Result.Dim := True;
   end;
   Result.Invisible := attr.IsInvisible;
   { the underline colour (:313-320): default = the text colour }
   Result.Underline := Result.Fg;
+  Result.UnderlineIsDefault := True;
   if attr.HasExtendedAttrs then
   begin
     ulMode := attr.GetUnderlineColorMode;
@@ -672,8 +692,13 @@ begin
         begin
           if bold and (ul < 8) and ADrawBoldBright then Inc(ul, 8);
           Result.Underline := AResolve(ul and $FF);
+          Result.UnderlineIsDefault := False;
         end;
-      TyTermAttrCmRgb: Result.Underline := Cardinal(ul) and TyTermAttrRgbMask;
+      TyTermAttrCmRgb:
+        begin
+          Result.Underline := Cardinal(ul) and TyTermAttrRgbMask;
+          Result.UnderlineIsDefault := False;
+        end;
     end;
   end;
 end;
@@ -1558,7 +1583,44 @@ var
   attr: TTyTerminalAttrData;
   ext: TTyTerminalExtAttrs;
   px: TBGRAPixel;
-  runColor, ink: Cardinal;
+  runColor: Cardinal;
+
+  { the text colour of cell ACol: the selection's where the theme gives one, else the
+    cell's; above a minimum contrast of 1, pushed off the painted background (the
+    selection's where selected) -- faint text at half the ratio and dimmed after }
+  procedure ResolveInk(ACol: Integer);
+  var
+    base, res: Cardinal;
+    ratio: Double;
+    cache: TTyTermContrastCache;
+    adj: Boolean;
+  begin
+    if SelHasInk and FInfo[ACol].Sel then
+      FInfo[ACol].Ink := SelInk
+    else
+      FInfo[ACol].Ink := FInfo[ACol].C.Fg;
+    if (MinContrast <= 1) or FInfo[ACol].C.Invisible or (ALine = nil) or (ACol >= ALine.Length) then Exit;
+    if ((ALine.GetContent(ACol) and TyTermContentIsCombinedMask) = 0)
+      and TyTermExcludedFromContrast(ALine.GetCodePoint(ACol)) then Exit;
+    if SelHasInk and FInfo[ACol].Sel then base := SelInk else base := FInfo[ACol].C.FgRaw;
+    ratio := MinContrast;
+    cache := ContrastCache;
+    if FInfo[ACol].C.Dim then
+    begin
+      ratio := ratio / 2;
+      cache := HalfContrastCache;
+    end;
+    if (cache = nil) or not cache.Find(FInfo[ACol].C.Bg, base, res, adj) then
+    begin
+      adj := TyTermEnsureContrastRatio(FInfo[ACol].C.Bg, base, ratio, res);
+      if cache <> nil then cache.Put(FInfo[ACol].C.Bg, base, res, adj);
+    end;
+    if adj then base := res;
+    if FInfo[ACol].C.Dim then base := DimMix(base, FInfo[ACol].C.Bg);
+    FInfo[ACol].Ink := base;
+    FInfo[ACol].C.Fg := base;
+    if FInfo[ACol].C.UnderlineIsDefault then FInfo[ACol].C.Underline := base;
+  end;
 
   function LineStyleOf(ACol, AKind: Integer): Integer;
   begin
@@ -1629,6 +1691,16 @@ begin
     if FInfo[c].Sel then
       FInfo[c].C.Bg := SelBg;
   end;
+  { the text colours, on the backgrounds as painted; a wide character's second half
+    takes its first half's }
+  for c := 0 to ACols - 1 do
+    if (c > 0) and (ALine <> nil) and (c < ALine.Length) and (ALine.GetWidth(c) = 0) then
+    begin
+      FInfo[c].C := FInfo[c - 1].C;
+      FInfo[c].Ink := FInfo[c - 1].Ink;
+    end
+    else
+      ResolveInk(c);
   runStart := 0;
   for c := 1 to ACols do
     if (c = ACols) or (FInfo[c].C.Bg <> FInfo[runStart].C.Bg) then
@@ -1641,14 +1713,7 @@ begin
   if ALine <> nil then
     for c := 0 to Min(ACols, ALine.Length) - 1 do
       if not FInfo[c].C.Invisible then
-      begin
-        { a theme's selection colour for the text only where the theme gives one }
-        if SelHasInk and FInfo[c].Sel then
-          ink := SelInk
-        else
-          ink := FInfo[c].C.Fg;
-        DrawGlyphAt(ABmp, ALine, c, AX + c * Metrics.CellW, AY, ink, clip);
-      end;
+        DrawGlyphAt(ABmp, ALine, c, AX + c * Metrics.CellW, AY, FInfo[c].Ink, clip);
   { 3. lines: underline, strikethrough, overline, each in runs of one style and colour }
   for kind := 0 to 2 do
   begin
