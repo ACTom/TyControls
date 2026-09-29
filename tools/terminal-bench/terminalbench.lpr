@@ -26,7 +26,8 @@ program terminalbench;
              frames with every row dirty. 96 and 144 PPI; with MinimumContrastRatio 4.5
              once the property exists (phase 5 Task 11).
   --scroll   the same control: a full screen, then 2000 times one line written and one
-             frame drawn. Rows painted per frame and the frame time.
+             frame drawn. Rows painted per frame and the frame time -- off screen (the
+             whole surface drawn each frame) and through a shown window's WM_PAINT.
   --raster   a new control, an empty glyph cache: one frame of the 95 printable ASCII
              characters in four styles (regular, bold, italic, bold italic), then one of 200
              CJK characters, the rasterizing budget off. The cold frame against the same
@@ -35,7 +36,8 @@ program terminalbench;
   --flood    the control on a shown form: 50 MB in 64 KB chunks through View.Write with a
              callback, four chunks in flight (the example's replay does the same), the
              message loop pumped until every callback is back. Wall time, MB/s, the
-             longest gap between two paints, the heap growth, live lines, glyph cache hits /
+             gap between two paints (median and longest; and the stretch before the first
+             paint and after the last), the heap growth, live lines, glyph cache hits /
              misses (and evictions from phase 5 Task 9).
   --reflow   a 200 x 60 core, Scrollback 10000, filled with 400-column lines (two rows
              each); Resize to 120, 200 and 80 columns, each timed.
@@ -742,6 +744,7 @@ var
   sz: TSize;
   i, n: Integer;
   t0, wall, gap, span: Double;
+  gaps: TDoubles;
   heap0, heap1: Int64;
 begin
   data := MixedText(Total);
@@ -780,8 +783,12 @@ begin
     FloodView.RecordPaints := False;
     heap1 := GetFPCHeapStatus.CurrHeapUsed;
     gap := 0;
+    gaps := nil;
     for i := 1 to High(FloodView.PaintTimes) do
+    begin
       gap := Max(gap, FloodView.PaintTimes[i] - FloodView.PaintTimes[i - 1]);
+      Push(gaps, FloodView.PaintTimes[i] - FloodView.PaintTimes[i - 1]);
+    end;
     { and from the first write to the first paint, from the last paint to the last
       callback: a window that stops painting for good shows there, not between paints }
     span := 0;
@@ -791,10 +798,10 @@ begin
     WriteLn;
     WriteLn('50 MB in 64 KB chunks through View.Write, four in flight, on a shown 200 x 60 control.');
     WriteLn;
-    WriteLn('| wall | MB/s | paints | longest gap between paints | before the first / after the last | heap growth | live lines | cache hits / misses / evictions |');
-    WriteLn('|---|---|---|---|---|---|---|---|');
-    WriteLn(Format('| %s | %s | %d | %s | %s | %s MB | %d | %d / %d / %d |', [Ms(wall),
-      FormatFloat('0.0', Total / MB / (wall / 1000)), Length(FloodView.PaintTimes), Ms(gap), Ms(span),
+    WriteLn('| wall | MB/s | paints | gap between paints, median | longest gap | before the first / after the last | heap growth | live lines | cache hits / misses / evictions |');
+    WriteLn('|---|---|---|---|---|---|---|---|---|');
+    WriteLn(Format('| %s | %s | %d | %s | %s | %s | %s MB | %d | %d / %d / %d |', [Ms(wall),
+      FormatFloat('0.0', Total / MB / (wall / 1000)), Length(FloodView.PaintTimes), Ms(Median(gaps)), Ms(gap), Ms(span),
       FormatFloat('0.0', (heap1 - heap0) / MB), TTyTerminalLine.LiveCount,
       FloodView.Cache.Hits, FloodView.Cache.Misses, FloodView.Cache.Evictions]));
     WriteLn;

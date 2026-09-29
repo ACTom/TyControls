@@ -26,8 +26,10 @@ unit tyControls.Terminal;
     那一行的像素搬过来(画了阴影 ░▒▓ 的行只按图案纵向周期的整数倍搬),都不是才画。
     帧级参数(色表、度量、聚焦、粗体变亮……)一变,全部键作废、整屏重画。滚动不再整屏
     标脏,只失效网格区让 Paint 贴一次。同步输出攒着的时候不搬也不画。
-  - 帧率:距上次绘制不到一帧(16 ms)就接着跑下一片,不让出给 WM_PAINT;一帧里光栅化新
-    字形有时间预算,没画完的行留脏、下一帧整行重画。
+  - 帧率:输出排着时解析加绘制一轮约 50 ms(FloodCycleMs):离上次绘制不到「一轮减上一帧
+    的绘制耗时」就接着跑片,到了就当场画这一帧(Update)再排下一片——Win32 上排片的
+    WM_NULL 一直在,只靠消息循环 WM_PAINT 永远轮不到;有按键排队时下一片走计时器。一帧里
+    光栅化新字形有时间预算(输出排着时 4 ms),没画完的行留脏、下一帧整行重画。
   - 焦点跟 LM_SETFOCUS / LM_KILLFOCUS(切到别的程序也算失焦),DoEnter / DoExit 也照报,
     两路幂等。
   - 不在 Paint 里改网格。RenderTo 只读状态、画;度量变了要改网格就记下来,经
@@ -526,7 +528,7 @@ type
       走一个 1 ms 计时器,先让输入进来) }
     procedure ScheduleSlice; virtual;
     procedure SliceTimerFired(Sender: TObject);
-    { 排好的一片:跑到队列空、或者离上次绘制满一帧为止(一帧留给解析的时间 = 16 ms 减上一帧
+    { 排好的一片:跑到队列空、或者离上次绘制够一轮为止(留给解析的时间 = 50 ms 减上一帧
       画了多久,至少 3 ms);还有没解析的就当场画这一帧再排下一片 }
     procedure AsyncSlice(Data: PtrInt);
     { 失效几行(视口行):有句柄时 InvalidateRect 那几行的并集。子类覆盖必须调 inherited。 }
@@ -735,11 +737,11 @@ const
   BlinkIntervalMs = 600;
   BlinkRestMs = 300000;          { 5 分钟不活动就停在「显示」 }
   SyncTimeoutMs = 1000;          { RenderService.ts:359-363 }
-  FrameMs = 16;                  { 一帧:离上次绘制不到这么久,接着跑下一片 }
   SurfaceBlock = 64;             { 表面位图按这么大的块向上取整 }
   DefaultRasterBudgetMs = 10;
   FloodRasterBudgetMs = 4;       { 还有输出排着时一帧光栅化新字形的预算 }
   MinSliceMs = 3;                { 一片至少给解析这么久 }
+  FloodCycleMs = 50;             { 输出一直排着时,解析加绘制一轮这么久(约 20 帧每秒) }
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
 
@@ -1063,9 +1065,10 @@ var
   budget: Integer;
 begin
   MaskUnencodedExtensions;
-  { 一帧里留给解析的时间:帧长减去上一帧画了多久,至少 MinSliceMs——解析加绘制合起来
-    大约一帧 }
-  window := FrameMs - FLastFrameCostMs;
+  { 一轮里留给解析的时间:FloodCycleMs 减去上一帧画了多久,至少 MinSliceMs。一帧整屏新行
+    要画 15–20 ms,贴上屏之后 DWM 还要再占十几毫秒:按 16 ms 一帧算,解析只剩 3 ms,吞吐掉到
+    五分之一;50 ms 一轮,两次绘制隔 50–85 ms,吞吐约 5 MB/s(5 期实测,spec §3.1) }
+  window := FloodCycleMs - FLastFrameCostMs;
   if window < MinSliceMs then window := MinSliceMs;
   BeginDrive;
   try
@@ -1073,7 +1076,7 @@ begin
       多少(至少 MinSliceMs);好久没画过(隐藏、无头)就按上游的 12 ms 一片 }
     repeat
       elapsed := NowMs - FLastPaintMs;
-      if elapsed > 4 * FrameMs then
+      if elapsed > 2 * FloodCycleMs then
         budget := TyTermWriteTimeoutMs
       else
       begin
