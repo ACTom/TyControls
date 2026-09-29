@@ -7594,3 +7594,56 @@ dataZoom 做完后按画廊重数缺口:还不画的系列类型里 custom 13(`r
 ### 下一批
 
 回画廊缺口清单:heatmap(12,其中日历坐标 10)与 markLine/markPoint/markArea(合计约 20 个文件)是下一批的候选。
+
+## 98. Tier 1 第六十四批:标注的模型、变换和布局(M1,2026-09-29)
+
+画廊里 markPoint/markLine/markArea 出现在约 20 个文件里,一直不读。标注分四批:M1 只出数字(哪些条目留下、落在哪里、链上读到什么),M2 画 markLine,M3 画 markPoint,M4 画 markArea。
+
+### 上游的做法
+
+- **模型链**:预处理让顶层 `markPoint`/`markLine`/`markArea` 在有系列用到时总存在,它是每个系列标注模型的父模型,自己的选项和默认值合并(作者的键优先)。一个键按 条目 → `series.markX` → 顶层 markX → 默认值 找。系列的 `markX` 没有 `data` 就没有标注;图例关掉的系列不画标注。
+- **dataTransform**:没给 x/y 像素、也没给 `coord` 数组的条目,`type` 为 min/max/average/median 时先算统计量,再找**离它最近的那个数据**(值轴局部坐标里比,等距时取在目标之前的一侧,完全相同取第一行)——四种统计都落在某个真实数据上;堆叠时在堆叠结果上找、位置取堆叠值,`value` 取原始值,位置再按**原始值**的精度 `toFixed`(0.125 + 0.25 的堆叠点 0.375 画在 0.38)。没有 type 的条目 `coord = [xAxis, yAxis]`。`coord` 里写 `'min'`/`'max'`/`'average'`/`'median'` 的,按那一维直接算,不找最近、不取整、不管堆叠。
+- **统计**:average 跳过空值;median 把数字排序,但用 `count()`(**含空值行**)算下标——`[-,10,20,30,40]` 的中位数是 30,空值够多时读出数组、得 NaN;空序列 median 是 0,min/max 是 ±Infinity。
+- **过滤**:`containData` 用刻度的**映射范围**(柱、象形柱、K 线、箱线图把类目轴两端各撑半个带宽),只要给了 x 或 y 像素就不过滤(`'center'` 被 `parseFloat` 当成没给,于是被过滤)。markLine 一维线看值是否在轴上;markArea 有一维是 ±Infinity 就留下,否则看两角的矩形和网格相交。
+- **markLine 一维**:`xAxis`/`yAxis` 常数(同时写时 `yAxis` 优先,字符串原样保留),或统计量(在**堆叠结果**上算,不找最近数据),按 `precision`(默认 2,链上读,封顶 20)取整;起点在基轴 `-Infinity`、终点 `+Infinity`,布局时换成轴的两端(`getExtent()[0]`/`[1]`,反向轴已反)。线条目按 `{type, valueIndex, value}` → 起点 → 终点合并、不覆盖:**成对的线 type 永远是 null**,起点的 value/name 先到先得(bar-stack 的 `[{type:'min'},{type:'max'}]` 的值是最小值)。
+- **布局**:x/y 按容器(markPoint 的 `relativeTo: 'coordinate'` 按网格,且网格左上角加到**数字**上也加);柱和象形柱先 `clampData` 到**有效范围**再加上本系列柱在带里的偏移 `offset + size/2`(方向看坐标系的基轴);其他类型直接 `dataToPoint`。markArea 先 `clampData`,柱系列在类目轴上贴到刻度坐标(终点角取下一刻度,`alignWithLabel` 时不加);`allClipped` 按有效范围判断,裁掉的不画多边形。
+- **视觉**:markPoint 的符号选项按链读(默认 pin、50);markLine 每端的 symbol/symbolRotate/symbolOffset 只读自己再取系列那对中的一个,**symbolSize 顺链读**——默认 `[8, 16]` 整个落到两端。
+- **z**:series 2、markArea 1(在系列下)、markPoint/markLine 5;`get('z') || 0`,silent 是标注的或系列的。
+- 上游改写它拿到的选项(像素条目写进 `coord`,`coord` 里的 `'min'` 换成数字);不认识的元素(没有 type/xAxis/yAxis 的一维 markLine、不成对的 markArea)在渲染时抛异常。
+
+### port 以前
+
+- 三种标注都不读;顶层 `markLine: {z: -100}` 在编辑器里报"未知选项"。
+- 直角坐标系列的默认 z 是 0(上游 2),markArea 的 z 1 会盖在系列上。
+- K 线和箱线图不撑开类目轴的映射范围:缩放后的 candlestick-sh(`boundaryGap: false`)蜡烛整体差半个带宽。
+- 提示框找最近数据用全局坐标比差值,平局时最后一位可能和上游相反。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.Marker`:JS 值记录(undefined/null/数字/字符串/其他)、模型链读取和默认值、`TyMkNumCalculate`、`TyMkNearestRows`(局部坐标)、逐字转写的 dataTransform/getAxisInfo/统计定位/过滤/markLine 与 markArea 变换/`clampData`/`getMarkerPosition` 两个分支/无穷端换轴端/x·y 像素;不改选项;上游会抛异常的元素跳过(不计 dataIndex)。
+- 图表:`Relayout` 在柱布局之后调 `SolveMarkers`,每个直角坐标系列三块结果;`MarkerLayout(seriesIndex, kind)` 读出。`NearestOnAxis` 改用 `TyMkNearestRows`。
+- 直角坐标系列默认 z 改为 2(`Marks`、`Pie` 的默认一并改)。
+- `Series` 的 containShape 覆盖 bar、pictorialBar、candlestick、boxplot 四种。
+- 编辑器:顶层 markPoint/markLine/markArea 按系列标注的目录节点校验。
+
+### 基准
+
+- `tools/advchart-oracle/markers-layout.js` 真跑 ECharts 6.1,54 个用例(39 个合成、15 个画廊文件),268 个标注条目,20 条守卫;每个用例跑两遍(原样一遍、给元素打标签一遍)得出每个原始元素的去留。
+- `test.advchart.markerslayout` 逐字段比较:块的 z/zlevel/silent/count/precision,每个条目的去留、dataIndex、coord、存储值、value、name、端点和四角坐标、allClipped、符号视觉;两根轴的有效/映射范围。画廊里 scatter-weight 两个系列的网格因 containLabel 标签测量不同而移位,跳过(限定不超过 3 条)。另有:上游会抛异常的元素被跳过、两次渲染一致且选项不变、中位数计空值、系列默认 z。
+
+### 变异测试
+
+51 个。第一轮 3 个存活,都是夹具里"答案碰巧一致":
+- 平均值不跳过空值:`[-,10,20,30,40]` 的平均 25 和 20 都落在数据 20 上。补 L10(一维平均线直接用统计量)杀掉。
+- 两个无穷都换成轴端:值轴上被夹住的端点本来就在轴端。补 A6(类目纵轴,y 落在首末类目的带中心)杀掉。
+- allClipped 不先排序:补 A7(反着写、跨过整个范围的区间)杀掉。
+
+### 已知偏差
+
+- 极坐标的标注没有移植。
+- 上游遇到不认识的元素整张图渲染失败,这里跳过那个元素。
+- `Time.parse` 对数字取整;dataZoom 那边的 `TyDzParse` 对时间轴数字不取整(本批的标注按上游取整)。
+
+### 下一批
+
+M2:markLine 的画面(线段、两端符号、标签位置和墨色)。

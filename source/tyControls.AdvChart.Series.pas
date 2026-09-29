@@ -1492,8 +1492,15 @@ var
 
   { UPSTREAM'S ctnShp. `containShape` as written, JavaScript-truthy; absent,
     it is on unless the axis has bands, where the bar already sits inside
-    one. And only on the base axis of a bar or a pictorial bar: the axis a bar
-    stands on is its value axis, and that one is never widened. }
+    one. And only on the base axis of a series that registers the handler:
+    the axis a bar stands on is its value axis, and that one is never
+    widened.
+
+    [Batch 64: FOUR types register it, not two -- bar and pictorialBar
+    (layout/barGrid.ts) and candlestick and boxplot (their layouts), all with
+    the same band-width handler. A zoomed candlestick on a category axis
+    without boundaryGap (candlestick-sh) mapped its candles half a band too
+    wide; its markers showed it.] }
   function WantsContainShape(AAxis: TTyAxis; ANode: TJSONObject): Boolean;
   var
     d: TJSONData;
@@ -1504,7 +1511,8 @@ var
     if (d = nil) or (d.JSONType = jtNull) then opt := not AAxis.OnBand
     else opt := JsTruthyOf(d);
     Result := opt and (KeyOnAxis(AAxis, 'bar')
-      or KeyOnAxis(AAxis, 'pictorialBar'));
+      or KeyOnAxis(AAxis, 'pictorialBar') or KeyOnAxis(AAxis, 'candlestick')
+      or KeyOnAxis(AAxis, 'boxplot'));
   end;
 
   { THE MAPPING EXTENT: the effective one, widened by half a bar each way so
@@ -1541,9 +1549,15 @@ var
     haveSup := False;
     sup0 := 0;
     sup1 := 0;
-    for k := 0 to 1 do
+    for k := 0 to 3 do
     begin
-      if k = 0 then typ := 'bar' else typ := 'pictorialBar';
+      case k of
+        0: typ := 'bar';
+        1: typ := 'pictorialBar';
+        2: typ := 'candlestick';
+      else
+        typ := 'boxplot';
+      end;
       if not KeyOnAxis(AAxis, typ) then Continue;
       w2 := NaN;
       if ordinal then

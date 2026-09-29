@@ -43,6 +43,7 @@ uses
   tyControls.AdvChart.VisualMapView,
   tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
   tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.ZrPath,
+  tyControls.AdvChart.Marker,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Graph,
@@ -289,6 +290,10 @@ type
     { a slider dataZoom's own picture, by the author's dataZoom index }
     FDzViews: array of TTyDzSliderSpec;
     FDzLayouts: array of TTyDzSliderLayout;
+    { SERIES MARKERS, index-parallel to FBindings: markPoint / markLine /
+      markArea as the last layout solved them. Solved in Relayout, after the
+      bars, because an end on a bar sits on its bar within the band. }
+    FMarkers: TTyMkSeriesArray;
     { dataZoom INTERACTION, by the author's dataZoom index: the window
       setRawRange left (percents), how each answers the pointer, each
       slider view's own state, each inside's view range }
@@ -440,6 +445,7 @@ type
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
     procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    procedure SolveMarkers(APPI: Integer);
     { ---- dataZoom interaction ---- }
     function DzRepresentative(AIndex: Integer): Integer;
     procedure DzRenderStates;
@@ -862,6 +868,11 @@ type
     { THE SLIDER AIndex AS THE LAST RENDER LAID IT OUT: Valid is False when
       it is hidden, has no target, is not a slider, or nothing has rendered. }
     function DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
+    { A SERIES' MARKERS OF ONE KIND AS THE LAST LAYOUT SOLVED THEM: Present
+      is False when the series has none of that kind (no `data`), is not on
+      a cartesian grid, is switched off by the legend, or nothing has
+      rendered. }
+    function MarkerLayout(ASeriesIndex: Integer; AKind: TTyMarkerKind): TTyMkBlock;
     { THE dataZoom ACTION, upstream's dispatchAction({type: 'dataZoom',
       dataZoomIndex, start, end}): the percent window goes on dataZoom AIndex
       and on every dataZoom linked to it through a shared axis, and the chart
@@ -1639,6 +1650,8 @@ begin
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
+  { AFTER THE BARS: a marker on a bar series sits on its own bar }
+  SolveMarkers(APPI);
   SolvePies;
   SolveFunnels;
   SolveGauges(APPI);
@@ -4010,6 +4023,110 @@ begin
     Result := FDzLayouts[AIndex];
 end;
 
+function TTyAdvanceChart.MarkerLayout(ASeriesIndex: Integer;
+  AKind: TTyMarkerKind): TTyMkBlock;
+var slot: Integer;
+begin
+  Result := Default(TTyMkBlock);
+  Result.Kind := AKind;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FMarkers)) then Exit;
+  Result := FMarkers[slot].Blocks[AKind];
+end;
+
+procedure TTyAdvanceChart.SolveMarkers(APPI: Integer);
+var
+  i, k: Integer;
+  b: TTySeriesBinding;
+  ctx: TTyMkContext;
+  node, nd: TJSONData;
+  kind: TTyMarkerKind;
+  ax: TTyAxis;
+  scale: Double;
+begin
+  FMarkers := nil;
+  SetLength(FMarkers, Length(FBindings));
+  if APPI <= 0 then APPI := 96;
+  scale := APPI / 96;
+  for i := 0 to High(FBindings) do
+  begin
+    b := FBindings[i];
+    FMarkers[i] := Default(TTyMkSeries);
+    FMarkers[i].SeriesIndex := b.SeriesIndex;
+    for kind := Low(TTyMarkerKind) to High(TTyMarkerKind) do
+      FMarkers[i].Blocks[kind].Kind := kind;
+    { A SERIES THE LEGEND SWITCHED OFF DRAWS NO MARKERS -- upstream's
+      marker views walk only the series the filter kept. Polar markers are
+      not ported. }
+    if (not b.Resolved) or (b.Cart = nil) or b.Hidden or (i > High(FStores))
+      or (FStores[i] = nil) then Continue;
+    node := FOption.ComponentAt('series', b.SeriesIndex);
+    if (node = nil) or (node.JSONType <> jtObject) then Continue;
+    ctx := Default(TTyMkContext);
+    ctx.Store := FStores[i];
+    ctx.Cart := b.Cart;
+    ctx.XAxis := b.XAxis;
+    ctx.YAxis := b.YAxis;
+    ax := b.Cart.GetBaseAxis;
+    if ax <> nil then
+    begin
+      ctx.BaseDim := ax.Dim;
+      ctx.CsBaseHorizontal := ax.Horizontal;
+    end;
+    ctx.StackedCol := -1;
+    ctx.StackResultCol := -1;
+    if (i <= High(FStacks)) and FStacks[i].Stacked and (b.ValueAxis <> nil) then
+    begin
+      ctx.StackedCol := FStores[i].DimIndexOf(b.ValueAxis.Dim);
+      ctx.StackResultCol := FStacks[i].ResultCol;
+    end;
+    ctx.IsBar := (b.SeriesType = 'bar') or (b.SeriesType = 'pictorialBar');
+    ctx.BarOffset := NaN;
+    ctx.BarSize := NaN;
+    if ctx.IsBar and (i <= High(FBarCols)) then
+    begin
+      ctx.BarOffset := FBarCols[i].Offset;
+      ctx.BarSize := FBarCols[i].Width;
+    end;
+    for k := 0 to 1 do
+    begin
+      if k = 0 then ax := ctx.XAxis else ax := ctx.YAxis;
+      ctx.AlignWithLabel[k] := False;
+      if ax = nil then Continue;
+      nd := FOption.ComponentAt(ax.MainType, ax.ComponentIndex);
+      if (nd <> nil) and (nd.JSONType = jtObject) then
+      begin
+        nd := TJSONObject(nd).Find('axisTick');
+        if (nd <> nil) and (nd.JSONType = jtObject) then
+        begin
+          nd := TJSONObject(nd).Find('alignWithLabel');
+          ctx.AlignWithLabel[k] := (nd <> nil) and (nd.JSONType = jtBoolean)
+            and nd.AsBoolean;
+        end;
+      end;
+    end;
+    nd := TJSONObject(node).Find('silent');
+    ctx.SeriesSilent := (nd <> nil) and (((nd.JSONType = jtBoolean) and nd.AsBoolean)
+      or ((nd.JSONType = jtNumber) and (nd.AsFloat <> 0))
+      or ((nd.JSONType = jtString) and (nd.AsString <> ''))
+      or (nd.JSONType in [jtArray, jtObject]));
+    ctx.Scale := scale;
+    ctx.OriginX := FLastRect.Left;
+    ctx.OriginY := FLastRect.Top;
+    ctx.Width := (FLastRect.Right - FLastRect.Left) / scale;
+    ctx.Height := (FLastRect.Bottom - FLastRect.Top) / scale;
+    for kind := Low(TTyMarkerKind) to High(TTyMarkerKind) do
+    begin
+      { the ONE nd-level component of the kind is every series marker's
+        parent; an array of them gives the first }
+      nd := FOption.ComponentAt(TyMarkerKey[kind], 0);
+      if (nd <> nil) and (nd.JSONType <> jtObject) then nd := nil;
+      FMarkers[i].Blocks[kind] := TyMarkerSolve(kind, TJSONObject(node),
+        TJSONObject(nd), ctx);
+    end;
+  end;
+end;
+
 function TTyAdvanceChart.DataZoomCount: Integer;
 begin
   Result := Length(FZoomSpecs);
@@ -6263,11 +6380,11 @@ begin
       v.BackgroundFill := TTyChartColor(
         ActiveController.Model.ResolveStyle('TyAdvChartBarBackground', '',
           []).Background.Color);
-      { `z` AND `z2`, AND NEITHER HAS A DEFAULT HERE. Upstream's series default
-        is z 2, but nothing else in this port shares that scale -- the grid and
-        the axes are ordered by INSERTION, not by a number -- so what matters
-        is the order two series come out in, and two series that both say
-        nothing keep insertion order either way.
+      { `z` AND `z2`, the series default z UPSTREAM'S 2. [Batch 64: it was 0,
+        on the grounds that nothing else here shared the scale. Markers do: a
+        markArea sits at z 1, UNDER its series, and a markPoint or markLine at
+        5, over it -- and only with the series at 2 do upstream's own numbers
+        order them. The grid and the axes are still drawn outside the list.]
 
         READ RATHER THAN INVENTED because it decides a picture nobody can work
         around: `pictorialBar-body-fill` draws the same silhouette three times,
@@ -6277,7 +6394,7 @@ begin
         zlevel IS NOT READ. It is a separate canvas upstream, not a deeper
         sort key, and pretending it is one would put a series in the right
         order for the wrong reason. }
-      v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 0);
+      v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 2);
       v.Z2 := SeriesIntIn(FBindings[i].SeriesIndex, 'z2', 0);
       v.Label_ := LabelSpecFor(i);
       { `{c}` and the default text read the VALUE column -- whichever axis is
@@ -6989,8 +7106,7 @@ function TTyAdvanceChart.NearestOnAxis(ASlot: Integer; AAxis: TTyAxis;
   AValue: Double; AMaxDistPx: Double; out ARows: TTyIntegerArray): Boolean;
 var
   st: TTyDataStore;
-  col, i, n: Integer;
-  target, v, coord, diff, dist, minDist, minDiff: Double;
+  col: Integer;
 begin
   ARows := nil;
   Result := False;
@@ -6999,47 +7115,25 @@ begin
   if st = nil then Exit;
   col := st.DimIndexOf(AAxis.Dim);
   if col < 0 then Exit;
-  target := AAxis.DataToCoord(AValue);
-  if IsNan(target) then Exit;
-
   { IN VIEW COORDINATE SPACE -- pixels, not data. The 0.5 a category axis is
     given is HALF A PIXEL, which after the value has already been rounded to a
     band centre means "the same band"; its purpose is to drop a series whose
     data is shorter than the axis, not to widen the search. ECharts 5.x
     compared in data space and 6.x changed it, so this is one to read rather
-    than remember. }
-  minDist := Infinity;
-  minDiff := -1;
-  n := 0;
-  SetLength(ARows, st.Count);
-  for i := 0 to st.Count - 1 do
-  begin
-    v := st.Get(col, i);
-    if IsNan(v) then Continue;
-    coord := AAxis.DataToCoord(v);
-    if IsNan(coord) then Continue;
-    diff := target - coord;
-    dist := Abs(diff);
-    if dist > AMaxDistPx then Continue;
-    { THE SIDE TIE-BREAK. When the pointer falls exactly between two rows, the
-      one at or before it wins -- otherwise both land in the list and every
-      midpoint shows two rows of the same series. Rows with the SAME signed
-      difference still accumulate, which is how two rows holding one value are
-      both reported. }
-    if (dist < minDist) or ((dist = minDist) and (diff >= 0) and (minDiff < 0)) then
-    begin
-      minDist := dist;
-      minDiff := diff;
-      n := 0;
-    end;
-    if diff = minDiff then
-    begin
-      ARows[n] := i;
-      Inc(n);
-    end;
-  end;
-  SetLength(ARows, n);
-  Result := n > 0;
+    than remember.
+
+    THE SIDE TIE-BREAK. When the pointer falls exactly between two rows, the
+    one at or before it wins -- otherwise both land in the list and every
+    midpoint shows two rows of the same series. Rows with the SAME signed
+    difference still accumulate, which is how two rows holding one value are
+    both reported.
+
+    [Batch 64: the loop moved to TyMkNearestRows, which the markers search a
+    GIVEN column with, and it now measures in the axis' LOCAL coordinates as
+    upstream's axis.dataToCoord does -- the grid's offset added to both sides
+    of a difference could move a tie's last bit.] }
+  ARows := TyMkNearestRows(st, col, AAxis, AValue, AMaxDistPx);
+  Result := Length(ARows) > 0;
 end;
 
 function TTyAdvanceChart.ResolveAxisPointers(AX, AY: Integer): TTyAxisHitArray;

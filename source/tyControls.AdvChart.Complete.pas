@@ -926,6 +926,24 @@ begin
   end;
 end;
 
+{ A TOP-LEVEL markPoint / markLine / markArea. The schema documents them
+  only under a series, but upstream's preprocessor makes the top-level one
+  the master every series' marker falls back to -- so it takes the series'
+  own marker node (every series type shares it; a line's is used). -1 for
+  any other key. [Batch 64: pictorialBar-body-fill's `markLine: {z: -100}`
+  was reported as an option ECharts does not know.] }
+function RootMarkerNode(const AKey: string): Integer;
+var s, v: Integer;
+begin
+  Result := -1;
+  if (AKey <> 'markPoint') and (AKey <> 'markLine') and (AKey <> 'markArea') then Exit;
+  s := TyOptChild(TyOptRoot, 'series');
+  if s < 0 then Exit;
+  v := TyOptVariant(s, 'line');
+  if v < 0 then Exit;
+  Result := TyOptChild(v, AKey);
+end;
+
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -937,6 +955,7 @@ begin
     key := AObj.Names[i];
     if APath = '' then sub := key else sub := APath + '.' + key;
     child := TyOptChild(ANode, key);
+    if (child < 0) and (APath = '') then child := RootMarkerNode(key);
     if child < 0 then
       AddIssue(C, oikUnknownOption, sub, '', '');
     { Descending with child = -1 is deliberate rather than guarded here: the

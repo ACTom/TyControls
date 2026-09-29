@@ -448,7 +448,8 @@ begin
     itself. So the line read like a safeguard and was never once read; a
     mutant that flipped it changed nothing, which is how it was found. }
   Result.BackgroundFill := AFill;
-  Result.Z := 0;
+  { upstream's series z }
+  Result.Z := 2;
   Result.Z2 := 0;
   Result.Line.HasArea := False;
   Result.Line.AreaOrigin := laoAuto;

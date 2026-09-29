@@ -472,7 +472,8 @@ begin
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
   Result.EmptyFill := AFill;
-  Result.Z := 0;
+  { upstream's series z }
+  Result.Z := 2;
   Result.Z2 := 0;
 end;
 
