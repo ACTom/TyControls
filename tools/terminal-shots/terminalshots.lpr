@@ -72,6 +72,7 @@ begin
         MouseDown(mbLeft, [ssLeft, ssAlt], a.X, a.Y);
         MouseMove([ssLeft, ssAlt], b.X, b.Y);
         MouseUp(mbLeft, [ssAlt], b.X, b.Y);
+        DoEnter;                               { focused, as right after the drag }
       end;
     spLinkHover:
       begin
@@ -225,11 +226,11 @@ begin
   begin
     tag := Skins[k][0] + '-' + Skins[k][1];
     Shoot(Format('selection-%s.png', [tag]), Skins[k][0], Skins[k][1], text, 60, 4, 96,
-      '失焦的选区：从第一行中间拖到第二行，选区色叠在底色上，字色不变', spSelection);
+      '失焦的选区：从第一行中间拖到第二行；选中格的底色换成选区色（在主题底色上混成不透明），字色不变', spSelection);
     Shoot(Format('selection-focused-%s.png', [tag]), Skins[k][0], Skins[k][1], text, 60, 4, 96,
       '聚焦的选区：同一段，换成聚焦那一色', spSelectionFocused);
     Shoot(Format('column-%s.png', [tag]), Skins[k][0], Skins[k][1], text, 60, 4, 96,
-      'Alt+拖出的列选区：三行同样宽的矩形（中文格子按整格算）', spColumn);
+      '聚焦的列选区（Alt+拖）：三行都是第 3–14 列；宽字符按它的第一列算——第二、三行的「文」「三」第一列在 2、起点落在它们后半，整字不选；第一行的「试」（13–14 列）整字选中', spColumn);
     Shoot(Format('link-hover-%s.png', [tag]), Skins[k][0], Skins[k][1], text, 60, 4, 96,
       '按着 Ctrl 悬停网址：只有网址那一段有链接色的下划线', spLinkHover);
     WriteLn(tag);

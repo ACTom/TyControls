@@ -195,9 +195,11 @@ end;
 
 **选区跟着文字走**：新的输出把行挤出滚回的顶上时，选区跟着上移；它指的那几行被挤没了，选区就没了。这些时候选区会被清掉：键入或粘贴、行数变了（列数变了不清）、切到另一个屏幕（进出 vim、RIS）、程序打开鼠标上报、清滚回。
 
-**复制**：`SelectionText` 去掉每行行尾的空白，折行接成一行，行之间用平台的换行（Windows 上 CRLF，Linux / macOS 上 LF），NBSP 换成空格。复制的快捷键见 §5；`CopyOnSelect` 打开后选完就写剪贴板。Linux（X11）上选完同时写 PRIMARY，中键粘贴它（Wayland 下看合成器支不支持）。
+**复制**：`SelectionText` 去掉每行行尾的空白，折行接成一行，行之间用平台的换行（Windows 上 CRLF，Linux / macOS 上 LF），NBSP 换成空格。复制的快捷键见 §5；`CopyOnSelect` 打开后选完就写剪贴板。Linux（X11）上选完同时占住 PRIMARY，文字等别的程序来要时才取（大选区松手时不拼文字），中键粘贴它（Wayland 下看合成器支不支持）。
 
-**右键菜单**：复制、粘贴、全选、清屏四项；没有选区时复制是灰的，剪贴板空或 `ReadOnly` 时粘贴是灰的。菜单键（Shift+F10）在光标格下面弹出。宿主设了 `PopupMenu` 就弹宿主的。
+**抬起丢了**：按下之后捕获被别处拿走（切换窗口、弹出模态框），或者抬起落在别的窗口上，控件等到那个键确实松开了（或下一次按同一个键时）就照松开收尾：选区照常结束，程序会收到补发的抬起。
+
+**右键菜单**：复制、粘贴、全选、清屏四项；没有选区时复制是灰的，剪贴板里没有文字或 `ReadOnly` 时粘贴是灰的（只问有没有文字，不把剪贴板读出来）。菜单键在光标格下面弹出。Shift+F10 是有编码的键，照常先发给程序；之后还弹不弹菜单看 widgetset，待真机确认。宿主设了 `PopupMenu` 就弹宿主的；macOS 上右键先选中指针下的词，宿主的菜单也一样。
 
 **指针形状**：平常是 I 形；程序接管鼠标时是箭头；按着 Alt 要列选择时是十字；链接上是手形。宿主自己设了 `Cursor` 的，平常就用宿主的。
 
@@ -226,7 +228,7 @@ end;
 | `to52Write` | 先问 `OnOsc52`（`AAllow` 默认 `True`），再写剪贴板 | 丢掉，不应答 |
 | `to52ReadWrite` | 同上 | 问 `OnOsc52`，`AAllow` 默认 `False`：宿主明确同意才应答；没挂事件就是不同意 |
 
-- 事件在解析中间同步发，宿主可以在里面弹模态框问用户，应答的顺序不会乱。
+- 事件在解析中间同步发，宿主可以在里面弹模态框问用户，应答的顺序不会乱；但**不能在事件里释放控件**（也不能做会释放它的事，比如关掉它所在的窗体）。事件或剪贴板（别的程序占着时会抛）抛出的异常由控件吞掉，这一条 OSC 52 作罢，后面的输出照常解析。
 - `AText` 写的时候是解出来的文字（坏的 base64 解成空串，同 xterm.js），读的时候是剪贴板现在的内容；宿主都可以改。
 - `ASelection` 是程序给的剪贴板名（`c`、`p` …）原样，控件不按它选剪贴板。
 - 应答不算键入：不清选区，不滚到底。
@@ -240,7 +242,7 @@ end;
 | `TyTerminal` | `background`（底色，调色板 257）、`color`（前景，256）、`font-size`、`padding`、边框（默认无边框） |
 | `TyTerminal:disabled` | `opacity`：禁用时整块（字、底色、内边距、外框）按它朝父控件底色淡下去；程序问颜色（OSC 10 / 11）仍答原色 |
 | `TyTerminalCursor` | `background`（光标色，258）、`color`（块光标下的字） |
-| `TyTerminalSelection`、`:focus` | `background`：选区颜色，失焦 / 聚焦两种，可以半透明（叠在格子自己的底色上）；`color`：选中的字换成这个色，**写了才用**，不写就保持原色 |
+| `TyTerminalSelection`、`:focus` | `background`：选区颜色，失焦 / 聚焦两种，可以半透明——先在主题底色上混成不透明，再**替换**选中格的底色（反显格、亮底色格上的选区一样看得见，同 xterm.js）；宽字符按它的第一列算，整字选中或整字不选；`color`：选中的字换成这个色，**写了才用**，不写就保持原色 |
 | `TyTerminalAnsi0` … `TyTerminalAnsi15` | `color`：16 色 |
 | `TyTerminalLink` | `color`：悬停链接的下划线 |
 | `TyTerminalPreedit` | `background`、`color`、`border-color`（组字串的底、字、下划线） |
@@ -251,7 +253,7 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 |-------|------|
 | `--terminal-bg` / `--terminal-fg` | `var(--surface)` / `var(--on-surface)` |
 | `--terminal-cursor` / `--terminal-cursor-ink` | `var(--on-surface)` / `var(--terminal-bg)` |
-| `--terminal-selection-bg` / `--terminal-selection-bg-inactive` | 半透明强调色 / 半透明前景 |
+| `--terminal-selection-bg` / `--terminal-selection-bg-inactive` | 半透明强调色（0.35）/ 半透明前景（0.3，同 xterm.js 默认选区的透明度） |
 | `--terminal-link` | `var(--accent)` |
 | `--terminal-ansi-0` … `--terminal-ansi-15` | 见下 |
 | `--terminal-font-family` / `--terminal-font-family-wide` | `monospace` / `monospace-wide` |
@@ -264,7 +266,7 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 
 自己的皮肤里若改写了 `TyTerminal` 规则，基础层的 `TyTerminal:disabled` 就不再继承，要连它一起写，否则禁用时不变淡。
 
-禁用时选区色、链接色和别的颜色一样朝父控件底色淡下去（选区色的透明度不变）。
+禁用时选区色（已经混成不透明）、链接色和别的颜色一样朝父控件底色淡下去。
 
 **字体**：`--terminal-font-family` 由控件原样读（不经 `var()` 求值），`monospace` 换成平台等宽字体（Windows `Consolas`、macOS `Menlo`、Linux `Monospace`）。宽字符（CJK）默认交给系统的字体替换；`--terminal-font-family-wide` 写一个字体名就专门用它画宽字符，`monospace-wide` 在 macOS / Linux 换成 `PingFang SC` / `Noto Sans CJK SC`，Windows 上是空（Consolas 经系统字体链接本来就把中文画在两格里）。
 
@@ -343,9 +345,10 @@ Windows 上在第一个字节到来之前告诉 Core 它在 ConPTY 后面、是�
 - REP（`CSI b`）重复次数极大时按周期快进，被跳过那段滚动的 `Core.OnScroll` 不发。
 - 窗口尺寸应答（`CSI 14 t` / `16 t`）和 SGR 像素鼠标报的是**设备像素**（xterm.js 报 CSS 像素）。
 - **表情**：Windows 上彩色表情画成单色轮廓（GDI 文字管线不画彩色字形），宽度照字符宽度表算。Powerline 私用区字形（U+E0A0、U+E0B0 等）要字体里有才画得出来。
-- 颜色 token 的透明度会被丢掉：终端的底色、前景、16 色都按不透明画（选区色例外，见 §10）。
+- 颜色 token 的透明度会被丢掉：终端的底色、前景、16 色都按不透明画；选区色的透明度只用来在主题底色上预混（见 §10）。
 - **OSC 52 读剪贴板是隐私问题**：程序（包括 ssh 过去的远端）能读到你复制过的密码。`to52ReadWrite` 只在宿主会问用户时才开。
-- **自己写 Unix PTY 时**：`fork` 之后子进程里只能做系统调用（`setsid`、`open`、`ioctl`、`dup2`、`execve`）。LCL 程序是多线程的，子进程里分配内存可能永远等一把别的线程拿着的锁；参数、环境变量都在 `fork` 之前备好。
+- **自己写 Unix PTY 时**：`fork` 之后子进程里只能做系统调用（`sigprocmask`、`sigaction`、`close`、`setsid`、`open`、`ioctl`、`dup2`、`execve`）。LCL 程序是多线程的，子进程里分配内存可能永远等一把别的线程拿着的锁；参数、环境变量、要关的描述符上限都在 `fork` 之前备好。子进程还要清空信号屏蔽字、把被忽略的信号恢复默认（忽略会跨 `execve` 传下去）、关掉宿主没设 close-on-exec 的描述符。
+- **关 PTY 别在主线程上等**：ConPTY 的 `ClosePseudoConsole` 在 Windows 11 24H2 之前会等输出读完、程序退出（程序在关闭处理里可以耗 5 秒）；Unix 子进程可能不理 SIGHUP。示例把这些放在收尾线程里，超时按句柄 / SIGKILL 结束程序，程序退出时有上限地等一次（`examples/terminal/uptysession.pas`）。
 - Linux 上 PRIMARY 在 X11 下照常；Wayland 下要看合成器支不支持 primary selection。
 - 程序接管鼠标时按着覆盖键拖出的是本地选区，程序收不到这次拖动；滚轮照常带着修饰键报给程序。
 
