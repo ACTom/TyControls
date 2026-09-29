@@ -55,6 +55,7 @@ type
     procedure TestMeasureTextBlockCountsAuthoredLines;
     procedure TestMeasureTextBlockLineHeightIsDerivedNotFloored;
     procedure TestMeasureTextBlockWrapsToAWidth;
+    procedure TestTheGdiRendererKeepsOneBitmap;
   end;
 
 implementation
@@ -891,6 +892,27 @@ begin
     [wNarrow, wFull]), wNarrow <= wFull div 4);
   AssertTrue(Format('and makes it at least three lines tall (%d vs %d)',
     [hNarrow, hFull]), hNarrow >= 3 * hFull);
+end;
+
+{ The Win32 text renderer draws every run on ONE kept GDI bitmap (it grows when a run
+  needs more room) instead of a fresh TBitmap and a whole-bitmap conversion per run.
+  200 runs of about the same size: at most the first bitmap and one growth. The pixels
+  are held elsewhere -- tools/painter-regress, every text path of the library. }
+procedure TPainterTest.TestTheGdiRendererKeepsOneBitmap;
+var
+  before, k: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  before := TyGdiTextBitmapsMade;
+  MakePainter(300, 60, 96);
+  for k := 1 to 200 do
+    FPainter.DrawText(Rect(0, 0, 300, 60), 'Run ' + IntToStr(k) + ' 文字 text', 'Segoe UI', 10, 400,
+      TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  AssertTrue(Format('bitmaps made or grown for 200 runs: %d', [TyGdiTextBitmapsMade - before]),
+    TyGdiTextBitmapsMade - before <= 2);
+  AssertTrue('the runs were drawn through it at all', TyGdiTextBitmapsMade >= 1);
 end;
 
 initialization
