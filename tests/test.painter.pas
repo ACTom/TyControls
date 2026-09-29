@@ -1009,14 +1009,18 @@ begin
   AssertTrue(Format('and the run was drawn (%d rows of ink)', [rows]), rows > 50);
 end;
 
-{ The kept bitmap holds the last run's ink outside the part the next run clears: a big
-  bold run, then a small one, must come out as the small one does on a fresh bitmap. }
+{ The kept bitmap holds the last run's ink: a long run of solid blocks, then a short run,
+  must come out as the short one does on a fresh bitmap. }
 procedure TPainterTest.TestTheKeptBitmapIsClearedBetweenRuns;
 var
   a: TBGRABitmap;
   x, y, diff: Integer;
   p, q: TBGRAPixel;
+  Blocks: string;
 begin
+  Blocks := '';
+  for x := 1 to 40 do
+    Blocks := Blocks + '█';
   {$IFNDEF LCLWin32}
   Ignore('Win32 only: the other widgetsets draw text through BGRA');
   {$ENDIF}
@@ -1026,9 +1030,17 @@ begin
     TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
   a := FPainter.Bitmap.Duplicate as TBGRABitmap;
   try
+    { text, not a box: a bitmap never cleared is black, and black reads as full ink }
+    diff := 0;
+    for y := 0 to 59 do
+      for x := 0 to 199 do
+        if a.GetPixel(x, y).alpha > 0 then Inc(diff);
+    AssertTrue(Format('the short run is drawn as text (%d inked pixels)', [diff]), (diff > 20) and (diff < 800));
     FreePainter;
-    MakePainter(900, 300, 96);
-    FPainter.DrawText(Rect(0, 0, 900, 300), '██████ ███', 'Segoe UI', 90, 700,
+    { solid ink where the small run's own part of the bitmap lies (the same size puts
+      both runs' margins in the same place) }
+    MakePainter(900, 60, 96);
+    FPainter.DrawText(Rect(0, 0, 900, 60), Blocks, 'Segoe UI', 12, 700,
       TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
     FreePainter;
     MakePainter(200, 60, 96);
