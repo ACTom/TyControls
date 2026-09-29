@@ -16,6 +16,10 @@ unit tyControls.Terminal.Render;
                     drawPathFunctionCharacter :531-588, translateArgs :734-768);
                     Copyright (c) 2021 The xterm.js authors; the data is in
                     tyControls.Terminal.CustomGlyphs.inc, dumped from the addon
+    minimum contrast  src/common/Color.ts:230-384 (Copyright (c) 2017 The xterm.js
+                    authors), src/browser/renderer/shared/RendererUtils.ts:15-65,
+                    src/browser/ColorContrastCache.ts; the luminance goes through
+                    TyTermRelativeLuminance (Core), a table of V8's own results
   MIT; the full text is in THIRD-PARTY-NOTICES.md.
 
   WHAT DIFFERS IN SHAPE FROM UPSTREAM:
@@ -158,10 +162,9 @@ type
   { Draws a cluster into a coverage mask through the library's text path. The scratch
     surface is made once, big enough for four cells, and keeps its font between calls:
     the font is configured only when the name, weight, slant, size or PPI differ from
-    the last glyph's. What a glyph still costs (about 2 ms on Win32) is the library's
-    text renderer itself -- TTyGdiTextRenderer draws each run on a fresh TBitmap and
-    converts it (Painter.pas) -- which is why the row painter spreads new glyphs over
-    frames (RasterBudgetMs). }
+    the last glyph's. What a glyph still costs (about 1 ms on Win32, phase 5) is the
+    library's text renderer itself (TTyGdiTextRenderer, Painter.pas), which is why the
+    row painter spreads new glyphs over frames (RasterBudgetMs). }
   TTyTermGlyphRasterizer = class
   private
     FScratch: TBGRABitmap;
@@ -177,6 +180,23 @@ type
       const AMetrics: TTyTermCellMetrics): TTyTermGlyph;
     { FOR THE TESTS and the probes: how many times a font was configured }
     property FontsConfigured: Integer read FConfigured;
+  end;
+
+  { ColorContrastCache.ts: (background, foreground) -> the adjusted foreground, or "no
+    adjustment needed". The key is ordered (background first); both $RRGGBB. }
+  TTyTermContrastCache = class
+  private
+    FMap: specialize TDictionary<UInt64, Cardinal>;
+    function GetCount: Integer;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    { False = not cached. AAdjusted False: the pair already holds the ratio (upstream's
+      null), AResult is then AFg. }
+    function Find(ABg, AFg: Cardinal; out AResult: Cardinal; out AAdjusted: Boolean): Boolean;
+    procedure Put(ABg, AFg, AResult: Cardinal; AAdjusted: Boolean);
+    procedure Clear;
+    property Count: Integer read GetCount;
   end;
 
   TTyTermCursorShape = (tcpNone, tcpBlock, tcpOutline, tcpUnderline, tcpBar);
@@ -305,9 +325,199 @@ procedure TyTermBlendMask(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleM
 procedure TyTermBlendMaskGamma(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleMask;
   AColor: Cardinal; const AClip: TRect);
 
+{ ---- minimum contrast (Color.ts, bit for bit against terminal-contrast.json) ---------- }
+
+{ Color.ts:377-382 contrastRatio: the lighter over the darker, each + 0.05. }
+function TyTermContrastRatio(AL1, AL2: Double): Double;
+{ Color.ts:296-321 rgba.ensureContrastRatio, on $RRGGBB. False = the ratio already
+  holds (upstream's undefined; AResult is then AFg). A foreground darker than the
+  ground is darkened first, then lightened if darkening cannot reach the ratio -- the
+  one with the higher ratio wins; a lighter one the other way round. }
+function TyTermEnsureContrastRatio(ABg, AFg: Cardinal; ARatio: Double; out AResult: Cardinal): Boolean;
+{ Color.ts:323-341: each channel less ceil(10 %) a step until the ratio holds or black }
+function TyTermReduceLuminance(ABg, AFg: Cardinal; ARatio: Double): Cardinal;
+{ Color.ts:343-361: each channel plus ceil(10 % of what is left to 255) a step }
+function TyTermIncreaseLuminance(ABg, AFg: Cardinal; ARatio: Double): Cardinal;
+{ OptionsService.ts:188-190: Math.max(1, Math.min(21, Math.round(v * 10) / 10)). NaN
+  and the infinities answer 1 (upstream would store NaN: design spec 15). }
+function TyTermClampContrastRatio(AValue: Double): Double;
+{ RendererUtils.ts:63-65 treatGlyphAsBackgroundColor: powerline U+E0A4-E0D6 and the box
+  and block glyphs U+2500-259F keep their colour whatever the ratio. }
+function TyTermExcludedFromContrast(ACodepoint: Cardinal): Boolean;
+
 implementation
 
+uses
+  tyControls.Terminal.Core;
+
 {$I tyControls.Terminal.CustomGlyphs.inc}
+
+{ ---- minimum contrast ---------------------------------------------------------------- }
+
+const
+  KContrastOffset: Double = 0.05;
+  KTenth: Double = 0.1;
+
+function Lum3(R, G, B: Integer): Double; inline;
+begin
+  Result := TyTermRelativeLuminance((Cardinal(R) shl 16) or (Cardinal(G) shl 8) or Cardinal(B));
+end;
+
+function TyTermContrastRatio(AL1, AL2: Double): Double;
+begin
+  if AL1 < AL2 then
+    Result := (AL2 + KContrastOffset) / (AL1 + KContrastOffset)
+  else
+    Result := (AL1 + KContrastOffset) / (AL2 + KContrastOffset);
+end;
+
+function TyTermReduceLuminance(ABg, AFg: Cardinal; ARatio: Double): Cardinal;
+var
+  bgR, bgG, bgB, fgR, fgG, fgB: Integer;
+  cr: Double;
+begin
+  bgR := (ABg shr 16) and $FF;
+  bgG := (ABg shr 8) and $FF;
+  bgB := ABg and $FF;
+  fgR := (AFg shr 16) and $FF;
+  fgG := (AFg shr 8) and $FF;
+  fgB := AFg and $FF;
+  cr := TyTermContrastRatio(Lum3(fgR, fgG, fgB), Lum3(bgR, bgG, bgB));
+  while (cr < ARatio) and ((fgR > 0) or (fgG > 0) or (fgB > 0)) do
+  begin
+    Dec(fgR, Max(0, Ceil(fgR * KTenth)));
+    Dec(fgG, Max(0, Ceil(fgG * KTenth)));
+    Dec(fgB, Max(0, Ceil(fgB * KTenth)));
+    cr := TyTermContrastRatio(Lum3(fgR, fgG, fgB), Lum3(bgR, bgG, bgB));
+  end;
+  Result := (Cardinal(fgR) shl 16) or (Cardinal(fgG) shl 8) or Cardinal(fgB);
+end;
+
+function TyTermIncreaseLuminance(ABg, AFg: Cardinal; ARatio: Double): Cardinal;
+var
+  bgR, bgG, bgB, fgR, fgG, fgB: Integer;
+  cr: Double;
+begin
+  bgR := (ABg shr 16) and $FF;
+  bgG := (ABg shr 8) and $FF;
+  bgB := ABg and $FF;
+  fgR := (AFg shr 16) and $FF;
+  fgG := (AFg shr 8) and $FF;
+  fgB := AFg and $FF;
+  cr := TyTermContrastRatio(Lum3(fgR, fgG, fgB), Lum3(bgR, bgG, bgB));
+  while (cr < ARatio) and ((fgR < $FF) or (fgG < $FF) or (fgB < $FF)) do
+  begin
+    fgR := Min($FF, fgR + Ceil((255 - fgR) * KTenth));
+    fgG := Min($FF, fgG + Ceil((255 - fgG) * KTenth));
+    fgB := Min($FF, fgB + Ceil((255 - fgB) * KTenth));
+    cr := TyTermContrastRatio(Lum3(fgR, fgG, fgB), Lum3(bgR, bgG, bgB));
+  end;
+  Result := (Cardinal(fgR) shl 16) or (Cardinal(fgG) shl 8) or Cardinal(fgB);
+end;
+
+function TyTermEnsureContrastRatio(ABg, AFg: Cardinal; ARatio: Double; out AResult: Cardinal): Boolean;
+var
+  bgL, fgL, ratioA, ratioB: Double;
+  a, b: Cardinal;
+begin
+  AResult := AFg and $FFFFFF;
+  bgL := TyTermRelativeLuminance(ABg and $FFFFFF);
+  fgL := TyTermRelativeLuminance(AFg and $FFFFFF);
+  if not (TyTermContrastRatio(bgL, fgL) < ARatio) then Exit(False);
+  if fgL < bgL then
+  begin
+    a := TyTermReduceLuminance(ABg, AFg, ARatio);
+    ratioA := TyTermContrastRatio(bgL, TyTermRelativeLuminance(a));
+    if ratioA < ARatio then
+    begin
+      b := TyTermIncreaseLuminance(ABg, AFg, ARatio);
+      ratioB := TyTermContrastRatio(bgL, TyTermRelativeLuminance(b));
+      if ratioA > ratioB then AResult := a else AResult := b;
+    end
+    else
+      AResult := a;
+    Exit(True);
+  end;
+  a := TyTermIncreaseLuminance(ABg, AFg, ARatio);
+  ratioA := TyTermContrastRatio(bgL, TyTermRelativeLuminance(a));
+  if ratioA < ARatio then
+  begin
+    b := TyTermReduceLuminance(ABg, AFg, ARatio);
+    ratioB := TyTermContrastRatio(bgL, TyTermRelativeLuminance(b));
+    if ratioA > ratioB then AResult := a else AResult := b;
+  end
+  else
+    AResult := a;
+  Result := True;
+end;
+
+function TyTermClampContrastRatio(AValue: Double): Double;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(1);
+  { the answer is 1 at or below 1 and 21 at or above 21 whatever the rounding; between,
+    v * 10 + 0.5 lies in [10.5, 210.5), where it is exact and Floor is Math.round }
+  if AValue <= 1 then Exit(1);
+  if AValue >= 21 then Exit(21);
+  Result := Floor(AValue * 10 + 0.5) / 10;
+  if Result < 1 then Result := 1;
+  if Result > 21 then Result := 21;
+end;
+
+function TyTermExcludedFromContrast(ACodepoint: Cardinal): Boolean;
+begin
+  Result := ((ACodepoint >= $E0A4) and (ACodepoint <= $E0D6))
+    or ((ACodepoint >= $2500) and (ACodepoint <= $259F));
+end;
+
+constructor TTyTermContrastCache.Create;
+begin
+  inherited Create;
+  FMap := specialize TDictionary<UInt64, Cardinal>.Create;
+end;
+
+destructor TTyTermContrastCache.Destroy;
+begin
+  FMap.Free;
+  inherited Destroy;
+end;
+
+function TTyTermContrastCache.GetCount: Integer;
+begin
+  Result := FMap.Count;
+end;
+
+function TTyTermContrastCache.Find(ABg, AFg: Cardinal; out AResult: Cardinal; out AAdjusted: Boolean): Boolean;
+var
+  v: Cardinal;
+begin
+  Result := FMap.TryGetValue((UInt64(ABg and $FFFFFF) shl 24) or UInt64(AFg and $FFFFFF), v);
+  if Result then
+  begin
+    AResult := v and $FFFFFF;
+    AAdjusted := (v and $1000000) <> 0;
+  end
+  else
+  begin
+    AResult := AFg and $FFFFFF;
+    AAdjusted := False;
+  end;
+end;
+
+procedure TTyTermContrastCache.Put(ABg, AFg, AResult: Cardinal; AAdjusted: Boolean);
+var
+  v: Cardinal;
+begin
+  if AAdjusted then
+    v := (AResult and $FFFFFF) or $1000000
+  else
+    v := AFg and $FFFFFF;
+  FMap.AddOrSetValue((UInt64(ABg and $FFFFFF) shl 24) or UInt64(AFg and $FFFFFF), v);
+end;
+
+procedure TTyTermContrastCache.Clear;
+begin
+  FMap.Clear;
+end;
 
 { ---- spec, metrics --------------------------------------------------------------- }
 

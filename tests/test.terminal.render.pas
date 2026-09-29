@@ -3,7 +3,8 @@ unit test.terminal.render;
 { tyControls.Terminal.Render on its own: the 256-colour table against xterm.js's
   (tools/terminal-oracle/view-cases.js), how a cell's colours resolve, the glyph
   cache, the drawn box-drawing and block glyphs, the cell metrics and the glyph
-  rasterizer.
+  rasterizer; the minimum-contrast functions against xterm.js's own answers
+  (tools/terminal-oracle/contrast-cases.js, terminal-contrast.json), bit for bit.
 
   The pixel tests use cell metrics made by hand (9 x 18, and 10 x 23 for a cell that
   is not a whole ratio), not a font, so they do not move with the machine's fonts;
@@ -41,6 +42,13 @@ type
     procedure TestGlyphKeysKeepCellCountsApart;
     procedure TestSingleCodePointsAreCachedByCode;
     procedure TestTheRasterBudgetSpreadsGlyphsOverFrames;
+    { phase 5: minimum contrast }
+    procedure TestLuminanceMatchesUpstream;
+    procedure TestEnsureContrastRatioMatchesUpstream;
+    procedure TestReduceAndIncreaseMatchUpstream;
+    procedure TestTheRatioIsClampedAsUpstream;
+    procedure TestTheExcludedGlyphs;
+    procedure TestTheContrastCache;
   end;
 
 function TyTermTestMetrics(ACellW, ACellH: Integer; ACharW: Integer = -1): TTyTermCellMetrics;
@@ -90,6 +98,275 @@ end;
 function TTyTerminalRenderTests.NewSentinel(AW, AH: Integer): TBGRABitmap;
 begin
   Result := TBGRABitmap.Create(AW, AH, TyTermSentinel);
+end;
+
+{ ---- minimum contrast ---------------------------------------------------------------- }
+
+function BitsOf(const AHex: string): QWord;
+begin
+  Result := StrToQWord('$' + AHex);
+end;
+
+function DoubleBits(D: Double): QWord;
+begin
+  Result := PQWord(@D)^;
+end;
+
+function HexOf(C: Cardinal): string;
+begin
+  Result := '$' + IntToHex(C, 6);
+end;
+
+type
+  TContrastFixtureTest = procedure(AFixture: TJSONObject; AMiss: TTyTermMisses) of object;
+
+procedure WithContrastFixture(ATest: TTestCase; ARun: TContrastFixtureTest; AExpected: Integer);
+var
+  miss: TTyTermMisses;
+  fx: TTyTermFixtures;
+begin
+  miss := TTyTermMisses.Create;
+  try
+    fx := TyTermLoadFixtures('contrast', miss);
+    try
+      ATest.AssertEquals(miss.Text, 0, miss.Count);
+      TyTermCheckUpstream(fx[0], 'contrast', miss);
+      ARun(fx[0], miss);
+      ATest.AssertEquals(miss.Text, 0, miss.Count);
+      ATest.AssertEquals('comparisons (2 for the pin)', AExpected + 2, miss.Compared);
+    finally
+      TyTermFreeFixtures(fx);
+    end;
+  finally
+    miss.Free;
+  end;
+end;
+
+type
+  TContrastRuns = class
+    procedure Luminance(AFixture: TJSONObject; AMiss: TTyTermMisses);
+    procedure Ensure(AFixture: TJSONObject; AMiss: TTyTermMisses);
+    procedure ReduceIncrease(AFixture: TJSONObject; AMiss: TTyTermMisses);
+    procedure Clamp(AFixture: TJSONObject; AMiss: TTyTermMisses);
+  end;
+
+procedure TContrastRuns.Luminance(AFixture: TJSONObject; AMiss: TTyTermMisses);
+var
+  arr, e: TJSONArray;
+  i: Integer;
+  got: QWord;
+begin
+  arr := AFixture.Arrays['luminance'];
+  for i := 0 to arr.Count - 1 do
+  begin
+    e := arr.Arrays[i];
+    AMiss.AddCompared;
+    got := DoubleBits(TyTermRelativeLuminance(Cardinal(e.Int64s[0])));
+    if got <> BitsOf(e.Strings[1]) then
+      AMiss.Add(HexOf(e.Int64s[0]), 'luminance', e.Strings[1], LowerCase(IntToHex(got, 16)));
+  end;
+end;
+
+procedure TContrastRuns.Ensure(AFixture: TJSONObject; AMiss: TTyTermMisses);
+var
+  arr, e, res, ratios: TJSONArray;
+  i, k: Integer;
+  bg, fg, got: Cardinal;
+  adjusted: Boolean;
+  want: string;
+begin
+  ratios := AFixture.Arrays['ratios'];
+  arr := AFixture.Arrays['ensure'];
+  for i := 0 to arr.Count - 1 do
+  begin
+    e := arr.Arrays[i];
+    bg := Cardinal(e.Int64s[0]);
+    fg := Cardinal(e.Int64s[1]);
+    res := e.Arrays[2];
+    for k := 0 to res.Count - 1 do
+    begin
+      AMiss.AddCompared;
+      adjusted := TyTermEnsureContrastRatio(bg, fg, ratios.Floats[k], got);
+      if res.Items[k].JSONType = jtNull then
+      begin
+        if adjusted then
+          AMiss.Add(HexOf(bg) + ' ' + HexOf(fg) + ' ' + ratios.Items[k].AsString, 'ensure', 'undefined', HexOf(got));
+      end
+      else
+      begin
+        want := HexOf(res.Int64s[k]);
+        if (not adjusted) or (got <> Cardinal(res.Int64s[k])) then
+          AMiss.Add(HexOf(bg) + ' ' + HexOf(fg) + ' ' + ratios.Items[k].AsString, 'ensure', want,
+            BoolToStr(adjusted, HexOf(got), 'undefined'));
+      end;
+    end;
+  end;
+end;
+
+procedure TContrastRuns.ReduceIncrease(AFixture: TJSONObject; AMiss: TTyTermMisses);
+var
+  arr, e: TJSONArray;
+  i, pass: Integer;
+  got: Cardinal;
+  name: string;
+begin
+  for pass := 0 to 1 do
+  begin
+    if pass = 0 then name := 'reduce' else name := 'increase';
+    arr := AFixture.Arrays[name];
+    for i := 0 to arr.Count - 1 do
+    begin
+      e := arr.Arrays[i];
+      AMiss.AddCompared;
+      if pass = 0 then
+        got := TyTermReduceLuminance(Cardinal(e.Int64s[0]), Cardinal(e.Int64s[1]), e.Floats[2])
+      else
+        got := TyTermIncreaseLuminance(Cardinal(e.Int64s[0]), Cardinal(e.Int64s[1]), e.Floats[2]);
+      if got <> Cardinal(e.Int64s[3]) then
+        AMiss.Add(HexOf(e.Int64s[0]) + ' ' + HexOf(e.Int64s[1]) + ' ' + e.Items[2].AsString, name,
+          HexOf(e.Int64s[3]), HexOf(got));
+    end;
+  end;
+end;
+
+procedure TContrastRuns.Clamp(AFixture: TJSONObject; AMiss: TTyTermMisses);
+var
+  arr, e: TJSONArray;
+  i: Integer;
+  got: QWord;
+begin
+  arr := AFixture.Arrays['clamp'];
+  for i := 0 to arr.Count - 1 do
+  begin
+    e := arr.Arrays[i];
+    AMiss.AddCompared;
+    got := DoubleBits(TyTermClampContrastRatio(e.Floats[0]));
+    if got <> BitsOf(e.Strings[1]) then
+      AMiss.Add(e.Items[0].AsString, 'clamp', e.Strings[1], LowerCase(IntToHex(got, 16)));
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestLuminanceMatchesUpstream;
+var
+  runs: TContrastRuns;
+begin
+  runs := TContrastRuns.Create;
+  try
+    WithContrastFixture(Self, @runs.Luminance, 16 + 12 + 24 + 2000);
+  finally
+    runs.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestEnsureContrastRatioMatchesUpstream;
+var
+  runs: TContrastRuns;
+begin
+  runs := TContrastRuns.Create;
+  try
+    { 54 x 54 pairs from the fixed set and 3000 random ones, at nine ratios }
+    WithContrastFixture(Self, @runs.Ensure, (54 * 54 + 3000) * 9);
+  finally
+    runs.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestReduceAndIncreaseMatchUpstream;
+var
+  runs: TContrastRuns;
+begin
+  runs := TContrastRuns.Create;
+  try
+    WithContrastFixture(Self, @runs.ReduceIncrease, 2 * 1000);
+  finally
+    runs.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestTheRatioIsClampedAsUpstream;
+var
+  runs: TContrastRuns;
+begin
+  runs := TContrastRuns.Create;
+  try
+    WithContrastFixture(Self, @runs.Clamp, 18);
+  finally
+    runs.Free;
+  end;
+  { not in upstream's table: NaN and the infinities (upstream would store NaN) }
+  AssertEquals('NaN', 1.0, TyTermClampContrastRatio(NaN), 0);
+  AssertEquals('+Inf', 1.0, TyTermClampContrastRatio(Infinity), 0);
+  AssertEquals('-Inf', 1.0, TyTermClampContrastRatio(NegInfinity), 0);
+end;
+
+procedure TTyTerminalRenderTests.TestTheExcludedGlyphs;
+var
+  miss: TTyTermMisses;
+  fx: TTyTermFixtures;
+  scanned, runs: TJSONArray;
+  s, k: Integer;
+  cp: Cardinal;
+  want: Boolean;
+begin
+  miss := TTyTermMisses.Create;
+  try
+    fx := TyTermLoadFixtures('contrast', miss);
+    try
+      AssertEquals(miss.Text, 0, miss.Count);
+      scanned := fx[0].Arrays['scanned'];
+      runs := fx[0].Arrays['excluded'];
+      AssertEquals('two runs upstream', 2, runs.Count);
+      for s := 0 to scanned.Count - 1 do
+        for cp := Cardinal(scanned.Arrays[s].Int64s[0]) to Cardinal(scanned.Arrays[s].Int64s[1]) do
+        begin
+          want := False;
+          for k := 0 to runs.Count - 1 do
+            if (cp >= Cardinal(runs.Arrays[k].Int64s[0])) and (cp <= Cardinal(runs.Arrays[k].Int64s[1])) then
+              want := True;
+          miss.AddCompared;
+          if TyTermExcludedFromContrast(cp) <> want then
+            miss.Add('U+' + IntToHex(cp, 4), 'excluded', BoolToStr(want, True), BoolToStr(not want, True));
+        end;
+      AssertEquals(miss.Text, 0, miss.Count);
+      AssertEquals('code points compared', ($2700 - $2400 + 1) + ($E100 - $E000 + 1), miss.Compared);
+    finally
+      TyTermFreeFixtures(fx);
+    end;
+  finally
+    miss.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestTheContrastCache;
+var
+  cache: TTyTermContrastCache;
+  res: Cardinal;
+  adj: Boolean;
+begin
+  cache := TTyTermContrastCache.Create;
+  try
+    AssertFalse('empty', cache.Find($111111, $222222, res, adj));
+    cache.Put($111111, $222222, $333333, True);
+    AssertTrue('found', cache.Find($111111, $222222, res, adj));
+    AssertEquals('the adjusted colour', $333333, res);
+    AssertTrue('adjusted', adj);
+    AssertFalse('the key is ordered: the swapped pair is another', cache.Find($222222, $111111, res, adj));
+    cache.Put($444444, $555555, $666666, False);
+    AssertTrue('a pair that needs nothing is found', cache.Find($444444, $555555, res, adj));
+    AssertFalse('and says so', adj);
+    AssertEquals('its colour is its own', $555555, res);
+    { two pairs whose xor is the same are two entries }
+    cache.Put($000001, $000003, $000009, True);
+    cache.Put($000003, $000001, $00000A, True);
+    AssertTrue(cache.Find($000001, $000003, res, adj));
+    AssertEquals('first', $000009, res);
+    AssertEquals('four entries', 4, cache.Count);
+    cache.Clear;
+    AssertEquals('cleared', 0, cache.Count);
+    AssertFalse('nothing after Clear', cache.Find($111111, $222222, res, adj));
+  finally
+    cache.Free;
+  end;
 end;
 
 procedure TTyTerminalRenderTests.TestPaletteMatchesUpstream;

@@ -602,7 +602,9 @@ function TyTermDefaultClock: Double;
 function TyTermParseXColor(const ASpec: string; out R, G, B: Integer): Boolean;
 { XParseColor.ts:58-80 toRgbString, 16 bits per channel. }
 function TyTermToRgbString(ARgb: Cardinal): string;
-{ Color.ts:236-259 }
+{ Color.ts:236-259, bit for bit: the linearized channels come from a table of V8's own
+  results (tyControls.Terminal.Luminance.inc, contrast-cases.js), summed in upstream's
+  order with Double constants. The minimum-contrast functions (Render) use it too. }
 function TyTermRelativeLuminance(ARgb: Cardinal): Double;
 { CoreMouseAction's value upstream (MOVE = 32) }
 function TyTermMouseActionCode(AAction: TTyTerminalMouseAction): Integer;
@@ -762,22 +764,20 @@ begin
   Result := 'rgb:' + Pad((ARgb shr 16) and $FF) + '/' + Pad((ARgb shr 8) and $FF) + '/' + Pad(ARgb and $FF);
 end;
 
+{$I tyControls.Terminal.Luminance.inc}
+
 function TyTermRelativeLuminance(ARgb: Cardinal): Double;
-
-  function Channel(c: Integer): Double;
-  var
-    s: Double;
-  begin
-    s := c / 255;
-    if s <= 0.03928 then
-      Result := s / 12.92
-    else
-      Result := Power((s + 0.055) / 1.055, 2.4);
-  end;
-
+const
+  KR: Double = 0.2126;
+  KG: Double = 0.7152;
+  KB: Double = 0.0722;
+var
+  r, g, b: QWord;
 begin
-  Result := Channel((ARgb shr 16) and $FF) * 0.2126 + Channel((ARgb shr 8) and $FF) * 0.7152
-    + Channel(ARgb and $FF) * 0.0722;
+  r := TyTermLinearChannelBits[(ARgb shr 16) and $FF];
+  g := TyTermLinearChannelBits[(ARgb shr 8) and $FF];
+  b := TyTermLinearChannelBits[ARgb and $FF];
+  Result := PDouble(@r)^ * KR + PDouble(@g)^ * KG + PDouble(@b)^ * KB;
 end;
 
 {$IFDEF MSWINDOWS}
