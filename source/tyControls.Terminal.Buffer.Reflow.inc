@@ -332,12 +332,12 @@ var
   reflowCursorLine: Boolean;
   nullCell: TTyTerminalCellData;
   toInsert: array of TToInsert;
-  insertCount, countToInsert, y, n, i, k, absoluteY, lastLineLength, linesToAdd, trimmedLines,
+  insertCount, countToInsert, row, n, i, k, absoluteY, lastLineLength, linesToAdd, trimmedRows,
     destLineIndex, destCol, srcLineIndex, srcCol, cellsToCopy, viewportAdjustments,
     originalLinesLength, originalLineIndex, nextToInsertIndex, countInsertedSoFar, nextI,
     insertCountEmitted, amountToTrim, eventCount, createdCount: Integer;
   nextLine: TTyTerminalLine;
-  wrapped, newLines, created, originalLines: TTyTermLineArray;
+  wrapped, addedLines, created, originalLines: TTyTermLineArray;
   destLineLengths: TIntegerDynArray;
   insertEvents: array of TInsertEvent;
 
@@ -359,24 +359,24 @@ begin                                                                        { :
   createdCount := 0;
   try
     { backwards: lines may be trimmed off the top as we go. The start is taken once;
-      every Continue lands on the Dec (for y-- upstream). }
-    y := FLines.Length;
+      every Continue lands on the Dec (upstream y--). }
+    row := FLines.Length;
     while True do
     begin
-      Dec(y);
-      if y < 0 then
+      Dec(row);
+      if row < 0 then
         Break;
-      nextLine := FLines.Get(y);
+      nextLine := FLines.Get(row);
       if (nextLine = nil) or ((not nextLine.IsWrapped) and (nextLine.GetTrimmedLength <= ANewCols)) then
         Continue;
-      { the run, y moved to its first row }
+      { the run, row moved to its first row }
       n := 1;
       SetLength(wrapped, 8);
       wrapped[0] := nextLine;
-      while nextLine.IsWrapped and (y > 0) do
+      while nextLine.IsWrapped and (row > 0) do
       begin
-        Dec(y);
-        nextLine := FLines.Get(y);
+        Dec(row);
+        nextLine := FLines.Get(row);
         if n = System.Length(wrapped) then
           SetLength(wrapped, n * 2);
         wrapped[n] := nextLine;
@@ -393,7 +393,7 @@ begin                                                                        { :
       if not reflowCursorLine then
       begin
         absoluteY := FYBase + FY;
-        if (absoluteY >= y) and (absoluteY < y + n) then
+        if (absoluteY >= row) and (absoluteY < row + n) then
           Continue;
       end;
       lastLineLength := wrapped[n - 1].GetTrimmedLength;
@@ -401,33 +401,33 @@ begin                                                                        { :
       linesToAdd := System.Length(destLineLengths) - n;
       if (FYBase = 0) and (FY <> FLines.Length - 1) then
         { the top of the buffer is not filled yet }
-        trimmedLines := IMax(0, FY - FLines.MaxLength + linesToAdd)
+        trimmedRows := IMax(0, FY - FLines.MaxLength + linesToAdd)
       else
-        trimmedLines := IMax(0, FLines.Length - FLines.MaxLength + linesToAdd);
+        trimmedRows := IMax(0, FLines.Length - FLines.MaxLength + linesToAdd);
       { the new lines }
-      newLines := nil;
+      addedLines := nil;
       if linesToAdd > 0 then
       begin
-        SetLength(newLines, linesToAdd);
+        SetLength(addedLines, linesToAdd);
         for i := 0 to linesToAdd - 1 do
         begin
-          newLines[i] := GetBlankLine(TyTermDefaultAttr, True);
+          addedLines[i] := GetBlankLine(TyTermDefaultAttr, True);
           if createdCount = System.Length(created) then
             SetLength(created, createdCount * 2 + 8);
-          created[createdCount] := newLines[i];
+          created[createdCount] := addedLines[i];
           Inc(createdCount);
         end;
         { the index counts the lines inserted after this run already: the list is
           walked forwards at the end }
         if insertCount = System.Length(toInsert) then
           SetLength(toInsert, insertCount * 2 + 4);
-        toInsert[insertCount].Start := y + n + countToInsert;
-        toInsert[insertCount].NewLines := newLines;
+        toInsert[insertCount].Start := row + n + countToInsert;
+        toInsert[insertCount].NewLines := addedLines;
         Inc(insertCount);
         Inc(countToInsert, linesToAdd);
         SetLength(wrapped, n + linesToAdd);
         for i := 0 to linesToAdd - 1 do
-          wrapped[n + i] := newLines[i];
+          wrapped[n + i] := addedLines[i];
       end;
       { copy the cells to their new places, backwards to do it in place }
       destLineIndex := System.Length(destLineLengths) - 1;
@@ -468,7 +468,7 @@ begin                                                                        { :
         if (i <= High(destLineLengths)) and (destLineLengths[i] < ANewCols) then
           wrapped[i].SetCell(destLineLengths[i], nullCell);
       { the viewport, run by run (a pop here changes what is left to walk) }
-      viewportAdjustments := linesToAdd - trimmedLines;
+      viewportAdjustments := linesToAdd - trimmedRows;
       while viewportAdjustments > 0 do
       begin
         Dec(viewportAdjustments);
@@ -526,17 +526,17 @@ begin                                                                        { :
           if (nextToInsertIndex < insertCount)
             and (toInsert[nextToInsertIndex].Start > originalLineIndex + countInsertedSoFar) then
           begin
-            newLines := toInsert[nextToInsertIndex].NewLines;
-            for nextI := High(newLines) downto 0 do
+            addedLines := toInsert[nextToInsertIndex].NewLines;
+            for nextI := High(addedLines) downto 0 do
             begin
-              FLines.SetItem(i, newLines[nextI]);
+              FLines.SetItem(i, addedLines[nextI]);
               Dec(i);
             end;
             Inc(i);
             insertEvents[eventCount].Index := originalLineIndex + 1;
-            insertEvents[eventCount].Amount := System.Length(newLines);
+            insertEvents[eventCount].Amount := System.Length(addedLines);
             Inc(eventCount);
-            Inc(countInsertedSoFar, System.Length(newLines));
+            Inc(countInsertedSoFar, System.Length(addedLines));
             Inc(nextToInsertIndex);
           end
           else

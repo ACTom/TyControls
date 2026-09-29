@@ -553,6 +553,7 @@ begin
     2: Result := FOptions.DisableStdin;
     3: Result := FOptions.CursorBlink;
     4: Result := FOptions.ScrollOnEraseInDisplay;
+    6: Result := FOptions.ReflowCursorLine;
   else
     Result := FOptions.AllowSetCursorBlink;
   end;
@@ -566,6 +567,7 @@ begin
     2: FOptions.DisableStdin := AValue;
     3: FOptions.CursorBlink := AValue;
     4: FOptions.ScrollOnEraseInDisplay := AValue;
+    6: FOptions.ReflowCursorLine := AValue;
   else
     FOptions.AllowSetCursorBlink := AValue;
   end;

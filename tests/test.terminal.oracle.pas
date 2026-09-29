@@ -1008,6 +1008,7 @@ begin
   else if AName = 'scrollOnEraseInDisplay' then Core.ScrollOnEraseInDisplay := AValue.AsBoolean
   else if AName = 'cursorBlink' then Core.CursorBlink := AValue.AsBoolean
   else if AName = 'allowSetCursorBlink' then Core.AllowSetCursorBlink := AValue.AsBoolean
+  else if AName = 'reflowCursorLine' then Core.ReflowCursorLine := AValue.AsBoolean
   else if AName = 'ambiguousWide' then Core.AmbiguousWide := AValue.AsBoolean
   else if AName = 'unicodeVersion' then Core.UnicodeVersion := TyTermUnicodeVersionOf(AValue.AsString)
   else if AName = 'cursorStyle' then
@@ -1132,6 +1133,9 @@ begin
       for t := 0 to o.Count - 1 do
         SetOption(o.Names[t], o.Items[t]);
     end
+    else if s.Find('marker') <> nil then
+      { registerMarker (headless/Terminal.ts:72-74): the buffer holds the marker }
+      Core.Buffer.AddMarker(Core.Buffer.YBase + Core.Buffer.Y + s.Integers['marker'])
     else if s.Find('focus') <> nil then
       Core.ReportFocus(s.Booleans['focus'])
     else if s.Find('theme') <> nil then

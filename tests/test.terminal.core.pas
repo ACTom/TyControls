@@ -44,6 +44,8 @@ type
     procedure TestEscapeFiles;
     procedure TestFuzz;
     procedure TestRecordings;
+    { phase 5: resized back and forth, reflowed as upstream (reflow-cases.js) }
+    procedure TestReflowCases;
   end;
 
   TTyTerminalCoreTests = class(TTestCase)
@@ -118,8 +120,8 @@ uses
   StrUtils, tyControls.Types;
 
 const
-  CoreKinds: array[0..6] of string = ('core-hand', 'core-long', 'core-synth', 'core-mouse',
-    'core-escape', 'core-fuzz', 'core-recording');
+  CoreKinds: array[0..7] of string = ('core-hand', 'core-long', 'core-synth', 'core-mouse',
+    'core-escape', 'core-fuzz', 'core-recording', 'core-reflow');
 
 { ---- TTyTerminalCoreOracleTests ------------------------------------------------------ }
 
@@ -254,6 +256,11 @@ end;
 procedure TTyTerminalCoreOracleTests.TestRecordings;
 begin
   RunKind('core-recording', 8);
+end;
+
+procedure TTyTerminalCoreOracleTests.TestReflowCases;
+begin
+  RunKind('core-reflow', 244);
 end;
 
 type

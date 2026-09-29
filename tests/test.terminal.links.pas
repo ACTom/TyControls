@@ -196,6 +196,7 @@ var
   flat: TTyTermLinks;
   found: TTyTermLink;
   id, want, got: string;
+  wp: TTyTerminalWindowsPty;
 begin
   miss := TTyTermMisses.Create;
   try
@@ -209,7 +210,21 @@ begin
         core := TTyTerminalCore.Create(cols, scene.Integers['rows']);
         try
           core.Scrollback := 0;
+          if scene.Find('windowsPty') <> nil then
+          begin
+            wp.Backend := twpNone;
+            if scene.Objects['windowsPty'].Get('backend', '') = 'conpty' then wp.Backend := twpConPty
+            else if scene.Objects['windowsPty'].Get('backend', '') = 'winpty' then wp.Backend := twpWinPty;
+            wp.BuildNumber := scene.Objects['windowsPty'].Get('buildNumber', 0);
+            core.WindowsPty := wp;
+          end;
           core.WriteSync(TyTermBase64Bytes(scene.Strings['write']));
+          { phase 5: resized after the write (rewrapped, or longer than the grid) }
+          if scene.Find('resize') <> nil then
+          begin
+            core.Resize(scene.Arrays['resize'].Integers[0], scene.Arrays['resize'].Integers[1]);
+            cols := core.Cols;
+          end;
           queries := scene.Arrays['queries'];
           for k := 0 to queries.Count - 1 do
           begin

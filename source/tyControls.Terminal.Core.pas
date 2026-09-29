@@ -536,6 +536,10 @@ type
     property CursorBlink: Boolean index 3 read GetOptBool write SetOptBool;
     property ScrollOnEraseInDisplay: Boolean index 4 read GetOptBool write SetOptBool;
     property AllowSetCursorBlink: Boolean index 5 read GetOptBool write SetOptBool;
+    { reflowCursorLine (OptionsService.ts:50), default False: the wrapped run holding
+      the cursor is not rewrapped on a new column count (the program redraws its own
+      line); a host may turn it on }
+    property ReflowCursorLine: Boolean index 6 read GetOptBool write SetOptBool;
     property AmbiguousWide: Boolean read FAmbiguousWide write FAmbiguousWide;
     property UnicodeVersion: TTyUnicodeVersion read FUnicodeVersion write FUnicodeVersion;
     property WindowsPty: TTyTerminalWindowsPty read GetWindowsPty write SetWindowsPty;

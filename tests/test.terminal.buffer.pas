@@ -436,6 +436,7 @@ begin
     opts.TabStopWidth := o.Get('tabStopWidth', 8);
     if o.Find('windowsPty') <> nil then
       opts.WindowsPty := WindowsPtyOf(o.Objects['windowsPty']);
+    opts.ReflowCursorLine := o.Get('reflowCursorLine', False);
   end;
   svc := TTyTerminalBufferService.Create(opts, init.Integers['cols'], init.Integers['rows']);
   links := TTyTerminalOscLinks.Create(svc);
@@ -499,6 +500,27 @@ begin
         end
         else if name = 'setWrapped' then
           buf.Lines.Get(a.Integers[1]).IsWrapped := a.Booleans[2]
+        else if name = 'cells' then
+        begin
+          col := a.Integers[2];
+          arr := a.Arrays[3];
+          for k := 0 to arr.Count - 1 do
+          begin
+            buf.Lines.Get(a.Integers[1]).SetCellFromCodepoint(col, Cardinal(arr.Arrays[k].Int64s[0]),
+              arr.Arrays[k].Integers[1], TyTermDefaultAttr);
+            Inc(col);
+          end;
+          arr := nil;
+        end
+        else if name = 'combine' then
+          buf.Lines.Get(a.Integers[1]).AddCodepointToCell(a.Integers[2], Cardinal(a.Int64s[3]), 0)
+        else if name = 'insertBlank' then
+        begin
+          for k := 1 to a.Integers[2] do
+            buf.Lines.SpliceOwned(a.Integers[1], 0, buf.GetBlankLine(TyTermDefaultAttr));
+        end
+        else if name = 'setYbase' then
+          buf.YBase := a.Integers[1]
         else if name = 'setupTabStops' then
         begin
           if a.Items[1].JSONType = jtNull then buf.SetupTabStops else buf.SetupTabStops(a.Integers[1]);
@@ -547,6 +569,8 @@ begin
               svc.ScrollbackChanged;
             end;
           end
+          else if a.Strings[1] = 'reflowCursorLine' then
+            opts.ReflowCursorLine := a.Booleans[2]
           else if a.Strings[1] = 'tabStopWidth' then
           begin
             if opts.TabStopWidth <> a.Integers[2] then
@@ -710,7 +734,7 @@ end;
 
 procedure TTyTerminalBufferOracleTests.TestBufferOps;
 begin
-  RunTarget(Self, 'buffers', @RunBuffersCase, 30);
+  RunTarget(Self, 'buffers', @RunBuffersCase, 78);
 end;
 
 { ---- TTyTerminalBufferTests --------------------------------------------------------- }
