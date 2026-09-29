@@ -271,6 +271,9 @@ function TyTextFontQuality: TBGRAFontQuality;
   own. TyConfigureTextFont calls it, so every bitmap configured for text has it; a surface
   that configures a font by hand must call it too. }
 procedure TyUseTextRenderer(ABmp: TBGRABitmap);
+{ FOR THE TESTS: GDI bitmaps the Win32 text renderer has made or grown (it keeps one); 0
+  elsewhere. }
+function TyGdiTextBitmapsMade: Integer;
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -1013,6 +1016,13 @@ type
     face from the one measured, and a run a fifth wider than its caret positions. Rotated,
     textured and self-underlined text go to BGRA's own path. }
   TTyGdiTextRenderer = class(TLCLFontRenderer)
+  private
+    { ONE GDI bitmap the runs are drawn on, kept for every renderer (the main thread's):
+      a run used to cost a fresh TBitmap and a whole-bitmap conversion to BGRA, about as
+      much as drawing it. It only grows; each run clears the part it uses and its
+      coverage is read straight off the DIB. GBitmapsMade counts them (FOR THE TESTS). }
+    class var GShot: TBitmap;
+    class var GBitmapsMade: Integer;
   protected
     procedure UpdateFont; override;
     { The measuring side, answered for the run exactly as it is drawn. }
@@ -1023,6 +1033,9 @@ type
   end;
 
   TTyCanvasAccess = class(TCanvas);
+  TTyBitmapAccess = class(TBitmap);        { GetRawImageDescriptionPtr is protected }
+
+function TyGdiFlush: LongBool; stdcall; external 'gdi32' name 'GdiFlush';
 
 function TTyGdiTextRenderer.RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
 begin
@@ -1057,6 +1070,11 @@ var
   shot: TBGRABitmap;
   row: PBGRAPixel;
   ink: TBGRAPixel;
+  kept: Boolean;
+  ds: TDIBSection;
+  bits, line: PByte;
+  stride, bpp: Integer;
+  bottomUp: Boolean;
 begin
   if sUTF8 = '' then Exit;
   if (AOrientation mod 3600 <> 0) or (texture <> nil) or FOwnUnderline then
@@ -1084,12 +1102,41 @@ begin
   my := sz.cy div 4 + 2;
   w := sz.cx + 2 * mx;
   h := sz.cy + 2 * my;
-  tmp := TBitmap.Create;
-  try
+  { The kept bitmap (GShot), grown when a run needs more room and never shrunk; only the
+    w x h the run uses is cleared and read. A thread other than the main one draws on a
+    bitmap of its own, as every run once did. }
+  kept := GetCurrentThreadId = MainThreadID;
+  if kept then
+  begin
+    if GShot = nil then
+    begin
+      GShot := TBitmap.Create;
+      GShot.PixelFormat := pf24bit;
+      Inc(GBitmapsMade);
+    end;
+    tmp := GShot;
+    if (tmp.Width < w) or (tmp.Height < h) then
+    begin
+      { half again as much as asked: a line a little longer than the last does not
+        reallocate }
+      tmp.SetSize(Max(w, tmp.Width + tmp.Width div 2), Max(h, tmp.Height + tmp.Height div 2));
+      Inc(GBitmapsMade);
+    end;
+  end
+  else
+  begin
+    tmp := TBitmap.Create;
     tmp.PixelFormat := pf24bit;
     tmp.SetSize(w, h);
+  end;
+  shot := nil;
+  try
     tmp.Canvas.Brush.Color := clWhite;
     tmp.Canvas.FillRect(0, 0, w, h);
+    { A fresh canvas's font was born at the screen's PPI of the moment, and Assign takes
+      the pixel height across only between equal PPIs (Size otherwise): the kept canvas
+      is put back to that first, or a run at a changed screen PPI gets another height. }
+    tmp.Canvas.Font.PixelsPerInch := ScreenInfo.PixelsPerInchY;
     tmp.Canvas.Font := FFont;
     TTyCanvasAccess(tmp.Canvas).RequiredState([csHandleValid, csFontValid]);
     SetBkMode(tmp.Canvas.Handle, TRANSPARENT);
@@ -1102,20 +1149,49 @@ begin
     tmp.Canvas.Changing;
     LCLIntf.DrawText(tmp.Canvas.Handle, PChar(sUTF8), Length(sUTF8), r, flags);
     tmp.Canvas.Changed;   // what TCanvas's own text calls do: the image is read back next
-    shot := TBGRABitmap.Create(tmp);
-  finally
-    tmp.Free;
-  end;
-  try
+    { The coverage straight off the DIB section GDI drew into -- the bytes BGRA's
+      conversion of the whole bitmap used to copy out, without the copy. A bitmap that is
+      not a 24- or 32-bit DIB goes through the conversion as before. }
+    bits := nil;
+    stride := 0;
+    bpp := 0;
+    if (LCLIntf.GetObject(tmp.Handle, SizeOf(ds), @ds) = SizeOf(ds)) and (ds.dsBm.bmBits <> nil)
+      and ((ds.dsBm.bmBitsPixel = 24) or (ds.dsBm.bmBitsPixel = 32)) then
+    begin
+      TyGdiFlush;                          { GDI may still be batching the DrawText }
+      bottomUp := TTyBitmapAccess(tmp).GetRawImageDescriptionPtr^.LineOrder = riloBottomToTop;
+      bits := ds.dsBm.bmBits;
+      bpp := ds.dsBm.bmBitsPixel div 8;
+      stride := ((ds.dsBm.bmWidth * ds.dsBm.bmBitsPixel + 31) div 32) * 4;
+    end
+    else
+      shot := TBGRABitmap.Create(tmp);
     ink := c;
     for py := 0 to h - 1 do
     begin
       dy := oy - my + py;
       if (dy < ADest.ClipRect.Top) or (dy >= ADest.ClipRect.Bottom) then Continue;
-      row := shot.ScanLine[py];
+      if bits <> nil then
+      begin
+        { LCL made the DIB top-down or bottom-up after its raw description (GetObject
+          reports a positive height either way) }
+        if bottomUp then
+          line := bits + (ds.dsBm.bmHeight - 1 - py) * stride
+        else
+          line := bits + py * stride;
+        row := nil;
+      end
+      else
+      begin
+        line := nil;
+        row := shot.ScanLine[py];
+      end;
       for px := 0 to w - 1 do
       begin
-        cov := 255 - (row[px].red + row[px].green + row[px].blue) div 3;
+        if line <> nil then
+          cov := 255 - (line[px * bpp] + line[px * bpp + 1] + line[px * bpp + 2]) div 3
+        else
+          cov := 255 - (row[px].red + row[px].green + row[px].blue) div 3;
         if cov > 0 then
         begin
           a := cov * c.alpha div 255;
@@ -1129,9 +1205,20 @@ begin
     end;
   finally
     shot.Free;
+    if not kept then
+      tmp.Free;
   end;
 end;
 {$ENDIF}
+
+function TyGdiTextBitmapsMade: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GBitmapsMade;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
 
 procedure TyUseTextRenderer(ABmp: TBGRABitmap);
 begin
@@ -2545,6 +2632,9 @@ initialization
   TyFallbackFontName := '';
 
 finalization
+  {$IFDEF LCLWin32}
+  FreeAndNil(TTyGdiTextRenderer.GShot);
+  {$ENDIF}
   FreeAndNil(GImgCache);  // OwnsObjects frees the cached bitmaps
   TyInvalidateTextMeasureCache;   // frees the boxed block measurements
   FreeAndNil(GBlockCache);
