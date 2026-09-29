@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；四期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；5 期已签收（2026-09-30，记录在 5 期计划末尾，3–5 期真机项合成一份验收文档 `docs/superpowers/plans/2026-09-29-terminal-acceptance.md`）；五期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -57,6 +57,15 @@
 13. **上游的链接比原先写的多一层过滤**：网址正则的每个匹配还要过 `isUrl`——`new URL` 解得出、且原文以规范化后的「协议//用户@主机:端口」开头（`WebLinkProvider.ts:44-55`）；OSC 8 在没有 `allowNonHttpProtocols` 时，非 http(s) 的链接在提供者里就不返回（`OscLinkProvider.ts:64-75`：不下划线、不能点），不是激活时才拒绝。§9.8 照此改。
 14. **上游悬停不要修饰键**：指针移到链接上就下划线、变手形，单击（按下和抬起在同一条链接上）就激活（`Linkifier.ts:217-233`、`:246-310`）。我们要按着 Ctrl（macOS Cmd），是偏离，进 §15。
 
+**实现期修正（5 期）**：
+15. **折行开关看的是字段 `_hasScrollback`**（`Buffer.ts:310-316`），不是 getter：`Scrollback = 0` 的主屏也折；给了构建号时只有 ConPTY 且 ≥ 21376 才折，`{winpty, 构建号}`、`{无后端, 构建号}` 也不折；没给构建号一律折（§6.2）。
+16. **`reflowCursorLine` 默认 false**（`OptionsService.ts:50`）：光标所在的那段折行两个方向都不动，提示符后正在打的长命令拖宽后仍是两行（§6.2、§7.6）。
+17. **上游改列数不清选区**：`SelectionService.ts:158-162` 只看行数；折行插删不跟，只随 `onTrim` 上移（§9.5.5）。
+18. **上游改尺寸清掉悬停的链接**（`Linkifier.ts:47-50`），指针形状跟着复位（`:355-357`）（§9.8）。
+19. **两个渲染器在对比度上有三处不同**：反显加默认前景时，DOM 拿前景比前景，WebGL 比画出来的两个颜色（`TextureAtlas.ts:399-417`）；暗淡的格调过对比度后两者都不再变淡（WebGL 在叠透明度之前返回，`TextureAtlas.ts:352-356`；DOM 的内联色盖过 `.xterm-dim`，`DomRenderer.ts:201-203`）；选区字色落在暗淡的格上，WebGL 变淡、DOM 不变淡。我们取 WebGL 的比法、DOM 的选区字色（§10.9）。
+20. **上游 `_reflowSmaller` 会写负下标**（`Buffer.ts:504-510`，`lines.set(i--, …)`）：环形表起点大于 0 时（滚回满了）变窄，负下标取模后落在最后几行，提示符那一行变成顶上被挤掉的那行。我们不照搬（§6.2、§15）。
+21. **Win32 上排队的异步调用会饿住绘制和输入**：LCL 的 `QueueAsyncCall` 投一个 `WM_NULL`，应用窗口在 `PeekMessage` 循环里派发它时就跑异步队列（`lcl:interfaces/win32/win32callback.inc:2062-2068`）。一片接一片地排，线程队列里总有一条投递的消息；`WM_PAINT` 只在队列空时给，键盘鼠标也排在投递消息之后。原稿 §3.1「已经提交的 `WM_PAINT` 会先被处理」在 Win32 上不成立：5 期实测 50 MB 灌入的前 3.4 秒窗口一次也没画（§3.1）。
+
 ---
 
 ## 2. 组成
@@ -96,6 +105,10 @@
 - 控件单元长到约 3700 行，鼠标路由、选区胶水、链接、OSC 52、右键菜单五段原样搬进 include（`tyControls.Terminal.View.Mouse / Selection / Links / Osc52 / Menu.inc`），照 Core 的做法不进 `.lpk`。控件是自己写的，这五个也不进 notices 标题；发版守卫查它们随包发出。
 - PTY 单元仍只在示例里，四个：`uptysession`、`uptywin`、`uptyunix`、`ushell`（§12.2）。
 
+**实现期修正（5 期）**：
+- 新 include `tyControls.Terminal.Buffer.Reflow.inc`（`BufferReflow.ts` 的五个函数、`Buffer.ts` 的 `_reflow*`，由 `Buffer.pas` 引入）；新生成物 `tyControls.Terminal.Luminance.inc`（`contrast-cases.js` 算出的 256 项线性化表，按 IEEE 位模式写）。两个都不进 `.lpk`，notices 标题和发版守卫逐个列名。
+- 亮度函数留在 Core：Core 回答明暗配色查询本来就用它，而且 Core 不依赖 LCL；`Terminal.Render` 的对比度函数引用 Core 的这一份。
+
 ### 2.2 不移植的上游部分
 
 DOM 渲染器与 WebGL 渲染器、`Viewport`（浏览器滚动）、`AccessibilityManager`、`CompositionHelper`（浏览器输入法）、`Linkifier` 的 DOM 部分、所有 addon 的 UI 部分。
@@ -124,7 +137,7 @@ DOM 渲染器与 WebGL 渲染器、`Viewport`（浏览器滚动）、`Accessibil
 - 每个块处理完调它的回调（`:289-290`）。
 
 **让出怎么做**：Core 不依赖 LCL，它只提供「处理一片」的方法；排下一片由控件用 `Application.QueueAsyncCall`。
-LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessages` 之后（`lcl:include/application.inc:449-453`），空闲时在 `Idle` 里跑（`:469-471`）——已经提交的 `WM_PAINT` 会先被处理，渲染有机会追上，和上游「setTimeout 0 让渲染追上」同一个意思。
+~~LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessages` 之后（`lcl:include/application.inc:449-453`），空闲时在 `Idle` 里跑（`:469-471`）——已经提交的 `WM_PAINT` 会先被处理，渲染有机会追上，和上游「setTimeout 0 让渲染追上」同一个意思。~~（5 期实测不成立，见下面 5 期修正与 §1.1 第 21 条。）
 
 测试和无头使用走 `Core.WriteSync`（照 `WriteBuffer.writeSync`，`:106`），当场解析完。
 
@@ -137,6 +150,12 @@ LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessag
 - 取块时**先推进偏移、再解析、再回调**，块的数据当场释放；处理器抛异常时这一块算已处理（不会重解析），它的回调照样调（宿主按回调做流量控制，不能少一次），剩下的块留在队里并重新 `OnProcessRequest`。上游的 `writeSync` 这时会永远停在「同步写中」。
 - `WriteSync` 和 `Resize` 前的清空都从第一个没处理的块开始（修上游让出后改尺寸重复解析，§15）。
 - **重入**：所有事件都在解析中同步发（`OnScroll`、`OnData`、`OnBell`、`OnTitleChange`、`OnOsc`、`OnRefreshRows`……），`Resize` / `Reset` 执行中也会发事件。事件里调 `Resize`、`Reset`、`WriteSync` 不报错，而是记下来，等这一块解析完、它的回调跑完再按调用顺序执行，`Resize` 只保留最后一次；`ProcessPending` 这时直接返回 False，Core 忙完后若还有东西会重新请求。结果和「事件返回后再调用」相同，不会重复解析，也不会有缓冲在处理器底下被换掉。3 期控件的常见路径（滚动条出现 → 改尺寸、模态框里跑消息循环）靠这一条不出事。
+
+**实现期修正（5 期）**：
+- **块内切片**：一片（`ProcessPending`）把一块按 `TyTermSlicePieceBytes`（32 KB）一段交给解析器，段与段之间看预算，一块没解析完就记下块内位置（`HeadChunkParsed`）、让出。~~按 131072 字节（`MAX_PARSEBUFFER`）分段~~ 审查后和 `MAX_PARSEBUFFER` 脱钩：128 KB 一段时预算只能在一段解析完才看，一片常超出 6–8 ms；32 KB 一段超出 1–2 ms。`WriteSync` 和改尺寸前的清空仍按 128 KB 一段。上游整块一次解析（`WriteBuffer.ts:224-297`），是偏离（§15），结果状态和整块相同（夹具证明）。
+- 细则：块的回调在最后一段之后才调；事件里延后的调用等整块处理完、回调之后才执行，不在段与段之间；`PendingBytes` 按段减；`OnRefreshRows` 每段一次；某段里处理器抛异常时这一块剩下的算已处理、回调照调；`WriteSync`、`Resize` 前的清空从块内位置接着解析；`DiscardPending` 连同半块一起丢、不调回调。
+- **一片多长、什么时候画**（控件，审查后改）：~~距上次绘制不到 16 ms 就接着跑下一片~~ 输出一直排着时，解析加绘制一轮约 50 ms（`FloodCycleMs`）：留给解析的时间 = 50 ms 减上一帧 `RenderTo` 花的时间，至少 3 ms；每次 `ProcessPending` 的预算是离这一刻还剩多少（好久没画过——隐藏、无头——就按上游的 12 ms）。按 16 ms 一帧算时，整屏新行一帧 15–20 ms、贴上屏后 DWM 还占十几毫秒，解析只剩 3 ms，50 MB 灌入掉到 1.4 MB/s；50 ms 一轮时约 5 MB/s、两次绘制隔 50–85 ms（§16）。到点还有没解析的，**当场画这一帧**（`Update`，Win32 上是 `UpdateWindow`），再排下一片：只靠排队，Win32 上窗口在整个灌入期间一次也画不上（§1.1 第 21 条）。Win32 上键盘、鼠标按键在排队时，下一片改走 1 ms 的计时器（`WM_TIMER` 排在输入和绘制之后），先让输入进来。还有输出排着时，一帧光栅化新字形的预算从 10 ms 降到 4 ms（这时的行很快滚走，新字形多半白画）。
+- 预算调优（Task 9）：一次改一个（写超时 8 / 12 / 16、帧 16 / 33、光栅 5 / 10），没有一组吞吐高出 10%，写超时维持 12 ms。灌入时两次绘制的间隔见 §10.1 与 §16。
 
 ### 3.2 脏行与重画
 
@@ -154,6 +173,14 @@ LCL 的异步调用在 `Application.ProcessMessages` 里排在 `AppProcessMessag
 - 一次解析（`AsyncSlice`、`WriteSync`、`Write` 当场解析那次）里 Core 可能滚几千次：`OnScroll` 只记「整屏脏、滚动条待同步」，解析返回后统一失效、同步一次。
 - 颜色变了整窗重画：解析前后比 259 色的签名，变了（OSC 4 / 10 / 11 / 12 / 104 / 110 …）就整窗失效——257 号色也是内边距的底色（照上游 `onChangeColors → _fullRefresh`，`RenderService.ts:120`）。
 - 帧率上限：距上次绘制不到 16 ms 就接着跑下一片，不让出给 `WM_PAINT`；一帧里光栅化新字形有时间预算（10 ms），超出的字形不画、那一行留脏，下一帧整行重画（每帧至少画一个新字形）。
+
+**实现期修正（5 期）**，行复用（整屏上滚只画新露出的行）：
+- 每个视口行记一个键：行对象的 `Serial`（出生时从类计数器取、永不重复，不怕地址复用）、`Revision`（每个改内容的方法加一，`IsWrapped` 不算）、压在这一行上的东西——选区列段、悬停链接列段、光标（列、形状，不显示时 −1）、组字串和它画在哪一列（光标闪灭、DECTCEM 时组字串照样画，横移光标只有这一列在变，审查后补进键里）。
+- 每帧：键和上一帧同一行相同就不动；和上一帧另一行相同就把那一行的像素搬过来（画过阴影 ░▒▓ 的行只在位移 × 格高是图案纵向周期的倍数时搬）；都不是才画。光栅预算超了的行键作废，下一帧重画。底边被表面截掉的行（排着的网格比客户区大）键也作废，不当搬运的源（审查后补的）。
+- 帧级参数（色表、度量与字体、PPI、列数、聚焦、粗体变亮、网格位置、最低对比度）一变，全部键作废、整屏重画。
+- 滚动不再整屏标脏，只失效网格区让 `Paint` 贴一次；同步输出攒着时不搬也不画，只贴图。
+- 行绘制和搬运都裁到外框里面（审查后补的：排着的网格比客户区大时不压右边、下边框）。
+- ~~帧率上限：距上次绘制不到 16 ms 就接着跑下一片~~ 输出排着时一轮约 50 ms、到点当场画（§3.1）；光栅化预算输出排着时 4 ms。
 
 ### 3.3 输出：`OnData` 交字节
 
@@ -360,6 +387,15 @@ type
 - `Scrollback` 上限 100000（`TyTermMaxScrollback`）：环形表按容量一次分配指针数组，上游的 JS 数组是稀疏的，给 10^9 会直接分配 8GB。选上限而不是按需增长：多一行判断、不碰环形表的下标算法。更大的值按上限取，负数照上游抛异常。
 - OSC 8 链接表最多 10000 条、`id` + URI 合计 16MB（`TyTermMaxLinks`、`TyTermMaxLinkBytes`），再多就丢最老的（格子上留着的号从此查不到，按无链接画）；链接号改 Int64，注册超过 2^31 次仍然递增有序。上游两样都无界（§15）。
 
+**实现期修正（5 期）**：
+- ~~Windows ConPTY 版本号低于 21376 时上游关掉折行~~ 实际规则（§1.1 第 15 条）：给了构建号（本仓库 `BuildNumber <> 0`）时，只有 ConPTY 且 ≥ 21376 才折；没给一律折，包括 `{conpty}`；看的是主缓冲的字段 `FHasScrollback`，`Scrollback = 0` 的主屏也折；备用屏不折。上游的 `{conpty, 0}` 会同时开启发、开折行，本仓库 0 = 没给，表达不了这个组合（没有意义的输入，§15）。
+- ~~2–4 期折行恒关~~ 5 期接上：`Buffer.Reflow.inc` 逐行照上游移植，事件次序和下标照抄，重排前把要搬的行全部钉住（环形表按原始下标清槽，起点不为 0 时清掉的可能是还要搬的行）。2 期绕开折行的改列数用例补了默认配置的镜像。
+- 光标所在的那段默认不动（`reflowCursorLine`，§7.6）。
+- 一列：`TyTermReflowSmallerGetNewLineLengths` 只在上游真会死循环的地方（宽字符落在切口、一列放不下）抛 `EArgumentOutOfRangeException`；另两处对应上游抛 TypeError 的地方（越过折行段、段里的行不够）也抛。入口不查列数：上游自己的用例会改到 1 列。Core 的最小列数是 2，碰不到。
+- **上游的负下标 bug 不照搬**（§1.1 第 20 条）：`_reflowSmaller` 重排时下标小于 0 的新行不写。node 基准脚本对上游同一处打运行时补丁（`lib-dump.js` 读 `out/common/buffer/Buffer.js` 的文本、把那一句加上判断后在内存里编译，被跟踪的文件不动，补丁点找不到或不止一处就拒绝；`XTERM_UNPATCHED=1` 跑原样的上游），新增用例 `full-scrollback-narrow-keeps-the-prompt`；原有夹具重生成后一个字节没变（这个 bug 没有别的用例碰到）。
+- **改尺寸合并**（控件）：`Scrollback` 10000、200 列两行一折时一次改尺寸 125 / 61 / 65 ms（200 → 120 → 200 → 80 列；审查后加了 `CopyCellsFrom` 的快路径，降到 48 / 33 / 32 ms），超过 50 ms，做了合并——有窗口时客户区一变，新网格先记下、排一次异步调用，消息循环里才 `Core.Resize`，只按最后的尺寸折一次；排着时照旧按 Core 的旧网格画。没有窗口（隐藏、测试、设计器）当场改。~~要新网格的入口（`Cols`、`Rows`、`Core`、`CellAt`、`CellRect`、`SizeForGrid`、`Write`、`WriteSync`、`Paste`、`Input`）先应用~~ 审查后只剩问几何的入口（`Cols`、`Rows`、`CellAt`、`CellRect`、`SizeForGrid`）和 `WriteSync`：程序收到改尺寸几乎一定输出，`Write` 每次都应用就退化成每一步折一次；排着时 `Core` 仍是旧网格（§9.3）。释放中不应用。Win32 的模态拖动循环会派发排着的异步调用，合并在真拖动时到底有没有效，进真机验收（用户已定：保留合并，真机再看）。
+- **行内存回收**（审查后补的）：~~内存回收调度本身没有可观察行为，不移植~~（§6.3 的 2 期修正）先变宽再变窄后，每行都留着宽的分配（10 万行 × 400 列约 480 MB）。照上游：`Resize` 数出分配超过两倍用量的行，超过总行数的十分之一就逐行 `CleanupMemory`（上游在空闲时每批 100 行，这里当场做完，只差在时机，§15）。1 万行 80 → 400 → 80 列，堆回到原处（测试守着）。
+
 ### 6.3 接口草案
 
 ```pascal
@@ -403,6 +439,12 @@ type
 - `LiveCount`（行、标记、链接条目各一个）、`SlotLine`、`SeedNextIdForTest` 是给测试的，注释标明。
 
 **实现期修正（4 期）**：`TTyTerminalBuffer` 加纯查询 `TrimmedLines: Int64`——环形表每次 `OnTrim` 把行数累加上去，选区按差值追（§9.5.5），不在缓冲上挂事件。Core 的 REP 快进跳过的那段滚动不发环形表事件，所以不计；快进要先真滚过两倍环形表长度才起作用，选区活不过那么久。
+
+**实现期修正（5 期）**：
+- `TTyTerminalLine` 加两个纯查询：`Serial: Int64`、`Revision: QWord`（§3.2 的行复用用；~~`Revision: Cardinal`~~ 审查后改 `QWord`：长会话里底部那一行改上 2^32 次，带溢出检查构建会抛异常）。
+- 行表加公开的事件触发口 `NotifyInsert` / `NotifyDelete` / `NotifyTrim`（上游的 emitter 本来公开，折行直接触发）；`TrimmedLines` 照旧只在缓冲的 `LinesTrim` 里加，折行的 `onTrim` 也算进去。
+- 新增 `CleanupMemory`（`BufferLine.ts:439-446`，§6.2）。
+- `CopyCellsFrom` 的快路径（审查后补的）：整段都在两行界内、源的格子都没有组合文本和扩展属性的标志、同一行里的拷贝方向和逐格的顺序一致时，一次 `Move`，结果和逐格相同（测试逐项对照）。1 万行滚回的折行 （200 → 120 → 200 → 80 列）从 125 / 61 / 65 ms 降到 48 / 33 / 32 ms；10 万行 120 → 70 → 120 列约 0.64–0.72 s，和 1 万行成线性。
 
 ---
 
@@ -567,6 +609,8 @@ type
 
 **实现期修正（4 期）**：Core 加 `OnUserInput: TNotifyEvent`（上游 `CoreService.onUserInput`，`CoreService.ts:86-89`）：`TriggerDataEvent` 在 `AWasUserInput` 时发，顺序照上游——先滚到底，再 `OnUserInput`，再 `OnData`；`ReadOnly` 时整个早退、不发。控件接管它（清选区），宿主别改写。
 
+**实现期修正（5 期）**：Core 加 `ReflowCursorLine: Boolean`（上游 `reflowCursorLine`，默认 False，只是 Core 属性、不上控件的 published）；`ParseRange`（写入队列一段一段交给解析器）；给测试的纯查询 `HeadChunkParsed`（队首那一块已经解析了多少字节）；常量 `TyTermSlicePieceBytes`（§3.1）。
+
 ---
 
 ## 8. `tyControls.Terminal.Keyboard`
@@ -655,7 +699,7 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | sbahDefault | 同 `TTyMemo`（`Memo.pas:880`；`ScrollBar.pas:355`） |
 | `LineHeightPercent` | Integer | 100 | 行高倍数（上游 `lineHeight` 1.0，`:29`） |
 | `LetterSpacing` | Integer | 0 | 字间距，逻辑像素（上游 `letterSpacing`，`:30`） |
-| `MinimumContrastRatio` | Single（stored 函数） | 1 | 5 期；1 = 不调（`:43`；`typings/xterm.d.ts:197-207`） |
+| `MinimumContrastRatio` | ~~Single~~ Double（stored 函数） | 1 | 5 期；1 = 不调（`:43`；`typings/xterm.d.ts:197-207`） |
 
 `WordSeparators` 的构造值写成 Pascal 是 ``' ()[]{}'',"`'``，和上游 `OptionsService.ts:55` 的字符集合逐字相同。
 
@@ -670,6 +714,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - published 默认值 = 构造值由本控件自己的 RTTI 测试逐个守（全局守卫只查 `TabStop`）。
 
 **实现期修正（4 期）**：4 期 published 的是 `SelectionOverrideKey`、`Osc52`、`WordSeparators`（`stored` 函数，构造值不写进 `.lfm`）、`CopyOnSelect`、`DetectUrls`，外加 `AllowNonHttpLinks: Boolean = False`（非 http(s) 的 OSC 8 算不算链接，§9.8）。运行时只读的 `SelectionText`、`HasSelection` 也在本期。
+
+**实现期修正（5 期）**：`MinimumContrastRatio` 用 `Double`：上游是 JS 双精度、钳成一位小数，`Single` 存不住 1.3，比值恰在边界时和上游不同。写入时照上游钳到 1–21、保留一位小数（`OptionsService.ts:188-190`），NaN 和无穷按 1（上游会存 NaN，§15）；`stored` 函数，构造值 1 不写进 `.lfm`，RTTI 守卫另加一条管它。改了清两份对比度缓存、整屏重画。
 
 ### 9.2 事件
 
@@ -699,6 +745,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - Core 加了 `DiscardPending`：丢掉还没解析的块、不调它们的回调（宿主自己要丢的，流控计数跟着重来；上游 `WriteBuffer` 没有）。回放示例换录制时用。
 
 **实现期修正（4 期）**：`SelectAll` / `ClearSelection` / `Select` / `SelectLines`、`CopyToClipboard`（有选区才写）本期接上。`Select(ACol, AAbsRow, ALength)` 在入口把参数钳进缓冲——列 0..`Cols`、行 0..最后一行、长度 0..到缓冲末尾（上游不查；长度太大时「起点 + 长度」会溢出）。
+
+**实现期修正（5 期）**：改尺寸合并（§6.2）之后，`Cols`、`Rows`、`CellAt`、`CellRect`、`SizeForGrid` 和 `WriteSync` 先把排着的网格应用掉——读这些属性可能当场发出 `OnGridResize`。`CellRect` 的参数若是现算的（右键菜单的光标格、输入法的锚），先应用再算。~~`Core`、`Write`、`Paste`、`Input` 也先应用~~ 审查后不应用：排着的时候 `Core` 仍是旧网格，`Write` 进来的数据按旧网格解析，应用时一起折。
 
 ### 9.4 键盘
 
@@ -781,6 +829,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - 取词沿折行上下接：上游每接一行递归一层（`:952-978`），折了几万行的一个词会把栈用完；这里写成两个循环，结果相同（期末审查后改的）。
 - 清选区的时机：用户输入（Core 的 `OnUserInput`，§7.6）；行数变了（列数变不清）；换缓冲（含 RIS、`Reset`，它们都发 `OnBufferActivate`）；程序的鼠标上报协议**每次换成开着的一种**都清（上游每次协议变化都走 `disable()`，`MouseService.ts:380-393`——1000 换 1002 也清，关掉不清；期末审查前只在从无到有时清）；清滚回——最后这条是我们加的（上游 `clear()` 不清，`CoreBrowserTerminal.ts:1075-1089`），进 §15。
 
+**实现期修正（5 期）**：~~列数变不清~~ 列数变了、并且当前缓冲这次真的重新折行时也清（字挪了，选区还框着原来的格子，复制出来是别的字）；不折行时（老 ConPTY、备用屏）照上游保留。是偏离（§15，用户可在验收时改）。折行挤出头部的行照常经 `TrimmedLines` 上移。
+
 ### 9.6 选区与剪贴板
 
 #### 9.6.1 复制
@@ -824,6 +874,8 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 
 **实现期修正（3 期）**：条宽**一直扣**——网格宽 = 客户区 − 内边距 − 条宽，备用屏里、`Scrollback = 0` 时条只是禁用、不拿掉（自动隐藏的主题下淡掉，留一条空白），列数不随主屏 / 备用屏变化，进出 vim 不会给程序多发一次改尺寸（开工前问题一第 2 条）。滚动条的同步在一次解析里只做一次（§3.2）。
 
+**实现期修正（5 期）**：重新折行改了行数，滚动条的范围和拇指跟着新的行数走（改尺寸事件里同步一次）。
+
 ### 9.8 链接
 
 - 两种来源：OSC 8（缓冲里的链接号，§6.2）；`DetectUrls` 开时按行文本正则识别，正则照 `addon-web-links` 的 `strictUrlRegex`（`xterm:addons/addon-web-links/src/WebLinksAddon.ts:21`），用 FPC `RegExpr` 改写。期望值由 node 直接跑上游正则生成，输入取上游用例（`addons/addon-web-links/test/WebLinksAddon.test.ts:33-188`：各种顶级域名、全角字符前后、带用户名密码、组合字符）再加自己的。
@@ -835,8 +887,10 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - ~~用 FPC `RegExpr` 改写~~ JS 的 `\s` 含 Unicode 空白（中文全角空格会截断网址）、正则没有 `u` 标志、按 UTF-16 单元走，`RegExpr` 两样都对不上：改成在 UTF-16 串上手写的扫描器，照正则的回溯走（`TyTermNextUrlMatch`）。每个匹配再过 `isUrl`（§1.1 第 13 条）：`TyTermParseUrlPrefix` 是 WHATWG URL 解析器里 http / https 用得到的那部分，另有一个带 `ANonAsciiHost` 的重载（主机含非 ASCII 时告诉调用方，§15）；`TyTermIsUrl` 对非 http(s) 一律答否。
 - ~~上游 OSC 8 默认拒绝非 http(s) 协议（`:64`）~~ 在提供者里就不返回（§1.1 第 13 条）。加 published `AllowNonHttpLinks`（默认 False，照上游）；打开后全交宿主，`OnLinkActivate` 带原样 URI。
 - 悬停与激活要按 Ctrl（macOS Cmd），是偏离（§1.1 第 14 条，§15）。按下和抬起在同一条链接上才发 `OnLinkActivate`（`Linkifier.ts:220-233`）。
-- 缓冲还不重新折行（5 期），一行可能比网格长：网址的下标回映射按 `ACols` 截断——上游重新折行后行本来就是这个长度；5 期接上折行，这个参数就不再起作用。
+- 缓冲还不重新折行（5 期），一行可能比网格长：网址的下标回映射按 `ACols` 截断——上游重新折行后行本来就是这个长度；5 期接上折行，这个参数就不再起作用。**实现期修正（5 期）**：~~这个参数就不再起作用~~ 不折行的地方（老 ConPTY、备用屏）行照样比网格长，上游按行的全长映射（`WebLinkProvider.ts:171`），截断反而是偏离：`TyTermComputeUrlLinks` 的 `ACols` 参数删掉。链接下划线仍按网格裁。
 - 同一行第一次悬停的结果和上游不同，进 §15。
+
+**实现期修正（5 期）**：改尺寸清掉悬停的链接（`Linkifier.ts:47-50`），重画它占的行，指针形状当场复位（审查后补的，`:355-357`）；指针再动时按新缓冲重新找。
 
 ### 9.9 输入法
 
@@ -886,6 +940,12 @@ X11 惯例：选完写 `PrimarySelection`（`lcl:clipbrd.pp:236`），中键粘�
 - 贴图（本批）：Win32 从位图的 DIB 带源偏移直接 `StretchDIBits`，不经 `GetPart` 复制一份；别的 widgetset 仍走 BGRA 的 `DrawPart`（零拷贝的路子要各平台真机核实）。构造里 `DoubleBuffered := False`：整面都是贴上去的，LCL 的双缓冲再垫一张整窗位图只是多拷一遍。悬停、按下、聚焦的整控件失效只在外框样式变了时才放行（§9.10）。
 - 禁用时整块按 `TyTerminal:disabled` 的 opacity 朝父控件底色预混（色表、外框、内边距，§11）。
 
+**实现期修正（5 期）**：
+- ~~整屏上滚时先把缓存内容整体上移~~ 按「视口挪了几行」推算在滚动区域、环形表回收、REP 快进下都会错，改成按行内容认行（§3.2 的行复用）：一行一行上滚时每帧只画新露出的行和光标离开的那一行，其余的行从表面上搬。
+- 搬运：所有要搬的行位移相同（一次滚动）时，按先读后写的方向逐像素行一次 `Move`，不经草稿（审查后补的）；位移不一的仍先拷进草稿再写回。
+- 数字（`terminalbench --scroll`，200 × 60、96 PPI，2000 行）：每帧画 2.00 行；离屏每帧（整张表面贴一次）4.78 ms（基线 6.94 ms、审查前 5.32 ms）；走 `Paint` 的测法（显示出来的窗口、只画失效区）6.9 ms（审查前 9.2 ms）。原定「耗时 ≤ 基线的 1/4」没达到（要 1.74 ms）；按主控的决定改写为「每帧 ≤ 3 行，耗时不劣于基线」，两种测法都过（§18）。
+- 没做、列为以后：环形表面（滚动只改一个行原点偏移，贴图分两次）、屏幕路径用 `ScrollWindowEx` 平移、只失效新行——后者要保证屏幕上的像素和表面一致（失效区没画完就滚、被遮挡的部分），本期不冒这个险。
+
 ### 10.2 单元格度量
 
 - 字号 → 像素：`TyFontHeightPx(Size, PPI)`（`Painter.pas:1174` 同一换算）。
@@ -930,6 +990,12 @@ E2（Win32 已跑，`--e2`；数字是本批修复后重跑的）：
 - 画质：（c）对参照（`TTyPainter.DrawText` 同底色同前景）的有墨像素平均差 0.19–0.43（每通道 0–255，三组颜色、96 / 144 PPI）；同一遮罩换成 BGRA `FillMask` 的伽马混合（`dmDrawWithTransparency`）差 15.8–27.0。自写混合循环和 `FillMask` 线性混合结果相同、快约 2.5 倍（200 × 60 整屏 7.6 对 20.0 ms、144 PPI 13.9 对 32.3 ms）。
 - 耗时（控件自己的光栅器和行绘制器）：冷填充 95 个 ASCII × 4 种样式 380 次约 710 ms（每个 1.87 ms，96 / 144 PPI 相同；花在库的 Win32 文字渲染器每次新建位图再转换上，`Painter.pas`）；热缓存 200 × 60 整屏重画（只画行，不贴）96 PPI 10.1 ms、144 PPI 16.4 ms，满屏 tmux 框线同样 10.0 / 16.4 ms。控件里连贴图的整屏重画 11.8 ms（ASCII、tmux 框线、mc 双线框都在 12 ms 左右；修复前框线靠每格两张整面剪裁遮罩，tmux 2.5 s、mc 5.3 s）。冷填充在控件里按帧摊开（§3.2 的光栅化预算），380 个字形约 900 ms、68 帧，每帧不超过预算。
 
+**实现期修正（5 期）**，冷启动光栅化：
+- 用户选了 A：改共享的 `Painter.pas`（`TTyGdiTextRenderer` 留一张常驻 GDI 位图、直接读 DIB 的像素，不再每次新建 `TBitmap` 再整张转成 BGRA）；终端的光栅器不动。全库的首帧文字都受益。
+- 数字（`terminalbench --raster`）：376 个 ASCII 冷填充 918 → 约 466 ms（每个 2.43 → 1.22 ms），200 个 CJK 461 → 约 276 ms（每个 2.28 → 1.34 ms）；`TextSize` 现在占约一半。原定「每个 ≤ 基线的 1/3」只对 B 路线（终端自己的光栅路径、度量也挪进同一个 DC）成立，改写为「走 A：每个 ≤ 基线的 1/2」（§18），实测 ASCII 0.50、CJK 0.59（五次的中位；这台机器此时负载起伏大，单次 0.48–0.70，Task 9 时量的是 0.47 / 0.53）。
+- 常驻位图（审查后改的）：只放大不够的那一维（原来一维不够两维都 ×1.5，一条长行之后几次大字号就是几十 MB）；超过 4 M 像素或宽超过 8192 的一段走一次性位图、画完就放；另一线程的一段照旧自己建一张（`SetSize` 在 `try` 里）；行距取 GDI 报的 `bmWidthBytes`；行序仍取 LCL 对这张 DIB 的描述——`GetObject` 对 LCL 建的自上而下 DIB 在 `dsBmih.biHeight` 里也答正数（本机实测），看符号分不出（审查建议按符号判断，改了全库文字就上下颠倒）；不是 DIB 时只转换用到的 w × h。
+- 像素：全库文字路径逐像素不变——`tools/painter-regress` 在同一次会话里对比改动前（`cf92b36d^` 的 `Painter.pas`）与当前，366 个画面 0 像素差（结果文件 `tests/fixtures/painter-regress/ab-2026-09-30.md`）。
+
 ### 10.4 字形缓存
 
 - 键：簇的 UTF-8 串 + 粗体 + 斜体 + 占格数（1 / 2）+ 用哪个字体（主 / 宽）。颜色不进键（按 E2 的（a））。
@@ -943,6 +1009,8 @@ E2（Win32 已跑，`--e2`；数字是本批修复后重跑的）：
 - 本批：单个码位（非 ASCII、非组合）用 64 位整数键（码位、粗体、斜体、占格数、字体），不每格每帧拼字符串；只有多码位的簇和输入法的组字串用字符串键，格数单独占两个字节编码（原来和标志挤在一个半字节里，1 格和 17 格撞键）。
 - 本批：自绘字形（§10.5）也进同一个缓存，键 = 码位、占格数、格宽、格高、PPI，阴影图案 ░▒▓ 另加相位（格子左上角对图案周期取模，图案从表面原点铺）。
 
+**实现期修正（5 期）**：缓存加淘汰计数 `Evictions`（累计，`Clear` 不清，另有 `ResetStats`），和 `Hits` / `Misses` 一起给基准；自绘字形的键加字号（矢量形状的线宽跟着字号，控件换字体本来也清缓存，这一项是冗余但守着——审查后补了测试）。
+
 ### 10.5 自绘字形
 
 制表符（U+2500–257F）和块元素（U+2580–259F）不用字体画，按单元格几何自己画，保证相邻格连成线（上游 WebGL 渲染器默认这么做，`addons/addon-webgl/typings/addon-webgl.d.ts:54-75`；定义表 `addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts`，MIT，可移植数据）。3 期做这两段；盲文、Powerline、Legacy Computing 5 期再定。
@@ -950,6 +1018,8 @@ E2（Win32 已跑，`--e2`；数字是本批修复后重跑的）：
 **实现期修正（3 期）**：
 - 路径坐标取整后**只裁不钳**：上游对这些字形传 `clampToCell = false`（`CustomGlyphRasterizer.ts:734`），画出格的部分按格子裁掉。
 - 本批：每个自绘字形只画一次——白色画在比格子大一圈的透明小位图上、Canvas2D 裁到格子，alpha 就是覆盖率遮罩，进字形缓存（§10.4）；着色时用 Canvas2D 画形状的同一个伽马混合（全覆盖直接是那个颜色）。原来直接在表面上画、每格两张整面大小的剪裁遮罩。和直接画比：全部 160 个字形 × 两种格子 × 两种 PPI × 两种底色里，0.03% 的像素差 1（一个字形两段笔画重叠的半覆盖像素，原来混两次、现在合成一次再混），其余逐像素相同。
+
+**实现期修正（5 期）**：~~盲文、Powerline、Legacy Computing 5 期再定~~ 做了 Powerline（E0A0–E0D4 里上游定义的 38 个）和盲文（2800–28FF，256 个）；部件加 `VECTOR_SHAPE`（含 Q / T / Z 命令和弧，按上游的 `scaleType` 缩放，非零环绕填充）与 `BRAILLE`。Legacy Computing、进度条（EE00–EE0B）、git 分支（F5D0–F60D）没做（§15「不做」）。遮罩和直接画的对照扩到三段全部 454 个字形：96 / 144 PPI × 两种格子 × 两种底色共 3632 次绘制，0.011% 的像素差 1，其余逐像素相同。
 
 ### 10.6 属性
 
@@ -982,6 +1052,15 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 ### 10.9 最低对比度（5 期）
 
 `MinimumContrastRatio > 1` 时，前景对底色对比度不够就把前景往亮或暗推，照 `ensureContrastRatio`（`xterm:src/common/Color.ts:296-`），结果按（前景，底色）缓存（上游 `ColorContrastCache.ts`）。
+
+**实现期修正（5 期）**：
+- 函数逐位照上游：亮度查表（`Luminance.inc`，V8 的 `Math.pow` 结果按位写进去，常量一律 `Double`），`contrastRatio`、`reduceLuminance` / `increaseLuminance`、`ensureContrastRatio` 与 node 跑出的夹具逐位相同。
+- 两份缓存：暗淡的格比值减半、用另一份；键是（底色，前景）。改比值、换主题两份都清（上游改比值只清常规那份，是上游的 bug）。缓存最多 16384 对，满了清空重来（上游无界，§15）。
+- 不调的：比值 1；框线、块元素 2500–259F 与 Powerline E0A4–E0D6（`treatGlyphAsBackgroundColor`）；块光标下的字；链接下划线；显式的下划线色；没有字形也没有线的空格子（审查后补的，省一次查缓存）；隐藏（SGR 8）的格。组合字符的格一律调（同 DOM，WebGL 排除）。
+- 比的是**画出来的**两个颜色（照 WebGL，§1.1 第 19 条）：选中的格对选区底色比，主题给了选区字色就调那个字色；反显的默认色是主题底色画在主题前景上。
+- 暗淡：~~先调前景再做暗淡混合~~ 调过的颜色直接画、**不再变淡**（审查发现照计划写成了「调完再混暗淡」：`$AAAAAA` 在 `$BBBBBB` 上、4.5 时画成 1.56:1，连要求的 2.25 都不到；上游两个渲染器都不再变淡）。没调的照比值 1 时的样子画（变淡）。
+- 选区字色（主题给了才有）：比值 1 和大于 1 一致——字、删除线、上划线、默认下划线都用选区字色，暗淡的格上也不变淡（同 DOM：内联色盖过暗淡类、线条取 `currentColor`；审查前比值 1 时线条用格子自己的前景，是 4 期遗留的偏离，已改）。
+- 默认下划线跟着调整后的前景（DOM 的 `currentColor`）。
 
 ---
 
@@ -1034,6 +1113,8 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - ~~`TyTerminalSelection` 的 `background` 叠在格子底色上~~ 期末审查后改成照上游：选区色带着它的透明度先在**主题底色**上混成不透明（上游 `selectionBackgroundOpaque` / `selectionInactiveBackgroundOpaque`，`ThemeService.ts:87-90`），再**替换**选中格的底色（`DomRendererRowFactory.ts:380-386`）——叠在格子自己的底色上时，反显格、亮底色格上的选区几乎看不见。宽字符按它的第一列算，整字选中或整字不选（`:112`、`:160`；列选区起点落在宽字符后半时那个字不选）。禁用时混好的不透明色再按 `:disabled` 的 opacity 预混。
 - 选区前景「写了才用」按 `tpTextColor in Present` 判断；基础层和 17 个主题都没给 `TyTerminalSelection` 写 `color`，选中的字保持原色。
 - ~~`--terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18)`~~ 改成 `0.3`（上游默认选区的透明度）：0.18 在浅底上只比底色深一点，失焦的选区几乎看不出来。守卫 `TestTheSelectionStandsOutOnEveryTheme`：17 个主题 × 明暗，混好的选区色对底色的 WCAG 对比度——失焦 ≥ 1.70（改后实测最差 1.80，macos 浅色；0.18 时最差 1.41，同是 macos 浅色，守卫会红）、聚焦 ≥ 1.25（实测最差 1.27，office 深色：强调色和深底亮度相近，靠色相区分，亮度比看不出来；聚焦色本期不动，这条只防皮肤再改坏）。选区是叠在字后面的色块，不照 WCAG 非文字的 3:1——那会要一个把字盖住的选区。
+
+**实现期修正（5 期）**：浅底兜底的数据：比值 1 时对皮肤实际浅底低于 4.5:1 的不止 3 号——xp 8 个（最差 3 号 3.70、14 号 3.72、10 号 3.74）、macos 8 个、breeze 7 个；比值 4.5 时全部 ≥ 4.5（最低 macos 3 号 4.58；每步推 10%，xp 会过冲到 5.25–5.30）。`MinimumContrastRatio` 默认 1，也就是默认不兜底，要宿主设。截图 `docs/superpowers/plans/2026-09-29-terminal-phase-5-shots/contrast-{1,45}-{xp,macos,breeze}-light.png`；（a）/（b）/（c）仍待用户在最终验收时定（验收文档决定 D1）。
 
 ---
 
@@ -1089,7 +1170,7 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 读线程在待写字节超过高水位（建议 1MB）时停读，等 `Write` 回调把积压降到低水位（建议 256KB）以下再读。这是上游文档推荐的做法（`WriteBuffer.ts:12-19` 的注释要求宿主做流控）。
 
-**实现期修正（4 期）**：~~5 期~~ 流控提前到本期（4 期任务要求），落在示例的会话里：读线程在「读了、终端还没解析完」的字节超过高水位 1 MB 时停读，`Write` 回调把它降到 256 KB 以下再读；一次读 64 KB。关闭时读线程改为丢弃、不再等背压。5 期仍做控件侧的 `Write` 回调顺序测试和性能。
+**实现期修正（4 期）**：~~5 期~~ 流控提前到本期（4 期任务要求），落在示例的会话里：读线程在「读了、终端还没解析完」的字节超过高水位 1 MB 时停读，`Write` 回调把它降到 256 KB 以下再读；一次读 64 KB。关闭时读线程改为丢弃、不再等背压。5 期仍做控件侧的 `Write` 回调顺序测试和性能。**实现期修正（5 期）**：控件侧的回调顺序测试已做（块内切片后回调仍在整块之后、按写入顺序到；事件里延后的调用在回调之后），灌入的内存与窗口重画见 §3.1、§16。
 
 ### 12.4 ConPTY 的两件事
 
@@ -1152,6 +1233,12 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - 新测试单元：`test.terminal.selection.pas`、`test.terminal.links.pas`（对上游）、`test.terminal.view.mouse.pas`、`test.terminal.view.links.pas`、`test.terminal.pty.pas`（会话、背压、关闭与收尾、ConPTY；「不肯跟着控制台走的程序」由测试程序自己带 `--ty-pty-helper` 起来当）。
 - 工具：`tools/terminal-ptytest`（WSL 里用 `fpc` 直接编的控制台程序，跑 Unix 后端，12 例）、`tools/terminal-conpty-record`（经示例的会话录 ConPTY）、`tools/terminal-shots --phase4`（选区、列选区、链接悬停的验收截图，存 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`）。
 - 像素测试：~~整体关掉光栅预算（`RasterBudgetMs := 0`）~~ 期末审查后改成冻结时钟——预算照常开着、每个字形都走那个判断，只是读到的时间不动，永远不超；要墙上时间的计时测试自己把时钟换回来。
+
+**实现期修正（5 期）**：
+- 新脚本：`reflow-cases.js`（+ `cases/reflow.js`）、`contrast-cases.js`（→ `Luminance.inc`、`terminal-contrast.json`）；`lib-dump.js` 加 `marker` 步骤、`reflowCursorLine` 选项、`PORTED` 加 `BufferReflow`、`RendererUtils`、`ColorContrastCache`、`OptionsService`，并对上游 `_reflowSmaller` 的负下标打运行时补丁（§6.2）；`gen-terminal-glyphs.js` 加 Powerline、盲文与图案纵向周期。
+- 新夹具：`terminal-core-reflow-*.json`（245 例：手写 110、4 份录制切出 16、种子随机 120）、`terminal-reflow-units.json`（五个纯函数：27 / 7 / 8 例）、`terminal-contrast.json`；`terminal-buffer-ops.json`、`terminal-selection*.json`、`terminal-links*.json` 加了改列数的用例。
+- 新测试单元：`test.terminal.reflow.pas`（`TTyTerminalReflowOracleTests`、`TTyTerminalReflowTests`）、`test.terminal.perf.pas`（`TTyTerminalPerfTests`：灌入的内存与缓存、热缓存零未中、最长一片、整屏重画、对比度成本、显示出来的窗口在灌入时照样画）。
+- 工具：`tools/terminal-bench`（基准，直接引 `source/`，不进包）；`tools/painter-regress`（全库文字路径的离屏出图与哈希、计时；`ab.sh` 在临时 worktree 里对改动前的文件做同一次会话的 A/B，哈希文件头写机器指纹、指纹不符拒绝比较）；`tools/terminal-shots --phase5`。
 
 Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + 'terminal-<name>.json'`，`fpjson` 解析（`D:/Projects/ty-advchart/tests/test.advchart.bargeometry.pas:62-66`、`:131-134`）。
 夹具里有 NUL 字节时解析前要处理（[[fpjson-drops-u0000]]）——所以字节一律 base64 存，不用 JSON 字符串。
@@ -1241,6 +1328,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 鼠标、网址两行本期完成（`mouse-cases.js`、`url-cases.js`）。
 - ConPTY 的录制本期补上：经示例的会话（`TConPtyBackend`）在本机（19044）录了 `cmd /c` 与 `powershell -NoProfile -Command` 各一段（`recordings/conpty-cmd.cast`、`conpty-powershell.cast`；命令行在同名 `.cmdline` 里，可以重录）。ConPTY 发的第一条 OSC 0 带程序的全路径，转换时只留文件名；转换脚本见到用户名、机器名、个人目录就拒绝。它们和 WSL 录的一样喂上游、逐步比，也拷进了示例。
 
+**实现期修正（5 期）**：「重新折行」一行完成：core-reflow 245 例（各种宽度来回、宽字符跨切口、组合字符、标记、OSC 8、光标、滚回满、四种视口情形、备用屏、四种 `WindowsPty`、`reflowCursorLine` 两种），另有缓冲层、选区、网址各几例改列数。
+
 ### 13.5 夹具纪律（AdvChart 的教训照搬）
 
 出处：`D:/Projects/ty-advchart/docs/superpowers/specs/2026-09-01-advancechart-tier0.md:4785-4792`、[[advchart-upstream-oracle]]。
@@ -1283,6 +1372,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **实现期修正（2 期）**：`MarkLodato/vt100-parser` 许可已核实为 MIT（`Copyright (c) 2010 Mark Lodato`），它的 `test/` 与 xterm.js 的 76 个 `.in` 有 48 个同名，notices 的「Test fixtures」一小节写明部分输入最初出自那里并附其版权行。xterm.js 一节的版权行照上游 `LICENSE` 补了「`Copyright (c) 2014-2026, The xterm.js authors`」一行；Fabrice Bellard（jslinux）的版权只在 Core 单元头说明来历（上游 `LICENSE` 不列它）。notices 标题逐个列出移植的文件（含 `Charsets.inc` 和 Core 的三个 include），发版守卫逐个查。
 - **实现期修正（3 期）**：notices 的 xterm.js 一节标题加了三个文件——`tyControls.Terminal.Keyboard.pas`（`Keyboard.ts`、`Clipboard.ts` 的粘贴两函数、第三层 Shift 判定）、`tyControls.Terminal.Render.pas`（颜色解析、256 色表、自绘字形的光栅化逻辑）、`tyControls.Terminal.CustomGlyphs.inc`（自绘字形数据，出自 `addon-webgl`，另列 addon 的版权行 2018 / 2021）。控件单元 `tyControls.Terminal.pas` 是自己写的，只照上游的逻辑、单元头注明出处行号。
 - **实现期修正（4 期）**：notices 的 xterm.js 一节标题加两个单元——`tyControls.Terminal.Selection.pas`（`SelectionService.ts`、`SelectionModel.ts`，外加 `addon-clipboard` 的 OSC 52 规则）、`tyControls.Terminal.Links.pas`（`addon-web-links` 的 `WebLinkProvider.ts` / `WebLinksAddon.ts`，`OscLinkProvider.ts`、`Linkifier.ts`）；两个 addon 自己的版权行（addon-web-links 2017、addon-clipboard 2023）并进那一节，发版守卫逐个查标题。控件拆出来的五个 include 是自己写的，不进标题。i18n：终端菜单的「Clear」和图片集合对话框的「Clear」同一个 msgid，库和示例的 `.po` 里各带 `msgctxt`，各有各的译文。
+- **实现期修正（5 期）**：notices 的 xterm.js 一节标题加 `tyControls.Terminal.Buffer.Reflow.inc`（`BufferReflow.ts`、`Buffer.ts` 的 `_reflow*`）与 `tyControls.Terminal.Luminance.inc`（`Color.ts` 的公式在 node 里算出的表）；自绘字形那句的区段改成实际范围。发版守卫逐个查。
 
 ---
 
@@ -1332,6 +1422,16 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 中键：Windows / macOS 上程序没接管鼠标时什么都不做（Linux X11 上粘贴 PRIMARY）。
 - 选区：期末审查前是「叠在格子底色上」，是偏离；已改回上游的「替换成不透明的选区色」（§11），不再是偏离。
 
+**实现期修正（5 期）**，5 期新增的偏离：
+- 块内切片：一片把一块按 32 KB 一段解析、段间看预算（上游整块一次，§3.1）；灌入时到点当场画一帧、Win32 上有输入排队时下一片让一下（上游的浏览器没有这回事）。
+- 改列数且真的重新折行时清选区（上游不清，§9.5.5）。
+- 对比度：反显默认色取 WebGL 的比法（DOM 拿前景比前景）；选区字色在暗淡格上不变淡、线条跟着选区字色（取 DOM 的做法，WebGL 变淡）；组合字符的格照调（同 DOM，WebGL 不调）；隐藏且带下划线的格不调；两份缓存在改比值时都清；缓存最多 16384 对（上游无界）。
+- `MinimumContrastRatio` 是 NaN 或无穷时按 1（上游会存 NaN）。
+- `WindowsPty = {conpty, 0}` 表达不了（0 = 没给）。
+- Buffer 层在上游会死循环或抛 TypeError 的三处抛 `EArgumentOutOfRangeException`（§6.2）。
+- 上游 `_reflowSmaller` 的负下标 bug 不照搬：满滚回时变窄不冲掉底部几行（§1.1 第 20 条）。
+- 行内存回收当场做完，上游在空闲时分批（§6.2）。
+
 **不做**（以后要再单独立项）：
 
 - 屏幕阅读器（§1.1 第 1 条：LCL 默认构建里没有任何 widgetset 桥接）。
@@ -1343,6 +1443,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 搜索（`addon-search`）、序列化（`addon-serialize`）、进度条 OSC 9;4（`addon-progress`）、网页字体（`addon-web-fonts`）。
 - 彩色表情（取决于 E1；大概率 BGRA 画不出）。
 - 文字闪烁（SGR 5）。
+- **实现期修正（5 期）**：Legacy Computing（1FB00–）、进度条（EE00–EE0B）、git 分支图（F5D0–F60D）的自绘（§10.5）。
 
 ---
 
@@ -1362,6 +1463,11 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 **实现期修正（3 期）**：E1、E2 在 Win32 上已经跑过（结论与数字见 §10.3），Qt6 / GTK2 / Cocoa 仍待真机；3 期的真机验收项汇总在 3 期计划末尾（截图在 `docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`）。
 
 **实现期修正（4 期）**：4 期的真机验收项接着 3 期编号，汇总在 4 期计划末尾（第 32–55 项，期末审查后加了第 56–65 项：关闭 / 重启的冻结时长、Win11 24H2 无残留、退出与关闭同时发生、macOS 的 `POLLNVAL`、失去捕获、Shift+F10、子进程的信号与描述符、失焦选区看不看得见、X10 横向滚轮、ConPTY 录制在新版本上的差异）；截图在 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`。
+
+**实现期修正（5 期）**：
+- 本机数字（Win32，Xeon Silver 4216，Windows 10 19044，`terminalbench`）：Core 吞吐 19.2 MB/s（基线 18.9）；一次 `Write` 20 MB 最长的一片 13.1–13.7 ms（基线整块一片 1025.6 ms；审查前 128 KB 一段时 18.0 ms）；热缓存整屏重画 96 PPI 10.9–11.1 ms、144 PPI 19.2–19.7 ms、对比度 4.5 时 11.6–12.0 ms；一行一行滚见 §10.1；冷填充见 §10.3；50 MB 灌入 5.1–5.2 MB/s，两次绘制的间隔中位 52.6 ms、最长 79–110 ms，开始后 33–39 ms 画上第一帧，堆 +3.1 MB，存活 1061 行（审查前记的 69 ms、12.5 MB/s 是在窗口前 3.4 秒一次也没画的情况下量的，§1.1 第 21 条）；折行（1 万行滚回）125 / 61 / 65 ms（200 → 120 → 200 → 80 列；审查后加了 `CopyCellsFrom` 的快路径，降到 48 / 33 / 32 ms），10 万行 120 → 70 → 120 列约 0.64–0.72 s（1 万行 49–54 ms，线性）。四个 widgetset 的数字留给真机（验收第 71、75 项）。
+- 对比度夹具只在 Win64（`Extended` = `Double`）上证明逐位相同；x86_64-linux 上未标类型的实常量是 80 位 Extended、i386 上 x87 全程扩展精度，那两处要真机跑 `TTyTerminalRenderTests`（有类型的常量已保留；i386 只能要求 SSE2 编译）。
+- 3–5 期的真机项合成一份：`docs/superpowers/plans/2026-09-29-terminal-acceptance.md`（91 项，含两轮审查补的第 80–91 项）。
 
 ---
 
@@ -1396,6 +1502,14 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 4. Windows 默认 `%COMSPEC%`，另列 `powershell.exe`，找得到才列 `pwsh.exe`、`wsl.exe`；Linux / macOS 用 `$SHELL -l`（§12.1）。
 5. 程序没接管鼠标时，Windows / macOS 上中键什么都不做；Linux 粘贴 PRIMARY。
 6. 双击在链接上选整条链接，照上游，不要求按 Ctrl（§9.5.5）。
+
+**实现期修正（5 期）**，5 期开工前问题一的五条结论：
+1. 冷启动光栅化：用户选 A（改 `Painter.pas`），并要求全库文字的像素与性能回归（§10.3）。
+2. 改列数重新折行时清选区（按建议，最终验收时可改，§9.5.5）。
+3. `MinimumContrastRatio` 默认 1、只做控件属性、示例加下拉（1 / 3 / 4.5 / 7）（按建议）。
+4. 自绘字形扩到 Powerline 与盲文（按建议，§10.5）。
+5. 光标所在的那段默认不折，`Core.ReflowCursorLine` 可开（按建议，§6.2）。
+另外期末审查后主控定了三条（用户验收时可改）：上游 `_reflowSmaller` 的负下标 bug 修掉（§6.2）；两条没达标的性能目标按实测改写（§18）；改尺寸合并保留，Win32 真拖动的效果进真机验收。
 
 ### 17.2 实现层面的（计划里定，不必问）
 
@@ -1463,3 +1577,14 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 性能：整屏上滚的缓存平移、字形缓存命中统计、切片预算调优；四个 widgetset 的实测数字写回本规格。
 - `MinimumContrastRatio`（§10.9）；盲文、Powerline、Legacy Computing 自绘字形要不要做在这期定。
 - **做完能看到**：拖窗口宽度时长行重新折回、缩回来复原；`cat` 几十 MB 的日志界面不卡死、内存不涨；打开最低对比度后浅色皮肤上的暗色文字变清楚。
+
+**实现期修正（5 期）**，实际做了什么：
+- 重新折行（`Buffer.Reflow.inc`，与上游逐位相同，负下标 bug 除外）；控件接线：选区、悬停链接、滚动条；网址回映射删掉 `ACols`；改尺寸合并。
+- 写入队列块内切片；灌入时窗口照样重画、输入不卡（§3.1）。
+- 性能：行复用（整屏上滚只画新露出的行）、`Painter.pas` 常驻位图（A 路线）、缓存统计、`CopyCellsFrom` 快路径、行内存回收；基准工具与性能测试。
+- `MinimumContrastRatio`；Powerline 与盲文自绘。
+- 性能目标的改写（主控在期末审查后按实测定，用户验收时可改）：
+  - 一行一行滚：~~每帧耗时 ≤ 基线的 1/4~~ 每帧画的行数 ≤ 3，且耗时不劣于基线（6.94 ms）。实测每帧 2.00 行，离屏 4.78 ms、走 `Paint` 6.9 ms：过。原目标（≤ 1.74 ms）要在屏幕上直接滚（环形表面、`ScrollWindowEx`），列为以后。
+  - 50 MB 灌入：~~两次绘制的最长间隔 ≤ 50 ms~~ 两次绘制的间隔 ≤ 约 90 ms（一轮 50 ms 的解析、一帧整屏新行 15–20 ms、贴上屏后 DWM 占的十几毫秒），且不劣于基线。实测中位 52.6 ms、最长 79–110 ms（两次），基线实际是前 3.4 秒不画：中位过，最长偶有尖峰超过 90 ms；吞吐 5 MB/s，低于不画时的 10–12 MB/s——这是灌入时窗口不再被饿住的代价。要再快得让整屏新行更便宜（很快滚走的行不画），列为以后。
+  - 冷填充：~~每个字形 ≤ 基线的 1/3~~ 走 A 路线：每个 ≤ 基线的 1/2（实测 ASCII 0.50、CJK 0.59（五次的中位；这台机器此时负载起伏大，单次 0.48–0.70，Task 9 时量的是 0.47 / 0.53））。在 A 之上再做 B（终端自己的光栅路径、度量挪进同一个 DC）列为以后。
+

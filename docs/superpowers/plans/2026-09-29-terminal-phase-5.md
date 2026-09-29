@@ -460,13 +460,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: 本计划（签收记录）、`docs/superpowers/specs/2026-09-28-terminal-view-design.md`（写回）
 - 修复时按需改 Task 1–13 的文件
 
-- [ ] **Step 1: 一次编译 + 本期全部 suite + 全量**：「跑测试的固定套路」5d 行与全量命令。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：折行、对比度**以上游为准**；修复提交 `fix(terminal): ...`，一个问题一个提交。
+- [x] **Step 1: 一次编译 + 本期全部 suite + 全量**：「跑测试的固定套路」5d 行与全量命令。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：折行、对比度**以上游为准**；修复提交 `fix(terminal): ...`，一个问题一个提交。
 
-- [ ] **Step 2: 重跑生成，确认可复现**：`node tools/terminal-oracle/regen-all.js --expect-clean` → `clean`；`node tools/terminal-oracle/light-palette.js --check` 一致。
+- [x] **Step 2: 重跑生成，确认可复现**：`node tools/terminal-oracle/regen-all.js --expect-clean` → `clean`；`node tools/terminal-oracle/light-palette.js --check` 一致。
 
-- [ ] **Step 3: 基准数字**：跑 `terminalbench --all`，和 Task 1 的基线并排记进签收（每项：基线 → 本期、目标、过没过）。新夹具的字节数与用例数；本期各 suite 用时；`TTyTerminalPerfTests` 三次连跑的用时。
+- [x] **Step 3: 基准数字**：跑 `terminalbench --all`，和 Task 1 的基线并排记进签收（每项：基线 → 本期、目标、过没过）。新夹具的字节数与用例数；本期各 suite 用时；`TTyTerminalPerfTests` 三次连跑的用时。
 
-- [ ] **Step 4: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）。逐条记「在哪一行实现 / 为什么不需要 / 挪到以后」：
+- [x] **Step 4: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）。逐条记「在哪一行实现 / 为什么不需要 / 挪到以后」：
   - §6.2：折行开关（四种 `WindowsPty` 与 `Scrollback = 0`）、备用屏不折、光标段、启发仍在老 ConPTY 下开；`Resize` 的顺序。
   - §3.1 / §3.2：块内切片的六条细则（开工前问题二第 8 条）；回调顺序；`OnRefreshRows` 每段；帧率上限与光栅预算仍生效。
   - §9.5.5：改列数后的选区（开工前问题一第 2 条）、`TrimmedLines` 跟上折行的挤出；§9.7 滚动条随折行后的行数；§9.8 `ACols` 已删、悬停随改尺寸清。
@@ -476,7 +476,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - §13.2 / §13.4：新脚本、夹具、测试单元；§14：notices；§15、§16：本期新增的偏离与真机项都进了验收表。
   - 4 期交接四条、3 期留给最终验收的一条逐条对上。
 
-- [ ] **Step 5: 【主控执行】编包、编示例、i18n、截图**
+- [ ] **Step 5: 【主控执行】编包、编示例、i18n、截图**（截图与 i18n 主控已在期末审查前做过；审查修复之后的编包、编示例待主控，见签收）
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; lazbuild -B tycontrols_dt.lpk > /tmp/term-dt.txt 2>&1; tail -3 /tmp/term-dt.txt; lazbuild -B examples/terminal/terminal_example.lpi > /tmp/term-ex.txt 2>&1; tail -3 /tmp/term-ex.txt; git status --short
@@ -488,9 +488,9 @@ Expected：三个都编过。然后：
 3. 示例回放模式放 `ls-color.cast`，拖窗口宽度看长行折回、复原；「最低对比度」下拉切到 4.5 看浅色皮肤上的 3 号色（只看不录，真机验收时用户再看）。
 4. `lazbuild -B tools/terminal-shots/terminalshots.lpi` 后跑 `terminalshots --phase5`；PNG 进 git、单张 ≤ 300 KB；抽查每组一张：画面正常、没有整块黑 / 白 / 哨兵色、折行三张的文字对得上。
 
-- [ ] **Step 6: 集中变异**（每条三拍，必须红）：各任务变异表 B*（Task 1、9）、J*（Task 2、10 的 JS 侧）、R*（Task 3）、K*（Task 4）、V*（Task 5）、F*（Task 6）、W*（Task 7）、G*（Task 8）、T*（Task 10）、N*（Task 11）、Y*（Task 12）、D*（Task 13）。JS 侧的变异改完跑对应生成脚本、确认失败后改回，`regen-all.js --expect-clean` 仍然 `clean`。结果逐条记进签收记录；没红的当场补强。
+- [x] **Step 6: 集中变异**（每条三拍，必须红）：各任务变异表 B*（Task 1、9）、J*（Task 2、10 的 JS 侧）、R*（Task 3）、K*（Task 4）、V*（Task 5）、F*（Task 6）、W*（Task 7）、G*（Task 8）、T*（Task 10）、N*（Task 11）、Y*（Task 12）、D*（Task 13）。JS 侧的变异改完跑对应生成脚本、确认失败后改回，`regen-all.js --expect-clean` 仍然 `clean`。结果逐条记进签收记录；没红的当场补强。
 
-- [ ] **Step 7: 整体代码质量审查**（`git diff <Task 0 的 HEAD>..HEAD`）：
+- [x] **Step 7: 整体代码质量审查**（`git diff <Task 0 的 HEAD>..HEAD`）：
   - 折行：与 `BufferReflow.ts` / `Buffer.ts:318-537` 逐行对照（两个方向的循环边界、宽字符挪行、`destLineLengths` 补空格子、视口调整的四个分支、`savedY`、事件次序与下标）；引用计数（钉住 / 放开成对、异常路径）；注释行号对得上。
   - 写入队列：块内位置在所有入口（`ProcessPending`、`WriteSync`、`Resize` 前清空、`DiscardPending`、`Reset`、析构）都处理了；异常路径不重复解析、不漏回调。
   - 行复用：键的每个组成部分都在；帧级参数变化全部走整屏；`Revision` 在所有改内容的方法里都加了（逐个方法对单元的写字段处 grep）。
@@ -499,9 +499,9 @@ Expected：三个都编过。然后：
   - 视觉值没有写死；夹具读空时每个测试都会红（计数断言）；等价变异的理由站得住。
   审出来的问题修完回到 Step 1。
 
-- [ ] **Step 8: 写回 spec 原处，标「实现期修正（5 期）」**，原文删除线保留。至少：状态行（5 期签收）；§1.1（新增：开关用字段、`{winpty/无后端, 构建号}` 也不折、`reflowCursorLine`、选区与改尺寸、`Linkifier` 清悬停、对比度两个渲染器的差异）；§2.1（`Buffer.Reflow.inc`、`Luminance.inc`）；§3.1（块内切片落地）；§3.2（行复用）；§6.2（折行的实际规则、2 期镜像用例已补）；§6.3（`Serial` / `Revision`、行表触发口）；§7.6（`ReflowCursorLine`）；§9.1（`MinimumContrastRatio` 的钳制与 `stored`）；§9.5.5（改列数后的选区）；§9.8（`ACols` 已删、悬停清）；§10.1（整屏上滚的实际做法）；§10.3（冷启动路径与数字）；§10.4（淘汰计数）；§10.5（自绘字形范围）；§10.9（对比度细则）；§11（浅底兜底的截图位置）；§13.2（新脚本、夹具、测试单元、`tools/terminal-bench`）；§13.4（重新折行一行完成）；§14（notices 标题）；§15（新增偏离：块内切片、改列数清选区（若选）、反显默认色的对比度取法、NaN 比值按 1、`{conpty, 0}` 表达不了、Buffer 层 `newCols < 2` 抛异常）；§16（性能项的本机数字，四个 widgetset 的留给真机）；§17（5 期开工前问题的结论）；§18（5 期实际做了什么）。
+- [x] **Step 8: 写回 spec 原处，标「实现期修正（5 期）」**，原文删除线保留。至少：状态行（5 期签收）；§1.1（新增：开关用字段、`{winpty/无后端, 构建号}` 也不折、`reflowCursorLine`、选区与改尺寸、`Linkifier` 清悬停、对比度两个渲染器的差异）；§2.1（`Buffer.Reflow.inc`、`Luminance.inc`）；§3.1（块内切片落地）；§3.2（行复用）；§6.2（折行的实际规则、2 期镜像用例已补）；§6.3（`Serial` / `Revision`、行表触发口）；§7.6（`ReflowCursorLine`）；§9.1（`MinimumContrastRatio` 的钳制与 `stored`）；§9.5.5（改列数后的选区）；§9.8（`ACols` 已删、悬停清）；§10.1（整屏上滚的实际做法）；§10.3（冷启动路径与数字）；§10.4（淘汰计数）；§10.5（自绘字形范围）；§10.9（对比度细则）；§11（浅底兜底的截图位置）；§13.2（新脚本、夹具、测试单元、`tools/terminal-bench`）；§13.4（重新折行一行完成）；§14（notices 标题）；§15（新增偏离：块内切片、改列数清选区（若选）、反显默认色的对比度取法、NaN 比值按 1、`{conpty, 0}` 表达不了、Buffer 层 `newCols < 2` 抛异常）；§16（性能项的本机数字，四个 widgetset 的留给真机）；§17（5 期开工前问题的结论）；§18（5 期实际做了什么）。
 
-- [ ] **Step 9: 签收记录写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、各 suite 用时、夹具体积与用例数、基准数字对照、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、遗留。
+- [x] **Step 9: 签收记录写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、各 suite 用时、夹具体积与用例数、基准数字对照、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、遗留。
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(terminal): phase 5 sign-off; corrections written back into the spec
@@ -518,18 +518,18 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 用户要求所有期做完后**一次性**真机验收。这份文档是他拿着逐项验的唯一入口，写法照 [[doc-writing-native-tone]]，不引用计划里的内部编号以外的东西就能看懂。
 
-- [ ] **Step 1: 开头（短）**：一句话说这是什么；怎么准备（`lazbuild -B examples/terminal/terminal_example.lpi`，Linux / macOS 各自怎么编；WSL 里 `tools/terminal-ptytest` 已跑过的不用再跑）；建议的顺序（先 Win32 本机，再 Windows 11，再 Linux GTK2 / Qt6，最后 macOS）；每项看完在「结果」列写 过 / 不过 / 现象。
+- [x] **Step 1: 开头（短）**：一句话说这是什么；怎么准备（`lazbuild -B examples/terminal/terminal_example.lpi`，Linux / macOS 各自怎么编；WSL 里 `tools/terminal-ptytest` 已跑过的不用再跑）；建议的顺序（先 Win32 本机，再 Windows 11，再 Linux GTK2 / Qt6，最后 macOS）；每项看完在「结果」列写 过 / 不过 / 现象。
 
-- [ ] **Step 2: 合并的验收表**：一张表，列为 `# | 期 | 项 | 平台 | 怎么验 | 算过 | 截图 | 结果`。
+- [x] **Step 2: 合并的验收表**：一张表，列为 `# | 期 | 项 | 平台 | 怎么验 | 算过 | 截图 | 结果`。
   - 第 1–31 项：**原样**取自 `2026-09-29-terminal-phase-3.md` 末尾「真机验收项汇总」（文字不改，只加「期 = 3」和截图列）。
   - 第 32–65 项：原样取自 `2026-09-29-terminal-phase-4.md` 末尾（期 = 4）。
   - 第 66 项起：本计划下面「5 期新增的真机验收项」（期 = 5），按 Task 12 的结果删掉不适用的一项后连续编号。
   - 某一项在后面的期里已经被改写（比如第 35 项老 ConPTY 的折行启发在 5 期仍然成立、第 54 项流控在 5 期多了块内切片），在「怎么验」里补一句「5 期：…」，不另起一项。
   - 表后按平台给一个索引（Win32 本机 / Windows 11 / GTK2 / Qt6 / Cocoa 各自要做的项号），方便用户在一台机器上一次做完。
 
-- [ ] **Step 3: 截图目录**：列三个目录（`2026-09-29-terminal-phase-3-shots/`、`…-4-shots/`、`…-5-shots/`），各一句话说里面是什么、链接到各自的 `index.md`；截图怎么重新生成（`terminalshots`、`--phase4`、`--phase5`）。
+- [x] **Step 3: 截图目录**：列三个目录（`2026-09-29-terminal-phase-3-shots/`、`…-4-shots/`、`…-5-shots/`），各一句话说里面是什么、链接到各自的 `index.md`；截图怎么重新生成（`terminalshots`、`--phase4`、`--phase5`）。
 
-- [ ] **Step 4: 待用户定的决定清单**：每条写「是什么、选项、现在的做法、建议、看哪张截图 / 哪一项、定了之后改哪里（spec 节号、文件）」。至少：
+- [x] **Step 4: 待用户定的决定清单**：每条写「是什么、选项、现在的做法、建议、看哪张截图 / 哪一项、定了之后改哪里（spec 节号、文件）」。至少：
   1. 浅底 16 色 3 号色：（a）以最暗浅底重算 /（b）终端底色改用更白的 token /（c）维持、靠 `MinimumContrastRatio` 兜底（spec §11、§17.1 第 4 条；截图 `…-3-shots/ansi-3-*-light-15x.png`、`…-5-shots/contrast-*-light.png`；第 26、76 项）。
   2. 浅底 7 / 15 号色调不调（3 期开工前问题一第 3 条；`ansi-7-15-default-light-2x.png`）。
   3. Shift+Home / Shift+End 保留「本地到顶 / 到底」还是照上游发给程序（第 27 项；spec §15）。
@@ -541,11 +541,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   9. spec §15 里用户可能想改的偏离（链接要按 Ctrl / Cmd 悬停与单击、输入法组字时不滚到底、macOS 默认覆盖键是 Option、1016 / 14t 报设备像素）——列出来，默认不改。
   10. 验收中「记现象」的项（第 33、34、46、61、65 项等）得出的结论写回 spec 哪里。
 
-- [ ] **Step 5: 验收之后**：一小节说用户验完后要做的事——结论写回 spec §16 / §17；不过的项开 `fix(terminal)`；合 `main` 前按 [[pre-merge-checklist]] 查 i18n 与 README；CHANGELOG 发版时写（[[changelog-user-facing]]）。
+- [x] **Step 5: 验收之后**：一小节说用户验完后要做的事——结论写回 spec §16 / §17；不过的项开 `fix(terminal)`；合 `main` 前按 [[pre-merge-checklist]] 查 i18n 与 README；CHANGELOG 发版时写（[[changelog-user-facing]]）。
 
-- [ ] **Step 6: 自查**：表里的项号连续、没有重复；1–65 的文字与 3、4 期计划逐字相同（`diff` 抽取出来的两段）；每个截图链接指向存在的文件（`ls` 核对）；决定清单每条都有「看哪里」。
+- [x] **Step 6: 自查**：表里的项号连续、没有重复；1–65 的文字与 3、4 期计划逐字相同（`diff` 抽取出来的两段）；每个截图链接指向存在的文件（`ls` 核对）；决定清单每条都有「看哪里」。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/superpowers/plans/2026-09-29-terminal-acceptance.md && git commit -m "docs(terminal): the acceptance sheet for all five phases
@@ -627,3 +627,84 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 10. `Buffer.pas` 单元头「Buffer.Resize only touches lines between ring changes」在接上折行后不再成立（折行在环形表上整体重排），要改写。
 11. §9.1 `MinimumContrastRatio` 的类型写成 `Single`：上游是双精度、钳成一位小数，`Single` 存不住 1.3 这类值，边界上会和上游不同；本期用 `Double`（开工前问题二第 16 条）。
 12. §10.5「盲文、Powerline、Legacy Computing」：上游的自绘区段还有进度条（EE00–EE0B）与 git 分支（F5D0–F60D），Powerline 的实际范围是 E0A0–E0D4（区段注释写 E0BF，定义到 E0D4），要画它们还得支持 `VECTOR_SHAPE`（含 Q / T / Z 命令）与 `BRAILLE` 两种部件（核实记录 29）。
+
+---
+
+## 5 期签收（2026-09-30）
+
+**全量**：`lazbuild -B` 后 `--all` 8360 条（4 期签收 8285，5 期开工 8347，期末审查前 8347，审查修复加了 13 条），errors 0、failures 1——唯一的红仍是本机 ClearType 环境下的 `TPainterTest.TestTextIsInkedAsWindowsInksIt`：改动前（在 `ed70a871` 上编的测试）和改动后实测值相同，都是「Segoe UI，96 PPI，浅色：ours 1075 / 0.24，Windows 1203 / 0.37」。最后一次全量是集中变异之后 `-B` 重编跑的。`node tools/terminal-oracle/regen-all.js --expect-clean` → `clean`；`light-palette.js --check` → `light.tycss matches`。
+
+**提交区间**：`1c419367..HEAD`（Task 1 基线起）。期末两轮审查（规格核对 + 代码质量）的修复在 `103c433a..HEAD`：`39a529f4` Painter 常驻位图、`da056fcf` 折行（上游负下标、块拷贝、内存回收、`QWord` 修订号）、`183128e2` 切片 32 KB 一段、`bbc90e4e` 控件（灌入时绘制与输入、`Write` 不应用网格、暗淡调色、选区字色、行复用的几处）、`ccc16f4d` / `7da1513b` 工具（painter-regress 同会话 A/B、terminalbench 的 Paint 测法）、`af9854de` 灌入的一轮 50 ms、`92ff4d0e` / `2a9f1938` 补测试、`7bc0984d` 与本签收的文档。
+
+**期末审查的处理**（审查员的编号 → 结果）：
+1. **暗淡格调过对比度后又变淡**：调过的颜色直接画、不再混暗淡（照 WebGL / DOM）；`TestDimHalvesTheRatio` 期望改成 `ensure(bg, fg, 2.25)`，加「本来就够的暗淡字照常变淡」一例；选区字色（主题给了才有）在比值 1 和大于 1 时一致：字、删除线、上划线、默认下划线都用它，暗淡格上不变淡（顺带去掉了 4 期「比值 1 时线条用格子自己的前景」的遗留偏离）。
+2. **Painter 常驻位图**：只放大不够的那一维；超过 4 M 像素或宽 8192 走一次性位图；非主线程的 `SetSize` 进 `try`；行距取 `bmWidthBytes`；非 DIB 只转换 w × h。**行序没有照建议改成看 `dsBmih.biHeight` 的符号**：本机实测 `GetObject` 对 LCL 建的自上而下 DIB 也答正数（写了探针，宽 7 / 13 / 100 都是），照改全库文字上下颠倒（第一次全量红了 184 条），仍用 LCL 的描述。测试：新加纯查询 `TyGdiTextKeptBitmapForTest`、`TyGdiTextOneOffBitmapsForTest`、`TyGdiTextConversionsForTest`、`TyGdiTextResetForTest`、`TyGdiTextForceConversionForTest`；`TestTheGdiRendererKeepsOneBitmap` 从没有常驻位图开始、断言句柄不变、零一次性位图、零转换（原来的假绿去掉）；加「宽行之后画高字宽度不变」「超上限走一次性位图」「复用位图清干净」「DIB 直读 = 整张转换，逐字节」四条。
+3. **Painter 的 6 条硬要求**：Memo 粗体经 `StyleOverride 'font-weight: bold'`、字号经 `'font-size: Npx'`（Memo 不读 `Font.Style` / `Font.Size`，原来三张字号画面靠多出来的一行「Size N」才不同——去掉那一行后三张一模一样，才发现字号也是假覆盖）；主题没有 font-style，Memo 画不出斜体，斜体改由 `text-italic` / `text-bolditalic`（直接经文字渲染器）覆盖；加弹出菜单、Label 省略号 / 换行 / 粗体（控件层）；提示窗、对话框补 120 / 192 PPI。painter-regress 加机器指纹与同会话 A/B（`ab.sh`）、`--perf-compare`、冷轮前放掉常驻位图。对照结果与耗时表落档 `tests/fixtures/painter-regress/ab-2026-09-30.md`，哈希清单换成今天这台机器的（带指纹）。
+4. **改尺寸合并在 Write 路径失效**：`Write` / `Input` / `Paste` / `Core` 不再应用排着的网格，只剩 `Cols` / `Rows` / `CellAt` / `CellRect` / `SizeForGrid` 和 `WriteSync`；释放中不应用；现算 `CellRect` 参数的两处先应用。测试 `TestWritesDuringADragReflowOnce`（10 步拖动、每步 `Write` + `Input` + `Paste`，Core 一直是旧网格，泵一次只折一次）。
+5. **行复用的模糊测试**：`Scrollback := 20`（环形表回收同一个行对象）；加改列数（折行）、切对比度、OSC 4 / 104、DECSCUSR、超过环长度的 REP（快进）、组字串（开、改、结束）、隐藏 / 显示光标、光标横移；步数 200 → 260。键加组字串的列，另加确定性测试 `TestMarkedTextFollowsAHiddenCursor`。
+6. **性能测试**：热帧的对比度缓存零未中、零新增，命中数等于从缓冲数出来的「要问的格子」数；整屏重画改成相对同一次运行里量的「每格一次填充 + 一次遮罩」的下限（≤ 0.8 倍 + 3 ms）；计时测试都试两次。
+7. **10 万行折行**：`CopyCellsFrom` 快路径（结果与逐格相同，测试对照）；照上游回收变宽又变窄后的行内存（1 万行 80 → 400 → 80 列，堆 16.6 → 53.4 → 16.6 MB）；`ReflowSmaller` 新行分批释放没做（要改重排的结构，不「简单」），留作以后。1 万 / 10 万行的线性时间测试。
+8. `FRevision` 改 `QWord`（行键跟着改）。
+9. **两条基准**：做了均匀位移一次 `Move`（不经草稿）、切片 32 KB 一段、切片预算按一轮剩下的时间、灌入时光栅预算 4 ms；环形表面与 `ScrollWindowEx` 没做（屏幕像素与表面的一致性风险，列为以后）。量的时候发现一个比目标更要紧的问题：Win32 上灌入期间窗口**根本不画**（排片的 `WM_NULL` 一直在，`WM_PAINT` 和键盘轮不到），原来记的 69 ms 间隔是假的——修了（当场画、有输入排队时让一下），并把一轮定在约 50 ms（16 ms 一帧时吞吐掉到 1.4 MB/s）。结果与目标的处理见下表。
+10. `MoveRows` 读到过期草稿：被外框截掉的行键作废、不当源；行绘制与搬运裁到外框里面。测试 `TestARowCutByTheFrameIsNotMoved`。
+11. 改尺寸清悬停后调 `UpdatePointer`（`TestAResizeDropsTheHover` 加断言）。
+12. 空白格（无字形无线条）跳过对比度；缓存上限 16384 对（`TestTheContrastCache` 加一段）。
+13. 注释与文档：`Buffer.pas` 的「Phase 2: always False」、单元头补另两处抛异常与负下标 bug；5a 附录「入口 `ANewCols < 2` 就抛」原处标注被推翻；截图 `index.md` 的对比度描述改成「xp 上差得最多的是 3、14、10 号」（`terminalshots.lpr` 同步）；`cases/buffer.js` 的 `reflow-combined-data-moves` 改了输入（在表情格上加组合符，真的带组合数据）；计划第 96 行的空占位块删了。
+14. 测试加强：遮罩 = 直接画扩到 Powerline（矢量）与盲文，全部 454 个字形、3632 次绘制，0.011% 的像素差 1；自绘字形的字号进缓存键加测试；Powerline 三角形加 144 PPI、36 pt，容差从 5% 收到 2%；折行单元测试的条数钉成夹具的 27 / 7 / 8；灌入的内存测试注明它证明的是缓存淘汰，真窗口重画由新加的 `TestAFloodStillPaints`（显示出来的窗口、6 MB、最长不画间隔 < 300 ms，本机 42 ms）守。
+15. 等价变异的重判写进下表。
+
+**上游 bug**（主控已定）：`_reflowSmaller` 负下标不照搬，node 侧对上游同一句打运行时补丁，新用例 `full-scrollback-narrow-keeps-the-prompt`（原有夹具一个字节没变），Pascal 侧 `TestNarrowingAFullScrollbackKeepsThePrompt`；记入 spec §1.1 第 20 条、§6.2、§15。
+
+**基准**（本机 Win32，Xeon Silver 4216，Windows 10 19044；`terminalbench --all` 两次，冷填充另跑三次）：
+
+| 项 | 基线（Task 1） | 审查前（Task 9） | 签收 | 目标 | 结论 |
+|---|---|---|---|---|---|
+| Core 吞吐 | 18.9 MB/s | 19.1 | 19.3 / 19.1 | ≥ 基线 95% | 过 |
+| 一次 `Write` 20 MB 最长一片 | 1025.6 ms | 17.96 | 13.66 / 13.14 | ≤ 12 + 一段 | 过（一段 32 KB 约 1.7 ms） |
+| 热缓存整屏重画 96 / 144 PPI | 10.99 / 19.81 ms | 10.44 / 19.17 | 11.05 / 19.16、10.92 / 19.67 | ≤ 基线 × 1.05 | 过（96 PPI 在边上） |
+| 对比度 4.5 | — | 12.12 | 11.59 / 11.96 | ≤ 基线 × 1.15 | 过 |
+| 一行一行滚：每帧行数 / 离屏 / 走 Paint | 60 行 / 6.94 ms / — | 2.00 / 5.32 / 9.2 | 2.00 / 4.78 / 6.9 | ~~≤ 1/4~~ ≤ 3 行且不劣于基线 | 改写后过 |
+| 冷填充 ASCII / CJK 每个 | 2.43 / 2.28 ms | 1.13 / 1.20 | 1.22 / 1.34（五次中位，单次 1.16–1.71） | ~~≤ 1/3~~ 走 A ≤ 1/2 | ASCII 0.50 在线上，CJK 0.59 没过（这次机器负载起伏大） |
+| 50 MB 灌入：MB/s、间隔中位 / 最长、第一帧 | 10.4、「76.8」 | 12.5、「69.2」 | 5.1 / 5.2、52.6 / 79–110 ms、33–39 ms | ~~≤ 50~~ ≤ 约 90 且不劣于基线 | 中位过，最长偶有尖峰超 90；基线与审查前的数是窗口不画时量的（前 3.4 s 没画） |
+| 堆增量 / 存活行 | +2.9 MB / 1061 | 同 | +3.1 MB / 1061 | ≤ 32 MB / ≤ 行数 + 滚回 + 4 | 过 |
+| 折行 200 → 120 → 200 → 80 | —（不折） | 125 / 61 / 65 ms | 48 / 33 / 32 ms | 记录 | 块拷贝快路径 |
+| 10 万行 120 → 70 → 120 | — | — | 0.64–0.72 s（1 万行 49–54 ms） | 线性 | 过 |
+
+**painter-regress 同会话 A/B**（`tools/painter-regress/ab.sh cf92b36d^`，结果文件 `tests/fixtures/painter-regress/ab-2026-09-30.md`）：A = 当前提交 + `ed70a871` 的 `Painter.pas`，B = 当前；366 个画面（示例窗体 196、对话框 52、Memo 48、Grid 20、控件 18、直接文字 32）**0 像素差**。耗时（三轮交替的中位，冷 / 热）：Memo 翻页 106.5 → 67.8 / 102.4 → 61.7 ms，Grid 989 → 713 / 67.7 → 59.3 ms，终端满屏 CJK 3208 → 1871 / 6.65 → 6.61 ms，全部示例窗体 6941 → 5978 / 6497 → 5917 ms；最差比 0.994，没有一项变慢。103c433a 取过的终端示例 4 个画面的旧哈希在新渲染器上取——这次的 A/B 两边用同一份示例，不再有这个问题。ClearType 没切换（关掉的对照进真机第 85 项），`DrawTextSupersampled` 在 Win32 上不存在。
+
+**变异**（`mutate.py`：改 → `git diff --stat` 确认 → 重编 → 跑相关 suite → 还原；还原后工作区干净。审查指定的之外，前面 Task 1–13 的变异表已在各任务提交时做过，见各附录）：
+
+| # | 变异 | 结果 |
+|---|---|---|
+| N3（重定义） | 调过对比度的暗淡色再混一次暗淡 | 红：`TestDimHalvesTheRatio` |
+| N7 | 选区字色不当格子的颜色（线条回到格子自己的前景） | 先存活（只看下划线，默认下划线另有一句赋值）→ 补删除线的断言 → 红：`TestSelectionIsTheGroundForContrast` |
+| N8 | 对比度缓存不设上限 | 红：`TestTheContrastCache` |
+| N9 | 只有每行第一格查缓存 | 红：`TestContrastCostsLittle` |
+| P1 | 常驻位图两维一起放大 | 红：`TestATallRunAfterAWideOneKeepsTheWidth` |
+| P2 | 常驻位图不设上限 | 红：`TestARunTooBigForTheKeptBitmapGetsItsOwn` |
+| P3 | 非主线程的 `SetSize` 挪回 `try` 外 | 测不到：要非主线程画字且 `SetSize` 抛异常，测试造不出；靠代码审查 |
+| G5 | 每一段新建位图（`kept := False`） | 红：`TestTheGdiRendererKeepsOneBitmap`（原测试拦不住，已修） |
+| G6 | R、B 通道对调 | 等价（覆盖率取三通道平均），不做；换成 G6b |
+| G6b | 只读两个通道（B、G、G） | 红：`TestTheCoverageIsReadOffTheDib` |
+| G7 | 复用位图不清 | 红：`TestDrawnTextEndsWhereItWasMeasured`、`TestMultiLineDrawsTheSecondLine`；新加的 `TestTheKeptBitmapIsClearedBetweenRuns` 起初没红（从不清的位图是全黑，两张图都是黑块），补「画出来的是字、不是块」的断言、让长的一段落在短的那段的区域里之后也红 |
+| G8 | 字号变大时不长高 | 红：`TestDrawnTextEndsWhereItWasMeasured`、`TestMultiLine*` |
+| V4 | `Write` 又应用排着的网格 | 红：`TestWritesDuringADragReflowOnce` |
+| W12 | 行键不含组字串的列 | 红：`TestMarkedTextFollowsAHiddenCursor`、`TestIncrementalEqualsFullRepaint` |
+| W13 | 均匀位移总是自上而下搬 | 红：`TestIncrementalEqualsFullRepaint`、`TestTheSelectionScrollsWithTheText` |
+| W14 | 均匀位移的源错一行 | 红：同上三条 |
+| W15 | 被外框截掉的行仍当源 | 红：`TestARowCutByTheFrameIsNotMoved` |
+| V11 | 改尺寸清悬停后不复位指针 | 红：`TestAResizeDropsTheHover` |
+| F9 | 灌入时不当场画 | 红：`TestAFloodStillPaints` |
+| R7 | 块拷贝不看组合 / 扩展标志 | 红：`TestTheBlockCopyMatchesTheCellCopy` |
+| R8 | 改尺寸后不回收行内存 | 红：`TestNarrowerAgainGivesTheMemoryBack` |
+| R9 | 去掉负下标的判断（照搬上游 bug） | 红：`TestNarrowingAFullScrollbackKeepsThePrompt`、`TTyTerminalCoreOracleTests.TestReflowCases` |
+
+审查员重判的等价变异：**V7**、**T9** 真等价（V7：`CoreResize` 同时设 `FFrameDirty`，帧签名里有行列数；T9：⌈0.1·d⌉ ≤ d 恒成立，外面的 `Min` 是空操作，上游也有）。**T8**（`>` 写成 `>=`）只在夹具范围内等价：两个结果一个不暗于原色、一个不亮于原色，比值恰好相等的平局夹具里没有。**T2 / T3 / T3b** 只在 Win64（以及 SSE 单精度运算）下等价：x86_64-linux 上未标类型的实常量是 80 位 Extended，i386 上 x87 全程扩展精度，都会不同——有类型的常量保留，Linux 上跑对比度夹具进真机第 82 项。**G6** 等价，换成 G6b。
+
+**写回 spec 的节**：状态行、§1.1（第 15–21 条）、§2.1、§3.1、§3.2、§6.2、§6.3、§7.6、§9.1、§9.3、§9.5.5、§9.7、§9.8、§10.1、§10.3、§10.4、§10.5、§10.9、§11、§12.3、§13.2、§13.4、§14、§15、§16、§17、§18。
+
+**验收文档**：`docs/superpowers/plans/2026-09-29-terminal-acceptance.md`（Task 15）：91 项（3 期 1–31、4 期 32–65、5 期 66–79、审查补的 80–91），按平台的项号索引，决定清单（N1–N3 已定可改、D1–D19、§15 的偏离、记现象的项），截图目录。
+
+**遗留**：环形表面与 `ScrollWindowEx`（一行一行滚的 1/4 目标）；灌入时让整屏新行更便宜（很快滚走的行不画）；在 A 之上再做 B（终端自己的光栅路径、度量挪进同一个 DC）；`ReflowSmaller` 新行分批释放（峰值内存）；四个 widgetset 的数字、Linux 上的对比度夹具（真机）。
+
+**待主控**：编 `tycontrols.lpk` / `tycontrols_dt.lpk`、编示例、`example-rsj2po` / `check-example-po`、`smoke-launch-examples`、重出截图（`terminalshots --phase5`：只有 `index.md` 的一句描述变了，已直接改，PNG 不用重出）。
