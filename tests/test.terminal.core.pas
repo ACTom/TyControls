@@ -107,6 +107,7 @@ type
     procedure TestResizeMidChunkParsesTheRestFirst;
     procedure TestWriteSyncMidChunk;
     procedure TestDiscardMidChunk;
+    procedure TestAPieceEndsInsideACharacter;
     procedure TestAHandlerRaisingMidChunk;
     procedure TestCallbacksRunInOrder;
     procedure TestCallbackMayWriteAgain;
@@ -2064,6 +2065,9 @@ begin
     ref.WriteSync(s);
     ref.Resize(40, 10);
     AssertSameScreen('as a whole chunk, then the resize', ref, r.Core);
+    { the text repeats every ten lines: a chunk parsed twice from its start ends on the same
+      screen; the lines that went by through the scrollback tell them apart }
+    AssertEquals('as many lines went by', ref.Buffer.TrimmedLines, r.Core.Buffer.TrimmedLines);
   finally
     r.Free;
     ref.Free;
@@ -2090,9 +2094,41 @@ begin
     ref.WriteSync(s);
     ref.WriteSync('x');
     AssertSameScreen('the rest of the chunk, then x', ref, r.Core);
+    AssertEquals('as many lines went by', ref.Buffer.TrimmedLines, r.Core.Buffer.TrimmedLines);
   finally
     r.Free;
     ref.Free;
+  end;
+end;
+
+{ a piece boundary inside a UTF-8 character: the decoder carries its first bytes over to
+  the next piece (the character is the last thing on the screen) }
+procedure TTyTerminalWriteQueueTests.TestAPieceEndsInsideACharacter;
+var
+  r: TQueueRig;
+  ref: TTyTerminalCore;
+  s: RawByteString;
+  line: string;
+  cut: Integer;
+begin
+  for cut := 1 to 2 do
+  begin
+    r := TQueueRig.Create(20, 6);
+    ref := TTyTerminalCore.Create(20, 6);
+    try
+      s := LinesOfText(TyTermMaxParseBuffer - cut) + #$E4#$B8#$AD'X';
+      r.Core.Write(s, @r.OnDone, 1);
+      r.Step := 20;
+      while r.Core.ProcessPending do ;
+      AssertEquals('the callback once', 1, Length(r.Done));
+      ref.WriteSync(s);
+      AssertSameScreen(Format('cut %d bytes into the character', [cut]), ref, r.Core);
+      line := r.Core.Buffer.TranslateBufferLineToString(r.Core.Buffer.YBase + r.Core.Buffer.Y, True);
+      AssertEquals('the line ends with the character and X', #$E4#$B8#$AD'X', Copy(line, Length(line) - 3, 4));
+    finally
+      r.Free;
+      ref.Free;
+    end;
   end;
 end;
 
