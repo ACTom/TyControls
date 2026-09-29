@@ -50,6 +50,12 @@ const GENERATED = [
   'tests/fixtures/terminal-paste.json',
   'source/tyControls.Terminal.CustomGlyphs.inc',
   'tests/fixtures/terminal-view-palette.json',
+  // phase 4: selection (selection-cases.js), links (url-cases.js), OSC 52
+  // (clipboard-cases.js), mouse event mapping and geometry (mouse-cases.js)
+  /^tests\/fixtures\/terminal-selection(-[0-9]+)?\.json$/,
+  /^tests\/fixtures\/terminal-links(-[0-9]+)?\.json$/,
+  /^tests\/fixtures\/terminal-osc52(-[0-9]+)?\.json$/,
+  /^tests\/fixtures\/terminal-mouse-events(-[0-9]+)?\.json$/,
 ];
 
 function isGenerated(rel) {
@@ -120,6 +126,14 @@ const PORTED = [
   // phase 3: the box-drawing and block glyphs the WebGL addon draws itself
   ['addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts',
     `addons/addon-webgl/${OUT_DIR}/customGlyphs/CustomGlyphDefinitions.js`],
+  // phase 4: the selection, the mouse, links, OSC 52 (loadBrowserParts)
+  ...['browser/services/SelectionService', 'browser/selection/SelectionModel', 'browser/input/Mouse',
+    'browser/services/MouseService', 'browser/OscLinkProvider', 'browser/Linkifier',
+    'browser/renderer/dom/DomRendererRowFactory', 'common/buffer/BufferRange',
+  ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
+  ['addons/addon-web-links/src/WebLinkProvider.ts', `addons/addon-web-links/${OUT_DIR}/WebLinkProvider.js`],
+  ['addons/addon-web-links/src/WebLinksAddon.ts', `addons/addon-web-links/${OUT_DIR}/WebLinksAddon.js`],
+  ['addons/addon-clipboard/src/ClipboardAddon.ts', `addons/addon-clipboard/${OUT_DIR}/ClipboardAddon.js`],
 ];
 
 function checkBuildFresh() {
@@ -147,6 +161,65 @@ function loadUpstream() {
     UC: need(`${g}/third-party/UnicodeProperties.js`),
     UnicodeTrie: need(`${g}/third-party/unicode-trie.js`).default,
     propsSourceFile: path.join(XTERM, g, 'third-party', 'UnicodeProperties.js'),
+  };
+}
+
+// PHASE 4: THE BROWSER LAYER. The selection service, the mouse service's event
+// mapping, the link providers, the Linkifier and the clipboard addon are browser-layer
+// code, but none of the parts we port touches the DOM: they run in node on a headless
+// terminal, called through their prototypes or constructed with the few fake objects
+// fakeBrowser() makes. The fakes only hand back points and sizes -- no logic.
+// Call after loadUpstream() (NODE_PATH must be set for the addons).
+function loadBrowserParts() {
+  const o = p => need(`${OUT_DIR}/${p}.js`);
+  const wl = `addons/addon-web-links/${OUT_DIR}`;
+  const { WebLinksAddon } = need(`${wl}/WebLinksAddon.js`);
+  // strictUrlRegex is not exported: activate the addon on a fake terminal that only
+  // records the provider it is given, and read the provider's _regex.
+  let captured;
+  new WebLinksAddon().activate({ registerLinkProvider: p => { captured = p; return { dispose() {} }; } });
+  const strictUrlRegex = captured && captured._regex;
+  if (!(strictUrlRegex instanceof RegExp)) throw new Error('WebLinksAddon did not hand its regex to registerLinkProvider');
+  // the same text as the pinned source's line (a stale or edited build is refused)
+  const src = gitBlob('addons/addon-web-links/src/WebLinksAddon.ts').toString('utf8');
+  const m = src.match(/^const strictUrlRegex = \/(.*)\/;\r?$/m);
+  if (!m) throw new Error('strictUrlRegex not found in WebLinksAddon.ts');
+  if (m[1] !== strictUrlRegex.source || strictUrlRegex.flags !== '') {
+    throw new Error(`strictUrlRegex: the build has /${strictUrlRegex.source}/${strictUrlRegex.flags}, the source /${m[1]}/`);
+  }
+  return {
+    SelectionService: o('browser/services/SelectionService').SelectionService,
+    DomRendererRowFactory: o('browser/renderer/dom/DomRendererRowFactory').DomRendererRowFactory,
+    Linkifier: o('browser/Linkifier').Linkifier,
+    OscLinkProvider: o('browser/OscLinkProvider').OscLinkProvider,
+    MouseService: o('browser/services/MouseService').MouseService,
+    getCoords: o('browser/input/Mouse').getCoords,
+    LinkComputer: need(`${wl}/WebLinkProvider.js`).LinkComputer,
+    strictUrlRegex,
+    ClipboardAddon: need(`addons/addon-clipboard/${OUT_DIR}/ClipboardAddon.js`).ClipboardAddon,
+  };
+}
+
+// The objects SelectionService's constructor and handlers read, for a terminal of
+// ROWS rows whose cells are CELL_H CSS pixels high. state.point is the point the
+// next getCoords answers (1-based, as getCoords answers), state.link the Linkifier's
+// currentLink. Nothing here decides anything.
+const CELL_H = 10;
+function fakeBrowser(rows, state) {
+  const doc = { addEventListener() {}, removeEventListener() {} };
+  const screenElement = { ownerDocument: doc, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  const element = { ownerDocument: doc, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  const window = {
+    requestAnimationFrame: () => 0, setInterval: () => 1, clearInterval() {},
+    getComputedStyle: () => ({ getPropertyValue: () => '0' }),
+  };
+  return {
+    element, screenElement, window,
+    linkifier: { get currentLink() { return state.link; } },
+    // a fresh array every call: the model keeps it and changes it in place
+    mouseCoordsService: { getCoords: () => (state.point ? [state.point[0], state.point[1]] : undefined) },
+    renderService: { dimensions: { css: { canvas: { height: rows * CELL_H } } } },
+    coreBrowserService: { window, dpr: 1 },
   };
 }
 
@@ -290,4 +363,5 @@ module.exports = {
   XTERM, OUT_DIR, PIN, ROOT, GENERATED, VARIANTS,
   upstreamInfo, loadUpstream, makeTerminal, useVariant, runsOf, checkTrieDecode,
   writeGenerated, writeFixture, isGenerated, gitBlob,
+  loadBrowserParts, fakeBrowser, CELL_H,
 };
