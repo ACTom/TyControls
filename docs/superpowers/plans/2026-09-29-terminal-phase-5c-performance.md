@@ -118,6 +118,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 1**：`TTyGdiTextRenderer` 加一个常驻 `TBitmap`（`pf24bit`，只长不缩，析构释放）；`InternalTextOutAngle` 复用它（每次按需 `SetSize` 变大、只清要用的矩形）；不再 `TBGRABitmap.Create(tmp)`，直接读 `TBitmap` 的扫描线算覆盖率，其余（量尺寸、位置取整、`DrawText`、`FastBlendPixel`）一字不改。
 - [ ] **Step 2: 测试**：`TPainterTest` 加 `TestTheGdiRendererKeepsOneBitmap`（画 200 段文字后创建的位图数 ≤ 2，计数是给测试的类变量）；全库文字像素测试（全量里的 `TPainterTest`、各控件的 golden）不许有变化——Task 14 的全量就是判据。变异 G5：每次新建位图（`KeepsOneBitmap` 红）；G6：读扫描线时 R、B 通道写反（golden 红）。
+> **用户追加的测试要求（2026-09-29，用户选 A 时一并提出，优先于上面 Step 2 的判据）**：这是全库共享的文字管线，影响面按「所有控件」算，**尤其 Memo、Grid**。必须做到：
+> 1. **改动前先留基线**：在改 `Painter.pas` 之前的提交上，用一个离屏出图工具（`tools/painter-regress/`，照 `tests/test.dpi.support` 的 `TyTestPaintTree` 与 `test.dpi.snapshot` 的做法，不开窗口；工程直接引用 source 路径，不依赖 .lpk）把以下画面渲染成位图并记录逐像素内容（存 PNG 或哈希清单进 `tests/fixtures/painter-regress/`）：
+>    - **全部示例窗体**（`examples/*` 的主窗体，与 `test.dpi.snapshot` 同一范围），PPI 96 / 120 / 144 / 192；
+>    - **Memo 专项**：中英混排、CJK、emoji、制表符、长行横向滚动、选区、只读、禁用、不同字号与粗斜体、ClearType 开/关两种系统设置下（若能在进程内切换就切，不能就按当前机器设置并在签收写明）；
+>    - **Grid 专项**：表头、多行单元格、CJK 与 emoji 单元格、选中行、固定行列、排序箭头旁文字、编辑器内文字、按 PPI 缩放；
+>    - 其余文字密集控件：Edit、ComboBox、ListBox、TreeView、ListView、Label（含换行与省略号）、Button、TabStrip、MenuBar/Menu、StatusBar、HintWindow、Breadcrumb、对话框（About、FileDialog 等）、Terminal 本身；
+>    - 旋转文字（`DrawTextRotated`）、超采样文字（`DrawTextSupersampled`）、双向文字（`DrawTextLineBidi`）这几条路径各一例。
+> 2. **改动后逐像素对照**：同一工具在改动后的提交上重跑，**全部画面必须逐像素相同**（0 像素差）。若有差异，一律视为回归，定位原因修掉；确属必要的差异（不应该有）先停下交主控问用户。对照结果（画面数、像素差为 0）写进签收。
+> 3. **性能前后对比**：同一工具量「首帧」耗时（冷缓存）与重复绘制耗时，至少覆盖 Memo（1 万行满屏、滚动一页）、Grid（100×20 满屏）、示例窗体整体、Terminal 满屏 CJK；前后数字进签收，任何控件变慢超过 10% 视为回归。
+> 4. **变异**：除 G5、G6 外，加一条「复用位图时没清干净上一次的像素」（残留像素会让基线对照红），以及「复用位图在字号变大时没长大」（截字会红）。
+> 5. **全量**里原有的 `TPainterTest`、各控件 golden、`test.dpi.*` 全部保持原样通过（本机已知失败的 `TPainterTest.TestTextIsInkedAsWindowsInksIt` 维持现状，不许因改动而变化其失败信息以外的结果——在签收里对比改动前后它的实测值）。
+> 6. 工具与基线进 git；以后任何人改 `Painter.pas` 都能重跑这套对照。
+
 - [ ] **Step 3: 提交** `perf(painter): the Windows text renderer keeps one bitmap`（正文说明：全库的首帧文字都受益；像素不变），结尾 Co-Authored-By 行。终端的光栅器不改。
 
 ---
