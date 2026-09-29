@@ -482,12 +482,29 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### 实验记录（Task 0 Step 7 填）
 
-- 合并：main 合进来的提交、合并后基线条数：
-- E1（Win32）：表格（配置 × 簇 × 字体）：
-- E1（Qt6 on Windows）：
-- E1 结论：各平台 `monospace-wide` 的默认值：
-- E2（Win32）：三种做法 × 三组颜色的平均绝对差、实心占比；冷填充、热缓存用时：
-- E2 结论：遮罩做法：
+- 合并：主控把 main 合进 `feat/terminal`（`3c86b8c7`，含 `b23893ba` Win32 ClearType 文字管线），无冲突。期末审查修复前全量 8133 条（2 条与本期无关的红：本机环境下的 ClearType 墨量测试、当时还没生成图标的 `TPaletteIconTest`）。
+- E1（Win32，`fontprobe --e1`，期末审查修复后重跑，数字不变）：主字体 Consolas，候选宽字体 Microsoft YaHei。
+
+  | 配置 | 度量（基线 / 行高 / `TextSize('Ag').cy` / 中文 `cy`） | 格宽 × 格高 | Consolas 画 CJK（中 文 あ） | 한 / U+20000 | 表情（😀、👍🏽、🇨🇳） | 框线 / █ | Powerline E0A0 / E0B0 | YaHei 画同一批 |
+  |---|---|---|---|---|---|---|---|---|
+  | 9pt@96 | 11 / 14 / 14 / 14 | 7 × 14 | 2.00 格，墨迹在格内 | 1.29 / 1.71 格 | 1.3–1.7 格，单色 | 上下出格 | 缺字 | 1.71 格；U+20000、表情墨迹出格（第 15 行，格高 14） |
+  | 9pt@144 | 17 / 22 / 22 / 22 | 10 × 22 | 2.00 格，在格内 | 1.50 / 2.10 | 1.5–1.9，单色 | 上下出格 | 缺字 | 表情出格 |
+  | 12pt@96 | 15 / 19 / 19 / 19 | 9 × 19 | 2.00 格，在格内 | 1.33 / 2.00 | 1.4–1.9，单色 | 上下出格 | 缺字 | 表情出格、被截 |
+  | 12pt@144 | 23 / 28 / 28 / 28 | 13 × 28 | 2.00 格，在格内 | 1.46 / 2.00 | 1.5–2.0，单色 | 上下出格 | 缺字 | 中文墨迹到最后一行 |
+
+- E1（Qt6 on Windows）：没跑（本机没有 Qt6 运行库），进真机验收第 1 项。
+- E1 结论：Windows 上 `monospace-wide` = 空串（Consolas 经系统字体链接把 CJK 画成两格、在格内；YaHei 反而出格）；macOS `PingFang SC`、Linux `Noto Sans CJK SC`（按证据，待真机）。表情单色、Powerline 缺字，都是已知限制。格高 = `Lineheight`，与 `TextSize('Ag').cy`、中文字高相同。
+- E2（Win32，`fontprobe --e2`，期末审查修复后重跑）：有墨像素对参照的平均差（每通道 0–255），三组颜色依次是黑 / 白、白 / `#1e1e1e`、`#cc0000` / 白：
+
+  | 做法 | 96 PPI | 144 PPI | 实心占比（黑 / 白；参照 12.4% / 21.0%） |
+  |---|---|---|---|
+  | （a）3× 超采样 | 39.5 / 34.6 / 28.3 | 44.0 / 38.6 / 31.8 | 0.3% / 8.5% |
+  | （b）直接画 | 0.07 / 0.06 / 0.05 | 0.02 / 0.02 / 0.02 | 17.2% / 30.6% |
+  | （c）遮罩 + 伽马混合（`FillMask` dmDrawWithTransparency） | 27.0 / 19.3 / 18.1 | 23.8 / 15.8 / 15.9 | 12.0% / 23.6% |
+  | （c）遮罩 + 线性混合（`FillMask` dmLinearBlend 或自写循环，结果相同） | 0.43 / 0.28 / 0.32 | 0.36 / 0.19 / 0.27 | 17.2% / 30.6% |
+
+  用时（5 次中位数）：探针自己的（c）冷填充 380 次 575 / 597 ms（每个 1.5 / 1.6 ms）；控件的光栅器冷填充 709 / 712 ms（每个 1.87 ms——多量一次前进宽度；时间花在库的 Win32 文字渲染器每次新建 `TBitmap` 再转换）；热缓存 200 × 60 整屏：`FillMask` 20.0 / 32.3 ms，自写循环 7.6 / 13.9 ms，控件的行绘制器（真行、底色、查缓存、着色，不贴）10.1 / 16.4 ms，满屏 tmux 框线同样 10.0 / 16.4 ms。控件里连贴图（常驻 DIB 上只计 `RenderTo`，96 PPI）：ASCII 11.8 ms、tmux 框线 11.8 ms、mc 双线框 + 阴影 12.0 ms（修复前 10.4 / 2550 / 5348 ms）；冷填充 380 个字形在控件里按帧摊开，约 900 ms、68 帧。
+- E2 结论：遮罩做法选（c），着色用和 `TTyGdiTextRenderer` 同一个非伽马混合（自写循环）；所有平台同一套，不另做超采样。热缓存整屏在 96 PPI 下 ≤ 16 ms 达标；冷填充每个 1.87 ms 超过 1 ms 的判据但低于 5 ms，记数字，靠每帧光栅化预算不卡帧；要再快得改库的 Win32 文字渲染器（`Painter.pas`，共享文件），交主控。
 
 ---
 
@@ -497,11 +514,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: 本计划（签收记录）、`docs/superpowers/specs/2026-09-28-terminal-view-design.md`（写回）
 - 修复时按需改 Task 1–19 的文件
 
-- [ ] **Step 1: 一次编译 + 本期全部 suite + 全量**
+- [x] **Step 1: 一次编译 + 本期全部 suite + 全量**
 
 「跑测试的固定套路」3d 行的 `SUITES` 和全量命令。Expected：本期 suite 全 0 / 0；全量 errors / failures 为 0、总数 = Task 0 基线 + 本期新增。红了集中修：分清是移植错、夹具错还是控件错——键盘**以上游为准**；修复提交 `fix(terminal): ...`，一个问题一个提交。全量红而单跑绿，按地雷 10 排查。
 
-- [ ] **Step 2: 重跑生成，确认可复现**
+- [x] **Step 2: 重跑生成，确认可复现**
 
 ```bash
 cd /d/Projects/ty-3.1 && node tools/terminal-oracle/regen-all.js --expect-clean && node tools/terminal-oracle/light-palette.js --check
@@ -509,9 +526,9 @@ cd /d/Projects/ty-3.1 && node tools/terminal-oracle/regen-all.js --expect-clean 
 
 Expected：`clean`；`light.tycss` 的浅底 16 色与脚本算出的相同。
 
-- [ ] **Step 3: 规模与用时记录**：新夹具的字节数与用例数；本期各 suite 用时；E2 的数字在真控件上再量一次（探针 `--e2` 之外，用 `TTyTerminalViewPaintTests` 里的热缓存用例打印用时，只打印不断言）。
+- [x] **Step 3: 规模与用时记录**：新夹具的字节数与用例数；本期各 suite 用时；E2 的数字在真控件上再量一次（探针 `--e2` 之外，用 `TTyTerminalViewPaintTests` 里的热缓存用例打印用时，只打印不断言）。
 
-- [ ] **Step 4: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）
+- [x] **Step 4: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）
 
 逐条记「在哪一行实现 / 为什么不需要 / 挪到几期」：
 - §2.1：三个新单元的依赖方向（Keyboard 不引 Forms；Render 不引控件；控件引全部）、进运行时包、两个 `.inc` 不进清单。
@@ -527,7 +544,7 @@ Expected：`clean`；`light.tycss` 的浅底 16 色与脚本算出的相同。
 - §14：新单元头、`CustomGlyphs.inc` 头、notices。
 - 2 期交接九条、1 期遗留两条文档项逐条对上。
 
-- [ ] **Step 5: 【主控执行】编包、编示例、截图**
+- [x] **Step 5: 【主控执行】编包、编示例、截图**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; lazbuild -B tycontrols_dt.lpk > /tmp/term-dt.txt 2>&1; tail -3 /tmp/term-dt.txt; lazbuild -B examples/terminal/terminal_example.lpi > /tmp/term-ex.txt 2>&1; tail -3 /tmp/term-ex.txt; git status --short
@@ -538,11 +555,11 @@ Expected：三个都编过；`git status` 只多出预期的生成物（`.pot` �
 2. `powershell -File scripts/smoke-launch-examples.ps1`（至少终端示例起得来、有窗口）。
 3. **截图（给期末一次性验收）**：示例播放 `ls-color.cast`、`vim-edit.cast`、`htop-few-frames.cast`、`cat-cjk-emoji.cast` 各停在最后一帧；17 个主题 × 明暗 = 34 张 `ls-color` + 一张专门的 16 色样例（`printf` 出 0–15 前景、背景各一行，写成 `examples/terminal/recordings/palette.cast`，Task 17 里做）× 34；7 / 15 的样例单独放大一张（开工前问题一第 3 条）。存 `docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`（PNG 进 git，单张 ≤ 300KB）。
 
-- [ ] **Step 6: 集中变异**（每条三拍，必须红）
+- [x] **Step 6: 集中变异**（每条三拍，必须红）
 
 各任务变异表：K*（Task 1–3）、R*（Task 4–6）、V*（Task 7–10）、I*（Task 11–14）、T*（Task 15–19）。JS 侧的变异改完跑对应生成脚本、确认失败后改回，`regen-all.js --expect-clean` 仍然 `clean`。结果逐条记进签收记录；没红的当场补强。
 
-- [ ] **Step 7: 整体代码质量审查**
+- [x] **Step 7: 整体代码质量审查**
 
 对 `git diff <Task 0 合并后的 HEAD>..HEAD`：
 - `TyTerminalEvaluateKey` 与 `Keyboard.ts:38-380` 逐分支对照（重点：`modifiers` 位的算法、`metaKey` 早退的三个方向键、PgUp / PgDn 只看 Ctrl 的那两句、默认分支四个 `else if` 的顺序）；注释里的行号都要对得上。
@@ -552,11 +569,11 @@ Expected：三个都编过；`git status` 只多出预期的生成物（`.pot` �
 
 审出来的问题修完回到 Step 1。
 
-- [ ] **Step 8: 写回 spec 原处，标「实现期修正（3 期）」**
+- [x] **Step 8: 写回 spec 原处，标「实现期修正（3 期）」**
 
 至少：§1.1（新增：上游不看应用小键盘模式；第三层 Shift 三项）；§2.1（`Terminal.Render` 单元、`CustomGlyphs.inc`）；§8.4（`AltGraph`、`AKeyPress`）；§9（类声明本期只有两个接口；§9.1 本期属性、4 期才加的几个；§9.2 `OnOsc` 无 `AHandled`；§9.3 `SizeForGrid`；§9.4 可出字符的键不清零、`FKeyDownHandled`；§9.7 条宽恒扣、备用屏禁用不拿掉；§9.9 放 3 期）；§10.1（表面位图、`DrawPart`）；§10.2（格高实测）；§10.3（E1 / E2 结论、`monospace-wide`、做法（c））；§10.4（缓存键按 E2）；§11（`:focus`、`font-family` 由控件读 token、`on()` 是 Rec.601 亮度）；§12.1（示例实际菜单、录制拷进示例）；§13.2（本期脚本与测试单元）；§14（notices 标题）；§16（E1 / E2 已在 Win32 跑过的部分）；§18（3 / 4 期边界的挪动）；开工前问题一的三条结论。
 
-- [ ] **Step 9: 签收记录写进本计划末尾，提交**
+- [x] **Step 9: 签收记录写进本计划末尾，提交**
 
 写：全量条数（基线 → 签收）、提交区间、各 suite 用时、夹具体积与用例数、E1 / E2 结论、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、遗留、给 4 期的交接（鼠标按键上报接 `TriggerMouseEvent`、选区与 `CopyToClipboard`、右键菜单与「清屏」、`OnScrollbackCleared` 清选区、覆盖键、横向滚轮、PRIMARY、OSC 52、链接）；更新「真机验收项汇总」。
 
@@ -601,3 +618,67 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 16 | DPI | Win32 125% / 150%、每显示器切换 | 拖窗口跨屏 | 格子数、字形重建，不糊不错位 |
 | 17 | 光标闪烁 | 各平台 | `CursorBlink = True`，放着不动 5 分钟 | 600ms 闪烁；5 分钟后停在显示 |
 | 18 | 设计期 | Lazarus IDE（Win32） | 面板图标、放一个到窗体、换主题 | 图标对；预览 16 色随主题变；没有滚动条和计时器 |
+| 19 | OSC 改色后整屏更新 | 各平台 | 在真 shell（4 期）或录制里 `printf '\e]11;#203040\a'`、再 `printf '\e]111\a'` | 整个终端连内边距一起变色、变回，没有残留的旧底色条 |
+| 20 | 候选窗位置在切焦点之后 | Win32 | 在示例旁放的 Memo / Edit 里打中文，再点回终端打中文 | 候选窗在终端的光标格，不留在 Memo / Edit 的位置 |
+| 21 | AltGr | Linux GTK2、Qt6（德语、法语布局） | 同第 7 项 | 出布局上的字符，不发 ESC 前缀 |
+| 22 | 切应用时的焦点报告 | 各平台 | 程序打开 1004（`printf '\e[?1004h'`）后 Alt+Tab 切走再切回 | 键码面板依次出 `1B 5B 4F`、`1B 5B 49`；光标变空心框、停闪，回来恢复 |
+| 23 | 同步输出（2026） | 各平台 | neovim、tmux 里快速滚动 / 重绘；再用一个只开 2026 不关的脚本 | 画面不撕裂；只开不关的 1 秒后恢复刷新 |
+| 24 | 表面位图不整块黑 | GTK2、Qt6、Cocoa | 示例正常播放、拖动改尺寸、局部重画（光标闪烁） | 没有整块黑（pf24bit 的坑，[[opaque-device-cache-pf24bit]]）；非 Win32 的贴图走 `DrawPart`，顺带看局部重画的耗时 |
+| 25 | 滚轮手感 | 各平台（触控板、高精度滚轮） | 主屏滚回、less 里、Shift+滚轮 | 触控板不过灵、不丢格；Shift+滚轮在 Win / Linux 上不动、在 macOS 上滚滚回 |
+| 26 | 浅底 3 号色取舍 | —（看截图） | `…-shots/ansi-3-{xp,macos,breeze}-light-15x.png`、`palette-*-light.png`、`ansi-7-15-default-light-2x.png` | 用户在（a）以最暗浅底重算、（b）终端底色改用更白 token、（c）维持 三者中定；7 / 15 调不调 |
+| 27 | Shift+Home / End | Win32 PSReadLine、nano | 按 Shift+Home / Shift+End | 现在是本地到顶 / 到底；用户定去留（spec §15） |
+| 28 | 禁用态外观 | 各平台 | 示例里临时把终端 `Enabled := False` | 整块按 `:disabled` 的 opacity 变淡，字、底色、内边距、外框一致 |
+| 29 | 高 DPI 下「按录制尺寸」 | Win32 125% / 150% | 点「按录制尺寸」 | 网格正好是录制的行列数（状态栏显示），不多不少 |
+| 30 | 满屏框线的流畅度 | 各平台 | 播放 `tmux-split.cast`；真 mc / tmux（4 期） | 不卡；框线连续 |
+| 31 | macOS 输入法 | Cocoa | 拼音输入、取消、死键（´ + e） | 组字串画在光标处，提交发一次、取消不发；死键的 é 只发一次 |
+
+---
+
+## 3 期签收（2026-09-29）
+
+- **全量**：期末审查修复前 8133 条（2 红与本期无关）→ 签收 8168 条（+35：渲染 5、控件 14、像素 5、输入 5、示例 6），唯一的红是 main 合进来的 `TPainterTest.TestTextIsInkedAsWindowsInksIt`（本机 ClearType 环境，不属本期）；`TPaletteIconTest` 在主控生成图标（`00c285cb`）后转绿。最后一次是集中变异之后 `lazbuild -B` 重编再跑的全量。
+- **提交区间**：`79787801..HEAD`（开工的问题记录到本签收）。期末两轮审查（规格核对 + 代码质量）的修复在 `82a2855d..668c24bb` 与本签收：渲染（自绘字形进缓存、64 位键、格数编码、行缓冲复用、块光标下隐藏字、光栅化预算）、括号粘贴一次分配、`Core.DiscardPending`、控件（解析中滚动只做一次、改色整窗重画、帧率上限、Win32 直接贴 DIB、关双缓冲、表面按块、状态失效只在外框变化时、禁用预混、实例样式的色表、只在色表变化时通知且不在绘制里通知、系统焦点、改字体 / 查询度量都重排、候选窗每帧设与聚焦刷新、macOS 输入法、任意键点击取焦点、`KeyUp` 清标志、Shift+滚轮、上报坐标钳制、Kitty / win32-input 屏蔽、去掉多余的滚到底处理器）、示例（流控回放、换录制丢弃排队数据、读失败保留原录制、宽高钳制、`idle_time_limit`、键码面板上限、「一次喂完」翻译、`ActiveControl` 进 `.lfm`、粘贴按钮）、控件文档、探针、截图工具与截图、spec 写回。
+- **生成物**：`regen-all.js --expect-clean` clean，`light-palette.js --check` 一致。
+- **E1 / E2**：见上面「实验记录」（本批修复后重跑）。性能前后（常驻 DIB 上只计 `RenderTo`，200 × 60，96 PPI）：ASCII 10.4 → 11.8 ms、tmux 框线 2550 → 11.8 ms、mc 双线框 5348 → 12.0 ms；冷填充 380 个字形 872 ms 一帧卡住 → 约 900 ms 摊在 68 帧（每帧不超过 10 ms 的预算）。
+- **变异**（每条：改一行 → 确认命中一次 → 编译 → 跑相关 suite → 必须红 → 改回）：
+
+  | # | 变异 | 结果（红的测试） |
+  |---|---|---|
+  | 1a | 自绘字形缓存键去掉阴影相位 | 红：`TestDrawnGlyphsAreCachedPerCellAndPhase` |
+  | 1b | 自绘字形缓存键去掉格宽、格高 | 红：同上 |
+  | 2 | 解析后不比颜色签名（不整窗重画） | 红：`TestColourChangesRepaintTheWholeWindow` |
+  | 4 | `LM_KILLFOCUS` 不报失焦 | 红：`TestSystemFocusDrivesTheReports` |
+  | 5 | 每次滚动当场失效、同步滚动条 | 红：`TestScrollingIsFlushedOncePerParse` |
+  | 6 | 一次异步调用只跑一片（没有帧率上限） | 红：`TestSlicesRunOnWithinAFrame` |
+  | 8a | 禁用时不预混 | 红：`TestDisabledDimsTowardTheParent` |
+  | 8b | 预混的键不含 `Enabled` | 红：同上 |
+  | 9a | 查询度量变了不重排 | 红：`TestAQueryRelaysOutTheGrid` |
+  | 9b | 改字体不重排 | 红：`TestAFontChangeRelaysOutTheGrid` |
+  | 11 | 候选窗锚的行列写反 | 红：`TestTheImeAnchorIsTheCursorCell`（走真路径：有句柄、聚焦、画一帧后问 `GetImeCaretRect` / `ImeCaretBoundClient`） |
+  | 12a | 色表不看实例的类和覆盖 | 红：`TestAnInstanceGroundPicksItsSixteenColours` |
+  | 12b | 16 色不按实例底色重求 | 红：同上 |
+  | 13a | V22：模式一打开就开计时器 | 红：`TestTheSyncTimerWaitsForARowOnScreen`（新）、`TestTheSyncTimerStartsAtTheFirstHeldRow` |
+  | 13b | I27：删掉 `MouseDown` 的取焦点 | 红：`TestAnyButtonTakesFocus`（中键、右键） |
+  | 14 | 码位键不含粗体 | 红：`TestSingleCodePointsAreCachedByCode` |
+  | 16 | 格数塞回半字节 | 红：`TestGlyphKeysKeepCellCountsApart` |
+  | 25 | 块光标下照画隐藏字 | 红：`TestHiddenTextStaysHiddenUnderTheCursor` |
+  | 26a | Shift+滚轮当普通滚轮 | 红：`TestShiftWheelIsLeftAlone` |
+  | 26b | 上报像素不钳 | 红：`TestReportedWheelPixelsStayInTheGrid` |
+  | 28a | 读录制先清掉旧的再解析 | 红：`TestAFailedLoadKeepsTheRecordingBefore` |
+  | 28b | 头部宽度不钳 | 红：`TestTheGridIsClamped` |
+  | 29 | 回放不等在途的块就写下一块 | 红：`TestOneChunkInFlight`、`TestAllAtOnceIntoARealTerminal`（60 MB 一次喂完溢出） |
+
+  审查确认的真等价：I5（`UTF8KeyPress` 不看 `FKeyDownHandled`——那几个键的字符本来就被控制字符过滤丢掉）、I16（不接 `OnRequestScrollToBottom`——Core 自己滚到底；本批把这个多余的处理器删了）、I17（输入法键不早退——上游对 229 本来没有编码、不算本地动作）；不适用：R9（`translateArgs` 的钳制上界——自绘路径只裁不钳）、V40（映射忽略 `YDisp`——Core 报的已是视口行）。翻案补测：V22、I27 见上表。
+- **编包 / 编示例**：本批没动 `.lpk`、没动设计期包；示例改了 `umain.pas` / `.lfm` / `uasciicast.pas` / `.po`，**待主控编示例**（`lazbuild -B examples/terminal/terminal_example.lpi`，再按惯例跑 `example-rsj2po.py` 核 `.po`；本批已手工补了四条新字符串的译文，`check-example-po.py`、`check-lfm-props.py` 都过）。macOS 输入法（`TTyCocoaImeHandler`、`LM_IM_COMPOSITION`）只在 `{$IFDEF LCLCocoa}` 下编，Win32 上编不到，待 Cocoa 构建。
+- **截图**：`docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`（79 张 + `index.md`，由 `tools/terminal-shots` 离屏生成，单张 ≤ 16 KB）：17 主题 × 明暗的彩色 ls 与 16 色样例、vim / htop（程序退出前的最后一屏）/ 中英表情各明暗一张、7 / 15 号色放大、xp / macos / breeze 浅底的 3 号色放大。抽查了默认浅色 16 色、xp 暗色 ls、htop 暗色、vim 浅色、CJK 表情、两张放大色样：画面正常，没有整块黑、白、空白或哨兵色。
+- **浅底对比度**：按主控决定暂维持（c），数字与三个选项写进 spec §11、§17.1 第 4 条，最终验收看截图定（真机验收第 26 项）。
+
+### 给 4 期的交接
+
+- 选区（字符 / 词 / 行 / 列、自动滚动、锚点随行走、`OnScrollbackCleared` 清选区）与 `CopyToClipboard`、`WriteClipboardText`；主题键 `TyTerminalSelection` / `TyTerminalLink` 与 token 已在基础层、解析得出，还没有使用者。
+- 右键菜单（`ITyTextEditActions`）与「清屏」的 resourcestring / i18n。
+- 链接（OSC 8 + 网址识别、悬停、Ctrl+单击）。
+- 鼠标全套经 `Core.TriggerMouseEvent`：按键上报、覆盖键、横向滚轮、中键、PRIMARY、OSC 52 三种策略；上报坐标沿用本期的钳制。
+- PTY 示例（ConPTY / forkpty），`OnGridResize` → 改 PTY 尺寸，写入走本期示例的流控写法。
+- `Win32InputMode` 与 ConPTY 鼠标：先真机观察 ConPTY 实际发什么；控件不编码 win32-input 时继续屏蔽该扩展。
+- 冷启动光栅化（Win32 每个字形约 1.9 ms）的根在库的 `TTyGdiTextRenderer`（每次新建 `TBitmap` 再转换，`Painter.pas`），要提速得改共享文件，交主控定。
