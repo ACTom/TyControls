@@ -46,6 +46,7 @@ uses
   tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
+  tyControls.AdvChart.Calendar,
   tyControls.AdvChart.Graph,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
@@ -181,6 +182,8 @@ type
       and its spokes are theirs jointly, which is the whole reason a radar is a
       coordinate system rather than a series' private geometry. }
     FRadars: array of TTyRadar;
+    { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
+    FCalendars: array of TTyCalendar;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -545,6 +548,9 @@ type
       series bound to that radar, which nothing else in this control is in a
       position to collect. }
     procedure SolveRadars(APPI: Integer);
+    procedure SolveCalendars(APPI: Integer);
+    procedure FreeCalendars;
+    function CalendarInk: TTyCalendarInk;
     procedure FreeRadars;
     procedure SolveGraphs(APPI: Integer);
     procedure FreeGraphs;
@@ -956,6 +962,8 @@ type
       scales, rings and angles -- or nil. Owned by the control and gone at
       the next layout. }
     function RadarLayout(AIndex: Integer): TTyRadar;
+    { Calendar component AIndex as the last render laid it out, or nil. }
+    function CalendarLayout(AIndex: Integer): TTyCalendar;
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
     function LegendLayout(AIndex: Integer): TTyLegendLayout;
@@ -1072,6 +1080,7 @@ begin
     INDEX, and the spoke objects a paint list was built against are about to
     stop existing. }
   FreeRadars;
+  FreeCalendars;
   FreeGraphs;
   FRadarDims := nil;
   FreeStores;
@@ -1676,6 +1685,7 @@ begin
   SolveFunnels;
   SolveGauges(APPI);
   SolveRadars(APPI);
+  SolveCalendars(APPI);
   SolveGraphs(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
@@ -4613,6 +4623,59 @@ begin
   FRadars := nil;
 end;
 
+procedure TTyAdvanceChart.FreeCalendars;
+var i: Integer;
+begin
+  for i := 0 to High(FCalendars) do FreeAndNil(FCalendars[i]);
+  FCalendars := nil;
+end;
+
+{ THE CALENDARS: each laid out on the whole canvas, as upstream's is -- its
+  box is getLayoutRect against the chart's width and height, with no margin
+  and nothing else shrinking it. [Batch 69] }
+procedure TTyAdvanceChart.SolveCalendars(APPI: Integer);
+var i, n: Integer;
+begin
+  FreeCalendars;
+  n := 0;
+  if FOption <> nil then n := FOption.ComponentCount('calendar');
+  if n = 0 then Exit;
+  SetLength(FCalendars, n);
+  for i := 0 to n - 1 do
+  begin
+    FCalendars[i] := TTyCalendar.Create(TyCalendarSpecOf(FOption, i));
+    FCalendars[i].Resize(FLastRect, APPI);
+  end;
+end;
+
+{ THE CALENDAR'S INK, from keys the chart already has: a day cell is the
+  ground an empty symbol is filled with, its border an axis split line; the
+  month lines are an axis line, the day and month names axis labels, and the
+  year the subtitle's quieter ink. Upstream's own tokens for them are the
+  same neutrals those keys default to. }
+function TTyAdvanceChart.CalendarInk: TTyCalendarInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  Result := Default(TTyCalendarInk);
+  model := ActiveController.Model;
+  Result.CellFill := TTyChartColor(
+    model.ResolveStyle('TyAdvChartEmptyCircle', '', []).Background.Color);
+  Result.CellBorder := TTyChartColor(
+    model.ResolveStyle('TyAdvChartSplitLine', '', []).BorderColor);
+  Result.SplitLine := TTyChartColor(
+    model.ResolveStyle('TyAdvChartAxisLine', '', []).BorderColor);
+  st := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
+  Result.LabelColour := TTyChartColor(st.TextColor);
+  Result.LabelFontName := st.FontName;
+  Result.LabelFontSizeLogical := ResolveFontSize(st);
+  Result.LabelFontWeight := st.FontWeight;
+  st := model.ResolveStyle('TyAdvChartSubtitle', '', []);
+  Result.YearColour := TTyChartColor(st.TextColor);
+  Result.YearFontName := st.FontName;
+end;
+
 function TTyAdvanceChart.GraphLayout(ASeriesIndex: Integer;
   out ANodes: TTyGraphNodeArray; out AEdges: TTyGraphEdgeArray;
   out AFills: TTyChartColorArray): Boolean;
@@ -4864,6 +4927,13 @@ function TTyAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FRadars)) then Result := FRadars[AIndex];
+end;
+
+function TTyAdvanceChart.CalendarLayout(AIndex: Integer): TTyCalendar;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FCalendars)) then
+    Result := FCalendars[AIndex];
 end;
 
 function TTyAdvanceChart.LegendLayoutCount: Integer;
@@ -6546,6 +6616,11 @@ begin
   drawn := 0;
   for i := 0 to High(FRadars) do
     Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+  { THE CALENDARS' TOO, before any series: at the same z a series is drawn
+    at, the order is decided by z2 -- day cell 0, heatmap cell 1, month line
+    20, names 30 -- and ties by insertion, components first. [Batch 69] }
+  for i := 0 to High(FCalendars) do
+    Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
   if Length(FBindings) = 0 then Exit;
   begin
     for i := 0 to High(FBindings) do
