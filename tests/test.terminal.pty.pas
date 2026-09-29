@@ -39,6 +39,7 @@ type
   public
     Endless: Boolean;
     EndlessLimit: Int64;             { 0 = without end }
+    MaxRead: Integer;                { > 0: at most this much a read }
     ConPty: Boolean;
     Build: Integer;
     StartResult: Boolean;
@@ -148,6 +149,7 @@ begin
       begin
         n := Length(FPending);
         if n > ACount then n := ACount;
+        if (MaxRead > 0) and (n > MaxRead) then n := MaxRead;
         Move(FPending[1], ABuf, n);
         Delete(FPending, 1, n);
         Inc(FReads);
@@ -362,6 +364,8 @@ begin
   fake := TFakePty.Create;
   s := TPtySession.Create(fake);
   try
+    { ten bytes a read: a hundred reads, whatever the threads' timing }
+    fake.MaxRead := 10;
     AssertTrue('started', s.Start('fake', 80, 24, err));
     for i := 1 to 100 do
       fake.Feed('0123456789');
