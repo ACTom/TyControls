@@ -1207,7 +1207,7 @@ begin
 end;
 
 var
-  hashFile, checkFile: string;
+  hashFile, checkFile, perfOut, perfBase: string;
   want: TStringList;
   k, bad, missing: Integer;
   saveX, saveY: Integer;
@@ -1221,10 +1221,21 @@ begin
     Exit;
   end;
   OnlyText := Arg('--only');
+  { absolute now: the run changes the current folder (SetCurrentDir below) }
   DumpDir := Arg('--dump');
-  if DumpDir <> '' then ForceDirectories(DumpDir);
+  if DumpDir <> '' then
+  begin
+    DumpDir := ExpandFileName(DumpDir);
+    ForceDirectories(DumpDir);
+  end;
   hashFile := Arg('--hashes');
+  if hashFile <> '' then hashFile := ExpandFileName(hashFile);
   checkFile := Arg('--check');
+  if checkFile <> '' then checkFile := ExpandFileName(checkFile);
+  perfOut := Arg('--perf-out');
+  if perfOut <> '' then perfOut := ExpandFileName(perfOut);
+  perfBase := Arg('--perf-base');
+  if perfBase <> '' then perfBase := ExpandFileName(perfBase);
   Application.Initialize;
   TyRegisterBuiltinThemes;
   PrRegisterClasses;
@@ -1232,6 +1243,8 @@ begin
     TEdit, TMemo, TImageList, TActionList, TAction, TTreeView, TListView, TListBox,
     TComboBox, TCheckBox, TRadioButton, TGroupBox, TPageControl, TTabSheet]);
   TyFallbackFontName := 'Segoe UI';
+  { the shell example lists the current folder with its dates: this tool's own, fixed }
+  SetCurrentDir(StableDir);
   saveX := ScreenInfo.PixelsPerInchX;
   saveY := ScreenInfo.PixelsPerInchY;
   Log := TStringList.Create;
@@ -1243,7 +1256,7 @@ begin
     Ctl.Mode := 'light';
     if Has('--perf') then
     begin
-      RunPerf(Arg('--perf-out'), Arg('--perf-base'));
+      RunPerf(perfOut, perfBase);
       Exit;
     end;
     RenderAll;

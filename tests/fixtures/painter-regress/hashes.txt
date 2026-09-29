@@ -268,10 +268,10 @@ ex-examples-shapes-umain-96 1180 802 761D3FE7EDB18A26
 ex-examples-shapes-umain-120 1475 1002 75062491F1017FC4
 ex-examples-shapes-umain-144 1770 1203 43CF3B884F413C2E
 ex-examples-shapes-umain-192 2360 1604 5D6C222BD557F21E
-ex-examples-shell-umain-96 1024 800 CEA555965A2509B8
-ex-examples-shell-umain-120 1280 1000 EA340467515C3D11
-ex-examples-shell-umain-144 1536 1200 B17B6606A9E3F193
-ex-examples-shell-umain-192 2048 1600 292F99173BC42E58
+ex-examples-shell-umain-96 1024 800 07A5DD8CB1F6060C
+ex-examples-shell-umain-120 1280 1000 B089AEC3F3AF180D
+ex-examples-shell-umain-144 1536 1200 CFEDBD21B3EC002B
+ex-examples-shell-umain-192 2048 1600 9FBA1F03F53FF485
 ex-examples-spinedit-umain-96 440 504 9CC94E8FB7F73F0C
 ex-examples-spinedit-umain-120 550 630 3D0AB71E3C385C95
 ex-examples-spinedit-umain-144 660 756 8D4415B4A476B1DC
