@@ -57,6 +57,10 @@ type
     procedure TestMeasureTextBlockWrapsToAWidth;
     procedure TestTheGdiRendererKeepsOneBitmap;
     procedure TestTheKeptBitmapGrowsForATallerRun;
+    procedure TestATallRunAfterAWideOneKeepsTheWidth;
+    procedure TestARunTooBigForTheKeptBitmapGetsItsOwn;
+    procedure TestTheKeptBitmapIsClearedBetweenRuns;
+    procedure TestTheCoverageIsReadOffTheDib;
   end;
 
 implementation
@@ -897,23 +901,34 @@ end;
 
 { The Win32 text renderer draws every run on ONE kept GDI bitmap (it grows when a run
   needs more room) instead of a fresh TBitmap and a whole-bitmap conversion per run.
-  200 runs of about the same size: at most the first bitmap and one growth. The pixels
-  are held elsewhere -- tools/painter-regress, every text path of the library. }
+  From a fresh start (no kept bitmap): the first run makes it, 200 runs no wider than it
+  keep the very same one, none gets a bitmap of its own, none is converted. The pixels
+  are held by TestTheCoverageIsReadOffTheDib and tools/painter-regress. }
 procedure TPainterTest.TestTheGdiRendererKeepsOneBitmap;
 var
-  before, k: Integer;
+  made, own, conv, k, w, h: Integer;
+  kept: THandle;
 begin
   {$IFNDEF LCLWin32}
   Ignore('Win32 only: the other widgetsets draw text through BGRA');
   {$ENDIF}
-  before := TyGdiTextBitmapsMade;
+  TyGdiTextResetForTest;
+  made := TyGdiTextBitmapsMade;
+  own := TyGdiTextOneOffBitmapsForTest;
+  conv := TyGdiTextConversionsForTest;
   MakePainter(300, 60, 96);
+  FPainter.DrawText(Rect(0, 0, 300, 60), 'Run 200 文字 text', 'Segoe UI', 10, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  kept := TyGdiTextKeptBitmapForTest(w, h);
+  AssertTrue('the first run made the kept bitmap', kept <> 0);
+  AssertEquals('one made', 1, TyGdiTextBitmapsMade - made);
   for k := 1 to 200 do
     FPainter.DrawText(Rect(0, 0, 300, 60), 'Run ' + IntToStr(k) + ' 文字 text', 'Segoe UI', 10, 400,
       TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
-  AssertTrue(Format('bitmaps made or grown for 200 runs: %d', [TyGdiTextBitmapsMade - before]),
-    TyGdiTextBitmapsMade - before <= 2);
-  AssertTrue('the runs were drawn through it at all', TyGdiTextBitmapsMade >= 1);
+  AssertTrue('200 runs on the same bitmap', kept = TyGdiTextKeptBitmapForTest(w, h));
+  AssertEquals('none made or grown', 1, TyGdiTextBitmapsMade - made);
+  AssertEquals('none drawn on a bitmap of its own', 0, TyGdiTextOneOffBitmapsForTest - own);
+  AssertEquals('none converted: the coverage read off the DIB', 0, TyGdiTextConversionsForTest - conv);
 end;
 
 { The kept bitmap grows in each direction on its own: a wide run of small text first
@@ -921,20 +936,173 @@ end;
   drawn, not cut at the height the wide run left (nor read past the bitmap's end). }
 procedure TPainterTest.TestTheKeptBitmapGrowsForATallerRun;
 var
-  top, bottom, rows: Integer;
+  top, bottom, rows, w, h: Integer;
 begin
   {$IFNDEF LCLWin32}
   Ignore('Win32 only: the other widgetsets draw text through BGRA');
   {$ENDIF}
+  TyGdiTextResetForTest;
   MakePainter(1400, 40, 96);
   FPainter.DrawText(Rect(0, 0, 1400, 40), StringOfChar('m', 150), 'Segoe UI', 8, 400,
     TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
   FreePainter;
+  TyGdiTextKeptBitmapForTest(w, h);
+  AssertTrue(Format('the wide run left a short bitmap (%d rows)', [h]), h < 250);
   MakePainter(1000, 900, 96);
   FPainter.DrawText(Rect(0, 0, 1000, 900), 'W', 'Segoe UI', 300, 400,
     TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
   InkRows(top, bottom, rows);
   AssertTrue(Format('the whole letter: %d rows of ink (%d..%d)', [rows, top, bottom]), rows >= 250);
+end;
+
+{ ...and only in the direction that is short: a tall letter after a wide run leaves the
+  width as the wide run made it (it used to widen by half on every growth of the height,
+  so a long line followed by a few big titles kept a bitmap of tens of megabytes). }
+procedure TPainterTest.TestATallRunAfterAWideOneKeepsTheWidth;
+var
+  w0, h0, w1, h1: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(1400, 40, 96);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), StringOfChar('m', 150), 'Segoe UI', 8, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  TyGdiTextKeptBitmapForTest(w0, h0);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), 'W', 'Segoe UI', 72, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  TyGdiTextKeptBitmapForTest(w1, h1);
+  AssertTrue(Format('taller (%d -> %d)', [h0, h1]), h1 > h0);
+  AssertEquals('as wide as the wide run made it', w0, w1);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), 'W', 'Segoe UI', 200, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  TyGdiTextKeptBitmapForTest(w1, h1);
+  AssertEquals('still as wide after a second growth', w0, w1);
+end;
+
+{ A run too big to keep a bitmap for (wider than 8192 pixels here) is drawn on a bitmap
+  of its own: the kept one stays as it was, and the run is still drawn. }
+procedure TPainterTest.TestARunTooBigForTheKeptBitmapGetsItsOwn;
+var
+  own, w0, h0, w1, h1, top, bottom, rows: Integer;
+  kept: THandle;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(400, 300, 96);
+  FPainter.DrawText(Rect(0, 0, 400, 300), 'small', 'Segoe UI', 10, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlTop, False);
+  kept := TyGdiTextKeptBitmapForTest(w0, h0);
+  own := TyGdiTextOneOffBitmapsForTest;
+  FreePainter;
+  MakePainter(400, 300, 96);
+  FPainter.DrawText(Rect(0, 0, 400, 300), StringOfChar('W', 60), 'Segoe UI', 120, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlTop, False);
+  AssertEquals('drawn on a bitmap of its own', 1, TyGdiTextOneOffBitmapsForTest - own);
+  AssertTrue('the kept bitmap is the same', kept = TyGdiTextKeptBitmapForTest(w1, h1));
+  AssertEquals('same width', w0, w1);
+  AssertEquals('same height', h0, h1);
+  InkRows(top, bottom, rows);
+  AssertTrue(Format('and the run was drawn (%d rows of ink)', [rows]), rows > 50);
+end;
+
+{ The kept bitmap holds the last run's ink outside the part the next run clears: a big
+  bold run, then a small one, must come out as the small one does on a fresh bitmap. }
+procedure TPainterTest.TestTheKeptBitmapIsClearedBetweenRuns;
+var
+  a: TBGRABitmap;
+  x, y, diff: Integer;
+  p, q: TBGRAPixel;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(200, 60, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 60), 'ab 字', 'Segoe UI', 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  a := FPainter.Bitmap.Duplicate as TBGRABitmap;
+  try
+    FreePainter;
+    MakePainter(900, 300, 96);
+    FPainter.DrawText(Rect(0, 0, 900, 300), '██████ ███', 'Segoe UI', 90, 700,
+      TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+    FreePainter;
+    MakePainter(200, 60, 96);
+    FPainter.DrawText(Rect(0, 0, 200, 60), 'ab 字', 'Segoe UI', 12, 400,
+      TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+    diff := 0;
+    for y := 0 to 59 do
+      for x := 0 to 199 do
+      begin
+        p := a.GetPixel(x, y);
+        q := FPainter.Bitmap.GetPixel(x, y);
+        if (p.red <> q.red) or (p.green <> q.green) or (p.blue <> q.blue) or (p.alpha <> q.alpha) then
+          Inc(diff);
+      end;
+    AssertEquals('pixels left over from the big run', 0, diff);
+  finally
+    a.Free;
+  end;
+end;
+
+{ The coverage read straight off the DIB is the coverage the whole conversion to BGRA
+  gives (the old path, still the one for a bitmap that is not a DIB): every channel in
+  the average, the rows in the DIB's order, the DIB's own row length. Several sizes and
+  runs (CJK, a mnemonic ampersand, ligatures), byte for byte. }
+procedure TPainterTest.TestTheCoverageIsReadOffTheDib;
+const
+  Runs: array[0..3] of string = ('Hamburgefonstiv 0123', '中文与 English 混排', 'W&M ag', 'ffi fl é');
+  Sizes: array[0..2] of Integer = (8, 11, 23);
+var
+  a: TBGRABitmap;
+  r, s, x, y, diff, conv, inked: Integer;
+  p, q: TBGRAPixel;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  for r := 0 to High(Runs) do
+    for s := 0 to High(Sizes) do
+    begin
+      MakePainter(400, 80, 96);
+      conv := TyGdiTextConversionsForTest;
+      FPainter.DrawText(Rect(3, 0, 400, 80), Runs[r], 'Segoe UI', Sizes[s], 400,
+        TyRGBA(20, 40, 60, 255), taLeftJustify, tlCenter, False);
+      AssertEquals('read off the DIB', 0, TyGdiTextConversionsForTest - conv);
+      a := FPainter.Bitmap.Duplicate as TBGRABitmap;
+      try
+        FreePainter;
+        MakePainter(400, 80, 96);
+        TyGdiTextForceConversionForTest(True);
+        try
+          FPainter.DrawText(Rect(3, 0, 400, 80), Runs[r], 'Segoe UI', Sizes[s], 400,
+            TyRGBA(20, 40, 60, 255), taLeftJustify, tlCenter, False);
+        finally
+          TyGdiTextForceConversionForTest(False);
+        end;
+        AssertTrue('the other went through the conversion', TyGdiTextConversionsForTest - conv >= 1);
+        diff := 0;
+        inked := 0;
+        for y := 0 to 79 do
+          for x := 0 to 399 do
+          begin
+            p := a.GetPixel(x, y);
+            q := FPainter.Bitmap.GetPixel(x, y);
+            if p.alpha > 0 then Inc(inked);
+            if (p.red <> q.red) or (p.green <> q.green) or (p.blue <> q.blue) or (p.alpha <> q.alpha) then
+              Inc(diff);
+          end;
+        AssertTrue(Format('"%s" at %d pt: drawn at all', [Runs[r], Sizes[s]]), inked > 20);
+        AssertEquals(Format('"%s" at %d pt: pixels that differ', [Runs[r], Sizes[s]]), 0, diff);
+      finally
+        a.Free;
+        FreePainter;
+      end;
+    end;
 end;
 
 initialization
