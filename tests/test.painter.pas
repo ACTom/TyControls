@@ -56,6 +56,7 @@ type
     procedure TestMeasureTextBlockLineHeightIsDerivedNotFloored;
     procedure TestMeasureTextBlockWrapsToAWidth;
     procedure TestTheGdiRendererKeepsOneBitmap;
+    procedure TestTheKeptBitmapGrowsForATallerRun;
   end;
 
 implementation
@@ -913,6 +914,27 @@ begin
   AssertTrue(Format('bitmaps made or grown for 200 runs: %d', [TyGdiTextBitmapsMade - before]),
     TyGdiTextBitmapsMade - before <= 2);
   AssertTrue('the runs were drawn through it at all', TyGdiTextBitmapsMade >= 1);
+end;
+
+{ The kept bitmap grows in each direction on its own: a wide run of small text first
+  (wide enough for what follows, not tall enough), then one very tall letter -- all of it
+  drawn, not cut at the height the wide run left (nor read past the bitmap's end). }
+procedure TPainterTest.TestTheKeptBitmapGrowsForATallerRun;
+var
+  top, bottom, rows: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  MakePainter(1400, 40, 96);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), StringOfChar('m', 150), 'Segoe UI', 8, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  FreePainter;
+  MakePainter(1000, 900, 96);
+  FPainter.DrawText(Rect(0, 0, 1000, 900), 'W', 'Segoe UI', 300, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  InkRows(top, bottom, rows);
+  AssertTrue(Format('the whole letter: %d rows of ink (%d..%d)', [rows, top, bottom]), rows >= 250);
 end;
 
 initialization
