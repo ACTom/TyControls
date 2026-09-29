@@ -81,7 +81,10 @@ type
     IT IS NOT THE SAME FOR EVERY SERIES. A bar, a line and a scatter point
     show their VALUE; a pie slice shows its NAME. One default for all of them
     renders every unformatted pie label as a number. }
-  TTyLabelDefaultText = (tldValue, tldName);
+  TTyLabelDefaultText = (tldValue, tldName,
+    { a heatmap cell's: the THIRD element of the raw item as written, else
+      '-' (HeatmapView.ts:313-317) [Batch 68] }
+    tldRawThird);
 
   { Everything about one series' labels except the words.
 
@@ -98,8 +101,11 @@ type
       mark's own: Position then holds tlpTop, the answer for a mark that has
       none, and a mark with an outside side (a bar) answers per datum. }
     Outside: Boolean;
-    { tlpAt only, DEVICE px from the host's top-left. }
+    { tlpAt only: from the host's top-left, a FRACTION of the host's width /
+      height when AtXIsPercent / AtYIsPercent, else LOGICAL px. [Batch 68:
+      they were device px, and a '30%' became 0.3 px.] }
     AtX, AtY: Double;
+    AtXIsPercent, AtYIsPercent: Boolean;
     { LOGICAL px. The gap outside, or the inset inside, depending on the
       position -- and unused entirely by tlpInside, which is the default, so a
       chart that sets only `distance` sees nothing happen. }
@@ -108,6 +114,12 @@ type
       inside the rotation; this applies it after, and says so below. }
     OffsetXLogical, OffsetYLogical: Double;
     RotationRad: Double;
+    { `align` / `verticalAlign` (or `baseline`) as written, over the ones the
+      position implies -- normalised as zrender does: 'middle' is centre,
+      'center' is middle, anything else left / top [Batch 68] }
+    HasAlignH, HasAlignV: Boolean;
+    AlignH: TTyTextAnchorH;
+    AlignV: TTyTextAnchorV;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
@@ -163,6 +175,7 @@ type
     Z2Lift: Integer;
   end;
   TTyLabelSpecArray = array of TTyLabelSpec;
+  TTyLabelSpecTable = array of TTyLabelSpecArray;
 
 { A spec that draws nothing. }
 function TyLabelSpecNone: TTyLabelSpec;
@@ -261,7 +274,12 @@ procedure TyLabelInkEmphasis(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor
   ASpecs is indexed by SERIES index -- an element whose datum names a series
   outside the array, or whose series draws no labels, is left alone. }
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+  const AMeasurer: ITyTextMeasurer; APPI: Integer); overload;
+{ AItemSpecs[series][raw row]: a data item's own label read over its
+  series', for a caption whose ItemSpec names it [Batch 68] }
+procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
+  const AItemSpecs: TTyLabelSpecTable; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer); overload;
 
 implementation
 
@@ -605,6 +623,13 @@ end;
 
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
+begin
+  TyExpandLabels(AList, ASpecs, nil, AMeasurer, APPI);
+end;
+
+procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
+  const AItemSpecs: TTyLabelSpecTable; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
 var
   i, n, si: Integer;
   host, cap: TTyChartElement;
@@ -614,7 +639,7 @@ var
   strokeW: Double;
   pos: TTyLabelPosition;
   bounds, box: TTyRectF;
-  x, y, w, h, scale, dist: Double;
+  x, y, w, h, scale, dist, sw, atX, atY: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
 begin
@@ -638,11 +663,29 @@ begin
     si := host.Datum.SeriesIndex;
     if (si < 0) or (si > High(ASpecs)) then Continue;
     spec := ASpecs[si];
+    { the item's own label, read over the series' }
+    if (host.Caption.ItemSpec > 0) and (si <= High(AItemSpecs))
+      and (host.Caption.ItemSpec - 1 <= High(AItemSpecs[si])) then
+      spec := AItemSpecs[si][host.Caption.ItemSpec - 1];
     if not spec.Show then Continue;
     if spec.Position = tlpNone then Continue;
 
     bounds := TyShapeBounds(host.Shape);
     if not TyRectFIsValid(bounds) then Continue;
+    { THE HOST'S STROKE GROWS ITS RECT, as Path.getBoundingRect grows it: by
+      the line width, or by at least five where nothing is filled, half on
+      each side. A label outside a bordered cell sits past the border.
+      [Batch 68] }
+    if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0) then
+    begin
+      sw := host.Style.StrokeWidthLogical;
+      if not host.Style.HasFill then sw := Max(sw, 5.0);
+      sw := sw * scale;
+      bounds.Left := bounds.Left - sw / 2;
+      bounds.Top := bounds.Top - sw / 2;
+      bounds.Right := bounds.Right + sw / 2;
+      bounds.Bottom := bounds.Bottom + sw / 2;
+    end;
 
     AMeasurer.MeasureLine(host.Caption.Text, spec.FontName,
       spec.FontSizeLogical, spec.FontWeight, w, h);
@@ -658,7 +701,14 @@ begin
         coLeft: pos := tlpLeft;
         coRight: pos := tlpRight;
       end;
-    TyLabelAnchor(bounds, pos, dist, spec.AtX, spec.AtY, x, y, ah, av);
+    { the array form against the host's own rect }
+    if spec.AtXIsPercent then atX := spec.AtX * (bounds.Right - bounds.Left)
+    else atX := spec.AtX * scale;
+    if spec.AtYIsPercent then atY := spec.AtY * (bounds.Bottom - bounds.Top)
+    else atY := spec.AtY * scale;
+    TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);
+    if spec.HasAlignH then ah := spec.AlignH;
+    if spec.HasAlignV then av := spec.AlignV;
     { OFFSET AFTER THE POSITION, which is upstream's order. Upstream also
       applies it INSIDE the rotation, so a rotated label's offset runs along
       the rotated axes; this applies it in screen axes and says so, because the

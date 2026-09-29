@@ -31,6 +31,7 @@ type
       horizontal bar chart. Its own fixture rather than a flag on Given,
       because what changes is which axis is the base, and that is the thing
       under test. }
+    procedure GivenHeatmap(ACount: Integer);
     procedure GivenMultiValue(const AType: string; ACount: Integer;
       const ARows: array of Double);
     procedure GivenSideways(const AType: string; ACount: Integer;
@@ -124,6 +125,61 @@ begin
   FBinding := Default(TTySeriesBinding);
   FBinding.SeriesIndex := 0;
   FBinding.SeriesType := AType;
+  FBinding.Resolved := True;
+  FBinding.HasAxes := True;
+  FBinding.Cart := FCart;
+  FBinding.XAxis := ax;
+  FBinding.YAxis := ay;
+  FBinding.BaseAxis := ax;
+  FBinding.ValueAxis := ay;
+end;
+
+{ A HEATMAP'S CHART: two category axes and one cell per row, its value the
+  third element of the raw item. Upstream sizes a cell by the category band,
+  so on the category-by-value chart above a heatmap draws nothing at all --
+  correctly, which is why it needs this fixture to be compared. }
+procedure TAdvChartMarksTest.GivenHeatmap(ACount: Integer);
+var
+  ax, ay: TTyAxis;
+  cats: TTyStringArray;
+  it: TTyRawItem;
+  i: Integer;
+begin
+  FCart := TTyCartesian2D.Create;
+  SetLength(cats, ACount);
+  for i := 0 to ACount - 1 do cats[i] := Chr(Ord('a') + i);
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  ax.AxisType := atCategory;
+  ax.SetCategories(cats);
+  ax.OnBand := True;
+  ay := TTyAxis.Create('y', TTyOrdinalScale.Create, False);
+  ay.AxisType := atCategory;
+  ay.SetCategories(cats);
+  ay.OnBand := True;
+  FCart.AddAxis(ax);
+  FCart.AddAxis(ay);
+  FCart.SetRect(TyRectF(0, 0, 400, 300));
+
+  FStore := TTyDataStore.Create;
+  FStore.AddDimension('x', ddtOrdinal);
+  FStore.AddDimension('y', ddtOrdinal);
+  FStore.UseOrdinalMeta(0, ax.Categories);
+  FStore.UseOrdinalMeta(1, ay.Categories);
+  for i := 0 to ACount - 1 do
+  begin
+    FStore.AppendRow([Double(i), Double(i)]);
+    it := Default(TTyRawItem);
+    it.Shape := rshArray;
+    SetLength(it.Cells, 3);
+    it.Cells[0] := TyDataNum(i);
+    it.Cells[1] := TyDataNum(i);
+    it.Cells[2] := TyDataNum(10 * (i + 1));
+    FStore.SetRawItem(i, it);
+  end;
+
+  FBinding := Default(TTySeriesBinding);
+  FBinding.SeriesIndex := 0;
+  FBinding.SeriesType := 'heatmap';
   FBinding.Resolved := True;
   FBinding.HasAxes := True;
   FBinding.Cart := FCart;
@@ -426,7 +482,9 @@ begin
       cannot read a coordinate-pair store at all, so handing it one would
       compare the published answer against a fixture rather than against the
       renderer. }
-    if MultiValueType(cTypes[i]) then
+    if cTypes[i] = 'heatmap' then
+      GivenHeatmap(3)
+    else if MultiValueType(cTypes[i]) then
       GivenMultiValue(cTypes[i], 3,
         [10, 30, 5, 35, 30, 10, 5, 35, 10, 10, 5, 35,
          10, 30, 5, 35, 30, 10, 5, 35, 10, 10, 5, 35])

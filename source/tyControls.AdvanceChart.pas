@@ -564,6 +564,11 @@ type
       ADefaultFormatter is the series type's own `label.formatter` default,
       which an option can override and -- with null -- remove. }
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec; overload;
+    function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
+    procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
+      out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
+    procedure ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
+      out ASpecs: TTyLabelSpecArray; out AHas: TTyBoolArray);
     function LabelSpecFor(ASlot: Integer;
       const ADefaultFormatter: string): TTyLabelSpec; overload;
     { The fonts and the four inks a pie label is drawn with. }
@@ -6314,6 +6319,121 @@ begin
       APPI, AList));
 end;
 
+{ an itemStyle's borderRadius: a number, or zrender's array forms; nil for
+  none }
+function RadiiOfStyle(AStyle: TJSONData; APPI: Integer; out ARadii: TTyCornerRadii): Boolean;
+var
+  d: TJSONData;
+  vals: array of Double;
+  k: Integer;
+begin
+  ARadii := Default(TTyCornerRadii);
+  Result := False;
+  if (AStyle = nil) or (AStyle.JSONType <> jtObject) then Exit;
+  d := TJSONObject(AStyle).Find('borderRadius');
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  vals := nil;
+  if d.JSONType = jtNumber then
+  begin
+    SetLength(vals, 1);
+    vals[0] := d.AsFloat;
+  end
+  else if d.JSONType = jtArray then
+  begin
+    SetLength(vals, d.Count);
+    for k := 0 to d.Count - 1 do
+      if d.Items[k].JSONType = jtNumber then vals[k] := d.Items[k].AsFloat
+      else vals[k] := 0;
+  end
+  else Exit;
+  Result := True;
+  if Length(vals) = 0 then Exit;
+  TyZrRadii(vals, ARadii[0], ARadii[1], ARadii[2], ARadii[3]);
+  for k := 0 to 3 do ARadii[k] := ARadii[k] * APPI / 96;
+end;
+
+{ each data item's own `label`, read over its series' spec, by raw row }
+procedure TTyAdvanceChart.ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
+  out ASpecs: TTyLabelSpecArray; out AHas: TTyBoolArray);
+var
+  node, d, it, lb: TJSONData;
+  k: Integer;
+begin
+  ASpecs := nil;
+  AHas := nil;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  SetLength(ASpecs, d.Count);
+  SetLength(AHas, d.Count);
+  for k := 0 to d.Count - 1 do
+  begin
+    it := d.Items[k];
+    if (it = nil) or (it.JSONType <> jtObject) then Continue;
+    lb := TJSONObject(it).Find('label');
+    if (lb = nil) or (lb.JSONType <> jtObject) then Continue;
+    ASpecs[k] := TyLabelSpecOfNode(TJSONObject(lb), TJSONObject(node), ABase);
+    AHas[k] := True;
+  end;
+end;
+
+{ each data item's own itemStyle.borderRadius, by raw row }
+procedure TTyAdvanceChart.HeatmapItemRadii(ASeriesIndex, APPI: Integer;
+  out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
+var
+  node, d, it: TJSONData;
+  k: Integer;
+begin
+  ARadii := nil;
+  AHas := nil;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  SetLength(ARadii, d.Count);
+  SetLength(AHas, d.Count);
+  for k := 0 to d.Count - 1 do
+  begin
+    it := d.Items[k];
+    if (it <> nil) and (it.JSONType = jtObject) then
+      AHas[k] := RadiiOfStyle(TJSONObject(it).Find('itemStyle'), APPI, ARadii[k]);
+  end;
+end;
+
+{ a heatmap's itemStyle.borderRadius: a number, or zrender's array forms }
+function TTyAdvanceChart.HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
+var
+  node, d: TJSONData;
+  vals: array of Double;
+  k: Integer;
+begin
+  Result := Default(TTyCornerRadii);
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('itemStyle');
+  if (d = nil) or (d.JSONType <> jtObject) then Exit;
+  d := TJSONObject(d).Find('borderRadius');
+  if d = nil then Exit;
+  vals := nil;
+  if d.JSONType = jtNumber then
+  begin
+    SetLength(vals, 1);
+    vals[0] := d.AsFloat;
+  end
+  else if d.JSONType = jtArray then
+  begin
+    SetLength(vals, d.Count);
+    for k := 0 to d.Count - 1 do
+      if d.Items[k].JSONType = jtNumber then vals[k] := d.Items[k].AsFloat
+      else vals[k] := 0;
+  end
+  else Exit;
+  if Length(vals) = 0 then Exit;
+  TyZrRadii(vals, Result[0], Result[1], Result[2], Result[3]);
+  for k := 0 to 3 do Result[k] := Result[k] * APPI / 96;
+end;
+
 function TTyAdvanceChart.LabelSpecFor(ASlot: Integer): TTyLabelSpec;
 begin
   Result := LabelSpecFor(ASlot, '');
@@ -6398,6 +6518,7 @@ var
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
   specs: TTyLabelSpecArray;
+  itemSpecs: TTyLabelSpecTable;
 begin
   Result := 0;
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
@@ -6585,9 +6706,28 @@ begin
         zlevel IS NOT READ. It is a separate canvas upstream, not a deeper
         sort key, and pretending it is one would put a series in the right
         order for the wrong reason. }
-      v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 2);
+      { [Batch 68: a LINE's default is 3, not 2 -- LineSeries.ts:161 --
+        so a line over a bar of the same chart is drawn above it however
+        the two are declared.] }
+      if FBindings[i].SeriesType = 'line' then
+        v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 3)
+      else
+        v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 2);
       v.Z2 := SeriesIntIn(FBindings[i].SeriesIndex, 'z2', 0);
       v.Label_ := LabelSpecFor(i);
+      { A HEATMAP CELL is labelled with the third element of its raw row, and
+        rounded by its series' itemStyle.borderRadius }
+      v.HeatPadPx := 0.5 * APPI / 96;
+      if FBindings[i].SeriesType = 'heatmap' then
+      begin
+        v.Label_.DefaultText := tldRawThird;
+        v.Bar.Radii := HeatmapRadii(FBindings[i].SeriesIndex, APPI);
+        HeatmapItemRadii(FBindings[i].SeriesIndex, APPI, v.HeatRadii, v.HeatHasRadii);
+        ItemLabelSpecs(FBindings[i].SeriesIndex, v.Label_, v.ItemLabels, v.HasItemLabel);
+        if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+          SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+        itemSpecs[FBindings[i].SeriesIndex] := v.ItemLabels;
+      end;
       { `{c}` and the default text read the VALUE column -- whichever axis is
         not the base one. A label that read x on a bar chart would show the
         category ordinal, which is a number and looks like an answer. }
@@ -6606,7 +6746,7 @@ begin
       has no update path, so a mark added later would have no label and a mark
       moved later would leave its label behind. }
     if drawn > 0 then
-      TyExpandLabels(list, specs, AMeasurer, APPI);
+      TyExpandLabels(list, specs, itemSpecs, AMeasurer, APPI);
     { AFTER THE LABELS, so a caption dims and rises with its node. }
     if drawn > 0 then ApplyGraphHover(list, APPI);
     { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because

@@ -14,7 +14,10 @@ unit tyControls.AdvChart.Coord;
   and Cartesian2D does not implement it, which is why HeatmapView.ts:250-285 has
   to branch three ways (cartesian computes its own width/height, matrix reads
   .rect, calendar reads .contentRect). Here it is REQUIRED and cartesian
-  implements it, so that branch collapses to one path.
+  implements it -- but the heatmap's cartesian branch still does NOT go
+  through it: upstream widens each band by half a pixel before halving
+  (HeatmapView.ts:193-194), which the exact band cell here does not, so
+  BuildHeatmap sizes its own cells. [Batch 68]
 
   N AXES, not two. A secondary y axis is the commonest real-world request; making
   it a special case later is how a coordinate system ends up rewritten.

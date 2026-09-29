@@ -631,9 +631,9 @@ var
   k, seen: Integer;
   e: TTyChartElement;
 begin
-  { upstream's scale, which the markers are placed on: a series at 2, a
-    markArea at 1 UNDER it, markPoint / markLine at 5 over it. A series that
-    sat at 0 would put every markArea on top of its series. }
+  { upstream's scale, which the markers are placed on: a series at 2 (a line
+    at 3), a markArea at 1 UNDER it, markPoint / markLine at 5 over it. A
+    series that sat at 0 would put every markArea on top of its series. }
   FChart.Option := '{"xAxis":{"type":"category","data":["a","b","c"]},'
     + '"yAxis":{"type":"value"},"series":[{"type":"line","data":[1,3,2]},'
     + '{"type":"bar","data":[2,1,3]},{"type":"scatter","data":[1,2,3],"z":7}]}';
@@ -648,8 +648,12 @@ begin
     Inc(seen);
     if e.Datum.SeriesIndex = 2 then
       AssertEquals('an authored z', 7, e.Z)
+    else if e.Datum.SeriesIndex = 0 then
+      { [Batch 68: a line's default is 3 -- LineSeries.ts:161 -- and this
+        asserted 2, pinning the port's mistake.] }
+      AssertEquals('a line at its default z', 3, e.Z)
     else
-      AssertEquals(Format('series %d at the default z', [e.Datum.SeriesIndex]), 2, e.Z);
+      AssertEquals('a bar at its default z', 2, e.Z);
   end;
   AssertTrue('the series drew', seen >= 9);
 end;

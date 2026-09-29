@@ -38,6 +38,11 @@ uses
   only `line` declares one and the rest fall to `inside`. }
 function TyLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyLabelSpec): TTyLabelSpec;
+{ The same reading of ONE label object over ABase -- a data item's own
+  `label` over its series' spec. ASeries is the series node (for its
+  emphasis). [Batch 68] }
+function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
+  const ABase: TTyLabelSpec): TTyLabelSpec;
 
 { THE INK HALF OF A LABEL BLOCK, shared by every series that reads one:
   `color` (a literal or `inherit`), `textBorderColor`, `textBorderWidth`,
@@ -109,6 +114,12 @@ begin
   Result := d.AsString;
 end;
 
+{ zrender's parsePercent test: a string with a '%' in it }
+function IsPercentText(AData: TJSONData): Boolean;
+begin
+  Result := (AData <> nil) and (AData.JSONType = jtString) and (Pos('%', AData.AsString) > 0);
+end;
+
 { A percentage against a base, or a plain number as px. The array form of
   `position` is two of these, against the host's own width and height. }
 function PercentOf(AData: TJSONData; ABase: Double; out AValue: Double): Boolean;
@@ -143,6 +154,17 @@ end;
 
 function TyLabelSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ABase: TTyLabelSpec): TTyLabelSpec;
+var series: TJSONObject;
+begin
+  Result := ABase;
+  if AOption = nil then Exit;
+  series := ObjOf(AOption.ComponentAt('series', ASlot));
+  if series = nil then Exit;
+  Result := TyLabelSpecOfNode(ObjOf(series.Find('label')), series, ABase);
+end;
+
+function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
+  const ABase: TTyLabelSpec): TTyLabelSpec;
 var
   series, node: TJSONObject;
   d: TJSONData;
@@ -152,10 +174,8 @@ var
   s: string;
 begin
   Result := ABase;
-  if AOption = nil then Exit;
-  series := ObjOf(AOption.ComponentAt('series', ASlot));
-  if series = nil then Exit;
-  node := ObjOf(series.Find('label'));
+  series := ASeries;
+  node := ANode;
   if node = nil then Exit;
 
   d := node.Find('show');
@@ -174,8 +194,16 @@ begin
       Result.Position := tlpAt;
       Result.AtX := 0;
       Result.AtY := 0;
-      if arr.Count > 0 then PercentOf(arr.Items[0], 1, Result.AtX);
-      if arr.Count > 1 then PercentOf(arr.Items[1], 1, Result.AtY);
+      if arr.Count > 0 then
+      begin
+        PercentOf(arr.Items[0], 1, Result.AtX);
+        Result.AtXIsPercent := IsPercentText(arr.Items[0]);
+      end;
+      if arr.Count > 1 then
+      begin
+        PercentOf(arr.Items[1], 1, Result.AtY);
+        Result.AtYIsPercent := IsPercentText(arr.Items[1]);
+      end;
     end
     else if d.JSONType = jtString then
     begin
@@ -219,6 +247,28 @@ begin
       one does not. }
     Result.RotationRad :=
       Max(Double(-360), Min(Double(360), d.AsFloat)) * Pi / 180;
+
+  { align / verticalAlign (baseline its old name), normalised as zrender's
+    Text normalizeStyle does }
+  d := node.Find('align');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.HasAlignH := True;
+    s := d.AsString;
+    if (s = 'center') or (s = 'middle') then Result.AlignH := tahCentre
+    else if s = 'right' then Result.AlignH := tahRight
+    else Result.AlignH := tahLeft;
+  end;
+  d := node.Find('verticalAlign');
+  if (d = nil) or (d.JSONType = jtNull) then d := node.Find('baseline');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.HasAlignV := True;
+    s := d.AsString;
+    if (s = 'middle') or (s = 'center') then Result.AlignV := tavMiddle
+    else if s = 'bottom' then Result.AlignV := tavBottom
+    else Result.AlignV := tavTop;
+  end;
 
   s := StrIn(node, 'overflow');
   if s = 'truncate' then Result.Overflow := tloTruncate
@@ -405,6 +455,14 @@ begin
   if not AHasFormatter then
   begin
     if ADefault = tldName then Exit(nameText);
+    if ADefault = tldRawThird then
+    begin
+      { `rawValue[2] + ''` when the raw value has a third element that is not
+        null, else '-' }
+      if hasRaw and TTyDataStore.RawCell(it, 2, cell) and (cell.Kind <> dvkNone) then
+        Exit(TyJsValueText(cell, ''));
+      Exit('-');
+    end;
     Exit(valueText);
   end;
 

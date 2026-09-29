@@ -1751,6 +1751,9 @@ begin
   if (ADim < 0) or (ADim > High(FDims)) or (FDims[ADim].Meta = nil) then Exit('');
   v := Get(ADim, AIndex);
   if IsNan(v) then Exit('');
+  { categories[v]: a fraction names nothing -- 2.5 is not the third
+    category, it is no category [Batch 68] }
+  if Frac(v) <> 0 then Exit('');
   Result := FDims[ADim].Meta.CategoryAt(Trunc(v));
 end;
 

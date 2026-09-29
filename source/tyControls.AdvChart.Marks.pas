@@ -189,6 +189,16 @@ type
     { The words on each mark, and how they are chosen. Carried here for the
       same reason the bar column is: it was decided somewhere else. }
     Label_: TTyLabelSpec;
+    { the half pixel a heatmap cell is widened by, in device px: upstream's
+      `.5` against its gaps, at this PPI [Batch 68] }
+    HeatPadPx: Double;
+    { a heatmap row's own itemStyle.borderRadius, by RAW row, when its item
+      wrote one (an array form is not a scalar the override table keeps) }
+    HeatRadii: TTyCornerRadiiArray;
+    { a data item's own label read over the series', by raw row }
+    ItemLabels: TTyLabelSpecArray;
+    HasItemLabel: TTyBoolArray;
+    HeatHasRadii: TTyBoolArray;
     { Which store column `{c}` and the default text read. -1 means neither
       has a value to show. }
     LabelValueDim: Integer;
@@ -593,6 +603,31 @@ begin
   Result := TyLabelText(AVisual.Label_.Formatter, AVisual.Label_.HasFormatter,
     AVisual.Label_.DefaultText, AStore, ARow, AVisual.SeriesName,
     AVisual.LabelValueDim, 0, False);
+end;
+
+{ THE ROW'S LABEL WITH ITS ITEM'S OWN OPTIONS over the series': the item
+  may show a label the series hides (or hide one it shows), and write its
+  own formatter, position and distance -- upstream's getItemModel('label').
+  [Batch 68: the heatmap reads it; the other builders still take the
+  series' alone.] }
+procedure ItemCaption(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer; var ACaption: TTyElementCaption);
+var
+  spec: TTyLabelSpec;
+  raw: Integer;
+begin
+  ACaption.Text := '';
+  spec := AVisual.Label_;
+  raw := AStore.GetRawIndex(ARow);
+  if (raw >= 0) and (raw <= High(AVisual.HasItemLabel)) and AVisual.HasItemLabel[raw] then
+  begin
+    spec := AVisual.ItemLabels[raw];
+    ACaption.ItemSpec := raw + 1;
+  end;
+  if not spec.Show then Exit;
+  if spec.Position = tlpNone then Exit;
+  ACaption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
+    AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False);
 end;
 
 { THIS ROW'S OWN COLOUR AND OPACITY, when the author gave them.
@@ -1644,6 +1679,87 @@ begin
   if valCol > 0 then ;
 end;
 
+{ A HEATMAP ON A CARTESIAN: one rect per row, centred on its point, a band
+  wide and a band tall -- each widened by half a pixel against the gaps
+  between neighbours (HeatmapView.ts:193-194), so cells overlap by a quarter
+  pixel either side. Only two category axes have bands: on any other axis
+  upstream's width is not a number and nothing is drawn. A row whose value
+  or position is not a number, or whose position lies outside the scale's
+  extent (tested on the stored value, before a category rounds it), is
+  skipped. No clip, no sub-pixel step. [Batch 68] }
+function BuildHeatmap(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  i: Integer;
+  x, y, val, w, h, l, t: Double;
+  xe, ye: TTyRange;
+  p: TTyPointF;
+  it: TTyRawItem;
+  cell, ov: TTyDataValue;
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+  r: TTyRectF;
+  raw: Integer;
+  c: TTyChartColor;
+  radii: TTyCornerRadii;
+begin
+  Result := 0;
+  if (AStore = nil) or (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
+  if (ABinding.XAxis.AxisType <> atCategory) or (ABinding.YAxis.AxisType <> atCategory) then
+    Exit;
+  w := ABinding.XAxis.BandWidth + AVisual.HeatPadPx;
+  h := ABinding.YAxis.BandWidth + AVisual.HeatPadPx;
+  xe := ABinding.XAxis.Scale.GetExtent;
+  ye := ABinding.YAxis.Scale.GetExtent;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    { the value: the third element of the raw item, parsed as a float
+      dimension parses it -- '' and '-' are gaps }
+    val := NaN;
+    it := AStore.RawItem(i);
+    if TTyDataStore.RawCell(it, 2, cell) then
+      case cell.Kind of
+        dvkNumber: val := cell.Num;
+        dvkText:
+          if (cell.Text <> '') and (cell.Text <> '-') then val := TyJsToNumber(cell.Text);
+        dvkBool: if cell.Num <> 0 then val := 1 else val := 0;
+      end;
+    x := AStore.Get(AColX, i);
+    y := AStore.Get(AColY, i);
+    if IsNan(val) or IsNan(x) or IsNan(y) then Continue;
+    if (x < xe.Start) or (x > xe.Stop) or (y < ye.Start) or (y > ye.Stop) then Continue;
+    p := ABinding.Cart.DataToPoint([x, y]);
+    if IsNan(p.X) or IsNan(p.Y) then Continue;
+    l := p.X - w / 2;
+    t := p.Y - h / 2;
+    r := TyRectF(l, t, l + w, t + h);
+    v := RowVisual(AVisual, AStore, i);
+    { the item's own border over the series' }
+    raw := AStore.GetRawIndex(i);
+    if AStore.HasOverrideByRaw(raw, TyOverrideKey('itemStyle.borderColor')) then
+    begin
+      ov := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderColor'));
+      if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then v.Stroke := c;
+    end;
+    if AStore.HasOverrideByRaw(raw, TyOverrideKey('itemStyle.borderWidth')) then
+    begin
+      ov := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderWidth'));
+      if ov.Kind = dvkNumber then v.StrokeWidthLogical := ov.Num;
+    end;
+    radii := AVisual.Bar.Radii;
+    if (raw >= 0) and (raw <= High(AVisual.HeatHasRadii)) and AVisual.HeatHasRadii[raw] then
+      radii := AVisual.HeatRadii[raw];
+    if radii[0] + radii[1] + radii[2] + radii[3] > 0 then
+      el := MarkElement(TyShapeRoundRect(r, radii), v, ABinding.SeriesIndex, i)
+    else
+      el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
+    ItemCaption(AVisual, AStore, i, el.Caption);
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
 function BuildCandlestick(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
@@ -2216,7 +2332,7 @@ const
     ECharts' names are case-sensitive, so a series typed 'Bar' never resolves
     and never reaches this unit. A lenient match here would answer yes for a
     chart that draws nothing. }
-  cRenderers: array[0..4] of record
+  cRenderers: array[0..5] of record
     Name: string;
     Build: TTyMarkBuilder;
   end = (
@@ -2224,7 +2340,8 @@ const
     (Name: 'line';                      Build: @BuildLine),
     (Name: 'scatter';                   Build: @BuildScatter),
     (Name: 'candlestick';               Build: @BuildCandlestick),
-    (Name: TyPictorialSeriesTypeName;   Build: @BuildPictorialBar));
+    (Name: TyPictorialSeriesTypeName;   Build: @BuildPictorialBar),
+    (Name: 'heatmap';                   Build: @BuildHeatmap));
 
   { AND THE ONES DRAWN SOMEWHERE ELSE. A pie is not on a coordinate system,
     so its geometry is solved in AdvChart.Pie and never reaches this unit --

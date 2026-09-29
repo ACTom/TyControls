@@ -133,6 +133,10 @@ type
     Text: string;
     { Set by the mark alongside Text, and read only for `position: outside`. }
     Outside: TTyCaptionOutside;
+    { THE ITEM'S OWN LABEL: 1 + the raw row whose data item wrote a `label`
+      of its own, read over its series' into the expansion's per-item table;
+      0, the zero value, is "the series' label". [Batch 68] }
+    ItemSpec: Integer;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;

@@ -601,7 +601,8 @@ begin
   end;
   AssertEquals('the band', 1, areas);
   AssertEquals('its name', 1, caps);
-  AssertEquals('the line over it', 2, lineZ);
+  { a line's own z is 3 (LineSeries.ts:161) [Batch 68] }
+  AssertEquals('the line over it', 3, lineZ);
 end;
 
 initialization

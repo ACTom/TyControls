@@ -46,6 +46,7 @@ type
     shape, because `borderRadius: [8, 8, 0, 0]` -- a bar rounded only where
     it leaves the axis -- is the commonest form there is. }
   TTyCornerRadii = array[0..3] of Double;
+  TTyCornerRadiiArray = array of TTyCornerRadii;
 
   { One element's geometry, DEVICE px throughout. A single record for every kind
     rather than a class hierarchy: a scatter series makes one of these per datum,
