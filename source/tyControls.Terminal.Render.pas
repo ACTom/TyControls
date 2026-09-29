@@ -213,6 +213,17 @@ type
       paints it again, whole, next frame. At least one glyph is drawn every frame. }
     RasterBudgetMs: Double;
     Clock: TTyTermClock;
+    { Set by the caller before every row (PaintRow does not clear them). The selected
+      columns [SelFrom, SelTo) (SelFrom >= SelTo: none) get SelColor laid over their own
+      background -- it may be translucent -- and, when SelHasInk, SelInk ($RRGGBB) as
+      their text colour. The hovered link's columns [LinkFrom, LinkTo) get a single
+      underline in LinkColor, over the cells' own lines. }
+    SelFrom, SelTo: Integer;
+    SelColor: TBGRAPixel;
+    SelInk: Cardinal;
+    SelHasInk: Boolean;
+    LinkFrom, LinkTo: Integer;
+    LinkColor: Cardinal;
     { the budget runs from here }
     procedure BeginFrame;
     { ACursorCol -1: no cursor on this row. ALine nil: an empty row. False: a glyph was
@@ -231,6 +242,10 @@ function TyTermMeasureCell(const ASpec: TTyTermFontSpec): TTyTermCellMetrics;
 function TyTermDefaultPaletteColor(AIndex: Integer): Cardinal;
 { $RRGGBB -> an opaque pixel: the one conversion between the two }
 function TyTermRgbToPixel(ARgb: Cardinal): TBGRAPixel;
+{ AOver laid on the opaque ABg ($RRGGBB): per channel (bg x (255 - a) + over x a + 127)
+  div 255 -- the selection's colour on a cell's background (upstream makes the selection
+  colour opaque on the theme's background the same way, ThemeService.ts:87-90) }
+function TyTermBlendOver(ABg: Cardinal; const AOver: TBGRAPixel): Cardinal;
 { DomRendererRowFactory.ts:313-320, :342-460, the colour part: inverse swaps modes
   and values; default colours read 256 / 257; bold brightens palette colours below 8
   (P16 and P256, after the swap); dim mixes the foreground halfway to the background;
@@ -1269,15 +1284,25 @@ begin
   end;
 end;
 
+function TyTermBlendOver(ABg: Cardinal; const AOver: TBGRAPixel): Cardinal;
+var
+  a: Cardinal;
+begin
+  a := AOver.alpha;
+  Result := ((((ABg shr 16) and $FF) * (255 - a) + Cardinal(AOver.red) * a + 127) div 255) shl 16
+    or ((((ABg shr 8) and $FF) * (255 - a) + Cardinal(AOver.green) * a + 127) div 255) shl 8
+    or (((ABg and $FF) * (255 - a) + Cardinal(AOver.blue) * a + 127) div 255);
+end;
+
 function TTyTermRowPainter.PaintRow(ABmp: TBGRABitmap; AX, AY: Integer; ALine: TTyTerminalLine;
   ACols: Integer; ACursorCol: Integer; ACursorShape: TTyTermCursorShape): Boolean;
 var
-  c, runStart, x0, n, w, cw, cy, lw, kind: Integer;
+  c, runStart, x0, n, w, cw, cy, lw, kind, sf, st: Integer;
   clip, cell: TRect;
   attr: TTyTerminalAttrData;
   ext: TTyTerminalExtAttrs;
   px: TBGRAPixel;
-  runColor: Cardinal;
+  runColor, ink: Cardinal;
 
   function LineStyleOf(ACol, AKind: Integer): Integer;
   begin
@@ -1333,6 +1358,11 @@ begin
     FInfo[c].Strike := attr.IsStrikethrough;
     FInfo[c].Over := attr.IsOverline;
   end;
+  { the selection over the cells' own backgrounds }
+  sf := Max(SelFrom, 0);
+  st := Min(SelTo, ACols);
+  for c := sf to st - 1 do
+    FInfo[c].C.Bg := TyTermBlendOver(FInfo[c].C.Bg, SelColor);
   runStart := 0;
   for c := 1 to ACols do
     if (c = ACols) or (FInfo[c].C.Bg <> FInfo[runStart].C.Bg) then
@@ -1345,7 +1375,14 @@ begin
   if ALine <> nil then
     for c := 0 to Min(ACols, ALine.Length) - 1 do
       if not FInfo[c].C.Invisible then
-        DrawGlyphAt(ABmp, ALine, c, AX + c * Metrics.CellW, AY, FInfo[c].C.Fg, clip);
+      begin
+        { a theme's selection colour for the text only where the theme gives one }
+        if SelHasInk and (c >= sf) and (c < st) then
+          ink := SelInk
+        else
+          ink := FInfo[c].C.Fg;
+        DrawGlyphAt(ABmp, ALine, c, AX + c * Metrics.CellW, AY, ink, clip);
+      end;
   { 3. lines: underline, strikethrough, overline, each in runs of one style and colour }
   for kind := 0 to 2 do
   begin
@@ -1363,6 +1400,10 @@ begin
         runStart := c;
       end;
   end;
+  { the hovered link: one single underline over the cells' own }
+  if Min(LinkTo, ACols) > Max(LinkFrom, 0) then
+    DrawLineRun(ABmp, Ord(tusSingle), AX + Max(LinkFrom, 0) * Metrics.CellW,
+      AX + Min(LinkTo, ACols) * Metrics.CellW, AY, LinkColor, clip);
   { 4. the cursor }
   if (ACursorCol >= 0) and (ACursorCol < ACols) and (ACursorShape <> tcpNone) then
   begin

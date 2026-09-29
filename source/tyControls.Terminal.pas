@@ -129,6 +129,11 @@ type
     { 色表:259 项 + 光标墨色,键 = (模型, ThemeVersion, StyleClass, StyleOverride) }
     FPalette: array[0..258] of Cardinal;
     FCursorInkRgb: Cardinal;
+    { 同一个键下取的选区色(失焦 / 聚焦,带 alpha)、选区前景(主题写了才有)、链接色 }
+    FSelBg: array[Boolean] of TTyColor;
+    FSelInk: array[Boolean] of Cardinal;
+    FSelHasInk: array[Boolean] of Boolean;
+    FLinkRgb: Cardinal;
     FPaletteModel: TObject;
     FPaletteVersion: Cardinal;
     FPaletteClass, FPaletteOverride: string;
@@ -977,6 +982,7 @@ var
   st, bare, cur, bareCur: TTyStyleSet;
   i: Integer;
   instFg, instBg, themeFg, themeBg, c: Cardinal;
+  focused: Boolean;
 begin
   model := ActiveController.Model;
   cls := TyStyleClassFor(Self, StyleClass);
@@ -992,6 +998,23 @@ begin
   themeBg := TermBgOf(bare, FallbackBg);
   FPalette[256] := instFg;
   FPalette[257] := instBg;
+  { 选区:无状态是失焦那一色、:focus 是聚焦那一色(TyTerminalSelection,alpha 保留);前景
+    只在主题给了 color 时才换(spec §11「写了才用」:基础层不写,17 个主题都不写——
+    tpTextColor 在 Present 里就是规则写了) }
+  for focused := False to True do
+  begin
+    if focused then
+      st := model.ResolveStyle('TyTerminalSelection', cls, [tysFocused])
+    else
+      st := model.ResolveStyle('TyTerminalSelection', cls, []);
+    if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then
+      FSelBg[focused] := st.Background.Color
+    else
+      FSelBg[focused] := TTyColor(($5A shl 24) or instFg);
+    FSelHasInk[focused] := tpTextColor in st.Present;
+    FSelInk[focused] := TermFgOf(st, instFg);
+  end;
+  FLinkRgb := TermFgOf(model.ResolveStyle('TyTerminalLink', cls, []), instFg);
   { 0..15 取实例的类;16..255 公式;颜色一律 RGB、丢 alpha;缺了退到 Tango,不抛 }
   ground := Format('#%.6x', [instBg]);
   for i := 0 to 15 do
@@ -1747,8 +1770,19 @@ begin
 end;
 
 procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+
+  function Frame(ARgb: Cardinal): Cardinal;
+  begin
+    { 禁用时朝父控件底色预混(色表同一个方向);选区色的 alpha 不动 }
+    if FPremixAlpha < 255 then
+      Result := PremixRgb(ARgb, FPremixBase, FPremixAlpha)
+    else
+      Result := ARgb;
+  end;
+
 var
-  w, h, r, cursorRow, cursorCol: Integer;
+  w, h, r, cursorRow, cursorCol, sa, sb: Integer;
+  selRgb: Cardinal;
   buf: TTyTerminalBuffer;
   ins, clip, part: TRect;
   shape: TTyTermCursorShape;
@@ -1760,6 +1794,8 @@ begin
   try
     EnsureThemeCurrent;
     EnsureMetrics(APPI);           { 度量变了它自己排队重排 }
+    { 追上被挤出头部的行(只动选区的行号,不发宿主事件;脏行这一帧画掉) }
+    SyncSelectionTrim;
     w := ARect.Right - ARect.Left;
     h := ARect.Bottom - ARect.Top;
     if (w <= 0) or (h <= 0) then Exit;
@@ -1798,6 +1834,13 @@ begin
     FRowPainter.CursorWidthPx := Max(1, MulDiv(FSpec.CursorWidthLogical, APPI, 96));
     FRowPainter.RasterBudgetMs := FRasterBudgetMs;
     FRowPainter.Clock := @NowMs;
+    { 选区与链接:聚焦 / 失焦两色,禁用时预混 }
+    selRgb := Frame(Cardinal(FSelBg[FHasFocus]) and $FFFFFF);
+    FRowPainter.SelColor := BGRA((selRgb shr 16) and $FF, (selRgb shr 8) and $FF, selRgb and $FF,
+      TyAlphaOf(FSelBg[FHasFocus]));
+    FRowPainter.SelHasInk := FSelHasInk[FHasFocus];
+    FRowPainter.SelInk := Frame(FSelInk[FHasFocus]);
+    FRowPainter.LinkColor := Frame(FLinkRgb);
     FRowPainter.BeginFrame;
     ins := ContentInsets(APPI);
     buf := FCore.Buffer;
@@ -1821,6 +1864,19 @@ begin
         cursorCol := Min(buf.X, FCore.Cols - 1)
       else
         cursorCol := -1;
+      { 选区按缓冲行(视口滚了它跟着字走) }
+      if FSelection.RowSpan(buf.YDisp + r, sa, sb) then
+      begin
+        FRowPainter.SelFrom := sa;
+        FRowPainter.SelTo := sb;
+      end
+      else
+      begin
+        FRowPainter.SelFrom := 0;
+        FRowPainter.SelTo := 0;
+      end;
+      FRowPainter.LinkFrom := 0;
+      FRowPainter.LinkTo := 0;
       if not FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
         FCore.Cols, cursorCol, shape) then
       begin
@@ -1834,6 +1890,7 @@ begin
     end;
     FAllDirty := False;
     FPaintedCursorRow := cursorRow;
+    SelectionViewRows(FSelDrawnFirst, FSelDrawnLast);
     if incomplete and not FRepaintQueued and not (csDesigning in ComponentState) then
     begin
       FRepaintQueued := True;
@@ -1917,6 +1974,8 @@ end;
   也在内)和 DoEnter / DoExit(窗体内换 ActiveControl)都走这里,重复的一路什么都不做。
   上游看的是 textarea 的 focus / blur,也就是系统焦点。 }
 procedure TTyTerminalView.SetHasFocus(AValue: Boolean);
+var
+  a, b: Integer;
 begin
   if FHasFocus = AValue then Exit;
   FHasFocus := AValue;
@@ -1937,6 +1996,9 @@ begin
     UpdateBlinkTimer;
   end;
   DirtyCursorRows;
+  { 选区聚焦 / 失焦两色 }
+  if SelectionViewRows(a, b) then
+    DirtyRows(a, b);
 end;
 
 procedure TTyTerminalView.DoEnter;
