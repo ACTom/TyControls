@@ -11,7 +11,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Forms, Controls, Graphics, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Terminal.Core,
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.Render, tyControls.Terminal, test.terminal.view;
 
 type
@@ -74,6 +74,8 @@ type
     { 4 期:链接下划线 }
     procedure TestAHoveredLinkIsUnderlined;
     procedure TestAWrappedLinkIsUnderlinedOnBothRows;
+    { 5 期:折行 }
+    procedure TestAReflowRepaintsEveryRow;
   end;
 
 implementation
@@ -1434,6 +1436,42 @@ begin
     AssertTrue('row 0, column 2: not', CellIs(b, 2, 0, Bg));
     AssertTrue('row 1, the first half: selected', CellIs(b, 1, 1, sel));
     AssertTrue('row 1, the second half with it', CellIs(b, 2, 1, sel));
+  finally
+    b.Free;
+  end;
+end;
+
+{ ---- 5 期:折行 ------------------------------------------------------------------------- }
+
+{ A new column count (here from the core, as DECCOLM or a host would: the client
+  area stays) rewraps the buffer: the next frame paints every row, and a cell has ink
+  exactly where the new buffer has a character. }
+procedure TTyTerminalViewPaintTests.TestAReflowRepaintsEveryRow;
+var
+  b: TBGRABitmap;
+  before, r, c: Integer;
+  line: TTyTerminalLine;
+  want: Boolean;
+begin
+  F.View.WriteSync(#27'[?25labcdefghijklmnopqrstuvwxyz0123456789'#13#10'$ x');
+  b := Snap;
+  b.Free;
+  before := F.View.PaintedRows;
+  F.View.Core.Resize(13, 5);
+  AssertEquals('13 columns', 13, F.View.Cols);
+  b := Snap;
+  try
+    AssertEquals('every row painted', before + F.View.Rows, F.View.PaintedRows);
+    for r := 0 to F.View.Rows - 1 do
+    begin
+      line := F.View.Core.Buffer.GetLine(F.View.Core.Buffer.YDisp + r);
+      for c := 0 to F.View.Cols - 1 do
+      begin
+        want := (line <> nil) and (c < line.Length) and line.HasContent(c) and (line.GetCodePoint(c) <> 32);
+        AssertEquals(Format('row %d col %d: ink', [r, c]), want, InkIn(b, F.View.CellRect(c, r), Bg));
+      end;
+    end;
+    AssertEquals('the long line rewrapped', 'abcdefghijklm', F.RowText(0));
   finally
     b.Free;
   end;

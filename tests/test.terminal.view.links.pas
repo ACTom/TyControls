@@ -9,8 +9,9 @@ unit test.terminal.view.links;
 interface
 
 uses
-  Classes, SysUtils, Types, Forms, Controls, LCLType, LMessages, fpcunit, testregistry,
-  tyControls.Terminal.Links, tyControls.Terminal, test.terminal.keyboard, test.terminal.view;
+  Classes, SysUtils, Types, Forms, Controls, LCLType, LMessages, fpcunit, testregistry, fpjson,
+  tyControls.Terminal.Buffer, tyControls.Terminal.Links, tyControls.Terminal, test.terminal.keyboard,
+  test.terminal.view, test.terminal.oracle;
 
 type
   TTyTerminalViewLinkTests = class(TTestCase)
@@ -50,6 +51,9 @@ type
     { 4 期期末审查 }
     procedure TestACtrlClickSurvivesTheCaptureGoingFirst;
     procedure TestOsc52ExceptionsStayInside;
+    { 5 期:改尺寸 }
+    procedure TestAResizeDropsTheHover;
+    procedure TestALongLineUnderAnOldConPtyMapsAsUpstream;
   end;
 
 function TyTermOsc8(const AUri, AText: RawByteString): RawByteString;
@@ -344,6 +348,93 @@ begin
   V.WriteSync(#13#10#27']52;c;?'#7'third'#27']52;c;aGk='#7'fourth');
   AssertEquals('reading a busy clipboard', 'thirdfourth', F.RowText(2));
   AssertEquals('no answer', '', F.Data);
+end;
+
+{ ---- 5 期:改尺寸 ------------------------------------------------------------------------ }
+
+{ Linkifier.ts:47-50: a resize drops the current link (its range points at the old
+  layout); the next pointer move finds it again in the new one }
+procedure TTyTerminalViewLinkTests.TestAResizeDropsTheHover;
+var
+  i: Integer;
+  covered: Boolean;
+  l: TTyTermLink;
+begin
+  V.WriteSync('see https://example.com/' + StringOfChar('a', 40) + ' ok'#13#10'$ ');
+  V.MoveTo([ssCtrl], V.CellCenter(8, 0));
+  AssertTrue('hovered', V.HoverOn);
+  AssertEquals('over two rows', 2, V.HoverNow.Range.EndY - V.HoverNow.Range.StartY + 1);
+  V.ClearInvalidated;
+  F.SizeTo(70, 5);
+  AssertEquals('70 columns', 70, V.Cols);
+  AssertFalse('the resize dropped the hover', V.HoverOn);
+  covered := False;
+  for i := 0 to High(V.Invalidated) do
+    if (V.Invalidated[i].X <= 0) and (V.Invalidated[i].Y >= 1) then
+      covered := True;
+  AssertTrue('the rows it underlined were repainted', covered);
+  V.MoveTo([ssCtrl], V.CellCenter(8, 0));
+  AssertTrue('found again', V.HoverOn);
+  AssertTrue('the link at that cell now',
+    TyTermFindLinkAt(V.Core.Buffer, V.Core.Links, 8, V.Core.Buffer.YDisp, V.Cols, True, False, l));
+  AssertTrue('the same range', TyTermLinkEquals(l, V.HoverNow));
+  AssertEquals('one row at 70 columns', V.HoverNow.Range.StartY, V.HoverNow.Range.EndY);
+end;
+
+{ An old ConPTY keeps a line longer than the grid after a narrower resize; the web
+  address on it maps back over the whole line, as upstream does (url-cases.js,
+  scene reflow-old-conpty-long-line) -- not cut at the grid's width }
+procedure TTyTerminalViewLinkTests.TestALongLineUnderAnOldConPtyMapsAsUpstream;
+var
+  m: TTyTermMisses;
+  fx: TTyTermFixtures;
+  scenes, web: TJSONArray;
+  scene, q: TJSONObject;
+  i, k: Integer;
+  wp: TTyTerminalWindowsPty;
+  found: Boolean;
+begin
+  m := TTyTermMisses.Create;
+  try
+    fx := TyTermLoadFixtures('links', m);
+    try
+      scenes := fx[0].Arrays['lines'];
+      found := False;
+      for i := 0 to scenes.Count - 1 do
+      begin
+        scene := scenes.Objects[i];
+        if scene.Strings['id'] <> 'reflow-old-conpty-long-line' then
+          Continue;
+        found := True;
+        F.SizeTo(scene.Integers['cols'], scene.Integers['rows']);
+        wp.Backend := twpConPty;
+        wp.BuildNumber := scene.Objects['windowsPty'].Integers['buildNumber'];
+        V.Core.WindowsPty := wp;
+        V.WriteSync(TyTermBase64Bytes(scene.Strings['write']));
+        F.SizeTo(scene.Arrays['resize'].Integers[0], scene.Arrays['resize'].Integers[1]);
+        AssertEquals('narrower', scene.Arrays['resize'].Integers[0], V.Cols);
+        AssertTrue('a line longer than the grid', V.Core.Buffer.GetLine(0).Length > V.Cols);
+        q := nil;
+        for k := 0 to scene.Arrays['queries'].Count - 1 do
+          if scene.Arrays['queries'].Objects[k].Integers['y'] = 1 then
+            q := scene.Arrays['queries'].Objects[k];
+        AssertTrue('the query of row 1', q <> nil);
+        web := q.Arrays['web'];
+        AssertEquals('upstream finds one address', 1, web.Count);
+        V.MoveTo([ssCtrl], V.CellCenter(5, 0));
+        AssertTrue('hovered', V.HoverOn);
+        AssertEquals('start x', web.Objects[0].Arrays['range'].Integers[0], V.HoverNow.Range.StartX);
+        AssertEquals('start y', web.Objects[0].Arrays['range'].Integers[1], V.HoverNow.Range.StartY);
+        AssertEquals('end x', web.Objects[0].Arrays['range'].Integers[2], V.HoverNow.Range.EndX);
+        AssertEquals('end y', web.Objects[0].Arrays['range'].Integers[3], V.HoverNow.Range.EndY);
+      end;
+      AssertTrue('scene found', found);
+    finally
+      TyTermFreeFixtures(fx);
+    end;
+  finally
+    m.Free;
+  end;
 end;
 
 initialization

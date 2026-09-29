@@ -13,8 +13,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Forms, Controls, Graphics, Menus, LCLType, fpcunit, testregistry,
-  tyControls.Terminal.Core, tyControls.Terminal.Selection, tyControls.Terminal, tyControls.StrConsts,
-  test.terminal.keyboard, test.terminal.view;
+  tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal.Selection, tyControls.Terminal,
+  tyControls.StrConsts, test.terminal.keyboard, test.terminal.view;
 
 type
   TTyTerminalViewMouseTests = class(TTestCase)
@@ -466,13 +466,32 @@ procedure TTyTerminalViewMouseTests.TestWhenTheSelectionIsCleared;
     FChanges := 0;
   end;
 
+var
+  wp: TTyTerminalWindowsPty;
 begin
   V.WriteSync(Lines(0, 10) + 'hello world');
+  { phase 5: a new column count that rewraps the buffer clears (the plan's question one
+    #2; upstream keeps the coordinates, SelectionService.ts:158-162 -- "pinned the
+    no-reflow answer" before) ... }
   Pick;
   F.SizeTo(25, 5);
   AssertEquals('25 columns', 25, V.Cols);
-  AssertTrue('more columns: kept', V.HasSelection);
+  AssertFalse('more columns, rewrapped: cleared', V.HasSelection);
+  AssertEquals('one change (columns)', 1, FChanges);
+  { ... one that does not (an old ConPTY) keeps it, as upstream }
+  wp.Backend := twpConPty;
+  wp.BuildNumber := 19044;
+  V.Core.WindowsPty := wp;
+  Pick;
+  F.SizeTo(27, 5);
+  AssertEquals('27 columns', 27, V.Cols);
+  AssertTrue('more columns, not rewrapped: kept', V.HasSelection);
   AssertEquals('no change', 0, FChanges);
+  F.SizeTo(25, 5);
+  wp.Backend := twpNone;
+  wp.BuildNumber := 0;
+  V.Core.WindowsPty := wp;
+  Pick;
   F.SizeTo(25, 6);
   AssertEquals('6 rows', 6, V.Rows);
   AssertFalse('more rows: cleared', V.HasSelection);

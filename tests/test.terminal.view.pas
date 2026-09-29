@@ -183,6 +183,9 @@ type
     function Clock: Double;
     function StepClock: Double;
     procedure ResizeFromTitle(Sender: TObject; const AText: string);
+  private
+    FSelChanges: Integer;
+    procedure SelChanged(Sender: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -224,6 +227,10 @@ type
     procedure TestDiscardPendingDropsWhatIsQueued;
     procedure TestTheSurfaceSurvivesASmallResize;
     procedure TestAStateChangeThatLeavesTheFrameRepaintsNothing;
+    { 5 期:折行 }
+    procedure TestTheViewRewrapsLikeTheCore;
+    procedure TestAReflowingResizeClearsTheSelection;
+    procedure TestTheScrollBarFollowsReflow;
   end;
 
 const
@@ -1670,6 +1677,132 @@ begin
   AssertEquals('hovering changes nothing on this theme: no whole repaint', n, F.View.Invalidations);
   F.View.Invalidate;
   AssertEquals('an Invalidate of the host''s own still goes through', n + 1, F.View.Invalidations);
+end;
+
+{ ---- 5 期:折行 ------------------------------------------------------------------------- }
+
+procedure TTyTerminalViewTests.SelChanged(Sender: TObject);
+begin
+  Inc(FSelChanges);
+end;
+
+function LongLine(ALen, AFrom: Integer): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to ALen - 1 do
+    Result := Result + Chr(33 + (AFrom + i) mod 94);
+end;
+
+{ The control, sized through its client area, against a bare core fed the same bytes
+  and resized the same way (the core is held to upstream by the reflow oracle). }
+procedure TTyTerminalViewTests.TestTheViewRewrapsLikeTheCore;
+const
+  Widths: array[0..2] of Integer = (40, 80, 23);
+var
+  core: TTyTerminalCore;
+  text: RawByteString;
+  k, i: Integer;
+  a, b: TTyTerminalBuffer;
+  la, lb: TTyTerminalLine;
+begin
+  F.SizeTo(80, 24);
+  AssertEquals('80 columns', 80, F.View.Cols);
+  text := LongLine(170, 0) + #13#10#$E4#$B8#$AD#$E6#$96#$87' CJK '#$F0#$9F#$98#$80' and an emoji, '
+    + LongLine(60, 7) + #13#10'$ ';
+  F.View.WriteSync(text);
+  core := TTyTerminalCore.Create(80, 24);
+  try
+    core.WriteSync(text);
+    for k := 0 to High(Widths) do
+    begin
+      F.SizeTo(Widths[k], 24);
+      core.Resize(Widths[k], 24);
+      AssertEquals('columns', Widths[k], F.View.Cols);
+      a := F.View.Core.Buffer;
+      b := core.Buffer;
+      AssertEquals(Format('%d: lines', [Widths[k]]), b.Lines.Length, a.Lines.Length);
+      AssertEquals(Format('%d: ybase', [Widths[k]]), b.YBase, a.YBase);
+      AssertEquals(Format('%d: ydisp', [Widths[k]]), b.YDisp, a.YDisp);
+      AssertEquals(Format('%d: cursor x', [Widths[k]]), b.X, a.X);
+      AssertEquals(Format('%d: cursor y', [Widths[k]]), b.Y, a.Y);
+      for i := 0 to b.Lines.Length - 1 do
+      begin
+        la := a.GetLine(i);
+        lb := b.GetLine(i);
+        AssertEquals(Format('%d: row %d', [Widths[k], i]), lb.TranslateToString(False), la.TranslateToString(False));
+        AssertEquals(Format('%d: row %d wrapped', [Widths[k], i]), lb.IsWrapped, la.IsWrapped);
+      end;
+    end;
+    { and it did rewrap: at 23 columns the long line takes eight rows }
+    AssertEquals('the first row, cut at 23', LongLine(23, 0), F.View.Core.Buffer.GetLine(0).TranslateToString(True));
+    AssertTrue('its next row wrapped', F.View.Core.Buffer.GetLine(1).IsWrapped);
+  finally
+    core.Free;
+  end;
+end;
+
+procedure TTyTerminalViewTests.TestAReflowingResizeClearsTheSelection;
+var
+  wp: TTyTerminalWindowsPty;
+  s0, e0, s1, e1: TTyTermSelPoint;
+begin
+  F.SizeTo(80, 10);
+  F.View.OnSelectionChange := @SelChanged;
+  F.View.WriteSync(LongLine(170, 0) + #13#10'$ ');
+  { the default: a new column count rewraps, the selection goes (one event) }
+  F.View.Select(5, 0, 20);
+  AssertTrue('selected', F.View.HasSelection);
+  FSelChanges := 0;
+  F.SizeTo(40, 10);
+  AssertFalse('rewrapped: cleared', F.View.HasSelection);
+  AssertEquals('one change', 1, FSelChanges);
+  { an old ConPTY: no reflow, the selection and its coordinates stay (upstream) }
+  wp.Backend := twpConPty;
+  wp.BuildNumber := 19044;
+  F.View.Core.WindowsPty := wp;
+  F.View.Select(5, 0, 20);
+  AssertTrue('the start', F.View.Sel.FinalStart(s0));
+  AssertTrue('the end', F.View.Sel.FinalEnd(e0));
+  FSelChanges := 0;
+  F.SizeTo(60, 10);
+  AssertEquals('60 columns', 60, F.View.Cols);
+  AssertTrue('not rewrapped: kept', F.View.HasSelection);
+  AssertEquals('no change', 0, FSelChanges);
+  AssertTrue(F.View.Sel.FinalStart(s1));
+  AssertTrue(F.View.Sel.FinalEnd(e1));
+  AssertEquals('start column', s0.Col, s1.Col);
+  AssertEquals('start row', s0.Row, s1.Row);
+  AssertEquals('end column', e0.Col, e1.Col);
+  AssertEquals('end row', e0.Row, e1.Row);
+  { a new row count clears in either case (SelectionService.ts:158-162) }
+  F.SizeTo(60, 12);
+  AssertFalse('rows: cleared', F.View.HasSelection);
+  AssertEquals('one change (rows)', 1, FSelChanges);
+end;
+
+procedure TTyTerminalViewTests.TestTheScrollBarFollowsReflow;
+var
+  i: Integer;
+  text: RawByteString;
+  buf: TTyTerminalBuffer;
+begin
+  F.SizeTo(80, 10);
+  text := '';
+  for i := 0 to 29 do
+    text := text + LongLine(200, i) + #13#10;
+  F.View.WriteSync(text + '$ ');
+  F.SizeTo(40, 10);
+  buf := F.View.Core.Buffer;
+  AssertEquals('40: 30 lines of five rows and the prompt', 30 * 5 + 1, buf.Lines.Length);
+  AssertEquals('40: the bar''s last position = rows - viewport', buf.Lines.Length - F.View.Rows, F.View.Bar.Max);
+  AssertEquals('40: the thumb at the viewport', buf.YDisp, F.View.Bar.Position);
+  F.SizeTo(80, 10);
+  buf := F.View.Core.Buffer;
+  AssertEquals('80: three rows each again', 30 * 3 + 1, buf.Lines.Length);
+  AssertEquals('80: the bar''s last position', buf.Lines.Length - F.View.Rows, F.View.Bar.Max);
+  AssertEquals('80: the thumb', buf.YDisp, F.View.Bar.Position);
 end;
 
 initialization

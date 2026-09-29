@@ -212,7 +212,7 @@ type
       行段(失效用);多击;拖出边界的自动滚 }
     FSelection: TTyTermSelection;
     FSelTrimBase: Int64;
-    FSelRows: Integer;
+    FSelRows, FSelCols: Integer;
     FLastProtocol: TTyTerminalMouseProtocol;
     FSelDrawnFirst, FSelDrawnLast: Integer;
     FLastClickX, FLastClickY, FClickCount: Integer;
@@ -721,6 +721,7 @@ begin
   FSelection.OnRedraw := @SelectionRedraw;
   FSelTrimBase := FCore.Buffer.TrimmedLines;
   FSelRows := FCore.Rows;
+  FSelCols := FCore.Cols;
   { OSC 52:同 Core 自己的处理器,交给解析器(它释放);Reset 不清解析器的处理器 }
   FCore.Parser.RegisterOscHandler(52, TTyTerminalOscStringHandler.Create(@HandleOsc52));
   MaskUnencodedExtensions;
@@ -893,11 +894,19 @@ end;
 
 procedure TTyTerminalView.CoreResize(Sender: TObject; ACols, ARows: Integer);
 begin
-  { 行数变了清选区,列数变不清(SelectionService.ts:158-162) }
-  if ARows <> FSelRows then
-  begin
-    FSelRows := ARows;
+  { 行数变了清选区(SelectionService.ts:158-162)。列数变了上游不清;但当前缓冲这次真的重新
+    折行了,格子里已经是别的字,选区还框着原来的坐标——这时也清(spec §15)。不折行
+    (老 ConPTY、备用屏)照上游保留,折行挤出头部的行照常经 SyncSelectionTrim 上移。 }
+  if (ARows <> FSelRows) or ((ACols <> FSelCols) and FCore.Buffer.IsReflowEnabled) then
     ClearSelection;
+  FSelRows := ARows;
+  FSelCols := ACols;
+  { 悬停的链接照上游清掉(Linkifier.ts:47-50 _clearCurrentLink):范围指着旧坐标;指针再动
+    时 UpdateHover 按新缓冲重新找 }
+  if FHoverValid then
+  begin
+    DirtyLinkRows(FHoverLink);
+    FHoverValid := False;
   end;
   SetLength(FDirty, ARows);
   FAllDirty := True;
