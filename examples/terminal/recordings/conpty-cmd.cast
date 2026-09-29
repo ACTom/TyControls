@@ -1,0 +1,12 @@
+{"version": 2, "width": 80, "height": 24, "env": {"TERM": "xterm-256color"}}
+[0.047, "o", "\u001b[2J\u001b[m\u001b[Htyterm-cmd 中文与 English 混排\r\n\u001b]0;cmd.exe\u0007\u001b[?25h"]
+[0.063, "o", "line 1 \r\nline 2 \r\nline 3 \r\nline 4 \r\nline 5 \r\nline 6 \r\nline 7 \r\nline 8 \r\nline 9 \r\nline 10\r\nline 11\r\nline 12\r\nline 13\r\nline 14\r\nline 15\r\nline 16\r\nline 17\r\nline 18\r\nline 19\r\nline 20\r\nline 21\r\nline 22\r\nline 23\r"]
+[0.063, "o", "\nline 24\r"]
+[0.063, "o", "\nline 25\r"]
+[0.063, "o", "\nline 26\r"]
+[0.063, "o", "\nline 27\r"]
+[0.063, "o", "\nline 28\r"]
+[0.063, "o", "\nline 29\r"]
+[0.063, "o", "\nline 30\r"]
+[0.063, "o", "\ndone\r"]
+[0.063, "o", "\n"]

@@ -6,7 +6,10 @@
 //
 // The inputs are recordings/*.cast (asciicast v2), made in WSL through tmux with a
 // scrubbed environment by wsl-record.sh from the recordings/*.keys next to them: vim,
-// less, htop, git log, ls, a Python REPL, nested tmux and a CJK and emoji file.
+// less, htop, git log, ls, a Python REPL, nested tmux and a CJK and emoji file; and two
+// made on Windows through the example's ConPTY session (conpty-cmd, conpty-powershell:
+// tools/terminal-conpty-record from the *.cmdline next to them, then conpty-cast.py) --
+// what ConPTY itself paints (build 19044), replayed the same way.
 // Each "o" event becomes one write step, UTF-8 encoded -- the event boundaries are
 // where the program's output was cut, so they are the chunk boundaries too. The size
 // comes from the header; scrollback 200, Unicode 11.

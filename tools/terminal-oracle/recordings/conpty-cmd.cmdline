@@ -1,0 +1,1 @@
+cmd.exe /d /c "echo tyterm-cmd 中文与 English 混排& (for /L %i in (1,1,30) do @echo line %i)& echo done"
