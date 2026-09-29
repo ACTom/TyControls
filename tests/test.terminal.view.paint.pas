@@ -1895,6 +1895,15 @@ begin
   Result := Rgb(B.GetPixel((r.Left + r.Right) div 2, r.Top + AView.CellMetrics.UnderlineY));
 end;
 
+{ the strikethrough's colour in cell ACol of row ARow (it is drawn in the text colour) }
+function StrikeAt(B: TBGRABitmap; AView: TTyTerminalViewProbe; ACol, ARow: Integer): Cardinal;
+var
+  r: TRect;
+begin
+  r := AView.CellRect(ACol, ARow);
+  Result := Rgb(B.GetPixel((r.Left + r.Right) div 2, r.Top + AView.CellMetrics.StrikeY));
+end;
+
 function Ensured(ABg, AFg: Cardinal; ARatio: Double): Cardinal;
 begin
   if not TyTermEnsureContrastRatio(ABg, AFg, ARatio, Result) then Result := AFg;
@@ -2026,11 +2035,12 @@ begin
   else
     ink := $FFFFFF;
   F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminalSelection:focus { color: #' + IntToHex(ink, 6) + '; }'#10;
-  F.View.WriteSync(#27'[H'#27'[2;4;38;2;170;170;170;48;2;187;187;187m' + 'Ab    ' + #27'[0m');
+  F.View.WriteSync(#27'[H'#27'[2;4;9;38;2;170;170;170;48;2;187;187;187m' + 'Ab    ' + #27'[0m');
   F.View.MinimumContrastRatio := 1;
   b := Snap;
   try
     AssertEquals('faint, selected, at 1', IntToHex(ink, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+    AssertEquals('its strikethrough too', IntToHex(ink, 6), IntToHex(StrikeAt(b, F.View, 3, 0), 6));
   finally
     b.Free;
   end;
@@ -2038,6 +2048,7 @@ begin
   b := Snap;
   try
     AssertEquals('faint, selected, at 4.5: the same', IntToHex(ink, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+    AssertEquals('its strikethrough too', IntToHex(ink, 6), IntToHex(StrikeAt(b, F.View, 3, 0), 6));
   finally
     b.Free;
   end;
