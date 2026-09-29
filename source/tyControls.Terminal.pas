@@ -15,7 +15,7 @@ unit tyControls.Terminal;
   - 本控件**接管**了 Core 的这些事件,宿主别改写:OnData、OnRefreshRows、OnTitleChange、
     OnBell、OnCursorMove、OnScroll、OnBufferActivate、OnModesChange、OnOsc、
     OnQueryBaseColor、OnProcessRequest、OnWindowOptionsReport、OnResize、
-    OnScrollbackCleared。宿主可以自己挂的是 OnIconNameChange、OnLineFeed、
+    OnScrollbackCleared、OnUserInput。宿主可以自己挂的是 OnIconNameChange、OnLineFeed、
     OnRequestScrollToBottom(只是通知:Core 自己滚到底),或者 Core.Parser.Register*Handler。
   - 解析一次(AsyncSlice、WriteSync、Write)里 Core 可能滚几千次、改几次色:这期间滚动只记
     「整屏脏」「滚动条待同步」,颜色签名不看;解析返回后(EndDrive)统一失效、同步一次,
@@ -35,7 +35,10 @@ unit tyControls.Terminal;
   - OnRefreshRows 报的行号 Core 已经换算成**视口行**(InputHandler.parse 的结尾),这里
     直接用,不再加 YBase − YDisp。
   - 主题变了没有钩子:覆盖 Invalidate,比 (模型, ThemeVersion, StyleClass, StyleOverride);
-    RenderTo 开头再比一次兜底(无头测试直接调 RenderTo)。 }
+    RenderTo 开头再比一次兜底(无头测试直接调 RenderTo)。
+  - 选区照上游记坐标(缓冲行),不记标记:输出把行挤出头部时按缓冲的 TrimmedLines 差值
+    整体上移(SyncSelectionTrim),解析返回后、绘制前、每个鼠标入口都追一次。清选区的时机
+    同上游:用户输入、行数变了、换缓冲(含 RIS / Reset)、程序打开鼠标上报;另加清滚回。 }
 
 interface
 
@@ -46,7 +49,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel,
   tyControls.Controller, tyControls.ScrollBar, tyControls.PlatformWS, tyControls.TextMenu,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  tyControls.Terminal.Keyboard, tyControls.Terminal.Render;
+  tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal.Selection;
 
 const
   { X11 惯例的 PRIMARY(选中即复制、中键粘贴):Unix 上除了 macOS。按平台取,不按 widgetset;
@@ -184,6 +187,19 @@ type
     FRightReported, FRightLocal: Boolean;
     FSelectionOverrideKey: TTyTerminalSelectionOverrideKey;
     FLastMousePos: TPoint;
+    { 选区:上游 SelectionService 的非 DOM 部分;缓冲的 TrimmedLines 读数;上次画到的视口
+      行段(失效用);多击;拖出边界的自动滚 }
+    FSelection: TTyTermSelection;
+    FSelTrimBase: Int64;
+    FSelRows: Integer;
+    FLastProtocol: TTyTerminalMouseProtocol;
+    FSelDrawnFirst, FSelDrawnLast: Integer;
+    FLastClickX, FLastClickY, FClickCount: Integer;
+    FLastClickTick: QWord;
+    FDragTimer: TTimer;
+    FCopyOnSelect: Boolean;
+    FWordSeparators: string;
+    FOnSelectionChange: TNotifyEvent;
     { 输入法 }
     FImeHook: TObject;
     FImeCaretRect: TRect;
@@ -214,6 +230,7 @@ type
     procedure CoreWindowReport(Sender: TObject; AKind: TTyTermWindowReport);
     procedure CoreResize(Sender: TObject; ACols, ARows: Integer);
     procedure CoreScrollbackCleared(Sender: TObject);
+    procedure CoreUserInput(Sender: TObject);
     { 调度 }
     procedure AsyncRelayout(Data: PtrInt);
     procedure AsyncRepaint(Data: PtrInt);
@@ -296,9 +313,38 @@ type
       X, Y: Integer; Shift: TShiftState);
     function OverrideIsAlt: Boolean;
     procedure UpdatePointer(Shift: TShiftState);
+    { 选区 }
+    procedure SelectionChanged(Sender: TObject);
+    procedure SelectionRedraw(Sender: TObject);
+    function SelectionViewRows(out AFirst, ALast: Integer): Boolean;
+    function SelPointAt(X, Y: Integer): TTyTermSelPoint;
+    procedure SelectionPress(Shift: TShiftState; X, Y: Integer);
+    procedure SelectionDrag(X, Y: Integer);
+    procedure SelectionRelease;
+    procedure StartDragTimer;
+    procedure StopDragTimer;
+    procedure DragTimerFired(Sender: TObject);
+    function GetSelectionText: string;
+    function GetHasSelection: Boolean;
+    procedure SetWordSeparators(const AValue: string);
+    function WordSeparatorsStored: Boolean;
   protected
     { 平台标志:按平台(不是 widgetset)取;受保护,测试可以改成别的平台 }
     FIsMac, FIsWindows: Boolean;
+    { 用不用 X11 的 PRIMARY(TyTerminalUsesPrimary);测试可以改 }
+    FUsesPrimary: Boolean;
+    function ReadPrimaryText: string; virtual;
+    procedure WritePrimaryText(const S: string); virtual;
+    { 选区追上被挤出头部的行(缓冲 TrimmedLines 的差值) }
+    procedure SyncSelectionTrim;
+    { 一次选择结束(松开、双击、三击、Shift 扩展、全选):选区非空就写 PRIMARY 与
+      (CopyOnSelect 时)剪贴板 }
+    procedure FinishSelection;
+    { 自动滚计时器的回调转到这里;测试直接调 }
+    procedure DragScrollTick;
+    { FOR THE TESTS }
+    function DragTimerActive: Boolean;
+    property Selection: TTyTermSelection read FSelection;
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
     procedure Loaded; override;
@@ -405,8 +451,18 @@ type
     procedure ScrollToTop;
     procedure ScrollToBottom;
     procedure PasteFromClipboard;
-    { 复制选区;选区在 4 期,本期什么都不做 }
+    { 有选区才写剪贴板(行间 LineEnding,见 SelectionText) }
     procedure CopyToClipboard;
+    procedure SelectAll;
+    procedure ClearSelection;
+    { = 上游 setSelection:从 (ACol, 缓冲行 AAbsRow) 起 ALength 格 }
+    procedure Select(ACol, AAbsRow, ALength: Integer);
+    { 缓冲行 AFirst..ALast 整行(越界钳住) }
+    procedure SelectLines(AFirst, ALast: Integer);
+    { 选中的文字:行尾空白去掉、折行接成一行、行间 LineEnding(Windows 上 CRLF,上游同样)、
+      NBSP 换成空格 }
+    property SelectionText: string read GetSelectionText;
+    property HasSelection: Boolean read GetHasSelection;
     { 客户区设备像素 -> 0 起的格子,钳在网格内 }
     function CellAt(X, Y: Integer): TPoint;
     { 视口行的格子矩形,客户区设备像素 }
@@ -436,6 +492,8 @@ type
       default sbahDefault;
     property SelectionOverrideKey: TTyTerminalSelectionOverrideKey read FSelectionOverrideKey
       write FSelectionOverrideKey default tsoDefault;
+    property WordSeparators: string read FWordSeparators write SetWordSeparators stored WordSeparatorsStored;
+    property CopyOnSelect: Boolean read FCopyOnSelect write FCopyOnSelect default False;
     property LineHeightPercent: Integer read FLineHeightPercent write SetLineHeightPercent default 100;
     property LetterSpacing: Integer read FLetterSpacing write SetLetterSpacing default 0;
     property TabStop default True;
@@ -448,6 +506,7 @@ type
     property OnBell: TNotifyEvent read FOnBell write FOnBell;
     property OnOsc: TTyTerminalOscEvent read FOnOsc write FOnOsc;
     property OnShortcutQuery: TTyTerminalShortcutQueryEvent read FOnShortcutQuery write FOnShortcutQuery;
+    property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
   end;
 
 { MouseService._sendEvent 的键(MouseService.ts:112-136):按下、抬起按 LCL 的键(左、中、右,
@@ -533,6 +592,10 @@ begin
   { 中键、右键拖出控件也要收到移动(上报期间);LCL 默认只捕获左键 }
   CaptureMouseButtons := [mbLeft, mbMiddle, mbRight];
   FSelectionOverrideKey := tsoDefault;
+  FUsesPrimary := TyTerminalUsesPrimary;
+  FWordSeparators := TyTermDefaultWordSeparators;
+  FSelDrawnFirst := -1;
+  FSelDrawnLast := -1;
   FBlinkVisible := True;
   FPaintedCursorRow := -1;
   FSyncFirst := -1;
@@ -555,6 +618,13 @@ begin
   FCore.OnWindowOptionsReport := @CoreWindowReport;
   FCore.OnResize := @CoreResize;
   FCore.OnScrollbackCleared := @CoreScrollbackCleared;
+  FCore.OnUserInput := @CoreUserInput;
+  FSelection := TTyTermSelection.Create(FCore.BufferService);
+  FSelection.WordSeparators := UTF8Decode(FWordSeparators);
+  FSelection.OnChange := @SelectionChanged;
+  FSelection.OnRedraw := @SelectionRedraw;
+  FSelTrimBase := FCore.Buffer.TrimmedLines;
+  FSelRows := FCore.Rows;
   MaskUnencodedExtensions;
   { Core 出生时 Focused = True(2 期交接):新控件还没焦点,马上告诉它 }
   FCore.ReportFocus(False);
@@ -571,10 +641,11 @@ end;
 
 destructor TTyTerminalView.Destroy;
 begin
-  { 地雷 8 的顺序:排着的异步调用 -> 两个计时器 -> 输入法 -> Core 的事件 -> Core 和缓存 }
+  { 地雷 8 的顺序:排着的异步调用 -> 计时器 -> 输入法 -> Core 的事件 -> 选区 -> Core 和缓存 }
   Application.RemoveAsyncCalls(Self);
   FreeAndNil(FBlinkTimer);
   FreeAndNil(FSyncTimer);
+  FreeAndNil(FDragTimer);
   TyImeUninstall(FImeHook);
   if FCore <> nil then
   begin
@@ -592,7 +663,14 @@ begin
     FCore.OnWindowOptionsReport := nil;
     FCore.OnResize := nil;
     FCore.OnScrollbackCleared := nil;
+    FCore.OnUserInput := nil;
   end;
+  if FSelection <> nil then
+  begin
+    FSelection.OnChange := nil;
+    FSelection.OnRedraw := nil;
+  end;
+  FreeAndNil(FSelection);
   FreeAndNil(FCore);
   FreeAndNil(FRowPainter);
   FreeAndNil(FGlyphCache);
@@ -660,15 +738,26 @@ end;
 
 procedure TTyTerminalView.CoreBufferActivate(Sender: TObject);
 begin
+  { 换缓冲(含 RIS、Reset:新的一对缓冲)清选区,读数换成新缓冲的(SelectionService.ts:778-785) }
+  ClearSelection;
+  FSelTrimBase := FCore.Buffer.TrimmedLines;
   DirtyAll;
   SyncScrollBar;
 end;
 
 procedure TTyTerminalView.CoreModesChange(Sender: TObject);
+var
+  p: TTyTerminalMouseProtocol;
 begin
   { DECSCUSR、DECTCEM:光标行重画;程序要不要闪烁也在这里变 }
   DirtyCursorRows;
   UpdateBlinkTimer;
+  { 程序打开鼠标上报:上游 _syncMouseModeState -> SelectionService.disable() 清选区
+    (MouseService.ts:380-393) }
+  p := FCore.Modes.MouseProtocol;
+  if (FLastProtocol = tmpNone) and (p <> tmpNone) then
+    ClearSelection;
+  FLastProtocol := p;
 end;
 
 procedure TTyTerminalView.CoreQueryColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
@@ -700,6 +789,12 @@ end;
 
 procedure TTyTerminalView.CoreResize(Sender: TObject; ACols, ARows: Integer);
 begin
+  { 行数变了清选区,列数变不清(SelectionService.ts:158-162) }
+  if ARows <> FSelRows then
+  begin
+    FSelRows := ARows;
+    ClearSelection;
+  end;
   SetLength(FDirty, ARows);
   FAllDirty := True;
   FFrameDirty := True;
@@ -711,10 +806,21 @@ end;
 
 procedure TTyTerminalView.CoreScrollbackCleared(Sender: TObject);
 begin
+  { 清滚回也清选区:上游 clear() 不清(CoreBrowserTerminal.ts:1075-1089),选区会指着别的行,
+    这是我们加的(spec §15) }
+  if FSelection.HasSelection then
+    ClearSelection;
   if FDriveDepth > 0 then
     FBarPending := True
   else
     SyncScrollBar;
+end;
+
+{ 用户输入清选区(SelectionService.ts:139-143);ReadOnly 时 Core 不发 }
+procedure TTyTerminalView.CoreUserInput(Sender: TObject);
+begin
+  if FSelection.HasSelection then
+    ClearSelection;
 end;
 
 { ---- 调度 --------------------------------------------------------------------------- }
@@ -769,6 +875,7 @@ begin
     FBarPending := False;
     SyncScrollBar;
   end;
+  SyncSelectionTrim;
   { OSC 4 / 10 / 11 / 12 / 104 … 改了色:上游 onChangeColors -> _fullRefresh
     (RenderService.ts:120);257 号色还是内边距的底色,所以整窗 }
   if FDrivenColorSigValid and (ColorSignature <> FDrivenColorSig) then
@@ -2146,6 +2253,16 @@ begin
   Clipboard.AsText := S;
 end;
 
+function TTyTerminalView.ReadPrimaryText: string;
+begin
+  Result := PrimarySelection.AsText;
+end;
+
+procedure TTyTerminalView.WritePrimaryText(const S: string);
+begin
+  PrimarySelection.AsText := S;
+end;
+
 procedure TTyTerminalView.PasteFromClipboard;
 begin
   Paste(ReadClipboardText);
@@ -2165,7 +2282,7 @@ end;
 
 procedure TTyTerminalView.KeyDown(var Key: Word; Shift: TShiftState);
 type
-  TKeyAction = (kaNone, kaSend, kaCopy, kaPaste, kaPageUp, kaPageDown, kaTop, kaBottom);
+  TKeyAction = (kaNone, kaSend, kaCopy, kaPaste, kaPageUp, kaPageDown, kaTop, kaBottom, kaSelectAll);
 var
   ev: TTyTerminalKeyEvent;
   r: TTyTerminalKeyResult;
@@ -2210,7 +2327,7 @@ begin
     case r.Kind of
       tkrPageUp: act := kaPageUp;
       tkrPageDown: act := kaPageDown;
-      tkrSelectAll: ;                  { 选区在 4 期:本期不算动作,不吞 }
+      tkrSelectAll: act := kaSelectAll;   { macOS 的 Cmd+A(Keyboard.ts 的 SELECT_ALL) }
     else
       begin
         { 第三层 Shift(AltGr、macOS Option):字符留给 UTF8KeyPress,上游 return true }
@@ -2241,6 +2358,11 @@ begin
     kaPageDown: FCore.ScrollLines(FCore.Rows - 1);
     kaTop: FCore.ScrollToTop;
     kaBottom: FCore.ScrollToBottom;
+    kaSelectAll:
+      begin
+        SelectAll;
+        FinishSelection;
+      end;
   end;
   Key := 0;
   FKeyDownHandled := True;
@@ -2503,6 +2625,7 @@ begin
     end;
   if csDesigning in ComponentState then Exit;
   FLastMousePos := Point(X, Y);
+  SyncSelectionTrim;
   if FRoute = mrReport then
   begin
     Include(FReportHeld, Button);
@@ -2526,7 +2649,20 @@ begin
     Exit;
   end;
   case Button of
+    mbLeft:
+      begin
+        FRoute := mrSelect;
+        FRouteButton := Button;
+        SelectionPress(Shift, X, Y);
+      end;
     mbRight: FRightLocal := True;           { 菜单由 DoContextPopup 弹 }
+    mbMiddle:
+      { X11 惯例:中键粘贴 PRIMARY(松开时);Windows / macOS 上中键不做事 }
+      if FUsesPrimary then
+      begin
+        FRoute := mrPrimary;
+        FRouteButton := Button;
+      end;
   end;
 end;
 
@@ -2538,6 +2674,8 @@ begin
   case FRoute of
     mrReport:
       ReportMouse(TyTerminalMouseButtonFor(tmaMove, mbLeft, Shift), tmaMove, X, Y, Shift);
+    mrSelect:
+      SelectionDrag(X, Y);
     mrNone:
       { 不带键的移动:只有 1003 放行(TriggerMouseEvent 按协议与去重决定);带着键却没有
         路(在别处按下的)上游也不报 }
@@ -2567,7 +2705,237 @@ begin
     Exit;
   end;
   if (FRoute <> mrNone) and (Button = FRouteButton) then
+  begin
+    case FRoute of
+      mrSelect: SelectionRelease;
+      mrPrimary: Paste(ReadPrimaryText);
+    end;
     FRoute := mrNone;
+  end;
+end;
+
+{ ---- 选区 --------------------------------------------------------------------------- }
+
+procedure TTyTerminalView.SelectionChanged(Sender: TObject);
+begin
+  if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
+end;
+
+{ 选区此刻落在哪几个视口行(钳在视口里);False = 没有,或不在视口里 }
+function TTyTerminalView.SelectionViewRows(out AFirst, ALast: Integer): Boolean;
+var
+  s, e: TTyTermSelPoint;
+  yd: Integer;
+begin
+  AFirst := -1;
+  ALast := -1;
+  if not FSelection.FinalStart(s) or not FSelection.FinalEnd(e) then
+    Exit(False);
+  yd := FCore.Buffer.YDisp;
+  AFirst := Max(Min(s.Row, e.Row) - yd, 0);
+  ALast := Min(Max(s.Row, e.Row) - yd, FCore.Rows - 1);
+  Result := AFirst <= ALast;
+  if not Result then
+  begin
+    AFirst := -1;
+    ALast := -1;
+  end;
+end;
+
+{ 上游 refresh():只重画涉及的行——上次画过的选区行段与现在的并集。在绘制里(追 trim)只标
+  脏不失效:这一帧就画掉 }
+procedure TTyTerminalView.SelectionRedraw(Sender: TObject);
+var
+  a, b, i: Integer;
+begin
+  if FSelDrawnFirst >= 0 then
+  begin
+    a := FSelDrawnFirst;
+    b := FSelDrawnLast;
+  end
+  else
+  begin
+    a := MaxInt;
+    b := -1;
+  end;
+  if SelectionViewRows(FSelDrawnFirst, FSelDrawnLast) then
+  begin
+    a := Min(a, FSelDrawnFirst);
+    b := Max(b, FSelDrawnLast);
+  end;
+  { 画的时候会重记;这里先记下现在的,下一次失效就从它算 }
+  if (b < a) or (a = MaxInt) then Exit;
+  a := Max(a, 0);
+  b := Min(b, High(FDirty));
+  if b < a then Exit;
+  if FInRender then
+  begin
+    for i := a to b do
+      FDirty[i] := True;
+  end
+  else
+    DirtyRows(a, b);
+end;
+
+procedure TTyTerminalView.SyncSelectionTrim;
+var
+  d: Int64;
+begin
+  if FSelection = nil then Exit;
+  d := FCore.Buffer.TrimmedLines - FSelTrimBase;
+  FSelTrimBase := FCore.Buffer.TrimmedLines;
+  if d > 0 then
+  begin
+    if d > MaxInt then d := MaxInt;
+    FSelection.HandleTrim(Integer(d));
+  end;
+end;
+
+function TTyTerminalView.SelPointAt(X, Y: Integer): TTyTermSelPoint;
+var
+  ins: TRect;
+  p: TPoint;
+begin
+  EnsureMetrics(Font.PixelsPerInch);
+  ins := ContentInsets(Font.PixelsPerInch);
+  p := TyTermSelectionPointAt(X - ins.Left, Y - ins.Top, FMetrics.CellW, FMetrics.CellH,
+    FCore.Cols, FCore.Rows);
+  Result.Col := p.X;
+  Result.Row := p.Y + FCore.Buffer.YDisp;
+end;
+
+procedure TTyTerminalView.SelectionPress(Shift: TShiftState; X, Y: Integer);
+var
+  clicks: Integer;
+begin
+  clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick,
+    FClickCount, Font.PixelsPerInch);
+  { Shift 扩展只在程序没接管鼠标时(上游 _enabled && shiftKey);程序接管时 Shift 是覆盖键 }
+  FSelection.Press(SelPointAt(X, Y), clicks, not Reporting and (ssShift in Shift), ColumnWanted(Shift));
+  if FSelection.Dragging then
+    StartDragTimer;
+end;
+
+procedure TTyTerminalView.SelectionDrag(X, Y: Integer);
+var
+  ins: TRect;
+begin
+  SyncSelectionTrim;
+  EnsureMetrics(Font.PixelsPerInch);
+  ins := ContentInsets(Font.PixelsPerInch);
+  { 点钳在网格里,滚速按真实的越界距离算;50 像素是逻辑像素,按 PPI 缩放 }
+  FSelection.DragTo(SelPointAt(X, Y), TyTermDragScrollAmount(Y - ins.Top, FCore.Rows * FMetrics.CellH,
+    MulDiv(TyTermDragScrollMaxThreshold, Font.PixelsPerInch, 96)));
+end;
+
+procedure TTyTerminalView.SelectionRelease;
+begin
+  StopDragTimer;
+  SyncSelectionTrim;
+  FSelection.Release;
+  FinishSelection;
+end;
+
+procedure TTyTerminalView.FinishSelection;
+var
+  t: string;
+begin
+  SyncSelectionTrim;
+  if not FSelection.HasSelection then Exit;
+  t := FSelection.Text(LineEnding);
+  if FUsesPrimary then
+    WritePrimaryText(t);
+  if FCopyOnSelect then
+    WriteClipboardText(t);
+end;
+
+procedure TTyTerminalView.StartDragTimer;
+begin
+  if csDesigning in ComponentState then Exit;
+  if FDragTimer = nil then
+  begin
+    FDragTimer := TTimer.Create(nil);
+    FDragTimer.Enabled := False;
+    FDragTimer.Interval := TyTermDragScrollInterval;
+    FDragTimer.OnTimer := @DragTimerFired;
+  end;
+  FDragTimer.Enabled := True;
+end;
+
+procedure TTyTerminalView.StopDragTimer;
+begin
+  if FDragTimer <> nil then
+    FDragTimer.Enabled := False;
+end;
+
+procedure TTyTerminalView.DragTimerFired(Sender: TObject);
+begin
+  DragScrollTick;
+end;
+
+procedure TTyTerminalView.DragScrollTick;
+var
+  n: Integer;
+begin
+  SyncSelectionTrim;
+  n := FSelection.DragScrollAmount;
+  if n <> 0 then
+  begin
+    FCore.ScrollLines(n);
+    FSelection.AfterDragScroll;
+  end;
+end;
+
+function TTyTerminalView.DragTimerActive: Boolean;
+begin
+  Result := (FDragTimer <> nil) and FDragTimer.Enabled;
+end;
+
+procedure TTyTerminalView.SelectAll;
+begin
+  SyncSelectionTrim;
+  FSelection.SelectAll;
+end;
+
+procedure TTyTerminalView.ClearSelection;
+begin
+  StopDragTimer;
+  FSelection.Clear;
+end;
+
+procedure TTyTerminalView.Select(ACol, AAbsRow, ALength: Integer);
+begin
+  SyncSelectionTrim;
+  FSelection.SetSelection(ACol, AAbsRow, ALength);
+end;
+
+procedure TTyTerminalView.SelectLines(AFirst, ALast: Integer);
+begin
+  SyncSelectionTrim;
+  FSelection.SelectLines(AFirst, ALast);
+end;
+
+function TTyTerminalView.GetSelectionText: string;
+begin
+  SyncSelectionTrim;
+  Result := FSelection.Text(LineEnding);
+end;
+
+function TTyTerminalView.GetHasSelection: Boolean;
+begin
+  SyncSelectionTrim;
+  Result := FSelection.HasSelection;
+end;
+
+procedure TTyTerminalView.SetWordSeparators(const AValue: string);
+begin
+  FWordSeparators := AValue;
+  FSelection.WordSeparators := UTF8Decode(AValue);
+end;
+
+function TTyTerminalView.WordSeparatorsStored: Boolean;
+begin
+  Result := FWordSeparators <> TyTermDefaultWordSeparators;
 end;
 
 { ---- 输入法 ------------------------------------------------------------------------- }
@@ -2613,7 +2981,8 @@ end;
 
 procedure TTyTerminalView.CopyToClipboard;
 begin
-  { 选区在 4 期:本期没有选区,什么都不做 }
+  if HasSelection then
+    WriteClipboardText(SelectionText);
 end;
 
 { ---- 属性 --------------------------------------------------------------------------- }
