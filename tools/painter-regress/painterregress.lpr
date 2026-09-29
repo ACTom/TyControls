@@ -12,13 +12,29 @@ program painterregress;
   tests/test.dpi.snapshot paints them (TyTestPaintTree).
 
     painterregress --hashes <file>        render every scene, write "name w h hash" lines
-    painterregress --check <file>         render every scene, compare with the file
+                                          under a header of "# env" lines: the machine's
+                                          fingerprint (Windows build, ClearType settings,
+                                          the fonts' sizes and dates, the screen's PPI)
+    painterregress --check <file>         render every scene, compare with the file; a file
+                                          whose fingerprint is not this machine's is refused
+                                          (exit 2) -- a new machine takes a new baseline
     painterregress --dump <dir>           also write every scene as a PNG into <dir>
     painterregress --diff <dir1> <dir2>   count the differing pixels of same-named PNGs
     painterregress --perf [--perf-out <file>] [--perf-base <file>]
                                           time the heavy scenes cold and warm; with a base
                                           file, print the ratio and flag > 10 % slower
+    painterregress --perf-compare <a1,a2,..> <b1,b2,..>
+                                          the medians of several --perf-out files of each
+                                          side, side by side, and the ratios
     --only <text>                         only the scenes whose name contains <text>
+
+  THE SAME-SESSION A/B (ab.sh next to this file): the library before a change and after it,
+  built and run in one session on one machine -- the only comparison that holds, since the
+  pictures depend on the machine's fonts and ClearType. It makes a temporary git worktree
+  of the current commit, puts the files under test back as a base commit had them, builds
+  this tool in both trees, takes the hashes on the base side and checks them on this one,
+  then times the two sides alternately. Nothing but the files under test differs between
+  the two builds, so every scene -- the tool's own, the examples -- must come out identical.
 
   THE SCENES (all at 96 / 120 / 144 / 192 PPI unless said):
     ex-*      every example form file under examples/ (read through a real TReader, as
@@ -39,12 +55,20 @@ program painterregress;
 
   LIMITS. ClearType on or off is the machine's own setting (changing it would change the
   system for everyone); the check must run on the machine and setting the hashes came
-  from. Scenes that show today's date (the calendar and date examples) or the library
-  version (about) change with them: take the hashes and check on the same day and
-  commit, or take new hashes from the unchanged commit first. }
+  from -- the fingerprint refuses any other. Scenes that show today's date (the calendar
+  and date examples) or the library version (about) change with them: take the hashes
+  and check on the same day and commit (ab.sh does), or take new hashes from the
+  unchanged commit first. A hashes file committed to the repository is a record of one
+  machine on one day, not a baseline for the next change: rerun ab.sh.
+
+  A MEMO IS NOT DRAWN ITALIC: its weight comes from the theme (StyleOverride
+  'font-weight: bold' here) and the theme has no font-style; italic runs are drawn by
+  text-italic / text-bolditalic straight through the text renderer, and by the terminal
+  (SGR 3). }
 
 uses
-  Interfaces, SysUtils, StrUtils, Classes, Math, Types, Forms, Controls, Graphics, LCLType, LCLIntf,
+  Interfaces, {$IFDEF MSWINDOWS}Windows, Registry,{$ENDIF}
+  SysUtils, StrUtils, Classes, Math, Types, Forms, Controls, Graphics, LCLType, LCLIntf,
   LResources, FileUtil, Menus, ExtCtrls, StdCtrls, ComCtrls, ActnList, Dialogs,
   BGRABitmap, BGRABitmapTypes,
   test.dpi.support,
@@ -57,6 +81,7 @@ uses
   tyControls.Dialogs.Progress, tyControls.Dialogs.About, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.IconBrowser, tyControls.Terminal,
   tyControls.Terminal.Core, tyControls.AnalogClock, tyControls.DateTimePicker, tyControls.Calendar,
+  tyControls.Menu,
   pr_classes;
 
 type
@@ -84,6 +109,18 @@ type
   public
     procedure ScrollToCaret;
   end;
+
+  { a popup menu's content, sized as its popup sizes it (protected) }
+  TShotMenuView = class(TTyMenuView)
+  public
+    function Size(APPI: Integer): TSize;
+  end;
+
+function TShotMenuView.Size(APPI: Integer): TSize;
+begin
+  Result.cx := MeasureWidth(APPI);
+  Result.cy := MeasureHeight(APPI);
+end;
 
 procedure TShotMemo.ScrollToCaret;
 begin
@@ -454,22 +491,22 @@ var
   nm, base: string;
 begin
   for k := 0 to 12 do
-    for p := 0 to High(TwoPPIs) do
+    for p := 0 to High(AllPPIs) do
     begin
       Application.Scaled := False;
-      TyTestSimulateScreen(TwoPPIs[p]);
+      TyTestSimulateScreen(AllPPIs[p]);
       d := nil;
       try
         try
           d := BuildDialog(k, base);
-          nm := Format('dlg-%s-%d', [base, TwoPPIs[p]]);
+          nm := Format('dlg-%s-%d', [base, AllPPIs[p]]);
           if (d = nil) or not Wanted(nm) then Continue;
           TyTestSettle(d);
           TDialogAccess(d).Resize;
           TyTestSettle(d);
           Shoot(d, nm);
         except
-          on Ex: Exception do Log.Add(Format('dialog %d at %d: %s: %s', [k, TwoPPIs[p], Ex.ClassName, Ex.Message]));
+          on Ex: Exception do Log.Add(Format('dialog %d at %d: %s: %s', [k, AllPPIs[p], Ex.ClassName, Ex.Message]));
         end;
       finally
         d.Free;
@@ -546,16 +583,13 @@ begin
            m.Enabled := False;
          end;
       8, 9, 10: begin
+           { the same text at each size: the pictures differ by the size alone }
            m.Font.Size := 8 + (AVariant - 8) * 4;
            m.Lines.Add(Mixed);
-           m.Lines.Add('Size ' + IntToStr(m.Font.Size));
          end;
       11: begin
-           m.Font.Style := [fsBold];
-           m.Lines.Add(Mixed);
-         end;
-      12: begin
-           m.Font.Style := [fsItalic];
+           { the weight is the theme's: Font.Style is not read (header) }
+           m.StyleOverride := 'font-weight: bold;';
            m.Lines.Add(Mixed);
          end;
     end;
@@ -568,8 +602,8 @@ end;
 
 procedure SceneMemos;
 const
-  V: array[0..12] of string = ('mixed', 'cjk', 'emoji', 'tabs', 'long-scrolled', 'selection', 'readonly',
-    'disabled', '8pt', '12pt', '16pt', 'bold', 'italic');
+  V: array[0..11] of string = ('mixed', 'cjk', 'emoji', 'tabs', 'long-scrolled', 'selection', 'readonly',
+    'disabled', '8pt', '12pt', '16pt', 'bold');
 var
   p, k: Integer;
 begin
@@ -744,12 +778,12 @@ var
   r: TRect;
   nm: string;
 begin
-  for p := 0 to High(TwoPPIs) do
+  for p := 0 to High(AllPPIs) do
   begin
-    nm := Format('ctl-hint-%d', [TwoPPIs[p]]);
+    nm := Format('ctl-hint-%d', [AllPPIs[p]]);
     if not Wanted(nm) then Continue;
     Application.Scaled := False;
-    TyTestSimulateScreen(TwoPPIs[p]);
+    TyTestSimulateScreen(AllPPIs[p]);
     h := TTyHintWindow.Create(nil);
     try
       r := h.CalcHintRect(400, 'A hint with 中文 in it', nil);
@@ -758,6 +792,95 @@ begin
       Shoot(h, nm);
     finally
       h.Free;
+    end;
+  end;
+end;
+
+{ Labels as a form holds them: one too narrow for its caption (it ellipsises, the
+  control's own path, not the painter's), one wrapped, one bold through the theme. }
+procedure SceneLabels;
+var
+  p: Integer;
+  f: TTyForm;
+  lab: TTyLabel;
+  nm: string;
+begin
+  for p := 0 to High(AllPPIs) do
+  begin
+    nm := Format('ctl-labels-%d', [AllPPIs[p]]);
+    if not Wanted(nm) then Continue;
+    f := NewHost(AllPPIs[p], 320, 150);
+    try
+      lab := TTyLabel.Create(f);
+      lab.Controller := Ctl;
+      lab.Parent := f;
+      lab.AutoSize := False;
+      lab.WordWrap := False;
+      lab.SetBounds(8, 8, MulDiv(150, AllPPIs[p], 96), MulDiv(24, AllPPIs[p], 96));
+      lab.Caption := 'A caption far too long for its label, 放不下的中文标题';
+      lab := TTyLabel.Create(f);
+      lab.Controller := Ctl;
+      lab.Parent := f;
+      lab.WordWrap := True;
+      lab.SetBounds(8, MulDiv(40, AllPPIs[p], 96), MulDiv(300, AllPPIs[p], 96), MulDiv(60, AllPPIs[p], 96));
+      lab.Caption := 'Wrapped: 一段会自动换行的中文说明文字，and some English words after it.';
+      lab := TTyLabel.Create(f);
+      lab.Controller := Ctl;
+      lab.Parent := f;
+      lab.StyleOverride := 'font-weight: bold;';
+      lab.SetBounds(8, MulDiv(110, AllPPIs[p], 96), MulDiv(300, AllPPIs[p], 96), MulDiv(24, AllPPIs[p], 96));
+      lab.Caption := 'Bold 粗体 label';
+      TyTestSettle(f);
+      Shoot(f, nm);
+    finally
+      f.Free;
+    end;
+  end;
+end;
+
+{ A popup menu's content (TTyMenuView, what TTyPopupMenu shows): mnemonics, shortcuts, a
+  check, a disabled row, a separator, a submenu arrow, CJK, one row highlighted. }
+procedure SceneMenu;
+var
+  p: Integer;
+  f: TTyForm;
+  mm: TPopupMenu;
+  v: TShotMenuView;
+  it, sub: TMenuItem;
+  sz: TSize;
+  nm: string;
+begin
+  for p := 0 to High(AllPPIs) do
+  begin
+    nm := Format('ctl-menu-%d', [AllPPIs[p]]);
+    if not Wanted(nm) then Continue;
+    f := NewHost(AllPPIs[p], 300, 300);
+    mm := TPopupMenu.Create(nil);
+    try
+      mm.Items.Add(NewItem('&Open...', ShortCut(Ord('O'), [ssCtrl]), False, True, nil, 0, ''));
+      mm.Items.Add(NewItem('Save &As 另存为', ShortCut(Ord('S'), [ssCtrl, ssShift]), False, True, nil, 0, ''));
+      mm.Items.Add(NewLine);
+      mm.Items.Add(NewItem('&Word wrap 自动换行', 0, True, True, nil, 0, ''));
+      mm.Items.Add(NewItem('Disabled 不可用', 0, False, False, nil, 0, ''));
+      sub := TMenuItem.Create(mm);
+      sub.Caption := '&Recent 最近';
+      it := TMenuItem.Create(mm);
+      it.Caption := 'doc.txt';
+      sub.Add(it);
+      mm.Items.Add(sub);
+      v := TShotMenuView.Create(f);
+      v.Controller := Ctl;
+      v.Parent := f;
+      v.SetRows(TyBuildMenuRows(mm.Items));
+      sz := v.Size(AllPPIs[p]);
+      v.SetBounds(0, 0, sz.cx, sz.cy);
+      v.SetHighlight(1);
+      f.SetBounds(0, 0, sz.cx, sz.cy);
+      TyTestSettle(f);
+      Shoot(f, nm);
+    finally
+      mm.Free;
+      f.Free;
     end;
   end;
 end;
@@ -804,7 +927,7 @@ var
   nm: string;
 begin
   for p := 0 to High(AllPPIs) do
-    for k := 0 to 5 do
+    for k := 0 to 7 do
     begin
       case k of
         0: nm := 'text-line';
@@ -812,8 +935,10 @@ begin
         2: nm := 'text-mnemonic';
         3: nm := 'text-multiline';
         4: nm := 'text-rotated';
+        5: nm := 'text-bidi';
+        6: nm := 'text-italic';
       else
-        nm := 'text-bidi';
+        nm := 'text-bolditalic';
       end;
       nm := Format('%s-%d', [nm, AllPPIs[p]]);
       if not Wanted(nm) then Continue;
@@ -842,9 +967,17 @@ begin
                P_.DrawTextRotated('Vertical', 'Segoe UI', 9, 400, TyRGB(120, 0, 0), 16, h / 2, Pi / 2,
                  taCenter, tlCenter);
              end;
+          5: P_.DrawText(Rect(4, 4, w - 4, h - 4), 'مرحبا بالعالم Acme 2024', 'Segoe UI', 11, 400, TyRGB(0, 0, 0),
+               taLeftJustify, tlTop, False);
         else
-          P_.DrawText(Rect(4, 4, w - 4, h - 4), 'مرحبا بالعالم Acme 2024', 'Segoe UI', 11, 400, TyRGB(0, 0, 0),
-            taLeftJustify, tlTop, False);
+          { the painter has no slant: italic straight through the text renderer, on the
+            painter's own surface, as the terminal draws SGR 3 }
+          TyConfigureTextFont(P_.Bitmap, 'Segoe UI', 11, IfThen(k = 7, 700, 400), AllPPIs[p]);
+          P_.Bitmap.FontStyle := P_.Bitmap.FontStyle + [fsItalic];
+          P_.Bitmap.TextOut(6, 6, 'Italic 斜体 fly away', BGRA(20, 20, 60));
+          TyConfigureTextFont(P_.Bitmap, 'Microsoft YaHei', 14, IfThen(k = 7, 700, 400), AllPPIs[p]);
+          P_.Bitmap.FontStyle := P_.Bitmap.FontStyle + [fsItalic];
+          P_.Bitmap.TextOut(6, h div 2, 'Wjf 中文 ffi', BGRA(90, 0, 0));
         end;
         P_.EndPaint;
         Record_(nm, bmp);
@@ -861,6 +994,8 @@ begin
   SceneMemos;
   SceneGrids;
   SceneControls;
+  SceneLabels;
+  SceneMenu;
   SceneHint;
   SceneTerminal;
   SceneDialogs;
@@ -929,6 +1064,11 @@ begin
   for round := 0 to 4 do
   begin
     TyInvalidateTextMeasureCache;
+    { cold for the kept text bitmap too (the renderer since phase 5; not in a library
+      from before it) }
+    {$IF DECLARED(TyGdiTextResetForTest)}
+    TyGdiTextResetForTest;
+    {$ENDIF}
     f := AMake(96);
     try
       bmp := TBitmap.Create;
@@ -1051,6 +1191,9 @@ begin
     for e := 0 to files.Count - 1 do
     begin
       TyInvalidateTextMeasureCache;
+      {$IF DECLARED(TyGdiTextResetForTest)}
+      TyGdiTextResetForTest;
+      {$ENDIF}
       frm := nil;
       try
         try
@@ -1137,6 +1280,143 @@ begin
   end;
 end;
 
+{ The medians of several --perf-out files per side, per scene: A (the base) and B side
+  by side, the ratio B / A. Rounds of the two sides run alternately (ab.sh), so a machine
+  that slows down or speeds up during the session weighs on both alike. }
+procedure PerfCompare(const AFiles, BFiles: string);
+var
+  names: TStringList;
+
+  function Load(const AList: string; AName: string; AWarm: Boolean): Double;
+  var
+    files: TStringArray;
+    vals: array of Double;
+    sl: TStringList;
+    parts: TStringArray;
+    i, j: Integer;
+  begin
+    files := AList.Split([',']);
+    vals := nil;
+    sl := TStringList.Create;
+    try
+      for i := 0 to High(files) do
+      begin
+        sl.LoadFromFile(files[i]);
+        for j := 0 to sl.Count - 1 do
+        begin
+          parts := sl[j].Split([#9]);
+          if Length(parts) <> 3 then Continue;
+          if names.IndexOf(parts[0]) < 0 then names.Add(parts[0]);
+          if parts[0] = AName then
+          begin
+            SetLength(vals, Length(vals) + 1);
+            vals[High(vals)] := StrToFloat(parts[1 + Ord(AWarm)]);
+          end;
+        end;
+      end;
+    finally
+      sl.Free;
+    end;
+    if Length(vals) = 0 then Exit(0);
+    Result := MedianOf(vals);
+  end;
+
+var
+  k: Integer;
+  ac, aw, bc, bw, worst: Double;
+begin
+  names := TStringList.Create;
+  try
+    Load(AFiles, '', False);
+    WriteLn(Format('%d rounds a side', [Length(AFiles.Split([',']))]));
+    WriteLn;
+    WriteLn('| scene | before, cold ms | after, cold ms | ratio | before, warm ms | after, warm ms | ratio |');
+    WriteLn('|---|---|---|---|---|---|---|');
+    worst := 0;
+    for k := 0 to names.Count - 1 do
+    begin
+      ac := Load(AFiles, names[k], False);
+      bc := Load(BFiles, names[k], False);
+      aw := Load(AFiles, names[k], True);
+      bw := Load(BFiles, names[k], True);
+      WriteLn(Format('| %s | %.1f | %.1f | %.2f | %.2f | %.2f | %.2f |', [names[k], ac, bc, bc / Max(ac, 1e-9),
+        aw, bw, bw / Max(aw, 1e-9)]));
+      worst := Max(worst, Max(bc / Max(ac, 1e-9), bw / Max(aw, 1e-9)));
+    end;
+    WriteLn;
+    WriteLn(Format('worst ratio %.3f -- %s', [worst, IfThen(worst > 1.10, 'SLOWER THAN 10 %', 'within 10 %')]));
+  finally
+    names.Free;
+  end;
+end;
+
+{ ---- the machine's fingerprint ------------------------------------------------------------- }
+
+{ What the pictures depend on besides the code: the Windows build, ClearType (on, its type,
+  contrast, orientation), each font the scenes use (size and date of its file), the screen's
+  PPI. One "# env key=value" line each. }
+function Fingerprint: TStringList;
+{$IFDEF MSWINDOWS}
+const
+  SPI_GETFONTSMOOTHING = $004A;
+  SPI_GETFONTSMOOTHINGTYPE = $200A;
+  SPI_GETFONTSMOOTHINGCONTRAST = $200C;
+  SPI_GETFONTSMOOTHINGORIENTATION = $2012;
+  Fonts: array[0..9] of string = ('segoeui.ttf', 'segoeuib.ttf', 'segoeuii.ttf', 'segoeuiz.ttf', 'msyh.ttc',
+    'msyhbd.ttc', 'consola.ttf', 'seguiemj.ttf', 'malgun.ttf', 'simsun.ttc');
+var
+  reg: TRegistry;
+  v: array[0..3] of UINT;
+  dir: string;
+  k: Integer;
+  sr: TSearchRec;
+  n: Integer;
+{$ENDIF}
+begin
+  Result := TStringList.Create;
+  {$IFDEF MSWINDOWS}
+  reg := TRegistry.Create(KEY_READ);
+  try
+    reg.RootKey := HKEY_LOCAL_MACHINE;
+    if reg.OpenKeyReadOnly('SOFTWARE\Microsoft\Windows NT\CurrentVersion') then
+    begin
+      Result.Add('# env windows-build=' + reg.ReadString('CurrentBuildNumber') + '.'
+        + IfThen(reg.ValueExists('UBR'), IntToStr(reg.ReadInteger('UBR')), '?'));
+      reg.CloseKey;
+    end;
+  finally
+    reg.Free;
+  end;
+  FillChar(v, SizeOf(v), 0);
+  SystemParametersInfo(SPI_GETFONTSMOOTHING, 0, @v[0], 0);
+  SystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, @v[1], 0);
+  SystemParametersInfo(SPI_GETFONTSMOOTHINGCONTRAST, 0, @v[2], 0);
+  SystemParametersInfo(SPI_GETFONTSMOOTHINGORIENTATION, 0, @v[3], 0);
+  Result.Add(Format('# env cleartype=%d/%d/%d/%d', [v[0], v[1], v[2], v[3]]));
+  dir := IncludeTrailingPathDelimiter(GetEnvironmentVariable('WINDIR')) + 'Fonts\';
+  for k := 0 to High(Fonts) do
+    if FindFirst(dir + Fonts[k], faAnyFile, sr) = 0 then
+    begin
+      Result.Add(Format('# env font %s=%d/%s', [Fonts[k], sr.Size, FormatDateTime('yyyy-mm-dd hh:nn', FileDateToDateTime(sr.Time))]));
+      FindClose(sr);
+    end
+    else
+      Result.Add(Format('# env font %s=none', [Fonts[k]]));
+  n := 0;
+  if FindFirst(dir + '*', faAnyFile, sr) = 0 then
+  begin
+    repeat
+      Inc(n);
+    until FindNext(sr) <> 0;
+    FindClose(sr);
+  end;
+  Result.Add(Format('# env fonts-folder=%d files', [n]));
+  {$ELSE}
+  Result.Add('# env os=' + {$I %FPCTARGETOS%});
+  {$ENDIF}
+  Result.Add(Format('# env screen-ppi=%d', [Screen.PixelsPerInch]));
+end;
+
 { ---- diff of two PNG folders --------------------------------------------------------------- }
 
 procedure DiffDirs(const A, B: string);
@@ -1208,7 +1488,7 @@ end;
 
 var
   hashFile, checkFile, perfOut, perfBase: string;
-  want: TStringList;
+  want, env, wantEnv: TStringList;
   k, bad, missing: Integer;
   saveX, saveY: Integer;
 begin
@@ -1218,6 +1498,12 @@ begin
   begin
     for k := 1 to ParamCount - 2 do
       if ParamStr(k) = '--diff' then DiffDirs(ParamStr(k + 1), ParamStr(k + 2));
+    Exit;
+  end;
+  if Has('--perf-compare') then
+  begin
+    for k := 1 to ParamCount - 2 do
+      if ParamStr(k) = '--perf-compare' then PerfCompare(ParamStr(k + 1), ParamStr(k + 2));
     Exit;
   end;
   OnlyText := Arg('--only');
@@ -1259,21 +1545,61 @@ begin
       RunPerf(perfOut, perfBase);
       Exit;
     end;
-    RenderAll;
-    ScreenInfo.PixelsPerInchX := saveX;
-    ScreenInfo.PixelsPerInchY := saveY;
-    WriteLn(Names.Count, ' scenes');
-    if hashFile <> '' then
-    begin
-      ForceDirectories(ExtractFilePath(hashFile));
-      Names.SaveToFile(hashFile);
-      WriteLn('wrote ', hashFile);
+    env := Fingerprint;
+    try
+      if checkFile <> '' then
+      begin
+        { the fingerprint first: a baseline from another machine (or another ClearType
+          setting, other fonts) is refused before anything is rendered }
+        wantEnv := TStringList.Create;
+        try
+          wantEnv.LoadFromFile(checkFile);
+          for k := wantEnv.Count - 1 downto 0 do
+            if not wantEnv[k].StartsWith('# env ') then wantEnv.Delete(k);
+          if wantEnv.Text <> env.Text then
+          begin
+            WriteLn('the baseline was taken on another machine or setting -- take a new one here (ab.sh):');
+            WriteLn('--- the file');
+            Write(wantEnv.Text);
+            WriteLn('--- this machine');
+            Write(env.Text);
+            if not Has('--any-machine') then
+            begin
+              ExitCode := 2;
+              Exit;
+            end;
+          end;
+        finally
+          wantEnv.Free;
+        end;
+      end;
+      RenderAll;
+      ScreenInfo.PixelsPerInchX := saveX;
+      ScreenInfo.PixelsPerInchY := saveY;
+      WriteLn(Names.Count, ' scenes');
+      if hashFile <> '' then
+      begin
+        ForceDirectories(ExtractFilePath(hashFile));
+        want := TStringList.Create;
+        try
+          want.AddStrings(env);
+          want.AddStrings(Names);
+          want.SaveToFile(hashFile);
+        finally
+          want.Free;
+        end;
+        WriteLn('wrote ', hashFile);
+      end;
+    finally
+      env.Free;
     end;
     if checkFile <> '' then
     begin
       want := TStringList.Create;
       try
         want.LoadFromFile(checkFile);
+        for k := want.Count - 1 downto 0 do
+          if want[k].StartsWith('#') then want.Delete(k);
         bad := 0;
         missing := 0;
         for k := 0 to want.Count - 1 do

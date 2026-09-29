@@ -355,7 +355,7 @@ begin
       pal, 44, 17, 96, '16 色写字、█ 块、当底色，最低对比度 1（不调）');
     Shoot(Format('contrast-45-%s-light.png', [YellowThemes[k]]), YellowThemes[k], 'light',
       pal, 44, 17, 96,
-      '同上，4.5：浅色的字压暗到对底色 4.5:1（3 号黄、11 号最明显）；█ 块和当底色的格不变', spNone, 4.5);
+      '同上，4.5：对底色不到 4.5:1 的字压暗到 4.5:1（xp 上差得最多的是 3、14、10 号）；█ 块和当底色的格不变', spNone, 4.5);
   end;
   { 4. on the dark ground: Tango 0 on pure black, faint text, selected text, ls's
     other-writable directory (black on green) and an inverse one }

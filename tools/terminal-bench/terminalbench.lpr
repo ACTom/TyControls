@@ -507,6 +507,53 @@ begin
   WriteLn;
 end;
 
+{ The same scroll through the real Paint path: a shown window, each line written and the
+  window made to paint what it invalidated (UpdateWindow: WM_PAINT at once), timed from
+  the write's return to the paint's. Only the region the view invalidated is drawn and
+  put on the screen, as in a terminal in use. }
+procedure BenchScrollPaint;
+const
+  Lines = 2000;
+var
+  f: TForm;
+  v: TBenchView;
+  sz: TSize;
+  n, i, rows0: Integer;
+  t: Double;
+  times: TDoubles;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    f.Caption := 'terminalbench --scroll';
+    v := TBenchView.Create(f);
+    v.Controller := Ctl;
+    v.Parent := f;
+    sz := v.SizeForGrid(200, 60);
+    f.SetBounds(40, 40, sz.cx, sz.cy);
+    v.SetBounds(0, 0, sz.cx, sz.cy);
+    f.Show;
+    for i := 1 to 20 do Application.ProcessMessages;
+    v.RasterBudgetMs := 0;
+    v.WriteSync(ScreenText);
+    v.Update;
+    v.WriteSync('line 0'#13#10);
+    v.Update;
+    rows0 := v.Painted;
+    times := nil;
+    for n := 1 to Lines do
+    begin
+      v.WriteSync('line ' + IntToStr(n) + #13#10);
+      t := Now;
+      v.Update;
+      Push(times, Now - t);
+    end;
+    WriteLn(Format('| a shown window, WM_PAINT of what was invalidated | %s | %s | %s |',
+      [FormatFloat('0.00', (v.Painted - rows0) / Lines), Ms(Median(times)), Ms(MaxOf(times))]));
+  finally
+    f.Free;
+  end;
+end;
+
 procedure BenchScroll;
 const
   Lines = 2000;
@@ -536,14 +583,15 @@ begin
     WriteLn;
     WriteLn(Format('200 x 60 at 96 PPI, a full screen, then %d times one line written and one frame drawn.', [Lines]));
     WriteLn;
-    WriteLn('| rows painted per frame | frame, median | frame, max |');
-    WriteLn('|---|---|---|');
-    WriteLn(Format('| %s | %s | %s |', [FormatFloat('0.00', (o.View.Painted - rows0) / Lines), Ms(Median(times)),
-      Ms(MaxOf(times))]));
-    WriteLn;
+    WriteLn('| path | rows painted per frame | frame, median | frame, max |');
+    WriteLn('|---|---|---|---|');
+    WriteLn(Format('| off screen (the whole surface drawn each frame) | %s | %s | %s |',
+      [FormatFloat('0.00', (o.View.Painted - rows0) / Lines), Ms(Median(times)), Ms(MaxOf(times))]));
   finally
     FreeOffscreen(o);
   end;
+  BenchScrollPaint;
+  WriteLn;
 end;
 
 procedure BenchRaster;
@@ -693,7 +741,7 @@ var
   sink: TFloodSink;
   sz: TSize;
   i, n: Integer;
-  t0, wall, gap: Double;
+  t0, wall, gap, span: Double;
   heap0, heap1: Int64;
 begin
   data := MixedText(Total);
@@ -734,14 +782,19 @@ begin
     gap := 0;
     for i := 1 to High(FloodView.PaintTimes) do
       gap := Max(gap, FloodView.PaintTimes[i] - FloodView.PaintTimes[i - 1]);
+    { and from the first write to the first paint, from the last paint to the last
+      callback: a window that stops painting for good shows there, not between paints }
+    span := 0;
+    if Length(FloodView.PaintTimes) > 0 then
+      span := Max(FloodView.PaintTimes[0] - t0, t0 + wall - FloodView.PaintTimes[High(FloodView.PaintTimes)]);
     WriteLn('## --flood');
     WriteLn;
     WriteLn('50 MB in 64 KB chunks through View.Write, four in flight, on a shown 200 x 60 control.');
     WriteLn;
-    WriteLn('| wall | MB/s | paints | longest gap between paints | heap growth | live lines | cache hits / misses / evictions |');
-    WriteLn('|---|---|---|---|---|---|---|');
-    WriteLn(Format('| %s | %s | %d | %s | %s MB | %d | %d / %d / %d |', [Ms(wall),
-      FormatFloat('0.0', Total / MB / (wall / 1000)), Length(FloodView.PaintTimes), Ms(gap),
+    WriteLn('| wall | MB/s | paints | longest gap between paints | before the first / after the last | heap growth | live lines | cache hits / misses / evictions |');
+    WriteLn('|---|---|---|---|---|---|---|---|');
+    WriteLn(Format('| %s | %s | %d | %s | %s | %s MB | %d | %d / %d / %d |', [Ms(wall),
+      FormatFloat('0.0', Total / MB / (wall / 1000)), Length(FloodView.PaintTimes), Ms(gap), Ms(span),
       FormatFloat('0.0', (heap1 - heap0) / MB), TTyTerminalLine.LiveCount,
       FloodView.Cache.Hits, FloodView.Cache.Misses, FloodView.Cache.Evictions]));
     WriteLn;
