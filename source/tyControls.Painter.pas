@@ -419,6 +419,17 @@ procedure TyUseTextRenderer(ABmp: TBGRABitmap);
 { FOR THE TESTS: GDI bitmaps the Win32 text renderer has made or grown (it keeps one); 0
   elsewhere. }
 function TyGdiTextBitmapsMade: Integer;
+{ FOR THE TESTS, pure queries (0 / False elsewhere than Win32): the kept bitmap's handle
+  and size (0 when there is none); the bitmaps made for one run only (another thread's
+  run, a run too big to keep one for); the runs whose coverage went through a whole
+  conversion to BGRA instead of being read off the DIB. }
+function TyGdiTextKeptBitmapForTest(out AWidth, AHeight: Integer): THandle;
+function TyGdiTextOneOffBitmapsForTest: Integer;
+function TyGdiTextConversionsForTest: Integer;
+{ FOR THE TESTS: let go of the kept bitmap (the next run makes a new one); send every run
+  through the conversion (the path a bitmap that is not a DIB takes). }
+procedure TyGdiTextResetForTest;
+procedure TyGdiTextForceConversionForTest(AOn: Boolean);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -1243,10 +1254,12 @@ type
   private
     { ONE GDI bitmap the runs are drawn on, kept for every renderer (the main thread's):
       a run used to cost a fresh TBitmap and a whole-bitmap conversion to BGRA, about as
-      much as drawing it. It only grows; each run clears the part it uses and its
-      coverage is read straight off the DIB. GBitmapsMade counts them (FOR THE TESTS). }
+      much as drawing it. It grows in the direction a run needs, up to GdiKeptMaxPixels /
+      GdiKeptMaxWidth; each run clears the part it uses and its
+      coverage is read straight off the DIB. The counters are FOR THE TESTS. }
     class var GShot: TBitmap;
-    class var GBitmapsMade: Integer;
+    class var GBitmapsMade, GOneOffs, GConversions: Integer;
+    class var GForceConversion: Boolean;
   protected
     procedure UpdateFont; override;
     { The measuring side, answered for the run exactly as it is drawn. }
@@ -1258,6 +1271,12 @@ type
 
   TTyCanvasAccess = class(TCanvas);
   TTyBitmapAccess = class(TBitmap);        { GetRawImageDescriptionPtr is protected }
+
+const
+  { The kept bitmap stays at most this big (24-bit: 12 MB); a run that would need more
+    -- a very long unwrapped line, a huge title -- gets a bitmap of its own, freed after. }
+  GdiKeptMaxPixels = 4 * 1024 * 1024;
+  GdiKeptMaxWidth = 8192;
 
 function TyGdiFlush: LongBool; stdcall; external 'gdi32' name 'GdiFlush';
 
@@ -1297,7 +1316,7 @@ var
   kept: Boolean;
   ds: TDIBSection;
   bits, line: PByte;
-  stride, bpp: Integer;
+  stride, bpp, nw, nh: Integer;
   bottomUp: Boolean;
 begin
   if sUTF8 = '' then Exit;
@@ -1326,35 +1345,61 @@ begin
   my := sz.cy div 4 + 2;
   w := sz.cx + 2 * mx;
   h := sz.cy + 2 * my;
-  { The kept bitmap (GShot), grown when a run needs more room and never shrunk; only the
-    w x h the run uses is cleared and read. A thread other than the main one draws on a
-    bitmap of its own, as every run once did. }
-  kept := GetCurrentThreadId = MainThreadID;
+  { The kept bitmap (GShot) grows in the direction a run needs more room and stays within
+    GdiKeptMaxPixels / GdiKeptMaxWidth (it gives up height only to make room for width
+    under that cap, never otherwise); only the w x h the run uses is
+    cleared and read. A run too big for that, and a thread other than the main one, draw
+    on a bitmap of their own, freed after, as every run once did. }
+  kept := (GetCurrentThreadId = MainThreadID) and (w <= GdiKeptMaxWidth)
+    and (Int64(w) * h <= GdiKeptMaxPixels);
+  nw := 0;
+  nh := 0;
   if kept then
   begin
-    if GShot = nil then
+    if GShot <> nil then
     begin
-      GShot := TBitmap.Create;
-      GShot.PixelFormat := pf24bit;
-      Inc(GBitmapsMade);
+      nw := GShot.Width;
+      nh := GShot.Height;
     end;
-    tmp := GShot;
-    if (tmp.Width < w) or (tmp.Height < h) then
+    { half again as much as asked, in the direction that is short: a line a little
+      longer than the last does not reallocate, and a tall run after a wide one does not
+      widen it }
+    if nw < w then nw := Min(Max(w, nw + nw div 2), GdiKeptMaxWidth);
+    if nh < h then nh := Max(h, nh + nh div 2);
+    if Int64(nw) * nh > GdiKeptMaxPixels then
     begin
-      { half again as much as asked: a line a little longer than the last does not
-        reallocate }
-      tmp.SetSize(Max(w, tmp.Width + tmp.Width div 2), Max(h, tmp.Height + tmp.Height div 2));
-      Inc(GBitmapsMade);
+      { no room for the headroom: what the run needs (at most the width it has) }
+      nh := Max(h, GdiKeptMaxPixels div nw);
+      if Int64(nw) * nh > GdiKeptMaxPixels then
+        kept := False;
     end;
-  end
-  else
-  begin
-    tmp := TBitmap.Create;
-    tmp.PixelFormat := pf24bit;
-    tmp.SetSize(w, h);
   end;
+  tmp := nil;
   shot := nil;
   try
+    if kept then
+    begin
+      if GShot = nil then
+      begin
+        GShot := TBitmap.Create;
+        GShot.PixelFormat := pf24bit;
+        GShot.SetSize(nw, nh);
+        Inc(GBitmapsMade);
+      end
+      else if (GShot.Width <> nw) or (GShot.Height <> nh) then
+      begin
+        GShot.SetSize(nw, nh);
+        Inc(GBitmapsMade);
+      end;
+      tmp := GShot;
+    end
+    else
+    begin
+      tmp := TBitmap.Create;
+      Inc(GOneOffs);
+      tmp.PixelFormat := pf24bit;
+      tmp.SetSize(w, h);
+    end;
     tmp.Canvas.Brush.Color := clWhite;
     tmp.Canvas.FillRect(0, 0, w, h);
     { A fresh canvas's font was born at the screen's PPI of the moment, and Assign takes
@@ -1374,22 +1419,29 @@ begin
     LCLIntf.DrawText(tmp.Canvas.Handle, PChar(sUTF8), Length(sUTF8), r, flags);
     tmp.Canvas.Changed;   // what TCanvas's own text calls do: the image is read back next
     { The coverage straight off the DIB section GDI drew into -- the bytes BGRA's
-      conversion of the whole bitmap used to copy out, without the copy. A bitmap that is
-      not a 24- or 32-bit DIB goes through the conversion as before. }
+      conversion of the whole bitmap used to copy out, without the copy. The row length is
+      the one GDI reports; the row order is LCL's own description of the DIB it made: GetObject
+      answers a POSITIVE height in dsBmih as in dsBm even for the top-down DIB LCL makes
+      (measured on Windows 10 19044), so the sign cannot tell. A bitmap that is not a 24-
+      or 32-bit DIB has its w x h copied into a BGRA bitmap, as the conversion did. }
     bits := nil;
     stride := 0;
     bpp := 0;
-    if (LCLIntf.GetObject(tmp.Handle, SizeOf(ds), @ds) = SizeOf(ds)) and (ds.dsBm.bmBits <> nil)
-      and ((ds.dsBm.bmBitsPixel = 24) or (ds.dsBm.bmBitsPixel = 32)) then
+    if (not GForceConversion) and (LCLIntf.GetObject(tmp.Handle, SizeOf(ds), @ds) = SizeOf(ds))
+      and (ds.dsBm.bmBits <> nil) and ((ds.dsBm.bmBitsPixel = 24) or (ds.dsBm.bmBitsPixel = 32)) then
     begin
       TyGdiFlush;                          { GDI may still be batching the DrawText }
       bottomUp := TTyBitmapAccess(tmp).GetRawImageDescriptionPtr^.LineOrder = riloBottomToTop;
       bits := ds.dsBm.bmBits;
       bpp := ds.dsBm.bmBitsPixel div 8;
-      stride := ((ds.dsBm.bmWidth * ds.dsBm.bmBitsPixel + 31) div 32) * 4;
+      stride := ds.dsBm.bmWidthBytes;
     end
     else
-      shot := TBGRABitmap.Create(tmp);
+    begin
+      Inc(GConversions);
+      shot := TBGRABitmap.Create(w, h);
+      shot.GetImageFromCanvas(tmp.Canvas, 0, 0);
+    end;
     ink := c;
     for py := 0 to h - 1 do
     begin
@@ -1397,8 +1449,6 @@ begin
       if (dy < ADest.ClipRect.Top) or (dy >= ADest.ClipRect.Bottom) then Continue;
       if bits <> nil then
       begin
-        { LCL made the DIB top-down or bottom-up after its raw description (GetObject
-          reports a positive height either way) }
         if bottomUp then
           line := bits + (ds.dsBm.bmHeight - 1 - py) * stride
         else
@@ -1441,6 +1491,53 @@ begin
   Result := TTyGdiTextRenderer.GBitmapsMade;
   {$ELSE}
   Result := 0;
+  {$ENDIF}
+end;
+
+function TyGdiTextKeptBitmapForTest(out AWidth, AHeight: Integer): THandle;
+begin
+  AWidth := 0;
+  AHeight := 0;
+  Result := 0;
+  {$IFDEF LCLWin32}
+  if TTyGdiTextRenderer.GShot = nil then Exit;
+  AWidth := TTyGdiTextRenderer.GShot.Width;
+  AHeight := TTyGdiTextRenderer.GShot.Height;
+  Result := TTyGdiTextRenderer.GShot.Handle;
+  {$ENDIF}
+end;
+
+function TyGdiTextOneOffBitmapsForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GOneOffs;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+function TyGdiTextConversionsForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GConversions;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+procedure TyGdiTextResetForTest;
+begin
+  {$IFDEF LCLWin32}
+  FreeAndNil(TTyGdiTextRenderer.GShot);
+  {$ENDIF}
+end;
+
+procedure TyGdiTextForceConversionForTest(AOn: Boolean);
+begin
+  {$IFDEF LCLWin32}
+  TTyGdiTextRenderer.GForceConversion := AOn;
+  {$ELSE}
+  if AOn then ;
   {$ENDIF}
 end;
 
