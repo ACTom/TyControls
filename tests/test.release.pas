@@ -580,10 +580,22 @@ const
     'source/tyControls.Terminal.Keyboard.pas', 'source/tyControls.Terminal.Render.pas',
     'source/tyControls.Terminal.CustomGlyphs.inc', 'source/tyControls.Terminal.Selection.pas',
     'source/tyControls.Terminal.Links.pas');
+  { the view (tyControls.Terminal.pas) is our own code that follows upstream's logic, not a
+    port, so neither it nor the five includes it was split into are in the heading; they
+    still have to ship, or the view does not compile }
+  ViewIncludes: array[0..4] of string = ('source/tyControls.Terminal.View.Mouse.inc',
+    'source/tyControls.Terminal.View.Links.inc', 'source/tyControls.Terminal.View.Osc52.inc',
+    'source/tyControls.Terminal.View.Menu.inc', 'source/tyControls.Terminal.View.Selection.inc');
 var
   notice, heading: string;
   i, p: Integer;
 begin
+  for i := 0 to High(ViewIncludes) do
+  begin
+    AssertTrue(ViewIncludes[i] + ' ships (ps1)', IsShipped(FPs1, ViewIncludes[i]));
+    AssertTrue(ViewIncludes[i] + ' ships (sh)', IsShipped(FSh, ViewIncludes[i]));
+    AssertTrue(ViewIncludes[i] + ' is on disk', FileExists(RepoRoot + ViewIncludes[i]));
+  end;
   { Hardcoded for the same reason as the width guard above: nothing declares the licence
     obligation. The three terminal units are ported from xterm.js (MIT) and the charset
     include is dumped from it; both release scripts ship source/ whole today, so this
