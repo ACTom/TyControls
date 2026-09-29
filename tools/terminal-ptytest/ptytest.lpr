@@ -297,7 +297,9 @@ end;
 { what the child must not inherit: this program ignores SIGPIPE, blocks SIGUSR2 on the
   forking thread and holds a descriptor without close-on-exec -- the child's shell has
   none of the three, and `yes | head -1` ends the way it should (yes dies of SIGPIPE,
-  says nothing) }
+  says nothing). The mask is only a weak check here: Ubuntu's /bin/sh is dash, which
+  clears its signal mask itself when it starts; a shell that does not (bash as /bin/sh)
+  shows the child's own reset. }
 procedure T12;
 var
   r: TRun;

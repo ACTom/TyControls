@@ -257,7 +257,7 @@ end;
   selectionBackgroundOpaque) against that ground, as a WCAG contrast ratio.
   THE BOUNDS, one per state, below the worst measured when the unfocused selection went
   to upstream's alpha 0.3 (spec 11, phase 4): unfocused 1.70 (worst 1.80, macos/light;
-  the old alpha 0.18 gave about 1.5 on the light grounds -- a shade off the ground,
+  the old alpha 0.18 gave 1.41 there, macos/light -- a shade off the ground,
   which is why it changed -- and this bound fails it); focused 1.25 (worst 1.27,
   office/dark: its accent is a blue about as dark as its surface -- told apart by hue,
   which a luminance ratio does not see; this batch does not touch the focused colour,

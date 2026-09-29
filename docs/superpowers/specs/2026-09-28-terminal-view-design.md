@@ -1033,7 +1033,7 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 **实现期修正（4 期）**：
 - ~~`TyTerminalSelection` 的 `background` 叠在格子底色上~~ 期末审查后改成照上游：选区色带着它的透明度先在**主题底色**上混成不透明（上游 `selectionBackgroundOpaque` / `selectionInactiveBackgroundOpaque`，`ThemeService.ts:87-90`），再**替换**选中格的底色（`DomRendererRowFactory.ts:380-386`）——叠在格子自己的底色上时，反显格、亮底色格上的选区几乎看不见。宽字符按它的第一列算，整字选中或整字不选（`:112`、`:160`；列选区起点落在宽字符后半时那个字不选）。禁用时混好的不透明色再按 `:disabled` 的 opacity 预混。
 - 选区前景「写了才用」按 `tpTextColor in Present` 判断；基础层和 17 个主题都没给 `TyTerminalSelection` 写 `color`，选中的字保持原色。
-- ~~`--terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18)`~~ 改成 `0.3`（上游默认选区的透明度）：0.18 在浅底上只比底色深一点，失焦的选区几乎看不出来。守卫 `TestTheSelectionStandsOutOnEveryTheme`：17 个主题 × 明暗，混好的选区色对底色的 WCAG 对比度——失焦 ≥ 1.70（改后实测最差 1.80，macos 浅色；0.18 时最差约 1.5，守卫会红）、聚焦 ≥ 1.25（实测最差 1.27，office 深色：强调色和深底亮度相近，靠色相区分，亮度比看不出来；聚焦色本期不动，这条只防皮肤再改坏）。选区是叠在字后面的色块，不照 WCAG 非文字的 3:1——那会要一个把字盖住的选区。
+- ~~`--terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18)`~~ 改成 `0.3`（上游默认选区的透明度）：0.18 在浅底上只比底色深一点，失焦的选区几乎看不出来。守卫 `TestTheSelectionStandsOutOnEveryTheme`：17 个主题 × 明暗，混好的选区色对底色的 WCAG 对比度——失焦 ≥ 1.70（改后实测最差 1.80，macos 浅色；0.18 时最差 1.41，同是 macos 浅色，守卫会红）、聚焦 ≥ 1.25（实测最差 1.27，office 深色：强调色和深底亮度相近，靠色相区分，亮度比看不出来；聚焦色本期不动，这条只防皮肤再改坏）。选区是叠在字后面的色块，不照 WCAG 非文字的 3:1——那会要一个把字盖住的选区。
 
 ---
 

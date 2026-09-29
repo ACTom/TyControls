@@ -531,13 +531,13 @@ Expected：`3.2.2` 与 `ptmx-ok`。不可用就把 Task 15 的 WSL 验证记成�
 - Modify: 本计划（签收记录）、`docs/superpowers/specs/2026-09-28-terminal-view-design.md`（写回）
 - 修复时按需改 Task 1–17 的文件
 
-- [ ] **Step 1: 一次编译 + 本期全部 suite + 全量**：「跑测试的固定套路」4d 行与全量命令。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：分清是移植错、夹具错还是控件错——选区、链接、OSC 52 **以上游为准**；修复提交 `fix(terminal): ...`，一个问题一个提交。
+- [x] **Step 1: 一次编译 + 本期全部 suite + 全量**：「跑测试的固定套路」4d 行与全量命令。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：分清是移植错、夹具错还是控件错——选区、链接、OSC 52 **以上游为准**；修复提交 `fix(terminal): ...`，一个问题一个提交。
 
-- [ ] **Step 2: 重跑生成，确认可复现**：`node tools/terminal-oracle/regen-all.js --expect-clean` → `clean`；WSL 的 `ptytest` 再跑一次全过。
+- [x] **Step 2: 重跑生成，确认可复现**：`node tools/terminal-oracle/regen-all.js --expect-clean` → `clean`；WSL 的 `ptytest` 再跑一次全过。
 
-- [ ] **Step 3: 规模记录**：新夹具的字节数与用例数；本期各 suite 用时；`TTyTerminalPtyTests` 三次连跑的用时。
+- [x] **Step 3: 规模记录**：新夹具的字节数与用例数；本期各 suite 用时；`TTyTerminalPtyTests` 三次连跑的用时。
 
-- [ ] **Step 4: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）。逐条记「在哪一行实现 / 为什么不需要 / 挪到几期」：
+- [x] **Step 4: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）。逐条记「在哪一行实现 / 为什么不需要 / 挪到几期」：
   - §2.1：两个新单元的依赖（不引 LCL）、进运行时包；示例四个单元只在示例里。
   - §3.4 / §3.5：链接、OSC 52 以事件交宿主；读线程 → 加锁队列 → 一次唤醒 → 主线程 `Write`。
   - §7.5 / §7.6：按键、拖动、移动、横竖滚轮全部经 `TriggerMouseEvent`；0 起格子、设备像素、钳在网格。
@@ -563,9 +563,9 @@ Expected：三个都编过；`git status` 只多出 `languages/tyControls.StrCon
 3. 示例切到 Shell 模式、默认命令，起得来、能打 `dir` 看到输出（只看不录，真机验收时用户再看一遍）；Linux 版若 WSL 里的 `lazbuild` 能编 LCL 程序就编一次，不能就记「待真机」。
 4. **截图**（给期末一次性验收，跑 Task 17 给 `tools/terminal-shots` 加好的三组，照 3 期的离屏做法）：选区（聚焦 / 失焦）、列选区、Ctrl+悬停的链接下划线，各在默认浅色 / 默认深色 / xp / macos 四种皮肤下；存 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`，PNG 进 git、单张 ≤ 300 KB，`index.md` 列出每张看什么。
 
-- [ ] **Step 6: 集中变异**（每条三拍，必须红）：各任务变异表 S*（Task 2）、L*（Task 3）、C*（Task 4）、M*（Task 5）、E*（Task 6）、P*（Task 7）、U*（Task 8）、H*（Task 10）、O*（Task 11）、Y*（Task 13–15）、X*（Task 16）。JS 侧的变异改完跑对应生成脚本、确认失败后改回，`regen-all.js --expect-clean` 仍然 `clean`。WSL 侧的变异在 WSL 里编跑 `ptytest`。结果逐条记进签收记录；没红的当场补强。
+- [x] **Step 6: 集中变异**（每条三拍，必须红）：各任务变异表 S*（Task 2）、L*（Task 3）、C*（Task 4）、M*（Task 5）、E*（Task 6）、P*（Task 7）、U*（Task 8）、H*（Task 10）、O*（Task 11）、Y*（Task 13–15）、X*（Task 16）。JS 侧的变异改完跑对应生成脚本、确认失败后改回，`regen-all.js --expect-clean` 仍然 `clean`。WSL 侧的变异在 WSL 里编跑 `ptytest`。结果逐条记进签收记录；没红的当场补强。
 
-- [ ] **Step 7: 整体代码质量审查**（`git diff <Task 0 的 HEAD>..HEAD`）：
+- [x] **Step 7: 整体代码质量审查**（`git diff <Task 0 的 HEAD>..HEAD`）：
   - 选区：与 `SelectionService.ts` / `SelectionModel.ts` 逐方法对照（`_getWordAt` 的四个计数、折行递归的两个方向、`finalSelectionEnd` 的三种补正、事件发送的条件）；注释里的行号对得上。
   - 链接：扫描器与正则逐字符集合对照；`_mapStrIdx` 的「行尾空格子 + 下一行宽字符」补正；OSC 8 段的「结束条件 + 行尾」；URL 前缀解析与 WHATWG 对照（userinfo 编码集、禁止主机字符、IPv4 / IPv6 规范形、默认端口）。
   - 控件：按下定路（地雷 8）；每个 Core 事件都接了（`OnUserInput` 新增）；析构顺序（自动滚计时器、菜单、会话）；`Paint` 里没有改选区、没有发宿主事件；视觉值没有写死。
@@ -573,9 +573,9 @@ Expected：三个都编过；`git status` 只多出 `languages/tyControls.StrCon
   - 夹具读空时每个测试都会红（计数断言）；等价变异的理由站得住。
   审出来的问题修完回到 Step 1。
 
-- [ ] **Step 8: 写回 spec 原处，标「实现期修正（4 期）」**。至少：§1.1（新增：选区用坐标不用标记；上游复制本来就是平台换行；OSC 8 非 http 在提供者里就丢；上游悬停与单击不要修饰键；`isUrl` 过滤；`Win32InputMode` 与 ConPTY 鼠标的结论）；§2.1（两个新单元）；§7.6（`OnUserInput`）；§6.3（`TrimmedLines`）；§9（类声明不加 `ITyTextEditActions`；§9.1 `AllowNonHttpLinks`；§9.5.2 不剥修饰位、按下定路；§9.5.3 `DoMouseWheelHorz`；§9.5.5 多击用 `TyMultiClickCount`、选区点、trim 计数、`OnScrollbackCleared`、阈值按 PPI；§9.6.1 删掉「偏离」一句；§9.6.2 写入时机；§9.6.4 四项菜单；§9.8 手写扫描器、`isUrl`、双击选链接）；§12.1 / §12.2 / §12.3（示例实际的样子、写线程与退出线程、`posix_openpt`、流控提前）；§12.4 与 §16（真机观察的结论位置）；§13.2（本期脚本与测试单元）；§14（notices 标题）；§15（新增偏离：Ctrl 才悬停 / 激活、`AllowNonHttpLinks`、`OnScrollbackCleared` 清选区、非 ASCII 主机与 `xn--`、1016 之外的像素规则不变）；§18（流控挪到 4 期、4 / 5 期边界）；开工前问题一的六条结论。
+- [x] **Step 8: 写回 spec 原处，标「实现期修正（4 期）」**。至少：§1.1（新增：选区用坐标不用标记；上游复制本来就是平台换行；OSC 8 非 http 在提供者里就丢；上游悬停与单击不要修饰键；`isUrl` 过滤；`Win32InputMode` 与 ConPTY 鼠标的结论）；§2.1（两个新单元）；§7.6（`OnUserInput`）；§6.3（`TrimmedLines`）；§9（类声明不加 `ITyTextEditActions`；§9.1 `AllowNonHttpLinks`；§9.5.2 不剥修饰位、按下定路；§9.5.3 `DoMouseWheelHorz`；§9.5.5 多击用 `TyMultiClickCount`、选区点、trim 计数、`OnScrollbackCleared`、阈值按 PPI；§9.6.1 删掉「偏离」一句；§9.6.2 写入时机；§9.6.4 四项菜单；§9.8 手写扫描器、`isUrl`、双击选链接）；§12.1 / §12.2 / §12.3（示例实际的样子、写线程与退出线程、`posix_openpt`、流控提前）；§12.4 与 §16（真机观察的结论位置）；§13.2（本期脚本与测试单元）；§14（notices 标题）；§15（新增偏离：Ctrl 才悬停 / 激活、`AllowNonHttpLinks`、`OnScrollbackCleared` 清选区、非 ASCII 主机与 `xn--`、1016 之外的像素规则不变）；§18（流控挪到 4 期、4 / 5 期边界）；开工前问题一的六条结论。
 
-- [ ] **Step 9: 签收记录写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、各 suite 用时、夹具体积与用例数、WSL `ptytest` 结果、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、遗留、给 5 期的交接；更新「真机验收项汇总」。
+- [x] **Step 9: 签收记录写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、各 suite 用时、夹具体积与用例数、WSL `ptytest` 结果、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、遗留、给 5 期的交接；更新「真机验收项汇总」。
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(terminal): phase 4 sign-off; corrections written back into the spec
@@ -624,6 +624,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 53 | macOS 全选与右键选词 | Cocoa | Cmd+A、Cmd+C；在选区外右键 | 全选并可复制；右键先选中词再弹菜单 |
 | 54 | 流量控制 | 各平台 | `cat` 一个 50 MB 文本（Win：`type`） | 界面不冻、内存不涨过百 MB；没有「写入溢出」；中途 Ctrl+C 能停 |
 | 55 | 关闭与重启不挂 | 各平台 | `ping -t` / `sleep 1000` 运行中点「重启」、再直接关窗 | 立即重启 / 关闭；任务管理器 / `ps` 里没有残留的 shell 或 conhost |
+| 56 | 关闭 / 重启的冻结时长（第 55 项的可量标准） | Win32、GTK2、Qt6、Cocoa | 第 55 项的三种程序（`ping -t`、一个在 `CTRL_CLOSE_EVENT` 里不走的程序、`trap '' HUP; sleep 1000`）各点一次「重启」、各关一次窗；看界面停多久 | 点下去到界面能动 ≤ 200 ms（关闭在收尾线程上，自动测试量的是 `Close` < 200 ms）；关窗时窗口可以晚到约 9 秒才消失（程序退出时有上限的总等待），但窗口不「未响应」 |
+| 57 | Win11 24H2 无残留 | Windows 11 24H2 | 同第 55 项；再跑 `cmd /k` 后关窗 | 24H2 上 `ClosePseudoConsole` 不再等，程序可能还在：3 秒内按句柄结束，任务管理器按 PID 查不到；这是本机杀不掉的 Y16 变异交给真机的那一半 |
+| 58 | 退出与关闭同时发生 | 各平台 | `cmd /c exit 3`（`sh -c 'exit 3'`）反复点「重启」，快过它退出 | 不崩、不挂、没有残留；偶尔看到上一个程序的退出行是正常的，不会出现在新程序的输出中间 |
+| 59 | macOS 的 `poll()` 与 PTY | Cocoa | 示例起 zsh，`ls`、`cat` 大文件、改尺寸 | 输出照常；若 `poll()` 对主端答 `POLLNVAL`，后端自动换 `select`（WSL 里强制走过这条路径） |
+| 60 | 失去捕获 | Win32、GTK2、Qt6、Cocoa | 在终端里按住左键拖选，拖动中 Alt+Tab 切走再松键再切回；vim 鼠标模式里拖动中弹出一个模态框（宿主可用 `OnBell` 弹） | 切回后选区已经结束、不再跟着指针；vim 收到了抬起（不再以为键还按着）；`GetKeyState` 对鼠标键的答案在各 widgetset 上对 |
+| 61 | Shift+F10 | Win32、GTK2、Qt6、Cocoa | bash / vim 里按 Shift+F10 | 程序收到 F10 带 Shift 的编码；之后弹不弹控件菜单记下来（看 widgetset），写回 §9.6.4 |
+| 62 | 子进程的信号与描述符 | GTK2、Qt6、Cocoa | 示例起 `bash --norc`，`grep -E 'Sig(Blk|Ign)' /proc/self/status`（macOS 用 `trap -p`、`ulimit`）；`yes | head -1`；`ls /proc/$$/fd` | 屏蔽字和忽略集都是 0（LCL 程序忽略了 SIGPIPE 也不传下去）；`yes` 静悄悄结束；没有宿主的描述符 |
+| 63 | 失焦选区看得见 | 各平台，17 个皮肤明暗 | 选中一段后点别处；深色主题、反显文字上（`ls --color` 的目录、vim 的状态行）也选一次 | 失焦的选区在每个皮肤下都看得出（截图 `selection-*.png`）；反显、亮底色格上的选区和空白处同色 |
+| 64 | X10 横向滚轮 | 各平台（触控板） | 程序开 `?9h`（`printf '\e[?9h'`）后横滚；再开 `?1000h` 横滚 | X10 下不上报、横滚交给外层（窗口里有可横滚的父控件时它动）；1000 下报 66 / 67 |
+| 65 | ConPTY 录制在新版本上的差异 | Windows 11 | 用 `tools/terminal-conpty-record` 按 `recordings/*.cmdline` 重录 cmd / PowerShell，和 19044 的录制比 | 记下 ConPTY 画屏的差别（标题、清屏、行尾补空格）；控件回放两份都和上游一致 |
 
 ---
 
@@ -643,3 +653,86 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 12. §12.2「写 PTY 在主线程」「forkpty 自己声明」：本期改成写线程（大段粘贴不卡界面）、`posix_openpt` 系列（不链 libutil）；§12.3 流控从 5 期提前到本期（本期任务要求）。
 13. §9.5.5 的清选区时机里没有 `OnScrollbackCleared`，3 期交接有；上游 `clear()` 不清选区，是我们加的（核实记录 10）。
 14. 本期任务里的 `OnLinkClick` 与 spec §9.2 的 `OnLinkActivate` 不一致：按 spec。
+
+---
+
+## 4 期签收（2026-09-29）
+
+**全量**：`lazbuild -B` 后 `--all` 8285 条（期末审查前 8260，本批新增 25），errors 0、failures 1——唯一的红仍是本机 ClearType 环境下的 `TPainterTest.TestTextIsInkedAsWindowsInksIt`（main 带来的环境测试，与本期无关）。本期各 suite 用时：Pty 21.1 s（另两次连跑 18.1 / 18.0 s，三次都绿）、ViewMouse 13.8 s、ViewPaint 14.8 s、ViewLink 5.2 s、ViewTheme 7.3 s、Selection 预言 0.3 s、Links 预言 0.8 s、CoreOracle 5.5 s（含两份 ConPTY 录制）。`node tools/terminal-oracle/regen-all.js --expect-clean` → `clean`。WSL `ptytest`：12 passed, 0 failed（T6 关闭 0 ms、子进程 11 ms 后没了；T10 不理 SIGHUP 的子进程 3.2 s 后被 SIGKILL；T11 select 路径；T12 子进程状态）。
+
+**提交区间**：`a5cabea2..`（期末审查前的截图提交之后）——`4d02b78c` 拆 include（纯搬移）、`26940c83` PTY 收尾线程、`f63554bf` 控件的审查修复、`9fe68995` 失焦选区 alpha、`e53c42ff` ConPTY 录制、`a5d18775` 示例 `.po` 的 msgctxt、`88eb8222` 控件文档与截图、`2ecadca2` spec 写回，以及本签收提交。
+
+**期末两轮审查（规格核对 + 代码质量）的处理**：
+1. ConPTY 关闭堵主线程：`ClosePseudoConsole` 只由退出等待线程调（等程序退出或关闭事件）；`Close` 只做不阻塞的几件事后立即返回，收尾线程等关（3 s）、超时按句柄 `TerminateProcess`（再 2 s）、中断两个线程（3 s）、关句柄释放；读线程关闭期间一直排空。程序退出时 `PtyWaitForFinishers` 有上限地等一次。Unix 同理（主线程只发 SIGHUP）。`TestConPtyResizesAndCloses` 改断言 `Close` < 200 ms；新加两个「不肯走的程序」（测试程序自己带 `--ty-pty-helper`：卡在 `CTRL_CLOSE_EVENT` 处理里 / `FreeConsole` 后睡），断言立即返回、按句柄结束（退出码 1）、按 PID 查无残留、会话全部释放；`TestCloseDoesNotHang` 后半段用 `PumpsRun`（类变量）与 `PtySessionsAlive` 计数断言；退出与关闭同时发生的竞态假后端 30 轮、真 ConPTY 5 轮。
+2. 超时后释放后使用：会话对象改成句柄，核心归收尾线程；停不下来的连同所用资源留着（`PtySessionsLeaked`）。`Stop` 先 `Unhook`（try/finally），关会话后再 `RemoveAsyncCalls`；卡在 `WriteFile` 的写线程由 `CancelSynchronousIo` 取消。测试：卡死的读线程、卡住的写。
+3. 鼠标抬起丢失：覆盖 `CaptureChanged`（LCL 抬起消息里那一次除外，`FInButtonUp`）、`DoExit`，键确实松开（`HeldMouseButtons`，默认 `GetKeyState`）就走 `MouseUp` 的收尾；同一个键再按下时也先收尾（抬起报在上次位置）。
+4. 选区色：`--terminal-selection-bg-inactive` → `alpha(var(--on-surface), 0.3)`，重跑 `gen-defaulttheme`（catalog、内置主题无变化），golden（light / dark / showcase 三份，只有这一个 alpha）更新；选中格底色**替换**为主题底色上预混的不透明色；宽字符按首列整字；守卫 17 主题 × 明暗：失焦 ≥ 1.70（实测最差 1.80，macos 浅色；0.18 时 1.41）、聚焦 ≥ 1.25（实测最差 1.27，office 深色）；截图工具列选区补 `DoEnter`。
+5. 选区取文字两遍法；`FinishSelection` 两样都不要时不取文字；PRIMARY 按需（LCL `PrimarySelection.OnRequest` + `SetSupportedFormats`，核实过 `clipbrd.pp` 有这条路，SynEdit 同法），控件释放时交出所有权；一万行复制 1 秒上限的测试（本机整个测试 0.19 s）。
+6. OSC 52：处理器 try/except，宿主事件与剪贴板的异常不出 `Parse`，块里后面的字节照常解析；文档与事件注释写明事件里不能释放控件。
+7. 等价变异重判：见下表 Y16、J1、Y9 / Y9a。
+8. Unix 子进程：清信号屏蔽字、1–31 恢复 `SIG_DFL`、关 3 到软上限（≤ 65536）的描述符，全在 fork 前备好；ptytest T12（`yes | head -1`、忽略集、描述符）。
+9. `POLLNVAL` → 改用 `select`（`ForceSelect` 让 WSL 走这条路，T11）；真机第 59 项。
+10. 读线程异常也唤醒宿主打退出行；写线程退出后 `Write` 不再入队。
+11. `GetWordAt` 的折行递归改两个循环（折了两万行的词双击测试）。
+12. `Select()` 入口钳参数。
+13. 菜单「粘贴」用 `TyClipboardHasText`（测试缝 `ClipboardHasText`），不读整段剪贴板。
+14. macOS 右键选词挪到 `PopupMenu` 判断之前。
+15. 鼠标协议每次换成开着的另一种都清选区；同一协议重复 DECSET 不清（Core 只在真变时发事件），进 §15。
+16. X10 下横向滚轮交还父控件：先用 `RestrictMouseEvent` 问协议收不收滚轮，满格的再看 `TriggerMouseEvent` 的返回值。
+17. `Links.pas` 单元头的首次悬停差异改归「结果不同」，写明上游第一次悬停可能挑中与别处 OSC 8 重叠的网址；行为不改（上游答案随悬停历史变），进 §15。
+18. `docs/controls/terminal.md`：Shift+F10 是有编码的键，先发给程序，弹不弹菜单看 widgetset（真机第 61 项）；另补抬起丢失、PRIMARY 按需、选区替换底色、OSC 52 事件约束、PTY 关闭不在主线程上等。
+19. 退出码 `Int64`（`ExitCode`、`Pump`、`TTerminalShell.ExitCode`；不再借写回调的 tag 传）；退出后终端回只读，`TermData` 在 `FRunning` 为假时不入队。
+20. 示例 `tycontrols.zh_CN.po` 的 `rsterminalmenuclear` 补 `msgctxt`（库里没有示例 po 同步脚本，手改；`check-example-po.py` 101 份 0 问题）。
+21. 像素测试不再整体关预算：`SetUp` 冻结 `Core.Clock`，预算分支照常执行；冷启动计时测试把时钟换回墙上时间。改动小，全绿。
+22. ConPTY 录制：做了。`tools/terminal-conpty-record` 经示例会话在 19044 录 `cmd /c` 与 `powershell -NoLogo -NoProfile -NonInteractive -Command` 各一段（命令行在 `recordings/*.cmdline`），`conpty-cast.py` 转 asciicast（首条 OSC 0 的全路径只留文件名；见到用户名、机器名、个人目录就拒绝），进 `recordings.js` 的上游对照（10 份录制），拷进示例。
+23. 拆单元：鼠标、链接、OSC 52、右键菜单、选区胶水搬进 `tyControls.Terminal.View.*.inc`，纯搬移单独提交；`.lpk` 不变（`.inc` 不列）；notices 标题不加（控件是自己写的，Terminal.pas 本来就不在标题里），发版守卫 `TheThirdPartyNoticeCoversTheTerminalPort` 加查这五个文件随包发出。
+
+**变异**（每条：改 → `git diff --stat` 确认改到 → 重编 → 跑相关 suite → 还原；脚本化执行，还原后工作区干净）：
+
+| # | 变异 | 结果 |
+|---|---|---|
+| 1a | 关闭回到主线程（`Close` 里同步做收尾） | 红：`TestConPtyCloseReturnsAtOnce…`、`…LeftItsConsole`、`TestAStuckSessionIsLeftNotFreed` |
+| 1b | 超时不 `TerminateProcess` | 红：`TestConPtyCloseReturnsAtOnceAndEndsAProgramThatStays`（`FreeConsole` 那例被 `Shutdown` 的兜底 `TerminateProcess` 救了——两道防线） |
+| 1u | Unix：`BeginClose` 里同步等子进程（WSL） | 红：ptytest T10（`Close` 3162 ms） |
+| 2a | 收尾超时照样释放 | 红：7 例（泄漏计数、存活计数） |
+| 2b | 不取消卡住的写 | 红：`TestABlockedWriteIsCancelled` |
+| 2c | 只去掉 `Stop` 里的 `RemoveAsyncCalls` | 存活：`Destroy` 里还有一次（冗余）；两处都去掉 → 红：`TestCloseDoesNotHang`、`TestCloseWhileTheProgramExits` |
+| 3a | `CaptureChanged` 不收尾 | 红：`TestALostReleaseIsFinished` |
+| 3b | 抬起消息里的捕获变化也当丢了 | 红：`TestACtrlClickSurvivesTheCaptureGoingFirst` |
+| 3c | 不问键还按着没有 | 红：`TestALostReleaseIsFinished` |
+| 4a | 失焦 alpha 回 0.18 | 红：`TestTheSelectionStandsOutOnEveryTheme`（最差 1.41 < 1.70） |
+| 4b | 选区只换默认底色的格子（彩色 / 反显格保持原底色） | 红：`TestTheSelectionReplacesTheCellsBackground` |
+| 4c | 列选区半格（宽字符不按首列） | 红：`TestAWideCharacterIsSelectedByItsFirstColumn` |
+| 5a | 每次松开都拼文字 | 红：`TestPrimaryIsOfferedNotBuilt` |
+| 5b | 选区文字改回逐段 `s := s + t` | 存活：FPC 的 `s := s + t` 在引用计数为 1 时原地扩展，本机不是平方级（整个测试 0.19 s）；两遍法不依赖内存管理器的这个行为，1 秒上限守的是真正的平方级（比如每段复制整串） |
+| 6 | OSC 52 异常不吞 | 红：`TestOsc52ExceptionsStayInside` |
+| 7 J1 | `TSelRun` 不读 `cellHeight`、写死 10，`lib-dump.js` 的 `CELL_H` 改 11 重生成夹具 | 红：`TestEveryStepMatches`、`TestAfterResetToo`；对照（写死 10、夹具仍是 10）绿——夹具确实依赖假尺寸。夹具与脚本已还原，`regen-all --expect-clean` 仍 `clean` |
+| 7 Y16 | `Shutdown` 不等进程、不 `TerminateProcess`（原 4d 表） | 重判：**本机不可杀、交真机**——19044 上 cmd 随控制台关闭就走，没有残留可看；24H2 上 `ClosePseudoConsole` 不再等，才会留下程序（真机第 57 项）。本批的收尾路径另由 1b 覆盖 |
+| 7 Y9 / Y9a | 只去掉等背压时的 `FDiscard` 检查 / 只去掉 `BeginClose` 的 `FHeld := False` | 各自存活；两者**同时**去掉 → 红：`TestCloseWhileHeldBack`。三道冗余：等背压的循环看 `FDiscard`；`BeginClose` 置 `FHeld := False` 并 `SetEvent(FResume)`；进等待前的判断 `not FDiscard and (FOutstanding > FHigh)` 不让关闭后的读再被拦住 |
+| 8a | 子进程不恢复 `SIG_DFL`（WSL） | 红：T12（`yes` 见到 EPIPE） |
+| 8b | 子进程不关继承的描述符（WSL） | 红：T12 |
+| 8c | 子进程不清信号屏蔽字（WSL） | 存活：本环境等价——Ubuntu 的 `/bin/sh` 是 dash，启动时自己清屏蔽字；换成不清的 shell 才看得见（真机第 62 项用 bash 看） |
+| 9 | select 路径看不到数据（WSL） | 红：T11 |
+| 10a | 读线程异常不唤醒 | 红：`TestAReaderThatRaisesEndsTheSession` |
+| 10b | 写线程没了仍入队 | 红：`TestNoWritesQueueOnceTheWriterIsGone` |
+| 11 | 折行取词只接一行 | 红：`TestAWordWrappedOverManyRows` |
+| 12 | `Select` 不钳长度 | 红：`TestSelectIsClamped` |
+| 13 | 菜单读整段剪贴板 | 红：`TestTheMenuDoesNotReadTheClipboard` |
+| 15 | 只在从无到有时清选区 | 红：`TestEveryProtocolChangeClearsTheSelection` |
+| 16 | X10 下横向滚轮照吃 | 红：`TestX10HandsTheSidewaysWheelBack` |
+| 19a | 退出码截成 Integer | 红：`TestTheExitCodeIsNotAnInteger` |
+| 19b / 19c | 退出后不回只读 / 退出后按键仍入队 | 红：`TestAfterTheExitKeysGoNowhere` |
+
+**主控待办**：编 `tycontrols.lpk` / `tycontrols_dt.lpk`（本批没有新单元，`.lpk` 清单不变；拆出的 `.inc` 不列）、**待主控编示例**（`examples/terminal` 的四个 PTY 单元改了）并起示例看一次 Shell 模式的重启与关窗；`scripts/example-rsj2po.py` 不需要重跑（示例没有新 resourcestring）。
+
+**截图**：`tools/terminal-shots --phase4` 重出，覆盖 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`，`index.md` 更新。抽查：深色失焦选区（`selection-default-dark.png`）看得清；列选区（聚焦）里「文」「三」起点落在后半整字不选、「试」整字选中，和上游规则一致。3 期截图里没有选区，不受影响，不重出。
+
+**spec 写回**（标「实现期修正（4 期）」，原文删除线保留）：状态行、§1.1（第 11–14 条）、§2.1、§6.3、§7.6、§9（类声明）、§9.1、§9.2、§9.3、§9.4、§9.5.2（含抬起丢失）、§9.5.3、§9.5.5、§9.6.1、§9.6.2（按需 PRIMARY）、§9.6.3（含异常隔离）、§9.6.4、§9.8、§11（选区绘制改法、alpha 0.3、对比度守卫阈值）、§12.1、§12.2（含工作线程关闭、子进程状态、`POLLNVAL`）、§12.3、§12.4、§13.2、§13.4（ConPTY 录制）、§14、§15、§16、§17.1（六条结论）、§18。
+
+**真机验收汇总续编**：第 56–65 项，接在上面「真机验收项汇总」表的第 55 项之后。
+
+**给 5 期的交接**：
+1. 重新折行：接上后 `TyTermComputeUrlLinks` 的 `ACols` 截断不再起作用，删掉参数前先看调用点；折行后选区的坐标怎么跟，照上游核实后再定。
+2. 冷启动光栅化慢：根因在共享单元 `Painter.pas` 的 `TTyGdiTextRenderer`，要改须用户拍板；控件侧的预算与分帧已经在。
+3. `MinimumContrastRatio`（§10.9），连同 3 期留下的浅底 3 号色与本批聚焦选区在 office 深色上的对比度（1.27）一起看。
+4. 流控已在 4 期；5 期做控件侧 `Write` 回调顺序测试与性能数字。
