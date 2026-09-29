@@ -26,7 +26,7 @@ type
   { A PTY that is not one. }
   TFakePty = class(TPtyBackend)
   private
-    FLock: TCriticalSection;
+    FLock: SyncObjs.TCriticalSection;  { LCLType and Windows have one too }
     FEvent: TEvent;
     FPending: RawByteString;
     FEof: Boolean;
@@ -105,8 +105,8 @@ type
 constructor TFakePty.Create;
 begin
   inherited Create;
-  FLock := TCriticalSection.Create;
-  FEvent := TEvent.Create(nil, False, False, '');
+  FLock := SyncObjs.TCriticalSection.Create;
+  FEvent := SyncObjs.TEvent.Create(nil, False, False, '');
   FEofCode := 0;
   StartResult := True;
 end;
@@ -266,7 +266,7 @@ function TFakePty.LastResize: TPoint;
 begin
   FLock.Enter;
   try
-    Result := Types.Point(FResizeCols, FResizeRows);
+    Result := Classes.Point(FResizeCols, FResizeRows);
   finally
     FLock.Leave;
   end;

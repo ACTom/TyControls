@@ -125,7 +125,7 @@ type
   TInitializeProcThreadAttributeList = function(lpAttributeList: Pointer; dwAttributeCount, dwFlags: DWORD;
     var lpSize: SIZE_T): BOOL; stdcall;
   TUpdateProcThreadAttribute = function(lpAttributeList: Pointer; dwFlags: DWORD; Attribute: DWORD_PTR;
-    lpValue: Pointer; cbSize: SIZE_T; lpPreviousValue: Pointer; lpReturnSize: PSIZE_T): BOOL; stdcall;
+    lpValue: Pointer; cbSize: SIZE_T; lpPreviousValue: Pointer; lpReturnSize: Pointer): BOOL; stdcall;
   TDeleteProcThreadAttributeList = procedure(lpAttributeList: Pointer); stdcall;
   TRtlGetVersion = function(var AInfo: TRtlOsVersionInfoExW): LongInt; stdcall;
 
