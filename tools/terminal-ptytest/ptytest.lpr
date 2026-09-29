@@ -225,10 +225,53 @@ var
   r: TRun;
   s: string;
 begin
-  r := Run('cut -d'' '' -f7 /proc/$$/stat', 1048576, 0, False);
-  s := Trim(r.Output);
+  { tty_nr alone does not tell: without setsid the shell keeps ptytest's own terminal
+    (WSL gives it one). /dev/tty is the controlling terminal: what is written there has
+    to come out of this PTY. }
+  r := Run('cut -d'' '' -f7 /proc/$$/stat; echo tyterm-$((6*7)) > /dev/tty', 1048576, 0, False);
+  s := Trim(Copy(r.Output, 1, Pos(#10, r.Output + #10) - 1));
   if (s = '') or (s = '0') then Fail('T8 controlling tty', 'tty_nr "' + s + '"')
+  else if Pos('tyterm-42', r.Output) = 0 then Fail('T8 controlling tty', '/dev/tty is not this PTY')
   else Pass('T8 controlling tty (tty_nr ' + s + ')');
+end;
+
+{ A child that ignores the hang-up keeps the slave open: only the wake-up pipe gets
+  the reader out, and the kill after a second the child }
+procedure T10;
+var
+  s: TPtySession;
+  b: TUnixPtyBackend;
+  err: string;
+  pid: TPid;
+  t0, took: QWord;
+begin
+  b := TUnixPtyBackend.Create;
+  s := TPtySession.Create(b);
+  try
+    if not s.Start('trap '''' HUP; sleep 100', 80, 24, err) then
+    begin
+      Fail('T10 close, hang-up ignored', err);
+      Exit;
+    end;
+    pid := b.Pid;
+    Sleep(300);
+    t0 := GetTickCount64;
+    try
+      s.Close;
+    except
+      on E: Exception do
+      begin
+        Fail('T10 close, hang-up ignored', E.Message);
+        Exit;
+      end;
+    end;
+    took := GetTickCount64 - t0;
+    if took > 3000 then Fail('T10 close, hang-up ignored', Format('%d ms', [took]))
+    else if (FpKill(pid, 0) = 0) or (fpgeterrno <> ESysESRCH) then Fail('T10 close, hang-up ignored', 'the child is still there')
+    else Pass(Format('T10 close, hang-up ignored (%d ms)', [took]));
+  finally
+    s.Free;
+  end;
 end;
 
 procedure T9;
@@ -253,6 +296,7 @@ begin
   T7;
   T8;
   T9;
+  T10;
   WriteLn(Format('ptytest: %d passed, %d failed', [Passed, Failed]));
   Halt(Failed);
 end.
