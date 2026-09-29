@@ -296,6 +296,7 @@ type
     FMarkers: TTyMkSeriesArray;
     { each series' markLine pictures, index-parallel to FBindings }
     FMarkLinePics: array of TTyMkLinePicArray;
+    FMarkPointPics: array of TTyMkPointPicArray;
     { dataZoom INTERACTION, by the author's dataZoom index: the window
       setRawRange left (percents), how each answers the pointer, each
       slider view's own state, each inside's view range }
@@ -881,6 +882,8 @@ type
     { THE markLine PICTURES of a series as the last layout drew them, one per
       surviving line in data order; empty when there are none. }
     function MarkLinePictures(ASeriesIndex: Integer): TTyMkLinePicArray;
+    { THE markPoint PICTURES likewise }
+    function MarkPointPictures(ASeriesIndex: Integer): TTyMkPointPicArray;
     { THE dataZoom ACTION, upstream's dispatchAction({type: 'dataZoom',
       dataZoomIndex, start, end}): the percent window goes on dataZoom AIndex
       and on every dataZoom linked to it through a shared axis, and the chart
@@ -4069,6 +4072,8 @@ begin
   SetLength(FMarkers, Length(FBindings));
   FMarkLinePics := nil;
   SetLength(FMarkLinePics, Length(FBindings));
+  FMarkPointPics := nil;
+  SetLength(FMarkPointPics, Length(FBindings));
   if APPI <= 0 then APPI := 96;
   scale := APPI / 96;
   for i := 0 to High(FBindings) do
@@ -4147,8 +4152,8 @@ begin
       FMarkers[i].Blocks[kind] := TyMarkerSolve(kind, TJSONObject(node),
         TJSONObject(nd), ctx);
     end;
-    { THE PICTURE of every markLine, from the layout just solved }
-    if FMarkers[i].Blocks[mkLine].Present then
+    { THE PICTURE of every marker, from the layout just solved }
+    if FMarkers[i].Blocks[mkLine].Present or FMarkers[i].Blocks[mkPoint].Present then
     begin
       pin := Default(TTyMkPicInput);
       pin.SeriesColor := MarkerSeriesColorCss(i);
@@ -4162,6 +4167,11 @@ begin
       MarkerGround(pin.Background, pin.IsDark);
       pin.Scale := scale;
       FMarkLinePics[i] := TyMkLinePictures(FMarkers[i].Blocks[mkLine], pin);
+      { the default text reads the last coordinate dim a label may come
+        from: not a category, not a time }
+      FMarkPointPics[i] := TyMkPointPictures(FMarkers[i].Blocks[mkPoint], pin,
+        not (ctx.XAxis.AxisType in [atCategory, atTime]),
+        not (ctx.YAxis.AxisType in [atCategory, atTime]));
     end;
   end;
 end;
@@ -4221,6 +4231,15 @@ begin
   Result := FMarkLinePics[slot];
 end;
 
+function TTyAdvanceChart.MarkPointPictures(ASeriesIndex: Integer): TTyMkPointPicArray;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FMarkPointPics)) then Exit;
+  Result := FMarkPointPics[slot];
+end;
+
 function TTyAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
   AList: TTyPaintList): Integer;
 var
@@ -4236,6 +4255,16 @@ begin
   ink.FontWeight := st.FontWeight;
   ink.Text := TTyChartColor(st.TextColor);
   LabelGround(ink.Halo, dark);
+  ink.Inside[0] := TTyChartColor(
+    ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight', '', []).TextColor);
+  ink.Inside[1] := TTyChartColor(
+    ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []).TextColor);
+  ink.Inside[2] := TTyChartColor(
+    ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
+  for i := 0 to High(FMarkPointPics) do
+    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
+      Inc(Result, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,
+        AMeasurer, AList));
   for i := 0 to High(FMarkLinePics) do
     if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
       Inc(Result, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,

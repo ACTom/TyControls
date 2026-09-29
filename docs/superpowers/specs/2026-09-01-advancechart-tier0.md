@@ -7695,3 +7695,41 @@ M1 给出了每条线的两端;这一批把它画出来:线段、两端符号、
 ### 下一批
 
 M3:markPoint 的画面(pin 的单位框缩放、inside 标签在 0.4 高处)。
+
+## 100. Tier 1 第六十六批:markPoint 的画面(M3,2026-09-30)
+
+### 上游的做法
+
+- **符号**:`createSymbol(type, -1, -1, 2, 2)` 的**单位框**,按 `symbolSize / 2` 缩放——`[w, h]` 的 pin 是被拉伸的单位 pin,不是在 w×h 盒子里建的 pin(pin 的高是 `max(0.6w, h)`,两者不同)。符号组放在点上,路径的局部变换是 偏移 → 转角 → 缩放:`symbolRotate` 逆时针为正,`(r || 0) * π / 180 || 0`(非数字是 0);`symbolOffset` 是像素或尺寸的百分比,y 缺省取 x,不随缩放和转角。`''` 等空名字画**圆**,`'none'` 连标签一起不画,`symbolSize: 0` 不画符号但标签留在点上。
+- **样式**:`itemStyle` 顺 条目 → 系列 markPoint → 顶层 markPoint → 默认(`borderWidth: 2`)读;填充缺省是系列色(K 线 `#eb5454`);`setColor` 后 `empty*` 是白填充、系列色描边、线宽 2,`line` 只描边(填充保留样式里的颜色),其余填系列色。描边不随缩放(`strokeNoScale`),画出来的线宽和虚线都除以线缩放(`|m0−1|` 与 `|m3−1|` 都大于 1e-10 才算,否则是 1)。
+- **标签矩形**:符号路径的包围盒(描边时按线宽/线缩放撑开,没有填充时至少 5),经**全局**变换(组平移 × 局部)——`BoundingRect.applyTransform` 在非对角项小于 1e-5 时走快路径并翻正负宽高,否则取四角外包。
+- **标签**:位置表是 zrender 的 `calculateTextPosition`,默认 `inside`、距离 5;pin 在恰好 `inside` 时把 y 放在矩形 0.4 高处;`'outside'` 当 `'top'`;数组位置不设对齐;不认识的位置落在矩形左上。默认文字是条目的 **value**(不是 coord),按最后一个不是类目/时间的坐标维取(值是数组时取那一维;两维都是类目或时间就没有文字),**不取整**;`formatter` 的 `{c}` 对数组值是逗号连接。
+- **墨色**:`inside*` 且有填充时用内侧墨:填充亮度严格 > 0.5 是 `#333`、> 0.2 是 `#eee`,否则 `#ccc`;当"是否暗色模式"等于"墨色亮度 < 0.4"时描边为填充色(浅色地面上 `#eee`/`#ccc` 标签带 2px 填充色描边——默认 pin 就是)。其余位置用外侧墨 + 地面光晕。写了颜色或 `backgroundColor` 就没有自动描边;不透明度默认跟 `itemStyle.opacity`。
+- **z2**:符号 z2 顺条目链(默认 0),标签 z2 是整个系列标注组里到它为止的最大 z2 加 2。
+
+### port 以前
+
+- markPoint 只有 M1 的数字,不画。
+
+### 做法
+
+- `MarkerView` 加 `TyMkPointPictures`(逐字转写上面各条,出画面记录:符号类型、组与局部/全局变换、单位框路径、包围盒、线缩放、样式与实际描边;标签文字、矩形、位置、旋转中心、变换、对齐、字体、样式、默认与实际墨色、z2)与 `TyBuildMarkPoints`(符号用 zrender 路径经全局变换;标签是答案标题,上游的默认墨换成皮肤的三档内侧色 `TyAdvChartLabelOn*`、外侧标签色与地面光晕)。
+- 图表:`SolveMarkers` 一并算 markPoint 画面,`MarkPointPictures(seriesIndex)` 读出,绘制列表里在 markLine 之前加入。
+
+### 基准
+
+- `tools/advchart-oracle/markers-point.js`(代理写)真跑 ECharts 6.1,43 个用例(38 合成 + 5 画廊)、253 个标注、44 条守卫:各系列类型上的默认 pin、全部符号类型、空心符号、`[w, h]`/0/负尺寸、转角、偏移、keepAspect、系列级与顶层选项、itemStyle 各键与颜色回退、13 个标签位置、pin 的 0.4 规则、`label.rotate`/`offset`/对齐、formatter、字体、标签颜色/描边/背景、三档内侧墨的精确边界(亮度恰为 0.5、0.2)、暗色地面、半透明地面光晕、z/z2/silent、图例隐藏、NaN 点、`relativeTo`。
+- `test.advchart.markpoint` 逐字段比较画面记录;另有检查绘制列表里确有 pin 和数值标签的测试。
+
+### 变异测试
+
+38 个,只有 1 个存活:pin 调用点换成 FPC 的 ArcSin。markPoint 的 pin 都是同一个单位 pin,肩角的参数只有一个值(0.4286…),FPC 在这一点上碰巧和 V8 一致——调用点等价;`TyJsAsin` 本身由 js-math 的 3031 行 `Math.asin` 逐位钉住。
+
+### 已知偏差
+
+- `path://`、`image://` 符号没有覆盖(keepAspect 只在它们上起作用);富文本标签(bar-rich-text)只记位置,不画富文本。
+- 悬停放大、提示框没有移植,标注元素静默。
+
+### 下一批
+
+M4:markArea 的画面。
