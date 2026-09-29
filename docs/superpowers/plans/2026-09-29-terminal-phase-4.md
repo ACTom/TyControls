@@ -723,7 +723,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 19a | 退出码截成 Integer | 红：`TestTheExitCodeIsNotAnInteger` |
 | 19b / 19c | 退出后不回只读 / 退出后按键仍入队 | 红：`TestAfterTheExitKeysGoNowhere` |
 
-**主控待办**：编 `tycontrols.lpk` / `tycontrols_dt.lpk`（本批没有新单元，`.lpk` 清单不变；拆出的 `.inc` 不列）、**待主控编示例**（`examples/terminal` 的四个 PTY 单元改了）并起示例看一次 Shell 模式的重启与关窗；`scripts/example-rsj2po.py` 不需要重跑（示例没有新 resourcestring）。
+**主控已办（2026-09-29）**：在 `ca0d63ac` 上 `lazbuild -B` 编过 `tycontrols.lpk`、`tycontrols_dt.lpk` 和终端示例，均 0 错；`example-rsj2po.py` 核对 rsj 26 条、added 0；示例启动能开窗。Shell 模式的重启与关窗需要人工点击（本会话没有界面操作权限），并入真机验收第 55–65 项，由用户在最终一次性验收时做。
 
 **截图**：`tools/terminal-shots --phase4` 重出，覆盖 `docs/superpowers/plans/2026-09-29-terminal-phase-4-shots/`，`index.md` 更新。抽查：深色失焦选区（`selection-default-dark.png`）看得清；列选区（聚焦）里「文」「三」起点落在后半整字不选、「试」整字选中，和上游规则一致。3 期截图里没有选区，不受影响，不重出。
 
