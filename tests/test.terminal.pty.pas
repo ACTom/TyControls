@@ -9,14 +9,18 @@ unit test.terminal.pty;
   A fake backend stands in for the PTY: its Read waits for what the test feeds it (or,
   endless, hands out a full chunk every time), its Interrupt makes a waiting Read
   return. Every wait here is bounded (5 s unless said otherwise) and pumps the message
-  loop, so a broken session fails a test instead of hanging the run. }
+  loop, so a broken session fails a test instead of hanging the run.
+
+  On Windows, the second part: the pipe backend on real pipes, the build number, and
+  ConPTY itself running cmd.exe (no window: a pseudo console has none; the program is
+  ended by its handle if it does not go with its console). }
 
 interface
 
 uses
   Classes, SysUtils, SyncObjs, Forms, Controls, LCLType, fpcunit, testregistry,
   tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal,
-  uptysession, ushell, test.terminal.view;
+  uptysession, ushell, {$IFDEF MSWINDOWS}uptywin,{$ENDIF} test.terminal.view;
 
 type
   { A PTY that is not one. }
@@ -76,9 +80,22 @@ type
     procedure TestCloseDoesNotHang;
     procedure TestCloseWhileHeldBack;
     procedure TestBackpressureThroughTheTerminal;
+    {$IFDEF MSWINDOWS}
+    procedure TestPipesRoundTrip;
+    procedure TestInterruptUnblocksARead;
+    procedure TestTheBuildNumberIsTheRealOne;
+    procedure TestNoConPtyIsReported;
+    procedure TestConPtyRunsACommand;
+    procedure TestConPtyResizesAndCloses;
+    {$ENDIF}
   end;
 
 implementation
+
+{$IFDEF MSWINDOWS}
+uses
+  Windows, Registry;
+{$ENDIF}
 
 type
   TWaitCheck = function: Boolean is nested;
@@ -249,7 +266,7 @@ function TFakePty.LastResize: TPoint;
 begin
   FLock.Enter;
   try
-    Result := Point(FResizeCols, FResizeRows);
+    Result := Types.Point(FResizeCols, FResizeRows);
   finally
     FLock.Leave;
   end;
@@ -589,6 +606,233 @@ begin
     sh.Free;
   end;
 end;
+
+{$IFDEF MSWINDOWS}
+
+{ ---- Windows: pipes, the build, ConPTY -------------------------------------------- }
+
+{ ESC [ ... final and ESC ] ... BEL / ST taken out: what ConPTY paints around the text }
+function StripEscapes(const S: RawByteString): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(S) do
+  begin
+    if (S[i] = #27) and (i < Length(S)) and (S[i + 1] = '[') then
+    begin
+      Inc(i, 2);
+      while (i <= Length(S)) and not (S[i] in [#$40..#$7E]) do Inc(i);
+      Inc(i);
+    end
+    else if (S[i] = #27) and (i < Length(S)) and (S[i + 1] = ']') then
+    begin
+      Inc(i, 2);
+      while (i <= Length(S)) and (S[i] <> #7) and (S[i] <> #27) do Inc(i);
+      if (i <= Length(S)) and (S[i] = #27) then Inc(i);
+      Inc(i);
+    end
+    else if S[i] = #27 then
+      Inc(i, 2)
+    else
+    begin
+      Result := Result + S[i];
+      Inc(i);
+    end;
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestPipesRoundTrip;
+var
+  inRead, inWrite, outRead, outWrite: THandle;
+  s: TPtySession;
+  err: string;
+  data, all: RawByteString;
+  exited, ended: Boolean;
+  code: Integer;
+  buf: array[0..15] of AnsiChar;
+  got, avail, written: DWORD;
+
+  function Three: Boolean;
+  begin
+    Result := s.Outstanding = 3;
+  end;
+
+  function Arrived: Boolean;
+  begin
+    avail := 0;
+    Result := PeekNamedPipe(inRead, nil, 0, nil, @avail, nil) and (avail >= 3);
+  end;
+
+  function TheEnd: Boolean;
+  begin
+    if s.Pump(data, exited, code) and exited then ended := True;
+    Result := ended;
+  end;
+
+begin
+  AssertTrue('pipes', CreatePipe(inRead, inWrite, nil, 0) and CreatePipe(outRead, outWrite, nil, 0));
+  s := TPtySession.Create(TPipeBackend.Create(inWrite, outRead, True));
+  try
+    AssertTrue('started', s.Start('', 80, 24, err));
+    all := 'abc';
+    written := 0;
+    AssertTrue(WriteFile(outWrite, all[1], 3, written, nil));
+    AssertTrue('read by the session', WaitUntil(@Three));
+    AssertTrue(s.Pump(data, exited, code));
+    AssertEquals('abc', data);
+    s.Write('xyz');
+    AssertTrue('written by the session', WaitUntil(@Arrived));
+    got := 0;
+    AssertTrue(ReadFile(inRead, buf, 3, got, nil));
+    AssertEquals('xyz', Copy(buf, 1, got));
+    { the program's end closes its side: the reader reads the end }
+    CloseHandle(outWrite);
+    outWrite := 0;
+    ended := False;
+    AssertTrue('the end is reported', WaitUntil(@TheEnd));
+  finally
+    s.Free;
+    if outWrite <> 0 then CloseHandle(outWrite);
+    CloseHandle(inRead);
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestInterruptUnblocksARead;
+var
+  inRead, inWrite, outRead, outWrite: THandle;
+  s: TPtySession;
+  err: string;
+  t0: QWord;
+begin
+  AssertTrue('pipes', CreatePipe(inRead, inWrite, nil, 0) and CreatePipe(outRead, outWrite, nil, 0));
+  s := TPtySession.Create(TPipeBackend.Create(inWrite, outRead, True));
+  try
+    AssertTrue('started', s.Start('', 80, 24, err));
+    Sleep(100);                                  { the reader blocks in ReadFile }
+    t0 := GetTickCount64;
+    s.Close;
+    AssertTrue(Format('the blocked read was cancelled (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 1000);
+  finally
+    s.Free;
+    CloseHandle(outWrite);
+    CloseHandle(inRead);
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestTheBuildNumberIsTheRealOne;
+var
+  reg: TRegistry;
+  want: Integer;
+begin
+  reg := TRegistry.Create(KEY_READ);
+  try
+    reg.RootKey := HKEY_LOCAL_MACHINE;
+    AssertTrue('the key', reg.OpenKeyReadOnly('SOFTWARE\Microsoft\Windows NT\CurrentVersion'));
+    want := StrToInt(reg.ReadString('CurrentBuildNumber'));
+  finally
+    reg.Free;
+  end;
+  AssertEquals('RtlGetVersion''s build is the registry''s', want, TyWindowsBuildNumber);
+  AssertTrue('Windows 10 or later', TyWindowsBuildNumber >= 10240);
+end;
+
+function NoConPty: Boolean;
+begin
+  Result := False;
+end;
+
+procedure TTyTerminalPtyTests.TestNoConPtyIsReported;
+var
+  s: TPtySession;
+  err: string;
+begin
+  TConPtyBackend.ConPtyLoader := @NoConPty;
+  try
+    s := TPtySession.Create(TConPtyBackend.Create);
+    try
+      AssertFalse('not started', s.Start('cmd.exe', 80, 24, err));
+      AssertEquals('said why', rsConPtyUnavailable, err);
+      AssertFalse('no threads', s.Started);
+    finally
+      s.Free;
+    end;
+  finally
+    TConPtyBackend.ConPtyLoader := nil;
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestConPtyRunsACommand;
+var
+  s: TPtySession;
+  err: string;
+  all, data: RawByteString;
+  exited, ended: Boolean;
+  code, endCode: Integer;
+
+  function TheEnd: Boolean;
+  begin
+    if s.Pump(data, exited, code) then
+    begin
+      all := all + data;
+      s.Delivered(Length(data));
+      if exited then
+      begin
+        ended := True;
+        endCode := code;
+      end;
+    end;
+    Result := ended;
+  end;
+
+begin
+  if not TyConPtyAvailable then
+    Ignore('this Windows has no ConPTY (1809 or later is needed)');
+  s := TPtySession.Create(TConPtyBackend.Create);
+  try
+    AssertTrue('started: ' + err, s.Start('cmd.exe /d /c echo tyterm-ok& exit 7', 80, 24, err));
+    all := '';
+    ended := False;
+    endCode := -2;
+    AssertTrue('the program ended within 10 s', WaitUntil(@TheEnd, 10000));
+    AssertTrue('its output came through: ' + StripEscapes(all), Pos('tyterm-ok', StripEscapes(all)) > 0);
+    AssertEquals('its exit code', 7, endCode);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestConPtyResizesAndCloses;
+var
+  s: TPtySession;
+  b: TConPtyBackend;
+  err: string;
+  proc: THandle;
+  t0: QWord;
+begin
+  if not TyConPtyAvailable then
+    Ignore('this Windows has no ConPTY (1809 or later is needed)');
+  b := TConPtyBackend.Create;
+  s := TPtySession.Create(b);
+  proc := 0;
+  try
+    AssertTrue('started: ' + err, s.Start('cmd.exe /d /k', 80, 24, err));
+    proc := OpenProcess(SYNCHRONIZE, False, b.ProcessId);
+    AssertTrue('the program is there', proc <> 0);
+    s.Resize(100, 40);
+    AssertEquals('ResizePseudoConsole succeeded', 0, b.LastResizeResult);
+    t0 := GetTickCount64;
+    s.Close;
+    AssertTrue(Format('closed within 5 s (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 5000);
+    AssertEquals('the program is gone', WAIT_OBJECT_0, WaitForSingleObject(proc, 0));
+  finally
+    s.Free;
+    if proc <> 0 then CloseHandle(proc);
+  end;
+end;
+
+{$ENDIF}
 
 initialization
   RegisterTest(TTyTerminalPtyTests);
