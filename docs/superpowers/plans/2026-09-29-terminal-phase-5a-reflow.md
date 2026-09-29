@@ -125,7 +125,7 @@ include 头：「tyControls.Terminal.Buffer 的一部分（被 include，不是�
   - `TyTermReflowLargerGetLinesToRemove`（`:25-110`）：内层 `while (i < lines.length && nextLine.isWrapped)` 先判下标再读——本仓库 `Get` 越界答 `nil`，照样先判下标；「光标在段内就跳过」只在 `not AReflowCursorLine` 时。
   - `TyTermReflowLargerCreateNewLayout`（`:116-145`）：删除事件经 `ALines.NotifyDelete(i − 已删, 个数)`，**正向**。
   - `TyTermReflowLargerApplyNewLayout`（`:151-163`）：先把 `layout` 指向的行收进一个数组并 `AddRef`，再逐个 `SetItem`，再 `Length := Length(layout)`，最后逐个 `Release`（地雷 1）。
-  - `TyTermReflowSmallerGetNewLineLengths`（`:179-213`）：入口 `ANewCols < 2` 抛 `EArgumentOutOfRangeException`（上游会死循环，核实记录 6）。
+  - `TyTermReflowSmallerGetNewLineLengths`（`:179-213`）：~~入口 `ANewCols < 2` 抛 `EArgumentOutOfRangeException`~~（上游会死循环，核实记录 6）。**实现期修正（5 期）**：入口不查列数——上游自己的用例会改到 1 列（没有宽字符落在切口时照常算完），照原文做那几例会红；只在上游真会死循环的地方（宽字符落在切口、一列放不下）抛，另两处对应上游抛 TypeError 的地方也抛（`Buffer.pas` 单元头）。
   - `TyTermGetWrappedLineTrimmedLength`（`:215-229`）。
 - [ ] **Step 3: 缓冲里的四个方法**（`Buffer.ts` 逐行）：
   - `GetIsReflowEnabled`（`:310-316`，开工前问题二第 4 条）：用字段 `FHasScrollback`。

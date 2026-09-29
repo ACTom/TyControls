@@ -12,11 +12,11 @@
 | `reflow-back-default-dark.png` | default | dark | 再改回 80 列：和第一张一样（折回的行接回去） |
 | `reflow-oldconpty-narrow-default-light.png` | default | light | 同样内容，`WindowsPty = {conpty, 19044}` 下改到 47 列：不重新折行，长行截在网格外（老 ConPTY 自己会重画） |
 | `contrast-1-xp-light.png` | xp | light | 16 色写字、█ 块、当底色，最低对比度 1（不调） |
-| `contrast-45-xp-light.png` | xp | light | 同上，4.5：浅色的字压暗到对底色 4.5:1（3 号黄、11 号最明显）；█ 块和当底色的格不变 |
+| `contrast-45-xp-light.png` | xp | light | 同上，4.5：对底色不到 4.5:1 的字压暗到 4.5:1（xp 上差得最多的是 3、14、10 号）；█ 块和当底色的格不变 |
 | `contrast-1-macos-light.png` | macos | light | 16 色写字、█ 块、当底色，最低对比度 1（不调） |
-| `contrast-45-macos-light.png` | macos | light | 同上，4.5：浅色的字压暗到对底色 4.5:1（3 号黄、11 号最明显）；█ 块和当底色的格不变 |
+| `contrast-45-macos-light.png` | macos | light | 同上，4.5：对底色不到 4.5:1 的字压暗到 4.5:1（xp 上差得最多的是 3、14、10 号）；█ 块和当底色的格不变 |
 | `contrast-1-breeze-light.png` | breeze | light | 16 色写字、█ 块、当底色，最低对比度 1（不调） |
-| `contrast-45-breeze-light.png` | breeze | light | 同上，4.5：浅色的字压暗到对底色 4.5:1（3 号黄、11 号最明显）；█ 块和当底色的格不变 |
+| `contrast-45-breeze-light.png` | breeze | light | 同上，4.5：对底色不到 4.5:1 的字压暗到 4.5:1（xp 上差得最多的是 3、14、10 号）；█ 块和当底色的格不变 |
 | `contrast-1-default-dark.png` | default | dark | 深底，最低对比度 1：纯黑底上的 0 号色、暗淡文字、选区里的字（第三行，失焦选区）、ls 的反显目录 |
 | `contrast-45-default-dark.png` | default | dark | 同上，4.5：纯黑底上的 0 号色提亮，绿底上的黑字压暗；暗淡文字（比值减半）和选区里的字（对选区色比）本来就够，不变 |
 | `contrast-excluded-default-light.png` | default | light | 4.5 下框线、块元素、Powerline 用的浅灰不变；右边同色的文字被压暗 |
