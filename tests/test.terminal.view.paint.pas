@@ -62,6 +62,13 @@ type
     procedure TestDisabledDimsTowardTheParent;
     procedure TestHiddenTextStaysHiddenUnderTheCursor;
     procedure TestAFrameThatChangesOnHoverIsRepainted;
+    { 4 期:选区 }
+    procedure TestSelectionIsPainted;
+    procedure TestSelectedTextKeepsItsColourUnlessTheThemeSaysSo;
+    procedure TestAColumnIsARectangle;
+    procedure TestTheSelectionScrollsWithTheText;
+    procedure TestOnlyTouchedRowsRepaint;
+    procedure TestADisabledSelectionIsDimmed;
   end;
 
 implementation
@@ -1079,6 +1086,192 @@ begin
   finally
     F.View.Controller := F.Ctl;
     c.Free;
+  end;
+end;
+
+{ ---- 4 期:选区 ------------------------------------------------------------------------ }
+
+{ the theme's selection colour (with its alpha) as the row painter lays it }
+function SelOver(ACtl: TTyStyleController; AFocused: Boolean): TBGRAPixel;
+var
+  st: TTyStyleSet;
+  c: TTyColor;
+begin
+  if AFocused then
+    st := ACtl.Model.ResolveStyle('TyTerminalSelection', '', [tysFocused])
+  else
+    st := ACtl.Model.ResolveStyle('TyTerminalSelection', '', []);
+  if not ((tpBackground in st.Present) and (st.Background.Kind = tfkSolid)) then
+    raise Exception.Create('the theme has no selection colour');
+  c := st.Background.Color;
+  Result := BGRA(TyRedOf(c), TyGreenOf(c), TyBlueOf(c), TyAlphaOf(c));
+end;
+
+procedure TTyTerminalViewPaintTests.TestSelectionIsPainted;
+var
+  b: TBGRABitmap;
+  c: Integer;
+  unfocused, focused: Cardinal;
+begin
+  F.View.WriteSync(#27'[?25l');
+  unfocused := TyTermBlendOver(Bg, SelOver(F.Ctl, False));
+  focused := TyTermBlendOver(Bg, SelOver(F.Ctl, True));
+  AssertTrue('the two selection colours differ', unfocused <> focused);
+  AssertTrue('and differ from the ground', (unfocused <> Bg) and (focused <> Bg));
+  F.View.Select(2, F.View.Core.Buffer.YBase, 4);
+  b := Snap;
+  try
+    for c := 2 to 5 do
+      AssertTrue(Format('cell %d: the unfocused selection over the ground', [c]), CellIs(b, c, 0, unfocused));
+    AssertTrue('cell 1: the ground', CellIs(b, 1, 0, Bg));
+    AssertTrue('cell 6: the ground', CellIs(b, 6, 0, Bg));
+    AssertTrue('the next row: the ground', CellIs(b, 3, 1, Bg));
+  finally
+    b.Free;
+  end;
+  F.View.Enter;
+  b := Snap;
+  try
+    for c := 2 to 5 do
+      AssertTrue(Format('cell %d: focused', [c]), CellIs(b, c, 0, focused));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestSelectedTextKeepsItsColourUnlessTheThemeSaysSo;
+var
+  b: TBGRABitmap;
+begin
+  F.View.WriteSync(#27'[?25l'#$E2#$96#$88);
+  F.View.Select(0, F.View.Core.Buffer.YBase, 1);
+  F.View.Enter;
+  b := Snap;
+  try
+    AssertTrue('the block keeps the foreground (the default theme gives no selection colour for text)',
+      CellIs(b, 0, 0, Fg));
+  finally
+    b.Free;
+  end;
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminalSelection:focus { color: #ff0000; }'#10;
+  b := Snap;
+  try
+    AssertTrue('a theme that gives one: the text in it', CellIs(b, 0, 0, $FF0000));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestAColumnIsARectangle;
+var
+  b: TBGRABitmap;
+  r, c, n: Integer;
+  sel: Cardinal;
+begin
+  F.View.WriteSync(#27'[?25l');
+  sel := TyTermBlendOver(Bg, SelOver(F.Ctl, False));
+  F.View.Down(mbLeft, [ssLeft, ssAlt], F.View.CellLeft(1, 0));
+  F.View.MoveTo([ssLeft, ssAlt], F.View.CellLeft(4, 1));
+  F.View.Up(mbLeft, [ssAlt], F.View.CellLeft(4, 1));
+  b := Snap;
+  try
+    n := 0;
+    for r := 0 to F.View.Rows - 1 do
+      for c := 0 to F.View.Cols - 1 do
+        if CellIs(b, c, r, sel) then
+        begin
+          Inc(n);
+          AssertTrue(Format('(%d, %d) inside the rectangle', [c, r]), (c >= 1) and (c <= 3) and (r <= 1));
+        end;
+    AssertEquals('3 x 2 cells', 6, n);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestTheSelectionScrollsWithTheText;
+var
+  b: TBGRABitmap;
+  i: Integer;
+  s: RawByteString;
+  sel: Cardinal;
+begin
+  s := #27'[?25l';
+  for i := 1 to 30 do
+    s := s + #13#10;
+  F.View.WriteSync(s);
+  sel := TyTermBlendOver(Bg, SelOver(F.Ctl, False));
+  F.View.SelectLines(F.View.Core.Buffer.YDisp + 2, F.View.Core.Buffer.YDisp + 2);
+  b := Snap;
+  try
+    AssertTrue('row 2 selected', CellIs(b, 10, 2, sel));
+    AssertTrue('row 3 not', CellIs(b, 10, 3, Bg));
+  finally
+    b.Free;
+  end;
+  F.View.ScrollLines(-1);
+  b := Snap;
+  try
+    AssertTrue('the line moved down: row 3 selected', CellIs(b, 10, 3, sel));
+    AssertTrue('row 2 not any more', CellIs(b, 10, 2, Bg));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestOnlyTouchedRowsRepaint;
+var
+  b: TBGRABitmap;
+  i: Integer;
+begin
+  F.View.WriteSync('hello');
+  b := Snap;
+  b.Free;
+  F.View.ClearInvalidated;
+  F.View.Select(2, F.View.Core.Buffer.YBase + 3, 3);
+  AssertTrue('something invalidated', Length(F.View.Invalidated) > 0);
+  for i := 0 to High(F.View.Invalidated) do
+  begin
+    AssertEquals('only row 3 (first)', 3, F.View.Invalidated[i].X);
+    AssertEquals('only row 3 (last)', 3, F.View.Invalidated[i].Y);
+  end;
+  AssertEquals('no whole-window invalidation', 0, F.View.WholeInvalidates);
+  b := Snap;
+  b.Free;
+  F.View.ClearInvalidated;
+  F.View.Select(4, F.View.Core.Buffer.YBase + 3, 2);
+  for i := 0 to High(F.View.Invalidated) do
+    AssertTrue('a change within row 3: row 3 only',
+      (F.View.Invalidated[i].X = 3) and (F.View.Invalidated[i].Y = 3));
+end;
+
+procedure TTyTerminalViewPaintTests.TestADisabledSelectionIsDimmed;
+var
+  b: TBGRABitmap;
+  st: TTyStyleSet;
+  a: Integer;
+  pc: TTyColor;
+  base, rgb: Cardinal;
+  over: TBGRAPixel;
+begin
+  F.View.WriteSync(#27'[?25l');
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminal:disabled { opacity: 0.4; }'#10;
+  st := F.Ctl.Model.ResolveStyle('TyTerminal', '', [tysDisabled]);
+  a := EnsureRange(Round(st.Opacity * 255), 0, 255);
+  AssertTrue('the parent has a colour', TyResolveParentBg(F.View, pc));
+  base := Cardinal(pc) and $FFFFFF;
+  over := SelOver(F.Ctl, False);
+  rgb := Mix((Cardinal(over.red) shl 16) or (Cardinal(over.green) shl 8) or over.blue, base, a);
+  over := BGRA((rgb shr 16) and $FF, (rgb shr 8) and $FF, rgb and $FF, over.alpha);
+  F.View.Select(2, F.View.Core.Buffer.YBase, 3);
+  F.View.Enabled := False;
+  b := Snap;
+  try
+    AssertTrue(Format('the selection dimmed over the dimmed ground (%s)',
+      [IntToHex(TyTermBlendOver(Mix(Bg, base, a), over), 6)]),
+      CellIs(b, 3, 0, TyTermBlendOver(Mix(Bg, base, a), over)));
+  finally
+    b.Free;
   end;
 end;
 

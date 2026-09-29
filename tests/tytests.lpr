@@ -171,7 +171,7 @@ uses
   test.terminal.oracle, test.terminal.parser, test.terminal.buffer, test.terminal.core,
   test.terminal.keyboard, test.terminal.render, test.terminal.view, test.terminal.view.paint,
   test.terminal.view.input, test.terminal.view.theme, test.terminal.example,
-  test.terminal.selection, test.terminal.links,
+  test.terminal.selection, test.terminal.links, test.terminal.view.mouse,
   test.transitions,
   test.htmllabel,
   test.shape,

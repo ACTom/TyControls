@@ -11,11 +11,12 @@ unit test.terminal.view;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, TypInfo, Forms, Controls, Graphics, LCLType, LCLIntf, LMessages, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, TypInfo, Forms, Controls, Graphics, Menus, LCLType, LCLIntf, LMessages,
+  fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.StyleModel,
   tyControls.ScrollBar, tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  tyControls.Terminal.Render, tyControls.Terminal, test.terminal.keyboard;
+  tyControls.Terminal.Render, tyControls.Terminal.Selection, tyControls.Terminal, test.terminal.keyboard;
 
 type
   TTyTerminalViewProbe = class(TTyTerminalView)
@@ -74,6 +75,45 @@ type
     procedure ImeCommit(const AText: string);
     { 无头测试跑不到 LCL 的对齐:自己调一次(传没扣过的客户区矩形) }
     procedure AlignNow;
+  public
+    { 4 期:鼠标、选区、菜单、PRIMARY、指针形状 }
+    MenuShows: Integer;
+    MenuShownAt: TPoint;
+    PrimaryText: string;
+    PrimaryWrites: Integer;
+    PrimaryWritten: string;
+    FakeShift: TShiftState;
+    UseFakeShift: Boolean;
+    LastTempCursor: TCursor;
+    TempCursorSets: Integer;
+    procedure Down(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); overload;
+    procedure Down(Button: TMouseButton; Shift: TShiftState; const P: TPoint); overload;
+    procedure MoveTo(Shift: TShiftState; X, Y: Integer); overload;
+    procedure MoveTo(Shift: TShiftState; const P: TPoint); overload;
+    procedure Up(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); overload;
+    procedure Up(Button: TMouseButton; Shift: TShiftState; const P: TPoint); overload;
+    { a press and a release at P }
+    procedure ClickAt(Button: TMouseButton; Shift: TShiftState; const P: TPoint);
+    function WheelHorz(Shift: TShiftState; ADelta: Integer; APos: TPoint): Boolean;
+    { DoContextPopup; the answer is Handled }
+    function ContextPopup(APos: TPoint): Boolean;
+    procedure ShowContextMenu(const AClientPos: TPoint); override;
+    { the menu built and its Enabled set as for a popup now }
+    function MenuItem(AIndex: Integer): TMenuItem;
+    function ReadPrimaryText: string; override;
+    procedure WritePrimaryText(const S: string); override;
+    function CurrentShiftState: TShiftState; override;
+    procedure SetTempCursor(Value: TCursor); override;
+    procedure TickDrag;
+    function DragTimerOn: Boolean;
+    function Sel: TTyTermSelection;
+    function MouseRoute: TTyTerminalMouseRoute;
+    procedure SetPrimaryPlatform(AValue: Boolean);
+    { client pixels inside a cell: its left quarter (a selection point at the cell's own
+      boundary), its centre, its right three quarters (the next boundary) }
+    function CellLeft(ACol, ARow: Integer): TPoint;
+    function CellCenter(ACol, ARow: Integer): TPoint;
+    function CellRight(ACol, ARow: Integer): TPoint;
   end;
 
   { 一个测试一个;SetUp 里建,TearDown 里 Free。 }
@@ -448,6 +488,150 @@ var
 begin
   r := Rect(0, 0, ClientWidth, ClientHeight);
   AlignControls(nil, r);
+end;
+
+procedure TTyTerminalViewProbe.Down(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyTerminalViewProbe.Down(Button: TMouseButton; Shift: TShiftState; const P: TPoint);
+begin
+  MouseDown(Button, Shift, P.X, P.Y);
+end;
+
+procedure TTyTerminalViewProbe.MoveTo(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseMove(Shift, X, Y);
+end;
+
+procedure TTyTerminalViewProbe.MoveTo(Shift: TShiftState; const P: TPoint);
+begin
+  MouseMove(Shift, P.X, P.Y);
+end;
+
+procedure TTyTerminalViewProbe.Up(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  MouseUp(Button, Shift, X, Y);
+end;
+
+procedure TTyTerminalViewProbe.Up(Button: TMouseButton; Shift: TShiftState; const P: TPoint);
+begin
+  MouseUp(Button, Shift, P.X, P.Y);
+end;
+
+procedure TTyTerminalViewProbe.ClickAt(Button: TMouseButton; Shift: TShiftState; const P: TPoint);
+var
+  held: TShiftState;
+begin
+  case Button of
+    mbLeft: held := [ssLeft];
+    mbMiddle: held := [ssMiddle];
+    mbRight: held := [ssRight];
+  else
+    held := [];
+  end;
+  MouseDown(Button, Shift + held, P.X, P.Y);
+  MouseUp(Button, Shift - [ssDouble], P.X, P.Y);
+end;
+
+function TTyTerminalViewProbe.WheelHorz(Shift: TShiftState; ADelta: Integer; APos: TPoint): Boolean;
+begin
+  Result := DoMouseWheelHorz(Shift, ADelta, APos);
+end;
+
+function TTyTerminalViewProbe.ContextPopup(APos: TPoint): Boolean;
+begin
+  Result := False;
+  DoContextPopup(APos, Result);
+end;
+
+procedure TTyTerminalViewProbe.ShowContextMenu(const AClientPos: TPoint);
+begin
+  Inc(MenuShows);
+  MenuShownAt := AClientPos;
+  UpdateContextMenu;
+end;
+
+function TTyTerminalViewProbe.MenuItem(AIndex: Integer): TMenuItem;
+begin
+  UpdateContextMenu;
+  Result := ContextMenu.Items[AIndex];
+end;
+
+function TTyTerminalViewProbe.ReadPrimaryText: string;
+begin
+  Result := PrimaryText;
+end;
+
+procedure TTyTerminalViewProbe.WritePrimaryText(const S: string);
+begin
+  Inc(PrimaryWrites);
+  PrimaryWritten := S;
+end;
+
+function TTyTerminalViewProbe.CurrentShiftState: TShiftState;
+begin
+  if UseFakeShift then
+    Result := FakeShift
+  else
+    Result := inherited CurrentShiftState;
+end;
+
+procedure TTyTerminalViewProbe.SetTempCursor(Value: TCursor);
+begin
+  LastTempCursor := Value;
+  Inc(TempCursorSets);
+  inherited SetTempCursor(Value);
+end;
+
+procedure TTyTerminalViewProbe.TickDrag;
+begin
+  DragScrollTick;
+end;
+
+function TTyTerminalViewProbe.DragTimerOn: Boolean;
+begin
+  Result := DragTimerActive;
+end;
+
+function TTyTerminalViewProbe.Sel: TTyTermSelection;
+begin
+  Result := Selection;
+end;
+
+function TTyTerminalViewProbe.MouseRoute: TTyTerminalMouseRoute;
+begin
+  Result := Route;
+end;
+
+procedure TTyTerminalViewProbe.SetPrimaryPlatform(AValue: Boolean);
+begin
+  FUsesPrimary := AValue;
+end;
+
+function TTyTerminalViewProbe.CellLeft(ACol, ARow: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := CellRect(ACol, ARow);
+  Result := Point(r.Left + (r.Right - r.Left) div 4, (r.Top + r.Bottom) div 2);
+end;
+
+function TTyTerminalViewProbe.CellCenter(ACol, ARow: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := CellRect(ACol, ARow);
+  Result := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+function TTyTerminalViewProbe.CellRight(ACol, ARow: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := CellRect(ACol, ARow);
+  Result := Point(r.Right - 1 - (r.Right - r.Left) div 4, (r.Top + r.Bottom) div 2);
 end;
 
 { ---- 夹具 --------------------------------------------------------------------------- }
