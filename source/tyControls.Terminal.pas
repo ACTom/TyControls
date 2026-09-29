@@ -48,6 +48,11 @@ uses
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard, tyControls.Terminal.Render;
 
+const
+  { X11 惯例的 PRIMARY(选中即复制、中键粘贴):Unix 上除了 macOS。按平台取,不按 widgetset;
+    控件的 FUsesPrimary 从它来,测试可以改 }
+  TyTerminalUsesPrimary = {$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN)}True{$ELSE}False{$ENDIF};
+
 type
   { 公开接口里用到的类型在这里各起一个同名别名:宿主只 uses tyControls.Terminal 就够。 }
   TTyTerminalDataEvent = tyControls.Terminal.Core.TTyTerminalDataEvent;
@@ -63,8 +68,13 @@ type
   TTyTerminalGridResizeEvent = procedure(Sender: TObject; ACols, ARows: Integer) of object;
   TTyTerminalShortcutQueryEvent = procedure(Sender: TObject; Key: Word; Shift: TShiftState;
     var APassToApplication: Boolean) of object;
+  { 按住哪个键时,程序接管了鼠标也照样本地选择:默认 macOS 是 Option(Alt)、其余 Shift }
+  TTyTerminalSelectionOverrideKey = (tsoDefault, tsoShift, tsoAlt, tsoNone);
+  { 一次按下走哪条路(在按下那一刻定,直到那个键抬起):上报给程序、本地选择、链接、
+    中键粘贴 PRIMARY、什么都不做 }
+  TTyTerminalMouseRoute = (mrNone, mrReport, mrSelect, mrLink, mrPrimary);
 
-  { 终端。右键菜单(ITyTextEditActions)、选区、鼠标上报在 4 期。 }
+  { 终端。右键菜单是自建的四项(不实现 ITyTextEditActions:那是给编辑框六项菜单设计的)。 }
   TTyTerminalView = class(TTyCustomControl, ITyImeEditable, ITyScrollBarFrameHost)
   private
     FCore: TTyTerminalCore;
@@ -166,6 +176,14 @@ type
     FKeyDownHandled: Boolean;
     FLastKeyShift: TShiftState;
     FWheelAccum: Integer;
+    FHorzAccum: Integer;
+    { 鼠标:这次按下定的路、开路的键、上报期间按着的键、右键是上报了还是本地的 }
+    FRoute: TTyTerminalMouseRoute;
+    FRouteButton: TMouseButton;
+    FReportHeld: set of TMouseButton;
+    FRightReported, FRightLocal: Boolean;
+    FSelectionOverrideKey: TTyTerminalSelectionOverrideKey;
+    FLastMousePos: TPoint;
     { 输入法 }
     FImeHook: TObject;
     FImeCaretRect: TRect;
@@ -270,6 +288,14 @@ type
     procedure SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
     procedure SetLineHeightPercent(AValue: Integer);
     procedure SetLetterSpacing(AValue: Integer);
+    { 鼠标上报 }
+    function Reporting: Boolean;
+    function MakeMouseEvent(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+      X, Y: Integer; Shift: TShiftState): TTyTerminalMouseEvent;
+    procedure ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+      X, Y: Integer; Shift: TShiftState);
+    function OverrideIsAlt: Boolean;
+    procedure UpdatePointer(Shift: TShiftState);
   protected
     { 平台标志:按平台(不是 widgetset)取;受保护,测试可以改成别的平台 }
     FIsMac, FIsWindows: Boolean;
@@ -286,8 +312,16 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure KeyUp(var Key: Word; Shift: TShiftState); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
+    function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { 覆盖键按着没有(SelectionOverrideKey;tsoDefault 在 macOS 是 Alt、其余 Shift) }
+    function OverrideHeld(Shift: TShiftState): Boolean;
+    { 要列选择:Alt 按着,且 Alt 不是覆盖键(macOS 默认、tsoAlt 时 Alt 让给覆盖键) }
+    function ColumnWanted(Shift: TShiftState): Boolean;
+    { FOR THE TESTS:这次按下走的路 }
+    property Route: TTyTerminalMouseRoute read FRoute;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure FontChanged(Sender: TObject); override;
     procedure CMParentFontChanged(var Message: TLMessage); message CM_PARENTFONTCHANGED;
@@ -400,6 +434,8 @@ type
     property ScrollOnUserInput: Boolean read GetScrollOnUserInput write SetScrollOnUserInput default True;
     property ScrollBarAutoHide: TTyScrollBarAutoHide read FScrollBarAutoHide write SetScrollBarAutoHide
       default sbahDefault;
+    property SelectionOverrideKey: TTyTerminalSelectionOverrideKey read FSelectionOverrideKey
+      write FSelectionOverrideKey default tsoDefault;
     property LineHeightPercent: Integer read FLineHeightPercent write SetLineHeightPercent default 100;
     property LetterSpacing: Integer read FLetterSpacing write SetLetterSpacing default 0;
     property TabStop default True;
@@ -413,6 +449,11 @@ type
     property OnOsc: TTyTerminalOscEvent read FOnOsc write FOnOsc;
     property OnShortcutQuery: TTyTerminalShortcutQueryEvent read FOnShortcutQuery write FOnShortcutQuery;
   end;
+
+{ MouseService._sendEvent 的键(MouseService.ts:112-136):按下、抬起按 LCL 的键(左、中、右,
+  其余答 tmbNone,不报);移动按 Shift 里按着的键,左先于中、中先于右,都没按答 tmbNone。 }
+function TyTerminalMouseButtonFor(AAction: TTyTerminalMouseAction; AButton: TMouseButton;
+  AShift: TShiftState): TTyTerminalMouseButton;
 
 const
   { 设计期预览:RIS 之后写进去,不进流式化。16 色前景 / 背景、属性、宽字符、框线。 }
@@ -489,6 +530,9 @@ begin
   FLetterSpacing := 0;
   FIsMac := TyTerminalIsMac;
   FIsWindows := TyTerminalIsWindows;
+  { 中键、右键拖出控件也要收到移动(上报期间);LCL 默认只捕获左键 }
+  CaptureMouseButtons := [mbLeft, mbMiddle, mbRight];
+  FSelectionOverrideKey := tsoDefault;
   FBlinkVisible := True;
   FPaintedCursorRow := -1;
   FSyncFirst := -1;
@@ -2260,8 +2304,6 @@ function TTyTerminalView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; M
 var
   notches, i, dir: Integer;
   ev: TTyTerminalMouseEvent;
-  cell: TPoint;
-  ins: TRect;
 begin
   { 宿主的 OnMouseWheel 先拿;它处理了就到此为止 }
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
@@ -2295,21 +2337,12 @@ begin
   begin
     { MouseService.ts:250-292:程序要滚轮事件就上报;否则有滚回就滚 3 行;再否则
       (备用屏、AlternateScroll)发方向键 }
-    if FCore.Modes.MouseProtocol <> tmpNone then
+    if Reporting then
     begin
-      cell := CellAt(MousePos.X, MousePos.Y);
-      ins := ContentInsets(Font.PixelsPerInch);
-      ev := Default(TTyTerminalMouseEvent);
-      ev.Col := cell.X;
-      ev.Row := cell.Y;
-      { 像素坐标钳在网格里(MouseCoordsService.ts:38-39 钳到画布宽高 - 1) }
-      ev.X := EnsureRange(MousePos.X - ins.Left, 0, FCore.Cols * FMetrics.CellW - 1);
-      ev.Y := EnsureRange(MousePos.Y - ins.Top, 0, FCore.Rows * FMetrics.CellH - 1);
-      ev.Button := tmbWheel;
-      if dir > 0 then ev.Action := tmaUp else ev.Action := tmaDown;
-      ev.Shift := ssShift in Shift;
-      ev.Alt := ssAlt in Shift;
-      ev.Ctrl := ssCtrl in Shift;
+      if dir > 0 then
+        ev := MakeMouseEvent(tmbWheel, tmaUp, MousePos.X, MousePos.Y, Shift)
+      else
+        ev := MakeMouseEvent(tmbWheel, tmaDown, MousePos.X, MousePos.Y, Shift);
       if FCore.TriggerMouseEvent(ev) then Continue;
     end;
     if FCore.Buffer.HasScrollback then
@@ -2328,6 +2361,130 @@ begin
   end;
 end;
 
+{ 横向滚轮:LCL 的 DoMouseWheelLeft / Right 拿不到 WheelDelta(DoMouseWheelHorz 按正负分过去),
+  照竖向按 ±120 累计要覆盖这一层。程序要了滚轮就报 66 / 67(左 / 右);没要就交还父控件——
+  终端没有横向可滚。 }
+function TTyTerminalView.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+var
+  notches, i: Integer;
+begin
+  Result := inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos);
+  if Result or not Enabled or (csDesigning in ComponentState) then Exit;
+  if not Reporting then
+    Exit(False);
+  if (FHorzAccum <> 0) and ((FHorzAccum > 0) <> (WheelDelta > 0)) then
+    FHorzAccum := 0;
+  Inc(FHorzAccum, WheelDelta);
+  notches := FHorzAccum div 120;
+  FHorzAccum := FHorzAccum - notches * 120;
+  Result := True;
+  { LCL:WheelDelta < 0 是向左(DoMouseWheelHorz 分给 DoMouseWheelLeft) }
+  for i := 1 to Abs(notches) do
+    if notches < 0 then
+      ReportMouse(tmbWheel, tmaLeft, MousePos.X, MousePos.Y, Shift)
+    else
+      ReportMouse(tmbWheel, tmaRight, MousePos.X, MousePos.Y, Shift);
+end;
+
+function TyTerminalMouseButtonFor(AAction: TTyTerminalMouseAction; AButton: TMouseButton;
+  AShift: TShiftState): TTyTerminalMouseButton;
+begin
+  if AAction = tmaMove then
+  begin
+    if ssLeft in AShift then Result := tmbLeft
+    else if ssMiddle in AShift then Result := tmbMiddle
+    else if ssRight in AShift then Result := tmbRight
+    else Result := tmbNone;
+    Exit;
+  end;
+  case AButton of
+    mbLeft: Result := tmbLeft;
+    mbMiddle: Result := tmbMiddle;
+    mbRight: Result := tmbRight;
+  else
+    Result := tmbNone;
+  end;
+end;
+
+function TTyTerminalView.Reporting: Boolean;
+begin
+  Result := FCore.Modes.MouseProtocol <> tmpNone;
+end;
+
+{ 上报用的事件:格子按 CellAt(整除再钳,上游 getCoords 的非选区取整),像素钳在网格里
+  (MouseCoordsService.ts:38-39 钳到画布宽高 - 1),修饰键原样:覆盖键按着时按键不会走到
+  这里,滚轮照上游带着修饰位(MouseService.ts:175-179 只在 mouseEventsRequireAlt 时剥) }
+function TTyTerminalView.MakeMouseEvent(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+  X, Y: Integer; Shift: TShiftState): TTyTerminalMouseEvent;
+var
+  cell: TPoint;
+  ins: TRect;
+begin
+  cell := CellAt(X, Y);
+  ins := ContentInsets(Font.PixelsPerInch);
+  Result := Default(TTyTerminalMouseEvent);
+  Result.Col := cell.X;
+  Result.Row := cell.Y;
+  Result.X := EnsureRange(X - ins.Left, 0, FCore.Cols * FMetrics.CellW - 1);
+  Result.Y := EnsureRange(Y - ins.Top, 0, FCore.Rows * FMetrics.CellH - 1);
+  Result.Button := AButton;
+  Result.Action := AAction;
+  Result.Shift := ssShift in Shift;
+  Result.Alt := ssAlt in Shift;
+  Result.Ctrl := ssCtrl in Shift;
+end;
+
+procedure TTyTerminalView.ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+  X, Y: Integer; Shift: TShiftState);
+begin
+  { 第 4、5 键上游是 NONE + 按下 / 抬起,被 TriggerMouseEvent 滤掉:不报 }
+  if (AButton = tmbNone) and (AAction <> tmaMove) then Exit;
+  FCore.TriggerMouseEvent(MakeMouseEvent(AButton, AAction, X, Y, Shift));
+end;
+
+function TTyTerminalView.OverrideIsAlt: Boolean;
+begin
+  Result := (FSelectionOverrideKey = tsoAlt) or ((FSelectionOverrideKey = tsoDefault) and FIsMac);
+end;
+
+function TTyTerminalView.OverrideHeld(Shift: TShiftState): Boolean;
+begin
+  case FSelectionOverrideKey of
+    tsoShift: Result := ssShift in Shift;
+    tsoAlt: Result := ssAlt in Shift;
+    tsoNone: Result := False;
+  else
+    if FIsMac then Result := ssAlt in Shift else Result := ssShift in Shift;
+  end;
+end;
+
+function TTyTerminalView.ColumnWanted(Shift: TShiftState): Boolean;
+begin
+  Result := (ssAlt in Shift) and not OverrideIsAlt;
+end;
+
+{ 指针形状(xterm.css:39、:119-120、:130):程序接管鼠标(没按覆盖键)箭头;要列选择十字;
+  平常 I 形,宿主设了别的 Cursor 就用宿主的。用 SetTempCursor,不写 Cursor 属性;LCL 进出
+  控件时会拿 Cursor 复位,所以每次移动都重设。 }
+procedure TTyTerminalView.UpdatePointer(Shift: TShiftState);
+var
+  c: TCursor;
+begin
+  if csDesigning in ComponentState then Exit;
+  if Reporting and not OverrideHeld(Shift) then
+    c := crDefault
+  else if ColumnWanted(Shift) then
+    c := crCross
+  else if Cursor <> crDefault then
+    c := Cursor
+  else
+    c := crIBeam;
+  SetTempCursor(c);
+end;
+
+{ 谁拿鼠标(4 期 4b 附录的表):路在按下那一刻定,拖动、抬起一直走它,中途松开覆盖键不换路
+  (MouseService.ts:224-249,选区服务的 mousemove 监听 stopImmediatePropagation)。上报路上
+  别的键按下也照报;其他路上别的键不管。 }
 procedure TTyTerminalView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   FStateChange := True;
@@ -2338,13 +2495,56 @@ begin
   end;
   { 基类只在左键时取焦点;终端照终端的惯例,哪个键点下去都取(中键、右键也是在跟这个
     终端打交道)。守着 TabStop 同基类:TabStop = False 的终端(宿主拿它当只看的面板)
-    点了也不抢焦点。SetFocus 可能抛(窗体还没显示、无头),同基类吞掉。本期不上报、不
-    选择(4 期)。 }
+    点了也不抢焦点。SetFocus 可能抛(窗体还没显示、无头),同基类吞掉。 }
   if TabStop and CanFocus and not Focused then
     try
       SetFocus;
     except
     end;
+  if csDesigning in ComponentState then Exit;
+  FLastMousePos := Point(X, Y);
+  if FRoute = mrReport then
+  begin
+    Include(FReportHeld, Button);
+    if Button = mbRight then FRightReported := True;
+    ReportMouse(TyTerminalMouseButtonFor(tmaDown, Button, Shift), tmaDown, X, Y, Shift);
+    Exit;
+  end;
+  if FRoute <> mrNone then Exit;
+  if Button = mbRight then
+  begin
+    FRightReported := False;
+    FRightLocal := False;
+  end;
+  if Reporting and not OverrideHeld(Shift) then
+  begin
+    FRoute := mrReport;
+    FRouteButton := Button;
+    FReportHeld := [Button];
+    if Button = mbRight then FRightReported := True;
+    ReportMouse(TyTerminalMouseButtonFor(tmaDown, Button, Shift), tmaDown, X, Y, Shift);
+    Exit;
+  end;
+  case Button of
+    mbRight: FRightLocal := True;           { 菜单由 DoContextPopup 弹 }
+  end;
+end;
+
+procedure TTyTerminalView.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if csDesigning in ComponentState then Exit;
+  FLastMousePos := Point(X, Y);
+  case FRoute of
+    mrReport:
+      ReportMouse(TyTerminalMouseButtonFor(tmaMove, mbLeft, Shift), tmaMove, X, Y, Shift);
+    mrNone:
+      { 不带键的移动:只有 1003 放行(TriggerMouseEvent 按协议与去重决定);带着键却没有
+        路(在别处按下的)上游也不报 }
+      if Reporting and ([ssLeft, ssMiddle, ssRight] * Shift = []) then
+        ReportMouse(tmbNone, tmaMove, X, Y, Shift);
+  end;
+  UpdatePointer(Shift);
 end;
 
 procedure TTyTerminalView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -2355,6 +2555,19 @@ begin
   finally
     FStateChange := False;
   end;
+  if csDesigning in ComponentState then Exit;
+  FLastMousePos := Point(X, Y);
+  if FRoute = mrReport then
+  begin
+    ReportMouse(TyTerminalMouseButtonFor(tmaUp, Button, Shift), tmaUp, X, Y, Shift);
+    { 上游在所有键都松开时才摘掉全局监听(MouseService.ts:196-203) }
+    Exclude(FReportHeld, Button);
+    if FReportHeld = [] then
+      FRoute := mrNone;
+    Exit;
+  end;
+  if (FRoute <> mrNone) and (Button = FRouteButton) then
+    FRoute := mrNone;
 end;
 
 { ---- 输入法 ------------------------------------------------------------------------- }
