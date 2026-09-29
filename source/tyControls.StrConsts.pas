@@ -260,6 +260,11 @@ resourcestring
   rsTextMenuPaste     = 'Paste';
   rsTextMenuSelectAll = 'Select All';
 
+  { --- TTyTerminalView context menu ------------------------------------------
+    The terminal's own four-item menu reuses Copy / Paste / Select All above; this is
+    its fourth item, which clears the scrollback. }
+  rsTerminalMenuClear = 'Clear';
+
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.
     Two steppers writing one field is not a configuration, it is a fight, and the

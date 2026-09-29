@@ -669,6 +669,10 @@ msgstr ""
 msgid "slice() needs 4 values: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rsterminalmenuclear
+msgid "Clear"
+msgstr ""
+
 #: tycontrols.strconsts.rstextmenucopy
 msgid "Copy"
 msgstr ""

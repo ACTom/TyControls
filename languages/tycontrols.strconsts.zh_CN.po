@@ -583,6 +583,10 @@ msgstr "搜索"
 msgid "(Select all)"
 msgstr "(全选)"
 
+#: tycontrols.strconsts.rsterminalmenuclear
+msgid "Clear"
+msgstr "清屏"
+
 #: tycontrols.strconsts.rstextmenucopy
 msgid "Copy"
 msgstr "复制"
