@@ -1159,7 +1159,10 @@ begin
   link := F.ThemeFg('TyTerminalLink');
   F.View.MoveTo([ssCtrl], F.View.CellCenter(8, 0));
   AssertTrue('hovering', F.View.HoverOn);
+  { the control starts at 80 columns and is narrowed to 20: its lines stay 80 cells
+    long (no reflow yet), and the address is still mapped onto the 20-column grid }
   AssertEquals('two rows', F.View.HoverNow.Range.StartY + 1, F.View.HoverNow.Range.EndY);
+  AssertEquals('ends at column 9 of the second', 9, F.View.HoverNow.Range.EndX);
   b := Snap;
   try
     AssertTrue('the first row', LinkBand(Self, b, F.View, 10, 0, link) > 0);

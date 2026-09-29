@@ -73,8 +73,11 @@ function TyTermIsUrl(const AText: UnicodeString): Boolean;
 { One exec of strictUrlRegex from AFrom (0-based UTF-16 index): the next match's start
   and length; False = none. }
 function TyTermNextUrlMatch(const S: UnicodeString; AFrom: Integer; out AStart, ALength: Integer): Boolean;
-{ LinkComputer.computeLink (WebLinkProvider.ts:59-101); AY is a 1-based buffer row. }
-function TyTermComputeUrlLinks(ABuffer: TTyTerminalBuffer; AY: Integer): TTyTermLinks;
+{ LinkComputer.computeLink (WebLinkProvider.ts:59-101); AY is a 1-based buffer row.
+  ACols > 0: a line longer than the grid (kept that way because the buffer does not
+  reflow yet, phase 5) is mapped back as ACols cells -- what upstream's reflowing buffer
+  would have cut it to. 0: the line's own length, as upstream's _mapStrIdx reads it. }
+function TyTermComputeUrlLinks(ABuffer: TTyTerminalBuffer; AY: Integer; ACols: Integer = 0): TTyTermLinks;
 { OscLinkProvider.provideLinks (:22-104); AAllowNonHttp = linkHandler.allowNonHttpProtocols }
 function TyTermComputeOsc8Links(ABuffer: TTyTerminalBuffer; ALinks: TTyTerminalOscLinks; AY: Integer;
   AAllowNonHttp: Boolean): TTyTermLinks;
@@ -820,11 +823,11 @@ begin
 end;
 
 { LinkComputer._mapStrIdx (:160-199): [lineIndex, column], or -1 / -1 }
-procedure MapStrIdx(ABuffer: TTyTerminalBuffer; ALineIndex, ARowIndex, AStringIndex: Integer;
+procedure MapStrIdx(ABuffer: TTyTerminalBuffer; ACols, ALineIndex, ARowIndex, AStringIndex: Integer;
   out AY, AX: Integer);
 var
   line, nextLine: TTyTerminalLine;
-  start, i: Integer;
+  start, i, n: Integer;
   chars: string;
   len: Integer;
 begin
@@ -838,7 +841,10 @@ begin
       AX := -1;
       Exit;
     end;
-    for i := start to line.Length - 1 do
+    n := line.Length;
+    if (ACols > 0) and (n > ACols) then
+      n := ACols;
+    for i := start to n - 1 do
     begin
       chars := line.GetChars(i);
       if line.GetWidth(i) <> 0 then
@@ -848,7 +854,7 @@ begin
         Dec(AStringIndex, len);
         { a wide character wrapped early leaves an empty last cell (InputHandler.print)
           that the trimmed string does not have }
-        if (i = line.Length - 1) and (chars = '') then
+        if (i = n - 1) and (chars = '') then
         begin
           nextLine := ABuffer.Lines.Get(ALineIndex + 1);
           if (nextLine <> nil) and nextLine.IsWrapped and (nextLine.GetWidth(0) = 2) then
@@ -869,7 +875,7 @@ begin
   AX := start;
 end;
 
-function TyTermComputeUrlLinks(ABuffer: TTyTerminalBuffer; AY: Integer): TTyTermLinks;
+function TyTermComputeUrlLinks(ABuffer: TTyTerminalBuffer; AY: Integer; ACols: Integer): TTyTermLinks;
 var
   lines: array of UnicodeString;
   n, topIdx, bottomIdx, total, k: Integer;
@@ -943,8 +949,8 @@ begin
     text := Copy(joined, mStart + 1, mLen);
     if not TyTermIsUrl(text) then
       Continue;
-    MapStrIdx(ABuffer, topIdx, 0, mStart, sy, sx);
-    MapStrIdx(ABuffer, sy, sx, mLen, ey, ex);
+    MapStrIdx(ABuffer, ACols, topIdx, 0, mStart, sy, sx);
+    MapStrIdx(ABuffer, ACols, sy, sx, mLen, ey, ex);
     if (sy = -1) or (sx = -1) or (ey = -1) or (ex = -1) then
       Continue;
     k := Length(Result);
@@ -1175,7 +1181,7 @@ begin
   y := AAbsRow + 1;
   replies[0] := TyTermComputeOsc8Links(ABuffer, ALinks, y, AAllowNonHttp);
   if ADetectUrls then
-    replies[1] := TyTermComputeUrlLinks(ABuffer, y)
+    replies[1] := TyTermComputeUrlLinks(ABuffer, y, ACols)
   else
     replies[1] := nil;
   TyTermRemoveIntersectingLinks(y, ACols, replies);
