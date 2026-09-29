@@ -1288,7 +1288,7 @@ end;
 
 { The WHATWG UTF-8 decoder (TextDecoder, BOM not ignored): the text as UTF-8 again,
   every bad sequence one U+FFFD per maximal subpart, a leading U+FEFF dropped. }
-function WhatwgUtf8(const B: RawByteString): string;
+function WhatwgUtf8(const ABytes: RawByteString): string;
 var
   i, n, needed, seen: Integer;
   cp, lower, upper, b: Cardinal;
@@ -1308,7 +1308,7 @@ var
 
 begin
   r := '';
-  SetLength(r, Length(B) + 16);
+  SetLength(r, Length(ABytes) + 16);
   n := 0;
   needed := 0;
   seen := 0;
@@ -1317,9 +1317,9 @@ begin
   upper := $BF;
   first := True;
   i := 1;
-  while i <= Length(B) do
+  while i <= Length(ABytes) do
   begin
-    b := Ord(B[i]);
+    b := Ord(ABytes[i]);
     if needed = 0 then
     begin
       case b of

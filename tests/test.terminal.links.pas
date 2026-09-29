@@ -122,10 +122,14 @@ begin
               miss.Add(o.Strings['text'], 'base', o.Strings['base'], UTF8Encode(base));
           end;
         end;
-        Inc(n);
-        miss.AddCompared;
-        if TyTermIsUrl(text) <> o.Booleans['isUrl'] then
-          miss.Add(o.Strings['text'], 'isUrl', BoolText(o.Booleans['isUrl']), BoolText(TyTermIsUrl(text)));
+        { isUrl only ever sees what the regex matched: http and https }
+        if not o.Booleans['ok'] or (o.Strings['protocol'] = 'http:') or (o.Strings['protocol'] = 'https:') then
+        begin
+          Inc(n);
+          miss.AddCompared;
+          if TyTermIsUrl(text) <> o.Booleans['isUrl'] then
+            miss.Add(o.Strings['text'], 'isUrl', BoolText(o.Booleans['isUrl']), BoolText(TyTermIsUrl(text)));
+        end;
       end;
       AssertEquals(miss.Text, 0, miss.Count);
       AssertTrue('prefixes read', arr.Count > 100);

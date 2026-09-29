@@ -67,7 +67,8 @@ function TyTermParseUrlPrefix(const AText: UnicodeString; out ABase: UnicodeStri
   out AIsHttp, ANonAsciiHost: Boolean): Boolean; overload;
 function TyTermParseUrlPrefix(const AText: UnicodeString; out ABase: UnicodeString;
   out AIsHttp: Boolean): Boolean; overload;
-{ WebLinkProvider.ts:44-55 }
+{ WebLinkProvider.ts:44-55, for http and https: the only schemes the regex hands it.
+  Any other scheme answers False. }
 function TyTermIsUrl(const AText: UnicodeString): Boolean;
 { One exec of strictUrlRegex from AFrom (0-based UTF-16 index): the next match's start
   and length; False = none. }
@@ -727,7 +728,7 @@ var
 begin
   if not TyTermParseUrlPrefix(AText, base, isHttp, nonAscii) then
     Exit(False);
-  if nonAscii then
+  if nonAscii or not isHttp then
     Exit(False);
   { toLocaleLowerCase on both: the prefix is ASCII (non-ASCII hosts are out above; a
     non-ASCII user is percent-encoded in the base and so never matches) }
