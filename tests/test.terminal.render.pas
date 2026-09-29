@@ -15,7 +15,7 @@ interface
 
 uses
   Classes, SysUtils, Math, Types, fpcunit, testregistry, fpjson,
-  BGRABitmap, BGRABitmapTypes,
+  BGRABitmap, BGRABitmapTypes, BGRAGrayscaleMask,
   tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal.Render, test.terminal.oracle;
 
 type
@@ -49,6 +49,12 @@ type
     procedure TestTheRatioIsClampedAsUpstream;
     procedure TestTheExcludedGlyphs;
     procedure TestTheContrastCache;
+    { phase 5: powerline and braille, drawn (no upstream pixels to hold them to: upstream
+      draws on a browser canvas -- the invariants of the shapes instead) }
+    procedure TestTheGlyphTableCoversTheNewRanges;
+    procedure TestBrailleDotsFollowTheBits;
+    procedure TestPowerlineTrianglesFillTheirShare;
+    procedure TestPowerlineShapesStayInTheCell;
   end;
 
 function TyTermTestMetrics(ACellW, ACellH: Integer; ACharW: Integer = -1): TTyTermCellMetrics;
@@ -367,6 +373,222 @@ begin
   finally
     cache.Free;
   end;
+end;
+
+{ ---- powerline and braille ----------------------------------------------------------- }
+
+procedure TTyTerminalRenderTests.TestTheGlyphTableCoversTheNewRanges;
+const
+  Drawn: array[0..6] of Cardinal = ($E0A0, $E0B0, $E0B4, $E0D4, $2800, $2847, $28FF);
+  Font: array[0..6] of Cardinal = ($E0D5, $E09F, $27FF, $2900, $E0A4, $E0C9, $2400);
+var
+  k: Integer;
+begin
+  for k := 0 to High(Drawn) do
+    AssertTrue('drawn: U+' + IntToHex(Drawn[k], 4), TyTermIsCustomGlyph(Drawn[k]));
+  { outside the ranges, and the powerline code points upstream leaves to the font }
+  for k := 0 to High(Font) do
+    AssertFalse('the font''s: U+' + IntToHex(Font[k], 4), TyTermIsCustomGlyph(Font[k]));
+  AssertTrue('box drawing still', TyTermIsCustomGlyph($2500) and TyTermIsCustomGlyph($259F));
+  AssertTrue('astral code points are not', not TyTermIsCustomGlyph($12500));
+end;
+
+type
+  TBlob = record
+    X, Y, W: Double;       { weighted centre (pixel centres at + 0.5), weight }
+  end;
+
+{ The ink of a mask as blobs: pixels of coverage >= 128, 8-connected (two dots a column
+  apart leave about 50 in the pixels between them). }
+function Blobs(M: TGrayscaleMask): specialize TArray<TBlob>;
+var
+  seen: array of Boolean;
+  stack: array of Integer;
+  x, y, sp, p, px, py, dx, dy, n: Integer;
+  b: TBlob;
+  v: Byte;
+begin
+  Result := nil;
+  if M = nil then Exit;
+  SetLength(seen, M.Width * M.Height);
+  SetLength(stack, M.Width * M.Height);
+  for y := 0 to M.Height - 1 do
+    for x := 0 to M.Width - 1 do
+    begin
+      if seen[y * M.Width + x] or ((M.ScanLine[y] + x)^ < 128) then Continue;
+      b.X := 0; b.Y := 0; b.W := 0;
+      sp := 0;
+      stack[sp] := y * M.Width + x;
+      Inc(sp);
+      seen[y * M.Width + x] := True;
+      while sp > 0 do
+      begin
+        Dec(sp);
+        p := stack[sp];
+        px := p mod M.Width;
+        py := p div M.Width;
+        v := (M.ScanLine[py] + px)^;
+        b.X := b.X + (px + 0.5) * v;
+        b.Y := b.Y + (py + 0.5) * v;
+        b.W := b.W + v;
+        for dy := -1 to 1 do
+          for dx := -1 to 1 do
+            if (px + dx >= 0) and (px + dx < M.Width) and (py + dy >= 0) and (py + dy < M.Height) then
+            begin
+              n := (py + dy) * M.Width + px + dx;
+              if (not seen[n]) and ((M.ScanLine[py + dy] + px + dx)^ >= 128) then
+              begin
+                seen[n] := True;
+                stack[sp] := n;
+                Inc(sp);
+              end;
+            end;
+      end;
+      b.X := b.X / b.W;
+      b.Y := b.Y / b.W;
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := b;
+    end;
+end;
+
+procedure TTyTerminalRenderTests.TestBrailleDotsFollowTheBits;
+const
+  { CustomGlyphRasterizer.ts:155-166, in eighths: the dot of bit n }
+  DotX: array[0..7] of Integer = (1, 1, 1, 5, 5, 5, 1, 5);
+  DotY: array[0..7] of Integer = (0, 2, 4, 0, 2, 4, 6, 6);
+  W = 8;
+  H = 16;
+var
+  g: TTyTermGlyph;
+  bits, bit, k, set_: Integer;
+  blobs_: specialize TArray<TBlob>;
+  cx, cy: Double;
+  used: array[0..7] of Boolean;
+  found: Boolean;
+begin
+  for bits := 0 to 255 do
+  begin
+    g := TyTermRasterizeCustomGlyph($2800 + Cardinal(bits), W, H, 0, 0, 96);
+    try
+      if bits = 0 then
+      begin
+        AssertNull('U+2800 has no ink', g.Mask);
+        Continue;
+      end;
+      AssertNotNull(Format('U+%s has ink', [IntToHex($2800 + bits, 4)]), g.Mask);
+      blobs_ := Blobs(g.Mask);
+      set_ := 0;
+      for bit := 0 to 7 do
+        if (bits and (1 shl bit)) <> 0 then Inc(set_);
+      AssertEquals(Format('U+%s: a blob per dot', [IntToHex($2800 + bits, 4)]), set_, Length(blobs_));
+      FillChar(used, SizeOf(used), 0);
+      for k := 0 to High(blobs_) do
+      begin
+        found := False;
+        for bit := 0 to 7 do
+          if ((bits and (1 shl bit)) <> 0) and not used[bit] then
+          begin
+            { upstream's centre: x (n + 1) eighths of the width; y 10 % down, then
+              (n + 1) eighths of the 80 % left }
+            cx := (DotX[bit] + 1) * (W / 8);
+            cy := H * 0.1 + (DotY[bit] + 1) * (H * 0.8 / 8);
+            if (Abs(blobs_[k].X - cx) <= 1) and (Abs(blobs_[k].Y - cy) <= 1) then
+            begin
+              used[bit] := True;
+              found := True;
+              Break;
+            end;
+          end;
+        AssertTrue(Format('U+%s: the blob at %.2f, %.2f is one of its dots', [IntToHex($2800 + bits, 4),
+          blobs_[k].X, blobs_[k].Y]), found);
+      end;
+    finally
+      g.Free;
+    end;
+  end;
+end;
+
+{ Coverage of column X of a mask, in pixels (0..height). }
+function ColumnInk(M: TGrayscaleMask; X: Integer): Double;
+var
+  y: Integer;
+begin
+  Result := 0;
+  for y := 0 to M.Height - 1 do
+    Result := Result + (M.ScanLine[y] + X)^ / 255;
+end;
+
+procedure TTyTerminalRenderTests.TestPowerlineTrianglesFillTheirShare;
+const
+  W = 10;
+  H = 20;
+  Pt = 12;
+var
+  r, l: TTyTermGlyph;
+  x: Integer;
+  ink, pad, want: Double;
+begin
+  r := TyTermRasterizeCustomGlyph($E0B0, W, H, 0, 0, 96, Pt);   { right triangle, solid }
+  l := TyTermRasterizeCustomGlyph($E0B2, W, H, 0, 0, 96, Pt);   { left triangle, solid }
+  try
+    AssertNotNull('E0B0 has ink', r.Mask);
+    AssertNotNull('E0B2 has ink', l.Mask);
+    { the triangle's area: the cell's height by its width less the padding upstream keeps
+      on the tip's side (two half line widths: devicePixelRatio x fontSize / 12, fontSize
+      in CSS pixels), halved }
+    pad := 2 * (Pt * 96 / 72 / 12 / 2);
+    want := (W - pad) * H / 2;
+    ink := 0;
+    for x := 0 to W - 1 do
+      ink := ink + ColumnInk(r.Mask, x);
+    AssertTrue(Format('E0B0 covers %.1f px, the triangle %.1f', [ink, want]), Abs(ink - want) <= 0.05 * W * H);
+    AssertTrue('a filled half, near enough', (ink >= 0.4 * W * H) and (ink <= 0.55 * W * H));
+    for x := 0 to W - 1 do
+      AssertTrue(Format('column %d mirrors column %d (%.2f, %.2f)', [x, W - 1 - x, ColumnInk(r.Mask, x),
+        ColumnInk(l.Mask, W - 1 - x)]), Abs(ColumnInk(r.Mask, x) - ColumnInk(l.Mask, W - 1 - x)) <= 0.02 * H);
+    AssertTrue('the solid side is full', ColumnInk(r.Mask, 0) >= 0.9 * H);
+  finally
+    r.Free;
+    l.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestPowerlineShapesStayInTheCell;
+const
+  W = 10;
+  H = 20;
+  M = 6;
+var
+  cp: Cardinal;
+  bmp: TBGRABitmap;
+  g: TTyTermGlyph;
+  x, y, drawn: Integer;
+begin
+  drawn := 0;
+  for cp := $E0A0 to $E0D4 do
+  begin
+    if not TyTermIsCustomGlyph(cp) then Continue;
+    Inc(drawn);
+    g := TyTermRasterizeCustomGlyph(cp, W, H, 0, 0, 96, 12);
+    try
+      AssertNotNull(Format('U+%s has ink', [IntToHex(cp, 4)]), g.Mask);
+    finally
+      g.Free;
+    end;
+    { drawn straight onto a surface with room around the cell: nothing outside it }
+    bmp := NewSentinel(W + 2 * M, H + 2 * M);
+    try
+      TyTermDrawCustomGlyphDirect(bmp, Rect(M, M, M + W, M + H), cp, TyTermRgbToPixel(Ink), 96, 12);
+      for y := 0 to bmp.Height - 1 do
+        for x := 0 to bmp.Width - 1 do
+          if (x < M) or (x >= M + W) or (y < M) or (y >= M + H) then
+            AssertTrue(Format('U+%s: no ink at %d, %d outside the cell', [IntToHex(cp, 4), x - M, y - M]),
+              TyTermIsSentinel(bmp.GetPixel(x, y)));
+    finally
+      bmp.Free;
+    end;
+  end;
+  AssertEquals('the powerline code points upstream draws', 38, drawn);
 end;
 
 procedure TTyTerminalRenderTests.TestPaletteMatchesUpstream;

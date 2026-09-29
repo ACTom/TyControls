@@ -92,6 +92,8 @@ type
     procedure TestInverseUsesThePaintedColours;
     procedure TestCursorInkAndLinksKeepTheirColour;
     procedure TestTheCachesClearWithThePalette;
+    { 5 期:Powerline 自绘 }
+    procedure TestPowerlineJoinsItsNeighbours;
   end;
 
 implementation
@@ -1841,10 +1843,13 @@ procedure TTyTerminalViewPaintTests.TestExcludedGlyphsKeepTheirColour;
 var
   b: TBGRABitmap;
 begin
-  F.View.WriteSync(#27'[?25l'#27'[38;2;170;170;170;48;2;187;187;187m'#$E2#$96#$88#$E2#$94#$80'A'#27'[0m');
+  F.View.WriteSync(#27'[?25l'#27'[38;2;170;170;170;48;2;187;187;187m'#$E2#$96#$88#$E2#$94#$80'A'#$EE#$82#$B0
+    + #27'[0m');
   F.View.MinimumContrastRatio := 4.5;
   b := Snap;
   try
+    AssertTrue('the powerline arrow keeps its colour', CountIn(b, F.View.CellRect(3, 0), LowFg) > 0);
+    AssertEquals('and nothing of the adjusted one', 0, CountIn(b, F.View.CellRect(3, 0), Ensured(LowBg, LowFg, 4.5)));
     AssertTrue('the full block keeps its colour', CellIs(b, 0, 0, LowFg));
     AssertTrue('the line keeps its colour', CountIn(b, F.View.CellRect(1, 0), LowFg) > 0);
     AssertEquals('and nothing of the adjusted one', 0, CountIn(b, F.View.CellRect(1, 0), Ensured(LowBg, LowFg, 4.5)));
@@ -1983,6 +1988,33 @@ begin
   b := Snap;
   try
     AssertEquals('the underline at 7', IntToHex(Ensured(LowBg, LowFg, 7), 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestPowerlineJoinsItsNeighbours;
+var
+  b: TBGRABitmap;
+  blue: Cardinal;
+  r: TRect;
+  y: Integer;
+begin
+  { a prompt segment on blue, then the arrow in blue on the default ground }
+  F.View.WriteSync(#27'[?25l'#27'[44m text '#27'[34;49m'#$EE#$82#$B0#27'[0m');
+  blue := F.Ansi(4);
+  b := Snap;
+  try
+    AssertTrue('the segment is blue', CellIs(b, 5, 0, blue));
+    r := F.View.CellRect(6, 0);
+    for y := r.Top + (r.Bottom - r.Top) div 4 to r.Top + 3 * (r.Bottom - r.Top) div 4 do
+      AssertEquals(Format('row %d: the arrow''s left column meets the blue', [y - r.Top]), IntToHex(blue, 6),
+        IntToHex(Rgb(b.GetPixel(r.Left, y)), 6));
+    for y := r.Top to r.Top + (r.Bottom - r.Top) div 4 do
+      AssertEquals(Format('row %d: beyond the tip, the ground', [y - r.Top]), IntToHex(Bg, 6),
+        IntToHex(Rgb(b.GetPixel(r.Right - 1, y)), 6));
+    AssertEquals('the middle of the right column: the ground (upstream pads the tip)', IntToHex(Bg, 6),
+      IntToHex(Rgb(b.GetPixel(r.Right - 1, (r.Top + r.Bottom) div 2)), 6));
   finally
     b.Free;
   end;

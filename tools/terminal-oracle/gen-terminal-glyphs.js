@@ -1,12 +1,13 @@
-// Writes source/tyControls.Terminal.CustomGlyphs.inc: the box-drawing and block
-// glyphs (U+2500-259F) xterm.js 6.0.0's WebGL addon draws itself so neighbouring
-// cells join up -- addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts,
-// dumped from the built module, not copied by hand. Upstream path and pin:
-// lib-dump.js.
+// Writes source/tyControls.Terminal.CustomGlyphs.inc: the glyphs xterm.js 6.0.0's
+// WebGL addon draws itself so neighbouring cells join up -- the box-drawing and block
+// glyphs (U+2500-259F, phase 3), the powerline symbols (U+E0A0-E0D4) and the braille
+// patterns (U+2800-28FF, phase 5) -- from
+// addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts, dumped from the built
+// module, not copied by hand. Upstream path and pin: lib-dump.js.
 //
 //   node tools/terminal-oracle/gen-terminal-glyphs.js
 //
-// Three kinds of part occur in this range, and only these (anything else, or a part
+// Five kinds of part occur in these ranges, and only these (anything else, or a part
 // property other than type / data / strokeWidth, stops the script):
 //   SOLID_OCTANT_BLOCK_VECTOR (0)  rectangles in eighths of the cell: x, y, w, h
 //   BLOCK_PATTERN (1)              a 0/1 matrix tiled over the cell
@@ -21,6 +22,15 @@
 //                                  yp = 1 and checked at yp = 0.37 (structure and
 //                                  value), or the script stops. A plain string has
 //                                  b = 0.
+//   VECTOR_SHAPE (5)               an SVG-like path, M / L / C / Q / T / Z with
+//                                  comma-separated numbers in cell units, filled or
+//                                  stroked, with a left and a right padding in half
+//                                  line widths (data.d, data.type, data.leftPadding,
+//                                  data.rightPadding and nothing else; an instruction
+//                                  upstream would skip, or another command, stops it)
+//   BRAILLE (6)                    the dot bits, 0-255
+// The index is two-level: a table of the three ranges (first, last, where the range
+// starts in the index) and one index for all of them.
 // The generated header carries the upstream version, commit and commit date, never
 // the time of the run or a path of this machine; the file holds no brace (a brace
 // would open a nested comment in FPC -- checked).
@@ -31,9 +41,11 @@ const L = require('./lib-dump.js');
 const up = L.loadUpstream();
 const G = require(path.join(L.XTERM, 'addons/addon-webgl', L.OUT_DIR, 'customGlyphs/CustomGlyphDefinitions.js'));
 
-const FIRST = 0x2500, LAST = 0x259F;
-const KIND = { 0: 'block', 1: 'pattern', 2: 'path' };
+const RANGES = [[0x2500, 0x259F], [0xE0A0, 0xE0D4], [0x2800, 0x28FF]];
+const KIND = { 0: 'block', 1: 'pattern', 2: 'path', 5: 'vector', 6: 'braille' };
 const CMD = { M: 1, L: 2, C: 3 };
+const VCMD = { M: 1, L: 2, C: 3, Q: 4, T: 5, Z: 6 };
+const VARGS = { M: 2, L: 2, C: 6, Q: 4, T: 2, Z: 0 };
 const XP = 0.15;
 
 // A path string as instructions: [letter, [numbers]] -- the split upstream does
@@ -68,12 +80,34 @@ function linearPath(data) {
   return out;
 }
 
-const index = [];     // [firstPart, partCount] per code point
-const parts = [];     // [kind, strokeWidth, firstData, dataCount]
+// A vector shape's path: [letter, [numbers]], split as drawVectorShape splits it (' ',
+// then substring(1).split(','), parseFloat || parseInt); Z has no arguments.
+function vectorPath(cp, d) {
+  return d.split(' ').map(ins => {
+    const letter = ins[0];
+    if (!(letter in VCMD)) throw new Error(`U+${cp.toString(16)}: vector command ${JSON.stringify(letter)}`);
+    if (letter === 'Z') {
+      if (ins.length !== 1) throw new Error(`U+${cp.toString(16)}: Z with arguments`);
+      return [letter, []];
+    }
+    const args = ins.substring(1).split(',');
+    if (!args[0] || !args[1]) throw new Error(`U+${cp.toString(16)}: an instruction upstream would skip: ${ins}`);
+    const nums = args.map(e => parseFloat(e) || parseInt(e));
+    if (nums.some(n => !Number.isFinite(n))) throw new Error(`U+${cp.toString(16)}: not a number in ${ins}`);
+    if (nums.length !== VARGS[letter]) throw new Error(`U+${cp.toString(16)}: ${letter} with ${nums.length} numbers`);
+    return [letter, nums];
+  });
+}
+
+const ranges = [];    // [first, last, where the range starts in index]
+const index = [];     // [firstPart, partCount] per code point, the ranges one after another
+const parts = [];     // [kind, strokeWidth or vector type, firstData, dataCount, leftPadding, rightPadding]
 const data = [];      // numbers
-const count = { block: 0, pattern: 0, path: 0 };
+const count = { block: 0, pattern: 0, path: 0, vector: 0, braille: 0 };
 let withYp = 0;
-for (let cp = FIRST; cp <= LAST; cp++) {
+for (const [FIRST, LAST] of RANGES) {
+ ranges.push([FIRST, LAST, index.length]);
+ for (let cp = FIRST; cp <= LAST; cp++) {
   const def = G.customGlyphDefinitions[String.fromCodePoint(cp)];
   if (!def) { index.push([parts.length, 0]); continue; }
   const list = Array.isArray(def) ? def : [def];
@@ -87,7 +121,23 @@ for (let cp = FIRST; cp <= LAST; cp++) {
     const sw = part.strokeWidth === undefined ? 0 : part.strokeWidth;
     if (!Number.isInteger(sw) || sw < 0) throw new Error(`U+${cp.toString(16)}: strokeWidth ${part.strokeWidth}`);
     const start = data.length;
-    if (part.type === 0) {
+    let second = sw, lp = 0, rp = 0;
+    if (part.type === 5) {
+      for (const k of Object.keys(part.data)) {
+        if (!['d', 'type', 'leftPadding', 'rightPadding'].includes(k)) throw new Error(`U+${cp.toString(16)}: vector property ${k}`);
+      }
+      if (part.data.type !== 0 && part.data.type !== 1) throw new Error(`U+${cp.toString(16)}: vector type ${part.data.type}`);
+      if (sw !== 0) throw new Error(`U+${cp.toString(16)}: a vector shape with a strokeWidth`);
+      second = part.data.type;
+      lp = part.data.leftPadding === undefined ? 0 : part.data.leftPadding;
+      rp = part.data.rightPadding === undefined ? 0 : part.data.rightPadding;
+      if (!Number.isInteger(lp) || !Number.isInteger(rp) || lp < 0 || rp < 0) throw new Error(`U+${cp.toString(16)}: padding ${lp}, ${rp}`);
+      for (const [c, nums] of vectorPath(cp, part.data.d)) data.push(VCMD[c], nums.length, ...nums);
+    } else if (part.type === 6) {
+      if (!Number.isInteger(part.data) || part.data < 0 || part.data > 255) throw new Error(`U+${cp.toString(16)}: braille ${part.data}`);
+      if (part.data !== cp - 0x2800) throw new Error(`U+${cp.toString(16)}: braille bits ${part.data} are not the code point's`);
+      data.push(part.data);
+    } else if (part.type === 0) {
       for (const r of part.data) {
         for (const k of Object.keys(r)) if (!['x', 'y', 'w', 'h'].includes(k)) throw new Error('block field ' + k);
         data.push(r.x, r.y, r.w, r.h);
@@ -106,10 +156,11 @@ for (let cp = FIRST; cp <= LAST; cp++) {
         for (const [a, b] of nums) data.push(a, b);
       }
     }
-    parts.push([part.type, sw, start, data.length - start]);
+    parts.push([part.type, second, start, data.length - start, lp, rp]);
     count[KIND[part.type]]++;
   }
   if (usesYp) withYp++;
+ }
 }
 
 // The shade patterns tile from the surface's origin: a row of pixels moved up or down
@@ -125,13 +176,17 @@ const header = [
   'GENERATED by tools/terminal-oracle/gen-terminal-glyphs.js -- do NOT edit by hand;',
   'change the script and rerun it. Upstream: xterm.js ' + i.version + ', commit ' + i.commit,
   `(${i.commitDate}), addons/addon-webgl/src/customGlyphs/CustomGlyphDefinitions.ts,`,
-  'code points U+2500-259F.',
+  'code points U+2500-259F, U+E0A0-E0D4 and U+2800-28FF.',
   '',
-  'TyTermGlyphIndex[cp]: first part, part count (0 = none).',
+  'TyTermGlyphRanges[r]: first code point, last, the range\'s first entry in',
+  '  TyTermGlyphIndex.',
+  'TyTermGlyphIndex[n]: first part, part count (0 = none: the font draws it).',
   'TyTermGlyphPatternPeriodY: the least common multiple of the pattern heights (a',
   '  row moved by a multiple of it keeps its shade phase).',
-  'TyTermGlyphParts[p]: kind (0 block, 1 pattern, 2 path), stroke width (0 = filled),',
-  '  first number in TyTermGlyphData, how many.',
+  'TyTermGlyphParts[p]: kind (0 block, 1 pattern, 2 path, 5 vector shape, 6 braille),',
+  '  stroke width (a path; 0 = filled) or fill / stroke (a vector shape, 0 / 1), first',
+  '  number in TyTermGlyphData, how many, left and right padding (a vector shape, in',
+  '  half line widths).',
   'TyTermGlyphData, per kind:',
   '  block    x, y, w, h per rectangle, in eighths of the cell',
   '  pattern  rows, columns, then the 0/1 cells row by row',
@@ -139,6 +194,9 @@ const header = [
   '           argument as a, b -- its value is a + b * yp, yp = 0.15 / cell height x',
   '           cell width (a plain path has b = 0); x arguments are in cell widths,',
   '           y arguments in cell heights',
+  '  vector   per instruction: command (1 M, 2 L, 3 C, 4 Q, 5 T, 6 Z), argument',
+  '           count, then the arguments as they are (cell widths, cell heights)',
+  '  braille  the dot bits (bit 0 = dot 1 ... bit 7 = dot 8)',
   '',
   'Derived from xterm.js, MIT:',
   '  Copyright (c) 2021 The xterm.js authors (CustomGlyphDefinitions.ts)',
@@ -156,18 +214,22 @@ const rows = (arr, per, fmt) => {
   return out.join(',\n');
 };
 let out = header.map(l => ('// ' + l).trimEnd()).join('\n') + '\n\nconst\n';
-out += `  TyTermGlyphFirst = $${FIRST.toString(16).toUpperCase()};\n`;
-out += `  TyTermGlyphLast = $${LAST.toString(16).toUpperCase()};\n`;
+out += `  TyTermGlyphRangeCount = ${ranges.length};\n`;
+out += `  TyTermGlyphIndexCount = ${index.length};\n`;
 out += `  TyTermGlyphPartCount = ${parts.length};\n`;
 out += `  TyTermGlyphDataCount = ${data.length};\n`;
 out += `  TyTermGlyphPatternPeriodY = ${periodY};\n`;
-out += `  TyTermGlyphIndex: array[TyTermGlyphFirst..TyTermGlyphLast, 0..1] of Word = (\n`;
+const hex = n => '$' + n.toString(16).toUpperCase();
+out += `  TyTermGlyphRanges: array[0..${ranges.length - 1}, 0..2] of Integer = (\n`;
+out += rows(ranges, 1, ([a, b, c]) => `(${hex(a)}, ${hex(b)}, ${c})`) + ');\n';
+out += `  TyTermGlyphIndex: array[0..${index.length - 1}, 0..1] of Integer = (\n`;
 out += rows(index, 8, ([a, b]) => `(${a}, ${b})`) + ');\n';
-out += `  TyTermGlyphParts: array[0..${parts.length - 1}, 0..3] of Word = (\n`;
-out += rows(parts, 4, p => `(${p.join(', ')})`) + ');\n';
+out += `  TyTermGlyphParts: array[0..${parts.length - 1}, 0..5] of Integer = (\n`;
+out += rows(parts, 3, p => `(${p.join(', ')})`) + ');\n';
 out += `  TyTermGlyphData: array[0..${data.length - 1}] of Double = (\n`;
 out += rows(data, 12, num) + ');\n';
 if (/[{}]/.test(out)) throw new Error('a brace in the generated include');
 L.writeGenerated('source/tyControls.Terminal.CustomGlyphs.inc', out);
-console.log(`blocks ${count.block}, patterns ${count.pattern}, paths ${count.path} (${withYp} code points with yp); parts ${parts.length}, numbers ${data.length}`);
+console.log(`blocks ${count.block}, patterns ${count.pattern}, paths ${count.path} (${withYp} code points with yp), ` +
+  `vector shapes ${count.vector}, braille ${count.braille}; parts ${parts.length}, numbers ${data.length}`);
 process.exit(0);

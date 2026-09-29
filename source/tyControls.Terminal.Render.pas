@@ -13,7 +13,9 @@ unit tyControls.Terminal.Render;
     the 256 colours src/browser/Types.ts:183-227
     drawn glyphs    addons/addon-webgl/src/customGlyphs/CustomGlyphRasterizer.ts
                     (drawBlockVectorChar :129-151, drawPatternChar :462-529,
-                    drawPathFunctionCharacter :531-588, translateArgs :734-768);
+                    drawPathFunctionCharacter :531-588, translateArgs :734-768;
+                    phase 5: drawBrailleCharacter :152-194, drawVectorShape :620-667
+                    with svgToCanvasInstructionMap :691-732);
                     Copyright (c) 2021 The xterm.js authors; the data is in
                     tyControls.Terminal.CustomGlyphs.inc, dumped from the addon
     minimum contrast  src/common/Color.ts:230-384 (Copyright (c) 2017 The xterm.js
@@ -299,33 +301,42 @@ function TyTermBlendOver(ABg: Cardinal; const AOver: TBGRAPixel): Cardinal;
   a default underline colour is the final foreground. }
 function TyTermResolveCellColors(AFg, ABg: Cardinal; const AExt: TTyTerminalExtAttrs;
   AResolve: TTyTermColorResolver; ADrawBoldBright: Boolean): TTyTermCellColors;
-{ U+2500-259F, the range the control draws itself in phase 3 }
+const
+  { the font size (points) a drawn glyph's line width follows when the caller gives none }
+  TyTermGlyphDefaultFontPt = 12;
+
+{ A code point the control draws itself (CustomGlyphs.inc): box drawing and blocks
+  U+2500-259F (phase 3), powerline U+E0A0-E0D4 and braille U+2800-28FF (phase 5) --
+  those upstream defines; the gaps in the powerline range come from the font. }
 function TyTermIsCustomGlyph(ACodepoint: Cardinal): Boolean;
 { The least common multiple of the shade patterns' heights (CustomGlyphs.inc): a row
   of pixels holding a shade keeps its look when moved by a multiple of it. }
 function TyTermGlyphPeriodY: Integer;
 { One drawn glyph, filling ACellRect's cell in AColor. APPI scales the stroke width
-  as upstream's devicePixelRatio. Through the mask (TyTermRasterizeCustomGlyph +
-  TyTermBlendMaskGamma), uncached: a fresh mask each call. }
+  as upstream's devicePixelRatio; AFontPt is the font size a vector shape's line width
+  and padding follow (upstream's fontSize / 12). Through the mask
+  (TyTermRasterizeCustomGlyph + TyTermBlendMaskGamma), uncached: a fresh mask each call. }
 procedure TyTermDrawCustomGlyph(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
-  AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer);
+  AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer;
+  AFontPt: Integer = TyTermGlyphDefaultFontPt);
 { FOR THE TESTS: the same glyph drawn straight onto ABmp through Canvas2D with the cell
   as its clip -- how it was drawn before the mask; the reference the mask is held to. }
 procedure TyTermDrawCustomGlyphDirect(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
-  AColor: TBGRAPixel; APPI: Integer);
+  AColor: TBGRAPixel; APPI: Integer; AFontPt: Integer = TyTermGlyphDefaultFontPt);
 { A drawn glyph's coverage mask for an AW x AH cell whose top left sits at (APhaseX,
   APhaseY) modulo the shade pattern's period (TyTermCustomGlyphPhase); offset 0, 0.
   Mask nil = no ink. }
 function TyTermRasterizeCustomGlyph(ACodepoint: Cardinal; AW, AH, APhaseX, APhaseY,
-  APPI: Integer): TTyTermGlyph;
+  APPI: Integer; AFontPt: Integer = TyTermGlyphDefaultFontPt): TTyTermGlyph;
 { The shade pattern's phase for a cell whose top left is at (AX, AY) on the surface
   (the pattern is tiled from the surface's origin); 0, 0 for a glyph without a pattern. }
 procedure TyTermCustomGlyphPhase(ACodepoint: Cardinal; AX, AY: Integer; out APhaseX, APhaseY: Integer);
 { Cache keys (TTyTermGlyphCache.FindCode / AddCode). A drawn glyph: code point, cells,
-  phase, cell size and PPI. A single code point through the font: code point, weight,
-  slant, cells and font. Bit 63 keeps the two apart. }
+  phase, cell size, PPI and font size (a vector shape's line width). A single code point
+  through the font: code point, weight, slant, cells and font. Bit 63 keeps the two
+  apart. }
 function TyTermCustomGlyphKey(ACodepoint: Cardinal; ACells, APhaseX, APhaseY, ACellW, ACellH,
-  APPI: Integer): UInt64;
+  APPI: Integer; AFontPt: Integer = TyTermGlyphDefaultFontPt): UInt64;
 function TyTermCodeKey(ACodepoint: Cardinal; ABold, AItalic: Boolean; ACells: Integer;
   AFont: TTyTermFontKind): UInt64;
 { Tints a coverage mask onto ABmp at (AX, AY), clipped to AClip; the non-gamma blend
@@ -742,17 +753,21 @@ begin
     or (UInt64(EnsureRange(ACells, 0, 255)) shl 24);
 end;
 
+function GlyphOrdinal(ACodepoint: Cardinal): Integer; forward;
+
 function TyTermCustomGlyphKey(ACodepoint: Cardinal; ACells, APhaseX, APhaseY, ACellW, ACellH,
-  APPI: Integer): UInt64;
+  APPI: Integer; AFontPt: Integer): UInt64;
 begin
+  { ordinal 10 bits, cells 3, phase 4 + 4, cell 12 + 12, PPI 11, font size 7, the flag }
   Result := (UInt64(1) shl 63)
-    or UInt64((ACodepoint - TyTermGlyphFirst) and $FF)
-    or (UInt64(EnsureRange(ACells, 0, 15)) shl 8)
-    or (UInt64(APhaseX and $F) shl 12)
-    or (UInt64(APhaseY and $F) shl 16)
-    or (UInt64(EnsureRange(ACellW, 0, $FFF)) shl 20)
-    or (UInt64(EnsureRange(ACellH, 0, $FFF)) shl 32)
-    or (UInt64(EnsureRange(APPI, 0, $FFF)) shl 44);
+    or UInt64(Max(0, GlyphOrdinal(ACodepoint)) and $3FF)
+    or (UInt64(EnsureRange(ACells, 0, 7)) shl 10)
+    or (UInt64(APhaseX and $F) shl 13)
+    or (UInt64(APhaseY and $F) shl 17)
+    or (UInt64(EnsureRange(ACellW, 0, $FFF)) shl 21)
+    or (UInt64(EnsureRange(ACellH, 0, $FFF)) shl 33)
+    or (UInt64(EnsureRange(APPI, 0, $7FF)) shl 45)
+    or (UInt64(EnsureRange(AFontPt, 0, $7F)) shl 56);
 end;
 
 constructor TTyTermGlyphCache.Create(ACapacity: Integer);
@@ -1067,10 +1082,25 @@ end;
 
 { ---- drawn glyphs ---------------------------------------------------------------- }
 
-function TyTermIsCustomGlyph(ACodepoint: Cardinal): Boolean;
+{ the code point's entry in TyTermGlyphIndex (the range table, then the offset); -1 =
+  none of the ranges }
+function GlyphOrdinal(ACodepoint: Cardinal): Integer;
+var
+  r: Integer;
 begin
-  Result := (ACodepoint >= TyTermGlyphFirst) and (ACodepoint <= TyTermGlyphLast)
-    and (TyTermGlyphIndex[ACodepoint, 1] > 0);
+  for r := 0 to TyTermGlyphRangeCount - 1 do
+    if (Integer(ACodepoint) >= TyTermGlyphRanges[r, 0]) and (Integer(ACodepoint) <= TyTermGlyphRanges[r, 1]) then
+      Exit(TyTermGlyphRanges[r, 2] + Integer(ACodepoint) - TyTermGlyphRanges[r, 0]);
+  Result := -1;
+end;
+
+function TyTermIsCustomGlyph(ACodepoint: Cardinal): Boolean;
+var
+  n: Integer;
+begin
+  if ACodepoint > $FFFF then Exit(False);
+  n := GlyphOrdinal(ACodepoint);
+  Result := (n >= 0) and (TyTermGlyphIndex[n, 1] > 0);
 end;
 
 function TyTermGlyphPeriodY: Integer;
@@ -1085,8 +1115,8 @@ var
 begin
   Result := False;
   if not TyTermIsCustomGlyph(ACodepoint) then Exit;
-  first := TyTermGlyphIndex[ACodepoint, 0];
-  for p := first to first + TyTermGlyphIndex[ACodepoint, 1] - 1 do
+  first := TyTermGlyphIndex[GlyphOrdinal(ACodepoint), 0];
+  for p := first to first + TyTermGlyphIndex[GlyphOrdinal(ACodepoint), 1] - 1 do
     if TyTermGlyphParts[p, 0] = 1 then
       Exit(True);
 end;
@@ -1227,8 +1257,8 @@ begin
   APhaseX := 0;
   APhaseY := 0;
   if not TyTermIsCustomGlyph(ACodepoint) then Exit;
-  first := TyTermGlyphIndex[ACodepoint, 0];
-  for p := first to first + TyTermGlyphIndex[ACodepoint, 1] - 1 do
+  first := TyTermGlyphIndex[GlyphOrdinal(ACodepoint), 0];
+  for p := first to first + TyTermGlyphIndex[GlyphOrdinal(ACodepoint), 1] - 1 do
     if TyTermGlyphParts[p, 0] = 1 then
     begin
       k := TyTermGlyphParts[p, 2];
@@ -1239,23 +1269,167 @@ begin
     end;
 end;
 
+{ drawVectorShape (:620-667): clipped to the cell; the line width is devicePixelRatio x
+  fontSize / 12 (fontSize in CSS pixels: points x 96 / 72); translateArgs without the
+  rounding (doClamp false), x over the cell less the two paddings (each in half line
+  widths, times devicePixelRatio) and shifted by the left one; the instructions as
+  svgToCanvasInstructionMap draws them -- T mirrors the last control point after a Q or a
+  T, else takes the current point; Z closes the subpath and leaves the state alone.
+  Filled with the non-zero rule (Canvas2D's default in a browser; BGRA's is even-odd). }
+procedure DrawVectorPart(ABmp: TBGRABitmap; APart: Integer; const ACellRect: TRect; AColor: TBGRAPixel;
+  APPI, AFontPt: Integer);
+var
+  c2d: TBGRACanvas2D;
+  W, H, k, last, cmd, n, j, lastCmd: Integer;
+  dpr, cssLine, lp, rp, span, curX, curY, ctlX, ctlY, cpX, cpY: Double;
+  a: array[0..5] of Double;
+begin
+  W := ACellRect.Right - ACellRect.Left;
+  H := ACellRect.Bottom - ACellRect.Top;
+  dpr := APPI / 96;
+  cssLine := AFontPt * 96 / 72 / 12;
+  lp := TyTermGlyphParts[APart, 4] * (cssLine / 2);
+  rp := TyTermGlyphParts[APart, 5] * (cssLine / 2);
+  span := W - (lp * dpr) - (rp * dpr);
+  c2d := ABmp.Canvas2D;
+  c2d.save;
+  try
+    c2d.beginPath;
+    c2d.rect(ACellRect.Left, ACellRect.Top, W, H);
+    c2d.clip;
+    c2d.beginPath;
+    c2d.lineWidth := dpr * cssLine;
+    curX := 0; curY := 0; ctlX := 0; ctlY := 0;
+    lastCmd := 0;
+    k := TyTermGlyphParts[APart, 2];
+    last := k + TyTermGlyphParts[APart, 3];
+    while k < last do
+    begin
+      cmd := Round(TyTermGlyphData[k]);
+      n := Round(TyTermGlyphData[k + 1]);
+      Inc(k, 2);
+      for j := 0 to n - 1 do
+        if j mod 2 = 0 then
+          a[j] := TyTermGlyphData[k + j] * span + (ACellRect.Left + (lp * dpr))
+        else
+          a[j] := TyTermGlyphData[k + j] * H + ACellRect.Top;
+      Inc(k, n);
+      case cmd of
+        1:
+          begin
+            c2d.moveTo(a[0], a[1]);
+            curX := a[0]; ctlX := a[0];
+            curY := a[1]; ctlY := a[1];
+          end;
+        2:
+          begin
+            c2d.lineTo(a[0], a[1]);
+            curX := a[0]; ctlX := a[0];
+            curY := a[1]; ctlY := a[1];
+          end;
+        3:
+          begin
+            c2d.bezierCurveTo(a[0], a[1], a[2], a[3], a[4], a[5]);
+            ctlX := a[2]; ctlY := a[3];
+            curX := a[4]; curY := a[5];
+          end;
+        4:
+          begin
+            c2d.quadraticCurveTo(a[0], a[1], a[2], a[3]);
+            ctlX := a[0]; ctlY := a[1];
+            curX := a[2]; curY := a[3];
+          end;
+        5:
+          begin
+            if (lastCmd = 4) or (lastCmd = 5) then
+            begin
+              cpX := 2 * curX - ctlX;
+              cpY := 2 * curY - ctlY;
+            end
+            else
+            begin
+              cpX := curX;
+              cpY := curY;
+            end;
+            c2d.quadraticCurveTo(cpX, cpY, a[0], a[1]);
+            ctlX := cpX; ctlY := cpY;
+            curX := a[0]; curY := a[1];
+          end;
+        6: c2d.closePath;
+      end;
+      lastCmd := cmd;
+    end;
+    if TyTermGlyphParts[APart, 1] = 1 then
+    begin
+      c2d.strokeStyle(AColor);
+      c2d.stroke;
+    end
+    else
+    begin
+      c2d.fillMode := fmWinding;
+      c2d.fillStyle(AColor);
+      c2d.fill;
+    end;
+  finally
+    c2d.restore;
+  end;
+end;
+
+const
+  { :155-166 brailleDotPositions: x, y of each dot in eighths, bit 0 = dot 1 }
+  BrailleDotX: array[0..7] of Integer = (1, 1, 1, 5, 5, 5, 1, 5);
+  BrailleDotY: array[0..7] of Integer = (0, 2, 4, 0, 2, 4, 6, 6);
+  KBraillePad: Double = 0.1;
+  KBrailleUsable: Double = 0.8;
+
+{ drawBrailleCharacter (:169-194): a full circle per set bit, radius the smaller eighth }
+procedure DrawBraillePart(ABmp: TBGRABitmap; APart: Integer; const ACellRect: TRect; AColor: TBGRAPixel);
+var
+  c2d: TBGRACanvas2D;
+  bits, bit: Integer;
+  xe, ye, padY, radius: Double;
+begin
+  bits := Round(TyTermGlyphData[TyTermGlyphParts[APart, 2]]);
+  xe := (ACellRect.Right - ACellRect.Left) / 8;
+  padY := (ACellRect.Bottom - ACellRect.Top) * KBraillePad;
+  ye := ((ACellRect.Bottom - ACellRect.Top) * KBrailleUsable) / 8;
+  radius := Min(xe, ye);
+  c2d := ABmp.Canvas2D;
+  c2d.save;
+  try
+    c2d.fillStyle(AColor);
+    for bit := 0 to 7 do
+      if (bits and (1 shl bit)) <> 0 then
+      begin
+        c2d.beginPath;
+        c2d.arc(ACellRect.Left + (BrailleDotX[bit] + 1) * xe, ACellRect.Top + padY + (BrailleDotY[bit] + 1) * ye,
+          radius, 0, Pi * 2);
+        c2d.fill;
+      end;
+  finally
+    c2d.restore;
+  end;
+end;
+
 procedure DrawCustomParts(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
-  AColor: TBGRAPixel; APPI, AOrgX, AOrgY: Integer; AClip: Boolean);
+  AColor: TBGRAPixel; APPI, AOrgX, AOrgY: Integer; AClip: Boolean; AFontPt: Integer);
 var
   first, n, p: Integer;
 begin
-  first := TyTermGlyphIndex[ACodepoint, 0];
-  n := TyTermGlyphIndex[ACodepoint, 1];
+  first := TyTermGlyphIndex[GlyphOrdinal(ACodepoint), 0];
+  n := TyTermGlyphIndex[GlyphOrdinal(ACodepoint), 1];
   for p := first to first + n - 1 do
     case TyTermGlyphParts[p, 0] of
       0: DrawBlockPart(ABmp, p, ACellRect, AColor);
       1: DrawPatternPart(ABmp, p, ACellRect, AColor, AOrgX, AOrgY);
       2: DrawPathPart(ABmp, p, ACellRect, AColor, APPI, AClip);
+      5: DrawVectorPart(ABmp, p, ACellRect, AColor, APPI, AFontPt);
+      6: DrawBraillePart(ABmp, p, ACellRect, AColor);
     end;
 end;
 
 function TyTermRasterizeCustomGlyph(ACodepoint: Cardinal; AW, AH, APhaseX, APhaseY,
-  APPI: Integer): TTyTermGlyph;
+  APPI: Integer; AFontPt: Integer): TTyTermGlyph;
 const
   Margin = 2;
 var
@@ -1277,7 +1451,7 @@ begin
   bmp := TBGRABitmap.Create(AW + 2 * Margin, AH + 2 * Margin);
   try
     DrawCustomParts(bmp, Rect(Margin, Margin, Margin + AW, Margin + AH), ACodepoint, BGRAWhite, APPI,
-      APhaseX - Margin, APhaseY - Margin, True);
+      APhaseX - Margin, APhaseY - Margin, True, AFontPt);
     Result.Mask := TGrayscaleMask.Create(AW, AH, 0);
     ink := False;
     for y := 0 to AH - 1 do
@@ -1300,7 +1474,7 @@ begin
 end;
 
 procedure TyTermDrawCustomGlyph(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
-  AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer);
+  AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer; AFontPt: Integer);
 var
   g: TTyTermGlyph;
   px, py: Integer;
@@ -1309,7 +1483,7 @@ begin
   if (ACellRect.Right <= ACellRect.Left) or (ACellRect.Bottom <= ACellRect.Top) then Exit;
   TyTermCustomGlyphPhase(ACodepoint, ACellRect.Left, ACellRect.Top, px, py);
   g := TyTermRasterizeCustomGlyph(ACodepoint, ACellRect.Right - ACellRect.Left,
-    ACellRect.Bottom - ACellRect.Top, px, py, APPI);
+    ACellRect.Bottom - ACellRect.Top, px, py, APPI, AFontPt);
   try
     TyTermBlendMaskGamma(ABmp, ACellRect.Left, ACellRect.Top, g.Mask,
       (Cardinal(AColor.red) shl 16) or (Cardinal(AColor.green) shl 8) or AColor.blue, ACellRect);
@@ -1320,12 +1494,12 @@ begin
 end;
 
 procedure TyTermDrawCustomGlyphDirect(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
-  AColor: TBGRAPixel; APPI: Integer);
+  AColor: TBGRAPixel; APPI: Integer; AFontPt: Integer);
 begin
   if not TyTermIsCustomGlyph(ACodepoint) then Exit;
   if (ACellRect.Right <= ACellRect.Left) or (ACellRect.Bottom <= ACellRect.Top) then Exit;
   if APPI <= 0 then APPI := 96;
-  DrawCustomParts(ABmp, ACellRect, ACodepoint, AColor, APPI, 0, 0, True);
+  DrawCustomParts(ABmp, ACellRect, ACodepoint, AColor, APPI, 0, 0, True, AFontPt);
 end;
 
 procedure TyTermBlendMask(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleMask;
@@ -1436,12 +1610,13 @@ begin
     if GlyphHasPattern(cp) then
       FRowUsesYPhase := True;
     TyTermCustomGlyphPhase(cp, AX, AY, px, py);
-    code := TyTermCustomGlyphKey(cp, w, px, py, Metrics.CellW, Metrics.CellH, Spec.PPI);
+    code := TyTermCustomGlyphKey(cp, w, px, py, Metrics.CellW, Metrics.CellH, Spec.PPI, Spec.SizeLogical);
     glyph := GlyphCache.FindCode(code);
     if glyph = nil then
     begin
       if not MayRasterize then Exit;
-      glyph := TyTermRasterizeCustomGlyph(cp, w * Metrics.CellW, Metrics.CellH, px, py, Spec.PPI);
+      glyph := TyTermRasterizeCustomGlyph(cp, w * Metrics.CellW, Metrics.CellH, px, py, Spec.PPI,
+        Spec.SizeLogical);
       GlyphCache.AddCode(code, glyph);
     end;
     cell := Rect(AX, AY, AX + w * Metrics.CellW, AY + Metrics.CellH);
