@@ -172,7 +172,7 @@ uses
   test.terminal.keyboard, test.terminal.render, test.terminal.view, test.terminal.view.paint,
   test.terminal.view.input, test.terminal.view.theme, test.terminal.example,
   test.terminal.selection, test.terminal.links, test.terminal.view.mouse,
-  test.terminal.view.links,
+  test.terminal.view.links, test.terminal.pty,
   test.transitions,
   test.htmllabel,
   test.shape,
