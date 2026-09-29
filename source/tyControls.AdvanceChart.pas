@@ -572,6 +572,9 @@ type
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec; overload;
     function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
     procedure RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
+    function CalendarPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+    function CalendarGraphPoints(ASeriesIndex: Integer;
+      ACal: TTyCalendar): TTyPointFArray;
     procedure SymbolItems(ASeriesIndex: Integer; const ABase: TTySymbolSpec;
       out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
@@ -1304,7 +1307,8 @@ begin
         element 0 of the row is the date and element 1 the value, and any
         more are raw positions the store keeps for the label and the
         visualMap. [Batch 70] }
-      if FBindings[i].CalendarIndex >= 0 then
+      if (FBindings[i].CalendarIndex >= 0)
+        and (FBindings[i].SeriesType <> TyPieSeriesTypeName) then
       begin
         st.AddDimension(TyCalendarTimeDim, ddtTime);
         st.AddDimension(TyCalendarValueDim, ddtFloat);
@@ -1702,11 +1706,13 @@ begin
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
   SolveMarkers(APPI);
+  { BEFORE THE PIES: a pie on a calendar is laid out in a day's cell
+    [Batch 72] }
+  SolveCalendars(APPI);
   SolvePies;
   SolveFunnels;
   SolveGauges(APPI);
   SolveRadars(APPI);
-  SolveCalendars(APPI);
   SolveGraphs(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
@@ -4610,7 +4616,74 @@ begin
       own left/top/right/bottom shrink that. Handing it a grid rect would
       centre it on the plot instead of on the chart, which is not where
       ECharts puts it. }
+    if (FBindings[i].CalendarIndex >= 0)
+      and (FBindings[i].CalendarIndex <= High(FCalendars)) then
+    begin
+      FPies[i] := CalendarPieLayout(i, dim);
+      Continue;
+    end;
     FPies[i] := TyPieLayoutOf(FPieSpecs[i], FLastRect, FStores[i], dim);
+  end;
+end;
+
+{ A PIE ON A CALENDAR: laid out in the content rect of a day's cell --
+  createBoxLayoutReference asks the calendar's dataToLayout for the pie's
+  coordinate, which is `coord` when written and else `center` read as a
+  date. The box and a percentage radius are taken against that rect; the
+  centre is the rect's own centre when the date came from `center`, and
+  `center` inside the box when it came from `coord`. A date off the range
+  leaves the cell's size and no position: the radius is a number, the
+  centre is not, and nothing is drawn. [Batch 72] }
+function TTyAdvanceChart.CalendarPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+var
+  node, d: TJSONData;
+  cal: TTyCalendar;
+  dv: TTyDataValue;
+  fromCentre: Boolean;
+  lay: TTyCoordLayout;
+  cx, cy: Double;
+  k: Integer;
+begin
+  cal := FCalendars[FBindings[ASlot].CalendarIndex];
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  d := nil;
+  fromCentre := True;
+  if (node <> nil) and (node.JSONType = jtObject) then
+  begin
+    d := TJSONObject(node).Find('coord');
+    if (d <> nil) and (d.JSONType <> jtNull) then fromCentre := False
+    else d := TJSONObject(node).Find('center');
+  end;
+  dv := Default(TTyDataValue);
+  if d <> nil then
+    case d.JSONType of
+      jtNumber: dv := TyDataNum(d.AsFloat);
+      jtString:
+        begin
+          dv.Kind := dvkText;
+          dv.Text := d.AsString;
+        end;
+    end;
+  { no date at all -- the default ['50%', '50%'] read as one -- is a cell of
+    no position }
+  lay := cal.DateLayout(cal.ParseDate(dv), True);
+  Result := TyPieLayoutOf(FPieSpecs[ASlot], lay.ContentRect, FStores[ASlot], ADim);
+  { A CELL OF NO POSITION draws nothing: upstream's sectors are there with a
+    centre that is not a number, which paints nowhere }
+  if IsNan(lay.ContentRect.Left) or IsNan(lay.ContentRect.Top) then
+  begin
+    Result.Valid := False;
+    Exit;
+  end;
+  if not fromCentre then Exit;
+  cx := (lay.ContentRect.Left + lay.ContentRect.Right) / 2;
+  cy := (lay.ContentRect.Top + lay.ContentRect.Bottom) / 2;
+  Result.CX := cx;
+  Result.CY := cy;
+  for k := 0 to High(Result.Sectors) do
+  begin
+    Result.Sectors[k].CX := cx;
+    Result.Sectors[k].CY := cy;
   end;
 end;
 
@@ -5069,7 +5142,22 @@ begin
       FGraphCats[i] := solved.Cats;
       Continue;
     end;
-    { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar, geo, a calendar --
+    { A GRAPH ON A CALENDAR: each node where the calendar puts its date,
+      under upstream's own rule for which nodes are placed at all -- see
+      CalendarGraphPoints. [Batch 72] }
+    if (FBindings[i].CalendarIndex >= 0)
+      and (FBindings[i].CalendarIndex <= High(FCalendars)) and (store <> nil) then
+    begin
+      solved := TyGraphSolveAtPoints(FOption, si, store,
+        CalendarGraphPoints(si, FCalendars[FBindings[i].CalendarIndex]));
+      FGraphLaidOut[i] := True;
+      FGraphSpecs[i] := solved.Spec;
+      FGraphNodes[i] := solved.Nodes;
+      FGraphEdges[i] := solved.Edges;
+      FGraphCats[i] := solved.Cats;
+      Continue;
+    end;
+    { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar, geo --
       and a graph on one resolves and draws nothing rather than being quietly
       given a view it did not ask for. }
     if FBindings[i].CoordSysName <> 'view' then Continue;
@@ -6489,6 +6577,115 @@ begin
     it := d.Items[k];
     if (it <> nil) and (it.JSONType = jtObject) then
       AHas[k] := RadiiOfStyle(TJSONObject(it).Find('itemStyle'), APPI, ARadii[k]);
+  end;
+end;
+
+{ WHERE A GRAPH'S NODES GO ON A CALENDAR, by raw index.
+
+  UPSTREAM BUILDS A GRAPH'S DATA WITH PLAIN DIMENSION NAMES, so the node's
+  date is not a time dimension: its type is GUESSED from the first node
+  that decides it (guessOrdinal -- a finite number or numeric string says
+  float, any other string but '-' says ordinal). An ordinal column keeps
+  each date as written; a float one turns a date string into NaN.
+  simpleLayout then places a node when ANY of its stored dimensions is a
+  number -- and isNaN of a date string is true -- at the calendar's
+  dataToPoint of the stored date, which the calendar parses itself. So a
+  string-dated node with no numeric value is not placed at all, and after
+  a first node dated by a timestamp every string-dated node is lost.
+  [Batch 72] }
+function TTyAdvanceChart.CalendarGraphPoints(ASeriesIndex: Integer;
+  ACal: TTyCalendar): TTyPointFArray;
+var
+  node, d, it, arr, t0, v0: TJSONData;
+  k, decided: Integer;
+  floatTime, hasValue: Boolean;
+  tNum, vNum, ms: Double;
+  dv: TTyDataValue;
+
+  function DateOf(AItem: TJSONData): TJSONData;
+  begin
+    Result := nil;
+    arr := AItem;
+    if (arr <> nil) and (arr.JSONType = jtObject) then arr := TJSONObject(arr).Find('value');
+    if (arr <> nil) and (arr.JSONType = jtArray) and (arr.Count > 0) then
+      Result := arr.Items[0];
+  end;
+
+  function NumOf(AData: TJSONData): Double;
+  begin
+    Result := NaN;
+    if AData = nil then Exit;
+    case AData.JSONType of
+      jtNumber: Result := AData.AsFloat;
+      jtString:
+        if (AData.AsString <> '') and (AData.AsString <> '-') then
+          Result := TyJsToNumber(AData.AsString);
+    end;
+  end;
+
+begin
+  Result := nil;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then d := TJSONObject(node).Find('nodes');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  { the guess: the first decisive date among the first five }
+  floatTime := True;
+  decided := 0;
+  for k := 0 to Min(d.Count, 5) - 1 do
+  begin
+    t0 := DateOf(d.Items[k]);
+    if (t0 = nil) or (t0.JSONType = jtNull) then Continue;
+    if (t0.JSONType = jtString) and ((t0.AsString = '-') or (t0.AsString = '')) then Continue;
+    if (t0.JSONType = jtNumber) or ((t0.JSONType = jtString)
+      and not IsNan(TyJsToNumber(t0.AsString)) and not IsInfinite(TyJsToNumber(t0.AsString))) then
+      floatTime := True
+    else
+      floatTime := False;
+    decided := 1;
+    Break;
+  end;
+  if decided = 0 then floatTime := True;
+  SetLength(Result, d.Count);
+  for k := 0 to d.Count - 1 do
+  begin
+    Result[k] := TyPointF(NaN, NaN);
+    it := d.Items[k];
+    t0 := DateOf(it);
+    v0 := nil;
+    if (arr <> nil) and (arr.JSONType = jtArray) and (arr.Count > 1) then v0 := arr.Items[1];
+    vNum := NumOf(v0);
+    { the stored date: a number either way; a string kept (ordinal) or not a
+      number (float) }
+    tNum := NaN;
+    ms := NaN;
+    if t0 <> nil then
+    begin
+      if t0.JSONType = jtNumber then
+      begin
+        tNum := t0.AsFloat;
+        ms := tNum;
+      end
+      else if t0.JSONType = jtString then
+      begin
+        if floatTime then
+        begin
+          tNum := NumOf(t0);
+          ms := tNum;
+        end
+        else
+        begin
+          dv := Default(TTyDataValue);
+          dv.Kind := dvkText;
+          dv.Text := t0.AsString;
+          ms := ACal.ParseDate(dv);
+        end;
+      end;
+    end;
+    hasValue := not IsNan(tNum) or not IsNan(vNum);
+    if not hasValue then Continue;
+    Result[k] := ACal.DatePoint(ms, True);
   end;
 end;
 

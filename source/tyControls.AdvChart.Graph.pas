@@ -754,6 +754,14 @@ function TyGraphSolveOnCoordSys(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const ACoordSys: ITyCoordSys;
   AColX, AColY: Integer): TTyGraphSolved;
 
+{ THE SAME, FOR A SYSTEM WHOSE PLACEMENT RULE THE CALLER HAS ALREADY RUN:
+  every node at APoints[its raw index], not-a-number for a node that is not
+  placed. A calendar is one -- its node's date is read the way the graph's
+  own dimension guess stored it, which only the caller can see. The edges
+  are simpleLayoutEdge's, as on any system that is not a view. [Batch 72] }
+function TyGraphSolveAtPoints(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const APoints: TTyPointFArray): TTyGraphSolved;
+
 type
   { Everything the builder needs a THEME to answer. This unit never asks what
     colour anything is -- the control resolves the palette, the category
@@ -4617,6 +4625,41 @@ begin
     end;
     { THE `none` FAMILY, by raw index, whatever `layout` says: upstream's
       one layout for a graph off a view is simpleLayoutEdge. }
+    SolveSurvivorCurveness(Result, all, allEdges, False, False);
+    TyGraphEdgeGeometry(Result.Edges, Result.Nodes, nil, False);
+    TyGraphSanitise(Result.Nodes);
+    Result.NodeScale := 1;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyGraphSolveAtPoints(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const APoints: TTyPointFArray): TTyGraphSolved;
+var
+  mask: TFPUExceptionMask;
+  all: TTyGraphNodeArray;
+  allEdges: TTyGraphEdgeArray;
+  i, row, raw: Integer;
+begin
+  Result := Default(TTyGraphSolved);
+  GatherGraph(AOption, ASeriesIndex, AStore, Result, all, allEdges);
+  mask := MaskFP;
+  try
+    for i := 0 to High(Result.Nodes) do
+    begin
+      row := Result.Nodes[i].Row;
+      raw := -1;
+      if (AStore <> nil) and (row >= 0) and (row < AStore.Count) then
+        raw := AStore.GetRawIndex(row);
+      Result.Nodes[i].X := NaN;
+      Result.Nodes[i].Y := NaN;
+      Result.Nodes[i].PX := NaN;
+      Result.Nodes[i].PY := NaN;
+      if (raw < 0) or (raw > High(APoints)) then Continue;
+      Result.Nodes[i].PX := APoints[raw].X;
+      Result.Nodes[i].PY := APoints[raw].Y;
+    end;
     SolveSurvivorCurveness(Result, all, allEdges, False, False);
     TyGraphEdgeGeometry(Result.Edges, Result.Nodes, nil, False);
     TyGraphSanitise(Result.Nodes);

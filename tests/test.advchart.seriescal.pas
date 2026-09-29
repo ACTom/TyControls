@@ -13,7 +13,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Color, tyControls.AdvanceChart;
+     tyControls.AdvChart.Color, tyControls.AdvChart.Graph, tyControls.AdvanceChart;
 type
   TScProbe = class(TTyAdvanceChart)
   public
@@ -32,12 +32,16 @@ type
     FReport, FName: string;
     procedure Miss(const AWhat: string);
     procedure RunSymbols(AGallery: Boolean);
+    procedure RunGraphsAndPies;
+    function LoadOption(ACase: TJSONObject): TJSONObject;
+    procedure Draw(AOpt: TJSONObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestScatterSymbolsAsUpstreamDrawsThem;
     procedure TestTheGallerySymbolsAsUpstream;
+    procedure TestGraphsAndPiesAsUpstreamPlaceThem;
   end;
 
 implementation
@@ -421,6 +425,175 @@ begin
       opt.Free;
     end;
   end;
+end;
+
+function TAdvChartSeriesCalendarOracleTest.LoadOption(ACase: TJSONObject): TJSONObject;
+var
+  d: TJSONData;
+  sl: TStringList;
+begin
+  d := ACase.Find('gallery');
+  if (d = nil) or (d.JSONType <> jtString) then
+    Exit(TJSONObject(ACase.Objects['option'].Clone));
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(GalleryPath(d.AsString));
+    Result := TJSONObject(GetJSON(sl.Text));
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TAdvChartSeriesCalendarOracleTest.Draw(AOpt: TJSONObject);
+begin
+  if AOpt.Find('color') = nil then
+    AOpt.Add('color', GetJSON('["#5070dd","#b6d634","#505372","#ff994d",'
+      + '"#0ca8df","#ffd10a","#fb628b","#785db0","#3fbe95"]'));
+  FChart.Option := '{}';
+  FChart.Option := AOpt.AsJSON;
+  FChart.SetBounds(0, 0, 800, 600);
+  FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, 800, 600), 96);
+end;
+
+{ A GRAPH'S NODES where upstream placed them -- or nowhere, for a node its
+  placement rule leaves out -- and which edges are drawn; A PIE'S SECTORS at
+  the centre and radii upstream solved in the day's cell. }
+procedure TAdvChartSeriesCalendarOracleTest.RunGraphsAndPies;
+var
+  cases, series, arr: TJSONArray;
+  cs, opt, se, nd, ed, sy, row, sh: TJSONObject;
+  c, s, k, j, si, n, drawnEdges, wantEdges: Integer;
+  nodes: TTyGraphNodeArray;
+  edges: TTyGraphEdgeArray;
+  fills: TTyChartColorArray;
+  lst: TTyPaintList;
+  e: TTyChartElement;
+  found: Boolean;
+  w_: string;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    opt := LoadOption(cs);
+    try
+      FName := cs.Strings['id'];
+      Draw(opt);
+      lst := FChart.List;
+      series := cs.Arrays['series'];
+      for s := 0 to series.Count - 1 do
+      begin
+        se := series.Objects[s];
+        if not se.Get('recorded', False) then Continue;
+        si := se.Integers['seriesIndex'];
+        FName := Format('%s series %d', [cs.Strings['id'], si]);
+        if se.Get('type', '') = 'graph' then
+        begin
+          Inc(FCompared);
+          if not FChart.GraphLayout(si, nodes, edges, fills) then
+          begin
+            Miss('the graph was not laid out');
+            Continue;
+          end;
+          arr := se.Arrays['nodes'];
+          Inc(FCompared);
+          if Length(nodes) <> arr.Count then
+          begin
+            Miss(Format('%d nodes here, %d upstream', [Length(nodes), arr.Count]));
+            Continue;
+          end;
+          for k := 0 to arr.Count - 1 do
+          begin
+            nd := arr.Objects[k];
+            w_ := Format('node %d', [k]);
+            if (GetLocalTimeOffset <> 0) and ZoneDependent(nd.Find('raw')) then
+            begin
+              Inc(FZoned);
+              Continue;
+            end;
+            Inc(FCompared);
+            if nd.Get('drawn', False) <> not IsNan(nodes[k].PX) then
+            begin
+              if nd.Get('drawn', False) then Miss(w_ + ': placed upstream, not here')
+              else Miss(w_ + Format(': not placed upstream, at (%s, %s) here',
+                [Fmt(nodes[k].PX), Fmt(nodes[k].PY)]));
+              Continue;
+            end;
+            if not nd.Get('drawn', False) then Continue;
+            Inc(FSymbols);
+            sy := nd.Objects['symbol'];
+            Inc(FCompared, 2);
+            if not (Same(nodes[k].PX, Num(sy.Find('x'))) and Same(nodes[k].PY, Num(sy.Find('y')))) then
+              Miss(Format('%s: at (%s, %s) upstream, (%s, %s) here', [w_,
+                Fmt(Num(sy.Find('x'))), Fmt(Num(sy.Find('y'))), Fmt(nodes[k].PX), Fmt(nodes[k].PY)]));
+          end;
+          { the edges: drawn exactly when both ends are }
+          arr := se.Arrays['edges'];
+          wantEdges := 0;
+          for k := 0 to arr.Count - 1 do
+          begin
+            ed := arr.Objects[k];
+            if ed.Get('drawn', False) then Inc(wantEdges);
+          end;
+          drawnEdges := 0;
+          for k := 0 to High(edges) do
+            if (edges[k].Source >= 0) and (edges[k].Target >= 0)
+              and (edges[k].Source <= High(nodes)) and (edges[k].Target <= High(nodes))
+              and not IsNan(nodes[edges[k].Source].PX) and not IsNan(nodes[edges[k].Target].PX)
+              and not edges[k].Hidden then Inc(drawnEdges);
+          Inc(FCompared);
+          if (GetLocalTimeOffset = 0) or (FZoned = 0) then
+            if drawnEdges <> wantEdges then
+              Miss(Format('%d edges drawable here, %d drawn upstream', [drawnEdges, wantEdges]));
+        end
+        else if se.Get('type', '') = 'pie' then
+        begin
+          arr := se.Arrays['rows'];
+          for k := 0 to arr.Count - 1 do
+          begin
+            row := arr.Objects[k];
+            w_ := Format('sector %d', [k]);
+            if not row.Get('drawn', False) or IsNull(row.Find('sector')) then Continue;
+            sh := row.Objects['sector'].Objects['shape'];
+            { a centre that is not a number draws nothing anywhere }
+            if IsNull(sh.Find('cx')) then Continue;
+            found := False;
+            for j := 0 to lst.Count - 1 do
+            begin
+              e := lst.Element(j);
+              if (e.Datum.SeriesIndex <> si) or (e.Shape.Kind <> cskSector)
+                or (e.Datum.RawDataIndex <> row.Integers['index']) then Continue;
+              found := True;
+              Inc(FSymbols);
+              Inc(FCompared, 4);
+              if not (Same(e.Shape.CX, Num(sh.Find('cx'))) and Same(e.Shape.CY, Num(sh.Find('cy')))
+                and Near(e.Shape.R0, Num(sh.Find('r0'))) and Near(e.Shape.R1, Num(sh.Find('r')))) then
+                Miss(Format('%s: centre (%s, %s) r %s..%s upstream, (%s, %s) r %s..%s here', [w_,
+                  Fmt(Num(sh.Find('cx'))), Fmt(Num(sh.Find('cy'))), Fmt(Num(sh.Find('r0'))),
+                  Fmt(Num(sh.Find('r'))), Fmt(e.Shape.CX), Fmt(e.Shape.CY), Fmt(e.Shape.R0),
+                  Fmt(e.Shape.R1)]));
+              Break;
+            end;
+            Inc(FCompared);
+            if not found and not IsNan(Num(row.Objects['layout'].Find('angle')))
+              and (Num(row.Objects['layout'].Find('angle')) > 0) then
+              Miss(w_ + ': a sector upstream, none here');
+          end;
+        end;
+      end;
+    finally
+      opt.Free;
+    end;
+  end;
+end;
+
+procedure TAdvChartSeriesCalendarOracleTest.TestGraphsAndPiesAsUpstreamPlaceThem;
+begin
+  RunGraphsAndPies;
+  AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
+    [FBad, FCompared, FReport]), FBad = 0);
+  AssertTrue(Format('nodes and sectors were compared (%d, %d zoned)', [FSymbols, FZoned]),
+    FSymbols >= 40);
 end;
 
 procedure TAdvChartSeriesCalendarOracleTest.TestScatterSymbolsAsUpstreamDrawsThem;
