@@ -7,8 +7,9 @@ interface
 
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
+  BGRABitmapTypes,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.BuiltinThemes,
-  tyControls.Terminal.Core;
+  tyControls.Terminal.Core, tyControls.Terminal.Render;
 
 type
   TTyTerminalViewThemeTests = class(TTestCase)
@@ -20,6 +21,7 @@ type
     procedure TestLightGroundsGetTheTunedSet;
     procedure TestTheTerminalLengthsHaveDensityValues;
     procedure TestSelectionFollowsFocus;
+    procedure TestTheSelectionStandsOutOnEveryTheme;
     procedure TestTheFontTokensAreReadRaw;
   end;
 
@@ -221,6 +223,98 @@ begin
     b := c.Model.ResolveStyle('TyTerminalSelection', '', [tysFocused]);
     AssertTrue('both have a background', (tpBackground in a.Present) and (tpBackground in b.Present));
     AssertTrue('the focused selection is another colour', a.Background.Color <> b.Background.Color);
+  finally
+    c.Free;
+  end;
+end;
+
+{ WCAG 2 relative luminance and contrast ratio }
+function Luminance(ARgb: Cardinal): Double;
+
+  function Lin(AByte: Cardinal): Double;
+  var
+    v: Double;
+  begin
+    v := AByte / 255;
+    if v <= 0.03928 then Result := v / 12.92 else Result := Power((v + 0.055) / 1.055, 2.4);
+  end;
+
+begin
+  Result := 0.2126 * Lin((ARgb shr 16) and $FF) + 0.7152 * Lin((ARgb shr 8) and $FF) + 0.0722 * Lin(ARgb and $FF);
+end;
+
+function Contrast(A, B: Cardinal): Double;
+var
+  la, lb: Double;
+begin
+  la := Luminance(A);
+  lb := Luminance(B);
+  Result := (Max(la, lb) + 0.05) / (Min(la, lb) + 0.05);
+end;
+
+{ The selection -- focused and not -- has to be seen on every built-in theme in both
+  modes: its colour made opaque on the terminal's ground (what the view paints, upstream's
+  selectionBackgroundOpaque) against that ground, as a WCAG contrast ratio.
+  THE BOUNDS, one per state, below the worst measured when the unfocused selection went
+  to upstream's alpha 0.3 (spec 11, phase 4): unfocused 1.70 (worst 1.80, macos/light;
+  the old alpha 0.18 gave about 1.5 on the light grounds -- a shade off the ground,
+  which is why it changed -- and this bound fails it); focused 1.25 (worst 1.27,
+  office/dark: its accent is a blue about as dark as its surface -- told apart by hue,
+  which a luminance ratio does not see; this batch does not touch the focused colour,
+  the bound only keeps a skin from making it worse). A selection is a tint over text,
+  not text: WCAG's 3:1 for non-text would ask for one that hides what it selects. }
+procedure TTyTerminalViewThemeTests.TestTheSelectionStandsOutOnEveryTheme;
+const
+  Bound: array[Boolean] of Double = (1.70, 1.25);
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, m, f, compared: Integer;
+  ground, opaque: Cardinal;
+  st: TTyStyleSet;
+  sel: TTyColor;
+  ratio: Double;
+  worst: array[Boolean] of Double;
+  worstAt: array[Boolean] of string;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    compared := 0;
+    worst[False] := 1000;
+    worst[True] := 1000;
+    worstAt[False] := '';
+    worstAt[True] := '';
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        AssertTrue('the ground resolves', Bg(c.Model, 'TyTerminal', ground));
+        for f := 0 to 1 do
+        begin
+          if f = 1 then
+            st := c.Model.ResolveStyle('TyTerminalSelection', '', [tysFocused])
+          else
+            st := c.Model.ResolveStyle('TyTerminalSelection', '', []);
+          AssertTrue('a selection colour', (tpBackground in st.Present) and (st.Background.Kind = tfkSolid));
+          sel := st.Background.Color;
+          opaque := TyTermBlendOver(ground, BGRA(TyRedOf(sel), TyGreenOf(sel), TyBlueOf(sel), TyAlphaOf(sel)));
+          ratio := Contrast(opaque, ground);
+          Inc(compared);
+          if ratio < worst[f = 1] then
+          begin
+            worst[f = 1] := ratio;
+            worstAt[f = 1] := Format('%s/%s: #%.6x on #%.6x', [names[i], c.Mode, opaque, ground]);
+          end;
+        end;
+      end;
+    AssertEquals('themes x 2 modes x 2 states', Length(names) * 4, compared);
+    AssertTrue(Format('the unfocused selection stands out everywhere: worst %.3f (%s), bound %.2f',
+      [worst[False], worstAt[False], Bound[False]]), worst[False] >= Bound[False]);
+    AssertTrue(Format('the focused selection stands out everywhere: worst %.3f (%s), bound %.2f',
+      [worst[True], worstAt[True], Bound[True]]), worst[True] >= Bound[True]);
   finally
     c.Free;
   end;

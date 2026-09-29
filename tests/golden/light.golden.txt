@@ -353,11 +353,11 @@ TyTerminalCursor||1 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0
 TyTerminalCursor||2 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTerminalCursor||3 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTerminalCursor||4 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyTerminalSelection||0 => pres[0,] bg=k1/2E1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyTerminalSelection||1 => pres[0,] bg=k1/2E1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyTerminalSelection||2 => pres[0,] bg=k1/2E1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||0 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||1 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||2 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTerminalSelection||3 => pres[0,] bg=k1/593B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyTerminalSelection||4 => pres[0,] bg=k1/2E1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||4 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTerminalAnsi0||0 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTerminalAnsi0||1 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTerminalAnsi0||2 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

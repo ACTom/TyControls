@@ -94,7 +94,7 @@
   --terminal-cursor:                var(--on-surface);
   --terminal-cursor-ink:            var(--terminal-bg);
   --terminal-selection-bg:          alpha(var(--accent), 0.35);
-  --terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18);
+  --terminal-selection-bg-inactive: alpha(var(--on-surface), 0.3);
   --terminal-link:                  var(--accent);
   --terminal-ansi-0:  on(var(--terminal-bg), #2e3436, #2e3436);
   --terminal-ansi-1:  on(var(--terminal-bg), #cc0000, #cc0000);

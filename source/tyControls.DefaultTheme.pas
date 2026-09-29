@@ -127,7 +127,7 @@ begin
     '  --terminal-cursor:                var(--on-surface);' + LineEnding +
     '  --terminal-cursor-ink:            var(--terminal-bg);' + LineEnding +
     '  --terminal-selection-bg:          alpha(var(--accent), 0.35);' + LineEnding +
-    '  --terminal-selection-bg-inactive: alpha(var(--on-surface), 0.18);' + LineEnding +
+    '  --terminal-selection-bg-inactive: alpha(var(--on-surface), 0.3);' + LineEnding +
     '  --terminal-link:                  var(--accent);' + LineEnding +
     '  --terminal-ansi-0:  on(var(--terminal-bg), #2e3436, #2e3436);' + LineEnding +
     '  --terminal-ansi-1:  on(var(--terminal-bg), #cc0000, #cc0000);' + LineEnding +
