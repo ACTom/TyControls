@@ -669,7 +669,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   | 29 | 回放不等在途的块就写下一块 | 红：`TestOneChunkInFlight`、`TestAllAtOnceIntoARealTerminal`（60 MB 一次喂完溢出） |
 
   审查确认的真等价：I5（`UTF8KeyPress` 不看 `FKeyDownHandled`——那几个键的字符本来就被控制字符过滤丢掉）、I16（不接 `OnRequestScrollToBottom`——Core 自己滚到底；本批把这个多余的处理器删了）、I17（输入法键不早退——上游对 229 本来没有编码、不算本地动作）；不适用：R9（`translateArgs` 的钳制上界——自绘路径只裁不钳）、V40（映射忽略 `YDisp`——Core 报的已是视口行）。翻案补测：V22、I27 见上表。
-- **编包 / 编示例**：本批没动 `.lpk`、没动设计期包；示例改了 `umain.pas` / `.lfm` / `uasciicast.pas` / `.po`，**待主控编示例**（`lazbuild -B examples/terminal/terminal_example.lpi`，再按惯例跑 `example-rsj2po.py` 核 `.po`；本批已手工补了四条新字符串的译文，`check-example-po.py`、`check-lfm-props.py` 都过）。macOS 输入法（`TTyCocoaImeHandler`、`LM_IM_COMPOSITION`）只在 `{$IFDEF LCLCocoa}` 下编，Win32 上编不到，待 Cocoa 构建。
+- **编包 / 编示例**：本批没动 `.lpk`、没动设计期包；示例改了 `umain.pas` / `.lfm` / `uasciicast.pas` / `.po`，主控已在 `da8d0551` 上 `lazbuild -B` 编过运行时包、dt 包和示例，均 0 错；`example-rsj2po.py` 核对 `.po`：rsj 10 条、added 0；示例启动能开窗（2026-09-29）。macOS 输入法（`TTyCocoaImeHandler`、`LM_IM_COMPOSITION`）只在 `{$IFDEF LCLCocoa}` 下编，Win32 上编不到，待 Cocoa 构建。
 - **截图**：`docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`（79 张 + `index.md`，由 `tools/terminal-shots` 离屏生成，单张 ≤ 16 KB）：17 主题 × 明暗的彩色 ls 与 16 色样例、vim / htop（程序退出前的最后一屏）/ 中英表情各明暗一张、7 / 15 号色放大、xp / macos / breeze 浅底的 3 号色放大。抽查了默认浅色 16 色、xp 暗色 ls、htop 暗色、vim 浅色、CJK 表情、两张放大色样：画面正常，没有整块黑、白、空白或哨兵色。
 - **浅底对比度**：按主控决定暂维持（c），数字与三个选项写进 spec §11、§17.1 第 4 条，最终验收看截图定（真机验收第 26 项）。
 
