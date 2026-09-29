@@ -13,7 +13,10 @@
 // urls    { text: b64, links: [{ text: b64, range: [sx, sy, ex, ey] }] } -- the text
 //         written alone on row 1 of a 300-column terminal, LinkComputer.computeLink(1,
 //         strictUrlRegex, terminal) (WebLinkProvider.ts:59-101).
-// lines   { id, cols, rows, write: b64, queries: [{ y, web, osc, oscAll, kept, hits }] }
+// lines   { id, cols, rows, write: b64, resize?: [c, r], windowsPty?: {...},
+//           queries: [{ y, web, osc, oscAll, kept, hits }] } -- written, then resized
+//         when `resize` is there (phase 5: the buffer rewraps, or under an old ConPTY
+//         keeps lines longer than the grid), then queried
 //         web     computeLink(y)
 //         osc     OscLinkProvider.provideLinks(y) with no linkHandler
 //         oscAll  the same with linkHandler.allowNonHttpProtocols
@@ -85,9 +88,12 @@ const urls = [];
 // ---- lines ------------------------------------------------------------------------
 const lines = [];
 for (const c of C.LINES) {
-  const term = T.makeCaseTerminal(up, { cols: c.cols, rows: c.rows, options: { scrollback: 0 } });
+  const term = T.makeCaseTerminal(up, { cols: c.cols, rows: c.rows,
+    options: Object.assign({ scrollback: 0 }, c.windowsPty ? { windowsPty: c.windowsPty } : {}) });
   const core = term._core;
   core.writeSync(Buffer.from(c.write, 'utf8'));
+  if (c.resize) term.resize(c.resize[0], c.resize[1]);
+  const cols = term.cols;
   const osc = new B.OscLinkProvider(core._bufferService, core.optionsService, core._oscLinkService);
   const provide = y => {
     let got;
@@ -95,7 +101,7 @@ for (const c of C.LINES) {
     return got;
   };
   const queries = [];
-  const ys = c.queries || Array.from({ length: c.rows }, (_, k) => k + 1);
+  const ys = c.queries || Array.from({ length: term.rows }, (_, k) => k + 1);
   for (const y of ys) {
     const web = B.LinkComputer.computeLink(y, B.strictUrlRegex, term, noop);
     term.options.linkHandler = null;
@@ -107,14 +113,14 @@ for (const c of C.LINES) {
     const replies = new Map();
     replies.set(0, oscLinks ? oscLinks.map(link => ({ link })) : undefined);
     replies.set(1, web.map(link => ({ link })));
-    B.Linkifier.prototype._removeIntersectingLinks.call({ _bufferService: { cols: c.cols } }, y, replies);
+    B.Linkifier.prototype._removeIntersectingLinks.call({ _bufferService: { cols } }, y, replies);
     const kept = [0, 1].map(i => (replies.get(i) || []).map(w => w.link));
     const flat = [...kept[0], ...kept[1]];
     const hits = [];
-    for (let x = 1; x <= c.cols; x++) {
+    for (let x = 1; x <= cols; x++) {
       let found = -1;
       for (let k = 0; k < flat.length && found === -1; k++) {
-        if (B.Linkifier.prototype._linkAtPosition.call({ _bufferService: { cols: c.cols } }, flat[k], { x, y })) found = k;
+        if (B.Linkifier.prototype._linkAtPosition.call({ _bufferService: { cols } }, flat[k], { x, y })) found = k;
       }
       hits.push(found);
     }
@@ -123,7 +129,11 @@ for (const c of C.LINES) {
       kept: kept.map(k => k.map(linkOut)), hits,
     });
   }
-  lines.push({ id: c.id, cols: c.cols, rows: c.rows, write: b64(c.write), queries });
+  const entry = { id: c.id, cols: c.cols, rows: c.rows, write: b64(c.write) };
+  if (c.resize) entry.resize = c.resize;
+  if (c.windowsPty) entry.windowsPty = c.windowsPty;
+  entry.queries = queries;
+  lines.push(entry);
   term.dispose();
 }
 

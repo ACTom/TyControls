@@ -56,6 +56,11 @@ const GENERATED = [
   /^tests\/fixtures\/terminal-links(-[0-9]+)?\.json$/,
   /^tests\/fixtures\/terminal-osc52(-[0-9]+)?\.json$/,
   /^tests\/fixtures\/terminal-mouse-events(-[0-9]+)?\.json$/,
+  // phase 5: reflow (reflow-cases.js: the core-reflow fixture falls under the phase 2
+  // pattern above, the pure functions' fixture is its own), contrast (contrast-cases.js)
+  'tests/fixtures/terminal-reflow-units.json',
+  'tests/fixtures/terminal-contrast.json',
+  'source/tyControls.Terminal.Luminance.inc',
 ];
 
 function isGenerated(rel) {
@@ -134,6 +139,11 @@ const PORTED = [
   ['addons/addon-web-links/src/WebLinkProvider.ts', `addons/addon-web-links/${OUT_DIR}/WebLinkProvider.js`],
   ['addons/addon-web-links/src/WebLinksAddon.ts', `addons/addon-web-links/${OUT_DIR}/WebLinksAddon.js`],
   ['addons/addon-clipboard/src/ClipboardAddon.ts', `addons/addon-clipboard/${OUT_DIR}/ClipboardAddon.js`],
+  // phase 5: reflow; the contrast functions, the glyphs drawn as background and the
+  // option's clamp
+  ...['common/buffer/BufferReflow', 'browser/renderer/shared/RendererUtils', 'browser/ColorContrastCache',
+    'common/services/OptionsService',
+  ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
 ];
 
 function checkBuildFresh() {

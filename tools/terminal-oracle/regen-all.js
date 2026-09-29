@@ -39,7 +39,7 @@ if (before.length) {
 // In dependency order. Every one must exist: a missing script would otherwise leave
 // its fixtures as they are and report "clean".
 const SCRIPTS = ['gen-unicode-tables.js', 'unicode-cases.js', 'parser-cases.js', 'buffer-cases.js',
-  'gen-terminal-charsets.js', 'core-cases.js', 'escape-files.js', 'fuzz.js', 'recordings.js',
+  'gen-terminal-charsets.js', 'core-cases.js', 'escape-files.js', 'fuzz.js', 'recordings.js', 'reflow-cases.js',
   'keyboard-cases.js', 'gen-terminal-glyphs.js', 'view-cases.js',
   'selection-cases.js', 'url-cases.js', 'clipboard-cases.js', 'mouse-cases.js'];
 const missing = SCRIPTS.filter(s => !fs.existsSync(path.join(__dirname, s)));

@@ -126,6 +126,15 @@ const LINES = [
   { id: 'osc-empty-uri-ends', cols: 30, rows: 3, write: 'a\x1b]8;;http://a.com\x1b\\bc\x1b]8;;\x1b\\d http://b.com' },
   { id: 'osc-with-wide-chars', cols: 20, rows: 3, write: osc8('http://a.com', '\u4e2d\u6587link') + ' x' },
   { id: 'url-in-the-alt-cells', cols: 20, rows: 3, write: '\x1b[31mhttp://a.com\x1b[0m/x' },
+  // phase 5: resized after the write. The buffer rewraps (the cursor is on the next line,
+  // outside the wrapped run); under an old ConPTY it does not, and a line is left longer
+  // than the grid -- upstream maps the address over the whole line (WebLinkProvider.ts:171)
+  { id: 'reflow-40-to-80', cols: 40, rows: 6, write: 'see https://example.com/' + 'a'.repeat(70) + ' ok\r\n$ ', resize: [80, 6] },
+  { id: 'reflow-40-to-23', cols: 40, rows: 8, write: 'see https://example.com/' + 'a'.repeat(70) + ' ok\r\n$ ', resize: [23, 8] },
+  { id: 'reflow-old-conpty-long-line', cols: 80, rows: 6, write: 'x https://example.com/' + 'b'.repeat(90) + ' ok\r\n$ ',
+    resize: [40, 6], windowsPty: { backend: 'conpty', buildNumber: 19044 } },
+  { id: 'reflow-old-conpty-to-23', cols: 40, rows: 8, write: 'see https://example.com/' + 'a'.repeat(70) + ' ok\r\n$ ',
+    resize: [23, 8], windowsPty: { backend: 'conpty', buildNumber: 19044 } },
 ];
 
 module.exports = { PREFIX, URLS, LINES };

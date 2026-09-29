@@ -43,8 +43,9 @@
 //   step's events, in order).
 //
 // target "buffers" -- init: { cols, rows, options: { scrollback?, tabStopWidth?,
-//   windowsPty? } }: a headless terminal, of which only term._core._bufferService
-//   (and the OSC link service) is driven. Ops on the ACTIVE buffer unless named:
+//   windowsPty?, reflowCursorLine? } }: a headless terminal, of which only
+//   term._core._bufferService (and the OSC link service) is driven. Ops on the
+//   ACTIVE buffer unless named:
 //   ["scroll", attr, isWrapped]  ["scrollLines", disp]  ["resize", cols, rows]
 //   (bufferService.resize: no flush, no minimum)  ["reset"]  ["activateAlt", attr|null]
 //   ["activateNormal"]  ["setXY", x, y]  ["setMargins", top, bottom]  ["setYdisp", n]
@@ -56,6 +57,11 @@
 //   ["wrappedRange", absRow] -> [first, last]  ["setOption", name, value]
 //   ["fillViewport", attr|null]  ["clear"]  ["registerLink", id|null, uri] -> link id
 //   ["addLineToLink", linkId, absRow]  ["getLinkData", linkId] -> [id|null, uri] | null
+//   Phase 5 (reflow, the shapes of Buffer.test.ts): ["cells", absRow, col, [[cp, w] ...]]
+//   (setCellFromCodepoint cell by cell, default attributes; [0, 0] is a wide
+//   character's second half)  ["combine", absRow, col, cp] (addCodepointToCell, width
+//   0)  ["insertBlank", index, n] (n times lines.splice(index, 0, getBlankLine(default)))
+//   ["setYbase", n]; setOption also takes "reflowCursorLine".
 //   state: { active, isUserScrolling, scrolls: [ydisp of each onScroll this step],
 //            buffers: { normal: <buf>, alt: <buf> } (no line omitted),
 //            markers: [[line, isDisposed] for every marker this case made],
@@ -189,7 +195,8 @@ function runListCase(c) {
 function runBuffersCase(c) {
   const o = c.init.options || {};
   const term = new up.Terminal({ allowProposedApi: true, logLevel: 'off', cols: c.init.cols, rows: c.init.rows,
-    scrollback: o.scrollback ?? 1000, tabStopWidth: o.tabStopWidth ?? 8, windowsPty: o.windowsPty ?? {} });
+    scrollback: o.scrollback ?? 1000, tabStopWidth: o.tabStopWidth ?? 8, windowsPty: o.windowsPty ?? {},
+    reflowCursorLine: o.reflowCursorLine ?? false });
   const core = term._core;
   const bs = core._bufferService;
   const links = core._oscLinkService;
@@ -216,6 +223,10 @@ function runBuffersCase(c) {
       case 'saveY': buf.savedY = a[0]; break;
       case 'text': { const ln = buf.lines.get(a[0]); let col = a[1]; for (const ch of a[2]) ln.setCellFromCodepoint(col++, ch.codePointAt(0), 1, DEFAULT_ATTR_DATA); break; }
       case 'setWrapped': buf.lines.get(a[0]).isWrapped = a[1]; break;
+      case 'cells': { const ln = buf.lines.get(a[0]); let col = a[1]; for (const [cp, w] of a[2]) ln.setCellFromCodepoint(col++, cp, w, DEFAULT_ATTR_DATA); break; }
+      case 'combine': buf.lines.get(a[0]).addCodepointToCell(a[1], a[2], 0); break;
+      case 'insertBlank': for (let k = 0; k < a[1]; k++) buf.lines.splice(a[0], 0, buf.getBlankLine(DEFAULT_ATTR_DATA)); break;
+      case 'setYbase': buf.ybase = a[0]; break;
       case 'setupTabStops': buf.setupTabStops(a[0] ?? undefined); break;
       case 'tabSet': buf.tabs[a[0]] = true; break;
       case 'tabClear': delete buf.tabs[a[0]]; break;

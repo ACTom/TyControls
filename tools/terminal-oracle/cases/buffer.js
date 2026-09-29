@@ -180,4 +180,108 @@ const bufferCases = [
   bufs('link-alt-switch', 6, 3, {}, [['activateAlt', null], ['registerLink', 'k', 'u'], ['registerLink', null, 'w'], ['activateNormal'], ['getLinkData', 1], ['getLinkData', 2], ['registerLink', 'k', 'u']]),
 ];
 
+// ---- reflow (phase 5) ----------------------------------------------------------------
+// The shapes of src/common/buffer/Buffer.test.ts:260-1140, one criterion per case, as
+// buffer operations; every answer is upstream's own. The upstream tests start from an
+// 80 x 24 buffer and resize it, so do these. (The upstream test's MockBufferService
+// keeps 80 columns for the blank lines reflow inserts; the real service here has the
+// new width -- the terminal's behaviour, which is what the port is held to.)
+
+// [cp, width] cells for a string: CJK and the emoji plane two cells (the second [0, 0])
+const cellsOf = s => [...s].flatMap(ch => {
+  const cp = ch.codePointAt(0);
+  return (cp >= 0x4E00 && cp <= 0x9FFF) || cp >= 0x1F300 ? [[cp, 2], [0, 0]] : [[cp, 1]];
+});
+const RS = (id, options, ops) => bufs('reflow-' + id, 80, 24, options, ops);
+// the setups the upstream describe blocks share
+const larger = [['resize', 2, 10], ['text', 0, 0, 'ab'], ['text', 1, 0, 'cd'], ['setWrapped', 1, true], ['text', 2, 0, 'ef'],
+  ['text', 3, 0, 'gh'], ['setWrapped', 3, true], ['text', 4, 0, 'ij'], ['text', 5, 0, 'kl'], ['setWrapped', 5, true]];
+const smaller = [['resize', 4, 10], ['text', 0, 0, 'abcd'], ['text', 1, 0, 'efgh'], ['text', 2, 0, 'ijkl']];
+const tenBlank = [['insertBlank', 0, 10], ['setYbase', 10]];
+const wideRows = [['resize', 12, 10], ['setXY', 0, 2], ['cells', 0, 0, cellsOf('汉语汉语汉语')], ['cells', 1, 0, cellsOf('汉语汉语汉语')],
+  ['setWrapped', 1, true]];
+const tabEnd = [['resize', 4, 10], ['setXY', 0, 2], ['text', 0, 0, 'ab'], ['text', 1, 0, 'cd'], ['setWrapped', 1, true]];
+
+bufferCases.push(
+  // phase 2 ran these under an old ConPTY to keep reflow out; the same in the default setup
+  bufs('cols-change-windowspty-reflow', 8, 3, { scrollback: 3 }, [['text', 0, 0, 'abcdefgh'], ['text', 1, 0, 'xy'], ['resize', 5, 3], ['resize', 11, 3], ['setXY', 7, 1], ['resize', 4, 3]]),
+  bufs('resize-cursor-clamp-reflow', 8, 4, { scrollback: 2 }, [['setXY', 7, 3], ['saveX', 6], ['setMargins', 1, 2], ['resize', 5, 2], ['resize', 3, 4]]),
+  bufs('tabs-after-resize-reflow', 12, 3, {}, [['resize', 7, 3], ['resize', 20, 3], ['tabSet', 12], ['resize', 10, 3], ['tabClear', 16], ['resize', 21, 3], ['setupTabStops', 13], ['setupTabStops', null]]),
+  // should not wrap empty lines / should shrink row length
+  RS('empty-lines-stay', {}, [['resize', 75, 24]]),
+  RS('rows-shrink-to-the-cols', {}, [['resize', 5, 10]]),
+  // should wrap and unwrap lines (one column: no wide character, see BufferReflow.ts:175-177)
+  RS('wrap-and-unwrap', {}, [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 1, 10], ['resize', 5, 10]]),
+  // should gate reflow on ConPTY buildNumber 21376
+  RS('conpty-21375-does-not-wrap', { windowsPty: { backend: 'conpty', buildNumber: 21375 } },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 1, 10]]),
+  RS('conpty-21376-wraps', { windowsPty: { backend: 'conpty', buildNumber: 21376 } },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 1, 10], ['resize', 5, 10]]),
+  // the other Windows settings upstream tells apart (Buffer.ts:310-316)
+  RS('winpty-with-build-does-not-wrap', { windowsPty: { backend: 'winpty', buildNumber: 30000 } },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 2, 10], ['resize', 5, 10]]),
+  RS('build-without-backend-does-not-wrap', { windowsPty: { buildNumber: 30000 } },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 2, 10], ['resize', 5, 10]]),
+  RS('conpty-without-build-wraps', { windowsPty: { backend: 'conpty' } },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 2, 10], ['resize', 5, 10]]),
+  RS('no-scrollback-wraps', { scrollback: 0 },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['setXY', 0, 1], ['resize', 2, 10], ['resize', 5, 10]]),
+  // should (not) reflow wrapped lines containing the cursor
+  RS('cursor-line-reflowed-when-asked', { reflowCursorLine: true },
+    [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['resize', 1, 10], ['setXY', 0, 2], ['resize', 5, 10]]),
+  RS('cursor-line-kept-by-default', {}, [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['resize', 1, 10], ['setXY', 0, 2], ['resize', 5, 10]]),
+  RS('cursor-line-option-set-later', {}, [['resize', 5, 10], ['text', 0, 0, 'abcde'], ['resize', 1, 10], ['setXY', 0, 2],
+    ['setOption', 'reflowCursorLine', true], ['resize', 5, 10]]),
+  // should discard parts of wrapped lines that go out of the scrollback
+  RS('scrollback-drops-the-top', {}, [['setOption', 'scrollback', 1], ['resize', 10, 5], ['text', 3, 0, 'abcdefghij'], ['setXY', 0, 4],
+    ['resize', 2, 5], ['resize', 1, 5], ['resize', 10, 5]]),
+  // should remove the correct amount of rows when reflowing larger
+  RS('larger-removes-the-right-rows', {}, [['resize', 10, 10], ['setXY', 0, 2], ['text', 0, 0, 'abcdefghij'], ['text', 1, 0, '0123456789'],
+    ['resize', 2, 10], ['resize', 10, 10]]),
+  // should transfer combined char data over to reflowed lines
+  RS('combined-data-moves', {}, [['resize', 4, 3], ['setXY', 0, 2], ['text', 0, 0, 'abc'], ['cells', 0, 3, [[0x1F601, 1]]], ['resize', 2, 3]]),
+  RS('combining-mark-moves', {}, [['resize', 6, 5], ['setXY', 0, 3], ['text', 0, 0, 'abcde'], ['combine', 0, 4, 0x301], ['text', 1, 0, 'fg'],
+    ['setWrapped', 1, true], ['resize', 3, 5], ['resize', 7, 5]]),
+  // should adjust markers when reflowing
+  RS('markers-follow', {}, [['resize', 10, 16], ['text', 0, 0, 'abcdefghij'], ['text', 1, 0, '0123456789'], ['text', 2, 0, 'klmnopqrst'],
+    ['setXY', 0, 3], ['addMarker', 0], ['addMarker', 1], ['addMarker', 2], ['resize', 2, 16], ['resize', 10, 16]]),
+  // should dispose markers whose rows are trimmed during a reflow
+  RS('markers-trimmed-away', {}, [['setOption', 'scrollback', 1], ['resize', 10, 11], ['text', 0, 0, 'abcdefghij'], ['text', 1, 0, '0123456789'],
+    ['text', 2, 0, 'klmnopqrst'], ['setXY', 0, 10], ['addMarker', 0], ['addMarker', 1], ['addMarker', 2], ['setXY', 0, 3],
+    ['resize', 2, 11], ['resize', 10, 11]]),
+  // should correctly reflow wrapped lines that end in 0 space (via tab char)
+  RS('tab-end-larger', {}, [...tabEnd, ['resize', 5, 10], ['resize', 6, 10]]),
+  RS('tab-end-smaller', {}, [...tabEnd, ['resize', 3, 10], ['resize', 2, 10]]),
+  // should wrap wide characters correctly when reflowing larger / smaller
+  RS('wide-larger', {}, [...wideRows, ['resize', 13, 10], ['resize', 14, 10]]),
+  RS('wide-smaller', {}, [...wideRows, ['resize', 11, 10], ['resize', 10, 10], ['resize', 9, 10], ['resize', 8, 10], ['resize', 7, 10],
+    ['resize', 6, 10]]),
+  RS('wide-down-to-two', {}, [...wideRows, ['resize', 3, 10], ['resize', 2, 10], ['resize', 12, 10]]),
+  // reflowLarger cases
+  RS('larger-viewport-not-filled', {}, [...larger, ['setXY', 0, 6], ['resize', 4, 10]]),
+  RS('larger-filled-ybase-0', {}, [...larger, ['setXY', 0, 9], ['resize', 4, 10]]),
+  RS('larger-ydisp-at-ybase', {}, [...larger, ['setXY', 0, 9], ...tenBlank, ['setYdisp', 10], ['resize', 4, 10]]),
+  RS('larger-ydisp-above-ybase', {}, [...larger, ['setXY', 0, 9], ...tenBlank, ['setYdisp', 5], ['resize', 4, 10]]),
+  RS('larger-full-ydisp-at-ybase', {}, [...larger, ['setOption', 'scrollback', 10], ...tenBlank, ['setXY', 0, 9], ['setYdisp', 10],
+    ['resize', 4, 10]]),
+  RS('larger-full-ydisp-above-ybase', {}, [...larger, ['setOption', 'scrollback', 10], ...tenBlank, ['setXY', 0, 9], ['setYdisp', 5],
+    ['resize', 4, 10]]),
+  // reflowSmaller cases
+  RS('smaller-viewport-not-filled', {}, [...smaller, ['setXY', 0, 3], ['resize', 2, 10]]),
+  RS('smaller-filled-ybase-0', {}, [...smaller, ['setXY', 0, 9], ['resize', 2, 10]]),
+  RS('smaller-ydisp-at-ybase', {}, [...smaller, ['setXY', 0, 9], ...tenBlank, ['setYdisp', 10], ['resize', 2, 10]]),
+  RS('smaller-ydisp-above-ybase', {}, [...smaller, ['setXY', 0, 9], ...tenBlank, ['setYdisp', 5], ['resize', 2, 10]]),
+  RS('smaller-full-ydisp-at-ybase', {}, [...smaller, ['setOption', 'scrollback', 10], ...tenBlank, ['setYdisp', 10], ['setXY', 0, 13],
+    ['resize', 2, 10]]),
+  RS('smaller-full-ydisp-above-ybase', {}, [...smaller, ['setOption', 'scrollback', 10], ...tenBlank, ['setYdisp', 5], ['setXY', 0, 13],
+    ['resize', 2, 10]]),
+  // the saved cursor row (savedY) on both ways
+  RS('saved-y-follows', {}, [['resize', 4, 6], ['text', 0, 0, 'abcd'], ['text', 1, 0, 'efgh'], ['setWrapped', 1, true], ['text', 2, 0, 'ij'],
+    ['setXY', 0, 4], ['saveY', 3], ['resize', 2, 6], ['resize', 8, 6]]),
+  // the alternate buffer never reflows; the normal one does behind it
+  bufs('reflow-alt-untouched', 6, 4, { scrollback: 5 }, [['text', 0, 0, 'abcdef'], ['text', 1, 0, 'gh'], ['setWrapped', 1, true], ['setXY', 0, 3],
+    ['activateAlt', null], ['text', 0, 0, 'ABCDEF'], ['text', 1, 0, 'GH'], ['setWrapped', 1, true], ['resize', 3, 4], ['resize', 8, 4],
+    ['activateNormal']]),
+);
+
 module.exports = { lineCases, listCases, bufferCases };

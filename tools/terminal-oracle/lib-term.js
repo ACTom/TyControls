@@ -67,7 +67,7 @@ const DEFAULT_OPTIONS = {
   scrollback: 1000, tabStopWidth: 8, convertEol: false, scrollOnUserInput: true,
   disableStdin: false, scrollOnEraseInDisplay: false, cursorStyle: 'block', cursorBlink: false,
   allowSetCursorBlink: false, unicodeVersion: '11', ambiguousWide: false, windowsPty: null,
-  windowOptions: [],
+  windowOptions: [], reflowCursorLine: false,
   vtExtensions: { kittyKeyboard: false, win32InputMode: false, kittySgrBoldFaintControl: true, colorSchemeQuery: true },
 };
 
@@ -133,7 +133,7 @@ function makeCaseTerminal(up, c) {
     scrollback: o.scrollback, tabStopWidth: o.tabStopWidth, convertEol: o.convertEol,
     scrollOnUserInput: o.scrollOnUserInput, disableStdin: o.disableStdin,
     scrollOnEraseInDisplay: o.scrollOnEraseInDisplay, cursorStyle: o.cursorStyle,
-    cursorBlink: o.cursorBlink, windowsPty: o.windowsPty ?? {}, windowOptions,
+    cursorBlink: o.cursorBlink, windowsPty: o.windowsPty ?? {}, windowOptions, reflowCursorLine: o.reflowCursorLine,
     vtExtensions: o.vtExtensions, quirks: { allowSetCursorBlink: o.allowSetCursorBlink },
   });
   term.loadAddon(new up.Unicode11Addon());
@@ -209,7 +209,9 @@ function attachSynth(term, palette, focused) {
 // A write step is one WriteBuffer chunk, parsed before the next step runs -- the
 // same parse call term.write(data, callback) makes once its timer fires; writeSync
 // makes it without waiting for a timer per chunk (thousands of them for a byte-by-
-// byte variant).
+// byte variant). Phase 5 adds { marker: n }: term.registerMarker(n), a marker on the
+// line n below the cursor's (ybase + y + n, headless/Terminal.ts:72-74) -- no handle
+// is kept, the export reads the buffer's live markers.
 async function runSteps(up, term, synthApi, steps) {
   for (const s of steps) {
     if (s.write !== undefined) {
@@ -230,7 +232,8 @@ async function runSteps(up, term, synthApi, steps) {
         else if (k === 'allowSetCursorBlink') term.options.quirks = { allowSetCursorBlink: v };
         else term.options[k] = v;
       }
-    } else if (s.focus !== undefined) synthApi.focus(s.focus);
+    } else if (s.marker !== undefined) term.registerMarker(s.marker);
+    else if (s.focus !== undefined) synthApi.focus(s.focus);
     else if (s.theme) synthApi.theme(s.theme);
     else throw new Error('unknown step ' + JSON.stringify(s));
   }

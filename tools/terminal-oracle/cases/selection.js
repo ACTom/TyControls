@@ -135,6 +135,14 @@ add('clear-on-user-input', 20, 5, 10, [{ write: 'hello world' }, { setSelection:
 add('clear-on-user-input-without-a-selection', 20, 5, 10, [{ write: 'hello world' }, { userInput: true }]);
 add('keep-on-a-new-column-count', 20, 5, 10, [{ write: 'hello world' }, { setSelection: [0, 0, 5] }, { resize: [25, 5] }]);
 add('clear-on-a-new-row-count', 20, 5, 10, [{ write: 'hello world' }, { setSelection: [0, 0, 5] }, { resize: [20, 6] }]);
+// phase 5: the buffer rewraps on a new column count. Upstream keeps the coordinates
+// (SelectionService.ts:158-162), so the selected text changes; a trim by the reflow
+// moves the selection up (its onTrim listener).
+add('reflow-narrow-keeps-coords', 20, 5, 10, [{ write: 'abcdefghijklmnopqrst0123456789\r\n$ ' }, { setSelection: [2, 0, 8] },
+  { resize: [10, 5] }]);
+add('reflow-trim-shifts', 20, 5, 2, [{ write: lines(5, 'long-line-number-') + '$ ' }, { selectLines: [3, 4] }, { resize: [10, 5] }]);
+add('reflow-wider', 10, 5, 10, [{ write: 'abcdefghijklmnopqrstuvwxy\r\n$ ' }, { setSelection: [3, 1, 6] }, { resize: [20, 5] }]);
+add('reflow-rows-too', 20, 5, 10, [{ write: 'abcdefghijklmnopqrst0123456789\r\n$ ' }, { setSelection: [2, 0, 8] }, { resize: [10, 6] }]);
 add('clear-on-the-alternate-screen', 20, 5, 10, [{ write: 'hello world' }, { setSelection: [0, 0, 5] }, { write: '\x1b[?1049h' },
   { write: 'alt' }, { setSelection: [0, 0, 2] }, { write: '\x1b[?1049l' }]);
 add('clear-on-ris', 20, 5, 10, [{ write: 'hello world' }, { setSelection: [0, 0, 5] }, { write: '\x1bc' }]);
