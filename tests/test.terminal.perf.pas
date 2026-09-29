@@ -481,6 +481,13 @@ begin
       med[pass] := (times[9] + times[10]) / 2;
     end;
     AssertTrue('pairs were cached', fx.View.Contrast.Count > 0);
+    { counted, not timed: a warm frame answers every cell from the cache (the time bound
+      alone lets a frame that computes every cell afresh through) }
+    k := fx.View.Contrast.Hits;
+    fx.View.Forget;
+    fx.View.Render(bmp.Canvas, Rect(0, 0, w, h), fx.View.Font.PixelsPerInch);
+    AssertTrue(Format('a warm frame asks the cache (%d hits)', [fx.View.Contrast.Hits - k]),
+      fx.View.Contrast.Hits - k >= fx.View.Rows);
     WriteLn(Format('  (200 x 60 full repaint, warm: %.1f ms at 1, %.1f ms at 4.5)', [med[0], med[1]]));
     AssertTrue(Format('at 4.5 %.1f ms <= 1.3 x %.1f ms', [med[1], med[0]]), med[1] <= 1.3 * med[0]);
   finally

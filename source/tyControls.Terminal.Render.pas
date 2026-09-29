@@ -191,6 +191,7 @@ type
   TTyTermContrastCache = class
   private
     FMap: specialize TDictionary<UInt64, Cardinal>;
+    FHits: Integer;
     function GetCount: Integer;
   public
     constructor Create;
@@ -201,6 +202,8 @@ type
     procedure Put(ABg, AFg, AResult: Cardinal; AAdjusted: Boolean);
     procedure Clear;
     property Count: Integer read GetCount;
+    { FOR THE TESTS: answers found (Clear keeps the count) }
+    property Hits: Integer read FHits;
   end;
 
   TTyTermCursorShape = (tcpNone, tcpBlock, tcpOutline, tcpUnderline, tcpBar);
@@ -516,6 +519,7 @@ begin
   Result := FMap.TryGetValue((UInt64(ABg and $FFFFFF) shl 24) or UInt64(AFg and $FFFFFF), v);
   if Result then
   begin
+    Inc(FHits);
     AResult := v and $FFFFFF;
     AAdjusted := (v and $1000000) <> 0;
   end
