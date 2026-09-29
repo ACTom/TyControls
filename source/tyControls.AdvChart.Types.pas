@@ -36,6 +36,9 @@ type
     HasBelow: Boolean;
     ResultCol: Integer;
     OverCol: Integer;
+    { the binding slot of the series this one is stacked on -- the one
+      before it in the stack (upstream's stackedOnSeries) -- or -1 }
+    OnSlot: Integer;
   end;
   TTySeriesStackArray = array of TTySeriesStack;
 
@@ -301,6 +304,7 @@ begin
   Result.HasBelow := False;
   Result.ResultCol := -1;
   Result.OverCol := -1;
+  Result.OnSlot := -1;
 end;
 
 function TyRangeSpan(const AR: TTyRange): Double;

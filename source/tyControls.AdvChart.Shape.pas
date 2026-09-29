@@ -30,6 +30,17 @@ type
 
   TTyPointFArray = array of TTyPointF;
 
+  { One command of a path as zrender's PathProxy holds it: a move, a line, a
+    cubic (its two control points, then its end) or a close. [Batch 63: a
+    line series' smooth curve.] }
+  TTyPathCmdKind = (pckMove, pckLine, pckCurve, pckClose);
+  TTyPathCmd = record
+    Kind: TTyPathCmdKind;
+    X1, Y1, X2, Y2: Double;
+    X, Y: Double;
+  end;
+  TTyPathCmdArray = array of TTyPathCmd;
+
   { A rounded rect's four corners, CLOCKWISE FROM TOP-LEFT, matching
     zrender's RectShape.r. One radius per corner rather than one for the
     shape, because `borderRadius: [8, 8, 0, 0]` -- a bar rounded only where
@@ -65,6 +76,16 @@ type
     { The point the rotation turns about, DEVICE px. Meaningless when
       RotationRad is zero. }
     RotCX, RotCY: Double;
+    { A POLYLINE OR POLYGON AS UPSTREAM DRAWS IT, when that is not simply its
+      points joined: a smoothed line's curves, and the points upstream drops
+      (a segment under 0.7 px). Empty for every shape that has not asked --
+      the points are then the path. The points stay what they are either way:
+      the hit test and every reader of the vertices go on using them.
+      CmdBounds: the path's own bounding rect (a curve bulges past its
+      points), which is what an element gradient spans. }
+    Cmds: TTyPathCmdArray;
+    HasCmdBounds: Boolean;
+    CmdBounds: TTyRectF;
   end;
 
 { ---- constructors, so a caller never has to remember which fields a kind uses ---- }
@@ -962,6 +983,7 @@ end;
 
 function TyShapeBounds(const AShape: TTyChartShape): TTyRectF;
 begin
+  if AShape.HasCmdBounds then Exit(AShape.CmdBounds);
   case AShape.Kind of
     cskRect, cskRoundRect, cskPath:
       Result := AShape.Bounds;

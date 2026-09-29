@@ -6233,6 +6233,11 @@ begin
       ApplyVisualMaps(v, i, APPI);
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
+      { the area's base is smoothed as the series it stands on is }
+      if (i <= High(FStacks)) and (FStacks[i].OnSlot >= 0)
+        and (FStacks[i].OnSlot <= High(FBindings)) then
+        v.Line.StackedOnSmooth := TyLineSpecOf(FOption,
+          FBindings[FStacks[i].OnSlot].SeriesIndex).Smooth;
       v.Candle := CandleVisual(FBindings[i].SeriesIndex);
       { The thinning the AXIS settled on. When markers would crowd, upstream
         falls back to the category axis' own label interval -- which the layout

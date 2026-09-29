@@ -99,6 +99,12 @@ type
       not drawn at all. FALSE lets the line run past the plot along the
       value axis only. }
     Clip: Boolean;
+    { `smooth` through getSmooth (0: straight), `smoothMonotone` as written,
+      and the smooth of the series this one is stacked on -- the area's base
+      is smoothed with THAT (0 when not stacked), filled in by the chart }
+    Smooth: Double;
+    SmoothMonotone: string;
+    StackedOnSmooth: Double;
   end;
 
   { Everything about ONE series that was decided somewhere else.
@@ -257,7 +263,8 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
 
 implementation
 
-uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels;
+uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
+     tyControls.AdvChart.LinePath;
 
 function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ADefaults: TTyCandleSpec): TTyCandleSpec;
@@ -329,10 +336,17 @@ begin
   Result.ShowAllSymbol := sasAuto;
   Result.LabelStep := 1;
   Result.Clip := True;
+  Result.Smooth := 0;
+  Result.SmoothMonotone := '';
+  Result.StackedOnSmooth := 0;
   if AOption = nil then Exit;
   d := AOption.ComponentAt('series', ASlot);
   if (d = nil) or not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
+
+  Result.Smooth := TyLineSmoothOf(node.Find('smooth'));
+  d := node.Find('smoothMonotone');
+  if (d <> nil) and (d.JSONType = jtString) then Result.SmoothMonotone := d.AsString;
 
   { `step` is false | true | 'start' | 'middle' | 'end', and true means
     'start' -- upstream's own comment says so beside the default. }
@@ -1051,6 +1065,13 @@ var
   rows: array of Integer;
   baseHoriz, stacked, gap: Boolean;
   spec: TTyLineSpec;
+  { UPSTREAM'S PATH: the whole series' points and area base (NaN where
+    illegal), its commands cut into runs, and whether those runs are the
+    ones this builder cuts }
+  fullP, fullB, stepP, stepB: TTyPointFArray;
+  lineRuns, areaRuns: TTyPathCmdArray2;
+  runsMatch: Boolean;
+  runIdx: Integer;
 
   { One marker, answering for its own row. False when the symbol draws
     nothing. }
@@ -1251,6 +1272,103 @@ var
     end;
   end;
 
+  { The run's own path from upstream's, when the runs line up: drawn from
+    the commands, and bounded by them when they curve }
+  procedure AttachPath(var AShape: TTyChartShape; const ARuns: TTyPathCmdArray2;
+    ACurved: Boolean);
+  var r: TTyXYWH;
+  begin
+    if (not runsMatch) or (runIdx > High(ARuns)) then Exit;
+    AShape.Cmds := ARuns[runIdx];
+    if ACurved then
+    begin
+      r := TyPathCmdsRect(AShape.Cmds);
+      AShape.HasCmdBounds := True;
+      AShape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+    end;
+  end;
+
+  { turnPointsIntoStep, drawSegment and the two buildPaths over the whole
+    series, as upstream runs them -- and the runs this builder will cut,
+    counted the same way the loop below cuts them }
+  procedure PreparePath;
+  var
+    k, runs: Integer;
+    px, py, lv: Double;
+    pp, qq: TTyPointF;
+    g, inRun, anyLegal: Boolean;
+    turn: TTyStepTurn;
+  begin
+    SetLength(fullP, AStore.Count);
+    SetLength(fullB, AStore.Count);
+    runs := 0;
+    inRun := False;
+    anyLegal := False;
+    for k := 0 to AStore.Count - 1 do
+    begin
+      px := AStore.Get(AColX, k);
+      py := AStore.Get(AColY, k);
+      if stacked then
+      begin
+        if baseHoriz then py := AStore.Get(AStack.ResultCol, k)
+                     else px := AStore.Get(AStack.ResultCol, k);
+      end;
+      pp := TyPointF(NaN, NaN);
+      if not (IsNan(px) or IsNan(py)) then
+      begin
+        pp := ABinding.Cart.DataToPoint([px, py]);
+        pp := TyPointF(TyJsFround(pp.X), TyJsFround(pp.Y));
+      end;
+      fullP[k] := pp;
+      { getStackedOnPoint: the value stacked under, else the origin; the
+        base coordinate the row's own -- legal under a null value too }
+      lv := NaN;
+      if AStack.Stacked and (AStack.OverCol >= 0) then lv := AStore.Get(AStack.OverCol, k);
+      if IsNan(lv) then lv := startV;
+      qq := TyPointF(NaN, NaN);
+      if baseHoriz then
+      begin
+        if not IsNan(px) then qq := ABinding.Cart.DataToPoint([px, lv]);
+      end
+      else if not IsNan(py) then qq := ABinding.Cart.DataToPoint([lv, py]);
+      if not (IsNan(qq.X) or IsNan(qq.Y)) then
+        qq := TyPointF(TyJsFround(qq.X), TyJsFround(qq.Y));
+      fullB[k] := qq;
+      { the loop's own gap rule }
+      g := Illegal(pp) or (spec.HasArea and Illegal(qq));
+      if not g then
+      begin
+        anyLegal := True;
+        if not inRun then Inc(runs);
+      end;
+      inRun := not g;
+    end;
+    if spec.ConnectNulls then
+      if anyLegal then runs := 1 else runs := 0;
+    stepP := fullP;
+    stepB := fullB;
+    if spec.Step <> lstNone then
+    begin
+      case spec.Step of
+        lstMiddle: turn := sttMiddle;
+        lstEnd: turn := sttEnd;
+      else
+        turn := sttStart;
+      end;
+      stepB := TyTurnPointsIntoStep(fullB, fullP, True, baseHoriz, turn, spec.ConnectNulls);
+      stepP := TyTurnPointsIntoStep(fullP, nil, False, baseHoriz, turn, spec.ConnectNulls);
+    end;
+    lineRuns := TySplitRuns(TyPolylinePath(stepP, spec.Smooth, spec.SmoothMonotone,
+      spec.ConnectNulls));
+    areaRuns := nil;
+    if spec.HasArea then
+      areaRuns := TySplitRuns(TyPolygonPath(stepP, stepB, spec.Smooth,
+        spec.StackedOnSmooth, spec.SmoothMonotone, spec.ConnectNulls));
+    runsMatch := (Length(lineRuns) = runs)
+      and ((not spec.HasArea) or (Length(areaRuns) = runs));
+    runIdx := 0;
+  end;
+
   { One run, from the points gathered so far. The AREA goes in FIRST so the
     line is drawn over its own fill rather than under it -- the paint list
     breaks ties by insertion order, so first in is furthest back. }
@@ -1302,6 +1420,7 @@ var
         { A visualMap's gradient, unless the area named its own colour. }
         if AVisual.VisualLineArea then ApplyVisualLine(v, True);
         el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
+        AttachPath(el.Shape, areaRuns, (spec.Smooth > 0) or (spec.StackedOnSmooth > 0));
         { The area's opacity REPLACES the series' -- it is a key on its own
           block, not a second multiplier on the item's. }
         el.Style.Alpha := spec.AreaOpacity;
@@ -1328,6 +1447,7 @@ var
       { A visualMap's gradient, unless lineStyle named the pen's colour. }
       if AVisual.VisualLineStroke then ApplyVisualLine(v, False);
       el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
+      AttachPath(el.Shape, lineRuns, spec.Smooth > 0);
       { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
         resolved width -- the default 2 was filled in a few lines up. }
       el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
@@ -1347,6 +1467,7 @@ var
         if SymbolKept(rows[k]) and InSymbolArea(pts[k])
           and EmitSymbol(pts[k], rows[k]) then
           Inc(Result);
+    Inc(runIdx);
   end;
 
 begin
@@ -1357,6 +1478,7 @@ begin
   startV := AreaStartValue(ABinding.ValueAxis, spec);
   PrepareThinning;
   PrepareClip;
+  PreparePath;
   SetLength(pts, AStore.Count);
   SetLength(lows, AStore.Count);
   SetLength(rows, AStore.Count);

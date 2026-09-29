@@ -101,6 +101,20 @@ begin
       end;
     cskPolyline, cskPolygon:
       begin
+        { THE PATH, when the shape carries one: its own moves, lines, curves
+          and closes, and nothing added }
+        if Length(AShape.Cmds) > 0 then
+        begin
+          for i := 0 to High(AShape.Cmds) do
+            case AShape.Cmds[i].Kind of
+              pckMove: P.MoveTo(AShape.Cmds[i].X, AShape.Cmds[i].Y);
+              pckLine: P.LineTo(AShape.Cmds[i].X, AShape.Cmds[i].Y);
+              pckCurve: P.CurveTo(AShape.Cmds[i].X1, AShape.Cmds[i].Y1,
+                AShape.Cmds[i].X2, AShape.Cmds[i].Y2, AShape.Cmds[i].X, AShape.Cmds[i].Y);
+              pckClose: P.ClosePath;
+            end;
+          Exit;
+        end;
         n := Length(AShape.Points);
         if n = 0 then Exit;
         SetLength(pts, n - 1);

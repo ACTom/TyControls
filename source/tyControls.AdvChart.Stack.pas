@@ -242,6 +242,7 @@ var
         me.Store.SetCalculated(me.OverCol, r, over);
       end;
       answer[me.Slot].HasBelow := idx > 0;
+      if idx > 0 then answer[me.Slot].OnSlot := AMembers[idx - 1].Slot;
     end;
   end;
 
@@ -261,6 +262,7 @@ begin
     answer[i].HasBelow := False;
     answer[i].ResultCol := -1;
     answer[i].OverCol := -1;
+    answer[i].OnSlot := -1;
   end;
   Result := answer;
   if AOption = nil then Exit;
