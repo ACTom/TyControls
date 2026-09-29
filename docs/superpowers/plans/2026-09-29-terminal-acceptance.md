@@ -16,7 +16,7 @@
 
 ## 准备
 
-- **示例**：`lazbuild -B examples/terminal/terminal_example.lpi`，程序在 `examples/terminal/` 下（Windows 是 `terminal_example.exe`）。Linux 用 `--ws=gtk2` 或 `--ws=qt6` 编，macOS 用 `--ws=cocoa`。
+- **示例**：`lazbuild -B examples/terminal/terminal_example.lpi`，程序在 `examples/terminal/lib/<目标平台>/` 下（Windows 是 `examples/terminal/lib/x86_64-win64/terminal_example.exe`，主控已在 2026-09-30 编好）。Linux 用 `--ws=gtk2` 或 `--ws=qt6` 编，macOS 用 `--ws=cocoa`。
 - **设计期**（第 18 项）：先装 `tycontrols_dt.lpk` 重建 IDE。
 - **两种模式**：示例第一行工具栏最左边的下拉切 Replay（回放）和 Shell。回放读 `examples/terminal/recordings/` 里的录制（vim、htop、less、tmux、彩色 ls、中英表情、两段 ConPTY 录制）；Shell 起真的 shell（Windows 默认 `%COMSPEC%`，另列 powershell，有的话列 pwsh、wsl；Linux / macOS 是 `$SHELL -l`）。「Minimum contrast」（最低对比度）下拉在第四行工具栏；Shell 模式的命令框和「Log PTY output」在第三行。
 - **要 WSL 或别的平台的项**：表后的平台索引列了每台机器要做的项。WSL 里 `tools/terminal-ptytest` 的 12 例 4 期已跑过，不用再跑。

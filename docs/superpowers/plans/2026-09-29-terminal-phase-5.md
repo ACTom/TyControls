@@ -476,7 +476,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - §13.2 / §13.4：新脚本、夹具、测试单元；§14：notices；§15、§16：本期新增的偏离与真机项都进了验收表。
   - 4 期交接四条、3 期留给最终验收的一条逐条对上。
 
-- [ ] **Step 5: 【主控执行】编包、编示例、i18n、截图**（截图与 i18n 主控已在期末审查前做过；审查修复之后的编包、编示例待主控，见签收）
+- [x] **Step 5: 【主控执行】编包、编示例、i18n、截图**（审查修复之后主控已编，见签收）
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; lazbuild -B tycontrols_dt.lpk > /tmp/term-dt.txt 2>&1; tail -3 /tmp/term-dt.txt; lazbuild -B examples/terminal/terminal_example.lpi > /tmp/term-ex.txt 2>&1; tail -3 /tmp/term-ex.txt; git status --short
@@ -707,4 +707,4 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **遗留**：环形表面与 `ScrollWindowEx`（一行一行滚的 1/4 目标）；灌入时让整屏新行更便宜（很快滚走的行不画）；在 A 之上再做 B（终端自己的光栅路径、度量挪进同一个 DC）；`ReflowSmaller` 新行分批释放（峰值内存）；四个 widgetset 的数字、Linux 上的对比度夹具（真机）。
 
-**待主控**：编 `tycontrols.lpk` / `tycontrols_dt.lpk`、编示例、`example-rsj2po` / `check-example-po`、`smoke-launch-examples`、重出截图（`terminalshots --phase5`：只有 `index.md` 的一句描述变了，已直接改，PNG 不用重出）。
+**主控已办（2026-09-30）**：在 `7476d9e9` 上 `lazbuild -B` 编过 `tycontrols.lpk`、`tycontrols_dt.lpk` 和终端示例，均 0 错；`check-example-po.py` 101 份 0 问题；`check-lfm-props.py` 通过；终端示例启动能开窗。全部示例窗体的渲染由 painter-regress 的 366 个画面覆盖，未逐个启动。截图不用重出。
