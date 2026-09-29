@@ -70,7 +70,7 @@ rather than duplicated here so it cannot drift from the upstream file.
 
 ---
 
-## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Core.Services.inc`, `source/tyControls.Terminal.Core.InputHandler.inc`, `source/tyControls.Terminal.Core.WriteQueue.inc`, `source/tyControls.Terminal.Charsets.inc`, `source/tyControls.Terminal.Keyboard.pas`, `source/tyControls.Terminal.Render.pas`, `source/tyControls.Terminal.CustomGlyphs.inc`
+## xterm.js — `source/tyControls.Unicode.Width.pas`, `source/tyControls.Unicode.Width.Data.inc`, `source/tyControls.Terminal.Parser.pas`, `source/tyControls.Terminal.Buffer.pas`, `source/tyControls.Terminal.Core.pas`, `source/tyControls.Terminal.Core.Services.inc`, `source/tyControls.Terminal.Core.InputHandler.inc`, `source/tyControls.Terminal.Core.WriteQueue.inc`, `source/tyControls.Terminal.Charsets.inc`, `source/tyControls.Terminal.Keyboard.pas`, `source/tyControls.Terminal.Render.pas`, `source/tyControls.Terminal.CustomGlyphs.inc`, `source/tyControls.Terminal.Selection.pas`, `source/tyControls.Terminal.Links.pas`
 
 Upstream: <https://github.com/xtermjs/xterm.js> · pinned at 6.0.0, commit `c58ea3637f39`.
 
@@ -87,6 +87,13 @@ characters as the WebGL addon's `CustomGlyphRasterizer.ts` does, from the defini
 `tools/terminal-oracle/gen-terminal-glyphs.js` dumps out of `CustomGlyphDefinitions.ts` into
 the include. Their copyright lines (2014, 2016, 2018, 2021, 2023, and the addon's own
 `LICENSE`, 2018) all name the xterm.js authors, whom the lines below already cover.
+
+The selection unit is ported from `src/browser/services/SelectionService.ts` and
+`src/browser/selection/SelectionModel.ts`, with the OSC 52 rules of the clipboard addon
+(`addons/addon-clipboard`, its own `LICENSE` 2023); the links unit from the web-links addon's
+`WebLinkProvider.ts` and `WebLinksAddon.ts` (`addons/addon-web-links`, its own `LICENSE` 2017),
+`src/browser/OscLinkProvider.ts` and `src/browser/Linkifier.ts`. The two addons' copyright
+lines are listed below with the others; the permission text is the same.
 
 **You ship this if you `uses tyControls.Unicode.Width` or any `tyControls.Terminal*` unit**
 (the terminal units use the width unit). The tables are constants inside the units, so smart
@@ -106,6 +113,8 @@ Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
 Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
 Copyright (c) 2023, The xterm.js authors (https://github.com/xtermjs/xterm.js)
 Copyright (c) 2014-2026, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+Copyright (c) 2017, The xterm.js authors (https://github.com/xtermjs/xterm.js) (addon-web-links)
+Copyright (c) 2023, The xterm.js authors (https://github.com/xtermjs/xterm.js) (addon-clipboard)
 Copyright 2018 (unicode-properties, https://github.com/PerBothner/unicode-properties)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

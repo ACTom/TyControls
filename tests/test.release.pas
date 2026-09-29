@@ -571,13 +571,15 @@ end;
 procedure TReleaseManifestTest.TheThirdPartyNoticeCoversTheTerminalPort;
 const
   { phase 3: the keyboard port, the renderer (colour resolution and drawn glyphs after
-    xterm.js) and the glyph table dumped from addon-webgl }
-  Units: array[0..9] of string = ('source/tyControls.Terminal.Parser.pas',
+    xterm.js) and the glyph table dumped from addon-webgl; phase 4: the selection and the
+    links, ported from the browser layer and the web-links / clipboard addons }
+  Units: array[0..11] of string = ('source/tyControls.Terminal.Parser.pas',
     'source/tyControls.Terminal.Buffer.pas', 'source/tyControls.Terminal.Core.pas',
     'source/tyControls.Terminal.Core.Services.inc', 'source/tyControls.Terminal.Core.InputHandler.inc',
     'source/tyControls.Terminal.Core.WriteQueue.inc', 'source/tyControls.Terminal.Charsets.inc',
     'source/tyControls.Terminal.Keyboard.pas', 'source/tyControls.Terminal.Render.pas',
-    'source/tyControls.Terminal.CustomGlyphs.inc');
+    'source/tyControls.Terminal.CustomGlyphs.inc', 'source/tyControls.Terminal.Selection.pas',
+    'source/tyControls.Terminal.Links.pas');
 var
   notice, heading: string;
   i, p: Integer;

@@ -12,7 +12,7 @@ Term.OnData := @TermData;                 // TermData 里把 AData 写回 PTY
 Term.OnGridResize := @TermGridResize;     // TermGridResize 里改 PTY 的行列数
 ```
 
-真的接 PTY 的示例在 4 期；现有的 `examples/terminal` 回放 asciicast 录制，不需要进程。
+`examples/terminal` 有两种模式：回放 asciicast 录制（不需要进程），以及「Shell」——真起一个 shell，Windows 上经 ConPTY，Linux / macOS 上经 PTY。接 PTY 的做法见 §11。
 
 ---
 
@@ -20,7 +20,7 @@ Term.OnGridResize := @TermGridResize;     // TermGridResize 里改 PTY 的行列
 
 | 项目 | 值 |
 |------|-----|
-| 单元 | `tyControls.Terminal`（控件）；`tyControls.Terminal.Core`（`Core` 属性的类）、`tyControls.Terminal.Keyboard`（按键编码）、`tyControls.Terminal.Render`（渲染部件） |
+| 单元 | `tyControls.Terminal`（控件）；`tyControls.Terminal.Core`（`Core` 属性的类）、`tyControls.Terminal.Keyboard`（按键编码）、`tyControls.Terminal.Render`（渲染部件）、`tyControls.Terminal.Selection`（选区）、`tyControls.Terminal.Links`（链接） |
 | typeKey | `TyTerminal`；另有 `TyTerminalCursor`、`TyTerminalSelection`、`TyTerminalAnsi0` … `TyTerminalAnsi15`、`TyTerminalLink`、`TyTerminalPreedit` |
 | 基类 | `TTyCustomControl` |
 | 默认尺寸 | 480 × 300（逻辑像素） |
@@ -44,7 +44,7 @@ uses tyControls.Terminal;
 | `CursorInactiveStyle` | `TTyTerminalCursorInactiveStyle` | `tcisOutline` | 失焦时的光标：空心框、实心块、竖线、下划线、不画。 |
 | `CursorBlink` | `Boolean` | `False` | 光标闪烁（600 ms；放着不动 5 分钟后停在显示）。程序用 DECSCUSR 要的闪烁优先。 |
 | `AmbiguousWide` | `Boolean` | `False` | 东亚歧义宽度字符算两格。只对 `UnicodeVersion` 为 `15` / `15-graphemes` 起作用。 |
-| `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §9。 |
+| `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §12。 |
 | `MacOptionIsMeta` | `Boolean` | `False` | macOS 上 Option 当 Meta（发 `ESC` 前缀），否则 Option 打第三层字符。 |
 | `AlternateScroll` | `Boolean` | `True` | 没有滚回（备用屏）且程序没要鼠标事件时，滚轮发上下方向键。 |
 | `DrawBoldTextInBrightColors` | `Boolean` | `True` | 粗体的调色板颜色 0–7 画成 8–15。 |
@@ -55,18 +55,27 @@ uses tyControls.Terminal;
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌滚动条闲下来后淡出，转给条；见 [scrollbar.md](scrollbar.md) §7。 |
 | `LineHeightPercent` | `Integer` | `100` | 行高倍数（100–300）。框线和块字符照样连成线。 |
 | `LetterSpacing` | `Integer` | `0` | 字间距，逻辑像素（−10–50）。 |
+| `SelectionOverrideKey` | `TTyTerminalSelectionOverrideKey` | `tsoDefault` | 程序接管鼠标时，按住哪个键照样本地选择：`tsoDefault`（macOS 上是 Option，别处 Shift）、`tsoShift`、`tsoAlt`、`tsoNone`。见 §7。 |
+| `WordSeparators` | `string` | 空格和 `` ()[]{}',"` `` | 双击选词时算分隔符的字符（同 xterm.js）。 |
+| `CopyOnSelect` | `Boolean` | `False` | 选完（松开、双击、三击、全选）就写剪贴板。 |
+| `DetectUrls` | `Boolean` | `True` | 认出输出里的网址当链接。OSC 8 链接不受它管。见 §8。 |
+| `AllowNonHttpLinks` | `Boolean` | `False` | OSC 8 里不是 http / https 的 URI（`file://`、`ssh://`）也算链接。见 §8。 |
+| `Osc52` | `TTyTerminalOsc52Policy` | `to52Off` | 程序能不能经 OSC 52 碰剪贴板：`to52Off`、`to52Write`、`to52ReadWrite`。见 §9。 |
+| `PopupMenu` | `TPopupMenu` | `nil` | 设了就代替内置的右键菜单。 |
 | `TabStop` | `Boolean` | `True` | |
-| `Font` / `ParentFont` | | | `ParentFont = False` 时 `Font.Name`、`Font.Size` 压过主题（见 §7）。 |
+| `Font` / `ParentFont` | | | `ParentFont = False` 时 `Font.Name`、`Font.Size` 压过主题（见 §10）。 |
 
-另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`PopupMenu`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。
+另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。
 
 ### public 属性
 
 | 属性 | 说明 |
 |------|------|
-| `Core: TTyTerminalCore` | 终端本体：缓冲、模式、解析器。只读取它，或挂下面 §9 说的那几个事件。 |
+| `Core: TTyTerminalCore` | 终端本体：缓冲、模式、解析器。只读取它，或挂下面 §12 说的那几个事件。 |
 | `Cols`、`Rows` | 当前网格 |
 | `Title` | 程序用 OSC 0 / 2 设的标题 |
+| `SelectionText` | 选中的文字（规则见 §7）；没有选区是空串 |
+| `HasSelection` | 有没有选区 |
 
 ### 方法
 
@@ -77,7 +86,10 @@ uses tyControls.Terminal;
 | `Paste(AText)` | 按粘贴编码（换行变 CR；程序开了括号粘贴就加括号、把 ESC 换成 ␛）发出去。 |
 | `Input(AText)` | 当作键入发出去。 |
 | `PasteFromClipboard` | 读剪贴板再 `Paste`。 |
-| `CopyToClipboard` | 复制选区。选区在 4 期，现在什么都不做。 |
+| `CopyToClipboard` | 有选区才写剪贴板（`SelectionText`）。 |
+| `SelectAll`、`ClearSelection` | 全选（滚回加屏幕）、清掉选区。 |
+| `Select(ACol, AAbsRow, ALength)` | 从缓冲行 `AAbsRow`（0 = 滚回最早一行）的 `ACol` 列起选 `ALength` 格，可以跨行。 |
+| `SelectLines(AFirst, ALast)` | 选中缓冲行 `AFirst`..`ALast` 整行（越界钳住）。 |
 | `Clear` | 清滚回。 |
 | `Reset` | 终端复位（xterm.js headless 的 reset：保留标题等）。 |
 | `ScrollLines(ADelta)`、`ScrollPages(APages)`、`ScrollToTop`、`ScrollToBottom` | 在滚回里移动视口。 |
@@ -95,13 +107,16 @@ uses tyControls.Terminal;
 | `OnBell(Sender)` | BEL。 |
 | `OnOsc(Sender, AIdent, AData)` | 没有处理器接的 OSC（例如 OSC 7 当前目录）。 |
 | `OnShortcutQuery(Sender, Key, Shift, var APassToApplication)` | 控件要吞一个键之前先问宿主；置 `True` 就不吞，交给窗体。见 §5。 |
+| `OnSelectionChange(Sender)` | 选区变了（包括被清掉）。 |
+| `OnLinkActivate(Sender, AUri, AFromOsc8)` | 用户 Ctrl+单击（macOS Cmd+单击）了一条链接。控件什么都不打开，打不打开由宿主定。见 §8。 |
+| `OnOsc52(Sender, AWrite, ASelection, var AText, var AAllow)` | 程序要写或读剪贴板，宿主可以改文字、可以拒绝。见 §9。 |
 
 ---
 
 ## 4. 数据流与线程
 
 - `Write` 只入队，控件经 `Application.QueueAsyncCall` 按片（每片约 12 ms）解析，窗口不会被一大段输出卡住。回调按写入的顺序到。
-- 所有方法都只能在主线程调用；别的线程调会抛 `EInvalidOperation`。后台读 PTY 的线程要 `TThread.Queue` / `Synchronize` 回主线程再 `Write`。
+- 所有方法都只能在主线程调用；别的线程调会抛 `EInvalidOperation`。后台读 PTY 的线程把读到的东西放进加锁的队列，回到主线程再 `Write`——示例的 `uptysession` 就是这么做的：队列从空变成非空时唤醒主线程一次（`Application.QueueAsyncCall`），不是每读一块唤醒一次。
 - 积压超过 50 MB（宿主没做流控）时 `Write` 抛 `ETyTerminalWriteOverflow`。流控靠 `Write` 的回调：回调到了再写下一块（示例的回放器就是这样，一次只让一块在队列里）。
 - `Core.DiscardPending` 丢掉还没解析的块，**不调**它们的回调——宿主自己要丢的（换一份录制、重开会话），流控计数跟着重来。
 - 解析一次里程序滚了几千行，控件只在解析完后失效、同步滚动条一次；程序改了颜色（OSC 4 / 10 / 11 / 104 …）整窗重画。距上一帧不到 16 ms 时控件接着解析，不急着画。
@@ -132,6 +147,7 @@ end;
 | 粘贴 | Ctrl+Shift+V、Shift+Insert | Cmd+V |
 | 翻页（滚回） | Shift+PgUp / Shift+PgDn（一次 行数 − 1） | 同左 |
 | 到顶 / 到底 | Shift+Home / Shift+End | 同左 |
+| 全选 | —（Ctrl+A 发给程序；用右键菜单） | Cmd+A |
 
 - Shift+Home / Shift+End 是本地的「到顶 / 到底」，所以不发给程序——PSReadLine、nano 里用它们选到行首 / 行尾的，在这个终端里做不到（xterm.js 不劫持这两个键，这是有意的不同）。
 - Ctrl+C 永远发给程序（`03`），不是复制。
@@ -150,19 +166,83 @@ end;
 - **条的宽度总是留着**：列数不随主屏 / 备用屏变化，进出 vim 不会让程序多收一次改尺寸。代价是全屏程序右边有一条空白（自动隐藏的主题下条淡掉，只剩空白）。
 - 竖向滚轮三种去向（照 xterm.js）：程序要了鼠标滚轮事件就上报给程序；否则有滚回就滚 3 行；再否则（备用屏）且 `AlternateScroll` 开着，就发上 / 下方向键——less、man 里滚轮就能翻。
 - Shift+滚轮照 xterm.js：不上报、不发方向键；Windows / Linux 上它是横滚（终端没有横向可滚，事件交给父控件），macOS 上照常滚滚回。
+- 横向滚轮（触控板、带横滚的鼠标）：程序要了鼠标事件就报左 / 右（SGR 里是 66 / 67）；没要就交给父控件。
 
 ---
 
-## 7. 状态与主题
+## 7. 鼠标与选区
+
+**谁拿鼠标**：程序没要鼠标事件时，鼠标归控件——拖动选择、双击选词、右键菜单。程序（vim `:set mouse=a`、htop、tmux、mc）打开了鼠标上报，按键、拖动、移动、滚轮就按程序要的协议报给它，拖出控件外也照报（坐标钳在网格边上）。这时按住**覆盖键**（默认 Shift，macOS 上是 Option；见 `SelectionOverrideKey`）再按，就还是本地选择。
+
+| 按下时 | 这次按下走哪 |
+|--------|--------------|
+| 按着 Ctrl（macOS Cmd），指针下是链接 | 链接（§8），程序接管了鼠标也一样 |
+| 程序要了鼠标，没按覆盖键 | 报给程序；拖动、抬起都报 |
+| 左键 | 本地选择 |
+| 右键 | 弹菜单（程序要了鼠标时，右键报给程序、不弹；按住覆盖键就弹） |
+| 中键 | Linux（X11）上粘贴 PRIMARY；Windows、macOS 上什么都不做 |
+
+路在按下那一刻就定了：拖到一半松开覆盖键，这次拖动还是本地选择。
+
+**怎么选**（同 xterm.js）：
+
+- 单击拖动选字符；点在一格的右半边，从下一格算起。
+- 双击选词，词按 `WordSeparators` 断，折行处上下接着选；指针下是链接（OSC 8 或认出的网址）就选整条链接。三击选整行（折了几行都算一行）。双击、三击后接着拖，按词、按行扩展。
+- Shift+单击把选区扩到这里（程序接管鼠标时 Shift 是覆盖键，就不扩展了）。
+- Alt+拖动选矩形（列选择）；macOS 上 Alt 是覆盖键，就不做列选择。
+- 拖出网格上下边会自动滚，离得越远滚得越快。
+- 键盘全选：macOS 上 Cmd+A。别的平台 Ctrl+A 照发给程序（`01`），要全选用右键菜单或 `SelectAll`。
+
+**选区跟着文字走**：新的输出把行挤出滚回的顶上时，选区跟着上移；它指的那几行被挤没了，选区就没了。这些时候选区会被清掉：键入或粘贴、行数变了（列数变了不清）、切到另一个屏幕（进出 vim、RIS）、程序打开鼠标上报、清滚回。
+
+**复制**：`SelectionText` 去掉每行行尾的空白，折行接成一行，行之间用平台的换行（Windows 上 CRLF，Linux / macOS 上 LF），NBSP 换成空格。复制的快捷键见 §5；`CopyOnSelect` 打开后选完就写剪贴板。Linux（X11）上选完同时写 PRIMARY，中键粘贴它（Wayland 下看合成器支不支持）。
+
+**右键菜单**：复制、粘贴、全选、清屏四项；没有选区时复制是灰的，剪贴板空或 `ReadOnly` 时粘贴是灰的。菜单键（Shift+F10）在光标格下面弹出。宿主设了 `PopupMenu` 就弹宿主的。
+
+**指针形状**：平常是 I 形；程序接管鼠标时是箭头；按着 Alt 要列选择时是十字；链接上是手形。宿主自己设了 `Cursor` 的，平常就用宿主的。
+
+---
+
+## 8. 链接
+
+链接有两种来源：程序用 OSC 8 标出来的超链接（`ls --hyperlink`、gcc 的诊断等），和控件从文字里认出来的网址（`DetectUrls`，认法同 xterm.js 的 web-links 插件：`http://` / `https://` 开头，结尾的标点、括号不算，主机是非 ASCII 的不算）。
+
+- **按住 Ctrl（macOS Cmd）**时指针下的链接画下划线、指针变手形；不按就是普通文字。
+- **Ctrl+单击**（按下、抬起都在同一条链接上）发 `OnLinkActivate`，`AUri` 是原样的 URI 或网址。程序接管了鼠标也是链接优先。
+- **控件什么都不打开。**宿主决定：弹个确认框再交给浏览器（示例就是这样，而且只开 http / https），或者干脆不理。
+- OSC 8 的 URI 不是 http / https（`file://`、`ssh://`、`mailto:`）默认**不算链接**：不画下划线、点了没反应（xterm.js 的默认也是这样）。设 `AllowNonHttpLinks := True` 才算，这时宿主要自己判断能不能打开。
+- 双击链接会选中整条，不用按 Ctrl。
+- xterm.js 的链接悬停不用按键、单击就打开；这里要 Ctrl / Cmd，是有意的不同：终端里的单击要留给选择和程序。
+
+---
+
+## 9. 剪贴板与 OSC 52
+
+程序可以用 OSC 52 写剪贴板、读剪贴板（tmux 的 `set-clipboard`、vim 的 osc52 插件）。读剪贴板等于让程序（也可能是 ssh 那头的程序）看到你复制过的东西，所以默认关着。
+
+| `Osc52` | 写 | 读 |
+|---------|----|----|
+| `to52Off`（默认） | 丢掉 | 丢掉，不应答 |
+| `to52Write` | 先问 `OnOsc52`（`AAllow` 默认 `True`），再写剪贴板 | 丢掉，不应答 |
+| `to52ReadWrite` | 同上 | 问 `OnOsc52`，`AAllow` 默认 `False`：宿主明确同意才应答；没挂事件就是不同意 |
+
+- 事件在解析中间同步发，宿主可以在里面弹模态框问用户，应答的顺序不会乱。
+- `AText` 写的时候是解出来的文字（坏的 base64 解成空串，同 xterm.js），读的时候是剪贴板现在的内容；宿主都可以改。
+- `ASelection` 是程序给的剪贴板名（`c`、`p` …）原样，控件不按它选剪贴板。
+- 应答不算键入：不清选区，不滚到底。
+
+---
+
+## 10. 状态与主题
 
 | typeKey | 用到的属性 |
 |---------|-----------|
 | `TyTerminal` | `background`（底色，调色板 257）、`color`（前景，256）、`font-size`、`padding`、边框（默认无边框） |
 | `TyTerminal:disabled` | `opacity`：禁用时整块（字、底色、内边距、外框）按它朝父控件底色淡下去；程序问颜色（OSC 10 / 11）仍答原色 |
 | `TyTerminalCursor` | `background`（光标色，258）、`color`（块光标下的字） |
-| `TyTerminalSelection`、`:focus` | `background`（选区，4 期用） |
+| `TyTerminalSelection`、`:focus` | `background`：选区颜色，失焦 / 聚焦两种，可以半透明（叠在格子自己的底色上）；`color`：选中的字换成这个色，**写了才用**，不写就保持原色 |
 | `TyTerminalAnsi0` … `TyTerminalAnsi15` | `color`：16 色 |
-| `TyTerminalLink` | `color`（链接，4 期用） |
+| `TyTerminalLink` | `color`：悬停链接的下划线 |
 | `TyTerminalPreedit` | `background`、`color`、`border-color`（组字串的底、字、下划线） |
 
 token（`light.tycss` 基础层，所有皮肤继承）：
@@ -184,6 +264,8 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 
 自己的皮肤里若改写了 `TyTerminal` 规则，基础层的 `TyTerminal:disabled` 就不再继承，要连它一起写，否则禁用时不变淡。
 
+禁用时选区色、链接色和别的颜色一样朝父控件底色淡下去（选区色的透明度不变）。
+
 **字体**：`--terminal-font-family` 由控件原样读（不经 `var()` 求值），`monospace` 换成平台等宽字体（Windows `Consolas`、macOS `Menlo`、Linux `Monospace`）。宽字符（CJK）默认交给系统的字体替换；`--terminal-font-family-wide` 写一个字体名就专门用它画宽字符，`monospace-wide` 在 macOS / Linux 换成 `PingFang SC` / `Noto Sans CJK SC`，Windows 上是空（Consolas 经系统字体链接本来就把中文画在两格里）。
 
 字体的来源顺序：**`StyleOverride` 里的 `font-family` / `font-size` > `ParentFont = False` 时的 `Font` > `TyTerminal` 规则 > token**。`Font.Name = 'default'` 当没设。
@@ -199,7 +281,7 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 
 ---
 
-## 8. 代码示例
+## 11. 代码示例
 
 **回放一份录制**（`examples/terminal` 的简化版）：一次只让一块在队列里，回调到了再写下一块——大录制「一次喂完」也不会撑爆队列。
 
@@ -219,43 +301,58 @@ begin
 end;
 ```
 
-**宿主接 PTY 的骨架**（伪接口；4 期示例有真实现）：
+**接一个 PTY**：真实现在 `examples/terminal/ushell.pas`（会话、读写线程在 `uptysession.pas`，平台部分在 `uptywin.pas` / `uptyunix.pas`，都在示例里，不在库里）。要做的就三件事：
 
 ```pascal
-procedure TForm1.PtyOutput(const ABytes: RawByteString);   // 已切回主线程
+// 1. 按键、粘贴、应答 -> PTY（示例在写线程里写，大段粘贴不卡窗口）
+procedure TShell.TermData(Sender: TObject; const AData: RawByteString);
 begin
-  Term.Write(ABytes);
+  Session.Write(AData);
 end;
 
-procedure TForm1.TermData(Sender: TObject; const AData: RawByteString);
+// 2. PTY 的输出 -> 终端，带回调：回调说「解析完了多少」，读线程据此决定读不读
+procedure TShell.Pump;                                  // 已在主线程
 begin
-  Pty.WriteBytes(AData);
+  if Session.Pump(Bytes, Exited, Code) and (Bytes <> '') then
+    Term.Write(Bytes, @WriteDone, Length(Bytes));
 end;
 
-procedure TForm1.TermGridResize(Sender: TObject; ACols, ARows: Integer);
+procedure TShell.WriteDone(Sender: TObject; ATag: PtrInt);
 begin
-  Pty.Resize(ACols, ARows);
+  Session.Delivered(ATag);                              // 积压降到低水位以下，读线程接着读
+end;
+
+// 3. 网格尺寸 -> PTY
+procedure TShell.TermGridResize(Sender: TObject; ACols, ARows: Integer);
+begin
+  Session.Resize(ACols, ARows);
 end;
 ```
 
+Windows 上在第一个字节到来之前告诉 Core 它在 ConPTY 后面、是哪个版本（`Core.WindowsPty := ...`，构建号用 `RtlGetVersion` 取）：21376 之前的 ConPTY 会自己重画折行，Core 照 xterm.js 的老办法处理。
+
 ---
 
-## 9. 注意事项
+## 12. 注意事项
 
 - **Unicode 版本**：默认 `11`。要字形簇（表情修饰符、ZWJ 序列按一个字算）选 `15-graphemes`。**`15` 不连接组合符**：`e` + U+0301 在 `15` 下占 2 格（组合符自占一格），在 `6` / `11` / `15-graphemes` 下占 1 格。
 - **`AmbiguousWide` 只对 `15` / `15-graphemes` 起作用**；打开后，U+0301 这类在表里本身是歧义宽度的组合符也算宽：`é`（e + U+0301）在 `15` 下占 **3** 格，在 `15-graphemes` 下占 **2** 格（照 xterm.js）。
-- **控件接管了 Core 的这些事件，宿主不要改写**：`OnData`、`OnRefreshRows`、`OnTitleChange`、`OnBell`、`OnCursorMove`、`OnScroll`、`OnBufferActivate`、`OnModesChange`、`OnOsc`、`OnQueryBaseColor`、`OnProcessRequest`、`OnWindowOptionsReport`、`OnResize`、`OnScrollbackCleared`。宿主可以自己挂 `Core.OnIconNameChange`、`Core.OnLineFeed`、`Core.OnRequestScrollToBottom`（只是通知，Core 自己会滚到底），或用 `Core.Parser.Register*Handler` 加自己的序列处理器。
+- **控件接管了 Core 的这些事件，宿主不要改写**：`OnData`、`OnRefreshRows`、`OnTitleChange`、`OnBell`、`OnCursorMove`、`OnScroll`、`OnBufferActivate`、`OnModesChange`、`OnOsc`、`OnQueryBaseColor`、`OnProcessRequest`、`OnWindowOptionsReport`、`OnResize`、`OnScrollbackCleared`、`OnUserInput`。宿主可以自己挂 `Core.OnIconNameChange`、`Core.OnLineFeed`、`Core.OnRequestScrollToBottom`（只是通知，Core 自己会滚到底），或用 `Core.Parser.Register*Handler` 加自己的序列处理器。
 - 换主题时只有颜色表真变了（换明暗、换配色）才告诉程序（开了 2031 就报明暗），同时丢掉程序用 OSC 设过的颜色；只改了内边距、字体的主题变化不算。
 - 第一次画一屏新字形时，每一帧只花约 10 ms 画新字形，剩下的下一帧补上（Windows 上一个字形约 2 ms）；之后都从缓存里取。
 - REP（`CSI b`）重复次数极大时按周期快进，被跳过那段滚动的 `Core.OnScroll` 不发。
 - 窗口尺寸应答（`CSI 14 t` / `16 t`）和 SGR 像素鼠标报的是**设备像素**（xterm.js 报 CSS 像素）。
 - **表情**：Windows 上彩色表情画成单色轮廓（GDI 文字管线不画彩色字形），宽度照字符宽度表算。Powerline 私用区字形（U+E0A0、U+E0B0 等）要字体里有才画得出来。
-- 颜色 token 的透明度会被丢掉：终端的底色、前景、16 色都按不透明画。
+- 颜色 token 的透明度会被丢掉：终端的底色、前景、16 色都按不透明画（选区色例外，见 §10）。
+- **OSC 52 读剪贴板是隐私问题**：程序（包括 ssh 过去的远端）能读到你复制过的密码。`to52ReadWrite` 只在宿主会问用户时才开。
+- **自己写 Unix PTY 时**：`fork` 之后子进程里只能做系统调用（`setsid`、`open`、`ioctl`、`dup2`、`execve`）。LCL 程序是多线程的，子进程里分配内存可能永远等一把别的线程拿着的锁；参数、环境变量都在 `fork` 之前备好。
+- Linux 上 PRIMARY 在 X11 下照常；Wayland 下要看合成器支不支持 primary selection。
+- 程序接管鼠标时按着覆盖键拖出的是本地选区，程序收不到这次拖动；滚轮照常带着修饰键报给程序。
 
 ---
 
-## 10. 本期限制 / 后续
+## 13. 本期限制 / 后续
 
-- 鼠标按键上报、本地选择与复制、右键菜单、Linux PRIMARY、OSC 52、链接：4 期。
-- 拖窗口时长行不重新折行（程序会按新宽度重画）：5 期。
+- 拖窗口时长行不重新折行（程序会按新宽度重画）：5 期。在这之前，窗口改窄后留下的长行，网址按网格宽度折回格子。
 - 最低对比度（`MinimumContrastRatio`）、盲文 / Powerline 自绘：5 期。
+- win32-input-mode（键盘按扫描码编码）、Alt+单击移动光标、kitty 键盘协议：以后。

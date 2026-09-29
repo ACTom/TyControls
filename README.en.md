@@ -382,7 +382,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [icons](examples/icons/) | Icon fonts |
 | [transitions](examples/transitions/) | Slide / fade transitions |
 | [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
-| [terminal](examples/terminal/) | Terminal replay: asciicast recordings, skins, a key-code panel |
+| [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY), skins, a key-code panel |
 
 Thirty-plus single-control examples live under [examples/](examples/).
 

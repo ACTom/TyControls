@@ -382,7 +382,7 @@ CharImage1.GlyphName := 'house';
 | [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
-| [terminal](examples/terminal/) | 终端回放:asciicast 录制、换肤、键码面板 |
+| [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY)、换肤、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。
 
