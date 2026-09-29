@@ -61,8 +61,9 @@ program painterregress;
   unchanged commit first. A hashes file committed to the repository is a record of one
   machine on one day, not a baseline for the next change: rerun ab.sh.
 
-  A MEMO IS NOT DRAWN ITALIC: its weight comes from the theme (StyleOverride
-  'font-weight: bold' here) and the theme has no font-style; italic runs are drawn by
+  A MEMO IS NOT DRAWN ITALIC: its weight and size come from the theme (StyleOverride
+  'font-weight: bold', 'font-size: Npx' here; Font.Style and Font.Size are not read)
+  and the theme has no font-style; italic runs are drawn by
   text-italic / text-bolditalic straight through the text renderer, and by the terminal
   (SGR 3). }
 
@@ -583,8 +584,9 @@ begin
            m.Enabled := False;
          end;
       8, 9, 10: begin
-           { the same text at each size: the pictures differ by the size alone }
-           m.Font.Size := 8 + (AVariant - 8) * 4;
+           { the same text at each size, the size through the theme (a memo reads its
+             font size from there, not from Font.Size): the pictures differ by it alone }
+           m.StyleOverride := Format('font-size: %dpx;', [8 + (AVariant - 8) * 4]);
            m.Lines.Add(Mixed);
          end;
       11: begin
