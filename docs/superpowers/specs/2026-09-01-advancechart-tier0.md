@@ -7733,3 +7733,42 @@ M3:markPoint 的画面(pin 的单位框缩放、inside 标签在 0.4 高处)。
 ### 下一批
 
 M4:markArea 的画面。
+
+## 101. Tier 1 第六十七批:markArea 的画面(M4,2026-09-30)
+
+标注系列的最后一批。
+
+### 上游的做法
+
+- **合并条目**:左上角条目、右下角条目依次并进一个对象(先有键者胜,对象逐键合并)——`itemStyle`、`label` 两角各写一半也会拼起来;名字取左上角的(左上写了 `''` 或 `null` 也会挡住右下角的)。
+- **多边形**:四个角 `M L L L Z`;`allClipped` 的区域不画多边形、不画标签,也不参与 z2 累计。
+- **填充**:条目写了颜色就用(`'transparent'`、`'none'` 照留);否则系列色经 `modifyAlpha(色, 0.4)`——**替换**原来的 alpha,打印成 `rgba(r,g,b,0.4)`;系列色是渐变对象时原样用;系列色解析不了时 `modifyAlpha` 给 undefined,结果**没有填充**。描边没写就是系列色本身(默认线宽 0,不画)。
+- **标签**:默认文字是名字(没有就是空串),`formatter` 的 `{c}` 是合并条目的 value;默认位置 `top`,`position: ''` 当 `inside`。标签矩形是多边形的包围盒(有描边时撑开),没有变换。markArea **不**把 `itemStyle.opacity` 传给标签。`inherit` 色是填充去掉透明度(`modifyAlpha(填充, 1)`),渐变是 `#000`。内侧墨按含 alpha 的亮度(底为黑)分档,所以默认 0.4 透明的填充落在 `#ccc`/`#eee` 档,浅色模式下还带填充色描边;渐变填充是 `#ccc`、无描边。
+- **z**:默认 1,在系列(2)下面。
+
+### port 以前
+
+- markArea 只有 M1 的数字,不画。
+
+### 做法
+
+- `MarkerView` 加 `TyMkAreaPictures`/`TyBuildMarkAreas`/`TyMkModifyAlpha`;把 M3 的标签样式、定位、墨色抽成共用的 `StyleLabel`(宿主填充是字符串还是渐变、默认不透明度、pin 规则都由调用方给),标签元素抽成共用的 `EmitLabel`。
+- 图表:画面输入加系列色的非字符串形式(渐变);画面计算在屏蔽浮点陷阱下进行——不认识的类目会给出 NaN 角点,上游照画;绘制时跳过 NaN 的区域和标签。
+
+### 基准
+
+- `tools/advchart-oracle/markers-area.js`(代理写)真跑 ECharts 6.1,34 个用例(31 合成 + area-rainfall、line-sections、scatter-weight)、188 个区域、43 条守卫:类目/数值/时间轴、反向角、部分出界、`allClipped`、dataZoom 窗口、柱系列贴刻度、各种颜色字符串(rgba、hsl、8 位 hex、`transparent`、`none`、空串、解析不了的)、系列色回退(含渐变、K 线)、描边与虚线、描边撑开包围盒、两角合并、13 个标签位置、formatter、默认文字、字体、标签颜色与 `inherit`、三档内侧墨的边界、暗色地面、z/z2/silent、图例隐藏、NaN 角点。
+- `test.advchart.markarea` 逐字段比较;另有检查区域在系列下面(z 1 对 2)、半透明、带名字标签的绘制测试。
+
+### 变异测试
+
+19 个,1 个存活且等价:渐变填充时去掉"填充是字符串"的判断仍不会给标签描边——渐变时传进来的填充串本来就是空的。
+
+### 已知偏差
+
+- 渐变填充的区域在端口里暂不画填充(只画描边和标签)。
+- 标注的提示框、悬停强调没有移植。
+
+### 标注系列小结
+
+M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画面都按上游逐位对上;画廊里用到标注的 16 个文件中,除 matrix-stock(矩阵坐标系)和 bar-rich-text 的富文本标签外都画出来了。

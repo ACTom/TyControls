@@ -297,6 +297,7 @@ type
     { each series' markLine pictures, index-parallel to FBindings }
     FMarkLinePics: array of TTyMkLinePicArray;
     FMarkPointPics: array of TTyMkPointPicArray;
+    FMarkAreaPics: array of TTyMkAreaPicArray;
     { dataZoom INTERACTION, by the author's dataZoom index: the window
       setRawRange left (percents), how each answers the pointer, each
       slider view's own state, each inside's view range }
@@ -450,6 +451,7 @@ type
     procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveMarkers(APPI: Integer);
     function MarkerSeriesColorCss(ASlot: Integer): string;
+    function MarkerSeriesColorData(ASlot: Integer): TJSONData;
     procedure MarkerGround(out ABackground: string; out AIsDark: Boolean);
     function BuildMarkers(const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
     { ---- dataZoom interaction ---- }
@@ -884,6 +886,8 @@ type
     function MarkLinePictures(ASeriesIndex: Integer): TTyMkLinePicArray;
     { THE markPoint PICTURES likewise }
     function MarkPointPictures(ASeriesIndex: Integer): TTyMkPointPicArray;
+    { THE markArea PICTURES likewise }
+    function MarkAreaPictures(ASeriesIndex: Integer): TTyMkAreaPicArray;
     { THE dataZoom ACTION, upstream's dispatchAction({type: 'dataZoom',
       dataZoomIndex, start, end}): the percent window goes on dataZoom AIndex
       and on every dataZoom linked to it through a shared axis, and the chart
@@ -4067,6 +4071,7 @@ var
   ax: TTyAxis;
   scale: Double;
   pin: TTyMkPicInput;
+  fpMask: TFPUExceptionMask;
 begin
   FMarkers := nil;
   SetLength(FMarkers, Length(FBindings));
@@ -4074,6 +4079,8 @@ begin
   SetLength(FMarkLinePics, Length(FBindings));
   FMarkPointPics := nil;
   SetLength(FMarkPointPics, Length(FBindings));
+  FMarkAreaPics := nil;
+  SetLength(FMarkAreaPics, Length(FBindings));
   if APPI <= 0 then APPI := 96;
   scale := APPI / 96;
   for i := 0 to High(FBindings) do
@@ -4153,10 +4160,12 @@ begin
         TJSONObject(nd), ctx);
     end;
     { THE PICTURE of every marker, from the layout just solved }
-    if FMarkers[i].Blocks[mkLine].Present or FMarkers[i].Blocks[mkPoint].Present then
+    if FMarkers[i].Blocks[mkLine].Present or FMarkers[i].Blocks[mkPoint].Present
+      or FMarkers[i].Blocks[mkArea].Present then
     begin
       pin := Default(TTyMkPicInput);
       pin.SeriesColor := MarkerSeriesColorCss(i);
+      pin.SeriesColorData := MarkerSeriesColorData(i);
       nd := TJSONObject(node).Find('name');
       if (nd <> nil) and (nd.JSONType = jtString) then
         pin.SeriesName := TyMkOf(nd)
@@ -4166,12 +4175,22 @@ begin
       if (nd <> nil) and (nd.JSONType = jtObject) then pin.TextStyle := TJSONObject(nd);
       MarkerGround(pin.Background, pin.IsDark);
       pin.Scale := scale;
+      { UNDER MASKED TRAPS: a corner of an unknown category is not a number,
+        and upstream draws on regardless }
+      fpMask := GetExceptionMask;
+      SetExceptionMask(fpMask + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow,
+        exPrecision]);
+      try
       FMarkLinePics[i] := TyMkLinePictures(FMarkers[i].Blocks[mkLine], pin);
       { the default text reads the last coordinate dim a label may come
         from: not a category, not a time }
       FMarkPointPics[i] := TyMkPointPictures(FMarkers[i].Blocks[mkPoint], pin,
         not (ctx.XAxis.AxisType in [atCategory, atTime]),
         not (ctx.YAxis.AxisType in [atCategory, atTime]));
+      FMarkAreaPics[i] := TyMkAreaPictures(FMarkers[i].Blocks[mkArea], pin);
+      finally
+        SetExceptionMask(fpMask);
+      end;
     end;
   end;
 end;
@@ -4201,6 +4220,21 @@ begin
   else
     Result := 'rgba(' + IntToStr((c shr 16) and $FF) + ',' + IntToStr((c shr 8) and $FF)
       + ',' + IntToStr(c and $FF) + ',' + TyJsNumberToString((c shr 24) / 255) + ')';
+end;
+
+{ the author's series colour when it is not a string: a gradient, used by a
+  markArea as it is }
+function TTyAdvanceChart.MarkerSeriesColorData(ASlot: Integer): TJSONData;
+var node, d: TJSONData;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('itemStyle');
+  if (d = nil) or (d.JSONType <> jtObject) then Exit;
+  d := TJSONObject(d).Find('color');
+  if (d <> nil) and (d.JSONType = jtObject) then Result := d;
 end;
 
 { THE GROUND upstream's marker label halo is made of: the option's
@@ -4240,6 +4274,15 @@ begin
   Result := FMarkPointPics[slot];
 end;
 
+function TTyAdvanceChart.MarkAreaPictures(ASeriesIndex: Integer): TTyMkAreaPicArray;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FMarkAreaPics)) then Exit;
+  Result := FMarkAreaPics[slot];
+end;
+
 function TTyAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
   AList: TTyPaintList): Integer;
 var
@@ -4261,6 +4304,10 @@ begin
     ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []).TextColor);
   ink.Inside[2] := TTyChartColor(
     ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
+  for i := 0 to High(FMarkAreaPics) do
+    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
+      Inc(Result, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
+        AMeasurer, AList));
   for i := 0 to High(FMarkPointPics) do
     if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
       Inc(Result, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,

@@ -93,8 +93,10 @@ type
 
   { what the pictures need besides the block }
   TTyMkPicInput = record
-    { the series' style colour, a css string: every colour falls back to it }
+    { the series' style colour, a css string: every colour falls back to it;
+      SeriesColorData when the author's is not a string (a gradient) }
     SeriesColor: string;
+    SeriesColorData: TJSONData;
     { {a}; undefined when the series has no name }
     SeriesName: TTyMkVal;
     { ecModel.option.textStyle: the option's own, nil for none }
@@ -213,6 +215,38 @@ function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkB
 { zrender's lum(color, background): 0 for what does not parse }
 function TyMkLum(const AColour: string; ABackground: Double): Double;
 
+type
+  TTyMkAreaPic = record
+    Item: Integer;
+    { the fill and stroke after the fallbacks: a css string, or the
+      option's own object (a gradient) in FillData }
+    Fill, Stroke: string;
+    FillData, StrokeData: TJSONData;
+    { False: no fill at all (a series colour that does not parse) }
+    HasFill: Boolean;
+    Z2: Double;
+    { False when allClipped: no polygon, no label }
+    Drawn: Boolean;
+    Points: array[0..3] of TTyPointF;
+    Path: TTyZrPath;
+    BBox, Rect: TTyXYWH;
+    LineWidth, Opacity, DashOffset: Double;
+    Dash: TJSONData;
+    LineCap, LineJoin: string;
+    Lbl: TTyMkPtLabelPic;
+  end;
+  TTyMkAreaPicArray = array of TTyMkAreaPic;
+
+{ every surviving markArea of the block, in data order }
+function TyMkAreaPictures(const ABlock: TTyMkBlock;
+  const AIn: TTyMkPicInput): TTyMkAreaPicArray;
+{ the paint-list elements of a series' markAreas }
+function TyBuildMarkAreas(const APics: TTyMkAreaPicArray; const ABlock: TTyMkBlock;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+{ tool/color modifyAlpha: the colour at alpha A as 'rgba(r,g,b,a)'; '' for
+  what does not parse }
+function TyMkModifyAlpha(const AColour: string; A: Double): string;
+
 { zrender's PathProxy commands through a matrix, arcs as cubics, into a
   polygon shape carrying them }
 function TyMkZrShape(const APath: TTyZrPath; const M: TTyMat2D;
@@ -230,7 +264,7 @@ type
 var
   GTextDefaults: TJSONObject;
   { 'outside' as createTextConfig rewrites it }
-  GTopWord: TJSONString;
+  GTopWord, GInsideWord: TJSONString;
 
 function JNull(A: TJSONData): Boolean; inline;
 begin
@@ -1494,6 +1528,268 @@ begin
   if (A <> nil) and (A.JSONType = jtNull) then Result := 0;
 end;
 
+{ THE LABEL'S STYLE, PLACE AND INK, shared by markPoint and markArea:
+  createTextStyle / createTextConfig, calculateTextPosition against ARect
+  (the pin's 0.4 rule when APin), updateInnerText's rotate and offset, and
+  the inside ink against the host fill (AFillStr when AFillIsString, else a
+  gradient) or the outside ink. The text is the caller's. }
+procedure StyleLabel(const LB: TMkLevels; const gts: TMkView; const AIn: TTyMkPicInput;
+  AScale: Double; const ARect: TTyXYWH; const AInherit: string;
+  AHasFill, AFillIsString: Boolean; const AFillStr: string; ADefaultOpacity: Double;
+  APin: Boolean; AMaxZ2: Double; var lp: TTyMkPtLabelPic);
+var
+  d, posd, offA: TJSONData;
+  fc, sc, posS, rawA, rawV: string;
+  hasFc, hasSc, useDefault, bgDrawn, rich: Boolean;
+  dist, lrot, rx, ry, ls, gw, op, calcX, calcY: Double;
+  calcA, calcV: string;
+  rect: TTyXYWH;
+  k: Integer;
+begin
+    { the text style, attached }
+    fc := '';
+    sc := '';
+    d := Chain(LB, 'color');
+    hasFc := d <> nil;
+    if hasFc then
+    begin
+      fc := StrOf(d);
+      if (fc = 'inherit') or (fc = 'auto') then fc := AInherit;
+      hasFc := fc <> '';
+    end;
+    d := Chain(LB, 'textBorderColor');
+    hasSc := d <> nil;
+    if hasSc then
+    begin
+      sc := StrOf(d);
+      if (sc = 'inherit') or (sc = 'auto') then sc := AInherit;
+      hasSc := sc <> '';
+    end;
+    if hasFc then lp.StyleFill := fc;
+    if hasSc then lp.StyleStroke := sc;
+    d := Chain(LB, 'textBorderWidth');
+    if d = nil then d := VGet(gts, 'textBorderWidth');
+    if JNull(d) then lp.StyleLineWidth := NaN else lp.StyleLineWidth := NumOf(d);
+    d := Chain(LB, 'opacity');
+    if d = nil then d := VGet(gts, 'opacity');
+    if not JNull(d) then lp.StyleOpacity := NumOf(d)
+    else
+    begin
+      { defaultOpacity: the host's, where it passes one }
+      lp.StyleOpacity := ADefaultOpacity;
+    end;
+    lp.FontStyle := Chain(LB, 'fontStyle');
+    if lp.FontStyle = nil then lp.FontStyle := VGet(gts, 'fontStyle');
+    lp.FontWeight := Chain(LB, 'fontWeight');
+    if lp.FontWeight = nil then lp.FontWeight := VGet(gts, 'fontWeight');
+    lp.FontSize := Chain(LB, 'fontSize');
+    if lp.FontSize = nil then lp.FontSize := VGet(gts, 'fontSize');
+    lp.FontFamily := Chain(LB, 'fontFamily');
+    if lp.FontFamily = nil then lp.FontFamily := VGet(gts, 'fontFamily');
+    if JNull(lp.FontStyle) then lp.FontStyle := nil;
+    if JNull(lp.FontWeight) then lp.FontWeight := nil;
+    if JNull(lp.FontSize) then lp.FontSize := nil;
+    if JNull(lp.FontFamily) then lp.FontFamily := nil;
+    lp.Font := MakeFont(lp.FontStyle, lp.FontWeight, lp.FontSize, lp.FontFamily);
+    lp.StyleBackground := Chain(LB, 'backgroundColor');
+    rich := False;
+    for k := 0 to High(LB) do
+      if Truthy(VGet(LB[k], 'rich')) then rich := True;
+    lp.Rich := rich;
+    rawA := '';
+    d := Chain(LB, 'align');
+    if d <> nil then rawA := NormAlign(JsStringOf(d));
+    d := Chain(LB, 'verticalAlign');
+    if d = nil then d := Chain(LB, 'baseline');
+    rawV := '';
+    if d <> nil then rawV := NormVAlign(JsStringOf(d));
+    lp.AuthorAlign := rawA;
+    lp.AuthorVAlign := rawV;
+    { createTextConfig: 'outside' is 'top' }
+    posd := Chain(LB, 'position');
+    lp.Position := posd;
+    if Truthy(posd) then posS := JsStringOf(posd) else
+    begin
+      posS := 'inside';
+      lp.Position := GInsideWord;
+    end;
+    if (posd <> nil) and (posd.JSONType = jtArray) then posS := #1;
+    if posS = 'outside' then
+    begin
+      posS := 'top';
+      lp.Position := GTopWord;
+    end;
+    d := Chain(LB, 'distance');
+    if d <> nil then dist := NumOf(d) else dist := 5;
+    lp.Distance := dist;
+    dist := dist * AScale;
+    { the rect: the symbol path's own, grown by its stroke, through its global
+      transform }
+    rect := ARect;
+    lp.Rect := rect;
+    { calculateTextPosition }
+    calcX := rect.X;
+    calcY := rect.Y;
+    calcA := 'left';
+    calcV := 'top';
+    if posS = #1 then
+    begin
+      calcX := calcX + ZrPercent(posd.Items[0], rect.W);
+      calcY := calcY + ZrPercent(posd.Items[1], rect.H);
+      calcA := '';
+      calcV := '';
+    end
+    else if posS = 'left' then
+    begin
+      calcX := calcX - dist; calcY := calcY + rect.H / 2; calcA := 'right'; calcV := 'middle';
+    end
+    else if posS = 'right' then
+    begin
+      calcX := calcX + dist + rect.W; calcY := calcY + rect.H / 2; calcV := 'middle';
+    end
+    else if posS = 'top' then
+    begin
+      calcX := calcX + rect.W / 2; calcY := calcY - dist; calcA := 'center'; calcV := 'bottom';
+    end
+    else if posS = 'bottom' then
+    begin
+      calcX := calcX + rect.W / 2; calcY := calcY + rect.H + dist; calcA := 'center';
+    end
+    else if posS = 'inside' then
+    begin
+      calcX := calcX + rect.W / 2; calcY := calcY + rect.H / 2; calcA := 'center'; calcV := 'middle';
+    end
+    else if posS = 'insideLeft' then
+    begin
+      calcX := calcX + dist; calcY := calcY + rect.H / 2; calcV := 'middle';
+    end
+    else if posS = 'insideRight' then
+    begin
+      calcX := calcX + rect.W - dist; calcY := calcY + rect.H / 2; calcA := 'right'; calcV := 'middle';
+    end
+    else if posS = 'insideTop' then
+    begin
+      calcX := calcX + rect.W / 2; calcY := calcY + dist; calcA := 'center';
+    end
+    else if posS = 'insideBottom' then
+    begin
+      calcX := calcX + rect.W / 2; calcY := calcY + rect.H - dist; calcA := 'center'; calcV := 'bottom';
+    end
+    else if posS = 'insideTopLeft' then
+    begin
+      calcX := calcX + dist; calcY := calcY + dist;
+    end
+    else if posS = 'insideTopRight' then
+    begin
+      calcX := calcX + rect.W - dist; calcY := calcY + dist; calcA := 'right';
+    end
+    else if posS = 'insideBottomLeft' then
+    begin
+      calcX := calcX + dist; calcY := calcY + rect.H - dist; calcV := 'bottom';
+    end
+    else if posS = 'insideBottomRight' then
+    begin
+      calcX := calcX + rect.W - dist; calcY := calcY + rect.H - dist; calcA := 'right';
+      calcV := 'bottom';
+    end;
+    { the pin's label sits at 0.4 of its rect }
+    if APin and (posS = 'inside') then calcY := rect.Y + rect.H * 0.4;
+    lp.DefAlign := calcA;
+    lp.DefVAlign := calcV;
+    if rawA <> '' then lp.Align := rawA else if calcA <> '' then lp.Align := calcA
+    else lp.Align := 'left';
+    if rawV <> '' then lp.VAlign := rawV else if calcV <> '' then lp.VAlign := calcV
+    else lp.VAlign := 'top';
+    lp.InnerX := calcX;
+    lp.InnerY := calcY;
+    lp.InnerRotation := 0;
+    lp.InnerOriginX := 0;
+    lp.InnerOriginY := 0;
+    d := Chain(LB, 'rotate');
+    if d <> nil then
+    begin
+      lrot := NumOf(d) * Pi / 180;
+      lp.InnerRotation := lrot;
+    end;
+    offA := Chain(LB, 'offset');
+    if Truthy(offA) and (offA.JSONType = jtArray) and (offA.Count >= 2) then
+    begin
+      rx := NumOf(offA.Items[0]) * AScale;
+      ry := NumOf(offA.Items[1]) * AScale;
+      lp.InnerX := lp.InnerX + rx;
+      lp.InnerY := lp.InnerY + ry;
+      lp.InnerOriginX := -rx;
+      lp.InnerOriginY := -ry;
+    end;
+    lp.HasTransform := LocalTransform(lp.InnerX, lp.InnerY, lp.InnerRotation,
+      lp.InnerOriginX, lp.InnerOriginY, lp.Transform);
+    { the ink: inside against the symbol's fill, else outside }
+    lp.Inside := (posS <> #1) and (Pos('inside', posS) > 0) and AHasFill;
+    if lp.Inside then
+    begin
+      { a fill that is not a string (a gradient) reads as dark }
+      if not AFillIsString then lp.DefFill := '#ccc'
+      else if AFillStr = 'none' then lp.DefFill := '#333'
+      else
+      begin
+        ls := TyMkLum(AFillStr, 0);
+        if ls > 0.5 then lp.DefFill := '#333'
+        else if ls > 0.2 then lp.DefFill := '#eee'
+        else lp.DefFill := '#ccc';
+      end;
+      lp.DefStroke := '';
+      if AFillIsString and (AIn.IsDark = (TyMkLum(lp.DefFill, 0) < 0.4)) then
+        lp.DefStroke := AFillStr;
+    end
+    else
+    begin
+      d := Chain(LB, 'color');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
+        lp.DefFill := AInherit
+      else if AIn.IsDark then lp.DefFill := '#ccc'
+      else lp.DefFill := '#333';
+      if lp.DefFill = '' then lp.DefFill := '#000';
+      lp.DefStroke := TyMkOutsideStroke(AIn.Background, AIn.IsDark);
+    end;
+    if rich then lp.Lines := -1
+    else if lp.Text = '' then lp.Lines := 0
+    else
+    begin
+      lp.Lines := 1;
+      for k := 1 to Length(lp.Text) do
+        if lp.Text[k] = #10 then Inc(lp.Lines);
+    end;
+    lp.HasInk := (not rich) and (lp.Text <> '');
+    if lp.HasInk then
+    begin
+      useDefault := not hasFc;
+      if useDefault then lp.InkFill := lp.DefFill else lp.InkFill := fc;
+      if lp.InkFill = 'none' then lp.InkFill := '';
+      bgDrawn := Truthy(lp.StyleBackground);
+      gw := 0;
+      lp.InkStroke := '';
+      if hasSc then lp.InkStroke := sc
+      else if (not bgDrawn) and useDefault then
+      begin
+        gw := 2;
+        lp.InkStroke := lp.DefStroke;
+      end;
+      if (lp.InkStroke = 'transparent') or (lp.InkStroke = 'none') then lp.InkStroke := '';
+      lp.InkLineWidth := NaN;
+      if lp.InkStroke <> '' then
+      begin
+        if (not IsNan(lp.StyleLineWidth)) and (lp.StyleLineWidth <> 0) then
+          lp.InkLineWidth := lp.StyleLineWidth
+        else
+          lp.InkLineWidth := gw;
+      end;
+      if IsNan(lp.StyleOpacity) then op := 1 else op := lp.StyleOpacity;
+      lp.InkOpacity := op;
+    end;
+    if IsInfinite(AMaxZ2) then lp.Z2 := 0 else lp.Z2 := AMaxZ2 + 2;
+    lp.Silent := Truthy(Chain(LB, 'silent'));
+end;
+
 function TyMkPointPictures(const ABlock: TTyMkBlock; const AIn: TTyMkPicInput;
   AXIsLabel, AYIsLabel: Boolean): TTyMkPointPicArray;
 var
@@ -1516,6 +1812,7 @@ var
     calcA, calcV: string;
     dimIdx, k: Integer;
     dl: TTyDoubleArray;
+    defOp: Double;
   begin
     lv := nil;
     SetLength(lv, 3);
@@ -1723,242 +2020,11 @@ var
       end;
     end;
     lp.Text := str;
-    { the text style, attached }
-    fc := '';
-    sc := '';
-    d := Chain(LB, 'color');
-    hasFc := d <> nil;
-    if hasFc then
-    begin
-      fc := StrOf(d);
-      if (fc = 'inherit') or (fc = 'auto') then fc := fill;
-      hasFc := fc <> '';
-    end;
-    d := Chain(LB, 'textBorderColor');
-    hasSc := d <> nil;
-    if hasSc then
-    begin
-      sc := StrOf(d);
-      if (sc = 'inherit') or (sc = 'auto') then sc := fill;
-      hasSc := sc <> '';
-    end;
-    if hasFc then lp.StyleFill := fc;
-    if hasSc then lp.StyleStroke := sc;
-    d := Chain(LB, 'textBorderWidth');
-    if d = nil then d := VGet(gts, 'textBorderWidth');
-    if JNull(d) then lp.StyleLineWidth := NaN else lp.StyleLineWidth := NumOf(d);
-    d := Chain(LB, 'opacity');
-    if d = nil then d := VGet(gts, 'opacity');
-    if not JNull(d) then lp.StyleOpacity := NumOf(d)
-    else
-    begin
-      { defaultOpacity: the symbol style's }
-      d := Chain(IS_, 'opacity');
-      if d <> nil then lp.StyleOpacity := NumOf(d) else lp.StyleOpacity := NaN;
-    end;
-    lp.FontStyle := Chain(LB, 'fontStyle');
-    if lp.FontStyle = nil then lp.FontStyle := VGet(gts, 'fontStyle');
-    lp.FontWeight := Chain(LB, 'fontWeight');
-    if lp.FontWeight = nil then lp.FontWeight := VGet(gts, 'fontWeight');
-    lp.FontSize := Chain(LB, 'fontSize');
-    if lp.FontSize = nil then lp.FontSize := VGet(gts, 'fontSize');
-    lp.FontFamily := Chain(LB, 'fontFamily');
-    if lp.FontFamily = nil then lp.FontFamily := VGet(gts, 'fontFamily');
-    if JNull(lp.FontStyle) then lp.FontStyle := nil;
-    if JNull(lp.FontWeight) then lp.FontWeight := nil;
-    if JNull(lp.FontSize) then lp.FontSize := nil;
-    if JNull(lp.FontFamily) then lp.FontFamily := nil;
-    lp.Font := MakeFont(lp.FontStyle, lp.FontWeight, lp.FontSize, lp.FontFamily);
-    lp.StyleBackground := Chain(LB, 'backgroundColor');
-    rich := False;
-    for k := 0 to High(LB) do
-      if Truthy(VGet(LB[k], 'rich')) then rich := True;
-    lp.Rich := rich;
-    rawA := '';
-    d := Chain(LB, 'align');
-    if d <> nil then rawA := NormAlign(JsStringOf(d));
-    d := Chain(LB, 'verticalAlign');
-    if d = nil then d := Chain(LB, 'baseline');
-    rawV := '';
-    if d <> nil then rawV := NormVAlign(JsStringOf(d));
-    lp.AuthorAlign := rawA;
-    lp.AuthorVAlign := rawV;
-    { createTextConfig: 'outside' is 'top' }
-    posd := Chain(LB, 'position');
-    lp.Position := posd;
-    if Truthy(posd) then posS := JsStringOf(posd) else posS := 'inside';
-    if (posd <> nil) and (posd.JSONType = jtArray) then posS := #1;
-    if posS = 'outside' then
-    begin
-      posS := 'top';
-      lp.Position := GTopWord;
-    end;
-    d := Chain(LB, 'distance');
-    if d <> nil then dist := NumOf(d) else dist := 5;
-    lp.Distance := dist;
-    dist := dist * s;
-    { the rect: the symbol path's own, grown by its stroke, through its global
-      transform }
-    rect := RectThrough(rectLocal, P.HasGlobal, P.Global);
-    lp.Rect := rect;
-    { calculateTextPosition }
-    calcX := rect.X;
-    calcY := rect.Y;
-    calcA := 'left';
-    calcV := 'top';
-    if posS = #1 then
-    begin
-      calcX := calcX + ZrPercent(posd.Items[0], rect.W);
-      calcY := calcY + ZrPercent(posd.Items[1], rect.H);
-      calcA := '';
-      calcV := '';
-    end
-    else if posS = 'left' then
-    begin
-      calcX := calcX - dist; calcY := calcY + rect.H / 2; calcA := 'right'; calcV := 'middle';
-    end
-    else if posS = 'right' then
-    begin
-      calcX := calcX + dist + rect.W; calcY := calcY + rect.H / 2; calcV := 'middle';
-    end
-    else if posS = 'top' then
-    begin
-      calcX := calcX + rect.W / 2; calcY := calcY - dist; calcA := 'center'; calcV := 'bottom';
-    end
-    else if posS = 'bottom' then
-    begin
-      calcX := calcX + rect.W / 2; calcY := calcY + rect.H + dist; calcA := 'center';
-    end
-    else if posS = 'inside' then
-    begin
-      calcX := calcX + rect.W / 2; calcY := calcY + rect.H / 2; calcA := 'center'; calcV := 'middle';
-    end
-    else if posS = 'insideLeft' then
-    begin
-      calcX := calcX + dist; calcY := calcY + rect.H / 2; calcV := 'middle';
-    end
-    else if posS = 'insideRight' then
-    begin
-      calcX := calcX + rect.W - dist; calcY := calcY + rect.H / 2; calcA := 'right'; calcV := 'middle';
-    end
-    else if posS = 'insideTop' then
-    begin
-      calcX := calcX + rect.W / 2; calcY := calcY + dist; calcA := 'center';
-    end
-    else if posS = 'insideBottom' then
-    begin
-      calcX := calcX + rect.W / 2; calcY := calcY + rect.H - dist; calcA := 'center'; calcV := 'bottom';
-    end
-    else if posS = 'insideTopLeft' then
-    begin
-      calcX := calcX + dist; calcY := calcY + dist;
-    end
-    else if posS = 'insideTopRight' then
-    begin
-      calcX := calcX + rect.W - dist; calcY := calcY + dist; calcA := 'right';
-    end
-    else if posS = 'insideBottomLeft' then
-    begin
-      calcX := calcX + dist; calcY := calcY + rect.H - dist; calcV := 'bottom';
-    end
-    else if posS = 'insideBottomRight' then
-    begin
-      calcX := calcX + rect.W - dist; calcY := calcY + rect.H - dist; calcA := 'right';
-      calcV := 'bottom';
-    end;
-    { the pin's label sits at 0.4 of its rect }
-    if (P.ShapeType = 'pin') and (posS = 'inside') then calcY := rect.Y + rect.H * 0.4;
-    lp.DefAlign := calcA;
-    lp.DefVAlign := calcV;
-    if rawA <> '' then lp.Align := rawA else if calcA <> '' then lp.Align := calcA
-    else lp.Align := 'left';
-    if rawV <> '' then lp.VAlign := rawV else if calcV <> '' then lp.VAlign := calcV
-    else lp.VAlign := 'top';
-    lp.InnerX := calcX;
-    lp.InnerY := calcY;
-    lp.InnerRotation := 0;
-    lp.InnerOriginX := 0;
-    lp.InnerOriginY := 0;
-    d := Chain(LB, 'rotate');
-    if d <> nil then
-    begin
-      lrot := NumOf(d) * Pi / 180;
-      lp.InnerRotation := lrot;
-    end;
-    offA := Chain(LB, 'offset');
-    if Truthy(offA) and (offA.JSONType = jtArray) and (offA.Count >= 2) then
-    begin
-      rx := NumOf(offA.Items[0]) * s;
-      ry := NumOf(offA.Items[1]) * s;
-      lp.InnerX := lp.InnerX + rx;
-      lp.InnerY := lp.InnerY + ry;
-      lp.InnerOriginX := -rx;
-      lp.InnerOriginY := -ry;
-    end;
-    lp.HasTransform := LocalTransform(lp.InnerX, lp.InnerY, lp.InnerRotation,
-      lp.InnerOriginX, lp.InnerOriginY, lp.Transform);
-    { the ink: inside against the symbol's fill, else outside }
-    lp.Inside := (posS <> #1) and (Pos('inside', posS) > 0) and hasFill;
-    if lp.Inside then
-    begin
-      if P.StyleFill = 'none' then lp.DefFill := '#333'
-      else
-      begin
-        ls := TyMkLum(P.StyleFill, 0);
-        if ls > 0.5 then lp.DefFill := '#333'
-        else if ls > 0.2 then lp.DefFill := '#eee'
-        else lp.DefFill := '#ccc';
-      end;
-      lp.DefStroke := '';
-      if AIn.IsDark = (TyMkLum(lp.DefFill, 0) < 0.4) then lp.DefStroke := P.StyleFill;
-    end
-    else
-    begin
-      d := Chain(LB, 'color');
-      if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
-        lp.DefFill := fill
-      else if AIn.IsDark then lp.DefFill := '#ccc'
-      else lp.DefFill := '#333';
-      if lp.DefFill = '' then lp.DefFill := '#000';
-      lp.DefStroke := TyMkOutsideStroke(AIn.Background, AIn.IsDark);
-    end;
-    if rich then lp.Lines := -1
-    else if lp.Text = '' then lp.Lines := 0
-    else
-    begin
-      lp.Lines := 1;
-      for k := 1 to Length(lp.Text) do
-        if lp.Text[k] = #10 then Inc(lp.Lines);
-    end;
-    lp.HasInk := (not rich) and (lp.Text <> '');
-    if lp.HasInk then
-    begin
-      useDefault := not hasFc;
-      if useDefault then lp.InkFill := lp.DefFill else lp.InkFill := fc;
-      if lp.InkFill = 'none' then lp.InkFill := '';
-      bgDrawn := Truthy(lp.StyleBackground);
-      gw := 0;
-      lp.InkStroke := '';
-      if hasSc then lp.InkStroke := sc
-      else if (not bgDrawn) and useDefault then
-      begin
-        gw := 2;
-        lp.InkStroke := lp.DefStroke;
-      end;
-      if (lp.InkStroke = 'transparent') or (lp.InkStroke = 'none') then lp.InkStroke := '';
-      lp.InkLineWidth := NaN;
-      if lp.InkStroke <> '' then
-      begin
-        if (not IsNan(lp.StyleLineWidth)) and (lp.StyleLineWidth <> 0) then
-          lp.InkLineWidth := lp.StyleLineWidth
-        else
-          lp.InkLineWidth := gw;
-      end;
-      if IsNan(lp.StyleOpacity) then op := 1 else op := lp.StyleOpacity;
-      lp.InkOpacity := op;
-    end;
-    if IsInfinite(maxZ2) then lp.Z2 := 0 else lp.Z2 := maxZ2 + 2;
-    lp.Silent := Truthy(Chain(LB, 'silent'));
+    { defaultOpacity: the symbol style's }
+    d := Chain(IS_, 'opacity');
+    if d <> nil then defOp := NumOf(d) else defOp := NaN;
+    StyleLabel(LB, gts, AIn, s, RectThrough(rectLocal, P.HasGlobal, P.Global), fill,
+      hasFill, True, P.StyleFill, defOp, P.ShapeType = 'pin', maxZ2, lp);
     P.Lbl := lp;
   end;
 
@@ -1987,6 +2053,105 @@ begin
     if n >= Length(Result) then Break;
   end;
   SetLength(Result, n);
+end;
+
+{ a markPoint's or a markArea's label as an answer caption }
+function EmitLabel(const B: TTyMkPtLabelPic; const ABlock: TTyMkBlock;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+var
+  fs: Integer;
+  el: TTyChartElement;
+  c: TTyChartColor;
+  x, y, w, h: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+
+  function Colour(const S: string; out AC: TTyChartColor): Boolean;
+  begin
+    Result := (S <> '') and TyTryParseChartColor(S, AC);
+  end;
+
+  function Faded(AC: TTyChartColor; AOpacity: Double): TTyChartColor;
+  begin
+    if IsNan(AOpacity) or (AOpacity >= 1) then Exit(AC);
+    if AOpacity <= 0 then Exit(AC and $00FFFFFF);
+    Result := (AC and $00FFFFFF) or (Cardinal(Round((AC shr 24) * AOpacity)) shl 24);
+  end;
+
+begin
+  Result := 0;
+  if (not B.Present) or (not B.HasInk) or (B.Text = '') then Exit;
+  if IsNan(B.InnerX) or IsNan(B.InnerY) then Exit;
+    if B.HasTransform then
+    begin
+      x := B.Transform[4];
+      y := B.Transform[5];
+    end
+    else
+    begin
+      x := 0;
+      y := 0;
+    end;
+    if B.Align = 'center' then ah := tahCentre
+    else if B.Align = 'right' then ah := tahRight
+    else ah := tahLeft;
+    if B.VAlign = 'middle' then av := tavMiddle
+    else if B.VAlign = 'bottom' then av := tavBottom
+    else av := tavTop;
+    fs := AInk.FontSizeLogical;
+    if (B.FontSize <> nil) and (B.FontSize <> GTextDefaults.Find('fontSize'))
+      and (B.FontSize.JSONType = jtNumber) and (B.FontSize.AsFloat > 0) then
+      fs := Round(B.FontSize.AsFloat);
+    w := 0;
+    h := 0;
+    if AMeasurer <> nil then
+      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
+    el := Default(TTyChartElement);
+    el.Z := Trunc(ABlock.Z);
+    el.Z2 := Round(B.Z2);
+    el.Silent := True;
+    el.Datum := TyChartDatum(-1, -1);
+    el.Style.Alpha := 1;
+    el.Shape := TyShapeRect(TyAnchorBox(x, y, w, h, ah, av));
+    el.Caption.Text := B.Text;
+    el.Caption.FontName := AInk.FontName;
+    el.Caption.FontSizeLogical := fs;
+    el.Caption.FontWeight := AInk.FontWeight;
+    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
+    begin
+      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
+        or (B.FontWeight.AsString = 'bolder')) then el.Caption.FontWeight := 700
+      else if B.FontWeight.JSONType = jtNumber then
+        el.Caption.FontWeight := Round(B.FontWeight.AsFloat);
+    end;
+    { the author's colour as written; upstream's default ink is the skin's --
+      the three inside bands by the same luminance cut, the outside colour
+      and the ground's halo otherwise }
+    if (B.StyleFill <> '') and Colour(B.InkFill, c) then el.Caption.Colour := c
+    else if B.Inside then
+    begin
+      if B.DefFill = '#333' then el.Caption.Colour := AInk.Inside[0]
+      else if B.DefFill = '#eee' then el.Caption.Colour := AInk.Inside[1]
+      else el.Caption.Colour := AInk.Inside[2];
+    end
+    else el.Caption.Colour := AInk.Text;
+    el.Caption.Colour := Faded(el.Caption.Colour, B.InkOpacity);
+    if B.InkStroke <> '' then
+    begin
+      if ((B.StyleStroke <> '') or B.Inside) and Colour(B.InkStroke, c) then
+        el.Caption.StrokeColour := c
+      else
+        el.Caption.StrokeColour := AInk.Halo;
+      el.Caption.StrokeColour := Faded(el.Caption.StrokeColour, B.InkOpacity);
+      if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
+    end;
+    el.Caption.X := x;
+    el.Caption.Y := y;
+    el.Caption.AnchorH := ah;
+    el.Caption.AnchorV := av;
+    if B.HasTransform then el.Caption.RotationRad := B.InnerRotation;
+  AList.Add(el);
+  Result := 1;
 end;
 
 function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkBlock;
@@ -2049,74 +2214,194 @@ begin
       AList.Add(el);
       Inc(Result);
     end;
-    { the label }
-    B := APics[i].Lbl;
-    if (not B.Present) or (not B.HasInk) or (B.Text = '') then Continue;
-    if B.HasTransform then
+    Inc(Result, EmitLabel(APics[i].Lbl, ABlock, AInk, AMeasurer, AList));
+  end;
+end;
+
+{ ============================ markArea ============================ }
+
+function TyMkModifyAlpha(const AColour: string; A: Double): string;
+var r, g, b, al: Double;
+begin
+  if not TyTryParseCssRgba(AColour, r, g, b, al) then Exit('');
+  Result := 'rgba(' + TyJsNumberToString(r) + ',' + TyJsNumberToString(g) + ','
+    + TyJsNumberToString(b) + ',' + TyJsNumberToString(A) + ')';
+end;
+
+function TyMkAreaPictures(const ABlock: TTyMkBlock;
+  const AIn: TTyMkPicInput): TTyMkAreaPicArray;
+var
+  own, master, gts: TMkView;
+  i, n, k: Integer;
+  maxZ2, s, z2v: Double;
+  A: TTyMkArea;
+  P: TTyMkAreaPic;
+  lv, IS_, LB: TMkLevels;
+  d, fmt, v: TJSONData;
+  hasStroke, hasFill: Boolean;
+  inherit, name, str: string;
+  lp: TTyMkPtLabelPic;
+begin
+  Result := nil;
+  if (not ABlock.Present) or (ABlock.Kind <> mkArea) then Exit;
+  s := AIn.Scale;
+  if (s <= 0) or IsNan(s) then s := 1;
+  own := View1(ABlock.Own);
+  master := View2(ABlock.Top, TyMkDefaults(mkArea));
+  gts := View2(AIn.TextStyle, GTextDefaults);
+  maxZ2 := NegInfinity;
+  n := 0;
+  SetLength(Result, ABlock.Count);
+  for i := 0 to High(ABlock.Areas) do
+  begin
+    A := ABlock.Areas[i];
+    if not A.Survived then Continue;
+    P := Default(TTyMkAreaPic);
+    P.Item := i;
+    { the merged item: the top-left corner's keys, then the bottom-right's }
+    SetLength(lv, 3);
+    lv[0] := View2(A.LtSrc, A.RbSrc);
+    lv[1] := own;
+    lv[2] := master;
+    IS_ := Sub(lv, 'itemStyle');
+    { the fill: the item's when it has one ('transparent' and 'none' kept),
+      else the series colour at alpha 0.4 -- nothing at all when that does
+      not parse }
+    d := Chain(IS_, 'color');
+    P.HasFill := True;
+    if Truthy(d) then
     begin
-      x := B.Transform[4];
-      y := B.Transform[5];
+      if d.JSONType = jtString then P.Fill := d.AsString else P.FillData := d;
     end
+    else if AIn.SeriesColorData <> nil then
+      { a gradient is used as it is }
+      P.FillData := AIn.SeriesColorData
     else
     begin
-      x := 0;
-      y := 0;
+      P.Fill := TyMkModifyAlpha(AIn.SeriesColor, 0.4);
+      P.HasFill := P.Fill <> '';
     end;
-    if B.Align = 'center' then ah := tahCentre
-    else if B.Align = 'right' then ah := tahRight
-    else ah := tahLeft;
-    if B.VAlign = 'middle' then av := tavMiddle
-    else if B.VAlign = 'bottom' then av := tavBottom
-    else av := tavTop;
-    fs := AInk.FontSizeLogical;
-    if (B.FontSize <> nil) and (B.FontSize <> GTextDefaults.Find('fontSize'))
-      and (B.FontSize.JSONType = jtNumber) and (B.FontSize.AsFloat > 0) then
-      fs := Round(B.FontSize.AsFloat);
-    w := 0;
-    h := 0;
-    if AMeasurer <> nil then
-      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
-    el := Blank(B.Z2);
-    el.Shape := TyShapeRect(TyAnchorBox(x, y, w, h, ah, av));
-    el.Caption.Text := B.Text;
-    el.Caption.FontName := AInk.FontName;
-    el.Caption.FontSizeLogical := fs;
-    el.Caption.FontWeight := AInk.FontWeight;
-    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
+    d := Chain(IS_, 'borderColor');
+    if Truthy(d) then
     begin
-      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
-        or (B.FontWeight.AsString = 'bolder')) then el.Caption.FontWeight := 700
-      else if B.FontWeight.JSONType = jtNumber then
-        el.Caption.FontWeight := Round(B.FontWeight.AsFloat);
-    end;
-    { the author's colour as written; upstream's default ink is the skin's --
-      the three inside bands by the same luminance cut, the outside colour
-      and the ground's halo otherwise }
-    if (B.StyleFill <> '') and Colour(B.InkFill, c) then el.Caption.Colour := c
-    else if B.Inside then
-    begin
-      if B.DefFill = '#333' then el.Caption.Colour := AInk.Inside[0]
-      else if B.DefFill = '#eee' then el.Caption.Colour := AInk.Inside[1]
-      else el.Caption.Colour := AInk.Inside[2];
+      if d.JSONType = jtString then P.Stroke := d.AsString else P.StrokeData := d;
     end
-    else el.Caption.Colour := AInk.Text;
-    el.Caption.Colour := Faded(el.Caption.Colour, B.InkOpacity);
-    if B.InkStroke <> '' then
+    else if AIn.SeriesColorData <> nil then
+      P.StrokeData := AIn.SeriesColorData
+    else
+      P.Stroke := AIn.SeriesColor;
+    d := Chain(lv, 'z2');
+    if d <> nil then P.Z2 := NumOf(d) else P.Z2 := 0;
+    P.Drawn := not A.AllClipped;
+    if P.Drawn then
     begin
-      if ((B.StyleStroke <> '') or B.Inside) and Colour(B.InkStroke, c) then
-        el.Caption.StrokeColour := c
-      else
-        el.Caption.StrokeColour := AInk.Halo;
-      el.Caption.StrokeColour := Faded(el.Caption.StrokeColour, B.InkOpacity);
-      if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
+      for k := 0 to 3 do P.Points[k] := A.Points[k];
+      P.Path := nil;
+      TyZrMoveTo(P.Path, A.Points[0].X, A.Points[0].Y);
+      for k := 1 to 3 do TyZrLineTo(P.Path, A.Points[k].X, A.Points[k].Y);
+      TyZrClose(P.Path);
+      P.BBox := TyZrBBox(P.Path);
+      d := Chain(IS_, 'borderWidth');
+      if d <> nil then P.LineWidth := NumOf(d) else P.LineWidth := 1;
+      d := Chain(IS_, 'opacity');
+      if d <> nil then P.Opacity := NumOf(d) else P.Opacity := 1;
+      P.Dash := Chain(IS_, 'borderType');
+      d := Chain(IS_, 'borderDashOffset');
+      if d <> nil then P.DashOffset := NumOf(d) else P.DashOffset := 0;
+      d := Chain(IS_, 'borderCap');
+      if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
+      d := Chain(IS_, 'borderJoin');
+      if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+      hasStroke := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none')
+        and (P.LineWidth > 0);
+      hasFill := P.HasFill and (P.Fill <> 'none');
+      P.Rect := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill, P.LineWidth, 1);
+      { Math.max(z2 || 0, maxZ2) -- a clipped area does not count }
+      if IsNan(P.Z2) then z2v := 0 else z2v := P.Z2;
+      if z2v > maxZ2 then maxZ2 := z2v;
+      { the label: the name, or the formatter }
+      lp := Default(TTyMkPtLabelPic);
+      LB := Sub(lv, 'label');
+      if Truthy(Chain(LB, 'show')) then
+      begin
+        lp.Present := True;
+        case A.Name.Kind of
+          mvkStr: name := A.Name.Str;
+          mvkNum: name := TyJsNumberToString(A.Name.Num);
+        else
+          name := '';
+        end;
+        fmt := Chain(LB, 'formatter');
+        if (fmt <> nil) and (fmt.JSONType = jtString) then
+        begin
+          v := VGet(lv[0], 'value');
+          if AIn.SeriesName.Kind = mvkUndef then
+            str := FormatTpl(fmt.AsString, ['undefined', name, JsStringOf(v)])
+          else
+            str := FormatTpl(fmt.AsString, [ValString(AIn.SeriesName), name, JsStringOf(v)]);
+        end
+        else
+          str := name;
+        lp.HasText := True;
+        lp.Text := str;
+        { inheritColor: the fill made opaque, black for a gradient }
+        if P.FillData <> nil then inherit := '#000'
+        else if not P.HasFill then inherit := ''
+        else inherit := TyMkModifyAlpha(P.Fill, 1);
+        StyleLabel(LB, gts, AIn, s, P.Rect, inherit, hasFill, P.FillData = nil, P.Fill,
+          NaN, False, maxZ2, lp);
+      end;
+      P.Lbl := lp;
     end;
-    el.Caption.X := x;
-    el.Caption.Y := y;
-    el.Caption.AnchorH := ah;
-    el.Caption.AnchorV := av;
-    if B.HasTransform then el.Caption.RotationRad := B.InnerRotation;
+    Result[n] := P;
+    Inc(n);
+    if n >= Length(Result) then Break;
+  end;
+  SetLength(Result, n);
+end;
+
+function TyBuildMarkAreas(const APics: TTyMkAreaPicArray; const ABlock: TTyMkBlock;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+var
+  i, k: Integer;
+  el: TTyChartElement;
+  c: TTyChartColor;
+  pts: TTyPointFArray;
+begin
+  Result := 0;
+  if AList = nil then Exit;
+  for i := 0 to High(APics) do
+  begin
+    if not APics[i].Drawn then Continue;
+    if IsNan(APics[i].Points[0].X) or IsNan(APics[i].Points[0].Y)
+      or IsNan(APics[i].Points[2].X) or IsNan(APics[i].Points[2].Y) then Continue;
+    el := Default(TTyChartElement);
+    el.Z := Trunc(ABlock.Z);
+    el.Z2 := Round(APics[i].Z2);
+    el.Silent := True;
+    el.Datum := TyChartDatum(-1, -1);
+    el.Style.Alpha := 1;
+    SetLength(pts, 4);
+    for k := 0 to 3 do pts[k] := APics[i].Points[k];
+    el.Shape := TyShapePolygon(pts);
+    if APics[i].HasFill and (APics[i].Fill <> 'none') and (APics[i].Fill <> '')
+      and TyTryParseChartColor(APics[i].Fill, c) then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := c;
+    end;
+    if (APics[i].LineWidth > 0) and (APics[i].Stroke <> '') and (APics[i].Stroke <> 'none')
+      and TyTryParseChartColor(APics[i].Stroke, c) then
+    begin
+      el.Style.StrokeColor := c;
+      el.Style.StrokeWidthLogical := APics[i].LineWidth;
+      el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
+    end;
+    if not IsNan(APics[i].Opacity) then
+      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
     AList.Add(el);
     Inc(Result);
+    Inc(Result, EmitLabel(APics[i].Lbl, ABlock, AInk, AMeasurer, AList));
   end;
 end;
 
@@ -2130,8 +2415,10 @@ initialization
   {$ENDIF}
 
   GTopWord := TJSONString.Create('top');
+  GInsideWord := TJSONString.Create('inside');
 
 finalization
   GTopWord.Free;
+  GInsideWord.Free;
   GTextDefaults.Free;
 end.
