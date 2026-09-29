@@ -15,15 +15,65 @@
  * A gallery that silently dropped a third of its examples would look complete
  * and be useless as a progress board.
  *
- * Usage:  node harvest.js [pathToEchartsExamples] [outDir]
+ * THE TIME HELPERS ARE THE REAL ONES. echarts.time.parse/format/roundTime,
+ * echarts.number.parseDate and echarts.format.formatTime come from the ECharts
+ * dist bundle (ECHARTS_DIST, as the oracles), not from stubs: every calendar
+ * example builds its daily rows as [echarts.time.format(t, '{yyyy}-{MM}-{dd}'),
+ * v], and a stub that returned '' harvested rows like ["", 9469] on which
+ * upstream draws no cell at all. ECharts reads a bare 'yyyy-mm-dd' as LOCAL
+ * time, so the process runs with TZ=UTC and says so by assertion -- the dates
+ * then do not depend on the machine that harvested them.
+ *
+ * Usage:  node harvest.js [pathToEchartsExamples] [outDir] [--only id,id,...]
+ *                         [--seeded]
+ *   --only    (or TY_GALLERY_ONLY=id,id)  harvest just these ids; every other
+ *             gallery file is left alone and only their index.json entries are
+ *             replaced (the rest stay byte-identical).
+ *   --seeded  (or TY_GALLERY_SEEDED=1)  Math.random inside each example is the
+ *             oracles' xorshift32 (seed 2463534242), reset per example, so the
+ *             generated data is reproducible. Off by default.
+ *   The calendar examples were re-harvested with:
+ *     node harvest.js --seeded --only calendar-charts,calendar-effectscatter,
+ *       calendar-graph,calendar-heatmap,calendar-simple,calendar-horizontal,
+ *       calendar-vertical,calendar-pie,custom-calendar-icon
+ *     (one comma-separated argument, no spaces)
  */
 'use strict';
+// Before anything creates a Date: ECharts parses 'yyyy-mm-dd' as local time.
+process.env.TZ = 'UTC';
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const SRC = process.argv[2] || 'D:/Projects/echarts-examples';
-const OUT = process.argv[3] ||
+if (new Date(2017, 0, 1).getTimezoneOffset() !== 0) {
+  console.error('TZ=UTC did not take effect; the harvested dates would ' +
+    'depend on the time zone of this machine.');
+  process.exit(2);
+}
+
+const DIST = process.env.ECHARTS_DIST || 'D:/Projects/echarts/dist/echarts.js';
+const realEcharts = require(DIST);
+
+/* Flags anywhere on the command line; the positional arguments are the rest. */
+const argv = process.argv.slice(2);
+const positional = [];
+let onlyArg = process.env.TY_GALLERY_ONLY || '';
+let SEEDED = process.env.TY_GALLERY_SEEDED === '1';
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--seeded') SEEDED = true;
+  else if (a === '--only') onlyArg = argv[++i] || '';
+  else if (a.startsWith('--only=')) onlyArg = a.slice('--only='.length);
+  else if (a.startsWith('--')) {
+    console.error('unknown option ' + a);
+    process.exit(2);
+  }
+  else positional.push(a);
+}
+const ONLY = onlyArg.split(',').map((x) => x.trim()).filter(Boolean);
+
+const SRC = positional[0] || 'D:/Projects/echarts-examples';
+const OUT = positional[1] ||
   'D:/Projects/ty-advchart/examples/advchart/gallery';
 const TS_DIR = path.join(SRC, 'public/examples/ts');
 const MAX_BYTES = Number(process.env.TY_GALLERY_MAX || 1048576);
@@ -85,6 +135,23 @@ function deTypeScript(src) {
   return out.outputText;
 }
 
+/* The oracles' seeded Math.random (the port's xorshift32), as a fresh Math for
+   one example: the host's Math.random is never replaced. */
+const SEED = 2463534242;
+function seededMath() {
+  let state = SEED;
+  const m = Object.create(Math);
+  m.random = function () {
+    let x = state;
+    x ^= x << 13; x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5; x >>>= 0;
+    state = x;
+    return x / 4294967296;
+  };
+  return m;
+}
+
 /* Local stand-ins for what an example expects the page to provide. Anything
    that reaches the network is refused rather than faked: an example whose data
    we do not have is an example we cannot show honestly. */
@@ -113,18 +180,19 @@ function makeSandbox(collected) {
       },
       color: { modifyHSL: (c) => c, lift: (c) => c },
       format: {
-        formatTime: () => '', addCommas: (v) => String(v),
+        formatTime: realEcharts.format.formatTime,
+        addCommas: (v) => String(v),
         encodeHTML: (s) => String(s)
       },
       number: {
-        parseDate: (v) => new Date(v),
+        parseDate: realEcharts.number.parseDate,
         round: (v, p) => Number(Number(v).toFixed(p == null ? 10 : p)),
         linearMap: (v) => v
       },
       time: {
-        parse: (v) => new Date(v).getTime(),
-        format: () => '',
-        roundTime: (v) => v
+        parse: realEcharts.time.parse,
+        format: realEcharts.time.format,
+        roundTime: realEcharts.time.roundTime
       },
       util: { map: (a, f) => Array.prototype.map.call(a, f) },
       registerMap() { collected.usedMap = true; },
@@ -132,7 +200,7 @@ function makeSandbox(collected) {
     },
     ROOT_PATH: '__ROOT__',
     console: { log() {}, warn() {}, error() {} },
-    Math, JSON, Date, Number, String, Array, Object, isNaN, parseInt,
+    Math: SEEDED ? seededMath() : Math, JSON, Date, Number, String, Array, Object, isNaN, parseInt,
     parseFloat, encodeURIComponent, decodeURIComponent
   };
   sandbox.window = sandbox;
@@ -247,9 +315,17 @@ function componentsIn(option) {
 
 function main() {
   fs.mkdirSync(OUT, { recursive: true });
-  const files = fs.readdirSync(TS_DIR)
+  let files = fs.readdirSync(TS_DIR)
     .filter((f) => f.endsWith('.ts'))
     .sort();
+  if (ONLY.length) {
+    const missing = ONLY.filter((id) => !files.includes(id + '.ts'));
+    if (missing.length) {
+      console.error('no such example: ' + missing.join(', '));
+      process.exit(2);
+    }
+    files = files.filter((f) => ONLY.includes(f.replace(/\.ts$/, '')));
+  }
 
   const index = [];
   let ok = 0, failed = 0;
@@ -312,6 +388,26 @@ function main() {
     index.push(entry);
   }
 
+  if (ONLY.length) {
+    /* A partial run replaces just its own entries, in place; every other entry
+       is re-serialised exactly as the full run wrote it (same stringify). */
+    const indexPath = path.join(OUT, 'index.json');
+    const whole = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    for (const e of index) {
+      const at = whole.entries.findIndex((x) => x.id === e.id);
+      if (at < 0) whole.entries.push(e);
+      else whole.entries[at] = e;
+    }
+    whole.total = whole.entries.length;
+    whole.converted = whole.entries.filter((x) => x.ok).length;
+    fs.writeFileSync(indexPath, JSON.stringify(whole, null, 1), 'utf8');
+    console.log('harvested ' + files.length + ' (' + ok + ' converted' +
+                (SEEDED ? ', seeded' : '') + '): ' +
+                index.map((e) => e.id + (e.ok ? '' : ' [' + e.reason + ']'))
+                  .join(', '));
+    process.exit(0);
+  }
+
   fs.writeFileSync(path.join(OUT, 'index.json'),
     JSON.stringify({ source: 'apache/echarts-examples', total: files.length,
                      converted: ok, entries: index }, null, 1), 'utf8');
@@ -331,3 +427,4 @@ function main() {
 }
 
 main();
+process.exit(0);

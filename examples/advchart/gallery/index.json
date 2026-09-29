@@ -946,7 +946,7 @@
     "calendar"
    ],
    "callbacks": 2,
-   "bytes": 47846
+   "bytes": 62426
   },
   {
    "id": "calendar-effectscatter",
@@ -967,7 +967,7 @@
     "calendar"
    ],
    "callbacks": 4,
-   "bytes": 26436
+   "bytes": 33970
   },
   {
    "id": "calendar-graph",
@@ -987,7 +987,7 @@
     "calendar"
    ],
    "callbacks": 0,
-   "bytes": 12999
+   "bytes": 16627
   },
   {
    "id": "calendar-heatmap",
@@ -1007,7 +1007,7 @@
     "calendar"
    ],
    "callbacks": 0,
-   "bytes": 10723
+   "bytes": 14372
   },
   {
    "id": "calendar-horizontal",
@@ -1026,7 +1026,7 @@
     "calendar"
    ],
    "callbacks": 0,
-   "bytes": 34649
+   "bytes": 45584
   },
   {
    "id": "calendar-lunar",
@@ -1066,7 +1066,7 @@
     "calendar"
    ],
    "callbacks": 1,
-   "bytes": 11796
+   "bytes": 12350
   },
   {
    "id": "calendar-simple",
@@ -1084,7 +1084,7 @@
     "calendar"
    ],
    "callbacks": 0,
-   "bytes": 10377
+   "bytes": 14011
   },
   {
    "id": "calendar-vertical",
@@ -1103,7 +1103,7 @@
     "calendar"
    ],
    "callbacks": 1,
-   "bytes": 34660
+   "bytes": 45616
   },
   {
    "id": "candlestick-brush",
@@ -1384,7 +1384,7 @@
     "calendar"
    ],
    "callbacks": 1,
-   "bytes": 12561
+   "bytes": 16210
   },
   {
    "id": "custom-cartesian-polygon",
