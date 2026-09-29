@@ -387,6 +387,10 @@ begin
       FillChar(si, SizeOf(si), 0);
       si.StartupInfo.cb := SizeOf(STARTUPINFOEXW);
       si.lpAttributeList := list;
+      { with no standard handles given, a program whose own are redirected (a pipe or a
+        file: the test runner's output) hands them to the child, and the child writes
+        there instead of into the pseudo console; empty ones make it use the console's }
+      si.StartupInfo.dwFlags := STARTF_USESTDHANDLES;
       FillChar(pi, SizeOf(pi), 0);
       cmd := UTF8Decode(ACommand);
       UniqueString(cmd);
