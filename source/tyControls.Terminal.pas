@@ -50,7 +50,7 @@ uses
   tyControls.Controller, tyControls.ScrollBar, tyControls.PlatformWS, tyControls.TextMenu,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal.Selection,
-  tyControls.Terminal.Links;
+  tyControls.Terminal.Links, tyControls.Terminal.Parser;
 
 const
   { X11 惯例的 PRIMARY(选中即复制、中键粘贴):Unix 上除了 macOS。按平台取,不按 widgetset;
@@ -80,6 +80,13 @@ type
   { 链接被 Ctrl+单击(macOS Cmd+单击):AUri 原样(OSC 8 的 URI,或识别出的网址);控件自己
     不打开任何东西 }
   TTyTerminalLinkEvent = procedure(Sender: TObject; const AUri: string; AFromOsc8: Boolean) of object;
+  { OSC 52 剪贴板:关(默认,全丢)、程序可以写、程序可以写也可以读(读要宿主同意) }
+  TTyTerminalOsc52Policy = (to52Off, to52Write, to52ReadWrite);
+  { 程序要写(AWrite)或读剪贴板。ASelection 是程序给的 Pc 原样(控件不按它选剪贴板)。写:
+    AText 是解出来的文字,宿主可以改,AAllow 默认 True;读:AText 是剪贴板现在的内容,宿主可以
+    改,AAllow 默认 False(宿主不说行就不给)。同步发,在解析中间:宿主可以在这里弹模态框 }
+  TTyTerminalOsc52Event = procedure(Sender: TObject; AWrite: Boolean; const ASelection: string;
+    var AText: string; var AAllow: Boolean) of object;
 
   { 终端。右键菜单是自建的四项(不实现 ITyTextEditActions:那是给编辑框六项菜单设计的)。 }
   TTyTerminalView = class(TTyCustomControl, ITyImeEditable, ITyScrollBarFrameHost)
@@ -217,6 +224,9 @@ type
     FHoverValid: Boolean;
     FHoverShift: TShiftState;
     FMouseInside: Boolean;
+    { OSC 52 }
+    FOsc52: TTyTerminalOsc52Policy;
+    FOnOsc52: TTyTerminalOsc52Event;
     { 右键菜单:自建四项,懒建,无 owner(析构里释放) }
     FMenu: TTyPopupMenu;
     FMenuCopy, FMenuPaste, FMenuSelectAll, FMenuClear: TMenuItem;
@@ -353,6 +363,8 @@ type
     procedure DirtyLinkRows(const ALink: TTyTermLink);
     procedure SetDetectUrls(AValue: Boolean);
     procedure SetAllowNonHttpLinks(AValue: Boolean);
+    { OSC 52 的处理器(注册在 Core 的解析器上);一律答「处理了」,不进 OnOsc }
+    function HandleOsc52(const AData: string): Boolean;
     { 右键菜单 }
     procedure MenuCopyClick(Sender: TObject);
     procedure MenuPasteClick(Sender: TObject);
@@ -547,6 +559,7 @@ type
     { OSC 8 里不是 http / https 的 URI(file://、ssh://)算不算链接:默认不算(上游没有
       linkHandler.allowNonHttpProtocols 时同样不算——不下划线、不能点) }
     property AllowNonHttpLinks: Boolean read FAllowNonHttpLinks write SetAllowNonHttpLinks default False;
+    property Osc52: TTyTerminalOsc52Policy read FOsc52 write FOsc52 default to52Off;
     property LineHeightPercent: Integer read FLineHeightPercent write SetLineHeightPercent default 100;
     property LetterSpacing: Integer read FLetterSpacing write SetLetterSpacing default 0;
     property TabStop default True;
@@ -561,6 +574,7 @@ type
     property OnShortcutQuery: TTyTerminalShortcutQueryEvent read FOnShortcutQuery write FOnShortcutQuery;
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
     property OnLinkActivate: TTyTerminalLinkEvent read FOnLinkActivate write FOnLinkActivate;
+    property OnOsc52: TTyTerminalOsc52Event read FOnOsc52 write FOnOsc52;
   end;
 
 { MouseService._sendEvent 的键(MouseService.ts:112-136):按下、抬起按 LCL 的键(左、中、右,
@@ -650,6 +664,7 @@ begin
   FWordSeparators := TyTermDefaultWordSeparators;
   FDetectUrls := True;
   FAllowNonHttpLinks := False;
+  FOsc52 := to52Off;
   FSelDrawnFirst := -1;
   FSelDrawnLast := -1;
   FBlinkVisible := True;
@@ -681,6 +696,8 @@ begin
   FSelection.OnRedraw := @SelectionRedraw;
   FSelTrimBase := FCore.Buffer.TrimmedLines;
   FSelRows := FCore.Rows;
+  { OSC 52:同 Core 自己的处理器,交给解析器(它释放);Reset 不清解析器的处理器 }
+  FCore.Parser.RegisterOscHandler(52, TTyTerminalOscStringHandler.Create(@HandleOsc52));
   MaskUnencodedExtensions;
   { Core 出生时 Focused = True(2 期交接):新控件还没焦点,马上告诉它 }
   FCore.ReportFocus(False);
@@ -2952,6 +2969,42 @@ begin
   FHoverValid := valid;
   if FHoverValid then
     DirtyLinkRows(FHover);
+end;
+
+{ ---- OSC 52 ------------------------------------------------------------------------ }
+
+{ ClipboardAddon.ts:32-66,外加三种策略与宿主的同意。上游读剪贴板是 Promise、解析器停住等
+  它;这里同步问宿主,应答的顺序同样不乱。应答不是用户输入(不清选区、不滚到底)。 }
+function TTyTerminalView.HandleOsc52(const AData: string): Boolean;
+var
+  pc, pd, text: string;
+  allow: Boolean;
+begin
+  Result := True;
+  if FOsc52 = to52Off then
+    Exit;
+  if not TyTermOsc52Split(AData, pc, pd) then
+    Exit;
+  if pd = '?' then
+  begin
+    if FOsc52 <> to52ReadWrite then
+      Exit;
+    text := ReadClipboardText;
+    allow := False;
+    if Assigned(FOnOsc52) then
+      FOnOsc52(Self, False, pc, text, allow);
+    if allow then
+      FCore.Input(TyTermOsc52Reply(pc, text), False);
+  end
+  else
+  begin
+    text := TyTermOsc52Decode(pd);
+    allow := True;
+    if Assigned(FOnOsc52) then
+      FOnOsc52(Self, True, pc, text, allow);
+    if allow then
+      WriteClipboardText(text);
+  end;
 end;
 
 procedure TTyTerminalView.SetDetectUrls(AValue: Boolean);
