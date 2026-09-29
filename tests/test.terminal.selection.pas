@@ -189,9 +189,9 @@ var
   a: TJSONArray;
   button, detail, oldRows, n: Integer;
   shift, alt, en: Boolean;
-  link: PTyTermLinkRange;
+  lp: PTyTermLinkRange;
 begin
-  if HasLink then link := @Link else link := nil;
+  if HasLink then lp := @Link else lp := nil;
   if AStep.Find('write') <> nil then
     Core.WriteSync(TyTermBase64Bytes(AStep.Strings['write']))
   else if AStep.Find('resize') <> nil then
@@ -225,7 +225,7 @@ begin
     else if button <> 0 then
     else if not Enabled and not shift then
     else
-      Sel.Press(Pt(Self, p.Arrays['at']), detail, Enabled and shift, alt, link);
+      Sel.Press(Pt(Self, p.Arrays['at']), detail, Enabled and shift, alt, lp);
   end
   else if AStep.Find('move') <> nil then
   begin
@@ -243,7 +243,7 @@ begin
   else if AStep.Find('release') <> nil then
     Sel.Release
   else if AStep.Find('rightClick') <> nil then
-    Sel.RightClickSelect(Pt(Self, AStep.Objects['rightClick'].Arrays['at']), link)
+    Sel.RightClickSelect(Pt(Self, AStep.Objects['rightClick'].Arrays['at']), lp)
   else if AStep.Find('link') <> nil then
   begin
     if AStep.Items[AStep.IndexOfName('link')].JSONType = jtNull then
@@ -367,7 +367,7 @@ var
   cases: TFPList;
   c: TJSONObject;
   steps: TJSONArray;
-  run: TSelRun;
+  rn: TSelRun;
   i, k: Integer;
   total: Int64;
   trimmed: Int64;
@@ -383,18 +383,18 @@ begin
       begin
         c := TJSONObject(cases[i]);
         steps := c.Arrays['steps'];
-        run := TSelRun.Create(c, fx[0].Integers['cellHeight'], fx[0].Integers['dragThreshold']);
+        rn := TSelRun.Create(c, fx[0].Integers['cellHeight'], fx[0].Integers['dragThreshold']);
         try
           for k := 0 to steps.Count - 1 do
           begin
-            run.Changes := 0;
-            trimmed := run.Step(steps.Objects[k]);
-            run.Compare(steps.Objects[k].Objects['after'], trimmed, c.Strings['id'],
+            rn.Changes := 0;
+            trimmed := rn.Step(steps.Objects[k]);
+            rn.Compare(steps.Objects[k].Objects['after'], trimmed, c.Strings['id'],
               Format('step %d', [k]), miss, False);
             Inc(total);
           end;
         finally
-          run.Free;
+          rn.Free;
         end;
       end;
       AssertEquals(miss.Text, 0, miss.Count);
@@ -409,18 +409,18 @@ begin
   end;
 end;
 
-{ The same selection object after the core's Reset runs the first three steps again
-  and answers as a new one did. dragAmount is left out: upstream keeps the last drag's
-  amount until the next press as well, so a used service differs from a new one there
-  by design. }
+{ The same selection object, the core Reset (resized back first if the case resized
+  it): the first three steps again, against what upstream's same service answered
+  (the fixture's rerun -- a used service keeps its mode, last drag amount and last
+  report, so a new one's answers are not the measure). }
 procedure TTyTerminalSelectionOracleTests.TestAfterResetToo;
 var
   miss: TTyTermMisses;
   fx: TTyTermFixtures;
   cases: TFPList;
   c: TJSONObject;
-  steps: TJSONArray;
-  run: TSelRun;
+  steps, rerun: TJSONArray;
+  rn: TSelRun;
   i, k, n: Integer;
   total, trimmed: Int64;
 begin
@@ -434,26 +434,32 @@ begin
       begin
         c := TJSONObject(cases[i]);
         steps := c.Arrays['steps'];
-        run := TSelRun.Create(c, fx[0].Integers['cellHeight'], fx[0].Integers['dragThreshold']);
+        rn := TSelRun.Create(c, fx[0].Integers['cellHeight'], fx[0].Integers['dragThreshold']);
         try
           for k := 0 to steps.Count - 1 do
-            run.Step(steps.Objects[k]);
-          if (run.Core.Cols <> c.Integers['cols']) or (run.Core.Rows <> c.Integers['rows']) then
-            run.Core.Resize(c.Integers['cols'], c.Integers['rows']);
-          run.Core.Reset;
-          run.ResetHarness;
+            rn.Step(steps.Objects[k]);
+          if (rn.Core.Cols <> c.Integers['cols']) or (rn.Core.Rows <> c.Integers['rows']) then
+          begin
+            k := rn.Core.Rows;
+            rn.Core.Resize(c.Integers['cols'], c.Integers['rows']);
+            if rn.Core.Rows <> k then
+              rn.Sel.Clear;
+          end;
+          rn.Core.Reset;
+          rerun := c.Arrays['rerun'];
           n := steps.Count;
           if n > 3 then n := 3;
+          AssertEquals(c.Strings['id'] + ' rerun steps', n, rerun.Count);
           for k := 0 to n - 1 do
           begin
-            run.Changes := 0;
-            trimmed := run.Step(steps.Objects[k]);
-            run.Compare(steps.Objects[k].Objects['after'], trimmed, c.Strings['id'],
-              Format('after reset, step %d', [k]), miss, True);
+            rn.Changes := 0;
+            trimmed := rn.Step(steps.Objects[k]);
+            rn.Compare(rerun.Objects[k], trimmed, c.Strings['id'],
+              Format('after reset, step %d', [k]), miss, False);
             Inc(total);
           end;
         finally
-          run.Free;
+          rn.Free;
         end;
       end;
       AssertEquals(miss.Text, 0, miss.Count);

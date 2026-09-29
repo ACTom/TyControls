@@ -218,7 +218,8 @@ function fakeBrowser(rows, state) {
     linkifier: { get currentLink() { return state.link; } },
     // a fresh array every call: the model keeps it and changes it in place
     mouseCoordsService: { getCoords: () => (state.point ? [state.point[0], state.point[1]] : undefined) },
-    renderService: { dimensions: { css: { canvas: { height: rows * CELL_H } } } },
+    // ROWS may be a function: the terminal's rows now (a case may resize)
+    renderService: { dimensions: { css: { canvas: { get height() { return (typeof rows === 'function' ? rows() : rows) * CELL_H; } } } } },
     coreBrowserService: { window, dpr: 1 },
   };
 }

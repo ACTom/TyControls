@@ -35,6 +35,10 @@
 // active buffer's list trimmed this step -- what the selection's onTrim listener
 // saw), spans (per viewport row, the [from, to) columns
 // DomRendererRowFactory._isCellInSelection answers, or null).
+// rerun: the same selection service after the case: resized back if it was resized,
+// term.reset(), then the first three steps again -- the `after` of each (the reuse
+// path: a used service keeps its mode, its last drag amount and what it last
+// reported, so the answers need not equal a new one's).
 //
 // Reproducible: no time, fixed key order.
 'use strict';
@@ -53,7 +57,7 @@ function runCase(c) {
   if (c.wordSeparator !== undefined) term.options.wordSeparator = c.wordSeparator;
   const core = term._core;
   const state = { point: null, link: undefined };
-  const fb = L.fakeBrowser(c.rows, state);
+  const fb = L.fakeBrowser(() => term.rows, state);
   const sel = new B.SelectionService(fb.element, fb.screenElement, fb.linkifier, core._bufferService,
     core.coreService, fb.mouseCoordsService, core.optionsService, core.mouseStateService,
     fb.renderService, fb.coreBrowserService);
@@ -70,8 +74,7 @@ function runCase(c) {
   hook();
   core._bufferService.buffers.onBufferActivate(() => hook());
   let enabled = true;
-  const outSteps = [];
-  for (const s of c.steps) {
+  const doStep = s => {
     changes = 0;
     trimmed = 0;
     const o = {};
@@ -131,15 +134,19 @@ function runCase(c) {
     } else {
       throw new Error(`${c.id}: unknown step ${JSON.stringify(s)}`);
     }
+    o.after = snapshot();
+    return o;
+  };
+  const snapshot = () => {
     const start = sel._model.finalSelectionStart;
     const end = sel._model.finalSelectionEnd;
     const mode = sel._activeSelectionMode;
     const buf = core._bufferService.buffer;
     const spans = [];
-    for (let r = 0; r < c.rows; r++) {
+    for (let r = 0; r < term.rows; r++) {
       const y = buf.ydisp + r;
       let from = -1, to = -1;
-      for (let x = 0; x < c.cols; x++) {
+      for (let x = 0; x < term.cols; x++) {
         const hit = B.DomRendererRowFactory.prototype._isCellInSelection.call(
           { _selectionStart: start, _selectionEnd: end, _columnSelectMode: mode === 3 }, x, y);
         if (hit) {
@@ -151,17 +158,24 @@ function runCase(c) {
       spans.push(from === -1 ? null : [from, to]);
     }
     const m = sel._model;
-    o.after = {
+    return {
       start: pt(start), end: pt(end),
       raw: [pt(m.selectionStart), pt(m.selectionEnd), m.selectionStartLength, m.isSelectAllActive],
       mode, has: sel.hasSelection, text: b64(sel.selectionText), changes,
       dragAmount: sel._dragScrollAmount, ydisp: buf.ydisp, ybase: buf.ybase, trimmed, spans,
     };
-    outSteps.push(o);
-  }
+  };
+  const outSteps = c.steps.map(doStep);
+  // THE SAME SERVICE AGAIN: back to the case's size, term.reset(), the first three
+  // steps once more (the harness state -- the program's mouse, the link -- carries on,
+  // as it would for a control that is reset).
+  if (term.cols !== c.cols || term.rows !== c.rows) term.resize(c.cols, c.rows);
+  term.reset();
+  const rerun = c.steps.slice(0, 3).map(s => doStep(s).after);
   const out = { id: c.id, cols: c.cols, rows: c.rows, scrollback: c.scrollback };
   if (c.wordSeparator !== undefined) out.wordSeparator = c.wordSeparator;
   out.steps = outSteps;
+  out.rerun = rerun;
   term.dispose();
   return out;
 }
