@@ -14,9 +14,16 @@ unit tyControls.Terminal;
 
   - 本控件**接管**了 Core 的这些事件,宿主别改写:OnData、OnRefreshRows、OnTitleChange、
     OnBell、OnCursorMove、OnScroll、OnBufferActivate、OnModesChange、OnOsc、
-    OnQueryBaseColor、OnRequestScrollToBottom、OnProcessRequest、OnWindowOptionsReport、
-    OnResize、OnScrollbackCleared。宿主可以自己挂的是 OnIconNameChange、OnLineFeed,
-    或者 Core.Parser.Register*Handler。
+    OnQueryBaseColor、OnProcessRequest、OnWindowOptionsReport、OnResize、
+    OnScrollbackCleared。宿主可以自己挂的是 OnIconNameChange、OnLineFeed、
+    OnRequestScrollToBottom(只是通知:Core 自己滚到底),或者 Core.Parser.Register*Handler。
+  - 解析一次(AsyncSlice、WriteSync、Write)里 Core 可能滚几千次、改几次色:这期间滚动只记
+    「整屏脏」「滚动条待同步」,颜色签名不看;解析返回后(EndDrive)统一失效、同步一次,
+    签名变了(OSC 4 / 10 / 11 / 104 …)整窗失效——内边距也是 257 号色。
+  - 帧率:距上次绘制不到一帧(16 ms)就接着跑下一片,不让出给 WM_PAINT;一帧里光栅化新
+    字形有时间预算,没画完的行留脏、下一帧整行重画。
+  - 焦点跟 LM_SETFOCUS / LM_KILLFOCUS(切到别的程序也算失焦),DoEnter / DoExit 也照报,
+    两路幂等。
   - 不在 Paint 里改网格。RenderTo 只读状态、画;度量变了要改网格就记下来,经
     QueueAsyncCall 延后一次(改尺寸会发事件、宿主会改 PTY、会再次失效重画,在绘制里做就是
     重画风暴)。
@@ -33,7 +40,7 @@ unit tyControls.Terminal;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, Forms,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LMessages, LazUTF8, Forms,
   ExtCtrls, Clipbrd,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel,
@@ -65,13 +72,42 @@ type
     FRasterizer: TTyTermGlyphRasterizer;
     FRowPainter: TTyTermRowPainter;
     FSurface: TBGRABitmap;
+    { 画到的大小(客户区);位图本身按块向上取整,拖动改尺寸时不每次重建 }
+    FSurfaceW, FSurfaceH: Integer;
     FFrameDirty, FAllDirty: Boolean;
     FDirty: array of Boolean;
-    FFrameBg: Cardinal;
+    { 上一次画外框时的外框样式签名(含状态:悬停、按下、聚焦) }
+    FFrameSig: Cardinal;
+    FFrameSigValid: Boolean;
     FColorSig: Cardinal;
     { 这一帧的 259 色快照:行绘制器每格要问两三次颜色,经 Core 问一次要走覆盖表和色表的
-      键比较,一屏几万次;画之前抄一份,画的时候查数组 }
+      键比较,一屏几万次;画之前抄一份,画的时候查数组。禁用时已经按 :disabled 的 opacity
+      预混(FrameColor 读的就是它) }
     FFrameColors: array[0..258] of Cardinal;
+    FRawColors: array[0..258] of Cardinal;
+    FCursorInkFrame: Cardinal;
+    { 预混的键(原色签名 + Enabled + 主题版本)与结果的 alpha、混向的底色 }
+    FPremixSig: Cardinal;
+    FPremixValid: Boolean;
+    FPremixAlpha: Integer;
+    FPremixBase: Cardinal;
+    { 解析过程中(AsyncSlice / WriteSync / Write)只记,返回后统一做 }
+    FDriveDepth: Integer;
+    FScrollPending, FBarPending: Boolean;
+    FDrivenColorSig: Cardinal;
+    FDrivenColorSigValid: Boolean;
+    { 帧率上限与光栅化预算 }
+    FLastPaintMs: Double;
+    FRasterBudgetMs: Double;
+    FRepaintQueued: Boolean;
+    { 内边距 + 边框:按 (模型, 版本, 类, 覆盖, PPI, 状态) 缓存 }
+    FInsets: TRect;
+    FInsetsModel: TObject;
+    FInsetsVersion: Cardinal;
+    FInsetsClass, FInsetsOverride: string;
+    FInsetsPPI: Integer;
+    FInsetsStates: TTyStateSet;
+    FInsetsValid: Boolean;
     { 度量:规格记录与它的键(便宜的字符串,先比键,变了才解析规格) }
     FSpec: TTyTermFontSpec;
     FSpecKey: string;
@@ -84,11 +120,14 @@ type
     FPaletteVersion: Cardinal;
     FPaletteClass, FPaletteOverride: string;
     FPaletteValid: Boolean;
-    { 已经通知过 Core 的那个主题键(第一次建色表不通知) }
+    { 已经通知过 Core 的那张色表(第一次建色表不通知;主题变了但色表没变——改内边距、
+      改字体——也不通知)与主题键 }
+    FNotifiedPalette: array[0..258] of Cardinal;
     FNotifiedModel: TObject;
     FNotifiedVersion: Cardinal;
     FNotifiedClass, FNotifiedOverride: string;
     FNotifiedValid: Boolean;
+    FNotifyQueued: Boolean;
     { 覆盖通道的字体:StyleOverride 单独解析一次,按 (模型, 版本, 文本) 缓存 }
     FOvrModel: TObject;
     FOvrVersion: Cardinal;
@@ -106,9 +145,12 @@ type
     { 状态 }
     FScrollBar: TTyScrollBar;
     FSyncingScroll: Boolean;
+    FBarSyncs, FControlInvalidates: Integer;
     FHasFocus: Boolean;
+    FStateChange: Boolean;
     FGridAnnounced: Boolean;
     FRelayoutQueued: Boolean;
+    FRelayingOut, FRelayoutAgain: Boolean;
     FInRender: Boolean;
     FPreviewCols, FPreviewRows: Integer;
     FPaintedCursorRow: Integer;
@@ -127,8 +169,11 @@ type
     { 输入法 }
     FImeHook: TObject;
     FImeCaretRect: TRect;
+    FImeCaretValid: Boolean;
     FPreedit: string;
     FInPreedit: Boolean;
+    { macOS:LM_IM_COMPOSITION 答它(TTyCocoaImeHandler),构造时就建,Cocoa 在建句柄时问 }
+    FCocoaIme: TObject;
     { 事件 }
     FOnData: TTyTerminalDataEvent;
     FOnGridResize: TTyTerminalGridResizeEvent;
@@ -147,18 +192,23 @@ type
     procedure CoreBufferActivate(Sender: TObject);
     procedure CoreModesChange(Sender: TObject);
     procedure CoreQueryColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
-    procedure CoreRequestScrollToBottom(Sender: TObject);
     procedure CoreProcessRequest(Sender: TObject);
     procedure CoreWindowReport(Sender: TObject; AKind: TTyTermWindowReport);
     procedure CoreResize(Sender: TObject; ACols, ARows: Integer);
     procedure CoreScrollbackCleared(Sender: TObject);
     { 调度 }
-    procedure AsyncSlice(Data: PtrInt);
     procedure AsyncRelayout(Data: PtrInt);
+    procedure AsyncRepaint(Data: PtrInt);
+    procedure AsyncNotifyScheme(Data: PtrInt);
+    procedure BeginDrive;
+    procedure EndDrive;
+    procedure MaskUnencodedExtensions;
     { 主题、字体、网格 }
-    function StyleColor(const ATypeKey: string; ABackground: Boolean; AFallback: Cardinal): Cardinal;
+    function InstanceStyle(const ATypeKey: string): TTyStyleSet;
     function EnsurePalette: Boolean;
     procedure EnsureThemeCurrent;
+    function FrameSignature: Cardinal;
+    procedure SetHasFocus(AValue: Boolean);
     function OverrideStyle: TTyStyleSet;
     function ResolveFontSpec(APPI: Integer): TTyTermFontSpec;
     function SpecKey(APPI: Integer): string;
@@ -177,8 +227,10 @@ type
     function CursorViewRow: Integer;
     function CursorShapeNow: TTyTermCursorShape;
     function ColorSignature: Cardinal;
+    procedure PremixFrameColors(ARawSig: Cardinal);
     function FrameColor(AIndex: Integer): Cardinal;
     procedure PaintFrame(APPI: Integer);
+    procedure BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer);
     procedure PaintPreedit(APPI: Integer);
     { 闪烁、同步输出 }
     function EffectiveBlink: Boolean;
@@ -232,21 +284,35 @@ type
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    procedure FontChanged(Sender: TObject); override;
+    procedure CMParentFontChanged(var Message: TLMessage); message CM_PARENTFONTCHANGED;
+    procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
+    procedure WMSetFocus(var Message: TLMSetFocus); message LM_SETFOCUS;
+    procedure WMKillFocus(var Message: TLMKillFocus); message LM_KILLFOCUS;
+    {$IFDEF LCLCocoa}
+    procedure CocoaImComposition(var Message: TLMessage); message LM_IM_COMPOSITION;
+    {$ENDIF}
     { 输入法提交的整段文字:当作键入发给程序 }
     procedure HandleImeCommit(const ACommitUtf8: string);
-    { 输入法候选窗的锚:光标所在的格子(宽字符不扩,候选窗只要一个锚点;视口不在底部时仍按
-      光标所在的屏幕行算——候选窗跟光标,不跟视口) }
-    function ImeCaretCell: TRect;
+    { 输入法候选窗的锚:上一帧画在光标所在格子上的矩形(宽字符不扩,候选窗只要一个锚点;
+      视口不在底部时仍按光标所在的屏幕行算——候选窗跟光标,不跟视口)。没聚焦、没句柄、
+      还没画过一帧:空矩形 }
     function GetImeCaretRect: TRect;
     procedure InitializeWnd; override;
     procedure DestroyWnd; override;
     { 调度的缝:默认 Application.QueueAsyncCall(设计期不排片) }
     procedure ScheduleSlice; virtual;
+    { 排好的一片:跑到队列空、或者离上次绘制满一帧(16 ms)为止 }
+    procedure AsyncSlice(Data: PtrInt);
     { 失效几行(视口行):有句柄时 InvalidateRect 那几行的并集。子类覆盖必须调 inherited。 }
     procedure InvalidateRows(AFirst, ALast: Integer); virtual;
+    { 失效整个客户区(外框、内边距、每一行)。子类覆盖必须调 inherited。 }
+    procedure InvalidateAll; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { 闪烁计时器的回调转到这里;测试直接喂时间 }
     procedure BlinkTick(ANowMs: Double);
@@ -275,6 +341,15 @@ type
     function SyncTimerActive: Boolean;
     function PendingSyncRows: TPoint;         { (-1, -1) = 没在攒 }
     function HasFocusFlag: Boolean;
+    function ScrollBarSyncs: Integer;
+    { whole-control invalidations that went through (Invalidate that did not return early) }
+    function ControlInvalidations: Integer;
+    { 一帧里光栅化新字形的时间预算(ms,<= 0 不限);默认 10 }
+    property RasterBudgetMs: Double read FRasterBudgetMs write FRasterBudgetMs;
+    { 上一次贴到画布的时刻(Core 的时钟) }
+    property LastPaintMs: Double read FLastPaintMs write FLastPaintMs;
+    { rows still to paint (a frame that ran out of its rasterizing budget leaves some) }
+    function RowsLeftToPaint: Boolean;
     property ScrollBar: TTyScrollBar read FScrollBar;
   public
     constructor Create(AOwner: TComponent); override;
@@ -360,16 +435,39 @@ const
 
 implementation
 
+{$IFDEF LCLCocoa}
+uses
+  tyControls.CocoaWS;
+{$ENDIF}
+
+{$IFDEF LCLWin32}
+{ gdi32 的 StretchDIBits 与它要的位图头,自己声明:implementation 里 uses Windows 会让
+  RECT 类型遮住 Types.Rect 函数 }
+type
+  TTyDibHeader = packed record
+    biSize: LongWord;
+    biWidth, biHeight: LongInt;
+    biPlanes, biBitCount: Word;
+    biCompression, biSizeImage: LongWord;
+    biXPelsPerMeter, biYPelsPerMeter: LongInt;
+    biClrUsed, biClrImportant: LongWord;
+  end;
+
+function TyStretchDIBits(ADC: HDC; AXDest, AYDest, ADestW, ADestH, AXSrc, AYSrc, ASrcW, ASrcH: LongInt;
+  ABits: Pointer; const AInfo: TTyDibHeader; AUsage, ARop: LongWord): LongInt; stdcall;
+  external 'gdi32' name 'StretchDIBits';
+{$ENDIF}
+
 const
-  { token 缺失时的兜底;真值都在主题里(§11) }
+  { token 缺失时的兜底;真值都在主题里(§11)。0..15 缺失时退到 Tango(TyTermDefaultPaletteColor) }
   FallbackFg = $000000;
   FallbackBg = $FFFFFF;
-  TangoFallback: array[0..15] of Cardinal = (
-    $2E3436, $CC0000, $4E9A06, $C4A000, $3465A4, $75507B, $06989A, $D3D7CF,
-    $555753, $EF2929, $8AE234, $FCE94F, $729FCF, $AD7FA8, $34E2E2, $EEEEEC);
   BlinkIntervalMs = 600;
   BlinkRestMs = 300000;          { 5 分钟不活动就停在「显示」 }
   SyncTimeoutMs = 1000;          { RenderService.ts:359-363 }
+  FrameMs = 16;                  { 一帧:离上次绘制不到这么久,接着跑下一片 }
+  SurfaceBlock = 64;             { 表面位图按这么大的块向上取整 }
+  DefaultRasterBudgetMs = 10;
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
 
@@ -377,7 +475,12 @@ constructor TTyTerminalView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csOpaque, csDoubleClicks, csTripleClicks];
+  { 整个客户区都由表面位图贴上去(csOpaque),局部重画只贴那几行:LCL 的双缓冲再垫一张
+    整窗位图只是多拷一遍 }
+  DoubleBuffered := False;
   TabStop := True;
+  FRasterBudgetMs := DefaultRasterBudgetMs;
+  FPremixAlpha := 255;
   FCursorInactiveStyle := tcisOutline;
   FAlternateScroll := True;
   FDrawBoldBright := True;
@@ -404,16 +507,21 @@ begin
   FCore.OnBufferActivate := @CoreBufferActivate;
   FCore.OnModesChange := @CoreModesChange;
   FCore.OnQueryBaseColor := @CoreQueryColor;
-  FCore.OnRequestScrollToBottom := @CoreRequestScrollToBottom;
   FCore.OnProcessRequest := @CoreProcessRequest;
   FCore.OnWindowOptionsReport := @CoreWindowReport;
   FCore.OnResize := @CoreResize;
   FCore.OnScrollbackCleared := @CoreScrollbackCleared;
+  MaskUnencodedExtensions;
   { Core 出生时 Focused = True(2 期交接):新控件还没焦点,马上告诉它 }
   FCore.ReportFocus(False);
   SetLength(FDirty, FCore.Rows);
   FAllDirty := True;
   FFrameDirty := True;
+  {$IFDEF LCLCocoa}
+  { 句柄建之前就要在:LCL-Cocoa 在 CreateHandle 里发 LM_IM_COMPOSITION(Edit.pas 同一做法);
+    handler 以 COM 字段持有 Self,_AddRef 是空操作,没有环 }
+  FCocoaIme := TTyCocoaImeHandler.Create(Self);
+  {$ENDIF}
   SetInitialBounds(0, 0, 480, 300);
 end;
 
@@ -436,7 +544,6 @@ begin
     FCore.OnBufferActivate := nil;
     FCore.OnModesChange := nil;
     FCore.OnQueryBaseColor := nil;
-    FCore.OnRequestScrollToBottom := nil;
     FCore.OnProcessRequest := nil;
     FCore.OnWindowOptionsReport := nil;
     FCore.OnResize := nil;
@@ -447,6 +554,7 @@ begin
   FreeAndNil(FGlyphCache);
   FreeAndNil(FRasterizer);
   FreeAndNil(FSurface);
+  FreeAndNil(FCocoaIme);
   inherited Destroy;
 end;
 
@@ -495,6 +603,13 @@ end;
 
 procedure TTyTerminalView.CoreScroll(Sender: TObject; AYDisp: Integer);
 begin
+  { 一次解析里可能滚几千次:只记下来,EndDrive 统一做一次 }
+  if FDriveDepth > 0 then
+  begin
+    FScrollPending := True;
+    FBarPending := True;
+    Exit;
+  end;
   DirtyAll;
   SyncScrollBar;
 end;
@@ -519,11 +634,6 @@ begin
     ARgb := FPalette[AIndex]
   else
     ARgb := 0;
-end;
-
-procedure TTyTerminalView.CoreRequestScrollToBottom(Sender: TObject);
-begin
-  FCore.ScrollToBottom;
 end;
 
 procedure TTyTerminalView.CoreProcessRequest(Sender: TObject);
@@ -552,12 +662,15 @@ begin
   FGridAnnounced := True;
   if Assigned(FOnGridResize) then FOnGridResize(Self, ACols, ARows);
   SyncScrollBar;
-  if HandleAllocated then LCLIntf.InvalidateRect(Handle, nil, False);
+  InvalidateAll;
 end;
 
 procedure TTyTerminalView.CoreScrollbackCleared(Sender: TObject);
 begin
-  SyncScrollBar;
+  if FDriveDepth > 0 then
+    FBarPending := True
+  else
+    SyncScrollBar;
 end;
 
 { ---- 调度 --------------------------------------------------------------------------- }
@@ -569,9 +682,85 @@ begin
 end;
 
 procedure TTyTerminalView.AsyncSlice(Data: PtrInt);
+var
+  more: Boolean;
 begin
-  if FCore.ProcessPending then
+  MaskUnencodedExtensions;
+  BeginDrive;
+  try
+    { 帧率上限:离上次绘制还不到一帧,消息循环这时让出去也画不了新的一帧——接着跑片;
+      满一帧了才让出(已经提交的 WM_PAINT 先处理) }
+    repeat
+      more := FCore.ProcessPending;
+    until (not more) or (NowMs - FLastPaintMs >= FrameMs);
+  finally
+    EndDrive;
+  end;
+  if more then
     ScheduleSlice;
+end;
+
+procedure TTyTerminalView.BeginDrive;
+begin
+  Inc(FDriveDepth);
+  if FDriveDepth = 1 then
+  begin
+    { 这次解析前的颜色签名:返回后比,变了就整窗重画 }
+    FDrivenColorSig := ColorSignature;
+    FDrivenColorSigValid := True;
+  end;
+end;
+
+procedure TTyTerminalView.EndDrive;
+begin
+  Dec(FDriveDepth);
+  if FDriveDepth > 0 then Exit;
+  if FScrollPending then
+  begin
+    FScrollPending := False;
+    DirtyAll;
+  end;
+  if FBarPending then
+  begin
+    FBarPending := False;
+    SyncScrollBar;
+  end;
+  { OSC 4 / 10 / 11 / 12 / 104 … 改了色:上游 onChangeColors -> _fullRefresh
+    (RenderService.ts:120);257 号色还是内边距的底色,所以整窗 }
+  if FDrivenColorSigValid and (ColorSignature <> FDrivenColorSig) then
+  begin
+    FFrameDirty := True;
+    DirtyAll;
+    InvalidateAll;
+  end;
+  FDrivenColorSigValid := False;
+end;
+
+{ Kitty 键盘协议、win32-input-mode 控件都不编码:程序查询时不能报支持(宿主改了 Core 的
+  VtExtensions 也一样,每次解析前再屏蔽一次) }
+procedure TTyTerminalView.MaskUnencodedExtensions;
+begin
+  if FCore.VtExtensions * [tveKittyKeyboard, tveWin32InputMode] <> [] then
+    FCore.VtExtensions := FCore.VtExtensions - [tveKittyKeyboard, tveWin32InputMode];
+end;
+
+procedure TTyTerminalView.AsyncRepaint(Data: PtrInt);
+var
+  r: Integer;
+begin
+  { 上一帧光栅化超了预算留下的行:再失效一次,下一帧补画 }
+  FRepaintQueued := False;
+  if csDestroying in ComponentState then Exit;
+  for r := 0 to High(FDirty) do
+    if FDirty[r] then
+      InvalidateRows(r, r);
+end;
+
+procedure TTyTerminalView.AsyncNotifyScheme(Data: PtrInt);
+begin
+  FNotifyQueued := False;
+  if csDestroying in ComponentState then Exit;
+  EnsureThemeCurrent;
 end;
 
 procedure TTyTerminalView.AsyncRelayout(Data: PtrInt);
@@ -583,6 +772,12 @@ end;
 
 procedure TTyTerminalView.RequestRelayout;
 begin
+  { UpdateGrid 自己也问度量:排版中途不重入,这一趟完了再来一趟 }
+  if FRelayingOut then
+  begin
+    FRelayoutAgain := True;
+    Exit;
+  end;
   if FInRender then
   begin
     { 在绘制里:记下来,消息循环里再改(地雷 5) }
@@ -598,67 +793,132 @@ end;
 
 { ---- 主题 --------------------------------------------------------------------------- }
 
-function TTyTerminalView.StyleColor(const ATypeKey: string; ABackground: Boolean; AFallback: Cardinal): Cardinal;
-var
-  st: TTyStyleSet;
+function TermFgOf(const S: TTyStyleSet; AFallback: Cardinal): Cardinal;
 begin
-  st := ActiveController.Model.ResolveStyle(ATypeKey, '', []);
-  Result := AFallback;
-  if ABackground then
-  begin
-    if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then
-      Result := Cardinal(st.Background.Color) and $FFFFFF;
-  end
-  else if tpTextColor in st.Present then
-    Result := Cardinal(st.TextColor) and $FFFFFF;
+  if tpTextColor in S.Present then
+    Result := Cardinal(S.TextColor) and $FFFFFF
+  else
+    Result := AFallback;
+end;
+
+function TermBgOf(const S: TTyStyleSet; AFallback: Cardinal): Cardinal;
+begin
+  if (tpBackground in S.Present) and (S.Background.Kind = tfkSolid) then
+    Result := Cardinal(S.Background.Color) and $FFFFFF
+  else
+    Result := AFallback;
+end;
+
+{ 本实例的**无状态**样式:类型键 + 本实例的类,TyTerminal 再叠 StyleOverride(覆盖是写给
+  TyTerminal 这一个键的)。色表不跟悬停、聚焦、禁用走——禁用在画的时候预混
+  (PremixFrameColors);色表本身是程序查询(OSC 4 / 10 / 11)答的那一份。 }
+function TTyTerminalView.InstanceStyle(const ATypeKey: string): TTyStyleSet;
+begin
+  Result := ActiveController.Model.ResolveStyle(ATypeKey, TyStyleClassFor(Self, StyleClass), []);
+  if (StyleOverride <> '') and SameText(ATypeKey, GetStyleTypeKey) then
+    TyMergeStyleSet(Result, OverrideStyle);
 end;
 
 function TTyTerminalView.EnsurePalette: Boolean;
 var
-  model: TObject;
-  st: TTyStyleSet;
+  model: TTyStyleModel;
+  cls, ground, raw, ansiKey: string;
+  st, bare, cur, bareCur: TTyStyleSet;
   i: Integer;
+  instFg, instBg, themeFg, themeBg, c: Cardinal;
 begin
   model := ActiveController.Model;
-  if FPaletteValid and (FPaletteModel = model)
-    and (FPaletteVersion = ActiveController.Model.ThemeVersion)
-    and (FPaletteClass = StyleClass) and (FPaletteOverride = StyleOverride) then
+  cls := TyStyleClassFor(Self, StyleClass);
+  if FPaletteValid and (FPaletteModel = model) and (FPaletteVersion = model.ThemeVersion)
+    and (FPaletteClass = cls) and (FPaletteOverride = StyleOverride) then
     Exit(False);
-  { 0..15 主题;16..255 公式;256 / 257 TyTerminal 的前景 / 底色;258 光标底色。
-    颜色一律取 RGB、丢 alpha;没解析出来的退到 Tango / 黑白,不抛。 }
+  { 256 / 257:本实例的前景 / 底色;主题自己的(不带类、不带覆盖)用来看实例换没换底 }
+  st := InstanceStyle(GetStyleTypeKey);
+  instFg := TermFgOf(st, FallbackFg);
+  instBg := TermBgOf(st, FallbackBg);
+  bare := model.ResolveStyle(GetStyleTypeKey, '', []);
+  themeFg := TermFgOf(bare, FallbackFg);
+  themeBg := TermBgOf(bare, FallbackBg);
+  FPalette[256] := instFg;
+  FPalette[257] := instBg;
+  { 0..15 取实例的类;16..255 公式;颜色一律 RGB、丢 alpha;缺了退到 Tango,不抛 }
+  ground := Format('#%.6x', [instBg]);
   for i := 0 to 15 do
-    FPalette[i] := StyleColor('TyTerminalAnsi' + IntToStr(i), False, TangoFallback[i]);
+  begin
+    ansiKey := 'TyTerminalAnsi' + IntToStr(i);
+    c := TermFgOf(model.ResolveStyle(ansiKey, cls, []), TyTermDefaultPaletteColor(i));
+    if instBg <> themeBg then
+    begin
+      { 这个实例换了底(类或 StyleOverride 改了 background):16 色的 token 是
+        on(var(--terminal-bg), 浅底用, 深底用),拿本实例的底色再求一次,深底就换成深底那套。
+        只在这一色确实来自 token 时这么做:类没有另写它,主题的规则就是 token 的值。 }
+      raw := Trim(model.RawVar('--terminal-ansi-' + IntToStr(i)));
+      if (raw <> '') and (Pos('var(--terminal-bg)', LowerCase(raw)) > 0)
+        and (TermFgOf(model.ResolveStyle(ansiKey, '', []), $1000000) = c)
+        and (TermFgOf(model.ResolveOverride('color: ' + raw), $1000000) = c) then
+        c := TermFgOf(model.ResolveOverride('color: '
+          + StringReplace(raw, 'var(--terminal-bg)', ground, [rfReplaceAll, rfIgnoreCase])), c);
+    end;
+    FPalette[i] := c;
+  end;
   for i := 16 to 255 do
     FPalette[i] := TyTermDefaultPaletteColor(i);
-  st := CurrentStyle;
-  if tpTextColor in st.Present then
-    FPalette[256] := Cardinal(st.TextColor) and $FFFFFF
-  else
-    FPalette[256] := FallbackFg;
-  if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then
-    FPalette[257] := Cardinal(st.Background.Color) and $FFFFFF
-  else
-    FPalette[257] := FallbackBg;
-  FPalette[258] := StyleColor('TyTerminalCursor', True, FPalette[256]);
-  FCursorInkRgb := StyleColor('TyTerminalCursor', False, FPalette[257]);
+  { 258 光标色、光标下的字色:默认就是前景、底色(--terminal-cursor / -ink);实例换了前景 /
+    底色而类没有另写光标时跟着换,否则深底实例上的光标还是浅底那一色 }
+  cur := model.ResolveStyle('TyTerminalCursor', cls, []);
+  bareCur := model.ResolveStyle('TyTerminalCursor', '', []);
+  FPalette[258] := TermBgOf(cur, instFg);
+  FCursorInkRgb := TermFgOf(cur, instBg);
+  if (instFg <> themeFg) and (FPalette[258] = themeFg) and (TermBgOf(bareCur, $1000000) = themeFg) then
+    FPalette[258] := instFg;
+  if (instBg <> themeBg) and (FCursorInkRgb = themeBg) and (TermFgOf(bareCur, $1000000) = themeBg) then
+    FCursorInkRgb := instBg;
   FPaletteModel := model;
-  FPaletteVersion := ActiveController.Model.ThemeVersion;
-  FPaletteClass := StyleClass;
+  FPaletteVersion := model.ThemeVersion;
+  FPaletteClass := cls;
   FPaletteOverride := StyleOverride;
   FPaletteValid := True;
   Result := True;
 end;
 
 procedure TTyTerminalView.EnsureThemeCurrent;
+var
+  i: Integer;
+  differs: Boolean;
 begin
   EnsurePalette;
   if FNotifiedValid and (FNotifiedModel = FPaletteModel) and (FNotifiedVersion = FPaletteVersion)
     and (FNotifiedClass = FPaletteClass) and (FNotifiedOverride = FPaletteOverride) then
     Exit;
-  { 换了主题:Core 清 OSC 覆盖色、2031 开着就报明暗;外框和每一行重画;度量的键失效。
-    第一次建色表不算「换」。 }
+  { 主题变了:外框和每一行重画、度量的键失效、内边距重取。只有色表真变了(换明暗、换配色)
+    才告诉 Core——它清 OSC 覆盖色、2031 开着就报明暗;改内边距、改字体不算。第一次建
+    色表不算「换」。在绘制里不当场通知(通知会发 OnData):记下来,消息循环里再做。 }
+  differs := False;
   if FNotifiedValid then
+    for i := 0 to 258 do
+      if FPalette[i] <> FNotifiedPalette[i] then
+      begin
+        differs := True;
+        Break;
+      end;
+  if differs and FInRender then
+  begin
+    if not FNotifyQueued then
+    begin
+      FNotifyQueued := True;
+      Application.QueueAsyncCall(@AsyncNotifyScheme, 0);
+    end;
+    { 键先不记:AsyncNotifyScheme 回来还要比出「变了」 }
+    FFrameDirty := True;
+    FAllDirty := True;
+    FSpecKey := '';
+    FInsetsValid := False;
+    Exit;
+  end;
+  if differs then
     FCore.NotifyColorSchemeChanged;
+  for i := 0 to 258 do
+    FNotifiedPalette[i] := FPalette[i];
   FNotifiedModel := FPaletteModel;
   FNotifiedVersion := FPaletteVersion;
   FNotifiedClass := FPaletteClass;
@@ -667,6 +927,45 @@ begin
   FFrameDirty := True;
   FAllDirty := True;
   FSpecKey := '';
+  FInsetsValid := False;
+end;
+
+{ 外框看得见的那几项(含状态:悬停、按下、聚焦时主题可能另写边框、底色、透明度) }
+function TTyTerminalView.FrameSignature: Cardinal;
+var
+  st: TTyStyleSet;
+  h: Cardinal;
+  p: TTyProp;
+
+  procedure Mix(AValue: Cardinal);
+  begin
+    h := (h xor AValue) * 16777619;
+  end;
+
+begin
+  st := CurrentStyle;
+  h := 2166136261;
+  for p := Low(TTyProp) to High(TTyProp) do
+    if p in st.Present then Mix(Ord(p) + 1);
+  Mix(Cardinal(st.Background.Color));
+  Mix(Ord(st.Background.Kind));
+  Mix(Cardinal(st.BorderColor));
+  Mix(Cardinal(st.BorderWidth));
+  Mix(Ord(st.BorderStyle));
+  Mix(Ord(st.RenderStyle));
+  Mix(Cardinal(st.BorderRadius));
+  Mix(Cardinal(st.Radius.TL) xor (Cardinal(st.Radius.TR) shl 8)
+    xor (Cardinal(st.Radius.BR) shl 16) xor (Cardinal(st.Radius.BL) shl 24));
+  Mix(Cardinal(st.Padding.Left) xor (Cardinal(st.Padding.Top) shl 8)
+    xor (Cardinal(st.Padding.Right) shl 16) xor (Cardinal(st.Padding.Bottom) shl 24));
+  if tpOpacity in st.Present then Mix(Cardinal(Round(st.Opacity * 1000)));
+  Mix(Cardinal(st.ShadowColor));
+  Mix(Cardinal(st.ShadowBlur));
+  Mix(Cardinal(st.OutlineColor));
+  Mix(Cardinal(st.OutlineWidth));
+  Mix(Cardinal(st.OutlineOffset));
+  Mix(Ord(Enabled));
+  Result := h;
 end;
 
 procedure TTyTerminalView.Invalidate;
@@ -681,7 +980,15 @@ begin
     EnsureThemeCurrent;
     if (wasKey <> '') and (FSpecKey = '') and not FInRender then
       RequestRelayout;
+    { 基类在悬停、按下、聚焦时整控件失效:终端的外框大多不随这些状态变,重贴整张表面
+      白花一次整窗贴图。外框样式真变了才重画外框(连同各行,外框的底铺在网格下面)。 }
+    if FStateChange and FFrameSigValid and not FFrameDirty then
+    begin
+      if FrameSignature = FFrameSig then Exit;
+      FFrameDirty := True;
+    end;
   end;
+  Inc(FControlInvalidates);
   inherited Invalidate;
 end;
 
@@ -813,18 +1120,38 @@ begin
   FAllDirty := True;
   FFrameDirty := True;
   Result := True;
+  { 谁问出来的度量变了(CellRect、CellAt、SizeForGrid、14t 应答……),网格都跟着重排:
+    不能让一次查询把「格子变了」这个信号吃掉。在绘制里经 QueueAsyncCall 延后。 }
+  RequestRelayout;
 end;
 
 function TTyTerminalView.ContentInsets(APPI: Integer): TRect;
 var
   st: TTyStyleSet;
   b: Integer;
+  model: TTyStyleModel;
+  states: TTyStateSet;
 begin
+  { 每行失效、每次查询都要:按主题键缓存(状态也在键里,:focus 可以另写内边距) }
+  model := ActiveController.Model;
+  states := CurrentStates;
+  if FInsetsValid and (FInsetsModel = model) and (FInsetsVersion = model.ThemeVersion)
+    and (FInsetsPPI = APPI) and (FInsetsStates = states) and (FInsetsClass = StyleClass)
+    and (FInsetsOverride = StyleOverride) then
+    Exit(FInsets);
   st := CurrentStyle;
   b := 0;
   if TyBorderVisible(st) then b := st.BorderWidth;
   Result := Rect(MulDiv(st.Padding.Left + b, APPI, 96), MulDiv(st.Padding.Top + b, APPI, 96),
     MulDiv(st.Padding.Right + b, APPI, 96), MulDiv(st.Padding.Bottom + b, APPI, 96));
+  FInsets := Result;
+  FInsetsModel := model;
+  FInsetsVersion := model.ThemeVersion;
+  FInsetsPPI := APPI;
+  FInsetsStates := states;
+  FInsetsClass := StyleClass;
+  FInsetsOverride := StyleOverride;
+  FInsetsValid := True;
 end;
 
 function TTyTerminalView.ScrollBarWidth(APPI: Integer): Integer;
@@ -842,30 +1169,61 @@ end;
 
 procedure TTyTerminalView.UpdateGrid;
 var
-  ppi, nc, nr, barW: Integer;
+  ppi, nc, nr, barW, passes: Integer;
   ins: TRect;
 begin
   if (FCore = nil) or (Parent = nil) then Exit;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  ppi := Font.PixelsPerInch;
-  EnsureThemeCurrent;
-  EnsureMetrics(ppi);
-  ins := ContentInsets(ppi);
-  barW := ScrollBarWidth(ppi);
-  UpdateScrollBar(ppi);
-  { 条宽恒扣(地雷 6);设计期也扣,设计器和运行时同一网格 }
-  nc := Max(TyTermMinimumCols, (ClientWidth - ins.Left - ins.Right - barW) div FMetrics.CellW);
-  nr := Max(TyTermMinimumRows, (ClientHeight - ins.Top - ins.Bottom) div FMetrics.CellH);
-  if (nc <> FCore.Cols) or (nr <> FCore.Rows) then
-    { OnResize 回来做其余的事(地雷 7:在 Core 的事件里调会被延后,以 OnResize 为准) }
-    FCore.Resize(nc, nr)
-  else if not FGridAnnounced then
+  if FRelayingOut then
   begin
-    { 加载完成后的第一次排版,尺寸没变也发一次(spec §9.2) }
-    FGridAnnounced := True;
-    if Assigned(FOnGridResize) then FOnGridResize(Self, nc, nr);
+    { 排版里又要排(宿主在 OnGridResize 里改了尺寸):这一趟完了再来一趟 }
+    FRelayoutAgain := True;
+    Exit;
   end;
-  WriteDesignPreview;
+  FRelayingOut := True;
+  passes := 0;
+  try
+   repeat
+    FRelayoutAgain := False;
+    Inc(passes);
+    ppi := Font.PixelsPerInch;
+    EnsureThemeCurrent;
+    EnsureMetrics(ppi);
+    ins := ContentInsets(ppi);
+    barW := ScrollBarWidth(ppi);
+    UpdateScrollBar(ppi);
+    { 条宽恒扣(地雷 6);设计期也扣,设计器和运行时同一网格 }
+    nc := Max(TyTermMinimumCols, (ClientWidth - ins.Left - ins.Right - barW) div FMetrics.CellW);
+    nr := Max(TyTermMinimumRows, (ClientHeight - ins.Top - ins.Bottom) div FMetrics.CellH);
+    if (nc <> FCore.Cols) or (nr <> FCore.Rows) then
+      { OnResize 回来做其余的事(地雷 7:在 Core 的事件里调会被延后,以 OnResize 为准) }
+      FCore.Resize(nc, nr)
+    else if not FGridAnnounced then
+    begin
+      { 加载完成后的第一次排版,尺寸没变也发一次(spec §9.2) }
+      FGridAnnounced := True;
+      if Assigned(FOnGridResize) then FOnGridResize(Self, nc, nr);
+    end;
+    WriteDesignPreview;
+   until (not FRelayoutAgain) or (passes >= 3);
+  finally
+    FRelayingOut := False;
+  end;
+end;
+
+procedure TTyTerminalView.FontChanged(Sender: TObject);
+begin
+  inherited FontChanged(Sender);
+  { 字号、字体一改就重排,不等下一次有人来问度量 }
+  if (FCore <> nil) and ([csLoading, csDestroying] * ComponentState = []) then
+    RequestRelayout;
+end;
+
+procedure TTyTerminalView.CMParentFontChanged(var Message: TLMessage);
+begin
+  inherited;
+  if (FCore <> nil) and ([csLoading, csDestroying] * ComponentState = []) then
+    RequestRelayout;
 end;
 
 procedure TTyTerminalView.Loaded;
@@ -949,6 +1307,12 @@ begin
   LCLIntf.InvalidateRect(Handle, @r, False);
 end;
 
+procedure TTyTerminalView.InvalidateAll;
+begin
+  if HandleAllocated then
+    LCLIntf.InvalidateRect(Handle, nil, False);
+end;
+
 procedure TTyTerminalView.HoldRows(AFirst, ALast: Integer);
 begin
   { 同步输出(2026)开着:每一次要重画的行都攒起来——Core 报的脏行、光标行、滚动带来的
@@ -982,7 +1346,11 @@ var
 begin
   if FCore.Modes.SynchronizedOutput then
   begin
-    HoldRows(AFirst, ALast);
+    { 只攒视口里的行:视口外的行(用户上翻了一屏多)不算「攒到了」,不起表 }
+    AFirst := Max(AFirst, 0);
+    ALast := Min(ALast, FCore.Rows - 1);
+    if ALast >= AFirst then
+      HoldRows(AFirst, ALast);
     Exit;
   end;
   { 模式关了:攒着的并进来一起画 }
@@ -1070,14 +1438,62 @@ function TTyTerminalView.ColorSignature: Cardinal;
 var
   i: Integer;
 begin
-  { OSC 4 / 10 / 11 / 12 改了覆盖色,Core 没有专门的事件;整屏的颜色签名变了就全部重画。
-    顺手抄下这一帧的色快照(FrameColor)。 }
+  { 259 色(覆盖色优先)与光标下的字色的签名;顺手抄进 FRawColors。OSC 4 / 10 / 11 / 12
+    改了覆盖色 Core 没有专门的事件,解析返回后比签名(EndDrive) }
   Result := 2166136261;
   for i := 0 to 258 do
   begin
-    FFrameColors[i] := FCore.ResolveColor(i);
-    Result := (Result xor FFrameColors[i]) * 16777619;
+    FRawColors[i] := FCore.ResolveColor(i);
+    Result := (Result xor FRawColors[i]) * 16777619;
   end;
+  EnsurePalette;
+  Result := (Result xor FCursorInkRgb) * 16777619;
+end;
+
+function PremixRgb(AColor, ABase: Cardinal; AAlpha: Integer): Cardinal;
+begin
+  Result := ((((AColor shr 16) and $FF) * Cardinal(AAlpha) + ((ABase shr 16) and $FF) * Cardinal(255 - AAlpha) + 127) div 255) shl 16
+    or ((((AColor shr 8) and $FF) * Cardinal(AAlpha) + ((ABase shr 8) and $FF) * Cardinal(255 - AAlpha) + 127) div 255) shl 8
+    or (((AColor and $FF) * Cardinal(AAlpha) + (ABase and $FF) * Cardinal(255 - AAlpha) + 127) div 255);
+end;
+
+{ 这一帧的色表:原色(FRawColors)禁用时按 TyTerminal:disabled 的 opacity 朝父控件底色预混
+  (TyApplyStyleOpacity 同一个方向:变淡而不透出底下的东西)。键 = 原色签名 + Enabled +
+  主题版本;键没变就不重算(opacity 和父底色要解析样式、走父链)。 }
+procedure TTyTerminalView.PremixFrameColors(ARawSig: Cardinal);
+var
+  st: TTyStyleSet;
+  a, i: Integer;
+  base, key: Cardinal;
+  pc: TTyColor;
+begin
+  key := (((ARawSig xor Cardinal(Ord(Enabled))) * 16777619) xor ActiveController.Model.ThemeVersion) * 16777619;
+  if FPremixValid and (key = FPremixSig) then Exit;
+  a := 255;
+  base := 0;
+  if not Enabled then
+  begin
+    st := ActiveController.Model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), [tysDisabled]);
+    if StyleOverride <> '' then TyMergeStyleSet(st, OverrideStyle);
+    if tpOpacity in st.Present then a := EnsureRange(Round(st.Opacity * 255), 0, 255);
+    if TyResolveParentBg(Self, pc) then
+      base := Cardinal(pc) and $FFFFFF
+    else
+      base := FRawColors[257];
+  end;
+  for i := 0 to 258 do
+    if a < 255 then
+      FFrameColors[i] := PremixRgb(FRawColors[i], base, a)
+    else
+      FFrameColors[i] := FRawColors[i];
+  if a < 255 then
+    FCursorInkFrame := PremixRgb(FCursorInkRgb, base, a)
+  else
+    FCursorInkFrame := FCursorInkRgb;
+  FPremixAlpha := a;
+  FPremixBase := base;
+  FPremixSig := key;
+  FPremixValid := True;
 end;
 
 function TTyTerminalView.FrameColor(AIndex: Integer): Cardinal;
@@ -1094,25 +1510,89 @@ procedure TTyTerminalView.PaintFrame(APPI: Integer);
 var
   P: TTyPainter;
   st: TTyStyleSet;
+  bg: Cardinal;
+
+  function Dim(AColor: TTyColor): TTyColor;
+  var
+    rgb: Cardinal;
+  begin
+    rgb := PremixRgb(Cardinal(AColor) and $FFFFFF, FPremixBase, FPremixAlpha);
+    Result := TTyColor((Cardinal(AColor) and $FF000000) or rgb);
+  end;
+
 begin
-  { 外框 + 内边距 + 网格外的余量:底色取 Core 的 257(OSC 11 改了底色,内边距也跟着变) }
-  FSurface.Fill(TyTermRgbToPixel(FFrameBg));
+  { 外框 + 内边距 + 网格外的余量:底色取这一帧的 257(OSC 11 改了底色,内边距也跟着变;
+    禁用时已经预混)。外框的其余颜色同样预混,opacity 不再交给画笔(表面上画的外框
+    EndPaint 时不经画布,画笔的 opacity 本来就落不下来) }
+  bg := FFrameColors[257];
+  FSurface.FillRect(0, 0, FSurfaceW, FSurfaceH, TyTermRgbToPixel(bg), dmSet);
   st := CurrentStyle;
   st.Background := Default(TTyFill);
   st.Background.Kind := tfkSolid;
-  st.Background.Color := TyRGB((FFrameBg shr 16) and $FF, (FFrameBg shr 8) and $FF, FFrameBg and $FF);
+  st.Background.Color := TyRGB((bg shr 16) and $FF, (bg shr 8) and $FF, bg and $FF);
   Include(st.Present, tpBackground);
+  Exclude(st.Present, tpOpacity);
+  if FPremixAlpha < 255 then
+  begin
+    st.BorderColor := Dim(st.BorderColor);
+    st.OutlineColor := Dim(st.OutlineColor);
+    st.ShadowColor := Dim(st.ShadowColor);
+  end;
   P := TTyPainter.Create;
   try
-    { 画布给 nil:EndPaint 不往任何画布上贴(贴由 RenderTo 末尾的 DrawPart 做) }
-    P.BeginPaintOn(nil, Rect(0, 0, FSurface.Width, FSurface.Height), APPI, FSurface);
-    DrawFrame(P, Rect(0, 0, FSurface.Width, FSurface.Height), st);
+    { 画布给 nil:EndPaint 不往任何画布上贴(贴由 RenderTo 末尾做) }
+    P.BeginPaintOn(nil, Rect(0, 0, FSurfaceW, FSurfaceH), APPI, FSurface);
+    DrawFrame(P, Rect(0, 0, FSurfaceW, FSurfaceH), st);
     P.EndPaint;
   finally
     P.Free;
   end;
+  FFrameSig := FrameSignature;
+  FFrameSigValid := True;
   FFrameDirty := False;
   FAllDirty := True;
+end;
+
+{ 表面位图的 APart(表面坐标)贴到画布的 (ADstX, ADstY):Win32 直接从位图的 DIB 带源偏移
+  StretchDIBits,不经 GetPart 复制一份;别的 widgetset 仍走 BGRA 的 DrawPart(零拷贝的
+  路子要各平台真机核实,见真机验收) }
+procedure TTyTerminalView.BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer);
+{$IFDEF LCLWin32}
+const
+  BI_RGB = 0;
+  DIB_RGB_COLORS = 0;
+  SRCCOPY = $00CC0020;
+var
+  info: TTyDibHeader;
+  w, h, ySrc: Integer;
+{$ENDIF}
+begin
+  {$IFDEF LCLWin32}
+  w := APart.Right - APart.Left;
+  h := APart.Bottom - APart.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  FillChar(info, SizeOf(info), 0);
+  info.biSize := SizeOf(info);
+  info.biWidth := FSurface.Width;
+  info.biPlanes := 1;
+  info.biBitCount := 32;
+  info.biCompression := BI_RGB;
+  if FSurface.LineOrder = riloBottomToTop then
+  begin
+    { 自下而上的 DIB:源矩形的原点在左下角 }
+    info.biHeight := FSurface.Height;
+    ySrc := FSurface.Height - APart.Bottom;
+  end
+  else
+  begin
+    info.biHeight := -FSurface.Height;
+    ySrc := APart.Top;
+  end;
+  TyStretchDIBits(ACanvas.Handle, ADstX, ADstY, w, h, APart.Left, ySrc, w, h,
+    FSurface.Data, info, DIB_RGB_COLORS, SRCCOPY);
+  {$ELSE}
+  FSurface.DrawPart(APart, ACanvas, ADstX, ADstY, True);
+  {$ENDIF}
 end;
 
 procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -1123,30 +1603,34 @@ var
   shape: TTyTermCursorShape;
   sig: Cardinal;
   ime: TRect;
+  incomplete: Boolean;
 begin
   FInRender := True;
   try
     EnsureThemeCurrent;
-    if EnsureMetrics(APPI) then
-      RequestRelayout;
+    EnsureMetrics(APPI);           { 度量变了它自己排队重排 }
     w := ARect.Right - ARect.Left;
     h := ARect.Bottom - ARect.Top;
     if (w <= 0) or (h <= 0) then Exit;
-    if (FSurface = nil) or (FSurface.Width <> w) or (FSurface.Height <> h) then
+    { 表面位图按块向上取整、只长不缩:拖着改尺寸不每次重建 }
+    if (FSurface = nil) or (FSurface.Width < w) or (FSurface.Height < h) then
     begin
       FreeAndNil(FSurface);
-      FSurface := TBGRABitmap.Create(w, h);
+      FSurface := TBGRABitmap.Create((w + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock,
+        (h + SurfaceBlock - 1) div SurfaceBlock * SurfaceBlock);
+      FFrameDirty := True;
+    end;
+    if (w <> FSurfaceW) or (h <> FSurfaceH) then
+    begin
+      FSurfaceW := w;
+      FSurfaceH := h;
       FFrameDirty := True;
     end;
     sig := ColorSignature;
-    if sig <> FColorSig then
+    PremixFrameColors(sig);
+    if FPremixSig <> FColorSig then
     begin
-      FColorSig := sig;
-      FFrameDirty := True;
-    end;
-    if FCore.ResolveColor(257) <> FFrameBg then
-    begin
-      FFrameBg := FCore.ResolveColor(257);
+      FColorSig := FPremixSig;
       FFrameDirty := True;
     end;
     if FFrameDirty then
@@ -1158,9 +1642,12 @@ begin
     FRowPainter.GlyphCache := FGlyphCache;
     FRowPainter.Rasterizer := FRasterizer;
     FRowPainter.DrawBoldBright := FDrawBoldBright;
-    FRowPainter.CursorColor := FCore.ResolveColor(258);
-    FRowPainter.CursorInk := FCursorInkRgb;
+    FRowPainter.CursorColor := FFrameColors[258];
+    FRowPainter.CursorInk := FCursorInkFrame;
     FRowPainter.CursorWidthPx := Max(1, MulDiv(FSpec.CursorWidthLogical, APPI, 96));
+    FRowPainter.RasterBudgetMs := FRasterBudgetMs;
+    FRowPainter.Clock := @NowMs;
+    FRowPainter.BeginFrame;
     ins := ContentInsets(APPI);
     buf := FCore.Buffer;
     { 光标:显示、视口在底部、闪烁相位为显示 }
@@ -1173,6 +1660,7 @@ begin
       SetLength(FDirty, FCore.Rows);
       FAllDirty := True;
     end;
+    incomplete := False;
     for r := 0 to FCore.Rows - 1 do
     begin
       if not (FAllDirty or FDirty[r]) then Continue;
@@ -1182,34 +1670,47 @@ begin
         cursorCol := Min(buf.X, FCore.Cols - 1)
       else
         cursorCol := -1;
-      FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
-        FCore.Cols, cursorCol, shape);
+      if not FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
+        FCore.Cols, cursorCol, shape) then
+      begin
+        { 光栅化超了这一帧的预算:这一行缺字,留脏,下一帧整行重画 }
+        FDirty[r] := True;
+        incomplete := True;
+      end;
       { 组字串画在光标所在的视口行上,不管光标此刻显不显示(闪烁、DECTCEM) }
       if FInPreedit and (FPreedit <> '') and (r = CursorViewRow) then
         PaintPreedit(APPI);
     end;
     FAllDirty := False;
     FPaintedCursorRow := cursorRow;
-    { 输入法的候选窗:锚在光标格(Edit.pas / Memo.pas 同一做法) }
-    { 用这一帧的度量(RenderTo 的 PPI 可以不是 Font.PixelsPerInch,别经 CellRect 把度量换回去) }
+    if incomplete and not FRepaintQueued and not (csDesigning in ComponentState) then
+    begin
+      FRepaintQueued := True;
+      Application.QueueAsyncCall(@AsyncRepaint, 0);
+    end;
+    { 输入法的候选窗:锚在光标格(Edit.pas / Memo.pas 同一做法),用这一帧的度量(RenderTo 的
+      PPI 可以不是 Font.PixelsPerInch,别经 CellRect 把度量换回去)。Win32 每帧都设
+      (Memo.pas:4464):系统候选窗的位置按线程记,在别的控件里打过字就被挪走了 }
     ime := GridCellRect(Min(buf.X, FCore.Cols - 1), buf.Y, ins);
-    if not EqualRect(ime, FImeCaretRect) then
+    if (not FImeCaretValid) or not EqualRect(ime, FImeCaretRect) then
     begin
       FImeCaretRect := ime;
+      FImeCaretValid := True;
       TyImeUpdateCaret;
-      if FHasFocus and HandleAllocated then
-        TySetImeCaretPos(Self, ime.Left, ime.Top);
     end;
+    if FHasFocus and HandleAllocated then
+      TySetImeCaretPos(Self, ime.Left, ime.Top);
     { 只贴画布的裁剪区 }
     if ACanvas <> nil then
     begin
+      FLastPaintMs := NowMs;
       clip := ACanvas.ClipRect;
       if IsRectEmpty(clip) then
         clip := ARect;
       if not IntersectRect(part, clip, ARect) then
         Exit;
-      FSurface.DrawPart(Rect(part.Left - ARect.Left, part.Top - ARect.Top,
-        part.Right - ARect.Left, part.Bottom - ARect.Top), ACanvas, part.Left, part.Top, True);
+      BlitSurface(ACanvas, Rect(part.Left - ARect.Left, part.Top - ARect.Top,
+        part.Right - ARect.Left, part.Bottom - ARect.Top), part.Left, part.Top);
     end;
   finally
     FInRender := False;
@@ -1227,9 +1728,9 @@ var
 begin
   { macOS 的组字串:从光标格起画在光标行上,不进缓冲、不动光标 }
   st := ActiveController.Model.ResolveStyle('TyTerminalPreedit', '', []);
-  bg := FCore.ResolveColor(257);
-  fg := FCore.ResolveColor(256);
-  line := FCore.ResolveColor(256);
+  bg := FFrameColors[257];
+  fg := FFrameColors[256];
+  line := FFrameColors[256];
   if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then bg := Cardinal(st.Background.Color) and $FFFFFF;
   if tpTextColor in st.Present then fg := Cardinal(st.TextColor) and $FFFFFF;
   if tpBorderColor in st.Present then line := Cardinal(st.BorderColor) and $FFFFFF;
@@ -1261,25 +1762,76 @@ end;
 
 { ---- 焦点、闪烁、同步输出 -------------------------------------------------------------- }
 
+{ 焦点的唯一入口:LM_SETFOCUS / LM_KILLFOCUS(窗口真的得到、失去键盘焦点,切到别的程序
+  也在内)和 DoEnter / DoExit(窗体内换 ActiveControl)都走这里,重复的一路什么都不做。
+  上游看的是 textarea 的 focus / blur,也就是系统焦点。 }
+procedure TTyTerminalView.SetHasFocus(AValue: Boolean);
+begin
+  if FHasFocus = AValue then Exit;
+  FHasFocus := AValue;
+  FCore.ReportFocus(AValue);
+  TyImeSetFocus(FImeHook, AValue);
+  if AValue then
+  begin
+    { 候选窗位置按线程记:别的控件里打过字就挪走了,回来先按缓存的光标格设一次,下一帧
+      再按新画的格子设 }
+    FImeCaretValid := False;
+    if HandleAllocated and FSpecValid then
+      TySetImeCaretPos(Self, FImeCaretRect.Left, FImeCaretRect.Top);
+    NoteActivity;
+  end
+  else
+  begin
+    FBlinkVisible := True;
+    UpdateBlinkTimer;
+  end;
+  DirtyCursorRows;
+end;
+
 procedure TTyTerminalView.DoEnter;
 begin
-  inherited DoEnter;
-  FHasFocus := True;
-  FCore.ReportFocus(True);
-  TyImeSetFocus(FImeHook, True);
-  NoteActivity;
-  DirtyCursorRows;
+  FStateChange := True;
+  try
+    inherited DoEnter;
+  finally
+    FStateChange := False;
+  end;
+  SetHasFocus(True);
 end;
 
 procedure TTyTerminalView.DoExit;
 begin
-  inherited DoExit;
-  FHasFocus := False;
-  FCore.ReportFocus(False);
-  TyImeSetFocus(FImeHook, False);
-  FBlinkVisible := True;
-  UpdateBlinkTimer;
-  DirtyCursorRows;
+  FStateChange := True;
+  try
+    inherited DoExit;
+  finally
+    FStateChange := False;
+  end;
+  SetHasFocus(False);
+end;
+
+procedure TTyTerminalView.WMSetFocus(var Message: TLMSetFocus);
+begin
+  inherited;
+  if not (csDestroying in ComponentState) then
+    SetHasFocus(True);
+end;
+
+procedure TTyTerminalView.WMKillFocus(var Message: TLMKillFocus);
+begin
+  inherited;
+  if not (csDestroying in ComponentState) then
+    SetHasFocus(False);
+end;
+
+procedure TTyTerminalView.CMEnabledChanged(var Message: TLMessage);
+begin
+  { 禁用 / 启用:色表按 :disabled 的 opacity 预混(键里有 Enabled),外框、每一行都重画 }
+  inherited;
+  if FCore = nil then Exit;
+  FFrameDirty := True;
+  DirtyAll;
+  InvalidateAll;
 end;
 
 function TTyTerminalView.NowMs: Double;
@@ -1393,6 +1945,7 @@ var
 begin
   if FScrollBar = nil then Exit;
   buf := FCore.Buffer;
+  Inc(FBarSyncs);
   FSyncingScroll := True;
   try
     { Max 是**最大位置**(行数 − 视口行数),不是内容高 }
@@ -1430,13 +1983,23 @@ end;
 
 procedure TTyTerminalView.MouseEnter;
 begin
-  inherited MouseEnter;
+  FStateChange := True;
+  try
+    inherited MouseEnter;
+  finally
+    FStateChange := False;
+  end;
   NoteHostHover(True);
 end;
 
 procedure TTyTerminalView.MouseLeave;
 begin
-  inherited MouseLeave;
+  FStateChange := True;
+  try
+    inherited MouseLeave;
+  finally
+    FStateChange := False;
+  end;
   NoteHostHover(False);
 end;
 
@@ -1449,19 +2012,38 @@ end;
 
 { ---- 公开方法 ----------------------------------------------------------------------- }
 
+{ Write 通常只入队;用户刚键入过时 Core 当场解析(回显延迟),所以也算一次解析 }
 procedure TTyTerminalView.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
-  FCore.Write(AData, AOnDone, ATag);
+  MaskUnencodedExtensions;
+  BeginDrive;
+  try
+    FCore.Write(AData, AOnDone, ATag);
+  finally
+    EndDrive;
+  end;
 end;
 
 procedure TTyTerminalView.Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
-  FCore.Write(ABuf, ACount, AOnDone, ATag);
+  MaskUnencodedExtensions;
+  BeginDrive;
+  try
+    FCore.Write(ABuf, ACount, AOnDone, ATag);
+  finally
+    EndDrive;
+  end;
 end;
 
 procedure TTyTerminalView.WriteSync(const AData: RawByteString);
 begin
-  FCore.WriteSync(AData);
+  MaskUnencodedExtensions;
+  BeginDrive;
+  try
+    FCore.WriteSync(AData);
+  finally
+    EndDrive;
+  end;
 end;
 
 procedure TTyTerminalView.Paste(const AText: string);
@@ -1620,6 +2202,13 @@ begin
   FKeyDownHandled := True;
 end;
 
+procedure TTyTerminalView.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  { 这个键的字符没来(widgetset 不送、或者按下时被别处拿走):别留给下一个键 }
+  FKeyDownHandled := False;
+end;
+
 procedure TTyTerminalView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   full: string;
@@ -1677,6 +2266,22 @@ begin
   { 宿主的 OnMouseWheel 先拿;它处理了就到此为止 }
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result or not Enabled then Exit;
+  { Shift+滚轮:上游既不上报也不翻方向键(MouseService.ts:459 的 _consumeWheelEvent 对
+    shiftKey 答 0 行);滚回在 Windows / Linux 上是横滚(scrollableElement.ts:394,终端没有
+    横向可滚),只有 macOS 照常竖滚。不是我们的事就不吃,交给父控件。 }
+  if ssShift in Shift then
+  begin
+    if not (FIsMac and FCore.Buffer.HasScrollback) then Exit;
+    if (FWheelAccum <> 0) and ((FWheelAccum > 0) <> (WheelDelta > 0)) then
+      FWheelAccum := 0;
+    Inc(FWheelAccum, WheelDelta);
+    notches := FWheelAccum div 120;
+    FWheelAccum := FWheelAccum - notches * 120;
+    Result := True;
+    if notches <> 0 then
+      FCore.ScrollLines(-3 * notches);
+    Exit;
+  end;
   { 每满 ±120 出一格,同号的余数留着,反向时清零;一格都不满也吃掉这点位移 }
   if (FWheelAccum <> 0) and ((FWheelAccum > 0) <> (WheelDelta > 0)) then
     FWheelAccum := 0;
@@ -1697,8 +2302,9 @@ begin
       ev := Default(TTyTerminalMouseEvent);
       ev.Col := cell.X;
       ev.Row := cell.Y;
-      ev.X := Max(0, MousePos.X - ins.Left);
-      ev.Y := Max(0, MousePos.Y - ins.Top);
+      { 像素坐标钳在网格里(MouseCoordsService.ts:38-39 钳到画布宽高 - 1) }
+      ev.X := EnsureRange(MousePos.X - ins.Left, 0, FCore.Cols * FMetrics.CellW - 1);
+      ev.Y := EnsureRange(MousePos.Y - ins.Top, 0, FCore.Rows * FMetrics.CellH - 1);
       ev.Button := tmbWheel;
       if dir > 0 then ev.Action := tmaUp else ev.Action := tmaDown;
       ev.Shift := ssShift in Shift;
@@ -1724,10 +2330,31 @@ end;
 
 procedure TTyTerminalView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  inherited MouseDown(Button, Shift, X, Y);
-  { 点一下取焦点;本期不上报、不选择(4 期) }
-  if CanFocus and not Focused then
-    SetFocus;
+  FStateChange := True;
+  try
+    inherited MouseDown(Button, Shift, X, Y);
+  finally
+    FStateChange := False;
+  end;
+  { 基类只在左键时取焦点;终端照终端的惯例,哪个键点下去都取(中键、右键也是在跟这个
+    终端打交道)。守着 TabStop 同基类:TabStop = False 的终端(宿主拿它当只看的面板)
+    点了也不抢焦点。SetFocus 可能抛(窗体还没显示、无头),同基类吞掉。本期不上报、不
+    选择(4 期)。 }
+  if TabStop and CanFocus and not Focused then
+    try
+      SetFocus;
+    except
+    end;
+end;
+
+procedure TTyTerminalView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  FStateChange := True;
+  try
+    inherited MouseUp(Button, Shift, X, Y);
+  finally
+    FStateChange := False;
+  end;
 end;
 
 { ---- 输入法 ------------------------------------------------------------------------- }
@@ -1748,17 +2375,21 @@ begin
   inherited DestroyWnd;
 end;
 
-function TTyTerminalView.ImeCaretCell: TRect;
-begin
-  Result := CellRect(Min(FCore.Buffer.X, FCore.Cols - 1), FCore.Buffer.Y);
-end;
-
 function TTyTerminalView.GetImeCaretRect: TRect;
 begin
-  if (not HandleAllocated) or (not FHasFocus) then
+  if (not HandleAllocated) or (not FHasFocus) or (not FImeCaretValid) then
     Exit(Rect(0, 0, 0, 0));
   Result := FImeCaretRect;
 end;
+
+{$IFDEF LCLCocoa}
+procedure TTyTerminalView.CocoaImComposition(var Message: TLMessage);
+begin
+  { WParam 0 = IM_MESSAGE_WPARAM_GET_IME_HANDLER:LCL-Cocoa 要 ICocoaIMEControl(Edit.pas 同一做法) }
+  if Message.WParam = 0 then Message.Result := PtrInt(FCocoaIme)
+  else Message.Result := 0;
+end;
+{$ENDIF}
 
 procedure TTyTerminalView.HandleImeCommit(const ACommitUtf8: string);
 begin
@@ -1947,10 +2578,14 @@ end;
 
 function TTyTerminalView.ImeCaretBoundClient: TRect;
 begin
-  if FHasFocus then
-    Result := CellRect(Min(FCore.Buffer.X, FCore.Cols - 1), FCore.Buffer.Y)
+  { macOS 的候选窗锚:和 GetImeCaretRect 同一个矩形(上一帧画出来的光标格);还没画过就
+    现算一个 }
+  if not FHasFocus then
+    Exit(Rect(0, 0, 0, 0));
+  if FImeCaretValid then
+    Result := FImeCaretRect
   else
-    Result := Rect(0, 0, 0, 0);
+    Result := CellRect(Min(FCore.Buffer.X, FCore.Cols - 1), FCore.Buffer.Y);
 end;
 
 function TTyTerminalView.ImeCaretIndex: Integer;
@@ -1980,6 +2615,14 @@ procedure TTyTerminalView.ImeReplace(AStart, ALen: Integer; const AText: string)
 var
   n: Integer;
 begin
+  { 不在组字会话里:LCL-Cocoa 在没有标记文本、却带着替换范围(死键)时直接调
+    IMEInsertFinalText,后面不跟 IMESessionEnd——这就是一次提交,当场发出,不留在组字串里
+    (留着的话下一次会话结束会再发一遍) }
+  if not FInPreedit then
+  begin
+    HandleImeCommit(AText);
+    Exit;
+  end;
   { 按码位下标,越界钳住 }
   n := UTF8Length(FPreedit);
   AStart := EnsureRange(AStart, 0, n);
@@ -2036,6 +2679,25 @@ end;
 function TTyTerminalView.HasFocusFlag: Boolean;
 begin
   Result := FHasFocus;
+end;
+
+function TTyTerminalView.ScrollBarSyncs: Integer;
+begin
+  Result := FBarSyncs;
+end;
+
+function TTyTerminalView.ControlInvalidations: Integer;
+begin
+  Result := FControlInvalidates;
+end;
+
+function TTyTerminalView.RowsLeftToPaint: Boolean;
+var
+  r: Integer;
+begin
+  Result := FAllDirty;
+  for r := 0 to High(FDirty) do
+    if FDirty[r] then Exit(True);
 end;
 
 end.

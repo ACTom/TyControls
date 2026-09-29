@@ -72,6 +72,11 @@ type
     procedure TestTheImeAnchorIsTheCursorCell;
     procedure TestMarkedTextIsKeptUntilTheSessionEnds;
     procedure TestACancelledCompositionSendsNothing;
+    procedure TestAnImeCommitOutsideASessionIsSentOnce;
+    procedure TestAnyButtonTakesFocus;
+    procedure TestKeyUpForgetsTheHandledKey;
+    procedure TestShiftWheelIsLeftAlone;
+    procedure TestReportedWheelPixelsStayInTheGrid;
   end;
 
 implementation
@@ -593,12 +598,6 @@ begin
   AssertEquals('read-only', '', Hex);
 end;
 
-procedure TTyTerminalViewInputTests.TestTheImeAnchorIsTheCursorCell;
-begin
-  F.View.WriteSync(#27'[3;5H');
-  AssertTrue('the anchor is the cursor''s cell', EqualRect(F.View.CellRect(4, 2), F.View.ImeAnchor));
-end;
-
 procedure TTyTerminalViewInputTests.TestMarkedTextIsKeptUntilTheSessionEnds;
 var
   b: TBGRABitmap;
@@ -652,6 +651,158 @@ begin
   F.View.ImeReplaceText(0, 1, '');
   F.View.ImeEnd;
   AssertEquals('nothing', '', Hex);
+end;
+
+procedure TTyTerminalViewInputTests.TestTheImeAnchorIsTheCursorCell;
+var
+  b: TBGRABitmap;
+begin
+  { the real path: a handle, the focus, a frame painted; then what the widgetset asks
+    (GetImeCaretRect for the candidate window, ImeCaretBoundClient on macOS) }
+  TyTermNeedWidgetSet;
+  F.View.HandleNeeded;
+  F.View.Enter;
+  F.View.WriteSync(#27'[3;5H');
+  b := F.Render;
+  b.Free;
+  AssertTrue('the candidate window''s anchor is the cursor''s cell (col 4, row 2)',
+    EqualRect(F.View.CellRect(4, 2), F.View.ImeAnchor));
+  AssertTrue('macOS asks the same rectangle', EqualRect(F.View.CellRect(4, 2), F.View.ImeBound));
+  F.View.WriteSync(#27'[5;2H');
+  b := F.Render;
+  b.Free;
+  AssertTrue('it follows the cursor', EqualRect(F.View.CellRect(1, 4), F.View.ImeAnchor));
+  F.View.Leave;
+  AssertTrue('unfocused: no anchor', IsRectEmpty(F.View.ImeAnchor));
+  F.View.Enter;
+  AssertTrue('focused again: nothing until the next frame is painted', IsRectEmpty(F.View.ImeAnchor));
+  b := F.Render;
+  b.Free;
+  AssertTrue('then the cell again', EqualRect(F.View.CellRect(1, 4), F.View.ImeAnchor));
+end;
+
+procedure TTyTerminalViewInputTests.TestAnImeCommitOutsideASessionIsSentOnce;
+var
+  b: TBGRABitmap;
+  mark: Cardinal;
+  x, y, n: Integer;
+  r: TRect;
+begin
+  { LCL-Cocoa's dead key: IMEInsertFinalText without a session, no IMESessionEnd after }
+  F.View.ImeReplaceText(0, 0, #$C3#$A9);
+  AssertEquals('sent at once', 'C3 A9', Hex);
+  F.View.ImeEnd;
+  AssertEquals('not sent again by a session end', 'C3 A9', Hex);
+  mark := F.Ctl.Model.ResolveStyle('TyTerminalPreedit', '', []).BorderColor and $FFFFFF;
+  b := F.Render;
+  try
+    n := 0;
+    r := F.View.CellRect(0, 0);
+    for y := r.Top to r.Bottom - 1 do
+      for x := r.Left to r.Right - 1 do
+        if ((Cardinal(b.GetPixel(x, y).red) shl 16) or (Cardinal(b.GetPixel(x, y).green) shl 8)
+          or b.GetPixel(x, y).blue) = mark then Inc(n);
+    AssertEquals('nothing left in the marked text', 0, n);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewInputTests.TestAnyButtonTakesFocus;
+var
+  form: TForm;
+  park: TTyEdit;
+  v: TTyTerminalView;
+
+  function ClickFocuses(AMsg: Cardinal; AKeys: PtrInt): Boolean;
+  begin
+    if park.CanFocus then park.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertFalse('precondition: the terminal is not focused', form.ActiveControl = v);
+    v.Perform(AMsg, AKeys, MousePos(40, 40));
+    Forms.Application.ProcessMessages;
+    Result := form.ActiveControl = v;
+  end;
+
+begin
+  TyTermNeedWidgetSet;
+  form := TForm.CreateNew(nil);
+  try
+    form.SetBounds(-4000, -4000, 640, 480);
+    form.Visible := True;
+    form.HandleNeeded;
+    park := TTyEdit.Create(form);
+    park.Parent := form;
+    park.SetBounds(8, 8, 160, 26);
+    v := TTyTerminalView.Create(form);
+    v.Parent := form;
+    v.SetBounds(200, 60, 300, 200);
+    v.HandleNeeded;
+    Forms.Application.ProcessMessages;
+    AssertTrue('a middle click focuses the terminal', ClickFocuses(LM_MBUTTONDOWN, MK_MBUTTON));
+    AssertTrue('a right click too', ClickFocuses(LM_RBUTTONDOWN, MK_RBUTTON));
+    v.TabStop := False;
+    AssertFalse('TabStop off: a click leaves the focus where it is (as every control here)',
+      ClickFocuses(LM_MBUTTONDOWN, MK_MBUTTON));
+  finally
+    form.Free;
+  end;
+end;
+
+procedure TTyTerminalViewInputTests.TestKeyUpForgetsTheHandledKey;
+var
+  k: Word;
+begin
+  Press(VK_RETURN);
+  AssertEquals('Enter', '0D', Hex);
+  { its character never came (the widgetset did not send it); the key comes up }
+  k := VK_RETURN;
+  F.View.ReleaseKey(k, []);
+  TypeIt('x');
+  AssertEquals('the next character is not taken for Enter''s', '0D 78', Hex);
+end;
+
+procedure TTyTerminalViewInputTests.TestShiftWheelIsLeftAlone;
+var
+  y: Integer;
+begin
+  F.View.SetPlatform(False, True);
+  F.View.WriteSync(#27'[?1000h'#27'[?1006h');
+  F.ClearRecords;
+  AssertFalse('a program that wants the wheel: Shift+wheel is not reported, not taken',
+    F.View.Wheel([ssShift], 120, Point(10, 10)));
+  AssertEquals('nothing sent', '', Hex);
+  F.View.WriteSync(#27'[?1000l'#27'[?1049h');
+  F.ClearRecords;
+  F.View.Wheel([ssShift], 120, Point(10, 10));
+  AssertEquals('no scrollback: no arrow keys for Shift+wheel', '', Hex);
+  F.View.WriteSync(#27'[?1049l');
+  Lines(100);
+  y := F.View.Core.Buffer.YDisp;
+  AssertFalse('Windows / Linux: Shift+wheel is a sideways scroll, not ours', F.View.Wheel([ssShift], 120, Point(10, 10)));
+  AssertEquals('the scrollback did not move', y, F.View.Core.Buffer.YDisp);
+  F.View.SetPlatform(True, False);
+  AssertTrue('macOS: Shift+wheel scrolls as ever', F.View.Wheel([ssShift], 120, Point(10, 10)));
+  AssertEquals('three lines', y - 3, F.View.Core.Buffer.YDisp);
+end;
+
+procedure TTyTerminalViewInputTests.TestReportedWheelPixelsStayInTheGrid;
+var
+  inside, outside: string;
+  r: TRect;
+begin
+  F.View.WriteSync(#27'[?1000h'#27'[?1016h');
+  r := F.View.CellRect(F.View.Cols - 1, F.View.Rows - 1);
+  F.ClearRecords;
+  { the last pixel of the grid }
+  F.View.Wheel([], 120, Point(r.Right - 1, r.Bottom - 1));
+  inside := Hex;
+  F.ClearRecords;
+  { past it: in the padding and the scroll bar }
+  F.View.Wheel([], 120, Point(F.View.ClientWidth - 1, F.View.ClientHeight - 1));
+  outside := Hex;
+  AssertTrue('reported', inside <> '');
+  AssertEquals('clamped to the grid''s last pixel', inside, outside);
 end;
 
 initialization

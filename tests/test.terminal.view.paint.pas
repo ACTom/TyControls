@@ -11,8 +11,8 @@ interface
 uses
   Classes, SysUtils, Types, Math, Forms, Controls, Graphics, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Terminal.Core, tyControls.Terminal.Render, tyControls.Terminal,
-  test.terminal.view;
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Terminal.Core,
+  tyControls.Terminal.Render, tyControls.Terminal, test.terminal.view;
 
 type
   TTyTerminalViewPaintTests = class(TTestCase)
@@ -29,6 +29,7 @@ type
     function Fg: Cardinal;
     function CursorBg: Cardinal;
     function CursorInk: Cardinal;
+    function MedianFullRepaint: Double;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -56,9 +57,20 @@ type
     procedure TestTheFontOrder;
     procedure TestBlinkingTextIsDrawnSteady;
     procedure TestWarmRedrawTime;
+    procedure TestWarmRedrawWithBoxDrawing;
+    procedure TestColdFillTime;
+    procedure TestDisabledDimsTowardTheParent;
+    procedure TestHiddenTextStaysHiddenUnderTheCursor;
+    procedure TestAFrameThatChangesOnHoverIsRepainted;
   end;
 
 implementation
+
+const
+  { a warm full 200 x 60 repaint, blit included: about 12 ms on the build machine
+    (ASCII, tmux borders and mc panels alike); the limit is well above it and well
+    below what a per-cell allocation costs (the Canvas2D clip took 2.5 s for tmux) }
+  WarmLimitMs = 30;
 
 function Rgb(const P: TBGRAPixel): Cardinal;
 begin
@@ -781,14 +793,65 @@ begin
   end;
 end;
 
+{ Five full repaints of whatever is on screen (a property flip marks every row dirty),
+  each timed as the RenderTo into a device bitmap that lives across the frames -- the
+  rows AND the blit, nothing else; the median in ms. }
+function TTyTerminalViewPaintTests.MedianFullRepaint: Double;
+var
+  bmp: TBitmap;
+  times: array[0..4] of Double;
+  t0, tmp: Double;
+  i, j, k, w, h: Integer;
+begin
+  w := F.View.ClientWidth;
+  h := F.View.ClientHeight;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(w, h);
+    { warm: the surface exists and every glyph is cached (a frame draws only so many
+      new glyphs, the rest come in the frames after) }
+    k := 0;
+    repeat
+      F.View.Render(bmp.Canvas, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+      Inc(k);
+    until (not F.View.RowsPending) or (k > 1000);
+    F.View.DrawBoldTextInBrightColors := not F.View.DrawBoldTextInBrightColors;
+    F.View.Render(bmp.Canvas, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+    AssertFalse('warm: nothing left to draw', F.View.RowsPending);
+    for k := 0 to 4 do
+    begin
+      F.View.DrawBoldTextInBrightColors := not F.View.DrawBoldTextInBrightColors;
+      t0 := TyTermDefaultClock;
+      F.View.Render(bmp.Canvas, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+      times[k] := TyTermDefaultClock - t0;
+    end;
+    for i := 0 to 4 do
+      for j := i + 1 to 4 do
+        if times[j] < times[i] then begin tmp := times[i]; times[i] := times[j]; times[j] := tmp; end;
+    Result := times[2];
+    { the rows alone (no canvas, no blit), printed for the record }
+    for k := 0 to 4 do
+    begin
+      F.View.DrawBoldTextInBrightColors := not F.View.DrawBoldTextInBrightColors;
+      t0 := TyTermDefaultClock;
+      F.View.Render(nil, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+      times[k] := TyTermDefaultClock - t0;
+    end;
+    for i := 0 to 4 do
+      for j := i + 1 to 4 do
+        if times[j] < times[i] then begin tmp := times[i]; times[i] := times[j]; times[j] := tmp; end;
+    WriteLn(Format('  (the rows alone, without the blit: median %.1f ms)', [times[2]]));
+  finally
+    bmp.Free;
+  end;
+end;
+
 procedure TTyTerminalViewPaintTests.TestWarmRedrawTime;
 var
   s: RawByteString;
-  row, col, k: Integer;
-  b: TBGRABitmap;
-  times: array[0..4] of Double;
-  t0, tmp: Double;
-  i, j: Integer;
+  row, col: Integer;
+  ms: Double;
 begin
   F.SizeTo(200, 60);
   s := #27'[H';
@@ -799,35 +862,224 @@ begin
     if row < 59 then s := s + #13#10;
   end;
   F.View.WriteSync(s);
-  b := Snap;
-  b.Free;
-  for k := 0 to 4 do
+  ms := MedianFullRepaint;
+  WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawTime: 200 x 60 ASCII, warm full repaint + blit, median %.1f ms',
+    [ms]));
+  AssertTrue(Format('a warm full screen of ASCII within %d ms (%.1f)', [WarmLimitMs, ms]), ms <= WarmLimitMs);
+end;
+
+procedure TTyTerminalViewPaintTests.TestColdFillTime;
+var
+  s: RawByteString;
+  st, ch, frames: Integer;
+  bmp: TBitmap;
+  t0, ms: Double;
+begin
+  { 95 printable ASCII x regular, bold, italic, bold italic: 380 glyphs never drawn }
+  F.SizeTo(100, 8);
+  s := #27'[H';
+  for st := 0 to 3 do
   begin
-    F.View.DrawBoldTextInBrightColors := not F.View.DrawBoldTextInBrightColors;
+    case st of
+      1: s := s + #27'[1m';
+      2: s := s + #27'[22;3m';
+      3: s := s + #27'[1;3m';
+    end;
+    for ch := 32 to 126 do s := s + Chr(ch);
+    s := s + #27'[0m'#13#10;
+  end;
+  F.View.WriteSync(s);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(F.View.ClientWidth, F.View.ClientHeight);
+    frames := 0;
     t0 := TyTermDefaultClock;
-    b := Snap;
-    times[k] := TyTermDefaultClock - t0;
+    repeat
+      F.View.Render(bmp.Canvas, Rect(0, 0, bmp.Width, bmp.Height), F.View.Font.PixelsPerInch);
+      Inc(frames);
+    until (not F.View.RowsPending) or (frames > 1000);
+    ms := TyTermDefaultClock - t0;
+  finally
+    bmp.Free;
+  end;
+  WriteLn(Format('TTyTerminalViewPaintTests.TestColdFillTime: 380 glyphs from an empty cache, %.1f ms in %d frame(s) (%.3f ms a glyph)',
+    [ms, frames, ms / 380]));
+  AssertTrue('every glyph drawn in the end', F.View.Cache.Count >= 376);
+end;
+
+procedure TTyTerminalViewPaintTests.TestWarmRedrawWithBoxDrawing;
+var
+  s: RawByteString;
+  row, col, boxes: Integer;
+  ms: Double;
+begin
+  F.SizeTo(200, 60);
+  { tmux, two panes: text everywhere, one vertical rule down column 100 and one
+    horizontal rule across row 30 -- 60 + 199 drawn cells }
+  s := #27'[H';
+  boxes := 0;
+  for row := 0 to 59 do
+  begin
+    for col := 0 to 199 do
+      if row = 30 then
+      begin
+        if col = 100 then s := s + #$E2#$94#$BC else s := s + #$E2#$94#$80;   { ┼ ─ }
+        Inc(boxes);
+      end
+      else if col = 100 then
+      begin
+        s := s + #$E2#$94#$82;                                               { │ }
+        Inc(boxes);
+      end
+      else
+        s := s + Chr(33 + (row * 200 + col) mod 94);
+    if row < 59 then s := s + #13#10;
+  end;
+  F.View.WriteSync(s);
+  ms := MedianFullRepaint;
+  WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawWithBoxDrawing: tmux borders (%d drawn cells), warm full repaint + blit, median %.1f ms',
+    [boxes, ms]));
+  AssertTrue(Format('tmux borders within %d ms (%.1f)', [WarmLimitMs, ms]), ms <= WarmLimitMs);
+  { mc: double-line rules along the top and bottom and down both sides, shades in
+    between -- about 500 drawn cells }
+  s := #27'[H'#27'[2J';
+  boxes := 0;
+  for row := 0 to 59 do
+  begin
+    for col := 0 to 199 do
+      if (row = 0) or (row = 59) then
+      begin
+        s := s + #$E2#$95#$90;                                               { ═ }
+        Inc(boxes);
+      end
+      else if (col = 0) or (col = 199) then
+      begin
+        s := s + #$E2#$95#$91;                                               { ║ }
+        Inc(boxes);
+      end
+      else if (row mod 3 = 1) and (col mod 50 < 20) then
+        s := s + #$E2#$96#$91                                                { ░ }
+      else
+        s := s + Chr(33 + (row * 200 + col) mod 94);
+    if row < 59 then s := s + #13#10;
+  end;
+  F.View.WriteSync(s);
+  ms := MedianFullRepaint;
+  WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawWithBoxDrawing: mc panels (%d drawn cells + shades), warm full repaint + blit, median %.1f ms',
+    [boxes, ms]));
+  AssertTrue(Format('mc panels within %d ms (%.1f)', [WarmLimitMs, ms]), ms <= WarmLimitMs);
+end;
+
+function Mix(AColor, ABase: Cardinal; AAlpha: Integer): Cardinal;
+begin
+  Result := ((((AColor shr 16) and $FF) * Cardinal(AAlpha) + ((ABase shr 16) and $FF) * Cardinal(255 - AAlpha) + 127) div 255) shl 16
+    or ((((AColor shr 8) and $FF) * Cardinal(AAlpha) + ((ABase shr 8) and $FF) * Cardinal(255 - AAlpha) + 127) div 255) shl 8
+    or (((AColor and $FF) * Cardinal(AAlpha) + (ABase and $FF) * Cardinal(255 - AAlpha) + 127) div 255);
+end;
+
+procedure TTyTerminalViewPaintTests.TestDisabledDimsTowardTheParent;
+var
+  b: TBGRABitmap;
+  st: TTyStyleSet;
+  a: Integer;
+  pc: TTyColor;
+  base: Cardinal;
+begin
+  F.View.WriteSync(#27'[?25l'#27'[31m'#$E2#$96#$88#27'[0m');
+  b := Snap;
+  try
+    AssertTrue('enabled: the red itself', CellIs(b, 0, 0, F.Ansi(1)));
+  finally
     b.Free;
   end;
-  for i := 0 to 4 do
-    for j := i + 1 to 4 do
-      if times[j] < times[i] then begin tmp := times[i]; times[i] := times[j]; times[j] := tmp; end;
-  WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawTime: 200 x 60 full repaint (with the blit), median %.1f ms',
-    [times[2]]));
-  { the same without the blit: rows into the kept surface only }
-  for k := 0 to 4 do
-  begin
-    F.View.DrawBoldTextInBrightColors := not F.View.DrawBoldTextInBrightColors;
-    t0 := TyTermDefaultClock;
-    F.View.Render(nil, Rect(0, 0, F.View.ClientWidth, F.View.ClientHeight), F.View.Font.PixelsPerInch);
-    times[k] := TyTermDefaultClock - t0;
+  { what the theme says a disabled terminal is, and what it fades toward (the fixture's
+    patch rewrites TyTerminal, which hides the base layer's :disabled -- say it again) }
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminal:disabled { opacity: 0.4; }'#10;
+  st := F.Ctl.Model.ResolveStyle('TyTerminal', '', [tysDisabled]);
+  AssertTrue('the theme gives :disabled an opacity', tpOpacity in st.Present);
+  a := EnsureRange(Round(st.Opacity * 255), 0, 255);
+  AssertTrue('a real fade', a < 255);
+  AssertTrue('the parent has a colour', TyResolveParentBg(F.View, pc));
+  base := Cardinal(pc) and $FFFFFF;
+  F.View.Enabled := False;
+  b := Snap;
+  try
+    AssertTrue(Format('disabled: the red faded toward the parent (%s)', [IntToHex(Mix(F.Ansi(1), base, a), 6)]),
+      CellIs(b, 0, 0, Mix(F.Ansi(1), base, a)));
+    AssertTrue('the empty cells faded', CellIs(b, 3, 2, Mix(Bg, base, a)));
+    AssertEquals('the padding faded with them', IntToHex(Mix(Bg, base, a), 6), IntToHex(Rgb(b.GetPixel(0, 0)), 6));
+  finally
+    b.Free;
   end;
-  for i := 0 to 4 do
-    for j := i + 1 to 4 do
-      if times[j] < times[i] then begin tmp := times[i]; times[i] := times[j]; times[j] := tmp; end;
-  WriteLn(Format('TTyTerminalViewPaintTests.TestWarmRedrawTime: the same, rows only (no blit), median %.1f ms',
-    [times[2]]));
-  AssertTrue('measured', times[2] >= 0);
+  AssertEquals('what the program asks still gets the theme''s colour', IntToHex(F.Ansi(1), 6),
+    IntToHex(F.View.Core.ResolveColor(1), 6));
+  F.View.Enabled := True;
+  b := Snap;
+  try
+    AssertTrue('enabled again: the red itself', CellIs(b, 0, 0, F.Ansi(1)));
+    AssertEquals('and the padding', IntToHex(Bg, 6), IntToHex(Rgb(b.GetPixel(0, 0)), 6));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestHiddenTextStaysHiddenUnderTheCursor;
+var
+  b: TBGRABitmap;
+begin
+  F.View.Enter;
+  F.View.WriteSync(#27'[8mW'#27'[0m'#27'[D');
+  b := Snap;
+  try
+    AssertTrue('the block cursor over hidden text is the cursor colour only', CellIs(b, 0, 0, CursorBg));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewPaintTests.TestAFrameThatChangesOnHoverIsRepainted;
+var
+  c: TTyStyleController;
+  b: TBGRABitmap;
+  n, h: Integer;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    c.Mode := 'light';
+    c.ThemeName := 'default';
+    c.StyleOverride := TyTermFixtureCss
+      + 'TyTerminal { border-width: 1px; border-color: #102030; }'#10
+      + 'TyTerminal:hover { border-color: #00ff00; }'#10;
+    F.View.Controller := c;
+    b := Snap;
+    try
+      h := b.Height;
+      AssertTrue('no hover: the edge is not green', b.GetPixel(0, h div 2).green < 150);
+    finally
+      b.Free;
+    end;
+    n := F.View.Invalidations;
+    F.View.Hover(True);
+    AssertEquals('the frame changes on hover: repainted', n + 1, F.View.Invalidations);
+    b := Snap;
+    try
+      AssertTrue('hovered: the edge is green ' + IntToHex(Rgb(b.GetPixel(0, h div 2)), 6),
+        (b.GetPixel(0, h div 2).green > 150) and (b.GetPixel(0, h div 2).green > 2 * b.GetPixel(0, h div 2).red));
+    finally
+      b.Free;
+    end;
+    F.View.Hover(False);
+    b := Snap;
+    try
+      AssertTrue('left again: not green', b.GetPixel(0, h div 2).green < 150);
+    finally
+      b.Free;
+    end;
+  finally
+    F.View.Controller := F.Ctl;
+    c.Free;
+  end;
 end;
 
 initialization

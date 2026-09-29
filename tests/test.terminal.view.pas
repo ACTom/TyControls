@@ -11,7 +11,7 @@ unit test.terminal.view;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, TypInfo, Forms, Controls, Graphics, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, TypInfo, Forms, Controls, Graphics, LCLType, LCLIntf, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.StyleModel,
   tyControls.ScrollBar, tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
@@ -26,8 +26,19 @@ type
     ClipText: string;
     ClipReads, ClipWrites: Integer;
     ClipWritten: string;
+    WholeInvalidates: Integer;
+    MuteFontNotice, MuteInvalidate: Boolean;
+    procedure Invalidate; override;
+    procedure ReleaseKey(var Key: Word; Shift: TShiftState);
+    function Surface: TBGRABitmap;
+    function Invalidations: Integer;
     procedure ScheduleSlice; override;
     procedure InvalidateRows(AFirst, ALast: Integer); override;
+    procedure InvalidateAll; override;
+    procedure FontChanged(Sender: TObject); override;
+    procedure RunSlice;
+    procedure Hover(AIn: Boolean);
+    procedure SetLastPaint(AMs: Double);
     function ReadClipboardText: string; override;
     procedure WriteClipboardText(const S: string); override;
     procedure ClearInvalidated;
@@ -49,6 +60,7 @@ type
     function BlinkOn: Boolean;
     function SyncOn: Boolean;
     function HeldRows: TPoint;
+    function RowsPending: Boolean;
     function Bar: TTyScrollBar;
     function Focus: Boolean;
     procedure MakeDesigning;
@@ -58,6 +70,7 @@ type
     procedure ImeEnd;
     procedure ImeReplaceText(AStart, ALen: Integer; const AText: string);
     function ImeAnchor: TRect;
+    function ImeBound: TRect;
     procedure ImeCommit(const AText: string);
     { 无头测试跑不到 LCL 的对齐:自己调一次(传没扣过的客户区矩形) }
     procedure AlignNow;
@@ -104,8 +117,10 @@ type
     F: TTyTermViewFixture;
     FDone: array of PtrInt;
     FClockMs: Double;
+    FStepMs: Double;
     procedure WriteDone(Sender: TObject; ATag: PtrInt);
     function Clock: Double;
+    function StepClock: Double;
     procedure ResizeFromTitle(Sender: TObject; const AText: string);
   protected
     procedure SetUp; override;
@@ -134,6 +149,20 @@ type
     procedure TestTheSyncTimerStartsAtTheFirstHeldRow;
     procedure TestResizingFromACoreEventIsSafe;
     procedure TestDesignTimePreview;
+    procedure TestColourChangesRepaintTheWholeWindow;
+    procedure TestSystemFocusDrivesTheReports;
+    procedure TestScrollingIsFlushedOncePerParse;
+    procedure TestSlicesRunOnWithinAFrame;
+    procedure TestAFontChangeRelaysOutTheGrid;
+    procedure TestAQueryRelaysOutTheGrid;
+    procedure TestAnInstanceGroundPicksItsSixteenColours;
+    procedure TestTheSyncTimerWaitsForARowOnScreen;
+    procedure TestAThemeChangeThatKeepsTheColoursIsNotReported;
+    procedure TestAThemeChangeSeenInPaintIsReportedAfterIt;
+    procedure TestUnencodedKeyboardExtensionsAreMasked;
+    procedure TestDiscardPendingDropsWhatIsQueued;
+    procedure TestTheSurfaceSurvivesASmallResize;
+    procedure TestAStateChangeThatLeavesTheFrameRepaintsNothing;
   end;
 
 const
@@ -204,9 +233,62 @@ begin
   ClipWritten := S;
 end;
 
+procedure TTyTerminalViewProbe.InvalidateAll;
+begin
+  Inc(WholeInvalidates);
+  inherited InvalidateAll;
+end;
+
+procedure TTyTerminalViewProbe.FontChanged(Sender: TObject);
+begin
+  { MuteFontNotice: as if the font had changed without telling the control (the query
+    path must relay out on its own) }
+  if not MuteFontNotice then inherited FontChanged(Sender);
+end;
+
+procedure TTyTerminalViewProbe.Invalidate;
+begin
+  { MuteInvalidate: a theme change that reaches the control without its Invalidate --
+    the paint has to notice it on its own }
+  if MuteInvalidate then Exit;
+  inherited Invalidate;
+end;
+
+procedure TTyTerminalViewProbe.ReleaseKey(var Key: Word; Shift: TShiftState);
+begin
+  KeyUp(Key, Shift);
+end;
+
+function TTyTerminalViewProbe.Invalidations: Integer;
+begin
+  Result := ControlInvalidations;
+end;
+
+function TTyTerminalViewProbe.Surface: TBGRABitmap;
+begin
+  Result := SurfaceBitmap;
+end;
+
+procedure TTyTerminalViewProbe.RunSlice;
+begin
+  AsyncSlice(0);
+end;
+
+procedure TTyTerminalViewProbe.Hover(AIn: Boolean);
+begin
+  if AIn then MouseEnter else MouseLeave;
+end;
+
+procedure TTyTerminalViewProbe.SetLastPaint(AMs: Double);
+begin
+  { what a paint leaves behind: the time it happened (RenderTo with a canvas) }
+  LastPaintMs := AMs;
+end;
+
 procedure TTyTerminalViewProbe.ClearInvalidated;
 begin
   Invalidated := nil;
+  WholeInvalidates := 0;
 end;
 
 procedure TTyTerminalViewProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -300,6 +382,11 @@ begin
   Result := PendingSyncRows;
 end;
 
+function TTyTerminalViewProbe.RowsPending: Boolean;
+begin
+  Result := RowsLeftToPaint;
+end;
+
 function TTyTerminalViewProbe.Bar: TTyScrollBar;
 begin
   Result := ScrollBar;
@@ -342,7 +429,12 @@ end;
 
 function TTyTerminalViewProbe.ImeAnchor: TRect;
 begin
-  Result := ImeCaretCell;
+  Result := GetImeCaretRect;
+end;
+
+function TTyTerminalViewProbe.ImeBound: TRect;
+begin
+  Result := ImeCaretBoundClient;
 end;
 
 procedure TTyTerminalViewProbe.ImeCommit(const AText: string);
@@ -528,6 +620,12 @@ begin
   Result := FClockMs;
 end;
 
+function TTyTerminalViewTests.StepClock: Double;
+begin
+  FClockMs := FClockMs + FStepMs;
+  Result := FClockMs;
+end;
+
 procedure TTyTerminalViewTests.ResizeFromTitle(Sender: TObject; const AText: string);
 var
   sz: TSize;
@@ -686,10 +784,16 @@ begin
   AssertEquals('the override is in', IntToHex($123456, 6), IntToHex(F.View.Core.ResolveColor(1), 6));
   F.View.WriteSync(#27'[?2031h');
   F.ClearRecords;
-  F.Ctl.Mode := 'dark';
-  AssertEquals('the override went with the theme', IntToHex(F.Ansi(1), 6), IntToHex(F.View.Core.ResolveColor(1), 6));
-  AssertTrue('a colour-scheme report went out: ' + TyTermHex(F.Data), Pos(#27'[?997;', F.Data) = 1);
-  AssertEquals('one report', 1, F.DataEvents);
+  { a theme change that changes the colours (the fixture's colours are the same in both
+    modes, so a mode switch alone changes nothing the program could see) }
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminal { background: #f0f0f0; color: #101010; }';
+  try
+    AssertEquals('the override went with the theme', IntToHex(F.Ansi(1), 6), IntToHex(F.View.Core.ResolveColor(1), 6));
+    AssertTrue('a colour-scheme report went out: ' + TyTermHex(F.Data), Pos(#27'[?997;', F.Data) = 1);
+    AssertEquals('one report', 1, F.DataEvents);
+  finally
+    F.Ctl.StyleOverride := TyTermFixtureCss;
+  end;
 end;
 
 procedure TTyTerminalViewTests.TestSwappingControllersRebuildsThePalette;
@@ -941,6 +1045,372 @@ begin
   finally
     fx.Free;
   end;
+end;
+
+procedure TTyTerminalViewTests.TestColourChangesRepaintTheWholeWindow;
+var
+  bmp: TBitmap;
+  b: TBGRABitmap;
+  w, h, x, y, sentinel, wrong: Integer;
+  r, clip: TRect;
+  want: Cardinal;
+
+  { what WM_PAINT draws after the change: only what was invalidated reaches the screen,
+    the rest keeps what was there (the sentinel here) }
+  procedure PaintWhatWasInvalidated;
+  var
+    k: Integer;
+  begin
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(w, h);
+      bmp.Canvas.Brush.Color := RGBToColor(255, 0, 255);
+      bmp.Canvas.FillRect(0, 0, w, h);
+      if F.View.WholeInvalidates > 0 then
+        clip := Rect(0, 0, w, h)
+      else
+      begin
+        clip := Rect(0, 0, 0, 0);
+        for k := 0 to High(F.View.Invalidated) do
+        begin
+          r := F.View.CellRect(0, F.View.Invalidated[k].X);
+          r.Left := 0;
+          r.Right := w;
+          r.Bottom := F.View.CellRect(0, F.View.Invalidated[k].Y).Bottom;
+          if IsRectEmpty(clip) then clip := r else UnionRect(clip, clip, r);
+        end;
+      end;
+      LCLIntf.IntersectClipRect(bmp.Canvas.Handle, clip.Left, clip.Top, clip.Right, clip.Bottom);
+      F.View.Render(bmp.Canvas, Rect(0, 0, w, h), F.View.Font.PixelsPerInch);
+      b := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+  end;
+
+begin
+  F.SizeTo(20, 6);
+  F.View.WriteSync(#27'[?25l');
+  w := F.View.ClientWidth;
+  h := F.View.ClientHeight;
+  b := F.Render;
+  b.Free;
+  F.View.ClearInvalidated;
+  F.View.WriteSync(#27']11;#123456'#7);
+  AssertTrue('the whole window is invalidated', F.View.WholeInvalidates > 0);
+  PaintWhatWasInvalidated;
+  try
+    sentinel := 0;
+    wrong := 0;
+    for y := 0 to h - 1 do
+      for x := 0 to w - 1 do
+      begin
+        want := (Cardinal(b.GetPixel(x, y).red) shl 16) or (Cardinal(b.GetPixel(x, y).green) shl 8) or b.GetPixel(x, y).blue;
+        if want = $FF00FF then Inc(sentinel)
+        else if want <> $123456 then Inc(wrong);
+      end;
+    AssertEquals('every pixel repainted', 0, sentinel);
+    AssertEquals('every pixel the new background, the padding too', 0, wrong);
+  finally
+    b.Free;
+  end;
+  { and back: OSC 111 restores the theme's background }
+  F.View.ClearInvalidated;
+  F.View.WriteSync(#27']111'#7);
+  AssertTrue('the reset repaints the whole window too', F.View.WholeInvalidates > 0);
+  PaintWhatWasInvalidated;
+  try
+    AssertEquals('the theme background again', IntToHex(F.ThemeBg('TyTerminal'), 6),
+      IntToHex((Cardinal(b.GetPixel(w - 1, h - 1).red) shl 16) or (Cardinal(b.GetPixel(w - 1, h - 1).green) shl 8)
+        or b.GetPixel(w - 1, h - 1).blue, 6));
+  finally
+    b.Free;
+  end;
+  { a write that changes no colour does not repaint the window }
+  F.View.ClearInvalidated;
+  F.View.WriteSync('x');
+  AssertEquals('plain text: rows only', 0, F.View.WholeInvalidates);
+end;
+
+procedure TTyTerminalViewTests.TestSystemFocusDrivesTheReports;
+begin
+  F.View.WriteSync(#27'[?1004h');
+  F.View.CursorBlink := True;
+  F.ClearRecords;
+  F.View.Perform(LM_SETFOCUS, 0, 0);
+  AssertEquals('the window got the focus', TyTermHex(#27'[I'), TyTermHex(F.Data));
+  AssertTrue('focused', F.View.Focus);
+  AssertTrue('blinking', F.View.BlinkOn);
+  F.ClearRecords;
+  F.View.Perform(LM_KILLFOCUS, 0, 0);
+  AssertEquals('another application took it', TyTermHex(#27'[O'), TyTermHex(F.Data));
+  AssertFalse('unfocused', F.View.Focus);
+  AssertFalse('no blinking', F.View.BlinkOn);
+  F.ClearRecords;
+  F.View.Leave;
+  AssertEquals('DoExit after it: nothing twice', '', TyTermHex(F.Data));
+  F.View.Perform(LM_SETFOCUS, 0, 0);
+  F.View.Enter;
+  AssertEquals('back, reported once', TyTermHex(#27'[I'), TyTermHex(F.Data));
+end;
+
+procedure TTyTerminalViewTests.TestScrollingIsFlushedOncePerParse;
+var
+  s: RawByteString;
+  i, syncs: Integer;
+begin
+  F.SizeTo(20, 5);
+  s := '';
+  for i := 1 to 500 do s := s + 'line ' + IntToStr(i) + #13#10;
+  syncs := F.View.ScrollBarSyncs;
+  F.View.ClearInvalidated;
+  F.View.WriteSync(s);
+  AssertTrue(Format('500 scrolls, the bar synced %d times', [F.View.ScrollBarSyncs - syncs]),
+    F.View.ScrollBarSyncs - syncs <= 2);
+  AssertTrue(Format('500 scrolls, %d invalidations', [Length(F.View.Invalidated)]), Length(F.View.Invalidated) <= 4);
+  AssertEquals('the bar ends where the buffer is', F.View.Core.Buffer.YBase, F.View.Bar.Max);
+  AssertEquals('at the bottom', F.View.Core.Buffer.YDisp, F.View.Bar.Position);
+  { a scroll outside a parse (the user's) is done at once }
+  F.View.ClearInvalidated;
+  F.View.ScrollLines(-3);
+  AssertEquals('the bar follows a scroll at once', F.View.Core.Buffer.YDisp, F.View.Bar.Position);
+  AssertTrue('and the rows are invalidated at once', Length(F.View.Invalidated) > 0);
+end;
+
+procedure TTyTerminalViewTests.TestSlicesRunOnWithinAFrame;
+var
+  i, recent, stale: Integer;
+begin
+  { every look at the clock a millisecond later; a slice's budget is 12 ms, a frame 16 }
+  FStepMs := 1;
+  FClockMs := 100000;
+  F.View.Core.Clock := @StepClock;
+  try
+    for i := 1 to 100 do
+      F.View.Write('x', @WriteDone, i);
+    { the last paint long ago: one slice, then give the loop back for the paint }
+    F.View.LastPaintMs := FClockMs - 1000;
+    F.View.RunSlice;
+    stale := Length(FDone);
+    { a frame was just painted: slices run on until a frame's worth has gone by }
+    F.View.LastPaintMs := FClockMs;
+    F.View.RunSlice;
+    recent := Length(FDone) - stale;
+  finally
+    F.View.Core.Clock := nil;
+  end;
+  AssertTrue(Format('one slice with an old paint (%d chunks)', [stale]), (stale > 0) and (stale < 100));
+  AssertTrue(Format('more within a frame of a paint (%d > %d)', [recent, stale]), recent > stale);
+end;
+
+procedure TTyTerminalViewTests.TestAFontChangeRelaysOutTheGrid;
+begin
+  F.SizeTo(40, 10);
+  F.View.ParentFont := False;
+  F.View.Font.Size := 9;
+  F.ClearRecords;
+  F.View.Font.Size := 14;
+  AssertEquals('one grid event, at once', 1, Length(F.Grids));
+  AssertTrue(Format('fewer columns at 14 pt (%d)', [F.Grids[0].X]), F.Grids[0].X < 40);
+  AssertEquals('the core agrees', F.Grids[0].X, F.View.Core.Cols);
+end;
+
+procedure TTyTerminalViewTests.TestAQueryRelaysOutTheGrid;
+var
+  r: TRect;
+  cols: Integer;
+begin
+  F.SizeTo(40, 10);
+  F.View.ParentFont := False;
+  F.View.Font.Size := 9;
+  F.View.CellRect(0, 0);
+  F.View.MuteFontNotice := True;
+  F.ClearRecords;
+  F.View.Font.Size := 14;
+  AssertEquals('the notice was muted: nothing yet', 0, Length(F.Grids));
+  r := F.View.CellRect(0, 0);
+  AssertEquals('the query relaid the grid', 1, Length(F.Grids));
+  cols := (F.View.ClientWidth - 2 * F.Pad - F.View.Bar.Width) div (r.Right - r.Left);
+  AssertEquals('as many columns as the new cell fits', cols, F.View.Cols);
+end;
+
+procedure TTyTerminalViewTests.TestAnInstanceGroundPicksItsSixteenColours;
+var
+  c: TTyStyleController;
+  second: TTyTerminalView;
+begin
+  c := TTyStyleController.Create(nil);
+  second := TTyTerminalView.Create(nil);
+  try
+    c.Mode := 'light';
+    c.ThemeName := 'default';
+    F.View.Controller := c;
+    second.Controller := c;
+    AssertEquals('a light ground: the tuned set', IntToHex($3F7C04, 6), IntToHex(F.View.Core.ResolveColor(2), 6));
+    { this one terminal on a dark ground (StyleOverride) }
+    F.View.StyleOverride := 'background: #101010; color: #e0e0e0';
+    AssertEquals('its own dark ground: the dark set', IntToHex($4E9A06, 6), IntToHex(F.View.Core.ResolveColor(2), 6));
+    AssertEquals('bright yellow too', IntToHex($FCE94F, 6), IntToHex(F.View.Core.ResolveColor(11), 6));
+    AssertEquals('the cursor follows its foreground', IntToHex($E0E0E0, 6), IntToHex(F.View.Core.ResolveColor(258), 6));
+    AssertEquals('the other terminal is still light', IntToHex($3F7C04, 6), IntToHex(second.Core.ResolveColor(2), 6));
+    F.View.StyleOverride := '';
+    AssertEquals('back to light', IntToHex($3F7C04, 6), IntToHex(F.View.Core.ResolveColor(2), 6));
+    { a class that makes the ground dark }
+    c.StyleOverride := 'TyTerminal.night { background: #000000; color: #ffffff; }';
+    F.View.StyleClass := 'night';
+    AssertEquals('a dark class: the dark set', IntToHex($4E9A06, 6), IntToHex(F.View.Core.ResolveColor(2), 6));
+    AssertEquals('its background', IntToHex($000000, 6), IntToHex(F.View.Core.ResolveColor(257), 6));
+    { a class that also names a colour of its own keeps it }
+    c.StyleOverride := 'TyTerminal.night { background: #000000; } TyTerminalAnsi2.night { color: #123456; }';
+    AssertEquals('the class''s own colour', IntToHex($123456, 6), IntToHex(F.View.Core.ResolveColor(2), 6));
+  finally
+    F.View.StyleClass := '';
+    F.View.Controller := F.Ctl;
+    second.Free;
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalViewTests.TestTheSyncTimerWaitsForARowOnScreen;
+var
+  b: TBGRABitmap;
+  s: RawByteString;
+  i: Integer;
+  c: TUTF8Char;
+begin
+  F.SizeTo(20, 5);
+  s := '';
+  for i := 1 to 30 do s := s + 'line ' + IntToStr(i) + #13#10;
+  F.View.WriteSync(s);
+  { more than a screen up: the cursor's row is off the viewport, the frame has no cursor }
+  F.View.ScrollLines(-10);
+  b := F.Render;
+  b.Free;
+  F.View.WriteSync(#27'[?2026h');
+  AssertFalse('nothing on screen held: no timer yet', F.View.SyncOn);
+  AssertEquals('nothing held', -1, F.View.HeldRows.X);
+  F.View.ScrollToBottom;
+  AssertTrue('back at the bottom the rows are held: now the timer runs', F.View.SyncOn);
+  { again, and this time a typed character brings the view down }
+  F.View.WriteSync(#27'[?2026l');
+  AssertFalse('the mode ended', F.View.SyncOn);
+  F.View.ScrollLines(-10);
+  b := F.Render;
+  b.Free;
+  F.View.WriteSync(#27'[?2026h');
+  AssertFalse('no timer', F.View.SyncOn);
+  c := 'x';
+  F.View.TypeChar(c);
+  AssertTrue('typing scrolled to the bottom: held, the timer runs', F.View.SyncOn);
+end;
+
+procedure TTyTerminalViewTests.TestAThemeChangeThatKeepsTheColoursIsNotReported;
+begin
+  F.View.WriteSync(#27']4;1;#123456'#7);
+  F.View.WriteSync(#27'[?2031h');
+  F.ClearRecords;
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminal { padding: 6px; }';
+  try
+    AssertEquals('the padding did change', MulDiv(6, F.View.Font.PixelsPerInch, 96), F.View.CellRect(0, 0).Left);
+    AssertEquals('no colour-scheme report', '', TyTermHex(F.Data));
+    AssertEquals('the program''s colour is kept', IntToHex($123456, 6), IntToHex(F.View.Core.ResolveColor(1), 6));
+  finally
+    F.Ctl.StyleOverride := TyTermFixtureCss;
+  end;
+end;
+
+procedure TTyTerminalViewTests.TestAThemeChangeSeenInPaintIsReportedAfterIt;
+var
+  b: TBGRABitmap;
+  i: Integer;
+begin
+  TyTermNeedWidgetSet;
+  F.View.WriteSync(#27'[?2031h');
+  F.ClearRecords;
+  F.View.MuteInvalidate := True;
+  try
+    F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminal { background: #f0f0f0; color: #101010; }';
+  finally
+    F.View.MuteInvalidate := False;
+  end;
+  AssertEquals('not seen yet', '', TyTermHex(F.Data));
+  b := F.Render;
+  b.Free;
+  AssertEquals('the paint noticed it but sent nothing from inside the paint', '', TyTermHex(F.Data));
+  for i := 1 to 5 do Forms.Application.ProcessMessages;
+  AssertTrue('reported once the paint is over: ' + TyTermHex(F.Data), Pos(#27'[?997;', F.Data) = 1);
+  AssertEquals('once', 1, F.DataEvents);
+  F.Ctl.StyleOverride := TyTermFixtureCss;
+end;
+
+procedure TTyTerminalViewTests.TestUnencodedKeyboardExtensionsAreMasked;
+begin
+  F.View.Core.VtExtensions := F.View.Core.VtExtensions + [tveKittyKeyboard, tveWin32InputMode];
+  F.ClearRecords;
+  F.View.WriteSync(#27'[?u');
+  AssertEquals('no kitty keyboard flags reported', '', TyTermHex(F.Data));
+  F.View.WriteSync(#27'[?9001$p');
+  AssertEquals('win32-input-mode not recognised', TyTermHex(#27'[?9001;0$y'), TyTermHex(F.Data));
+  AssertFalse('the extensions are off', tveKittyKeyboard in F.View.Core.VtExtensions);
+end;
+
+procedure TTyTerminalViewTests.TestDiscardPendingDropsWhatIsQueued;
+begin
+  F.View.Write('abc', @WriteDone, 1);
+  F.View.Write('def', @WriteDone, 2);
+  AssertEquals('queued', 6, F.View.Core.PendingBytes);
+  F.View.Core.DiscardPending;
+  AssertEquals('dropped', 0, F.View.Core.PendingBytes);
+  AssertFalse('nothing left to process', F.View.Core.ProcessPending);
+  AssertEquals('never parsed', '', F.RowText(0));
+  AssertEquals('no callbacks', 0, Length(FDone));
+  F.View.Write('xyz');
+  F.View.Core.ProcessPending;
+  AssertEquals('the next write goes through', 'xyz', F.RowText(0));
+end;
+
+procedure TTyTerminalViewTests.TestTheSurfaceSurvivesASmallResize;
+var
+  b: TBGRABitmap;
+  first: TBGRABitmap;
+  x, y, sentinel: Integer;
+begin
+  F.SizeTo(20, 5);
+  b := F.Render;
+  b.Free;
+  first := F.View.Surface;
+  AssertNotNull(first);
+  AssertEquals('whole blocks wide', 0, first.Width mod 64);
+  AssertEquals('whole blocks high', 0, first.Height mod 64);
+  F.View.SetBounds(F.View.Left, F.View.Top, F.View.Width - 3, F.View.Height - 2);
+  b := F.Render;
+  try
+    AssertTrue('the same surface after a small resize', F.View.Surface = first);
+    sentinel := 0;
+    for y := 0 to b.Height - 1 do
+      for x := 0 to b.Width - 1 do
+        if (b.GetPixel(x, y).red = 255) and (b.GetPixel(x, y).green = 0) and (b.GetPixel(x, y).blue = 255) then
+          Inc(sentinel);
+    AssertEquals('and the smaller frame painted whole', 0, sentinel);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalViewTests.TestAStateChangeThatLeavesTheFrameRepaintsNothing;
+var
+  b: TBGRABitmap;
+  n: Integer;
+begin
+  b := F.Render;
+  b.Free;
+  n := F.View.Invalidations;
+  F.View.Hover(True);
+  F.View.Hover(False);
+  AssertEquals('hovering changes nothing on this theme: no whole repaint', n, F.View.Invalidations);
+  F.View.Invalidate;
+  AssertEquals('an Invalidate of the host''s own still goes through', n + 1, F.View.Invalidations);
 end;
 
 initialization
