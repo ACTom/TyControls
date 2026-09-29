@@ -55,10 +55,12 @@ unit tyControls.Terminal.Core;
   - The write queue survives an exception from a handler or a callback: the chunk
     that raised counts as parsed, its dirty rows are still reported, and what is
     left asks for another slice.
-  - A chunk is parsed in pieces of TyTermMaxParseBuffer bytes and the time budget is
-    checked between pieces, not only between chunks, so one huge Write does not hold
-    the thread (upstream parses a chunk in one go, WriteBuffer.ts:224-297: a
-    deliberate difference, spec 15). Each piece is one parse call (its own
+  - A slice (ProcessPending) parses a chunk in pieces of TyTermSlicePieceBytes and
+    checks the time budget between pieces, not only between chunks, so one huge Write
+    does not hold the thread (upstream parses a chunk in one go, WriteBuffer.ts:224-297:
+    a deliberate difference, spec 15); a piece that small runs over the budget by a
+    millisecond or two, not by one of MAX_PARSEBUFFER's 128 KB. A flush (WriteSync,
+    Resize) takes pieces of TyTermMaxParseBuffer. Each piece is one parse call (its own
     OnCursorMove / OnRefreshRows); the state afterwards is the whole chunk's. A
     chunk's callback comes once, after its last piece; calls made from events wait
     for it too; PendingBytes drops piece by piece; a flush (WriteSync, Resize) goes
@@ -104,6 +106,9 @@ const
   TyTermLibraryVersion = '3.1.0';
   TyTermDiscardWatermark = 50000000;      { WriteBuffer.ts:20 }
   TyTermWriteTimeoutMs = 12;              { WriteBuffer.ts:27 }
+  { ours: the piece of a chunk a slice parses between two looks at the clock (unit
+    header); a flush parses TyTermMaxParseBuffer at a time }
+  TyTermSlicePieceBytes = 32768;
   TyTermWriteBufferLengthThreshold = 50;  { WriteBuffer.ts:28 }
   TyTermStackLimit = 10;                  { InputHandler.ts:47 }
   { REP: code points printed on one line, without a scroll or a new line, after
@@ -448,7 +453,7 @@ type
     function NowMs: Double;
     procedure RequestProcess;
     procedure Enqueue(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
-    procedure ProcessOneChunk;
+    procedure ProcessOneChunk(APieceBytes: Integer);
     procedure InnerWrite(ABudgetMs: Integer; out AMore: Boolean);
     procedure FlushSync;
     procedure ClearQueue;

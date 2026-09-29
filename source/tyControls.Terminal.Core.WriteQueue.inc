@@ -99,15 +99,16 @@ begin
   Write(s, AOnDone, ATag);
 end;
 
-{ The next piece of the head chunk: at most TyTermMaxParseBuffer bytes from where the
-  last piece stopped (unit header). The position and the byte count move BEFORE the
+{ The next piece of the head chunk: at most APieceBytes from where the last piece
+  stopped (unit header: TyTermSlicePieceBytes in a slice, TyTermMaxParseBuffer in a
+  flush). The position and the byte count move BEFORE the
   piece is parsed, so neither an exception nor a nested flush can parse it twice. The
   last piece takes the chunk off the queue first (the queue lets go of its data), then
   its callback -- also when a handler raised, a host counting callbacks for flow
   control must not lose one -- then what an event asked for while the chunk was
   parsed. A handler raising in an earlier piece: the rest of the chunk counts as
   parsed, the same way. }
-procedure TTyTerminalCore.ProcessOneChunk;
+procedure TTyTerminalCore.ProcessOneChunk(APieceBytes: Integer);
 var
   item: TTyTermQueueItem;
   data: RawByteString;
@@ -129,7 +130,7 @@ begin
   data := FQueue[head].Data;             { our own reference: a nested clear lets go of the slot's }
   item := Default(TTyTermQueueItem);
   start := FChunkPos;
-  n := Min(TyTermMaxParseBuffer, Length(data) - start);
+  n := Min(APieceBytes, Length(data) - start);
   Inc(FChunkPos, n);
   Dec(FPendingData, n);
   last := FChunkPos >= Length(data);
@@ -172,7 +173,7 @@ begin
   try
     while FQueueCount > FBufferOffset do
     begin
-      ProcessOneChunk;
+      ProcessOneChunk(TyTermSlicePieceBytes);
       if NowMs - start >= ABudgetMs then
         Break;
     end;
@@ -262,7 +263,7 @@ begin
   ok := False;
   try
     while FBufferOffset < FQueueCount do
-      ProcessOneChunk;
+      ProcessOneChunk(TyTermMaxParseBuffer);
     ok := True;
   finally
     FIsSyncWriting := False;

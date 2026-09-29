@@ -100,7 +100,7 @@ type
     procedure TestProcessDrainsAndReports;
     procedure TestAnOutstandingRequestIsNotRepeated;
     procedure TestSliceStopsBetweenChunksAtTheBudget;
-    { phase 5: a chunk is sliced between its 128 KB pieces (TestOneBigChunkIsNotSplit
+    { phase 5: a chunk is sliced between its pieces (TestOneBigChunkIsNotSplit
       pinned the phase 2 answer: one chunk, whole) }
     procedure TestABigChunkIsSlicedBetweenPieces;
     procedure TestSlicedInsideAChunkEqualsWhole;
@@ -1932,8 +1932,9 @@ begin
   end;
 end;
 
-{ 1 MB is eight 128 KB pieces. The clock moves 5 ms a read: the slice reads it at the
-  start and after each piece -- 5, 10, 15 ms in, so three pieces, then it stops. }
+{ 1 MB is 32 pieces of a slice (TyTermSlicePieceBytes, 32 KB). The clock moves 5 ms a
+  read: the slice reads it at the start and after each piece -- 5, 10, 15 ms in, so
+  three pieces, then it stops. }
 procedure TTyTerminalWriteQueueTests.TestABigChunkIsSlicedBetweenPieces;
 var
   r: TQueueRig;
@@ -1946,21 +1947,21 @@ begin
     r.Core.Write(s, @r.OnDone, 9);
     r.Step := 5;
     AssertTrue('the chunk is not done', r.Core.ProcessPending);
-    AssertEquals('three pieces parsed', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    AssertEquals('three pieces parsed', 3 * TyTermSlicePieceBytes, r.Core.HeadChunkParsed);
     AssertEquals('no callback yet', 0, Length(r.Done));
-    AssertEquals('the pending bytes drop piece by piece', Int64(1024 * 1024 - 3 * TyTermMaxParseBuffer),
+    AssertEquals('the pending bytes drop piece by piece', Int64(1024 * 1024 - 3 * TyTermSlicePieceBytes),
       r.Core.PendingBytes);
     AssertEquals('one parse call (refresh) per piece', 3, r.Renders);
     slices := 1;
     while r.Core.ProcessPending do
       Inc(slices);
     Inc(slices);
-    AssertEquals('three slices: three, three and two pieces', 3, slices);
+    AssertEquals('eleven slices: ten of three pieces, one of two', 11, slices);
     AssertEquals('the callback once', 1, Length(r.Done));
     AssertEquals('its tag', 9, r.Done[0]);
     AssertEquals('after the last piece: nothing pending', 0, r.PendingAtDone);
     AssertEquals('after the last piece: the chunk left the queue', 0, r.ParsedAtDone);
-    AssertEquals('eight refreshes', 8, r.Renders);
+    AssertEquals('32 refreshes', 32, r.Renders);
     AssertEquals('pending', 0, r.Core.PendingBytes);
     AssertEquals(StringOfChar('x', 20), r.Line0);
   finally
@@ -1997,7 +1998,7 @@ begin
         for k := 0 to steps.Count - 1 do
           if steps.Objects[k].Find('write') <> nil then
             one := one + TyTermBase64Bytes(steps.Objects[k].Strings['write']);
-        data := StringOfChar('.', TyTermMaxParseBuffer - 1) + #$E4#$B8#$AD;
+        data := StringOfChar('.', TyTermSlicePieceBytes - 1) + #$E4#$B8#$AD;
         while Length(data) < 3 * TyTermMaxParseBuffer + 1000 do
           data := data + one;
         r := TQueueRig.Create(c.Integers['cols'], c.Integers['rows']);
@@ -2057,7 +2058,7 @@ begin
     r.Core.Write(s, @r.OnDone, 1);
     r.Step := 5;
     AssertTrue(r.Core.ProcessPending);
-    AssertEquals('three pieces', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    AssertEquals('three pieces', 3 * TyTermSlicePieceBytes, r.Core.HeadChunkParsed);
     r.Core.Resize(40, 10);
     AssertEquals('the callback once', 1, Length(r.Done));
     AssertEquals('the chunk done', 0, r.Core.HeadChunkParsed);
@@ -2087,7 +2088,7 @@ begin
     r.Core.Write(s, @r.OnDone, 1);
     r.Step := 5;
     AssertTrue(r.Core.ProcessPending);
-    AssertEquals('three pieces', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    AssertEquals('three pieces', 3 * TyTermSlicePieceBytes, r.Core.HeadChunkParsed);
     r.Core.WriteSync('x');
     AssertEquals('the callback once', 1, Length(r.Done));
     AssertEquals('nothing pending', 0, r.Core.PendingBytes);
@@ -2116,7 +2117,7 @@ begin
     r := TQueueRig.Create(20, 6);
     ref := TTyTerminalCore.Create(20, 6);
     try
-      s := LinesOfText(TyTermMaxParseBuffer - cut) + #$E4#$B8#$AD'X';
+      s := LinesOfText(TyTermSlicePieceBytes - cut) + #$E4#$B8#$AD'X';
       r.Core.Write(s, @r.OnDone, 1);
       r.Step := 20;
       while r.Core.ProcessPending do ;
@@ -2142,7 +2143,7 @@ begin
     r.Core.Write(LinesOfText(1024 * 1024), @r.OnDone, 1);
     r.Step := 5;
     AssertTrue(r.Core.ProcessPending);
-    AssertEquals('three pieces', 3 * TyTermMaxParseBuffer, r.Core.HeadChunkParsed);
+    AssertEquals('three pieces', 3 * TyTermSlicePieceBytes, r.Core.HeadChunkParsed);
     r.Core.DiscardPending;
     AssertEquals('no callback', 0, Length(r.Done));
     AssertEquals('nothing pending', 0, r.Core.PendingBytes);
@@ -2216,8 +2217,8 @@ begin
     s.Core.OnBell := @s.OnBell;
     s.Core.Clock := @s.Clock;
     s.Step := 5;
-    data := LinesOfText(TyTermMaxParseBuffer + 600) + #7 + LinesOfText(TyTermMaxParseBuffer)
-      + 'NEVERSEEN' + LinesOfText(2 * TyTermMaxParseBuffer);
+    data := LinesOfText(TyTermSlicePieceBytes + 600) + #7 + LinesOfText(TyTermSlicePieceBytes)
+      + 'NEVERSEEN' + LinesOfText(2 * TyTermSlicePieceBytes);
     s.Core.Write(data, @s.OnDone, 1);
     s.Core.Write('NEXT');
     raised := False;
@@ -2629,6 +2630,8 @@ var
   r: TQueueRig;
   s: RawByteString;
   before, after: PtrUInt;
+  script: array of Double;
+  k: Integer;
 begin
   r := TQueueRig.Create;
   try
@@ -2637,10 +2640,13 @@ begin
     s := '';                               { the queue holds the only reference }
     r.Core.Write('z');
     before := GetFPCHeapStatus.CurrHeapUsed;
-    { the whole chunk -- 64 pieces of 128 KB (phase 5 slices between them), the clock
-      read at the start and after each -- then the budget is spent }
-    r.SetScript([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20]);
+    { the whole chunk -- its pieces (phase 5 slices between them), the clock read at the
+      start and after each -- then the budget is spent }
+    SetLength(script, 8 * 1024 * 1024 div TyTermSlicePieceBytes + 1);
+    for k := 0 to High(script) - 1 do
+      script[k] := 0;
+    script[High(script)] := 20;
+    r.SetScript(script);
     AssertTrue('z still waits', r.Core.ProcessPending);
     after := GetFPCHeapStatus.CurrHeapUsed;
     AssertTrue(Format('8 MB given back (%d -> %d)', [before, after]), Int64(before) - Int64(after) > 7 * 1024 * 1024);
