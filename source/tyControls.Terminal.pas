@@ -49,7 +49,8 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel,
   tyControls.Controller, tyControls.ScrollBar, tyControls.PlatformWS, tyControls.TextMenu,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal.Selection;
+  tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal.Selection,
+  tyControls.Terminal.Links;
 
 const
   { X11 惯例的 PRIMARY(选中即复制、中键粘贴):Unix 上除了 macOS。按平台取,不按 widgetset;
@@ -76,6 +77,9 @@ type
   { 一次按下走哪条路(在按下那一刻定,直到那个键抬起):上报给程序、本地选择、链接、
     中键粘贴 PRIMARY、什么都不做 }
   TTyTerminalMouseRoute = (mrNone, mrReport, mrSelect, mrLink, mrPrimary);
+  { 链接被 Ctrl+单击(macOS Cmd+单击):AUri 原样(OSC 8 的 URI,或识别出的网址);控件自己
+    不打开任何东西 }
+  TTyTerminalLinkEvent = procedure(Sender: TObject; const AUri: string; AFromOsc8: Boolean) of object;
 
   { 终端。右键菜单是自建的四项(不实现 ITyTextEditActions:那是给编辑框六项菜单设计的)。 }
   TTyTerminalView = class(TTyCustomControl, ITyImeEditable, ITyScrollBarFrameHost)
@@ -205,6 +209,14 @@ type
     FCopyOnSelect: Boolean;
     FWordSeparators: string;
     FOnSelectionChange: TNotifyEvent;
+    { 链接:识别网址、非 http(s) 的 OSC 8 算不算链接;悬停的那条(按着链接键时)、按下时的
+      那条、指针在不在控件里、上次悬停用的修饰键 }
+    FDetectUrls, FAllowNonHttpLinks: Boolean;
+    FOnLinkActivate: TTyTerminalLinkEvent;
+    FHover, FDownLink: TTyTermLink;
+    FHoverValid: Boolean;
+    FHoverShift: TShiftState;
+    FMouseInside: Boolean;
     { 右键菜单:自建四项,懒建,无 owner(析构里释放) }
     FMenu: TTyPopupMenu;
     FMenuCopy, FMenuPaste, FMenuSelectAll, FMenuClear: TMenuItem;
@@ -336,6 +348,11 @@ type
     function GetHasSelection: Boolean;
     procedure SetWordSeparators(const AValue: string);
     function WordSeparatorsStored: Boolean;
+    { 链接 }
+    function LinkKeyHeld(Shift: TShiftState): Boolean;
+    procedure DirtyLinkRows(const ALink: TTyTermLink);
+    procedure SetDetectUrls(AValue: Boolean);
+    procedure SetAllowNonHttpLinks(AValue: Boolean);
     { 右键菜单 }
     procedure MenuCopyClick(Sender: TObject);
     procedure MenuPasteClick(Sender: TObject);
@@ -364,6 +381,14 @@ type
     procedure ShowContextMenu(const AClientPos: TPoint); virtual;
     { 此刻按着的修饰键(菜单先于按下到时现算);默认 GetKeyShiftState }
     function CurrentShiftState: TShiftState; virtual;
+    { 指针下(视口行 AViewRow、列 ACol)的链接:OSC 8 在前、DetectUrls 才认网址、去重叠后
+      第一条命中的 }
+    function LinkAt(ACol, AViewRow: Integer; out ALink: TTyTermLink): Boolean;
+    { 悬停:指针在网格里、按着链接键、不在拖选 -> 指针下的链接,变了就重画涉及的行 }
+    procedure UpdateHover(X, Y: Integer; Shift: TShiftState);
+    { FOR THE TESTS:悬停的链接 }
+    property HoverLink: TTyTermLink read FHover;
+    property HoverValid: Boolean read FHoverValid;
     { FOR THE TESTS }
     function DragTimerActive: Boolean;
     property Selection: TTyTermSelection read FSelection;
@@ -380,6 +405,7 @@ type
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure ModifierChanged(AKey: Word; Shift: TShiftState);
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -517,6 +543,10 @@ type
       write FSelectionOverrideKey default tsoDefault;
     property WordSeparators: string read FWordSeparators write SetWordSeparators stored WordSeparatorsStored;
     property CopyOnSelect: Boolean read FCopyOnSelect write FCopyOnSelect default False;
+    property DetectUrls: Boolean read FDetectUrls write SetDetectUrls default True;
+    { OSC 8 里不是 http / https 的 URI(file://、ssh://)算不算链接:默认不算(上游没有
+      linkHandler.allowNonHttpProtocols 时同样不算——不下划线、不能点) }
+    property AllowNonHttpLinks: Boolean read FAllowNonHttpLinks write SetAllowNonHttpLinks default False;
     property LineHeightPercent: Integer read FLineHeightPercent write SetLineHeightPercent default 100;
     property LetterSpacing: Integer read FLetterSpacing write SetLetterSpacing default 0;
     property TabStop default True;
@@ -530,6 +560,7 @@ type
     property OnOsc: TTyTerminalOscEvent read FOnOsc write FOnOsc;
     property OnShortcutQuery: TTyTerminalShortcutQueryEvent read FOnShortcutQuery write FOnShortcutQuery;
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
+    property OnLinkActivate: TTyTerminalLinkEvent read FOnLinkActivate write FOnLinkActivate;
   end;
 
 { MouseService._sendEvent 的键(MouseService.ts:112-136):按下、抬起按 LCL 的键(左、中、右,
@@ -617,6 +648,8 @@ begin
   FSelectionOverrideKey := tsoDefault;
   FUsesPrimary := TyTerminalUsesPrimary;
   FWordSeparators := TyTermDefaultWordSeparators;
+  FDetectUrls := True;
+  FAllowNonHttpLinks := False;
   FSelDrawnFirst := -1;
   FSelDrawnLast := -1;
   FBlinkVisible := True;
@@ -909,6 +942,9 @@ begin
     InvalidateAll;
   end;
   FDrivenColorSigValid := False;
+  { 输出改了悬停链接所在的行、或者滚了:在上次的指针位置重算(Linkifier.ts:299-321) }
+  if FHoverValid then
+    UpdateHover(FLastMousePos.X, FLastMousePos.Y, FHoverShift);
 end;
 
 { Kitty 键盘协议、win32-input-mode 控件都不编码:程序查询时不能报支持(宿主改了 Core 的
@@ -1894,8 +1930,18 @@ begin
         FRowPainter.SelFrom := 0;
         FRowPainter.SelTo := 0;
       end;
+      { 悬停链接落在这一行上的那一段(1 起、闭区间、缓冲行) }
       FRowPainter.LinkFrom := 0;
       FRowPainter.LinkTo := 0;
+      if FHoverValid and (buf.YDisp + r + 1 >= FHover.Range.StartY) and (buf.YDisp + r + 1 <= FHover.Range.EndY) then
+      begin
+        if buf.YDisp + r + 1 = FHover.Range.StartY then
+          FRowPainter.LinkFrom := FHover.Range.StartX - 1;
+        if buf.YDisp + r + 1 = FHover.Range.EndY then
+          FRowPainter.LinkTo := FHover.Range.EndX
+        else
+          FRowPainter.LinkTo := FCore.Cols;
+      end;
       if not FRowPainter.PaintRow(FSurface, ins.Left, ins.Top + r * FMetrics.CellH, buf.GetLine(buf.YDisp + r),
         FCore.Cols, cursorCol, shape) then
       begin
@@ -2222,6 +2268,7 @@ begin
     FStateChange := False;
   end;
   NoteHostHover(True);
+  FMouseInside := True;
 end;
 
 procedure TTyTerminalView.MouseLeave;
@@ -2233,6 +2280,9 @@ begin
     FStateChange := False;
   end;
   NoteHostHover(False);
+  FMouseInside := False;
+  { 离开:悬停清掉(按着链接键也一样) }
+  UpdateHover(-1, -1, []);
 end;
 
 procedure TTyTerminalView.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
@@ -2361,6 +2411,17 @@ begin
     and (((AEvent.KeyCode >= 48) and (TyTermJsLength(AEvent.Key) = 1)) or (AEvent.KeyCode = VK_SPACE));
 end;
 
+{ 修饰键按下 / 抬起:链接悬停与指针形状跟着变(指针没动也一样)。不改变按键的去向 }
+procedure TTyTerminalView.ModifierChanged(AKey: Word; Shift: TShiftState);
+begin
+  if (AKey = VK_CONTROL) or (AKey = VK_SHIFT) or (AKey = VK_MENU) or (AKey = VK_LWIN) or (AKey = VK_RWIN) then
+  begin
+    UpdateHover(FLastMousePos.X, FLastMousePos.Y, Shift);
+    if FMouseInside then
+      UpdatePointer(Shift);
+  end;
+end;
+
 procedure TTyTerminalView.KeyDown(var Key: Word; Shift: TShiftState);
 type
   TKeyAction = (kaNone, kaSend, kaCopy, kaPaste, kaPageUp, kaPageDown, kaTop, kaBottom, kaSelectAll);
@@ -2370,6 +2431,7 @@ var
   act: TKeyAction;
   pass, ctrl, alt, meta, shf: Boolean;
 begin
+  ModifierChanged(Key, Shift);
   { 宿主的 OnKeyDown 先拿到;它清了零就到此为止 }
   inherited KeyDown(Key, Shift);
   FKeyDownHandled := False;
@@ -2451,6 +2513,7 @@ end;
 
 procedure TTyTerminalView.KeyUp(var Key: Word; Shift: TShiftState);
 begin
+  ModifierChanged(Key, Shift);
   inherited KeyUp(Key, Shift);
   { 这个键的字符没来(widgetset 不送、或者按下时被别处拿走):别留给下一个键 }
   FKeyDownHandled := False;
@@ -2674,7 +2737,9 @@ var
   c: TCursor;
 begin
   if csDesigning in ComponentState then Exit;
-  if Reporting and not OverrideHeld(Shift) then
+  if FHoverValid then
+    c := crHandPoint
+  else if Reporting and not OverrideHeld(Shift) then
     c := crDefault
   else if ColumnWanted(Shift) then
     c := crCross
@@ -2689,6 +2754,9 @@ end;
   (MouseService.ts:224-249,选区服务的 mousemove 监听 stopImmediatePropagation)。上报路上
   别的键按下也照报;其他路上别的键不管。 }
 procedure TTyTerminalView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  cell: TPoint;
+  link: TTyTermLink;
 begin
   FStateChange := True;
   try
@@ -2707,6 +2775,18 @@ begin
   if csDesigning in ComponentState then Exit;
   FLastMousePos := Point(X, Y);
   SyncSelectionTrim;
+  { Ctrl(macOS Cmd)+单击链接:链接优先,程序接管了鼠标也一样(spec §9.8);不上报、不选择 }
+  if (FRoute = mrNone) and (Button = mbLeft) and LinkKeyHeld(Shift) then
+  begin
+    cell := CellAt(X, Y);
+    if LinkAt(cell.X, cell.Y, link) then
+    begin
+      FRoute := mrLink;
+      FRouteButton := Button;
+      FDownLink := link;
+      Exit;
+    end;
+  end;
   if FRoute = mrReport then
   begin
     Include(FReportHeld, Button);
@@ -2763,10 +2843,16 @@ begin
       if Reporting and ([ssLeft, ssMiddle, ssRight] * Shift = []) then
         ReportMouse(tmbNone, tmaMove, X, Y, Shift);
   end;
+  FMouseInside := True;
+  UpdateHover(X, Y, Shift);
   UpdatePointer(Shift);
 end;
 
 procedure TTyTerminalView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  rt: TTyTerminalMouseRoute;
+  cell: TPoint;
+  link: TTyTermLink;
 begin
   FStateChange := True;
   try
@@ -2787,12 +2873,101 @@ begin
   end;
   if (FRoute <> mrNone) and (Button = FRouteButton) then
   begin
-    case FRoute of
+    rt := FRoute;
+    FRoute := mrNone;
+    case rt of
       mrSelect: SelectionRelease;
       mrPrimary: Paste(ReadPrimaryText);
+      mrLink:
+        begin
+          { 按下和抬起在同一条链接上才算(Linkifier.ts:220-233) }
+          cell := CellAt(X, Y);
+          if LinkAt(cell.X, cell.Y, link) and TyTermLinkEquals(link, FDownLink)
+            and Assigned(FOnLinkActivate) then
+            FOnLinkActivate(Self, link.Text, link.Source = tlsOsc8);
+        end;
     end;
-    FRoute := mrNone;
   end;
+end;
+
+{ ---- 链接 --------------------------------------------------------------------------- }
+
+function TTyTerminalView.LinkKeyHeld(Shift: TShiftState): Boolean;
+begin
+  if FIsMac then
+    Result := ssMeta in Shift
+  else
+    Result := ssCtrl in Shift;
+end;
+
+function TTyTerminalView.LinkAt(ACol, AViewRow: Integer; out ALink: TTyTermLink): Boolean;
+begin
+  Result := TyTermFindLinkAt(FCore.Buffer, FCore.Links, ACol, FCore.Buffer.YDisp + AViewRow, FCore.Cols,
+    FDetectUrls, FAllowNonHttpLinks, ALink);
+end;
+
+procedure TTyTerminalView.DirtyLinkRows(const ALink: TTyTermLink);
+var
+  a, b, i: Integer;
+begin
+  a := Max(ALink.Range.StartY - 1 - FCore.Buffer.YDisp, 0);
+  b := Min(ALink.Range.EndY - 1 - FCore.Buffer.YDisp, FCore.Rows - 1);
+  if b < a then Exit;
+  if FInRender then
+  begin
+    for i := a to Min(b, High(FDirty)) do
+      FDirty[i] := True;
+  end
+  else
+    DirtyRows(a, b);
+end;
+
+procedure TTyTerminalView.UpdateHover(X, Y: Integer; Shift: TShiftState);
+var
+  ins: TRect;
+  cell: TPoint;
+  link: TTyTermLink;
+  valid: Boolean;
+begin
+  if csDesigning in ComponentState then Exit;
+  FHoverShift := Shift;
+  valid := False;
+  link := Default(TTyTermLink);
+  if (X >= 0) and (Y >= 0) and LinkKeyHeld(Shift) and (FRoute <> mrSelect) then
+  begin
+    EnsureMetrics(Font.PixelsPerInch);
+    ins := ContentInsets(Font.PixelsPerInch);
+    if (X >= ins.Left) and (Y >= ins.Top) and (X < ins.Left + FCore.Cols * FMetrics.CellW)
+      and (Y < ins.Top + FCore.Rows * FMetrics.CellH) then
+    begin
+      cell := CellAt(X, Y);
+      valid := LinkAt(cell.X, cell.Y, link);
+    end;
+  end;
+  if (valid = FHoverValid) and (not valid or TyTermLinkEquals(link, FHover)) then
+    Exit;
+  if FHoverValid then
+    DirtyLinkRows(FHover);
+  FHover := link;
+  FHoverValid := valid;
+  if FHoverValid then
+    DirtyLinkRows(FHover);
+end;
+
+procedure TTyTerminalView.SetDetectUrls(AValue: Boolean);
+begin
+  if FDetectUrls = AValue then Exit;
+  FDetectUrls := AValue;
+  if FHoverValid then
+    UpdateHover(FLastMousePos.X, FLastMousePos.Y, FHoverShift);
+end;
+
+procedure TTyTerminalView.SetAllowNonHttpLinks(AValue: Boolean);
+begin
+  if FAllowNonHttpLinks = AValue then Exit;
+  FAllowNonHttpLinks := AValue;
+  if FHoverValid then
+    UpdateHover(FLastMousePos.X, FLastMousePos.Y, FHoverShift);
 end;
 
 { ---- 右键菜单 ----------------------------------------------------------------------- }
@@ -2802,6 +2977,8 @@ var
   keyboard: Boolean;
   cur: TRect;
   buf: TTyTerminalBuffer;
+  cell: TPoint;
+  link: TTyTermLink;
 begin
   inherited DoContextPopup(MousePos, Handled);
   if Handled or (csDesigning in ComponentState) then Exit;
@@ -2833,9 +3010,14 @@ begin
   end
   else if FIsMac then
   begin
-    { macOS 惯例(上游 rightClickSelectsWord: isMac):右键在选区外先选中那个词 }
+    { macOS 惯例(上游 rightClickSelectsWord: isMac):右键在选区外先选中那个词(指针下有链接
+      就选整条) }
     SyncSelectionTrim;
-    FSelection.RightClickSelect(SelPointAt(MousePos.X, MousePos.Y));
+    cell := CellAt(MousePos.X, MousePos.Y);
+    if LinkAt(cell.X, cell.Y, link) then
+      FSelection.RightClickSelect(SelPointAt(MousePos.X, MousePos.Y), @link.Range)
+    else
+      FSelection.RightClickSelect(SelPointAt(MousePos.X, MousePos.Y));
   end;
   ShowContextMenu(MousePos);
   Handled := True;
@@ -3001,11 +3183,23 @@ end;
 procedure TTyTerminalView.SelectionPress(Shift: TShiftState; X, Y: Integer);
 var
   clicks: Integer;
+  cell: TPoint;
+  link: TTyTermLink;
+  lp: PTyTermLinkRange;
 begin
   clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick,
     FClickCount, Font.PixelsPerInch);
+  { 双击时指针下有链接就选整条(上游 _selectWordAtCursor 先看 linkifier.currentLink);
+    不要求链接键,受 DetectUrls / AllowNonHttpLinks 管 }
+  lp := nil;
+  if clicks = 2 then
+  begin
+    cell := CellAt(X, Y);
+    if LinkAt(cell.X, cell.Y, link) then
+      lp := @link.Range;
+  end;
   { Shift 扩展只在程序没接管鼠标时(上游 _enabled && shiftKey);程序接管时 Shift 是覆盖键 }
-  FSelection.Press(SelPointAt(X, Y), clicks, not Reporting and (ssShift in Shift), ColumnWanted(Shift));
+  FSelection.Press(SelPointAt(X, Y), clicks, not Reporting and (ssShift in Shift), ColumnWanted(Shift), lp);
   if FSelection.Dragging then
     StartDragTimer;
 end;
