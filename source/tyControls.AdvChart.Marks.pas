@@ -260,6 +260,12 @@ function TyRowFill(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   typed 'Bar' does not resolve and never draws. }
 function TySeriesTypeHasRenderer(const AType: string): Boolean;
 
+{ A heatmap on a calendar: one cell per row, the calendar's content rect for
+  its date, at z2 1. [Batch 70] }
+function TyBuildCalendarHeatmap(const ABinding: TTySeriesBinding;
+  const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList): Integer;
+
 { Append this series' marks to AList and answer how many were added.
 
   Zero is a legitimate answer and not a failure: a series whose type has no
@@ -1679,6 +1685,40 @@ begin
   if valCol > 0 then ;
 end;
 
+{ ONE HEATMAP CELL over its rect, on either coordinate system: the row's
+  visual, the item's own border over the series', the item's corners over
+  the series', and the row's caption. }
+function HeatCell(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AVisual: TTySeriesVisual; ARow: Integer; const ARect: TTyRectF): TTyChartElement;
+var
+  v: TTySeriesVisual;
+  ov: TTyDataValue;
+  raw: Integer;
+  c: TTyChartColor;
+  radii: TTyCornerRadii;
+begin
+  v := RowVisual(AVisual, AStore, ARow);
+  raw := AStore.GetRawIndex(ARow);
+  if AStore.HasOverrideByRaw(raw, TyOverrideKey('itemStyle.borderColor')) then
+  begin
+    ov := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor'));
+    if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then v.Stroke := c;
+  end;
+  if AStore.HasOverrideByRaw(raw, TyOverrideKey('itemStyle.borderWidth')) then
+  begin
+    ov := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderWidth'));
+    if ov.Kind = dvkNumber then v.StrokeWidthLogical := ov.Num;
+  end;
+  radii := AVisual.Bar.Radii;
+  if (raw >= 0) and (raw <= High(AVisual.HeatHasRadii)) and AVisual.HeatHasRadii[raw] then
+    radii := AVisual.HeatRadii[raw];
+  if radii[0] + radii[1] + radii[2] + radii[3] > 0 then
+    Result := MarkElement(TyShapeRoundRect(ARect, radii), v, ABinding.SeriesIndex, ARow)
+  else
+    Result := MarkElement(TyShapeRect(ARect), v, ABinding.SeriesIndex, ARow);
+  ItemCaption(AVisual, AStore, ARow, Result.Caption);
+end;
+
 { A HEATMAP ON A CARTESIAN: one rect per row, centred on its point, a band
   wide and a band tall -- each widened by half a pixel against the gaps
   between neighbours (HeatmapView.ts:193-194), so cells overlap by a quarter
@@ -1696,13 +1736,8 @@ var
   xe, ye: TTyRange;
   p: TTyPointF;
   it: TTyRawItem;
-  cell, ov: TTyDataValue;
-  v: TTySeriesVisual;
-  el: TTyChartElement;
+  cell: TTyDataValue;
   r: TTyRectF;
-  raw: Integer;
-  c: TTyChartColor;
-  radii: TTyCornerRadii;
 begin
   Result := 0;
   if (AStore = nil) or (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
@@ -1734,27 +1769,37 @@ begin
     l := p.X - w / 2;
     t := p.Y - h / 2;
     r := TyRectF(l, t, l + w, t + h);
-    v := RowVisual(AVisual, AStore, i);
-    { the item's own border over the series' }
-    raw := AStore.GetRawIndex(i);
-    if AStore.HasOverrideByRaw(raw, TyOverrideKey('itemStyle.borderColor')) then
-    begin
-      ov := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderColor'));
-      if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then v.Stroke := c;
-    end;
-    if AStore.HasOverrideByRaw(raw, TyOverrideKey('itemStyle.borderWidth')) then
-    begin
-      ov := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderWidth'));
-      if ov.Kind = dvkNumber then v.StrokeWidthLogical := ov.Num;
-    end;
-    radii := AVisual.Bar.Radii;
-    if (raw >= 0) and (raw <= High(AVisual.HeatHasRadii)) and AVisual.HeatHasRadii[raw] then
-      radii := AVisual.HeatRadii[raw];
-    if radii[0] + radii[1] + radii[2] + radii[3] > 0 then
-      el := MarkElement(TyShapeRoundRect(r, radii), v, ABinding.SeriesIndex, i)
-    else
-      el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
-    ItemCaption(AVisual, AStore, i, el.Caption);
+    AList.Add(HeatCell(ABinding, AStore, AVisual, i, r));
+    Inc(Result);
+  end;
+end;
+
+{ A HEATMAP ON A CALENDAR: the cell is the calendar's CONTENT rect for the
+  row's date -- the day's cell inset by half the calendar's own border, with
+  no half-pixel widening (HeatmapView.ts:271-285). A row whose value is not a
+  number, or whose date is not a day of the range, is skipped. The cell's z2
+  is 1 whatever the series says: over the calendar's day cells (0), under
+  its month lines (20) and names (30). [Batch 70] }
+function TyBuildCalendarHeatmap(const ABinding: TTySeriesBinding;
+  const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList): Integer;
+var
+  i, colT, colV: Integer;
+  lay: TTyCoordLayout;
+  el: TTyChartElement;
+begin
+  Result := 0;
+  if (AStore = nil) or (ACal = nil) or (AList = nil) then Exit;
+  colT := AStore.DimIndexOf(TyCalendarTimeDim);
+  colV := AStore.DimIndexOf(TyCalendarValueDim);
+  if (colT < 0) or (colV < 0) then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    if IsNan(AStore.Get(colV, i)) then Continue;
+    lay := ACal.DataToLayout([AStore.Get(colT, i)]);
+    if IsNan(lay.ContentRect.Left) or IsNan(lay.ContentRect.Top) then Continue;
+    el := HeatCell(ABinding, AStore, AVisual, i, lay.ContentRect);
+    el.Z2 := 1;
     AList.Add(el);
     Inc(Result);
   end;

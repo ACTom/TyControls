@@ -50,6 +50,7 @@ type
     procedure TestTheCalendarAsUpstreamLaysItOut;
     procedure TestTheGalleryCalendarsAsUpstream;
     procedure TestAHeatmapCellSitsBetweenTheDayAndTheSplitLine;
+    procedure TestAFractionOfAMillisecondCarriesIntoTheNextDay;
   end;
 
   TCalProbe = class(TTyAdvanceChart)
@@ -683,6 +684,36 @@ begin
   AssertEquals('a cell a day', 28, cells);
   AssertEquals('two month lines and two edges', 4, lines);
   AssertEquals('the year, the month and seven days', 9, names);
+end;
+
+procedure TAdvChartCalendarOracleTest.TestAFractionOfAMillisecondCarriesIntoTheNextDay;
+var
+  cal: TTyCalendar;
+  first, second: TTyPointF;
+begin
+  { getDateInfo is parseDate on the instant, and a number is
+    new Date(Math.round(n)): the last 0.6 ms of a day rounds into the next.
+    The store keeps a timestamp's fraction, so this is the calendar's to do
+    -- a heatmap row at 1485993599999.6 is drawn on 2 February. }
+  FOpt.SetOptionText('{"calendar": {"range": "2017-02"}}');
+  cal := TTyCalendar.Create(TyCalendarSpecOf(FOpt, 0));
+  try
+    cal.UTC := True;
+    cal.Resize(TyRectF(0, 0, 800, 600), 96);
+    first := cal.DatePoint(1485907200000, True);          // 2017-02-01T00:00Z
+    second := cal.DatePoint(1485907200000 + 86399999.6, True);
+    AssertEquals('the next day''s row', first.Y + cal.CellH, second.Y);
+    AssertEquals('0.6 ms short of midnight is still the first',
+      first.Y, cal.DatePoint(1485907200000 + 86399999.4, True).Y);
+    { AND THE CLAMP SEES THE ROUNDED INSTANT: 0.4 ms before the range starts
+      rounds onto its first millisecond, which is inside }
+    AssertFalse('rounded into the range',
+      IsNan(cal.DatePoint(1485907200000 - 0.4, True).Y));
+    AssertEquals('onto its first day', first.Y,
+      cal.DatePoint(1485907200000 - 0.4, True).Y);
+  finally
+    cal.Free;
+  end;
 end;
 
 initialization

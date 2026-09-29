@@ -1297,6 +1297,24 @@ begin
         TyGraphFillStore(FOption, i, st);
         Continue;
       end;
+      { ON A CALENDAR: the calendar's two dimensions, a time and a value --
+        element 0 of the row is the date and element 1 the value, and any
+        more are raw positions the store keeps for the label and the
+        visualMap. [Batch 70] }
+      if FBindings[i].CalendarIndex >= 0 then
+      begin
+        st.AddDimension(TyCalendarTimeDim, ddtTime);
+        st.AddDimension(TyCalendarValueDim, ddtFloat);
+        SetLength(dims, 2);
+        dims[0] := Default(TTySeriesDim);
+        dims[0].Name := TyCalendarTimeDim;
+        dims[0].Kind := ddtTime;
+        dims[1] := Default(TTySeriesDim);
+        dims[1].Name := TyCalendarValueDim;
+        dims[1].Kind := ddtFloat;
+        TyFillSeriesStore(FOption, i, dims, st);
+        Continue;
+      end;
       if TySeriesFindType(FBindings[i].SeriesType, typeInfo)
         and (typeInfo.Usage = scuBox) and (Length(typeInfo.Dims) > 0) then
       begin
@@ -6813,6 +6831,18 @@ begin
       if Length(specs) <= FBindings[i].SeriesIndex then
         SetLength(specs, FBindings[i].SeriesIndex + 1);
       specs[FBindings[i].SeriesIndex] := v.Label_;
+      { ON A CALENDAR there is no cartesian to enter: the calendar is the
+        coordinate system and only a heatmap draws on it yet. [Batch 70] }
+      if FBindings[i].CalendarIndex >= 0 then
+      begin
+        if (FBindings[i].CalendarIndex <= High(FCalendars))
+          and (FBindings[i].SeriesType = 'heatmap') and (FStores[i] <> nil) then
+        begin
+          Inc(drawn, TyBuildCalendarHeatmap(FBindings[i],
+            FCalendars[FBindings[i].CalendarIndex], FStores[i], v, list));
+        end;
+        Continue;
+      end;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
     end;

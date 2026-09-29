@@ -825,6 +825,9 @@ var
   dow: Integer;
 begin
   Result := Default(TTyCalDateInfo);
+  { parseDate: a number is new Date(Math.round(n)) -- a fraction of a
+    millisecond can carry an instant into the next day }
+  if not IsNan(AMs) and not IsInfinite(AMs) then AMs := TyJsRound(AMs);
   Result.Time := AMs;
   if IsNan(AMs) or IsInfinite(AMs) or (Abs(AMs) > 8.64e15) then
   begin

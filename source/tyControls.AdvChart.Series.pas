@@ -40,6 +40,13 @@ uses SysUtils, Classes, Math, fpjson,
      tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Builder;
 
+const
+  { A series on a calendar: the system's name, and the two dimensions it
+    gives a series -- Calendar.ts `dimensions = ['time', 'value']`. }
+  TyCalendarSysName = 'calendar';
+  TyCalendarTimeDim = 'time';
+  TyCalendarValueDim = 'value';
+
 type
   { How a series occupies the chart.
 
@@ -104,6 +111,10 @@ type
       caller that tests it is asking whether there is an x and a y to map
       through. A radar has neither. }
     RadarIndex: Integer;
+    { WHICH CALENDAR, or -1 -- an index for the reason RadarIndex is one: the
+      calendar is laid out by the control, after binding. Resolved with
+      HasAxes False, like a radar. [Batch 70] }
+    CalendarIndex: Integer;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -472,6 +483,27 @@ begin
     Result[i] := ABuild.Axis(AMainType, i).Id;
 end;
 
+{ Each calendar component's `id`, '' where it has none. }
+function CalendarIds(AOption: TTyChartOption): TTyStringArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount('calendar'));
+  for k := 0 to High(Result) do
+  begin
+    Result[k] := '';
+    d := AOption.ComponentAt('calendar', k);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType = jtString) then Result[k] := d.AsString
+      else if (d <> nil) and (d.JSONType = jtNumber) then Result[k] := d.AsString;
+    end;
+  end;
+end;
+
 function TyBindSeries(AOption: TTyChartOption; ABuild: TTyChartBuild): TTySeriesBindingArray;
 var
   i, n, xi, yi: Integer;
@@ -517,6 +549,7 @@ begin
     b.CoordSysName := sys;
     b.Usage := info.Usage;
     b.RadarIndex := -1;
+    b.CalendarIndex := -1;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -539,6 +572,24 @@ begin
       b.RadarIndex := TyResolveComponentRef(node, 'radarIndex', 'radarId',
         AOption.ComponentCount('radar'), nil);
       if b.RadarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = TyCalendarSysName then
+    begin
+      { A CALENDAR: which one, by calendarIndex or calendarId; its dates and
+        its days are the calendar's own, not an axis'. [Batch 70] }
+      b.CalendarIndex := TyResolveComponentRef(node, 'calendarIndex', 'calendarId',
+        AOption.ComponentCount('calendar'), CalendarIds(AOption));
+      if b.CalendarIndex < 0 then
       begin
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;
