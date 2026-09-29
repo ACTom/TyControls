@@ -277,8 +277,8 @@ type
     PaintTimes: TDoubles;
     RecordPaints: Boolean;
     procedure Shot(ABmp: TBitmap; APPI: Integer);
-    { every row dirty: a line up into the scrollback and back (the view repaints the
-      whole grid on a scroll) }
+    { every row painted again next frame (phase 5: the view keys its rows and moves
+      the ones it finds, so a scroll no longer repaints them -- ForgetPaintedRows) }
     procedure AllDirty;
     function Painted: Integer;
     function Cache: TTyTermGlyphCache;
@@ -296,8 +296,7 @@ end;
 
 procedure TBenchView.AllDirty;
 begin
-  ScrollLines(-1);
-  ScrollLines(1);
+  ForgetPaintedRows;
 end;
 
 function TBenchView.Painted: Integer;
@@ -736,12 +735,12 @@ begin
     WriteLn;
     WriteLn('50 MB in 64 KB chunks through View.Write, four in flight, on a shown 200 x 60 control.');
     WriteLn;
-    WriteLn('| wall | MB/s | paints | longest gap between paints | heap growth | live lines | cache hits / misses |');
+    WriteLn('| wall | MB/s | paints | longest gap between paints | heap growth | live lines | cache hits / misses / evictions |');
     WriteLn('|---|---|---|---|---|---|---|');
-    WriteLn(Format('| %s | %s | %d | %s | %s MB | %d | %d / %d |', [Ms(wall),
+    WriteLn(Format('| %s | %s | %d | %s | %s MB | %d | %d / %d / %d |', [Ms(wall),
       FormatFloat('0.0', Total / MB / (wall / 1000)), Length(FloodView.PaintTimes), Ms(gap),
       FormatFloat('0.0', (heap1 - heap0) / MB), TTyTerminalLine.LiveCount,
-      FloodView.Cache.Hits, FloodView.Cache.Misses]));
+      FloodView.Cache.Hits, FloodView.Cache.Misses, FloodView.Cache.Evictions]));
     WriteLn;
   finally
     sink.Free;

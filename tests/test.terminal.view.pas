@@ -246,6 +246,8 @@ type
     procedure TestWriteCallbacksComeInOrderThroughTheView;
     procedure TestAResizeInsideAViewCallback;
     procedure TestAHugeWriteYieldsToTheMessageLoop;
+    { 5 期:有窗口时连续改尺寸合并成最后那一次;要网格的入口先应用 }
+    procedure TestResizesCoalesceToTheLast;
   end;
 
 const
@@ -1932,6 +1934,55 @@ begin
   AssertTrue('while the write was still being parsed', FPendingAtMark > 0);
   AssertEquals('the callback once', 1, Length(FDone));
   AssertEquals('nothing left', 0, F.View.Core.PendingBytes);
+end;
+
+procedure TTyTerminalViewTests.TestResizesCoalesceToTheLast;
+var
+  sizes: array[1..10] of TSize;
+  i, t: Integer;
+  p: TPoint;
+begin
+  TyTermNeedWidgetSet;
+  F.SizeTo(20, 6);
+  for i := 1 to 10 do
+    sizes[i] := F.View.SizeForGrid(20 + i, 6 + i);
+  F.Form.HandleNeeded;
+  F.View.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  F.ClearRecords;
+  for i := 1 to 10 do
+    F.View.SetBounds(0, 0, sizes[i].cx, sizes[i].cy);
+  AssertEquals('no grid event before the message loop runs', 0, Length(F.Grids));
+  t := 0;
+  while (Length(F.Grids) = 0) and (t < 20) do
+  begin
+    Forms.Application.ProcessMessages;
+    Inc(t);
+  end;
+  AssertEquals('one grid event', 1, Length(F.Grids));
+  AssertEquals('the last cols', 30, F.Grids[0].X);
+  AssertEquals('the last rows', 16, F.Grids[0].Y);
+  Forms.Application.ProcessMessages;
+  AssertEquals('still one', 1, Length(F.Grids));
+  { 排着的时候问格子:先应用 }
+  F.ClearRecords;
+  F.View.SetBounds(0, 0, sizes[2].cx, sizes[2].cy);
+  F.View.SetBounds(0, 0, sizes[3].cx, sizes[3].cy);
+  AssertEquals('queued', 0, Length(F.Grids));
+  p := F.View.CellAt(0, 0);
+  AssertEquals('CellAt applied it', 1, Length(F.Grids));
+  AssertEquals('the new cols', 23, F.View.Cols);
+  AssertEquals('the new rows', 9, F.View.Rows);
+  AssertEquals('cell', 0, p.X);
+  Forms.Application.ProcessMessages;
+  AssertEquals('the queued call finds nothing left', 1, Length(F.Grids));
+  { 拖回原尺寸:排着的作废 }
+  F.ClearRecords;
+  F.View.SetBounds(0, 0, sizes[5].cx, sizes[5].cy);
+  F.View.SetBounds(0, 0, sizes[3].cx, sizes[3].cy);
+  Forms.Application.ProcessMessages;
+  AssertEquals('back where it was: no event', 0, Length(F.Grids));
+  AssertEquals('cols kept', 23, F.View.Cols);
 end;
 
 initialization

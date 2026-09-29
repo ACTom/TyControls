@@ -124,7 +124,7 @@ type
     FAscii: array[0..95 * 4 - 1] of TNode;
     FHead, FTail: TNode;             { head = most recently used }
     FCapacity: Integer;
-    FHits, FMisses: Integer;
+    FHits, FMisses, FEvictions: Integer;
     procedure Unlink(ANode: TNode);
     procedure PushFront(ANode: TNode);
     function GetCount: Integer;
@@ -144,11 +144,15 @@ type
     function FindCode(ACode: UInt64): TTyTermGlyph;
     procedure AddCode(ACode: UInt64; AGlyph: TTyTermGlyph);
     procedure Clear;
+    { the three counters back to 0 (Clear keeps them: they add up over the cache's life) }
+    procedure ResetStats;
     property Count: Integer read GetCount;
     property Capacity: Integer read FCapacity;
     { FOR THE TESTS and the probes }
     property Hits: Integer read FHits;
     property Misses: Integer read FMisses;
+    { entries dropped to make room (least recently used first) }
+    property Evictions: Integer read FEvictions;
   end;
 
   { Draws a cluster into a coverage mask through the library's text path. The scratch
@@ -581,7 +585,15 @@ begin
     if old.Ascii >= 0 then FAscii[old.Ascii] := nil;
     old.Glyph.Free;
     old.Free;
+    Inc(FEvictions);
   end;
+end;
+
+procedure TTyTermGlyphCache.ResetStats;
+begin
+  FHits := 0;
+  FMisses := 0;
+  FEvictions := 0;
 end;
 
 function TTyTermGlyphCache.FindCode(ACode: UInt64): TTyTermGlyph;

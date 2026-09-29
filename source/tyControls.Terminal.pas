@@ -33,6 +33,11 @@ unit tyControls.Terminal;
   - 不在 Paint 里改网格。RenderTo 只读状态、画;度量变了要改网格就记下来,经
     QueueAsyncCall 延后一次(改尺寸会发事件、宿主会改 PTY、会再次失效重画,在绘制里做就是
     重画风暴)。
+  - 改尺寸合并(5 期):有句柄时(真窗口拖动)客户区一变,新网格先记在 FPendingGrid、排一次
+    QueueAsyncCall,消息循环里才 Core.Resize——大滚回的重新折行一次上百毫秒,拖动中只按
+    最后的尺寸折一次。排着的时候照旧按 Core 的格子画(网格外是底色);要新网格的入口
+    (Cols、Rows、Core、CellAt、CellRect、SizeForGrid、Write、WriteSync、Paste、Input)先把
+    排着的应用掉。没有句柄(隐藏的控件、测试、设计器)照旧当场改。
   - 能出字符的键在 KeyDown 里**不清零**:Win32 上 LCL 处理了 WM_KEYDOWN(Key 被清零)就会
     吞掉随后的 WM_CHAR,字符就丢了。KeyDown 已经发过字节的键,由本控件自己记
     FKeyDownHandled,UTF8KeyPress 见到就丢——不靠 widgetset 的行为。
@@ -207,6 +212,9 @@ type
     FStateChange: Boolean;
     FGridAnnounced: Boolean;
     FRelayoutQueued: Boolean;
+    { 改尺寸合并:排着的网格 }
+    FPendingGrid: TPoint;
+    FGridPending: Boolean;
     FRelayingOut, FRelayoutAgain: Boolean;
     FInRender: Boolean;
     FPreviewCols, FPreviewRows: Integer;
@@ -294,6 +302,10 @@ type
     procedure CoreUserInput(Sender: TObject);
     { 调度 }
     procedure AsyncRelayout(Data: PtrInt);
+    procedure AsyncApplyGrid(Data: PtrInt);
+    { 排着的网格当场应用(要新网格的公开入口先调它) }
+    procedure ApplyPendingGrid;
+    function GetCore: TTyTerminalCore;
     procedure AsyncRepaint(Data: PtrInt);
     procedure AsyncNotifyScheme(Data: PtrInt);
     procedure BeginDrive;
@@ -589,7 +601,7 @@ type
     function CellRect(ACol, ARow: Integer): TRect;
     { 给定网格要多大的客户区(内边距、条宽都算进去) }
     function SizeForGrid(ACols, ARows: Integer): TSize;
-    property Core: TTyTerminalCore read FCore;
+    property Core: TTyTerminalCore read GetCore;
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
     property Title: string read GetTitle;
@@ -1065,6 +1077,26 @@ begin
   EnsureThemeCurrent;
 end;
 
+procedure TTyTerminalView.AsyncApplyGrid(Data: PtrInt);
+begin
+  if csDestroying in ComponentState then Exit;
+  ApplyPendingGrid;
+end;
+
+procedure TTyTerminalView.ApplyPendingGrid;
+begin
+  if not FGridPending then Exit;
+  FGridPending := False;
+  if (FPendingGrid.X <> FCore.Cols) or (FPendingGrid.Y <> FCore.Rows) then
+    FCore.Resize(FPendingGrid.X, FPendingGrid.Y);
+end;
+
+function TTyTerminalView.GetCore: TTyTerminalCore;
+begin
+  ApplyPendingGrid;
+  Result := FCore;
+end;
+
 procedure TTyTerminalView.AsyncRelayout(Data: PtrInt);
 begin
   FRelayoutQueued := False;
@@ -1516,13 +1548,31 @@ begin
     nc := Max(TyTermMinimumCols, (ClientWidth - ins.Left - ins.Right - barW) div FMetrics.CellW);
     nr := Max(TyTermMinimumRows, (ClientHeight - ins.Top - ins.Bottom) div FMetrics.CellH);
     if (nc <> FCore.Cols) or (nr <> FCore.Rows) then
-      { OnResize 回来做其余的事(地雷 7:在 Core 的事件里调会被延后,以 OnResize 为准) }
-      FCore.Resize(nc, nr)
-    else if not FGridAnnounced then
     begin
-      { 加载完成后的第一次排版,尺寸没变也发一次(spec §9.2) }
-      FGridAnnounced := True;
-      if Assigned(FOnGridResize) then FOnGridResize(Self, nc, nr);
+      if HandleAllocated and not (csDesigning in ComponentState) then
+      begin
+        { 真窗口:合并到消息循环里,只按最后的尺寸改一次(单元头) }
+        FPendingGrid := Point(nc, nr);
+        if not FGridPending then
+        begin
+          FGridPending := True;
+          Application.QueueAsyncCall(@AsyncApplyGrid, 0);
+        end;
+      end
+      else
+        { OnResize 回来做其余的事(地雷 7:在 Core 的事件里调会被延后,以 OnResize 为准) }
+        FCore.Resize(nc, nr);
+    end
+    else
+    begin
+      { 拖回了 Core 现在的尺寸:排着的作废 }
+      FGridPending := False;
+      if not FGridAnnounced then
+      begin
+        { 加载完成后的第一次排版,尺寸没变也发一次(spec §9.2) }
+        FGridAnnounced := True;
+        if Assigned(FOnGridResize) then FOnGridResize(Self, nc, nr);
+      end;
     end;
     WriteDesignPreview;
    until (not FRelayoutAgain) or (passes >= 3);
@@ -1577,6 +1627,7 @@ end;
 
 function TTyTerminalView.CellRect(ACol, ARow: Integer): TRect;
 begin
+  ApplyPendingGrid;
   EnsureMetrics(Font.PixelsPerInch);
   Result := GridCellRect(ACol, ARow, ContentInsets(Font.PixelsPerInch));
 end;
@@ -1586,6 +1637,7 @@ var
   ins: TRect;
 begin
   { 上游先钳再除(MouseCoordsService.ts:38-44);这里除完再钳到网格内,结果相同 }
+  ApplyPendingGrid;
   EnsureMetrics(Font.PixelsPerInch);
   ins := ContentInsets(Font.PixelsPerInch);
   X := X - ins.Left;
@@ -1600,6 +1652,7 @@ function TTyTerminalView.SizeForGrid(ACols, ARows: Integer): TSize;
 var
   ins: TRect;
 begin
+  ApplyPendingGrid;
   EnsureMetrics(Font.PixelsPerInch);
   ins := ContentInsets(Font.PixelsPerInch);
   Result.cx := ins.Left + ins.Right + ScrollBarWidth(Font.PixelsPerInch) + ACols * FMetrics.CellW;
@@ -2553,6 +2606,7 @@ end;
 { Write 通常只入队;用户刚键入过时 Core 当场解析(回显延迟),所以也算一次解析 }
 procedure TTyTerminalView.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
+  ApplyPendingGrid;
   MaskUnencodedExtensions;
   BeginDrive;
   try
@@ -2564,6 +2618,7 @@ end;
 
 procedure TTyTerminalView.Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
+  ApplyPendingGrid;
   MaskUnencodedExtensions;
   BeginDrive;
   try
@@ -2575,6 +2630,7 @@ end;
 
 procedure TTyTerminalView.WriteSync(const AData: RawByteString);
 begin
+  ApplyPendingGrid;
   MaskUnencodedExtensions;
   BeginDrive;
   try
@@ -2587,6 +2643,7 @@ end;
 procedure TTyTerminalView.Paste(const AText: string);
 begin
   if AText = '' then Exit;
+  ApplyPendingGrid;
   FCore.Input(TyTerminalPrepareTextForPaste(AText, FCore.Modes.BracketedPaste), True);
   NoteActivity;
 end;
@@ -2594,6 +2651,7 @@ end;
 procedure TTyTerminalView.Input(const AText: string);
 begin
   if AText = '' then Exit;
+  ApplyPendingGrid;
   FCore.Input(AText, True);
   NoteActivity;
 end;
@@ -2915,11 +2973,13 @@ end;
 
 function TTyTerminalView.GetCols: Integer;
 begin
+  ApplyPendingGrid;
   Result := FCore.Cols;
 end;
 
 function TTyTerminalView.GetRows: Integer;
 begin
+  ApplyPendingGrid;
   Result := FCore.Rows;
 end;
 
