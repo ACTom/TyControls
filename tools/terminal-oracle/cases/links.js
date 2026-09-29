@@ -77,6 +77,9 @@ const URLS = [
   'http://127.0.0.1:8000/x', 'http://0x7f.0.0.1/x', 'http://ex%41mple.com/x', 'http://a.com/%41',
   'http://a.com\\x', 'http://a.com/x\\y', 'http://a.com/x|y', 'http://a.com/x^y', 'http://a.com/x`y',
   'http://a.com/x{y}', 'http://a.com/x<y>', 'http://a.com/x"y', 'http://a.com/x\'y', 'http://a.com/x!y',
+  // every printable ASCII character inside an address and at its end: the regex's
+  // two classes, character by character
+  ...Array.from({ length: 94 }, (_, i) => String.fromCharCode(33 + i)).flatMap(c => [`http://a.com/x${c}y z`, `http://a.com/x${c}`]),
   // IDNA hosts: isUrl's real answer is "no" (not a deviation)
   'http://\u4f8b\u5b50.\u6d4b\u8bd5', 'http://m\u00fcnchen.de', 'go http://m\u00fcnchen.de/x now',
 ];
@@ -117,6 +120,9 @@ const LINES = [
   { id: 'osc-text-is-a-url', cols: 40, rows: 3, write: 'go ' + osc8('http://a.com', 'http://b.com/x') + ' ok' },
   { id: 'osc-covers-half-a-url', cols: 40, rows: 3, write: 'see http://a.com/' + osc8('http://z.com', 'abc') + '/def more' },
   { id: 'osc-then-url', cols: 40, rows: 3, write: osc8('http://z.com', 'zz') + ' http://a.com/x' },
+  // the two share only the link's last cell: the ranges are closed at both ends
+  { id: 'url-starts-in-the-last-osc-cell', cols: 40, rows: 3, write: osc8('http://z.com', 'abcdh') + 'ttp://a.com/x z' },
+  { id: 'url-ends-in-the-first-osc-cell', cols: 40, rows: 3, write: 'go http://a.com/' + osc8('http://z.com', 'x zz') },
   { id: 'osc-empty-uri-ends', cols: 30, rows: 3, write: 'a\x1b]8;;http://a.com\x1b\\bc\x1b]8;;\x1b\\d http://b.com' },
   { id: 'osc-with-wide-chars', cols: 20, rows: 3, write: osc8('http://a.com', '\u4e2d\u6587link') + ' x' },
   { id: 'url-in-the-alt-cells', cols: 20, rows: 3, write: '\x1b[31mhttp://a.com\x1b[0m/x' },
