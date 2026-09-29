@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Math, Types, fpcunit, testregistry, fpjson,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Terminal.Buffer, tyControls.Terminal.Render, test.terminal.oracle;
+  tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal.Render, test.terminal.oracle;
 
 type
   TTyTerminalRenderTests = class(TTestCase)
@@ -36,6 +36,11 @@ type
     procedure TestArcsReachTheirEdges;
     procedure TestCellMetricsScaleWithThePPI;
     procedure TestRasterizedGlyphs;
+    procedure TestDrawnGlyphMasksMatchDrawingThem;
+    procedure TestDrawnGlyphsAreCachedPerCellAndPhase;
+    procedure TestGlyphKeysKeepCellCountsApart;
+    procedure TestSingleCodePointsAreCachedByCode;
+    procedure TestTheRasterBudgetSpreadsGlyphsOverFrames;
   end;
 
 function TyTermTestMetrics(ACellW, ACellH: Integer; ACharW: Integer = -1): TTyTermCellMetrics;
@@ -584,6 +589,286 @@ begin
   finally
     cache.Free;
     r.Free;
+  end;
+end;
+
+{ A row of the given cells written through a real core (so the line carries real
+  attributes); the caller frees the core. }
+function RowOf(const AData: RawByteString; ACols: Integer; out ACore: TTyTerminalCore): TTyTerminalLine;
+begin
+  ACore := TTyTerminalCore.Create(ACols, 2);
+  ACore.WriteSync(AData);
+  Result := ACore.Buffer.GetLine(ACore.Buffer.YBase);
+end;
+
+{ One bitmap per way, the same ground: every drawn glyph through the mask (and its
+  gamma blend) against drawing it straight onto the surface through Canvas2D with the
+  cell as the clip -- how the row painter drew them before. }
+procedure TTyTerminalRenderTests.TestDrawnGlyphMasksMatchDrawingThem;
+const
+  PPIs: array[0..1] of Integer = (96, 144);
+  Grounds: array[0..1] of Cardinal = ($1E1E1E, $F0F0F0);
+var
+  a, b: TBGRABitmap;
+  m: TTyTermCellMetrics;
+  mi, pi_, gi, x, y, d, maxDiff, diffPx, total, glyphs: Integer;
+  cp: Cardinal;
+  pa, pb: TBGRAPixel;
+begin
+  maxDiff := 0;
+  diffPx := 0;
+  total := 0;
+  glyphs := 0;
+  for mi := 0 to 1 do
+    for pi_ := 0 to 1 do
+      for gi := 0 to 1 do
+      begin
+        if mi = 0 then m := TyTermTestMetrics(9, 18) else m := TyTermTestMetrics(10, 23);
+        for cp := $2500 to $259F do
+        begin
+          if not TyTermIsCustomGlyph(cp) then Continue;
+          { two cells side by side at an odd x, so the shade patterns are phased }
+          a := TBGRABitmap.Create(3 * m.CellW, m.CellH, TyTermRgbToPixel(Grounds[gi]));
+          b := TBGRABitmap.Create(3 * m.CellW, m.CellH, TyTermRgbToPixel(Grounds[gi]));
+          try
+            TyTermDrawCustomGlyphDirect(a, Rect(1, 0, 1 + m.CellW, m.CellH), cp, TyTermRgbToPixel(Ink), PPIs[pi_]);
+            TyTermDrawCustomGlyphDirect(a, Rect(1 + m.CellW, 0, 1 + 2 * m.CellW, m.CellH), cp, TyTermRgbToPixel(Ink), PPIs[pi_]);
+            TyTermDrawCustomGlyph(b, Rect(1, 0, 1 + m.CellW, m.CellH), cp, TyTermRgbToPixel(Ink), m, PPIs[pi_]);
+            TyTermDrawCustomGlyph(b, Rect(1 + m.CellW, 0, 1 + 2 * m.CellW, m.CellH), cp, TyTermRgbToPixel(Ink), m, PPIs[pi_]);
+            Inc(glyphs);
+            for y := 0 to a.Height - 1 do
+              for x := 0 to a.Width - 1 do
+              begin
+                pa := a.GetPixel(x, y);
+                pb := b.GetPixel(x, y);
+                d := Max(Abs(pa.red - pb.red), Max(Abs(pa.green - pb.green), Abs(pa.blue - pb.blue)));
+                Inc(total);
+                if d > 0 then Inc(diffPx);
+                if d > maxDiff then maxDiff := d;
+              end;
+          finally
+            a.Free;
+            b.Free;
+          end;
+        end;
+      end;
+  WriteLn(Format('TTyTerminalRenderTests.TestDrawnGlyphMasksMatchDrawingThem: %d glyph drawings, %d of %d pixels differ, by at most %d',
+    [glyphs, diffPx, total, maxDiff]));
+  AssertTrue('glyphs compared', glyphs > 4 * 150);
+  { the one difference that can remain: a pixel two parts of a glyph both half-cover
+    (a heavy stroke over a light one) is blended once through the mask, twice direct --
+    the same sum, rounded once instead of twice }
+  AssertTrue(Format('at most 1 of 255 off (%d)', [maxDiff]), maxDiff <= 1);
+end;
+
+procedure TTyTerminalRenderTests.TestDrawnGlyphsAreCachedPerCellAndPhase;
+var
+  p: TTyTermRowPainter;
+  cache: TTyTermGlyphCache;
+  core: TTyTerminalCore;
+  line: TTyTerminalLine;
+  a, b: TBGRABitmap;
+  m: TTyTermCellMetrics;
+  mi, c, x, y, px, py: Integer;
+  s: TTyTermFontSpec;
+  seen: set of 0..15;
+  phases: array[0..1] of Integer;
+begin
+  cache := TTyTermGlyphCache.Create;
+  p := TTyTermRowPainter.Create;
+  { four light shades, a vertical line and a full block; the cache outlives a change of
+    cell size (the control clears it then, the key must not rely on that) }
+  line := RowOf(#$E2#$96#$91#$E2#$96#$91#$E2#$96#$91#$E2#$96#$91#$E2#$94#$82#$E2#$96#$88, 6, core);
+  try
+    for mi := 0 to 1 do
+    begin
+      if mi = 0 then m := TyTermTestMetrics(9, 18) else m := TyTermTestMetrics(10, 23);
+      s := Default(TTyTermFontSpec);
+      s.PPI := 96;
+      p.Metrics := m;
+      p.Spec := s;
+      p.Resolver := @Resolve;
+      p.GlyphCache := cache;
+      p.DrawBoldBright := True;
+      seen := [];
+      for c := 0 to 3 do
+      begin
+        TyTermCustomGlyphPhase($2591, 1 + c * m.CellW, 0, px, py);
+        Include(seen, px * 4 + py);
+      end;
+      phases[mi] := 0;
+      for c := 0 to 15 do
+        if c in seen then Inc(phases[mi]);
+      a := TBGRABitmap.Create(6 * m.CellW + 1, m.CellH, TyTermSentinel);
+      b := TBGRABitmap.Create(6 * m.CellW + 1, m.CellH, TyTermSentinel);
+      try
+        { painted at x = 1: an odd cell width makes neighbouring shades differently phased }
+        AssertTrue('complete', p.PaintRow(a, 1, 0, line, 6, -1, tcpNone));
+        { the reference: the same backgrounds, each glyph drawn straight }
+        b.FillRect(1, 0, 1 + 6 * m.CellW, m.CellH, TyTermRgbToPixel(Resolve(257)), dmSet);
+        for c := 0 to 5 do
+          TyTermDrawCustomGlyphDirect(b, Rect(1 + c * m.CellW, 0, 1 + (c + 1) * m.CellW, m.CellH),
+            line.GetCodePoint(c), TyTermRgbToPixel(Resolve(256)), 96);
+        for y := 0 to a.Height - 1 do
+          for x := 0 to a.Width - 1 do
+            AssertTrue(Format('%dx%d cell: (%d,%d) as drawn directly', [m.CellW, m.CellH, x, y]),
+              TyTermSamePixel(a.GetPixel(x, y), (Cardinal(b.GetPixel(x, y).red) shl 16)
+                or (Cardinal(b.GetPixel(x, y).green) shl 8) or b.GetPixel(x, y).blue));
+      finally
+        a.Free;
+        b.Free;
+      end;
+    end;
+    { per cell size: one mask per phase the shades landed on, the line, the block }
+    AssertEquals(Format('masks cached: (%d + %d shade phases) + 2 x (line + block)', [phases[0], phases[1]]),
+      phases[0] + phases[1] + 4, cache.Count);
+    AssertTrue('an odd cell width phases neighbouring shades differently', phases[0] > 1);
+  finally
+    core.Free;
+    p.Free;
+    cache.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestGlyphKeysKeepCellCountsApart;
+var
+  cache: TTyTermGlyphCache;
+  k: TTyTermGlyphKey;
+begin
+  cache := TTyTermGlyphCache.Create;
+  try
+    k := Key('marked');
+    k.Cells := 1;
+    cache.Add(k, TTyTermGlyph.Create);
+    k.Cells := 17;                    { 1 + 16: a nibble would take them for one }
+    AssertNull('17 cells is another glyph than 1', cache.Find(k));
+    k.Cells := 257;
+    AssertNull('257 cells is another glyph than 1', cache.Find(k));
+    cache.Add(k, TTyTermGlyph.Create);
+    AssertEquals('two entries', 2, cache.Count);
+    AssertNotNull('and each is found', cache.Find(k));
+  finally
+    cache.Free;
+  end;
+end;
+
+procedure TTyTerminalRenderTests.TestSingleCodePointsAreCachedByCode;
+var
+  p: TTyTermRowPainter;
+  cache: TTyTermGlyphCache;
+  r: TTyTermGlyphRasterizer;
+  core: TTyTerminalCore;
+  line: TTyTerminalLine;
+  bmp: TBGRABitmap;
+  s: TTyTermFontSpec;
+  m: TTyTermCellMetrics;
+begin
+  cache := TTyTermGlyphCache.Create;
+  r := TTyTermGlyphRasterizer.Create;
+  p := TTyTermRowPainter.Create;
+  { 中 中 bold-中 é: two CJK glyphs and a Latin one, none of them ASCII }
+  line := RowOf(#$E4#$B8#$AD#$E4#$B8#$AD#27'[1m'#$E4#$B8#$AD#27'[0m'#$C3#$A9, 8, core);
+  try
+    s := SpecOf(9, 96);
+    m := TyTermMeasureCell(s);
+    p.Metrics := m;
+    p.Spec := s;
+    p.Resolver := @Resolve;
+    p.GlyphCache := cache;
+    p.Rasterizer := r;
+    bmp := TBGRABitmap.Create(8 * m.CellW, m.CellH, TyTermSentinel);
+    try
+      AssertTrue(p.PaintRow(bmp, 0, 0, line, 8, -1, tcpNone));
+    finally
+      bmp.Free;
+    end;
+    AssertEquals('regular 中, bold 中, é', 3, cache.Count);
+    AssertEquals('the second 中 was a hit', 1, cache.Hits);
+    AssertNotNull('filed under its code', cache.FindCode(TyTermCodeKey($4E2D, False, False, 2, tfkMain)));
+    AssertNotNull('bold apart', cache.FindCode(TyTermCodeKey($4E2D, True, False, 2, tfkMain)));
+    AssertNotNull('é', cache.FindCode(TyTermCodeKey($E9, False, False, 1, tfkMain)));
+  finally
+    core.Free;
+    p.Free;
+    r.Free;
+    cache.Free;
+  end;
+end;
+
+type
+  TStepClock = class
+    Now: Double;
+    function Tick: Double;
+  end;
+
+function TStepClock.Tick: Double;
+begin
+  Now := Now + 1;           { every look at the clock is a millisecond later }
+  Result := Now;
+end;
+
+procedure TTyTerminalRenderTests.TestTheRasterBudgetSpreadsGlyphsOverFrames;
+var
+  p: TTyTermRowPainter;
+  cache: TTyTermGlyphCache;
+  r: TTyTermGlyphRasterizer;
+  core: TTyTerminalCore;
+  line: TTyTerminalLine;
+  a, b: TBGRABitmap;
+  s: TTyTermFontSpec;
+  m: TTyTermCellMetrics;
+  clk: TStepClock;
+  frames, x, y: Integer;
+  done: Boolean;
+begin
+  clk := TStepClock.Create;
+  cache := TTyTermGlyphCache.Create;
+  r := TTyTermGlyphRasterizer.Create;
+  p := TTyTermRowPainter.Create;
+  line := RowOf('Hello, glyphs!', 14, core);
+  try
+    s := SpecOf(9, 96);
+    m := TyTermMeasureCell(s);
+    p.Metrics := m;
+    p.Spec := s;
+    p.Resolver := @Resolve;
+    p.GlyphCache := cache;
+    p.Rasterizer := r;
+    { the reference: no budget, one frame }
+    b := TBGRABitmap.Create(14 * m.CellW, m.CellH, TyTermSentinel);
+    a := TBGRABitmap.Create(14 * m.CellW, m.CellH, TyTermSentinel);
+    try
+      p.BeginFrame;
+      AssertTrue('without a budget one frame does it', p.PaintRow(b, 0, 0, line, 14, -1, tcpNone));
+      cache.Clear;
+      { 2 ms a frame, the clock a millisecond on at every look: a frame draws a glyph
+        or two and leaves the rest }
+      p.Clock := @clk.Tick;
+      p.RasterBudgetMs := 2;
+      frames := 0;
+      repeat
+        p.BeginFrame;
+        done := p.PaintRow(a, 0, 0, line, 14, -1, tcpNone);
+        Inc(frames);
+        AssertTrue('every frame draws at least one new glyph', p.RasterizedThisFrame >= 1);
+        AssertTrue('and not all of them at once', done or (p.RasterizedThisFrame < 11));
+      until done or (frames > 50);
+      AssertTrue(Format('done in more than one frame (%d)', [frames]), done and (frames > 1));
+      for y := 0 to a.Height - 1 do
+        for x := 0 to a.Width - 1 do
+          AssertTrue(Format('(%d,%d) the same as one frame without a budget', [x, y]),
+            (a.GetPixel(x, y).red = b.GetPixel(x, y).red) and (a.GetPixel(x, y).green = b.GetPixel(x, y).green)
+            and (a.GetPixel(x, y).blue = b.GetPixel(x, y).blue));
+    finally
+      a.Free;
+      b.Free;
+    end;
+  finally
+    core.Free;
+    p.Free;
+    r.Free;
+    cache.Free;
+    clk.Free;
   end;
 end;
 

@@ -34,7 +34,15 @@ unit tyControls.Terminal.Render;
     run on across cells (upstream's underlineVariantOffset does that job for its
     per-cell atlas; we do not need it). The shade patterns are phased the same way.
   - Custom-glyph paths are not clamped to the cell after rounding; they are clipped
-    to it (upstream passes clampToCell = false for these, translateArgs :734). }
+    to it (upstream passes clampToCell = false for these, translateArgs :734). The
+    clip is the cell's: a drawn glyph is rasterized once, white on a transparent
+    bitmap a little larger than the cell, into a coverage mask kept in the glyph cache (by
+    code point, cells, cell size, PPI and, for the shades, the pattern's phase), and
+    tinted wherever it lands with the gamma-corrected blend Canvas2D draws with -- the
+    same pixels as drawing it straight onto the surface, without a surface-sized clip
+    mask (two of them) per drawn cell.
+  - Single code points are cached under a 64-bit key; only clusters of several code
+    points (and the IME's marked text) build a string key. }
 
 interface
 
@@ -94,17 +102,23 @@ type
   end;
 
   { The glyph cache: 4096 entries by default, least recently used dropped first
-    (design spec 10.4). Keyed by text, weight, slant, width and font -- no colour. }
+    (design spec 10.4). Keyed by text, weight, slant, width and font -- no colour.
+    Two key spaces share the one recency list and capacity: strings (clusters of
+    several code points, marked text) and 64-bit codes (a single code point, see
+    TyTermCodeKey; a drawn glyph, see TyTermCustomGlyphKey). }
   TTyTermGlyphCache = class
   private type
     TNode = class
       Key: string;
+      Code: UInt64;
+      IsCode: Boolean;
       Glyph: TTyTermGlyph;
       Prev, Next: TNode;
       Ascii: Integer;                { slot in FAscii, -1 = none }
     end;
   private
     FMap: specialize TDictionary<string, TNode>;
+    FCodes: specialize TDictionary<UInt64, TNode>;
     { printable ASCII, one cell, the main font: the bulk of any screen, looked up without
       building a key string (the same entries as FMap, never more) }
     FAscii: array[0..95 * 4 - 1] of TNode;
@@ -114,6 +128,8 @@ type
     procedure Unlink(ANode: TNode);
     procedure PushFront(ANode: TNode);
     function GetCount: Integer;
+    procedure MakeRoom;
+    procedure Hit(ANode: TNode);
   public
     constructor Create(ACapacity: Integer = 4096);
     destructor Destroy; override;
@@ -124,6 +140,9 @@ type
     function FindAscii(ACode: Integer; ABold, AItalic: Boolean): TTyTermGlyph;
     { takes ownership; an entry for the same key is replaced }
     procedure Add(const AKey: TTyTermGlyphKey; AGlyph: TTyTermGlyph);
+    { the same under a 64-bit code (TyTermCodeKey, TyTermCustomGlyphKey) }
+    function FindCode(ACode: UInt64): TTyTermGlyph;
+    procedure AddCode(ACode: UInt64; AGlyph: TTyTermGlyph);
     procedure Clear;
     property Count: Integer read GetCount;
     property Capacity: Integer read FCapacity;
@@ -132,23 +151,49 @@ type
     property Misses: Integer read FMisses;
   end;
 
-  { Draws a cluster into a coverage mask through the library's text path. }
+  { Draws a cluster into a coverage mask through the library's text path. The scratch
+    surface is made once, big enough for four cells, and keeps its font between calls:
+    the font is configured only when the name, weight, slant, size or PPI differ from
+    the last glyph's. What a glyph still costs (about 2 ms on Win32) is the library's
+    text renderer itself -- TTyGdiTextRenderer draws each run on a fresh TBitmap and
+    converts it (Painter.pas) -- which is why the row painter spreads new glyphs over
+    frames (RasterBudgetMs). }
   TTyTermGlyphRasterizer = class
   private
     FScratch: TBGRABitmap;
-    function Scratch(AW, AH: Integer): TBGRABitmap;
+    FFontName: string;
+    FFontSize, FFontPPI, FFontWeight: Integer;
+    FFontItalic, FFontSet: Boolean;
+    FConfigured: Integer;
+    procedure Reserve(AW, AH: Integer);
+    procedure Configure(const AName: string; ASize, AWeight, APPI: Integer; AItalic: Boolean);
   public
     destructor Destroy; override;
     function Rasterize(const AKey: TTyTermGlyphKey; const ASpec: TTyTermFontSpec;
       const AMetrics: TTyTermCellMetrics): TTyTermGlyph;
+    { FOR THE TESTS and the probes: how many times a font was configured }
+    property FontsConfigured: Integer read FConfigured;
   end;
 
   TTyTermCursorShape = (tcpNone, tcpBlock, tcpOutline, tcpUnderline, tcpBar);
+  { milliseconds; the control passes its own clock (the Core's, injectable) }
+  TTyTermClock = function: Double of object;
 
   { One row: backgrounds, glyphs, lines, cursor (design spec 10.1's order). }
   TTyTermRowPainter = class
+  private type
+    TCellInfo = record
+      C: TTyTermCellColors;
+      Ul: Integer;                 { underline style, 0 none }
+      Strike, Over: Boolean;
+    end;
   private
     FRowsPainted: Integer;
+    FInfo: array of TCellInfo;     { reused row to row }
+    FFrameStart: Double;
+    FRasterized: Integer;
+    FRowComplete: Boolean;
+    function MayRasterize: Boolean;
     procedure DrawGlyphAt(ABmp: TBGRABitmap; ALine: TTyTerminalLine; ACol, AX, AY: Integer;
       AInk: Cardinal; const AClip: TRect);
     procedure DrawLineRun(ABmp: TBGRABitmap; AStyle, AX0, AX1, AY: Integer; AColor: Cardinal;
@@ -162,11 +207,21 @@ type
     DrawBoldBright: Boolean;
     CursorColor, CursorInk: Cardinal;
     CursorWidthPx: Integer;
-    { ACursorCol -1: no cursor on this row. ALine nil: an empty row. }
-    procedure PaintRow(ABmp: TBGRABitmap; AX, AY: Integer; ALine: TTyTerminalLine; ACols: Integer;
-      ACursorCol: Integer; ACursorShape: TTyTermCursorShape);
-    { FOR THE TESTS: rows painted so far }
+    { How long one frame may spend drawing glyphs it has not cached (ms); <= 0 or no
+      Clock = no limit. Once over, a glyph not in the cache is left out and its row
+      reported incomplete (PaintRow returns False): the caller keeps the row dirty and
+      paints it again, whole, next frame. At least one glyph is drawn every frame. }
+    RasterBudgetMs: Double;
+    Clock: TTyTermClock;
+    { the budget runs from here }
+    procedure BeginFrame;
+    { ACursorCol -1: no cursor on this row. ALine nil: an empty row. False: a glyph was
+      left out for the budget, paint the row again. }
+    function PaintRow(ABmp: TBGRABitmap; AX, AY: Integer; ALine: TTyTerminalLine; ACols: Integer;
+      ACursorCol: Integer; ACursorShape: TTyTermCursorShape): Boolean;
+    { FOR THE TESTS: rows painted so far; glyphs rasterized this frame }
     property RowsPainted: Integer read FRowsPainted;
+    property RasterizedThisFrame: Integer read FRasterized;
   end;
 
 { The cell for a font (design spec 10.2); not cached here -- the caller keys it. }
@@ -185,12 +240,36 @@ function TyTermResolveCellColors(AFg, ABg: Cardinal; const AExt: TTyTerminalExtA
 { U+2500-259F, the range the control draws itself in phase 3 }
 function TyTermIsCustomGlyph(ACodepoint: Cardinal): Boolean;
 { One drawn glyph, filling ACellRect's cell in AColor. APPI scales the stroke width
-  as upstream's devicePixelRatio. }
+  as upstream's devicePixelRatio. Through the mask (TyTermRasterizeCustomGlyph +
+  TyTermBlendMaskGamma), uncached: a fresh mask each call. }
 procedure TyTermDrawCustomGlyph(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
   AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer);
+{ FOR THE TESTS: the same glyph drawn straight onto ABmp through Canvas2D with the cell
+  as its clip -- how it was drawn before the mask; the reference the mask is held to. }
+procedure TyTermDrawCustomGlyphDirect(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
+  AColor: TBGRAPixel; APPI: Integer);
+{ A drawn glyph's coverage mask for an AW x AH cell whose top left sits at (APhaseX,
+  APhaseY) modulo the shade pattern's period (TyTermCustomGlyphPhase); offset 0, 0.
+  Mask nil = no ink. }
+function TyTermRasterizeCustomGlyph(ACodepoint: Cardinal; AW, AH, APhaseX, APhaseY,
+  APPI: Integer): TTyTermGlyph;
+{ The shade pattern's phase for a cell whose top left is at (AX, AY) on the surface
+  (the pattern is tiled from the surface's origin); 0, 0 for a glyph without a pattern. }
+procedure TyTermCustomGlyphPhase(ACodepoint: Cardinal; AX, AY: Integer; out APhaseX, APhaseY: Integer);
+{ Cache keys (TTyTermGlyphCache.FindCode / AddCode). A drawn glyph: code point, cells,
+  phase, cell size and PPI. A single code point through the font: code point, weight,
+  slant, cells and font. Bit 63 keeps the two apart. }
+function TyTermCustomGlyphKey(ACodepoint: Cardinal; ACells, APhaseX, APhaseY, ACellW, ACellH,
+  APPI: Integer): UInt64;
+function TyTermCodeKey(ACodepoint: Cardinal; ABold, AItalic: Boolean; ACells: Integer;
+  AFont: TTyTermFontKind): UInt64;
 { Tints a coverage mask onto ABmp at (AX, AY), clipped to AClip; the non-gamma blend
   the library's text is laid down with. Does not call InvalidateBitmap. }
 procedure TyTermBlendMask(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleMask;
+  AColor: Cardinal; const AClip: TRect);
+{ The same with the gamma-corrected blend Canvas2D draws shapes with (full coverage is
+  the colour itself): a drawn glyph's mask lands exactly where drawing it would have. }
+procedure TyTermBlendMaskGamma(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleMask;
   AColor: Cardinal; const AClip: TRect);
 
 implementation
@@ -376,10 +455,36 @@ begin
   Result := GLiveCount;
 end;
 
+{ flags, then the cell count in two bytes of its own (the IME's marked text can span
+  more cells than a nibble holds), then the text }
 function GlyphKeyText(const AKey: TTyTermGlyphKey): string;
+var
+  cells: Integer;
 begin
-  Result := Chr(Ord(AKey.Bold) or (Ord(AKey.Italic) shl 1) or (Ord(AKey.Font) shl 2)
-    or ((AKey.Cells and $F) shl 3) or $80) + AKey.Text;
+  cells := EnsureRange(AKey.Cells, 0, $FFFF);
+  Result := Chr(Ord(AKey.Bold) or (Ord(AKey.Italic) shl 1) or (Ord(AKey.Font) shl 2) or $80)
+    + Chr(cells and $FF) + Chr(cells shr 8) + AKey.Text;
+end;
+
+function TyTermCodeKey(ACodepoint: Cardinal; ABold, AItalic: Boolean; ACells: Integer;
+  AFont: TTyTermFontKind): UInt64;
+begin
+  Result := UInt64(ACodepoint and $1FFFFF)
+    or (UInt64(Ord(ABold)) shl 21) or (UInt64(Ord(AItalic)) shl 22) or (UInt64(Ord(AFont)) shl 23)
+    or (UInt64(EnsureRange(ACells, 0, 255)) shl 24);
+end;
+
+function TyTermCustomGlyphKey(ACodepoint: Cardinal; ACells, APhaseX, APhaseY, ACellW, ACellH,
+  APPI: Integer): UInt64;
+begin
+  Result := (UInt64(1) shl 63)
+    or UInt64((ACodepoint - TyTermGlyphFirst) and $FF)
+    or (UInt64(EnsureRange(ACells, 0, 15)) shl 8)
+    or (UInt64(APhaseX and $F) shl 12)
+    or (UInt64(APhaseY and $F) shl 16)
+    or (UInt64(EnsureRange(ACellW, 0, $FFF)) shl 20)
+    or (UInt64(EnsureRange(ACellH, 0, $FFF)) shl 32)
+    or (UInt64(EnsureRange(APPI, 0, $FFF)) shl 44);
 end;
 
 constructor TTyTermGlyphCache.Create(ACapacity: Integer);
@@ -388,12 +493,14 @@ begin
   if ACapacity < 1 then ACapacity := 1;
   FCapacity := ACapacity;
   FMap := specialize TDictionary<string, TNode>.Create;
+  FCodes := specialize TDictionary<UInt64, TNode>.Create;
 end;
 
 destructor TTyTermGlyphCache.Destroy;
 begin
   Clear;
   FMap.Free;
+  FCodes.Free;
   inherited Destroy;
 end;
 
@@ -416,7 +523,74 @@ end;
 
 function TTyTermGlyphCache.GetCount: Integer;
 begin
-  Result := FMap.Count;
+  Result := FMap.Count + FCodes.Count;
+end;
+
+procedure TTyTermGlyphCache.Hit(ANode: TNode);
+begin
+  Inc(FHits);
+  if ANode <> FHead then
+  begin
+    Unlink(ANode);
+    PushFront(ANode);
+  end;
+end;
+
+{ evict the least recently used until one more fits }
+procedure TTyTermGlyphCache.MakeRoom;
+var
+  old: TNode;
+begin
+  while (GetCount >= FCapacity) and (FTail <> nil) do
+  begin
+    old := FTail;
+    Unlink(old);
+    if old.IsCode then
+      FCodes.Remove(old.Code)
+    else
+      FMap.Remove(old.Key);
+    if old.Ascii >= 0 then FAscii[old.Ascii] := nil;
+    old.Glyph.Free;
+    old.Free;
+  end;
+end;
+
+function TTyTermGlyphCache.FindCode(ACode: UInt64): TTyTermGlyph;
+var
+  node: TNode;
+begin
+  if FCodes.TryGetValue(ACode, node) then
+  begin
+    Hit(node);
+    Result := node.Glyph;
+  end
+  else
+  begin
+    Inc(FMisses);
+    Result := nil;
+  end;
+end;
+
+procedure TTyTermGlyphCache.AddCode(ACode: UInt64; AGlyph: TTyTermGlyph);
+var
+  node: TNode;
+begin
+  if FCodes.TryGetValue(ACode, node) then
+  begin
+    if node.Glyph <> AGlyph then node.Glyph.Free;
+    node.Glyph := AGlyph;
+    Unlink(node);
+    PushFront(node);
+    Exit;
+  end;
+  MakeRoom;
+  node := TNode.Create;
+  node.Code := ACode;
+  node.IsCode := True;
+  node.Glyph := AGlyph;
+  node.Ascii := -1;
+  FCodes.Add(ACode, node);
+  PushFront(node);
 end;
 
 function AsciiSlot(const AKey: TTyTermGlyphKey): Integer;
@@ -439,12 +613,7 @@ begin
     Inc(FMisses);
     Exit(nil);
   end;
-  Inc(FHits);
-  if node <> FHead then
-  begin
-    Unlink(node);
-    PushFront(node);
-  end;
+  Hit(node);
   Result := node.Glyph;
 end;
 
@@ -454,12 +623,7 @@ var
 begin
   if FMap.TryGetValue(GlyphKeyText(AKey), node) then
   begin
-    Inc(FHits);
-    if node <> FHead then
-    begin
-      Unlink(node);
-      PushFront(node);
-    end;
+    Hit(node);
     Result := node.Glyph;
   end
   else
@@ -472,7 +636,7 @@ end;
 procedure TTyTermGlyphCache.Add(const AKey: TTyTermGlyphKey; AGlyph: TTyTermGlyph);
 var
   k: string;
-  node, old: TNode;
+  node: TNode;
 begin
   k := GlyphKeyText(AKey);
   if FMap.TryGetValue(k, node) then
@@ -483,15 +647,7 @@ begin
     PushFront(node);
     Exit;
   end;
-  while (FMap.Count >= FCapacity) and (FTail <> nil) do
-  begin
-    old := FTail;
-    Unlink(old);
-    FMap.Remove(old.Key);
-    if old.Ascii >= 0 then FAscii[old.Ascii] := nil;
-    old.Glyph.Free;
-    old.Free;
-  end;
+  MakeRoom;
   node := TNode.Create;
   node.Key := k;
   node.Glyph := AGlyph;
@@ -516,6 +672,7 @@ begin
   FHead := nil;
   FTail := nil;
   FMap.Clear;
+  FCodes.Clear;
   FillChar(FAscii, SizeOf(FAscii), 0);
 end;
 
@@ -527,15 +684,36 @@ begin
   inherited Destroy;
 end;
 
-function TTyTermGlyphRasterizer.Scratch(AW, AH: Integer): TBGRABitmap;
+{ The scratch surface grows, never shrinks; a new one has no font, so the next
+  Configure sets it up again. }
+procedure TTyTermGlyphRasterizer.Reserve(AW, AH: Integer);
 begin
-  if (FScratch = nil) or (FScratch.Width < AW) or (FScratch.Height < AH) then
+  if (FScratch <> nil) and (FScratch.Width >= AW) and (FScratch.Height >= AH) then Exit;
+  if FScratch <> nil then
   begin
-    FreeAndNil(FScratch);
-    FScratch := TBGRABitmap.Create(Max(AW, 64), Max(AH, 32));
+    AW := Max(AW, FScratch.Width);
+    AH := Max(AH, FScratch.Height);
   end;
-  FScratch.FillRect(0, 0, AW, AH, BGRAWhite, dmSet);
-  Result := FScratch;
+  FreeAndNil(FScratch);
+  FScratch := TBGRABitmap.Create(Max(AW, 64), Max(AH, 32));
+  FFontSet := False;
+end;
+
+procedure TTyTermGlyphRasterizer.Configure(const AName: string; ASize, AWeight, APPI: Integer;
+  AItalic: Boolean);
+begin
+  if FFontSet and (FFontName = AName) and (FFontSize = ASize) and (FFontWeight = AWeight)
+    and (FFontPPI = APPI) and (FFontItalic = AItalic) then
+    Exit;
+  TyConfigureTextFont(FScratch, AName, ASize, AWeight, APPI);
+  if AItalic then FScratch.FontStyle := FScratch.FontStyle + [fsItalic];
+  FFontName := AName;
+  FFontSize := ASize;
+  FFontWeight := AWeight;
+  FFontPPI := APPI;
+  FFontItalic := AItalic;
+  FFontSet := True;
+  Inc(FConfigured);
 end;
 
 function TTyTermGlyphRasterizer.Rasterize(const AKey: TTyTermGlyphKey; const ASpec: TTyTermFontSpec;
@@ -544,7 +722,7 @@ var
   tmp: TBGRABitmap;
   full: TGrayscaleMask;
   name: string;
-  pad, cells, target, adv, w, h, x, y, l, t, r, b, nw: Integer;
+  pad, cells, target, adv, w, h, x, y, l, t, r, b, nw, weight: Integer;
   p: PBGRAPixel;
   q: PByte;
 begin
@@ -553,16 +731,20 @@ begin
   target := cells * AMetrics.CellW;
   pad := AMetrics.CellH;
   if (AKey.Font = tfkWide) and (ASpec.WideName <> '') then name := ASpec.WideName else name := ASpec.MainName;
-  { the advance first, on the scratch surface configured for the font }
-  tmp := Scratch(1, 1);
-  TyConfigureTextFont(tmp, name, ASpec.SizeLogical, IfThen(AKey.Bold, 700, 400), ASpec.PPI);
-  if AKey.Italic then tmp.FontStyle := tmp.FontStyle + [fsItalic];
-  adv := tmp.TextSize(AKey.Text).cx;
+  weight := IfThen(AKey.Bold, 700, 400);
+  { room for four cells and the padding up front, so the font is not lost to a regrowth }
+  Reserve(4 * AMetrics.CellW + 2 * pad, AMetrics.CellH + 2 * pad);
+  Configure(name, ASpec.SizeLogical, weight, ASpec.PPI, AKey.Italic);
+  adv := FScratch.TextSize(AKey.Text).cx;
   w := Max(adv, target) + 2 * pad;
   h := AMetrics.CellH + 2 * pad;
-  tmp := Scratch(w, h);
-  TyConfigureTextFont(tmp, name, ASpec.SizeLogical, IfThen(AKey.Bold, 700, 400), ASpec.PPI);
-  if AKey.Italic then tmp.FontStyle := tmp.FontStyle + [fsItalic];
+  if (w > FScratch.Width) or (h > FScratch.Height) then
+  begin
+    Reserve(w, h);
+    Configure(name, ASpec.SizeLogical, weight, ASpec.PPI, AKey.Italic);
+  end;
+  tmp := FScratch;
+  tmp.FillRect(0, 0, w, h, BGRAWhite, dmSet);
   tmp.TextOut(pad, pad + AMetrics.TextTop, AKey.Text, BGRABlack);
   { coverage, clipped to the cell's rows: a neighbouring row repaints over ink that
     leaves the row, so ink kept there would come and go }
@@ -627,8 +809,10 @@ begin
   Result := v + AOffset;
 end;
 
+{ AClip: clip Canvas2D to the cell -- only for drawing straight onto a surface (the
+  reference); on a cell-sized bitmap the bitmap's own edge is the clip. }
 procedure DrawPathPart(ABmp: TBGRABitmap; APart: Integer; const ACellRect: TRect; AColor: TBGRAPixel;
-  APPI: Integer);
+  APPI: Integer; AClip: Boolean);
 var
   c2d: TBGRACanvas2D;
   W, H, k, last, cmd, n, j: Integer;
@@ -641,9 +825,12 @@ begin
   c2d := ABmp.Canvas2D;
   c2d.save;
   try
-    c2d.beginPath;
-    c2d.rect(ACellRect.Left, ACellRect.Top, W, H);
-    c2d.clip;
+    if AClip then
+    begin
+      c2d.beginPath;
+      c2d.rect(ACellRect.Left, ACellRect.Top, W, H);
+      c2d.clip;
+    end;
     c2d.beginPath;
     k := TyTermGlyphParts[APart, 2];
     last := k + TyTermGlyphParts[APart, 3];
@@ -707,7 +894,11 @@ begin
   end;
 end;
 
-procedure DrawPatternPart(ABmp: TBGRABitmap; APart: Integer; const ACellRect: TRect; AColor: TBGRAPixel);
+{ Tiled from the surface's origin, so neighbouring cells run on seamlessly: pixel (x, y)
+  of ABmp takes the pattern's cell ((y + AOrgY) mod rows, (x + AOrgX) mod cols). On the
+  surface AOrg is 0, 0; on a cell-sized bitmap it is the cell's phase. }
+procedure DrawPatternPart(ABmp: TBGRABitmap; APart: Integer; const ACellRect: TRect; AColor: TBGRAPixel;
+  AOrgX, AOrgY: Integer);
 var
   k, rows, cols, x, y: Integer;
   r: TRect;
@@ -722,13 +913,12 @@ begin
   if r.Top < 0 then r.Top := 0;
   if r.Right > ABmp.Width then r.Right := ABmp.Width;
   if r.Bottom > ABmp.Height then r.Bottom := ABmp.Height;
-  { tiled from the surface's origin, so neighbouring cells run on seamlessly }
   for y := r.Top to r.Bottom - 1 do
   begin
     p := ABmp.ScanLine[y] + r.Left;
     for x := r.Left to r.Right - 1 do
     begin
-      if TyTermGlyphData[k + (y mod rows) * cols + (x mod cols)] <> 0 then
+      if TyTermGlyphData[k + ((y + AOrgY) mod rows) * cols + ((x + AOrgX) mod cols)] <> 0 then
         p^ := AColor;
       Inc(p);
     end;
@@ -736,22 +926,112 @@ begin
   ABmp.InvalidateBitmap;
 end;
 
-procedure TyTermDrawCustomGlyph(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
-  AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer);
+procedure TyTermCustomGlyphPhase(ACodepoint: Cardinal; AX, AY: Integer; out APhaseX, APhaseY: Integer);
+var
+  first, p, k: Integer;
+begin
+  APhaseX := 0;
+  APhaseY := 0;
+  if not TyTermIsCustomGlyph(ACodepoint) then Exit;
+  first := TyTermGlyphIndex[ACodepoint, 0];
+  for p := first to first + TyTermGlyphIndex[ACodepoint, 1] - 1 do
+    if TyTermGlyphParts[p, 0] = 1 then
+    begin
+      k := TyTermGlyphParts[p, 2];
+      { AX, AY are never negative on the surface; the mod stays in range for them }
+      APhaseY := AY mod Round(TyTermGlyphData[k]);
+      APhaseX := AX mod Round(TyTermGlyphData[k + 1]);
+      Exit;
+    end;
+end;
+
+procedure DrawCustomParts(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
+  AColor: TBGRAPixel; APPI, AOrgX, AOrgY: Integer; AClip: Boolean);
 var
   first, n, p: Integer;
 begin
-  if not TyTermIsCustomGlyph(ACodepoint) then Exit;
-  if (ACellRect.Right <= ACellRect.Left) or (ACellRect.Bottom <= ACellRect.Top) then Exit;
-  if APPI <= 0 then APPI := 96;
   first := TyTermGlyphIndex[ACodepoint, 0];
   n := TyTermGlyphIndex[ACodepoint, 1];
   for p := first to first + n - 1 do
     case TyTermGlyphParts[p, 0] of
       0: DrawBlockPart(ABmp, p, ACellRect, AColor);
-      1: DrawPatternPart(ABmp, p, ACellRect, AColor);
-      2: DrawPathPart(ABmp, p, ACellRect, AColor, APPI);
+      1: DrawPatternPart(ABmp, p, ACellRect, AColor, AOrgX, AOrgY);
+      2: DrawPathPart(ABmp, p, ACellRect, AColor, APPI, AClip);
     end;
+end;
+
+function TyTermRasterizeCustomGlyph(ACodepoint: Cardinal; AW, AH, APhaseX, APhaseY,
+  APPI: Integer): TTyTermGlyph;
+const
+  Margin = 2;
+var
+  bmp: TBGRABitmap;
+  x, y: Integer;
+  p: PBGRAPixel;
+  q: PByte;
+  ink: Boolean;
+begin
+  Result := TTyTermGlyph.Create;
+  if not TyTermIsCustomGlyph(ACodepoint) or (AW <= 0) or (AH <= 0) then Exit;
+  if APPI <= 0 then APPI := 96;
+  { White on transparent: every pixel keeps exactly the alpha Canvas2D would have
+    blended the colour with (a transparent pixel takes the colour and that alpha). The
+    cell sits Margin pixels inside the bitmap and Canvas2D clips to it, as drawing on
+    the surface does: at the bitmap's own edge the polygon filler rounds the last row
+    and column differently (up to 21 of 255 on a diagonal's ends). The clip mask is
+    the size of this small bitmap, made once per glyph. }
+  bmp := TBGRABitmap.Create(AW + 2 * Margin, AH + 2 * Margin);
+  try
+    DrawCustomParts(bmp, Rect(Margin, Margin, Margin + AW, Margin + AH), ACodepoint, BGRAWhite, APPI,
+      APhaseX - Margin, APhaseY - Margin, True);
+    Result.Mask := TGrayscaleMask.Create(AW, AH, 0);
+    ink := False;
+    for y := 0 to AH - 1 do
+    begin
+      p := bmp.ScanLine[y + Margin] + Margin;
+      q := Result.Mask.ScanLine[y];
+      for x := 0 to AW - 1 do
+      begin
+        q^ := p^.alpha;
+        if q^ <> 0 then ink := True;
+        Inc(p);
+        Inc(q);
+      end;
+    end;
+    if not ink then
+      FreeAndNil(Result.Mask);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TyTermDrawCustomGlyph(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
+  AColor: TBGRAPixel; const AMetrics: TTyTermCellMetrics; APPI: Integer);
+var
+  g: TTyTermGlyph;
+  px, py: Integer;
+begin
+  if not TyTermIsCustomGlyph(ACodepoint) then Exit;
+  if (ACellRect.Right <= ACellRect.Left) or (ACellRect.Bottom <= ACellRect.Top) then Exit;
+  TyTermCustomGlyphPhase(ACodepoint, ACellRect.Left, ACellRect.Top, px, py);
+  g := TyTermRasterizeCustomGlyph(ACodepoint, ACellRect.Right - ACellRect.Left,
+    ACellRect.Bottom - ACellRect.Top, px, py, APPI);
+  try
+    TyTermBlendMaskGamma(ABmp, ACellRect.Left, ACellRect.Top, g.Mask,
+      (Cardinal(AColor.red) shl 16) or (Cardinal(AColor.green) shl 8) or AColor.blue, ACellRect);
+    ABmp.InvalidateBitmap;
+  finally
+    g.Free;
+  end;
+end;
+
+procedure TyTermDrawCustomGlyphDirect(ABmp: TBGRABitmap; const ACellRect: TRect; ACodepoint: Cardinal;
+  AColor: TBGRAPixel; APPI: Integer);
+begin
+  if not TyTermIsCustomGlyph(ACodepoint) then Exit;
+  if (ACellRect.Right <= ACellRect.Left) or (ACellRect.Bottom <= ACellRect.Top) then Exit;
+  if APPI <= 0 then APPI := 96;
+  DrawCustomParts(ABmp, ACellRect, ACodepoint, AColor, APPI, 0, 0, True);
 end;
 
 procedure TyTermBlendMask(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleMask;
@@ -786,7 +1066,57 @@ begin
   end;
 end;
 
+procedure TyTermBlendMaskGamma(ABmp: TBGRABitmap; AX, AY: Integer; AMask: TGrayscaleMask;
+  AColor: Cardinal; const AClip: TRect);
+var
+  x, y, x0, x1, y0, y1: Integer;
+  src: PByte;
+  dst: PBGRAPixel;
+  c: TBGRAPixel;
+  ec: TExpandedPixel;
+begin
+  if AMask = nil then Exit;
+  c := TyTermRgbToPixel(AColor);
+  ec := GammaExpansion(c);
+  x0 := Max(AX, Max(AClip.Left, 0));
+  x1 := Min(AX + AMask.Width, Min(AClip.Right, ABmp.Width));
+  y0 := Max(AY, Max(AClip.Top, 0));
+  y1 := Min(AY + AMask.Height, Min(AClip.Bottom, ABmp.Height));
+  if (x1 <= x0) or (y1 <= y0) then Exit;
+  for y := y0 to y1 - 1 do
+  begin
+    src := AMask.ScanLine[y - AY] + (x0 - AX);
+    dst := ABmp.ScanLine[y] + x0;
+    for x := x0 to x1 - 1 do
+    begin
+      { BGRASolidBrushDrawPixels: full coverage is the colour, partial the gamma blend }
+      if src^ = 255 then
+        dst^ := c
+      else if src^ <> 0 then
+        DrawExpandedPixelInlineNoAlphaCheck(dst, ec, src^);
+      Inc(src);
+      Inc(dst);
+    end;
+  end;
+end;
+
 { ---- row painter ----------------------------------------------------------------- }
+
+procedure TTyTermRowPainter.BeginFrame;
+begin
+  FRasterized := 0;
+  if Assigned(Clock) then FFrameStart := Clock() else FFrameStart := 0;
+end;
+
+function TTyTermRowPainter.MayRasterize: Boolean;
+begin
+  Result := (RasterBudgetMs <= 0) or not Assigned(Clock) or (FRasterized = 0)
+    or (Clock() - FFrameStart < RasterBudgetMs);
+  if Result then
+    Inc(FRasterized)
+  else
+    FRowComplete := False;
+end;
 
 procedure TTyTermRowPainter.DrawGlyphAt(ABmp: TBGRABitmap; ALine: TTyTerminalLine; ACol, AX,
   AY: Integer; AInk: Cardinal; const AClip: TRect);
@@ -794,54 +1124,92 @@ var
   key: TTyTermGlyphKey;
   glyph: TTyTermGlyph;
   cp: Cardinal;
-  w: Integer;
+  w, px, py: Integer;
   attr: TTyTerminalAttrData;
-  asciiMissed: Boolean;
+  combined: Boolean;
+  code: UInt64;
+  font: TTyTermFontKind;
+  cell: TRect;
 begin
-  asciiMissed := False;
   if not ALine.HasContent(ACol) then Exit;
   w := ALine.GetWidth(ACol);
   if w <= 0 then Exit;
   cp := ALine.GetCodePoint(ACol);
-  if (not ALine.IsCombined(ACol)) and TyTermIsCustomGlyph(cp) then
+  combined := ALine.IsCombined(ACol);
+  if (not combined) and TyTermIsCustomGlyph(cp) then
   begin
-    TyTermDrawCustomGlyph(ABmp, Rect(AX, AY, AX + w * Metrics.CellW, AY + Metrics.CellH), cp,
-      TyTermRgbToPixel(AInk), Metrics, Spec.PPI);
+    { drawn, not a font's: one mask per code point, cell size and shade phase }
+    TyTermCustomGlyphPhase(cp, AX, AY, px, py);
+    code := TyTermCustomGlyphKey(cp, w, px, py, Metrics.CellW, Metrics.CellH, Spec.PPI);
+    glyph := GlyphCache.FindCode(code);
+    if glyph = nil then
+    begin
+      if not MayRasterize then Exit;
+      glyph := TyTermRasterizeCustomGlyph(cp, w * Metrics.CellW, Metrics.CellH, px, py, Spec.PPI);
+      GlyphCache.AddCode(code, glyph);
+    end;
+    cell := Rect(AX, AY, AX + w * Metrics.CellW, AY + Metrics.CellH);
+    IntersectRect(cell, cell, AClip);
+    TyTermBlendMaskGamma(ABmp, AX, AY, glyph.Mask, AInk, cell);
     Exit;
   end;
+  if (cp = 32) and not combined then Exit;
   attr := Default(TTyTerminalAttrData);
   attr.Fg := ALine.GetFg(ACol);
   attr.Bg := ALine.GetBg(ACol);
-  if (cp = 32) and not ALine.IsCombined(ACol) then Exit;
-  if (w = 1) and (cp > 32) and (cp <= 126) and not ALine.IsCombined(ACol) then
+  if (w >= 2) and (Spec.WideName <> '') then font := tfkWide else font := tfkMain;
+  { every field of key is set wherever it is used: no Default() on the hot path }
+  if not combined then
   begin
-    { the common case, without a key string }
-    glyph := GlyphCache.FindAscii(cp, attr.IsBold, attr.IsItalic);
-    if glyph <> nil then
+    { a single code point: no string built unless it has to be rasterized }
+    if (w = 1) and (cp > 32) and (cp <= 126) then
     begin
-      TyTermBlendMask(ABmp, AX + glyph.OffsetX, AY + glyph.OffsetY, glyph.Mask, AInk, AClip);
-      Exit;
+      glyph := GlyphCache.FindAscii(cp, attr.IsBold, attr.IsItalic);
+      if glyph = nil then
+      begin
+        if not MayRasterize then Exit;
+        key.Text := Chr(cp);
+        key.Bold := attr.IsBold;
+        key.Italic := attr.IsItalic;
+        key.Cells := 1;
+        key.Font := tfkMain;
+        glyph := Rasterizer.Rasterize(key, Spec, Metrics);
+        GlyphCache.Add(key, glyph);
+      end;
+    end
+    else
+    begin
+      code := TyTermCodeKey(cp, attr.IsBold, attr.IsItalic, w, font);
+      glyph := GlyphCache.FindCode(code);
+      if glyph = nil then
+      begin
+        key.Text := ALine.GetChars(ACol);
+        if (key.Text = '') or (key.Text = ' ') then Exit;
+        if not MayRasterize then Exit;
+        key.Bold := attr.IsBold;
+        key.Italic := attr.IsItalic;
+        key.Cells := w;
+        key.Font := font;
+        glyph := Rasterizer.Rasterize(key, Spec, Metrics);
+        GlyphCache.AddCode(code, glyph);
+      end;
     end;
-    key.Text := Chr(cp);
-    asciiMissed := True;
   end
   else
   begin
     key.Text := ALine.GetChars(ACol);
     if (key.Text = '') or (key.Text = ' ') then Exit;
-  end;
-  key.Bold := attr.IsBold;
-  key.Italic := attr.IsItalic;
-  key.Cells := w;
-  if (w >= 2) and (Spec.WideName <> '') then key.Font := tfkWide else key.Font := tfkMain;
-  if asciiMissed then
-    glyph := nil                     { FindAscii already counted the miss }
-  else
+    key.Bold := attr.IsBold;
+    key.Italic := attr.IsItalic;
+    key.Cells := w;
+    key.Font := font;
     glyph := GlyphCache.Find(key);
-  if glyph = nil then
-  begin
-    glyph := Rasterizer.Rasterize(key, Spec, Metrics);
-    GlyphCache.Add(key, glyph);
+    if glyph = nil then
+    begin
+      if not MayRasterize then Exit;
+      glyph := Rasterizer.Rasterize(key, Spec, Metrics);
+      GlyphCache.Add(key, glyph);
+    end;
   end;
   TyTermBlendMask(ABmp, AX + glyph.OffsetX, AY + glyph.OffsetY, glyph.Mask, AInk, AClip);
 end;
@@ -901,16 +1269,9 @@ begin
   end;
 end;
 
-procedure TTyTermRowPainter.PaintRow(ABmp: TBGRABitmap; AX, AY: Integer; ALine: TTyTerminalLine;
-  ACols: Integer; ACursorCol: Integer; ACursorShape: TTyTermCursorShape);
-type
-  TCellInfo = record
-    C: TTyTermCellColors;
-    Ul: Integer;                 { underline style, 0 none }
-    Strike, Over: Boolean;
-  end;
+function TTyTermRowPainter.PaintRow(ABmp: TBGRABitmap; AX, AY: Integer; ALine: TTyTerminalLine;
+  ACols: Integer; ACursorCol: Integer; ACursorShape: TTyTermCursorShape): Boolean;
 var
-  info: array of TCellInfo;
   c, runStart, x0, n, w, cw, cy, lw, kind: Integer;
   clip, cell: TRect;
   attr: TTyTerminalAttrData;
@@ -921,67 +1282,70 @@ var
   function LineStyleOf(ACol, AKind: Integer): Integer;
   begin
     case AKind of
-      0: Result := info[ACol].Ul;
-      1: if info[ACol].Strike then Result := 6 else Result := 0;
+      0: Result := FInfo[ACol].Ul;
+      1: if FInfo[ACol].Strike then Result := 6 else Result := 0;
     else
-      if info[ACol].Over then Result := 7 else Result := 0;
+      if FInfo[ACol].Over then Result := 7 else Result := 0;
     end;
   end;
 
   function LineColorOf(ACol, AKind: Integer): Cardinal;
   begin
-    if AKind = 0 then Result := info[ACol].C.Underline else Result := info[ACol].C.Fg;
+    if AKind = 0 then Result := FInfo[ACol].C.Underline else Result := FInfo[ACol].C.Fg;
   end;
 
 begin
+  FRowComplete := True;
+  Result := True;
   if ACols <= 0 then Exit;
   clip := Rect(AX, AY, AX + ACols * Metrics.CellW, AY + Metrics.CellH);
-  SetLength(info, ACols);
+  if Length(FInfo) < ACols then
+    SetLength(FInfo, ACols);
   { 1. resolve every cell; backgrounds in runs of one colour }
   for c := 0 to ACols - 1 do
   begin
     if (ALine = nil) or (c >= ALine.Length) then
     begin
-      info[c].C := TyTermResolveCellColors(0, 0, Default(TTyTerminalExtAttrs), Resolver, DrawBoldBright);
-      info[c].Ul := 0;
-      info[c].Strike := False;
-      info[c].Over := False;
+      FInfo[c].C := TyTermResolveCellColors(0, 0, Default(TTyTerminalExtAttrs), Resolver, DrawBoldBright);
+      FInfo[c].Ul := 0;
+      FInfo[c].Strike := False;
+      FInfo[c].Over := False;
       Continue;
     end;
     if (c > 0) and (ALine.GetWidth(c) = 0) then
     begin
       { the second half of a wide character: the first half's colours }
-      info[c] := info[c - 1];
+      FInfo[c] := FInfo[c - 1];
       Continue;
     end;
     attr.Fg := ALine.GetFg(c);
     attr.Bg := ALine.GetBg(c);
     if not ALine.ExtendedEntry(c, ext) then ext := Default(TTyTerminalExtAttrs);
     attr.Extended := ext;
-    info[c].C := TyTermResolveCellColors(attr.Fg, attr.Bg, ext, Resolver, DrawBoldBright);
+    FInfo[c].C := TyTermResolveCellColors(attr.Fg, attr.Bg, ext, Resolver, DrawBoldBright);
     if attr.IsUnderline then
     begin
-      info[c].Ul := attr.GetUnderlineStyle;
-      if (info[c].Ul < Ord(tusSingle)) or (info[c].Ul > Ord(tusDashed)) then info[c].Ul := Ord(tusSingle);
+      FInfo[c].Ul := attr.GetUnderlineStyle;
+      if (FInfo[c].Ul < Ord(tusSingle)) or (FInfo[c].Ul > Ord(tusDashed)) then FInfo[c].Ul := Ord(tusSingle);
     end
     else
-      info[c].Ul := 0;
-    info[c].Strike := attr.IsStrikethrough;
-    info[c].Over := attr.IsOverline;
+      FInfo[c].Ul := 0;
+    FInfo[c].Strike := attr.IsStrikethrough;
+    FInfo[c].Over := attr.IsOverline;
   end;
   runStart := 0;
   for c := 1 to ACols do
-    if (c = ACols) or (info[c].C.Bg <> info[runStart].C.Bg) then
+    if (c = ACols) or (FInfo[c].C.Bg <> FInfo[runStart].C.Bg) then
     begin
       ABmp.FillRect(AX + runStart * Metrics.CellW, AY, AX + c * Metrics.CellW, AY + Metrics.CellH,
-        TyTermRgbToPixel(info[runStart].C.Bg), dmSet);
+        TyTermRgbToPixel(FInfo[runStart].C.Bg), dmSet);
       runStart := c;
     end;
   { 2. glyphs }
   if ALine <> nil then
     for c := 0 to Min(ACols, ALine.Length) - 1 do
-      if not info[c].C.Invisible then
-        DrawGlyphAt(ABmp, ALine, c, AX + c * Metrics.CellW, AY, info[c].C.Fg, clip);
+      if not FInfo[c].C.Invisible then
+        DrawGlyphAt(ABmp, ALine, c, AX + c * Metrics.CellW, AY, FInfo[c].C.Fg, clip);
   { 3. lines: underline, strikethrough, overline, each in runs of one style and colour }
   for kind := 0 to 2 do
   begin
@@ -1014,7 +1378,9 @@ begin
       tcpBlock:
         begin
           ABmp.FillRect(cell, px, dmSet);
-          if (ALine <> nil) and (ACursorCol < ALine.Length) then
+          { hidden text (SGR 8) stays hidden under the cursor: upstream draws such a
+            cell as a space (DomRendererRowFactory.ts:302-306) }
+          if (ALine <> nil) and (ACursorCol < ALine.Length) and not FInfo[ACursorCol].C.Invisible then
             DrawGlyphAt(ABmp, ALine, ACursorCol, x0, AY, CursorInk, cell);
         end;
       tcpOutline:
@@ -1035,6 +1401,7 @@ begin
   end;
   ABmp.InvalidateBitmap;
   Inc(FRowsPainted);
+  Result := FRowComplete;
 end;
 
 end.
