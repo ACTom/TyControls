@@ -363,11 +363,13 @@ begin
   V.WriteSync('see https://example.com/' + StringOfChar('a', 40) + ' ok'#13#10'$ ');
   V.MoveTo([ssCtrl], V.CellCenter(8, 0));
   AssertTrue('hovered', V.HoverOn);
+  AssertEquals('a hand over it', Ord(crHandPoint), Ord(V.LastTempCursor));
   AssertEquals('over two rows', 2, V.HoverNow.Range.EndY - V.HoverNow.Range.StartY + 1);
   V.ClearInvalidated;
   F.SizeTo(70, 5);
   AssertEquals('70 columns', 70, V.Cols);
   AssertFalse('the resize dropped the hover', V.HoverOn);
+  AssertEquals('and the hand with it', Ord(crIBeam), Ord(V.LastTempCursor));
   covered := False;
   for i := 0 to High(V.Invalidated) do
     if (V.Invalidated[i].X <= 0) and (V.Invalidated[i].Y >= 1) then

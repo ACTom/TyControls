@@ -57,6 +57,10 @@ uses
   BGRABitmap, BGRABitmapTypes, BGRAGrayscaleMask, BGRABlend, BGRACanvas2D,
   tyControls.Painter, tyControls.Terminal.Buffer;
 
+const
+  { the most (background, foreground) pairs a contrast cache holds (TTyTermContrastCache) }
+  TyTermContrastCacheMax = 16384;
+
 type
   TTyTermFontKind = (tfkMain, tfkWide);
 
@@ -187,11 +191,13 @@ type
   end;
 
   { ColorContrastCache.ts: (background, foreground) -> the adjusted foreground, or "no
-    adjustment needed". The key is ordered (background first); both $RRGGBB. }
+    adjustment needed". The key is ordered (background first); both $RRGGBB. Bounded
+    (upstream's is not, spec 15): a true-colour stream makes a pair per colour, so at
+    TyTermContrastCacheMax pairs it starts again empty. }
   TTyTermContrastCache = class
   private
     FMap: specialize TDictionary<UInt64, Cardinal>;
-    FHits: Integer;
+    FHits, FMisses: Integer;
     function GetCount: Integer;
   public
     constructor Create;
@@ -202,8 +208,9 @@ type
     procedure Put(ABg, AFg, AResult: Cardinal; AAdjusted: Boolean);
     procedure Clear;
     property Count: Integer read GetCount;
-    { FOR THE TESTS: answers found (Clear keeps the count) }
+    { FOR THE TESTS: answers found and not found (Clear keeps the counts) }
     property Hits: Integer read FHits;
+    property Misses: Integer read FMisses;
   end;
 
   TTyTermCursorShape = (tcpNone, tcpBlock, tcpOutline, tcpUnderline, tcpBar);
@@ -525,6 +532,7 @@ begin
   end
   else
   begin
+    Inc(FMisses);
     AResult := AFg and $FFFFFF;
     AAdjusted := False;
   end;
@@ -538,6 +546,8 @@ begin
     v := (AResult and $FFFFFF) or $1000000
   else
     v := AFg and $FFFFFF;
+  if FMap.Count >= TyTermContrastCacheMax then
+    FMap.Clear;
   FMap.AddOrSetValue((UInt64(ABg and $FFFFFF) shl 24) or UInt64(AFg and $FFFFFF), v);
 end;
 
@@ -1766,22 +1776,38 @@ var
 
   { the text colour of cell ACol: the selection's where the theme gives one, else the
     cell's; above a minimum contrast of 1, pushed off the painted background (the
-    selection's where selected) -- faint text at half the ratio and dimmed after }
+    selection's where selected) -- faint text at half the ratio. An adjusted colour is
+    drawn as it comes: upstream's WebGL atlas returns it before the dim is applied
+    (TextureAtlas.ts:352-356), the DOM renderer writes it inline over the dim class
+    (DomRenderer.ts:201-203). One not adjusted is dimmed as at a ratio of 1: the cell's
+    own colour dimmed, the selection's colour as it is (spec 15). }
   procedure ResolveInk(ACol: Integer);
   var
     base, res: Cardinal;
     ratio: Double;
     cache: TTyTermContrastCache;
-    adj: Boolean;
+    adj, onSel: Boolean;
   begin
-    if SelHasInk and FInfo[ACol].Sel then
-      FInfo[ACol].Ink := SelInk
+    onSel := SelHasInk and FInfo[ACol].Sel;
+    if onSel then
+    begin
+      { the selection's text colour is the cell's colour: its lines too, the default
+        underline included (upstream's DOM renderer writes it inline, and the lines
+        take currentColor) -- and not dimmed (the inline colour wins over the dim class) }
+      FInfo[ACol].Ink := SelInk;
+      FInfo[ACol].C.Fg := SelInk;
+      if FInfo[ACol].C.UnderlineIsDefault then FInfo[ACol].C.Underline := SelInk;
+    end
     else
       FInfo[ACol].Ink := FInfo[ACol].C.Fg;
     if (MinContrast <= 1) or FInfo[ACol].C.Invisible or (ALine = nil) or (ACol >= ALine.Length) then Exit;
+    { nothing drawn in this cell's colour (a blank without a line): nothing to push off }
+    if ((ALine.GetContent(ACol) and TyTermContentIsCombinedMask) = 0)
+      and ((ALine.GetCodePoint(ACol) = 0) or (ALine.GetCodePoint(ACol) = 32))
+      and (FInfo[ACol].Ul = 0) and not FInfo[ACol].Strike and not FInfo[ACol].Over then Exit;
     if ((ALine.GetContent(ACol) and TyTermContentIsCombinedMask) = 0)
       and TyTermExcludedFromContrast(ALine.GetCodePoint(ACol)) then Exit;
-    if SelHasInk and FInfo[ACol].Sel then base := SelInk else base := FInfo[ACol].C.FgRaw;
+    if onSel then base := SelInk else base := FInfo[ACol].C.FgRaw;
     ratio := MinContrast;
     cache := ContrastCache;
     if FInfo[ACol].C.Dim then
@@ -1794,8 +1820,12 @@ var
       adj := TyTermEnsureContrastRatio(FInfo[ACol].C.Bg, base, ratio, res);
       if cache <> nil then cache.Put(FInfo[ACol].C.Bg, base, res, adj);
     end;
-    if adj then base := res;
-    if FInfo[ACol].C.Dim then base := DimMix(base, FInfo[ACol].C.Bg);
+    if adj then
+      base := res
+    else if onSel then
+      base := SelInk
+    else
+      base := FInfo[ACol].C.Fg;              { dimmed already, as at a ratio of 1 }
     FInfo[ACol].Ink := base;
     FInfo[ACol].C.Fg := base;
     if FInfo[ACol].C.UnderlineIsDefault then FInfo[ACol].C.Underline := base;

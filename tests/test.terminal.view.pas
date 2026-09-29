@@ -251,6 +251,7 @@ type
     procedure TestAHugeWriteYieldsToTheMessageLoop;
     { 5 期:有窗口时连续改尺寸合并成最后那一次;要网格的入口先应用 }
     procedure TestResizesCoalesceToTheLast;
+    procedure TestWritesDuringADragReflowOnce;
     { 5 期:最低对比度属性 }
     procedure TestMinimumContrastRatioProperty;
   end;
@@ -2001,6 +2002,45 @@ begin
   Forms.Application.ProcessMessages;
   AssertEquals('back where it was: no event', 0, Length(F.Grids));
   AssertEquals('cols kept', 23, F.View.Cols);
+end;
+
+{ A drag of the window: every size step comes with output (the program answers the
+  resize by drawing), written through View.Write, Input and Paste as a host does. None of
+  them applies the waiting grid -- the core parses into the old one -- so the drag still
+  rewraps once, at the last size, when the message loop runs. }
+procedure TTyTerminalViewTests.TestWritesDuringADragReflowOnce;
+var
+  sizes: array[1..10] of TSize;
+  i, t: Integer;
+begin
+  TyTermNeedWidgetSet;
+  F.SizeTo(20, 6);
+  for i := 1 to 10 do
+    sizes[i] := F.View.SizeForGrid(20 + i, 6 + i);
+  F.Form.HandleNeeded;
+  F.View.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  F.View.WriteSync(StringOfChar('x', 70) + #13#10'$ ');
+  F.ClearRecords;
+  for i := 1 to 10 do
+  begin
+    F.View.SetBounds(0, 0, sizes[i].cx, sizes[i].cy);
+    F.View.Write(#27'[H' + 'redrawn ' + IntToStr(i));
+    F.View.Input('k');
+    F.View.Paste('p');
+    AssertEquals(Format('step %d: the core still has the old grid', [i]), 20, F.View.Core.Cols);
+  end;
+  AssertEquals('no grid event before the message loop runs', 0, Length(F.Grids));
+  t := 0;
+  while (Length(F.Grids) = 0) and (t < 20) do
+  begin
+    Forms.Application.ProcessMessages;
+    Inc(t);
+  end;
+  AssertEquals('one reflow for the whole drag', 1, Length(F.Grids));
+  AssertEquals('at the last cols', 30, F.Grids[0].X);
+  AssertEquals('and rows', 16, F.Grids[0].Y);
+  AssertEquals('the core has it now', 30, F.View.Core.Cols);
 end;
 
 procedure TTyTerminalViewTests.TestMinimumContrastRatioProperty;

@@ -35,9 +35,11 @@ unit tyControls.Terminal;
     重画风暴)。
   - 改尺寸合并(5 期):有句柄时(真窗口拖动)客户区一变,新网格先记在 FPendingGrid、排一次
     QueueAsyncCall,消息循环里才 Core.Resize——大滚回的重新折行一次上百毫秒,拖动中只按
-    最后的尺寸折一次。排着的时候照旧按 Core 的格子画(网格外是底色);要新网格的入口
-    (Cols、Rows、Core、CellAt、CellRect、SizeForGrid、Write、WriteSync、Paste、Input)先把
-    排着的应用掉。没有句柄(隐藏的控件、测试、设计器)照旧当场改。
+    最后的尺寸折一次。排着的时候照旧按 Core 的格子画(网格外是底色,行画到内区为止);
+    只有问几何的入口(Cols、Rows、CellAt、CellRect、SizeForGrid)和 WriteSync 先把排着的
+    应用掉。Write、Input、Paste 不应用:拖动时程序收到改尺寸就会输出,每次 Write 都应用
+    就成了每一步折一次。所以排着的时候 Core 仍是旧网格(Core 属性不应用),数据按旧网格
+    解析,应用时一起折。释放中不应用。没有句柄(隐藏的控件、测试、设计器)照旧当场改。
   - 能出字符的键在 KeyDown 里**不清零**:Win32 上 LCL 处理了 WM_KEYDOWN(Key 被清零)就会
     吞掉随后的 WM_CHAR,字符就丢了。KeyDown 已经发过字节的键,由本控件自己记
     FKeyDownHandled,UTF8KeyPress 见到就丢——不靠 widgetset 的行为。
@@ -101,17 +103,19 @@ type
     var AText: string; var AAllow: Boolean) of object;
 
   { 5 期:行复用。压在一行上的东西(按字段比,不用哈希):选区列段 [SelFrom, SelTo)、悬停链接
-    列段 [LinkFrom, LinkTo)、光标(列,不显示时 -1;形状)、组字串(在这一行时) }
+    列段 [LinkFrom, LinkTo)、光标(列,不显示时 -1;形状)、组字串(在这一行时)和它画在哪一列
+    (光标不显示时它照样画,横移光标的列要单独记,不然组字串留在旧位置) }
   TTyTermRowOverlay = record
     SelFrom, SelTo, LinkFrom, LinkTo, CursorCol: Integer;
     CursorShape: TTyTermCursorShape;
     Preedit: string;
+    PreeditCol: Integer;
   end;
   { 一行像素的键。Serial / Revision 来自 TTyTerminalLine(没有行:0 / 0);YPhase:这一行画了
     阴影图案;Valid:这一行的像素是按这个键画全的 }
   TTyTermRowKey = record
     Serial: Int64;
-    Revision: Cardinal;
+    Revision: QWord;
     Overlay: TTyTermRowOverlay;
     YPhase, Valid: Boolean;
   end;
@@ -155,6 +159,8 @@ type
     FDrivenColorSigValid: Boolean;
     { 帧率上限与光栅化预算 }
     FLastPaintMs: Double;
+    FLastFrameCostMs: Double;              { 上一帧 RenderTo(贴到画布的那种)花了多久 }
+    FSliceTimer: TTimer;                   { Win32:输入在排队时,下一片走它 }
     FRasterBudgetMs: Double;
     { 最低对比度(5 期):钳过的值;两份缓存(常规 / 暗淡减半),色表签名一变一起清 }
     FMinContrast: Double;
@@ -516,9 +522,12 @@ type
     function GetImeCaretRect: TRect;
     procedure InitializeWnd; override;
     procedure DestroyWnd; override;
-    { 调度的缝:默认 Application.QueueAsyncCall(设计期不排片) }
+    { 调度的缝:默认 Application.QueueAsyncCall(设计期不排片;Win32 上键盘、鼠标按键在排队时
+      走一个 1 ms 计时器,先让输入进来) }
     procedure ScheduleSlice; virtual;
-    { 排好的一片:跑到队列空、或者离上次绘制满一帧(16 ms)为止 }
+    procedure SliceTimerFired(Sender: TObject);
+    { 排好的一片:跑到队列空、或者离上次绘制满一帧为止(一帧留给解析的时间 = 16 ms 减上一帧
+      画了多久,至少 3 ms);还有没解析的就当场画这一帧再排下一片 }
     procedure AsyncSlice(Data: PtrInt);
     { 失效几行(视口行):有句柄时 InvalidateRect 那几行的并集。子类覆盖必须调 inherited。 }
     procedure InvalidateRows(AFirst, ALast: Integer); virtual;
@@ -710,6 +719,13 @@ type
 function TyStretchDIBits(ADC: HDC; AXDest, AYDest, ADestW, ADestH, AXSrc, AYSrc, ASrcW, ASrcH: LongInt;
   ABits: Pointer; const AInfo: TTyDibHeader; AUsage, ARop: LongWord): LongInt; stdcall;
   external 'gdi32' name 'StretchDIBits';
+
+const
+  TyQsKey = $0001;
+  TyQsMouseButton = $0004;
+
+{ user32 GetQueueStatus: the high word is what waits in the thread's queue now }
+function TyGetQueueStatus(AFlags: LongWord): LongWord; stdcall; external 'user32' name 'GetQueueStatus';
 {$ENDIF}
 
 const
@@ -722,6 +738,8 @@ const
   FrameMs = 16;                  { 一帧:离上次绘制不到这么久,接着跑下一片 }
   SurfaceBlock = 64;             { 表面位图按这么大的块向上取整 }
   DefaultRasterBudgetMs = 10;
+  FloodRasterBudgetMs = 4;       { 还有输出排着时一帧光栅化新字形的预算 }
+  MinSliceMs = 3;                { 一片至少给解析这么久 }
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
 
@@ -808,6 +826,7 @@ begin
   Application.RemoveAsyncCalls(Self);
   FreeAndNil(FBlinkTimer);
   FreeAndNil(FSyncTimer);
+  FreeAndNil(FSliceTimer);
   FreeAndNil(FDragTimer);
   TyImeUninstall(FImeHook);
   if FCore <> nil then
@@ -974,6 +993,8 @@ begin
   begin
     DirtyLinkRows(FHoverLink);
     FHoverValid := False;
+    { and the hand goes with it (Linkifier.ts:355-357 _linkLeave) }
+    UpdatePointer(FHoverShift);
   end;
   SetLength(FDirty, ARows);
   FAllDirty := True;
@@ -1008,26 +1029,70 @@ end;
 procedure TTyTerminalView.ScheduleSlice;
 begin
   if csDesigning in ComponentState then Exit;
+  {$IFDEF LCLWin32}
+  { QueueAsyncCall 每排一次就投一个 WM_NULL,投递的消息排在键盘、鼠标之前:一片接一片地排,
+    输入就一直进不来。有按键、鼠标按键在排队时下一片改走计时器(WM_TIMER 排在输入和绘制
+    之后) }
+  if HandleAllocated and ((TyGetQueueStatus(TyQsKey or TyQsMouseButton) shr 16) <> 0) then
+  begin
+    if FSliceTimer = nil then
+    begin
+      FSliceTimer := TTimer.Create(nil);
+      FSliceTimer.Enabled := False;
+      FSliceTimer.Interval := 1;
+      FSliceTimer.OnTimer := @SliceTimerFired;
+    end;
+    FSliceTimer.Enabled := True;
+    Exit;
+  end;
+  {$ENDIF}
   Application.QueueAsyncCall(@AsyncSlice, 0);
+end;
+
+procedure TTyTerminalView.SliceTimerFired(Sender: TObject);
+begin
+  FSliceTimer.Enabled := False;
+  if csDestroying in ComponentState then Exit;
+  AsyncSlice(0);
 end;
 
 procedure TTyTerminalView.AsyncSlice(Data: PtrInt);
 var
   more: Boolean;
+  window, elapsed: Double;
+  budget: Integer;
 begin
   MaskUnencodedExtensions;
+  { 一帧里留给解析的时间:帧长减去上一帧画了多久,至少 MinSliceMs——解析加绘制合起来
+    大约一帧 }
+  window := FrameMs - FLastFrameCostMs;
+  if window < MinSliceMs then window := MinSliceMs;
   BeginDrive;
   try
-    { 帧率上限:离上次绘制还不到一帧,消息循环这时让出去也画不了新的一帧——接着跑片;
-      满一帧了才让出(已经提交的 WM_PAINT 先处理) }
+    { 帧率上限:离上次绘制还不到这么久,接着跑片;到了才停。每一片的预算是离这一刻还剩
+      多少(至少 MinSliceMs);好久没画过(隐藏、无头)就按上游的 12 ms 一片 }
     repeat
-      more := FCore.ProcessPending;
-    until (not more) or (NowMs - FLastPaintMs >= FrameMs);
+      elapsed := NowMs - FLastPaintMs;
+      if elapsed > 4 * FrameMs then
+        budget := TyTermWriteTimeoutMs
+      else
+      begin
+        budget := Round(window - elapsed);
+        if budget < MinSliceMs then budget := MinSliceMs;
+      end;
+      more := FCore.ProcessPending(budget);
+    until (not more) or (NowMs - FLastPaintMs >= window);
   finally
     EndDrive;
   end;
   if more then
+  begin
+    { 这一帧当场画(UpdateWindow)。Windows 只在没有投递消息等着的时候才给 WM_PAINT,
+      异步队列一片投一个消息:光靠排队,整个 flood 期间窗口一次也画不上 }
+    if HandleAllocated and IsVisible and not (csDestroying in ComponentState) then
+      Update;
     ScheduleSlice;
+  end;
 end;
 
 procedure TTyTerminalView.BeginDrive;
@@ -1107,13 +1172,15 @@ procedure TTyTerminalView.ApplyPendingGrid;
 begin
   if not FGridPending then Exit;
   FGridPending := False;
+  { a host reading Cols in its OnDestroy: no resize (and no reflow) on the way out }
+  if csDestroying in ComponentState then Exit;
   if (FPendingGrid.X <> FCore.Cols) or (FPendingGrid.Y <> FCore.Rows) then
     FCore.Resize(FPendingGrid.X, FPendingGrid.Y);
 end;
 
+{ The core as it is: while a grid waits (header), its grid is still the old one. }
 function TTyTerminalView.GetCore: TTyTerminalCore;
 begin
-  ApplyPendingGrid;
   Result := FCore;
 end;
 
@@ -1995,7 +2062,7 @@ begin
     and (APrev.Overlay.SelFrom = ANew.Overlay.SelFrom) and (APrev.Overlay.SelTo = ANew.Overlay.SelTo)
     and (APrev.Overlay.LinkFrom = ANew.Overlay.LinkFrom) and (APrev.Overlay.LinkTo = ANew.Overlay.LinkTo)
     and (APrev.Overlay.CursorCol = ANew.Overlay.CursorCol) and (APrev.Overlay.CursorShape = ANew.Overlay.CursorShape)
-    and (APrev.Overlay.Preedit = ANew.Overlay.Preedit);
+    and (APrev.Overlay.Preedit = ANew.Overlay.Preedit) and (APrev.Overlay.PreeditCol = ANew.Overlay.PreeditCol);
 end;
 
 procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -2019,11 +2086,14 @@ var
   ime: TRect;
   incomplete, allNew, holding: Boolean;
   frameKey: string;
+  frameStart: Double;
+  inner: TRect;
   line: TTyTerminalLine;
   rowAction: array of Byte;             { 0 不动,1 从别的行搬,2 画 }
   moved: TIntegerDynArray;
 begin
   FInRender := True;
+  frameStart := NowMs;
   try
     EnsureThemeCurrent;
     EnsureMetrics(APPI);           { 度量变了它自己排队重排 }
@@ -2069,6 +2139,10 @@ begin
     FRowPainter.CursorInk := FCursorInkFrame;
     FRowPainter.CursorWidthPx := Max(1, MulDiv(FSpec.CursorWidthLogical, APPI, 96));
     FRowPainter.RasterBudgetMs := FRasterBudgetMs;
+    { output still waiting (a flood): rows scroll away within frames, their new glyphs are
+      mostly drawn for nothing -- a smaller budget, the frame comes back sooner }
+    if (FCore.PendingBytes > 0) and ((FRasterBudgetMs <= 0) or (FRasterBudgetMs > FloodRasterBudgetMs)) then
+      FRowPainter.RasterBudgetMs := IfThen(FRasterBudgetMs <= 0, FRasterBudgetMs, FloodRasterBudgetMs);
     FRowPainter.Clock := @NowMs;
     { 选区与链接:聚焦 / 失焦两色。选区色先带着它的 alpha 在主题底色上混成不透明(上游
       selectionBackgroundOpaque / selectionInactiveBackgroundOpaque,ThemeService.ts:87-90),
@@ -2165,9 +2239,15 @@ begin
         end;
         { 组字串画在光标所在的视口行上,不管光标此刻显不显示(闪烁、DECTCEM) }
         if FInPreedit and (FPreedit <> '') and (r = CursorViewRow) then
-          Overlay.Preedit := FPreedit
+        begin
+          Overlay.Preedit := FPreedit;
+          Overlay.PreeditCol := Min(buf.X, FCore.Cols - 1);
+        end
         else
+        begin
           Overlay.Preedit := '';
+          Overlay.PreeditCol := -1;
+        end;
         YPhase := False;
         Valid := True;
       end;
@@ -2177,6 +2257,10 @@ begin
     else
       holding := False;
     moved := nil;
+    { rows are drawn and moved inside the frame only: a grid still waiting to be applied
+      (header) can be larger than the client area for a moment }
+    inner := Rect(ins.Left, ins.Top, Max(ins.Left, w - ins.Right - ScrollBarWidth(APPI)), Max(ins.Top, h - ins.Bottom));
+    FSurface.ClipRect := inner;
     if not holding then
     begin
       SetLength(rowAction, FCore.Rows);
@@ -2233,6 +2317,10 @@ begin
       for r := 0 to FCore.Rows - 1 do
       begin
         if rowAction[r] = 1 then Inc(FRowsMoved);
+        { a row cut by the surface's bottom has pixels nobody drew: never kept, never a
+          source to move from }
+        if ins.Top + (r + 1) * FMetrics.CellH > inner.Bottom then
+          FNewKeys[r].Valid := False;
         FRowKeys[r] := FNewKeys[r];
       end;
       { 画了或搬了、却不在这次画布裁剪区里的行:补一次失效,下一次 Paint 把它贴上去 }
@@ -2250,6 +2338,7 @@ begin
     end
     else
       incomplete := False;
+    FSurface.NoClip;
     FPaintedCursorRow := cursorRow;
     SelectionViewRows(FSelDrawnFirst, FSelDrawnLast);
     if incomplete and not FRepaintQueued and not (csDesigning in ComponentState) then
@@ -2273,6 +2362,7 @@ begin
     if ACanvas <> nil then
     begin
       FLastPaintMs := NowMs;
+      FLastFrameCostMs := FLastPaintMs - frameStart;
       clip := ACanvas.ClipRect;
       if IsRectEmpty(clip) then
         clip := ARect;
@@ -2288,15 +2378,64 @@ end;
 
 procedure TTyTerminalView.MoveRows(const AFrom: TIntegerDynArray; const AInsets: TRect);
 var
-  r, y, k, w, h, sy, dy, cnt: Integer;
+  r, y, k, w, h, sy, dy, cnt, d, first, last, step: Integer;
+  uniform: Boolean;
 begin
   cnt := 0;
+  uniform := True;
+  d := 0;
+  first := -1;
+  last := -1;
   for r := 0 to High(AFrom) do
-    if AFrom[r] >= 0 then Inc(cnt);
+    if AFrom[r] >= 0 then
+    begin
+      if cnt = 0 then
+      begin
+        d := AFrom[r] - r;
+        first := r;
+      end
+      else if AFrom[r] - r <> d then
+        uniform := False;
+      last := r;
+      Inc(cnt);
+    end;
   if cnt = 0 then Exit;
-  w := Min(FCore.Cols * FMetrics.CellW, FSurface.Width - AInsets.Left);
+  { inside the frame (RenderTo's clip): a waiting grid larger than the client area }
+  w := Min(FCore.Cols * FMetrics.CellW, FSurface.ClipRect.Right - AInsets.Left);
   h := FMetrics.CellH;
   if w <= 0 then Exit;
+  if uniform then
+  begin
+    { every row moves by the same d (a scroll): each pixel row straight to its place, in
+      the order that reads every source before it is written over -- upward (d > 0, the
+      sources below) from the top, downward from the bottom. One copy, no scratch. }
+    if d > 0 then
+    begin
+      r := first;
+      step := 1;
+    end
+    else
+    begin
+      r := last;
+      step := -1;
+    end;
+    while (r >= first) and (r <= last) do
+    begin
+      if AFrom[r] >= 0 then
+        for k := 0 to h - 1 do
+        begin
+          if step > 0 then y := k else y := h - 1 - k;
+          dy := AInsets.Top + r * h + y;
+          sy := dy + d * h;
+          if (dy >= 0) and (dy < FSurface.Height) and (sy >= 0) and (sy < FSurface.Height) then
+            Move((FSurface.ScanLine[sy] + AInsets.Left)^, (FSurface.ScanLine[dy] + AInsets.Left)^,
+              w * SizeOf(TBGRAPixel));
+        end;
+      Inc(r, step);
+    end;
+    FSurface.InvalidateBitmap;
+    Exit;
+  end;
   if Length(FMoveScratch) < cnt * h * w then
     SetLength(FMoveScratch, cnt * h * w);
   { 源行先全部拷进草稿:一行的目标可能是另一行的源(地雷 11:自下而上存的位图也按
@@ -2634,7 +2773,6 @@ end;
 { Write 通常只入队;用户刚键入过时 Core 当场解析(回显延迟),所以也算一次解析 }
 procedure TTyTerminalView.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
-  ApplyPendingGrid;
   MaskUnencodedExtensions;
   BeginDrive;
   try
@@ -2646,7 +2784,6 @@ end;
 
 procedure TTyTerminalView.Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
-  ApplyPendingGrid;
   MaskUnencodedExtensions;
   BeginDrive;
   try
@@ -2671,7 +2808,6 @@ end;
 procedure TTyTerminalView.Paste(const AText: string);
 begin
   if AText = '' then Exit;
-  ApplyPendingGrid;
   FCore.Input(TyTerminalPrepareTextForPaste(AText, FCore.Modes.BracketedPaste), True);
   NoteActivity;
 end;
@@ -2679,7 +2815,6 @@ end;
 procedure TTyTerminalView.Input(const AText: string);
 begin
   if AText = '' then Exit;
-  ApplyPendingGrid;
   FCore.Input(AText, True);
   NoteActivity;
 end;
@@ -3199,7 +3334,11 @@ begin
   if FImeCaretValid then
     Result := FImeCaretRect
   else
+  begin
+    { the waiting grid first: the cell is counted in it }
+    ApplyPendingGrid;
     Result := CellRect(Min(FCore.Buffer.X, FCore.Cols - 1), FCore.Buffer.Y);
+  end;
 end;
 
 function TTyTerminalView.ImeCaretIndex: Integer;

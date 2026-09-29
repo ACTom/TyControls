@@ -46,6 +46,7 @@ begin
   if PopupMenu <> nil then Exit;
   if keyboard then
   begin
+    ApplyPendingGrid;                      { the cell counted in the grid it is shown in }
     buf := FCore.Buffer;
     cur := CellRect(Min(buf.X, FCore.Cols - 1), EnsureRange(CursorViewRow, 0, FCore.Rows - 1));
     MousePos := Point(cur.Left, cur.Bottom);

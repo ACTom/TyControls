@@ -55,6 +55,7 @@ type
     procedure TestBrailleDotsFollowTheBits;
     procedure TestPowerlineTrianglesFillTheirShare;
     procedure TestPowerlineShapesStayInTheCell;
+    procedure TestTheFontSizeIsInTheDrawnGlyphKey;
   end;
 
 function TyTermTestMetrics(ACellW, ACellH: Integer; ACharW: Integer = -1): TTyTermCellMetrics;
@@ -518,38 +519,93 @@ begin
     Result := Result + (M.ScanLine[y] + X)^ / 255;
 end;
 
+{ The solid triangles fill the share upstream's shape gives them -- the cell's height by
+  its width less the padding kept on the tip's side (two half line widths:
+  devicePixelRatio x fontSize / 12, fontSize in CSS pixels), halved -- at 96 and 144 PPI
+  and at a small and a large font: a line width without the 96 / 72, or without the
+  PPI, puts the tip elsewhere by more than the 2 % allowed. }
 procedure TTyTerminalRenderTests.TestPowerlineTrianglesFillTheirShare;
 const
-  W = 10;
-  H = 20;
-  Pt = 12;
+  Cases: array[0..3, 0..3] of Integer = ((96, 12, 10, 20), (144, 12, 15, 30), (96, 36, 30, 60), (144, 36, 45, 90));
 var
   r, l: TTyTermGlyph;
-  x: Integer;
+  x, k, W, H, PPI, Pt: Integer;
   ink, pad, want: Double;
 begin
-  r := TyTermRasterizeCustomGlyph($E0B0, W, H, 0, 0, 96, Pt);   { right triangle, solid }
-  l := TyTermRasterizeCustomGlyph($E0B2, W, H, 0, 0, 96, Pt);   { left triangle, solid }
+  for k := 0 to High(Cases) do
+  begin
+    PPI := Cases[k, 0];
+    Pt := Cases[k, 1];
+    W := Cases[k, 2];
+    H := Cases[k, 3];
+    r := TyTermRasterizeCustomGlyph($E0B0, W, H, 0, 0, PPI, Pt);   { right triangle, solid }
+    l := TyTermRasterizeCustomGlyph($E0B2, W, H, 0, 0, PPI, Pt);   { left triangle, solid }
+    try
+      AssertNotNull('E0B0 has ink', r.Mask);
+      AssertNotNull('E0B2 has ink', l.Mask);
+      pad := 2 * (Pt * 96 / 72 / 12 / 2) * (PPI / 96);
+      want := (W - pad) * H / 2;
+      ink := 0;
+      for x := 0 to W - 1 do
+        ink := ink + ColumnInk(r.Mask, x);
+      AssertTrue(Format('%d PPI, %d pt, %dx%d: E0B0 covers %.1f px, the triangle %.1f', [PPI, Pt, W, H, ink, want]),
+        Abs(ink - want) <= 0.02 * W * H);
+      for x := 0 to W - 1 do
+        AssertTrue(Format('%d PPI, %d pt: column %d mirrors column %d (%.2f, %.2f)', [PPI, Pt, x, W - 1 - x,
+          ColumnInk(r.Mask, x), ColumnInk(l.Mask, W - 1 - x)]),
+          Abs(ColumnInk(r.Mask, x) - ColumnInk(l.Mask, W - 1 - x)) <= 0.02 * H);
+      AssertTrue('the solid side is full', ColumnInk(r.Mask, 0) >= 0.9 * H);
+    finally
+      r.Free;
+      l.Free;
+    end;
+  end;
+end;
+
+function RowOf(const AData: RawByteString; ACols: Integer; out ACore: TTyTerminalCore): TTyTerminalLine; forward;
+
+{ A drawn glyph's line width follows the font size, so the size is in its cache key: the
+  same powerline arrow in the same cell at 12 and at 24 pt is two masks, not one reused. }
+procedure TTyTerminalRenderTests.TestTheFontSizeIsInTheDrawnGlyphKey;
+var
+  p: TTyTermRowPainter;
+  cache: TTyTermGlyphCache;
+  core: TTyTerminalCore;
+  line: TTyTerminalLine;
+  a: TBGRABitmap;
+  m: TTyTermCellMetrics;
+  s: TTyTermFontSpec;
+begin
+  AssertTrue('the key tells the sizes apart',
+    TyTermCustomGlyphKey($E0B4, 1, 0, 0, 10, 20, 96, 12) <> TyTermCustomGlyphKey($E0B4, 1, 0, 0, 10, 20, 96, 24));
+  cache := TTyTermGlyphCache.Create;
+  p := TTyTermRowPainter.Create;
+  line := RowOf(#$EE#$82#$B4, 2, core);          { U+E0B4, a half circle: its outline has a line width }
+  a := TBGRABitmap.Create(2 * 10, 20, TyTermSentinel);
   try
-    AssertNotNull('E0B0 has ink', r.Mask);
-    AssertNotNull('E0B2 has ink', l.Mask);
-    { the triangle's area: the cell's height by its width less the padding upstream keeps
-      on the tip's side (two half line widths: devicePixelRatio x fontSize / 12, fontSize
-      in CSS pixels), halved }
-    pad := 2 * (Pt * 96 / 72 / 12 / 2);
-    want := (W - pad) * H / 2;
-    ink := 0;
-    for x := 0 to W - 1 do
-      ink := ink + ColumnInk(r.Mask, x);
-    AssertTrue(Format('E0B0 covers %.1f px, the triangle %.1f', [ink, want]), Abs(ink - want) <= 0.05 * W * H);
-    AssertTrue('a filled half, near enough', (ink >= 0.4 * W * H) and (ink <= 0.55 * W * H));
-    for x := 0 to W - 1 do
-      AssertTrue(Format('column %d mirrors column %d (%.2f, %.2f)', [x, W - 1 - x, ColumnInk(r.Mask, x),
-        ColumnInk(l.Mask, W - 1 - x)]), Abs(ColumnInk(r.Mask, x) - ColumnInk(l.Mask, W - 1 - x)) <= 0.02 * H);
-    AssertTrue('the solid side is full', ColumnInk(r.Mask, 0) >= 0.9 * H);
+    m := TyTermTestMetrics(10, 20);
+    s := Default(TTyTermFontSpec);
+    s.PPI := 96;
+    s.SizeLogical := 12;
+    p.Metrics := m;
+    p.Spec := s;
+    p.Resolver := @Resolve;
+    p.GlyphCache := cache;
+    AssertTrue('complete', p.PaintRow(a, 0, 0, line, 2, -1, tcpNone));
+    AssertEquals('one mask', 1, cache.Count);
+    s.SizeLogical := 24;
+    p.Spec := s;
+    AssertTrue('complete', p.PaintRow(a, 0, 0, line, 2, -1, tcpNone));
+    AssertEquals('another mask at 24 pt', 2, cache.Count);
+    s.SizeLogical := 12;
+    p.Spec := s;
+    AssertTrue('complete', p.PaintRow(a, 0, 0, line, 2, -1, tcpNone));
+    AssertEquals('the 12 pt one found again', 2, cache.Count);
   finally
-    r.Free;
-    l.Free;
+    a.Free;
+    core.Free;
+    p.Free;
+    cache.Free;
   end;
 end;
 
@@ -1110,10 +1166,21 @@ const
 var
   a, b: TBGRABitmap;
   m: TTyTermCellMetrics;
-  mi, pi_, gi, x, y, d, maxDiff, diffPx, total, glyphs: Integer;
+  mi, pi_, gi, x, y, d, maxDiff, diffPx, total, glyphs, ci: Integer;
   cp: Cardinal;
+  cps: array of Cardinal;
   pa, pb: TBGRAPixel;
 begin
+  { box drawing and blocks, braille (dots), powerline (vector shapes: arcs, curves, the
+    non-zero fill) }
+  cps := nil;
+  for cp := $2500 to $259F do
+    if TyTermIsCustomGlyph(cp) then begin SetLength(cps, Length(cps) + 1); cps[High(cps)] := cp; end;
+  for cp := $2800 to $28FF do
+    if TyTermIsCustomGlyph(cp) then begin SetLength(cps, Length(cps) + 1); cps[High(cps)] := cp; end;
+  for cp := $E0A0 to $E0D4 do
+    if TyTermIsCustomGlyph(cp) then begin SetLength(cps, Length(cps) + 1); cps[High(cps)] := cp; end;
+  AssertEquals('box and block, braille, powerline', 160 + 256 + 38, Length(cps));
   maxDiff := 0;
   diffPx := 0;
   total := 0;
@@ -1123,9 +1190,9 @@ begin
       for gi := 0 to 1 do
       begin
         if mi = 0 then m := TyTermTestMetrics(9, 18) else m := TyTermTestMetrics(10, 23);
-        for cp := $2500 to $259F do
+        for ci := 0 to High(cps) do
         begin
-          if not TyTermIsCustomGlyph(cp) then Continue;
+          cp := cps[ci];
           { two cells side by side at an odd x, so the shade patterns are phased }
           a := TBGRABitmap.Create(3 * m.CellW, m.CellH, TyTermRgbToPixel(Grounds[gi]));
           b := TBGRABitmap.Create(3 * m.CellW, m.CellH, TyTermRgbToPixel(Grounds[gi]));
@@ -1153,7 +1220,7 @@ begin
       end;
   WriteLn(Format('TTyTerminalRenderTests.TestDrawnGlyphMasksMatchDrawingThem: %d glyph drawings, %d of %d pixels differ, by at most %d',
     [glyphs, diffPx, total, maxDiff]));
-  AssertTrue('glyphs compared', glyphs > 4 * 150);
+  AssertEquals('glyphs compared', 8 * Length(cps), glyphs);
   { the one difference that can remain: a pixel two parts of a glyph both half-cover
     (a heavy stroke over a light one) is blended once through the mask, twice direct --
     the same sum, rounded once instead of twice }

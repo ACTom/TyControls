@@ -80,6 +80,7 @@ type
     procedure TestAReflowRepaintsEveryRow;
     { 5 期:行复用 }
     procedure TestIncrementalEqualsFullRepaint;
+    procedure TestMarkedTextFollowsAHiddenCursor;
     procedure TestScrollingPaintsOnlyWhatChanged;
     procedure TestAFrameChangeRepaintsEveryRow;
     procedure TestSyncOutputStillHoldsRows;
@@ -1566,12 +1567,15 @@ begin
     Inc(lh);
   until lh > 150;
   AssertTrue('an odd cell height', Odd(F.View.CellMetrics.CellH));
+  { a short ring: the ring fills within the run and hands the top line back as the new
+    bottom one (the same object, new contents), and a long REP fast-forwards past it }
+  F.View.Scrollback := 20;
   rows := F.View.Rows;
   cols := F.View.Cols;
   seed := ASeed;
-  for step := 1 to 200 do
+  for step := 1 to 260 do
   begin
-    op := Rnd(14);
+    op := Rnd(22);
     case op of
       0: F.View.WriteSync(Text(1 + Rnd(40)) + IfThen(Rnd(2) = 0, #13#10, ''));
       1: F.View.WriteSync(StringOfChar(' ', Rnd(4)) + Utf8Of($2591) + Utf8Of($2592) + Utf8Of($2593)
@@ -1589,8 +1593,34 @@ begin
           else F.View.MoveTo([], F.View.CellCenter(Rnd(cols), Rnd(rows)));
       11: if Rnd(2) = 0 then F.View.Enter else F.View.Leave;
       12: F.View.Tick(FClockMs);
+      13: if Rnd(2) = 0 then F.View.WriteSync(#27'[?2026h') else F.View.WriteSync(#27'[?2026l');
+      { a new column count (the reflow), back and forth around 30 }
+      14: begin
+            F.SizeTo(26 + Rnd(9), 8);
+            cols := F.View.Cols;
+          end;
+      15: if Rnd(2) = 0 then F.View.MinimumContrastRatio := 1 else F.View.MinimumContrastRatio := 4.5;
+      { OSC 4 recolours a palette entry, OSC 104 puts them back }
+      16: if Rnd(2) = 0 then F.View.WriteSync(#27']4;' + IntToStr(1 + Rnd(6)) + ';rgb:' + IntToHex(Rnd(256), 2) + '/'
+            + IntToHex(Rnd(256), 2) + '/' + IntToHex(Rnd(256), 2) + #7)
+          else F.View.WriteSync(#27']104'#7);
+      17: F.View.WriteSync(#27'[' + IntToStr(Rnd(7)) + ' q');
+      { past the whole ring: the core fast-forwards the scrolls }
+      18: F.View.WriteSync('z'#27'[' + IntToStr(2000 + Rnd(3000)) + 'b');
+      { marked text (the macOS path, drawn by the view), with the cursor shown or not and
+        moved along the row under it }
+      19: case Rnd(3) of
+            0: begin
+                 F.View.ImeBegin;
+                 F.View.ImeReplaceText(0, 0, 'zh' + Utf8Of($4E2D));
+               end;
+            1: F.View.ImeEnd;
+          else
+            F.View.ImeReplaceText(0, 1, 'x');
+          end;
+      20: if Rnd(2) = 0 then F.View.WriteSync(#27'[?25l') else F.View.WriteSync(#27'[?25h');
     else
-      if Rnd(2) = 0 then F.View.WriteSync(#27'[?2026h') else F.View.WriteSync(#27'[?2026l');
+      F.View.WriteSync(#27'[' + IntToStr(1 + Rnd(cols)) + 'G');
     end;
     { incremental, until every row is painted whole }
     a := nil;
@@ -1641,6 +1671,40 @@ procedure TTyTerminalViewPaintTests.TestIncrementalEqualsFullRepaint;
 begin
   RunIncremental(96, 20260929);
   RunIncremental(144, 7);
+end;
+
+{ Marked text is drawn at the cursor's column whether the cursor shows or not (a blink's
+  off phase, DECTCEM): with the cursor hidden, moving it along the row changes neither
+  the line nor the cursor's part of the row key -- the marked text's column must, or the
+  text stays where it was drawn. }
+procedure TTyTerminalViewPaintTests.TestMarkedTextFollowsAHiddenCursor;
+var
+  a, b: TBGRABitmap;
+  x, y, bad: Integer;
+begin
+  F.View.WriteSync('abc def'#27'[?25l'#27'[3G');
+  F.View.ImeBegin;
+  F.View.ImeReplaceText(0, 0, 'zh');
+  a := F.Render;
+  a.Free;
+  F.View.WriteSync(#27'[9G');
+  a := F.Render;
+  try
+    F.View.Forget;
+    b := F.Render;
+    try
+      bad := 0;
+      for y := 0 to a.Height - 1 do
+        for x := 0 to a.Width - 1 do
+          if Rgb(a.GetPixel(x, y)) <> Rgb(b.GetPixel(x, y)) then Inc(bad);
+      AssertEquals('pixels the incremental frame got wrong', 0, bad);
+    finally
+      b.Free;
+    end;
+  finally
+    a.Free;
+  end;
+  F.View.ImeEnd;
 end;
 
 procedure TTyTerminalViewPaintTests.TestScrollingPaintsOnlyWhatChanged;
@@ -1819,20 +1883,31 @@ begin
   end;
 end;
 
+{ Faint text asks half the ratio, and a colour adjusted for it is drawn as it comes --
+  not dimmed again (upstream's WebGL atlas returns it before the dim, TextureAtlas.ts:
+  352-356; the DOM renderer writes it inline over the dim class). $AAAAAA on $BBBBBB at
+  4.5: #6E6E6E-like, not a dim mix of it (which would fall under even 2.25). Faint text
+  that holds half the ratio already is dimmed as at 1. }
 procedure TTyTerminalViewPaintTests.TestDimHalvesTheRatio;
 var
   b: TBGRABitmap;
   want: Cardinal;
 begin
-  F.View.WriteSync(#27'[2m' + LowText);
+  F.View.WriteSync(#27'[2m' + LowText + #13#10#27'[2;4;38;2;0;0;0;48;2;255;255;255m' + 'ok  ' + #27'[0m');
   F.View.MinimumContrastRatio := 4.5;
-  { half the ratio against the painted ground, then dimmed over it }
-  want := HalfWay(Ensured(LowBg, LowFg, 2.25), LowBg);
-  AssertTrue('not what the full ratio would give', want <> HalfWay(Ensured(LowBg, LowFg, 4.5), LowBg));
-  AssertTrue('not what dimming first would give', want <> Ensured(LowBg, HalfWay(LowFg, LowBg), 2.25));
+  { half the ratio against the painted ground, and nothing after }
+  want := Ensured(LowBg, LowFg, 2.25);
+  AssertTrue('the pair is adjusted at half the ratio', want <> LowFg);
+  AssertTrue('not what the full ratio would give', want <> Ensured(LowBg, LowFg, 4.5));
+  AssertTrue('not dimmed after', want <> HalfWay(want, LowBg));
+  AssertTrue('the adjusted colour holds the half ratio',
+    TyTermContrastRatio(TyTermRelativeLuminance(LowBg), TyTermRelativeLuminance(want)) >= 2.25);
   b := Snap;
   try
     AssertEquals('faint text', IntToHex(want, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+    { black on white holds 2.25: not adjusted, dimmed as at a ratio of 1 }
+    AssertEquals('faint text that holds the ratio: dimmed',
+      IntToHex(HalfWay($000000, $FFFFFF), 6), IntToHex(UnderlineAt(b, F.View, 3, 1), 6));
   finally
     b.Free;
   end;
@@ -1862,7 +1937,7 @@ end;
 procedure TTyTerminalViewPaintTests.TestSelectionIsTheGroundForContrast;
 var
   b: TBGRABitmap;
-  sel: Cardinal;
+  sel, ink: Cardinal;
 begin
   F.View.WriteSync(LowText);
   F.View.MinimumContrastRatio := 4.5;
@@ -1885,6 +1960,29 @@ begin
   try
     AssertEquals('the selection''s text colour, adjusted', IntToHex(Ensured(sel, $FF0000, 4.5), 6),
       IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+  { faint text under a theme's selection colour that holds the ratio: that colour as it
+    is, at 1 and above alike (the selection's colour is not dimmed at 1, spec 15) }
+  if TyTermContrastRatio(TyTermRelativeLuminance(sel), TyTermRelativeLuminance($000000))
+    > TyTermContrastRatio(TyTermRelativeLuminance(sel), TyTermRelativeLuminance($FFFFFF)) then
+    ink := $000000
+  else
+    ink := $FFFFFF;
+  F.Ctl.StyleOverride := TyTermFixtureCss + 'TyTerminalSelection:focus { color: #' + IntToHex(ink, 6) + '; }'#10;
+  F.View.WriteSync(#27'[H'#27'[2;4;38;2;170;170;170;48;2;187;187;187m' + 'Ab    ' + #27'[0m');
+  F.View.MinimumContrastRatio := 1;
+  b := Snap;
+  try
+    AssertEquals('faint, selected, at 1', IntToHex(ink, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
+  finally
+    b.Free;
+  end;
+  F.View.MinimumContrastRatio := 4.5;
+  b := Snap;
+  try
+    AssertEquals('faint, selected, at 4.5: the same', IntToHex(ink, 6), IntToHex(UnderlineAt(b, F.View, 3, 0), 6));
   finally
     b.Free;
   end;
