@@ -15,9 +15,16 @@ unit ushell;
   before 21376 it keeps xterm.js's old-ConPTY wrapping rules. When the program exits,
   everything it wrote is shown first, then one dim line saying so.
 
+  When the program exits, the terminal goes back to read-only and keys go nowhere.
+
   The platform backend is passed in (the example makes TConPtyBackend or
   TUnixPtyBackend; the tests a fake), so this unit has no platform code of its own. A
-  TTerminalShell runs one program: start another with a new one. }
+  TTerminalShell runs one program: start another with a new one.
+
+  Stop (and Free) returns at once: it unhooks the terminal, drops what the terminal has
+  not parsed yet, closes the session -- after which no wake comes -- and removes the
+  pumps already queued. Taking the program down happens on the session's own finisher
+  thread (uptysession); a program that exits waits for those with PtyWaitForFinishers. }
 
 {$mode objfpc}{$H+}
 
@@ -36,7 +43,7 @@ type
     FTerm: TTyTerminalView;
     FSession: TPtySession;
     FRunning, FStarted, FHooked: Boolean;
-    FExitCode: Integer;
+    FExitCode, FPendingExitCode: Int64;
     FOnData, FOnOutput: TTyTerminalDataEvent;
     FOnExit: TNotifyEvent;
     FSavedData: TTyTerminalDataEvent;
@@ -56,7 +63,8 @@ type
     function Start(const ACommand: string; out AError: string): Boolean;
     procedure Stop;
     property Running: Boolean read FRunning;
-    property ExitCode: Integer read FExitCode;
+    { -1 = not known; a Windows code is a DWORD (Int64: 4294967295 is not -1) }
+    property ExitCode: Int64 read FExitCode;
     { the key panel still wants to see each key's bytes }
     property OnData: TTyTerminalDataEvent read FOnData write FOnData;
     { every batch of the PTY's raw output (the example's "log PTY output") }
@@ -65,6 +73,9 @@ type
     property OnExit: TNotifyEvent read FOnExit write FOnExit;
     { FOR THE TESTS }
     property Session: TPtySession read FSession;
+    { how many pumps ran, in all shells (a class variable: counts a pump that would run
+      on a freed shell too) }
+    class var PumpsRun: Integer;
   end;
 
 implementation
@@ -82,8 +93,8 @@ begin
   try
     Stop;
   except
-    { the session could not stop its threads (it says so on Stop); a destructor does
-      not raise }
+    { closing could not even start its finisher (no thread to be had); a destructor
+      does not raise }
   end;
   Application.RemoveAsyncCalls(Self);
   FreeAndNil(FSession);
@@ -138,17 +149,26 @@ end;
 
 procedure TTerminalShell.Stop;
 begin
-  if FSession <> nil then
-    FSession.Close;
-  Application.RemoveAsyncCalls(Self);
-  if FStarted then
-  begin
-    Unhook;
-    { what the program wrote and the terminal has not parsed yet is dropped (with the
-      callbacks that would have reached a closed session) }
-    FTerm.Core.DiscardPending;
-  end;
   FRunning := False;
+  try
+    if FStarted then
+    begin
+      { first: no key, no resize reaches the session from here on }
+      Unhook;
+      { what the program wrote and the terminal has not parsed yet is dropped (with the
+        callbacks that would have reached a closed session) }
+      FTerm.Core.DiscardPending;
+    end;
+  finally
+    try
+      { returns at once; no wake after it }
+      if FSession <> nil then
+        FSession.Close;
+    finally
+      { the pumps queued before the Close }
+      Application.RemoveAsyncCalls(Self);
+    end;
+  end;
 end;
 
 { the reader thread: one wake per batch; the pump runs on the main thread }
@@ -161,8 +181,9 @@ procedure TTerminalShell.AsyncPump(Data: PtrInt);
 var
   bytes: RawByteString;
   exited: Boolean;
-  code: Integer;
+  code: Int64;
 begin
+  Inc(PumpsRun);
   if (FSession = nil) or not FRunning then Exit;
   if not FSession.Pump(bytes, exited, code) then Exit;
   if bytes <> '' then
@@ -170,13 +191,20 @@ begin
     if Assigned(FOnOutput) then FOnOutput(Self, bytes);
     FTerm.Write(bytes, @WriteDone, Length(bytes));
   end;
-  { an empty write with a callback runs after everything queued before it (spec 3.1) }
+  { an empty write with a callback runs after everything queued before it (spec 3.1);
+    the code does not ride in the tag (a PtrInt is 32 bits on 32-bit Windows) }
   if exited then
-    FTerm.Write('', @ExitDone, code);
+  begin
+    FPendingExitCode := code;
+    FTerm.Write('', @ExitDone, 0);
+  end;
 end;
 
 procedure TTerminalShell.TermData(Sender: TObject; const AData: RawByteString);
 begin
+  { the program is gone: keys go nowhere (the terminal is read-only by now; a host
+    that turns that off again still sends nothing) }
+  if not FRunning then Exit;
   FSession.Write(AData);
   if Assigned(FOnData) then FOnData(Self, AData);
 end;
@@ -196,7 +224,8 @@ end;
 procedure TTerminalShell.ExitDone(Sender: TObject; ATag: PtrInt);
 begin
   FRunning := False;
-  FExitCode := ATag;
+  FExitCode := FPendingExitCode;
+  FTerm.ReadOnly := True;
   FTerm.WriteSync(#13#10#27'[2m' + Format(rsShellExited, [FExitCode]) + #27'[0m'#13#10);
   if Assigned(FOnExit) then FOnExit(Self);
 end;

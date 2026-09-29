@@ -8,16 +8,22 @@ unit uptywin;
   are declared here. The ConPTY and attribute-list calls are looked up by name, so on an
   older Windows the example says what is missing instead of failing to start.
 
-  - TPipeBackend reads and writes a pair of existing handles. Interrupt sets a flag
-    (checked before every ReadFile) and cancels the reader's blocking ReadFile with
-    CancelSynchronousIo; a cancel that lands between two reads is lost, which is why the
-    session repeats Interrupt while it waits for its threads.
+  - TPipeBackend reads and writes a pair of existing handles. Interrupt sets two flags
+    (checked before every ReadFile / WriteFile) and cancels the threads' blocking calls
+    with CancelSynchronousIo; a cancel that lands between two calls is lost, which is
+    why the session's finisher repeats Interrupt while it waits for its threads. A cancel
+    that is not ours (no flag set) is retried, not read as the end.
   - TConPtyBackend makes the pipes and the pseudo console and starts the program on it.
-    A thread of its own waits for the program to exit and then closes the pseudo
-    console: ConPTY keeps the output pipe open after its client is gone until then, and
-    before Windows 11 24H2 ClosePseudoConsole blocks until the output is drained -- so it
-    is called on that thread (or, when the user closes, while the session's reader is
-    still draining), never on the main thread alone.
+    ClosePseudoConsole is called on one thread only, the backend's exit waiter: it waits
+    for the program to exit OR for the close event, then closes the pseudo console.
+    ConPTY keeps the output pipe open after its program is gone until then, and before
+    Windows 11 24H2 ClosePseudoConsole blocks until the output is drained and the
+    program has gone -- a program in its close handler may take five seconds, and it
+    was measured blocking the main thread on build 19044. So closing (BeginClose, main
+    thread) only sets the event and cancels a blocked write; the session's finisher
+    waits for the waiter (FinishClose), ends the program by its handle when it does not
+    go in time -- which also lets ClosePseudoConsole return -- and the session's reader
+    drains the output all along.
   - TyWindowsBuildNumber reads RtlGetVersion: GetVersionEx lies to a program without a
     compatibility manifest. The build goes to the core (Core.WindowsPty), which keeps
     xterm.js's old-ConPTY wrapping rules before build 21376. }
@@ -42,9 +48,10 @@ type
   protected
     FIn, FOut: THandle;
     FOwnsHandles: Boolean;
-    FStop: LongInt;
-    FReaderHandle: THandle;
+    FStopRead, FStopWrite: LongInt;
+    FReaderHandle, FWriterHandle: THandle;
     procedure CloseHandles;
+    procedure StopWrites;
   public
     constructor Create(AIn, AOut: THandle; AOwnsHandles: Boolean = False);
     destructor Destroy; override;
@@ -53,9 +60,9 @@ type
     function Write(const ABuf; ACount: Integer): Boolean; override;
     procedure Resize(ACols, ARows: Integer); override;
     procedure Interrupt; override;
-    function ExitCode(AWaitMs: Integer): Integer; override;
+    function ExitCode(AWaitMs: Integer): Int64; override;
     procedure Shutdown; override;
-    procedure BindReader(AThread: TThread); override;
+    procedure BindThreads(AReader, AWriter: TThread); override;
   end;
 
   TConPtyBackend = class;
@@ -75,9 +82,13 @@ type
     FLock: TCriticalSection;
     FProcess: THandle;
     FProcessId: DWORD;
+    FCloseEvent: THandle;
     FWaiter: TConPtyExitWaiter;
+    FWaiterStuck: Boolean;
+    FKilled: Boolean;
     FLastResizeResult: HRESULT;
     procedure ClosePc;
+    function WaiterGone(AWaitMs: DWORD): Boolean;
   public
     { FOR THE TESTS: answers "no ConPTY here" when set to a function that says so }
     class var ConPtyLoader: TConPtyLoaderFunc;
@@ -85,13 +96,15 @@ type
     destructor Destroy; override;
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; override;
     procedure Resize(ACols, ARows: Integer); override;
-    procedure Interrupt; override;
-    function ExitCode(AWaitMs: Integer): Integer; override;
+    procedure BeginClose; override;
+    function FinishClose(AWaitMs: Integer): TPtyCloseResult; override;
+    function ExitCode(AWaitMs: Integer): Int64; override;
     procedure Shutdown; override;
     function IsConPty(out ABuild: Integer): Boolean; override;
     { FOR THE TESTS }
     property LastResizeResult: HRESULT read FLastResizeResult;
     property ProcessId: DWORD read FProcessId;
+    property Killed: Boolean read FKilled;
   end;
 
 { dwBuildNumber from RtlGetVersion; 0 when it cannot be had }
@@ -224,11 +237,18 @@ function TPipeBackend.Read(var ABuf; ACount: Integer): Integer;
 var
   got: DWORD;
 begin
-  if InterLockedExchangeAdd(FStop, 0) <> 0 then Exit(0);
-  got := 0;
-  { a broken pipe (the other end closed), a cancelled read, any failure: the end }
-  if not ReadFile(FOut, ABuf, ACount, got, nil) then Exit(0);
-  Result := got;
+  while True do
+  begin
+    if InterLockedExchangeAdd(FStopRead, 0) <> 0 then Exit(0);
+    got := 0;
+    if ReadFile(FOut, ABuf, ACount, got, nil) then
+      Exit(got);
+    { a cancel that is not ours (the write side's, say): read on. A broken pipe (the
+      other end closed), our cancel, any other failure: the end }
+    if (GetLastError = ERROR_OPERATION_ABORTED) and (InterLockedExchangeAdd(FStopRead, 0) = 0) then
+      Continue;
+    Exit(0);
+  end;
 end;
 
 function TPipeBackend.Write(const ABuf; ACount: Integer): Boolean;
@@ -241,9 +261,14 @@ begin
   left := ACount;
   while left > 0 do
   begin
-    if InterLockedExchangeAdd(FStop, 0) <> 0 then Exit(False);
+    if InterLockedExchangeAdd(FStopWrite, 0) <> 0 then Exit(False);
     done := 0;
-    if not WriteFile(FIn, p^, left, done, nil) then Exit(False);
+    if not WriteFile(FIn, p^, left, done, nil) then
+    begin
+      if (GetLastError = ERROR_OPERATION_ABORTED) and (InterLockedExchangeAdd(FStopWrite, 0) = 0) then
+        Continue;
+      Exit(False);
+    end;
     Inc(p, done);
     Dec(left, done);
   end;
@@ -254,14 +279,23 @@ procedure TPipeBackend.Resize(ACols, ARows: Integer);
 begin
 end;
 
-procedure TPipeBackend.Interrupt;
+{ a writer blocked in WriteFile (the program reads no input, the pipe is full) returns }
+procedure TPipeBackend.StopWrites;
 begin
-  InterLockedExchange(FStop, 1);
-  if FReaderHandle <> 0 then
-    CancelSynchronousIo(FReaderHandle);
+  InterLockedExchange(FStopWrite, 1);
+  if FWriterHandle <> 0 then
+    CancelSynchronousIo(FWriterHandle);
 end;
 
-function TPipeBackend.ExitCode(AWaitMs: Integer): Integer;
+procedure TPipeBackend.Interrupt;
+begin
+  InterLockedExchange(FStopRead, 1);
+  if FReaderHandle <> 0 then
+    CancelSynchronousIo(FReaderHandle);
+  StopWrites;
+end;
+
+function TPipeBackend.ExitCode(AWaitMs: Integer): Int64;
 begin
   Result := -1;
 end;
@@ -271,9 +305,10 @@ begin
   CloseHandles;
 end;
 
-procedure TPipeBackend.BindReader(AThread: TThread);
+procedure TPipeBackend.BindThreads(AReader, AWriter: TThread);
 begin
-  FReaderHandle := AThread.Handle;
+  FReaderHandle := AReader.Handle;
+  FWriterHandle := AWriter.Handle;
 end;
 
 { ---- TConPtyExitWaiter -------------------------------------------------------------- }
@@ -286,10 +321,16 @@ begin
 end;
 
 procedure TConPtyExitWaiter.Execute;
+var
+  hs: array[0..1] of THandle;
 begin
-  WaitForSingleObject(FOwner.FProcess, INFINITE);
-  { the output pipe breaks once the pseudo console goes; this may block until the
-    reader has drained it (before 24H2) -- which is why it is here }
+  { the program exits, or the user closes: either way the pseudo console goes, and with
+    it the output pipe (the reader then reads the end). This may block until the reader
+    has drained the output and the program has gone (before 24H2) -- which is why it is
+    here, on no thread anything waits for unbounded }
+  hs[0] := FOwner.FProcess;
+  hs[1] := FOwner.FCloseEvent;
+  WaitForMultipleObjects(2, PWOHandleArray(@hs[0]), False, INFINITE);
   FOwner.ClosePc;
 end;
 
@@ -304,6 +345,8 @@ end;
 destructor TConPtyBackend.Destroy;
 begin
   Shutdown;
+  { a waiter stuck in ClosePseudoConsole keeps FLock: the session leaks the backend
+    instead of freeing it, so this is not reached then }
   FreeAndNil(FLock);
   inherited Destroy;
 end;
@@ -411,6 +454,7 @@ begin
   CloseHandle(pi.hThread);
   FProcess := pi.hProcess;
   FProcessId := pi.dwProcessId;
+  FCloseEvent := CreateEvent(nil, True, False, nil);
   FWaiter := TConPtyExitWaiter.Create(Self);
   Result := True;
 end;
@@ -426,15 +470,52 @@ begin
   end;
 end;
 
-procedure TConPtyBackend.Interrupt;
+{ the main thread: the waiter closes the pseudo console (the program gets
+  CTRL_CLOSE_EVENT); a blocked write returns. The reader goes on draining. }
+procedure TConPtyBackend.BeginClose;
 begin
-  { the user closes: the program's console goes (it gets CTRL_CLOSE_EVENT) and with it
-    the output pipe; the session's reader, discarding by now, drains it meanwhile }
-  ClosePc;
-  inherited Interrupt;
+  if FCloseEvent <> 0 then
+    SetEvent(FCloseEvent);
+  StopWrites;
 end;
 
-function TConPtyBackend.ExitCode(AWaitMs: Integer): Integer;
+function TConPtyBackend.WaiterGone(AWaitMs: DWORD): Boolean;
+begin
+  Result := (FWaiter = nil) or (WaitForSingleObject(FWaiter.Handle, AWaitMs) = WAIT_OBJECT_0);
+end;
+
+function TConPtyBackend.FinishClose(AWaitMs: Integer): TPtyCloseResult;
+var
+  t0, spent: QWord;
+  left: DWORD;
+begin
+  Result := pcrGone;
+  if FProcess = 0 then Exit;
+  { 1. the pseudo console closes and the program goes, both within AWaitMs }
+  t0 := GetTickCount64;
+  WaiterGone(AWaitMs);
+  spent := GetTickCount64 - t0;
+  if spent >= QWord(AWaitMs) then left := 0 else left := AWaitMs - spent;
+  if WaitForSingleObject(FProcess, left) = WAIT_OBJECT_0 then
+  begin
+    if WaiterGone(PtyKillWaitMs) then Exit;
+  end
+  else
+  begin
+    { 2. it did not: by its handle, nothing else (never by name) -- this also lets a
+      blocked ClosePseudoConsole return }
+    FKilled := True;
+    Result := pcrKilled;
+    TerminateProcess(FProcess, 1);
+    WaitForSingleObject(FProcess, PtyKillWaitMs);
+    if WaiterGone(PtyKillWaitMs) then Exit;
+  end;
+  { 3. ClosePseudoConsole still has not returned: what it uses stays }
+  FWaiterStuck := True;
+  Result := pcrStuck;
+end;
+
+function TConPtyBackend.ExitCode(AWaitMs: Integer): Int64;
 var
   code: DWORD;
 begin
@@ -443,23 +524,24 @@ begin
   if WaitForSingleObject(FProcess, AWaitMs) <> WAIT_OBJECT_0 then Exit;
   code := 0;
   if GetExitCodeProcess(FProcess, code) then
-    Result := Integer(code);
+    Result := code;                            { a DWORD, never -1 }
 end;
 
 procedure TConPtyBackend.Shutdown;
 begin
-  if FProcess <> 0 then
+  { reached after FinishClose (the waiter is gone), or for a backend that never
+    started; a program still there (freed without FinishClose) goes by its handle }
+  if (FProcess <> 0) and (WaitForSingleObject(FProcess, 0) <> WAIT_OBJECT_0) then
   begin
-    { a program that did not go with its console within 2 s: by its handle, nothing else }
-    if WaitForSingleObject(FProcess, 2000) <> WAIT_OBJECT_0 then
-    begin
-      TerminateProcess(FProcess, 1);
-      WaitForSingleObject(FProcess, 2000);
-    end;
+    TerminateProcess(FProcess, 1);
+    WaitForSingleObject(FProcess, PtyKillWaitMs);
   end;
+  if FCloseEvent <> 0 then
+    SetEvent(FCloseEvent);
   if FWaiter <> nil then
   begin
-    FWaiter.WaitFor;
+    if FWaiterStuck or not WaiterGone(PtyKillWaitMs) then
+      Exit;                                    { leave it and its handles (unit header) }
     FreeAndNil(FWaiter);
   end;
   ClosePc;
@@ -467,6 +549,11 @@ begin
   begin
     CloseHandle(FProcess);
     FProcess := 0;
+  end;
+  if FCloseEvent <> 0 then
+  begin
+    CloseHandle(FCloseEvent);
+    FCloseEvent := 0;
   end;
   CloseHandles;
 end;

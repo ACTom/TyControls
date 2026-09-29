@@ -8,8 +8,10 @@ program ptytest;
 
   Each case starts a command through the session, pumps its output on the main thread
   (woken by the session's OnWake, as the example is by QueueAsyncCall), counts it back
-  with Delivered, and waits at most 10 s. Prints PASS / FAIL per case and, last,
-  "ptytest: N passed, M failed"; the exit code is M. }
+  with Delivered, and waits at most 10 s. Closing returns at once; the cases that close
+  wait for the session's finisher (PtyWaitForFinishers) before they look for the child.
+  Prints PASS / FAIL per case and, last, "ptytest: N passed, M failed"; the exit code
+  is M. }
 
 {$mode objfpc}{$H+}
 
@@ -27,7 +29,7 @@ type
 
   TRun = record
     Output: RawByteString;
-    Code: Integer;
+    Code: Int64;
     Ended: Boolean;
     MaxOutstanding: Int64;
     Error: string;
@@ -68,19 +70,22 @@ end;
 { ADelayMs: sleep after each pump before counting it back (back-pressure);
   AResize: resize to 100 x 30 right after the start }
 function Run(const ACommand: string; AHigh, ADelayMs: Integer; AResize: Boolean;
-  ATimeoutMs: Integer = 10000): TRun;
+  ATimeoutMs: Integer = 10000; ASelect: Boolean = False): TRun;
 var
   waker: TWaker;
   s: TPtySession;
+  b: TUnixPtyBackend;
   data: RawByteString;
   exited: Boolean;
-  code: Integer;
+  code: Int64;
   t0: QWord;
 begin
   Result := Default(TRun);
   Result.Code := -2;
   waker := TWaker.Create;
-  s := TPtySession.Create(TUnixPtyBackend.Create, AHigh, AHigh div 4, 65536);
+  b := TUnixPtyBackend.Create;
+  b.ForceSelect := ASelect;
+  s := TPtySession.Create(b, AHigh, AHigh div 4, 65536);
   try
     s.OnWake := @waker.Wake;
     if not s.Start(ACommand, 80, 24, Result.Error) then
@@ -107,6 +112,8 @@ begin
     Result.MaxOutstanding := s.MaxOutstanding;
   finally
     s.Free;
+    { the waker goes after the finisher: no wake after Close, but be plain about it }
+    PtyWaitForFinishers(PtyExitWaitMs);
     waker.Free;
   end;
 end;
@@ -193,19 +200,12 @@ begin
     pid := b.Pid;
     Sleep(300);
     t0 := GetTickCount64;
-    try
-      s.Close;
-    except
-      on E: Exception do
-      begin
-        Fail('T6 close', E.Message);
-        Exit;
-      end;
-    end;
+    s.Close;
     took := GetTickCount64 - t0;
-    if took > 2000 then Fail('T6 close', Format('%d ms', [took]))
+    if took > 200 then Fail('T6 close', Format('Close took %d ms', [took]))
+    else if not PtyWaitForFinishers(PtyExitWaitMs) then Fail('T6 close', 'the finisher did not finish')
     else if (FpKill(pid, 0) = 0) or (fpgeterrno <> ESysESRCH) then Fail('T6 close', 'the child is still there')
-    else Pass(Format('T6 close (%d ms)', [took]));
+    else Pass(Format('T6 close (%d ms, gone after %d ms)', [took, GetTickCount64 - t0]));
   finally
     s.Free;
   end;
@@ -256,19 +256,14 @@ begin
     pid := b.Pid;
     Sleep(300);
     t0 := GetTickCount64;
-    try
-      s.Close;
-    except
-      on E: Exception do
-      begin
-        Fail('T10 close, hang-up ignored', E.Message);
-        Exit;
-      end;
-    end;
+    s.Close;
     took := GetTickCount64 - t0;
-    if took > 3000 then Fail('T10 close, hang-up ignored', Format('%d ms', [took]))
+    if took > 200 then Fail('T10 close, hang-up ignored', Format('Close took %d ms', [took]))
+    else if not PtyWaitForFinishers(PtyExitWaitMs) then Fail('T10 close, hang-up ignored', 'the finisher did not finish')
     else if (FpKill(pid, 0) = 0) or (fpgeterrno <> ESysESRCH) then Fail('T10 close, hang-up ignored', 'the child is still there')
-    else Pass(Format('T10 close, hang-up ignored (%d ms)', [took]));
+    else if GetTickCount64 - t0 < PtyCloseWaitMs then
+      Fail('T10 close, hang-up ignored', Format('gone after %d ms: it did not ignore the hang-up', [GetTickCount64 - t0]))
+    else Pass(Format('T10 close, hang-up ignored (%d ms, killed after %d ms)', [took, GetTickCount64 - t0]));
   finally
     s.Free;
   end;
@@ -284,6 +279,58 @@ begin
   else Pass('T9 no such command');
 end;
 
+{ macOS answers POLLNVAL for a pty's master; the select path, forced, on Linux }
+procedure T11;
+const
+  N = 300000;
+var
+  r: TRun;
+begin
+  r := Run('echo tyterm-select; head -c 300000 /dev/zero | tr ''\0'' x', 65536, 5, False, 30000, True);
+  if not r.Ended then Fail('T11 select', 'no end: ' + r.Error)
+  else if Pos('tyterm-select', r.Output) = 0 then Fail('T11 select', 'got ' + Copy(r.Output, 1, 80))
+  else if CountOf('x', r.Output) <> N then Fail('T11 select', Format('%d x of %d', [CountOf('x', r.Output), N]))
+  else if r.Code <> 0 then Fail('T11 select', 'code ' + IntToStr(r.Code))
+  else Pass('T11 select');
+end;
+
+{ what the child must not inherit: this program ignores SIGPIPE, blocks SIGUSR2 on the
+  forking thread and holds a descriptor without close-on-exec -- the child's shell has
+  none of the three, and `yes | head -1` ends the way it should (yes dies of SIGPIPE,
+  says nothing) }
+procedure T12;
+var
+  r: TRun;
+  ign, old: SigActionRec;
+  blk, oldMask: TSigSet;
+  fd: cint;
+  cmd: string;
+begin
+  FillChar(ign, SizeOf(ign), 0);
+  ign.sa_handler := SigActionHandler(SIG_IGN);
+  FpSigAction(SIGPIPE, @ign, @old);
+  FpSigEmptySet(blk);
+  FpSigAddSet(blk, SIGUSR2);
+  FpSigProcMask(SIG_BLOCK, @blk, @oldMask);
+  fd := FpOpen('/dev/null', O_RDONLY);
+  try
+    cmd := Format('grep -E "^Sig(Blk|Ign)" /proc/self/status; ' +
+      'if [ -e /proc/$$/fd/%d ]; then echo fd-leaked; else echo fd-closed; fi; yes | head -1', [fd]);
+    r := Run(cmd, 1048576, 0, False);
+  finally
+    FpClose(fd);
+    FpSigProcMask(SIG_SETMASK, @oldMask, nil);
+    FpSigAction(SIGPIPE, @old, nil);
+  end;
+  if not r.Ended then Fail('T12 child state', 'no end: ' + r.Error)
+  else if Pos('SigBlk:'#9'0000000000000000', r.Output) = 0 then Fail('T12 child state', 'mask: ' + r.Output)
+  else if Pos('SigIgn:'#9'0000000000000000', r.Output) = 0 then Fail('T12 child state', 'ignored: ' + r.Output)
+  else if Pos('fd-closed', r.Output) = 0 then Fail('T12 child state', 'descriptor: ' + r.Output)
+  else if Pos('Broken pipe', r.Output) > 0 then Fail('T12 child state', 'yes saw EPIPE: ' + r.Output)
+  else if r.Code <> 0 then Fail('T12 child state', 'code ' + IntToStr(r.Code))
+  else Pass('T12 child state');
+end;
+
 begin
   Passed := 0;
   Failed := 0;
@@ -297,6 +344,8 @@ begin
   T8;
   T9;
   T10;
+  T11;
+  T12;
   WriteLn(Format('ptytest: %d passed, %d failed', [Passed, Failed]));
   Halt(Failed);
 end.

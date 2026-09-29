@@ -8,21 +8,37 @@ unit uptyunix;
   (glibc, libSystem): no libutil (forkpty / openpty), which on Linux would need its
   development package to link.
 
-  THE RULE AFTER fork: the child makes system calls only -- setsid, open, ioctl, dup2,
-  close, execve, exit. An LCL program is multi-threaded; in the child only the forking
-  thread exists, and a lock another thread held at the fork (the memory manager's, for
-  one) stays held forever. So the program path, the argument list and the environment
-  are built as PChar arrays before the fork, and the child only reads them. No strings,
-  no exceptions, no WriteLn there.
+  THE RULE AFTER fork: the child makes system calls only -- sigprocmask, sigaction,
+  close, setsid, open, ioctl, dup2, execve, exit (all async-signal-safe). An LCL program
+  is multi-threaded; in the child only the forking thread exists, and a lock another
+  thread held at the fork (the memory manager's, for one) stays held forever. So the
+  program path, the argument list, the environment, the empty signal set and the fd
+  limit are all made before the fork, and the child only reads them. No strings, no
+  exceptions, no WriteLn there.
+
+  What the child must not inherit from the host: the forking thread's signal mask (it
+  is reset to empty), ignored signals (an ignored signal stays ignored across execve --
+  a host that ignores SIGPIPE would hand `yes | head -1` a `yes` that never dies; 1..31
+  go back to SIG_DFL), and the host's descriptors that were opened without close-on-exec
+  (every fd from 3 to the soft RLIMIT_NOFILE, at most 65536, is closed).
 
   The command runs as `/bin/sh -c "<command line>"`: the shell parses the line (a list,
   a pipe, a builtin such as `exit 7` -- an `exec` in front would break all three) and,
-  for a single command, most shells replace themselves with it. The environment is the example's own with TERM =
-  xterm-256color and COLORTERM = truecolor (LINES and COLUMNS dropped: the size comes
-  from the PTY).
+  for a single command, most shells replace themselves with it. The environment is the
+  example's own with TERM = xterm-256color and COLORTERM = truecolor (LINES and COLUMNS
+  dropped: the size comes from the PTY).
 
-  Only BaseUnix, Unix, TermIO, Classes, SysUtils: tools/terminal-ptytest runs it in WSL
-  as a console program, without the LCL. }
+  Waiting: poll on the master and the wake-up pipe. macOS's poll() does not support
+  character devices and may answer POLLNVAL for the master; the first such answer
+  switches this backend to select() for good (ForceSelect makes the tests take that
+  path on Linux).
+
+  Closing (the session's finisher does the waiting, never the main thread): BeginClose
+  sends the whole session SIGHUP; FinishClose waits for the child to be reaped, then
+  SIGKILLs it; Interrupt writes the wake-up pipe.
+
+  Only BaseUnix, Unix, TermIO, Classes, SysUtils, SyncObjs: tools/terminal-ptytest runs it
+  in WSL as a console program, without the LCL. }
 
 {$mode objfpc}{$H+}
 
@@ -30,7 +46,7 @@ interface
 
 {$IFDEF UNIX}
 uses
-  BaseUnix, Unix, TermIO, Classes, SysUtils, uptysession;
+  BaseUnix, Unix, TermIO, Classes, SysUtils, SyncObjs, uptysession;
 
 type
   TUnixPtyBackend = class(TPtyBackend)
@@ -39,24 +55,36 @@ type
     FWakeRead, FWakeWrite: cint;
     FPid: TPid;
     FReaped: Boolean;
-    FExitCode: Integer;
+    FExitCode: Int64;
+    FReapLock: TCriticalSection;       { the reader (ExitCode) and the finisher both reap }
     FStrings: TStringList;           { what FArgv / FEnvp point into, kept until Shutdown }
     FArgv, FEnvp: array of PChar;
     FPath: string;
+    FUseSelect: Boolean;
+    FKilled: Boolean;
     procedure CloseFds;
     function Reap(ABlock: Boolean): Boolean;
+    { 1 = the master is ready (ARevents: POLLIN / POLLOUT / POLLHUP ...), 0 = woken
+      (closing), -1 = an error }
+    function WaitMaster(AForWrite: Boolean; out ARevents: cint): Integer;
   public
+    { FOR THE TESTS: select() from the start, as on macOS after a POLLNVAL }
+    ForceSelect: Boolean;
     constructor Create;
     destructor Destroy; override;
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; override;
     function Read(var ABuf; ACount: Integer): Integer; override;
     function Write(const ABuf; ACount: Integer): Boolean; override;
     procedure Resize(ACols, ARows: Integer); override;
+    procedure BeginClose; override;
+    function FinishClose(AWaitMs: Integer): TPtyCloseResult; override;
     procedure Interrupt; override;
-    function ExitCode(AWaitMs: Integer): Integer; override;
+    function ExitCode(AWaitMs: Integer): Int64; override;
     procedure Shutdown; override;
     { FOR THE TESTS }
     property Pid: TPid read FPid;
+    property UsesSelect: Boolean read FUseSelect;
+    property Killed: Boolean read FKilled;
   end;
 {$ENDIF}
 
@@ -66,6 +94,8 @@ implementation
 
 const
   FD_CLOEXEC = 1;                    { fcntl.h; not in BaseUnix }
+  { the child closes the fds from 3 up to the soft limit, but no further }
+  MaxFdToClose = 65536;
 
 { from the C library (FPC 3.2.2's RTL has none of them) }
 function posix_openpt(flags: cint): cint; cdecl; external 'c' name 'posix_openpt';
@@ -92,12 +122,14 @@ begin
   FPid := 0;
   FExitCode := -1;
   FStrings := TStringList.Create;
+  FReapLock := TCriticalSection.Create;
 end;
 
 destructor TUnixPtyBackend.Destroy;
 begin
   Shutdown;
   FStrings.Free;
+  FReapLock.Free;
   inherited Destroy;
 end;
 
@@ -120,7 +152,10 @@ var
   i, n: Integer;
   e, name: string;
   child: TPid;
-  slave: cint;
+  slave, fd, fdLimit, sig: cint;
+  emptySet: TSigSet;
+  dfl: SigActionRec;
+  rl: TRLimit;
 begin
   AError := '';
   Result := False;
@@ -165,6 +200,7 @@ begin
   SetCloExec(FWakeWrite);
   SetNonBlock(FWakeRead);
   SetNonBlock(FWakeWrite);
+  FUseSelect := ForceSelect;
   { everything the child reads, built before the fork }
   FStrings.Clear;
   FPath := '/bin/sh';
@@ -190,6 +226,14 @@ begin
   for i := n to FStrings.Count - 1 do
     FEnvp[i - n] := PChar(FStrings[i]);
   FEnvp[FStrings.Count - n] := nil;
+  FpSigEmptySet(emptySet);
+  FillChar(dfl, SizeOf(dfl), 0);
+  dfl.sa_handler := SigActionHandler(SIG_DFL);
+  fdLimit := 1024;
+  if (FpGetRLimit(RLIMIT_NOFILE, @rl) = 0) and (rl.rlim_cur > 3) then
+  begin
+    if rl.rlim_cur > MaxFdToClose then fdLimit := MaxFdToClose else fdLimit := rl.rlim_cur;
+  end;
   child := FpFork;
   if child < 0 then
   begin
@@ -200,6 +244,11 @@ begin
   if child = 0 then
   begin
     { THE CHILD: system calls only (unit header) }
+    FpSigProcMask(SIG_SETMASK, @emptySet, nil);
+    for sig := 1 to 31 do
+      FpSigAction(sig, @dfl, nil);             { SIGKILL / SIGSTOP answer EINVAL: fine }
+    for fd := 3 to fdLimit - 1 do
+      FpClose(fd);                             { the master and the wake pipe too }
     FpSetsid;
     slave := FpOpen(PChar(@slaveName[0]), O_RDWR);
     if slave < 0 then FpExit(127);
@@ -216,72 +265,110 @@ begin
   Result := True;
 end;
 
-function TUnixPtyBackend.Read(var ABuf; ACount: Integer): Integer;
+function TUnixPtyBackend.WaitMaster(AForWrite: Boolean; out ARevents: cint): Integer;
 var
   fds: array[0..1] of TPollFd;
-  r: cint;
+  rs, ws: TFDSet;
+  r, top: cint;
+begin
+  ARevents := 0;
+  while True do
+  begin
+    if not FUseSelect then
+    begin
+      fds[0].fd := FMaster;
+      if AForWrite then fds[0].events := POLLOUT else fds[0].events := POLLIN;
+      fds[0].revents := 0;
+      fds[1].fd := FWakeRead;
+      fds[1].events := POLLIN;
+      fds[1].revents := 0;
+      r := FpPoll(@fds[0], 2, -1);
+      if r < 0 then
+      begin
+        if fpgeterrno = ESysEINTR then Continue;
+        Exit(-1);
+      end;
+      { woken up: closing }
+      if fds[1].revents <> 0 then Exit(0);
+      if fds[0].revents and POLLNVAL <> 0 then
+      begin
+        { macOS: poll() and a character device (unit header). The fd itself is fine --
+          it is closed only after both threads are gone; select says so if it is not }
+        FUseSelect := True;
+        Continue;
+      end;
+      if fds[0].revents <> 0 then
+      begin
+        ARevents := fds[0].revents;
+        Exit(1);
+      end;
+    end
+    else
+    begin
+      fpFD_ZERO(rs);
+      fpFD_ZERO(ws);
+      fpFD_SET(FWakeRead, rs);
+      if AForWrite then fpFD_SET(FMaster, ws) else fpFD_SET(FMaster, rs);
+      top := FMaster;
+      if FWakeRead > top then top := FWakeRead;
+      r := FpSelect(top + 1, @rs, @ws, nil, nil);
+      if r < 0 then
+      begin
+        if fpgeterrno = ESysEINTR then Continue;
+        Exit(-1);
+      end;
+      if fpFD_ISSET(FWakeRead, rs) = 1 then Exit(0);
+      if AForWrite and (fpFD_ISSET(FMaster, ws) = 1) then
+      begin
+        ARevents := POLLOUT;
+        Exit(1);
+      end;
+      if not AForWrite and (fpFD_ISSET(FMaster, rs) = 1) then
+      begin
+        { select does not tell a hang-up from data: the read that follows does }
+        ARevents := POLLIN;
+        Exit(1);
+      end;
+    end;
+  end;
+end;
+
+function TUnixPtyBackend.Read(var ABuf; ACount: Integer): Integer;
+var
+  rev: cint;
   n: TSsize;
   e: cint;
 begin
   while True do
   begin
-    fds[0].fd := FMaster;
-    fds[0].events := POLLIN;
-    fds[0].revents := 0;
-    fds[1].fd := FWakeRead;
-    fds[1].events := POLLIN;
-    fds[1].revents := 0;
-    r := FpPoll(@fds[0], 2, -1);
-    if r < 0 then
+    if WaitMaster(False, rev) <> 1 then Exit(0);
+    n := FpRead(FMaster, ABuf, ACount);
+    if n > 0 then Exit(n);
+    if n = 0 then Exit(0);
+    e := fpgeterrno;
+    if (e = ESysEAGAIN) or (e = ESysEINTR) then
     begin
-      if fpgeterrno = ESysEINTR then Continue;
-      Exit(0);
+      { POLLHUP with nothing left to read: the slave side is gone }
+      if rev and (POLLHUP or POLLERR) <> 0 then Exit(0);
+      Continue;
     end;
-    { woken up: closing }
-    if fds[1].revents <> 0 then Exit(0);
-    if fds[0].revents <> 0 then
-    begin
-      n := FpRead(FMaster, ABuf, ACount);
-      if n > 0 then Exit(n);
-      if n = 0 then Exit(0);
-      e := fpgeterrno;
-      if (e = ESysEAGAIN) or (e = ESysEINTR) then
-      begin
-        { POLLHUP with nothing left to read: the slave side is gone }
-        if fds[0].revents and (POLLHUP or POLLERR) <> 0 then Exit(0);
-        Continue;
-      end;
-      Exit(0);                                   { EIO: every slave fd is closed (Linux) }
-    end;
+    Exit(0);                                   { EIO: every slave fd is closed (Linux) }
   end;
 end;
 
 function TUnixPtyBackend.Write(const ABuf; ACount: Integer): Boolean;
 var
-  fds: array[0..1] of TPollFd;
   p: PByte;
   left: Integer;
   n: TSsize;
-  r, e: cint;
+  rev, e: cint;
 begin
   p := @ABuf;
   left := ACount;
   while left > 0 do
   begin
-    fds[0].fd := FMaster;
-    fds[0].events := POLLOUT;
-    fds[0].revents := 0;
-    fds[1].fd := FWakeRead;
-    fds[1].events := POLLIN;
-    fds[1].revents := 0;
-    r := FpPoll(@fds[0], 2, -1);
-    if r < 0 then
-    begin
-      if fpgeterrno = ESysEINTR then Continue;
-      Exit(False);
-    end;
-    if fds[1].revents <> 0 then Exit(False);
-    if fds[0].revents and (POLLERR or POLLHUP or POLLNVAL) <> 0 then Exit(False);
+    if WaitMaster(True, rev) <> 1 then Exit(False);
+    if rev and (POLLERR or POLLHUP or POLLNVAL) <> 0 then Exit(False);
     n := FpWrite(FMaster, p^, left);
     if n < 0 then
     begin
@@ -307,6 +394,38 @@ begin
   FpIoctl(FMaster, TIOCSWINSZ, @ws);
 end;
 
+{ the main thread: the whole session gets the hang-up; nothing waits here }
+procedure TUnixPtyBackend.BeginClose;
+begin
+  FReapLock.Enter;
+  try
+    if (FPid > 0) and not FReaped then
+      FpKill(-FPid, SIGHUP);
+  finally
+    FReapLock.Leave;
+  end;
+end;
+
+function TUnixPtyBackend.FinishClose(AWaitMs: Integer): TPtyCloseResult;
+begin
+  Result := pcrGone;
+  if FPid <= 0 then Exit;
+  if ExitCode(AWaitMs) <> -1 then Exit;
+  FReapLock.Enter;
+  try
+    if FReaped then Exit;
+    { it ignores the hang-up: the session, then the child itself }
+    FKilled := True;
+    Result := pcrKilled;
+    FpKill(-FPid, SIGKILL);
+    FpKill(FPid, SIGKILL);
+  finally
+    FReapLock.Leave;
+  end;
+  if ExitCode(PtyKillWaitMs) = -1 then
+    Result := pcrStuck;                        { not even SIGKILL (uninterruptible) }
+end;
+
 procedure TUnixPtyBackend.Interrupt;
 var
   b: Byte;
@@ -314,9 +433,6 @@ begin
   b := 1;
   if FWakeWrite >= 0 then
     FpWrite(FWakeWrite, b, 1);
-  { the user closes: the whole session gets the hang-up }
-  if (FPid > 0) and not FReaped then
-    FpKill(-FPid, SIGHUP);
 end;
 
 function TUnixPtyBackend.Reap(ABlock: Boolean): Boolean;
@@ -324,25 +440,30 @@ var
   st: cint;
   r: TPid;
 begin
-  if FReaped then Exit(True);
-  if FPid <= 0 then Exit(False);
-  st := 0;
-  if ABlock then
-    r := FpWaitPid(FPid, @st, 0)
-  else
-    r := FpWaitPid(FPid, @st, WNOHANG);
-  if r <> FPid then Exit(False);
-  FReaped := True;
-  if wifexited(st) then
-    FExitCode := wexitstatus(st)
-  else if wifsignaled(st) then
-    FExitCode := 128 + wtermsig(st)
-  else
-    FExitCode := -1;
-  Result := True;
+  FReapLock.Enter;
+  try
+    if FReaped then Exit(True);
+    if FPid <= 0 then Exit(False);
+    st := 0;
+    if ABlock then
+      r := FpWaitPid(FPid, @st, 0)
+    else
+      r := FpWaitPid(FPid, @st, WNOHANG);
+    if r <> FPid then Exit(False);
+    FReaped := True;
+    if wifexited(st) then
+      FExitCode := wexitstatus(st)
+    else if wifsignaled(st) then
+      FExitCode := 128 + wtermsig(st)
+    else
+      FExitCode := -1;
+    Result := True;
+  finally
+    FReapLock.Leave;
+  end;
 end;
 
-function TUnixPtyBackend.ExitCode(AWaitMs: Integer): Integer;
+function TUnixPtyBackend.ExitCode(AWaitMs: Integer): Int64;
 var
   waited: Integer;
 begin
@@ -358,17 +479,18 @@ end;
 
 procedure TUnixPtyBackend.Shutdown;
 begin
-  if (FPid > 0) and not FReaped then
+  { after FinishClose the child is reaped; a backend freed without it (never through a
+    session's finisher) takes the child down here, bounded }
+  if (FPid > 0) and not Reap(False) then
   begin
     FpKill(-FPid, SIGHUP);
     FpKill(FPid, SIGHUP);
     if ExitCode(1000) = -1 then
-      if not FReaped then
-      begin
-        FpKill(-FPid, SIGKILL);
-        FpKill(FPid, SIGKILL);
-        Reap(True);
-      end;
+    begin
+      FpKill(-FPid, SIGKILL);
+      FpKill(FPid, SIGKILL);
+      Reap(True);
+    end;
   end;
   CloseFds;
 end;

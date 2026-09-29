@@ -17,10 +17,25 @@ unit uptysession;
       water mark of bytes read but not yet parsed the reader stops reading, and goes on
       below the low one: the program is held back by the PTY instead of the terminal's
       queue growing (spec 12.3).
-  Close is safe from any state: the reader is put in a discarding mode (it no longer
-  waits for the terminal), the backend is interrupted until both threads are gone
-  (each wait bounded), and only then are the handles closed. Nothing here waits on the
-  main thread, so the main thread may wait on the threads.
+
+  CLOSING NEVER WAITS ON THE MAIN THREAD. Taking a program down can take seconds: before
+  Windows 11 24H2 ClosePseudoConsole blocks until the console's output is drained and its
+  program has gone (a program may sit in its close handler for five seconds), a Unix
+  child may ignore the hang-up. So Close does only what is quick -- the reader starts
+  discarding, the writer stops, OnWake is cleared (no wake reaches the host after Close
+  returns), the backend is told to begin (BeginClose: ConPTY signals its exit waiter,
+  which calls ClosePseudoConsole; Unix sends SIGHUP) -- and hands the rest to a finisher
+  thread of its own: it waits for the program's side to go (PtyCloseWaitMs), ends the
+  program by its handle / SIGKILL if not (PtyKillWaitMs more), interrupts the two
+  threads until they are gone (PtyThreadsWaitMs), closes the handles and frees what the
+  session used. The reader keeps reading (and discarding) all along: the pseudo console
+  may wait for its output to be read before it closes. Anything that would not stop in
+  time is left running together with everything it uses -- a leak (PtySessionsLeaked),
+  never a hang or a use after free.
+
+  The session object itself is only a handle: freeing it is Close, returns at once, and
+  never frees what a thread still uses. A program that exits waits for the finishers
+  with PtyWaitForFinishers (bounded) before it goes.
 
   Only Classes, SysUtils, SyncObjs: the WSL console test (tools/terminal-ptytest) runs
   it without the LCL. }
@@ -33,46 +48,61 @@ uses
   Classes, SysUtils, SyncObjs;
 
 type
+  { how BeginClose / FinishClose ended }
+  TPtyCloseResult = (pcrGone, pcrKilled, pcrStuck);
+
   { One platform's PTY. Read and Write are called on the session's threads and block;
-    the rest on the main thread. }
+    Start, Resize and BeginClose on the main thread; FinishClose, Interrupt and Shutdown
+    on the session's finisher thread. }
   TPtyBackend = class
   public
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; virtual; abstract;
     { > 0 the bytes read; <= 0 the end (the program's side closed, or Interrupt) }
     function Read(var ABuf; ACount: Integer): Integer; virtual; abstract;
-    { True once everything is written; False = the pipe is broken or Interrupt }
+    { True once everything is written; False = the pipe is broken, closing or Interrupt }
     function Write(const ABuf; ACount: Integer): Boolean; virtual; abstract;
     procedure Resize(ACols, ARows: Integer); virtual; abstract;
+    { main thread, must not block: begin taking the program down. A blocked Write
+      returns; Read goes on until the program's side closes (the default: Interrupt) }
+    procedure BeginClose; virtual;
+    { the finisher: wait for the program's side to go, at most AWaitMs; if it does not,
+      end the program (by its handle, SIGKILL) and wait a bounded while more. pcrStuck:
+      something still blocks and what the backend uses must not be freed. Default:
+      pcrGone at once. }
+    function FinishClose(AWaitMs: Integer): TPtyCloseResult; virtual;
     { Makes a blocked Read / Write return (any thread; may be called again) }
     procedure Interrupt; virtual; abstract;
     { After the end was read: the program's exit code (waiting for it at most AWaitMs;
-      -1 = not known) }
-    function ExitCode(AWaitMs: Integer): Integer; virtual; abstract;
-    { Once both threads are gone, on the main thread: reap the program, close handles }
+      -1 = not known). Int64: a Windows code is a DWORD, and 4294967295 is not -1. }
+    function ExitCode(AWaitMs: Integer): Int64; virtual; abstract;
+    { the finisher, once both threads are gone: reap the program, close handles }
     procedure Shutdown; virtual; abstract;
     { The Windows backend answers (True, build) -- the core wants it (spec 12.4) }
     function IsConPty(out ABuild: Integer): Boolean; virtual;
-    { The session started its reader (the Windows backend cancels its I/O to interrupt) }
-    procedure BindReader(AThread: TThread); virtual;
+    { The session started its threads (the Windows backend cancels their I/O to interrupt) }
+    procedure BindThreads(AReader, AWriter: TThread); virtual;
   end;
 
-  TPtySession = class;
+  TPtySessionCore = class;
 
+  { what a started session is made of; owned by the TPtySession until Close, by the
+    finisher after. Not for the host. }
   TPtyThread = class(TThread)
   private
-    FSession: TPtySession;
+    FCore: TPtySessionCore;
     FReader: Boolean;
   protected
     procedure Execute; override;
   public
-    constructor Create(ASession: TPtySession; AReader: Boolean);
+    constructor Create(ACore: TPtySessionCore; AReader: Boolean);
   end;
 
-  TPtySession = class
+  TPtySessionCore = class
   private
     FBackend: TPtyBackend;
     FHigh, FLow, FChunk: Integer;
     FLock: TCriticalSection;
+    FWakeLock: TCriticalSection;
     FResume: TEvent;
     FWriteEvent: TEvent;
     FData: RawByteString;
@@ -80,57 +110,152 @@ type
     FOutstanding, FMaxOutstanding, FTotalDelivered: Int64;
     FHeld: Boolean;
     FEnded, FEndReported: Boolean;
-    FExitCode: Integer;
-    FDiscard, FStopping: Boolean;
+    FExitCode: Int64;
+    FDiscard, FStopping, FWriterGone: Boolean;
     FReader, FWriter: TPtyThread;
     FWakeCount: Integer;
     FOnWake: TNotifyEvent;
-    FStarted, FClosed: Boolean;
-    procedure ReadLoop(AThread: TPtyThread);
-    procedure WriteLoop(AThread: TPtyThread);
+    FStarted: Boolean;
+    procedure ReadLoop;
+    procedure WriteLoop;
+    procedure ReaderEnded;
+    procedure WriterEnded;
     procedure Wake;
+    function ThreadsFinished: Boolean;
+  public
+    constructor Create(ABackend: TPtyBackend; AHigh, ALow, AChunk: Integer);
+    destructor Destroy; override;
+    function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
+    procedure Write(const AData: RawByteString);
+    function Pump(out AData: RawByteString; out AExited: Boolean; out AExitCode: Int64): Boolean;
+    procedure Delivered(ACount: Integer);
+    { main thread, quick: discard, stop the writer, no more wakes, BeginClose }
+    procedure BeginClose;
+    { the finisher: the rest; True = everything stopped and may be freed }
+    function Finish: Boolean;
+    procedure SetOnWake(AValue: TNotifyEvent);
+  end;
+
+  { The host's handle on a session. }
+  TPtySession = class
+  private
+    FCore: TPtySessionCore;
+    FBackend: TPtyBackend;           { what the test properties read before Close }
+    FStarted, FClosed: Boolean;
+    FOnWake: TNotifyEvent;
+    procedure SetOnWake(AValue: TNotifyEvent);
     function GetOutstanding: Int64;
     function GetMaxOutstanding: Int64;
     function GetWakeCount: Integer;
     function GetTotalDelivered: Int64;
+    function GetPendingWrite: Integer;
+    function GetWriterGone: Boolean;
   public
     { takes ABackend over }
     constructor Create(ABackend: TPtyBackend; AHigh: Integer = 1048576; ALow: Integer = 262144;
       AChunk: Integer = 65536);
-    destructor Destroy; override;                 { Close }
+    destructor Destroy; override;                 { Close; returns at once }
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
-    { main thread: queue keys for the writer }
+    { main thread: queue keys for the writer (dropped once the writer is gone) }
     procedure Write(const AData: RawByteString);
     { main thread: straight to the backend }
     procedure Resize(ACols, ARows: Integer);
     { main thread: everything read so far; AExited once the end was read and everything
       before it handed out (reported once) }
-    function Pump(out AData: RawByteString; out AExited: Boolean; out AExitCode: Integer): Boolean;
+    function Pump(out AData: RawByteString; out AExited: Boolean; out AExitCode: Int64): Boolean;
     { main thread: the terminal parsed ACount bytes (its Write callback) }
     procedure Delivered(ACount: Integer);
-    { idempotent; raises if the threads do not stop within 5 s (never hangs) }
+    { idempotent, returns at once (unit header): after it the session does nothing and
+      OnWake is never called again; its threads and program are finished elsewhere }
     procedure Close;
     { called on the READER thread: the queue went from empty to not empty, or the end
-      was read. The host schedules Pump on the main thread from here. }
-    property OnWake: TNotifyEvent read FOnWake write FOnWake;
-    { FOR THE TESTS }
+      was read. The host schedules Pump on the main thread from here. Set before Start. }
+    property OnWake: TNotifyEvent read FOnWake write SetOnWake;
+    { FOR THE TESTS (0 / nil after Close) }
     property Outstanding: Int64 read GetOutstanding;           { read, not yet Delivered }
     property MaxOutstanding: Int64 read GetMaxOutstanding;
     property TotalDelivered: Int64 read GetTotalDelivered;
     property WakeCount: Integer read GetWakeCount;
+    property PendingWrite: Integer read GetPendingWrite;       { queued, not yet taken by the writer }
+    property WriterGone: Boolean read GetWriterGone;
     property Backend: TPtyBackend read FBackend;
     property Started: Boolean read FStarted;
-    function ThreadsFinished: Boolean;
+    property Closed: Boolean read FClosed;
   end;
 
 const
-  { ms: how long Close waits for the threads, and how often it interrupts meanwhile }
-  PtyCloseTimeoutMs = 5000;
-  PtyCloseStepMs = 50;
+  { ms, the finisher's bounds (unit header): the program's side to go by itself, then
+    after it was ended, then the two threads; PtyExitWaitMs covers all three }
+  PtyCloseWaitMs = 3000;
+  PtyKillWaitMs = 2000;
+  PtyThreadsWaitMs = 3000;
+  PtyThreadsStepMs = 20;
+  PtyExitWaitMs = PtyCloseWaitMs + PtyKillWaitMs + PtyThreadsWaitMs + 1000;
+
+{ sessions whose finisher has not finished yet }
+function PtyFinishersRunning: Integer;
+{ started sessions not freed yet: running, finishing, or leaked }
+function PtySessionsAlive: Integer;
+{ sessions whose threads or program would not stop: left running, not freed }
+function PtySessionsLeaked: Integer;
+{ any thread: wait until no finisher runs, at most AWaitMs; True = none left. A program
+  calls it once as it exits. }
+function PtyWaitForFinishers(AWaitMs: Integer): Boolean;
 
 implementation
 
+var
+  GFinishers, GAlive, GLeaked: LongInt;
+
+function PtyFinishersRunning: Integer;
+begin
+  Result := InterLockedExchangeAdd(GFinishers, 0);
+end;
+
+function PtySessionsAlive: Integer;
+begin
+  Result := InterLockedExchangeAdd(GAlive, 0);
+end;
+
+function PtySessionsLeaked: Integer;
+begin
+  Result := InterLockedExchangeAdd(GLeaked, 0);
+end;
+
+function PtyWaitForFinishers(AWaitMs: Integer): Boolean;
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  while PtyFinishersRunning > 0 do
+  begin
+    if GetTickCount64 - t0 >= QWord(AWaitMs) then Exit(False);
+    Sleep(10);
+  end;
+  Result := True;
+end;
+
+type
+  TPtyFinisher = class(TThread)
+  private
+    FCore: TPtySessionCore;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(ACore: TPtySessionCore);
+  end;
+
 { ---- TPtyBackend ------------------------------------------------------------------- }
+
+procedure TPtyBackend.BeginClose;
+begin
+  Interrupt;
+end;
+
+function TPtyBackend.FinishClose(AWaitMs: Integer): TPtyCloseResult;
+begin
+  Result := pcrGone;
+end;
 
 function TPtyBackend.IsConPty(out ABuild: Integer): Boolean;
 begin
@@ -138,15 +263,15 @@ begin
   Result := False;
 end;
 
-procedure TPtyBackend.BindReader(AThread: TThread);
+procedure TPtyBackend.BindThreads(AReader, AWriter: TThread);
 begin
 end;
 
 { ---- TPtyThread -------------------------------------------------------------------- }
 
-constructor TPtyThread.Create(ASession: TPtySession; AReader: Boolean);
+constructor TPtyThread.Create(ACore: TPtySessionCore; AReader: Boolean);
 begin
-  FSession := ASession;
+  FCore := ACore;
   FReader := AReader;
   FreeOnTerminate := False;
   inherited Create(True);
@@ -156,30 +281,49 @@ procedure TPtyThread.Execute;
 begin
   try
     if FReader then
-      FSession.ReadLoop(Self)
+      FCore.ReadLoop
     else
-      FSession.WriteLoop(Self);
+      FCore.WriteLoop;
   except
-    { a thread must not take the process down; the reader's end is reported below }
+    { a thread must not take the process down; what it leaves is reported below }
   end;
   if FReader then
-  begin
-    FSession.FLock.Enter;
+    FCore.ReaderEnded
+  else
+    FCore.WriterEnded;
+end;
+
+{ ---- TPtyFinisher ------------------------------------------------------------------ }
+
+constructor TPtyFinisher.Create(ACore: TPtySessionCore);
+begin
+  FCore := ACore;
+  FreeOnTerminate := True;
+  inherited Create(True);
+  { counted before it can run (and uncount itself) }
+  InterLockedIncrement(GFinishers);
+  Start;
+end;
+
+procedure TPtyFinisher.Execute;
+begin
+  try
     try
-      if not FSession.FEnded then
-      begin
-        FSession.FEnded := True;
-        FSession.FExitCode := -1;
-      end;
-    finally
-      FSession.FLock.Leave;
+      if FCore.Finish then
+        FCore.Free
+      else
+        InterLockedIncrement(GLeaked);
+    except
+      InterLockedIncrement(GLeaked);
     end;
+  finally
+    InterLockedDecrement(GFinishers);
   end;
 end;
 
-{ ---- TPtySession ------------------------------------------------------------------- }
+{ ---- TPtySessionCore --------------------------------------------------------------- }
 
-constructor TPtySession.Create(ABackend: TPtyBackend; AHigh, ALow, AChunk: Integer);
+constructor TPtySessionCore.Create(ABackend: TPtyBackend; AHigh, ALow, AChunk: Integer);
 begin
   inherited Create;
   FBackend := ABackend;
@@ -187,67 +331,74 @@ begin
   FLow := ALow;
   FChunk := AChunk;
   if FChunk < 1 then FChunk := 1;
+  FExitCode := -1;
   FLock := TCriticalSection.Create;
+  FWakeLock := TCriticalSection.Create;
   FResume := TEvent.Create(nil, False, False, '');
   FWriteEvent := TEvent.Create(nil, False, False, '');
+  InterLockedIncrement(GAlive);
 end;
 
-destructor TPtySession.Destroy;
+destructor TPtySessionCore.Destroy;
 begin
-  try
-    Close;
-  except
-    { a destructor does not raise; Close already said it on its own call }
-  end;
-  { threads that would not stop are left running with what they use (a leak, not a
-    hang: freeing a running TThread waits for it) }
-  if ThreadsFinished then
-  begin
-    FreeAndNil(FReader);
-    FreeAndNil(FWriter);
-    FreeAndNil(FBackend);
-    FreeAndNil(FResume);
-    FreeAndNil(FWriteEvent);
-    FreeAndNil(FLock);
-  end;
+  { only ever with both threads gone (Finish), or never started }
+  FreeAndNil(FReader);
+  FreeAndNil(FWriter);
+  if FStarted then
+    FBackend.Shutdown;
+  FreeAndNil(FBackend);
+  FreeAndNil(FResume);
+  FreeAndNil(FWriteEvent);
+  FreeAndNil(FWakeLock);
+  FreeAndNil(FLock);
+  InterLockedDecrement(GAlive);
   inherited Destroy;
 end;
 
-function TPtySession.Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
+function TPtySessionCore.Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
 begin
-  AError := '';
   Result := False;
-  if FStarted or FClosed then
-  begin
-    AError := 'the session was started already';
-    Exit;
-  end;
   if not FBackend.Start(ACommand, ACols, ARows, AError) then
     Exit;
   FStarted := True;
   FReader := TPtyThread.Create(Self, True);
   FWriter := TPtyThread.Create(Self, False);
-  FBackend.BindReader(FReader);
+  FBackend.BindThreads(FReader, FWriter);
   FReader.Start;
   FWriter.Start;
   Result := True;
 end;
 
-procedure TPtySession.Wake;
-var
-  h: TNotifyEvent;
+procedure TPtySessionCore.SetOnWake(AValue: TNotifyEvent);
 begin
-  { not under the lock: the host's callback may take locks of its own }
-  InterLockedIncrement(FWakeCount);
-  h := FOnWake;
-  if Assigned(h) then
-    h(Self);
+  FWakeLock.Enter;
+  try
+    FOnWake := AValue;
+  finally
+    FWakeLock.Leave;
+  end;
 end;
 
-procedure TPtySession.ReadLoop(AThread: TPtyThread);
+procedure TPtySessionCore.Wake;
+begin
+  InterLockedIncrement(FWakeCount);
+  { under a lock of its own (not FLock: the host's callback may take locks of its own):
+    BeginClose clears OnWake under it, so once Close returns no callback is running or
+    will run -- the host may go }
+  FWakeLock.Enter;
+  try
+    if Assigned(FOnWake) then
+      FOnWake(nil);
+  finally
+    FWakeLock.Leave;
+  end;
+end;
+
+procedure TPtySessionCore.ReadLoop;
 var
   buf: array of Byte;
-  n, code: Integer;
+  n: Integer;
+  code: Int64;
   wasEmpty, discard: Boolean;
   s: RawByteString;
 begin
@@ -294,10 +445,11 @@ begin
       finally
         FLock.Leave;
       end;
-      if not discard then
-        Wake;
+      Wake;
       Exit;
     end;
+    { closing: read on (the pseudo console may wait for its output to be drained),
+      keep nothing }
     if discard then
       Continue;
     SetLength(s, n);
@@ -317,7 +469,28 @@ begin
   end;
 end;
 
-procedure TPtySession.WriteLoop(AThread: TPtyThread);
+{ the reader is gone however it went: an exception in it is an end too, and the host
+  hears about it (the exit line), with the code not known }
+procedure TPtySessionCore.ReaderEnded;
+var
+  unreported: Boolean;
+begin
+  FLock.Enter;
+  try
+    unreported := not FEnded;
+    if unreported then
+    begin
+      FEnded := True;
+      FExitCode := -1;
+    end;
+  finally
+    FLock.Leave;
+  end;
+  if unreported then
+    Wake;
+end;
+
+procedure TPtySessionCore.WriteLoop;
 var
   data: RawByteString;
   stop: Boolean;
@@ -341,11 +514,23 @@ begin
   end;
 end;
 
-procedure TPtySession.Write(const AData: RawByteString);
+{ nothing writes the queue out any more: Write stops adding to it }
+procedure TPtySessionCore.WriterEnded;
 begin
-  if (AData = '') or not FStarted or FClosed then Exit;
   FLock.Enter;
   try
+    FWriterGone := True;
+    FWriteQueue := '';
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TPtySessionCore.Write(const AData: RawByteString);
+begin
+  FLock.Enter;
+  try
+    if FWriterGone or FStopping then Exit;
     FWriteQueue := FWriteQueue + AData;
   finally
     FLock.Leave;
@@ -353,13 +538,7 @@ begin
   FWriteEvent.SetEvent;
 end;
 
-procedure TPtySession.Resize(ACols, ARows: Integer);
-begin
-  if FStarted and not FClosed then
-    FBackend.Resize(ACols, ARows);
-end;
-
-function TPtySession.Pump(out AData: RawByteString; out AExited: Boolean; out AExitCode: Integer): Boolean;
+function TPtySessionCore.Pump(out AData: RawByteString; out AExited: Boolean; out AExitCode: Int64): Boolean;
 begin
   FLock.Enter;
   try
@@ -375,7 +554,7 @@ begin
   Result := (AData <> '') or AExited;
 end;
 
-procedure TPtySession.Delivered(ACount: Integer);
+procedure TPtySessionCore.Delivered(ACount: Integer);
 begin
   FLock.Enter;
   try
@@ -391,80 +570,209 @@ begin
   end;
 end;
 
-function TPtySession.ThreadsFinished: Boolean;
+function TPtySessionCore.ThreadsFinished: Boolean;
 begin
   Result := ((FReader = nil) or FReader.Finished) and ((FWriter = nil) or FWriter.Finished);
 end;
 
-procedure TPtySession.Close;
-var
-  waited: Integer;
+procedure TPtySessionCore.BeginClose;
 begin
-  if FClosed then Exit;
-  FClosed := True;
-  if not FStarted then
-    Exit;
   { 1. the reader discards and no longer waits for the terminal; the writer stops }
   FLock.Enter;
   try
     FDiscard := True;
     FStopping := True;
     FHeld := False;
+    FWriteQueue := '';
   finally
     FLock.Leave;
   end;
+  { 2. no wake reaches the host from here on (Wake holds this lock while it calls) }
+  SetOnWake(nil);
   FResume.SetEvent;
   FWriteEvent.SetEvent;
-  { 2. interrupt until both are gone -- a cancel that lands between two reads is lost,
-    so it is repeated -- bounded }
+  { 3. the program's side begins to go -- nothing here blocks }
+  FBackend.BeginClose;
+end;
+
+function TPtySessionCore.Finish: Boolean;
+var
+  closeResult: TPtyCloseResult;
+  t0: QWord;
+begin
+  { 1. the program's side goes, or is ended; the reader drains meanwhile }
+  closeResult := FBackend.FinishClose(PtyCloseWaitMs);
+  { 2. interrupt until both threads are gone -- a cancel that lands between two calls
+    is lost, so it is repeated -- bounded }
   FBackend.Interrupt;
-  waited := 0;
-  while not ThreadsFinished do
+  t0 := GetTickCount64;
+  while not ThreadsFinished and (GetTickCount64 - t0 < PtyThreadsWaitMs) do
   begin
-    if waited >= PtyCloseTimeoutMs then
-      raise Exception.Create('the PTY threads did not stop within 5 s');
-    Sleep(PtyCloseStepMs);
-    Inc(waited, PtyCloseStepMs);
+    Sleep(PtyThreadsStepMs);
     FBackend.Interrupt;
   end;
-  FReader.WaitFor;
-  FWriter.WaitFor;
-  { 3. the handles }
-  FBackend.Shutdown;
+  { 3. only what nothing uses any more is freed (the caller frees, Destroy closes the
+    handles); the rest stays -- a leak, not a use after free }
+  Result := ThreadsFinished and (closeResult <> pcrStuck);
+  if Result then
+  begin
+    FReader.WaitFor;
+    FWriter.WaitFor;
+  end;
+end;
+
+{ ---- TPtySession ------------------------------------------------------------------- }
+
+constructor TPtySession.Create(ABackend: TPtyBackend; AHigh, ALow, AChunk: Integer);
+begin
+  inherited Create;
+  FBackend := ABackend;
+  FCore := TPtySessionCore.Create(ABackend, AHigh, ALow, AChunk);
+end;
+
+destructor TPtySession.Destroy;
+begin
+  Close;
+  inherited Destroy;
+end;
+
+function TPtySession.Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
+begin
+  AError := '';
+  Result := False;
+  if FStarted or FClosed then
+  begin
+    AError := 'the session was started already';
+    Exit;
+  end;
+  FCore.SetOnWake(FOnWake);
+  if not FCore.Start(ACommand, ACols, ARows, AError) then
+    Exit;
+  FStarted := True;
+  Result := True;
+end;
+
+procedure TPtySession.SetOnWake(AValue: TNotifyEvent);
+begin
+  FOnWake := AValue;
+  if FCore <> nil then
+    FCore.SetOnWake(AValue);
+end;
+
+procedure TPtySession.Write(const AData: RawByteString);
+begin
+  if (AData = '') or not FStarted or FClosed then Exit;
+  FCore.Write(AData);
+end;
+
+procedure TPtySession.Resize(ACols, ARows: Integer);
+begin
+  if FStarted and not FClosed then
+    FBackend.Resize(ACols, ARows);
+end;
+
+function TPtySession.Pump(out AData: RawByteString; out AExited: Boolean; out AExitCode: Int64): Boolean;
+begin
+  if not FStarted or FClosed then
+  begin
+    AData := '';
+    AExited := False;
+    AExitCode := -1;
+    Exit(False);
+  end;
+  Result := FCore.Pump(AData, AExited, AExitCode);
+end;
+
+procedure TPtySession.Delivered(ACount: Integer);
+begin
+  if FStarted and not FClosed then
+    FCore.Delivered(ACount);
+end;
+
+procedure TPtySession.Close;
+var
+  core: TPtySessionCore;
+begin
+  if FClosed then Exit;
+  FClosed := True;
+  core := FCore;
+  FCore := nil;
+  FBackend := nil;
+  if core = nil then Exit;
+  if not FStarted then
+  begin
+    core.Free;
+    Exit;
+  end;
+  core.BeginClose;
+  { from here the core belongs to the finisher }
+  TPtyFinisher.Create(core);
 end;
 
 function TPtySession.GetOutstanding: Int64;
 begin
-  FLock.Enter;
+  Result := 0;
+  if FCore = nil then Exit;
+  FCore.FLock.Enter;
   try
-    Result := FOutstanding;
+    Result := FCore.FOutstanding;
   finally
-    FLock.Leave;
+    FCore.FLock.Leave;
   end;
 end;
 
 function TPtySession.GetMaxOutstanding: Int64;
 begin
-  FLock.Enter;
+  Result := 0;
+  if FCore = nil then Exit;
+  FCore.FLock.Enter;
   try
-    Result := FMaxOutstanding;
+    Result := FCore.FMaxOutstanding;
   finally
-    FLock.Leave;
+    FCore.FLock.Leave;
   end;
 end;
 
 function TPtySession.GetWakeCount: Integer;
 begin
-  Result := InterLockedExchangeAdd(FWakeCount, 0);
+  Result := 0;
+  if FCore = nil then Exit;
+  Result := InterLockedExchangeAdd(FCore.FWakeCount, 0);
 end;
 
 function TPtySession.GetTotalDelivered: Int64;
 begin
-  FLock.Enter;
+  Result := 0;
+  if FCore = nil then Exit;
+  FCore.FLock.Enter;
   try
-    Result := FTotalDelivered;
+    Result := FCore.FTotalDelivered;
   finally
-    FLock.Leave;
+    FCore.FLock.Leave;
+  end;
+end;
+
+function TPtySession.GetPendingWrite: Integer;
+begin
+  Result := 0;
+  if FCore = nil then Exit;
+  FCore.FLock.Enter;
+  try
+    Result := Length(FCore.FWriteQueue);
+  finally
+    FCore.FLock.Leave;
+  end;
+end;
+
+function TPtySession.GetWriterGone: Boolean;
+begin
+  Result := False;
+  if FCore = nil then Exit;
+  FCore.FLock.Enter;
+  try
+    Result := FCore.FWriterGone;
+  finally
+    FCore.FLock.Leave;
   end;
 end;
 

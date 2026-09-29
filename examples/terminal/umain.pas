@@ -274,8 +274,11 @@ end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
-  { the shell first: its threads and its pending pump go before anything they touch }
+  { the shell first: its pending pumps go before anything they touch. Freeing it
+    returns at once; its program is taken down on a thread of its own, which the
+    example waits for here, once and bounded, before it exits }
   FreeAndNil(FShell);
+  PtyWaitForFinishers(PtyExitWaitMs);
   Player.Enabled := False;
   FFiles.Free;
   FPlayer.Free;
@@ -651,7 +654,9 @@ begin
     Status.Panels[0].Text := Format(rsLinkNotOpenedFmt, [AUri]);
 end;
 
-{ OSC 52: a write is let through and shown; a read needs a yes }
+{ OSC 52: a write is let through and shown; a read needs a yes. This runs in the middle
+  of parsing: a modal dialog is fine, freeing the terminal (or switching modes, which
+  frees the shell) is not. }
 procedure TMainForm.TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
   var AText: string; var AAllow: Boolean);
 begin

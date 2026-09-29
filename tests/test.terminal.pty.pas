@@ -13,7 +13,14 @@ unit test.terminal.pty;
 
   On Windows, the second part: the pipe backend on real pipes, the build number, and
   ConPTY itself running cmd.exe (no window: a pseudo console has none; the program is
-  ended by its handle if it does not go with its console). }
+  ended by its handle if it does not go with its console).
+
+  Closing returns at once and finishes on the session's own thread: the tests that
+  close wait for the finishers (PtyWaitForFinishers) and count the sessions still
+  alive or leaked. A program that will not go with its console is this test runner
+  itself, started as a helper (--ty-pty-helper, handled in this unit's initialization
+  before any test runs): it blocks in its CTRL_CLOSE_EVENT handler, or leaves its
+  console, and sleeps -- only its handle ends it. }
 
 interface
 
@@ -30,7 +37,7 @@ type
     FEvent: TEvent;
     FPending: RawByteString;
     FEof: Boolean;
-    FEofCode: Integer;
+    FEofCode: Int64;
     FInterrupted: Boolean;
     FWritten: RawByteString;
     FResizeCols, FResizeRows, FResizes: Integer;
@@ -43,6 +50,9 @@ type
     ConPty: Boolean;
     Build: Integer;
     StartResult: Boolean;
+    StuckRead: TEvent;               { set: Read waits for it and ignores Interrupt }
+    RaiseInRead: Boolean;            { Read raises }
+    WriteFails: Boolean;             { Write answers False (the pipe is broken) }
     constructor Create;
     destructor Destroy; override;
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; override;
@@ -50,11 +60,11 @@ type
     function Write(const ABuf; ACount: Integer): Boolean; override;
     procedure Resize(ACols, ARows: Integer); override;
     procedure Interrupt; override;
-    function ExitCode(AWaitMs: Integer): Integer; override;
+    function ExitCode(AWaitMs: Integer): Int64; override;
     procedure Shutdown; override;
     function IsConPty(out ABuild: Integer): Boolean; override;
     procedure Feed(const S: RawByteString);
-    procedure FeedEof(ACode: Integer);
+    procedure FeedEof(ACode: Int64);
     function Written: RawByteString;
     function Reads: Integer;
     function LastResize: TPoint;
@@ -81,15 +91,31 @@ type
     procedure TestCloseDoesNotHang;
     procedure TestCloseWhileHeldBack;
     procedure TestBackpressureThroughTheTerminal;
+    procedure TestCloseWhileTheProgramExits;
+    procedure TestAStuckSessionIsLeftNotFreed;
+    procedure TestAReaderThatRaisesEndsTheSession;
+    procedure TestNoWritesQueueOnceTheWriterIsGone;
+    procedure TestTheExitCodeIsNotAnInteger;
+    procedure TestAfterTheExitKeysGoNowhere;
     {$IFDEF MSWINDOWS}
     procedure TestPipesRoundTrip;
     procedure TestInterruptUnblocksARead;
+    procedure TestABlockedWriteIsCancelled;
     procedure TestTheBuildNumberIsTheRealOne;
     procedure TestNoConPtyIsReported;
     procedure TestConPtyRunsACommand;
     procedure TestConPtyResizesAndCloses;
+    procedure TestConPtyCloseReturnsAtOnceAndEndsAProgramThatStays;
+    procedure TestConPtyCloseEndsAProgramThatLeftItsConsole;
+    procedure TestConPtyCloseWhileTheProgramExits;
     {$ENDIF}
   end;
+
+{$IFDEF MSWINDOWS}
+{ '--ty-pty-helper=block-close' / 'free-console': run as the helper and halt (called
+  from the initialization, before any test) }
+procedure RunPtyHelperIfAsked;
+{$ENDIF}
 
 implementation
 
@@ -130,6 +156,13 @@ function TFakePty.Read(var ABuf; ACount: Integer): Integer;
 var
   n: Integer;
 begin
+  if RaiseInRead then
+    raise Exception.Create('the fake read raises');
+  if StuckRead <> nil then
+  begin
+    StuckRead.WaitFor(INFINITE);
+    Exit(0);
+  end;
   while True do
   begin
     FLock.Enter;
@@ -172,7 +205,7 @@ begin
   FLock.Enter;
   try
     FWritten := FWritten + s;
-    Result := not FInterrupted;
+    Result := not FInterrupted and not WriteFails;
   finally
     FLock.Leave;
   end;
@@ -201,7 +234,7 @@ begin
   FEvent.SetEvent;
 end;
 
-function TFakePty.ExitCode(AWaitMs: Integer): Integer;
+function TFakePty.ExitCode(AWaitMs: Integer): Int64;
 begin
   FLock.Enter;
   try
@@ -232,7 +265,7 @@ begin
   FEvent.SetEvent;
 end;
 
-procedure TFakePty.FeedEof(ACode: Integer);
+procedure TFakePty.FeedEof(ACode: Int64);
 begin
   FLock.Enter;
   try
@@ -290,6 +323,8 @@ procedure TTyTerminalPtyTests.TearDown;
 begin
   Application.ProcessMessages;
   FreeAndNil(F);
+  { a test that failed half way leaves its session finishing: not into the next test }
+  PtyWaitForFinishers(PtyExitWaitMs);
 end;
 
 procedure TTyTerminalPtyTests.OnExit(Sender: TObject);
@@ -348,7 +383,7 @@ var
   i: Integer;
   data: RawByteString;
   exited: Boolean;
-  code: Integer;
+  code: Int64;
 
   function AllRead: Boolean;
   begin
@@ -389,7 +424,8 @@ var
   err: string;
   data: RawByteString;
   exited: Boolean;
-  code, before: Integer;
+  code: Int64;
+  before: Integer;
 
   function Grew: Boolean;
   begin
@@ -522,6 +558,8 @@ begin
   end;
 end;
 
+{ closing is two steps: Close returns at once, the finisher stops the threads and frees
+  the session behind it; both counted }
 procedure TTyTerminalPtyTests.TestCloseDoesNotHang;
 var
   fake: TFakePty;
@@ -529,28 +567,41 @@ var
   sh: TTerminalShell;
   err: string;
   t0: QWord;
+  alive, pumps: Integer;
 begin
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  alive := PtySessionsAlive;
   fake := TFakePty.Create;
   s := TPtySession.Create(fake);
   try
     AssertTrue('started', s.Start('fake', 80, 24, err));
+    AssertEquals('one session alive', alive + 1, PtySessionsAlive);
     Sleep(50);                                 { the reader is waiting in Read }
     t0 := GetTickCount64;
     s.Close;
-    AssertTrue(Format('closed within a second (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 1000);
-    AssertTrue('both threads are gone', s.ThreadsFinished);
+    AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
     s.Close;                                   { again: nothing }
   finally
     s.Free;
   end;
-  { a shell freed with a pump still queued }
+  AssertTrue('the finisher finished', PtyWaitForFinishers(2000));
+  AssertEquals('and freed the session', alive, PtySessionsAlive);
+  { a shell freed with a pump still queued: the pump is taken out, not run on the freed
+    shell (PumpsRun is a class variable -- it counts a pump on freed memory too) }
   fake := TFakePty.Create;
   sh := TTerminalShell.Create(F.View, fake);
   AssertTrue('started', sh.Start('fake', err));
   fake.Feed('queued');
   Sleep(100);                                  { the wake is queued, not run }
+  pumps := TTerminalShell.PumpsRun;
+  t0 := GetTickCount64;
   sh.Free;
+  AssertTrue(Format('the shell went at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
   Application.ProcessMessages;                 { would run the freed shell's pump }
+  Application.ProcessMessages;
+  AssertEquals('no pump ran after the shell was freed', pumps, TTerminalShell.PumpsRun);
+  AssertTrue('its session finished', PtyWaitForFinishers(2000));
+  AssertEquals('and was freed', alive, PtySessionsAlive);
 end;
 
 procedure TTyTerminalPtyTests.TestCloseWhileHeldBack;
@@ -575,10 +626,14 @@ begin
     Sleep(100);
     t0 := GetTickCount64;
     s.Close;
-    AssertTrue(Format('closed within a second (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 1000);
+    AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
   finally
     s.Free;
   end;
+  { the reader, held back, is let go: within a second, not after the finisher's bound }
+  t0 := GetTickCount64;
+  AssertTrue('the finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
+  AssertTrue(Format('within a second (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 1000);
 end;
 
 procedure TTyTerminalPtyTests.TestBackpressureThroughTheTerminal;
@@ -606,6 +661,190 @@ begin
     AssertEquals('every byte parsed and counted back', Int64(Total), sh.Session.TotalDelivered);
     AssertTrue(Format('never more than the high mark plus a chunk ahead (%d)', [sh.Session.MaxOutstanding]),
       sh.Session.MaxOutstanding <= 256 * 1024 + 65536);
+  finally
+    sh.Free;
+  end;
+end;
+
+{ the program's end and the user's close at the same moment, many times over: nothing
+  of a freed shell runs (no pump, no exit line), every session is finished and freed }
+procedure TTyTerminalPtyTests.TestCloseWhileTheProgramExits;
+var
+  fake: TFakePty;
+  sh: TTerminalShell;
+  err: string;
+  alive, pumps, exits, i: Integer;
+begin
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  alive := PtySessionsAlive;
+  for i := 0 to 29 do
+  begin
+    fake := TFakePty.Create;
+    sh := TTerminalShell.Create(F.View, fake);
+    sh.OnExit := @OnExit;
+    AssertTrue('started', sh.Start('fake', err));
+    fake.Feed('bye');
+    fake.FeedEof(i);
+    { 0..2 ms: before the reader read the end, while it wakes, after the pump is queued }
+    if i mod 3 > 0 then Sleep(i mod 3);
+    if i mod 5 = 4 then Application.ProcessMessages;
+    exits := FExits;
+    pumps := TTerminalShell.PumpsRun;
+    sh.Free;
+    Application.ProcessMessages;
+    Application.ProcessMessages;
+    AssertEquals(Format('round %d: no pump after the free', [i]), pumps, TTerminalShell.PumpsRun);
+    AssertEquals(Format('round %d: no exit line after the free', [i]), exits, FExits);
+  end;
+  AssertTrue('every finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
+  AssertEquals('every session was freed', alive, PtySessionsAlive);
+end;
+
+{ a reader that will not come out of Read: Close still returns at once, and the
+  finisher leaves the session (its threads use it) instead of freeing it }
+procedure TTyTerminalPtyTests.TestAStuckSessionIsLeftNotFreed;
+var
+  fake: TFakePty;
+  s: TPtySession;
+  stuck: TEvent;
+  err: string;
+  t0: QWord;
+  alive, leaked: Integer;
+begin
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  alive := PtySessionsAlive;
+  leaked := PtySessionsLeaked;
+  stuck := TEvent.Create(nil, True, False, '');
+  fake := TFakePty.Create;
+  fake.StuckRead := stuck;
+  s := TPtySession.Create(fake);
+  AssertTrue('started', s.Start('fake', 80, 24, err));
+  Sleep(50);
+  t0 := GetTickCount64;
+  s.Free;
+  AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
+  AssertTrue('the finisher gave up within its bound', PtyWaitForFinishers(PtyExitWaitMs));
+  AssertEquals('one session left behind', leaked + 1, PtySessionsLeaked);
+  AssertEquals('and not freed', alive + 1, PtySessionsAlive);
+  { let the reader go: it ends in the session that was left for it (never freed) }
+  stuck.SetEvent;
+  Sleep(100);
+  { the event stays: the leaked fake still points at it }
+end;
+
+{ an exception in the reader is an end like any other: the host shows the exit line }
+procedure TTyTerminalPtyTests.TestAReaderThatRaisesEndsTheSession;
+var
+  fake: TFakePty;
+  sh: TTerminalShell;
+  err: string;
+
+  function Exited: Boolean;
+  begin
+    Result := FExits > 0;
+  end;
+
+begin
+  fake := TFakePty.Create;
+  fake.RaiseInRead := True;
+  sh := TTerminalShell.Create(F.View, fake);
+  try
+    sh.OnExit := @OnExit;
+    AssertTrue('started', sh.Start('fake', err));
+    AssertTrue('the exit was announced', WaitUntil(@Exited));
+    AssertEquals('code not known', Int64(-1), sh.ExitCode);
+    AssertEquals('the line', Format(rsShellExited, [-1]), F.RowText(1));
+  finally
+    sh.Free;
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestNoWritesQueueOnceTheWriterIsGone;
+var
+  fake: TFakePty;
+  s: TPtySession;
+  err: string;
+
+  function Gone: Boolean;
+  begin
+    Result := s.WriterGone;
+  end;
+
+begin
+  fake := TFakePty.Create;
+  fake.WriteFails := True;
+  s := TPtySession.Create(fake);
+  try
+    AssertTrue('started', s.Start('fake', 80, 24, err));
+    s.Write('a');
+    AssertTrue('the broken write ended the writer', WaitUntil(@Gone));
+    s.Write('bbbb');
+    AssertEquals('nothing queues up behind it', 0, s.PendingWrite);
+  finally
+    s.Free;
+  end;
+end;
+
+{ Windows exit codes are DWORDs: 4294967295 is a code, not "not known" }
+procedure TTyTerminalPtyTests.TestTheExitCodeIsNotAnInteger;
+const
+  Big = Int64(4294967295);
+var
+  fake: TFakePty;
+  sh: TTerminalShell;
+  err: string;
+
+  function Exited: Boolean;
+  begin
+    Result := FExits > 0;
+  end;
+
+begin
+  fake := TFakePty.Create;
+  sh := TTerminalShell.Create(F.View, fake);
+  try
+    sh.OnExit := @OnExit;
+    AssertTrue('started', sh.Start('fake', err));
+    fake.FeedEof(Big);
+    AssertTrue('the exit was announced', WaitUntil(@Exited));
+    AssertEquals('the code', Big, sh.ExitCode);
+    AssertEquals('the line', Format(rsShellExited, [Big]), F.RowText(1));
+  finally
+    sh.Free;
+  end;
+end;
+
+procedure TTyTerminalPtyTests.TestAfterTheExitKeysGoNowhere;
+var
+  fake: TFakePty;
+  sh: TTerminalShell;
+  err: string;
+  ch: TUTF8Char;
+
+  function Exited: Boolean;
+  begin
+    Result := FExits > 0;
+  end;
+
+begin
+  fake := TFakePty.Create;
+  sh := TTerminalShell.Create(F.View, fake);
+  try
+    sh.OnExit := @OnExit;
+    AssertTrue('started', sh.Start('fake', err));
+    AssertFalse('writable while it runs', F.View.ReadOnly);
+    fake.FeedEof(0);
+    AssertTrue('the exit was announced', WaitUntil(@Exited));
+    AssertTrue('read-only again', F.View.ReadOnly);
+    ch := 'x';
+    F.View.TypeChar(ch);
+    { a host that turns read-only off again: the shell itself drops the keys }
+    F.View.ReadOnly := False;
+    ch := 'y';
+    F.View.TypeChar(ch);
+    Sleep(200);
+    AssertEquals('no key reached the PTY', '', fake.Written);
+    AssertEquals('none was queued', 0, sh.Session.PendingWrite);
   finally
     sh.Free;
   end;
@@ -654,7 +893,7 @@ var
   err: string;
   data, all: RawByteString;
   exited, ended: Boolean;
-  code: Integer;
+  code: Int64;
   buf: array[0..15] of AnsiChar;
   got, avail, written: DWORD;
 
@@ -717,7 +956,45 @@ begin
     Sleep(100);                                  { the reader blocks in ReadFile }
     t0 := GetTickCount64;
     s.Close;
-    AssertTrue(Format('the blocked read was cancelled (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 1000);
+    AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
+    { our ends of the pipes stay open: only the cancel gets the reader out }
+    AssertTrue('the blocked read was cancelled within a second', PtyWaitForFinishers(1000));
+  finally
+    s.Free;
+    CloseHandle(outWrite);
+    CloseHandle(inRead);
+  end;
+end;
+
+{ the program reads no input: the writer blocks in WriteFile on a full pipe; closing
+  cancels it (a writer that could not be got out would leave the session behind) }
+procedure TTyTerminalPtyTests.TestABlockedWriteIsCancelled;
+var
+  inRead, inWrite, outRead, outWrite: THandle;
+  s: TPtySession;
+  err: string;
+  t0: QWord;
+  alive, leaked: Integer;
+  big: RawByteString;
+begin
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  alive := PtySessionsAlive;
+  leaked := PtySessionsLeaked;
+  AssertTrue('pipes', CreatePipe(inRead, inWrite, nil, 4096) and CreatePipe(outRead, outWrite, nil, 0));
+  s := TPtySession.Create(TPipeBackend.Create(inWrite, outRead, True));
+  try
+    AssertTrue('started', s.Start('', 80, 24, err));
+    SetLength(big, 1024 * 1024);
+    FillChar(big[1], Length(big), Ord('k'));
+    s.Write(big);
+    Sleep(200);                                  { the writer blocks in WriteFile }
+    AssertEquals('the writer took it (and is blocked with it)', 0, s.PendingWrite);
+    t0 := GetTickCount64;
+    s.Close;
+    AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
+    AssertTrue('the blocked write was cancelled within a second', PtyWaitForFinishers(1000));
+    AssertEquals('nothing left behind', leaked, PtySessionsLeaked);
+    AssertEquals('the session was freed', alive, PtySessionsAlive);
   finally
     s.Free;
     CloseHandle(outWrite);
@@ -773,7 +1050,7 @@ var
   err: string;
   all, data: RawByteString;
   exited, ended: Boolean;
-  code, endCode: Integer;
+  code, endCode: Int64;
 
   function TheEnd: Boolean;
   begin
@@ -795,13 +1072,13 @@ begin
     Ignore('this Windows has no ConPTY (1809 or later is needed)');
   s := TPtySession.Create(TConPtyBackend.Create);
   try
-    AssertTrue('started: ' + err, s.Start('cmd.exe /d /c echo tyterm-ok& exit 7', 80, 24, err));
+    if not s.Start('cmd.exe /d /c echo tyterm-ok& exit 7', 80, 24, err) then Fail('not started: ' + err);
     all := '';
     ended := False;
     endCode := -2;
     AssertTrue('the program ended within 10 s', WaitUntil(@TheEnd, 10000));
     AssertTrue('its output came through: ' + StripEscapes(all), Pos('tyterm-ok', StripEscapes(all)) > 0);
-    AssertEquals('its exit code', 7, endCode);
+    AssertEquals('its exit code', Int64(7), endCode);
   finally
     s.Free;
   end;
@@ -821,23 +1098,197 @@ begin
   s := TPtySession.Create(b);
   proc := 0;
   try
-    AssertTrue('started: ' + err, s.Start('cmd.exe /d /k', 80, 24, err));
+    if not s.Start('cmd.exe /d /k', 80, 24, err) then Fail('not started: ' + err);
     proc := OpenProcess(SYNCHRONIZE, False, b.ProcessId);
     AssertTrue('the program is there', proc <> 0);
     s.Resize(100, 40);
     AssertEquals('ResizePseudoConsole succeeded', 0, b.LastResizeResult);
     t0 := GetTickCount64;
     s.Close;
-    AssertTrue(Format('closed within 5 s (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 5000);
-    AssertEquals('the program is gone', WAIT_OBJECT_0, WaitForSingleObject(proc, 0));
+    AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
+    AssertEquals('the program went with its console', WAIT_OBJECT_0, WaitForSingleObject(proc, PtyExitWaitMs));
+    AssertTrue('the finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
   finally
     s.Free;
     if proc <> 0 then CloseHandle(proc);
   end;
 end;
 
+{ ---- the helper: this runner, started under a pseudo console ---------------------- }
+
+function HelperBlockClose(ACtrl: DWORD): WINBOOL; stdcall;
+begin
+  { the close, the log-off, the shut-down: never done -- only its handle ends it }
+  if (ACtrl = CTRL_CLOSE_EVENT) or (ACtrl = CTRL_LOGOFF_EVENT) or (ACtrl = CTRL_SHUTDOWN_EVENT) then
+    Sleep(INFINITE);
+  Result := True;
+end;
+
+procedure HelperSay(const S: RawByteString);
+var
+  h: THandle;
+  done: DWORD;
+begin
+  { the console's own output (the standard handles may be the runner's redirection) }
+  h := CreateFileW('CONOUT$', GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, nil,
+    OPEN_EXISTING, 0, 0);
+  if h = INVALID_HANDLE_VALUE then Exit;
+  done := 0;
+  WriteFile(h, S[1], Length(S), done, nil);
+  CloseHandle(h);
+end;
+
+procedure RunPtyHelperIfAsked;
+const
+  Flag = '--ty-pty-helper=';
+var
+  mode: string;
+begin
+  if Copy(ParamStr(1), 1, Length(Flag)) <> Flag then Exit;
+  mode := Copy(ParamStr(1), Length(Flag) + 1, MaxInt);
+  if mode = 'block-close' then
+    SetConsoleCtrlHandler(@HelperBlockClose, True);
+  HelperSay('ty-helper-ready'#13#10);
+  if mode = 'free-console' then
+    FreeConsole;
+  Sleep(60000);
+  Halt(0);
+end;
+
+{ the helper's run: Close returns at once, the program is ended by its handle (exit code
+  1 is TerminateProcess's; a program that went on its own would have another), nothing
+  is left behind -- looked up by the helper's PID only }
+procedure CloseAHelper(ACase: TTestCase; const AMode: string);
+var
+  s: TPtySession;
+  b: TConPtyBackend;
+  err: string;
+  all, data: RawByteString;
+  exited: Boolean;
+  code: Int64;
+  proc: THandle;
+  t0: QWord;
+  alive, leaked: Integer;
+  exitCode: DWORD;
+
+  function Ready: Boolean;
+  begin
+    if s.Pump(data, exited, code) then
+    begin
+      all := all + data;
+      s.Delivered(Length(data));
+    end;
+    Result := Pos('ty-helper-ready', StripEscapes(all)) > 0;
+  end;
+
+begin
+  ACase.AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  alive := PtySessionsAlive;
+  leaked := PtySessionsLeaked;
+  b := TConPtyBackend.Create;
+  s := TPtySession.Create(b);
+  proc := 0;
+  try
+    if not s.Start('"' + ParamStr(0) + '" --ty-pty-helper=' + AMode, 80, 24, err) then ACase.Fail('not started: ' + err);
+    proc := OpenProcess(SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION, False, b.ProcessId);
+    ACase.AssertTrue('the helper is there', proc <> 0);
+    all := '';
+    ACase.AssertTrue('the helper is ready: ' + StripEscapes(all), WaitUntil(@Ready, 20000));
+    t0 := GetTickCount64;
+    s.Close;
+    ACase.AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 200);
+    ACase.AssertEquals('the helper is gone', WAIT_OBJECT_0, WaitForSingleObject(proc, PtyExitWaitMs));
+    exitCode := 0;
+    ACase.AssertTrue(GetExitCodeProcess(proc, exitCode));
+    ACase.AssertEquals('ended by its handle', Int64(1), Int64(exitCode));
+    ACase.AssertTrue('the finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
+    ACase.AssertEquals('nothing left behind', leaked, PtySessionsLeaked);
+    ACase.AssertEquals('the session was freed', alive, PtySessionsAlive);
+  finally
+    s.Free;
+    if proc <> 0 then
+    begin
+      { a failed run must not leave the helper for a minute: by its handle }
+      if WaitForSingleObject(proc, 0) <> WAIT_OBJECT_0 then
+      begin
+        CloseHandle(proc);
+        proc := OpenProcess(PROCESS_TERMINATE, False, b.ProcessId);
+        if proc <> 0 then TerminateProcess(proc, 2);
+      end;
+      if proc <> 0 then CloseHandle(proc);
+    end;
+  end;
+end;
+
+{ the helper sits in its CTRL_CLOSE_EVENT handler: ClosePseudoConsole (before 24H2)
+  would wait for it; the finisher ends it by its handle after PtyCloseWaitMs }
+procedure TTyTerminalPtyTests.TestConPtyCloseReturnsAtOnceAndEndsAProgramThatStays;
+begin
+  if not TyConPtyAvailable then
+    Ignore('this Windows has no ConPTY (1809 or later is needed)');
+  CloseAHelper(Self, 'block-close');
+end;
+
+{ the helper left its console: ClosePseudoConsole returns, the program stays }
+procedure TTyTerminalPtyTests.TestConPtyCloseEndsAProgramThatLeftItsConsole;
+begin
+  if not TyConPtyAvailable then
+    Ignore('this Windows has no ConPTY (1809 or later is needed)');
+  CloseAHelper(Self, 'free-console');
+end;
+
+{ the program's end and the user's close together, on a real pseudo console }
+procedure TTyTerminalPtyTests.TestConPtyCloseWhileTheProgramExits;
+var
+  s: TPtySession;
+  b: TConPtyBackend;
+  err: string;
+  procs: array[0..4] of THandle;
+  i, alive, leaked: Integer;
+  t0: QWord;
+begin
+  if not TyConPtyAvailable then
+    Ignore('this Windows has no ConPTY (1809 or later is needed)');
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  alive := PtySessionsAlive;
+  leaked := PtySessionsLeaked;
+  FillChar(procs, SizeOf(procs), 0);
+  try
+    for i := 0 to High(procs) do
+    begin
+      b := TConPtyBackend.Create;
+      s := TPtySession.Create(b);
+      try
+        if not s.Start('cmd.exe /d /c exit 3', 80, 24, err) then Fail('not started: ' + err);
+        procs[i] := OpenProcess(SYNCHRONIZE, False, b.ProcessId);
+        { 0, 20, 40 ... ms: before, while and after cmd exits }
+        if i > 0 then
+          Sleep(i * 20);
+        t0 := GetTickCount64;
+        s.Close;
+        AssertTrue(Format('round %d: Close returned at once (%d ms)', [i, GetTickCount64 - t0]),
+          GetTickCount64 - t0 < 200);
+      finally
+        s.Free;
+      end;
+    end;
+    AssertTrue('every finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
+    for i := 0 to High(procs) do
+      if procs[i] <> 0 then
+        AssertEquals(Format('round %d: cmd is gone', [i]), WAIT_OBJECT_0, WaitForSingleObject(procs[i], 0));
+    AssertEquals('nothing left behind', leaked, PtySessionsLeaked);
+    AssertEquals('every session was freed', alive, PtySessionsAlive);
+  finally
+    for i := 0 to High(procs) do
+      if procs[i] <> 0 then CloseHandle(procs[i]);
+  end;
+end;
+
 {$ENDIF}
 
 initialization
+  {$IFDEF MSWINDOWS}
+  RunPtyHelperIfAsked;
+  {$ENDIF}
   RegisterTest(TTyTerminalPtyTests);
 end.
