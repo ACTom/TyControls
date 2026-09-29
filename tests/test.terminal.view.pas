@@ -30,6 +30,7 @@ type
     ClipWritten: string;
     WholeInvalidates: Integer;
     MuteFontNotice, MuteInvalidate: Boolean;
+    property RasterBudgetMs;
     procedure Invalidate; override;
     procedure ReleaseKey(var Key: Word; Shift: TShiftState);
     function Surface: TBGRABitmap;

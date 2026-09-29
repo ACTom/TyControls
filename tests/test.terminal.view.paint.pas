@@ -91,6 +91,10 @@ procedure TTyTerminalViewPaintTests.SetUp;
 begin
   F := TTyTermViewFixture.Create;
   F.SizeTo(20, 5);
+  { a pixel test wants the whole frame: under load the 10 ms budget for new glyphs
+    runs out and leaves a row (or a glyph) for the next frame. The timing tests set it
+    back. }
+  F.View.RasterBudgetMs := 0;
   FClockMs := 100000;
 end;
 
@@ -887,6 +891,7 @@ var
 begin
   { 95 printable ASCII x regular, bold, italic, bold italic: 380 glyphs never drawn }
   F.SizeTo(100, 8);
+  F.View.RasterBudgetMs := 10;                 { the control's default: spread over frames }
   s := #27'[H';
   for st := 0 to 3 do
   begin
