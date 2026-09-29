@@ -21,6 +21,7 @@ type
     function SpecFromJson(const AText: string): TTySymbolSpec;
   published
     procedure TestTheNamesAndTheirTwoPrefixes;
+    procedure TestOneOffsetIsBothAndAPercentIsOfTheSize;
     procedure TestTheDefaultsAreUpstreamsAndDifferByType;
     procedure TestTheOptionIsActuallyRead;
     procedure TestACircleTakesTheShorterSide;
@@ -360,6 +361,21 @@ begin
     sh.Points[1].X - sh.Points[2].X, Eps);
   AssertEquals('in both directions', 10.0,
     sh.Points[1].Y - sh.Points[0].Y, Eps);
+end;
+
+procedure TAdvChartSymbolTest.TestOneOffsetIsBothAndAPercentIsOfTheSize;
+var s: TTySymbolSpec;
+begin
+  { normalizeSymbolOffset: a single value is both offsets, and parsePercent
+    takes a percentage of the symbol's own width and height [Batch 71] }
+  s := TySymbolResolveOffset(SpecFromJson(
+    '{"symbolSize": [20, 10], "symbolOffset": "25%"}'));
+  AssertEquals('x: a quarter of the width', 5, s.OffsetX);
+  AssertEquals('y: a quarter of the height', 2.5, s.OffsetY);
+  s := TySymbolResolveOffset(SpecFromJson(
+    '{"symbolSize": [20, 10], "symbolOffset": [4, "-50%"]}'));
+  AssertEquals('a number is px', 4, s.OffsetX);
+  AssertEquals('a percentage of the height', -5, s.OffsetY);
 end;
 
 initialization

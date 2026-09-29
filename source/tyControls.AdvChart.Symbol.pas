@@ -49,15 +49,25 @@ type
     RotateDeg: Double;
     OffsetX: Double;
     OffsetY: Double;
+    { A PERCENTAGE OFFSET is of the symbol's own size (parsePercent against
+      symbolSize), so it is kept as a fraction and resolved once the row's
+      size is known -- TySymbolResolveOffset. [Batch 71] }
+    OffsetXIsPct, OffsetYIsPct: Boolean;
+    OffsetXPct, OffsetYPct: Double;
     { ONLY `path://` AND `image://` CONSULT THIS. createSymbol passes it to
       makePath/makeImage as the bounding-rect fit mode and never to a built-in
       shape, so squaring a triangle's box off would be this port's invention. }
     KeepAspect: Boolean;
   end;
+  TTySymbolSpecArray = array of TTySymbolSpec;
 
 { A spec with upstream's defaults for a series type: symbolSize is 10 for a
   scatter and 6 for a line, and neither is written down anywhere else. }
 function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
+
+{ The offset in px for the size the spec now has: a percentage is of the
+  width (x) and the height (y). }
+function TySymbolResolveOffset(const ASpec: TTySymbolSpec): TTySymbolSpec;
 
 { Read `symbol`, `symbolSize`, `symbolRotate`, `symbolOffset` and
   `symbolKeepAspect` off a series node, over the given defaults. }
@@ -121,9 +131,10 @@ function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
 begin
   Result.Kind := tsyCircle;
   Result.PathData := '';
-  if ASeriesType = 'scatter' then
+  if (ASeriesType = 'scatter') or (ASeriesType = 'effectScatter') then
   begin
-    { ScatterSeries: symbol 'circle', symbolSize 10, solid. }
+    { ScatterSeries and EffectScatterSeries: symbol 'circle', symbolSize 10,
+      solid. }
     Result.Empty := False;
     Result.WidthPx := cScatterSymbolSize;
     Result.HeightPx := cScatterSymbolSize;
@@ -194,6 +205,14 @@ begin
   Result := tsyRect;
 end;
 
+function PctNum(const S: string): Double;
+var fs: TFormatSettings;
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  Result := StrToFloatDef(Trim(S), NaN, fs);
+end;
+
 { symbolSize is a number or a two-element array; a callback cannot survive the
   trip through JSON and is simply absent. }
 procedure ReadSize(ANode: TJSONObject; var ASpec: TTySymbolSpec);
@@ -209,6 +228,13 @@ begin
     ASpec.HeightPx := d.AsFloat;
     Exit;
   end;
+  { `+symbolSize`: a numeric string is its number [Batch 71] }
+  if (d.JSONType = jtString) and not IsNan(PctNum(d.AsString)) then
+  begin
+    ASpec.WidthPx := PctNum(d.AsString);
+    ASpec.HeightPx := ASpec.WidthPx;
+    Exit;
+  end;
   if not (d is TJSONArray) then Exit;
   a := TJSONArray(d);
   { EACH ELEMENT TYPE-CHECKED, because `Floats[]` COERCES: handed the string
@@ -222,10 +248,46 @@ begin
     guessed at, which is what ReadOffset just below already did. }
   if (a.Count > 0) and (a.Items[0].JSONType = jtNumber) then
     ASpec.WidthPx := a.Floats[0];
+  { normalizeSymbolSize: `[w, h]` taken as written, a missing height is
+    `undefined || 0` -- so `[8]` is eight wide and nothing tall, not a
+    square [Batch 71: it was doubled] }
   if (a.Count > 1) and (a.Items[1].JSONType = jtNumber) then
     ASpec.HeightPx := a.Floats[1]
   else if a.Count <= 1 then
-    ASpec.HeightPx := ASpec.WidthPx;
+    ASpec.HeightPx := 0;
+end;
+
+{ One offset: a number as px, a string ending in '%' as a fraction of the
+  size, any other string parseFloat'd as px. }
+procedure ReadOffsetOne(AData: TJSONData; var APx: Double; var AIsPct: Boolean;
+  var APct: Double);
+var
+  s: string;
+  v: Double;
+begin
+  AIsPct := False;
+  APx := 0;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+    APx := AData.AsFloat
+  else if AData.JSONType = jtString then
+  begin
+    s := Trim(AData.AsString);
+    if (s <> '') and (s[Length(s)] = '%') then
+    begin
+      v := PctNum(Copy(s, 1, Length(s) - 1));
+      if not IsNan(v) then
+      begin
+        AIsPct := True;
+        APct := v / 100;
+      end;
+    end
+    else
+    begin
+      v := PctNum(s);
+      if not IsNan(v) then APx := v;
+    end;
+  end;
 end;
 
 procedure ReadOffset(ANode: TJSONObject; var ASpec: TTySymbolSpec);
@@ -234,14 +296,28 @@ var
   a: TJSONArray;
 begin
   d := ANode.Find('symbolOffset');
-  if (d = nil) or not (d is TJSONArray) then Exit;
+  if d = nil then Exit;
+  { normalizeSymbolOffset: a single value is both offsets }
+  if not (d is TJSONArray) then
+  begin
+    ReadOffsetOne(d, ASpec.OffsetX, ASpec.OffsetXIsPct, ASpec.OffsetXPct);
+    ReadOffsetOne(d, ASpec.OffsetY, ASpec.OffsetYIsPct, ASpec.OffsetYPct);
+    Exit;
+  end;
   a := TJSONArray(d);
-  { A percentage offset is of the symbol's own size. Only the numeric form is
-    read here; a '50%' string is left at zero rather than guessed at. }
-  if (a.Count > 0) and (a.Items[0].JSONType = jtNumber) then
-    ASpec.OffsetX := a.Floats[0];
-  if (a.Count > 1) and (a.Items[1].JSONType = jtNumber) then
-    ASpec.OffsetY := a.Floats[1];
+  if a.Count > 0 then
+    ReadOffsetOne(a.Items[0], ASpec.OffsetX, ASpec.OffsetXIsPct, ASpec.OffsetXPct);
+  if a.Count > 1 then
+    ReadOffsetOne(a.Items[1], ASpec.OffsetY, ASpec.OffsetYIsPct, ASpec.OffsetYPct)
+  else
+    ReadOffsetOne(nil, ASpec.OffsetY, ASpec.OffsetYIsPct, ASpec.OffsetYPct);
+end;
+
+function TySymbolResolveOffset(const ASpec: TTySymbolSpec): TTySymbolSpec;
+begin
+  Result := ASpec;
+  if ASpec.OffsetXIsPct then Result.OffsetX := ASpec.OffsetXPct * ASpec.WidthPx;
+  if ASpec.OffsetYIsPct then Result.OffsetY := ASpec.OffsetYPct * ASpec.HeightPx;
 end;
 
 function TySymbolSpecOf(ANode: TJSONObject;

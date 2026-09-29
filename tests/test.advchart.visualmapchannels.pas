@@ -302,10 +302,16 @@ begin
     end;
     { a symbol: none is nothing drawn }
     sym := Str(r.Find('symbol'));
-    { a symbol of no size is an element upstream and nothing here: the same
-      picture }
-    if (drawn <> nil) and (r.Arrays['symbolSize'].Count = 1)
-      and (FromHex(r.Arrays['symbolSize'].Strings[0]) = 0) then drawn := nil;
+    { a symbol of no size is an element upstream and here too -- it paints
+      nothing and carries its label [Batch 71: it was dropped here] }
+    if (drawn <> nil) and (sym <> 'none') and (r.Arrays['symbolSize'].Count = 1)
+      and (FromHex(r.Arrays['symbolSize'].Strings[0]) = 0) then
+    begin
+      Inc(FCompared);
+      if found <> 1 then
+        Miss(Format('s%d row %d: %d elements for a symbol of no size', [si, raw, found]));
+      Continue;
+    end;
     if (drawn = nil) or (sym = 'none') then
     begin
       if found > 0 then Miss(Format('s%d row %d: drawn here, not upstream', [si, raw]));
@@ -356,11 +362,11 @@ begin
         or ((el.Shape.Kind = cskPolygon) and (Abs(w - sz) > 1e-9 * Max(1, sz))) then
         Miss(Format('s%d row %d: %s wide here, %s upstream', [si, raw, Fmt(w), Fmt(sz)]));
     end;
-    { liftZ over the series' own z2 }
+    { liftZ over a symbol's own z2, which is 100 (Symbol.ts:85) }
     if (r.Find('liftZ') <> nil) and (r.Find('liftZ').JSONType <> jtNull) then
     begin
       Inc(FCompared);
-      if el.Z2 <> Round(FromHex(r.Strings['liftZ'])) then
+      if el.Z2 <> 100 + Round(FromHex(r.Strings['liftZ'])) then
         Miss(Format('s%d row %d: z2 %d here, lifted %s upstream', [si, raw, el.Z2,
           r.Strings['liftZText']]));
     end;

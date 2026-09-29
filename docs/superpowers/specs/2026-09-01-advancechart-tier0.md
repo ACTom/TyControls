@@ -7897,3 +7897,35 @@ M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画
 
 - 上游在值维度被猜成类目(前几行里有非数字的字符串)时保留原始值,`isNaN(null)` 和 `isNaN('')` 为假,于是值为 `null` 或 `''` 的行也会画出格子;端口按数读值,这两种行是空缺。
 - 散点、涟漪散点、关系图、饼图在日历上还没有画——下一批。
+
+## 105. Tier 1 第七十一批:日历上的散点和涟漪散点(H4a,2026-09-30)
+
+### 上游的做法
+
+- **位置**:日历的 `dataToPoint([时间, 值])` 只看日期,落在当天格子的中心;值不是数也照画(`'-'`、`null`、缺值都有符号),值从不拿来当尺寸;日期不在范围内就没有点。日历没有面积,不裁剪。
+- **符号**:`symbolSize` 走 `normalizeSymbolSize`——数字(或数字字符串)是正方,数组照写,`[a]` 是 a 宽、高为 0;`symbolOffset` 单个值当两个,百分比是符号自身宽/高的比例;条目自己的 `symbol`、`symbolSize`、`symbolRotate`、`symbolOffset` 压过系列的,数组也算。尺寸为 0 的符号仍是一个元素——不画东西、挂着标签,画廊里只显示文字的系列(calendar-pie 的日期、calendar-lunar 的农历)就是这么写的。
+- **z2**:符号 100(Symbol.ts:85,系列的 `z2` 选项够不到它),加 visualMap 的 liftZ;标签 102。所以符号在日历的月线(20)和名字(30)上面。这一条在直角坐标上也一样。
+- **effectScatter**:符号之外有 `rippleEffect.number` 个涟漪(默认 3、`brushType` 默认 `'fill'`),z2 99、不响应鼠标;`showEffectOn` 不是 `'render'` 时没有涟漪。服务器端渲染只停在动画的第一帧:每个涟漪都是同一个符号形状、同样大小、不透明度 1——描边时正好是符号边上的一圈,填充时被符号盖住。条目可以写自己的 `rippleEffect.number`。
+
+### 做法
+
+- `Marks`:散点一个符号的整段逻辑抽成 `AddScatterSymbol`,直角坐标和日历共用;日历上走 `TyBuildCalendarScatter`。effectScatter 进渲染器表,用同一个散点构建器,涟漪由视觉记录里的 `Ripple*` 字段决定(控件的 `RippleOf` 读选项)。
+- 条目自己的符号选项:控件用 `TySymbolSpecOf` 把每个对象条目读成一份完整的符号规格(`SymbolItems`),数组形式也在内;按原始行取。
+- `Symbol`:数字字符串的 `symbolSize`、`[a]` 高为 0、单个值的 `symbolOffset`、百分比偏移(`TySymbolResolveOffset` 在行的尺寸定下之后换算)。
+- 散点和涟漪散点的条目自己的 `label` 也读了(第 68 批给热力图做的那套)。
+- **顺带修的一个真缺陷**:`TySeriesVisual` 是逐字段填的,新加的布尔和整数字段没写进去就是栈上的垃圾值——一个普通散点拿到随机的「有涟漪」和几十亿的涟漪数,画不完。现在新字段都显式清零。
+
+### 基准
+
+- `tools/advchart-oracle/series-calendar.js`(代理写)真跑 ECharts 6.1:散点/涟漪散点/关系图/饼图在日历上,共 20 条守卫。这一批用其中散点和涟漪散点的部分:9 种符号、尺寸/旋转/偏移的各种写法、值和日期的各种写法、同一天多行、条目样式与标签、两种涟漪画法、条目涟漪数、`showEffectOn: 'emphasis'`、zlevel,以及 calendar-charts、effectscatter、pie、lunar 四个画廊文件里的散点系列。
+- `test.advchart.seriescal`:通过控件画一遍,逐行比较有没有画、中心(含偏移)、尺寸(圆、矩形、圆角矩形、菱形;转过的圆和转了四分之一圈的矩形)、z/z2、填充/空心的笔色、不透明度、涟漪个数与画法、标签文字/锚点/对齐。数字日期的行只在 UTC 时区的机器上比较。
+- `test.advchart.symbol` 加了单个值偏移与百分比偏移的直接测试;`test.advchart.visualmapchannels` 改为期望尺寸为 0 的符号是一个元素、liftZ 叠在 100 上(原来钉的是端口旧的行为)。
+
+### 变异测试
+
+24 个,全部杀死。中途的存活都是覆盖缺口:转过的符号原来不比尺寸、条目的 `symbolOffset` 原来根本没读、系列上单个值的偏移没有用例——各自补了比较或测试。原先按覆盖表读条目标量的 `ItemSymbol` 在改成整份读条目规格后成了死代码,已删。
+
+### 已知偏差
+
+- 涟漪的动画没有移植,只画上游服务器端渲染的第一帧。
+- `rippleEffect` 的 `period`、`scale` 只影响动画,静态画面用不到;emphasis 状态没有移植。

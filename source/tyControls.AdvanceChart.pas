@@ -571,6 +571,9 @@ type
       which an option can override and -- with null -- remove. }
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec; overload;
     function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
+    procedure RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
+    procedure SymbolItems(ASeriesIndex: Integer; const ABase: TTySymbolSpec;
+      out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
       out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
     procedure ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
@@ -6489,6 +6492,62 @@ begin
   end;
 end;
 
+{ Each object data item's own symbol options over the series' spec. }
+procedure TTyAdvanceChart.SymbolItems(ASeriesIndex: Integer;
+  const ABase: TTySymbolSpec; out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
+var
+  node, d, it: TJSONData;
+  k: Integer;
+begin
+  ASpecs := nil;
+  AHas := nil;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  SetLength(ASpecs, d.Count);
+  SetLength(AHas, d.Count);
+  for k := 0 to d.Count - 1 do
+  begin
+    it := d.Items[k];
+    if (it = nil) or (it.JSONType <> jtObject) then Continue;
+    AHas[k] := True;
+    ASpecs[k] := TySymbolSpecOf(TJSONObject(it), ABase);
+  end;
+end;
+
+{ AN effectScatter's rippleEffect and showEffectOn, upstream's defaults
+  under them: ripples on render, three of them, filled. [Batch 71] }
+procedure TTyAdvanceChart.RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
+var
+  node, re, d: TJSONData;
+  c: TTyChartColor;
+begin
+  AVisual.RippleShow := True;
+  AVisual.RippleNumber := 3;
+  AVisual.RippleFill := True;
+  AVisual.RippleHasColor := False;
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('showEffectOn');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> 'render') then
+    AVisual.RippleShow := False;
+  re := TJSONObject(node).Find('rippleEffect');
+  if (re = nil) or (re.JSONType <> jtObject) then Exit;
+  d := TJSONObject(re).Find('number');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    AVisual.RippleNumber := Max(0, Trunc(d.AsFloat));
+  d := TJSONObject(re).Find('brushType');
+  if (d <> nil) and (d.JSONType = jtString) then
+    AVisual.RippleFill := d.AsString <> 'stroke';
+  d := TJSONObject(re).Find('color');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+  begin
+    AVisual.RippleHasColor := True;
+    AVisual.RippleColor := c;
+  end;
+end;
+
 { a heatmap's itemStyle.borderRadius: a number, or zrender's array forms }
 function TTyAdvanceChart.HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
 var
@@ -6766,6 +6825,10 @@ begin
         pass already computed, so it is fetched rather than re-derived. }
       v.Line.LabelStep := LabelStepFor(FBindings[i].BaseAxis);
       v.Symbol := SymbolFor(i);
+      if FBindings[i].SeriesType = 'effectScatter' then RippleOf(i, v);
+      if (FBindings[i].SeriesType = 'scatter')
+        or (FBindings[i].SeriesType = 'effectScatter') then
+        SymbolItems(FBindings[i].SeriesIndex, v.Symbol, v.SymItems, v.SymItemHas);
       { THE PICTORIAL OPTIONS, read for every series rather than only for the
         one type that uses them. The alternative is a branch on the type name
         here, and this file already has too many of those: the reader is
@@ -6820,6 +6883,15 @@ begin
         if Length(itemSpecs) <= FBindings[i].SeriesIndex then
           SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
         itemSpecs[FBindings[i].SeriesIndex] := v.ItemLabels;
+      end
+      else if (FBindings[i].SeriesType = 'scatter')
+        or (FBindings[i].SeriesType = 'effectScatter') then
+      begin
+        { a symbol's own label over its series' [Batch 71] }
+        ItemLabelSpecs(FBindings[i].SeriesIndex, v.Label_, v.ItemLabels, v.HasItemLabel);
+        if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+          SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+        itemSpecs[FBindings[i].SeriesIndex] := v.ItemLabels;
       end;
       { `{c}` and the default text read the VALUE column -- whichever axis is
         not the base one. A label that read x on a bar chart would show the
@@ -6835,11 +6907,19 @@ begin
         coordinate system and only a heatmap draws on it yet. [Batch 70] }
       if FBindings[i].CalendarIndex >= 0 then
       begin
-        if (FBindings[i].CalendarIndex <= High(FCalendars))
-          and (FBindings[i].SeriesType = 'heatmap') and (FStores[i] <> nil) then
+        if (FBindings[i].CalendarIndex <= High(FCalendars)) and (FStores[i] <> nil) then
         begin
-          Inc(drawn, TyBuildCalendarHeatmap(FBindings[i],
-            FCalendars[FBindings[i].CalendarIndex], FStores[i], v, list));
+          if FBindings[i].SeriesType = 'heatmap' then
+            Inc(drawn, TyBuildCalendarHeatmap(FBindings[i],
+              FCalendars[FBindings[i].CalendarIndex], FStores[i], v, list))
+          else if (FBindings[i].SeriesType = 'scatter')
+            or (FBindings[i].SeriesType = 'effectScatter') then
+          begin
+            { a symbol's default words are its value [Batch 71] }
+            v.LabelValueDim := FStores[i].DimIndexOf(TyCalendarValueDim);
+            Inc(drawn, TyBuildCalendarScatter(FBindings[i],
+              FCalendars[FBindings[i].CalendarIndex], FStores[i], v, list));
+          end;
         end;
         Continue;
       end;

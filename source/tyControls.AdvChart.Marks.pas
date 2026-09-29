@@ -192,6 +192,21 @@ type
     { the half pixel a heatmap cell is widened by, in device px: upstream's
       `.5` against its gaps, at this PPI [Batch 68] }
     HeatPadPx: Double;
+    { AN effectScatter's RIPPLES, as upstream's static first frame: `number`
+      copies of the symbol at its own size, stroked (brushType 'stroke') or
+      filled, in rippleEffect.color or the row's own colour, at z2 99 --
+      just under the symbol's 100. No ripples when showEffectOn is not
+      'render'. [Batch 71] }
+    RippleShow: Boolean;
+    { A DATA ITEM'S OWN symbol options, by raw row -- the series' spec with
+      the item's keys read over it, arrays included (an item's symbolSize
+      [w, h] and symbolOffset never reach the override table). [Batch 71] }
+    SymItems: TTySymbolSpecArray;
+    SymItemHas: TTyBoolArray;
+    RippleNumber: Integer;
+    RippleFill: Boolean;
+    RippleHasColor: Boolean;
+    RippleColor: TTyChartColor;
     { a heatmap row's own itemStyle.borderRadius, by RAW row, when its item
       wrote one (an array form is not a scalar the override table keeps) }
     HeatRadii: TTyCornerRadiiArray;
@@ -259,6 +274,12 @@ function TyRowFill(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   Case-sensitive, like TySeriesFindType: ECharts' type names are, so a series
   typed 'Bar' does not resolve and never draws. }
 function TySeriesTypeHasRenderer(const AType: string): Boolean;
+
+{ A scatter or an effectScatter on a calendar: one symbol per row at the
+  centre of its date's cell. [Batch 71] }
+function TyBuildCalendarScatter(const ABinding: TTySeriesBinding;
+  const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList): Integer;
 
 { A heatmap on a calendar: one cell per row, the calendar's content rect for
   its date, at z2 1. [Batch 70] }
@@ -494,6 +515,18 @@ begin
     and the renderer would look absent rather than unconfigured. }
   Result.Pictorial := TyPictorialSpecDefault;
   Result.EmptyFill := 0;
+  { [Batch 71: THESE WERE LEFT AS WHATEVER THE STACK HELD -- this record is
+    filled field by field, so a Boolean added to it and not named here is
+    garbage, and a scatter took a random RippleShow with a count in the
+    billions and never finished drawing.] }
+  Result.HeatPadPx := 0;
+  Result.RippleShow := False;
+  Result.RippleNumber := 0;
+  Result.RippleFill := False;
+  Result.RippleHasColor := False;
+  Result.RippleColor := 0;
+  Result.SymItems := nil;
+  Result.SymItemHas := nil;
   Result.VisualRows := nil;
   Result.VisualLine := Default(TTyVisualLineFill);
   Result.VisualLineStroke := False;
@@ -1595,17 +1628,108 @@ end;
   third number on the point, which is how a bubble chart is written when the
   option is static. So a row with more columns than the two axes need has its
   next value read as the diameter. }
+{ ONE SCATTER SYMBOL at a point, with its ripples when the series has them:
+  the item's and the visualMap's symbol over the series', the row's colour,
+  an `empty` symbol stroked in it, z2 100 (Symbol.ts:85 -- the series' own
+  z2 option does not reach a symbol) plus a visualMap's lift. Answers how
+  many elements went in. [Batch 71: shared by the cartesian and the
+  calendar; z2 was the series' option.] }
+function AddScatterSymbol(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AVisual: TTySeriesVisual; ARow: Integer; const AP: TTyPointF;
+  const ASpec: TTySymbolSpec; AList: TTyPaintList): Integer;
+var
+  rs: TTySymbolSpec;
+  shape: TTyChartShape;
+  v: TTySeriesVisual;
+  el, rip: TTyChartElement;
+  lift: Double;
+  k, n: Integer;
+  ink: TTyChartColor;
+  ov: TTyDataValue;
+begin
+  Result := 0;
+  k := AStore.GetRawIndex(ARow);
+  if (k >= 0) and (k <= High(AVisual.SymItemHas)) and AVisual.SymItemHas[k] then
+    rs := RowSymbol(AVisual, AStore, ARow, AVisual.SymItems[k], lift)
+  else
+    rs := RowSymbol(AVisual, AStore, ARow, ASpec, lift);
+  if rs.Kind = tsyNone then Exit;
+  rs := TySymbolResolveOffset(rs);
+  shape := TyBuildSymbol(rs, AP.X, AP.Y);
+  { A SYMBOL OF NO SIZE is still an element upstream -- it paints nothing
+    and carries its label, which is how a series of words alone is written
+    (calendar-pie's day numbers, calendar-lunar's names) }
+  if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds)
+    and ((rs.WidthPx = 0) or (rs.HeightPx = 0))
+    and not IsNan(AP.X + rs.OffsetX) and not IsNan(AP.Y + rs.OffsetY) then
+    shape := TyShapeRect(TyRectF(AP.X + rs.OffsetX, AP.Y + rs.OffsetY,
+      AP.X + rs.OffsetX, AP.Y + rs.OffsetY));
+  if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Exit;
+  v := RowVisual(AVisual, AStore, ARow);
+  ink := v.Fill;
+  { THE RIPPLES FIRST, under the symbol: the same shape at the same size --
+    upstream's first frame, a ripple at half the group's symbol-sized scale }
+  if AVisual.RippleShow then
+  begin
+    if AVisual.RippleHasColor then ink := AVisual.RippleColor;
+    n := AVisual.RippleNumber;
+    { an item's own rippleEffect.number }
+    if AStore.HasOverrideByRaw(AStore.GetRawIndex(ARow), TyOverrideKey('rippleEffect.number')) then
+    begin
+      ov := AStore.GetOverride(ARow, TyOverrideKey('rippleEffect.number'));
+      if ov.Kind = dvkNumber then n := Max(0, Trunc(ov.Num));
+    end;
+    for k := 1 to n do
+    begin
+      rip := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
+      rip.Style.Alpha := 1;
+      if AVisual.RippleFill then
+      begin
+        rip.Style.HasFill := True;
+        rip.Style.FillColor := ink;
+        rip.Style.StrokeWidthLogical := 0;
+      end
+      else
+      begin
+        rip.Style.HasFill := False;
+        rip.Style.StrokeColor := ink;
+        rip.Style.StrokeWidthLogical := 1;
+      end;
+      rip.Z2 := 99;
+      rip.Silent := True;
+      rip.Caption.Text := '';
+      AList.Add(rip);
+      Inc(Result);
+    end;
+  end;
+  { AN `empty` SYMBOL IS STROKED, NOT FILLED -- upstream strokes it in the
+    series colour and fills it with the theme's background, and a line symbol
+    is stroked too. Both are the same rule: the colour is the pen.
+    [Batch 54: the whole row, not only its fill -- a visualMap's opacity is
+    the row's too.] }
+  if rs.Empty or (rs.Kind = tsyLine) then
+  begin
+    v.Stroke := v.Fill;
+    if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+    if rs.Kind = tsyLine then v.Fill := 0
+    else v.Fill := AVisual.EmptyFill;
+  end;
+  el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
+  el.Z2 := 100 + Round(lift);
+  el.HitSlopLogical := cHitSlopSymbolLogical;
+  ItemCaption(AVisual, AStore, ARow, el.Caption);
+  AList.Add(el);
+  Inc(Result);
+end;
+
 function BuildScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, sizeCol, valCol: Integer;
-  x, y, sz, lift: Double;
+  x, y, sz: Double;
   p: TTyPointF;
-  spec, rs: TTySymbolSpec;
-  shape: TTyChartShape;
-  v: TTySeriesVisual;
-  el: TTyChartElement;
+  spec: TTySymbolSpec;
   baseHoriz, stacked: Boolean;
   area: TTyXYWH;
 begin
@@ -1654,31 +1778,8 @@ begin
       end;
     end;
 
-    { a visualMap's symbol, size and lift over the series' }
-    rs := RowSymbol(AVisual, AStore, i, spec, lift);
-    if rs.Kind = tsyNone then Continue;
-    shape := TyBuildSymbol(rs, p.X, p.Y);
-    if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
-
-    { AN `empty` SYMBOL IS STROKED, NOT FILLED -- upstream strokes it in the
-      series colour and fills it with the theme's background, and a line symbol
-      is stroked too. Both are the same rule: the colour is the pen.
-      [Batch 54: the whole row, not only its fill -- a visualMap's opacity is
-      the row's too.] }
-    v := RowVisual(AVisual, AStore, i);
-    if rs.Empty or (rs.Kind = tsyLine) then
-    begin
-      v.Stroke := v.Fill;
-      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-      if rs.Kind = tsyLine then v.Fill := 0
-      else v.Fill := AVisual.EmptyFill;
-    end;
-    el := MarkElement(shape, v, ABinding.SeriesIndex, i);
-    el.Z2 := el.Z2 + Round(lift);
-    el.HitSlopLogical := cHitSlopSymbolLogical;
-    el.Caption.Text := CaptionFor(AVisual, AStore, i);
-    AList.Add(el);
-    Inc(Result);
+    { the item's and a visualMap's symbol, size and lift over the series' }
+    Inc(Result, AddScatterSymbol(ABinding, AStore, AVisual, i, p, spec, AList));
   end;
   { The unused local keeps the compiler quiet about valCol in a future edit. }
   valCol := 0;
@@ -1771,6 +1872,30 @@ begin
     r := TyRectF(l, t, l + w, t + h);
     AList.Add(HeatCell(ABinding, AStore, AVisual, i, r));
     Inc(Result);
+  end;
+end;
+
+{ A SCATTER ON A CALENDAR: the symbol at the centre of the row's date --
+  dataToPoint([time, value]) reads the date alone, so a value that is not a
+  number is still drawn and never sizes the symbol. A date off the range has
+  no point. No clip: a calendar has no area to clip to. [Batch 71] }
+function TyBuildCalendarScatter(const ABinding: TTySeriesBinding;
+  const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList): Integer;
+var
+  i, colT: Integer;
+  p: TTyPointF;
+begin
+  Result := 0;
+  if (AStore = nil) or (ACal = nil) or (AList = nil) then Exit;
+  if AVisual.Symbol.Kind = tsyNone then Exit;
+  colT := AStore.DimIndexOf(TyCalendarTimeDim);
+  if colT < 0 then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    p := ACal.DataToPoint([AStore.Get(colT, i)]);
+    if IsNan(p.X) or IsNan(p.Y) then Continue;
+    Inc(Result, AddScatterSymbol(ABinding, AStore, AVisual, i, p, AVisual.Symbol, AList));
   end;
 end;
 
@@ -2377,7 +2502,7 @@ const
     ECharts' names are case-sensitive, so a series typed 'Bar' never resolves
     and never reaches this unit. A lenient match here would answer yes for a
     chart that draws nothing. }
-  cRenderers: array[0..5] of record
+  cRenderers: array[0..6] of record
     Name: string;
     Build: TTyMarkBuilder;
   end = (
@@ -2386,7 +2511,8 @@ const
     (Name: 'scatter';                   Build: @BuildScatter),
     (Name: 'candlestick';               Build: @BuildCandlestick),
     (Name: TyPictorialSeriesTypeName;   Build: @BuildPictorialBar),
-    (Name: 'heatmap';                   Build: @BuildHeatmap));
+    (Name: 'heatmap';                   Build: @BuildHeatmap),
+    (Name: 'effectScatter';             Build: @BuildScatter));
 
   { AND THE ONES DRAWN SOMEWHERE ELSE. A pie is not on a coordinate system,
     so its geometry is solved in AdvChart.Pie and never reaches this unit --
