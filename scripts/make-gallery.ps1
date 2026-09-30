@@ -45,6 +45,12 @@ $skins = @('default') +
   @(Get-ChildItem (Join-Path $root 'themes\builtin\*.tycss') | Sort-Object Name | ForEach-Object { $_.BaseName }) +
   @('system', 'green')
 
+# Examples whose page control is a small part of the window: only these pages (named as in
+# the file names), so the gallery does not repeat the same window.
+$pagePicks = @{
+  'demo' = @('tab-1', 'gauges')
+}
+
 # The README's pictures: copies of gallery pictures under docs/images, so the README in the
 # release bundle (which leaves the gallery out) still has them. Refreshed on every run.
 $readmePicks = [ordered]@{
@@ -117,6 +123,7 @@ function Shoot($name, $exe) {
   New-Item -ItemType Directory $dir | Out-Null
   $env:TY_GALLERY_DIR = $dir
   if ($name -eq 'demo') { $env:TY_GALLERY_SKINS = ($skins -join ',') } else { $env:TY_GALLERY_SKINS = '' }
+  if ($pagePicks.ContainsKey($name)) { $env:TY_GALLERY_PAGES = ($pagePicks[$name] -join ',') } else { $env:TY_GALLERY_PAGES = '' }
   try {
     $p = Start-Process $exe.FullName -ArgumentList '--lang=en' -WorkingDirectory $exe.DirectoryName -PassThru
     if (-not $p.WaitForExit($Timeout * 1000)) {
@@ -126,6 +133,7 @@ function Shoot($name, $exe) {
   } finally {
     Remove-Item Env:TY_GALLERY_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:TY_GALLERY_SKINS -ErrorAction SilentlyContinue
+    Remove-Item Env:TY_GALLERY_PAGES -ErrorAction SilentlyContinue
   }
   $shots = @(Get-ChildItem $dir -Filter *.png).Count
   # the log stays with the build copy, out of docs/

@@ -11,7 +11,8 @@ unit tyGalleryCapture;
     * every page of every top-level TTyPageControl (a page control inside another one keeps
       its default page), or the form as it opens when it has none -- first in light, then in
       dark, switched through the example's OWN "Dark" switch (or its Light/Dark buttons), so
-      the switch in the picture says what the picture shows;
+      the switch in the picture says what the picture shows; when TY_GALLERY_PAGES lists page
+      names (their captions as file names: 'tab-1', 'gauges'), only those pages;
     * when TY_GALLERY_SKINS lists theme names, each of them picked in the example's
       ThemeCombo (the demo's skin wall);
 
@@ -53,6 +54,7 @@ type
   private
     FDir: string;
     FSkins: TStringList;
+    FPages: TStringList;
     FLog: TStringList;
     FTimer: TTimer;
     FSteps: TList;
@@ -170,6 +172,11 @@ begin
   FSkins.Delimiter := ',';
   s := SysUtils.GetEnvironmentVariable('TY_GALLERY_SKINS');
   if s <> '' then FSkins.DelimitedText := s;
+  FPages := TStringList.Create;
+  FPages.StrictDelimiter := True;
+  FPages.Delimiter := ',';
+  s := SysUtils.GetEnvironmentVariable('TY_GALLERY_PAGES');
+  if s <> '' then FPages.DelimitedText := s;
   Screen.AddHandlerFormAdded(@FormAdded);
 end;
 
@@ -182,6 +189,7 @@ begin
     TObject(FSteps[i]).Free;
   FSteps.Free;
   FSkins.Free;
+  FPages.Free;
   FLog.Free;
   inherited Destroy;
 end;
@@ -252,6 +260,7 @@ begin
           for j := 0 to pc.PageCount - 1 do
           begin
             if not pc.Pages[j].TabVisible then Continue;
+            if (FPages.Count > 0) and (FPages.IndexOf(Slug(pc.Pages[j].Caption)) < 0) then Continue;
             Add(skPage, 500, '', pc, j);
             base := Format('%.2d-%s', [j + 1, Slug(pc.Pages[j].Caption)]);
             if pcs.Count > 1 then base := Slug(pc.Name) + '-' + base;
