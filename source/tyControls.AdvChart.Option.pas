@@ -102,13 +102,63 @@ type
   write instead. Exported so the design-time editor can warn BEFORE parsing. }
 function TyOptionTextHasFunction(const AText: string): Boolean;
 
+{ A fontWeight as a label reads one: 'bold' and 'bolder' 700, 'normal' 400,
+  a number rounded into 1..1000; anything else leaves ADefault. }
+function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+
+{ A fontSize as zrender's parseFontSize takes it, as a logical size in CSS px
+  (tyControls.FontUnits): a number, a string of a number ('14'), or a string
+  with its px ('14px'); ADefault for anything else, and for a size that is
+  not positive. [Batch 83] }
+function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
+
 implementation
 
 uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
-  tyControls.StrConsts, LazUTF8;
+  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits;
+
+function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
+var
+  s: string;
+  v: Double;
+  p: Integer;
+  fs: TFormatSettings;
+begin
+  Result := ADefault;
+  if AData = nil then Exit;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  fs.ThousandSeparator := #0;
+  v := NaN;
+  if AData.JSONType = jtNumber then v := AData.AsFloat
+  else if AData.JSONType = jtString then
+  begin
+    s := Trim(AData.AsString);
+    p := Pos('px', s);
+    if p > 0 then s := Trim(Copy(s, 1, p - 1));
+    if not TryStrToFloat(s, v, fs) then v := NaN;
+    { a period is the only separator a JSON number or a CSS size has }
+    if (Pos(',', s) > 0) then v := NaN;
+  end;
+  if TyFontSizeFromPx(v) > 0 then Result := TyFontSizeFromPx(v);
+end;
+
+function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+begin
+  Result := ADefault;
+  if AData = nil then Exit;
+  if AData.JSONType = jtString then
+  begin
+    if (AData.AsString = 'bold') or (AData.AsString = 'bolder') then Result := 700
+    else if AData.AsString = 'normal' then Result := 400;
+  end
+  else if (AData.JSONType = jtNumber) and not IsNan(AData.AsFloat)
+    and (AData.AsFloat >= 1) and (AData.AsFloat <= 1000) then
+    Result := Round(AData.AsFloat);
+end;
 
 function TyOptionTextHasFunction(const AText: string): Boolean;
 var

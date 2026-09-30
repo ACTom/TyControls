@@ -433,7 +433,8 @@ uses
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
   tyControls.StrConsts, tyControls.AdvChart.AxisName,
-  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers;
+  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers,
+  tyControls.AdvChart.Paint, tyControls.AdvChart.Color;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -1224,6 +1225,31 @@ begin
   sub := TJSONObject(sub).Find(AKey);
   if (sub = nil) or (sub.JSONType <> jtBoolean) then Exit;
   if sub.AsBoolean then Result := aelShow else Result := aelHide;
+end;
+
+{ ONE TEXT STYLE OBJECT OVER A FONT: fontFamily, fontSize (CSS px),
+  fontWeight and a colour the chart can parse, each only where it is written
+  as upstream reads it -- a size must be a positive number, a family a
+  non-empty string. }
+procedure AuthorFont(ANode: TJSONObject; var AName: string; var ASize: Integer;
+  var AWeight: Integer; var AHasColour: Boolean; var AColour: Cardinal);
+var
+  d: TJSONData;
+  c: TTyChartColor;
+begin
+  if ANode = nil then Exit;
+  d := ANode.Find('fontFamily');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+    AName := d.AsString;
+  ASize := TyOptFontSize(ANode.Find('fontSize'), ASize);
+  d := ANode.Find('fontWeight');
+  if d <> nil then AWeight := TyFontWeightOf(d, AWeight);
+  d := ANode.Find('color');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+  begin
+    AHasColour := True;
+    AColour := c;
+  end;
 end;
 
 { axisLabel.formatter, when it is a string. }
@@ -2437,6 +2463,13 @@ var
     ASpec.NameFontName := AText.NameFontName;
     ASpec.NameFontSizeLogical := AText.NameFontSizeLogical;
     ASpec.NameFontWeight := AText.NameFontWeight;
+    ASpec.HasNameColour := AText.HasGlobalColour;
+    ASpec.NameColour := AText.GlobalColour;
+    { THE AUTHOR'S nameTextStyle over the theme and the root textStyle
+      [Batch 83] }
+    AuthorFont(ObjOf(FindIn(ANode, 'nameTextStyle')), ASpec.NameFontName,
+      ASpec.NameFontSizeLogical, ASpec.NameFontWeight, ASpec.HasNameColour,
+      ASpec.NameColour);
     { 'end' by default; 'center' is 'middle'. A location upstream does not
       know takes its middle anchor and its end layout there -- here it is
       simply 'end'. }
@@ -2546,6 +2579,15 @@ var
     ASpec.FontName := AText.FontName;
     ASpec.FontSizeLogical := AText.FontSizeLogical;
     ASpec.FontWeight := AText.FontWeight;
+    { a label's token colour is a default of its own: the root textStyle's
+      colour never reaches it -- only the name's does }
+    ASpec.HasLabelColour := False;
+    ASpec.LabelColour := 0;
+    { THE AUTHOR'S axisLabel font and colour over the theme's and the root
+      textStyle's [Batch 83]: measured in what it is drawn in }
+    AuthorFont(ObjOf(FindIn(ANode, 'axisLabel')), ASpec.FontName,
+      ASpec.FontSizeLogical, ASpec.FontWeight, ASpec.HasLabelColour,
+      ASpec.LabelColour);
     { THE THEME FIRST AND THE OPTION OVER IT. A gap is a geometric value and
       an author is allowed to name one -- the same arrangement
       `axisLabel.width` has already. Colours are the other kind and still

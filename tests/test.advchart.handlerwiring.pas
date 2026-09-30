@@ -89,8 +89,10 @@ implementation
 const
   cDeferred: array[0..2] of string = (
     'label radar: one call per indicator',  // radar series labels: not ported (batch 35)
-    { author font sizes read as points: the port's text is wider and the
-      treemap truncates what upstream fits -- batch A2 }
+    { a treemap truncates its words to the box by their measured width, and
+      this harness measures with the real font where upstream's node run
+      estimates -- test.advchart.treemap holds the words with zrender's own
+      SSR measure }
     'label treemap',
     { axisPointer.status / value on the option: not ported -- batch B5 }
     'axisPointer status show with a value, no tooltip trigger'

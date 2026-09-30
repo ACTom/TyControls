@@ -482,7 +482,7 @@ begin
       Result.TextColour := c;
     end;
     d := s.Find('fontSize');
-    if (d <> nil) and (d.JSONType = jtNumber) then Result.FontSize := Round(d.AsFloat);
+    Result.FontSize := TyOptFontSize(d, Result.FontSize);
   end;
 end;
 

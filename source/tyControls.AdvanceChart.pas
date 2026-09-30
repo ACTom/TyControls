@@ -33,7 +33,7 @@ uses
   tyControls.AdvChart.Time,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
+  tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers, tyControls.FontUnits,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
@@ -97,6 +97,13 @@ const
   TyAdvChartNameGap = 15;
 
 type
+  { WHICH OF THE ROOT textStyle'S PROPERTIES A TEXT TAKES. Upstream falls back
+    to it property by property, and only where the component has no default
+    of its own: an axis label's default 12px shuts out a root fontSize but not
+    a root fontWeight, a legend's default colour shuts out a root colour.
+    [Batch 83] }
+  TTyTextPickItem = (ttpSize, ttpWeight, ttpFamily, ttpColour);
+  TTyTextPick = set of TTyTextPickItem;
   { ONE AXIS THE POINTER IS ON, and what it found there.
 
     NOT A DATUM. An axis trigger names a place on an axis, and the series that
@@ -271,6 +278,8 @@ type
       rather than before them. }
     FTitles: array of TTyTitleLayout;
     FTitleSpecs: array of TTyTitleSpec;
+    { each title's two fonts as laid out and drawn [Batch 83] }
+    FTitleFonts: array of array[0..1] of TTyTitleFont;
     { Every legend the option carries, in two halves. The ENTRIES and the
       SELECTION need nothing but the option and the stores, so they settle in
       Rebuild; the LAYOUT has to measure the words, so it waits for Relayout
@@ -563,6 +572,10 @@ type
     procedure SolveTitles(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     { The two title fonts, resolved from the theme. }
     function TitleFont(const AKey: string): TTyTitleFont;
+    procedure LegendTextOf(AIndex: Integer; var AFont: TTyLegendFont;
+      var AInk: TTyLegendInk);
+    function TitleFontOf(AIndex: Integer; const AKey, AStyleKey: string;
+      APick: TTyTextPick): TTyTitleFont;
     procedure PaintTitles(APainter: TTyPainter);
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
@@ -829,6 +842,19 @@ type
       unless written: the step's decimals plus two, padded, so 3.00), with
       the label's string formatter over it. }
     function PointerLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    function AuthorBackground(out AColour: TTyChartColor): Boolean;
+    procedure GlobalInk(var AName: string; var ASize, AWeight: Integer;
+      var AColour: TTyChartColor; APick: TTyTextPick);
+    procedure GlobalTextOver(var AName: string; var ASize, AWeight: Integer;
+      var AHasColour: Boolean; var AColour: Cardinal; APick: TTyTextPick);
+    { the styles an axis' labels (plain and emphasised) and name are painted
+      in: the theme's, with the family, size, weight and colour the layout
+      measured them in -- the author's where written [Batch 83] }
+    procedure AxisTextStyles(ASpec: PTyAxisLayoutSpec; out ALabel, APrimary,
+      AName: TTyStyleSet);
+    procedure AxisTextOver(var AStyle: TTyStyleSet; const AName: string;
+      ASize, AWeight: Integer; AHasColour: Boolean; AColour: Cardinal;
+      AKeepWeight: Boolean);
     function TipValueFormatted(const AHandler: string;
       const AParams: TTyChartCallbackParams): string; overload;
     function TipValueFormatted(const AHandler: string;
@@ -1053,6 +1079,11 @@ type
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
     function LegendLayout(AIndex: Integer): TTyLegendLayout;
+    { the titles as laid out, and the font each line was measured and drawn
+      in (ALine 0 the text, 1 the subtext) [Batch 83] }
+    function TitleCount: Integer;
+    function TitleLayoutOf(AIndex: Integer): TTyTitleLayout;
+    function TitleFontUsed(AIndex, ALine: Integer): TTyTitleFont;
   published
     { THE API. Relaxed JSON: unquoted keys, single quotes, trailing commas and
       comments all parse, because that is what an ECharts config in the wild
@@ -1780,6 +1811,8 @@ procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
 var
   txt: TTyAxisTextStyle;
   labelS: TTyStyleSet;
+  lblHasCol: Boolean;
+  lblCol: Cardinal;
 begin
   FLastRect := ARect;
   FLastPPI := APPI;
@@ -1806,6 +1839,17 @@ begin
   txt.NameFontName := labelS.FontName;
   txt.NameFontSizeLogical := ResolveFontSize(labelS);
   txt.NameFontWeight := labelS.FontWeight;
+  { THE OPTION'S ROOT textStyle BETWEEN THE THEME AND THE AXIS: upstream's
+    getFont falls back to it, and free-standing text takes its colour
+    [Batch 83] }
+  { labels: the family and weight only -- their 12px and their token colour
+    are defaults of their own; the name has neither and takes all four }
+  lblHasCol := False;
+  lblCol := 0;
+  GlobalTextOver(txt.FontName, txt.FontSizeLogical, txt.FontWeight,
+    lblHasCol, lblCol, [ttpWeight, ttpFamily]);
+  GlobalTextOver(txt.NameFontName, txt.NameFontSizeLogical, txt.NameFontWeight,
+    txt.HasGlobalColour, txt.GlobalColour, [ttpSize, ttpWeight, ttpFamily, ttpColour]);
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
@@ -1998,8 +2042,6 @@ begin
   minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
   minorSplitS := model.ResolveStyle('TyAdvChartMinorSplitLine', '', []);
   tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
-  labelS := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
-  primaryS := model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
   splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
   areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
 
@@ -2031,6 +2073,8 @@ begin
     plot rect; it records what it decided and this reads it. }
   spec := nil;
   if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
+  { DRAWN IN WHAT IT WAS MEASURED IN [Batch 83] }
+  AxisTextStyles(spec, labelS, primaryS, nameS);
   { WHAT THIS AXIS ACTUALLY DRAWS. Resolved once by the builder, from the
     option AND from upstream's per-type defaults -- which is where most of
     the answers come from: on a chart with no axis option written at all, the
@@ -2258,7 +2302,6 @@ begin
     aligns it, and moved clear of the labels -- so this draws that answer
     and works nothing out: a second route here is how the name used to land
     beside the band that was reserved for it. }
-  nameS := model.ResolveStyle('TyAdvChartAxisName', '', []);
   if (spec <> nil) and spec^.NamePlacement.Shown
     and (tpTextColor in nameS.Present) then
   begin
@@ -2400,6 +2443,8 @@ var
   plotF: TTyRectF;
   g, a: Integer;
   gb: TTyGridBuild;
+  bg: TTyChartColor;
+  fill: TTyFill;
 begin
   { Resolved at REST on purpose. The plot rect is measured from the label
     font, and a geometry that read the focused style would move the whole
@@ -2410,6 +2455,16 @@ begin
     opacity, shadow, background, border, and the corner gaps a windowed
     control cannot get from a shadow it is not allowed to cast. }
   DrawFrame(APainter, ARect, boxStyle);
+  { THE OPTION'S backgroundColor OVER THE SKIN'S GROUND, inside the frame's
+    corners -- 'transparent' and anything unreadable leave the skin's
+    [Batch 83] }
+  if AuthorBackground(bg) then
+  begin
+    fill := Default(TTyFill);
+    fill.Kind := tfkSolid;
+    fill.Color := TTyColor(bg);
+    APainter.FillBackground(ARect, fill, boxStyle.Radius);
+  end;
 
   plotF := TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
   if FDirty or (plotF.Right <> FLastRect.Right)
@@ -2874,10 +2929,12 @@ begin
   st := model.ResolveStyle('TyAdvChartVisualMap', '', []);
   Result.FontName := st.FontName;
   Result.FontSizeLogical := ResolveFontSize(st);
-  if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
   Result.FontWeight := st.FontWeight;
-  if AView.HasText_ then Result.Text := AView.TextColour
-  else Result.Text := TTyChartColor(st.TextColor);
+  Result.Text := TTyChartColor(st.TextColor);
+  GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    Result.Text, [ttpSize, ttpWeight, ttpFamily]);
+  if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
+  if AView.HasText_ then Result.Text := AView.TextColour;
   if AView.HasBorder then Result.Border := AView.BorderColour
   else Result.Border := TTyChartColor(
     model.ResolveStyle('TyAdvChartVisualMapBorder', '', []).BorderColor);
@@ -2930,9 +2987,11 @@ begin
   st := model.ResolveStyle('TyAdvChartDataZoom', '', []);
   Result.FontName := st.FontName;
   Result.FontSizeLogical := ResolveFontSize(st);
-  if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
   Result.FontWeight := st.FontWeight;
   Result.Text := TTyChartColor(st.TextColor);
+  GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    Result.Text, [ttpSize, ttpWeight, ttpFamily]);
+  if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
   Result.Filler := TTyChartColor(
     model.ResolveStyle('TyAdvChartDataZoomFiller', '', []).Background.Color);
   Result.Frame := TTyChartColor(
@@ -4704,6 +4763,38 @@ begin
   Result.Name := st.FontName;
   Result.SizeLogical := ResolveFontSize(st);
   Result.Weight := st.FontWeight;
+  Result.HasColour := False;
+  Result.Colour := 0;
+end;
+
+{ A TITLE LINE'S FONT: the theme's, the root textStyle over it, the title's
+  own textStyle or subtextStyle over that -- upstream's getFont order, and
+  the colour free-standing text takes [Batch 83] }
+function TTyAdvanceChart.TitleFontOf(AIndex: Integer; const AKey,
+  AStyleKey: string; APick: TTyTextPick): TTyTitleFont;
+var
+  node, st, d: TJSONData;
+  col: TTyChartColor;
+begin
+  Result := TitleFont(AKey);
+  GlobalTextOver(Result.Name, Result.SizeLogical, Result.Weight,
+    Result.HasColour, Result.Colour, APick);
+  node := FOption.ComponentAt('title', AIndex);
+  if not (node is TJSONObject) then Exit;
+  st := TJSONObject(node).Find(AStyleKey);
+  if not (st is TJSONObject) then Exit;
+  d := TJSONObject(st).Find('fontFamily');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+    Result.Name := d.AsString;
+  Result.SizeLogical := TyOptFontSize(TJSONObject(st).Find('fontSize'),
+    Result.SizeLogical);
+  Result.Weight := TyFontWeightOf(TJSONObject(st).Find('fontWeight'), Result.Weight);
+  d := TJSONObject(st).Find('color');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+  begin
+    Result.HasColour := True;
+    Result.Colour := col;
+  end;
 end;
 
 procedure TTyAdvanceChart.SolveTitles(const AMeasurer: ITyTextMeasurer;
@@ -4714,11 +4805,17 @@ begin
   n := TyTitleCount(FOption);
   SetLength(FTitles, n);
   SetLength(FTitleSpecs, n);
+  SetLength(FTitleFonts, n);
   for i := 0 to n - 1 do
   begin
     FTitleSpecs[i] := TyTitleSpecOf(FOption, i);
+    { the title's 18px bold and both lines' colours are its own defaults;
+      the subtitle's 12px is too, its weight is not }
+    FTitleFonts[i][0] := TitleFontOf(i, 'TyAdvChartTitle', 'textStyle', [ttpFamily]);
+    FTitleFonts[i][1] := TitleFontOf(i, 'TyAdvChartSubtitle', 'subtextStyle',
+      [ttpWeight, ttpFamily]);
     FTitles[i] := TyLayoutTitle(FTitleSpecs[i], FLastRect, AMeasurer,
-      TitleFont('TyAdvChartTitle'), TitleFont('TyAdvChartSubtitle'), APPI);
+      FTitleFonts[i][0], FTitleFonts[i][1], APPI);
   end;
 end;
 
@@ -5222,6 +5319,24 @@ begin
     Result := FCalendars[AIndex];
 end;
 
+function TTyAdvanceChart.TitleCount: Integer;
+begin
+  Result := Length(FTitles);
+end;
+
+function TTyAdvanceChart.TitleLayoutOf(AIndex: Integer): TTyTitleLayout;
+begin
+  Result := Default(TTyTitleLayout);
+  if (AIndex >= 0) and (AIndex <= High(FTitles)) then Result := FTitles[AIndex];
+end;
+
+function TTyAdvanceChart.TitleFontUsed(AIndex, ALine: Integer): TTyTitleFont;
+begin
+  Result := Default(TTyTitleFont);
+  if (AIndex >= 0) and (AIndex <= High(FTitleFonts)) and (ALine in [0, 1]) then
+    Result := FTitleFonts[AIndex][ALine];
+end;
+
 function TTyAdvanceChart.LegendLayoutCount: Integer;
 begin
   Result := Length(FLegends);
@@ -5640,6 +5755,7 @@ end;
   series; after the rows, the breadcrumb's words, and its chip. }
 function TTyAdvanceChart.TreemapInk(ASlot: Integer): TTyTreemapInk;
 var
+  dummyCol: TTyChartColor;
   base, crumb: TTyLabelSpec;
   ls, cs: TTyStyleSet;
   hs: TTyLabelSpecArray;
@@ -5655,6 +5771,7 @@ begin
   base.FontName := ls.FontName;
   base.FontSizeLogical := ResolveFontSize(ls);
   base.FontWeight := ls.FontWeight;
+  GlobalInk(base.FontName, base.FontSizeLogical, base.FontWeight, dummyCol, [ttpSize, ttpWeight, ttpFamily]);
   Result.Label_ := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
   Result.ItemLabels := TyTreemapLabelSpecs(FTreemaps[ASlot], Result.Label_);
   cs := ActiveController.Model.ResolveStyle('TyAdvChartBreadcrumb', '', []);
@@ -5665,6 +5782,7 @@ begin
   crumb.FontName := cs.FontName;
   crumb.FontSizeLogical := ResolveFontSize(cs);
   crumb.FontWeight := cs.FontWeight;
+  GlobalInk(crumb.FontName, crumb.FontSizeLogical, crumb.FontWeight, dummyCol, [ttpSize, ttpWeight, ttpFamily]);
   SetLength(Result.ItemLabels, Length(Result.ItemLabels) + 1);
   Result.ItemLabels[High(Result.ItemLabels)] := crumb;
   Result.CrumbFill := TTyChartColor(cs.Background.Color);
@@ -6043,11 +6161,15 @@ begin
   Result.NameFontName := st.FontName;
   Result.NameFontSizeLogical := ResolveFontSize(st);
   Result.NameFontWeight := st.FontWeight;
+  GlobalInk(Result.NameFontName, Result.NameFontSizeLogical,
+    Result.NameFontWeight, Result.NameColour, [ttpSize, ttpWeight, ttpFamily]);
   st := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
   Result.LabelColour := TTyChartColor(st.TextColor);
   Result.LabelFontName := st.FontName;
   Result.LabelFontSizeLogical := ResolveFontSize(st);
   Result.LabelFontWeight := st.FontWeight;
+  GlobalInk(Result.LabelFontName, Result.LabelFontSizeLogical,
+    Result.LabelFontWeight, Result.LabelColour, [ttpWeight, ttpFamily]);
   Result.Z := 0;
 end;
 
@@ -6139,6 +6261,7 @@ end;
 
 function TTyAdvanceChart.GaugeVisual(ASlot: Integer): TTyGaugeVisual;
 var
+  dummyCol: TTyChartColor;
   model: TTyStyleModel;
   st: TTyStyleSet;
   f: TTyTitleFont;
@@ -6163,7 +6286,12 @@ begin
   Result.LabelFontName := st.FontName;
   Result.LabelFontSizeLogical := ResolveFontSize(st);
   Result.LabelFontWeight := st.FontWeight;
+  { a gauge's axis label (12px), title (16px) and detail (30px bold) have
+    sizes of their own }
+  GlobalInk(Result.LabelFontName, Result.LabelFontSizeLogical,
+    Result.LabelFontWeight, dummyCol, [ttpWeight, ttpFamily]);
   f := TitleFont('TyAdvChartLabel');
+  GlobalInk(f.Name, f.SizeLogical, f.Weight, dummyCol, [ttpWeight, ttpFamily]);
   st := model.ResolveStyle('TyAdvChartLabel', '', []);
   Result.TitleColour := TTyChartColor(st.TextColor);
   Result.TitleFontName := f.Name;
@@ -6174,6 +6302,7 @@ begin
     sized from the title scale, and a gauge's reading is the headline of the
     picture rather than a heading over it. }
   f := TitleFont('TyAdvChartGaugeDetail');
+  GlobalInk(f.Name, f.SizeLogical, f.Weight, dummyCol, [ttpFamily]);
   st := model.ResolveStyle('TyAdvChartGaugeDetail', '', []);
   Result.DetailColour := TTyChartColor(st.TextColor);
   Result.DetailFontName := f.Name;
@@ -6203,6 +6332,7 @@ end;
 
 function TTyAdvanceChart.FunnelLabelInk: TTyFunnelLabelInk;
 var
+  dummyCol: TTyChartColor;
   model: TTyStyleModel;
   st: TTyStyleSet;
 begin
@@ -6211,6 +6341,8 @@ begin
   Result.FontName := st.FontName;
   Result.FontSizeLogical := ResolveFontSize(st);
   Result.FontWeight := st.FontWeight;
+  GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    dummyCol, [ttpSize, ttpWeight, ttpFamily]);
   Result.OutsideColour := TTyChartColor(st.TextColor);
   { THE SAME THREE BANDS THE PIE AND THE MARKS USE. Not a second table: a
     label over a coloured shape is one question however the shape was made. }
@@ -6377,6 +6509,8 @@ var
   i: Integer;
   st, subSt: TTyStyleSet;
   lay: TTyTitleLayout;
+  f0, f1: TTyTitleFont;
+  ink0, ink1: TTyColor;
 
   { The box DrawText wants, hung off an anchor with the title's alignment.
     The same job AnchorBox does for an axis label; kept local because the two
@@ -6429,17 +6563,22 @@ begin
         Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
              Round(lay.Frame.Right), Round(lay.Frame.Bottom)),
         st.Background, Round(FTitleSpecs[i].BorderRadii[0]));
+    { in the fonts the layout measured -- the author's where written }
+    f0 := FTitleFonts[i][0];
+    f1 := FTitleFonts[i][1];
+    if f0.HasColour then ink0 := TTyColor(f0.Colour) else ink0 := st.TextColor;
+    if f1.HasColour then ink1 := TTyColor(f1.Colour) else ink1 := subSt.TextColor;
     if FTitleSpecs[i].Text <> '' then
       APainter.DrawText(
         Hang(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign),
-        FTitleSpecs[i].Text, st.FontName, ResolveFontSize(st), st.FontWeight,
-        st.TextColor, LclAlign(lay.Align), tlTop, False, 0, False,
+        FTitleSpecs[i].Text, f0.Name, f0.SizeLogical, f0.Weight,
+        ink0, LclAlign(lay.Align), tlTop, False, 0, False,
         Pos(#10, FTitleSpecs[i].Text) > 0);
     if lay.HasSub then
       APainter.DrawText(
         Hang(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign),
-        FTitleSpecs[i].Subtext, subSt.FontName, ResolveFontSize(subSt),
-        subSt.FontWeight, subSt.TextColor, LclAlign(lay.Align), tlTop, False,
+        FTitleSpecs[i].Subtext, f1.Name, f1.SizeLogical,
+        f1.Weight, ink1, LclAlign(lay.Align), tlTop, False,
         0, False, Pos(#10, FTitleSpecs[i].Subtext) > 0);
   end;
 end;
@@ -7115,6 +7254,36 @@ begin
   Result.Weight := st.FontWeight;
 end;
 
+{ ONE LEGEND'S FONT AND TEXT COLOUR: the theme's, the root textStyle over
+  it, the legend's own textStyle over that [Batch 83] }
+procedure TTyAdvanceChart.LegendTextOf(AIndex: Integer; var AFont: TTyLegendFont;
+  var AInk: TTyLegendInk);
+var
+  node, st, d: TJSONData;
+  col: TTyChartColor;
+  hasCol: Boolean;
+  gcol: Cardinal;
+begin
+  hasCol := False;
+  gcol := 0;
+  { a legend's colour is its own default; its font is not }
+  GlobalTextOver(AFont.Name, AFont.SizeLogical, AFont.Weight, hasCol, gcol, [ttpSize, ttpWeight, ttpFamily]);
+  if hasCol then AInk.Text := TTyChartColor(gcol);
+  node := FOption.ComponentAt('legend', AIndex);
+  if not (node is TJSONObject) then Exit;
+  st := TJSONObject(node).Find('textStyle');
+  if not (st is TJSONObject) then Exit;
+  d := TJSONObject(st).Find('fontFamily');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+    AFont.Name := d.AsString;
+  AFont.SizeLogical := TyOptFontSize(TJSONObject(st).Find('fontSize'),
+    AFont.SizeLogical);
+  AFont.Weight := TyFontWeightOf(TJSONObject(st).Find('fontWeight'), AFont.Weight);
+  d := TJSONObject(st).Find('color');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+    AInk.Text := col;
+end;
+
 function TTyAdvanceChart.LegendInk: TTyLegendInk;
 var model: TTyStyleModel;
 begin
@@ -7139,13 +7308,18 @@ procedure TTyAdvanceChart.SolveLegends(const AMeasurer: ITyTextMeasurer;
 var
   i: Integer;
   fnt: TTyLegendFont;
+  ink: TTyLegendInk;
 begin
   if Length(FLegendSpecs) = 0 then Exit;
-  fnt := LegendFont;
   for i := 0 to High(FLegendSpecs) do
+  begin
+    fnt := LegendFont;
+    ink := LegendInk;
+    LegendTextOf(i, fnt, ink);
     FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
       FLegendFlags[i], LegendSources(FLegendEntries[i]), FLastRect,
       AMeasurer, fnt, APPI);
+  end;
 end;
 
 function TTyAdvanceChart.BuildLegends(APPI: Integer;
@@ -7157,11 +7331,14 @@ var
 begin
   Result := 0;
   if Length(FLegends) = 0 then Exit;
-  ink := LegendInk;
-  fnt := LegendFont;
   for i := 0 to High(FLegends) do
+  begin
+    ink := LegendInk;
+    fnt := LegendFont;
+    LegendTextOf(i, fnt, ink);
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], FLegends[i], ink, fnt,
       APPI, AList));
+  end;
 end;
 
 { an itemStyle's borderRadius: a number, or zrender's array forms; nil for
@@ -7454,6 +7631,8 @@ end;
 function TTyAdvanceChart.LabelBaseFor(ASlot: Integer): TTyLabelSpec;
 var
   outS, lightS, midS, darkS: TTyStyleSet;
+  hasCol: Boolean;
+  col: Cardinal;
 begin
   Result := TyLabelSpecNone;
   outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
@@ -7465,6 +7644,12 @@ begin
   Result.FontName := outS.FontName;
   Result.FontSizeLogical := ResolveFontSize(outS);
   Result.FontWeight := outS.FontWeight;
+  { the root textStyle's font; not its colour, which a label attached to its
+    mark never takes [Batch 83] }
+  hasCol := False;
+  col := 0;
+  GlobalTextOver(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    hasCol, col, [ttpSize, ttpWeight, ttpFamily]);
   Result.OutsideColour := TTyChartColor(outS.TextColor);
   Result.InsideColour[0] := TTyChartColor(lightS.TextColor);
   Result.InsideColour[1] := TTyChartColor(midS.TextColor);
@@ -7477,6 +7662,8 @@ function TTyAdvanceChart.LabelSpecFor(ASlot: Integer;
 var
   base: TTyLabelSpec;
   outS, lightS, midS, darkS: TTyStyleSet;
+  hasCol: Boolean;
+  col: Cardinal;
 begin
   base := TyLabelSpecNone;
   if ADefaultFormatter <> '' then
@@ -7493,6 +7680,10 @@ begin
   base.FontName := outS.FontName;
   base.FontSizeLogical := ResolveFontSize(outS);
   base.FontWeight := outS.FontWeight;
+  hasCol := False;
+  col := 0;
+  GlobalTextOver(base.FontName, base.FontSizeLogical, base.FontWeight,
+    hasCol, col, [ttpSize, ttpWeight, ttpFamily]);
   base.OutsideColour := TTyChartColor(outS.TextColor);
   base.InsideColour[0] := TTyChartColor(lightS.TextColor);
   base.InsideColour[1] := TTyChartColor(midS.TextColor);
@@ -7508,6 +7699,7 @@ end;
 
 function TTyAdvanceChart.PieLabelInk: TTyPieLabelInk;
 var
+  dummyCol: TTyChartColor;
   outS, lightS, midS, darkS: TTyStyleSet;
 begin
   outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
@@ -7519,6 +7711,8 @@ begin
   Result.FontName := outS.FontName;
   Result.FontSizeLogical := ResolveFontSize(outS);
   Result.FontWeight := outS.FontWeight;
+  GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    dummyCol, [ttpSize, ttpWeight, ttpFamily]);
   Result.InsideColour[0] := TTyChartColor(lightS.TextColor);
   Result.InsideColour[1] := TTyChartColor(midS.TextColor);
   Result.InsideColour[2] := TTyChartColor(darkS.TextColor);
@@ -8048,7 +8242,7 @@ begin
   end;
   if ASpec.HasTextSize then
   begin
-    Result.NameSizeLogical := TyRoundOpt(ASpec.TextSizeLogical, 12, 1, 400);
+    Result.NameSizeLogical := TyFontSizeFromPx(ASpec.TextSizeLogical);  // CSS px [Batch 83]
     Result.ValueSizeLogical := Result.NameSizeLogical;
   end;
 
@@ -8057,8 +8251,11 @@ begin
     the type scale cannot carry a constant here: a dense skin at 11px would get
     a box of double-spaced rows and a display skin at 20px would get overlapping
     ones. Recorded as a deliberate divergence. }
+  { in the point units the sizes were always given in: a pixel size is
+    brought back to its point equivalent first [Batch 83] }
   Result.LineHeightLogical :=
-    Round(Max(Result.NameSizeLogical, Result.ValueSizeLogical) * 3 / 2);
+    Round(Max(TyFontPxOf(Result.NameSizeLogical),
+      TyFontPxOf(Result.ValueSizeLogical)) * 72 / 96 * 3 / 2);
 
   Result.MarkerSizeLogical := ActiveController.Metric(
     TyAdvChartTooltipMarkerVar, TyAdvChartTooltipMarker);
@@ -8649,6 +8846,67 @@ begin
   Result := TyChartRunHandler(AHandler, TyChartOneParams(prm));
 end;
 
+{ The root textStyle over a font the theme resolved: family, size (CSS px),
+  weight, and the colour free-standing text takes -- each where written. }
+procedure TTyAdvanceChart.GlobalTextOver(var AName: string; var ASize,
+  AWeight: Integer; var AHasColour: Boolean; var AColour: Cardinal;
+  APick: TTyTextPick);
+var
+  ts, d: TJSONData;
+  col: TTyChartColor;
+begin
+  if FOption = nil then Exit;
+  ts := FOption.Find('textStyle');
+  if not (ts is TJSONObject) then Exit;
+  d := TJSONObject(ts).Find('fontFamily');
+  if (ttpFamily in APick) and (d <> nil) and (d.JSONType = jtString)
+    and (d.AsString <> '') then
+    AName := d.AsString;
+  if ttpSize in APick then
+    ASize := TyOptFontSize(TJSONObject(ts).Find('fontSize'), ASize);
+  if ttpWeight in APick then
+    AWeight := TyFontWeightOf(TJSONObject(ts).Find('fontWeight'), AWeight);
+  d := TJSONObject(ts).Find('color');
+  if (ttpColour in APick) and (d <> nil) and (d.JSONType = jtString)
+    and TyTryParseChartColor(d.AsString, col) then
+  begin
+    AHasColour := True;
+    AColour := col;
+  end;
+end;
+
+{ An axis text style made what the layout measured: its family and size, its
+  weight (an emphasised label keeps the theme's heavier one), and the
+  author's colour where one was written. }
+procedure TTyAdvanceChart.AxisTextOver(var AStyle: TTyStyleSet;
+  const AName: string; ASize, AWeight: Integer; AHasColour: Boolean;
+  AColour: Cardinal; AKeepWeight: Boolean);
+begin
+  AStyle.FontName := AName;
+  AStyle.FontSize := ASize;
+  Include(AStyle.Present, tpFontSize);
+  if not AKeepWeight then AStyle.FontWeight := AWeight;
+  if AHasColour then AStyle.TextColor := TTyColor(AColour);
+end;
+
+procedure TTyAdvanceChart.AxisTextStyles(ASpec: PTyAxisLayoutSpec;
+  out ALabel, APrimary, AName: TTyStyleSet);
+var model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  ALabel := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
+  APrimary := model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
+  AName := model.ResolveStyle('TyAdvChartAxisName', '', []);
+  if ASpec = nil then Exit;
+  AxisTextOver(ALabel, ASpec^.FontName, ASpec^.FontSizeLogical, ASpec^.FontWeight,
+    ASpec^.HasLabelColour, ASpec^.LabelColour, False);
+  { the emphasised label keeps the theme's heavier weight }
+  AxisTextOver(APrimary, ASpec^.FontName, ASpec^.FontSizeLogical, ASpec^.FontWeight,
+    ASpec^.HasLabelColour, ASpec^.LabelColour, True);
+  AxisTextOver(AName, ASpec^.NameFontName, ASpec^.NameFontSizeLogical,
+    ASpec^.NameFontWeight, ASpec^.HasNameColour, ASpec^.NameColour, False);
+end;
+
 function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
 var ext: TTyRange;
 begin
@@ -8930,17 +9188,84 @@ begin
   end;
 end;
 
+{ THE ROOT textStyle OVER A THEME FONT: always its font, and its colour where
+  the text stands free rather than on a mark [Batch 83] }
+procedure TTyAdvanceChart.GlobalInk(var AName: string; var ASize,
+  AWeight: Integer; var AColour: TTyChartColor; APick: TTyTextPick);
+var
+  has: Boolean;
+  col: Cardinal;
+begin
+  has := False;
+  col := 0;
+  GlobalTextOver(AName, ASize, AWeight, has, col, APick);
+  if has then AColour := TTyChartColor(col);
+end;
+
+{ backgroundColor as the option writes it, when it is a colour that paints:
+  not 'transparent', not 'none', not unreadable, not fully clear }
+function TTyAdvanceChart.AuthorBackground(out AColour: TTyChartColor): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  AColour := 0;
+  if FOption = nil then Exit;
+  d := FOption.Find('backgroundColor');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  if not TyTryParseChartColor(d.AsString, AColour) then Exit;
+  Result := (AColour shr 24) > 0;
+end;
+
 procedure TTyAdvanceChart.LabelGround(out AGround: TTyChartColor;
   out ADark: Boolean);
-var a, l: Double;
+var
+  a, l: Double;
+  d: TJSONData;
+  authored, forced: Boolean;
+  k: Integer;
+  ch: array[0..2] of Double;
 begin
-  AGround := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
-    StyleClass, [tysNormal]).Background.Color);
+  { the option's ground where it paints one, else the skin's [Batch 83] }
+  authored := AuthorBackground(AGround);
+  if not authored then
+    AGround := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+      StyleClass, [tysNormal]).Background.Color);
   { zrender's lum with a background of ONE: what shows through a translucent
     ground counts as white. Dark under 0.4. }
   a := ((AGround shr 24) and $FF) / 255;
   l := TyLabelLuminance(AGround) + (1 - a);
   ADark := l < 0.4;
+  { darkMode FORCES THE ANSWER when it is a boolean: upstream's
+    zr.setDarkMode after the ground set it -- null and 'auto' keep the
+    luminance's [Batch 83] }
+  forced := False;
+  if FOption <> nil then
+  begin
+    d := FOption.Find('darkMode');
+    if (d <> nil) and (d.JSONType = jtBoolean) then
+    begin
+      ADark := d.AsBoolean;
+      forced := True;
+    end;
+  end;
+  { THE GROUND AN OUTSIDE LABEL IS HALOED IN is getOutsideStroke's: the
+    background over black when dark, over white when not, made opaque. With
+    no background written upstream's is transparent -- black or white
+    outright -- which the skin's own ground stands in for unless darkMode was
+    forced. [Batch 83] }
+  if not authored and forced then AGround := 0;
+  if authored or forced then
+  begin
+    a := ((AGround shr 24) and $FF) / 255;
+    ch[0] := (AGround shr 16) and $FF;
+    ch[1] := (AGround shr 8) and $FF;
+    ch[2] := AGround and $FF;
+    for k := 0 to 2 do
+      if ADark then ch[k] := ch[k] * a
+      else ch[k] := ch[k] * a + 255 * (1 - a);
+    AGround := TTyChartColor($FF000000 or (Cardinal(Round(ch[0])) shl 16)
+      or (Cardinal(Round(ch[1])) shl 8) or Cardinal(Round(ch[2])));
+  end;
 end;
 
 function TTyAdvanceChart.IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;

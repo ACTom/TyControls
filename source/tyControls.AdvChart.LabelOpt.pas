@@ -340,8 +340,10 @@ begin
     Result.HasFormatter := False;
   end;
 
-  Result.FontSizeLogical := TyRoundOpt(NumIn(node, 'fontSize',
-    Result.FontSizeLogical));
+  { AN AUTHOR'S fontSize IS CSS PX, not the theme's points: 14 read as a
+    point size drew a third too large [Batch 83] }
+  Result.FontSizeLogical := TyOptFontSize(node.Find('fontSize'),
+    Result.FontSizeLogical);
   s := StrIn(node, 'fontWeight');
   if (s = 'bold') or (s = 'bolder') then Result.FontWeight := 700
   else if s = 'normal' then Result.FontWeight := 400

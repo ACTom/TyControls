@@ -13,7 +13,7 @@ unit test.advchart.calendar;
   Colours and fonts are compared where the option wrote them: the defaults
   are the skin's, by the theme rule, and upstream's tokens are not. }
 interface
-uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
+uses tyControls.FontUnits, Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.AdvanceChart,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
@@ -521,7 +521,8 @@ begin
         Same(grp + ' z2', e.Z2, TJSONObject(ACal.Find('textCommon')).Objects[grp].Find('z2'));
         tc := TJSONObject(TJSONObject(ACal.Find('textCommon')).Objects[grp].Find('style'));
         if (grp = 'year') or (tc.Integers['fontSize'] <> 12) then
-          Same(grp + ' font size', e.Caption.FontSizeLogical, tc.Find('fontSize'));
+          { upstream's size is px, and so is the port's [Batch 83] }
+          Same(grp + ' font size', TyFontPxOf(e.Caption.FontSizeLogical), tc.Find('fontSize'));
         s := tc.Get('fontWeight', 'normal');
         if (grp = 'year') or (s <> 'normal') then
         begin

@@ -24,6 +24,7 @@ unit test.advchart.categoryminmax;
   Everything is compared to the bit. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
+     tyControls.FontUnits,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
@@ -96,8 +97,12 @@ end;
 procedure TPtToPxMeasurer.MeasureLine(const AText, AFontName: string;
   AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
 begin
-  FInner.MeasureLine(AText, AFontName, Round(AFontSizeLogical * 96 / 72),
-    AWeight, AW, AH);
+  { points to px; a size that is px already passes through }
+  if TyFontSizeIsPx(AFontSizeLogical) then
+    FInner.MeasureLine(AText, AFontName, AFontSizeLogical, AWeight, AW, AH)
+  else
+    FInner.MeasureLine(AText, AFontName, Round(AFontSizeLogical * 96 / 72),
+      AWeight, AW, AH);
 end;
 
 function TPtToPxMeasurer.WrapToWidth(const AText, AFontName: string;

@@ -19,7 +19,7 @@ unit test.advchart.labels;
     - the inside colour is a THREE-band table by luminance, and the middle band
       is the LIGHTEST of the three. }
 interface
-uses
+uses tyControls.FontUnits,
   Classes, SysUtils, Math, fpcunit, testregistry,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
@@ -424,7 +424,10 @@ begin
   AssertEquals('rotate', Pi / 2, spec.RotationRad, 1e-9);
   AssertEquals('overflow', Ord(tloTruncate), Ord(spec.Overflow));
   AssertEquals('formatter', '{c} kg', spec.Formatter);
-  AssertEquals('font size', 14, spec.FontSizeLogical);
+  { CSS PX, not the theme's points: 14 read as a point size drew a third too
+    large [Batch 83] }
+  AssertTrue('font size is px', TyFontSizeIsPx(spec.FontSizeLogical));
+  AssertEquals('font size', 14.0, TyFontPxOf(spec.FontSizeLogical), 1e-9);
   AssertEquals('bold is 700', 700, spec.FontWeight);
 
   { OFF UNLESS ASKED. Neither bar nor line nor scatter declares label.show, and

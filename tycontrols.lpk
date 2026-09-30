@@ -29,6 +29,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.StrConsts"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.FontUnits.pas"/>
+        <UnitName Value="tyControls.FontUnits"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.NativeStyler.pas"/>
         <UnitName Value="tyControls.NativeStyler"/>
       </Item>

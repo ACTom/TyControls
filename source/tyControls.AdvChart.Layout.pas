@@ -251,6 +251,13 @@ type
     NameFontName: string;
     NameFontSizeLogical: Integer;
     NameFontWeight: Integer;
+    { THE OPTION'S ROOT textStyle.color, which an axis NAME takes where its
+      own options give none -- free-standing text with no default colour of
+      its own (upstream's setTextStyleCommon; the labels have one). A chart
+      colour (TTyChartColor) carried as the Cardinal it is, as this unit does
+      not see the paint layer. }
+    HasGlobalColour: Boolean;
+    GlobalColour: Cardinal;
   end;
 
   { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
@@ -397,6 +404,10 @@ type
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
+    { axisLabel.color over the root textStyle's, as a chart colour; the
+      theme's where neither is written }
+    HasLabelColour: Boolean;
+    LabelColour: Cardinal;
     { COUNTER-CLOCKWISE positive, matching TTyPainter.DrawTextRotated. }
     RotationRad: Double;
     LabelMarginLogical: Double;
@@ -549,6 +560,8 @@ type
     NameFontName: string;
     NameFontSizeLogical: Integer;
     NameFontWeight: Integer;
+    HasNameColour: Boolean;
+    NameColour: Cardinal;
     { the frame of the pass being laid out, set by the builder; without it a
       frame is made from the rect with the line on the plot's edge }
     HasNameFrame: Boolean;

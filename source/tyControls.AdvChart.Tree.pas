@@ -352,6 +352,9 @@ begin
       nm := TJSONObject(node).Find('name');
       if nm <> nil then o.Add('name', nm.Clone);
     end;
+    { THE VIRTUAL ROOT'S VALUE IS COMPLETED TOO -- the sum of what it holds,
+      which a treemap's drilled-out root label prints as its c [Batch 83] }
+    if (done <> nil) and (Length(done) > 0) then o.Floats['value'] := done[0];
     arr.Add(o);
     for row := 1 to High(hier.Nodes) do
     begin

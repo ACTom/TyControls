@@ -8321,6 +8321,47 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 
 - 关系图、桑基图的**边标签**本来就没画(第 46、79 批),对应的上游文字不比。
 - 雷达系列标签没移植(第 35 批),该用例跳过。
-- 矩形树图用例:作者字号按磅读导致文字更宽被截断,等 A2 修字号后放开。
+- 矩形树图用例:~~作者字号按磅读导致文字更宽被截断,等 A2 修字号后放开~~ **[第 83 批更正:理由不对——这个用例没写字号;是这个测试用真字体量字、上游用 SSR 估算,截断位置不同。矩形树图的文字由 `test.advchart.treemap` 用 zrender 的量字表比,那边已全部放开。]**
 - `axisPointer.status: 'show'` 与 `value` 写在选项里时的初始指针没移植,归 B5。
 - `tooltip.position` 的函数形式要另一种返回类型,归 B5。
+
+## 118. Tier 1 第八十三批:作者写的字号是 px、根 textStyle、backgroundColor 与 darkMode(A2,2026-10-01)
+
+### 问题
+
+作者在选项里写的 `fontSize` 一直被当成主题的**磅**读——`14` 画成 14pt ≈ 18.7px,大三分之一。15 个读取点无一换算;矩形树图、旭日图、桑基图的测试靠「写了 fontSize 就跳过文字比较」绕开(约三成标签)。根级 `textStyle`、`backgroundColor`、`darkMode`,轴标签/轴名/标题/图例自己的字体与颜色,也都不读。
+
+### 上游的做法(`text-style.js` 逐项核对)
+
+- **字号是 CSS px**:数字、`'14'`、`'14px'` 都是 14px(zrender `parseFontSize`);读不出的串是 12px;`13.5` 就是 13.5。
+- **字体属性逐个回落到根 textStyle**(`getFont`、`setTokenTextStyle`),但**组件自己有默认值的属性挡住它**:轴标签的 12px、标题的 18px bold、副标题的 12px、仪表盘的 12/16/30px 都挡住根 fontSize;根 fontWeight/fontFamily 能到轴标签和副标题;轴名、图例、系列标签、visualMap、dataZoom、雷达指示器名三样都接。
+- **颜色只给没有默认颜色的独立文字**:轴名接根 color;轴标签、标题、图例有令牌默认色,挡住;挂在图形上的标签从来不接(`setTextStyleCommon` 的 `!isAttached`)。
+- **darkMode**:每次更新先按背景亮度定 isDark(`lum(bg, 1) < 0.4`),布尔的 darkMode 再强行覆盖,`'auto'`/缺省不动。它只影响挂着的标签:外侧描边是 `getOutsideStroke`——背景在黑(暗)或白(亮)上合成、不透明;内侧标签只在「isDark 等于墨色是深色」时拿宿主填充作描边。
+- 默认字体在 Windows 的 node 下是 `'Microsoft YaHei'`——皮肤的事,不比。
+
+### 做法
+
+- **新单元 `tyControls.FontUnits`**(纯,只用 SysUtils/Math;画家和图表的纯单元都用得上):逻辑字号仍是一个 Integer,像素字号编码为 `cTyFontPxBase + 百分之一像素`——仍为正,所有「字号 > 0 就是画出来的标题」的判断不受影响;`TyFontSizeFromPx`、`TyFontSizeIsPx`、`TyFontPxOf`。画家的两个字体配置过程解码:BGRA 的 `FontHeight = px × PPI/96`,测量画布的 `Font.Height` 在 96 DPI 下与同等磅值走 Size 路径的一致;高 DPI 下磅值路径先把字号取整到整磅(144 DPI 的 9pt 取成 14),像素路径不取整,更准。新单元已登记进 `.lpk`。
+- `TyOptFontSize`(Option 单元):数字/数字串/`'Npx'` → px 编码;全部 15 个读取点改用它。
+- 轴:`TTyAxisLayoutSpec` 多标签与轴名的颜色;Builder 的 `AuthorFont` 读 `axisLabel`、`nameTextStyle` 的 family/size/weight/color;画轴改走 `AxisTextStyles`——量和画用同一份。
+- 控件:`GlobalTextOver`/`GlobalInk` 带「取哪几样」(`TTyTextPick`),每个调用点按上游默认值挑;标题两行的字体 `TitleFontOf`(textStyle/subtextStyle)存在 `FTitleFonts`,布局与绘制共用;图例 `LegendTextOf`(textStyle);`backgroundColor` 在框内画、并作标签的地;`LabelGround` 按 darkMode 强制、按 `getOutsideStroke` 合成。
+- **顺带修的真缺陷**:矩形树图虚根没有补值,下钻后根标签的 `{c}` 是 undefined(放开字号用例后才露出来)。
+- 测试侧:`TZrSsrMeasurer` 认 px 编码,并照 platform.ts 对字体串含 `mono` 的按字符数量宽;`TPtToPxMeasurer` 让 px 直通;矩形树图测试删掉「写了 fontSize 就跳过文字」,11.3 万项全比。
+
+### 基准
+
+- `tools/advchart-oracle/text-style.js`(代理写):65 个用例、984 段文字,每段记组件、所属、是否挂着、位置、变换、字体五项、填充/描边与自动墨色、盒子;外加 zrender 的 SSR 量字表。守卫若干(根色不进挂着的标签、各组件在根 16 下的字号、`'14pxpx'`、parseFontSize、isDark 表……),三条守卫变异确认会红。
+- `test.advchart.textstyle`:网格矩形逐位;轴标签与轴名的锚点(1e-6)和字体;标题、图例、系列标签的字体;暗色用例里每个系列标签的描边有无与颜色。**比的是「上游动了的属性」**:以 `default-everything` 里同组件的值为基线,上游偏离基线处端口必须是作者/根的值,上游没动处端口必须保持主题(不许有作者颜色、不许有像素字号)。另有字符串字号、画轴用的样式等于量的样式、画家解码三条直接测试。
+
+### 变异测试
+
+`m86`:25 个变异(px 按磅解、px 取整到整像素、画家两条像素路径、字符串字号两条、标签字号不读、轴/轴名作者字体、作者颜色、根 textStyle 的六个挑选、标题/图例自己的 textStyle、画轴不看 spec、darkMode 三条与作者背景、矩形树图虚根补值、日历年默认字号)。首轮存活 2 个:
+- 「图例接根颜色」:测试的「作者颜色」判定取自上游,端口多接了颜色看不出来——改成按端口实际墨色是否不等于皮肤的图例色判定后杀死;
+- 「日历年的默认字号按磅」:等价——年的文字规格恒带自己的 20px(`HasFontSize` 为真),AddText 的默认值用不到。
+
+### 已知偏差
+
+- 系列标签外侧墨色(上游暗 `#ccc`/亮 `#333`)取皮肤的,只比描边。
+- `fontStyle`(italic)读不进端口的字体——画家没有斜体参数。
+- visualMap、dataZoom、雷达、仪表盘、矩形树图面包屑的根 textStyle 规则按上游默认值推断,基准里没有它们的用例。
+- `rem`/`em` 字号当作读不出。

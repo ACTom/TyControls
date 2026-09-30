@@ -357,7 +357,7 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.FontUnits;
 
 const
   cRadian = Pi / 180;
@@ -521,7 +521,7 @@ begin
   if v > 0 then
   begin
     AText.HasFontSize := True;
-    AText.FontSizeLogical := TyRoundOpt(v, AText.FontSizeLogical, 1, 4000);
+    AText.FontSizeLogical := TyFontSizeFromPx(v);  // CSS px [Batch 83]
   end;
   if StrIn(n, 'fontFamily', '') <> '' then
   begin
@@ -745,7 +745,7 @@ begin
     if v > 0 then
     begin
       Result.AxisLabel.HasFontSize := True;
-      Result.AxisLabel.FontSizeLogical := TyRoundOpt(v, 12, 1, 4000);
+      Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
     end;
     s := StrIn(n2, 'fontFamily', '');
     if s <> '' then

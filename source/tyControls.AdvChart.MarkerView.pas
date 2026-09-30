@@ -259,7 +259,7 @@ implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Data, tyControls.AdvChart.Color, tyControls.AdvChart.Labels,
-     tyControls.AdvChart.Handlers;
+     tyControls.AdvChart.Handlers, tyControls.AdvChart.Option;
 
 type
   TMkView = array of TJSONObject;
@@ -1369,9 +1369,8 @@ var
     else av := tavTop;
     { the author's size where they gave one; the skin's otherwise }
     fs := AInk.FontSizeLogical;
-    if (B.FontSize <> nil) and (B.FontSize <> GTextDefaults.Find('fontSize'))
-      and (B.FontSize.JSONType = jtNumber) and (B.FontSize.AsFloat > 0) then
-      fs := Round(B.FontSize.AsFloat);
+    if (B.FontSize <> nil) and (B.FontSize <> GTextDefaults.Find('fontSize')) then
+      fs := TyOptFontSize(B.FontSize, fs);  // CSS px [Batch 83]
     w := 0;
     h := 0;
     if AMeasurer <> nil then
@@ -2127,9 +2126,8 @@ begin
     else if B.VAlign = 'bottom' then av := tavBottom
     else av := tavTop;
     fs := AInk.FontSizeLogical;
-    if (B.FontSize <> nil) and (B.FontSize <> GTextDefaults.Find('fontSize'))
-      and (B.FontSize.JSONType = jtNumber) and (B.FontSize.AsFloat > 0) then
-      fs := Round(B.FontSize.AsFloat);
+    if (B.FontSize <> nil) and (B.FontSize <> GTextDefaults.Find('fontSize')) then
+      fs := TyOptFontSize(B.FontSize, fs);  // CSS px [Batch 83]
     w := 0;
     h := 0;
     if AMeasurer <> nil then

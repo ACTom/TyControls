@@ -9,7 +9,7 @@ uses
   BGRAGradientScanner, BGRACanvas2D, BGRATextBidi,
   BGRAPath,   // TBGRAPath: measures a path:// symbol's own bounds for SvgPathIn
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
-  tyControls.Types;
+  tyControls.Types, tyControls.FontUnits;
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck, tgCheckIndeterminate,
@@ -425,6 +425,7 @@ function TyEffectiveFontName(const AName: string): string;
   --font-size-base on every theme apply, so a key that computed it differently from the
   measurement would serve a pre-switch width. }
 function TyEffectiveFontSizeLogical(AFontSizeLogical: Integer): Integer;
+
 { Greedy line wrap that understands both scripts. Western words break at spaces (runs
   collapse to one space); CJK text carries no spaces, so each ideograph / kana / hangul
   syllable is its own break opportunity — without this a Chinese run is one unbreakable
@@ -1047,7 +1048,13 @@ begin
   // drawn -- TyConfigureTextFont falls back the same way on the drawing side.
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ACanvas.Font.Name := TyEffectiveFontName(AFontName);
-  ACanvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
+  { a pixel size lands where the point size px * 72/96 would: the same
+    Height the Size path gives, without the Size path's whole points }
+  if TyFontSizeIsPx(AFontSizeLogical) then
+    ACanvas.Font.Height := -Round(TyFontPxOf(AFontSizeLogical) * APPI
+      * ACanvas.Font.PixelsPerInch / 9216)
+  else
+    ACanvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
   if AWeight >= 600 then
     ACanvas.Font.Style := [fsBold]
   else
@@ -1155,7 +1162,10 @@ begin
   // A missing font-size (0) would render invisible text; fall back to a visible default.
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ABmp.FontName := TyEffectiveFontName(AFontName);
-  ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  if TyFontSizeIsPx(AFontSizeLogical) then
+    ABmp.FontHeight := Round(TyFontPxOf(AFontSizeLogical) * APPI / 96)
+  else
+    ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
   // Text quality is a WIDGETSET choice. fqFineAntialiasing only stays crisp where BGRABitmap runs
   // its OWN 3x supersampler -- the Win32 LCL font backend. On Qt/GTK it renders BLANK (diagnostic on
   // Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on Cocoa it silently drops to single-pass

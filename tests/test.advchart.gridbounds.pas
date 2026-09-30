@@ -29,6 +29,7 @@ unit test.advchart.gridbounds;
      from (118.16 + 421.84 - 118.16 = 421.84000000000003).] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
+     tyControls.FontUnits,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
@@ -120,8 +121,11 @@ var
   i, lines, cp, len: Integer;
   b: Byte;
 begin
-  { the size in px; the family, weight and style count for nothing }
-  px := AFontSizeLogical;
+  { the size in px -- an author's size arrives encoded as px, the rest as a
+    number this measurer has always read as px; the family, weight and style
+    count for nothing }
+  if TyFontSizeIsPx(AFontSizeLogical) then px := TyFontPxOf(AFontSizeLogical)
+  else px := AFontSizeLogical;
   AW := 0;
   w := 0;
   lines := 1;
@@ -143,7 +147,10 @@ begin
     else if b < $F0 then begin cp := b and $0F; len := 3; end
     else begin cp := b and $07; len := 4; end;
     Inc(i, len);
-    if (cp >= Low(FRatio)) and (cp <= High(FRatio)) and (len = 1) then
+    { a font whose string says 'mono' is a whole size per unit, whatever the
+      character (platform.ts) }
+    if (cp >= Low(FRatio)) and (cp <= High(FRatio)) and (len = 1)
+      and (Pos('mono', AFontName) = 0) then
       w := w + FRatio[cp] * px
     else
     begin

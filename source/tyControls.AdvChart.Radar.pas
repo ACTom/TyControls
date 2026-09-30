@@ -306,6 +306,8 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 
 implementation
 
+uses tyControls.FontUnits;
+
 const
   cRadian = Pi / 180;
 
@@ -572,7 +574,7 @@ begin
     if v > 0 then
     begin
       Result.AxisName.HasFontSize := True;
-      Result.AxisName.FontSizeLogical := TyRoundOpt(v, 12, 1, 4000);
+      Result.AxisName.FontSizeLogical := TyFontSizeFromPx(v);  // CSS px [Batch 83]
     end;
     Result.AxisName.Formatter := StrIn(n2, 'formatter', '');
     Result.AxisName.HasFormatter := Result.AxisName.Formatter <> '';
@@ -603,7 +605,7 @@ begin
     if v > 0 then
     begin
       Result.AxisLabel.HasFontSize := True;
-      Result.AxisLabel.FontSizeLogical := TyRoundOpt(v, 12, 1, 4000);
+      Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
     end;
   end;
 

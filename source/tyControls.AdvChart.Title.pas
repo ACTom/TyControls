@@ -43,6 +43,10 @@ type
     Name: string;
     SizeLogical: Integer;
     Weight: Integer;
+    { the author's colour (textStyle / subtextStyle, else the root
+      textStyle's) as a chart colour; the theme's where neither is written }
+    HasColour: Boolean;
+    Colour: Cardinal;
   end;
 
   TTyTitleSpec = record

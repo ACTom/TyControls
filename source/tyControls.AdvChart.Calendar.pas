@@ -209,7 +209,7 @@ function TyBuildCalendar(ACal: TTyCalendar; const AInk: TTyCalendarInk;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.StrConsts, tyControls.AdvChart.Handlers;
+uses tyControls.AdvChart.Scale, tyControls.StrConsts, tyControls.AdvChart.Handlers, tyControls.FontUnits;
 
 { what a named month or year label handler is given: nameMap as Name, the
   kind in Extra, and (yyyy, M) for a month, (start, end) for a year }
@@ -324,11 +324,11 @@ begin
     AText.HasColour := True;
     AText.Colour := c;
   end;
-  d := ANode.Find('fontSize');
-  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+  { CSS px, a number or zrender's string forms [Batch 83] }
+  if TyOptFontSize(ANode.Find('fontSize'), 0) > 0 then
   begin
     AText.HasFontSize := True;
-    AText.FontSizeLogical := Round(d.AsFloat);
+    AText.FontSizeLogical := TyOptFontSize(ANode.Find('fontSize'), 0);
   end;
   d := ANode.Find('fontWeight');
   if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
@@ -548,7 +548,7 @@ begin
   Result.YearMargin := 30;
   { upstream's own defaults for the year, which beat the global textStyle }
   Result.YearText.HasFontSize := True;
-  Result.YearText.FontSizeLogical := 20;
+  Result.YearText.FontSizeLogical := TyFontSizeFromPx(20);
   Result.YearText.HasWeight := True;
   Result.YearText.FontWeight := 700;
   Result.Z := 2;
@@ -1552,7 +1552,7 @@ begin
     end;
     if pos in [tcyLeft, tcyRight] then rot := Pi / 2 else rot := 0;
     AddText(content, x, y, ah, av, rot, spec.YearText, AInk.YearColour,
-      AInk.YearFontName, 20, 700);
+      AInk.YearFontName, TyFontSizeFromPx(20), 700);
   end;
 
   { ---- the months ---- }

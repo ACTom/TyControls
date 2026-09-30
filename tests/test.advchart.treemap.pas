@@ -14,10 +14,9 @@ unit test.advchart.treemap;
   bounds must be, bit for bit. A white background is the port's ground (the
   theme's) and is passed over, counted.
 
-  A LABEL'S WORDS ARE PASSED OVER, counted, where the case writes a
-  `fontSize`: the port reads an author's size into its logical unit, the
-  theme's points, so 14 there is 14 pt, not upstream's 14 px -- a question
-  for every series, not this one. The anchor and z2 are still compared. }
+  A LABEL'S WORDS ARE COMPARED where the case writes a `fontSize` too: an
+  author's size is CSS px in the port as upstream [Batch 83; they were passed
+  over while the port read it as points]. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -42,7 +41,7 @@ type
     FChart: TTmProbe;
     FRoot: TJSONData;
     FBmp: TBGRABitmap;
-    FBad, FCompared, FRects, FLabels, FCrumbs, FSkipped, FSkippedWords, FHeaders: Integer;
+    FBad, FCompared, FRects, FLabels, FCrumbs, FSkipped, FHeaders: Integer;
     FReport, FName: string;
     procedure Miss(const AWhat: string);
     procedure RunCases(AGallery: Boolean);
@@ -145,7 +144,6 @@ begin
   FLabels := 0;
   FCrumbs := 0;
   FSkipped := 0;
-  FSkippedWords := 0;
   FHeaders := 0;
   FReport := '';
 end;
@@ -187,7 +185,6 @@ var
   crumbEls, crumbCaps: array of Integer;
   wantCol: TTyChartColor;
   seenCrumb, seenCrumbText: Integer;
-  sized: Boolean;
   lastTx, lastTy, wantY: Double;
   sl2: TJSONArray;
 begin
@@ -199,7 +196,6 @@ begin
     if AGallery <> ((d <> nil) and (d.JSONType = jtString)) then Continue;
     FName := cs.Strings['id'];
     d := cs.Find('option');
-    sized := (d <> nil) and (Pos('"fontSize"', d.AsJSON) > 0);
     if not AGallery then
       opt := TJSONObject(cs.Objects['option'].Clone)
     else
@@ -478,22 +474,6 @@ begin
           { a label: its words joined; all-empty lines draw nothing here }
           txt := StringReplace(lblText[row], #10, '', [rfReplaceAll]);
           if hasLbl[row] and (txt <> '') then wantLbl := 1 else wantLbl := 0;
-          if sized then
-          begin
-            { the words hang on the size; the anchor does not }
-            Inc(FSkippedWords);
-            if (capAt[row] < 0) or (wantLbl = 0) then Continue;
-            e := lst.Element(capAt[row]);
-            Inc(FCompared, 2);
-            { the line height hangs on the size too: y only when middle }
-            if not (Same(e.Caption.X, lblX[row]) and ((e.Caption.AnchorV <> tavMiddle)
-              or Same(e.Caption.Y, lblY[row]))) then
-              Miss(Format('%s: label at (%s, %s) upstream, (%s, %s) here', [w_,
-                Fmt(lblX[row]), Fmt(lblY[row]), Fmt(e.Caption.X), Fmt(e.Caption.Y)]));
-            if e.Z2 <> lblZ2[row] then
-              Miss(Format('%s: label z2 %d upstream, %d here', [w_, lblZ2[row], e.Z2]));
-            Continue;
-          end;
           Inc(FCompared);
           if wantLbl <> Ord(capAt[row] >= 0) then
           begin
@@ -542,12 +522,9 @@ begin
   RunCases(False);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs (%d white grounds passed over, %d labels'' words for their size)',
-    [FRects, FLabels, FHeaders, FCrumbs, FSkipped, FSkippedWords]),
-    (FRects >= 5000) and (FLabels >= 1000) and (FCrumbs >= 300) and (FHeaders >= 150)
-    { the M4-M6 families write fontSize 14 often: under a third of the
-      labels' words wait on the font-size unit question }
-    and (FSkippedWords < FLabels div 3));
+  AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs (%d white grounds passed over)',
+    [FRects, FLabels, FHeaders, FCrumbs, FSkipped]),
+    (FRects >= 5000) and (FLabels >= 1000) and (FCrumbs >= 300) and (FHeaders >= 150));
 end;
 
 procedure TAdvChartTreemapOracleTest.TestTheGalleryTreemapAsUpstream;

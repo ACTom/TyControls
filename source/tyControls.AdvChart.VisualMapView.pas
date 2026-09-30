@@ -441,7 +441,7 @@ begin
       Result.TextColour := c;
     end;
     d := ts.Find('fontSize');
-    if (d <> nil) and (d.JSONType = jtNumber) then Result.FontSize := Round(d.AsFloat);
+    Result.FontSize := TyOptFontSize(d, Result.FontSize);
     d := ts.Find('align');
     if (d <> nil) and (d.JSONType = jtString) then Result.TextAlign := d.AsString;
     d := ts.Find('verticalAlign');
