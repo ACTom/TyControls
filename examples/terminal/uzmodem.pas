@@ -146,36 +146,54 @@ implementation
 const
   HexDigits: array[0..15] of AnsiChar = '0123456789abcdef';
 
-function ZmCrc16(ACrc: Word; AData: PByte; ACount: Integer): Word;
+var
+  { a byte at a time (built in the initialization, bit by bit as below) }
+  Crc16Table: array[0..255] of Word;
+  Crc32Table: array[0..255] of Cardinal;
+
+procedure BuildCrcTables;
 var
   i, b: Integer;
+  c16: Word;
+  c32: Cardinal;
+begin
+  for i := 0 to 255 do
+  begin
+    { XMODEM: $1021, most significant bit first }
+    c16 := Word(i shl 8);
+    for b := 1 to 8 do
+      if (c16 and $8000) <> 0 then
+        c16 := Word((c16 shl 1) xor $1021)
+      else
+        c16 := Word(c16 shl 1);
+    Crc16Table[i] := c16;
+    { IEEE, reflected: $EDB88320, least significant bit first }
+    c32 := i;
+    for b := 1 to 8 do
+      if (c32 and 1) <> 0 then
+        c32 := (c32 shr 1) xor $EDB88320
+      else
+        c32 := c32 shr 1;
+    Crc32Table[i] := c32;
+  end;
+end;
+
+function ZmCrc16(ACrc: Word; AData: PByte; ACount: Integer): Word;
+var
+  i: Integer;
 begin
   Result := ACrc;
   for i := 0 to ACount - 1 do
-  begin
-    Result := Result xor (Word(AData[i]) shl 8);
-    for b := 1 to 8 do
-      if (Result and $8000) <> 0 then
-        Result := Word((Result shl 1) xor $1021)
-      else
-        Result := Word(Result shl 1);
-  end;
+    Result := Word(Result shl 8) xor Crc16Table[(Result shr 8) xor AData[i]];
 end;
 
 function ZmCrc32(ACrc: Cardinal; AData: PByte; ACount: Integer): Cardinal;
 var
-  i, b: Integer;
+  i: Integer;
 begin
   Result := ACrc;
   for i := 0 to ACount - 1 do
-  begin
-    Result := Result xor AData[i];
-    for b := 1 to 8 do
-      if (Result and 1) <> 0 then
-        Result := (Result shr 1) xor $EDB88320
-      else
-        Result := Result shr 1;
-  end;
+    Result := (Result shr 8) xor Crc32Table[(Result xor AData[i]) and $FF];
 end;
 
 function ZmPosHeader(AType: Byte; APos: Cardinal): TZmHeader;
@@ -784,4 +802,6 @@ begin
   Result := ACount;
 end;
 
+initialization
+  BuildCrcTables;
 end.

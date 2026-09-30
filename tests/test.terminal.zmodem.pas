@@ -56,6 +56,7 @@ type
     procedure TestALongNameIsCut;
     procedure TestAZeofRepeatedAfterTheFileIsAnsweredAgain;
     procedure TestTheRemoteNameIsShownNotRun;
+    procedure TestTheCrcTablesAreTheBitwiseCrcs;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -1480,6 +1481,77 @@ begin
     r.Free;
     log.Free;
     sink.Free;
+  end;
+end;
+
+{ the CRCs a bit at a time, straight from the definitions (the reference for the tables) }
+function BitCrc16(ACrc: Word; const S: RawByteString): Word;
+var
+  i, b: Integer;
+begin
+  Result := ACrc;
+  for i := 1 to Length(S) do
+  begin
+    Result := Result xor (Word(Ord(S[i])) shl 8);
+    for b := 1 to 8 do
+      if (Result and $8000) <> 0 then
+        Result := Word((Result shl 1) xor $1021)
+      else
+        Result := Word(Result shl 1);
+  end;
+end;
+
+function BitCrc32(ACrc: Cardinal; const S: RawByteString): Cardinal;
+var
+  i, b: Integer;
+begin
+  Result := ACrc;
+  for i := 1 to Length(S) do
+  begin
+    Result := Result xor Ord(S[i]);
+    for b := 1 to 8 do
+      if (Result and 1) <> 0 then
+        Result := (Result shr 1) xor $EDB88320
+      else
+        Result := Result shr 1;
+  end;
+end;
+
+{ The table-driven CRCs (review: a bit at a time was slow) give what the bitwise
+  definitions give: every byte value alone from several starting values, and random
+  runs of every length up to 300, whole and in two parts. Mutations: a table entry
+  wrong; the table index not masked. }
+procedure TTyTerminalZmodemTests.TestTheCrcTablesAreTheBitwiseCrcs;
+const
+  Starts16: array[0..2] of Word = (0, $FFFF, $1234);
+  Starts32: array[0..2] of Cardinal = ($FFFFFFFF, 0, $89ABCDEF);
+var
+  i, k, n, cut: Integer;
+  s: RawByteString;
+begin
+  for k := 0 to 2 do
+    for i := 0 to 255 do
+    begin
+      s := AnsiChar(i);
+      AssertEquals(Format('CRC-16 of %d from %x', [i, Starts16[k]]), BitCrc16(Starts16[k], s),
+        ZmCrc16(Starts16[k], @s[1], 1));
+      AssertEquals(Format('CRC-32 of %d from %x', [i, Starts32[k]]), Int64(BitCrc32(Starts32[k], s)),
+        Int64(ZmCrc32(Starts32[k], @s[1], 1)));
+    end;
+  RandSeed := 77;
+  for n := 1 to 300 do
+  begin
+    s := '';
+    SetLength(s, n);
+    for i := 1 to n do
+      s[i] := AnsiChar(Random(256));
+    AssertEquals(Format('CRC-16, %d bytes', [n]), BitCrc16(0, s), ZmCrc16(0, @s[1], n));
+    AssertEquals(Format('CRC-32, %d bytes', [n]), Int64(BitCrc32($FFFFFFFF, s)), Int64(ZmCrc32($FFFFFFFF, @s[1], n)));
+    cut := n div 3;
+    AssertEquals(Format('CRC-16 in two parts, %d bytes', [n]), BitCrc16(0, s),
+      ZmCrc16(ZmCrc16(0, @s[1], cut), @s[cut + 1], n - cut));
+    AssertEquals(Format('CRC-32 in two parts, %d bytes', [n]), Int64(BitCrc32($FFFFFFFF, s)),
+      Int64(ZmCrc32(ZmCrc32($FFFFFFFF, @s[1], cut), @s[cut + 1], n - cut)));
   end;
 end;
 

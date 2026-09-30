@@ -348,19 +348,16 @@ begin
   end;
 end;
 
-{ at S[I] (a '*' followed by ZDLE 'B'): 14 hex digits with a good CRC and type 0 or 1?
-  -2 = not all there yet }
-function HexHeaderAt(const S: RawByteString; I: Integer): Integer;
+{ AH[0..16]: '*', ZDLE, 'B', then 14 hex digits -- with a good CRC and type 0 or 1? }
+function HexHeaderIn(const AH: array of Byte): Integer;
 var
   b: array[0..6] of Byte;
   k, hi, lo: Integer;
 begin
-  if I + 2 + 14 > Length(S) then
-    Exit(-2);
   for k := 0 to 6 do
   begin
-    hi := HexVal(S[I + 3 + k * 2]);
-    lo := HexVal(S[I + 4 + k * 2]);
+    hi := HexVal(AnsiChar(AH[3 + k * 2]));
+    lo := HexVal(AnsiChar(AH[4 + k * 2]));
     if (hi < 0) or (lo < 0) then
       Exit(-1);
     b[k] := hi * 16 + lo;
@@ -373,63 +370,87 @@ begin
     Result := -1;
 end;
 
+{ Over the carry and AData as one run of bytes, without joining them (a piece is up to
+  128 KB, every piece is looked at): positions 0 .. carry - 1 are the carry's }
 function ZmDetectHexStart(AData: PByte; ACount: Integer; var ACarry: RawByteString;
   out AAt: Integer): Integer;
+const
+  HeaderLen = 17;                        { '*' ZDLE 'B' and 14 hex digits }
 var
-  s: RawByteString;
-  i, first, t, star, carryLen: Integer;
+  carryLen, total, i, k, first, t, star: Integer;
+  h: array[0..HeaderLen - 1] of Byte;
+  keep: RawByteString;
+
+  function B(AIndex: Integer): Byte;
+  begin
+    if AIndex < carryLen then
+      Result := Byte(ACarry[AIndex + 1])
+    else
+      Result := AData[AIndex - carryLen];
+  end;
+
 begin
   AAt := 0;
   Result := -1;
   carryLen := Length(ACarry);
-  s := ACarry;
-  if ACount > 0 then
+  total := carryLen + ACount;
+  i := 0;
+  while i + 2 < total do
   begin
-    SetLength(s, carryLen + ACount);
-    Move(AData^, s[carryLen + 1], ACount);
-  end;
-  i := 1;
-  while i + 2 <= Length(s) do
-  begin
-    if (s[i] = '*') and (s[i + 1] = #$18) and (s[i + 2] = 'B') then
+    if i >= carryLen then
     begin
-      t := HexHeaderAt(s, i);
+      { in the piece itself: straight to its next '*' }
+      k := IndexByte(AData[i - carryLen], total - i, Ord('*'));
+      if k < 0 then
+        Break;
+      Inc(i, k);
+      if i + 2 >= total then
+        Break;
+    end;
+    if (B(i) = Ord('*')) and (B(i + 1) = $18) and (B(i + 2) = Ord('B')) then
+    begin
+      if i + HeaderLen > total then
+        Break;                           { cut at the end: kept below }
+      for k := 0 to HeaderLen - 1 do
+        h[k] := B(i + k);
+      t := HexHeaderIn(h);
       if t >= 0 then
       begin
         first := i;
-        while (first > 1) and (s[first - 1] = '*') do
+        while (first > 0) and (B(first - 1) = Ord('*')) do
           Dec(first);
-        AAt := first - 1 - carryLen;
+        AAt := first - carryLen;
         if AAt < 0 then
         begin
           { the header began in the carry: those bytes are on screen already }
-          ACarry := Copy(s, first, carryLen - first + 1);
+          ACarry := Copy(ACarry, first + 1, carryLen - first);
           AAt := 0;
         end
         else
           ACarry := '';
         Exit(t);
       end;
-      if t = -2 then
-        Break;                           { cut at the end: kept below }
     end;
     Inc(i);
   end;
   { nothing: keep the end from its last '*' run on, when it may be a header's start }
-  ACarry := '';
-  star := 0;
-  for i := Length(s) downto Max(1, Length(s) - CarryMax + 1) do
-    if s[i] = '*' then
+  star := -1;
+  for i := total - 1 downto Max(0, total - CarryMax) do
+    if B(i) = Ord('*') then
     begin
       star := i;
       Break;
     end;
-  if star > 0 then
+  keep := '';
+  if star >= 0 then
   begin
-    while (star > 1) and (star > Length(s) - CarryMax + 1) and (s[star - 1] = '*') do
+    while (star > 0) and (star > total - CarryMax) and (B(star - 1) = Ord('*')) do
       Dec(star);
-    ACarry := Copy(s, star, MaxInt);
+    SetLength(keep, total - star);
+    for k := 0 to total - star - 1 do
+      keep[k + 1] := AnsiChar(B(star + k));
   end;
+  ACarry := keep;
 end;
 
 { ---- the disk sink and source --------------------------------------------------------------- }
