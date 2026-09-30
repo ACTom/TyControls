@@ -352,6 +352,42 @@ object MainForm: TMainForm
         OnChange = ContrastChange
       end
     end
+    object Tools5: TTyPanel
+      Left = 0
+      Height = 40
+      Top = 194
+      Width = 980
+      Align = alTop
+      Caption = ''
+      object LblColors: TTyLabel
+        Left = 10
+        Height = 20
+        Top = 11
+        Width = 56
+        AutoSize = True
+        Caption = 'Colours:'
+      end
+      object CmbColors: TTyComboBox
+        Left = 80
+        Height = 26
+        Top = 7
+        Width = 240
+        Hint = 'Follow the theme, or give the terminal a colour scheme of its own'
+        ShowHint = True
+        OnChange = ColorsChange
+      end
+      object BtnImportColors: TTyButton
+        Left = 332
+        Height = 28
+        Top = 6
+        Width = 90
+        AutoSize = True
+        Caption = 'Import...'
+        Hint = 'Load a Windows Terminal colour scheme or settings.json'
+        ShowHint = True
+        OnClick = ImportColorsClick
+      end
+    end
     object Status: TTyStatusBar
       Left = 0
       Height = 24
@@ -377,8 +413,8 @@ object MainForm: TMainForm
     end
     object Keys: TTyMemo
       Left = 690
-      Height = 422
-      Top = 194
+      Height = 382
+      Top = 234
       Width = 290
       Align = alRight
       ReadOnly = True
@@ -387,8 +423,8 @@ object MainForm: TMainForm
     end
     object Split: TTySplitter
       Left = 684
-      Height = 422
-      Top = 194
+      Height = 382
+      Top = 234
       Width = 6
       Align = alRight
       MinSize = 120
@@ -396,8 +432,8 @@ object MainForm: TMainForm
     end
     object Term: TTyTerminalView
       Left = 0
-      Height = 422
-      Top = 194
+      Height = 382
+      Top = 234
       Width = 684
       Align = alClient
       ReadOnly = True
@@ -415,6 +451,12 @@ object MainForm: TMainForm
     Title = 'Open a recording'
     Filter = 'asciicast (*.cast)|*.cast|All files (*.*)|*.*'
     Left = 40
+    Top = 160
+  end
+  object DlgColors: TTyOpenDialog
+    Title = 'Import a colour scheme'
+    Filter = 'Windows Terminal colour schemes (*.json)|*.json|All files (*.*)|*.*'
+    Left = 160
     Top = 160
   end
   object Player: TTimer

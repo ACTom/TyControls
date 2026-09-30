@@ -147,6 +147,26 @@ msgstr "最低对比度："
 msgid "Push text colours off their background until they reach this contrast ratio (1 = off)"
 msgstr "把字色推离底色，直到达到这个对比度（1 = 不调）"
 
+#: tmainform.lblcolors.caption
+msgid "Colours:"
+msgstr "配色："
+
+#: tmainform.cmbcolors.hint
+msgid "Follow the theme, or give the terminal a colour scheme of its own"
+msgstr "跟随主题，或者给终端一套自己的配色方案"
+
+#: tmainform.btnimportcolors.caption
+msgid "Import..."
+msgstr "导入…"
+
+#: tmainform.btnimportcolors.hint
+msgid "Load a Windows Terminal colour scheme or settings.json"
+msgstr "读入 Windows Terminal 的配色方案或 settings.json"
+
+#: tmainform.dlgcolors.title
+msgid "Import a colour scheme"
+msgstr "导入配色方案"
+
 # --- resourcestrings ---
 
 #: uasciicast.rsnotv2
@@ -263,3 +283,17 @@ msgstr "进程已退出，退出码 %d"
 #: uptywin.rsconptyunavailable
 msgid "This version of Windows has no pseudo console (ConPTY); Windows 10 1809 or later is needed."
 msgstr "这个版本的 Windows 没有伪控制台（ConPTY），需要 Windows 10 1809 或更新的版本。"
+
+#: umain.rscolorsfollowtheme
+msgid "Follow theme"
+msgstr "跟随主题"
+
+#: umain.rscolorsimportfailedfmt
+#, object-pascal-format
+msgid "Could not import: %s"
+msgstr "无法导入：%s"
+
+#: umain.rscolorspairfmt
+#, object-pascal-format
+msgid "%s (light / dark)"
+msgstr "%s（浅色 / 深色）"

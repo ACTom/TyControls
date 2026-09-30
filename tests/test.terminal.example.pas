@@ -12,8 +12,9 @@ interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
   Forms, FileUtil,
+  tyControls.Types, tyControls.StyleModel, tyControls.Controller,
   tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, umain, test.terminal.view,
-  test.terminal.pty;
+  test.terminal.pty, test.terminal.oracle;
 
 type
   TTyTerminalExampleTests = class(TTestCase)
@@ -22,7 +23,9 @@ type
     FTags: array of PtrInt;
     FDone: Integer;
     FPlayer: TAsciicastPlayer;
+    FTermData: RawByteString;
     procedure Collect(Sender: TObject; const AData: RawByteString; ATag: PtrInt);
+    procedure TermData(Sender: TObject; const AData: RawByteString);
     procedure ToView(Sender: TObject; const AData: RawByteString; ATag: PtrInt);
     procedure ViewDone(Sender: TObject; ATag: PtrInt);
     function Cast(const ALines: array of string): TStringList;
@@ -39,6 +42,8 @@ type
     procedure TestTheShellUnitsCompileInTheTests;
     procedure TestTheExampleProjectListsItsUnits;
     procedure TestTheMainFormBuildsWithARecording;
+    { 6 期:配色 }
+    procedure TestTheColourListOffersSevenAndThreePairs;
   end;
 
 implementation
@@ -351,10 +356,153 @@ begin
       AssertTrue('FormCreate ran to the end: the shell commands are listed',
         f.CmbCommand.Items.Count > 0);
       AssertEquals('both modes are offered', 2, f.CmbMode.Items.Count);
+      { no colorschemes/ beside the test runner or above it: only "Follow theme", and
+        "Import..." still works }
+      AssertEquals('no scheme file: the colour list has one entry', 1, f.CmbColors.Items.Count);
+      AssertEquals('and it is "Follow theme"', 'Follow theme', f.CmbColors.Items[0]);
+      AssertEquals('picked', 0, f.CmbColors.ItemIndex);
+      f.ImportColorsFrom(TyTermFixturePath('terminal-wt-defaults.json'));
+      AssertEquals('importing Windows Terminal''s defaults.json adds its 16', 17, f.CmbColors.Items.Count);
+      AssertEquals('and picks the first', 1, f.CmbColors.ItemIndex);
+      AssertTrue('the terminal took it', f.Term.ColorSource = tsrcScheme);
+      AssertEquals('Dimidium', 'Dimidium', f.Term.ColorScheme.Name);
     finally
       f.Free;
     end;
   finally
+    DeleteDirectory(dir, False);
+  end;
+end;
+
+procedure TTyTerminalExampleTests.TermData(Sender: TObject; const AData: RawByteString);
+begin
+  FTermData := FTermData + AData;
+end;
+
+function Reports(const AData: RawByteString): Integer;
+var
+  s: RawByteString;
+  p: Integer;
+begin
+  Result := 0;
+  s := AData;
+  p := Pos(#27'[?997;', s);
+  while p > 0 do
+  begin
+    Inc(Result);
+    Delete(s, 1, p + 5);
+    p := Pos(#27'[?997;', s);
+  end;
+end;
+
+procedure PumpMessages;
+var
+  i: Integer;
+begin
+  for i := 1 to 5 do
+    Application.ProcessMessages;
+end;
+
+{ The example's colour list, from its own colorschemes/windows-terminal.json put where
+  the example looks (beside the executable): Follow theme, the seven, the three pairs.
+  Picking one sets the terminal's colours; a pair follows the dark-mode switch; each pick
+  is one 2031 report; a file that does not import changes nothing. }
+procedure TTyTerminalExampleTests.TestTheColourListOffersSevenAndThreePairs;
+const
+  Want: array[0..10] of string = ('Follow theme', 'Campbell', 'One Half Dark', 'One Half Light',
+    'Solarized Dark', 'Solarized Light', 'Tango Dark', 'Tango Light',
+    'One Half (light / dark)', 'Solarized (light / dark)', 'Tango (light / dark)');
+var
+  dir, src, bad: string;
+  f: TMainForm;
+  i: Integer;
+  oldMode: string;
+  st: TTyStyleSet;
+  sl: TStringList;
+  before: Cardinal;
+
+  procedure Pick(const AName: string);
+  begin
+    f.CmbColors.ItemIndex := f.CmbColors.Items.IndexOf(AName);
+    AssertTrue('listed: ' + AName, f.CmbColors.ItemIndex >= 0);
+    f.ColorsChange(f.CmbColors);
+  end;
+
+  procedure Dark(AOn: Boolean);
+  begin
+    f.DarkSwitch.Checked := AOn;
+    f.DarkSwitchChange(f.DarkSwitch);
+  end;
+
+begin
+  TyTermNeedWidgetSet;
+  dir := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'colorschemes' + PathDelim;
+  src := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim + 'terminal'
+    + PathDelim + 'colorschemes' + PathDelim + 'windows-terminal.json';
+  AssertFalse('no colorschemes folder beside the test runner beforehand', DirectoryExists(dir));
+  oldMode := TyDefaultController.Mode;
+  ForceDirectories(dir);
+  try
+    AssertTrue('copied the scheme file', CopyFile(src, dir + 'windows-terminal.json'));
+    f := TMainForm.Create(nil);
+    try
+      AssertEquals('Follow theme, seven schemes, three pairs', Length(Want), f.CmbColors.Items.Count);
+      for i := 0 to High(Want) do
+        AssertEquals('entry ' + IntToStr(i), Want[i], f.CmbColors.Items[i]);
+      Dark(False);
+      f.Term.ReadOnly := False;
+      f.Term.OnData := @TermData;
+      f.Term.WriteSync(#27'[?2031h');
+      PumpMessages;
+      FTermData := '';
+      Pick('Solarized Dark');
+      AssertTrue('a scheme', f.Term.ColorSource = tsrcScheme);
+      AssertFalse('not paired', f.Term.ColorSchemePaired);
+      AssertEquals('Solarized Dark''s ground', IntToHex($002B36, 6), IntToHex(f.Term.Core.ResolveColor(257), 6));
+      PumpMessages;
+      AssertEquals('theme -> a scheme: one report', 1, Reports(FTermData));
+      FTermData := '';
+      Pick('Tango (light / dark)');
+      AssertTrue('paired', f.Term.ColorSchemePaired);
+      AssertEquals('the light one', 'Tango Light', f.Term.ColorScheme.Name);
+      AssertEquals('the dark one', 'Tango Dark', f.Term.DarkColorScheme.Name);
+      AssertEquals('light mode: Tango Light''s ground', IntToHex($FFFFFF, 6), IntToHex(f.Term.Core.ResolveColor(257), 6));
+      PumpMessages;
+      AssertEquals('a scheme -> a pair: one report', 1, Reports(FTermData));
+      Dark(True);
+      AssertEquals('dark mode: Tango Dark''s ground', IntToHex($000000, 6), IntToHex(f.Term.Core.ResolveColor(257), 6));
+      Dark(False);
+      AssertEquals('light again: Tango Light''s ground', IntToHex($FFFFFF, 6), IntToHex(f.Term.Core.ResolveColor(257), 6));
+      Pick('Follow theme');
+      AssertTrue('the theme again', f.Term.ColorSource = tsrcTheme);
+      st := TyDefaultController.Model.ResolveStyle('TyTerminal', '', []);
+      AssertEquals('the theme''s ground', IntToHex(Cardinal(st.Background.Color) and $FFFFFF, 6),
+        IntToHex(f.Term.Core.ResolveColor(257), 6));
+      { a file that imports nothing: the list, the colours stay; the status bar says why }
+      Pick('Campbell');
+      before := f.Term.Core.ResolveColor(257);
+      bad := GetTempDir(False) + 'tyterm-example-bad-scheme.json';
+      sl := TStringList.Create;
+      try
+        sl.Text := '{"name": "Broken", "black": "#000000"}';
+        sl.SaveToFile(bad);
+      finally
+        sl.Free;
+      end;
+      try
+        f.ImportColorsFrom(bad);
+      finally
+        DeleteFile(bad);
+      end;
+      AssertEquals('nothing added', Length(Want), f.CmbColors.Items.Count);
+      AssertTrue('the status bar says so: ' + f.Status.Panels[0].Text,
+        Pos('Could not import', f.Status.Panels[0].Text) > 0);
+      AssertEquals('the colours are as they were', IntToHex(before, 6), IntToHex(f.Term.Core.ResolveColor(257), 6));
+    finally
+      f.Free;
+    end;
+  finally
+    TyDefaultController.Mode := oldMode;
     DeleteDirectory(dir, False);
   end;
 end;

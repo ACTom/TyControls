@@ -1,6 +1,9 @@
 {
   "umain.rsallowclipboardread": "程序要求读取剪贴板。允许吗？",
   "umain.rsclipboardsetfmt": "程序设置了剪贴板（%d 个字符）",
+  "umain.rscolorsfollowtheme": "跟随主题",
+  "umain.rscolorsimportfailedfmt": "无法导入：%s",
+  "umain.rscolorspairfmt": "%s（浅色 / 深色）",
   "umain.rslinknotopenedfmt": "未打开（只打开 http 和 https）：%s",
   "umain.rslogstopped": "（已停止记录：已显示 4 KB）",
   "umain.rsmodereplay": "回放",

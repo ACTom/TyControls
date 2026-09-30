@@ -38,6 +38,14 @@ unit umain;
   opens a browser, and opens only http and https. OSC 52 is off unless picked; a
   program may then set the clipboard, and must ask before reading it.
 
+  COLOUR SCHEMES. "Colours" switches the terminal from the theme to a colour scheme of
+  its own (ColorSource / ColorScheme). The seven listed are Windows Terminal's own, copied
+  as they are from its defaults.json into colorschemes/windows-terminal.json (MIT; see
+  THIRD-PARTY-NOTICES.md); the three "(light / dark)" entries pair two of them
+  (ColorSchemePaired / DarkColorScheme), and the dark-mode switch in the title bar then
+  swaps them. "Import..." reads any Windows Terminal scheme file or settings.json and adds
+  every scheme in it that loads.
+
   The window, the terminal and every control are designed in umain.lfm (a TTyForm +
   TTyTitleBar); the code here is event handlers, the player and theme setup. }
 
@@ -55,6 +63,14 @@ uses
   uasciicast, uptysession, uptywin, uptyunix, ushell;
 
 type
+  { one entry of the colour list: which scheme file text (FColorTexts; -1 = follow the
+    theme) and the names to load -- a pair has a light and a dark one }
+  TColorChoice = record
+    TextIndex: Integer;
+    LightName, DarkName: string;
+    Paired: Boolean;
+  end;
+
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
@@ -74,6 +90,11 @@ type
     CmbOsc52: TTyComboBox;
     LblContrast: TTyLabel;
     CmbContrast: TTyComboBox;
+    Tools5: TTyPanel;
+    LblColors: TTyLabel;
+    CmbColors: TTyComboBox;
+    BtnImportColors: TTyButton;
+    DlgColors: TTyOpenDialog;
     LblRecording: TTyLabel;
     CmbRecording: TTyComboBox;
     BtnOpen: TTyButton;
@@ -121,6 +142,8 @@ type
     procedure DetectUrlsClick(Sender: TObject);
     procedure Osc52Change(Sender: TObject);
     procedure ContrastChange(Sender: TObject);
+    procedure ColorsChange(Sender: TObject);
+    procedure ImportColorsClick(Sender: TObject);
     procedure TermLinkActivate(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
     procedure TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
       var AText: string; var AAllow: Boolean);
@@ -147,6 +170,18 @@ type
     function Speed: Double;
     procedure UpdateProgress;
     procedure AddKeyLine(const S: string);
+  private
+    { the colour list: one entry per item of CmbColors; a scheme file's text is kept once
+      in FColorTexts and the entries point at it (-1 = follow the theme) }
+    FColorTexts: TStringList;
+    FColorChoices: array of TColorChoice;
+    function AddColorChoice(const ACaption: string; ATextIndex: Integer;
+      const ALight, ADark: string; APaired: Boolean): Integer;
+    procedure FillColors;
+  public
+    { "Import...": every scheme in the file that loads joins the list and the first one is
+      picked; a file with none says why in the status bar and changes nothing }
+    procedure ImportColorsFrom(const AFileName: string);
   end;
 
 var
@@ -180,6 +215,9 @@ resourcestring
   rsAllowClipboardRead = 'The program asks to read the clipboard. Allow it?';
   rsShellExitedStatusFmt = 'Shell exited (%d)';
   rsShellFailedFmt = 'Could not start: %s';
+  rsColorsFollowTheme = 'Follow theme';
+  rsColorsPairFmt = '%s (light / dark)';
+  rsColorsImportFailedFmt = 'Could not import: %s';
 
 const
   { the key panel keeps the last this many lines }
@@ -187,20 +225,41 @@ const
   { "Log PTY output" lists at most this many bytes of one session }
   PtyLogMax = 4096;
 
-function RecordingsDir: string;
+{ a folder of the example's: next to the executable, or up the tree (lib/<target>/ builds) }
+function ExampleDir(const ASub: string): string;
 var
   Dir: string;
   i: Integer;
 begin
-  { next to the executable, or up the tree (lib/<target>/ builds) }
   Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
   for i := 1 to 8 do
   begin
-    if DirectoryExists(Dir + 'recordings') then Exit(Dir + 'recordings' + PathDelim);
+    if DirectoryExists(Dir + ASub) then Exit(Dir + ASub + PathDelim);
     Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
     if Dir = '' then Break;
   end;
-  Result := 'recordings' + PathDelim;
+  Result := ASub + PathDelim;
+end;
+
+function RecordingsDir: string;
+begin
+  Result := ExampleDir('recordings');
+end;
+
+{ a whole file as it is (a colour scheme file: UTF-8, maybe with a BOM the reader drops) }
+function ReadWholeFile(const AFileName: string): string;
+var
+  fs: TFileStream;
+begin
+  Result := '';
+  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, fs.Size);
+    if Length(Result) > 0 then
+      fs.ReadBuffer(Result[1], Length(Result));
+  finally
+    fs.Free;
+  end;
 end;
 
 { '1B 5B 41  ESC [ A': the bytes, then a readable spelling }
@@ -273,6 +332,8 @@ begin
   CmbOsc52.Items[2] := rsOsc52ReadWrite;
   BtnStart.Caption := rsStart;
   FillCommands;
+  FColorTexts := TStringList.Create;
+  FillColors;
   AddKeyLine(rsReadOnlyHint);
 end;
 
@@ -287,6 +348,7 @@ begin
   FFiles.Free;
   FPlayer.Free;
   FCast.Free;
+  FColorTexts.Free;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -663,6 +725,158 @@ begin
   fs := DefaultFormatSettings;
   fs.DecimalSeparator := '.';
   Term.MinimumContrastRatio := StrToFloatDef(CmbContrast.Items[CmbContrast.ItemIndex], 1, fs);
+end;
+
+{ ---- colour schemes ---- }
+
+function TMainForm.AddColorChoice(const ACaption: string; ATextIndex: Integer;
+  const ALight, ADark: string; APaired: Boolean): Integer;
+begin
+  Result := CmbColors.Items.Add(ACaption);
+  if Length(FColorChoices) <= Result then
+    SetLength(FColorChoices, Result + 1);
+  FColorChoices[Result].TextIndex := ATextIndex;
+  FColorChoices[Result].LightName := ALight;
+  FColorChoices[Result].DarkName := ADark;
+  FColorChoices[Result].Paired := APaired;
+end;
+
+procedure TMainForm.FillColors;
+const
+  Pairs: array[0..2, 0..2] of string = (
+    ('One Half', 'One Half Light', 'One Half Dark'),
+    ('Solarized', 'Solarized Light', 'Solarized Dark'),
+    ('Tango', 'Tango Light', 'Tango Dark'));
+var
+  fn, txt: string;
+  names: TStringArray;
+  i, t: Integer;
+
+  function Listed(const AName: string): Boolean;
+  var
+    k: Integer;
+  begin
+    for k := 0 to High(names) do
+      if names[k] = AName then Exit(True);
+    Result := False;
+  end;
+
+begin
+  CmbColors.Items.Clear;
+  FColorChoices := nil;
+  AddColorChoice(rsColorsFollowTheme, -1, '', '', False);
+  fn := ExampleDir('colorschemes') + 'windows-terminal.json';
+  if FileExists(fn) then
+  begin
+    txt := '';
+    try
+      txt := ReadWholeFile(fn);
+    except
+      on E: Exception do
+        Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [E.Message]);
+    end;
+    names := TTyTerminalColorScheme.ListSchemeNames(txt);
+    if Length(names) > 0 then
+    begin
+      t := FColorTexts.Add(txt);
+      for i := 0 to High(names) do
+        AddColorChoice(names[i], t, names[i], names[i], False);
+      for i := 0 to High(Pairs) do
+        if Listed(Pairs[i, 1]) and Listed(Pairs[i, 2]) then
+          AddColorChoice(Format(rsColorsPairFmt, [Pairs[i, 0]]), t, Pairs[i, 1], Pairs[i, 2], True);
+    end;
+  end;
+  CmbColors.ItemIndex := 0;
+end;
+
+procedure TMainForm.ColorsChange(Sender: TObject);
+var
+  i: Integer;
+  err: string;
+begin
+  i := CmbColors.ItemIndex;
+  if (i < 0) or (i > High(FColorChoices)) then Exit;
+  if FColorChoices[i].TextIndex < 0 then
+  begin
+    Term.ColorSource := tsrcTheme;
+    Exit;
+  end;
+  { several settings in a row: the terminal tells the program about the new colours once }
+  if not Term.ColorScheme.TryLoadFromText(FColorTexts[FColorChoices[i].TextIndex],
+    FColorChoices[i].LightName, err) then
+  begin
+    Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [err]);
+    Exit;
+  end;
+  if FColorChoices[i].Paired and not Term.DarkColorScheme.TryLoadFromText(
+    FColorTexts[FColorChoices[i].TextIndex], FColorChoices[i].DarkName, err) then
+  begin
+    Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [err]);
+    Exit;
+  end;
+  Term.ColorSchemePaired := FColorChoices[i].Paired;
+  Term.ColorSource := tsrcScheme;
+end;
+
+procedure TMainForm.ImportColorsClick(Sender: TObject);
+begin
+  if DlgColors.Execute then
+    ImportColorsFrom(DlgColors.FileName);
+end;
+
+procedure TMainForm.ImportColorsFrom(const AFileName: string);
+var
+  txt, err, shown: string;
+  names, added: TStringArray;
+  probe: TTyTerminalColorScheme;
+  i, k, t, first, n: Integer;
+  dup: Boolean;
+begin
+  try
+    txt := ReadWholeFile(AFileName);
+  except
+    on E: Exception do
+    begin
+      Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [E.Message]);
+      Exit;
+    end;
+  end;
+  names := TTyTerminalColorScheme.ListSchemeNames(txt);
+  added := nil;
+  first := -1;
+  t := -1;
+  err := '';
+  probe := TTyTerminalColorScheme.Create;
+  try
+    for i := 0 to High(names) do
+    begin
+      { a name twice in a settings.json: only its first scheme is ever read }
+      dup := False;
+      for k := 0 to High(added) do
+        if added[k] = names[i] then dup := True;
+      if dup then Continue;
+      if not probe.TryLoadFromText(txt, names[i], err) then Continue;
+      if t < 0 then t := FColorTexts.Add(txt);
+      n := Length(added);
+      SetLength(added, n + 1);
+      added[n] := names[i];
+      shown := names[i];
+      if shown = '' then shown := ExtractFileName(AFileName);
+      k := AddColorChoice(shown, t, names[i], names[i], False);
+      if first < 0 then first := k;
+    end;
+    if first < 0 then
+    begin
+      { nothing loads: say why (a text with no scheme at all gets the reader's own reason) }
+      if err = '' then probe.TryLoadFromText(txt, '', err);
+      Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [err]);
+      Exit;
+    end;
+  finally
+    probe.Free;
+  end;
+  CmbColors.ItemIndex := first;
+  ColorsChange(CmbColors);
 end;
 
 { The control opens nothing: the host decides. Here, like xterm.js's own OSC 8 default:
