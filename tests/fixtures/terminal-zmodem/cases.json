@@ -1,0 +1,136 @@
+{
+ "generator": "tools/terminal-oracle/zmodem-record.sh (wsl.exe -d Ubuntu --cd <repo> -- sh tools/terminal-oracle/zmodem-record.sh)",
+ "sz": "sz (lrzsz) 0.12.21rc",
+ "rz": "rz (GNU lrzsz) 0.12.21rc",
+ "note": "sz and rz talking to each other through two FIFOs, each direction copied by tee. Reproducible up to the files: a rerun gives the same received files and this file, the .bin recordings may differ (which side speaks first is a race).",
+ "cases": [
+  {
+   "id": "one-small",
+   "szOptions": [],
+   "rzOptions": [],
+   "files": [
+    {
+     "name": "one-small.bin",
+     "size": 1500,
+     "md5": "e0a857a2aba6c24d8fb580f0b272077f",
+     "mtime": 1700000000,
+     "source": "one-small.1.src"
+    }
+   ]
+  },
+  {
+   "id": "empty",
+   "szOptions": [],
+   "rzOptions": [],
+   "files": [
+    {
+     "name": "empty.bin",
+     "size": 0,
+     "md5": "d41d8cd98f00b204e9800998ecf8427e",
+     "mtime": 1700000000,
+     "source": "empty.1.src"
+    }
+   ]
+  },
+  {
+   "id": "batch",
+   "szOptions": [],
+   "rzOptions": [],
+   "files": [
+    {
+     "name": "b1.bin",
+     "size": 1,
+     "md5": "03c7c0ace395d80182db07ae2c30f034",
+     "mtime": 1700000000,
+     "source": "batch.1.src"
+    },
+    {
+     "name": "b2.bin",
+     "size": 1024,
+     "md5": "06a7c76af61d6f8ee5bf33444d2a2b0e",
+     "mtime": 1700000000,
+     "source": "batch.2.src"
+    },
+    {
+     "name": "b3.bin",
+     "size": 5000,
+     "md5": "2ec2995738c916bb23669ccb5985da42",
+     "mtime": 1700000000,
+     "source": "batch.3.src"
+    }
+   ]
+  },
+  {
+   "id": "esc",
+   "szOptions": [
+    "-e"
+   ],
+   "rzOptions": [
+    "-e"
+   ],
+   "files": [
+    {
+     "name": "esc.bin",
+     "size": 3000,
+     "md5": "1cab0b9226c6fbd2ae787bff54d25074",
+     "mtime": 1700000000,
+     "source": "esc.1.src"
+    }
+   ]
+  },
+  {
+   "id": "big-block",
+   "szOptions": [
+    "-8"
+   ],
+   "rzOptions": [],
+   "files": [
+    {
+     "name": "big.bin",
+     "size": 20000,
+     "md5": "a46f1bfb3445a5ae1041fd22b1bd470a",
+     "mtime": 1700000000,
+     "source": "big-block.1.src"
+    }
+   ]
+  },
+  {
+   "id": "window",
+   "szOptions": [
+    "-w",
+    "2048"
+   ],
+   "rzOptions": [],
+   "files": [
+    {
+     "name": "window.bin",
+     "size": 20000,
+     "md5": "42d4fbf00fd657147ab88e29f8ceb2ed",
+     "mtime": 1700000000,
+     "source": "window.1.src"
+    }
+   ]
+  },
+  {
+   "id": "names",
+   "szOptions": [],
+   "rzOptions": [],
+   "files": [
+    {
+     "name": "a b 中文.bin",
+     "size": 100,
+     "md5": "97831b4e47704aca9bfb7ca5938163a7",
+     "mtime": 1700000000,
+     "source": "names.1.src"
+    },
+    {
+     "name": "x.y.z",
+     "size": 100,
+     "md5": "e7bcd775e806013ce6adde15c82c6c6c",
+     "mtime": 1700000000,
+     "source": "names.2.src"
+    }
+   ]
+  }
+ ]
+}

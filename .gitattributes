@@ -14,3 +14,7 @@ assets/lucide/**  -text
 # Windows Terminal's own defaults.json, byte for byte (CRLF included): the colour-scheme
 # tests count its bytes and read its comments and trailing commas as they are upstream.
 tests/fixtures/terminal-wt-defaults.json  -text
+
+# The terminal example's ZModem recordings: lrzsz's bytes on the wire and the files it
+# sent, byte for byte (tools/terminal-oracle/zmodem-record.sh).
+tests/fixtures/terminal-zmodem/**  -text
