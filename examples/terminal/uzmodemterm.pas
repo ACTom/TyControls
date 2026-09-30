@@ -204,9 +204,13 @@ end;
 
 function ZmSafeFileName(const AName: string): string;
 const
-  Reserved: array[0..21] of string = ('CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
-    'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7',
-    'LPT8', 'LPT9');
+  { Windows' device names: COM0 / LPT0 and the superscript digits (U+00B9, U+00B2,
+    U+00B3, which Windows takes for 1, 2, 3) too, and the console's CONIN$ / CONOUT$ }
+  Reserved: array[0..31] of string = ('CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$',
+    'COM0', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+    'COM'#$C2#$B9, 'COM'#$C2#$B2, 'COM'#$C2#$B3,
+    'LPT0', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+    'LPT'#$C2#$B9, 'LPT'#$C2#$B2, 'LPT'#$C2#$B3);
 var
   i, p: Integer;
   base: string;
@@ -227,6 +231,9 @@ begin
     Exit('file');
   p := Pos('.', Result);
   if p > 0 then base := Copy(Result, 1, p - 1) else base := Result;
+  { "CON .txt" is CON: Windows drops the spaces (and dots) that end the part it looks at }
+  while (base <> '') and (base[Length(base)] in [' ', '.']) do
+    SetLength(base, Length(base) - 1);
   for i := 0 to High(Reserved) do
     if SameText(base, Reserved[i]) then
       Exit('_' + Result);

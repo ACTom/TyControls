@@ -52,6 +52,7 @@ type
     procedure TestA4GiBFileIsSkipped;
     procedure TestA4GiBFileInTheTerminal;
     procedure TestDecliningShowsWhatFollowed;
+    procedure TestEveryDeviceNameIsRenamed;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -1790,6 +1791,35 @@ begin
   Check('.', 'file');
   Check(#$E6#$8A#$A5#$E5#$91#$8A' 2026.pdf', #$E6#$8A#$A5#$E5#$91#$8A' 2026.pdf');
   Check('a'#1'b'#31'c'#127'd', 'a_b_c_d');
+end;
+
+{ Windows' device names, all of them: COM0 / LPT0, the superscript digits (U+00B9,
+  U+00B2, U+00B3 -- Windows takes them for 1, 2, 3), CONIN$ / CONOUT$, and a name whose
+  part before the first dot ends in spaces ("CON .txt" is CON too). Names that only
+  look alike stay. Mutations: the spaces not taken off before the comparison; the
+  list without the new names. }
+procedure TTyTerminalZmodemTests.TestEveryDeviceNameIsRenamed;
+
+  procedure Check(const AIn, AWant: string);
+  begin
+    AssertEquals('"' + AIn + '"', AWant, ZmSafeFileName(AIn));
+  end;
+
+begin
+  Check('COM0', '_COM0');
+  Check('lpt0.txt', '_lpt0.txt');
+  Check('COM'#$C2#$B9, '_COM'#$C2#$B9);
+  Check('COM'#$C2#$B2'.log', '_COM'#$C2#$B2'.log');
+  Check('LPT'#$C2#$B3, '_LPT'#$C2#$B3);
+  Check('CONIN$', '_CONIN$');
+  Check('conout$.txt', '_conout$.txt');
+  Check('CON .txt', '_CON .txt');
+  Check('nul  .tar.gz', '_nul  .tar.gz');
+  Check('AUX.tar.gz', '_AUX.tar.gz');
+  Check('COM10', 'COM10');
+  Check('CONX', 'CONX');
+  Check('CONIN', 'CONIN');
+  Check('LPT'#$C2#$B4, 'LPT'#$C2#$B4);
 end;
 
 function NewTempDir: string;
