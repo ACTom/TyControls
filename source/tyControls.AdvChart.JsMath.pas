@@ -26,6 +26,8 @@ unit tyControls.AdvChart.JsMath;
 interface
 
 function TyJsSin(AX: Double): Double;
+{ JavaScript's %: the exact remainder, with the dividend's sign. [Batch 75] }
+function TyJsFMod(A, B: Double): Double;
 function TyJsCos(AX: Double): Double;
 function TyJsAtan(AX: Double): Double;
 function TyJsAtan2(AY, AX: Double): Double;
@@ -321,6 +323,26 @@ begin
   if not RemPio2(AX, n, y0, y1) then Exit(Tan(AX));
   { 1 when n is even, -1 when it is odd }
   Result := KTan(y0, y1, 1 - ((n and 1) shl 1));
+end;
+
+function TyJsFMod(A, B: Double): Double;
+var x, y: Double;
+begin
+  if IsNan(A) or IsNan(B) or IsInfinite(A) or (B = 0) then Exit(NaN);
+  if IsInfinite(B) then Exit(A);
+  B := Abs(B);
+  x := Abs(A);
+  if x < B then Exit(A);
+  { each subtraction is of a power-of-two multiple no more than twice the
+    rest, which Sterbenz makes exact }
+  y := B;
+  while y <= x / 2 do y := y * 2;
+  while y >= B do
+  begin
+    if x >= y then x := x - y;
+    y := y / 2;
+  end;
+  if A < 0 then Result := -x else Result := x;
 end;
 
 function TyJsSin(AX: Double): Double;

@@ -744,9 +744,9 @@ begin
       ah := host.Caption.FixedAH;
       av := host.Caption.FixedAV;
     end;
-    if spec.HasAlignH then ah := spec.AlignH;
-    { a fixed anchor's vertical alignment is the mark's (upstream sets it on
-      the style after the author's) }
+    { a fixed anchor's alignment is the mark's: it has already weighed the
+      author's in (a sunburst flips it, a radial tree takes it) }
+    if spec.HasAlignH and not host.Caption.HasFixedAnchor then ah := spec.AlignH;
     if spec.HasAlignV and not host.Caption.HasFixedAnchor then av := spec.AlignV;
     { OFFSET AFTER THE POSITION, which is upstream's order. Upstream also
       applies it INSIDE the rotation, so a rotated label's offset runs along

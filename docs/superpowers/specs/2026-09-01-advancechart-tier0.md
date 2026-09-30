@@ -8038,3 +8038,44 @@ H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历�
 
 - 径向标签的 `offset` 按屏幕坐标加,不随转角转(上游在转后的坐标里加)。
 - 提示框、点击展开收起、漫游、emphasis 之后再做。
+
+## 109. Tier 1 第七十五批:旭日图(S1,2026-09-30)
+
+### 上游的做法
+
+- **层级**:和树同一套(虚拟根以系列名命名,先序行号即 dataIndex),但旭日图画**所有**根。
+- **补值**(`completeTreeValue`,建树之前改写选项):没写值的节点取子节点之和,写了值的保留(子节点不重新缩放,多了溢出、少了留空),负值和非数都成 0;数组值取第 0 项。标签里的 `{c}` 读的就是补过的值。
+- **排序**:没写 `sort` 按值降序,`null` 不排,`'asc'` 升序且相等时反转原顺序,其他字符串按降序。
+- **角度**:单位弧度 `2π / 根之和`(和为 0 且 `stillShowZeroSum` 时每个根平分),每块至少 `minAngle`;兄弟节点按各自 `end - start` 累加,所以写了值的父节点和子节点可以不对齐。起始角默认 12 点,`clockwise: false` 反向。
+- **半径**:`radius` 标量是外半径、数组是内外;每层等宽 `(r - r0) / (树高 - 1)`;`levels[depth]` 可用 `radius` 覆盖本层,旧写法 `r0`/`r` 在没有 `radius` 时才生效。
+- **颜色**:条目 → `levels[depth]` → 系列的 `itemStyle.color` 优先;否则按深度 1 的祖先的**名字**向色板取色(同一个图表里所有旭日图共用一个取色游标),深度大于 1 的再向白色提亮 `(depth-1)/(树高-1)·0.5`,每个通道截断取整。
+- **样式**:边框默认白色、宽 1,z2 为 2,`borderRadius` 支持百分比(按 `r`,`r` 为 0 时按 `r0`)。值为 0 的块不画(`renderLabelForZeroData` 除外)。
+- **标签**:默认显示名字;锚点在块的中角上——`center` 取内外半径中点(整圆且内半径为 0 时取圆心),`left`/`right` 从内/外缘量 `distance`(默认 5),`outside` 在外缘之外;中角(切向旋转时是 `π/2 - 中角`)落在 π/2 到 3π/2 之间就翻转(π/2 处有 1e-4 的容差),翻转改对齐、给转角加 π;`rotate` 可以是 `radial`/`tangential`/度数;`offset` 被忽略;`label.minAngle` 太小就不显示。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.Sunburst`:`TySunburstSolve`(补值、排序、中心与半径、递归 `RenderNode`)、`TySunburstColour`、`TySunburstLift`、`TySunburstLabelSpecs`(条目 → 层 → 系列,偏移清零)、`TyBuildSunburstMarks`(扇形用已有的 `TyShapeSector`,标签用上一批的「固定锚点」)。
+- 补值挪进 Tree 单元的 `TyTreeCompletedValues`,旭日图的求解和存储共用;`TyTreeFillStore` 多一个参数,旭日图的存储写入补过的值,所以 `{c}` 与上游一致。
+- JsMath 新增 `TyJsFMod`:JS 的 `%`,精确余数(逐次减去 2 的幂倍,Sterbenz 保证每步精确),`NormalizeRadian` 靠它逐位对上。
+- 控件:存储分支与树共用、`SolveSunbursts`(整块画布,共享取色游标;色板依次取系列自己的、图表的、主题色阶)、`SunburstInk`(边框是图表底色——上游的白)、`BuildSeriesList` 的旭日图分支;`sunburst` 加入「别处画」名单。
+- **固定锚点的对齐**:展开标签时,标记给了固定锚点就不再用作者的 `align` 覆盖——旭日图的翻转已经把它算进去了;径向树改在 `RadialLabel` 里自己先应用作者的 `align`,行为不变。
+- 上游对未知 `align`(如 `'middle'`)不设半径、锚点是 NaN;端口不画这个标签(和树的 NaN 锚点一样)。
+
+### 基准
+
+- `tools/advchart-oracle/sunburst.js`(代理写)真跑 ECharts 6.1,80 个用例、35 条守卫:补值(缺值、显式值溢出与留空、负值、数组值)、四种排序、中心与半径写法、起始角、逆时针、`minAngle`、零和、层半径与 `r0`/`r` 旧写法、颜色层级与提亮、多个旭日图共用取色、边框与圆角、标签位置/对齐/距离/三种旋转/翻转边界/整圆居中/`minAngle`/formatter 层级,以及画廊 6 例(简单、圆角、单色、标签旋转、饮料、visualMap)。另有独立转写和 440 个随机图逐位一致。
+- `test.advchart.sunburst`:通过控件画一遍,逐行比较有没有画、扇形的中心/内外半径/起止角/四个圆角(精确)、z2、填充、边框颜色与宽度、不透明度,每个标签的文字、最终锚点(精确)、转角(精确)、对齐。visualMap 着色的行跳过填充、计数(下一批)。
+
+### 变异测试
+
+40 个,首轮 5 个存活、1 个编不过,都是测试的缺口,补完全部杀死:
+
+- 四个颜色变异(不提亮、提亮四舍五入、按自己名字取色、忽略条目颜色)全部存活——测试把夹具里的 `visualMapFill: false` 当成「有 visualMap 着色」,**所有**填充都被跳过了。改为只跳过真值,并断言跳过的不到一成。
+- 数组值只取第 0 项:基准里唯一的数组值在 `V-string` 里,而这个用例按名跳过。补 `TestAnArrayValueCountsItsFirstEntry`。
+- 忽略圆角:测试没比较圆角。现在按 `TySectorRadii` 规整夹具里的 `cornerRadius` 后逐个比较。
+
+### 已知偏差
+
+- 字符串值:上游补值用 JS `+`,`'5' + '3'` 拼成 `'053'`;端口按数相加(父节点是 8)。基准里的 `V-string` 按名跳过,`TestStringValuesAddAsNumbers` 钉住端口这一侧。
+- 未知 `align` 的标签不画(上游锚点是 NaN)。
+- 下钻(`nodeClick`)、回上一层的圆盘、emphasis 的祖先/后代高亮、visualMap 着色、提示框之后再做。

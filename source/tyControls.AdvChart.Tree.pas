@@ -118,7 +118,13 @@ function TyHierarchyOf(AOption: TTyChartOption; ASeriesIndex: Integer): TTyHiera
 { The store: one row per hierarchy row, the value column parsed as a series'
   data item is, names and raw values and per-item overrides as any series. }
 procedure TyTreeFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
-  AStore: TTyDataStore);
+  AStore: TTyDataStore; ACompleteValues: Boolean = False);
+{ SunburstSeries' completeTreeValue, by row: a node without a value (null,
+  NaN, a non-number) takes its children's sum, a negative one 0, the virtual
+  root the sum of the roots. An array value's first entry is its value.
+  String values are numbers here -- upstream's JS `+` concatenates them.
+  [Batch 75] }
+function TyTreeCompletedValues(const AHier: TTyHierarchy): TTyDoubleArray;
 function TyTreeSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer): TTyTreeSpec;
 { TreeSeries.getInitialData's isExpand. }
 procedure TyTreeApplyExpand(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -275,18 +281,52 @@ begin
   end;
 end;
 
+function TyTreeCompletedValues(const AHier: TTyHierarchy): TTyDoubleArray;
+var
+  row, k: Integer;
+  sum, v: Double;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, Length(AHier.Nodes));
+  { children's rows come after their parent's: bottom up is post-order }
+  for row := High(AHier.Nodes) downto 0 do
+  begin
+    sum := 0;
+    for k := 0 to High(AHier.Nodes[row].Children) do
+      sum := sum + Result[AHier.Nodes[row].Children[k]];
+    v := NaN;
+    if (row > 0) and (AHier.Nodes[row].Item <> nil)
+      and (AHier.Nodes[row].Item.JSONType = jtObject) then
+    begin
+      d := TJSONObject(AHier.Nodes[row].Item).Find('value');
+      if (d <> nil) and (d.JSONType = jtArray) then
+      begin
+        if d.Count > 0 then d := d.Items[0] else d := nil;
+      end;
+      if (d <> nil) and (d.JSONType <> jtNull) then v := JsNum(d);
+    end;
+    if IsNan(v) then v := sum;
+    if v < 0 then v := 0;
+    Result[row] := v;
+  end;
+end;
+
 procedure TyTreeFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
-  AStore: TTyDataStore);
+  AStore: TTyDataStore; ACompleteValues: Boolean);
 var
   hier: TTyHierarchy;
   arr: TJSONArray;
   o: TJSONObject;
-  node, nm: TJSONData;
+  node, nm, d: TJSONData;
   row, k: Integer;
   dims: TTySeriesDimArray;
+  done: TTyDoubleArray;
 begin
   if AStore = nil then Exit;
   hier := TyHierarchyOf(AOption, ASeriesIndex);
+  done := nil;
+  if ACompleteValues then done := TyTreeCompletedValues(hier);
   AStore.AddDimension('value', ddtFloat);
   SetLength(dims, 1);
   dims[0] := Default(TTySeriesDim);
@@ -313,6 +353,16 @@ begin
           if TJSONObject(hier.Nodes[row].Item).Names[k] <> 'children' then
             o.Add(TJSONObject(hier.Nodes[row].Item).Names[k],
               TJSONObject(hier.Nodes[row].Item).Items[k].Clone);
+        { the completed value in place of the written one, as upstream's
+          completeTreeValue writes it back before the store is built }
+        if done <> nil then
+        begin
+          d := o.Find('value');
+          if (d <> nil) and (d.JSONType = jtArray) and (d.Count > 0) then
+            TJSONArray(d).Items[0] := TJSONFloatNumber.Create(done[row])
+          else
+            o.Floats['value'] := done[row];
+        end;
         arr.Add(o);
       end
       else
@@ -1107,6 +1157,8 @@ begin
   ACaption.FixedX := m4;
   ACaption.FixedY := m5;
   ACaption.FixedInside := TyLabelIsInside(pos);
+  { the author's align wins over the side's; the vertical is always middle }
+  if ASpec.HasAlignH then ah := ASpec.AlignH;
   ACaption.FixedAH := ah;
   ACaption.FixedAV := tavMiddle;
   ACaption.FixedRotationRad := rot;

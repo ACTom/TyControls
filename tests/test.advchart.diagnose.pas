@@ -148,12 +148,12 @@ begin
     right and unreachable, and the mutant for it survives on purpose. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
     + '{ type: ''bar'', data: [1] }, { type: ''treemap'', data: [1] },'
-    + ' { type: ''sunburst'', data: [1] }] }', odkAllClear, d));
-  { [Batch 73: a tree draws now, so the second undrawn type is a sunburst] }
+    + ' { type: ''sankey'', data: [1] }] }', odkAllClear, d));
+  { [Batch 73/75: a tree and a sunburst draw now, so the second undrawn type is a sankey] }
   AssertTrue('names treemap, got: ' + d.Text, Pos('treemap', d.Text) > 0);
   txt := d.Text;
   Delete(txt, Pos('treemap', txt), 7);
-  AssertTrue('and sunburst as well, got: ' + d.Text, Pos('sunburst', txt) > 0);
+  AssertTrue('and sankey as well, got: ' + d.Text, Pos('sankey', txt) > 0);
 end;
 
 procedure TAdvChartDiagnoseTest.TestTextThatDoesNotParseYieldsExactlyOneThing;

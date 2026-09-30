@@ -47,6 +47,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
+  tyControls.AdvChart.Sunburst,
   tyControls.AdvChart.Graph,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
@@ -187,6 +188,8 @@ type
     { THE TREES, laid out per slot -- an empty record where the slot is no
       tree. [Batch 73] }
     FTrees: array of TTyTreeSolved;
+    { THE SUNBURSTS, per slot. [Batch 75] }
+    FSunbursts: array of TTySunburstSolved;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -558,6 +561,8 @@ type
     procedure SolveGraphs(APPI: Integer);
     procedure FreeGraphs;
     procedure SolveTrees(APPI: Integer);
+    procedure SolveSunbursts(APPI: Integer);
+    function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
     function LabelBaseFor(ASlot: Integer): TTyLabelSpec;
     procedure SolveGraphCategoryColours;
@@ -1095,6 +1100,7 @@ begin
   FreeCalendars;
   FreeGraphs;
   FTrees := nil;
+  FSunbursts := nil;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -1314,9 +1320,12 @@ begin
         never the top-level `data` alone, which would lose every child. Before
         the calendar's branch: a tree on a calendar keeps its own rows.
         [Batch 73] }
-      if FBindings[i].SeriesType = TyTreeSeriesTypeName then
+      if (FBindings[i].SeriesType = TyTreeSeriesTypeName)
+        or (FBindings[i].SeriesType = TySunburstSeriesTypeName) then
       begin
-        TyTreeFillStore(FOption, FBindings[i].SeriesIndex, st);
+        { a sunburst's rows are the same hierarchy [Batch 75] }
+        TyTreeFillStore(FOption, FBindings[i].SeriesIndex, st,
+          FBindings[i].SeriesType = TySunburstSeriesTypeName);
         Continue;
       end;
       { ON A CALENDAR: the calendar's two dimensions, a time and a value --
@@ -1731,6 +1740,7 @@ begin
   SolveRadars(APPI);
   SolveGraphs(APPI);
   SolveTrees(APPI);
+  SolveSunbursts(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -5111,6 +5121,56 @@ begin
   end;
 end;
 
+{ THE SUNBURSTS: laid out on the whole canvas, then coloured in one pass
+  whose palette cursor every sunburst in the chart shares -- a second
+  sunburst's first root takes the palette's NEXT colour. [Batch 75] }
+procedure TTyAdvanceChart.SolveSunbursts(APPI: Integer);
+var
+  i, k: Integer;
+  cur: TTyPaletteCursor;
+  pal, ramp: TTyChartColorArray;
+  declared: Boolean;
+begin
+  FSunbursts := nil;
+  SetLength(FSunbursts, Length(FBindings));
+  cur := TyPaletteStart(nil);
+  SetLength(ramp, 9);
+  for k := 0 to 8 do ramp[k] := TTyChartColor(ThemeRampColor(k));
+  for i := 0 to High(FBindings) do
+  begin
+    FSunbursts[i] := Default(TTySunburstSolved);
+    if FBindings[i].SeriesType <> TySunburstSeriesTypeName then Continue;
+    if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
+    FSunbursts[i] := TySunburstSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    { the series' own palette, else the chart's, else the theme's ramp }
+    pal := TyChartPaletteOf(FOption, FBindings[i].SeriesIndex, declared);
+    if not declared then pal := TyChartPaletteOf(FOption, -1, declared);
+    if not declared then pal := ramp;
+    TySunburstColour(FSunbursts[i], pal, cur);
+  end;
+end;
+
+{ A SUNBURST'S INK: the ring separator is the chart's own ground (upstream's
+  white), and the labels are shown by default with the node's name, read
+  item -> level -> series. }
+function TTyAdvanceChart.SunburstInk(ASlot: Integer): TTySunburstInk;
+var base: TTyLabelSpec;
+begin
+  Result := Default(TTySunburstInk);
+  Result.Border := TTyChartColor(
+    ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+      [tysNormal]).Background.Color);
+  base := LabelBaseFor(ASlot);
+  base.Show := True;
+  base.DefaultText := tldName;
+  Result.Label_ := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
+  Result.ItemLabels := TySunburstLabelSpecs(FSunbursts[ASlot], Result.Label_);
+  Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  Result.LabelValueDim := -1;
+  if FStores[ASlot] <> nil then
+    Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+end;
+
 { A TREE'S INK: the node colour the palette pass settled (the theme's, or
   the series' own), the edge colour from its key, a ring's hole from the
   chart's own ground, and the labels -- shown by default, the node's name
@@ -6954,6 +7014,7 @@ var
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
   ti: TTyTreeInk;
+  si2: TTySunburstInk;
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
 begin
@@ -7039,6 +7100,22 @@ begin
         its symbols and its label requests here -- BEFORE the expansion,
         whose per-row table carries the item -> leaves -> series chain.
         [Batch 73] }
+      if FBindings[i].SeriesType = TySunburstSeriesTypeName then
+      begin
+        if (i <= High(FSunbursts)) and FSunbursts[i].Valid then
+        begin
+          si2 := SunburstInk(i);
+          Inc(drawn, TyBuildSunburstMarks(FBindings[i].SeriesIndex, FSunbursts[i], si2,
+            FStores[i], list, APPI));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := si2.Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := si2.ItemLabels;
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyTreeSeriesTypeName then
       begin
         if (i <= High(FTrees)) and FTrees[i].Valid then
