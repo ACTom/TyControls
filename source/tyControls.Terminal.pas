@@ -1221,7 +1221,8 @@ begin
   FNotifyQueued := False;
   if csDestroying in ComponentState then Exit;
   EnsureThemeCurrent;
-  { 改方案的路(RequestSchemeNotify)没有当场 Invalidate:这里重画 }
+  { 改方案的路(RequestSchemeNotify)没有当场 Invalidate:这里重画。没用到的方案改了不会排到
+    这里(SchemeChanged 先看是不是正在用的那一边) }
   Invalidate;
 end;
 
@@ -3472,8 +3473,13 @@ end;
 
 procedure TTyTerminalView.SchemeChanged(Sender: TObject);
 begin
-  { 方案的修订号已经加了一:色表的键当场失效。没用到的那一边改了,键不变,通知回来时
-    逐项比也是一样,不报、不重画 }
+  { 方案的修订号已经加了一:正在用的那一边,色表的键当场失效。没用到的方案(跟随主题时两个
+    都没用;没配对时 DarkColorScheme 没用;配对时另一边)改了,键不变:不排通知,也就不整窗
+    失效。配对时哪一边在用看上次建色表时的明暗(主题一变控件就被 Invalidate、当场重建,
+    不会过期);还没建过色表就照排 }
+  if FColorSource = tsrcTheme then Exit;
+  if (Sender = FDarkColorScheme) and not FColorSchemePaired then Exit;
+  if FColorSchemePaired and FPaletteValid and ((Sender = FDarkColorScheme) <> FPaletteDarkSide) then Exit;
   RequestSchemeNotify;
 end;
 

@@ -30,6 +30,7 @@ type
     function Res(AIndex: Integer): string;
     procedure Settle;
     procedure Step(const AWhat: string; AWant: Integer);
+    procedure Quiet(const AWhat: string);
     function Pumpless996: RawByteString;
   protected
     procedure SetUp; override;
@@ -52,6 +53,8 @@ type
     procedure TestContrastWorksOnTheScheme;
     procedure TestDisabledFadesTheScheme;
     procedure TestMarkedTextTakesTheSchemesGround;
+    { 6 期审查 }
+    procedure TestChangedRefreshesASystemColour;
   end;
 
 implementation
@@ -468,15 +471,29 @@ begin
   F.ClearRecords;
 end;
 
+{ 改的是没用到的方案:不排通知、不报、整窗一次都不失效(数控件的 Invalidate) }
+procedure TTyTerminalViewSchemeTests.Quiet(const AWhat: string);
+var
+  inv: Integer;
+begin
+  AssertEquals(AWhat + ': nothing sent', '', TyTermHex(F.Data));
+  AssertFalse(AWhat + ': no notification queued', TSchemeAccess(F.View).NotifyQueued);
+  inv := F.View.Invalidations;
+  Pump;
+  AssertEquals(AWhat + ': no report (' + TyTermHex(F.Data) + ')', 0, Reports);
+  AssertEquals(AWhat + ': the window is not invalidated', inv, F.View.Invalidations);
+  F.ClearRecords;
+end;
+
 procedure TTyTerminalViewSchemeTests.TestNotificationsComeOncePerChange;
 var
   b: TBGRABitmap;
-  i: Integer;
+  i, inv: Integer;
 begin
   F.View.WriteSync(#27'[?2031h');
   Settle;
   Load(F.View.ColorScheme, 'Campbell');
-  Step('a scheme loaded while following the theme', 0);
+  Quiet('a scheme loaded while following the theme');
   F.View.ColorSource := tsrcScheme;
   Step('theme -> scheme', 1);
   F.View.WriteSync(#27']4;1;#123456'#7);
@@ -511,11 +528,16 @@ begin
   F.View.ColorSchemePaired := True;
   AssertEquals('not pumped: the dark side already', Hex6($000000), Res(257));
   Step('three settings in one go', 1);
+  { the side in use changed: reported, and the window repainted }
+  inv := F.View.Invalidations;
+  F.View.DarkColorScheme.Red := TColor($0102CD);
+  Step('the side in use changed', 1);
+  AssertTrue('the side in use changed: the window is invalidated', F.View.Invalidations > inv);
   { a colour the palette does not use: the light side while the theme is dark }
   b := F.Render;
   b.Free;
   F.View.ColorScheme.Red := TColor($0000AA);
-  Step('the unused side changed', 0);
+  Quiet('the unused side changed');
   b := F.Render;
   b.Free;
   AssertEquals('and nothing repainted', 0, F.View.PaintedLast);
@@ -525,7 +547,7 @@ begin
   b := F.Render;
   b.Free;
   F.View.ColorScheme.Red := TColor($0000BB);
-  Step('a scheme colour while following the theme', 0);
+  Quiet('a scheme colour while following the theme');
   b := F.Render;
   b.Free;
   AssertEquals('and nothing repainted', 0, F.View.PaintedLast);
@@ -541,9 +563,12 @@ begin
   F.View.ColorScheme.CursorColor := TyTermRgbToSchemeColor(F.ThemeBg('TyTerminalCursor'));
   F.View.ColorScheme.CursorText := TyTermRgbToSchemeColor(F.ThemeFg('TyTerminalCursor'));
   F.View.ColorScheme.EndUpdate;
-  Step('the theme''s colours loaded while following the theme', 0);
+  Quiet('the theme''s colours loaded while following the theme');
   F.View.ColorSource := tsrcScheme;
   Step('switched to a scheme that is the theme', 0);
+  { not paired: DarkColorScheme is not used }
+  F.View.DarkColorScheme.Red := TColor($0000DD);
+  Quiet('the dark scheme while not paired');
 end;
 
 function TTyTerminalViewSchemeTests.Pumpless996: RawByteString;
@@ -633,11 +658,11 @@ begin
           if exact = '' then exact := Format('#%.2x%.2x%.2x', [r, g, b]);
         end;
       end;
-    if exact <> '' then
-    begin
-      Ground(exact);
-      AssertTrue('exactly 0.5 is dark (' + exact + ')', TSchemeAccess(F.View).ThemeGroundIsDark);
-    end;
+    { V11b (> written as >=) is caught only by such a ground: there must be one, or the case
+      below would quietly test nothing }
+    AssertTrue('a ground whose luma is exactly 0.5 exists', found > 0);
+    Ground(exact);
+    AssertTrue('exactly 0.5 is dark (' + exact + ')', TSchemeAccess(F.View).ThemeGroundIsDark);
     { a single-mode dark skin: no mode name, the ground says it }
     F.Ctl.StyleOverride := 'TyTerminal { background: #1e1e1e; }'#10;
     AssertTrue('a single-mode dark skin is dark', TSchemeAccess(F.View).ThemeGroundIsDark);
@@ -757,6 +782,33 @@ begin
   finally
     F.View.ImeEnd;
   end;
+end;
+
+{ A system colour is stored as itself (clWindow), so after the system's colours change,
+  setting it again is no change at all; ColorScheme.Changed is the way to have the terminal
+  take the colours again. }
+procedure TTyTerminalViewSchemeTests.TestChangedRefreshesASystemColour;
+var
+  rev: Cardinal;
+  inv: Integer;
+  rgb: Cardinal;
+begin
+  F.View.ColorScheme.Background := clWindow;
+  F.View.ColorSource := tsrcScheme;
+  Settle;
+  AssertTrue('clWindow resolves', TyTermSchemeColorRgb(clWindow, rgb));
+  AssertEquals('the ground is the system''s window colour', Hex6(rgb), Res(257));
+  rev := F.View.ColorScheme.Revision;
+  F.View.ColorScheme.Background := clWindow;
+  AssertEquals('setting the same system colour again changes nothing', rev, F.View.ColorScheme.Revision);
+  AssertFalse('and queues nothing', TSchemeAccess(F.View).NotifyQueued);
+  inv := F.View.Invalidations;
+  F.View.ColorScheme.Changed;
+  AssertEquals('Changed: a new revision', rev + 1, F.View.ColorScheme.Revision);
+  AssertTrue('Changed: a notification is queued', TSchemeAccess(F.View).NotifyQueued);
+  Pump;
+  AssertTrue('Changed: the window is invalidated', F.View.Invalidations > inv);
+  AssertEquals('the ground is still the window colour', Hex6(rgb), Res(257));
 end;
 
 initialization
