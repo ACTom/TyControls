@@ -47,7 +47,16 @@ type
     destructor Destroy; override;
   end;
 
-  ETyCssError = class(Exception);
+  { Line / Col: where the parser stopped, 1-based, the column counted in bytes (what
+    SynEdit calls the logical column). 0 when the error is not the parser's -- an
+    @import that failed, a nil source (raised by the style model). }
+  ETyCssError = class(Exception)
+  private
+    FLine, FCol: Integer;
+  public
+    property Line: Integer read FLine write FLine;
+    property Col: Integer read FCol write FCol;
+  end;
 
   TTyCssParser = class
   private
@@ -144,9 +153,14 @@ begin
 end;
 
 procedure TTyCssParser.Error(const AMsg: string; const ATok: TTyCssToken);
+var
+  e: ETyCssError;
 begin
-  raise ETyCssError.CreateFmt(rsCssErrorFrame,
+  e := ETyCssError.CreateFmt(rsCssErrorFrame,
     [AMsg, ATok.Line, ATok.Col, ATok.Text]);
+  e.Line := ATok.Line;
+  e.Col := ATok.Col;
+  raise e;
 end;
 
 function TTyCssParser.Expect(AKind: TTyCssTokenKind): TTyCssToken;

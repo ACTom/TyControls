@@ -215,7 +215,8 @@ uses
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
   test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime,
-  test.themebuilder.golden;
+  test.themebuilder.golden,
+  test.themebuilder.parser;
 
 type
   TTyTestRunner = class(TTestRunner)
