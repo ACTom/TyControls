@@ -22,6 +22,8 @@ unit uzmodemterm;
        dialog from the event (it runs inside the core's Feed): it queues one and
        answers later with AcceptDownload(dir) / StartUpload(files) / Decline. Until
        then nothing is sent; what the program repeats meanwhile is kept (bounded).
+       Declined (or the claim ended by the host): what the program wrote after its
+       last header is shown -- the shell's prompt once sz gives up.
     4. The transfer: a progress line redrawn in place at most every 200 ms, then a
        summary line; what followed the session is handed back (the shell's prompt).
        Cancel (the host's button), five Ctrl+X in a row (UserInput, wired to the
@@ -604,6 +606,42 @@ begin
   end;
 end;
 
+{ What the program wrote while the host was asked, less the protocol: everything after
+  the last complete hex header kept (sz / rz repeat theirs), its CR LF XON, and the run
+  of CAN / BS after it (the program giving up) -- the shell's prompt, say. All of it
+  when no complete header is kept (the start was cut off at PendingLimit). }
+function AfterLastHexHeader(const S: RawByteString): RawByteString;
+var
+  i, k, e, n: Integer;
+  whole: Boolean;
+begin
+  e := 0;
+  for i := 1 to Length(S) - 15 do
+    if (S[i] = #$18) and (S[i + 1] = 'B') then
+    begin
+      whole := True;
+      for k := i + 2 to i + 15 do
+        if HexVal(S[k]) < 0 then
+        begin
+          whole := False;
+          Break;
+        end;
+      if whole then
+        e := i + 15;                     { its last hex digit }
+    end;
+  if e = 0 then
+    Exit(S);
+  n := 0;
+  while (e < Length(S)) and (n < 3) and (S[e + 1] in [#$0D, #$8D, #$0A, #$8A, #$11]) do
+  begin
+    Inc(e);
+    Inc(n);
+  end;
+  while (e < Length(S)) and (S[e + 1] in [#$18, #$08]) do
+    Inc(e);
+  Result := Copy(S, e + 1, MaxInt);
+end;
+
 { refusing: once the header is all in FPending, the bytes after it go back }
 procedure TZmodemStreamHandler.FeedRefusing;
 var
@@ -664,6 +702,10 @@ begin
     zsAskDownload, zsAskUpload:
       begin
         FSession.SendRaw(ZmAbortSequence);
+        { Release does nothing while the core ends the claim: what the program wrote
+          meanwhile (less the headers) is shown here, where it belongs -- before
+          anything still queued, and before a Reset's clearing, as if never claimed }
+        Show(AfterLastHexHeader(FPending));
         EndClaim(zrCancelledHere, rsZmCancelledLine, '', '');
       end;
   end;
@@ -910,7 +952,8 @@ begin
     line := Format(rsZmFailedLine, [AMessage])
   else
     line := AMessage;
-  EndClaim(AResult, AMessage, line, '');
+  { what the program wrote meanwhile goes back (under the line), less the headers }
+  EndClaim(AResult, AMessage, line, AfterLastHexHeader(FPending));
 end;
 
 procedure TZmodemStreamHandler.Cancel;

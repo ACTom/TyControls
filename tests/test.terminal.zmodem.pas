@@ -51,6 +51,7 @@ type
     procedure TestAFileThatEndsEarlyFails;
     procedure TestA4GiBFileIsSkipped;
     procedure TestA4GiBFileInTheTerminal;
+    procedure TestDecliningShowsWhatFollowed;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -2319,6 +2320,46 @@ begin
     AssertTrue('the abort sent', Pos(ZmAbortSequence, r.Sent) > 0);
     AssertTrue('an error', r.LastResult = zrError);
     AssertTrue('why, on the screen: ' + r.Screen, FindLine(r, rsZmTooBig) >= 0);
+  finally
+    r.Free;
+  end;
+end;
+
+{ What the program wrote while we asked -- sz's repeated header, its abort once it gave
+  up, then the shell's prompt -- is not dropped when the transfer is declined: the
+  prompt shows under the "declined" line; the headers do not show and are not found
+  again. The same when the host takes the handler off while it asks (ClaimEnded, where
+  Release does nothing). Mutations: Decline handing back nothing; handing back all it
+  kept (the header found again: a second request); ClaimEnded dropping it. }
+procedure TTyTerminalZmodemTests.TestDecliningShowsWhatFollowed;
+var
+  r: TGlueRig;
+  y: Integer;
+begin
+  r := TGlueRig.Create;
+  try
+    r.Core.WriteSync(SzStart);
+    AssertEquals('asked', 1, r.Downloads);
+    r.Core.WriteSync(Copy(SzStart, 4, MaxInt) + ZmAbortSequence + '$ ');
+    r.Zm.Decline;
+    r.Core.WriteSync('');                { the bytes handed back wait for the next slice }
+    y := FindLine(r, rsZmDeclined);
+    AssertTrue('the declined line: ' + r.Screen, y >= 0);
+    AssertEquals('the prompt under it: ' + r.Screen, '$', Trim(r.Line(y + 1)));
+    AssertEquals('not asked again', 1, r.Downloads);
+    AssertFalse('the stream is back', r.Core.StreamClaimed);
+    AssertEquals('no header on the screen', 0, Pos('B0000', r.Screen));
+  finally
+    r.Free;
+  end;
+  r := TGlueRig.Create;
+  try
+    r.Core.WriteSync(SzStart);
+    r.Core.WriteSync('$ ');
+    r.Core.RemoveStreamHandler(r.Zm);
+    AssertFalse('the stream is back', r.Core.StreamClaimed);
+    AssertTrue('the prompt shown: ' + r.Screen, FindLine(r, '$') >= 0);
+    AssertEquals('no header on the screen', 0, Pos('B0000', r.Screen));
   finally
     r.Free;
   end;
