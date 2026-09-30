@@ -523,7 +523,14 @@ Handler.Free;
 
 **ZModem**：`examples/terminal` 里有一份完整的实现（`uzmodem.pas` 编解码、`uzmodemsession.pas` 收发状态机、`uzmodemterm.pas` 接到终端上），和 lrzsz 互通，可以照着抄。它按 Forsberg 的协议文档（公有领域）写，不含 lrzsz 的代码（GPL）。
 
-**Windows 上要不经 ConPTY**：ConPTY 会把程序的输出重新渲染一遍，0x80 以上的字节两个方向都会丢，二进制协议走不通。这类协议要让命令直接跑在两条管道上（示例 Shell 那排的「Pipe」，`uptywin.pas` 的 `TProcessPipeBackend`）；这时没有终端，程序不回显、不能改尺寸。Linux / macOS 的 PTY 没有这个问题（`sz` / `rz` 自己把终端设成原始模式）。
+**Windows 上要不经 ConPTY**：ConPTY 会把程序的输出重新渲染一遍，0x80 以上的字节两个方向都会丢，二进制协议走不通。这类协议要让命令直接跑在两条管道上（示例 Shell 那排的「Pipe」，`uptywin.pas` 的 `TProcessPipeBackend`）。Linux / macOS 的 PTY 没有这个问题（`sz` / `rz` 自己把终端设成原始模式）。
+
+管道只传字节，没有终端的行规程：回车发出的 CR 没人转成 LF，打的字没人回显，输出的 LF 没人补成 CR LF，程序也查不到窗口多大。所以勾上「Pipe」后，示例的命令列表换成在对端自己开终端的两条：
+
+- **WSL**：`wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null`。`script`（util-linux）在 Linux 里开一个真 PTY 跑登录 shell，提示符、回显、行编辑、颜色都有；启动时 `%COLS%` / `%ROWS%` 换成终端当前的列数、行数，交给 `stty`。之后改窗口大小，示例另起一个短命的 `wsl.exe`，按 `%TTYFILE%` 里记下的 shell 进程号和 PTY 执行 `stty -F`，前台程序照常收到 SIGWINCH。大约半秒后生效；连着拖动时 250 ms 内的变化只发最后一次，同一时刻只跑一个。旁路进程只动那个 shell 还在用的 PTY（PTY 编号会被别的终端重用）。会话结束时示例再起一次 `wsl.exe` 删掉这个文件。命令用的是登录 shell 的语法（bash、zsh；登录 shell 是 fish 的话把命令里的 `$SHELL` 换成 `bash`）。
+- **SSH**：`ssh -tt 用户@主机`。`-tt` 让远端在我们这头是管道时也分配 PTY（`-T` 不分配，又回到没有终端）。尺寸固定在启动时：真 SSH 客户端改尺寸靠 SSH 协议的 window-change 消息，我们经管道只有一条字节流，发不出去；ssh 在管道上也查不到窗口多大，远端可能按 80×24 排版，需要时在远端自己 `stty cols … rows …`。
+
+cmd、PowerShell 不列：它们用不上 `sz` / `rz`，在 Windows 这边又拿不到 PTY，在管道上没有行编辑、回显和宽度（cmd 要等 LF 才执行，而终端的回车只发 CR；PowerShell 按 120 列排版），输出还是 OEM 代码页（简体中文系统是 GBK）。手输照样能起，按原样的管道处理。
 
 ---
 

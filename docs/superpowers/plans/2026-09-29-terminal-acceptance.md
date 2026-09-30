@@ -22,7 +22,7 @@
 - **设计期**（第 18、94、95 项）：先装 `tycontrols_dt.lpk` 重建 IDE。6 期起右键终端有「导入 Windows Terminal 配色…」「导出配色…」。
 - **两种模式**：示例第一行工具栏最左边的下拉切 Replay（回放）和 Shell。回放读 `examples/terminal/recordings/` 里的录制（vim、htop、less、tmux、彩色 ls、中英表情、两段 ConPTY 录制）；Shell 起真的 shell（Windows 默认 `%COMSPEC%`，另列 powershell，有的话列 pwsh、wsl；Linux / macOS 是 `$SHELL -l`）。「Minimum contrast」（最低对比度）下拉在第四行工具栏；Shell 模式的命令框和「Log PTY output」在第三行；6 期的「Colours」（配色）下拉和「Import...」（导入…）在第五行，同一行右边是光标设置（「Cursor:」形状、「Blink」闪烁、「Unfocused:」失焦时的样子，第 101 项）。
 - **要 WSL 或别的平台的项**：表后的平台索引列了每台机器要做的项。WSL 里 `tools/terminal-ptytest` 的 12 例 4 期已跑过，不用再跑。
-- **7 期的示例**：Shell 那排（第三行）多了「ZModem」「Pipe」（管道）两个勾选，Pipe 只在 Windows 上有、下次启动生效；传输时底部多出一排（文件名、进度条、「Cancel」取消），传完隐藏。
+- **7 期的示例**：Shell 那排（第三行）多了「ZModem」「Pipe」（管道）两个勾选，Pipe 只在 Windows 上有、下次启动生效；传输时底部多出一排（文件名、进度条、「Cancel」取消），传完隐藏。**验收反馈后**：勾上 Pipe，命令下拉换成两条在对端自己开终端的命令——WSL 条目（`wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null`，PATH 里有 `wsl.exe` 才列）和 `ssh -tt user@host`；cmd、PowerShell 不再列（管道上没有行编辑、回显、宽度，输出是 OEM 代码页）；取消勾选恢复原来的列表。要用别的发行版，在 WSL 条目的 `wsl.exe` 后面加 `-d 名字`（改尺寸的旁路进程跟着用同一个）。
 - **ZModem 的项**（第 102–114 项）：Windows 上要在 WSL 里装 lrzsz（`sudo apt install lrzsz`）；Linux / macOS 本机装 lrzsz（macOS `brew install lrzsz`）；远端的项（第 108、110 项）要一台能 ssh 的机器。
 - **基准工具**（第 72、75、89 项）：`lazbuild -B tools/terminal-bench/terminalbench.lpi`。
 - **顺序建议**：先 Win32 本机（Windows 10 19044），再 Windows 11，再 Linux GTK2 / Qt6，最后 macOS。
@@ -134,19 +134,19 @@
 | 99 | 6 期（99） | 导入真实的 WT 文件 | Win32 | 示例「导入…」本机 WT 的 `settings.json`（带注释、尾逗号，可能有 BOM）；再导入 `iTerm2-Color-Schemes` 的 `windowsterminal/` 里任意几个文件；同一个文件再导入一次；再导入一个故意写坏的（删一个颜色）；再导入两个方案名是中文的文件，一个名字写成 `\u` 转义（`"name": "\u6d4b\u8bd5"`），一个直接写 UTF-8 的中文 | 能读的都出现在下拉里、颜色和 WT 里一样；同名的方案（比如 WT 自带的 Campbell 和示例里的 Campbell）在下拉里只出现一次，再导入同一个文件也不多；坏文件在状态栏报出缺哪个颜色，终端不变，之后选一套能读的，状态栏里的错误消失；两个中文名在下拉里都显示成正确的中文 |  |
 | 100 | 6 期审查补 | 只设底色的方案配浅主题 | Win32 | 设计器（或临时代码）里一个终端 `ColorSource := tsrcScheme`，方案只设 `Background`（深色，比如 `#1E1E1E`），16 色都不设；浅色主题下回放 `palette.cast`、`ls-color.cast`；再拨到深色主题看一次 | 16 色跟的是主题：浅色主题下是给浅底配的那套，落在深底上几色（0 黑、4 蓝等）看不清——这是定下的逐槽规则，不是 bug；看完定：维持并在文档提醒（现在的做法，控件文档 §10 已写），还是改成按方案的底重求 16 色（结论交决定 D1 或文档） |  |
 | 101 | 6 期审查补 | 示例里的光标设置 | Win32（WSL 或 Git Bash 的 vim）、GTK2、Qt6、Cocoa | 第五行「Cursor:」切方块 / 下划线 / 竖线，勾「Blink」，「Unfocused:」切几种再点别处；Shell 模式跑 vim：进插入模式（`i`）、退出（Esc），再 `printf '\e[0 q'`；再换一种默认样式后跑一次 vim | 三种形状、闪烁、失焦样子都跟着设置变；vim 插入模式把光标改成竖线，Esc 退出后恢复（vim 自己发 DECSCUSR）；`CSI 0 SP q` 回到示例里选的样式，不是固定的方块 |  |
-| 102 | 7 期（Z1） | ZModem 下载 | Win32（管道模式、WSL） | 勾「Pipe」，命令 `wsl.exe -d Ubuntu --cd ~ -- sz 文件`，点 Start；分别下一个小文本、一个 0 字节文件、一次三个文件（`sz a b c`）、一个中文名的文件 | 弹选目录（第一次默认「下载」文件夹，之后默认上次的）；文件都在、内容和 WSL 里 `md5sum` 一致；中文名正确；终端里一行摘要（文件数、大小、用时、速度），之后的输出正常 |  |
-| 103 | 7 期（Z2） | ZModem 上传 | Win32（管道模式、WSL） | 命令 `wsl.exe -d Ubuntu --cd /tmp -- rz`；选一个文件；再起一次选三个 | 弹选文件（可多选）；WSL 里 `md5sum` 一致；多个文件都到；终端里一行摘要 |  |
-| 104 | 7 期（Z3） | 管道模式下的交互 shell | Win32 | 勾「Pipe」，命令 `wsl.exe -d Ubuntu -- bash -i`，开「本地回显」；在里面 `sz`、`rz` 各一次 | 能用；记下提示符、回显的样子（写回 spec §19.7） |  |
+| 102 | 7 期（Z1） | ZModem 下载 | Win32（管道模式、WSL） | 勾「Pipe」，选 WSL 条目（`script` 包装的那条），点 Start，在提示符下 `sz 文件`；分别下一个小文本、一个 0 字节文件、一次三个文件（`sz a b c`）、一个中文名的文件 | 弹选目录（第一次默认「下载」文件夹，之后默认上次的）；文件都在、内容和 WSL 里 `md5sum` 一致；中文名正确；终端里一行摘要（文件数、大小、用时、速度），下面接着是干净的提示符（没有 `OO` 之类残留，下一条命令照常执行） |  |
+| 103 | 7 期（Z2） | ZModem 上传 | Win32（管道模式、WSL） | WSL 条目的 shell 里 `cd /tmp; rz`；选一个文件；再 `rz` 一次选三个 | 弹选文件（可多选）；WSL 里 `md5sum` 一致；多个文件都到；终端里一行摘要，下面接着是干净的提示符 |  |
+| 104 | 7 期（Z3） | 管道模式下的交互 shell | Win32 | 勾「Pipe」：看命令下拉（有 WSL 条目和 `ssh -tt`，没有 cmd、PowerShell），取消勾选再看一次；勾上后选 WSL 条目 Start（**不开**「本地回显」）：打命令、方向键翻历史、Tab 补全、`ls --color`、`vim`、`htop`；`tput cols; tput lines`；拖窗口改大小后再 `tput cols; tput lines`，`htop` / `vim` 开着时也拖一次；在里面 `sz`、`rz` 各一次 | 下拉随勾选切换；提示符、颜色、回显、行编辑都正常，回车就执行，输出不成阶梯；`tput` 等于状态栏的格子数；改大小约半秒后 `tput` 跟着变，`htop` / `vim` 重排（连着拖只在停下后发一次）；`sz` / `rz` 能传，传完提示符干净（写回 spec §19.7） |  |
 | 105 | 7 期（Z4） | 大文件与速度 | Win32（管道模式） | WSL 里 `dd if=/dev/urandom of=/tmp/big bs=1M count=200` 后 `sz /tmp/big`；再用 `rz` 把它传回去 | 内容一致；记下下载、上传各多快（写回 spec §19.9；测试里 1.5 MB 约 0.4 s）；终端里的进度行原地刷新、不刷屏，底部传输条跟着走、传完隐藏；传输中窗口能拖、能滚回、界面不卡 |  |
 | 106 | 7 期（Z5） | 取消 | Win32 | 大文件传到一半：点传输条的「Cancel」；另一次连按五次 Ctrl+X；另一次点「Restart」；另一次直接关窗口；下载、上传各试 | 都能停下，WSL 里的 `sz` / `rz` 退出（`ps` 看不到）；没收完的文件被删；终端里一行「ZModem 传输已取消」，之后终端能正常用；关窗口不卡 |  |
 | 107 | 7 期（Z6） | ConPTY 下的拒绝提示 | Win32（默认模式） | 不勾「Pipe」，命令 `wsl.exe`，在里面 `sz 文件` | 终端里一行「ConPTY 会改坏二进制数据，ZModem 请改用管道模式（勾选“管道”后重启）」、`sz` 被中止、终端能继续用、提示符还在 |  |
 | 108 | 7 期（Z7） | Linux 真 PTY | GTK2、Qt6 | 示例 Shell（`$SHELL -l`）里 `sz`、`rz`，各传一个大文件和三个小文件；再 `ssh` 到另一台机器上做一次 | 都能传、内容一致；速度记下 |  |
 | 109 | 7 期（Z8） | macOS 真 PTY | Cocoa | 装 lrzsz（`brew install lrzsz`）后同第 108 项 | 同第 108 项 |  |
-| 110 | 7 期（Z9） | `ssh -T` 管道模式与远端速度 | Win32（Windows 自带 OpenSSH） | 勾「Pipe」，命令 `ssh -T 用户@主机`，在里面 `sz`、`rz` 一个几十 MB 的文件；有条件的话找一台远一点（往返时间几十毫秒以上）的机器 | 能传；记下现象和上传、下载速度（上传用 16 KB 窗口，远端往返时间长时会比下载慢，决定 D30；写回 spec §19.7） |  |
+| 110 | 7 期（Z9） | `ssh -tt` 管道模式与远端速度 | Win32（Windows 自带 OpenSSH） | 勾「Pipe」，选 `ssh -tt user@host` 改成真的用户和主机，Start；看提示符、回显，`tput cols; tput lines`，拖窗口后再看一次；在里面 `sz`、`rz` 一个几十 MB 的文件；有条件的话找一台远一点（往返时间几十毫秒以上）的机器 | 有提示符、回显，回车就执行；尺寸固定在启动时（ssh 在管道上查不到窗口多大，远端可能是 80×24；改窗口大小传不过去——没有 SSH 的 window-change 通道，这是已知限制），记下实际看到的；能传；记下上传、下载速度（上传用 16 KB 窗口，远端往返时间长时会比下载慢，决定 D30；写回 spec §19.7） |  |
 | 111 | 7 期（Z10） | 误检与拒绝后提示符还在 | Win32、GTK2 | Shell 里 `printf 'rz\r**\030B00000000000000\r\212\021'`（一个没有 `sz` 在等的假头）；弹选目录时点取消；另一次起真的 `sz 文件`，弹选目录时点取消 | 弹选目录；取消后终端里一行「ZModem 传输已拒绝」，**下面接着是 shell 的提示符**（不会丢、不会再弹一次选目录）；shell 收到中止序列后照常能用（记下 shell 显示了什么）；真 `sz` 那次 `sz` 退出 |  |
 | 112 | 7 期（Z11） | 接管期间的鼠标、选区、滚回 | Win32 | 在 vim 里（开了鼠标）`:!sz 文件`，传输中用鼠标拖选、滚轮滚回、右键、切到别的窗口再切回 | 能本地选中复制；滚轮滚滚回；右键菜单照常；vim 恢复后鼠标照常给 vim |  |
 | 113 | 7 期（Z12） | 文件名与重名 | Win32 | WSL 里建 `a:b.txt`、`CON`、`COM0.log`、`x.txt`（本地目录里已有 `x.txt`）、一个名字 250 字节的文件后 `sz` 它们 | 分别存成 `a_b.txt`、`_CON`、`_COM0.log`、`x (1).txt`、名字截到 200 字节（扩展名保留）；原有的 `x.txt` 没被覆盖 |  |
-| 114 | 7 期审查补 | 传输中程序退出 | Win32（管道模式） | 命令 `wsl.exe -d Ubuntu -- sz /tmp/big`（第 105 项的大文件），传到一半在 WSL 的另一个窗口里 `pkill -9 sz`；弹选目录时（还没答）再做一次 | 传输马上结束（一行失败或取消），接着是「进程已退出」那行，终端不会卡住等两分钟；没收完的文件被删 |  |
+| 114 | 7 期审查补 | 传输中程序退出 | Win32（管道模式） | 手输命令 `wsl.exe -d Ubuntu -- sz /tmp/big`（第 105 项的大文件；手输的命令按原样的管道跑，程序就是 `sz` 本身），传到一半在 WSL 的另一个窗口里 `pkill -9 sz`；弹选目录时（还没答）再做一次 | 传输马上结束（一行失败或取消），接着是「进程已退出」那行，终端不会卡住等两分钟；没收完的文件被删 |  |
 
 ## 按平台的项号
 
@@ -296,7 +296,7 @@
 | D27 | 检测到 ZModem 后先不先问 | 问（选目录 / 选文件就是确认，取消 = 拒绝）；下载不问、直接存默认目录 | 问 | 第 102、111 项 | `umain.pas` 的 `ZmDownloadRequest`；spec §19.7 |
 | D28 | 进度显示在哪 | 终端里一行（原地刷新，结束留摘要）+ 底部传输条；只用传输条 | 两处 | 第 105 项；截图 `zmodem-progress-*.png`、`zmodem-done-*.png` | `uzmodemterm.pas` 的 `MachineProgress` / `MachineDone`、`umain.pas` 的 `ZmProgress`；spec §19.7 |
 | D29 | 自动识别能不能关 | Shell 那排「ZModem」勾选，默认开；不给开关 | 勾选、默认开 | 第 102 项时关掉再 `sz` 一次（乱码照原样显示） | `umain.lfm` 的 `ChkZmodem`；spec §19.7 |
-| D30 | 上传的窗口（期末定的） | 发方离最后确认的位置至多 16 KB、每 4 KB 要一次确认（现在）；全流式（和 `sz` 一样）；窗口更大 | 16 KB：经 WSL 的管道，`rz` 吃到约 40 KB 的「垃圾」（ZRPOS 到达前路上排着的字节）就放弃，全流式时一个坏字节就让上传失败。代价是吞吐至多约「16 KB / 往返时间」，远处的 `ssh -T` 会慢 | 第 105、110 项记上传速度 | `uzmodemsession.pas` 的 `ZmSendWindow`（`TZmSender.Window` 可设，示例不给界面）；spec §19.7 |
+| D30 | 上传的窗口（期末定的） | 发方离最后确认的位置至多 16 KB、每 4 KB 要一次确认（现在）；全流式（和 `sz` 一样）；窗口更大 | 16 KB：经 WSL 的管道，`rz` 吃到约 40 KB 的「垃圾」（ZRPOS 到达前路上排着的字节）就放弃，全流式时一个坏字节就让上传失败。代价是吞吐至多约「16 KB / 往返时间」，远处的 `ssh -tt` 会慢 | 第 105、110 项记上传速度 | `uzmodemsession.pas` 的 `ZmSendWindow`（`TZmSender.Window` 可设，示例不给界面）；spec §19.7 |
 
 ### spec §15 里你可能想改的偏离（默认都不改）
 
@@ -327,7 +327,7 @@
 | 98 | 各 widgetset 下系统色（`clWindow`、`clWindowText`）解出来的实际值；改系统配色后调 `Changed` 的效果 | §11.1.3 |
 | 100 | 只设底色的方案配浅主题时 16 色看不看得清 | §11.1.4（或决定 D1） |
 | 107 | ConPTY 下 ZModem 的实际表现（提示句、`sz` 停没停） | §19.2 第 12 条、§12.4 |
-| 104、110 | 管道模式下交互 shell 的样子；`ssh -T` 管道模式能不能用 | §19.7 |
+| 104、110 | 管道模式下 WSL 条目的交互 shell 与改尺寸；`ssh -tt` 管道模式的样子与尺寸 | §19.7 |
 | 105、108、109、110 | 各平台的下载 / 上传速度 | §19.9（上传窗口 D30） |
 
 ## 截图
