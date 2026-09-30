@@ -36,7 +36,11 @@ type
     procedure NewUntitled(const AText, ABasedOn: string);
     { raises on a read error; the document is unchanged then }
     procedure LoadFromFile(const AFileName: string);
-    { ALines joined with the document's line ending, BOM and final line break as read }
+    { FOR THE TESTS: SaveToFile raises half-way through writing }
+    class var FailWriteForTest: Boolean;
+    { ALines joined with the document's line ending, BOM and final line break as read;
+      written to a file beside AFileName and moved over it, so a failure (it raises) leaves
+      AFileName and the document as they were }
     procedure SaveToFile(const AFileName: string; ALines: TStrings);
     function EditorText: string;
     { the file on disk changed since it was opened / saved (age or size). The stamp is
@@ -63,7 +67,7 @@ function TbLineEndingName(AEol: TTbLineEnding): string;
 implementation
 
 uses
-  LazUTF8, LConvEncoding;
+  {$IFDEF MSWINDOWS}Windows,{$ELSE}BaseUnix,{$ENDIF} LazUTF8, LConvEncoding;
 
 const
   cBom = #$EF#$BB#$BF;
@@ -158,7 +162,7 @@ begin
   if FindFirst(FFileName, faAnyFile, sr) = 0 then
   begin
     FStampSize := sr.Size;
-    FindClose(sr);
+    SysUtils.FindClose(sr);
   end;
 end;
 
@@ -211,20 +215,71 @@ begin
   CaptureStamp;
 end;
 
+{ A name next to ATarget that nothing has: the same folder, so the final rename stays on
+  one volume (and is atomic there). }
+function TempNameFor(const ATarget: string): string;
+var
+  n: Integer;
+begin
+  n := 0;
+  repeat
+    Result := ATarget + Format('.%d-%d.tbsave', [GetProcessID, n]);
+    Inc(n);
+  until not FileExists(Result);
+end;
+
+{ ATemp takes ATarget's place in one step, or raises with ATarget as it was. Windows:
+  MoveFileExW replacing, written through; elsewhere rename(2), with the old file's
+  permission bits carried over (a new file gets the umask's). }
+procedure ReplaceWith(const ATemp, ATarget: string);
+{$IFDEF MSWINDOWS}
+const
+  cMoveFileWriteThrough = 8;   { MOVEFILE_WRITE_THROUGH: FPC's Windows unit lacks it }
+begin
+  if not MoveFileExW(PWideChar(UnicodeString(ATemp)), PWideChar(UnicodeString(ATarget)),
+    MOVEFILE_REPLACE_EXISTING or cMoveFileWriteThrough) then
+    RaiseLastOSError;
+end;
+{$ELSE}
+var
+  st: TStat;
+begin
+  if FpStat(ATarget, st) = 0 then
+    FpChmod(ATemp, st.st_mode and &7777);
+  if FpRename(ATemp, ATarget) <> 0 then
+    RaiseLastOSError;
+end;
+{$ENDIF}
+
 procedure TTbDocument.SaveToFile(const AFileName: string; ALines: TStrings);
 var
-  s: string;
+  s, tmp: string;
   fs: TFileStream;
+  half: Integer;
 begin
   s := TbJoinLines(ALines, FLineEnding, FTrailingEol);
   if FHasBom then
     s := cBom + s;
-  fs := TFileStream.Create(AFileName, fmCreate);
+  { Written beside the file and then moved over it: a write that fails half-way (a full
+    disk, a pulled drive) leaves the file as it was, never cut short. }
+  tmp := TempNameFor(AFileName);
   try
-    if s <> '' then
-      fs.WriteBuffer(s[1], Length(s));
-  finally
-    fs.Free;
+    fs := TFileStream.Create(tmp, fmCreate);
+    try
+      half := Length(s) div 2;
+      if half > 0 then
+        fs.WriteBuffer(s[1], half);
+      if FailWriteForTest then
+        raise EWriteError.Create('FailWriteForTest');
+      if Length(s) > half then
+        fs.WriteBuffer(s[half + 1], Length(s) - half);
+    finally
+      fs.Free;
+    end;
+    ReplaceWith(tmp, AFileName);
+  except
+    SysUtils.DeleteFile(tmp);
+    raise;   { the document keeps its name and its stamp: the file on disk did not change }
   end;
   FFileName := ExpandFileName(AFileName);
   FConvertedFrom := '';
@@ -249,7 +304,7 @@ begin
   if FindFirst(FFileName, faAnyFile, sr) = 0 then
   begin
     size := sr.Size;
-    FindClose(sr);
+    SysUtils.FindClose(sr);
   end;
   if (age <> FStampAge) or (size <> FStampSize) then
   begin

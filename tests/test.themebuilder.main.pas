@@ -47,13 +47,14 @@ type
     procedure TestTheLibraryCatalogueIsACopy;
     procedure TestAVariableCycleIsAProblem;
     procedure TestARefusedDarkReachesTheProblemList;
+    procedure TestAFailedSaveLeavesTheFile;
   end;
 
 implementation
 
 uses
   Forms, FileUtil, IniFiles, Graphics, fpjson, jsonparser, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
-  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, test.themebuilder.golden;
+  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden;
 
 const
   { a document whose one value no base theme has }
@@ -773,6 +774,44 @@ begin
   FForm.Editor.Lines.Text := TbMinimalTemplate;
   FForm.RefreshNow;
   AssertEquals('F19: a new document clears it', 0, Refusals);
+end;
+
+{ A save that fails half-way through writing (FailWriteForTest, inside the real
+  SaveToFile) leaves the file byte for byte as it was, no stray file beside it, the
+  document still modified and on its old stamp -- so the watch does not take our own failed
+  write for another program's. The file used to be cut to nothing first (fmCreate on it). }
+procedure TTbMainFormTests.TestAFailedSaveLeavesTheFile;
+const
+  cBytes = 'TyButton { background: #111111; }'#10'TyEdit { color: #222222; }'#10;
+var
+  f: string;
+  asked: Integer;
+  files: TStringList;
+begin
+  f := FDir + 'keep.tycss';
+  WriteBytes(f, cBytes);
+  AssertTrue('opened', FForm.OpenFile(f));
+  FForm.Editor.Lines.Add('TyPanel { color: #333333; }');
+  FForm.Editor.Modified := True;
+  TTbDocument.FailWriteForTest := True;
+  try
+    AssertFalse('F20: the save failed', FForm.SaveDocument);
+  finally
+    TTbDocument.FailWriteForTest := False;
+  end;
+  AssertTrue('F20: the file is as it was', ReadBytes(f) = cBytes);
+  files := FindAllFiles(FDir, '*', False);
+  try
+    AssertEquals('F20: nothing left beside it', 1, files.Count);
+  finally
+    files.Free;
+  end;
+  AssertTrue('F20: still modified', FForm.Editor.Modified);
+  asked := FForm.AskCount;
+  FForm.CheckDiskNow;
+  AssertEquals('F20: our failed write is not an outside change', asked, FForm.AskCount);
+  AssertTrue('F20: and the next save goes through', FForm.SaveDocument);
+  AssertTrue('F20: with the new text', Pos('TyPanel', ReadBytes(f)) > 0);
 end;
 
 initialization
