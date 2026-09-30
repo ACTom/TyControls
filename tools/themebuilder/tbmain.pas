@@ -120,6 +120,7 @@ type
     procedure RebuildRecentMenu;
     procedure LoadEditor(const AText: string);
     function ConfirmDiscard: Boolean;
+    procedure SaveSettings;
     function SaveAs: Boolean;
     procedure UpdateTitle;
     procedure UpdateStatusPosition;
@@ -256,7 +257,19 @@ begin
   begin
     FSettings.PreviewDark := FPreview.IsDark;
     FSettings.PreviewModern := FPreview.IsModern;
+    SaveSettings;
+  end;
+end;
+
+{ Best effort: a settings file that cannot be written (a read-only file, a full disk) must
+  not keep the window open or lose the document being saved -- the settings are only the
+  tool's own convenience. }
+procedure TTbMainForm.SaveSettings;
+begin
+  try
     FSettings.Save;
+  except
+    { the next start begins from the defaults or the last file that was written }
   end;
 end;
 
@@ -368,6 +381,7 @@ begin
     end;
   end;
   FSettings.AddRecent(FDoc.FileName);
+  SaveSettings;   { the recent list outlives a crash of this session }
   RebuildRecentMenu;
   LoadEditor(FDoc.EditorText);
   if FDoc.ConvertedFrom <> '' then
@@ -394,6 +408,7 @@ begin
   end;
   Editor.Modified := False;
   FSettings.AddRecent(FDoc.FileName);
+  SaveSettings;
   RebuildRecentMenu;
   UpdateTitle;
   UpdateStatusPosition;

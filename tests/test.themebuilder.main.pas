@@ -48,6 +48,7 @@ type
     procedure TestAVariableCycleIsAProblem;
     procedure TestARefusedDarkReachesTheProblemList;
     procedure TestAFailedSaveLeavesTheFile;
+    procedure TestAReadOnlySettingsFileDoesNotKeepTheWindowOpen;
   end;
 
 implementation
@@ -812,6 +813,42 @@ begin
   AssertEquals('F20: our failed write is not an outside change', asked, FForm.AskCount);
   AssertTrue('F20: and the next save goes through', FForm.SaveDocument);
   AssertTrue('F20: with the new text', Pos('TyPanel', ReadBytes(f)) > 0);
+end;
+
+{ The settings file cannot be written (read-only): closing still closes, and says nothing
+  -- saving the settings is the tool's convenience, not the user's work. Red without the
+  try/except around FSettings.Save (TIniFile raises from UpdateFile). The recent list is
+  written as soon as a file is opened, not only at close. }
+procedure TTbMainFormTests.TestAReadOnlySettingsFileDoesNotKeepTheWindowOpen;
+var
+  f, ini: string;
+  raised: Boolean;
+  sl: TStringList;
+begin
+  ini := TTbMainForm.SettingsFileForTest;
+  f := FDir + 'recent.tycss';
+  WriteBytes(f, 'TyButton { background: #111111; }'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  AssertTrue('F21: the settings were written on opening', FileExists(ini));
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(ini);
+    AssertTrue('F21: with the recent file', Pos(ExpandFileName(f), sl.Text) > 0);
+  finally
+    sl.Free;
+  end;
+  AssertEquals('made read-only', 0, FileSetAttr(ini, faReadOnly));
+  try
+    raised := False;
+    try
+      AssertTrue('F21: it closes', FForm.CloseQuery);
+    except
+      raised := True;
+    end;
+    AssertFalse('F21: and nothing was raised', raised);
+  finally
+    FileSetAttr(ini, 0);
+  end;
 end;
 
 initialization
