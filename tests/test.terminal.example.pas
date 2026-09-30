@@ -361,6 +361,8 @@ begin
       AssertEquals('no scheme file: the colour list has one entry', 1, f.CmbColors.Items.Count);
       AssertEquals('and it is "Follow theme"', 'Follow theme', f.CmbColors.Items[0]);
       AssertEquals('picked', 0, f.CmbColors.ItemIndex);
+      AssertEquals('and no error about a scheme file that is not there', 0,
+        Pos('Could not import', f.Status.Panels[0].Text));
       f.ImportColorsFrom(TyTermFixturePath('terminal-wt-defaults.json'));
       AssertEquals('importing Windows Terminal''s defaults.json adds its 16', 17, f.CmbColors.Items.Count);
       AssertEquals('and picks the first', 1, f.CmbColors.ItemIndex);
