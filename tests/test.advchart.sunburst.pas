@@ -296,8 +296,8 @@ begin
           st := pc.Objects['ink'];
           d := rows.Objects[ri].Find('visualMapFill');
           vm := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
-          if vm then Inc(FSkipped)
-          else if TyTryParseChartColor(st.Get('fill', ''), want) then
+          if vm then Inc(FSkipped);
+          if TyTryParseChartColor(st.Get('fill', ''), want) then
           begin
             Inc(FCompared);
             if e.Style.FillColor <> want then

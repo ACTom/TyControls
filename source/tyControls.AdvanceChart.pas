@@ -5158,6 +5158,13 @@ begin
     if not declared then pal := TyChartPaletteOf(FOption, -1, declared);
     if not declared then pal := ramp;
     TySunburstColour(FSunbursts[i], pal, cur);
+    { A VISUALMAP RUNS AFTER the sunburst's own visual and overwrites the
+      fill of every node it maps -- the label's ink follows the new fill.
+      [Batch 77] }
+    if (i <= High(FVisualRows)) and (FVisualRows[i] <> nil) then
+      for k := 0 to Min(High(FSunbursts[i].Nodes), High(FVisualRows[i])) do
+        if FVisualRows[i][k].ColorSet then
+          FSunbursts[i].Nodes[k].Fill := TyVisualToChart(FVisualRows[i][k].Color);
   end;
 end;
 
