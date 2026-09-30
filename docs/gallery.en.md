@@ -85,14 +85,7 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 | Light | Dark |
 |---|---|
 | tab 1<br>![demo tab 1](gallery/demo/01-tab-1-light.png) | tab 1<br>![demo tab 1](gallery/demo/01-tab-1-dark.png) |
-| tab 2<br>![demo tab 2](gallery/demo/02-tab-2-light.png) | tab 2<br>![demo tab 2](gallery/demo/02-tab-2-dark.png) |
-| tab 3<br>![demo tab 3](gallery/demo/03-tab-3-light.png) | tab 3<br>![demo tab 3](gallery/demo/03-tab-3-dark.png) |
-| tree<br>![demo tree](gallery/demo/04-tree-light.png) | tree<br>![demo tree](gallery/demo/04-tree-dark.png) |
-| native<br>![demo native](gallery/demo/05-native-light.png) | native<br>![demo native](gallery/demo/05-native-dark.png) |
-| command buttons<br>![demo command buttons](gallery/demo/06-command-buttons-light.png) | command buttons<br>![demo command buttons](gallery/demo/06-command-buttons-dark.png) |
-| icons text<br>![demo icons text](gallery/demo/07-icons-text-light.png) | icons text<br>![demo icons text](gallery/demo/07-icons-text-dark.png) |
 | gauges<br>![demo gauges](gallery/demo/08-gauges-light.png) | gauges<br>![demo gauges](gallery/demo/08-gauges-dark.png) |
-| grid<br>![demo grid](gallery/demo/09-grid-light.png) | grid<br>![demo grid](gallery/demo/09-grid-dark.png) |
 
 ### dialogs
 
