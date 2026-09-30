@@ -414,3 +414,296 @@ msgstr "确定"
 #: ttbsampleform.btncancel.caption
 msgid "Cancel"
 msgstr "取消"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbmain.rstbconverted
+#, object-pascal-format
+msgid "Read as %s; it will be saved as UTF-8."
+msgstr "按 %s 读入，将存为 UTF-8。"
+
+#: tbmain.rstbfilter
+msgid "Theme files (*.tycss)|*.tycss|All files|*"
+msgstr "主题文件 (*.tycss)|*.tycss|所有文件|*"
+
+#: tbmain.rstblinecol
+#, object-pascal-format
+msgid "Ln %d, Col %d"
+msgstr "行 %d，列 %d"
+
+#: tbmain.rstbnoproblems
+msgid "No problems"
+msgstr "没有问题"
+
+#: tbmain.rstbopenfailed
+#, object-pascal-format
+msgid "Could not open %s: %s"
+msgstr "无法打开 %s：%s"
+
+#: tbmain.rstbparsekept
+msgid "Not loaded: the preview shows the last version that worked."
+msgstr "没有载入：预览显示的是上一版能用的样子。"
+
+#: tbmain.rstbpreviewkept
+#, object-pascal-format
+msgid "The preview kept the last version that worked: %s"
+msgstr "预览保持上一版能用的样子：%s"
+
+#: tbmain.rstbregenerate
+#, object-pascal-format
+msgid "Saved. This theme is compiled into the library: run scripts/%s."
+msgstr "已保存。这个主题编译进了库里：请运行 scripts/%s。"
+
+#: tbmain.rstbreload
+#, object-pascal-format
+msgid "The file %s was changed by another program. Reload it?"
+msgstr "文件 %s 已被其他程序修改。重新载入吗？"
+
+#: tbmain.rstbreloadloses
+msgid "Your unsaved changes will be lost."
+msgstr "未保存的改动会丢失。"
+
+#: tbmain.rstbsavechanges
+#, object-pascal-format
+msgid "Save the changes to %s?"
+msgstr "保存对 %s 的改动吗？"
+
+#: tbmain.rstbsaved
+msgid "Saved."
+msgstr "已保存。"
+
+#: tbmain.rstbsavefailed
+#, object-pascal-format
+msgid "Could not save %s: %s"
+msgstr "无法保存 %s：%s"
+
+#: tbmain.rstbtitle
+#, object-pascal-format
+msgid "%s%s - Theme Builder"
+msgstr "%s%s - 主题编辑器"
+
+#: tbmain.rstbuntitled
+msgid "Untitled"
+msgstr "未命名"
+
+#: tbpreview.rstbdensityclassic
+msgid "Classic"
+msgstr "经典"
+
+#: tbpreview.rstbdensitymodern
+msgid "Modern"
+msgstr "现代"
+
+#: tbpreview.rstbmodedark
+msgid "dark"
+msgstr "暗色"
+
+#: tbpreview.rstbmodefailed
+#, object-pascal-format
+msgid "In %s mode: %s"
+msgstr "%s模式下：%s"
+
+#: tbpreview.rstbmodelight
+msgid "light"
+msgstr "亮色"
+
+#: tbpreview.rstbsamplecolamount
+msgid "Amount"
+msgstr "金额"
+
+#: tbpreview.rstbsamplecolkind
+msgid "Kind"
+msgstr "类型"
+
+#: tbpreview.rstbsamplecolname
+msgid "Name"
+msgstr "名称"
+
+#: tbpreview.rstbsamplecolqty
+msgid "Quantity"
+msgstr "数量"
+
+#: tbpreview.rstbsamplecolregion
+msgid "Region"
+msgstr "地区"
+
+#: tbpreview.rstbsamplecolsize
+msgid "Size"
+msgstr "大小"
+
+#: tbpreview.rstbsamplecrumb1
+msgid "Home"
+msgstr "首页"
+
+#: tbpreview.rstbsamplecrumb2
+msgid "Themes"
+msgstr "主题"
+
+#: tbpreview.rstbsamplecrumb3
+msgid "My theme"
+msgstr "我的主题"
+
+#: tbpreview.rstbsampleeast
+msgid "East"
+msgstr "东区"
+
+#: tbpreview.rstbsamplefile1
+msgid "theme.tycss"
+msgstr "theme.tycss"
+
+#: tbpreview.rstbsamplefile2
+msgid "background.jpg"
+msgstr "background.jpg"
+
+#: tbpreview.rstbsamplefile3
+msgid "notes.txt"
+msgstr "notes.txt"
+
+#: tbpreview.rstbsampleinputprompt
+msgid "New name:"
+msgstr "新名字："
+
+#: tbpreview.rstbsampleinputtitle
+msgid "Rename"
+msgstr "重命名"
+
+#: tbpreview.rstbsampleitem1
+msgid "Apples"
+msgstr "苹果"
+
+#: tbpreview.rstbsampleitem2
+msgid "Pears"
+msgstr "梨"
+
+#: tbpreview.rstbsampleitem3
+msgid "Cherries"
+msgstr "樱桃"
+
+#: tbpreview.rstbsampleitem4
+msgid "Plums"
+msgstr "李子"
+
+#: tbpreview.rstbsampleitem5
+msgid "Grapes"
+msgstr "葡萄"
+
+#: tbpreview.rstbsamplekeyauthor
+msgid "Author"
+msgstr "作者"
+
+#: tbpreview.rstbsamplekeymodes
+msgid "Modes"
+msgstr "模式"
+
+#: tbpreview.rstbsamplekeyname
+msgid "Name"
+msgstr "名称"
+
+#: tbpreview.rstbsamplekeyversion
+msgid "Version"
+msgstr "版本"
+
+#: tbpreview.rstbsamplekindimage
+msgid "Image"
+msgstr "图片"
+
+#: tbpreview.rstbsamplekindtext
+msgid "Text"
+msgstr "文本"
+
+#: tbpreview.rstbsamplekindtheme
+msgid "Theme"
+msgstr "主题"
+
+#: tbpreview.rstbsamplememo1
+msgid "The first line of a memo."
+msgstr "多行文本框的第一行。"
+
+#: tbpreview.rstbsamplememo2
+msgid "A second line, a little longer than the first one."
+msgstr "第二行，比第一行稍长一点。"
+
+#: tbpreview.rstbsamplememo3
+msgid "A third."
+msgstr "第三行。"
+
+#: tbpreview.rstbsamplemessage
+msgid "Save the changes to this theme?"
+msgstr "保存对这个主题的改动吗？"
+
+#: tbpreview.rstbsamplenorth
+msgid "North"
+msgstr "北区"
+
+#: tbpreview.rstbsamplenotifytext
+msgid "The theme was saved."
+msgstr "主题已保存。"
+
+#: tbpreview.rstbsamplenotifytitle
+msgid "Saved"
+msgstr "已保存"
+
+#: tbpreview.rstbsamplesouth
+msgid "South"
+msgstr "南区"
+
+#: tbpreview.rstbsamplestatus1
+msgid "Ready"
+msgstr "就绪"
+
+#: tbpreview.rstbsamplestatus2
+msgid "Ln 1, Col 1"
+msgstr "行 1，列 1"
+
+#: tbpreview.rstbsamplestatus3
+msgid "UTF-8"
+msgstr "UTF-8"
+
+#: tbpreview.rstbsampletab1
+msgid "Overview"
+msgstr "概览"
+
+#: tbpreview.rstbsampletab2
+msgid "Details"
+msgstr "详情"
+
+#: tbpreview.rstbsampletab3
+msgid "History"
+msgstr "历史"
+
+#: tbpreview.rstbsampletotal
+msgid "Total"
+msgstr "合计"
+
+#: tbpreview.rstbsamplevalauthor
+msgid "Me"
+msgstr "我"
+
+#: tbpreview.rstbsamplevalmodes
+msgid "light, dark"
+msgstr "亮色、暗色"
+
+#: tbpreview.rstbsamplevalname
+msgid "My theme"
+msgstr "我的主题"
+
+#: tbpreview.rstbsamplewest
+msgid "West"
+msgstr "西区"
+
+#: tbpreview.rstbsinglemode
+msgid "One mode only"
+msgstr "只有一种模式"
+
+#: tbproblems.rstbsaveforassets
+msgid "Save the file first: url() paths are read from the file's folder."
+msgstr "请先保存文件：url() 的路径按文件所在的文件夹读取。"
+
+#: tbtemplates.rstbbasedon
+#, object-pascal-format
+msgid "Based on the built-in theme \"%s\"."
+msgstr "基于内置主题「%s」。"
+
+#: tbtemplates.rstbminimalheader
+msgid "A minimal theme: the six seeds, light and dark. Everything else comes from the base theme."
+msgstr "极简主题：只有明暗两套的六个种子，其余全部来自底层主题。"
