@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；5 期已签收（2026-09-30，记录在 5 期计划末尾，3–5 期真机项合成一份验收文档 `docs/superpowers/plans/2026-09-29-terminal-acceptance.md`）；五期的实现期修正都已写回各节原处；**6 期（独立配色方案）2026-09-30 用户拍板、规格补在 §11.1**，计划 `docs/superpowers/plans/2026-09-30-terminal-phase-6.md`，做完和 1–5 期一起验收，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；5 期已签收（2026-09-30，记录在 5 期计划末尾，3–5 期真机项合成一份验收文档 `docs/superpowers/plans/2026-09-29-terminal-acceptance.md`）；五期的实现期修正都已写回各节原处；**6 期（独立配色方案）2026-09-30 用户拍板、规格补在 §11.1**，计划 `docs/superpowers/plans/2026-09-30-terminal-phase-6.md`，做完和 1–5 期一起验收；**6 期已签收（2026-09-30，记录在 6 期计划末尾；期末审查的修正写回各节原处，标「实现期修正（6 期）」）**；**7 期（带内协议钩子与解析器钩子，示例里实现 ZModem）2026-09-30 用户拍板、规格补在 §19**，计划 `docs/superpowers/plans/2026-09-30-terminal-phase-7.md`，做完和 1–6 期一起验收，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -109,6 +109,8 @@
 - 新 include `tyControls.Terminal.Buffer.Reflow.inc`（`BufferReflow.ts` 的五个函数、`Buffer.ts` 的 `_reflow*`，由 `Buffer.pas` 引入）；新生成物 `tyControls.Terminal.Luminance.inc`（`contrast-cases.js` 算出的 256 项线性化表，按 IEEE 位模式写）。两个都不进 `.lpk`，notices 标题和发版守卫逐个列名。
 - 亮度函数留在 Core：Core 回答明暗配色查询本来就用它，而且 Core 不依赖 LCL；`Terminal.Render` 的对比度函数引用 Core 的这一份。
 
+**7 期新增（2026-09-30 用户拍板）**：Core 新 include `tyControls.Terminal.Core.Stream.inc`（数据流钩子与解析器钩子的包装，§19），自己写的，不进 `.lpk`、不进 notices 标题，发版守卫查它随包发出。示例多三个单元 `uzmodem.pas`、`uzmodemsession.pas`、`uzmodemterm.pas`（ZModem，§19.7），`uptywin.pas` 多一个 `TProcessPipeBackend`。
+
 ### 2.2 不移植的上游部分
 
 DOM 渲染器与 WebGL 渲染器、`Viewport`（浏览器滚动）、`AccessibilityManager`、`CompositionHelper`（浏览器输入法）、`Linkifier` 的 DOM 部分、所有 addon 的 UI 部分。
@@ -192,6 +194,8 @@ DOM 渲染器与 WebGL 渲染器、`Viewport`（浏览器滚动）、`Accessibil
 
 标题（OSC 0 / 2，`InputHandler.ts:286-290`）、响铃（BEL，`:267`）、OSC 52（§9.6.3）、链接（§9.8）、**核心不处理的 OSC**（7 当前目录、133 / 633 shell 集成等，全部原样交出，§7.4）、网格尺寸变化（宿主据此改 PTY 大小）。
 窗口操作类请求（XTWINOPS）照上游默认全关（`windowOptions: {}`，`OptionsService.ts:53`）。
+
+**7 期新增（2026-09-30 用户拍板）**：写入队列和解码器之间多一个拦截点——挂了数据流处理器时，每段先问 `Detect`，被接管的字节交给处理器、不进解析器；接管期间用户输入改走 `OnClaimedInput`（§19.3–19.5）。解析器钩子经 Core 的 `Register*Handler` 公开（§19.6）。
 
 ### 3.5 线程约定
 
@@ -507,6 +511,8 @@ OSC 4 / 10 / 11 / 12 设置和查询、OSC 104 / 110 / 111 / 112 复位（`Input
 
 **6 期新增（2026-09-30 用户拍板）**：色表多了一个来源——控件的独立配色方案（§11.1）。取色顺序变成「程序的 OSC 覆盖 > 自定义方案 > 主题 token」：Core 的覆盖表照旧在最前，`OnQueryBaseColor` 答的色表由控件按 `ColorSource` 从方案或主题建。Core 不改：明暗查询（`CSI ? 996 n`）和 2031 通知本来就按 `ResolveColor(256 / 257)`（覆盖优先、其次色表）比亮度，方案进了色表，答的就是实际生效的背景色。换方案、改方案里的颜色、明暗配对随主题换边，都算「色表真变了」，走上面 3 期修正的同一条通知路径（清 OSC 覆盖色、2031 开着就报一次）。
 
+**实现期修正（6 期）**：上面 3 期修正里「只有色表真变了（换明暗、换配色）才调」的「换配色」原指主题的配色；6 期起也包括换方案、改正在用的那套方案里的颜色（§11.1.6）。
+
 ### 7.4 未处理的 OSC
 
 核心注册的 OSC 只有 0 / 1 / 2 / 4 / 8 / 10 / 11 / 12 / 104 / 110 / 111 / 112（`InputHandler.ts:286-325`）。52 由控件注册（§9.6.3）。其余一律进 `OnOsc(Ident, Data, var Handled)`——7（当前目录）、133 / 633（shell 集成）、1337 等由宿主处理。宿主也可以直接 `Core.Parser.RegisterOscHandler`。
@@ -515,6 +521,8 @@ OSC 4 / 10 / 11 / 12 设置和查询、OSC 104 / 110 / 111 / 112 复位（`Input
 - ~~`OnOsc(Ident, Data, var Handled)`~~ `OnOsc(Sender, AIdent, AData)`：Core 对未处理的 OSC 本来就没有默认动作，`Handled` 无处可用，删掉。
 - 只交 0..`High(Integer)` 的编号（没有编号的 OSC 是 -1，也不交）。载荷和字符串处理器同一个上限，成功结束才交。
 - OSC 开始时没挂 `OnOsc` 就不收集载荷（中途才挂上的那一个也不交），没人听不花内存。
+
+**7 期新增（2026-09-30 用户拍板）**：宿主改用 `Core.RegisterOscHandler`（§19.6）注册；某个编号注册了处理器，它就不再进 `OnOsc`（即使处理器都返回 False，照上游「链非空不走回退」），注销到链为空又回到 `OnOsc`。`Core.Parser` 仍公开，但是底层接口（`Clear*`、`Set*Fallback` 会拆掉 Core 自己的处理）。
 
 ### 7.5 鼠标协议状态
 
@@ -612,6 +620,8 @@ type
 **实现期修正（4 期）**：Core 加 `OnUserInput: TNotifyEvent`（上游 `CoreService.onUserInput`，`CoreService.ts:86-89`）：`TriggerDataEvent` 在 `AWasUserInput` 时发，顺序照上游——先滚到底，再 `OnUserInput`，再 `OnData`；`ReadOnly` 时整个早退、不发。控件接管它（清选区），宿主别改写。
 
 **实现期修正（5 期）**：Core 加 `ReflowCursorLine: Boolean`（上游 `reflowCursorLine`，默认 False，只是 Core 属性、不上控件的 published）；`ParseRange`（写入队列一段一段交给解析器）；给测试的纯查询 `HeadChunkParsed`（队首那一块已经解析了多少字节）；常量 `TyTermSlicePieceBytes`（§3.1）。
+
+**7 期新增（2026-09-30 用户拍板）**：Core 加数据流钩子（`AddStreamHandler` / `RemoveStreamHandler` / `StreamHandlerCount` / `StreamClaimed` / `ClaimingHandler` / `OnClaimedInput`，类型 `TTyTerminalStreamHandler`、`TTyTerminalStreamSession`、`TTyTerminalClaimEnd`，§19.3）和解析器钩子的五个 `Register*Handler` + `UnregisterHandler`（§19.6）。
 
 ---
 
@@ -739,6 +749,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 
 **实现期修正（4 期）**：这三个本期加上（4 期任务里写的 `OnLinkClick` 以本节的 `OnLinkActivate` 为准）。`OnOsc52` 在解析中间同步发：宿主可以弹模态框，**不能在里面释放控件**；事件抛出的异常控件吞掉（§9.6.3）。
 
+**7 期新增（2026-09-30 用户拍板）**：`OnClaimedInput(Sender; const AData: RawByteString)`——数据流处理器接管期间，按键、粘贴、滚轮翻成的方向键编好的字节不发给程序、改走这里（宿主拿它做取消，§19.5）。
+
 ### 9.3 公开方法
 
 `Write`（两个重载，转 `Core.Write` 并负责排片）、`WriteSync`、`Paste(const AText)`（走粘贴编码）、`Input(const AText)`（当作键入）、`Clear`（清滚回）、`Reset`、`ScrollLines` / `ScrollPages` / `ScrollToTop` / `ScrollToBottom`、`SelectAll` / `ClearSelection` / `Select(ACol, AAbsRow, ALength)` / `SelectLines`、`CopyToClipboard` / `PasteFromClipboard`、`CellAt(X, Y): TPoint`、`CellRect(ACol, ARow): TRect`。
@@ -749,6 +761,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - Core 加了 `DiscardPending`：丢掉还没解析的块、不调它们的回调（宿主自己要丢的，流控计数跟着重来；上游 `WriteBuffer` 没有）。回放示例换录制时用。
 
 **实现期修正（4 期）**：`SelectAll` / `ClearSelection` / `Select` / `SelectLines`、`CopyToClipboard`（有选区才写）本期接上。`Select(ACol, AAbsRow, ALength)` 在入口把参数钳进缓冲——列 0..`Cols`、行 0..最后一行、长度 0..到缓冲末尾（上游不查；长度太大时「起点 + 长度」会溢出）。
+
+**7 期新增（2026-09-30 用户拍板）**：`AddStreamHandler` / `RemoveStreamHandler`、运行时只读 `StreamClaimed`，转发 Core（§19.3）；接管期间鼠标不上报，按程序没要鼠标处理（§19.5）。
 
 **实现期修正（5 期）**：改尺寸合并（§6.2）之后，`Cols`、`Rows`、`CellAt`、`CellRect`、`SizeForGrid` 和 `WriteSync` 先把排着的网格应用掉——读这些属性可能当场发出 `OnGridResize`。`CellRect` 的参数若是现算的（右键菜单的光标格、输入法的锚），先应用再算。~~`Core`、`Write`、`Paste`、`Input` 也先应用~~ 审查后不应用：排着的时候 `Core` 仍是旧网格，`Write` 进来的数据按旧网格解析，应用时一起折。
 
@@ -1049,6 +1063,8 @@ E2（Win32 已跑，`--e2`；数字是本批修复后重跑的）：
 
 块 / 下划线 / 竖线（竖线宽取 `--terminal-cursor-width`）；失焦时按 `CursorInactiveStyle`，轮廓 = 1 像素框。块光标下的字用 `TyTerminalCursor` 的 `color` 重画。光标隐藏（DECTCEM）或视口不在底部时不画。
 
+**实现期修正（6 期）**：~~块光标下的字用 `TyTerminalCursor` 的 `color` 重画~~ 跟随主题时照旧；用方案时（`ColorSource = tsrcScheme`、方案不全空）用方案的 `CursorText`，没设就用生效的底色（色表的 257，§11.1.4）。
+
 ### 10.8 DPI
 
 PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清字形缓存、重算格子数（会触发 `OnGridResize`）。
@@ -1122,6 +1138,8 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 **6 期新增（2026-09-30 用户拍板）**：主题仍是默认的配色来源；单个实例可以改用独立的配色方案，见 §11.1。浅底 16 色的取舍（D1 / D2）表述改成「默认跟随主题；看不清可换方案」，仍待用户定（§17.1 第 4 条的 6 期注）。
 
+**实现期修正（6 期）**：WT 自带的 Tango Dark 和上面深底那套（xterm.js 的 Tango）只差 0 号色：WT 是 `#000000`，xterm.js 是 `#2e3436`，其余 15 色逐个相同（核实时对过）；前景 / 底色两边本来就不同（WT `#D3D7CF` / `#000000`，跟随主题时是皮肤的 surface token）。示例里选「Tango Dark」和跟随深色主题看起来不一样是这个原因，不是 bug（控件文档 §10 写了一句）。
+
 ### 11.1 独立配色方案（6 期新增（2026-09-30 用户拍板））
 
 现在终端的颜色全部来自主题 token，单个实例只能靠 `StyleClass` / `StyleOverride` 改。6 期给控件一套独立于主题的配色：宿主（或设计器里的用户）选「跟随主题」或「自定义方案」，方案可以从 Windows Terminal 的 JSON 读进来、写出去。方案清单由外部维护，控件只管读入和应用。实现步骤见 `docs/superpowers/plans/2026-09-30-terminal-phase-6.md`。
@@ -1138,7 +1156,7 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 | 6 | 示例带几套许可清楚的方案做演示，外加「从文件导入」 |
 | 7 | 做成第 6 期，做完和 1–5 期一起验收（更新 `2026-09-29-terminal-acceptance.md`，不另起一份） |
 
-标「待定」的是计划开工前问题一里等用户答的，本节按建议写。
+标「待定」的是计划开工前问题一里等用户答的，本节按建议写。**实现期修正（6 期）**：用户没有另外回复，三条都按建议定了（验收文档 D20–D22，另有 D23 链接与组字串的颜色），各处的「待定」已改成定论。
 
 #### 11.1.2 核实记录（2026-09-30，读文档与源码）
 
@@ -1190,6 +1208,7 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 - **「未设置」是 `clNone`**，不是 0：TColor 的零值是合法的黑色（[[zero-value-must-be-the-safe-answer]]）。`clDefault` 当未设置；系统色（`clWindow` 这类，设计器的颜色下拉里有）用时经 `ColorToRGB` 解成 RGB。TColor 是 `$00BBGGRR`，色表是 `$RRGGBB`，换算只在一处（地雷见计划）。
 - 另有：`Colors[ASlot]` 下标属性（`TTyTerminalSchemeSlot`，前 16 个的序号就是 ANSI 号）、`Assign`、`Clear`、`IsEmpty`、`Equals`、`BeginUpdate` / `EndUpdate`、`OnChange`（控件挂上，宿主别改写）、读写方法（§11.1.7）。`GetOwner` 答控件，设计器的属性路径与「已修改」标记靠它。
+- **实现期修正（6 期）**：另有公开的 `Changed`：内容没变也算改了一次（修订号加一、发 `OnChange`；`BeginUpdate` 里照样攒到最后发一次）。给系统色用：方案里存的是 `clWindow` 本身，系统改了配色后再设一次同样的值是空操作（`SetColor` 值没变就返回），调 `ColorScheme.Changed`（配对时还有 `DarkColorScheme.Changed`）终端才重新取色、重画。控件文档原来写的「要重新设一次」不管用，已改成调它。
 - 选区字色（xterm `selectionForeground`）不进方案：WT 没有；主题「写了才用」的那一条照旧（§11）。
 
 **控件的新属性**（`TTyTerminalView`，published；default 一律等于构造值）：
@@ -1198,11 +1217,12 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 |---|---|---|---|
 | `ColorSource` | `TTyTerminalColorSource = (tsrcTheme, tsrcScheme)` | `tsrcTheme` | 跟随主题 = 5 期的样子，方案对象里有什么都不看 |
 | `ColorScheme` | `TTyTerminalColorScheme` | 空方案 | 自定义方案；配对时是浅色那套。有 setter（`Assign`）：FPC 没有 setter 的对象属性不流式化（`source/tyControls.Columns.pas` 里 `TTyHeader.Columns` 的注释） |
-| `ColorSchemePaired` | Boolean | False | 明暗各一套（待定：属性形态，计划开工前问题一第 1 条） |
+| `ColorSchemePaired` | Boolean | False | 明暗各一套（~~待定：属性形态，计划开工前问题一第 1 条~~ 按建议 A：两个值的 `ColorSource` 加这个开关和 `DarkColorScheme`；验收文档 D20，可改） |
 | `DarkColorScheme` | `TTyTerminalColorScheme` | 空方案 | 配对时深色主题用 |
 
 - 设计器里四个都能改；`ColorScheme` / `DarkColorScheme` 在对象查看器里展开成 23 个子属性，只有改过的写进 `.lfm`。
-- `ColorSource = tsrcScheme` 而方案全空时，画出来和跟随主题一样（每一色都退回主题）。
+- `ColorSource = tsrcScheme` 而方案全空时，画出来和跟随主题一样（~~每一色都退回主题~~）。**实现期修正（6 期）**：22 色都没设（`Name` 不算）时整套视为跟随主题，直接用主题的色表，光标仍是主题的光标色（逐槽退回的话，没设的光标取生效的前景，和跟随主题不一样）。配对时只填了深色那套，浅色主题下用的是空的浅色那套，也就是跟随主题（用户已认可这一偏离）。
+- **实现期修正（6 期）**：`ColorScheme := nil` 抛 `EConvertError`（`Assign(nil)`，和 `Font := nil` 一样），控件文档注明；清空用 `Clear`。
 
 #### 11.1.4 取色与优先级
 
@@ -1214,8 +1234,8 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 | 16–255 | 公式（`TyTermDefaultPaletteColor`，同上游；方案不管，WT 没有、xterm 的 `extendedAnsi` 不做） | 同左 |
 | 256 前景 | 方案的色 | 主题的 |
 | 257 底色（也是内边距、网格外余量的底色） | 方案的色 | 主题的 |
-| 258 光标 | 方案的色 | 生效的前景（256） |
-| 光标下的字色 | 方案的色 | 生效的底色（257） |
+| 258 光标 | 方案的色 | 生效的前景（256）。**实现期修正（6 期）**：是色表的 256（方案或主题的前景），不含程序用 OSC 10 设的前景——程序改了前景，光标不跟 |
+| 光标下的字色 | 方案的色 | 生效的底色（257）；同上，是色表的 257，不含 OSC 11 |
 | 选区（聚焦） | 方案的色按 xterm 降到 0.3（alpha `$4D`），再在生效的底色上混成不透明 | 主题 `TyTerminalSelection:focus`，带它自己的 alpha 混 |
 | 选区（失焦） | 同上 | 方案设了聚焦选区就用它（xterm）；否则主题的无状态 `TyTerminalSelection` |
 | 选区字色、链接下划线、外框与边框 | —（不进方案） | 主题 |
@@ -1224,6 +1244,8 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 - 深底实例的 3 期规则（光标色、光标下的字色跟着实例的前景 / 底色换）只在「跟随主题」下用；自定义方案下由上表决定。
 - **其后照旧**：禁用时整张表按 `:disabled` 的 opacity 预混（`PremixFrameColors`）；程序问颜色答原色；`MinimumContrastRatio` 对画出来的两个颜色调（§10.9），所以方案里对比度不够的色一样被推；换方案清两份对比度缓存（色表签名变了）。
 - 16–255 不进方案；OSC 4 改它们照旧。
+- **实现期修正（6 期）**：链接下划线跟主题、组字串的底色 / 字色用方案（下划线跟主题），照计划开工前问题一第 4 条的建议定了（验收文档 D23，可改）。
+- **实现期修正（6 期）**：方案只设了底色（或前景、底色）而 16 色没设时，16 色跟的是主题，不按方案的底重求：浅色主题下就是浅底那套，配一个深底会有几色看不清。代码不改（逐槽「设了用方案、没设跟主题」是定下的规则），控件文档提醒一句，真机看验收第 100 项，结论交 D1 或文档。
 
 #### 11.1.5 明暗配对
 
@@ -1234,10 +1256,10 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 #### 11.1.6 什么时候通知 Core
 
-- 色表的缓存键（今天是 模型、`ThemeVersion`、类、`StyleOverride`）加上：`ColorSource`、`ColorSchemePaired`、两个方案各自的修订号（每次 `OnChange` 加一）。明暗配对选哪边由主题决定，已经在 `ThemeVersion` 里。
-- 通知仍只走 `EnsureThemeCurrent` 那一处：**色表逐项比，真变了才** `NotifyColorSchemeChanged`（清 OSC 覆盖色——和上游换主题一样，程序设的颜色随之丢掉；2031 开着就报一次明暗）。改一个方案里没被用到的色（`ColorSource = tsrcTheme` 时，或配对时另一边的方案）不通知、也不重画。
+- 色表的缓存键（今天是 模型、`ThemeVersion`、类、`StyleOverride`）加上：`ColorSource`、`ColorSchemePaired`、~~两个方案各自的修订号~~（每次 `OnChange` 加一）。明暗配对选哪边由主题决定，已经在 `ThemeVersion` 里。**实现期修正（6 期）**：只加选中那一边的修订号（跟随主题时记 0）——选哪一边由主题决定、主题已经在键里；另一边的方案改了，键不变。
+- 通知仍只走 `EnsureThemeCurrent` 那一处：**色表逐项比，真变了才** `NotifyColorSchemeChanged`（清 OSC 覆盖色——和上游换主题一样，程序设的颜色随之丢掉；2031 开着就报一次明暗）。改一个方案里没被用到的色（`ColorSource = tsrcTheme` 时，或配对时另一边的方案）不通知、也不重画。**实现期修正（6 期）**：初版在这时仍排一次通知，回调里逐项比出没变、不通知 Core，但还是整窗 `Invalidate` 了一次（期末审查）。现在方案的 `OnChange` 先看改的是不是正在用的那一边——跟随主题时两套都没用；没配对时 `DarkColorScheme` 没用；配对时看上次建色表时的明暗（主题一变控件就被 `Invalidate`、当场重建色表，不会过期；还没建过色表就照排）——不是就什么都不排、不失效。测试数控件的 `Invalidate` 次数。
 - 在绘制里发现的变化照旧经消息循环再通知（3 期修正），不在绘制里发 `OnData`。
-- `.lfm` 加载中（`csLoading`）不建色表、不通知；`Loaded` 之后第一次建色表不算「变了」（和 3 期「第一次建色表不算变化」同一条）——加载本身不会清掉什么、不会发 2031。
+- `.lfm` 加载中（`csLoading`）不建色表、不通知；`Loaded` 之后第一次建色表不算「变了」（和 3 期「第一次建色表不算变化」同一条）——加载本身不会清掉什么、不会发 2031。**实现期修正（6 期）**：副作用：`Loaded` 把「已通知」清掉，所以对一个运行中的实例 `ReadComponent`（不是窗体加载）时，加载前后色表就算变了也不通知——不清程序的 OSC 覆盖色、不发 2031。这种用法少见，代码不改，记在这里。
 - 一次改多个色用 `BeginUpdate` / `EndUpdate`，只算一次；`LoadFrom*` / `Assign` / `Clear` 内部就是一次。
 - 改 `ColorSource`、`ColorSchemePaired`、方案里的色，**当场**只让色表的键失效（之后 Core 问颜色、996 都已是新的一套），「清 OSC 覆盖、报 2031、重画」经消息循环做一次（`QueueAsyncCall`，和绘制里发现的主题变化同一个开关）——宿主在一个事件处理里连着设几项（装两套、开配对、改来源），程序只收到一条 2031（计划开工前问题二第 12 条）。
 - 通知后整窗重画（色表签名变了，§3.2 的 3 期修正）。
@@ -1271,11 +1293,13 @@ type
   end;
 ```
 
+**实现期修正（6 期）**：`LoadFromText`、`SaveToText`、`ListSchemeNames` 里的 `case` 目前只有一个分支（`tcfAuto, tcfWindowsTerminal`），加格式时在这里分开。另公开：`Changed`（§11.1.3）；`TyTermSchemeImportPlan(AText, out ANames, out AError): Boolean`，设计器和示例的「导入…」用——只解析一次，列出能导入的名字（`settings.json` 里 16 色的键齐、颜色也读得进的，按出现顺序；同名只列一次、只看第一套，第一套写坏了这个名字就不列；单个对象是它自己的名字，可能是空），一套都没有返回 False（颜色都写坏时消息是第一处坏颜色的）；常量 `TyTermJsonMaxDepth = 64`、`TyTermSchemeMaxFileBytes = 16 MB`。
+
 **读**：
-- 先去掉 UTF-8 BOM；开头是 UTF-16 的 BOM 报「不支持 UTF-16」。`\u` 转义先解成 UTF-8（认注释；引号、反斜杠、控制字符保留成转义），再交 `fpjson`，选项 `joUTF8`、`joComments`、`joIgnoreTrailingComma`。
-- 顶层对象有 `schemes` 键 → 当 `settings.json`：`schemes` 必须是数组；按出现顺序找 `name` 与 `AName` **逐字相等**（区分大小写）且 16 色齐全的第一个对象（同 WT 的 `emplace`）；`AName = ''` 时数组里恰好一套有效就取它，多于一套报「要给名字」并列出名字。其余的对象不看——别的方案里的坏颜色不连累这一套（WT 会整个文件读不进，这是有意放宽）。
+- 先去掉 UTF-8 BOM；开头是 UTF-16 的 BOM 报「不支持 UTF-16」。`\u` 转义先解成 UTF-8（认注释；引号、反斜杠、控制字符保留成转义），再交 `fpjson`，选项 `joUTF8`、`joComments`、`joIgnoreTrailingComma`。**实现期修正（6 期）**：单引号串（`jsonscanner` 非严格模式认）里的 `\u0027` 也保留成转义，不然解出来的单引号会提前结束字符串。预解码的同一遍扫描里数串外、注释外的方括号与花括号深度，超过 64 层报「不是合法的 JSON」：`fpjson` 是递归解析的，十万层会撑爆栈、整个进程崩掉（设计器里就是 IDE）；文本里没有 `\u`、预解码直接返回原文的那条快路也照样数。`LoadFromFile` 只读 16 MB 以内的文件（WT 的 `defaults.json` 约 36 KB），大了报错、不整个读进内存。
+- 顶层对象有 `schemes` 键 → 当 `settings.json`：`schemes` 必须是数组；按出现顺序找 `name` 与 `AName` **逐字相等**（区分大小写）且 16 色齐全的第一个对象（同 WT 的 `emplace`）；`AName = ''` 时数组里恰好一套有效就取它，多于一套报「要给名字」并列出名字。**实现期修正（6 期）**：按不同的名字数——同名的几套只算一个名字（按名取时读到的只有第一套），所以只有两套同名、别无其他时不用给名字，取第一套；消息里的名字也只列一次。其余的对象不看——别的方案里的坏颜色不连累这一套（WT 会整个文件读不进，这是有意放宽）。
 - 顶层对象没有 `schemes` 键 → 当单个方案对象；`name` 可以没有（单个文件里名字不是必需的，读进来 `Name = ''`）；`AName <> ''` 且和它的名字不同时报「找不到」。
-- 16 色必须齐（`purple` 缺了用 `magenta`，`brightPurple` 同理，两者都写了以主名为准）；`foreground` / `background` / `cursorColor` / `selectionBackground` 缺了**按 WT 的缺省补上**（`#FFFFFF` / `#000000` / `#FFFFFF` / `#FFFFFF`），读进来的方案因此和它在 WT 里一样完整（待定：计划开工前问题二第 4 条）；`CursorText`、`SelectionInactiveBackground` 读后是未设置（WT 没有这两项）。
+- 16 色必须齐（`purple` 缺了用 `magenta`，`brightPurple` 同理，两者都写了以主名为准）；`foreground` / `background` / `cursorColor` / `selectionBackground` 缺了**按 WT 的缺省补上**（`#FFFFFF` / `#000000` / `#FFFFFF` / `#FFFFFF`），读进来的方案因此和它在 WT 里一样完整（~~待定：计划开工前问题二第 4 条~~ 主控按建议定了）；`CursorText`、`SelectionInactiveBackground` 读后是未设置（WT 没有这两项）。
 - 颜色必须是字符串，`#rgb` 或 `#rrggbb`，十六进制位大小写都行，前后不许有空白；别的一律报错（含 `#rrggbbaa`、`rgb(…)`、颜色名）。
 - 不认识的键不管（WT 的 schema 不许多余键，但加载器不查）。
 - **原子**：成功才整体替换（`Assign` 一个临时对象），发一次 `OnChange`；失败什么都不动、不发 `OnChange`。
@@ -1298,16 +1322,20 @@ type
 | 重复键 | 报错（`fpjson` 默认；jsoncpp 后者为准，§15） |
 | 文件打不开 | `LoadFromFile` 透传 RTL 的异常；`TryLoadFromFile` 返回 False 和它的消息 |
 | 写出时名字空、16 色不全 | 报错，方案不变 |
+| 嵌套超过 64 层（**实现期修正（6 期）**） | 当不是合法的 JSON 报错，`Key` = `''`；不交给 `fpjson` |
+| 文件超过 16 MB（**实现期修正（6 期）**） | `LoadFromFile` 抛 `ETyTerminalColorSchemeError`；`TryLoadFromFile` 返回 False |
 
 - `Try*` 变体不抛（`ETyTerminalColorSchemeError` 和读文件的异常都转成 `AError`），示例和设计器用它。
 - 消息是 `resourcestring`（放 `tyControls.StrConsts`，和 3 期终端菜单同一处），进 `.po`（en + zh_CN）。
+- **实现期修正（6 期）**：消息里的名字去重（同名只列一次）。按名找不到、而文本里一套完整的都没有时，换一句「没有名为 X 的配色方案，文本里也没有完整的配色方案」，不再是「文本里有：」后面空着；单个方案对象没有名字、又按名去找时说「文本里的那一套没有名字」。
 
 #### 11.1.9 设计器、`.lfm`、示例
 
 - 对象查看器里改 `ColorSource` / `ColorSchemePaired`、展开两个方案改颜色；设计期预览照这一套画（设计期本来就画色表）。
 - `.lfm` 里只写改过的：`ColorSource = tsrcScheme`、`ColorScheme.Name = 'Campbell'`、`ColorScheme.Red = 2035653` 之类。改颜色不改别的属性，`Loaded` 里不往 published 字段写派生值（[[loaded-sync-clobbers-streamed-values]]）。
-- 设计器右键菜单「导入 Windows Terminal 配色…」「导出…」（待定：计划开工前问题一第 2 条；建议做，否则设计器里只能一格一格填 22 个颜色）：选文件 → 一套就直接导入、多套先选名字（`InputCombo`）→ 写进 `ColorScheme`（配对时再问写哪一边）→ 标记窗体已修改。
-- **示例**：带 Windows Terminal 自带的七套（Campbell、One Half Dark / Light、Solarized Dark / Light、Tango Dark / Light），原样取自 `wt:src/cascadia/TerminalSettingsModel/defaults.json`（MIT，Microsoft；Solarized 原作 Ethan Schoonover，MIT，已核 `altercation/solarized` 的 `LICENSE`；One Half 原作 Son A. Pham，MIT，已核 `sonph/onehalf` 的 `LICENSE.txt`；Tango 调色板由 Tango Desktop Project 放进公有领域），放 `examples/terminal/colorschemes/windows-terminal.json`（`settings.json` 的形状，只有 `schemes`），notices 加一节（待定：计划开工前问题一第 3 条）。下拉：跟随主题 / 七套单套 / 三对明暗（One Half、Solarized、Tango）；「导入…」读任意 WT 文件，一套或多套都加进下拉。不从 iTerm2-Color-Schemes 带（§11.1.2）；文档里告诉用户那里的 `windowsterminal/` 目录可以直接导入。
+- 设计器右键菜单「导入 Windows Terminal 配色…」「导出…」（~~待定：计划开工前问题一第 2 条；建议做，否则设计器里只能一格一格填 22 个颜色~~ 做了，验收文档 D21，可改）：选文件 → 一套就直接导入、多套先选名字（`InputCombo`）→ 写进 `ColorScheme`（配对时再问写哪一边）→ 标记窗体已修改。**实现期修正（6 期）**：导入后若 `ColorSource` 还是跟随主题，再问要不要改用方案；配对时导出先问导出哪一套；导出前先按写出的规则校验（没名字、16 色不全），不合格当场报错、不弹保存对话框（期末审查；原来要选完文件才报）。对话框标题是菜单项去掉省略号，英文的 `...` 和译文的 `…` 都去掉。
+- **示例**：带 Windows Terminal 自带的七套（Campbell、One Half Dark / Light、Solarized Dark / Light、Tango Dark / Light），原样取自 `wt:src/cascadia/TerminalSettingsModel/defaults.json`（MIT，Microsoft；Solarized 原作 Ethan Schoonover，MIT，已核 `altercation/solarized` 的 `LICENSE`；One Half 原作 Son A. Pham，MIT，已核 `sonph/onehalf` 的 `LICENSE.txt`；Tango 调色板由 Tango Desktop Project 放进公有领域），放 `examples/terminal/colorschemes/windows-terminal.json`（`settings.json` 的形状，只有 `schemes`），notices 加一节（~~待定：计划开工前问题一第 3 条~~ 按建议带七套加三对，验收文档 D22，可改）。下拉：跟随主题 / 七套单套 / 三对明暗（One Half、Solarized、Tango）；「导入…」读任意 WT 文件，一套或多套都加进下拉。不从 iTerm2-Color-Schemes 带（§11.1.2）；文档里告诉用户那里的 `windowsterminal/` 目录可以直接导入。
+- **实现期修正（6 期）**：示例放在第五行工具栏 `Tools5`：标签「Colours:」、下拉 `CmbColors`、按钮「Import...」；导入用单独一个 `DlgColors`（不和打开录制的 `DlgOpen` 共用）。期末审查后：选一对时两套都读成功才一起赋值，有一套读不进什么属性都不改；「导入…」用 `TyTermSchemeImportPlan` 只解析一次，下拉里同名只有一项（再导入同一个文件不会多出来，同名的那一项改读新文件）；选中或导入成功后清掉状态栏里之前的导入错误。同一行另加光标设置（用户要求）：「Cursor:」下拉（方块 / 下划线 / 竖线，`CursorStyle`）、「Blink」（`CursorBlink`）、「Unfocused:」下拉（`CursorInactiveStyle`），程序的 DECSCUSR 仍可临时盖过，`CSI 0 SP q` 回到这里选的。
 
 #### 11.1.10 与 WT、xterm.js 不同的地方（进 §15）
 
@@ -1318,11 +1346,13 @@ type
 - 单个方案对象可以没有 `name`（WT 的 `schemes` 里没名字的无效）。
 - 未设置的光标下字色取生效的底色（xterm 缺省是常量黑，§11.1.2）；未设置的光标取生效的前景（xterm / WT 缺省白）——只在方案没设这两项时有区别，从 WT 读进来的方案光标一定有值。
 - 写出时丢掉 `CursorText`、`SelectionInactiveBackground`（WT 格式没有）。
+- **实现期修正（6 期）**：嵌套超过 64 层、文件超过 16 MB 不读（WT 没有这两条限制）；`AName = ''` 时同名的几套算一个名字（WT 同名的只留第一套，效果相同）。
 
 #### 11.1.11 i18n
 
 - 库：读写错误消息（§11.1.8）进 `tyControls.StrConsts` 的 `resourcestring`，`languages/tycontrols.strconsts.{en,zh_CN}.po` 同步；设计器菜单项（若做）进 `designtime` 的 `.po`。
 - 示例：新下拉的标签、「跟随主题」「导入…」、三对的显示名、导入失败的提示，进 `languages/terminal_example.zh_CN.json` / `.po`。方案名（Campbell、Solarized Dark…）是专名，不翻。
+- **实现期修正（6 期）**：库的 `en.po` 不用改（它只收和英文原文不同的条目，方案的消息没有），`.pot` 与 `zh_CN.po` 同步；设计期的菜单项进 `tyControls.Design.CompEditors.pot` 与它的 `zh_CN.po`。示例的 `.po` 是手工补全的，主控跑 `example-rsj2po.py` 复查新增 0 条。审查修正加的四条库消息（找不到且无完整方案、找不到且单个对象无名、嵌套太深、文件太大）和示例的光标设置照样同步。
 
 #### 11.1.12 测试（6 期）
 
@@ -1330,6 +1360,7 @@ type
 - 控件：取色优先级逐槽（方案设 / 没设 × 主题明 / 暗）；OSC 覆盖在方案之上；996 / 2031 按实际底色答；换方案、改一色、`BeginUpdate` 批量、配对随主题换边各只通知一次，没配对时换明暗不通知；`.lfm` 往返、加载中不发任何 `OnData`；RTTI 守卫扩到方案对象的子属性；最低对比度、禁用预混、选区 0.3 在方案下的像素。
 - 示例：下拉里有七套和三对，选中后控件的色表等于那一套；导入坏文件时状态栏提示、控件不变。
 - 每条判据写「在哪个变异下必须红」，期末集中变异（计划）。
+- **实现期修正（6 期）**：WT 文档里 Campbell 的示例（测试里的 `DocCampbell`）已和文档页逐字核对（2026-09-30）。审查修正加的：十万层嵌套不崩（各入口都答 False / 空）、深度 64 能读 65 报错（带不带 `\u` 各一例，抓「快路绕过检查」）、超 16 MB 的文件、名字去重与两句新消息、导入计划跳过坏颜色、`Changed`、没用到的方案改了不整窗失效（数 `Invalidate`）、示例一对原子与下拉去重、明暗判定恰好 0.5 的底色必须存在（V11b 不许静默跳过）。
 
 ---
 
@@ -1354,6 +1385,8 @@ type
 - 命令列表：Windows 上 `%COMSPEC%`（默认：一定在、起得最快）、`powershell.exe`，PATH 里找得到才列 `pwsh.exe`、`wsl.exe`；Linux / macOS 上 `$SHELL -l`（没有就 `/bin/sh -l`）。可以手改。
 - 程序退出：它写的全部显示完，再打一行暗色的「进程已退出，退出码 n」；终端回到只读，按键不再入队（期末审查后补的）。Windows 的退出码是 DWORD，按 `Int64` 存，4294967295 不和「不知道」（−1）混。
 - Ctrl+单击链接：示例先问再开，只开 http / https；OSC 52 读剪贴板要用户点头。
+
+**7 期新增（2026-09-30 用户拍板）**：Shell 那一排加「ZModem」（默认开）与「Pipe」（只在 Windows 显示，不经 ConPTY 起命令）两个勾选；新一排传输条（平时隐藏：传输名、进度、取消）；远端 `sz` / `rz` 自动识别，下载先选目录、上传选文件（§19.7）。
 
 ### 12.2 PTY 单元（只在示例里）
 
@@ -1391,6 +1424,8 @@ type
 
 - **版本号**：示例用 `RtlGetVersion` 取 Windows 构建号，设 `Core.WindowsPty := (twpConPty, 构建号)`。低于 21376 时核心关折行、开折行启发（§6.2）。
 - **win32-input-mode**：ConPTY 启动时会不会发 `CSI ? 9001 h`、发了之后要求终端怎么报键，出处是上游注释里链接的微软规格（`InputHandler.ts:2043`），本机没有源码可核；控件默认不开这个扩展（§7.2），键盘按普通 VT 发。列入后期（§15），真机上先观察 ConPTY 实际发了什么（§16）。
+
+**7 期新增（2026-09-30 用户拍板）**：ConPTY 会把程序的输出重新渲染成 VT，`0x80` 以上与 NUL 字节丢掉（§19.2 第 12 条），ZModem 这类二进制带内协议走不通；示例加「管道模式」（`TProcessPipeBackend`，不经 ConPTY），ZModem 在 Windows 上走它（§19.7）。
 
 **实现期修正（4 期）**：ConPTY 下的鼠标控件不用另做：控制台程序打开鼠标输入时，ConPTY 应该向终端要标准的 1000 / 1002 / 1003 / 1006，再把终端报上来的 SGR 序列转成控制台的鼠标事件，终端这边就是本期的标准上报。这段出自对 ConPTY 行为的了解，本机没有源码可核，列为真机项（示例的「记录 PTY 输出」看它实际发了什么）。win32-input-mode 本期不做（§15）。
 
@@ -1454,6 +1489,8 @@ type
 - 新夹具：`terminal-core-reflow-*.json`（245 例：手写 110、4 份录制切出 16、种子随机 120）、`terminal-reflow-units.json`（五个纯函数：27 / 7 / 8 例）、`terminal-contrast.json`；`terminal-buffer-ops.json`、`terminal-selection*.json`、`terminal-links*.json` 加了改列数的用例。
 - 新测试单元：`test.terminal.reflow.pas`（`TTyTerminalReflowOracleTests`、`TTyTerminalReflowTests`）、`test.terminal.perf.pas`（`TTyTerminalPerfTests`：灌入的内存与缓存、热缓存零未中、最长一片、整屏重画、对比度成本、显示出来的窗口在灌入时照样画）。
 - 工具：`tools/terminal-bench`（基准，直接引 `source/`，不进包）；`tools/painter-regress`（全库文字路径的离屏出图与哈希、计时；`ab.sh` 在临时 worktree 里对改动前的文件做同一次会话的 A/B，哈希文件头写机器指纹、指纹不符拒绝比较）；`tools/terminal-shots --phase5`。
+
+**7 期新增（2026-09-30 用户拍板）**：新脚本 `hook-cases.js`（+ `cases/hooks.js`）→ `terminal-core-hooks.json`；新测试单元 `test.terminal.stream.pas`（数据流钩子）、`test.terminal.hooks.pas`（解析器钩子对上游）、`test.terminal.view.stream.pas`（控件的改道与鼠标）、`test.terminal.zmodem.pas`（ZModem 纯逻辑与环回）、`test.terminal.zmodem.wsl.pas`（与真 lrzsz 互通，WSL 不在时 `Ignore`）；夹具目录 `tests/fixtures/terminal-zmodem/`（WSL 里 `sz` 与 `rz` 直接对传时双方各自发的字节、源文件与 `cases.json`，脚本 `tools/terminal-oracle/zmodem-record.sh`）；工具 `tools/terminal-zmodem-probe`（ConPTY / 管道的二进制实验，Windows）、`tools/terminal-zmodem-wsl`（WSL 里经 Unix PTY 跑 lrzsz）、`terminalshots --phase7`（§19.9）。
 
 Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + 'terminal-<name>.json'`，`fpjson` 解析（`D:/Projects/ty-advchart/tests/test.advchart.bargeometry.pas:62-66`、`:131-134`）。
 夹具里有 NUL 字节时解析前要处理（[[fpjson-drops-u0000]]）——所以字节一律 base64 存，不用 JSON 字符串。
@@ -1588,7 +1625,9 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **实现期修正（3 期）**：notices 的 xterm.js 一节标题加了三个文件——`tyControls.Terminal.Keyboard.pas`（`Keyboard.ts`、`Clipboard.ts` 的粘贴两函数、第三层 Shift 判定）、`tyControls.Terminal.Render.pas`（颜色解析、256 色表、自绘字形的光栅化逻辑）、`tyControls.Terminal.CustomGlyphs.inc`（自绘字形数据，出自 `addon-webgl`，另列 addon 的版权行 2018 / 2021）。控件单元 `tyControls.Terminal.pas` 是自己写的，只照上游的逻辑、单元头注明出处行号。
 - **实现期修正（4 期）**：notices 的 xterm.js 一节标题加两个单元——`tyControls.Terminal.Selection.pas`（`SelectionService.ts`、`SelectionModel.ts`，外加 `addon-clipboard` 的 OSC 52 规则）、`tyControls.Terminal.Links.pas`（`addon-web-links` 的 `WebLinkProvider.ts` / `WebLinksAddon.ts`，`OscLinkProvider.ts`、`Linkifier.ts`）；两个 addon 自己的版权行（addon-web-links 2017、addon-clipboard 2023）并进那一节，发版守卫逐个查标题。控件拆出来的五个 include 是自己写的，不进标题。i18n：终端菜单的「Clear」和图片集合对话框的「Clear」同一个 msgid，库和示例的 `.po` 里各带 `msgctxt`，各有各的译文。
 - **实现期修正（5 期）**：notices 的 xterm.js 一节标题加 `tyControls.Terminal.Buffer.Reflow.inc`（`BufferReflow.ts`、`Buffer.ts` 的 `_reflow*`）与 `tyControls.Terminal.Luminance.inc`（`Color.ts` 的公式在 node 里算出的表）；自绘字形那句的区段改成实际范围。发版守卫逐个查。
-- **6 期新增（2026-09-30 用户拍板）**：新单元 `tyControls.Terminal.ColorScheme.pas` 是自己写的（读写 WT 格式、取色语义照 xterm `ThemeService.ts`，单元头注明出处行号），不进 xterm.js 一节的标题。示例带的七套方案取自 Windows Terminal 的 `defaults.json`（MIT，Microsoft），notices 加一节「Windows Terminal color schemes — `examples/terminal/colorschemes/`」：WT 的 MIT 全文与版权行，外加 Solarized（Ethan Schoonover，MIT）、One Half（Son A. Pham，MIT）两行版权与「Tango 调色板在公有领域」一句；「只在带上示例的这个目录时才要」。发版守卫查这一节与文件随示例发出。`iTerm2-Color-Schemes` 不打包（单套许可归各作者，§11.1.2）。
+- **6 期新增（2026-09-30 用户拍板）**：新单元 `tyControls.Terminal.ColorScheme.pas` 是自己写的（读写 WT 格式、取色语义照 xterm `ThemeService.ts`，单元头注明出处行号），不进 xterm.js 一节的标题。示例带的七套方案取自 Windows Terminal 的 `defaults.json`（MIT，Microsoft），notices 加一节「Windows Terminal color schemes — `examples/terminal/colorschemes/`」：WT 的 MIT 全文与版权行，外加 Solarized（Ethan Schoonover，MIT）、One Half（Son A. Pham，MIT）两行版权与「Tango 调色板在公有领域」一句；「只在带上示例的这个目录时才要」。发版守卫查这一节与文件随示例发出。`iTerm2-Color-Schemes` 不打包（单套许可归各作者，§11.1.2）。**实现期修正（6 期）**：notices 的标题是「`## Windows Terminal color schemes — examples/terminal/colorschemes/`」（路径加了反引号）；测试夹具 `tests/fixtures/terminal-wt-defaults.json` 是同一份 `defaults.json` 逐字节，写在这一节末尾的「`### Test fixture`」小节里（不随包发出，条款同上）。
+
+- **7 期新增（2026-09-30 用户拍板）**：数据流钩子、解析器钩子的包装、示例里的 ZModem 都是自己写的，不进 xterm.js 一节的标题。ZMODEM 协议在公有领域（Forsberg 的规范写明，§19.2 第 8 条），不用加 notices；lrzsz 是 GPL v2，仓库里不放它的任何代码，读它只为弄清线上行为，单元头写明；测试只在运行时经 WSL 调本机装的那一份（§19.10）。
 
 ---
 
@@ -1648,7 +1687,9 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 上游 `_reflowSmaller` 的负下标 bug 不照搬：满滚回时变窄不冲掉底部几行（§1.1 第 20 条）。
 - 行内存回收当场做完，上游在空闲时分批（§6.2）。
 
-**6 期新增（2026-09-30 用户拍板）**：独立配色方案（§11.1）和 Windows Terminal、xterm.js 不同的七处，逐条见 §11.1.10（严格的十六进制、重复键报错、只校验选中的那一套、别名的怪情况报缺键、单个对象可无名、未设置的光标与光标下字色取生效的前景 / 底色、写出丢两项）。
+**6 期新增（2026-09-30 用户拍板）**：独立配色方案（§11.1）和 Windows Terminal、xterm.js 不同的七处，逐条见 §11.1.10（严格的十六进制、重复键报错、只校验选中的那一套、别名的怪情况报缺键、单个对象可无名、未设置的光标与光标下字色取生效的前景 / 底色、写出丢两项）。**实现期修正（6 期）**：另加嵌套 64 层与文件 16 MB 的上限；全空的方案按跟随主题（§11.1.3）。
+
+**7 期新增（2026-09-30 用户拍板）**，逐条见 §19.8：数据流钩子是我们加的；解析器钩子的参数借用、只有同步；接管期间 Core 自发的焦点、2031、默认编码鼠标报告丢掉、交还后不补发；标记跨段时前半截会显示。控件不内置 ZModem（示例里有一份）。
 
 **不做**（以后要再单独立项）：
 
@@ -1688,6 +1729,10 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 3–5 期的真机项合成一份：`docs/superpowers/plans/2026-09-29-terminal-acceptance.md`（91 项，含两轮审查补的第 80–91 项）。
 
 **6 期新增（2026-09-30 用户拍板）**：配色方案的真机项接着验收文档编号（第 92 项起，6 期计划末尾列出、收尾时并进验收文档）：示例里切方案与明暗配对、设计器里改方案并存盘重开、导入真实的 WT `settings.json`（带注释、尾逗号、BOM、中文名）、方案下的 OSC 改色与 2031、最低对比度、禁用态、各 widgetset 下系统色（`clWindow` 等）解出来的样子。
+
+**实现期修正（6 期）**：已并进验收文档，第 92–99 项（切方案、明暗配对、设计器里改方案、设计器导入导出、方案下程序改色与 2031、方案下的对比度与禁用、系统色、导入真实的 WT 文件），期末审查后加第 100 项（只设底色的方案配浅主题时 16 色看不看得清）、第 101 项（示例里的光标设置与程序的 DECSCUSR）。截图在 `docs/superpowers/plans/2026-09-30-terminal-phase-6-shots/`（18 张）。
+
+**7 期新增（2026-09-30 用户拍板）**：带内协议的真机项接着验收文档编号（接验收文档当时的最后一项往下编，写计划时最后是第 101 项；7 期计划末尾以 Z1–Z12 列出、收尾时换成实际项号并进验收文档）：Windows 管道模式下经 WSL 的下载与上传（单个、多个、0 字节、大文件）、取消（按钮、连按 Ctrl+X、重启、关窗口）、ConPTY 下的实际表现、Linux / macOS 真 PTY 下（本机与 ssh 远端）、`ssh -T` 管道模式、误检（`cat` 出一段像 ZModem 头的字节）、接管期间的鼠标与选区、各种文件名。
 
 ---
 
@@ -1733,6 +1778,15 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 另外期末审查后主控定了三条（用户验收时可改）：上游 `_reflowSmaller` 的负下标 bug 修掉（§6.2）；两条没达标的性能目标按实测改写（§18）；改尺寸合并保留，Win32 真拖动的效果进真机验收。
 
 **6 期新增（2026-09-30 用户拍板）**：用户定了独立配色方案的七条（§11.1.1），不再讨论。计划开工前问题一里另有三条等用户答（明暗配对的属性形态、设计器右键导入导出、示例带哪几套），用户没回复前按建议做，验收时可改；结论写回 §11.1 原处。验收文档的决定清单 D1 / D2 按上面第 4 条的 6 期注改表述，D17（最低对比度的默认值）的「另一个做法」里加一句「或换一套方案」。
+
+**实现期修正（6 期）**，6 期开工前问题一的结论（用户说「继续」，四条都按建议，验收时可改；验收文档 D20–D23）：
+1. 属性形态：`ColorSource` 两个值，另加 `ColorSchemePaired` 和 `DarkColorScheme`（D20）。
+2. 设计器右键导入 / 导出：做（D21）。
+3. 示例带 WT 自带的七套，外加三对明暗（D22）。
+4. 自定义方案下链接下划线跟主题，组字串的底色 / 字色用方案、下划线跟主题（D23）。
+第二类（实现层面）主控全按建议。
+
+**7 期新增（2026-09-30 用户拍板）**：用户定的四条见 §19.1，不再讨论。7 期计划开工前问题一里另有几条等用户答（Windows 上 ZModem 走哪条路、下载存哪与重名、取消后没收完的文件、检测到后先不先问、进度显示在哪、自动识别的开关），用户没回复前按建议做，验收时可改；结论写回 §19 原处。
 
 ### 17.2 实现层面的（计划里定，不必问）
 
@@ -1817,4 +1871,229 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 设计器：对象查看器里改，`.lfm` 往返；（用户同意时）右键导入 / 导出。
 - 示例：Windows Terminal 自带的七套 + 三对明暗、「导入…」；notices 一节。
 - **做完能看到**：示例里把终端换成 Solarized Dark，整窗连内边距一起换色，换皮肤不影响它；选「Tango（明暗）」再拨暗色开关，终端跟着换成 Tango Dark；导入一个 WT 的 `settings.json` 按名选出一套；程序 `printf '\e]11;#203040\a'` 仍盖过方案、`\e]111\a` 回到方案的底色；和 1–5 期一起真机验收。
+
+**实现期修正（6 期）**，实际做了什么：
+- 新单元 `tyControls.Terminal.ColorScheme`（方案对象、WT 的读写、自带的 `\u` 预解码、导入计划）；控件的四个属性，色表逐槽「方案设了用方案、没设跟主题」，全空按跟随主题；明暗配对按主题底色的 Rec.601 亮度；通知经消息循环一次。
+- 设计器：右键导入 / 导出（导入后问改不改用方案，配对时问哪一边，导出先校验）。
+- 示例：第五行工具栏的配色下拉（七套 + 三对）与「导入…」；期末审查后加了光标设置。
+- 文档、notices 一节、发版守卫（七个名字的许可）、截图工具 `--phase6`（18 张）。
+- 期末审查的修正：深嵌套 JSON 崩进程（64 层上限、16 MB 上限）、系统色刷新（公开 `Changed`）、没用到的方案改了不整窗失效、消息里的名字去重与两句新消息、设计器导出先校验、示例的一对原子与下拉去重、几处测试加严。
+
+### 7 期：带内协议钩子与解析器钩子（7 期新增（2026-09-30 用户拍板））
+
+- Core 的数据流钩子（§19.3–19.5）：处理器挂在写入队列里、解码之前；接管期间程序的输出交给处理器、键盘改道、Core 自发的应答丢弃；会话句柄 `SendRaw` / `Release` / `ShowText`。控件转发并加 `OnClaimedInput`、接管期间鼠标不上报。
+- 解析器钩子公开（§19.6）：Core 上照 xterm.js `IParser` 的五个 `Register*Handler` 与 `UnregisterHandler`，node 基准对照。
+- 示例里的 ZModem（§19.7）：自己写的编解码与收发状态机、终端胶水、Windows 的管道模式（不经 ConPTY）、传输条；与真实 lrzsz 互通的集成测试（Windows 经管道、WSL 里经 Unix PTY）。
+- **做完能看到**：示例 Shell 模式（Windows 勾「管道」、命令 `wsl.exe -d Ubuntu -- sz 文件`）里自动弹出选目录、下载完文件与远端逐字节相同，终端里留一行摘要、接着显示后面的输出；远端 `rz` 弹选文件、上传；传输中点取消或连按五次 Ctrl+X 能停下、远端退出；Linux / macOS 的真 PTY 下直接可用；和 1–6 期一起真机验收。
+
+---
+
+## 19. 带内协议钩子（7 期新增（2026-09-30 用户拍板））
+
+### 19.1 用户定的（2026-09-30）
+
+1. 控件**不内置** ZModem。控件提供钩子，让宿主不改控件就能自己实现 ZModem 这类「程序在输出里嵌一段二进制协议」的东西（带内协议）。
+2. 在 `examples/terminal` 里实现 ZModem 协议，用它来测这套钩子。
+3. 解析器钩子照 xterm.js 的 `parser.registerCsiHandler / registerDcsHandler / registerEscHandler / registerOscHandler / registerApcHandler` 对外开放（只做同步）。
+4. 做成第 7 期，和 1–6 期一起验收。
+
+### 19.2 核实记录（2026-09-30，读源码、实跑）
+
+**xterm.js 的解析器钩子**（`xterm:src/common/public/ParserApi.ts`、`typings/xterm.d.ts:1953-2031`、`src/common/parser/EscapeSequenceParser.ts`、`OscParser.ts` / `DcsParser.ts` / `ApcParser.ts`）：
+
+1. 公开的是 `terminal.parser`（headless 也有，`src/headless/public/Terminal.ts:77-80`），五个 `register*`（外加三个旧名 `add*`，同一实现）。`ParserApi` 只是一层包装：CSI 把 `IParams` 换成 `params.toArray()`（新数组，子参数是嵌套数组），DCS 把载荷串与 `toArray()` 一起给；OSC / APC 直接给载荷串；ESC 无参数。
+2. **同一标识的处理器成链，后注册的先试**（`handlers.push`，派发时 `j` 从末尾往前）。返回 `true` 就停；返回 `false` 试前一个。CSI / ESC 整条链都返回 `false`（或没有链）时调回退处理器（`EscapeSequenceParser.ts:729-730`、`:807-808`、`:846-847`）；**OSC / DCS / APC 只在链为空时才调回退**，链里都返回 `false` 就什么都不调，其余的处理器照样收到 `end(false)` 做清理（`OscParser.ts:143-178`）。内置处理器就在同一条链的最前面（`InputHandler.ts:205-325` 在构造时注册），所以宿主注册的一定先于内置的被试到。
+3. `dispose()` 是 `indexOf` + `splice`：注销后链还在（可能为空）。派发途中注销同一条链里的处理器，上游数组当场变短。
+4. 标识：前缀一个字节 `0x3c..0x3f`，中间字节至多两个 `0x20..0x2f`，终止字节 CSI / DCS 为 `0x40..0x7e`、ESC / APC 为 `0x30..0x7e`；不合法就抛（`:340-370`）。APC 忽略前缀（`:467-470`）。OSC 按编号。
+5. OSC / DCS / APC 的公开处理器只在序列**成功结束**时调一次，载荷上限 10 MB（`typings/xterm.d.ts` 各条注释；`OscHandler` 超限时不调）。
+6. 处理器可以返回 `Promise` 让解析暂停（异步处理器）；我们 2 期起就不做（§2.2），公开钩子也只有同步。
+7. 我们的解析器（2 期）已经把这些全部移植：`Register*` / `Unregister` / `Clear*` / 回退，处理器对象归解析器所有，派发中注销延后释放（§5.3），并且注册链的行为已对上游逐项比过（`test.terminal.parser.pas` 的 trace 用例）。`Core.Parser` 早就公开（§7.4），但它是**底层**接口：`Clear*`、`Set*Fallback`、`SetPrintHandler` 会拆掉 Core 自己的处理。7 期要做的是 Core 上一层照 `ParserApi` 的包装，外加 Core 层面对上游的基准。
+
+**ZModem 的出处与许可**：
+
+8. 规范：Chuck Forsberg，《The ZMODEM Inter Application File Transfer Protocol》，Rev Oct-14-88（Omen Technology）；在线副本 `http://gallium.inria.fr/~doligez/zmodem/zmodem.txt`（同目录有 `ymodem.txt`）。文中写明 ZMODEM 是在 Telenet 合同下为公有领域开发的，协议描述与 Unix rz/sz 的源码属于公有领域。文档本身的文字不照抄进仓库（只按它实现，单元头写出处）。
+9. lrzsz（本机 WSL `Ubuntu` 装的 0.12.21rc，Debian 包 0.12.21-11build1）是 **GPL v2**（`/usr/share/doc/lrzsz/copyright`：Chuck Forsberg 1988 前、Matt Porter / Michael D. Black 1994、Uwe Ohse 1996–1997）。本库是 Modified LGPL，**lrzsz 的代码一行也不能抄进来**：只把它当互通对象跑、观察它在线上发什么；读它的源码只为弄清行为，不照它的结构写，单元头与计划里写明。
+10. 另有 MIT / Apache 许可的实现（zmodem.js 等）可以参考做法，同样不抄代码；我们的是自己写的。
+11. **写计划时的实测**（WSL，经 Git Bash 的管道，2026-09-30）：`sz` 在 stdout 不是终端时照常工作，开头发 `rz\r` 加 ZRQINIT 的十六进制头 `**` `18` `B00000000000000` `\r` `8a` `11`，没人应答时最后发 10 个 CAN（`18`）加 10 个退格（`08`）；`rz` 发 ZRINIT `**` `18` `B0100000023be50` `\r` `8a` `11`（ZF0 = `23` = CANFDX | CANOVIO | CANFC32），几次没人应答后退到 XMODEM 的 `C`，最后同样 10 CAN + 10 BS。`rz` 另往 stderr 写一句 `rz waiting to receive.`。
+12. **ConPTY 会改坏二进制**（写计划时的预实验，本机 19044）：经示例的会话（`tools/terminal-conpty-record`）跑 `wsl.exe -d Ubuntu -- sh -c "printf 'A\030B\212C\021D\023E\377F\000G\033[31mH\r\n'"`，收到的是重新渲染过的 VT：`0x8A`、`0xFF`、`0x00` **没了**，`CAN` / `XON` / `XOFF` 还在，SGR 被重写，前后多了清屏、光标定位、标题和 `?25l/h`。同一条命令经管道（不经 ConPTY）21 字节原样到达；反方向把同样的字节灌进 `wsl.exe -d Ubuntu -- od` 也原样。30 万字节随机数据经管道进 WSL 的 `md5sum` 相同。结论（待 7 期 Task 0 用正式实验定性，含 ConPTY 输入方向）：**Windows 上 ZModem 只能不经 ConPTY 走**；Linux / macOS 的 PTY 由 `sz` 自己设成原始模式，二进制原样。
+
+### 19.3 数据流钩子：接口
+
+单元 `tyControls.Terminal.Core`（实现放新 include `tyControls.Terminal.Core.Stream.inc`，照 Core 另三个 include 的做法不进 `.lpk`）：
+
+```pascal
+type
+  TTyTerminalStreamSession = class;
+  { 接管不是处理器自己 Release 结束的：宿主 Reset、宿主 RemoveStreamHandler }
+  TTyTerminalClaimEnd = (tceReset, tceRemoved);
+
+  { 带内协议处理器：宿主继承它，AddStreamHandler 挂上。Core 不拥有它（宿主自己释放，
+    释放前先 RemoveStreamHandler）。全部在主线程调。 }
+  TTyTerminalStreamHandler = class
+  public
+    { 这段程序输出（原始字节，未解码）马上要交给解析器。返回 True 并给出
+      AClaimAt（0..ACount）：从这里起接管，前面的照常解析显示。只在没人接管时调；
+      跨块的标记由处理器自己记着（前一段已经显示的不会收回）。 }
+    function Detect(AData: PByte; ACount: Integer; out AClaimAt: Integer): Boolean; virtual; abstract;
+    { 接管开始，AClaimAt 之前的已经解析完；ASession 一直有效到接管结束 }
+    procedure Claimed(ASession: TTyTerminalStreamSession); virtual;
+    { 接管期间程序的输出，按到达顺序；第一次是 Detect 那一段从 AClaimAt 起的部分
+      （AClaimAt = ACount 时从下一段起） }
+    procedure Feed(AData: PByte; ACount: Integer); virtual; abstract;
+    { 接管被宿主结束（不是自己 Release 的）；之后不会再被调，除非再次 Detect 成功 }
+    procedure ClaimEnded(AHow: TTyTerminalClaimEnd); virtual;
+  end;
+
+  { Core 持有、只有一个，接管期间 Active；接管结束后调它的方法什么都不做 }
+  TTyTerminalStreamSession = class
+  public
+    { 原样交 OnData：不经键盘编码、不滚到底、不发 OnUserInput、不算「用户刚输入」。
+      ReadOnly、没挂 OnData 或不在接管中时不发、返回 False。 }
+    function SendRaw(const AData: RawByteString): Boolean;
+    { 结束接管。ALeftover 是处理器收下但不属于它的字节（比如协议结束标记之后的
+      shell 提示符），按原顺序排在所有还没解析的输出之前交还：先再走一遍 Detect，
+      再进解析器。 }
+    procedure Release(const ALeftover: RawByteString = '');
+    { 在屏幕上显示一段 UTF-8 文字（可以带控制序列，比如 #13#27'[K' 刷新一行进度），
+      不发给程序。当场解析（用自己的 UTF-8 解码器，不打乱程序那一路的半截序列）；
+      解析器正在跑时（只可能来自它自己引出的事件）攒着，那次解析返回后接着解析。 }
+    procedure ShowText(const AText: string);
+    property Active: Boolean;
+    property Core: TTyTerminalCore;
+    property Handler: TTyTerminalStreamHandler;
+  end;
+
+  TTyTerminalCore = class
+  public
+    procedure AddStreamHandler(AHandler: TTyTerminalStreamHandler);     { 重复挂忽略 }
+    procedure RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);  { 没挂过忽略 }
+    property StreamHandlerCount: Integer;
+    property StreamClaimed: Boolean;
+    property ClaimingHandler: TTyTerminalStreamHandler;    { nil = 没人接管 }
+    { 接管期间用户的输入（按键、粘贴、滚轮翻成的方向键）不发给程序，改走这里 }
+    property OnClaimedInput: TTyTerminalDataEvent;
+  end;
+```
+
+控件（§9.2、§9.3 的 7 期注）：`AddStreamHandler` / `RemoveStreamHandler` / `StreamClaimed` 转发 Core；published 事件 `OnClaimedInput`。
+
+**用抽象类、不用接口**（和主控提议的 `ITyTerminalStreamHandler` / `ITyTerminalStreamSession` 不同，理由）：库里的接口都是 COM 接口（带引用计数）；Core 拿着一个指向 `TComponent` 宿主的接口引用，宿主先释放时，Core 析构里的 `_Release` 就落在已释放的对象上；拿着 `TInterfacedObject` 又会在 Core 放手时把宿主的对象释放掉。解析器的处理器 2 期起就是抽象类（`TTyTerminalOscHandler` 等），同一个写法；可选的通知（`Claimed` / `ClaimEnded`）有空的默认实现，宿主只写要的。会话只有一个、跟 Core 同寿命，接管结束后被误用也不会落在释放掉的内存上。
+
+### 19.4 时序
+
+```
+Write ─▶ 队列 ─▶ ProcessOneChunk 取一段（切片 32 KB / 清空 128 KB）
+                     │
+          没挂处理器、没人接管、没有交还的字节 ──▶ ParseRange（和 6 期一样，零开销）
+                     │
+          有人接管 ──▶ Feed(整段)
+                     │
+          否则 ──▶ 逐个 Detect(整段) ─ 都 False ─▶ ParseRange(整段)
+                               └─ 有 True：取 AClaimAt 最小的（同一位置后挂的优先）
+                                   ParseRange(段首..AClaimAt) → Claimed → Feed(AClaimAt..段尾)
+          Release(ALeftover) ─▶ 交还缓冲：下一段之前先处理它（同样走 Detect / Feed / 解析）
+```
+
+- **拦截点在解码之前**：处理器拿到的是原始字节；接管期间解码器、解析器、屏幕都不动（程序那一路的 UTF-8 半截序列、解析器的状态都留着，交还时接着用）。
+- **起始标记之前的一定先显示**：`AClaimAt` 之前的字节在 `Claimed` 之前就解析完了。标记被切在两段之间时，前半截在前一段已经显示了（ZModem 的头前面是 `**` 和一个 CAN，显示出来是两个星号）；处理器自己记住前半截，在下一段 `AClaimAt = 0` 接管。不做「扣住段尾等下一段」：扣住的字节在程序停下时永远显示不出来，要再加一个定时器冲出去，而 lrzsz 的头是一次 `write` 写出的，实测没见被切开。
+- **流控不断**：块的回调照常在它最后一段之后调（接管与否一样），宿主的高低水位照常。`PendingBytes` 照常减。
+- **一片的预算**：`Detect` / `Feed` 花的时间算进这一片（段与段之间看预算，§3.1）。
+- **Release 之后的字节再走一遍 Detect**：`sz a; sz b` 这类第二段的头可能就在第一段结束标记后面同一次读里。**防死循环**：一次接管从开始到 `Release` 一个字节也没吃（交还的字节就是收到的全部）时，交还缓冲的第一个字节不经 `Detect`、直接解析，之后照常。
+- **在 Feed 外 Release**（比如用户点取消、程序没在输出）：交还的字节进交还缓冲，Core 发 `OnProcessRequest`，下一片处理（和 `Write` 一样只入队）；`ShowText` 则当场解析。
+- **多个处理器**：每段交给所有挂着的处理器 `Detect`，位置最早的胜出，同一位置后挂的优先（和解析器钩子「后注册的先试」一致）；没胜出的什么通知都没有。`Detect` 只看到没人接管时的字节：别人接管的那一段对它来说是个缺口。
+- **异常**：`Detect` / `Feed` / `Claimed` 抛异常照 §3.1 的规则——这一块剩下的算已处理、回调照调、剩下的块留着再排片；接管状态不变（`Detect` 抛了就没有接管）。`AClaimAt` 不在 `0..ACount` 抛 `EArgumentOutOfRangeException`，同上处理。
+
+### 19.5 与既有机制
+
+| 机制 | 接管期间 |
+|---|---|
+| 事件中调用延后（§3.1 2 期修正） | `Detect` / `Claimed` / `Feed` 执行期间 Core 算「忙」：处理器（或它引出的 `OnData` → 宿主）调 `Resize` / `Reset` / `WriteSync` 照样延后到这一块处理完、回调之后；`ProcessPending` 返回 False |
+| 块内切片（§3.1 5 期修正） | 段与段之间照常看预算；交还缓冲在下一段之前处理 |
+| `WriteSync` | 照常：清空队列时一样经过拦截点（测试用它） |
+| `DiscardPending` | 丢掉还没处理的块**和交还缓冲**，不调回调；**不结束接管**（宿主要结束就让处理器取消，或 `Reset`） |
+| `Reset` | **结束接管**：先 `ClaimEnded(tceReset)`，再照旧复位；队里剩下的输出之后走 `Detect` / 解析器。示例「重启」先 `DiscardPending` 再 `Reset`，旧会话的接管随之结束 |
+| `Resize` | 不影响接管；缓冲照常改尺寸、`OnGridResize` 照发 |
+| `RemoveStreamHandler`（正在接管的那个） | 先 `ClaimEnded(tceRemoved)`，再摘掉；可以在它自己的 `Feed` 里调，返回后 Core 不再碰它 |
+| Core 析构 | 不回调处理器（宿主可能正在析构）；要知道就先 `RemoveStreamHandler` |
+| 键盘、粘贴、滚轮翻成的方向键（`TriggerDataEvent` 里 `AWasUserInput = True` 的） | 不发给程序，改发 `OnClaimedInput`；不滚到底、不发 `OnUserInput`（选区不清）、不算「用户刚输入」 |
+| Core 自发的输出：焦点报告（1004）、2031 明暗通知、默认编码的鼠标（`TriggerBinaryEvent`）、其余 `AWasUserInput = False` 的 `Input` | **丢掉**：它们会插进协议的字节流。交还之后不补发（程序可能以为焦点没变，记为限制） |
+| 鼠标 | `TriggerMouseEvent` 返回 False；控件按「程序没要鼠标」处理：本地选择、滚轮滚滚回 |
+| `ReadOnly` | `OnClaimedInput` 也不发；`SendRaw` 返回 False（`ReadOnly` 一律不往外发，§3.3） |
+| 线程 | 全部主线程（`CheckThread`）：`AddStreamHandler`、`RemoveStreamHandler`、`SendRaw`、`Release`、`ShowText` |
+| 没挂处理器 | `ProcessOneChunk` 多一次整数比较；`TriggerDataEvent` 多一次布尔判断；吞吐和 6 期一样（`terminalbench` 对比，误差内） |
+
+### 19.6 解析器钩子公开
+
+Core 上照 `ParserApi` 加五个方法（CSI / ESC 直接用解析器已有的方法指针类型，OSC / DCS / APC 用字符串处理器 `TTyTerminalOscStringHandler` 等包一层）：
+
+```pascal
+    function RegisterCsiHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalCsiEvent): Integer;
+    function RegisterEscHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalEscEvent): Integer;
+    function RegisterOscHandler(AIdent: Integer; AHandler: TTyTerminalOscDataEvent): Integer;
+    function RegisterDcsHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalDcsDataEvent): Integer;
+    function RegisterApcHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalOscDataEvent): Integer;
+    { 只认这五个方法发出的句柄；别的（包括 Core 自己的）忽略 }
+    procedure UnregisterHandler(AHandle: Integer);
+```
+
+- 语义照上游（§19.2 第 2–5 条）：后注册的先试，`True` 停、`False` 试前一个，最后是 Core 内置的；OSC / DCS / APC 只在成功结束时调、载荷上限 10 MB；标识不合法抛 `EArgumentException`（照上游的消息）；`AHandler = nil` 抛 `EArgumentNilException`；OSC 编号小于 0 抛 `EArgumentOutOfRangeException`（上游不查，负数永远匹配不上）。
+- **和上游不同**：CSI 的参数是解析器的 `TTyTerminalParams`，**借用**、只在调用期间有效（要留就 `Clone`；上游给一个新数组）；DCS 同。只有同步（§2.2）。
+- **注册了某个 OSC 编号之后，这个编号不再进 `OnOsc`**，即使链里都返回 False（照上游：链非空就不走回退）；注销到链为空后又回到 `OnOsc`。控件文档写明。
+- 处理器里可以调：读 Core 的状态；`Write`（入队）；`Resize` / `Reset` / `WriteSync`（延后，§3.1）；`Register*` / `UnregisterHandler`（结果以上游在派发中 `push` / `splice` 的行为为准，基准用例覆盖）。
+- `Core.Reset`（上游 `reset()`）不清宿主注册的处理器（上游同样不清）。
+- `Core.Parser` 保持公开，但接口注释写明是底层接口：宿主用上面五个。
+- 线程：五个方法与 `UnregisterHandler` 只在主线程（`CheckThread`）。
+
+### 19.7 示例里的 ZModem
+
+**范围**（按需裁剪到能和 lrzsz 可靠互通）：
+
+- 帧：十六进制头、binary16 头、binary32 头（ZBIN32）；CRC16（XMODEM / CCITT，多项式 `0x1021`，初值 0）、CRC32（IEEE 反射，`0xEDB88320`，初值与结果取反）；ZDLE 转义（ZDLE、DLE、XON、XOFF 及它们置高位的，`@` 之后的 CR；对方要求 ESCCTL 时所有控制字符）；收时认 ZRUB0 / ZRUB1、丢掉未转义的 XON / XOFF、连续 5 个 CAN 算对方中止。
+- 帧类型：收 ZRQINIT、ZRINIT、ZSINIT（收下、回 ZACK、不用它的 Attn）、ZACK、ZFILE、ZSKIP、ZNAK、ZABORT、ZFIN、ZRPOS、ZDATA、ZEOF、ZFERR、ZCAN；**ZCOMMAND 一律拒绝**（远端让本机执行命令，安全上不做）；ZCHALLENGE、ZFREECNT 按规范最简应答；续传（ZCRESUM）当作从头传；不做加密 / 压缩。
+- 数据子包：四种结束（ZCRCE / ZCRCG / ZCRCQ / ZCRCW），收时接受至多 8192 字节一包（兼容 `sz -8`），发时 1024 字节；ZCRCQ / ZCRCW 回 ZACK。
+- 流式与重传：收方出错（CRC 错、超长、乱码）回 ZRPOS（最后正确的位置），丢弃直到位置对得上的 ZDATA；发方全流式（对方缓冲为 0 且 CANOVIO 时），收到 ZRPOS 就回退到那个位置重发；对方给了缓冲大小时按窗口发（每满一窗 ZCRCW 等 ZACK）。
+- 超时：10 秒没等到应答就重发，同一处重试 10 次后放弃、发中止序列（10 个 CAN + 10 个退格，照 lrzsz 线上的样子）。时钟由宿主驱动（`Tick`），测试可注入。
+- 会话结束：收方回 ZFIN 后吃掉至多两个 `O`（over and out），之后的字节交还终端；发方收到对方 ZFIN 后发 `OO`，之后的字节交还。
+
+**单元**（示例里，自己写，单元头写规范出处与「不含 lrzsz 代码」）：
+
+| 单元 | 内容 | 依赖 |
+|---|---|---|
+| `uzmodem.pas` | 常量、CRC16 / CRC32、ZDLE 转义与反转义、头与子包的编码、逐字节的帧读取器 | `SysUtils`、`Classes` |
+| `uzmodemsession.pas` | 收方 / 发方状态机（`Input` / `Tick` / `Cancel`，经回调发字节、读写文件） | 上一个 |
+| `uzmodemterm.pas` | `TZmodemStreamHandler`：检测、接管、问宿主要目录 / 文件、进度（`ShowText` 一行 + 事件）、取消（宿主调、或连续 5 个 Ctrl+X）、结束时 `Release`；文件名净化、不覆盖 | 上两个 + `tyControls.Terminal.Core`；不引 LCL |
+
+- **检测**：十六进制头 `**` ZDLE `B` + 类型 `00`（ZRQINIT，远端 `sz`，我们下载）或 `01`（ZRINIT，远端 `rz`，我们上传）+ 8 位十六进制 + 4 位 CRC，**CRC 对了才算**；前半截跨段时自己记着（至多 20 字节）。`AClaimAt` = 第一个 `*` 的位置（`sz` 发的 `rz\r` 照常显示）。
+- **下载**：先问宿主存到哪个目录（问的时候不回 ZRINIT，`sz` 重发的 ZRQINIT 忽略），宿主答了再开始；远端给的名字只取最后一段、去掉 Windows 不许的字符与控制字符、去掉结尾的点与空格、避开 `CON` / `NUL` 这类保留名；重名不覆盖，改名 `名字 (1).扩展名`；按 ZFILE 里的修改时间设文件时间；取消或失败时删掉没收完的文件（开工前问题一第 3 条）。
+- **上传**：问宿主要文件（可多选），按顺序发；`mode` 发 `100644`（八进制）。宿主写队列里待写超过 256 KB 时不再产数据（示例用会话的 `PendingWrite`）。
+- **ConPTY 下**：按 7 期 Task 0 的正式实验定。预实验（§19.2 第 12 条）说二进制会被改坏，所以默认：检测到头、而 `Core.WindowsPty` 说在 ConPTY 后面时，终端里提示一行「ConPTY 会改坏二进制数据，ZModem 请改用管道模式」、发中止序列、交还（开工前问题一第 1 条）。
+
+**示例**（`examples/terminal`）：
+
+- Shell 那一排（`Tools3`）加「ZModem」勾选（默认开）和「Pipe」勾选（只在 Windows 上显示，默认关：勾上后命令不经 ConPTY、用两条管道直接起，stderr 并进同一条管道；给 `wsl.exe -d Ubuntu -- sz 文件`、`ssh -T 主机` 这类用）。管道模式没有终端，程序不回显，示例的「本地回显」照旧可用。
+- 新后端 `TProcessPipeBackend`（`uptywin.pas`）：`CreateProcessW` 带重定向的标准句柄、不开窗口；不改尺寸；`IsConPty` 答 False（Core 的 `WindowsPty` 为空）；关闭照 ConPTY 那套「主线程不等」的规矩。
+- 新一排（`Tools6`，平时隐藏）：传输名、进度条、「取消」按钮；传输结束隐藏。目录用 `TTySelectPathDialog`，文件用 `TTyOpenDialog`（多选）；都经 `QueueAsyncCall` 弹，不在 `Feed` 里弹模态框。
+- 终端里：传输中一行进度（`\r` 刷新，至多每 200 ms 一次），结束留一行摘要。
+- 示例规矩照旧（`.lfm` + 真 `TTyTitleBar`、设置写 `.lfm`、库控件、焦点用 `CanSetFocus`、「建真主窗体」的测试）。
+
+### 19.8 与上游、与别的终端不同的地方（进 §15）
+
+- 数据流钩子是我们加的（xterm.js 没有；它的 zmodem 插件早已移除，做法是宿主在 `write` 之前自己筛）。
+- 解析器钩子的参数借用、只有同步（§19.6）。
+- 接管期间焦点报告、2031、默认编码的鼠标报告丢掉，交还后不补发。
+- 标记跨段时前半截会显示（§19.4）。
+
+### 19.9 测试（7 期）
+
+- **钩子**：一个「假协议」处理器（标记 `<<GO>>`、结束标记 `<<END>>`、用 `Feed` 记下收到的全部字节）逐条测：挂载与摘除、跨段检测、接管前的先显示、交还字节的顺序（再检测、防死循环）、回调与 `PendingBytes`、输入改道、Core 自发输出丢弃、鼠标、`Reset` / `DiscardPending` / `Resize` / 延后与重入、多个处理器、异常、零开销；每条判据写「在哪个变异下必须红」。
+- **解析器钩子**：`tools/terminal-oracle/hook-cases.js` 在 headless 里经 `terminal.parser.register*` 注册脚本化的处理器（按用例返回 True / False、中途注销、在处理器里注册 / 注销），导出整份状态和调用日志（CSI 参数用 `JSON.stringify(params)`，与 `TTyTerminalParams.ToJson` 逐字比）；Pascal 侧同样注册、逐位比。`OnOsc` 与链的关系（上游没有 `OnOsc`）另写判据测试。
+- **ZModem 纯逻辑**：CRC 标准校验值（CRC16/XMODEM `"123456789"` = `0x31C3`，CRC32 = `0xCBF43926`）、§19.2 第 11 条实测到的两个头逐字节、转义表、读取器（切成 1 字节喂）、收发状态机（手写字节序列、录下来的 lrzsz 字节流回放）、自家收发环回（含随机丢字节 / 改字节的故障注入）。
+- **与真 lrzsz 互通**：Windows 上经 `TProcessPipeBackend` 跑 `wsl.exe -d Ubuntu -- sz / rz`，Core + 钩子 + 胶水全是真的；文件 0 字节、1 字节、1024 / 1025、每个字节值都有且 ZDLE 很多的、1.5 MB 随机、一次多个、`sz -e` / `-8` / `-w`、`rz -e`、注入一次坏字节逼出重传、中途取消、结束后面紧跟的输出（`sz f; printf TAIL`）；逐字节比内容。WSL、`Ubuntu` 或 lrzsz 不在时 `Ignore` 并写明原因。另在 WSL 里用 `fpc` 编一个控制台工具，经 Unix PTY 后端跑同一套（Linux 路径）。
+- **示例**：「建真主窗体」、ZModem / 管道开关、传输条显示与隐藏、用假后端回放录下的 `sz` 字节流完成一次下载。
+
+### 19.10 许可（进 §14）
+
+- 钩子和 ZModem 都是自己写的，不进 notices 的 xterm.js 一节。
+- ZMODEM 协议在公有领域（§19.2 第 8 条）；lrzsz 是 GPL，仓库里不放它的任何代码，只在测试时经 WSL 调用本机装的那一份。测试夹具里录下的 lrzsz 线上字节是程序的输出，不是它的代码。
+- 发版守卫加一条：`examples/terminal/` 下的 ZModem 单元不含 `GNU General Public License` 字样、单元头写着规范出处。
 

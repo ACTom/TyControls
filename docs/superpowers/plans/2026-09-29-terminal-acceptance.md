@@ -13,13 +13,13 @@
 - **5 期**：改宽度时重新折行；一次很大的 `Write` 也分片、灌入时窗口照样重画；整屏上滚只画新露出的行；库的 Windows 文字渲染器留一张常驻位图（全库首帧文字快约一倍，像素不变）；`MinimumContrastRatio`；Powerline 与盲文自绘。
 - **6 期**：终端可以不跟主题、换成独立的配色方案（前景、背景、光标、选区、16 色），可在设计器里改、能配成明暗两套随主题换；方案从 Windows Terminal 的 JSON 读进来、也能写出去；示例带 WT 自带的七套和三对明暗，外加「导入…」。
 
-分支 `feat/terminal`，头提交 `bb8bf870`（6 期代码与测试；之后只有文档）。全量测试 8405 条，只有 1 条红：`TPainterTest.TestTextIsInkedAsWindowsInksIt`——本机 ClearType 环境下的测试（main 带来的，和终端无关，改动前后实测值相同：Segoe UI 96 PPI 浅色 1075 / 0.24 对 Windows 1203 / 0.37）。
+分支 `feat/terminal`，头提交 `afeb61f4`（6 期代码与测试，含期末审查的修复；之后只有文档）。全量测试 8413 条，只有 1 条红：`TPainterTest.TestTextIsInkedAsWindowsInksIt`——本机 ClearType 环境下的测试（main 带来的，和终端无关，改动前后实测值相同：Segoe UI 96 PPI 浅色 1075 / 0.24 对 Windows 1203 / 0.37）。
 
 ## 准备
 
 - **示例**：`lazbuild -B examples/terminal/terminal_example.lpi`，程序在 `examples/terminal/lib/<目标平台>/` 下（Windows 是 `examples/terminal/lib/x86_64-win64/terminal_example.exe`，主控已在 2026-09-30 编好）。Linux 用 `--ws=gtk2` 或 `--ws=qt6` 编，macOS 用 `--ws=cocoa`。
 - **设计期**（第 18、94、95 项）：先装 `tycontrols_dt.lpk` 重建 IDE。6 期起右键终端有「导入 Windows Terminal 配色…」「导出配色…」。
-- **两种模式**：示例第一行工具栏最左边的下拉切 Replay（回放）和 Shell。回放读 `examples/terminal/recordings/` 里的录制（vim、htop、less、tmux、彩色 ls、中英表情、两段 ConPTY 录制）；Shell 起真的 shell（Windows 默认 `%COMSPEC%`，另列 powershell，有的话列 pwsh、wsl；Linux / macOS 是 `$SHELL -l`）。「Minimum contrast」（最低对比度）下拉在第四行工具栏；Shell 模式的命令框和「Log PTY output」在第三行；6 期的「Colours」（配色）下拉和「Import...」（导入…）在第五行。
+- **两种模式**：示例第一行工具栏最左边的下拉切 Replay（回放）和 Shell。回放读 `examples/terminal/recordings/` 里的录制（vim、htop、less、tmux、彩色 ls、中英表情、两段 ConPTY 录制）；Shell 起真的 shell（Windows 默认 `%COMSPEC%`，另列 powershell，有的话列 pwsh、wsl；Linux / macOS 是 `$SHELL -l`）。「Minimum contrast」（最低对比度）下拉在第四行工具栏；Shell 模式的命令框和「Log PTY output」在第三行；6 期的「Colours」（配色）下拉和「Import...」（导入…）在第五行，同一行右边是光标设置（「Cursor:」形状、「Blink」闪烁、「Unfocused:」失焦时的样子，第 101 项）。
 - **要 WSL 或别的平台的项**：表后的平台索引列了每台机器要做的项。WSL 里 `tools/terminal-ptytest` 的 12 例 4 期已跑过，不用再跑。
 - **基准工具**（第 72、75、89 项）：`lazbuild -B tools/terminal-bench/terminalbench.lpi`。
 - **顺序建议**：先 Win32 本机（Windows 10 19044），再 Windows 11，再 Linux GTK2 / Qt6，最后 macOS。
@@ -122,13 +122,15 @@
 | 90 | 5 期审查补 | macOS 组字串跟着光标 | Cocoa | 组字过程中让光标闪烁、用方向键左右移动光标 | 组字串一直画在光标所在的格子，不留在旧位置 |  |
 | 91 | 5 期审查补 | office 深色的聚焦选区 | Win32 | 切到 office 深色，选中一段文字，终端保持聚焦 | 选区看不看得出来（聚焦选区对底色只有 1.27:1，靠色相区分），结论交决定 D3 |  |
 | 92 | 6 期（92） | 示例里切方案 | Win32；GTK2、Qt6、Cocoa 各抽一次 | 「Colours」（配色）下拉切七套、再切回「跟随主题」；回放 `palette.cast`、`ls-color.cast` | 整窗（连内边距）换成那一套，换皮肤时不跟着变；切回后和以前一样（和 `scheme-*.png` 对照） |  |
-| 93 | 6 期（93） | 明暗配对 | 各平台 | 选「Tango (light / dark)」，拨标题栏的暗色开关几次；再换一个深色皮肤 | 浅色主题是 Tango Light、深色是 Tango Dark，拨一次换一次；单模式的深色皮肤也换到深色那套（截图 `scheme-pair-tango-*.png`） |  |
+| 93 | 6 期（93） | 明暗配对 | 各平台 | 选「Tango (light / dark)」，拨标题栏的暗色开关几次；再换一个深色皮肤；Shell 模式里先 `printf '\e[?2031h'`，再拨暗色开关几次，看键码面板 | 浅色主题是 Tango Light、深色是 Tango Dark，拨一次换一次；单模式的深色皮肤也换到深色那套（截图 `scheme-pair-tango-*.png`）；开着 2031 时每拨一次键码面板恰好出一条 `ESC [ ? 997 ; 1 n` / `2 n`，不多不少 |  |
 | 94 | 6 期（94） | 设计器里改方案 | Lazarus IDE（Win32） | 放一个终端，`ColorSource` 改成 `tsrcScheme`，展开 `ColorScheme` 改几个颜色；存盘、关掉窗体再打开 | 设计期预览跟着变；`.lfm` 里只有改过的几项；重开后颜色还在 |  |
-| 95 | 6 期（95） | 设计器右键导入导出 | Lazarus IDE（Win32） | 右键终端「导入 Windows Terminal 配色…」选本机 WT 的 `settings.json`（`%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_*\LocalState\settings.json`）挑一套；开着 `ColorSchemePaired` 再导入一次（会问写进浅色还是深色）；再「导出配色…」，把导出的文件放进 WT 的 `schemes` 里 | 导入后预览是那一套、窗体标成已修改；`ColorSource` 还是跟随主题时会问要不要改；导出的方案在 WT 里能选、颜色一样 |  |
+| 95 | 6 期（95） | 设计器右键导入导出 | Lazarus IDE（Win32） | 右键终端「导入 Windows Terminal 配色…」选本机 WT 的 `settings.json`（`%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_*\LocalState\settings.json`）挑一套；导入后按 Ctrl+Z；开着 `ColorSchemePaired` 再导入一次（会问写进浅色还是深色）；再「导出配色…」，把导出的文件放进 WT 的 `schemes` 里；最后把方案的 `Name` 清空（或清掉一个颜色）再导出 | 导入后预览是那一套、窗体标成已修改；`ColorSource` 还是跟随主题时会问要不要改；Ctrl+Z 撤不撤得掉这次导入，记现象；对话框标题没有省略号（中文界面也是）；导出的方案在 WT 里能选、颜色一样；没名字或缺色的方案一选导出就报错，不弹保存对话框、不留空文件 |  |
 | 96 | 6 期（96） | 方案下程序改色 | 各平台 | 自定义方案下 Shell 里 `printf '\e]11;#203040\a'`、`printf '\e]4;1;#00ff00\a'`，再 `printf '\e]111\a'`、`printf '\e]104\a'`；开 2031 后切方案（`printf '\e[?2031h'`，看键码面板） | 程序的颜色盖过方案；复位后回到方案的颜色（不是主题的）；切方案时程序设的颜色被清掉、键码面板出一条 `ESC [ ? 997 ; 1 n` / `2 n`，和新方案的底色深浅一致（截图 `scheme-osc11-solarized-dark.png`） |  |
 | 97 | 6 期（97） | 方案下的最低对比度与禁用 | Win32 | Solarized Light 下「最低对比度」切 1 / 4.5；临时把终端 `Enabled := False` | 4.5 下浅色方案里的淡色字变清楚、框线块元素不变；禁用时整块变淡（和 `scheme-contrast-*.png` 对照） |  |
-| 98 | 6 期（98） | 系统色 | Win32、GTK2、Qt6、Cocoa | 设计器里把方案的背景设成 `clWindow`、前景设成 `clWindowText`，运行 | 颜色是那个平台窗口底色 / 字色；记下各 widgetset 的实际值，写回 spec §11.1.3 |  |
-| 99 | 6 期（99） | 导入真实的 WT 文件 | Win32 | 示例「导入…」本机 WT 的 `settings.json`（带注释、尾逗号，可能有 BOM）；再导入 `iTerm2-Color-Schemes` 的 `windowsterminal/` 里任意几个文件；再导入一个故意写坏的（删一个颜色） | 能读的都出现在下拉里、颜色和 WT 里一样；坏文件在状态栏报出缺哪个颜色，终端不变 |  |
+| 98 | 6 期（98） | 系统色 | Win32、GTK2、Qt6、Cocoa | 设计器里把方案的背景设成 `clWindow`、前景设成 `clWindowText`，运行；运行中改系统配色（Windows：高对比度主题或「窗口」颜色；Linux：换 GTK / Qt 主题），再让程序调一次 `Term.ColorScheme.Changed`（示例里没有按钮，临时加一行，比如接在暗色开关上） | 颜色是那个平台窗口底色 / 字色；记下各 widgetset 的实际值，写回 spec §11.1.3；改了系统配色后终端先不变，调 `Changed` 后换成新的窗口色 |  |
+| 99 | 6 期（99） | 导入真实的 WT 文件 | Win32 | 示例「导入…」本机 WT 的 `settings.json`（带注释、尾逗号，可能有 BOM）；再导入 `iTerm2-Color-Schemes` 的 `windowsterminal/` 里任意几个文件；同一个文件再导入一次；再导入一个故意写坏的（删一个颜色）；再导入两个方案名是中文的文件，一个名字写成 `\u` 转义（`"name": "\u6d4b\u8bd5"`），一个直接写 UTF-8 的中文 | 能读的都出现在下拉里、颜色和 WT 里一样；同名的方案（比如 WT 自带的 Campbell 和示例里的 Campbell）在下拉里只出现一次，再导入同一个文件也不多；坏文件在状态栏报出缺哪个颜色，终端不变，之后选一套能读的，状态栏里的错误消失；两个中文名在下拉里都显示成正确的中文 |  |
+| 100 | 6 期审查补 | 只设底色的方案配浅主题 | Win32 | 设计器（或临时代码）里一个终端 `ColorSource := tsrcScheme`，方案只设 `Background`（深色，比如 `#1E1E1E`），16 色都不设；浅色主题下回放 `palette.cast`、`ls-color.cast`；再拨到深色主题看一次 | 16 色跟的是主题：浅色主题下是给浅底配的那套，落在深底上几色（0 黑、4 蓝等）看不清——这是定下的逐槽规则，不是 bug；看完定：维持并在文档提醒（现在的做法，控件文档 §10 已写），还是改成按方案的底重求 16 色（结论交决定 D1 或文档） |  |
+| 101 | 6 期审查补 | 示例里的光标设置 | Win32（WSL 或 Git Bash 的 vim）、GTK2、Qt6、Cocoa | 第五行「Cursor:」切方块 / 下划线 / 竖线，勾「Blink」，「Unfocused:」切几种再点别处；Shell 模式跑 vim：进插入模式（`i`）、退出（Esc），再 `printf '\e[0 q'`；再换一种默认样式后跑一次 vim | 三种形状、闪烁、失焦样子都跟着设置变；vim 插入模式把光标改成竖线，Esc 退出后恢复（vim 自己发 DECSCUSR）；`CSI 0 SP q` 回到示例里选的样式，不是固定的方块 |  |
 
 ## 按平台的项号
 
@@ -136,11 +138,11 @@
 
 | 平台 | 项号 |
 |---|---|
-| Win32 本机（Windows 10 19044） | 3、4、6、7、9、10、12、13、14、15、16、17、18、19、20、22、23、25、27、28、29、30、32、33、34、35、38、39、40、41、42、43、44、45、47、48、49、50、51、52、54、55、56、58、60、61、63、64、66、68、69、70、71、72、73、74、76、77、78、79、80、81、84、85、86、87、88、91、92、93、94、95、96、97、98、99 |
+| Win32 本机（Windows 10 19044） | 3、4、6、7、9、10、12、13、14、15、16、17、18、19、20、22、23、25、27、28、29、30、32、33、34、35、38、39、40、41、42、43、44、45、47、48、49、50、51、52、54、55、56、58、60、61、63、64、66、68、69、70、71、72、73、74、76、77、78、79、80、81、84、85、86、87、88、91、92、93、94、95、96、97、98、99、100、101 |
 | Windows 11 | 32、57、65、67 |
-| Linux GTK2 | 1、4、5、9、10、11、12、13、14、15、17、19、21、22、23、24、25、28、30、36、38、39、40、41、42、43、44、45、46、47、48、49、50、51、54、55、56、58、60、61、62、63、64、66、67、69、70、71、72、73、75、77、78、80、81、82、83、88、89、92、93、96、98 |
-| Linux Qt6 | 1、4、5、10、11、12、13、14、15、17、19、21、22、23、24、25、28、30、36、38、39、40、41、42、43、44、45、46、47、48、49、50、51、54、55、56、58、60、61、62、63、64、66、67、69、70、71、72、73、75、77、78、80、81、82、83、88、89、92、93、96、98 |
-| macOS Cocoa | 1、4、5、8、9、10、11、12、13、14、15、17、19、22、23、24、25、28、30、31、37、38、39、40、41、42、43、45、47、48、49、50、51、53、54、55、56、58、59、60、61、62、63、64、66、67、69、70、71、73、75、77、78、80、83、88、89、90、92、93、96、98 |
+| Linux GTK2 | 1、4、5、9、10、11、12、13、14、15、17、19、21、22、23、24、25、28、30、36、38、39、40、41、42、43、44、45、46、47、48、49、50、51、54、55、56、58、60、61、62、63、64、66、67、69、70、71、72、73、75、77、78、80、81、82、83、88、89、92、93、96、98、101 |
+| Linux Qt6 | 1、4、5、10、11、12、13、14、15、17、19、21、22、23、24、25、28、30、36、38、39、40、41、42、43、44、45、46、47、48、49、50、51、54、55、56、58、60、61、62、63、64、66、67、69、70、71、72、73、75、77、78、80、81、82、83、88、89、92、93、96、98、101 |
+| macOS Cocoa | 1、4、5、8、9、10、11、12、13、14、15、17、19、22、23、24、25、28、30、31、37、38、39、40、41、42、43、45、47、48、49、50、51、53、54、55、56、58、59、60、61、62、63、64、66、67、69、70、71、73、75、77、78、80、83、88、89、90、92、93、96、98、101 |
 | 只看截图 / 任一平台 | 4、26（6 期截图对照第 92、93、96、97 项） |
 
 ## 等你定的决定
@@ -176,7 +178,7 @@
 - 选项：（a）以最暗的浅底重算浅色表；（b）终端底色改用更白的 token；（c）维持，靠 `MinimumContrastRatio` 兜底。
 - 现在：（c）。对白底 4.52:1；落到皮肤实际浅底上 xp 3.70、macos 3.82、breeze 3.96（office 4.04、win10 4.07 …）。比值 1 时低于 4.5 的不止 3 号：xp 8 个（3、14、10 号最差）、macos 8 个、breeze 7 个；比值 4.5 时全部 ≥ 4.5。注意 `MinimumContrastRatio` 默认是 1，也就是默认不兜底。
 - 看哪里：3 期截图 `ansi-3-{xp,macos,breeze}-light-15x.png`、`palette-*-light.png`；5 期截图 `contrast-{1,45}-{xp,macos,breeze}-light.png`；第 3、26、76 项。
-- **6 期后的表述**：默认跟随主题；看不清可换方案。主题的浅底 16 色仍是默认，仍待你在（a）/（b）/（c）中定；嫌看不清的宿主可以把单个终端换成一套方案（示例里的 Tango Light、Solarized Light、One Half Light），或打开最低对比度。6 期截图 `scheme-tango-light.png`、`scheme-solarized-light.png`、`scheme-onehalf-light.png`、`scheme-contrast-{1,45}-solarized-light.png` 可对照。
+- **6 期后的表述**：默认跟随主题；看不清可换方案。主题的浅底 16 色仍是默认，仍待你在（a）/（b）/（c）中定；嫌看不清的宿主可以把单个终端换成一套方案（示例里的 Tango Light、Solarized Light、One Half Light），或打开最低对比度。6 期截图 `scheme-tango-light.png`、`scheme-solarized-light.png`、`scheme-onehalf-light.png`、`scheme-contrast-{1,45}-solarized-light.png` 可对照。只设了底色的方案在浅色主题下 16 色仍是浅底那套，看第 100 项，结论也在这里定。
 - 改哪里：（a）`tools/terminal-oracle/light-palette.js` 的目标底色、`themes/light.tycss` 的 16 色，重跑 `light-palette.js --check`、`scripts/gen-defaulttheme.ps1`、`gen-builtinthemes.ps1`；（b）`themes/light.tycss` 的 `--terminal-bg`；都要改 spec §11、§17.1 第 4 条。
 
 **D2 浅底 7 / 15 号色调不调**
@@ -292,14 +294,16 @@
 | 70 | 拖动时合并有没有效、卡不卡 | §6.2（N3） |
 | 1、2、75 | 各平台的字体与光栅化耗时 | §10.3 |
 | 71 | 四个 widgetset 的 CPU 和帧率 | §16 |
-| 98 | 各 widgetset 下系统色（`clWindow`、`clWindowText`）解出来的实际值 | §11.1.3 |
+| 95 | 设计器里 Ctrl+Z 撤不撤得掉一次导入 | §11.1.9 |
+| 98 | 各 widgetset 下系统色（`clWindow`、`clWindowText`）解出来的实际值；改系统配色后调 `Changed` 的效果 | §11.1.3 |
+| 100 | 只设底色的方案配浅主题时 16 色看不看得清 | §11.1.4（或决定 D1） |
 
 ## 截图
 
 - [`2026-09-29-terminal-phase-3-shots/`](2026-09-29-terminal-phase-3-shots/index.md)：3 期，79 张。17 个皮肤明暗两种的 16 色样例和彩色 `ls`、几段录制（vim、htop、tmux、mc…）、3 号色与 7 / 15 号色的放大样例。
 - [`2026-09-29-terminal-phase-4-shots/`](2026-09-29-terminal-phase-4-shots/index.md)：4 期，16 张。选区（聚焦 / 失焦、反显格上）、列选区、链接悬停。
 - [`2026-09-29-terminal-phase-5-shots/`](2026-09-29-terminal-phase-5-shots/index.md)：5 期，22 张。折行前后（80 → 47 → 80 列，明暗两种）、老 ConPTY 不折的对照、最低对比度 1 与 4.5（xp、macos、breeze 浅色，default 深色）、不调的字形、Powerline 与盲文。
-- [`2026-09-30-terminal-phase-6-shots/`](2026-09-30-terminal-phase-6-shots/index.md)：6 期，17 张。七套方案下的 `palette.cast`、Tango 明暗配对、跟随主题的对照（和从没设过方案的控件逐像素相同，也和 3 期的 `palette-default-*.png` 相同）、方案下程序的 OSC 11、Solarized Light 下最低对比度 1 与 4.5、只设了三色的方案、Campbell 的选区。
+- [`2026-09-30-terminal-phase-6-shots/`](2026-09-30-terminal-phase-6-shots/index.md)：6 期，18 张。七套方案下的 `palette.cast`、Tango 明暗配对、跟随主题的对照（和从没设过方案的控件逐像素相同，也和 3 期的 `palette-default-*.png` 相同）、方案下程序的 OSC 11、Solarized Light 下最低对比度 1 与 4.5、只设了三色的方案、Campbell 的选区（另设了失焦选区色时失焦用它，`scheme-selection-inactive-campbell.png`）。
 - 重新生成：`lazbuild -B tools/terminal-shots/terminalshots.lpi`，然后 `terminalshots`（3 期）、`terminalshots --phase4`、`terminalshots --phase5`、`terminalshots --phase6`。
 - 库的文字路径前后对照（`Painter.pas` 常驻位图）：[`tests/fixtures/painter-regress/ab-2026-09-30.md`](../../../tests/fixtures/painter-regress/ab-2026-09-30.md)——366 个画面 0 像素差，耗时前后表，全量结果。
 

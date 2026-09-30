@@ -467,7 +467,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - 新建的方案 22 色都是 `clNone`、`Name = ''`、`IsEmpty`、`Revision = 0`。**变异 O1**：构造漏设一项（`CursorText` 留 0）→ 红。
   - RTTI：方案类的每个 `tkInteger` published 属性 `Default` = 构造后的值（22 项，断言个数 = 22）。**O2**：一个属性的 `default` 写成 `clBlack` → 红。
   - 改一色：`OnChange` 一次、`Revision` +1；再设同一个值：不发、不加。**O3**：去掉「值没变不动」→ 红。
-  - `BeginUpdate` 里改三色、`EndUpdate`：一次；嵌套两层只在最外层发。**O4**：`EndUpdate` 每减一层都发 → 红。
+  - `BeginUpdate` 里改三色、`EndUpdate`：一次；嵌套两层只在最外层发。**O4**：`EndUpdate` 每减一层都发 → 红。（签收注：按原意是「每减一层都直接加修订号、发 `OnChange`，绕过 `Changed`」，审查后照这个写法重做，见签收的变异表。）
   - `Assign`：结果 `Equals` 源、发一次；从相同的方案 `Assign`：不发。`Clear` 一个空方案：不发。
   - `SlotRgb`：设 `Red := TColor($1F0FC5)` → `$C50F1F`；未设置 → False。
   - `Colors[tssPurple]` 与 `Purple` 是同一格（设一个读另一个）。**O5**：`index` 写错一个（`Purple` 指到 `tssBlue`）→ 红。
@@ -724,9 +724,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: 本计划（签收记录）、`docs/superpowers/specs/2026-09-28-terminal-view-design.md`（写回）
 - 修复时按需改 Task 1–9 的文件
 
-- [ ] **Step 1: 一次编译 + 本期 suite + 全量**：「跑测试的固定套路」。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：WT 格式以 spec §11.1.2 的核实记录为准、取色语义以 xterm `ThemeService.ts` 为准；修复提交 `fix(terminal): ...`，一个问题一个提交。
-- [ ] **Step 2: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）：§11.1.1 七条、§11.1.3 两张表的每一行、§11.1.4 取色表每一槽、§11.1.5 三条、§11.1.6 六条、§11.1.7 读九条写五条、§11.1.8 错误表每一行、§11.1.9、§11.1.11；逐条记「在哪一行实现 / 为什么不需要 / 挪到以后」。
-- [ ] **Step 3: 【主控执行】编包、编示例、i18n、截图**
+- [x] **Step 1: 一次编译 + 本期 suite + 全量**：「跑测试的固定套路」。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：WT 格式以 spec §11.1.2 的核实记录为准、取色语义以 xterm `ThemeService.ts` 为准；修复提交 `fix(terminal): ...`，一个问题一个提交。
+- [x] **Step 2: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）：§11.1.1 七条、§11.1.3 两张表的每一行、§11.1.4 取色表每一槽、§11.1.5 三条、§11.1.6 六条、§11.1.7 读九条写五条、§11.1.8 错误表每一行、§11.1.9、§11.1.11；逐条记「在哪一行实现 / 为什么不需要 / 挪到以后」。
+- [ ] **Step 3: 【主控执行】编包、编示例、i18n、截图**（截图已在审查修复后重跑、`check-example-po` / `check-lfm-props` 已过；编包、编示例、`example-rsj2po` 待主控，见签收）
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; lazbuild -B tycontrols_dt.lpk > /tmp/term-dt.txt 2>&1; tail -3 /tmp/term-dt.txt; lazbuild -B examples/terminal/terminal_example.lpi > /tmp/term-ex.txt 2>&1; tail -3 /tmp/term-ex.txt; git status --short
@@ -738,14 +738,14 @@ Expected：三个都编过。然后：
 3. 示例里切 Solarized Dark、Tango（明暗）后拨暗色开关、「导入…」选夹具 `terminal-wt-defaults.json`（只看不录，真机验收时用户再看）。
 4. Task 7 做了的话：装 `tycontrols_dt.lpk` 重建 IDE，右键终端看得到两项（真机项第 95 项交用户）。
 5. `lazbuild -B tools/terminal-shots/terminalshots.lpi` 后跑 `terminalshots --phase6`；PNG 进 git、单张 ≤ 300 KB；抽查每组一张；`scheme-follow-*` 与 3 期截图逐像素相同的比对结果记进签收。
-- [ ] **Step 4: 集中变异**（每条三拍，必须红）：C1–C5（Task 1）、O1–O5（Task 2）、L1–L8（Task 3）、S1–S3（Task 4）、P1–P3（Task 5）、V1–V13 与 V11b（Task 6）、X1–X2（Task 8）、D1–D2（Task 9）；Task 7 做了的话加 **E1**（`TyTermSchemeImportPlan` 把不全的也列上 → 红）。结果逐条记进签收；没红的当场补强。
-- [ ] **Step 5: 整体代码质量审查**（`git diff <Task 0 的 HEAD>..HEAD`）：
+- [x] **Step 4: 集中变异**（每条三拍，必须红）：C1–C5（Task 1）、O1–O5（Task 2）、L1–L8（Task 3）、S1–S3（Task 4）、P1–P3（Task 5）、V1–V13 与 V11b（Task 6）、X1–X2（Task 8）、D1–D2（Task 9）；Task 7 做了的话加 **E1**（`TyTermSchemeImportPlan` 把不全的也列上 → 红）。结果逐条记进签收；没红的当场补强。
+- [x] **Step 5: 整体代码质量审查**（`git diff <Task 0 的 HEAD>..HEAD`）：
   - 方案单元：读的每条规则与 spec §11.1.7 对照；错误路径都原子；预解码与 AdvChart 那份的差异写在注释里；没有 `ENotImplemented`；`fpjson` 对象都释放（`try … finally`）。
   - 控件：两把键（地雷 4）；判明暗用的是主题底（地雷 6）；加载中（地雷 7）；析构顺序；`EnsurePalette` 的热路径没变慢（跑一次 `terminalbench --paint`，和 5 期签收的 10.92–11.05 ms 比）。
   - 视觉值没有写死（0.3 是上游的常量，注明出处）；测试里期望值不从被测代码算（[[test-expectation-from-the-environment]]）。
   审出来的问题修完回到 Step 1。
-- [ ] **Step 6: 写回 spec 原处，标「实现期修正（6 期）」**，原文删除线保留。至少：状态行（6 期签收）；§11.1 各小节里「待定」的三条按用户的答复改成定论；实现中与 §11.1 不同的地方；§14（notices 实际写法）；§15（§11.1.10 若有增减）；§16（本期真机项编号）；§17（6 期开工前问题的结论）；§18（6 期实际做了什么）。
-- [ ] **Step 7: 签收记录写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、本期各 suite 用时、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、计划外发现（至少：AdvChart 的 `TyDecodeUnicodeEscapes` 不认注释、会把 `"` / `\` 解成裸字符）、遗留。
+- [x] **Step 6: 写回 spec 原处，标「实现期修正（6 期）」**，原文删除线保留。至少：状态行（6 期签收）；§11.1 各小节里「待定」的三条按用户的答复改成定论；实现中与 §11.1 不同的地方；§14（notices 实际写法）；§15（§11.1.10 若有增减）；§16（本期真机项编号）；§17（6 期开工前问题的结论）；§18（6 期实际做了什么）。
+- [x] **Step 7: 签收记录写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、本期各 suite 用时、变异结果（每条红 / 补强 / 等价）、spec 写回的节号、计划外发现（至少：AdvChart 的 `TyDecodeUnicodeEscapes` 不认注释、会把 `"` / `\` 解成裸字符）、遗留。
 
 ```bash
 cd /d/Projects/ty-3.1 && git add docs/ && git commit -m "docs(terminal): phase 6 sign-off; corrections written back into the spec
@@ -826,3 +826,55 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 2. 不是规格错，是一处容易看走眼的地方：spec §11「深底那套用 xterm.js 默认色（Tango）」，而 WT 自带的 Tango Dark 和它**只差 0 号**（WT `#000000`、xterm `#2e3436`，其余 15 色逐个相同，核实时对过）；前景 / 底色两边本来就不同（WT `#D3D7CF` / `#000000`，跟随主题时是皮肤的 surface token）。示例里「Tango Dark」和跟随深色主题时看起来不一样是这个原因，不是 bug——控件文档第 10 节写一句。
 3. spec §10.7「块光标下的字用 `TyTerminalCursor` 的 `color` 重画」：方案下改用方案的 `CursorText`、未设时生效的底色（§11.1.4）。
 
+---
+
+## 6 期签收（2026-09-30）
+
+**全量**：集中变异之后 `lazbuild -B` 重编、`--all` 跑一遍：8413 条（审查前 8405，审查修复加 8 条：方案单元 6、控件 1、示例 1），errors 0、failures 1——唯一的红仍是本机 ClearType 环境下的 `TPainterTest.TestTextIsInkedAsWindowsInksIt`（「Segoe UI，96 PPI，浅色：ours 1075 / 0.24，Windows 1203 / 0.37」，和 5 期签收时同一个值，与终端无关）。本期三个 suite：`TTyTerminalColorSchemeTests` 33 条 0.25 s、`TTyTerminalViewSchemeTests` 16 条 6.7 s、`TTyTerminalExampleTests` 11 条 3.5 s。
+
+**提交区间**：`997cb270..HEAD`（Task 1 起）。期末审查的修复在 `4dd29fac..HEAD`：`639a773b` 方案单元（嵌套深度与文件大小的上限、名字去重与两句新消息、导入计划读颜色、`Changed` 公开）、`7e96c022` 控件（没用到的方案改了不整窗失效）、`bdfdd1d8` 设计器（导出先校验、标题去两种省略号）、`899b2ce3` 示例（一对原子、下拉去重、清错误、光标设置）、`afeb61f4` 发版守卫的 `\u0000`、`f2f053ca` 控件文档与截图，以及本签收（spec 写回、验收文档）。
+
+**期末审查的处理**（审查员的编号 → 结果）：
+1. **深嵌套 JSON 栈溢出崩进程**：预解码的同一遍扫描里数串外、注释外的方括号与花括号深度，超过 64 层报 `rsTermSchemeBadJson`（内层消息 `rsTermSchemeTooDeep`）；没有 `\u`、原样返回的快路也数（只数不解）；`LoadFromFile` 超过 16 MB 报 `rsTermSchemeTooBig`。公开常量 `TyTermJsonMaxDepth`、`TyTermSchemeMaxFileBytes`。测试：深度 64 能读、65 报错（不带和带 `\u` 各一例，方括号、花括号、混合，串里 / 注释里的不算）；十万层对 `TryLoadFromText`、`ListSchemeNames`、`TyTermSchemeImportPlan` 都答失败、不崩；16 MB + 1 字节的文件。
+2. **系统色刷新办法无效**：`TTyTerminalColorScheme.Changed` 改成公开（库里 `TTyStyleController.Changed` 的惯例）：内容没变也加修订号、发 `OnChange`，`BeginUpdate` 里照样攒。控件文档 §3 方法表、系统色一段、§13 改成调它。测试：方案单元一条、控件一条（再设同一个 `clWindow` 不动；`Changed` 加修订号、排通知、整窗失效）。
+3. **没用到的方案改了整窗失效**：选了「`SchemeChanged` 只在正在用的那一边时排通知」。另一种（回调里只在键变了才 `Invalidate`）试过又退回：`UpdateGrid` 也会调 `EnsureThemeCurrent` 把新键记下而不失效窗口，回调再比就会漏掉该有的重画。测试：`TestNotificationsComeOncePerChange` 里原来四处「0 条」改用新的 `Quiet`（不排通知、不报、控件的 `Invalidate` 次数不变），加「正在用的一边改了：报一次、失效」「没配对时改 `DarkColorScheme`：什么都不动」。
+4. **`Loaded` 清 `FNotifiedValid` 的副作用**：代码不改，写进 spec §11.1.6。
+5. **未设光标取「生效前景」不含 OSC 10**：代码不改，spec §11.1.4 表里写清（光标下的字色同理，不含 OSC 11）。
+6. **只设底色的方案配浅主题时 16 色仍是浅底那套**：控件文档 §10 提醒一句；验收文档加第 100 项，结论交 D1 或文档。
+7. **`ColorScheme := nil` 抛 `EConvertError`**：控件文档属性表注明（同 `Font := nil`），清空用 `Clear`。
+8. **报错消息的名字列表**：去重；按名找不到而没有完整方案时换一句（`rsTermSchemeNotFoundNone`），单个对象没名字时另一句（`rsTermSchemeNotFoundUnnamed`）。顺带：`AName = ''` 时按不同的名字数（两套同名、别无其他时取第一套，不再报「要给名字：A, A」）。测试 `TestNameListsNameEachOnce`（7 行）。`.pot` 与 `zh_CN.po` 同步，`en.po` 不需要。
+9. **设计器**：导出先 `SaveToText` 校验，不合格当场报错、不弹对话框；对话框标题 `VerbTitle` 同时去掉 `...` 与 `…`；选边的标题跟着是导入还是导出（原来导出也用导入的标题）。设计期单元不在测试构建里：用 fpc 对着已编好的包单独编过这个单元（0 错），包本身待主控编。
+10. **示例**：`ColorsChange` 先把一套（一对就两套）读进临时对象，都成功才赋值，失败什么属性都不改；`ImportColorsFrom` 用 `TyTermSchemeImportPlan` 解析一次（导入计划顺带读每一套的颜色，写坏颜色的不列——和原来「逐个试读」的结果一样），下拉按显示名去重（同名那一项改读新文件，再导入同一个文件不增加）；选中或导入成功后清掉之前的错误。测试：一对里深色那套读不进时浅色那套也没设上（新 `TestAPairThatDoesNotLoadChangesNothing`）、再导入 `defaults.json` 条数不变、七套各只一项、成功的选择清掉错误。
+11. **`test.release.pas` 的 `'' + 'u0000'`**：改回 `'\' + 'u0000'`。
+12. **V11b 静默跳过**：`TestTheDarkSideIsWhatOnCalls` 断言恰好 0.5 的底色存在（本机找到的第一个是 `#00CC44`），不再 `if` 跳过。
+13. **示例测试的环境依赖**：新函数 `FoldersOnTheExamplePath` 照示例的找法（exe 旁边再往上 8 层）先查有没有 `colorschemes/`、`recordings/`，有就报出路径（注释说明理由：示例会把路径上任何一个这样的目录当自己的，不查就会在后面的条数上莫名其妙地失败）；只删自己建的目录，删完断言它不在了。
+14. **截图**：`terminalshots --phase6` 加 `scheme-selection-inactive-campbell.png`（Campbell 另设失焦选区色 `#00FFFF`，失焦时选区是 `#085555`，前两张是 `#555555`；数像素核过），重跑后另外 17 张逐字节没变，`scheme-follow-*` 仍和从没设过方案的控件、和 3 期 `palette-default-*.png` 都 0 像素差；index 多一行。
+15. **O4 重做**：按原意写（`EndUpdate` 每减一层都直接加修订号、发 `OnChange`，绕过 `Changed`）：红，见下表。
+
+另外（用户要求，和本批一起）：示例第五行加光标设置——「Cursor:」下拉（方块 / 下划线 / 竖线 → `CursorStyle`）、「Blink」（`CursorBlink`）、「Unfocused:」下拉（空心框 / 方块 / 竖线 / 下划线 / 不显示 → `CursorInactiveStyle`），写在 `.lfm`，文字走 resourcestring，`FormCreate` 按控件现在的值选中；示例 `.po` / `.json` 同步；「建真主窗体」的测试覆盖到它们。控件文档写清光标默认值由属性定，DECSCUSR（`CSI Ps SP q`，0–6）临时覆盖，`CSI 0 SP q` 与 RIS 回到属性。验收文档第 101 项。
+
+**变异**（脚本：改一处 → 断言命中恰好一次 → `lazbuild` → 跑相关 suite → 还原；全部做完还原后 `-B` 重编跑全量，见上）。审查前 Task 1–9 的变异表不在本仓库的记录里，这里只记审查指定的和本次修正的；O4 按计划的原意（绕过 `Changed` 直接加修订号、发 `OnChange`）重做，以这里为准：
+
+| # | 变异 | 结果 |
+|---|---|---|
+| 1a | 去掉深度检查 | 红：`TestDeepNestingIsRefused`（第 41 行：深度 65 读成功了）。只跑这一条：带十万层的 `TestVeryDeepNestingDoesNotCrash` 在这个变异下会撑爆栈，不拿进程崩溃当「红」 |
+| 1b | 没有 `\u` 的快路不数深度 | 红：`TestDeepNestingIsRefused`（第 41 行，不带转义的那一例） |
+| 2 | `Changed` 不加修订号 | 红：`TestChangedIsAChange`、`TestChangedRefreshesASystemColour` 等（方案单元 3 条、控件 6 条） |
+| 3 | `SchemeChanged` 不看是不是正在用的一边 | 红：`TestNotificationsComeOncePerChange`（「跟随主题时装方案：不排通知」） |
+| 8a | 名字不去重 | 红：`TestNameListsNameEachOnce` |
+| 8b | 没有可列的名字时仍用旧句子 | 红：`TestNameListsNameEachOnce`（第 53 行） |
+| 8c | 单个对象无名时仍用旧句子 | 红：`TestNameListsNameEachOnce` |
+| 8d | 导入计划不读颜色 | 红：`TestTheImportPlanSkipsBadColours` |
+| 10a | 示例把浅色那套直接读进终端 | 红：`TestAPairThatDoesNotLoadChangesNothing`（「浅色那套也没设上」） |
+| 10b | 示例导入不去重 | 红：`TestTheMainFormBuildsWithARecording`（再导入 17 → 33）、`TestTheColourListOffersSevenAndThreePairs`（20 → 27） |
+| 10c | 成功后不清错误 | 红：`TestAPairThatDoesNotLoadChangesNothing`、`TestTheColourListOffersSevenAndThreePairs` |
+| 12（V11b） | 明暗判定 `> 0.5` 写成 `>= 0.5` | 红：`TestTheDarkSideIsWhatOnCalls`（`#00CC44`） |
+| 15（O4） | `EndUpdate` 每减一层都直接加修订号、发 `OnChange`，绕过 `Changed` | 红：`TestUpdatesAreBatched`（「里层结束不发」期望 1 得 2）、`TestAssignClearAndEquals` |
+
+**写回 spec 的节**（标「实现期修正（6 期）」，推翻的原文删除线保留）：状态行；§7.3（「换配色」含换方案）；§10.7（方案下块光标里的字）；§11（WT 的 Tango Dark 与 xterm.js 默认只差 0 号）；§11.1.1（待定已定）；§11.1.3（属性表的待定 → D20、`Changed`、全空按跟随主题与配对只填深色、`:= nil`）；§11.1.4（258 与光标下字色取色表不含 OSC 10 / 11、D23、只设底色时 16 色跟主题）；§11.1.6（只加选中那一边的修订号、没用到的方案不排通知不失效、`ReadComponent` 的副作用）；§11.1.7（单个 `case` 分支、公开的 `Changed` / 导入计划 / 两个常量、单引号串的 `\u0027`、深度与大小上限、按不同名字数、待定已定）；§11.1.8（两行新错误、名字去重与两句新消息）；§11.1.9（设计器的问改用方案 / 问哪一套 / 导出先校验 / 标题、D21、D22、示例在 `Tools5` 与单独的 `DlgColors`、一对原子、去重、光标设置）；§11.1.10（两条上限、同名算一个名字）；§11.1.11（`en.po` 不改、示例 `.po` 手工补全、rsj2po 复查新增 0）；§11.1.12（WT 文档 Campbell 已逐字核对，2026-09-30；审查加的测试）；§14（notices 的实际标题与 `### Test fixture` 小节）；§15；§16（第 92–101 项、18 张截图）；§17（D20–D23 的结论）；§18（6 期实际做了什么）。
+
+**验收文档**：第 93 项加「开着 2031 拨暗色开关，每拨一次恰好一条 997」；第 95 项加 Ctrl+Z 撤销导入（记现象）、标题没有省略号、没名字或缺色时导出报错不留空文件；第 98 项加改系统配色后调 `Changed`；第 99 项加 `\u` 转义与直接 UTF-8 的中文名、同名只出现一次、再导入不增加、成功后错误消失；新第 100 项（只设底色的方案配浅主题，结论交 D1 或文档）、第 101 项（示例光标设置与 vim 的 DECSCUSR、`CSI 0 SP q`）；平台索引、D1「看哪里」、「记现象」表（95、98、100）、截图 18 张；头提交与全量条数。
+
+**计划外发现**：AdvChart 的 `TyDecodeUnicodeEscapes`（`source/tyControls.AdvChart.Option.pas`）不认注释、会把 `\u0022` / `\u005C` 解成裸字符，也没有嵌套深度上限（AdvChart 的 JSON 同样交给 fpjson 递归解析，很深的嵌套应当同样会撑爆栈；没有实测）。不在本期范围，留给 AdvChart。
+
+**待主控**：编 `tycontrols.lpk`（运行时单元改了：`Terminal.ColorScheme`、`Terminal`、`StrConsts`）、`tycontrols_dt.lpk`（`designtime/tyControls.Design.CompEditors.pas` 改了），编终端示例（`.lfm` 加了五个控件）；`example-rsj2po.py` 复查示例 `.po`（本次手工补了 5 条 `.lfm` 文字与 5 条 resourcestring，`check-example-po.py` 101 份 0 问题、`check-lfm-props.py` 通过）；启动示例看第五行的光标设置在英文和中文界面下不挤。
