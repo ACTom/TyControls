@@ -15,6 +15,8 @@ type
     FForm: TTbMainForm;
     FThemeName, FMode: string;
     FDensity: TTyDensity;
+    FHeard: Integer;
+    procedure Heard(Sender: TObject);
     procedure WriteBytes(const AFileName, ABytes: string);
     function ReadBytes(const AFileName: string): string;
     function Unify(const S: string): string;
@@ -414,11 +416,31 @@ begin
   AssertEquals('F15: the editor followed', dark, FForm.Editor.Color);
 end;
 
+procedure TTbMainFormTests.Heard(Sender: TObject);
+begin
+  Inc(FHeard);
+end;
+
+{ The window listens to the tool's controller (the default one, which outlives it) and must
+  stop when it goes. A sentinel inside its listener (ToolThemeChangedForTest, called before
+  the listener touches the window) counts the calls: one while the window lives -- the
+  sentinel is live -- and none after it is freed. The test used to free the window, fire
+  Changed and assert True, which a dangling listener passes whenever the freed memory
+  still reads. }
 procedure TTbMainFormTests.TestTheListenerIsRemoved;
 begin
-  FreeAndNil(FForm);
-  TyDefaultController.Changed;   { would call into the freed window if it still listened }
-  AssertTrue('F16: no access violation', True);
+  FHeard := 0;
+  TTbMainForm.ToolThemeChangedForTest := @Heard;
+  try
+    TyDefaultController.Changed;
+    AssertEquals('the window listens', 1, FHeard);
+    FreeAndNil(FForm);
+    FHeard := 0;
+    TyDefaultController.Changed;
+    AssertEquals('F16: the freed window no longer listens', 0, FHeard);
+  finally
+    TTbMainForm.ToolThemeChangedForTest := nil;
+  end;
 end;
 
 procedure TTbMainFormTests.TestTheSettingsAreKept;

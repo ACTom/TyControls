@@ -137,6 +137,9 @@ type
     class var PromptAnswerForTest: TModalResult;   { FOR THE TESTS: mrNone = really ask }
     class var SaveAsNameForTest: string;           { FOR THE TESTS }
     class var SettingsFileForTest: string;         { FOR THE TESTS }
+    { FOR THE TESTS: called first thing whenever a window hears the tool's theme change
+      (before it touches itself), so a test can tell a freed window still listening }
+    class var ToolThemeChangedForTest: TNotifyEvent;
     procedure RefreshNow;                          { lint + preview + problem list, now }
     procedure NewMinimal;
     procedure NewFromBuiltin(const AName: string);
@@ -742,6 +745,8 @@ end;
 
 procedure TTbMainForm.ToolThemeChanged(Sender: TObject);
 begin
+  if Assigned(ToolThemeChangedForTest) then
+    ToolThemeChangedForTest(Sender);
   if (Editor = nil) or (FKit = nil) then Exit;
   FLook := TbEditorColors(TyDefaultController);
   TbApplyEditorColors(Editor, FKit.Highlighter, FLook);
