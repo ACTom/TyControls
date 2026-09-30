@@ -190,6 +190,20 @@ A loaded theme overrides the built-in skin **per typeKey**:
 | `themes/dark.tycss` | Dark theme |
 | `themes/builtin/showcase.tycss` | Showcase theme |
 
+### Built-in themes by name
+
+The 17 built-in themes are compiled into the library. Register them once at startup, then pick one by name, in the Object Inspector or in code:
+
+```pascal
+uses tyControls.BuiltinThemes;
+
+TyRegisterBuiltinThemes;                    // once, before the first form is created
+TyDefaultController.ThemeName := 'win11';
+TyDefaultController.Mode := 'dark';         // 'light' | 'dark'
+```
+
+A project made with **File → New… → Project → TyControls Application** already has this call in its `.lpr`. Without it, a `ThemeName` chosen in the designer shows only there (the IDE registers the themes for itself), and the running program keeps the default look.
+
 ### Loading a theme
 
 ```pascal

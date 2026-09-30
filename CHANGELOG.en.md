@@ -7,6 +7,23 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.0] — 2026-09-30
+
+TyControls 3.0, the first stable release. Only the changes below since RC3; everything that changed from 2.2 to 3.0 is in the 3.0.0-Beta through 3.0.0-RC3 sections.
+
+### Added
+
+- A gallery ([docs/gallery.en.md](docs/gallery.en.md)): every example and every tab page in light and dark, and all built-in themes side by side.
+
+### Fixed
+
+- On Windows with a non-default ClearType contrast, light text on dark themes came out lighter than the text Windows draws.
+- The grid example's tab captions lost their `&`.
+
+### Performance
+
+- Text draws faster on Windows: text-heavy controls such as the grid and the memo take about a third less time for their first paint.
+
 ## [3.0.0-RC3] — 2026-09-28
 
 Fixes a batch of layout errors under high-DPI scaling (150%, 175%; [#2](https://github.com/ACTom/TyControls/issues/2)) and blurry text on Windows. Still a release candidate: if nothing new comes in, this content becomes 3.0.0 final.

@@ -5,13 +5,29 @@
   source, the Lazarus packages, themes, i18n catalogs, user docs and examples — laid out exactly
   as in the repo so `tycontrols.lpk` / `tycontrols_dt.lpk` install unchanged.
 
-  EXCLUDED: tests, tools/ (icon generator), scripts/, docs/superpowers (specs/plans),
+  EXCLUDED: tests, tools/ (icon generator, gallery capture), scripts/, docs/superpowers
+  (specs/plans), docs/gallery* (the screenshot pages),
   designtime/icons (PNG regeneration source — the packed .lrs is shipped instead),
   the auto-generated package units, and every build artifact (lib/, *.ppu/.o/.exe, ...).
 
   Output: dist/TyControls-<version>.zip  (dist/ is git-ignored).
   Usage:  pwsh -File scripts/make-release.ps1
+          pwsh -File scripts/make-release.ps1 -Opm     # a final release: also the OPM package
+
+  -Opm, for a final release only (a version with a pre-release label is refused), also
+    * writes dist/opm/<version>/TyControls.zip + TyControls.json -- the package the Lazarus
+      Online Package Manager maintainers add to the central repository (mail both to
+      opm@lazarus-ide.org, or submit them from OPM). The zip holds the same files as the
+      release bundle under a TyControls/ root (the JSON's PackageBaseDir); the JSON is what
+      OPM's "Create repository package" writes, with the zip's size, MD5 and date filled in;
+    * points update_TyControls.json (repo root) at this release: OPM reads it from main to
+      offer the update, and downloads DownloadZipURL -- the GitHub release asset, whose
+      TyControls-<version>/ root OPM copies into TyControls/ itself (opkman_zipper). Commit
+      it to main only once the release asset is published, or OPM offers a dead link.
 #>
+param(
+  [switch]$Opm
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 
@@ -21,6 +37,7 @@ $m = [regex]::Match((Get-Content $typesPath -Raw), "TyVersion\s*=\s*'([^']+)'")
 if (-not $m.Success) { throw "could not read TyVersion from $typesPath" }
 $version = $m.Groups[1].Value
 Write-Host "== TyControls release v$version =="
+if ($Opm -and ($version -match '-')) { throw "-Opm is for a final release; v$version is a pre-release" }
 
 # --- staging ---------------------------------------------------------------
 $distDir = Join-Path $root 'dist'
@@ -84,8 +101,8 @@ Add-Tree 'themes' @('.tycss', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', 
 Write-Host '-- languages (i18n .po/.pot catalogs; .lpk EnableI18N points here)'
 Add-Tree 'languages' @('.po', '.pot')
 
-Write-Host '-- docs (excluding docs/superpowers)'
-Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])superpowers([\\/]|$)'
+Write-Host '-- docs (excluding docs/superpowers and the gallery -- screenshots for the web pages)'
+Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])(superpowers([\\/]|$)|gallery)'
 
 Write-Host '-- examples (source only)'
 # The image extensions are the same set the themes rule above uses, and they are here for the
@@ -97,6 +114,36 @@ Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', 
 # --- zip -------------------------------------------------------------------
 Write-Host '-- zipping'
 Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+
+# --- OPM (final releases) ----------------------------------------------------
+if ($Opm) {
+  Write-Host '-- OPM package + update_TyControls.json'
+  $opmDir = Join-Path $distDir "opm\$version"
+  if (Test-Path $opmDir) { Remove-Item $opmDir -Recurse -Force }
+  New-Item -ItemType Directory -Force $opmDir | Out-Null
+  $pkgRoot = Join-Path $opmDir 'TyControls'
+  Copy-Item $stage $pkgRoot -Recurse
+  $opmZip = Join-Path $opmDir 'TyControls.zip'
+  Compress-Archive -Path $pkgRoot -DestinationPath $opmZip -CompressionLevel Optimal
+  Remove-Item $pkgRoot -Recurse -Force
+  $lpkVersion = "$version.0"   # the .lpk's Major.Minor.Release.Build
+  # RepositoryDate is a TDateTime: days since 1899-12-30, which is what ToOADate counts
+  $json = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'opm\TyControls.json.template'), [Text.Encoding]::UTF8)
+  $json = $json.Replace('@SIZE@', [string](Get-Item $opmZip).Length)
+  $json = $json.Replace('@MD5@', (Get-FileHash $opmZip -Algorithm MD5).Hash.ToLower())
+  $json = $json.Replace('@DATE@', [DateTime]::Now.ToOADate().ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+  $json = $json.Replace('@VERSION@', $lpkVersion)
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText((Join-Path $opmDir 'TyControls.json'), $json, $utf8)
+  $upd = Join-Path $root 'update_TyControls.json'
+  $text = [IO.File]::ReadAllText($upd)
+  $text = [regex]::Replace($text, '("Version"\s*:\s*")[^"]*(")', "`${1}$lpkVersion`${2}")
+  $text = [regex]::Replace($text, '("DownloadZipURL"\s*:\s*")[^"]*(")',
+    "`${1}https://github.com/ACTom/TyControls/releases/download/v$version/TyControls-$version.zip`${2}")
+  [IO.File]::WriteAllText($upd, $text, $utf8)
+  Write-Host "Wrote $opmZip + TyControls.json; update_TyControls.json now points at v$version" -ForegroundColor Green
+}
+
 Remove-Item $stage -Recurse -Force    # keep dist/ tidy: just the .zip
 
 $fileCount = (Get-ChildItem -Path $zip).Length
