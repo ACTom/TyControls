@@ -234,6 +234,7 @@ type
     procedure FillCodeOnlyData;
     procedure UpdateModeNote;
     procedure RestoreGood;
+    function Notify(out AError: string): Boolean;
     function LoadInto(const AText, ABaseDir: string; out AError: string;
       out ATouched: Boolean): Boolean;
     function GetIsDark: Boolean;
@@ -520,7 +521,10 @@ begin
     ATouched := True;
     if FController.Density = tdModern then
       FController.Model.LoadFromCssAdditive(TyDensityModernCss);
-    FController.Changed;                     { repaint + seed the mode of a dual-mode theme }
+    { what the controller's Changed would do first: a two-mode theme with no mode chosen
+      takes its default one (its @mode-only variables are undefined otherwise) }
+    if (FController.Model.Mode = '') and (FController.Model.DefaultModeName <> '') then
+      FController.Model.SetMode(FController.Model.DefaultModeName);
   except
     on E: Exception do
     begin
@@ -528,7 +532,27 @@ begin
       Exit(False);
     end;
   end;
+  { probe BEFORE Changed: Changed has every control re-measure itself, which resolves its
+    style -- a theme that does not resolve would raise from there (and from every paint) }
   Result := TbProbeResolve(FController.Model, AError);
+  if Result then
+    Result := Notify(AError);
+end;
+
+{ the controller's Changed: repaint, and tell the listeners (the sample window) }
+function TTbPreviewFrame.Notify(out AError: string): Boolean;
+begin
+  AError := '';
+  try
+    FController.Changed;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      AError := E.Message;
+      Result := False;
+    end;
+  end;
 end;
 
 function TTbPreviewFrame.LoadDocument(const AText, ABaseDir: string; out AError: string): Boolean;
@@ -587,17 +611,21 @@ end;
 
 function TTbPreviewFrame.SetDark(ADark: Boolean; out AError: string): Boolean;
 var
-  old, want: string;
+  old, want, ignored: string;
 begin
   AError := '';
   if ADark then want := 'dark' else want := 'light';
   old := FController.Mode;
   if SameText(old, want) then Exit(True);
-  FController.Mode := want;
+  { switch the model only, probe, and only then tell the controls (see LoadInto) }
+  FController.Model.SetMode(want);
   Result := TbProbeResolve(FController.Model, AError);
+  if Result then
+    Result := Notify(AError);
   if not Result then
   begin
-    FController.Mode := old;
+    FController.Model.SetMode(old);
+    Notify(ignored);
     { the mode's display name, not its internal one: it is read in the problem list }
     if ADark then
       AError := Format(rsTbModeFailed, [rsTbModeDark, AError])

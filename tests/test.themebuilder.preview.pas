@@ -269,6 +269,8 @@ begin
   AssertTrue(Load(TbMinimalTemplate));
   AssertTrue('V11: dark resolves', FFrame.SetDark(True, err));
   AssertTrue('V11: dark', FFrame.IsDark);
+  { a document that resolves in light only: shown in light, then refused dark }
+  AssertTrue('back to light', FFrame.SetDark(False, err));
   AssertTrue(Load('@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
     'TyButton { background: var(--x); }'));
   FFrame.SetDark(True, err);
