@@ -763,7 +763,7 @@ begin
     for i := 0 to files.Count - 1 do
     begin
       body := ReadScript(files[i]);
-      AssertEquals(ExtractFileName(files[i]) + ' holds no U+0000 escape', 0, Pos('' + 'u0000', body));
+      AssertEquals(ExtractFileName(files[i]) + ' holds no U+0000 escape', 0, Pos('\' + 'u0000', body));
       names := TTyTerminalColorScheme.ListSchemeNames(body);
       AssertTrue(ExtractFileName(files[i]) + ' has schemes', Length(names) > 0);
       for j := 0 to High(names) do
