@@ -53,6 +53,7 @@ type
     procedure TestAFileThatCannotBeReadStaysRecent;
     procedure TestAnAmpersandInARecentPathIsShown;
     procedure TestTheSideBarShowsItsHints;
+    procedure TestTheMarksDoNotTakeTheBookmarkImages;
   end;
 
 implementation
@@ -919,6 +920,17 @@ procedure TTbMainFormTests.TestTheSideBarShowsItsHints;
 begin
   AssertTrue('F25: the strip shows hints', FForm.SideBar.ShowHint);
   AssertTrue('F25: and the problems window has one', FForm.ProblemsWin.StripHint <> '');
+end;
+
+{ The problem marks bring their own images; SynEdit's bookmarks (Ctrl+Shift+0..9) must not
+  draw from them -- they did, the mark list being set as the bookmark images. }
+procedure TTbMainFormTests.TestTheMarksDoNotTakeTheBookmarkImages;
+begin
+  FForm.Editor.Lines.Text := 'TyButton {'#10'  frobnicate: 1px;'#10'}';
+  FForm.RefreshNow;
+  AssertEquals('a mark', 1, FForm.Editor.Marks.Count);
+  AssertTrue('F26: the mark has the problem images', FForm.Editor.Marks[0].ImageList = FForm.GutterIcons);
+  AssertTrue('F26: the bookmarks do not', FForm.Editor.BookMarkOptions.BookmarkImages <> FForm.GutterIcons);
 end;
 
 initialization

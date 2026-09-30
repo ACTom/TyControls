@@ -187,7 +187,8 @@ begin
   TbBaseVarNames(FBaseVars);
   FLineSeverity := TStringList.Create;
   FProblemMarks := TFPList.Create;
-  Editor.BookMarkOptions.BookmarkImages := GutterIcons;
+  { the problem marks carry their own image list (ShowProblems); SynEdit's bookmarks keep
+    theirs -- sharing it made bookmark 0 and 1 show the error and warning signs }
 
   { the shared tycss setup; theme files keep their own alignment, so no tidying on line leave }
   FKit := TTyCssEditKit.Create(Self);
