@@ -26,7 +26,15 @@ unit uptywin;
     drains the output all along.
   - TyWindowsBuildNumber reads RtlGetVersion: GetVersionEx lies to a program without a
     compatibility manifest. The build goes to the core (Core.WindowsPty), which keeps
-    xterm.js's old-ConPTY wrapping rules before build 21376. }
+    xterm.js's old-ConPTY wrapping rules before build 21376.
+  - TProcessPipeBackend (phase 7, spec 19.7): the command on two anonymous pipes, no
+    pseudo console -- binary safe, which ConPTY is not (it renders the output anew
+    and drops every byte from $80 up, both ways: the phase 7 plan's Task 0). For
+    ZModem through wsl.exe or ssh -T. There is no terminal: the program sees pipes,
+    does not echo, cannot be resized; stderr goes into the same pipe unless asked not
+    to. Closing sends EOF (the input pipe's end closed), then the session's finisher
+    waits and ends the program by its handle, as for ConPTY -- never on the main
+    thread. }
 
 {$mode objfpc}{$H+}
 
@@ -103,6 +111,27 @@ type
     function IsConPty(out ABuild: Integer): Boolean; override;
     { FOR THE TESTS }
     property LastResizeResult: HRESULT read FLastResizeResult;
+    property ProcessId: DWORD read FProcessId;
+    property Killed: Boolean read FKilled;
+  end;
+
+  { a command on two anonymous pipes, no pseudo console (spec 19.7): binary safe }
+  TProcessPipeBackend = class(TPipeBackend)
+  private
+    FMergeStderr: Boolean;
+    FProcess: THandle;
+    FProcessId: DWORD;
+    FKilled: Boolean;
+  public
+    constructor Create(AMergeStderr: Boolean = True);
+    destructor Destroy; override;
+    function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; override;
+    procedure Resize(ACols, ARows: Integer); override;       { nothing }
+    procedure BeginClose; override;                          { closes the input pipe }
+    function FinishClose(AWaitMs: Integer): TPtyCloseResult; override;
+    function ExitCode(AWaitMs: Integer): Int64; override;
+    procedure Shutdown; override;
+    { FOR THE TESTS }
     property ProcessId: DWORD read FProcessId;
     property Killed: Boolean read FKilled;
   end;
@@ -562,6 +591,138 @@ function TConPtyBackend.IsConPty(out ABuild: Integer): Boolean;
 begin
   ABuild := TyWindowsBuildNumber;
   Result := True;
+end;
+
+{ ---- TProcessPipeBackend ---------------------------------------------------------------- }
+
+constructor TProcessPipeBackend.Create(AMergeStderr: Boolean);
+begin
+  inherited Create(0, 0, True);
+  FMergeStderr := AMergeStderr;
+end;
+
+destructor TProcessPipeBackend.Destroy;
+begin
+  Shutdown;
+  inherited Destroy;
+end;
+
+function TProcessPipeBackend.Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
+var
+  sa: TSecurityAttributes;
+  inRead, inWrite, outRead, outWrite, errH: THandle;
+  si: TStartupInfoW;
+  pi: TProcessInformation;
+  cmd: UnicodeString;
+begin
+  AError := '';
+  Result := False;
+  FillChar(sa, SizeOf(sa), 0);
+  sa.nLength := SizeOf(sa);
+  sa.bInheritHandle := True;
+  inRead := 0; inWrite := 0; outRead := 0; outWrite := 0; errH := 0;
+  if not CreatePipe(inRead, inWrite, @sa, 0) or not CreatePipe(outRead, outWrite, @sa, 0) then
+  begin
+    AError := SysErrorMessage(GetLastError);
+    if inRead <> 0 then CloseHandle(inRead);
+    if inWrite <> 0 then CloseHandle(inWrite);
+    Exit;
+  end;
+  { our ends are not the child's to inherit }
+  SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
+  SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
+  if FMergeStderr then
+    errH := outWrite
+  else
+    errH := CreateFileW('NUL', GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, @sa, OPEN_EXISTING, 0, 0);
+  FillChar(si, SizeOf(si), 0);
+  si.cb := SizeOf(si);
+  si.dwFlags := STARTF_USESTDHANDLES;
+  si.hStdInput := inRead;
+  si.hStdOutput := outWrite;
+  si.hStdError := errH;
+  FillChar(pi, SizeOf(pi), 0);
+  cmd := UTF8Decode(ACommand);
+  UniqueString(cmd);
+  if not CreateProcessW(nil, PWideChar(cmd), nil, nil, True, CREATE_NO_WINDOW or CREATE_UNICODE_ENVIRONMENT,
+    nil, nil, @si, @pi) then
+  begin
+    AError := SysErrorMessage(GetLastError);
+    CloseHandle(inRead);
+    CloseHandle(outWrite);
+    if not FMergeStderr and (errH <> INVALID_HANDLE_VALUE) then CloseHandle(errH);
+    CloseHandle(inWrite);
+    CloseHandle(outRead);
+    Exit;
+  end;
+  { the child's ends: only the child holds them now, so its exit ends our read }
+  CloseHandle(inRead);
+  CloseHandle(outWrite);
+  if not FMergeStderr and (errH <> INVALID_HANDLE_VALUE) then CloseHandle(errH);
+  CloseHandle(pi.hThread);
+  FProcess := pi.hProcess;
+  FProcessId := pi.dwProcessId;
+  FIn := inWrite;
+  FOut := outRead;
+  Result := True;
+end;
+
+procedure TProcessPipeBackend.Resize(ACols, ARows: Integer);
+begin
+  { a pipe has no size }
+end;
+
+{ the main thread, quick: a blocked write returns, the program reads EOF. The handle
+  is taken out of FIn before it is closed: the writer, stopped already, fails on 0 }
+procedure TProcessPipeBackend.BeginClose;
+var
+  h: THandle;
+begin
+  StopWrites;
+  h := FIn;
+  FIn := 0;
+  if h <> 0 then
+    CloseHandle(h);
+end;
+
+function TProcessPipeBackend.FinishClose(AWaitMs: Integer): TPtyCloseResult;
+begin
+  Result := pcrGone;
+  if FProcess = 0 then Exit;
+  if WaitForSingleObject(FProcess, AWaitMs) = WAIT_OBJECT_0 then
+    Exit;
+  { it did not go with its input: by its handle, nothing else (never by name) }
+  FKilled := True;
+  Result := pcrKilled;
+  TerminateProcess(FProcess, 1);
+  WaitForSingleObject(FProcess, PtyKillWaitMs);
+end;
+
+function TProcessPipeBackend.ExitCode(AWaitMs: Integer): Int64;
+var
+  code: DWORD;
+begin
+  Result := -1;
+  if FProcess = 0 then Exit;
+  if WaitForSingleObject(FProcess, AWaitMs) <> WAIT_OBJECT_0 then Exit;
+  code := 0;
+  if GetExitCodeProcess(FProcess, code) then
+    Result := code;
+end;
+
+procedure TProcessPipeBackend.Shutdown;
+begin
+  if FProcess <> 0 then
+  begin
+    if WaitForSingleObject(FProcess, 0) <> WAIT_OBJECT_0 then
+    begin
+      TerminateProcess(FProcess, 1);
+      WaitForSingleObject(FProcess, PtyKillWaitMs);
+    end;
+    CloseHandle(FProcess);
+    FProcess := 0;
+  end;
+  CloseHandles;
 end;
 
 {$ENDIF}

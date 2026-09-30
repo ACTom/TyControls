@@ -108,6 +108,10 @@ type
     procedure TestConPtyCloseReturnsAtOnceAndEndsAProgramThatStays;
     procedure TestConPtyCloseEndsAProgramThatLeftItsConsole;
     procedure TestConPtyCloseWhileTheProgramExits;
+    { phase 7: TProcessPipeBackend }
+    procedure TestPipeBackendIsBinarySafe;                   { B1 }
+    procedure TestPipeBackendCloseDoesNotWait;               { B2 }
+    procedure TestPipeBackendStderr;                         { B3 }
     {$ENDIF}
   end;
 
@@ -1138,6 +1142,45 @@ begin
   CloseHandle(h);
 end;
 
+{ phase 7, the pipe backend: on the standard handles themselves (pipes there) }
+procedure HelperOnPipes(const AMode: string);
+var
+  i: Integer;
+  buf: array[0..4095] of Byte;
+  got, done: DWORD;
+  s: RawByteString;
+begin
+  if AMode = 'dump' then
+  begin
+    { every byte value, four times }
+    SetLength(s, 1024);
+    for i := 0 to 1023 do
+      s[i + 1] := AnsiChar(i and 255);
+    done := 0;
+    { under a pseudo console (the tests' control group) there is no standard handle:
+      the console's own output }
+    if not WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s[1], Length(s), done, nil) then
+      HelperSay(s);
+    Sleep(500);                          { a pseudo console renders only while we are here }
+  end
+  else if AMode = 'cat' then
+  begin
+    { what comes in goes out, until the input ends }
+    while ReadFile(GetStdHandle(STD_INPUT_HANDLE), buf[0], SizeOf(buf), got, nil) and (got > 0) do
+      WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf[0], got, done, nil);
+  end
+  else if AMode = 'stderr' then
+  begin
+    s := 'ty-out';
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s[1], Length(s), done, nil);
+    s := 'ty-err';
+    WriteFile(GetStdHandle(STD_ERROR_HANDLE), s[1], Length(s), done, nil);
+  end
+  else
+    Sleep(60000);                        { 'sleep': a program that does not go }
+  Halt(0);
+end;
+
 procedure RunPtyHelperIfAsked;
 const
   Flag = '--ty-pty-helper=';
@@ -1146,6 +1189,8 @@ var
 begin
   if Copy(ParamStr(1), 1, Length(Flag)) <> Flag then Exit;
   mode := Copy(ParamStr(1), Length(Flag) + 1, MaxInt);
+  if (mode = 'dump') or (mode = 'cat') or (mode = 'stderr') or (mode = 'sleep') then
+    HelperOnPipes(mode);
   if mode = 'block-close' then
     SetConsoleCtrlHandler(@HelperBlockClose, True);
   HelperSay('ty-helper-ready'#13#10);
@@ -1282,6 +1327,133 @@ begin
     for i := 0 to High(procs) do
       if procs[i] <> 0 then CloseHandle(procs[i]);
   end;
+end;
+
+{ ---- phase 7: the pipe backend (no pseudo console) ------------------------------------ }
+
+{ run ACommand on ABackend to its end (at most 15 s); what it wrote, and AInput written
+  first when given }
+function RunToEnd(ACase: TTestCase; ABackend: TPtyBackend; const ACommand: string;
+  const AInput: RawByteString; out AOutput: RawByteString): Int64;
+var
+  s: TPtySession;
+  err: string;
+  data: RawByteString;
+  exited, ended: Boolean;
+  code: Int64;
+
+  function TheEnd: Boolean;
+  begin
+    if s.Pump(data, exited, code) then
+    begin
+      AOutput := AOutput + data;
+      s.Delivered(Length(data));
+      if exited then
+        ended := True;
+    end;
+    Result := ended;
+  end;
+
+begin
+  AOutput := '';
+  ended := False;
+  code := -2;
+  s := TPtySession.Create(ABackend);
+  try
+    if not s.Start(ACommand, 80, 24, err) then ACase.Fail('not started: ' + err);
+    if AInput <> '' then
+    begin
+      s.Write(AInput);
+      { the program reads to its input's end: the session's close gives it that, but
+        not before its output is read -- the pipe is closed by hand here }
+      Sleep(200);
+      ABackend.BeginClose;
+    end;
+    ACase.AssertTrue('the program ended within 15 s', WaitUntil(@TheEnd, 15000));
+    Result := code;
+  finally
+    s.Free;
+  end;
+  ACase.AssertTrue('the finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
+end;
+
+function AllBytes4: RawByteString;
+var
+  i: Integer;
+begin
+  SetLength(Result, 1024);
+  for i := 0 to 1023 do
+    Result[i + 1] := AnsiChar(i and 255);
+end;
+
+{ B1. The same program through ConPTY is the control: its bytes must differ, or the
+  test could not tell a pseudo console from pipes. }
+procedure TTyTerminalPtyTests.TestPipeBackendIsBinarySafe;
+var
+  got: RawByteString;
+  helper: string;
+begin
+  helper := '"' + ParamStr(0) + '" --ty-pty-helper=';
+  RunToEnd(Self, TProcessPipeBackend.Create(False), helper + 'dump', '', got);
+  AssertEquals('every byte value, as written', Length(AllBytes4), Length(got));
+  AssertTrue('byte for byte', got = AllBytes4);
+  RunToEnd(Self, TProcessPipeBackend.Create(False), helper + 'cat', AllBytes4, got);
+  AssertTrue(Format('echoed byte for byte (%d bytes)', [Length(got)]), got = AllBytes4);
+  if TyConPtyAvailable then
+  begin
+    RunToEnd(Self, TConPtyBackend.Create, helper + 'dump', '', got);
+    AssertFalse('the control: ConPTY changes them', got = AllBytes4);
+  end;
+end;
+
+{ B2. Mutation: BeginClose waiting for the program on the main thread. }
+procedure TTyTerminalPtyTests.TestPipeBackendCloseDoesNotWait;
+var
+  s: TPtySession;
+  b: TProcessPipeBackend;
+  err: string;
+  proc: THandle;
+  t0: QWord;
+  build: Integer;
+begin
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  b := TProcessPipeBackend.Create(False);
+  s := TPtySession.Create(b);
+  proc := 0;
+  try
+    if not s.Start('"' + ParamStr(0) + '" --ty-pty-helper=sleep', 80, 24, err) then Fail('not started: ' + err);
+    AssertFalse('not a pseudo console', b.IsConPty(build));
+    proc := OpenProcess(SYNCHRONIZE or PROCESS_TERMINATE, False, b.ProcessId);
+    AssertTrue('the program is there', proc <> 0);
+    t0 := GetTickCount64;
+    s.Close;
+    AssertTrue(Format('Close returned at once (%d ms)', [GetTickCount64 - t0]), GetTickCount64 - t0 < 100);
+    AssertTrue('the finisher finished', PtyWaitForFinishers(9000));
+    AssertEquals('the program is gone', WAIT_OBJECT_0, WaitForSingleObject(proc, 0));
+  finally
+    s.Free;
+    if proc <> 0 then
+    begin
+      if WaitForSingleObject(proc, 0) <> WAIT_OBJECT_0 then
+        TerminateProcess(proc, 2);
+      CloseHandle(proc);
+    end;
+  end;
+end;
+
+{ B3. Mutation: the merge switch doing nothing. }
+procedure TTyTerminalPtyTests.TestPipeBackendStderr;
+var
+  got: RawByteString;
+  helper: string;
+begin
+  helper := '"' + ParamStr(0) + '" --ty-pty-helper=stderr';
+  RunToEnd(Self, TProcessPipeBackend.Create(True), helper, '', got);
+  AssertTrue('merged: stdout there: ' + got, Pos('ty-out', got) > 0);
+  AssertTrue('merged: stderr there: ' + got, Pos('ty-err', got) > 0);
+  RunToEnd(Self, TProcessPipeBackend.Create(False), helper, '', got);
+  AssertTrue('apart: stdout there: ' + got, Pos('ty-out', got) > 0);
+  AssertEquals('apart: stderr not', 0, Pos('ty-err', got));
 end;
 
 {$ENDIF}

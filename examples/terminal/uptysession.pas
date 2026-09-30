@@ -171,12 +171,15 @@ type
     { called on the READER thread: the queue went from empty to not empty, or the end
       was read. The host schedules Pump on the main thread from here. Set before Start. }
     property OnWake: TNotifyEvent read FOnWake write SetOnWake;
+    { bytes queued by Write, not yet taken by the writer (0 after Close): the ZModem
+      upload (phase 7, uzmodemterm CanSend) keeps it below 256 KB instead of filling
+      memory ahead of a slow pipe }
+    property PendingWrite: Integer read GetPendingWrite;
     { FOR THE TESTS (0 / nil after Close) }
     property Outstanding: Int64 read GetOutstanding;           { read, not yet Delivered }
     property MaxOutstanding: Int64 read GetMaxOutstanding;
     property TotalDelivered: Int64 read GetTotalDelivered;
     property WakeCount: Integer read GetWakeCount;
-    property PendingWrite: Integer read GetPendingWrite;       { queued, not yet taken by the writer }
     property WriterGone: Boolean read GetWriterGone;
     property Backend: TPtyBackend read FBackend;
     property Started: Boolean read FStarted;
