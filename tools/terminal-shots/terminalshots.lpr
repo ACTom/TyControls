@@ -629,7 +629,7 @@ begin
     + ', see https://example.com/docs here'#13#10
     + Utf8($7B2C) + Utf8($4E09) + Utf8($884C) + ' third line 12345'#13#10;
   ShootScheme('scheme-selection-unfocused-campbell.png', 'default', 'light', sel, 60, 4,
-    'Campbell 的选区（#FFFFFF 降到 0.3，在底色 #0C0C0C 上混成 #4D4D4D 左右），失焦：没设失焦色，用同一色', 'Campbell', '',
+    'Campbell 的选区（#FFFFFF 降到 0.3，在底色 #0C0C0C 上混成 #555555），失焦：没设失焦色，用同一色', 'Campbell', '',
     spSelection);
   ShootScheme('scheme-selection-focused-campbell.png', 'default', 'light', sel, 60, 4,
     '同上，聚焦', 'Campbell', '', spSelectionFocused);
