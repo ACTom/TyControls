@@ -244,7 +244,12 @@ end;
   blocky), BGRA's ClearType (coloured, and lighter). What the eye compares is how much ink a
   line lays down and how much of it is solid -- so that is what is compared, against GDI's
   own ClearType drawing the same string in the same font, black on white and white on black.
-  Each of the three rejected renderings misses one of the two by far more than the margin. }
+  Each of the three rejected renderings misses one of the two by far more than the margin.
+  The reference is GDI under THIS machine's ClearType settings, on purpose: away from the
+  default contrast Windows inks light-on-dark heavier than dark-on-light (12% for Segoe UI
+  at 1200), so a light-ink case going red where it was green is the renderer drifting from
+  what Windows draws on that desktop -- light ink drawn from dark-on-light coverage did
+  exactly that -- not an environment to be waved through. }
 procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
 
   { Coverage of every pixel: 0 = paper, 1 = ink. }
