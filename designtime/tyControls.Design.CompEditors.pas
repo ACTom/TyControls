@@ -221,7 +221,7 @@ type
     function Term: TTyTerminalView;
     { paired: which of the two schemes (light = ColorScheme, dark = DarkColorScheme);
       False when the user cancels }
-    function PickSide(const APrompt: string; out ADark: Boolean): Boolean;
+    function PickSide(const ATitle, APrompt: string; out ADark: Boolean): Boolean;
     procedure ImportScheme;
     procedure ExportScheme;
   public
@@ -1005,12 +1005,20 @@ begin
   end;
 end;
 
-function TTyTerminalViewComponentEditor.PickSide(const APrompt: string; out ADark: Boolean): Boolean;
+{ a verb as a dialog title: without its trailing ellipsis, written as three dots in English
+  and as one character (U+2026) in a translation }
+function VerbTitle(const AVerb: string): string;
+begin
+  Result := StringReplace(AVerb, '...', '', [rfReplaceAll]);
+  Result := Trim(StringReplace(Result, #$E2#$80#$A6, '', [rfReplaceAll]));
+end;
+
+function TTyTerminalViewComponentEditor.PickSide(const ATitle, APrompt: string; out ADark: Boolean): Boolean;
 var
   pick: Integer;
 begin
   ADark := False;
-  pick := InputCombo(StringReplace(rsDtTermImport, '...', '', []), APrompt, [rsDtTermLight, rsDtTermDark]);
+  pick := InputCombo(VerbTitle(ATitle), APrompt, [rsDtTermLight, rsDtTermDark]);
   Result := pick >= 0;
   ADark := pick = 1;
 end;
@@ -1063,7 +1071,7 @@ begin
     try
       for i := 0 to High(names) do
         list.Add(names[i]);
-      pick := InputCombo(StringReplace(rsDtTermImport, '...', '', []), rsDtTermWhichScheme, list);
+      pick := InputCombo(VerbTitle(rsDtTermImport), rsDtTermWhichScheme, list);
     finally
       list.Free;
     end;
@@ -1071,7 +1079,7 @@ begin
     nm := names[pick];
   end;
   dark := False;
-  if Term.ColorSchemePaired and not PickSide(rsDtTermImportSide, dark) then Exit;
+  if Term.ColorSchemePaired and not PickSide(rsDtTermImport, rsDtTermImportSide, dark) then Exit;
   if dark then
     target := Term.DarkColorScheme
   else
@@ -1094,11 +1102,22 @@ var
   src: TTyTerminalColorScheme;
 begin
   dark := False;
-  if Term.ColorSchemePaired and not PickSide(rsDtTermExportSide, dark) then Exit;
+  if Term.ColorSchemePaired and not PickSide(rsDtTermExport, rsDtTermExportSide, dark) then Exit;
   if dark then
     src := Term.DarkColorScheme
   else
     src := Term.ColorScheme;
+  { a scheme with no name or a missing colour cannot be written: say so before asking where
+    to save it (SaveToFile would refuse it too, but only after the user picked a file) }
+  try
+    src.SaveToText;
+  except
+    on E: Exception do
+    begin
+      TyMessageDlg(E.Message, mtError, [mbOK]);
+      Exit;
+    end;
+  end;
   dlg := TSaveDialog.Create(nil);
   try
     dlg.Filter := rsDtTermFilter;
