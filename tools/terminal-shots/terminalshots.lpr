@@ -10,24 +10,29 @@ program terminalshots;
   with --phase6 for the phase 6 one (colour schemes: the seven the example ships, a
   light / dark pair, following the theme, a program's OSC 11 over a scheme, the minimum
   contrast on a light scheme, a partial scheme, the selection at 0.3 and a scheme's own
-  unfocused selection colour).
+  unfocused selection colour), and with --phase7 for the phase 7 one (ZModem in the
+  terminal: the progress line, the summary with the prompt after it, the ConPTY
+  refusal, a local selection while the stream is claimed -- the real core and the
+  example's glue fed lrzsz's recording, the clock injected).
   Off screen, the way tests/test.dpi.support paints a tree: no window is shown, the
   control is parented to a form that never appears and drawn into a bitmap through
   its own RenderTo -- the path a WM_PAINT takes, minus the screen. Builds from source/
   and examples/terminal (for the asciicast reader) without the package.
 
-    terminalshots [--phase4 | --phase5 | --phase6] [--out <dir>] [--recordings <dir>]
+    terminalshots [--phase4 | --phase5 | --phase6 | --phase7] [--out <dir>] [--recordings <dir>]
 
   Writes PNGs and an index.md into <dir> (default
   docs/superpowers/plans/2026-09-29-terminal-phase-3-shots under the repository, or
   ...-phase-4-shots with --phase4, ...-phase-5-shots with --phase5,
-  docs/superpowers/plans/2026-09-30-terminal-phase-6-shots with --phase6). }
+  docs/superpowers/plans/2026-09-30-terminal-phase-6-shots with --phase6,
+  ...-phase-7-shots with --phase7). }
 
 uses
   Interfaces, SysUtils, Classes, Math, Types, Forms, Controls, Graphics, LCLType, LCLIntf,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.BuiltinThemes,
-  tyControls.Terminal.Buffer, tyControls.Terminal, uasciicast;
+  tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uzmodemsession,
+  uzmodemterm;
 
 type
   { what a phase 4 shot does to the terminal after the text is in }
@@ -658,12 +663,165 @@ begin
   end;
 end;
 
+{ ---- phase 7: ZModem in the terminal ------------------------------------------------------ }
+
+type
+  { the example's glue on a shot view: a clock the shots set, a download folder answered
+    at once (no dialog off screen) }
+  TZmShot = class
+  public
+    Now_: Double;
+    Dir: string;
+    Zm: TZmodemStreamHandler;
+    function Clock: Double;
+    procedure OnDownload(Sender: TObject);
+  end;
+
+function TZmShot.Clock: Double;
+begin
+  Result := Now_;
+end;
+
+procedure TZmShot.OnDownload(Sender: TObject);
+begin
+  Zm.AcceptDownload(Dir);
+end;
+
+function ZmRecording(const AName: string): RawByteString;
+var
+  f: TFileStream;
+begin
+  f := TFileStream.Create(ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../tests/fixtures/terminal-zmodem/' + AName),
+    fmOpenRead or fmShareDenyWrite);
+  try
+    Result := '';
+    SetLength(Result, f.Size);
+    if f.Size > 0 then
+      f.ReadBuffer(Result[1], f.Size);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure RemoveShotDir(const ADir: string);
+var
+  sr: TSearchRec;
+begin
+  if FindFirst(IncludeTrailingPathDelimiter(ADir) + '*', faAnyFile, sr) = 0 then
+  begin
+    repeat
+      if (sr.Name <> '.') and (sr.Name <> '..') then
+        DeleteFile(IncludeTrailingPathDelimiter(ADir) + sr.Name);
+    until FindNext(sr) <> 0;
+    FindClose(sr);
+  end;
+  RemoveDir(ADir);
+end;
+
+{ AHow: 0 = the progress line half way, 1 = done and the prompt after it, 2 = behind
+  ConPTY, 3 = a local selection while claimed (the program wanted the mouse) }
+procedure ShootZmodem(const AFile, AMode: string; AHow: Integer; const AWhat: string);
+const
+  Cols = 72;
+  Rows = 8;
+var
+  ctl: TTyStyleController;
+  v: TShotView;
+  z: TZmShot;
+  sz: RawByteString;
+  pty: TTyTerminalWindowsPty;
+  p, n, stop: Integer;
+begin
+  sz := ZmRecording('big-block.sz.bin');
+  ctl := TTyStyleController.Create(nil);
+  z := TZmShot.Create;
+  try
+    ctl.ThemeName := 'default';
+    ctl.Mode := AMode;
+    z.Dir := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyzm-shots-' + IntToStr(GetTickCount64);
+    ForceDirectories(z.Dir);
+    z.Now_ := 1000;
+    v := NewShotView(ctl, Cols, Rows);
+    try
+      z.Zm := TZmodemStreamHandler.Create(v.Core);
+      try
+        z.Zm.Clock := @z.Clock;
+        z.Zm.OnDownloadRequest := @z.OnDownload;
+        if AHow = 2 then
+        begin
+          pty.Backend := twpConPty;
+          pty.BuildNumber := 19044;
+          v.Core.WindowsPty := pty;
+        end;
+        if AHow = 3 then
+          v.WriteSync('$ cat notes.txt'#13#10'The ZModem transfer keeps the stream,'#13#10
+            + 'the mouse selects text on this side.'#13#10#27'[?1000h');
+        v.WriteSync(#27'[?25l$ sz big.bin'#13#10);
+        { the recording in 500-byte reads, 40 ms apart: the progress line at its pace }
+        case AHow of
+          0: stop := 11000;
+          1: stop := Length(sz);
+          2: stop := 24;                 { "rz" and the ZRQINIT: what sz says before it waits }
+        else
+          stop := 400;
+        end;
+        p := 1;
+        while p <= stop do
+        begin
+          n := 500;
+          if p + n - 1 > stop then n := stop - p + 1;
+          z.Now_ := z.Now_ + 40;
+          v.WriteSync(Copy(sz, p, n));
+          Inc(p, n);
+        end;
+        if AHow = 1 then
+          v.WriteSync('$ ');
+        if AHow = 3 then
+          v.Prepare(spSelectionFocused);
+        SaveShot(v, AFile, 'default', AMode, 96, AWhat);
+      finally
+        z.Zm.Free;
+      end;
+    finally
+      v.Free;
+    end;
+  finally
+    RemoveShotDir(z.Dir);
+    z.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure Phase7;
+const
+  Modes: array[0..1] of string = ('light', 'dark');
+var
+  m: Integer;
+begin
+  Index.Add('# 终端 7 期验收截图');
+  Index.Add('');
+  Index.Add('`tools/terminal-shots` 离屏画出来的（不开窗口，控件自己的 RenderTo），Windows、默认字体、96 PPI。传输走真的 Core 和示例的 ZModem（`uzmodemterm`），喂的是 lrzsz 自己的录制 `tests/fixtures/terminal-zmodem/big-block.sz.bin`（`sz -8`，20000 字节），时钟注入（每 500 字节 40 ms），所以数字每次一样。重新生成：编 `tools/terminal-shots/terminalshots.lpi`，跑 `terminalshots --phase7`。');
+  Index.Add('');
+  Index.Add('| 文件 | 主题 | 明暗 | 看什么 |');
+  Index.Add('|---|---|---|---|');
+  for m := 0 to 1 do
+    ShootZmodem(Format('zmodem-progress-%s.png', [Modes[m]]), Modes[m], 0,
+      '传输到一半：`sz` 打的 `rz` 被进度行原地盖掉，一行：箭头、文件名、已收 / 总大小、百分比、速度');
+  for m := 0 to 1 do
+    ShootZmodem(Format('zmodem-done-%s.png', [Modes[m]]), Modes[m], 1,
+      '传完：进度行换成摘要（文件数、大小、用时、平均速度），下一行是交还之后程序接着输出的提示符 `$ `');
+  ShootZmodem('zmodem-conpty-refused.png', 'light', 2,
+    'ConPTY 后面：终端里一行说明 ConPTY 会改坏二进制数据、请改用管道模式，`sz` 收到中止序列');
+  ShootZmodem('claimed-selection.png', 'light', 3,
+    '程序开着鼠标（1000）时接管：拖动出的是本地选区（程序拿不到这次拖动），传输照常');
+end;
+
 var
   names: TStringArray;
   i, m, w, h, k: Integer;
   data: RawByteString;
   mode, rec, what: string;
-  doPhase4, doPhase5, doPhase6: Boolean;
+  doPhase4, doPhase5, doPhase6, doPhase7: Boolean;
 const
   Modes: array[0..1] of string = ('light', 'dark');
   Singles: array[0..2] of string = ('vim-edit.cast', 'htop-few-frames.cast', 'cat-cjk-emoji.cast');
@@ -673,13 +831,17 @@ begin
   doPhase4 := False;
   doPhase5 := False;
   doPhase6 := False;
+  doPhase7 := False;
   for i := 1 to ParamCount do
   begin
     if ParamStr(i) = '--phase4' then doPhase4 := True;
     if ParamStr(i) = '--phase5' then doPhase5 := True;
     if ParamStr(i) = '--phase6' then doPhase6 := True;
+    if ParamStr(i) = '--phase7' then doPhase7 := True;
   end;
-  if doPhase6 then
+  if doPhase7 then
+    OutDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../docs/superpowers/plans/2026-09-30-terminal-phase-7-shots')
+  else if doPhase6 then
     OutDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../docs/superpowers/plans/2026-09-30-terminal-phase-6-shots')
   else if doPhase5 then
     OutDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../docs/superpowers/plans/2026-09-29-terminal-phase-5-shots')
@@ -702,6 +864,13 @@ begin
   Index := TStringList.Create;
   try
     Form.SetBounds(0, 0, 1600, 1200);
+    if doPhase7 then
+    begin
+      Phase7;
+      Index.SaveToFile(IncludeTrailingPathDelimiter(OutDir) + 'index.md');
+      WriteLn('done: ', OutDir);
+      Exit;
+    end;
     if doPhase6 then
     begin
       Phase6;

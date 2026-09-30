@@ -71,6 +71,8 @@ type
     procedure TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
     procedure TheExampleRecordingsMatchTheOracle;
     procedure TheExampleColourSchemesAreCoveredByTheNotice;
+    { 7 期: the example's ZModem is our own, written from the public-domain protocol }
+    procedure TheExampleZmodemUnitsAreOurOwn;
   end;
 
 implementation
@@ -589,6 +591,9 @@ const
   ViewIncludes: array[0..4] of string = ('source/tyControls.Terminal.View.Mouse.inc',
     'source/tyControls.Terminal.View.Links.inc', 'source/tyControls.Terminal.View.Osc52.inc',
     'source/tyControls.Terminal.View.Menu.inc', 'source/tyControls.Terminal.View.Selection.inc');
+  { phase 7: the core's stream and parser hooks are our own code too (spec 19): they
+    ship and are on disk, and the xterm.js heading does NOT name them }
+  CoreOwnIncludes: array[0..0] of string = ('source/tyControls.Terminal.Core.Stream.inc');
 var
   notice, heading: string;
   i, p: Integer;
@@ -617,6 +622,14 @@ begin
   { every file of the port by name, the generated charset tables included }
   for i := 0 to High(Units) do
     AssertTrue('its heading names ' + Units[i], Pos(ExtractFileName(Units[i]), heading) > 0);
+  for i := 0 to High(CoreOwnIncludes) do
+  begin
+    AssertTrue(CoreOwnIncludes[i] + ' ships (ps1)', IsShipped(FPs1, CoreOwnIncludes[i]));
+    AssertTrue(CoreOwnIncludes[i] + ' ships (sh)', IsShipped(FSh, CoreOwnIncludes[i]));
+    AssertTrue(CoreOwnIncludes[i] + ' is on disk', FileExists(RepoRoot + CoreOwnIncludes[i]));
+    AssertEquals(CoreOwnIncludes[i] + ' is ours: not in the xterm.js heading', 0,
+      Pos(ExtractFileName(CoreOwnIncludes[i]), heading));
+  end;
   AssertTrue('the notice credits the test fixtures', Pos('### Test fixtures', notice) > 0);
 end;
 
@@ -899,5 +912,31 @@ end;
 
 initialization
   RegisterTest(TReleaseManifestTest);
+
+{ The example's ZModem (spec 19.10): written from Forsberg's protocol description,
+  which is public domain, with no code from lrzsz -- whose licence (GPL) the library's
+  must not take on. So: the three units ship with the example, none of them says
+  anything under that licence (the word itself included: a copied header would), and
+  each names its source. }
+procedure TReleaseManifestTest.TheExampleZmodemUnitsAreOurOwn;
+const
+  ZmUnits: array[0..2] of string = ('examples/terminal/uzmodem.pas',
+    'examples/terminal/uzmodemsession.pas', 'examples/terminal/uzmodemterm.pas');
+var
+  i: Integer;
+  body, head: string;
+begin
+  for i := 0 to High(ZmUnits) do
+  begin
+    AssertTrue(ZmUnits[i] + ' ships (ps1)', IsShipped(FPs1, ZmUnits[i]));
+    AssertTrue(ZmUnits[i] + ' ships (sh)', IsShipped(FSh, ZmUnits[i]));
+    AssertTrue(ZmUnits[i] + ' is on disk', FileExists(RepoRoot + ZmUnits[i]));
+    body := ReadScript(RepoRoot + ZmUnits[i]);
+    AssertEquals(ZmUnits[i] + ': no "General Public License"', 0, Pos('General Public License', body));
+    AssertEquals(ZmUnits[i] + ': no "GPL"', 0, Pos('GPL', body));
+    head := Copy(body, 1, 1500);
+    AssertTrue(ZmUnits[i] + ': the header names the protocol''s source', Pos('Forsberg', head) > 0);
+  end;
+end;
 
 end.

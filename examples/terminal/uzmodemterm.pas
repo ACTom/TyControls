@@ -7,7 +7,7 @@ unit uzmodemterm;
 
   WRITTEN FOR THIS LIBRARY from Chuck Forsberg's protocol description, "The ZMODEM
   Inter Application File Transfer Protocol", Rev Oct-14-88 (public domain). No code
-  from lrzsz (GPL).
+  from lrzsz (its licence is not ours).
 
   How a transfer goes:
     1. Detect finds a hex ZRQINIT (a remote sz: we download) or ZRINIT (a remote rz:

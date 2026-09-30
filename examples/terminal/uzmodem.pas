@@ -7,7 +7,7 @@ unit uzmodem;
 
   WRITTEN FOR THIS LIBRARY. The protocol follows Chuck Forsberg, "The ZMODEM Inter
   Application File Transfer Protocol", Omen Technology, Rev Oct-14-88 -- a public
-  domain protocol (the document says so). It contains NO code from lrzsz (GPL): lrzsz
+  domain protocol (the document says so). It contains NO code from lrzsz (its licence is not ours): lrzsz
   is only the program the tests talk to, and what it sends on the wire (recorded, spec
   19.2 item 11) is what the tests compare with.
 

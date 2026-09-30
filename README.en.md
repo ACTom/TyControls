@@ -117,7 +117,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 |---|---|
 | `TTyEdit` | Single-line edit: selection, clipboard, word navigation |
 | `TTyMemo` | Multi-line edit |
-| `TTyTerminalView` | Terminal: draws a program's output and encodes keys for the host, after xterm.js; its own colour scheme if wanted (reads and writes Windows Terminal's format) |
+| `TTyTerminalView` | Terminal: draws a program's output and encodes keys for the host, after xterm.js; its own colour scheme if wanted (reads and writes Windows Terminal's format); hooks for in-band protocols and for the parser (ZModem send and receive in the example) |
 | `TTySpinEdit` | Integer spinner |
 | `TTyFloatSpinEdit` | Decimal spinner; the step can be less than 1 |
 | `TTyNumericEdit` | Digits-only field, group-formatted on blur |
@@ -382,7 +382,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [icons](examples/icons/) | Icon fonts |
 | [transitions](examples/transitions/) | Slide / fade transitions |
 | [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
-| [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY), skins, colour schemes, a key-code panel |
+| [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY / pipes), ZModem send and receive, skins, colour schemes, a key-code panel |
 
 Thirty-plus single-control examples live under [examples/](examples/).
 

@@ -8,7 +8,7 @@ unit uzmodemsession;
 
   WRITTEN FOR THIS LIBRARY from Chuck Forsberg's protocol description, "The ZMODEM
   Inter Application File Transfer Protocol", Rev Oct-14-88 (public domain). No code
-  from lrzsz (GPL); lrzsz is only the program the tests talk to.
+  from lrzsz (its licence is not ours); lrzsz is only the program the tests talk to.
 
   What is done (spec 19.7 "范围"):
     - the receiver answers with hex headers as rz does: ZRINIT (CANFDX | CANOVIO |

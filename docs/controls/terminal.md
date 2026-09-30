@@ -12,7 +12,7 @@ Term.OnData := @TermData;                 // TermData 里把 AData 写回 PTY
 Term.OnGridResize := @TermGridResize;     // TermGridResize 里改 PTY 的行列数
 ```
 
-`examples/terminal` 有两种模式：回放 asciicast 录制（不需要进程），以及「Shell」——真起一个 shell，Windows 上经 ConPTY，Linux / macOS 上经 PTY。接 PTY 的做法见 §11。
+`examples/terminal` 有两种模式：回放 asciicast 录制（不需要进程），以及「Shell」——真起一个 shell，Windows 上经 ConPTY，Linux / macOS 上经 PTY。接 PTY 的做法见 §11。Shell 模式里还能用 ZModem 收发文件（远端 `sz` / `rz`）：控件本身不带 ZModem，示例用下面 §12 的数据流钩子自己实现了一份。
 
 ---
 
@@ -44,7 +44,7 @@ uses tyControls.Terminal;
 | `CursorInactiveStyle` | `TTyTerminalCursorInactiveStyle` | `tcisOutline` | 失焦时的光标：空心框、实心块、竖线、下划线、不画。 |
 | `CursorBlink` | `Boolean` | `False` | 光标闪烁（600 ms；放着不动 5 分钟后停在显示）。同样是默认值：DECSCUSR 的奇数 / 偶数 `Ps` 临时要闪 / 不闪，`CSI 0 SP q` 和 RIS 回到这里设的。 |
 | `AmbiguousWide` | `Boolean` | `False` | 东亚歧义宽度字符算两格。只对 `UnicodeVersion` 为 `15` / `15-graphemes` 起作用。 |
-| `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §12。 |
+| `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §14。 |
 | `MacOptionIsMeta` | `Boolean` | `False` | macOS 上 Option 当 Meta（发 `ESC` 前缀），否则 Option 打第三层字符。 |
 | `AlternateScroll` | `Boolean` | `True` | 没有滚回（备用屏）且程序没要鼠标事件时，滚轮发上下方向键。 |
 | `DrawBoldTextInBrightColors` | `Boolean` | `True` | 粗体的调色板颜色 0–7 画成 8–15。 |
@@ -100,12 +100,13 @@ uses tyControls.Terminal;
 
 | 属性 | 说明 |
 |------|------|
-| `Core: TTyTerminalCore` | 终端本体：缓冲、模式、解析器。只读取它，或挂下面 §12 说的那几个事件。 |
+| `Core: TTyTerminalCore` | 终端本体：缓冲、模式、解析器。只读取它，或挂下面 §14 说的那几个事件；解析器钩子用它的 `Register*Handler`（§13）。 |
 | `Core.ReflowCursorLine` | 改列数重新折行时，光标所在的那段也折。默认 `False`（同 xterm.js：程序收到改尺寸会自己重画那一行）。 |
 | `Cols`、`Rows` | 当前网格 |
 | `Title` | 程序用 OSC 0 / 2 设的标题 |
 | `SelectionText` | 选中的文字（规则见 §7）；没有选区是空串 |
 | `HasSelection` | 有没有选区 |
+| `StreamClaimed` | 有数据流处理器正在接管程序的输出（§12） |
 
 ### 方法
 
@@ -126,6 +127,7 @@ uses tyControls.Terminal;
 | `CellAt(X, Y): TPoint` | 客户区像素 → 0 起的格子（钳在网格内）。 |
 | `CellRect(ACol, ARow): TRect` | 视口里一格的矩形。 |
 | `SizeForGrid(ACols, ARows): TSize` | 要这么多行列，客户区得多大（内边距、滚动条都算进去）。宿主想固定 80 × 24 就用它设尺寸。 |
+| `AddStreamHandler(AHandler)`、`RemoveStreamHandler(AHandler)` | 挂上 / 摘掉一个数据流处理器（带内协议，§12），转给 Core。控件不拥有它：释放处理器之前先摘掉。 |
 
 ### 事件
 
@@ -140,6 +142,7 @@ uses tyControls.Terminal;
 | `OnSelectionChange(Sender)` | 选区变了（包括被清掉）。 |
 | `OnLinkActivate(Sender, AUri, AFromOsc8)` | 用户 Ctrl+单击（macOS Cmd+单击）了一条链接。控件什么都不打开，打不打开由宿主定。见 §8。 |
 | `OnOsc52(Sender, AWrite, ASelection, var AText, var AAllow)` | 程序要写或读剪贴板，宿主可以改文字、可以拒绝。见 §9。 |
+| `OnClaimedInput(Sender, AData)` | 数据流处理器接管期间，用户的按键、粘贴、滚轮翻成的方向键（已经编好的字节）不发给程序，改从这里来。宿主拿它做取消（比如连按五次 Ctrl+X）。`ReadOnly` 时不发。见 §12。 |
 
 ---
 
@@ -431,11 +434,148 @@ Windows 上在第一个字节到来之前告诉 Core 它在 ConPTY 后面、是�
 
 ---
 
-## 12. 注意事项
+## 12. 带内协议：数据流钩子
+
+有些程序把一段二进制协议夹在普通输出里：`sz` / `rz` 的 ZModem 就是这样——先打一行字，再开始传文件，传完了 shell 的提示符接着出来。控件不内置任何这类协议，但宿主可以在不改控件的前提下自己接：写一个 `TTyTerminalStreamHandler` 的子类，`Term.AddStreamHandler` 挂上。
+
+控件每解析一段程序输出（原始字节，还没按 UTF-8 解码）之前，先问挂着的处理器 `Detect`：认出了协议的开头就返回 `True` 和开头的位置。这之前的字节照常显示，之后的都交给处理器的 `Feed`，不进解析器、不上屏，直到处理器 `Release`。接管期间处理器经 `Claimed` 拿到的会话对象（`TTyTerminalStreamSession`）说话：
+
+| 会话的方法 | 做什么 |
+|------|------|
+| `SendRaw(AData)` | 原样发给程序（走 `OnData`，不经按键编码，不滚到底）。`ReadOnly` 时不发，返回 `False`。 |
+| `ShowText(AText)` | 在屏幕上显示一段文字，可以带控制序列（`#13#27'[K'` 原地刷新一行进度）。不发给程序。 |
+| `Release(ALeftover)` | 结束接管。`ALeftover` 是处理器收下但不属于协议的字节（协议结束之后的提示符），交还后排在所有还没解析的输出前面，再走一遍 `Detect`。 |
+
+一个最小的处理器——`<<GO>>` 开始、`<<END>>` 结束，中间的字节自己处理：
+
+```pascal
+type
+  TMarkerHandler = class(TTyTerminalStreamHandler)
+  private
+    FSession: TTyTerminalStreamSession;
+    FGot: RawByteString;
+  public
+    function Detect(AData: PByte; ACount: Integer; out AClaimAt: Integer): Boolean; override;
+    procedure Claimed(ASession: TTyTerminalStreamSession); override;
+    procedure Feed(AData: PByte; ACount: Integer); override;
+  end;
+
+function TMarkerHandler.Detect(AData: PByte; ACount: Integer; out AClaimAt: Integer): Boolean;
+var
+  s: RawByteString;
+begin
+  SetString(s, PAnsiChar(AData), ACount);
+  AClaimAt := Pos('<<GO>>', s) - 1;             // 0 起；前面的字节照常显示
+  Result := AClaimAt >= 0;
+end;
+
+procedure TMarkerHandler.Claimed(ASession: TTyTerminalStreamSession);
+begin
+  FSession := ASession;
+  FGot := '';
+end;
+
+procedure TMarkerHandler.Feed(AData: PByte; ACount: Integer);
+var
+  s: RawByteString;
+  p: Integer;
+begin
+  SetString(s, PAnsiChar(AData), ACount);
+  FGot := FGot + s;
+  p := Pos('<<END>>', FGot);
+  if p > 0 then
+    FSession.Release(Copy(FGot, p + 7, MaxInt));  // 结束标记之后的交还
+end;
+
+// 挂上；释放之前先摘掉
+Handler := TMarkerHandler.Create;
+Term.AddStreamHandler(Handler);
+...
+Term.RemoveStreamHandler(Handler);
+Handler.Free;
+```
+
+要知道的几件事：
+
+- **前面的先显示**：`Detect` 给的位置之前的字节，在 `Claimed` 之前就解析上屏了。
+- **标记被切开**：输出是一段一段来的（大块按 32 KB 分段），标记可能跨两段。前一段已经显示了，控件不扣着它等下一段；处理器自己记住前半截，在下一段位置 0 接管（ZModem 的头被切开时，屏幕上会先出现 `**` 两个字符）。
+- **流控照常**：接管的块，`Write` 的回调照样按顺序到，`Core.PendingBytes` 照样往下减，宿主的高低水位不受影响。
+- **交还的字节再检测**：`sz a; sz b` 这种，第二段协议的开头可能就在第一段结束之后的同一次读里。处理器一个字节都没吃就把收到的全部交还时，控件把第一个字节直接交给解析器，免得同一个处理器在同一处反复接管。
+- **在 `Feed` 外 `Release`**（用户点了取消，程序没在输出）：交还的字节下一片再解析，和 `Write` 一样只入队；`ShowText` 则当场显示。
+- **多个处理器**：每段都问所有挂着的，位置最靠前的接管，同一位置后挂的优先；没接管到的什么都不知道。
+- **在事件里调控件**：`Detect`、`Claimed`、`Feed` 期间控件算「忙」，处理器（或它引出的 `OnData` → 宿主）调 `Core.Resize`、`Reset`、`WriteSync` 会等这一块处理完再执行（§4）。别在 `Feed` 里弹模态框：用 `Application.QueueAsyncCall` 排到消息循环里再问用户，程序在等的时候重发的东西照收。
+- **异常**：`Detect` / `Feed` 抛异常照 §4 的规矩处理（这一块剩下的算处理过、回调照调），`Detect` 抛了就没有接管，`Feed` 抛了接管还在。`Detect` 给的位置不在 `0..ACount` 里抛 `EArgumentOutOfRangeException`。
+
+**接管期间**：
+
+| | |
+|------|------|
+| 键盘、粘贴、滚轮翻成的方向键 | 不发给程序，改发 `OnClaimedInput`；不滚到底，不清选区。 |
+| 焦点报告（1004）、明暗通知（2031）、默认编码的鼠标报告 | **丢掉**：它们会插进协议的字节里。交还之后也不补发。 |
+| 鼠标 | 按「程序没要鼠标」处理：拖出来是本地选区，滚轮滚滚回。 |
+| `Reset` | 结束接管：先调处理器的 `ClaimEnded(tceReset)`，这时会话还能 `SendRaw`（叫程序停下），`Release` 不起作用。 |
+| `RemoveStreamHandler`（正在接管的那个） | 同上，`ClaimEnded(tceRemoved)`；可以在它自己的 `Feed` 里摘。 |
+| `Core.DiscardPending` | 丢掉排着的输出和交还了还没解析的字节，**不**结束接管。 |
+| 改尺寸 | 不影响接管。 |
+| 释放控件 / Core | 不回调处理器（宿主可能也在释放）。 |
+
+没挂处理器时，解析路径和没有这个功能时一样。
+
+**ZModem**：`examples/terminal` 里有一份完整的实现（`uzmodem.pas` 编解码、`uzmodemsession.pas` 收发状态机、`uzmodemterm.pas` 接到终端上），和 lrzsz 互通，可以照着抄。它按 Forsberg 的协议文档（公有领域）写，不含 lrzsz 的代码（GPL）。
+
+**Windows 上要不经 ConPTY**：ConPTY 会把程序的输出重新渲染一遍，0x80 以上的字节两个方向都会丢，二进制协议走不通。这类协议要让命令直接跑在两条管道上（示例 Shell 那排的「Pipe」，`uptywin.pas` 的 `TProcessPipeBackend`）；这时没有终端，程序不回显、不能改尺寸。Linux / macOS 的 PTY 没有这个问题（`sz` / `rz` 自己把终端设成原始模式）。
+
+---
+
+## 13. 解析器钩子
+
+想处理某个转义序列（或改掉内置的处理），用 `Core` 上照 xterm.js `terminal.parser` 公开的五个方法：
+
+| 方法 | 回调 |
+|------|------|
+| `Core.RegisterCsiHandler(AId, AHandler)` | `function(AParams: TTyTerminalParams): Boolean` |
+| `Core.RegisterEscHandler(AId, AHandler)` | `function: Boolean` |
+| `Core.RegisterOscHandler(AIdent, AHandler)` | `function(const AData: string): Boolean`（UTF-8） |
+| `Core.RegisterDcsHandler(AId, AHandler)` | `function(const AData: string; AParams: TTyTerminalParams): Boolean` |
+| `Core.RegisterApcHandler(AId, AHandler)` | `function(const AData: string): Boolean` |
+| `Core.UnregisterHandler(AHandle)` | 注销上面返回的句柄 |
+
+- `AId` 用 `TyTerminalFunctionId(前缀, 中间字节, 终止字节)` 造：`TyTerminalFunctionId('?', '', 'h')` 是 `CSI ? … h`。不合法（前缀不在 `<=>?`、中间字节超过两个、终止字节越界）抛 `EArgumentException`，消息和 xterm.js 一样。
+- 同一个序列可以挂多个：**后挂的先调**。返回 `True` 就到此为止；返回 `False` 试前一个，最后是控件自己的处理。
+- OSC / DCS / APC 只在序列**正常结束**时调一次，载荷最多 10 MB。某个 OSC 编号挂了处理器，它就**不再进 `OnOsc`**——哪怕处理器都返回 `False`（同 xterm.js：链非空不走回退）；注销到一个不剩，又回到 `OnOsc`。
+- 参数对象是借给回调用的，只在调用期间有效；要留着就 `AParams.Clone`。
+- `UnregisterHandler` 只认这五个方法发出的句柄，别的数字（包括控件自己的处理器）一律忽略。
+- `Core.Reset` 不清宿主挂的处理器。只有同步处理器，没有 xterm.js 的异步（返回 Promise）那种。
+- 全部只能在主线程调。
+- `Core.Parser` 仍然公开，但那是底层接口：它的 `Clear*`、`Set*Fallback`、`SetPrintHandler` 会拆掉控件自己的处理。
+
+```pascal
+// OSC 1337（iTerm2 的扩展）：控件没有内置处理，挂一个收下载荷
+function TForm1.Osc1337(const AData: string): Boolean;
+begin
+  Memo1.Lines.Add('OSC 1337: ' + AData);
+  Result := True;
+end;
+
+// 吞掉闪烁（SGR 5）：只有这一个参数时返回 True，内置的 SGR 就不跑；其余照常
+function TForm1.NoBlink(AParams: TTyTerminalParams): Boolean;
+begin
+  Result := (AParams.Length = 1) and (AParams[0] = 5);
+end;
+
+FOsc := Term.Core.RegisterOscHandler(1337, @Osc1337);
+FSgr := Term.Core.RegisterCsiHandler(TyTerminalFunctionId('', '', 'm'), @NoBlink);
+...
+Term.Core.UnregisterHandler(FSgr);
+```
+
+---
+
+## 14. 注意事项
 
 - **Unicode 版本**：默认 `11`。要字形簇（表情修饰符、ZWJ 序列按一个字算）选 `15-graphemes`。**`15` 不连接组合符**：`e` + U+0301 在 `15` 下占 2 格（组合符自占一格），在 `6` / `11` / `15-graphemes` 下占 1 格。
 - **`AmbiguousWide` 只对 `15` / `15-graphemes` 起作用**；打开后，U+0301 这类在表里本身是歧义宽度的组合符也算宽：`é`（e + U+0301）在 `15` 下占 **3** 格，在 `15-graphemes` 下占 **2** 格（照 xterm.js）。
-- **控件接管了 Core 的这些事件，宿主不要改写**：`OnData`、`OnRefreshRows`、`OnTitleChange`、`OnBell`、`OnCursorMove`、`OnScroll`、`OnBufferActivate`、`OnModesChange`、`OnOsc`、`OnQueryBaseColor`、`OnProcessRequest`、`OnWindowOptionsReport`、`OnResize`、`OnScrollbackCleared`、`OnUserInput`。宿主可以自己挂 `Core.OnIconNameChange`、`Core.OnLineFeed`、`Core.OnRequestScrollToBottom`（只是通知，Core 自己会滚到底），或用 `Core.Parser.Register*Handler` 加自己的序列处理器。
+- **控件接管了 Core 的这些事件，宿主不要改写**：`OnData`、`OnRefreshRows`、`OnTitleChange`、`OnBell`、`OnCursorMove`、`OnScroll`、`OnBufferActivate`、`OnModesChange`、`OnOsc`、`OnQueryBaseColor`、`OnProcessRequest`、`OnWindowOptionsReport`、`OnResize`、`OnScrollbackCleared`、`OnUserInput`、`OnClaimedInput`（转成控件自己的 `OnClaimedInput`）。宿主可以自己挂 `Core.OnIconNameChange`、`Core.OnLineFeed`、`Core.OnRequestScrollToBottom`（只是通知，Core 自己会滚到底），或用 `Core.Register*Handler` 加自己的序列处理器（§13）。
 - 换主题、换方案时只有颜色表真变了（换明暗、换配色、换方案）才告诉程序（开了 2031 就报明暗），同时丢掉程序用 OSC 设过的颜色；只改了内边距、字体的主题变化不算。
 - 第一次画一屏新字形时，每一帧只花约 10 ms 画新字形，剩下的下一帧补上（Windows 上一个字形约 1.1 ms）；之后都从缓存里取。整屏往上滚一行时只画新露出的那一行，其余的行原样挪上去。
 - 块内切片不改变重入的规矩：解析中间调的 `Core.Resize`、`WriteSync` 等整块处理完才执行（§4）。
@@ -452,9 +592,10 @@ Windows 上在第一个字节到来之前告诉 Core 它在 ConPTY 后面、是�
 
 ---
 
-## 13. 本期限制 / 后续
+## 15. 本期限制 / 后续
 
 - 自绘字形还没覆盖：Legacy Computing（U+1FB00–）、进度条（U+EE00–EE0B）、git 分支图（U+F5D0–F60D），现在由字体画。
 - win32-input-mode（键盘按扫描码编码）、Alt+单击移动光标、kitty 键盘协议：以后。
 - 配色方案：只读写 Windows Terminal 的格式（iTerm2 的 `.itermcolors`、xterm.js 的主题 JSON 等以后再说，接口留了 `AFormat`）；16–255 色不进方案；系统色（`clWindow` 这类）在系统改了配色后不会自己刷新，要调一次方案的 `Changed`（§3）；方案名里的 `\u0000` 会丢（FPC 的 JSON 解析器吞掉它）。
+- 数据流钩子：标记跨段时前半截会先显示；接管期间的焦点报告、2031 通知、默认编码的鼠标报告丢掉且不补发；只有同步处理器。解析器钩子只有同步的。
 - 以后单独立项：屏幕阅读器、连字、图片协议（sixel、iTerm、kitty 图形）、搜索、序列化、进度条 OSC 9;4、网页字体、彩色表情、文字闪烁（SGR 5）。
