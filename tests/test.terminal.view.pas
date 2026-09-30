@@ -962,6 +962,31 @@ var
   list: PPropList;
   n, i, checked: Integer;
   p: PPropInfo;
+
+  function CheckSubDefaults(const AOwnerProp: string; AObj: TObject): Integer;
+  var
+    sub: PPropList;
+    m, k: Integer;
+    q: PPropInfo;
+  begin
+    Result := 0;
+    m := GetPropList(AObj.ClassInfo, [tkInteger, tkChar, tkWChar, tkEnumeration, tkBool], nil);
+    GetMem(sub, m * SizeOf(Pointer));
+    try
+      GetPropList(AObj.ClassInfo, [tkInteger, tkChar, tkWChar, tkEnumeration, tkBool], sub);
+      for k := 0 to m - 1 do
+      begin
+        q := sub^[k];
+        AssertTrue(AOwnerProp + '.' + q^.Name + ' declares a default', q^.Default <> Longint($80000000));
+        AssertEquals('published default of ' + AOwnerProp + '.' + q^.Name + ' = what the constructor makes',
+          Int64(q^.Default), GetOrdProp(AObj, q));
+        Inc(Result);
+      end;
+    finally
+      FreeMem(sub);
+    end;
+  end;
+
 begin
   v := TTyTerminalView.Create(nil);
   try
@@ -982,6 +1007,19 @@ begin
     finally
       FreeMem(list);
     end;
+    { 6 期:两个方案对象的子属性(22 色,default clNone)同样等于构造值 }
+    checked := 0;
+    n := GetPropList(v.ClassInfo, [tkClass], nil);
+    GetMem(list, n * SizeOf(Pointer));
+    try
+      GetPropList(v.ClassInfo, [tkClass], list);
+      for i := 0 to n - 1 do
+        if GetObjectProp(v, list^[i]) is TTyTerminalColorScheme then
+          checked := checked + CheckSubDefaults(list^[i]^.Name, GetObjectProp(v, list^[i]));
+    finally
+      FreeMem(list);
+    end;
+    AssertEquals('sub-properties of ColorScheme and DarkColorScheme checked', 44, checked);
   finally
     v.Free;
   end;

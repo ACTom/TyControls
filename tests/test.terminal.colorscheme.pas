@@ -56,6 +56,10 @@ type
 
 { 反引号换成反斜杠(见单元头) }
 function J(const S: string): string;
+{ WT 文档里 Campbell 的示例(单个对象) }
+function TyTermDocCampbell: string;
+{ 夹具 terminal-wt-defaults.json 的原样字节 }
+function TyTermWtFixtureText: string;
 
 implementation
 
@@ -552,6 +556,16 @@ var
   rgb: Cardinal;
 begin
   if C.SlotRgb(S, rgb) then Result := Hex6(rgb) else Result := 'unset';
+end;
+
+function TyTermDocCampbell: string;
+begin
+  Result := DocCampbell;
+end;
+
+function TyTermWtFixtureText: string;
+begin
+  Result := FixtureText;
 end;
 
 { 读成功:OnChange 恰好一次;调用者释放 }

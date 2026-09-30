@@ -51,6 +51,11 @@ unit tyControls.Terminal;
     直接用,不再加 YBase − YDisp。
   - 主题变了没有钩子:覆盖 Invalidate,比 (模型, ThemeVersion, StyleClass, StyleOverride);
     RenderTo 开头再比一次兜底(无头测试直接调 RenderTo)。
+  - 独立配色方案(6 期):ColorSource / ColorScheme / ColorSchemePaired / DarkColorScheme。
+    改这几项(含方案里的色)不当场 Invalidate:色表的键里有来源、配对和选中那一边的修订号,
+    当场就失效(Core 问颜色、996 已是新的);「清 OSC 覆盖、报 2031、重画」经 QueueAsyncCall
+    做一次(RequestSchemeNotify),宿主连着设几项程序只收到一条 2031。加载中(csLoading)
+    什么都不排、不通知;Loaded 之后第一次建色表不算「变了」。
   - 选区照上游记坐标(缓冲行),不记标记:输出把行挤出头部时按缓冲的 TrimmedLines 差值
     整体上移(SyncSelectionTrim),解析返回后、绘制前、每个鼠标入口都追一次。清选区的时机
     同上游:用户输入、行数变了、换缓冲(含 RIS / Reset)、程序打开鼠标上报;另加清滚回。 }
@@ -58,6 +63,7 @@ unit tyControls.Terminal;
 interface
 
 uses
+  tyControls.Css.Values,
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LMessages, LazUTF8, Forms,
   ExtCtrls, Clipbrd, Menus, tyControls.Menu, tyControls.StrConsts,
   BGRABitmap, BGRABitmapTypes,
@@ -65,7 +71,7 @@ uses
   tyControls.Controller, tyControls.ScrollBar, tyControls.PlatformWS, tyControls.TextMenu,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal.Selection,
-  tyControls.Terminal.Links, tyControls.Terminal.Parser;
+  tyControls.Terminal.Links, tyControls.Terminal.Parser, tyControls.Terminal.ColorScheme;
 
 const
   { X11 惯例的 PRIMARY(选中即复制、中键粘贴):Unix 上除了 macOS。按平台取,不按 widgetset;
@@ -81,6 +87,10 @@ type
   TTyTerminalCore = tyControls.Terminal.Core.TTyTerminalCore;
   TTyUnicodeVersion = tyControls.Unicode.Width.TTyUnicodeVersion;
   TTyScrollBarAutoHide = tyControls.ScrollBar.TTyScrollBarAutoHide;
+  TTyTerminalColorScheme = tyControls.Terminal.ColorScheme.TTyTerminalColorScheme;
+
+  { 色表从哪来:跟随主题(默认,5 期的样子)/ 自定义方案(ColorScheme,配对时按主题明暗选边) }
+  TTyTerminalColorSource = (tsrcTheme, tsrcScheme);
 
   TTyTerminalCursorStyle = (tcsBlock, tcsUnderline, tcsBar);
   TTyTerminalCursorInactiveStyle = (tcisOutline, tcisBlock, tcisBar, tcisUnderline, tcisNone);
@@ -215,6 +225,21 @@ type
     FScrollBarAutoHide: TTyScrollBarAutoHide;
     FLineHeightPercent: Integer;
     FLetterSpacing: Integer;
+    { 独立配色方案(6 期) }
+    FColorSource: TTyTerminalColorSource;
+    FColorScheme, FDarkColorScheme: TTyTerminalColorScheme;
+    FColorSchemePaired: Boolean;
+    { 色表缓存键新增的:来源、配对、上次选了哪一边、那一边的修订号 }
+    FPaletteSource: TTyTerminalColorSource;
+    FPalettePaired, FPaletteDarkSide: Boolean;
+    FPaletteSchemeRev: Cardinal;
+    FActiveScheme: TTyTerminalColorScheme;
+    FThemeGroundDark: Boolean;
+    { EnsureThemeCurrent 的「上次通知」键同样加这四项 }
+    FNotifiedSource: TTyTerminalColorSource;
+    FNotifiedPaired, FNotifiedDarkSide: Boolean;
+    FNotifiedSchemeRev: Cardinal;
+    FSchemeNotifyRequests: Integer;
     { 状态 }
     FScrollBar: TTyScrollBar;
     FSyncingScroll: Boolean;
@@ -391,6 +416,16 @@ type
     procedure SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
     procedure SetLineHeightPercent(AValue: Integer);
     procedure SetLetterSpacing(AValue: Integer);
+    { 独立配色方案 }
+    procedure SetColorSource(AValue: TTyTerminalColorSource);
+    procedure SetColorScheme(AValue: TTyTerminalColorScheme);
+    procedure SetDarkColorScheme(AValue: TTyTerminalColorScheme);
+    procedure SetColorSchemePaired(AValue: Boolean);
+    procedure SchemeChanged(Sender: TObject);
+    { 改了来源 / 配对 / 方案:经消息循环通知一次(加载中、释放中不排) }
+    procedure RequestSchemeNotify;
+    { 这一边(深 = True)用的方案的修订号;跟随主题时 0 }
+    function SideRevision(ADark: Boolean): Cardinal;
     { 鼠标上报 }
     function Reporting: Boolean;
     function MakeMouseEvent(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
@@ -575,6 +610,12 @@ type
     function ScrollBarSyncs: Integer;
     { whole-control invalidations that went through (Invalidate that did not return early) }
     function ControlInvalidations: Integer;
+    { FOR THE TESTS(6 期,纯查询):色表这一刻用的是哪套(nil = 跟随主题)、主题的底算不算深、
+      有没有排着的通知、RequestSchemeNotify 真正排队过几次 }
+    function ActiveColorScheme: TTyTerminalColorScheme;
+    function ThemeGroundIsDark: Boolean;
+    function NotifyQueued: Boolean;
+    function SchemeNotifyRequests: Integer;
     { 一帧里光栅化新字形的时间预算(ms,<= 0 不限);默认 10 }
     property RasterBudgetMs: Double read FRasterBudgetMs write FRasterBudgetMs;
     { 上一次贴到画布的时刻(Core 的时钟) }
@@ -659,6 +700,13 @@ type
     property Osc52: TTyTerminalOsc52Policy read FOsc52 write FOsc52 default to52Off;
     property LineHeightPercent: Integer read FLineHeightPercent write SetLineHeightPercent default 100;
     property LetterSpacing: Integer read FLetterSpacing write SetLetterSpacing default 0;
+    { 独立配色方案(6 期):程序的 OSC 4 / 10 / 11 / 12 > 方案里设了的 > 主题。方案里没设的
+      项跟主题;两个方案对象的 setter 是 Assign }
+    property ColorSource: TTyTerminalColorSource read FColorSource write SetColorSource default tsrcTheme;
+    property ColorScheme: TTyTerminalColorScheme read FColorScheme write SetColorScheme;
+    { 开着时:主题的底是浅的用 ColorScheme、深的用 DarkColorScheme(按 tycss on() 的规则) }
+    property ColorSchemePaired: Boolean read FColorSchemePaired write SetColorSchemePaired default False;
+    property DarkColorScheme: TTyTerminalColorScheme read FDarkColorScheme write SetDarkColorScheme;
     property TabStop default True;
     property Align;
     property Anchors;
@@ -761,6 +809,12 @@ begin
   FScrollBarAutoHide := sbahDefault;
   FLineHeightPercent := 100;
   FLetterSpacing := 0;
+  FColorSource := tsrcTheme;
+  FColorSchemePaired := False;
+  FColorScheme := TTyTerminalColorScheme.Create(Self);
+  FColorScheme.OnChange := @SchemeChanged;
+  FDarkColorScheme := TTyTerminalColorScheme.Create(Self);
+  FDarkColorScheme.OnChange := @SchemeChanged;
   FIsMac := TyTerminalIsMac;
   FIsWindows := TyTerminalIsWindows;
   { 中键、右键拖出控件也要收到移动(上报期间);LCL 默认只捕获左键 }
@@ -867,6 +921,10 @@ begin
   FreeAndNil(FRasterizer);
   FreeAndNil(FSurface);
   FreeAndNil(FCocoaIme);
+  if FColorScheme <> nil then FColorScheme.OnChange := nil;
+  if FDarkColorScheme <> nil then FDarkColorScheme.OnChange := nil;
+  FreeAndNil(FColorScheme);
+  FreeAndNil(FDarkColorScheme);
   inherited Destroy;
 end;
 
@@ -1163,6 +1221,8 @@ begin
   FNotifyQueued := False;
   if csDestroying in ComponentState then Exit;
   EnsureThemeCurrent;
+  { 改方案的路(RequestSchemeNotify)没有当场 Invalidate:这里重画 }
+  Invalidate;
 end;
 
 procedure TTyTerminalView.AsyncApplyGrid(Data: PtrInt);
@@ -1328,6 +1388,8 @@ var
   i: Integer;
   differs: Boolean;
 begin
+  { .lfm 的子属性一项项流进来:加载中不建色表、不记「已通知」(半套方案) }
+  if csLoading in ComponentState then Exit;
   EnsurePalette;
   if FNotifiedValid and (FNotifiedModel = FPaletteModel) and (FNotifiedVersion = FPaletteVersion)
     and (FNotifiedClass = FPaletteClass) and (FNotifiedOverride = FPaletteOverride) then
@@ -1689,6 +1751,9 @@ end;
 procedure TTyTerminalView.Loaded;
 begin
   inherited Loaded;
+  { 加载定下的是起始状态:之后第一次建色表不算「变了」(不清 OSC 覆盖、不报 2031);
+    不往 published 字段写任何东西 }
+  FNotifiedValid := False;
   UpdateGrid;
 end;
 
@@ -3316,6 +3381,60 @@ begin
   DirtyAll;
 end;
 
+{ ---- 独立配色方案(6 期) ------------------------------------------------------------- }
+
+procedure TTyTerminalView.SetColorSource(AValue: TTyTerminalColorSource);
+begin
+  if FColorSource = AValue then Exit;
+  FColorSource := AValue;
+  RequestSchemeNotify;
+end;
+
+procedure TTyTerminalView.SetColorScheme(AValue: TTyTerminalColorScheme);
+begin
+  { 对象属性要有 setter 才流式化(TTyHeader.Columns 的注释);Assign 发一次 OnChange }
+  FColorScheme.Assign(AValue);
+end;
+
+procedure TTyTerminalView.SetDarkColorScheme(AValue: TTyTerminalColorScheme);
+begin
+  FDarkColorScheme.Assign(AValue);
+end;
+
+procedure TTyTerminalView.SetColorSchemePaired(AValue: Boolean);
+begin
+  if FColorSchemePaired = AValue then Exit;
+  FColorSchemePaired := AValue;
+  RequestSchemeNotify;
+end;
+
+procedure TTyTerminalView.SchemeChanged(Sender: TObject);
+begin
+  { 方案的修订号已经加了一:色表的键当场失效。没用到的那一边改了,键不变,通知回来时
+    逐项比也是一样,不报、不重画 }
+  RequestSchemeNotify;
+end;
+
+procedure TTyTerminalView.RequestSchemeNotify;
+begin
+  { 不当场 Invalidate:它当场 EnsureThemeCurrent、当场通知,连着设几项就是几条 2031 }
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  if FNotifyQueued then Exit;
+  FNotifyQueued := True;
+  Inc(FSchemeNotifyRequests);
+  Application.QueueAsyncCall(@AsyncNotifyScheme, 0);
+end;
+
+function TTyTerminalView.SideRevision(ADark: Boolean): Cardinal;
+begin
+  if FColorSource = tsrcTheme then
+    Result := 0
+  else if FColorSchemePaired and ADark then
+    Result := FDarkColorScheme.Revision
+  else
+    Result := FColorScheme.Revision;
+end;
+
 { ---- 输入法 ------------------------------------------------------------------------- }
 
 function TTyTerminalView.ImeTargetControl: TWinControl;
@@ -3471,6 +3590,28 @@ end;
 function TTyTerminalView.ControlInvalidations: Integer;
 begin
   Result := FControlInvalidates;
+end;
+
+function TTyTerminalView.ActiveColorScheme: TTyTerminalColorScheme;
+begin
+  EnsurePalette;
+  Result := FActiveScheme;
+end;
+
+function TTyTerminalView.ThemeGroundIsDark: Boolean;
+begin
+  EnsurePalette;
+  Result := FThemeGroundDark;
+end;
+
+function TTyTerminalView.NotifyQueued: Boolean;
+begin
+  Result := FNotifyQueued;
+end;
+
+function TTyTerminalView.SchemeNotifyRequests: Integer;
+begin
+  Result := FSchemeNotifyRequests;
 end;
 
 function TTyTerminalView.RowsLeftToPaint: Boolean;
