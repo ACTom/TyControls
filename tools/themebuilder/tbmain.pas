@@ -124,6 +124,7 @@ type
     function SaveAs: Boolean;
     procedure UpdateTitle;
     procedure UpdateStatusPosition;
+    procedure ClampToEditor(var AList: TTbProblems);
     procedure BuildProblems;
     procedure ShowProblems;
     procedure ClearProblemMarks;
@@ -493,12 +494,41 @@ begin
   RefreshTimer.Enabled := False;
   css := Editor.Lines.Text;
   FLint := TbCollectProblems(css, FDoc.BaseDir, FDoc.Untitled, FBaseVars);
+  ClampToEditor(FLint);
   FParseFailed := TbHasParseError(FLint);
   FLoadError := '';
   if not FParseFailed then
     if not FPreview.LoadDocument(css, FDoc.BaseDir, err) then
       FLoadError := err;
   BuildProblems;
+end;
+
+{ Lines.Text ends with a line break the editor does not show as a line: an error at the end
+  of the text (a rule left open) is placed on the line after the last one. Such a position,
+  and a column past a line's end, is moved to the end of the text the editor has -- where
+  the caret can go and the gutter can mark it. }
+procedure TTbMainForm.ClampToEditor(var AList: TTbProblems);
+var
+  i, n: Integer;
+begin
+  n := Editor.Lines.Count;
+  for i := 0 to High(AList) do
+  begin
+    if AList[i].Line <= 0 then Continue;
+    if n = 0 then
+    begin
+      AList[i].Line := 1;
+      AList[i].Col := 1;
+      Continue;
+    end;
+    if AList[i].Line > n then
+    begin
+      AList[i].Line := n;
+      AList[i].Col := Length(Editor.Lines[n - 1]) + 1;
+    end
+    else if AList[i].Col > Length(Editor.Lines[AList[i].Line - 1]) + 1 then
+      AList[i].Col := Length(Editor.Lines[AList[i].Line - 1]) + 1;
+  end;
 end;
 
 { The list from what the last refresh found plus what the preview says now: a switch the

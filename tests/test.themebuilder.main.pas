@@ -49,6 +49,7 @@ type
     procedure TestARefusedDarkReachesTheProblemList;
     procedure TestAFailedSaveLeavesTheFile;
     procedure TestAReadOnlySettingsFileDoesNotKeepTheWindowOpen;
+    procedure TestAnErrorAtTheEndIsOnTheLastLine;
   end;
 
 implementation
@@ -849,6 +850,23 @@ begin
   finally
     FileSetAttr(ini, 0);
   end;
+end;
+
+{ A rule left open on the last line: the parser stops at the end of Lines.Text, which ends
+  with a line break -- one line past the last the editor has. The problem, its gutter mark
+  and the jump belong on the last line, after its last character. }
+procedure TTbMainFormTests.TestAnErrorAtTheEndIsOnTheLastLine;
+begin
+  FForm.Editor.Lines.Text := 'TyButton {'#10'  color: red;';
+  AssertEquals('two lines in the editor', 2, FForm.Editor.Lines.Count);
+  FForm.RefreshNow;
+  AssertTrue('a parse error', TbHasParseError(FForm.Problems));
+  AssertEquals('F22: on the last line', 2, FForm.Problems[0].Line);
+  AssertEquals('F22: after its last character', Length('  color: red;') + 1, FForm.Problems[0].Col);
+  AssertEquals('F22: one mark', 1, FForm.Editor.Marks.Count);
+  AssertEquals('F22: in the gutter of line 2', 2, FForm.Editor.Marks[0].Line);
+  FForm.JumpToProblem(0);
+  AssertEquals('F22: the caret goes there', 2, FForm.Editor.LogicalCaretXY.Y);
 end;
 
 initialization
