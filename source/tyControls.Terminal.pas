@@ -1309,13 +1309,18 @@ var
   cls, ground, raw, ansiKey: string;
   st, bare, cur, bareCur: TTyStyleSet;
   i: Integer;
-  instFg, instBg, themeFg, themeBg, c: Cardinal;
-  inFocus: Boolean;
+  instFg, instBg, themeFg, themeBg, c, rgb: Cardinal;
+  inFocus, darkSide, selSet: Boolean;
+  scheme: TTyTerminalColorScheme;
 begin
   model := ActiveController.Model;
   cls := TyStyleClassFor(Self, StyleClass);
+  { 6 期:键里再加来源、配对、选中那一边方案的修订号。选哪一边只取决于主题,主题的四项已经
+    在键里,所以用上次算出的那一边挑修订号(另一边的方案改了不失效、不重画) }
   if FPaletteValid and (FPaletteModel = model) and (FPaletteVersion = model.ThemeVersion)
-    and (FPaletteClass = cls) and (FPaletteOverride = StyleOverride) then
+    and (FPaletteClass = cls) and (FPaletteOverride = StyleOverride)
+    and (FPaletteSource = FColorSource) and (FPalettePaired = FColorSchemePaired)
+    and (FPaletteSchemeRev = SideRevision(FPaletteDarkSide)) then
     Exit(False);
   { 256 / 257:本实例的前景 / 底色;主题自己的(不带类、不带覆盖)用来看实例换没换底 }
   st := InstanceStyle(GetStyleTypeKey);
@@ -1375,6 +1380,52 @@ begin
     FPalette[258] := instFg;
   if (instBg <> themeBg) and (FCursorInkRgb = themeBg) and (TermFgOf(bareCur, $1000000) = themeBg) then
     FCursorInkRgb := instBg;
+  { 6 期:独立配色方案。主题是深是浅看本实例跟随主题时的底色(instBg,不是方案的底),
+    和 tycss 三参数 on() 同一条规则:Rec.601 亮度 > 0.5 为浅,恰好 0.5 算深 }
+  darkSide := not (TyLuminance(TyRGB((instBg shr 16) and $FF, (instBg shr 8) and $FF, instBg and $FF)) > 0.5);
+  if FColorSource = tsrcTheme then
+    scheme := nil
+  else if FColorSchemePaired and darkSide then
+    scheme := FDarkColorScheme
+  else
+    scheme := FColorScheme;
+  { 全空的方案画出来和跟随主题一样(spec §11.1.3):不走下面的「未设置取生效色」 }
+  if (scheme <> nil) and scheme.IsEmpty then
+    scheme := nil;
+  if scheme <> nil then
+  begin
+    { 逐槽:方案设了用方案,没设的保留上面算好的主题值(spec §11.1.4) }
+    for i := 0 to 15 do
+      if scheme.SlotRgb(TTyTerminalSchemeSlot(i), rgb) then
+        FPalette[i] := rgb;
+    if scheme.SlotRgb(tssForeground, rgb) then FPalette[256] := rgb;
+    if scheme.SlotRgb(tssBackground, rgb) then FPalette[257] := rgb;
+    { 光标没设 = 生效的前景;光标下的字没设 = 生效的底色 }
+    if scheme.SlotRgb(tssCursor, rgb) then
+      FPalette[258] := rgb
+    else
+      FPalette[258] := FPalette[256];
+    if scheme.SlotRgb(tssCursorText, rgb) then
+      FCursorInkRgb := rgb
+    else
+      FCursorInkRgb := FPalette[257];
+    { 选区:不透明的方案色按 xterm 降到 0.3(color.opacity 的 alpha = round(0.3 x 255) =
+      $4D,ThemeService.ts:97-106),绘制时再在生效的底色上混成不透明;失焦没设就用聚焦的
+      (ThemeService.ts:89),都没设跟主题 }
+    selSet := scheme.SlotRgb(tssSelection, rgb);
+    if selSet then
+      FSelBg[True] := TTyColor(($4D shl 24) or rgb);
+    if scheme.SlotRgb(tssSelectionInactive, rgb) then
+      FSelBg[False] := TTyColor(($4D shl 24) or rgb)
+    else if selSet then
+      FSelBg[False] := FSelBg[True];
+  end;
+  FActiveScheme := scheme;
+  FThemeGroundDark := darkSide;
+  FPaletteSource := FColorSource;
+  FPalettePaired := FColorSchemePaired;
+  FPaletteDarkSide := darkSide;
+  FPaletteSchemeRev := SideRevision(darkSide);
   FPaletteModel := model;
   FPaletteVersion := model.ThemeVersion;
   FPaletteClass := cls;
@@ -1392,7 +1443,9 @@ begin
   if csLoading in ComponentState then Exit;
   EnsurePalette;
   if FNotifiedValid and (FNotifiedModel = FPaletteModel) and (FNotifiedVersion = FPaletteVersion)
-    and (FNotifiedClass = FPaletteClass) and (FNotifiedOverride = FPaletteOverride) then
+    and (FNotifiedClass = FPaletteClass) and (FNotifiedOverride = FPaletteOverride)
+    and (FNotifiedSource = FPaletteSource) and (FNotifiedPaired = FPalettePaired)
+    and (FNotifiedDarkSide = FPaletteDarkSide) and (FNotifiedSchemeRev = FPaletteSchemeRev) then
     Exit;
   { 主题变了:外框和每一行重画、度量的键失效、内边距重取。只有色表真变了(换明暗、换配色)
     才告诉 Core——它清 OSC 覆盖色、2031 开着就报明暗;改内边距、改字体不算。第一次建
@@ -1427,6 +1480,10 @@ begin
   FNotifiedVersion := FPaletteVersion;
   FNotifiedClass := FPaletteClass;
   FNotifiedOverride := FPaletteOverride;
+  FNotifiedSource := FPaletteSource;
+  FNotifiedPaired := FPalettePaired;
+  FNotifiedDarkSide := FPaletteDarkSide;
+  FNotifiedSchemeRev := FPaletteSchemeRev;
   FNotifiedValid := True;
   FFrameDirty := True;
   FAllDirty := True;
@@ -2545,8 +2602,13 @@ begin
   bg := FFrameColors[257];
   fg := FFrameColors[256];
   line := FFrameColors[256];
-  if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then bg := Cardinal(st.Background.Color) and $FFFFFF;
-  if tpTextColor in st.Present then fg := Cardinal(st.TextColor) and $FFFFFF;
+  { 自定义方案下底色 / 字色用生效的 257 / 256(TyTerminalPreedit 的底色、字色本来就是
+    --terminal-bg / -fg,方案的底上不能冒出一块主题色);下划线仍取主题 }
+  if FActiveScheme = nil then
+  begin
+    if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid) then bg := Cardinal(st.Background.Color) and $FFFFFF;
+    if tpTextColor in st.Present then fg := Cardinal(st.TextColor) and $FFFFFF;
+  end;
   if tpBorderColor in st.Present then line := Cardinal(st.BorderColor) and $FFFFFF;
   ins := ContentInsets(APPI);
   x := ins.Left + Min(FCore.Buffer.X, FCore.Cols - 1) * FMetrics.CellW;
