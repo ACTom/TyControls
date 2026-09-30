@@ -31,7 +31,8 @@ unit ushell;
   terminal's OnData), but not into the key panel (OnData here is skipped while a stream
   is claimed: an upload is megabytes). An upload is held back while the session has
   more than 256 KB queued for the writer (CanSend). Stop cancels a transfer before it
-  unhooks, so the abort still reaches the program. A program that exits mid-transfer
+  unhooks; the abort is queued, not waited for (the program is closed right after). A
+  program that exits mid-transfer
   ends the transfer before the exit line is written, so the line is shown. }
 
 {$mode objfpc}{$H+}
@@ -176,8 +177,10 @@ end;
 
 procedure TTerminalShell.Stop;
 begin
-  { a transfer is cancelled while the terminal still sends to the session: the abort
-    sequence reaches the program }
+  { a transfer is cancelled while the terminal still sends to the session: its abort
+    sequence is queued for the program -- but not waited for. The Close below drops
+    what the writer has not taken yet, so the abort may never arrive; the program is
+    taken down right after anyway (the session's finisher) }
   if FZmodem <> nil then
     FZmodem.Cancel;
   FRunning := False;
