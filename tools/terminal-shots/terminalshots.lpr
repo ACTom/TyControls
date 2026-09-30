@@ -9,7 +9,8 @@ program terminalshots;
   contrast at 1 and 4.5, the glyphs it leaves alone, powerline and braille drawn), and
   with --phase6 for the phase 6 one (colour schemes: the seven the example ships, a
   light / dark pair, following the theme, a program's OSC 11 over a scheme, the minimum
-  contrast on a light scheme, a partial scheme, the selection at 0.3).
+  contrast on a light scheme, a partial scheme, the selection at 0.3 and a scheme's own
+  unfocused selection colour).
   Off screen, the way tests/test.dpi.support paints a tree: no window is shown, the
   control is parented to a form that never appears and drawn into a bitmap through
   its own RenderTo -- the path a WM_PAINT takes, minus the screen. Builds from source/
@@ -633,6 +634,28 @@ begin
     spSelection);
   ShootScheme('scheme-selection-focused-campbell.png', 'default', 'light', sel, 60, 4,
     '同上，聚焦', 'Campbell', '', spSelectionFocused);
+  { 8. the scheme sets an unfocused selection colour: unfocused, that one is used (cyan at
+    0.3), not the focused one (the grey above) }
+  ctl := TTyStyleController.Create(nil);
+  try
+    ctl.ThemeName := 'default';
+    ctl.Mode := 'light';
+    plain := NewShotView(ctl, 60, 4);
+    try
+      plain.ColorScheme.LoadFromText(SchemeText, 'Campbell');
+      plain.ColorScheme.SelectionInactiveBackground := RGBToColor($00, $FF, $FF);
+      plain.ColorSource := tsrcScheme;
+      plain.WriteSync(sel);
+      plain.Prepare(spSelection);
+      SaveShot(plain, 'scheme-selection-inactive-campbell.png', 'default', 'light', 96,
+        'Campbell 另设了失焦选区色 #00FFFF：失焦时用它（降到 0.3，在 #0C0C0C 上混成偏青的 #085555），'
+        + '不是聚焦那一色（对照前两张的灰 #555555）');
+    finally
+      plain.Free;
+    end;
+  finally
+    ctl.Free;
+  end;
 end;
 
 var

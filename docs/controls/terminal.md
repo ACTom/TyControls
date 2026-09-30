@@ -40,9 +40,9 @@ uses tyControls.Terminal;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Scrollback` | `Integer` | `1000` | 滚回行数，转给 Core。`0` 没有滚回（滚动条禁用）。上限 100000。 |
-| `CursorStyle` | `TTyTerminalCursorStyle` | `tcsBlock` | 光标形状：块、下划线、竖线。程序用 DECSCUSR（`CSI n SP q`）要的形状优先。 |
+| `CursorStyle` | `TTyTerminalCursorStyle` | `tcsBlock` | 光标形状：块、下划线、竖线。这是默认值：程序可以用 DECSCUSR（`CSI Ps SP q`，`Ps` 为 0–6）临时要别的形状（比如 vim 的插入模式要竖线），`CSI 0 SP q` 回到这里设的，RIS（`ESC c`）也回到这里。 |
 | `CursorInactiveStyle` | `TTyTerminalCursorInactiveStyle` | `tcisOutline` | 失焦时的光标：空心框、实心块、竖线、下划线、不画。 |
-| `CursorBlink` | `Boolean` | `False` | 光标闪烁（600 ms；放着不动 5 分钟后停在显示）。程序用 DECSCUSR 要的闪烁优先。 |
+| `CursorBlink` | `Boolean` | `False` | 光标闪烁（600 ms；放着不动 5 分钟后停在显示）。同样是默认值：DECSCUSR 的奇数 / 偶数 `Ps` 临时要闪 / 不闪，`CSI 0 SP q` 和 RIS 回到这里设的。 |
 | `AmbiguousWide` | `Boolean` | `False` | 东亚歧义宽度字符算两格。只对 `UnicodeVersion` 为 `15` / `15-graphemes` 起作用。 |
 | `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §12。 |
 | `MacOptionIsMeta` | `Boolean` | `False` | macOS 上 Option 当 Meta（发 `ESC` 前缀），否则 Option 打第三层字符。 |
@@ -57,7 +57,7 @@ uses tyControls.Terminal;
 | `LetterSpacing` | `Integer` | `0` | 字间距，逻辑像素（−10–50）。 |
 | `MinimumContrastRatio` | `Double` | `1` | 最低对比度（同 xterm.js 的 `minimumContrastRatio`）。`1` 不调；大于 1 时把字色往亮或往暗推，直到和画出来的底色达到这个比值。写入时钳到 1–21、保留一位小数。只调前景；暗淡的字按一半算。框线、块元素、Powerline 符号、块光标下的字、链接下划线、自带颜色的下划线不调。见 §10。 |
 | `ColorSource` | `TTyTerminalColorSource` | `tsrcTheme` | 颜色从哪来：`tsrcTheme` 跟随主题，`tsrcScheme` 用下面的配色方案。见 §10。 |
-| `ColorScheme` | `TTyTerminalColorScheme` | 空方案 | 自定义配色方案；开了 `ColorSchemePaired` 时是浅色那套。在对象查看器里展开改，只有改过的项写进 `.lfm`。 |
+| `ColorScheme` | `TTyTerminalColorScheme` | 空方案 | 自定义配色方案；开了 `ColorSchemePaired` 时是浅色那套。在对象查看器里展开改，只有改过的项写进 `.lfm`。赋值是复制（`Assign`）；赋 `nil` 抛 `EConvertError`，和 `Font := nil` 一样——要清空用 `ColorScheme.Clear`。 |
 | `ColorSchemePaired` | `Boolean` | `False` | 明暗各一套：主题的底色是浅的用 `ColorScheme`，深的用 `DarkColorScheme`，换明暗时自动换。 |
 | `DarkColorScheme` | `TTyTerminalColorScheme` | 空方案 | 配对时深色主题用的那套。 |
 | `SelectionOverrideKey` | `TTyTerminalSelectionOverrideKey` | `tsoDefault` | 程序接管鼠标时，按住哪个键照样本地选择：`tsoDefault`（macOS 上是 Option，别处 Shift）、`tsoShift`、`tsoAlt`、`tsoNone`。见 §7。 |
@@ -82,7 +82,7 @@ uses tyControls.Terminal;
 | `SelectionInactiveBackground` | —（WT 没有） | 设了 `SelectionBackground` 就用它，否则主题的失焦选区色 |
 | `Black` `Red` `Green` `Yellow` `Blue` `Purple` `Cyan` `White`、`BrightBlack` … `BrightWhite` | 同名小驼峰（`purple` / `brightPurple`，读时也认 `magenta` / `brightMagenta`） | 主题的那一色 |
 
-`clDefault` 也当未设置；`clWindow` 这类系统色用的时候换成当前平台的 RGB。方案对象的方法：
+`clDefault` 也当未设置；`clWindow` 这类系统色用的时候换成当前平台的 RGB。方案里存的是系统色本身，用户改了系统配色以后再设一次同样的值什么都不会发生（值没变）；这时调 `Term.ColorScheme.Changed`（配对时还有 `Term.DarkColorScheme.Changed`），终端就按新的系统色重画。方案对象的方法：
 
 | 方法 | 说明 |
 |------|------|
@@ -92,6 +92,7 @@ uses tyControls.Terminal;
 | `ListSchemeNames(AText)`（类方法） | 文本里有哪几套（按出现的顺序）。 |
 | `Assign`、`Clear`、`IsEmpty`、`Equals`、`Colors[ASlot]` | 复制、清空、是不是全没设、比较、按槽取色。 |
 | `BeginUpdate` / `EndUpdate` | 一次改多个颜色，终端只重算一次。 |
+| `Changed` | 内容没变也算改了一次：终端重新取色、重画。给系统色用（见下）。 |
 
 另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。
 
@@ -318,6 +319,7 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 - 禁用时变淡、`MinimumContrastRatio` 照旧对画出来的颜色起作用，程序问颜色（OSC 10 / 11、996）答的是方案的颜色。
 - 链接下划线、外框、滚动条仍然跟主题；输入法组字串的底色和字色用方案的底色、前景，下划线跟主题。
 - 浅底上 16 色看不清时，可以换一套方案（Windows Terminal 自带的 Tango Light、Solarized Light、One Half Light），或者打开最低对比度。
+- 方案只设了底色（或前景、底色），16 色没设时，16 色跟的是**主题**，不看方案的底：浅色主题下就是给浅底配的那套。所以在浅色主题下给方案设一个深底，暗的几色（0 黑、4 蓝这类）落在深底上会看不清；反过来也一样。底色和 16 色要一起设，或者打开最低对比度。
 - Windows Terminal 自带的「Tango Dark」和深色主题下的默认 16 色只差 0 号（WT 是 `#000000`，xterm.js 是 `#2e3436`），前景和底色本来就不同，所以两者看起来不一样。
 
 **读写 Windows Terminal 配色**：`LoadFromText` / `LoadFromFile` 认两种文本：
@@ -325,7 +327,7 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 - 单个方案对象（Windows Terminal 配色文档里的形状，也是 `iTerm2-Color-Schemes` 仓库 `windowsterminal/` 目录里每个文件的形状）：`name` 可以没有。
 - Windows Terminal 的 `settings.json`：按 `AName` 在 `schemes` 里取，名字区分大小写，同名的取第一个 16 色齐全的；`AName` 为空时 `schemes` 里得恰好一套完整的。别的方案里写坏的颜色不影响这一套。
 
-注释（`//`、`/* */`）、尾逗号、UTF-8 BOM 都认；UTF-16 的文件要先存成 UTF-8。16 色必须齐（`purple` 缺了看 `magenta`）；颜色只收 `#rgb`、`#rrggbb`；`foreground`、`background`、`cursorColor`、`selectionBackground` 缺了按 Windows Terminal 的缺省补（白、黑、白、白），读进来的颜色和它在 Windows Terminal 里一样。不认识的键不管；重复的键报错。
+注释（`//`、`/* */`）、尾逗号、UTF-8 BOM 都认；UTF-16 的文件要先存成 UTF-8。大于 16 MB 的文件不读，方括号、花括号嵌套超过 64 层的当坏 JSON（不这样的话，一个很深的文件会撑爆解析器的栈、整个程序崩掉）。16 色必须齐（`purple` 缺了看 `magenta`）；颜色只收 `#rgb`、`#rrggbb`；`foreground`、`background`、`cursorColor`、`selectionBackground` 缺了按 Windows Terminal 的缺省补（白、黑、白、白），读进来的颜色和它在 Windows Terminal 里一样。不认识的键不管；重复的键报错。
 
 出错时抛 `ETyTerminalColorSchemeError`，消息说哪个键、什么值；`Try*` 版本不抛。读失败时方案原样不动。
 
@@ -454,5 +456,5 @@ Windows 上在第一个字节到来之前告诉 Core 它在 ConPTY 后面、是�
 
 - 自绘字形还没覆盖：Legacy Computing（U+1FB00–）、进度条（U+EE00–EE0B）、git 分支图（U+F5D0–F60D），现在由字体画。
 - win32-input-mode（键盘按扫描码编码）、Alt+单击移动光标、kitty 键盘协议：以后。
-- 配色方案：只读写 Windows Terminal 的格式（iTerm2 的 `.itermcolors`、xterm.js 的主题 JSON 等以后再说，接口留了 `AFormat`）；16–255 色不进方案；系统色（`clWindow` 这类）在系统改了配色后不会自己刷新，要重新设一次；方案名里的 `\u0000` 会丢（FPC 的 JSON 解析器吞掉它）。
+- 配色方案：只读写 Windows Terminal 的格式（iTerm2 的 `.itermcolors`、xterm.js 的主题 JSON 等以后再说，接口留了 `AFormat`）；16–255 色不进方案；系统色（`clWindow` 这类）在系统改了配色后不会自己刷新，要调一次方案的 `Changed`（§3）；方案名里的 `\u0000` 会丢（FPC 的 JSON 解析器吞掉它）。
 - 以后单独立项：屏幕阅读器、连字、图片协议（sixel、iTerm、kitty 图形）、搜索、序列化、进度条 OSC 9;4、网页字体、彩色表情、文字闪烁（SGR 5）。

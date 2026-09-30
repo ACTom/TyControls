@@ -21,3 +21,4 @@
 | `scheme-partial-default-light.png` | default | light | 方案只设了前景（#303060）、底色（#FFF4E0）、红（#E00070）：其余 15 色跟主题（浅底那套） |
 | `scheme-selection-unfocused-campbell.png` | default | light | Campbell 的选区（#FFFFFF 降到 0.3，在底色 #0C0C0C 上混成 #555555），失焦：没设失焦色，用同一色 |
 | `scheme-selection-focused-campbell.png` | default | light | 同上，聚焦 |
+| `scheme-selection-inactive-campbell.png` | default | light | Campbell 另设了失焦选区色 #00FFFF：失焦时用它（降到 0.3，在 #0C0C0C 上混成偏青的 #085555），不是聚焦那一色（对照前两张的灰 #555555） |
