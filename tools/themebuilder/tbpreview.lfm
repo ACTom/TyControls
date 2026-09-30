@@ -127,6 +127,7 @@ object PreviewFrame: TTbPreviewFrame
           Top = 52
           Width = 110
           Caption = 'More'
+          DropDownMenu = SamplePopup
         end
         object LblNormal: TTyLabel
           Left = 12

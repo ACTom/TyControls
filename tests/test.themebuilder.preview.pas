@@ -44,6 +44,7 @@ type
     procedure TestAVariableCycleDoesNotBringItDown;
     procedure TestTheProbeStillCatchesWhatAPaintWouldRaise;
     procedure TestTheFastProbeAgreesWithTheResolveWalk;
+    procedure TestTheDropDownButtonDropsTheSampleMenu;
   end;
 
 const
@@ -593,6 +594,14 @@ begin
     FFrame.LoadDocument(':root { --radius: 1px 2px 3px; }', '', err));
   AssertTrue('V17: says why: ' + err, err <> '');
   AssertEquals('V17: the last good version is back', $123456, ButtonBg(FFrame.Controller));
+end;
+
+{ The drop-down button on the first page drops the sample menu (the .lfm), which wears the
+  preview's theme like every pop-up here. }
+procedure TTbPreviewTests.TestTheDropDownButtonDropsTheSampleMenu;
+begin
+  AssertTrue('V19: its menu', FFrame.DdbMore.DropDownMenu = FFrame.SamplePopup);
+  AssertTrue('V19: on the preview''s controller', FFrame.SamplePopup.Controller = FFrame.Controller);
 end;
 
 initialization
