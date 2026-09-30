@@ -10,9 +10,9 @@ Lazarus 自绘控件库。168 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 | `classic` | `win11` | `material3` |
 |---|---|---|
-| ![classic 主题](docs/images/antd-classic.png) | ![win11 主题](docs/images/antd-win11.png) | ![material3 主题](docs/images/antd-material3.png) |
+| ![classic 主题](docs/images/skin-classic.png) | ![win11 主题](docs/images/skin-win11.png) | ![material3 主题](docs/images/skin-material3.png) |
 
-四张图是同一份 `.lfm`、同一份代码,只改了主题名。主题不只换配色:`classic` 下按钮是立体边框、方角、渐变标题带。
+三张图是同一个窗口、同一份代码,只改了主题名。主题不只换配色:`classic` 下按钮是立体边框、方角、渐变标题带。全部内置主题的对照见[图库](docs/gallery.md)。
 
 ### 亮 / 暗 / 图片主题
 
@@ -26,8 +26,11 @@ Lazarus 自绘控件库。168 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 | | |
 |---|---|
-| **`TTyStringGrid`** 冻结列、行号槽、汇总带<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
-| **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **自绘对话框** 取色器<br>![取色对话框](docs/images/colordialog.png) |
+| **`TTyStringGrid`** 按列指定编辑器:复选、星级、取色、按钮<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
+| **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **`TTyChart`** 折线、柱状、饼图、环形图<br>![图表](docs/images/chart.png) |
+| **`TTyRibbon`** 功能区、快速访问栏、Alt 键提示<br>![功能区](docs/images/ribbon.png) | **`TTyCalendar`** 周数、今日高亮、可选日期范围<br>![日历](docs/images/calendar.png) |
+
+每个示例每个标签页的亮色、暗色截图都在[图库](docs/gallery.md)里。
 
 ---
 
