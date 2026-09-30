@@ -640,6 +640,21 @@ type
     { while claimed, the user's input (keys, a paste, the arrows a wheel turns into) goes
       here instead of OnData -- never while ReadOnly }
     property OnClaimedInput: TTyTerminalDataEvent read FOnClaimedInput write FOnClaimedInput;
+    { Parser hooks (spec 19.6, after xterm.js's ParserApi): the newest is tried first,
+      True stops, False tries the one before, the core's own last. OSC / DCS / APC:
+      once, on a successful end, payload up to 10 MB; an OSC number with a handler
+      no longer reaches OnOsc (a non-empty chain never falls back, as upstream). The
+      params are borrowed (Clone to keep). An identifier upstream refuses raises
+      EArgumentException with upstream's message; a nil handler
+      EArgumentNilException, an OSC number below 0 EArgumentOutOfRangeException.
+      Reset keeps them. Main thread only. }
+    function RegisterCsiHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalCsiEvent): Integer;
+    function RegisterEscHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalEscEvent): Integer;
+    function RegisterOscHandler(AIdent: Integer; AHandler: TTyTerminalOscDataEvent): Integer;
+    function RegisterDcsHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalDcsDataEvent): Integer;
+    function RegisterApcHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalOscDataEvent): Integer;
+    { only handles these five gave out; anything else (the core's own) is ignored }
+    procedure UnregisterHandler(AHandle: Integer);
     { FOR THE TESTS (pure queries) }
     property StreamPiecesOffered: Int64 read FStreamPiecesOffered;   { pieces that took the slow path }
     property StreamDetectCalls: Int64 read FStreamDetectCalls;
@@ -672,6 +687,8 @@ type
     property Modes: TTyTerminalModes read GetModes;
     property Title: string read FWindowTitle;
     property IconName: string read FIconName;
+    { the LOW-LEVEL interface: its Clear*, Set*Fallback and SetPrintHandler take the
+      core's own handling apart. A host adds handlers through Register*Handler. }
     property Parser: TTyTerminalParser read FParser;
     property Links: TTyTerminalOscLinks read FLinks;
     { options }

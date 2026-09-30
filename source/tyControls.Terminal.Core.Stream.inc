@@ -356,6 +356,104 @@ begin
   end;
 end;
 
+{ ==== parser hooks (spec 19.6): ParserApi.ts over the parser's own chains ================== }
+
 procedure TTyTerminalCore.NoteUserHandle(AHandle: Integer);
 begin
+  SetLength(FUserHandles, Length(FUserHandles) + 1);
+  FUserHandles[High(FUserHandles)] := AHandle;
+end;
+
+function TTyTerminalCore.RegisterCsiHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalCsiEvent): Integer;
+begin
+  CheckThread('RegisterCsiHandler');
+  if not Assigned(AHandler) then
+    raise EArgumentNilException.Create('TTyTerminalCore.RegisterCsiHandler: the handler is nil');
+  Result := FParser.RegisterCsiHandler(AId, AHandler);
+  NoteUserHandle(Result);
+end;
+
+function TTyTerminalCore.RegisterEscHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalEscEvent): Integer;
+begin
+  CheckThread('RegisterEscHandler');
+  if not Assigned(AHandler) then
+    raise EArgumentNilException.Create('TTyTerminalCore.RegisterEscHandler: the handler is nil');
+  Result := FParser.RegisterEscHandler(AId, AHandler);
+  NoteUserHandle(Result);
+end;
+
+{ OSC / DCS / APC: the parser's string handlers (OscHandler, DcsHandler, ApcHandler
+  upstream) collect the payload and call AHandler once on a successful end. The
+  parser owns the wrapper once registered; one it refused is freed here. }
+function TTyTerminalCore.RegisterOscHandler(AIdent: Integer; AHandler: TTyTerminalOscDataEvent): Integer;
+var
+  h: TTyTerminalOscStringHandler;
+begin
+  CheckThread('RegisterOscHandler');
+  if not Assigned(AHandler) then
+    raise EArgumentNilException.Create('TTyTerminalCore.RegisterOscHandler: the handler is nil');
+  { upstream does not check: a negative number would simply never match }
+  if AIdent < 0 then
+    raise EArgumentOutOfRangeException.CreateFmt('TTyTerminalCore.RegisterOscHandler: OSC %d is below 0', [AIdent]);
+  h := TTyTerminalOscStringHandler.Create(AHandler);
+  try
+    Result := FParser.RegisterOscHandler(AIdent, h);
+  except
+    h.Free;
+    raise;
+  end;
+  NoteUserHandle(Result);
+end;
+
+function TTyTerminalCore.RegisterDcsHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalDcsDataEvent): Integer;
+var
+  h: TTyTerminalDcsStringHandler;
+begin
+  CheckThread('RegisterDcsHandler');
+  if not Assigned(AHandler) then
+    raise EArgumentNilException.Create('TTyTerminalCore.RegisterDcsHandler: the handler is nil');
+  h := TTyTerminalDcsStringHandler.Create(AHandler);
+  try
+    Result := FParser.RegisterDcsHandler(AId, h);
+  except
+    h.Free;
+    raise;
+  end;
+  NoteUserHandle(Result);
+end;
+
+function TTyTerminalCore.RegisterApcHandler(const AId: TTyTerminalFunctionId; AHandler: TTyTerminalOscDataEvent): Integer;
+var
+  h: TTyTerminalApcStringHandler;
+begin
+  CheckThread('RegisterApcHandler');
+  if not Assigned(AHandler) then
+    raise EArgumentNilException.Create('TTyTerminalCore.RegisterApcHandler: the handler is nil');
+  h := TTyTerminalApcStringHandler.Create(AHandler);
+  try
+    Result := FParser.RegisterApcHandler(AId, h);
+  except
+    h.Free;
+    raise;
+  end;
+  NoteUserHandle(Result);
+end;
+
+{ The parser's handles are one sequence for everything, the core's own handlers
+  included (1, 2, 3 ...): a handle these five did not give out is ignored, so a wrong
+  number cannot take SGR away. }
+procedure TTyTerminalCore.UnregisterHandler(AHandle: Integer);
+var
+  i, k: Integer;
+begin
+  CheckThread('UnregisterHandler');
+  for i := 0 to High(FUserHandles) do
+    if FUserHandles[i] = AHandle then
+    begin
+      for k := i to High(FUserHandles) - 1 do
+        FUserHandles[k] := FUserHandles[k + 1];
+      SetLength(FUserHandles, Length(FUserHandles) - 1);
+      FParser.Unregister(AHandle);
+      Exit;
+    end;
 end;
