@@ -156,6 +156,11 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { THE CAPTION'S OWN z2, when the mark knows it: a treemap label's is the
+      running maximum over the walk plus two, not its host's plus two.
+      [Batch 76] }
+    HasFixedZ2: Boolean;
+    FixedZ2: Integer;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;

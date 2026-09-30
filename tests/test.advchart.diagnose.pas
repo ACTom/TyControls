@@ -147,12 +147,13 @@ begin
     'tree' before 'treemap' is a PREFIX and was never affected. So the fix is
     right and unreachable, and the mutant for it survives on purpose. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''treemap'', data: [1] },'
+    + '{ type: ''bar'', data: [1] }, { type: ''chord'', data: [1] },'
     + ' { type: ''sankey'', data: [1] }] }', odkAllClear, d));
-  { [Batch 73/75: a tree and a sunburst draw now, so the second undrawn type is a sankey] }
-  AssertTrue('names treemap, got: ' + d.Text, Pos('treemap', d.Text) > 0);
+  { [Batches 73/75/76: a tree, a sunburst and a treemap draw now, so the two
+    undrawn types are a chord and a sankey] }
+  AssertTrue('names chord, got: ' + d.Text, Pos('chord', d.Text) > 0);
   txt := d.Text;
-  Delete(txt, Pos('treemap', txt), 7);
+  Delete(txt, Pos('chord', txt), 5);
   AssertTrue('and sankey as well, got: ' + d.Text, Pos('sankey', txt) > 0);
 end;
 

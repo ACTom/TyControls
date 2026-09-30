@@ -506,7 +506,7 @@ begin
     if (cTypes[i] = 'pie') or (cTypes[i] = 'funnel')
       or (cTypes[i] = 'gauge') or (cTypes[i] = 'radar')
       or (cTypes[i] = 'graph') or (cTypes[i] = 'tree')
-      or (cTypes[i] = 'sunburst') then
+      or (cTypes[i] = 'sunburst') or (cTypes[i] = 'treemap') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));

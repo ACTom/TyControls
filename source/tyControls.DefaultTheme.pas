@@ -1231,6 +1231,13 @@ begin
     '   its own accent and its own line ink. */' + LineEnding +
     'TyAdvChartTreeNode { background: alpha(var(--accent), 0.55); }' + LineEnding +
     'TyAdvChartTreeEdge { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '/* A TREEMAP''S LABELS AND ITS BREADCRUMB. Upstream writes the label white --' + LineEnding +
+    '   a fixed ink over palette fills, which do not change with the mode, so' + LineEnding +
+    '   neither does this -- and draws the breadcrumb as a pale chip with' + LineEnding +
+    '   secondary text: here the chip is alpha over the ink and the text muted,' + LineEnding +
+    '   so a dark skin gets a dark chip. */' + LineEnding +
+    'TyAdvChartTreemapLabel { color: #FFFFFF; font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartBreadcrumb { background: alpha(var(--on-surface), 0.08); color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '/* The chart''s own title and subtitle. Upstream draws them at 18/bold and' + LineEnding +
     '   12/regular; the sizes come from the type scale here so a dense skin gets a' + LineEnding +
     '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +

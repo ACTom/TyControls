@@ -280,6 +280,17 @@ procedure TyLabelInkEmphasis(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor
   outside the array, or whose series draws no labels, is left alone. }
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
   const AMeasurer: ITyTextMeasurer; APPI: Integer); overload;
+
+{ ZRENDER'S PLAIN-TEXT OVERFLOW, parseText.ts: AText's lines, those the
+  height cannot hold dropped (the line height is the width of '国'), each
+  cut to the width -- the container one short of it, AMinChar 'a' widths
+  reserved before deciding whether AEllipsis fits (it is dropped if not),
+  a first cut by summing character widths, a second by proportion, then the
+  ellipsis. A width under one gives ''. Lengths are UTF-16 units, as JS's.
+  AWidth and AHeight are the box inside the padding. [Batch 76] }
+function TyZrPlainTextLines(const AText: string; AWidth, AHeight: Double;
+  AMinChar: Integer; const AEllipsis: string; const AMeasurer: ITyTextMeasurer;
+  const AFontName: string; AFontSizeLogical, AWeight: Integer): TStringArray;
 { AItemSpecs[series][raw row]: a data item's own label read over its
   series', for a caption whose ItemSpec names it [Batch 68] }
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
@@ -638,6 +649,103 @@ begin
     AStrokeWidthLogical);
 end;
 
+function TyZrPlainTextLines(const AText: string; AWidth, AHeight: Double;
+  AMinChar: Integer; const AEllipsis: string; const AMeasurer: ITyTextMeasurer;
+  const AFontName: string; AFontSizeLogical, AWeight: Integer): TStringArray;
+const
+  { U+56FD, zrender's stand-in for any wide character, as UTF-8 }
+  cGuo = #$E5#$9B#$BD;
+var
+  lines: TStringArray;
+  lh, containerWidth, contentWidth, asc, ellW, lw, w: Double;
+  ell: string;
+  k, j, i, n, keep, sub: Integer;
+  u: UnicodeString;
+
+  function M(const S: string): Double;
+  var h_: Double;
+  begin
+    if S = '' then Exit(0);
+    AMeasurer.MeasureLine(S, AFontName, AFontSizeLogical, AWeight, Result, h_);
+  end;
+
+  function CharW(ACode: Integer): Double;
+  begin
+    if (ACode >= 0) and (ACode <= 127) then Result := M(Chr(ACode))
+    else Result := M(cGuo);
+  end;
+
+begin
+  Result := nil;
+  if AText = '' then Exit;
+  lines := AText.Split([#10]);
+  lh := M(cGuo);
+  { lineOverflow 'truncate': the lines that fit }
+  if Length(lines) * lh > AHeight then
+  begin
+    keep := Floor(AHeight / lh);
+    if keep < Length(lines) then SetLength(lines, Max(keep, 0));
+  end;
+  containerWidth := Max(0.0, AWidth - 1);
+  contentWidth := containerWidth;
+  asc := M('a');
+  i := 0;
+  while (i < AMinChar) and (contentWidth >= asc) do
+  begin
+    contentWidth := contentWidth - asc;
+    Inc(i);
+  end;
+  ell := AEllipsis;
+  ellW := M(ell);
+  if ellW > contentWidth then
+  begin
+    ell := '';
+    ellW := 0;
+  end;
+  contentWidth := containerWidth - ellW;
+  for k := 0 to High(lines) do
+  begin
+    if (AWidth = 0) or (containerWidth = 0) then
+    begin
+      lines[k] := '';
+      Continue;
+    end;
+    lw := M(lines[k]);
+    if lw <= containerWidth then Continue;
+    j := 0;
+    while True do
+    begin
+      if (lw <= contentWidth) or (j >= 2) then
+      begin
+        lines[k] := lines[k] + ell;
+        Break;
+      end;
+      u := UTF8Decode(lines[k]);
+      n := Length(u);
+      if j = 0 then
+      begin
+        { estimateLength: characters while the sum is short, the crossing
+          one counted }
+        w := 0;
+        sub := 0;
+        while (sub < n) and (w < contentWidth) do
+        begin
+          w := w + CharW(Ord(u[sub + 1]));
+          Inc(sub);
+        end;
+      end
+      else if lw > 0 then
+        sub := Floor(n * contentWidth / lw)
+      else
+        sub := 0;
+      lines[k] := UTF8Encode(Copy(u, 1, sub));
+      lw := M(lines[k]);
+      Inc(j);
+    end;
+  end;
+  Result := lines;
+end;
+
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 begin
@@ -792,6 +900,7 @@ begin
       because it was appended later, and that is an accident rather than a
       rule. Saying it makes the ordering survive a future series `z`. }
     cap.Z2 := host.Z2 + spec.Z2Lift;
+    if host.Caption.HasFixedZ2 then cap.Z2 := host.Caption.FixedZ2;
     { It answers for the same datum as the thing it names: hovering a bar's
       number has to report that bar. }
     cap.Silent := host.Silent;

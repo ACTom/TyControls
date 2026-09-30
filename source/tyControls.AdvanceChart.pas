@@ -47,7 +47,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
-  tyControls.AdvChart.Sunburst,
+  tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
   tyControls.AdvChart.Graph,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
@@ -190,6 +190,10 @@ type
     FTrees: array of TTyTreeSolved;
     { THE SUNBURSTS, per slot. [Batch 75] }
     FSunbursts: array of TTySunburstSolved;
+    { THE TREEMAPS and their inks, per slot: the labels are cut to their
+      cells when the layout is, so the specs are read then. [Batch 76] }
+    FTreemaps: array of TTyTreemapSolved;
+    FTreemapInks: array of TTyTreemapInk;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -562,6 +566,8 @@ type
     procedure FreeGraphs;
     procedure SolveTrees(APPI: Integer);
     procedure SolveSunbursts(APPI: Integer);
+    procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
     function LabelBaseFor(ASlot: Integer): TTyLabelSpec;
@@ -1101,6 +1107,8 @@ begin
   FreeGraphs;
   FTrees := nil;
   FSunbursts := nil;
+  FTreemaps := nil;
+  FTreemapInks := nil;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -1321,11 +1329,13 @@ begin
         the calendar's branch: a tree on a calendar keeps its own rows.
         [Batch 73] }
       if (FBindings[i].SeriesType = TyTreeSeriesTypeName)
-        or (FBindings[i].SeriesType = TySunburstSeriesTypeName) then
+        or (FBindings[i].SeriesType = TySunburstSeriesTypeName)
+        or (FBindings[i].SeriesType = TyTreemapSeriesTypeName) then
       begin
-        { a sunburst's rows are the same hierarchy [Batch 75] }
+        { a sunburst's and a treemap's rows are the same hierarchy, their
+          values completed [Batches 75, 76] }
         TyTreeFillStore(FOption, FBindings[i].SeriesIndex, st,
-          FBindings[i].SeriesType = TySunburstSeriesTypeName);
+          FBindings[i].SeriesType <> TyTreeSeriesTypeName);
         Continue;
       end;
       { ON A CALENDAR: the calendar's two dimensions, a time and a value --
@@ -1741,6 +1751,7 @@ begin
   SolveGraphs(APPI);
   SolveTrees(APPI);
   SolveSunbursts(APPI);
+  SolveTreemaps(AMeasurer, APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -5150,6 +5161,83 @@ begin
   end;
 end;
 
+{ THE TREEMAPS: each laid out in its box on the whole canvas, coloured from
+  the CHART's palette (a treemap's own `color` is a list its levels map by,
+  not a palette), its labels cut to their cells and its breadcrumb found --
+  all of which needs the measurer. [Batch 76] }
+procedure TTyAdvanceChart.SolveTreemaps(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var
+  i, k, dim: Integer;
+  pal: TTyChartColorArray;
+  declared: Boolean;
+  border: TTyChartColor;
+begin
+  FTreemaps := nil;
+  FTreemapInks := nil;
+  SetLength(FTreemaps, Length(FBindings));
+  SetLength(FTreemapInks, Length(FBindings));
+  pal := TyChartPaletteOf(FOption, -1, declared);
+  if not declared then
+  begin
+    SetLength(pal, 9);
+    for k := 0 to 8 do pal[k] := TTyChartColor(ThemeRampColor(k));
+  end;
+  border := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).Background.Color);
+  for i := 0 to High(FBindings) do
+  begin
+    FTreemaps[i] := Default(TTyTreemapSolved);
+    FTreemapInks[i] := Default(TTyTreemapInk);
+    if FBindings[i].SeriesType <> TyTreemapSeriesTypeName then Continue;
+    if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
+    FTreemaps[i] := TyTreemapSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    if not FTreemaps[i].Valid then Continue;
+    TyTreemapColour(FTreemaps[i], pal, border);
+    FTreemapInks[i] := TreemapInk(i);
+    dim := -1;
+    if FStores[i] <> nil then dim := FStores[i].DimIndexOf('value');
+    TyTreemapLabels(FTreemaps[i], FTreemapInks[i].ItemLabels, FStores[i],
+      SeriesModelName(FBindings[i].SeriesIndex), dim, AMeasurer);
+    TyTreemapBreadcrumb(FTreemaps[i],
+      FTreemapInks[i].ItemLabels[High(FTreemapInks[i].ItemLabels)], AMeasurer,
+      FLastRect);
+  end;
+end;
+
+{ A TREEMAP'S INK: its labels in their own key's ink -- white over the
+  palette in every mode, never the auto bands -- read item -> level ->
+  series; after the rows, the breadcrumb's words, and its chip. }
+function TTyAdvanceChart.TreemapInk(ASlot: Integer): TTyTreemapInk;
+var
+  base, crumb: TTyLabelSpec;
+  ls, cs: TTyStyleSet;
+begin
+  Result := Default(TTyTreemapInk);
+  ls := ActiveController.Model.ResolveStyle('TyAdvChartTreemapLabel', '', []);
+  base := LabelBaseFor(ASlot);
+  base.Show := True;
+  base.DefaultText := tldName;
+  base.AutoColour := False;
+  base.Colour := TTyChartColor(ls.TextColor);
+  base.FontName := ls.FontName;
+  base.FontSizeLogical := ResolveFontSize(ls);
+  base.FontWeight := ls.FontWeight;
+  Result.Label_ := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
+  Result.ItemLabels := TyTreemapLabelSpecs(FTreemaps[ASlot], Result.Label_);
+  cs := ActiveController.Model.ResolveStyle('TyAdvChartBreadcrumb', '', []);
+  crumb := TyLabelSpecNone;
+  crumb.Show := True;
+  crumb.AutoColour := False;
+  crumb.Colour := TTyChartColor(cs.TextColor);
+  crumb.FontName := cs.FontName;
+  crumb.FontSizeLogical := ResolveFontSize(cs);
+  crumb.FontWeight := cs.FontWeight;
+  SetLength(Result.ItemLabels, Length(Result.ItemLabels) + 1);
+  Result.ItemLabels[High(Result.ItemLabels)] := crumb;
+  Result.CrumbFill := TTyChartColor(cs.Background.Color);
+end;
+
 { A SUNBURST'S INK: the ring separator is the chart's own ground (upstream's
   white), and the labels are shown by default with the node's name, read
   item -> level -> series. }
@@ -7100,6 +7188,21 @@ begin
         its symbols and its label requests here -- BEFORE the expansion,
         whose per-row table carries the item -> leaves -> series chain.
         [Batch 73] }
+      if FBindings[i].SeriesType = TyTreemapSeriesTypeName then
+      begin
+        if (i <= High(FTreemaps)) and FTreemaps[i].Valid then
+        begin
+          Inc(drawn, TyBuildTreemapMarks(FBindings[i].SeriesIndex, FTreemaps[i],
+            FTreemapInks[i], list));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := FTreemapInks[i].Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := FTreemapInks[i].ItemLabels;
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TySunburstSeriesTypeName then
       begin
         if (i <= High(FSunbursts)) and FSunbursts[i].Valid then
