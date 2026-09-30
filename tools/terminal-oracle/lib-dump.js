@@ -144,6 +144,8 @@ const PORTED = [
   ...['common/buffer/BufferReflow', 'browser/renderer/shared/RendererUtils', 'browser/ColorContrastCache',
     'common/services/OptionsService',
   ].map(m => [`src/${m}.ts`, `${OUT_DIR}/${m}.js`]),
+  // phase 7: the public parser hooks the core's Register*Handler follows
+  ['src/common/public/ParserApi.ts', `${OUT_DIR}/common/public/ParserApi.js`],
 ];
 
 function checkBuildFresh() {
