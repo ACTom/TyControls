@@ -113,6 +113,10 @@ type
     procedure TestPipeBackendIsBinarySafe;                   { B1 }
     procedure TestPipeBackendCloseDoesNotWait;               { B2 }
     procedure TestPipeBackendStderr;                         { B3 }
+    { the phase 7 review's fixes }
+    procedure TestPipeBackendClosesItsInputAfterTheWriter;
+    procedure TestPipeBackendSeesTheExitWhileAChildHoldsThePipe;
+    procedure TestPipeBackendHandsOnlyItsPipesToTheProgram;
     {$ENDIF}
   end;
 
@@ -1215,6 +1219,18 @@ begin
     while ReadFile(GetStdHandle(STD_INPUT_HANDLE), buf[0], SizeOf(buf), got, nil) and (got > 0) do
       WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf[0], got, done, nil);
   end
+  else if AMode = 'echo1024' then
+  begin
+    { the same for the first 1024 bytes, then the end (no input's end needed) }
+    i := 0;
+    while (i < 1024) and ReadFile(GetStdHandle(STD_INPUT_HANDLE), buf[0], 1024 - i, got, nil) and (got > 0) do
+    begin
+      WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf[0], got, done, nil);
+      Inc(i, got);
+    end;
+  end
+  else if AMode = 'linger' then
+    Sleep(4000)                          { started by cmd's "start /b": outlives it, holding its pipes }
   else if AMode = 'stderr' then
   begin
     s := 'ty-out';
@@ -1235,7 +1251,8 @@ var
 begin
   if Copy(ParamStr(1), 1, Length(Flag)) <> Flag then Exit;
   mode := Copy(ParamStr(1), Length(Flag) + 1, MaxInt);
-  if (mode = 'dump') or (mode = 'cat') or (mode = 'stderr') or (mode = 'sleep') then
+  if (mode = 'dump') or (mode = 'cat') or (mode = 'stderr') or (mode = 'sleep') or (mode = 'echo1024')
+    or (mode = 'linger') then
     HelperOnPipes(mode);
   if mode = 'block-close' then
     SetConsoleCtrlHandler(@HelperBlockClose, True);
@@ -1407,14 +1424,9 @@ begin
   s := TPtySession.Create(ABackend);
   try
     if not s.Start(ACommand, 80, 24, err) then ACase.Fail('not started: ' + err);
+    { a program that reads its input stops by itself (echo1024) }
     if AInput <> '' then
-    begin
       s.Write(AInput);
-      { the program reads to its input's end: the session's close gives it that, but
-        not before its output is read -- the pipe is closed by hand here }
-      Sleep(200);
-      ABackend.BeginClose;
-    end;
     ACase.AssertTrue('the program ended within 15 s', WaitUntil(@TheEnd, 15000));
     Result := code;
   finally
@@ -1443,7 +1455,7 @@ begin
   RunToEnd(Self, TProcessPipeBackend.Create(False), helper + 'dump', '', got);
   AssertEquals('every byte value, as written', Length(AllBytes4), Length(got));
   AssertTrue('byte for byte', got = AllBytes4);
-  RunToEnd(Self, TProcessPipeBackend.Create(False), helper + 'cat', AllBytes4, got);
+  RunToEnd(Self, TProcessPipeBackend.Create(False), helper + 'echo1024', AllBytes4, got);
   AssertTrue(Format('echoed byte for byte (%d bytes)', [Length(got)]), got = AllBytes4);
   if TyConPtyAvailable then
   begin
@@ -1500,6 +1512,112 @@ begin
   RunToEnd(Self, TProcessPipeBackend.Create(False), helper, '', got);
   AssertTrue('apart: stdout there: ' + got, Pos('ty-out', got) > 0);
   AssertEquals('apart: stderr not', 0, Pos('ty-err', got));
+end;
+
+{ BeginClose (the main thread) leaves the input pipe alone -- the session's writer may
+  still be inside a WriteFile on it; the finisher closes it once the writer is gone, and
+  a program that reads to its input's end then goes by itself. Mutation: BeginClose
+  closing the input. }
+procedure TTyTerminalPtyTests.TestPipeBackendClosesItsInputAfterTheWriter;
+var
+  b: TProcessPipeBackend;
+  err: string;
+  res: TPtyCloseResult;
+begin
+  b := TProcessPipeBackend.Create(False);
+  try
+    if not b.Start('"' + ParamStr(0) + '" --ty-pty-helper=cat', 80, 24, err) then Fail('not started: ' + err);
+    b.BeginClose;
+    AssertTrue('BeginClose leaves the input open', b.InputOpen);
+    res := b.FinishClose(5000);
+    AssertFalse('then it is closed', b.InputOpen);
+    AssertTrue('the program went by itself', res = pcrGone);
+    AssertFalse('not ended by its handle', b.Killed);
+    AssertEquals('its own exit code', 0, b.ExitCode(0));
+  finally
+    b.Free;
+  end;
+end;
+
+{ The program is gone but a program it started holds the output pipe (cmd's "start
+  /b"): the pipe never ends, and the session still reports the exit at once -- what is
+  in the pipe is read first. Mutation: no exit waiter (the exit comes only when the
+  child lets go, 4 s later). }
+procedure TTyTerminalPtyTests.TestPipeBackendSeesTheExitWhileAChildHoldsThePipe;
+var
+  s: TPtySession;
+  err: string;
+  data, all: RawByteString;
+  exited, ended: Boolean;
+  code: Int64;
+
+  function TheEnd: Boolean;
+  begin
+    if s.Pump(data, exited, code) then
+    begin
+      all := all + data;
+      s.Delivered(Length(data));
+      if exited then
+        ended := True;
+    end;
+    Result := ended;
+  end;
+
+begin
+  AssertTrue('nothing finishing from before', PtyWaitForFinishers(PtyExitWaitMs));
+  ended := False;
+  all := '';
+  code := -2;
+  s := TPtySession.Create(TProcessPipeBackend.Create(True));
+  try
+    if not s.Start('cmd.exe /d /c echo ty-before& start "" /b "' + ParamStr(0) + '" --ty-pty-helper=linger', 80, 24,
+      err) then
+      Fail('not started: ' + err);
+    AssertTrue('the exit within 2.5 s (the child holds the pipe for 4 s)', WaitUntil(@TheEnd, 2500));
+    AssertEquals('cmd''s exit code', 0, code);
+    AssertTrue('its output first: ' + all, Pos('ty-before', all) > 0);
+  finally
+    s.Free;
+  end;
+  AssertTrue('the finisher finished', PtyWaitForFinishers(PtyExitWaitMs));
+end;
+
+{ The program inherits its three pipe ends and nothing else of ours: an inheritable pipe
+  of the test's own is broken as soon as the test closes its end. Mutation: every
+  inheritable handle inherited (bInheritHandles without the handle list). }
+procedure TTyTerminalPtyTests.TestPipeBackendHandsOnlyItsPipesToTheProgram;
+var
+  b: TProcessPipeBackend;
+  sa: TSecurityAttributes;
+  rd, wr: THandle;
+  err: string;
+  avail: DWORD;
+  ok: Boolean;
+  lastErr: DWORD;
+begin
+  FillChar(sa, SizeOf(sa), 0);
+  sa.nLength := SizeOf(sa);
+  sa.bInheritHandle := True;
+  rd := 0;
+  wr := 0;
+  AssertTrue('a pipe of our own', CreatePipe(rd, wr, @sa, 0));
+  b := TProcessPipeBackend.Create(False);
+  try
+    if not b.Start('"' + ParamStr(0) + '" --ty-pty-helper=sleep', 80, 24, err) then Fail('not started: ' + err);
+    CloseHandle(wr);
+    wr := 0;
+    avail := 0;
+    ok := PeekNamedPipe(rd, nil, 0, nil, @avail, nil);
+    lastErr := GetLastError;
+    AssertFalse('nobody else holds its write end', ok);
+    AssertEquals('broken', ERROR_BROKEN_PIPE, lastErr);
+  finally
+    b.BeginClose;
+    b.FinishClose(200);                  { the sleeper is ended by its handle }
+    b.Free;
+    if wr <> 0 then CloseHandle(wr);
+    CloseHandle(rd);
+  end;
 end;
 
 {$ENDIF}
