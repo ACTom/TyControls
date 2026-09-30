@@ -351,16 +351,32 @@ begin
     tlpInsideBottomLeft, tlpInsideBottomRight];
 end;
 
+procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV); forward;
+
 procedure TyLabelAnchor(const AHost: TTyRectF; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+var r: TTyXYWH;
+begin
+  r.X := AHost.Left;
+  r.Y := AHost.Top;
+  r.W := TyRectFWidth(AHost);
+  r.H := TyRectFHeight(AHost);
+  TyLabelAnchorXYWH(r, APosition, ADistancePx, AAtX, AAtY, AX, AY, AH, AV);
+end;
+
+procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
   ADistancePx, AAtX, AAtY: Double;
   out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
 var
   x0, y0, w, h, halfH: Double;
 begin
-  x0 := AHost.Left;
-  y0 := AHost.Top;
-  w := TyRectFWidth(AHost);
-  h := TyRectFHeight(AHost);
+  x0 := AHost.X;
+  y0 := AHost.Y;
+  w := AHost.W;
+  h := AHost.H;
   { NAMED, because upstream names it and uses it five times -- while the
     horizontal half is written out inline every time. Kept the same way so the
     two tables read against the source line by line. }
@@ -671,12 +687,17 @@ begin
     if spec.Position = tlpNone then Continue;
 
     bounds := TyShapeBounds(host.Shape);
+    if host.Caption.HasHostBox then
+      bounds := TyRectF(host.Caption.HostBox.X, host.Caption.HostBox.Y,
+        host.Caption.HostBox.X + host.Caption.HostBox.W,
+        host.Caption.HostBox.Y + host.Caption.HostBox.H);
     if not TyRectFIsValid(bounds) then Continue;
     { THE HOST'S STROKE GROWS ITS RECT, as Path.getBoundingRect grows it: by
       the line width, or by at least five where nothing is filled, half on
       each side. A label outside a bordered cell sits past the border.
       [Batch 68] }
-    if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0) then
+    if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0)
+      and not host.Caption.HasHostBox then
     begin
       sw := host.Style.StrokeWidthLogical;
       if not host.Style.HasFill then sw := Max(sw, 5.0);
@@ -706,7 +727,14 @@ begin
     else atX := spec.AtX * scale;
     if spec.AtYIsPercent then atY := spec.AtY * (bounds.Bottom - bounds.Top)
     else atY := spec.AtY * scale;
-    TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);
+    if host.Caption.HasHostBox then
+    begin
+      if spec.AtXIsPercent then atX := spec.AtX * host.Caption.HostBox.W;
+      if spec.AtYIsPercent then atY := spec.AtY * host.Caption.HostBox.H;
+      TyLabelAnchorXYWH(host.Caption.HostBox, pos, dist, atX, atY, x, y, ah, av);
+    end
+    else
+      TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);
     if spec.HasAlignH then ah := spec.AlignH;
     if spec.HasAlignV then av := spec.AlignV;
     { OFFSET AFTER THE POSITION, which is upstream's order. Upstream also

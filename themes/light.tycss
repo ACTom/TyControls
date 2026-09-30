@@ -1192,6 +1192,12 @@ TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }
    band across a dark skin; alpha over the ink darkens one and lightens the
    other from the same declaration. */
 TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }
+/* A TREE'S NODES AND EDGES. Upstream names the colours in the series'
+   defaults -- lightsteelblue for a node, a light grey for an edge -- and a
+   tree takes no palette slot; here they are keys, so a skin gives its trees
+   its own accent and its own line ink. */
+TyAdvChartTreeNode { background: alpha(var(--accent), 0.55); }
+TyAdvChartTreeEdge { border-color: var(--border); border-width: 1px; }
 /* The chart's own title and subtitle. Upstream draws them at 18/bold and
    12/regular; the sizes come from the type scale here so a dense skin gets a
    proportionate title instead of an 18px one on 11px axis labels. */

@@ -137,6 +137,14 @@ type
       of its own, read over its series' into the expansion's per-item table;
       0, the zero value, is "the series' label". [Batch 68] }
     ItemSpec: Integer;
+    { THE RECT A LABEL IS PLACED AGAINST, when the mark knows it better than
+      its shape's bounds do: zrender's layoutRect for a symbol is its UNIT
+      path box grown by the stroke in unit space and carried through the
+      symbol's whole transform -- rotation included, so a turned ellipse's
+      label sits off the rotated box, not the ellipse. Kept as x, y, width,
+      height, the form upstream adds to, so the anchor is exact. [Batch 73] }
+    HasHostBox: Boolean;
+    HostBox: TTyXYWH;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;

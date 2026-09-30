@@ -7964,3 +7964,44 @@ M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画
 ### 热力图/日历系列小结
 
 H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历上的热力图、散点、涟漪散点、关系图、饼图,都按上游逐位对上;画廊的 10 个日历文件除 custom-calendar-icon(renderItem 是函数)外都画出来了。
+
+## 107. Tier 1 第七十三批:树图——层级、正交布局、节点、曲边、标签(T1,2026-09-30)
+
+层级系列(树图/矩形树图/旭日图,画廊共 19 个文件)的第一批。调研在 scratchpad/wf73:upstream.md、gallery.md、port.md。
+
+### 上游的做法
+
+- **层级**:`series.data` 挂在一个以系列名命名的**虚根**下面,数据行就是这棵树的**先序**:第 0 行是虚根,第 1 行是 `data[0]`。只有 `data[0]`(真根)参与布局;其余的根有数据行、没有位置。虚根深度 0,真根 1。
+- **展开**:写了 `collapsed` 的节点照它(`collapsed != null` 才算写了);其余节点深度 ≤ `initialTreeDepth`(默认 2)才展开——真根和它的子节点展开,孙节点看得见但收着,更深的看不见。`expandAndCollapse` 为假、或 `initialTreeDepth` 不是 ≥0 的数(`-1`、非数字字符串)时一律展开;`null` 按 0 算。收起的节点对布局来说是叶子,它的后代没有位置。
+- **盒子**:系列走 `box` 布局:没写的 `left/top/right/bottom` 补 `12%`,再做一遍按个数的 `mergeLayoutParam`——写了 `left` 和 `width` 时默认的 `right` 被丢掉。
+- **布局**:layoutHelper.ts 就是 d3-hierarchy 的 tree(Reingold-Tilford / Walker):可见节点后序 firstWalk(executeShifts、apportion 的线程与祖先、moveSubtree),先序 secondWalk;同父兄弟间距 1、堂亲 2。然后找最左、最右(并列时先序在前者胜)、最深的节点,`delta = (最左 === 最右) ? 1 : 间距/2`,再按朝向缩放进盒子:LR/RL 的横向是深度、纵向是广度,TB/BT 反之;RL、BT 镜像;`(最深 - 1) || 1` 防单节点除零。运算顺序照原文,不能化简。
+- **节点**:默认 `emptyCircle`、7px。空心符号一律 2px 的环(**写死**,盖过 `itemStyle.borderWidth`),环色是节点色,中间是白;收起且有子节点的节点实心。z2 100。
+- **边**:每个非真根可见节点一条三次贝塞尔,从父到子,用**子**节点的 lineStyle;控制点 LR/RL `(s.x + (t.x - s.x)·c, s.y)`、`(t.x + (s.x - t.x)·c, t.y)`,TB/BT 对称;曲度只读系列的 `lineStyle.curveness`(默认 0.5)。z2 0——所有边画在所有节点下面。
+- **`leaves`**:叶子和收起的节点读 label、itemStyle、lineStyle 时先过 `leaves` 再到系列——但**符号**只读条目自己和系列。
+- **标签**:默认显示节点名,位置默认 `inside`(四个朝向都是);标签矩形是符号的单位路径框按描边在单位空间里撑开、再经符号的完整变换(旋转也算)得到的框。
+- **颜色**:树的默认色写在系列默认值里(节点 lightsteelblue、边 #cfd2d7),所以**不占色板位**。
+
+### 做法
+
+- 新单元 `tyControls.AdvChart.Tree`:`TyHierarchyOf`(显式栈的先序,行号即上游 dataIndex)、`TyTreeFillStore`(每行一个去掉 `children` 的浅拷贝交给 Builder 新导出的 `TyFillSeriesStoreArray`)、`TyTreeSpecOf`(盒子沿用日历的 `TyCalMergeLayoutParam`)、`TyTreeApplyExpand`(JS 的真值与 `>= 0` 语义)、`TyTreeSolve`(Walker 算法按行号实现,四个朝向)、`TyTreeLabelSpecs`、`TyBuildTreeMarks`(真正的三次曲线路径命令,不采样)。
+- 控件:存储分支(在日历分支之前)、`SolveTrees`、`TreeInk`、`BuildSeriesList` 里在展开标签之前画、色板里给树一个不占位的分支;标签的主题部分抽成 `LabelBaseFor`,树的标签默认显示、默认文字是名字。
+- 主题:新键 `TyAdvChartTreeNode`(强调色的浅版,代替 lightsteelblue)和 `TyAdvChartTreeEdge`(边框墨);重新生成 DefaultTheme 与目录。
+- **标签框**:`TySymbolLabelBox` 按 zrender 的算法算符号标签的参照框(单位框、描边在单位空间撑开、完整变换,pin 有自己的单位框);标题新增 `HasHostBox/HostBox`,展开标签时有它就用它、并用新的 `TyLabelAnchorXYWH` 按 x+w/2 的形式算锚点——原来按 Left/Right 反算宽度,会差最后一位。这一批只给树用;散点、关系图、标注各自的现有测试不受影响。
+- **顺带修的真缺陷**:`TySymbolDefault` 逐字段填、新加的百分比偏移字段没写就是垃圾值——没写 `symbolOffset` 的系列可能被随机偏移。现在先 `Default()` 清零。
+
+### 基准
+
+- `tools/advchart-oracle/tree.js`(代理写)真跑 ECharts 6.1,74 个用例、75 个树系列:四个朝向和两个旧别名、径向、不对称树(强制子树移位)、单节点、单子节点、深链、20 个子节点的扇、`initialTreeDepth` 0/1/2/3/-1、`collapsed` 各种位置、`expandAndCollapse: false`、多个根、盒子写法、符号(系列/条目/`leaves` 被忽略)、空心与实心的样式层级、曲度、边样式层级、折线边、标签位置/旋转/显示开关/formatter/背景/`inherit`、值的各种写法,以及 7 个画廊文件(强制关动画)。25 条变异守卫,另有 210 棵随机树与独立转写逐位一致。
+- `test.advchart.tree`:通过控件画一遍,逐行比较有没有画、节点位置(精确)、尺寸、环宽、填充/实心、不透明度、z2,每条曲边的四个点(精确)、宽度、颜色、z2,每个标签的文字/锚点(精确)/对齐;另有「树不占色板位」的测试。径向布局和折线边的用例这一批跳过、计数。
+
+### 变异测试
+
+34 个。两个存活:
+
+- 单节点的 `delta` 从 1 改成 0.5:单节点(以及所有广度坐标都是 0 的链)的纵坐标是 `delta·h / (2·delta)`,恒为 `h/2`,等价。
+- 去掉按个数的盒子合并:基准里的 `B-wh` 写的是 `left` 和 `width`,被丢掉的 `right` 本来就不参与 getLayoutRect。补了一个直接测试:写 `right` 和 `width`(以及 `bottom` 和 `height`)时默认的 `left`(`top`)必须被丢掉、盒子贴右(贴底)——补后杀死。
+
+### 已知偏差
+
+- 尺寸为 0 的空心节点端口不画环(上游的环宽是 2,但没有尺寸,什么也看不见)。
+- 径向布局、折线边、提示框、展开收起的点击、漫游、emphasis 下一批起再做。

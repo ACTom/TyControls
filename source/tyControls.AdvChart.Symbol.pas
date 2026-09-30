@@ -69,6 +69,15 @@ function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
   width (x) and the height (y). }
 function TySymbolResolveOffset(const ASpec: TTySymbolSpec): TTySymbolSpec;
 
+{ THE RECT A SYMBOL'S LABEL IS PLACED AGAINST, zrender's way: the symbol's
+  UNIT path box (createSymbol(-1, -1, 2, 2)), grown by the stroke in unit
+  space -- lineWidth over the line scale, at least 5 where nothing is filled
+  -- then carried through the symbol's transform: scale to half its size,
+  turn by symbolRotate, move by symbolOffset and to the point. A turned
+  symbol answers the box of its turned unit rect. [Batch 73] }
+function TySymbolLabelBox(const ASpec: TTySymbolSpec; APX, APY: Double;
+  ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
+
 { Read `symbol`, `symbolSize`, `symbolRotate`, `symbolOffset` and
   `symbolKeepAspect` off a series node, over the given defaults. }
 function TySymbolSpecOf(ANode: TJSONObject;
@@ -129,6 +138,11 @@ const
 
 function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
 begin
+  { EVERY FIELD FROM ZERO FIRST. The record is filled field by field below,
+    and a field added to it later and not named here is whatever the stack
+    held -- [Batch 73: the percentage offsets were, and an offset resolved
+    against garbage moved a symbol by garbage] }
+  Result := Default(TTySymbolSpec);
   Result.Kind := tsyCircle;
   Result.PathData := '';
   if (ASeriesType = 'scatter') or (ASeriesType = 'effectScatter') then
@@ -138,6 +152,13 @@ begin
     Result.Empty := False;
     Result.WidthPx := cScatterSymbolSize;
     Result.HeightPx := cScatterSymbolSize;
+  end
+  else if ASeriesType = 'tree' then
+  begin
+    { TreeSeries: symbol 'emptyCircle', symbolSize 7 [Batch 73] }
+    Result.Empty := True;
+    Result.WidthPx := 7;
+    Result.HeightPx := 7;
   end
   else if ASeriesType = 'radar' then
   begin
@@ -311,6 +332,91 @@ begin
     ReadOffsetOne(a.Items[1], ASpec.OffsetY, ASpec.OffsetYIsPct, ASpec.OffsetYPct)
   else
     ReadOffsetOne(nil, ASpec.OffsetY, ASpec.OffsetYIsPct, ASpec.OffsetYPct);
+end;
+
+function TySymbolLabelBox(const ASpec: TTySymbolSpec; APX, APY: Double;
+  ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
+var
+  lx, ly, lw, lh, m0, m1, m2, m3, m4, m5, r, st, ct, ls, w: Double;
+  xs, ys: array[0..3] of Double;
+  k: Integer;
+begin
+  { the unit path's own box: every built-in shape fills -1..1 but the pin }
+  lx := -1; ly := -1; lw := 2; lh := 2;
+  if ASpec.Kind = tsyPin then
+  begin
+    lx := -0.6000000000000001;
+    ly := -1.7428571428571429;
+    lw := 1.2000000000000002;
+    lh := 1.7428571428571429;
+  end;
+  { scale, rotate, translate (Transformable.getLocalTransform), then the
+    group's move to the point }
+  r := ASpec.RotateDeg * Pi / 180;
+  st := Sin(r);
+  ct := Cos(r);
+  m0 := ASpec.WidthPx / 2 * ct;
+  m1 := -(ASpec.WidthPx / 2) * st;
+  m2 := ASpec.HeightPx / 2 * st;
+  m3 := ASpec.HeightPx / 2 * ct;
+  if r = 0 then
+  begin
+    m0 := ASpec.WidthPx / 2;
+    m1 := 0;
+    m2 := 0;
+    m3 := ASpec.HeightPx / 2;
+  end;
+  m4 := ASpec.OffsetX + APX;
+  m5 := ASpec.OffsetY + APY;
+  { the stroke, in unit space: strokeNoScale divides by the line scale }
+  if AHasStroke then
+  begin
+    w := ALineWidth;
+    if not AHasFill then w := Max(w, 5.0);
+    if (Abs(m0 - 1) > 1e-10) and (Abs(m3 - 1) > 1e-10) then
+      ls := Sqrt(Abs(m0 * m3 - m2 * m1))
+    else
+      ls := 1;
+    if ls > 1e-10 then
+    begin
+      lw := lw + w / ls;
+      lh := lh + w / ls;
+      lx := lx - w / ls / 2;
+      ly := ly - w / ls / 2;
+    end;
+  end;
+  { BoundingRect.applyTransform: a fast path when nothing turns }
+  if (m1 < 1e-5) and (m1 > -1e-5) and (m2 < 1e-5) and (m2 > -1e-5) then
+  begin
+    Result.X := lx * m0 + m4;
+    Result.Y := ly * m3 + m5;
+    Result.W := lw * m0;
+    Result.H := lh * m3;
+    if Result.W < 0 then
+    begin
+      Result.X := Result.X + Result.W;
+      Result.W := -Result.W;
+    end;
+    if Result.H < 0 then
+    begin
+      Result.Y := Result.Y + Result.H;
+      Result.H := -Result.H;
+    end;
+    Exit;
+  end;
+  xs[0] := m0 * lx + m2 * ly + m4;               ys[0] := m1 * lx + m3 * ly + m5;
+  xs[1] := m0 * (lx + lw) + m2 * (ly + lh) + m4; ys[1] := m1 * (lx + lw) + m3 * (ly + lh) + m5;
+  xs[2] := m0 * lx + m2 * (ly + lh) + m4;        ys[2] := m1 * lx + m3 * (ly + lh) + m5;
+  xs[3] := m0 * (lx + lw) + m2 * ly + m4;        ys[3] := m1 * (lx + lw) + m3 * ly + m5;
+  Result.X := xs[0];
+  Result.Y := ys[0];
+  for k := 1 to 3 do
+  begin
+    if xs[k] < Result.X then Result.X := xs[k];
+    if ys[k] < Result.Y then Result.Y := ys[k];
+  end;
+  Result.W := Max(Max(xs[0], xs[1]), Max(xs[2], xs[3])) - Result.X;
+  Result.H := Max(Max(ys[0], ys[1]), Max(ys[2], ys[3])) - Result.Y;
 end;
 
 function TySymbolResolveOffset(const ASpec: TTySymbolSpec): TTySymbolSpec;

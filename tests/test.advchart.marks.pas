@@ -505,7 +505,7 @@ begin
       service this function performs. }
     if (cTypes[i] = 'pie') or (cTypes[i] = 'funnel')
       or (cTypes[i] = 'gauge') or (cTypes[i] = 'radar')
-      or (cTypes[i] = 'graph') then
+      or (cTypes[i] = 'graph') or (cTypes[i] = 'tree') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));

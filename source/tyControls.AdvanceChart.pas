@@ -46,7 +46,7 @@ uses
   tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
-  tyControls.AdvChart.Calendar,
+  tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
   tyControls.AdvChart.Graph,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
@@ -184,6 +184,9 @@ type
     FRadars: array of TTyRadar;
     { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
     FCalendars: array of TTyCalendar;
+    { THE TREES, laid out per slot -- an empty record where the slot is no
+      tree. [Batch 73] }
+    FTrees: array of TTyTreeSolved;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -554,6 +557,9 @@ type
     procedure FreeRadars;
     procedure SolveGraphs(APPI: Integer);
     procedure FreeGraphs;
+    procedure SolveTrees(APPI: Integer);
+    function TreeInk(ASlot: Integer): TTyTreeInk;
+    function LabelBaseFor(ASlot: Integer): TTyLabelSpec;
     procedure SolveGraphCategoryColours;
     { A graph node's raw row survives the legend: upstream's categoryFilter,
       with isSelected asked of every legend. FFilterCats carries the
@@ -1088,6 +1094,7 @@ begin
   FreeRadars;
   FreeCalendars;
   FreeGraphs;
+  FTrees := nil;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -1301,6 +1308,15 @@ begin
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
       begin
         TyGraphFillStore(FOption, i, st);
+        Continue;
+      end;
+      { A TREE'S ROWS ARE ITS HIERARCHY IN PRE-ORDER under a virtual root --
+        never the top-level `data` alone, which would lose every child. Before
+        the calendar's branch: a tree on a calendar keeps its own rows.
+        [Batch 73] }
+      if FBindings[i].SeriesType = TyTreeSeriesTypeName then
+      begin
+        TyTreeFillStore(FOption, FBindings[i].SeriesIndex, st);
         Continue;
       end;
       { ON A CALENDAR: the calendar's two dimensions, a time and a value --
@@ -1714,6 +1730,7 @@ begin
   SolveGauges(APPI);
   SolveRadars(APPI);
   SolveGraphs(APPI);
+  SolveTrees(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -2490,6 +2507,16 @@ begin
     if (st = 'candlestick') and (not key.Written) and (not hasAuto) then
     begin
       FSeriesColors[i] := TTyChartColor($FFEB5454);
+      FSeriesColorKnown[i] := True;
+      Continue;
+    end;
+    { A TREE'S DEFAULTS NAME ITS COLOUR TOO (lightsteelblue upstream), so it
+      takes no slot and a series after it keeps its own; the colour is the
+      theme's. [Batch 73] }
+    if (st = TyTreeSeriesTypeName) and (not key.Written) and (not hasAuto) then
+    begin
+      FSeriesColors[i] := TTyChartColor(ActiveController.Model.ResolveStyle(
+        'TyAdvChartTreeNode', '', []).Background.Color);
       FSeriesColorKnown[i] := True;
       Continue;
     end;
@@ -5068,6 +5095,48 @@ begin
   FGraphCatColours := TyGraphCategoryColours(FOption, shown, fallback);
 end;
 
+{ THE TREES: each laid out in its box on the whole canvas, as a pie is.
+  [Batch 73] }
+procedure TTyAdvanceChart.SolveTrees(APPI: Integer);
+var i: Integer;
+begin
+  FTrees := nil;
+  SetLength(FTrees, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FTrees[i] := Default(TTyTreeSolved);
+    if FBindings[i].SeriesType <> TyTreeSeriesTypeName then Continue;
+    if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
+    FTrees[i] := TyTreeSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+  end;
+end;
+
+{ A TREE'S INK: the node colour the palette pass settled (the theme's, or
+  the series' own), the edge colour from its key, a ring's hole from the
+  chart's own ground, and the labels -- shown by default, the node's name
+  their words, read item -> leaves -> series. }
+function TTyAdvanceChart.TreeInk(ASlot: Integer): TTyTreeInk;
+var
+  base: TTyLabelSpec;
+begin
+  Result := Default(TTyTreeInk);
+  Result.NodeColour := TTyChartColor(SeriesColor(FBindings[ASlot].SeriesIndex));
+  Result.EdgeColour := TTyChartColor(ActiveController.Model.ResolveStyle(
+    'TyAdvChartTreeEdge', '', []).BorderColor);
+  Result.EmptyFill := TTyChartColor(
+    ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+      [tysNormal]).Background.Color);
+  base := LabelBaseFor(ASlot);
+  base.Show := True;
+  base.DefaultText := tldName;
+  Result.Label_ := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
+  Result.ItemLabels := TyTreeLabelSpecs(FTrees[ASlot], Result.Label_);
+  Result.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
+  Result.LabelValueDim := -1;
+  if FStores[ASlot] <> nil then
+    Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+end;
+
 procedure TTyAdvanceChart.FreeGraphs;
 var i: Integer;
 begin
@@ -6783,6 +6852,29 @@ begin
   Result := LabelSpecFor(ASlot, '');
 end;
 
+{ THE THEME HALF OF A LABEL SPEC: fonts, the outside ink and the three
+  inside bands, the ground -- everything but what the option says. }
+function TTyAdvanceChart.LabelBaseFor(ASlot: Integer): TTyLabelSpec;
+var
+  outS, lightS, midS, darkS: TTyStyleSet;
+begin
+  Result := TyLabelSpecNone;
+  outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  lightS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight',
+    '', []);
+  midS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []);
+  darkS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '',
+    []);
+  Result.FontName := outS.FontName;
+  Result.FontSizeLogical := ResolveFontSize(outS);
+  Result.FontWeight := outS.FontWeight;
+  Result.OutsideColour := TTyChartColor(outS.TextColor);
+  Result.InsideColour[0] := TTyChartColor(lightS.TextColor);
+  Result.InsideColour[1] := TTyChartColor(midS.TextColor);
+  Result.InsideColour[2] := TTyChartColor(darkS.TextColor);
+  LabelGround(Result.Ground, Result.GroundDark);
+end;
+
 function TTyAdvanceChart.LabelSpecFor(ASlot: Integer;
   const ADefaultFormatter: string): TTyLabelSpec;
 var
@@ -6861,6 +6953,7 @@ var
   fv: TTyFunnelVisual;
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
+  ti: TTyTreeInk;
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
 begin
@@ -6939,6 +7032,26 @@ begin
           if Length(specs) <= FBindings[i].SeriesIndex then
             SetLength(specs, FBindings[i].SeriesIndex + 1);
           specs[FBindings[i].SeriesIndex] := gi.Label_;
+        end;
+        Continue;
+      end;
+      { A TREE lays itself out in its box (SolveTrees) and draws its edges,
+        its symbols and its label requests here -- BEFORE the expansion,
+        whose per-row table carries the item -> leaves -> series chain.
+        [Batch 73] }
+      if FBindings[i].SeriesType = TyTreeSeriesTypeName then
+      begin
+        if (i <= High(FTrees)) and FTrees[i].Valid then
+        begin
+          ti := TreeInk(i);
+          Inc(drawn, TyBuildTreeMarks(FBindings[i].SeriesIndex, FTrees[i], ti,
+            FStores[i], list));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := ti.Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := ti.ItemLabels;
         end;
         Continue;
       end;

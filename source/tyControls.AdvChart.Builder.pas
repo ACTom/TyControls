@@ -370,6 +370,11 @@ function TySeriesUsesRowIndex(AData: TJSONArray;
 function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ADims: TTySeriesDimArray; AStore: TTyDataStore;
   const AKey: string = 'data'): Integer;
+{ THE SAME FILL OVER AN ARRAY THE CALLER BUILT -- a tree's rows, which are a
+  hierarchy flattened in pre-order and not any one array of the option. The
+  series still answers `dimensions`. [Batch 73] }
+function TyFillSeriesStoreArray(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AArray: TJSONArray; const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
 
 { The same job from a DATASET. AEncode says which source dimension feeds each
   of ADims; a coordinate it leaves at -1 gets no value at all.
@@ -1623,12 +1628,6 @@ function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
 var
   node: TJSONObject;
   d: TJSONData;
-  arr: TJSONArray;
-  row: array of TTyDataValue;
-  i, k, src, catDim, raw, pos: Integer;
-  item, v, cell: TJSONData;
-  useIndex, prepend: Boolean;
-  txt: string;
 begin
   Result := 0;
   if (AOption = nil) or (AStore = nil) or (Length(ADims) = 0) then Exit;
@@ -1637,7 +1636,26 @@ begin
   { AKey IS NOT ALWAYS `data`: a graph's node list has a second name. }
   d := node.Find(AKey);
   if (d = nil) or (d.JSONType = jtNull) or not (d is TJSONArray) then Exit;
-  arr := TJSONArray(d);
+  Result := TyFillSeriesStoreArray(AOption, ASeriesIndex, TJSONArray(d), ADims, AStore);
+end;
+
+function TyFillSeriesStoreArray(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AArray: TJSONArray; const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  arr: TJSONArray;
+  row: array of TTyDataValue;
+  i, k, src, catDim, raw, pos: Integer;
+  item, v, cell: TJSONData;
+  useIndex, prepend: Boolean;
+  txt: string;
+begin
+  Result := 0;
+  if (AOption = nil) or (AStore = nil) or (Length(ADims) = 0) or (AArray = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt('series', ASeriesIndex));
+  if node = nil then Exit;
+  arr := AArray;
 
   catDim := FirstCategoryDim(ADims);
   useIndex := TySeriesUsesRowIndex(arr, ADims);

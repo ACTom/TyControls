@@ -1225,6 +1225,12 @@ begin
     '   band across a dark skin; alpha over the ink darkens one and lightens the' + LineEnding +
     '   other from the same declaration. */' + LineEnding +
     'TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* A TREE''S NODES AND EDGES. Upstream names the colours in the series''' + LineEnding +
+    '   defaults -- lightsteelblue for a node, a light grey for an edge -- and a' + LineEnding +
+    '   tree takes no palette slot; here they are keys, so a skin gives its trees' + LineEnding +
+    '   its own accent and its own line ink. */' + LineEnding +
+    'TyAdvChartTreeNode { background: alpha(var(--accent), 0.55); }' + LineEnding +
+    'TyAdvChartTreeEdge { border-color: var(--border); border-width: 1px; }' + LineEnding +
     '/* The chart''s own title and subtitle. Upstream draws them at 18/bold and' + LineEnding +
     '   12/regular; the sizes come from the type scale here so a dense skin gets a' + LineEnding +
     '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +
