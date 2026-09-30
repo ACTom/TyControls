@@ -42,6 +42,10 @@ type
     procedure TestOverAndOut;                                { S7 }
     procedure TestZcommandIsRefused;                         { S8 }
     procedure TestAZeofAtTheWrongPlace;                      { S9 }
+    { found against the real lrzsz (Task 13): sz -e's hex ZSINIT carries a subpacket;
+      rz gives up after about 40 KB of garbage, so an upload keeps a window }
+    procedure TestAHexZsinitIsAnswered;                      { S10 }
+    procedure TestTheSendersWindow;                          { S11 }
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -1433,6 +1437,112 @@ begin
     r.Free;
     log.Free;
     sink.Free;
+  end;
+end;
+
+{ S10. What sz -e sent to a receiver that had not offered ESCCTL (seen against the
+  real sz): a HEX ZSINIT asking for it, then its Attn subpacket (one escaped NUL,
+  CRC-16). Mutation: the reader expecting data only after binary headers (sz repeats
+  the ZSINIT for ever). }
+procedure TTyTerminalZmodemTests.TestAHexZsinitIsAnswered;
+const
+  SzZsinit: RawByteString = '**'#$18'B02000000400c47'#13#$8A#$11#$18'@'#$18'k'#$DD#$CD#$11;
+var
+  r: TReaderLog;
+  sink: TMemSink;
+  log: TZmLog;
+  rc: TZmReceiver;
+  h: THeaderList;
+begin
+  r := TReaderLog.Create;
+  try
+    r.PushEach(SzZsinit);
+    AssertEquals('the header', 1, Length(r.Headers));
+    AssertEquals('ZSINIT', ZSINIT, r.Headers[0].FrameType);
+    AssertEquals('TESCCTL in ZF0', $40, r.Headers[0].P[3]);
+    AssertEquals('its subpacket', 1, Length(r.Data));
+    AssertEquals('one NUL', ZmHex(#0), ZmHex(r.Data[0]));
+    AssertEquals('ZCRCW', ZCRCW, r.Ends[0]);
+    AssertTrue('CRC-16 right', r.Oks[0]);
+  finally
+    r.Free;
+  end;
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  rc := TZmReceiver.Create(sink);
+  try
+    rc.OnSend := @log.OnSend;
+    rc.Start(0);
+    log.Sent := '';
+    FeedR(rc, SzZsinit);
+    h := THeaderList.Create(log.Sent);
+    try
+      AssertEquals('answered once', 1, Length(h.Types));
+      AssertEquals('with ZACK', ZACK, h.Types[0]);
+    finally
+      h.Free;
+    end;
+  finally
+    rc.Free;
+    log.Free;
+    sink.Free;
+  end;
+end;
+
+{ S11. A window: no more than Window bytes past the last acknowledged place, a ZCRCQ
+  every quarter of it, and a ZACK moves it on. Mutation: the window not checked. }
+procedure TTyTerminalZmodemTests.TestTheSendersWindow;
+var
+  src: TMemSource;
+  log: TZmLog;
+  s: TZmSender;
+  got: TSentFiles;
+  rpos, ack: RawByteString;
+  before: Integer;
+  lp: TLoop;
+begin
+  src := TMemSource.Create;
+  log := TZmLog.Create;
+  s := TZmSender.Create(src);
+  try
+    src.Add('w.bin', Cycle(70000));
+    s.OnSend := @log.OnSend;
+    s.Window := 4096;
+    s.Start(InitHeader(0), 0);
+    rpos := ZmEncodeHexHeader(ZmPosHeader(ZRPOS, 0));
+    s.Input(@rpos[1], Length(rpos), 0);
+    got := TSentFiles.Create(log.Sent);
+    try
+      AssertEquals('stopped at the window', 4096, Length(got.Cur));
+    finally
+      got.Free;
+    end;
+    before := Length(log.Sent);
+    s.Tick(10);
+    AssertEquals('a tick sends nothing more', before, Length(log.Sent));
+    ack := ZmEncodeHexHeader(ZmPosHeader(ZACK, 2048));
+    s.Input(@ack[1], Length(ack), 20);
+    got := TSentFiles.Create(log.Sent);
+    try
+      AssertEquals('the window moved on by the acknowledged part', 2048 + 4096, Length(got.Cur));
+    finally
+      got.Free;
+    end;
+  finally
+    s.Free;
+    log.Free;
+    src.Free;
+  end;
+  { and a whole transfer with our receiver acknowledging the ZCRCQs }
+  lp := TLoop.Create;
+  try
+    lp.Source.Add('w.bin', Cycle(70000));
+    lp.Sender.Window := 4096;
+    lp.Run(InitHeader(0));
+    AssertTrue('ok', (lp.SLog.Result_ = zrOk) and (lp.RLog.Result_ = zrOk));
+    AssertTrue('the same bytes', lp.Sink.Contents[0] = Cycle(70000));
+  finally
+    lp.Free;
   end;
 end;
 

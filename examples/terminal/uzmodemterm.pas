@@ -173,9 +173,8 @@ const
   { what is kept of the program's repeats while the host has not answered }
   PendingLimit = 65536;
   ProgressEveryMs = 200;
+  UploadWindow = 16384;
   CarryMax = 20;
-  { a hex header after its '*' run and ZDLE: 'B' + 14 hex digits }
-  HexBodyLen = 15;
 
 function DotFormat: TFormatSettings;
 begin
@@ -853,6 +852,9 @@ begin
   FSender.OnProgress := @MachineProgress;
   FSender.OnDone := @MachineDone;
   FSender.CanSend := FCanSend;
+  { what is on its way when rz asks for a byte again reaches it as garbage, and rz
+    gives up after about 40 KB of that: keep less than that unacknowledged }
+  FSender.Window := UploadWindow;
   FState := zsSending;
   FStartMs := NowMs;
   FLastProgressMs := -1;

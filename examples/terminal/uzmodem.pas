@@ -85,10 +85,11 @@ type
 
   TZmReaderState = (zrsSeek, zrsPad, zrsPadDle, zrsHex, zrsHexTail, zrsBin, zrsData, zrsDataCrc);
 
-  { byte-at-a-time frame reader: headers anywhere in garbage; after a binary ZDATA /
-    ZFILE / ZSINIT / ZCOMMAND header, data subpackets in that header's CRC until one
-    ends ZCRCE or ZCRCW. Unescaped XON / XOFF (with or without the high bit) are
-    dropped; five ZDLE (CAN) in a row is the peer aborting. }
+  { byte-at-a-time frame reader: headers anywhere in garbage; after a ZDATA / ZFILE /
+    ZSINIT / ZCOMMAND header, data subpackets in that header's CRC (a hex header's
+    are CRC-16, after its CR LF: sz -e sends its ZSINIT so) until one ends ZCRCE or
+    ZCRCW. Unescaped XON / XOFF (with or without the high bit) are dropped; five ZDLE
+    (CAN) in a row is the peer aborting. }
   TZmReader = class
   private
     FState: TZmReaderState;
@@ -104,6 +105,7 @@ type
     FCanRun: Integer;
     FGarbage: Integer;
     FStopped: Boolean;
+    FTailData: Boolean;                    { a hex header whose data follows its CR LF }
     FMaxSubpacket: Integer;
     FOnHeader: TZmReaderHeaderEvent;
     FOnData: TZmReaderDataEvent;
@@ -114,6 +116,8 @@ type
     procedure DataDone;
     procedure DataFailed;
     procedure Feed(B: Byte);
+    procedure Step(B: Byte);
+    procedure EndHexTail;
     function GetInData: Boolean;
   public
     constructor Create;
@@ -429,6 +433,7 @@ end;
 
 procedure TZmReader.ExpectData(ACrc32: Boolean);
 begin
+  FTailData := False;
   FState := zrsData;
   FDataCrc32 := ACrc32;
   FDataLen := 0;
@@ -437,6 +442,7 @@ end;
 
 procedure TZmReader.DropData;
 begin
+  FTailData := False;
   FState := zrsSeek;
   FEscaped := False;
   FDataLen := 0;
@@ -484,7 +490,10 @@ begin
   h.P[3] := FBuf[4];
   kind := FKind;
   if kind = zhkHex then
-    FState := zrsHexTail
+  begin
+    FState := zrsHexTail;
+    FTailData := h.FrameType in [ZDATA, ZFILE, ZSINIT, ZCOMMAND];
+  end
   else if h.FrameType in [ZDATA, ZFILE, ZSINIT, ZCOMMAND] then
     ExpectData(kind = zhkBin32)          { before the event: it may DropData }
   else
@@ -556,8 +565,6 @@ begin
 end;
 
 procedure TZmReader.Feed(B: Byte);
-var
-  v: Integer;
 begin
   { five CANs in a row: the other side aborts (in any state) }
   if B = ZDLE then
@@ -578,6 +585,22 @@ begin
   { unescaped XON / XOFF: flow control somewhere on the way, never data }
   if B in [$11, $13, $91, $93] then
     Exit;
+  Step(B);
+end;
+
+{ after a hex header's CR LF: its data (CRC-16), or the next header }
+procedure TZmReader.EndHexTail;
+begin
+  if FTailData then
+    ExpectData(False)
+  else
+    FState := zrsSeek;
+end;
+
+procedure TZmReader.Step(B: Byte);
+var
+  v: Integer;
+begin
   case FState of
     zrsSeek:
       if B = ZPAD then
@@ -645,18 +668,16 @@ begin
     zrsHexTail:
       { CR, LF with or without the high bit (XON is dropped above); anything else
         starts the next search }
-      if (B and $7F) in [$0D, $0A] then
+      if ((B and $7F) in [$0D, $0A]) and (FCount < 2) then
       begin
         Inc(FCount);
         if FCount >= 2 then
-          FState := zrsSeek;
+          EndHexTail;
       end
-      else if B = ZPAD then
-        FState := zrsPad
       else
       begin
-        FState := zrsSeek;
-        Inc(FGarbage);
+        EndHexTail;
+        Step(B);                         { the first byte of what follows }
       end;
     zrsBin:
       begin

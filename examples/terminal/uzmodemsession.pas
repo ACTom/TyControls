@@ -153,7 +153,10 @@ type
     FEsc: TZmEscaper;
     FBufSize: Integer;
     FName: string;
-    FSize, FMTime, FPos, FWindowStart, FTotal: Int64;
+    FSize, FMTime, FPos, FWindowStart, FTotal, FDoneBytes: Int64;
+    FWindow: Integer;
+    FAcked, FLastQ: Int64;               { the window: the last acknowledged place, the last ZCRCQ }
+    FPaused: Boolean;                    { the window is full: waiting for a ZACK }
     FStream: TStream;
     FLastHeader: RawByteString;
     FLastActivity, FNow: Double;
@@ -200,6 +203,12 @@ type
     property UseCrc32: Boolean read GetUseCrc32 write SetUseCrc32;
     property TimeoutMs: Integer read FTimeoutMs write FTimeoutMs;
     property MaxRetries: Integer read FMaxRetries write FMaxRetries;
+    { at most this many bytes past the last acknowledged place (a ZCRCQ every quarter
+      of it asks for the acknowledgements); 0 = stream freely. Where the bytes queue on
+      the way (a pipe, a relay), what was sent before a ZRPOS arrives is read as
+      garbage by the receiver, and rz gives up after about 40 KB of garbage: the
+      terminal glue keeps this well below that. Before Start. }
+    property Window: Integer read FWindow write FWindow;
     { FOR THE TESTS (pure query): times a ZRPOS sent the data back }
     property Repositions: Integer read FRepositions;
   end;
@@ -706,6 +715,10 @@ begin
     APos := 0;
   FPos := APos;
   FWindowStart := APos;
+  FAcked := APos;
+  FLastQ := APos;
+  FPaused := False;
+  FTotal := FDoneBytes + APos;
   if FStream <> nil then
     FStream.Position := APos;
   FState := zsnData;
@@ -737,6 +750,16 @@ begin
   begin
     while (FState = zsnData) and (allow > 0) do
     begin
+      if (FWindow > 0) and (FPos - FAcked >= FWindow) then
+      begin
+        if not FPaused then
+        begin
+          FPaused := True;
+          FLastActivity := FNow;         { from now the ZACK is waited for }
+        end;
+        Break;
+      end;
+      FPaused := False;
       n := ZmSendSubpacket;
       if FSize - FPos < n then
         n := FSize - FPos;
@@ -749,6 +772,11 @@ begin
         e := ZCRCE
       else if (FBufSize > 0) and (FPos + n - FWindowStart >= FBufSize) then
         e := ZCRCW
+      else if (FWindow > 0) and (FPos + n - FLastQ >= FWindow div 4) then
+      begin
+        e := ZCRCQ;                      { the receiver says how far it is }
+        FLastQ := FPos + n;
+      end
       else
         e := ZCRCG;
       if n > 0 then
@@ -756,7 +784,7 @@ begin
       else
         s := ZmEncodeSubpacket(nil, 0, e, FCrc32, FEsc);
       Inc(FPos, n);
-      Inc(FTotal, n);
+      FTotal := FDoneBytes + FPos;
       Dec(allow, Length(s));
       Send(s);
       if Assigned(FOnProgress) then
@@ -826,13 +854,17 @@ begin
       if FState = zsnEof then
       begin
         Inc(FFiles);
+        Inc(FDoneBytes, FSize);
+        FTotal := FDoneBytes;
         NextFile;
       end
       else if FState = zsnFin then
         Send(FLastHeader);
     ZACK:
       if FState = zsnWaitAck then
-        StartData(pos);                  { a new frame at the acknowledged place }
+        StartData(pos)                   { a new frame at the acknowledged place }
+      else if (FState = zsnData) and (pos > FAcked) and (pos <= FPos) then
+        FAcked := pos;                   { the window moves on (Input pumps next) }
     ZNAK:
       if FLastHeader <> '' then
         Send(FLastHeader);
@@ -885,6 +917,18 @@ begin
     Exit;
   if FState = zsnData then
   begin
+    { a full window whose ZACK does not come: again from the last acknowledged place }
+    if FPaused and (FNow - FLastActivity >= FTimeoutMs) then
+    begin
+      if FRetries >= FMaxRetries then
+      begin
+        Send(ZmAbortSequence);
+        Finish(zrTimeout, rsZmTimeout, '');
+        Exit;
+      end;
+      Inc(FRetries);
+      StartData(FAcked);
+    end;
     Pump;
     Exit;
   end;
