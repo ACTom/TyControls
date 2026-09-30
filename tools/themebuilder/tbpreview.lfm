@@ -15,33 +15,55 @@ object PreviewFrame: TTbPreviewFrame
     Width = 560
     Align = alTop
     object DarkSwitch: TTyToggleSwitch
+      AnchorSideLeft.Control = Tools
+      AnchorSideTop.Control = Tools
+      AnchorSideTop.Side = asrCenter
       Left = 8
       Height = 24
       Top = 6
       Width = 90
+      AutoSize = True
+      BorderSpacing.Left = 8
       Caption = 'Dark'
       OnChange = DarkSwitchChange
     end
     object DensityCombo: TTyComboBox
-      Left = 108
+      AnchorSideLeft.Control = DarkSwitch
+      AnchorSideLeft.Side = asrBottom
+      AnchorSideTop.Control = Tools
+      AnchorSideTop.Side = asrCenter
+      Left = 110
       Height = 26
       Top = 5
       Width = 120
+      BorderSpacing.Left = 12
       OnChange = DensityComboChange
     end
     object DisableAllCheck: TTyCheckBox
-      Left = 240
+      AnchorSideLeft.Control = DensityCombo
+      AnchorSideLeft.Side = asrBottom
+      AnchorSideTop.Control = Tools
+      AnchorSideTop.Side = asrCenter
+      Left = 242
       Height = 24
       Top = 6
       Width = 140
+      AutoSize = True
+      BorderSpacing.Left = 12
       Caption = 'Disable all'
       OnChange = DisableAllCheckChange
     end
     object ModeNote: TTyLabel
-      Left = 388
+      AnchorSideLeft.Control = DisableAllCheck
+      AnchorSideLeft.Side = asrBottom
+      AnchorSideTop.Control = Tools
+      AnchorSideTop.Side = asrCenter
+      Left = 394
       Height = 20
       Top = 8
       Width = 168
+      AutoSize = True
+      BorderSpacing.Left = 12
     end
   end
   object Root: TTyPanel

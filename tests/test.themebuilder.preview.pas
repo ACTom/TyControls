@@ -47,6 +47,7 @@ type
     procedure TestTheDropDownButtonDropsTheSampleMenu;
     procedure TestADensityTheDocumentCannotTakeIsRefused;
     procedure TestAOneModeDocumentIsNotShownDark;
+    procedure TestTheStripIsLaidOutByContent;
   end;
 
 const
@@ -640,6 +641,26 @@ begin
   AssertFalse('V21: and is off', FFrame.DarkSwitch.Enabled);
   AssertTrue(Load(TbMinimalTemplate));
   AssertFalse('V21: the next two-mode document starts in its default mode', FFrame.IsDark);
+end;
+
+{ The strip above the preview is on the tool's theme, and a skin changes its font and
+  padding: fixed positions let a wider caption run into the next control. Each control
+  sizes to its caption and hangs on the right side of the one before. The layout itself
+  runs only in a real window (LCL defers autosizing and anchoring until there is a handle,
+  so a headless test cannot watch a caption push the next control along); whether it looks
+  right under each skin is an acceptance item. Here: the chain and the sizing are there. }
+procedure TTbPreviewTests.TestTheStripIsLaidOutByContent;
+begin
+  AssertTrue('V22: the switch sizes to its caption', FFrame.DarkSwitch.AutoSize);
+  AssertTrue('V22: the check box too', FFrame.DisableAllCheck.AutoSize);
+  AssertTrue('V22: the note too', FFrame.ModeNote.AutoSize);
+  AssertTrue('V22: the switch starts at the strip', FFrame.DarkSwitch.AnchorSideLeft.Control = FFrame.Tools);
+  AssertTrue('V22: the combo hangs on the switch', (FFrame.DensityCombo.AnchorSideLeft.Control = FFrame.DarkSwitch)
+    and (FFrame.DensityCombo.AnchorSideLeft.Side = asrBottom));
+  AssertTrue('V22: the check box on the combo', (FFrame.DisableAllCheck.AnchorSideLeft.Control = FFrame.DensityCombo)
+    and (FFrame.DisableAllCheck.AnchorSideLeft.Side = asrBottom));
+  AssertTrue('V22: the note on the check box', (FFrame.ModeNote.AnchorSideLeft.Control = FFrame.DisableAllCheck)
+    and (FFrame.ModeNote.AnchorSideLeft.Side = asrBottom));
 end;
 
 initialization
