@@ -1525,4 +1525,123 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## 签收
 
-（Task 12 填写：起点与提交、期末审查的处理、集中变异、测试结果、主控已做、与规格不符之处的写回、计划外发现、遗留。）
+签收日期 2026-10-01。实现到 `ffe4861d`；期末两份审查（规格核对、代码质量）查出的问题由修复 + 签收 agent 处理，一个问题一个提交（`77e9d0e0`..`3e800d65`，中间的 `5bc7237c` 是 2 期计划 agent 的提交，不属本期）。「与规格不符之处」1–9 条与期末修复都已写回 spec 原处，标「实现期修正（1 期）」（状态行、§2、§4 结构与共享改动 1–4、§5.3、§5.4、§6、§10）。
+
+### 主控已做
+
+在 `ffe4861d` 上 `lazbuild -B` 编过 `tycontrols.lpk`、`tycontrols_dt.lpk`（0 错，拆出的 `TTyCssEditKit` 在设计期包里编得过）、`tools/themebuilder/themebuilder.lpi`（0 错）；冒烟启动只有主窗体「未命名 - 主题编辑器」与应用窗口，没有错误框。
+
+### 期末审查的处理（提交表）
+
+| 项 | 问题 | 提交 | 处理 |
+|---|---|---|---|
+| 必修 1 | 变量成环（`--a: var(--a)`、互指、`@mode` 里 `--surface: darken(var(--surface),5%)`、经 `TyEvalLength` 的裸 `--x` 环）递归到栈溢出、崩进程 | `77e9d0e0` | 修：`Css.Values` 每次查变量带当前路径上的名字，再遇到抛 `Exception`「variable --x refers back to itself」（该单元惯用普通 `Exception`，英文常量 `TyCssVarCycleMsg`，不进 `StrConsts`）；`TyLintCssEx` 新增 `ScanVarCycles`，按模式合并变量、Tarjan 强连通分量，只报环上的变量、报在定义处，类别用 **`tlkBadValue`**（不新增枚举：它本就是「引擎会拒的值」，`TyLintCss` 滤掉它，旧输出逐字不变，金样本不动）。测试：`Css.Values`、lint、模型加载、预览 `LoadDocument`、主窗体问题列表五处 |
+| 必修 2 | 切暗色被拒的原因到不了问题列表；L1 解析失败时加进过期的 `ModeError` | `a481e9c4` | 修：`PreviewChanged` 只重建列表（`BuildProblems`，用上次刷新的 lint 与加载错误），不再重载；`LoadDocument` 只在文本或目录变了时清 `ModeError`；解析失败时不列 `ModeError`。V11「a good load clears it」没有钉死错误行为（它载入的是另一份文档），保留并补「同一份文本再载入不清」。新测 F19 走真实路径（拨 `DarkSwitch.Checked`，经 `OnChange`） |
+| 必修 3 | 保存非原子 | `bc7cd192` | 修：写同目录临时文件 → `MoveFileExW(REPLACE_EXISTING or WRITE_THROUGH)`（其他平台 `fpRename` 并带原权限位）；失败删临时文件、文档不改名不重取时间戳（盘上的文件没变，所以也不会被当外部修改）。钩子 `TTbDocument.FailWriteForTest` 在真实 `SaveToFile` 里、写了一半之后抛 |
+| 必修 4 | 试解析慢（冷 0.6–1.1 s），计时测试量的是缓存 | `275ed625` | 先修测试（每次计时前 `RefreshSystemTokens` 挪版本号丢掉缓存，所有内置主题 + 极简模板，> 100 ms 红），现状下红（aero 1062 ms）；再优化，见下表 |
+| 必修 5 | 设置写不进去时关不掉窗口；L11 `AddRecent` 后顺手保存 | `0f18a69e` | 修：`SaveSettings` 尽力而为（try/except）；打开、保存把文件加进最近列表后即写设置 |
+| 必修 6 | 文件末尾的解析错误行号 +1 | `38c4e59a` | 修：收集问题后钳到编辑器的行数、列钳到行长 + 1（`ClampToEditor`）；选钳位置而不是改喂给解析器的文本，lint 的其他位置与预览载入的文本都不变 |
+| 必修 7 | 外部修改检测只到 2 秒 | `df8ee7dc` | 修：`TbFileStamp` 取全精度修改时间（Windows `GetFileAttributesExW` 的 `ftLastWriteTime`，Unix `fpStat` 的秒 + 纳秒）+ 大小 |
+| 必修 8 | 预览控制器改全局 `TyFallbackFontSize` | —（没改） | **核实后停下交主控**：`Controller.Changed` 对任何控制器都写全局，这是库的现有契约——`test.fontcascade` 的 `TestControllerSyncsPainterFallback` 与 `test.measurecache` 的 `ThemeChangeChangesTheMeasuredFontSize` 都用 `TTyStyleController.Create(nil)`（非默认控制器）断言全局被写。改成「只有默认控制器写」会让这两条红。已写进 spec §10 与验收文档 E10 |
+| 必修 9 | 最近文件：任何打开失败都移除；菜单 `&` | `c47f8450` | 修：只有文件已不存在才移除；标题里 `&` → `&&` |
+| L2 | 暗色下载入单模式文档，开关与设置仍是暗 | `b069720a` | 修：载入无 `@mode` 的文档时模式置空 |
+| L3 | 换密度后重载失败静默落到底层 | `45668bee` | 修：换密度同切模式一样可被拒——退回原密度、文档还在、原因写进 `ModeError`（新资源串 `rsTbDensityFailed`，已补 zh_CN） |
+| L4 | 侧栏 `ShowHint` | `5f7ff49a` | 修 |
+| L5 | 行标记占 SynEdit 书签图标 | `0706c217` | 修：不再把 `GutterIcons` 设成书签图标，标记自带 `ImageList` |
+| L6 | `Ask` 无消息类型 | `c2d346b6` | 修：`Ask` 带 `TMsgDlgType`，打开 / 保存失败用 `mtError` |
+| L7 | `DdbMore` 没挂菜单 | `ba0a9651` | 修（`.lfm`） |
+| L8 | `eoTrimTrailingSpaces` | `ebef1b2d` | 修：工具里关掉 |
+| L10 | 工具条换肤挤压 | `67a6dc4a` | 修：开关条的四个控件按标题 AutoSize、一个锚在前一个右边；无头测试跑不到 LCL 的锚定与自动尺寸，测试只查结构，外观写进验收第 28 项 |
+| 代码审查 7 | `Css.Parser.pas` 注释 | `288b68db` | 写实：`@import` 子文件的解析错误带子文件坐标，`StyleModel` 自己抛的为 0（`StyleModel.pas` 未动） |
+| 测试质量 13 | `TestTheListenerIsRemoved` 断言 `True` | `3e800d65` | 改：监听里的哨兵（`ToolThemeChangedForTest`，在碰窗体之前调用）——窗体活着时 1 次、释放后 0 次 |
+| 测试质量 15 | `TestTheProbeIsQuick` 的 `err` 未初始化 | `275ed625` | 随计时测试重写一并修 |
+
+### 试解析计时（冷，GetTickCount64，五次中位数，ms；计时粒度约 15.6 ms）
+
+| 主题 | 修前（逐 typeKey × 变体 × 六组状态） | 中间方案（每 typeKey 一次、全部变体与状态） | 修后（快探测，`TbProbeDocument`） |
+|---|---|---|---|
+| default | 625 | 109 | 31 |
+| system | 735 | 140 | 31 |
+| adwaita | 875 | 141 | 16 |
+| aero | 1062 | 156 | 31 |
+| antdesign | 656 | 140 | 15 |
+| bootstrap | 750 | 125 | 16 |
+| breeze | 828 | 141 | 31 |
+| classic | 765 | 141 | 15 |
+| fluent | 781 | 125 | 16 |
+| macos | 844 | 156 | 16 |
+| material3 | 797 | 172 | 31 |
+| office | 734 | 125 | 16 |
+| showcase | 547 | 94 | 16 |
+| ubuntu | 781 | 125 | 16 |
+| win10 | 766 | 140 | 16 |
+| win11 | 1000 | 172 | 31 |
+| xp | 594 | 110 | 16 |
+| 极简模板 | 625 | 110 | 16 |
+
+中间方案只砍掉了重复：实测单是对 253 个 typeKey 各解析一次 `[]` 就要约 80 ms（底层规则按 typeKey 一遍遍求值、变量表线性查找），达不到 100 ms。最终做法（spec §5.3、验收 E9）：快探测把一次绘制可能求值的每条声明在当前模式变量下各求值一次（相同「属性 + 值」只算一次，变量按用到的名字向模型 `RawVar` 读一次、有序索引查找）；说干净就采信，抛了再走中间方案定案并指出 typeKey.变体。带 `@import` 的文档不走快探测。守护：`TestTheFastProbeAgreesWithTheResolveWalk`（V18）在全部内置主题的每个模式、极简模板与七份坏文档的两种密度上比两条路的结论（≥ 40 次比较、≥ 8 次拒收）；`TestTheProbeStillCatchesWhatAPaintWouldRaise`（V17：只在亮色定义、被变体的禁用态用到的变量；底层规则接不住的种子）与成环用例证明「画的时候会抛的主题」仍被拦下。
+
+### 测试结果
+
+- 基线（`ffe4861d`，`tests/tytests-tb1base.exe`）全量：8658 / 0 / 0（18 分钟）。
+- 签收（`3e800d65` 重编，`tests/tytests-tb1fix.exe`）：本期 suite 与相关 suite 全绿——TThemeLintGoldenTests 2、TTbParserPosTests 10、TTbLintExTests 14、TTbCssEditKitTests 9、TTbDocumentTests 11、TTbSettingsTests 4、TTbTemplatesTests 4、TTbProblemsTests 6、TTbPreviewTests 24、TTbMainFormTests 33、TThemeLintTest 19、TTestCssParser 16、TTestCssValuesEval 10、TTestStyleLoad 9、TTestStyleImport 5、TControllerTest 9、TCssCatalogTest 14、TI18NTest 7、TReleaseManifestTest 15、TTyTerminalExampleTests 23。
+- 全量：**8679 / 0 errors / 1 failure**（基线 8658 + 本批新增 21 条；17 分 46 秒）。红名单只有一条 `TTyTerminalPerfTests.TestAFloodStillPaints`（「最长无重绘 363.9 ms < 300 ms」），与本批改动无关（终端代码没动）：跑全量时另一棵树（`ty-advchart`）的全量测试同时在跑；单跑三次都绿（最长无重绘 80.5 / 58.3 / 157.1 ms）。全量里的试解析计时：15–31 ms。
+- `lazbuild -B tools/themebuilder/themebuilder.lpi` 0 错（没有重编 SynEdit）；`example-rsj2po.py` added=0（`rsTbDensityFailed` 已随 `45668bee` 进 `.po`）；`check-example-po.py` 103 个文件 0 问题；`check-lfm-props.py` OK。
+
+### 集中变异（本批修复；每条改一行 → `lazbuild -B` → 跑指定测试 → 还原原字节）
+
+| # | 变异 | 必须红的测试 | 结果 |
+|---|---|---|---|
+| M1a | `EnterVar` 不抛 | `TTestCssValuesEval.TestAVariableCycleRaises`、L14、成环预览测试、主窗体成环测试 | 红（前两个失败、后两个进程段错误） |
+| M1b | 去掉 `ScanVarCycles` 调用 | L14、`TestAVariableCycleIsAProblem` | 红 |
+| M2a | `PreviewChanged` 改回 `RefreshNow` | F19 | **等价**：同一文本再载入不清 `ModeError`（M2b 那半修复）已让结果正确，多一次重载看不出来；两半互为保险，M2b 红 |
+| M2b | `LoadDocument` 成功一律清 `ModeError` | V11「same document again keeps it」、F19「refresh keeps it」 | 红 |
+| M2c | 解析失败也列 `ModeError` | F19「not listed while the text does not parse」 | 红 |
+| M3 | 临时文件名改成目标本身（直写） | F20 | 红（原文件没了，`EFOpenError`） |
+| M4 | 旧探测（修前代码） | `TestTheProbeIsQuick` | 红（aero 1062 ms，见计时表「修前」列） |
+| M4a | 快探测不求值底层规则 | V18 | 红（`--radius: 1px 2px 3px` 快探测说干净、引擎拒）；V17 未红——`Notify` 里控件重量尺寸时抛，同样拒收，属第二道保险 |
+| M4b | `cEveryState` 去掉 `tysDisabled` | V17（暗色被拒） | 红 |
+| M5 | 设置保存不包 try/except | F21 | 红 |
+| M6 | 去掉 `ClampToEditor` | F22 | 红（报在第 3 行） |
+| M7 | 时间戳比较按 2 秒一格 | D11 | 红 |
+| M9a | 打开失败一律移出最近列表 | F23 | 红 |
+| M9b | 标题不转义 `&` | F24 | 红 |
+| L2 | 单模式文档不清模式 | V21 | 红 |
+| L3 | 换密度失败不退回 | V20 | 红 |
+| L4 | `.lfm` 去掉 `ShowHint` | F25 | 红 |
+| L5 | 书签图标又设成 `GutterIcons` | F26 | 红 |
+| L6 | `Ask` 记录的类型恒为 `mtConfirmation` | F27 | 红 |
+| L7 | `.lfm` 去掉 `DropDownMenu` | V19 | 红 |
+| L8 | 不关 `eoTrimTrailingSpaces` | F28 | 红 |
+| L10 | `.lfm` 去掉 `DensityCombo` 的左锚 | V22 | 红 |
+| T13 | `FormDestroy` 不摘监听 | F16 | 红（释放后的监听被调用，随即访问已释放的窗体 AV） |
+
+变异分批做，同批的变异互不影响指定测试（T13 会让之后每个主窗体测试的 `TearDown` 都 AV，单独一批重跑）。全部还原后 `git diff --quiet -- source tools tests` 为真，再 `lazbuild -B` 跑全量。
+
+### 与规格不符之处（期末新增，已写回 spec）
+
+1. spec §4 共享改动多一处：`Css.Values` 的变量成环防护（第 4 条）。
+2. spec §5.3 试解析改为快探测 + 引擎定案两段；带 `@import` 的文档只走引擎（验收 E9）。
+3. spec §5.3 换密度可被拒；单模式文档不显示为暗色。
+4. spec §5.4 文末错误钳到最后一行；解析失败时不列切模式被拒。
+5. spec §6 保存原子化、关掉去行尾空格、最近文件只移除已不存在的、外部修改按全精度时间戳。
+6. spec §10 预览控制器会改全局回退字号（未改，交主控，验收 E10）。
+
+### 计划外发现
+
+- `TTyToggleSwitch.Checked` 的 setter 触发 `OnChange`——测试可以直接拨开关走真实路径。
+- FPC 3.2.2 的 Windows 单元没有 `MOVEFILE_WRITE_THROUGH`（本地常量 8）；`FileAge` 把不足两秒的零头**向上**进到下一个偶数秒（D11 的夹具按这个选时间）。
+- 无头测试里 LCL 不做 AutoSize 与锚定（要有句柄），工具条的布局只能查结构、真机看样子。
+- 单条测试可以 `--suite=类名.测试名` 跑，变异时省时间。
+
+### 遗留
+
+- 必修 8（`TyFallbackFontSize`）：等主控 / 用户定（验收 E10）。
+- 工具条在各皮肤下的实际样子、保存失败提示、成环不崩、刷新不卡：真机验收第 23–29 项。
+- 快探测按引擎规则重走了一遍「哪些规则会被用到」，`StyleModel` 的解析规则将来变了要跟着改（V18 会红提醒）。
+
+### 主控待做
+
+1. 在签收头提交上 `lazbuild -B tycontrols.lpk`、`lazbuild -B tycontrols_dt.lpk`（`Css.Values.pas`、`ThemeLint.pas`、`Css.Parser.pas` 改过）、`lazbuild -B tools/themebuilder/themebuilder.lpi`，冒烟启动工具（只有主窗体与应用窗口、没有 `#32770`）。
+2. 定必修 8 的做法（E10）。
+3. 视情况再派一次期末审查看本批修复。
