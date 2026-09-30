@@ -8,10 +8,12 @@
      "size": 120
     },
     {
-     "value": "Data A"
+     "value": "Data A",
+     "size": null
     },
     {
-     "value": "Data B"
+     "value": "Data B",
+     "size": null
     },
     {
      "value": "Location",

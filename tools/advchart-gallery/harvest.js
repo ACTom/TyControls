@@ -37,6 +37,11 @@
  *       calendar-graph,calendar-heatmap,calendar-simple,calendar-horizontal,
  *       calendar-vertical,calendar-pie,custom-calendar-icon
  *     (one comma-separated argument, no spaces)
+ *   The explicit-undefined and linearMap fixes re-harvested, unseeded:
+ *     node harvest.js --only candlestick-brush,geo-seatmap-flight,
+ *       geo-svg-lines,geo-svg-map,matrix-mini-bar-geo,pictorialBar-forest,
+ *       sunburst-drink,sunburst-label-rotate,sunburst-monochrome,
+ *       treemap-drill-down,treemap-obama,treemap-visual
  */
 'use strict';
 // Before anything creates a Date: ECharts parses 'yyyy-mm-dd' as local time.
@@ -187,7 +192,9 @@ function makeSandbox(collected) {
       number: {
         parseDate: realEcharts.number.parseDate,
         round: (v, p) => Number(Number(v).toFixed(p == null ? 10 : p)),
-        linearMap: (v) => v
+        // The real one: treemap-visual scales its colour dimension with it,
+        // and an identity stub harvested the raw growth percentages instead.
+        linearMap: realEcharts.number.linearMap
       },
       time: {
         parse: realEcharts.time.parse,
@@ -279,8 +286,9 @@ function makeSandbox(collected) {
   return sandbox;
 }
 
-/* JSON.stringify silently drops functions and undefined. Count them first, so
-   the entry can say what was lost instead of pretending the option is whole. */
+/* JSON.stringify silently drops functions (an explicit undefined is kept as
+   null, below). Count them first, so the entry can say what was lost instead
+   of pretending the option is whole. */
 function countCallbacks(node, seen) {
   if (node === null || typeof node !== 'object') {
     return typeof node === 'function' ? 1 : 0;
@@ -294,6 +302,21 @@ function countCallbacks(node, seen) {
     else n += countCallbacks(v, seen);
   }
   return n;
+}
+
+/* AN EXPLICIT undefined IS WRITTEN AS null. JSON.stringify drops an own key
+   whose value is undefined, and upstream can tell the two apart: sunburst's
+   `sort: undefined` means "do not sort" (the key is present, so the 'desc'
+   default never merges in), while an absent `sort` sorts descending. The same
+   holds for every key: zrender's merge keeps a present key whatever its value
+   (`key in target`), and Model.get tests `== null`, so null and undefined are
+   one answer upstream -- the SSR of every file this rule changed is identical
+   either way, and candlestick-brush's differs from the key dropped. Functions
+   still vanish -- they are callbacks, counted above. The rule is general, not
+   a list of keys: the stringifier only visits own enumerable keys, so
+   everything it turns into null was written into the option by the example. */
+function keepExplicitUndefined(key, value) {
+  return value === undefined && key !== '' ? null : value;
 }
 
 function seriesTypesIn(option) {
@@ -360,7 +383,7 @@ function main() {
       entry.callbacks = countCallbacks(option, new WeakSet());
       entry.seriesTypes = seriesTypesIn(option);
       entry.components = componentsIn(option);
-      const json = JSON.stringify(option, null, 1);
+      const json = JSON.stringify(option, keepExplicitUndefined, 1);
       entry.bytes = json.length;
       /* A CAP, AND THE REASON RECORDED. Ten examples carry between 1 and 64 MB
          of generated points -- they are the large-mode stress cases, the very

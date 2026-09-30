@@ -814,6 +814,7 @@
    0,
    "95%"
   ],
+  "sort": null,
   "emphasis": {
    "focus": "ancestor"
   },

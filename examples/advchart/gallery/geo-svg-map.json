@@ -14,7 +14,9 @@
     "show": true,
     "confine": true
    },
-   "itemStyle": {},
+   "itemStyle": {
+    "color": null
+   },
    "emphasis": {
     "label": {
      "show": false

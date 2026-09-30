@@ -17,6 +17,7 @@
   },
   "emphasis": {
    "itemStyle": {
+    "color": null,
     "borderColor": "green",
     "borderWidth": 2
    },

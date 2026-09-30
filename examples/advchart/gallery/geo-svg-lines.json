@@ -9,7 +9,9 @@
   "map": "MacOdrum-LV5-floorplan-web",
   "roam": true,
   "emphasis": {
-   "itemStyle": {},
+   "itemStyle": {
+    "color": null
+   },
    "label": {
     "show": false
    }

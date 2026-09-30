@@ -63,6 +63,7 @@
    },
    "levels": [
     {
+     "color": null,
      "colorMappingBy": "id",
      "itemStyle": {
       "borderWidth": 3,
@@ -70,6 +71,7 @@
      }
     },
     {
+     "colorAlpha": null,
      "itemStyle": {
       "gapWidth": 1
      }
@@ -77,6 +79,7 @@
    ],
    "name": "2012Budget",
    "top": 80,
+   "visualDimension": null,
    "data": [
     {
      "name": "Health and Human Services",
@@ -4663,6 +4666,7 @@
    },
    "levels": [
     {
+     "color": null,
      "colorMappingBy": "id",
      "itemStyle": {
       "borderWidth": 3,
@@ -4670,6 +4674,7 @@
      }
     },
     {
+     "colorAlpha": null,
      "itemStyle": {
       "gapWidth": 1
      }
@@ -4677,6 +4682,7 @@
    ],
    "name": "2011Budget",
    "top": 80,
+   "visualDimension": null,
    "data": [
     {
      "name": "Health and Human Services",

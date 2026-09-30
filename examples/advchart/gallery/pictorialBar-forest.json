@@ -57,7 +57,8 @@
    "symbolRepeat": true,
    "data": [
     {
-     "value": 0
+     "value": 0,
+     "symbolOffset": null
     },
     {
      "value": 0,
@@ -67,7 +68,8 @@
      ]
     },
     {
-     "value": 0
+     "value": 0,
+     "symbolOffset": null
     },
     {
      "value": 4.5,
@@ -77,7 +79,8 @@
      ]
     },
     {
-     "value": 4.5
+     "value": 4.5,
+     "symbolOffset": null
     },
     {
      "value": 5,
@@ -87,7 +90,8 @@
      ]
     },
     {
-     "value": 4.5
+     "value": 4.5,
+     "symbolOffset": null
     },
     {
      "value": 0,
@@ -97,7 +101,8 @@
      ]
     },
     {
-     "value": 0
+     "value": 0,
+     "symbolOffset": null
     },
     {
      "value": 0,
@@ -120,7 +125,8 @@
    "symbolRepeat": true,
    "data": [
     {
-     "value": 0
+     "value": 0,
+     "symbolOffset": null
     },
     {
      "value": 0,
@@ -130,7 +136,8 @@
      ]
     },
     {
-     "value": 0
+     "value": 0,
+     "symbolOffset": null
     },
     {
      "value": -5,
@@ -140,7 +147,8 @@
      ]
     },
     {
-     "value": -4.5
+     "value": -4.5,
+     "symbolOffset": null
     },
     {
      "value": -4.5,
@@ -150,7 +158,8 @@
      ]
     },
     {
-     "value": -5
+     "value": -5,
+     "symbolOffset": null
     },
     {
      "value": 0,
@@ -160,7 +169,8 @@
      ]
     },
     {
-     "value": 0
+     "value": 0,
+     "symbolOffset": null
     },
     {
      "value": 0,

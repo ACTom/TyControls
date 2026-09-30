@@ -5,6 +5,7 @@
    "80%"
   ],
   "type": "sunburst",
+  "sort": null,
   "emphasis": {
    "focus": "ancestor"
   },

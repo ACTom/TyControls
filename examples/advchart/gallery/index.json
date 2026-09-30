@@ -1131,7 +1131,7 @@
     "brush"
    ],
    "callbacks": 1,
-   "bytes": 722106
+   "bytes": 722157
   },
   {
    "id": "candlestick-large",
@@ -2172,7 +2172,7 @@
     "geo"
    ],
    "callbacks": 0,
-   "bytes": 2500
+   "bytes": 2519
   },
   {
    "id": "geo-svg-custom-effect",
@@ -2209,7 +2209,7 @@
     "geo"
    ],
    "callbacks": 0,
-   "bytes": 2562
+   "bytes": 2584
   },
   {
    "id": "geo-svg-map",
@@ -2230,7 +2230,7 @@
     "geo"
    ],
    "callbacks": 2,
-   "bytes": 2522
+   "bytes": 2544
   },
   {
    "id": "geo-svg-scatter-simple",
@@ -3419,7 +3419,7 @@
     "matrix"
    ],
    "callbacks": 0,
-   "bytes": 35597
+   "bytes": 35635
   },
   {
    "id": "matrix-periodic-table",
@@ -3725,7 +3725,7 @@
     "yAxis"
    ],
    "callbacks": 0,
-   "bytes": 4908
+   "bytes": 5178
   },
   {
    "id": "pictorialBar-hill",
@@ -4852,7 +4852,7 @@
     "title"
    ],
    "callbacks": 0,
-   "bytes": 14580
+   "bytes": 14596
   },
   {
    "id": "sunburst-label-rotate",
@@ -4867,7 +4867,7 @@
    ],
    "components": [],
    "callbacks": 1,
-   "bytes": 1384
+   "bytes": 1401
   },
   {
    "id": "sunburst-monochrome",
@@ -4882,7 +4882,7 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 4405
+   "bytes": 4421
   },
   {
    "id": "sunburst-simple",
@@ -5106,7 +5106,7 @@
     "tooltip"
    ],
    "callbacks": 0,
-   "bytes": 529024
+   "bytes": 530652
   },
   {
    "id": "treemap-obama",
@@ -5125,7 +5125,7 @@
     "tooltip"
    ],
    "callbacks": 6,
-   "bytes": 276132
+   "bytes": 276278
   },
   {
    "id": "treemap-show-parent",
@@ -5188,7 +5188,7 @@
     "tooltip"
    ],
    "callbacks": 1,
-   "bytes": 103543
+   "bytes": 103579
   },
   {
    "id": "watermark",

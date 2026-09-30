@@ -28445,7 +28445,9 @@
    ],
    "itemStyle": {
     "color": "#00da3c",
-    "color0": "#ec0000"
+    "color0": "#ec0000",
+    "borderColor": null,
+    "borderColor0": null
    }
   },
   {

@@ -981,7 +981,8 @@
                    "value": 1
                   },
                   {
-                   "name": "series.bar.markLine.data.0.label.emphasis"
+                   "name": "series.bar.markLine.data.0.label.emphasis",
+                   "value": null
                   }
                  ]
                 },
@@ -1090,7 +1091,8 @@
                    "value": 3
                   },
                   {
-                   "name": "series.bar.markLine.data.1.label.normal"
+                   "name": "series.bar.markLine.data.1.label.normal",
+                   "value": null
                   }
                  ]
                 },
@@ -1099,7 +1101,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.bar.markLine.data.1.label"
+                 "name": "series.bar.markLine.data.1.label",
+                 "value": null
                 }
                ]
               },
@@ -1578,7 +1581,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.bar.markPoint.data.label.emphasis"
+                 "name": "series.bar.markPoint.data.label.emphasis",
+                 "value": null
                 }
                ]
               },
@@ -2979,7 +2983,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.graph.markPoint.data.itemStyle.emphasis"
+                 "name": "series.graph.markPoint.data.itemStyle.emphasis",
+                 "value": null
                 }
                ]
               },
@@ -3093,7 +3098,8 @@
                "value": 2
               },
               {
-               "name": "series.graph.markPoint.itemStyle.normal"
+               "name": "series.graph.markPoint.itemStyle.normal",
+               "value": null
               }
              ]
             },
@@ -3381,7 +3387,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.pie.markPoint.data.itemStyle.emphasis"
+                 "name": "series.pie.markPoint.data.itemStyle.emphasis",
+                 "value": null
                 }
                ]
               },
@@ -4255,12 +4262,14 @@
                    "value": 2
                   },
                   {
-                   "name": "series.pie.markLine.data.0.label.normal"
+                   "name": "series.pie.markLine.data.0.label.normal",
+                   "value": null
                   }
                  ]
                 },
                 {
-                 "name": "series.pie.markLine.data.0.label"
+                 "name": "series.pie.markLine.data.0.label",
+                 "value": null
                 }
                ]
               },
@@ -4279,7 +4288,8 @@
                    "value": 1
                   },
                   {
-                   "name": "series.pie.markLine.data.0.lineStyle.normal"
+                   "name": "series.pie.markLine.data.0.lineStyle.normal",
+                   "value": null
                   }
                  ]
                 },
@@ -5087,12 +5097,14 @@
                    "value": 1
                   },
                   {
-                   "name": "series.effectScatter.markLine.data.1.lineStyle.normal"
+                   "name": "series.effectScatter.markLine.data.1.lineStyle.normal",
+                   "value": null
                   }
                  ]
                 },
                 {
-                 "name": "series.effectScatter.markLine.data.1.lineStyle"
+                 "name": "series.effectScatter.markLine.data.1.lineStyle",
+                 "value": null
                 }
                ]
               },
@@ -5148,7 +5160,8 @@
                "value": 2
               },
               {
-               "name": "series.effectScatter.markLine.label.emphasis"
+               "name": "series.effectScatter.markLine.label.emphasis",
+               "value": null
               }
              ]
             },
@@ -5181,7 +5194,8 @@
                "value": 1
               },
               {
-               "name": "series.effectScatter.markLine.lineStyle.normal"
+               "name": "series.effectScatter.markLine.lineStyle.normal",
+               "value": null
               }
              ]
             },
@@ -7053,7 +7067,8 @@
                "value": 1
               },
               {
-               "name": "series.map.data.itemStyle.emphasisObject)"
+               "name": "series.map.data.itemStyle.emphasisObject)",
+               "value": null
               }
              ]
             },
@@ -7705,7 +7720,8 @@
                  "value": 3
                 },
                 {
-                 "name": "series.treemap.levels.label.emphasis.textStyle"
+                 "name": "series.treemap.levels.label.emphasis.textStyle",
+                 "value": null
                 }
                ]
               },
@@ -7926,7 +7942,8 @@
                "value": 1
               },
               {
-               "name": "series.treemap.label.emphasis.textStyle"
+               "name": "series.treemap.label.emphasis.textStyle",
+               "value": null
               }
              ]
             },
@@ -8694,7 +8711,8 @@
                    "value": 1
                   },
                   {
-                   "name": "series.scatter.markLine.data.1.lineStyle.normal"
+                   "name": "series.scatter.markLine.data.1.lineStyle.normal",
+                   "value": null
                   }
                  ]
                 },
@@ -8723,7 +8741,8 @@
                    "value": 2
                   },
                   {
-                   "name": "series.scatter.markLine.data.1.label.normal"
+                   "name": "series.scatter.markLine.data.1.label.normal",
+                   "value": null
                   }
                  ]
                 },
@@ -9851,7 +9870,8 @@
                    "value": 3
                   },
                   {
-                   "name": "series.gauge.markLine.data.0.label.emphasis"
+                   "name": "series.gauge.markLine.data.0.label.emphasis",
+                   "value": null
                   }
                  ]
                 },
@@ -9894,12 +9914,14 @@
                    "value": 2
                   },
                   {
-                   "name": "series.gauge.markLine.data.1.label.normal"
+                   "name": "series.gauge.markLine.data.1.label.normal",
+                   "value": null
                   }
                  ]
                 },
                 {
-                 "name": "series.gauge.markLine.data.1.label"
+                 "name": "series.gauge.markLine.data.1.label",
+                 "value": null
                 }
                ]
               },
@@ -9908,7 +9930,8 @@
                "value": 1
               },
               {
-               "name": "series.gauge.markLine.data.1"
+               "name": "series.gauge.markLine.data.1",
+               "value": null
               }
              ]
             },
@@ -10268,7 +10291,8 @@
                  "value": 3
                 },
                 {
-                 "name": "series.lines.markPoint.data.label.normal"
+                 "name": "series.lines.markPoint.data.label.normal",
+                 "value": null
                 }
                ]
               },
@@ -10384,7 +10408,8 @@
                "value": 1
               },
               {
-               "name": "series.lines.markPoint.label.emphasis"
+               "name": "series.lines.markPoint.label.emphasis",
+               "value": null
               }
              ]
             },
@@ -10434,7 +10459,8 @@
                "value": 1
               },
               {
-               "name": "series.lines.markPoint.itemStyle.emphasis"
+               "name": "series.lines.markPoint.itemStyle.emphasis",
+               "value": null
               }
              ]
             },
@@ -10698,12 +10724,14 @@
                    "value": 1
                   },
                   {
-                   "name": "series.lines.markLine.data.1.lineStyle.normal"
+                   "name": "series.lines.markLine.data.1.lineStyle.normal",
+                   "value": null
                   }
                  ]
                 },
                 {
-                 "name": "series.lines.markLine.data.1.lineStyle"
+                 "name": "series.lines.markLine.data.1.lineStyle",
+                 "value": null
                 }
                ]
               },
@@ -11012,7 +11040,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.lines.data.1.lineStyle.normal"
+                 "name": "series.lines.data.1.lineStyle.normal",
+                 "value": null
                 }
                ]
               },
@@ -11676,7 +11705,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.radar.data.label.emphasis.textStyle"
+                 "name": "series.radar.data.label.emphasis.textStyle",
+                 "value": null
                 }
                ]
               },
@@ -11874,7 +11904,8 @@
                "value": 1
               },
               {
-               "name": "series.boxplot.markLine.lineStyle.emphasis"
+               "name": "series.boxplot.markLine.lineStyle.emphasis",
+               "value": null
               }
              ]
             },
@@ -12140,7 +12171,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.candlestick.markPoint.data.itemStyle.emphasis"
+                 "name": "series.candlestick.markPoint.data.itemStyle.emphasis",
+                 "value": null
                 }
                ]
               },
@@ -12496,7 +12528,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.candlestick.markLine.data.1.label"
+                 "name": "series.candlestick.markLine.data.1.label",
+                 "value": null
                 }
                ]
               },
@@ -12711,12 +12744,14 @@
                  "value": 1
                 },
                 {
-                 "name": "series.heatmap.markLine.data.1.lineStyle"
+                 "name": "series.heatmap.markLine.data.1.lineStyle",
+                 "value": null
                 }
                ]
               },
               {
-               "name": "series.heatmap.markLine.data.1"
+               "name": "series.heatmap.markLine.data.1",
+               "value": null
               }
              ]
             },
@@ -12788,7 +12823,8 @@
                "value": 1
               },
               {
-               "name": "series.heatmap.markPoint.itemStyle.normal"
+               "name": "series.heatmap.markPoint.itemStyle.normal",
+               "value": null
               }
              ]
             },
@@ -12800,7 +12836,8 @@
                "value": 1
               },
               {
-               "name": "series.heatmap.markPoint.itemStyle.emphasis"
+               "name": "series.heatmap.markPoint.itemStyle.emphasis",
+               "value": null
               }
              ]
             },
@@ -12840,12 +12877,14 @@
                  "value": 1
                 },
                 {
-                 "name": "series.heatmap.markPoint.label.emphasis.textStyle"
+                 "name": "series.heatmap.markPoint.label.emphasis.textStyle",
+                 "value": null
                 }
                ]
               },
               {
-               "name": "series.heatmap.markPoint.label.emphasis"
+               "name": "series.heatmap.markPoint.label.emphasis",
+               "value": null
               }
              ]
             },
@@ -12917,7 +12956,8 @@
                ]
               },
               {
-               "name": "series.heatmap.markPoint.data.itemStyle"
+               "name": "series.heatmap.markPoint.data.itemStyle",
+               "value": null
               }
              ]
             },
@@ -13527,7 +13567,8 @@
            "value": 45
           },
           {
-           "name": "series.sankey.color(Array"
+           "name": "series.sankey.color(Array",
+           "value": null
           }
          ]
         },
@@ -14083,7 +14124,8 @@
                  ]
                 },
                 {
-                 "name": "series.funnel.markLine.data.0.label"
+                 "name": "series.funnel.markLine.data.0.label",
+                 "value": null
                 }
                ]
               },
@@ -14103,7 +14145,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.funnel.markLine.data.0.lineStyle"
+                 "name": "series.funnel.markLine.data.0.lineStyle",
+                 "value": null
                 }
                ]
               },
@@ -14127,7 +14170,8 @@
                    "value": 1
                   },
                   {
-                   "name": "series.funnel.markLine.data.1.label.normal"
+                   "name": "series.funnel.markLine.data.1.label.normal",
+                   "value": null
                   }
                  ]
                 },
@@ -14139,12 +14183,14 @@
                    "value": 1
                   },
                   {
-                   "name": "series.funnel.markLine.data.1.label.emphasis"
+                   "name": "series.funnel.markLine.data.1.label.emphasis",
+                   "value": null
                   }
                  ]
                 },
                 {
-                 "name": "series.funnel.markLine.data.1.label"
+                 "name": "series.funnel.markLine.data.1.label",
+                 "value": null
                 }
                ]
               },
@@ -14153,7 +14199,8 @@
                "value": 1
               },
               {
-               "name": "series.funnel.markLine.data.1"
+               "name": "series.funnel.markLine.data.1",
+               "value": null
               }
              ]
             },
@@ -14248,7 +14295,8 @@
                  "value": 1
                 },
                 {
-                 "name": "series.funnel.data.label.emphasis.textStyle"
+                 "name": "series.funnel.data.label.emphasis.textStyle",
+                 "value": null
                 }
                ]
               },
@@ -14463,12 +14511,14 @@
                "value": 1
               },
               {
-               "name": "series.funnel.markPoint.label.emphasis"
+               "name": "series.funnel.markPoint.label.emphasis",
+               "value": null
               }
              ]
             },
             {
-             "name": "series.funnel.markPoint.label"
+             "name": "series.funnel.markPoint.label",
+             "value": null
             }
            ]
           },
@@ -14872,7 +14922,8 @@
            "value": 1
           },
           {
-           "name": "visualMap.piecewise.seriesIndex(number|Array"
+           "name": "visualMap.piecewise.seriesIndex(number|Array",
+           "value": null
           }
          ]
         },
@@ -19540,7 +19591,8 @@
      "value": 1534
     },
     {
-     "name": ""
+     "name": "",
+     "value": null
     }
    ],
    "leafDepth": 2,
