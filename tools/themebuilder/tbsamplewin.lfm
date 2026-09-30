@@ -1,0 +1,69 @@
+object TbSampleForm: TTbSampleForm
+  Left = 0
+  Height = 280
+  Top = 0
+  Width = 420
+  Caption = 'Sample window'
+  ClientHeight = 280
+  ClientWidth = 420
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 280
+    Top = 0
+    Width = 420
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 420
+      Align = alTop
+      Caption = 'Sample window'
+    end
+    object LblText: TTyLabel
+      Left = 20
+      Height = 40
+      Top = 50
+      Width = 380
+      Caption = 'A real window: title bar buttons, frame and shadow.'
+      WordWrap = True
+    end
+    object EdtName: TTyEdit
+      Left = 20
+      Height = 28
+      Top = 100
+      Width = 380
+      TextHint = 'Your name'
+    end
+    object ChkRemember: TTyCheckBox
+      Left = 20
+      Height = 24
+      Top = 140
+      Width = 200
+      Caption = 'Remember'
+    end
+    object BtnOk: TTyButton
+      Left = 196
+      Height = 30
+      Top = 230
+      Width = 96
+      Anchors = [akRight, akBottom]
+      StyleClass = 'primary'
+      Caption = 'OK'
+      OnClick = BtnCloseClick
+    end
+    object BtnCancel: TTyButton
+      Left = 304
+      Height = 30
+      Top = 230
+      Width = 96
+      Anchors = [akRight, akBottom]
+      Caption = 'Cancel'
+      OnClick = BtnCloseClick
+    end
+  end
+end

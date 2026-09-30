@@ -33,6 +33,13 @@ type
     procedure TestUrlResolvesFromTheDocumentFolder;
     procedure TestTheModeNote;
     procedure TestTheProbeTriesVariantsAndStates;
+    procedure TestDarkIsRefusedWhenItDoesNotResolve;
+    procedure TestDarkWithTheMinimalTemplate;
+    procedure TestTheDocumentSurvivesADensityChange;
+    procedure TestDisableAllAndBack;
+    procedure TestTheDialogWearsThePreviewTheme;
+    procedure TestTheSampleWindow;
+    procedure TestTheSampleWindowFollowsTheDocument;
   end;
 
 const
@@ -42,8 +49,8 @@ const
 implementation
 
 uses
-  Controls, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, tyControls.Base,
-  tbtemplates;
+  Controls, Forms, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, tyControls.Base,
+  tyControls.Dialogs, tbtemplates, tbsamplewin;
 
 procedure TTbPreviewTests.SetUp;
 begin
@@ -235,6 +242,121 @@ begin
     '@mode light { :root { --z: #ffffff; } } @mode dark { :root { --y: #000000; } } ' +
     'TyButton.primary:hover { background: var(--y); }', '', err));
   AssertEquals('V9: it was the variant, hovered: ' + err, 1, Pos('TyButton.primary: ', err));
+end;
+
+procedure TTbPreviewTests.TestDarkIsRefusedWhenItDoesNotResolve;
+var
+  err, head: string;
+  ok: Boolean;
+begin
+  AssertTrue(Load('@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyButton { background: var(--x); }'));
+  AssertFalse('the light mode is shown', FFrame.IsDark);
+  ok := FFrame.SetDark(True, err);
+  AssertFalse('V10: dark is refused', ok);
+  head := Format(rsTbModeFailed, [rsTbModeDark, '']);
+  AssertEquals('V10: it says which mode: ' + err, 1, Pos(head, err));
+  AssertTrue('V10: and which control: ' + err, Pos('TyButton', err) > 0);
+  AssertFalse('V10: still light', FFrame.IsDark);
+  AssertTrue('V10: the frame remembers the refusal', FFrame.ModeError <> '');
+  AssertTrue('V10: light is fine', FFrame.SetDark(False, err));
+end;
+
+procedure TTbPreviewTests.TestDarkWithTheMinimalTemplate;
+var
+  err: string;
+begin
+  AssertTrue(Load(TbMinimalTemplate));
+  AssertTrue('V11: dark resolves', FFrame.SetDark(True, err));
+  AssertTrue('V11: dark', FFrame.IsDark);
+  AssertTrue(Load('@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyButton { background: var(--x); }'));
+  FFrame.SetDark(True, err);
+  AssertTrue('a refusal was remembered', FFrame.ModeError <> '');
+  AssertTrue(Load(TbMinimalTemplate));
+  AssertEquals('V11: a good load clears it', '', FFrame.ModeError);
+end;
+
+procedure TTbPreviewTests.TestTheDocumentSurvivesADensityChange;
+begin
+  AssertTrue(Load(cMarkerDoc));
+  FFrame.SetModern(True);
+  AssertTrue('V12: modern', FFrame.Controller.Density = tdModern);
+  AssertTrue('V12: modern', FFrame.IsModern);
+  AssertEquals('V12: the document is still loaded', $123456, ButtonBg(FFrame.Controller));
+  FFrame.SetModern(False);
+  AssertTrue('V12: classic', FFrame.Controller.Density = tdClassic);
+  AssertEquals('V12: and still loaded', $123456, ButtonBg(FFrame.Controller));
+end;
+
+procedure TTbPreviewTests.TestDisableAllAndBack;
+begin
+  AssertFalse('designed disabled', FFrame.BtnDisabled.Enabled);
+  AssertTrue('designed enabled', FFrame.BtnDefault.Enabled);
+  FFrame.SetAllDisabled(True);
+  AssertTrue('V13: all disabled', FFrame.AllDisabled);
+  AssertFalse('V13: a button', FFrame.BtnDefault.Enabled);
+  AssertFalse('V13: an edit', FFrame.EdtText.Enabled);
+  AssertFalse('V13: a tree', FFrame.TreSample.Enabled);
+  AssertFalse('V13: a nested page control', FFrame.InnerPages.Enabled);
+  AssertTrue('V13: the pages still switch', FFrame.Pages.Enabled);
+  AssertTrue('V13: and so do their sheets', FFrame.TabBasic.Enabled);
+  FFrame.SetAllDisabled(False);
+  AssertTrue('V13: back', FFrame.BtnDefault.Enabled);
+  AssertTrue('V13: back', FFrame.EdtText.Enabled);
+  AssertTrue('V13: back', FFrame.TreSample.Enabled);
+  AssertTrue('V13: back', FFrame.InnerPages.Enabled);
+  AssertFalse('V13: a designed-disabled button stays disabled', FFrame.BtnDisabled.Enabled);
+  AssertFalse('V13: a designed-disabled edit stays disabled', FFrame.EdtDisabled.Enabled);
+end;
+
+procedure TTbPreviewTests.TestTheDialogWearsThePreviewTheme;
+var
+  d: TTyDialog;
+begin
+  AssertTrue('no main form in the test runner', Application.MainForm = nil);
+  d := FFrame.BuildSampleDialog;
+  try
+    d.ApplyControllerNow;
+    AssertTrue('V14: the dialog', d.Controller = FFrame.Controller);
+    AssertTrue('V14: its buttons', d.Buttons[0].Controller = FFrame.Controller);
+  finally
+    d.Free;
+  end;
+  d := FFrame.BuildSampleInput;
+  try
+    d.ApplyControllerNow;
+    AssertTrue('V14: the input dialog', d.Controller = FFrame.Controller);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTbPreviewTests.TestTheSampleWindow;
+var
+  w: TTbSampleForm;
+begin
+  w := FFrame.BuildSampleWindow;
+  AssertTrue('V15: built once', FFrame.BuildSampleWindow = w);
+  AssertTrue('V15: the window', w.Controller = FFrame.Controller);
+  AssertTrue('V15: an edit in it', w.EdtName.Controller = FFrame.Controller);
+  AssertTrue('V15: a button in it', w.BtnOk.Controller = FFrame.Controller);
+  AssertTrue('V15: a real title bar', w.TitleBar = w.Bar);
+  FreeAndNil(FFrame);   { the window goes before the controller }
+end;
+
+procedure TTbPreviewTests.TestTheSampleWindowFollowsTheDocument;
+var
+  w: TTbSampleForm;
+  ctl: TTyStyleController;
+begin
+  w := FFrame.BuildSampleWindow;
+  ctl := w.BtnCancel.Controller;
+  AssertTrue('the window''s button has a controller', ctl <> nil);
+  AssertTrue('not the marker yet', ButtonBg(ctl) <> $123456);
+  AssertTrue(Load(cMarkerDoc));
+  AssertEquals('V16: the window''s button wears the document', $123456,
+    ButtonBg(w.BtnCancel.Controller));
 end;
 
 initialization

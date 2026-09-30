@@ -18,7 +18,7 @@ unit tbpreview;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Menus, Types,
+  Classes, SysUtils, Forms, Controls, Menus, Types, Dialogs,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.Base,
   tyControls.Form, tyControls.Dialogs, tyControls.Panel, tyControls.Button,
   tyControls.GlyphButtons, tyControls.DropButtons, tyControls.TyLabel, tyControls.LinkLabel,
@@ -31,12 +31,20 @@ uses
   tyControls.ScrollBox, tyControls.Splitter, tyControls.Menu, tyControls.ToolBar,
   tyControls.StatusBar, tyControls.Breadcrumb, tyControls.ScrollBar, tyControls.ProgressBar,
   tyControls.CircularProgress, tyControls.ActivityIndicator, tyControls.Alert,
-  tyControls.Empty, tyControls.Notification, tyControls.Icons.Lucide;
+  tyControls.Empty, tyControls.Notification, tyControls.Icons.Lucide, tbsamplewin;
 
 resourcestring
   rsTbDensityClassic = 'Classic';
   rsTbDensityModern = 'Modern';
   rsTbSingleMode = 'One mode only';
+  rsTbModeFailed = 'In %s mode: %s';
+  rsTbModeLight = 'light';
+  rsTbModeDark = 'dark';
+  rsTbSampleMessage = 'Save the changes to this theme?';
+  rsTbSampleInputTitle = 'Rename';
+  rsTbSampleInputPrompt = 'New name:';
+  rsTbSampleNotifyTitle = 'Saved';
+  rsTbSampleNotifyText = 'The theme was saved.';
   { the sample data the .lfm cannot hold, or holds untranslated }
   rsTbSampleItem1 = 'Apples';
   rsTbSampleItem2 = 'Pears';
@@ -81,6 +89,11 @@ resourcestring
   rsTbSampleCrumb3 = 'My theme';
 
 type
+  TTbDisabledEntry = record
+    Ctl: TControl;
+    Was: Boolean;
+  end;
+
   TTbPreviewFrame = class(TFrame)
     Tools: TTyPanel;
     DarkSwitch: TTyToggleSwitch;
@@ -211,6 +224,8 @@ type
   private
     FController: TTyStyleController;
     FDialogOwner: TTyForm;
+    FSampleWin: TTbSampleForm;
+    FDisabled: array of TTbDisabledEntry;   { what "disable all" changed, to put back }
     FGoodText, FGoodDir: string;
     FModeError: string;
     FAllDisabled: Boolean;
@@ -229,7 +244,15 @@ type
     { AText over the base, as an app would load it; url() / @import from ABaseDir.
       False + AError: the preview keeps the last version that loaded (or the base) }
     function LoadDocument(const AText, ABaseDir: string; out AError: string): Boolean;
+    { False + AError: the document does not resolve in that mode; the mode is unchanged }
+    function SetDark(ADark: Boolean; out AError: string): Boolean;
+    procedure SetModern(AModern: Boolean);
+    procedure SetAllDisabled(ADisabled: Boolean);
     function HasModes: Boolean;
+    function BuildSampleDialog: TTyDialog;          { built, not shown }
+    function BuildSampleInput: TTyDialog;           { built, not shown }
+    function BuildSampleWindow: TTbSampleForm;      { built once, not shown }
+    procedure ShowSampleWindow;
     function StyledControlCount: Integer;           { FOR THE TESTS }
     property Controller: TTyStyleController read FController;
     property ModeError: string read FModeError;     { the last rejected switch, '' after a good load }
@@ -351,8 +374,10 @@ end;
 
 destructor TTbPreviewFrame.Destroy;
 begin
-  { before the controller (a component of this frame) goes: the window on it }
+  { before the controller (a component of this frame) goes: the windows on it }
+  FreeAndNil(FSampleWin);
   FreeAndNil(FDialogOwner);
+  FDisabled := nil;
   inherited Destroy;
 end;
 
@@ -558,38 +583,208 @@ begin
     Inc(Result);
 end;
 
-{ ---- the switches and the pop-ups (filled in by the next step) ---- }
+{ ---- the switches ---- }
+
+function TTbPreviewFrame.SetDark(ADark: Boolean; out AError: string): Boolean;
+var
+  old, want: string;
+begin
+  AError := '';
+  if ADark then want := 'dark' else want := 'light';
+  old := FController.Mode;
+  if SameText(old, want) then Exit(True);
+  FController.Mode := want;
+  Result := TbProbeResolve(FController.Model, AError);
+  if not Result then
+  begin
+    FController.Mode := old;
+    { the mode's display name, not its internal one: it is read in the problem list }
+    if ADark then
+      AError := Format(rsTbModeFailed, [rsTbModeDark, AError])
+    else
+      AError := Format(rsTbModeFailed, [rsTbModeLight, AError]);
+  end;
+  FModeError := AError;
+end;
+
+procedure TTbPreviewFrame.SetModern(AModern: Boolean);
+var
+  mode: string;
+begin
+  if AModern = IsModern then Exit;
+  mode := FController.Mode;
+  { A density change reloads the controller's own theme layer -- there is none here, so the
+    base alone: the document goes and is loaded again. The controls keep the height they
+    were built with; what changes is the density's tokens (font size, padding). }
+  if AModern then
+    FController.Density := tdModern
+  else
+    FController.Density := tdClassic;
+  RestoreGood;
+  if (mode <> '') and HasModes and not SameText(FController.Mode, mode) then
+  begin
+    FController.Mode := mode;
+    if not TbProbeResolve(FController.Model, FModeError) then
+      RestoreGood;
+  end;
+  UpdateModeNote;
+end;
+
+procedure TTbPreviewFrame.SetAllDisabled(ADisabled: Boolean);
+
+  procedure Walk(AParent: TWinControl);
+  var
+    i, n: Integer;
+    c: TControl;
+  begin
+    for i := 0 to AParent.ControlCount - 1 do
+    begin
+      c := AParent.Controls[i];
+      { the pages themselves stay enabled: the tabs must still switch }
+      if ((c is TTyCustomControl) or (c is TTyGraphicControl)) and (AParent <> Pages) then
+      begin
+        n := Length(FDisabled);
+        SetLength(FDisabled, n + 1);
+        FDisabled[n].Ctl := c;
+        FDisabled[n].Was := c.Enabled;
+        c.Enabled := False;
+      end;
+      if c is TWinControl then
+        Walk(TWinControl(c));
+    end;
+  end;
+
+var
+  i: Integer;
+begin
+  if ADisabled = FAllDisabled then Exit;
+  FAllDisabled := ADisabled;
+  if ADisabled then
+  begin
+    FDisabled := nil;
+    Walk(Pages);
+  end
+  else
+  begin
+    for i := High(FDisabled) downto 0 do
+      FDisabled[i].Ctl.Enabled := FDisabled[i].Was;
+    FDisabled := nil;
+  end;
+end;
 
 procedure TTbPreviewFrame.DarkSwitchChange(Sender: TObject);
+var
+  err: string;
 begin
+  if FUpdating then Exit;
+  if not SetDark(DarkSwitch.Checked, err) then
+  begin
+    FUpdating := True;
+    try
+      DarkSwitch.Checked := not DarkSwitch.Checked;
+    finally
+      FUpdating := False;
+    end;
+  end;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
 end;
 
 procedure TTbPreviewFrame.DensityComboChange(Sender: TObject);
 begin
+  if FUpdating then Exit;
+  SetModern(DensityCombo.ItemIndex = 1);
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
 end;
 
 procedure TTbPreviewFrame.DisableAllCheckChange(Sender: TObject);
 begin
+  if FUpdating then Exit;
+  SetAllDisabled(DisableAllCheck.Checked);
 end;
 
-procedure TTbPreviewFrame.BtnPopupClick(Sender: TObject);
+{ ---- the pop-ups ---- }
+
+{ The message and input dialogs are built with Application as their owner, and a dialog
+  adopts its owner's controller when it shows -- or else the main form's, i.e. the TOOL's
+  theme. Moved under a hidden form that carries the preview's controller, it wears the
+  preview's theme. }
+function TTbPreviewFrame.BuildSampleDialog: TTyDialog;
 begin
+  Result := TyBuildMessageDialog(rsTbSampleMessage, mtConfirmation, [mbYes, mbNo, mbCancel]);
+  if Result.Owner <> nil then
+    Result.Owner.RemoveComponent(Result);
+  FDialogOwner.InsertComponent(Result);
 end;
 
-procedure TTbPreviewFrame.BtnSampleWindowClick(Sender: TObject);
+function TTbPreviewFrame.BuildSampleInput: TTyDialog;
+var
+  edt: TTyEdit;
 begin
+  Result := TyBuildInputDialog(rsTbSampleInputTitle, rsTbSampleInputPrompt, 'theme', edt);
+  if Result.Owner <> nil then
+    Result.Owner.RemoveComponent(Result);
+  FDialogOwner.InsertComponent(Result);
 end;
 
 procedure TTbPreviewFrame.BtnMessageClick(Sender: TObject);
+var
+  d: TTyDialog;
 begin
+  d := BuildSampleDialog;
+  try
+    d.ShowModal;
+  finally
+    d.Free;
+  end;
 end;
 
 procedure TTbPreviewFrame.BtnInputClick(Sender: TObject);
+var
+  d: TTyDialog;
 begin
+  d := BuildSampleInput;
+  try
+    d.ShowModal;
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTbPreviewFrame.BtnPopupClick(Sender: TObject);
+var
+  p: TPoint;
+begin
+  p := BtnPopup.ClientToScreen(Point(0, BtnPopup.Height));
+  SamplePopup.PopUp(p.X, p.Y);
 end;
 
 procedure TTbPreviewFrame.BtnNotifyClick(Sender: TObject);
 begin
+  SampleNotify.Title := rsTbSampleNotifyTitle;
+  SampleNotify.Message := rsTbSampleNotifyText;
+  SampleNotify.Show;
+end;
+
+function TTbPreviewFrame.BuildSampleWindow: TTbSampleForm;
+begin
+  if FSampleWin = nil then
+  begin
+    FSampleWin := TTbSampleForm.Create(Self);
+    FSampleWin.UseController(FController);
+  end;
+  Result := FSampleWin;
+end;
+
+procedure TTbPreviewFrame.ShowSampleWindow;
+begin
+  BuildSampleWindow.Show;
+end;
+
+procedure TTbPreviewFrame.BtnSampleWindowClick(Sender: TObject);
+begin
+  ShowSampleWindow;
 end;
 
 end.
