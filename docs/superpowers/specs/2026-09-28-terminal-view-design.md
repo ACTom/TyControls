@@ -1,6 +1,6 @@
 # 终端控件 TTyTerminalView —— 设计规格
 
-> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；5 期已签收（2026-09-30，记录在 5 期计划末尾，3–5 期真机项合成一份验收文档 `docs/superpowers/plans/2026-09-29-terminal-acceptance.md`）；五期的实现期修正都已写回各节原处，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
+> 状态：已定稿（用户 2026-09-28 审过，§17.1 全部按建议）；1 期已签收（2026-09-28，记录在 1 期计划末尾）；2 期已签收（2026-09-29，记录在 2 期计划末尾）；3 期已签收（2026-09-29，记录在 3 期计划末尾，真机与截图验收随各期一次做完）；4 期已签收（2026-09-29，记录在 4 期计划末尾）；5 期已签收（2026-09-30，记录在 5 期计划末尾，3–5 期真机项合成一份验收文档 `docs/superpowers/plans/2026-09-29-terminal-acceptance.md`）；五期的实现期修正都已写回各节原处；**6 期（独立配色方案）2026-09-30 用户拍板、规格补在 §11.1**，计划 `docs/superpowers/plans/2026-09-30-terminal-phase-6.md`，做完和 1–5 期一起验收，分支 feat/terminal · 上游：xterm.js 6.0.0（`D:/Projects/xterm.js`，commit `c58ea36`）· 需求来源：用户口头（2026-09-23 立项，2026-09-28 逐段确认）
 
 在库里加一个终端控件：宿主把程序输出的字节流喂进来，控件解析、存进屏幕缓冲、画出来；键盘、鼠标、粘贴编码成字节，经事件交还宿主。
 会话、PTY、shell 集成都归宿主，控件不碰进程。解析、缓冲、核心、键盘编码照 xterm.js 移植，渲染自己写。
@@ -505,6 +505,8 @@ OSC 4 / 10 / 11 / 12 设置和查询、OSC 104 / 110 / 111 / 112 复位（`Input
 - ~~换主题时控件调 `NotifyColorSchemeChanged`~~ 只有色表真变了（换明暗、换配色）才调；改内边距、字体的主题变化不调（它会清掉程序设的覆盖色）。第一次建色表不算变化。在绘制里才发现的主题变化不当场调（它会发 `OnData`），记下来经消息循环再调。
 - 程序改了颜色时整窗重画，见 §3.2 的控件侧修正。
 
+**6 期新增（2026-09-30 用户拍板）**：色表多了一个来源——控件的独立配色方案（§11.1）。取色顺序变成「程序的 OSC 覆盖 > 自定义方案 > 主题 token」：Core 的覆盖表照旧在最前，`OnQueryBaseColor` 答的色表由控件按 `ColorSource` 从方案或主题建。Core 不改：明暗查询（`CSI ? 996 n`）和 2031 通知本来就按 `ResolveColor(256 / 257)`（覆盖优先、其次色表）比亮度，方案进了色表，答的就是实际生效的背景色。换方案、改方案里的颜色、明暗配对随主题换边，都算「色表真变了」，走上面 3 期修正的同一条通知路径（清 OSC 覆盖色、2031 开着就报一次）。
+
 ### 7.4 未处理的 OSC
 
 核心注册的 OSC 只有 0 / 1 / 2 / 4 / 8 / 10 / 11 / 12 / 104 / 110 / 111 / 112（`InputHandler.ts:286-325`）。52 由控件注册（§9.6.3）。其余一律进 `OnOsc(Ident, Data, var Handled)`——7（当前目录）、133 / 633（shell 集成）、1337 等由宿主处理。宿主也可以直接 `Core.Parser.RegisterOscHandler`。
@@ -714,6 +716,8 @@ default 一律等于构造值（[[tabstop-declared-default-must-match]]）。浮
 - published 默认值 = 构造值由本控件自己的 RTTI 测试逐个守（全局守卫只查 `TabStop`）。
 
 **实现期修正（4 期）**：4 期 published 的是 `SelectionOverrideKey`、`Osc52`、`WordSeparators`（`stored` 函数，构造值不写进 `.lfm`）、`CopyOnSelect`、`DetectUrls`，外加 `AllowNonHttpLinks: Boolean = False`（非 http(s) 的 OSC 8 算不算链接，§9.8）。运行时只读的 `SelectionText`、`HasSelection` 也在本期。
+
+**6 期新增（2026-09-30 用户拍板）**：配色来源 `ColorSource`（默认跟随主题）、方案对象 `ColorScheme`、明暗配对 `ColorSchemePaired` + `DarkColorScheme`，属性表与默认值见 §11.1.3。
 
 **实现期修正（5 期）**：`MinimumContrastRatio` 用 `Double`：上游是 JS 双精度、钳成一位小数，`Single` 存不住 1.3，比值恰在边界时和上游不同。写入时照上游钳到 1–21、保留一位小数（`OptionsService.ts:188-190`），NaN 和无穷按 1（上游会存 NaN，§15）；`stored` 函数，构造值 1 不写进 `.lfm`，RTTI 守卫另加一条管它。改了清两份对比度缓存、整屏重画。
 
@@ -1116,6 +1120,217 @@ PPI 取 `Font.PixelsPerInch`（全库约定）。PPI 变化：重算度量、清
 
 **实现期修正（5 期）**：浅底兜底的数据：比值 1 时对皮肤实际浅底低于 4.5:1 的不止 3 号——xp 8 个（最差 3 号 3.70、14 号 3.72、10 号 3.74）、macos 8 个、breeze 7 个；比值 4.5 时全部 ≥ 4.5（最低 macos 3 号 4.58；每步推 10%，xp 会过冲到 5.25–5.30）。`MinimumContrastRatio` 默认 1，也就是默认不兜底，要宿主设。截图 `docs/superpowers/plans/2026-09-29-terminal-phase-5-shots/contrast-{1,45}-{xp,macos,breeze}-light.png`；（a）/（b）/（c）仍待用户在最终验收时定（验收文档决定 D1）。
 
+**6 期新增（2026-09-30 用户拍板）**：主题仍是默认的配色来源；单个实例可以改用独立的配色方案，见 §11.1。浅底 16 色的取舍（D1 / D2）表述改成「默认跟随主题；看不清可换方案」，仍待用户定（§17.1 第 4 条的 6 期注）。
+
+### 11.1 独立配色方案（6 期新增（2026-09-30 用户拍板））
+
+现在终端的颜色全部来自主题 token，单个实例只能靠 `StyleClass` / `StyleOverride` 改。6 期给控件一套独立于主题的配色：宿主（或设计器里的用户）选「跟随主题」或「自定义方案」，方案可以从 Windows Terminal 的 JSON 读进来、写出去。方案清单由外部维护，控件只管读入和应用。实现步骤见 `docs/superpowers/plans/2026-09-30-terminal-phase-6.md`。
+
+#### 11.1.1 用户定的（2026-09-30）
+
+| # | 决定 |
+|---|---|
+| 1 | 控件加 `ColorSource`：跟随主题（默认，维持现状）/ 自定义方案 |
+| 2 | 独立的方案对象 `ColorScheme`，published，可在设计器里改、进 `.lfm`：前景、背景、光标、光标下的字色、选区（聚焦 / 失焦）、16 色；16 色的名字照 Windows Terminal：black / red / green / yellow / blue / purple / cyan / white 及 bright* |
+| 3 | 可选「明暗各一套」：浅色、深色各配一个方案，主题换明暗时自动换 |
+| 4 | 优先级：程序的 OSC 4 / 10 / 11（/ 12）覆盖 > 自定义方案 > 主题 token；`MinimumContrastRatio` 对最终颜色生效；2031 与明暗查询按实际生效的背景色回答；`NotifyColorSchemeChanged` 的时机要对 |
+| 5 | 先只支持 Windows Terminal 的 JSON 配色格式，解析留扩展口；读入：单个 scheme 对象、WT `settings.json` 里的 `schemes` 数组（按名取）；也能写出 |
+| 6 | 示例带几套许可清楚的方案做演示，外加「从文件导入」 |
+| 7 | 做成第 6 期，做完和 1–5 期一起验收（更新 `2026-09-29-terminal-acceptance.md`，不另起一份） |
+
+标「待定」的是计划开工前问题一里等用户答的，本节按建议写。
+
+#### 11.1.2 核实记录（2026-09-30，读文档与源码）
+
+**Windows Terminal 的配色格式**（文档 https://learn.microsoft.com/en-us/windows/terminal/customize-settings/color-schemes ，`ms.date` 2021-04-14、页面更新 2025-08-21；源码 github.com/microsoft/terminal `main`，commit `4e2b8bd9`，下称 `wt:`）：
+
+| 键 | 必选 | 缺了 WT 怎么办 | 出处 |
+|---|---|---|---|
+| `name` | 是 | 整套无效、跳过 | `wt:src/cascadia/TerminalSettingsModel/ColorScheme.cpp` 的 `_layerJson`（「Required fields」）；schema `minLength: 1` |
+| `foreground` | 否 | `#FFFFFF`（`DEFAULT_FOREGROUND`） | `ColorScheme.h` 的 `WINRT_PROPERTY` 默认值；`wt:src/inc/DefaultSettings.h` |
+| `background` | 否 | `#000000`（`DEFAULT_BACKGROUND`） | 同上 |
+| `cursorColor` | 否 | `#FFFFFF`（`DEFAULT_CURSOR_COLOR`） | 同上；schema 标 `default: "#FFFFFF"` |
+| `selectionBackground` | 否 | `#FFFFFF`（取 `DEFAULT_FOREGROUND`，不是这套的前景） | 同上 |
+| `black` `red` `green` `yellow` `blue` `purple` `cyan` `white` `brightBlack` `brightRed` `brightGreen` `brightYellow` `brightBlue` `brightPurple` `brightCyan` `brightWhite` | 是，16 个都要 | 不满 16 个整套无效、跳过 | `ColorScheme.cpp` 的 `TableColorsMapping` 与 `isValid &= (colorCount == 16)` |
+| `magenta` / `brightMagenta` | 别名 | 分别等于 5 / 13 号（GH#11456） | `TableColorsMapping` 末两项 |
+
+- **颜色格式**：文档原话是 `"#rgb"` 或 `"#rrggbb"`；schema 的 `Color` 模式 `^#[A-Fa-f0-9]{3}(?:[A-Fa-f0-9]{3})?$`。读入时 `CanConvert` 只收**字符串、长度 4 或 7、以 `#` 开头**（`wt:src/cascadia/TerminalSettingsModel/JsonUtils.h` 的 `ConversionTrait<til::color>`），所以 `#rrggbbaa` 在配色里**不收**（底层 `Utils::ColorFromHexString` 认 9 位，但走不到）；不是字符串、长度不对都抛 `DeserializationError`。十六进制位用 `std::stoul(…, 16)` 解，`#12345g` 这种会被解成 `05`，WT 不报错——我们严格报错（§11.1.10）。
+- **缺字段**：`name` 或 16 色不全 → `FromJson` 返回空、这一套被**静默跳过**；颜色写坏 → 异常。两者不一样。
+- **按名取**：`settings.colorSchemes.emplace(scheme->Name(), …)`（`wt:…/CascadiaSettingsSerialization.cpp` 的 `_parse`）——`emplace` 不覆盖已有的键，同名的**第一个有效**的算数。名字按原样比较（区分大小写）。
+- **`purple` 与 `magenta` 都写了**：WT 按表的顺序读，读满 16 个就停（`if (colorCount == ColorSchemeExpectedSize) break;`）——16 个主名都在时别名不读；主名缺一个时别名补上。怪情况（`purple` 和 `magenta` 都写了、另缺一个主名）WT 会数到 16、把缺的那一色留成未初始化值；我们报「缺某键」（§11.1.10）。
+- **文件格式**：`settings.json` 是带注释、允许尾逗号的 JSON（WT 自带的 `defaults.json` 里就有 `//` 注释和尾逗号；读用 jsoncpp 的 `CharReaderBuilder` 默认设置）。方案在顶层的 `schemes` 数组里。
+- **明暗配对 WT 也有**：profile 的 `colorScheme` 可以是字符串，也可以是 `{"light": 名, "dark": 名}`（schema `SchemePair`：「depending on the theme of the application」）。我们的「明暗各一套」同一个意思，但看的是主题（§11.1.5），不读 profile。
+- **WT 写出**（`ColorScheme::ToJson`）：`name`、`foreground`、`background`、`selectionBackground`、`cursorColor`，再按表顺序 16 色；颜色是 `#RRGGBB`（`til::color::ToHexString(true)`）。
+
+**xterm.js 的 `ITheme`**（`xterm:typings/xterm.d.ts:372-445`，`xterm:src/browser/services/ThemeService.ts`）——控件内部的取色语义以它为准：
+- 字段：`foreground`、`background`、`cursor`、`cursorAccent`（块光标下的字色）、`selectionBackground`、`selectionForeground`、`selectionInactiveBackground`，16 色用 `magenta` / `brightMagenta`（WT 叫 `purple`），另有 `extendedAnsi`（16–255，WT 没有）、滚动条三色、`overviewRulerBorder`。
+- 缺省（`ThemeService.ts:23-31`、`:81-131`）：前景 `#ffffff`、底 `#000000`、光标 `#ffffff`、`cursorAccent` 取常量 `#000000`（`DEFAULT_CURSOR_ACCENT = DEFAULT_BACKGROUND`，`:26`——是默认底色常量，不是这套主题的底色）、选区 `rgba(255,255,255,0.3)`；**失焦选区缺了就等于聚焦选区**（`:89`）。
+- **不透明的选区色一律降到 0.3 透明度**（`:97-106`，Issue #2737；`color.opacity` 的 alpha = `Math.round(0.3 × 255)` = `0x4D`），再在底色上混成不透明（`:88`、`:90`）。WT 的 `selectionBackground` 没有 alpha，按这一条就是「这一色、0.3」。
+- 光标与 `cursorAccent` 也在底色上混（`:85-86`），不透明时等于原色。
+- 换主题清两份对比度缓存（`:135-136`）；覆盖色随整张表重建丢掉（§7.3 的 2 期修正）。
+
+**FPC 3.2.2 的 JSON**：`fpjson` / `jsonparser` / `jsonscanner` 在 `fpc:packages/fcl-json/src/`，库里 AdvChart 已在用（`source/tyControls.AdvChart.Option.pas:332`），运行时包不多一个依赖。选项 `joComments`（`//` 与 `/* */`，`jsonscanner.pp:498-540`）、`joIgnoreTrailingComma`（`jsonreader.pp:372`、`:400`）够读 WT 的 `settings.json`；**重复键默认抛异常**（`jsonparser.pp:132`，开了 `joIgnoreDuplicates` 是**前者**为准，jsoncpp 是后者为准）；BOM 只在流构造时查（`joBOMCheck`，`jsonscanner.pp:162`），从字符串读要自己去掉。已知两个坑：**`\u0000` 被吞掉**（[[fpjson-drops-u0000]]），**两个 `\u` 转义挨着时丢字节**（`AdvChart.Option.pas:197-208` 的注释；那里的对策是解析前先把 `\u` 转义解成 UTF-8，`TyDecodeUnicodeEscapes`，在实现部分、没导出）。那个预解码不认注释（注释里的引号会让它把串内串外弄反），也会把 `\u0022` / `\u005C` 解成裸的引号、反斜杠——终端这边要自己的一份，认注释、这两个字符和控制字符保留成转义（计划开工前问题二）。
+
+**外部方案集**：`mbadolato/iTerm2-Color-Schemes` 有 `windowsterminal/` 目录（每套一个 WT 格式的 JSON）；仓库 `LICENSE` 是 MIT（Copyright (c) 2011 to Present Mark Badolato），但末尾写明「This license covers the iTerm-Color-Schemes repository collection of themes. The copyright/license for each individual theme belongs to the author of that theme.」——**单套方案的许可要逐个查，不能按仓库的 MIT 打包**。示例因此不从那里带（§11.1.9）。
+
+#### 11.1.3 数据模型与属性
+
+**方案对象** `TTyTerminalColorScheme = class(TPersistent)`（新单元 `tyControls.Terminal.ColorScheme`，进运行时包；依赖 `SysUtils`、`Classes`、`Graphics`（只为 `TColor` / `clNone` / `ColorToRGB`）、`fpjson` / `jsonparser` / `jsonscanner`、`tyControls.StrConsts`；不引 `Controls` / `Forms`）：
+
+| published 属性 | 类型 | 默认（= 构造值） | WT 键 | xterm `ITheme` | 未设置时 |
+|---|---|---|---|---|---|
+| `Name` | string | `''`（不写进 `.lfm`） | `name` | — | 只用于显示和写出 |
+| `Foreground` | TColor | `clNone` | `foreground` | `foreground` | 主题的前景 |
+| `Background` | TColor | `clNone` | `background` | `background` | 主题的底色 |
+| `CursorColor` | TColor | `clNone` | `cursorColor` | `cursor` | 生效的前景 |
+| `CursorText` | TColor | `clNone` | —（WT 没有） | `cursorAccent` | 生效的底色 |
+| `SelectionBackground` | TColor | `clNone` | `selectionBackground` | `selectionBackground` | 主题的聚焦选区色（带它自己的 alpha） |
+| `SelectionInactiveBackground` | TColor | `clNone` | —（WT 没有） | `selectionInactiveBackground` | 设了 `SelectionBackground` 就用它（照 xterm `:89`），否则主题的失焦选区色 |
+| `Black` … `White`、`BrightBlack` … `BrightWhite`（16 个，顺序 = ANSI 0–15，5 / 13 叫 `Purple` / `BrightPurple`） | TColor | `clNone` | 同名小驼峰（读时也认 `magenta` / `brightMagenta`） | `black` … `brightWhite`（5 / 13 叫 `magenta`） | 主题的那一色 |
+
+- **「未设置」是 `clNone`**，不是 0：TColor 的零值是合法的黑色（[[zero-value-must-be-the-safe-answer]]）。`clDefault` 当未设置；系统色（`clWindow` 这类，设计器的颜色下拉里有）用时经 `ColorToRGB` 解成 RGB。TColor 是 `$00BBGGRR`，色表是 `$RRGGBB`，换算只在一处（地雷见计划）。
+- 另有：`Colors[ASlot]` 下标属性（`TTyTerminalSchemeSlot`，前 16 个的序号就是 ANSI 号）、`Assign`、`Clear`、`IsEmpty`、`Equals`、`BeginUpdate` / `EndUpdate`、`OnChange`（控件挂上，宿主别改写）、读写方法（§11.1.7）。`GetOwner` 答控件，设计器的属性路径与「已修改」标记靠它。
+- 选区字色（xterm `selectionForeground`）不进方案：WT 没有；主题「写了才用」的那一条照旧（§11）。
+
+**控件的新属性**（`TTyTerminalView`，published；default 一律等于构造值）：
+
+| 属性 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `ColorSource` | `TTyTerminalColorSource = (tsrcTheme, tsrcScheme)` | `tsrcTheme` | 跟随主题 = 5 期的样子，方案对象里有什么都不看 |
+| `ColorScheme` | `TTyTerminalColorScheme` | 空方案 | 自定义方案；配对时是浅色那套。有 setter（`Assign`）：FPC 没有 setter 的对象属性不流式化（`source/tyControls.Columns.pas` 里 `TTyHeader.Columns` 的注释） |
+| `ColorSchemePaired` | Boolean | False | 明暗各一套（待定：属性形态，计划开工前问题一第 1 条） |
+| `DarkColorScheme` | `TTyTerminalColorScheme` | 空方案 | 配对时深色主题用 |
+
+- 设计器里四个都能改；`ColorScheme` / `DarkColorScheme` 在对象查看器里展开成 23 个子属性，只有改过的写进 `.lfm`。
+- `ColorSource = tsrcScheme` 而方案全空时，画出来和跟随主题一样（每一色都退回主题）。
+
+#### 11.1.4 取色与优先级
+
+一句话：**程序的 OSC 覆盖 > 方案里设了的 > 主题**。控件的色表（`FPalette`，就是 `OnQueryBaseColor` 答的那一份）按下表建；Core 的覆盖表照旧在它前面（§7.3）。
+
+| 槽 | 方案设了 | 方案没设 |
+|---|---|---|
+| 0–15 | 方案的色 | 跟随主题时本实例的那一色（含 3 期「实例换了底就按 `on()` 重求」那一条） |
+| 16–255 | 公式（`TyTermDefaultPaletteColor`，同上游；方案不管，WT 没有、xterm 的 `extendedAnsi` 不做） | 同左 |
+| 256 前景 | 方案的色 | 主题的 |
+| 257 底色（也是内边距、网格外余量的底色） | 方案的色 | 主题的 |
+| 258 光标 | 方案的色 | 生效的前景（256） |
+| 光标下的字色 | 方案的色 | 生效的底色（257） |
+| 选区（聚焦） | 方案的色按 xterm 降到 0.3（alpha `$4D`），再在生效的底色上混成不透明 | 主题 `TyTerminalSelection:focus`，带它自己的 alpha 混 |
+| 选区（失焦） | 同上 | 方案设了聚焦选区就用它（xterm）；否则主题的无状态 `TyTerminalSelection` |
+| 选区字色、链接下划线、外框与边框 | —（不进方案） | 主题 |
+| 组字串（macOS） | — | 自定义方案时底色 / 字色取生效的 257 / 256，下划线仍取主题（`TyTerminalPreedit` 的底色 / 字色本来就是 `--terminal-bg` / `-fg`，方案下不能再用主题的） |
+
+- 深底实例的 3 期规则（光标色、光标下的字色跟着实例的前景 / 底色换）只在「跟随主题」下用；自定义方案下由上表决定。
+- **其后照旧**：禁用时整张表按 `:disabled` 的 opacity 预混（`PremixFrameColors`）；程序问颜色答原色；`MinimumContrastRatio` 对画出来的两个颜色调（§10.9），所以方案里对比度不够的色一样被推；换方案清两份对比度缓存（色表签名变了）。
+- 16–255 不进方案；OSC 4 改它们照旧。
+
+#### 11.1.5 明暗配对
+
+- `ColorSchemePaired = False`：一直用 `ColorScheme`。
+- `ColorSchemePaired = True`：主题是浅的用 `ColorScheme`，深的用 `DarkColorScheme`。
+- **「主题是深是浅」看主题，不看方案**：取本实例「跟随主题」时会用的底色（`TyTerminal` 的 `background`，带本实例的 `StyleClass` / `StyleOverride`），按 tycss 三参数 `on()` 同一条规则判断——Rec.601 亮度 > 0.5 为浅，恰好 0.5 算深（`Css.Values.pas`，§11 的 3 期修正）。不看 `TTyStyleModel.Mode` 的名字：单模式的深色皮肤没有 `dark` 这个模式名，用户把 `--terminal-bg` 调深也该换边。
+- 主题换明暗 → 选中的那一边变了 → 色表变了 → 通知 Core（§11.1.6）。没配对时换明暗色表不变，不通知（和 3 期「主题变了但颜色没变不报」同一条）。
+
+#### 11.1.6 什么时候通知 Core
+
+- 色表的缓存键（今天是 模型、`ThemeVersion`、类、`StyleOverride`）加上：`ColorSource`、`ColorSchemePaired`、两个方案各自的修订号（每次 `OnChange` 加一）。明暗配对选哪边由主题决定，已经在 `ThemeVersion` 里。
+- 通知仍只走 `EnsureThemeCurrent` 那一处：**色表逐项比，真变了才** `NotifyColorSchemeChanged`（清 OSC 覆盖色——和上游换主题一样，程序设的颜色随之丢掉；2031 开着就报一次明暗）。改一个方案里没被用到的色（`ColorSource = tsrcTheme` 时，或配对时另一边的方案）不通知、也不重画。
+- 在绘制里发现的变化照旧经消息循环再通知（3 期修正），不在绘制里发 `OnData`。
+- `.lfm` 加载中（`csLoading`）不建色表、不通知；`Loaded` 之后第一次建色表不算「变了」（和 3 期「第一次建色表不算变化」同一条）——加载本身不会清掉什么、不会发 2031。
+- 一次改多个色用 `BeginUpdate` / `EndUpdate`，只算一次；`LoadFrom*` / `Assign` / `Clear` 内部就是一次。
+- 改 `ColorSource`、`ColorSchemePaired`、方案里的色，**当场**只让色表的键失效（之后 Core 问颜色、996 都已是新的一套），「清 OSC 覆盖、报 2031、重画」经消息循环做一次（`QueueAsyncCall`，和绘制里发现的主题变化同一个开关）——宿主在一个事件处理里连着设几项（装两套、开配对、改来源），程序只收到一条 2031（计划开工前问题二第 12 条）。
+- 通知后整窗重画（色表签名变了，§3.2 的 3 期修正）。
+
+#### 11.1.7 读写 API（先只有 Windows Terminal 格式，留扩展口）
+
+```pascal
+type
+  TTyTerminalColorSchemeFormat = (tcfAuto, tcfWindowsTerminal);   { 以后加格式就加一个值和一对读写函数 }
+  ETyTerminalColorSchemeError = class(Exception)
+  public
+    property Key: string;          { 出错的键（'' = 整段文本或整套） }
+  end;
+
+  TTyTerminalColorScheme = class(TPersistent)
+  public
+    procedure LoadFromText(const AText: string; const AName: string = '';
+      AFormat: TTyTerminalColorSchemeFormat = tcfAuto);
+    procedure LoadFromFile(const AFileName: string; const AName: string = '';
+      AFormat: TTyTerminalColorSchemeFormat = tcfAuto);
+    function TryLoadFromText(const AText, AName: string; out AError: string;
+      AFormat: TTyTerminalColorSchemeFormat = tcfAuto): Boolean;
+    function TryLoadFromFile(const AFileName, AName: string; out AError: string;
+      AFormat: TTyTerminalColorSchemeFormat = tcfAuto): Boolean;
+    function SaveToText(AFormat: TTyTerminalColorSchemeFormat = tcfWindowsTerminal): string;
+    procedure SaveToFile(const AFileName: string;
+      AFormat: TTyTerminalColorSchemeFormat = tcfWindowsTerminal);
+    { 文本里有哪几套（按出现顺序；只列有字符串 name 的；单个对象就是它自己的名字，可能是 ''） }
+    class function ListSchemeNames(const AText: string;
+      AFormat: TTyTerminalColorSchemeFormat = tcfAuto): TStringArray;
+  end;
+```
+
+**读**：
+- 先去掉 UTF-8 BOM；开头是 UTF-16 的 BOM 报「不支持 UTF-16」。`\u` 转义先解成 UTF-8（认注释；引号、反斜杠、控制字符保留成转义），再交 `fpjson`，选项 `joUTF8`、`joComments`、`joIgnoreTrailingComma`。
+- 顶层对象有 `schemes` 键 → 当 `settings.json`：`schemes` 必须是数组；按出现顺序找 `name` 与 `AName` **逐字相等**（区分大小写）且 16 色齐全的第一个对象（同 WT 的 `emplace`）；`AName = ''` 时数组里恰好一套有效就取它，多于一套报「要给名字」并列出名字。其余的对象不看——别的方案里的坏颜色不连累这一套（WT 会整个文件读不进，这是有意放宽）。
+- 顶层对象没有 `schemes` 键 → 当单个方案对象；`name` 可以没有（单个文件里名字不是必需的，读进来 `Name = ''`）；`AName <> ''` 且和它的名字不同时报「找不到」。
+- 16 色必须齐（`purple` 缺了用 `magenta`，`brightPurple` 同理，两者都写了以主名为准）；`foreground` / `background` / `cursorColor` / `selectionBackground` 缺了**按 WT 的缺省补上**（`#FFFFFF` / `#000000` / `#FFFFFF` / `#FFFFFF`），读进来的方案因此和它在 WT 里一样完整（待定：计划开工前问题二第 4 条）；`CursorText`、`SelectionInactiveBackground` 读后是未设置（WT 没有这两项）。
+- 颜色必须是字符串，`#rgb` 或 `#rrggbb`，十六进制位大小写都行，前后不许有空白；别的一律报错（含 `#rrggbbaa`、`rgb(…)`、颜色名）。
+- 不认识的键不管（WT 的 schema 不许多余键，但加载器不查）。
+- **原子**：成功才整体替换（`Assign` 一个临时对象），发一次 `OnChange`；失败什么都不动、不发 `OnChange`。
+
+**写**：
+- 键的顺序照 WT 的 `ToJson`：`name`、`foreground`、`background`、`selectionBackground`、`cursorColor`，然后 16 色（`black` … `brightWhite`，5 / 13 写 `purple` / `brightPurple`）；颜色写 `#RRGGBB` 大写；四个空格缩进、`LF` 换行、末尾一个换行。
+- 前四个里未设置的不写（WT 读时按它的缺省补）；16 色有未设置的、或 `Name` 为空，报错（WT 会把这一套当无效跳过，写出去没用）。
+- `CursorText`、`SelectionInactiveBackground` 不写（WT 格式没有这两项），文档写明；系统色经 `ColorToRGB` 写成 RGB。
+- 读 → 写 → 读，方案逐项相等（除了上面丢掉的两项）。
+
+#### 11.1.8 错误处理
+
+| 情况 | 结果 |
+|---|---|
+| 不是合法 JSON（含没收尾的注释、UTF-16） | `ETyTerminalColorSchemeError`，消息带 `fpjson` 给的行列 |
+| 顶层不是对象；`schemes` 不是数组 | 报错，`Key` = `''` / `schemes` |
+| 找不到 `AName`；`AName = ''` 而有效的多于一套；一套有效的都没有 | 报错，消息列出文本里有效的名字（最多 20 个） |
+| 缺 16 色里的键 | 报错，`Key` = 第一个缺的键，消息列出全部缺的 |
+| 颜色不是字符串 / 格式不对 | 报错，`Key` = 那个键，消息带原值 |
+| 重复键 | 报错（`fpjson` 默认；jsoncpp 后者为准，§15） |
+| 文件打不开 | `LoadFromFile` 透传 RTL 的异常；`TryLoadFromFile` 返回 False 和它的消息 |
+| 写出时名字空、16 色不全 | 报错，方案不变 |
+
+- `Try*` 变体不抛（`ETyTerminalColorSchemeError` 和读文件的异常都转成 `AError`），示例和设计器用它。
+- 消息是 `resourcestring`（放 `tyControls.StrConsts`，和 3 期终端菜单同一处），进 `.po`（en + zh_CN）。
+
+#### 11.1.9 设计器、`.lfm`、示例
+
+- 对象查看器里改 `ColorSource` / `ColorSchemePaired`、展开两个方案改颜色；设计期预览照这一套画（设计期本来就画色表）。
+- `.lfm` 里只写改过的：`ColorSource = tsrcScheme`、`ColorScheme.Name = 'Campbell'`、`ColorScheme.Red = 2035653` 之类。改颜色不改别的属性，`Loaded` 里不往 published 字段写派生值（[[loaded-sync-clobbers-streamed-values]]）。
+- 设计器右键菜单「导入 Windows Terminal 配色…」「导出…」（待定：计划开工前问题一第 2 条；建议做，否则设计器里只能一格一格填 22 个颜色）：选文件 → 一套就直接导入、多套先选名字（`InputCombo`）→ 写进 `ColorScheme`（配对时再问写哪一边）→ 标记窗体已修改。
+- **示例**：带 Windows Terminal 自带的七套（Campbell、One Half Dark / Light、Solarized Dark / Light、Tango Dark / Light），原样取自 `wt:src/cascadia/TerminalSettingsModel/defaults.json`（MIT，Microsoft；Solarized 原作 Ethan Schoonover，MIT，已核 `altercation/solarized` 的 `LICENSE`；One Half 原作 Son A. Pham，MIT，已核 `sonph/onehalf` 的 `LICENSE.txt`；Tango 调色板由 Tango Desktop Project 放进公有领域），放 `examples/terminal/colorschemes/windows-terminal.json`（`settings.json` 的形状，只有 `schemes`），notices 加一节（待定：计划开工前问题一第 3 条）。下拉：跟随主题 / 七套单套 / 三对明暗（One Half、Solarized、Tango）；「导入…」读任意 WT 文件，一套或多套都加进下拉。不从 iTerm2-Color-Schemes 带（§11.1.2）；文档里告诉用户那里的 `windowsterminal/` 目录可以直接导入。
+
+#### 11.1.10 与 WT、xterm.js 不同的地方（进 §15）
+
+- 颜色的十六进制位严格检查（WT 用 `stoul` 解，`#12345g` 算 `05`）。
+- 重复键报错（jsoncpp 后者为准）。
+- 按名取时只校验选中的那一套，别的方案的坏颜色不连累（WT 整个文件读不进）。
+- `purple` + `magenta` 都写了又缺一个主名：报缺键（WT 会数满 16 个、留一色未初始化）。
+- 单个方案对象可以没有 `name`（WT 的 `schemes` 里没名字的无效）。
+- 未设置的光标下字色取生效的底色（xterm 缺省是常量黑，§11.1.2）；未设置的光标取生效的前景（xterm / WT 缺省白）——只在方案没设这两项时有区别，从 WT 读进来的方案光标一定有值。
+- 写出时丢掉 `CursorText`、`SelectionInactiveBackground`（WT 格式没有）。
+
+#### 11.1.11 i18n
+
+- 库：读写错误消息（§11.1.8）进 `tyControls.StrConsts` 的 `resourcestring`，`languages/tycontrols.strconsts.{en,zh_CN}.po` 同步；设计器菜单项（若做）进 `designtime` 的 `.po`。
+- 示例：新下拉的标签、「跟随主题」「导入…」、三对的显示名、导入失败的提示，进 `languages/terminal_example.zh_CN.json` / `.po`。方案名（Campbell、Solarized Dark…）是专名，不翻。
+
+#### 11.1.12 测试（6 期）
+
+- 纯函数（颜色串、转义预解码、读、写）给输入 / 期望表：WT 文档与源码给出的每一条规则一例以上；`defaults.json`（`4e2b8bd9` 的原样一份作夹具，带 `//` 注释、尾逗号、CRLF、一个 `\u` 转义）里 16 套全部读得进、名字与顺序对，示例带的七套逐色对（期望值由测试里手写的 `$RRGGBB` 表给，不经 `fpjson`）；读 → 写 → 读逐项相等；失败原子。
+- 控件：取色优先级逐槽（方案设 / 没设 × 主题明 / 暗）；OSC 覆盖在方案之上；996 / 2031 按实际底色答；换方案、改一色、`BeginUpdate` 批量、配对随主题换边各只通知一次，没配对时换明暗不通知；`.lfm` 往返、加载中不发任何 `OnData`；RTTI 守卫扩到方案对象的子属性；最低对比度、禁用预混、选区 0.3 在方案下的像素。
+- 示例：下拉里有七套和三对，选中后控件的色表等于那一套；导入坏文件时状态栏提示、控件不变。
+- 每条判据写「在哪个变异下必须红」，期末集中变异（计划）。
+
 ---
 
 ## 12. 示例 `examples/terminal`
@@ -1373,6 +1588,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - **实现期修正（3 期）**：notices 的 xterm.js 一节标题加了三个文件——`tyControls.Terminal.Keyboard.pas`（`Keyboard.ts`、`Clipboard.ts` 的粘贴两函数、第三层 Shift 判定）、`tyControls.Terminal.Render.pas`（颜色解析、256 色表、自绘字形的光栅化逻辑）、`tyControls.Terminal.CustomGlyphs.inc`（自绘字形数据，出自 `addon-webgl`，另列 addon 的版权行 2018 / 2021）。控件单元 `tyControls.Terminal.pas` 是自己写的，只照上游的逻辑、单元头注明出处行号。
 - **实现期修正（4 期）**：notices 的 xterm.js 一节标题加两个单元——`tyControls.Terminal.Selection.pas`（`SelectionService.ts`、`SelectionModel.ts`，外加 `addon-clipboard` 的 OSC 52 规则）、`tyControls.Terminal.Links.pas`（`addon-web-links` 的 `WebLinkProvider.ts` / `WebLinksAddon.ts`，`OscLinkProvider.ts`、`Linkifier.ts`）；两个 addon 自己的版权行（addon-web-links 2017、addon-clipboard 2023）并进那一节，发版守卫逐个查标题。控件拆出来的五个 include 是自己写的，不进标题。i18n：终端菜单的「Clear」和图片集合对话框的「Clear」同一个 msgid，库和示例的 `.po` 里各带 `msgctxt`，各有各的译文。
 - **实现期修正（5 期）**：notices 的 xterm.js 一节标题加 `tyControls.Terminal.Buffer.Reflow.inc`（`BufferReflow.ts`、`Buffer.ts` 的 `_reflow*`）与 `tyControls.Terminal.Luminance.inc`（`Color.ts` 的公式在 node 里算出的表）；自绘字形那句的区段改成实际范围。发版守卫逐个查。
+- **6 期新增（2026-09-30 用户拍板）**：新单元 `tyControls.Terminal.ColorScheme.pas` 是自己写的（读写 WT 格式、取色语义照 xterm `ThemeService.ts`，单元头注明出处行号），不进 xterm.js 一节的标题。示例带的七套方案取自 Windows Terminal 的 `defaults.json`（MIT，Microsoft），notices 加一节「Windows Terminal color schemes — `examples/terminal/colorschemes/`」：WT 的 MIT 全文与版权行，外加 Solarized（Ethan Schoonover，MIT）、One Half（Son A. Pham，MIT）两行版权与「Tango 调色板在公有领域」一句；「只在带上示例的这个目录时才要」。发版守卫查这一节与文件随示例发出。`iTerm2-Color-Schemes` 不打包（单套许可归各作者，§11.1.2）。
 
 ---
 
@@ -1432,6 +1648,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 上游 `_reflowSmaller` 的负下标 bug 不照搬：满滚回时变窄不冲掉底部几行（§1.1 第 20 条）。
 - 行内存回收当场做完，上游在空闲时分批（§6.2）。
 
+**6 期新增（2026-09-30 用户拍板）**：独立配色方案（§11.1）和 Windows Terminal、xterm.js 不同的七处，逐条见 §11.1.10（严格的十六进制、重复键报错、只校验选中的那一套、别名的怪情况报缺键、单个对象可无名、未设置的光标与光标下字色取生效的前景 / 底色、写出丢两项）。
+
 **不做**（以后要再单独立项）：
 
 - 屏幕阅读器（§1.1 第 1 条：LCL 默认构建里没有任何 widgetset 桥接）。
@@ -1469,6 +1687,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 - 对比度夹具只在 Win64（`Extended` = `Double`）上证明逐位相同；x86_64-linux 上未标类型的实常量是 80 位 Extended、i386 上 x87 全程扩展精度，那两处要真机跑 `TTyTerminalRenderTests`（有类型的常量已保留；i386 只能要求 SSE2 编译）。
 - 3–5 期的真机项合成一份：`docs/superpowers/plans/2026-09-29-terminal-acceptance.md`（91 项，含两轮审查补的第 80–91 项）。
 
+**6 期新增（2026-09-30 用户拍板）**：配色方案的真机项接着验收文档编号（第 92 项起，6 期计划末尾列出、收尾时并进验收文档）：示例里切方案与明暗配对、设计器里改方案并存盘重开、导入真实的 WT `settings.json`（带注释、尾逗号、BOM、中文名）、方案下的 OSC 改色与 2031、最低对比度、禁用态、各 widgetset 下系统色（`clWindow` 等）解出来的样子。
+
 ---
 
 ## 17. 开工前要定的问题
@@ -1482,6 +1702,7 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 3. **字体从哪来**。建议：主题键 `TyTerminal` 的 font-family / font-size（token 默认 `monospace` + 基础字号），实例覆盖按「字体覆盖通道」需求的规则就地实现（`ParentFont = False` 且字段非出厂值才生效），那个需求落地后并入公共 helper（§10.3）。
 4. **16 色默认值**。深底用 xterm.js 的 Tango（已核实，`xterm:src/browser/Types.ts:183-203`）。浅底那套建议：同色相、逐色调暗到对白底对比度 ≥ 4.5:1（0 黑、7 白、8 亮黑、15 亮白除外），3 期用脚本算出后写死进 light.tycss，出 17 主题截图给你拍板。
    **实现期修正（3 期）**：按公式做了，字面「对白底 ≥ 4.5:1」达标（最差 3 号 4.52:1）；但各皮肤的浅底不是纯白，3 号色落到实际 `--surface` 上最差 xp 3.70:1、macos 3.82、breeze 3.96（其余 ≥ 4.04）。主控决定暂按（c）维持，5 期 `MinimumContrastRatio` 兜底；最终验收时看截图（`docs/superpowers/plans/2026-09-29-terminal-phase-3-shots/`，含 xp / macos / breeze 的 3 号色放大样例和 7 / 15 号色放大样例）请用户在（a）以最暗浅底重算、（b）终端底色改用更白的 token、（c）维持 三者中定；7 / 15 在浅底上几乎看不见，同一次定要不要调。
+   **6 期注（2026-09-30）**：有了独立配色方案（§11.1），验收文档的 D1（3 号色）、D2（7 / 15 号色）表述改成「**默认跟随主题；看不清可换方案**」——主题的浅底 16 色仍是默认、仍待用户在（a）/（b）/（c）与调不调 7 / 15 之间定；嫌主题的浅底色看不清的宿主，可以把单个终端换成一套自定义方案（比如 Tango Light、Solarized Light），或打开 `MinimumContrastRatio`。决定本身没变，只是多了一条出路。
 5. **复制粘贴快捷键**。建议 Win / Linux：Ctrl+Shift+C / V 和 Ctrl+Insert / Shift+Insert；macOS：Cmd+C / V；Ctrl+C 永远发给程序。
 6. **Tab 和窗体快捷键**。终端默认吞掉 Tab 和所有有编码的键，焦点只能靠鼠标或宿主放行的键离开；`OnShortcutQuery` 让宿主逐键放行（§9.4）。要不要给一个默认放行的键（比如 Ctrl+Tab）？建议不给，交宿主。
 7. **1007**。建议只做属性 `AlternateScroll`、不认 DECSET 1007，保持和上游逐位一致（§9.5.4）。
@@ -1510,6 +1731,8 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
 4. 自绘字形扩到 Powerline 与盲文（按建议，§10.5）。
 5. 光标所在的那段默认不折，`Core.ReflowCursorLine` 可开（按建议，§6.2）。
 另外期末审查后主控定了三条（用户验收时可改）：上游 `_reflowSmaller` 的负下标 bug 修掉（§6.2）；两条没达标的性能目标按实测改写（§18）；改尺寸合并保留，Win32 真拖动的效果进真机验收。
+
+**6 期新增（2026-09-30 用户拍板）**：用户定了独立配色方案的七条（§11.1.1），不再讨论。计划开工前问题一里另有三条等用户答（明暗配对的属性形态、设计器右键导入导出、示例带哪几套），用户没回复前按建议做，验收时可改；结论写回 §11.1 原处。验收文档的决定清单 D1 / D2 按上面第 4 条的 6 期注改表述，D17（最低对比度的默认值）的「另一个做法」里加一句「或换一套方案」。
 
 ### 17.2 实现层面的（计划里定，不必问）
 
@@ -1587,4 +1810,11 @@ Pascal 侧读夹具照 AdvChart：`ExtractFilePath(ParamStr(0)) + 'fixtures' + P
   - 一行一行滚：~~每帧耗时 ≤ 基线的 1/4~~ 每帧画的行数 ≤ 3，且耗时不劣于基线（6.94 ms）。实测每帧 2.00 行，离屏 4.78 ms、走 `Paint` 6.9 ms：过。原目标（≤ 1.74 ms）要在屏幕上直接滚（环形表面、`ScrollWindowEx`），列为以后。
   - 50 MB 灌入：~~两次绘制的最长间隔 ≤ 50 ms~~ 两次绘制的间隔 ≤ 约 90 ms（一轮 50 ms 的解析、一帧整屏新行 15–20 ms、贴上屏后 DWM 占的十几毫秒），且不劣于基线。实测中位 52.6 ms、最长 79–110 ms（两次），基线实际是前 3.4 秒不画：中位过，最长偶有尖峰超过 90 ms；吞吐 5 MB/s，低于不画时的 10–12 MB/s——这是灌入时窗口不再被饿住的代价。要再快得让整屏新行更便宜（很快滚走的行不画），列为以后。
   - 冷填充：~~每个字形 ≤ 基线的 1/3~~ 走 A 路线：每个 ≤ 基线的 1/2（实测 ASCII 0.50、CJK 0.59（五次的中位；这台机器此时负载起伏大，单次 0.48–0.70，Task 9 时量的是 0.47 / 0.53））。在 A 之上再做 B（终端自己的光栅路径、度量挪进同一个 DC）列为以后。
+
+### 6 期：独立配色方案（6 期新增（2026-09-30 用户拍板））
+
+- 新单元 `tyControls.Terminal.ColorScheme`：方案对象、Windows Terminal JSON 的读写（单个对象、`settings.json` 的 `schemes` 按名取）、错误处理；控件的 `ColorSource`、`ColorScheme`、明暗配对；色表插在 OSC 覆盖之下、主题之上（§11.1）。
+- 设计器：对象查看器里改，`.lfm` 往返；（用户同意时）右键导入 / 导出。
+- 示例：Windows Terminal 自带的七套 + 三对明暗、「导入…」；notices 一节。
+- **做完能看到**：示例里把终端换成 Solarized Dark，整窗连内边距一起换色，换皮肤不影响它；选「Tango（明暗）」再拨暗色开关，终端跟着换成 Tango Dark；导入一个 WT 的 `settings.json` 按名选出一套；程序 `printf '\e]11;#203040\a'` 仍盖过方案、`\e]111\a` 回到方案的底色；和 1–5 期一起真机验收。
 
