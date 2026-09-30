@@ -108,6 +108,7 @@ type
     FProblemMarks: TFPList;            { the gutter marks ShowProblems placed }
     FAskCount: Integer;
     FLastAsk: string;
+    FLastAskType: TMsgDlgType;
     FPrompting: Boolean;
     FPendingOpen: string;
     procedure OpenPending(Data: PtrInt);
@@ -130,7 +131,8 @@ type
     procedure ClearProblemMarks;
     procedure SetStatus(const AText: string);
     function DisplayName: string;
-    function Ask(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
+    function Ask(const AMsg: string; AButtons: TMsgDlgButtons;
+      AType: TMsgDlgType = mtConfirmation): TModalResult;
   public
     class var PromptAnswerForTest: TModalResult;   { FOR THE TESTS: mrNone = really ask }
     class var SaveAsNameForTest: string;           { FOR THE TESTS }
@@ -148,6 +150,7 @@ type
       message it was given }
     property AskCount: Integer read FAskCount;
     property LastAsk: string read FLastAsk;
+    property LastAskType: TMsgDlgType read FLastAskType;
     property Look: TTbEditorColors read FLook;
     property Doc: TTbDocument read FDoc;
     property Kit: TTyCssEditKit read FKit;
@@ -277,15 +280,18 @@ end;
 
 { ---- asking ---- }
 
-function TTbMainForm.Ask(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
+{ AType: a question is mtConfirmation; a failure to open or save is reported as mtError }
+function TTbMainForm.Ask(const AMsg: string; AButtons: TMsgDlgButtons;
+  AType: TMsgDlgType): TModalResult;
 begin
   FLastAsk := AMsg;
+  FLastAskType := AType;
   if PromptAnswerForTest <> mrNone then
   begin
     Inc(FAskCount);
     Exit(PromptAnswerForTest);
   end;
-  Result := TyMessageDlg(AMsg, mtConfirmation, AButtons, 0);
+  Result := TyMessageDlg(AMsg, AType, AButtons, 0);
 end;
 
 function TTbMainForm.ConfirmDiscard: Boolean;
@@ -376,7 +382,7 @@ begin
   except
     on E: Exception do
     begin
-      Ask(Format(rsTbOpenFailed, [AFileName, E.Message]), [mbOK]);
+      Ask(Format(rsTbOpenFailed, [AFileName, E.Message]), [mbOK], mtError);
       { only a file that is gone leaves the list: one another program holds open, or a
         share that is not there right now, is still the user's file }
       if not FileExists(AFileName) then
@@ -410,7 +416,7 @@ begin
   except
     on E: Exception do
     begin
-      Ask(Format(rsTbSaveFailed, [AFileName, E.Message]), [mbOK]);
+      Ask(Format(rsTbSaveFailed, [AFileName, E.Message]), [mbOK], mtError);
       Exit(False);
     end;
   end;
@@ -698,7 +704,7 @@ begin
   except
     on E: Exception do
     begin
-      Ask(Format(rsTbOpenFailed, [fname, E.Message]), [mbOK]);
+      Ask(Format(rsTbOpenFailed, [fname, E.Message]), [mbOK], mtError);
       Exit;
     end;
   end;

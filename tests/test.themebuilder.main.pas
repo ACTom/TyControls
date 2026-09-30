@@ -6,7 +6,7 @@ unit test.themebuilder.main;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Controls, tyControls.Controller, tbmain;
+  Classes, SysUtils, fpcunit, testregistry, Controls, Dialogs, tyControls.Controller, tbmain;
 
 type
   TTbMainFormTests = class(TTestCase)
@@ -54,6 +54,7 @@ type
     procedure TestAnAmpersandInARecentPathIsShown;
     procedure TestTheSideBarShowsItsHints;
     procedure TestTheMarksDoNotTakeTheBookmarkImages;
+    procedure TestAFailureIsAnErrorNotAQuestion;
   end;
 
 implementation
@@ -931,6 +932,29 @@ begin
   AssertEquals('a mark', 1, FForm.Editor.Marks.Count);
   AssertTrue('F26: the mark has the problem images', FForm.Editor.Marks[0].ImageList = FForm.GutterIcons);
   AssertTrue('F26: the bookmarks do not', FForm.Editor.BookMarkOptions.BookmarkImages <> FForm.GutterIcons);
+end;
+
+{ A file that cannot be opened or saved is reported with the error sign, not the question
+  mark every message used to wear; a question (reload?) keeps the question mark. }
+procedure TTbMainFormTests.TestAFailureIsAnErrorNotAQuestion;
+var
+  f: string;
+begin
+  AssertFalse('a missing file', FForm.OpenFile(FDir + 'nowhere.tycss'));
+  AssertEquals('F27: opening failed: an error', Ord(mtError), Ord(FForm.LastAskType));
+  f := FDir + 'q.tycss';
+  WriteBytes(f, 'TyButton { background: #111111; }'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  TTbDocument.FailWriteForTest := True;
+  try
+    AssertFalse('the save fails', FForm.SaveDocument);
+  finally
+    TTbDocument.FailWriteForTest := False;
+  end;
+  AssertEquals('F27: saving failed: an error', Ord(mtError), Ord(FForm.LastAskType));
+  WriteBytes(f, 'TyButton { background: #222222; }'#10#10);
+  FForm.CheckDiskNow;
+  AssertEquals('F27: the reload is a question', Ord(mtConfirmation), Ord(FForm.LastAskType));
 end;
 
 initialization
