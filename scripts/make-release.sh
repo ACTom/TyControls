@@ -87,8 +87,8 @@ add_tree themes "" tycss jpg jpeg png webp bmp gif svg
 echo "-- languages (i18n .po/.pot catalogs; .lpk EnableI18N points here)"
 add_tree languages "" po pot
 
-echo "-- docs (excluding docs/superpowers)"
-add_tree docs "/superpowers/" md png svg gif
+echo "-- docs (excluding docs/superpowers and the gallery -- screenshots for the web pages)"
+add_tree docs "/superpowers/|/gallery" md png svg gif
 
 echo "-- examples (source only)"
 # Image extensions match the themes rule above: examples/theming keeps its own skin plus the
