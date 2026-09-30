@@ -50,7 +50,7 @@ type
 implementation
 
 uses
-  FileUtil, IniFiles, Graphics, fpjson, jsonparser, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
+  Forms, FileUtil, IniFiles, Graphics, fpjson, jsonparser, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, test.themebuilder.golden;
 
 const
@@ -63,8 +63,22 @@ type
 var
   GMainSeq: Integer = 0;
 
+{ TSynCompletion builds its popup form when it is created, and that needs the widgetset
+  (the tool and the IDE always have one; this console runner does not until asked). Asked
+  once, the first time a test here needs it -- these suites run after the rest. }
+var
+  GWidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if GWidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  GWidgetSetReady := True;
+end;
+
 procedure TTbMainFormTests.SetUp;
 begin
+  NeedWidgetSet;
   Inc(GMainSeq);
   FDir := IncludeTrailingPathDelimiter(GetTempDir(False)) +
     Format('tb1-main-%d-%d', [GetProcessID, GMainSeq]) + PathDelim;
@@ -622,7 +636,7 @@ var
   obj: TJSONObject;
   files, src, names: TStringList;
   i, j, p: Integer;
-  unitName, t, rs: string;
+  uname, t, rs: string;
   inRs: Boolean;
 begin
   names := TStringList.Create;
@@ -632,7 +646,7 @@ begin
   try
     for i := 0 to files.Count - 1 do
     begin
-      unitName := LowerCase(ChangeFileExt(ExtractFileName(files[i]), ''));
+      uname := LowerCase(ChangeFileExt(ExtractFileName(files[i]), ''));
       src.LoadFromFile(files[i]);
       inRs := False;
       for j := 0 to src.Count - 1 do
@@ -650,7 +664,7 @@ begin
           if (Copy(t, 1, 2) = 'rs') and (p > 0) then
           begin
             rs := LowerCase(Trim(Copy(t, 1, p - 1)));
-            names.Add(unitName + '.' + rs);
+            names.Add(uname + '.' + rs);
           end
           else if Copy(t, 1, 1) <> '''' then
             inRs := False;   { the section ended (type, function, ...) }

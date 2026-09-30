@@ -226,6 +226,12 @@ end;
 procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
   TyDefaultController.RemoveChangeListener(@ToolThemeChanged);
+  { the editor outlives this handler: it must not call back into a window taken apart }
+  if FKit <> nil then
+    FKit.Detach;
+  Editor.OnChange := nil;
+  Editor.OnStatusChange := nil;
+  Editor.OnSpecialLineMarkup := nil;
   RefreshTimer.Enabled := False;
   WatchTimer.Enabled := False;
   ClearProblemMarks;
@@ -303,7 +309,7 @@ procedure TTbMainForm.UpdateStatusPosition;
 var
   enc: string;
 begin
-  if Status.Panels.Count < 3 then Exit;
+  if (FDoc = nil) or (Status.Panels.Count < 3) then Exit;
   Status.Panels[1].Text := Format(rsTbLineCol, [Editor.LogicalCaretXY.Y, Editor.LogicalCaretXY.X]);
   if FDoc.HasBom then enc := 'UTF-8 BOM' else enc := 'UTF-8';
   Status.Panels[2].Text := TbLineEndingName(FDoc.LineEnding) + ' · ' + enc;
@@ -330,12 +336,12 @@ end;
 
 procedure TTbMainForm.NewFromBuiltin(const AName: string);
 var
-  text: string;
+  css: string;
 begin
-  text := TbFromBuiltin(AName);
-  if text = '' then Exit;
+  css := TbFromBuiltin(AName);
+  if css = '' then Exit;
   if not ConfirmDiscard then Exit;
-  FDoc.NewUntitled(text, AName);
+  FDoc.NewUntitled(css, AName);
   LoadEditor(FDoc.EditorText);
 end;
 
@@ -368,7 +374,7 @@ end;
 
 function TTbMainForm.SaveTo(const AFileName: string): Boolean;
 var
-  hint: string;
+  regen: string;
 begin
   try
     FDoc.SaveToFile(AFileName, Editor.Lines);
@@ -385,9 +391,9 @@ begin
   UpdateTitle;
   UpdateStatusPosition;
   RefreshNow;   { the folder may have changed: url() resolves again }
-  hint := FDoc.RegenerateHint;
-  if hint <> '' then
-    SetStatus(Format(rsTbRegenerate, [hint]))
+  regen := FDoc.RegenerateHint;
+  if regen <> '' then
+    SetStatus(Format(rsTbRegenerate, [regen]))
   else
     SetStatus(rsTbSaved);
   Result := True;
@@ -395,10 +401,10 @@ end;
 
 function TTbMainForm.SaveAs: Boolean;
 var
-  name: string;
+  fname: string;
 begin
   if SaveAsNameForTest <> '' then
-    name := SaveAsNameForTest
+    fname := SaveAsNameForTest
   else
   begin
     DlgSave.Filter := rsTbFilter;
@@ -414,9 +420,9 @@ begin
       DlgSave.FileName := FDoc.FileName;
     if not DlgSave.Execute then
       Exit(False);
-    name := DlgSave.FileName;
+    fname := DlgSave.FileName;
   end;
-  Result := SaveTo(name);
+  Result := SaveTo(fname);
 end;
 
 function TTbMainForm.SaveDocument: Boolean;
@@ -460,13 +466,13 @@ end;
 
 procedure TTbMainForm.RefreshNow;
 var
-  text, err: string;
+  css, err: string;
 begin
   RefreshTimer.Enabled := False;
-  text := Editor.Lines.Text;
-  FProblems := TbCollectProblems(text, FDoc.BaseDir, FDoc.Untitled, FBaseVars);
+  css := Editor.Lines.Text;
+  FProblems := TbCollectProblems(css, FDoc.BaseDir, FDoc.Untitled, FBaseVars);
   if not TbHasParseError(FProblems) then
-    if not FPreview.LoadDocument(text, FDoc.BaseDir, err) then
+    if not FPreview.LoadDocument(css, FDoc.BaseDir, err) then
       TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, Format(rsTbPreviewKept, [err]));
   if FPreview.ModeError <> '' then
     TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, FPreview.ModeError);
@@ -605,18 +611,18 @@ end;
 { Reload after the question above: no second "save the changes?" }
 procedure TTbMainForm.ReloadKeepingCaret;
 var
-  y, top: Integer;
-  name: string;
+  y, topRow: Integer;
+  fname: string;
 begin
   y := Editor.CaretY;
-  top := Editor.TopLine;
-  name := FDoc.FileName;
+  topRow := Editor.TopLine;
+  fname := FDoc.FileName;
   try
-    FDoc.LoadFromFile(name);
+    FDoc.LoadFromFile(fname);
   except
     on E: Exception do
     begin
-      Ask(Format(rsTbOpenFailed, [name, E.Message]), [mbOK]);
+      Ask(Format(rsTbOpenFailed, [fname, E.Message]), [mbOK]);
       Exit;
     end;
   end;
@@ -624,7 +630,7 @@ begin
   if Editor.Lines.Count > 0 then
   begin
     Editor.CaretY := Max(1, Min(y, Editor.Lines.Count));
-    Editor.TopLine := Max(1, Min(top, Editor.Lines.Count));
+    Editor.TopLine := Max(1, Min(topRow, Editor.Lines.Count));
   end;
 end;
 
