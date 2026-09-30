@@ -795,7 +795,12 @@ begin
     { what the controller's Changed would do first: a two-mode theme with no mode chosen
       takes its default one (its @mode-only variables are undefined otherwise) }
     if (FController.Model.Mode = '') and (FController.Model.DefaultModeName <> '') then
-      FController.Model.SetMode(FController.Model.DefaultModeName);
+      FController.Model.SetMode(FController.Model.DefaultModeName)
+    { a document with one mode only is shown in it: a dark left over from the last
+      document would leave the switch (and the saved setting) saying dark with nothing
+      dark to show }
+    else if (Length(FController.Model.ModeNames) = 0) and (FController.Model.Mode <> '') then
+      FController.Model.SetMode('');
   except
     on E: Exception do
     begin

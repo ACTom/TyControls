@@ -46,6 +46,7 @@ type
     procedure TestTheFastProbeAgreesWithTheResolveWalk;
     procedure TestTheDropDownButtonDropsTheSampleMenu;
     procedure TestADensityTheDocumentCannotTakeIsRefused;
+    procedure TestAOneModeDocumentIsNotShownDark;
   end;
 
 const
@@ -621,6 +622,24 @@ begin
   AssertEquals('V20: the combo says so', 0, FFrame.DensityCombo.ItemIndex);
   AssertEquals('V20: the document is still shown', $123456, ButtonBg(FFrame.Controller));
   AssertEquals('V20: and why', 1, Pos(Format(rsTbDensityFailed, [rsTbDensityModern, '']), FFrame.ModeError));
+end;
+
+{ Dark was on for a two-mode document; a one-mode document comes next. It has no dark to
+  show, so the preview is not dark and the switch (off, and disabled) does not say it is --
+  it used to stay checked, and the setting saved on closing said dark. }
+procedure TTbPreviewTests.TestAOneModeDocumentIsNotShownDark;
+var
+  err: string;
+begin
+  AssertTrue(Load(TbMinimalTemplate));
+  AssertTrue('dark', FFrame.SetDark(True, err));
+  AssertTrue('the switch says dark', FFrame.DarkSwitch.Checked);
+  AssertTrue(Load(cMarkerDoc));
+  AssertFalse('V21: not dark', FFrame.IsDark);
+  AssertFalse('V21: the switch says so', FFrame.DarkSwitch.Checked);
+  AssertFalse('V21: and is off', FFrame.DarkSwitch.Enabled);
+  AssertTrue(Load(TbMinimalTemplate));
+  AssertFalse('V21: the next two-mode document starts in its default mode', FFrame.IsDark);
 end;
 
 initialization
