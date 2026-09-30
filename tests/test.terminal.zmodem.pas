@@ -42,6 +42,17 @@ type
     procedure TestOverAndOut;                                { S7 }
     procedure TestZcommandIsRefused;                         { S8 }
     procedure TestAZeofAtTheWrongPlace;                      { S9 }
+    { Task 8: the terminal glue }
+    procedure TestSafeFileNames;
+    procedure TestUniqueFileNames;
+    procedure TestDetection;                                 { T1 }
+    procedure TestNothingIsSentBeforeTheAnswer;              { T2 }
+    procedure TestAWholeDownload;                            { T3 }
+    procedure TestProgressIsThrottled;                       { T4 }
+    procedure TestFiveCtrlXCancel;                           { T5 }
+    procedure TestRefusedBehindConPty;                       { T6 }
+    procedure TestResetMidDownload;                          { T7 }
+    procedure TestUploadIsThrottled;                         { T8 }
   end;
 
 { bytes as two-digit hex separated by spaces (failure messages) }
@@ -50,7 +61,8 @@ function ZmHex(const S: RawByteString): string;
 implementation
 
 uses
-  Math, StrUtils, fpjson, md5, uzmodemsession, test.terminal.oracle;
+  Math, StrUtils, fpjson, md5, tyControls.Terminal.Buffer, tyControls.Terminal.Core, uzmodemsession,
+  uzmodemterm, test.terminal.oracle;
 
 function ZmHex(const S: RawByteString): string;
 var
@@ -1419,6 +1431,492 @@ begin
     r.Free;
     log.Free;
     sink.Free;
+  end;
+end;
+
+{ ---- Task 8: the terminal glue -------------------------------------------------------------- }
+
+procedure TTyTerminalZmodemTests.TestSafeFileNames;
+
+  procedure Check(const AIn, AWant: string);
+  begin
+    AssertEquals('"' + AIn + '"', AWant, ZmSafeFileName(AIn));
+  end;
+
+begin
+  Check('../../etc/passwd', 'passwd');
+  Check('a\b\c.txt', 'c.txt');
+  Check('C:\x\y.bin', 'y.bin');
+  Check('a:b*c?"<>|.txt', 'a_b_c_____.txt');
+  Check('name. . ', 'name');
+  Check('CON', '_CON');
+  Check('con.txt', '_con.txt');
+  Check('LPT1.log', '_LPT1.log');
+  Check('', 'file');
+  Check('..', 'file');
+  Check('.', 'file');
+  Check(#$E6#$8A#$A5#$E5#$91#$8A' 2026.pdf', #$E6#$8A#$A5#$E5#$91#$8A' 2026.pdf');
+  Check('a'#1'b'#31'c'#127'd', 'a_b_c_d');
+end;
+
+function NewTempDir: string;
+begin
+  Result := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyzm-' + IntToStr(GetTickCount64) + '-'
+    + IntToStr(Random(1000000));
+  ForceDirectories(Result);
+end;
+
+procedure RemoveTempDir(const ADir: string);
+var
+  sr: TSearchRec;
+begin
+  if FindFirst(IncludeTrailingPathDelimiter(ADir) + '*', faAnyFile, sr) = 0 then
+  begin
+    repeat
+      if (sr.Name <> '.') and (sr.Name <> '..') then
+        DeleteFile(IncludeTrailingPathDelimiter(ADir) + sr.Name);
+    until FindNext(sr) <> 0;
+    FindClose(sr);
+  end;
+  RemoveDir(ADir);
+end;
+
+function FilesIn(const ADir: string): Integer;
+var
+  sr: TSearchRec;
+begin
+  Result := 0;
+  if FindFirst(IncludeTrailingPathDelimiter(ADir) + '*', faAnyFile and not faDirectory, sr) = 0 then
+  begin
+    repeat
+      Inc(Result);
+    until FindNext(sr) <> 0;
+    FindClose(sr);
+  end;
+end;
+
+procedure Touch(const APath: string);
+begin
+  with TFileStream.Create(APath, fmCreate) do
+    Free;
+end;
+
+procedure TTyTerminalZmodemTests.TestUniqueFileNames;
+var
+  d: string;
+begin
+  d := NewTempDir;
+  try
+    Touch(d + PathDelim + 'x.txt');
+    Touch(d + PathDelim + 'x (1).txt');
+    AssertEquals(d + PathDelim + 'x (2).txt', ZmUniqueFileName(d, 'x.txt'));
+    Touch(d + PathDelim + 'x');
+    AssertEquals(d + PathDelim + 'x (1)', ZmUniqueFileName(d, 'x'));
+    AssertEquals('free', d + PathDelim + 'y.txt', ZmUniqueFileName(d, 'y.txt'));
+  finally
+    RemoveTempDir(d);
+  end;
+end;
+
+type
+  { a core with the ZModem handler on it: its bytes out, its clock, its answers }
+  TGlueRig = class
+  public
+    Core: TTyTerminalCore;
+    Zm: TZmodemStreamHandler;
+    Sent: RawByteString;
+    SentBefore: Integer;
+    Now_: Double;
+    Dir: string;
+    AutoAccept: Boolean;
+    Uploads: TStringList;
+    Downloads, UploadAsks, Finished: Integer;
+    LastResult: TZmResult;
+    Allow: Integer;
+    constructor Create;
+    destructor Destroy; override;
+    function Clock: Double;
+    function CanSend: Integer;
+    procedure OnData(Sender: TObject; const AData: RawByteString);
+    procedure OnDownload(Sender: TObject);
+    procedure OnUpload(Sender: TObject);
+    procedure OnFinished(Sender: TObject; AResult: TZmResult; const AMessage: string);
+    procedure OnClaimed(Sender: TObject; const AData: RawByteString);
+    function Line(AY: Integer): string;
+    function Screen: string;
+    procedure WriteIn(const S: RawByteString; APiece: Integer; AStepMs: Double = 0);
+  end;
+
+constructor TGlueRig.Create;
+begin
+  inherited Create;
+  Core := TTyTerminalCore.Create(80, 24);
+  Core.OnData := @OnData;
+  Core.OnClaimedInput := @OnClaimed;
+  Zm := TZmodemStreamHandler.Create(Core);
+  Zm.Clock := @Clock;
+  Zm.CanSend := @CanSend;
+  Zm.OnDownloadRequest := @OnDownload;
+  Zm.OnUploadRequest := @OnUpload;
+  Zm.OnFinished := @OnFinished;
+  Uploads := TStringList.Create;
+  Dir := NewTempDir;
+  Allow := MaxInt;
+  Now_ := 1000;
+end;
+
+destructor TGlueRig.Destroy;
+begin
+  Zm.Free;
+  Core.Free;
+  Uploads.Free;
+  RemoveTempDir(Dir);
+  inherited Destroy;
+end;
+
+function TGlueRig.Clock: Double;
+begin
+  Result := Now_;
+end;
+
+function TGlueRig.CanSend: Integer;
+begin
+  Result := Allow;
+end;
+
+procedure TGlueRig.OnData(Sender: TObject; const AData: RawByteString);
+begin
+  Sent := Sent + AData;
+end;
+
+procedure TGlueRig.OnDownload(Sender: TObject);
+begin
+  Inc(Downloads);
+  if AutoAccept then
+    Zm.AcceptDownload(Dir);              { no message loop here: answered at once }
+end;
+
+procedure TGlueRig.OnUpload(Sender: TObject);
+begin
+  Inc(UploadAsks);
+  if AutoAccept then
+    Zm.StartUpload(Uploads);
+end;
+
+procedure TGlueRig.OnFinished(Sender: TObject; AResult: TZmResult; const AMessage: string);
+begin
+  Inc(Finished);
+  LastResult := AResult;
+end;
+
+procedure TGlueRig.OnClaimed(Sender: TObject; const AData: RawByteString);
+begin
+  Zm.UserInput(AData);
+end;
+
+function TGlueRig.Line(AY: Integer): string;
+begin
+  Result := Core.Buffer.TranslateBufferLineToString(Core.Buffer.YBase + AY, True);
+end;
+
+function TGlueRig.Screen: string;
+var
+  y: Integer;
+begin
+  Result := '';
+  for y := 0 to Core.Rows - 1 do
+    Result := Result + Line(y) + #10;
+end;
+
+procedure TGlueRig.WriteIn(const S: RawByteString; APiece: Integer; AStepMs: Double);
+var
+  p, n: Integer;
+begin
+  p := 1;
+  while p <= Length(S) do
+  begin
+    n := Min(APiece, Length(S) - p + 1);
+    Now_ := Now_ + AStepMs;
+    Core.WriteSync(Copy(S, p, n));
+    Inc(p, n);
+  end;
+end;
+
+{ sz's first bytes: "rz\r" and the ZRQINIT hex header (24 bytes) }
+function SzStart: RawByteString;
+begin
+  Result := Copy(ReadBytes(ZmFixture('one-small.sz.bin')), 1, 24);
+end;
+
+{ T1. Mutation: a header taken without its CRC checked. }
+procedure TTyTerminalZmodemTests.TestDetection;
+var
+  r: TGlueRig;
+  s, bad, rnd: RawByteString;
+  k, i: Integer;
+begin
+  s := SzStart;
+  AssertEquals('the recording starts as expected', ZmHex('rz'#13'**'#$18'B00000000000000'#13#$8A#$11), ZmHex(s));
+  r := TGlueRig.Create;
+  try
+    r.Core.WriteSync(s);
+    AssertEquals('asked', 1, r.Downloads);
+    AssertEquals('rz shown, the header not', 'rz', r.Line(0));
+    AssertTrue('claimed', r.Core.StreamClaimed);
+  finally
+    r.Free;
+  end;
+  { the header (18 bytes, then CR LF XON) cut at each of its first 20 bytes: inside it,
+    the second piece finds it; after it, the first }
+  for k := 1 to 20 do
+  begin
+    r := TGlueRig.Create;
+    try
+      r.Core.WriteSync(Copy(s, 1, 3 + k));
+      if k < 18 then
+        AssertEquals(Format('cut at %d: not yet', [k]), 0, r.Downloads)
+      else
+        AssertEquals(Format('cut at %d: whole in the first piece', [k]), 1, r.Downloads);
+      r.Core.WriteSync(Copy(s, 4 + k, MaxInt));
+      AssertEquals(Format('cut at %d: found', [k]), 1, r.Downloads);
+      AssertTrue(Format('cut at %d: claimed', [k]), r.Core.StreamClaimed);
+    finally
+      r.Free;
+    end;
+  end;
+  { a CRC that does not fit }
+  r := TGlueRig.Create;
+  try
+    bad := 'rz'#13'**'#$18'B00000000000001'#13#$8A#$11;
+    r.Core.WriteSync(bad);
+    AssertEquals('a bad CRC is not a header', 0, r.Downloads);
+    AssertFalse('not claimed', r.Core.StreamClaimed);
+    { ten megabytes of seeded random bytes, with that bad header in them now and then }
+    RandSeed := 1234;
+    rnd := '';
+    SetLength(rnd, 1024 * 1024);
+    for i := 1 to 10 do
+    begin
+      for k := 1 to Length(rnd) do
+        rnd[k] := AnsiChar(Random(256));
+      Move(bad[1], rnd[1000 * i], Length(bad));
+      r.Core.WriteSync(rnd);
+    end;
+    AssertEquals('no false detection', 0, r.Downloads + r.UploadAsks);
+  finally
+    r.Free;
+  end;
+  { rz's ZRINIT: an upload }
+  r := TGlueRig.Create;
+  try
+    r.Core.WriteSync('rz waiting to receive.' + Copy(ReadBytes(ZmFixture('one-small.rz.bin')), 1, 21));
+    AssertEquals('an upload asked for', 1, r.UploadAsks);
+    AssertEquals('no download', 0, r.Downloads);
+  finally
+    r.Free;
+  end;
+end;
+
+{ T2. Mutation: the receiver started as soon as the stream is claimed. }
+procedure TTyTerminalZmodemTests.TestNothingIsSentBeforeTheAnswer;
+var
+  r: TGlueRig;
+  h: THeaderList;
+begin
+  r := TGlueRig.Create;
+  try
+    r.Core.WriteSync(SzStart);
+    r.Core.WriteSync(SzStart);             { sz repeats itself while we ask }
+    AssertEquals('asked once', 1, r.Downloads);
+    AssertEquals('nothing sent before the answer', '', ZmHex(r.Sent));
+    r.Zm.AcceptDownload(r.Dir);
+    h := THeaderList.Create(r.Sent);
+    try
+      AssertTrue('something sent', Length(h.Types) > 0);
+      AssertEquals('ZRINIT first', ZRINIT, h.Types[0]);
+    finally
+      h.Free;
+    end;
+  finally
+    r.Free;
+  end;
+end;
+
+function FindLine(r: TGlueRig; const AText: string): Integer;
+var
+  y: Integer;
+begin
+  for y := 0 to r.Core.Rows - 1 do
+    if Pos(AText, r.Line(y)) > 0 then
+      Exit(y);
+  Result := -1;
+end;
+
+{ T3. Mutation: no Release at the end. }
+procedure TTyTerminalZmodemTests.TestAWholeDownload;
+var
+  r: TGlueRig;
+  y: Integer;
+  want: RawByteString;
+begin
+  want := ReadBytes(ZmFixture('one-small.1.src'));
+  r := TGlueRig.Create;
+  try
+    r.AutoAccept := True;
+    r.WriteIn(ReadBytes(ZmFixture('one-small.sz.bin')), 100);
+    AssertEquals('finished once', 1, r.Finished);
+    AssertTrue('ok', r.LastResult = zrOk);
+    AssertFalse('the stream is back', r.Core.StreamClaimed);
+    AssertTrue('the file is there', FileExists(r.Dir + PathDelim + 'one-small.bin'));
+    AssertTrue('its bytes', ReadBytes(r.Dir + PathDelim + 'one-small.bin') = want);
+    AssertEquals('the saved list', 1, r.Zm.LastSaved.Count);
+    y := FindLine(r, 'Received 1 file(s), 1.5 KB');
+    AssertTrue('the summary line: ' + r.Screen, y >= 0);
+    r.Core.WriteSync('$ ');
+    AssertEquals('the prompt below it', '$', Trim(r.Line(y + 1)));
+  finally
+    r.Free;
+  end;
+end;
+
+{ T4. Mutation: the 200 ms rule dropped. }
+procedure TTyTerminalZmodemTests.TestProgressIsThrottled;
+var
+  r: TGlueRig;
+  sz: RawByteString;
+begin
+  sz := ReadBytes(ZmFixture('window.sz.bin'));
+  r := TGlueRig.Create;
+  try
+    r.AutoAccept := True;
+    r.WriteIn(sz, (Length(sz) + 39) div 40, 50);
+    AssertTrue('ok', r.LastResult = zrOk);
+    AssertTrue('some progress', r.Zm.ProgressLines > 0);
+    AssertTrue(Format('at most 11 lines in 2 s, got %d', [r.Zm.ProgressLines]), r.Zm.ProgressLines <= 11);
+  finally
+    r.Free;
+  end;
+end;
+
+{ T5. Mutation: the Ctrl+X count not reset by another byte. }
+procedure TTyTerminalZmodemTests.TestFiveCtrlXCancel;
+var
+  r: TGlueRig;
+  sz: RawByteString;
+begin
+  sz := ReadBytes(ZmFixture('big-block.sz.bin'));
+  r := TGlueRig.Create;
+  try
+    r.AutoAccept := True;
+    r.WriteIn(Copy(sz, 1, 3000), 500);
+    AssertTrue('receiving', r.Zm.State = zsReceiving);
+    AssertEquals('a half file', 1, FilesIn(r.Dir));
+    r.Core.Input(#24#24'a'#24#24#24, True);
+    AssertTrue('broken run: still receiving', r.Zm.State = zsReceiving);
+    r.Core.Input(#24#24#24#24, True);
+    AssertTrue('four: still receiving', r.Zm.State = zsReceiving);
+    r.Sent := '';
+    r.Core.Input(#24, True);
+    AssertTrue('five in a row: idle', r.Zm.State = zsIdle);
+    AssertEquals('the abort sent', ZmHex(ZmAbortSequence), ZmHex(r.Sent));
+    AssertTrue('cancelled here', r.LastResult = zrCancelledHere);
+    AssertEquals('the half file deleted', 0, FilesIn(r.Dir));
+    AssertFalse('the stream is back', r.Core.StreamClaimed);
+  finally
+    r.Free;
+  end;
+end;
+
+{ T6. Mutation: WindowsPty not looked at. }
+procedure TTyTerminalZmodemTests.TestRefusedBehindConPty;
+var
+  r: TGlueRig;
+  pty: TTyTerminalWindowsPty;
+begin
+  pty.Backend := twpConPty;
+  pty.BuildNumber := 19044;
+  r := TGlueRig.Create;
+  try
+    r.Core.WindowsPty := pty;
+    r.Core.WriteSync(SzStart + 'after');
+    AssertEquals('not asked', 0, r.Downloads);
+    AssertEquals('the abort', ZmHex(ZmAbortSequence), ZmHex(r.Sent));
+    AssertTrue('the line: ' + r.Screen, FindLine(r, 'ConPTY damages binary data') >= 0);
+    AssertTrue('what followed the header shown', FindLine(r, 'after') >= 0);
+    AssertTrue('an error', r.LastResult = zrError);
+    AssertFalse('the stream is back', r.Core.StreamClaimed);
+  finally
+    r.Free;
+  end;
+  r := TGlueRig.Create;
+  try
+    r.Core.WindowsPty := pty;
+    r.Zm.RefuseBehindConPty := False;
+    r.Core.WriteSync(SzStart);
+    AssertEquals('asked as usual', 1, r.Downloads);
+  finally
+    r.Free;
+  end;
+end;
+
+{ T7. Mutation: ClaimEnded not cancelling the machine. }
+procedure TTyTerminalZmodemTests.TestResetMidDownload;
+var
+  r: TGlueRig;
+begin
+  r := TGlueRig.Create;
+  try
+    r.AutoAccept := True;
+    r.WriteIn(Copy(ReadBytes(ZmFixture('big-block.sz.bin')), 1, 3000), 500);
+    AssertEquals('a half file', 1, FilesIn(r.Dir));
+    r.Sent := '';
+    r.Core.Reset;
+    AssertEquals('the abort sent', ZmHex(ZmAbortSequence), ZmHex(r.Sent));
+    AssertEquals('the half file deleted', 0, FilesIn(r.Dir));
+    AssertTrue('idle', r.Zm.State = zsIdle);
+    AssertFalse('not claimed', r.Core.StreamClaimed);
+  finally
+    r.Free;
+  end;
+end;
+
+{ T8. Mutation: the sender not asking CanSend. }
+procedure TTyTerminalZmodemTests.TestUploadIsThrottled;
+var
+  r: TGlueRig;
+  f: string;
+  data: RawByteString;
+  before, grown: Integer;
+begin
+  r := TGlueRig.Create;
+  try
+    f := r.Dir + PathDelim + 'up.bin';
+    data := Cycle(70000);
+    with TFileStream.Create(f, fmCreate) do
+    try
+      WriteBuffer(data[1], Length(data));
+    finally
+      Free;
+    end;
+    r.Uploads.Add(f);
+    r.AutoAccept := True;
+    r.Allow := 0;
+    r.Core.WriteSync(Copy(ReadBytes(ZmFixture('one-small.rz.bin')), 1, 21));
+    AssertTrue('sending', r.Zm.State = zsSending);
+    { rz's answer to the ZFILE: from the start }
+    r.Core.WriteSync(ZmEncodeHexHeader(ZmPosHeader(ZRPOS, 0)));
+    before := Length(r.Sent);
+    r.Now_ := r.Now_ + 100;
+    r.Zm.Tick(r.Now_);
+    AssertEquals('CanSend 0: nothing more', before, Length(r.Sent));
+    r.Allow := 4096;
+    r.Now_ := r.Now_ + 100;
+    r.Zm.Tick(r.Now_);
+    grown := Length(r.Sent) - before;
+    AssertTrue('CanSend 4096: some data', grown > 0);
+    AssertTrue(Format('CanSend 4096: at most one packet over, got %d', [grown]), grown <= 4096 + 2 * ZmSendSubpacket + 16);
+  finally
+    r.Free;
   end;
 end;
 
