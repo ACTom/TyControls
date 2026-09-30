@@ -1,0 +1,798 @@
+object PreviewFrame: TTbPreviewFrame
+  Left = 0
+  Height = 600
+  Top = 0
+  Width = 560
+  ClientHeight = 600
+  ClientWidth = 560
+  TabOrder = 0
+  DesignLeft = 0
+  DesignTop = 0
+  object Tools: TTyPanel
+    Left = 0
+    Height = 36
+    Top = 0
+    Width = 560
+    Align = alTop
+    object DarkSwitch: TTyToggleSwitch
+      Left = 8
+      Height = 24
+      Top = 6
+      Width = 90
+      Caption = 'Dark'
+      OnChange = DarkSwitchChange
+    end
+    object DensityCombo: TTyComboBox
+      Left = 108
+      Height = 26
+      Top = 5
+      Width = 120
+      OnChange = DensityComboChange
+    end
+    object DisableAllCheck: TTyCheckBox
+      Left = 240
+      Height = 24
+      Top = 6
+      Width = 140
+      Caption = 'Disable all'
+      OnChange = DisableAllCheckChange
+    end
+    object ModeNote: TTyLabel
+      Left = 388
+      Height = 20
+      Top = 8
+      Width = 168
+    end
+  end
+  object Root: TTyPanel
+    Left = 0
+    Height = 564
+    Top = 36
+    Width = 560
+    Align = alClient
+    object Pages: TTyPageControl
+      Left = 0
+      Height = 564
+      Top = 0
+      Width = 560
+      Align = alClient
+      ActivePageIndex = 0
+      object TabBasic: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Basic'
+        object BtnDefault: TTyButton
+          Left = 12
+          Height = 30
+          Top = 12
+          Width = 100
+          Caption = 'Default'
+        end
+        object BtnPrimary: TTyButton
+          Left = 120
+          Height = 30
+          Top = 12
+          Width = 100
+          StyleClass = 'primary'
+          Caption = 'Primary'
+        end
+        object BtnDanger: TTyButton
+          Left = 228
+          Height = 30
+          Top = 12
+          Width = 100
+          StyleClass = 'danger'
+          Caption = 'Danger'
+        end
+        object BtnGhost: TTyButton
+          Left = 336
+          Height = 30
+          Top = 12
+          Width = 100
+          StyleClass = 'ghost'
+          Caption = 'Ghost'
+        end
+        object BtnDisabled: TTyButton
+          Left = 12
+          Height = 30
+          Top = 52
+          Width = 100
+          Enabled = False
+          Caption = 'Disabled'
+        end
+        object BtnPrimaryDisabled: TTyButton
+          Left = 120
+          Height = 30
+          Top = 52
+          Width = 140
+          Enabled = False
+          StyleClass = 'primary'
+          Caption = 'Primary, disabled'
+        end
+        object SpdGhost: TTySpeedButton
+          Left = 268
+          Height = 30
+          Top = 52
+          Width = 90
+          StyleClass = 'ghost'
+          Caption = 'Star'
+          IconFont = LucideFont
+          GlyphName = 'star'
+        end
+        object DdbMore: TTyDropDownButton
+          Left = 366
+          Height = 30
+          Top = 52
+          Width = 110
+          Caption = 'More'
+        end
+        object LblNormal: TTyLabel
+          Left = 12
+          Height = 22
+          Top = 96
+          Width = 100
+          Caption = 'Label'
+        end
+        object LblDisabled: TTyLabel
+          Left = 120
+          Height = 22
+          Top = 96
+          Width = 120
+          Enabled = False
+          Caption = 'Disabled label'
+        end
+        object LnkSample: TTyLinkLabel
+          Left = 250
+          Height = 22
+          Top = 96
+          Width = 120
+          Caption = 'Link'
+        end
+        object ChkOn: TTyCheckBox
+          Left = 12
+          Height = 24
+          Top = 128
+          Width = 120
+          Caption = 'Checked'
+          Checked = True
+        end
+        object ChkOff: TTyCheckBox
+          Left = 140
+          Height = 24
+          Top = 128
+          Width = 120
+          Caption = 'Not checked'
+        end
+        object ChkDisabled: TTyCheckBox
+          Left = 268
+          Height = 24
+          Top = 128
+          Width = 160
+          Enabled = False
+          Caption = 'Disabled'
+          Checked = True
+        end
+        object RadOn: TTyRadioButton
+          Left = 12
+          Height = 24
+          Top = 160
+          Width = 120
+          Caption = 'Chosen'
+          Checked = True
+        end
+        object RadOff: TTyRadioButton
+          Left = 140
+          Height = 24
+          Top = 160
+          Width = 120
+          Caption = 'Not chosen'
+        end
+        object TglOn: TTyToggleSwitch
+          Left = 12
+          Height = 24
+          Top = 194
+          Width = 100
+          Caption = 'On'
+          Checked = True
+        end
+        object TglOff: TTyToggleSwitch
+          Left = 140
+          Height = 24
+          Top = 194
+          Width = 100
+          Caption = 'Off'
+        end
+        object TagPlain: TTyTag
+          Left = 12
+          Height = 26
+          Top = 230
+          Width = 80
+          Caption = 'Tag'
+        end
+        object TagAccent: TTyTag
+          Left = 100
+          Height = 26
+          Top = 230
+          Width = 80
+          StyleClass = 'accent'
+          Caption = 'Accent'
+        end
+        object TagDanger: TTyTag
+          Left = 188
+          Height = 26
+          Top = 230
+          Width = 80
+          StyleClass = 'danger'
+          Caption = 'Danger'
+        end
+        object BadgeSample: TTyBadge
+          Left = 280
+          Height = 18
+          Top = 234
+          Width = 32
+          Value = 7
+        end
+        object DivSample: TTyDivider
+          Left = 12
+          Height = 22
+          Top = 270
+          Width = 420
+          Caption = 'Divider'
+        end
+      end
+      object TabInputs: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Inputs'
+        object EdtText: TTyEdit
+          Left = 12
+          Height = 28
+          Top = 12
+          Width = 240
+          Text = 'Some text'
+        end
+        object EdtHint: TTyEdit
+          Left = 264
+          Height = 28
+          Top = 12
+          Width = 240
+          TextHint = 'Placeholder'
+        end
+        object EdtDisabled: TTyEdit
+          Left = 12
+          Height = 28
+          Top = 48
+          Width = 240
+          Enabled = False
+          Text = 'Disabled'
+        end
+        object EdtReadOnly: TTyEdit
+          Left = 264
+          Height = 28
+          Top = 48
+          Width = 240
+          ReadOnly = True
+          Text = 'Read only'
+        end
+        object MemoSample: TTyMemo
+          Left = 12
+          Height = 80
+          Top = 86
+          Width = 492
+        end
+        object CmbSample: TTyComboBox
+          Left = 12
+          Height = 28
+          Top = 176
+          Width = 240
+        end
+        object SpnSample: TTySpinEdit
+          Left = 264
+          Height = 28
+          Top = 176
+          Width = 120
+          MaxValue = 100
+          Value = 42
+        end
+        object DtpSample: TTyDateTimePicker
+          Left = 12
+          Height = 30
+          Top = 214
+          Width = 240
+        end
+        object TrkSample: TTyTrackBar
+          Left = 12
+          Height = 32
+          Top = 254
+          Width = 240
+          Position = 4
+        end
+        object RatSample: TTyRating
+          Left = 264
+          Height = 32
+          Top = 254
+          Width = 150
+          Value = 3
+        end
+      end
+      object TabLists: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Lists and trees'
+        object LstSample: TTyListBox
+          Left = 12
+          Height = 150
+          Top = 12
+          Width = 160
+        end
+        object ClbSample: TTyCheckListBox
+          Left = 184
+          Height = 150
+          Top = 12
+          Width = 160
+        end
+        object TreSample: TTyTreeView
+          Left = 356
+          Height = 150
+          Top = 12
+          Width = 180
+          Items = <
+            item
+              Text = 'themes'
+            end
+            item
+              Text = 'builtin'
+              Level = 1
+            end
+            item
+              Text = 'win11.tycss'
+              Level = 2
+            end
+            item
+              Text = 'auto.tycss'
+              Level = 1
+            end
+            item
+              Text = 'assets'
+            end>
+        end
+        object LvwSample: TTyListView
+          Left = 12
+          Height = 160
+          Top = 174
+          Width = 524
+        end
+      end
+      object TabGrids: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Grids'
+        object GrdSample: TTyStringGrid
+          Left = 12
+          Height = 200
+          Top = 12
+          Width = 524
+        end
+        object VleSample: TTyValueListEditor
+          Left = 12
+          Height = 130
+          Top = 224
+          Width = 360
+        end
+      end
+      object TabContainers: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Containers and tabs'
+        object PnlSample: TTyPanel
+          Left = 12
+          Height = 80
+          Top = 12
+          Width = 160
+        end
+        object GrpSample: TTyGroupBox
+          Left = 184
+          Height = 80
+          Top = 12
+          Width = 160
+          Caption = 'Group'
+        end
+        object CrdSample: TTyCard
+          Left = 356
+          Height = 80
+          Top = 12
+          Width = 180
+          Title = 'Card'
+        end
+        object ExpSample: TTyExPanel
+          Left = 12
+          Height = 80
+          Top = 104
+          Width = 524
+          Caption = 'Expandable'
+        end
+        object TabsSample: TTyTabSet
+          Left = 12
+          Height = 36
+          Top = 196
+          Width = 524
+        end
+        object InnerPages: TTyPageControl
+          Left = 12
+          Height = 120
+          Top = 242
+          Width = 260
+          ActivePageIndex = 0
+          object InnerOne: TTyTabSheet
+            Left = 0
+            Height = 88
+            Top = 32
+            Width = 260
+            Caption = 'One'
+          end
+          object InnerTwo: TTyTabSheet
+            Left = 0
+            Height = 88
+            Top = 32
+            Width = 260
+            Caption = 'Two'
+          end
+          object InnerThree: TTyTabSheet
+            Left = 0
+            Height = 88
+            Top = 32
+            Width = 260
+            Caption = 'Three'
+          end
+        end
+        object SbxSample: TTyScrollBox
+          Left = 284
+          Height = 120
+          Top = 242
+          Width = 252
+          object SbxContent: TTyPanel
+            Left = 8
+            Height = 300
+            Top = 8
+            Width = 200
+          end
+        end
+        object SplHost: TTyPanel
+          Left = 12
+          Height = 80
+          Top = 374
+          Width = 524
+          object SplLeft: TTyPanel
+            Left = 0
+            Height = 80
+            Top = 0
+            Width = 150
+            Align = alLeft
+          end
+          object SplSample: TTySplitter
+            Left = 150
+            Height = 80
+            Top = 0
+            Width = 5
+          end
+          object SplRight: TTyPanel
+            Left = 155
+            Height = 80
+            Top = 0
+            Width = 369
+            Align = alClient
+          end
+        end
+      end
+      object TabMenus: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Menus and toolbars'
+        object MnbSample: TTyMenuBar
+          Left = 12
+          Height = 28
+          Top = 12
+          Width = 300
+          Menu = SampleMenu
+        end
+        object TbrSample: TTyToolBar
+          Left = 12
+          Height = 36
+          Top = 52
+          Width = 524
+          Align = alNone
+          object TbnOne: TTyToolButton
+            Left = 4
+            Height = 28
+            Top = 4
+            Width = 60
+            Caption = 'Build'
+          end
+          object TbnDown: TTyToolButton
+            Left = 66
+            Height = 28
+            Top = 4
+            Width = 60
+            Caption = 'Pinned'
+            Down = True
+          end
+          object TbnSep: TTyToolSeparator
+            Left = 128
+            Height = 28
+            Top = 4
+            Width = 8
+          end
+          object TbnThree: TTyToolButton
+            Left = 138
+            Height = 28
+            Top = 4
+            Width = 60
+            Caption = 'Run'
+          end
+          object TbnDisabled: TTyToolButton
+            Left = 200
+            Height = 28
+            Top = 4
+            Width = 70
+            Enabled = False
+            Caption = 'Stop'
+          end
+        end
+        object StbSample: TTyStatusBar
+          Left = 12
+          Height = 24
+          Top = 100
+          Width = 524
+          Align = alNone
+        end
+        object BtnPopup: TTyButton
+          Left = 12
+          Height = 30
+          Top = 138
+          Width = 200
+          Caption = 'Show a popup menu'
+          OnClick = BtnPopupClick
+        end
+        object BrcSample: TTyBreadcrumb
+          Left = 12
+          Height = 32
+          Top = 182
+          Width = 400
+        end
+      end
+      object TabChrome: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Window chrome'
+        object LblChromeNote: TTyLabel
+          Left = 12
+          Height = 40
+          Top = 12
+          Width = 520
+          Caption = 'The title bar, its buttons and the shadow are drawn on a real window.'
+          WordWrap = True
+        end
+        object BtnSampleWindow: TTyButton
+          Left = 12
+          Height = 30
+          Top = 60
+          Width = 220
+          Caption = 'Open a sample window'
+          OnClick = BtnSampleWindowClick
+        end
+        object ScbH: TTyScrollBar
+          Left = 12
+          Height = 18
+          Top = 108
+          Width = 300
+          Kind = sbHorizontal
+        end
+        object ScbDisabled: TTyScrollBar
+          Left = 12
+          Height = 18
+          Top = 138
+          Width = 300
+          Enabled = False
+          Kind = sbHorizontal
+        end
+        object ScbV: TTyScrollBar
+          Left = 324
+          Height = 150
+          Top = 108
+          Width = 18
+        end
+      end
+      object TabFeedback: TTyTabSheet
+        Left = 0
+        Height = 532
+        Top = 32
+        Width = 560
+        Caption = 'Feedback'
+        object PrgSample: TTyProgressBar
+          Left = 12
+          Height = 18
+          Top = 12
+          Width = 300
+          Position = 60
+          AnimationsEnabled = False
+        end
+        object PrgDisabled: TTyProgressBar
+          Left = 12
+          Height = 18
+          Top = 40
+          Width = 300
+          Enabled = False
+          Position = 30
+          AnimationsEnabled = False
+        end
+        object CprSample: TTyCircularProgress
+          Left = 324
+          Height = 96
+          Top = 12
+          Width = 96
+          Position = 68
+        end
+        object ActSample: TTyActivityIndicator
+          Left = 436
+          Height = 48
+          Top = 12
+          Width = 48
+        end
+        object AlrInfo: TTyAlert
+          Left = 12
+          Height = 48
+          Top = 116
+          Width = 524
+          Message = 'Information: nothing needs doing.'
+        end
+        object AlrSuccess: TTyAlert
+          Left = 12
+          Height = 48
+          Top = 170
+          Width = 524
+          AlertType = atSuccess
+          Message = 'Success: the theme was saved.'
+        end
+        object AlrWarning: TTyAlert
+          Left = 12
+          Height = 48
+          Top = 224
+          Width = 524
+          AlertType = atWarning
+          Message = 'Warning: an image could not be found.'
+        end
+        object AlrError: TTyAlert
+          Left = 12
+          Height = 48
+          Top = 278
+          Width = 524
+          AlertType = atError
+          Message = 'Error: the theme did not load.'
+        end
+        object EmpSample: TTyEmpty
+          Left = 12
+          Height = 120
+          Top = 336
+          Width = 300
+          Description = 'Nothing here yet'
+        end
+        object BtnMessage: TTyButton
+          Left = 324
+          Height = 30
+          Top = 336
+          Width = 180
+          Caption = 'Message dialog'
+          OnClick = BtnMessageClick
+        end
+        object BtnInput: TTyButton
+          Left = 324
+          Height = 30
+          Top = 374
+          Width = 180
+          Caption = 'Input dialog'
+          OnClick = BtnInputClick
+        end
+        object BtnNotify: TTyButton
+          Left = 324
+          Height = 30
+          Top = 412
+          Width = 180
+          Caption = 'Notification'
+          OnClick = BtnNotifyClick
+        end
+      end
+    end
+  end
+  object SampleMenu: TMainMenu
+    Left = 40
+    Top = 520
+    object SmFile: TMenuItem
+      Caption = '&File'
+      object SmNew: TMenuItem
+        Caption = '&New'
+        ShortCut = 16462
+      end
+      object SmOpen: TMenuItem
+        Caption = '&Open...'
+        ShortCut = 16463
+      end
+      object SmSep: TMenuItem
+        Caption = '-'
+      end
+      object SmRecent: TMenuItem
+        Caption = 'Open &recent'
+        object SmRecentOne: TMenuItem
+          Caption = 'win11.tycss'
+        end
+        object SmRecentTwo: TMenuItem
+          Caption = 'auto.tycss'
+        end
+      end
+    end
+    object SmEdit: TMenuItem
+      Caption = '&Edit'
+      object SmUndo: TMenuItem
+        Caption = '&Undo'
+        ShortCut = 16474
+      end
+      object SmWrap: TMenuItem
+        Caption = '&Word wrap'
+        Checked = True
+      end
+      object SmPaste: TMenuItem
+        Caption = '&Paste'
+        Enabled = False
+      end
+    end
+    object SmView: TMenuItem
+      Caption = '&View'
+      object SmZoom: TMenuItem
+        Caption = '&Zoom'
+      end
+    end
+  end
+  object SamplePopup: TTyPopupMenu
+    Left = 100
+    Top = 520
+    object SpCut: TMenuItem
+      Caption = 'Cu&t'
+      ShortCut = 16472
+    end
+    object SpCopy: TMenuItem
+      Caption = '&Copy'
+    end
+    object SpSep: TMenuItem
+      Caption = '-'
+    end
+    object SpChecked: TMenuItem
+      Caption = 'Show &hidden'
+      Checked = True
+    end
+    object SpDisabled: TMenuItem
+      Caption = '&Delete'
+      Enabled = False
+    end
+  end
+  object SampleNotify: TTyNotification
+    Left = 160
+    Top = 520
+  end
+  object LucideFont: TTyLucideIconFont
+    Left = 220
+    Top = 520
+  end
+end

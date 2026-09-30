@@ -220,7 +220,8 @@ uses
   test.themebuilder.lint,
   test.themebuilder.editkit,
   test.themebuilder.doc,
-  test.themebuilder.problems;
+  test.themebuilder.problems,
+  test.themebuilder.preview;
 
 type
   TTyTestRunner = class(TTestRunner)

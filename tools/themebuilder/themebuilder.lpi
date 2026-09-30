@@ -25,13 +25,14 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="6">
+    <Units Count="7">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
       <Unit3><Filename Value="tbthemesource.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbthemesource"/></Unit3>
       <Unit4><Filename Value="tbtemplates.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbtemplates"/></Unit4>
       <Unit5><Filename Value="tbproblems.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbproblems"/></Unit5>
+      <Unit6><Filename Value="tbpreview.pas"/><IsPartOfProject Value="True"/><ComponentName Value="PreviewFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbpreview"/></Unit6>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
