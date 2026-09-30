@@ -708,12 +708,32 @@ msgstr ""
 msgid "No colour scheme named \"%s\". Schemes in the text: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rstermschemenotfoundnone
+#, object-pascal-format
+msgid "No colour scheme named \"%s\", and the text has no complete colour scheme"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenotfoundunnamed
+#, object-pascal-format
+msgid "No colour scheme named \"%s\"; the scheme in the text has no name"
+msgstr ""
+
 #: tycontrols.strconsts.rstermschemenotobject
 msgid "Expected a colour scheme object or a settings file with \"schemes\""
 msgstr ""
 
 #: tycontrols.strconsts.rstermschemeschemesnotarray
 msgid "\"schemes\" is not an array"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemetoobig
+#, object-pascal-format
+msgid "The file is larger than %d MB; a colour scheme file is far smaller"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemetoodeep
+#, object-pascal-format
+msgid "nested more than %d levels deep"
 msgstr ""
 
 #: tycontrols.strconsts.rstermschemeutf16

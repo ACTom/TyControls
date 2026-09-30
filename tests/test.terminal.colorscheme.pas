@@ -54,6 +54,13 @@ type
     procedure TestSystemColoursAreWrittenAsRgb;
     { Task 7:设计器导入的纯逻辑 }
     procedure TestTheImportPlan;
+    { 6 期审查 }
+    procedure TestDeepNestingIsRefused;
+    procedure TestVeryDeepNestingDoesNotCrash;
+    procedure TestAHugeFileIsNotRead;
+    procedure TestNameListsNameEachOnce;
+    procedure TestTheImportPlanSkipsBadColours;
+    procedure TestChangedIsAChange;
   end;
 
 { 反引号换成反斜杠(见单元头) }
@@ -1085,6 +1092,203 @@ begin
   AssertEquals('nothing complete: the message', rsTermSchemeNoneValid, err);
   AssertFalse('an incomplete object', TyTermSchemeImportPlan('{' + Colours16('red') + '}', names, err));
   AssertTrue('an incomplete object: what is missing', Pos(Head(rsTermSchemeMissingKeys), err) = 1);
+end;
+
+{ ---- 6 期审查 ------------------------------------------------------------------- }
+
+{ ADepth levels of [ ... ] (as the value of "x" inside a scheme object: the object is one
+  more level) }
+function Nested(ADepth: Integer; const AOpen, AClose: string): string;
+begin
+  Result := StringOfChar(AOpen[1], ADepth) + StringOfChar(AClose[1], ADepth);
+end;
+
+procedure TTyTerminalColorSchemeTests.TestDeepNestingIsRefused;
+var
+  deep: string;
+  c: TTyTerminalColorScheme;
+begin
+  deep := Format(rsTermSchemeTooDeep, [TyTermJsonMaxDepth]);
+  AssertEquals('the limit', 64, TyTermJsonMaxDepth);
+  { 64 levels in all (the object, then 63 arrays): reads }
+  c := LoadOk(40, '{' + Colours16 + ', "x": ' + Nested(63, '[', ']') + '}', '');
+  c.Free;
+  { 65: refused, as bad JSON, before fpjson sees it -- with no \u in the text (the path that
+    skips the decoding) and with one }
+  LoadFails(41, '{' + Colours16 + ', "x": ' + Nested(64, '[', ']') + '}', '', rsTermSchemeBadJson, '', deep);
+  LoadFails(42, J('{"name": "`u4e2d", ') + Colours16 + ', "x": ' + Nested(64, '[', ']') + '}', '',
+    rsTermSchemeBadJson, '', deep);
+  { braces count too, and the two mixed }
+  LoadFails(44, StringOfChar('{', 65) + StringOfChar('}', 65), '', rsTermSchemeBadJson, '', deep);
+  LoadFails(45, '{"a": ' + StringOfChar('[', 32) + '{"b": ' + StringOfChar('[', 32)
+    + StringOfChar(']', 32) + '}' + StringOfChar(']', 32) + '}', '', rsTermSchemeBadJson, '', deep);
+  { brackets in a string, a comment, or after the closing ones do not count }
+  c := LoadOk(46, '{' + Colours16 + ', "name": "' + StringOfChar('[', 100) + '", "n2": ''' + StringOfChar('{', 100)
+    + '''' + #10'// ' + StringOfChar('[', 100) + #10'/* ' + StringOfChar('{', 100) + ' */}', '');
+  try
+    AssertEquals('row 46: the name', StringOfChar('[', 100), c.Name);
+  finally
+    c.Free;
+  end;
+  { the pure function says so itself }
+  try
+    TyTermJsonDecodeEscapes(StringOfChar('[', 65));
+    Fail('65 levels, no escape: TyTermJsonDecodeEscapes raises');
+  except
+    on E: ETyTerminalColorSchemeError do
+      AssertTrue('its message: ' + E.Message, Pos(deep, E.Message) > 0);
+  end;
+  AssertEquals('64 levels, no escape: as it was', StringOfChar('[', 64), TyTermJsonDecodeEscapes(StringOfChar('[', 64)));
+end;
+
+{ 100 000 levels used to overflow fpjson's recursion and take the process down (the IDE,
+  in the designer). Every entry point answers instead. }
+procedure TTyTerminalColorSchemeTests.TestVeryDeepNestingDoesNotCrash;
+var
+  txt, err: string;
+  c: TTyTerminalColorScheme;
+  names: TStringArray;
+begin
+  txt := StringOfChar('[', 100000);
+  c := TTyTerminalColorScheme.Create;
+  try
+    AssertFalse('TryLoadFromText', c.TryLoadFromText(txt, '', err));
+    AssertTrue('the message: ' + err, Pos(Head(rsTermSchemeBadJson), err) = 1);
+    AssertFalse('with a name', c.TryLoadFromText('{"schemes": ' + txt, 'A', err));
+    AssertFalse('and an escape', c.TryLoadFromText(J('{"name": "`u4e2d", "x": ') + txt, '', err));
+    AssertTrue('nothing loaded', c.IsEmpty);
+  finally
+    c.Free;
+  end;
+  AssertEquals('ListSchemeNames', 0, Length(TTyTerminalColorScheme.ListSchemeNames(txt)));
+  AssertFalse('the import plan', TyTermSchemeImportPlan(txt, names, err));
+  AssertTrue('the import plan: the message', Pos(Head(rsTermSchemeBadJson), err) = 1);
+end;
+
+procedure TTyTerminalColorSchemeTests.TestAHugeFileIsNotRead;
+var
+  fn, err: string;
+  fs: TFileStream;
+  c: TTyTerminalColorScheme;
+  raised: Boolean;
+  buf: string;
+begin
+  AssertEquals('the limit', 16 * 1024 * 1024, TyTermSchemeMaxFileBytes);
+  fn := GetTempDir(False) + 'tyterm-huge-scheme.json';
+  buf := DocCampbell + StringOfChar(' ', TyTermSchemeMaxFileBytes + 1 - Length(DocCampbell));
+  fs := TFileStream.Create(fn, fmCreate);
+  try
+    fs.WriteBuffer(buf[1], Length(buf));
+  finally
+    fs.Free;
+  end;
+  c := NewCounted;
+  try
+    AssertEquals('one byte over', TyTermSchemeMaxFileBytes + 1, Length(buf));
+    AssertFalse('TryLoadFromFile', c.TryLoadFromFile(fn, '', err));
+    AssertTrue('the message: ' + err, Pos(Head(rsTermSchemeTooBig), err) = 1);
+    AssertEquals('nothing changed', 0, FChanges);
+    raised := False;
+    try
+      c.LoadFromFile(fn);
+    except
+      on E: ETyTerminalColorSchemeError do raised := True;
+    end;
+    AssertTrue('LoadFromFile raises the scheme error', raised);
+    AssertTrue('still empty', c.IsEmpty);
+  finally
+    c.Free;
+    DeleteFile(fn);
+  end;
+end;
+
+{ the part of a message after its last %s (tells apart two messages that start alike) }
+function Tail(const AFmt: string): string;
+var
+  p: Integer;
+begin
+  Result := AFmt;
+  p := Pos('%s', Result);
+  while p > 0 do
+  begin
+    Delete(Result, 1, p + 1);
+    p := Pos('%s', Result);
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestNameListsNameEachOnce;
+var
+  c: TTyTerminalColorScheme;
+begin
+  { a name twice: listed once }
+  LoadFails(50, '{"schemes": [{"name": "A", ' + Colours16 + '}, {"name": "A", ' + Colours16 + '}, {"name": "B", '
+    + Colours16 + '}]}', 'C', rsTermSchemeNotFound, '', 'text: A, B');
+  LoadFails(51, '{"schemes": [{"name": "A", ' + Colours16 + '}, {"name": "A", ' + Colours16 + '}, {"name": "B", '
+    + Colours16 + '}]}', '', rsTermSchemeNeedName, '', 'one: A, B');
+  { two of one name and nothing else: one scheme can be named, so no name is needed (the first) }
+  c := LoadOk(52, '{"schemes": [{"name": "A", ' + Colours16('red') + ', "red": "#111111"}, {"name": "A", '
+    + Colours16 + '}]}', '');
+  try
+    AssertEquals('row 52: the first A', Hex6($111111), SlotHex(c, tssRed));
+  finally
+    c.Free;
+  end;
+  { no complete scheme to list: another sentence, not "Schemes in the text: " and nothing }
+  LoadFails(53, '{"schemes": [{"name": "A"}]}', 'C', rsTermSchemeNotFoundNone, '', Tail(rsTermSchemeNotFoundNone));
+  LoadFails(54, '{"schemes": []}', 'C', rsTermSchemeNotFoundNone, '', Tail(rsTermSchemeNotFoundNone));
+  { a single object without a name, asked for by name }
+  LoadFails(55, '{' + Colours16 + '}', 'C', rsTermSchemeNotFoundUnnamed, '', Tail(rsTermSchemeNotFoundUnnamed));
+  { with a name it is listed }
+  LoadFails(56, DocCampbell, 'C', rsTermSchemeNotFound, '', 'text: Campbell');
+end;
+
+procedure TTyTerminalColorSchemeTests.TestTheImportPlanSkipsBadColours;
+var
+  names: TStringArray;
+  err: string;
+begin
+  AssertTrue('a bad colour in one', TyTermSchemeImportPlan('{"schemes": [{"name": "A", ' + Colours16('red')
+    + ', "red": "bad"}, {"name": "B", ' + Colours16 + '}]}', names, err));
+  AssertEquals('only B', 1, Length(names));
+  AssertEquals('only B', 'B', names[0]);
+  { the first A is the one read by name: if it is broken, A is not offered, even though a
+    second A is fine }
+  AssertTrue('the first of a name is broken', TyTermSchemeImportPlan('{"schemes": [{"name": "A", ' + Colours16('red')
+    + ', "red": "bad"}, {"name": "A", ' + Colours16 + '}, {"name": "B", ' + Colours16 + '}]}', names, err));
+  AssertEquals('A is not offered', 1, Length(names));
+  AssertEquals('A is not offered', 'B', names[0]);
+  AssertFalse('all broken', TyTermSchemeImportPlan('{"schemes": [{"name": "A", ' + Colours16('red')
+    + ', "red": "bad"}]}', names, err));
+  AssertTrue('all broken: which colour: ' + err, (Pos(Head(rsTermSchemeBadColor), err) = 1) and (Pos('bad', err) > 0));
+  AssertEquals('all broken: no names', 0, Length(names));
+  AssertFalse('a single object with a bad colour', TyTermSchemeImportPlan('{' + Colours16('red')
+    + ', "red": "#12345g"}', names, err));
+  AssertTrue('a single object with a bad colour: which: ' + err, Pos('#12345g', err) > 0);
+end;
+
+procedure TTyTerminalColorSchemeTests.TestChangedIsAChange;
+var
+  c: TTyTerminalColorScheme;
+begin
+  c := NewCounted;
+  try
+    c.Background := clWindow;
+    AssertEquals('set once', 1, FChanges);
+    c.Background := clWindow;
+    AssertEquals('the same system colour again: nothing', 1, FChanges);
+    c.Changed;
+    AssertEquals('Changed: an OnChange with nothing changed', 2, FChanges);
+    AssertEquals('Changed: a revision', 2, c.Revision);
+    c.BeginUpdate;
+    c.Changed;
+    c.Changed;
+    AssertEquals('inside an update: held', 2, FChanges);
+    c.EndUpdate;
+    AssertEquals('one at the end', 3, FChanges);
+    AssertEquals('one revision', 3, c.Revision);
+  finally
+    c.Free;
+  end;
 end;
 
 initialization

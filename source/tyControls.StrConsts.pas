@@ -275,6 +275,14 @@ resourcestring
   rsTermSchemeSchemesNotArray = '"schemes" is not an array';
   { %s = the name asked for, %s = the complete schemes in the text }
   rsTermSchemeNotFound = 'No colour scheme named "%s". Schemes in the text: %s';
+  { %s = the name asked for; the text has no complete scheme to list }
+  rsTermSchemeNotFoundNone = 'No colour scheme named "%s", and the text has no complete colour scheme';
+  { %s = the name asked for; the text is a single scheme object without a name }
+  rsTermSchemeNotFoundUnnamed = 'No colour scheme named "%s"; the scheme in the text has no name';
+  { inside rsTermSchemeBadJson; %d = the most levels of brackets and braces allowed }
+  rsTermSchemeTooDeep = 'nested more than %d levels deep';
+  { %d = the largest file read, in MB }
+  rsTermSchemeTooBig = 'The file is larger than %d MB; a colour scheme file is far smaller';
   rsTermSchemeNeedName = 'The text has several colour schemes; choose one: %s';
   rsTermSchemeNoneValid = 'The text has no complete colour scheme (a name and all 16 colours)';
   { %s = the missing keys, as Windows Terminal names them }

@@ -32,6 +32,13 @@ interface
 uses
   SysUtils, Classes, Graphics, fpjson, jsonparser, jsonscanner, tyControls.StrConsts;
 
+const
+  { 读的时候 JSON 最多嵌套这么多层(方括号与花括号合计):fpjson 是递归解析的,很深的嵌套会撑爆栈、
+    整个进程崩掉。WT 的 settings.json 不到 10 层 }
+  TyTermJsonMaxDepth = 64;
+  { LoadFromFile / TryLoadFromFile 最多读这么大的文件(WT 的 defaults.json 约 36 KB) }
+  TyTermSchemeMaxFileBytes = 16 * 1024 * 1024;
+
 type
   { 前 16 个的序号就是 ANSI 号 }
   TTyTerminalSchemeSlot = (
@@ -69,7 +76,6 @@ type
     function GetSlotColor(AIndex: Integer): TColor;
     procedure SetSlotColor(AIndex: Integer; AValue: TColor);
     procedure SetName(const AValue: string);
-    procedure Changed;
   protected
     function GetOwner: TPersistent; override;
   public
@@ -84,13 +90,18 @@ type
     procedure BeginUpdate;
     { 期间有改动,最外层结束时只发一次 OnChange }
     procedure EndUpdate;
+    { 当作改了一次:修订号加一、发 OnChange(BeginUpdate 里记下,最外层 EndUpdate 时发),
+      内容没变也发。给系统色用:clWindow 这类存的是系统色本身,系统改了配色后再设一次同样的
+      值是空操作(值没变),调它让终端重新取色、重画 }
+    procedure Changed;
     { 这一槽设了没有、设了是什么 RGB($RRGGBB;系统色经 ColorToRGB) }
     function SlotRgb(ASlot: TTyTerminalSchemeSlot; out ARgb: Cardinal): Boolean;
     { 读一套:AText 是单个方案对象,或带 "schemes" 数组的 settings.json(按 AName 取;
       AName = '' 时数组里得恰好一套完整的)。失败抛 ETyTerminalColorSchemeError,方案不变 }
     procedure LoadFromText(const AText: string; const AName: string = '';
       AFormat: TTyTerminalColorSchemeFormat = tcfAuto);
-    { 文件整个读进来再走 LoadFromText;打不开文件时 RTL 的异常照抛 }
+    { 文件整个读进来再走 LoadFromText;打不开文件时 RTL 的异常照抛;大于
+      TyTermSchemeMaxFileBytes 的不读,抛 ETyTerminalColorSchemeError }
     procedure LoadFromFile(const AFileName: string; const AName: string = '';
       AFormat: TTyTerminalColorSchemeFormat = tcfAuto);
     { 不抛:失败返回 False,AError 是消息 }
@@ -149,13 +160,16 @@ function TyTermSchemeColorRgb(AColor: TColor; out ARgb: Cardinal): Boolean;
 function TyTermRgbToSchemeColor(ARgb: Cardinal): TColor;
 { 交给 fpjson 之前:字符串里的 \u 转义解成 UTF-8。认 // 与 /* */ 注释(原样拷,里面的引号
   不算);\u0022、\u005C 写回 \" 与 \\,小于 U+0020 的保留原转义;代理对合并,孤立的代理出
-  U+FFFD;\\u 是字面的反斜杠加 u;不是完整转义的原样留给解析器报错 }
+  U+FFFD;\\u 是字面的反斜杠加 u;不是完整转义的原样留给解析器报错。串外、注释外的方括号与花括号
+  嵌套超过 TyTermJsonMaxDepth 层时抛 ETyTerminalColorSchemeError(rsTermSchemeBadJson),
+  文本里没有 \u 时也查 }
 function TyTermJsonDecodeEscapes(const AText: string): string;
 { WT 的键名(16 色与四个可选项);CursorText / SelectionInactive 答 '' }
 function TyTermWtSchemeKey(ASlot: TTyTerminalSchemeSlot): string;
-{ 设计器「导入…」用:文本里能导入的方案名(settings.json 的 schemes 里 name 是字符串、16 色
-  的键齐的,同名只列一次;单个对象就是它自己的名字,可能是 '')。一个都没有、或读不了时答
-  False,AError 是消息 }
+{ 设计器和示例的「导入…」用:文本里能导入的方案名,只解析一次。settings.json 的 schemes 里
+  name 是字符串、16 色的键齐、颜色都读得进的,按出现顺序,同名只列一次(同名的只看第一个:
+  按名读时读到的是它,它写坏了这个名字就不列);单个对象就是它自己的名字,可能是 ''。一个
+  都没有、或读不了时答 False,AError 是消息(颜色都写坏时是第一处坏颜色的消息) }
 function TyTermSchemeImportPlan(const AText: string; out ANames: TStringArray; out AError: string): Boolean;
 
 implementation
@@ -236,15 +250,19 @@ begin
   Result := WtKeys[ASlot];
 end;
 
-function TyTermJsonDecodeEscapes(const AText: string): string;
+{ 逐字符扫一遍:串外、注释外的方括号与花括号数深度,超过 TyTermJsonMaxDepth 抛(fpjson 递归解析,
+  十万层会把栈撑爆、整个进程崩掉——设计器里就是 IDE)。ADecode 时顺带解 \u 转义、返回解好的
+  文本;否则只数深度、返回 ''。 }
+function JsonScan(const AText: string; ADecode: Boolean): string;
 var
-  i, n, o, code, lo, k: Integer;
+  i, n, o, code, lo, k, depth: Integer;
   inStr: Boolean;
   quote: Char;
   buf: string;
 
   procedure Put(C: Char);
   begin
+    if not ADecode then Exit;
     Inc(o);
     buf[o] := C;
   end;
@@ -296,11 +314,12 @@ var
   end;
 
 begin
-  if Pos('\u', AText) = 0 then Exit(AText);
   n := Length(AText);
   { 解出来的不会比原文长:\uXXXX 六个字节换成至多三个,一对代理十二个换成四个 }
-  SetLength(buf, n);
+  buf := '';
+  if ADecode then SetLength(buf, n);
   o := 0;
+  depth := 0;
   inStr := False;
   quote := '"';
   i := 1;
@@ -336,7 +355,17 @@ begin
         { 单引号串:jsonscanner 非严格模式收,照样认 }
         inStr := True;
         quote := AText[i];
-      end;
+      end
+      else if (AText[i] = '[') or (AText[i] = '{') then
+      begin
+        Inc(depth);
+        if depth > TyTermJsonMaxDepth then
+          raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeBadJson,
+            [Format(rsTermSchemeTooDeep, [TyTermJsonMaxDepth])]));
+      end
+      { 多出来的收尾括号不让深度变负(否则后面能多嵌套几层);解析器自己会报它 }
+      else if ((AText[i] = ']') or (AText[i] = '}')) and (depth > 0) then
+        Dec(depth);
       Put(AText[i]);
       Inc(i);
       Continue;
@@ -411,6 +440,17 @@ begin
   Result := buf;
 end;
 
+function TyTermJsonDecodeEscapes(const AText: string): string;
+begin
+  if Pos('\u', AText) = 0 then
+  begin
+    { 没有转义要解:原样返回,但深度照样数(提前退出的路也不能绕过它) }
+    JsonScan(AText, False);
+    Exit(AText);
+  end;
+  Result := JsonScan(AText, True);
+end;
+
 { ---- ETyTerminalColorSchemeError --------------------------------------------------- }
 
 constructor ETyTerminalColorSchemeError.CreateKey(const AKey, AMessage: string);
@@ -444,6 +484,21 @@ begin
   A[High(A)] := S;
 end;
 
+function HasName(const A: TStringArray; const S: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(A) do
+    if A[i] = S then Exit(True);
+  Result := False;
+end;
+
+{ 同名的只记第一个(按名取时读得到的只有它,WT 的 emplace) }
+procedure AddNameOnce(var A: TStringArray; const S: string);
+begin
+  if not HasName(A, S) then AddName(A, S);
+end;
+
 function NameList(const ANames: TStringArray): string;
 var
   i: Integer;
@@ -461,8 +516,8 @@ begin
   end;
 end;
 
-{ 去 UTF-8 BOM、拒 UTF-16、预解码、解析(认注释与尾逗号;重复键 fpjson 默认抛)。
-  调用者释放结果;空文本答 nil。 }
+{ 去 UTF-8 BOM、拒 UTF-16、预解码(连同嵌套深度的检查,见 TyTermJsonDecodeEscapes)、解析
+  (认注释与尾逗号;重复键 fpjson 默认抛)。调用者释放结果;空文本答 nil。 }
 function WtParse(const AText: string): TJSONData;
 var
   src: string;
@@ -597,7 +652,8 @@ begin
     for i := 0 to arr.Count - 1 do
       if WtIsCandidate(arr.Items[i], nm) then
       begin
-        AddName(names, nm);
+        { 名字只记一次:同名的后几个按名取不到,消息里也不重复列 }
+        AddNameOnce(names, nm);
         if first = nil then first := TJSONObject(arr.Items[i]);
         if (AName <> '') and (Result = nil) and (nm = AName) then
           Result := TJSONObject(arr.Items[i]);
@@ -605,7 +661,11 @@ begin
     if AName <> '' then
     begin
       if Result = nil then
+      begin
+        if Length(names) = 0 then
+          raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNotFoundNone, [AName]));
         raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNotFound, [AName, NameList(names)]));
+      end;
     end
     else if Length(names) = 0 then
       raise ETyTerminalColorSchemeError.CreateKey('', rsTermSchemeNoneValid)
@@ -619,6 +679,9 @@ begin
   WtNameOf(obj, nm);
   if (AName <> '') and (nm <> AName) then
   begin
+    { 没名字的单个对象:列一个空名字读不懂,换一句话 }
+    if nm = '' then
+      raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNotFoundUnnamed, [AName]));
     names := nil;
     AddName(names, nm);
     raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNotFound, [AName, NameList(names)]));
@@ -730,40 +793,57 @@ end;
 function TyTermSchemeImportPlan(const AText: string; out ANames: TStringArray; out AError: string): Boolean;
 var
   root, d: TJSONData;
-  i, k: Integer;
-  nm: string;
-  seen: Boolean;
+  i: Integer;
+  nm, firstError: string;
+  seen: TStringArray;
+  tmp: TTyTerminalColorScheme;
 begin
   ANames := nil;
   AError := '';
   try
+    { 只解析一次:每一套都在这棵树上读一遍(颜色写坏的不列),不再按名字各解析一次 }
     root := WtParse(AText);
+    tmp := TTyTerminalColorScheme.Create(nil);
     try
       d := nil;
       if root is TJSONObject then
         d := TJSONObject(root).Find('schemes');
       if d is TJSONArray then
       begin
+        seen := nil;
+        firstError := '';
         for i := 0 to TJSONArray(d).Count - 1 do
           if WtIsCandidate(TJSONArray(d).Items[i], nm) then
           begin
-            { 同名的只有第一个读得到(WT 的 emplace):列一次 }
-            seen := False;
-            for k := 0 to High(ANames) do
-              if ANames[k] = nm then seen := True;
-            if not seen then AddName(ANames, nm);
+            { 同名的只有第一个读得到(WT 的 emplace):只看它,列一次;它的颜色写坏了,这个
+              名字就不列(按名读时读到的正是它) }
+            if HasName(seen, nm) then Continue;
+            AddName(seen, nm);
+            try
+              WtReadScheme(TJSONObject(TJSONArray(d).Items[i]), tmp);
+              AddName(ANames, nm);
+            except
+              on E: ETyTerminalColorSchemeError do
+                if firstError = '' then firstError := E.Message;
+            end;
           end;
         if Length(ANames) = 0 then
+        begin
+          { 有完整的、只是颜色都写坏了:说是哪一色 }
+          if firstError <> '' then
+            raise ETyTerminalColorSchemeError.CreateKey('', firstError);
           raise ETyTerminalColorSchemeError.CreateKey('', rsTermSchemeNoneValid);
+        end;
       end
       else
       begin
         { 单个对象(或 schemes 不是数组、顶层不是对象):照读的规则报错 }
-        WtChoose(root, '');
+        WtReadScheme(WtChoose(root, ''), tmp);
         WtNameOf(TJSONObject(root), nm);
         AddName(ANames, nm);
       end;
     finally
+      tmp.Free;
       root.Free;
     end;
     Result := True;
@@ -933,6 +1013,10 @@ begin
   Result := '';
   fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
   try
+    { 选错了文件(一个几 GB 的日志)不整个读进内存 }
+    if fs.Size > TyTermSchemeMaxFileBytes then
+      raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeTooBig,
+        [TyTermSchemeMaxFileBytes div (1024 * 1024)]));
     SetLength(Result, fs.Size);
     if Length(Result) > 0 then
       fs.ReadBuffer(Result[1], Length(Result));
