@@ -56,6 +56,10 @@ type
 
 implementation
 
+type
+  { the view's test queries are protected: a descendant in this unit reaches them }
+  TSchemeAccess = class(TTyTerminalViewProbe);
+
 const
   SlotProps: array[TTyTerminalSchemeSlot] of string = (
     'Black', 'Red', 'Green', 'Yellow', 'Blue', 'Purple', 'Cyan', 'White',
@@ -185,10 +189,10 @@ begin
   end;
   AssertEquals('loaded', 'Campbell', F.View.ColorScheme.Name);
   AssertTrue('loaded: the source', F.View.ColorSource = tsrcScheme);
-  AssertEquals('loading queued no notification', 0, F.View.SchemeNotifyRequests);
+  AssertEquals('loading queued no notification', 0, TSchemeAccess(F.View).SchemeNotifyRequests);
   Pump;
   AssertEquals('nothing sent after loading', '', TyTermHex(F.Data));
-  AssertFalse('nothing queued', F.View.NotifyQueued);
+  AssertFalse('nothing queued', TSchemeAccess(F.View).NotifyQueued);
   F.View.WriteSync(#27'[?2031h');
   F.ClearRecords;
   b := F.Render;
@@ -278,7 +282,7 @@ begin
   Load(F.View.ColorScheme, 'Campbell');
   Settle;
   AssertTrue('the default source is the theme', F.View.ColorSource = tsrcTheme);
-  AssertNull('no scheme in use', F.View.ActiveColorScheme);
+  AssertNull('no scheme in use', TSchemeAccess(F.View).ActiveColorScheme);
   for i := 0 to 258 do
     AssertEquals('colour ' + IntToStr(i) + ' is the theme''s', Hex6(before[i]), Res(i));
   { the same scheme, switched on, does change them (the assertion above can fail) }
@@ -293,7 +297,7 @@ var
 begin
   Load(F.View.ColorScheme, 'Campbell');
   F.View.ColorSource := tsrcScheme;
-  AssertSame('the scheme in use', F.View.ColorScheme, F.View.ActiveColorScheme);
+  AssertSame('the scheme in use', F.View.ColorScheme, TSchemeAccess(F.View).ActiveColorScheme);
   AssertEquals('1 red', Hex6($C50F1F), Res(1));
   AssertEquals('5 purple', Hex6($881798), Res(5));
   AssertEquals('256 foreground', Hex6($CCCCCC), Res(256));
@@ -310,7 +314,7 @@ begin
     F.ThemeBg('TyTerminalCursor') <> F.ThemeFg('TyTerminal'));
   F.View.ColorSource := tsrcScheme;
   { an empty scheme draws as the theme does, cursor included }
-  AssertNull('an empty scheme is not in use', F.View.ActiveColorScheme);
+  AssertNull('an empty scheme is not in use', TSchemeAccess(F.View).ActiveColorScheme);
   AssertEquals('empty: the theme''s cursor', Hex6(F.ThemeBg('TyTerminalCursor')), Res(258));
   F.View.ColorScheme.Red := TColor($1F0FC5);
   AssertEquals('red from the scheme', Hex6($C50F1F), Res(1));
@@ -458,7 +462,7 @@ end;
 procedure TTyTerminalViewSchemeTests.Step(const AWhat: string; AWant: Integer);
 begin
   AssertEquals(AWhat + ': nothing sent from inside the change', '', TyTermHex(F.Data));
-  AssertTrue(AWhat + ': a notification is queued', F.View.NotifyQueued);
+  AssertTrue(AWhat + ': a notification is queued', TSchemeAccess(F.View).NotifyQueued);
   Pump;
   AssertEquals(AWhat + ': reports (' + TyTermHex(F.Data) + ')', AWant, Reports);
   F.ClearRecords;
@@ -563,13 +567,13 @@ begin
   F.Ctl.StyleOverride := TyTermFixtureCss + LightCss;
   try
     Settle;
-    AssertFalse('a light theme', F.View.ThemeGroundIsDark);
-    AssertSame('light: ColorScheme', F.View.ColorScheme, F.View.ActiveColorScheme);
+    AssertFalse('a light theme', TSchemeAccess(F.View).ThemeGroundIsDark);
+    AssertSame('light: ColorScheme', F.View.ColorScheme, TSchemeAccess(F.View).ActiveColorScheme);
     AssertEquals('light: Tango Light''s ground', Hex6($FFFFFF), Res(257));
     F.Ctl.StyleOverride := TyTermFixtureCss;
     Pump;
-    AssertTrue('a dark theme', F.View.ThemeGroundIsDark);
-    AssertSame('dark: DarkColorScheme', F.View.DarkColorScheme, F.View.ActiveColorScheme);
+    AssertTrue('a dark theme', TSchemeAccess(F.View).ThemeGroundIsDark);
+    AssertSame('dark: DarkColorScheme', F.View.DarkColorScheme, TSchemeAccess(F.View).ActiveColorScheme);
     AssertEquals('dark: Campbell''s ground', Hex6($0C0C0C), Res(257));
     AssertEquals('one report, dark: ' + TyTermHex(F.Data), TyTermHex(#27'[?997;1n'), TyTermHex(F.Data));
     F.ClearRecords;
@@ -582,7 +586,7 @@ begin
     F.Ctl.StyleOverride := TyTermFixtureCss;
     Pump;
     AssertEquals('not paired: a mode switch changes no colour', '', TyTermHex(F.Data));
-    AssertSame('not paired: ColorScheme in both', F.View.ColorScheme, F.View.ActiveColorScheme);
+    AssertSame('not paired: ColorScheme in both', F.View.ColorScheme, TSchemeAccess(F.View).ActiveColorScheme);
   finally
     F.Ctl.StyleOverride := TyTermFixtureCss;
   end;
@@ -600,7 +604,7 @@ procedure TTyTerminalViewSchemeTests.TestTheDarkSideIsWhatOnCalls;
     AssertTrue('on() answers for ' + AColor, tpTextColor in st.Present);
     white := (Cardinal(st.TextColor) and $FFFFFF) = $FFFFFF;
     AssertEquals(AColor + ': dark exactly when on() picks the ink for a dark ground', white,
-      F.View.ThemeGroundIsDark);
+      TSchemeAccess(F.View).ThemeGroundIsDark);
   end;
 
 var
@@ -632,11 +636,11 @@ begin
     if exact <> '' then
     begin
       Ground(exact);
-      AssertTrue('exactly 0.5 is dark (' + exact + ')', F.View.ThemeGroundIsDark);
+      AssertTrue('exactly 0.5 is dark (' + exact + ')', TSchemeAccess(F.View).ThemeGroundIsDark);
     end;
     { a single-mode dark skin: no mode name, the ground says it }
     F.Ctl.StyleOverride := 'TyTerminal { background: #1e1e1e; }'#10;
-    AssertTrue('a single-mode dark skin is dark', F.View.ThemeGroundIsDark);
+    AssertTrue('a single-mode dark skin is dark', TSchemeAccess(F.View).ThemeGroundIsDark);
   finally
     F.Ctl.StyleOverride := TyTermFixtureCss;
   end;
@@ -653,8 +657,8 @@ begin
   F.View.ColorSource := tsrcScheme;
   Settle;
   ground := $FDF6E3;
-  { Solarized Light's first colour under 4.5:1 on its own ground (3, yellow #B58900, about
-    2.7:1, as computed here) }
+  { Solarized Light's first colour under 4.5:1 on its own ground, found here rather than
+    written in: 1, red #DC322F, about 4.29:1 (WCAG, computed by hand beside the test) }
   pick := -1;
   ratio := 0;
   for i := 1 to 15 do

@@ -790,7 +790,7 @@ begin
   LoadFails(22, '[1, 2]', '', rsTermSchemeNotObject, '', '');
   LoadFails(23, '{"schemes": {}}', '', rsTermSchemeSchemesNotArray, 'schemes', '');
   { 24:第一个没有 name,不算候选 }
-  c := LoadOk(24, '{"schemes": [{' + Colours16 + ', "red": "#111111"}, ' + DocCampbell + ']}', '');
+  c := LoadOk(24, '{"schemes": [{' + Colours16('red') + ', "red": "#111111"}, ' + DocCampbell + ']}', '');
   try
     AssertEquals('row 24: the named one', 'Campbell', c.Name);
     AssertEquals('row 24: its red', Hex6($C50F1F), SlotHex(c, tssRed));
