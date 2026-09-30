@@ -1640,7 +1640,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - 工具条在各皮肤下的实际样子、保存失败提示、成环不崩、刷新不卡：真机验收第 23–29 项。
 - 快探测按引擎规则重走了一遍「哪些规则会被用到」，`StyleModel` 的解析规则将来变了要跟着改（V18 会红提醒）。
 
-### 主控待做
+### 主控已做（c0cebbe1 之上）
+
+- `lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`、`tools/themebuilder/themebuilder.lpi`：都 0 错。
+- 冒烟：枚举工具进程的可见窗口，只有主窗体「未命名 - 主题编辑器」与应用窗口，没有 `#32770`。
+- 第 8 项（E10，全局回退字号）：先按 (c) 不改——现有内置主题的 `--font-size-base` 都是 9，今天看不出差别；留给用户验收时定。
+- 本批修复不另派审查：三期做完、交验收之前对整个分支做一次总审查。
+
+### 原「主控待做」
 
 1. 在签收头提交上 `lazbuild -B tycontrols.lpk`、`lazbuild -B tycontrols_dt.lpk`（`Css.Values.pas`、`ThemeLint.pas`、`Css.Parser.pas` 改过）、`lazbuild -B tools/themebuilder/themebuilder.lpi`，冒烟启动工具（只有主窗体与应用窗口、没有 `#32770`）。
 2. 定必修 8 的做法（E10）。
