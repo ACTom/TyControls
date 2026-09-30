@@ -40,6 +40,7 @@ type
     procedure TestTheDialogWearsThePreviewTheme;
     procedure TestTheSampleWindow;
     procedure TestTheSampleWindowFollowsTheDocument;
+    procedure TestTheProbeIsQuick;
   end;
 
 const
@@ -50,7 +51,7 @@ implementation
 
 uses
   Controls, Forms, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, tyControls.Base,
-  tyControls.Dialogs, tbtemplates, tbsamplewin;
+  tyControls.Dialogs, tyControls.BuiltinThemes, tbtemplates, tbsamplewin;
 
 procedure TTbPreviewTests.SetUp;
 begin
@@ -359,6 +360,45 @@ begin
   AssertTrue(Load(cMarkerDoc));
   AssertEquals('V16: the window''s button wears the document', $123456,
     ButtonBg(w.BtnCancel.Controller));
+end;
+
+{ Every load and every mode switch runs the probe (every catalog typeKey x variants x six
+  state sets), so it sits on the typing path. Printed for the sign-off; red only when it
+  would be felt (> 200 ms), at which point the plan falls back to fewer states. }
+procedure TTbPreviewTests.TestTheProbeIsQuick;
+
+  function MedianMs(const AText: string): Double;
+  var
+    t: array[0..4] of QWord;
+    i, j: Integer;
+    start: QWord;
+    err: string;
+    x: QWord;
+  begin
+    AssertTrue('loads', Load(AText));
+    for i := 0 to 4 do
+    begin
+      start := GetTickCount64;
+      AssertTrue('resolves: ' + err, TbProbeResolve(FFrame.Controller.Model, err));
+      t[i] := GetTickCount64 - start;
+    end;
+    for i := 0 to 3 do
+      for j := i + 1 to 4 do
+        if t[j] < t[i] then
+        begin
+          x := t[i]; t[i] := t[j]; t[j] := x;
+        end;
+    Result := t[2];
+  end;
+
+var
+  a, b: Double;
+begin
+  a := MedianMs(TyBuiltinThemeCss('default'));
+  b := MedianMs(TbMinimalTemplate);
+  WriteLn(Format('TTbPreviewTests.TestTheProbeIsQuick: default theme %.0f ms, minimal template %.0f ms (median of 5)',
+    [a, b]));
+  AssertTrue('the probe is not felt while typing', (a <= 200) and (b <= 200));
 end;
 
 initialization
