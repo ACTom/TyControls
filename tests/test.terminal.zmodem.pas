@@ -49,6 +49,8 @@ type
     { the phase 7 review's fixes }
     procedure TestAnUploadWithNoRoomTimesOut;
     procedure TestAFileThatEndsEarlyFails;
+    procedure TestA4GiBFileIsSkipped;
+    procedure TestA4GiBFileInTheTerminal;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -70,6 +72,13 @@ implementation
 uses
   Math, StrUtils, fpjson, md5, tyControls.Terminal.Buffer, tyControls.Terminal.Core, uzmodemsession,
   uzmodemterm, test.terminal.oracle;
+
+{$IFDEF MSWINDOWS}
+{ for a sparse file (FSCTL_SET_SPARSE): the Windows unit here would hide SysUtils' names }
+function TyDeviceIoControl(hDevice: THandle; dwIoControlCode: LongWord; lpInBuffer: Pointer; nInBufferSize: LongWord;
+  lpOutBuffer: Pointer; nOutBufferSize: LongWord; var lpBytesReturned: LongWord; lpOverlapped: Pointer): LongBool;
+  stdcall; external 'kernel32' name 'DeviceIoControl';
+{$ENDIF}
 
 function ZmHex(const S: RawByteString): string;
 var
@@ -1287,7 +1296,7 @@ begin
 end;
 
 { a ZFILE with its information, as a sender sends it }
-function ZfileFrame(const AName: string; ASize: Integer): RawByteString;
+function ZfileFrame(const AName: string; ASize: Int64): RawByteString;
 var
   e: TZmEscaper;
   info: RawByteString;
@@ -1681,6 +1690,80 @@ procedure TTyTerminalZmodemTests.TestAFileThatEndsEarlyFails;
 begin
   Run(True);
   Run(False);
+end;
+
+type
+  TSkipLog = class
+  public
+    Names: TStringList;
+    Reasons: TStringList;
+    constructor Create;
+    destructor Destroy; override;
+    procedure OnSkip(Sender: TObject; const AName, AReason: string);
+  end;
+
+constructor TSkipLog.Create;
+begin
+  inherited Create;
+  Names := TStringList.Create;
+  Reasons := TStringList.Create;
+end;
+
+destructor TSkipLog.Destroy;
+begin
+  Names.Free;
+  Reasons.Free;
+  inherited Destroy;
+end;
+
+procedure TSkipLog.OnSkip(Sender: TObject; const AName, AReason: string);
+begin
+  Names.Add(AName);
+  Reasons.Add(AReason);
+end;
+
+{ A ZFILE of 4 GiB or more: its positions would wrap at 32 bits, so the receiver skips
+  it (ZSKIP) and says why; a smaller one after it is taken. Mutation: the size not
+  looked at (the file opened; its positions wrap). }
+procedure TTyTerminalZmodemTests.TestA4GiBFileIsSkipped;
+var
+  sink: TMemSink;
+  log: TZmLog;
+  skips: TSkipLog;
+  r: TZmReceiver;
+  h: THeaderList;
+begin
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  skips := TSkipLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.OnFileSkipped := @skips.OnSkip;
+    r.Start(0);
+    log.Sent := '';
+    FeedR(r, ZfileFrame('huge.iso', ZmMaxFileSize));
+    AssertEquals('not opened', 0, sink.Opens);
+    h := THeaderList.Create(log.Sent);
+    try
+      AssertEquals('one answer', 1, Length(h.Types));
+      AssertEquals('ZSKIP', ZSKIP, h.Types[0]);
+    finally
+      h.Free;
+    end;
+    AssertEquals('said so', 1, skips.Names.Count);
+    AssertEquals('which', 'huge.iso', skips.Names[0]);
+    AssertEquals('why', rsZmTooBig, skips.Reasons[0]);
+    FeedR(r, ZfileFrame('small.bin', ZmMaxFileSize - 1));
+    AssertEquals('one byte less is taken', 1, sink.Opens);
+    AssertFalse('still going', log.Done);
+  finally
+    r.Free;
+    skips.Free;
+    log.Free;
+    sink.Free;
+  end;
 end;
 
 { ---- Task 8: the terminal glue -------------------------------------------------------------- }
@@ -2165,6 +2248,77 @@ begin
     grown := Length(r.Sent) - before;
     AssertTrue('CanSend 4096: some data', grown > 0);
     AssertTrue(Format('CanSend 4096: at most one packet over, got %d', [grown]), grown <= 4096 + 2 * ZmSendSubpacket + 16);
+  finally
+    r.Free;
+  end;
+end;
+
+{ a sparse file of ASize bytes (nothing written: no disk space taken); False when the
+  file system cannot make one }
+function MakeSparseFile(const APath: string; ASize: Int64): Boolean;
+var
+  fs: TFileStream;
+  {$IFDEF MSWINDOWS}
+  ret: LongWord;
+  {$ENDIF}
+begin
+  fs := TFileStream.Create(APath, fmCreate);
+  try
+    {$IFDEF MSWINDOWS}
+    ret := 0;
+    if not TyDeviceIoControl(fs.Handle, $000900C4 { FSCTL_SET_SPARSE }, nil, 0, nil, 0, ret, nil) then
+      Exit(False);
+    {$ENDIF}
+    fs.Size := ASize;
+    Result := fs.Size = ASize;
+  finally
+    fs.Free;
+  end;
+end;
+
+{ In the terminal: a 4 GiB download is skipped with a line saying why; a 4 GiB upload
+  is refused before anything is sent -- the abort to rz, the reason on the screen, the
+  stream back. Mutations: the receiver's skip not shown; the upload's size not looked
+  at (a ZFILE goes out whose size the positions cannot reach). }
+procedure TTyTerminalZmodemTests.TestA4GiBFileInTheTerminal;
+var
+  r: TGlueRig;
+  f: string;
+  h: THeaderList;
+  k: Integer;
+begin
+  r := TGlueRig.Create;
+  try
+    r.AutoAccept := True;
+    r.Core.WriteSync(SzStart);
+    AssertTrue('receiving', r.Zm.State = zsReceiving);
+    r.Core.WriteSync(ZfileFrame('huge.iso', ZmMaxFileSize));
+    AssertTrue('the skip on the screen: ' + r.Screen, FindLine(r, 'huge.iso') >= 0);
+    AssertTrue('and why: ' + r.Screen, FindLine(r, rsZmTooBig) >= 0);
+    AssertEquals('no file', 0, FilesIn(r.Dir));
+  finally
+    r.Free;
+  end;
+  r := TGlueRig.Create;
+  try
+    f := r.Dir + PathDelim + 'huge.img';
+    if not MakeSparseFile(f, ZmMaxFileSize) then
+      Ignore('this file system makes no sparse file of 4 GiB');
+    r.Uploads.Add(f);
+    r.AutoAccept := True;
+    r.Core.WriteSync(Copy(ReadBytes(ZmFixture('one-small.rz.bin')), 1, 21) + '$ ');
+    AssertTrue('idle', r.Zm.State = zsIdle);
+    AssertFalse('the stream is back', r.Core.StreamClaimed);
+    h := THeaderList.Create(r.Sent);
+    try
+      for k := 0 to High(h.Types) do
+        AssertTrue('no ZFILE', h.Types[k] <> ZFILE);
+    finally
+      h.Free;
+    end;
+    AssertTrue('the abort sent', Pos(ZmAbortSequence, r.Sent) > 0);
+    AssertTrue('an error', r.LastResult = zrError);
+    AssertTrue('why, on the screen: ' + r.Screen, FindLine(r, rsZmTooBig) >= 0);
   finally
     r.Free;
   end;

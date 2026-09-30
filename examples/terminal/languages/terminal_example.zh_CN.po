@@ -437,3 +437,12 @@ msgstr "对方无法写入文件"
 #: uzmodemsession.rszmreadfailed
 msgid "the file could not be read to its end"
 msgstr "无法读完文件"
+
+#: uzmodemsession.rszmtoobig
+msgid "ZModem cannot carry files of 4 GiB or more"
+msgstr "ZModem 无法传送 4 GiB 及以上的文件"
+
+#: uzmodemterm.rszmskippedline
+#, object-pascal-format
+msgid "Skipped %s: %s"
+msgstr "已跳过 %s：%s"

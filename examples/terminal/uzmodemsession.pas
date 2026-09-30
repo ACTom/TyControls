@@ -18,6 +18,8 @@ unit uzmodemsession;
       dropped until a ZDATA at that place; ZSINIT is acknowledged and otherwise
       ignored; ZCOMMAND is REFUSED (the other side asking this machine to run a
       command): an abort and zrError; ZFREECNT and ZCHALLENGE get the simplest ZACK;
+      a file of 4 GiB or more is skipped (ZSKIP, OnFileSkipped): its positions would
+      wrap at 32 bits;
     - the sender sends binary headers (CRC-32 when the receiver can), 1 KB
       subpackets streamed with ZCRCG, or ZCRCW at the end of each window when the
       receiver gave a buffer size; a ZRPOS goes back to that place; ZNAK repeats the
@@ -55,6 +57,8 @@ type
   { ALeftover: bytes after the session's end (after "OO", after the peer's ZFIN) }
   TZmDoneEvent = procedure(Sender: TObject; AResult: TZmResult; const AMessage: string;
     const ALeftover: RawByteString) of object;
+  { a file the receiver skipped for a reason of its own (AName is the peer's, untouched) }
+  TZmSkipEvent = procedure(Sender: TObject; const AName, AReason: string) of object;
 
   TZmFileSink = class          { the receiver writes through it }
   public
@@ -67,7 +71,8 @@ type
 
   TZmFileSource = class        { the sender reads through it }
   public
-    { the next file; False = none left. AStream belongs to the source. }
+    { the next file; False = none left. AStream belongs to the source. Smaller than
+      ZmMaxFileSize (the glue refuses bigger ones before a sender is made). }
     function Next(out AName: string; out ASize, AMTime: Int64; out AStream: TStream): Boolean; virtual; abstract;
     function FilesLeft: Integer; virtual; abstract;
     function BytesLeft: Int64; virtual; abstract;
@@ -101,6 +106,7 @@ type
     FOnSend: TZmSendEvent;
     FOnProgress: TZmProgressEvent;
     FOnDone: TZmDoneEvent;
+    FOnFileSkipped: TZmSkipEvent;
     procedure Send(const AData: RawByteString);
     procedure SendHex(AType: Byte; APos: Cardinal);
     procedure SendRinit;
@@ -130,6 +136,8 @@ type
     property OnSend: TZmSendEvent read FOnSend write FOnSend;
     property OnProgress: TZmProgressEvent read FOnProgress write FOnProgress;
     property OnDone: TZmDoneEvent read FOnDone write FOnDone;
+    { a file of ZmMaxFileSize or more was skipped (its positions would wrap) }
+    property OnFileSkipped: TZmSkipEvent read FOnFileSkipped write FOnFileSkipped;
     { options, before Start }
     property EscapeControl: Boolean read FEscapeControl write FEscapeControl;   { advertise ESCCTL (tests); default False }
     property TimeoutMs: Integer read FTimeoutMs write FTimeoutMs;               { default 10000 }
@@ -222,6 +230,7 @@ resourcestring
   rsZmCancelledThere = 'cancelled by the other side';
   rsZmWriteFailed = 'the file could not be written';
   rsZmReadFailed = 'the file could not be read to its end';
+  rsZmTooBig = 'ZModem cannot carry files of 4 GiB or more';
   rsZmFileError = 'the other side could not write the file';
 
 implementation
@@ -397,6 +406,15 @@ begin
       Exit;
     end;
     CloseFile(False);
+  end;
+  if size >= ZmMaxFileSize then
+  begin
+    { the positions (32 bits) would wrap: skipped, and the host told why }
+    SendHex(ZSKIP, 0);
+    FLast := zrkRinit;
+    if Assigned(FOnFileSkipped) then
+      FOnFileSkipped(Self, name, rsZmTooBig);
+    Exit;
   end;
   if not FSink.Open(name, size, mtime) then
   begin

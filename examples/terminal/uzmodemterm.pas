@@ -29,6 +29,8 @@ unit uzmodemterm;
        sequence goes to the program, a file not received whole is deleted.
   Received files: the remote name's last element, made safe for Windows (ZmSafeFileName),
   never overwriting (ZmUniqueFileName), with the sender's modification time.
+  ZMODEM's positions are 32 bits: a file of 4 GiB or more is skipped on the way in (a
+  line says so) and refused on the way out (nothing is sent; the line says why).
 
   Uses the core (no LCL): the tests and the WSL console tool run it without a form. }
 
@@ -46,6 +48,7 @@ resourcestring
   rsZmFailedLine = 'ZModem transfer failed: %s';
   rsZmReceivedLine = 'Received %d file(s), %s in %s s (%s/s)';
   rsZmSentLine = 'Sent %d file(s), %s in %s s (%s/s)';
+  rsZmSkippedLine = 'Skipped %s: %s';
 
 type
   TZmodemState = (zsIdle, zsAskDownload, zsAskUpload, zsReceiving, zsSending, zsRefusing);
@@ -112,10 +115,12 @@ type
     procedure MachineSend(Sender: TObject; const AData: RawByteString);
     procedure MachineProgress(Sender: TObject; const AName: string; AFileDone, AFileSize, ATotalDone: Int64);
     procedure MachineDone(Sender: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+    procedure MachineSkipped(Sender: TObject; const AName, AReason: string);
     procedure Show(const AText: string);
     procedure EndClaim(AResult: TZmResult; const AMessage, ALine: string; const ALeftover: RawByteString);
     procedure FeedRefusing;
     procedure TryStartUpload;
+    procedure Abandon(AResult: TZmResult; const AMessage: string);
   public
     constructor Create(ACore: TTyTerminalCore);    { AddStreamHandler here, Remove in Destroy }
     destructor Destroy; override;
@@ -511,6 +516,7 @@ begin
     FReceiver.OnSend := nil;
     FReceiver.OnDone := nil;
     FReceiver.OnProgress := nil;
+    FReceiver.OnFileSkipped := nil;
     FDead.Add(FReceiver);
     FReceiver := nil;
   end;
@@ -743,6 +749,13 @@ begin
   EndClaim(AResult, AMessage, line, ALeftover);
 end;
 
+{ a file the receiver would not take (4 GiB or more): a line of its own, the transfer
+  goes on with the next }
+procedure TZmodemStreamHandler.MachineSkipped(Sender: TObject; const AName, AReason: string);
+begin
+  Show(#13#27'[K' + Format(rsZmSkippedLine, [AName, AReason]) + #13#10);
+end;
+
 { a transfer, a refusal or a decline is over: the line, the stream back, the host told }
 procedure TZmodemStreamHandler.EndClaim(AResult: TZmResult; const AMessage, ALine: string;
   const ALeftover: RawByteString);
@@ -781,6 +794,7 @@ begin
   FReceiver.OnSend := @MachineSend;
   FReceiver.OnProgress := @MachineProgress;
   FReceiver.OnDone := @MachineDone;
+  FReceiver.OnFileSkipped := @MachineSkipped;
   FState := zsReceiving;
   FStartMs := NowMs;
   FLastProgressMs := -1;
@@ -810,10 +824,26 @@ begin
 end;
 
 procedure TZmodemStreamHandler.StartUpload(AFiles: TStrings);
+var
+  i: Integer;
+  sr: TSearchRec;
 begin
   if FState <> zsAskUpload then
     Exit;
   FreeDead;
+  { a header's position is 32 bits: a file of 4 GiB or more is refused before anything
+    is sent, with the reason on the screen }
+  for i := 0 to AFiles.Count - 1 do
+    if FindFirst(AFiles[i], faAnyFile and not faDirectory, sr) = 0 then
+      try
+        if sr.Size >= ZmMaxFileSize then
+        begin
+          Abandon(zrError, ExtractFileName(AFiles[i]) + ': ' + rsZmTooBig);
+          Exit;
+        end;
+      finally
+        FindClose(sr);
+      end;
   FreeAndNil(FUploadFiles);
   FUploadFiles := TStringList.Create;
   FUploadFiles.Assign(AFiles);
@@ -865,9 +895,22 @@ procedure TZmodemStreamHandler.Decline;
 begin
   if not (FState in [zsAskDownload, zsAskUpload]) then
     Exit;
+  Abandon(zrCancelledHere, rsZmDeclined);
+end;
+
+{ no transfer after all (declined, a file too big): the program is told to stop, the
+  line says why }
+procedure TZmodemStreamHandler.Abandon(AResult: TZmResult; const AMessage: string);
+var
+  line: string;
+begin
   if FSession <> nil then
     FSession.SendRaw(ZmAbortSequence);
-  EndClaim(zrCancelledHere, rsZmDeclined, rsZmDeclined, '');
+  if AResult = zrError then
+    line := Format(rsZmFailedLine, [AMessage])
+  else
+    line := AMessage;
+  EndClaim(AResult, AMessage, line, '');
 end;
 
 procedure TZmodemStreamHandler.Cancel;

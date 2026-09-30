@@ -32,9 +32,13 @@ unit uptywin;
     and drops every byte from $80 up, both ways: the phase 7 plan's Task 0). For
     ZModem through wsl.exe or ssh -T. There is no terminal: the program sees pipes,
     does not echo, cannot be resized; stderr goes into the same pipe unless asked not
-    to. Closing sends EOF (the input pipe's end closed), then the session's finisher
-    waits and ends the program by its handle, as for ConPTY -- never on the main
-    thread. }
+    to. The program inherits its three pipe ends and nothing else of ours
+    (PROC_THREAD_ATTRIBUTE_HANDLE_LIST). An exit waiter watches the process: once it
+    is gone the reader drains the pipe and ends, even when a program it started still
+    holds the pipe (the pipe itself would never end then). Closing stops the writer on
+    the main thread; the session's finisher closes the input pipe once the writer has
+    gone (EOF for the program -- never under a WriteFile), waits, and ends the program
+    by its handle, as for ConPTY -- never on the main thread. }
 
 {$mode objfpc}{$H+}
 
@@ -115,6 +119,17 @@ type
     property Killed: Boolean read FKilled;
   end;
 
+  TProcessPipeBackend = class;
+
+  TProcessPipeExitWaiter = class(TThread)
+  private
+    FOwner: TProcessPipeBackend;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(AOwner: TProcessPipeBackend);
+  end;
+
   { a command on two anonymous pipes, no pseudo console (spec 19.7): binary safe }
   TProcessPipeBackend = class(TPipeBackend)
   private
@@ -122,18 +137,26 @@ type
     FProcess: THandle;
     FProcessId: DWORD;
     FKilled: Boolean;
+    FCloseEvent: THandle;
+    FWaiter: TProcessPipeExitWaiter;
+    FExited: LongInt;                    { the program is gone: Read drains, then ends }
+    procedure CloseInput;
+    procedure StopWaiter;
   public
     constructor Create(AMergeStderr: Boolean = True);
     destructor Destroy; override;
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; override;
+    function Read(var ABuf; ACount: Integer): Integer; override;
     procedure Resize(ACols, ARows: Integer); override;       { nothing }
-    procedure BeginClose; override;                          { closes the input pipe }
+    procedure BeginClose; override;                          { stops the writer }
+    { the input's end once the writer is gone, then the program }
     function FinishClose(AWaitMs: Integer): TPtyCloseResult; override;
     function ExitCode(AWaitMs: Integer): Int64; override;
     procedure Shutdown; override;
     { FOR THE TESTS }
     property ProcessId: DWORD read FProcessId;
     property Killed: Boolean read FKilled;
+    function InputOpen: Boolean;
   end;
 
 { dwBuildNumber from RtlGetVersion; 0 when it cannot be had }
@@ -173,6 +196,7 @@ type
 
 const
   PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = $00020016;
+  PROC_THREAD_ATTRIBUTE_HANDLE_LIST = $00020002;
 
 function CancelSynchronousIo(hThread: THandle): BOOL; stdcall; external 'kernel32' name 'CancelSynchronousIo';
 
@@ -607,13 +631,72 @@ begin
   inherited Destroy;
 end;
 
+{ Vista and later; looked up by name like the ConPTY calls (the same variables) }
+function LoadAttributeListCalls: Boolean;
+var
+  k: HMODULE;
+begin
+  if not Assigned(PInitializeProcThreadAttributeList) then
+  begin
+    k := GetModuleHandle('kernel32.dll');
+    if k = 0 then Exit(False);
+    Pointer(PInitializeProcThreadAttributeList) := GetProcAddress(k, 'InitializeProcThreadAttributeList');
+    Pointer(PUpdateProcThreadAttribute) := GetProcAddress(k, 'UpdateProcThreadAttribute');
+    Pointer(PDeleteProcThreadAttributeList) := GetProcAddress(k, 'DeleteProcThreadAttributeList');
+  end;
+  Result := Assigned(PInitializeProcThreadAttributeList) and Assigned(PUpdateProcThreadAttribute)
+    and Assigned(PDeleteProcThreadAttributeList);
+end;
+
+{ CreateProcessW handing the child ONLY AHandles (PROC_THREAD_ATTRIBUTE_HANDLE_LIST):
+  bInheritHandles alone would hand it every inheritable handle this process has -- a
+  pipe of another session, say, whose end then never closes. Without the attribute-list
+  calls (before Vista), every inheritable handle as before. }
+function CreateProcessWithHandles(var ACmd: UnicodeString; const AHandles: array of THandle;
+  var AStartup: STARTUPINFOEXW; out AInfo: TProcessInformation): Boolean;
+var
+  size: SIZE_T;
+  list: Pointer;
+  flags: DWORD;
+begin
+  FillChar(AInfo, SizeOf(AInfo), 0);
+  flags := CREATE_NO_WINDOW or CREATE_UNICODE_ENVIRONMENT;
+  if not LoadAttributeListCalls then
+  begin
+    AStartup.StartupInfo.cb := SizeOf(TStartupInfoW);
+    Exit(CreateProcessW(nil, PWideChar(ACmd), nil, nil, True, flags, nil, nil, @AStartup.StartupInfo, @AInfo));
+  end;
+  size := 0;
+  PInitializeProcThreadAttributeList(nil, 1, 0, size);
+  GetMem(list, size);
+  try
+    if not PInitializeProcThreadAttributeList(list, 1, 0, size) then
+      Exit(False);
+    try
+      { the value is a pointer to the handles }
+      if not PUpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, @AHandles[0],
+        Length(AHandles) * SizeOf(THandle), nil, nil) then
+        Exit(False);
+      AStartup.StartupInfo.cb := SizeOf(STARTUPINFOEXW);
+      AStartup.lpAttributeList := list;
+      Result := CreateProcessW(nil, PWideChar(ACmd), nil, nil, True, flags or EXTENDED_STARTUPINFO_PRESENT, nil,
+        nil, @AStartup.StartupInfo, @AInfo);
+    finally
+      PDeleteProcThreadAttributeList(list);
+    end;
+  finally
+    FreeMem(list);
+  end;
+end;
+
 function TProcessPipeBackend.Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
 var
   sa: TSecurityAttributes;
   inRead, inWrite, outRead, outWrite, errH: THandle;
-  si: TStartupInfoW;
+  si: STARTUPINFOEXW;
   pi: TProcessInformation;
   cmd: UnicodeString;
+  ok: Boolean;
 begin
   AError := '';
   Result := False;
@@ -636,16 +719,18 @@ begin
   else
     errH := CreateFileW('NUL', GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, @sa, OPEN_EXISTING, 0, 0);
   FillChar(si, SizeOf(si), 0);
-  si.cb := SizeOf(si);
-  si.dwFlags := STARTF_USESTDHANDLES;
-  si.hStdInput := inRead;
-  si.hStdOutput := outWrite;
-  si.hStdError := errH;
-  FillChar(pi, SizeOf(pi), 0);
+  si.StartupInfo.dwFlags := STARTF_USESTDHANDLES;
+  si.StartupInfo.hStdInput := inRead;
+  si.StartupInfo.hStdOutput := outWrite;
+  si.StartupInfo.hStdError := errH;
   cmd := UTF8Decode(ACommand);
   UniqueString(cmd);
-  if not CreateProcessW(nil, PWideChar(cmd), nil, nil, True, CREATE_NO_WINDOW or CREATE_UNICODE_ENVIRONMENT,
-    nil, nil, @si, @pi) then
+  { the handle list may not name a handle twice }
+  if FMergeStderr or (errH = INVALID_HANDLE_VALUE) then
+    ok := CreateProcessWithHandles(cmd, [inRead, outWrite], si, pi)
+  else
+    ok := CreateProcessWithHandles(cmd, [inRead, outWrite, errH], si, pi);
+  if not ok then
   begin
     AError := SysErrorMessage(GetLastError);
     CloseHandle(inRead);
@@ -655,7 +740,8 @@ begin
     CloseHandle(outRead);
     Exit;
   end;
-  { the child's ends: only the child holds them now, so its exit ends our read }
+  { the child's ends: only the child holds them now (and whatever it starts), so its
+    exit ends our read -- or the exit waiter does, when a child of its holds them }
   CloseHandle(inRead);
   CloseHandle(outWrite);
   if not FMergeStderr and (errH <> INVALID_HANDLE_VALUE) then CloseHandle(errH);
@@ -664,7 +750,41 @@ begin
   FProcessId := pi.dwProcessId;
   FIn := inWrite;
   FOut := outRead;
+  FCloseEvent := CreateEvent(nil, True, False, nil);
+  FWaiter := TProcessPipeExitWaiter.Create(Self);
   Result := True;
+end;
+
+{ TPipeBackend's, and once the program is gone (the exit waiter): what is in the pipe
+  now, then the end -- a program it started may hold the pipe's other end for as long
+  as it likes (cmd's "start /b", a daemon) }
+function TProcessPipeBackend.Read(var ABuf; ACount: Integer): Integer;
+var
+  got, avail: DWORD;
+begin
+  while True do
+  begin
+    if InterLockedExchangeAdd(FStopRead, 0) <> 0 then Exit(0);
+    if InterLockedExchangeAdd(FExited, 0) <> 0 then
+    begin
+      avail := 0;
+      if not PeekNamedPipe(FOut, nil, 0, nil, @avail, nil) or (avail = 0) then Exit(0);
+      if avail > DWORD(ACount) then
+        avail := ACount;
+      got := 0;
+      if ReadFile(FOut, ABuf, avail, got, nil) then
+        Exit(got);
+      Exit(0);
+    end;
+    got := 0;
+    if ReadFile(FOut, ABuf, ACount, got, nil) then
+      Exit(got);
+    { a cancel that is not ours to end on (the exit waiter's: looked at above; the
+      write side's): read on }
+    if (GetLastError = ERROR_OPERATION_ABORTED) and (InterLockedExchangeAdd(FStopRead, 0) = 0) then
+      Continue;
+    Exit(0);
+  end;
 end;
 
 procedure TProcessPipeBackend.Resize(ACols, ARows: Integer);
@@ -672,30 +792,59 @@ begin
   { a pipe has no size }
 end;
 
-{ the main thread, quick: a blocked write returns, the program reads EOF. The handle
-  is taken out of FIn before it is closed: the writer, stopped already, fails on 0 }
+{ the main thread, quick: a blocked write returns and the writer stops. The input pipe
+  stays open -- the writer may be inside a WriteFile on it; FinishClose closes it once
+  the writer is gone }
 procedure TProcessPipeBackend.BeginClose;
+begin
+  StopWrites;
+  if FCloseEvent <> 0 then
+    SetEvent(FCloseEvent);
+end;
+
+procedure TProcessPipeBackend.CloseInput;
 var
   h: THandle;
 begin
-  StopWrites;
   h := FIn;
   FIn := 0;
   if h <> 0 then
     CloseHandle(h);
 end;
 
+procedure TProcessPipeBackend.StopWaiter;
+begin
+  if FWaiter = nil then Exit;
+  if FCloseEvent <> 0 then
+    SetEvent(FCloseEvent);
+  FWaiter.WaitFor;                       { it looks at the event at least every 20 ms }
+  FreeAndNil(FWaiter);
+end;
+
 function TProcessPipeBackend.FinishClose(AWaitMs: Integer): TPtyCloseResult;
+var
+  t0: QWord;
 begin
   Result := pcrGone;
   if FProcess = 0 then Exit;
-  if WaitForSingleObject(FProcess, AWaitMs) = WAIT_OBJECT_0 then
-    Exit;
-  { it did not go with its input: by its handle, nothing else (never by name) }
-  FKilled := True;
-  Result := pcrKilled;
-  TerminateProcess(FProcess, 1);
-  WaitForSingleObject(FProcess, PtyKillWaitMs);
+  { 1. the writer goes (BeginClose stopped it; a stop that lands between two writes is
+    lost, so it is repeated), then the input's end: the program reads EOF. A writer that
+    does not go keeps the handle -- the program is ended below instead }
+  t0 := GetTickCount64;
+  while (FWriterHandle <> 0) and (WaitForSingleObject(FWriterHandle, 20) <> WAIT_OBJECT_0)
+    and (GetTickCount64 - t0 < PtyKillWaitMs) do
+    StopWrites;
+  if (FWriterHandle = 0) or (WaitForSingleObject(FWriterHandle, 0) = WAIT_OBJECT_0) then
+    CloseInput;
+  { 2. the program goes with its input, or by its handle (never by name) }
+  if WaitForSingleObject(FProcess, AWaitMs) <> WAIT_OBJECT_0 then
+  begin
+    FKilled := True;
+    Result := pcrKilled;
+    TerminateProcess(FProcess, 1);
+    WaitForSingleObject(FProcess, PtyKillWaitMs);
+  end;
+  StopWaiter;
 end;
 
 function TProcessPipeBackend.ExitCode(AWaitMs: Integer): Int64;
@@ -710,6 +859,11 @@ begin
     Result := code;
 end;
 
+function TProcessPipeBackend.InputOpen: Boolean;
+begin
+  Result := FIn <> 0;
+end;
+
 procedure TProcessPipeBackend.Shutdown;
 begin
   if FProcess <> 0 then
@@ -719,10 +873,54 @@ begin
       TerminateProcess(FProcess, 1);
       WaitForSingleObject(FProcess, PtyKillWaitMs);
     end;
+  end;
+  StopWaiter;
+  if FProcess <> 0 then
+  begin
     CloseHandle(FProcess);
     FProcess := 0;
   end;
+  if FCloseEvent <> 0 then
+  begin
+    CloseHandle(FCloseEvent);
+    FCloseEvent := 0;
+  end;
   CloseHandles;
+end;
+
+{ ---- TProcessPipeExitWaiter ---------------------------------------------------------------- }
+
+constructor TProcessPipeExitWaiter.Create(AOwner: TProcessPipeBackend);
+begin
+  FOwner := AOwner;
+  FreeOnTerminate := False;
+  inherited Create(False);
+end;
+
+{ The program exits, or the backend closes. On an exit the reader is told to drain the
+  pipe and end (Read), and a read blocked on a pipe that another program still holds is
+  cancelled -- again every 20 ms (a cancel between two reads is lost) until the reader
+  has gone or the backend closes. The reader's thread handle stays valid until the
+  session frees the thread, which is after FinishClose stopped this thread. }
+procedure TProcessPipeExitWaiter.Execute;
+var
+  hs: array[0..1] of THandle;
+  r: THandle;
+begin
+  hs[0] := FOwner.FProcess;
+  hs[1] := FOwner.FCloseEvent;
+  if WaitForMultipleObjects(2, PWOHandleArray(@hs[0]), False, INFINITE) <> WAIT_OBJECT_0 then
+    Exit;
+  InterLockedExchange(FOwner.FExited, 1);
+  repeat
+    r := FOwner.FReaderHandle;
+    if r <> 0 then
+    begin
+      if WaitForSingleObject(r, 0) = WAIT_OBJECT_0 then
+        Exit;
+      CancelSynchronousIo(r);
+    end;
+  until WaitForSingleObject(FOwner.FCloseEvent, 20) = WAIT_OBJECT_0;
 end;
 
 {$ENDIF}

@@ -31,6 +31,7 @@
   "uzmodemsession.rszmfileerror": "对方无法写入文件",
   "uzmodemsession.rszmreadfailed": "无法读完文件",
   "uzmodemsession.rszmtimeout": "对方没有应答",
+  "uzmodemsession.rszmtoobig": "ZModem 无法传送 4 GiB 及以上的文件",
   "uzmodemsession.rszmtoomanyerrors": "同一位置出错次数过多",
   "uzmodemsession.rszmwritefailed": "无法写入文件",
   "uzmodemterm.rszmcancelledline": "ZModem 传输已取消",
@@ -38,5 +39,6 @@
   "uzmodemterm.rszmdeclined": "ZModem 传输已拒绝",
   "uzmodemterm.rszmfailedline": "ZModem 传输失败：%s",
   "uzmodemterm.rszmreceivedline": "已接收 %d 个文件，%s，用时 %s 秒（%s/s）",
-  "uzmodemterm.rszmsentline": "已发送 %d 个文件，%s，用时 %s 秒（%s/s）"
+  "uzmodemterm.rszmsentline": "已发送 %d 个文件，%s，用时 %s 秒（%s/s）",
+  "uzmodemterm.rszmskippedline": "已跳过 %s：%s"
 }

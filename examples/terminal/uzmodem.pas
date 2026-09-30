@@ -43,6 +43,8 @@ const
   ZCBIN = 1;
   ZmMaxRecvSubpacket = 8192;
   ZmSendSubpacket = 1024;
+  { a header's position is 32 bits: a file this long or longer cannot be carried }
+  ZmMaxFileSize = Int64($100000000);
   { what lrzsz sends to abort, as seen on the wire (spec 19.2 item 11) }
   ZmAbortSequence = #24#24#24#24#24#24#24#24#24#24#8#8#8#8#8#8#8#8#8#8;
 
