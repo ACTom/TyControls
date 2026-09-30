@@ -173,6 +173,7 @@ uses
   test.terminal.view.input, test.terminal.view.theme, test.terminal.example,
   test.terminal.selection, test.terminal.links, test.terminal.view.mouse,
   test.terminal.view.links, test.terminal.pty, test.terminal.reflow, test.terminal.perf,
+  test.terminal.colorscheme,
   test.transitions,
   test.htmllabel,
   test.shape,

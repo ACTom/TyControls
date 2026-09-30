@@ -936,6 +936,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Terminal.Links.pas"/>
         <UnitName Value="tyControls.Terminal.Links"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.ColorScheme.pas"/>
+        <UnitName Value="tyControls.Terminal.ColorScheme"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
