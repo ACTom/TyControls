@@ -72,7 +72,7 @@ The template creates a main form with a custom-drawn title bar, the content cont
 
 **3. Switch themes**
 
-Select the `TTyStyleController` on the form and set `ThemeName` to any built-in theme name. The designer updates immediately; change the same property at runtime to hot-swap.
+Select the `TTyStyleController` on the form and set `ThemeName` to any built-in theme name. The designer updates immediately; change the same property at runtime to hot-swap. The template's `.lpr` already calls `TyRegisterBuiltinThemes` at startup; a project set up another way needs that line too, or a built-in theme picked by name shows only in the designer.
 
 Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 

@@ -343,7 +343,7 @@ begin
     + '  athreads,' + LE
     + '  {$ENDIF}' + LE
     + '  Interfaces, // this includes the LCL widgetset' + LE
-    + '  Forms' + LE
+    + '  Forms, tyControls.BuiltinThemes' + LE
     + '  { you can add units after this };' + LE + LE
     + 'begin' + LE
     + '  RequireDerivedFormResource := True;' + LE
@@ -352,6 +352,12 @@ begin
     + '  Application.MainFormOnTaskbar := True;' + LE
     + '  {$POP}' + LE
     + '  Application.Initialize;' + LE
+    { The built-in themes are registered by the APPLICATION: the IDE registers them for
+      the designer (tyControls.Design), so a ThemeName picked in the Object Inspector
+      shows there -- and without this line the program then opens with the default look.
+      Before the forms: the IDE puts each Application.CreateForm in front of
+      Application.Run, so the first paint is already themed. }
+    + '  TyRegisterBuiltinThemes; // the built-in themes, so ThemeName works at run time' + LE
     + '  Application.Run;' + LE
     + 'end.' + LE + LE;
   AProject.MainFile.SetSourceText(NewSource, True);

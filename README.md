@@ -72,7 +72,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 **3. 换主题**
 
-选中窗体上的 `TTyStyleController`,把 `ThemeName` 改成任意内置主题名。设计器里立即生效,运行时改同一个属性即热切换。
+选中窗体上的 `TTyStyleController`,把 `ThemeName` 改成任意内置主题名。设计器里立即生效,运行时改同一个属性即热切换。模板生成的 `.lpr` 已在启动时调用 `TyRegisterBuiltinThemes`;用别的方式建的工程也要加上这一行,否则按名字选的内置主题只在设计器里生效。
 
 完整步骤见 [docs/getting-started.md](docs/getting-started.md)。
 
