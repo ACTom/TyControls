@@ -10,9 +10,9 @@ A custom-drawn component library for Lazarus. All 162 controls are rendered with
 
 | `classic` | `win11` | `material3` |
 |---|---|---|
-| ![classic theme](docs/images/antd-classic.png) | ![win11 theme](docs/images/antd-win11.png) | ![material3 theme](docs/images/antd-material3.png) |
+| ![classic theme](docs/images/skin-classic.png) | ![win11 theme](docs/images/skin-win11.png) | ![material3 theme](docs/images/skin-material3.png) |
 
-All four screenshots share one `.lfm` and one code base; only the theme name differs. Themes go beyond colors: under `classic`, buttons get 3D bevels, square corners, and a gradient header band.
+The three are one window and one code base; only the theme name differs. Themes go beyond colors: under `classic`, buttons get 3D bevels, square corners, and a gradient header band. Every built-in theme side by side: see the [gallery](docs/gallery.en.md).
 
 ### Light / dark / image themes
 
@@ -26,8 +26,11 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 
 | | |
 |---|---|
-| **`TTyStringGrid`** frozen columns, row gutter, summary band<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
-| **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **Custom-drawn dialogs** color picker<br>![color dialog](docs/images/colordialog.png) |
+| **`TTyStringGrid`** per-column editors: check box, rating, colour, button<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
+| **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **`TTyChart`** line, bar, pie, donut<br>![chart](docs/images/chart.png) |
+| **`TTyRibbon`** ribbon, quick access toolbar, Alt key tips<br>![ribbon](docs/images/ribbon.png) | **`TTyCalendar`** week numbers, today highlight, selectable range<br>![calendar](docs/images/calendar.png) |
+
+Every example, every tab page, in light and dark: see the [gallery](docs/gallery.en.md).
 
 ---
 
