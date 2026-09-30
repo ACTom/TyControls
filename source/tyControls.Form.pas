@@ -457,6 +457,15 @@ type
       the identical background onto its OWN (edge-reaching) canvas. Uses the form's controller (or the
       built-in default). }
     procedure RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
+    { The themed part of RenderBackgroundTo, rendered into ABmp over its whole size (the same
+      pixels RenderBackgroundTo composites onto a canvas). False, ABmp untouched, when there is
+      no themed background -- RenderBackgroundTo then fills the LCL Color instead. }
+    function PaintBackgroundInto(ABmp: TBGRABitmap): Boolean;
+    { Everything the background depends on besides the size: the controller and its theme
+      version, this form's StyleOverride, PPI and Color. The surface drops its cached
+      background when this changes: a change here need not Invalidate it -- one made on the
+      controller's Model directly bumps the version and tells no control at all. }
+    function BackgroundCacheKey: string;
     { Public trigger for RebuildBackdrop, so the surface can keep the glass snapshot current from its
       own paint cycle (the form's own Paint no longer fires once the surface covers the client). }
     procedure EnsureBackdrop;
@@ -2527,34 +2536,62 @@ begin
   RebuildBackdrop;
 end;
 
-procedure TTyForm.RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
+function TTyForm.PaintBackgroundInto(ABmp: TBGRABitmap): Boolean;
 var
   bg: TTyStyleSet;
   P: TTyPainter;
+  r: TRect;
+begin
+  Result := False;
+  if (ABmp = nil) or (FController = nil) then Exit;
+  bg := ResolveChromeStyle(FController);
+  if not (tpBackground in bg.Present) then Exit;
+  r := Rect(0, 0, ABmp.Width, ABmp.Height);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(nil, r, Font.PixelsPerInch, ABmp);
+    P.FillBackground(r, bg.Background, 0);
+    // Themed window frame (non-image themes; e.g. the XP Luna blue border). The title bar
+    // covers the top run; the side + bottom runs show in the client margins.
+    if (bg.Background.Kind <> tfkImage)
+       and (tpBorderColor in bg.Present) and (bg.BorderWidth > 0) then
+      P.StrokeBorder(r, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
+    P.EndPaint;   // no canvas: nothing is drawn, the bitmap stays the caller's
+  finally
+    P.Free;
+  end;
+  Result := True;
+end;
+
+function TTyForm.BackgroundCacheKey: string;
+var
+  ver: Cardinal;
+begin
+  if FController <> nil then ver := FController.Model.ThemeVersion else ver := 0;
+  Result := Format('%p|%u|%d|%d|%s', [Pointer(FController), ver, Font.PixelsPerInch,
+    Integer(Color), FStyleOverride]);
+end;
+
+procedure TTyForm.RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
+var
+  bmp: TBGRABitmap;
 begin
   // Paint the themed `form` background (image / solid / gradient) OPAQUELY across ARect. Called BOTH
   // by the form's own Paint and by TTyFormSurface.Paint (onto the surface's edge-reaching canvas, so
   // the WS_THICKFRAME dead band is covered). The glass backdrop snapshot is kept current separately
   // via EnsureBackdrop. App controls paint on top in their own windows.
-  if FController <> nil then
+  if (ARect.Right > ARect.Left) and (ARect.Bottom > ARect.Top) then
   begin
-    bg := ResolveChromeStyle(FController);
-    if tpBackground in bg.Present then
-    begin
-      P := TTyPainter.Create;
-      try
-        P.BeginPaint(ACanvas, ARect, Font.PixelsPerInch);
-        P.FillBackground(ARect, bg.Background, 0);
-        // Themed window frame (non-image themes; e.g. the XP Luna blue border). The title bar
-        // covers the top run; the side + bottom runs show in the client margins.
-        if (bg.Background.Kind <> tfkImage)
-           and (tpBorderColor in bg.Present) and (bg.BorderWidth > 0) then
-          P.StrokeBorder(ARect, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
-        P.EndPaint;
-      finally
-        P.Free;
+    bmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top,
+      BGRAPixelTransparent);
+    try
+      if PaintBackgroundInto(bmp) then
+      begin
+        bmp.Draw(ACanvas, ARect.Left, ARect.Top, False);   // as the painter's EndPaint lays it down
+        Exit;
       end;
-      Exit;
+    finally
+      bmp.Free;
     end;
   end;
   // No controller / no bg token: opaque LCL Color fill (still covers the band with the fallback colour).

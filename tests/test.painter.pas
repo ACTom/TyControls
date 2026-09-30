@@ -61,6 +61,9 @@ type
     procedure TestARunTooBigForTheKeptBitmapGetsItsOwn;
     procedure TestTheKeptBitmapIsClearedBetweenRuns;
     procedure TestTheCoverageIsReadOffTheDib;
+    procedure TestAShadowIsRenderedOncePerLook;
+    procedure TestANineSliceImageIsReadOnce;
+    procedure TestAnImageFillIsServedWithoutTheDisk;
   end;
 
 implementation
@@ -244,7 +247,12 @@ end;
   blocky), BGRA's ClearType (coloured, and lighter). What the eye compares is how much ink a
   line lays down and how much of it is solid -- so that is what is compared, against GDI's
   own ClearType drawing the same string in the same font, black on white and white on black.
-  Each of the three rejected renderings misses one of the two by far more than the margin. }
+  Each of the three rejected renderings misses one of the two by far more than the margin.
+  The reference is GDI under THIS machine's ClearType settings, on purpose: away from the
+  default contrast Windows inks light-on-dark heavier than dark-on-light (12% for Segoe UI
+  at 1200), so a light-ink case going red where it was green is the renderer drifting from
+  what Windows draws on that desktop -- light ink drawn from dark-on-light coverage did
+  exactly that -- not an environment to be waved through. }
 procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
 
   { Coverage of every pixel: 0 = paper, 1 = ink. }
@@ -1115,6 +1123,216 @@ begin
         FreePainter;
       end;
     end;
+end;
+
+{ Every pixel, alpha included, of A and B. }
+procedure AssertSamePixels(const AMsg: string; A, B: TBGRABitmap);
+var
+  x, y, diff: Integer;
+  pa, pb: TBGRAPixel;
+begin
+  TAssert.AssertEquals(AMsg + ': width', B.Width, A.Width);
+  TAssert.AssertEquals(AMsg + ': height', B.Height, A.Height);
+  diff := 0;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+    begin
+      pa := A.GetPixel(x, y);
+      pb := B.GetPixel(x, y);
+      if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue)
+         or (pa.alpha <> pb.alpha) then
+        Inc(diff);
+    end;
+  TAssert.AssertEquals(AMsg + ': pixels that differ', 0, diff);
+end;
+
+{ A SHADOW IS RENDERED ONCE PER LOOK (TTyPainter.DropShadow).
+  Each look is drawn with the cache off -- the reference, rendered the way every shadow
+  always was -- and then with it on, and the two must be the same bytes. The looks are drawn
+  in an order that makes the key matter: the first is kept, and every one after it differs
+  from it in ONE thing the shadow depends on (the bitmap's size, the outline, the radius, the
+  blur, the colour), so a key that left that thing out would hand back the first shadow.
+  The offset is not in the key -- it is applied when the shadow is laid down -- so the look
+  moved by an offset must come from the cache and still land where the reference does. One
+  outline runs off the bitmap's edge, where the blur is cut off. }
+procedure TPainterTest.TestAShadowIsRenderedOncePerLook;
+type
+  TLook = record
+    W, H: Integer;
+    R: TRect;
+    Rad, Blur: Integer;
+    C: TTyColor;
+    Ofs: TPoint;
+  end;
+
+  function Look(AW, AH: Integer; const AR: TRect; ARad, ABlur: Integer; AC: TTyColor;
+    const AOfs: TPoint): TLook;
+  begin
+    Result.W := AW; Result.H := AH; Result.R := AR; Result.Rad := ARad; Result.Blur := ABlur;
+    Result.C := AC; Result.Ofs := AOfs;
+  end;
+
+  function Draw(const L: TLook; ACache: Boolean): TBGRABitmap;
+  var
+    saved: Boolean;
+  begin
+    saved := TyShadowCacheEnabled;
+    TyShadowCacheEnabled := ACache;
+    try
+      MakePainter(L.W, L.H, 96);
+      try
+        FPainter.DropShadow(L.R, L.Rad, L.C, L.Blur, L.Ofs);
+        Result := FPainter.Bitmap.Duplicate as TBGRABitmap;
+      finally
+        FreePainter;
+      end;
+    finally
+      TyShadowCacheEnabled := saved;
+    end;
+  end;
+
+  procedure Check(const AMsg: string; const L: TLook; AExpectRender: Boolean);
+  var
+    want, got: TBGRABitmap;
+    before: Integer;
+  begin
+    want := Draw(L, False);
+    before := TyShadowsRendered;
+    got := Draw(L, True);
+    try
+      AssertSamePixels(AMsg, got, want);
+      if AExpectRender then
+        AssertEquals(AMsg + ': rendered, not taken from the cache', before + 1, TyShadowsRendered)
+      else
+        AssertEquals(AMsg + ': taken from the cache', before, TyShadowsRendered);
+    finally
+      want.Free;
+      got.Free;
+    end;
+  end;
+
+var
+  base: TLook;
+  shade: TTyColor;
+begin
+  TyClearShadowCache;
+  shade := TyRGBA(0, 0, 0, 90);
+  base := Look(160, 110, Rect(16, 14, 140, 92), 8, 10, shade, Point(0, 4));
+  Check('the first look', base, True);
+  Check('the same look again', base, False);
+  Check('the same look at another offset', Look(160, 110, Rect(16, 14, 140, 92), 8, 10, shade,
+    Point(3, -2)), False);
+  Check('a bitmap of another size', Look(170, 110, Rect(16, 14, 140, 92), 8, 10, shade,
+    Point(0, 4)), True);
+  Check('another outline', Look(160, 110, Rect(20, 14, 140, 92), 8, 10, shade, Point(0, 4)), True);
+  Check('another radius', Look(160, 110, Rect(16, 14, 140, 92), 3, 10, shade, Point(0, 4)), True);
+  Check('another blur', Look(160, 110, Rect(16, 14, 140, 92), 8, 4, shade, Point(0, 4)), True);
+  Check('another colour', Look(160, 110, Rect(16, 14, 140, 92), 8, 10, TyRGBA(200, 0, 0, 90),
+    Point(0, 4)), True);
+  Check('an outline off the edge', Look(160, 110, Rect(-6, 14, 150, 104), 8, 10, shade,
+    Point(0, 4)), True);
+  Check('no blur, and square', Look(160, 110, Rect(16, 14, 140, 92), 0, 0, shade, Point(0, 4)), True);
+  Check('no blur, and square, again', Look(160, 110, Rect(16, 14, 140, 92), 0, 0, shade,
+    Point(0, 4)), False);
+end;
+
+{ Writes a small picture with a different colour in each of its nine cells. }
+function WriteNineCellPng(const APath: string): Boolean;
+var
+  b: TBGRABitmap;
+  x, y: Integer;
+begin
+  b := TBGRABitmap.Create(9, 9);
+  try
+    for y := 0 to 8 do
+      for x := 0 to 8 do
+        b.SetPixel(x, y, BGRA(40 + 70 * (x div 3), 40 + 70 * (y div 3), 200, 255));
+    b.SaveToFile(APath);
+  finally
+    b.Free;
+  end;
+  Result := FileExists(APath);
+end;
+
+{ A NINE-SLICE IMAGE IS READ ONCE. NineSlice read its file from disk on every paint; it now
+  shares DrawImageFill's image cache. Drawn once, the file removed, drawn again: the second
+  picture is the first. }
+procedure TPainterTest.TestANineSliceImageIsReadOnce;
+var
+  path: string;
+  first, second: TBGRABitmap;
+begin
+  path := GetTempDir(False) + 'ty_nineslice_' + IntToStr(GetProcessID) + '_'
+    + IntToStr(GetTickCount64) + '.png';
+  AssertTrue('precondition: the picture was written', WriteNineCellPng(path));
+  MakePainter(60, 40, 96);
+  try
+    FPainter.NineSlice(Rect(0, 0, 60, 40), path, Rect(3, 3, 3, 3), False);
+    first := FPainter.Bitmap.Duplicate as TBGRABitmap;
+  finally
+    FreePainter;
+  end;
+  try
+    AssertTrue('precondition: the slices were drawn', first.GetPixel(30, 20).alpha = 255);
+    AssertTrue('precondition: the file is gone', DeleteFile(path));
+    MakePainter(60, 40, 96);
+    try
+      FPainter.NineSlice(Rect(0, 0, 60, 40), path, Rect(3, 3, 3, 3), False);
+      second := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    finally
+      FreePainter;
+    end;
+    try
+      AssertSamePixels('the second paint, without the file', second, first);
+    finally
+      second.Free;
+    end;
+  finally
+    first.Free;
+  end;
+end;
+
+{ AN IMAGE FILL IS SERVED WITHOUT THE DISK. The image cache asked the file system whether the
+  file existed before it looked in the cache, on every paint; it now looks first. Drawn once,
+  the file removed, drawn again: the cached picture is still drawn. }
+procedure TPainterTest.TestAnImageFillIsServedWithoutTheDisk;
+var
+  path: string;
+  fill: TTyFill;
+  first, second: TBGRABitmap;
+begin
+  path := GetTempDir(False) + 'ty_imagefill_' + IntToStr(GetProcessID) + '_'
+    + IntToStr(GetTickCount64) + '.png';
+  AssertTrue('precondition: the picture was written', WriteNineCellPng(path));
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkImage;
+  fill.ImagePath := path;
+  fill.ImageMode := timStretch;
+  MakePainter(45, 45, 96);
+  try
+    FPainter.FillBackground(Rect(0, 0, 45, 45), fill, 0);
+    first := FPainter.Bitmap.Duplicate as TBGRABitmap;
+  finally
+    FreePainter;
+  end;
+  try
+    AssertTrue('precondition: the picture was drawn', first.GetPixel(22, 22).alpha = 255);
+    AssertTrue('precondition: the file is gone', DeleteFile(path));
+    MakePainter(45, 45, 96);
+    try
+      FPainter.FillBackground(Rect(0, 0, 45, 45), fill, 0);
+      second := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    finally
+      FreePainter;
+    end;
+    try
+      AssertSamePixels('the second paint, without the file', second, first);
+    finally
+      second.Free;
+    end;
+  finally
+    first.Free;
+  end;
 end;
 
 initialization

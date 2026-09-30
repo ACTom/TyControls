@@ -26,7 +26,7 @@ uses
   test.controls.scrollbar,
   test.scrollbar.autohide,
   test.scrollbar.hostframe,
-  test.form, test.formsurface, test.edgepassthrough, test.release, test.themes,
+  test.form, test.formsurface, test.formsurface.cache, test.edgepassthrough, test.release, test.themes,
   test.listbox, test.listbox.scroll,
   test.progressbar,
   test.toggleswitch,

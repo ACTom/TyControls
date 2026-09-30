@@ -419,6 +419,13 @@ procedure TyUseTextRenderer(ABmp: TBGRABitmap);
 { FOR THE TESTS: GDI bitmaps the Win32 text renderer has made or grown (it keeps one); 0
   elsewhere. }
 function TyGdiTextBitmapsMade: Integer;
+{ FOR THE TESTS: drop shadows actually rendered (blurred) since start -- a draw served from
+  the shadow cache does not count. }
+function TyShadowsRendered: Integer;
+{ FOR THE TESTS: drop the cached shadows (the next draw of each renders again). }
+procedure TyClearShadowCache;
+{ Every pixel of ABmp has alpha 255 (stops at the first that does not). }
+function TyBitmapIsOpaque(ABmp: TBGRABitmap): Boolean;
 { FOR THE TESTS, pure queries (0 / False elsewhere than Win32): the kept bitmap's handle
   and size (0 when there is none); the bitmaps made for one run only (another thread's
   run, a run too big to keep one for); the runs whose coverage went through a whole
@@ -657,6 +664,11 @@ var
         than reason about when to drop it.
     Flipping it to False never changes an answer, only how long it takes. }
   TyTextMeasureCacheEnabled: Boolean = True;
+
+  { Off switch for the drop-shadow cache (see TTyPainter.DropShadow). Like the memo's, it
+    never changes a pixel, only how long a shadow takes: the tests draw every shadow with it
+    off too and require the same bytes. }
+  TyShadowCacheEnabled: Boolean = True;
 
 implementation
 
@@ -1234,10 +1246,14 @@ type
 
     What Windows draws is the third one's SHAPES -- hinted vertically only, so horizontal
     strokes are crisp and the glyph keeps its form -- at the weight ClearType gives them. This
-    renderer draws exactly that: GDI renders the run in ClearType, black on white, the three
-    subpixel coverages are averaged into one grey, and that grey is laid down in the ink colour
-    with the same non-gamma blend GDI uses. (Black on white serves light ink too: GDI's
-    ClearType covers a light-on-dark run within half a percent of the dark-on-light one.)
+    renderer draws exactly that: GDI renders the run in ClearType in the ink's polarity --
+    dark ink black on white, light ink white on black -- the three subpixel coverages are
+    averaged into one grey, and that grey is laid down in the ink colour with the same
+    non-gamma blend GDI uses. The polarity is not a nicety: Windows weights the two
+    differently under the user's ClearType contrast. At the default (1400) they cover within
+    half a percent of each other; at 1200 a white-on-black line of 9pt Segoe UI inks 12% more
+    than the black-on-white one, and light text drawn from the dark-on-light coverage came out
+    a tenth lighter than the text Windows drew beside it.
     Measured on a line of 9pt YaHei: the ink it lays down is the ink native ClearType lays
     down (1403 against 1404 at 100%, 3697 against 3697 at 175%), and so is the share of solid
     pixels; there is no colour, so a transparent surface or an accent button is safe.
@@ -1313,7 +1329,7 @@ var
   shot: TBGRABitmap;
   row: PBGRAPixel;
   ink: TBGRAPixel;
-  kept: Boolean;
+  kept, lightInk: Boolean;
   ds: TDIBSection;
   bits, line: PByte;
   stride, bpp, nw, nh: Integer;
@@ -1327,6 +1343,8 @@ begin
     Exit;
   end;
   if c.alpha = 0 then Exit;
+  { Light ink is drawn white on black, as Windows draws light text: see the class comment. }
+  lightInk := (c.red * 30 + c.green * 59 + c.blue * 11) div 100 > 128;
   UpdateFont;
   sz := InternalTextSizeStyle(sUTF8, RunStyle(ARightToLeft, AShowPrefix), MaxLongint);
   if (sz.cx <= 0) or (sz.cy <= 0) then Exit;
@@ -1400,7 +1418,7 @@ begin
       tmp.PixelFormat := pf24bit;
       tmp.SetSize(w, h);
     end;
-    tmp.Canvas.Brush.Color := clWhite;
+    if lightInk then tmp.Canvas.Brush.Color := clBlack else tmp.Canvas.Brush.Color := clWhite;
     tmp.Canvas.FillRect(0, 0, w, h);
     { A fresh canvas's font was born at the screen's PPI of the moment, and Assign takes
       the pixel height across only between equal PPIs (Size otherwise): the kept canvas
@@ -1409,7 +1427,7 @@ begin
     tmp.Canvas.Font := FFont;
     TTyCanvasAccess(tmp.Canvas).RequiredState([csHandleValid, csFontValid]);
     SetBkMode(tmp.Canvas.Handle, TRANSPARENT);
-    SetTextColor(tmp.Canvas.Handle, 0);
+    if lightInk then SetTextColor(tmp.Canvas.Handle, $FFFFFF) else SetTextColor(tmp.Canvas.Handle, 0);
     { The flags BGRA's BitmapTextExtentStyle measures RunStyle with, less DT_CALCRECT. }
     flags := DT_SINGLELINE or DT_NOCLIP;
     if ARightToLeft then flags := flags or DT_RTLREADING;
@@ -1463,9 +1481,10 @@ begin
       for px := 0 to w - 1 do
       begin
         if line <> nil then
-          cov := 255 - (line[px * bpp] + line[px * bpp + 1] + line[px * bpp + 2]) div 3
+          cov := (line[px * bpp] + line[px * bpp + 1] + line[px * bpp + 2]) div 3
         else
-          cov := 255 - (row[px].red + row[px].green + row[px].blue) div 3;
+          cov := (row[px].red + row[px].green + row[px].blue) div 3;
+        if not lightInk then cov := 255 - cov;
         if cov > 0 then
         begin
           a := cov * c.alpha div 255;
@@ -2033,11 +2052,81 @@ begin
   FBmp.PutImage(x, y, ABmp, dmDrawWithTransparency);
 end;
 
+type
+  { A rendered shadow, cropped to the pixels that carry any alpha, and where that crop sat
+    in the bitmap it was rendered on. }
+  TTyShadowEntry = class
+    Bmp: TBGRABitmap;
+    Origin: TPoint;
+    destructor Destroy; override;
+  end;
+
+destructor TTyShadowEntry.Destroy;
+begin
+  Bmp.Free;
+  inherited Destroy;
+end;
+
+const
+  { Pixels the shadow cache may hold, all entries together (4 bytes each: 16 MB). A shadow
+    bigger than that on its own is drawn every time, as before. }
+  ShadowCacheMaxPixels = 4 * 1024 * 1024;
+
+var
+  GShadowCache: TStringList = nil;   // sorted key -> TTyShadowEntry (OwnsObjects)
+  GShadowCachePixels: Int64 = 0;
+  GShadowsRendered: Integer = 0;
+
+function TyShadowsRendered: Integer;
+begin
+  Result := GShadowsRendered;
+end;
+
+procedure TyClearShadowCache;
+begin
+  if GShadowCache <> nil then GShadowCache.Clear;
+  GShadowCachePixels := 0;
+end;
+
+function TyBitmapIsOpaque(ABmp: TBGRABitmap): Boolean;
+var
+  y, x: Integer;
+  p: PBGRAPixel;
+begin
+  Result := False;
+  if ABmp = nil then Exit;
+  for y := 0 to ABmp.Height - 1 do
+  begin
+    p := ABmp.ScanLine[y];
+    for x := 0 to ABmp.Width - 1 do
+    begin
+      if p^.alpha <> 255 then Exit;
+      Inc(p);
+    end;
+  end;
+  Result := True;
+end;
+
+
+{ DROP SHADOWS ARE RENDERED ONCE PER LOOK.
+  A shadow is a blur of the control's outline over a bitmap the size of the control, redone
+  on every paint: 38 ms for a 400 x 300 card, 300 ms for 1200 x 800, so a shadowed card
+  (fluent's cards and buttons carry one) stalled on every hover. What it depends on is all
+  here -- the bitmap's size, the outline, the corner radius, the blur, the colour -- so it is
+  kept under exactly that key; the offset is applied when it is laid down. The cache holds
+  the blur cropped to its ink and puts it back where it came from: every pixel outside the
+  crop is fully transparent, which a transparent draw leaves alone, so the result is the
+  same bytes. Main thread only (another thread renders as before); bounded by
+  ShadowCacheMaxPixels, emptied whole when full. }
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
 var
-  r, blur, ox, oy: Integer;
+  r, blur, ox, oy, idx: Integer;
   shadow, blurred: TBGRABitmap;
   px: TBGRAPixel;
+  key: string;
+  useCache: Boolean;
+  entry: TTyShadowEntry;
+  ink: TRect;
 begin
   if FBmp = nil then
     Exit;
@@ -2047,7 +2136,29 @@ begin
   ox := Scale(AOffsetLogical.X);
   oy := Scale(AOffsetLogical.Y);
   px := TyColorToBGRA(AColor);
+  useCache := TyShadowCacheEnabled and (GetCurrentThreadId = MainThreadID)
+    and (Int64(FBmp.Width) * FBmp.Height <= ShadowCacheMaxPixels);
+  key := '';
+  if useCache then
+  begin
+    key := Format('%d,%d|%d,%d,%d,%d|%d|%d|%.2x%.2x%.2x%.2x', [FBmp.Width, FBmp.Height,
+      ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, r, blur,
+      px.red, px.green, px.blue, px.alpha]);
+    if GShadowCache <> nil then
+    begin
+      idx := GShadowCache.IndexOf(key);
+      if idx >= 0 then
+      begin
+        entry := TTyShadowEntry(GShadowCache.Objects[idx]);
+        if entry.Bmp <> nil then
+          FBmp.PutImage(ox + entry.Origin.X, oy + entry.Origin.Y, entry.Bmp, dmDrawWithTransparency);
+        Exit;
+      end;
+    end;
+  end;
+  Inc(GShadowsRendered);
   shadow := TBGRABitmap.Create(FBmp.Width, FBmp.Height, BGRAPixelTransparent);
+  blurred := nil;
   try
     if r <= 0 then
       shadow.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmSet)
@@ -2056,16 +2167,42 @@ begin
     if blur > 0 then
     begin
       blurred := shadow.FilterBlurRadial(blur, rbFast) as TBGRABitmap;
-      try
-        FBmp.PutImage(ox, oy, blurred, dmDrawWithTransparency);
-      finally
-        blurred.Free;
-      end;
+      FBmp.PutImage(ox, oy, blurred, dmDrawWithTransparency);
     end
     else
       FBmp.PutImage(ox, oy, shadow, dmDrawWithTransparency);
+    if useCache then
+    begin
+      if blurred = nil then
+      begin
+        blurred := shadow;
+        shadow := nil;
+      end;
+      entry := TTyShadowEntry.Create;
+      ink := blurred.GetImageBounds;
+      if not IsRectEmpty(ink) then
+      begin
+        entry.Bmp := blurred.GetPart(ink) as TBGRABitmap;
+        entry.Origin := ink.TopLeft;
+      end;
+      if GShadowCache = nil then
+      begin
+        GShadowCache := TStringList.Create;
+        GShadowCache.Sorted := True;
+        GShadowCache.Duplicates := dupError;
+        GShadowCache.OwnsObjects := True;
+      end;
+      if entry.Bmp <> nil then
+      begin
+        if GShadowCachePixels + Int64(entry.Bmp.Width) * entry.Bmp.Height > ShadowCacheMaxPixels then
+          TyClearShadowCache;
+        Inc(GShadowCachePixels, Int64(entry.Bmp.Width) * entry.Bmp.Height);
+      end;
+      GShadowCache.AddObject(key, entry);
+    end;
   finally
     shadow.Free;
+    blurred.Free;
   end;
 end;
 
@@ -2723,6 +2860,8 @@ begin
   end;
 end;
 
+function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap; forward;
+
 procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
   src: TBGRABitmap;
@@ -2733,10 +2872,12 @@ var
 begin
   if FBmp = nil then
     Exit;
-  if not FileExists(AImagePath) then
+  { The image cache DrawImageFill uses (owned by it -- not freed here): the file was read
+    from disk on every paint. }
+  src := GetCachedImage(AImagePath, 0);
+  if src = nil then
     Exit;
-  src := TBGRABitmap.Create(AImagePath);
-  try
+  begin
     iw := src.Width;
     ih := src.Height;
     sl := AInsets.Left;
@@ -2761,8 +2902,6 @@ begin
     BlitRegion(src, Rect(0, syB, sxL, ih), Rect(dl, db - sb, dl + sl, db));
     BlitRegion(src, Rect(sxL, syB, sxR, ih), Rect(dl + sl, db - sb, dr - sr, db), ATile);
     BlitRegion(src, Rect(sxR, syB, iw, ih), Rect(dr - sr, db - sb, dr, db));
-  finally
-    src.Free;
   end;
 end;
 
@@ -2921,7 +3060,6 @@ var
   raw, bl: TBGRABitmap;
 begin
   Result := nil;
-  if not FileExists(APath) then Exit;
   if GImgCache = nil then
   begin
     GImgCache := TStringList.Create;
@@ -2931,6 +3069,8 @@ begin
   idx := GImgCache.IndexOf(key);
   if idx >= 0 then
     Exit(TBGRABitmap(GImgCache.Objects[idx]));
+  { Asked only on a miss: a hit costs no file-system call. }
+  if not FileExists(APath) then Exit;
   try
     raw := TBGRABitmap.Create(APath);
   except
@@ -3478,6 +3618,7 @@ finalization
   FreeAndNil(TTyGdiTextRenderer.GShot);
   {$ENDIF}
   FreeAndNil(GImgCache);  // OwnsObjects frees the cached bitmaps
+  FreeAndNil(GShadowCache);
   TyInvalidateTextMeasureCache;   // frees the boxed block measurements
   FreeAndNil(GBlockCache);
   FreeAndNil(GRenderCache);
