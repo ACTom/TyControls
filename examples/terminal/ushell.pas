@@ -32,8 +32,8 @@ unit ushell;
   is claimed: an upload is megabytes). An upload is held back while the session has
   more than 256 KB queued for the writer (CanSend). Stop cancels a transfer before it
   unhooks; the abort is queued, not waited for (the program is closed right after). A
-  program that exits mid-transfer
-  ends the transfer before the exit line is written, so the line is shown. }
+  program that exits mid-transfer ends the transfer before the exit line is written, so
+  the line is shown. }
 
 {$mode objfpc}{$H+}
 

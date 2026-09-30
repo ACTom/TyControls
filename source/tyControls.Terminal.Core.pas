@@ -632,7 +632,8 @@ type
     function HasColorOverride(AIndex: Integer): Boolean;
     { stream hooks (spec 19.3-19.5, unit header). Main thread only. }
     procedure AddStreamHandler(AHandler: TTyTerminalStreamHandler);     { again: ignored; nil raises }
-    { the claiming one gets ClaimEnded(tceRemoved) first; unknown: ignored }
+    { taken off the list first, then the claiming one gets ClaimEnded(tceRemoved) (a
+      Detect it causes cannot reach it); unknown: ignored }
     procedure RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);
     property StreamHandlerCount: Integer read GetStreamHandlerCount;
     property StreamClaimed: Boolean read GetStreamClaimed;
