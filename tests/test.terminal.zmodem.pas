@@ -1918,19 +1918,49 @@ begin
     Free;
 end;
 
+function FileText(const APath: string): RawByteString;
+begin
+  Result := ReadBytes(APath);
+end;
+
+{ ZmCreateNewFile: the name, else "name (1).ext", "name (2).ext" ..., each created only
+  if it is not there -- the check and the creation are one step (CREATE_NEW / O_EXCL),
+  so a file that appears in between is never truncated, and a directory of that name
+  is passed over. Mutation (review fix): a create that opens what is there (the file
+  of that name emptied and taken). }
 procedure TTyTerminalZmodemTests.TestUniqueFileNames;
 var
-  d: string;
+  d, path: string;
+  h: THandle;
+
+  procedure Take(const AName, AWant: string);
+  begin
+    h := ZmCreateNewFile(d, AName, path);
+    AssertTrue(AName + ': created', h <> THandle(-1));
+    FileClose(h);
+    AssertEquals(AName, AWant, path);
+  end;
+
 begin
   d := NewTempDir;
   try
-    Touch(d + PathDelim + 'x.txt');
+    with TFileStream.Create(d + PathDelim + 'x.txt', fmCreate) do
+    try
+      WriteBuffer(PChar('keep')^, 4);
+    finally
+      Free;
+    end;
     Touch(d + PathDelim + 'x (1).txt');
-    AssertEquals(d + PathDelim + 'x (2).txt', ZmUniqueFileName(d, 'x.txt'));
+    Take('x.txt', d + PathDelim + 'x (2).txt');
+    AssertEquals('what was there is untouched', 'keep', FileText(d + PathDelim + 'x.txt'));
     Touch(d + PathDelim + 'x');
-    AssertEquals(d + PathDelim + 'x (1)', ZmUniqueFileName(d, 'x'));
-    AssertEquals('free', d + PathDelim + 'y.txt', ZmUniqueFileName(d, 'y.txt'));
+    Take('x', d + PathDelim + 'x (1)');
+    ForceDirectories(d + PathDelim + 'sub.d');
+    Take('sub.d', d + PathDelim + 'sub (1).d');
+    Take('y.txt', d + PathDelim + 'y.txt');
+    Take('y.txt', d + PathDelim + 'y (1).txt');
   finally
+    RemoveDir(d + PathDelim + 'sub.d');
     RemoveTempDir(d);
   end;
 end;

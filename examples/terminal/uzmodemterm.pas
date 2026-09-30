@@ -30,7 +30,9 @@ unit uzmodemterm;
        core's OnClaimedInput), Reset and RemoveStreamHandler stop it: the abort
        sequence goes to the program, a file not received whole is deleted.
   Received files: the remote name's last element, made safe for Windows (ZmSafeFileName),
-  never overwriting (ZmUniqueFileName), with the sender's modification time.
+  never overwriting (ZmCreateNewFile: made only if nothing of that name is there, in one
+  step with the check), with the sender's modification time; a file not received whole
+  is deleted -- always one this transfer made.
   ZMODEM's positions are 32 bits: a file of 4 GiB or more is skipped on the way in (a
   line says so) and refused on the way out (nothing is sent; the line says why).
 
@@ -60,7 +62,8 @@ type
   TZmodemDiskSink = class(TZmFileSink)
   private
     FDir, FPath: string;
-    FStream: TFileStream;
+    FHandle: THandle;
+    FStream: THandleStream;
     FMTime: Int64;
     FSaved: TStringList;
   public
@@ -164,8 +167,14 @@ const
   trailing dots and spaces off, cut to ZmMaxNameBytes (the extension kept, no UTF-8
   sequence cut), a reserved device name prefixed with '_', '' -> 'file' }
 function ZmSafeFileName(const AName: string): string;
-{ ADir + AName when free, else 'name (1).ext', 'name (2).ext' ... }
-function ZmUniqueFileName(const ADir, AName: string): string;
+const
+  ZmInvalidHandle = THandle(-1);
+
+{ a NEW file, never one that is there: ADir + AName, else 'name (1).ext', 'name (2).ext'
+  ... -- each made only if nothing of that name exists, in one step with the check
+  (CREATE_NEW, O_EXCL), so a file that appears meanwhile is never truncated. APath is
+  the one made; ZmInvalidHandle (APath '') when none could be. Close it with FileClose. }
+function ZmCreateNewFile(const ADir, AName: string; out APath: string): THandle;
 { finds a ZRQINIT / ZRINIT hex header with a good CRC; ACarry holds up to 20 bytes of a
   header cut at the end of the previous piece. Answers the header's type (-1 = none)
   and where its first '*' is (0 when it began in the carry). Found: ACarry is then the
@@ -179,7 +188,14 @@ function ZmFormatSize(ABytes: Double): string;
 implementation
 
 uses
-  Math, DateUtils;
+  Math, DateUtils{$IFDEF UNIX}, BaseUnix, UnixType{$ENDIF};
+
+{$IFDEF MSWINDOWS}
+{ declared here: the Windows unit would hide SysUtils' DeleteFile and friends }
+function ZmCreateFileW(lpFileName: PWideChar; dwDesiredAccess, dwShareMode: LongWord; lpSecurityAttributes: Pointer;
+  dwCreationDisposition, dwFlagsAndAttributes: LongWord; hTemplateFile: THandle): THandle; stdcall;
+  external 'kernel32' name 'CreateFileW';
+{$ENDIF}
 
 const
   { what is kept of the program's repeats while the host has not answered }
@@ -263,22 +279,60 @@ begin
       Exit('_' + Result);
 end;
 
-function ZmUniqueFileName(const ADir, AName: string): string;
+{ a new file at APath, or ZmInvalidHandle with AExists telling whether something of
+  that name is there already -- one step, so nothing can appear between the check and
+  the creation }
+function CreateExclusive(const APath: string; out AExists: Boolean): THandle;
+{$IFDEF MSWINDOWS}
+var
+  err: LongWord;
+begin
+  Result := ZmCreateFileW(PWideChar(UnicodeString(UTF8Decode(APath))), $40000000 { GENERIC_WRITE },
+    1 { FILE_SHARE_READ }, nil, 1 { CREATE_NEW }, $80 { FILE_ATTRIBUTE_NORMAL }, 0);
+  AExists := False;
+  if Result = ZmInvalidHandle then
+  begin
+    err := GetLastOSError;
+    { 80 ERROR_FILE_EXISTS, 183 ERROR_ALREADY_EXISTS; a directory of that name may
+      answer 5 ERROR_ACCESS_DENIED instead }
+    AExists := (err = 80) or (err = 183) or DirectoryExists(APath);
+  end;
+end;
+{$ELSE}
+var
+  fd: cint;
+begin
+  fd := FpOpen(APath, O_WRONLY or O_CREAT or O_EXCL, &644);
+  AExists := False;
+  if fd < 0 then
+  begin
+    AExists := fpgeterrno = ESysEEXIST;
+    Exit(ZmInvalidHandle);
+  end;
+  Result := THandle(fd);
+end;
+{$ENDIF}
+
+function ZmCreateNewFile(const ADir, AName: string; out APath: string): THandle;
 var
   dir, base, ext: string;
   n: Integer;
+  exists: Boolean;
 begin
   dir := IncludeTrailingPathDelimiter(ADir);
-  Result := dir + AName;
-  if not FileExists(Result) and not DirectoryExists(Result) then
-    Exit;
   ext := ExtractFileExt(AName);
   base := Copy(AName, 1, Length(AName) - Length(ext));
-  n := 1;
+  APath := dir + AName;
+  n := 0;
   repeat
-    Result := dir + base + ' (' + IntToStr(n) + ')' + ext;
+    if n > 0 then
+      APath := dir + base + ' (' + IntToStr(n) + ')' + ext;
+    Result := CreateExclusive(APath, exists);
+    if Result <> ZmInvalidHandle then
+      Exit;
     Inc(n);
-  until not FileExists(Result) and not DirectoryExists(Result);
+  until not exists or (n > 9999);
+  APath := '';
 end;
 
 { ---- detection ----------------------------------------------------------------------------- }
@@ -384,6 +438,7 @@ constructor TZmodemDiskSink.Create(const ADir: string);
 begin
   inherited Create;
   FDir := ADir;
+  FHandle := ZmInvalidHandle;
   FSaved := TStringList.Create;
 end;
 
@@ -399,15 +454,13 @@ function TZmodemDiskSink.Open(const AName: string; ASize, AMTime: Int64): Boolea
 begin
   if FStream <> nil then
     Finish(False);
-  FPath := ZmUniqueFileName(FDir, ZmSafeFileName(AName));
   FMTime := AMTime;
-  try
-    FStream := TFileStream.Create(FPath, fmCreate);
-    Result := True;
-  except
-    FStream := nil;
-    Result := False;
-  end;
+  { a new file, never one that is there (ZmCreateNewFile): what Finish(False) deletes
+    is always ours }
+  FHandle := ZmCreateNewFile(FDir, ZmSafeFileName(AName), FPath);
+  Result := FHandle <> ZmInvalidHandle;
+  if Result then
+    FStream := THandleStream.Create(FHandle);
 end;
 
 function TZmodemDiskSink.Write(AData: PByte; ACount: Integer): Boolean;
@@ -428,6 +481,8 @@ begin
   if FStream = nil then
     Exit;
   FreeAndNil(FStream);
+  FileClose(FHandle);
+  FHandle := ZmInvalidHandle;
   if AComplete then
   begin
     if FMTime > 0 then
