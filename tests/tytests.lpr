@@ -217,7 +217,8 @@ uses
   test.parity.datetime,
   test.themebuilder.golden,
   test.themebuilder.parser,
-  test.themebuilder.lint;
+  test.themebuilder.lint,
+  test.themebuilder.editkit;
 
 type
   TTyTestRunner = class(TTestRunner)
