@@ -433,3 +433,7 @@ msgstr "无法写入文件"
 #: uzmodemsession.rszmfileerror
 msgid "the other side could not write the file"
 msgstr "对方无法写入文件"
+
+#: uzmodemsession.rszmreadfailed
+msgid "the file could not be read to its end"
+msgstr "无法读完文件"

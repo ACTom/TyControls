@@ -21,7 +21,8 @@ unit uzmodemsession;
     - the sender sends binary headers (CRC-32 when the receiver can), 1 KB
       subpackets streamed with ZCRCG, or ZCRCW at the end of each window when the
       receiver gave a buffer size; a ZRPOS goes back to that place; ZNAK repeats the
-      last header; a file resumed (ZCRESUM) is sent from the start;
+      last header; a file resumed (ZCRESUM) is sent from the start; a file that ends
+      before the size it gave (it shrank, a read failed) is the abort and zrError;
     - after ZFIN the receiver eats at most two 'O's (a second at most, then it ends);
       the sender sends "OO" after the receiver's ZFIN. What follows in the same
       Input goes to OnDone's ALeftover: the terminal shows it (the shell's prompt).
@@ -220,6 +221,7 @@ resourcestring
   rsZmCancelledHere = 'cancelled';
   rsZmCancelledThere = 'cancelled by the other side';
   rsZmWriteFailed = 'the file could not be written';
+  rsZmReadFailed = 'the file could not be read to its end';
   rsZmFileError = 'the other side could not write the file';
 
 implementation
@@ -772,10 +774,21 @@ begin
       n := ZmSendSubpacket;
       if FSize - FPos < n then
         n := FSize - FPos;
-      if (n > 0) and (FStream <> nil) then
-        n := FStream.Read(FBuf[0], n);
-      if n < 0 then
-        n := 0;
+      if n > 0 then
+      begin
+        if FStream <> nil then
+          n := FStream.Read(FBuf[0], n)
+        else
+          n := 0;
+        if n <= 0 then
+        begin
+          { the file ends before the size it gave (it shrank, a read failed): the place
+            would never move -- empty subpackets for ever. The other side is told. }
+          Send(ZmAbortSequence);
+          Finish(zrError, rsZmReadFailed, '');
+          Exit;
+        end;
+      end;
       last := FPos + n >= FSize;
       if last then
         e := ZCRCE

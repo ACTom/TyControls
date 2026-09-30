@@ -29,6 +29,7 @@
   "uzmodemsession.rszmcancelledthere": "对方已取消",
   "uzmodemsession.rszmcommandrefused": "对方要求执行命令，已拒绝",
   "uzmodemsession.rszmfileerror": "对方无法写入文件",
+  "uzmodemsession.rszmreadfailed": "无法读完文件",
   "uzmodemsession.rszmtimeout": "对方没有应答",
   "uzmodemsession.rszmtoomanyerrors": "同一位置出错次数过多",
   "uzmodemsession.rszmwritefailed": "无法写入文件",

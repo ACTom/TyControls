@@ -48,6 +48,7 @@ type
     procedure TestTheSendersWindow;                          { S11 }
     { the phase 7 review's fixes }
     procedure TestAnUploadWithNoRoomTimesOut;
+    procedure TestAFileThatEndsEarlyFails;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -509,6 +510,7 @@ type
     Contents: array of RawByteString;
     Next_: Integer;
     Stream: TMemoryStream;
+    LieSize: Int64;                      { > 0: every file says it is this long }
     constructor Create;
     destructor Destroy; override;
     procedure Add(const AName: string; const AData: RawByteString);
@@ -521,6 +523,7 @@ type
   TZmLog = class
   public
     Sent: RawByteString;
+    Limit: Integer;                      { > 0: more sent than this raises (a sender that does not stop) }
     Done: Boolean;
     Result_: TZmResult;
     Message: string;
@@ -621,6 +624,8 @@ begin
   Stream.Position := 0;
   AName := Names[Next_];
   ASize := Length(Contents[Next_]);
+  if LieSize > 0 then
+    ASize := LieSize;
   AMTime := 1700000000;
   AStream := Stream;
   Inc(Next_);
@@ -644,6 +649,8 @@ end;
 procedure TZmLog.OnSend(Sender: TObject; const AData: RawByteString);
 begin
   Sent := Sent + AData;
+  if (Limit > 0) and (Length(Sent) > Limit) then
+    raise Exception.CreateFmt('more than %d bytes sent: the sender does not stop', [Limit]);
 end;
 
 procedure TZmLog.OnDone(Sender: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
@@ -1613,6 +1620,67 @@ begin
     log.Free;
     src.Free;
   end;
+end;
+
+{ A file that ends before the size it gave (it shrank while being sent, or a read
+  failed): the upload fails with its reason, the abort goes out, and what was sent stays
+  small -- with the host's room limited (the example) and unlimited (CanSend nil).
+  Mutation: a read of 0 bytes taken as an empty subpacket (the place never moves: empty
+  subpackets for ever -- with CanSend nil in one call, which the log's limit stops). }
+procedure TTyTerminalZmodemTests.TestAFileThatEndsEarlyFails;
+
+  procedure Run(AWithRoom: Boolean);
+  var
+    src: TMemSource;
+    log: TZmLog;
+    room: TRoom;
+    s: TZmSender;
+    rpos: RawByteString;
+    t: Double;
+    i: Integer;
+    tag: string;
+  begin
+    if AWithRoom then tag := 'room 4096: ' else tag := 'CanSend nil: ';
+    src := TMemSource.Create;
+    log := TZmLog.Create;
+    room := TRoom.Create;
+    s := TZmSender.Create(src);
+    try
+      src.Add('short.bin', Cycle(1000));
+      src.LieSize := 5000;
+      log.Limit := 64 * 1024;
+      s.OnSend := @log.OnSend;
+      s.OnDone := @log.OnDone;
+      if AWithRoom then
+      begin
+        room.Value := 4096;
+        s.CanSend := @room.Allow;
+      end;
+      s.Start(InitHeader(0), 0);
+      rpos := ZmEncodeHexHeader(ZmPosHeader(ZRPOS, 0));
+      s.Input(@rpos[1], Length(rpos), 0);
+      t := 0;
+      for i := 1 to 50 do
+      begin
+        t := t + 100;
+        s.Tick(t);
+      end;
+      AssertTrue(tag + 'ended', log.Done);
+      AssertTrue(tag + 'an error: ' + log.Message, log.Result_ = zrError);
+      AssertEquals(tag + 'the reason', rsZmReadFailed, log.Message);
+      AssertTrue(tag + 'the abort sent', Pos(ZmAbortSequence, log.Sent) > 0);
+      AssertTrue(Format('%sa bounded amount sent (%d bytes)', [tag, Length(log.Sent)]), Length(log.Sent) < 8000);
+    finally
+      s.Free;
+      room.Free;
+      log.Free;
+      src.Free;
+    end;
+  end;
+
+begin
+  Run(True);
+  Run(False);
 end;
 
 { ---- Task 8: the terminal glue -------------------------------------------------------------- }
