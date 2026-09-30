@@ -31,7 +31,8 @@ unit ushell;
   terminal's OnData), but not into the key panel (OnData here is skipped while a stream
   is claimed: an upload is megabytes). An upload is held back while the session has
   more than 256 KB queued for the writer (CanSend). Stop cancels a transfer before it
-  unhooks, so the abort still reaches the program. }
+  unhooks, so the abort still reaches the program. A program that exits mid-transfer
+  ends the transfer before the exit line is written, so the line is shown. }
 
 {$mode objfpc}{$H+}
 
@@ -258,6 +259,10 @@ procedure TTerminalShell.ExitDone(Sender: TObject; ATag: PtrInt);
 begin
   FRunning := False;
   FExitCode := FPendingExitCode;
+  { a transfer that held the stream ends first (its abort goes nowhere now): else the
+    exit line would go into the claim and the terminal stay claimed until it timed out }
+  if FZmodem <> nil then
+    FZmodem.Cancel;
   FTerm.ReadOnly := True;
   FTerm.WriteSync(#13#10#27'[2m' + Format(rsShellExited, [FExitCode]) + #27'[0m'#13#10);
   if Assigned(FOnExit) then FOnExit(Self);

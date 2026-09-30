@@ -97,6 +97,7 @@ type
     procedure TestNoWritesQueueOnceTheWriterIsGone;
     procedure TestTheExitCodeIsNotAnInteger;
     procedure TestAfterTheExitKeysGoNowhere;
+    procedure TestAnExitEndsAZmodemClaim;
     {$IFDEF MSWINDOWS}
     procedure TestPipesRoundTrip;
     procedure TestInterruptUnblocksARead;
@@ -481,6 +482,51 @@ begin
     AssertEquals('a', F.RowText(0));
     AssertEquals('b', F.RowText(1));
     AssertEquals('then the line', Format(rsShellExited, [3]), F.RowText(2));
+  finally
+    sh.Free;
+  end;
+end;
+
+{ The program exits while a ZModem transfer holds the stream (here still asking where
+  to save): the transfer is cancelled first, so the exit line reaches the screen and the
+  stream is back. ReadOnly afterwards still sends nothing. Mutation: the exit not
+  ending the transfer (the line goes into the claim; the stream stays claimed until the
+  transfer times out, 110 s later). }
+procedure TTyTerminalPtyTests.TestAnExitEndsAZmodemClaim;
+var
+  fake: TFakePty;
+  sh: TTerminalShell;
+  err: string;
+  y, at: Integer;
+
+  function Claimed: Boolean;
+  begin
+    Result := F.View.StreamClaimed;
+  end;
+
+  function Exited: Boolean;
+  begin
+    Result := FExits > 0;
+  end;
+
+begin
+  fake := TFakePty.Create;
+  sh := TTerminalShell.Create(F.View, fake, 1048576, 262144, True);
+  try
+    sh.OnExit := @OnExit;
+    AssertTrue('started', sh.Start('fake', err));
+    { sz's first bytes: "rz\r" and its ZRQINIT }
+    fake.Feed('rz'#13'**'#$18'B00000000000000'#13#$8A#$11);
+    AssertTrue('the stream is claimed', WaitUntil(@Claimed));
+    fake.FeedEof(0);
+    AssertTrue('the exit was announced', WaitUntil(@Exited));
+    AssertFalse('the claim ended', F.View.StreamClaimed);
+    at := -1;
+    for y := 0 to F.View.Rows - 1 do
+      if F.RowText(y) = Format(rsShellExited, [0]) then
+        at := y;
+    AssertTrue('the exit line on the screen', at >= 0);
+    AssertTrue('read-only again', F.View.ReadOnly);
   finally
     sh.Free;
   end;
