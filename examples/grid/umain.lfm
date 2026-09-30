@@ -65,7 +65,7 @@ object MainForm: TMainForm
       Align = alClient
       ActivePageIndex = 0
       object PgBasic: TTyTabSheet
-        Caption = 'Basics & virtualization'
+        Caption = 'Basics && virtualization'
         object LblBasicHint: TTyLabel
           Left = 8
           Height = 34
@@ -562,7 +562,7 @@ object MainForm: TMainForm
         end
       end
       object PgEdit: TTyTabSheet
-        Caption = 'Editing & cell types'
+        Caption = 'Editing && cell types'
         object LblEditHint: TTyLabel
           Left = 8
           Height = 34
@@ -906,7 +906,7 @@ object MainForm: TMainForm
         end
       end
       object PgEvents: TTyTabSheet
-        Caption = 'Events & hooks'
+        Caption = 'Events && hooks'
         object LblEvHint: TTyLabel
           Left = 8
           Height = 34
@@ -1224,7 +1224,7 @@ object MainForm: TMainForm
         end
       end
       object PgView: TTyTabSheet
-        Caption = 'Rendering & headers'
+        Caption = 'Rendering && headers'
         object LblViewHint: TTyLabel
           Left = 8
           Height = 34
