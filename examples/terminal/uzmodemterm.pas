@@ -201,7 +201,6 @@ const
   { what is kept of the program's repeats while the host has not answered }
   PendingLimit = 65536;
   ProgressEveryMs = 200;
-  UploadWindow = 16384;
   CarryMax = 20;
 
 function DotFormat: TFormatSettings;
@@ -1055,9 +1054,8 @@ begin
   FSender.OnProgress := @MachineProgress;
   FSender.OnDone := @MachineDone;
   FSender.CanSend := FCanSend;
-  { what is on its way when rz asks for a byte again reaches it as garbage, and rz
-    gives up after about 40 KB of that: keep less than that unacknowledged }
-  FSender.Window := UploadWindow;
+  { the sender's own Window (16 KB): what is on its way when rz asks for a byte again
+    reaches it as garbage, and rz gives up after about 40 KB of that }
   FState := zsSending;
   FStartMs := NowMs;
   FLastProgressMs := -1;

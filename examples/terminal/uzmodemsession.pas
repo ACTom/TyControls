@@ -148,6 +148,12 @@ type
   end;
 
   TZmCanSendFunc = function: Integer of object;       { bytes the host takes now }
+
+const
+  { the sender's default Window (TZmSender.Window) }
+  ZmSendWindow = 16384;
+
+type
   TZmCrcMode = (zcmAuto, zcmCrc16, zcmCrc32);
   TZmSenderState = (zsnIdle, zsnFile, zsnData, zsnWaitAck, zsnEof, zsnFin, zsnDone);
 
@@ -213,10 +219,12 @@ type
     property TimeoutMs: Integer read FTimeoutMs write FTimeoutMs;
     property MaxRetries: Integer read FMaxRetries write FMaxRetries;
     { at most this many bytes past the last acknowledged place (a ZCRCQ every quarter
-      of it asks for the acknowledgements); 0 = stream freely. Where the bytes queue on
-      the way (a pipe, a relay), what was sent before a ZRPOS arrives is read as
-      garbage by the receiver, and rz gives up after about 40 KB of garbage: the
-      terminal glue keeps this well below that. Before Start. }
+      of it asks for the acknowledgements); 0 = stream freely. Default ZmSendWindow
+      (16 KB). Where the bytes queue on the way (a pipe, a relay), what was sent before
+      a ZRPOS arrives is read as garbage by the receiver, and rz gives up after about
+      40 KB of garbage (seen through WSL's pipes): 16 KB stays well below that. The
+      price: at most 16 KB per round trip -- slow on a link with a long one (ssh far
+      away). Before Start. }
     property Window: Integer read FWindow write FWindow;
     { FOR THE TESTS (pure query): times a ZRPOS sent the data back }
     property Repositions: Integer read FRepositions;
@@ -647,6 +655,7 @@ begin
   FReader.OnCancel := @Cancelled;
   FTimeoutMs := 10000;
   FMaxRetries := 10;
+  FWindow := ZmSendWindow;
   SetLength(FBuf, ZmSendSubpacket);
 end;
 

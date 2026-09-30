@@ -966,6 +966,9 @@ begin
           src.Add(files.Objects[j].Strings['name'], ReadBytes(ZmFixture(files.Objects[j].Strings['source'])));
         s.OnSend := @log.OnSend;
         s.OnDone := @log.OnDone;
+        { rz answered sz, which streams without a window: nothing in the recording
+          acknowledges a ZCRCQ }
+        s.Window := 0;
         AssertEquals(id + ': rz starts with ZRINIT', ZRINIT, heads.Types[0]);
         s.Start(heads.Headers[0], 0);
         from := heads.Ends[0] + 1;
@@ -1661,6 +1664,8 @@ begin
   try
     src.Add('w.bin', Cycle(70000));
     s.OnSend := @log.OnSend;
+    AssertEquals('16 KB unless set', ZmSendWindow, s.Window);
+    AssertEquals('16 KB', 16384, ZmSendWindow);
     s.Window := 4096;
     s.Start(InitHeader(0), 0);
     rpos := ZmEncodeHexHeader(ZmPosHeader(ZRPOS, 0));
