@@ -48,6 +48,7 @@ type
     { 7 期:ZModem }
     procedure TestAZmodemDownloadInTheExample;               { X2 }
     procedure TestZmodemCanBeSwitchedOff;                    { X3 }
+    procedure TestTheTransferBarIsThrottled;
   end;
 
 implementation
@@ -796,6 +797,59 @@ begin
   finally
     TMainForm.ZmodemAnswerForTest := '';
     f.Free;
+    DeleteDirectory(dir, False);
+  end;
+end;
+
+type
+  TFrozenClock = class
+  public
+    function Now_: Double;
+  end;
+
+function TFrozenClock.Now_: Double;
+begin
+  Result := 1000;
+end;
+
+{ The transfer bar follows the progress events (one a KB) at most every 150 ms -- with
+  the clock frozen: the first one and the file's end only, so the bar ends full and
+  named. Mutation: every event shown (about twenty for a 20 KB file). }
+procedure TTyTerminalExampleTests.TestTheTransferBarIsThrottled;
+var
+  f: TMainForm;
+  fake: TFakePty;
+  dir: string;
+  t0: QWord;
+  clk: TFrozenClock;
+begin
+  dir := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyzm-example-bar-' + IntToStr(GetTickCount64);
+  AssertTrue(ForceDirectories(dir));
+  TMainForm.ZmodemAnswerForTest := dir;
+  clk := TFrozenClock.Create;
+  TMainForm.ZmClockForTest := @clk.Now_;
+  f := nil;
+  try
+    f := ShellOnAFake(fake);
+    fake.Feed(ZmFixtureBytes('window.sz.bin'));
+    t0 := GetTickCount64;
+    while not FileExists(dir + PathDelim + 'window.bin') or f.Term.StreamClaimed do
+    begin
+      Application.ProcessMessages;
+      Sleep(5);
+      if GetTickCount64 - t0 > 10000 then
+        Fail('no download within 10 s; status: ' + f.Status.Panels[0].Text);
+    end;
+    PumpMessages;
+    AssertTrue('some progress', f.ZmProgressShown > 0);
+    AssertEquals('the first and the end only', 2, f.ZmProgressShown);
+    AssertEquals('the bar ended full', 1000, f.BarTransfer.Position);
+    AssertEquals('and named', 'window.bin', f.LblTransfer.Caption);
+  finally
+    TMainForm.ZmodemAnswerForTest := '';
+    TMainForm.ZmClockForTest := nil;
+    f.Free;
+    clk.Free;
     DeleteDirectory(dir, False);
   end;
 end;

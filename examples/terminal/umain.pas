@@ -192,6 +192,8 @@ type
     FShell: TTerminalShell;
     FLastDownloadDir: string;
     FLogged: Integer;
+    FLastZmProgressMs: Double;
+    FZmProgressShown: Integer;
     procedure ZmDownloadRequest(Sender: TObject);
     procedure ZmUploadRequest(Sender: TObject);
     procedure AskDownloadDir(Data: PtrInt);
@@ -240,6 +242,10 @@ type
     class var ZmodemAnswerForTest: string;
     { FOR THE TESTS: the next shell runs on this backend (taken over, then cleared) }
     class var ShellBackendForTest: TPtyBackend;
+    { FOR THE TESTS: the transfer bar's clock (nil = TyTermDefaultClock) }
+    class var ZmClockForTest: TTyTerminalClock;
+    { FOR THE TESTS (pure query): progress events the transfer bar showed }
+    property ZmProgressShown: Integer read FZmProgressShown;
   end;
 
 var
@@ -863,8 +869,23 @@ begin
   FocusTerm;
 end;
 
+{ an event comes for every KB: the bar follows at most every 150 ms -- the first, a new
+  file and a file's end always }
 procedure TMainForm.ZmProgress(Sender: TObject; const AName: string; AFileDone, AFileSize, ATotalDone: Int64);
+const
+  EveryMs = 150;
+var
+  now: Double;
 begin
+  if Assigned(ZmClockForTest) then
+    now := ZmClockForTest()
+  else
+    now := TyTermDefaultClock;
+  if Tools6.Visible and (AName = LblTransfer.Caption) and (AFileDone < AFileSize)
+    and (now - FLastZmProgressMs < EveryMs) then
+    Exit;
+  FLastZmProgressMs := now;
+  Inc(FZmProgressShown);
   if not Tools6.Visible then
   begin
     { above the status bar: same-side aligned siblings go by Top }
