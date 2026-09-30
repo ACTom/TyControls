@@ -109,6 +109,16 @@ begin
     EndClaim(tceRemoved, True);
 end;
 
+function TTyTerminalCore.StreamHandlerListed(AHandler: TTyTerminalStreamHandler): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FStreamHandlers) do
+    if FStreamHandlers[i] = AHandler then
+      Exit(True);
+  Result := False;
+end;
+
 procedure TTyTerminalCore.CompactStreamHandlers;
 var
   i, k: Integer;
@@ -177,21 +187,26 @@ begin
       CompactStreamHandlers;
   end;
   { a winner removed by a later Detect does not claim }
-  if winner <> nil then
-  begin
-    h := winner;
+  if (winner <> nil) and not StreamHandlerListed(winner) then
     winner := nil;
-    for i := 0 to High(FStreamHandlers) do
-      if FStreamHandlers[i] = h then
-        winner := h;
-  end;
   if winner = nil then
   begin
     ParseRange(AData, AFrom, ACount);
     Exit;
   end;
   if best > 0 then
+  begin
     ParseRange(AData, AFrom, best);
+    { an event of those bytes (a parser hook, OnTitleChange ...) may have taken the
+      winner off: it claims nothing, and the rest goes to the parser as when nobody
+      claims -- not offered again, the others saw this piece already }
+    if not StreamHandlerListed(winner) then
+    begin
+      if best < ACount then
+        ParseRange(AData, AFrom + best, ACount - best);
+      Exit;
+    end;
+  end;
   BeginClaim(winner);
   if best < ACount then
     if FClaim = winner then

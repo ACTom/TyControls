@@ -82,6 +82,8 @@ type
     procedure TestDiscardPendingKeepsTheClaim;               { H20 }
     procedure TestResetEndsTheClaim;                         { H21 }
     procedure TestResizeKeepsTheClaim;                       { H22 }
+    { the phase 7 review's fixes }
+    procedure TestAWinnerRemovedBeforeItsMarkerDoesNotClaim;
   end;
 
 { the text of line AY of the active buffer (from ybase), trailing blanks cut }
@@ -1373,6 +1375,61 @@ begin
   finally
     r.Free;
     p.Free;
+  end;
+end;
+
+{ ---- the phase 7 review's fixes ------------------------------------------------------------ }
+
+type
+  { an OSC 1337 handler (the public parser hook) that takes a stream handler off }
+  TOscRemover = class
+  public
+    Core: TTyTerminalCore;
+    Victim: TTyTerminalStreamHandler;
+    Calls: Integer;
+    function Osc(const AData: string): Boolean;
+  end;
+
+function TOscRemover.Osc(const AData: string): Boolean;
+begin
+  Inc(Calls);
+  Core.RemoveStreamHandler(Victim);
+  Result := True;
+end;
+
+{ The winner of a piece is taken off by an event of the bytes before its marker (parsed
+  first, spec 19.4): it does not claim -- the rest of the piece goes to the parser, as
+  when nobody claims (the other handlers saw this piece already; it is not offered
+  twice) -- and it can be freed at once. Mutation: no second look at the list after the
+  prefix is parsed (the removed handler claims; the next write feeds a freed object). }
+procedure TTyTerminalStreamTests.TestAWinnerRemovedBeforeItsMarkerDoesNotClaim;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  rm: TOscRemover;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  rm := TOscRemover.Create;
+  try
+    p := r.Proto;
+    rm.Core := r.Core;
+    rm.Victim := p;
+    r.Core.RegisterOscHandler(1337, @rm.Osc);
+    r.Core.WriteSync('ab'#27']1337;x'#7'cd<<GO>>rest');
+    AssertEquals('the OSC ran', 1, rm.Calls);
+    AssertEquals('taken off', 0, r.Core.StreamHandlerCount);
+    AssertFalse('not claimed', r.Core.StreamClaimed);
+    AssertEquals('no Claimed', 0, p.Claims);
+    AssertTrue('nothing fed', p.Fed = '');
+    AssertEquals('the rest of the piece on the screen', 'abcd<<GO>>rest', r.Line);
+    FreeAndNil(p);
+    r.Core.WriteSync(' more');
+    AssertEquals('and what follows', 'abcd<<GO>>rest more', r.Line);
+  finally
+    r.Free;
+    p.Free;
+    rm.Free;
   end;
 end;
 

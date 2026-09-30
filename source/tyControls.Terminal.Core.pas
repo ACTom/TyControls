@@ -557,6 +557,7 @@ type
     function GetStreamClaimed: Boolean;
     function GetClaimingHandler: TTyTerminalStreamHandler;
     procedure CompactStreamHandlers;
+    function StreamHandlerListed(AHandler: TTyTerminalStreamHandler): Boolean;
     { the slow path of ProcessOneChunk: AData[AFrom .. AFrom + ACount - 1] }
     procedure StreamPiece(const AData: RawByteString; AFrom, ACount: Integer);
     procedure OfferPiece(const AData: RawByteString; AFrom, ACount: Integer);
