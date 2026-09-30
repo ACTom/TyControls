@@ -713,6 +713,11 @@ procedure TyGraphBlurStates(ANodeCount, AEdgeCount: Integer; ABlur,
 procedure TyGraphRoamStep(AView: TTyGraphView; const ASpec: TTyGraphSpec;
   const APayload: TTyGraphRoamPayload; var AState: TTyGraphRoamState);
 
+{ A view's own options -- center, zoom, scaleLimit, nodeScaleRatio, roam,
+  roamTrigger -- read from a series node as the graph reads them; a tree's
+  view is the same View. [Batch 82] }
+procedure TyGraphReadRoamOptions(ANode, ARoot: TJSONObject; var ASpec: TTyGraphSpec);
+
 { The wheel's zoom factor for an LCL WheelDelta: zrender's delta is a
   notch per 120, and 1.1, 1.2 or 1.4 by how far it went -- inverted for a
   turn the other way. Nought for a delta of nothing. }
@@ -1915,6 +1920,11 @@ begin
   d := ShallowOf(ANode, ARoot, 'roamTrigger');
   ASpec.RoamGlobal := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString = 'global');
+end;
+
+procedure TyGraphReadRoamOptions(ANode, ARoot: TJSONObject; var ASpec: TTyGraphSpec);
+begin
+  ReadRoamOptions(ANode, ARoot, ASpec);
 end;
 
 function TyGraphSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyGraphSpec;

@@ -1055,7 +1055,7 @@ begin
         end
         else if ps = 'bottom' then
         begin
-          ax := ax + hw / 2; ay := ay + hh + dist;
+          ax := ax + hw / 2; ay := ay + (hh + dist);
           ASolved.Nodes[i].LabelAH := tahCentre;
         end
         else if ps = 'inside' then

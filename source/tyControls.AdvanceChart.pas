@@ -125,6 +125,11 @@ type
   end;
   TTyAxisHitArray = array of TTyAxisHit;
 
+  { A TREE NODE EXPANDED OR COLLAPSED, as upstream's
+    `treeexpandandcollapse` action reports it: from a click and from the API
+    alike. [Batch 81] }
+  TTyTreeToggleEvent = procedure(Sender: TObject; ASeriesIndex, ADataIndex: Integer) of object;
+
   { A GRAPH ROAM, as upstream's `graphroam` event reports it: once per action,
     whether a gesture or the API dispatched it, with the series it moved. }
   TTyGraphRoamEvent = procedure(Sender: TObject;
@@ -232,6 +237,27 @@ type
     FRoamSeries: Integer;
     FRoamX, FRoamY: Integer;
     FOnGraphRoam: TTyGraphRoamEvent;
+    { EACH TREE'S TOGGLES, by SERIES index and row, outside the build: a
+      click survives a resize and a relayout and goes only with the option.
+      [Batch 81] }
+    FTreeToggled: array of TTyBoolArray;
+    FOnTreeToggle: TTyTreeToggleEvent;
+    { EACH TREE'S VIEW, by slot and owned (rebuilt by every layout), with its
+      options read as a graph's; WHAT ITS ROAM LEFT and THE BOX IT LAST HAD,
+      by series index and outside the build -- a roam survives a relayout,
+      and a view with no extent on an axis takes that axis from the box
+      before. [Batch 82] }
+    FTreeViews: array of TTyGraphView;
+    FTreeSpecs: array of TTyGraphSpec;
+    FTreeRoam: array of TTyGraphRoamState;
+    FTreeBox: array of TTyXYWH;
+    FTreeBoxHas: TTyBoolArray;
+    FOnTreeRoam: TTyGraphRoamEvent;
+    { THE PRESS a click is judged against: zrender's -- the same target
+      (datum, and caption or not) within 4 px }
+    FPressArmed, FPressCaption: Boolean;
+    FPressDatum: TTyChartDatumRef;
+    FPressX, FPressY: Integer;
     FFilterCats: TTyGraphCategoryArray;
     { Which store column feeds spoke j, per series. Its own array because the
       store is exactly as wide as the first data row while the spokes come from
@@ -569,6 +595,10 @@ type
     procedure SolveGraphs(APPI: Integer);
     procedure FreeGraphs;
     procedure SolveTrees(APPI: Integer);
+    procedure FreeTreeViews;
+    { a tree's view over its placed nodes, and the numbers the build
+      draws with [Batch 82] }
+    procedure SolveTreeView(ASlot, APPI: Integer);
     procedure SolveSunbursts(APPI: Integer);
     procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveSankeys(APPI: Integer);
@@ -706,6 +736,14 @@ type
       PLACE. A graph is not overlaid by PaintEmphasis: a translucent edge
       drawn twice darkens, and a lifted copy would cover the nodes. }
     procedure ApplyGraphHover(AList: TTyPaintList; APPI: Integer);
+    { A TREE'S HOVER, in place in the static list: its own focus words --
+      ancestor, descendant, relative -- and upstream's edge rule. [Batch 83] }
+    procedure ApplyTreeHover(AList: TTyPaintList; APPI: Integer);
+    function IsTreeDatum(const ADatum: TTyChartDatumRef): Boolean;
+    function TreeEmphasisOf(ASlot, ARow: Integer): TTyChartEmphasisSpec;
+    function TreeFocusOf(ASlot, ARow: Integer): string;
+    function TreeRowName(ASlot, ARow: Integer): string;
+    function TreeRowValue(ASlot, ARow: Integer): Double;
     { True when the datum is on a laid-out graph. }
     function IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
     { The static layer again with the same build and the same list -- a
@@ -840,6 +878,7 @@ type
       -- highest zlevel, then z, then the lowest series index -- whose roam
       allows it and whose area holds the point. -1 when none does. }
     function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+    function IsTreeSeries(ASeriesIndex: Integer): Boolean;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -975,6 +1014,19 @@ type
     function GraphZoom(ASeriesIndex: Integer; AScale, AOriginX,
       AOriginY: Double): Boolean;
     function GraphDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+    { upstream's treeExpandAndCollapse action: flip ADataIndex's expanded
+      state in the tree series ASeriesIndex (-1: every tree). Not gated by
+      `expandAndCollapse`, which gates the click only. False for a series
+      that is no tree, row 0 or a row past the end. [Batch 81] }
+    function TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
+    { upstream's treeRoam action: a pan (both deltas present) and/or a zoom
+      about a point, on the tree ASeriesIndex (-1: every tree). Not gated by
+      `roam`, which gates the gestures only. [Batch 82] }
+    function TreeDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+    function TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+    function TreeZoom(ASeriesIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
+    { whether the row is expanded now, the toggles applied }
+    function TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
     { The centre and zoom as the OPTION now says them -- the series' own
       until the first roam, what the roam wrote back after it. The zoom is
       not clamped; GraphView(..).Zoom is the one the view uses. }
@@ -1042,6 +1094,8 @@ type
     property OnMouseWheel;
     property OnResize;
     property OnGraphRoam: TTyGraphRoamEvent read FOnGraphRoam write FOnGraphRoam;
+    property OnTreeExpandAndCollapse: TTyTreeToggleEvent read FOnTreeToggle write FOnTreeToggle;
+    property OnTreeRoam: TTyGraphRoamEvent read FOnTreeRoam write FOnTreeRoam;
     property OnDataZoom: TTyDataZoomEvent read FOnDataZoom write FOnDataZoom;
   end;
 
@@ -1110,6 +1164,7 @@ begin
   FreeRadars;
   FreeCalendars;
   FreeGraphs;
+  FreeTreeViews;
   FTrees := nil;
   FSunbursts := nil;
   FTreemaps := nil;
@@ -1144,8 +1199,13 @@ begin
   FOptionText := AValue;
   FOption.SetOptionText(AValue);
   FGraphForce := nil;
-  { notMerge: new series models, so no roam survives either. }
+  { notMerge: new series models, so no roam survives either, nor a toggle. }
   FGraphRoam := nil;
+  FTreeToggled := nil;
+  FTreeRoam := nil;
+  FTreeBox := nil;
+  FTreeBoxHas := nil;
+  FPressArmed := False;
   FRoamSeries := -1;
   { nor a zoom: the dataZooms are new models, read from what was written }
   FDzRawHas := nil;
@@ -4993,7 +5053,32 @@ begin
       bs := sp;
     end;
   end;
+  { THE TREES, on the same terms: a tree's view is the same View [Batch 82] }
+  for i := 0 to High(FTreeViews) do
+  begin
+    if FTreeViews[i] = nil then Continue;
+    sp := FTreeSpecs[i];
+    if AZoom then ok := sp.Roam in [grmZoom, grmBoth]
+    else ok := sp.Roam in [grmPan, grmBoth];
+    if not ok then Continue;
+    if not (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY)) then Continue;
+    if (best < 0) or (sp.ZLevel > bs.ZLevel)
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
+        and (FBindings[i].SeriesIndex < FBindings[best].SeriesIndex)) then
+    begin
+      best := i;
+      bs := sp;
+    end;
+  end;
   if best >= 0 then Result := FBindings[best].SeriesIndex;
+end;
+
+function TTyAdvanceChart.IsTreeSeries(ASeriesIndex: Integer): Boolean;
+var slot: Integer;
+begin
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName);
 end;
 
 procedure TTyAdvanceChart.MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -5007,6 +5092,13 @@ begin
   { A MIDDLE OR RIGHT PRESS NEITHER ARMS NOR DISARMS. }
   if Button <> mbLeft then Exit;
   FRoamSeries := -1;
+  { THE PRESS A CLICK IS JUDGED AGAINST, before anything else claims it }
+  FPressDatum := HitTestAt(X, Y, el);
+  FPressCaption := (el >= 0) and (FPaintList <> nil)
+    and (FPaintList.Element(el).Caption.FontSizeLogical > 0);
+  FPressX := X;
+  FPressY := Y;
+  FPressArmed := True;
   { A PRESS ON A DRAGGABLE NODE IS THE NODE'S, not the view's. }
   d := HitTestAt(X, Y, el);
   if (d.SeriesIndex >= 0) and not d.IsEdge then
@@ -5030,13 +5122,46 @@ end;
 
 procedure TTyAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
+var
+  d: TTyChartDatumRef;
+  el, slot: Integer;
+  cap: Boolean;
+  n: TJSONData;
 begin
   if Button = mbLeft then
   begin
     FRoamSeries := -1;
+    { the target under the release, before anything moves }
+    d := HitTestAt(X, Y, el);
+    cap := (el >= 0) and (FPaintList <> nil)
+      and (FPaintList.Element(el).Caption.FontSizeLogical > 0);
     { zrender's mouseup, then the DOM click at the same point }
     DataZoomPointer(dpUp, X, Y, Shift, 0);
     DataZoomPointer(dpClick, X, Y, Shift, 0);
+    { A CLICK: pressed and released on the same thing -- the same datum, a
+      node's disc and its label being different things -- within 4 px. On a
+      tree node whose series says `expandAndCollapse: true`, it toggles.
+      [Batch 81] }
+    if FPressArmed and (d.SeriesIndex >= 0) and not d.IsEdge
+      and (d.SeriesIndex = FPressDatum.SeriesIndex)
+      and (d.DataIndex = FPressDatum.DataIndex) and not FPressDatum.IsEdge
+      and (cap = FPressCaption)
+      and (Sqrt(Sqr(X - FPressX) + Sqr(Y - FPressY)) <= 4) then
+    begin
+      slot := SlotOfSeries(d.SeriesIndex);
+      if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName) then
+      begin
+        n := FOption.ComponentAt('series', d.SeriesIndex);
+        if (n <> nil) and (n.JSONType = jtObject) then
+        begin
+          n := TJSONObject(n).Find('expandAndCollapse');
+          { absent is the default, true; anything but JSON true is off }
+          if (n = nil) or ((n.JSONType = jtBoolean) and n.AsBoolean) then
+            TreeToggle(d.SeriesIndex, d.DataIndex);
+        end;
+      end;
+    end;
+    FPressArmed := False;
   end;
   inherited MouseUp(Button, Shift, X, Y);
 end;
@@ -5048,6 +5173,7 @@ begin
     a mouseup where the pointer was last would end it -- its commit and all;
     the widgetset's own mouseup, when it follows, finds nothing to end. }
   FRoamSeries := -1;
+  FPressArmed := False;
   if (FDzDrag.Kind <> dtkNone) or (FDzPanGrid >= 0) then
     DataZoomPointer(dpUp, FDzLastX, FDzLastY, [], 0);
   inherited CaptureChanged;
@@ -5070,7 +5196,8 @@ begin
   if s = 0 then Exit;
   si := RoamSeriesAt(MousePos.X, MousePos.Y, True);
   if si < 0 then Exit;
-  Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
+  else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
 end;
 
 function TTyAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
@@ -5136,8 +5263,216 @@ begin
     FTrees[i] := Default(TTyTreeSolved);
     if FBindings[i].SeriesType <> TyTreeSeriesTypeName then Continue;
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
-    FTrees[i] := TyTreeSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    if FBindings[i].SeriesIndex <= High(FTreeToggled) then
+      FTrees[i] := TyTreeSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI,
+        FTreeToggled[FBindings[i].SeriesIndex])
+    else
+      FTrees[i] := TyTreeSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    if FTrees[i].Valid then SolveTreeView(i, APPI);
   end;
+end;
+
+procedure TTyAdvanceChart.SolveTreeView(ASlot, APPI: Integer);
+var
+  si, row: Integer;
+  node: TJSONData;
+  root: TJSONObject;
+  spec: TTyGraphSpec;
+  mnX, mnY, mxX, mxY, one: Double;
+  box: TTyXYWH;
+  any: Boolean;
+  centre: TTyGraphCentre;
+  zoom: Double;
+begin
+  si := FBindings[ASlot].SeriesIndex;
+  if Length(FTreeViews) < Length(FBindings) then
+  begin
+    SetLength(FTreeViews, Length(FBindings));
+    SetLength(FTreeSpecs, Length(FBindings));
+  end;
+  FreeAndNil(FTreeViews[ASlot]);
+  { the view's options, read as a graph's; a tree's nodeScaleRatio is 0.4 }
+  spec := TyGraphSpecDefault;
+  spec.NodeScaleRatio := 0.4;
+  node := FOption.ComponentAt('series', si);
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  if (node <> nil) and (node.JSONType = jtObject) then
+  begin
+    TyGraphReadRoamOptions(TJSONObject(node), root, spec);
+    { a tree's roamTrigger defaults to 'global': a drag anywhere pans }
+    if TJSONObject(node).Find('roamTrigger') = nil then spec.RoamGlobal := True;
+  end;
+  spec.Z := FTrees[ASlot].Spec.Z;
+  FTreeSpecs[ASlot] := spec;
+  { the bounding box of the placed nodes, local to the main group }
+  any := False;
+  mnX := Infinity; mnY := Infinity; mxX := NegInfinity; mxY := NegInfinity;
+  for row := 0 to High(FTrees[ASlot].Pos) do
+    if FTrees[ASlot].Pos[row].Placed then
+    begin
+      any := True;
+      if FTrees[ASlot].Pos[row].X < mnX then mnX := FTrees[ASlot].Pos[row].X;
+      if FTrees[ASlot].Pos[row].X > mxX then mxX := FTrees[ASlot].Pos[row].X;
+      if FTrees[ASlot].Pos[row].Y < mnY then mnY := FTrees[ASlot].Pos[row].Y;
+      if FTrees[ASlot].Pos[row].Y > mxY then mxY := FTrees[ASlot].Pos[row].Y;
+    end;
+  if not any then Exit;
+  if APPI > 0 then one := APPI / 96 else one := 1;
+  { no extent on an axis: the box the view last had there, else one either
+    side }
+  if mxX - mnX = 0 then
+  begin
+    if (si <= High(FTreeBoxHas)) and FTreeBoxHas[si] then
+    begin
+      mnX := FTreeBox[si].X;
+      mxX := FTreeBox[si].X + FTreeBox[si].W;
+    end
+    else
+    begin
+      mnX := mnX - one;
+      mxX := mxX + one;
+    end;
+  end;
+  if mxY - mnY = 0 then
+  begin
+    if (si <= High(FTreeBoxHas)) and FTreeBoxHas[si] then
+    begin
+      mnY := FTreeBox[si].Y;
+      mxY := FTreeBox[si].Y + FTreeBox[si].H;
+    end
+    else
+    begin
+      mnY := mnY - one;
+      mxY := mxY + one;
+    end;
+  end;
+  box := TyXYWH(mnX, mnY, mxX - mnX, mxY - mnY);
+  if si > High(FTreeBox) then
+  begin
+    SetLength(FTreeBox, si + 1);
+    SetLength(FTreeBoxHas, si + 1);
+  end;
+  FTreeBox[si] := box;
+  FTreeBoxHas[si] := True;
+  FTreeViews[ASlot] := TTyGraphView.CreateXYWH(box, box);
+  { the roam's write-back, else the option's }
+  if (si <= High(FTreeRoam)) and FTreeRoam[si].Valid then
+  begin
+    centre := FTreeRoam[si].Centre;
+    zoom := FTreeRoam[si].Zoom;
+  end
+  else
+  begin
+    centre := spec.Centre;
+    zoom := spec.Zoom;
+  end;
+  FTreeViews[ASlot].SetRoam(centre, zoom, spec.HasLimit, spec.LimitMin, spec.LimitMax);
+  TyTreeApplyView(FTrees[ASlot], FTreeViews[ASlot].OverallScaleX,
+    FTreeViews[ASlot].OverallX, FTreeViews[ASlot].OverallY,
+    FTreeViews[ASlot].NodeScale(spec.NodeScaleRatio));
+end;
+
+function TTyAdvanceChart.TreeDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+var
+  i, si: Integer;
+  p: TTyGraphRoamPayload;
+  m: ITyTextMeasurer;
+begin
+  Result := False;
+  if APayload.HasZoom and (IsNan(APayload.Zoom) or IsInfinite(APayload.Zoom)
+    or (APayload.Zoom <= 0)) then Exit;
+  if APayload.HasPan and (IsNan(APayload.DX) or IsNan(APayload.DY)) then Exit;
+  for i := 0 to High(FTreeViews) do
+  begin
+    if FTreeViews[i] = nil then Continue;
+    si := FBindings[i].SeriesIndex;
+    if (APayload.SeriesIndex >= 0) and (si <> APayload.SeriesIndex) then Continue;
+    if Length(FTreeRoam) <= si then SetLength(FTreeRoam, si + 1);
+    TyGraphRoamStep(FTreeViews[i], FTreeSpecs[i], APayload, FTreeRoam[si]);
+    Result := True;
+    if Assigned(FOnTreeRoam) then
+    begin
+      p := APayload;
+      p.SeriesIndex := si;
+      FOnTreeRoam(Self, p);
+    end;
+  end;
+  if not Result then Exit;
+  { A NEW LAYOUT, AND AT ONCE: the transform is re-derived from what the roam
+    wrote back, and the release that ends a short drag must find the node
+    where the pan put it -- upstream's elements are the same objects,
+    moved. }
+  if FLastPPI <= 0 then
+  begin
+    Invalidate;
+    Exit;
+  end;
+  m := NewTextMeasurer(FLastPPI);
+  Relayout(nil, FLastRect, FLastPPI, m);
+  DropStatic;
+  BuildSeriesList(m, FLastPPI);
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+var p: TTyGraphRoamPayload;
+begin
+  p := Default(TTyGraphRoamPayload);
+  p.SeriesIndex := ASeriesIndex;
+  p.HasPan := True;
+  p.DX := ADX;
+  p.DY := ADY;
+  Result := TreeDispatchRoam(p);
+end;
+
+function TTyAdvanceChart.TreeZoom(ASeriesIndex: Integer; AScale, AOriginX,
+  AOriginY: Double): Boolean;
+var p: TTyGraphRoamPayload;
+begin
+  p := Default(TTyGraphRoamPayload);
+  p.SeriesIndex := ASeriesIndex;
+  p.HasZoom := True;
+  p.Zoom := AScale;
+  p.OriginX := AOriginX;
+  p.OriginY := AOriginY;
+  Result := TreeDispatchRoam(p);
+end;
+
+function TTyAdvanceChart.TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
+var i, s: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesType <> TyTreeSeriesTypeName then Continue;
+    s := FBindings[i].SeriesIndex;
+    if (ASeriesIndex >= 0) and (s <> ASeriesIndex) then Continue;
+    if (i > High(FTrees)) or not FTrees[i].Hier.Valid then Continue;
+    if (ADataIndex <= 0) or (ADataIndex > High(FTrees[i].Hier.Nodes)) then Continue;
+    if s > High(FTreeToggled) then SetLength(FTreeToggled, s + 1);
+    if ADataIndex > High(FTreeToggled[s]) then
+      SetLength(FTreeToggled[s], Length(FTrees[i].Hier.Nodes));
+    FTreeToggled[s][ADataIndex] := not FTreeToggled[s][ADataIndex];
+    { the solved flag too, so TreeExpanded answers before the relayout }
+    FTrees[i].Hier.Nodes[ADataIndex].Expanded :=
+      not FTrees[i].Hier.Nodes[ADataIndex].Expanded;
+    Result := True;
+    if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
+  end;
+  if Result then Invalidate;
+end;
+
+function TTyAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
+var slot: Integer;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FTrees)) or not FTrees[slot].Hier.Valid then Exit;
+  if (ADataIndex < 0) or (ADataIndex > High(FTrees[slot].Hier.Nodes)) then Exit;
+  Result := FTrees[slot].Hier.Nodes[ADataIndex].Expanded;
 end;
 
 { THE SUNBURSTS: laid out on the whole canvas, then coloured in one pass
@@ -5380,6 +5715,14 @@ begin
   Result.LabelValueDim := -1;
   if FStores[ASlot] <> nil then
     Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+end;
+
+procedure TTyAdvanceChart.FreeTreeViews;
+var i: Integer;
+begin
+  for i := 0 to High(FTreeViews) do FreeAndNil(FTreeViews[i]);
+  FTreeViews := nil;
+  FTreeSpecs := nil;
 end;
 
 procedure TTyAdvanceChart.FreeGraphs;
@@ -7536,6 +7879,7 @@ begin
       TyExpandLabels(list, specs, itemSpecs, AMeasurer, APPI);
     { AFTER THE LABELS, so a caption dims and rises with its node. }
     if drawn > 0 then ApplyGraphHover(list, APPI);
+    if drawn > 0 then ApplyTreeHover(list, APPI);
     { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because
       its captions are ANSWERS rather than requests -- they arrive with a
       font and an anchor already on them, which is what the expansion exists
@@ -8102,6 +8446,36 @@ begin
   if ASpec.HasOrder then Result.SortBlocks(ASpec.Order);
 end;
 
+{ a tree row's name as upstream converts it: a string, a number's text, or
+  nothing }
+function TTyAdvanceChart.TreeRowName(ASlot, ARow: Integer): string;
+var it, d: TJSONData;
+begin
+  Result := '';
+  it := FTrees[ASlot].Hier.Nodes[ARow].Item;
+  if not (it is TJSONObject) then Exit;
+  d := TJSONObject(it).Find('name');
+  if d = nil then Exit;
+  if d.JSONType = jtString then Result := d.AsString
+  else if d.JSONType = jtNumber then Result := TyJsNumberToString(d.AsFloat);
+end;
+
+{ its value: the first of an array; NaN unless a number }
+function TTyAdvanceChart.TreeRowValue(ASlot, ARow: Integer): Double;
+var it, d: TJSONData;
+begin
+  Result := NaN;
+  it := FTrees[ASlot].Hier.Nodes[ARow].Item;
+  if not (it is TJSONObject) then Exit;
+  d := TJSONObject(it).Find('value');
+  if (d <> nil) and (d.JSONType = jtArray) then
+  begin
+    if d.Count = 0 then Exit;
+    d := d.Items[0];
+  end;
+  if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
+end;
+
 function TTyAdvanceChart.TooltipContent(const ADatum: TTyChartDatumRef;
   const ASpec: TTyTooltipSpec): TTyTooltipBlock;
 var
@@ -8109,6 +8483,7 @@ var
   seriesName, inlineName, valueText: string;
   haveValue: Boolean;
   slot, i: Integer;
+  tv: Double;
   cells: TTyTipCells;
 begin
   Result := nil;
@@ -8135,6 +8510,26 @@ begin
     Exit;
   end;
   slot := SlotOfSeries(ADatum.SeriesIndex);
+  { A TREE NODE IS ONE BARE ROW too: its name the path from the real root,
+    dotted; its value the first value, and none unless it is a number.
+    [Batch 83] }
+  if IsTreeDatum(ADatum) and (ADatum.DataIndex > 0)
+    and (ADatum.DataIndex <= High(FTrees[slot].Hier.Nodes)) then
+  begin
+    inlineName := '';
+    i := ADatum.DataIndex;
+    while i > 0 do
+    begin
+      if inlineName = '' then inlineName := TreeRowName(slot, i)
+      else inlineName := TreeRowName(slot, i) + '.' + inlineName;
+      i := FTrees[slot].Hier.Nodes[i].Parent;
+    end;
+    tv := TreeRowValue(slot, ADatum.DataIndex);
+    Result := TTyTooltipBlock.CreateSection('', True);
+    Result.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, inlineName, False,
+      TyTooltipValueText(tv), IsNan(tv)));
+    Exit;
+  end;
   if (slot >= 0) and (FBindings[slot].RadarIndex >= 0) and (slot <= High(FStores))
     and (FStores[slot] <> nil) and (ADatum.DataIndex >= 0)
     and (ADatum.DataIndex < FStores[slot].Count) then
@@ -8432,6 +8827,228 @@ begin
   if ADatum.SeriesIndex < 0 then Exit;
   slot := SlotOfSeries(ADatum.SeriesIndex);
   Result := (slot >= 0) and (slot <= High(FGraphLaidOut)) and FGraphLaidOut[slot];
+end;
+
+function TTyAdvanceChart.IsTreeDatum(const ADatum: TTyChartDatumRef): Boolean;
+var slot: Integer;
+begin
+  Result := False;
+  if ADatum.SeriesIndex < 0 then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FTrees)) and FTrees[slot].Valid
+    and (FBindings[slot].SeriesType = TyTreeSeriesTypeName);
+end;
+
+{ a tree row's emphasis: the series', `leaves` over it for a leaf-modelled
+  row, the item over both }
+function TTyAdvanceChart.TreeEmphasisOf(ASlot, ARow: Integer): TTyChartEmphasisSpec;
+var ser, lv: TJSONData;
+begin
+  Result := TyChartEmphasisDefault;
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (ser is TJSONObject) then Exit;
+  Result := TyChartReadEmphasis(ser);
+  if (ARow <= High(FTrees[ASlot].LeafModelled)) and FTrees[ASlot].LeafModelled[ARow] then
+  begin
+    lv := TJSONObject(ser).Find('leaves');
+    if lv is TJSONObject then
+      Result := TyChartMergeEmphasis(Result, TyChartReadEmphasis(lv));
+  end;
+  if (ARow > 0) and (ARow <= High(FTrees[ASlot].Hier.Nodes))
+    and (FTrees[ASlot].Hier.Nodes[ARow].Item is TJSONObject) then
+    Result := TyChartMergeEmphasis(Result,
+      TyChartReadEmphasis(FTrees[ASlot].Hier.Nodes[ARow].Item));
+end;
+
+{ `emphasis.focus` along item -> leaves -> series, as the word it is: the
+  tree reads three more than any other series }
+function TTyAdvanceChart.TreeFocusOf(ASlot, ARow: Integer): string;
+var
+  ser, d: TJSONData;
+  k: Integer;
+  chain: array[0..2] of TJSONData;
+begin
+  Result := 'none';
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (ser is TJSONObject) then Exit;
+  chain[0] := nil;
+  if (ARow > 0) and (ARow <= High(FTrees[ASlot].Hier.Nodes)) then
+    chain[0] := FTrees[ASlot].Hier.Nodes[ARow].Item;
+  chain[1] := nil;
+  if (ARow <= High(FTrees[ASlot].LeafModelled)) and FTrees[ASlot].LeafModelled[ARow] then
+    chain[1] := TJSONObject(ser).Find('leaves');
+  chain[2] := ser;
+  for k := 0 to 2 do
+  begin
+    if not (chain[k] is TJSONObject) then Continue;
+    d := TJSONObject(chain[k]).Find('emphasis');
+    if not (d is TJSONObject) then Continue;
+    d := TJSONObject(d).Find('focus');
+    if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString);
+    if (d <> nil) and (d.JSONType <> jtNull) then Exit('none');
+  end;
+end;
+
+procedure TTyAdvanceChart.ApplyTreeHover(AList: TTyPaintList; APPI: Integer);
+var
+  hs, r, n, i, k, row, par, si: Integer;
+  focus: string;
+  blurAll: Boolean;
+  spec, es: TTyChartEmphasisSpec;
+  symSt, edgeSt: array of TTyGraphHoverState;
+  order, anc: TTyIntegerArray;
+  el: TTyChartElement;
+  st: TTyGraphHoverState;
+  isCaption, isSymbol: Boolean;
+  normal, res: TTyChartStyle;
+  states: TTyChartStateList;
+  ratio: Double;
+
+  procedure Push(ARow: Integer);
+  begin
+    SetLength(order, Length(order) + 1);
+    order[High(order)] := ARow;
+  end;
+
+  function Blurred(ADeclared, ANormal: Double): Double;
+  begin
+    if not IsNan(ADeclared) then Result := ADeclared
+    else Result := ANormal * TyChartBlurOpacityFactor;
+  end;
+
+begin
+  if (AList = nil) or not TyChartDatumValid(FTipDatum) then Exit;
+  if FTipDatum.IsEdge or not IsTreeDatum(FTipDatum) then Exit;
+  hs := SlotOfSeries(FTipDatum.SeriesIndex);
+  r := FTipDatum.DataIndex;
+  n := Length(FTrees[hs].Hier.Nodes);
+  if (r <= 0) or (r >= n) or not FTrees[hs].Pos[r].Placed then Exit;
+  spec := TreeEmphasisOf(hs, r);
+  { a disabled emphasis is no hover at all }
+  if spec.Disabled then Exit;
+  focus := TreeFocusOf(hs, r);
+  if focus = 'adjacency' then focus := 'self';
+  blurAll := (focus = 'self') or (focus = 'ancestor') or (focus = 'descendant')
+    or (focus = 'relative');
+  SetLength(symSt, n);
+  SetLength(edgeSt, n);
+  for i := 0 to n - 1 do
+  begin
+    if blurAll then symSt[i] := ghsBlur else symSt[i] := ghsNormal;
+    edgeSt[i] := symSt[i];
+  end;
+  { THE ROWS THAT LEAVE THE BLUR, in upstream's order }
+  order := nil;
+  if (focus = 'ancestor') or (focus = 'relative') then
+  begin
+    anc := nil;
+    row := r;
+    while row > 0 do
+    begin
+      SetLength(anc, Length(anc) + 1);
+      anc[High(anc)] := row;
+      row := FTrees[hs].Hier.Nodes[row].Parent;
+    end;
+    for i := High(anc) downto 0 do Push(anc[i]);
+  end;
+  if (focus = 'descendant') or (focus = 'relative') then
+  begin
+    { the row and its pre-order subtree, contiguous }
+    Push(r);
+    i := r + 1;
+    while (i < n) and (FTrees[hs].Hier.Nodes[i].Depth > FTrees[hs].Hier.Nodes[r].Depth) do
+    begin
+      if FTrees[hs].Pos[i].Placed then Push(i);
+      Inc(i);
+    end;
+  end;
+  if Length(order) = 0 then Push(r);
+  for k := 0 to High(order) do
+  begin
+    row := order[k];
+    if row = r then symSt[row] := ghsEmphasis else symSt[row] := ghsNormal;
+    { a row's own edge follows it only when its parent's symbol is not
+      blurred at this moment }
+    par := FTrees[hs].Hier.Nodes[row].Parent;
+    if (par > 0) and (symSt[par] <> ghsBlur) then edgeSt[row] := symSt[row]
+    else if par <= 0 then edgeSt[row] := symSt[row];
+  end;
+
+  si := FTipDatum.SeriesIndex;
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if (el.Datum.SeriesIndex <> si) or (el.Datum.DataIndex < 0)
+      or (el.Datum.DataIndex >= n) then Continue;
+    row := el.Datum.DataIndex;
+    isCaption := el.Caption.FontSizeLogical > 0;
+    isSymbol := not isCaption and (el.Z2 >= FTrees[hs].Spec.Z2 + cTyTreeNodeZ2);
+    if isCaption or isSymbol then st := symSt[row] else st := edgeSt[row];
+    if st = ghsNormal then Continue;
+    es := TreeEmphasisOf(hs, row);
+    if st = ghsBlur then
+    begin
+      if isCaption then el.Style.Alpha := Blurred(es.BlurLabelOpacity, el.Style.Alpha)
+      else if isSymbol then el.Style.Alpha := Blurred(es.BlurItemOpacity, el.Style.Alpha)
+      else el.Style.Alpha := Blurred(es.BlurLineOpacity, el.Style.Alpha);
+      AList.SetElement(i, el);
+      Continue;
+    end;
+    states := Default(TTyChartStateList);
+    states.Emphasis := True;
+    if isCaption then
+    begin
+      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+      if el.Caption.HasEmph then
+      begin
+        el.Caption.Colour := el.Caption.EmphColour;
+        el.Caption.StrokeColour := el.Caption.EmphStrokeColour;
+        el.Caption.StrokeWidthLogical := el.Caption.EmphStrokeWidthLogical;
+      end;
+    end
+    else if not isSymbol then
+    begin
+      { the edge: its stroke lifted unless declared, a width only if so }
+      normal := TyChartNoStyle;
+      TyChartSetColor(normal, cskStroke, el.Style.StrokeColor);
+      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
+      res := TyChartResolveStyle(normal, es.Line, states);
+      el.Style.StrokeColor := res.Color[cskStroke];
+      if TyChartStyleHas(es.Line, cskLineWidth) then
+        el.Style.StrokeWidthLogical := es.Line.Num[cskLineWidth];
+      if TyChartStyleHas(res, cskOpacity) then el.Style.Alpha := res.Num[cskOpacity];
+      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+    end
+    else
+    begin
+      { the symbol: its fill lifted unless declared, grown about its centre }
+      normal := TyChartNoStyle;
+      if el.Style.HasFill then TyChartSetColor(normal, cskFill, el.Style.FillColor);
+      if el.Style.StrokeColor <> 0 then
+        TyChartSetColor(normal, cskStroke, el.Style.StrokeColor);
+      if el.Style.StrokeWidthLogical > 0 then
+        TyChartSetNum(normal, cskLineWidth, el.Style.StrokeWidthLogical);
+      TyChartSetNum(normal, cskOpacity, el.Style.Alpha);
+      res := TyChartResolveStyle(normal, es.Item, states);
+      if TyChartStyleHas(res, cskFill) then
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := res.Color[cskFill];
+      end;
+      if TyChartStyleHas(res, cskStroke) then el.Style.StrokeColor := res.Color[cskStroke];
+      if TyChartStyleHas(res, cskLineWidth) then
+        el.Style.StrokeWidthLogical := res.Num[cskLineWidth];
+      if TyChartStyleHas(res, cskOpacity) then el.Style.Alpha := res.Num[cskOpacity];
+      if el.Shape.Kind in [cskCircle, cskEllipse] then
+        ratio := TyChartSymbolScaleRatio(es, el.Shape.R1)
+      else
+        ratio := TyChartSymbolScaleRatio(es, (el.Shape.Bounds.Bottom - el.Shape.Bounds.Top) / 2);
+      if ratio <> 1 then el.Shape := TyScaleShape(el.Shape, ratio);
+      el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
+    end;
+    AList.SetElement(i, el);
+  end;
+  if APPI < 0 then ;
 end;
 
 procedure TTyAdvanceChart.RestyleStatic;
@@ -8782,6 +9399,7 @@ var
     { A GRAPH'S HOVER IS IN THE STATIC LAYER ALREADY -- see
       ApplyGraphHover. }
     if IsGraphDatum(FPaintList.Element(AIndex).Datum) then Exit;
+    if IsTreeDatum(FPaintList.Element(AIndex).Datum) then Exit;
     if not EmphasiseElement(AIndex, APPI, el) then Exit;
     { THE CAPTION IS DROPPED. A mark's words were expanded once, into a
       SEPARATE element, and the copy drawn here carries the request rather
@@ -9358,7 +9976,8 @@ begin
     dy := Y - FRoamY;
     FRoamX := X;
     FRoamY := Y;
-    GraphRoam(FRoamSeries, dx, dy);
+    if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
+    else GraphRoam(FRoamSeries, dx, dy);
   end;
   DataZoomPointer(dpMove, X, Y, Shift, 0);
   spec := TyTooltipSpecOf(FOption, -1, -1);
@@ -9379,7 +9998,8 @@ begin
   { A GRAPH'S HOVER LIVES IN THE STATIC LAYER, so a change of it -- onto a
     graph element, off one, or from one to another -- draws that layer
     again. A label's hit is its node's: they share the datum. }
-  if (IsGraphDatum(d) or IsGraphDatum(FTipDatum))
+  if (IsGraphDatum(d) or IsGraphDatum(FTipDatum) or IsTreeDatum(d)
+    or IsTreeDatum(FTipDatum))
     and ((d.SeriesIndex <> FTipDatum.SeriesIndex)
       or (d.DataIndex <> FTipDatum.DataIndex) or (d.IsEdge <> FTipDatum.IsEdge)) then
     graphChanged := True;
@@ -9412,7 +10032,7 @@ procedure TTyAdvanceChart.MouseLeave;
 var wasOn, wasGraph: Boolean;
 begin
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
-  wasGraph := IsGraphDatum(FTipDatum);
+  wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum);
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   FTipHits := nil;

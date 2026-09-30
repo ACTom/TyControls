@@ -413,7 +413,8 @@ begin
       end;
     tlpRight:
       begin
-        AX := x0 + ADistancePx + w; AY := y0 + halfH;
+        { zrender's grouping: x += distance + width }
+        AX := x0 + (ADistancePx + w); AY := y0 + halfH;
         AV := tavMiddle;
       end;
     tlpTop:
@@ -423,7 +424,7 @@ begin
       end;
     tlpBottom:
       begin
-        AX := x0 + w / 2; AY := y0 + h + ADistancePx;
+        AX := x0 + w / 2; AY := y0 + (h + ADistancePx);
         AH := tahCentre;
       end;
     tlpInside:
@@ -440,7 +441,7 @@ begin
       end;
     tlpInsideRight:
       begin
-        AX := x0 + w - ADistancePx; AY := y0 + halfH;
+        AX := x0 + (w - ADistancePx); AY := y0 + halfH;
         AH := tahRight; AV := tavMiddle;
       end;
     tlpInsideTop:
@@ -450,7 +451,7 @@ begin
       end;
     tlpInsideBottom:
       begin
-        AX := x0 + w / 2; AY := y0 + h - ADistancePx;
+        AX := x0 + w / 2; AY := y0 + (h - ADistancePx);
         AH := tahCentre; AV := tavBottom;
       end;
     tlpInsideTopLeft:
@@ -459,17 +460,17 @@ begin
       end;
     tlpInsideTopRight:
       begin
-        AX := x0 + w - ADistancePx; AY := y0 + ADistancePx;
+        AX := x0 + (w - ADistancePx); AY := y0 + ADistancePx;
         AH := tahRight;
       end;
     tlpInsideBottomLeft:
       begin
-        AX := x0 + ADistancePx; AY := y0 + h - ADistancePx;
+        AX := x0 + ADistancePx; AY := y0 + (h - ADistancePx);
         AV := tavBottom;
       end;
     tlpInsideBottomRight:
       begin
-        AX := x0 + w - ADistancePx; AY := y0 + h - ADistancePx;
+        AX := x0 + (w - ADistancePx); AY := y0 + (h - ADistancePx);
         AH := tahRight; AV := tavBottom;
       end;
     tlpAt:

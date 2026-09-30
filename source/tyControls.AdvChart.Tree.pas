@@ -99,6 +99,11 @@ type
     Pos: array of TTyTreePos;
     { by row: not (has children and expanded) -- reads through `leaves` }
     LeafModelled: TTyBoolArray;
+    { THE VIEW a zoom, a centre or a roam leaves: the zoom, the main group's
+      global origin, and the compensation scale the symbols take. A point
+      is (VZ*x + 0*y) + VMX, zrender's matrix order. [Batch 82] }
+    HasView: Boolean;
+    VZ, VMX, VMY, VNS: Double;
   end;
 
   { Everything a THEME answers. }
@@ -131,7 +136,11 @@ procedure TyTreeApplyExpand(AOption: TTyChartOption; ASeriesIndex: Integer;
   var AHier: TTyHierarchy);
 { treeLayout.ts commonLayout over the container, device px at APPI. }
 function TyTreeSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const AContainer: TTyRectF; APPI: Integer): TTyTreeSolved;
+  const AContainer: TTyRectF; APPI: Integer;
+  const AToggled: TTyBoolArray = nil): TTyTreeSolved;
+{ The view's zoom AZ and translation (ATX, ATY), and the node scale:
+  every placed row's pixel moved through them. [Batch 82] }
+procedure TyTreeApplyView(var ASolved: TTyTreeSolved; AZ, ATX, ATY, ANodeScale: Double);
 { One label spec per row: the item's `label` over `leaves.label` (for a
   leaf-modelled row) over the series' spec. }
 function TyTreeLabelSpecs(const ASolved: TTyTreeSolved;
@@ -372,6 +381,36 @@ begin
   finally
     arr.Free;
   end;
+end;
+
+procedure TyTreeApplyView(var ASolved: TTyTreeSolved; AZ, ATX, ATY, ANodeScale: Double);
+var row: Integer;
+begin
+  ASolved.HasView := True;
+  ASolved.VZ := AZ;
+  ASolved.VNS := ANodeScale;
+  { the main group under the view: mul(outer, mainLocal) }
+  ASolved.VMX := (AZ * ASolved.GX + 0 * ASolved.GY) + ATX;
+  ASolved.VMY := (0 * ASolved.GX + AZ * ASolved.GY) + ATY;
+  for row := 0 to High(ASolved.Pos) do
+    if ASolved.Pos[row].Placed then
+    begin
+      ASolved.Pos[row].PX := (AZ * ASolved.Pos[row].X + 0 * ASolved.Pos[row].Y) + ASolved.VMX;
+      ASolved.Pos[row].PY := (0 * ASolved.Pos[row].X + AZ * ASolved.Pos[row].Y) + ASolved.VMY;
+    end;
+end;
+
+{ a local point to the device, through the view when there is one }
+function MapX(const S: TTyTreeSolved; AX, AY: Double): Double;
+begin
+  if S.HasView then Result := (S.VZ * AX + 0 * AY) + S.VMX
+  else Result := S.GX + AX;
+end;
+
+function MapY(const S: TTyTreeSolved; AX, AY: Double): Double;
+begin
+  if S.HasView then Result := (0 * AX + S.VZ * AY) + S.VMY
+  else Result := S.GY + AY;
 end;
 
 { ==================== the spec ==================== }
@@ -715,7 +754,8 @@ begin
 end;
 
 function TyTreeSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const AContainer: TTyRectF; APPI: Integer): TTyTreeSolved;
+  const AContainer: TTyRectF; APPI: Integer;
+  const AToggled: TTyBoolArray): TTyTreeSolved;
 var
   mask: TFPUExceptionMask;
   W: TWalk;
@@ -736,6 +776,13 @@ begin
   Result.Hier := TyHierarchyOf(AOption, ASeriesIndex);
   TyTreeApplyExpand(AOption, ASeriesIndex, Result.Hier);
   n := Length(Result.Hier.Nodes);
+  { A CLICK'S TOGGLES, before anything reads the flag: a toggle is exactly
+    the option with that row's `collapsed` flipped -- the leaves model, the
+    filled ring and the layout all follow it. Row 0 never toggles.
+    [Batch 81] }
+  for row := 1 to Min(n - 1, High(AToggled)) do
+    if AToggled[row] then
+      Result.Hier.Nodes[row].Expanded := not Result.Hier.Nodes[row].Expanded;
   SetLength(Result.Pos, n);
   SetLength(Result.LeafModelled, n);
   for row := 0 to n - 1 do
@@ -1014,8 +1061,8 @@ var
     SetLength(cmds, Length(cmds) + 1);
     cmds[High(cmds)] := Default(TTyPathCmd);
     cmds[High(cmds)].Kind := AKind;
-    cmds[High(cmds)].X := ASolved.GX + AX;
-    cmds[High(cmds)].Y := ASolved.GY + AY;
+    cmds[High(cmds)].X := MapX(ASolved, AX, AY);
+    cmds[High(cmds)].Y := MapY(ASolved, AX, AY);
   end;
 
   function P(ARow2: Integer): TTyPointF;
@@ -1172,7 +1219,7 @@ var
   row, par, cnt: Integer;
   chain: array[0..2] of TJSONObject;
   s, t, cp1, cp2: TTyPointF;
-  c: Double;
+  c, vs: Double;
   el: TTyChartElement;
   shape: TTyChartShape;
   sym: TTySymbolSpec;
@@ -1244,10 +1291,10 @@ begin
         cp2 := TyPointF(t.X, t.Y + (s.Y - t.Y) * c);
       end;
       { to device px, each point once }
-      s := TyPointF(ASolved.GX + s.X, ASolved.GY + s.Y);
-      t := TyPointF(ASolved.GX + t.X, ASolved.GY + t.Y);
-      cp1 := TyPointF(ASolved.GX + cp1.X, ASolved.GY + cp1.Y);
-      cp2 := TyPointF(ASolved.GX + cp2.X, ASolved.GY + cp2.Y);
+      s := TyPointF(MapX(ASolved, s.X, s.Y), MapY(ASolved, s.X, s.Y));
+      t := TyPointF(MapX(ASolved, t.X, t.Y), MapY(ASolved, t.X, t.Y));
+      cp1 := TyPointF(MapX(ASolved, cp1.X, cp1.Y), MapY(ASolved, cp1.X, cp1.Y));
+      cp2 := TyPointF(MapX(ASolved, cp2.X, cp2.Y), MapY(ASolved, cp2.X, cp2.Y));
       { a REAL cubic: the two end points for the hit test and the bounds to
         fall back on, the commands for the painter }
       shape := TyShapePolyline([s, t]);
@@ -1293,6 +1340,16 @@ begin
     if ItemObj(ASolved, row) <> nil then sym := TySymbolSpecOf(ItemObj(ASolved, row), sym);
     sym := TySymbolResolveOffset(sym);
     if sym.Kind = tsyNone then Continue;
+    { under a zoom a symbol grows by the zoom times the compensation --
+      (z*ns)*(size/2) is its drawn half -- and its label does not }
+    if ASolved.HasView then
+    begin
+      vs := ASolved.VZ * ASolved.VNS;
+      sym.WidthPx := 2 * (vs * (sym.WidthPx / 2));
+      sym.HeightPx := 2 * (vs * (sym.HeightPx / 2));
+      sym.OffsetX := vs * sym.OffsetX;
+      sym.OffsetY := vs * sym.OffsetY;
+    end;
     shape := TyBuildSymbol(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
     { A NODE OF NO SIZE is still an element: it paints nothing and carries
       its label }
@@ -1338,6 +1395,9 @@ begin
     el.Z := ASolved.Spec.Z;
     el.Z2 := ASolved.Spec.Z2 + cTyTreeNodeZ2;
     el.HitSlopLogical := 4;
+    { A NODE IS HIT: a click toggles it, a hover names it. The edges stay
+      silent -- upstream's never toggle. [Batch 81] }
+    el.Silent := False;
     el.Datum := TyChartDatum(ASeriesIndex, row, row);
     { the caption REQUEST: the row's own spec, through the expansion's table }
     el.Caption.Text := '';
@@ -1348,6 +1408,10 @@ begin
       el.Caption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
         AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False);
       el.Caption.ItemSpec := row + 1;
+      { the running maximum over the walk plus two: every symbol is at the
+        node order, so every label two above it [Batch 83] }
+      el.Caption.HasFixedZ2 := True;
+      el.Caption.FixedZ2 := el.Z2 + 2;
       if ASolved.Spec.Radial then
         RadialLabel(ASolved, row, spec, Slice(chain, cnt), AScale, el.Caption);
     end;
