@@ -801,6 +801,29 @@ begin
   FSession := nil;
 end;
 
+{ the remote name for the screen: shown, not run -- C0 controls, DEL and the C1
+  controls (U+0080..U+009F, $C2 $80..$9F in UTF-8: $C2 $9B is a CSI) as '?' }
+function PrintableName(const AName: string): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(AName) do
+  begin
+    if (Ord(AName[i]) < 32) or (Ord(AName[i]) = 127) then
+      Result := Result + '?'
+    else if (AName[i] = #$C2) and (i < Length(AName)) and (Ord(AName[i + 1]) in [$80..$9F]) then
+    begin
+      Result := Result + '?';
+      Inc(i);
+    end
+    else
+      Result := Result + AName[i];
+    Inc(i);
+  end;
+end;
+
 procedure TZmodemStreamHandler.MachineSend(Sender: TObject; const AData: RawByteString);
 begin
   if FSession <> nil then
@@ -829,7 +852,8 @@ begin
   else
     pct := 100;
   secs := (now - FStartMs) / 1000;
-  line := #13#27'[K' + arrow + ' ' + AName + '  ' + ZmFormatSize(AFileDone) + ' / ' + ZmFormatSize(AFileSize)
+  line := #13#27'[K' + arrow + ' ' + PrintableName(AName) + '  ' + ZmFormatSize(AFileDone) + ' / '
+    + ZmFormatSize(AFileSize)
     + '  ' + IntToStr(pct) + '%';
   if secs > 0 then
     line := line + '  ' + ZmFormatSize(ATotalDone / secs) + '/s';
@@ -881,7 +905,7 @@ end;
   goes on with the next }
 procedure TZmodemStreamHandler.MachineSkipped(Sender: TObject; const AName, AReason: string);
 begin
-  Show(#13#27'[K' + Format(rsZmSkippedLine, [AName, AReason]) + #13#10);
+  Show(#13#27'[K' + Format(rsZmSkippedLine, [PrintableName(AName), AReason]) + #13#10);
 end;
 
 { a transfer, a refusal or a decline is over: the line, the stream back, the host told }

@@ -55,6 +55,7 @@ type
     procedure TestEveryDeviceNameIsRenamed;
     procedure TestALongNameIsCut;
     procedure TestAZeofRepeatedAfterTheFileIsAnsweredAgain;
+    procedure TestTheRemoteNameIsShownNotRun;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -2474,6 +2475,36 @@ begin
     AssertTrue('the abort sent', Pos(ZmAbortSequence, r.Sent) > 0);
     AssertTrue('an error', r.LastResult = zrError);
     AssertTrue('why, on the screen: ' + r.Screen, FindLine(r, rsZmTooBig) >= 0);
+  finally
+    r.Free;
+  end;
+end;
+
+{ The remote file name goes on the screen in the progress line and the skip line: its
+  control characters (C0, DEL, C1 as UTF-8) show as '?', they are not run -- an ESC [2J
+  in a name would clear the screen, a U+009B start a CSI. Mutation: the name shown as
+  it came. }
+procedure TTyTerminalZmodemTests.TestTheRemoteNameIsShownNotRun;
+const
+  Nasty = 'a'#27'[2Jb'#$C2#$9B'31mc'#127'd.bin';
+  Shown = 'a?[2Jb?31mc?d.bin';
+var
+  r: TGlueRig;
+begin
+  r := TGlueRig.Create;
+  try
+    r.AutoAccept := True;
+    r.Core.WriteSync('above'#13#10);
+    r.Core.WriteSync(SzStart);
+    AssertTrue('receiving', r.Zm.State = zsReceiving);
+    r.Core.WriteSync(ZfileFrame(Nasty, 5000) + ZdataFrame(0, Cycle(1000), ZCRCE));
+    AssertEquals('one progress line', 1, r.Zm.ProgressLines);
+    AssertTrue('the name, controls as ''?'': ' + r.Screen, FindLine(r, Shown) >= 0);
+    AssertTrue('nothing cleared: ' + r.Screen, FindLine(r, 'above') >= 0);
+    { another file, too big: the skip line names it the same way }
+    r.Core.WriteSync(ZfileFrame('big' + Nasty, ZmMaxFileSize));
+    AssertTrue('the skip line: ' + r.Screen, FindLine(r, 'big' + Shown) >= 0);
+    AssertTrue('nothing cleared: ' + r.Screen, FindLine(r, 'above') >= 0);
   finally
     r.Free;
   end;
