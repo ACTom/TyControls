@@ -726,7 +726,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [x] **Step 1: 一次编译 + 本期 suite + 全量**：「跑测试的固定套路」。Expected：本期 suite 全 0 / 0；全量 errors / failures 只剩基线那一条、总数 = 基线 + 本期新增。红了集中修：WT 格式以 spec §11.1.2 的核实记录为准、取色语义以 xterm `ThemeService.ts` 为准；修复提交 `fix(terminal): ...`，一个问题一个提交。
 - [x] **Step 2: 按 spec 逐条核代码，不看测试**（[[green-tests-are-not-spec-conformance]]、[[built-not-wired-is-the-default-failure]]）：§11.1.1 七条、§11.1.3 两张表的每一行、§11.1.4 取色表每一槽、§11.1.5 三条、§11.1.6 六条、§11.1.7 读九条写五条、§11.1.8 错误表每一行、§11.1.9、§11.1.11；逐条记「在哪一行实现 / 为什么不需要 / 挪到以后」。
-- [ ] **Step 3: 【主控执行】编包、编示例、i18n、截图**（截图已在审查修复后重跑、`check-example-po` / `check-lfm-props` 已过；编包、编示例、`example-rsj2po` 待主控，见签收）
+- [x] **Step 3: 【主控执行】编包、编示例、i18n、截图**（截图已在审查修复后重跑；主控在 922af908 上编完两个包与示例，见签收）
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk > /tmp/term-pkg.txt 2>&1; tail -3 /tmp/term-pkg.txt; lazbuild -B tycontrols_dt.lpk > /tmp/term-dt.txt 2>&1; tail -3 /tmp/term-dt.txt; lazbuild -B examples/terminal/terminal_example.lpi > /tmp/term-ex.txt 2>&1; tail -3 /tmp/term-ex.txt; git status --short
@@ -877,4 +877,4 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **计划外发现**：AdvChart 的 `TyDecodeUnicodeEscapes`（`source/tyControls.AdvChart.Option.pas`）不认注释、会把 `\u0022` / `\u005C` 解成裸字符，也没有嵌套深度上限（AdvChart 的 JSON 同样交给 fpjson 递归解析，很深的嵌套应当同样会撑爆栈；没有实测）。不在本期范围，留给 AdvChart。
 
-**待主控**：编 `tycontrols.lpk`（运行时单元改了：`Terminal.ColorScheme`、`Terminal`、`StrConsts`）、`tycontrols_dt.lpk`（`designtime/tyControls.Design.CompEditors.pas` 改了），编终端示例（`.lfm` 加了五个控件）；`example-rsj2po.py` 复查示例 `.po`（本次手工补了 5 条 `.lfm` 文字与 5 条 resourcestring，`check-example-po.py` 101 份 0 问题、`check-lfm-props.py` 通过）；启动示例看第五行的光标设置在英文和中文界面下不挤。
+**主控已做（922af908 之上）**：`lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`、终端示例都 0 错；`example-rsj2po.py` 0 新增 0 改动；`check-example-po.py` 101 份 0 问题、`check-lfm-props.py` 通过；启动示例枚举窗口只有主窗体（`TTyTerminalView 示例`）与应用窗口，没有 `#32770`。第五行在中英文下挤不挤是真机项，并入验收第 101 项。原待办：编 `tycontrols.lpk`（运行时单元改了：`Terminal.ColorScheme`、`Terminal`、`StrConsts`）、`tycontrols_dt.lpk`（`designtime/tyControls.Design.CompEditors.pas` 改了），编终端示例（`.lfm` 加了五个控件）；`example-rsj2po.py` 复查示例 `.po`（本次手工补了 5 条 `.lfm` 文字与 5 条 resourcestring，`check-example-po.py` 101 份 0 问题、`check-lfm-props.py` 通过）；启动示例看第五行的光标设置在英文和中文界面下不挤。
