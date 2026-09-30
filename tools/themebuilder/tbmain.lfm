@@ -1,0 +1,199 @@
+object TbMainForm: TTbMainForm
+  Left = 0
+  Height = 680
+  Top = 0
+  Width = 1280
+  Caption = 'Theme Builder'
+  ClientHeight = 680
+  ClientWidth = 1280
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  MenuBar = MainMenuBar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 680
+    Top = 0
+    Width = 1280
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1280
+      Align = alTop
+      Caption = 'Theme Builder  · TyControls'
+      TitleAlignment = taCenter
+      object MainMenuBar: TTyMenuBar
+        Left = 4
+        Height = 26
+        Top = 4
+        Width = 160
+        Menu = MainMenu1
+        AutoSizeWidth = True
+      end
+    end
+    object Status: TTyStatusBar
+      Left = 0
+      Height = 24
+      Top = 656
+      Width = 1280
+      Panels = <
+        item
+          Width = 640
+        end
+        item
+          Width = 140
+        end
+        item
+          Width = 0
+        end>
+    end
+    object SideBar: TTyToolWindowBar
+      Left = 0
+      Height = 622
+      Top = 34
+      ExpandedSize = 280
+      Images = Icons
+      object ProblemsWin: TTyToolWindow
+        Caption = 'Problems'
+        ImageName = 'circle-alert'
+        StripHint = 'Problems'
+        ShowBadge = True
+        object ProblemsList: TTyListBox
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+          OnDblClick = ProblemsListDblClick
+        end
+      end
+    end
+    object PreviewHost: TTyPanel
+      Left = 720
+      Height = 622
+      Top = 34
+      Width = 560
+      Align = alRight
+    end
+    object PreviewSplitter: TTySplitter
+      Left = 714
+      Height = 622
+      Top = 34
+      Width = 6
+      Align = alRight
+    end
+    object Editor: TSynEdit
+      Left = 280
+      Height = 622
+      Top = 34
+      Width = 434
+      Align = alClient
+      Gutter.Visible = True
+      OnChange = EditorChange
+      OnStatusChange = EditorStatusChange
+      OnSpecialLineMarkup = EditorSpecialLineMarkup
+    end
+  end
+  object Icons: TTyLucideImageList
+    Names.Strings = (
+      'circle-alert'
+    )
+    Left = 360
+    Top = 160
+  end
+  object GutterIcons: TTyLucideImageList
+    Names.Strings = (
+      'circle-x'
+      'triangle-alert'
+    )
+    Left = 420
+    Top = 160
+  end
+  object MainMenu1: TMainMenu
+    Left = 480
+    Top = 160
+    object MnuFile: TMenuItem
+      Caption = '&File'
+      object MnuNew: TMenuItem
+        Caption = '&New'
+        object MnuNewMinimal: TMenuItem
+          Caption = 'Minimal theme'
+          ShortCut = 16462
+          OnClick = MnuNewMinimalClick
+        end
+        object MnuNewSep: TMenuItem
+          Caption = '-'
+        end
+      end
+      object MnuOpen: TMenuItem
+        Caption = '&Open...'
+        ShortCut = 16463
+        OnClick = MnuOpenClick
+      end
+      object MnuRecent: TMenuItem
+        Caption = 'Open &recent'
+      end
+      object MnuSave: TMenuItem
+        Caption = '&Save'
+        ShortCut = 16467
+        OnClick = MnuSaveClick
+      end
+      object MnuSaveAs: TMenuItem
+        Caption = 'Save &as...'
+        ShortCut = 24659
+        OnClick = MnuSaveAsClick
+      end
+      object MnuFileSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuExit: TMenuItem
+        Caption = 'E&xit'
+        OnClick = MnuExitClick
+      end
+    end
+    object MnuView: TMenuItem
+      Caption = '&View'
+      object MnuAppearance: TMenuItem
+        Caption = 'Editor &appearance'
+      end
+      object MnuEditorDark: TMenuItem
+        AutoCheck = True
+        Caption = '&Dark editor'
+        OnClick = MnuEditorDarkClick
+      end
+      object MnuViewSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuProblems: TMenuItem
+        Caption = '&Problems'
+        OnClick = MnuProblemsClick
+      end
+    end
+  end
+  object DlgOpen: TTyOpenDialog
+    Left = 540
+    Top = 160
+  end
+  object DlgSave: TTySaveDialog
+    Left = 600
+    Top = 160
+  end
+  object RefreshTimer: TTimer
+    Enabled = False
+    Interval = 300
+    OnTimer = RefreshTimerTimer
+    Left = 660
+    Top = 160
+  end
+  object WatchTimer: TTimer
+    Interval = 1000
+    OnTimer = WatchTimerTimer
+    Left = 720
+    Top = 160
+  end
+end
