@@ -245,6 +245,7 @@ type
     CancelAt: Int64;                     { cancel once this many bytes went; 0 = never }
     Cancelled: Boolean;
     Sent: RawByteString;
+    AllIn, AllOut: RawByteString;        { the first bytes each way, for a failure message }
     constructor Create(const ADir: string);
     destructor Destroy; override;
     procedure OnData(Sender: TObject; const AData: RawByteString);
@@ -257,6 +258,8 @@ type
     procedure OnClaimed(Sender: TObject; const AData: RawByteString);
     function Run(const ACommand: string; ATimeoutMs: Integer = 60000): Boolean;
     function Screen: string;
+    { how it ended, for a failure message }
+    function Describe: string;
   end;
 
 constructor TWslRun.Create(const ADir: string);
@@ -299,6 +302,8 @@ begin
     s[FlipOut - SeenOut] := AnsiChar(Ord(s[FlipOut - SeenOut]) xor $5A);
   end;
   Inc(SeenOut, Length(s));
+  if Length(AllOut) < 600 then
+    AllOut := AllOut + Copy(s, 1, 600 - Length(AllOut));
   if (Session <> nil) and not Session.Closed then
     Session.Write(s);
 end;
@@ -372,6 +377,8 @@ begin
         data[FlipIn - SeenIn] := AnsiChar(Ord(data[FlipIn - SeenIn]) xor $5A);
       end;
       Inc(SeenIn, Length(data));
+      if Length(AllIn) < 600 then
+        AllIn := AllIn + Copy(data, 1, 600 - Length(AllIn));
       if data <> '' then
         Core.Write(data, @OnDelivered, Length(data));
       if ended then
@@ -397,6 +404,25 @@ begin
   Result := False;
 end;
 
+function HexOf(const S: RawByteString): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(S) do
+    if S[i] in [#32..#126] then
+      Result := Result + S[i]
+    else
+      Result := Result + '<' + IntToHex(Ord(S[i]), 2) + '>';
+end;
+
+function TWslRun.Describe: string;
+begin
+  Result := Format('exited %s (code %d), finished %s (%s), state %d, %d bytes in, %d out'#10'in:  %s'#10'out: %s'#10'screen:'#10'%s',
+    [BoolToStr(Exited, True), ExitCode, BoolToStr(Finished, True), Message, Ord(Zm.State), SeenIn, SeenOut,
+     HexOf(AllIn), HexOf(AllOut), Screen]);
+end;
+
 function TWslRun.Screen: string;
 var
   y: Integer;
@@ -415,6 +441,7 @@ var
   r: TWslRun;
   i: Integer;
   t0: QWord;
+  ok: Boolean;
 begin
   src := NewDir(ATag + '-src');
   dst := NewDir(ATag + '-dst');
@@ -428,12 +455,12 @@ begin
     end;
     r.FlipIn := AFlipIn;
     t0 := GetTickCount64;
-    ACase.AssertTrue(ATag + ': ended within 60 s: ' + r.Screen,
-      r.Run('wsl.exe -d Ubuntu --cd "' + WslPath(src) + '"' + ' -- sz ' + ASzOptions + names));
+    ok := r.Run('wsl.exe -d Ubuntu --cd "' + WslPath(src) + '"' + ' -- sz ' + ASzOptions + names);
+    ACase.AssertTrue(ATag + ': ended within 60 s: ' + r.Describe, ok);
     if Length(AData) > 0 then
       WriteLn(Format('%s: %d bytes in %d ms', [ATag, Length(AData[High(AData)]), GetTickCount64 - t0]));
     ACase.AssertTrue(ATag + ': finished', r.Finished);
-    ACase.AssertTrue(ATag + ': ok (' + r.Message + ')', r.Result_ = zrOk);
+    ACase.AssertTrue(ATag + ': ok: ' + r.Describe, r.Result_ = zrOk);
     ACase.AssertEquals(ATag + ': sz exit code', 0, r.ExitCode);
     for i := 0 to High(ANames) do
     begin
@@ -552,6 +579,7 @@ var
   r: TWslRun;
   i: Integer;
   t0: QWord;
+  ok: Boolean;
 begin
   src := NewDir(ATag + '-src');
   dst := NewDir(ATag + '-dst');
@@ -564,10 +592,10 @@ begin
     end;
     r.FlipOut := AFlipOut;
     t0 := GetTickCount64;
-    ACase.AssertTrue(ATag + ': ended within 60 s: ' + r.Screen,
-      r.Run('wsl.exe -d Ubuntu --cd "' + WslPath(dst) + '"' + ' -- rz ' + ARzOptions));
+    ok := r.Run('wsl.exe -d Ubuntu --cd "' + WslPath(dst) + '"' + ' -- rz ' + ARzOptions);
+    ACase.AssertTrue(ATag + ': ended within 60 s: ' + r.Describe, ok);
     WriteLn(Format('%s: %d bytes in %d ms', [ATag, Length(AData[High(AData)]), GetTickCount64 - t0]));
-    ACase.AssertTrue(ATag + ': ok (' + r.Message + ')', r.Result_ = zrOk);
+    ACase.AssertTrue(ATag + ': ok: ' + r.Describe, r.Result_ = zrOk);
     ACase.AssertEquals(ATag + ': rz exit code', 0, r.ExitCode);
     for i := 0 to High(ANames) do
     begin
