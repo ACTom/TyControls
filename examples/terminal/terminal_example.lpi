@@ -26,7 +26,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="10">
+    <Units Count="11">
       <Unit0>
         <Filename Value="terminal_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -76,6 +76,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="uzmodemterm"/>
       </Unit9>
+      <Unit10>
+        <Filename Value="uwslresize.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uwslresize"/>
+      </Unit10>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

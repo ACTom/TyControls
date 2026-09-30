@@ -14,10 +14,12 @@ unit test.terminal.zmodem.wsl;
   I1-I11 of the phase 7 plan. The WSL console tool tools/terminal-zmodem-wsl runs the
   same kind of transfers through the Unix PTY backend.
 
-  P1-P3 (7 期验收反馈): the example's pipe-mode WSL entry (umain's PipeWslCommand) --
-  script opens a PTY in Linux, so the shell on the pipe is an interactive one with a line
-  discipline -- and sz / rz typed into it, the prompt clean afterwards. They also need
-  script (util-linux) in Ubuntu. }
+  P1-P5 (7 期验收反馈): the example's pipe-mode WSL entry (umain's PipeWslCommand) on the
+  example's pipe backend (uwslresize's TWslPipeBackend) -- script opens a PTY in Linux, so
+  the shell on the pipe is an interactive one with a line discipline -- sz / rz typed
+  into it, the prompt clean afterwards, and a size change that gets there through the side
+  process (also in the middle of a download). They also need script (util-linux) in
+  Ubuntu. }
 
 interface
 
@@ -44,6 +46,8 @@ type
     procedure TestThePipeShellHasATerminal;                  { P1 }
     procedure TestSzInThePipeShell;                          { P2 }
     procedure TestRzInThePipeShell;                          { P3 }
+    procedure TestAResizeReachesThePipeShell;                { P4 }
+    procedure TestAResizeDuringADownload;                    { P5 }
   end;
 
 implementation
@@ -51,7 +55,7 @@ implementation
 {$IFDEF MSWINDOWS}
 uses
   Windows, SyncObjs, Math, md5, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  uptysession, uptywin, uzmodem, uzmodemsession, uzmodemterm, umain;
+  uptysession, uptywin, uzmodem, uzmodemsession, uzmodemterm, umain, uwslresize;
 
 const
   { I6 / I10: about 1 s when the ZRPOS puts the damage right; a recovery only by the
@@ -281,8 +285,13 @@ type
     Cancelled: Boolean;
     Sent: RawByteString;
     AllIn, AllOut: RawByteString;        { the first bytes each way, for a failure message }
-    Raw: RawByteString;                  { everything the program sent }
+    { what the program sent -- of a batch that comes while a transfer runs only its last
+      4 KB (a download's megabytes appended would cost seconds; the prompt after it is at
+      a batch's end) }
+    Raw: RawByteString;
     MergeStderr: Boolean;                { the pipe backend as the example makes it }
+    WslBackend: Boolean;                 { the example's pipe backend (TWslPipeBackend) }
+    Backend: TProcessPipeBackend;        { the session's, while it runs }
     FLastTick: QWord;
     FDidCancel: Boolean;
     constructor Create(const ADir: string; ACols: Integer = 80; ARows: Integer = 24);
@@ -398,7 +407,11 @@ procedure TWslRun.Start(const ACommand: string);
 var
   err: string;
 begin
-  Session := TPtySession.Create(TProcessPipeBackend.Create(MergeStderr));
+  if WslBackend then
+    Backend := TWslPipeBackend.Create(MergeStderr)
+  else
+    Backend := TProcessPipeBackend.Create(MergeStderr);
+  Session := TPtySession.Create(Backend);
   Session.OnWake := @Waker.Wake;
   if not Session.Start(ACommand, Core.Cols, Core.Rows, err) then
     raise Exception.Create('not started: ' + err);
@@ -424,7 +437,10 @@ begin
     Inc(SeenIn, Length(data));
     if Length(AllIn) < 600 then
       AllIn := AllIn + Copy(data, 1, 600 - Length(AllIn));
-    Raw := Raw + data;
+    if (Zm.State <> zsIdle) and (Length(data) > 4096) then
+      Raw := Raw + Copy(data, Length(data) - 4095, 4096)
+    else
+      Raw := Raw + data;
     if data <> '' then
       Core.Write(data, @OnDelivered, Length(data));
     if ended then
@@ -817,6 +833,7 @@ var
 
 begin
   R.MergeStderr := True;
+  R.WslBackend := True;
   R.Start(PipeShellCommand(ADir, R.Core.Cols, R.Core.Rows));
   ACase.AssertTrue('the shell said something: ' + R.Describe, R.WaitUntil(@Some, 20000));
   n := -1;
@@ -976,6 +993,143 @@ begin
   end;
 end;
 
+{ P4. A size change reaches the pipe shell through the side process: a program waiting in
+  the foreground gets SIGWINCH, tput answers the new size. The file the wrapper wrote (the
+  shell's PID, its PTY) is there while the shell runs and removed after the session.
+  Mutations: Resize doing nothing; the cleanup not started. }
+procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePipeShell;
+var
+  dir, f: string;
+  r: TWslRun;
+  got, o: RawByteString;
+  mark: Integer;
+  t0: QWord;
+  gone: Boolean;
+
+  function Winched: Boolean;
+  begin
+    Result := Pos('WINCH 77x20', Copy(r.Raw, mark + 1, MaxInt)) > 0;
+  end;
+
+  function Prompted: Boolean;
+  begin
+    Result := Winched and EndsWith(r.Raw, TestPrompt);
+  end;
+
+  function SideEnded: Boolean;
+  begin
+    Result := (r.Backend as TWslPipeBackend).ResizesSent + (r.Backend as TWslPipeBackend).ResizesFailed > 0;
+  end;
+
+begin
+  NeedWslScript;
+  dir := NewDir('p4');
+  r := TWslRun.Create(dir, 97, 31);
+  f := '';
+  try
+    StartPipeShell(Self, r, dir);
+    f := (r.Backend as TWslPipeBackend).TtyFile;
+    AssertEquals('the file: ' + f, 1, Pos('/tmp/tyterm-', f));
+    AssertEquals('the wrapper wrote it: the shell''s PID and its PTY', 0,
+      RunPlain('wsl.exe -d Ubuntu -- sh -c "read p t < ' + f + ' && test -e /proc/$p && test -c $t"', 15000, o));
+    { the trap reports what the kernel's SIGWINCH says; wait returns after it }
+    mark := Length(r.Raw);
+    r.Send('trap ''echo WINCH $(tput cols)x$(tput lines)'' WINCH; sleep 30 & wait'#13);
+    Settle(r, 500);
+    t0 := GetTickCount64;
+    r.Session.Resize(77, 20);
+    AssertTrue('the waiting shell got SIGWINCH: ' + HexOf(Copy(r.Raw, mark + 1, MaxInt)), r.WaitUntil(@Prompted, 10000));
+    WriteLn(Format('p4: the new size was there after %d ms', [GetTickCount64 - t0]));
+    RunLine(Self, r, 'kill %1; wait');
+    got := RunLine(Self, r, 'tput cols; tput lines');
+    AssertTrue('tput: ' + HexOf(got), Pos('77'#13#10'20'#13#10, got) > 0);
+    { the side process ends a little after its stty }
+    AssertTrue('the side process ended', r.WaitUntil(@SideEnded, 5000));
+    AssertEquals('one side process', 1, (r.Backend as TWslPipeBackend).ResizesSent);
+    AssertEquals('none failed', 0, (r.Backend as TWslPipeBackend).ResizesFailed);
+    LeavePipeShell(Self, r);
+  finally
+    r.Free;
+    RemoveDirAll(dir);
+  end;
+  { the finisher started the removal; it takes a WSL start }
+  gone := False;
+  t0 := GetTickCount64;
+  repeat
+    gone := RunPlain('wsl.exe -d Ubuntu -- test -e ' + f, 15000, o) = 1;
+    if not gone then Sleep(200);
+  until gone or (GetTickCount64 - t0 > 10000);
+  AssertTrue('the file is removed after the session: ' + f, gone);
+end;
+
+{ P5. A size change in the middle of a download: the side process sets the PTY's size
+  while sz sends (sz gets SIGWINCH and goes on), the file arrives byte for byte, and the
+  shell has the new size afterwards. }
+procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownload;
+var
+  src, dst: string;
+  r: TWslRun;
+  data, got: RawByteString;
+  mark: Integer;
+  base: Int64;
+  resized: Boolean;
+  sentAtEnd: Integer;
+  tStart, tResize, tSent, tEnd: QWord;
+
+  function Done: Boolean;
+  begin
+    if not resized and (r.Zm.State <> zsIdle) and (r.SeenIn > base + 200 * 1024) then
+    begin
+      resized := True;
+      tResize := GetTickCount64;
+      r.Session.Resize(88, 22);
+    end;
+    if resized and (tSent = 0) and ((r.Backend as TWslPipeBackend).ResizesSent > 0) then
+      tSent := GetTickCount64;
+    if r.Finished and (sentAtEnd < 0) then
+    begin
+      tEnd := GetTickCount64;
+      sentAtEnd := (r.Backend as TWslPipeBackend).ResizesSent;
+    end;
+    Result := r.Finished and (r.Zm.State = zsIdle) and (Length(r.Raw) > mark) and EndsWith(r.Raw, TestPrompt);
+  end;
+
+begin
+  NeedWslScript;
+  src := NewDir('p5-src');
+  dst := NewDir('p5-dst');
+  r := TWslRun.Create(dst);
+  try
+    data := Seeded(64 * 1024 * 1024, 22);
+    SaveBytes(src + PathDelim + 'big.bin', data);
+    StartPipeShell(Self, r, src);
+    mark := Length(r.Raw);
+    base := r.SeenIn;
+    resized := False;
+    sentAtEnd := -1;
+    tResize := 0;
+    tSent := 0;
+    tEnd := 0;
+    tStart := GetTickCount64;
+    r.Send('sz big.bin'#13);
+    AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 120000));
+    WriteLn(Format('p5: resize at %d ms, set at %d ms, the transfer ended at %d ms (%d failed)',
+      [tResize - tStart, tSent - tStart, tEnd - tStart, (r.Backend as TWslPipeBackend).ResizesFailed]));
+    AssertTrue('the size changed in the middle', resized);
+    AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
+    AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'big.bin') = data);
+    AssertEquals('the side process had set the size before the transfer ended', 1, sentAtEnd);
+    got := RunLine(Self, r, 'tput cols; tput lines');
+    AssertTrue('tput: ' + HexOf(got), Pos('88'#13#10'22'#13#10, got) > 0);
+    LeavePipeShell(Self, r);
+  finally
+    r.Free;
+    KillLeftovers;
+    RemoveDirAll(src);
+    RemoveDirAll(dst);
+  end;
+end;
+
 {$ELSE}
 
 procedure TTyTerminalZmodemWslTests.NeedWsl;
@@ -998,6 +1152,8 @@ procedure TTyTerminalZmodemWslTests.NeedWslScript; begin NeedWsl; end;
 procedure TTyTerminalZmodemWslTests.TestThePipeShellHasATerminal; begin NeedWsl; end;
 procedure TTyTerminalZmodemWslTests.TestSzInThePipeShell; begin NeedWsl; end;
 procedure TTyTerminalZmodemWslTests.TestRzInThePipeShell; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePipeShell; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownload; begin NeedWsl; end;
 
 {$ENDIF}
 

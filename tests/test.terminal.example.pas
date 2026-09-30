@@ -13,8 +13,8 @@ uses
   Classes, SysUtils, Math, fpcunit, testregistry,
   Forms, FileUtil,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller,
-  tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, umain, test.terminal.view,
-  test.terminal.pty, test.terminal.oracle;
+  tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, umain, uwslresize,
+  {$IFDEF MSWINDOWS}uptywin,{$ENDIF} test.terminal.view, test.terminal.pty, test.terminal.oracle;
 
 type
   TTyTerminalExampleTests = class(TTestCase)
@@ -52,6 +52,9 @@ type
     { 7 期验收反馈:管道模式的命令 }
     procedure TestPipeModeListsCommandsWithATerminalOfTheirOwn;
     procedure TestTheGridSizeGoesIntoAPipeCommand;
+    procedure TestTheWslResizeCommands;
+    procedure TestTheWslResizeQueue;
+    procedure TestThePipeModeBackendResizesWsl;
   end;
 
 implementation
@@ -325,8 +328,8 @@ end;
   compiles what the project names or its units use) }
 procedure TTyTerminalExampleTests.TestTheExampleProjectListsItsUnits;
 const
-  Units: array[0..6] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas',
-    'uzmodem.pas', 'uzmodemsession.pas', 'uzmodemterm.pas');
+  Units: array[0..7] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas',
+    'uzmodem.pas', 'uzmodemsession.pas', 'uzmodemterm.pas', 'uwslresize.pas');
 var
   l: TStringList;
   i: Integer;
@@ -875,7 +878,8 @@ var
 begin
   hasWsl := FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) <> '';
   AssertEquals('the WSL entry of the pipe mode',
-    'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; exec $SHELL -il" /dev/null', PipeWslCommand);
+    'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null',
+    PipeWslCommand);
   AssertEquals('the ssh entry asks the far side for a terminal', 'ssh -tt user@host', PipeSshCommand);
   f := TMainForm.Create(nil);
   try
@@ -929,8 +933,8 @@ var
 begin
   AssertEquals('both, every time', 'a 97 b 31 c 97x31', ExpandGridSize('a %COLS% b %ROWS% c %COLS%x%ROWS%', 97, 31));
   AssertEquals('none: as it is', 'ssh -tt user@host', ExpandGridSize('ssh -tt user@host', 97, 31));
-  AssertEquals('the WSL entry',
-    'wsl.exe -e script -qfc "stty cols 120 rows 40; exec $SHELL -il" /dev/null',
+  AssertEquals('the WSL entry (the file is the backend''s)',
+    'wsl.exe -e script -qfc "stty cols 120 rows 40; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null',
     ExpandGridSize(PipeWslCommand, 120, 40));
   {$IFDEF MSWINDOWS}
   fake := TFakePty.Create;
@@ -948,6 +952,123 @@ begin
     { not taken (the shell never started): the test's to free }
     FreeAndNil(TMainForm.ShellBackendForTest);
     f.Free;
+  end;
+  {$ENDIF}
+end;
+
+{ The pipe mode's side channel for WSL's size (uwslresize): which commands have it (the WSL
+  entry: wsl.exe and %TTYFILE%; the same distribution and user), the file the wrapper
+  writes, the side process that sets the PTY's size -- only while the shell that wrote the
+  file still has that terminal as its input -- and the one that removes the file. }
+procedure TTyTerminalExampleTests.TestTheWslResizeCommands;
+var
+  exe, opts: string;
+begin
+  AssertEquals('the file', '/tmp/tyterm-1234-5.tty', WslTtyFileName(1234, 5));
+  AssertTrue('the WSL entry', WslResizeTarget(ExpandGridSize(PipeWslCommand, 80, 24), exe, opts));
+  AssertEquals('its wsl.exe', 'wsl.exe', exe);
+  AssertEquals('no options: the default distribution', '', opts);
+  AssertTrue('a distribution, a user; --cd is not for the side process',
+    WslResizeTarget('C:\Windows\System32\WSL.EXE -d Ubuntu --cd "C:\a b" --user root -e script -qfc "tty > %TTYFILE%" /dev/null',
+      exe, opts));
+  AssertEquals('the program as given', 'C:\Windows\System32\WSL.EXE', exe);
+  AssertEquals('-d and --user kept', ' -d Ubuntu --user root', opts);
+  AssertTrue('a quoted distribution name', WslResizeTarget('wsl --distribution "My Distro" -- script %TTYFILE%', exe, opts));
+  AssertEquals('quoted again', ' --distribution "My Distro"', opts);
+  AssertFalse('wsl.exe without %TTYFILE%: no side channel', WslResizeTarget('wsl.exe -e bash -il', exe, opts));
+  AssertFalse('ssh: no side channel (no window-change message on a pipe)',
+    WslResizeTarget('ssh -tt user@host %TTYFILE%', exe, opts));
+  AssertFalse('an options-only look-alike', WslResizeTarget('notwsl.exe %TTYFILE%', exe, opts));
+  AssertEquals('the side process',
+    'wsl.exe -d Ubuntu -e sh -c "read p t < /tmp/tyterm-1-2.tty && [ $(readlink /proc/$p/fd/0) = $t ] && stty -F $t cols 77 rows 20"',
+    WslResizeCommand('wsl.exe', ' -d Ubuntu', '/tmp/tyterm-1-2.tty', 77, 20));
+  AssertEquals('the cleanup', 'wsl.exe -d Ubuntu -e rm -f /tmp/tyterm-1-2.tty',
+    WslCleanupCommand('wsl.exe', ' -d Ubuntu', '/tmp/tyterm-1-2.tty'));
+end;
+
+{ The side process takes about half a second: sizes are sent 250 ms after the last change,
+  one process at a time, the latest after it; a failure is tried again twice, a second
+  apart; after Stop nothing. Mutations: sending at once (no debounce); a second process
+  while one runs; the failure dropped (no retry). }
+procedure TTyTerminalExampleTests.TestTheWslResizeQueue;
+var
+  q: TWslResizeQueue;
+  c, r: Integer;
+begin
+  q := TWslResizeQueue.Create(100, 30);
+  try
+    AssertFalse('nothing at the start', q.Next(1000, c, r));
+    q.SizeChanged(90, 30, 1000);
+    q.SizeChanged(80, 25, 1100);
+    AssertFalse('100 ms after the last change: not yet', q.Next(1200, c, r));
+    AssertFalse('249 ms: not yet', q.Next(1349, c, r));
+    AssertTrue('250 ms: the last size', q.Next(1350, c, r));
+    AssertEquals(80, c);
+    AssertEquals(25, r);
+    AssertTrue('in flight', q.Busy);
+    q.SizeChanged(70, 20, 1400);
+    AssertFalse('one at a time', q.Next(2000, c, r));
+    q.Done(True, 2000);
+    AssertTrue('then the latest', q.Next(2000, c, r));
+    AssertEquals(70, c);
+    AssertEquals(20, r);
+    q.Done(True, 2400);
+    AssertFalse('sent: nothing more', q.Next(5000, c, r));
+    { back to what was sent before it went: nothing to send }
+    q.SizeChanged(71, 20, 6000);
+    q.SizeChanged(70, 20, 6100);
+    AssertFalse('the size it has', q.Next(7000, c, r));
+    { a failure: again a second later, three tries in all }
+    q.SizeChanged(60, 15, 8000);
+    AssertTrue(q.Next(8250, c, r));
+    q.Done(False, 8700);
+    AssertFalse('not at once after a failure', q.Next(8800, c, r));
+    AssertTrue('a second later', q.Next(9700, c, r));
+    AssertEquals(60, c);
+    q.Done(False, 10100);
+    AssertTrue('the third try', q.Next(11100, c, r));
+    q.Done(False, 11500);
+    AssertFalse('three failures: given up', q.Next(20000, c, r));
+    AssertTrue(q.GaveUp);
+    q.SizeChanged(61, 15, 21000);
+    AssertFalse('a new size tries again', q.GaveUp);
+    AssertTrue(q.Next(21250, c, r));
+    q.Done(True, 21700);
+    q.SizeChanged(50, 10, 22000);
+    q.Stop;
+    AssertFalse('stopped: nothing', q.Next(30000, c, r));
+    q.SizeChanged(40, 10, 30000);
+    AssertFalse('stopped: a change is not taken', q.Next(40000, c, r));
+  finally
+    q.Free;
+  end;
+end;
+
+{ Pipe mode starts its commands on the backend that has the side channel (ConPTY and
+  Unix keep theirs). Mutation: StartShell making a plain TProcessPipeBackend. }
+procedure TTyTerminalExampleTests.TestThePipeModeBackendResizesWsl;
+var
+  b: TPtyBackend;
+begin
+  {$IFDEF MSWINDOWS}
+  b := NewShellBackend(True);
+  try
+    AssertTrue('pipe: ' + b.ClassName, b is TWslPipeBackend);
+  finally
+    b.Free;
+  end;
+  b := NewShellBackend(False);
+  try
+    AssertTrue('ConPTY: ' + b.ClassName, b is TConPtyBackend);
+  finally
+    b.Free;
+  end;
+  {$ELSE}
+  b := NewShellBackend(True);
+  try
+    AssertEquals('elsewhere the PTY', 'TUnixPtyBackend', b.ClassName);
+  finally
+    b.Free;
   end;
   {$ENDIF}
 end;

@@ -59,8 +59,10 @@ unit umain;
   the list offers commands that open a terminal on the far side: WSL through script (a
   PTY in Linux; stty gives it the grid at the start, %COLS% / %ROWS%) and ssh -tt. cmd and
   PowerShell are not listed: on a pipe they have no line editing, no echo and no width,
-  and write in the OEM code page. A size change after the start does not get through
-  (the pipe carries data only). Behind ConPTY the terminal says so and stops sz / rz.
+  and write in the OEM code page. The pipe carries data only: for the WSL entry a later
+  size goes to the PTY in Linux through a short side process (uwslresize, about half a
+  second); ssh -tt keeps the size it started with. Behind ConPTY the terminal says so and
+  stops sz / rz.
 
   CURSOR. "Cursor", "Blink" and "Unfocused" set the terminal's own cursor (CursorStyle,
   CursorBlink, CursorInactiveStyle). A program can ask for another shape for a while --
@@ -83,7 +85,7 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.ProgressBar,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.ColorScheme, tyControls.Terminal,
-  uasciicast, uptysession, uptywin, uptyunix, ushell, uzmodemsession, uzmodemterm;
+  uasciicast, uptysession, uptywin, uptyunix, ushell, uzmodemsession, uzmodemterm, uwslresize;
 
 const
   { The commands "Pipe" lists (Windows). A plain pipe has no line discipline: nobody turns
@@ -93,10 +95,12 @@ const
     - WSL: script (util-linux) runs the login shell on a PTY of Linux; stty gives the PTY
       the grid the terminal has at the start (%COLS% / %ROWS%, see ExpandGridSize). WSL sets
       $SHELL from the user's passwd entry under wsl.exe -e too, and script runs the -c
-      command with it.
-    - ssh -tt: the remote side opens a PTY although our end is a pipe (-T would not).
-    A size change later does not get there: a pipe carries data only. }
-  PipeWslCommand = 'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; exec $SHELL -il" /dev/null';
+      command with it (so its syntax is the login shell's: bash, zsh). The shell's PID and
+      PTY go into %TTYFILE%: later sizes get there through a side process (uwslresize).
+    - ssh -tt: the remote side opens a PTY although our end is a pipe (-T would not). Its
+      size stays the one at the start: a real SSH client sends a new one in the SSH
+      protocol's window-change message, and on a pipe we have the byte stream only. }
+  PipeWslCommand = 'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null';
   PipeSshCommand = 'ssh -tt user@host';
 
 type
@@ -273,7 +277,23 @@ var
   a command without them comes back as it is) }
 function ExpandGridSize(const ACommand: string; ACols, ARows: Integer): string;
 
+{ the shell's backend: Windows -- ConPTY, or with APipe the pipes (and for the WSL entry
+  the side channel for the size); elsewhere the PTY }
+function NewShellBackend(APipe: Boolean): TPtyBackend;
+
 implementation
+
+function NewShellBackend(APipe: Boolean): TPtyBackend;
+begin
+  {$IFDEF MSWINDOWS}
+  if APipe then
+    Result := TWslPipeBackend.Create(True)
+  else
+    Result := TConPtyBackend.Create;
+  {$ELSE}
+  Result := TUnixPtyBackend.Create;
+  {$ENDIF}
+end;
 
 function ExpandGridSize(const ACommand: string; ACols, ARows: Integer): string;
 begin
@@ -780,14 +800,7 @@ begin
   Application.RemoveAsyncCalls(Self);
   Tools6.Visible := False;
   FreeAndNil(FShell);
-  {$IFDEF MSWINDOWS}
-  if ChkPipe.Checked then
-    backend := TProcessPipeBackend.Create(True)
-  else
-    backend := TConPtyBackend.Create;
-  {$ELSE}
-  backend := TUnixPtyBackend.Create;
-  {$ENDIF}
+  backend := NewShellBackend(ChkPipe.Checked);
   if ShellBackendForTest <> nil then
   begin
     backend.Free;
