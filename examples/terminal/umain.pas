@@ -56,10 +56,12 @@ unit umain;
   ConPTY drops every byte from $80 up, so ZModem needs "Pipe": the command then runs on
   two plain pipes -- binary safe, but a pipe is no terminal: nothing turns the CR of
   Enter into LF, echoes, turns LF into CR LF or passes the window's size. So with "Pipe"
-  the list offers commands that open a terminal on the far side: WSL through script (a
-  PTY in Linux; stty gives it the grid at the start, %COLS% / %ROWS%) and ssh -tt. cmd and
+  the list offers commands that open a terminal on the far side: WSL, one entry per
+  distribution, the default first (uwslpipe: a PTY in Linux through script, or python3
+  where there is no script; the grid at the start from %COLS% / %ROWS%), and ssh -tt. A
+  distribution with neither ends at once, and the example says what to install. cmd and
   PowerShell are not listed: on a pipe they have no line editing, no echo and no width,
-  and write in the OEM code page. The pipe carries data only: for the WSL entry a later
+  and write in the OEM code page. The pipe carries data only: for the WSL entries a later
   size goes to the PTY in Linux through a short side process (uwslresize, about half a
   second); ssh -tt keeps the size it started with. Behind ConPTY the terminal says so and
   stops sz / rz.
@@ -85,22 +87,23 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.ProgressBar,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.ColorScheme, tyControls.Terminal,
-  uasciicast, uptysession, uptywin, uptyunix, ushell, uzmodemsession, uzmodemterm, uwslresize;
+  uasciicast, uptysession, uptywin, uptyunix, ushell, uzmodemsession, uzmodemterm, uwslresize,
+  uwslpipe;
 
 const
   { The commands "Pipe" lists (Windows). A plain pipe has no line discipline: nobody turns
     the terminal's CR into LF, echoes, turns LF into CR LF or tells the program the window's
     size -- cmd waits for an LF that never comes, PowerShell lays out 120 columns, bash on a
     pipe is not interactive. So these open a terminal on the far side:
-    - WSL: script (util-linux) runs the login shell on a PTY of Linux; stty gives the PTY
-      the grid the terminal has at the start (%COLS% / %ROWS%, see ExpandGridSize). WSL sets
-      $SHELL from the user's passwd entry under wsl.exe -e too, and script runs the -c
-      command with it (so its syntax is the login shell's: bash, zsh). The shell's PID and
-      PTY go into %TTYFILE%: later sizes get there through a side process (uwslresize).
+    - WSL (uwslpipe's PipeWslCommand, one per distribution: WslPipeCommandFor): the login
+      shell on a PTY of Linux, through script (util-linux / bsdutils) or else a python3
+      PTY helper; the PTY gets the grid the terminal has at the start (%COLS% / %ROWS%, see
+      ExpandGridSize). WSL sets $SHELL from the user's passwd entry under wsl.exe -e too.
+      The shell's PID and PTY go into %TTYFILE%: later sizes get there through a side
+      process (uwslresize).
     - ssh -tt: the remote side opens a PTY although our end is a pipe (-T would not). Its
       size stays the one at the start: a real SSH client sends a new one in the SSH
       protocol's window-change message, and on a pipe we have the byte stream only. }
-  PipeWslCommand = 'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null';
   PipeSshCommand = 'ssh -tt user@host';
 
 type
@@ -216,6 +219,10 @@ type
     FLogged: Integer;
     FLastZmProgressMs: Double;
     FZmProgressShown: Integer;
+    { this shell runs on the pipes; the first bytes it wrote (a WSL entry that found
+      neither script nor python3 says so there) }
+    FShellPiped: Boolean;
+    FOutputHead: RawByteString;
     procedure ZmDownloadRequest(Sender: TObject);
     procedure ZmUploadRequest(Sender: TObject);
     procedure AskDownloadDir(Data: PtrInt);
@@ -336,6 +343,9 @@ resourcestring
   rsCursorOutline = 'Outline';
   rsCursorNone = 'None';
   rsPipeNextStart = 'Pipe mode takes effect at the next start';
+  rsPipeNeedsPtyHelper = 'Pipe mode needs script or python3 in the WSL distribution. '
+    + 'Debian / Ubuntu: sudo apt install bsdutils. '
+    + 'Fedora: sudo dnf install /usr/bin/script (util-linux-script from Fedora 42 on, util-linux before)';
   rsClaimedKey = '(claimed) %s';
 
 const
@@ -343,6 +353,9 @@ const
   KeyLinesMax = 1000;
   { "Log PTY output" lists at most this many bytes of one session }
   PtyLogMax = 4096;
+
+  { the first bytes of a pipe shell's output kept for its exit (IsWslNoPtyHelperExit) }
+  OutputHeadMax = 1024;
 
 { a folder of the example's: next to the executable, or up the tree (lib/<target>/ builds) }
 function ExampleDir(const ASub: string): string;
@@ -722,11 +735,16 @@ end;
 
 { Windows: %COMSPEC% first (always there, starts fastest), then PowerShell, and pwsh /
   wsl where the PATH has them; with "Pipe" ticked the commands that open a terminal on the
-  far side instead (PipeWslCommand where the PATH has wsl.exe, PipeSshCommand). Elsewhere:
-  the login shell. }
+  far side instead: where the PATH has wsl.exe one WSL entry per distribution, the default
+  first (asked of wsl.exe the first time, uwslpipe; the entry without -d when that fails),
+  then PipeSshCommand. Elsewhere: the login shell. }
 procedure TMainForm.FillCommands;
 var
   sh: string;
+  {$IFDEF MSWINDOWS}
+  distros: TStringArray;
+  i: Integer;
+  {$ENDIF}
 begin
   CmbCommand.Items.Clear;
   {$IFDEF MSWINDOWS}
@@ -734,7 +752,13 @@ begin
   begin
     { no cmd / PowerShell here: on a pipe they have no line editing, no echo, no width }
     if FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) <> '' then
-      CmbCommand.Items.Add(PipeWslCommand);
+    begin
+      distros := WslPipeDistros;
+      for i := 0 to High(distros) do
+        CmbCommand.Items.Add(WslPipeCommandFor(distros[i]));
+      if Length(distros) = 0 then
+        CmbCommand.Items.Add(PipeWslCommand);
+    end;
     CmbCommand.Items.Add(PipeSshCommand);
     CmbCommand.ItemIndex := 0;
     CmbCommand.Text := CmbCommand.Items[0];
@@ -818,6 +842,8 @@ begin
   FShell.OnOutput := @ShellOutput;
   FShell.OnExit := @ShellExit;
   FLogged := 0;
+  FShellPiped := ChkPipe.Checked;
+  FOutputHead := '';
   cmd := CmbCommand.Text;
   {$IFDEF MSWINDOWS}
   { the grid reaches the far side of a pipe once, now (stty in the WSL entry) }
@@ -854,6 +880,8 @@ procedure TMainForm.ShellOutput(Sender: TObject; const AData: RawByteString);
 var
   n: Integer;
 begin
+  if FShellPiped and (Length(FOutputHead) < OutputHeadMax) then
+    FOutputHead := FOutputHead + Copy(AData, 1, OutputHeadMax - Length(FOutputHead));
   if not ChkLogPty.Checked or (FLogged >= PtyLogMax) then Exit;
   n := Length(AData);
   if n > PtyLogMax - FLogged then n := PtyLogMax - FLogged;
@@ -863,9 +891,17 @@ begin
     AddKeyLine(rsLogStopped);
 end;
 
+{ a WSL entry whose distribution has neither script nor python3 wrote one English line
+  and ended with 127 at once: say what to install, in the terminal and the status bar }
 procedure TMainForm.ShellExit(Sender: TObject);
 begin
-  Status.Panels[0].Text := Format(rsShellExitedStatusFmt, [FShell.ExitCode]);
+  if FShellPiped and IsWslNoPtyHelperExit(FShell.ExitCode, FOutputHead) then
+  begin
+    Term.WriteSync(#27'[1m' + rsPipeNeedsPtyHelper + #27'[0m'#13#10);
+    Status.Panels[0].Text := rsPipeNeedsPtyHelper;
+  end
+  else
+    Status.Panels[0].Text := Format(rsShellExitedStatusFmt, [FShell.ExitCode]);
   BtnStart.Caption := rsRestart;
 end;
 

@@ -14,6 +14,7 @@ uses
   Forms, FileUtil,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller,
   tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, umain, uwslresize,
+  uwslpipe, base64,
   {$IFDEF MSWINDOWS}uptywin,{$ENDIF} test.terminal.view, test.terminal.pty, test.terminal.oracle;
 
 type
@@ -55,6 +56,11 @@ type
     procedure TestTheWslResizeCommands;
     procedure TestTheWslResizeQueue;
     procedure TestThePipeModeBackendResizesWsl;
+    { 7 期验收反馈:按发行版列 WSL 条目;没有 script 时 python3 兜底,都没有时说明 }
+    procedure TestTheWslListsAreParsed;
+    procedure TestTheRealWslListsAreAsked;
+    procedure TestTheWslEntryFallsBackAndCarriesThePtyHelper;
+    procedure TestTheExampleSaysWhatAPipeShellLacks;
   end;
 
 implementation
@@ -328,8 +334,8 @@ end;
   compiles what the project names or its units use) }
 procedure TTyTerminalExampleTests.TestTheExampleProjectListsItsUnits;
 const
-  Units: array[0..7] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas',
-    'uzmodem.pas', 'uzmodemsession.pas', 'uzmodemterm.pas', 'uwslresize.pas');
+  Units: array[0..8] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas',
+    'uzmodem.pas', 'uzmodemsession.pas', 'uzmodemterm.pas', 'uwslresize.pas', 'uwslpipe.pas');
 var
   l: TStringList;
   i: Integer;
@@ -862,6 +868,46 @@ end;
 
 { ---- 7 期验收反馈: the commands of the pipe mode ---------------------------------------- }
 
+var
+  GCannedQuiet, GCannedVerbose: RawByteString;
+  GCannedQuietOk, GCannedVerboseOk: Boolean;
+  GCannedCalls: Integer;
+
+{ what wsl.exe writes: UTF-16LE, a BOM when asked }
+function U16(const S: string; ABom: Boolean = False): RawByteString;
+var
+  u: UnicodeString;
+  i: Integer;
+begin
+  u := UTF8Decode(S);
+  Result := '';
+  if ABom then
+    Result := #$FF#$FE;
+  for i := 1 to Length(u) do
+    Result := Result + AnsiChar(Ord(u[i]) and $FF) + AnsiChar(Ord(u[i]) shr 8);
+end;
+
+procedure CannedWslLists(out AQuiet, AVerbose: RawByteString; out AQuietOk, AVerboseOk: Boolean);
+begin
+  Inc(GCannedCalls);
+  AQuiet := GCannedQuiet;
+  AVerbose := GCannedVerbose;
+  AQuietOk := GCannedQuietOk;
+  AVerboseOk := GCannedVerboseOk;
+end;
+
+{ the lists the example gets from here on (asked again: the kept ones forgotten) }
+procedure CanWslLists(const AQuiet, AVerbose: RawByteString; AQuietOk: Boolean = True; AVerboseOk: Boolean = True);
+begin
+  GCannedQuiet := AQuiet;
+  GCannedVerbose := AVerbose;
+  GCannedQuietOk := AQuietOk;
+  GCannedVerboseOk := AVerboseOk;
+  GCannedCalls := 0;
+  WslListRunner := @CannedWslLists;
+  ForgetWslPipeDistros;
+end;
+
 { A plain pipe has no line discipline: nobody turns the terminal's CR into LF, echoes, turns
   LF into CR LF or tells the program the window's size -- cmd waits for an LF that never
   comes, PowerShell lays out 120 columns, bash on a pipe is not interactive. So with "Pipe"
@@ -875,14 +921,26 @@ var
   f: TMainForm;
   shell: string;
   hasWsl: Boolean;
+  saved: TWslListRunner;
 begin
   hasWsl := FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) <> '';
   AssertEquals('the WSL entry of the pipe mode',
-    'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null',
+    'wsl.exe -e sh -c "if command -v script >/dev/null 2>&1; then '
+    + 'TYTERM_SHELL=${SHELL:-/bin/sh}; SHELL=/bin/sh; export TYTERM_SHELL SHELL; exec script -qfc '
+    + '''stty cols %COLS% rows %ROWS%; echo $$ $(tty) > %TTYFILE%; SHELL=$TYTERM_SHELL; unset TYTERM_SHELL; exec $SHELL -il'' /dev/null; fi; '
+    + 'if command -v python3 >/dev/null 2>&1; then exec python3 -c '
+    + '''import sys,base64;exec(base64.b64decode(sys.argv[1]))'' %PTYHELPER% %COLS% %ROWS% %TTYFILE%; fi; '
+    + 'echo ''tyterm: neither script nor python3 in this WSL distribution''; exit 127"',
     PipeWslCommand);
   AssertEquals('the ssh entry asks the far side for a terminal', 'ssh -tt user@host', PipeSshCommand);
+  saved := WslListRunner;
+  { Ubuntu, docker-desktop's two, Fedora the default }
+  CanWslLists(U16('Ubuntu'#13#10'docker-desktop'#13#10'Fedora'#13#10'docker-desktop-data'#13#10, True),
+    U16('  NAME                   STATE           VERSION'#13#10'  Ubuntu                 Stopped         2'#13#10
+      + '* Fedora                 Running         2'#13#10'  docker-desktop         Running         2'#13#10));
   f := TMainForm.Create(nil);
   try
+    AssertEquals('the distributions are not asked for at the start (Pipe is off)', 0, GCannedCalls);
     AssertFalse('Pipe off at start', f.ChkPipe.Checked);
     shell := f.CmbCommand.Items[0];
     AssertTrue('ConPTY: %COMSPEC% first: ' + shell, Pos('cmd', LowerCase(shell)) > 0);
@@ -896,13 +954,17 @@ begin
     AssertTrue('Pipe: ssh -tt listed', f.CmbCommand.Items.IndexOf(PipeSshCommand) >= 0);
     if hasWsl then
     begin
-      AssertEquals('Pipe: WSL through script, first', PipeWslCommand, f.CmbCommand.Items[0]);
-      AssertEquals('Pipe: two entries', 2, f.CmbCommand.Items.Count);
+      AssertEquals('asked once', 1, GCannedCalls);
+      AssertEquals('Pipe: the default distribution first', WslPipeCommandFor('Fedora'), f.CmbCommand.Items[0]);
+      AssertEquals('then the others in their order', WslPipeCommandFor('Ubuntu'), f.CmbCommand.Items[1]);
+      AssertEquals('Pipe: two distributions (no docker-desktop) and ssh', 3, f.CmbCommand.Items.Count);
+      AssertEquals('-d', 'wsl.exe -d Fedora -e sh -c "', Copy(f.CmbCommand.Items[0], 1, 28));
     end
     else
     begin
       AssertEquals('Pipe, no wsl.exe: ssh only', 1, f.CmbCommand.Items.Count);
       AssertEquals('no WSL entry without wsl.exe', -1, f.CmbCommand.Items.IndexOf(PipeWslCommand));
+      AssertEquals('nothing asked without wsl.exe', 0, GCannedCalls);
     end;
     AssertEquals('the first one is picked', f.CmbCommand.Items[0], f.CmbCommand.Text);
     f.ChkPipe.Checked := False;
@@ -910,9 +972,34 @@ begin
     AssertEquals('and picked', shell, f.CmbCommand.Text);
     AssertTrue('unticked: PowerShell again', f.CmbCommand.Items.IndexOf('powershell.exe') >= 0);
     AssertEquals('unticked: no pipe entry', -1, f.CmbCommand.Items.IndexOf(PipeSshCommand));
-    AssertEquals('unticked: no script entry', -1, f.CmbCommand.Items.IndexOf(PipeWslCommand));
+    AssertEquals('unticked: no WSL entry', -1, f.CmbCommand.Items.IndexOf(WslPipeCommandFor('Fedora')));
+    if hasWsl then
+    begin
+      f.ChkPipe.Checked := True;
+      AssertEquals('ticked again: the lists are kept, not asked again', 1, GCannedCalls);
+      AssertEquals('the same entries', WslPipeCommandFor('Fedora'), f.CmbCommand.Items[0]);
+      { the lists cannot be had: the entry without -d (the default distribution) }
+      f.ChkPipe.Checked := False;
+      CanWslLists('', '', False, False);
+      f.ChkPipe.Checked := True;
+      AssertEquals('no lists: asked', 1, GCannedCalls);
+      AssertEquals('no lists: the entry without -d', PipeWslCommand, f.CmbCommand.Items[0]);
+      AssertEquals('no lists: it and ssh', 2, f.CmbCommand.Items.Count);
+      { only docker-desktop: nothing to list, the entry without -d as well }
+      f.ChkPipe.Checked := False;
+      CanWslLists(U16('docker-desktop'#13#10'docker-desktop-data'#13#10), '');
+      f.ChkPipe.Checked := True;
+      AssertEquals('docker only: the entry without -d', PipeWslCommand, f.CmbCommand.Items[0]);
+      { the verbose list failed: the order of the quiet one }
+      f.ChkPipe.Checked := False;
+      CanWslLists(U16('Ubuntu'#13#10'Fedora'#13#10), U16('* Fedora Running 2'#13#10), True, False);
+      f.ChkPipe.Checked := True;
+      AssertEquals('no default known: the order wsl.exe gave', WslPipeCommandFor('Ubuntu'), f.CmbCommand.Items[0]);
+    end;
   finally
     f.Free;
+    WslListRunner := saved;
+    ForgetWslPipeDistros;
   end;
 end;
 {$ELSE}
@@ -933,8 +1020,13 @@ var
 begin
   AssertEquals('both, every time', 'a 97 b 31 c 97x31', ExpandGridSize('a %COLS% b %ROWS% c %COLS%x%ROWS%', 97, 31));
   AssertEquals('none: as it is', 'ssh -tt user@host', ExpandGridSize('ssh -tt user@host', 97, 31));
-  AssertEquals('the WSL entry (the file is the backend''s)',
-    'wsl.exe -e script -qfc "stty cols 120 rows 40; echo $$ $(tty) > %TTYFILE%; exec $SHELL -il" /dev/null',
+  AssertEquals('the WSL entry (the file and the helper are the backend''s)',
+    'wsl.exe -e sh -c "if command -v script >/dev/null 2>&1; then '
+    + 'TYTERM_SHELL=${SHELL:-/bin/sh}; SHELL=/bin/sh; export TYTERM_SHELL SHELL; exec script -qfc '
+    + '''stty cols 120 rows 40; echo $$ $(tty) > %TTYFILE%; SHELL=$TYTERM_SHELL; unset TYTERM_SHELL; exec $SHELL -il'' /dev/null; fi; '
+    + 'if command -v python3 >/dev/null 2>&1; then exec python3 -c '
+    + '''import sys,base64;exec(base64.b64decode(sys.argv[1]))'' %PTYHELPER% 120 40 %TTYFILE%; fi; '
+    + 'echo ''tyterm: neither script nor python3 in this WSL distribution''; exit 127"',
     ExpandGridSize(PipeWslCommand, 120, 40));
   {$IFDEF MSWINDOWS}
   fake := TFakePty.Create;
@@ -968,6 +1060,10 @@ begin
   AssertTrue('the WSL entry', WslResizeTarget(ExpandGridSize(PipeWslCommand, 80, 24), exe, opts));
   AssertEquals('its wsl.exe', 'wsl.exe', exe);
   AssertEquals('no options: the default distribution', '', opts);
+  AssertTrue('an entry of one distribution', WslResizeTarget(ExpandGridSize(WslPipeCommandFor('Fedora'), 80, 24), exe, opts));
+  AssertEquals('its -d for the side process', ' -d Fedora', opts);
+  AssertTrue('a name with a space', WslResizeTarget(ExpandGridSize(WslPipeCommandFor('My Distro'), 80, 24), exe, opts));
+  AssertEquals('quoted for the side process as well', ' -d "My Distro"', opts);
   AssertTrue('a distribution, a user; --cd is not for the side process',
     WslResizeTarget('C:\Windows\System32\WSL.EXE -d Ubuntu --cd "C:\a b" --user root -e script -qfc "tty > %TTYFILE%" /dev/null',
       exe, opts));
@@ -1070,6 +1166,221 @@ begin
   finally
     b.Free;
   end;
+  {$ENDIF}
+end;
+
+{ wsl.exe --list --quiet / --verbose as wsl.exe writes them (UTF-16LE, a BOM or not, CR
+  LF; with WSL_UTF8=1 UTF-8): the names in their order, docker-desktop's left out, the
+  default ("*") first. Mutations: the BOM not skipped (the first name loses its first
+  letter or is dropped); docker-desktop kept; the default not moved to the front; the
+  first word of the "*" row taken as the name (a name with a space). }
+procedure TTyTerminalExampleTests.TestTheWslListsAreParsed;
+const
+  Header = '  NAME                   STATE           VERSION'#13#10;
+var
+  n: TStringArray;
+
+  function Joined(const A: TStringArray): string;
+  var
+    i: Integer;
+  begin
+    Result := '';
+    for i := 0 to High(A) do
+      Result := Result + '[' + A[i] + ']';
+  end;
+
+begin
+  n := ParseWslDistros(U16('Ubuntu'#13#10'docker-desktop'#13#10'Ubuntu-26.04'#13#10'docker-desktop-data'#13#10, True));
+  AssertEquals('a BOM, docker-desktop''s two left out', '[Ubuntu][Ubuntu-26.04]', Joined(n));
+  AssertEquals('no BOM: the same', '[Ubuntu][Ubuntu-26.04]',
+    Joined(ParseWslDistros(U16('Ubuntu'#13#10'docker-desktop'#13#10'Ubuntu-26.04'#13#10))));
+  AssertEquals('the default',  'Ubuntu-26.04', ParseWslDefaultDistro(U16(Header
+    + '  Ubuntu                 Stopped         2'#13#10'* Ubuntu-26.04           Running         2'#13#10, True), n));
+  AssertEquals('the default first, the rest in order', '[Ubuntu-26.04][Ubuntu]',
+    Joined(WslPipeDistrosFrom(U16('Ubuntu'#13#10'Ubuntu-26.04'#13#10), U16(Header
+      + '  Ubuntu                 Stopped         2'#13#10'* Ubuntu-26.04           Running         2'#13#10))));
+  AssertEquals('one distribution (the report: Fedora alone, the default)', '[Fedora]',
+    Joined(WslPipeDistrosFrom(U16('Fedora'#13#10), U16(Header + '* Fedora    Running         2'#13#10))));
+  AssertEquals('empty', '', Joined(ParseWslDistros('')));
+  AssertEquals('empty: nothing', '', Joined(WslPipeDistrosFrom('', '')));
+  AssertEquals('a BOM only', '', Joined(ParseWslDistros(#$FF#$FE)));
+  AssertEquals('no "*": no default', '', ParseWslDefaultDistro(U16(Header + '  Ubuntu Stopped 2'#13#10), n));
+  AssertEquals('the default is docker-desktop: the order as it was', '[Ubuntu][Fedora]',
+    Joined(WslPipeDistrosFrom(U16('Ubuntu'#13#10'Fedora'#13#10'docker-desktop'#13#10),
+      U16(Header + '* docker-desktop Running 2'#13#10'  Ubuntu Stopped 2'#13#10))));
+  AssertEquals('a header in the system''s language', 'Fedora',
+    ParseWslDefaultDistro(U16('  名称      状态           版本'#13#10'* Fedora    正在运行         2'#13#10), nil));
+  AssertEquals('NULs and a stray byte', '[Ubuntu][Fedora]',
+    Joined(ParseWslDistros(U16('Ubuntu'#13#10#0'Fedora'#13#10) + #0#0 + #0)));
+  AssertEquals('UTF-8 (WSL_UTF8=1), a BOM', '[Ubuntu][Fedora]',
+    Joined(ParseWslDistros(#$EF#$BB#$BF'Ubuntu'#13#10'Fedora'#13#10)));
+  AssertEquals('UTF-8 without one; LF only', '[Ubuntu][Fedora]', Joined(ParseWslDistros('Ubuntu'#10'Fedora'#10)));
+  AssertEquals('each once', '[Ubuntu]', Joined(ParseWslDistros(U16('Ubuntu'#13#10'Ubuntu'#13#10))));
+  AssertEquals('a name with a double quote or a control character is left out', '[Fedora]',
+    Joined(ParseWslDistros(U16('a"b'#13#10'x'#9'y'#13#10'Fedora'#13#10))));
+  { a name with a space (wsl.exe --import "My Distro"): the whole name, the longest match }
+  n := ParseWslDistros(U16('My'#13#10'My Distro'#13#10'Fedora'#13#10));
+  AssertEquals('names with a space', '[My][My Distro][Fedora]', Joined(n));
+  AssertEquals('the default with a space', 'My Distro',
+    ParseWslDefaultDistro(U16(Header + '  My          Stopped 2'#13#10'* My Distro   Running 2'#13#10), n));
+  AssertEquals('ordered', '[My Distro][My][Fedora]', Joined(OrderWslDistros(n, 'My Distro')));
+  AssertEquals('an unknown default: the order as it was', '[My][My Distro][Fedora]', Joined(OrderWslDistros(n, 'Nope')));
+  AssertEquals('the entry quotes it', 'wsl.exe -d "My Distro" -e sh -c "', Copy(WslPipeCommandFor('My Distro'), 1, 33));
+  AssertEquals('a plain name is not quoted', 'wsl.exe -d Ubuntu-26.04 -e sh -c "', Copy(WslPipeCommandFor('Ubuntu-26.04'), 1, 34));
+  AssertEquals('no name: the entry without -d', PipeWslCommand, WslPipeCommandFor(''));
+end;
+
+{ The real wsl.exe, where there is one: the lists come, and what the pipe mode lists
+  holds no docker-desktop. Printed for the record. }
+procedure TTyTerminalExampleTests.TestTheRealWslListsAreAsked;
+{$IFDEF MSWINDOWS}
+var
+  saved: TWslListRunner;
+  q, v: RawByteString;
+  qok, vok: Boolean;
+  names: TStringArray;
+  i: Integer;
+  t0: QWord;
+{$ENDIF}
+begin
+  {$IFDEF MSWINDOWS}
+  if FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) = '' then
+    Ignore('no wsl.exe');
+  saved := WslListRunner;
+  AssertTrue('the example''s runner is set', Assigned(saved));
+  t0 := GetTickCount64;
+  saved(q, v, qok, vok);
+  WriteLn(Format('wsl.exe --list: %d ms, quiet ok %s (%d bytes), verbose ok %s (%d bytes)',
+    [GetTickCount64 - t0, BoolToStr(qok, True), Length(q), BoolToStr(vok, True), Length(v)]));
+  if not qok then
+    Ignore('wsl.exe --list --quiet failed here: ' + DecodeWslOutput(q));
+  ForgetWslPipeDistros;
+  try
+    names := WslPipeDistros;
+    for i := 0 to High(names) do
+    begin
+      WriteLn('  ', i, ': ', names[i], ' -> ', Copy(WslPipeCommandFor(names[i]), 1, 40), '...');
+      AssertEquals('no docker-desktop: ' + names[i], 0, Pos('docker-desktop', LowerCase(names[i])));
+    end;
+    if vok and (ParseWslDefaultDistro(v, ParseWslDistros(q)) <> '') and (Length(names) > 0) then
+      AssertEquals('the default first', ParseWslDefaultDistro(v, ParseWslDistros(q)), names[0]);
+  finally
+    ForgetWslPipeDistros;
+  end;
+  {$ELSE}
+  Ignore('the pipe mode is Windows only');
+  {$ENDIF}
+end;
+
+{ The entry tries script, then python3, then says it has neither (sh -c: wsl.exe -e runs
+  one program, a missing one is only "execvpe(script) failed"); the helper goes in as
+  base64 where the backend puts it (only there: two kilobytes the list need not show).
+  The runs in WSL are in test.terminal.zmodem.wsl (P1-P5 / Q1-Q5 / N1-N2). }
+procedure TTyTerminalExampleTests.TestTheWslEntryFallsBackAndCarriesThePtyHelper;
+var
+  x, b64: string;
+  i, a, z: Integer;
+begin
+  a := Pos('command -v script', PipeWslCommand);
+  z := Pos('command -v python3', PipeWslCommand);
+  AssertTrue('script first, then python3', (a > 0) and (z > a));
+  AssertTrue('then the marker and 127',
+    Pos('echo ''' + WslNoPtyHelperMarker + '''; exit 127"', PipeWslCommand) > z);
+  AssertTrue('the login shell, /bin/sh when $SHELL is empty; script runs its -c with /bin/sh',
+    Pos('TYTERM_SHELL=${SHELL:-/bin/sh}; SHELL=/bin/sh; export TYTERM_SHELL SHELL; exec script', PipeWslCommand) > 0);
+  AssertEquals('one double-quoted argument for sh -c: no double quote inside', 2,
+    Length(PipeWslCommand) - Length(StringReplace(PipeWslCommand, '"', '', [rfReplaceAll])));
+  AssertEquals('no %PTYHELPER%: as it is', 'ssh -tt user@host', ExpandWslPtyHelper('ssh -tt user@host'));
+  x := ExpandWslPtyHelper(PipeWslCommand);
+  AssertEquals('the helper put in', 0, Pos(WslPtyHelperPlaceholder, x));
+  i := Pos(WslPtyHelperPlaceholder, PipeWslCommand);
+  b64 := Copy(x, i, Length(x) - Length(PipeWslCommand) + Length(WslPtyHelperPlaceholder));
+  AssertEquals('what follows it', ' %COLS% %ROWS% %TTYFILE%', Copy(x, i + Length(b64), 24));
+  for a := 1 to Length(b64) do
+    AssertTrue('base64 only (nothing sh or the command line would read): ' + b64[a],
+      b64[a] in ['A'..'Z', 'a'..'z', '0'..'9', '+', '/', '=']);
+  AssertEquals('it decodes to the helper', WslPtyHelperSource, DecodeStringBase64(b64));
+  AssertTrue('the helper execs the login shell, /bin/sh when $SHELL is empty',
+    Pos('sh=os.environ.get(''SHELL'') or ''/bin/sh''', WslPtyHelperSource) > 0);
+  AssertTrue('and writes the line the side process reads: PID and PTY',
+    Pos('o.write(''%d %s\n''%(os.getpid(),os.ttyname(0)))', WslPtyHelperSource) > 0);
+  AssertTrue('the marker is the sign', IsWslNoPtyHelperExit(127, 'x'#13#10 + WslNoPtyHelperMarker + #13#10));
+  AssertFalse('127 alone is not (a shell''s "command not found", wsl.exe''s unknown -d)',
+    IsWslNoPtyHelperExit(127, 'bash: foo: command not found'));
+  AssertFalse('the marker with another code is not', IsWslNoPtyHelperExit(0, WslNoPtyHelperMarker));
+  AssertFalse('nor with 1', IsWslNoPtyHelperExit(1, WslNoPtyHelperMarker));
+end;
+
+{ A WSL entry whose distribution has neither script nor python3 ends at once with the
+  marker and 127: the example says what to install, in the terminal and the status bar.
+  Not for 127 without the marker, not for a shell that is not on the pipes. Mutations:
+  ShellExit not asking; the output's first bytes not kept. }
+procedure TTyTerminalExampleTests.TestTheExampleSaysWhatAPipeShellLacks;
+{$IFDEF MSWINDOWS}
+var
+  saved: TWslListRunner;
+
+  function Run(APipe: Boolean; const AOutput: RawByteString; ACode: Int64; out AScreen: string): string;
+  var
+    f: TMainForm;
+    fake: TFakePty;
+    t0: QWord;
+  begin
+    fake := TFakePty.Create;
+    TMainForm.ShellBackendForTest := fake;
+    f := TMainForm.Create(nil);
+    try
+      f.ChkPipe.Checked := APipe;
+      f.CmbMode.ItemIndex := 1;
+      if TMainForm.ShellBackendForTest <> nil then
+        f.ModeChange(f.CmbMode);
+      fake.Feed(AOutput);
+      fake.FeedEof(ACode);
+      AssertFalse('the shell runs', f.Term.ReadOnly);
+      t0 := GetTickCount64;
+      { the exit makes the terminal read-only, and ShellExit follows at once }
+      while not f.Term.ReadOnly do
+      begin
+        Application.ProcessMessages;
+        Sleep(5);
+        if GetTickCount64 - t0 > 10000 then
+          Fail('the shell did not end within 10 s: ' + f.Status.Panels[0].Text);
+      end;
+      PumpMessages;
+      Result := f.Status.Panels[0].Text;
+      AScreen := ScreenOf(f.Term);
+    finally
+      FreeAndNil(TMainForm.ShellBackendForTest);
+      f.Free;
+    end;
+  end;
+
+var
+  st, scr: string;
+{$ENDIF}
+begin
+  {$IFDEF MSWINDOWS}
+  saved := WslListRunner;
+  CanWslLists(U16('Fedora'#13#10), U16('* Fedora Running 2'#13#10));
+  try
+    st := Run(True, WslNoPtyHelperMarker + #10, 127, scr);
+    AssertTrue('the status bar says what to install: ' + st, Pos('sudo apt install bsdutils', st) > 0);
+    AssertTrue('Fedora too: ' + st, Pos('sudo dnf install /usr/bin/script', st) > 0);
+    AssertTrue('the terminal says it too: ' + scr, Pos('sudo dnf install /usr/bin/script', scr) > 0);
+    AssertTrue('after the marker: ' + scr, Pos(WslNoPtyHelperMarker, scr) > 0);
+    st := Run(True, 'bash: foo: command not found'#10, 127, scr);
+    AssertEquals('127 without the marker: an exit like any', 'Shell exited (127)', st);
+    AssertEquals('and nothing more in the terminal', 0, Pos('bsdutils', scr));
+    st := Run(True, WslNoPtyHelperMarker + #10, 0, scr);
+    AssertEquals('the marker and 0: an exit like any', 'Shell exited (0)', st);
+    st := Run(False, WslNoPtyHelperMarker + #10, 127, scr);
+    AssertEquals('not on the pipes: an exit like any', 'Shell exited (127)', st);
+  finally
+    WslListRunner := saved;
+    ForgetWslPipeDistros;
+  end;
+  {$ELSE}
+  Ignore('the pipe mode is Windows only');
   {$ENDIF}
 end;
 

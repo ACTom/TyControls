@@ -18,6 +18,7 @@
   "umain.rsosc52off": "关",
   "umain.rsosc52readwrite": "读写",
   "umain.rsosc52write": "只写",
+  "umain.rspipeneedsptyhelper": "管道模式需要 WSL 发行版里有 script 或 python3。Debian / Ubuntu：sudo apt install bsdutils；Fedora：sudo dnf install /usr/bin/script（Fedora 42 起在 util-linux-script 包，之前在 util-linux）",
   "umain.rspipenextstart": "管道模式下次启动生效",
   "umain.rsrestart": "重启",
   "umain.rsshellexitedstatusfmt": "Shell 已退出（%d）",

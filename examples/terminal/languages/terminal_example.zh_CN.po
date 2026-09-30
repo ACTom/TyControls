@@ -374,6 +374,10 @@ msgstr "下划线"
 msgid "Pipe mode takes effect at the next start"
 msgstr "管道模式下次启动生效"
 
+#: umain.rspipeneedsptyhelper
+msgid "Pipe mode needs script or python3 in the WSL distribution. Debian / Ubuntu: sudo apt install bsdutils. Fedora: sudo dnf install /usr/bin/script (util-linux-script from Fedora 42 on, util-linux before)"
+msgstr "管道模式需要 WSL 发行版里有 script 或 python3。Debian / Ubuntu：sudo apt install bsdutils；Fedora：sudo dnf install /usr/bin/script（Fedora 42 起在 util-linux-script 包，之前在 util-linux）"
+
 #: umain.rsclaimedkey
 #, object-pascal-format
 msgid "(claimed) %s"

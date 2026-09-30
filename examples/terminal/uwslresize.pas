@@ -2,11 +2,11 @@ unit uwslresize;
 
 { The pipe mode's window size for WSL (7 期验收反馈).
 
-  A pipe carries bytes only: no resize goes down it. The example's WSL entry runs the login
-  shell under script (util-linux), which gives it a PTY in Linux; the wrapper also writes
-  the shell's PID and that PTY's name into a file of its own (%TTYFILE%,
-  /tmp/tyterm-<our PID>-<n>.tty). When the terminal changes size, a short side process
-  sets the PTY's size from outside:
+  A pipe carries bytes only: no resize goes down it. The example's WSL entry (uwslpipe)
+  runs the login shell on a PTY in Linux -- under script (util-linux / bsdutils), or where
+  there is none under a python3 PTY helper; either writes the shell's PID and that PTY's
+  name into a file of its own (%TTYFILE%, /tmp/tyterm-<our PID>-<n>.tty). When the
+  terminal changes size, a short side process sets the PTY's size from outside:
 
     wsl.exe [-d D] [-u U] -e sh -c "read p t < F && [ $(readlink /proc/$p/fd/0) = $t ] && stty -F $t cols C rows R"
 
@@ -24,10 +24,11 @@ unit uwslresize;
   --user). Not for ssh -tt: a real SSH client sends the new size in the SSH protocol's
   window-change message; on a pipe we only have the byte stream.
 
-  TWslPipeBackend (Windows) is TProcessPipeBackend with this added; the side processes
-  run on a thread of its own, never on the main thread, and are waited for there -- a
-  side process that takes longer than WslSideWaitMs is ended by its handle, nothing is
-  ended by name. BeginClose stops the sending (main thread, at once); the session's
+  TWslPipeBackend (Windows) is TProcessPipeBackend with this added (and it puts the PTY
+  helper in for %PTYHELPER%, uwslpipe: two kilobytes the command list need not show); the
+  side processes run on a thread of its own, never on the main thread, and are waited for
+  there -- a side process that takes longer than WslSideWaitMs is ended by its handle,
+  nothing is ended by name. BeginClose stops the sending (main thread, at once); the session's
   finisher stops the thread, then starts one more side process that removes the file
   (not waited for). The file is removed from our side, not by a trap in the wrapper: the
   wrapper execs the login shell (a trap would not survive the exec), and our side removes
@@ -39,7 +40,7 @@ interface
 
 uses
   Classes, SysUtils
-  {$IFDEF MSWINDOWS}, Windows, SyncObjs, uptysession, uptywin{$ENDIF};
+  {$IFDEF MSWINDOWS}, Windows, SyncObjs, uptysession, uptywin, uwslpipe{$ENDIF};
 
 const
   { in the command: the file the wrapper writes the shell's PID and PTY into }
@@ -357,7 +358,7 @@ function TWslPipeBackend.Start(const ACommand: string; ACols, ARows: Integer; ou
 var
   cmd: string;
 begin
-  cmd := ACommand;
+  cmd := ExpandWslPtyHelper(ACommand);
   FTtyFile := '';
   if WslResizeTarget(ACommand, FExe, FOptions) then
   begin

@@ -19,7 +19,15 @@ unit test.terminal.zmodem.wsl;
   the shell on the pipe is an interactive one with a line discipline -- sz / rz typed
   into it, the prompt clean afterwards, and a size change that gets there through the side
   process (also in the middle of a download). They also need script (util-linux) in
-  Ubuntu. }
+  Ubuntu.
+
+  Q1-Q5 (7 期验收反馈, a distribution without script): the same five with the entry's
+  python3 PTY helper. The entry runs under a PATH of links to everything in Ubuntu's
+  /usr/bin but script (env PATH=... in front of its sh -c; only the test's command line
+  changes, the entry is the example's as it is), so its "command -v script" finds none.
+  Q1 also asks the shell who its parent is: python3 (P1: script). N1-N2: with python3 left
+  out of that PATH too, the entry writes its marker and ends with 127 at once, and the
+  example's window says what to install. They need python3 in Ubuntu. }
 
 interface
 
@@ -31,6 +39,7 @@ type
   private
     procedure NeedWsl;
     procedure NeedWslScript;
+    procedure NeedWslPython;
   published
     procedure TestDownloadSmallFiles;                        { I1 }
     procedure TestDownloadEveryByteValue;                    { I2 }
@@ -48,14 +57,21 @@ type
     procedure TestRzInThePipeShell;                          { P3 }
     procedure TestAResizeReachesThePipeShell;                { P4 }
     procedure TestAResizeDuringADownload;                    { P5 }
+    procedure TestThePythonPipeShellHasATerminal;            { Q1 }
+    procedure TestSzInThePythonPipeShell;                    { Q2 }
+    procedure TestRzInThePythonPipeShell;                    { Q3 }
+    procedure TestAResizeReachesThePythonPipeShell;          { Q4 }
+    procedure TestAResizeDuringADownloadWithPython;          { Q5 }
+    procedure TestNeitherScriptNorPythonEndsAtOnce;          { N1 }
+    procedure TestTheExampleSaysWhatToInstall;               { N2 }
   end;
 
 implementation
 
 {$IFDEF MSWINDOWS}
 uses
-  Windows, SyncObjs, Math, md5, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  uptysession, uptywin, uzmodem, uzmodemsession, uzmodemterm, umain, uwslresize;
+  Windows, SyncObjs, Math, md5, Forms, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
+  uptysession, uptywin, uzmodem, uzmodemsession, uzmodemterm, umain, uwslresize, uwslpipe;
 
 const
   { I6 / I10: about 1 s when the ZRPOS puts the damage right; a recovery only by the
@@ -67,6 +83,9 @@ var
   GReason: string = '';
   GScriptChecked: Boolean = False;
   GScriptReason: string = '';
+  GPythonChecked: Boolean = False;
+  GPythonReason: string = '';
+  GBareSeq: Integer = 0;
 
 type
   TWaker = class
@@ -186,6 +205,23 @@ begin
   end;
   if GScriptReason <> '' then
     Ignore('script (util-linux) is not available: ' + GScriptReason);
+end;
+
+procedure TTyTerminalZmodemWslTests.NeedWslPython;
+var
+  o: RawByteString;
+  code: Int64;
+begin
+  NeedWsl;
+  if not GPythonChecked then
+  begin
+    GPythonChecked := True;
+    code := RunPlain('wsl.exe -d Ubuntu -- sh -c "command -v python3"', 15000, o);
+    if code <> 0 then
+      GPythonReason := Format('python3 not found in WSL Ubuntu (exit %d): %s', [code, o]);
+  end;
+  if GPythonReason <> '' then
+    Ignore('python3 is not available: ' + GPythonReason);
 end;
 
 function NewDir(const ATag: string): string;
@@ -759,16 +795,55 @@ const
   { the prompt the cases set (the user's own may be anything) }
   TestPrompt = 'TY> ';
 
-{ the example's pipe-mode WSL entry, in Ubuntu (what NeedWsl checked), started in ADir,
-  for the grid ACols x ARows }
-function PipeShellCommand(const ADir: string; ACols, ARows: Integer): string;
+type
+  { what the entry finds in the distribution: script; python3 but no script; neither }
+  TPipeVariant = (pvScript, pvPython, pvNeither);
+
+{ the example's pipe-mode WSL entry for Ubuntu (what NeedWsl checked), started in ADir,
+  for the grid ACols x ARows. ABare: a PATH for it (MakeBarePath; '' = Ubuntu's own) }
+function PipeShellCommand(const ADir: string; ACols, ARows: Integer; const ABare: string = ''): string;
 const
-  Head = 'wsl.exe -e ';
+  Head = 'wsl.exe -d Ubuntu -e ';
+var
+  entry: string;
 begin
-  if Copy(PipeWslCommand, 1, Length(Head)) <> Head then
-    raise Exception.Create('the example''s WSL entry no longer starts with "' + Head + '": ' + PipeWslCommand);
-  Result := ExpandGridSize('wsl.exe -d Ubuntu --cd "' + WslPath(ADir) + '" -e '
-    + Copy(PipeWslCommand, Length(Head) + 1, MaxInt), ACols, ARows);
+  entry := WslPipeCommandFor('Ubuntu');
+  if Copy(entry, 1, Length(Head)) <> Head then
+    raise Exception.Create('the example''s WSL entry no longer starts with "' + Head + '": ' + entry);
+  Result := 'wsl.exe -d Ubuntu --cd "' + WslPath(ADir) + '" -e ';
+  if ABare <> '' then
+    Result := Result + 'env PATH=' + ABare + ' ';
+  Result := ExpandGridSize(Result + Copy(entry, Length(Head) + 1, MaxInt), ACols, ARows);
+end;
+
+{ pvPython / pvNeither: a folder in WSL with a link to every program in /usr/bin but
+  script (and for pvNeither python3*) -- as a PATH, a distribution without them. '' for
+  pvScript. Removed with RemoveBarePath. }
+function MakeBarePath(AVariant: TPipeVariant): string;
+var
+  o: RawByteString;
+  code: Int64;
+  drop: string;
+begin
+  Result := '';
+  if AVariant = pvScript then Exit;
+  Inc(GBareSeq);
+  Result := Format('/tmp/tyterm-bare-%d-%d', [GetCurrentProcessId, GBareSeq]);
+  drop := Result + '/script';
+  if AVariant = pvNeither then
+    drop := drop + ' ' + Result + '/python3*';
+  code := RunPlain('wsl.exe -d Ubuntu -- sh -c "rm -rf ' + Result + ' && mkdir ' + Result
+    + ' && ln -s /usr/bin/* ' + Result + '/ && rm -f ' + drop + ' && ! test -e ' + Result + '/script"', 30000, o);
+  if code <> 0 then
+    raise Exception.CreateFmt('could not make %s (exit %d): %s', [Result, code, o]);
+end;
+
+procedure RemoveBarePath(const ABare: string);
+var
+  o: RawByteString;
+begin
+  if ABare <> '' then
+    RunPlain('wsl.exe -d Ubuntu -- rm -rf ' + ABare, 15000, o);
 end;
 
 function EndsWith(const S, ATail: RawByteString): Boolean;
@@ -806,7 +881,7 @@ end;
 
 { the shell's own first prompt (whatever it is: the output stops for a while), then
   TestPrompt for the rest of the case }
-procedure StartPipeShell(ACase: TTestCase; R: TWslRun; const ADir: string);
+procedure StartPipeShell(ACase: TTestCase; R: TWslRun; const ADir: string; const ABare: string = '');
 var
   n: Integer;
   t: QWord;
@@ -834,7 +909,7 @@ var
 begin
   R.MergeStderr := True;
   R.WslBackend := True;
-  R.Start(PipeShellCommand(ADir, R.Core.Cols, R.Core.Rows));
+  R.Start(PipeShellCommand(ADir, R.Core.Cols, R.Core.Rows, ABare));
   ACase.AssertTrue('the shell said something: ' + R.Describe, R.WaitUntil(@Some, 20000));
   n := -1;
   t := GetTickCount64;
@@ -861,7 +936,7 @@ begin
   Result := Copy(R.Raw, mark + 1, MaxInt);
 end;
 
-procedure LeavePipeShell(ACase: TTestCase; R: TWslRun);
+procedure LeavePipeShell(ACase: TTestCase; R: TWslRun; const AExit: string = 'exit');
 
   function Gone: Boolean;
   begin
@@ -869,48 +944,78 @@ procedure LeavePipeShell(ACase: TTestCase; R: TWslRun);
   end;
 
 begin
-  R.Send('exit'#13);
+  R.Send(AExit + #13);
   ACase.AssertTrue('exit ends the shell, script and wsl.exe: ' + R.Describe, R.WaitUntil(@Gone, 15000));
 end;
 
-{ P1. Mutations: the entry without script (bash on a pipe is not interactive: no prompt);
-  without the stty (tput answers 80 x 24). }
-procedure TTyTerminalZmodemWslTests.TestThePipeShellHasATerminal;
+{ P1 / Q1. Mutations: the entry without script (bash on a pipe is not interactive: no
+  prompt); without the stty (tput answers 80 x 24); Q1: the helper's TIOCSWINSZ left out;
+  the helper not put in (python3 cannot decode "%PTYHELPER%"); the helper ending with 0
+  whatever the shell's code. }
+procedure PipeShellHasATerminal(ACase: TTestCase; AVariant: TPipeVariant);
 var
-  dir: string;
+  dir, bare: string;
   r: TWslRun;
   got: RawByteString;
   i: Integer;
 begin
-  NeedWslScript;
   dir := NewDir('p1');
+  bare := MakeBarePath(AVariant);
   r := TWslRun.Create(dir, 97, 31);
   try
-    StartPipeShell(Self, r, dir);
+    StartPipeShell(ACase, r, dir, bare);
+    { who opened the PTY: the login shell's parent (bash ends bracketed paste with a CR
+      before the output) }
+    got := RunLine(ACase, r, 'cat /proc/$PPID/comm');
+    if AVariant = pvPython then
+      ACase.AssertTrue('the python3 helper opened the PTY: ' + HexOf(got), Pos(#13'python3'#13#10, got) > 0)
+    else
+      ACase.AssertTrue('script opened the PTY: ' + HexOf(got), Pos(#13'script'#13#10, got) > 0);
     { h""i: the echo of the line is not the output }
-    got := RunLine(Self, r, 'echo h""i');
-    AssertTrue('the line is echoed, its Enter as CR LF: ' + HexOf(got), Pos('echo h""i'#13#10, got) > 0);
-    AssertTrue('the output, its LF as CR LF: ' + HexOf(got), Pos('hi'#13#10, got) > 0);
+    got := RunLine(ACase, r, 'echo h""i');
+    ACase.AssertTrue('the line is echoed, its Enter as CR LF: ' + HexOf(got), Pos('echo h""i'#13#10, got) > 0);
+    ACase.AssertTrue('the output, its LF as CR LF: ' + HexOf(got), Pos('hi'#13#10, got) > 0);
     for i := 1 to Length(got) do
       if (got[i] = #10) and ((i = 1) or (got[i - 1] <> #13)) then
-        Fail(Format('a bare LF at %d: %s', [i, HexOf(got)]));
-    AssertTrue('on the screen: ' + r.Screen, Pos(#10'hi'#10, #10 + r.Screen) > 0);
-    got := RunLine(Self, r, 'tput cols; tput lines');
-    AssertTrue('the grid stty set: ' + HexOf(got), Pos('97'#13#10'31'#13#10, got) > 0);
-    LeavePipeShell(Self, r);
+        ACase.Fail(Format('a bare LF at %d: %s', [i, HexOf(got)]));
+    ACase.AssertTrue('on the screen: ' + r.Screen, Pos(#10'hi'#10, #10 + r.Screen) > 0);
+    got := RunLine(ACase, r, 'tput cols; tput lines');
+    ACase.AssertTrue('the grid set at the start: ' + HexOf(got), Pos('97'#13#10'31'#13#10, got) > 0);
+    { the helper ends with the login shell's code (sys.exit); script without -e ends
+      with 0 here (the entry does not pass -e, which not every script has) }
+    { what the shell writes just before it exits still arrives; a program left running
+      in the background still holds the PTY, and the session ends with the shell anyway }
+    LeavePipeShell(ACase, r, '(sleep 20 &); seq 1 30000; echo END-OF-OUT""PUT; exit 3');
+    ACase.AssertTrue('the last output before the exit: ' + HexOf(Copy(r.Raw, Length(r.Raw) - 200, MaxInt)),
+      Pos('END-OF-OUTPUT'#13#10, r.Raw) > 0);
+    if AVariant = pvPython then
+      ACase.AssertEquals('the shell''s exit code comes through: ' + r.Describe, 3, r.ExitCode);
   finally
     r.Free;
     RemoveDirAll(dir);
+    RemoveBarePath(bare);
   end;
+end;
+
+procedure TTyTerminalZmodemWslTests.TestThePipeShellHasATerminal;
+begin
+  NeedWslScript;
+  PipeShellHasATerminal(Self, pvScript);
+end;
+
+procedure TTyTerminalZmodemWslTests.TestThePythonPipeShellHasATerminal;
+begin
+  NeedWslPython;
+  PipeShellHasATerminal(Self, pvPython);
 end;
 
 { P2. sz typed into the pipe shell: sz sets the PTY raw, ZMODEM's bytes pass as they are
   (every byte value), the file arrives byte for byte, and afterwards the prompt is back
   clean -- nothing of the protocol on the screen after it, nothing in the shell's input
   (a stray "OO" there would make the next line "OOecho ...: command not found"). }
-procedure TTyTerminalZmodemWslTests.TestSzInThePipeShell;
+procedure SzInThePipeShell(ACase: TTestCase; AVariant: TPipeVariant);
 var
-  src, dst: string;
+  src, dst, bare: string;
   r: TWslRun;
   data, got: RawByteString;
   mark: Integer;
@@ -921,39 +1026,52 @@ var
   end;
 
 begin
-  NeedWslScript;
   src := NewDir('p2-src');
   dst := NewDir('p2-dst');
+  bare := MakeBarePath(AVariant);
   r := TWslRun.Create(dst);
   try
     data := EveryByte(65536) + Seeded(100000, 20);
     SaveBytes(src + PathDelim + 'every.bin', data);
-    StartPipeShell(Self, r, src);
+    StartPipeShell(ACase, r, src, bare);
     mark := Length(r.Raw);
     r.Send('sz every.bin'#13);
-    AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 60000));
-    AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
-    AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'every.bin') = data);
+    ACase.AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 60000));
+    ACase.AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
+    ACase.AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'every.bin') = data);
     Settle(r, 700);
-    AssertEquals('the prompt alone on the last line: ' + r.Screen + HexOf(Copy(r.Raw, Length(r.Raw) - 300, MaxInt)),
+    ACase.AssertEquals('the prompt alone on the last line: ' + r.Screen + HexOf(Copy(r.Raw, Length(r.Raw) - 300, MaxInt)),
       TrimRight(TestPrompt), LastLine(r.Screen));
-    got := RunLine(Self, r, 'echo "done-$?"');
-    AssertTrue('sz ended well, the line reached the shell as typed: ' + HexOf(got), Pos('done-0'#13#10, got) > 0);
-    LeavePipeShell(Self, r);
+    got := RunLine(ACase, r, 'echo "done-$?"');
+    ACase.AssertTrue('sz ended well, the line reached the shell as typed: ' + HexOf(got), Pos('done-0'#13#10, got) > 0);
+    LeavePipeShell(ACase, r);
   finally
     r.Free;
     KillLeftovers;
     RemoveDirAll(src);
     RemoveDirAll(dst);
+    RemoveBarePath(bare);
   end;
+end;
+
+procedure TTyTerminalZmodemWslTests.TestSzInThePipeShell;
+begin
+  NeedWslScript;
+  SzInThePipeShell(Self, pvScript);
+end;
+
+procedure TTyTerminalZmodemWslTests.TestSzInThePythonPipeShell;
+begin
+  NeedWslPython;
+  SzInThePipeShell(Self, pvPython);
 end;
 
 { P3. rz typed into the pipe shell: the upload's bytes (every value, ^C ^Z ^D among them)
   reach rz through the PTY as they are -- cmp in WSL says so -- and the prompt is back
   clean. }
-procedure TTyTerminalZmodemWslTests.TestRzInThePipeShell;
+procedure RzInThePipeShell(ACase: TTestCase; AVariant: TPipeVariant);
 var
-  src, dst: string;
+  src, dst, bare: string;
   r: TWslRun;
   data, got: RawByteString;
   mark: Integer;
@@ -964,42 +1082,55 @@ var
   end;
 
 begin
-  NeedWslScript;
   src := NewDir('p3-src');
   dst := NewDir('p3-dst');
+  bare := MakeBarePath(AVariant);
   r := TWslRun.Create(src);
   try
     data := EveryByte(65536) + Seeded(100000, 21);
     SaveBytes(src + PathDelim + 'up.bin', data);
     r.Uploads.Add(src + PathDelim + 'up.bin');
-    StartPipeShell(Self, r, dst);
+    StartPipeShell(ACase, r, dst, bare);
     mark := Length(r.Raw);
     r.Send('rz'#13);
-    AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 60000));
-    AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
-    AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'up.bin') = data);
+    ACase.AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 60000));
+    ACase.AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
+    ACase.AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'up.bin') = data);
     Settle(r, 700);
-    AssertEquals('the prompt alone on the last line: ' + r.Screen + HexOf(Copy(r.Raw, Length(r.Raw) - 300, MaxInt)),
+    ACase.AssertEquals('the prompt alone on the last line: ' + r.Screen + HexOf(Copy(r.Raw, Length(r.Raw) - 300, MaxInt)),
       TrimRight(TestPrompt), LastLine(r.Screen));
-    got := RunLine(Self, r, 'cmp up.bin ' + Quote(WslPath(src) + '/up.bin') + ' && echo "same-$?"');
-    AssertTrue('the same bytes in WSL, the line reached the shell as typed: ' + HexOf(got),
+    got := RunLine(ACase, r, 'cmp up.bin ' + Quote(WslPath(src) + '/up.bin') + ' && echo "same-$?"');
+    ACase.AssertTrue('the same bytes in WSL, the line reached the shell as typed: ' + HexOf(got),
       Pos('same-0'#13#10, got) > 0);
-    LeavePipeShell(Self, r);
+    LeavePipeShell(ACase, r);
   finally
     r.Free;
     KillLeftovers;
     RemoveDirAll(src);
     RemoveDirAll(dst);
+    RemoveBarePath(bare);
   end;
+end;
+
+procedure TTyTerminalZmodemWslTests.TestRzInThePipeShell;
+begin
+  NeedWslScript;
+  RzInThePipeShell(Self, pvScript);
+end;
+
+procedure TTyTerminalZmodemWslTests.TestRzInThePythonPipeShell;
+begin
+  NeedWslPython;
+  RzInThePipeShell(Self, pvPython);
 end;
 
 { P4. A size change reaches the pipe shell through the side process: a program waiting in
   the foreground gets SIGWINCH, tput answers the new size. The file the wrapper wrote (the
   shell's PID, its PTY) is there while the shell runs and removed after the session.
   Mutations: Resize doing nothing; the cleanup not started. }
-procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePipeShell;
+procedure AResizeReachesThePipeShell(ACase: TTestCase; AVariant: TPipeVariant);
 var
-  dir, f: string;
+  dir, f, bare: string;
   r: TWslRun;
   got, o: RawByteString;
   mark: Integer;
@@ -1022,35 +1153,37 @@ var
   end;
 
 begin
-  NeedWslScript;
   dir := NewDir('p4');
+  bare := MakeBarePath(AVariant);
   r := TWslRun.Create(dir, 97, 31);
   f := '';
   try
-    StartPipeShell(Self, r, dir);
+    StartPipeShell(ACase, r, dir, bare);
     f := (r.Backend as TWslPipeBackend).TtyFile;
-    AssertEquals('the file: ' + f, 1, Pos('/tmp/tyterm-', f));
-    AssertEquals('the wrapper wrote it: the shell''s PID and its PTY', 0,
-      RunPlain('wsl.exe -d Ubuntu -- sh -c "read p t < ' + f + ' && test -e /proc/$p && test -c $t"', 15000, o));
+    ACase.AssertEquals('the file: ' + f, 1, Pos('/tmp/tyterm-', f));
+    ACase.AssertEquals('the wrapper wrote it: the shell''s PID and its PTY, the one the shell reads', 0,
+      RunPlain('wsl.exe -d Ubuntu -- sh -c "read p t < ' + f
+        + ' && test -e /proc/$p && test -c $t && [ $(readlink /proc/$p/fd/0) = $t ]"', 15000, o));
     { the trap reports what the kernel's SIGWINCH says; wait returns after it }
     mark := Length(r.Raw);
     r.Send('trap ''echo WINCH $(tput cols)x$(tput lines)'' WINCH; sleep 30 & wait'#13);
     Settle(r, 500);
     t0 := GetTickCount64;
     r.Session.Resize(77, 20);
-    AssertTrue('the waiting shell got SIGWINCH: ' + HexOf(Copy(r.Raw, mark + 1, MaxInt)), r.WaitUntil(@Prompted, 10000));
-    WriteLn(Format('p4: the new size was there after %d ms', [GetTickCount64 - t0]));
-    RunLine(Self, r, 'kill %1; wait');
-    got := RunLine(Self, r, 'tput cols; tput lines');
-    AssertTrue('tput: ' + HexOf(got), Pos('77'#13#10'20'#13#10, got) > 0);
+    ACase.AssertTrue('the waiting shell got SIGWINCH: ' + HexOf(Copy(r.Raw, mark + 1, MaxInt)), r.WaitUntil(@Prompted, 10000));
+    WriteLn(Format('p4 (%d): the new size was there after %d ms', [Ord(AVariant), GetTickCount64 - t0]));
+    RunLine(ACase, r, 'kill %1; wait');
+    got := RunLine(ACase, r, 'tput cols; tput lines');
+    ACase.AssertTrue('tput: ' + HexOf(got), Pos('77'#13#10'20'#13#10, got) > 0);
     { the side process ends a little after its stty }
-    AssertTrue('the side process ended', r.WaitUntil(@SideEnded, 5000));
-    AssertEquals('one side process', 1, (r.Backend as TWslPipeBackend).ResizesSent);
-    AssertEquals('none failed', 0, (r.Backend as TWslPipeBackend).ResizesFailed);
-    LeavePipeShell(Self, r);
+    ACase.AssertTrue('the side process ended', r.WaitUntil(@SideEnded, 5000));
+    ACase.AssertEquals('one side process', 1, (r.Backend as TWslPipeBackend).ResizesSent);
+    ACase.AssertEquals('none failed', 0, (r.Backend as TWslPipeBackend).ResizesFailed);
+    LeavePipeShell(ACase, r);
   finally
     r.Free;
     RemoveDirAll(dir);
+    RemoveBarePath(bare);
   end;
   { the finisher started the removal; it takes a WSL start }
   gone := False;
@@ -1059,15 +1192,27 @@ begin
     gone := RunPlain('wsl.exe -d Ubuntu -- test -e ' + f, 15000, o) = 1;
     if not gone then Sleep(200);
   until gone or (GetTickCount64 - t0 > 10000);
-  AssertTrue('the file is removed after the session: ' + f, gone);
+  ACase.AssertTrue('the file is removed after the session: ' + f, gone);
+end;
+
+procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePipeShell;
+begin
+  NeedWslScript;
+  AResizeReachesThePipeShell(Self, pvScript);
+end;
+
+procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePythonPipeShell;
+begin
+  NeedWslPython;
+  AResizeReachesThePipeShell(Self, pvPython);
 end;
 
 { P5. A size change in the middle of a download: the side process sets the PTY's size
   while sz sends (sz gets SIGWINCH and goes on), the file arrives byte for byte, and the
   shell has the new size afterwards. }
-procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownload;
+procedure AResizeDuringADownload(ACase: TTestCase; AVariant: TPipeVariant);
 var
-  src, dst: string;
+  src, dst, bare: string;
   r: TWslRun;
   data, got: RawByteString;
   mark: Integer;
@@ -1095,14 +1240,14 @@ var
   end;
 
 begin
-  NeedWslScript;
   src := NewDir('p5-src');
   dst := NewDir('p5-dst');
+  bare := MakeBarePath(AVariant);
   r := TWslRun.Create(dst);
   try
     data := Seeded(64 * 1024 * 1024, 22);
     SaveBytes(src + PathDelim + 'big.bin', data);
-    StartPipeShell(Self, r, src);
+    StartPipeShell(ACase, r, src, bare);
     mark := Length(r.Raw);
     base := r.SeenIn;
     resized := False;
@@ -1112,21 +1257,110 @@ begin
     tEnd := 0;
     tStart := GetTickCount64;
     r.Send('sz big.bin'#13);
-    AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 120000));
-    WriteLn(Format('p5: resize at %d ms, set at %d ms, the transfer ended at %d ms (%d failed)',
-      [tResize - tStart, tSent - tStart, tEnd - tStart, (r.Backend as TWslPipeBackend).ResizesFailed]));
-    AssertTrue('the size changed in the middle', resized);
-    AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
-    AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'big.bin') = data);
-    AssertEquals('the side process had set the size before the transfer ended', 1, sentAtEnd);
-    got := RunLine(Self, r, 'tput cols; tput lines');
-    AssertTrue('tput: ' + HexOf(got), Pos('88'#13#10'22'#13#10, got) > 0);
-    LeavePipeShell(Self, r);
+    ACase.AssertTrue('the transfer ended and the prompt came back: ' + r.Describe, r.WaitUntil(@Done, 120000));
+    WriteLn(Format('p5 (%d): resize at %d ms, set at %d ms, the transfer ended at %d ms (%d failed)',
+      [Ord(AVariant), tResize - tStart, tSent - tStart, tEnd - tStart, (r.Backend as TWslPipeBackend).ResizesFailed]));
+    ACase.AssertTrue('the size changed in the middle', resized);
+    ACase.AssertTrue('ok: ' + r.Describe, r.Result_ = zrOk);
+    ACase.AssertTrue('the file, byte for byte', LoadBytes(dst + PathDelim + 'big.bin') = data);
+    ACase.AssertEquals('the side process had set the size before the transfer ended', 1, sentAtEnd);
+    got := RunLine(ACase, r, 'tput cols; tput lines');
+    ACase.AssertTrue('tput: ' + HexOf(got), Pos('88'#13#10'22'#13#10, got) > 0);
+    LeavePipeShell(ACase, r);
   finally
     r.Free;
     KillLeftovers;
     RemoveDirAll(src);
     RemoveDirAll(dst);
+    RemoveBarePath(bare);
+  end;
+end;
+
+procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownload;
+begin
+  NeedWslScript;
+  AResizeDuringADownload(Self, pvScript);
+end;
+
+procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownloadWithPython;
+begin
+  NeedWslPython;
+  AResizeDuringADownload(Self, pvPython);
+end;
+
+{ N1. A distribution with neither script nor python3: the entry writes its marker and ends
+  with 127 at once (no "execvpe(script) failed" from WSL, no shell on a pipe that waits).
+  Mutation: the entry without its last branch (sh ends with 0 and says nothing). }
+procedure TTyTerminalZmodemWslTests.TestNeitherScriptNorPythonEndsAtOnce;
+var
+  dir, bare: string;
+  r: TWslRun;
+  t0: QWord;
+begin
+  NeedWslPython;
+  dir := NewDir('n1');
+  bare := MakeBarePath(pvNeither);
+  r := TWslRun.Create(dir);
+  try
+    r.MergeStderr := True;
+    r.WslBackend := True;
+    t0 := GetTickCount64;
+    AssertTrue('it ended: ' + r.Describe, r.Run(PipeShellCommand(dir, 80, 24, bare), 20000));
+    WriteLn(Format('n1: ended after %d ms: %s', [GetTickCount64 - t0, HexOf(r.Raw)]));
+    AssertEquals('127: ' + r.Describe, WslNoPtyHelperExitCode, r.ExitCode);
+    AssertTrue('the marker: ' + HexOf(r.Raw), Pos(WslNoPtyHelperMarker, r.Raw) > 0);
+    AssertEquals('nothing from WSL about a program it could not run: ' + HexOf(r.Raw), 0, Pos('execvpe', r.Raw));
+    AssertTrue('the example''s check says so', IsWslNoPtyHelperExit(r.ExitCode, r.Raw));
+    AssertTrue('at once (one WSL start): ' + IntToStr(GetTickCount64 - t0), GetTickCount64 - t0 < 10000);
+  finally
+    r.Free;
+    RemoveDirAll(dir);
+    RemoveBarePath(bare);
+  end;
+end;
+
+{ N2. The same in the example's window: pipe mode, the entry (typed in with the PATH that
+  has neither), started; the terminal and the status bar say what to install. Mutation:
+  ShellExit not asking IsWslNoPtyHelperExit. }
+procedure TTyTerminalZmodemWslTests.TestTheExampleSaysWhatToInstall;
+var
+  dir, bare, scr: string;
+  f: TMainForm;
+  t0: QWord;
+  y: Integer;
+begin
+  NeedWslPython;
+  dir := NewDir('n2');
+  bare := MakeBarePath(pvNeither);
+  f := TMainForm.Create(nil);
+  try
+    f.ChkPipe.Checked := True;
+    f.CmbCommand.Text := PipeShellCommand(dir, 80, 24, bare);
+    f.CmbMode.ItemIndex := 1;
+    if f.BtnStart.Caption <> 'Restart' then
+      f.ModeChange(f.CmbMode);
+    t0 := GetTickCount64;
+    while Pos('bsdutils', f.Status.Panels[0].Text) = 0 do
+    begin
+      Application.ProcessMessages;
+      Sleep(10);
+      if GetTickCount64 - t0 > 20000 then
+        Fail('no word within 20 s; status: ' + f.Status.Panels[0].Text);
+    end;
+    for y := 1 to 5 do
+      Application.ProcessMessages;
+    scr := '';
+    for y := 0 to f.Term.Core.Buffer.Lines.Length - 1 do
+      scr := scr + f.Term.Core.Buffer.TranslateBufferLineToString(y, True) + #10;
+    AssertTrue('Debian / Ubuntu: ' + f.Status.Panels[0].Text, Pos('sudo apt install bsdutils', f.Status.Panels[0].Text) > 0);
+    AssertTrue('Fedora: ' + f.Status.Panels[0].Text, Pos('sudo dnf install /usr/bin/script', f.Status.Panels[0].Text) > 0);
+    AssertTrue('the terminal says it: ' + scr, Pos('sudo dnf install /usr/bin/script', scr) > 0);
+    AssertTrue('after the marker: ' + scr, Pos(WslNoPtyHelperMarker, scr) > 0);
+  finally
+    f.Free;
+    PtyWaitForFinishers(PtyExitWaitMs);
+    RemoveDirAll(dir);
+    RemoveBarePath(bare);
   end;
 end;
 
@@ -1154,6 +1388,14 @@ procedure TTyTerminalZmodemWslTests.TestSzInThePipeShell; begin NeedWsl; end;
 procedure TTyTerminalZmodemWslTests.TestRzInThePipeShell; begin NeedWsl; end;
 procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePipeShell; begin NeedWsl; end;
 procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownload; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.NeedWslPython; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestThePythonPipeShellHasATerminal; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestSzInThePythonPipeShell; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestRzInThePythonPipeShell; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestAResizeReachesThePythonPipeShell; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestAResizeDuringADownloadWithPython; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestNeitherScriptNorPythonEndsAtOnce; begin NeedWsl; end;
+procedure TTyTerminalZmodemWslTests.TestTheExampleSaysWhatToInstall; begin NeedWsl; end;
 
 {$ENDIF}
 
