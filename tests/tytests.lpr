@@ -174,6 +174,7 @@ uses
   test.terminal.selection, test.terminal.links, test.terminal.view.mouse,
   test.terminal.view.links, test.terminal.pty, test.terminal.reflow, test.terminal.perf,
   test.terminal.colorscheme, test.terminal.view.scheme,
+  test.terminal.stream,
   test.transitions,
   test.htmllabel,
   test.shape,

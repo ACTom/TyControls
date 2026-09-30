@@ -52,6 +52,10 @@ begin
   FPendingData := 0;
   { a half-parsed head goes with the rest, without its callback }
   FChunkPos := 0;
+  { and what a stream claim handed back (spec 19.5: DiscardPending drops it too) }
+  FFront := '';
+  FFrontPos := 0;
+  FFrontBypass := False;
   Inc(FQueueGen);
 end;
 
@@ -126,6 +130,12 @@ var
   end;
 
 begin
+  { spec 19.4: the bytes a stream claim handed back go before the queue }
+  if FFront <> '' then
+  begin
+    ProcessFrontPiece(APieceBytes);
+    Exit;
+  end;
   head := FBufferOffset;
   data := FQueue[head].Data;             { our own reference: a nested clear lets go of the slot's }
   item := Default(TTyTermQueueItem);
@@ -139,7 +149,11 @@ begin
   gen := FQueueGen;
   ok := False;
   try
-    ParseRange(data, start + 1, n);
+    { the stream hooks' fast path (spec 19.4): no handler, no claim, nothing handed back }
+    if (FStreamCount = 0) and (FClaim = nil) and (FFront = '') then
+      ParseRange(data, start + 1, n)
+    else
+      StreamPiece(data, start + 1, n);
     ok := True;
   finally
     { a handler raised in an earlier piece: the rest counts as parsed -- unless the
@@ -171,7 +185,7 @@ begin
   ok := False;
   start := NowMs;
   try
-    while FQueueCount > FBufferOffset do
+    while (FFront <> '') or (FQueueCount > FBufferOffset) do
     begin
       ProcessOneChunk(TyTermSlicePieceBytes);
       if NowMs - start >= ABudgetMs then
@@ -179,7 +193,7 @@ begin
     end;
     ok := True;
   finally
-    if FQueueCount > FBufferOffset then
+    if (FFront <> '') or (FQueueCount > FBufferOffset) then
     begin
       { drop the processed chunks once there are many of them }
       if FBufferOffset > TyTermWriteBufferLengthThreshold then
@@ -262,12 +276,12 @@ begin
   FIsSyncWriting := True;
   ok := False;
   try
-    while FBufferOffset < FQueueCount do
+    while (FFront <> '') or (FBufferOffset < FQueueCount) do
       ProcessOneChunk(TyTermMaxParseBuffer);
     ok := True;
   finally
     FIsSyncWriting := False;
-    if FBufferOffset >= FQueueCount then
+    if (FFront = '') and (FBufferOffset >= FQueueCount) then
       ClearQueue
     else
       RequestProcess;
@@ -337,7 +351,7 @@ begin
   if FRerequest and (FBusy = 0) and not FIsSyncWriting then
   begin
     FRerequest := False;
-    if (FQueueCount > FBufferOffset) or (FDeferredCount > 0) then
+    if (FFront <> '') or (FQueueCount > FBufferOffset) or (FDeferredCount > 0) then
       RequestProcess;
   end;
 end;

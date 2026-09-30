@@ -7,10 +7,12 @@ unit tyControls.Terminal.Core;
   character sets and send replies back through OnData. No LCL (design spec 3.1):
   the control that shows it is built on top in a later phase.
 
-  The implementation continues in three include files, split off only for length:
+  The implementation continues in four include files, split off only for length:
   tyControls.Terminal.Core.Services.inc (the services, the entry points),
-  tyControls.Terminal.Core.InputHandler.inc (every sequence handler) and
-  tyControls.Terminal.Core.WriteQueue.inc (the queue and re-entry).
+  tyControls.Terminal.Core.InputHandler.inc (every sequence handler),
+  tyControls.Terminal.Core.WriteQueue.inc (the queue and re-entry) and
+  tyControls.Terminal.Core.Stream.inc (the stream and parser hooks -- ours, not
+  ported; see below).
 
   PORTED FROM xterm.js 6.0.0, commit c58ea3637f39:
     src/common/InputHandler.ts            every handler, the parse entry, dirty rows
@@ -92,7 +94,22 @@ unit tyControls.Terminal.Core;
     _triggerMouseEvent (0-based in, filtered, de-duplicated, routed). Turning LCL
     mouse events into TTyTerminalMouseEvent is the control's job (phase 4).
   - The screen-reader branches of print and tab are not ported (no accessibility
-    layer, spec 15). }
+    layer, spec 15).
+  - Stream hooks (spec 19; ours, xterm.js has none): with a TTyTerminalStreamHandler
+    added, every piece the queue hands over is offered, as raw bytes, to Detect before
+    it is decoded; a handler that claims gets the rest of the output through Feed
+    (the decoder, the parser and the screen stay as they are) until it Releases, the
+    host Resets or removes it. The bytes before the claim are parsed first; a Release
+    hands the bytes that are not the handler's back in front of everything still
+    queued, through Detect again (a claim that ate nothing hands back its first byte
+    to the parser, or the same handler would claim it for ever). Detect / Claimed /
+    Feed run with the core busy, so what they cause (a Resize, a Reset, a WriteSync)
+    waits for the chunk like any event's. While claimed the user's input goes to
+    OnClaimedInput and the core's own reports (focus, 2031, default-encoding mouse,
+    Input with AWasUserInput False) are dropped; TriggerMouseEvent answers False.
+    With no handler and no claim, ProcessOneChunk costs three more comparisons.
+    DiscardPending drops the handed-back bytes with the queue and leaves the claim;
+    Reset ends it (ClaimEnded(tceReset)); the destructor calls no handler. }
 
 interface
 
@@ -199,6 +216,58 @@ type
     Data: RawByteString;
   end;
 
+  TTyTerminalStreamSession = class;
+
+  { spec 19.3: a claim that the handler did not end itself }
+  TTyTerminalClaimEnd = (tceReset, tceRemoved);
+
+  { In-band protocol hook (spec 19.3). The host derives from it and hands it to
+    AddStreamHandler; the core does not own it (remove it before freeing it). Main
+    thread only. }
+  TTyTerminalStreamHandler = class
+  public
+    { The program's raw bytes (not decoded) are about to reach the parser. True with
+      AClaimAt in 0..ACount: claim from there; the bytes before it are parsed first.
+      Asked only while nobody claims. A marker cut between two pieces is the handler's
+      to remember -- the earlier piece is already on screen. }
+    function Detect(AData: PByte; ACount: Integer; out AClaimAt: Integer): Boolean; virtual; abstract;
+    { the claim starts; everything before AClaimAt has been parsed. ASession stays
+      Active until the claim ends. Default: nothing. }
+    procedure Claimed(ASession: TTyTerminalStreamSession); virtual;
+    { the program's output while claimed, in order; the first call is the rest of the
+      piece Detect saw (none when AClaimAt = ACount) }
+    procedure Feed(AData: PByte; ACount: Integer); virtual; abstract;
+    { the host ended the claim (Reset, RemoveStreamHandler), not Release. The session
+      still sends (SendRaw: tell the program to stop) and shows text during this call;
+      Release there does nothing. Default: nothing. }
+    procedure ClaimEnded(AHow: TTyTerminalClaimEnd); virtual;
+  end;
+
+  { One per core, for the core's life; Active only during a claim. Every method is a
+    no-op (SendRaw answers False) when not Active. }
+  TTyTerminalStreamSession = class
+  private
+    FCore: TTyTerminalCore;
+    FHandler: TTyTerminalStreamHandler;
+    FActive: Boolean;
+    FEnding: Boolean;                    { inside ClaimEnded: Release is a no-op }
+  public
+    constructor Create(ACore: TTyTerminalCore);
+    { straight to OnData: no key encoding, no scroll to the bottom, no OnUserInput, not
+      "the user just typed". False under ReadOnly, without OnData, or not Active. }
+    function SendRaw(const AData: RawByteString): Boolean;
+    { ends the claim; ALeftover (bytes the handler took but that are not its own) goes
+      back in front of everything not parsed yet: through Detect again, then the parser }
+    procedure Release(const ALeftover: RawByteString = '');
+    { UTF-8 text (control sequences allowed) on the screen, not sent: parsed now with a
+      decoder of its own; while the parser runs (an event of its own parse) it waits
+      for that parse to return }
+    procedure ShowText(const AText: string);
+    property Active: Boolean read FActive;
+    property Core: TTyTerminalCore read FCore;
+    property Handler: TTyTerminalStreamHandler read FHandler;
+  end;
+
   TTyTerminalCore = class
   private
     FOptions: TTyTerminalOptions;
@@ -278,6 +347,27 @@ type
     FOnResize: TTyTerminalResizeEvent;
     FOnScrollbackCleared: TNotifyEvent;
     FOnUserInput: TNotifyEvent;
+    { stream hooks (spec 19, Core.Stream.inc). FStreamHandlers may hold nil slots while
+      the handlers are asked (a handler removed from Detect); FStreamCount counts the
+      live ones. }
+    FStreamHandlers: array of TTyTerminalStreamHandler;
+    FStreamCount: Integer;
+    FStreamLoop: Integer;                { > 0 while the handlers are asked }
+    FClaim: TTyTerminalStreamHandler;
+    FStreamSession: TTyTerminalStreamSession;
+    { the bytes a claim handed back, parsed before anything queued; not in PendingBytes }
+    FFront: RawByteString;
+    FFrontPos: Integer;
+    FFrontBypass: Boolean;               { its first byte goes to the parser, not to Detect }
+    FClaimFed: Int64;                    { bytes this claim was fed }
+    FClaimReturned: Integer;             { bytes this claim's Release handed back }
+    FShowDecoder: TTyUtf8Decoder;
+    FShowPending: RawByteString;
+    FShowFlushing: Boolean;
+    FParsing: Integer;                   { parse depth: ParseRange and ShowText }
+    FUserHandles: array of Integer;      { what Register*Handler gave out }
+    FOnClaimedInput: TTyTerminalDataEvent;
+    FStreamPiecesOffered, FStreamDetectCalls: Int64;
 
     { wiring }
     procedure RegisterHandlers;
@@ -461,6 +551,29 @@ type
     procedure Defer(AKind: TTyTermDeferredKind; ACols, ARows: Integer; const AData: RawByteString);
     procedure RunDeferred;
     procedure AfterDrive;
+
+    { ---- stream hooks (spec 19, Core.Stream.inc) ---- }
+    function GetStreamHandlerCount: Integer;
+    function GetStreamClaimed: Boolean;
+    function GetClaimingHandler: TTyTerminalStreamHandler;
+    procedure CompactStreamHandlers;
+    { the slow path of ProcessOneChunk: AData[AFrom .. AFrom + ACount - 1] }
+    procedure StreamPiece(const AData: RawByteString; AFrom, ACount: Integer);
+    procedure OfferPiece(const AData: RawByteString; AFrom, ACount: Integer);
+    procedure DoFeed(const AData: RawByteString; AFrom, ACount: Integer);
+    procedure BeginClaim(AHandler: TTyTerminalStreamHandler);
+    procedure EndClaim(AHow: TTyTerminalClaimEnd; ANotify: Boolean);
+    procedure ReleaseClaim(const ALeftover: RawByteString);
+    { AData goes in front of the bytes handed back but not parsed yet, after the first
+      AOffset of them }
+    procedure SpliceFront(const AData: RawByteString; AOffset: Integer);
+    { one piece of the handed-back bytes }
+    procedure ProcessFrontPiece(APieceBytes: Integer);
+    procedure ShowLocal(const AText: string);
+    procedure FlushShowPending;
+    { ParseRange with a decoder of the caller's (the program's, or ShowText's) }
+    procedure ParseDecoded(ADecoder: TTyUtf8Decoder; const AData: RawByteString; AStart, ACount: Integer);
+    procedure NoteUserHandle(AHandle: Integer);
   public
     constructor Create(ACols, ARows: Integer);
     destructor Destroy; override;
@@ -516,6 +629,20 @@ type
     procedure ClearScrollback;                           { headless Terminal.clear }
     function ResolveColor(AIndex: Integer): Cardinal;
     function HasColorOverride(AIndex: Integer): Boolean;
+    { stream hooks (spec 19.3-19.5, unit header). Main thread only. }
+    procedure AddStreamHandler(AHandler: TTyTerminalStreamHandler);     { again: ignored; nil raises }
+    { the claiming one gets ClaimEnded(tceRemoved) first; unknown: ignored }
+    procedure RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);
+    property StreamHandlerCount: Integer read GetStreamHandlerCount;
+    property StreamClaimed: Boolean read GetStreamClaimed;
+    property ClaimingHandler: TTyTerminalStreamHandler read GetClaimingHandler;   { nil = nobody }
+    property StreamSession: TTyTerminalStreamSession read FStreamSession;
+    { while claimed, the user's input (keys, a paste, the arrows a wheel turns into) goes
+      here instead of OnData -- never while ReadOnly }
+    property OnClaimedInput: TTyTerminalDataEvent read FOnClaimedInput write FOnClaimedInput;
+    { FOR THE TESTS (pure queries) }
+    property StreamPiecesOffered: Int64 read FStreamPiecesOffered;   { pieces that took the slow path }
+    property StreamDetectCalls: Int64 read FStreamDetectCalls;
     { FOR THE TESTS (pure queries; the fixtures compare them with upstream's
       internals, nothing uses them at run time) }
     function CharsetOfG(AG: Integer): TTyTermCharsetId;
@@ -886,6 +1013,8 @@ begin
   FParser := TTyTerminalParser.Create;
   FDecoder := TTyUtf8Decoder.Create;
   FOscData := TTyLimitedStringBuilder.Create(TyTermParserPayloadLimit);
+  FShowDecoder := TTyUtf8Decoder.Create;
+  FStreamSession := TTyTerminalStreamSession.Create(Self);
   FCharsetHandlers := TFPList.Create;
   SetLength(FParseBuffer, 4096);
   ClearRange;
@@ -900,6 +1029,12 @@ begin
   ClearQueue;                            { pending chunks are dropped, callbacks not called }
   FDeferred := nil;
   FDeferredCount := 0;
+  { spec 19.5: no handler is called (the host may be going too) }
+  FClaim := nil;
+  FStreamHandlers := nil;
+  FStreamCount := 0;
+  FStreamSession.Free;
+  FShowDecoder.Free;
   FParser.Free;
   { the buffers dispose their markers, which the link table listens to }
   FBufferService.Free;
@@ -1093,5 +1228,7 @@ end;
 {$I tyControls.Terminal.Core.InputHandler.inc}
 
 {$I tyControls.Terminal.Core.WriteQueue.inc}
+
+{$I tyControls.Terminal.Core.Stream.inc}
 
 end.
