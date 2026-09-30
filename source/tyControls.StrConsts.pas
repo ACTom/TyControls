@@ -348,6 +348,7 @@ resourcestring
   // Both reach the user through the chart's diagnostics list, so they are as
   // user-facing as any caption.
   rsTyChartNoSuchHandler = 'No formatter named ''%s'' is registered.';
+  rsTyOptTooDeep = 'The option is nested more than %d levels deep.';
   rsTyOptFunctionValue =
     'JavaScript functions cannot be used here. Write a template string such as '
   + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';

@@ -212,6 +212,92 @@ end;
   would end the string and the other start a new escape. And comments are
   skipped whole: a quote inside `// ...` or `/* ... */` is not the start of a
   string. [Batch 75] }
+{ THE DEEPEST NESTING THE PARSER IS HANDED. FPC 3.2.2's jsonreader recurses
+  once per array or object, so text nested a few hundred thousand deep
+  overflows the stack -- uncatchable on Win64, SIGSEGV on Linux -- and takes
+  the IDE down with the chart. A real option is a few dozen deep; a tree or
+  treemap's `children` add two per level, so this leaves room for a hierarchy
+  over a hundred levels deep. [Batch 76] }
+const
+  TyOptionMaxNesting = 256;
+
+{ Whether AText opens more than AMax arrays and objects at once, and where
+  the first one too many is (1-based). Strings and comments are skipped as
+  the pre-decode skips them, so a bracket in a label counts for nothing. }
+function TyJsonNestingExceeds(const AText: string; AMax: Integer;
+  out ALine, ACol: Integer): Boolean;
+var
+  i, depth, line, lineStart: Integer;
+  quote: Char;
+begin
+  Result := False;
+  ALine := 0;
+  ACol := 0;
+  depth := 0;
+  line := 1;
+  lineStart := 1;
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    case AText[i] of
+      #10:
+        begin
+          Inc(line);
+          lineStart := i + 1;
+        end;
+      '"', '''':
+        begin
+          quote := AText[i];
+          Inc(i);
+          while (i <= Length(AText)) and (AText[i] <> quote) do
+          begin
+            if AText[i] = '' then Inc(i)
+            else if AText[i] = #10 then
+            begin
+              Inc(line);
+              lineStart := i + 1;
+            end;
+            Inc(i);
+          end;
+        end;
+      '/':
+        if (i < Length(AText)) and (AText[i + 1] = '/') then
+        begin
+          while (i <= Length(AText)) and (AText[i] <> #10) do Inc(i);
+          Continue;
+        end
+        else if (i < Length(AText)) and (AText[i + 1] = '*') then
+        begin
+          Inc(i, 2);
+          while (i <= Length(AText))
+            and not ((AText[i] = '*') and (i < Length(AText)) and (AText[i + 1] = '/')) do
+          begin
+            if AText[i] = #10 then
+            begin
+              Inc(line);
+              lineStart := i + 1;
+            end;
+            Inc(i);
+          end;
+          Inc(i);
+        end;
+      '[', '{':
+        begin
+          Inc(depth);
+          if depth > AMax then
+          begin
+            ALine := line;
+            ACol := i - lineStart + 1;
+            Exit(True);
+          end;
+        end;
+      ']', '}':
+        if depth > 0 then Dec(depth);
+    end;
+    Inc(i);
+  end;
+end;
+
 function TyDecodeUnicodeEscapes(const AText: string): string;
 var
   i, code, lo: Integer;
@@ -363,6 +449,13 @@ begin
     Exit(True);
   end;
   parsed := nil;
+  { TOO DEEP IS REFUSED before the parser can recurse into it }
+  if TyJsonNestingExceeds(AText, TyOptionMaxNesting, line, col) then
+  begin
+    SetError(Format(rsTyOptTooDeep, [TyOptionMaxNesting]), line, col);
+    FreeAndNil(FRoot);
+    Exit(False);
+  end;
   { DECODED FIRST -- see TyDecodeUnicodeEscapes. The scanner in FPC 3.2.2 drops
     bytes when two \uXXXX escapes are adjacent, which is what every CJK string
     written in escape form looks like. }

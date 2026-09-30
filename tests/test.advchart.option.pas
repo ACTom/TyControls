@@ -50,6 +50,7 @@ type
     procedure TestABackslashBeforeUIsNotAnEscape;
     procedure TestAnEscapedQuoteOrBackslashStaysInsideTheString;
     procedure TestAQuoteInACommentDoesNotStartAString;
+    procedure TestNestingPastTheLimitIsRefusedNotRecursedInto;
   end;
 implementation
 
@@ -434,6 +435,41 @@ begin
     AssertEquals('it''s ' + #$E4#$B8#$AD#$E6#$96#$87, o.GetStr('title.text', ''));
     AssertTrue(o.SetOptionText('{ /* say "hi */ "title": { "text": "\u4e2d\u6587" } }'));
     AssertEquals(#$E4#$B8#$AD#$E6#$96#$87, o.GetStr('title.text', ''));
+  finally
+    o.Free;
+  end;
+end;
+
+procedure TAdvChartOptionTest.TestNestingPastTheLimitIsRefusedNotRecursedInto;
+var
+  o: TTyChartOption;
+
+  function Nest(ADepth: Integer): string;
+  begin
+    { an object holding ADepth - 1 arrays, ADepth levels in all }
+    Result := '{"a":' + StringOfChar('[', ADepth - 1) + StringOfChar(']', ADepth - 1) + '}';
+  end;
+
+begin
+  { FPC'S PARSER RECURSES PER LEVEL: deep enough and the stack is gone, with
+    nothing to catch. Past 256 the text is refused before it is parsed --
+    as an ordinary error, with the place of the first bracket too many.
+    [Batch 76] }
+  o := TTyChartOption.Create;
+  try
+    AssertTrue('256 levels parse', o.SetOptionText(Nest(256)));
+    AssertFalse('257 do not', o.SetOptionText(Nest(257)));
+    AssertTrue('and say so', o.Error.Failed);
+    AssertTrue('naming the limit: ' + o.Error.Message, Pos('256', o.Error.Message) > 0);
+    // the object's head is five columns, so the 256th `[` -- the 257th opener -- is at 261
+    AssertEquals('at the bracket too many', 261, o.Error.Col);
+    { deep enough to overflow the stack if it ever reached the parser }
+    AssertFalse(o.SetOptionText(Nest(300000)));
+    { brackets in strings and comments are words, not nesting }
+    AssertTrue(o.SetOptionText('{"t":"' + StringOfChar('[', 1000) + '", /* '
+      + StringOfChar('{', 1000) + ' */ "u": 1 // ' + StringOfChar('[', 1000)
+      + LineEnding + '}'));
+    AssertEquals(StringOfChar('[', 1000), o.GetStr('t', ''));
   finally
     o.Free;
   end;

@@ -893,6 +893,11 @@ msgstr "%s   (ImageIndex %d)"
 msgid "No formatter named '%s' is registered."
 msgstr "没有注册名为 '%s' 的格式化器。"
 
+#: tycontrols.strconsts.rstyopttoodeep
+#, object-pascal-format
+msgid "The option is nested more than %d levels deep."
+msgstr "选项的嵌套超过了 %d 层。"
+
 #: tycontrols.strconsts.rstyoptfunctionvalue
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr "这里不能写 JavaScript 函数。请改用模板串，例如 '{b}: {c}'，或已注册的处理器名，例如 '@MyFormatter'。"
