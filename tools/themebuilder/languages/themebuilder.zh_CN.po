@@ -707,3 +707,10 @@ msgstr "基于内置主题「%s」。"
 #: tbtemplates.rstbminimalheader
 msgid "A minimal theme: the six seeds, light and dark. Everything else comes from the base theme."
 msgstr "极简主题：只有明暗两套的六个种子，其余全部来自底层主题。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbpreview.rstbdensityfailed
+#, object-pascal-format
+msgid "In the %s density: %s"
+msgstr "%s密度下：%s"

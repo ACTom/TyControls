@@ -44,6 +44,7 @@ resourcestring
   rsTbModeFailed = 'In %s mode: %s';
   rsTbModeLight = 'light';
   rsTbModeDark = 'dark';
+  rsTbDensityFailed = 'In the %s density: %s';
   rsTbSampleMessage = 'Save the changes to this theme?';
   rsTbSampleInputTitle = 'Rename';
   rsTbSampleInputPrompt = 'New name:';
@@ -253,7 +254,9 @@ type
     function LoadDocument(const AText, ABaseDir: string; out AError: string): Boolean;
     { False + AError: the document does not resolve in that mode; the mode is unchanged }
     function SetDark(ADark: Boolean; out AError: string): Boolean;
-    procedure SetModern(AModern: Boolean);
+    { False (ModeError says why): the document does not resolve in that density; the
+      density is unchanged }
+    function SetModern(AModern: Boolean): Boolean;
     procedure SetAllDisabled(ADisabled: Boolean);
     function HasModes: Boolean;
     function BuildSampleDialog: TTyDialog;          { built, not shown }
@@ -908,22 +911,42 @@ begin
   SyncSwitches;
 end;
 
-procedure TTbPreviewFrame.SetModern(AModern: Boolean);
+function TTbPreviewFrame.SetModern(AModern: Boolean): Boolean;
 var
-  mode: string;
+  mode, err: string;
+  touched: Boolean;
+
+  procedure Apply(AOn: Boolean);
+  begin
+    { A density change reloads the controller's own theme layer -- there is none here, so
+      the base alone: the document goes and is loaded again. The controls keep the height
+      they were built with; what changes is the density's tokens (font size, padding). }
+    if AOn then
+      FController.Density := tdModern
+    else
+      FController.Density := tdClassic;
+    if (mode <> '') and not SameText(FController.Model.Mode, mode) then
+      FController.Model.SetMode(mode);
+  end;
+
 begin
+  Result := True;
   if AModern = IsModern then Exit;
   mode := FController.Mode;
-  { A density change reloads the controller's own theme layer -- there is none here, so the
-    base alone: the document goes and is loaded again. The controls keep the height they
-    were built with; what changes is the density's tokens (font size, padding). }
-  if AModern then
-    FController.Density := tdModern
-  else
-    FController.Density := tdClassic;
-  if (mode <> '') and not SameText(FController.Model.Mode, mode) then
-    FController.Model.SetMode(mode);
-  RestoreGood;   { probes before the controls hear of it }
+  Apply(AModern);
+  { probes before the controls hear of it }
+  if not LoadInto(FGoodText, FGoodDir, err, touched) then
+  begin
+    { the document does not resolve in this density (a variable the density pack sets
+      that the document uses otherwise): back to the density it did, and say why }
+    Apply(not AModern);
+    RestoreGood;
+    if AModern then
+      FModeError := Format(rsTbDensityFailed, [rsTbDensityModern, err])
+    else
+      FModeError := Format(rsTbDensityFailed, [rsTbDensityClassic, err]);
+    Result := False;
+  end;
   UpdateModeNote;
 end;
 

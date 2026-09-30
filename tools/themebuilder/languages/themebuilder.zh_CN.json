@@ -20,6 +20,7 @@
   "tbpreview.rstbmodefailed": "%s模式下：%s",
   "tbpreview.rstbmodelight": "亮色",
   "tbpreview.rstbmodedark": "暗色",
+  "tbpreview.rstbdensityfailed": "%s密度下：%s",
   "tbpreview.rstbsamplemessage": "保存对这个主题的改动吗？",
   "tbpreview.rstbsampleinputtitle": "重命名",
   "tbpreview.rstbsampleinputprompt": "新名字：",

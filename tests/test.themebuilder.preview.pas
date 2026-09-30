@@ -45,6 +45,7 @@ type
     procedure TestTheProbeStillCatchesWhatAPaintWouldRaise;
     procedure TestTheFastProbeAgreesWithTheResolveWalk;
     procedure TestTheDropDownButtonDropsTheSampleMenu;
+    procedure TestADensityTheDocumentCannotTakeIsRefused;
   end;
 
 const
@@ -602,6 +603,24 @@ procedure TTbPreviewTests.TestTheDropDownButtonDropsTheSampleMenu;
 begin
   AssertTrue('V19: its menu', FFrame.DdbMore.DropDownMenu = FFrame.SamplePopup);
   AssertTrue('V19: on the preview''s controller', FFrame.SamplePopup.Controller = FFrame.Controller);
+end;
+
+{ The density pack sets --segmented-height, which the base does not define: a document
+  that uses the name for a colour resolves in classic and not in modern. Switching to
+  modern used to fall silently back to the bare base (the document gone, no word why);
+  now the switch is refused, the density stays classic, the document stays, and ModeError
+  says so. }
+procedure TTbPreviewTests.TestADensityTheDocumentCannotTakeIsRefused;
+const
+  cDoc = ':root { --segmented-height: #123456; } TyButton { background: var(--segmented-height); }';
+begin
+  AssertTrue('loads in classic', Load(cDoc));
+  AssertEquals('the document is shown', $123456, ButtonBg(FFrame.Controller));
+  AssertFalse('V20: modern is refused', FFrame.SetModern(True));
+  AssertFalse('V20: still classic', FFrame.IsModern);
+  AssertEquals('V20: the combo says so', 0, FFrame.DensityCombo.ItemIndex);
+  AssertEquals('V20: the document is still shown', $123456, ButtonBg(FFrame.Controller));
+  AssertEquals('V20: and why', 1, Pos(Format(rsTbDensityFailed, [rsTbDensityModern, '']), FFrame.ModeError));
 end;
 
 initialization
