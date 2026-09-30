@@ -387,6 +387,63 @@ object MainForm: TMainForm
         ShowHint = True
         OnClick = ImportColorsClick
       end
+      object LblCursor: TTyLabel
+        Left = 444
+        Height = 20
+        Top = 11
+        Width = 52
+        AutoSize = True
+        Caption = 'Cursor:'
+      end
+      object CmbCursor: TTyComboBox
+        Left = 502
+        Height = 26
+        Top = 7
+        Width = 110
+        Hint = 'The cursor''s shape when the program does not ask for one'
+        ItemIndex = 0
+        Items.Strings = (
+          'Block'
+          'Underline'
+          'Bar'
+        )
+        ShowHint = True
+        OnChange = CursorStyleChange
+      end
+      object ChkCursorBlink: TTyCheckBox
+        Left = 624
+        Height = 24
+        Top = 8
+        Width = 70
+        AutoSize = True
+        Caption = 'Blink'
+        OnClick = CursorBlinkClick
+      end
+      object LblCursorInactive: TTyLabel
+        Left = 708
+        Height = 20
+        Top = 11
+        Width = 76
+        AutoSize = True
+        Caption = 'Unfocused:'
+      end
+      object CmbCursorInactive: TTyComboBox
+        Left = 790
+        Height = 26
+        Top = 7
+        Width = 110
+        Hint = 'The cursor when the terminal does not have the focus'
+        ItemIndex = 0
+        Items.Strings = (
+          'Outline'
+          'Block'
+          'Bar'
+          'Underline'
+          'None'
+        )
+        ShowHint = True
+        OnChange = CursorInactiveChange
+      end
     end
     object Status: TTyStatusBar
       Left = 0

@@ -44,6 +44,7 @@ type
     procedure TestTheMainFormBuildsWithARecording;
     { 6 期:配色 }
     procedure TestTheColourListOffersSevenAndThreePairs;
+    procedure TestAPairThatDoesNotLoadChangesNothing;
   end;
 
 implementation
@@ -333,6 +334,43 @@ begin
   end;
 end;
 
+{ The example looks for colorschemes/ (and recordings/) beside its executable and then up
+  to 8 folders above it (ExampleDir in umain, so that a build under lib/<target>/ finds the
+  example's own folders). Here the executable is the test runner, and nothing guarantees
+  what lies above it: a folder left by a run that crashed, or one somebody keeps above the
+  checkout, would be picked up and change what the colour list offers. So the tests look
+  first and name what they find, instead of assuming there is nothing and failing later on
+  a count that means nothing; they then add their own folder beside the runner (where the
+  example looks first) and remove it -- only it -- in a finally, and check it is gone.
+  Answers the folders named ASub on that path, joined with '; ' ('' = none). }
+function FoldersOnTheExamplePath(const ASub: string; ALevels: Integer = 8): string;
+var
+  dir: string;
+  i: Integer;
+begin
+  Result := '';
+  dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to ALevels do
+  begin
+    if DirectoryExists(dir + ASub) then
+    begin
+      if Result <> '' then Result := Result + '; ';
+      Result := Result + dir + ASub;
+    end;
+    dir := ExtractFilePath(ExcludeTrailingPathDelimiter(dir));
+    if dir = '' then Break;
+  end;
+end;
+
+function CountOf(AItems: TStrings; const S: string): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to AItems.Count - 1 do
+    if AItems[i] = S then Inc(Result);
+end;
+
 { The example's own main form, built the way the program builds it, with a recording
   where RecordingsDir looks (next to the executable). FormCreate selects the first
   recording, which fires RecordingChange while the form is not showing yet; a SetFocus
@@ -346,8 +384,12 @@ begin
   dir := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'recordings' + PathDelim;
   src := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim + 'terminal'
     + PathDelim + 'recordings' + PathDelim + 'cat-cjk-emoji.cast';
-  AssertFalse('no recordings folder beside the test runner beforehand', DirectoryExists(dir));
-  ForceDirectories(dir);
+  AssertEquals('no recordings folder beside the test runner beforehand', '',
+    FoldersOnTheExamplePath('recordings', 1));
+  { the colour list below counts on no scheme file anywhere the example looks }
+  AssertEquals('no colorschemes folder where the example looks (the runner and 8 above)', '',
+    FoldersOnTheExamplePath('colorschemes'));
+  AssertTrue('made the recordings folder', ForceDirectories(dir));
   try
     AssertTrue('copied a recording', CopyFile(src, dir + 'cat-cjk-emoji.cast'));
     f := TMainForm.Create(nil);
@@ -368,11 +410,38 @@ begin
       AssertEquals('and picks the first', 1, f.CmbColors.ItemIndex);
       AssertTrue('the terminal took it', f.Term.ColorSource = tsrcScheme);
       AssertEquals('Dimidium', 'Dimidium', f.Term.ColorScheme.Name);
+      f.ImportColorsFrom(TyTermFixturePath('terminal-wt-defaults.json'));
+      AssertEquals('importing it again adds nothing', 17, f.CmbColors.Items.Count);
+      AssertEquals('Dimidium is there once', 1, CountOf(f.CmbColors.Items, 'Dimidium'));
+      { the cursor settings: FormCreate filled them from the terminal, and they set it }
+      AssertEquals('three cursor shapes', 3, f.CmbCursor.Items.Count);
+      AssertEquals('the terminal''s shape is picked', Ord(f.Term.CursorStyle), f.CmbCursor.ItemIndex);
+      AssertEquals('five unfocused cursors', 5, f.CmbCursorInactive.Items.Count);
+      AssertEquals('the terminal''s unfocused cursor is picked', Ord(f.Term.CursorInactiveStyle),
+        f.CmbCursorInactive.ItemIndex);
+      AssertEquals('blink as the terminal has it', f.Term.CursorBlink, f.ChkCursorBlink.Checked);
+      AssertEquals('the shapes are words, in order', 'Bar', f.CmbCursor.Items[2]);
+      f.CmbCursor.ItemIndex := 2;
+      f.CursorStyleChange(f.CmbCursor);
+      AssertTrue('Bar sets the terminal''s shape', f.Term.CursorStyle = tcsBar);
+      f.CmbCursor.ItemIndex := 1;
+      f.CursorStyleChange(f.CmbCursor);
+      AssertTrue('Underline', f.Term.CursorStyle = tcsUnderline);
+      f.ChkCursorBlink.Checked := not f.Term.CursorBlink;
+      f.CursorBlinkClick(f.ChkCursorBlink);
+      AssertEquals('Blink sets blinking', f.ChkCursorBlink.Checked, f.Term.CursorBlink);
+      f.CmbCursorInactive.ItemIndex := 4;
+      f.CursorInactiveChange(f.CmbCursorInactive);
+      AssertTrue('None', f.Term.CursorInactiveStyle = tcisNone);
+      f.CmbCursorInactive.ItemIndex := 3;
+      f.CursorInactiveChange(f.CmbCursorInactive);
+      AssertTrue('Underline, unfocused', f.Term.CursorInactiveStyle = tcisUnderline);
     finally
       f.Free;
     end;
   finally
     DeleteDirectory(dir, False);
+    AssertFalse('the recordings folder the test made is gone', DirectoryExists(dir));
   end;
 end;
 
@@ -441,9 +510,12 @@ begin
   dir := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'colorschemes' + PathDelim;
   src := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim + 'terminal'
     + PathDelim + 'colorschemes' + PathDelim + 'windows-terminal.json';
-  AssertFalse('no colorschemes folder beside the test runner beforehand', DirectoryExists(dir));
+  { the example takes the first colorschemes/ it finds, beside the runner before any above:
+    only that one has to be absent }
+  AssertEquals('no colorschemes folder beside the test runner beforehand', '',
+    FoldersOnTheExamplePath('colorschemes', 1));
   oldMode := TyDefaultController.Mode;
-  ForceDirectories(dir);
+  AssertTrue('made the colorschemes folder', ForceDirectories(dir));
   try
     AssertTrue('copied the scheme file', CopyFile(src, dir + 'windows-terminal.json'));
     f := TMainForm.Create(nil);
@@ -500,12 +572,93 @@ begin
       AssertTrue('the status bar says so: ' + f.Status.Panels[0].Text,
         Pos('Could not import', f.Status.Panels[0].Text) > 0);
       AssertEquals('the colours are as they were', IntToHex(before, 6), IntToHex(f.Term.Core.ResolveColor(257), 6));
+      { the next pick that works takes the error away }
+      Pick('Solarized Light');
+      AssertEquals('a pick that works clears the error: ' + f.Status.Panels[0].Text, 0,
+        Pos('Could not import', f.Status.Panels[0].Text));
+      { Windows Terminal's defaults.json: its 16 names, the seven already listed once each }
+      f.ImportColorsFrom(TyTermFixturePath('terminal-wt-defaults.json'));
+      AssertEquals('the nine new ones join', Length(Want) + 9, f.CmbColors.Items.Count);
+      for i := 1 to 7 do
+        AssertEquals(Want[i] + ' once', 1, CountOf(f.CmbColors.Items, Want[i]));
+      AssertEquals('picks its first', 'Dimidium', f.CmbColors.Items[f.CmbColors.ItemIndex]);
+      f.ImportColorsFrom(TyTermFixturePath('terminal-wt-defaults.json'));
+      AssertEquals('again: nothing new', Length(Want) + 9, f.CmbColors.Items.Count);
+      Pick('Campbell');
+      AssertEquals('Campbell still loads', 'Campbell', f.Term.ColorScheme.Name);
     finally
       f.Free;
     end;
   finally
     TyDefaultController.Mode := oldMode;
     DeleteDirectory(dir, False);
+    AssertFalse('the colorschemes folder the test made is gone', DirectoryExists(dir));
+  end;
+end;
+
+{ A pair is two schemes: when the second does not load, nothing is set -- not even the first
+  one, which would otherwise change the terminal's ColorScheme behind a status bar error. }
+procedure TTyTerminalExampleTests.TestAPairThatDoesNotLoadChangesNothing;
+const
+  Keys: array[0..15] of string = ('black', 'red', 'green', 'yellow', 'blue', 'purple', 'cyan', 'white',
+    'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightPurple', 'brightCyan',
+    'brightWhite');
+var
+  dir: string;
+  f: TMainForm;
+  sl: TStringList;
+  i: Integer;
+  colours, bad: string;
+begin
+  TyTermNeedWidgetSet;
+  dir := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'colorschemes' + PathDelim;
+  AssertEquals('no colorschemes folder beside the test runner beforehand', '',
+    FoldersOnTheExamplePath('colorschemes', 1));
+  colours := '';
+  bad := '';
+  for i := 0 to 15 do
+  begin
+    colours := colours + ', "' + Keys[i] + '": "#' + IntToHex(i * 16 + 1, 6) + '"';
+    if i = 1 then
+      bad := bad + ', "red": "not a colour"'
+    else
+      bad := bad + ', "' + Keys[i] + '": "#' + IntToHex(i * 16 + 2, 6) + '"';
+  end;
+  AssertTrue('made the colorschemes folder', ForceDirectories(dir));
+  try
+    sl := TStringList.Create;
+    try
+      sl.Text := '{"schemes": [{"name": "Tango Light", "background": "#FFFFFF"' + colours
+        + '}, {"name": "Tango Dark", "background": "#000000"' + bad + '}]}';
+      sl.SaveToFile(dir + 'windows-terminal.json');
+    finally
+      sl.Free;
+    end;
+    f := TMainForm.Create(nil);
+    try
+      AssertTrue('the pair is offered (both names are there)',
+        f.CmbColors.Items.IndexOf('Tango (light / dark)') >= 0);
+      AssertTrue('following the theme', f.Term.ColorSource = tsrcTheme);
+      f.CmbColors.ItemIndex := f.CmbColors.Items.IndexOf('Tango (light / dark)');
+      f.ColorsChange(f.CmbColors);
+      AssertTrue('the status bar says why: ' + f.Status.Panels[0].Text,
+        Pos('Could not import', f.Status.Panels[0].Text) > 0);
+      AssertTrue('the light half was not set either', f.Term.ColorScheme.IsEmpty);
+      AssertEquals('nor its name', '', f.Term.ColorScheme.Name);
+      AssertTrue('the dark one is untouched', f.Term.DarkColorScheme.IsEmpty);
+      AssertFalse('not paired', f.Term.ColorSchemePaired);
+      AssertTrue('still following the theme', f.Term.ColorSource = tsrcTheme);
+      { the light one alone loads, and takes the error away }
+      f.CmbColors.ItemIndex := f.CmbColors.Items.IndexOf('Tango Light');
+      f.ColorsChange(f.CmbColors);
+      AssertEquals('Tango Light alone', 'Tango Light', f.Term.ColorScheme.Name);
+      AssertEquals('the error is gone', 0, Pos('Could not import', f.Status.Panels[0].Text));
+    finally
+      f.Free;
+    end;
+  finally
+    DeleteDirectory(dir, False);
+    AssertFalse('the colorschemes folder the test made is gone', DirectoryExists(dir));
   end;
 end;
 

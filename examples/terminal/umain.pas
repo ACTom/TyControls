@@ -44,7 +44,12 @@ unit umain;
   THIRD-PARTY-NOTICES.md); the three "(light / dark)" entries pair two of them
   (ColorSchemePaired / DarkColorScheme), and the dark-mode switch in the title bar then
   swaps them. "Import..." reads any Windows Terminal scheme file or settings.json and adds
-  every scheme in it that loads.
+  every scheme in it that loads, each name once (importing a file again adds nothing new).
+
+  CURSOR. "Cursor", "Blink" and "Unfocused" set the terminal's own cursor (CursorStyle,
+  CursorBlink, CursorInactiveStyle). A program can ask for another shape for a while --
+  vim's insert mode asks for a bar with DECSCUSR -- and CSI 0 SP q (or a reset) brings back
+  the one picked here.
 
   The window, the terminal and every control are designed in umain.lfm (a TTyForm +
   TTyTitleBar); the code here is event handlers, the player and theme setup. }
@@ -59,7 +64,8 @@ uses
   tyControls.TyLabel, tyControls.Button, tyControls.ComboBox, tyControls.CheckBox,
   tyControls.ToggleSwitch, tyControls.SpinEdit, tyControls.Memo, tyControls.Splitter,
   tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.FileDialog,
-  tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core, tyControls.Terminal,
+  tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
+  tyControls.Terminal.ColorScheme, tyControls.Terminal,
   uasciicast, uptysession, uptywin, uptyunix, ushell;
 
 type
@@ -94,6 +100,11 @@ type
     LblColors: TTyLabel;
     CmbColors: TTyComboBox;
     BtnImportColors: TTyButton;
+    LblCursor: TTyLabel;
+    CmbCursor: TTyComboBox;
+    ChkCursorBlink: TTyCheckBox;
+    LblCursorInactive: TTyLabel;
+    CmbCursorInactive: TTyComboBox;
     DlgColors: TTyOpenDialog;
     LblRecording: TTyLabel;
     CmbRecording: TTyComboBox;
@@ -144,6 +155,9 @@ type
     procedure ContrastChange(Sender: TObject);
     procedure ColorsChange(Sender: TObject);
     procedure ImportColorsClick(Sender: TObject);
+    procedure CursorStyleChange(Sender: TObject);
+    procedure CursorBlinkClick(Sender: TObject);
+    procedure CursorInactiveChange(Sender: TObject);
     procedure TermLinkActivate(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
     procedure TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
       var AText: string; var AAllow: Boolean);
@@ -175,12 +189,17 @@ type
       in FColorTexts and the entries point at it (-1 = follow the theme) }
     FColorTexts: TStringList;
     FColorChoices: array of TColorChoice;
+    FColorError: Boolean;     { the status bar shows a colour scheme error }
     function AddColorChoice(const ACaption: string; ATextIndex: Integer;
       const ALight, ADark: string; APaired: Boolean): Integer;
+    function SchemeEntry(const ACaption: string): Integer;
     procedure FillColors;
+    procedure ColorsFailed(const AMessage: string);
+    procedure ColorsDone;
   public
-    { "Import...": every scheme in the file that loads joins the list and the first one is
-      picked; a file with none says why in the status bar and changes nothing }
+    { "Import...": every scheme in the file that loads is in the list once (a name already
+      there now reads from this file) and the first one is picked; a file with none says why
+      in the status bar and changes nothing }
     procedure ImportColorsFrom(const AFileName: string);
   end;
 
@@ -218,6 +237,11 @@ resourcestring
   rsColorsFollowTheme = 'Follow theme';
   rsColorsPairFmt = '%s (light / dark)';
   rsColorsImportFailedFmt = 'Could not import: %s';
+  rsCursorBlock = 'Block';
+  rsCursorUnderline = 'Underline';
+  rsCursorBar = 'Bar';
+  rsCursorOutline = 'Outline';
+  rsCursorNone = 'None';
 
 const
   { the key panel keeps the last this many lines }
@@ -330,6 +354,18 @@ begin
   CmbOsc52.Items[0] := rsOsc52Off;
   CmbOsc52.Items[1] := rsOsc52Write;
   CmbOsc52.Items[2] := rsOsc52ReadWrite;
+  CmbCursor.Items[0] := rsCursorBlock;
+  CmbCursor.Items[1] := rsCursorUnderline;
+  CmbCursor.Items[2] := rsCursorBar;
+  CmbCursorInactive.Items[0] := rsCursorOutline;
+  CmbCursorInactive.Items[1] := rsCursorBlock;
+  CmbCursorInactive.Items[2] := rsCursorBar;
+  CmbCursorInactive.Items[3] := rsCursorUnderline;
+  CmbCursorInactive.Items[4] := rsCursorNone;
+  { the cursor settings show what the terminal has (its defaults, or what the .lfm set) }
+  CmbCursor.ItemIndex := Ord(Term.CursorStyle);
+  ChkCursorBlink.Checked := Term.CursorBlink;
+  CmbCursorInactive.ItemIndex := Ord(Term.CursorInactiveStyle);
   BtnStart.Caption := rsStart;
   FillCommands;
   FColorTexts := TStringList.Create;
@@ -773,7 +809,7 @@ begin
       txt := ReadWholeFile(fn);
     except
       on E: Exception do
-        Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [E.Message]);
+        ColorsFailed(E.Message);
     end;
     names := TTyTerminalColorScheme.ListSchemeNames(txt);
     if Length(names) > 0 then
@@ -789,33 +825,69 @@ begin
   CmbColors.ItemIndex := 0;
 end;
 
+{ an entry for a single scheme (not "Follow theme", not a pair) with this caption, or -1 }
+function TMainForm.SchemeEntry(const ACaption: string): Integer;
+var
+  k: Integer;
+begin
+  for k := 0 to High(FColorChoices) do
+    if (FColorChoices[k].TextIndex >= 0) and not FColorChoices[k].Paired
+      and (k < CmbColors.Items.Count) and (CmbColors.Items[k] = ACaption) then
+      Exit(k);
+  Result := -1;
+end;
+
+procedure TMainForm.ColorsFailed(const AMessage: string);
+begin
+  Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [AMessage]);
+  FColorError := True;
+end;
+
+{ a pick or an import that worked: an earlier "Could not import" no longer applies }
+procedure TMainForm.ColorsDone;
+begin
+  if not FColorError then Exit;
+  FColorError := False;
+  Status.Panels[0].Text := '';
+end;
+
 procedure TMainForm.ColorsChange(Sender: TObject);
 var
   i: Integer;
-  err: string;
+  err, txt: string;
+  light, dark: TTyTerminalColorScheme;
 begin
   i := CmbColors.ItemIndex;
   if (i < 0) or (i > High(FColorChoices)) then Exit;
   if FColorChoices[i].TextIndex < 0 then
   begin
     Term.ColorSource := tsrcTheme;
+    ColorsDone;
     Exit;
   end;
-  { several settings in a row: the terminal tells the program about the new colours once }
-  if not Term.ColorScheme.TryLoadFromText(FColorTexts[FColorChoices[i].TextIndex],
-    FColorChoices[i].LightName, err) then
-  begin
-    Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [err]);
-    Exit;
+  { both read before anything is set: a pair whose second half does not load leaves the
+    terminal exactly as it was }
+  txt := FColorTexts[FColorChoices[i].TextIndex];
+  light := TTyTerminalColorScheme.Create;
+  dark := TTyTerminalColorScheme.Create;
+  try
+    if not light.TryLoadFromText(txt, FColorChoices[i].LightName, err)
+      or (FColorChoices[i].Paired and not dark.TryLoadFromText(txt, FColorChoices[i].DarkName, err)) then
+    begin
+      ColorsFailed(err);
+      Exit;
+    end;
+    { several settings in a row: the terminal tells the program about the new colours once }
+    Term.ColorScheme := light;
+    if FColorChoices[i].Paired then
+      Term.DarkColorScheme := dark;
+    Term.ColorSchemePaired := FColorChoices[i].Paired;
+    Term.ColorSource := tsrcScheme;
+    ColorsDone;
+  finally
+    dark.Free;
+    light.Free;
   end;
-  if FColorChoices[i].Paired and not Term.DarkColorScheme.TryLoadFromText(
-    FColorTexts[FColorChoices[i].TextIndex], FColorChoices[i].DarkName, err) then
-  begin
-    Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [err]);
-    Exit;
-  end;
-  Term.ColorSchemePaired := FColorChoices[i].Paired;
-  Term.ColorSource := tsrcScheme;
 end;
 
 procedure TMainForm.ImportColorsClick(Sender: TObject);
@@ -827,56 +899,68 @@ end;
 procedure TMainForm.ImportColorsFrom(const AFileName: string);
 var
   txt, err, shown: string;
-  names, added: TStringArray;
-  probe: TTyTerminalColorScheme;
-  i, k, t, first, n: Integer;
-  dup: Boolean;
+  names: TStringArray;
+  i, k, t, first: Integer;
 begin
   try
     txt := ReadWholeFile(AFileName);
   except
     on E: Exception do
     begin
-      Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [E.Message]);
+      ColorsFailed(E.Message);
       Exit;
     end;
   end;
-  names := TTyTerminalColorScheme.ListSchemeNames(txt);
-  added := nil;
+  { one parse: the schemes in the file that load, each name once; none says why }
+  if not TyTermSchemeImportPlan(txt, names, err) then
+  begin
+    ColorsFailed(err);
+    Exit;
+  end;
+  t := FColorTexts.Add(txt);
   first := -1;
-  t := -1;
-  err := '';
-  probe := TTyTerminalColorScheme.Create;
-  try
-    for i := 0 to High(names) do
+  for i := 0 to High(names) do
+  begin
+    { a scheme without a name (a single scheme file) is listed under the file's name }
+    shown := names[i];
+    if shown = '' then shown := ExtractFileName(AFileName);
+    { a name already in the list -- one of the example's, or imported before -- stays one
+      entry, which now reads from this file }
+    k := SchemeEntry(shown);
+    if k < 0 then
+      k := AddColorChoice(shown, t, names[i], names[i], False)
+    else
     begin
-      { a name twice in a settings.json: only its first scheme is ever read }
-      dup := False;
-      for k := 0 to High(added) do
-        if added[k] = names[i] then dup := True;
-      if dup then Continue;
-      if not probe.TryLoadFromText(txt, names[i], err) then Continue;
-      if t < 0 then t := FColorTexts.Add(txt);
-      n := Length(added);
-      SetLength(added, n + 1);
-      added[n] := names[i];
-      shown := names[i];
-      if shown = '' then shown := ExtractFileName(AFileName);
-      k := AddColorChoice(shown, t, names[i], names[i], False);
-      if first < 0 then first := k;
+      FColorChoices[k].TextIndex := t;
+      FColorChoices[k].LightName := names[i];
+      FColorChoices[k].DarkName := names[i];
     end;
-    if first < 0 then
-    begin
-      { nothing loads: say why (a text with no scheme at all gets the reader's own reason) }
-      if err = '' then probe.TryLoadFromText(txt, '', err);
-      Status.Panels[0].Text := Format(rsColorsImportFailedFmt, [err]);
-      Exit;
-    end;
-  finally
-    probe.Free;
+    if first < 0 then first := k;
   end;
   CmbColors.ItemIndex := first;
   ColorsChange(CmbColors);
+end;
+
+{ ---- cursor ---- }
+
+{ The terminal's own cursor: what it draws when the program does not ask. A program may ask
+  for another shape with DECSCUSR (vim's insert mode asks for a bar); CSI 0 SP q, and a
+  reset, go back to these. }
+procedure TMainForm.CursorStyleChange(Sender: TObject);
+begin
+  if CmbCursor.ItemIndex >= 0 then
+    Term.CursorStyle := TTyTerminalCursorStyle(CmbCursor.ItemIndex);
+end;
+
+procedure TMainForm.CursorBlinkClick(Sender: TObject);
+begin
+  Term.CursorBlink := ChkCursorBlink.Checked;
+end;
+
+procedure TMainForm.CursorInactiveChange(Sender: TObject);
+begin
+  if CmbCursorInactive.ItemIndex >= 0 then
+    Term.CursorInactiveStyle := TTyTerminalCursorInactiveStyle(CmbCursorInactive.ItemIndex);
 end;
 
 { The control opens nothing: the host decides. Here, like xterm.js's own OSC 8 default:
