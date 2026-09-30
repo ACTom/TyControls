@@ -674,6 +674,55 @@ begin
   end;
 end;
 
+{ 名字写成 JSON 串:引号、反斜杠转义,控制字符写成六个字符的 u 转义,其余 UTF-8 原样 }
+function WtQuote(const S: string): string;
+var
+  i: Integer;
+begin
+  Result := '"';
+  for i := 1 to Length(S) do
+    case S[i] of
+      '"': Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #0..#31: Result := Result + '\u' + IntToHex(Ord(S[i]), 4);
+    else
+      Result := Result + S[i];
+    end;
+  Result := Result + '"';
+end;
+
+{ WT 的 ColorScheme::ToJson:name、foreground、background、selectionBackground、
+  cursorColor,再按表的顺序 16 色;#RRGGBB 大写。四个可选项未设置的不写(WT 读时补),
+  16 色缺或名字空报错(WT 会把它当无效跳过,写出去没用) }
+function WtSave(AScheme: TTyTerminalColorScheme): string;
+const
+  Optional: array[0..3] of TTyTerminalSchemeSlot = (tssForeground, tssBackground, tssSelection, tssCursor);
+var
+  s: TTyTerminalSchemeSlot;
+  i: Integer;
+  rgb: Cardinal;
+  missing: TStringArray;
+begin
+  if AScheme.Name = '' then
+    raise ETyTerminalColorSchemeError.CreateKey('name', rsTermSchemeNoName);
+  missing := nil;
+  for s := tssBlack to tssBrightWhite do
+    if not AScheme.SlotRgb(s, rgb) then
+      AddName(missing, WtKeys[s]);
+  if Length(missing) > 0 then
+    raise ETyTerminalColorSchemeError.CreateKey(missing[0], Format(rsTermSchemeMissingKeys, [NameList(missing)]));
+  Result := '{'#10'    "name": ' + WtQuote(AScheme.Name);
+  for i := 0 to High(Optional) do
+    if AScheme.SlotRgb(Optional[i], rgb) then
+      Result := Result + ','#10'    "' + WtKeys[Optional[i]] + '": "' + TyTermSchemeColorText(rgb) + '"';
+  for s := tssBlack to tssBrightWhite do
+  begin
+    AScheme.SlotRgb(s, rgb);
+    Result := Result + ','#10'    "' + WtKeys[s] + '": "' + TyTermSchemeColorText(rgb) + '"';
+  end;
+  Result := Result + #10'}'#10;
+end;
+
 { ---- TTyTerminalColorScheme -------------------------------------------------------- }
 
 constructor TTyTerminalColorScheme.Create(AOwner: TPersistent);
@@ -878,13 +927,29 @@ end;
 
 function TTyTerminalColorScheme.SaveToText(AFormat: TTyTerminalColorSchemeFormat): string;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.SaveToText');
+  Result := '';
+  case AFormat of
+    { tcfAuto 写出时就是 WT(目前唯一的格式) }
+    tcfAuto, tcfWindowsTerminal:
+      Result := WtSave(Self);
+  end;
 end;
 
 procedure TTyTerminalColorScheme.SaveToFile(const AFileName: string;
   AFormat: TTyTerminalColorSchemeFormat);
+var
+  txt: string;
+  fs: TFileStream;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.SaveToFile');
+  { 先拼好再开文件:名字空、缺色时不留下一个空文件;不加 BOM }
+  txt := SaveToText(AFormat);
+  fs := TFileStream.Create(AFileName, fmCreate);
+  try
+    if txt <> '' then
+      fs.WriteBuffer(txt[1], Length(txt));
+  finally
+    fs.Free;
+  end;
 end;
 
 class function TTyTerminalColorScheme.ListSchemeNames(const AText: string;

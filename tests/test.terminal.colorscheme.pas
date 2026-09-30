@@ -44,6 +44,14 @@ type
     procedure TestReadByNameFromTheFixture;
     procedure TestReadRules;
     procedure TestReadFromFile;
+    { Task 4:写 WT }
+    procedure TestSaveCampbellExactly;
+    procedure TestReadWriteReadTheFixture;
+    procedure TestUnsetOptionalsAreNotWritten;
+    procedure TestIncompleteSchemesAreNotWritten;
+    procedure TestNamesRoundTrip;
+    procedure TestWhatWtLacksIsNotWritten;
+    procedure TestSystemColoursAreWrittenAsRgb;
   end;
 
 { 反引号换成反斜杠(见单元头) }
@@ -828,6 +836,208 @@ begin
       on E: EFOpenError do raised := True;
     end;
     AssertTrue('LoadFromFile lets the RTL''s exception through', raised);
+  finally
+    c.Free;
+  end;
+end;
+
+{ ---- Task 4:写 WT ----------------------------------------------------------------- }
+
+procedure TTyTerminalColorSchemeTests.TestSaveCampbellExactly;
+const
+  Want =
+    '{'#10 +
+    '    "name": "Campbell",'#10 +
+    '    "foreground": "#CCCCCC",'#10 +
+    '    "background": "#0C0C0C",'#10 +
+    '    "selectionBackground": "#FFFFFF",'#10 +
+    '    "cursorColor": "#FFFFFF",'#10 +
+    '    "black": "#0C0C0C",'#10 +
+    '    "red": "#C50F1F",'#10 +
+    '    "green": "#13A10E",'#10 +
+    '    "yellow": "#C19C00",'#10 +
+    '    "blue": "#0037DA",'#10 +
+    '    "purple": "#881798",'#10 +
+    '    "cyan": "#3A96DD",'#10 +
+    '    "white": "#CCCCCC",'#10 +
+    '    "brightBlack": "#767676",'#10 +
+    '    "brightRed": "#E74856",'#10 +
+    '    "brightGreen": "#16C60C",'#10 +
+    '    "brightYellow": "#F9F1A5",'#10 +
+    '    "brightBlue": "#3B78FF",'#10 +
+    '    "brightPurple": "#B4009E",'#10 +
+    '    "brightCyan": "#61D6D6",'#10 +
+    '    "brightWhite": "#F2F2F2"'#10 +
+    '}'#10;
+var
+  c: TTyTerminalColorScheme;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    { 小写的 #rgb 读进来,写成大写的 #RRGGBB }
+    c.LoadFromText(DocCampbell.Replace('"#FFFFFF"', '"#fff"').Replace('"#C50F1F"', '"#c50f1f"'));
+    AssertEquals('WT''s key order, upper case, four spaces, LF, one newline at the end', Want, c.SaveToText);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestReadWriteReadTheFixture;
+var
+  a, b: TTyTerminalColorScheme;
+  txt: string;
+  i, same: Integer;
+begin
+  txt := FixtureText;
+  same := 0;
+  a := TTyTerminalColorScheme.Create;
+  b := TTyTerminalColorScheme.Create;
+  try
+    for i := 0 to 15 do
+    begin
+      a.LoadFromText(txt, FixtureNames[i]);
+      b.LoadFromText(a.SaveToText);
+      AssertTrue(FixtureNames[i] + ' reads back the same', b.Equals(a));
+      Inc(same);
+    end;
+  finally
+    a.Free;
+    b.Free;
+  end;
+  AssertEquals('all 16 round-tripped', 16, same);
+end;
+
+procedure TTyTerminalColorSchemeTests.TestUnsetOptionalsAreNotWritten;
+var
+  a, b: TTyTerminalColorScheme;
+  s: TTyTerminalSchemeSlot;
+  txt: string;
+begin
+  a := TTyTerminalColorScheme.Create;
+  b := TTyTerminalColorScheme.Create;
+  try
+    a.Name := 'Bare';
+    for s := tssBlack to tssBrightWhite do
+      a.Colors[s] := TColor($100000 + Ord(s));
+    txt := a.SaveToText;
+    AssertEquals('no foreground', 0, Pos('"foreground"', txt));
+    AssertEquals('no background', 0, Pos('"background"', txt));
+    AssertEquals('no cursorColor', 0, Pos('"cursorColor"', txt));
+    AssertEquals('no selectionBackground', 0, Pos('"selectionBackground"', txt));
+    b.LoadFromText(txt);
+    AssertEquals('read back: WT''s foreground', Hex6($FFFFFF), SlotHex(b, tssForeground));
+    AssertEquals('read back: WT''s background', Hex6($000000), SlotHex(b, tssBackground));
+    AssertEquals('read back: WT''s cursor', Hex6($FFFFFF), SlotHex(b, tssCursor));
+    AssertEquals('read back: WT''s selection', Hex6($FFFFFF), SlotHex(b, tssSelection));
+    AssertEquals('the sixteen', IntToHex(a.Colors[tssBrightCyan], 8), IntToHex(b.Colors[tssBrightCyan], 8));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestIncompleteSchemesAreNotWritten;
+var
+  c, snap: TTyTerminalColorScheme;
+  key, fn: string;
+begin
+  c := NewCounted;
+  snap := TTyTerminalColorScheme.Create;
+  try
+    c.LoadFromText(DocCampbell);
+    c.Yellow := clNone;
+    snap.Assign(c);
+    FChanges := 0;
+    key := '';
+    try
+      c.SaveToText;
+    except
+      on E: ETyTerminalColorSchemeError do key := E.Key;
+    end;
+    AssertEquals('a missing colour is refused, naming it', 'yellow', key);
+    AssertTrue('the scheme is as it was', c.Equals(snap));
+    AssertEquals('no OnChange', 0, FChanges);
+    fn := GetTempDir(False) + 'tyterm-scheme-missing.json';
+    DeleteFile(fn);
+    try
+      c.SaveToFile(fn);
+    except
+      on ETyTerminalColorSchemeError do ;
+    end;
+    AssertFalse('no file left behind', FileExists(fn));
+    c.LoadFromText(DocCampbell);
+    c.Name := '';
+    key := '?';
+    try
+      c.SaveToText;
+    except
+      on E: ETyTerminalColorSchemeError do key := E.Key;
+    end;
+    AssertEquals('no name is refused', 'name', key);
+  finally
+    snap.Free;
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestNamesRoundTrip;
+
+  procedure Trip(const AName: string);
+  var
+    a, b: TTyTerminalColorScheme;
+  begin
+    a := TTyTerminalColorScheme.Create;
+    b := TTyTerminalColorScheme.Create;
+    try
+      a.LoadFromText(DocCampbell);
+      a.Name := AName;
+      b.LoadFromText(a.SaveToText);
+      AssertEquals('the name read back', AName, b.Name);
+    finally
+      a.Free;
+      b.Free;
+    end;
+  end;
+
+begin
+  Trip(J('a"b`c'));
+  Trip(ZH);
+  Trip('a'#1'b');
+  Trip(J('`u4e2d'));
+end;
+
+procedure TTyTerminalColorSchemeTests.TestWhatWtLacksIsNotWritten;
+var
+  c: TTyTerminalColorScheme;
+  txt: string;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    c.LoadFromText(DocCampbell);
+    c.CursorText := TColor($0C0B0A);
+    c.SelectionInactiveBackground := TColor($0F0E0D);
+    txt := c.SaveToText;
+    AssertEquals('no cursor text', 0, Pos('#0A0B0C', txt));
+    AssertEquals('no inactive selection', 0, Pos('#0D0E0F', txt));
+    AssertEquals('no such key', 0, Pos('Inactive', txt));
+    AssertEquals('no such key', 0, Pos('ursorText', txt));
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestSystemColoursAreWrittenAsRgb;
+var
+  c: TTyTerminalColorScheme;
+  sys: Cardinal;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    c.LoadFromText(DocCampbell);
+    c.Red := clWindow;
+    sys := Cardinal(ColorToRGB(clWindow));
+    AssertTrue('clWindow as its RGB', Pos('"red": "' + TyTermSchemeColorText(((sys and $FF) shl 16)
+      or (sys and $FF00) or ((sys shr 16) and $FF)) + '"', c.SaveToText) > 0);
   finally
     c.Free;
   end;
