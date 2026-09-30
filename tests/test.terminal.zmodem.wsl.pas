@@ -165,9 +165,9 @@ begin
   begin
     repeat
       if (sr.Name <> '.') and (sr.Name <> '..') then
-        DeleteFile(IncludeTrailingPathDelimiter(ADir) + sr.Name);
+        SysUtils.DeleteFile(IncludeTrailingPathDelimiter(ADir) + sr.Name);
     until FindNext(sr) <> 0;
-    FindClose(sr);
+    SysUtils.FindClose(sr);
   end;
   RemoveDir(ADir);
 end;
@@ -348,7 +348,7 @@ function TWslRun.Run(const ACommand: string; ATimeoutMs: Integer): Boolean;
 var
   err: string;
   data: RawByteString;
-  exited: Boolean;
+  ended: Boolean;
   code: Int64;
   t0, lastTick: QWord;
   didCancel: Boolean;
@@ -363,7 +363,7 @@ begin
   while GetTickCount64 - t0 < QWord(ATimeoutMs) do
   begin
     Waker.Event.WaitFor(20);
-    if Session.Pump(data, exited, code) then
+    if Session.Pump(data, ended, code) then
     begin
       { I6: one of the program's bytes damaged on the way }
       if (FlipIn > 0) and (SeenIn < FlipIn) and (SeenIn + Length(data) >= FlipIn) then
@@ -374,7 +374,7 @@ begin
       Inc(SeenIn, Length(data));
       if data <> '' then
         Core.Write(data, @OnDelivered, Length(data));
-      if exited then
+      if ended then
       begin
         Self.Exited := True;
         Self.ExitCode := code;

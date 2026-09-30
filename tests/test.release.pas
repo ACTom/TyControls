@@ -910,9 +910,6 @@ begin
   end;
 end;
 
-initialization
-  RegisterTest(TReleaseManifestTest);
-
 { The example's ZModem (spec 19.10): written from Forsberg's protocol description,
   which is public domain, with no code from lrzsz -- whose licence (GPL) the library's
   must not take on. So: the three units ship with the example, none of them says
@@ -939,4 +936,6 @@ begin
   end;
 end;
 
+initialization
+  RegisterTest(TReleaseManifestTest);
 end.

@@ -287,7 +287,7 @@ var
   cases: TFPList;
   c: TJSONObject;
   h: TTyTermHarness;
-  run: TScriptRun;
+  scr: TScriptRun;
   after: TJSONData;
   i, calls: Integer;
   id: string;
@@ -305,31 +305,31 @@ begin
         c := TJSONObject(cases[i]);
         id := c.Strings['id'];
         h := TTyTermHarness.Create(c, fx[0].Arrays['palette']);
-        run := TScriptRun.Create(h.Core);
+        scr := TScriptRun.Create(h.Core);
         try
-          RunSteps(h, run, c.Arrays['steps'], id, m);
+          RunSteps(h, scr, c.Arrays['steps'], id, m);
           TyTermCompareState(h, c.Objects['expect'], id, False, m);
-          CompareCalls(c.Objects['expect'].Arrays['calls'], run, id, m);
-          Inc(calls, run.Calls.Count);
-          { the same core again after Reset: the handlers of the first run stay }
+          CompareCalls(c.Objects['expect'].Arrays['calls'], scr, id, m);
+          Inc(calls, scr.Calls.Count);
+          { the same core again after Reset: the handlers of the first scr stay }
           h.Core.Reset;
           h.ClearRecord;
-          RunSteps(h, run, c.Arrays['steps'], id + ' after Reset', m);
+          RunSteps(h, scr, c.Arrays['steps'], id + ' after Reset', m);
           after := c.Find('afterReset');
           if (after = nil) or (after.JSONType = jtString) then
           begin
             TyTermCompareState(h, c.Objects['expect'], id + ' after Reset', False, m);
-            CompareCalls(c.Objects['expect'].Arrays['calls'], run, id + ' after Reset', m);
+            CompareCalls(c.Objects['expect'].Arrays['calls'], scr, id + ' after Reset', m);
           end
           else
           begin
             TyTermCompareState(h, TJSONObject(after), id + ' after Reset', False, m);
-            CompareCalls(TJSONObject(after).Arrays['calls'], run, id + ' after Reset', m);
+            CompareCalls(TJSONObject(after).Arrays['calls'], scr, id + ' after Reset', m);
           end;
         finally
           { the core first: its parser still points at the handlers' methods }
           h.Free;
-          run.Free;
+          scr.Free;
         end;
       end;
       WriteLn(Format('core-hooks: %d cases, %d calls, %d comparisons', [cases.Count, calls, m.Compared]));
