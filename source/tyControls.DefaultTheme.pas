@@ -1238,6 +1238,10 @@ begin
     '   so a dark skin gets a dark chip. */' + LineEnding +
     'TyAdvChartTreemapLabel { color: #FFFFFF; font-size: var(--font-size-base); }' + LineEnding +
     'TyAdvChartBreadcrumb { background: alpha(var(--on-surface), 0.08); color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A SANKEY''S LINKS. Upstream fills them a mid grey at 0.2 opacity; here the' + LineEnding +
+    '   grey is the ink''s own muted tone, so a dark skin''s links stay grey on' + LineEnding +
+    '   its ground. */' + LineEnding +
+    'TyAdvChartSankeyLink { background: var(--muted); }' + LineEnding +
     '/* The chart''s own title and subtitle. Upstream draws them at 18/bold and' + LineEnding +
     '   12/regular; the sizes come from the type scale here so a dense skin gets a' + LineEnding +
     '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +

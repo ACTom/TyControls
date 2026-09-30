@@ -800,7 +800,9 @@ begin
       bounds := TyRectF(host.Caption.HostBox.X, host.Caption.HostBox.Y,
         host.Caption.HostBox.X + host.Caption.HostBox.W,
         host.Caption.HostBox.Y + host.Caption.HostBox.H);
-    if not TyRectFIsValid(bounds) then Continue;
+    { a fixed anchor needs no host rect -- a sankey node whose column
+      overflowed has a rect of negative height and still its label }
+    if not TyRectFIsValid(bounds) and not host.Caption.HasFixedAnchor then Continue;
     { THE HOST'S STROKE GROWS ITS RECT, as Path.getBoundingRect grows it: by
       the line width, or by at least five where nothing is filled, half on
       each side. A label outside a bordered cell sits past the border.

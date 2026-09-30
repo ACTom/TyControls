@@ -48,6 +48,7 @@ uses
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
   tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
+  tyControls.AdvChart.Sankey,
   tyControls.AdvChart.Graph,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
@@ -194,6 +195,9 @@ type
       cells when the layout is, so the specs are read then. [Batch 76] }
     FTreemaps: array of TTyTreemapSolved;
     FTreemapInks: array of TTyTreemapInk;
+    { THE SANKEYS and their inks, per slot. [Batch 79] }
+    FSankeys: array of TTySankeySolved;
+    FSankeyInks: array of TTySankeyInk;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -567,6 +571,7 @@ type
     procedure SolveTrees(APPI: Integer);
     procedure SolveSunbursts(APPI: Integer);
     procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    procedure SolveSankeys(APPI: Integer);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
@@ -1109,6 +1114,8 @@ begin
   FSunbursts := nil;
   FTreemaps := nil;
   FTreemapInks := nil;
+  FSankeys := nil;
+  FSankeyInks := nil;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -1752,6 +1759,7 @@ begin
   SolveTrees(APPI);
   SolveSunbursts(APPI);
   SolveTreemaps(AMeasurer, APPI);
+  SolveSankeys(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -5216,6 +5224,73 @@ begin
   end;
 end;
 
+{ THE SANKEYS: each laid out in its box on the whole canvas, its nodes
+  coloured by value over the palette -- the series' `color`, else the
+  chart's, else the theme's -- read as zrender parses them, so an alpha
+  survives; then the labels placed. [Batch 79] }
+procedure TTyAdvanceChart.SolveSankeys(APPI: Integer);
+var
+  i, k: Integer;
+  stops: TTyVisualColorArray;
+  d, node: TJSONData;
+  base, lk: TTyLabelSpec;
+  ls: TTyStyleSet;
+
+  procedure StopsOf(AData: TJSONData);
+  var q: Integer;
+  begin
+    stops := nil;
+    if AData.JSONType = jtArray then
+    begin
+      SetLength(stops, AData.Count);
+      for q := 0 to AData.Count - 1 do stops[q] := TyVisualParsedStop(AData.Items[q]);
+    end
+    else
+    begin
+      SetLength(stops, 1);
+      stops[0] := TyVisualParsedStop(AData);
+    end;
+  end;
+
+begin
+  FSankeys := nil;
+  FSankeyInks := nil;
+  SetLength(FSankeys, Length(FBindings));
+  SetLength(FSankeyInks, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FSankeys[i] := Default(TTySankeySolved);
+    FSankeyInks[i] := Default(TTySankeyInk);
+    if FBindings[i].SeriesType <> TySankeySeriesTypeName then Continue;
+    if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
+    FSankeys[i] := TySankeySolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    if not FSankeys[i].Valid then Continue;
+    { the palette: series.get('color') falls through to the chart's }
+    d := nil;
+    node := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+    if (node <> nil) and (node.JSONType = jtObject) then d := TJSONObject(node).Find('color');
+    if ((d = nil) or (d.JSONType = jtNull)) and (FOption.Root is TJSONObject) then
+      d := TJSONObject(FOption.Root).Find('color');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+      StopsOf(d)
+    else
+    begin
+      SetLength(stops, 9);
+      for k := 0 to 8 do stops[k] := TyVisualFromChart(TTyChartColor(ThemeRampColor(k)));
+    end;
+    TySankeyColour(FSankeys[i], stops);
+    { the labels: outside by default, the chart's own label ink }
+    base := LabelBaseFor(i);
+    base.Show := True;
+    base.DefaultText := tldName;
+    FSankeyInks[i].Label_ := TyLabelSpecOf(FOption, FBindings[i].SeriesIndex, base);
+    FSankeyInks[i].ItemLabels := TySankeyLabelSpecs(FSankeys[i], FSankeyInks[i].Label_);
+    ls := ActiveController.Model.ResolveStyle('TyAdvChartSankeyLink', '', []);
+    FSankeyInks[i].LinkColour := TTyChartColor(ls.Background.Color);
+    TySankeyLabels(FSankeys[i], SeriesModelName(FBindings[i].SeriesIndex));
+  end;
+end;
+
 { A TREEMAP'S INK: its labels in their own key's ink -- white over the
   palette in every mode, never the auto bands -- read item -> level ->
   series; after the rows, the breadcrumb's words, and its chip. }
@@ -7210,6 +7285,21 @@ begin
         its symbols and its label requests here -- BEFORE the expansion,
         whose per-row table carries the item -> leaves -> series chain.
         [Batch 73] }
+      if FBindings[i].SeriesType = TySankeySeriesTypeName then
+      begin
+        if (i <= High(FSankeys)) and FSankeys[i].Valid then
+        begin
+          Inc(drawn, TyBuildSankeyMarks(FBindings[i].SeriesIndex, FSankeys[i],
+            FSankeyInks[i], list));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := FSankeyInks[i].Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := FSankeyInks[i].ItemLabels;
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyTreemapSeriesTypeName then
       begin
         if (i <= High(FTreemaps)) and FTreemaps[i].Valid then

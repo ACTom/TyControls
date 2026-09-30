@@ -506,7 +506,8 @@ begin
     if (cTypes[i] = 'pie') or (cTypes[i] = 'funnel')
       or (cTypes[i] = 'gauge') or (cTypes[i] = 'radar')
       or (cTypes[i] = 'graph') or (cTypes[i] = 'tree')
-      or (cTypes[i] = 'sunburst') or (cTypes[i] = 'treemap') then
+      or (cTypes[i] = 'sunburst') or (cTypes[i] = 'treemap')
+      or (cTypes[i] = 'sankey') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));
@@ -531,7 +532,8 @@ begin
   AssertTrue('and the radar', TySeriesTypeHasRenderer('radar'));
   AssertTrue('and the graph, as of this batch',
     TySeriesTypeHasRenderer('graph'));
-  AssertFalse('a sankey does not yet', TySeriesTypeHasRenderer('sankey'));
+  AssertTrue('and the sankey [Batch 79]', TySeriesTypeHasRenderer('sankey'));
+  AssertFalse('a chord does not yet', TySeriesTypeHasRenderer('chord'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot
     draw. }

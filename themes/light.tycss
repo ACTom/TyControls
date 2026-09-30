@@ -1205,6 +1205,10 @@ TyAdvChartTreeEdge { border-color: var(--border); border-width: 1px; }
    so a dark skin gets a dark chip. */
 TyAdvChartTreemapLabel { color: #FFFFFF; font-size: var(--font-size-base); }
 TyAdvChartBreadcrumb { background: alpha(var(--on-surface), 0.08); color: var(--muted); font-size: var(--font-size-base); }
+/* A SANKEY'S LINKS. Upstream fills them a mid grey at 0.2 opacity; here the
+   grey is the ink's own muted tone, so a dark skin's links stay grey on
+   its ground. */
+TyAdvChartSankeyLink { background: var(--muted); }
 /* The chart's own title and subtitle. Upstream draws them at 18/bold and
    12/regular; the sizes come from the type scale here so a dense skin gets a
    proportionate title instead of an 18px one on 11px axis labels. */

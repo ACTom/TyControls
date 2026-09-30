@@ -8,7 +8,7 @@ unit tyControls.Css.Catalog;
     - TyCatalogTokens   : the --custom-property names a theme defines (197 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (254 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (255 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -217,7 +217,7 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..253] of string = (
+  TyCatalogTypeKeys: array[0..254] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -256,6 +256,7 @@ const
     'TyAdvChartLegendInactive',
     'TyAdvChartMinorSplitLine',
     'TyAdvChartMinorTick',
+    'TyAdvChartSankeyLink',
     'TyAdvChartSeries1',
     'TyAdvChartSeries2',
     'TyAdvChartSeries3',
