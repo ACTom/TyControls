@@ -49,6 +49,9 @@ type
     procedure TestAZmodemDownloadInTheExample;               { X2 }
     procedure TestZmodemCanBeSwitchedOff;                    { X3 }
     procedure TestTheTransferBarIsThrottled;
+    { 7 期验收反馈:管道模式的命令 }
+    procedure TestPipeModeListsCommandsWithATerminalOfTheirOwn;
+    procedure TestTheGridSizeGoesIntoAPipeCommand;
   end;
 
 implementation
@@ -852,6 +855,101 @@ begin
     clk.Free;
     DeleteDirectory(dir, False);
   end;
+end;
+
+{ ---- 7 期验收反馈: the commands of the pipe mode ---------------------------------------- }
+
+{ A plain pipe has no line discipline: nobody turns the terminal's CR into LF, echoes, turns
+  LF into CR LF or tells the program the window's size -- cmd waits for an LF that never
+  comes, PowerShell lays out 120 columns, bash on a pipe is not interactive. So with "Pipe"
+  ticked the list offers commands that open a terminal on the far side: WSL through
+  script (a PTY in Linux, the size set by stty), and ssh -tt; cmd / PowerShell are not
+  listed. Unticked, the ConPTY list is back. Mutations: PipeChange not refilling the list;
+  FillCommands ignoring the tick. }
+procedure TTyTerminalExampleTests.TestPipeModeListsCommandsWithATerminalOfTheirOwn;
+{$IFDEF MSWINDOWS}
+var
+  f: TMainForm;
+  shell: string;
+  hasWsl: Boolean;
+begin
+  hasWsl := FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) <> '';
+  AssertEquals('the WSL entry of the pipe mode',
+    'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; exec $SHELL -il" /dev/null', PipeWslCommand);
+  AssertEquals('the ssh entry asks the far side for a terminal', 'ssh -tt user@host', PipeSshCommand);
+  f := TMainForm.Create(nil);
+  try
+    AssertFalse('Pipe off at start', f.ChkPipe.Checked);
+    shell := f.CmbCommand.Items[0];
+    AssertTrue('ConPTY: %COMSPEC% first: ' + shell, Pos('cmd', LowerCase(shell)) > 0);
+    AssertTrue('ConPTY: PowerShell listed', f.CmbCommand.Items.IndexOf('powershell.exe') >= 0);
+    AssertEquals('ConPTY: no pipe entry', -1, f.CmbCommand.Items.IndexOf(PipeSshCommand));
+    f.ChkPipe.Checked := True;
+    AssertEquals('Pipe: no cmd', -1, f.CmbCommand.Items.IndexOf(shell));
+    AssertEquals('Pipe: no PowerShell', -1, f.CmbCommand.Items.IndexOf('powershell.exe'));
+    AssertEquals('Pipe: no pwsh', -1, f.CmbCommand.Items.IndexOf('pwsh.exe'));
+    AssertEquals('Pipe: no bare wsl.exe', -1, f.CmbCommand.Items.IndexOf('wsl.exe'));
+    AssertTrue('Pipe: ssh -tt listed', f.CmbCommand.Items.IndexOf(PipeSshCommand) >= 0);
+    if hasWsl then
+    begin
+      AssertEquals('Pipe: WSL through script, first', PipeWslCommand, f.CmbCommand.Items[0]);
+      AssertEquals('Pipe: two entries', 2, f.CmbCommand.Items.Count);
+    end
+    else
+    begin
+      AssertEquals('Pipe, no wsl.exe: ssh only', 1, f.CmbCommand.Items.Count);
+      AssertEquals('no WSL entry without wsl.exe', -1, f.CmbCommand.Items.IndexOf(PipeWslCommand));
+    end;
+    AssertEquals('the first one is picked', f.CmbCommand.Items[0], f.CmbCommand.Text);
+    f.ChkPipe.Checked := False;
+    AssertEquals('unticked: %COMSPEC% first again', shell, f.CmbCommand.Items[0]);
+    AssertEquals('and picked', shell, f.CmbCommand.Text);
+    AssertTrue('unticked: PowerShell again', f.CmbCommand.Items.IndexOf('powershell.exe') >= 0);
+    AssertEquals('unticked: no pipe entry', -1, f.CmbCommand.Items.IndexOf(PipeSshCommand));
+    AssertEquals('unticked: no script entry', -1, f.CmbCommand.Items.IndexOf(PipeWslCommand));
+  finally
+    f.Free;
+  end;
+end;
+{$ELSE}
+begin
+  Ignore('the pipe mode is Windows only');
+end;
+{$ENDIF}
+
+{ %COLS% / %ROWS% in the command become the terminal's grid when the shell starts in pipe
+  mode -- the only time the size can reach the far side (stty in the WSL entry): a pipe
+  carries no resize. Mutation: StartShell handing the command over as typed. }
+procedure TTyTerminalExampleTests.TestTheGridSizeGoesIntoAPipeCommand;
+{$IFDEF MSWINDOWS}
+var
+  f: TMainForm;
+  fake: TFakePty;
+{$ENDIF}
+begin
+  AssertEquals('both, every time', 'a 97 b 31 c 97x31', ExpandGridSize('a %COLS% b %ROWS% c %COLS%x%ROWS%', 97, 31));
+  AssertEquals('none: as it is', 'ssh -tt user@host', ExpandGridSize('ssh -tt user@host', 97, 31));
+  AssertEquals('the WSL entry',
+    'wsl.exe -e script -qfc "stty cols 120 rows 40; exec $SHELL -il" /dev/null',
+    ExpandGridSize(PipeWslCommand, 120, 40));
+  {$IFDEF MSWINDOWS}
+  fake := TFakePty.Create;
+  TMainForm.ShellBackendForTest := fake;
+  f := TMainForm.Create(nil);
+  try
+    f.ChkPipe.Checked := True;
+    f.CmbCommand.Text := 'probe %COLS%x%ROWS%';
+    f.CmbMode.ItemIndex := 1;
+    if TMainForm.ShellBackendForTest <> nil then
+      f.ModeChange(f.CmbMode);
+    AssertTrue('a grid', (f.Term.Cols > 0) and (f.Term.Rows > 0));
+    AssertEquals('the shell got the grid', Format('probe %dx%d', [f.Term.Cols, f.Term.Rows]), fake.Command);
+  finally
+    { not taken (the shell never started): the test's to free }
+    FreeAndNil(TMainForm.ShellBackendForTest);
+    f.Free;
+  end;
+  {$ENDIF}
 end;
 
 initialization

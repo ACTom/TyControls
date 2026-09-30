@@ -300,7 +300,7 @@ object MainForm: TMainForm
         AutoSize = True
         BorderSpacing.Left = 18
         Caption = 'Pipe'
-        Hint = 'Run the command on two plain pipes instead of ConPTY (binary safe; no terminal, no echo). Takes effect at the next start'
+        Hint = 'Run the command on two plain pipes instead of ConPTY (binary safe, for ZModem); the list then offers commands that open a terminal on the far side. Takes effect at the next start'
         ShowHint = True
         OnChange = PipeChange
       end

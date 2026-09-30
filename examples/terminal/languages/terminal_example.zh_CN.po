@@ -200,8 +200,8 @@ msgid "Pipe"
 msgstr "管道"
 
 #: tmainform.chkpipe.hint
-msgid "Run the command on two plain pipes instead of ConPTY (binary safe; no terminal, no echo). Takes effect at the next start"
-msgstr "不经 ConPTY、用两条普通管道运行命令（二进制安全；没有终端，不回显）。下次启动生效"
+msgid "Run the command on two plain pipes instead of ConPTY (binary safe, for ZModem); the list then offers commands that open a terminal on the far side. Takes effect at the next start"
+msgstr "不经 ConPTY、用两条普通管道运行命令（二进制安全，给 ZModem 用）；命令列表随之换成在对端自己开终端的命令。下次启动生效"
 
 #: tmainform.btncanceltransfer.caption
 msgid "Cancel"

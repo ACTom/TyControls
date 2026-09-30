@@ -53,6 +53,7 @@ type
     StuckRead: TEvent;               { set: Read waits for it and ignores Interrupt }
     RaiseInRead: Boolean;            { Read raises }
     WriteFails: Boolean;             { Write answers False (the pipe is broken) }
+    Command: string;                 { what Start was given }
     constructor Create;
     destructor Destroy; override;
     function Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean; override;
@@ -156,6 +157,7 @@ end;
 
 function TFakePty.Start(const ACommand: string; ACols, ARows: Integer; out AError: string): Boolean;
 begin
+  Command := ACommand;
   AError := '';
   if not StartResult then AError := 'the fake did not start';
   Result := StartResult;

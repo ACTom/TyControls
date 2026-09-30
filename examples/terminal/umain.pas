@@ -54,9 +54,13 @@ unit umain;
   summary; the bar at the bottom shows the file and has "Cancel" (five Ctrl+X in the
   terminal do the same). Received files never overwrite one: "name (1).ext". On Windows
   ConPTY drops every byte from $80 up, so ZModem needs "Pipe": the command then runs on
-  two plain pipes (wsl.exe -d Ubuntu -- sz file, ssh -T host) -- no terminal, no echo
-  (tick "Local echo" to see what you type). Behind ConPTY the terminal says so and
-  stops sz / rz.
+  two plain pipes -- binary safe, but a pipe is no terminal: nothing turns the CR of
+  Enter into LF, echoes, turns LF into CR LF or passes the window's size. So with "Pipe"
+  the list offers commands that open a terminal on the far side: WSL through script (a
+  PTY in Linux; stty gives it the grid at the start, %COLS% / %ROWS%) and ssh -tt. cmd and
+  PowerShell are not listed: on a pipe they have no line editing, no echo and no width,
+  and write in the OEM code page. A size change after the start does not get through
+  (the pipe carries data only). Behind ConPTY the terminal says so and stops sz / rz.
 
   CURSOR. "Cursor", "Blink" and "Unfocused" set the terminal's own cursor (CursorStyle,
   CursorBlink, CursorInactiveStyle). A program can ask for another shape for a while --
@@ -80,6 +84,20 @@ uses
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.ColorScheme, tyControls.Terminal,
   uasciicast, uptysession, uptywin, uptyunix, ushell, uzmodemsession, uzmodemterm;
+
+const
+  { The commands "Pipe" lists (Windows). A plain pipe has no line discipline: nobody turns
+    the terminal's CR into LF, echoes, turns LF into CR LF or tells the program the window's
+    size -- cmd waits for an LF that never comes, PowerShell lays out 120 columns, bash on a
+    pipe is not interactive. So these open a terminal on the far side:
+    - WSL: script (util-linux) runs the login shell on a PTY of Linux; stty gives the PTY
+      the grid the terminal has at the start (%COLS% / %ROWS%, see ExpandGridSize). WSL sets
+      $SHELL from the user's passwd entry under wsl.exe -e too, and script runs the -c
+      command with it.
+    - ssh -tt: the remote side opens a PTY although our end is a pipe (-T would not).
+    A size change later does not get there: a pipe carries data only. }
+  PipeWslCommand = 'wsl.exe -e script -qfc "stty cols %COLS% rows %ROWS%; exec $SHELL -il" /dev/null';
+  PipeSshCommand = 'ssh -tt user@host';
 
 type
   { one entry of the colour list: which scheme file text (FColorTexts; -1 = follow the
@@ -251,7 +269,17 @@ type
 var
   MainForm: TMainForm;
 
+{ %COLS% and %ROWS% in a command line -> the grid's columns and rows (every one of them;
+  a command without them comes back as it is) }
+function ExpandGridSize(const ACommand: string; ACols, ARows: Integer): string;
+
 implementation
+
+function ExpandGridSize(const ACommand: string; ACols, ARows: Integer): string;
+begin
+  Result := StringReplace(ACommand, '%COLS%', IntToStr(ACols), [rfReplaceAll]);
+  Result := StringReplace(Result, '%ROWS%', IntToStr(ARows), [rfReplaceAll]);
+end;
 
 {$R *.lfm}
 
@@ -661,8 +689,6 @@ end;
 
 { ---- Shell mode ---------------------------------------------------------------------- }
 
-{ Windows: %COMSPEC% first (always there, starts fastest), then PowerShell, and pwsh /
-  wsl where the PATH has them. Elsewhere: the login shell. }
 { Handlers that end by giving the terminal the keyboard also run while the form is
   being built: FormCreate selects the first recording, which fires RecordingChange.
   A form that is not showing yet cannot take focus, and SetFocus raises there.
@@ -674,12 +700,26 @@ begin
     Term.SetFocus;
 end;
 
+{ Windows: %COMSPEC% first (always there, starts fastest), then PowerShell, and pwsh /
+  wsl where the PATH has them; with "Pipe" ticked the commands that open a terminal on the
+  far side instead (PipeWslCommand where the PATH has wsl.exe, PipeSshCommand). Elsewhere:
+  the login shell. }
 procedure TMainForm.FillCommands;
 var
   sh: string;
 begin
   CmbCommand.Items.Clear;
   {$IFDEF MSWINDOWS}
+  if ChkPipe.Checked then
+  begin
+    { no cmd / PowerShell here: on a pipe they have no line editing, no echo, no width }
+    if FileSearch('wsl.exe', GetEnvironmentVariable('PATH')) <> '' then
+      CmbCommand.Items.Add(PipeWslCommand);
+    CmbCommand.Items.Add(PipeSshCommand);
+    CmbCommand.ItemIndex := 0;
+    CmbCommand.Text := CmbCommand.Items[0];
+    Exit;
+  end;
   sh := GetEnvironmentVariable('COMSPEC');
   if sh = '' then sh := 'cmd.exe';
   CmbCommand.Items.Add(sh);
@@ -734,7 +774,7 @@ end;
 procedure TMainForm.StartShell;
 var
   backend: TPtyBackend;
-  err: string;
+  err, cmd: string;
 begin
   { a transfer's queued dialog belongs to the shell that goes now }
   Application.RemoveAsyncCalls(Self);
@@ -765,7 +805,13 @@ begin
   FShell.OnOutput := @ShellOutput;
   FShell.OnExit := @ShellExit;
   FLogged := 0;
-  if not FShell.Start(CmbCommand.Text, err) then
+  cmd := CmbCommand.Text;
+  {$IFDEF MSWINDOWS}
+  { the grid reaches the far side of a pipe once, now (stty in the WSL entry) }
+  if ChkPipe.Checked then
+    cmd := ExpandGridSize(cmd, Term.Cols, Term.Rows);
+  {$ENDIF}
+  if not FShell.Start(cmd, err) then
   begin
     FreeAndNil(FShell);
     Status.Panels[0].Text := Format(rsShellFailedFmt, [err]);
@@ -773,7 +819,7 @@ begin
     EnterReplay;
     Exit;
   end;
-  Status.Panels[0].Text := CmbCommand.Text;
+  Status.Panels[0].Text := cmd;
   BtnStart.Caption := rsRestart;
   FocusTerm;
 end;
@@ -920,8 +966,11 @@ begin
     FShell.Zmodem.Enabled := ChkZmodem.Checked;
 end;
 
+{ the list follows the tick (what is in it works only one way); a running shell keeps
+  its backend until the next start }
 procedure TMainForm.PipeChange(Sender: TObject);
 begin
+  FillCommands;
   if FShell <> nil then
     Status.Panels[0].Text := rsPipeNextStart;
 end;
