@@ -133,40 +133,35 @@ begin
 end;
 
 type
-  TClaimRoot = class(TComponent)
+  { the event must name a published method of the root: the view is the root here }
+  TClaimView = class(TTyTerminalView)
   published
     procedure Claimed(Sender: TObject; const AData: RawByteString);
   end;
 
-procedure TClaimRoot.Claimed(Sender: TObject; const AData: RawByteString);
+procedure TClaimView.Claimed(Sender: TObject; const AData: RawByteString);
 begin
 end;
 
 { V5. The published event goes through the stream like any other. }
 procedure TTyTerminalViewStreamTests.TestOnClaimedInputIsStreamed;
 var
-  src, dst: TClaimRoot;
-  v: TTyTerminalView;
+  src, dst: TClaimView;
   ms: TMemoryStream;
   m: TMethod;
 begin
-  RegisterClass(TTyTerminalView);
-  src := TClaimRoot.Create(nil);
-  dst := TClaimRoot.Create(nil);
+  { no parent: no scroll bar child, only the view }
+  src := TClaimView.Create(nil);
+  dst := TClaimView.Create(nil);
   ms := TMemoryStream.Create;
   try
-    { no parent: no scroll bar child, only the view under the root }
-    v := TTyTerminalView.Create(src);
-    v.Name := 'Term';
-    v.OnClaimedInput := @src.Claimed;
+    src.OnClaimedInput := @src.Claimed;
     ms.WriteComponent(src);
     ms.Position := 0;
     ms.ReadComponent(dst);
-    AssertEquals('one view read', 1, dst.ComponentCount);
-    v := dst.Components[0] as TTyTerminalView;
-    m := TMethod(v.OnClaimedInput);
+    m := TMethod(dst.OnClaimedInput);
     AssertTrue('the event came back', m.Code = dst.MethodAddress('Claimed'));
-    AssertTrue('bound to the new root', m.Data = Pointer(dst));
+    AssertTrue('bound to the view read', m.Data = Pointer(dst));
   finally
     ms.Free;
     dst.Free;

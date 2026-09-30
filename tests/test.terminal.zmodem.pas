@@ -768,6 +768,8 @@ begin
         try
           r.OnSend := @log.OnSend;
           r.OnDone := @log.OnDone;
+          { rz -e asked for every control character escaped: so do we, as rz did }
+          r.EscapeControl := Pos('"-e"', c.Arrays['rzOptions'].AsJSON) > 0;
           r.Start(0);
           if step = 0 then
             r.Input(@sz[1], Length(sz), 0)
@@ -1813,6 +1815,7 @@ begin
     AssertEquals('a half file', 1, FilesIn(r.Dir));
     r.Core.Input(#24#24'a'#24#24#24, True);
     AssertTrue('broken run: still receiving', r.Zm.State = zsReceiving);
+    r.Core.Input('x', True);             { the three CANs above end here }
     r.Core.Input(#24#24#24#24, True);
     AssertTrue('four: still receiving', r.Zm.State = zsReceiving);
     r.Sent := '';
