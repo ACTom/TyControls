@@ -229,6 +229,8 @@ const
 begin
   WriteBytes(FDir + 'crlf.tycss', cBytes);
   AssertTrue('opened', FForm.OpenFile(FDir + 'crlf.tycss'));
+  FForm.Editor.Modified := True;   { as after an edit that was undone by hand }
+  AssertTrue('modified before saving', FForm.Editor.Modified);
   AssertTrue('F5: saved', FForm.SaveDocument);
   AssertTrue('F5: the same bytes', ReadBytes(FDir + 'crlf.tycss') = cBytes);
   AssertTrue('F5: not modified: ' + FForm.Bar.Caption, Pos('*', FForm.Bar.Caption) = 0);

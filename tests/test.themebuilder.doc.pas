@@ -373,6 +373,8 @@ begin
     st.AddRecent(st.Recent[2]);
     AssertEquals('S3: a repeat moves to the front', FDir + 'f10.tycss', st.Recent[0]);
     AssertEquals('S3: without growing', TbMaxRecent, st.Recent.Count);
+    AssertEquals('S3: and leaves its old place', FDir + 'f9.tycss', st.Recent[3]);
+    AssertEquals('S3: the oldest still there', FDir + 'f3.tycss', st.Recent[9]);
     {$IFDEF MSWINDOWS}
     st.AddRecent(UpperCase(FDir + 'f9.tycss'));
     AssertEquals('S3: case does not make it another file', TbMaxRecent, st.Recent.Count);
