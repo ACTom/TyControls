@@ -44,6 +44,11 @@ uses
   Windows, SyncObjs, Math, md5, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   uptysession, uptywin, uzmodem, uzmodemsession, uzmodemterm;
 
+const
+  { I6 / I10: about 1 s when the ZRPOS puts the damage right; a recovery only by the
+    10 s timeout of either side takes longer than this }
+  DamagedWithinMs = 7000;
+
 var
   GChecked: Boolean = False;
   GReason: string = '';
@@ -434,8 +439,10 @@ end;
 
 { one download: AFiles (name, bytes) written in a Windows folder, sz in WSL sends them,
   the glue saves them into another folder }
+{ AWithinMs > 0: the whole transfer takes less (a damaged byte put right by the ZRPOS
+  at once, not by the 10 s timeout, which also gets there) }
 procedure Download(ACase: TTestCase; const ATag, ASzOptions: string; const ANames: array of string;
-  const AData: array of RawByteString; AFlipIn: Int64 = 0);
+  const AData: array of RawByteString; AFlipIn: Int64 = 0; AWithinMs: Integer = 0);
 var
   src, dst, names: string;
   r: TWslRun;
@@ -456,9 +463,12 @@ begin
     r.FlipIn := AFlipIn;
     t0 := GetTickCount64;
     ok := r.Run('wsl.exe -d Ubuntu --cd "' + WslPath(src) + '"' + ' -- sz ' + ASzOptions + names);
+    t0 := GetTickCount64 - t0;
     ACase.AssertTrue(ATag + ': ended within 60 s: ' + r.Describe, ok);
     if Length(AData) > 0 then
-      WriteLn(Format('%s: %d bytes in %d ms', [ATag, Length(AData[High(AData)]), GetTickCount64 - t0]));
+      WriteLn(Format('%s: %d bytes in %d ms', [ATag, Length(AData[High(AData)]), t0]));
+    if AWithinMs > 0 then
+      ACase.AssertTrue(Format('%s: %d ms, not within %d', [ATag, t0, AWithinMs]), t0 < QWord(AWithinMs));
     ACase.AssertTrue(ATag + ': finished', r.Finished);
     ACase.AssertTrue(ATag + ': ok: ' + r.Describe, r.Result_ = zrOk);
     ACase.AssertEquals(ATag + ': sz exit code', 0, r.ExitCode);
@@ -514,7 +524,7 @@ end;
 procedure TTyTerminalZmodemWslTests.TestDownloadWithADamagedByte;
 begin
   NeedWsl;
-  Download(Self, 'i6', '', ['dmg.bin'], [Seeded(100000, 9)], 20000);
+  Download(Self, 'i6', '', ['dmg.bin'], [Seeded(100000, 9)], 20000, DamagedWithinMs);
 end;
 
 { I7. Mutation: the bytes after the session dropped. }
@@ -573,7 +583,7 @@ end;
 
 { one upload: the files in a Windows folder, rz in WSL takes them into another }
 procedure Upload(ACase: TTestCase; const ATag, ARzOptions: string; const ANames: array of string;
-  const AData: array of RawByteString; AFlipOut: Int64 = 0);
+  const AData: array of RawByteString; AFlipOut: Int64 = 0; AWithinMs: Integer = 0);
 var
   src, dst: string;
   r: TWslRun;
@@ -593,8 +603,11 @@ begin
     r.FlipOut := AFlipOut;
     t0 := GetTickCount64;
     ok := r.Run('wsl.exe -d Ubuntu --cd "' + WslPath(dst) + '"' + ' -- rz ' + ARzOptions);
+    t0 := GetTickCount64 - t0;
     ACase.AssertTrue(ATag + ': ended within 60 s: ' + r.Describe, ok);
-    WriteLn(Format('%s: %d bytes in %d ms', [ATag, Length(AData[High(AData)]), GetTickCount64 - t0]));
+    WriteLn(Format('%s: %d bytes in %d ms', [ATag, Length(AData[High(AData)]), t0]));
+    if AWithinMs > 0 then
+      ACase.AssertTrue(Format('%s: %d ms, not within %d', [ATag, t0, AWithinMs]), t0 < QWord(AWithinMs));
     ACase.AssertTrue(ATag + ': ok: ' + r.Describe, r.Result_ = zrOk);
     ACase.AssertEquals(ATag + ': rz exit code', 0, r.ExitCode);
     for i := 0 to High(ANames) do
@@ -626,7 +639,7 @@ end;
 procedure TTyTerminalZmodemWslTests.TestUploadWithADamagedByte;
 begin
   NeedWsl;
-  Upload(Self, 'i10', '', ['dmg.bin'], [Seeded(100000, 16)], 30000);
+  Upload(Self, 'i10', '', ['dmg.bin'], [Seeded(100000, 16)], 30000, DamagedWithinMs);
 end;
 
 procedure TTyTerminalZmodemWslTests.TestCancellingAnUpload;

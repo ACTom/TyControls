@@ -116,7 +116,9 @@ begin
   AssertEquals('hello', F.View.SelectionText);
 end;
 
-{ V4. Mutation: as V3 (the wheel would be reported). }
+{ V4. Two guards stand here: the view's Reporting and the core's TriggerMouseEvent (a
+  report the core refuses falls back to scrolling). Each alone is pinned elsewhere (V3,
+  and the stream suite's TestNoMouseReportWhileClaimed); this goes red when both go. }
 procedure TTyTerminalViewStreamTests.TestTheWheelScrollsWhileClaimed;
 var
   i, ydisp: Integer;

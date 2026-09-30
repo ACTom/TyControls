@@ -830,6 +830,7 @@ type
     Last: Integer;
     Names: TStringList;
     Contents: array of RawByteString;
+    Eofs: array of Int64;                  { the position each ZEOF names }
     Cur: RawByteString;
     Pos_: Integer;
     constructor Create(const S: RawByteString);
@@ -867,7 +868,11 @@ begin
       end;
     ZEOF:
       if Length(Contents) > 0 then
+      begin
         Contents[High(Contents)] := Cur;
+        SetLength(Eofs, Length(Contents));
+        Eofs[High(Eofs)] := ZmHeaderPos(AHeader);
+      end;
   end;
 end;
 
@@ -949,6 +954,9 @@ begin
             AssertEquals(id + ': name, size, time', files.Objects[j].Strings['name'] + '|'
               + IntToStr(files.Objects[j].Integers['size']) + '|1700000000', got.Names[j]);
             AssertTrue(id + ': content ' + IntToStr(j), got.Contents[j] = src.Contents[j]);
+            AssertTrue(id + ': a ZEOF for ' + IntToStr(j), j < Length(got.Eofs));
+            AssertEquals(id + ': ZEOF at the size ' + IntToStr(j),
+              files.Objects[j].Integers['size'], got.Eofs[j]);
           end;
         finally
           got.Free;
