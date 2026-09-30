@@ -27,7 +27,7 @@ uses
   tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
-  tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo,
+  tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo, tyControls.Terminal,
   tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
   tyControls.ListGroupPanel, tyControls.RibbonAppMenu,
   { non-focusable side }
@@ -225,6 +225,8 @@ begin
     TTyShellListView, TTyShellTreeView,
     { value pickers and data controls, each of which handles its own keys }
     TTyCalendar, TTyDateTimePicker, TTyMemo, TTyTrackBar, TTyDial, TTyGearDial,
+    { 终端自己吞 Tab,焦点只经鼠标或宿主放行的键离开(spec §9.4) }
+    TTyTerminalView,
     TTyRating, TTyPagination, TTyTreeSelect, TTyCascader, TTyRadioButton,
 
     { ----- entries that need their reason stated, because the name suggests otherwise ----

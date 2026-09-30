@@ -47,7 +47,7 @@
       <Filename Value="tytests"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="../source;."/>
+      <OtherUnitFiles Value="../source;.;../examples/terminal"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
   </CompilerOptions>

@@ -260,6 +260,37 @@ resourcestring
   rsTextMenuPaste     = 'Paste';
   rsTextMenuSelectAll = 'Select All';
 
+  { --- TTyTerminalView context menu ------------------------------------------
+    The terminal's own four-item menu reuses Copy / Paste / Select All above; this is
+    its fourth item, which clears the scrollback. }
+  rsTerminalMenuClear = 'Clear';
+
+  { --- TTyTerminalColorScheme ---------------------------------------------------
+    Reading and writing a Windows Terminal colour scheme (tyControls.Terminal.ColorScheme).
+    %s in the name lists = up to 20 names joined with ', '. }
+  rsTermSchemeUtf16 = 'UTF-16 text is not supported; save the file as UTF-8';
+  { %s = fpjson's message, which carries the line and column }
+  rsTermSchemeBadJson = 'Not valid JSON: %s';
+  rsTermSchemeNotObject = 'Expected a colour scheme object or a settings file with "schemes"';
+  rsTermSchemeSchemesNotArray = '"schemes" is not an array';
+  { %s = the name asked for, %s = the complete schemes in the text }
+  rsTermSchemeNotFound = 'No colour scheme named "%s". Schemes in the text: %s';
+  { %s = the name asked for; the text has no complete scheme to list }
+  rsTermSchemeNotFoundNone = 'No colour scheme named "%s", and the text has no complete colour scheme';
+  { %s = the name asked for; the text is a single scheme object without a name }
+  rsTermSchemeNotFoundUnnamed = 'No colour scheme named "%s"; the scheme in the text has no name';
+  { inside rsTermSchemeBadJson; %d = the most levels of brackets and braces allowed }
+  rsTermSchemeTooDeep = 'nested more than %d levels deep';
+  { %d = the largest file read, in MB }
+  rsTermSchemeTooBig = 'The file is larger than %d MB; a colour scheme file is far smaller';
+  rsTermSchemeNeedName = 'The text has several colour schemes; choose one: %s';
+  rsTermSchemeNoneValid = 'The text has no complete colour scheme (a name and all 16 colours)';
+  { %s = the missing keys, as Windows Terminal names them }
+  rsTermSchemeMissingKeys = 'Missing colours: %s';
+  { %s = the key, %s = the value as written }
+  rsTermSchemeBadColor = '"%s" is not a colour (#rgb or #rrggbb): %s';
+  rsTermSchemeNoName = 'The colour scheme has no name';
+
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.
     Two steppers writing one field is not a configuration, it is a fight, and the

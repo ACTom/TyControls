@@ -30,7 +30,7 @@ uses
   tyControls.Icons.Lucide,
   tyControls.Image, tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker,
   tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
-  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
+  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Terminal,
   tyControls.Menu, tyControls.Meter, tyControls.NativeStyler, tyControls.Notification,
   tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
   tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
@@ -431,7 +431,7 @@ initialization
     TTySpeedButton, TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup, TTyLabel,
     TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel, TTyTag, TTyBadge, TTyEdit,
     TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
-    TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator, TTyMemo, TTySpinEdit, TTyFloatSpinEdit,
+    TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator, TTyMemo, TTyTerminalView, TTySpinEdit, TTyFloatSpinEdit,
     TTyUpDown,
     TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup, TTySegmented,
     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox]);

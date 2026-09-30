@@ -583,6 +583,76 @@ msgstr "搜索"
 msgid "(Select all)"
 msgstr "(全选)"
 
+#: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
+msgid "Clear"
+msgstr "清屏"
+
+#: tycontrols.strconsts.rstermschemebadcolor
+#, object-pascal-format
+msgid "\"%s\" is not a colour (#rgb or #rrggbb): %s"
+msgstr "「%s」不是颜色（#rgb 或 #rrggbb）：%s"
+
+#: tycontrols.strconsts.rstermschemebadjson
+#, object-pascal-format
+msgid "Not valid JSON: %s"
+msgstr "不是合法的 JSON：%s"
+
+#: tycontrols.strconsts.rstermschememissingkeys
+#, object-pascal-format
+msgid "Missing colours: %s"
+msgstr "缺少颜色：%s"
+
+#: tycontrols.strconsts.rstermschemeneedname
+#, object-pascal-format
+msgid "The text has several colour schemes; choose one: %s"
+msgstr "文本里有多套配色方案，请指定一个：%s"
+
+#: tycontrols.strconsts.rstermschemenoname
+msgid "The colour scheme has no name"
+msgstr "配色方案没有名字"
+
+#: tycontrols.strconsts.rstermschemenonevalid
+msgid "The text has no complete colour scheme (a name and all 16 colours)"
+msgstr "文本里没有完整的配色方案（要有名字和全部 16 色）"
+
+#: tycontrols.strconsts.rstermschemenotfound
+#, object-pascal-format
+msgid "No colour scheme named \"%s\". Schemes in the text: %s"
+msgstr "没有名为「%s」的配色方案。文本里有：%s"
+
+#: tycontrols.strconsts.rstermschemenotfoundnone
+#, object-pascal-format
+msgid "No colour scheme named \"%s\", and the text has no complete colour scheme"
+msgstr "没有名为「%s」的配色方案，文本里也没有完整的配色方案"
+
+#: tycontrols.strconsts.rstermschemenotfoundunnamed
+#, object-pascal-format
+msgid "No colour scheme named \"%s\"; the scheme in the text has no name"
+msgstr "没有名为「%s」的配色方案；文本里的那一套没有名字"
+
+#: tycontrols.strconsts.rstermschemenotobject
+msgid "Expected a colour scheme object or a settings file with \"schemes\""
+msgstr "需要一个配色方案对象，或带 \"schemes\" 的设置文件"
+
+#: tycontrols.strconsts.rstermschemeschemesnotarray
+msgid "\"schemes\" is not an array"
+msgstr "\"schemes\" 不是数组"
+
+#: tycontrols.strconsts.rstermschemetoobig
+#, object-pascal-format
+msgid "The file is larger than %d MB; a colour scheme file is far smaller"
+msgstr "文件超过 %d MB；配色方案文件远没有这么大"
+
+#: tycontrols.strconsts.rstermschemetoodeep
+#, object-pascal-format
+msgid "nested more than %d levels deep"
+msgstr "嵌套超过 %d 层"
+
+#: tycontrols.strconsts.rstermschemeutf16
+msgid "UTF-16 text is not supported; save the file as UTF-8"
+msgstr "不支持 UTF-16 文本，请把文件存成 UTF-8"
+
 #: tycontrols.strconsts.rstextmenucopy
 msgid "Copy"
 msgstr "复制"
@@ -863,6 +933,7 @@ msgid "Move Down"
 msgstr "下移"
 
 #: tycontrols.strconsts.rsdlgimgcolclear
+msgctxt "tycontrols.strconsts.rsdlgimgcolclear"
 msgid "Clear"
 msgstr "清空"
 

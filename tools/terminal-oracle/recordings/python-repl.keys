@@ -1,0 +1,15 @@
+clear
+python3 -q
+#sleep 1
+1 + 2 * 3
+[x * x for x in range(12)]
+{'a': 1, 'b': [1, 2, 3], 'c': 'text'}
+'中文 ' * 5
+1 / 0
+def f(n):
+#raw     return n * 2
+#key Enter
+#key Enter
+f(21)
+exit()
+#sleep 0.8

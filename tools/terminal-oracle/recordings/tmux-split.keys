@@ -1,0 +1,18 @@
+clear
+unset TMUX; tmux -L inner -f ~/inner.conf new-session -s inner
+#sleep 1
+seq 1 50
+#key C-b %
+#sleep 0.8
+printf '\033[31mred \033[32mgreen \033[1;34mbold blue\033[0m plain\n'; seq 1 30
+#sleep 0.5
+#key C-b o
+#sleep 0.3
+printf '\033[7minverse\033[0m \033[4munderline\033[0m\n'
+#sleep 0.5
+#key C-b "
+#sleep 0.8
+echo lower pane
+#sleep 0.5
+tmux -L inner kill-server
+#sleep 1

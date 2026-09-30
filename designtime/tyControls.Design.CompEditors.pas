@@ -20,6 +20,9 @@ uses
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.ListGroupPanel, tyControls.PageControl, tyControls.TabSheet,
   tyControls.TreeView, tyControls.Cascader, tyControls.TreeSelect,
+  { The terminal's colour schemes: reading, choosing and the errors are in the runtime unit
+    (tested there); the editor below is only the IDE half. }
+  tyControls.Terminal, tyControls.Terminal.ColorScheme,
   { Tool window bars / tool windows. Whether a verb applies, and the model half of each verb,
     live in the runtime unit DesignRules (testable headless); this unit only does the IDE half. }
   tyControls.ToolWindows, tyControls.ToolWindows.DesignRules,
@@ -208,6 +211,25 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
+  { A terminal's context menu (terminal phase 6): "Import Windows Terminal colour scheme..." and
+    "Export colour scheme...". Which schemes a file offers, reading one and writing one are
+    runtime calls (TyTermSchemeImportPlan, TryLoadFromText, SaveToFile); here are only the file
+    dialogs and the questions. TDefaultComponentEditor: a double-click still makes the default
+    event handler. }
+  TTyTerminalViewComponentEditor = class(TDefaultComponentEditor)
+  private
+    function Term: TTyTerminalView;
+    { paired: which of the two schemes (light = ColorScheme, dark = DarkColorScheme);
+      False when the user cancels }
+    function PickSide(const ATitle, APrompt: string; out ADark: Boolean): Boolean;
+    procedure ImportScheme;
+    procedure ExportScheme;
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
 { All RegisterComponentEditor calls of the package; called once from tyControls.Design.Register. }
 procedure RegisterComponentEditors;
 
@@ -240,6 +262,16 @@ resourcestring
   rsDtTwAddActions    = 'Add Actions Area';
   rsDtTwMoveOtherSide = 'Move to Other Side Bar';
   rsDtTwMoveBack      = 'Move Back into Bar';
+  { The terminal's colour schemes (terminal phase 6) }
+  rsDtTermImport      = 'Import Windows Terminal colour scheme...';
+  rsDtTermExport      = 'Export colour scheme...';
+  rsDtTermFilter      = 'Windows Terminal colour schemes (*.json)|*.json|All files (*.*)|*.*';
+  rsDtTermWhichScheme = 'Which colour scheme?';
+  rsDtTermImportSide  = 'Write it into which scheme?';
+  rsDtTermExportSide  = 'Export which scheme?';
+  rsDtTermLight       = 'Light';
+  rsDtTermDark        = 'Dark';
+  rsDtTermUseScheme   = 'Use the custom colour scheme instead of the theme?';
 
 { TTyIconBrowserComponentEditor }
 
@@ -941,6 +973,171 @@ begin
   else if Component is TTyIconBrowserDialog then TTyIconBrowserDialog(Component).Execute;
 end;
 
+{ TTyTerminalViewComponentEditor }
+
+function TTyTerminalViewComponentEditor.Term: TTyTerminalView;
+begin
+  Result := Component as TTyTerminalView;
+end;
+
+function TTyTerminalViewComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 2;
+end;
+
+function TTyTerminalViewComponentEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := rsDtTermImport;
+    1: Result := rsDtTermExport;
+  else
+    Result := inherited GetVerb(Index);
+  end;
+end;
+
+procedure TTyTerminalViewComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  case Index of
+    0: ImportScheme;
+    1: ExportScheme;
+  else
+    inherited ExecuteVerb(Index);
+  end;
+end;
+
+{ a verb as a dialog title: without its trailing ellipsis, written as three dots in English
+  and as one character (U+2026) in a translation }
+function VerbTitle(const AVerb: string): string;
+begin
+  Result := StringReplace(AVerb, '...', '', [rfReplaceAll]);
+  Result := Trim(StringReplace(Result, #$E2#$80#$A6, '', [rfReplaceAll]));
+end;
+
+function TTyTerminalViewComponentEditor.PickSide(const ATitle, APrompt: string; out ADark: Boolean): Boolean;
+var
+  pick: Integer;
+begin
+  ADark := False;
+  pick := InputCombo(VerbTitle(ATitle), APrompt, [rsDtTermLight, rsDtTermDark]);
+  Result := pick >= 0;
+  ADark := pick = 1;
+end;
+
+procedure TTyTerminalViewComponentEditor.ImportScheme;
+var
+  dlg: TOpenDialog;
+  fs: TFileStream;
+  txt, err, nm: string;
+  names: TStringArray;
+  list: TStringList;
+  i, pick: Integer;
+  dark: Boolean;
+  target: TTyTerminalColorScheme;
+begin
+  dlg := TOpenDialog.Create(nil);
+  try
+    dlg.Filter := rsDtTermFilter;
+    dlg.Options := dlg.Options + [ofFileMustExist];
+    if not dlg.Execute then Exit;
+    txt := '';
+    try
+      fs := TFileStream.Create(dlg.FileName, fmOpenRead or fmShareDenyWrite);
+      try
+        SetLength(txt, fs.Size);
+        if Length(txt) > 0 then fs.ReadBuffer(txt[1], Length(txt));
+      finally
+        fs.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        TyMessageDlg(E.Message, mtError, [mbOK]);
+        Exit;
+      end;
+    end;
+  finally
+    dlg.Free;
+  end;
+  if not TyTermSchemeImportPlan(txt, names, err) then
+  begin
+    TyMessageDlg(err, mtError, [mbOK]);
+    Exit;
+  end;
+  if Length(names) = 1 then
+    nm := names[0]
+  else
+  begin
+    list := TStringList.Create;
+    try
+      for i := 0 to High(names) do
+        list.Add(names[i]);
+      pick := InputCombo(VerbTitle(rsDtTermImport), rsDtTermWhichScheme, list);
+    finally
+      list.Free;
+    end;
+    if pick < 0 then Exit;
+    nm := names[pick];
+  end;
+  dark := False;
+  if Term.ColorSchemePaired and not PickSide(rsDtTermImport, rsDtTermImportSide, dark) then Exit;
+  if dark then
+    target := Term.DarkColorScheme
+  else
+    target := Term.ColorScheme;
+  if not target.TryLoadFromText(txt, nm, err) then
+  begin
+    TyMessageDlg(err, mtError, [mbOK]);
+    Exit;
+  end;
+  if (Term.ColorSource = tsrcTheme)
+    and (TyMessageDlg(rsDtTermUseScheme, mtConfirmation, [mbYes, mbNo]) = mrYes) then
+    Term.ColorSource := tsrcScheme;
+  Modified;
+end;
+
+procedure TTyTerminalViewComponentEditor.ExportScheme;
+var
+  dlg: TSaveDialog;
+  dark: Boolean;
+  src: TTyTerminalColorScheme;
+begin
+  dark := False;
+  if Term.ColorSchemePaired and not PickSide(rsDtTermExport, rsDtTermExportSide, dark) then Exit;
+  if dark then
+    src := Term.DarkColorScheme
+  else
+    src := Term.ColorScheme;
+  { a scheme with no name or a missing colour cannot be written: say so before asking where
+    to save it (SaveToFile would refuse it too, but only after the user picked a file) }
+  try
+    src.SaveToText;
+  except
+    on E: Exception do
+    begin
+      TyMessageDlg(E.Message, mtError, [mbOK]);
+      Exit;
+    end;
+  end;
+  dlg := TSaveDialog.Create(nil);
+  try
+    dlg.Filter := rsDtTermFilter;
+    dlg.DefaultExt := 'json';
+    dlg.Options := dlg.Options + [ofOverwritePrompt];
+    if src.Name <> '' then
+      dlg.FileName := src.Name + '.json';
+    if not dlg.Execute then Exit;
+    try
+      { a scheme with no name or a missing colour is refused before the file is created }
+      src.SaveToFile(dlg.FileName);
+    except
+      on E: Exception do
+        TyMessageDlg(E.Message, mtError, [mbOK]);
+    end;
+  finally
+    dlg.Free;
+  end;
+end;
+
 { ---- registration ---- }
 
 procedure RegisterComponentEditors;
@@ -971,6 +1168,8 @@ begin
   // Double-click a tree-select to edit its dropdown tree -- the same node editor,
   // aimed at the embedded tree the published Items forward to.
   RegisterComponentEditor(TTyTreeSelect, TTyTreeSelectComponentEditor);
+  // Right-click a terminal: import / export a Windows Terminal colour scheme.
+  RegisterComponentEditor(TTyTerminalView, TTyTerminalViewComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(

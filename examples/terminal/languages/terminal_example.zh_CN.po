@@ -1,0 +1,452 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-terminal_example 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyTerminalView example"
+msgstr "TTyTerminalView 示例"
+
+#: tmainform.bar.caption
+msgid "Terminal replay  · TyControls"
+msgstr "终端回放  · TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblrecording.caption
+msgid "Recording:"
+msgstr "录制："
+
+#: tmainform.btnopen.caption
+msgid "Open..."
+msgstr "打开…"
+
+#: tmainform.btnopen.hint
+msgid "Open another asciicast v2 recording"
+msgstr "打开别的 asciicast v2 录制"
+
+#: tmainform.btnplay.caption
+msgid "Play"
+msgstr "播放"
+
+#: tmainform.btnstep.caption
+msgid "Step"
+msgstr "单步"
+
+#: tmainform.btnstep.hint
+msgid "Write the next output event"
+msgstr "写入下一段输出"
+
+#: tmainform.lblspeed.caption
+msgid "Speed:"
+msgstr "速度："
+
+#: tmainform.btnfit.caption
+msgid "Fit to recording"
+msgstr "按录制尺寸"
+
+#: tmainform.btnfit.hint
+msgid "Size the window so the grid is the recording's"
+msgstr "调整窗口，让网格和录制时一样大"
+
+#: tmainform.chkreadonly.caption
+msgid "Read-only"
+msgstr "只读"
+
+#: tmainform.chkecho.caption
+msgid "Local echo"
+msgstr "本地回显"
+
+#: tmainform.lblunicode.caption
+msgid "Unicode:"
+msgstr "Unicode："
+
+#: tmainform.chkambiguous.caption
+msgid "Ambiguous wide"
+msgstr "歧义字符算宽"
+
+#: tmainform.lblfontsize.caption
+msgid "Font size:"
+msgstr "字号："
+
+#: tmainform.btnpaste.caption
+msgid "Paste"
+msgstr "粘贴"
+
+#: tmainform.btnpaste.hint
+msgid "Paste the clipboard into the terminal (what Ctrl+Shift+V does)"
+msgstr "把剪贴板粘贴进终端（同 Ctrl+Shift+V）"
+
+#: tmainform.dlgopen.title
+msgid "Open a recording"
+msgstr "打开录制"
+
+#: tmainform.cmbmode.hint
+msgid "Replay a recording, or run a real shell in the terminal"
+msgstr "回放录制，或者在终端里运行真正的 shell"
+
+#: tmainform.lblcommand.caption
+msgid "Command:"
+msgstr "命令："
+
+#: tmainform.cmbcommand.hint
+msgid "The program to run; pick one or type a command line"
+msgstr "要运行的程序：选一个，或者输入命令行"
+
+#: tmainform.btnstart.caption
+msgid "Start"
+msgstr "启动"
+
+#: tmainform.btnstart.hint
+msgid "Start the command, or start it again"
+msgstr "启动命令，或者重新启动"
+
+#: tmainform.chklogpty.caption
+msgid "Log PTY output"
+msgstr "记录 PTY 输出"
+
+#: tmainform.chklogpty.hint
+msgid "Show the first 4 KB the PTY sends in the panel on the right, in hex"
+msgstr "把 PTY 发来的前 4 KB 以十六进制显示在右侧面板"
+
+#: tmainform.chkcopyonselect.caption
+msgid "Copy on select"
+msgstr "选中即复制"
+
+#: tmainform.chkdetecturls.caption
+msgid "Detect web addresses"
+msgstr "识别网址"
+
+#: tmainform.chkdetecturls.hint
+msgid "Ctrl+click (Cmd+click on macOS) a web address to open it"
+msgstr "按住 Ctrl（macOS 上是 Cmd）单击网址即可打开"
+
+#: tmainform.lblosc52.caption
+msgid "OSC 52:"
+msgstr "OSC 52："
+
+#: tmainform.cmbosc52.hint
+msgid "What a program may do with the clipboard"
+msgstr "程序可以对剪贴板做什么"
+
+#: tmainform.lblcontrast.caption
+msgid "Minimum contrast:"
+msgstr "最低对比度："
+
+#: tmainform.cmbcontrast.hint
+msgid "Push text colours off their background until they reach this contrast ratio (1 = off)"
+msgstr "把字色推离底色，直到达到这个对比度（1 = 不调）"
+
+#: tmainform.lblcolors.caption
+msgid "Colours:"
+msgstr "配色："
+
+#: tmainform.cmbcolors.hint
+msgid "Follow the theme, or give the terminal a colour scheme of its own"
+msgstr "跟随主题，或者给终端一套自己的配色方案"
+
+#: tmainform.btnimportcolors.caption
+msgid "Import..."
+msgstr "导入…"
+
+#: tmainform.btnimportcolors.hint
+msgid "Load a Windows Terminal colour scheme or settings.json"
+msgstr "读入 Windows Terminal 的配色方案或 settings.json"
+
+#: tmainform.lblcursor.caption
+msgid "Cursor:"
+msgstr "光标："
+
+#: tmainform.cmbcursor.hint
+msgid "The cursor's shape when the program does not ask for one"
+msgstr "程序没有指定时光标的形状"
+
+#: tmainform.chkcursorblink.caption
+msgid "Blink"
+msgstr "闪烁"
+
+#: tmainform.lblcursorinactive.caption
+msgid "Unfocused:"
+msgstr "失焦时："
+
+#: tmainform.cmbcursorinactive.hint
+msgid "The cursor when the terminal does not have the focus"
+msgstr "终端没有焦点时的光标"
+
+#: tmainform.dlgcolors.title
+msgid "Import a colour scheme"
+msgstr "导入配色方案"
+
+#: tmainform.chkzmodem.caption
+msgid "ZModem"
+msgstr "ZModem"
+
+#: tmainform.chkzmodem.hint
+msgid "Receive the files a remote sz sends, send files to a remote rz"
+msgstr "接收远端 sz 发来的文件，向远端 rz 发送文件"
+
+#: tmainform.chkpipe.caption
+msgid "Pipe"
+msgstr "管道"
+
+#: tmainform.chkpipe.hint
+msgid "Run the command on two plain pipes instead of ConPTY (binary safe, for ZModem); the list then offers commands that open a terminal on the far side. Takes effect at the next start"
+msgstr "不经 ConPTY、用两条普通管道运行命令（二进制安全，给 ZModem 用）；命令列表随之换成在对端自己开终端的命令。下次启动生效"
+
+#: tmainform.btncanceltransfer.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: tmainform.btncanceltransfer.hint
+msgid "Stop the transfer (five Ctrl+X in the terminal do the same)"
+msgstr "停止传输（在终端里连按五次 Ctrl+X 也一样）"
+
+#: tmainform.dlgupload.title
+msgid "Files to send"
+msgstr "要发送的文件"
+
+#: tmainform.dlgdownloaddir.caption
+msgid "Save received files in"
+msgstr "收到的文件保存到"
+
+# --- resourcestrings ---
+
+#: uasciicast.rsnotv2
+#, object-pascal-format
+msgid "%s is not an asciicast v2 recording"
+msgstr "%s 不是 asciicast v2 录制"
+
+#: umain.rsgridfmt
+#, object-pascal-format
+msgid "%d x %d"
+msgstr "%d × %d"
+
+#: umain.rsnorecording
+msgid "No recording"
+msgstr "没有录制"
+
+#: umain.rspause
+msgid "Pause"
+msgstr "暂停"
+
+#: umain.rsplay
+msgid "Play"
+msgstr "播放"
+
+#: umain.rsprogressfmt
+#, object-pascal-format
+msgid "Event %d / %d · %.1f s"
+msgstr "事件 %d / %d · %.1f 秒"
+
+#: umain.rsreadonlyhint
+msgid "Switch read-only off to see the bytes of each key here."
+msgstr "关掉「只读」，按键的字节就显示在这里。"
+
+#: umain.rsrecordingsizefmt
+#, object-pascal-format
+msgid "%s: recorded at %d x %d"
+msgstr "%s：录制尺寸 %d × %d"
+
+#: umain.rsspeedallatonce
+msgid "All at once"
+msgstr "一次喂完"
+
+#: umain.rswritefailedfmt
+#, object-pascal-format
+msgid "Playback stopped: %s"
+msgstr "回放已停止：%s"
+
+#: umain.rsallowclipboardread
+msgid "The program asks to read the clipboard. Allow it?"
+msgstr "程序要求读取剪贴板。允许吗？"
+
+#: umain.rsclipboardsetfmt
+#, object-pascal-format
+msgid "The program set the clipboard (%d characters)"
+msgstr "程序设置了剪贴板（%d 个字符）"
+
+#: umain.rslinknotopenedfmt
+#, object-pascal-format
+msgid "Not opened (only http and https): %s"
+msgstr "未打开（只打开 http 和 https）：%s"
+
+#: umain.rslogstopped
+msgid "(stopped logging: 4 KB shown)"
+msgstr "（已停止记录：已显示 4 KB）"
+
+#: umain.rsmodereplay
+msgid "Replay"
+msgstr "回放"
+
+#: umain.rsmodeshell
+msgid "Shell"
+msgstr "Shell"
+
+#: umain.rsopenlinkfmt
+#, object-pascal-format
+msgid "Open %s?"
+msgstr "打开 %s？"
+
+#: umain.rsosc52off
+msgid "Off"
+msgstr "关"
+
+#: umain.rsosc52readwrite
+msgid "Read and write"
+msgstr "读写"
+
+#: umain.rsosc52write
+msgid "Write only"
+msgstr "只写"
+
+#: umain.rsrestart
+msgid "Restart"
+msgstr "重启"
+
+#: umain.rsshellexitedstatusfmt
+#, object-pascal-format
+msgid "Shell exited (%d)"
+msgstr "Shell 已退出（%d）"
+
+#: umain.rsshellfailedfmt
+#, object-pascal-format
+msgid "Could not start: %s"
+msgstr "无法启动：%s"
+
+#: umain.rsstart
+msgid "Start"
+msgstr "启动"
+
+#: ushell.rsshellexited
+#, object-pascal-format
+msgid "Process exited with code %d"
+msgstr "进程已退出，退出码 %d"
+
+#: uptywin.rsconptyunavailable
+msgid "This version of Windows has no pseudo console (ConPTY); Windows 10 1809 or later is needed."
+msgstr "这个版本的 Windows 没有伪控制台（ConPTY），需要 Windows 10 1809 或更新的版本。"
+
+#: umain.rscolorsfollowtheme
+msgid "Follow theme"
+msgstr "跟随主题"
+
+#: umain.rscolorsimportfailedfmt
+#, object-pascal-format
+msgid "Could not import: %s"
+msgstr "无法导入：%s"
+
+#: umain.rscolorspairfmt
+#, object-pascal-format
+msgid "%s (light / dark)"
+msgstr "%s（浅色 / 深色）"
+
+#: umain.rscursorbar
+msgid "Bar"
+msgstr "竖线"
+
+#: umain.rscursorblock
+msgid "Block"
+msgstr "方块"
+
+#: umain.rscursornone
+msgid "None"
+msgstr "不显示"
+
+#: umain.rscursoroutline
+msgid "Outline"
+msgstr "空心框"
+
+#: umain.rscursorunderline
+msgid "Underline"
+msgstr "下划线"
+
+#: umain.rspipenextstart
+msgid "Pipe mode takes effect at the next start"
+msgstr "管道模式下次启动生效"
+
+#: umain.rspipeneedsptyhelper
+msgid "Pipe mode needs script or python3 in the WSL distribution. Debian / Ubuntu: sudo apt install bsdutils. Fedora: sudo dnf install /usr/bin/script (util-linux-script from Fedora 42 on, util-linux before)"
+msgstr "管道模式需要 WSL 发行版里有 script 或 python3。Debian / Ubuntu：sudo apt install bsdutils；Fedora：sudo dnf install /usr/bin/script（Fedora 42 起在 util-linux-script 包，之前在 util-linux）"
+
+#: umain.rsclaimedkey
+#, object-pascal-format
+msgid "(claimed) %s"
+msgstr "（传输中）%s"
+
+#: uzmodemterm.rszmconptyrefused
+msgid "ConPTY damages binary data: for ZModem use the pipe mode (tick \"Pipe\" and restart)"
+msgstr "ConPTY 会改坏二进制数据，ZModem 请改用管道模式（勾选“管道”后重启）"
+
+#: uzmodemterm.rszmdeclined
+msgid "ZModem transfer declined"
+msgstr "ZModem 传输已拒绝"
+
+#: uzmodemterm.rszmcancelledline
+msgid "ZModem transfer cancelled"
+msgstr "ZModem 传输已取消"
+
+#: uzmodemterm.rszmfailedline
+#, object-pascal-format
+msgid "ZModem transfer failed: %s"
+msgstr "ZModem 传输失败：%s"
+
+#: uzmodemterm.rszmreceivedline
+#, object-pascal-format
+msgid "Received %d file(s), %s in %s s (%s/s)"
+msgstr "已接收 %d 个文件，%s，用时 %s 秒（%s/s）"
+
+#: uzmodemterm.rszmsentline
+#, object-pascal-format
+msgid "Sent %d file(s), %s in %s s (%s/s)"
+msgstr "已发送 %d 个文件，%s，用时 %s 秒（%s/s）"
+
+#: uzmodemsession.rszmcommandrefused
+msgid "the sender asked to run a command; refused"
+msgstr "对方要求执行命令，已拒绝"
+
+#: uzmodemsession.rszmtimeout
+msgid "no answer from the other side"
+msgstr "对方没有应答"
+
+#: uzmodemsession.rszmtoomanyerrors
+msgid "too many errors at one place"
+msgstr "同一位置出错次数过多"
+
+#: uzmodemsession.rszmcancelledhere
+msgid "cancelled"
+msgstr "已取消"
+
+#: uzmodemsession.rszmcancelledthere
+msgid "cancelled by the other side"
+msgstr "对方已取消"
+
+#: uzmodemsession.rszmwritefailed
+msgid "the file could not be written"
+msgstr "无法写入文件"
+
+#: uzmodemsession.rszmfileerror
+msgid "the other side could not write the file"
+msgstr "对方无法写入文件"
+
+#: uzmodemsession.rszmreadfailed
+msgid "the file could not be read to its end"
+msgstr "无法读完文件"
+
+#: uzmodemsession.rszmtoobig
+msgid "ZModem cannot carry files of 4 GiB or more"
+msgstr "ZModem 无法传送 4 GiB 及以上的文件"
+
+#: uzmodemterm.rszmskippedline
+#, object-pascal-format
+msgid "Skipped %s: %s"
+msgstr "已跳过 %s：%s"

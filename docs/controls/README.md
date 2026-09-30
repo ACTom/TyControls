@@ -71,6 +71,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyFontListBox](fontlistbox.md) | 字体族列表框（FontComboBox 的列表版） |
 | [TTyFontSizeComboBox](fontsizecombobox.md) | 可编辑字号组合框（预设 6…72，也可手输） |
 | [TTyMemo](memo.md) | 多行编辑器：2D 导航、内嵌滚动条 |
+| [TTyTerminalView](terminal.md) | 终端：解析 + 缓冲 + 渲染，照 xterm.js；PTY 归宿主 |
 | [TTySpinEdit](spinedit.md) | 数值微调框（箭头 / 方向键 / 滚轮，Min/Max/Increment） |
 | [TTyFloatSpinEdit](floatspinedit.md) | 小数微调框（`Value: Double` + `Double` 步长，NumericEdit 派生，带完整文本引擎） |
 | [TTyUpDown](updown.md) | 独立上/下微调按钮对（按住连发，绑定到任意控件） |
