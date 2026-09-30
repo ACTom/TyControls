@@ -8215,3 +8215,35 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 - NaN/无穷几何不输出(上游输出但不可见)。
 - 渐变连线的包围盒不含描边外扩(只在 `lineStyle.borderColor` 与 `'gradient'` 同时出现时有差别)。
 - 边标签、强调/聚焦、拖动、提示框、`zoom`/`center` 之后再做。
+
+## 115. Tier 1 第八十批:矩形树图的下钻、按值着色与多系列(M4 + M5 + M6,2026-09-30)
+
+### 上游的做法
+
+- **leafDepth(M4)**:按 squarify 深度(根为 0)数;到了这一层,子节点只保留面积、不再布局也不画,父节点记为「叶根」,当叶子画、标签前加系列**自己的** `drillDownIcon`(默认 `▶`,按 `!= null` 判断文字——空串也加图标);`leafDepth` 只在这一层及以后压过 `childrenVisibleMin`;只要写了 `leafDepth`,首帧面包屑只有根。
+- **按值着色(M5)**:`colorMappingBy` 除了 `'index'`/`'id'` 以外一律是线性颜色映射;值取父节点链上的 `visualDimension`(0、空、`'value'` 读补过的值;超出最长值数组的维度是 NaN;标量——包括补出来的和——对每个维度都回答自己);值域是排序后、visibleMin 之前的子节点,`visualMin`/`visualMax` 只放宽;fastLerp:`value = t·(n-1)`,每个通道 `round(L + (R-L)·p)`,alpha 不取整,输出 `rgba(...)`;t 为 NaN 或越界没有颜色,值域为一点时一律取中间。
+- **按 id 着色、透明度、位置、富文本(M6)**:id 是条目自己的,没有就用名字(没有 id 的行里第 k 次重复加 `__ec__k`,根按系列名算),再没有就生成;`mapIdToIndex` 是每个系列一个、按先序访问顺序首次出现计数(不可见的子节点也占号)。`colorAlpha` 范围与饱和度同样映射、优先于饱和度范围;值在饱和度之后用 `modifyAlpha`(保留通道),只对真值生效。系列的 `color` 列表在根以下的每一层按序号映射。`label.position` 的 `inside*` 九种按 zrender 表格加 `distance`(默认 0),普通布局在对齐的一侧加内边距;任何 `label.rich` 都切到富文本布局:只截宽过盒子本身的行,盒子按**外框**放(所以默认 `'inside'` 的富文本贴在格子顶部)。图例 `selectedMode: 'single'` 选第一个没被显式关掉的名字,被过滤的系列什么也不画。
+
+### 做法
+
+- Treemap 单元:
+  - `InitChildren` / `Squarify` 带上深度,`leafDepth` 截断、`IsLeafRoot`;面包屑按 `HasLeafDepth` 取根。
+  - 新 `ValueAt`(按维度取值)、`DimOf`,值域按父节点的维度算;`DimMax` 与 id(`AssignIds`,按上游 `makeIdFromName`)在求解时算好。
+  - 视觉:颜色种类多了「映射出的 rgba」;线性映射用 VisualMap 已有的 `TyVisualParsedStop`/`TyVisualFastLerp`,id 映射用每个系列一个的 `TStringList` 计数;透明度值/范围;着色过程整体屏蔽浮点陷阱(NaN 维度要比较)。
+  - 标签:钻取图标、`label.padding`/`distance`/`position`、富文本的放置;节点记下标签的水平/竖直锚点,标题交给展开。
+- Labels 的 `TyZrPlainTextLines` 多一个 `ARich`:富文本只截宽过盒子本身的行。
+
+### 基准
+
+- `treemap.js` 由代理扩展:121 个新用例(M4 30、M5 33、M6 56,含画廊 `treemap-drill-down`、`treemap-visual`、`treemap-obama`),外加上一批变异测试要的两个缺口用例;原 396 个用例逐字节不变;61 条守卫全部变红;独立转写与上游 36 万项零差异。
+- `test.advchart.treemap`:标签的竖直位置按端口自己的锚点比较(居中精确比锚点;顶/底比第一行顶/最后一行底);比较水平对齐;被图例过滤的系列必须一个元素也没有。画廊测试钉死六个文件合计 2155 个矩形、308 个标签(35 行标题)、9 个面包屑。M4–M6 的全部用例第一次通过就逐位对上(只修了一处:着色过程没屏蔽浮点陷阱,NaN 维度在比较时抛异常)。
+
+### 变异测试
+
+31 个,全部杀死:其中 29 个针对 M4–M6(leafDepth 的深度与优先级、图标、面包屑、按值/按 id 映射、维度取值的三条规则、visualMin/Max 只放宽、未定义颜色不继承、透明度的真值与范围优先级、位置/距离/内边距、富文本的截断与外框),另外 2 个是上一批存活、这批补了用例的缺口(系列的 `itemStyle.colorSaturation` 输给父节点映射值、标题截断宽度减内边距)——都杀死。
+
+### 已知偏差
+
+- 写了 `fontSize` 的用例仍跳过标签文字(M4–M6 的随机族里常见,约三成标签);锚点、z2 照比。
+- 标签不透明度、`seriesStyleTask` 给每个矩形树图系列占的色板位(对矩形树图自己不可见)没有做。
+- 下钻/缩放交互、悬停色之后再做。

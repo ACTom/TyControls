@@ -287,10 +287,13 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
   reserved before deciding whether AEllipsis fits (it is dropped if not),
   a first cut by summing character widths, a second by proportion, then the
   ellipsis. A width under one gives ''. Lengths are UTF-16 units, as JS's.
-  AWidth and AHeight are the box inside the padding. [Batch 76] }
+  AWidth and AHeight are the box inside the padding. ARich: the rich
+  layout's threshold -- a line is cut only when wider than the box itself.
+  [Batches 76, 80] }
 function TyZrPlainTextLines(const AText: string; AWidth, AHeight: Double;
   AMinChar: Integer; const AEllipsis: string; const AMeasurer: ITyTextMeasurer;
-  const AFontName: string; AFontSizeLogical, AWeight: Integer): TStringArray;
+  const AFontName: string; AFontSizeLogical, AWeight: Integer;
+  ARich: Boolean = False): TStringArray;
 { AItemSpecs[series][raw row]: a data item's own label read over its
   series', for a caption whose ItemSpec names it [Batch 68] }
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
@@ -651,7 +654,8 @@ end;
 
 function TyZrPlainTextLines(const AText: string; AWidth, AHeight: Double;
   AMinChar: Integer; const AEllipsis: string; const AMeasurer: ITyTextMeasurer;
-  const AFontName: string; AFontSizeLogical, AWeight: Integer): TStringArray;
+  const AFontName: string; AFontSizeLogical, AWeight: Integer;
+  ARich: Boolean): TStringArray;
 const
   { U+56FD, zrender's stand-in for any wide character, as UTF-8 }
   cGuo = #$E5#$9B#$BD;
@@ -711,7 +715,13 @@ begin
       Continue;
     end;
     lw := M(lines[k]);
-    if lw <= containerWidth then Continue;
+    { the rich layout cuts only a line wider than the box itself, the plain
+      one a line wider than the box less one [Batch 80] }
+    if ARich then
+    begin
+      if lw <= AWidth then Continue;
+    end
+    else if lw <= containerWidth then Continue;
     j := 0;
     while True do
     begin

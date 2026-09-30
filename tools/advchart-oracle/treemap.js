@@ -1,6 +1,7 @@
 /*
 Upstream's own answers for the TREEMAP series, first static frame (batches M1,
-M2 colour saturation, M3 upper labels):
+M2 colour saturation, M3 upper labels, M4 drill-down, M5 value-mapped colour,
+M6 multi-series / id mapping / alpha / label positions):
 the data model, the layout, the colour visual, every rect, label and breadcrumb
 item exactly as chart/treemap/TreemapSeries.ts (getInitialData: the virtual
 root named after the series name, completeTreeValue -- byte-identical to
@@ -19,7 +20,16 @@ the borderColorSaturation stroke through zrender color.ts modifyHSL (LIGHTNESS),
 and visual/style.ts dataStyleTask (the raw item itemStyle color / borderColor /
 opacity override the visual). M3 adds the header Text renderBackground gives a
 parent's background rect (prepareText with an upperLabelRect, setLabelStyle,
-Element.updateInnerText's inside / outside default colours, ZRText layout).
+Element.updateInnerText's inside / outside default colours, ZRText layout). M4
+adds leafDepth (isLeafRoot parents drawn as leaves, TreemapView addDrillDownIcon,
+the breadcrumb on the view root); M5 the linear colour mapping (colorMappingBy
+other than 'index' / 'id': VisualMapping linear + zrender fastLerp), statistic()
+over visualDimension (the 'value' shortcut, scalar values, NaN) and visualMin /
+visualMax; M6 colorMappingBy 'id' (SeriesData ids, TreemapSeries.mapIdToIndex),
+colorAlpha ranges and values (zrender modifyAlpha), a series-level colour list,
+the 'inside*' label positions (calculateTextPosition), the RICH text layout any
+label.rich switches on (parseRichText / _updateRichTexts), and several series
+with a legend (LegendModel's selectedMode 'single' first frame).
 
 Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 ECHARTS_DIST) in node's server-side mode (SVG renderer, ssr: true) at 800 x 600
@@ -37,7 +47,8 @@ identically.
 
 writes tests/fixtures/advchart-treemap.json (ORACLE_OUT overrides;
 ORACLE_RANDOM=<n> sets the number of M1 random forests, ORACLE_RANDOM_M23=<n>
-the number of M2 / M3 random forests, defaults below).
+the number of M2 / M3 random forests, ORACLE_RANDOM_M456=<n> the number of
+M4-M6 random forests, defaults below).
 
 -----------------------------------------------------------------------------
 Number encoding.
@@ -66,11 +77,15 @@ Top level
             casesM2, casesM3, saturatedColours, saturationMappedRows,
             borderSaturatedRows, rawItemOverrides, upperHeaders, upperTspans,
             upperTruncatedLines, upperDroppedLines, upperColour_outside /
-            _inside / _option): minimums for the test
+            _inside / _option; over the M4-M6 cases: casesM4 / M5 / M6,
+            leafRoots, drillIconLabels, ignoredIconLabels, crumbOnLeafDepthRoot,
+            linearColourRows, linearColourNone, idMappedRows, alphaMappedRows,
+            alphaColours, richLabels, labelsNotInside, filteredSeries): minimums
+            for the test
   cases[], guards[]
 
 Per case
-  id, batch (ONLY on the M2 / M3 cases: 'M2' or 'M3'; a case without it is M1),
+  id, batch (ONLY on the M2-M6 cases: 'M2' .. 'M6'; a case without it is M1),
   note, gallery (the gallery file name or null), option (the exact JSON fed,
   animation false included; null for a gallery case: load
   examples/advchart/gallery/<gallery>.json and set animation false),
@@ -81,7 +96,19 @@ Per case
   textStyle ecModel.option.textStyle (fontFamily 'Microsoft YaHei' here)
   ground    {background (zr.getBackgroundColor()), isDark}: an INPUT of the M3
             header colours (the outside fill and stroke, the inside stroke)
-  series[]  one per treemap series (every case has exactly one)
+  series[]  one per DRAWN treemap series (seriesIndex says which; every case but
+            some M6 ones has exactly one series; a legend may filter series out)
+  M6 cases only:
+  legend    null or {selectedMode, data (legend item names), selectedFed (the
+            option's legend.selected), selected (after LegendModel init)}: in
+            'single' mode the FIRST legend item not explicitly false is selected
+            and every other one deselected (a `true` elsewhere does not win); a
+            series missing from legend.data stays shown
+  seriesList[] every series of the option: {seriesIndex, name, legendSelected,
+            filtered (ecModel.isSeriesFiltered: no layout, no visual, no element),
+            drawn, styleFill (seriesStyleTask's colour: the series' own `color`
+            list, else the GLOBAL palette slot by series name -- one per series,
+            filtered ones included; never drawn by a treemap)}
 
 Per series
   seriesIndex, name (the option name or null)
@@ -155,6 +182,24 @@ Per series
               upperHeight}) + layoutRectText, anchor {x, y} (hex: the text origin
               before the 5e-5 rule), textAlign, verticalAlign, colourRule
               ('outside' | 'inside' | 'option'), fill, stroke}
+    M4 / M5 / M6 cases only (after upperLabel):
+    id        the SeriesData id (item id as a string; else the name, its k-th
+              repeat suffixed '__ec__' + k counting only rows without an id, row 0
+              named by the series name), or null for a generated one ('e' + two NUL
+              characters + dataIndex: no id and no name); idSource 'item' | 'name' |
+              'nameRepeat' | 'generated'
+    visual4   null (not visited) or {colorAlpha (dec) + colorAlphaHex, alphaSource
+              ('item' | 'level' | 'mapped' | 'inherited' | 'series' | 'none'),
+              alphaMappedFrom, idIndex (mapIdToIndex's answer when the parent maps
+              by id), mappedInput (null or {value, normalized} dec + hex: the
+              child value getValue(visualDimension) and linearMap(value, extent,
+              [0, 1], clamp) when the parent maps linearly), mapping (the map THIS
+              node gives: null or {type 'color' | 'colorAlpha' | 'colorSaturation',
+              method 'category' | 'linear', by, dimension, dataExtent (hex, after
+              visualMin / visualMax) + dataExtentText, list | range})}
+    labelInfo null or {position, distance, textAlign, verticalAlign, anchor {x, y}
+              (hex: calculateTextPosition over the globalised content rect) +
+              anchorText, layout ('plain' | 'rich'), drillIcon}
   elements[] zrender's display list for this series in PAINT order (elements of
     other components, e.g. a gallery title, are left out):
     kind 'bg' | 'content' | 'tspan' | 'upper' | 'crumb' | 'crumbText', row (the node's
@@ -168,7 +213,8 @@ Per series
     upper:        the same fields for a header line (M3; its Text hangs off the
                   BACKGROUND rect; host record rows[row].upperLabel)
   breadcrumb null (breadcrumb.show false) or
-    target (row), targetRule ('findTarget' | 'fallbackRoot'), availableWidth
+    target (row), targetRule ('findTarget' | 'fallbackRoot' | 'leafDepthViewRoot':
+    a series leafDepth puts the target on the view root), availableWidth
     (hex), height, emptyItemWidth, totalWidth (hex, before collapse),
     items[] root first: {row, text (the chain name), measuredWidth (hex,
       '12px sans-serif' unless breadcrumb.itemStyle.textStyle sets a font),
@@ -178,7 +224,8 @@ Per series
     unionRect {x, y, width, height} (hex), groupX, groupY (hex) + groupText (dec)
   labelStats {tspans, truncated, ellipsis, dropped}
   upperStats {headers, tspans, truncated, ellipsis, dropped} and foreignElements
-            (display-list elements of other components left out): M2 / M3 only
+            (display-list elements of other components -- a title, a legend,
+            another series -- left out): M2-M6 only
 
 Guards[] one per mutation of the transcription (ref.js's mutants): id,
   mutation, red (the number of recorded checks the mutated transcription gets
@@ -202,7 +249,13 @@ visualMax, decal (M4+), a series-level color list (M6), an upperLabel key other
 than show / height / color / fontSize / formatter / padding / position ([x, y] or
 'inside') / opacity / verticalAlign ('middle') / overflow ('truncate'), a
 non-numeric colorSaturation, and any colour NAME the transcription's parser does
-not list (transparent, red, green, blue, white, black).
+not list (transparent, red, green, blue, white, black). In M4 / M5 / M6 cases:
+decal, a content-label key other than show / formatter / fontSize / color /
+padding / position ('inside*') / distance / opacity / rich / overflow ('truncate'),
+{style|...} markup in a rich label text, a visualDimension other than a
+non-negative integer or 'value', non-numeric visualMin / visualMax / colorAlpha /
+value entries, an unparsable colour in a linear colour list, a legend or several
+series outside M6.
 */
 'use strict';
 process.env.TZ = 'UTC';
@@ -356,7 +409,7 @@ const TM_DEFAULTS = {
 };
 // the merged keys the transcription reads (checked against upstream's own merged option)
 const READ_KEYS = ['sort', 'squareRatio', 'leafDepth', 'breadcrumb', 'label', 'upperLabel', 'itemStyle', 'color', 'visibleMin', 'childrenVisibleMin', 'colorMappingBy', 'name',
-  'colorSaturation', 'colorAlpha', 'visualDimension', 'visualMin', 'visualMax'];
+  'colorSaturation', 'colorAlpha', 'visualDimension', 'visualMin', 'visualMax', 'drillDownIcon'];
 
 function parsePct(v, base) {                         // util/number.ts parsePercent (layout flavour)
   if (v === 'center' || v === 'middle') v = '50%';
@@ -456,9 +509,33 @@ function cssHueToRgb(m1, m2, h) {
   return m1;
 }
 
-// so: the series option as fed; env: {W, H, palette, fontFamily}; mut: a mutant name or null
+// the legend's first frame (LegendModel init): selectedMode 'single' selects the FIRST legend item (legend.data
+// order) that is not explicitly `false` in legend.selected and deselects every other one (a `true` elsewhere
+// does not win); a series whose name is missing from legend.data stays shown; without a legend every series
+// is drawn. Returns, per series of the option, whether it is drawn (not filtered).
+function legendDrawn(option, mut) {
+  const M = k => mut === k;
+  const series = [].concat(option.series);
+  const lg = option.legend ? [].concat(option.legend)[0] : null;
+  if (!lg) return series.map(() => true);
+  const names = lg.data ? lg.data.map(d => (d && typeof d === 'object' ? d.name : d)) : series.map(s => s.name);
+  const sel = Object.assign({}, lg.selected || {});
+  const isSel = nm => !(hasOwn(sel, nm) && !sel[nm]);
+  if (lg.selectedMode === 'single') {
+    let chosen = null;
+    if (M('legendfirst')) chosen = Object.keys(sel).find(k => sel[k]) || names[0];
+    else for (const nm of names) if (isSel(nm)) { chosen = nm; break; }
+    if (chosen == null) chosen = names[0];
+    for (const nm of names) sel[nm] = nm === chosen;
+  }
+  return series.map(s => !(hasOwn(sel, s.name) && !sel[s.name]));
+}
+
+// so: the series option as fed; env: {W, H, palette, fontFamily, ground, batch}; mut: a mutant name or null
 function transcribe(soIn, env, mut) {
   const M = k => mut === k;
+  // M4 / M5 / M6 cases record more (visual mappings, ids, label placement); M1-M3 cases keep their fields
+  const ext4 = env.batch === 'M4' || env.batch === 'M5' || env.batch === 'M6';
   const so = zrClone(soIn);
   const S = zrMerge(zrClone(so), TM_DEFAULTS, false);
   const seriesName = so.name == null ? 'series\u00000' : String(so.name);
@@ -492,6 +569,20 @@ function transcribe(soIn, env, mut) {
     return pathGet(S, p);
   }
   const val = n => { const v = n.item.value; return isArray(v) ? v[0] : v; };
+  // M5: TreeNode.getValue(dim) = store.get(getDimensionIndex(dim || 'value'), idx). The store has dimMax
+  // dimensions (the longest value array over ALL nodes, the root included, after completeTreeValue); the
+  // original-format getter returns a SCALAR value whole for every dimension; null / undefined / '' parse to
+  // NaN; a dimension at or past dimMax reads NaN.
+  let dimMax = 1;
+  (function dm(it) { dimMax = Math.max(dimMax, isArray(it.value) ? it.value.length : 1); for (const c of (it.children || [])) dm(c); })(root);
+  const parseDataValue = x => ((x == null || x === '') ? NaN : Number(x));
+  const getV = (n, dim) => {
+    if (!dim || dim === 'value') return val(n);
+    must(typeof dim === 'number' && dim >= 0 && Math.floor(dim) === dim, 'visualDimension ' + JSON.stringify(dim) + ' is not transcribed');
+    if (!M('dimmax') && dim >= dimMax) return NaN;
+    const v = n.item.value;
+    return parseDataValue(isArray(v) ? v[dim] : (M('scalardim') ? undefined : v));
+  };
   const storeName = n => (n.item.name == null ? '' : String(n.item.name));
   const chainName = n => { const v = get(n, ['name']); return v == null ? null : String(v); };
   const ground = env.ground || { background: 'transparent', isDark: false };
@@ -594,9 +685,17 @@ function transcribe(soIn, env, mut) {
       });
     }
     let sum = 0; for (const c of vc) sum += val(c);
-    // statistic(): [min, max] of getValue(visualDimension 0 -> 'value') over the sorted children, BEFORE visibleMin
-    const ext = [Infinity, -Infinity];
-    for (const c of (M('extpost') ? [] : vc)) { const v = val(c); v < ext[0] && (ext[0] = v); v > ext[1] && (ext[1] = v); }
+    // statistic(): over the sorted children, BEFORE visibleMin, by the parent's visualDimension chain: [NaN, NaN]
+    // without children; the STRING 'value' with a sort takes [last, first] of the sorted list (reversed for
+    // asc); otherwise [min, max] of getValue(dim) (NaN values never enter; [Infinity, -Infinity] when all NaN)
+    const dim = get(n, ['visualDimension']);
+    let ext;
+    if (!vc.length) ext = [NaN, NaN];
+    else if (dim === 'value' && orderBy) { ext = [val(vc[vc.length - 1]), val(vc[0])]; orderBy === 'asc' && ext.reverse(); }
+    else {
+      ext = [Infinity, -Infinity];
+      for (const c of (M('extpost') ? [] : vc)) { const v = getV(c, dim); v < ext[0] && (ext[0] = v); v > ext[1] && (ext[1] = v); }
+    }
     if (sum === 0) return (n.viewChildren = []);
     if (orderBy && !M('novismin')) {
       const vm = get(n, ['visibleMin']);
@@ -673,13 +772,53 @@ function transcribe(soIn, env, mut) {
     if (c) {
       const a = defined(v.colorAlpha); const s = defined(v.colorSaturation);
       if (M('satnull') ? s != null : s) c = modifyLightness(c, s);          // truthy: a saturation of 0 changes nothing
-      must(!a, 'colorAlpha reached calculateColor (M6)');
+      if (M('alphanull') ? a != null : a) c = modifyAlpha(c, a);           // M6: after the saturation; truthy (0 changes nothing)
       return c;
     }
     return undefined;
   }
+  // zrender modifyAlpha: the PARSED channels with a = clamp(alpha, 0, 1) as 'rgba(r,g,b,a)'; undefined when the
+  // colour does not parse (no HSL round trip, no rounding)
+  function modifyAlpha(colour, alpha) {
+    const arr = parseColour(colour);
+    if (arr && alpha != null) { arr[3] = clampCssFloat(alpha); return rgbaText(arr); }
+    return undefined;
+  }
+  // zrender fastLerp (VisualMapping linear colour): value = t * (n - 1); left = floor, right = ceil, p = value - left;
+  // channels Math.round(l + (r - l) * p) clamped to 0..255, alpha clamp(l + (r - l) * p, 0, 1) unrounded;
+  // undefined when t is not within [0, 1] (NaN included) -> no colour
+  function fastLerp(t, colors) {
+    if (!(colors && colors.length) || !(t >= 0 && t <= 1)) return undefined;
+    const value = t * (colors.length - 1);
+    const li = Math.floor(value); const ri = Math.ceil(value);
+    const lc = colors[li]; const rc = colors[ri];
+    const p = value - li;
+    const lerp = (a, b) => (M('lerp') ? a * (1 - p) + b * p : a + (b - a) * p);
+    const cb = M('lerpfloor') ? (v => Math.max(0, Math.min(255, Math.floor(v)))) : clampCssByte;
+    return rgbaText([cb(lerp(lc[0], rc[0])), cb(lerp(lc[1], rc[1])), cb(lerp(lc[2], rc[2])), clampCssFloat(lerp(lc[3], rc[3]))]);
+  }
+  // M6: SeriesData ids (dataIndex order): an item id (string, or a number as a string) is kept; otherwise the
+  // name (row 0: the series name), from its k-th occurrence suffixed '__ec__' + k (counted only over the rows
+  // without an id); a row with neither is 'e\0\0' + dataIndex
+  const idText = v => (typeof v === 'string' ? v : typeof v === 'number' ? v + '' : null);
+  {
+    const repeat = {};
+    for (const n of rows) {
+      let id = idText(n.item.id);
+      n.idSource = 'item';
+      const nm = idText(n.depth === 0 ? so.name : n.item.name);
+      if (id == null && nm != null) { const k = repeat[nm] = (repeat[nm] || 0) + 1; id = nm; n.idSource = 'name'; if (k > 1 && !M('iddup')) { id += '__ec__' + k; n.idSource = 'nameRepeat'; } }
+      if (id == null) { id = 'e\u0000\u0000' + n.idx; n.idSource = 'generated'; }
+      n.id = id;
+    }
+  }
+  // TreemapSeries.mapIdToIndex: one map per series model, indices in FIRST-SEEN order over the whole visual
+  // traversal (pre-order: a child's index is taken right before its own subtree is visited)
+  let idIndexMap = new Map();
+  const mapIdToIndex = id => { let k = idIndexMap.get(id); if (k == null) idIndexMap.set(id, k = idIndexMap.size); return k; };
   const rangeOf = (n, name) => { const r = get(n, [name]); return (isArray(r) && r.length) ? { name, range: r } : null; };
-  (function travel(n, dv, mappedFrom, k, satFrom) {
+  const by0 = nn => get(nn, ['colorMappingBy']);
+  (function travel(n, dv, mappedFrom, k, satFrom, x4) {
     if (!n.layout || n.layout.invisible || !n.layout.isInView) return;
     const visuals = Object.assign({}, dv);
     let source = 'none';
@@ -704,6 +843,19 @@ function transcribe(soIn, env, mut) {
     else if (pathGet(S, ['itemStyle', 'color']) != null) source = 'series';
     n.colour = { source, value: visuals.color == null ? null : visuals.color, mappedFrom: source === 'designated' ? mappedFrom : null };
     n.paletteIndex = mappedFrom != null ? k : null;
+    if (ext4) {
+      // M6 alpha: item itemStyle.colorAlpha > levels[depth].itemStyle.colorAlpha > mapped / inherited > series
+      const itemA = pathGet(n.item, ['itemStyle', 'colorAlpha']) != null;
+      const levelA = !!(levels[n.depth] && pathGet(levels[n.depth], ['itemStyle', 'colorAlpha']) != null);
+      n.visual4 = {
+        colorAlpha: visuals.colorAlpha == null ? null : visuals.colorAlpha,
+        alphaSource: itemA ? 'item' : levelA ? 'level' : dv.colorAlpha != null ? (x4 && x4.alphaFrom != null ? 'mapped' : 'inherited') : pathGet(S, ['itemStyle', 'colorAlpha']) != null ? 'series' : 'none',
+        alphaMappedFrom: x4 && x4.alphaFrom != null && !itemA && !levelA ? x4.alphaFrom : null,
+        mappedInput: x4 && x4.input ? x4.input : null,
+        idIndex: x4 && x4.idIndex != null ? x4.idIndex : null,
+        mapping: null,
+      };
+    }
     n.stroke = get(n, ['itemStyle', 'borderColor']);
     // borderColorSaturation (item > level > series itemStyle): the stroke becomes the node colour (after its own
     // saturation) at that LIGHTNESS, or null when the node has no colour
@@ -718,37 +870,60 @@ function transcribe(soIn, env, mut) {
     if (!vc || !vc.length) { n.fill = calcColor(visuals); return; }
     n.visual.dataExtent = n.layout.dataExtent.slice();
     // buildVisualMapping: this node's chain `color` list; else, when it has a colour, its colorAlpha / colorSaturation range
-    const rv = rangeOf(n, 'color') || (visuals.color != null && visuals.color !== 'none' && (rangeOf(n, 'colorAlpha') || rangeOf(n, 'colorSaturation')));
+    const rv = rangeOf(n, 'color') || (visuals.color != null && visuals.color !== 'none' && (M('alpharange') ? (rangeOf(n, 'colorSaturation') || rangeOf(n, 'colorAlpha')) : (rangeOf(n, 'colorAlpha') || rangeOf(n, 'colorSaturation'))));
     let mapping = null;
     if (rv) {
       const ext = n.layout.dataExtent.slice();
-      const vmin = get(n, ['visualMin']); const vmax = get(n, ['visualMax']);
+      const vmin = M('novmm') ? null : get(n, ['visualMin']); const vmax = M('novmm') ? null : get(n, ['visualMax']);
       vmin != null && vmin < ext[0] && (ext[0] = vmin);
       vmax != null && vmax > ext[1] && (ext[1] = vmax);
-      const by = get(n, ['colorMappingBy']);
+      const by = M('byvalue') && by0(n) === 'value' ? 'index' : by0(n);
       if (rv.name === 'color' && (by === 'index' || by === 'id')) {
-        must(by === 'index', "colorMappingBy 'id' (M6)");
-        mapping = { type: 'color', list: rv.range };
+        mapping = { type: 'color', list: rv.range, by };                               // category, loop: list[k % n]
+        if (ext4) n.visual4.mapping = { type: 'color', method: 'category', by, list: json(rv.range) };
+      } else if (rv.name === 'color') {
+        // M5 linear colour (colorMappingBy anything but 'index' / 'id'): every entry of the list parsed
+        // (normalizeVisualRange keeps them all, no pairing for colour); fastLerp over the normalised value
+        mapping = { type: 'color', linear: true, ext, parsed: rv.range.map(x => parseColour(x)) };
+        must(mapping.parsed.every(Boolean), 'an unparsable colour in a linear colour list (upstream: [0,0,0,1] with a warning)');
+        if (ext4) n.visual4.mapping = { type: 'color', method: 'linear', by, dimension: json(get(n, ['visualDimension'])), dataExtent: ext.slice(), list: json(rv.range) };
       } else {
-        must(rv.name === 'colorSaturation', 'a linear ' + rv.name + ' mapping (M5 / M6)');
-        must(rv.range.every(x => typeof x === 'number'), 'a non-numeric colorSaturation range');
+        must(rv.range.every(x => typeof x === 'number'), 'a non-numeric ' + rv.name + ' range');
         const vis = rv.range.slice(0, 2); if (vis.length === 1) vis[1] = vis[0];      // normalizeVisualRange; linear uses [0], [1]
-        mapping = { type: 'colorSaturation', ext, vis };
-        n.visual.mapping = { type: 'colorSaturation', dataExtent: ext.slice(), range: vis.slice() };
+        mapping = { type: rv.name, ext, vis };
+        if (rv.name === 'colorSaturation') n.visual.mapping = { type: 'colorSaturation', dataExtent: ext.slice(), range: vis.slice() };
+        if (ext4) n.visual4.mapping = { type: rv.name, method: 'linear', dimension: json(get(n, ['visualDimension'])), dataExtent: ext.slice(), range: vis.slice() };
       }
     }
+    const vdim = get(n, ['visualDimension']);
+    const perParent = M('idperparent') ? new Map() : null;
     vc.forEach((c, i) => {
       const cv = Object.assign({}, M('inherit') ? dv : visuals);
       let sf = null;
-      if (mapping && mapping.type === 'color') cv.color = mapping.list[(M('index') ? c.idx : i) % mapping.list.length];
-      else if (mapping) {
-        const value = val(c);                          // child.getValue(visualDimension 0)
-        cv.colorSaturation = linearMap(linearMap(value, mapping.ext, [0, 1]), [0, 1], mapping.vis);
-        sf = n.idx;
+      const x4 = {};
+      let pk = null;
+      if (mapping && mapping.type === 'color' && !mapping.linear) {
+        let kk;
+        if (mapping.by === 'index' || M('idasindex')) kk = M('index') ? c.idx : i;
+        else if (perParent) { kk = perParent.get(c.id); if (kk == null) perParent.set(c.id, kk = perParent.size); }
+        else kk = mapIdToIndex(c.id);
+        if (mapping.by === 'id') x4.idIndex = kk;
+        cv.color = mapping.list[kk % mapping.list.length];
+        pk = kk;
+      } else if (mapping) {
+        const value = M('dim0') ? val(c) : getV(c, vdim);           // child.getValue(visualDimension)
+        const t = linearMap(value, mapping.ext, [0, 1]);
+        x4.input = { value, normalized: t };
+        if (mapping.linear) cv.color = fastLerp(t, mapping.parsed);
+        else {
+          cv[mapping.type] = linearMap(t, [0, 1], mapping.vis);
+          if (mapping.type === 'colorSaturation') sf = n.idx; else x4.alphaFrom = n.idx;
+        }
       }
-      travel(c, cv, mapping && mapping.type === 'color' ? n.idx : null, mapping && mapping.type === 'color' ? i : null, sf);
+      const colourMapped = mapping && mapping.type === 'color';
+      travel(c, cv, colourMapped ? n.idx : null, colourMapped && !mapping.linear ? pk : null, sf, x4);
     });
-  })(rows[0], {}, null, null, null);
+  })(rows[0], {}, null, null, null, null);
   // a designated colour inherited (not mapped here) keeps mappedFrom null
   // seriesStyleTask: the series itemStyle.opacity (only) reaches every style; then dataStyleTask (4500) extends each
   // style with the RAW item itemStyle: color -> fill, borderColor -> stroke, opacity -> opacity (after the visual)
@@ -818,6 +993,84 @@ function transcribe(soIn, env, mut) {
       });
     }
     return { lines, lh, contentHeight, width, height, isTruncated };
+  }
+  // ---- M6: zrender's RICH text layout. Any `label.rich` makes ZRText use _updateRichTexts even for text without
+  // {style|...} markup (markup is refused): parseRichText gives one token per '\n' piece; a line is dropped
+  // (with all after it) when the accumulated line heights + its own exceed the box height; a token is truncated
+  // only when it is WIDER than the box (truncateText2: '' for a zero width, else containerWidth = width - 1,
+  // minChar 2, '...'); then boxX / boxY = adjustTextX / Y(0, OUTER size = box + padding, align / verticalAlign),
+  // xLeft = boxX + pad[3], lineTop = boxY + pad[0]; a token is placed at xLeft ('left'), xLeft + width
+  // ('right') or xLeft + (width - lineWidth) / 2 + tokenWidth / 2 ('center'), y = lineTop + lineHeight / 2.
+  function richLayout(text, cw, ch, font, padding, align, vAlign) {
+    const width = Math.max(cw - padding[1] - padding[3], 0);
+    const height = Math.max(ch - padding[0] - padding[2], 0);
+    const str = text != null ? text + '' : '';
+    const out = { lines: [], tokens: [], width, height, isTruncated: false };
+    if (!str) return out;
+    must(!/\{([a-zA-Z0-9_]+)\|([^}]*)\}/.test(str), 'rich markup in a label text is not transcribed: ' + JSON.stringify(str));
+    let lines = str.split('\n').map(p => ({ text: p, width: measure(p, font) }));
+    const lh = measure('国', font);
+    let calcH = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i];
+      if (M('richdrop') ? calcH > height : calcH + lh > height) {
+        const before = lines.length;
+        lines = lines.slice(0, i);
+        out.isTruncated = out.isTruncated || lines.length < before;
+        stat.dropped++;
+        break;
+      }
+      if (M('richtrunc') ? width - 1 < t.width : width < t.width) {
+        if (!width) t.text = '';
+        else {
+          const containerWidth = Math.max(0, width - 1);
+          let contentWidth = containerWidth;
+          const asc = measure('a', font);
+          for (let k = 0; k < 2 && contentWidth >= asc; k++) contentWidth -= asc;
+          let ell = '...'; let ellW = measure('...', font);
+          if (ellW > contentWidth) { ell = ''; ellW = 0; }
+          contentWidth = containerWidth - ellW;
+          let line = t.text;
+          if (!containerWidth) line = '';
+          else {
+            let lw = measure(line, font);
+            if (lw > containerWidth) {
+              for (let j = 0; ; j++) {
+                if (lw <= contentWidth || j >= 2) { line += ell; break; }
+                let sub;
+                if (j === 0) { let w = 0; let q = 0; for (const len = line.length; q < len && w < contentWidth; q++) w += charW(font, line.charCodeAt(q)); sub = q; } else sub = lw > 0 ? Math.floor(line.length * contentWidth / lw) : 0;
+                line = line.substr(0, sub); lw = measure(line, font);
+              }
+              out.isTruncated = true;
+              stat.truncated++;
+              if (ell) stat.ellipsis++;
+            }
+          }
+          t.text = line;
+        }
+        t.width = measure(t.text, font);
+      }
+      t.lineHeight = lh;
+      calcH += lh;
+    }
+    const outerWidth = width + (padding[1] + padding[3]);
+    const outerHeight = M('richouter') ? calcH + (padding[0] + padding[2]) : height + (padding[0] + padding[2]);
+    const boxX = align === 'right' ? 0 - outerWidth : align === 'center' ? 0 - outerWidth / 2 : 0;
+    const boxY = vAlign === 'middle' ? 0 - outerHeight / 2 : vAlign === 'bottom' ? 0 - outerHeight : 0;
+    const xLeft = boxX + padding[3];
+    let lineTop = boxY + padding[0];
+    const xRight = xLeft + width;
+    for (const t of lines) {
+      let x; let a;
+      if (!align || align === 'left') { x = xLeft; a = 'left'; } else if (align === 'right') { x = xRight; a = 'right'; } else {
+        const lx = xLeft + (width - (xLeft - xLeft) - (xRight - xRight) - t.width) / 2;
+        x = lx + t.width / 2; a = 'center';
+      }
+      out.tokens.push({ text: t.text, x, y: lineTop + t.lineHeight / 2, align: a });
+      lineTop += t.lineHeight;
+    }
+    out.lines = lines.map(t => t.text);
+    return out;
   }
   // ---- M3: the upper label (TreemapView renderBackground -> prepareText(bg, borderColour, opacity, upperLabelRect))
   const pctOf = (v, max) => (typeof v === 'string' ? (v.lastIndexOf('%') >= 0 ? parseFloat(v) / 100 * max : parseFloat(v)) : v);   // zrender contain/text parsePercent
@@ -950,33 +1203,75 @@ function transcribe(soIn, env, mut) {
       const anyShow = showNormal || !!emphShow || !!get(n, ['blur', 'label', 'show']) || !!get(n, ['select', 'label', 'show']);
       if (anyShow && !showNormal) {
         const fmt0 = get(n, ['label', 'formatter']);
-        const t0 = typeof fmt0 === 'string' ? formatTpl(fmt0, { seriesName, name: storeName(n), value: n.item.value }) : null;
+        let t0 = typeof fmt0 === 'string' ? formatTpl(fmt0, { seriesName, name: storeName(n), value: n.item.value }) : null;
+        // M4: addDrillDownIcon runs on the IGNORED Text too (its text is the formatter's, never the chain name)
+        if (t0 != null && n.layout.isLeafRoot && !M('noicon') && !M('iconignored') && S.drillDownIcon) t0 = S.drillDownIcon + ' ' + t0;
         n.label = { rawText: t0, ignore: true, transform: null, z2: M('z2') ? z2c + 2 : maxZ2 + 2, width: null, height: null, padding: json(get(n, ['label', 'padding'])), isTruncated: false, lines: [] };
       }
       if (showNormal) {
         const fmt = get(n, ['label', 'formatter']);
         let text = typeof fmt === 'string' ? formatTpl(fmt, { seriesName, name: storeName(n), value: n.item.value }) : undefined;
         if (text == null) text = chainName(n);
+        // M4 addDrillDownIcon: a leaf root's text (any non-null text, '' included) gets the series' OWN
+        // drillDownIcon + ' ' when that icon is truthy
+        let iconed = false;
+        if (text != null && n.layout.isLeafRoot && !M('noicon') && S.drillDownIcon) { text = S.drillDownIcon + ' ' + text; iconed = true; }
         const fsz = get(n, ['label', 'fontSize']) || 12;
         const font = 'normal normal ' + fsz + 'px ' + family;
         const tx = T ? T[0] : 0; const ty = T ? T[1] : 0;
-        const rx = M('ordx') ? bw + (tx + cw / 2) : (bw * 1 + tx) + cw / 2;
-        const ry = (bw * 1 + ty) + ch / 2;
+        // the layout rect = the content rect through the group transform; calculateTextPosition (M6: every
+        // 'inside*' position; distance = label.distance, treemap default 0)
+        const position = get(n, ['label', 'position']);
+        const distance = get(n, ['label', 'distance']);
+        let rx; let ry; let align; let vAlign;
+        if (position === 'inside' || M('itlinside')) {
+          rx = M('ordx') ? bw + (tx + cw / 2) : (bw * 1 + tx) + cw / 2;
+          ry = (bw * 1 + ty) + ch / 2;
+          align = 'center'; vAlign = 'middle';
+        } else {
+          const d = distance != null ? distance : 5;
+          rx = bw * 1 + tx; ry = bw * 1 + ty; align = 'left'; vAlign = 'top';
+          switch (position) {
+            case 'insideLeft': rx += d; ry += ch / 2; vAlign = 'middle'; break;
+            case 'insideRight': rx += cw - d; ry += ch / 2; align = 'right'; vAlign = 'middle'; break;
+            case 'insideTop': rx += cw / 2; ry += d; align = 'center'; break;
+            case 'insideBottom': rx += cw / 2; ry += ch - d; align = 'center'; vAlign = 'bottom'; break;
+            case 'insideTopLeft': rx += d; ry += d; break;
+            case 'insideTopRight': rx += cw - d; ry += d; align = 'right'; break;
+            case 'insideBottomLeft': rx += d; ry += ch - d; vAlign = 'bottom'; break;
+            case 'insideBottomRight': rx += cw - d; ry += ch - d; align = 'right'; vAlign = 'bottom'; break;
+            default: must(false, 'label.position ' + JSON.stringify(position) + ' is not transcribed');
+          }
+        }
         const LT = composeT(null, rx, ry).T;
         let pad = get(n, ['label', 'padding']);
         pad = isArray(pad) ? (pad.length === 2 ? [pad[0], pad[1], pad[0], pad[1]] : pad.length === 3 ? [pad[0], pad[1], pad[2], pad[1]] : pad) : [pad, pad, pad, pad];
-        const L = labelLines(text, cw, ch, font, pad);
+        const rich = get(n, ['label', 'rich']);
+        const isRich = !!rich && isObject(rich) && !M('norich');
+        const L = isRich ? richLayout(text, cw, ch, font, pad, align, vAlign) : labelLines(text, cw, ch, font, pad);
         const z2l = M('z2') ? z2c + 2 : maxZ2 + 2;
         n.label = { rawText: text == null ? null : text, ignore: false, transform: m6T(LT), z2: z2l, width: L.width, height: L.height, padding: pad, isTruncated: L.isTruncated, lines: L.lines.slice() };
-        let y = 0 - L.contentHeight / 2 + L.lh / 2;
+        if (ext4) n.labelInfo = { position: json(position), distance: json(distance), textAlign: align, verticalAlign: vAlign, anchor: { x: rx, y: ry }, layout: isRich ? 'rich' : 'plain', drillIcon: iconed };
         const fill = get(n, ['label', 'color']);
         // the label opacity: label.opacity, else the node style's opacity (defaultOpacity), else the TSpan default 1
         const lop = get(n, ['label', 'opacity']);
         const opacity = lop != null ? lop : (n.opacity != null && !M('noopacity') ? n.opacity : 1);
-        for (const line of L.lines) {
-          els.push({ kind: 'tspan', row: n.idx, z: 0, z2: z2l, zlevel: 0, transform: m6T(LT), fill, stroke: null, lineWidth: 1, lineJoin: null, opacity, text: line, x: 0 + pad[3] / 2 - pad[1] / 2, y, textAlign: 'center', textBaseline: 'middle', font });
-          stat.tspans++;
-          y += L.lh;
+        if (isRich) {
+          for (const t of L.tokens) {
+            els.push({ kind: 'tspan', row: n.idx, z: 0, z2: z2l, zlevel: 0, transform: m6T(LT), fill, stroke: null, lineWidth: 1, lineJoin: null, opacity, text: t.text, x: t.x, y: t.y, textAlign: t.align, textBaseline: 'middle', font });
+            stat.tspans++;
+          }
+        } else {
+          // ZRText plain: y = adjustTextY(0, contentHeight, verticalAlign) + lh / 2 (+ pad[0] for top, - pad[2]
+          // for bottom); x = getTextXForPadding(0, align, pad)
+          let y = (vAlign === 'middle' ? 0 - L.contentHeight / 2 : vAlign === 'bottom' ? 0 - L.contentHeight : 0) + L.lh / 2;
+          if (vAlign === 'top') y += pad[0]; else if (vAlign === 'bottom') y -= pad[2];
+          const x = align === 'right' ? 0 - pad[1] : align === 'center' ? 0 + pad[3] / 2 - pad[1] / 2 : 0 + pad[3];
+          for (const line of L.lines) {
+            els.push({ kind: 'tspan', row: n.idx, z: 0, z2: z2l, zlevel: 0, transform: m6T(LT), fill, stroke: null, lineWidth: 1, lineJoin: null, opacity, text: line, x, y, textAlign: align, textBaseline: 'middle', font });
+            stat.tspans++;
+            y += L.lh;
+          }
         }
       }
     }
@@ -989,12 +1284,17 @@ function transcribe(soIn, env, mut) {
   if (bc.show) {
     let target; let targetRule = 'findTarget';
     const px = env.W / 2; const py = env.H / 2;
-    (function find(n) {
-      if (!n.layout || n.layout.invisible) return;  // no background element: nothing below it has one either
-      const qx = M('global') ? px - (n.T ? n.T[0] : 0) : px; const qy = M('global') ? py - (n.T ? n.T[1] : 0) : py;
-      if (0 <= qx && qx <= 0 + n.layout.width && 0 <= qy && qy <= 0 + n.layout.height) { target = n; for (const c of (n.viewChildren || [])) find(c); }
-    })(rows[0]);
-    if (!target) { target = rows[0]; targetRule = 'fallbackRoot'; }
+    if (leafDepth != null && !M('ldcrumb')) {
+      // M4: seriesModel.get('leafDepth', true) != null -> the target is the view root (the tree root on frame 1)
+      target = rows[0]; targetRule = 'leafDepthViewRoot';
+    } else {
+      (function find(n) {
+        if (!n.layout || n.layout.invisible) return;  // no background element: nothing below it has one either
+        const qx = M('global') ? px - (n.T ? n.T[0] : 0) : px; const qy = M('global') ? py - (n.T ? n.T[1] : 0) : py;
+        if (0 <= qx && qx <= 0 + n.layout.width && 0 <= qy && qy <= 0 + n.layout.height) { target = n; for (const c of (n.viewChildren || [])) find(c); }
+      })(rows[0]);
+      if (!target) { target = rows[0]; targetRule = 'fallbackRoot'; }
+    }
     const tsFont = pathGet(bc, ['itemStyle', 'textStyle', 'fontSize']) != null ? pathGet(bc, ['itemStyle', 'textStyle', 'fontSize']) + 'px sans-serif' : '12px sans-serif';
     const list = [];
     let total = 0;
@@ -1080,6 +1380,10 @@ function transcribe(soIn, env, mut) {
       opacity: n.visited ? (n.opacity === undefined ? null : n.opacity) : null,
       visual: n.visited ? n.visual : null,
       upperLabel: n.upperLabel || null,
+      // M4-M6 extras (emitted for M4 / M5 / M6 cases only)
+      id: n.id, idSource: n.idSource,
+      visual4: n.visited && n.visual4 ? n.visual4 : null,
+      labelInfo: n.labelInfo || null,
     })),
     elements,
     breadcrumb: crumb,
@@ -1114,12 +1418,13 @@ function styleOf(el) {
   const g = k => (s[k] === undefined ? null : s[k]);
   return { fill: g('fill'), stroke: g('stroke'), lineWidth: g('lineWidth'), lineJoin: g('lineJoin'), opacity: g('opacity') };
 }
-function readTreemap(chart, fedSeries) {
+function readTreemap(chart, fedSeries, si) {
+  si = si || 0;
   const ec = chart.getModel();
   const zr = chart.getZr();
   const list = zr.storage.getDisplayList(true);
-  const sm = ec.getSeriesByIndex(0);
-  must(sm && sm.subType === 'treemap', 'series 0 is not a treemap');
+  const sm = ec.getSeriesByIndex(si);
+  must(sm && sm.subType === 'treemap', 'series ' + si + ' is not a treemap');
   const view = chart.getViewOfSeriesModel(sm);
   const data = sm.getData();
   const tree = data.tree;
@@ -1178,6 +1483,7 @@ function readTreemap(chart, fedSeries) {
       valueWritten: written[i].value,
       hasWrittenValue: hasOwn(written[i], 'value'),
       hasGroup: !!g,
+      id: data.getId(i),
     });
     must(!g || (bg && (!isParent) === !!ct), 'row ' + i + ': a group without its rects');
     must(!ct || !isParent, 'row ' + i + ': a parent with a content rect');
@@ -1249,7 +1555,7 @@ function upstreamView(u) {
     box: u.box,
     levels: u.levelsAfter,
     rows: u.rows.map(r => ({ index: r.index, name: r.name, valueCompleted: r.valueCompleted, value: r.value, depth: r.depth, height: r.height, parent: r.parent, children: r.children,
-      layout: r.layout, viewChildren: r.viewChildren, stroke: r.stroke, fill: r.fill, T: r.T, label: r.label, dataExtent: r.dataExtent, opacity: r.opacity, upperLabel: r.upperLabel })),
+      layout: r.layout, viewChildren: r.viewChildren, stroke: r.stroke, fill: r.fill, T: r.T, label: r.label, dataExtent: r.dataExtent, opacity: r.opacity, upperLabel: r.upperLabel, id: r.id })),
     elements: u.elements,
     breadcrumb: u.breadcrumb,
   };
@@ -1261,7 +1567,7 @@ function transcribedView(t) {
     rows: t.rows.map(r => ({ index: r.index, name: r.name, valueCompleted: r.valueCompleted, value: r.value, depth: r.depth, height: r.height, parent: r.parent, children: r.children,
       layout: r.layout, viewChildren: r.viewChildren, stroke: r.stroke, fill: r.fill, T: r.T, label: r.label, dataExtent: r.dataExtent, opacity: r.opacity,
       upperLabel: r.upperLabel ? { rawText: r.upperLabel.rawText, transform: r.upperLabel.transform, z2: r.upperLabel.z2, width: r.upperLabel.width, height: r.upperLabel.height,
-        padding: r.upperLabel.padding, isTruncated: r.upperLabel.isTruncated, lines: r.upperLabel.lines, layoutRect: r.upperLabel.layoutRect } : null })),
+        padding: r.upperLabel.padding, isTruncated: r.upperLabel.isTruncated, lines: r.upperLabel.lines, layoutRect: r.upperLabel.layoutRect } : null, id: r.id })),
     elements: t.elements.map(e => {
       const o = { kind: e.kind, row: e.row, z: e.z, z2: e.z2, zlevel: e.zlevel, transform: e.transform, fill: e.fill, stroke: e.stroke, lineWidth: e.lineWidth, lineJoin: e.lineJoin, opacity: e.opacity };
       if (e.shape) o.shape = e.shape;
@@ -1317,43 +1623,115 @@ function m1Violations(o, where, out, list) {
   return out;
 }
 
+// M4 / M5 / M6 cases: still refused anywhere in a series option
+const M7PLUS = ['decal'];
+// the content-label keys the transcription follows in M4-M6 cases (position: 'inside*'; rich: a style map that
+// only switches the layout, markup refused; overflow 'truncate')
+const LABEL_KEYS = ['show', 'formatter', 'fontSize', 'color', 'padding', 'position', 'distance', 'opacity', 'rich', 'overflow'];
+const INSIDE_POSITIONS = ['inside', 'insideLeft', 'insideRight', 'insideTop', 'insideBottom', 'insideTopLeft', 'insideTopRight', 'insideBottomLeft', 'insideBottomRight'];
+function m4Violations(o, where, out) {
+  m1Violations(o, where, out, M7PLUS);
+  (function walk(v, w) {
+    if (isArray(v)) { v.forEach((x, i) => walk(x, w + '[' + i + ']')); return; }
+    if (!isObject(v)) return;
+    for (const k of Object.keys(v)) {
+      const x = v[k];
+      if (k === 'label' && isObject(x) && !w.endsWith('emphasis') && !w.endsWith('blur') && !w.endsWith('select')) {
+        for (const kk of Object.keys(x)) if (!LABEL_KEYS.includes(kk)) out.push(w + '.label.' + kk);
+        if (x.position != null && !INSIDE_POSITIONS.includes(x.position)) out.push(w + '.label.position');
+        if (x.overflow != null && x.overflow !== 'truncate') out.push(w + '.label.overflow');
+      }
+      if (k === 'visualDimension' && x != null && !(x === 'value' || (typeof x === 'number' && x >= 0 && Math.floor(x) === x))) out.push(w + '.visualDimension');
+      if ((k === 'visualMin' || k === 'visualMax') && x != null && typeof x !== 'number') out.push(w + '.' + k);
+      if ((k === 'colorAlpha' || k === 'colorSaturation') && x != null && !(typeof x === 'number' || (isArray(x) && x.every(y => typeof y === 'number')))) out.push(w + '.' + k + ' (not numeric)');
+      if (k === 'value' && isArray(x) && !x.every(y => y == null || typeof y === 'number')) out.push(w + '.value (not numeric)');
+      if (k !== 'rich') walk(x, w + '.' + k);               // rich styles only switch the layout (markup is refused)
+    }
+  })(o, where);
+  return out;
+}
+
 function recordCase(def, withProd) {
   const opt = def.gallery ? gallery(def.gallery) : zrClone(def.option);
   const animationForced = opt.animation !== false;
   opt.animation = false;
   const optionText = JSON.stringify(opt);
   const fed = JSON.parse(optionText);
-  must(isArray(fed.series) ? fed.series.length === 1 : !!fed.series, 'one treemap series per case');
-  const fedSeries = [].concat(fed.series)[0];
-  must(fedSeries.type === 'treemap', 'not a treemap');
-  const viol = m1Violations(fedSeries, 'series[0]', [], def.batch ? M4PLUS : M2PLUS);
-  must(!viol.length, (def.batch ? 'an M4+ key: ' : 'an M2+ key: ') + viol.join(', '));
-  must(!(isArray(fedSeries.color) && fedSeries.color.length), 'a series-level colour list (M6)');
+  const ext4 = def.batch === 'M4' || def.batch === 'M5' || def.batch === 'M6';
+  const fedList = [].concat(fed.series);
+  must(fedList.length >= 1 && (fedList.length === 1 || def.batch === 'M6'), 'one treemap series per case (several: M6 only)');
+  fedList.forEach((s, i) => must(s && s.type === 'treemap', 'series ' + i + ' is not a treemap'));
+  must(!fed.legend || def.batch === 'M6', 'a legend outside M6');
+  fedList.forEach((s, i) => {
+    const viol = ext4 ? m4Violations(s, 'series[' + i + ']', []) : m1Violations(s, 'series[' + i + ']', [], def.batch ? M4PLUS : M2PLUS);
+    must(!viol.length, (ext4 ? 'a key not transcribed: ' : def.batch ? 'an M4+ key: ' : 'an M2+ key: ') + viol.join(', '));
+    must(ext4 || !(isArray(s.color) && s.color.length), 'a series-level colour list (M6)');
+  });
+  const fedSeries = fedList[0];
   // the sort key as fed, BEFORE any JSON round trip
-  const src = def.gallery ? fedSeries : [].concat(def.option.series)[0];
-  const sortKeyPresent = hasOwn(src, 'sort');
+  const srcList = def.gallery ? fedList : [].concat(def.option.series);
+  const sortKeyPresent = hasOwn(srcList[0], 'sort');
+  const readAll = (E, chart) => {
+    const ec = chart.getModel();
+    const lg = ec.getComponent('legend');
+    const seriesList = fedList.map((s, i) => {
+      const sm = ec.getSeriesByIndex(i);
+      const st = sm.getData().getVisual('style');
+      return { seriesIndex: i, name: s.name == null ? null : String(s.name), legendSelected: lg ? lg.isSelected(sm.name) : null, filtered: ec.isSeriesFiltered(sm), styleFill: json(st && st.fill) };
+    });
+    const us = [];
+    seriesList.forEach(sl => {
+      if (sl.filtered) return;
+      const u = readTreemap(chart, fedList[sl.seriesIndex], sl.seriesIndex);
+      u.seriesIndex = sl.seriesIndex;
+      us.push(u);
+    });
+    seriesList.forEach(sl => { sl.drawn = us.some(u => u.seriesIndex === sl.seriesIndex && u.elements.length > 0); });
+    const legend = lg ? { selectedMode: json(lg.option.selectedMode), data: lg.getData().map(m => m.get('name')), selectedFed: json([].concat(fed.legend)[0].selected), selected: json(lg.option.selected) } : null;
+    return { us, seriesList, legend };
+  };
   const rec = runChart(echarts, JSON.parse(optionText), chart => {
     const ec = chart.getModel();
     const zr = chart.getZr();
-    const u = readTreemap(chart, fedSeries);
-    for (const k of READ_KEYS) {
-      const want = zrMerge(zrClone(fedSeries), TM_DEFAULTS, false)[k];
-      must(JSON.stringify(json(u.merged[k])) === JSON.stringify(json(want)), 'the merged option ' + k + ' is not the fed option over the defaults: ' + JSON.stringify(u.merged[k]) + ' vs ' + JSON.stringify(want));
+    const all = readAll(echarts, chart);
+    for (const u of all.us) {
+      for (const k of READ_KEYS) {
+        const want = zrMerge(zrClone(fedList[u.seriesIndex]), TM_DEFAULTS, false)[k];
+        must(JSON.stringify(json(u.merged[k])) === JSON.stringify(json(want)), 'the merged option ' + k + ' is not the fed option over the defaults: ' + JSON.stringify(u.merged[k]) + ' vs ' + JSON.stringify(want));
+      }
+      delete u.merged;
+      must(!u.foreign || def.gallery || fedList.length > 1 || fed.legend, 'elements of another component in a hand-written case');
     }
-    delete u.merged;
-    must(!u.foreign || def.gallery, 'elements of another component in a hand-written case');
-    return { palette: json(ec.option.color), textStyle: json(ec.option.textStyle), ground: { background: json(zr.getBackgroundColor()), isDark: !!zr.isDarkMode() }, u };
+    must(all.us.length >= 1, 'no treemap series is drawn');
+    return { palette: json(ec.option.color), textStyle: json(ec.option.textStyle), ground: { background: json(zr.getBackgroundColor()), isDark: !!zr.isDarkMode() }, u: all.us[0], us: all.us, seriesList: all.seriesList, legend: all.legend };
   });
   if (withProd) {
-    const p = runChart(PROD, JSON.parse(optionText), chart => readTreemap(chart, fedSeries));
-    delete p.merged;
-    const a = JSON.stringify(flat(upstreamView(rec.u), 's', {}));
-    const b = JSON.stringify(flat(upstreamView(p), 's', {}));
+    const p = runChart(PROD, JSON.parse(optionText), chart => readAll(PROD, chart));
+    p.us.forEach(u => delete u.merged);
+    const a = JSON.stringify(rec.us.map(u => flat(upstreamView(u), 's', {})).concat([rec.seriesList, rec.legend]));
+    const b = JSON.stringify(p.us.map(u => flat(upstreamView(u), 's', {})).concat([p.seriesList, p.legend]));
     must(a === b, 'the production build records differently');
   }
-  const env = { W, H, palette: rec.palette, fontFamily: rec.textStyle.fontFamily, ground: rec.ground };
+  const env = { W, H, palette: rec.palette, fontFamily: rec.textStyle.fontFamily, ground: rec.ground, batch: def.batch };
   must(typeof env.fontFamily === 'string', 'no global fontFamily');
-  return { def, optionText, animationForced, sortKeyPresent, fedSeries, env, rec };
+  return { def, optionText, animationForced, sortKeyPresent, fedSeries, fedList, fed, env, rec, srcList };
+}
+// the transcription of a whole case: which series the legend lets draw, then each drawn series
+function transcribeCase(c, mut) {
+  const drawn = legendDrawn(c.fed, mut);
+  const trs = [];
+  drawn.forEach((d, i) => { if (d) { const t = transcribe(c.fedList[i], c.env, mut); t.seriesIndex = i; trs.push(t); } });
+  return { drawn, trs };
+}
+function caseViewUp(c) {
+  const o = { drawn: c.rec.seriesList.map(s => !s.filtered) };
+  c.rec.us.forEach(u => { o['s' + u.seriesIndex] = upstreamView(u); });
+  return o;
+}
+function caseViewTr(t) {
+  const o = { drawn: t.drawn };
+  t.trs.forEach(x => { o['s' + x.seriesIndex] = transcribedView(x); });
+  return o;
 }
 
 // ============================================================================
@@ -1573,15 +1951,42 @@ const GUARDS = [
   ['autostroke', 'M3: an option colour keeps the auto stroke'],
   ['nodark', 'M3: dark mode ignored in the outside colour'],
   ['bgalpha', "M3: the outside stroke ignores the background's alpha (no blend over white)"],
+  // M4
+  ['noicon', 'M4: no drillDownIcon prefix on leaf roots'],
+  ['iconignored', 'M4: the ignored label Text of a leaf root gets no icon'],
+  ['ldcrumb', 'M4: with leafDepth the breadcrumb target is still found by findTarget (upstream: the view root)'],
+  // M5
+  ['scalardim', 'M5: a scalar value reads NaN at dimensions > 0 (upstream: the scalar answers every dimension)'],
+  ['dimmax', 'M5: a dimension past the stored ones reads the value (upstream: NaN)'],
+  ['byvalue', "M5: colorMappingBy 'value' maps the colour list by index"],
+  ['lerp', 'M5: fastLerp as a * (1 - p) + b * p (upstream: a + (b - a) * p)'],
+  ['lerpfloor', 'M5: fastLerp truncates the channels (upstream: Math.round, then clamp)'],
+  ['dim0', 'M5: the mapped value ignores visualDimension (reads dimension 0)'],
+  ['novmm', 'M5: visualMin / visualMax do not widen the extent'],
+  // M6
+  ['alphanull', 'M6: calculateColor applies a colorAlpha of 0 (upstream: truthiness)'],
+  ['alpharange', 'M6: a colorSaturation range wins over a colorAlpha range (upstream: alpha first)'],
+  ['iddup', "M6: repeated names keep the bare name as id (upstream: '__ec__' + k)"],
+  ['idasindex', "M6: colorMappingBy 'id' maps by the sorted index"],
+  ['idperparent', "M6: mapIdToIndex restarts for every parent (upstream: one map per series)"],
+  ['legendfirst', "M6: legend 'single' picks the first explicitly selected item (upstream: the first not explicitly false)"],
+  ['norich', 'M6: a label.rich keeps the plain text layout'],
+  ['richtrunc', 'M6: the rich layout truncates like the plain one (upstream: only a token wider than the box)'],
+  ['richdrop', 'M6: the rich line drop ignores the current line height'],
+  ['richouter', 'M6: the rich box is placed by its content height (upstream: the outer box = height + padding)'],
+  ['itlinside', "M6: every label position is treated as 'inside'"],
 ];
 
 // ============================================================================
 // Output
 // ============================================================================
 function hexArr(a) { return a ? a.map(hexOrNull) : null; }
-function emitSeries(c) {
-  const u = c.rec.u;
-  const t = c.tr;
+function emitSeries(c, sk) {
+  const u = c.rec.us[sk];
+  const t = c.tc.trs[sk];
+  const ext4 = c.def.batch === 'M4' || c.def.batch === 'M5' || c.def.batch === 'M6';
+  const numOut = v => (v == null ? null : dec(v));
+  const hexOut = v => (typeof v === 'number' ? hex(v) : null);
   const R = t.resolved;
   const rows = u.rows.map((r, i) => {
     const tr = t.rows[i];
@@ -1625,6 +2030,20 @@ function emitSeries(c) {
         anchor: { x: hex(tu.anchor.x), y: hex(tu.anchor.y) }, textAlign: tu.textAlign, verticalAlign: tu.verticalAlign, colourRule: tu.colourRule, fill: tu.fill, stroke: tu.stroke,
       } : null;
     }
+    if (ext4) {
+      // M4-M6: the SeriesData id (null for a generated 'e' + NUL + NUL + dataIndex id), the alpha visual, the input of a
+      // linear mapping, the id index, the map this node gives its children, the content label placement
+      o.id = tr.idSource === 'generated' ? null : tr.id;
+      o.idSource = tr.idSource;
+      const v4 = tr.visual4;
+      o.visual4 = v4 ? {
+        colorAlpha: numOut(v4.colorAlpha), colorAlphaHex: hexOut(v4.colorAlpha), alphaSource: v4.alphaSource, alphaMappedFrom: v4.alphaMappedFrom, idIndex: v4.idIndex,
+        mappedInput: v4.mappedInput ? { value: dec(v4.mappedInput.value), valueHex: hex(v4.mappedInput.value), normalized: dec(v4.mappedInput.normalized), normalizedHex: hex(v4.mappedInput.normalized) } : null,
+        mapping: v4.mapping ? Object.assign({}, v4.mapping, v4.mapping.dataExtent ? { dataExtent: v4.mapping.dataExtent.map(hex), dataExtentText: v4.mapping.dataExtent.map(dec) } : {}) : null,
+      } : null;
+      const li = tr.labelInfo;
+      o.labelInfo = li ? { position: li.position, distance: li.distance, textAlign: li.textAlign, verticalAlign: li.verticalAlign, anchor: { x: hex(li.anchor.x), y: hex(li.anchor.y) }, anchorText: { x: dec(li.anchor.x), y: dec(li.anchor.y) }, layout: li.layout, drillIcon: li.drillIcon } : null;
+    }
     return o;
   });
   const elements = u.elements.map(e => {
@@ -1648,10 +2067,10 @@ function emitSeries(c) {
     };
   }
   return {
-    seriesIndex: 0, name: u.name,
+    seriesIndex: u.seriesIndex, name: u.name,
     resolved: {
       box: { x: hex(u.box.x), y: hex(u.box.y), width: hex(u.box.width), height: hex(u.box.height) }, boxText: { x: dec(u.box.x), y: dec(u.box.y), width: dec(u.box.width), height: dec(u.box.height) },
-      sortKeyPresent: c.sortKeyPresent, sortValue: R.sortValue, sortMode: R.sortMode, squareRatio: hex(R.squareRatio), squareRatioText: dec(R.squareRatio), leafDepth: R.leafDepth,
+      sortKeyPresent: hasOwn(c.srcList[u.seriesIndex], 'sort'), sortValue: R.sortValue, sortMode: R.sortMode, squareRatio: hex(R.squareRatio), squareRatioText: dec(R.squareRatio), leafDepth: R.leafDepth,
       visibleMin: dec(R.visibleMin), level0PaletteDefaulted: R.level0PaletteDefaulted, levels: u.levelsAfter,
     },
     rows, elements, breadcrumb,
@@ -1682,6 +2101,7 @@ console.error = (...a) => logged.push(a.join(' '));
 console.warn = (...a) => logged.push(a.join(' '));
 const NRANDOM = +(process.env.ORACLE_RANDOM || 16);
 const NRANDOM_M23 = +(process.env.ORACLE_RANDOM_M23 || 6);
+const NRANDOM_M456 = +(process.env.ORACLE_RANDOM_M456 || 4);
 let exitCode = 0;
 if (require.main !== module) {
   console.error = quiet.error;
@@ -1700,6 +2120,14 @@ if (require.main !== module) {
   defs.push({ id: 'G-disk', batch: 'M2', gallery: 'treemap-disk', note: 'examples/advchart/gallery/treemap-disk.json verbatim (animation forced false; its title is another component and is left out): levels[2] colorSaturation [0.35, 0.5] and borderColorSaturation 0.6, visibleMin 300, formatter {b}' });
   defs.push({ id: 'G-show-parent', batch: 'M3', gallery: 'treemap-show-parent', note: 'examples/advchart/gallery/treemap-show-parent.json verbatim (animation forced false; title left out): upperLabel height 30 on the series, hidden on levels[0], plus the disk colours' });
   for (const d of randomCasesM23(NRANDOM_M23)) defs.push(d);
+  // ---- M4 / M5 / M6 (appended: every case above keeps its id and content) ----
+  for (const d of M456_CASES()) defs.push(d);
+  defs.push({ id: 'G-drill-down', batch: 'M4', gallery: 'treemap-drill-down', note: "examples/advchart/gallery/treemap-drill-down.json verbatim (animation forced false; its title -- left: 'leafDepth', which getLayoutRect parses to NaN and treats as 0 -- is another component and is left out): leafDepth 2 (leaf roots with the drill icon, the crumb on the root), visibleMin 300, colorSaturation / borderColorSaturation per level" });
+  defs.push({ id: 'G-visual', batch: 'M5', gallery: 'treemap-visual', note: "examples/advchart/gallery/treemap-visual.json verbatim (animation forced false; title left out): levels[1].color ['#942e38', '#aaa', '#269f3c'] with colorMappingBy 'value' over visualDimension 3, visualMin -100 / visualMax 100 widening every extent; depth-1 nodes have no colour (the root has no list)" });
+  defs.push({ id: 'G-obama', batch: 'M6', gallery: 'treemap-obama', note: "examples/advchart/gallery/treemap-obama.json verbatim (animation forced false; title and legend left out): three treemap series, the legend in selectedMode 'single' selects '2012Budget' (the first item), so only series 0 draws; its levels[0] colorMappingBy 'id' over the default palette (levels[0].color null is overwritten by setDefault); label.position 'insideTopLeft' with a label.rich, so the RICH layout; the harvested JSON lost the label formatter functions, so the labels are the chain names" });
+  for (const d of randomCasesM456(NRANDOM_M456)) defs.push(d);
+  // ---- gaps found by the Pascal mutation run (M2 / M3, appended) ----
+  for (const d of GAP_CASES()) defs.push(d);
   { const seen = new Set(); for (const d of defs) { must(!seen.has(d.id), 'duplicate id ' + d.id); seen.add(d.id); } }
   const recs = [];
   let checks = 0;
@@ -1707,16 +2135,19 @@ if (require.main !== module) {
     let c;
     try {
       c = recordCase(d, !d.id.startsWith('R-'));
-      c.tr = transcribe(c.fedSeries, c.env, null);
-      const a = flat(upstreamView(c.rec.u), 's', {});
-      const b = flat(transcribedView(c.tr), 's', {});
+      c.tc = transcribeCase(c, null);
+      c.tr = c.tc.trs[0];
+      const a = flat(caseViewUp(c), 'c', {});
+      const b = flat(caseViewTr(c.tc), 'c', {});
       const df = diffFlat(a, b);
       checks += Object.keys(a).length;
       must(!df.length, 'the transcription differs from upstream at ' + df.length + ' fields: ' + df.slice(0, +(process.env.ORACLE_NDIFF || 6)).map(x => JSON.stringify(x)).join('; '));
       // transcribed extras agree with what upstream shows
-      const ub = c.rec.u.breadcrumb; const tb = c.tr.breadcrumb;
-      must(!ub === !tb, 'breadcrumb presence');
-      if (tb) must(tb.target === ub.target, 'breadcrumb target');
+      c.rec.us.forEach((u, k) => {
+        const ub = u.breadcrumb; const tb = c.tc.trs[k].breadcrumb;
+        must(!ub === !tb, 'breadcrumb presence');
+        if (tb) must(tb.target === ub.target, 'breadcrumb target');
+      });
       c.flatUp = a;
     } catch (e) {
       if (e instanceof OracleError) e.message = d.id + ': ' + e.message;
@@ -1774,10 +2205,38 @@ if (require.main !== module) {
     must(U('M3-formatter-fallback').elements.some(e => e.kind === 'upper' && e.text === 'L:') && U('M3-formatter-fallback').elements.some(e => e.kind === 'upper' && e.text === 'L:Ser'), 'M3-formatter-fallback: label.formatter reaches the header');
     must(U('M3-negative-width').rows.some(r => r.upperLabel && r.upperLabel.layoutRect.width < 0), 'M3-negative-width: a negative header rect');
     must(U('M3-levels').rows.every(r => !r.upperLabel || r.viewChildren.length), 'M3-levels: headers on parents only');
+    // M4 / M5 / M6 anchors (wf79 upstream.md)
+    const T = (id, sk) => byId[id].tc.trs[sk || 0];
+    const trow = (id, nm, sk) => T(id, sk).rows.find(r => r.name === nm);
+    const texts = id => U(id).elements.filter(e => e.kind === 'tspan').map(e => e.text);
+    must(texts('M4-leafDepth-1').join('|') === '\u25b6 B|\u25b6 A|C' && U('M4-leafDepth-1').breadcrumb.items.length === 1 && T('M4-leafDepth-1').breadcrumb.targetRule === 'leafDepthViewRoot', 'M4-leafDepth-1: leaf roots with icons, the crumb on the root');
+    must(rowOf('M4-leafDepth-0', 'S').label.lines[0] === '\u25b6 S' && rowOf('M4-leafDepth-0', 'S').fill === null, 'M4-leafDepth-0: the root as leaf root');
+    must(!trow('M4-cvm-hides-first', 'a1').layout.isLeafRoot && trow('M4-cvm-leafDepth-wins', 'a1').layout.isLeafRoot, 'M4-cvm: leafDepth beats the hide only at or past its depth');
+    must(texts('M4-icon-nameless').join('|') === '\u25b6 n|\u25b6 ' && texts('M4-icon-empty').indexOf('Beta') >= 0 && texts('M4-icon-custom').indexOf('>> Beta') >= 0, 'M4-icon: the prefix rules');
+    must(rowOf('M4-icon-ignored', 'Beta').label.ignore && rowOf('M4-icon-ignored', 'Beta').label.rawText === '\u25b6 FBeta', 'M4-icon-ignored: the ignored Text carries the icon');
+    must(rowOf('M5-value-dim0', 'a2').fill === 'rgba(166,145,147,1)' && rowOf('M5-value-dim0', 'C').fill === null, 'M5-value-dim0: fastLerp');
+    must(rowOf('M5-nan', 'p1').fill === null && rowOf('M5-nan', 'q1').fill === 'rgba(128,128,128,1)', 'M5-nan: NaN gives no colour, except over a degenerate extent (0.5)');
+    must(rowOf('M5-series-linear', 'C').fill === 'rgba(80,112,221,1)' && rowOf('M5-alpha-colours', 'a2').fill === 'rgba(51,204,0,0.4415686274509804)', 'M5: the palette mapped linearly; the alpha lerped unrounded');
+    must(rowOf('M5-scalar-dims', 'R').fill === 'rgba(240,240,240,1)' && rowOf('M5-past-dimmax', 'R').fill === null, 'M5: a scalar answers every stored dimension, NaN past them');
+    must(['b1', 'b21', 'a11', 'Gamma'].map(nm => trow('M6-id-series', nm).visual4.idIndex).join() === '1,3,7,10' && rowOf('M6-id-series', 'Gamma').fill === '#b6d634', 'M6-id-series: one pre-order counter per series');
+    must(T('M6-id-dup').rows.map(r => r.id).slice(0, 5).join() === 'x,x__ec__2,x__ec__3,y,x__ec__4' && T('M6-id-dup').rows[5].visual4.idIndex === T('M6-id-dup').rows[3].visual4.idIndex, 'M6-id-dup: ids and a shared index');
+    must(rowOf('M6-alpha-item', 'Alpha').stroke === 'rgba(179,212,43,0.3)' && rowOf('M6-alpha-item', 'b1').fill === '#5070dd', 'M6-alpha-item: alpha through the border; 0 changes nothing');
+    must(rowOf('M6-alpha-dim', 'b1').fill === '#5070dd', 'M6-alpha-dim: a NaN alpha is falsy');
+    const itl = U('M6-insideTopLeft').elements.find(e => e.kind === 'tspan');
+    must(itl.x === 5 && itl.y === 11 && itl.textAlign === 'left', 'M6-insideTopLeft: x 5, y 11, left');
+    must(U('M6-inside-rich').elements.filter(e => e.kind === 'tspan').every(e => e.y < -100), 'M6-inside-rich: the rich layout puts the text at the top');
+    must(rowOf('M6-snug-plain', 'Elephant').label.isTruncated && !rowOf('M6-snug-rich', 'Elephant').label.isTruncated, 'M6-snug: plain truncates, rich keeps');
+    const drawnOf = id => byId[id].rec.seriesList.filter(s => !s.filtered).map(s => s.seriesIndex).join();
+    must(drawnOf('M6-legend-single') === '0' && drawnOf('M6-legend-selected-true') === '0' && drawnOf('M6-legend-false-first') === '1' && drawnOf('M6-legend-missing') === '0,1' && drawnOf('M6-legend-multiple') === '0,2' && drawnOf('G-obama') === '0' && drawnOf('M6-obama-growth') === '2', 'M6: the legend single-mode rule');
+    must(U('G-drill-down').foreign > 0 && U('G-visual').foreign > 0 && U('G-obama').foreign > 0, 'the gallery titles / legend were left out');
+    must(trow('M2-series-itemstyle-sat', 'A1').visual.saturationSource === 'mapped' && trow('M2-series-itemstyle-sat', 'C').visual.colorSaturation === 0.3 && trow('M2-series-itemstyle-sat', 'D1').visual.colorSaturation === 0.3, 'M2-series-itemstyle-sat: mapped beats the series value; unmapped leaves keep it');
+    must(U('M3-upper-padding-truncate').rows.some(r => r.upperLabel && r.upperLabel.isTruncated), 'M3-upper-padding-truncate: the padding truncates the header');
   }
   // the cases carry what the Pascal test needs
+  const c0f = id => byId[id].rec.seriesList.filter(sl => sl.filtered).length;
   const counts = { cases: recs.length, rows: 0, elements: 0, rects: 0, tspans: 0, crumbs: 0, crumbTexts: 0, labels: 0 };
-  for (const c of recs) {
+  for (const c0 of recs) for (let sk = 0; sk < c0.rec.us.length; sk++) {
+    const c = { def: c0.def, rec: { u: c0.rec.us[sk] }, tr: c0.tc.trs[sk], first: sk === 0 };
     counts.rows += c.rec.u.rows.length;
     counts.elements += c.rec.u.elements.length;
     for (const e of c.rec.u.elements) {
@@ -1798,7 +2257,7 @@ if (require.main !== module) {
     counts.ignoredLabels = (counts.ignoredLabels || 0) + c.rec.u.rows.filter(r => r.label && r.label.ignore).length;
     if (c.def.batch) {
       const bump = (k, v) => { counts[k] = (counts[k] || 0) + v; };
-      bump(c.def.batch === 'M2' ? 'casesM2' : 'casesM3', 1);
+      if (c.first) bump('cases' + c.def.batch, 1);
       const vis = c.tr.rows.filter(r => r.visual);
       bump('saturatedColours', vis.filter(r => r.visual.colorSaturation != null && !(r.viewChildren && r.viewChildren.length) && typeof r.fill === 'string' && r.fill.indexOf('rgba(') === 0).length);
       bump('saturationMappedRows', vis.filter(r => r.visual.saturationMappedFrom != null).length);
@@ -1809,6 +2268,21 @@ if (require.main !== module) {
       bump('upperTruncatedLines', c.tr.upperStats.truncated);
       bump('upperDroppedLines', c.tr.upperStats.dropped);
       for (const k of ['outside', 'inside', 'option']) bump('upperColour_' + k, c.tr.rows.filter(r => r.upperLabel && r.upperLabel.colourRule === k).length);
+      if (c.def.batch === 'M4' || c.def.batch === 'M5' || c.def.batch === 'M6') {
+        const v4 = c.tr.rows.filter(r => r.visual4);
+        bump('leafRoots', c.tr.rows.filter(r => r.layout && r.layout.isLeafRoot).length);
+        bump('drillIconLabels', c.tr.rows.filter(r => r.labelInfo && r.labelInfo.drillIcon).length);
+        bump('ignoredIconLabels', c.tr.rows.filter(r => r.label && r.label.ignore && r.layout && r.layout.isLeafRoot && r.label.rawText != null).length);
+        bump('crumbOnLeafDepthRoot', c.tr.breadcrumb && c.tr.breadcrumb.targetRule === 'leafDepthViewRoot' ? 1 : 0);
+        bump('linearColourRows', v4.filter(r => r.visual4.mappedInput && r.colour && r.colour.mappedFrom != null && r.paletteIndex == null).length);
+        bump('linearColourNone', v4.filter(r => r.visual4.mappedInput && r.colour && r.colour.value == null).length);
+        bump('idMappedRows', v4.filter(r => r.visual4.idIndex != null).length);
+        bump('alphaMappedRows', v4.filter(r => r.visual4.alphaMappedFrom != null).length);
+        bump('alphaColours', v4.filter(r => r.visual4.colorAlpha && !(r.viewChildren && r.viewChildren.length) && typeof r.fill === 'string' && r.fill.indexOf('rgba(') === 0).length);
+        bump('richLabels', c.tr.rows.filter(r => r.labelInfo && r.labelInfo.layout === 'rich').length);
+        bump('labelsNotInside', c.tr.rows.filter(r => r.labelInfo && r.labelInfo.position !== 'inside').length);
+        if (c.first) bump('filteredSeries', c0f(c.def.id));
+      }
     }
   }
   // guards
@@ -1816,7 +2290,7 @@ if (require.main !== module) {
     let red = 0; const changed = [];
     for (const c of recs) {
       let b;
-      try { b = flat(transcribedView(transcribe(c.fedSeries, c.env, id)), 's', {}); } catch (e) { b = { threw: String(e.message) }; }
+      try { b = flat(caseViewTr(transcribeCase(c, id)), 'c', {}); } catch (e) { b = { threw: String(e.message) }; }
       const n = diffFlat(c.flatUp, b).length;
       if (n) { red += n; changed.push(c.def.id); }
     }
@@ -1848,13 +2322,18 @@ if (require.main !== module) {
       "M2 saturation: a parent maps its children when its chain `color` is not a non-empty list, it has a colour (visuals.color not null / 'none'), and its chain colorSaturation (item colorSaturation > levels[depth].colorSaturation > series colorSaturation) is a non-empty array: child visual = linearMap(linearMap(child.getValue(), dataExtent, [0, 1], clamp), [0, 1], [range[0], range[1] (= range[0] for a one-entry range)], clamp); dataExtent = [min, max] over the sorted children BEFORE the visibleMin cut; min == max gives 0.5, the middle of the range. The child's itemStyle.colorSaturation chain (item > level) wins over the mapped value, which wins over the series itemStyle.colorSaturation; the value is inherited by descendants that are not remapped.",
       "M2 colours: calculateColor = the colour, then (if colorSaturation is TRUTHY: 0 changes nothing) zrender modifyHSL(colour, null, null, s), which sets HSL LIGHTNESS: parse -> rgba2hsla -> l = clamp(s, 0, 1) -> hsla2rgba (h = ((H % 360) + 360) % 360 / 360; channels Math.round(x * 255) clamped to 0..255; alpha kept) -> 'rgba(r,g,b,a)'. borderColorSaturation (chain, != null) makes the stroke modifyHSL(calculateColor(visuals), null, null, bcs) (0 is black), or null without a colour. Then dataStyleTask: a raw item itemStyle color / borderColor / opacity replace fill / stroke / opacity.",
       "M3 headers: only a PARENT (viewChildren) whose upperLabelHeight (show ? height : 0 on its chain) is non-zero gets a header Text on its BACKGROUND; a leaf keeps its content label (its content rect is inset by bw only, the reserved strip is ignored). Text: upperLabel.formatter, else label.formatter, else the chain name. Rect {bw, 0, w - 2bw, upperHeight} through the background transform (a negative width flips); position [x, y] (default [0, '50%']): left / middle at (rect.x + x, rect.y + y%); 'inside': centre / middle. Width max(rect.width - pad, 0), height max(upperHeight - pad, 0), the label truncation / line drop. z2 = running max + 2. Colour: an option colour ('inherit' = the border colour) as is, no stroke; otherwise 'inside' over a filled background: #333 (lum > 0.5) / #eee (> 0.2) / #ccc, stroke = the background colour when (lum(fill) < 0.4) == dark mode; anything else (the default array position, or an unfilled background): #333 (#ccc in dark mode) with a 2px stroke = the canvas background blended over white (black in dark mode). Opacity: upperLabel.opacity, else the node style opacity.",
-      "Not recorded: hover / emphasis, drill-down, zoom / roam, animations, the second-frame breadcrumb (which would use the previous frame's transforms).",
+      "M4 leafDepth: squarify depth counts from the view root (0); a node at depth >= leafDepth with laid-out children becomes isLeafRoot, its children get only {area} (no x / y, never drawn) and it is drawn as a leaf. leafDepth wins over childrenVisibleMin only at or past its depth (initChildren: `hideChildren && !overLeafDepth`). A leaf root's label text (any non-null text, '' included, the IGNORED Text of a hidden label too) gets the series' own drillDownIcon + ' ' when the icon is truthy; headers never get it. With a series leafDepth the breadcrumb target is the view root (the root alone on frame 1).",
+      "M5 linear colour: a parent whose chain `color` list maps with a colorMappingBy other than 'index' / 'id' maps child value v = getValue(visualDimension of the PARENT chain) as t = linearMap(v, extent, [0, 1], clamp) (a degenerate extent gives 0.5 for anything, NaN included), then zrender fastLerp: value = t * (n - 1), l = floor, r = ceil, p = value - l, channel = clamp(Math.round(L + (R - L) * p), 0, 255), alpha = clamp(L_a + (R_a - L_a) * p, 0, 1) unrounded, 'rgba(r,g,b,a)'; t outside [0, 1] or NaN gives NO colour. extent = statistic() over the sorted children before visibleMin by the parent's visualDimension ([last, first] for the STRING 'value' with a sort, reversed for asc; else [min, max], NaN skipped), then visualMin < extent[0] and visualMax > extent[1] widen it. getValue(dim): a scalar value answers every stored dimension, null is NaN, a dimension past the longest value array is NaN.",
+      "M6: colorMappingBy 'id' maps list[mapIdToIndex(child id) % n], one first-seen map per series over the pre-order visual traversal (a child's index is taken right before its subtree). colorAlpha ranges map like colorSaturation (linear, paired, clamped) and win over a colorSaturation range on the same parent; calculateColor applies modifyAlpha after the saturation when the alpha is TRUTHY (0 and NaN change nothing): the parsed channels with a = clamp(alpha, 0, 1). A series-level colour list maps below the root at every depth (the root keeps its levels[0] palette). Label positions 'inside*': calculateTextPosition over the content rect (distance = label.distance, 0 by default); plain tspans at x = getTextXForPadding(0, align, pad), y = adjustTextY(0, contentHeight, verticalAlign) + lh / 2 (+ pad[0] top, - pad[2] bottom). Any label.rich switches to the RICH layout: a token is truncated only when wider than the box; the box is placed by the OUTER size (box + padding), so 'inside' text sits at the top.",
+      "M6 legend: LegendModel in selectedMode 'single' selects the first legend item that is not explicitly false and deselects the others; filtered series have no layout, no visual and no element; a name missing from legend.data stays shown. seriesStyleTask still gives every series (filtered too) a colour: its own `color` list's first entry, else the global palette by series name.",
+      "Not recorded: hover / emphasis, drill-down clicks, zoom / roam, animations, the second-frame breadcrumb (which would use the previous frame's transforms), rich-text markup, label align / verticalAlign / lineHeight overrides.",
     ],
     measure: measureRec,
     counts,
     cases: recs.map(c => ({
       id: c.def.id, ...(c.def.batch ? { batch: c.def.batch } : {}), note: c.def.note, gallery: c.def.gallery || null, option: c.def.gallery ? null : JSON.parse(c.optionText), animationForced: c.animationForced,
-      random: c.def.random || null, palette: c.rec.palette, textStyle: c.rec.textStyle, ground: c.rec.ground, series: [emitSeries(c)],
+      random: c.def.random || null, palette: c.rec.palette, textStyle: c.rec.textStyle, ground: c.rec.ground, series: c.rec.us.map((u, k) => emitSeries(c, k)),
+      ...(c.def.batch === 'M6' ? { legend: c.rec.legend, seriesList: c.rec.seriesList } : {}),
     })),
     guards,
   };
@@ -2028,4 +2507,190 @@ function randomCasesM23(nForests) {
     }
   }
   return out;
+}
+
+// ============================================================================
+// M4 (drill-down), M5 (value-mapped colour), M6 (multi-series): hand cases, then the random families
+// ============================================================================
+function M456_CASES() {
+  const D1x = D1;
+  const D4 = () => [
+    { name: 'Alpha', children: [{ name: 'a1', value: 6, children: [{ name: 'a11', value: 4 }, { name: 'a12', value: 2 }] }, { name: 'a2', value: 3 }] },
+    { name: 'Beta', children: [{ name: 'b1', value: 5 }, { name: 'b2', value: 4, children: [{ name: 'b21', value: 3 }, { name: 'b22', value: 1 }] }] },
+    { name: 'Gamma', value: 4 },
+  ];
+  // value arrays [size, dim1, dim2] with a null
+  const V = () => [
+    { name: 'A', value: [10, 1, -50], children: [{ name: 'a1', value: [6, 5, -80] }, { name: 'a2', value: [3, 2, 20] }, { name: 'a3', value: [1, 9, 100] }] },
+    { name: 'B', value: [8, 4, 0], children: [{ name: 'b1', value: [5, null, 60] }, { name: 'b2', value: [3, 7, -10] }] },
+    { name: 'C', value: [2, 3, 150] },
+  ];
+  const RGB3 = ['#942e38', '#aaa', '#269f3c'];
+  const C6 = ['#c23531', '#314656', '#61a0a8', '#dd8668', '#91c7ae', '#6e7074'];
+  const byValue = list => [{}, { color: list, colorMappingBy: 'value' }];
+  const m4 = (id, note, option) => ({ id, batch: 'M4', note, option });
+  const m5 = (id, note, option) => ({ id, batch: 'M5', note, option });
+  const m6 = (id, note, option) => ({ id, batch: 'M6', note, option });
+  const three = (extraSeries, legend) => ({ animation: false, legend, series: ['S0', 'S1', 'S2'].map(nm => Object.assign({ type: 'treemap', name: nm, data: D4() }, extraSeries || {})) });
+  // a leaf whose label box is exactly 0.5 wider than its text: the plain layout truncates (containerWidth =
+  // width - 1), the rich layout keeps it (it truncates only a token WIDER than the box)
+  const snug = rich => {
+    const nm = 'Elephant';
+    const w = measure(nm, 'normal normal 12px Microsoft YaHei');
+    return one({ data: [{ name: nm, value: 1 }], left: 20, width: w + 10.5, top: 50, height: 200, label: rich ? { rich: { r: {} } } : {} });
+  };
+  const obama = sel => { const o = gallery('treemap-obama'); o.legend.selected = sel; return o; };
+  return [
+    // ---- M4: leafDepth ----
+    m4('M4-leafDepth-1', "leafDepth 1 on D1: A and B are leaf roots (drawn as leaves with '\u25b6 ' labels, their children keep only {area}); the crumb is the root alone (findTarget would give root > B)", one({ data: D1x(), leafDepth: 1 })),
+    m4('M4-leafDepth-2', "leafDepth 2 on D4: a1 and b2 are leaf roots; levels[2] label formatter '{b}' gets the icon too", one({ data: D4(), leafDepth: 2, levels: [{}, {}, { label: { formatter: '{b}' } }] })),
+    m4('M4-leafDepth-0', "leafDepth 0: the root itself is the leaf root ('\u25b6 S', no colour: fill null); the crumb is 'S'", one({ name: 'S', data: D4(), leafDepth: 0 })),
+    m4('M4-cvm-leafDepth-wins', 'childrenVisibleMin 200000 hides the children of Alpha / Beta, but leafDepth 2 has priority there: a1 and b2 are still leaf roots with icons', one({ data: D4(), leafDepth: 2, childrenVisibleMin: 200000 })),
+    m4('M4-cvm-hides-first', 'childrenVisibleMin 200000 with leafDepth 3: at depth 2 the hide wins (a1, b2 are plain leaves, no icon, no isLeafRoot)', one({ data: D4(), leafDepth: 3, childrenVisibleMin: 200000 })),
+    m4('M4-icon-custom', "drillDownIcon '>>': '>> Beta'", one({ data: D4(), leafDepth: 1, drillDownIcon: '>>' })),
+    m4('M4-icon-empty', "drillDownIcon '' (falsy): leaf roots keep their plain text", one({ data: D4(), leafDepth: 1, drillDownIcon: '' })),
+    m4('M4-icon-nameless', "unnamed series, nameless leaf roots: without a formatter the text is null (no icon, no tspan); an item formatter '{b}' gives '' and so '\u25b6 '", one({ data: [{ value: 3, children: [{ value: 1 }, { value: 2 }] }, { name: 'n', value: 2, children: [{ value: 2 }] }, { value: 1.5, label: { formatter: '{b}' }, children: [{ value: 1 }] }], leafDepth: 1 })),
+    m4('M4-icon-ignored', "levels[1] label show false with formatter 'F{b}': the IGNORED Texts of the leaf roots carry '\u25b6 FBeta', Gamma (a plain leaf) 'FGamma'", one({ data: D4(), leafDepth: 1, levels: [{}, { label: { show: false, formatter: 'F{b}' } }] })),
+    m4('M4-upper', 'leafDepth 2 with upperLabel: a leaf root reserves the header strip in its layout but draws its content label (with the icon), no header', one({ data: D4(), leafDepth: 2, upperLabel: { show: true }, itemStyle: { borderWidth: 2 } })),
+    m4('M4-visibleMin', "a leaf root whose zero child was cut by visibleMin (only p1 gets {area}); an all-zero sibling is cut at the root", one({ data: [{ name: 'P', children: [{ name: 'p1', value: 100 }, { name: 'p0', value: 0 }] }, { name: 'Z', children: [{ name: 'z0', value: 0 }] }, { name: 'Q', value: 5 }], leafDepth: 1 })),
+    m4('M4-sat-bcs', 'leafDepth 1 with a series colorSaturation range and levels[1] borderColorSaturation 0.5: leaf roots map nothing, they keep their palette colour and get the saturated border', one({ data: D4(), leafDepth: 1, colorSaturation: [0.3, 0.7], levels: [{}, { itemStyle: { borderColorSaturation: 0.5, borderWidth: 2 } }] })),
+    m4('M4-drill-down-mini', 'the gallery drill-down configuration on a small tree', one({ name: 'option', visibleMin: 300, leafDepth: 2, data: D4().concat([{ name: 'Delta', children: [{ name: 'd1', value: 2, children: [{ name: 'd11', value: 1 }, { name: 'd12', value: 1 }] }, { name: 'd2', value: 1 }] }]), levels: [{ itemStyle: { borderColor: '#555', borderWidth: 4, gapWidth: 4 } }, { colorSaturation: [0.3, 0.6], itemStyle: { borderColorSaturation: 0.7, gapWidth: 2, borderWidth: 2 } }, { colorSaturation: [0.3, 0.5], itemStyle: { borderColorSaturation: 0.6, gapWidth: 1 } }, { colorSaturation: [0.3, 0.5] }] })),
+    // ---- M5: colorMappingBy 'value' ----
+    m5('M5-value-dim0', "levels[1].color ['#942e38', '#aaa', '#269f3c'] with colorMappingBy 'value' (dimension 0): a2 (3 over [1, 6]) -> t 0.4 -> 0.8 between entries 0 and 1 -> rgba(166,145,147,1); depth-1 nodes have no colour (C: fill null)", one({ data: V(), levels: byValue(RGB3) })),
+    m5('M5-dim2', 'visualDimension 2 (the extents and the mapped values read value[2])', one({ data: V(), visualDimension: 2, levels: byValue(RGB3) })),
+    m5('M5-dim2-minmax', 'visualMin -100 / visualMax 100 widen every extent that does not reach them (B [-10, 60] -> [-100, 100]); A [-80, 100] keeps its max', one({ data: V(), visualDimension: 2, visualMin: -100, visualMax: 100, levels: byValue(RGB3) })),
+    m5('M5-nan', 'visualDimension 1 with null entries: NaN never enters the extent; over [4, 7] a NaN normalises to NaN and fastLerp gives no colour (fill null); over a degenerate [6, 6] linearMap returns 0.5 for anything, NaN included (rgba(128,128,128,1))', one({ data: [{ name: 'P', children: [{ name: 'p1', value: [5, null] }, { name: 'p2', value: [3, 7] }, { name: 'p3', value: [2, 4] }] }, { name: 'Q', children: [{ name: 'q1', value: [4, null] }, { name: 'q2', value: [3, 6] }] }], visualDimension: 1, levels: byValue(['#000', '#fff']) })),
+    m5('M5-value-string', "visualDimension 'value' (the string) with the default sort: statistic takes [last, first] of the sorted children", one({ data: V(), visualDimension: 'value', levels: byValue(['#000', '#fff']) })),
+    m5('M5-value-string-asc', "visualDimension 'value' with sort 'asc': [last, first] reversed", one({ data: V(), sort: 'asc', visualDimension: 'value', levels: byValue(['#000', '#fff']) })),
+    m5('M5-one-colour', "a one-colour list ['#123456'] by value: every child rgba(18,52,86,1) (fastLerp over one colour)", one({ data: V(), levels: byValue(['#123456']) })),
+    m5('M5-alpha-colours', "colours with alpha: 'rgba(255,0,0,0.2)', '#00ff0080' (a = 128 / 255), 'blue'; the alpha lerps unrounded (0.4415686274509804)", one({ data: V(), levels: byValue(['rgba(255,0,0,0.2)', '#00ff0080', 'blue']) })),
+    m5('M5-root-linear', "levels[0].color ['#000', '#fff'] by value: the ROOT maps its children linearly (A white, B rgba(191,191,191,1), C black), their children inherit", one({ data: V(), levels: [{ color: ['#000', '#fff'], colorMappingBy: 'value' }] })),
+    m5('M5-series-linear', "series color ['#000', '#fff'] with colorMappingBy 'value': the root's palette (levels[0]) is mapped linearly too (C gets rgba(80,112,221,1)), every parent below maps black to white", one({ data: V(), color: ['#000', '#fff'], colorMappingBy: 'value' })),
+    m5('M5-dim-absent', 'visualDimension 9 (past the 3 stored dimensions): every value NaN, extents [Infinity, -Infinity], no mapped colour', one({ data: V(), visualDimension: 9, levels: byValue(['#000', '#fff']) })),
+    m5('M5-scalar-dims', 'a SCALAR value answers every dimension: P (no value: completed to the scalar 5) and R (3) read 5 and 3 at dimension 2 in the root mapping', one({ data: [{ name: 'P', children: [{ name: 'p1', value: [3, 1, -20] }, { name: 'p2', value: [2, 1, 30] }] }, { name: 'Q', value: [4, 1, -30] }, { name: 'R', value: 3 }], visualDimension: 2, levels: [{ color: ['#000', '#fff'], colorMappingBy: 'value' }] })),
+    m5('M5-past-dimmax', 'dimension 3 with 3 stored dimensions: NaN even for the scalar R (a dimension past the store reads NaN before the scalar rule)', one({ data: [{ name: 'P', children: [{ name: 'p1', value: [3, 1, -20] }, { name: 'p2', value: [2, 1, 30] }] }, { name: 'Q', value: [4, 1, -30] }, { name: 'R', value: 3 }], visualDimension: 3, levels: [{ color: ['#000', '#fff'], colorMappingBy: 'value' }] })),
+    m5('M5-visualmin-inside', 'visualMin 2 / visualMax 3 only widen where they fall outside: A [1, 6] unchanged, B [3, 5] -> [2, 5]', one({ data: V(), visualMin: 2, visualMax: 3, levels: byValue(['#000', '#fff']) })),
+    m5('M5-sat-dim', 'a colorSaturation range mapped by visualDimension 1 with visualMin -10 (the same linear map, another dimension)', one({ data: V(), visualDimension: 1, visualMin: -10, levels: [{}, { colorSaturation: [0.2, 0.8] }] })),
+    m5('M5-visual-mini', 'the gallery visual configuration on a small four-dimension tree', one({ name: 'ALL', top: 80, label: { show: true, formatter: '{b}' }, itemStyle: { borderColor: 'black' }, visualMin: -100, visualMax: 100, visualDimension: 3, levels: [{ itemStyle: { borderWidth: 3, borderColor: '#333', gapWidth: 3 } }, { color: RGB3, colorMappingBy: 'value', itemStyle: { gapWidth: 1 } }], data: [{ name: 'H', value: [120, null, null, 0], children: [{ name: 'h1', value: [100, 90, 3.1, 40.1] }, { name: 'h2', value: [20, 25, -1.5, -20] }] }, { name: 'D', value: [80, null, null, 0], children: [{ name: 'd1', value: [50, 55, -9, -120] }, { name: 'd2', value: [30, 20, 50, 250] }, { name: 'd3', value: [5, 5, 0, 0] }] }] })),
+    // ---- M6: colorMappingBy 'id', colorAlpha, series colour list, label positions, rich, legend ----
+    m6('M6-id-root', "levels[0] colour list with colorMappingBy 'id': the root maps its children by mapIdToIndex (Beta 0, Alpha 1, Gamma 2: first-seen = sorted order here)", one({ data: D4(), levels: [{ color: C6, colorMappingBy: 'id' }] })),
+    m6('M6-id-series', "series color list + colorMappingBy 'id': ONE counter per series over the pre-order visual traversal (Beta 0, b1 1, b2 2, b21 3, b22 4, Alpha 5, a1 6, a11 7, a12 8, a2 9, Gamma 10); the root maps the palette, deeper parents the series list", one({ data: D4(), color: C6, colorMappingBy: 'id' })),
+    m6('M6-id-dup', "ids: series 'x' (the root's id 'x'), then 'x' -> 'x__ec__2', 'x__ec__3'; an explicit id 'y' shares the index of the name 'y'; a nameless row gets 'e' NUL NUL + dataIndex", one({ name: 'x', data: [{ name: 'x', value: 5, children: [{ name: 'x', value: 2 }, { name: 'y', value: 3 }] }, { name: 'x', value: 4 }, { id: 'y', name: 'z', value: 3 }, { value: 2 }], color: C6, colorMappingBy: 'id' })),
+    m6('M6-id-numeric', "numeric ids and names become strings ('7'); a row with its own id does not count its name ({id: 'k', name: 'w'} then {name: 'w'} gives 'w', not 'w__ec__2')", one({ data: [{ id: 7, name: 'w', value: 4 }, { name: 'w', value: 3 }, { name: 7, value: 2 }, { name: 'q', value: 1.5 }], levels: [{ color: C6, colorMappingBy: 'id' }] })),
+    m6('M6-series-color-index', "series color ['#111', '#222', '#333'] (index): every parent below the root maps it, restarting at 0", one({ data: D4(), color: ['#111', '#222', '#333'] })),
+    m6('M6-alpha-ranges', 'levels[1].colorAlpha [0.5, 1] maps depth-2 alpha (a truthy 1 still rewrites #5070dd as rgba(80,112,221,1)); levels[2].colorAlpha [0.2] is paired [0.2, 0.2]', one({ data: D4(), levels: [{}, { colorAlpha: [0.5, 1] }, { colorAlpha: [0.2] }] })),
+    m6('M6-alpha-item', 'itemStyle.colorAlpha: 0.3 on Alpha (its border: modifyHSL of rgba(...,0.3) keeps 0.3), 0 on b1 (falsy: #5070dd unchanged), 0.6 on levels[2] (inherited below); root border null (no colour)', one({ data: (() => { const d = D4(); d[0].itemStyle = { colorAlpha: 0.3 }; d[1].children[0].itemStyle = { colorAlpha: 0 }; return d; })(), levels: [{}, {}, { itemStyle: { colorAlpha: 0.6 } }], itemStyle: { borderColorSaturation: 0.5, borderWidth: 2 } })),
+    m6('M6-alpha-vs-sat', 'series colorAlpha [0.4, 0.9] and colorSaturation [0.3, 0.7]: a parent maps only ONE of them, the alpha (colour list > alpha > saturation)', one({ data: D4(), colorSaturation: [0.3, 0.7], colorAlpha: [0.4, 0.9] })),
+    m6('M6-alpha-hex', "modifyAlpha keeps the parsed channels and replaces the alpha: '#d48265cc' -> rgba(212,130,101,0.8), 'rgba(10,20,30,0.5)' -> 0.1 / 0.8; '#abc' (never alpha-mapped) stays '#abc'", one({ data: D4(), levels: [{ color: ['#d48265cc', 'rgba(10,20,30,0.5)', '#abc'] }, { colorAlpha: [0.1, 0.8] }] })),
+    m6('M6-alpha-dim', "colorAlpha [0.3, 1] mapped by visualDimension 1: b1's null reads NaN, over B's extent [4, 7] the alpha is NaN, which is FALSY, so b1 keeps its plain '#5070dd' (no rgba; B ties A at 10 and sorts first); the other children get rgba(...,a)", one({ data: (() => { const d = V(); d[1].children.push({ name: 'b3', value: [2, 4, 5] }); d[1].value = [10, 4, 0]; return d; })(), visualDimension: 1, levels: [{}, { colorAlpha: [0.3, 1] }] })),
+    m6('M6-insideTopLeft', "label.position 'insideTopLeft': the Text at (bw + T.x) + 0, (bw + T.y) + 0 (distance 0), tspans left / top at x = pad[3] = 5, y = lh / 2 + pad[0] = 11", one({ data: D4(), label: { position: 'insideTopLeft' }, itemStyle: { borderWidth: 2 } })),
+    m6('M6-insideTopLeft-rich', "the same with a label.rich: the RICH layout, which for 'insideTopLeft' lands on the same x / y", one({ data: D4(), label: { position: 'insideTopLeft', rich: { a: { fontSize: 20 } } }, itemStyle: { borderWidth: 2 } })),
+    m6('M6-inside-rich', "label.rich with the default 'inside': the rich layout puts the text at the TOP of the box (boxY = -(height + 10) / 2, y = boxY + 5 + lh / 2), x picks up float noise from the centring", one({ data: D4(), label: { rich: { a: { fontSize: 20 } } }, itemStyle: { borderWidth: 2 } })),
+    m6('M6-positions', "positions per level: insideBottomRight with distance 4 on levels[1], insideTop with padding [2, 8] on levels[2], insideLeft on an item", one({ data: (() => { const d = D4(); d[1].children[0].label = { position: 'insideLeft' }; return d; })(), itemStyle: { borderWidth: 1 }, levels: [{}, { label: { position: 'insideBottomRight', distance: 4 } }, { label: { position: 'insideTop', padding: [2, 8] } }] })),
+    m6('M6-snug-plain', "a label box 0.5 wider than 'Elephant': the plain layout truncates it (containerWidth = width - 1)", snug(false)),
+    m6('M6-snug-rich', "the same with a label.rich: the rich layout keeps 'Elephant' (it truncates only a token WIDER than the box)", snug(true)),
+    m6('M6-legend-single', "three series and a legend in selectedMode 'single' with no selection: the first legend item S0 is selected, S1 and S2 are filtered (no layout, no elements)", three(null, { data: ['S0', 'S1', 'S2'], selectedMode: 'single' })),
+    m6('M6-legend-selected-true', "selected {S2: true} does NOT pick S2: 'single' selects the first legend item that is not explicitly false (S0)", three(null, { data: ['S0', 'S1', 'S2'], selectedMode: 'single', selected: { S2: true } })),
+    m6('M6-legend-false-first', 'selected {S0: false}: S1 is the first not-false item and is the one drawn', three({ colorMappingBy: 'id', color: C6 }, { data: ['S0', 'S1', 'S2'], selectedMode: 'single', selected: { S0: false } })),
+    m6('M6-legend-missing', "legend.data ['S1', 'S2'] in 'single' mode: S1 is selected, S2 filtered, and S0 (not in the legend) stays drawn: two series draw", three(null, { data: ['S1', 'S2'], selectedMode: 'single' })),
+    m6('M6-legend-multiple', "a legend in the default (multiple) mode with {S1: false}: S0 and S2 draw", three(null, { data: ['S0', 'S1', 'S2'], selected: { S1: false } })),
+    m6('M6-two-series', "two drawn series side by side, each with its own id map (the second's indices start at 0 again) and its own levels[0] palette copy", { animation: false, series: [Object.assign({ type: 'treemap', name: 'L', data: D4(), right: '50%', colorMappingBy: 'id', color: C6 }), Object.assign({ type: 'treemap', name: 'R', data: D4(), left: '50%', colorMappingBy: 'id', color: C6, levels: [{}, { colorAlpha: [0.4, 1] }] })] }),
+    m6('M6-obama-growth', "the gallery obama option with legend.selected {2012Budget: false, 2011Budget: false}: 'Growth' draws -- levels[0] colour list by id, levels[1].colorAlpha [0.5, 1] over visualDimension 2 (a null growth gives NaN, a falsy alpha: the colour stays)", obama({ '2012Budget': false, '2011Budget': false })),
+  ];
+}
+
+// the M4-M6 random families: ref.js's genForest3 / VARIANTS3 (wf79) on their own seeds
+function randomCasesM456(nForests) {
+  const mkRng = s0 => { const r = { s: s0 }; r.rnd = () => { r.s = (r.s * 1103515245 + 12345) & 0x7fffffff; return r.s / 0x7fffffff; }; r.ri = n => Math.floor(r.rnd() * n); return r; };
+  const NAMES = ['a', 'bb', 'Cat', 'dog', 'Elephant', 'LongNameAbcdefghijk', '中文', 'x y', 'W', 'm'];
+  function genNode(depth, maxDepth, r) {
+    const n = {};
+    const t0 = r.rnd();
+    if (t0 < 0.85) n.name = NAMES[r.ri(NAMES.length)] + (r.rnd() < 0.5 ? String(r.ri(12)) : '');
+    else if (t0 < 0.88) n.name = 'two\nlines';
+    if (r.rnd() < 0.3) n.id = 'id' + r.ri(8);
+    const k = depth < maxDepth ? r.ri(5) : 0;
+    const arr = () => { const a = [r.ri(40) + 1]; const m = r.ri(4); for (let i = 0; i < m; i++) { const u = r.rnd(); a.push(u < 0.12 ? null : u < 0.5 ? r.ri(200) - 100 : +(r.rnd() * 50 - 25).toFixed(2)); } return a; };
+    if (k > 0 && r.rnd() < 0.8) {
+      n.children = [];
+      for (let i = 0; i < k; i++) n.children.push(genNode(depth + 1, maxDepth, r));
+      const u = r.rnd();
+      if (u < 0.25) n.value = arr(); else if (u < 0.35) n.value = r.ri(60);
+    } else {
+      const t = r.rnd();
+      n.value = t < 0.05 ? 0 : t < 0.08 ? undefined : t < 0.6 ? arr() : t < 0.7 ? +(r.rnd() * 30).toFixed(3) : r.ri(40) + 1;
+      if (n.value === undefined) delete n.value;
+    }
+    if (r.rnd() < 0.2) {
+      const u = r.rnd();
+      n.itemStyle = {};
+      if (u < 0.25) n.itemStyle.colorAlpha = [0, 0.3, 0.75, 1][r.ri(4)];
+      else if (u < 0.4) n.colorAlpha = [0.2 + r.ri(4) / 10, 1 - r.ri(3) / 10];
+      else if (u < 0.5) n.itemStyle.colorSaturation = +(r.rnd()).toFixed(2);
+      else if (u < 0.6) n.itemStyle.color = ['#8a2be2', '#ff994d80', 'rgb(1,200,90)', 'rgba(20,40,60,0.4)'][r.ri(4)];
+      else if (u < 0.7) n.itemStyle.borderColorSaturation = [0, 0.5, 0.8][r.ri(3)];
+      else if (u < 0.8) { n.color = [['#000', '#fff'], ['#c23531', '#2f4554', '#61a0a8'], ['#123456']][r.ri(3)]; if (r.rnd() < 0.5) n.colorMappingBy = ['value', 'id', 'index'][r.ri(3)]; }
+      else if (u < 0.9) { n.visualMin = -r.ri(50); n.visualMax = r.ri(80); }
+      else n.label = { show: r.rnd() < 0.7, formatter: '{b}' };
+    }
+    return n;
+  }
+  const VARIANTS = [
+    ['M4', r => ({ leafDepth: 1, levels: [{}, { label: { formatter: '{b}' } }] })],
+    ['M4', r => ({ leafDepth: 2, childrenVisibleMin: 30000, itemStyle: { borderWidth: 1 } })],
+    ['M4', r => ({ leafDepth: 3, childrenVisibleMin: 60000, upperLabel: { show: true }, drillDownIcon: '>>', itemStyle: { borderWidth: 2 } })],
+    ['M4', r => { const o = { leafDepth: r.ri(2), name: 'Ser', drillDownIcon: ['', '\u25b6', '+'][r.ri(3)], label: { show: r.rnd() < 0.8 } }; if (r.rnd() < 0.5) o.label.formatter = 'F{b}'; return o; }],
+    ['M5', r => ({ visualDimension: 1, visualMin: -5, visualMax: 30, levels: [{}, { color: ['#942e38', '#aaa', '#269f3c'], colorMappingBy: 'value' }] })],
+    ['M5', r => ({ color: ['#000', '#fff'], colorMappingBy: 'value', visualDimension: r.ri(3) })],
+    ['M5', r => ({ sort: 'asc', visualDimension: 'value', levels: [{ color: ['#123', 'rgba(200,100,50,0.5)', '#abcdef80'], colorMappingBy: 'value' }, { colorSaturation: [0.3, 0.7] }] })],
+    ['M5', r => ({ visualDimension: 2, levels: [{ itemStyle: { borderWidth: 2, gapWidth: 2 } }, { color: ['red', 'blue'], colorMappingBy: 'value', visualMin: -100 }, { color: ['#111111', '#eeeeee'], colorMappingBy: 'value', visualMax: 100 }] })],
+    ['M6', r => ({ color: ['#c23531', '#314656', '#61a0a8', '#dd8668', '#91c7ae', '#6e7074'], colorMappingBy: 'id' })],
+    ['M6', r => ({ visualDimension: 1, levels: [{}, { colorAlpha: [0.5, 1] }, { colorAlpha: [0.2] }] })],
+    ['M6', r => ({ colorAlpha: [0.3, 0.9], colorSaturation: [0.2, 0.8], itemStyle: { borderWidth: 2, borderColorSaturation: 0.6 }, levels: [{}, { itemStyle: { colorAlpha: 0.7 } }] })],
+    ['M6', r => ({ label: { position: 'insideTopLeft', rich: { a: { fontSize: 20 } } }, itemStyle: { borderWidth: 2 }, levels: [{ itemStyle: { borderWidth: 3, gapWidth: 3 }, colorMappingBy: 'id' }, { itemStyle: { gapWidth: 1 } }] })],
+    ['M6', r => { const lb = { position: INSIDE_POSITIONS[r.ri(9)], padding: [[2, 8], 5, [1, 2, 3, 4], 0][r.ri(4)], distance: r.ri(3) * 3 }; if (r.rnd() < 0.5) lb.rich = { x: {} }; lb.fontSize = [12, 14][r.ri(2)]; return { label: lb }; }],
+    ['M6', r => ({ levels: [{ color: ['#5070dd', '#b6d634', '#505372'], colorMappingBy: 'id' }, { color: ['#111', '#222', '#333', '#444'], colorMappingBy: 'id' }, { colorAlpha: [0.4, 0.8] }] })],
+    ['M6', r => ({ MULTI: { legend: { selectedMode: 'single', selected: r.rnd() < 0.5 ? { S0: false } : {} }, n: 3 }, colorMappingBy: 'id', color: ['#c23531', '#314656', '#61a0a8'] })],
+    ['M6', r => ({ MULTI: { n: 2, second: { left: '50%', colorAlpha: [0.4, 1] } }, right: '50%', levels: [{}, { colorAlpha: [0.5, 0.9] }] })],
+  ];
+  const BOXES = [{}, { left: 50, right: 90, top: 90, bottom: 90 }, { left: 250, right: 250, top: 200, bottom: 200 }, { top: 125, bottom: 125 }, { left: 150, right: 150 }];
+  const r0 = mkRng(797979);
+  const out = [];
+  for (let f = 0; f < nForests; f++) {
+    const n = 1 + r0.ri(6); const md = 1 + r0.ri(4);
+    const data = []; for (let i = 0; i < n; i++) data.push(genNode(1, md, r0));
+    for (let v = 0; v < VARIANTS.length; v++) {
+      const [batch, mk] = VARIANTS[v];
+      const r = mkRng(1000 * f + v + 1);
+      const vo = mk(r);
+      const multi = vo.MULTI; delete vo.MULTI;
+      const hasBox = ['left', 'right', 'top', 'bottom', 'width', 'height'].some(k => k in vo);
+      const b = hasBox || multi ? null : (f + v) % BOXES.length;
+      let option;
+      if (multi) {
+        const series = [];
+        for (let k = 0; k < multi.n; k++) series.push(Object.assign({ type: 'treemap', name: 'S' + k, data: zrClone(data) }, zrClone(vo), k === 1 && multi.second ? multi.second : {}));
+        option = { animation: false, series };
+        if (multi.legend) option.legend = Object.assign({ data: series.map(s => s.name) }, multi.legend);
+      } else option = { animation: false, series: [Object.assign({ type: 'treemap', data: zrClone(data) }, b == null ? {} : BOXES[b], vo)] };
+      out.push({ id: 'R456-f' + f + 'v' + v, batch, note: 'M4-M6 random forest ' + f + ', variant ' + v + (b == null ? '' : ', box ' + b), option, random: { family: 'M456', forest: f, variant: v, box: b } });
+    }
+  }
+  return out;
+}
+
+// gaps the Pascal mutation run found (appended after everything else)
+function GAP_CASES() {
+  const D2 = () => [
+    { name: 'A', children: [{ name: 'A1', value: 4 }, { name: 'A2', value: 2 }, { name: 'A3', value: 1 }] },
+    { name: 'B', value: 10, children: [{ name: 'B1', value: 3 }, { name: 'B2', value: 5, children: [{ name: 'B21', value: 5 }] }, { name: 'B3', value: 0 }] },
+    { name: 'C', value: 3 },
+    { name: 'D', value: 4, color: ['#aa0000', '#00aa00'], children: [{ name: 'D1', value: 3 }, { name: 'D2', value: 1 }] },
+  ];
+  const long = 'LongNameAbcdefghijk and more';
+  const lw = measure(long, 'normal normal 12px Microsoft YaHei');
+  return [
+    { id: 'M2-series-itemstyle-sat', batch: 'M2', note: "series itemStyle.colorSaturation 0.3 with levels[1].colorSaturation [0.4, 0.8]: the chain is item > level > DESIGNATED > series, so A's and B's children take the mapped value (the series 0.3 loses), while C (a depth-1 leaf: the root maps colours, not saturation) and D's children (D maps its own colour list) keep 0.3 -- through the root's visuals (the root reads the series value first and hands it down)", option: one({ data: D2(), itemStyle: { colorSaturation: 0.3 }, levels: [{}, { colorSaturation: [0.4, 0.8] }] }) },
+    { id: 'M3-upper-padding-truncate', batch: 'M3', note: "upperLabel padding [0, 30, 0, 30] on a parent exactly 20 wider than its name: the header text box is w - 2bw - pad[1] - pad[3] = name width - 40, so the name is truncated (without the padding it would fit: containerWidth = name width + 19)", option: one({ data: [{ name: long, children: [{ name: 'x', value: 1 }] }], left: 20, width: lw + 20, upperLabel: { show: true, padding: [0, 30, 0, 30] }, levels: [{ upperLabel: { show: false } }] }) },
+  ];
 }

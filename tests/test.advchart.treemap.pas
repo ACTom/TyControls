@@ -180,15 +180,16 @@ var
   tx, ty, sx, sy, sw, shh, px, py: Double;
   kind, w_, txt: string;
   bgAt, ctAt, capAt: array of Integer;
-  lblText: array of string;
-  lblX, lblY: array of Double;
+  lblText, lblAlign: array of string;
+  lblX, lblY, lblFirst, lblLast, lblLh: array of Double;
   lblZ2: array of Integer;
   hasLbl: array of Boolean;
   crumbEls, crumbCaps: array of Integer;
   wantCol: TTyChartColor;
   seenCrumb, seenCrumbText: Integer;
   sized: Boolean;
-  lastTx, lastTy: Double;
+  lastTx, lastTy, wantY: Double;
+  sl2: TJSONArray;
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
   for c := 0 to cases.Count - 1 do
@@ -229,6 +230,24 @@ begin
         end;
       end;
       lst := FChart.List;
+      { a series the legend filtered draws nothing at all }
+      d := cs.Find('seriesList');
+      if (d <> nil) and (d.JSONType = jtArray) then
+      begin
+        sl2 := TJSONArray(d);
+        for s := 0 to sl2.Count - 1 do
+          if sl2.Objects[s].Get('filtered', False) then
+          begin
+            Inc(FCompared);
+            for k := 0 to lst.Count - 1 do
+              if lst.Element(k).Datum.SeriesIndex = sl2.Objects[s].Get('seriesIndex', -1) then
+              begin
+                Miss(Format('series %d is filtered upstream, drawn here',
+                  [sl2.Objects[s].Get('seriesIndex', -1)]));
+                Break;
+              end;
+          end;
+      end;
       series := cs.Arrays['series'];
       for s := 0 to series.Count - 1 do
       begin
@@ -274,9 +293,11 @@ begin
         end;
         { the labels upstream: each row's tspans, joined }
         SetLength(lblText, 0); SetLength(lblX, 0); SetLength(lblY, 0);
-        SetLength(lblZ2, 0); SetLength(hasLbl, 0);
+        SetLength(lblZ2, 0); SetLength(hasLbl, 0); SetLength(lblAlign, 0);
+        SetLength(lblFirst, 0); SetLength(lblLast, 0); SetLength(lblLh, 0);
         SetLength(lblText, n); SetLength(lblX, n); SetLength(lblY, n);
-        SetLength(lblZ2, n); SetLength(hasLbl, n);
+        SetLength(lblZ2, n); SetLength(hasLbl, n); SetLength(lblAlign, n);
+        SetLength(lblFirst, n); SetLength(lblLast, n); SetLength(lblLh, n);
         elems := se.Arrays['elements'];
         seenCrumb := 0;
         seenCrumbText := 0;
@@ -346,10 +367,26 @@ begin
             if kind = 'upper' then Inc(FHeaders);
             tx := tx + Hex(ex.Find('x'));
             if hasLbl[row] then lblText[row] := lblText[row] + #10 + ex.Get('text', '')
-            else lblText[row] := ex.Get('text', '');
+            else
+            begin
+              lblText[row] := ex.Get('text', '');
+              { the first line: its x, its y, and its line height (the font's
+                px -- the SSR width of the wide glyph) }
+              lblX[row] := tx;
+              lblY[row] := ty;
+              lblFirst[row] := Hex(ex.Find('y'));
+              lblAlign[row] := ex.Get('textAlign', 'center');
+              txt := ex.Get('font', '');
+              lblLh[row] := 12;
+              for k := 1 to Length(txt) - 2 do
+                if (txt[k] in ['0'..'9']) and (Copy(txt, k, 3) <> '') and (Pos('px', Copy(txt, k, 5)) > 0) then
+                begin
+                  lblLh[row] := StrToFloatDef(Copy(txt, k, Pos('px', Copy(txt, k, 5)) - 1), 12);
+                  Break;
+                end;
+            end;
+            lblLast[row] := Hex(ex.Find('y'));
             hasLbl[row] := True;
-            lblX[row] := tx;
-            lblY[row] := ty;
             lblZ2[row] := ex.Integers['z2'];
           end
           else if kind = 'crumb' then
@@ -448,7 +485,9 @@ begin
             if (capAt[row] < 0) or (wantLbl = 0) then Continue;
             e := lst.Element(capAt[row]);
             Inc(FCompared, 2);
-            if not (Same(e.Caption.X, lblX[row]) and Same(e.Caption.Y, lblY[row])) then
+            { the line height hangs on the size too: y only when middle }
+            if not (Same(e.Caption.X, lblX[row]) and ((e.Caption.AnchorV <> tavMiddle)
+              or Same(e.Caption.Y, lblY[row]))) then
               Miss(Format('%s: label at (%s, %s) upstream, (%s, %s) here', [w_,
                 Fmt(lblX[row]), Fmt(lblY[row]), Fmt(e.Caption.X), Fmt(e.Caption.Y)]));
             if e.Z2 <> lblZ2[row] then
@@ -467,13 +506,27 @@ begin
           if wantLbl = 0 then Continue;
           Inc(FLabels);
           e := lst.Element(capAt[row]);
-          Inc(FCompared, 3);
+          Inc(FCompared, 4);
           if e.Caption.Text <> lblText[row] then
             Miss(Format('%s: label "%s" upstream, "%s" here', [w_, lblText[row],
               e.Caption.Text]));
-          if not (Same(e.Caption.X, lblX[row]) and Same(e.Caption.Y, lblY[row])) then
+          { where the words hang: a middle caption at the Text's anchor, a
+            top one where its first line's top is, a bottom one where its
+            last line's bottom is }
+          case e.Caption.AnchorV of
+            tavTop: wantY := lblY[row] + (lblFirst[row] - lblLh[row] / 2);
+            tavBottom: wantY := lblY[row] + (lblLast[row] + lblLh[row] / 2);
+          else
+            wantY := lblY[row];
+          end;
+          if not (Same(e.Caption.X, lblX[row]) and ((e.Caption.AnchorV = tavMiddle)
+            and Same(e.Caption.Y, wantY) or (e.Caption.AnchorV <> tavMiddle)
+            and (Abs(e.Caption.Y - wantY) <= 1e-9 * Max(1, Abs(wantY))))) then
             Miss(Format('%s: label at (%s, %s) upstream, (%s, %s) here', [w_,
-              Fmt(lblX[row]), Fmt(lblY[row]), Fmt(e.Caption.X), Fmt(e.Caption.Y)]));
+              Fmt(lblX[row]), Fmt(wantY), Fmt(e.Caption.X), Fmt(e.Caption.Y)]));
+          if not (((lblAlign[row] = 'left') = (e.Caption.AnchorH = tahLeft))
+            and ((lblAlign[row] = 'right') = (e.Caption.AnchorH = tahRight))) then
+            Miss(Format('%s: label aligned %s upstream, otherwise here', [w_, lblAlign[row]]));
           if e.Z2 <> lblZ2[row] then
             Miss(Format('%s: label z2 %d upstream, %d here', [w_, lblZ2[row], e.Z2]));
         end;
@@ -489,10 +542,12 @@ begin
   RunCases(False);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs (%d white grounds passed over)',
-    [FRects, FLabels, FHeaders, FCrumbs, FSkipped]),
+  AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs (%d white grounds passed over, %d labels'' words for their size)',
+    [FRects, FLabels, FHeaders, FCrumbs, FSkipped, FSkippedWords]),
     (FRects >= 5000) and (FLabels >= 1000) and (FCrumbs >= 300) and (FHeaders >= 150)
-    and (FSkippedWords < FLabels div 5));
+    { the M4-M6 families write fontSize 14 often: under a third of the
+      labels' words wait on the font-size unit question }
+    and (FSkippedWords < FLabels div 3));
 end;
 
 procedure TAdvChartTreemapOracleTest.TestTheGalleryTreemapAsUpstream;
@@ -500,12 +555,12 @@ begin
   RunCases(True);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  { treemap-simple is 10 rects, 3 labels, 4 crumbs; disk and show-parent
-    what visibleMin 300 leaves of 3635 nodes -- 781 rects, 139 labels, 35
-    of them header lines, 6 crumbs in all }
+  { the six gallery treemaps -- simple, disk, show-parent, drill-down,
+    visual, obama -- as they are drawn: 2155 rects, 308 labels (35 of them
+    header lines), 9 crumbs in all }
   AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs',
-    [FRects, FLabels, FHeaders, FCrumbs]), (FRects = 781) and (FLabels = 139)
-    and (FHeaders = 35) and (FCrumbs = 6));
+    [FRects, FLabels, FHeaders, FCrumbs]), (FRects = 2155) and (FLabels = 308)
+    and (FHeaders = 35) and (FCrumbs = 9));
 end;
 
 initialization

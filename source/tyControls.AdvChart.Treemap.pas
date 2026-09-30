@@ -37,7 +37,7 @@ unit tyControls.AdvChart.Treemap;
   PURE: SysUtils, Math, fpjson and the AdvChart units. No painter, no LCL. }
 interface
 uses
-  SysUtils, Math, fpjson,
+  Classes, SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Data, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
@@ -78,6 +78,14 @@ type
     HasLabel: Boolean;
     LabelText: string;
     LabelX, LabelY: Double;
+    LabelAH: TTyTextAnchorH;
+    LabelAV: TTyTextAnchorV;
+    { cut by leafDepth: drawn as a leaf, its label behind the drill icon
+      [Batch 80] }
+    IsLeafRoot: Boolean;
+    { upstream's data id: the item's, else its name (a repeat counted
+      '__ec__k'), else generated }
+    Id: string;
     { A PARENT'S HEADER, on its background's top strip [Batch 78] }
     HasUpper: Boolean;
     UpperText: string;
@@ -105,6 +113,12 @@ type
     Z: Integer;
     Scale: Double;
     Crumbs: array of TTyTreemapCrumb;
+    { the series' own leafDepth [Batch 80] }
+    HasLeafDepth: Boolean;
+    LeafDepth: Double;
+    { the store's dimension count: the longest value array, the root's
+      scalar counting one }
+    DimMax: Integer;
   end;
 
   TTyTreemapInk = record
@@ -290,6 +304,38 @@ begin
   end;
 end;
 
+{ getValue(dim): 0, '' and 'value' the completed value; a dimension past
+  the store NaN; an array's entry (null NaN); a scalar -- a completed sum
+  included -- answers every dimension [Batch 80] }
+function ValueAt(const S: TTyTreemapSolved; ARow, ADim: Integer): Double;
+var d: TJSONData; it: TJSONObject;
+begin
+  if ADim <= 0 then Exit(S.Nodes[ARow].Value);
+  if ADim >= S.DimMax then Exit(NaN);
+  it := ItemOf(S, ARow);
+  d := nil;
+  if it <> nil then d := it.Find('value');
+  if (d <> nil) and (d.JSONType = jtArray) then
+  begin
+    if ADim >= d.Count then Exit(NaN);
+    d := d.Items[ADim];
+    if (d = nil) or (d.JSONType = jtNull) then Exit(NaN);
+    if (d.JSONType = jtString) and (d.AsString = '') then Exit(NaN);
+    Exit(JsNum(d));
+  end;
+  Result := S.Nodes[ARow].Value;
+end;
+
+{ the parent's visualDimension: 0 for none, '' and 'value' }
+function DimOf(const S: TTyTreemapSolved; ARow: Integer): Integer;
+var d: TJSONData;
+begin
+  Result := 0;
+  d := ChainFind(S, ARow, '', 'visualDimension');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+    Result := Trunc(d.AsFloat);
+end;
+
 { ==================== the solve ==================== }
 
 type
@@ -314,14 +360,17 @@ begin
 end;
 
 function InitChildren(const C: TSolveCtx; ARow: Integer; ATotalArea: Double;
-  AHide: Boolean): TTyIntegerArray;
+  AHide: Boolean; ADepth: Integer): TTyIntegerArray;
 var
   vc: TTyIntegerArray;
-  k, j, tmp, len, del: Integer;
+  k, j, tmp, len, del, dim: Integer;
   sum, v, vm, emin, emax: Double;
+  over: Boolean;
 begin
   Result := nil;
-  if AHide then Exit;
+  { leafDepth outranks childrenVisibleMin -- at or past its depth only }
+  over := C.S^.HasLeafDepth and (C.S^.LeafDepth <= ADepth);
+  if AHide and not over then Exit;
   vc := Copy(C.S^.Hier.Nodes[ARow].Children, 0, Length(C.S^.Hier.Nodes[ARow].Children));
   if C.SortMode <> 0 then
     for k := 1 to High(vc) do
@@ -337,12 +386,14 @@ begin
     end;
   sum := 0;
   for k := 0 to High(vc) do sum := sum + C.S^.Nodes[vc[k]].Value;
-  { statistic(): over the sorted children, before the cut }
+  { statistic(): over the sorted children, before the cut, by the
+    parent's visualDimension; NaN never enters }
+  dim := DimOf(C.S^, ARow);
   emin := Infinity;
   emax := NegInfinity;
   for k := 0 to High(vc) do
   begin
-    v := C.S^.Nodes[vc[k]].Value;
+    v := ValueAt(C.S^, vc[k], dim);
     if v < emin then emin := v;
     if v > emax then emax := v;
   end;
@@ -376,6 +427,12 @@ begin
     C.S^.Nodes[vc[k]].W := 0;
     C.S^.Nodes[vc[k]].H := 0;
     C.S^.Nodes[vc[k]].Area := C.S^.Nodes[vc[k]].Value / sum * ATotalArea;
+  end;
+  { past leafDepth: the children keep their area and nothing more }
+  if over then
+  begin
+    if Length(vc) > 0 then C.S^.Nodes[ARow].IsLeafRoot := True;
+    vc := nil;
   end;
   C.S^.Nodes[ARow].HasExtent := True;
   C.S^.Nodes[ARow].ExtMin := emin;
@@ -444,7 +501,7 @@ begin
   RS[o] := RS[o] - rol;
 end;
 
-procedure Squarify(const C: TSolveCtx; ARow: Integer; AHide: Boolean);
+procedure Squarify(const C: TSolveCtx; ARow: Integer; AHide: Boolean; ADepth: Integer);
 var
   width, height, bw, hg, ulh, uh, lo, lou, totalArea, rfl, best, score, rowArea, cvm: Double;
   vc, row: TTyIntegerArray;
@@ -469,7 +526,7 @@ begin
   width := JsMax(width - 2 * lo, 0);
   height := JsMax(height - lo - lou, 0);
   totalArea := width * height;
-  vc := InitChildren(C, ARow, totalArea, AHide);
+  vc := InitChildren(C, ARow, totalArea, AHide, ADepth);
   C.S^.Nodes[ARow].View := vc;
   if Length(vc) = 0 then Exit;
   rp[0] := lo;
@@ -515,7 +572,7 @@ begin
       if totalArea < cvm then AHide := True;
     end;
   end;
-  for k := 0 to High(vc) do Squarify(C, vc[k], AHide);
+  for k := 0 to High(vc) do Squarify(C, vc[k], AHide, ADepth + 1);
 end;
 
 { zrender BoundingRect.intersect, touching counts }
@@ -578,6 +635,70 @@ begin
       S.Nodes[ARow].TY);
 end;
 
+{ SeriesData's ids: the item's own (a number as its text), else its name
+  -- counted among the id-less rows, the k-th repeat '__ec__k', the root
+  named after the series -- else generated from the row }
+procedure AssignIds(var S: TTyTreemapSolved);
+var
+  row, k: Integer;
+  counts: TStringList;
+  d: TJSONData;
+  nm: string;
+  hasName: Boolean;
+
+  function IdName(AData: TJSONData; out AText: string): Boolean;
+  begin
+    Result := False;
+    AText := '';
+    if AData = nil then Exit;
+    if AData.JSONType = jtString then AText := AData.AsString
+    else if AData.JSONType = jtNumber then AText := TyJsNumberToString(AData.AsFloat)
+    else Exit;
+    Result := True;
+  end;
+
+begin
+  counts := TStringList.Create;
+  try
+    counts.Sorted := True;
+    counts.CaseSensitive := True;
+    for row := 0 to High(S.Nodes) do
+    begin
+      if row = 0 then
+      begin
+        hasName := IdName(S.Series.Find('name'), nm);
+        d := nil;
+      end
+      else if S.Hier.Nodes[row].Item is TJSONObject then
+      begin
+        hasName := IdName(TJSONObject(S.Hier.Nodes[row].Item).Find('name'), nm);
+        d := TJSONObject(S.Hier.Nodes[row].Item).Find('id');
+      end
+      else
+      begin
+        hasName := False;
+        d := nil;
+      end;
+      if IdName(d, S.Nodes[row].Id) then Continue;
+      if hasName then
+      begin
+        if counts.Find(nm, k) then
+          counts.Objects[k] := TObject(PtrInt(counts.Objects[k]) + 1)
+        else
+          k := counts.AddObject(nm, TObject(PtrInt(1)));
+        if PtrInt(counts.Objects[k]) > 1 then
+          S.Nodes[row].Id := nm + '__ec__' + IntToStr(PtrInt(counts.Objects[k]))
+        else
+          S.Nodes[row].Id := nm;
+      end
+      else
+        S.Nodes[row].Id := 'e'#0#0 + IntToStr(row);
+    end;
+  finally
+    counts.Free;
+  end;
+end;
+
 function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer): TTyTreemapSolved;
 const
@@ -633,10 +754,24 @@ begin
       hasColor := True;
   end;
   Result.Level0Default := not hasColor;
+  { the series' OWN leafDepth }
+  d := Result.Series.Find('leafDepth');
+  Result.HasLeafDepth := (d <> nil) and (d.JSONType = jtNumber);
+  if Result.HasLeafDepth then Result.LeafDepth := d.AsFloat;
   n := Length(Result.Hier.Nodes);
   SetLength(Result.Nodes, n);
   done := TyTreeCompletedValues(Result.Hier);
   for row := 0 to n - 1 do Result.Nodes[row].Value := done[row];
+  { the store's dimensions: the longest value array; a scalar is one }
+  Result.DimMax := 1;
+  for row := 1 to n - 1 do
+    if Result.Hier.Nodes[row].Item is TJSONObject then
+    begin
+      d := TJSONObject(Result.Hier.Nodes[row].Item).Find('value');
+      if (d <> nil) and (d.JSONType = jtArray) and (d.Count > Result.DimMax) then
+        Result.DimMax := d.Count;
+    end;
+  AssignIds(Result);
   { sort: absent is true; truthy is desc unless 'asc'; falsy none }
   d := Result.Series.Find('sort');
   if d = nil then C.SortMode := 2
@@ -689,7 +824,7 @@ begin
     Result.Nodes[0].W := Result.Box.W;
     Result.Nodes[0].H := Result.Box.H;
     Result.Nodes[0].Area := Result.Box.W * Result.Box.H;
-    Squarify(C, 0, False);
+    Squarify(C, 0, False, 0);
     { the canvas in root coordinates }
     Prune(Result, 0, -(Result.Box.X - AContainer.Left), -(Result.Box.Y - AContainer.Top), W, H);
     { the container group at the box, then the nodes' own groups }
@@ -712,11 +847,14 @@ type
   { the visuals a node carries: its colour -- none, a JSON value from the
     chain, or a palette entry -- and its saturation, inherited down }
   TTmColour = record
-    Kind: Integer;              // 0 none, 1 json, 2 palette
+    Kind: Integer;              // 0 none, 1 json, 2 palette, 3 a mapped rgba
     Json: TJSONData;
     Pal: TTyChartColor;
+    Vis: TTyVisualColor;
     HasSat: Boolean;
     Sat: Double;
+    HasAlpha: Boolean;
+    Alpha: Double;
   end;
 
 { getValueVisualDefine: null and 'none' are no colour }
@@ -726,6 +864,7 @@ begin
     1: Result := (V.Json.JSONType <> jtNull)
          and not ((V.Json.JSONType = jtString) and (V.Json.AsString = 'none'));
     2: Result := True;
+    3: Result := V.Vis.Defined;
   else
     Result := False;
   end;
@@ -747,9 +886,17 @@ begin
         AColour := TyVisualFromChart(V.Pal);
         Result := True;
       end;
+    3:
+      begin
+        AColour := V.Vis;
+        Result := V.Vis.Defined;
+      end;
   end;
   if Result and V.HasSat and (V.Sat <> 0) and not IsNan(V.Sat) then
     AColour := TyVisualModifyHSL(AColour, 0, 0, V.Sat, False, False, True);
+  { then the alpha, a truthy one only: the channels kept [Batch 80] }
+  if Result and V.HasAlpha and (V.Alpha <> 0) and not IsNan(V.Alpha) then
+    AColour := TyVisualModifyAlpha(AColour, V.Alpha);
 end;
 
 { util/number linearMap, clamped: the ends exact, a flat domain the middle }
@@ -777,16 +924,27 @@ begin
 end;
 
 procedure Travel(var S: TTyTreemapSolved; ARow: Integer; const ADv: TTmColour;
-  const APalette: TTyChartColorArray; ABorder: TTyChartColor);
+  const APalette: TTyChartColorArray; ABorder: TTyChartColor; AIds: TStringList);
 var
   vis, cv: TTmColour;
   d, range, sr: TJSONData;
   it, lv: TJSONObject;
-  k, len: Integer;
+  k, len, dim, idx, mapKind: Integer;
   c: TTyChartColor;
   vc: TTyVisualColor;
-  usePal, satMap: Boolean;
-  r0, r1, n1: Double;
+  usePal, satMap, alphaMap: Boolean;
+  r0, r1, n1, e0, e1: Double;
+  by: string;
+  stops: TTyVisualColorArray;
+
+  { mapIdToIndex: one first-seen counter per series }
+  function IdIndex(const AId: string): Integer;
+  var q: Integer;
+  begin
+    if AIds.Find(AId, q) then Exit(PtrInt(AIds.Objects[q]));
+    Result := AIds.Count;
+    AIds.AddObject(AId, TObject(PtrInt(Result)));
+  end;
 
   function Own(AObj: TJSONObject; const AKey: string = 'color'): TJSONData;
   var o: TJSONObject;
@@ -830,6 +988,20 @@ begin
     begin
       vis.HasSat := True;
       vis.Sat := JsNum(d);
+    end;
+  end;
+  { and the alpha: item > level > designated > series [Batch 80] }
+  d := Own(it, 'colorAlpha');
+  if d = nil then d := Own(lv, 'colorAlpha');
+  if (d = nil) and ADv.HasAlpha then
+    { carried }
+  else
+  begin
+    if d = nil then d := Own(S.Series, 'colorAlpha');
+    if d <> nil then
+    begin
+      vis.HasAlpha := True;
+      vis.Alpha := JsNum(d);
     end;
   end;
   { the border: the chain's, else the series default }
@@ -890,17 +1062,50 @@ begin
   if usePal then len := Length(APalette)
   else if (range <> nil) and (range.JSONType = jtArray) then len := range.Count
   else len := 0;
-  { NO COLOUR LIST: a saturation range on this node's chain maps the
-    children linearly over their extent -- if this node has a colour }
+  { the extent a linear mapping reads: widened, never narrowed, by the
+    chain's visualMin / visualMax [Batch 80] }
+  e0 := S.Nodes[ARow].ExtMin;
+  e1 := S.Nodes[ARow].ExtMax;
+  d := ChainFind(S, ARow, '', 'visualMin');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat < e0) then e0 := d.AsFloat;
+  d := ChainFind(S, ARow, '', 'visualMax');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > e1) then e1 := d.AsFloat;
+  dim := DimOf(S, ARow);
+  { a colour list maps by index, by id, or -- anything else -- linearly }
+  mapKind := 0;
+  if len > 0 then
+  begin
+    d := ChainFind(S, ARow, '', 'colorMappingBy');
+    if (d <> nil) and (d.JSONType = jtString) then by := d.AsString else by := 'index';
+    if by = 'index' then mapKind := 0
+    else if by = 'id' then mapKind := 1
+    else
+    begin
+      mapKind := 2;
+      SetLength(stops, len);
+      for k := 0 to len - 1 do
+        if usePal then stops[k] := TyVisualFromChart(APalette[k])
+        else stops[k] := TyVisualParsedStop(range.Items[k]);
+    end;
+  end;
+  { NO COLOUR LIST: an alpha range, else a saturation range, on this node's
+    chain maps the children linearly -- if this node has a colour }
   satMap := False;
+  alphaMap := False;
   r0 := 0;
   r1 := 0;
   if (len = 0) and HasColourDefine(vis) and S.Nodes[ARow].HasExtent then
   begin
-    sr := ChainFind(S, ARow, '', 'colorSaturation');
+    sr := ChainFind(S, ARow, '', 'colorAlpha');
     if (sr <> nil) and (sr.JSONType = jtArray) and (sr.Count > 0) then
+      alphaMap := True
+    else
     begin
-      satMap := True;
+      sr := ChainFind(S, ARow, '', 'colorSaturation');
+      satMap := (sr <> nil) and (sr.JSONType = jtArray) and (sr.Count > 0);
+    end;
+    if alphaMap or satMap then
+    begin
       r0 := JsNum(sr.Items[0]);
       if sr.Count > 1 then r1 := JsNum(sr.Items[1]) else r1 := r0;
     end;
@@ -908,38 +1113,71 @@ begin
   for k := 0 to High(S.Nodes[ARow].View) do
   begin
     cv := vis;
-    if satMap then
+    if satMap or alphaMap then
     begin
-      n1 := LinearMap(S.Nodes[S.Nodes[ARow].View[k]].Value, S.Nodes[ARow].ExtMin,
-        S.Nodes[ARow].ExtMax, 0, 1);
-      cv.HasSat := True;
-      cv.Sat := LinearMap(n1, 0, 1, r0, r1);
-    end;
-    if len > 0 then
-    begin
-      if usePal then
+      n1 := LinearMap(ValueAt(S, S.Nodes[ARow].View[k], dim), e0, e1, 0, 1);
+      if alphaMap then
       begin
-        cv.Kind := 2;
-        cv.Pal := APalette[k mod len];
+        cv.HasAlpha := True;
+        cv.Alpha := LinearMap(n1, 0, 1, r0, r1);
       end
       else
       begin
-        cv.Kind := 1;
-        cv.Json := range.Items[k mod len];
-        if cv.Json.JSONType = jtNull then cv.Kind := 0;
+        cv.HasSat := True;
+        cv.Sat := LinearMap(n1, 0, 1, r0, r1);
       end;
     end;
-    Travel(S, S.Nodes[ARow].View[k], cv, APalette, ABorder);
+    if len > 0 then
+    begin
+      if mapKind = 2 then
+      begin
+        { the value over the list: an rgba, or no colour at all }
+        cv.Kind := 3;
+        cv.Vis := TyVisualFastLerp(LinearMap(ValueAt(S, S.Nodes[ARow].View[k], dim),
+          e0, e1, 0, 1), stops);
+        if not cv.Vis.Defined then cv.Kind := 0;
+      end
+      else
+      begin
+        if mapKind = 1 then idx := IdIndex(S.Nodes[S.Nodes[ARow].View[k]].Id)
+        else idx := k;
+        if usePal then
+        begin
+          cv.Kind := 2;
+          cv.Pal := APalette[idx mod len];
+        end
+        else
+        begin
+          cv.Kind := 1;
+          cv.Json := range.Items[idx mod len];
+          if cv.Json.JSONType = jtNull then cv.Kind := 0;
+        end;
+      end;
+    end;
+    Travel(S, S.Nodes[ARow].View[k], cv, APalette, ABorder, AIds);
   end;
 end;
 
 procedure TyTreemapColour(var ASolved: TTyTreemapSolved;
   const APalette: TTyChartColorArray; ABorder: TTyChartColor);
-var none: TTmColour;
+var none: TTmColour; ids: TStringList; mask: TFPUExceptionMask;
 begin
   if not ASolved.Valid then Exit;
   none := Default(TTmColour);
-  Travel(ASolved, 0, none, APalette, ABorder);
+  ids := TStringList.Create;
+  { a NaN value -- a missing dimension -- maps to no colour, through
+    comparisons that must not trap }
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    ids.Sorted := True;
+    ids.CaseSensitive := True;
+    Travel(ASolved, 0, none, APalette, ABorder, ids);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+    ids.Free;
+  end;
 end;
 
 { ==================== labels ==================== }
@@ -997,12 +1235,14 @@ procedure TyTreemapLabels(var ASolved: TTyTreemapSolved;
   const ASpecs: TTyLabelSpecArray; AStore: TTyDataStore; const ASeriesName: string;
   AValueDim: Integer; const AMeasurer: ITyTextMeasurer);
 var
-  row, k: Integer;
+  row, k, j: Integer;
   spec: TTyLabelSpec;
-  text, pad: string;
-  has: Boolean;
-  bw, cw, ch, rx, ry, p: Double;
+  text, pad, icon, ps: string;
+  has, rich: Boolean;
+  bw, cw, ch, rx, ry, dist, tw, th, ow, oh, bx, by, xl, lt, tokW, h_: Double;
+  pd: array[0..3] of Double;
   lines: TStringArray;
+  d: TJSONData;
   mask: TFPUExceptionMask;
 begin
   if not ASolved.Valid or (AMeasurer = nil) then Exit;
@@ -1028,18 +1268,142 @@ begin
       else
         has := ChainName(ASolved, row, text);
       if not has then Continue;
+      { a leaf root's words behind the series' OWN drill icon [Batch 80] }
+      if ASolved.Nodes[row].IsLeafRoot then
+      begin
+        d := ASolved.Series.Find('drillDownIcon');
+        if d = nil then icon := #$E2#$96#$B6
+        else if (d.JSONType = jtString) then icon := d.AsString
+        else icon := '';
+        if icon <> '' then text := icon + ' ' + text;
+      end;
       bw := ASolved.Nodes[row].BorderWidth;
       cw := JsMax(ASolved.Nodes[row].W - 2 * bw, 0);
       ch := JsMax(ASolved.Nodes[row].H - 2 * bw, 0);
-      p := 5 * ASolved.Scale;
-      lines := TyZrPlainTextLines(text, JsMax(cw - p - p, 0), JsMax(ch - p - p, 0),
-        2, '...', AMeasurer, spec.FontName, spec.FontSizeLogical, spec.FontWeight);
-      rx := (bw * 1 + ASolved.Nodes[row].TX) + cw / 2;
-      ry := (bw * 1 + ASolved.Nodes[row].TY) + ch / 2;
+      { padding (5, CSS shorthand), distance (0), position ('inside') }
+      for k := 0 to 3 do pd[k] := 5 * ASolved.Scale;
+      d := ChainFind(ASolved, row, 'label', 'padding');
+      if d <> nil then
+      begin
+        if d.JSONType = jtNumber then
+          for k := 0 to 3 do pd[k] := d.AsFloat * ASolved.Scale
+        else if (d.JSONType = jtArray) and (d.Count > 0) then
+          for k := 0 to 3 do
+          begin
+            case d.Count of
+              1: j := 0;
+              2: j := k mod 2;
+              3: if k = 3 then j := 1 else j := k;
+            else
+              j := k;
+            end;
+            pd[k] := JsNum(d.Items[j]) * ASolved.Scale;
+          end;
+      end;
+      d := ChainFind(ASolved, row, 'label', 'distance');
+      if d <> nil then dist := JsNum(d) * ASolved.Scale else dist := 0;
+      d := ChainFind(ASolved, row, 'label', 'position');
+      if (d <> nil) and (d.JSONType = jtString) then ps := d.AsString else ps := 'inside';
+      rich := ChainFind(ASolved, row, 'label', 'rich') is TJSONObject;
+      tw := JsMax(cw - pd[1] - pd[3], 0);
+      th := JsMax(ch - pd[0] - pd[2], 0);
+      lines := TyZrPlainTextLines(text, tw, th, 2, '...', AMeasurer, spec.FontName,
+        spec.FontSizeLogical, spec.FontWeight, rich);
+      { the anchor in the content rect, by zrender's table }
+      rx := bw * 1 + ASolved.Nodes[row].TX;
+      ry := bw * 1 + ASolved.Nodes[row].TY;
+      ASolved.Nodes[row].LabelAH := tahCentre;
+      ASolved.Nodes[row].LabelAV := tavMiddle;
+      if ps = 'insideLeft' then
+      begin
+        rx := rx + dist; ry := ry + ch / 2; ASolved.Nodes[row].LabelAH := tahLeft;
+      end
+      else if ps = 'insideRight' then
+      begin
+        rx := rx + (cw - dist); ry := ry + ch / 2; ASolved.Nodes[row].LabelAH := tahRight;
+      end
+      else if ps = 'insideTop' then
+      begin
+        rx := rx + cw / 2; ry := ry + dist; ASolved.Nodes[row].LabelAV := tavTop;
+      end
+      else if ps = 'insideBottom' then
+      begin
+        rx := rx + cw / 2; ry := ry + (ch - dist); ASolved.Nodes[row].LabelAV := tavBottom;
+      end
+      else if ps = 'insideTopLeft' then
+      begin
+        rx := rx + dist; ry := ry + dist;
+        ASolved.Nodes[row].LabelAH := tahLeft; ASolved.Nodes[row].LabelAV := tavTop;
+      end
+      else if ps = 'insideTopRight' then
+      begin
+        rx := rx + (cw - dist); ry := ry + dist;
+        ASolved.Nodes[row].LabelAH := tahRight; ASolved.Nodes[row].LabelAV := tavTop;
+      end
+      else if ps = 'insideBottomLeft' then
+      begin
+        rx := rx + dist; ry := ry + (ch - dist);
+        ASolved.Nodes[row].LabelAH := tahLeft; ASolved.Nodes[row].LabelAV := tavBottom;
+      end
+      else if ps = 'insideBottomRight' then
+      begin
+        rx := rx + (cw - dist); ry := ry + (ch - dist);
+        ASolved.Nodes[row].LabelAH := tahRight; ASolved.Nodes[row].LabelAV := tavBottom;
+      end
+      else
+      begin
+        rx := rx + cw / 2;
+        ry := ry + ch / 2;
+      end;
       if Around0(rx) and Around0(ry) then
       begin
         rx := 0;
         ry := 0;
+      end;
+      { where the words start from the anchor: the plain layout pads the
+        side it is aligned to; the rich one places the OUTER box and puts
+        the first line at its top }
+      if rich and (Length(lines) > 0) then
+      begin
+        ow := tw + (pd[1] + pd[3]);
+        oh := th + (pd[0] + pd[2]);
+        case ASolved.Nodes[row].LabelAH of
+          tahLeft: bx := 0;
+          tahRight: bx := 0 - ow;
+        else
+          bx := 0 - ow / 2;
+        end;
+        case ASolved.Nodes[row].LabelAV of
+          tavTop: by := 0;
+          tavBottom: by := 0 - oh;
+        else
+          by := 0 - oh / 2;
+        end;
+        xl := bx + pd[3];
+        lt := by + pd[0];
+        AMeasurer.MeasureLine(lines[0], spec.FontName, spec.FontSizeLogical,
+          spec.FontWeight, tokW, h_);
+        case ASolved.Nodes[row].LabelAH of
+          tahLeft: rx := rx + xl;
+          tahRight: rx := rx + (xl + tw);
+        else
+          rx := rx + ((xl + (tw - (xl - xl) - ((xl + tw) - (xl + tw)) - tokW) / 2) + tokW / 2);
+        end;
+        ry := ry + lt;
+        ASolved.Nodes[row].LabelAV := tavTop;
+      end
+      else
+      begin
+        case ASolved.Nodes[row].LabelAH of
+          tahLeft: rx := rx + (0 + pd[3]);
+          tahRight: rx := rx + (0 - pd[1]);
+        else
+          rx := rx + (0 + pd[3] / 2 - pd[1] / 2);
+        end;
+        case ASolved.Nodes[row].LabelAV of
+          tavTop: ry := ry + pd[0];
+          tavBottom: ry := ry - pd[2];
+        end;
       end;
       ASolved.Nodes[row].HasLabel := Length(lines) > 0;
       pad := '';
@@ -1307,7 +1671,8 @@ begin
     px := W / 2;
     py := H / 2;
     target := -1;
-    Find(0);
+    { a series leafDepth puts the crumb on the view root [Batch 80] }
+    if ASolved.HasLeafDepth then target := 0 else Find(0);
     if target < 0 then target := 0;
     { the path, target first }
     path := nil;
@@ -1512,8 +1877,8 @@ var
         el.Caption.FixedX := nd.LabelX;
         el.Caption.FixedY := nd.LabelY;
         el.Caption.FixedInside := True;
-        el.Caption.FixedAH := tahCentre;
-        el.Caption.FixedAV := tavMiddle;
+        el.Caption.FixedAH := nd.LabelAH;
+        el.Caption.FixedAV := nd.LabelAV;
         el.Caption.HasFixedZ2 := True;
         el.Caption.FixedZ2 := maxZ2 + 2;
       end;
