@@ -275,6 +275,35 @@ object MainForm: TMainForm
         Hint = 'Show the first 4 KB the PTY sends in the panel on the right, in hex'
         ShowHint = True
       end
+      object ChkZmodem: TTyCheckBox
+        AnchorSideLeft.Control = ChkLogPty
+        AnchorSideLeft.Side = asrBottom
+        Left = 690
+        Height = 24
+        Top = 8
+        Width = 90
+        AutoSize = True
+        BorderSpacing.Left = 18
+        Caption = 'ZModem'
+        Checked = True
+        Hint = 'Receive the files a remote sz sends, send files to a remote rz'
+        ShowHint = True
+        OnChange = ZmodemChange
+      end
+      object ChkPipe: TTyCheckBox
+        AnchorSideLeft.Control = ChkZmodem
+        AnchorSideLeft.Side = asrBottom
+        Left = 798
+        Height = 24
+        Top = 8
+        Width = 70
+        AutoSize = True
+        BorderSpacing.Left = 18
+        Caption = 'Pipe'
+        Hint = 'Run the command on two plain pipes instead of ConPTY (binary safe; no terminal, no echo). Takes effect at the next start'
+        ShowHint = True
+        OnChange = PipeChange
+      end
     end
     object Tools4: TTyPanel
       Left = 0
@@ -445,6 +474,55 @@ object MainForm: TMainForm
         OnChange = CursorInactiveChange
       end
     end
+    object Tools6: TTyPanel
+      Left = 0
+      Height = 40
+      Top = 575
+      Width = 980
+      Align = alBottom
+      Caption = ''
+      Visible = False
+      object LblTransfer: TTyLabel
+        Left = 10
+        Height = 20
+        Top = 10
+        Width = 60
+        Align = alLeft
+        AutoSize = True
+        BorderSpacing.Left = 10
+        BorderSpacing.Top = 10
+        BorderSpacing.Bottom = 10
+        Caption = ''
+      end
+      object BtnCancelTransfer: TTyButton
+        Left = 888
+        Height = 28
+        Top = 6
+        Width = 84
+        Align = alRight
+        AutoSize = True
+        BorderSpacing.Top = 6
+        BorderSpacing.Right = 8
+        BorderSpacing.Bottom = 6
+        Caption = 'Cancel'
+        Hint = 'Stop the transfer (five Ctrl+X in the terminal do the same)'
+        ShowHint = True
+        OnClick = CancelTransferClick
+      end
+      object BarTransfer: TTyProgressBar
+        Left = 80
+        Height = 16
+        Top = 12
+        Width = 796
+        Align = alClient
+        AnimationsEnabled = False
+        BorderSpacing.Left = 12
+        BorderSpacing.Top = 12
+        BorderSpacing.Right = 12
+        BorderSpacing.Bottom = 12
+        Max = 1000
+      end
+    end
     object Status: TTyStatusBar
       Left = 0
       Height = 24
@@ -502,6 +580,7 @@ object MainForm: TMainForm
       OnTitleChange = TermTitleChange
       OnLinkActivate = TermLinkActivate
       OnOsc52 = TermOsc52
+      OnClaimedInput = TermClaimedInput
     end
   end
   object DlgOpen: TTyOpenDialog
@@ -521,6 +600,24 @@ object MainForm: TMainForm
     Interval = 15
     OnTimer = PlayerTimer
     Left = 100
+    Top = 160
+  end
+  object DlgUpload: TTyOpenDialog
+    Title = 'Files to send'
+    Options = [fdoFileMustExist, fdoAllowMultiSelect]
+    Left = 220
+    Top = 160
+  end
+  object DlgDownloadDir: TTySelectPathDialog
+    Caption = 'Save received files in'
+    Left = 280
+    Top = 160
+  end
+  object ZmTimer: TTimer
+    Enabled = False
+    Interval = 100
+    OnTimer = ZmTimerTimer
+    Left = 340
     Top = 160
   end
 end

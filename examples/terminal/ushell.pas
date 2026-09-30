@@ -24,7 +24,14 @@ unit ushell;
   Stop (and Free) returns at once: it unhooks the terminal, drops what the terminal has
   not parsed yet, closes the session -- after which no wake comes -- and removes the
   pumps already queued. Taking the program down happens on the session's own finisher
-  thread (uptysession); a program that exits waits for those with PtyWaitForFinishers. }
+  thread (uptysession); a program that exits waits for those with PtyWaitForFinishers.
+
+  ZMODEM (phase 7, spec 19.7): with AZmodem a TZmodemStreamHandler (uzmodemterm) sits
+  on the terminal's core for the shell's life. Its bytes go out the way keys do (the
+  terminal's OnData), but not into the key panel (OnData here is skipped while a stream
+  is claimed: an upload is megabytes). An upload is held back while the session has
+  more than 256 KB queued for the writer (CanSend). Stop cancels a transfer before it
+  unhooks, so the abort still reaches the program. }
 
 {$mode objfpc}{$H+}
 
@@ -32,7 +39,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
-  tyControls.Terminal, uptysession;
+  tyControls.Terminal, uptysession, uzmodemterm;
 
 resourcestring
   rsShellExited = 'Process exited with code %d';
@@ -48,6 +55,8 @@ type
     FOnExit: TNotifyEvent;
     FSavedData: TTyTerminalDataEvent;
     FSavedGrid: TTyTerminalGridResizeEvent;
+    FZmodem: TZmodemStreamHandler;
+    function ZmCanSend: Integer;
     procedure SessionWake(Sender: TObject);
     procedure AsyncPump(Data: PtrInt);
     procedure TermData(Sender: TObject; const AData: RawByteString);
@@ -58,7 +67,7 @@ type
   public
     { takes ABackend over; AHigh / ALow: the session's water marks (spec 12.3) }
     constructor Create(ATerm: TTyTerminalView; ABackend: TPtyBackend; AHigh: Integer = 1048576;
-      ALow: Integer = 262144);
+      ALow: Integer = 262144; AZmodem: Boolean = False);
     destructor Destroy; override;                     { Stop }
     function Start(const ACommand: string; out AError: string): Boolean;
     procedure Stop;
@@ -67,6 +76,8 @@ type
     property ExitCode: Int64 read FExitCode;
     { the key panel still wants to see each key's bytes }
     property OnData: TTyTerminalDataEvent read FOnData write FOnData;
+    { the ZModem handler (nil without AZmodem); the host wires its requests and events }
+    property Zmodem: TZmodemStreamHandler read FZmodem;
     { every batch of the PTY's raw output (the example's "log PTY output") }
     property OnOutput: TTyTerminalDataEvent read FOnOutput write FOnOutput;
     { after the exit line is written }
@@ -80,12 +91,26 @@ type
 
 implementation
 
-constructor TTerminalShell.Create(ATerm: TTyTerminalView; ABackend: TPtyBackend; AHigh, ALow: Integer);
+constructor TTerminalShell.Create(ATerm: TTyTerminalView; ABackend: TPtyBackend; AHigh, ALow: Integer;
+  AZmodem: Boolean);
 begin
   inherited Create;
   FTerm := ATerm;
   FSession := TPtySession.Create(ABackend, AHigh, ALow);
   FExitCode := -1;
+  if AZmodem then
+  begin
+    FZmodem := TZmodemStreamHandler.Create(FTerm.Core);
+    FZmodem.CanSend := @ZmCanSend;
+  end;
+end;
+
+{ what an upload may queue now: 256 KB less what the writer has not taken yet }
+function TTerminalShell.ZmCanSend: Integer;
+begin
+  if (FSession = nil) or not FRunning or FSession.Closed then
+    Exit(0);
+  Result := 256 * 1024 - FSession.PendingWrite;
 end;
 
 destructor TTerminalShell.Destroy;
@@ -97,6 +122,7 @@ begin
       does not raise }
   end;
   Application.RemoveAsyncCalls(Self);
+  FreeAndNil(FZmodem);                   { a shell that never started }
   FreeAndNil(FSession);
   inherited Destroy;
 end;
@@ -149,12 +175,18 @@ end;
 
 procedure TTerminalShell.Stop;
 begin
+  { a transfer is cancelled while the terminal still sends to the session: the abort
+    sequence reaches the program }
+  if FZmodem <> nil then
+    FZmodem.Cancel;
   FRunning := False;
   try
     if FStarted then
     begin
       { first: no key, no resize reaches the session from here on }
       Unhook;
+      { the handler goes before the core drops the queue (it would end no claim now) }
+      FreeAndNil(FZmodem);
       { what the program wrote and the terminal has not parsed yet is dropped (with the
         callbacks that would have reached a closed session) }
       FTerm.Core.DiscardPending;
@@ -206,7 +238,8 @@ begin
     that turns that off again still sends nothing) }
   if not FRunning then Exit;
   FSession.Write(AData);
-  if Assigned(FOnData) then FOnData(Self, AData);
+  { a claimed stream's bytes (ZModem) are not keys: not for the key panel }
+  if Assigned(FOnData) and not FTerm.StreamClaimed then FOnData(Self, AData);
 end;
 
 procedure TTerminalShell.TermGrid(Sender: TObject; ACols, ARows: Integer);

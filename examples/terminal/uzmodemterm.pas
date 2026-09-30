@@ -102,6 +102,7 @@ type
     FClock: TTyTerminalClock;
     FUploadFiles: TStringList;          { StartUpload came before rz's ZRINIT was all here }
     FLastSaved: TStringList;
+    FLastSummary: string;
     FOnDownloadRequest, FOnUploadRequest: TNotifyEvent;
     FOnProgress: TZmProgressEvent;
     FOnFinished: TZmodemFinishedEvent;
@@ -142,6 +143,8 @@ type
     property OnFinished: TZmodemFinishedEvent read FOnFinished write FOnFinished;
     { the files the last download saved whole }
     property LastSaved: TStringList read FLastSaved;
+    { the last transfer's summary line, or why it ended (for a status bar) }
+    property LastSummary: string read FLastSummary;
     { FOR THE TESTS (pure query): progress lines shown }
     property ProgressLines: Integer read FProgressLines;
   end;
@@ -748,7 +751,12 @@ var
   s: TTyTerminalStreamSession;
 begin
   if ALine <> '' then
+  begin
     Show(#13#27'[K' + ALine + #13#10);
+    FLastSummary := ALine;
+  end
+  else
+    FLastSummary := AMessage;
   Bury;
   FState := zsIdle;
   FPending := '';

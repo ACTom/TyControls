@@ -26,7 +26,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="7">
+    <Units Count="10">
       <Unit0>
         <Filename Value="terminal_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -61,6 +61,21 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="ushell"/>
       </Unit6>
+      <Unit7>
+        <Filename Value="uzmodem.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uzmodem"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="uzmodemsession.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uzmodemsession"/>
+      </Unit8>
+      <Unit9>
+        <Filename Value="uzmodemterm.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uzmodemterm"/>
+      </Unit9>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

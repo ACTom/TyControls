@@ -45,6 +45,9 @@ type
     { 6 期:配色 }
     procedure TestTheColourListOffersSevenAndThreePairs;
     procedure TestAPairThatDoesNotLoadChangesNothing;
+    { 7 期:ZModem }
+    procedure TestAZmodemDownloadInTheExample;               { X2 }
+    procedure TestZmodemCanBeSwitchedOff;                    { X3 }
   end;
 
 implementation
@@ -318,7 +321,8 @@ end;
   compiles what the project names or its units use) }
 procedure TTyTerminalExampleTests.TestTheExampleProjectListsItsUnits;
 const
-  Units: array[0..3] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas');
+  Units: array[0..6] of string = ('ushell.pas', 'uptysession.pas', 'uptywin.pas', 'uptyunix.pas',
+    'uzmodem.pas', 'uzmodemsession.pas', 'uzmodemterm.pas');
 var
   l: TStringList;
   i: Integer;
@@ -398,6 +402,17 @@ begin
       AssertTrue('FormCreate ran to the end: the shell commands are listed',
         f.CmbCommand.Items.Count > 0);
       AssertEquals('both modes are offered', 2, f.CmbMode.Items.Count);
+      { 7 期 (X1): the transfer bar waits hidden, ZModem is on, Pipe is offered on Windows
+        only, the transfer timer runs with a shell only }
+      AssertFalse('the transfer bar is hidden', f.Tools6.Visible);
+      AssertTrue('ZModem on', f.ChkZmodem.Checked);
+      AssertFalse('Pipe off', f.ChkPipe.Checked);
+      {$IFDEF MSWINDOWS}
+      AssertTrue('Pipe offered on Windows', f.ChkPipe.Visible);
+      {$ELSE}
+      AssertFalse('no Pipe elsewhere', f.ChkPipe.Visible);
+      {$ENDIF}
+      AssertFalse('no transfer timer without a shell', f.ZmTimer.Enabled);
       { no colorschemes/ beside the test runner or above it: only "Follow theme", and
         "Import..." still works }
       AssertEquals('no scheme file: the colour list has one entry', 1, f.CmbColors.Items.Count);
@@ -659,6 +674,126 @@ begin
   finally
     DeleteDirectory(dir, False);
     AssertFalse('the colorschemes folder the test made is gone', DirectoryExists(dir));
+  end;
+end;
+
+{ ---- 7 期: ZModem in the example ---------------------------------------------------------- }
+
+function ZmFixtureBytes(const AName: string): RawByteString;
+var
+  fs: TFileStream;
+begin
+  fs := TFileStream.Create(TyTermFixturePath('terminal-zmodem' + PathDelim + AName), fmOpenRead or fmShareDenyWrite);
+  try
+    Result := '';
+    SetLength(Result, fs.Size);
+    if fs.Size > 0 then
+      fs.ReadBuffer(Result[1], fs.Size);
+  finally
+    fs.Free;
+  end;
+end;
+
+{ the example's main form in shell mode on a fake PTY whose output is lrzsz's sz
+  recording; the download folder answered by the test seam (no dialog) }
+function ShellOnAFake(out AFake: TFakePty): TMainForm;
+begin
+  AFake := TFakePty.Create;
+  TMainForm.ShellBackendForTest := AFake;
+  Result := TMainForm.Create(nil);
+  Result.CmbMode.ItemIndex := 1;
+  Result.ModeChange(Result.CmbMode);
+end;
+
+{ X2. Mutation: the form not wiring OnDownloadRequest. }
+procedure TTyTerminalExampleTests.TestAZmodemDownloadInTheExample;
+var
+  f: TMainForm;
+  fake: TFakePty;
+  dir: string;
+  t0: QWord;
+  got: RawByteString;
+begin
+  dir := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyzm-example-' + IntToStr(GetTickCount64);
+  AssertTrue(ForceDirectories(dir));
+  TMainForm.ZmodemAnswerForTest := dir;
+  f := nil;
+  try
+    f := ShellOnAFake(fake);
+    AssertTrue('a shell with ZModem', f.ZmTimer.Enabled);
+    fake.Feed(ZmFixtureBytes('one-small.sz.bin'));
+    t0 := GetTickCount64;
+    while not FileExists(dir + PathDelim + 'one-small.bin') or f.Term.StreamClaimed do
+    begin
+      Application.ProcessMessages;
+      Sleep(5);
+      if GetTickCount64 - t0 > 10000 then
+        Fail('no download within 10 s; status: ' + f.Status.Panels[0].Text);
+    end;
+    PumpMessages;
+    got := '';
+    with TFileStream.Create(dir + PathDelim + 'one-small.bin', fmOpenRead or fmShareDenyWrite) do
+    try
+      SetLength(got, Size);
+      if Size > 0 then ReadBuffer(got[1], Size);
+    finally
+      Free;
+    end;
+    AssertTrue('the file, byte for byte', got = ZmFixtureBytes('one-small.1.src'));
+    AssertFalse('the transfer bar went again', f.Tools6.Visible);
+    AssertTrue('the summary in the status bar: ' + f.Status.Panels[0].Text,
+      Pos('Received 1 file(s)', f.Status.Panels[0].Text) > 0);
+    AssertTrue('the answers went to the program', Length(fake.Written) > 0);
+  finally
+    TMainForm.ZmodemAnswerForTest := '';
+    f.Free;
+    DeleteDirectory(dir, False);
+  end;
+end;
+
+function ScreenOf(ATerm: TTyTerminalView): string;
+var
+  y: Integer;
+begin
+  Result := '';
+  for y := 0 to ATerm.Core.Buffer.Lines.Length - 1 do
+    Result := Result + ATerm.Core.Buffer.TranslateBufferLineToString(y, True) + #10;
+end;
+
+{ X3. Mutation: ChkZmodem's OnChange not wired. }
+procedure TTyTerminalExampleTests.TestZmodemCanBeSwitchedOff;
+var
+  f: TMainForm;
+  fake: TFakePty;
+  dir: string;
+  t0: QWord;
+begin
+  dir := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyzm-example-off-' + IntToStr(GetTickCount64);
+  AssertTrue(ForceDirectories(dir));
+  TMainForm.ZmodemAnswerForTest := dir;
+  f := nil;
+  try
+    f := ShellOnAFake(fake);
+    f.ChkZmodem.Checked := False;
+    fake.Feed(ZmFixtureBytes('one-small.sz.bin'));
+    t0 := GetTickCount64;
+    { sz's bytes as text: the file information block ('one-small.bin', its size) is
+      printed like any output -- a claimed stream would never show it }
+    while Pos('one-small.bin', ScreenOf(f.Term)) = 0 do
+    begin
+      Application.ProcessMessages;
+      Sleep(5);
+      if GetTickCount64 - t0 > 10000 then
+        Fail('the output did not arrive within 10 s: ' + ScreenOf(f.Term));
+    end;
+    PumpMessages;
+    AssertFalse('not claimed', f.Term.StreamClaimed);
+    AssertFalse('no file', FileExists(dir + PathDelim + 'one-small.bin'));
+    AssertEquals('no ZRINIT went back', 0, Pos('**'#$18'B01', fake.Written));
+  finally
+    TMainForm.ZmodemAnswerForTest := '';
+    f.Free;
+    DeleteDirectory(dir, False);
   end;
 end;
 

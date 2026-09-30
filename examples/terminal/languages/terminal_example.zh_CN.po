@@ -187,6 +187,38 @@ msgstr "终端没有焦点时的光标"
 msgid "Import a colour scheme"
 msgstr "导入配色方案"
 
+#: tmainform.chkzmodem.caption
+msgid "ZModem"
+msgstr "ZModem"
+
+#: tmainform.chkzmodem.hint
+msgid "Receive the files a remote sz sends, send files to a remote rz"
+msgstr "接收远端 sz 发来的文件，向远端 rz 发送文件"
+
+#: tmainform.chkpipe.caption
+msgid "Pipe"
+msgstr "管道"
+
+#: tmainform.chkpipe.hint
+msgid "Run the command on two plain pipes instead of ConPTY (binary safe; no terminal, no echo). Takes effect at the next start"
+msgstr "不经 ConPTY、用两条普通管道运行命令（二进制安全；没有终端，不回显）。下次启动生效"
+
+#: tmainform.btncanceltransfer.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: tmainform.btncanceltransfer.hint
+msgid "Stop the transfer (five Ctrl+X in the terminal do the same)"
+msgstr "停止传输（在终端里连按五次 Ctrl+X 也一样）"
+
+#: tmainform.dlgupload.title
+msgid "Files to send"
+msgstr "要发送的文件"
+
+#: tmainform.dlgdownloaddir.caption
+msgid "Save received files in"
+msgstr "收到的文件保存到"
+
 # --- resourcestrings ---
 
 #: uasciicast.rsnotv2
@@ -337,3 +369,67 @@ msgstr "空心框"
 #: umain.rscursorunderline
 msgid "Underline"
 msgstr "下划线"
+
+#: umain.rspipenextstart
+msgid "Pipe mode takes effect at the next start"
+msgstr "管道模式下次启动生效"
+
+#: umain.rsclaimedkey
+#, object-pascal-format
+msgid "(claimed) %s"
+msgstr "（传输中）%s"
+
+#: uzmodemterm.rszmconptyrefused
+msgid "ConPTY damages binary data: for ZModem use the pipe mode (tick \"Pipe\" and restart)"
+msgstr "ConPTY 会改坏二进制数据，ZModem 请改用管道模式（勾选“管道”后重启）"
+
+#: uzmodemterm.rszmdeclined
+msgid "ZModem transfer declined"
+msgstr "ZModem 传输已拒绝"
+
+#: uzmodemterm.rszmcancelledline
+msgid "ZModem transfer cancelled"
+msgstr "ZModem 传输已取消"
+
+#: uzmodemterm.rszmfailedline
+#, object-pascal-format
+msgid "ZModem transfer failed: %s"
+msgstr "ZModem 传输失败：%s"
+
+#: uzmodemterm.rszmreceivedline
+#, object-pascal-format
+msgid "Received %d file(s), %s in %s s (%s/s)"
+msgstr "已接收 %d 个文件，%s，用时 %s 秒（%s/s）"
+
+#: uzmodemterm.rszmsentline
+#, object-pascal-format
+msgid "Sent %d file(s), %s in %s s (%s/s)"
+msgstr "已发送 %d 个文件，%s，用时 %s 秒（%s/s）"
+
+#: uzmodemsession.rszmcommandrefused
+msgid "the sender asked to run a command; refused"
+msgstr "对方要求执行命令，已拒绝"
+
+#: uzmodemsession.rszmtimeout
+msgid "no answer from the other side"
+msgstr "对方没有应答"
+
+#: uzmodemsession.rszmtoomanyerrors
+msgid "too many errors at one place"
+msgstr "同一位置出错次数过多"
+
+#: uzmodemsession.rszmcancelledhere
+msgid "cancelled"
+msgstr "已取消"
+
+#: uzmodemsession.rszmcancelledthere
+msgid "cancelled by the other side"
+msgstr "对方已取消"
+
+#: uzmodemsession.rszmwritefailed
+msgid "the file could not be written"
+msgstr "无法写入文件"
+
+#: uzmodemsession.rszmfileerror
+msgid "the other side could not write the file"
+msgstr "对方无法写入文件"

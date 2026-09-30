@@ -46,6 +46,18 @@ unit umain;
   swaps them. "Import..." reads any Windows Terminal scheme file or settings.json and adds
   every scheme in it that loads, each name once (importing a file again adds nothing new).
 
+  ZMODEM (phase 7). With "ZModem" ticked, a remote sz or rz in the shell is spotted in the
+  output (uzmodemterm: a stream handler on the core, ZMODEM written for the example):
+  sz asks where to save (every time; the folder picked last is offered first), rz asks
+  which files to send. The dialogs are shown from a queued call -- the request comes in
+  the middle of the core's parse. A line in the terminal shows the progress and then a
+  summary; the bar at the bottom shows the file and has "Cancel" (five Ctrl+X in the
+  terminal do the same). Received files never overwrite one: "name (1).ext". On Windows
+  ConPTY drops every byte from $80 up, so ZModem needs "Pipe": the command then runs on
+  two plain pipes (wsl.exe -d Ubuntu -- sz file, ssh -T host) -- no terminal, no echo
+  (tick "Local echo" to see what you type). Behind ConPTY the terminal says so and
+  stops sz / rz.
+
   CURSOR. "Cursor", "Blink" and "Unfocused" set the terminal's own cursor (CursorStyle,
   CursorBlink, CursorInactiveStyle). A program can ask for another shape for a while --
   vim's insert mode asks for a bar with DECSCUSR -- and CSI 0 SP q (or a reset) brings back
@@ -64,9 +76,10 @@ uses
   tyControls.TyLabel, tyControls.Button, tyControls.ComboBox, tyControls.CheckBox,
   tyControls.ToggleSwitch, tyControls.SpinEdit, tyControls.Memo, tyControls.Splitter,
   tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.FileDialog,
+  tyControls.Dialogs.SelectPath, tyControls.ProgressBar,
   tyControls.Unicode.Width, tyControls.Terminal.Buffer, tyControls.Terminal.Core,
   tyControls.Terminal.ColorScheme, tyControls.Terminal,
-  uasciicast, uptysession, uptywin, uptyunix, ushell;
+  uasciicast, uptysession, uptywin, uptyunix, ushell, uzmodemsession, uzmodemterm;
 
 type
   { one entry of the colour list: which scheme file text (FColorTexts; -1 = follow the
@@ -89,6 +102,8 @@ type
     CmbCommand: TTyComboBox;
     BtnStart: TTyButton;
     ChkLogPty: TTyCheckBox;
+    ChkZmodem: TTyCheckBox;
+    ChkPipe: TTyCheckBox;
     Tools4: TTyPanel;
     ChkCopyOnSelect: TTyCheckBox;
     ChkDetectUrls: TTyCheckBox;
@@ -123,12 +138,19 @@ type
     ChkAmbiguous: TTyCheckBox;
     LblFontSize: TTyLabel;
     SpnFontSize: TTySpinEdit;
+    Tools6: TTyPanel;
+    LblTransfer: TTyLabel;
+    BtnCancelTransfer: TTyButton;
+    BarTransfer: TTyProgressBar;
     Status: TTyStatusBar;
     Keys: TTyMemo;
     Split: TTySplitter;
     Term: TTyTerminalView;
     DlgOpen: TTyOpenDialog;
     Player: TTimer;
+    DlgUpload: TTyOpenDialog;
+    DlgDownloadDir: TTySelectPathDialog;
+    ZmTimer: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -161,8 +183,20 @@ type
     procedure TermLinkActivate(Sender: TObject; const AUri: string; AFromOsc8: Boolean);
     procedure TermOsc52(Sender: TObject; AWrite: Boolean; const ASelection: string;
       var AText: string; var AAllow: Boolean);
+    procedure TermClaimedInput(Sender: TObject; const AData: RawByteString);
+    procedure ZmodemChange(Sender: TObject);
+    procedure PipeChange(Sender: TObject);
+    procedure CancelTransferClick(Sender: TObject);
+    procedure ZmTimerTimer(Sender: TObject);
   private
     FShell: TTerminalShell;
+    FLastDownloadDir: string;
+    procedure ZmDownloadRequest(Sender: TObject);
+    procedure ZmUploadRequest(Sender: TObject);
+    procedure AskDownloadDir(Data: PtrInt);
+    procedure AskUploadFiles(Data: PtrInt);
+    procedure ZmProgress(Sender: TObject; const AName: string; AFileDone, AFileSize, ATotalDone: Int64);
+    procedure ZmFinished(Sender: TObject; AResult: TZmResult; const AMessage: string);
     FLogged: Integer;
     procedure FillCommands;
     procedure FocusTerm;
@@ -201,6 +235,11 @@ type
       there now reads from this file) and the first one is picked; a file with none says why
       in the status bar and changes nothing }
     procedure ImportColorsFrom(const AFileName: string);
+  public
+    { FOR THE TESTS: not empty = the download folder, no dialog }
+    class var ZmodemAnswerForTest: string;
+    { FOR THE TESTS: the next shell runs on this backend (taken over, then cleared) }
+    class var ShellBackendForTest: TPtyBackend;
   end;
 
 var
@@ -242,6 +281,8 @@ resourcestring
   rsCursorBar = 'Bar';
   rsCursorOutline = 'Outline';
   rsCursorNone = 'None';
+  rsPipeNextStart = 'Pipe mode takes effect at the next start';
+  rsClaimedKey = '(claimed) %s';
 
 const
   { the key panel keeps the last this many lines }
@@ -367,6 +408,10 @@ begin
   ChkCursorBlink.Checked := Term.CursorBlink;
   CmbCursorInactive.ItemIndex := Ord(Term.CursorInactiveStyle);
   BtnStart.Caption := rsStart;
+  { a pipe instead of ConPTY is a Windows matter: elsewhere the PTY is binary safe }
+  {$IFNDEF MSWINDOWS}
+  ChkPipe.Visible := False;
+  {$ENDIF}
   FillCommands;
   FColorTexts := TStringList.Create;
   FillColors;
@@ -375,6 +420,9 @@ end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
+  ZmTimer.Enabled := False;
+  { the dialogs a transfer queued must not run on a form that is going }
+  Application.RemoveAsyncCalls(Self);
   { the shell first: its pending pumps go before anything they touch. Freeing it
     returns at once; its program is taken down on a thread of its own, which the
     example waits for here, once and bounded, before it exits }
@@ -663,6 +711,9 @@ procedure TMainForm.EnterReplay;
 var
   none: TTyTerminalWindowsPty;
 begin
+  Application.RemoveAsyncCalls(Self);
+  ZmTimer.Enabled := False;
+  Tools6.Visible := False;
   FreeAndNil(FShell);
   Tools3.Visible := False;
   Term.ReadOnly := ChkReadOnly.Checked;
@@ -679,13 +730,31 @@ var
   backend: TPtyBackend;
   err: string;
 begin
+  { a transfer's queued dialog belongs to the shell that goes now }
+  Application.RemoveAsyncCalls(Self);
+  Tools6.Visible := False;
   FreeAndNil(FShell);
   {$IFDEF MSWINDOWS}
-  backend := TConPtyBackend.Create;
+  if ChkPipe.Checked then
+    backend := TProcessPipeBackend.Create(True)
+  else
+    backend := TConPtyBackend.Create;
   {$ELSE}
   backend := TUnixPtyBackend.Create;
   {$ENDIF}
-  FShell := TTerminalShell.Create(Term, backend);
+  if ShellBackendForTest <> nil then
+  begin
+    backend.Free;
+    backend := ShellBackendForTest;
+    ShellBackendForTest := nil;
+  end;
+  FShell := TTerminalShell.Create(Term, backend, 1048576, 262144, True);
+  FShell.Zmodem.Enabled := ChkZmodem.Checked;
+  FShell.Zmodem.OnDownloadRequest := @ZmDownloadRequest;
+  FShell.Zmodem.OnUploadRequest := @ZmUploadRequest;
+  FShell.Zmodem.OnProgress := @ZmProgress;
+  FShell.Zmodem.OnFinished := @ZmFinished;
+  ZmTimer.Enabled := True;
   FShell.OnData := @ShellData;
   FShell.OnOutput := @ShellOutput;
   FShell.OnExit := @ShellExit;
@@ -733,6 +802,122 @@ procedure TMainForm.ShellExit(Sender: TObject);
 begin
   Status.Panels[0].Text := Format(rsShellExitedStatusFmt, [FShell.ExitCode]);
   BtnStart.Caption := rsRestart;
+end;
+
+{ ---- ZModem (phase 7) ---------------------------------------------------------------- }
+
+{ the requests come in the middle of the core's parse (the handler's Feed): the dialog
+  is shown from the message loop, never from here }
+procedure TMainForm.ZmDownloadRequest(Sender: TObject);
+begin
+  Application.QueueAsyncCall(@AskDownloadDir, 0);
+end;
+
+procedure TMainForm.ZmUploadRequest(Sender: TObject);
+begin
+  Application.QueueAsyncCall(@AskUploadFiles, 0);
+end;
+
+{ every download asks where (the answer is the confirmation); the folder picked last
+  is offered first, the user's Downloads the first time }
+procedure TMainForm.AskDownloadDir(Data: PtrInt);
+var
+  dir: string;
+begin
+  if (FShell = nil) or (FShell.Zmodem = nil) or (FShell.Zmodem.State <> zsAskDownload) then Exit;
+  if ZmodemAnswerForTest <> '' then
+  begin
+    FShell.Zmodem.AcceptDownload(ZmodemAnswerForTest);
+    Exit;
+  end;
+  dir := FLastDownloadDir;
+  if dir = '' then
+  begin
+    dir := IncludeTrailingPathDelimiter(GetUserDir) + 'Downloads';
+    if not DirectoryExists(dir) then
+      dir := GetUserDir;
+  end;
+  DlgDownloadDir.Directory := dir;
+  { the shell may have gone while the dialog was up }
+  if DlgDownloadDir.Execute then
+  begin
+    FLastDownloadDir := DlgDownloadDir.Directory;
+    if (FShell <> nil) and (FShell.Zmodem <> nil) then
+      FShell.Zmodem.AcceptDownload(FLastDownloadDir);
+  end
+  else if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    FShell.Zmodem.Decline;
+  FocusTerm;
+end;
+
+procedure TMainForm.AskUploadFiles(Data: PtrInt);
+begin
+  if (FShell = nil) or (FShell.Zmodem = nil) or (FShell.Zmodem.State <> zsAskUpload) then Exit;
+  if DlgUpload.Execute and (DlgUpload.Files.Count > 0) then
+  begin
+    if (FShell <> nil) and (FShell.Zmodem <> nil) then
+      FShell.Zmodem.StartUpload(DlgUpload.Files);
+  end
+  else if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    FShell.Zmodem.Decline;
+  FocusTerm;
+end;
+
+procedure TMainForm.ZmProgress(Sender: TObject; const AName: string; AFileDone, AFileSize, ATotalDone: Int64);
+begin
+  if not Tools6.Visible then
+  begin
+    { above the status bar: same-side aligned siblings go by Top }
+    Tools6.Top := Status.Top - 1;
+    Tools6.Visible := True;
+  end;
+  LblTransfer.Caption := AName;
+  if AFileSize > 0 then
+    BarTransfer.Position := Integer(AFileDone * 1000 div AFileSize)
+  else
+    BarTransfer.Position := 1000;
+end;
+
+procedure TMainForm.ZmFinished(Sender: TObject; AResult: TZmResult; const AMessage: string);
+begin
+  Tools6.Visible := False;
+  if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    Status.Panels[0].Text := FShell.Zmodem.LastSummary;
+end;
+
+procedure TMainForm.CancelTransferClick(Sender: TObject);
+begin
+  if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    FShell.Zmodem.Cancel;
+  FocusTerm;
+end;
+
+{ runs while a shell does, so a transfer can be switched off (and on) mid-session }
+procedure TMainForm.ZmodemChange(Sender: TObject);
+begin
+  if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    FShell.Zmodem.Enabled := ChkZmodem.Checked;
+end;
+
+procedure TMainForm.PipeChange(Sender: TObject);
+begin
+  if FShell <> nil then
+    Status.Panels[0].Text := rsPipeNextStart;
+end;
+
+procedure TMainForm.ZmTimerTimer(Sender: TObject);
+begin
+  if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    FShell.Zmodem.Tick(TyTermDefaultClock);
+end;
+
+{ while a transfer holds the stream: keys go to the handler (five Ctrl+X cancel) and
+  into the key panel, marked }
+procedure TMainForm.TermClaimedInput(Sender: TObject; const AData: RawByteString);
+begin
+  AddKeyLine(Format(rsClaimedKey, [Describe(AData)]));
+  if (FShell <> nil) and (FShell.Zmodem <> nil) then
+    FShell.Zmodem.UserInput(AData);
 end;
 
 procedure TMainForm.CopyOnSelectClick(Sender: TObject);
