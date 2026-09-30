@@ -52,6 +52,7 @@ type
     procedure TestAnErrorAtTheEndIsOnTheLastLine;
     procedure TestAFileThatCannotBeReadStaysRecent;
     procedure TestAnAmpersandInARecentPathIsShown;
+    procedure TestTheSideBarShowsItsHints;
   end;
 
 implementation
@@ -910,6 +911,14 @@ begin
   AssertEquals('F24: the caption doubles the ampersand',
     StringReplace(ExpandFileName(f), '&', '&&', [rfReplaceAll]), FForm.MnuRecent.Items[0].Caption);
   AssertEquals('F24: the list keeps the path', ExpandFileName(f), FForm.Settings.Recent[0]);
+end;
+
+{ The side bar's strip shows its tool windows as icons; their names are in hints, which a
+  control only shows when ShowHint is on (the .lfm). }
+procedure TTbMainFormTests.TestTheSideBarShowsItsHints;
+begin
+  AssertTrue('F25: the strip shows hints', FForm.SideBar.ShowHint);
+  AssertTrue('F25: and the problems window has one', FForm.ProblemsWin.StripHint <> '');
 end;
 
 initialization

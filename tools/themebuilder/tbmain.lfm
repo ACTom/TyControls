@@ -58,6 +58,7 @@ object TbMainForm: TTbMainForm
       Top = 34
       ExpandedSize = 280
       Images = Icons
+      ShowHint = True
       object ProblemsWin: TTyToolWindow
         Caption = 'Problems'
         ImageName = 'circle-alert'
