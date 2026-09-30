@@ -41,12 +41,16 @@ type
     procedure TestTheListenerIsRemoved;
     procedure TestTheSettingsAreKept;
     procedure TestProblemLinesTakeTheirColourFromTheTheme;
+    procedure TestTheCatalogueCoversTheForms;
+    procedure TestTheCatalogueEntriesAreWhole;
+    procedure TestTheTranslationsCoverTheCode;
+    procedure TestTheLibraryCatalogueIsACopy;
   end;
 
 implementation
 
 uses
-  FileUtil, IniFiles, Graphics, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
+  FileUtil, IniFiles, Graphics, fpjson, jsonparser, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, test.themebuilder.golden;
 
 const
@@ -429,6 +433,254 @@ begin
   finally
     markup.Free;
   end;
+end;
+
+{ ---- the catalogues ---- }
+
+function ToolDir: string;
+begin
+  Result := TbRepoDir + 'tools' + PathDelim + 'themebuilder' + PathDelim;
+end;
+
+function LoadLines(const AFileName: string): TStringList;
+begin
+  Result := TStringList.Create;
+  Result.LoadFromFile(AFileName);
+end;
+
+{ The keys LCLTranslator looks up for a .lfm's texts: <root class>.<component>.<property>
+  (or <root class>.<property> for the root), lower case -- for the string properties a
+  person reads. Collection items (tree items, status panels) are skipped: they carry no
+  text to translate here. }
+procedure LfmKeys(const AFileName: string; AKeys: TStrings);
+const
+  cProps: array[0..7] of string = ('caption', 'hint', 'texthint', 'striphint', 'text',
+    'message', 'description', 'title');
+var
+  lines, stack: TStringList;
+  i, j, depth, inColl: Integer;
+  ln, t, root, name, prop: string;
+  p: Integer;
+begin
+  lines := LoadLines(AFileName);
+  stack := TStringList.Create;
+  try
+    root := '';
+    inColl := 0;
+    for i := 0 to lines.Count - 1 do
+    begin
+      ln := lines[i];
+      t := Trim(ln);
+      if (Length(t) >= 3) and (Copy(t, Length(t) - 2, 3) = '= <') then
+      begin
+        Inc(inColl);
+        Continue;
+      end;
+      if inColl > 0 then
+      begin
+        if (t = '>') or (Copy(t, Length(t) - 3, 4) = 'end>') then
+          Dec(inColl);
+        Continue;
+      end;
+      depth := 0;
+      while (depth < Length(ln)) and (ln[depth + 1] = ' ') do Inc(depth);
+      depth := depth div 2;
+      if (Copy(t, 1, 7) = 'object ') or (Copy(t, 1, 7) = 'inline ') then
+      begin
+        name := Copy(t, 8, Pos(':', t) - 8);
+        while stack.Count > depth do stack.Delete(stack.Count - 1);
+        stack.Add(LowerCase(Trim(name)));
+        if root = '' then
+          root := LowerCase(Trim(Copy(t, Pos(':', t) + 1, MaxInt)));
+        Continue;
+      end;
+      p := Pos(' = ''', t);
+      if p = 0 then Continue;
+      prop := LowerCase(Copy(t, 1, p - 1));
+      for j := 0 to High(cProps) do
+        if prop = cProps[j] then
+        begin
+          if depth <= 1 then
+            AKeys.Add(root + '.' + prop)
+          else
+            AKeys.Add(root + '.' + stack[depth - 1] + '.' + prop);
+          Break;
+        end;
+    end;
+  finally
+    stack.Free;
+    lines.Free;
+  end;
+end;
+
+procedure TTbMainFormTests.TestTheCatalogueCoversTheForms;
+var
+  want, have, po: TStringList;
+  i: Integer;
+  k: string;
+begin
+  want := TStringList.Create;
+  have := TStringList.Create;
+  po := LoadLines(ToolDir + 'languages' + PathDelim + 'themebuilder.zh_CN.po');
+  try
+    want.Sorted := True;
+    want.Duplicates := dupIgnore;
+    have.Sorted := True;
+    have.Duplicates := dupIgnore;
+    LfmKeys(ToolDir + 'tbmain.lfm', want);
+    LfmKeys(ToolDir + 'tbpreview.lfm', want);
+    LfmKeys(ToolDir + 'tbsamplewin.lfm', want);
+    AssertTrue('the forms have texts', want.Count > 50);
+    AssertTrue('a menu item', want.IndexOf('ttbmainform.mnufile.caption') >= 0);
+    AssertTrue('a frame control', want.IndexOf('ttbpreviewframe.btndefault.caption') >= 0);
+    AssertTrue('a root caption', want.IndexOf('ttbsampleform.caption') >= 0);
+    for i := 0 to po.Count - 1 do
+      if Copy(po[i], 1, 3) = '#: ' then
+      begin
+        k := Trim(Copy(po[i], 4, MaxInt));
+        if Copy(k, 1, 3) = 'ttb' then   { the code's keys start with the unit: tbmain. ... }
+          have.Add(k);
+      end;
+    for i := 0 to want.Count - 1 do
+      AssertTrue('I1: the catalogue translates ' + want[i], have.IndexOf(want[i]) >= 0);
+    for i := 0 to have.Count - 1 do
+      AssertTrue('I1: the catalogue has a key no form has: ' + have[i], want.IndexOf(have[i]) >= 0);
+  finally
+    want.Free;
+    have.Free;
+    po.Free;
+  end;
+end;
+
+function FormatSpecs(const S: string): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i < Length(S) do
+  begin
+    if S[i] = '%' then
+    begin
+      if S[i + 1] = '%' then
+      begin
+        Inc(i, 2);
+        Continue;
+      end;
+      Inc(i);
+      while (i <= Length(S)) and (S[i] in ['0'..'9', '.', '-', '*', ':']) do Inc(i);
+      if i <= Length(S) then
+        Result := Result + LowerCase(S[i]);
+    end;
+    Inc(i);
+  end;
+end;
+
+procedure TTbMainFormTests.TestTheCatalogueEntriesAreWhole;
+var
+  po: TStringList;
+  i, n: Integer;
+  ident, id, str: string;
+  fmt: Boolean;
+begin
+  po := LoadLines(ToolDir + 'languages' + PathDelim + 'themebuilder.zh_CN.po');
+  try
+    ident := '';
+    fmt := False;
+    id := '';
+    n := 0;
+    for i := 0 to po.Count - 1 do
+    begin
+      if Copy(po[i], 1, 3) = '#: ' then
+      begin
+        ident := Trim(Copy(po[i], 4, MaxInt));
+        fmt := False;
+      end
+      else if Copy(po[i], 1, 3) = '#, ' then
+        fmt := Pos('object-pascal-format', po[i]) > 0
+      else if Copy(po[i], 1, 6) = 'msgid ' then
+        id := Copy(po[i], 7, MaxInt)
+      else if (Copy(po[i], 1, 7) = 'msgstr ') and (ident <> '') then
+      begin
+        str := Copy(po[i], 8, MaxInt);
+        Inc(n);
+        AssertTrue('I2: ' + ident + ' has a translation', (str <> '""') and (str <> ''));
+        if fmt then
+          AssertEquals('I2: ' + ident + ' keeps its placeholders', FormatSpecs(id), FormatSpecs(str));
+        ident := '';
+      end;
+    end;
+    AssertTrue('I2: entries were read', n > 50);
+  finally
+    po.Free;
+  end;
+end;
+
+procedure TTbMainFormTests.TestTheTranslationsCoverTheCode;
+var
+  json: TJSONData;
+  obj: TJSONObject;
+  files, src, names: TStringList;
+  i, j, p: Integer;
+  unitName, t, rs: string;
+  inRs: Boolean;
+begin
+  names := TStringList.Create;
+  names.Sorted := True;
+  files := FindAllFiles(ToolDir, '*.pas', False);
+  src := TStringList.Create;
+  try
+    for i := 0 to files.Count - 1 do
+    begin
+      unitName := LowerCase(ChangeFileExt(ExtractFileName(files[i]), ''));
+      src.LoadFromFile(files[i]);
+      inRs := False;
+      for j := 0 to src.Count - 1 do
+      begin
+        t := Trim(src[j]);
+        if LowerCase(t) = 'resourcestring' then
+        begin
+          inRs := True;
+          Continue;
+        end;
+        if inRs then
+        begin
+          if (t = '') or (Copy(t, 1, 1) = '{') or (Copy(t, 1, 2) = '//') then Continue;
+          p := Pos('=', t);
+          if (Copy(t, 1, 2) = 'rs') and (p > 0) then
+          begin
+            rs := LowerCase(Trim(Copy(t, 1, p - 1)));
+            names.Add(unitName + '.' + rs);
+          end
+          else if Copy(t, 1, 1) <> '''' then
+            inRs := False;   { the section ended (type, function, ...) }
+        end;
+      end;
+    end;
+    AssertTrue('the tool has resourcestrings', names.Count > 40);
+    json := GetJSON(ReadBytes(ToolDir + 'languages' + PathDelim + 'themebuilder.zh_CN.json'));
+    try
+      obj := json as TJSONObject;
+      for i := 0 to obj.Count - 1 do
+        AssertTrue('I3: the translation of ' + obj.Names[i] + ' is for a resourcestring',
+          names.IndexOf(obj.Names[i]) >= 0);
+      for i := 0 to names.Count - 1 do
+        AssertTrue('I3: ' + names[i] + ' has a translation', obj.IndexOfName(names[i]) >= 0);
+    finally
+      json.Free;
+    end;
+  finally
+    src.Free;
+    files.Free;
+    names.Free;
+  end;
+end;
+
+procedure TTbMainFormTests.TestTheLibraryCatalogueIsACopy;
+begin
+  AssertTrue('I4: the tool carries the library''s catalogue as it is',
+    ReadBytes(ToolDir + 'languages' + PathDelim + 'tycontrols.zh_CN.po') =
+    ReadBytes(TbRepoDir + 'languages' + PathDelim + 'tycontrols.strconsts.zh_CN.po'));
 end;
 
 initialization

@@ -54,8 +54,9 @@ def declared_properties():
 
 def scan(names):
     suspects = []
-    pattern = os.path.join(ROOT, 'examples', '*', '*.lfm')
-    for path in sorted(glob.glob(pattern)):
+    paths = (glob.glob(os.path.join(ROOT, 'examples', '*', '*.lfm'))
+             + glob.glob(os.path.join(ROOT, 'tools', '*', '*.lfm')))
+    for path in sorted(paths):
         current = None
         rel = os.path.relpath(path, ROOT).replace(os.sep, '/')
         for lineno, line in enumerate(io.open(path, encoding='utf-8', errors='replace'), 1):

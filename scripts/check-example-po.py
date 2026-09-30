@@ -8,6 +8,8 @@
  3. flags claiming object-pascal-format on a placeholder-less msgid are noise
  4. duplicate identifiers in one file
 Usage: python check-example-po.py <repo_root>
+Covers examples/*/languages/*.po and tools/*/languages/*.po (the tools that ship a UI,
+such as the theme builder, keep the same catalogues as the examples).
 """
 import io, os, re, sys, glob
 
@@ -43,7 +45,8 @@ def parse(path):
 def main():
     root = sys.argv[1]
     bad = 0
-    files = sorted(glob.glob(os.path.join(root, 'examples', '*', 'languages', '*.po')))
+    files = sorted(glob.glob(os.path.join(root, 'examples', '*', 'languages', '*.po'))
+                   + glob.glob(os.path.join(root, 'tools', '*', 'languages', '*.po')))
     for f in files:
         rel = os.path.relpath(f, root)
         seen = {}

@@ -1,0 +1,416 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-themebuilder 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid=English source) ---
+
+#: ttbmainform.caption
+msgid "Theme Builder"
+msgstr "Theme Builder"
+
+#: ttbmainform.bar.caption
+msgid "Theme Builder  · TyControls"
+msgstr "Theme Builder  · TyControls"
+
+#: ttbmainform.problemswin.caption
+msgid "Problems"
+msgstr "问题"
+
+#: ttbmainform.problemswin.striphint
+msgid "Problems"
+msgstr "问题"
+
+#: ttbmainform.mnufile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: ttbmainform.mnunew.caption
+msgid "&New"
+msgstr "新建(&N)"
+
+#: ttbmainform.mnunewminimal.caption
+msgid "Minimal theme"
+msgstr "极简主题"
+
+#: ttbmainform.mnunewsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuopen.caption
+msgid "&Open..."
+msgstr "打开(&O)…"
+
+#: ttbmainform.mnurecent.caption
+msgid "Open &recent"
+msgstr "最近打开(&R)"
+
+#: ttbmainform.mnusave.caption
+msgid "&Save"
+msgstr "保存(&S)"
+
+#: ttbmainform.mnusaveas.caption
+msgid "Save &as..."
+msgstr "另存为(&A)…"
+
+#: ttbmainform.mnufilesep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuexit.caption
+msgid "E&xit"
+msgstr "退出(&X)"
+
+#: ttbmainform.mnuview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: ttbmainform.mnuappearance.caption
+msgid "Editor &appearance"
+msgstr "编辑器外观(&A)"
+
+#: ttbmainform.mnueditordark.caption
+msgid "&Dark editor"
+msgstr "暗色编辑器(&D)"
+
+#: ttbmainform.mnuviewsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuproblems.caption
+msgid "&Problems"
+msgstr "问题(&P)"
+
+#: ttbpreviewframe.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: ttbpreviewframe.disableallcheck.caption
+msgid "Disable all"
+msgstr "全部禁用"
+
+#: ttbpreviewframe.tabbasic.caption
+msgid "Basic"
+msgstr "基础"
+
+#: ttbpreviewframe.btndefault.caption
+msgid "Default"
+msgstr "默认"
+
+#: ttbpreviewframe.btnprimary.caption
+msgid "Primary"
+msgstr "主要"
+
+#: ttbpreviewframe.btndanger.caption
+msgid "Danger"
+msgstr "危险"
+
+#: ttbpreviewframe.btnghost.caption
+msgid "Ghost"
+msgstr "幽灵"
+
+#: ttbpreviewframe.btndisabled.caption
+msgid "Disabled"
+msgstr "已禁用"
+
+#: ttbpreviewframe.btnprimarydisabled.caption
+msgid "Primary, disabled"
+msgstr "主要，已禁用"
+
+#: ttbpreviewframe.spdghost.caption
+msgid "Star"
+msgstr "星标"
+
+#: ttbpreviewframe.ddbmore.caption
+msgid "More"
+msgstr "更多"
+
+#: ttbpreviewframe.lblnormal.caption
+msgid "Label"
+msgstr "标签"
+
+#: ttbpreviewframe.lbldisabled.caption
+msgid "Disabled label"
+msgstr "禁用的标签"
+
+#: ttbpreviewframe.lnksample.caption
+msgid "Link"
+msgstr "链接"
+
+#: ttbpreviewframe.chkon.caption
+msgid "Checked"
+msgstr "已勾选"
+
+#: ttbpreviewframe.chkoff.caption
+msgid "Not checked"
+msgstr "未勾选"
+
+#: ttbpreviewframe.chkdisabled.caption
+msgid "Disabled"
+msgstr "已禁用"
+
+#: ttbpreviewframe.radon.caption
+msgid "Chosen"
+msgstr "已选中"
+
+#: ttbpreviewframe.radoff.caption
+msgid "Not chosen"
+msgstr "未选中"
+
+#: ttbpreviewframe.tglon.caption
+msgid "On"
+msgstr "开"
+
+#: ttbpreviewframe.tgloff.caption
+msgid "Off"
+msgstr "关"
+
+#: ttbpreviewframe.tagplain.caption
+msgid "Tag"
+msgstr "标签"
+
+#: ttbpreviewframe.tagaccent.caption
+msgid "Accent"
+msgstr "强调"
+
+#: ttbpreviewframe.tagdanger.caption
+msgid "Danger"
+msgstr "危险"
+
+#: ttbpreviewframe.divsample.caption
+msgid "Divider"
+msgstr "分隔线"
+
+#: ttbpreviewframe.tabinputs.caption
+msgid "Inputs"
+msgstr "输入"
+
+#: ttbpreviewframe.edttext.text
+msgid "Some text"
+msgstr "一段文字"
+
+#: ttbpreviewframe.edthint.texthint
+msgid "Placeholder"
+msgstr "占位提示"
+
+#: ttbpreviewframe.edtdisabled.text
+msgid "Disabled"
+msgstr "已禁用"
+
+#: ttbpreviewframe.edtreadonly.text
+msgid "Read only"
+msgstr "只读"
+
+#: ttbpreviewframe.tablists.caption
+msgid "Lists and trees"
+msgstr "列表与树"
+
+#: ttbpreviewframe.tabgrids.caption
+msgid "Grids"
+msgstr "表格"
+
+#: ttbpreviewframe.tabcontainers.caption
+msgid "Containers and tabs"
+msgstr "容器与页签"
+
+#: ttbpreviewframe.grpsample.caption
+msgid "Group"
+msgstr "分组"
+
+#: ttbpreviewframe.crdsample.title
+msgid "Card"
+msgstr "卡片"
+
+#: ttbpreviewframe.expsample.caption
+msgid "Expandable"
+msgstr "可展开"
+
+#: ttbpreviewframe.innerone.caption
+msgid "One"
+msgstr "一"
+
+#: ttbpreviewframe.innertwo.caption
+msgid "Two"
+msgstr "二"
+
+#: ttbpreviewframe.innerthree.caption
+msgid "Three"
+msgstr "三"
+
+#: ttbpreviewframe.tabmenus.caption
+msgid "Menus and toolbars"
+msgstr "菜单与工具栏"
+
+#: ttbpreviewframe.tbnone.caption
+msgid "Build"
+msgstr "构建"
+
+#: ttbpreviewframe.tbndown.caption
+msgid "Pinned"
+msgstr "已固定"
+
+#: ttbpreviewframe.tbnthree.caption
+msgid "Run"
+msgstr "运行"
+
+#: ttbpreviewframe.tbndisabled.caption
+msgid "Stop"
+msgstr "停止"
+
+#: ttbpreviewframe.btnpopup.caption
+msgid "Show a popup menu"
+msgstr "弹出菜单"
+
+#: ttbpreviewframe.tabchrome.caption
+msgid "Window chrome"
+msgstr "窗体外框"
+
+#: ttbpreviewframe.lblchromenote.caption
+msgid "The title bar, its buttons and the shadow are drawn on a real window."
+msgstr "标题栏、标题栏按钮和阴影要在真窗口上才看得到。"
+
+#: ttbpreviewframe.btnsamplewindow.caption
+msgid "Open a sample window"
+msgstr "打开样例窗口"
+
+#: ttbpreviewframe.tabfeedback.caption
+msgid "Feedback"
+msgstr "反馈"
+
+#: ttbpreviewframe.alrinfo.message
+msgid "Information: nothing needs doing."
+msgstr "提示：没有需要处理的事。"
+
+#: ttbpreviewframe.alrsuccess.message
+msgid "Success: the theme was saved."
+msgstr "成功：主题已保存。"
+
+#: ttbpreviewframe.alrwarning.message
+msgid "Warning: an image could not be found."
+msgstr "警告：有一张图片找不到。"
+
+#: ttbpreviewframe.alrerror.message
+msgid "Error: the theme did not load."
+msgstr "错误：主题没有载入。"
+
+#: ttbpreviewframe.empsample.description
+msgid "Nothing here yet"
+msgstr "这里还什么都没有"
+
+#: ttbpreviewframe.btnmessage.caption
+msgid "Message dialog"
+msgstr "消息对话框"
+
+#: ttbpreviewframe.btninput.caption
+msgid "Input dialog"
+msgstr "输入对话框"
+
+#: ttbpreviewframe.btnnotify.caption
+msgid "Notification"
+msgstr "通知"
+
+#: ttbpreviewframe.smfile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: ttbpreviewframe.smnew.caption
+msgid "&New"
+msgstr "新建(&N)"
+
+#: ttbpreviewframe.smopen.caption
+msgid "&Open..."
+msgstr "打开(&O)…"
+
+#: ttbpreviewframe.smsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbpreviewframe.smrecent.caption
+msgid "Open &recent"
+msgstr "最近打开(&R)"
+
+#: ttbpreviewframe.smrecentone.caption
+msgid "win11.tycss"
+msgstr "win11.tycss"
+
+#: ttbpreviewframe.smrecenttwo.caption
+msgid "auto.tycss"
+msgstr "auto.tycss"
+
+#: ttbpreviewframe.smedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: ttbpreviewframe.smundo.caption
+msgid "&Undo"
+msgstr "撤销(&U)"
+
+#: ttbpreviewframe.smwrap.caption
+msgid "&Word wrap"
+msgstr "自动换行(&W)"
+
+#: ttbpreviewframe.smpaste.caption
+msgid "&Paste"
+msgstr "粘贴(&P)"
+
+#: ttbpreviewframe.smview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: ttbpreviewframe.smzoom.caption
+msgid "&Zoom"
+msgstr "缩放(&Z)"
+
+#: ttbpreviewframe.spcut.caption
+msgid "Cu&t"
+msgstr "剪切(&T)"
+
+#: ttbpreviewframe.spcopy.caption
+msgid "&Copy"
+msgstr "复制(&C)"
+
+#: ttbpreviewframe.spsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbpreviewframe.spchecked.caption
+msgid "Show &hidden"
+msgstr "显示隐藏项(&H)"
+
+#: ttbpreviewframe.spdisabled.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: ttbsampleform.caption
+msgid "Sample window"
+msgstr "样例窗口"
+
+#: ttbsampleform.bar.caption
+msgid "Sample window"
+msgstr "样例窗口"
+
+#: ttbsampleform.lbltext.caption
+msgid "A real window: title bar buttons, frame and shadow."
+msgstr "一个真窗口：标题栏按钮、边框和阴影。"
+
+#: ttbsampleform.edtname.texthint
+msgid "Your name"
+msgstr "你的名字"
+
+#: ttbsampleform.chkremember.caption
+msgid "Remember"
+msgstr "记住"
+
+#: ttbsampleform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: ttbsampleform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
