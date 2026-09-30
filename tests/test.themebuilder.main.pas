@@ -428,6 +428,7 @@ begin
   FForm := TTbMainForm.Create(nil);
   AssertEquals('F17: the next window starts on it', 'xp', TyDefaultController.ThemeName);
   AssertTrue('F17: and the preview is modern', FForm.Preview.IsModern);
+  AssertEquals('F17: its strip says so', 1, FForm.Preview.DensityCombo.ItemIndex);
 end;
 
 procedure TTbMainFormTests.TestProblemLinesTakeTheirColourFromTheTheme;

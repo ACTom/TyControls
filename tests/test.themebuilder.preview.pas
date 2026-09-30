@@ -270,12 +270,14 @@ begin
   AssertTrue(Load(TbMinimalTemplate));
   AssertTrue('V11: dark resolves', FFrame.SetDark(True, err));
   AssertTrue('V11: dark', FFrame.IsDark);
+  AssertTrue('V11: the switch shows it', FFrame.DarkSwitch.Checked);
   { a document that resolves in light only: shown in light, then refused dark }
   AssertTrue('back to light', FFrame.SetDark(False, err));
   AssertTrue(Load('@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
     'TyButton { background: var(--x); }'));
   FFrame.SetDark(True, err);
   AssertTrue('a refusal was remembered', FFrame.ModeError <> '');
+  AssertFalse('V11: the switch sprang back', FFrame.DarkSwitch.Checked);
   AssertTrue(Load(TbMinimalTemplate));
   AssertEquals('V11: a good load clears it', '', FFrame.ModeError);
 end;
@@ -286,6 +288,7 @@ begin
   FFrame.SetModern(True);
   AssertTrue('V12: modern', FFrame.Controller.Density = tdModern);
   AssertTrue('V12: modern', FFrame.IsModern);
+  AssertEquals('V12: the combo shows it', 1, FFrame.DensityCombo.ItemIndex);
   AssertEquals('V12: the document is still loaded', $123456, ButtonBg(FFrame.Controller));
   FFrame.SetModern(False);
   AssertTrue('V12: classic', FFrame.Controller.Density = tdClassic);

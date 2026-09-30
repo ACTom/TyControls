@@ -106,6 +106,8 @@ type
     FAskCount: Integer;
     FLastAsk: string;
     FPrompting: Boolean;
+    FPendingOpen: string;
+    procedure OpenPending(Data: PtrInt);
     procedure MnuNewBuiltinClick(Sender: TObject);
     procedure MnuRecentClick(Sender: TObject);
     procedure MnuAppearanceClick(Sender: TObject);
@@ -225,6 +227,7 @@ end;
 
 procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
+  Application.RemoveAsyncCalls(Self);
   TyDefaultController.RemoveChangeListener(@ToolThemeChanged);
   { the editor outlives this handler: it must not call back into a window taken apart }
   if FKit <> nil then
@@ -687,8 +690,20 @@ var
   i: Integer;
 begin
   i := (Sender as TMenuItem).Tag;
-  if (i >= 0) and (i < FSettings.Recent.Count) then
-    OpenFile(FSettings.Recent[i]);
+  if (i < 0) or (i >= FSettings.Recent.Count) then Exit;
+  { opening rebuilds this very menu: do it after the click has finished with its item }
+  FPendingOpen := FSettings.Recent[i];
+  Application.QueueAsyncCall(@OpenPending, 0);
+end;
+
+procedure TTbMainForm.OpenPending(Data: PtrInt);
+var
+  f: string;
+begin
+  f := FPendingOpen;
+  FPendingOpen := '';
+  if f <> '' then
+    OpenFile(f);
 end;
 
 procedure TTbMainForm.MnuSaveClick(Sender: TObject);

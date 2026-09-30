@@ -233,6 +233,7 @@ type
     FOnChanged: TNotifyEvent;
     procedure FillCodeOnlyData;
     procedure UpdateModeNote;
+    procedure SyncSwitches;
     procedure RestoreGood;
     function Notify(out AError: string): Boolean;
     function LoadInto(const AText, ABaseDir: string; out AError: string;
@@ -489,6 +490,23 @@ begin
     DarkSwitch.Enabled := False;
     ModeNote.Caption := rsTbSingleMode;
   end;
+  SyncSwitches;
+end;
+
+{ the strip shows what the preview is: a switch set from code (the saved settings) moves too }
+procedure TTbPreviewFrame.SyncSwitches;
+begin
+  FUpdating := True;
+  try
+    DarkSwitch.Checked := IsDark;
+    if IsModern then
+      DensityCombo.ItemIndex := 1
+    else
+      DensityCombo.ItemIndex := 0;
+    DisableAllCheck.Checked := FAllDisabled;
+  finally
+    FUpdating := False;
+  end;
 end;
 
 function TTbPreviewFrame.HasModes: Boolean;
@@ -633,6 +651,7 @@ begin
       AError := Format(rsTbModeFailed, [rsTbModeLight, AError]);
   end;
   FModeError := AError;
+  SyncSwitches;
 end;
 
 procedure TTbPreviewFrame.SetModern(AModern: Boolean);
@@ -648,13 +667,9 @@ begin
     FController.Density := tdModern
   else
     FController.Density := tdClassic;
-  RestoreGood;
-  if (mode <> '') and HasModes and not SameText(FController.Mode, mode) then
-  begin
-    FController.Mode := mode;
-    if not TbProbeResolve(FController.Model, FModeError) then
-      RestoreGood;
-  end;
+  if (mode <> '') and not SameText(FController.Model.Mode, mode) then
+    FController.Model.SetMode(mode);
+  RestoreGood;   { probes before the controls hear of it }
   UpdateModeNote;
 end;
 
@@ -698,6 +713,7 @@ begin
       FDisabled[i].Ctl.Enabled := FDisabled[i].Was;
     FDisabled := nil;
   end;
+  SyncSwitches;
 end;
 
 procedure TTbPreviewFrame.DarkSwitchChange(Sender: TObject);
@@ -705,15 +721,7 @@ var
   err: string;
 begin
   if FUpdating then Exit;
-  if not SetDark(DarkSwitch.Checked, err) then
-  begin
-    FUpdating := True;
-    try
-      DarkSwitch.Checked := not DarkSwitch.Checked;
-    finally
-      FUpdating := False;
-    end;
-  end;
+  SetDark(DarkSwitch.Checked, err);   { refused: SyncSwitches springs the switch back }
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
