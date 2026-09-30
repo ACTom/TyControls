@@ -48,6 +48,8 @@ type
     procedure TestRepeatedSetDoesNotGrowTheHeap;
     procedure TestAdjacentUnicodeEscapesSurviveIntact;
     procedure TestABackslashBeforeUIsNotAnEscape;
+    procedure TestAnEscapedQuoteOrBackslashStaysInsideTheString;
+    procedure TestAQuoteInACommentDoesNotStartAString;
   end;
 implementation
 
@@ -385,6 +387,53 @@ begin
       judge rather than silently swallowed. }
     AssertTrue(o.SetOptionText('{ "title": { "text": "100\u00a5" } }'));
     AssertEquals('100' + #$C2#$A5, o.GetStr('title.text', ''));
+  finally
+    o.Free;
+  end;
+end;
+
+procedure TAdvChartOptionTest.TestAnEscapedQuoteOrBackslashStaysInsideTheString;
+var
+  o: TTyChartOption;
+begin
+  { THE PRE-DECODE WRITES JSON, not text. `\u0022` decoded to a bare quote
+    ends the string early, and `\u005C` decoded to a bare backslash starts a
+    new escape with whatever follows it -- `a\u005Cb` would come back with a
+    BACKSPACE where the author wrote a backslash and a b. The two must be
+    handed on in their escaped form. [Batch 75] }
+  o := TTyChartOption.Create;
+  try
+    AssertTrue('a quote in \u form parses', o.SetOptionText(
+      '{ "title": { "text": "a\u0022b" } }'));
+    AssertEquals('and is a quote', 'a"b', o.GetStr('title.text', ''));
+    AssertTrue('a backslash in \u form parses', o.SetOptionText(
+      '{ "title": { "text": "a\u005Cb" } }'));
+    AssertEquals('and is a backslash then a b', 'a\b', o.GetStr('title.text', ''));
+    { in a single-quoted string it is the apostrophe that would end it }
+    AssertTrue('an apostrophe in \u form parses', o.SetOptionText(
+      '{ title: { text: ''it\u0027s'' } }'));
+    AssertEquals('it''s', o.GetStr('title.text', ''));
+  finally
+    o.Free;
+  end;
+end;
+
+procedure TAdvChartOptionTest.TestAQuoteInACommentDoesNotStartAString;
+var
+  o: TTyChartOption;
+begin
+  { COMMENTS ARE ALLOWED, so the pre-decode has to know where they are: an
+    apostrophe in `// don't` is not the start of a string. Taken for one, it
+    ends at the next apostrophe -- here inside a real string -- and the rest
+    of that string, adjacent escapes and all, is then read as being OUTSIDE
+    one and left for the scanner that loses bytes between them. [Batch 75] }
+  o := TTyChartOption.Create;
+  try
+    AssertTrue(o.SetOptionText('{ // don''t' + LineEnding
+      + '"title": { "text": "it''s \u4e2d\u6587" } }'));
+    AssertEquals('it''s ' + #$E4#$B8#$AD#$E6#$96#$87, o.GetStr('title.text', ''));
+    AssertTrue(o.SetOptionText('{ /* say "hi */ "title": { "text": "\u4e2d\u6587" } }'));
+    AssertEquals(#$E4#$B8#$AD#$E6#$96#$87, o.GetStr('title.text', ''));
   finally
     o.Free;
   end;

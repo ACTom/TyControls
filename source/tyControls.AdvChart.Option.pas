@@ -205,7 +205,13 @@ end;
   Only inside strings, and a doubled backslash is a literal backslash rather
   than the start of an escape -- so `"\\u0041"` stays the six characters the
   author wrote. Anything that is not a well-formed escape is passed through
-  untouched, leaving the parser to report it. }
+  untouched, leaving the parser to report it.
+
+  THE OUTPUT IS STILL JSON. An escape that decodes to the string's own quote
+  or to a backslash is handed on escaped (`\"`, `\'`, `\\`) -- bare, the one
+  would end the string and the other start a new escape. And comments are
+  skipped whole: a quote inside `// ...` or `/* ... */` is not the start of a
+  string. [Batch 75] }
 function TyDecodeUnicodeEscapes(const AText: string): string;
 var
   i, code, lo: Integer;
@@ -242,6 +248,33 @@ begin
   begin
     if not inStr then
     begin
+      { a comment, copied as it is, to the end of its line or its close }
+      if (AText[i] = '/') and (i < Length(AText)) and (AText[i + 1] = '/') then
+      begin
+        while (i <= Length(AText)) and not (AText[i] in [#10, #13]) do
+        begin
+          Result := Result + AText[i];
+          Inc(i);
+        end;
+        Continue;
+      end;
+      if (AText[i] = '/') and (i < Length(AText)) and (AText[i + 1] = '*') then
+      begin
+        Result := Result + '/*';
+        Inc(i, 2);
+        while (i <= Length(AText))
+          and not ((AText[i] = '*') and (i < Length(AText)) and (AText[i + 1] = '/')) do
+        begin
+          Result := Result + AText[i];
+          Inc(i);
+        end;
+        if i <= Length(AText) then
+        begin
+          Result := Result + '*/';
+          Inc(i, 2);
+        end;
+        Continue;
+      end;
       if (AText[i] = '"') or (AText[i] = '''') then
       begin
         inStr := True;
@@ -289,7 +322,11 @@ begin
           end
           else if (code >= $DC00) and (code <= $DFFF) then
             code := $FFFD;
-          Result := Result + UnicodeToUTF8(Cardinal(code));
+          { the string's own quote, or a backslash, stays escaped }
+          if (code = Ord(quote)) or (code = Ord('\')) then
+            Result := Result + '\' + Chr(code)
+          else
+            Result := Result + UnicodeToUTF8(Cardinal(code));
           Continue;
         end;
       end;
