@@ -15,6 +15,10 @@ uses
 
 type
   TTyTerminalColorSchemeTests = class(TTestCase)
+  private
+    FChanges: Integer;
+    procedure Counted(Sender: TObject);
+    function NewCounted: TTyTerminalColorScheme;
   published
     { Task 1:颜色串、字节序、键名、预解码 }
     procedure TestParseSchemeColor;
@@ -23,6 +27,14 @@ type
     procedure TestWtKeys;
     procedure TestDecodeEscapes;
     procedure TestDecodedTextParses;
+    { Task 2:方案对象 }
+    procedure TestANewSchemeIsEmpty;
+    procedure TestSchemeDefaultsMatchTheConstructor;
+    procedure TestAChangeIsCountedOnce;
+    procedure TestUpdatesAreBatched;
+    procedure TestAssignClearAndEquals;
+    procedure TestSlotRgb;
+    procedure TestNamedAndIndexedAreOneSlot;
   end;
 
 { 反引号换成反斜杠(见单元头) }
@@ -208,6 +220,202 @@ begin
     end;
   end;
   AssertEquals('rows parsed', 12, parsed);
+end;
+
+{ ---- Task 2:方案对象 ------------------------------------------------------------- }
+
+const
+  { published 属性名,按槽的顺序 }
+  SlotProps: array[TTyTerminalSchemeSlot] of string = (
+    'Black', 'Red', 'Green', 'Yellow', 'Blue', 'Purple', 'Cyan', 'White',
+    'BrightBlack', 'BrightRed', 'BrightGreen', 'BrightYellow',
+    'BrightBlue', 'BrightPurple', 'BrightCyan', 'BrightWhite',
+    'Foreground', 'Background', 'CursorColor', 'CursorText',
+    'SelectionBackground', 'SelectionInactiveBackground');
+
+procedure TTyTerminalColorSchemeTests.Counted(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+function TTyTerminalColorSchemeTests.NewCounted: TTyTerminalColorScheme;
+begin
+  Result := TTyTerminalColorScheme.Create;
+  Result.OnChange := @Counted;
+  FChanges := 0;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestANewSchemeIsEmpty;
+var
+  c: TTyTerminalColorScheme;
+  s: TTyTerminalSchemeSlot;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    for s := Low(s) to High(s) do
+      AssertEquals(SlotProps[s] + ' is clNone', IntToHex(clNone, 8), IntToHex(c.Colors[s], 8));
+    AssertEquals('no name', '', c.Name);
+    AssertTrue('empty', c.IsEmpty);
+    AssertEquals('revision', 0, c.Revision);
+    c.CursorText := clBlack;
+    AssertFalse('black is a colour, not "unset"', c.IsEmpty);
+    c.CursorText := clDefault;
+    AssertTrue('clDefault counts as unset', c.IsEmpty);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestSchemeDefaultsMatchTheConstructor;
+var
+  c: TTyTerminalColorScheme;
+  list: PPropList;
+  n, i, checked: Integer;
+  p: PPropInfo;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    n := GetPropList(c.ClassInfo, [tkInteger], nil);
+    GetMem(list, n * SizeOf(Pointer));
+    try
+      GetPropList(c.ClassInfo, [tkInteger], list);
+      checked := 0;
+      for i := 0 to n - 1 do
+      begin
+        p := list^[i];
+        AssertTrue(p^.Name + ' has a default', p^.Default <> Longint($80000000));
+        AssertEquals('published default of ' + p^.Name + ' = what the constructor makes',
+          Int64(p^.Default), GetOrdProp(c, p));
+        Inc(checked);
+      end;
+      AssertEquals('colour properties checked', 22, checked);
+    finally
+      FreeMem(list);
+    end;
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestAChangeIsCountedOnce;
+var
+  c: TTyTerminalColorScheme;
+begin
+  c := NewCounted;
+  try
+    c.Red := TColor($1F0FC5);
+    AssertEquals('one OnChange', 1, FChanges);
+    AssertEquals('revision + 1', 1, c.Revision);
+    c.Red := TColor($1F0FC5);
+    AssertEquals('the same value again: no OnChange', 1, FChanges);
+    AssertEquals('the same value again: revision kept', 1, c.Revision);
+    c.Name := 'Mine';
+    AssertEquals('the name is a change', 2, FChanges);
+    c.Name := 'Mine';
+    AssertEquals('the same name: no change', 2, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestUpdatesAreBatched;
+var
+  c: TTyTerminalColorScheme;
+begin
+  c := NewCounted;
+  try
+    c.BeginUpdate;
+    c.Red := TColor($1F0FC5);
+    c.Green := TColor($0CA113);
+    c.Blue := TColor($DA3700);
+    AssertEquals('nothing inside the update', 0, FChanges);
+    c.EndUpdate;
+    AssertEquals('one OnChange for three colours', 1, FChanges);
+    AssertEquals('one revision', 1, c.Revision);
+    c.BeginUpdate;
+    c.BeginUpdate;
+    c.Red := TColor($000001);
+    c.EndUpdate;
+    AssertEquals('the inner end sends nothing', 1, FChanges);
+    c.Green := TColor($000002);
+    c.EndUpdate;
+    AssertEquals('the outer end sends one', 2, FChanges);
+    c.BeginUpdate;
+    c.Red := TColor($000001);
+    c.EndUpdate;
+    AssertEquals('an update that changed nothing sends nothing', 2, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestAssignClearAndEquals;
+var
+  a, b: TTyTerminalColorScheme;
+begin
+  a := TTyTerminalColorScheme.Create;
+  b := NewCounted;
+  try
+    a.Name := 'Campbell';
+    a.Red := TColor($1F0FC5);
+    a.Background := TColor($0C0C0C);
+    AssertFalse('different before', b.Equals(a));
+    b.Assign(a);
+    AssertTrue('equal after Assign', b.Equals(a));
+    AssertEquals('Assign sends one OnChange', 1, FChanges);
+    b.Assign(a);
+    AssertEquals('assigning the same scheme sends nothing', 1, FChanges);
+    a.CursorText := TColor($010203);
+    AssertFalse('one colour apart', b.Equals(a));
+    a.CursorText := clNone;
+    a.Name := 'Other';
+    AssertFalse('the name counts', b.Equals(a));
+    b.Clear;
+    AssertEquals('Clear sends one', 2, FChanges);
+    AssertTrue('cleared', b.IsEmpty);
+    AssertEquals('cleared name', '', b.Name);
+    b.Clear;
+    AssertEquals('clearing an empty scheme sends nothing', 2, FChanges);
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestSlotRgb;
+var
+  c: TTyTerminalColorScheme;
+  rgb: Cardinal;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    c.Red := TColor($1F0FC5);
+    AssertTrue('set', c.SlotRgb(tssRed, rgb));
+    AssertEquals('RGB order', Hex6($C50F1F), Hex6(rgb));
+    AssertFalse('unset', c.SlotRgb(tssGreen, rgb));
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyTerminalColorSchemeTests.TestNamedAndIndexedAreOneSlot;
+var
+  c: TTyTerminalColorScheme;
+  s: TTyTerminalSchemeSlot;
+begin
+  c := TTyTerminalColorScheme.Create;
+  try
+    for s := Low(s) to High(s) do
+    begin
+      c.Colors[s] := TColor($100000 + Ord(s));
+      AssertEquals(SlotProps[s] + ' reads the slot it names', $100000 + Ord(s), GetOrdProp(c, SlotProps[s]));
+      SetOrdProp(c, SlotProps[s], $200000 + Ord(s));
+      AssertEquals(SlotProps[s] + ' writes the slot it names', $200000 + Ord(s), Integer(c.Colors[s]));
+    end;
+    AssertEquals('Purple is slot 5', $200005, Integer(c.Colors[tssPurple]));
+  finally
+    c.Free;
+  end;
 end;
 
 initialization

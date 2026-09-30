@@ -418,78 +418,140 @@ end;
 { ---- TTyTerminalColorScheme -------------------------------------------------------- }
 
 constructor TTyTerminalColorScheme.Create(AOwner: TPersistent);
+var
+  s: TTyTerminalSchemeSlot;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.Create');
+  inherited Create;
+  FOwner := AOwner;
+  { 未设置 = clNone(不是 0:0 是黑色);published 的 default clNone 必须等于这里 }
+  for s := Low(s) to High(s) do
+    FColors[s] := clNone;
 end;
 
 function TTyTerminalColorScheme.GetOwner: TPersistent;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.GetOwner');
+  { 设计器的属性路径与「已修改」标记靠它 }
+  Result := FOwner;
 end;
 
 function TTyTerminalColorScheme.GetColor(ASlot: TTyTerminalSchemeSlot): TColor;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.GetColor');
+  Result := FColors[ASlot];
 end;
 
 procedure TTyTerminalColorScheme.SetColor(ASlot: TTyTerminalSchemeSlot; AValue: TColor);
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.SetColor');
+  if FColors[ASlot] = AValue then Exit;
+  FColors[ASlot] := AValue;
+  Changed;
 end;
 
 function TTyTerminalColorScheme.GetSlotColor(AIndex: Integer): TColor;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.GetSlotColor');
+  Result := FColors[TTyTerminalSchemeSlot(AIndex)];
 end;
 
 procedure TTyTerminalColorScheme.SetSlotColor(AIndex: Integer; AValue: TColor);
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.SetSlotColor');
+  SetColor(TTyTerminalSchemeSlot(AIndex), AValue);
 end;
 
 procedure TTyTerminalColorScheme.SetName(const AValue: string);
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.SetName');
+  if FName = AValue then Exit;
+  FName := AValue;
+  Changed;
 end;
 
 procedure TTyTerminalColorScheme.Changed;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.Changed');
+  if FUpdateCount > 0 then
+  begin
+    FChangePending := True;
+    Exit;
+  end;
+  Inc(FRevision);
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyTerminalColorScheme.Assign(ASource: TPersistent);
+var
+  src: TTyTerminalColorScheme;
+  s: TTyTerminalSchemeSlot;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.Assign');
+  if ASource is TTyTerminalColorScheme then
+  begin
+    src := TTyTerminalColorScheme(ASource);
+    BeginUpdate;
+    try
+      SetName(src.FName);
+      for s := Low(s) to High(s) do
+        SetColor(s, src.FColors[s]);
+    finally
+      EndUpdate;
+    end;
+  end
+  else
+    inherited Assign(ASource);
 end;
 
 function TTyTerminalColorScheme.Equals(AObj: TObject): Boolean;
+var
+  other: TTyTerminalColorScheme;
+  s: TTyTerminalSchemeSlot;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.Equals');
+  if AObj = Self then Exit(True);
+  if not (AObj is TTyTerminalColorScheme) then Exit(False);
+  other := TTyTerminalColorScheme(AObj);
+  if other.FName <> FName then Exit(False);
+  for s := Low(s) to High(s) do
+    if other.FColors[s] <> FColors[s] then Exit(False);
+  Result := True;
 end;
 
 procedure TTyTerminalColorScheme.Clear;
+var
+  s: TTyTerminalSchemeSlot;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.Clear');
+  BeginUpdate;
+  try
+    SetName('');
+    for s := Low(s) to High(s) do
+      SetColor(s, clNone);
+  finally
+    EndUpdate;
+  end;
 end;
 
 function TTyTerminalColorScheme.IsEmpty: Boolean;
+var
+  s: TTyTerminalSchemeSlot;
+  rgb: Cardinal;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.IsEmpty');
+  for s := Low(s) to High(s) do
+    if TyTermSchemeColorRgb(FColors[s], rgb) then Exit(False);
+  Result := True;
 end;
 
 procedure TTyTerminalColorScheme.BeginUpdate;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.BeginUpdate');
+  Inc(FUpdateCount);
 end;
 
 procedure TTyTerminalColorScheme.EndUpdate;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.EndUpdate');
+  if FUpdateCount <= 0 then Exit;
+  Dec(FUpdateCount);
+  if (FUpdateCount = 0) and FChangePending then
+  begin
+    FChangePending := False;
+    Changed;
+  end;
 end;
 
 function TTyTerminalColorScheme.SlotRgb(ASlot: TTyTerminalSchemeSlot; out ARgb: Cardinal): Boolean;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.SlotRgb');
+  Result := TyTermSchemeColorRgb(FColors[ASlot], ARgb);
 end;
 
 procedure TTyTerminalColorScheme.LoadFromText(const AText: string; const AName: string;
