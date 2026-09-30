@@ -458,6 +458,9 @@ var
         if visited.IndexOf(key) >= 0 then
           Continue;
         visited.Add(key);
+        { a variable the OS fills in (its value is the bare sentinel, swapped at merge) }
+        if IsKnownDynamicVar(Trim(AEvalVars.Values[key])) then
+          Exit(True);
         if Walk(AEvalVars.Values[key], ADepth + 1) then
           Exit(True);
       end;

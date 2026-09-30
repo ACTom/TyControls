@@ -207,7 +207,7 @@ end;
 procedure TTbLintExTests.TestTheOldOutputIsTheExMinusBadValues;
 var
   names, texts, dirs: TStringList;
-  i, j, k: Integer;
+  i, m, k: Integer;
   old: TTyLintResult;
   ex: TTyLintIssues;
 begin
@@ -221,16 +221,16 @@ begin
       old := TyLintCss(texts[i], dirs[i]);
       ex := TyLintCssEx(texts[i], dirs[i]);
       k := 0;
-      for j := 0 to High(ex) do
+      for m := 0 to High(ex) do
       begin
         { every shipped theme loads in the engine: none of its values is bad }
         if Copy(names[i], 1, 7) = 'themes/' then
           AssertTrue('L12: no bad value in ' + names[i] + ':' + Dump(ex),
-            ex[j].Kind <> tlkBadValue);
-        if ex[j].Kind = tlkBadValue then
+            ex[m].Kind <> tlkBadValue);
+        if ex[m].Kind = tlkBadValue then
           Continue;
         AssertTrue('L12: ' + names[i] + ' has more Ex issues than old ones', k <= High(old));
-        AssertEquals('L12: ' + names[i] + ' #' + IntToStr(k), old[k], ex[j].Message);
+        AssertEquals('L12: ' + names[i] + ' #' + IntToStr(k), old[k], ex[m].Message);
         Inc(k);
       end;
       AssertEquals('L12: ' + names[i] + ' count', Length(old), k);
