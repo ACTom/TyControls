@@ -1244,7 +1244,15 @@ WSL 里经 Unix PTY 的工具 `tools/terminal-zmodem-wsl`（在 WSL 里用 `fpc`
 - 第 5 条的代码因为 `git add` 整个目录，随第 6 条的提交 `2cb3e321` 进了仓库；没有改写历史，测试与说明补在 `0f9f42c2`。
 - 发方默认窗口改成 16 KB 后，自家环回的故障注入测试（S4）从约 2.1 s 降到 0.7 s（重传的量有界了）。
 
-### 主控待做
+### 主控已做（f1be58ca 之上）
+
+- `lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`、终端示例、`terminalshots`：都 0 错。
+- `example-rsj2po.py`：52 条，0 新增 0 改动；`check-example-po.py` 101 份 0 问题；`check-lfm-props.py` 通过。
+- 冒烟：枚举示例进程的可见窗口，只有主窗体与应用窗口，没有 `#32770`。
+- `terminalshots --phase7` 重跑：6 张 PNG 与 a3bbdee0 逐字节相同，不用替换。
+- 「勾 Pipe 跑 `sz`、选目录时取消、看提示符」要点界面，主控不能代点，已在验收表（Z 系列、拒绝后提示符）里，由用户真机验。
+
+### 原「主控待做」
 
 1. 编 `tycontrols.lpk`、`tycontrols_dt.lpk`（本批改了 `Terminal.Core.pas`、`Core.Stream.inc`、`Core.WriteQueue.inc`）和终端示例（`lazbuild -B examples/terminal/terminal_example.lpi`）。
 2. `python scripts/example-rsj2po.py examples/terminal terminal_example examples/terminal/languages/terminal_example.zh_CN.json`，再跑 `check-example-po.py`：本批新增 `rsZmReadFailed`、`rsZmTooBig`（`uzmodemsession`）与 `rsZmSkippedLine`（`uzmodemterm`），`.json` 与 `.po` 已手工补了中文，生成后核对没有空 msgstr。
