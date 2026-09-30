@@ -911,11 +911,6 @@ msgstr ""
 msgid "%s is not an option ECharts 6.1 knows."
 msgstr ""
 
-#: tycontrols.strconsts.rstyopttoodeep
-#, object-pascal-format
-msgid "The option is nested more than %d levels deep."
-msgstr ""
-
 #: tycontrols.strconsts.rstyoptfunctionvalue
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""
@@ -941,6 +936,11 @@ msgstr ""
 #: tycontrols.strconsts.rstyoptsummarysince
 #, object-pascal-format
 msgid "since %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyopttoodeep
+#, object-pascal-format
+msgid "The option is nested more than %d levels deep."
 msgstr ""
 
 #: tycontrols.strconsts.rstyshortday1
