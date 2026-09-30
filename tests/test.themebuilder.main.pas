@@ -55,12 +55,13 @@ type
     procedure TestTheSideBarShowsItsHints;
     procedure TestTheMarksDoNotTakeTheBookmarkImages;
     procedure TestAFailureIsAnErrorNotAQuestion;
+    procedure TestTrailingSpacesOfAnEditedLineAreKept;
   end;
 
 implementation
 
 uses
-  Forms, FileUtil, IniFiles, Graphics, fpjson, jsonparser, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
+  Forms, FileUtil, IniFiles, Graphics, Types, fpjson, jsonparser, SynEdit, SynEditKeyCmds, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden;
 
 const
@@ -955,6 +956,29 @@ begin
   WriteBytes(f, 'TyButton { background: #222222; }'#10#10);
   FForm.CheckDiskNow;
   AssertEquals('F27: the reload is a question', Ord(mtConfirmation), Ord(FForm.LastAskType));
+end;
+
+{ A line is edited (a character typed and taken back) and the caret moves on: its trailing
+  spaces stay, and the save writes the bytes that were read. SynEdit's default trims them
+  when the caret leaves an edited line. }
+procedure TTbMainFormTests.TestTrailingSpacesOfAnEditedLineAreKept;
+const
+  cLine1 = 'TyButton { color: #111111; }   ';
+  cBytes = cLine1 + #10'TyEdit { color: #222222; }'#10;
+var
+  f: string;
+begin
+  f := FDir + 'spaces.tycss';
+  WriteBytes(f, cBytes);
+  AssertTrue('opened', FForm.OpenFile(f));
+  FForm.Editor.LogicalCaretXY := Point(Length(cLine1) + 1, 1);
+  FForm.Editor.CommandProcessor(ecChar, 'x', nil);
+  AssertEquals('typed', cLine1 + 'x', FForm.Editor.Lines[0]);
+  FForm.Editor.CommandProcessor(ecDeleteLastChar, #0, nil);
+  FForm.Editor.LogicalCaretXY := Point(1, 2);
+  AssertEquals('F28: the edited line keeps its spaces', cLine1, FForm.Editor.Lines[0]);
+  AssertTrue('saved', FForm.SaveDocument);
+  AssertTrue('F28: the same bytes', ReadBytes(f) = cBytes);
 end;
 
 initialization

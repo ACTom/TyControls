@@ -197,6 +197,9 @@ begin
   FKit := TTyCssEditKit.Create(Self);
   FKit.FormatOnLineLeave := False;
   FKit.Attach(Editor, True);
+  { and no trimming of trailing spaces on a line the caret leaves: a save writes back the
+    bytes that were read, on the lines that were edited too }
+  Editor.Options := Editor.Options - [eoTrimTrailingSpaces];
 
   FPreview := TTbPreviewFrame.Create(Self);
   FPreview.Parent := PreviewHost;
