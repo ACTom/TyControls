@@ -32,6 +32,16 @@ type
     procedure TestFiveCansAbort;                             { Z12 }
     procedure TestAnOverlongSubpacket;                       { Z13 }
     procedure TestTheFileInformation;                        { Z14 }
+    { Task 7: the state machines }
+    procedure TestReceivingWhatSzSent;                       { S1 }
+    procedure TestSendingToWhatRzSaid;                       { S2 }
+    procedure TestLoopback;                                  { S3 }
+    procedure TestLoopbackWithFaults;                        { S4 }
+    procedure TestTheReceiverTimesOut;                       { S5 }
+    procedure TestCancelling;                                { S6 }
+    procedure TestOverAndOut;                                { S7 }
+    procedure TestZcommandIsRefused;                         { S8 }
+    procedure TestAZeofAtTheWrongPlace;                      { S9 }
   end;
 
 { bytes as two-digit hex separated by spaces (failure messages) }
@@ -40,7 +50,7 @@ function ZmHex(const S: RawByteString): string;
 implementation
 
 uses
-  StrUtils;
+  Math, StrUtils, fpjson, md5, uzmodemsession, test.terminal.oracle;
 
 function ZmHex(const S: RawByteString): string;
 var
@@ -454,6 +464,962 @@ begin
   AssertEquals(42, size);
   AssertEquals(Int64(&17), mtime);
   AssertEquals(Int64(&100644), Int64(mode));
+end;
+
+{ ---- Task 7: the state machines ------------------------------------------------------------ }
+
+type
+  { files in memory; a file not finished whole is dropped (as the example deletes it) }
+  TMemSink = class(TZmFileSink)
+  public
+    Names: TStringList;
+    Contents: array of RawByteString;
+    Complete: array of Boolean;
+    Opens, Finishes, Incomplete: Integer;
+    Refuse: string;                      { Open answers False for this name }
+    Cur: RawByteString;
+    constructor Create;
+    destructor Destroy; override;
+    function Open(const AName: string; ASize, AMTime: Int64): Boolean; override;
+    function Write(AData: PByte; ACount: Integer): Boolean; override;
+    procedure Finish(AComplete: Boolean); override;
+  end;
+
+  TMemSource = class(TZmFileSource)
+  public
+    Names: TStringList;
+    Contents: array of RawByteString;
+    Next_: Integer;
+    Stream: TMemoryStream;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Add(const AName: string; const AData: RawByteString);
+    function Next(out AName: string; out ASize, AMTime: Int64; out AStream: TStream): Boolean; override;
+    function FilesLeft: Integer; override;
+    function BytesLeft: Int64; override;
+  end;
+
+  { what a session did: its bytes out, how it ended }
+  TZmLog = class
+  public
+    Sent: RawByteString;
+    Done: Boolean;
+    Result_: TZmResult;
+    Message: string;
+    Leftover: RawByteString;
+    procedure OnSend(Sender: TObject; const AData: RawByteString);
+    procedure OnDone(Sender: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+  end;
+
+constructor TMemSink.Create;
+begin
+  inherited Create;
+  Names := TStringList.Create;
+end;
+
+destructor TMemSink.Destroy;
+begin
+  Names.Free;
+  inherited Destroy;
+end;
+
+function TMemSink.Open(const AName: string; ASize, AMTime: Int64): Boolean;
+begin
+  Inc(Opens);
+  if AName = Refuse then
+    Exit(False);
+  Cur := '';
+  Names.Add(AName);
+  Result := True;
+end;
+
+function TMemSink.Write(AData: PByte; ACount: Integer): Boolean;
+var
+  s: RawByteString;
+begin
+  s := '';
+  SetLength(s, ACount);
+  Move(AData^, s[1], ACount);
+  Cur := Cur + s;
+  Result := True;
+end;
+
+procedure TMemSink.Finish(AComplete: Boolean);
+begin
+  Inc(Finishes);
+  SetLength(Contents, Length(Contents) + 1);
+  Contents[High(Contents)] := Cur;
+  SetLength(Complete, Length(Complete) + 1);
+  Complete[High(Complete)] := AComplete;
+  if not AComplete then
+    Inc(Incomplete);
+  Cur := '';
+end;
+
+constructor TMemSource.Create;
+begin
+  inherited Create;
+  Names := TStringList.Create;
+end;
+
+destructor TMemSource.Destroy;
+begin
+  Stream.Free;
+  Names.Free;
+  inherited Destroy;
+end;
+
+procedure TMemSource.Add(const AName: string; const AData: RawByteString);
+begin
+  Names.Add(AName);
+  SetLength(Contents, Length(Contents) + 1);
+  Contents[High(Contents)] := AData;
+end;
+
+function TMemSource.Next(out AName: string; out ASize, AMTime: Int64; out AStream: TStream): Boolean;
+begin
+  AStream := nil;
+  AName := '';
+  ASize := 0;
+  AMTime := 0;
+  if Next_ >= Names.Count then
+    Exit(False);
+  FreeAndNil(Stream);
+  Stream := TMemoryStream.Create;
+  if Contents[Next_] <> '' then
+    Stream.WriteBuffer(Contents[Next_][1], Length(Contents[Next_]));
+  Stream.Position := 0;
+  AName := Names[Next_];
+  ASize := Length(Contents[Next_]);
+  AMTime := 1700000000;
+  AStream := Stream;
+  Inc(Next_);
+  Result := True;
+end;
+
+function TMemSource.FilesLeft: Integer;
+begin
+  Result := Names.Count - Next_;
+end;
+
+function TMemSource.BytesLeft: Int64;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := Next_ to High(Contents) do
+    Inc(Result, Length(Contents[i]));
+end;
+
+procedure TZmLog.OnSend(Sender: TObject; const AData: RawByteString);
+begin
+  Sent := Sent + AData;
+end;
+
+procedure TZmLog.OnDone(Sender: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+begin
+  Done := True;
+  Result_ := AResult;
+  Message := AMessage;
+  Leftover := ALeftover;
+end;
+
+function ZmFixture(const AName: string): string;
+begin
+  Result := TyTermFixturePath('terminal-zmodem' + PathDelim + AName);
+end;
+
+function ReadBytes(const APath: string): RawByteString;
+var
+  f: TFileStream;
+begin
+  f := TFileStream.Create(APath, fmOpenRead or fmShareDenyWrite);
+  try
+    Result := '';
+    SetLength(Result, f.Size);
+    if f.Size > 0 then
+      f.ReadBuffer(Result[1], f.Size);
+  finally
+    f.Free;
+  end;
+end;
+
+function LoadCases: TJSONObject;
+var
+  s: RawByteString;
+begin
+  s := ReadBytes(ZmFixture('cases.json'));
+  Result := GetJSON(s) as TJSONObject;
+end;
+
+type
+  { every header in a byte stream, with the offset just past it }
+  THeaderList = class
+  public
+    Reader: TZmReader;
+    Types, Positions, Ends: array of Integer;
+    Headers: array of TZmHeader;
+    At: Integer;
+    constructor Create(const S: RawByteString);
+    destructor Destroy; override;
+    procedure OnHeader(const AHeader: TZmHeader; AKind: TZmHeaderKind);
+    { ZRINIT / ZRPOS repeated back to back (the other side's timing), each run as one }
+    function Deduped: string;
+  end;
+
+constructor THeaderList.Create(const S: RawByteString);
+var
+  i: Integer;
+begin
+  inherited Create;
+  Reader := TZmReader.Create;
+  Reader.OnHeader := @OnHeader;
+  for i := 1 to Length(S) do
+  begin
+    At := i;
+    Reader.Push(@S[i], 1);
+  end;
+end;
+
+destructor THeaderList.Destroy;
+begin
+  Reader.Free;
+  inherited Destroy;
+end;
+
+procedure THeaderList.OnHeader(const AHeader: TZmHeader; AKind: TZmHeaderKind);
+var
+  n: Integer;
+begin
+  n := Length(Types);
+  SetLength(Types, n + 1);
+  SetLength(Positions, n + 1);
+  SetLength(Ends, n + 1);
+  SetLength(Headers, n + 1);
+  Types[n] := AHeader.FrameType;
+  Positions[n] := Integer(ZmHeaderPos(AHeader));
+  Ends[n] := At;
+  Headers[n] := AHeader;
+end;
+
+function THeaderList.Deduped: string;
+var
+  i: Integer;
+  cur, prev: string;
+begin
+  Result := '';
+  prev := '';
+  for i := 0 to High(Types) do
+  begin
+    cur := ZmFrameName(Types[i]) + '@' + IntToStr(Positions[i]);
+    if (cur = prev) and (Types[i] in [ZRINIT, ZRPOS]) then
+      Continue;
+    Result := Result + cur + ' ';
+    prev := cur;
+  end;
+end;
+
+{ S1. Mutation: the receiver answering ZFILE with ZRINIT instead of ZRPOS. Every
+  recording, fed whole, a byte and seven bytes at a time. }
+procedure TTyTerminalZmodemTests.TestReceivingWhatSzSent;
+const
+  Steps: array[0..2] of Integer = (0, 1, 7);
+var
+  cases, files: TJSONArray;
+  doc, c, f: TJSONObject;
+  k, j, si, step, p, n: Integer;
+  sz, rz, want: RawByteString;
+  sink: TMemSink;
+  log: TZmLog;
+  r: TZmReceiver;
+  ours, theirs: THeaderList;
+  id: string;
+begin
+  doc := LoadCases;
+  try
+    cases := doc.Arrays['cases'];
+    AssertTrue('seven recordings', cases.Count >= 7);
+    AssertEquals('lrzsz''s version', 'sz (lrzsz) 0.12.21rc', doc.Strings['sz']);
+    for k := 0 to cases.Count - 1 do
+    begin
+      c := cases.Objects[k];
+      id := c.Strings['id'];
+      files := c.Arrays['files'];
+      sz := ReadBytes(ZmFixture(id + '.sz.bin'));
+      rz := ReadBytes(ZmFixture(id + '.rz.bin'));
+      for si := 0 to 2 do
+      begin
+        step := Steps[si];
+        sink := TMemSink.Create;
+        log := TZmLog.Create;
+        r := TZmReceiver.Create(sink);
+        try
+          r.OnSend := @log.OnSend;
+          r.OnDone := @log.OnDone;
+          r.Start(0);
+          if step = 0 then
+            r.Input(@sz[1], Length(sz), 0)
+          else
+          begin
+            p := 1;
+            while (p <= Length(sz)) and not r.Done do
+            begin
+              n := Min(step, Length(sz) - p + 1);
+              r.Input(@sz[p], n, 0);
+              Inc(p, n);
+            end;
+          end;
+          AssertTrue(Format('%s/%d: done', [id, step]), log.Done);
+          AssertTrue(Format('%s/%d: ok (%s)', [id, step, log.Message]), log.Result_ = zrOk);
+          AssertEquals(Format('%s/%d: nothing after OO', [id, step]), '', ZmHex(log.Leftover));
+          AssertEquals(Format('%s/%d: files', [id, step]), files.Count, sink.Names.Count);
+          for j := 0 to files.Count - 1 do
+          begin
+            f := files.Objects[j];
+            want := ReadBytes(ZmFixture(f.Strings['source']));
+            AssertEquals(Format('%s/%d: name %d', [id, step, j]), f.Strings['name'], sink.Names[j]);
+            AssertTrue(Format('%s/%d: file %d whole', [id, step, j]), sink.Complete[j]);
+            AssertEquals(Format('%s/%d: size %d', [id, step, j]), Length(want), Length(sink.Contents[j]));
+            AssertTrue(Format('%s/%d: content %d', [id, step, j]), sink.Contents[j] = want);
+            AssertEquals(Format('%s/%d: md5 %d', [id, step, j]), f.Strings['md5'],
+              MD5Print(MD5String(sink.Contents[j])));
+          end;
+          ours := THeaderList.Create(log.Sent);
+          theirs := THeaderList.Create(rz);
+          try
+            AssertEquals(Format('%s/%d: our answers are rz''s', [id, step]), theirs.Deduped, ours.Deduped);
+          finally
+            ours.Free;
+            theirs.Free;
+          end;
+        finally
+          r.Free;
+          log.Free;
+          sink.Free;
+        end;
+      end;
+    end;
+  finally
+    doc.Free;
+  end;
+end;
+
+type
+  { a stream of ZMODEM from a sender, decoded: the files it carries }
+  TSentFiles = class
+  public
+    Reader: TZmReader;
+    Last: Integer;
+    Names: TStringList;
+    Contents: array of RawByteString;
+    Cur: RawByteString;
+    Pos_: Integer;
+    constructor Create(const S: RawByteString);
+    destructor Destroy; override;
+    procedure OnHeader(const AHeader: TZmHeader; AKind: TZmHeaderKind);
+    procedure OnData(const AData: RawByteString; AEnd: Byte; ACrcOk: Boolean);
+  end;
+
+constructor TSentFiles.Create(const S: RawByteString);
+begin
+  inherited Create;
+  Names := TStringList.Create;
+  Reader := TZmReader.Create;
+  Reader.OnHeader := @OnHeader;
+  Reader.OnData := @OnData;
+  if S <> '' then
+    Reader.Push(@S[1], Length(S));
+end;
+
+destructor TSentFiles.Destroy;
+begin
+  Reader.Free;
+  Names.Free;
+  inherited Destroy;
+end;
+
+procedure TSentFiles.OnHeader(const AHeader: TZmHeader; AKind: TZmHeaderKind);
+begin
+  Last := AHeader.FrameType;
+  case Last of
+    ZDATA:
+      begin
+        Pos_ := ZmHeaderPos(AHeader);
+        Cur := Copy(Cur, 1, Pos_);
+      end;
+    ZEOF:
+      if Length(Contents) > 0 then
+        Contents[High(Contents)] := Cur;
+  end;
+end;
+
+procedure TSentFiles.OnData(const AData: RawByteString; AEnd: Byte; ACrcOk: Boolean);
+var
+  name: string;
+  size, mtime: Int64;
+  mode: Cardinal;
+begin
+  if not ACrcOk then
+    raise Exception.Create('a bad CRC in what the sender sent');
+  if Last = ZFILE then
+  begin
+    if ZmParseFileInfo(AData, name, size, mtime, mode) then
+    begin
+      Names.Add(name + '|' + IntToStr(size) + '|' + IntToStr(mtime));
+      SetLength(Contents, Length(Contents) + 1);
+      Cur := '';
+    end;
+  end
+  else if Last = ZDATA then
+    Cur := Cur + AData;
+end;
+
+{ S2. Mutation: ZEOF at one byte less than was sent. rz's headers from each recording
+  fed one by one, each after the sender has answered the one before. }
+procedure TTyTerminalZmodemTests.TestSendingToWhatRzSaid;
+var
+  cases, files: TJSONArray;
+  doc, c: TJSONObject;
+  k, j, from: Integer;
+  rz, chunk: RawByteString;
+  src: TMemSource;
+  log: TZmLog;
+  s: TZmSender;
+  heads: THeaderList;
+  got: TSentFiles;
+  id: string;
+begin
+  doc := LoadCases;
+  try
+    cases := doc.Arrays['cases'];
+    for k := 0 to cases.Count - 1 do
+    begin
+      c := cases.Objects[k];
+      id := c.Strings['id'];
+      files := c.Arrays['files'];
+      rz := ReadBytes(ZmFixture(id + '.rz.bin'));
+      src := TMemSource.Create;
+      log := TZmLog.Create;
+      s := TZmSender.Create(src);
+      heads := THeaderList.Create(rz);
+      try
+        for j := 0 to files.Count - 1 do
+          src.Add(files.Objects[j].Strings['name'], ReadBytes(ZmFixture(files.Objects[j].Strings['source'])));
+        s.OnSend := @log.OnSend;
+        s.OnDone := @log.OnDone;
+        AssertEquals(id + ': rz starts with ZRINIT', ZRINIT, heads.Types[0]);
+        s.Start(heads.Headers[0], 0);
+        from := heads.Ends[0] + 1;
+        for j := 1 to High(heads.Types) do
+        begin
+          if j < High(heads.Types) then
+            chunk := Copy(rz, from, heads.Ends[j] - from + 1)
+          else
+            chunk := Copy(rz, from, MaxInt);
+          from := heads.Ends[j] + 1;
+          if chunk <> '' then
+            s.Input(@chunk[1], Length(chunk), 0);
+        end;
+        AssertTrue(id + ': done', log.Done);
+        AssertTrue(id + ': ok ' + log.Message, log.Result_ = zrOk);
+        AssertEquals(id + ': OO last', 'OO', Copy(log.Sent, Length(log.Sent) - 1, 2));
+        got := TSentFiles.Create(log.Sent);
+        try
+          AssertEquals(id + ': files', files.Count, got.Names.Count);
+          for j := 0 to files.Count - 1 do
+          begin
+            AssertEquals(id + ': name, size, time', files.Objects[j].Strings['name'] + '|'
+              + IntToStr(files.Objects[j].Integers['size']) + '|1700000000', got.Names[j]);
+            AssertTrue(id + ': content ' + IntToStr(j), got.Contents[j] = src.Contents[j]);
+          end;
+        finally
+          got.Free;
+        end;
+      finally
+        heads.Free;
+        s.Free;
+        log.Free;
+        src.Free;
+      end;
+    end;
+  finally
+    doc.Free;
+  end;
+end;
+
+type
+  { a sender and a receiver wired through two queues, optionally damaging bytes }
+  TLoop = class
+  public
+    Sender: TZmSender;
+    Receiver: TZmReceiver;
+    Sink: TMemSink;
+    Source: TMemSource;
+    ToReceiver, ToSender: RawByteString;
+    SLog, RLog: TZmLog;
+    Now_: Double;
+    Rnd: Cardinal;
+    FlipEvery, DropEvery: Integer;   { 0 = never; else about one in this many bytes }
+    Damaged: Integer;
+    constructor Create;
+    destructor Destroy; override;
+    function NextRandom: Cardinal;
+    function Damage(const S: RawByteString): RawByteString;
+    procedure FromSender(Sender_: TObject; const AData: RawByteString);
+    procedure FromReceiver(Sender_: TObject; const AData: RawByteString);
+    procedure SenderDone(Sender_: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+    procedure ReceiverDone(Sender_: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+    procedure Run(const AInit: TZmHeader);
+  end;
+
+constructor TLoop.Create;
+begin
+  inherited Create;
+  Sink := TMemSink.Create;
+  Source := TMemSource.Create;
+  SLog := TZmLog.Create;
+  RLog := TZmLog.Create;
+  Sender := TZmSender.Create(Source);
+  Receiver := TZmReceiver.Create(Sink);
+  Sender.OnSend := @FromSender;
+  Receiver.OnSend := @FromReceiver;
+  Sender.OnDone := @SenderDone;
+  Receiver.OnDone := @ReceiverDone;
+end;
+
+destructor TLoop.Destroy;
+begin
+  Sender.Free;
+  Receiver.Free;
+  Sink.Free;
+  Source.Free;
+  SLog.Free;
+  RLog.Free;
+  inherited Destroy;
+end;
+
+{ xorshift32: the same damage for the same seed on every machine }
+function TLoop.NextRandom: Cardinal;
+begin
+  Rnd := Rnd xor (Rnd shl 13);
+  Rnd := Rnd xor (Rnd shr 17);
+  Rnd := Rnd xor (Rnd shl 5);
+  Result := Rnd;
+end;
+
+function TLoop.Damage(const S: RawByteString): RawByteString;
+var
+  i: Integer;
+begin
+  if (FlipEvery = 0) and (DropEvery = 0) then
+    Exit(S);
+  Result := '';
+  for i := 1 to Length(S) do
+  begin
+    if (DropEvery > 0) and (NextRandom mod Cardinal(DropEvery) = 0) then
+    begin
+      Inc(Damaged);
+      Continue;
+    end;
+    if (FlipEvery > 0) and (NextRandom mod Cardinal(FlipEvery) = 0) then
+    begin
+      Inc(Damaged);
+      Result := Result + AnsiChar(Ord(S[i]) xor (1 shl (NextRandom mod 8)));
+    end
+    else
+      Result := Result + S[i];
+  end;
+end;
+
+procedure TLoop.FromSender(Sender_: TObject; const AData: RawByteString);
+begin
+  ToReceiver := ToReceiver + Damage(AData);
+  if AData = 'OO' then
+    ToReceiver := ToReceiver + 'TAIL';
+end;
+
+procedure TLoop.FromReceiver(Sender_: TObject; const AData: RawByteString);
+begin
+  ToSender := ToSender + Damage(AData);
+  if AData = ZmEncodeHexHeader(ZmPosHeader(ZFIN, 0)) then
+    ToSender := ToSender + 'TAIL';
+end;
+
+procedure TLoop.SenderDone(Sender_: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+begin
+  SLog.OnDone(Sender_, AResult, AMessage, ALeftover);
+end;
+
+procedure TLoop.ReceiverDone(Sender_: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
+begin
+  RLog.OnDone(Sender_, AResult, AMessage, ALeftover);
+end;
+
+procedure TLoop.Run(const AInit: TZmHeader);
+var
+  s: RawByteString;
+  guard: Integer;
+begin
+  Receiver.Start(Now_);
+  Sender.Start(AInit, Now_);
+  guard := 0;
+  while not (SLog.Done and RLog.Done) do
+  begin
+    Inc(guard);
+    if guard > 200000 then
+      raise Exception.Create('the loop does not end');
+    if ToReceiver <> '' then
+    begin
+      s := ToReceiver;
+      ToReceiver := '';
+      if not Receiver.Done then
+        Receiver.Input(@s[1], Length(s), Now_);
+    end
+    else if ToSender <> '' then
+    begin
+      s := ToSender;
+      ToSender := '';
+      if not Sender.Done then
+        Sender.Input(@s[1], Length(s), Now_);
+    end
+    else
+    begin
+      { nothing on the wire: time passes }
+      Now_ := Now_ + 10001;
+      Receiver.Tick(Now_);
+      Sender.Tick(Now_);
+    end;
+  end;
+end;
+
+function InitHeader(ABuffer: Integer): TZmHeader;
+begin
+  Result := ZmFlagsHeader(ZRINIT, CANFDX or CANOVIO or CANFC32, 0, (ABuffer shr 8) and $FF, ABuffer and $FF);
+end;
+
+{ S3. Mutation: no ZRPOS after a bad CRC (S4 needs it; here: the loop must simply
+  work in every option). }
+procedure TTyTerminalZmodemTests.TestLoopback;
+const
+  Sizes: array[0..6] of Integer = (0, 1, 1023, 1024, 1025, 70000, 5000);
+var
+  combo, k, i: Integer;
+  lp: TLoop;
+  data: RawByteString;
+  tag: string;
+begin
+  for combo := 0 to 4 do
+    for k := 0 to High(Sizes) do
+    begin
+      if k = 6 then
+        data := Cycle(Sizes[k])          { every byte value, the escaped ones many times }
+      else
+      begin
+        RandSeed := k + 100;
+        data := '';
+        SetLength(data, Sizes[k]);
+        for i := 1 to Sizes[k] do
+          data[i] := AnsiChar(Random(256));
+      end;
+      lp := TLoop.Create;
+      try
+        lp.Source.Add('f' + IntToStr(k) + '.bin', data);
+        case combo of
+          1: lp.Sender.UseCrc32 := False;
+          2: lp.Receiver.EscapeControl := True;
+          3: lp.Receiver.MaxSubpacket := 1024;
+        end;
+        if combo = 4 then
+          lp.Run(InitHeader(4096))
+        else if combo = 2 then
+          lp.Run(ZmFlagsHeader(ZRINIT, CANFDX or CANOVIO or CANFC32 or ESCCTL, 0, 0, 0))
+        else
+          lp.Run(InitHeader(0));
+        tag := Format('combo %d size %d', [combo, Sizes[k]]);
+        AssertTrue(tag + ': sender ok ' + lp.SLog.Message, lp.SLog.Result_ = zrOk);
+        AssertTrue(tag + ': receiver ok ' + lp.RLog.Message, lp.RLog.Result_ = zrOk);
+        AssertEquals(tag + ': one file', 1, Length(lp.Sink.Contents));
+        AssertTrue(tag + ': whole', lp.Sink.Complete[0]);
+        AssertTrue(tag + ': the same bytes', lp.Sink.Contents[0] = data);
+        AssertEquals(tag + ': the receiver''s leftover', 'TAIL', lp.RLog.Leftover);
+        AssertEquals(tag + ': the sender''s leftover', 'TAIL', lp.SLog.Leftover);
+      finally
+        lp.Free;
+      end;
+    end;
+end;
+
+{ S4. Mutation: the sender not going back on a ZRPOS mid-file. }
+procedure TTyTerminalZmodemTests.TestLoopbackWithFaults;
+var
+  seed, i: Integer;
+  lp: TLoop;
+  data: RawByteString;
+  retries, damaged: Integer;
+begin
+  data := '';
+  SetLength(data, 70000);
+  RandSeed := 42;
+  for i := 1 to 70000 do
+    data[i] := AnsiChar(Random(256));
+  retries := 0;
+  damaged := 0;
+  for seed := 1 to 20 do
+  begin
+    lp := TLoop.Create;
+    try
+      lp.Rnd := Cardinal(seed) * 2654435761;
+      lp.FlipEvery := 5000;
+      lp.DropEvery := 20000;
+      lp.Source.Add('r.bin', data);
+      lp.Run(InitHeader(0));
+      AssertTrue(Format('seed %d: sender ok (%s)', [seed, lp.SLog.Message]), lp.SLog.Result_ = zrOk);
+      AssertTrue(Format('seed %d: receiver ok (%s)', [seed, lp.RLog.Message]), lp.RLog.Result_ = zrOk);
+      AssertTrue(Format('seed %d: the same bytes', [seed]), (Length(lp.Sink.Contents) >= 1)
+        and (lp.Sink.Contents[High(lp.Sink.Contents)] = data));
+      Inc(retries, lp.Sender.Repositions + lp.Receiver.Errors);
+      Inc(damaged, lp.Damaged);
+    finally
+      lp.Free;
+    end;
+  end;
+  WriteLn(Format('zmodem faults: %d bytes damaged, %d repositions / errors', [damaged, retries]));
+  AssertTrue('bytes were damaged', damaged > 0);
+  AssertTrue('and recovered from', retries > 0);
+end;
+
+{ S5. Mutation: the retry count not reset by a header. }
+procedure TTyTerminalZmodemTests.TestTheReceiverTimesOut;
+var
+  sink: TMemSink;
+  log: TZmLog;
+  r: TZmReceiver;
+  t: Double;
+  i: Integer;
+  rinit, rq: RawByteString;
+begin
+  rinit := ZmEncodeHexHeader(ZmFlagsHeader(ZRINIT, CANFDX or CANOVIO or CANFC32, 0, 0, 0));
+  rq := ZmEncodeHexHeader(ZmPosHeader(ZRQINIT, 0));
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.Start(0);
+    AssertTrue('ZRINIT first', log.Sent = rinit);
+    t := 0;
+    for i := 1 to 5 do
+    begin
+      log.Sent := '';
+      t := t + 10001;
+      r.Tick(t);
+      AssertTrue(Format('repeat %d', [i]), log.Sent = rinit);
+    end;
+    { a header from the other side: the count starts again }
+    r.Input(@rq[1], Length(rq), t);
+    for i := 1 to 10 do
+    begin
+      log.Sent := '';
+      t := t + 10001;
+      r.Tick(t);
+      AssertTrue(Format('after the header, repeat %d', [i]), log.Sent = rinit);
+      AssertFalse('not done yet', log.Done);
+    end;
+    log.Sent := '';
+    t := t + 10001;
+    r.Tick(t);
+    AssertEquals('the eleventh: the abort', ZmHex(ZmAbortSequence), ZmHex(log.Sent));
+    AssertTrue('done', log.Done);
+    AssertTrue('timed out', log.Result_ = zrTimeout);
+  finally
+    r.Free;
+    log.Free;
+    sink.Free;
+  end;
+end;
+
+{ a ZFILE with its information, as a sender sends it }
+function ZfileFrame(const AName: string; ASize: Integer): RawByteString;
+var
+  e: TZmEscaper;
+  info: RawByteString;
+begin
+  e.Init(False);
+  info := ZmBuildFileInfo(AName, ASize, 1700000000, 1, ASize);
+  Result := ZmEncodeBinHeader(ZmFlagsHeader(ZFILE, ZCBIN, 0, 0, 0), True, e)
+    + ZmEncodeSubpacket(@info[1], Length(info), ZCRCW, True, e);
+end;
+
+function ZdataFrame(APos: Integer; const AData: RawByteString; AEnd: Byte): RawByteString;
+var
+  e: TZmEscaper;
+begin
+  e.Init(False);
+  Result := ZmEncodeBinHeader(ZmPosHeader(ZDATA, APos), True, e);
+  if AData <> '' then
+    Result := Result + ZmEncodeSubpacket(@AData[1], Length(AData), AEnd, True, e)
+  else
+    Result := Result + ZmEncodeSubpacket(nil, 0, AEnd, True, e);
+end;
+
+procedure FeedR(r: TZmReceiver; const S: RawByteString);
+begin
+  if S <> '' then
+    r.Input(@S[1], Length(S), 0);
+end;
+
+{ S6: byte values }
+procedure TTyTerminalZmodemTests.TestCancelling;
+var
+  sink: TMemSink;
+  log: TZmLog;
+  r: TZmReceiver;
+begin
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.Start(0);
+    FeedR(r, ZfileFrame('half.bin', 5000) + ZdataFrame(0, Cycle(1000), ZCRCG));
+    AssertEquals('opened', 1, sink.Opens);
+    log.Sent := '';
+    r.Cancel;
+    AssertEquals('ten CAN, ten BS', ZmHex(ZmAbortSequence), ZmHex(log.Sent));
+    AssertTrue('cancelled here', log.Result_ = zrCancelledHere);
+    AssertEquals('the half file finished, not whole', 1, sink.Incomplete);
+  finally
+    r.Free;
+    log.Free;
+    sink.Free;
+  end;
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.Start(0);
+    FeedR(r, ZfileFrame('half.bin', 5000) + ZdataFrame(0, Cycle(1000), ZCRCG) + #24#24#24#24#24#24#24#24#24#24#8#8'$ ');
+    AssertTrue('cancelled there', log.Result_ = zrCancelledThere);
+    AssertEquals('the half file not whole', 1, sink.Incomplete);
+    AssertEquals('what follows the abort', '$ ', log.Leftover);
+  finally
+    r.Free;
+    log.Free;
+    sink.Free;
+  end;
+end;
+
+{ S7. Mutation: "OO" counted into the leftover. }
+procedure TTyTerminalZmodemTests.TestOverAndOut;
+
+  procedure Check(const AFeeds: array of RawByteString; ATickMs: Double; const AWant: RawByteString; ADone: Boolean);
+  var
+    sink: TMemSink;
+    log: TZmLog;
+    r: TZmReceiver;
+    i: Integer;
+  begin
+    sink := TMemSink.Create;
+    log := TZmLog.Create;
+    r := TZmReceiver.Create(sink);
+    try
+      r.OnSend := @log.OnSend;
+      r.OnDone := @log.OnDone;
+      r.Start(0);
+      FeedR(r, ZmEncodeHexHeader(ZmPosHeader(ZFIN, 0)));
+      AssertTrue('ZFIN answered', Pos(ZmEncodeHexHeader(ZmPosHeader(ZFIN, 0)), log.Sent) > 0);
+      for i := 0 to High(AFeeds) do
+        FeedR(r, AFeeds[i]);
+      if ATickMs > 0 then
+        r.Tick(ATickMs);
+      AssertEquals('done', ADone, log.Done);
+      if ADone then
+      begin
+        AssertTrue('ok', log.Result_ = zrOk);
+        AssertEquals('leftover', ZmHex(AWant), ZmHex(log.Leftover));
+      end;
+    finally
+      r.Free;
+      log.Free;
+      sink.Free;
+    end;
+  end;
+
+begin
+  Check(['OOprompt$ '], 0, 'prompt$ ', True);
+  Check(['Xprompt'], 0, 'Xprompt', True);
+  Check(['O', 'Orest'], 0, 'rest', True);
+  Check(['O'], 0, '', False);
+  Check(['O'], 1000, '', True);
+end;
+
+{ S8 }
+procedure TTyTerminalZmodemTests.TestZcommandIsRefused;
+var
+  sink: TMemSink;
+  log: TZmLog;
+  r: TZmReceiver;
+  e: TZmEscaper;
+  cmd, s: RawByteString;
+begin
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.Start(0);
+    log.Sent := '';
+    e.Init(False);
+    cmd := 'rm -rf ~'#0;
+    s := ZmEncodeBinHeader(ZmFlagsHeader(ZCOMMAND, 0, 0, 0, 0), True, e)
+      + ZmEncodeSubpacket(@cmd[1], Length(cmd), ZCRCW, True, e);
+    FeedR(r, s);
+    AssertEquals('the abort', ZmHex(ZmAbortSequence), ZmHex(log.Sent));
+    AssertTrue('an error', log.Result_ = zrError);
+    AssertEquals('no file', 0, sink.Opens);
+  finally
+    r.Free;
+    log.Free;
+    sink.Free;
+  end;
+end;
+
+{ S9. Mutation: ZEOF's position not checked. }
+procedure TTyTerminalZmodemTests.TestAZeofAtTheWrongPlace;
+var
+  sink: TMemSink;
+  log: TZmLog;
+  r: TZmReceiver;
+  e: TZmEscaper;
+begin
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.Start(0);
+    FeedR(r, ZfileFrame('a.bin', 1500) + ZdataFrame(0, Cycle(1000), ZCRCE));
+    log.Sent := '';
+    e.Init(False);
+    FeedR(r, ZmEncodeBinHeader(ZmPosHeader(ZEOF, 1500), True, e));
+    AssertEquals('not finished', 0, sink.Finishes);
+    AssertEquals('no ZRINIT', '', ZmHex(log.Sent));
+    FeedR(r, ZdataFrame(1000, Cycle(500, 1000), ZCRCE) + ZmEncodeBinHeader(ZmPosHeader(ZEOF, 1500), True, e));
+    AssertEquals('now it is', 1, sink.Finishes);
+    AssertTrue('whole', sink.Complete[0]);
+    AssertTrue('the ZRINIT', Pos(ZmEncodeHexHeader(ZmFlagsHeader(ZRINIT, CANFDX or CANOVIO or CANFC32, 0, 0, 0)), log.Sent) > 0);
+    AssertTrue('the bytes', sink.Contents[0] = Cycle(1500));
+  finally
+    r.Free;
+    log.Free;
+    sink.Free;
+  end;
 end;
 
 initialization
