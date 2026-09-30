@@ -12,9 +12,13 @@ unit tbpreview;
   Loading never leaves the preview broken. The model loads fail-fast (a load that raises
   keeps the old layer), but a load can pass and still raise when a control paints: a
   variable defined only in the dark block and used in light mode survives the model's check
-  (it validates against every mode at once) and raises in ResolveStyle. So after every load
-  (and every light / dark switch) every catalog typeKey, each of its variants and six state
-  sets are resolved once (TbProbeResolve); a failure puts the last version that worked back. }
+  (it validates against every mode at once) and raises in ResolveStyle; so does a seed the
+  base theme's rules cannot take (only the document's rules are validated), or a variable
+  that leads back to itself. So after every load (and every light / dark switch) the
+  document is probed (TbProbeDocument): every declaration a paint could evaluate is
+  evaluated once against the mode's variables (TbFastProbe), and if that raises, every
+  catalog typeKey is resolved with all its variants and states (TbProbeResolve), which has
+  the last word and names the typeKey. A failure puts the last version that worked back. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -227,6 +231,7 @@ type
     FSampleWin: TTbSampleForm;
     FDisabled: array of TTbDisabledEntry;   { what "disable all" changed, to put back }
     FGoodText, FGoodDir: string;
+    FLoadedText: string;                  { the user text the model holds now }
     FModeError: string;
     FAllDisabled: Boolean;
     FUpdating: Boolean;
@@ -266,8 +271,22 @@ type
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;  { a switch was used }
   end;
 
+type
+  { what TbFastProbe could tell }
+  TTbFastProbe = (tfpClean, tfpRaised, tfpUnknown);
+
 procedure TbApplyController(ARoot: TWinControl; AController: TTyStyleController);
-{ every catalog typeKey x its variants x six state sets; False and AError on the first raise }
+{ The probe every load and switch runs: TbFastProbe, and only when that one does not say
+  clean, TbProbeResolve (which then decides, and names the typeKey). AText is the user text
+  the model holds, AModern whether the density pack sits on it. }
+function TbProbeDocument(AModel: TTyStyleModel; const AText: string; AModern: Boolean;
+  out AError: string): Boolean;
+{ Each distinct declaration a paint could evaluate, evaluated once against the model's
+  variables for its current mode -- without going through ResolveStyle. tfpUnknown for a
+  document with @import (its rules are not all in AText). }
+function TbFastProbe(AModel: TTyStyleModel; const AText: string; AModern: Boolean): TTbFastProbe;
+{ every catalog typeKey, once, with all its variants and every state: every declaration
+  any combination would evaluate. False and AError (typeKey[.variant]: why) on a raise }
 function TbProbeResolve(AModel: TTyStyleModel; out AError: string): Boolean;
 
 implementation
@@ -275,8 +294,13 @@ implementation
 {$R *.lfm}
 
 uses
-  tyControls.Css.Catalog, tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns,
-  tbthemesource;
+  tyControls.Css.Catalog, tyControls.Css.Parser, tyControls.DefaultTheme,
+  tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns, tbthemesource;
+
+var
+  GBaseSheet: TTyCssStylesheet = nil;   { the model's base layer, parsed once }
+  GDensitySheet: TTyCssStylesheet = nil;
+  GCatalog: TStringList = nil;          { the catalog typeKeys, lower case, sorted }
 
 procedure TbApplyController(ARoot: TWinControl; AController: TTyStyleController);
 
@@ -313,12 +337,46 @@ begin
   Walk(ARoot);
 end;
 
-function TbProbeResolve(AModel: TTyStyleModel; out AError: string): Boolean;
+{ Which variant and state set of AKey raises, and why: the old one-by-one walk, run only
+  once the combined resolve below has failed }
+function LocateFailure(AModel: TTyStyleModel; const AKey: string; AVariants: TStrings): string;
 const
   cStates: array[0..5] of TTyStateSet = ([], [tysHover], [tysActive], [tysFocused],
     [tysDisabled], [tysSelected]);
 var
-  k, v, s: Integer;
+  v, s: Integer;
+  cls: string;
+begin
+  for v := -1 to AVariants.Count - 1 do
+  begin
+    if v < 0 then cls := '' else cls := AVariants[v];
+    for s := 0 to High(cStates) do
+      try
+        AModel.ResolveStyle(AKey, cls, cStates[s]);
+      except
+        on E: Exception do
+        begin
+          if cls <> '' then
+            Exit(AKey + '.' + cls + ': ' + E.Message);
+          Exit(AKey + ': ' + E.Message);
+        end;
+      end;
+  end;
+  Result := '';
+end;
+
+{ One resolve per typeKey, with every variant the model knows for it as the class and every
+  state at once. ResolveLayer applies the type's rule, each variant's, and each state's for
+  the type and for each variant -- every rule any single variant / state combination would
+  apply -- so every declaration that could ever be evaluated for the typeKey is evaluated
+  here once, against the mode's variables (a missing one, a cycle, a bad value all raise).
+  Resolving each variant and each state set on its own evaluated the type's rules
+  (1 + variants) x 6 times over and took 0.6 to 1.1 s cold; see TestTheProbeIsQuick. }
+function TbProbeResolve(AModel: TTyStyleModel; out AError: string): Boolean;
+const
+  cEveryState: TTyStateSet = [tysSelected, tysHover, tysFocused, tysActive, tysDisabled];
+var
+  k, v: Integer;
   variants: TStringList;
   key, cls: string;
 begin
@@ -329,28 +387,217 @@ begin
     begin
       key := TyCatalogTypeKeys[k];
       variants.Clear;
-      variants.Add('');
       AModel.GetVariantsForType(key, variants);
+      cls := '';
       for v := 0 to variants.Count - 1 do
-        for s := 0 to High(cStates) do
+        if variants[v] <> '' then
         begin
-          cls := variants[v];
-          try
-            AModel.ResolveStyle(key, cls, cStates[s]);
-          except
-            on E: Exception do
-            begin
-              if cls <> '' then key := key + '.' + cls;
-              AError := key + ': ' + E.Message;
-              Exit(False);
-            end;
-          end;
+          if cls <> '' then cls := cls + ' ';
+          cls := cls + variants[v];
         end;
+      try
+        AModel.ResolveStyle(key, cls, cEveryState);
+      except
+        on E: Exception do
+        begin
+          AError := LocateFailure(AModel, key, variants);
+          if AError = '' then
+            AError := key + ': ' + E.Message;
+          Exit(False);
+        end;
+      end;
     end;
   finally
     variants.Free;
   end;
   Result := True;
+end;
+
+type
+  { The model's merged variables, as the evaluator reads them (IndexOfName, then Values):
+    each name is asked of the model (RawVar) the first time it is looked up and kept, found
+    or not, behind a sorted index -- only the names the declarations use are ever read, and
+    none of them twice. RawVar says '' for a name the current mode does not define, so it is
+    undefined here as it is in the model. }
+  TTbVarList = class(TStringList)
+  private
+    FModel: TTyStyleModel;
+    FIndex: TStringList;                  { name -> Objects = its line, or -1: not defined }
+  public
+    constructor Create(AModel: TTyStyleModel);
+    destructor Destroy; override;
+    function IndexOfName(const AName: string): Integer; override;
+  end;
+
+constructor TTbVarList.Create(AModel: TTyStyleModel);
+begin
+  inherited Create;
+  FModel := AModel;
+  FIndex := TStringList.Create;
+  FIndex.CaseSensitive := False;          { as TStrings.IndexOfName compares names }
+  FIndex.Sorted := True;
+end;
+
+destructor TTbVarList.Destroy;
+begin
+  FIndex.Free;
+  inherited Destroy;
+end;
+
+function TTbVarList.IndexOfName(const AName: string): Integer;
+var
+  i: Integer;
+  v: string;
+begin
+  if FIndex.Find(AName, i) then
+    Exit(PtrInt(FIndex.Objects[i]));
+  v := FModel.RawVar(AName);
+  if v = '' then
+    Result := -1
+  else
+    Result := Add(AName + '=' + v);
+  FIndex.AddObject(AName, TObject(PtrInt(Result)));
+end;
+
+function ParseCss(const ACss: string): TTyCssStylesheet;
+var
+  p: TTyCssParser;
+begin
+  p := TTyCssParser.Create(ACss);
+  try
+    Result := p.Parse;
+  finally
+    p.Free;
+  end;
+end;
+
+{ The fast probe. Why it may stand in for resolving every typeKey: ResolveStyle raises only
+  when it evaluates a declaration (TyApplyDeclaration against the merged variables), and the
+  declarations it can ever evaluate for a catalog typeKey are those of the user layer's
+  rules for it and, unless the user layer has a plain rule for it (UserHasTypeKey) or the
+  property cascade is on, the base layer's. Both layers are known text: the base is the
+  model's own seed (TyBuiltinThemeCss + TyBuiltinBaseModeCss, LoadInto in the model's
+  constructor), the user layer is AText plus the density pack. The variables are the
+  model's merged set for its current mode, read back one name at a time (RawVar) as the
+  declarations ask for them (TTbVarList) -- a name the mode does not define reads '' and
+  stays out, so it is undefined here as it is there. One (property, value) pair evaluates
+  the same wherever it stands, so each is evaluated once; the many typeKeys that share a
+  base rule share the work. That is what makes it fast (the resolve walk evaluates the
+  shared base rules once per typeKey and scans every rule list per variant and state).
+  Clean is trusted. Raised is not taken on its own word: TbProbeDocument lets the resolve
+  walk decide, so a variable this reading got wrong can cost time, never refuse a theme
+  the engine takes. test.themebuilder.preview holds the two to the same verdict. }
+function TbFastProbe(AModel: TTyStyleModel; const AText: string; AModern: Boolean): TTbFastProbe;
+var
+  doc: TTyCssStylesheet;
+  vars: TTbVarList;
+  userBase, seen: TStringList;
+
+  procedure AddUserBase(ASheet: TTyCssStylesheet);
+  var
+    r, s: Integer;
+    rule: TTyCssRule;
+  begin
+    for r := 0 to ASheet.Rules.Count - 1 do
+    begin
+      rule := TTyCssRule(ASheet.Rules[r]);
+      for s := 0 to High(rule.Selectors) do
+        if (rule.Selectors[s].Variant = '') and not rule.Selectors[s].HasState then
+          userBase.Add(LowerCase(rule.Selectors[s].TypeName));
+    end;
+  end;
+
+  { the rule's declarations, when a paint of some catalog typeKey applies it }
+  procedure Evaluate(ASheet: TTyCssStylesheet; AIsBase: Boolean);
+  var
+    r, s, d: Integer;
+    rule: TTyCssRule;
+    t, key: string;
+    applies: Boolean;
+    dummy: TTyStyleSet;
+  begin
+    for r := 0 to ASheet.Rules.Count - 1 do
+    begin
+      rule := TTyCssRule(ASheet.Rules[r]);
+      applies := False;
+      for s := 0 to High(rule.Selectors) do
+      begin
+        t := LowerCase(rule.Selectors[s].TypeName);
+        if (GCatalog.IndexOf(t) >= 0)
+           and not (AIsBase and not AModel.PropertyCascade and (userBase.IndexOf(t) >= 0)) then
+        begin
+          applies := True;
+          Break;
+        end;
+      end;
+      if not applies then Continue;
+      for d := 0 to High(rule.Declarations) do
+      begin
+        key := rule.Declarations[d].Prop + #0 + rule.Declarations[d].RawValue;
+        if seen.IndexOf(key) >= 0 then Continue;
+        seen.Add(key);
+        dummy := EmptyStyleSet;
+        TyApplyDeclaration(dummy, rule.Declarations[d].Prop, rule.Declarations[d].RawValue, vars);
+      end;
+    end;
+  end;
+
+var
+  k: Integer;
+begin
+  if GCatalog = nil then
+  begin
+    GCatalog := TStringList.Create;
+    for k := 0 to High(TyCatalogTypeKeys) do
+      GCatalog.Add(LowerCase(TyCatalogTypeKeys[k]));
+    GCatalog.Sorted := True;
+  end;
+  if GBaseSheet = nil then
+    GBaseSheet := ParseCss(TyBuiltinThemeCss + LineEnding + TyBuiltinBaseModeCss);
+  if AModern and (GDensitySheet = nil) then
+    GDensitySheet := ParseCss(TyDensityModernCss);
+  try
+    doc := ParseCss(AText);
+  except
+    Exit(tfpUnknown);   { the model holds a text that parses: nothing to learn here }
+  end;
+  vars := TTbVarList.Create(AModel);
+  userBase := TStringList.Create;
+  seen := TStringList.Create;
+  try
+    if Length(doc.Imports) > 0 then
+      Exit(tfpUnknown);
+    userBase.Sorted := True;
+    userBase.Duplicates := dupIgnore;
+    AddUserBase(doc);
+    if AModern then
+      AddUserBase(GDensitySheet);
+    seen.Sorted := True;
+    seen.CaseSensitive := True;
+    try
+      Evaluate(GBaseSheet, True);
+      Evaluate(doc, False);
+      if AModern then
+        Evaluate(GDensitySheet, False);
+    except
+      Exit(tfpRaised);
+    end;
+    Result := tfpClean;
+  finally
+    vars.Free;
+    userBase.Free;
+    seen.Free;
+    doc.Free;
+  end;
+end;
+
+function TbProbeDocument(AModel: TTyStyleModel; const AText: string; AModern: Boolean;
+  out AError: string): Boolean;
+begin
+  AError := '';
+  if TbFastProbe(AModel, AText, AModern) = tfpClean then
+    Exit(True);
+  Result := TbProbeResolve(AModel, AError);
 end;
 
 { ---- TTbPreviewFrame ---- }
@@ -539,6 +786,7 @@ begin
   try
     FController.Model.LoadFromSource(src);   { fail-fast: on a raise the old layer stays }
     ATouched := True;
+    FLoadedText := AText;
     if FController.Density = tdModern then
       FController.Model.LoadFromCssAdditive(TyDensityModernCss);
     { what the controller's Changed would do first: a two-mode theme with no mode chosen
@@ -554,7 +802,7 @@ begin
   end;
   { probe BEFORE Changed: Changed has every control re-measure itself, which resolves its
     style -- a theme that does not resolve would raise from there (and from every paint) }
-  Result := TbProbeResolve(FController.Model, AError);
+  Result := TbProbeDocument(FController.Model, AText, FController.Density = tdModern, AError);
   if Result then
     Result := Notify(AError);
 end;
@@ -642,7 +890,8 @@ begin
   if SameText(old, want) then Exit(True);
   { switch the model only, probe, and only then tell the controls (see LoadInto) }
   FController.Model.SetMode(want);
-  Result := TbProbeResolve(FController.Model, AError);
+  Result := TbProbeDocument(FController.Model, FLoadedText, FController.Density = tdModern,
+    AError);
   if Result then
     Result := Notify(AError);
   if not Result then
@@ -828,4 +1077,8 @@ begin
   ShowSampleWindow;
 end;
 
+finalization
+  FreeAndNil(GBaseSheet);
+  FreeAndNil(GDensitySheet);
+  FreeAndNil(GCatalog);
 end.

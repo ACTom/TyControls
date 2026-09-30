@@ -42,6 +42,8 @@ type
     procedure TestTheSampleWindowFollowsTheDocument;
     procedure TestTheProbeIsQuick;
     procedure TestAVariableCycleDoesNotBringItDown;
+    procedure TestTheProbeStillCatchesWhatAPaintWouldRaise;
+    procedure TestTheFastProbeAgreesWithTheResolveWalk;
   end;
 
 const
@@ -52,7 +54,7 @@ implementation
 
 uses
   Controls, Forms, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, tyControls.Base,
-  tyControls.Dialogs, tyControls.BuiltinThemes, tyControls.StyleModel, tbtemplates, tbsamplewin;
+  tyControls.Dialogs, tyControls.BuiltinThemes, tyControls.StyleModel, tyControls.DensityPack, tbtemplates, tbsamplewin;
 
 procedure TTbPreviewTests.SetUp;
 begin
@@ -370,24 +372,29 @@ begin
     ButtonBg(w.BtnCancel.Controller));
 end;
 
-{ Every load and every mode switch runs the probe (every catalog typeKey x variants x six
-  state sets), so it sits on the typing path. Printed for the sign-off; red only when it
-  would be felt (> 200 ms), at which point the plan falls back to fewer states. }
+{ Every load and every mode switch runs the probe (TbProbeDocument), so it sits on the
+  typing path. Timed COLD: the model memoises ResolveStyle until its version moves, and a
+  load always moves it -- an earlier version of this test probed five times after one load
+  and timed the memo (15 ms) instead of the probe (0.6 to 1.1 s then). RefreshSystemTokens
+  moves the version without changing the theme. Every built-in theme and the minimal
+  template, median of five; the table is printed for the sign-off, and a median over
+  100 ms is red. }
 procedure TTbPreviewTests.TestTheProbeIsQuick;
 
-  function MedianMs(const AText: string): Double;
+  function MedianMs(const AText: string): QWord;
   var
     t: array[0..4] of QWord;
     i, j: Integer;
-    start: QWord;
+    start, x: QWord;
     err: string;
-    x: QWord;
   begin
+    err := '';
     AssertTrue('loads', Load(AText));
     for i := 0 to 4 do
     begin
+      FFrame.Controller.Model.RefreshSystemTokens;   { cold: the memo is dropped }
       start := GetTickCount64;
-      AssertTrue('resolves: ' + err, TbProbeResolve(FFrame.Controller.Model, err));
+      AssertTrue('resolves: ' + err, TbProbeDocument(FFrame.Controller.Model, AText, False, err));
       t[i] := GetTickCount64 - start;
     end;
     for i := 0 to 3 do
@@ -400,13 +407,121 @@ procedure TTbPreviewTests.TestTheProbeIsQuick;
   end;
 
 var
-  a, b: Double;
+  names: TStringArray;
+  i: Integer;
+  ms, worst: QWord;
+  line, worstName: string;
 begin
-  a := MedianMs(TyBuiltinThemeCss('default'));
-  b := MedianMs(TbMinimalTemplate);
-  WriteLn(Format('TTbPreviewTests.TestTheProbeIsQuick: default theme %.0f ms, minimal template %.0f ms (median of 5)',
-    [a, b]));
-  AssertTrue('the probe is not felt while typing', (a <= 200) and (b <= 200));
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  worst := 0;
+  worstName := '';
+  line := '';
+  for i := 0 to High(names) do
+  begin
+    ms := MedianMs(TyBuiltinThemeCss(names[i]));
+    line := line + Format(' %s=%d', [names[i], ms]);
+    if ms > worst then
+    begin
+      worst := ms;
+      worstName := names[i];
+    end;
+  end;
+  ms := MedianMs(TbMinimalTemplate);
+  line := line + Format(' minimal=%d', [ms]);
+  if ms > worst then
+  begin
+    worst := ms;
+    worstName := 'minimal';
+  end;
+  WriteLn('TTbPreviewTests.TestTheProbeIsQuick (cold, ms, median of 5):' + line);
+  AssertTrue(Format('the probe is not felt while typing: %s takes %d ms', [worstName, worst]),
+    worst <= 100);
+end;
+
+{ The fast probe stands in for resolving every typeKey only if it reaches the same verdict:
+  every built-in theme in each of its modes, the minimal template and a set of documents
+  that do not resolve (a variable of the other mode, in a rule, a variant's state, a seed
+  the base rules cannot take, a cycle through a seed; one that raises only for a type no
+  control has, which both must let through; a plain rule that takes the base layer off
+  one type while the bad seed still breaks the others), in both densities. Clean from the
+  fast probe is trusted as it stands, so a disagreement there would let a paint raise. }
+procedure TTbPreviewTests.TestTheFastProbeAgreesWithTheResolveWalk;
+const
+  cBad: array[0..6] of string = (
+    '@mode light { :root { --z: #ffffff; } } @mode dark { :root { --x: #000000; } } ' +
+      'TyButton { background: var(--x); }',
+    '@mode light { :root { --z: #ffffff; } } @mode dark { :root { --y: #000000; } } ' +
+      'TyButton.primary:hover { background: var(--y); }',
+    '@mode light { :root { --y: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+      'TyEdit.embedded:disabled { color: var(--y); }',
+    ':root { --radius: 1px 2px 3px; }',
+    '@mode light { :root { --surface: darken(var(--surface), 5%); } } ' +
+      '@mode dark { :root { --surface: #202020; } }',
+    '@mode light { :root { --q: #ffffff; } } @mode dark { :root { --w: #000000; } } ' +
+      'TyNotAControl { color: var(--w); }',
+    'TyButton { background: #ffffff; } :root { --radius: 1px 2px 3px; }');
+var
+  docs: TStringList;
+  names: TStringArray;
+  i, m, d, raised, compared: Integer;
+  model: TTyStyleModel;
+  modes: TStringArray;
+  fast: TTbFastProbe;
+  full: Boolean;
+  err, lbl: string;
+begin
+  TyRegisterBuiltinThemes;
+  docs := TStringList.Create;
+  try
+    names := TyBuiltinThemeNames;
+    for i := 0 to High(names) do
+      docs.AddObject(TyBuiltinThemeCss(names[i]), TObject(PtrInt(1)));   { 1 = classic only }
+    docs.AddObject(TbMinimalTemplate, TObject(PtrInt(2)));
+    for i := 0 to High(cBad) do
+      docs.AddObject(cBad[i], TObject(PtrInt(2)));
+    raised := 0;
+    compared := 0;
+    for i := 0 to docs.Count - 1 do
+      for d := 0 to PtrInt(docs.Objects[i]) - 1 do
+      begin
+        model := TTyStyleModel.Create;
+        try
+          try
+            model.LoadFromCss(docs[i]);
+          except
+            Continue;   { refused at load already: nothing to probe }
+          end;
+          if d = 1 then
+            model.LoadFromCssAdditive(TyDensityModernCss);
+          modes := model.ModeNames;
+          if Length(modes) = 0 then
+          begin
+            SetLength(modes, 1);
+            modes[0] := '';
+          end;
+          for m := 0 to High(modes) do
+          begin
+            model.SetMode(modes[m]);
+            fast := TbFastProbe(model, docs[i], d = 1);
+            full := TbProbeResolve(model, err);
+            lbl := Format('document %d, mode "%s", density %d: %s', [i, modes[m], d,
+              Copy(docs[i], 1, 80)]);
+            AssertTrue('V18: the fast probe could tell: ' + lbl, fast <> tfpUnknown);
+            AssertEquals('V18: the same verdict: ' + lbl + ' / ' + err, full, fast = tfpClean);
+            Inc(compared);
+            if not full then
+              Inc(raised);
+          end;
+        finally
+          model.Free;
+        end;
+      end;
+    AssertTrue('V18: enough comparisons: ' + IntToStr(compared), compared >= 40);
+    AssertTrue('V18: and some of them refused: ' + IntToStr(raised), raised >= 8);
+  finally
+    docs.Free;
+  end;
 end;
 
 { A variable that leads back to itself used to recurse until the stack ran out -- in the
@@ -454,6 +569,30 @@ begin
   end;
   { nothing evaluates it: the engine has nothing to refuse (the lint reports it) }
   AssertTrue('an unused cycle loads', FFrame.LoadDocument(cDocs[0], '', err));
+end;
+
+{ The probe resolves each typeKey once with all its variants and states together; it must
+  still refuse every theme that one variant / state combination would raise on in a paint.
+  A variable only light defines, used by a variant's disabled state in dark; a seed with a
+  value the base theme's own rules cannot take (the load validates only the document's
+  rules); and the failure is still pinned to the variant. Red if the combined resolve
+  missed a variant or a state (say, cEveryState without tysDisabled). }
+procedure TTbPreviewTests.TestTheProbeStillCatchesWhatAPaintWouldRaise;
+var
+  err: string;
+begin
+  AssertTrue(Load(TbMinimalTemplate));
+  AssertTrue(Load(
+    '@mode light { :root { --y: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyEdit.embedded:disabled { color: var(--y); }'));
+  AssertFalse('V17: dark is refused', FFrame.SetDark(True, err));
+  AssertTrue('V17: pinned to the variant: ' + err, Pos('TyEdit.embedded: ', err) > 0);
+  AssertFalse('V17: still light', FFrame.IsDark);
+  AssertTrue(Load(cMarkerDoc));
+  AssertFalse('V17: a seed the base rules cannot take',
+    FFrame.LoadDocument(':root { --radius: 1px 2px 3px; }', '', err));
+  AssertTrue('V17: says why: ' + err, err <> '');
+  AssertEquals('V17: the last good version is back', $123456, ButtonBg(FFrame.Controller));
 end;
 
 initialization
