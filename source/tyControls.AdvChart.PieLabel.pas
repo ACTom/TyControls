@@ -616,7 +616,8 @@ begin
       AN EMPTY TEXT KEEPS ITS LINE: a formatter of '' is an empty label, and
       upstream still draws the line that points at it. }
     words := TyLabelText(ASpec.Formatter, ASpec.HasFormatter, tldName, AStore,
-      ALayout.Sectors[i].Index, ASeriesName, AValueDim, percents[i], True);
+      ALayout.Sectors[i].Index, ASeriesName, AValueDim, percents[i], True,
+      ABinding.SeriesIndex, ABinding.SeriesType);
 
     if Length(AFills) > 0 then fill := AFills[i mod Length(AFills)]
     else fill := AInk.OutsideColour;

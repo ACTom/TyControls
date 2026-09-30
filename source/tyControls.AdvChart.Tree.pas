@@ -1406,7 +1406,8 @@ begin
     if (AStore <> nil) and spec.Show then
     begin
       el.Caption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
-        AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False);
+        AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False,
+        ASeriesIndex, 'tree');
       el.Caption.ItemSpec := row + 1;
       { the running maximum over the walk plus two: every symbol is at the
         node order, so every label two above it [Batch 83] }

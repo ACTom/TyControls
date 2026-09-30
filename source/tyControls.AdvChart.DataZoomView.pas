@@ -242,7 +242,8 @@ implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Data, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Symbol, tyControls.AdvChart.DataZoom;
+     tyControls.AdvChart.Symbol, tyControls.AdvChart.DataZoom,
+     tyControls.AdvChart.Handlers;
 
 { ==================== small things ==================== }
 
@@ -713,6 +714,7 @@ end;
 function LabelText(const ASpec: TTyDzSliderSpec; const AIn: TTyDzSliderInput;
   AEnd: Integer): string;
 var
+  prm: TTyChartCallbackParams;
   p, v: Double;
   s: string;
   k: Integer;
@@ -729,6 +731,17 @@ begin
   else
     s := TyJsNumberToString(v);
   if not ASpec.HasFormatter then Exit(s);
+  { a named handler: upstream's labelFormatter(value, valueStr) }
+  if TyChartIsHandlerRef(ASpec.Formatter) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'dataZoom';
+    SetLength(prm.Values, 1);
+    prm.Values[0] := v;
+    prm.ValueText := TyChartValueText(v);
+    prm.DefaultText := s;
+    Exit(TyChartRunHandler(ASpec.Formatter, TyChartOneParams(prm)));
+  end;
   { String.replace with a string: the first occurrence only }
   Result := ASpec.Formatter;
   k := Pos('{value}', Result);

@@ -296,7 +296,7 @@ function TyVisualLineGradient(const AFill: TTyVisualLineFill): TTyChartGradient;
 implementation
 
 uses tyControls.AdvChart.Color, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Complete;
+     tyControls.AdvChart.Complete, tyControls.AdvChart.Handlers;
 
 { JAVASCRIPT'S ORDERED COMPARISONS: false whenever either side is NaN. FPC's
   raise on a NaN instead, masked or not, so every comparison a NaN can reach
@@ -921,8 +921,32 @@ function FormatPieceText(AIsInterval: Boolean; A0, A1: Double;
     Result := TyJsToFixedStr(V, Min(APrecision, 20));
   end;
 
-var t0, t1: string; p: Integer;
+var
+  t0, t1: string;
+  p: Integer;
+  prm: TTyChartCallbackParams;
 begin
+  { A NAMED HANDLER is given the numbers, not their text: (lo, hi) for an
+    interval -- an open end is an infinity -- (value) for a value, and the
+    category for a category. }
+  if TyChartIsHandlerRef(AFormatter) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'visualMap';
+    if AIsCategory then
+    begin
+      prm.Name := ACategory;
+      prm.ValueText := ACategory;
+    end
+    else
+    begin
+      if AIsInterval then SetLength(prm.Values, 2) else SetLength(prm.Values, 1);
+      prm.Values[0] := A0;
+      if AIsInterval then prm.Values[1] := A1;
+      prm.ValueText := TyChartValueText(A0);
+    end;
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(prm)));
+  end;
   if AIsCategory then
   begin
     t0 := ACategory;

@@ -193,7 +193,8 @@ implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Data, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Complete, tyControls.AdvChart.Symbol;
+     tyControls.AdvChart.Complete, tyControls.AdvChart.Symbol,
+     tyControls.AdvChart.Handlers;
 
 { ==================== small things ==================== }
 
@@ -1118,8 +1119,21 @@ end;
 
 function TyVmFormatValue(AValue: Double; APrecision: Integer;
   const AFormatter: string): string;
-var s: string; p: Integer;
+var
+  s: string;
+  p: Integer;
+  prm: TTyChartCallbackParams;
 begin
+  { a named handler is given the handle's value, upstream's formatter(value) }
+  if TyChartIsHandlerRef(AFormatter) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'visualMap';
+    SetLength(prm.Values, 1);
+    prm.Values[0] := AValue;
+    prm.ValueText := TyChartValueText(AValue);
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(prm)));
+  end;
   if IsInfinite(AValue) and (AValue < 0) then s := 'min'
   else if IsInfinite(AValue) then s := 'max'
   else s := TyJsToFixedStr(AValue, Min(APrecision, 20));

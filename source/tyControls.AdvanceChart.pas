@@ -828,6 +828,12 @@ type
       as IntervalScale.getLabel prints it to the label's precision ('auto'
       unless written: the step's decimals plus two, padded, so 3.00), with
       the label's string formatter over it. }
+    function PointerLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    function TipValueFormatted(const AHandler: string;
+      const AParams: TTyChartCallbackParams): string; overload;
+    function TipValueFormatted(const AHandler: string;
+      const AParams: TTyChartCallbackParams; const AValueText: string;
+      AWithIndex: Boolean): string; overload;
     function AxisValueText(AAxis: TTyAxis; AValue: Double;
       const ALabel: TTyAxisPointerLabelSpec): string;
     { Where a pointer stands for AValue: inside the scale's extent, which
@@ -4322,6 +4328,9 @@ begin
       or FMarkers[i].Blocks[mkArea].Present then
     begin
       pin := Default(TTyMkPicInput);
+      pin.SeriesIndex := FMarkers[i].SeriesIndex;
+      if SlotOfSeries(FMarkers[i].SeriesIndex) >= 0 then
+        pin.SeriesType := FBindings[SlotOfSeries(FMarkers[i].SeriesIndex)].SeriesType;
       pin.SeriesColor := MarkerSeriesColorCss(i);
       pin.SeriesColorData := MarkerSeriesColorData(i);
       nd := TJSONObject(node).Find('name');
@@ -7830,9 +7839,12 @@ begin
         itemSpecs[FBindings[i].SeriesIndex] := v.ItemLabels;
       end
       else if (FBindings[i].SeriesType = 'scatter')
-        or (FBindings[i].SeriesType = 'effectScatter') then
+        or (FBindings[i].SeriesType = 'effectScatter')
+        or (FBindings[i].SeriesType = 'bar') or (FBindings[i].SeriesType = 'line')
+        or (FBindings[i].SeriesType = 'pictorialBar') then
       begin
-        { a symbol's own label over its series' [Batch 71] }
+        { a symbol's own label over its series' [Batch 71]; a bar's, a
+          line point's and a pictorial bar's too [Batch 82] }
         ItemLabelSpecs(FBindings[i].SeriesIndex, v.Label_, v.ItemLabels, v.HasItemLabel);
         if Length(itemSpecs) <= FBindings[i].SeriesIndex then
           SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
@@ -7845,6 +7857,8 @@ begin
       if (FBindings[i].ValueAxis <> nil) and (FStores[i] <> nil) then
         v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim);
       v.SeriesName := SeriesModelName(FBindings[i].SeriesIndex);
+      v.SeriesIndex := FBindings[i].SeriesIndex;
+      v.SeriesType := FBindings[i].SeriesType;
       if Length(specs) <= FBindings[i].SeriesIndex then
         SetLength(specs, FBindings[i].SeriesIndex + 1);
       specs[FBindings[i].SeriesIndex] := v.Label_;
@@ -8285,6 +8299,8 @@ type
   TTyTipCells = record
     Valid, MultiLine: Boolean;
     Texts, Names: TTyStringArray;
+    { each cell as String() prints it, for a valueFormatter handler }
+    Raws: TTyStringArray;
     Sort: TTyDataValue;
   end;
 
@@ -8334,6 +8350,8 @@ var
     k := Length(Result.Texts);
     SetLength(Result.Texts, k + 1);
     SetLength(Result.Names, k + 1);
+    SetLength(Result.Raws, k + 1);
+    Result.Raws[k] := TyJsValueText(ACell, '');
     Result.Texts[k] := TipReadable(ACell, AStore.RawPosType(APos), AUTC);
     Result.Names[k] := '';
     if info.HasDisplay then Result.Names[k] := info.Display;
@@ -8559,6 +8577,23 @@ begin
     whether one was written, and the header then goes through
     makeValueReadable, which never shows nothing -- so it reads '-'. }
   if (seriesName <> '') and (Trim(seriesName) = '') then seriesName := '-';
+  { valueFormatter REPLACES THE VALUE CELL: upstream calls it in place of
+    makeValueReadable, with the value and the raw index. [Batch 82] }
+  if (ASpec.ValueFormatter <> '') and haveValue then
+  begin
+    { SUB-ROWS ARE FORMATTED ONE BY ONE, each with its own value and NO
+      index -- upstream's sub-row fragments carry none -- and the item's own
+      row gets the empty list. }
+    if cells.MultiLine then
+    begin
+      valueText := TipValueFormatted(ASpec.ValueFormatter, p, '', True);
+      for i := 0 to High(cells.Texts) do
+        cells.Texts[i] := TipValueFormatted(ASpec.ValueFormatter, p,
+          cells.Raws[i], False);
+    end
+    else
+      valueText := TipValueFormatted(ASpec.ValueFormatter, p);
+  end;
   Result := TTyTooltipBlock.CreateSection(seriesName, False);
   Result.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
     inlineName, False, valueText, not haveValue));
@@ -8568,6 +8603,50 @@ begin
     for i := 0 to High(cells.Texts) do
       Result.Add(TTyTooltipBlock.CreateNameValue(ttmSubItem, p.Color,
         TipRowName(cells.Names[i]), False, cells.Texts[i], False));
+end;
+
+{ valueFormatter's (value, dataIndex): the value as String() prints the
+  row's tooltip dimensions -- one scalar, or several joined -- and the RAW
+  index, which is what 6.1 passes. }
+function TTyAdvanceChart.TipValueFormatted(const AHandler: string;
+  const AParams: TTyChartCallbackParams): string;
+var
+  prm: TTyChartCallbackParams;
+  i: Integer;
+begin
+  prm := AParams;
+  prm.ValueText := '';
+  if Length(prm.RawCells) > 0 then
+    for i := 0 to High(prm.RawCells) do
+    begin
+      if i > 0 then prm.ValueText := prm.ValueText + ',';
+      prm.ValueText := prm.ValueText + TyJsValueText(prm.RawCells[i], '');
+    end
+  else
+    for i := 0 to High(prm.Values) do
+    begin
+      if i > 0 then prm.ValueText := prm.ValueText + ',';
+      prm.ValueText := prm.ValueText + TyChartValueText(prm.Values[i]);
+    end;
+  Result := TyChartRunHandler(AHandler, TyChartOneParams(prm));
+end;
+
+{ the same with the value text given -- a sub-row's own cell, or the empty
+  list an item row with sub-rows gets -- and the index only where upstream
+  passes one }
+function TTyAdvanceChart.TipValueFormatted(const AHandler: string;
+  const AParams: TTyChartCallbackParams; const AValueText: string;
+  AWithIndex: Boolean): string;
+var prm: TTyChartCallbackParams;
+begin
+  prm := AParams;
+  prm.ValueText := AValueText;
+  if not AWithIndex then
+  begin
+    prm.DataIndex := -1;
+    prm.RawDataIndex := -1;
+  end;
+  Result := TyChartRunHandler(AHandler, TyChartOneParams(prm));
 end;
 
 function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
@@ -8585,6 +8664,50 @@ function TTyAdvanceChart.PointerValue(const AHit: TTyAxisHit): Double;
 begin
   if AHit.Spec.Snap then Result := AHit.SnapValue else Result := AHit.Value;
   Result := PointerAt(AHit.Axis, Result);
+end;
+
+{ THE POINTER'S LABEL, and the axis tooltip's header. A named handler is
+  given upstream's getValueLabel params: first the axis itself (its dimension,
+  index and the value), then one entry per series the pointer collected --
+  params.seriesData, in the order the hit holds them. }
+function TTyAdvanceChart.PointerLabelText(const AHit: TTyAxisHit;
+  AValue: Double): string;
+var
+  prm: TTyChartParams;
+  k, n, slot: Integer;
+begin
+  if (AHit.Axis = nil) or not AHit.Spec.LabelSpec.HasFormatter
+    or not TyChartIsHandlerRef(AHit.Spec.LabelSpec.Formatter) then
+    Exit(AxisValueText(AHit.Axis, AValue, AHit.Spec.LabelSpec));
+  prm := nil;
+  SetLength(prm, 1);
+  prm[0] := TyChartBlankParams;
+  prm[0].ComponentType := AHit.Axis.Dim + 'Axis';
+  prm[0].AxisDimension := AHit.Axis.Dim;
+  prm[0].AxisIndex := AHit.Axis.ComponentIndex;
+  SetLength(prm[0].Values, 1);
+  prm[0].Values[0] := AValue;
+  prm[0].ValueText := TyChartValueText(AValue);
+  { a category axis hands over the category, not its ordinal }
+  if AHit.Axis.Scale is TTyOrdinalScale then
+  begin
+    prm[0].Name := TTyOrdinalScale(AHit.Axis.Scale).GetLabel(AValue);
+    prm[0].ValueText := prm[0].Name;
+  end;
+  prm[0].DefaultText := AxisValueText(AHit.Axis, AValue,
+    Default(TTyAxisPointerLabelSpec));
+  n := 1;
+  for k := 0 to High(AHit.Slots) do
+  begin
+    slot := AHit.Slots[k];
+    if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
+      or (FStores[slot] = nil) then Continue;
+    SetLength(prm, n + 1);
+    prm[n] := TooltipParams(TyChartDatum(FBindings[slot].SeriesIndex,
+      AHit.Rows[k], FStores[slot].GetRawIndex(AHit.Rows[k])));
+    Inc(n);
+  end;
+  Result := TyChartRunHandler(AHit.Spec.LabelSpec.Formatter, prm);
 end;
 
 function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
@@ -9556,7 +9679,7 @@ begin
     if not (tpBackground in labelS.Present) then Continue;
     { The value the line is at -- the cursor's with snap off, where it used to
       be the nearest row's while the line stood under the cursor. }
-    txt := AxisValueText(hit.Axis, pv, hit.Spec.LabelSpec);
+    txt := PointerLabelText(hit, pv);
     if txt = '' then Continue;
     AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
       labelS.FontWeight, tw, th);
@@ -9685,7 +9808,7 @@ function TTyAdvanceChart.AxisTooltipContent(const AHits: TTyAxisHitArray;
 var
   i, k, slot, row: Integer;
   section: TTyTooltipBlock;
-  header, valueText: string;
+  header, valueText, vf: string;
   d: TTyChartDatumRef;
   p: TTyChartCallbackParams;
   rows, j: Integer;
@@ -9708,8 +9831,7 @@ begin
       all -- upstream's header is getValueLabel with the pointer's label
       options -- at the snapped row, which the tooltip always describes. A
       header left blank by the formatter is no header. }
-    header := AxisValueText(AHits[i].Axis, AHits[i].SnapValue,
-      AHits[i].Spec.LabelSpec);
+    header := PointerLabelText(AHits[i], AHits[i].SnapValue);
     section := TTyTooltipBlock.CreateSection(header, False);
     for k := 0 to High(AHits[i].Slots) do
     begin
@@ -9725,6 +9847,19 @@ begin
       if not cells.Valid then valueText := ValuesText(p)
       else if cells.MultiLine then valueText := ''
       else valueText := TipInline(cells);
+      { THE SERIES' OWN valueFormatter, else the global one: upstream builds
+        each row's from the series and the component, never the item. }
+      vf := TyTooltipSpecOf(FOption, FBindings[slot].SeriesIndex, -1).ValueFormatter;
+      if (vf <> '') and cells.MultiLine then
+      begin
+        { as in an item tooltip: each sub-row by itself and without an
+          index, the row itself with the empty list }
+        valueText := TipValueFormatted(vf, p, '', True);
+        for j := 0 to High(cells.Texts) do
+          cells.Texts[j] := TipValueFormatted(vf, p, cells.Raws[j], False);
+      end
+      else if vf <> '' then
+        valueText := TipValueFormatted(vf, p);
       { EACH SERIES IS ITS OWN HEADERLESS SECTION -- its row and its sub-rows
         together, so `order` and `seriesDesc` move them as one. It is what
         `order` sorts, keyed on the series' first inline RAW value. }

@@ -8282,3 +8282,45 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 - 端口节点的命中半径 7.5(与关系图一致),上游 4.5;依赖精确命中几何的两个点击步骤按名跳过。
 - `roamTrigger: 'selfRect'` 用节点中心的包围盒近似上游的元素包围盒。
 - 其他系列被 `blurScope` 波及的模糊没有做(基准只有单棵树)。
+
+## 117. Tier 1 第八十二批:具名句柄接到每一个 formatter(A1,2026-10-01)
+
+剩余路线图的审计见 `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`(Tier 1 28 行完成 10、Tier 2 37 行完成 8、Tier 3 23 行完成 0,约 70 批)。这一批是阶段 A 的第一批:`'@Name'` 以前只接到 `tooltip.formatter` 一处。
+
+### 上游的做法(基准逐项核对过)
+
+- **系列标签** `formatter(params)`:`getDataParams` 的 `dataIndex` 是**原始**下标(dataZoom、图例过滤后都不变);`percent` 只有饼(最大余数的席位)和漏斗(`toFixed(2)`);`dataType` 只在关系图的边、桑基图的节点和边上有,关系图节点没有;树、矩形树图、旭日图的下标从 1 数(0 是虚根);函数的返回值原样作标签,不再过模板。
+- **标注**:`componentType` 是 markPoint/markLine/markArea,系列类型、名字、下标是宿主系列的;没有 percent/dataType;markArea 的 value 是 undefined。
+- **坐标轴标签**:类目轴 `(类目名, tick - extent[0], null)`——下标从窗口第一个类目数起,interval 的空档看得见;数值/对数轴 `(值, 在 getTicks 里的位置, null)`;时间轴 `(值, i, {level})`,**返回值再过一遍时间模板**。
+- **图例** `formatter(name)`;**valueFormatter** `(value, rawDataIndex)`——子行各自格式化、下标 undefined,有子行的那一行拿到空数组;**axisPointer 标签** `params` 带轴维、轴下标、值(类目轴是类目名)和 `seriesData`;**visualMap** 区间 `(lo, hi)`(开口端是 ±Infinity)、单值 `(value)`、类目 `(category)`,连续型只有 calculable 的手柄标签调用;**dataZoom** `(value, valueStr)`;**仪表盘** detail/axisLabel `(value)`;**雷达** `(name, indicator)`——负的 min 且没写 max 时 RadarModel 把 max 写成 0;**日历** 月 `{yyyy, yy, MM, M, nameMap}`、年 `{start, end, nameMap}`。
+
+### 做法
+
+- Handlers:参数记录新增 `Status`、`AxisDimension`/`AxisIndex`、`Level`/`HasLevel`、`ValueText`(值按 JS `String()` 印的样子)、`DefaultText`(没有 formatter 时本来会印的字);`TyChartRunHandler`、`TyChartOneParams`、`TyChartBlankParams`。
+- 标签:`TyLabelText` 多三个默认参数(系列下标、类型、颜色、dataType),遇到 `@` 走新的 `TyLabelParams`;漏斗、饼、关系图、树、旭日图、矩形树图、桑基图、标注各自传入。
+- 轴:`TyAxisTickLabelAt` 带下标;时间轴的字符串 formatter 也顺带接上(`TyFormatTime`,以前完全不读)。
+- 控件:`PointerLabelText`(指针标签和轴 tooltip 的表头走同一个)、`TipValueFormatted`、tooltip 规格读 `valueFormatter`(级联同 formatter;轴触发时按系列+全局)。
+- 其余:图例、visualMap 两处、dataZoom、仪表盘、雷达、日历。
+- **顺带修的真缺陷**:
+  - 柱、折线点、象形柱**不读条目自己的 `label`**(只有热力图和散点读),条目级 formatter/show 被忽略;
+  - 仪表盘条目写了 `detail`(哪怕只写 offsetCenter)就把系列的 formatter 清空;
+  - 死代码 `CaptionFor` 删掉。
+
+### 基准
+
+- `tools/advchart-oracle/handlers.js`(代理写):64 个用例,每个 `'@Name'` 在上游换成一个把实参编码进返回值的 JS 函数;21 条守卫;两次运行逐字节一致。轴触发的指针位置取整数像素(端口的指针按鼠标坐标)。
+- `test.advchart.handlerwiring`:注册同名 Pascal 句柄、按同样编码印参数,比较画面(显示列表的标题 + 坐标轴显示的标签)、tooltip 各行、指针标签三组文字的多重集合;另有一条未注册名字要说出来的测试。fpjson 会吞掉 `\u0000`(自动系列名 `series\0 1`),比较前两边都去掉。
+
+### 变异测试
+
+`m85`:23 个变异(标签的过滤下标、句柄当模板、值当数字、柱不读条目标签、关系图节点的 dataType、桑基图节点用布局值、标注系列类型、markPoint 当 markLine;类目下标、时间模板不格式化、时间没有 level;图例;valueFormatter 不读、子行带下标、轴触发不看系列;指针类目当数、没有 seriesData;visualMap 区间只给一个值、手柄;dataZoom valueStr;仪表盘条目 detail 清掉 formatter;雷达负 min 规则;日历月的两个值对调)。首轮存活 2 个:
+- 「桑基图节点用布局值」:基准唯一写了值的节点,写的值恰好不小于流量,布局值等于写的值——补了一个「节点自己的值小于流量」的用例后杀死;
+- 「类目下标取刻度位置」:等价——端口的类目刻度列表从窗口第一个类目起逐个列出,位置恒等于序号减去范围起点;公式照上游写法保留。
+
+### 已知偏差
+
+- 关系图、桑基图的**边标签**本来就没画(第 46、79 批),对应的上游文字不比。
+- 雷达系列标签没移植(第 35 批),该用例跳过。
+- 矩形树图用例:作者字号按磅读导致文字更宽被截断,等 A2 修字号后放开。
+- `axisPointer.status: 'show'` 与 `value` 写在选项里时的初始指针没移植,归 B5。
+- `tooltip.position` 的函数形式要另一种返回类型,归 B5。

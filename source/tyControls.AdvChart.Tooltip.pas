@@ -68,6 +68,9 @@ type
       does NOT override the default content. }
     Formatter: string;
     HasFormatter: Boolean;
+    { valueFormatter: a function upstream, so only '@Name' means anything --
+      '' is none. It formats each row's value cell, (value, rawDataIndex). }
+    ValueFormatter: string;
     { `order` has NO default upstream -- it resolves to undefined, which
       short-circuits the sort entirely. So absence is a third thing, not
       `seriesAsc`. }
@@ -689,6 +692,12 @@ begin
       else if d.AsString = 'seriesDesc' then ASpec.Order := ttoSeriesDesc
       else ASpec.Order := ttoSeriesAsc;
     end;
+  end;
+  if Fresh('valueFormatter') then
+  begin
+    d := ANode.Find('valueFormatter');
+    if (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+      ASpec.ValueFormatter := d.AsString;
   end;
   if Fresh('formatter') then
   begin

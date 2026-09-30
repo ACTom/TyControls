@@ -433,7 +433,7 @@ uses
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
   tyControls.StrConsts, tyControls.AdvChart.AxisName,
-  tyControls.AdvChart.AxisLabels;
+  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -1238,6 +1238,41 @@ begin
   if (sub = nil) or (sub.JSONType <> jtString) then Exit;
   AFormatter := sub.AsString;
   Result := True;
+end;
+
+{ what a named axis label handler is given: upstream's (value, index, extra)
+  -- a category's raw text and its ordinal less the extent's start, or a
+  number and its tick's index; the level where the axis is a time axis. }
+function AxisLabelParams(AAxis: TTyAxis; AValue: Double; AIndex: Integer;
+  const ADefault: string; AHasLevel: Boolean; ALevel: Integer): TTyChartCallbackParams;
+begin
+  Result := TyChartBlankParams;
+  Result.ComponentType := AAxis.Dim + 'Axis';
+  Result.DefaultText := ADefault;
+  Result.HasLevel := AHasLevel;
+  if AHasLevel then Result.Level := ALevel;
+  if AAxis.Scale is TTyOrdinalScale then
+  begin
+    Result.Name := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue);
+    Result.ValueText := Result.Name;
+    Result.DataIndex := Round(AValue - AAxis.Scale.GetExtent.Start);
+  end
+  else
+  begin
+    SetLength(Result.Values, 1);
+    Result.Values[0] := AValue;
+    Result.ValueText := TyChartValueText(AValue);
+    Result.DataIndex := AIndex;
+  end;
+end;
+
+function TyAxisTickLabelAt(AAxis: TTyAxis; AValue: Double; AIndex: Integer;
+  AHasFormatter: Boolean; const AFormatter: string): string;
+begin
+  if AHasFormatter and TyChartIsHandlerRef(AFormatter) then
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(AxisLabelParams(AAxis,
+      AValue, AIndex, TyAxisTickLabel(AAxis, AValue, False, ''), False, 0))));
+  Result := TyAxisTickLabel(AAxis, AValue, AHasFormatter, AFormatter);
 end;
 
 function TyAxisTickLabel(AAxis: TTyAxis; AValue: Double;
@@ -2629,7 +2664,20 @@ var
         tt.Unit_ := ticks[q].TimeUnit;
         tt.Level := ticks[q].TimeLevel;
         tt.NotNice := ticks[q].NotNice;
-        ASpec.Labels[kept] := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
+        { A NAMED HANDLER ANSWERS A TEMPLATE, not the text: upstream's
+          leveledFormat runs whatever the function returns through the same
+          time format a string formatter goes through. A string formatter is
+          that template for every level. }
+        if AFurn.HasLabelFormatter and TyChartIsHandlerRef(AFurn.LabelFormatter) then
+          ASpec.Labels[kept] := TyFormatTime(ticks[q].Value,
+            TyChartRunHandler(AFurn.LabelFormatter, TyChartOneParams(
+              AxisLabelParams(AAxis, ticks[q].Value, q, '', True,
+              ticks[q].TimeLevel))), TTyTimeScale(AAxis.Scale).UTC)
+        else if AFurn.HasLabelFormatter then
+          ASpec.Labels[kept] := TyFormatTime(ticks[q].Value, AFurn.LabelFormatter,
+            TTyTimeScale(AAxis.Scale).UTC)
+        else
+          ASpec.Labels[kept] := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
         { THE TWO RAGGED ENDS. The extent of a time axis is the data's own,
           never rounded outwards, so its first and last ticks are wherever
           the data happens to start and stop; labelling those puts a `07:13`
@@ -2645,7 +2693,7 @@ var
           '1,400,000', '0.0000001', '1e+21' -- and the one routine the paint
           pass calls too, so the width measured here is the width of the string
           drawn. Locale-free: no FormatFloat anywhere on the way. }
-        ASpec.Labels[kept] := TyAxisTickLabel(AAxis, ticks[q].Value,
+        ASpec.Labels[kept] := TyAxisTickLabelAt(AAxis, ticks[q].Value, q,
           AFurn.HasLabelFormatter, AFurn.LabelFormatter);
       { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
         renderer cannot disagree about where a label goes. }

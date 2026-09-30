@@ -99,6 +99,9 @@ type
     SeriesColorData: TJSONData;
     { {a}; undefined when the series has no name }
     SeriesName: TTyMkVal;
+    { the host series, for what a named label handler is given }
+    SeriesIndex: Integer;
+    SeriesType: string;
     { ecModel.option.textStyle: the option's own, nil for none }
     TextStyle: TJSONObject;
     { the chart's ground: a css string, and whether it counts as dark }
@@ -255,7 +258,8 @@ function TyMkZrShape(const APath: TTyZrPath; const M: TTyMat2D;
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Color, tyControls.AdvChart.Labels;
+     tyControls.AdvChart.Data, tyControls.AdvChart.Color, tyControls.AdvChart.Labels,
+     tyControls.AdvChart.Handlers;
 
 type
   TMkView = array of TJSONObject;
@@ -601,6 +605,24 @@ begin
 end;
 
 { formatTpl: {a} {b} {c}, each replaced at its FIRST occurrence only }
+{ what a named marker label handler is given: the marker's own params }
+function MkHandlerText(const AHandler: string; const AIn: TTyMkPicInput;
+  const AKind, AName, AValueText: string; ADataIndex: Integer): string;
+var p: TTyChartCallbackParams;
+begin
+  p := TyChartBlankParams;
+  p.ComponentType := AKind;
+  p.SeriesIndex := AIn.SeriesIndex;
+  p.SeriesType := AIn.SeriesType;
+  if AIn.SeriesName.Kind = mvkStr then p.SeriesName := AIn.SeriesName.Str;
+  p.Name := AName;
+  p.DataIndex := ADataIndex;
+  p.RawDataIndex := ADataIndex;
+  p.ValueText := AValueText;
+  p.Status := 'normal';
+  Result := TyChartRunHandler(AHandler, TyChartOneParams(p));
+end;
+
 function FormatTpl(const ATpl: string; const AValues: array of string): string;
 const cAlias: array[0..2] of Char = ('a', 'b', 'c');
 var
@@ -845,7 +867,10 @@ var
       name := '';
     end;
     d := Chain(LB, 'formatter');
-    if (d <> nil) and (d.JSONType = jtString) then
+    if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+      str := MkHandlerText(d.AsString, AIn, 'markLine', name, ValString(rawVal),
+        L.DataIndex)
+    else if (d <> nil) and (d.JSONType = jtString) then
     begin
       if AIn.SeriesName.Kind = mvkUndef then
         str := FormatTpl(d.AsString, ['undefined', name, ValString(rawVal)])
@@ -1990,7 +2015,10 @@ var
       else
         str := '';
       end;
-      if AIn.SeriesName.Kind = mvkUndef then
+      if TyChartIsHandlerRef(fmt.AsString) then
+        str := MkHandlerText(fmt.AsString, AIn, 'markPoint', str, sv,
+          ABlock.Points[P.Item].DataIndex)
+      else if AIn.SeriesName.Kind = mvkUndef then
         str := FormatTpl(fmt.AsString, ['undefined', str, sv])
       else
         str := FormatTpl(fmt.AsString, [ValString(AIn.SeriesName), str, sv]);
@@ -2332,7 +2360,11 @@ begin
           name := '';
         end;
         fmt := Chain(LB, 'formatter');
-        if (fmt <> nil) and (fmt.JSONType = jtString) then
+        if (fmt <> nil) and (fmt.JSONType = jtString)
+          and TyChartIsHandlerRef(fmt.AsString) then
+          str := MkHandlerText(fmt.AsString, AIn, 'markArea', name,
+            JsStringOf(VGet(lv[0], 'value')), A.DataIndex)
+        else if (fmt <> nil) and (fmt.JSONType = jtString) then
         begin
           v := VGet(lv[0], 'value');
           if AIn.SeriesName.Kind = mvkUndef then

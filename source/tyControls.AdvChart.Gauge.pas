@@ -546,7 +546,9 @@ begin
     AText.HasWeight := True;
     AText.FontWeight := TyRoundOpt(v, 400, 1, 1000);
   end;
-  if AWantFormatter then
+  { AN ITEM'S OWN detail MERGES OVER THE SERIES': a formatter it does not
+    write is the series' still -- it was read as '' and dropped it. }
+  if AWantFormatter and (n.Find('formatter') <> nil) then
   begin
     AText.Formatter := StrIn(n, 'formatter', '');
     AText.HasFormatter := AText.Formatter <> '';
@@ -1062,12 +1064,25 @@ end;
 
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
   AValue: Double): string;
+var prm: TTyChartCallbackParams;
 begin
   { formatLabel: `value + ''` -- JavaScript's own text, so a missing value
     reads NaN, as upstream's dial does, and 1e21 reads 1e+21. }
   Result := TyJsNumberToString(AValue);
   if not AHasFormatter then Exit;
-  Result := TyReplaceFirst(AFormatter, '{value}', Result);
+  { a named handler is given the value, upstream's formatter(value) }
+  if TyChartIsHandlerRef(AFormatter) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'series';
+    prm.SeriesType := 'gauge';
+    SetLength(prm.Values, 1);
+    prm.Values[0] := AValue;
+    prm.ValueText := Result;
+    Result := TyChartRunHandler(AFormatter, TyChartOneParams(prm));
+  end
+  else
+    Result := TyReplaceFirst(AFormatter, '{value}', Result);
   Result := StripRich(Result);
   { ONE LINE. A caption is drawn as a single run here, so a formatter with
     real line breaks in it would draw its first line and a row of boxes.

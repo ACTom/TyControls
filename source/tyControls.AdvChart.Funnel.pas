@@ -794,7 +794,8 @@ begin
     { THE NAME, or the template with a, b, c and d filled in -- it was drawn
       as written, braces and all. }
     words := TyLabelText(ASpec.Formatter, ASpec.HasFormatter, tldName, AStore,
-      ALayout.Items[i].Index, ASeriesName, AValueDim, percents[i], True);
+      ALayout.Items[i].Index, ASeriesName, AValueDim, percents[i], True,
+      ABinding.SeriesIndex, ABinding.SeriesType);
     if words = '' then Continue;
     p[0] := ALayout.Items[i].Points[0];
     p[1] := ALayout.Items[i].Points[1];

@@ -716,8 +716,34 @@ end;
 
 function TyRadarNameText(const AInd: TTyRadarIndicator;
   const ASpec: TTyRadarNameSpec): string;
+var prm: TTyChartCallbackParams;
 begin
   Result := AInd.Name;
+  { a named handler is given the name and the indicator's max, upstream's
+    formatter(name, indicator) }
+  if ASpec.HasFormatter and TyChartIsHandlerRef(ASpec.Formatter) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'radar';
+    prm.Name := AInd.Name;
+    { an unwritten max is undefined upstream, and says so -- unless a
+      negative min made RadarModel write it as 0 }
+    if not AInd.HasMax and AInd.HasMin and (AInd.Min_ < 0) then
+    begin
+      SetLength(prm.Values, 1);
+      prm.Values[0] := 0;
+      prm.ValueText := '0';
+    end
+    else if AInd.HasMax then
+    begin
+      SetLength(prm.Values, 1);
+      prm.Values[0] := AInd.Max_;
+      prm.ValueText := TyChartValueText(AInd.Max_);
+    end
+    else
+      prm.ValueText := 'undefined';
+    Exit(TyChartRunHandler(ASpec.Formatter, TyChartOneParams(prm)));
+  end;
   if ASpec.HasFormatter then
     Result := TyReplaceFirst(ASpec.Formatter, '{value}', Result);
 end;

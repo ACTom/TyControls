@@ -72,6 +72,7 @@ type
 
   TTySankeySolved = record
     Valid: Boolean;
+    SeriesIndex: Integer;
     Series: TJSONObject;               // borrowed
     Box: TTyXYWH;
     HasT: Boolean;
@@ -109,7 +110,7 @@ function TyBuildSankeyMarks(ASeriesIndex: Integer; const ASolved: TTySankeySolve
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.Handlers;
 
 const
   cEps = 5e-5;
@@ -445,6 +446,7 @@ var
 
 begin
   Result := Default(TTySankeySolved);
+  Result.SeriesIndex := ASeriesIndex;
   S := @Result;
   node := AOption.ComponentAt('series', ASeriesIndex);
   if (node = nil) or (node.JSONType <> jtObject) then Exit;
@@ -965,6 +967,7 @@ var
   x, y, w, h, hx, hy, hw, hh, sw, ax, ay, dist: Double;
   sc: TTyChartColor;
   mask: TFPUExceptionMask;
+  prm: TTyChartCallbackParams;
 begin
   if not ASolved.Valid then Exit;
   mask := GetExceptionMask;
@@ -977,7 +980,30 @@ begin
       if (d <> nil) and not Truthy(d) then Continue;
       // the formatter, the first of each placeholder replaced; else the node's id
       d := ChainFind(ASolved, ASolved.Nodes[i].Item, ASolved.Nodes[i].Depth, 'label', 'formatter');
-      if (d <> nil) and (d.JSONType = jtString) then
+      if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString) then
+      begin
+        { a named handler: the node's params, dataType 'node' }
+        prm := TyChartBlankParams;
+        prm.ComponentType := 'series';
+        prm.SeriesType := 'sankey';
+        prm.SeriesIndex := ASolved.SeriesIndex;
+        prm.SeriesName := ASeriesName;
+        prm.DataType := 'node';
+        prm.Status := 'normal';
+        prm.DataIndex := i;
+        prm.RawDataIndex := i;
+        it := nil;
+        if ASolved.Nodes[i].Item <> nil then it := ASolved.Nodes[i].Item.Find('name');
+        if Present(it) then prm.Name := JsStr(it) else prm.Name := ASolved.Nodes[i].Key;
+        it := nil;
+        if ASolved.Nodes[i].Item <> nil then it := ASolved.Nodes[i].Item.Find('value');
+        if Present(it) then prm.ValueText := JsStr(it)
+        else prm.ValueText := TyJsNumberToString(ASolved.Nodes[i].Value);
+        SetLength(prm.Values, 1);
+        prm.Values[0] := ASolved.Nodes[i].Value;
+        text := TyChartRunHandler(d.AsString, TyChartOneParams(prm));
+      end
+      else if (d <> nil) and (d.JSONType = jtString) then
       begin
         text := ReplaceFirst(d.AsString, '{a}', ASeriesName);
         it := nil;

@@ -209,7 +209,22 @@ function TyBuildCalendar(ACal: TTyCalendar; const AInk: TTyCalendarInk;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.StrConsts;
+uses tyControls.AdvChart.Scale, tyControls.StrConsts, tyControls.AdvChart.Handlers;
+
+{ what a named month or year label handler is given: nameMap as Name, the
+  kind in Extra, and (yyyy, M) for a month, (start, end) for a year }
+function CalHandler(const AHandler, AKind, ANameMap: string; A, B: Integer): string;
+var prm: TTyChartCallbackParams;
+begin
+  prm := TyChartBlankParams;
+  prm.ComponentType := 'calendar';
+  prm.Extra := AKind;
+  prm.Name := ANameMap;
+  SetLength(prm.Values, 2);
+  prm.Values[0] := A;
+  prm.Values[1] := B;
+  Result := TyChartRunHandler(AHandler, TyChartOneParams(prm));
+end;
 
 const
   cEnMonths: array[0..11] of string = ('Jan', 'Feb', 'Mar', 'Apr', 'May',
@@ -1518,7 +1533,10 @@ begin
     name := IntToStr(ACal.Range.Start.Y);
     if ACal.Range.Stop.Y > ACal.Range.Start.Y then
       name := name + '-' + IntToStr(ACal.Range.Stop.Y);
-    if spec.YearFormatter <> '' then
+    if TyChartIsHandlerRef(spec.YearFormatter) then
+      content := CalHandler(spec.YearFormatter, 'year', name,
+        ACal.Range.Start.Y, ACal.Range.Stop.Y)
+    else if spec.YearFormatter <> '' then
       content := TyCalFormatTpl(spec.YearFormatter, ['start', 'end', 'nameMap'],
         [IntToStr(ACal.Range.Start.Y), IntToStr(ACal.Range.Stop.Y), name])
     else
@@ -1553,7 +1571,9 @@ begin
         else tmpP.Y := (fdPts[i].Y + tl[i + 1].Y) / 2;
       end;
       name := MonthName(spec, info.M);
-      if spec.MonthFormatter <> '' then
+      if TyChartIsHandlerRef(spec.MonthFormatter) then
+        content := CalHandler(spec.MonthFormatter, 'month', name, info.Y, info.M)
+      else if spec.MonthFormatter <> '' then
         content := TyCalFormatTpl(spec.MonthFormatter,
           ['yyyy', 'yy', 'MM', 'M', 'nameMap'],
           [IntToStr(info.Y), Copy(IntToStr(info.Y), 3, MaxInt),

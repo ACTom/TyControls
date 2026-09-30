@@ -219,6 +219,10 @@ type
     LabelValueDim: Integer;
     { `{a}`. The option's own series name, resolved by the control. }
     SeriesName: string;
+    { Which series and what type, for what a named label handler is given;
+      -1 and '' when no control filled them. }
+    SeriesIndex: Integer;
+    SeriesType: string;
     { WHAT A visualMap WROTE ON EACH DATUM, by raw index; nil when none
       targets this series. Applied before the datum's own itemStyle.color,
       which still wins, and its opacity REPLACES the series' Alpha. }
@@ -472,6 +476,8 @@ end;
 
 function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
 begin
+  Result.SeriesIndex := -1;
+  Result.SeriesType := '';
   Result.Fill := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
@@ -629,26 +635,11 @@ end;
 
 { The element every mark starts from: this series' colours, and a datum
   reference so the hit test can answer with the row the pointer is over. }
-{ The words one mark says, or '' when its series draws no labels.
-
-  AStore is the series' own store, so `{c}` and `{@dim}` read the row that is
-  being drawn rather than a row somebody passed separately. }
-function CaptionFor(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
-  ARow: Integer): string;
-begin
-  Result := '';
-  if not AVisual.Label_.Show then Exit;
-  if AVisual.Label_.Position = tlpNone then Exit;
-  Result := TyLabelText(AVisual.Label_.Formatter, AVisual.Label_.HasFormatter,
-    AVisual.Label_.DefaultText, AStore, ARow, AVisual.SeriesName,
-    AVisual.LabelValueDim, 0, False);
-end;
-
 { THE ROW'S LABEL WITH ITS ITEM'S OWN OPTIONS over the series': the item
   may show a label the series hides (or hide one it shows), and write its
   own formatter, position and distance -- upstream's getItemModel('label').
-  [Batch 68: the heatmap reads it; the other builders still take the
-  series' alone.] }
+  [Batch 68: the heatmap reads it. Batch 82: bars, lines and pictorial bars
+  too.] }
 procedure ItemCaption(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer; var ACaption: TTyElementCaption);
 var
@@ -666,7 +657,8 @@ begin
   if not spec.Show then Exit;
   if spec.Position = tlpNone then Exit;
   ACaption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
-    AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False);
+    AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False,
+    AVisual.SeriesIndex, AVisual.SeriesType, AVisual.Fill);
 end;
 
 { THIS ROW'S OWN COLOUR AND OPACITY, when the author gave them.
@@ -1118,7 +1110,7 @@ begin
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
-    el.Caption.Text := CaptionFor(AVisual, AStore, i);
+    ItemCaption(AVisual, AStore, i, el.Caption);
     el.Caption.Outside := BarOutside(len, zero, baseHoriz, inverse);
     AList.Add(el);
     Inc(Result);
@@ -1179,7 +1171,7 @@ var
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
     el.Z2 := el.Z2 + Round(lift);
     el.HitSlopLogical := cHitSlopSymbolLogical;
-    el.Caption.Text := CaptionFor(AVisual, AStore, ARow);
+    ItemCaption(AVisual, AStore, ARow, el.Caption);
     AList.Add(el);
     Result := True;
   end;
@@ -2378,7 +2370,7 @@ begin
     el.Z2 := AVisual.Z2;
     el.Silent := False;
     el.Datum := TyChartDatum(ABinding.SeriesIndex, i);
-    el.Caption.Text := CaptionFor(AVisual, AStore, i);
+    ItemCaption(AVisual, AStore, i, el.Caption);
     { FILLED BUT TRANSPARENT, for its label: upstream's target rect has a
       `transparent` fill, which counts as a fill. }
     el.Caption.HostTransparent := True;

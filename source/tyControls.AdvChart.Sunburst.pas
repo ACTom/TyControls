@@ -715,7 +715,8 @@ begin
     if show and (AStore <> nil) then
     begin
       el.Caption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
-        AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False);
+        AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False,
+        ASeriesIndex, 'sunburst');
       if el.Caption.Text <> '' then
       begin
         el.Caption.ItemSpec := row + 1;

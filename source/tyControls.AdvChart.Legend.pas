@@ -379,6 +379,8 @@ function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
 
 implementation
 
+uses tyControls.AdvChart.Handlers;
+
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
     tokens.size.m. `itemGap` is 8 and the JSDoc two lines above it says 10 --
@@ -865,10 +867,21 @@ begin
 end;
 
 function TyLegendText(const AFormatter, AName: string): string;
-var p: Integer;
+var
+  p: Integer;
+  prm: TTyChartCallbackParams;
 begin
   Result := AName;
   if AFormatter = '' then Exit;
+  { a named handler is given the name, upstream's formatter(name) }
+  if TyChartIsHandlerRef(AFormatter) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'legend';
+    prm.Name := AName;
+    prm.DefaultText := AName;
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(prm)));
+  end;
   Result := AFormatter;
   p := Pos('{name}', Result);
   if p <= 0 then Exit;

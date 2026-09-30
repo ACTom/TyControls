@@ -103,6 +103,7 @@ type
 
   TTyTreemapSolved = record
     Valid: Boolean;
+    SeriesIndex: Integer;
     Hier: TTyHierarchy;
     Nodes: array of TTyTreemapNode;
     Series: TJSONObject;                 // borrowed
@@ -723,6 +724,7 @@ var
 
 begin
   Result := Default(TTyTreemapSolved);
+  Result.SeriesIndex := ASeriesIndex;
   Result.Hier := TyHierarchyOf(AOption, ASeriesIndex);
   if not Result.Hier.Valid then Exit;
   node := AOption.ComponentAt('series', ASeriesIndex);
@@ -1262,7 +1264,7 @@ begin
       if spec.HasFormatter then
       begin
         text := TyLabelText(spec.Formatter, True, tldName, AStore, row,
-          ASeriesName, AValueDim, NaN, False);
+          ASeriesName, AValueDim, NaN, False, ASolved.SeriesIndex, 'treemap');
         has := True;
       end
       else
@@ -1477,7 +1479,7 @@ begin
       if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
       begin
         text := TyLabelText(d.AsString, True, tldName, AStore, row, ASeriesName,
-          AValueDim, NaN, False);
+          AValueDim, NaN, False, ASolved.SeriesIndex, 'treemap');
         has := True;
       end
       else

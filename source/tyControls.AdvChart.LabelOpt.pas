@@ -28,7 +28,8 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Data, tyControls.AdvChart.Paint,
-  tyControls.AdvChart.Labels, tyControls.AdvChart.Color;
+  tyControls.AdvChart.Labels, tyControls.AdvChart.Color,
+  tyControls.AdvChart.Handlers;
 
 
 { The label block of the series in slot ASlot.
@@ -63,7 +64,18 @@ procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
 function TyLabelText(const AFormatter: string; AHasFormatter: Boolean;
   ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
   const ASeriesName: string; AValueDim: Integer; APercent: Double;
-  AHasPercent: Boolean): string;
+  AHasPercent: Boolean; ASeriesIndex: Integer = -1;
+  const ASeriesType: string = ''; AColor: TTyChartColor = 0;
+  const ADataType: string = ''): string;
+
+{ What a named label handler ('@Name') is given for row ARow: upstream's
+  getDataParams -- the series, the item's name, its value as written, both
+  indices (upstream's own params.dataIndex is the RAW one), the percentage
+  where the series has one, and status 'normal'. }
+function TyLabelParams(AStore: TTyDataStore; ARow: Integer;
+  const ASeriesName: string; AValueDim: Integer; APercent: Double;
+  AHasPercent: Boolean; ASeriesIndex: Integer; const ASeriesType: string;
+  AColor: TTyChartColor; const ADataType: string): TTyChartCallbackParams;
 
 { A value the way a label prints a raw one: JavaScript's String(), exact and
   never grouped -- 0.30000000000000004, 1e-7, 1e+21. A missing value is ''. }
@@ -79,7 +91,41 @@ function TyReplaceFirst(const AText, AToken, AWith: string): string;
 
 implementation
 
-uses tyControls.AdvChart.Handlers, tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale;
+
+function TyLabelParams(AStore: TTyDataStore; ARow: Integer;
+  const ASeriesName: string; AValueDim: Integer; APercent: Double;
+  AHasPercent: Boolean; ASeriesIndex: Integer; const ASeriesType: string;
+  AColor: TTyChartColor; const ADataType: string): TTyChartCallbackParams;
+var v: Double;
+begin
+  Result := TyChartBlankParams;
+  Result.ComponentType := 'series';
+  Result.SeriesType := ASeriesType;
+  Result.SeriesIndex := ASeriesIndex;
+  Result.SeriesName := ASeriesName;
+  Result.DataType := ADataType;
+  Result.Color := AColor;
+  Result.Status := 'normal';
+  Result.DataIndex := ARow;
+  Result.HasPercent := AHasPercent;
+  if AHasPercent then Result.Percent := APercent;
+  if AStore = nil then Exit;
+  if (ARow < 0) or (ARow >= AStore.Count) then Exit;
+  Result.RawDataIndex := AStore.GetRawIndex(ARow);
+  Result.Name := AStore.GetItemName(ARow);
+  Result.Raw := AStore.RawItem(ARow);
+  if (AValueDim >= 0) and (AValueDim < AStore.DimCount) then
+  begin
+    v := AStore.Get(AValueDim, ARow);
+    SetLength(Result.Values, 1);
+    Result.Values[0] := v;
+  end;
+  if Result.Raw.Shape <> rshNone then
+    Result.ValueText := TyRawItemText(Result.Raw)
+  else if Length(Result.Values) > 0 then
+    Result.ValueText := TyLabelNumToStr(Result.Values[0]);
+end;
 
 function TyLabelNumToStr(AValue: Double): string;
 begin
@@ -396,7 +442,8 @@ end;
 function TyLabelText(const AFormatter: string; AHasFormatter: Boolean;
   ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
   const ASeriesName: string; AValueDim: Integer; APercent: Double;
-  AHasPercent: Boolean): string;
+  AHasPercent: Boolean; ASeriesIndex: Integer; const ASeriesType: string;
+  AColor: TTyChartColor; const ADataType: string): string;
 var
   nameText, valueText: string;
   i, dim, openAt, n: Integer;
@@ -408,6 +455,13 @@ var
   cell: TTyDataValue;
   lp: TTyIntegerArray;
 begin
+  { A NAMED HANDLER IS HANDED THE PARAMS AND ITS ANSWER IS THE LABEL, as
+    upstream's getFormattedLabel returns a function formatter's result as it
+    stands -- no template pass over it. }
+  if AHasFormatter and TyChartIsHandlerRef(AFormatter) then
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(TyLabelParams(AStore,
+      ARow, ASeriesName, AValueDim, APercent, AHasPercent, ASeriesIndex,
+      ASeriesType, AColor, ADataType))));
   nameText := '';
   valueText := '';
   it := Default(TTyRawItem);

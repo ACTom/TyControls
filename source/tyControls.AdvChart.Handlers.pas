@@ -79,6 +79,25 @@ type
       is per series type, so it is a slot the caller fills rather than something
       invented here. }
     Extra: string;
+    { 'normal' for a label drawn in its resting state -- upstream's
+      params.status. }
+    Status: string;
+    { An axis-pointer label's axis: 'x', 'y', 'radius', 'angle', 'single' and
+      the axis's index among its kind. }
+    AxisDimension: string;
+    AxisIndex: Integer;
+    { A time axis label's level (upstream's extra.level); HasLevel False is
+      the null every other axis passes. }
+    Level: Integer;
+    HasLevel: Boolean;
+    { THE VALUE AS JavaScript's String() PRINTS IT -- an array joined by
+      commas, 'undefined', 'null' -- which is what `{c}` and every upstream
+      function formatter that concatenates params.value would show. }
+    ValueText: string;
+    { What the chart would have printed had there been no formatter -- the
+      axis label's own text, a dataZoom label's valueStr. '' where upstream
+      has no such thing. }
+    DefaultText: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 
@@ -132,6 +151,19 @@ function TyChartResolveText(const ASpec: string; const AParams: TTyChartParams;
 
 { True when ASpec names a handler rather than being a template. }
 function TyChartIsHandlerRef(const ASpec: string): Boolean;
+
+{ Runs the handler ASpec names ('@Name') on AParams -- for every formatter site
+  whose template language is not the tooltip's. A name nobody registered
+  answers the message saying so, never an empty text. }
+function TyChartRunHandler(const ASpec: string;
+  const AParams: TTyChartParams): string;
+
+{ One params record, the shape a formatter of a single datum is given. }
+function TyChartOneParams(const AParams: TTyChartCallbackParams): TTyChartParams;
+
+{ A record with every index at -1 and nothing else set -- the start of every
+  params a site builds. }
+function TyChartBlankParams: TTyChartCallbackParams;
 
 { A number as a template or a label prints a raw value: JavaScript's String(),
   exact -- 0.30000000000000004, 1e-7, 1e+21 -- and never grouped. A missing
@@ -381,6 +413,28 @@ begin
   end;
   AText := h(AParams);
   Result := True;
+end;
+
+function TyChartRunHandler(const ASpec: string;
+  const AParams: TTyChartParams): string;
+begin
+  TyChartResolveText(ASpec, AParams, Result);
+end;
+
+function TyChartOneParams(const AParams: TTyChartCallbackParams): TTyChartParams;
+begin
+  Result := nil;
+  SetLength(Result, 1);
+  Result[0] := AParams;
+end;
+
+function TyChartBlankParams: TTyChartCallbackParams;
+begin
+  Result := Default(TTyChartCallbackParams);
+  Result.SeriesIndex := -1;
+  Result.DataIndex := -1;
+  Result.RawDataIndex := -1;
+  Result.AxisIndex := -1;
 end;
 
 finalization
