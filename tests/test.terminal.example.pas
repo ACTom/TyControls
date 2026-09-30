@@ -11,7 +11,8 @@ interface
 
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, test.terminal.view,
+  Forms, FileUtil,
+  tyControls.Terminal.Core, tyControls.Terminal, uasciicast, uptysession, ushell, umain, test.terminal.view,
   test.terminal.pty;
 
 type
@@ -37,6 +38,7 @@ type
     procedure TestAllAtOnceIntoARealTerminal;
     procedure TestTheShellUnitsCompileInTheTests;
     procedure TestTheExampleProjectListsItsUnits;
+    procedure TestTheMainFormBuildsWithARecording;
   end;
 
 implementation
@@ -323,6 +325,37 @@ begin
       AssertTrue(Units[i] + ' is in the project', Pos('<Filename Value="' + Units[i] + '"/>', l.Text) > 0);
   finally
     l.Free;
+  end;
+end;
+
+{ The example's own main form, built the way the program builds it, with a recording
+  where RecordingsDir looks (next to the executable). FormCreate selects the first
+  recording, which fires RecordingChange while the form is not showing yet; a SetFocus
+  there raised "Can not focus", FormCreate stopped half way, and the shell command list
+  stayed empty -- so Shell could never start and the mode fell back to Replay. }
+procedure TTyTerminalExampleTests.TestTheMainFormBuildsWithARecording;
+var
+  dir, src: string;
+  f: TMainForm;
+begin
+  dir := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'recordings' + PathDelim;
+  src := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim + 'terminal'
+    + PathDelim + 'recordings' + PathDelim + 'cat-cjk-emoji.cast';
+  AssertFalse('no recordings folder beside the test runner beforehand', DirectoryExists(dir));
+  ForceDirectories(dir);
+  try
+    AssertTrue('copied a recording', CopyFile(src, dir + 'cat-cjk-emoji.cast'));
+    f := TMainForm.Create(nil);
+    try
+      AssertEquals('the first recording is selected', 0, f.CmbRecording.ItemIndex);
+      AssertTrue('FormCreate ran to the end: the shell commands are listed',
+        f.CmbCommand.Items.Count > 0);
+      AssertEquals('both modes are offered', 2, f.CmbMode.Items.Count);
+    finally
+      f.Free;
+    end;
+  finally
+    DeleteDirectory(dir, False);
   end;
 end;
 

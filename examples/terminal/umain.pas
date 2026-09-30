@@ -128,6 +128,7 @@ type
     FShell: TTerminalShell;
     FLogged: Integer;
     procedure FillCommands;
+    procedure FocusTerm;
     procedure EnterReplay;
     procedure StartShell;
     procedure ShellData(Sender: TObject; const AData: RawByteString);
@@ -334,7 +335,7 @@ procedure TMainForm.RecordingChange(Sender: TObject);
 begin
   if CmbRecording.ItemIndex < 0 then Exit;
   LoadCast(RecordingsDir + CmbRecording.Items[CmbRecording.ItemIndex]);
-  Term.SetFocus;
+  FocusTerm;
 end;
 
 procedure TMainForm.OpenClick(Sender: TObject);
@@ -375,7 +376,7 @@ begin
   FLastTick := TyTermDefaultClock;
   Player.Enabled := True;
   BtnPlay.Caption := rsPause;
-  Term.SetFocus;
+  FocusTerm;
 end;
 
 { The player's chunk: Write only queues (the terminal parses in slices from the message
@@ -441,14 +442,14 @@ begin
   { the same path as Ctrl+Shift+V: bracketed when the program asked for it, then out
     through OnData (the key panel) }
   Term.PasteFromClipboard;
-  Term.SetFocus;
+  FocusTerm;
 end;
 
 procedure TMainForm.ReadOnlyClick(Sender: TObject);
 begin
   Term.ReadOnly := ChkReadOnly.Checked;
   if Term.ReadOnly then AddKeyLine(rsReadOnlyHint);
-  Term.SetFocus;
+  FocusTerm;
 end;
 
 procedure TMainForm.UnicodeChange(Sender: TObject);
@@ -510,6 +511,17 @@ end;
 
 { Windows: %COMSPEC% first (always there, starts fastest), then PowerShell, and pwsh /
   wsl where the PATH has them. Elsewhere: the login shell. }
+{ Handlers that end by giving the terminal the keyboard also run while the form is
+  being built: FormCreate selects the first recording, which fires RecordingChange.
+  A form that is not showing yet cannot take focus, and SetFocus raises there.
+  CanSetFocus, not CanFocus: CanFocus stops at the form and never asks whether the
+  form itself is showing. }
+procedure TMainForm.FocusTerm;
+begin
+  if Term.CanSetFocus then
+    Term.SetFocus;
+end;
+
 procedure TMainForm.FillCommands;
 var
   sh: string;
@@ -590,7 +602,7 @@ begin
   end;
   Status.Panels[0].Text := CmbCommand.Text;
   BtnStart.Caption := rsRestart;
-  Term.SetFocus;
+  FocusTerm;
 end;
 
 procedure TMainForm.StartClick(Sender: TObject);
