@@ -53,6 +53,7 @@ type
     procedure TestA4GiBFileInTheTerminal;
     procedure TestDecliningShowsWhatFollowed;
     procedure TestEveryDeviceNameIsRenamed;
+    procedure TestALongNameIsCut;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -1820,6 +1821,59 @@ begin
   Check('CONX', 'CONX');
   Check('CONIN', 'CONIN');
   Check('LPT'#$C2#$B4, 'LPT'#$C2#$B4);
+end;
+
+{ a whole UTF-8 string: no sequence cut, none left open }
+function WholeUtf8(const S: RawByteString): Boolean;
+var
+  i, n, k: Integer;
+begin
+  i := 1;
+  while i <= Length(S) do
+  begin
+    case Ord(S[i]) of
+      $00..$7F: n := 0;
+      $C2..$DF: n := 1;
+      $E0..$EF: n := 2;
+      $F0..$F4: n := 3;
+    else
+      Exit(False);
+    end;
+    if i + n > Length(S) then
+      Exit(False);
+    for k := 1 to n do
+      if (Ord(S[i + k]) and $C0) <> $80 then
+        Exit(False);
+    Inc(i, n + 1);
+  end;
+  Result := True;
+end;
+
+{ A remote name longer than 200 bytes (a file system allows 255, and the " (1)" of a
+  second copy needs room) is cut to 200, keeping its extension, never inside a UTF-8
+  sequence. Mutation: no cut. }
+procedure TTyTerminalZmodemTests.TestALongNameIsCut;
+var
+  s, got: string;
+  i: Integer;
+begin
+  got := ZmSafeFileName(StringOfChar('a', 300) + '.txt');
+  AssertEquals('200 bytes', 200, Length(got));
+  AssertEquals('the extension kept', StringOfChar('a', 196) + '.txt', got);
+  s := '';
+  for i := 1 to 150 do
+    s := s + #$E4#$B8#$AD;               { U+4E2D, three bytes }
+  got := ZmSafeFileName(s + '.bin');
+  AssertTrue(Format('at most 200 bytes (%d)', [Length(got)]), Length(got) <= 200);
+  AssertTrue('no sequence cut', WholeUtf8(got));
+  AssertEquals('the extension kept', '.bin', Copy(got, Length(got) - 3, 4));
+  AssertEquals('65 whole characters before it', 65 * 3 + 4, Length(got));
+  AssertEquals('no extension: 200', 200, Length(ZmSafeFileName(StringOfChar('x', 250))));
+  got := ZmSafeFileName(StringOfChar('a', 300) + '.' + StringOfChar('e', 40));
+  AssertEquals('an overlong "extension" is cut like the rest', 200, Length(got));
+  AssertEquals('200 bytes stay as they are', StringOfChar('b', 200), ZmSafeFileName(StringOfChar('b', 200)));
+  AssertEquals('dots and spaces do not end it', StringOfChar('c', 195) + '.txt',
+    ZmSafeFileName(StringOfChar('c', 195) + ' . .' + StringOfChar('d', 100) + '.txt'));
 end;
 
 function NewTempDir: string;

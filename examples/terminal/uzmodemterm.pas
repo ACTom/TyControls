@@ -156,8 +156,13 @@ type
     property ProgressLines: Integer read FProgressLines;
   end;
 
+const
+  { the longest name a download gets, in bytes }
+  ZmMaxNameBytes = 200;
+
 { the last path element, Windows-forbidden characters and control characters as '_',
-  trailing dots and spaces off, a reserved device name prefixed with '_', '' -> 'file' }
+  trailing dots and spaces off, cut to ZmMaxNameBytes (the extension kept, no UTF-8
+  sequence cut), a reserved device name prefixed with '_', '' -> 'file' }
 function ZmSafeFileName(const AName: string): string;
 { ADir + AName when free, else 'name (1).ext', 'name (2).ext' ... }
 function ZmUniqueFileName(const ADir, AName: string): string;
@@ -213,7 +218,7 @@ const
     'LPT'#$C2#$B9, 'LPT'#$C2#$B2, 'LPT'#$C2#$B3);
 var
   i, p: Integer;
-  base: string;
+  base, ext: string;
 begin
   Result := AName;
   { the last element, either separator }
@@ -229,6 +234,25 @@ begin
     SetLength(Result, Length(Result) - 1);
   if Result = '' then
     Exit('file');
+  if Length(Result) > ZmMaxNameBytes then
+  begin
+    { a file system takes 255 bytes, and a second copy's " (1)" needs room: cut to
+      ZmMaxNameBytes, the extension kept (unless it is overlong itself), never inside
+      a UTF-8 sequence }
+    ext := ExtractFileExt(Result);
+    if (Length(ext) > 32) or (Length(ext) = Length(Result)) then
+      ext := '';
+    base := Copy(Result, 1, Length(Result) - Length(ext));
+    p := ZmMaxNameBytes - Length(ext);
+    while (p > 0) and ((Ord(base[p + 1]) and $C0) = $80) do
+      Dec(p);
+    SetLength(base, p);
+    while (base <> '') and (base[Length(base)] in ['.', ' ']) do
+      SetLength(base, Length(base) - 1);
+    if base = '' then
+      base := 'file';
+    Result := base + ext;
+  end;
   p := Pos('.', Result);
   if p > 0 then base := Copy(Result, 1, p - 1) else base := Result;
   { "CON .txt" is CON: Windows drops the spaces (and dots) that end the part it looks at }
