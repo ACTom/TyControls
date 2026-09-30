@@ -84,6 +84,7 @@ type
     procedure TestResizeKeepsTheClaim;                       { H22 }
     { the phase 7 review's fixes }
     procedure TestAWinnerRemovedBeforeItsMarkerDoesNotClaim;
+    procedure TestADeferredResetWaitsForTheBytesHandedBack;
   end;
 
 { the text of line AY of the active buffer (from ybase), trailing blanks cut }
@@ -1430,6 +1431,71 @@ begin
     r.Free;
     p.Free;
     rm.Free;
+  end;
+end;
+
+type
+  TResetOnce = class
+  public
+    Done: Boolean;
+    procedure Hook(AProto: TFakeProtocol);
+  end;
+
+procedure TResetOnce.Hook(AProto: TFakeProtocol);
+begin
+  if Done then
+    Exit;
+  Done := True;
+  AProto.Core.Reset;                     { busy: deferred }
+end;
+
+{ A Reset asked for in a chunk's Feed runs after the bytes that Feed handed back, as it
+  does after a chunk (spec 19.5) -- the handed-back bytes were the chunk's own output.
+  Here they claim again (a second '<<GO>>'), so the Reset must end that claim. Mutation:
+  the chunk's last piece running what was deferred while handed-back bytes wait (the
+  Reset comes first; the second claim outlives it). }
+procedure TTyTerminalStreamTests.TestADeferredResetWaitsForTheBytesHandedBack;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  once: TResetOnce;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  once := TResetOnce.Create;
+  try
+    p := r.Proto;
+    p.OnFeed := @once.Hook;
+    r.Core.WriteSync('a<<GO>>b<<END>>x<<GO>>y');
+    AssertTrue('the Reset was asked for in Feed', once.Done);
+    AssertEquals('claimed twice', 2, p.Claims);
+    AssertEquals('the Reset ended the second claim: ' + r.Log.CommaText, 1, CountOf(r.Log, 'ClaimEnded:reset'));
+    AssertFalse('nothing claimed after the Reset', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+    once.Free;
+  end;
+  { the same in slices whose budget runs out after every piece: the next slice starts
+    with what was deferred -- it too waits for the bytes handed back }
+  r := TStreamRig.Create;
+  p := nil;
+  once := TResetOnce.Create;
+  try
+    p := r.Proto;
+    p.OnFeed := @once.Hook;
+    r.Step := 100;
+    r.Core.Write('a<<GO>>b<<END>>x<<GO>>y');
+    r.Drain;
+    AssertTrue('slices: the Reset was asked for in Feed', once.Done);
+    AssertEquals('slices: claimed twice', 2, p.Claims);
+    AssertEquals('slices: the Reset ended the second claim: ' + r.Log.CommaText, 1,
+      CountOf(r.Log, 'ClaimEnded:reset'));
+    AssertFalse('slices: nothing claimed after the Reset', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+    once.Free;
   end;
 end;
 

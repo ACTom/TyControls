@@ -327,8 +327,10 @@ var
   d: TTyTermDeferred;
   i: Integer;
 begin
-  { half a chunk parsed: what its events asked for waits for its last piece }
-  if FChunkPos > 0 then
+  { half a chunk parsed: what its events asked for waits for its last piece. Bytes a
+    claim handed back are still the output of the chunk they came from: that waits for
+    them too (ProcessFrontPiece runs it once they are through; DiscardPending drops them) }
+  if (FChunkPos > 0) or (FFront <> '') then
     Exit;
   while (FBusy = 0) and (FDeferredCount > 0) do
   begin
