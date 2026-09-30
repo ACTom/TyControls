@@ -121,7 +121,8 @@ end;
 
 function TTyTerminalView.Reporting: Boolean;
 begin
-  Result := FCore.Modes.MouseProtocol <> tmpNone;
+  { 7 期(spec 19.5):数据流被接管时程序拿不到鼠标,按没要鼠标处理 }
+  Result := (FCore.Modes.MouseProtocol <> tmpNone) and not FCore.StreamClaimed;
 end;
 
 { 上报用的事件:格子按 CellAt(整除再钳,上游 getCoords 的非选区取整),像素钳在网格里

@@ -16,8 +16,10 @@ unit tyControls.Terminal;
   - 本控件**接管**了 Core 的这些事件,宿主别改写:OnData、OnRefreshRows、OnTitleChange、
     OnBell、OnCursorMove、OnScroll、OnBufferActivate、OnModesChange、OnOsc、
     OnQueryBaseColor、OnProcessRequest、OnWindowOptionsReport、OnResize、
-    OnScrollbackCleared、OnUserInput。宿主可以自己挂的是 OnIconNameChange、OnLineFeed、
-    OnRequestScrollToBottom(只是通知:Core 自己滚到底),或者 Core.Parser.Register*Handler。
+    OnScrollbackCleared、OnUserInput、OnClaimedInput(7 期,转给控件自己的 OnClaimedInput)。
+    宿主可以自己挂的是 OnIconNameChange、OnLineFeed、OnRequestScrollToBottom(只是通知:
+    Core 自己滚到底),解析器钩子用 Core.Register*Handler(7 期;Core.Parser 是底层接口),
+    带内协议用 AddStreamHandler。
   - 解析一次(AsyncSlice、WriteSync、Write)里 Core 可能滚几千次、改几次色:这期间滚动只记
     「网格待失效」「滚动条待同步」,颜色签名不看;解析返回后(EndDrive)统一失效、同步一次,
     签名变了(OSC 4 / 10 / 11 / 104 …)整窗失效——内边距也是 257 号色。
@@ -320,6 +322,7 @@ type
     FOnBell: TNotifyEvent;
     FOnOsc: TTyTerminalOscEvent;
     FOnShortcutQuery: TTyTerminalShortcutQueryEvent;
+    FOnClaimedInput: TTyTerminalDataEvent;
     { Core 的事件 }
     procedure CoreData(Sender: TObject; const AData: RawByteString);
     procedure CoreRefreshRows(Sender: TObject; AFirst, ALast: Integer);
@@ -336,6 +339,9 @@ type
     procedure CoreResize(Sender: TObject; ACols, ARows: Integer);
     procedure CoreScrollbackCleared(Sender: TObject);
     procedure CoreUserInput(Sender: TObject);
+    { 7 期:数据流被接管时用户的输入(spec 19.5) }
+    procedure CoreClaimedInput(Sender: TObject; const AData: RawByteString);
+    function GetStreamClaimed: Boolean;
     { 调度 }
     procedure AsyncRelayout(Data: PtrInt);
     procedure AsyncApplyGrid(Data: PtrInt);
@@ -661,6 +667,11 @@ type
     function CellRect(ACol, ARow: Integer): TRect;
     { 给定网格要多大的客户区(内边距、条宽都算进去) }
     function SizeForGrid(ACols, ARows: Integer): TSize;
+    { 7 期:带内协议的数据流处理器(spec 19.3),转给 Core。接管期间按键、粘贴、滚轮翻成的
+      方向键改发 OnClaimedInput,鼠标按「程序没要鼠标」处理(本地选区、滚轮滚滚回) }
+    procedure AddStreamHandler(AHandler: TTyTerminalStreamHandler);
+    procedure RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);
+    property StreamClaimed: Boolean read GetStreamClaimed;
     property Core: TTyTerminalCore read GetCore;
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
@@ -720,6 +731,8 @@ type
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
     property OnLinkActivate: TTyTerminalLinkEvent read FOnLinkActivate write FOnLinkActivate;
     property OnOsc52: TTyTerminalOsc52Event read FOnOsc52 write FOnOsc52;
+    { 7 期:数据流处理器接管期间用户的输入(编好的字节,不发给程序);ReadOnly 时不发 }
+    property OnClaimedInput: TTyTerminalDataEvent read FOnClaimedInput write FOnClaimedInput;
   end;
 
 { MouseService._sendEvent 的键(MouseService.ts:112-136):按下、抬起按 LCL 的键(左、中、右,
@@ -853,6 +866,7 @@ begin
   FCore.OnResize := @CoreResize;
   FCore.OnScrollbackCleared := @CoreScrollbackCleared;
   FCore.OnUserInput := @CoreUserInput;
+  FCore.OnClaimedInput := @CoreClaimedInput;
   FSelection := TTyTermSelection.Create(FCore.BufferService);
   FSelection.WordSeparators := UTF8Decode(FWordSeparators);
   FSelection.OnChange := @SelectionChanged;
@@ -902,6 +916,7 @@ begin
     FCore.OnResize := nil;
     FCore.OnScrollbackCleared := nil;
     FCore.OnUserInput := nil;
+    FCore.OnClaimedInput := nil;
   end;
   if FSelection <> nil then
   begin
@@ -1082,6 +1097,29 @@ procedure TTyTerminalView.CoreUserInput(Sender: TObject);
 begin
   if FSelection.HasSelection then
     ClearSelection;
+end;
+
+{ 7 期(spec 19.5):接管期间的输入转给宿主(它拿来做取消);选区不清、不滚到底——Core 已经
+  不做那两样 }
+procedure TTyTerminalView.CoreClaimedInput(Sender: TObject; const AData: RawByteString);
+begin
+  NoteActivity;
+  if Assigned(FOnClaimedInput) then FOnClaimedInput(Self, AData);
+end;
+
+function TTyTerminalView.GetStreamClaimed: Boolean;
+begin
+  Result := FCore.StreamClaimed;
+end;
+
+procedure TTyTerminalView.AddStreamHandler(AHandler: TTyTerminalStreamHandler);
+begin
+  FCore.AddStreamHandler(AHandler);
+end;
+
+procedure TTyTerminalView.RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);
+begin
+  FCore.RemoveStreamHandler(AHandler);
 end;
 
 { ---- 调度 --------------------------------------------------------------------------- }
