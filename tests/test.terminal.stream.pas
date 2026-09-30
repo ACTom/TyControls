@@ -73,6 +73,15 @@ type
     procedure TestCallbacksComeWhileClaimed;                 { H13 }
     procedure TestSendRawGoesStraightOut;                    { H14 }
     procedure TestAReleaseInClaimedHandsTheRestBack;
+    { Task 3 }
+    procedure TestTheUsersInputGoesToOnClaimedInput;         { H15 }
+    procedure TestTheCoresOwnReportsAreDropped;              { H16 }
+    procedure TestNoMouseReportWhileClaimed;                 { H17 }
+    procedure TestCallsFromFeedWaitForTheChunk;              { H18 }
+    procedure TestWriteSyncWhileClaimed;                     { H19 }
+    procedure TestDiscardPendingKeepsTheClaim;               { H20 }
+    procedure TestResetEndsTheClaim;                         { H21 }
+    procedure TestResizeKeepsTheClaim;                       { H22 }
   end;
 
 { the text of line AY of the active buffer (from ybase), trailing blanks cut }
@@ -259,9 +268,13 @@ type
     ClaimedInput: RawByteString;
     ClaimedCount: Integer;
     Done: TStringList;
+    Resizes: Integer;
+    DataHook: TThreadMethod;             { called from OnData, after the bytes are noted }
     constructor Create(ACols: Integer = 40; ARows: Integer = 5);
     destructor Destroy; override;
     function Clock: Double;
+    procedure OnResizeEv(Sender: TObject; ACols, ARows: Integer);
+    procedure OnColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
     procedure OnData(Sender: TObject; const AData: RawByteString);
     procedure OnUserInput(Sender: TObject);
     procedure OnClaimedIn(Sender: TObject; const AData: RawByteString);
@@ -283,6 +296,22 @@ begin
   Core.OnUserInput := @OnUserInput;
   Core.OnClaimedInput := @OnClaimedIn;
   Core.OnProcessRequest := @OnRequest;
+  Core.OnResize := @OnResizeEv;
+end;
+
+procedure TStreamRig.OnResizeEv(Sender: TObject; ACols, ARows: Integer);
+begin
+  Inc(Resizes);
+  Log.Add('resize');
+end;
+
+{ a dark theme: white on black }
+procedure TStreamRig.OnColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
+begin
+  if AIndex = 257 then
+    ARgb := $000000
+  else
+    ARgb := $FFFFFF;
 end;
 
 destructor TStreamRig.Destroy;
@@ -303,6 +332,8 @@ procedure TStreamRig.OnData(Sender: TObject; const AData: RawByteString);
 begin
   Sent := Sent + AData;
   Inc(SentCount);
+  if Assigned(DataHook) then
+    DataHook();
 end;
 
 procedure TStreamRig.OnUserInput(Sender: TObject);
@@ -1025,6 +1056,320 @@ begin
     AssertTrue('fed nothing', p.Fed = '');
     AssertEquals('nothing lost', 'abc<<GO>>xyz', r.Line);
     AssertFalse('not claimed', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ ---- Task 3: the rest of the core while claimed ------------------------------------------- }
+
+procedure ScrollBackSome(r: TStreamRig);
+var
+  i: Integer;
+begin
+  for i := 1 to 20 do
+    r.Core.WriteSync('line ' + IntToStr(i) + #13#10);
+end;
+
+{ H15. Mutations: no redirection; the redirection after the scroll to the bottom. }
+procedure TTyTerminalStreamTests.TestTheUsersInputGoesToOnClaimedInput;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  ydisp: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    ScrollBackSome(r);
+    AssertTrue('scrolls to the bottom on input', r.Core.ScrollOnUserInput);
+    { not claimed: the same input goes out, announced, and scrolls down }
+    r.Core.ScrollLines(-3);
+    r.Core.Input('x', True);
+    AssertTrue('sent', r.Sent = 'x');
+    AssertEquals('announced', 1, r.UserInputs);
+    AssertEquals('scrolled to the bottom', r.Core.Buffer.YBase, r.Core.Buffer.YDisp);
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    r.Core.ScrollLines(-3);
+    ydisp := r.Core.Buffer.YDisp;
+    r.Core.Input('x', True);
+    AssertTrue('to OnClaimedInput', r.ClaimedInput = 'x');
+    AssertEquals('not to OnData', 1, r.SentCount);
+    AssertEquals('not announced', 1, r.UserInputs);
+    AssertEquals('the viewport stays', ydisp, r.Core.Buffer.YDisp);
+    { released: back to OnData }
+    p.Session.Release('');
+    r.Core.Input('y', True);
+    AssertTrue('sent again', r.Sent = 'xy');
+    AssertEquals('claimed input unchanged', 1, r.ClaimedCount);
+    { ReadOnly: nothing, not even OnClaimedInput }
+    r.Core.WriteSync('<<GO>>');
+    r.Core.ReadOnly := True;
+    r.Core.Input('z', True);
+    AssertEquals('ReadOnly: no claimed input', 1, r.ClaimedCount);
+    AssertEquals('ReadOnly: nothing sent', 2, r.SentCount);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H16. Mutation: the claimed branch passing on (or redirecting) AWasUserInput = False. }
+procedure TTyTerminalStreamTests.TestTheCoresOwnReportsAreDropped;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  n: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    r.Core.OnQueryBaseColor := @r.OnColor;
+    r.Core.WriteSync(#27'[?1004h'#27'[?2031h');
+    AssertTrue('1004 on', r.Core.Modes.SendFocus);
+    AssertTrue('2031 on', r.Core.Modes.ColorSchemeUpdates);
+    { not claimed: each of them sends }
+    n := r.SentCount;
+    r.Core.ReportFocus(False);
+    AssertEquals('a focus report', n + 1, r.SentCount);
+    r.Core.NotifyColorSchemeChanged;
+    AssertEquals('a colour-scheme report', n + 2, r.SentCount);
+    r.Core.Input('r', False);
+    AssertEquals('the core''s own input', n + 3, r.SentCount);
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    n := r.SentCount;
+    r.Core.ReportFocus(True);
+    r.Core.ReportFocus(False);
+    r.Core.NotifyColorSchemeChanged;
+    r.Core.Input('r', False);
+    AssertEquals('none sent while claimed', n, r.SentCount);
+    AssertEquals('none redirected either', 0, r.ClaimedCount);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+function MouseAt(ACol, ARow: Integer; AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction): TTyTerminalMouseEvent;
+begin
+  Result := Default(TTyTerminalMouseEvent);
+  Result.Col := ACol;
+  Result.Row := ARow;
+  Result.X := ACol * 8;
+  Result.Y := ARow * 16;
+  Result.Button := AButton;
+  Result.Action := AAction;
+end;
+
+{ H17. Mutation: TriggerMouseEvent not looking at the claim. Default encoding: the
+  report is binary (TriggerBinaryEvent). }
+procedure TTyTerminalStreamTests.TestNoMouseReportWhileClaimed;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  n: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    r.Core.WriteSync(#27'[?1000h');
+    n := r.SentCount;
+    AssertTrue('passes', r.Core.TriggerMouseEvent(MouseAt(1, 1, tmbLeft, tmaDown)));
+    AssertEquals('reported', n + 1, r.SentCount);
+    AssertTrue('the default encoding', Copy(r.Sent, Length(r.Sent) - 5, 3) = #27'[M');
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    n := r.SentCount;
+    AssertFalse('refused while claimed', r.Core.TriggerMouseEvent(MouseAt(2, 1, tmbLeft, tmaUp)));
+    AssertFalse('refused while claimed', r.Core.TriggerMouseEvent(MouseAt(3, 2, tmbLeft, tmaDown)));
+    AssertEquals('nothing sent', n, r.SentCount);
+    AssertEquals('nothing redirected', 0, r.ClaimedCount);
+    { SGR: the report would be user input -- still nothing }
+    r.Core.Reset;
+    r.Core.WriteSync(#27'[?1000h'#27'[?1006h<<GO>>');
+    n := r.SentCount;
+    AssertFalse('SGR refused too', r.Core.TriggerMouseEvent(MouseAt(1, 1, tmbLeft, tmaDown)));
+    AssertEquals('nothing sent', n, r.SentCount);
+    AssertEquals('nothing redirected', 0, r.ClaimedCount);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+type
+  TFeedCaller = class
+  public
+    Rig: TStreamRig;
+    Pinged: Boolean;
+    InData: Boolean;
+    procedure Hook(AProto: TFakeProtocol);
+    procedure Data;
+  end;
+
+procedure TFeedCaller.Hook(AProto: TFakeProtocol);
+begin
+  if Pinged then
+    Exit;
+  Pinged := True;
+  InData := True;
+  try
+    AProto.Session.SendRaw('ping');
+  finally
+    InData := False;
+  end;
+end;
+
+procedure TFeedCaller.Data;
+begin
+  if not InData then
+    Exit;
+  Rig.Core.Resize(30, 5);
+  Rig.Core.WriteSync('w');
+  Rig.Core.Reset;
+  Rig.Log.Add('calls made');
+end;
+
+{ H18. Mutation: OfferPiece / DoFeed without Inc(FBusy) (the Resize would flush and
+  the WriteSync feed inside Feed). }
+procedure TTyTerminalStreamTests.TestCallsFromFeedWaitForTheChunk;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  c: TFeedCaller;
+  iFeed, iCalls, iDone, iResize, iW, iEnd: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  c := TFeedCaller.Create;
+  try
+    c.Rig := r;
+    r.DataHook := @c.Data;
+    p := r.Proto;
+    p.OnFeed := @c.Hook;
+    r.Core.Write('<<GO>>', @r.OnDone, 1);
+    r.Drain;
+    iFeed := r.Log.IndexOf('Feed:<<GO>>');
+    iCalls := r.Log.IndexOf('calls made');
+    iDone := r.Log.IndexOf('done1');
+    iResize := r.Log.IndexOf('resize');
+    iW := r.Log.IndexOf('Feed:w');
+    iEnd := r.Log.IndexOf('ClaimEnded:reset');
+    AssertTrue('the calls were made in Feed: ' + r.Log.CommaText, (iFeed >= 0) and (iCalls > iFeed));
+    AssertTrue('the callback after Feed: ' + r.Log.CommaText, iDone > iCalls);
+    AssertTrue('the Resize after the callback: ' + r.Log.CommaText, iResize > iDone);
+    AssertTrue('then w reaches the claim: ' + r.Log.CommaText, iW > iResize);
+    AssertTrue('then the Reset ends it: ' + r.Log.CommaText, iEnd > iW);
+    AssertEquals('Feed never nested', 1, p.MaxFeedDepth);
+    AssertEquals('resized', 30, r.Core.Cols);
+    AssertFalse('the claim ended', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+    c.Free;
+  end;
+end;
+
+{ H19. Mutation: the hook only on the slicing path. }
+procedure TTyTerminalStreamTests.TestWriteSyncWhileClaimed;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.WriteSync('ab<<GO>>');
+    r.Core.WriteSync('abc');
+    AssertTrue('fed', Copy(p.Fed, Length(p.Fed) - 2, 3) = 'abc');
+    AssertEquals('the screen stays', 'ab', r.Line);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H20. Mutation: ClearQueue leaving the handed-back bytes. }
+procedure TTyTerminalStreamTests.TestDiscardPendingKeepsTheClaim;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  fed: RawByteString;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    fed := p.Fed;
+    r.Core.Write('one', @r.OnDone, 1);
+    r.Core.Write('two', @r.OnDone, 2);
+    r.Core.Write('three', @r.OnDone, 3);
+    r.Core.DiscardPending;
+    r.Drain;
+    AssertEquals('no callback', 0, r.Done.Count);
+    AssertTrue('nothing fed', p.Fed = fed);
+    AssertTrue('still claimed', r.Core.StreamClaimed);
+    { handed back outside Feed, not parsed yet: dropped with the queue }
+    p.Session.Release('xyz');
+    r.Core.DiscardPending;
+    r.Drain;
+    AssertEquals('dropped', '', r.Line);
+    r.Core.WriteSync('q');
+    AssertEquals('parsed as usual', 'q', r.Line);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H21. Mutation: Reset leaving the claim. }
+procedure TTyTerminalStreamTests.TestResetEndsTheClaim;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  n: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.Reset;
+    AssertEquals('not claimed: Reset calls no handler', 0, CountOf(r.Log, 'ClaimEnded:reset'));
+    r.Core.WriteSync('<<GO>>');
+    n := r.Log.Count;
+    r.Core.Reset;
+    AssertEquals('ClaimEnded once', 1, CountOf(r.Log, 'ClaimEnded:reset'));
+    AssertEquals('and nothing else', n + 1, r.Log.Count);
+    AssertFalse('no claim', r.Core.StreamClaimed);
+    r.Core.WriteSync('<<GO>>');
+    AssertEquals('detected again', 2, p.Claims);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H22. Mutation: Resize ending the claim. }
+procedure TTyTerminalStreamTests.TestResizeKeepsTheClaim;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    r.Core.Resize(30, 5);
+    AssertTrue('still claimed', r.Core.StreamClaimed);
+    AssertEquals('resized', 30, r.Core.Cols);
+    AssertEquals('OnResize', 1, r.Resizes);
+    AssertEquals('no ClaimEnded', 0, CountOf(r.Log, 'ClaimEnded:removed') + CountOf(r.Log, 'ClaimEnded:reset'));
   finally
     r.Free;
     p.Free;

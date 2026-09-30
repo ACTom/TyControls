@@ -36,6 +36,14 @@ var
 begin                                                                        { :74-95 }
   if FOptions.DisableStdin then
     Exit;
+  if FClaim <> nil then
+  begin
+    { spec 19.5: the user's input goes to OnClaimedInput; the core's own reports would
+      land inside the protocol's bytes and are dropped }
+    if AWasUserInput and Assigned(FOnClaimedInput) then
+      FOnClaimedInput(Self, AData);
+    Exit;
+  end;
   buf := Buffer;
   if AWasUserInput and FOptions.ScrollOnUserInput and (buf.YBase <> buf.YDisp) then
   begin
@@ -57,6 +65,8 @@ procedure TTyTerminalCore.TriggerBinaryEvent(const AData: RawByteString);
 begin
   if FOptions.DisableStdin then
     Exit;
+  if FClaim <> nil then
+    Exit;                                { spec 19.5: never inside a claimed stream }
   if Assigned(FOnData) then
     FOnData(Self, AData);
 end;
@@ -253,6 +263,10 @@ var
   report: RawByteString;
 begin
   CheckThread('TriggerMouseEvent');
+  { spec 19.5: while a stream is claimed the program is not asked for the mouse; the
+    control treats the mouse as its own (a local selection, the wheel scrolls) }
+  if FClaim <> nil then
+    Exit(False);
   e := AEvent;
   if (e.Col < 0) or (e.Col >= Cols) or (e.Row < 0) or (e.Row >= Rows) then
     Exit(False);
@@ -622,6 +636,9 @@ begin
   end;
   Inc(FBusy);
   try
+    { spec 19.5: a Reset ends a stream claim first (busy: what ClaimEnded causes waits) }
+    if FClaim <> nil then
+      EndClaim(tceReset, True);
     DoReset;
   finally
     Dec(FBusy);
