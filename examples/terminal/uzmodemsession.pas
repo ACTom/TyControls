@@ -453,14 +453,17 @@ begin
       else
         FState := zrcData;
     ZEOF:
-      { at the end we have: the file is whole; elsewhere a stale ZEOF (spec) }
+      { at the end we have: the file is whole; elsewhere a stale ZEOF (spec). With no
+        file open it is the last one's again: our ZRINIT got lost -- again (as rz) }
       if FFileOpen and (pos = FPos) then
       begin
         CloseFile(True);
         Inc(FFiles);
         FState := zrcHeaders;
         SendRinit;
-      end;
+      end
+      else if not FFileOpen then
+        SendRinit;
     ZFIN:
       begin
         SendHex(ZFIN, 0);

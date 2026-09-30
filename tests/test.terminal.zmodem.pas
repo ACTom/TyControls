@@ -54,6 +54,7 @@ type
     procedure TestDecliningShowsWhatFollowed;
     procedure TestEveryDeviceNameIsRenamed;
     procedure TestALongNameIsCut;
+    procedure TestAZeofRepeatedAfterTheFileIsAnsweredAgain;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -1474,6 +1475,45 @@ begin
     AssertTrue('whole', sink.Complete[0]);
     AssertTrue('the ZRINIT', Pos(ZmEncodeHexHeader(ZmFlagsHeader(ZRINIT, CANFDX or CANOVIO or CANFC32, 0, 0, 0)), log.Sent) > 0);
     AssertTrue('the bytes', sink.Contents[0] = Cycle(1500));
+  finally
+    r.Free;
+    log.Free;
+    sink.Free;
+  end;
+end;
+
+{ The ZRINIT that answers a ZEOF is lost on the way: the sender repeats its ZEOF, and
+  the receiver -- the file closed already -- answers again at once, without a tick of
+  its own (its own timeout would repeat the ZRINIT too, 10 s later, and hide this).
+  Mutation: a ZEOF with no file open ignored. }
+procedure TTyTerminalZmodemTests.TestAZeofRepeatedAfterTheFileIsAnsweredAgain;
+var
+  sink: TMemSink;
+  log: TZmLog;
+  r: TZmReceiver;
+  e: TZmEscaper;
+  rinit, eof: RawByteString;
+begin
+  rinit := ZmEncodeHexHeader(ZmFlagsHeader(ZRINIT, CANFDX or CANOVIO or CANFC32, 0, 0, 0));
+  e.Init(False);
+  eof := ZmEncodeBinHeader(ZmPosHeader(ZEOF, 1000), True, e);
+  sink := TMemSink.Create;
+  log := TZmLog.Create;
+  r := TZmReceiver.Create(sink);
+  try
+    r.OnSend := @log.OnSend;
+    r.OnDone := @log.OnDone;
+    r.Start(0);
+    FeedR(r, ZfileFrame('a.bin', 1000) + ZdataFrame(0, Cycle(1000), ZCRCE));
+    log.Sent := '';
+    FeedR(r, eof);
+    AssertEquals('the file is whole', 1, sink.Finishes);
+    AssertTrue('ZRINIT', Pos(rinit, log.Sent) > 0);
+    log.Sent := '';                      { lost }
+    FeedR(r, eof);
+    AssertTrue('the repeated ZEOF answered at once: ' + ZmHex(log.Sent), Pos(rinit, log.Sent) > 0);
+    AssertEquals('not a second file', 1, sink.Finishes);
+    AssertFalse('still going', log.Done);
   finally
     r.Free;
     log.Free;
