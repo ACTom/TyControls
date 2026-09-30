@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 162 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 165 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -36,7 +36,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 
 ## Features
 
-- **162 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
+- **165 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
 - **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
 - **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
 - **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
@@ -80,7 +80,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-162 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+165 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -277,11 +277,13 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyRibbonGallery` | Gallery that expands into a popup grid |
 | `TTyRibbonBackstage` | Full-window backstage view |
 
-### Images & hints · `TyControls Images` (9)
+### Images & hints · `TyControls Images` (11)
 
 | Control | Description |
 |---|---|
 | `TTyIconFont` | Icon font: vector icons by codepoint or name, themed |
+| `TTyLucideIconFont` | The built-in Lucide icon font, icons by name |
+| `TTyLucideImageList` | Image list with the Lucide icons, ready to drop on a form |
 | `TTyCharImage` | Uses one icon-font glyph as an image |
 | `TTyImage` | Image control |
 | `TTyGlyphImageList` | Image list driven by an icon font |
