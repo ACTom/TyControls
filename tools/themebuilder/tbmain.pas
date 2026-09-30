@@ -376,8 +376,14 @@ begin
     on E: Exception do
     begin
       Ask(Format(rsTbOpenFailed, [AFileName, E.Message]), [mbOK]);
-      FSettings.RemoveRecent(AFileName);
-      RebuildRecentMenu;
+      { only a file that is gone leaves the list: one another program holds open, or a
+        share that is not there right now, is still the user's file }
+      if not FileExists(AFileName) then
+      begin
+        FSettings.RemoveRecent(AFileName);
+        SaveSettings;
+        RebuildRecentMenu;
+      end;
       Exit(False);
     end;
   end;
@@ -465,7 +471,8 @@ begin
   for i := 0 to FSettings.Recent.Count - 1 do
   begin
     item := TMenuItem.Create(Self);
-    item.Caption := FSettings.Recent[i];
+    { a menu caption takes & as the accelerator mark: a path is shown as it is }
+    item.Caption := StringReplace(FSettings.Recent[i], '&', '&&', [rfReplaceAll]);
     item.Tag := i;
     item.OnClick := @MnuRecentClick;
     MnuRecent.Add(item);

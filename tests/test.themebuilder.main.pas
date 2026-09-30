@@ -50,6 +50,8 @@ type
     procedure TestAFailedSaveLeavesTheFile;
     procedure TestAReadOnlySettingsFileDoesNotKeepTheWindowOpen;
     procedure TestAnErrorAtTheEndIsOnTheLastLine;
+    procedure TestAFileThatCannotBeReadStaysRecent;
+    procedure TestAnAmpersandInARecentPathIsShown;
   end;
 
 implementation
@@ -867,6 +869,47 @@ begin
   AssertEquals('F22: in the gutter of line 2', 2, FForm.Editor.Marks[0].Line);
   FForm.JumpToProblem(0);
   AssertEquals('F22: the caret goes there', 2, FForm.Editor.LogicalCaretXY.Y);
+end;
+
+{ Opening a recent file fails: only a file that is gone leaves the list. One another program
+  holds exclusively (as a share that is down, or a file being written) stays. }
+procedure TTbMainFormTests.TestAFileThatCannotBeReadStaysRecent;
+var
+  held, gone: string;
+  lock: TFileStream;
+begin
+  held := FDir + 'held.tycss';
+  gone := FDir + 'gone.tycss';
+  WriteBytes(held, 'TyButton { background: #111111; }'#10);
+  WriteBytes(gone, 'TyButton { background: #222222; }'#10);
+  AssertTrue('opened', FForm.OpenFile(gone));
+  AssertTrue('opened', FForm.OpenFile(held));
+  AssertEquals('both are recent', 2, FForm.Settings.Recent.Count);
+  lock := TFileStream.Create(held, fmOpenRead or fmShareExclusive);
+  try
+    AssertFalse('F23: a file held by another program does not open', FForm.OpenFile(held));
+  finally
+    lock.Free;
+  end;
+  AssertTrue('F23: and stays in the list', FForm.Settings.Recent.IndexOf(ExpandFileName(held)) >= 0);
+  AssertTrue('removed', DeleteFile(gone));
+  AssertFalse('a file that is gone does not open', FForm.OpenFile(ExpandFileName(gone)));
+  AssertTrue('F23: and leaves the list', FForm.Settings.Recent.IndexOf(ExpandFileName(gone)) < 0);
+  AssertEquals('F23: the menu follows', FForm.Settings.Recent.Count, FForm.MnuRecent.Count);
+end;
+
+{ A menu caption reads & as the accelerator mark: a path with one in it is shown as it is
+  (&& in the caption), and the item still opens that path. }
+procedure TTbMainFormTests.TestAnAmpersandInARecentPathIsShown;
+var
+  f: string;
+begin
+  f := FDir + 'salt&pepper.tycss';
+  WriteBytes(f, 'TyButton { background: #111111; }'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  AssertEquals('F24: the caption doubles the ampersand',
+    StringReplace(ExpandFileName(f), '&', '&&', [rfReplaceAll]), FForm.MnuRecent.Items[0].Caption);
+  AssertEquals('F24: the list keeps the path', ExpandFileName(f), FForm.Settings.Recent[0]);
 end;
 
 initialization
