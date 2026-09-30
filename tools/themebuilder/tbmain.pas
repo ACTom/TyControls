@@ -98,6 +98,9 @@ type
     FKit: TTyCssEditKit;
     FPreview: TTbPreviewFrame;
     FProblems: TTbProblems;
+    FLint: TTbProblems;                { what the last refresh's lint found }
+    FLoadError: string;                { the load the last refresh was refused, '' = none }
+    FParseFailed: Boolean;             { the last refresh did not parse: nothing was loaded }
     FSettings: TTbSettings;
     FBaseVars: TStringList;
     FLook: TTbEditorColors;
@@ -120,6 +123,7 @@ type
     function SaveAs: Boolean;
     procedure UpdateTitle;
     procedure UpdateStatusPosition;
+    procedure BuildProblems;
     procedure ShowProblems;
     procedure ClearProblemMarks;
     procedure SetStatus(const AText: string);
@@ -473,11 +477,25 @@ var
 begin
   RefreshTimer.Enabled := False;
   css := Editor.Lines.Text;
-  FProblems := TbCollectProblems(css, FDoc.BaseDir, FDoc.Untitled, FBaseVars);
-  if not TbHasParseError(FProblems) then
+  FLint := TbCollectProblems(css, FDoc.BaseDir, FDoc.Untitled, FBaseVars);
+  FParseFailed := TbHasParseError(FLint);
+  FLoadError := '';
+  if not FParseFailed then
     if not FPreview.LoadDocument(css, FDoc.BaseDir, err) then
-      TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, Format(rsTbPreviewKept, [err]));
-  if FPreview.ModeError <> '' then
+      FLoadError := err;
+  BuildProblems;
+end;
+
+{ The list from what the last refresh found plus what the preview says now: a switch the
+  preview refused arrives here without a reload (PreviewChanged) -- reloading would count
+  as a good load and forget the refusal. While the text does not parse nothing was loaded,
+  and a refusal about the version still shown is not about what is being written. }
+procedure TTbMainForm.BuildProblems;
+begin
+  FProblems := Copy(FLint);
+  if FLoadError <> '' then
+    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, Format(rsTbPreviewKept, [FLoadError]));
+  if (not FParseFailed) and (FPreview.ModeError <> '') then
     TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, FPreview.ModeError);
   ShowProblems;
 end;
@@ -581,9 +599,11 @@ begin
   UpdateStatusPosition;
 end;
 
+{ a switch on the preview's strip was used: the document is where it was, only what the
+  preview says about it (a refused mode) may have changed }
 procedure TTbMainForm.PreviewChanged(Sender: TObject);
 begin
-  RefreshNow;
+  BuildProblems;
 end;
 
 { ---- the file on disk ---- }

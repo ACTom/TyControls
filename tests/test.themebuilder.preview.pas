@@ -279,8 +279,12 @@ begin
   FFrame.SetDark(True, err);
   AssertTrue('a refusal was remembered', FFrame.ModeError <> '');
   AssertFalse('V11: the switch sprang back', FFrame.DarkSwitch.Checked);
+  { the same text again (a save, a refresh) resolves in dark no better: kept }
+  AssertTrue(Load('@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyButton { background: var(--x); }'));
+  AssertTrue('V11: the same document again keeps it', FFrame.ModeError <> '');
   AssertTrue(Load(TbMinimalTemplate));
-  AssertEquals('V11: a good load clears it', '', FFrame.ModeError);
+  AssertEquals('V11: a good load of another document clears it', '', FFrame.ModeError);
 end;
 
 procedure TTbPreviewTests.TestTheDocumentSurvivesADensityChange;

@@ -46,13 +46,14 @@ type
     procedure TestTheTranslationsCoverTheCode;
     procedure TestTheLibraryCatalogueIsACopy;
     procedure TestAVariableCycleIsAProblem;
+    procedure TestARefusedDarkReachesTheProblemList;
   end;
 
 implementation
 
 uses
   Forms, FileUtil, IniFiles, Graphics, fpjson, jsonparser, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
-  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, test.themebuilder.golden;
+  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, test.themebuilder.golden;
 
 const
   { a document whose one value no base theme has }
@@ -729,6 +730,49 @@ begin
     AssertTrue('a row on a line for document ' + IntToStr(i), found);
     AssertTrue('and a mark in the gutter', FForm.Editor.Marks.Count > 0);
   end;
+end;
+
+{ The preview's dark switch, used as a person uses it (its OnChange): a document that does
+  not resolve in dark is refused, and the reason is in the problem list. It used to be lost
+  on the way: the switch's notice reloaded the document, and a good load cleared the
+  refusal. A refresh of the same text keeps it; while the text does not parse it is not
+  listed (it is about the version still shown, not the text being written); a new document
+  clears it. }
+procedure TTbMainFormTests.TestARefusedDarkReachesTheProblemList;
+const
+  cLightOnly = '@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyButton { background: var(--x); }';
+
+  function Refusals: Integer;
+  var
+    i: Integer;
+    head: string;
+  begin
+    Result := 0;
+    head := Format(rsTbModeFailed, [rsTbModeDark, '']);
+    for i := 0 to High(FForm.Problems) do
+      if (FForm.Problems[i].Origin = tpoLoad) and (Pos(head, FForm.Problems[i].Text) = 1) then
+        Inc(Result);
+  end;
+
+begin
+  FForm.Editor.Lines.Text := cLightOnly;
+  FForm.RefreshNow;
+  AssertFalse('shown in light', FForm.Preview.IsDark);
+  AssertEquals('nothing refused yet', 0, Refusals);
+  FForm.Preview.DarkSwitch.Checked := True;
+  AssertFalse('dark was refused', FForm.Preview.IsDark);
+  AssertFalse('the switch sprang back', FForm.Preview.DarkSwitch.Checked);
+  AssertEquals('F19: the reason is in the list', 1, Refusals);
+  FForm.RefreshNow;
+  AssertEquals('F19: a refresh of the same text keeps it', 1, Refusals);
+  FForm.Editor.Lines.Text := cLightOnly + ' TyEdit { color: red';
+  FForm.RefreshNow;
+  AssertTrue('a parse error', TbHasParseError(FForm.Problems));
+  AssertEquals('F19: not listed while the text does not parse', 0, Refusals);
+  FForm.Editor.Lines.Text := TbMinimalTemplate;
+  FForm.RefreshNow;
+  AssertEquals('F19: a new document clears it', 0, Refusals);
 end;
 
 initialization

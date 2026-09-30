@@ -257,7 +257,9 @@ type
     procedure ShowSampleWindow;
     function StyledControlCount: Integer;           { FOR THE TESTS }
     property Controller: TTyStyleController read FController;
-    property ModeError: string read FModeError;     { the last rejected switch, '' after a good load }
+    { the last refused switch; '' after a switch that went through or a good load of a
+      different document }
+    property ModeError: string read FModeError;
     property AllDisabled: Boolean read FAllDisabled;
     property IsDark: Boolean read GetIsDark;
     property IsModern: Boolean read GetIsModern;
@@ -580,9 +582,12 @@ begin
   Result := LoadInto(AText, ABaseDir, AError, touched);
   if Result then
   begin
+    { a refused switch holds until the document changes: the same text loaded again (a
+      save, a refresh) resolves in that mode no better than it did }
+    if (AText <> FGoodText) or (ABaseDir <> FGoodDir) then
+      FModeError := '';
     FGoodText := AText;
     FGoodDir := ABaseDir;
-    FModeError := '';
   end
   else if touched then
     { a load that raised left the model as it was, but one that loaded and then failed
