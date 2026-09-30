@@ -1128,3 +1128,125 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 1. spec §7.4 原文「宿主也可以直接 `Core.Parser.RegisterOscHandler`」：能，但 `Core.Parser` 同时开放了 `Clear*` / `Set*Fallback`，会拆掉 Core 自己的处理；7 期起建议改用 Core 的 `Register*Handler`（§7.4 的 7 期注已写）。
 2. 主控提议的 `ITyTerminalStreamHandler` / `ITyTerminalStreamSession` 改成抽象类 `TTyTerminalStreamHandler` 与 Core 持有的 `TTyTerminalStreamSession`（理由在 spec §19.3 末段与开工前问题二第 1 条）；处理器的方法多了可选的 `Claimed` / `ClaimEnded`，`Detect` 的参数是指针 + 长度（避免每段复制一份）。
 3. xterm.js 类型注释里 `IFunctionIdentifier` 那段还写着「APC … currently not supported」（`typings/xterm.d.ts` 约 `:1913`），而同一文件的 `IParser` 已有 `registerApcHandler`、`ParserApi.ts` 也实现了——是上游注释过时，照实现做。
+
+（Task 13 写回：第 1 条 spec §7.4 的 7 期注本来就在；第 2 条写进 §19.3 的「实现期修正（7 期）」；第 3 条写进 §19.2 第 4 条。）
+
+---
+
+## 签收（2026-09-30）
+
+### 起点与提交
+
+- 实现：`0d04d823..a3bbdee0`（Task 0–12、Task 13 的编译 / 修红 / 集中变异，实现 agent）。实现后全量 8520 条、0 错 0 败。
+- 期末两份审查（规格核对 + 代码质量）之后的修复与签收：`a3bbdee0..` 本签收提交（修复 agent），17 个修复提交 + 1 个重构提交 + 文档提交，逐条见下表。
+- **主控已做的事**（在 `a3bbdee0`）：编 `tycontrols.lpk`、`tycontrols_dt.lpk` 与终端示例；跑 `scripts/example-rsj2po.py` 与各检查脚本；冒烟；截图 `2026-09-30-terminal-phase-7-shots/`（6 张）；`terminalbench --core` 三次 19.3 / 19.5 / 19.3 MB/s，对 5 期签收的 19.2 MB/s 无回退（没挂处理器时的零开销成立）。
+
+### 期末审查的处理（每个 bug 先写一条去掉修复会红的测试）
+
+| # | 问题 | 处理 | 提交 | 守它的测试 |
+|---|---|---|---|---|
+| 1 | 上传时 `CanSend` 恒 0 永不超时 | 修：没空间和等 ZACK 一样计时，超时从最后确认处重来，10 次后中止 | `3aca6f77` | `TTyTerminalZmodemTests.TestAnUploadWithNoRoomTimesOut` |
+| 2 | 上传中文件变短 / 读失败时无限发空子包 | 修：读到 0 → 中止序列、`zrError`「无法读完文件」（示例失败行显示） | `d0c29230` | `TestAFileThatEndsEarlyFails`（有 / 无 `CanSend` 两种，发出字节有上界） |
+| 3 | 前缀解析中被摘掉的胜出者仍接管 | 修：前缀解析后再查列表，不在就按「没人接管」把剩余字节交解析器、不再问 `Detect`（理由写进 spec §19.4） | `afa9e9e9` | `TTyTerminalStreamTests.TestAWinnerRemovedBeforeItsMarkerDoesNotClaim`（OSC 1337 处理器里摘，之后释放处理器再写） |
+| 4 | 接管中程序退出锁死终端 | 修：`ExitDone` 先 `Cancel` 再只读、写退出行；ReadOnly 下 `OnClaimedInput` 不发不变 | `9fa13809` | `TTyTerminalPtyTests.TestAnExitEndsAZmodemClaim` |
+| 5 | 管道后端 `BeginClose` 关 `FIn` 与写线程竞态；孙进程拿着管道时报不出退出；继承全部可继承句柄 | 修：`BeginClose` 只停写线程，收尾线程等写线程走了再关输入；加退出等待线程（进程走后读线程读完现有字节即结束）；`STARTUPINFOEXW` + `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` 只继承三个管道句柄（做成了，不用记限制） | 代码误随 `2cb3e321` 提交，测试与说明在 `0f9f42c2` | `TestPipeBackendClosesItsInputAfterTheWriter`、`TestPipeBackendSeesTheExitWhileAChildHoldsThePipe`（`cmd /c start /b` 的孙进程拿管道 4 s，2.5 s 内要报退出）、`TestPipeBackendHandsOnlyItsPipesToTheProgram`（测试自己的可继承管道，关掉写端后必须断） |
+| 6 | > 4 GiB（Cardinal 对 Int64） | 修：收方对 ≥ 4 GiB 的 ZFILE 回 ZSKIP、`OnFileSkipped`，终端一行原因；上传选中 ≥ 4 GiB 的文件直接拒绝并说明 | `2cb3e321` | `TestA4GiBFileIsSkipped`、`TestA4GiBFileInTheTerminal`（上传用 4 GiB 稀疏文件，文件系统不支持时 Ignore） |
+| 7 | 拒绝传输时丢掉等待期间的输出 | 修：交还最后一个完整十六进制头（及 CR/LF/XON、CAN/BS 串）之后的部分；`ClaimEnded` 里 `Release` 空操作，改用 `ShowText` 显示 | `c8a1585f` | `TestDecliningShowsWhatFollowed`（`Decline` 与 `RemoveStreamHandler` 两条路） |
+| 8 | 设备名过滤不全 | 修：补 `COM0`/`LPT0`、上标 `COM¹²³`/`LPT¹²³`、`CONIN$`/`CONOUT$`，比较前去掉 base 末尾空格和点 | `8b0a9ee3` | `TestEveryDeviceNameIsRenamed` |
+| 9 | 超长文件名 | 修：截到 200 字节，保留扩展名，不截在 UTF-8 中间 | `477534a5` | `TestALongNameIsCut` |
+| 10 | 重名 TOCTOU | 修：`ZmCreateNewFile`（`CREATE_NEW` / `O_EXCL`，失败换下一个 `(n)`），取代 `ZmUniqueFileName`；取消只删自己建的 | `36699277` | `TestUniqueFileNames`（改写：已有文件内容不被截断、同名目录跳过） |
+| 11 | 块最后一片的 `RunDeferred` 不等交还缓冲 | 修：放进 `RunDeferred` 本身（交还缓冲非空就等），块末与下一片开头两条路都覆盖 | `b3929d64` | `TestADeferredResetWaitsForTheBytesHandedBack`（整块与预算每段用完的切片两种） |
+| 12 | 文件关闭后再收到 ZEOF 不应答 | 修：无文件打开时的 ZEOF 立刻回 ZRINIT（照 rz） | `20057615` | `TestAZeofRepeatedAfterTheFileIsAnsweredAgain`（只喂收方、不走时钟，避免超时对称掩盖） |
+| 13 | 进度行直接显示对方文件名 | 修：C0 / C1 / DEL 显示成 `?`（进度行与跳过行） | `cb78a72b` | `TestTheRemoteNameIsShownNotRun` |
+| 14 | 示例进度事件每 KB 刷一次传输条 | 修：至多每 150 ms，第一次、换文件、文件结束必刷 | `731c3bb9` | `TTyTerminalExampleTests.TestTheTransferBarIsThrottled`（冻结时钟，20 个事件只刷 2 次、条满） |
+| 15 | `ZmDetectHexStart` 整段拼串；CRC 按位 | 修：carry 与段原地当一串扫描（段内按 `*` 跳）；CRC16 / CRC32 查表 | `29bd7919` | 现有 T1 / S1–S4 夹具结果不变；新 `TestTheCrcTablesAreTheBitwiseCrcs` |
+| 16 | `ushell.Stop` 注释说中止序列能送达 | 注释改成实话（排进队列、不等，`Close` 可能丢掉，进程随后被关） | `3cef1e8c` | —（注释） |
+| 17 | `Core.pas` 里 `RemoveStreamHandler` 的注释顺序与代码相反 | 注释改成「先摘后 `ClaimEnded`」 | `a1912294` | —（注释） |
+| 窗口 | 上传窗口做成 `TZmSender` 的字段 | 重构：`TZmSender.Window` 默认 `ZmSendWindow` = 16 KB（胶水不再自己设），示例不给界面；回放 rz 录制的 S2 显式设 0 | `125a6225` | `TestTheSendersWindow` 断言默认值 |
+
+### 本批修复的集中变异（每条：改一处 → 确认 `git diff` 改到了 → 编 → 跑守它的测试 → 必须红 → 写回原字节 → 核对字节相同）
+
+24 条全红，全部还原（脚本逐字节比对）；还原后 `lazbuild -B` 重编再跑本期 suite 与全量，全绿（见下）。
+
+| 变异 | 改了什么 | 红的测试与消息 |
+|---|---|---|
+| M1 | `Pump` 没空间时不进等待计时 | `TestAnUploadWithNoRoomTimesOut`：the upload ended |
+| M2 | 读到 0 字节不报错 | `TestAFileThatEndsEarlyFails`：more than 65536 bytes sent |
+| M3 | 前缀解析后不再查列表 | `TestAWinnerRemovedBeforeItsMarkerDoesNotClaim`：not claimed |
+| M4 | `ExitDone` 不取消传输 | `TestAnExitEndsAZmodemClaim`：the claim ended |
+| M5a | `BeginClose` 关输入管道 | `TestPipeBackendClosesItsInputAfterTheWriter`：BeginClose leaves the input open |
+| M5b | 不起退出等待线程 | `TestPipeBackendSeesTheExitWhileAChildHoldsThePipe`：the exit within 2.5 s |
+| M5c | 不用句柄列表（继承全部） | `TestPipeBackendHandsOnlyItsPipesToTheProgram`：nobody else holds its write end |
+| M6a | 收方不看大小 | `TestA4GiBFileIsSkipped`：not opened 期望 0 实为 1 |
+| M6b | 上传不看大小 | `TestA4GiBFileInTheTerminal`：idle |
+| M7a | 拒绝时交还空串 | `TestDecliningShowsWhatFollowed`：the prompt under it |
+| M7b | 拒绝时交还全部 `FPending`（头被再次检测） | 同上：the prompt under it（又被接管） |
+| M7c | `ClaimEnded` 不显示等待期间的输出 | 同上：the prompt shown |
+| M8 | 比较前不去掉 base 末尾空格 | `TestEveryDeviceNameIsRenamed`："CON .txt" |
+| M9 | 不截断 | `TestALongNameIsCut`：200 bytes 实为 304 |
+| M10 | `CREATE_NEW` 换成 `CREATE_ALWAYS` | `TestUniqueFileNames`：x.txt 被占用 |
+| M11 | `RunDeferred` 不看交还缓冲 | `TestADeferredResetWaitsForTheBytesHandedBack`：Reset 没结束第二次接管 |
+| M12 | 无文件时的 ZEOF 不应答 | `TestAZeofRepeatedAfterTheFileIsAnsweredAgain` |
+| M13a | 进度行不净化名字 | `TestTheRemoteNameIsShownNotRun`：the name, controls as '?' |
+| M13b | 跳过行不净化名字 | 同上：the skip line |
+| M14 | 传输条不节流 | `TestTheTransferBarIsThrottled`：期望 2 实为 20 |
+| M15a | CRC16 表多项式 `$1020` | `TestTheCrcTablesAreTheBitwiseCrcs`、`TestCrc16CheckValue` |
+| M15b | CRC32 表第 200 项错一位 | `TestTheCrcTablesAreTheBitwiseCrcs` |
+| M15c | 检测按 `*` 跳时多跳一个 | `TestDetection`：cut at 1: found |
+| MW | 发方窗口默认 0 | `TestTheSendersWindow`：16 KB unless set |
+
+实现 agent 那一轮集中变异（计划 Task 13 Step 5 的 H / P / V / Z / S / T / B / I / X / D 各条）的逐条结果没有写进本计划；留下的记录只有提交 `0e6e6bed`：变异中发现三条测试在去掉修复后仍绿，已补强（S2 核对每个 ZEOF 的位置、I6 / I10 要求 7 s 内完成、滚轮测试的注释写明两道守卫）。
+
+### 测试结果（`tests/tytests-p7fix.exe`，`lazbuild -B` 重编）
+
+本期 suite（条数 / 错 / 败 / 忽略，用时）：
+
+| suite | 结果 | 用时 |
+|---|---|---|
+| TTyTerminalStreamTests | 31 / 0 / 0 / 0 | 0.1 s |
+| TTyTerminalHookOracleTests | 1 / 0 / 0 / 0 | 0.0 s |
+| TTyTerminalHookTests | 6 / 0 / 0 / 0 | 0.0 s |
+| TTyTerminalViewStreamTests | 6 / 0 / 0 / 0 | 1.2 s |
+| TTyTerminalZmodemTests | 45 / 0 / 0 / 0 | 1.8 s |
+| TTyTerminalZmodemWslTests | 11 / 0 / 0 / **0** | 22.3 s |
+| TTyTerminalWriteQueueTests | 24 / 0 / 0 / 0 | 1.5 s |
+| TTyTerminalReentryTests | 9 / 0 / 0 / 0 | 0.1 s |
+| TTyTerminalCoreTests | 24 / 0 / 0 / 0 | 1.7 s |
+| TTyTerminalCoreOracleTests | 9 / 0 / 0 / 0 | 7.0 s |
+| TTyTerminalParserTests | 9 / 0 / 0 / 0 | 0.0 s |
+| TTyTerminalViewTests | 46 / 0 / 0 / 0 | 11.3 s |
+| TTyTerminalViewInputTests | 41 / 0 / 0 / 0 | 8.6 s |
+| TTyTerminalViewMouseTests | 44 / 0 / 0 / 0 | 8.3 s |
+| TTyTerminalPtyTests | 33 / 0 / 0 / 0 | 25.9 s |
+| TTyTerminalExampleTests | 14 / 0 / 0 / 0 | 4.9 s |
+| TTyTerminalPerfTests | 6 / 0 / 0 / 0 | 24.1 s |
+| TReleaseManifestTest | 15 / 0 / 0 / 0 | 0.3 s |
+| TI18NTest | 7 / 0 / 0 / 0 | 0.1 s |
+
+全量：**8537 条，0 错 0 败 0 忽略**（12 分 7 秒），红名单为空。实现后是 8520 条；本批新增 17 条（`TTyTerminalStreamTests` 2、`TTyTerminalZmodemTests` 10、`TTyTerminalPtyTests` 4、`TTyTerminalExampleTests` 1），1–6 期的测试一条没改（改的只有本期的 S2 显式设窗口 0、`TestUniqueFileNames` 换成新函数、管道测试的 helper）。
+
+WSL 互通（`TTyTerminalZmodemWslTests`，Windows 经 `TProcessPipeBackend` 与真 lrzsz 0.12.21rc）：11 条全过、无忽略。各例用时（含 `wsl.exe` 起进程约 0.4 s）：下载 1.5 MB 0.80 s、上传 1.5 MB 0.44 s；其余 0.41–0.64 s。改完管道后端（退出等待、句柄列表、输入关闭时机）后另单独跑过一次，同样全过。
+
+WSL 里经 Unix PTY 的工具 `tools/terminal-zmodem-wsl`（在 WSL 里用 `fpc` 现编，Core 与三个 ZModem 单元不依赖 LCL，`uzmodemterm` 的 `O_EXCL` 分支在这里编过）：**`zmwsl: 10 passed, 0 failed`**——I1 下载 0 / 1 / 1024 / 1025、I2 每个字节值（另 `sz -e`）、I3 下载 1.5 MB（1.2 s）、I4 一次三个、I7 之后的输出、I9 上传每个字节值 / 1.5 MB（0.45 s）/ 两个加 `rz -e` / 带空格和中文的名字。
+
+### 与规格不符之处（写回 spec，标「实现期修正（7 期）」）
+
+- §19.2 第 4 条：上游 `IFunctionIdentifier` 注释过时。第 12 条：换成 Task 0 正式实验的结论。
+- §19.3：`AddStreamHandler(nil)` 抛异常；`RemoveStreamHandler` 先摘后 `ClaimEnded`；`ClaimEnded` 期间 `SendRaw` / `ShowText` 可用、`Release` 空操作；接口名的改动。
+- §19.4：`Claimed` 里 `Release('')` 时首字节直接进解析器（与计划地雷 6 相反）；胜出者在前缀解析中被摘掉时不接管、剩余字节直接解析。
+- §19.5：延后调用等交还缓冲；`RemoveStreamHandler` 一行；示例「重启」的实际顺序。
+- §19.7：转义不含 `$98`；十六进制头后可跟数据子包（`sz -e` 的 ZSINIT）；上传 16 KB 窗口 + 每 4 KB 一个 ZCRCQ（理由、代价、`TZmSender.Window` 可设）；没空间超时、文件变短；ZFIN 重发两次后按成功结束；ZEOF 重发；4 GiB；检测只要求一个 `*`、原地扫描；拒绝时交还等待期间的输出；设备名、200 字节、独占建文件、名字里的控制字符；ConPTY 结论；开工前问题一的答复；管道后端（句柄列表、退出等待、输入关闭时机——句柄列表做成了，不用记限制）；勾选用 `OnChange`、Shell 总带处理器、勾选只控制 `Enabled`；`Stop` 先 `Cancel` 再摘钩子、中止序列不保证送到；传输中程序退出；传输条 150 ms。
+- §19.8、§15：上传窗口、4 GiB。§16：真机项实际编号 102–114。§17：开工前问题的结论。§18：7 期实际做了什么。状态行：7 期签收。
+
+### 计划外发现
+
+- 管道后端的测试原来靠 `BeginClose` 关输入让 `cat` 结束；修了第 5 条后改用只回显 1024 字节就退出的 helper（`echo1024`）。另加 `linger` helper（给 `cmd /c start /b` 用）。
+- 第 5 条的代码因为 `git add` 整个目录，随第 6 条的提交 `2cb3e321` 进了仓库；没有改写历史，测试与说明补在 `0f9f42c2`。
+- 发方默认窗口改成 16 KB 后，自家环回的故障注入测试（S4）从约 2.1 s 降到 0.7 s（重传的量有界了）。
+
+### 主控待做
+
+1. 编 `tycontrols.lpk`、`tycontrols_dt.lpk`（本批改了 `Terminal.Core.pas`、`Core.Stream.inc`、`Core.WriteQueue.inc`）和终端示例（`lazbuild -B examples/terminal/terminal_example.lpi`）。
+2. `python scripts/example-rsj2po.py examples/terminal terminal_example examples/terminal/languages/terminal_example.zh_CN.json`，再跑 `check-example-po.py`：本批新增 `rsZmReadFailed`、`rsZmTooBig`（`uzmodemsession`）与 `rsZmSkippedLine`（`uzmodemterm`），`.json` 与 `.po` 已手工补了中文，生成后核对没有空 msgstr。
+3. 冒烟：示例起得来；勾「Pipe」跑一次 `wsl.exe -d Ubuntu -- sz /etc/os-release`；弹选目录时点取消，看「已拒绝」下面接着是提示符。
+4. `terminalshots --phase7`：进度行、摘要、拒绝提示的画面本批按说没有变化（截图用的文件名里没有控制字符、传输是下载），可以重跑确认像素相同；有变化就替换 PNG。
