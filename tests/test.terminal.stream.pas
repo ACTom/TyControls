@@ -63,6 +63,16 @@ type
     procedure TestOtherThreadsAreRefused;                    { H26 }
     procedure TestTheDestructorCallsNoHandler;               { H27 }
     procedure TestOneSessionForEveryClaim;                   { H28 }
+    { Task 2 }
+    procedure TestHandedBackBytesComeBeforeTheQueue;         { H7 }
+    procedure TestHandedBackBytesAreOfferedAgain;            { H8 }
+    procedure TestAClaimThatAteNothingDoesNotLoop;           { H9 }
+    procedure TestAReleaseOutsideFeedWaitsForASlice;         { H10 }
+    procedure TestShowTextHasADecoderOfItsOwn;               { H11 }
+    procedure TestShowTextFromItsOwnEventWaits;              { H12 }
+    procedure TestCallbacksComeWhileClaimed;                 { H13 }
+    procedure TestSendRawGoesStraightOut;                    { H14 }
+    procedure TestAReleaseInClaimedHandsTheRestBack;
   end;
 
 { the text of line AY of the active buffer (from ybase), trailing blanks cut }
@@ -744,6 +754,277 @@ begin
     r.Core.WriteSync('<<GO>>');
     AssertEquals('two claims', 2, Length(p.SessionsSeen));
     AssertTrue('the same session object', p.SessionsSeen[0] = p.SessionsSeen[1]);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ ---- Task 2: the session -------------------------------------------------------------- }
+
+{ H7. Mutation: the handed-back bytes appended after the queue. }
+procedure TTyTerminalStreamTests.TestHandedBackBytesComeBeforeTheQueue;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.Write('<<GO>>x<<END>>tail');
+    r.Core.Write('more');
+    r.Drain;
+    AssertFalse('released', r.Core.StreamClaimed);
+    AssertEquals('handed back first, then the queue', 'tailmore', r.Line);
+    AssertTrue('fed up to the end marker and what followed in the piece', p.Fed = '<<GO>>x<<END>>tail');
+    AssertEquals('pending', 0, r.Core.PendingBytes);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H8 (sz a; sz b). Mutation: the handed-back bytes parsed without Detect. }
+procedure TTyTerminalStreamTests.TestHandedBackBytesAreOfferedAgain;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>a<<END>>b<<GO>>c');
+    AssertEquals('two claims', 2, CountOf(r.Log, 'Claimed'));
+    AssertEquals('b between them', 'b', r.Line);
+    AssertTrue('the second claim is fed its part', p.ClaimBuf = '<<GO>>c');
+    AssertTrue('still claimed', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H9. Mutation: FFrontBypass dropped (Detect would claim the same byte for ever; the
+  fake raises at 1000 calls). }
+procedure TTyTerminalStreamTests.TestAClaimThatAteNothingDoesNotLoop;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  t0: QWord;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    p.ReleaseAllOnFirstFeed := True;
+    t0 := GetTickCount64;
+    r.Core.WriteSync('<<GO>>x');
+    AssertTrue('returns at once', GetTickCount64 - t0 < 1000);
+    AssertTrue('asked a few times only', p.DetectCalls < 20);
+    AssertEquals('everything shown', '<<GO>>x', r.Line);
+    AssertFalse('no claim left', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H10. Mutation: a Release outside Feed parsed on the spot. }
+procedure TTyTerminalStreamTests.TestAReleaseOutsideFeedWaitsForASlice;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.WriteSync('ab<<GO>>');
+    AssertTrue('claimed', r.Core.StreamClaimed);
+    r.Requests := 0;
+    p.Session.Release('xyz');
+    AssertFalse('released', r.Core.StreamClaimed);
+    AssertEquals('not parsed yet', 'ab', r.Line);
+    AssertEquals('asked for a slice once', 1, r.Requests);
+    AssertEquals('not pending bytes (counted off already)', 0, r.Core.PendingBytes);
+    AssertFalse('one slice does it', r.Core.ProcessPending);
+    AssertEquals('parsed in the slice', 'abxyz', r.Line);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+type
+  TShowOnce = class
+  public
+    Text: string;
+    Shown: Boolean;
+    procedure Hook(AProto: TFakeProtocol);
+  end;
+
+procedure TShowOnce.Hook(AProto: TFakeProtocol);
+begin
+  if Shown then
+    Exit;
+  Shown := True;
+  AProto.Session.ShowText(Text);
+end;
+
+{ H11. Mutation: ShowText parsed with the program's decoder. The program's half
+  character (E4 B8 of U+4E2D) waits in its decoder across the claim. }
+procedure TTyTerminalStreamTests.TestShowTextHasADecoderOfItsOwn;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  show: TShowOnce;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  show := TShowOnce.Create;
+  try
+    p := r.Proto;
+    show.Text := #$C3#$A9;               { U+00E9 }
+    p.OnFeed := @show.Hook;
+    r.Core.WriteSync(#$E4#$B8'<<GO>>');
+    AssertTrue('shown in Feed', show.Shown);
+    AssertEquals('on screen at once', #$C3#$A9, r.Line);
+    r.Core.WriteSync('<<END>>'#$AD);
+    AssertEquals('the program''s character is whole', #$C3#$A9#$E4#$B8#$AD, r.Line);
+  finally
+    r.Free;
+    p.Free;
+    show.Free;
+  end;
+end;
+
+type
+  TBellShow = class
+  public
+    Session: TTyTerminalStreamSession;
+    Bells: Integer;
+    procedure OnBell(Sender: TObject);
+  end;
+
+procedure TBellShow.OnBell(Sender: TObject);
+begin
+  Inc(Bells);
+  if Bells = 1 then
+    Session.ShowText('2');
+end;
+
+{ H12. Mutation: ShowText parsing at once even while a parse runs (the parser entered
+  twice: the bell's '2' would land between '1' and '3', or worse). }
+procedure TTyTerminalStreamTests.TestShowTextFromItsOwnEventWaits;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  show: TShowOnce;
+  bell: TBellShow;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  show := TShowOnce.Create;
+  bell := TBellShow.Create;
+  try
+    p := r.Proto;
+    show.Text := '1'#7'3';
+    p.OnFeed := @show.Hook;
+    bell.Session := r.Core.StreamSession;
+    r.Core.OnBell := @bell.OnBell;
+    r.Core.WriteSync('<<GO>>');
+    AssertEquals('one bell', 1, bell.Bells);
+    AssertEquals('the event''s text after its parse', '132', r.Line);
+    AssertTrue('the parser is back in ground', r.Core.Parser.CurrentState = tpsGround);
+  finally
+    r.Free;
+    p.Free;
+    show.Free;
+    bell.Free;
+  end;
+end;
+
+{ H13. Mutation: a claimed chunk skipping its callback. }
+procedure TTyTerminalStreamTests.TestCallbacksComeWhileClaimed;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  i, before: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    before := Length(p.Fed);
+    for i := 1 to 5 do
+      r.Core.Write(StringOfChar(AnsiChar(Ord('a') + i), 10240), @r.OnDone, i);
+    r.Drain;
+    AssertEquals('every callback, in order', '1,2,3,4,5', r.Done.CommaText);
+    AssertEquals('nothing pending', 0, r.Core.PendingBytes);
+    AssertEquals('all fed', 5 * 10240, Length(p.Fed) - before);
+    AssertTrue('still claimed', r.Core.StreamClaimed);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ H14. Mutations: SendRaw through TriggerDataEvent(.., True); ReadOnly not checked. }
+procedure TTyTerminalStreamTests.TestSendRawGoesStraightOut;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+  i, ydisp: Integer;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    for i := 1 to 20 do
+      r.Core.WriteSync('line ' + IntToStr(i) + #13#10);
+    p := r.Proto;
+    r.Core.WriteSync('<<GO>>');
+    r.Core.ScrollLines(-3);
+    ydisp := r.Core.Buffer.YDisp;
+    AssertTrue('scrolled up', ydisp < r.Core.Buffer.YBase);
+    AssertTrue('sent', p.Session.SendRaw(#0#$FF#$18));
+    AssertTrue('byte for byte', r.Sent = #0#$FF#$18);
+    AssertEquals('the viewport stays', ydisp, r.Core.Buffer.YDisp);
+    AssertEquals('no OnUserInput', 0, r.UserInputs);
+    AssertEquals('not claimed input either', 0, r.ClaimedCount);
+    { not "the user just typed": the next write is queued, not parsed at once }
+    r.Core.Write('a');
+    AssertEquals('queued', 1, r.Core.PendingBytes);
+    AssertTrue('not fed yet', Copy(p.Fed, Length(p.Fed), 1) <> 'a');
+    r.Drain;
+    r.Core.ReadOnly := True;
+    AssertFalse('ReadOnly refuses', p.Session.SendRaw('x'));
+    AssertEquals('nothing more sent', 1, r.SentCount);
+  finally
+    r.Free;
+    p.Free;
+  end;
+end;
+
+{ A Release in Claimed, before anything was fed: the rest of the piece was never the
+  handler's; it goes back in front and its first byte to the parser (no loop). }
+procedure TTyTerminalStreamTests.TestAReleaseInClaimedHandsTheRestBack;
+var
+  r: TStreamRig;
+  p: TFakeProtocol;
+begin
+  r := TStreamRig.Create;
+  p := nil;
+  try
+    p := r.Proto;
+    p.ReleaseInClaimed := True;
+    r.Core.WriteSync('abc<<GO>>xyz');
+    AssertEquals('claimed once', 1, p.Claims);
+    AssertTrue('fed nothing', p.Fed = '');
+    AssertEquals('nothing lost', 'abc<<GO>>xyz', r.Line);
+    AssertFalse('not claimed', r.Core.StreamClaimed);
   finally
     r.Free;
     p.Free;

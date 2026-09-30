@@ -18,11 +18,22 @@ end;
 { The write queue hands a chunk over one piece at a time (unit header): each piece is
   one call here, the decoder's half sequence carried to the next. }
 procedure TTyTerminalCore.ParseRange(const AData: RawByteString; AStart, ACount: Integer);
+begin
+  ParseDecoded(FDecoder, AData, AStart, ACount);
+end;
+
+{ ParseRange with the decoder given: the program's (FDecoder), or the stream session's
+  own for ShowText (spec 19.3), so neither cuts into the other's half sequence. Text
+  shown while a parse runs (from one of its events) waits in FShowPending and is
+  parsed once the outermost parse has returned. }
+procedure TTyTerminalCore.ParseDecoded(ADecoder: TTyUtf8Decoder; const AData: RawByteString;
+  AStart, ACount: Integer);
 var
   buf: TTyTerminalBuffer;
   cursorStartX, cursorStartY, total, i, chunk, len, viewportStart, viewportEnd: Integer;
 begin
   Inc(FBusy);
+  Inc(FParsing);
   try
     buf := Buffer;
     cursorStartX := buf.X;
@@ -38,7 +49,7 @@ begin
       while i < total do
       begin
         chunk := Min(TyTermMaxParseBuffer, total - i);
-        len := FDecoder.Decode(AData[AStart + i], chunk, FParseBuffer);
+        len := ADecoder.Decode(AData[AStart + i], chunk, FParseBuffer);
         FParser.Parse(FParseBuffer, len);
         Inc(i, chunk);
       end;
@@ -55,8 +66,11 @@ begin
           FOnRefreshRows(Self, Min(viewportStart, Rows - 1), Min(viewportEnd, Rows - 1));
     end;
   finally
+    Dec(FParsing);
     Dec(FBusy);
   end;
+  if (FParsing = 0) and (FShowPending <> '') and not FShowFlushing then
+    FlushShowPending;
 end;
 
 procedure TTyTerminalCore.PrintHandler(const AData: array of Cardinal; AStart, AEnd: Integer);

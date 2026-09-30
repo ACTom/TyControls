@@ -23,20 +23,31 @@ begin
   FCore := ACore;
 end;
 
+{ straight to OnData, not through TriggerDataEvent: no scroll to the bottom, no
+  OnUserInput, no "the user just typed" (spec 19.3). ReadOnly sends nothing (spec 3.3). }
 function TTyTerminalStreamSession.SendRaw(const AData: RawByteString): Boolean;
 begin
   FCore.CheckThread('StreamSession.SendRaw');
-  Result := False;
+  if not FActive or FCore.FOptions.DisableStdin or not Assigned(FCore.FOnData) then
+    Exit(False);
+  FCore.FOnData(FCore, AData);
+  Result := True;
 end;
 
 procedure TTyTerminalStreamSession.Release(const ALeftover: RawByteString);
 begin
   FCore.CheckThread('StreamSession.Release');
+  if not FActive or FEnding then
+    Exit;
+  FCore.ReleaseClaim(ALeftover);
 end;
 
 procedure TTyTerminalStreamSession.ShowText(const AText: string);
 begin
   FCore.CheckThread('StreamSession.ShowText');
+  if not FActive or (AText = '') then
+    Exit;
+  FCore.ShowLocal(AText);
 end;
 
 { ==== the core's side ======================================================================= }
@@ -184,7 +195,18 @@ begin
   BeginClaim(winner);
   if best < ACount then
     if FClaim = winner then
-      DoFeed(AData, AFrom + best, ACount - best);
+      DoFeed(AData, AFrom + best, ACount - best)
+    else
+    begin
+      { the claim ended in Claimed (a Release, a RemoveStreamHandler) before it was fed
+        anything: the rest of the piece was never the handler's, so it goes back in
+        front, after what the Release handed back. A claim that took nothing and gave
+        nothing back would be found again at the same byte: that byte goes to the
+        parser (spec 19.4, the loop guard). }
+      SpliceFront(Copy(AData, AFrom + best, ACount - best), FClaimReturned);
+      if FClaimReturned = 0 then
+        FFrontBypass := True;
+    end;
 end;
 
 procedure TTyTerminalCore.DoFeed(const AData: RawByteString; AFrom, ACount: Integer);
@@ -245,8 +267,23 @@ begin
   end;
 end;
 
+{ Session.Release (spec 19.4): the claim ends; ALeftover goes in front of everything not
+  parsed yet -- in Feed the outer loop takes it next; elsewhere (a Cancel from the
+  host, the program quiet) it waits for the next slice, like a Write. Not counted in
+  PendingBytes: those bytes were counted off when they were handed over. }
 procedure TTyTerminalCore.ReleaseClaim(const ALeftover: RawByteString);
+var
+  zeroProgress: Boolean;
 begin
+  { the loop guard: a claim that handed back exactly what it was fed ate nothing }
+  zeroProgress := (FClaimFed > 0) and (Length(ALeftover) = FClaimFed);
+  EndClaim(tceRemoved, False);
+  FClaimReturned := Length(ALeftover);
+  if ALeftover = '' then
+    Exit;
+  SpliceFront(ALeftover, 0);
+  FFrontBypass := zeroProgress;
+  RequestProcess;
 end;
 
 procedure TTyTerminalCore.SpliceFront(const AData: RawByteString; AOffset: Integer);
@@ -273,24 +310,50 @@ begin
     FFront := '';
     FFrontPos := 0;
   end;
-  StreamPiece(data, start + 1, n);
+  if FFrontBypass and (n > 0) then
+  begin
+    { the loop guard (ReleaseClaim, OfferPiece): the first byte straight to the parser }
+    FFrontBypass := False;
+    ParseRange(data, start + 1, 1);
+    Inc(start);
+    Dec(n);
+  end;
+  if n > 0 then
+    StreamPiece(data, start + 1, n);
   { a handed-back piece ends no chunk: what its events asked for runs once the bytes
     handed back are through and no chunk is half parsed }
   if FFront = '' then
     RunDeferred;
 end;
 
+{ Session.ShowText: parsed now with the session's own decoder; from an event of a
+  running parse it waits for that parse to return (ParseDecoded flushes it) -- the
+  parser is never entered twice }
 procedure TTyTerminalCore.ShowLocal(const AText: string);
 begin
+  FShowPending := FShowPending + AText;
+  if FParsing > 0 then
+    Exit;                                { a parse runs further up: it flushes when done }
+  FlushShowPending;
 end;
 
+{ from ShowLocal, and from ParseDecoded once the outermost parse is done (unless a
+  flush further up the stack is already looping) }
 procedure TTyTerminalCore.FlushShowPending;
+var
+  s: RawByteString;
 begin
-end;
-
-procedure TTyTerminalCore.ParseDecoded(ADecoder: TTyUtf8Decoder; const AData: RawByteString;
-  AStart, ACount: Integer);
-begin
+  FShowFlushing := True;
+  try
+    while FShowPending <> '' do
+    begin
+      s := FShowPending;
+      FShowPending := '';
+      ParseDecoded(FShowDecoder, s, 1, Length(s));
+    end;
+  finally
+    FShowFlushing := False;
+  end;
 end;
 
 procedure TTyTerminalCore.NoteUserHandle(AHandle: Integer);
