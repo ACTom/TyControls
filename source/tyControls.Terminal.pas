@@ -529,6 +529,7 @@ type
     procedure Loaded; override;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
+    procedure EraseBackground(DC: HDC); override;
     procedure Paint; override;
     procedure DoEnter; override;
     procedure DoExit; override;
@@ -2668,6 +2669,14 @@ begin
   TyTermBlendMask(FSurface, x + glyph.OffsetX, y + glyph.OffsetY, glyph.Mask, fg, Rect(x, y, x + w, y + FMetrics.CellH));
   FSurface.FillRect(x, y + FMetrics.CellH - FMetrics.LineW, x + w, y + FMetrics.CellH, TyTermRgbToPixel(line), dmSet);
   FSurface.InvalidateBitmap;
+end;
+
+{ 不擦底:Paint 从表面位图贴满整个更新区(csOpaque)。Win32 上 LCL 每次 WM_PAINT 先发
+  WM_ERASEBKGND,没开双缓冲(上面构造里关掉的)时 TWinControl.EraseBackground 拿 Brush 把
+  更新区直接填在窗口上,贴图却要等这一帧的行都画完——中间 DWM 合成一次,重画的那几行就闪
+  成一片底色(ConPTY 每个键把光标行到末行整行重写,vim 里按键就闪)。SynEdit 同一做法。 }
+procedure TTyTerminalView.EraseBackground(DC: HDC);
+begin
 end;
 
 procedure TTyTerminalView.Paint;

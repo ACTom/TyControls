@@ -175,6 +175,7 @@ uses
   test.terminal.view.links, test.terminal.pty, test.terminal.reflow, test.terminal.perf,
   test.terminal.colorscheme, test.terminal.view.scheme,
   test.terminal.stream, test.terminal.hooks, test.terminal.view.stream, test.terminal.zmodem, test.terminal.zmodem.wsl,
+  test.terminal.view.flicker,
   test.transitions,
   test.htmllabel,
   test.shape,
