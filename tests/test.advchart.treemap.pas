@@ -42,7 +42,7 @@ type
     FChart: TTmProbe;
     FRoot: TJSONData;
     FBmp: TBGRABitmap;
-    FBad, FCompared, FRects, FLabels, FCrumbs, FSkipped, FSkippedWords: Integer;
+    FBad, FCompared, FRects, FLabels, FCrumbs, FSkipped, FSkippedWords, FHeaders: Integer;
     FReport, FName: string;
     procedure Miss(const AWhat: string);
     procedure RunCases(AGallery: Boolean);
@@ -146,6 +146,7 @@ begin
   FCrumbs := 0;
   FSkipped := 0;
   FSkippedWords := 0;
+  FHeaders := 0;
   FReport := '';
 end;
 
@@ -337,9 +338,13 @@ begin
                   e.Style.FillColor]));
             end;
           end
-          else if kind = 'tspan' then
+          else if (kind = 'tspan') or (kind = 'upper') then
           begin
+            { a leaf's label, or a parent's header -- never both on a node;
+              a header's words start its padding in from the anchor }
             if (row < 0) or (row >= n) then Continue;
+            if kind = 'upper' then Inc(FHeaders);
+            tx := tx + Hex(ex.Find('x'));
             if hasLbl[row] then lblText[row] := lblText[row] + #10 + ex.Get('text', '')
             else lblText[row] := ex.Get('text', '');
             hasLbl[row] := True;
@@ -484,9 +489,9 @@ begin
   RunCases(False);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  AssertTrue(Format('compared %d rects, %d labels, %d crumbs (%d white grounds passed over)',
-    [FRects, FLabels, FCrumbs, FSkipped]),
-    (FRects >= 5000) and (FLabels >= 1000) and (FCrumbs >= 300)
+  AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs (%d white grounds passed over)',
+    [FRects, FLabels, FHeaders, FCrumbs, FSkipped]),
+    (FRects >= 5000) and (FLabels >= 1000) and (FCrumbs >= 300) and (FHeaders >= 150)
     and (FSkippedWords < FLabels div 5));
 end;
 
@@ -495,8 +500,12 @@ begin
   RunCases(True);
   AssertTrue(Format('%d of %d comparisons differ from upstream:%s',
     [FBad, FCompared, FReport]), FBad = 0);
-  AssertTrue(Format('compared %d rects, %d labels, %d crumbs',
-    [FRects, FLabels, FCrumbs]), (FRects = 10) and (FLabels = 3) and (FCrumbs = 4));
+  { treemap-simple is 10 rects, 3 labels, 4 crumbs; disk and show-parent
+    what visibleMin 300 leaves of 3635 nodes -- 781 rects, 139 labels, 35
+    of them header lines, 6 crumbs in all }
+  AssertTrue(Format('compared %d rects, %d labels (%d header lines), %d crumbs',
+    [FRects, FLabels, FHeaders, FCrumbs]), (FRects = 781) and (FLabels = 139)
+    and (FHeaders = 35) and (FCrumbs = 6));
 end;
 
 initialization

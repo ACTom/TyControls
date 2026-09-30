@@ -5206,8 +5206,12 @@ begin
     if FStores[i] <> nil then dim := FStores[i].DimIndexOf('value');
     TyTreemapLabels(FTreemaps[i], FTreemapInks[i].ItemLabels, FStores[i],
       SeriesModelName(FBindings[i].SeriesIndex), dim, AMeasurer);
+    { the headers' specs follow the rows' and the breadcrumb's [Batch 78] }
+    TyTreemapUpperLabels(FTreemaps[i], Copy(FTreemapInks[i].ItemLabels,
+      Length(FTreemaps[i].Nodes) + 1, Length(FTreemaps[i].Nodes)), FStores[i],
+      SeriesModelName(FBindings[i].SeriesIndex), dim, AMeasurer);
     TyTreemapBreadcrumb(FTreemaps[i],
-      FTreemapInks[i].ItemLabels[High(FTreemapInks[i].ItemLabels)], AMeasurer,
+      FTreemapInks[i].ItemLabels[Length(FTreemaps[i].Nodes)], AMeasurer,
       FLastRect);
   end;
 end;
@@ -5219,6 +5223,8 @@ function TTyAdvanceChart.TreemapInk(ASlot: Integer): TTyTreemapInk;
 var
   base, crumb: TTyLabelSpec;
   ls, cs: TTyStyleSet;
+  hs: TTyLabelSpecArray;
+  j, k: Integer;
 begin
   Result := Default(TTyTreemapInk);
   ls := ActiveController.Model.ResolveStyle('TyAdvChartTreemapLabel', '', []);
@@ -5243,6 +5249,15 @@ begin
   SetLength(Result.ItemLabels, Length(Result.ItemLabels) + 1);
   Result.ItemLabels[High(Result.ItemLabels)] := crumb;
   Result.CrumbFill := TTyChartColor(cs.Background.Color);
+  { the parents' headers: outside text in the chart's label ink, a halo of
+    the ground [Batch 78] }
+  base := LabelBaseFor(ASlot);
+  base.Show := True;
+  base.DefaultText := tldName;
+  hs := TyTreemapUpperSpecs(FTreemaps[ASlot], base);
+  k := Length(Result.ItemLabels);
+  SetLength(Result.ItemLabels, k + Length(hs));
+  for j := 0 to High(hs) do Result.ItemLabels[k + j] := hs[j];
 end;
 
 { A SUNBURST'S INK: the ring separator is the chart's own ground (upstream's

@@ -43,7 +43,7 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Color, tyControls.AdvChart.Labels,
   tyControls.AdvChart.LabelOpt, tyControls.AdvChart.Calendar,
-  tyControls.AdvChart.Tree;
+  tyControls.AdvChart.VisualMap, tyControls.AdvChart.Tree;
 
 const
   TyTreemapSeriesTypeName = 'treemap';
@@ -63,7 +63,13 @@ type
     { the accumulated group origin; HasT false is zrender's null transform }
     HasT: Boolean;
     TX, TY: Double;
-    { the border colour, which is the background rect's fill }
+    { the children's value extent, sorted, BEFORE visibleMin cut any: what
+      a saturation range maps over [Batch 78] }
+    HasExtent: Boolean;
+    ExtMin, ExtMax: Double;
+    { the border colour, which is the background rect's fill; none when a
+      borderColorSaturation has no colour to work from }
+    HasStroke: Boolean;
     Stroke: TTyChartColor;
     { nodes with no view children only; false draws nothing }
     HasFill: Boolean;
@@ -72,6 +78,11 @@ type
     HasLabel: Boolean;
     LabelText: string;
     LabelX, LabelY: Double;
+    { A PARENT'S HEADER, on its background's top strip [Batch 78] }
+    HasUpper: Boolean;
+    UpperText: string;
+    UpperX, UpperY: Double;
+    UpperCentre, UpperInside: Boolean;
   end;
 
   TTyTreemapCrumb = record
@@ -97,8 +108,8 @@ type
   end;
 
   TTyTreemapInk = record
-    { the label spec by row (item -> level -> series); one more at the end,
-      the breadcrumb's text }
+    { the label spec by row (item -> level -> series); then the breadcrumb's
+      text; then the headers', by row }
     Label_: TTyLabelSpec;
     ItemLabels: TTyLabelSpecArray;
     CrumbFill: TTyChartColor;
@@ -114,8 +125,17 @@ procedure TyTreemapColour(var ASolved: TTyTreemapSolved;
 { One label spec per row: item -> levels[depth] -> series. }
 function TyTreemapLabelSpecs(const ASolved: TTyTreemapSolved;
   const ASeriesSpec: TTyLabelSpec): TTyLabelSpecArray;
+{ One header spec per row: upperLabel on item -> level -> series over
+  ABase (the chart's own label ink, so a header reads as outside text). }
+function TyTreemapUpperSpecs(const ASolved: TTyTreemapSolved;
+  const ABase: TTyLabelSpec): TTyLabelSpecArray;
 { The labels' words and anchors. }
 procedure TyTreemapLabels(var ASolved: TTyTreemapSolved;
+  const ASpecs: TTyLabelSpecArray; AStore: TTyDataStore; const ASeriesName: string;
+  AValueDim: Integer; const AMeasurer: ITyTextMeasurer);
+{ The parents' headers (upperLabel): ASpecs by row, the words cut to the
+  strip. [Batch 78] }
+procedure TyTreemapUpperLabels(var ASolved: TTyTreemapSolved;
   const ASpecs: TTyLabelSpecArray; AStore: TTyDataStore; const ASeriesName: string;
   AValueDim: Integer; const AMeasurer: ITyTextMeasurer);
 { The breadcrumb on the first frame, measured in ACrumbSpec's font. }
@@ -298,7 +318,7 @@ function InitChildren(const C: TSolveCtx; ARow: Integer; ATotalArea: Double;
 var
   vc: TTyIntegerArray;
   k, j, tmp, len, del: Integer;
-  sum, v, vm: Double;
+  sum, v, vm, emin, emax: Double;
 begin
   Result := nil;
   if AHide then Exit;
@@ -317,6 +337,15 @@ begin
     end;
   sum := 0;
   for k := 0 to High(vc) do sum := sum + C.S^.Nodes[vc[k]].Value;
+  { statistic(): over the sorted children, before the cut }
+  emin := Infinity;
+  emax := NegInfinity;
+  for k := 0 to High(vc) do
+  begin
+    v := C.S^.Nodes[vc[k]].Value;
+    if v < emin then emin := v;
+    if v > emax then emax := v;
+  end;
   if sum = 0 then Exit;
   { filterByThreshold: smallest first, the sum shrinking as it goes, the
     last match the cut }
@@ -348,6 +377,9 @@ begin
     C.S^.Nodes[vc[k]].H := 0;
     C.S^.Nodes[vc[k]].Area := C.S^.Nodes[vc[k]].Value / sum * ATotalArea;
   end;
+  C.S^.Nodes[ARow].HasExtent := True;
+  C.S^.Nodes[ARow].ExtMin := emin;
+  C.S^.Nodes[ARow].ExtMax := emax;
   Result := vc;
 end;
 
@@ -677,46 +709,92 @@ end;
 { ==================== the colours ==================== }
 
 type
-  { a visual colour: none, a JSON value from the chain, or a palette entry }
+  { the visuals a node carries: its colour -- none, a JSON value from the
+    chain, or a palette entry -- and its saturation, inherited down }
   TTmColour = record
     Kind: Integer;              // 0 none, 1 json, 2 palette
     Json: TJSONData;
     Pal: TTyChartColor;
+    HasSat: Boolean;
+    Sat: Double;
   end;
 
-function CalcColour(const V: TTmColour; out AColour: TTyChartColor): Boolean;
+{ getValueVisualDefine: null and 'none' are no colour }
+function HasColourDefine(const V: TTmColour): Boolean;
+begin
+  case V.Kind of
+    1: Result := (V.Json.JSONType <> jtNull)
+         and not ((V.Json.JSONType = jtString) and (V.Json.AsString = 'none'));
+    2: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+{ calculateColor: the colour, its lightness set by a truthy "saturation"
+  (zrender's modifyHSL, whose fourth argument is L) }
+function CalcColour(const V: TTmColour; out AColour: TTyVisualColor): Boolean;
 begin
   Result := False;
-  AColour := 0;
+  AColour := TyVisualUndefined;
   case V.Kind of
     1:
-      if (V.Json.JSONType = jtString) and (V.Json.AsString <> 'none') then
-        Result := TyTryParseChartColor(V.Json.AsString, AColour);
+      if (V.Json.JSONType = jtString) and (V.Json.AsString <> 'none')
+        and (V.Json.AsString <> '') then
+        Result := TyVisualTryParse(V.Json.AsString, AColour);
     2:
       begin
-        AColour := V.Pal;
+        AColour := TyVisualFromChart(V.Pal);
         Result := True;
       end;
   end;
+  if Result and V.HasSat and (V.Sat <> 0) and not IsNan(V.Sat) then
+    AColour := TyVisualModifyHSL(AColour, 0, 0, V.Sat, False, False, True);
+end;
+
+{ util/number linearMap, clamped: the ends exact, a flat domain the middle }
+function LinearMap(AVal, D0, D1, R0, R1: Double): Double;
+var sd, sr: Double;
+begin
+  sd := D1 - D0;
+  sr := R1 - R0;
+  if sd = 0 then
+  begin
+    if sr = 0 then Exit(R0);
+    Exit((R0 + R1) / 2);
+  end;
+  if sd > 0 then
+  begin
+    if AVal <= D0 then Exit(R0);
+    if AVal >= D1 then Exit(R1);
+  end
+  else
+  begin
+    if AVal >= D0 then Exit(R0);
+    if AVal <= D1 then Exit(R1);
+  end;
+  Result := (AVal - D0) / sd * sr + R0;
 end;
 
 procedure Travel(var S: TTyTreemapSolved; ARow: Integer; const ADv: TTmColour;
   const APalette: TTyChartColorArray; ABorder: TTyChartColor);
 var
   vis, cv: TTmColour;
-  d, range: TJSONData;
+  d, range, sr: TJSONData;
   it, lv: TJSONObject;
   k, len: Integer;
   c: TTyChartColor;
-  usePal: Boolean;
+  vc: TTyVisualColor;
+  usePal, satMap: Boolean;
+  r0, r1, n1: Double;
 
-  function Own(AObj: TJSONObject): TJSONData;
+  function Own(AObj: TJSONObject; const AKey: string = 'color'): TJSONData;
   var o: TJSONObject;
   begin
     Result := nil;
     o := ObjIn(AObj, 'itemStyle');
     if o = nil then Exit;
-    Result := o.Find('color');
+    Result := o.Find(AKey);
     if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
   end;
 
@@ -740,15 +818,49 @@ begin
       vis.Json := d;
     end;
   end;
+  { the saturation the same way: item > level > designated > series }
+  d := Own(it, 'colorSaturation');
+  if d = nil then d := Own(lv, 'colorSaturation');
+  if (d = nil) and ADv.HasSat then
+    { the designated one, already carried }
+  else
+  begin
+    if d = nil then d := Own(S.Series, 'colorSaturation');
+    if d <> nil then
+    begin
+      vis.HasSat := True;
+      vis.Sat := JsNum(d);
+    end;
+  end;
   { the border: the chain's, else the series default }
+  S.Nodes[ARow].HasStroke := True;
   d := ChainFind(S, ARow, 'itemStyle', 'borderColor');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
     S.Nodes[ARow].Stroke := c
   else
     S.Nodes[ARow].Stroke := ABorder;
+  { borderColorSaturation, tested != null: the node's own colour (its
+    saturation applied) re-lit; no colour, no border at all }
+  d := ChainFind(S, ARow, 'itemStyle', 'borderColorSaturation');
+  if d <> nil then
+  begin
+    S.Nodes[ARow].HasStroke := CalcColour(vis, vc);
+    if S.Nodes[ARow].HasStroke then
+      S.Nodes[ARow].Stroke := TyVisualToChart(
+        TyVisualModifyHSL(vc, 0, 0, JsNum(d), False, False, True));
+  end;
+  { dataStyleTask, after the visual: the raw item's own border colour }
+  d := Own(it, 'borderColor');
+  if (d <> nil) and (d.JSONType = jtString) then
+    S.Nodes[ARow].HasStroke := TyTryParseChartColor(d.AsString, S.Nodes[ARow].Stroke);
   if Length(S.Nodes[ARow].View) = 0 then
   begin
-    S.Nodes[ARow].HasFill := CalcColour(vis, S.Nodes[ARow].Fill);
+    S.Nodes[ARow].HasFill := CalcColour(vis, vc);
+    S.Nodes[ARow].Fill := TyVisualToChart(vc);
+    { and its own colour, over any saturation }
+    d := Own(it);
+    if (d <> nil) and (d.JSONType = jtString) then
+      S.Nodes[ARow].HasFill := TyTryParseChartColor(d.AsString, S.Nodes[ARow].Fill);
     Exit;
   end;
   { the list this node maps its children by: item -> level (levels[0]
@@ -778,9 +890,31 @@ begin
   if usePal then len := Length(APalette)
   else if (range <> nil) and (range.JSONType = jtArray) then len := range.Count
   else len := 0;
+  { NO COLOUR LIST: a saturation range on this node's chain maps the
+    children linearly over their extent -- if this node has a colour }
+  satMap := False;
+  r0 := 0;
+  r1 := 0;
+  if (len = 0) and HasColourDefine(vis) and S.Nodes[ARow].HasExtent then
+  begin
+    sr := ChainFind(S, ARow, '', 'colorSaturation');
+    if (sr <> nil) and (sr.JSONType = jtArray) and (sr.Count > 0) then
+    begin
+      satMap := True;
+      r0 := JsNum(sr.Items[0]);
+      if sr.Count > 1 then r1 := JsNum(sr.Items[1]) else r1 := r0;
+    end;
+  end;
   for k := 0 to High(S.Nodes[ARow].View) do
   begin
     cv := vis;
+    if satMap then
+    begin
+      n1 := LinearMap(S.Nodes[S.Nodes[ARow].View[k]].Value, S.Nodes[ARow].ExtMin,
+        S.Nodes[ARow].ExtMax, 0, 1);
+      cv.HasSat := True;
+      cv.Sat := LinearMap(n1, 0, 1, r0, r1);
+    end;
     if len > 0 then
     begin
       if usePal then
@@ -827,6 +961,31 @@ begin
     it := ItemOf(ASolved, row);
     if it <> nil then base := TyLabelSpecOfNode(ObjIn(it, 'label'), ASolved.Series, base);
     { the mark places and cuts the words itself }
+    base.OffsetXLogical := 0;
+    base.OffsetYLogical := 0;
+    base.Overflow := tloNone;
+    Result[row] := base;
+  end;
+end;
+
+function TyTreemapUpperSpecs(const ASolved: TTyTreemapSolved;
+  const ABase: TTyLabelSpec): TTyLabelSpecArray;
+var
+  row: Integer;
+  base: TTyLabelSpec;
+  lv, it: TJSONObject;
+begin
+  Result := nil;
+  SetLength(Result, Length(ASolved.Hier.Nodes));
+  for row := 0 to High(ASolved.Hier.Nodes) do
+  begin
+    base := TyLabelSpecOfNode(ObjIn(ASolved.Series, 'upperLabel'), ASolved.Series, ABase);
+    lv := LevelOf(ASolved, row);
+    if lv <> nil then base := TyLabelSpecOfNode(ObjIn(lv, 'upperLabel'), ASolved.Series, base);
+    it := ItemOf(ASolved, row);
+    if it <> nil then base := TyLabelSpecOfNode(ObjIn(it, 'upperLabel'), ASolved.Series, base);
+    { shown where the strip is; placed and cut by the mark }
+    base.Show := True;
     base.OffsetXLogical := 0;
     base.OffsetYLogical := 0;
     base.Overflow := tloNone;
@@ -893,6 +1052,157 @@ begin
       ASolved.Nodes[row].LabelText := text;
       ASolved.Nodes[row].LabelX := rx;
       ASolved.Nodes[row].LabelY := ry;
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ zrender's parsePercent: 'n%' of AMax, another string its number }
+function ZrPct(AData: TJSONData; AMax: Double): Double;
+var s: string;
+begin
+  Result := 0;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then Exit(AData.AsFloat);
+  if AData.JSONType = jtString then
+  begin
+    s := AData.AsString;
+    if (s <> '') and (Pos('%', s) > 0) then
+      Result := TyJsParseFloat(s) / 100 * AMax
+    else
+      Result := TyJsParseFloat(s);
+  end;
+end;
+
+procedure TyTreemapUpperLabels(var ASolved: TTyTreemapSolved;
+  const ASpecs: TTyLabelSpecArray; AStore: TTyDataStore; const ASeriesName: string;
+  AValueDim: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  row, k, j: Integer;
+  spec: TTyLabelSpec;
+  nd: TTyTreemapNode;
+  d, pos: TJSONData;
+  text, sep: string;
+  has, inside: Boolean;
+  rx, ry, rw, rh, w, h, ax, ay, tx: Double;
+  pad: array[0..3] of Double;
+  lines: TStringArray;
+  mask: TFPUExceptionMask;
+begin
+  if not ASolved.Valid or (AMeasurer = nil) then Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    for row := 0 to High(ASolved.Nodes) do
+    begin
+      ASolved.Nodes[row].HasUpper := False;
+      nd := ASolved.Nodes[row];
+      if not nd.HasLayout or not nd.InView or nd.Invisible then Continue;
+      { A PARENT whose strip is reserved; a leaf never has one }
+      if Length(nd.View) = 0 then Continue;
+      if (nd.UpperLabelHeight = 0) or IsNan(nd.UpperLabelHeight) then Continue;
+      if row <= High(ASpecs) then spec := ASpecs[row] else Continue;
+      { upperLabel's formatter, else label's, else the chain's name }
+      has := False;
+      text := '';
+      d := ChainFind(ASolved, row, 'upperLabel', 'formatter');
+      if (d = nil) or (d.JSONType <> jtString) or (d.AsString = '') then
+        d := ChainFind(ASolved, row, 'label', 'formatter');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+      begin
+        text := TyLabelText(d.AsString, True, tldName, AStore, row, ASeriesName,
+          AValueDim, NaN, False);
+        has := True;
+      end
+      else
+        has := ChainName(ASolved, row, text);
+      if not has or (text = '') then Continue;
+      { the strip: the background's top, in its group's frame }
+      rx := nd.BorderWidth * 1 + nd.TX;
+      ry := 0 * 1 + nd.TY;
+      rw := nd.W - 2 * nd.BorderWidth;
+      rh := nd.UpperHeight;
+      if not nd.HasT then
+      begin
+        rx := nd.BorderWidth;
+        ry := 0;
+      end
+      else if rw < 0 then
+      begin
+        rx := rx + rw;
+        rw := -rw;
+      end;
+      { padding: none by default, CSS shorthand }
+      for k := 0 to 3 do pad[k] := 0;
+      d := ChainFind(ASolved, row, 'upperLabel', 'padding');
+      if d <> nil then
+      begin
+        if d.JSONType = jtNumber then
+          for k := 0 to 3 do pad[k] := d.AsFloat * ASolved.Scale
+        else if (d.JSONType = jtArray) and (d.Count > 0) then
+        begin
+          for k := 0 to 3 do
+          begin
+            case d.Count of
+              1: j := 0;
+              2: j := k mod 2;
+              3: if k = 3 then j := 1 else j := k;
+            else
+              j := k;
+            end;
+            pad[k] := JsNum(d.Items[j]) * ASolved.Scale;
+          end;
+        end;
+      end;
+      w := JsMax(nd.W - 2 * nd.BorderWidth - pad[1] - pad[3], 0);
+      h := JsMax(nd.UpperHeight - pad[0] - pad[2], 0);
+      lines := TyZrPlainTextLines(text, w, h, 2, '...', AMeasurer, spec.FontName,
+        spec.FontSizeLogical, spec.FontWeight);
+      if Length(lines) = 0 then Continue;
+      { [0, '50%'] by default: left, middle; 'inside' the centre }
+      pos := ChainFind(ASolved, row, 'upperLabel', 'position');
+      inside := (pos <> nil) and (pos.JSONType = jtString) and (pos.AsString = 'inside');
+      if inside then
+      begin
+        ax := rx + rw / 2;
+        ay := ry + rh / 2;
+        tx := 0 + pad[3] / 2 - pad[1] / 2;
+      end
+      else
+      begin
+        if (pos <> nil) and (pos.JSONType = jtArray) and (pos.Count >= 2) then
+        begin
+          ax := rx + ZrPct(pos.Items[0], rw);
+          ay := ry + ZrPct(pos.Items[1], rh);
+        end
+        else
+        begin
+          ax := rx + 0;
+          ay := ry + 50 / 100 * rh;
+        end;
+        tx := 0 + pad[3];
+      end;
+      if Around0(ax) and Around0(ay) then
+      begin
+        ax := 0;
+        ay := 0;
+      end;
+      sep := '';
+      text := '';
+      for k := 0 to High(lines) do
+      begin
+        text := text + sep + lines[k];
+        sep := #10;
+      end;
+      if text = '' then Continue;
+      ASolved.Nodes[row].HasUpper := True;
+      ASolved.Nodes[row].UpperText := text;
+      ASolved.Nodes[row].UpperX := tx + ax;
+      ASolved.Nodes[row].UpperY := ay;
+      ASolved.Nodes[row].UpperCentre := inside;
+      ASolved.Nodes[row].UpperInside := inside;
     end;
   finally
     ClearExceptions(False);
@@ -1157,14 +1467,29 @@ var
     z2 := ADepth * 100 + 20;
     el := TyChartElement(TyShapeRect(TyRectF(0 + nd.TX, 0 + nd.TY,
       (0 + nd.W) + nd.TX, (0 + nd.H) + nd.TY)));
-    el.Style.HasFill := True;
+    el.Style.HasFill := nd.HasStroke;
     el.Style.FillColor := nd.Stroke;
     el.Z := ASolved.Z;
     el.Z2 := z2;
     el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);
+    if z2 > maxZ2 then maxZ2 := z2;
+    { a parent's header hangs off its background [Batch 78] }
+    if nd.HasUpper then
+    begin
+      el.Caption.Text := nd.UpperText;
+      el.Caption.ItemSpec := Length(ASolved.Nodes) + 2 + ARow;
+      el.Caption.HasFixedAnchor := True;
+      el.Caption.FixedX := nd.UpperX;
+      el.Caption.FixedY := nd.UpperY;
+      el.Caption.FixedInside := nd.UpperInside;
+      if nd.UpperCentre then el.Caption.FixedAH := tahCentre
+      else el.Caption.FixedAH := tahLeft;
+      el.Caption.FixedAV := tavMiddle;
+      el.Caption.HasFixedZ2 := True;
+      el.Caption.FixedZ2 := maxZ2 + 2;
+    end;
     AList.Add(el);
     Inc(cnt);
-    if z2 > maxZ2 then maxZ2 := z2;
     if Length(nd.View) = 0 then
     begin
       bw := nd.BorderWidth;

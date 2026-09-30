@@ -8137,3 +8137,40 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 - **做法**:visualMap 的逐行结果本来就算在 `FVisualRows` 里(行号即层级行号,存储里的值是补过的值),`SolveSunbursts` 在 `TySunburstColour` 之后把 `ColorSet` 的行的填充换掉。标签的墨色由展开时按宿主填充决定,自然跟着变。
 - **基准**:`sunburst.js` 加 4 个用例:连续型 0..5(范围内渐变、范围外 `outOfRange`)、连续型不写 `outOfRange`(默认的范围外颜色)、分段型三段、两个旭日图只映射 `seriesIndex: 1`。连同画廊的 `sunburst-visualMap`,测试不再跳过 visualMap 行的填充。
 - **变异**:去掉覆盖——杀死。
+
+## 113. Tier 1 第七十八批:矩形树图的饱和度着色与父节点标题条(M2 + M3,2026-09-30)
+
+### 上游的做法
+
+- **两个同名键**:条目/层/系列顶层的 `colorSaturation` 是**范围**,父节点用它映射子节点(`levels[d]` 的映射作用在深度 d+1);`itemStyle.colorSaturation` 是节点自己的**值**。
+- **映射**:父节点没有颜色列表、自己有颜色时,用链上的 `colorSaturation` 范围,按子节点的值线性映射两次(先到 [0,1],再到范围,都夹紧;端点精确;值域为一点时取中间;单元素范围自己配对)。值域是**排序后、visibleMin 裁剪前**的子节点——被裁掉的 0 值子节点仍然把最小值拉到 0。
+- **优先级**:条目 `itemStyle` → 层 `itemStyle` → 父节点映射(一路继承)→ 系列 `itemStyle`。
+- **所谓饱和度是 HSL 亮度**:`modifyHSL(c, null, null, s)` 的第四个参数是 L;饱和度 0 不改变颜色(真值判断)。
+- **`borderColorSaturation`**(用 `!= null` 判断,0 得黑色):边框 = 节点自己的颜色(已套过饱和度)再改亮度;节点没颜色则**没有边框**,背景矩形什么也不画。
+- **dataStyleTask 在视觉之后**:条目自己的 `itemStyle.color` 覆盖叶子的(饱和过的)填充,`borderColor` 覆盖任何节点的边框。
+- **标题条只在父节点上**:`upperLabel.show` 且高度非零的父节点,在背景矩形顶部 `upperHeight = max(bw, height)` 的条带里放文字;叶子只保留布局预留、照常画居中标签。文字是 `upperLabel.formatter`,没有就用 `label.formatter`,再没有就用链上的名字;没有默认内边距;截断规则同 M1;默认位置 `[0, '50%']`(左、中),`'inside'` 居中;z2 是遍历中已见最大值(含背景)加 2。
+- **标题的墨色是「外侧」规则**:`#333` 加背景色的光晕,不是按条带底色做亮度对比;只有 `position: 'inside'` 且条带有填充时才按亮度分三档。
+
+### 做法
+
+- Treemap 单元:节点记下子节点的值域(只在 initChildren 走到最后时);视觉记录多了继承的饱和度;`CalcColour` 用 VisualMap 已有的 `TyVisualModifyHSL`(逐位对过上游)改亮度;边框饱和度、条目颜色/边框覆盖;`HasStroke` 为假时背景不填充。
+- 新 `TyTreemapUpperLabels`:文字、条带(有组变换时负宽翻转)、内边距(CSS 简写)、截断(复用 `TyZrPlainTextLines`)、位置;新 `TyTreemapUpperSpecs`:`upperLabel` 按条目 → 层 → 系列叠在图表自己的标签墨色上。标题挂在背景矩形上,`ItemLabels` 的顺序是行、面包屑、各行标题。
+- 墨色:固定锚点 `FixedInside` 只在 `'inside'` 时为真,于是默认是外侧墨色加底色光晕(主题的 `TyAdvChartLabel`),与上游规则同构。
+
+### 基准
+
+- `treemap.js` 由代理扩展:106 个新用例(51 个 M2、55 个 M3,含画廊 `treemap-disk`、`treemap-show-parent`),原 290 个用例逐字节不变;40 条守卫全部变红;转写与上游 76.7 万项零差异。
+- `test.advchart.treemap`:新增 `upper` 元素按普通标签比较(锚点加上内边距偏移);画廊测试钉死 disk + show-parent + simple 的 781 个矩形、139 个标签(其中 35 行标题)、6 个面包屑。M2/M3 用例第一次跑就全部逐位对上。
+
+### 变异测试
+
+25 个,20 个杀死,5 个存活:
+
+- 两次线性映射改成一次:内部点完全相同;值域为一点时两者只差最后一位,经 modifyHSL 取整后颜色相同——等价。
+- 负宽条带不翻转、无变换时也翻转:负宽条带的文字宽度为 0,截断成空串,不画——锚点不可观测,等价。
+- 系列的 `itemStyle.colorSaturation` 压过父节点映射值、标题截断宽度不减内边距:基准缺这两种组合。已请代理在下一批(M4–M6)的夹具里补两个手写用例,补上后重跑这两个变异。
+
+### 已知偏差
+
+- 标签/标题的不透明度(条目或系列 `itemStyle.opacity` 作为标签默认不透明度)没有做:端口的标签不透明度跟随宿主,而矩形树图的矩形本身不用不透明度。
+- 写了 `fontSize` 的用例仍跳过文字比较(全局字号单位问题,另有任务)。
