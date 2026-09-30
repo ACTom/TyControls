@@ -45,10 +45,19 @@ type
     procedure TestSaveCreatesTheFolder;
   end;
 
+  TTbTemplatesTests = class(TTestCase)
+  published
+    procedure TestFromBuiltinIsTheThemeUnderAHeader;
+    procedure TestTheMinimalTemplateWorksInBothModes;
+    procedure TestTheMinimalTemplateSeeds;
+    procedure TestTheMinimalTemplateLintsClean;
+  end;
+
 implementation
 
 uses
-  FileUtil, LazUTF8, LConvEncoding, SynEdit, tbdocument, tbsettings,
+  FileUtil, LazUTF8, LConvEncoding, SynEdit, tbdocument, tbsettings, tbtemplates, tbpreview,
+  tyControls.ThemeLint, tyControls.BuiltinThemes, tyControls.Controller,
   test.themebuilder.golden;
 
 var
@@ -387,7 +396,107 @@ begin
   end;
 end;
 
+{ ---- TTbTemplatesTests ---- }
+
+procedure TTbTemplatesTests.TestFromBuiltinIsTheThemeUnderAHeader;
+var
+  names: TStringArray;
+  i: Integer;
+  t, h: string;
+begin
+  names := TyBuiltinThemeNames;
+  AssertTrue('there are built-in themes', Length(names) > 5);
+  for i := 0 to High(names) do
+  begin
+    t := TbFromBuiltin(names[i]);
+    h := TbBuiltinHeader(names[i]);
+    AssertEquals('T1: ' + names[i] + ' starts with the header', 1, Pos(h, t));
+    AssertTrue('T1: ' + names[i] + ' then the theme verbatim',
+      Copy(t, Length(h) + 1, MaxInt) = TyBuiltinThemeCss(names[i]));
+  end;
+  AssertEquals('T1: an unknown name', '', TbFromBuiltin('nope'));
+end;
+
+procedure TTbTemplatesTests.TestTheMinimalTemplateWorksInBothModes;
+var
+  ctl: TTyStyleController;
+  modes: TStringArray;
+  err: string;
+  ok: Boolean;
+begin
+  ctl := TTyStyleController.Create(nil);
+  try
+    ctl.Model.LoadFromCss(TbMinimalTemplate);
+    modes := ctl.Model.ModeNames;
+    AssertEquals('T2: two modes', 2, Length(modes));
+    AssertEquals('T2: light first', 'light', modes[0]);
+    AssertEquals('T2: then dark', 'dark', modes[1]);
+    ctl.Mode := 'light';
+    ok := TbProbeResolve(ctl.Model, err);
+    AssertTrue('T2: light resolves: ' + err, ok);
+    ctl.Mode := 'dark';
+    ok := TbProbeResolve(ctl.Model, err);
+    AssertTrue('T2: dark resolves: ' + err, ok);
+  finally
+    ctl.Free;
+  end;
+end;
+
+procedure TTbTemplatesTests.TestTheMinimalTemplateSeeds;
+const
+  cSeeds: array[0..11] of string = (
+    '--accent: #3B82F6;', '--surface: #FFFFFF;', '--on-surface: #1F2937;',
+    '--border: #D1D5DB;', '--danger: #EF4444;', '--radius: 6px;',
+    '--accent: #60A5FA;', '--surface: #1E1E1E;', '--on-surface: #E5E7EB;',
+    '--border: #3F3F46;', '--danger: #F87171;', '--radius: 6px;');
+  cNames: array[0..5] of string = ('--accent:', '--surface:', '--on-surface:', '--border:',
+    '--danger:', '--radius:');
+
+  function CountOf(const ASub, S: string): Integer;
+  var
+    p, from: Integer;
+  begin
+    Result := 0;
+    from := 1;
+    repeat
+      p := Pos(ASub, Copy(S, from, MaxInt));
+      if p > 0 then
+      begin
+        Inc(Result);
+        from := from + p + Length(ASub) - 1;
+      end;
+    until p = 0;
+  end;
+
+var
+  t, light, dark: string;
+  i, darkAt: Integer;
+begin
+  t := TbMinimalTemplate;
+  darkAt := Pos('@mode dark', t);
+  AssertTrue('T3: a dark block', darkAt > 0);
+  light := Copy(t, 1, darkAt - 1);
+  dark := Copy(t, darkAt, MaxInt);
+  for i := 0 to 5 do
+  begin
+    AssertTrue('T3: light ' + cSeeds[i], Pos(cSeeds[i], light) > 0);
+    AssertTrue('T3: dark ' + cSeeds[i + 6], Pos(cSeeds[i + 6], dark) > 0);
+    { '--surface:' is also inside '--on-surface:', so count the whole declarations }
+    if cNames[i] <> '--surface:' then
+      AssertEquals('T3: ' + cNames[i] + ' twice', 2, CountOf(cNames[i], t));
+  end;
+end;
+
+procedure TTbTemplatesTests.TestTheMinimalTemplateLintsClean;
+var
+  r: TTyLintIssues;
+begin
+  r := TyLintCssEx(TbMinimalTemplate);
+  AssertEquals('T4: no problems', 0, Length(r));
+end;
+
 initialization
   RegisterTest(TTbDocumentTests);
   RegisterTest(TTbSettingsTests);
+  RegisterTest(TTbTemplatesTests);
 end.
