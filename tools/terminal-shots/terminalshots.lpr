@@ -761,7 +761,7 @@ begin
         case AHow of
           0: stop := 11000;
           1: stop := Length(sz);
-          2: stop := 24;                 { "rz" and the ZRQINIT: what sz says before it waits }
+          2: stop := 24;                 { sz's "rz" line and its ZRQINIT: what it says before it waits }
         else
           stop := 400;
         end;
