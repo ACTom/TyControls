@@ -216,7 +216,8 @@ uses
   test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime,
   test.themebuilder.golden,
-  test.themebuilder.parser;
+  test.themebuilder.parser,
+  test.themebuilder.lint;
 
 type
   TTyTestRunner = class(TTestRunner)
