@@ -156,7 +156,7 @@ type
     FSize, FMTime, FPos, FWindowStart, FTotal, FDoneBytes: Int64;
     FWindow: Integer;
     FAcked, FLastQ: Int64;               { the window: the last acknowledged place, the last ZCRCQ }
-    FPaused: Boolean;                    { the window is full: waiting for a ZACK }
+    FPaused: Boolean;                    { the window is full (waiting for a ZACK), or CanSend gave no room }
     FStream: TStream;
     FLastHeader: RawByteString;
     FLastActivity, FNow: Double;
@@ -743,7 +743,16 @@ begin
   begin
     allow := FCanSend();
     if allow <= 0 then
+    begin
+      { no room: waited for like a full window (Tick times it out), so a pipe that no
+        longer drains ends the upload instead of holding it for good }
+      if not FPaused then
+      begin
+        FPaused := True;
+        FLastActivity := FNow;
+      end;
       Exit;
+    end;
   end
   else
     allow := High(Int64);
@@ -917,7 +926,8 @@ begin
     Exit;
   if FState = zsnData then
   begin
-    { a full window whose ZACK does not come: again from the last acknowledged place }
+    { a full window whose ZACK does not come, or no room at the host for that long:
+      again from the last acknowledged place }
     if FPaused and (FNow - FLastActivity >= FTimeoutMs) then
     begin
       if FRetries >= FMaxRetries then

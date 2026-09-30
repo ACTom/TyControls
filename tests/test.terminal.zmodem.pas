@@ -46,6 +46,8 @@ type
       rz gives up after about 40 KB of garbage, so an upload keeps a window }
     procedure TestAHexZsinitIsAnswered;                      { S10 }
     procedure TestTheSendersWindow;                          { S11 }
+    { the phase 7 review's fixes }
+    procedure TestAnUploadWithNoRoomTimesOut;
     { Task 8: the terminal glue }
     procedure TestSafeFileNames;
     procedure TestUniqueFileNames;
@@ -526,6 +528,18 @@ type
     procedure OnSend(Sender: TObject; const AData: RawByteString);
     procedure OnDone(Sender: TObject; AResult: TZmResult; const AMessage: string; const ALeftover: RawByteString);
   end;
+
+  { a host's CanSend answering a fixed room }
+  TRoom = class
+  public
+    Value: Integer;
+    function Allow: Integer;
+  end;
+
+function TRoom.Allow: Integer;
+begin
+  Result := Value;
+end;
 
 constructor TMemSink.Create;
 begin
@@ -1551,6 +1565,53 @@ begin
     AssertTrue('the same bytes', lp.Sink.Contents[0] = Cycle(70000));
   finally
     lp.Free;
+  end;
+end;
+
+{ ---- the phase 7 review's fixes --------------------------------------------------------------- }
+
+{ A host whose CanSend answers 0 for good (a pipe that no longer drains): the sender
+  waits for room the way it waits for a ZACK, repeats from the last acknowledged place
+  every TimeoutMs, and gives up after MaxRetries. Mutation: Pump leaving at "no room"
+  without starting that wait (no timeout ever runs; the upload hangs for good). }
+procedure TTyTerminalZmodemTests.TestAnUploadWithNoRoomTimesOut;
+var
+  src: TMemSource;
+  log: TZmLog;
+  room: TRoom;
+  s: TZmSender;
+  rpos: RawByteString;
+  t: Double;
+  i: Integer;
+begin
+  src := TMemSource.Create;
+  log := TZmLog.Create;
+  room := TRoom.Create;
+  s := TZmSender.Create(src);
+  try
+    src.Add('stuck.bin', Cycle(5000));
+    s.OnSend := @log.OnSend;
+    s.OnDone := @log.OnDone;
+    room.Value := 0;
+    s.CanSend := @room.Allow;
+    s.Start(InitHeader(0), 0);
+    rpos := ZmEncodeHexHeader(ZmPosHeader(ZRPOS, 0));
+    s.Input(@rpos[1], Length(rpos), 0);
+    AssertFalse('waiting for room', log.Done);
+    t := 0;
+    for i := 1 to 15 do
+    begin
+      t := t + 10001;
+      s.Tick(t);
+    end;
+    AssertTrue('the upload ended', log.Done);
+    AssertTrue('timed out: ' + log.Message, log.Result_ = zrTimeout);
+    AssertTrue('the abort sent', Pos(ZmAbortSequence, log.Sent) > 0);
+  finally
+    s.Free;
+    room.Free;
+    log.Free;
+    src.Free;
   end;
 end;
 
