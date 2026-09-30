@@ -227,7 +227,7 @@ var
     until (tok.Kind = AKind) or (tok.Kind = ctkEOF);
   end;
 
-  { the '{' is next; each '--name:' up to the closing '}' }
+  // the opening brace is next; each '--name:' up to the closing brace
   procedure ReadVarBlock(AList: TStringList);
   var
     name: string;
@@ -253,7 +253,7 @@ var
     end;
   end;
 
-  { the '{' is consumed; each property name up to the closing '}' }
+  // the opening brace is consumed; each property name up to the closing brace
   procedure ReadDeclBlock(ARule: Integer);
   begin
     while True do
