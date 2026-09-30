@@ -202,6 +202,11 @@ function TyLabelPositionOf(const AName: string; out AKnown: Boolean): TTyLabelPo
 procedure TyLabelAnchor(const AHost: TTyRectF; APosition: TTyLabelPosition;
   ADistancePx, AAtX, AAtY: Double;
   out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+{ The same table over a rect given as x, y, width and height -- the form
+  upstream adds to, so an anchor computed from it is exact. [Batch 73] }
+procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
 
 { Whether a position puts the caption over its host. Upstream decides this by
   asking whether the position's NAME contains "inside" -- a substring test on a
@@ -350,10 +355,6 @@ begin
     tlpInsideTop, tlpInsideBottom, tlpInsideTopLeft, tlpInsideTopRight,
     tlpInsideBottomLeft, tlpInsideBottomRight];
 end;
-
-procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
-  ADistancePx, AAtX, AAtY: Double;
-  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV); forward;
 
 procedure TyLabelAnchor(const AHost: TTyRectF; APosition: TTyLabelPosition;
   ADistancePx, AAtX, AAtY: Double;
@@ -735,8 +736,18 @@ begin
     end
     else
       TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);
+    if host.Caption.HasFixedAnchor then
+    begin
+      x := host.Caption.FixedX;
+      y := host.Caption.FixedY;
+      if host.Caption.FixedInside then pos := tlpInside else pos := tlpRight;
+      ah := host.Caption.FixedAH;
+      av := host.Caption.FixedAV;
+    end;
     if spec.HasAlignH then ah := spec.AlignH;
-    if spec.HasAlignV then av := spec.AlignV;
+    { a fixed anchor's vertical alignment is the mark's (upstream sets it on
+      the style after the author's) }
+    if spec.HasAlignV and not host.Caption.HasFixedAnchor then av := spec.AlignV;
     { OFFSET AFTER THE POSITION, which is upstream's order. Upstream also
       applies it INSIDE the rotation, so a rotated label's offset runs along
       the rotated axes; this applies it in screen axes and says so, because the
@@ -793,6 +804,8 @@ begin
     cap.Caption.AnchorH := ah;
     cap.Caption.AnchorV := av;
     cap.Caption.RotationRad := spec.RotationRad;
+    if host.Caption.HasFixedAnchor then
+      cap.Caption.RotationRad := host.Caption.FixedRotationRad;
     cap.Caption.Truncate := spec.Overflow = tloTruncate;
     AList.Add(cap);
   end;

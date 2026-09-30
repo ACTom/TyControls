@@ -7045,7 +7045,7 @@ begin
         begin
           ti := TreeInk(i);
           Inc(drawn, TyBuildTreeMarks(FBindings[i].SeriesIndex, FTrees[i], ti,
-            FStores[i], list));
+            FStores[i], list, APPI));
           if Length(specs) <= FBindings[i].SeriesIndex then
             SetLength(specs, FBindings[i].SeriesIndex + 1);
           specs[FBindings[i].SeriesIndex] := ti.Label_;

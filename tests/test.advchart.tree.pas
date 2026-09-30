@@ -163,7 +163,7 @@ end;
 
 procedure TAdvChartTreeOracleTest.RunCases(AGallery: Boolean);
 var
-  cases, series, rows, edges: TJSONArray;
+  cases, series, rows, edges, cmds: TJSONArray;
   cs, opt, se, row, sy, st, lb, ed, sh, mg: TJSONObject;
   sl: TStringList;
   c, s, k, j, si, ri, n: Integer;
@@ -171,7 +171,7 @@ var
   e: TTyChartElement;
   d: TJSONData;
   symAt, capAt, edgeAt: array of Integer;
-  cx, cy, w, h, ox, oy: Double;
+  cx, cy, w, h, ox, oy, lx, ly: Double;
   want: TTyChartColor;
   b: TTyRectF;
   w_, ty: string;
@@ -218,11 +218,6 @@ begin
         FName := Format('%s series %d', [cs.Strings['id'], si]);
         radial := se.Get('layout', '') = 'radial';
         poly := se.Get('edgeShape', '') = 'polyline';
-        if radial then
-        begin
-          Inc(FSkipped);
-          Continue;
-        end;
         rows := se.Arrays['rows'];
         n := rows.Count;
         SetLength(symAt, 0);
@@ -355,11 +350,22 @@ begin
           if e.Caption.Text <> lb.Strings['text'] then
             Miss(Format('%s: label "%s" upstream, "%s" here', [w_, lb.Strings['text'],
               e.Caption.Text]));
-          if not (Same(e.Caption.X, Num(lb.Objects['inner'].Find('x')))
-            and Same(e.Caption.Y, Num(lb.Objects['inner'].Find('y')))) then
+          { the anchor: where the words' own origin lands -- the transform's
+            move, which for a radial label includes its turn about the box }
+          lx := Num(lb.Objects['inner'].Find('x'));
+          ly := Num(lb.Objects['inner'].Find('y'));
+          if radial then
+          begin
+            lx := Num(lb.Arrays['transform'].Items[4]);
+            ly := Num(lb.Arrays['transform'].Items[5]);
+            Inc(FCompared);
+            if not Same(e.Caption.RotationRad, Num(lb.Objects['inner'].Find('rotation'))) then
+              Miss(Format('%s: label turned %s upstream, %s here', [w_,
+                Fmt(Num(lb.Objects['inner'].Find('rotation'))), Fmt(e.Caption.RotationRad)]));
+          end;
+          if not (Same(e.Caption.X, lx) and Same(e.Caption.Y, ly)) then
             Miss(Format('%s: label at (%s, %s) upstream, (%s, %s) here', [w_,
-              Fmt(Num(lb.Objects['inner'].Find('x'))), Fmt(Num(lb.Objects['inner'].Find('y'))),
-              Fmt(e.Caption.X), Fmt(e.Caption.Y)]));
+              Fmt(lx), Fmt(ly), Fmt(e.Caption.X), Fmt(e.Caption.Y)]));
           if not (((lb.Get('align', '') = 'center') = (e.Caption.AnchorH = tahCentre))
             and ((lb.Get('align', '') = 'right') = (e.Caption.AnchorH = tahRight))
             and ((lb.Get('verticalAlign', '') = 'middle') = (e.Caption.AnchorV = tavMiddle))
@@ -368,12 +374,67 @@ begin
               lb.Get('align', ''), lb.Get('verticalAlign', '')]));
         end;
         { ---- the edges ---- }
+        edges := se.Arrays['edges'];
         if poly then
         begin
-          Inc(FSkipped);
+          for j := 0 to edges.Count - 1 do
+          begin
+            ed := edges.Objects[j];
+            if ed.Get('kind', '') <> 'polyline' then Continue;
+            ri := ed.Integers['owner'];
+            w_ := Format('fork from row %d', [ri]);
+            Inc(FCompared);
+            if edgeAt[ri] < 0 then
+            begin
+              Miss(w_ + ': drawn upstream, not here');
+              Continue;
+            end;
+            Inc(FEdges);
+            e := lst.Element(edgeAt[ri]);
+            cmds := ed.Arrays['commands'];
+            Inc(FCompared);
+            if Length(e.Shape.Cmds) <> cmds.Count then
+            begin
+              Miss(Format('%s: %d commands upstream, %d here', [w_, cmds.Count,
+                Length(e.Shape.Cmds)]));
+              Continue;
+            end;
+            for k := 0 to cmds.Count - 1 do
+            begin
+              Inc(FCompared, 3);
+              if ((cmds.Objects[k].Get('cmd', '') = 'M') <> (e.Shape.Cmds[k].Kind = pckMove))
+                or not Same(e.Shape.Cmds[k].X, ox + Num(cmds.Objects[k].Arrays['args'].Items[0]))
+                or not Same(e.Shape.Cmds[k].Y, oy + Num(cmds.Objects[k].Arrays['args'].Items[1])) then
+              begin
+                Miss(Format('%s: command %d %s %s,%s upstream, %s,%s here', [w_, k,
+                  cmds.Objects[k].Get('cmd', ''),
+                  Fmt(ox + Num(cmds.Objects[k].Arrays['args'].Items[0])),
+                  Fmt(oy + Num(cmds.Objects[k].Arrays['args'].Items[1])),
+                  Fmt(e.Shape.Cmds[k].X), Fmt(e.Shape.Cmds[k].Y)]));
+                Break;
+              end;
+            end;
+            st := ed.Objects['ink'];
+            Inc(FCompared);
+            if e.Style.StrokeWidthLogical <> Num(st.Find('lineWidth')) then
+              Miss(w_ + ': the width differs');
+            if (st.Get('stroke', '') <> '#cfd2d7') and TyTryParseChartColor(st.Get('stroke', ''), want)
+              and (e.Style.StrokeColor <> want) then
+              Miss(w_ + ': the colour differs');
+          end;
+          { and none here that upstream does not draw }
+          for ri := 0 to n - 1 do
+            if edgeAt[ri] >= 0 then
+            begin
+              k := 0;
+              for j := 0 to edges.Count - 1 do
+                if (edges.Objects[j].Get('kind', '') = 'polyline')
+                  and (edges.Objects[j].Integers['owner'] = ri) then k := 1;
+              Inc(FCompared);
+              if k = 0 then Miss(Format('a fork from row %d here, none upstream', [ri]));
+            end;
           Continue;
         end;
-        edges := se.Arrays['edges'];
         for j := 0 to edges.Count - 1 do
         begin
           ed := edges.Objects[j];

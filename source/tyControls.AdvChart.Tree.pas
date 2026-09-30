@@ -36,7 +36,8 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Color, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.LinePath, tyControls.AdvChart.Calendar;
+  tyControls.AdvChart.LinePath, tyControls.AdvChart.Calendar,
+  tyControls.AdvChart.JsMath;
 
 const
   TyTreeSeriesTypeName = 'tree';
@@ -68,6 +69,8 @@ type
     Curve: Boolean;              // edgeShape 'curve'
     Polyline: Boolean;           // edgeShape 'polyline'
     Curveness: Double;
+    { edgeForkPosition as written, parsePercent against 1 }
+    ForkPosition: TTyBoxRaw;
     Symbol: TTySymbolSpec;
     Series: TJSONObject;         // borrowed
     Leaves: TJSONObject;         // borrowed `leaves`, or nil
@@ -76,8 +79,11 @@ type
 
   TTyTreePos = record
     Placed: Boolean;
-    { local to the box, as upstream's getItemLayout }
+    { local to the main group, as upstream's getItemLayout }
     X, Y: Double;
+    { radial only: the angle-like and radius coordinates before
+      radialCoordinate }
+    RawX, RawY: Double;
     { device px }
     PX, PY: Double;
   end;
@@ -87,6 +93,9 @@ type
     Spec: TTyTreeSpec;
     Hier: TTyHierarchy;
     Box: TTyXYWH;
+    { the main group's origin: the box's corner, or its centre when radial }
+    GX, GY: Double;
+    RealRoot: Integer;
     Pos: array of TTyTreePos;
     { by row: not (has children and expanded) -- reads through `leaves` }
     LeafModelled: TTyBoolArray;
@@ -123,7 +132,8 @@ function TyTreeLabelSpecs(const ASolved: TTyTreeSolved;
   const ASeriesSpec: TTyLabelSpec): TTyLabelSpecArray;
 { Edges (z2 0), then symbols (z2 100) with their caption requests. }
 function TyBuildTreeMarks(ASeriesIndex: Integer; const ASolved: TTyTreeSolved;
-  const AInk: TTyTreeInk; AStore: TTyDataStore; AList: TTyPaintList): Integer;
+  const AInk: TTyTreeInk; AStore: TTyDataStore; AList: TTyPaintList;
+  APPI: Integer = 96): Integer;
 
 implementation
 
@@ -334,6 +344,7 @@ begin
   Result.Orient := troLR;
   Result.Curve := True;
   Result.Curveness := 0.5;
+  Result.ForkPosition := TyBoxRawStr('50%');
   Result.Symbol := TySymbolDefault(TyTreeSeriesTypeName);
   Result.Z := 2;
   if AOption = nil then Exit;
@@ -389,6 +400,8 @@ begin
     Result.Curve := d.AsString = 'curve';
     Result.Polyline := d.AsString = 'polyline';
   end;
+  d := Result.Series.Find('edgeForkPosition');
+  if d <> nil then Result.ForkPosition := TyBoxRawOf(d);
   ls := ObjIn(Result.Series, 'lineStyle');
   if ls <> nil then
   begin
@@ -689,10 +702,23 @@ begin
   Result.Box := TyGetLayoutRect(box, AContainer.Left, AContainer.Top,
     AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, []);
   Result.Valid := True;
-  { only data[0] is laid out; the radial layout is the next batch's }
+  Result.RealRoot := -1;
+  { the main group: the box's corner, or its centre for a radial tree }
+  if Result.Spec.Radial then
+  begin
+    Result.GX := Result.Box.X + Result.Box.W / 2;
+    Result.GY := Result.Box.Y + Result.Box.H / 2;
+  end
+  else
+  begin
+    Result.GX := Result.Box.X;
+    Result.GY := Result.Box.Y;
+  end;
+  { only data[0] is laid out }
   if (n < 2) or (Length(Result.Hier.Nodes[0].Children) = 0) then Exit;
-  if Result.Spec.Radial or (Result.Spec.Orient = troNone) then Exit;
+  if (not Result.Spec.Radial) and (Result.Spec.Orient = troNone) then Exit;
   realRoot := Result.Hier.Nodes[0].Children[0];
+  Result.RealRoot := realRoot;
 
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
@@ -714,7 +740,7 @@ begin
     end;
     post := PostorderVisible(Result.Hier, realRoot);
     for k := 0 to High(post) do
-      FirstWalk(Result.Hier, W, False, post[k]);
+      FirstWalk(Result.Hier, W, Result.Spec.Radial, post[k]);
     W.Modifier[0] := -W.Prelim[realRoot];
     pre := PreorderVisible(Result.Hier, realRoot);
     for k := 0 to High(pre) do
@@ -734,14 +760,35 @@ begin
       if W.X[row] > W.X[right] then right := row;
       if Result.Hier.Nodes[row].Depth > Result.Hier.Nodes[bottom].Depth then bottom := row;
     end;
+    { NB radial: the separation divides by the LEFT node's depth }
     if left = right then delta := 1
-    else delta := Separation(Result.Hier, False, left, right) / 2;
+    else delta := Separation(Result.Hier, Result.Spec.Radial, left, right) / 2;
     tx := delta - W.X[left];
     width := Result.Box.W;
     height := Result.Box.H;
     k := Result.Hier.Nodes[bottom].Depth - 1;
     if k = 0 then k := 1;
-    if Result.Spec.Orient in [troLR, troRL] then
+    if Result.Spec.Radial then
+    begin
+      { the angle runs round a full turn from twelve o'clock, the radius to
+        half the shorter side }
+      width := 2 * Pi;
+      height := Min(Result.Box.H, Result.Box.W) / 2;
+      kx := width / (W.X[right] + delta + tx);
+      ky := height / k;
+      for k := 0 to High(pre) do
+      begin
+        row := pre[k];
+        x := W.X[row];
+        Result.Pos[row].RawX := (x + tx) * kx;
+        Result.Pos[row].RawY := (Result.Hier.Nodes[row].Depth - 1) * ky;
+        { radialCoordinate }
+        Result.Pos[row].X := Result.Pos[row].RawY * TyJsCos(Result.Pos[row].RawX - Pi / 2);
+        Result.Pos[row].Y := Result.Pos[row].RawY * TyJsSin(Result.Pos[row].RawX - Pi / 2);
+        Result.Pos[row].Placed := True;
+      end;
+    end
+    else if Result.Spec.Orient in [troLR, troRL] then
     begin
       ky := height / (W.X[right] + delta + tx);
       kx := width / k;
@@ -781,8 +828,8 @@ begin
         Result.Pos[row].Placed := False;
         Continue;
       end;
-      Result.Pos[row].PX := Result.Box.X + Result.Pos[row].X;
-      Result.Pos[row].PY := Result.Box.Y + Result.Pos[row].Y;
+      Result.Pos[row].PX := Result.GX + Result.Pos[row].X;
+      Result.Pos[row].PY := Result.GY + Result.Pos[row].Y;
     end;
   finally
     ClearExceptions(False);
@@ -882,9 +929,194 @@ begin
   end;
 end;
 
-function TyBuildTreeMarks(ASeriesIndex: Integer; const ASolved: TTyTreeSolved;
-  const AInk: TTyTreeInk; AStore: TTyDataStore; AList: TTyPaintList): Integer;
+{ radialCoordinate, each coordinate `|| 0`: not-a-number and a negative
+  zero both come out as a plain zero }
+function Radial0(ARad, AR: Double): TTyPointF;
+begin
+  Result.X := AR * TyJsCos(ARad - Pi / 2);
+  Result.Y := AR * TyJsSin(ARad - Pi / 2);
+  if IsNan(Result.X) or (Result.X = 0) then Result.X := 0;
+  if IsNan(Result.Y) or (Result.Y = 0) then Result.Y := 0;
+end;
+
+{ TreePath.buildPath: the stem from the parent to the fork, then each
+  child's twig -- the first, the bar to the last, the last, then the ones
+  between -- as one path of several pieces. The fork sits edgeForkPosition
+  of the way to the LAST child. }
+function PolylineEdge(const ASolved: TTyTreeSolved; ARow: Integer): TTyChartShape;
 var
+  kids: TTyIntegerArray;
+  n, i: Integer;
+  pp, first, last, ci: TTyPointF;
+  f: Double;
+  tmp: array[0..1] of Double;
+  forkDim, otherDim: Integer;
+  cmds: TTyPathCmdArray;
+  r: TTyXYWH;
+
+  function At(const P: TTyPointF; ADim: Integer): Double;
+  begin
+    if ADim = 0 then Result := P.X else Result := P.Y;
+  end;
+
+  procedure Add(AKind: TTyPathCmdKind; AX, AY: Double);
+  begin
+    SetLength(cmds, Length(cmds) + 1);
+    cmds[High(cmds)] := Default(TTyPathCmd);
+    cmds[High(cmds)].Kind := AKind;
+    cmds[High(cmds)].X := ASolved.GX + AX;
+    cmds[High(cmds)].Y := ASolved.GY + AY;
+  end;
+
+  function P(ARow2: Integer): TTyPointF;
+  begin
+    Result := TyPointF(ASolved.Pos[ARow2].X, ASolved.Pos[ARow2].Y);
+  end;
+
+begin
+  Result := TyShapePolyline([]);
+  cmds := nil;
+  kids := ASolved.Hier.Nodes[ARow].Children;
+  n := Length(kids);
+  for i := 0 to n - 1 do
+    if not ASolved.Pos[kids[i]].Placed then Exit;
+  pp := P(ARow);
+  if n = 1 then
+  begin
+    Add(pckMove, pp.X, pp.Y);
+    Add(pckLine, P(kids[0]).X, P(kids[0]).Y);
+  end
+  else
+  begin
+    if ASolved.Spec.Orient in [troTB, troBT] then forkDim := 0 else forkDim := 1;
+    otherDim := 1 - forkDim;
+    f := TyBoxRawResolve(ASolved.Spec.ForkPosition, 1);
+    first := P(kids[0]);
+    last := P(kids[n - 1]);
+    tmp[forkDim] := At(pp, forkDim);
+    tmp[otherDim] := At(pp, otherDim) + (At(last, otherDim) - At(pp, otherDim)) * f;
+    Add(pckMove, pp.X, pp.Y);
+    Add(pckLine, tmp[0], tmp[1]);
+    Add(pckMove, first.X, first.Y);
+    tmp[forkDim] := At(first, forkDim);
+    Add(pckLine, tmp[0], tmp[1]);
+    tmp[forkDim] := At(last, forkDim);
+    Add(pckLine, tmp[0], tmp[1]);
+    Add(pckLine, last.X, last.Y);
+    for i := 1 to n - 2 do
+    begin
+      ci := P(kids[i]);
+      Add(pckMove, ci.X, ci.Y);
+      tmp[forkDim] := At(ci, forkDim);
+      Add(pckLine, tmp[0], tmp[1]);
+    end;
+  end;
+  Result := TyShapePolyline([TyPointF(cmds[0].X, cmds[0].Y),
+    TyPointF(cmds[High(cmds)].X, cmds[High(cmds)].Y)]);
+  Result.Cmds := cmds;
+  r := TyPathCmdsRect(cmds);
+  Result.HasCmdBounds := True;
+  Result.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+end;
+
+{ THE RADIAL LABEL (TreeView.ts:389-444): its side and its turn from the
+  node's angle about the real root -- a leaf or a collapsed node reads
+  outward, an open inner node toward the centre, and the root follows the
+  middle of its first and last child. Placed on its box by the position,
+  then turned about the box's centre, as zrender's getLocalTransform turns
+  an element with an origin. }
+procedure RadialLabel(const ASolved: TTyTreeSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AChain: array of TJSONObject; AScale: Double;
+  var ACaption: TTyElementCaption);
+var
+  root, t: TTyTreePos;
+  kids: TTyIntegerArray;
+  cx, cy, rad, rot, x, y, ox, oy, m4, m5, st, ct, atx, aty, d: Double;
+  isLeft: Boolean;
+  pos: TTyLabelPosition;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  dp: TJSONData;
+  box: TTyXYWH;
+begin
+  if ASolved.RealRoot < 0 then Exit;
+  root := ASolved.Pos[ASolved.RealRoot];
+  t := ASolved.Pos[ARow];
+  kids := ASolved.Hier.Nodes[ASolved.RealRoot].Children;
+  if (t.X = root.X) and ASolved.Hier.Nodes[ARow].Expanded and (Length(kids) > 0) then
+  begin
+    cx := (ASolved.Pos[kids[0]].X + ASolved.Pos[kids[High(kids)]].X) / 2;
+    cy := (ASolved.Pos[kids[0]].Y + ASolved.Pos[kids[High(kids)]].Y) / 2;
+    rad := TyJsAtan2(cy - root.Y, cx - root.X);
+    if rad < 0 then rad := Pi * 2 + rad;
+    isLeft := cx < root.X;
+    if isLeft then rad := rad - Pi;
+  end
+  else
+  begin
+    rad := TyJsAtan2(t.Y - root.Y, t.X - root.X);
+    if rad < 0 then rad := Pi * 2 + rad;
+    if (Length(ASolved.Hier.Nodes[ARow].Children) = 0)
+      or not ASolved.Hier.Nodes[ARow].Expanded then
+    begin
+      isLeft := t.X < root.X;
+      if isLeft then rad := rad - Pi;
+    end
+    else
+    begin
+      isLeft := t.X > root.X;
+      if not isLeft then rad := rad - Pi;
+    end;
+  end;
+  { the author's position and turn win }
+  if ChainFind(AChain, 'label', 'position') <> nil then pos := ASpec.Position
+  else if isLeft then pos := tlpLeft
+  else pos := tlpRight;
+  dp := ChainFind(AChain, 'label', 'rotate');
+  if (dp <> nil) and (dp.JSONType = jtNumber) then rot := ASpec.RotationRad
+  else rot := -rad;
+  { the anchor on the box, as the position puts it }
+  box := ACaption.HostBox;
+  d := ASpec.DistanceLogical * AScale;
+  TyLabelAnchorXYWH(box, pos, d, 0, 0, x, y, ah, av);
+  { getLocalTransform with an origin at the box's centre }
+  ox := box.X + box.W / 2 - x;
+  oy := box.Y + box.H / 2 - y;
+  if (ox <> 0) or (oy <> 0) then
+  begin
+    m4 := -ox;
+    m5 := -oy;
+  end
+  else
+  begin
+    m4 := 0;
+    m5 := 0;
+  end;
+  if rot <> 0 then
+  begin
+    st := TyJsSin(rot);
+    ct := TyJsCos(rot);
+    atx := m4;
+    aty := m5;
+    m4 := ct * atx + st * aty;
+    m5 := ct * aty - st * atx;
+  end;
+  m4 := m4 + (ox + x);
+  m5 := m5 + (oy + y);
+  ACaption.HasFixedAnchor := True;
+  ACaption.FixedX := m4;
+  ACaption.FixedY := m5;
+  ACaption.FixedInside := TyLabelIsInside(pos);
+  ACaption.FixedAH := ah;
+  ACaption.FixedAV := tavMiddle;
+  ACaption.FixedRotationRad := rot;
+end;
+
+function TyBuildTreeMarks(ASeriesIndex: Integer; const ASolved: TTyTreeSolved;
+  const AInk: TTyTreeInk; AStore: TTyDataStore; AList: TTyPaintList;
+  APPI: Integer): Integer;
+var
+  AScale: Double;
   row, par, cnt: Integer;
   chain: array[0..2] of TJSONObject;
   s, t, cp1, cp2: TTyPointF;
@@ -900,8 +1132,36 @@ var
 begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
+  if APPI > 0 then AScale := APPI / 96 else AScale := 1;
   c := ASolved.Spec.Curveness;
-  { ---- the edges: parent to child, in the child's lineStyle ---- }
+  { ---- polyline edges: one per open parent, in the parent's lineStyle ----
+    (orthogonal only: upstream's radial polyline throws, its production
+    build draws no edges) }
+  if ASolved.Spec.Polyline and not ASolved.Spec.Radial then
+    for row := 1 to High(ASolved.Hier.Nodes) do
+    begin
+      if not ASolved.Pos[row].Placed then Continue;
+      if not ASolved.Hier.Nodes[row].Expanded then Continue;
+      if Length(ASolved.Hier.Nodes[row].Children) = 0 then Continue;
+      shape := PolylineEdge(ASolved, row);
+      if Length(shape.Cmds) = 0 then Continue;
+      el := TyChartElement(shape);
+      ChainOf(ASolved, row, chain, cnt);
+      w := ChainNum(Slice(chain, cnt), 'lineStyle', 'width', 1.5);
+      el.Style.HasFill := False;
+      el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
+      el.Style.StrokeWidthLogical := w;
+      el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
+      el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
+      el.Z := ASolved.Spec.Z;
+      el.Z2 := ASolved.Spec.Z2;
+      el.Silent := True;
+      el.Datum := TyChartDatum(ASeriesIndex, row, row);
+      AList.Add(el);
+      Inc(Result);
+    end;
+
+  { ---- curve edges: parent to child, in the child's lineStyle ---- }
   if ASolved.Spec.Curve then
     for row := 1 to High(ASolved.Hier.Nodes) do
     begin
@@ -910,7 +1170,18 @@ begin
       if not (ASolved.Pos[row].Placed and ASolved.Pos[par].Placed) then Continue;
       s := TyPointF(ASolved.Pos[par].X, ASolved.Pos[par].Y);
       t := TyPointF(ASolved.Pos[row].X, ASolved.Pos[row].Y);
-      if ASolved.Spec.Orient in [troLR, troRL] then
+      if ASolved.Spec.Radial then
+      begin
+        { in (angle, radius): every point re-derived from the raw pair, and
+          each coordinate `|| 0` }
+        s := Radial0(ASolved.Pos[par].RawX, ASolved.Pos[par].RawY);
+        cp1 := Radial0(ASolved.Pos[par].RawX, ASolved.Pos[par].RawY
+          + (ASolved.Pos[row].RawY - ASolved.Pos[par].RawY) * c);
+        cp2 := Radial0(ASolved.Pos[row].RawX, ASolved.Pos[row].RawY
+          + (ASolved.Pos[par].RawY - ASolved.Pos[row].RawY) * c);
+        t := Radial0(ASolved.Pos[row].RawX, ASolved.Pos[row].RawY);
+      end
+      else if ASolved.Spec.Orient in [troLR, troRL] then
       begin
         cp1 := TyPointF(s.X + (t.X - s.X) * c, s.Y);
         cp2 := TyPointF(t.X + (s.X - t.X) * c, t.Y);
@@ -921,10 +1192,10 @@ begin
         cp2 := TyPointF(t.X, t.Y + (s.Y - t.Y) * c);
       end;
       { to device px, each point once }
-      s := TyPointF(ASolved.Box.X + s.X, ASolved.Box.Y + s.Y);
-      t := TyPointF(ASolved.Box.X + t.X, ASolved.Box.Y + t.Y);
-      cp1 := TyPointF(ASolved.Box.X + cp1.X, ASolved.Box.Y + cp1.Y);
-      cp2 := TyPointF(ASolved.Box.X + cp2.X, ASolved.Box.Y + cp2.Y);
+      s := TyPointF(ASolved.GX + s.X, ASolved.GY + s.Y);
+      t := TyPointF(ASolved.GX + t.X, ASolved.GY + t.Y);
+      cp1 := TyPointF(ASolved.GX + cp1.X, ASolved.GY + cp1.Y);
+      cp2 := TyPointF(ASolved.GX + cp2.X, ASolved.GY + cp2.Y);
       { a REAL cubic: the two end points for the hit test and the bounds to
         fall back on, the commands for the painter }
       shape := TyShapePolyline([s, t]);
@@ -1025,6 +1296,8 @@ begin
       el.Caption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
         AStore, row, AInk.SeriesName, AInk.LabelValueDim, NaN, False);
       el.Caption.ItemSpec := row + 1;
+      if ASolved.Spec.Radial then
+        RadialLabel(ASolved, row, spec, Slice(chain, cnt), AScale, el.Caption);
     end;
     AList.Add(el);
     Inc(Result);

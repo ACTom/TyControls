@@ -145,6 +145,17 @@ type
       height, the form upstream adds to, so the anchor is exact. [Batch 73] }
     HasHostBox: Boolean;
     HostBox: TTyXYWH;
+    { AN ANCHOR THE MARK WORKED OUT ITSELF -- a radial tree's label, turned
+      about its box's centre (textConfig origin 'center'), which no position
+      in the expansion's table can say. The expansion takes it as given, with
+      its position (for the ink), its alignment and its turn. [Batch 74] }
+    HasFixedAnchor: Boolean;
+    FixedX, FixedY: Double;
+    { inside its host, for the ink bands, or outside it }
+    FixedInside: Boolean;
+    FixedAH: TTyTextAnchorH;
+    FixedAV: TTyTextAnchorV;
+    FixedRotationRad: Double;
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
