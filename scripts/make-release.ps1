@@ -5,7 +5,8 @@
   source, the Lazarus packages, themes, i18n catalogs, user docs and examples — laid out exactly
   as in the repo so `tycontrols.lpk` / `tycontrols_dt.lpk` install unchanged.
 
-  EXCLUDED: tests, tools/ (icon generator), scripts/, docs/superpowers (specs/plans),
+  EXCLUDED: tests, tools/ (icon generator, gallery capture), scripts/, docs/superpowers
+  (specs/plans), docs/gallery* (the screenshot pages),
   designtime/icons (PNG regeneration source — the packed .lrs is shipped instead),
   the auto-generated package units, and every build artifact (lib/, *.ppu/.o/.exe, ...).
 
@@ -84,8 +85,8 @@ Add-Tree 'themes' @('.tycss', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', 
 Write-Host '-- languages (i18n .po/.pot catalogs; .lpk EnableI18N points here)'
 Add-Tree 'languages' @('.po', '.pot')
 
-Write-Host '-- docs (excluding docs/superpowers)'
-Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])superpowers([\\/]|$)'
+Write-Host '-- docs (excluding docs/superpowers and the gallery -- screenshots for the web pages)'
+Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])(superpowers([\\/]|$)|gallery)'
 
 Write-Host '-- examples (source only)'
 # The image extensions are the same set the themes rule above uses, and they are here for the
