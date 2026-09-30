@@ -218,7 +218,8 @@ uses
   test.themebuilder.golden,
   test.themebuilder.parser,
   test.themebuilder.lint,
-  test.themebuilder.editkit;
+  test.themebuilder.editkit,
+  test.themebuilder.doc;
 
 type
   TTyTestRunner = class(TTestRunner)
