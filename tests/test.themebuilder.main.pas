@@ -34,13 +34,20 @@ type
     procedure TestNewFromABuiltinTheme;
     procedure TestThePreviewCannotTouchTheTool;
     procedure TestTheProjectListsItsUnits;
+    procedure TestAnOutsideChangeIsOfferedOnce;
+    procedure TestTheReloadQuestionWarnsOfUnsavedChanges;
+    procedure TestOurOwnSaveIsNotAnOutsideChange;
+    procedure TestTheEditorFollowsTheToolTheme;
+    procedure TestTheListenerIsRemoved;
+    procedure TestTheSettingsAreKept;
+    procedure TestProblemLinesTakeTheirColourFromTheTheme;
   end;
 
 implementation
 
 uses
-  FileUtil, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
-  tyControls.ThemeLint, tbproblems, tbtemplates, test.themebuilder.golden;
+  FileUtil, IniFiles, Graphics, SynEdit, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
+  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, test.themebuilder.golden;
 
 const
   { a document whose one value no base theme has }
@@ -304,6 +311,123 @@ begin
         Pos('<Filename Value="' + ExtractFileName(files[i]) + '"/>', lpi) > 0);
   finally
     files.Free;
+  end;
+end;
+
+procedure TTbMainFormTests.TestAnOutsideChangeIsOfferedOnce;
+var
+  f: string;
+  asked: Integer;
+begin
+  f := FDir + 'watched.tycss';
+  WriteBytes(f, 'TyButton { background: #111111; }'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  WriteBytes(f, 'TyButton { background: #123456; }'#10'TyEdit { color: #222222; }'#10);
+  TTbMainForm.PromptAnswerForTest := mrYes;
+  FForm.CheckDiskNow;
+  AssertEquals('F12: reloaded', 'TyButton { background: #123456; }'#10'TyEdit { color: #222222; }',
+    Unify(FForm.Editor.Lines.Text));
+  WriteBytes(f, 'TyButton { background: #654321; }'#10);
+  TTbMainForm.PromptAnswerForTest := mrNo;
+  FForm.CheckDiskNow;
+  AssertEquals('F12: kept when told no', 'TyButton { background: #123456; }'#10'TyEdit { color: #222222; }',
+    Unify(FForm.Editor.Lines.Text));
+  asked := FForm.AskCount;
+  FForm.CheckDiskNow;
+  AssertEquals('F12: the same change is not offered again', asked, FForm.AskCount);
+end;
+
+procedure TTbMainFormTests.TestTheReloadQuestionWarnsOfUnsavedChanges;
+var
+  f: string;
+begin
+  f := FDir + 'w2.tycss';
+  WriteBytes(f, 'TyButton { background: #111111; }'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  WriteBytes(f, 'TyButton { background: #222222; }'#10#10);
+  TTbMainForm.PromptAnswerForTest := mrNo;
+  FForm.CheckDiskNow;
+  AssertTrue('F13: asked', FForm.LastAsk <> '');
+  AssertTrue('F13: nothing unsaved, no warning', Pos(rsTbReloadLoses, FForm.LastAsk) = 0);
+  FForm.Editor.Modified := True;
+  WriteBytes(f, 'TyButton { background: #333333; }'#10#10#10);
+  FForm.CheckDiskNow;
+  AssertTrue('F13: unsaved changes are warned about', Pos(rsTbReloadLoses, FForm.LastAsk) > 0);
+end;
+
+procedure TTbMainFormTests.TestOurOwnSaveIsNotAnOutsideChange;
+var
+  f: string;
+  asked: Integer;
+begin
+  f := FDir + 'own.tycss';
+  WriteBytes(f, 'TyButton { background: #111111; }'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  FForm.Editor.Lines.Add('TyEdit { color: #222222; }');
+  AssertTrue('saved', FForm.SaveDocument);
+  asked := FForm.AskCount;
+  FForm.CheckDiskNow;
+  AssertEquals('F14: not asked', asked, FForm.AskCount);
+end;
+
+procedure TTbMainFormTests.TestTheEditorFollowsTheToolTheme;
+var
+  light, dark: TColor;
+begin
+  FForm.SetEditorAppearance('default', False);
+  light := TbEditorColors(TyDefaultController).Background;
+  AssertEquals('the editor is on the light ground', light, FForm.Editor.Color);
+  FForm.SetEditorAppearance('default', True);
+  dark := TbEditorColors(TyDefaultController).Background;
+  AssertTrue('the two grounds differ', light <> dark);
+  AssertEquals('F15: the editor followed', dark, FForm.Editor.Color);
+end;
+
+procedure TTbMainFormTests.TestTheListenerIsRemoved;
+begin
+  FreeAndNil(FForm);
+  TyDefaultController.Changed;   { would call into the freed window if it still listened }
+  AssertTrue('F16: no access violation', True);
+end;
+
+procedure TTbMainFormTests.TestTheSettingsAreKept;
+var
+  ini: TIniFile;
+begin
+  FForm.SetEditorAppearance('xp', True);
+  FForm.Preview.SetModern(True);
+  AssertTrue('closes', FForm.CloseQuery);
+  ini := TIniFile.Create(TTbMainForm.SettingsFileForTest);
+  try
+    AssertEquals('F17: the theme', 'xp', ini.ReadString('Editor', 'Theme', ''));
+    AssertTrue('F17: dark', ini.ReadBool('Editor', 'Dark', False));
+    AssertTrue('F17: modern', ini.ReadBool('Preview', 'Modern', False));
+  finally
+    ini.Free;
+  end;
+  FreeAndNil(FForm);
+  TyDefaultController.ThemeName := 'default';
+  FForm := TTbMainForm.Create(nil);
+  AssertEquals('F17: the next window starts on it', 'xp', TyDefaultController.ThemeName);
+  AssertTrue('F17: and the preview is modern', FForm.Preview.IsModern);
+end;
+
+procedure TTbMainFormTests.TestProblemLinesTakeTheirColourFromTheTheme;
+var
+  special: Boolean;
+  markup: TSynSelectedColor;
+begin
+  WriteBytes(FDir + 'bad.tycss', '/* a */'#10'TyButton {'#10'/* '#$E4#$B8#$AD' */ color red;'#10);
+  AssertTrue('opened', FForm.OpenFile(FDir + 'bad.tycss'));
+  markup := TSynSelectedColor.Create;
+  try
+    special := False;
+    FForm.EditorSpecialLineMarkup(FForm.Editor, 3, special, markup);
+    AssertTrue('the line is tinted', special);
+    AssertEquals('F18: the error tint of the tool theme', FForm.Look.ErrorLine, markup.Background);
+    AssertTrue('F18: which is not the ground', markup.Background <> FForm.Editor.Color);
+  finally
+    markup.Free;
   end;
 end;
 

@@ -39,6 +39,8 @@ resourcestring
   rsTbNoProblems = 'No problems';
   rsTbLineCol = 'Ln %d, Col %d';
   rsTbFilter = 'Theme files (*.tycss)|*.tycss|All files|*';
+  rsTbReload = 'The file %s was changed by another program. Reload it?';
+  rsTbReloadLoses = 'Your unsaved changes will be lost.';
 
 type
   TTbMainForm = class(TTyForm)
@@ -108,6 +110,8 @@ type
     procedure MnuRecentClick(Sender: TObject);
     procedure MnuAppearanceClick(Sender: TObject);
     procedure PreviewChanged(Sender: TObject);
+    procedure ToolThemeChanged(Sender: TObject);
+    procedure ReloadKeepingCaret;
     procedure RebuildRecentMenu;
     procedure LoadEditor(const AText: string);
     function ConfirmDiscard: Boolean;
@@ -205,7 +209,11 @@ begin
   end;
   RebuildRecentMenu;
 
+  { the editor's colours follow the tool's theme; the listener goes in FormDestroy (the
+    default controller outlives this window) }
+  TyDefaultController.AddChangeListener(@ToolThemeChanged);
   SetEditorAppearance(FSettings.EditorTheme, FSettings.EditorDark);
+  ToolThemeChanged(nil);
   FPreview.SetModern(FSettings.PreviewModern);
   NewMinimal;
   if FSettings.PreviewDark then
@@ -217,6 +225,7 @@ end;
 
 procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
+  TyDefaultController.RemoveChangeListener(@ToolThemeChanged);
   RefreshTimer.Enabled := False;
   WatchTimer.Enabled := False;
   ClearProblemMarks;
@@ -568,7 +577,7 @@ begin
   RefreshNow;
 end;
 
-{ ---- the file on disk (filled in by the next step) ---- }
+{ ---- the file on disk ---- }
 
 procedure TTbMainForm.WatchTimerTimer(Sender: TObject);
 begin
@@ -576,15 +585,76 @@ begin
 end;
 
 procedure TTbMainForm.CheckDiskNow;
+var
+  msg: string;
 begin
+  if FPrompting or (Application.ModalLevel > 0) then Exit;
+  if not FDoc.DiskChanged then Exit;          { takes the stamp again: asked once per change }
+  msg := Format(rsTbReload, [FDoc.FileName]);
+  if Editor.Modified then
+    msg := msg + LineEnding + rsTbReloadLoses;
+  FPrompting := True;
+  try
+    if Ask(msg, [mbYes, mbNo]) = mrYes then
+      ReloadKeepingCaret;
+  finally
+    FPrompting := False;
+  end;
 end;
 
-{ ---- the editor's look (filled in by the next step) ---- }
+{ Reload after the question above: no second "save the changes?" }
+procedure TTbMainForm.ReloadKeepingCaret;
+var
+  y, top: Integer;
+  name: string;
+begin
+  y := Editor.CaretY;
+  top := Editor.TopLine;
+  name := FDoc.FileName;
+  try
+    FDoc.LoadFromFile(name);
+  except
+    on E: Exception do
+    begin
+      Ask(Format(rsTbOpenFailed, [name, E.Message]), [mbOK]);
+      Exit;
+    end;
+  end;
+  LoadEditor(FDoc.EditorText);
+  if Editor.Lines.Count > 0 then
+  begin
+    Editor.CaretY := Max(1, Min(y, Editor.Lines.Count));
+    Editor.TopLine := Max(1, Min(top, Editor.Lines.Count));
+  end;
+end;
+
+{ ---- the editor's look ---- }
 
 procedure TTbMainForm.SetEditorAppearance(const ATheme: string; ADark: Boolean);
+var
+  i: Integer;
 begin
+  { the tool's own theme, on the default controller; the colours follow through
+    ToolThemeChanged }
   TyDefaultController.ThemeName := ATheme;
+  if ADark then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
+  for i := 0 to MnuAppearance.Count - 1 do
+    MnuAppearance.Items[i].Checked := SameText(MnuAppearance.Items[i].Hint, ATheme);
+  MnuEditorDark.Checked := ADark;
+  FSettings.EditorTheme := ATheme;
+  FSettings.EditorDark := ADark;
+end;
+
+procedure TTbMainForm.ToolThemeChanged(Sender: TObject);
+begin
+  if (Editor = nil) or (FKit = nil) then Exit;
+  FLook := TbEditorColors(TyDefaultController);
+  TbApplyEditorColors(Editor, FKit.Highlighter, FLook);
+  Editor.Invalidate;
 end;
 
 { ---- menus ---- }
