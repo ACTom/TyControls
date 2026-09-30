@@ -1,0 +1,46 @@
+{
+  "PackageData0" : {
+    "Name" : "TyControls",
+    "DisplayName" : "TyControls",
+    "Category" : "List and Combo Boxes, ListViews and TreeViews, Dialogs, GUIContainers, Menus",
+    "CommunityDescription" : "A skinnable / styleable Lazarus component library: every control is fully custom-drawn (BGRABitmap) and its appearance is driven uniformly by lightweight CSS-lite text themes (.tycss), rendering pixel-identical on Windows / Linux / macOS.",
+    "ExternalDependecies" : "BGRABitmap",
+    "OrphanedPackage" : 0,
+    "RepositoryFileName" : "TyControls.zip",
+    "RepositoryFileSize" : @SIZE@,
+    "RepositoryFileHash" : "@MD5@",
+    "RepositoryDate" : @DATE@,
+    "PackageBaseDir" : "TyControls\\/",
+    "HomePageURL" : "https://github.com/ACTom/TyControls/",
+    "DownloadURL" : "https://raw.githubusercontent.com/ACTom/TyControls/refs/heads/main/update_TyControls.json",
+    "SVNURL" : ""
+  },
+  "PackageFiles0" : [
+    {
+      "Name" : "tycontrols.lpk",
+      "Description" : "A Lazarus component library with skin/style support: all controls are fully custom-drawn via BGRABitmap, their appearances are uniformly styled by lightweight CSS text themes (.tycss), delivering pixel-perfect identical UI rendering across Windows, Linux and macOS.\r\n\r\nHomepage: https://github.com/ACTom/TyControls",
+      "Author" : "ACTom",
+      "License" : "Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL",
+      "RelativeFilePath" : "",
+      "VersionAsString" : "@VERSION@",
+      "LazCompatibility" : "3.0.0, 3.2.0, 3.4.0, 3.6.0, 3.8.0, 4.0.0, 4.2.0, 4.4.0, 4.6.0, 4.8.0",
+      "FPCCompatibility" : "3.2.2, 3.2.4",
+      "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
+      "PackageType" : 2,
+      "DependenciesAsString" : "BGRABitmapPack, LCL"
+    },
+    {
+      "Name" : "tycontrols_dt.lpk",
+      "Description" : "TyControls Design-Time Support Package. Requires the TyControls Run-Time Package to function.\r\n",
+      "Author" : "ACTom",
+      "License" : "Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL",
+      "RelativeFilePath" : "",
+      "VersionAsString" : "@VERSION@",
+      "LazCompatibility" : "3.0.0, 3.2.0, 3.4.0, 3.6.0, 3.8.0, 4.0.0, 4.2.0, 4.4.0, 4.6.0, 4.8.0",
+      "FPCCompatibility" : "3.2.2, 3.2.4",
+      "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
+      "PackageType" : 1,
+      "DependenciesAsString" : "tycontrols, IDEIntf, SynEdit"
+    }
+  ]
+}
