@@ -117,7 +117,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 |---|---|
 | `TTyEdit` | 单行文本框:选区、剪贴板、词级导航 |
 | `TTyMemo` | 多行文本框 |
-| `TTyTerminalView` | 终端:画程序输出、把按键编码交给宿主,照 xterm.js |
+| `TTyTerminalView` | 终端:画程序输出、把按键编码交给宿主,照 xterm.js;可用独立配色方案(读写 Windows Terminal 格式) |
 | `TTySpinEdit` | 整数微调框 |
 | `TTyFloatSpinEdit` | 小数微调框,步长可小于 1 |
 | `TTyNumericEdit` | 只接受数字的输入框,失焦时千分位格式化 |
@@ -382,7 +382,7 @@ CharImage1.GlyphName := 'house';
 | [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
-| [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY)、换肤、键码面板 |
+| [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY)、换肤、配色方案、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。
 

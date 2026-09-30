@@ -6,17 +6,21 @@ program terminalshots;
   with --phase4 for the phase 4 one (a selection unfocused and focused, a column
   selection, a Ctrl-hovered web address, on four skins), and with --phase5 for the
   phase 5 one (the reflow at three widths and under an old ConPTY, the minimum
-  contrast at 1 and 4.5, the glyphs it leaves alone, powerline and braille drawn).
+  contrast at 1 and 4.5, the glyphs it leaves alone, powerline and braille drawn), and
+  with --phase6 for the phase 6 one (colour schemes: the seven the example ships, a
+  light / dark pair, following the theme, a program's OSC 11 over a scheme, the minimum
+  contrast on a light scheme, a partial scheme, the selection at 0.3).
   Off screen, the way tests/test.dpi.support paints a tree: no window is shown, the
   control is parented to a form that never appears and drawn into a bitmap through
   its own RenderTo -- the path a WM_PAINT takes, minus the screen. Builds from source/
   and examples/terminal (for the asciicast reader) without the package.
 
-    terminalshots [--phase4 | --phase5] [--out <dir>] [--recordings <dir>]
+    terminalshots [--phase4 | --phase5 | --phase6] [--out <dir>] [--recordings <dir>]
 
   Writes PNGs and an index.md into <dir> (default
   docs/superpowers/plans/2026-09-29-terminal-phase-3-shots under the repository, or
-  ...-phase-4-shots with --phase4, ...-phase-5-shots with --phase5). }
+  ...-phase-4-shots with --phase4, ...-phase-5-shots with --phase5,
+  docs/superpowers/plans/2026-09-30-terminal-phase-6-shots with --phase6). }
 
 uses
   Interfaces, SysUtils, Classes, Math, Types, Forms, Controls, Graphics, LCLType, LCLIntf,
@@ -426,12 +430,217 @@ begin
   Shoot('glyphs-braille-light-3x.png', 'default', 'light', braille, 66, 5, 288, '同上，放大 3 倍');
 end;
 
+{ Phase 6: colour schemes. The seven come from the example's own scheme file. }
+function SchemeText: string;
+var
+  fs: TFileStream;
+begin
+  fs := TFileStream.Create(ExpandFileName(RecDir + '..' + PathDelim + 'colorschemes' + PathDelim
+    + 'windows-terminal.json'), fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, fs.Size);
+    if Length(Result) > 0 then fs.ReadBuffer(Result[1], Length(Result));
+  finally
+    fs.Free;
+  end;
+end;
+
+{ a terminal under theme/mode, the scheme ALight (paired with ADark when that is not ''),
+  fed AData, then AAfter, prepared, drawn at 96 PPI }
+procedure ShootScheme(const AFile, ATheme, AMode: string; const AData: RawByteString; ACols, ARows: Integer;
+  const AWhat, ALight, ADark: string; APrep: TShotPrep = spNone; AContrast: Double = 1;
+  const AAfter: RawByteString = '');
+var
+  ctl: TTyStyleController;
+  v: TShotView;
+  txt: string;
+begin
+  txt := SchemeText;
+  ctl := TTyStyleController.Create(nil);
+  try
+    ctl.ThemeName := ATheme;
+    ctl.Mode := AMode;
+    v := NewShotView(ctl, ACols, ARows);
+    try
+      v.ColorScheme.LoadFromText(txt, ALight);
+      if ADark <> '' then
+      begin
+        v.DarkColorScheme.LoadFromText(txt, ADark);
+        v.ColorSchemePaired := True;
+      end;
+      v.ColorSource := tsrcScheme;
+      v.MinimumContrastRatio := AContrast;
+      v.WriteSync(AData);
+      v.WriteSync(AAfter);
+      v.Prepare(APrep);
+      SaveShot(v, AFile, ATheme, AMode, 96, AWhat);
+    finally
+      v.Free;
+    end;
+  finally
+    ctl.Free;
+  end;
+end;
+
+{ the pixels of a view drawn now (the sentinel ground under it) }
+function Pixels(AView: TShotView): TBGRABitmap;
+var
+  bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(AView.Width, AView.Height);
+    bmp.Canvas.Brush.Color := RGBToColor(255, 0, 255);
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    AView.Shot(bmp, AView.Font.PixelsPerInch);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function CountDifferent(A, B: TBGRABitmap): Integer;
+var
+  x, y: Integer;
+  p, q: TBGRAPixel;
+begin
+  if (A.Width <> B.Width) or (A.Height <> B.Height) then Exit(-1);
+  Result := 0;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+    begin
+      p := A.GetPixel(x, y);
+      q := B.GetPixel(x, y);
+      if (p.red <> q.red) or (p.green <> q.green) or (p.blue <> q.blue) then Inc(Result);
+    end;
+end;
+
+procedure Phase6;
+const
+  Seven: array[0..6, 0..1] of string = (('campbell', 'Campbell'), ('onehalf-dark', 'One Half Dark'),
+    ('onehalf-light', 'One Half Light'), ('solarized-dark', 'Solarized Dark'),
+    ('solarized-light', 'Solarized Light'), ('tango-dark', 'Tango Dark'), ('tango-light', 'Tango Light'));
+  Modes: array[0..1] of string = ('light', 'dark');
+var
+  pal, sel, lines: RawByteString;
+  w, h, k, m, diff: Integer;
+  ctl: TTyStyleController;
+  plain, loaded: TShotView;
+  a, b, old: TBGRABitmap;
+  oldFile: string;
+begin
+  pal := CastBytes('palette.cast', w, h) + #27'[?25l';
+  Index.Add('# 终端 6 期验收截图');
+  Index.Add('');
+  Index.Add('`tools/terminal-shots` 离屏画出来的（不开窗口，控件自己的 RenderTo），Windows、默认字体、96 PPI。方案取自示例的 `examples/terminal/colorschemes/windows-terminal.json`（Windows Terminal 自带的七套）。重新生成：编 `tools/terminal-shots/terminalshots.lpi`，跑 `terminalshots --phase6`。');
+  Index.Add('');
+  Index.Add('| 文件 | 主题 | 明暗 | 看什么 |');
+  Index.Add('|---|---|---|---|');
+  { 1. the seven, palette.cast under the default light theme }
+  for k := 0 to High(Seven) do
+    ShootScheme(Format('scheme-%s.png', [Seven[k][0]]), 'default', 'light', pal, w, h,
+      Format('`palette.cast`，方案 %s：16 色、前景、底色（连内边距）都是这一套的，不跟主题', [Seven[k][1]]),
+      Seven[k][1], '');
+  { 2. a pair: Tango Light on the light theme, Tango Dark on the dark one }
+  for m := 0 to 1 do
+    ShootScheme(Format('scheme-pair-tango-%s.png', [Modes[m]]), 'default', Modes[m], pal, w, h,
+      '明暗配对（Tango Light / Tango Dark）：浅色主题是 Tango Light，深色主题是 Tango Dark', 'Tango Light', 'Tango Dark');
+  { 3. following the theme: a control that never had a scheme, and one with Campbell loaded
+    but ColorSource = tsrcTheme, must be the same picture }
+  for m := 0 to 1 do
+  begin
+    ctl := TTyStyleController.Create(nil);
+    try
+      ctl.ThemeName := 'default';
+      ctl.Mode := Modes[m];
+      plain := NewShotView(ctl, w, h);
+      loaded := NewShotView(ctl, w, h);
+      try
+        loaded.ColorScheme.LoadFromText(SchemeText, 'Campbell');
+        plain.WriteSync(pal);
+        loaded.WriteSync(pal);
+        a := Pixels(plain);
+        b := Pixels(loaded);
+        try
+          diff := CountDifferent(a, b);
+          WriteLn(Format('scheme-follow-default-%s: never set vs Campbell loaded but following the theme: %d pixels differ',
+            [Modes[m], diff]));
+          oldFile := ExpandFileName(OutDir + PathDelim + '..' + PathDelim + '2026-09-29-terminal-phase-3-shots'
+            + PathDelim + Format('palette-default-%s.png', [Modes[m]]));
+          if FileExists(oldFile) then
+          begin
+            old := TBGRABitmap.Create(oldFile);
+            try
+              WriteLn(Format('scheme-follow-default-%s vs phase 3 palette-default-%s.png: %d pixels differ',
+                [Modes[m], Modes[m], CountDifferent(a, old)]));
+            finally
+              old.Free;
+            end;
+          end;
+        finally
+          a.Free;
+          b.Free;
+        end;
+        SaveShot(loaded, Format('scheme-follow-default-%s.png', [Modes[m]]), 'default', Modes[m], 96,
+          Format('跟随主题：方案里装着 Campbell 但 `ColorSource = tsrcTheme`，和从没设过方案的控件逐像素比，%d 个像素不同', [diff]));
+      finally
+        plain.Free;
+        loaded.Free;
+      end;
+    finally
+      ctl.Free;
+    end;
+  end;
+  { 4. the program's OSC 11 over a scheme: the padding follows }
+  ShootScheme('scheme-osc11-solarized-dark.png', 'default', 'light', pal, w, h,
+    'Solarized Dark 下程序发 `OSC 11 ;#203040`：底色连内边距换成程序的颜色', 'Solarized Dark', '', spNone, 1,
+    #27']11;#203040'#7);
+  { 5. the minimum contrast on a light scheme: the 16 colours as text }
+  lines := Sample([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+  ShootScheme('scheme-contrast-1-solarized-light.png', 'default', 'light', lines, 44, 17,
+    'Solarized Light，16 色写字、█ 块、当底色，最低对比度 1（不调）', 'Solarized Light', '');
+  ShootScheme('scheme-contrast-45-solarized-light.png', 'default', 'light', lines, 44, 17,
+    '同上，4.5：对方案底色 #FDF6E3 不到 4.5:1 的字压暗；█ 块和当底色的格不变', 'Solarized Light', '', spNone, 4.5);
+  { 6. a partial scheme: foreground, background and red; the rest follows the theme }
+  ctl := TTyStyleController.Create(nil);
+  try
+    ctl.ThemeName := 'default';
+    ctl.Mode := 'light';
+    plain := NewShotView(ctl, w, h);
+    try
+      plain.ColorScheme.Foreground := RGBToColor($30, $30, $60);
+      plain.ColorScheme.Background := RGBToColor($FF, $F4, $E0);
+      plain.ColorScheme.Red := RGBToColor($E0, $00, $70);
+      plain.ColorSource := tsrcScheme;
+      plain.WriteSync(pal);
+      SaveShot(plain, 'scheme-partial-default-light.png', 'default', 'light', 96,
+        '方案只设了前景（#303060）、底色（#FFF4E0）、红（#E00070）：其余 15 色跟主题（浅底那套）');
+    finally
+      plain.Free;
+    end;
+  finally
+    ctl.Free;
+  end;
+  { 7. the selection at 0.3 of Campbell's (unset: WT's #FFFFFF) over its ground }
+  sel := #27'[?25l'
+    + '$ echo ' + Utf8($9009) + Utf8($533A) + Utf8($6D4B) + Utf8($8BD5) + ' selection test'#13#10
+    + Utf8($4E2D) + Utf8($6587) + Utf8($4E0E) + ' English ' + Utf8($6DF7) + Utf8($6392)
+    + ', see https://example.com/docs here'#13#10
+    + Utf8($7B2C) + Utf8($4E09) + Utf8($884C) + ' third line 12345'#13#10;
+  ShootScheme('scheme-selection-unfocused-campbell.png', 'default', 'light', sel, 60, 4,
+    'Campbell 的选区（#FFFFFF 降到 0.3，在底色 #0C0C0C 上混成 #4D4D4D 左右），失焦：没设失焦色，用同一色', 'Campbell', '',
+    spSelection);
+  ShootScheme('scheme-selection-focused-campbell.png', 'default', 'light', sel, 60, 4,
+    '同上，聚焦', 'Campbell', '', spSelectionFocused);
+end;
+
 var
   names: TStringArray;
   i, m, w, h, k: Integer;
   data: RawByteString;
   mode, rec, what: string;
-  doPhase4, doPhase5: Boolean;
+  doPhase4, doPhase5, doPhase6: Boolean;
 const
   Modes: array[0..1] of string = ('light', 'dark');
   Singles: array[0..2] of string = ('vim-edit.cast', 'htop-few-frames.cast', 'cat-cjk-emoji.cast');
@@ -440,12 +649,16 @@ begin
   TyFallbackFontName := {$IFDEF MSWINDOWS}'Segoe UI'{$ELSE}''{$ENDIF};
   doPhase4 := False;
   doPhase5 := False;
+  doPhase6 := False;
   for i := 1 to ParamCount do
   begin
     if ParamStr(i) = '--phase4' then doPhase4 := True;
     if ParamStr(i) = '--phase5' then doPhase5 := True;
+    if ParamStr(i) = '--phase6' then doPhase6 := True;
   end;
-  if doPhase5 then
+  if doPhase6 then
+    OutDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../docs/superpowers/plans/2026-09-30-terminal-phase-6-shots')
+  else if doPhase5 then
     OutDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../docs/superpowers/plans/2026-09-29-terminal-phase-5-shots')
   else if doPhase4 then
     OutDir := ExpandFileName(ExtractFilePath(ParamStr(0)) + '../../docs/superpowers/plans/2026-09-29-terminal-phase-4-shots')
@@ -466,6 +679,13 @@ begin
   Index := TStringList.Create;
   try
     Form.SetBounds(0, 0, 1600, 1200);
+    if doPhase6 then
+    begin
+      Phase6;
+      Index.SaveToFile(IncludeTrailingPathDelimiter(OutDir) + 'index.md');
+      WriteLn('done: ', OutDir);
+      Exit;
+    end;
     if doPhase5 then
     begin
       Phase5;

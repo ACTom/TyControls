@@ -196,3 +196,50 @@ not be used in advertising or otherwise to promote the sale, use or other
 dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 ```
+
+---
+
+## Windows Terminal color schemes — `examples/terminal/colorschemes/`
+
+Upstream: <https://github.com/microsoft/terminal>, `src/cascadia/TerminalSettingsModel/defaults.json`,
+commit `4e2b8bd9`. `examples/terminal/colorschemes/windows-terminal.json` holds seven of the
+colour schemes in that file (Campbell, One Half Dark, One Half Light, Solarized Dark,
+Solarized Light, Tango Dark, Tango Light), copied as they are.
+
+This is needed only if you ship that directory of the example. The library itself carries no
+colour scheme: `TTyTerminalColorScheme` reads and writes the format, and its code is our own.
+
+The colours themselves go back to their authors:
+
+- Solarized — Copyright (c) 2011 Ethan Schoonover, MIT License (<https://github.com/altercation/solarized>).
+- One Half — Copyright (c) 2019 Son A. Pham, MIT License (<https://github.com/sonph/onehalf>).
+- The Tango palette was placed in the public domain by the Tango Desktop Project.
+
+```
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Test fixture
+
+`tests/fixtures/terminal-wt-defaults.json` is the same `defaults.json`, byte for byte (the
+terms above). It lives under `tests/` and is not shipped.

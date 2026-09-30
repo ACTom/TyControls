@@ -70,12 +70,13 @@ type
     procedure EveryTestUnitThatRegistersTestsIsLinked;
     procedure TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
     procedure TheExampleRecordingsMatchTheOracle;
+    procedure TheExampleColourSchemesAreCoveredByTheNotice;
   end;
 
 implementation
 
 uses
-  FileUtil, test.designregistry;
+  FileUtil, test.designregistry, tyControls.Terminal.ColorScheme;
 
 { ---------------------------------------------------------------- helpers ---------------- }
 
@@ -727,6 +728,58 @@ begin
   finally
     files.Free;
     lpr.Free;
+  end;
+end;
+
+{ The terminal example ships colour schemes copied from Windows Terminal's defaults.json
+  (terminal phase 6). Every scheme file there must fall under a notice section whose heading
+  names the directory; every scheme in them must be one of the seven whose licences were
+  checked (Windows Terminal MIT; Solarized, One Half MIT; Tango public domain) -- a scheme
+  added later without its licence looked up turns this red; and none may hold the U+0000
+  escape, which fpjson drops. }
+procedure TReleaseManifestTest.TheExampleColourSchemesAreCoveredByTheNotice;
+const
+  Dir = 'examples/terminal/colorschemes/';
+  Checked: array[0..6] of string = ('Campbell', 'One Half Dark', 'One Half Light',
+    'Solarized Dark', 'Solarized Light', 'Tango Dark', 'Tango Light');
+var
+  files, notice: TStringList;
+  i, j, k, schemes: Integer;
+  heading, body: string;
+  names: TStringArray;
+  known: Boolean;
+begin
+  files := FindAllFiles(RepoRoot + 'examples' + PathDelim + 'terminal' + PathDelim + 'colorschemes', '*.json', False);
+  notice := TStringList.Create;
+  try
+    AssertTrue('the example has colour scheme files', files.Count > 0);
+    notice.Text := ReadScript(RepoRoot + 'THIRD-PARTY-NOTICES.md');
+    heading := '';
+    for i := 0 to notice.Count - 1 do
+      if (Pos('## ', notice[i]) = 1) and (Pos(Dir, notice[i]) > 0) then
+        heading := notice[i];
+    AssertTrue('a notice section is headed with ' + Dir, heading <> '');
+    schemes := 0;
+    for i := 0 to files.Count - 1 do
+    begin
+      body := ReadScript(files[i]);
+      AssertEquals(ExtractFileName(files[i]) + ' holds no U+0000 escape', 0, Pos('' + 'u0000', body));
+      names := TTyTerminalColorScheme.ListSchemeNames(body);
+      AssertTrue(ExtractFileName(files[i]) + ' has schemes', Length(names) > 0);
+      for j := 0 to High(names) do
+      begin
+        known := False;
+        for k := 0 to High(Checked) do
+          if names[j] = Checked[k] then known := True;
+        AssertTrue(ExtractFileName(files[i]) + ': "' + names[j]
+          + '" is one of the seven whose licence was checked', known);
+        Inc(schemes);
+      end;
+    end;
+    AssertTrue('schemes checked', schemes >= Length(Checked));
+  finally
+    notice.Free;
+    files.Free;
   end;
 end;
 
