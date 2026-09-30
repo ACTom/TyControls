@@ -31,12 +31,13 @@ type
     procedure TestTheSameVariableInTwoRules;
     procedure TestTheOldOutputIsTheExMinusBadValues;
     procedure TestEveryIssueInAutoHasAPosition;
+    procedure TestAVariableCycleIsABadValueOnItsDefinition;
   end;
 
 implementation
 
 uses
-  test.themebuilder.golden, tyControls.StrConsts, tyControls.Css.Parser;
+  test.themebuilder.golden, tyControls.StrConsts, tyControls.Css.Parser, tyControls.Css.Values;
 
 function TTbLintExTests.J(const ALines: array of string): string;
 var
@@ -262,6 +263,89 @@ begin
   finally
     sl.Free;
   end;
+end;
+
+{ A variable that leads back to itself is a bad value on its definition (and it used to
+  take the lint down with a stack overflow as soon as a rule used it). Per mode: a cycle
+  that only one mode closes is reported, two definitions in different modes that would
+  make a cycle only if merged are not. A variable that merely uses a cycle is not itself
+  reported; the declaration that evaluates it is a bad value (through TyEvalLength for
+  border-width). TyLintCss keeps quiet about all of it. Red without ScanVarCycles (the
+  definitions go unreported) and a crash without the guard in Css.Values. }
+procedure TTbLintExTests.TestAVariableCycleIsABadValueOnItsDefinition;
+
+  function Find(const AIssues: TTyLintIssues; const ASubject: string; ALine: Integer): Integer;
+  var
+    i: Integer;
+  begin
+    for i := 0 to High(AIssues) do
+      if (AIssues[i].Subject = ASubject) and (AIssues[i].Line = ALine) then
+        Exit(i);
+    Result := -1;
+  end;
+
+  procedure CheckOld(const ASrc: string);
+  begin
+    AssertEquals('L14: TyLintCss says nothing: ' + ASrc, 0, Length(TyLintCss(ASrc)));
+  end;
+
+var
+  r: TTyLintIssues;
+  src: string;
+  k: Integer;
+begin
+  src := J([':root {', '  --a: var(--a);', '}']);
+  r := TyLintCssEx(src);
+  AssertEquals('L14 self: one issue' + Dump(r), 1, Length(r));
+  CheckIssue('L14 self', r[0], 2, 3, tlkBadValue, tlsError, 'a');
+  AssertEquals('L14 self: the message', '--a: ' + Format(TyCssVarCycleMsg, ['a']), r[0].Message);
+  CheckOld(src);
+
+  src := J([':root {', '  --a: var(--b);', '  --b: lighten(var(--a), 5%);', '  --c: var(--a);', '}',
+    'TyButton { background: var(--c); }']);
+  r := TyLintCssEx(src);
+  AssertEquals('L14 pair: three issues' + Dump(r), 3, Length(r));
+  k := Find(r, 'a', 2);
+  AssertTrue('L14 pair: --a' + Dump(r), k >= 0);
+  CheckIssue('L14 pair a', r[k], 2, 3, tlkBadValue, tlsError, 'a');
+  k := Find(r, 'b', 3);
+  AssertTrue('L14 pair: --b' + Dump(r), k >= 0);
+  CheckIssue('L14 pair b', r[k], 3, 3, tlkBadValue, tlsError, 'b');
+  AssertEquals('L14 pair: --c only uses it', -1, Find(r, 'c', 4));
+  k := Find(r, 'background', 6);
+  AssertTrue('L14 pair: the rule that evaluates it' + Dump(r), k >= 0);
+  CheckIssue('L14 pair rule', r[k], 6, 12, tlkBadValue, tlsError, 'background');
+  CheckOld(src);
+
+  src := J(['@mode light {', '  :root {', '    --surface: darken(var(--surface), 5%);', '  }', '}']);
+  r := TyLintCssEx(src);
+  AssertEquals('L14 mode: one issue' + Dump(r), 1, Length(r));
+  CheckIssue('L14 mode', r[0], 3, 5, tlkBadValue, tlsError, 'surface');
+  CheckOld(src);
+
+  { closed in dark only: the root definition and the dark one }
+  src := J([':root { --a: var(--b); }', '@mode light { :root { --b: #ffffff; } }',
+    '@mode dark { :root { --b: var(--a); } }']);
+  r := TyLintCssEx(src);
+  AssertEquals('L14 dark: two issues' + Dump(r), 2, Length(r));
+  AssertTrue('L14 dark: the root --a' + Dump(r), Find(r, 'a', 1) >= 0);
+  AssertTrue('L14 dark: the dark --b' + Dump(r), Find(r, 'b', 3) >= 0);
+  CheckOld(src);
+
+  { a cycle only if the two modes were one }
+  src := J(['@mode light { :root { --a: var(--b); --b: #ffffff; } }',
+    '@mode dark { :root { --b: var(--a); --a: #000000; } }']);
+  r := TyLintCssEx(src);
+  AssertEquals('L14 two modes: nothing' + Dump(r), 0, Length(r));
+
+  { through TyEvalLength (bare leaves) }
+  src := J([':root {', '  --r: --r2;', '  --r2: --r;', '}', 'TyButton { border-width: var(--r); }']);
+  r := TyLintCssEx(src);
+  AssertEquals('L14 length: three issues' + Dump(r), 3, Length(r));
+  AssertTrue('L14 length: --r' + Dump(r), Find(r, 'r', 2) >= 0);
+  AssertTrue('L14 length: --r2' + Dump(r), Find(r, 'r2', 3) >= 0);
+  AssertTrue('L14 length: the rule' + Dump(r), Find(r, 'border-width', 5) >= 0);
+  CheckOld(src);
 end;
 
 initialization

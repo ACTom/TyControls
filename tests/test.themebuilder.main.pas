@@ -45,6 +45,7 @@ type
     procedure TestTheCatalogueEntriesAreWhole;
     procedure TestTheTranslationsCoverTheCode;
     procedure TestTheLibraryCatalogueIsACopy;
+    procedure TestAVariableCycleIsAProblem;
   end;
 
 implementation
@@ -698,6 +699,36 @@ begin
   AssertTrue('I4: the tool carries the library''s catalogue as it is',
     ReadBytes(ToolDir + 'languages' + PathDelim + 'tycontrols.zh_CN.po') =
     ReadBytes(TbRepoDir + 'languages' + PathDelim + 'tycontrols.strconsts.zh_CN.po'));
+end;
+
+{ A variable that leads back to itself: the window comes through and the problem list
+  has it on a line. A crash without the guard in Css.Values; no row on a line without
+  ThemeLint's ScanVarCycles (the first document is evaluated by nothing). }
+procedure TTbMainFormTests.TestAVariableCycleIsAProblem;
+const
+  cDocs: array[0..3] of string = (
+    ':root { --a: var(--a); }',
+    ':root {'#10'  --a: var(--b);'#10'  --b: var(--a);'#10'}'#10'TyButton { background: var(--a); }',
+    '@mode light {'#10'  :root { --surface: darken(var(--surface), 5%); }'#10'}'#10 +
+      '@mode dark { :root { --surface: #202020; } }',
+    ':root { --r: --r2; --r2: --r; }'#10'TyButton { border-width: var(--r); }');
+var
+  i, k: Integer;
+  found: Boolean;
+begin
+  for i := 0 to High(cDocs) do
+  begin
+    FForm.Editor.Lines.Text := cDocs[i];
+    FForm.RefreshNow;
+    found := False;
+    for k := 0 to High(FForm.Problems) do
+      if (FForm.Problems[k].Origin = tpoLint) and (FForm.Problems[k].Kind = tlkBadValue)
+         and (FForm.Problems[k].Line > 0)
+         and (Pos('refers back to itself', FForm.Problems[k].Text) > 0) then
+        found := True;
+    AssertTrue('a row on a line for document ' + IntToStr(i), found);
+    AssertTrue('and a mark in the gutter', FForm.Editor.Marks.Count > 0);
+  end;
 end;
 
 initialization

@@ -41,6 +41,7 @@ type
     procedure TestTheSampleWindow;
     procedure TestTheSampleWindowFollowsTheDocument;
     procedure TestTheProbeIsQuick;
+    procedure TestAVariableCycleDoesNotBringItDown;
   end;
 
 const
@@ -51,7 +52,7 @@ implementation
 
 uses
   Controls, Forms, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, tyControls.Base,
-  tyControls.Dialogs, tyControls.BuiltinThemes, tbtemplates, tbsamplewin;
+  tyControls.Dialogs, tyControls.BuiltinThemes, tyControls.StyleModel, tbtemplates, tbsamplewin;
 
 procedure TTbPreviewTests.SetUp;
 begin
@@ -402,6 +403,53 @@ begin
   WriteLn(Format('TTbPreviewTests.TestTheProbeIsQuick: default theme %.0f ms, minimal template %.0f ms (median of 5)',
     [a, b]));
   AssertTrue('the probe is not felt while typing', (a <= 200) and (b <= 200));
+end;
+
+{ A variable that leads back to itself used to recurse until the stack ran out -- in the
+  model's load, in the probe, in a paint -- and take the tool with it. Now the model and the
+  preview come through: a document whose cycle something evaluates is refused with the
+  reason, and the last good version stays. A crash without the guard in Css.Values. }
+procedure TTbPreviewTests.TestAVariableCycleDoesNotBringItDown;
+const
+  cDocs: array[0..3] of string = (
+    ':root { --a: var(--a); }',
+    ':root { --a: var(--b); --b: var(--a); } TyButton { background: var(--a); }',
+    '@mode light { :root { --surface: darken(var(--surface), 5%); } } ' +
+      '@mode dark { :root { --surface: #202020; } }',
+    ':root { --r: --r2; --r2: --r; } TyButton { border-width: var(--r); }');
+var
+  model: TTyStyleModel;
+  i: Integer;
+  err: string;
+begin
+  for i := 0 to High(cDocs) do
+  begin
+    model := TTyStyleModel.Create;
+    try
+      try
+        model.LoadFromCss(cDocs[i]);
+        if model.DefaultModeName <> '' then
+          model.SetMode(model.DefaultModeName);
+        model.ResolveStyle('TyButton', '', []);
+        model.ResolveStyle('TyPanel', '', []);
+      except
+        on E: Exception do
+          AssertTrue('the model names the cycle: ' + E.Message,
+            Pos('refers back to itself', E.Message) > 0);
+      end;
+    finally
+      model.Free;
+    end;
+  end;
+  AssertTrue(Load(cMarkerDoc));
+  for i := 1 to High(cDocs) do
+  begin
+    AssertFalse('refused: ' + cDocs[i], FFrame.LoadDocument(cDocs[i], '', err));
+    AssertTrue('and says why: ' + err, Pos('refers back to itself', err) > 0);
+    AssertEquals('the last good version is back', $123456, ButtonBg(FFrame.Controller));
+  end;
+  { nothing evaluates it: the engine has nothing to refuse (the lint reports it) }
+  AssertTrue('an unused cycle loads', FFrame.LoadDocument(cDocs[0], '', err));
 end;
 
 initialization

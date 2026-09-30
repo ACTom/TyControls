@@ -43,7 +43,9 @@ unit tyControls.ThemeLint;
   starts (BuildPositions). Those line up one to one with the parsed sheet. A problem inside
   an @import-ed file is placed on the entry document's @import that brought it in. One kind
   exists only in the Ex form: tlkBadValue, a value the engine rejects (border-radius with
-  three numbers, say) -- TyLintCss leaves it out, so its output is unchanged word for word. }
+  three numbers, say, or a variable that leads back to itself -- ScanVarCycles, on the
+  variable's definition) -- TyLintCss leaves it out, so its output is unchanged word for
+  word. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -758,6 +760,209 @@ begin
     AEvalVars.Values['ty-mode'] := 'light';
 end;
 
+{ Each variable of the entry document that, in some mode, leads back to itself through
+  variables (--a: var(--a); --a: var(--b) with --b: var(--a)) -- the engine refuses such a
+  theme wherever the variable is evaluated (TyCssVarCycleMsg), and before that guard it
+  recursed until the stack ran out. Every mode is checked on its own var set, merged the
+  way the engine merges it (every sheet's :root, the importer's last, then that mode's
+  blocks over them); a document without @mode is checked on its :root alone. A variable is
+  reported only when it is ON a cycle (a strongly connected component of more than one, or
+  one that refers to itself), not when it merely uses one, and only where the entry
+  document defines it -- as tlkBadValue on that definition, once. A cycle through the base
+  theme's variables is not seen here (the lint does not know the base); the load reports it. }
+procedure ScanVarCycles(ASheets: TFPList; AEntry: TTyCssStylesheet; APos: TLintPositions;
+  var AIssues: TTyLintIssues);
+var
+  modes, names, reported, refs: TStringList;
+  vals: array of string;
+  srcEntry: array of Boolean;
+  srcBlock: array of Integer;           { -1 = the entry's :root, else its @mode block }
+  adj: array of array of Integer;
+  num, low: array of Integer;
+  onStack, cyclic: array of Boolean;
+  stack: array of Integer;
+  sp, counter: Integer;
+
+  procedure Put(const AName, AValue: string; AIsEntry: Boolean; ABlock: Integer);
+  var
+    n: string;
+    i, k: Integer;
+  begin
+    n := LowerCase(Trim(AName));
+    if n = '' then Exit;
+    i := names.IndexOf(n);
+    if i < 0 then
+    begin
+      k := Length(vals);
+      SetLength(vals, k + 1);
+      SetLength(srcEntry, k + 1);
+      SetLength(srcBlock, k + 1);
+      names.AddObject(n, TObject(PtrInt(k)));
+    end
+    else
+      k := PtrInt(names.Objects[i]);
+    vals[k] := AValue;
+    srcEntry[k] := AIsEntry;
+    srcBlock[k] := ABlock;
+  end;
+
+  procedure Strong(V: Integer);
+  var
+    i, w: Integer;
+    size: Integer;
+    selfRef: Boolean;
+  begin
+    num[V] := counter;
+    low[V] := counter;
+    Inc(counter);
+    stack[sp] := V;
+    Inc(sp);
+    onStack[V] := True;
+    selfRef := False;
+    for i := 0 to High(adj[V]) do
+    begin
+      w := adj[V][i];
+      if w = V then
+        selfRef := True;
+      if num[w] < 0 then
+      begin
+        Strong(w);
+        if low[w] < low[V] then low[V] := low[w];
+      end
+      else if onStack[w] and (num[w] < low[V]) then
+        low[V] := num[w];
+    end;
+    if low[V] = num[V] then
+    begin
+      { pop the component; mark it when it is a real cycle }
+      size := 0;
+      i := sp - 1;
+      while stack[i] <> V do
+      begin
+        Inc(size);
+        Dec(i);
+      end;
+      Inc(size);
+      while True do
+      begin
+        Dec(sp);
+        w := stack[sp];
+        onStack[w] := False;
+        cyclic[w] := (size > 1) or selfRef;
+        if w = V then Break;
+      end;
+    end;
+  end;
+
+var
+  si, mi, vi, i, j, k, n: Integer;
+  sheet: TTyCssStylesheet;
+  mb: TTyCssModeBlock;
+  isEntry: Boolean;
+  mode, key: string;
+  P: TLintPos;
+begin
+  modes := TStringList.Create;
+  names := TStringList.Create;
+  reported := TStringList.Create;
+  refs := TStringList.Create;
+  try
+    modes.Sorted := True;
+    modes.Duplicates := dupIgnore;
+    for si := 0 to ASheets.Count - 1 do
+    begin
+      sheet := TTyCssStylesheet(ASheets[si]);
+      for mi := 0 to sheet.ModeBlocks.Count - 1 do
+        modes.Add(LowerCase(Trim(TTyCssModeBlock(sheet.ModeBlocks[mi]).Mode)));
+    end;
+    if modes.Count = 0 then
+      modes.Add('');                    { no @mode anywhere: the :root alone }
+    names.Sorted := True;
+    for i := 0 to modes.Count - 1 do
+    begin
+      mode := modes[i];
+      names.Clear;
+      vals := nil;
+      srcEntry := nil;
+      srcBlock := nil;
+      for si := 0 to ASheets.Count - 1 do
+      begin
+        sheet := TTyCssStylesheet(ASheets[si]);
+        isEntry := sheet = AEntry;
+        for vi := 0 to sheet.RootVars.Count - 1 do
+          Put(sheet.RootVars.Names[vi], sheet.RootVars.ValueFromIndex[vi], isEntry, -1);
+      end;
+      if mode <> '' then
+        for si := 0 to ASheets.Count - 1 do
+        begin
+          sheet := TTyCssStylesheet(ASheets[si]);
+          isEntry := sheet = AEntry;
+          for mi := 0 to sheet.ModeBlocks.Count - 1 do
+          begin
+            mb := TTyCssModeBlock(sheet.ModeBlocks[mi]);
+            if not SameText(Trim(mb.Mode), mode) then Continue;
+            for vi := 0 to mb.Vars.Count - 1 do
+              Put(mb.Vars.Names[vi], mb.Vars.ValueFromIndex[vi], isEntry, mi);
+          end;
+        end;
+      n := Length(vals);
+      SetLength(adj, n);
+      for k := 0 to n - 1 do
+      begin
+        adj[k] := nil;
+        refs.Clear;
+        CollectVarRefs(vals[k], nil, nil, refs);
+        for j := 0 to refs.Count - 1 do
+        begin
+          si := names.IndexOf(LowerCase(refs[j]));
+          if si >= 0 then
+          begin
+            SetLength(adj[k], Length(adj[k]) + 1);
+            adj[k][High(adj[k])] := PtrInt(names.Objects[si]);
+          end;
+        end;
+      end;
+      SetLength(num, n);
+      SetLength(low, n);
+      SetLength(onStack, n);
+      SetLength(cyclic, n);
+      SetLength(stack, n);
+      for k := 0 to n - 1 do
+      begin
+        num[k] := -1;
+        onStack[k] := False;
+        cyclic[k] := False;
+      end;
+      sp := 0;
+      counter := 0;
+      for k := 0 to n - 1 do
+        if num[k] < 0 then
+          Strong(k);
+      for j := 0 to names.Count - 1 do
+      begin
+        k := PtrInt(names.Objects[j]);
+        if not (cyclic[k] and srcEntry[k]) then Continue;
+        if APos = nil then
+          P := NoPos
+        else if srcBlock[k] < 0 then
+          P := APos.RootVar(names[j])
+        else
+          P := APos.ModeVar(srcBlock[k], names[j]);
+        key := Format('%d:%d:%s', [P.Line, P.Col, names[j]]);
+        if reported.IndexOf(key) >= 0 then Continue;
+        reported.Add(key);
+        EmitIssue(AIssues, P, tlkBadValue, names[j],
+          '--' + names[j] + ': ' + Format(TyCssVarCycleMsg, [names[j]]));
+      end;
+    end;
+  finally
+    modes.Free;
+    names.Free;
+    reported.Free;
+    refs.Free;
+  end;
+end;
+
 { Walk a sheet's decls: report unknown properties + undefined vars + missing assets, and
   (when AScanContrast) low-contrast rules. ADefined drives var-defined-ness; AEvalVars the
   contrast resolve. Properties are scanned via a throwaway TyApplyDeclaration whose False
@@ -920,6 +1125,8 @@ begin
       ScanSheet(TTyCssStylesheet(imported[i]), defined, evalVars,
                 importedDirs[i], False, nil, importedTops[i], Result);
     ScanSheet(sheet, defined, evalVars, baseDir, True, positions, NoPos, Result);
+    // 5) variables that lead back to themselves (Ex only: tlkBadValue)
+    ScanVarCycles(allSheets, sheet, positions, Result);
   finally
     for i := 0 to imported.Count - 1 do
       TTyCssStylesheet(imported[i]).Free;

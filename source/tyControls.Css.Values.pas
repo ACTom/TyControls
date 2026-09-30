@@ -35,6 +35,12 @@ const
   TyKnownColorFns: array[0..8] of string =
     ('var', 'lighten', 'darken', 'alpha', 'mix', 'rgb', 'rgba', 'elevate', 'on');
 
+  { What TyEvalColor / TyEvalLength / TyEvalFloat raise for a variable that leads back to
+    itself (--a: var(--a); --a: var(--b) with --b: var(--a)) instead of recursing until the
+    stack runs out. English, like the rest of the CSS-syntax family (not a resourcestring).
+    ThemeLint reports the same cycle on the variable's definition. }
+  TyCssVarCycleMsg = 'variable --%s refers back to itself';
+
 implementation
 
 // Clamp a real channel value into the 0..255 Byte range.
@@ -190,6 +196,35 @@ end;
 
 // --- expression evaluation -------------------------------------------------
 
+// The name var(--name) refers to, without the leading --.
+function VarRefKey(const Expr: string): string;
+var
+  inner: string;
+begin
+  inner := Trim(Copy(Expr, 5, Length(Expr) - 5)); // strip 'var(' .. ')'
+  if (Length(inner) >= 2) and (inner[1] = '-') and (inner[2] = '-') then
+    Result := Copy(inner, 3, Length(inner) - 2)
+  else
+    Result := inner;
+end;
+
+// The names on the current path of variable lookups, '|a|b|' (lower case), plus AKey --
+// or a raise when AKey is already on it: following it again would never end. Passed by
+// value down the recursion, so one variable used twice side by side (mix(var(--a),
+// var(--a))) is not a cycle; only a variable reached again through itself is.
+function EnterVar(const AChain, AKey: string): string;
+var
+  k: string;
+begin
+  k := LowerCase(Trim(AKey));
+  if Pos('|' + k + '|', AChain) > 0 then
+    raise Exception.CreateFmt(TyCssVarCycleMsg, [Trim(AKey)]);
+  if AChain = '' then
+    Result := '|' + k + '|'
+  else
+    Result := AChain + k + '|';
+end;
+
 // Resolve var(--name) -> the raw string from Vars (name without leading --).
 // Vars holds entries 'name=value'; var(--accent) looks up 'accent'.
 function ResolveVarRef(const Expr: string; Vars: TStrings): string;
@@ -197,10 +232,7 @@ var
   inner, key: string;
 begin
   inner := Trim(Copy(Expr, 5, Length(Expr) - 5)); // strip 'var(' .. ')'
-  if (Length(inner) >= 2) and (inner[1] = '-') and (inner[2] = '-') then
-    key := Copy(inner, 3, Length(inner) - 2)
-  else
-    key := inner;
+  key := VarRefKey(Expr);
   if Vars = nil then
     raise Exception.CreateFmt('var(%s) but no vars provided', [inner]);
   if Vars.IndexOfName(key) < 0 then
@@ -247,9 +279,9 @@ begin
   Result := StrToFloat(T, fmt);
 end;
 
-function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;
+function EvalColor(const Expr: string; Vars: TStrings; const AChain: string): TTyColor;
 var
-  E, fn, body: string;
+  E, fn, body, key: string;
   p: Integer;
   args: TStringList;
   a: string;
@@ -266,7 +298,10 @@ begin
     Exit(TyParseColor(E));
   // var(...)
   if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
-    Exit(TyEvalColor(ResolveVarRef(E, Vars), Vars));
+  begin
+    key := VarRefKey(E);
+    Exit(EvalColor(ResolveVarRef(E, Vars), Vars, EnterVar(AChain, key)));
+  end;
   // function call: name( args )
   p := Pos('(', E);
   if (p > 0) and (E[Length(E)] = ')') then
@@ -277,19 +312,19 @@ begin
     try
       SplitArgs(body, args);
       if (fn = 'lighten') and (args.Count = 2) then
-        Exit(TyLighten(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
+        Exit(TyLighten(EvalColor(args[0], Vars, AChain), ParsePctOrNum(args[1])));
       if (fn = 'darken') and (args.Count = 2) then
-        Exit(TyDarken(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
+        Exit(TyDarken(EvalColor(args[0], Vars, AChain), ParsePctOrNum(args[1])));
       if (fn = 'alpha') and (args.Count = 2) then
       begin
         a := Trim(args[1]);
         if (a <> '') and (a[Length(a)] = '%') then
-          Exit(TyAlpha(TyEvalColor(args[0], Vars), ParsePctOrNum(a) / 100.0))
+          Exit(TyAlpha(EvalColor(args[0], Vars, AChain), ParsePctOrNum(a) / 100.0))
         else
-          Exit(TyAlpha(TyEvalColor(args[0], Vars), ParsePctOrNum(a)));
+          Exit(TyAlpha(EvalColor(args[0], Vars, AChain), ParsePctOrNum(a)));
       end;
       if (fn = 'mix') and (args.Count = 3) then
-        Exit(TyMix(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), ParsePctOrNum(args[2])));
+        Exit(TyMix(EvalColor(args[0], Vars, AChain), EvalColor(args[1], Vars, AChain), ParsePctOrNum(args[2])));
       if (fn = 'rgb') and (args.Count = 3) then
         Exit(TyRGB(ClampByte(ParsePctOrNum(args[0])),
                    ClampByte(ParsePctOrNum(args[1])),
@@ -307,11 +342,11 @@ begin
                     ClampByte(aF * 255)));
       end;
       if (fn = 'elevate') and (args.Count = 2) then
-        Exit(TyElevate(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1]), ModeOf(Vars)));
+        Exit(TyElevate(EvalColor(args[0], Vars, AChain), ParsePctOrNum(args[1]), ModeOf(Vars)));
       if (fn = 'on') and (args.Count = 1) then
-        Exit(TyOn(TyEvalColor(args[0], Vars)));
+        Exit(TyOn(EvalColor(args[0], Vars, AChain)));
       if (fn = 'on') and (args.Count = 3) then
-        Exit(TyOn(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), TyEvalColor(args[2], Vars)));
+        Exit(TyOn(EvalColor(args[0], Vars, AChain), EvalColor(args[1], Vars, AChain), EvalColor(args[2], Vars, AChain)));
       raise Exception.CreateFmt(rsCssUnknownColorFunction, [fn, args.Count]);
     finally
       args.Free;
@@ -319,8 +354,16 @@ begin
   end;
   // bare '--name' leaf: look up in Vars and recurse
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
-    Exit(TyEvalColor(Vars.Values[Copy(E, 3, MaxInt)], Vars));
+  begin
+    key := Copy(E, 3, MaxInt);
+    Exit(EvalColor(Vars.Values[key], Vars, EnterVar(AChain, key)));
+  end;
   raise Exception.CreateFmt(rsCssCannotEvaluateColor, [Expr]);
+end;
+
+function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;
+begin
+  Result := EvalColor(Expr, Vars, '');
 end;
 
 function TyExpandVars(const Expr: string; Vars: TStrings): string;
@@ -358,32 +401,56 @@ begin
   end;
 end;
 
-function TyEvalLength(const Expr: string; Vars: TStrings): Integer;
+function EvalLength(const Expr: string; Vars: TStrings; const AChain: string): Integer;
 var
-  E: string;
+  E, chain, key: string;
 begin
   E := Trim(Expr);
+  chain := AChain;
   if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
+  begin
+    chain := EnterVar(chain, VarRefKey(E));
     E := Trim(ResolveVarRef(E, Vars));
+  end;
   // bare '--name' leaf: look up in Vars and recurse
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
-    Exit(TyEvalLength(Vars.Values[Copy(E, 3, MaxInt)], Vars));
+  begin
+    key := Copy(E, 3, MaxInt);
+    Exit(EvalLength(Vars.Values[key], Vars, EnterVar(chain, key)));
+  end;
   if (Length(E) >= 2) and (LowerCase(Copy(E, Length(E) - 1, 2)) = 'px') then
     E := Trim(Copy(E, 1, Length(E) - 2));
   Result := Round(ParsePctOrNum(E));
 end;
 
-function TyEvalFloat(const Expr: string; Vars: TStrings): Single;
+function TyEvalLength(const Expr: string; Vars: TStrings): Integer;
+begin
+  Result := EvalLength(Expr, Vars, '');
+end;
+
+function EvalFloat(const Expr: string; Vars: TStrings; const AChain: string): Single;
 var
-  E: string;
+  E, chain, key: string;
 begin
   E := Trim(Expr);
+  chain := AChain;
   if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
+  begin
+    chain := EnterVar(chain, VarRefKey(E));
     E := Trim(ResolveVarRef(E, Vars));
+  end;
   // bare '--name' leaf: look up in Vars and recurse
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
-    Exit(TyEvalFloat(Vars.Values[Copy(E, 3, MaxInt)], Vars));
+  begin
+    key := Copy(E, 3, MaxInt);
+    Exit(EvalFloat(Vars.Values[key], Vars, EnterVar(chain, key)));
+  end;
   Result := ParsePctOrNum(E);
+end;
+
+function TyEvalFloat(const Expr: string; Vars: TStrings): Single;
+begin
+  Result := EvalFloat(Expr, Vars, '');
 end;
 
 end.
