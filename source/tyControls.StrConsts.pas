@@ -265,6 +265,24 @@ resourcestring
     its fourth item, which clears the scrollback. }
   rsTerminalMenuClear = 'Clear';
 
+  { --- TTyTerminalColorScheme ---------------------------------------------------
+    Reading and writing a Windows Terminal colour scheme (tyControls.Terminal.ColorScheme).
+    %s in the name lists = up to 20 names joined with ', '. }
+  rsTermSchemeUtf16 = 'UTF-16 text is not supported; save the file as UTF-8';
+  { %s = fpjson's message, which carries the line and column }
+  rsTermSchemeBadJson = 'Not valid JSON: %s';
+  rsTermSchemeNotObject = 'Expected a colour scheme object or a settings file with "schemes"';
+  rsTermSchemeSchemesNotArray = '"schemes" is not an array';
+  { %s = the name asked for, %s = the complete schemes in the text }
+  rsTermSchemeNotFound = 'No colour scheme named "%s". Schemes in the text: %s';
+  rsTermSchemeNeedName = 'The text has several colour schemes; choose one: %s';
+  rsTermSchemeNoneValid = 'The text has no complete colour scheme (a name and all 16 colours)';
+  { %s = the missing keys, as Windows Terminal names them }
+  rsTermSchemeMissingKeys = 'Missing colours: %s';
+  { %s = the key, %s = the value as written }
+  rsTermSchemeBadColor = '"%s" is not a colour (#rgb or #rrggbb): %s';
+  rsTermSchemeNoName = 'The colour scheme has no name';
+
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.
     Two steppers writing one field is not a configuration, it is a fight, and the

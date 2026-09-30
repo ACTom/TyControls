@@ -10,3 +10,7 @@
 # drift guard fail on every fresh clone. The .ttf is binary anyway; the JSON is the one that
 # would actually have been rewritten.
 assets/lucide/**  -text
+
+# Windows Terminal's own defaults.json, byte for byte (CRLF included): the colour-scheme
+# tests count its bytes and read its comments and trailing commas as they are upstream.
+tests/fixtures/terminal-wt-defaults.json  -text

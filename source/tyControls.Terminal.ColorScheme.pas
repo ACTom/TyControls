@@ -415,6 +415,265 @@ begin
   FKey := AKey;
 end;
 
+{ ---- 读 Windows Terminal 的 JSON ---------------------------------------------------- }
+
+const
+  { 消息里列名字最多这么多个 }
+  MaxListedNames = 20;
+  Ellipsis = #$E2#$80#$A6;
+
+{ 四个可选项缺了按 WT 补(ColorScheme.h 的 WINRT_PROPERTY 默认值,DefaultSettings.h):
+  前景 #FFFFFF、底 #000000、光标 #FFFFFF、选区 #FFFFFF(取 DEFAULT_FOREGROUND,不是这套的
+  前景) }
+function WtOptionalDefault(ASlot: TTyTerminalSchemeSlot): Cardinal;
+begin
+  case ASlot of
+    tssBackground: Result := $000000;
+  else
+    Result := $FFFFFF;
+  end;
+end;
+
+procedure AddName(var A: TStringArray; const S: string);
+begin
+  SetLength(A, Length(A) + 1);
+  A[High(A)] := S;
+end;
+
+function NameList(const ANames: TStringArray): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(ANames) do
+  begin
+    if i > 0 then Result := Result + ', ';
+    if i >= MaxListedNames then
+    begin
+      Result := Result + Ellipsis;
+      Break;
+    end;
+    Result := Result + ANames[i];
+  end;
+end;
+
+{ 去 UTF-8 BOM、拒 UTF-16、预解码、解析(认注释与尾逗号;重复键 fpjson 默认抛)。
+  调用者释放结果;空文本答 nil。 }
+function WtParse(const AText: string): TJSONData;
+var
+  src: string;
+  parser: TJSONParser;
+begin
+  src := AText;
+  if (Length(src) >= 2) and (((src[1] = #$FF) and (src[2] = #$FE)) or ((src[1] = #$FE) and (src[2] = #$FF))) then
+    raise ETyTerminalColorSchemeError.CreateKey('', rsTermSchemeUtf16);
+  if (Length(src) >= 3) and (src[1] = #$EF) and (src[2] = #$BB) and (src[3] = #$BF) then
+    Delete(src, 1, 3);
+  parser := TJSONParser.Create(TyTermJsonDecodeEscapes(src), [joUTF8, joComments, joIgnoreTrailingComma]);
+  try
+    try
+      Result := parser.Parse;
+    except
+      on E: Exception do
+        raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeBadJson, [E.Message]));
+    end;
+  finally
+    parser.Free;
+  end;
+end;
+
+{ name 是字符串就答 True 和它;否则 False、'' }
+function WtNameOf(AObj: TJSONObject; out AName: string): Boolean;
+var
+  d: TJSONData;
+begin
+  AName := '';
+  d := AObj.Find('name');
+  Result := (d <> nil) and (d.JSONType = jtString);
+  if Result then AName := d.AsString;
+end;
+
+{ 16 色里这一色的键:主名在就用主名,5 / 13 号主名不在时看 magenta / brightMagenta
+  (WT 的 TableColorsMapping 末两项,GH#11456);都不在答 '' }
+function WtColourKey(AObj: TJSONObject; ASlot: TTyTerminalSchemeSlot): string;
+begin
+  Result := WtKeys[ASlot];
+  if AObj.IndexOfName(Result) >= 0 then Exit;
+  if (ASlot = tssPurple) and (AObj.IndexOfName('magenta') >= 0) then Exit('magenta');
+  if (ASlot = tssBrightPurple) and (AObj.IndexOfName('brightMagenta') >= 0) then Exit('brightMagenta');
+  Result := '';
+end;
+
+{ 16 色缺哪几个键(按槽的顺序,WT 的主名);只看键在不在,值的格式读的时候再查 }
+function WtMissingKeys(AObj: TJSONObject): TStringArray;
+var
+  s: TTyTerminalSchemeSlot;
+begin
+  Result := nil;
+  for s := tssBlack to tssBrightWhite do
+    if WtColourKey(AObj, s) = '' then
+      AddName(Result, WtKeys[s]);
+end;
+
+{ settings.json 的 schemes 里算数的一项:对象、name 是字符串、16 色的键齐(WT 的 FromJson
+  对缺 name 或不满 16 色的静默跳过) }
+function WtIsCandidate(AItem: TJSONData; out AName: string): Boolean;
+begin
+  AName := '';
+  Result := (AItem is TJSONObject) and WtNameOf(TJSONObject(AItem), AName)
+    and (Length(WtMissingKeys(TJSONObject(AItem))) = 0);
+end;
+
+{ 一色:必须是字符串、#rgb 或 #rrggbb;否则报错,Key = 键名,消息带原值 }
+procedure WtReadColour(AObj: TJSONObject; const AKey: string; ADest: TTyTerminalColorScheme;
+  ASlot: TTyTerminalSchemeSlot);
+var
+  d: TJSONData;
+  rgb: Cardinal;
+  shown: string;
+begin
+  d := AObj.Find(AKey);
+  if (d <> nil) and (d.JSONType = jtString) and TyTermParseSchemeColor(d.AsString, rgb) then
+  begin
+    ADest.Colors[ASlot] := TyTermRgbToSchemeColor(rgb);
+    Exit;
+  end;
+  if d = nil then
+    shown := ''
+  else if d.JSONType = jtString then
+    shown := d.AsString
+  else
+    shown := d.AsJSON;
+  raise ETyTerminalColorSchemeError.CreateKey(AKey, Format(rsTermSchemeBadColor, [AKey, shown]));
+end;
+
+{ 选中的那一套读进 ADest(一个临时对象):16 色、四个可选项(缺了按 WT 补)、名字。
+  CursorText、SelectionInactiveBackground 留未设置(WT 没有这两项)。 }
+procedure WtReadScheme(AObj: TJSONObject; ADest: TTyTerminalColorScheme);
+var
+  s: TTyTerminalSchemeSlot;
+  nm: string;
+begin
+  for s := tssBlack to tssBrightWhite do
+    WtReadColour(AObj, WtColourKey(AObj, s), ADest, s);
+  for s in [tssForeground, tssBackground, tssCursor, tssSelection] do
+    if AObj.IndexOfName(WtKeys[s]) >= 0 then
+      WtReadColour(AObj, WtKeys[s], ADest, s)
+    else
+      ADest.Colors[s] := TyTermRgbToSchemeColor(WtOptionalDefault(s));
+  WtNameOf(AObj, nm);
+  ADest.Name := nm;
+end;
+
+{ 挑出要读的那一套(读的第 3–5 步);错误照 spec §11.1.8 }
+function WtChoose(ARoot: TJSONData; const AName: string): TJSONObject;
+var
+  obj: TJSONObject;
+  d: TJSONData;
+  arr: TJSONArray;
+  i: Integer;
+  nm: string;
+  names, missing: TStringArray;
+  first: TJSONObject;
+begin
+  if not (ARoot is TJSONObject) then
+    raise ETyTerminalColorSchemeError.CreateKey('', rsTermSchemeNotObject);
+  obj := TJSONObject(ARoot);
+  d := obj.Find('schemes');
+  if d <> nil then
+  begin
+    { settings.json:按出现顺序,name 逐字相等(区分大小写)、16 色齐的第一个(WT 的 emplace
+      不覆盖先到的);只校验选中的那一套 }
+    if not (d is TJSONArray) then
+      raise ETyTerminalColorSchemeError.CreateKey('schemes', rsTermSchemeSchemesNotArray);
+    arr := TJSONArray(d);
+    names := nil;
+    first := nil;
+    Result := nil;
+    for i := 0 to arr.Count - 1 do
+      if WtIsCandidate(arr.Items[i], nm) then
+      begin
+        AddName(names, nm);
+        if first = nil then first := TJSONObject(arr.Items[i]);
+        if (AName <> '') and (Result = nil) and (nm = AName) then
+          Result := TJSONObject(arr.Items[i]);
+      end;
+    if AName <> '' then
+    begin
+      if Result = nil then
+        raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNotFound, [AName, NameList(names)]));
+    end
+    else if Length(names) = 0 then
+      raise ETyTerminalColorSchemeError.CreateKey('', rsTermSchemeNoneValid)
+    else if Length(names) > 1 then
+      raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNeedName, [NameList(names)]))
+    else
+      Result := first;
+    Exit;
+  end;
+  { 单个方案对象:name 可以没有 }
+  WtNameOf(obj, nm);
+  if (AName <> '') and (nm <> AName) then
+  begin
+    names := nil;
+    AddName(names, nm);
+    raise ETyTerminalColorSchemeError.CreateKey('', Format(rsTermSchemeNotFound, [AName, NameList(names)]));
+  end;
+  missing := WtMissingKeys(obj);
+  if Length(missing) > 0 then
+    raise ETyTerminalColorSchemeError.CreateKey(missing[0], Format(rsTermSchemeMissingKeys, [NameList(missing)]));
+  Result := obj;
+end;
+
+procedure WtLoad(ADest: TTyTerminalColorScheme; const AText, AName: string);
+var
+  root: TJSONData;
+  tmp: TTyTerminalColorScheme;
+begin
+  root := WtParse(AText);
+  try
+    tmp := TTyTerminalColorScheme.Create(nil);
+    try
+      { 读进临时对象,整套读成功才 Assign(一次 OnChange);失败 ADest 不动 }
+      WtReadScheme(WtChoose(root, AName), tmp);
+      ADest.Assign(tmp);
+    finally
+      tmp.Free;
+    end;
+  finally
+    root.Free;
+  end;
+end;
+
+function WtListNames(const AText: string): TStringArray;
+var
+  root, d: TJSONData;
+  i: Integer;
+  nm: string;
+begin
+  Result := nil;
+  try
+    root := WtParse(AText);
+  except
+    on Exception do Exit(nil);
+  end;
+  try
+    if not (root is TJSONObject) then Exit;
+    d := TJSONObject(root).Find('schemes');
+    if d = nil then
+    begin
+      WtNameOf(TJSONObject(root), nm);
+      AddName(Result, nm);
+    end
+    else if d is TJSONArray then
+      for i := 0 to TJSONArray(d).Count - 1 do
+        if (TJSONArray(d).Items[i] is TJSONObject) and WtNameOf(TJSONObject(TJSONArray(d).Items[i]), nm) then
+          AddName(Result, nm);
+  finally
+    root.Free;
+  end;
+end;
+
 { ---- TTyTerminalColorScheme -------------------------------------------------------- }
 
 constructor TTyTerminalColorScheme.Create(AOwner: TPersistent);
@@ -557,25 +816,64 @@ end;
 procedure TTyTerminalColorScheme.LoadFromText(const AText: string; const AName: string;
   AFormat: TTyTerminalColorSchemeFormat);
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.LoadFromText');
+  case AFormat of
+    { 目前只有 WT 一种;以后加格式时 tcfAuto 在这里按内容认 }
+    tcfAuto, tcfWindowsTerminal:
+      WtLoad(Self, AText, AName);
+  end;
+end;
+
+function ReadWholeFile(const AFileName: string): string;
+var
+  fs: TFileStream;
+begin
+  Result := '';
+  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, fs.Size);
+    if Length(Result) > 0 then
+      fs.ReadBuffer(Result[1], Length(Result));
+  finally
+    fs.Free;
+  end;
 end;
 
 procedure TTyTerminalColorScheme.LoadFromFile(const AFileName: string; const AName: string;
   AFormat: TTyTerminalColorSchemeFormat);
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.LoadFromFile');
+  LoadFromText(ReadWholeFile(AFileName), AName, AFormat);
 end;
 
 function TTyTerminalColorScheme.TryLoadFromText(const AText, AName: string; out AError: string;
   AFormat: TTyTerminalColorSchemeFormat): Boolean;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.TryLoadFromText');
+  AError := '';
+  try
+    LoadFromText(AText, AName, AFormat);
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      AError := E.Message;
+      Result := False;
+    end;
+  end;
 end;
 
 function TTyTerminalColorScheme.TryLoadFromFile(const AFileName, AName: string; out AError: string;
   AFormat: TTyTerminalColorSchemeFormat): Boolean;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.TryLoadFromFile');
+  AError := '';
+  try
+    LoadFromFile(AFileName, AName, AFormat);
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      AError := E.Message;
+      Result := False;
+    end;
+  end;
 end;
 
 function TTyTerminalColorScheme.SaveToText(AFormat: TTyTerminalColorSchemeFormat): string;
@@ -592,7 +890,11 @@ end;
 class function TTyTerminalColorScheme.ListSchemeNames(const AText: string;
   AFormat: TTyTerminalColorSchemeFormat): TStringArray;
 begin
-  raise ENotImplemented.Create('TTyTerminalColorScheme.ListSchemeNames');
+  Result := nil;
+  case AFormat of
+    tcfAuto, tcfWindowsTerminal:
+      Result := WtListNames(AText);
+  end;
 end;
 
 end.
