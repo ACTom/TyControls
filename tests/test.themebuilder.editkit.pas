@@ -38,10 +38,24 @@ type
 implementation
 
 uses
-  SynHighlighterCss, tyControls.Css.Complete, test.themebuilder.golden;
+  Forms, SynHighlighterCss, tyControls.Css.Complete, test.themebuilder.golden;
+
+{ TSynCompletion builds its popup form when it is created, and that needs the widgetset
+  (the tool and the IDE always have one; this console runner does not until asked). Asked
+  once, the first time a test here needs it -- these suites run after the rest. }
+var
+  GWidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if GWidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  GWidgetSetReady := True;
+end;
 
 procedure TTbCssEditKitTests.SetUp;
 begin
+  NeedWidgetSet;
   FEdit := TSynEdit.Create(nil);
   FKit := TTyCssEditKit.Create(nil);
   FChanges := 0;
@@ -179,11 +193,15 @@ procedure TTbCssEditKitTests.TestTheStatusHandlerIsRegistered;
 const
   cLine = 'TyButton{color:red}';
 begin
-  { the real path: moving the caret reaches the kit through SynEdit's handler list }
+  { the real path: moving the caret reaches the kit through SynEdit's handler list. SynEdit
+    records a caret move and reports it with the next status change (a keystroke's paint
+    lock ends one); toggling ReadOnly is a status change that flushes it here. }
   FEdit.Lines.Text := cLine + #10'x';
   FEdit.CaretY := 1;
   FKit.Attach(FEdit, True);
   FEdit.CaretY := 2;
+  FEdit.ReadOnly := True;
+  FEdit.ReadOnly := False;
   AssertEquals('K5: moving the caret off the line tidied it',
     TyCssFormatLine(cLine), FEdit.Lines[0]);
 end;
