@@ -701,8 +701,11 @@ begin
   AFake := TFakePty.Create;
   TMainForm.ShellBackendForTest := AFake;
   Result := TMainForm.Create(nil);
+  { the combo's OnChange starts the shell (and takes the fake); a second ModeChange
+    would start another one on a real backend and free the fake with the first }
   Result.CmbMode.ItemIndex := 1;
-  Result.ModeChange(Result.CmbMode);
+  if TMainForm.ShellBackendForTest <> nil then
+    Result.ModeChange(Result.CmbMode);
 end;
 
 { X2. Mutation: the form not wiring OnDownloadRequest. }
