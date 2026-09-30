@@ -153,6 +153,10 @@ function TyTermRgbToSchemeColor(ARgb: Cardinal): TColor;
 function TyTermJsonDecodeEscapes(const AText: string): string;
 { WT 的键名(16 色与四个可选项);CursorText / SelectionInactive 答 '' }
 function TyTermWtSchemeKey(ASlot: TTyTerminalSchemeSlot): string;
+{ 设计器「导入…」用:文本里能导入的方案名(settings.json 的 schemes 里 name 是字符串、16 色
+  的键齐的,同名只列一次;单个对象就是它自己的名字,可能是 '')。一个都没有、或读不了时答
+  False,AError 是消息 }
+function TyTermSchemeImportPlan(const AText: string; out ANames: TStringArray; out AError: string): Boolean;
 
 implementation
 
@@ -721,6 +725,56 @@ begin
     Result := Result + ','#10'    "' + WtKeys[s] + '": "' + TyTermSchemeColorText(rgb) + '"';
   end;
   Result := Result + #10'}'#10;
+end;
+
+function TyTermSchemeImportPlan(const AText: string; out ANames: TStringArray; out AError: string): Boolean;
+var
+  root, d: TJSONData;
+  i, k: Integer;
+  nm: string;
+  seen: Boolean;
+begin
+  ANames := nil;
+  AError := '';
+  try
+    root := WtParse(AText);
+    try
+      d := nil;
+      if root is TJSONObject then
+        d := TJSONObject(root).Find('schemes');
+      if d is TJSONArray then
+      begin
+        for i := 0 to TJSONArray(d).Count - 1 do
+          if WtIsCandidate(TJSONArray(d).Items[i], nm) then
+          begin
+            { 同名的只有第一个读得到(WT 的 emplace):列一次 }
+            seen := False;
+            for k := 0 to High(ANames) do
+              if ANames[k] = nm then seen := True;
+            if not seen then AddName(ANames, nm);
+          end;
+        if Length(ANames) = 0 then
+          raise ETyTerminalColorSchemeError.CreateKey('', rsTermSchemeNoneValid);
+      end
+      else
+      begin
+        { 单个对象(或 schemes 不是数组、顶层不是对象):照读的规则报错 }
+        WtChoose(root, '');
+        WtNameOf(TJSONObject(root), nm);
+        AddName(ANames, nm);
+      end;
+    finally
+      root.Free;
+    end;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      ANames := nil;
+      AError := E.Message;
+      Result := False;
+    end;
+  end;
 end;
 
 { ---- TTyTerminalColorScheme -------------------------------------------------------- }

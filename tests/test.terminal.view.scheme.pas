@@ -161,18 +161,18 @@ end;
 
 procedure TTyTerminalViewSchemeTests.TestLoadingNotifiesNothing;
 var
-  text: string;
+  lfm: string;
   s: TTyTerminalSchemeSlot;
   inp: TStringStream;
   bin: TMemoryStream;
   b: TBGRABitmap;
 begin
-  text := 'object View: TTyTerminalViewProbe'#10'  ColorSource = tsrcScheme'#10
+  lfm := 'object View: TTyTerminalViewProbe'#10'  ColorSource = tsrcScheme'#10
     + '  ColorScheme.Name = ''Campbell'''#10;
   for s := Low(s) to High(s) do
-    text := text + '  ColorScheme.' + SlotProps[s] + ' = ' + IntToStr($100000 + Ord(s) * $0A0B03) + #10;
-  text := text + 'end'#10;
-  inp := TStringStream.Create(text);
+    lfm := lfm + '  ColorScheme.' + SlotProps[s] + ' = ' + IntToStr($100000 + Ord(s) * $0A0B03) + #10;
+  lfm := lfm + 'end'#10;
+  inp := TStringStream.Create(lfm);
   bin := TMemoryStream.Create;
   try
     ObjectTextToBinary(inp, bin);

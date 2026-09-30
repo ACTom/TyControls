@@ -52,6 +52,8 @@ type
     procedure TestNamesRoundTrip;
     procedure TestWhatWtLacksIsNotWritten;
     procedure TestSystemColoursAreWrittenAsRgb;
+    { Task 7:设计器导入的纯逻辑 }
+    procedure TestTheImportPlan;
   end;
 
 { 反引号换成反斜杠(见单元头) }
@@ -1055,6 +1057,34 @@ begin
   finally
     c.Free;
   end;
+end;
+
+{ ---- Task 7:设计器导入 ------------------------------------------------------------ }
+
+procedure TTyTerminalColorSchemeTests.TestTheImportPlan;
+var
+  names: TStringArray;
+  err: string;
+  i: Integer;
+begin
+  AssertTrue('the fixture', TyTermSchemeImportPlan(FixtureText, names, err));
+  AssertEquals('all 16', 16, Length(names));
+  for i := 0 to 15 do
+    AssertEquals('in order', FixtureNames[i], names[i]);
+  AssertTrue('one object', TyTermSchemeImportPlan(DocCampbell, names, err));
+  AssertEquals('one object: one name', 1, Length(names));
+  AssertEquals('one object: its name', 'Campbell', names[0]);
+  AssertTrue('only the complete ones', TyTermSchemeImportPlan('{"schemes": [{"name": "A"}, {"name": "B", '
+    + Colours16 + '}, {"name": "B", ' + Colours16 + '}]}', names, err));
+  AssertEquals('only the complete ones, a name once', 1, Length(names));
+  AssertEquals('only the complete ones', 'B', names[0]);
+  AssertFalse('bad JSON', TyTermSchemeImportPlan('{', names, err));
+  AssertTrue('bad JSON: a message', Pos(Head(rsTermSchemeBadJson), err) = 1);
+  AssertEquals('bad JSON: no names', 0, Length(names));
+  AssertFalse('nothing complete', TyTermSchemeImportPlan('{"schemes": [{"name": "A"}]}', names, err));
+  AssertEquals('nothing complete: the message', rsTermSchemeNoneValid, err);
+  AssertFalse('an incomplete object', TyTermSchemeImportPlan('{' + Colours16('red') + '}', names, err));
+  AssertTrue('an incomplete object: what is missing', Pos(Head(rsTermSchemeMissingKeys), err) = 1);
 end;
 
 initialization

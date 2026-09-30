@@ -41,6 +41,42 @@ msgstr ""
 msgid "Show Previous Page"
 msgstr ""
 
+#: tycontrols.design.compeditors.rsdttermdark
+msgid "Dark"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermexport
+msgid "Export colour scheme..."
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermexportside
+msgid "Export which scheme?"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermfilter
+msgid "Windows Terminal colour schemes (*.json)|*.json|All files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermimport
+msgid "Import Windows Terminal colour scheme..."
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermimportside
+msgid "Write it into which scheme?"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermlight
+msgid "Light"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermusescheme
+msgid "Use the custom colour scheme instead of the theme?"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttermwhichscheme
+msgid "Which colour scheme?"
+msgstr ""
+
 #: tycontrols.design.compeditors.rsdttreeeditnodes
 msgid "Edit Nodes..."
 msgstr ""
