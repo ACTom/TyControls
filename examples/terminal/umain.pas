@@ -191,13 +191,13 @@ type
   private
     FShell: TTerminalShell;
     FLastDownloadDir: string;
+    FLogged: Integer;
     procedure ZmDownloadRequest(Sender: TObject);
     procedure ZmUploadRequest(Sender: TObject);
     procedure AskDownloadDir(Data: PtrInt);
     procedure AskUploadFiles(Data: PtrInt);
     procedure ZmProgress(Sender: TObject; const AName: string; AFileDone, AFileSize, ATotalDone: Int64);
     procedure ZmFinished(Sender: TObject; AResult: TZmResult; const AMessage: string);
-    FLogged: Integer;
     procedure FillCommands;
     procedure FocusTerm;
     procedure EnterReplay;
