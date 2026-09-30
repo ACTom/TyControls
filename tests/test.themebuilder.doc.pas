@@ -33,6 +33,7 @@ type
     procedure TestNotUtf8IsConverted;
     procedure TestARepoThemeRoundTrip;
     procedure TestDiskChangedAnswersOncePerChange;
+    procedure TestASameSizeChangeInTheSameTwoSecondsIsSeen;
     procedure TestAFailedReadLeavesTheDocument;
     procedure TestRegenerateHintOnlyInACheckout;
   end;
@@ -56,7 +57,7 @@ type
 implementation
 
 uses
-  FileUtil, LazUTF8, LConvEncoding, SynEdit, tbdocument, tbsettings, tbtemplates, tbpreview,
+  {$IFDEF MSWINDOWS}Windows,{$ENDIF} FileUtil, LazUTF8, LConvEncoding, SynEdit, tbdocument, tbsettings, tbtemplates, tbpreview,
   tyControls.ThemeLint, tyControls.BuiltinThemes, tyControls.Controller,
   test.themebuilder.golden;
 
@@ -223,6 +224,64 @@ begin
   RoundTrip('D7', ReadBytes(TbThemesDir + 'builtin' + PathDelim + 'win11.tycss'));
 end;
 
+{ Another program rewrites the file at the same size within the same two seconds: the watch
+  compared FileAge (a DOS time, two seconds wide) and the size, and missed it. Both times
+  are set by hand -- a millisecond past an even second, then two -- so the old stamp is
+  provably blind to it (the fixture checks FileAge agrees: it rounds any fraction up to the
+  next even second) and the new one must see it. }
+procedure TTbDocumentTests.TestASameSizeChangeInTheSameTwoSecondsIsSeen;
+{$IFDEF MSWINDOWS}
+const
+  { 2026-01-01 00:00:00 UTC as a FILETIME: an even second }
+  cEven: Int64 = (Int64(1767225600) + Int64(11644473600)) * 10000000;
+
+  procedure SetWriteTime(const AFileName: string; ATime: Int64);
+  var
+    h: THandle;
+    ft: TFileTime;
+  begin
+    h := CreateFileW(PWideChar(UnicodeString(AFileName)), FILE_WRITE_ATTRIBUTES,
+      FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
+    AssertTrue('opened for its times', h <> INVALID_HANDLE_VALUE);
+    try
+      ft.dwLowDateTime := DWORD(ATime and $FFFFFFFF);
+      ft.dwHighDateTime := DWORD(ATime shr 32);
+      AssertTrue('the time was set', SetFileTime(h, nil, nil, @ft));
+    finally
+      CloseHandle(h);
+    end;
+  end;
+
+var
+  doc: TTbDocument;
+  f: string;
+  age: LongInt;
+  t, n: Int64;
+begin
+  f := FDir + 'same.tycss';
+  WriteBytes(f, 'a {}'#10);
+  SetWriteTime(f, cEven + 10000);   { a millisecond past the even second }
+  doc := TTbDocument.Create;
+  try
+    doc.LoadFromFile(f);
+    age := FileAge(f);
+    AssertFalse('nothing changed yet', doc.DiskChanged);
+    WriteBytes(f, 'b {}'#10);
+    SetWriteTime(f, cEven + 20000);   { one millisecond on }
+    AssertEquals('the fixture: FileAge cannot tell the two apart', age, FileAge(f));
+    AssertTrue('the fixture: the stamp can', TbFileStamp(f, t, n) and (t = cEven + 20000) and (n = 5));
+    AssertTrue('D11: a same-size change within two seconds is seen', doc.DiskChanged);
+    AssertFalse('D11: once', doc.DiskChanged);
+  finally
+    doc.Free;
+  end;
+end;
+{$ELSE}
+begin
+  { the millisecond is set through the Windows API; stat's nanoseconds are read the same way }
+end;
+{$ENDIF}
+
 procedure TTbDocumentTests.TestDiskChangedAnswersOncePerChange;
 var
   doc: TTbDocument;
@@ -246,7 +305,7 @@ begin
     end;
     AssertTrue('D8: another program changed it', doc.DiskChanged);
     AssertFalse('D8: the same change is not reported twice', doc.DiskChanged);
-    DeleteFile(FDir + 'w.tycss');
+    SysUtils.DeleteFile(FDir + 'w.tycss');
     AssertFalse('D8: a file that went away is not reported', doc.DiskChanged);
     ed.Lines.Text := 'b {}';
     doc.SaveToFile(FDir + 'w.tycss', ed.Lines);

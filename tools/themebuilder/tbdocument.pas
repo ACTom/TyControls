@@ -5,10 +5,14 @@ unit tbdocument;
   the system's code page (GuessEncoding) and will be saved as UTF-8; ConvertedFrom names the
   code page so the window can say so.
 
-  The file on disk is watched by stamp (age and size), not by the style controller's hot
-  reload: that one loads a changed file straight into the model, and here the editor's text
-  is what matters. DiskChanged takes the stamp again before it answers True, so one change
-  is reported once. A file that has gone away is not reported (saving writes it back). }
+  The file on disk is watched by stamp (last-write time and size), not by the style
+  controller's hot reload: that one loads a changed file straight into the model, and here
+  the editor's text is what matters. The time is the file system's own, to the 100 ns on
+  NTFS and the nanosecond where stat gives it (TbFileStamp) -- FileAge is a DOS time, two
+  seconds wide, and a program that rewrote the file at the same size within those two
+  seconds went unseen. DiskChanged takes the stamp again before it answers True, so one
+  change is reported once. A file that has gone away is not reported (saving writes it
+  back). }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -26,7 +30,7 @@ type
     FHasBom: Boolean;
     FTrailingEol: Boolean;
     FConvertedFrom: string;
-    FStampAge: LongInt;
+    FStampTime: Int64;
     FStampSize: Int64;
     function GetBaseDir: string;
     function GetUntitled: Boolean;
@@ -43,7 +47,7 @@ type
       AFileName and the document as they were }
     procedure SaveToFile(const AFileName: string; ALines: TStrings);
     function EditorText: string;
-    { the file on disk changed since it was opened / saved (age or size). The stamp is
+    { the file on disk changed since it was opened / saved (time or size). The stamp is
       taken again, so one change answers True once. A missing file answers False. }
     function DiskChanged: Boolean;
     { '' or the script(s) to run after saving a theme the library compiles in }
@@ -63,6 +67,10 @@ function TbDetectLineEnding(const S: string): TTbLineEnding;
 function TbJoinLines(ALines: TStrings; AEol: TTbLineEnding; ATrailing: Boolean): string;
 { 'LF' / 'CRLF' / 'CR' }
 function TbLineEndingName(AEol: TTbLineEnding): string;
+{ AFileName's last-write time at the file system's precision (Windows: FILETIME, 100 ns
+  ticks; elsewhere: nanoseconds since the epoch) and its size. False (-1, -1) when it
+  cannot be read -- it is not there. }
+function TbFileStamp(const AFileName: string; out ATime, ASize: Int64): Boolean;
 
 implementation
 
@@ -151,19 +159,41 @@ begin
   Result := FFileName = '';
 end;
 
-procedure TTbDocument.CaptureStamp;
+function TbFileStamp(const AFileName: string; out ATime, ASize: Int64): Boolean;
+{$IFDEF MSWINDOWS}
 var
-  sr: TSearchRec;
+  d: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  FStampAge := -1;
+  ATime := -1;
+  ASize := -1;
+  Result := GetFileAttributesExW(PWideChar(UnicodeString(AFileName)), GetFileExInfoStandard, @d);
+  if not Result then Exit;
+  ATime := Int64(d.ftLastWriteTime.dwHighDateTime) shl 32 or d.ftLastWriteTime.dwLowDateTime;
+  ASize := Int64(d.nFileSizeHigh) shl 32 or d.nFileSizeLow;
+end;
+{$ELSE}
+var
+  st: TStat;
+begin
+  ATime := -1;
+  ASize := -1;
+  Result := FpStat(AFileName, st) = 0;
+  if not Result then Exit;
+  {$IFDEF DARWIN}
+  ATime := Int64(st.st_mtime) * 1000000000 + st.st_mtimensec;
+  {$ELSE}
+  ATime := Int64(st.st_mtime) * 1000000000 + Int64(st.st_mtime_nsec);
+  {$ENDIF}
+  ASize := st.st_size;
+end;
+{$ENDIF}
+
+procedure TTbDocument.CaptureStamp;
+begin
+  FStampTime := -1;
   FStampSize := -1;
   if FFileName = '' then Exit;
-  FStampAge := FileAge(FFileName);
-  if FindFirst(FFileName, faAnyFile, sr) = 0 then
-  begin
-    FStampSize := sr.Size;
-    SysUtils.FindClose(sr);
-  end;
+  TbFileStamp(FFileName, FStampTime, FStampSize);
 end;
 
 procedure TTbDocument.NewUntitled(const AText, ABasedOn: string);
@@ -175,7 +205,7 @@ begin
   FHasBom := False;
   FTrailingEol := True;
   FConvertedFrom := '';
-  FStampAge := -1;
+  FStampTime := -1;
   FStampSize := -1;
 end;
 
@@ -293,20 +323,11 @@ end;
 
 function TTbDocument.DiskChanged: Boolean;
 var
-  age: LongInt;
-  size: Int64;
-  sr: TSearchRec;
+  time, size: Int64;
 begin
   Result := False;
-  if Untitled or not FileExists(FFileName) then Exit;
-  age := FileAge(FFileName);
-  size := -1;
-  if FindFirst(FFileName, faAnyFile, sr) = 0 then
-  begin
-    size := sr.Size;
-    SysUtils.FindClose(sr);
-  end;
-  if (age <> FStampAge) or (size <> FStampSize) then
+  if Untitled or not TbFileStamp(FFileName, time, size) then Exit;
+  if (time <> FStampTime) or (size <> FStampSize) then
   begin
     CaptureStamp;
     Result := True;
