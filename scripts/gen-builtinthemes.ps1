@@ -5,9 +5,15 @@
 # ALL of these are compiled into the binary so an app ships them with NO themes/ folder. The
 # themes/builtin/ FILES are a REFERENCE copy for users to base their own themes on -- they are
 # NOT scanned or dynamically loaded at runtime. Sync-tested byte-identical (test.builtinthemes).
-# Run from the repo root:  powershell -File scripts/gen-builtinthemes.ps1
+# Run from anywhere:  powershell -File scripts/gen-builtinthemes.ps1  -- every path below is the
+# repository this script lives in. They used to be relative, and two kinds of relative disagree:
+# Get-ChildItem resolves against PowerShell's location, [IO.File] against the process's current
+# directory, which Set-Location does not move. Run in-process after a Set-Location into another
+# checkout, it read that checkout's skins and wrote them over THIS process's start directory --
+# the main tree's BuiltinThemeData.pas was twice rewritten with another branch's skins that way.
 $ErrorActionPreference = 'Stop'
 $enc = New-Object System.Text.UTF8Encoding($false)   # UTF-8, no BOM
+$root = Split-Path $PSScriptRoot -Parent
 
 function Emit-Func($name, $file) {
   $src = [IO.File]::ReadAllText($file, $enc)
@@ -25,7 +31,7 @@ function Emit-Func($name, $file) {
 }
 
 # Discover the structural skins (sorted by file name).
-$skinFiles = Get-ChildItem 'themes\builtin\*.tycss' | Sort-Object Name
+$skinFiles = Get-ChildItem (Join-Path $root 'themes\builtin\*.tycss') | Sort-Object Name
 $skinNames = @($skinFiles | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_.Name) })
 
 $u = New-Object System.Text.StringBuilder
@@ -41,9 +47,9 @@ $u = New-Object System.Text.StringBuilder
 [void]$u.Append("{ The structural skin names (sorted) + each skin's compiled-in CSS by name ('' if unknown). }`r`n")
 [void]$u.Append("function TyBuiltinSkinNames: TStringArray;`r`nfunction TyBuiltinSkinCss(const AName: string): string;`r`n`r`n")
 [void]$u.Append("implementation`r`n`r`n")
-[void]$u.Append((Emit-Func 'TyBuiltinDualBaseCss' 'themes\auto.tycss'))
+[void]$u.Append((Emit-Func 'TyBuiltinDualBaseCss' (Join-Path $root 'themes\auto.tycss')))
 [void]$u.Append("`r`n")
-[void]$u.Append((Emit-Func 'TyBuiltinSystemCss' 'themes\system.tycss'))
+[void]$u.Append((Emit-Func 'TyBuiltinSystemCss' (Join-Path $root 'themes\system.tycss')))
 [void]$u.Append("`r`n")
 # One private function per skin (defined before the dispatcher that calls them).
 foreach ($f in $skinFiles) {
@@ -63,5 +69,5 @@ foreach ($name in $skinNames) {
 }
 [void]$u.Append("  Result := '';`r`nend;`r`n`r`n")
 [void]$u.Append("end.`r`n")
-[IO.File]::WriteAllText('source\tyControls.BuiltinThemeData.pas', $u.ToString(), $enc)
+[IO.File]::WriteAllText((Join-Path $root 'source\tyControls.BuiltinThemeData.pas'), $u.ToString(), $enc)
 Write-Output "Regenerated BuiltinThemeData.pas (auto + system + $($skinNames.Count) skins: $($skinNames -join ', '))"
