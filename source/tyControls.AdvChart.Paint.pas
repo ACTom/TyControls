@@ -85,6 +85,9 @@ type
 
   { Which datum an element belongs to. Both -1 together means "none" -- one
     place decides that, so the two can never disagree. }
+  TTyChartTargetKind = (ctkSeries, ctkMarkPoint, ctkMarkLine, ctkMarkArea,
+    ctkLegend);
+
   TTyChartDatumRef = record
     SeriesIndex: Integer;
     { The row in the store's CURRENT VIEW -- the subscript Get(dim, index)
@@ -106,6 +109,16 @@ type
       hover over the first edge described the first node. False for every
       other datum, which is what the zero value answers. }
     IsEdge: Boolean;
+    { WHAT KIND OF THING WAS HIT, for the chart's mouse events [Batch 84]:
+      a series item (the zero value, so every datum built before this field
+      existed is one), a marker -- ComponentIndex its HOST SERIES, DataIndex
+      its place in the marker's data -- or a legend item (ComponentIndex the
+      legend, DataIndex the item). SeriesIndex stays -1 on all of these, so
+      nothing that walks the list for a series' rows can take one for a
+      series item; and HitTestAt answers series items only, so the hover,
+      the tooltip and the emphasis never see them. }
+    Kind: TTyChartTargetKind;
+    ComponentIndex: Integer;
   end;
 
   { WORDS ON A MARK, and -- once the label pass has placed them -- everything
@@ -300,6 +313,9 @@ function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef; overload;
 function TyChartDatum(ASeries, AData, ARaw: Integer): TTyChartDatumRef; overload;
 { Link ARow of a graph series -- see TTyChartDatumRef.IsEdge. }
 function TyChartEdgeDatum(ASeries, ARow: Integer): TTyChartDatumRef;
+{ a marker or a legend item as a hit target [Batch 84] }
+function TyChartComponentDatum(AKind: TTyChartTargetKind; AComponent,
+  AIndex: Integer): TTyChartDatumRef;
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
@@ -370,6 +386,19 @@ begin
   Result.DataIndex := -1;
   Result.RawDataIndex := -1;
   Result.IsEdge := False;
+  Result.Kind := ctkSeries;
+  Result.ComponentIndex := -1;
+end;
+
+function TyChartComponentDatum(AKind: TTyChartTargetKind; AComponent,
+  AIndex: Integer): TTyChartDatumRef;
+begin
+  Result.SeriesIndex := -1;
+  Result.DataIndex := AIndex;
+  Result.RawDataIndex := AIndex;
+  Result.IsEdge := False;
+  Result.Kind := AKind;
+  Result.ComponentIndex := AComponent;
 end;
 
 function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef;
@@ -383,6 +412,8 @@ begin
     would be making a claim it had not checked. }
   Result.RawDataIndex := AData;
   Result.IsEdge := False;
+  Result.Kind := ctkSeries;
+  Result.ComponentIndex := -1;
 end;
 
 function TyChartDatum(ASeries, AData, ARaw: Integer): TTyChartDatumRef;
@@ -391,6 +422,8 @@ begin
   Result.DataIndex := AData;
   Result.RawDataIndex := ARaw;
   Result.IsEdge := False;
+  Result.Kind := ctkSeries;
+  Result.ComponentIndex := -1;
 end;
 
 function TyChartEdgeDatum(ASeries, ARow: Integer): TTyChartDatumRef;
@@ -399,6 +432,8 @@ begin
   Result.DataIndex := ARow;
   Result.RawDataIndex := ARow;
   Result.IsEdge := True;
+  Result.Kind := ctkSeries;
+  Result.ComponentIndex := -1;
 end;
 
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;

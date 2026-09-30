@@ -997,6 +997,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Handlers"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Events.pas"/>
+        <UnitName Value="tyControls.AdvChart.Events"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Diagnose.pas"/>
         <UnitName Value="tyControls.AdvChart.Diagnose"/>
       </Item>

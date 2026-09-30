@@ -599,7 +599,12 @@ begin
   begin
     e := lst.Element(k);
     if e.Z <> 5 then Continue;
-    AssertTrue('a marker is silent', e.Silent);
+    { A MARKER TAKES THE POINTER -- upstream's markers answer it, and emit
+      the chart's events [Batch 84; they were silent] -- but is no series
+      datum: nothing that asks for a series' rows can find it }
+    AssertFalse('a marker takes the pointer', e.Silent);
+    AssertTrue('a marker is no series datum',
+      (e.Datum.SeriesIndex < 0) and (e.Datum.Kind <> ctkSeries));
     if e.Caption.Text = '3' then Inc(caps)
     else if e.Style.HasFill and (Length(e.Shape.Cmds) > 0) then Inc(pins);
   end;

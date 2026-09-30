@@ -1839,6 +1839,8 @@ var
     el.Z := ASolved.Z;
     el.Z2 := z2;
     el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);
+    { the node takes the pointer -- TyChartElement starts silent [Batch 84] }
+    el.Silent := False;
     if z2 > maxZ2 then maxZ2 := z2;
     { a parent's header hangs off its background [Batch 78] }
     if nd.HasUpper then
@@ -1870,6 +1872,7 @@ var
       el.Z := ASolved.Z;
       el.Z2 := z2;
       el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);
+      el.Silent := False;
       if z2 > maxZ2 then maxZ2 := z2;
       if nd.HasLabel and (nd.LabelText <> '') then
       begin

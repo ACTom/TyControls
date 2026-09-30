@@ -375,7 +375,8 @@ function TyLayoutLegend(const ASpec: TTyLegendSpec;
   which -- rather than this list, which does not. }
 function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
   const ALayout: TTyLegendLayout; const AInk: TTyLegendInk;
-  const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList): Integer;
+  const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList;
+  ALegendIndex: Integer = -1): Integer;
 
 implementation
 
@@ -1305,7 +1306,8 @@ end;
 
 function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
   const ALayout: TTyLegendLayout; const AInk: TTyLegendInk;
-  const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList): Integer;
+  const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList;
+  ALegendIndex: Integer): Integer;
 var
   i: Integer;
   scale: Double;
@@ -1393,6 +1395,19 @@ begin
   begin
     it := ALayout.Items[i];
     if not TyRectFIsValid(it.Bounds) then Continue;
+    { THE ITEM'S ONE HIT TARGET: an unpainted rect over its bounds, under
+      which the icon and the words stay silent -- upstream's legend item is a
+      single target too, so moving from its icon to its words is no
+      out-and-over [Batch 84] }
+    if ALegendIndex >= 0 then
+    begin
+      el := Blank;
+      el.Shape := TyShapeRect(it.Bounds);
+      el.Silent := False;
+      el.Datum := TyChartComponentDatum(ctkLegend, ALegendIndex, i);
+      AList.Add(el);
+      Inc(Result);
+    end;
 
     { DESELECTED IS ONE COLOUR FOR EVERYTHING -- icon, ring, rule and words.
       Upstream reaches it through four separate options that all default to

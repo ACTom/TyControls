@@ -702,6 +702,8 @@ begin
     el.Z := ASolved.Z;
     el.Z2 := 2;
     el.Datum := TyChartDatum(ASeriesIndex, row, row);
+    { the sector takes the pointer -- TyChartElement starts silent [Batch 84] }
+    el.Silent := False;
     { the label }
     if row <= High(AInk.ItemLabels) then spec := AInk.ItemLabels[row]
     else spec := AInk.Label_;

@@ -94,6 +94,17 @@ type
       commas, 'undefined', 'null' -- which is what `{c}` and every upstream
       function formatter that concatenates params.value would show. }
     ValueText: string;
+    { AN EVENT'S params beyond a formatter's [Batch 84]: the component's
+      subtype ('bar' for a bar series, '' where upstream has none) and index,
+      the series' own id where the option wrote one, an axis event's
+      targetType ('axisLabel', 'axisName') and tickIndex (-1: none), and a
+      series-level event's selfType ('line' for a line's polyline). }
+    ComponentSubType: string;
+    ComponentIndex: Integer;
+    SeriesId: string;
+    TargetType: string;
+    TickIndex: Integer;
+    SelfType: string;
     { What the chart would have printed had there been no formatter -- the
       axis label's own text, a dataZoom label's valueStr. '' where upstream
       has no such thing. }
@@ -435,6 +446,8 @@ begin
   Result.DataIndex := -1;
   Result.RawDataIndex := -1;
   Result.AxisIndex := -1;
+  Result.ComponentIndex := -1;
+  Result.TickIndex := -1;
 end;
 
 finalization

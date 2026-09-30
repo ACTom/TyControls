@@ -591,7 +591,12 @@ begin
     e := lst.Element(k);
     if (e.Shape.Kind = cskPolyline) and (e.Datum.SeriesIndex = 0) then lineZ := e.Z;
     if e.Z <> 1 then Continue;
-    AssertTrue('a marker is silent', e.Silent);
+    { A MARKER TAKES THE POINTER -- upstream's markers answer it, and emit
+      the chart's events [Batch 84; they were silent] -- but is no series
+      datum: nothing that asks for a series' rows can find it }
+    AssertFalse('a marker takes the pointer', e.Silent);
+    AssertTrue('a marker is no series datum',
+      (e.Datum.SeriesIndex < 0) and (e.Datum.Kind <> ctkSeries));
     if e.Caption.Text = 'band' then Inc(caps)
     else if (e.Shape.Kind = cskPolygon) and e.Style.HasFill then
     begin

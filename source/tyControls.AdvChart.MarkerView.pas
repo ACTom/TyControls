@@ -139,7 +139,8 @@ type
   Silent all: markers carry no tooltip yet, and a hover on one must not
   report the series under it. }
 function TyBuildMarkLines(const APics: TTyMkLinePicArray; const ABlock: TTyMkBlock;
-  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
+  AHostSeries: Integer = -1): Integer;
 
 type
   { a markPoint's label (Symbol.ts's setLabelStyle on the symbol path) }
@@ -214,7 +215,8 @@ function TyMkPointPictures(const ABlock: TTyMkBlock; const AIn: TTyMkPicInput;
   AXIsLabel, AYIsLabel: Boolean): TTyMkPointPicArray;
 { the paint-list elements of a series' markPoints }
 function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkBlock;
-  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
+  AHostSeries: Integer = -1): Integer;
 { zrender's lum(color, background): 0 for what does not parse }
 function TyMkLum(const AColour: string; ABackground: Double): Double;
 
@@ -245,7 +247,8 @@ function TyMkAreaPictures(const ABlock: TTyMkBlock;
   const AIn: TTyMkPicInput): TTyMkAreaPicArray;
 { the paint-list elements of a series' markAreas }
 function TyBuildMarkAreas(const APics: TTyMkAreaPicArray; const ABlock: TTyMkBlock;
-  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
+  AHostSeries: Integer = -1): Integer;
 { tool/color modifyAlpha: the colour at alpha A as 'rgba(r,g,b,a)'; '' for
   what does not parse }
 function TyMkModifyAlpha(const AColour: string; A: Double): string;
@@ -1293,9 +1296,30 @@ begin
   Result.Cmds := cmds;
 end;
 
-function TyBuildMarkLines(const APics: TTyMkLinePicArray; const ABlock: TTyMkBlock;
-  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+{ THE ELEMENTS ONE MARKER ADDED, from AFirst on, AS ITS HIT TARGET: its
+  host series and its place in the marker's data, and silent only where the
+  marker says so -- upstream's markers answer the pointer [Batch 84] }
+procedure MkTarget(AList: TTyPaintList; AFirst: Integer; AKind: TTyChartTargetKind;
+  AHostSeries, AIndex: Integer; ASilent: Boolean);
 var
+  k: Integer;
+  el: TTyChartElement;
+begin
+  if AHostSeries < 0 then Exit;
+  for k := AFirst to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    el.Datum := TyChartComponentDatum(AKind, AHostSeries, AIndex);
+    el.Silent := ASilent;
+    AList.SetElement(k, el);
+  end;
+end;
+
+function TyBuildMarkLines(const APics: TTyMkLinePicArray; const ABlock: TTyMkBlock;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
+  AHostSeries: Integer): Integer;
+var
+  first: Integer;
   i: Integer;
   el: TTyChartElement;
   c: TTyChartColor;
@@ -1415,6 +1439,7 @@ begin
   for i := 0 to High(APics) do
   begin
     if not APics[i].Drawn then Continue;
+    first := AList.Count;
     { the segment: zrender draws no stroke of no width }
     if (APics[i].LineWidth > 0) and (Length(APics[i].Path) = 2) then
     begin
@@ -1434,6 +1459,8 @@ begin
     Symbol(APics[i].FromSym);
     Symbol(APics[i].ToSym);
     Lbl(APics[i].Lbl);
+    MkTarget(AList, first, ctkMarkLine, AHostSeries,
+      ABlock.Lines[APics[i].Item].DataIndex, ABlock.Silent);
   end;
 end;
 
@@ -2181,8 +2208,10 @@ begin
 end;
 
 function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkBlock;
-  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
+  AHostSeries: Integer): Integer;
 var
+  first: Integer;
   i, fs: Integer;
   el: TTyChartElement;
   c: TTyChartColor;
@@ -2219,6 +2248,7 @@ begin
   for i := 0 to High(APics) do
   begin
     if not APics[i].Drawn then Continue;
+    first := AList.Count;
     el := Blank(APics[i].Z2);
     el.Shape := TyMkZrShape(APics[i].Path, APics[i].Global, APics[i].HasGlobal);
     if (APics[i].StyleFill <> 'none') and Colour(APics[i].StyleFill, c) then
@@ -2241,6 +2271,8 @@ begin
       Inc(Result);
     end;
     Inc(Result, EmitLabel(APics[i].Lbl, ABlock, AInk, AMeasurer, AList));
+    MkTarget(AList, first, ctkMarkPoint, AHostSeries,
+      ABlock.Points[APics[i].Item].DataIndex, ABlock.Silent);
   end;
 end;
 
@@ -2391,9 +2423,10 @@ begin
 end;
 
 function TyBuildMarkAreas(const APics: TTyMkAreaPicArray; const ABlock: TTyMkBlock;
-  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+  const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
+  AHostSeries: Integer): Integer;
 var
-  i, k: Integer;
+  i, k, first: Integer;
   el: TTyChartElement;
   c: TTyChartColor;
   pts: TTyPointFArray;
@@ -2403,6 +2436,7 @@ begin
   for i := 0 to High(APics) do
   begin
     if not APics[i].Drawn then Continue;
+    first := AList.Count;
     if IsNan(APics[i].Points[0].X) or IsNan(APics[i].Points[0].Y)
       or IsNan(APics[i].Points[2].X) or IsNan(APics[i].Points[2].Y) then Continue;
     el := Default(TTyChartElement);
@@ -2432,6 +2466,8 @@ begin
     AList.Add(el);
     Inc(Result);
     Inc(Result, EmitLabel(APics[i].Lbl, ABlock, AInk, AMeasurer, AList));
+    MkTarget(AList, first, ctkMarkArea, AHostSeries,
+      ABlock.Areas[APics[i].Item].DataIndex, ABlock.Silent);
   end;
 end;
 

@@ -34,6 +34,7 @@ uses
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers, tyControls.FontUnits,
+  tyControls.AdvChart.Events,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
@@ -136,6 +137,26 @@ type
     `treeexpandandcollapse` action reports it: from a click and from the API
     alike. [Batch 81] }
   TTyTreeToggleEvent = procedure(Sender: TObject; ASeriesIndex, ADataIndex: Integer) of object;
+
+  { WHAT THE POINTER IS OVER, as the chart's mouse events see it [Batch 84]:
+    an identity (0 is nothing; the same thing answers the same identity from
+    one move to the next, which is what decides out and over), whether it
+    carries data -- upstream emits a chart event only for an element with
+    ECData -- and, when it does, the params and the model a query is matched
+    against. }
+  TTyChartEventTarget = record
+    Id: Int64;
+    HasData: Boolean;
+    Params: TTyChartCallbackParams;
+    Model: TTyEventModel;
+  end;
+
+  TTyChartEventReg = record
+    Id: Integer;
+    EventType: string;
+    Query: TTyEventQuery;
+    Handler: TTyChartEventHandler;
+  end;
 
   { A GRAPH ROAM, as upstream's `graphroam` event reports it: once per action,
     whether a gesture or the API dispatched it, with the series it moved. }
@@ -249,6 +270,18 @@ type
       [Batch 81] }
     FTreeToggled: array of TTyBoolArray;
     FOnTreeToggle: TTyTreeToggleEvent;
+    { THE CHART'S MOUSE EVENTS [Batch 84]: the registrations in the order
+      they were made, the published catch-all, and zrender's bookkeeping --
+      what is hovered, what the last press and release were on, and the press
+      point a click is judged against (cleared by the click it makes). }
+    FEventRegs: array of TTyChartEventReg;
+    FEventNextId: Integer;
+    FOnChartEvent: TTyChartEventHandler;
+    FEvHover: TTyChartEventTarget;
+    FEvDownId, FEvUpId: Int64;
+    FEvDownArmed: Boolean;
+    FEvDownX, FEvDownY: Integer;
+    FEvLastX, FEvLastY: Integer;
     { EACH TREE'S VIEW, by slot and owned (rebuilt by every layout), with its
       options read as a graph's; WHAT ITS ROAM LEFT and THE BOX IT LAST HAD,
       by series index and outside the build -- a roam survives a relayout,
@@ -894,6 +927,22 @@ type
       box, which is what the cache exists to make affordable. }
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    procedure DblClick; override;
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
+    { the chart's mouse events [Batch 84] }
+    function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+    function SeriesEventTarget(const ADatum: TTyChartDatumRef;
+      AElement: Integer): TTyChartEventTarget;
+    function SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
+    procedure SilenceSeries(AList: TTyPaintList);
+    procedure EmitChartEvent(const AType: string; const ATarget: TTyChartEventTarget;
+      AX, AY: Integer; AHasOffset: Boolean = True);
+    procedure EventMove(AX, AY: Integer);
+    procedure EventDown(AButton: TMouseButton; AX, AY: Integer);
+    procedure EventUp(AButton: TMouseButton; AX, AY: Integer);
+    procedure EventDblClick(AX, AY: Integer);
+    procedure EventContextMenu(AX, AY: Integer);
+    procedure EventLeave(AX, AY: Integer);
     { THE ROAM GESTURES. A left press inside a graph's roam area arms a drag
       that pans by every movement after it -- off the control too -- until
       the left button comes up or the capture is lost; a wheel turn over the
@@ -1050,6 +1099,16 @@ type
       state in the tree series ASeriesIndex (-1: every tree). Not gated by
       `expandAndCollapse`, which gates the click only. False for a series
       that is no tree, row 0 or a row past the end. [Batch 81] }
+    { THE CHART'S MOUSE EVENTS, upstream's chart.on / chart.off [Batch 84]:
+      AType one of click, dblclick, mousedown, mouseup, mousemove, mouseover,
+      mouseout, globalout, contextmenu (any case); AQuery '' for every event,
+      a class type ('series.bar'), or a JSON object ('{"seriesIndex":1}').
+      The same handler registered twice for one type is kept once, as
+      upstream keeps it. Answers the registration's id, or -1 for a type the
+      chart does not emit. }
+    function ChartOn(const AType: string; AHandler: TTyChartEventHandler;
+      const AQuery: string = ''): Integer;
+    procedure ChartOff(AId: Integer);
     function TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
     { upstream's treeRoam action: a pan (both deltas present) and/or a zoom
       about a point, on the tree ASeriesIndex (-1: every tree). Not gated by
@@ -1132,6 +1191,9 @@ type
     property OnResize;
     property OnGraphRoam: TTyGraphRoamEvent read FOnGraphRoam write FOnGraphRoam;
     property OnTreeExpandAndCollapse: TTyTreeToggleEvent read FOnTreeToggle write FOnTreeToggle;
+    { EVERY chart mouse event, unfiltered -- the published face of ChartOn
+      [Batch 84] }
+    property OnChartEvent: TTyChartEventHandler read FOnChartEvent write FOnChartEvent;
     property OnTreeRoam: TTyGraphRoamEvent read FOnTreeRoam write FOnTreeRoam;
     property OnDataZoom: TTyDataZoomEvent read FOnDataZoom write FOnDataZoom;
   end;
@@ -4533,15 +4595,15 @@ begin
   for i := 0 to High(FMarkAreaPics) do
     if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
       Inc(Result, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
-        AMeasurer, AList));
+        AMeasurer, AList, FMarkers[i].SeriesIndex));
   for i := 0 to High(FMarkPointPics) do
     if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
       Inc(Result, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,
-        AMeasurer, AList));
+        AMeasurer, AList, FMarkers[i].SeriesIndex));
   for i := 0 to High(FMarkLinePics) do
     if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
       Inc(Result, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,
-        AMeasurer, AList));
+        AMeasurer, AList, FMarkers[i].SeriesIndex));
 end;
 
 function TTyAdvanceChart.DataZoomCount: Integer;
@@ -5195,6 +5257,7 @@ var
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if csDesigning in ComponentState then Exit;
+  EventDown(Button, X, Y);
   { A MIDDLE OR RIGHT PRESS NEITHER ARMS NOR DISARMS. }
   if Button <> mbLeft then Exit;
   FRoamSeries := -1;
@@ -5269,6 +5332,7 @@ begin
     end;
     FPressArmed := False;
   end;
+  if not (csDesigning in ComponentState) then EventUp(Button, X, Y);
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -7337,7 +7401,7 @@ begin
     fnt := LegendFont;
     LegendTextOf(i, fnt, ink);
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], FLegends[i], ink, fnt,
-      APPI, AList));
+      APPI, AList, i));
   end;
 end;
 
@@ -8085,6 +8149,9 @@ begin
       moved later would leave its label behind. }
     if drawn > 0 then
       TyExpandLabels(list, specs, itemSpecs, AMeasurer, APPI);
+    { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
+      hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
+    if drawn > 0 then SilenceSeries(list);
     { AFTER THE LABELS, so a caption dims and rises with its node. }
     if drawn > 0 then ApplyGraphHover(list, APPI);
     if drawn > 0 then ApplyTreeHover(list, APPI);
@@ -8374,7 +8441,7 @@ var
   st: TTyDataStore;
   pct: TTyDoubleArray;
 begin
-  Result := Default(TTyChartCallbackParams);
+  Result := TyChartBlankParams;
   Result.ComponentType := 'series';
   Result.SeriesIndex := ADatum.SeriesIndex;
   Result.DataIndex := ADatum.DataIndex;
@@ -8905,6 +8972,540 @@ begin
     ASpec^.HasLabelColour, ASpec^.LabelColour, True);
   AxisTextOver(AName, ASpec^.NameFontName, ASpec^.NameFontSizeLogical,
     ASpec^.NameFontWeight, ASpec^.HasNameColour, ASpec^.NameColour, False);
+end;
+
+{ ==================== the chart's mouse events [Batch 84] ==================== }
+
+function TTyAdvanceChart.ChartOn(const AType: string;
+  AHandler: TTyChartEventHandler; const AQuery: string): Integer;
+var
+  t: string;
+  i: Integer;
+begin
+  Result := -1;
+  t := TyChartEventTypeOf(AType);
+  if (t = '') or not Assigned(AHandler) then Exit;
+  { THE SAME FUNCTION TWICE FOR ONE TYPE IS KEPT ONCE, whatever the second
+    query -- zrender's Eventful.on }
+  for i := 0 to High(FEventRegs) do
+    if (FEventRegs[i].EventType = t)
+      and (TMethod(FEventRegs[i].Handler).Code = TMethod(AHandler).Code)
+      and (TMethod(FEventRegs[i].Handler).Data = TMethod(AHandler).Data) then
+      Exit(FEventRegs[i].Id);
+  Inc(FEventNextId);
+  SetLength(FEventRegs, Length(FEventRegs) + 1);
+  FEventRegs[High(FEventRegs)].Id := FEventNextId;
+  FEventRegs[High(FEventRegs)].EventType := t;
+  FEventRegs[High(FEventRegs)].Query := TyEventQueryOf(AQuery);
+  FEventRegs[High(FEventRegs)].Handler := AHandler;
+  Result := FEventNextId;
+end;
+
+procedure TTyAdvanceChart.ChartOff(AId: Integer);
+var i, k: Integer;
+begin
+  for i := 0 to High(FEventRegs) do
+    if FEventRegs[i].Id = AId then
+    begin
+      for k := i to High(FEventRegs) - 1 do FEventRegs[k] := FEventRegs[k + 1];
+      SetLength(FEventRegs, Length(FEventRegs) - 1);
+      Exit;
+    end;
+end;
+
+function SeriesIdOf(AOption: TTyChartOption; ASeriesIndex: Integer): string;
+var n, d: TJSONData;
+begin
+  Result := '';
+  if AOption = nil then Exit;
+  n := AOption.ComponentAt('series', ASeriesIndex);
+  if not (n is TJSONObject) then Exit;
+  d := TJSONObject(n).Find('id');
+  if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then Result := d.AsString;
+end;
+
+procedure TTyAdvanceChart.SilenceSeries(AList: TTyPaintList);
+var
+  silent: array of Boolean;
+  i, k: Integer;
+  n, d: TJSONData;
+  el: TTyChartElement;
+  any: Boolean;
+begin
+  silent := nil;
+  SetLength(silent, FOption.ComponentCount('series'));
+  any := False;
+  for i := 0 to High(silent) do
+  begin
+    n := FOption.ComponentAt('series', i);
+    d := nil;
+    if n is TJSONObject then d := TJSONObject(n).Find('silent');
+    silent[i] := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
+    any := any or silent[i];
+  end;
+  if not any then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex < 0)
+      or (el.Datum.SeriesIndex > High(silent)) or not silent[el.Datum.SeriesIndex] then
+      Continue;
+    el.Silent := True;
+    AList.SetElement(k, el);
+  end;
+end;
+
+function TTyAdvanceChart.SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
+var slot: Integer;
+begin
+  Result := Default(TTyEventModel);
+  slot := SlotOfSeries(ASeriesIndex);
+  if slot < 0 then Exit;
+  Result.Valid := True;
+  Result.MainType := 'series';
+  Result.SubType := FBindings[slot].SeriesType;
+  Result.Index := ASeriesIndex;
+  Result.Name := SeriesModelName(ASeriesIndex);
+  Result.Id := SeriesIdOf(FOption, ASeriesIndex);
+end;
+
+{ A SERIES ITEM'S params: upstream's getDataParams -- the raw index, the value
+  as String() prints it (absent when undefined), 'main' for the tree family's
+  data type -- or, for the one element that stands for a whole line, the
+  series' own params with selfType 'line', and then only when the series
+  says triggerEvent. }
+function TTyAdvanceChart.SeriesEventTarget(const ADatum: TTyChartDatumRef;
+  AElement: Integer): TTyChartEventTarget;
+var
+  slot: Integer;
+  p: TTyChartCallbackParams;
+  n, d: TJSONData;
+  st: string;
+begin
+  Result := Default(TTyChartEventTarget);
+  Result.Id := AElement + 1;
+  if ADatum.SeriesIndex < 0 then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if slot < 0 then Exit;
+  st := FBindings[slot].SeriesType;
+  if ADatum.DataIndex < 0 then
+  begin
+    n := FOption.ComponentAt('series', ADatum.SeriesIndex);
+    d := nil;
+    if n is TJSONObject then d := TJSONObject(n).Find('triggerEvent');
+    if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
+    p := TyChartBlankParams;
+    p.SelfType := st;
+  end
+  else
+  begin
+    p := TooltipParams(ADatum);
+    if ADatum.IsEdge then
+    begin
+      if Length(p.Values) > 0 then p.ValueText := TyChartValueText(p.Values[0]);
+    end
+    else if p.Raw.Shape <> rshNone then
+      p.ValueText := TyRawItemText(p.Raw);
+    if p.ValueText = 'undefined' then p.ValueText := '';
+    if (st = TyTreemapSeriesTypeName) or (st = TySunburstSeriesTypeName)
+      or (st = TyTreeSeriesTypeName) then
+      p.DataType := 'main';
+  end;
+  p.ComponentType := 'series';
+  p.ComponentSubType := st;
+  p.ComponentIndex := ADatum.SeriesIndex;
+  p.SeriesType := st;
+  p.SeriesIndex := ADatum.SeriesIndex;
+  p.SeriesName := SeriesModelName(ADatum.SeriesIndex);
+  p.SeriesId := SeriesIdOf(FOption, ADatum.SeriesIndex);
+  Result.HasData := True;
+  Result.Params := p;
+  Result.Model := SeriesEventModel(ADatum.SeriesIndex);
+end;
+
+function TriggersEvent(ANode: TJSONData): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if not (ANode is TJSONObject) then Exit;
+  d := TJSONObject(ANode).Find('triggerEvent');
+  Result := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
+end;
+
+function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+const
+  cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
+    'markLine', 'markArea', 'legend');
+var
+  i, k, g, a, q, idx, slot, nth: Integer;
+  lay: TTyTitleLayout;
+  r: TTyRectF;
+  el: TTyChartElement;
+  d: TTyChartDatumRef;
+  node: TJSONData;
+  gb: TTyGridBuild;
+  axObj: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  meas: ITyTextMeasurer;
+  lblS, priS, nameS: TTyStyleSet;
+  fw, fh: Double;
+  kind: TTyMarkerKind;
+  mk: TTyMkBlock;
+  nm, mainT: string;
+
+  function Inside(const AR: TTyRectF): Boolean;
+  begin
+    Result := (AX >= AR.Left) and (AX <= AR.Right) and (AY >= AR.Top)
+      and (AY <= AR.Bottom);
+  end;
+
+  function Hung(AXa, AYa, AW, AH: Double; AAlign: TTyTitleAlign;
+    AVAlign: TTyTitleVAlign): TTyRectF;
+  var l, t: Double;
+  begin
+    case AAlign of
+      ttaCentre: l := AXa - AW / 2;
+      ttaRight: l := AXa - AW;
+    else
+      l := AXa;
+    end;
+    case AVAlign of
+      ttvMiddle: t := AYa - AH / 2;
+      ttvBottom: t := AYa - AH;
+    else
+      t := AYa;
+    end;
+    Result := TyRectF(l, t, l + AW, t + AH);
+  end;
+
+  function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
+    AAV: TTyTextAnchorV): TTyRectF;
+  var l, t: Double;
+  begin
+    case AAH of
+      tahLeft: l := AXa;
+      tahRight: l := AXa - AW;
+    else
+      l := AXa - AW / 2;
+    end;
+    case AAV of
+      tavTop: t := AYa;
+      tavBottom: t := AYa - AH;
+    else
+      t := AYa - AH / 2;
+    end;
+    Result := TyRectF(l, t, l + AW, t + AH);
+  end;
+
+begin
+  Result := Default(TTyChartEventTarget);
+  Result.Params := TyChartBlankParams;
+  { THE TITLES, over everything but the tooltip: the text and the subtext are
+    two targets }
+  for i := 0 to High(FTitles) do
+  begin
+    lay := FTitles[i];
+    if not lay.Valid then Continue;
+    for k := 0 to 1 do
+    begin
+      if (k = 1) and not lay.HasSub then Continue;
+      if (k = 0) and ((i > High(FTitleSpecs)) or (FTitleSpecs[i].Text = '')) then Continue;
+      if k = 0 then r := Hung(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign)
+      else r := Hung(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign);
+      if not Inside(r) then Continue;
+      Result.Id := -(1000 + 2 * i + k);
+      if TriggersEvent(FOption.ComponentAt('title', i)) then
+      begin
+        Result.HasData := True;
+        Result.Params.ComponentType := 'title';
+        Result.Params.ComponentIndex := i;
+        Result.Model.Valid := True;
+        Result.Model.MainType := 'title';
+        Result.Model.Index := i;
+      end;
+      Exit;
+    end;
+  end;
+  { THE DISPLAY LIST: series items, their labels, markers, legend items }
+  idx := -1;
+  if (FPaintList <> nil) and FPaintListValid then
+    idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
+  if idx >= 0 then
+  begin
+    el := FPaintList.Element(idx);
+    d := el.Datum;
+    Result.Id := idx + 1;
+    case d.Kind of
+      ctkSeries:
+        if d.SeriesIndex >= 0 then Result := SeriesEventTarget(d, idx);
+      ctkMarkPoint, ctkMarkLine, ctkMarkArea:
+        begin
+          slot := SlotOfSeries(d.ComponentIndex);
+          if slot < 0 then Exit;
+          if d.Kind = ctkMarkPoint then kind := mkPoint
+          else if d.Kind = ctkMarkLine then kind := mkLine
+          else kind := mkArea;
+          { THE MARKER MODEL'S OWN INDEX among its kind, and its HOST's
+            series fields: MarkerModel.getDataParams }
+          nth := 0;
+          for k := 0 to High(FMarkers) do
+          begin
+            if FMarkers[k].SeriesIndex = d.ComponentIndex then Break;
+            if FMarkers[k].Blocks[kind].Present then Inc(nth);
+          end;
+          Result.HasData := True;
+          Result.Params.ComponentType := cKindWord[d.Kind];
+          Result.Params.ComponentSubType := '';
+          Result.Params.ComponentIndex := nth;
+          Result.Params.SeriesType := FBindings[slot].SeriesType;
+          Result.Params.SeriesIndex := d.ComponentIndex;
+          Result.Params.SeriesName := SeriesModelName(d.ComponentIndex);
+          Result.Params.SeriesId := SeriesIdOf(FOption, d.ComponentIndex);
+          Result.Params.DataIndex := d.DataIndex;
+          Result.Params.RawDataIndex := d.DataIndex;
+          for k := 0 to High(FMarkers) do
+            if FMarkers[k].SeriesIndex = d.ComponentIndex then
+            begin
+              mk := FMarkers[k].Blocks[kind];
+              if kind = mkPoint then
+              begin
+                for q := 0 to High(mk.Points) do
+                  if mk.Points[q].DataIndex = d.DataIndex then
+                  begin
+                    if mk.Points[q].E.Name.Kind = mvkStr then
+                      Result.Params.Name := mk.Points[q].E.Name.Str
+                    else if mk.Points[q].E.Name.Kind = mvkNum then
+                      Result.Params.Name := TyChartValueText(mk.Points[q].E.Name.Num);
+                    if mk.Points[q].E.Value.Kind = mvkNum then
+                      Result.Params.ValueText := TyChartValueText(mk.Points[q].E.Value.Num)
+                    else if mk.Points[q].E.Value.Kind = mvkStr then
+                      Result.Params.ValueText := mk.Points[q].E.Value.Str;
+                  end;
+              end;
+              Break;
+            end;
+          { a query is matched against the host series }
+          Result.Model := SeriesEventModel(d.ComponentIndex);
+        end;
+      ctkLegend:
+        begin
+          node := FOption.ComponentAt('legend', d.ComponentIndex);
+          if not TriggersEvent(node) then Exit;
+          if (d.ComponentIndex > High(FLegends))
+            or (d.DataIndex > High(FLegends[d.ComponentIndex].Items)) then Exit;
+          nm := FLegends[d.ComponentIndex].Items[d.DataIndex].Name;
+          Result.HasData := True;
+          Result.Params.ComponentType := 'legend';
+          Result.Params.ComponentIndex := d.ComponentIndex;
+          Result.Params.DataIndex := d.DataIndex;
+          Result.Params.RawDataIndex := d.DataIndex;
+          Result.Params.ValueText := nm;
+          { the series the name is, the first that answers to it }
+          for k := 0 to High(FBindings) do
+            if SeriesModelName(FBindings[k].SeriesIndex) = nm then
+            begin
+              Result.Params.SeriesIndex := FBindings[k].SeriesIndex;
+              Break;
+            end;
+          Result.Model.Valid := True;
+          Result.Model.MainType := 'legend';
+          Result.Model.SubType := 'plain';
+          if (node is TJSONObject) and (TJSONObject(node).Get('type', '') = 'scroll') then
+            Result.Model.SubType := 'scroll';
+          Result.Model.Index := d.ComponentIndex;
+        end;
+    end;
+    Exit;
+  end;
+  { THE AXES that say triggerEvent: a label's box, the name's }
+  if FBuild = nil then Exit;
+  meas := nil;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+    begin
+      if a < gb.XAxisCount then axObj := gb.XAxis(a)
+      else axObj := gb.YAxis(a - gb.XAxisCount);
+      if axObj = nil then Continue;
+      mainT := axObj.MainType;
+      if mainT = '' then mainT := axObj.Dim + 'Axis';
+      if not TriggersEvent(FOption.ComponentAt(mainT, axObj.ComponentIndex)) then Continue;
+      spec := gb.SpecFor(axObj);
+      if spec = nil then Continue;
+      AxisTextStyles(spec, lblS, priS, nameS);
+      Result.Model.Valid := True;
+      Result.Model.MainType := mainT;
+      case axObj.AxisType of
+        atCategory: Result.Model.SubType := 'category';
+        atTime: Result.Model.SubType := 'time';
+        atLog: Result.Model.SubType := 'log';
+      else
+        Result.Model.SubType := 'value';
+      end;
+      Result.Model.Index := axObj.ComponentIndex;
+      Result.Params.ComponentType := mainT;
+      Result.Params.ComponentIndex := axObj.ComponentIndex;
+      Result.Params.AxisIndex := axObj.ComponentIndex;
+      Result.Params.AxisDimension := axObj.Dim;
+      if spec^.NamePlacement.Shown
+        and Inside(TyRectF(spec^.NamePlacement.Rect.X, spec^.NamePlacement.Rect.Y,
+          spec^.NamePlacement.Rect.X + spec^.NamePlacement.Rect.W,
+          spec^.NamePlacement.Rect.Y + spec^.NamePlacement.Rect.H)) then
+      begin
+        Result.Id := -(200000 + g * 100 + a);
+        Result.HasData := True;
+        Result.Params.TargetType := 'axisName';
+        Result.Params.Name := spec^.NamePlacement.Text;
+        Exit;
+      end;
+      for q := 0 to High(spec^.Placements) do
+      begin
+        if not spec^.Placements[q].Shown then Continue;
+        if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+        fw := 0;
+        fh := 0;
+        if meas <> nil then
+          meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
+            ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
+        if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
+          spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
+        Result.Id := -(100000 + g * 10000 + a * 1000 + q);
+        Result.HasData := True;
+        Result.Params.TargetType := 'axisLabel';
+        Result.Params.TickIndex := q;
+        if axObj.Scale is TTyOrdinalScale then
+        begin
+          Result.Params.ValueText := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[q]);
+          Result.Params.DataIndex := Round(TTyOrdinalScale(axObj.Scale).TickToOrdinal(spec^.TickValues[q]));
+          Result.Params.RawDataIndex := Result.Params.DataIndex;
+        end
+        else
+          Result.Params.ValueText := TyChartValueText(spec^.TickValues[q]);
+        Exit;
+      end;
+      Result.Model := Default(TTyEventModel);
+      Result.Params := TyChartBlankParams;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.EmitChartEvent(const AType: string;
+  const ATarget: TTyChartEventTarget; AX, AY: Integer; AHasOffset: Boolean);
+var
+  ev: TTyChartEvent;
+  regs: array of TTyChartEventReg;
+  model: TTyEventModel;
+  i: Integer;
+begin
+  ev := Default(TTyChartEvent);
+  ev.EventType := AType;
+  ev.HasParams := ATarget.HasData;
+  if ev.HasParams then ev.Params := ATarget.Params
+  else ev.Params := TyChartBlankParams;
+  ev.HasOffset := AHasOffset;
+  if AHasOffset then
+  begin
+    ev.OffsetX := AX;
+    ev.OffsetY := AY;
+  end;
+  if ATarget.HasData then model := ATarget.Model
+  else model := Default(TTyEventModel);
+  if Assigned(FOnChartEvent) then FOnChartEvent(Self, ev);
+  { a copy: a handler may register or unregister }
+  regs := Copy(FEventRegs);
+  for i := 0 to High(regs) do
+    if (regs[i].EventType = AType) and TyEventQueryMatches(regs[i].Query, model, ev) then
+      regs[i].Handler(Self, ev);
+end;
+
+{ zrender's mousemove: an out to what was hovered when the target changes,
+  a move to the new one, an over when it changed -- each only where the
+  target carries data }
+procedure TTyAdvanceChart.EventMove(AX, AY: Integer);
+var t: TTyChartEventTarget;
+begin
+  FEvLastX := AX;
+  FEvLastY := AY;
+  t := EventTargetAt(AX, AY);
+  if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) and FEvHover.HasData then
+    EmitChartEvent('mouseout', FEvHover, AX, AY);
+  if t.HasData then EmitChartEvent('mousemove', t, AX, AY);
+  if (t.Id <> 0) and (t.Id <> FEvHover.Id) and t.HasData then
+    EmitChartEvent('mouseover', t, AX, AY);
+  FEvHover := t;
+end;
+
+procedure TTyAdvanceChart.EventDown(AButton: TMouseButton; AX, AY: Integer);
+var t: TTyChartEventTarget;
+begin
+  FEvLastX := AX;
+  FEvLastY := AY;
+  t := EventTargetAt(AX, AY);
+  { ANY BUTTON: zrender records the press whichever it was }
+  FEvDownId := t.Id;
+  FEvUpId := t.Id;
+  FEvDownArmed := True;
+  FEvDownX := AX;
+  FEvDownY := AY;
+  if t.HasData then EmitChartEvent('mousedown', t, AX, AY);
+end;
+
+{ zrender's mouseup, then -- for the left button, as a browser follows it --
+  the click: the same target pressed and released, a press point to judge
+  it against, within 4 px of it. A click that passes clears the point; one
+  that fails does not. }
+procedure TTyAdvanceChart.EventUp(AButton: TMouseButton; AX, AY: Integer);
+var t: TTyChartEventTarget;
+begin
+  t := EventTargetAt(AX, AY);
+  FEvUpId := t.Id;
+  if t.HasData then EmitChartEvent('mouseup', t, AX, AY);
+  if AButton <> mbLeft then Exit;
+  if (FEvDownId <> FEvUpId) or not FEvDownArmed
+    or (Sqrt(Sqr(AX - FEvDownX) + Sqr(AY - FEvDownY)) > 4) then Exit;
+  FEvDownArmed := False;
+  if t.HasData then EmitChartEvent('click', t, AX, AY);
+end;
+
+procedure TTyAdvanceChart.EventDblClick(AX, AY: Integer);
+var t: TTyChartEventTarget;
+begin
+  t := EventTargetAt(AX, AY);
+  if t.HasData then EmitChartEvent('dblclick', t, AX, AY);
+end;
+
+procedure TTyAdvanceChart.EventContextMenu(AX, AY: Integer);
+var t: TTyChartEventTarget;
+begin
+  t := EventTargetAt(AX, AY);
+  if t.HasData then EmitChartEvent('contextmenu', t, AX, AY);
+end;
+
+{ THE POINTER LEFT THE CANVAS: an out to what it was over, at the last point
+  it was seen, then globalout with nothing -- and what was hovered is
+  remembered, so coming back onto it is no over }
+procedure TTyAdvanceChart.EventLeave(AX, AY: Integer);
+var none: TTyChartEventTarget;
+begin
+  if (FEvHover.Id <> 0) and FEvHover.HasData then
+    EmitChartEvent('mouseout', FEvHover, AX, AY);
+  none := Default(TTyChartEventTarget);
+  none.Params := TyChartBlankParams;
+  EmitChartEvent('globalout', none, 0, 0, False);
+end;
+
+procedure TTyAdvanceChart.DblClick;
+begin
+  inherited DblClick;
+  if not (csDesigning in ComponentState) then EventDblClick(FEvLastX, FEvLastY);
+end;
+
+procedure TTyAdvanceChart.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+begin
+  if not (csDesigning in ComponentState) then
+    EventContextMenu(MousePos.X, MousePos.Y);
+  inherited DoContextPopup(MousePos, Handled);
 end;
 
 function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
@@ -10476,6 +11077,8 @@ begin
     answer holds axis POINTERS into the build, and DropBuild clears it for
     exactly that reason. }
   FTipHits := ResolveAxisPointers(X, Y);
+  { the chart's own mouse events [Batch 84] }
+  EventMove(X, Y);
   { REPAINT ON MOVEMENT, not only when the datum changes. The box is anchored
     to the CURSOR -- upstream positions against the raw pointer offsets and
     never against the snapped datum -- so a repaint gated on the datum would
@@ -10491,6 +11094,7 @@ end;
 procedure TTyAdvanceChart.MouseLeave;
 var wasOn, wasGraph: Boolean;
 begin
+  if not (csDesigning in ComponentState) then EventLeave(FEvLastX, FEvLastY);
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
   wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum);
   FTipDatum := TyChartNoDatum;

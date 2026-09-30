@@ -8365,3 +8365,44 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 - `fontStyle`(italic)读不进端口的字体——画家没有斜体参数。
 - visualMap、dataZoom、雷达、仪表盘、矩形树图面包屑的根 textStyle 规则按上游默认值推断,基准里没有它们的用例。
 - `rem`/`em` 字号当作读不出。
+
+## 119. Tier 1 第八十四批:图表级鼠标事件与事件查询(A3,2026-10-01)
+
+以前只有 LCL 原生的 OnClick/OnMouse*,拿不到「点的是哪根柱子」;上游的 `chart.on('click', [query], handler)` 九种事件都没有。这一批做它们,连同 Tier 3 那行「事件的查询过滤」。
+
+### 上游的做法(`mouse-events.js` 核对)
+
+- **九种事件**:click、dblclick、mousedown、mouseup、mousemove、mouseover、mouseout、globalout、contextmenu。只有命中元素沿宿主/父链找得到 ECData(dataIndex 或 eventData)才发图表事件;空地、轴线、没开 triggerEvent 的标题、silent 系列都不发——**但 zrender 的悬停目标照样换**,从柱子移到轴线就是柱子的 mouseout。
+- **click**(zrender `Handler.click`):按下与松开找到的是**同一个元素**(都为空也算,但没有 params)、有按下点、按下点到点击点欧氏距离 ≤ 4;通过的 click 清掉按下点,失败的不清;中间路径不管。dblclick/contextmenu/mousedown/mouseup 没有这条规则;右键有 mousedown/mouseup、没有 click。
+- **悬停**:目标变了先对旧的发 mouseout(带新点的坐标),再对新的 mousemove(总是),变了再 mouseover。身份是 **zrender 元素**不是数据项——柱子和它自己的标签之间也 out/over;图例一项是一个目标(子元素都 silent、上面盖一个透明矩形)。离开画布:mouseout 然后 globalout(params 为空、无坐标),悬停目标不忘——回到同一根柱子只有 mousemove。
+- **params**:系列项是 `getDataParams`(原始下标);标注是 markPoint/markLine/markArea、componentSubType ''、componentIndex 是同类标注模型的序号、系列字段取宿主;标题 `{componentType, componentIndex}`,正副标题是两个目标;图例(triggerEvent)`{componentIndex, dataIndex=在 legend.data 里的位置, value=名字, seriesIndex}`;轴(triggerEvent)标签 `{targetType:'axisLabel', value, tickIndex, dataIndex(类目轴), xAxisIndex}`、轴名 `{targetType:'axisName', name}`;折线的整条线(系列 triggerEvent)`selfType:'line'` 无 dataIndex;关系图 dataType node/edge;树系 dataType 'main'。
+- **查询**(`ECEventProcessor`):字符串是 `main` 或 `main.sub`,空的部分不约束;对象的键以 Index/Name/Id 结尾就定主类型加条件(值为 null 也定主类型),`name`/`dataIndex`/`dataType` 比事件本身,其余键忽略;对着事件所属**模型**严格相等地比(标注比宿主系列),没有模型(globalout)无条件通过。事件名小写化;同一函数同一类型注册两次只留一次。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Events`**(纯):`TTyChartEvent`、`TTyChartEventHandler`、`TTyEventModel`、查询解析 `TyEventQueryOf`(对象用 JSON 文本写)与匹配 `TyEventQueryMatches`、`TyChartEventTypeOf`。已进 `.lpk`。
+- 参数记录多 `ComponentSubType`、`ComponentIndex`、`SeriesId`、`TargetType`、`TickIndex`、`SelfType`。
+- **命中目标**:`TTyChartDatumRef` 多 `Kind`(系列/三种标注/图例)与 `ComponentIndex`,每个构造函数都写——组件目标的 `SeriesIndex` 恒为 -1,所以按系列找行的代码不会把标注当成系列项;标注元素不再 silent(按标注自己的 `silent`),宿主系列放在 `ComponentIndex`;图例每项一个不画的矩形。`HitTestAt` 仍只答系列项,悬停/tooltip/强调不受影响。标题、轴标签/轴名不在显示列表里,`EventTargetAt` 按布局的框判。
+- **控件**:`ChartOn`/`ChartOff`、published `OnChartEvent`(全部事件不过滤);`EventMove/Down/Up/DblClick/ContextMenu/Leave` 照 zrender 的状态机;接到 MouseMove/MouseDown/MouseUp/DblClick/DoContextPopup/MouseLeave。
+- **顺带修的真缺陷**:
+  - 系列的 `silent: true` 从来不读——它的柱子照样能悬停、出 tooltip;
+  - 矩形树图、旭日图的元素一直是 silent(`TyChartElement` 默认 silent,构造后没放开),点不中、悬停不到;
+  - `TooltipParams` 从 `Default` 起步,新加的「-1 表示没有」字段读成 0。
+
+### 基准
+
+- `tools/advchart-oracle/mouse-events.js`(代理写):37 个用例、175 步、803 个事件;9 个全量处理器 + 42 个带查询的,按固定顺序注册;每步记命中与按序发生的事件。自带规则转写逐步重放全部对上,14 条守卫各自变红。标题用例写明上游默认的 18px/12px(端口的标题在选项没写时取皮肤字体,命中框跟着字体走)。
+- `test.advchart.mouseevents`:按 fixture 的注册表用 `ChartOn` 注册(`sameFnAs` 共用同一个方法),逐步驱动控件自己的事件路径,每步比较事件序列:处理器、类型、上游持有的每个字段(且不多出字段)。量字用 zrender 的 SSR 表——测量画布的 `Font.PixelsPerInch` 随测试环境在 72 与 96 之间变,真字体会让标题框差几像素。
+
+### 变异测试
+
+`m87`:28 个变异(查询:子类型、null 仍定主类型、dataIndex 不当组件、其余键约束、name 不比、globalout 被过滤、大小写;注册去重;click 的 4px、同一目标、清按下点、右键;悬停 out 的条件、over/move 的顺序、离开时忘掉悬停、离开时不发 out;params:过滤后的下标、树系 main、折线无 triggerEvent 也发、标注序号按同类、图例找系列、轴 tickIndex;目标:标题一个目标、图例项不是目标、标注 silent、silent 系列、矩形树图/旭日图 silent)。首轮存活 2 个,都是基准缺用例:
+- 「params 用过滤后的下标」:没有被 dataZoom 过滤的用例——补了一个窗口从第三个类目起的柱子用例;
+- 「标注序号数所有标注」:唯一的 markPoint 在第一个系列上——补了「A 只有 markLine、B 有 markPoint」的用例。
+补完后全部杀死。
+
+### 已知偏差
+
+- 上游发布的动作事件(select、selectchanged、legendselectchanged、treemap/sunburst 的下钻……)不在这一批:归 B1、B3、C6;矩形树图、旭日图点击后的下钻画面和图例点击后的切换画面之后的步骤按名停下。
+- 轴标签的命中框不随旋转转;markLine/markArea 的 name/value 只有 markPoint 取全了。
+- LCL 的 DblClick 没有坐标,用最近一次按下的点。
