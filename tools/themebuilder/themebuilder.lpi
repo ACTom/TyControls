@@ -25,7 +25,7 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="19">
+    <Units Count="21">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
@@ -45,6 +45,8 @@
       <Unit16><Filename Value="tbcoverageform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbCoverageForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbcoverageform"/></Unit16>
       <Unit17><Filename Value="tbexport.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbexport"/></Unit17>
       <Unit18><Filename Value="tbexportform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbExportForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbexportform"/></Unit18>
+      <Unit19><Filename Value="tbsnippets.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsnippets"/></Unit19>
+      <Unit20><Filename Value="tbsnippetsform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbSnippetsForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbsnippetsform"/></Unit20>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
