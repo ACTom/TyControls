@@ -26,7 +26,7 @@ type
   end;
   TTyBidiRunArray = array of TTyBidiRun;
 
-  TTyEdit = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable)
+  TTyCustomEdit = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable)
   private
     FText: TCaption;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
@@ -385,20 +385,56 @@ type
     { LCL's latch (stdctrls.pp:839): set once AutoSelect has fired for this focus visit so the
       first click inside an already-focused edit does not re-select. Cleared on focus loss. }
     property AutoSelected: Boolean read FAutoSelected write FAutoSelected;
+    { The constructor turns this on (an edit is always a tab stop); declaring the default
+      to match is what makes the OPT-OUT work — against the inherited `default False` a
+      designer's TabStop=False equals the declared default, is never written to the .lfm,
+      and the constructor's True silently wins again at run time. }
+    property TabStop default True;
+    property Text: TCaption read FText write SetText;
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
+    { The masking character, as a UTF-8 STRING rather than LCL's Char (stdctrls.pp:870) --
+      deliberately wider, because the character people actually want is '●' (U+25CF), which
+      does not fit in a Char. '' turns masking off.
+
+      #0 is accepted and means '' , because LCL's "off" value IS #0 and `Ed.PasswordChar := #0`
+      compiles here (Char converts to string). It used to build a one-character string holding
+      NUL, so the field went on masking -- with a glyph nobody can see -- exactly when the
+      ported code was asking for plain text. Same for ' ' , which is LCL's emNone. }
+    property PasswordChar: string read FPasswordChar write SetPasswordChar;
+    { How the text is echoed, LCL's TCustomEdit.EchoMode (stdctrls.pp:863). emNormal shows the
+      text, emPassword masks it, emNone shows NOTHING at all -- and emNone had no equivalent
+      here at any spelling. Coupled to PasswordChar in both directions exactly as LCL couples
+      them (include/customedit.inc:374-387 and 408-424), so setting either keeps the other
+      truthful and a form can be written against whichever one it already uses. }
+    property EchoMode: TEchoMode read FEchoMode write SetEchoMode default emNormal;
+    { When True (the default, as on TEdit -- stdctrls.pp:865) the selection band is not painted
+      while the control is unfocused; the selection itself survives. Without it a form with
+      three edits paints three "active-looking" selections at once. TTyMemo has had this since
+      it shipped; only the Edit was missing it. }
+    property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
+    property TextHint: TCaption read FTextHint write SetTextHint;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
+    property NumbersOnly: Boolean read FNumbersOnly write FNumbersOnly default False;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  protected
+    { Select the whole text when the control gains focus from the KEYBOARD (Tab/Enter), and on
+      the first left click of that focus visit -- LCL's TEdit default (stdctrls.pp:838), and
+      what makes "tab in, type the new value" work without an OnEnter handler on every edit. }
+    property AutoSelect: Boolean read FAutoSelect write FAutoSelect default True;
+  end;
+
+  { TTyEdit publishes TTyCustomEdit's properties; everything lives in TTyCustomEdit. }
+  TTyEdit = class(TTyCustomEdit)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    { The constructor turns this on (an edit is always a tab stop); declaring the default
-      to match is what makes the OPT-OUT work — against the inherited `default False` a
-      designer's TabStop=False equals the declared default, is never written to the .lfm,
-      and the constructor's True silently wins again at run time. }
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -442,40 +478,20 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Text: TCaption read FText write SetText;
-    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
-    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
-    { The masking character, as a UTF-8 STRING rather than LCL's Char (stdctrls.pp:870) --
-      deliberately wider, because the character people actually want is '●' (U+25CF), which
-      does not fit in a Char. '' turns masking off.
-
-      #0 is accepted and means '' , because LCL's "off" value IS #0 and `Ed.PasswordChar := #0`
-      compiles here (Char converts to string). It used to build a one-character string holding
-      NUL, so the field went on masking -- with a glyph nobody can see -- exactly when the
-      ported code was asking for plain text. Same for ' ' , which is LCL's emNone. }
-    property PasswordChar: string read FPasswordChar write SetPasswordChar;
-    { How the text is echoed, LCL's TCustomEdit.EchoMode (stdctrls.pp:863). emNormal shows the
-      text, emPassword masks it, emNone shows NOTHING at all -- and emNone had no equivalent
-      here at any spelling. Coupled to PasswordChar in both directions exactly as LCL couples
-      them (include/customedit.inc:374-387 and 408-424), so setting either keeps the other
-      truthful and a form can be written against whichever one it already uses. }
-    property EchoMode: TEchoMode read FEchoMode write SetEchoMode default emNormal;
-    { When True (the default, as on TEdit -- stdctrls.pp:865) the selection band is not painted
-      while the control is unfocused; the selection itself survives. Without it a form with
-      three edits paints three "active-looking" selections at once. TTyMemo has had this since
-      it shipped; only the Edit was missing it. }
-    property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
-    { Select the whole text when the control gains focus from the KEYBOARD (Tab/Enter), and on
-      the first left click of that focus visit -- LCL's TEdit default (stdctrls.pp:838), and
-      what makes "tab in, type the new value" work without an OnEnter handler on every edit. }
-    property AutoSelect: Boolean read FAutoSelect write FAutoSelect default True;
-    property TextHint: TCaption read FTextHint write SetTextHint;
-    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
-    property NumbersOnly: Boolean read FNumbersOnly write FNumbersOnly default False;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
     property Align;
     property Anchors;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnChange;
   end;
 
 { THE trailing-widget zone -- the strip an edit reserves at its right for a drop chevron, a
@@ -503,7 +519,7 @@ begin
                  ABox.Right, ABox.Bottom - APadBottom);
 end;
 
-constructor TTyEdit.Create(AOwner: TComponent);
+constructor TTyCustomEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -543,7 +559,7 @@ begin
   AccessibleRole := larTextEditorSingleline;
 end;
 
-destructor TTyEdit.Destroy;
+destructor TTyCustomEdit.Destroy;
 begin
   // The default context menu holds only an interface reference back to Self (no strong
   // ref -- TComponent interface calls do not reference-count), so freeing it here, before
@@ -593,20 +609,20 @@ end;
 
 // ---- Multicast OnChange (LCL customedit.inc:91-97) ----
 
-procedure TTyEdit.AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent;
+procedure TTyCustomEdit.AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent;
   AsFirst: Boolean = False);
 begin
   if FOnChangeHandlers = nil then FOnChangeHandlers := TMethodList.Create;
   FOnChangeHandlers.Add(TMethod(AnOnChangeEvent), not AsFirst);
 end;
 
-procedure TTyEdit.RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
+procedure TTyCustomEdit.RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
 begin
   if FOnChangeHandlers <> nil then
     FOnChangeHandlers.Remove(TMethod(AnOnChangeEvent));
 end;
 
-procedure TTyEdit.RemoveAllHandlersOfObject(AnObject: TObject);
+procedure TTyCustomEdit.RemoveAllHandlersOfObject(AnObject: TObject);
 begin
   inherited RemoveAllHandlersOfObject(AnObject);
   { An observer that is being freed must not stay in the list -- otherwise the next edit
@@ -617,7 +633,7 @@ end;
 
 // ---- Blinking caret (Task 10) ----
 
-procedure TTyEdit.EnsureBlinkTimer;
+procedure TTyCustomEdit.EnsureBlinkTimer;
 begin
   if FBlinkTimer = nil then
   begin
@@ -628,20 +644,20 @@ begin
   end;
 end;
 
-procedure TTyEdit.HandleBlink(Sender: TObject);
+procedure TTyCustomEdit.HandleBlink(Sender: TObject);
 begin
   Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
   FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
   Invalidate;
 end;
 
-procedure TTyEdit.ResetCaretBlink;
+procedure TTyCustomEdit.ResetCaretBlink;
 begin
   FCaretVisible := True;
   FBlinkElapsedMs := 0;
 end;
 
-procedure TTyEdit.DoEnter;
+procedure TTyCustomEdit.DoEnter;
 begin
   inherited DoEnter;
   { AutoSelect on KEYBOARD focus only -- csLButtonDown is LCL's own test for "this focus came
@@ -662,7 +678,7 @@ begin
   TyImeSetFocus(FImeHook, True);   // GTK2: start our IM context composing (no-op elsewhere)
 end;
 
-procedure TTyEdit.DoExit;
+procedure TTyCustomEdit.DoExit;
 begin
   inherited DoExit;
   FAutoSelected := False;   // the next focus visit gets its own auto-select (LCL does this too)
@@ -672,14 +688,14 @@ begin
   Invalidate;
 end;
 
-function TTyEdit.GetStyleTypeKey: string;
+function TTyCustomEdit.GetStyleTypeKey: string;
 begin
   Result := 'TyEdit';
 end;
 
 // ---- Change notification ----
 
-procedure TTyEdit.DoChange;
+procedure TTyCustomEdit.DoChange;
 begin
   // Suppressed while a composite op (InjectKey-over-selection, Cut, Paste) runs
   // its inner mutators under FSuspendUndo: the inner DeleteSelection /
@@ -700,13 +716,13 @@ end;
 
 // ---- Undo/redo machinery ----
 
-function TTyEdit.CaptureState: string;
+function TTyCustomEdit.CaptureState: string;
 begin
   // header: caret<TAB>anchor<LF>  then verbatim text
   Result := IntToStr(FCaret) + #9 + IntToStr(FSelAnchor) + #10 + FText;
 end;
 
-procedure TTyEdit.RestoreState(const S: string);
+procedure TTyCustomEdit.RestoreState(const S: string);
 var
   NL, TabPos: Integer;
   Header, CaretStr, AnchorStr: string;
@@ -744,13 +760,13 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.BeginUndoStep(AKind: Byte);
+procedure TTyCustomEdit.BeginUndoStep(AKind: Byte);
 begin
   if FSuspendUndo then Exit;
   FUndoStack.Push(CaptureState, AKind);
 end;
 
-procedure TTyEdit.BreakCoalescing;
+procedure TTyCustomEdit.BreakCoalescing;
 begin
   { Undo bookkeeping ONLY. It is tempting to default the caret's affinity here too -- every
     caret navigation passes through it -- but the visual arrow walk needs to read the
@@ -760,58 +776,58 @@ begin
   FUndoStack.BreakCoalescing;
 end;
 
-procedure TTyEdit.Undo;
+procedure TTyCustomEdit.Undo;
 begin
   if not Enabled then Exit;
   if FUndoStack.CanUndo then
     RestoreState(FUndoStack.Undo(CaptureState));
 end;
 
-procedure TTyEdit.Redo;
+procedure TTyCustomEdit.Redo;
 begin
   if not Enabled then Exit;
   if FUndoStack.CanRedo then
     RestoreState(FUndoStack.Redo(CaptureState));
 end;
 
-function TTyEdit.CanUndo: Boolean;
+function TTyCustomEdit.CanUndo: Boolean;
 begin
   Result := FUndoStack.CanUndo;
 end;
 
-function TTyEdit.CanRedo: Boolean;
+function TTyCustomEdit.CanRedo: Boolean;
 begin
   Result := FUndoStack.CanRedo;
 end;
 
 // ---- ITyTextEditActions (default context-menu seam) ----
 
-function TTyEdit.TeControl: TControl;             begin Result := Self; end;
-function TTyEdit.TeController: TTyStyleController; begin Result := ActiveController; end;
-procedure TTyEdit.TeUndo;                          begin Undo; end;
-procedure TTyEdit.TeRedo;                          begin Redo; end;
-procedure TTyEdit.TeCut;                           begin CutToClipboard; end;
-procedure TTyEdit.TeCopy;                          begin CopyToClipboard; end;
-procedure TTyEdit.TePaste;                         begin PasteFromClipboard; end;
-procedure TTyEdit.TeSelectAll;                     begin SelectAll; end;
-function TTyEdit.TeCanUndo: Boolean;               begin Result := CanUndo; end;
-function TTyEdit.TeCanRedo: Boolean;               begin Result := CanRedo; end;
-function TTyEdit.TeHasSelection: Boolean;          begin Result := HasSelection; end;
+function TTyCustomEdit.TeControl: TControl;             begin Result := Self; end;
+function TTyCustomEdit.TeController: TTyStyleController; begin Result := ActiveController; end;
+procedure TTyCustomEdit.TeUndo;                          begin Undo; end;
+procedure TTyCustomEdit.TeRedo;                          begin Redo; end;
+procedure TTyCustomEdit.TeCut;                           begin CutToClipboard; end;
+procedure TTyCustomEdit.TeCopy;                          begin CopyToClipboard; end;
+procedure TTyCustomEdit.TePaste;                         begin PasteFromClipboard; end;
+procedure TTyCustomEdit.TeSelectAll;                     begin SelectAll; end;
+function TTyCustomEdit.TeCanUndo: Boolean;               begin Result := CanUndo; end;
+function TTyCustomEdit.TeCanRedo: Boolean;               begin Result := CanRedo; end;
+function TTyCustomEdit.TeHasSelection: Boolean;          begin Result := HasSelection; end;
 // Route through the virtual ReadClipboardText so headless tests can stub the clipboard;
 // production reads Clipboard.AsText (consistent with TyClipboardHasText).
-function TTyEdit.TeCanPaste: Boolean;              begin Result := ReadClipboardText <> ''; end;
-function TTyEdit.TeHasText: Boolean;               begin Result := UTF8Length(FText) > 0; end;
-function TTyEdit.TeIsReadOnly: Boolean;            begin Result := FReadOnly; end;
+function TTyCustomEdit.TeCanPaste: Boolean;              begin Result := ReadClipboardText <> ''; end;
+function TTyCustomEdit.TeHasText: Boolean;               begin Result := UTF8Length(FText) > 0; end;
+function TTyCustomEdit.TeIsReadOnly: Boolean;            begin Result := FReadOnly; end;
 
 // ---- ITyImeEditable (macOS IME composition seam; see tyControls.CocoaWS) ----
 
-function  TTyEdit.ImeTargetControl: TWinControl;   begin Result := Self; end;
-function  TTyEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not Enabled); end;
-function  TTyEdit.ImeCaretBoundClient: TRect;      begin Result := GetImeCaretRect; end;
-function  TTyEdit.ImeCaretIndex: Integer;          begin Result := SelStart; end;
+function  TTyCustomEdit.ImeTargetControl: TWinControl;   begin Result := Self; end;
+function  TTyCustomEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not Enabled); end;
+function  TTyCustomEdit.ImeCaretBoundClient: TRect;      begin Result := GetImeCaretRect; end;
+function  TTyCustomEdit.ImeCaretIndex: Integer;          begin Result := SelStart; end;
 // Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
 // pre-composition text, FSuspendUndo then swallows every per-keystroke push + OnChange until End fires.
-procedure TTyEdit.ImeSessionBegin;
+procedure TTyCustomEdit.ImeSessionBegin;
 begin
   BeginUndoStep(uskTyping);
   FSuspendUndo := True;
@@ -819,8 +835,8 @@ begin
   // not our control's), so delete it here before the first intermediate text lands at the caret.
   if HasSelection then DeleteSelection;
 end;
-procedure TTyEdit.ImeSessionEnd;                   begin FSuspendUndo := False; DoChange; end;
-procedure TTyEdit.ImeReplace(AStart, ALen: Integer; const AText: string);
+procedure TTyCustomEdit.ImeSessionEnd;                   begin FSuspendUndo := False; DoChange; end;
+procedure TTyCustomEdit.ImeReplace(AStart, ALen: Integer; const AText: string);
 begin
   // Replace [AStart, AStart+ALen) with AText, reusing the same private mutators HandleImeCommit uses
   // (they self-filter + collapse the anchor). Runs under the session FSuspendUndo, so no extra steps.
@@ -836,7 +852,7 @@ begin
 end;
 
 {$IFDEF LCLCocoa}
-procedure TTyEdit.CocoaImComposition(var Message: TLMessage);
+procedure TTyCustomEdit.CocoaImComposition(var Message: TLMessage);
 begin
   // WParam 0 = IM_MESSAGE_WPARAM_GET_IME_HANDLER (LCL-Cocoa wants our ICocoaIMEControl); 1 = lookup-word (unused).
   if Message.WParam = 0 then Message.Result := PtrInt(FCocoaIme)
@@ -846,12 +862,12 @@ end;
 
 // ---- Selection read helpers ----
 
-function TTyEdit.HasSelection: Boolean;
+function TTyCustomEdit.HasSelection: Boolean;
 begin
   Result := FCaret <> FSelAnchor;
 end;
 
-function TTyEdit.GetSelStart: Integer;
+function TTyCustomEdit.GetSelStart: Integer;
 begin
   if FCaret < FSelAnchor then
     Result := FCaret
@@ -859,17 +875,17 @@ begin
     Result := FSelAnchor;
 end;
 
-function TTyEdit.GetSelLength: Integer;
+function TTyCustomEdit.GetSelLength: Integer;
 begin
   Result := Abs(FCaret - FSelAnchor);
 end;
 
-function TTyEdit.GetSelText: string;
+function TTyCustomEdit.GetSelText: string;
 begin
   Result := UTF8Copy(FText, SelStart + 1, SelLength);
 end;
 
-procedure TTyEdit.SetSelStart(const AValue: Integer);
+procedure TTyCustomEdit.SetSelStart(const AValue: Integer);
 var
   V, Len: Integer;
 begin
@@ -888,7 +904,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetSelLength(const AValue: Integer);
+procedure TTyCustomEdit.SetSelLength(const AValue: Integer);
 var
   SS, V, Len: Integer;
 begin
@@ -908,7 +924,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetSelText(const AValue: string);
+procedure TTyCustomEdit.SetSelText(const AValue: string);
 var
   TextBefore: string;
 begin
@@ -931,7 +947,7 @@ begin
     DoChange;
 end;
 
-procedure TTyEdit.SelectAll;
+procedure TTyCustomEdit.SelectAll;
 begin
   BreakCoalescing;
   FSelAnchor := 0;
@@ -942,12 +958,12 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.Clear;
+procedure TTyCustomEdit.Clear;
 begin
   Text := '';
 end;
 
-procedure TTyEdit.ClearSelection;
+procedure TTyCustomEdit.ClearSelection;
 begin
   { Deletes, as LCL does. DeleteSelection already exists and carries the undo step, the
     caret move and the change notification, so this is a rename of intent, not a second
@@ -958,7 +974,7 @@ begin
     CollapseSelection;
 end;
 
-procedure TTyEdit.CollapseSelection;
+procedure TTyCustomEdit.CollapseSelection;
 begin
   BreakCoalescing;
   FSelAnchor := FCaret;
@@ -968,7 +984,7 @@ end;
 
 // ---- Internal mutators ----
 
-procedure TTyEdit.DeleteSelection;
+procedure TTyCustomEdit.DeleteSelection;
 var
   SS, SL: Integer;
   Before, After: string;
@@ -992,7 +1008,7 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.DeleteWordBackward;
+procedure TTyCustomEdit.DeleteWordBackward;
 var
   t, Len: Integer;
   Before, After: string;
@@ -1017,7 +1033,7 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.DeleteWordForward;
+procedure TTyCustomEdit.DeleteWordForward;
 var
   t, Len: Integer;
   Before, After: string;
@@ -1042,12 +1058,12 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.SetText(const AValue: TCaption);
+procedure TTyCustomEdit.SetText(const AValue: TCaption);
 begin
   SetTextInternal(AValue, True);   // the published writer is by definition programmatic
 end;
 
-procedure TTyEdit.SetTextInternal(const AValue: TCaption; AByCode: Boolean);
+procedure TTyCustomEdit.SetTextInternal(const AValue: TCaption; AByCode: Boolean);
 var
   APPI: Integer;
 begin
@@ -1071,7 +1087,7 @@ begin
   if AByCode then FModified := False;
 end;
 
-procedure TTyEdit.SetCaretPos(AValue: Integer);
+procedure TTyCustomEdit.SetCaretPos(AValue: Integer);
 var
   Len: Integer;
 begin
@@ -1088,20 +1104,20 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetReadOnly(const AValue: Boolean);
+procedure TTyCustomEdit.SetReadOnly(const AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
 end;
 
-procedure TTyEdit.SetMaxLength(const AValue: Integer);
+procedure TTyCustomEdit.SetMaxLength(const AValue: Integer);
 begin
   if FMaxLength = AValue then Exit;
   FMaxLength := AValue;
 end;
 
-procedure TTyEdit.SetPasswordChar(const AValue: string);
+procedure TTyCustomEdit.SetPasswordChar(const AValue: string);
 var
   V: string;
 begin
@@ -1128,7 +1144,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetEchoMode(const AValue: TEchoMode);
+procedure TTyCustomEdit.SetEchoMode(const AValue: TEchoMode);
 begin
   if FEchoMode = AValue then Exit;
   FEchoMode := AValue;
@@ -1144,21 +1160,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetHideSelection(const AValue: Boolean);
+procedure TTyCustomEdit.SetHideSelection(const AValue: Boolean);
 begin
   if FHideSelection = AValue then Exit;
   FHideSelection := AValue;
   Invalidate;
 end;
 
-procedure TTyEdit.SetTextHint(const AValue: TCaption);
+procedure TTyCustomEdit.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;
   if FText = '' then Invalidate;
 end;
 
-procedure TTyEdit.SetAlignment(const AValue: TAlignment);
+procedure TTyCustomEdit.SetAlignment(const AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
@@ -1167,7 +1183,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetCharCase(const AValue: TEditCharCase);
+procedure TTyCustomEdit.SetCharCase(const AValue: TEditCharCase);
 begin
   if FCharCase = AValue then Exit;
   FCharCase := AValue;
@@ -1181,7 +1197,7 @@ begin
   end;
 end;
 
-function TTyEdit.ApplyCharCase(const AStr: string): string;
+function TTyCustomEdit.ApplyCharCase(const AStr: string): string;
 begin
   case FCharCase of
     ecUppercase: Result := UTF8UpperCase(AStr);
@@ -1193,7 +1209,7 @@ end;
 
 // ---- Width cache helpers ----
 
-procedure TTyEdit.InvalidateWidthCache;
+procedure TTyCustomEdit.InvalidateWidthCache;
 begin
   FWidthCacheValid := False;
   { The gate's answer and the run table both hang off the TEXT, and this is the one call
@@ -1209,7 +1225,7 @@ begin
   FCaretAfterPrev := True;
 end;
 
-function TTyEdit.EffectiveFontSize(const S: TTyStyleSet): Integer;
+function TTyCustomEdit.EffectiveFontSize(const S: TTyStyleSet): Integer;
 begin
   // Route through the shared resolver so a skin that suppresses TyEdit's font-size gets the
   // theme's --font-size-base (matching default), not a hardcoded 12pt that reads as enlarged.
@@ -1218,7 +1234,7 @@ end;
 
 // ---- Text measurement helpers ----
 
-function TTyEdit.TextStartX(APPI: Integer): Integer;
+function TTyCustomEdit.TextStartX(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
 begin
@@ -1227,7 +1243,7 @@ begin
   Result := MulDiv(S.Padding.Left, APPI, 96);
 end;
 
-function TTyEdit.AlignOffset(APPI: Integer): Integer;
+function TTyCustomEdit.AlignOffset(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   Widths: TTyIntArray;
@@ -1252,17 +1268,17 @@ begin
   end;
 end;
 
-function TTyEdit.RightReserve(APPI: Integer): Integer;
+function TTyCustomEdit.RightReserve(APPI: Integer): Integer;
 begin
   Result := 0;   // plain edit reserves nothing on the right (byte-identical)
 end;
 
-procedure TTyEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);
 begin
   // default: no trailing widget
 end;
 
-function TTyEdit.TrailingZone(APPI: Integer): TRect;
+function TTyCustomEdit.TrailingZone(APPI: Integer): TRect;
 var
   S: TTyStyleSet;
 begin
@@ -1271,7 +1287,7 @@ begin
     MulDiv(S.Padding.Top, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96));
 end;
 
-function TTyEdit.DisplayText: string;
+function TTyCustomEdit.DisplayText: string;
 var
   i, n: Integer;
 begin
@@ -1286,7 +1302,7 @@ begin
     Result := Result + FPasswordChar;
 end;
 
-function TTyEdit.MeasureCodepointWidths(APPI: Integer): TTyIntArray;
+function TTyCustomEdit.MeasureCodepointWidths(APPI: Integer): TTyIntArray;
 // Returns an array of Length=UTF8Length(FText)+1 cumulative x positions (in px)
 // relative to the text start, measured on a shared lazy bitmap.
 // The result is cached; rebuilds when font/ppi/text/passwordchar change.
@@ -1374,7 +1390,7 @@ end;
 // through TTyPainter.TextCaretX and requires the same pixel for every index the painter can
 // express, so the two cannot drift apart in silence.
 
-procedure TTyEdit.EnsureBidiLayout(APPI: Integer);
+procedure TTyCustomEdit.EnsureBidiLayout(APPI: Integer);
 var
   S: TTyStyleSet;
   EffSize, i, r, n, a, b, x: Integer;
@@ -1498,7 +1514,7 @@ begin
   FBidiActive := Length(FBidiRuns) > 0;
 end;
 
-function TTyEdit.BidiRunEdgeX(ARun, AIndex: Integer): Integer;
+function TTyCustomEdit.BidiRunEdgeX(ARun, AIndex: Integer): Integer;
 begin
   { At the run's logical END only Trail was written from this run; everywhere else Lead was.
     (Both arrays hold the same number except at a direction boundary.) }
@@ -1508,7 +1524,7 @@ begin
     Result := FBidiLead[AIndex];
 end;
 
-function TTyEdit.BidiCaretRun: Integer;
+function TTyCustomEdit.BidiCaretRun: Integer;
 var
   r: Integer;
 begin
@@ -1527,7 +1543,7 @@ begin
   Result := -1;
 end;
 
-function TTyEdit.BidiNeighbourRun(ARun, ADir: Integer): Integer;
+function TTyCustomEdit.BidiNeighbourRun(ARun, ADir: Integer): Integer;
 var
   i: Integer;
 begin
@@ -1545,18 +1561,18 @@ begin
     end;
 end;
 
-function TTyEdit.UsesBidiCaret(APPI: Integer): Boolean;
+function TTyCustomEdit.UsesBidiCaret(APPI: Integer): Boolean;
 begin
   EnsureBidiLayout(APPI);
   Result := FBidiActive;
 end;
 
-procedure TTyEdit.DefaultCaretAffinity;
+procedure TTyCustomEdit.DefaultCaretAffinity;
 begin
   FCaretAfterPrev := True;
 end;
 
-function TTyEdit.MoveCaretVisual(ADir, APPI: Integer): Boolean;
+function TTyCustomEdit.MoveCaretVisual(ADir, APPI: Integer): Boolean;
 var
   Len, r, q, j: Integer;
 begin
@@ -1608,7 +1624,7 @@ end;
 
 // ---- Scroll helpers ----
 
-procedure TTyEdit.ClampScrollX(APPI: Integer);
+procedure TTyCustomEdit.ClampScrollX(APPI: Integer);
 var
   S: TTyStyleSet;
   Widths: TTyIntArray;
@@ -1629,7 +1645,7 @@ begin
   if FScrollX < 0 then FScrollX := 0;
 end;
 
-procedure TTyEdit.EnsureCaretVisible(APPI: Integer);
+procedure TTyCustomEdit.EnsureCaretVisible(APPI: Integer);
 var
   S: TTyStyleSet;
   Widths: TTyIntArray;
@@ -1675,7 +1691,7 @@ begin
   UpdateImeCaret;
 end;
 
-procedure TTyEdit.UpdateImeCaret;
+procedure TTyCustomEdit.UpdateImeCaret;
 { Keep the Windows IME composition window pinned to the on-screen caret so CJK
   candidates appear at the caret, not the screen origin (we draw our own caret, so
   there is no system caret for the IME to track). Geometry mirrors RenderTo. }
@@ -1696,7 +1712,7 @@ end;
 // unit-testable like TyScrollThumbRect. Indices are codepoint counts in
 // 0..UTF8Length(FText). cp@k denotes UTF8Copy(FText, k+1, 1).
 
-function TTyEdit.IsWordCodepoint(const CP: string): Boolean;
+function TTyCustomEdit.IsWordCodepoint(const CP: string): Boolean;
 // A word codepoint is anything that is not whitespace and not ASCII punctuation.
 // Whitespace: #32 (space), #9 (tab), U+00A0 (no-break space).
 // ASCII punctuation: ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ ` { | } ~
@@ -1716,7 +1732,7 @@ begin
   Result := True;
 end;
 
-function TTyEdit.NextWordBoundary(AIdx: Integer): Integer;
+function TTyCustomEdit.NextWordBoundary(AIdx: Integer): Integer;
 var
   i, Len: Integer;
 begin
@@ -1732,7 +1748,7 @@ begin
   Result := i;
 end;
 
-function TTyEdit.PrevWordBoundary(AIdx: Integer): Integer;
+function TTyCustomEdit.PrevWordBoundary(AIdx: Integer): Integer;
 var
   i, Len: Integer;
 begin
@@ -1750,14 +1766,14 @@ end;
 
 // ---- Mouse caret hit-test ----
 
-function TTyEdit.CaretIndexAtX(AX: Integer): Integer;
+function TTyCustomEdit.CaretIndexAtX(AX: Integer): Integer;
 var
   Ignored: Boolean;
 begin
   Result := CaretIndexAtX(AX, Ignored);
 end;
 
-function TTyEdit.CaretIndexAtX(AX: Integer; out AAfterPrev: Boolean): Integer;
+function TTyCustomEdit.CaretIndexAtX(AX: Integer; out AAfterPrev: Boolean): Integer;
 var
   APPI: Integer;
   Widths: TTyIntArray;
@@ -1840,7 +1856,7 @@ end;
 
 // ---- Caret pixel position helper ----
 
-function TTyEdit.CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
+function TTyCustomEdit.CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
 var
   Widths: TTyIntArray;
   Len: Integer;
@@ -1855,7 +1871,7 @@ begin
   Result := Result + Widths[ACaretIndex];
 end;
 
-function TTyEdit.CaretDrawXAt(ACaretIndex, APPI: Integer; AAfterPrev: Boolean): Integer;
+function TTyCustomEdit.CaretDrawXAt(ACaretIndex, APPI: Integer; AAfterPrev: Boolean): Integer;
 var
   Len: Integer;
 begin
@@ -1875,31 +1891,31 @@ begin
     Result := TextStartX(APPI) + FBidiLead[ACaretIndex];
 end;
 
-function TTyEdit.CaretDrawX(APPI: Integer): Integer;
+function TTyCustomEdit.CaretDrawX(APPI: Integer): Integer;
 begin
   Result := CaretDrawXAt(FCaret, APPI, FCaretAfterPrev);
 end;
 
 // ---- Clipboard implementation ----
 
-function TTyEdit.ReadClipboardText: string;
+function TTyCustomEdit.ReadClipboardText: string;
 begin
   Result := Clipboard.AsText;
 end;
 
-procedure TTyEdit.WriteClipboardText(const S: string);
+procedure TTyCustomEdit.WriteClipboardText(const S: string);
 begin
   Clipboard.AsText := S;
 end;
 
-procedure TTyEdit.CopyToClipboard;
+procedure TTyCustomEdit.CopyToClipboard;
 begin
   if FPasswordChar <> '' then Exit;
   if not HasSelection then Exit;
   WriteClipboardText(SelText);
 end;
 
-procedure TTyEdit.CutToClipboard;
+procedure TTyCustomEdit.CutToClipboard;
 begin
   if FPasswordChar <> '' then Exit;
   if FReadOnly then begin CopyToClipboard; Exit; end;
@@ -1915,7 +1931,7 @@ begin
   DoChange;  // composite op fires OnChange once (inner DeleteSelection was suppressed)
 end;
 
-procedure TTyEdit.PasteFromClipboard;
+procedure TTyCustomEdit.PasteFromClipboard;
 var
   S: string;
   i: Integer;
@@ -1952,12 +1968,12 @@ begin
     DoChange;
 end;
 
-function TTyEdit.FilterInsert(const AText: string): string;
+function TTyCustomEdit.FilterInsert(const AText: string): string;
 begin
   Result := AText;   // no filtering by default => plain edits are byte-identical
 end;
 
-procedure TTyEdit.InjectStringAt(const AStr: string);
+procedure TTyCustomEdit.InjectStringAt(const AStr: string);
 var Before, After, Ins: string; InsLen, room, APPI: Integer;
 begin
   if AStr = '' then Exit;
@@ -1991,7 +2007,7 @@ end;
 
 // ---- Mouse overrides ----
 
-procedure TTyEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   Clicks: Integer;
 begin
@@ -2052,7 +2068,7 @@ begin
   end;
 end;
 
-procedure TTyEdit.SelectWordAt(AIdx: Integer);
+procedure TTyCustomEdit.SelectWordAt(AIdx: Integer);
 var
   Len, p, ws, we: Integer;
   refWord: Boolean;
@@ -2086,7 +2102,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+procedure TTyCustomEdit.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 begin
   inherited DoContextPopup(MousePos, Handled);   // fires OnContextPopup (it may set Handled)
   if Handled then Exit;
@@ -2098,7 +2114,7 @@ begin
   Handled := True;
 end;
 
-procedure TTyEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
@@ -2112,7 +2128,7 @@ begin
   end;
 end;
 
-procedure TTyEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
@@ -2129,7 +2145,7 @@ begin
   end;
 end;
 
-procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
+procedure TTyCustomEdit.InjectKey(const AChar: TUTF8Char);
 var
   Before, After, TextBefore, Ch: string;
   APPI: Integer;
@@ -2186,7 +2202,7 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.InjectBackspace;
+procedure TTyCustomEdit.InjectBackspace;
 var
   Len: Integer;
   Before, After: string;
@@ -2215,7 +2231,7 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.InjectDelete;
+procedure TTyCustomEdit.InjectDelete;
 var
   Len: Integer;
   Before, After: string;
@@ -2244,7 +2260,7 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
 begin
@@ -2268,7 +2284,7 @@ end;
   (String[7], ~2 CJK chars); our Qt event filter (tyControls.QtWS) bypasses that and calls this with
   the whole commitString. Mirrors Paste: one undo step, replace any selection, strip CR/LF, fire
   OnChange once. }
-procedure TTyEdit.HandleImeCommit(const ACommitUtf8: string);
+procedure TTyCustomEdit.HandleImeCommit(const ACommitUtf8: string);
 var
   TextBefore, Filtered: string;
   i: Integer;
@@ -2294,7 +2310,7 @@ begin
   if FText <> TextBefore then DoChange;
 end;
 
-function TTyEdit.GetImeCaretRect: TRect;
+function TTyCustomEdit.GetImeCaretRect: TRect;
 begin
   // Empty rect when not focused/painted -> the IME hook declines and Qt's default position stands.
   if (not HandleAllocated) or (not Focused) then
@@ -2302,7 +2318,7 @@ begin
   Result := FImeCaretRect;
 end;
 
-procedure TTyEdit.InitializeWnd;
+procedure TTyCustomEdit.InitializeWnd;
 begin
   inherited InitializeWnd;
   // Qt6: intercept the native input method so (1) a multi-char CJK commit isn't truncated to ~2 chars
@@ -2313,13 +2329,13 @@ begin
   FImeHook := TyImeInstall(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
-procedure TTyEdit.DestroyWnd;
+procedure TTyCustomEdit.DestroyWnd;
 begin
   TyImeUninstall(FImeHook);
   inherited DestroyWnd;
 end;
 
-procedure TTyEdit.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomEdit.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Len: Integer;
   Extending: Boolean;
@@ -2596,7 +2612,7 @@ begin
   end;
 end;
 
-procedure TTyEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, SelStyle: TTyStyleSet;
@@ -2767,7 +2783,7 @@ begin
   end;
 end;
 
-procedure TTyEdit.Paint;
+procedure TTyCustomEdit.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

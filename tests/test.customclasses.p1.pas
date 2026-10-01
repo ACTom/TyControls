@@ -25,7 +25,8 @@ uses
   Classes, SysUtils, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   test.customclasses,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
-  tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag;
+  tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
+  tyControls.MaskEdit;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -54,6 +55,9 @@ type
     { Task 3: labels }
     procedure TestThirdLabel;
     procedure TestThirdTag;
+    { Task 4: edits I }
+    procedure TestThirdEdit;
+    procedure TestThirdMaskEdit;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -82,6 +86,20 @@ type
     property Closable;
   end;
 
+  TThirdEdit = class(TTyCustomEdit)
+  published
+    property Text;
+    property ReadOnly;
+  end;
+
+  { Mask rather than EditMask: EditMask is the LCL-spelled alias and is `stored False`, so it
+    could not show up in a streamed text. }
+  TThirdMaskEdit = class(TTyCustomMaskEdit)
+  published
+    property Mask;
+    property Text;
+  end;
+
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
 function StreamedText(AComp: TComponent): string;
 { Stream ASrc and read it back into ADst. }
@@ -104,6 +122,13 @@ type
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
     procedure SetLayoutTo(AValue: TTextLayout);
     function LayoutNow: TTextLayout;
+  end;
+
+  { SpaceChar is protected on the custom class (TCustomMaskEdit keeps it protected). }
+  TP1MaskCracker = class(TTyCustomMaskEdit)
+  public
+    procedure SetSpace(AValue: Char);
+    function SpaceNow: Char;
   end;
 
   TP1ToolBar = class(TTyToolBar)
@@ -137,6 +162,16 @@ end;
 function TP1LabelCracker.LayoutNow: TTextLayout;
 begin
   Result := Layout;
+end;
+
+procedure TP1MaskCracker.SetSpace(AValue: Char);
+begin
+  SpaceChar := AValue;
+end;
+
+function TP1MaskCracker.SpaceNow: Char;
+begin
+  Result := SpaceChar;
 end;
 
 procedure TP1ToolBar.ForceLayout;
@@ -539,7 +574,78 @@ begin
   AssertFalse('T-v: Closable is public through a TTyCustomTag reference', third.Closable);
 end;
 
+{ ------------------------------------------------------------------ Task 4: edits I }
+
+procedure TTyCustomClassesP1Test.TestThirdEdit;
+var
+  third, back: TThirdEdit;
+  own: TTyEdit;
+  c: TTyCustomEdit;
+  ime: ITyImeEditable;
+  acts: ITyTextEditActions;
+begin
+  third := TThirdEdit.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdEdit, ['Text', 'ReadOnly']);
+  third.Text := 'abc';
+  third.ReadOnly := True;
+  third.MaxLength := 5;
+  CheckStreamText(third, ['Text', 'ReadOnly'], 'MaxLength');
+  back := TThirdEdit.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Text round-trips', 'abc', back.Text);
+  AssertTrue('T-c: ReadOnly round-trips', back.ReadOnly);
+  AssertEquals('T-c: the unpublished MaxLength stayed at its default', 0, back.MaxLength);
+  own := TTyEdit.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdEdit, ['Text', 'ReadOnly']);
+  { The edit is a tab stop and says so in its declared default; that redeclaration lives in
+    the custom class, so a mimic that publishes TabStop gets the same default. }
+  AssertTrue('T-e: the mimic is a tab stop, like TTyEdit', third.TabStop);
+  { T-f: the edit interfaces are on the custom class's header, so the mimic has them -- the
+    shared right-click menu and the IME bridge both find a third party's edit. }
+  AssertTrue('T-f: ITyImeEditable', Supports(third, ITyImeEditable, ime));
+  AssertTrue('T-f: ITyTextEditActions', Supports(third, ITyTextEditActions, acts));
+  ime := nil;
+  acts := nil;
+  c := third;
+  c.MaxLength := 3;
+  AssertEquals('T-v: MaxLength is public through a TTyCustomEdit reference', 3, third.MaxLength);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdMaskEdit;
+var
+  third, back: TThirdMaskEdit;
+  own: TTyMaskEdit;
+begin
+  third := TThirdMaskEdit.Create(FForm);
+  third.Parent := FForm;
+  own := TTyMaskEdit.Create(FForm);
+  own.Parent := FForm;
+  CheckPublishesOnly(TThirdMaskEdit, ['Mask', 'Text']);
+  { Text's masked setter is the redeclaration `property Text write SetMaskedText`; it sits in
+    the custom class, so assigning through the mimic is filtered exactly like TTyMaskEdit. }
+  third.Mask := '00/00/0000';
+  own.Mask := '00/00/0000';
+  third.Text := '12345678';
+  own.Text := '12345678';
+  AssertEquals('the mimic''s Text goes through the masked setter', own.Text, third.Text);
+  AssertEquals('which lays the digits into the mask', '12/34/5678', third.Text);
+  TP1MaskCracker(third).SetSpace('*');
+  CheckStreamText(third, ['Mask', 'Text'], 'SpaceChar');
+  back := TThirdMaskEdit.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Mask round-trips', '00/00/0000', back.Mask);
+  AssertEquals('T-c: Text round-trips', '12/34/5678', back.Text);
+  AssertEquals('T-c: the unpublished SpaceChar stayed at its default', TyMaskDefaultBlank,
+    TP1MaskCracker(back).SpaceNow);
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdMaskEdit, ['Mask', 'Text']);
+end;
+
 initialization
-  RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag]);
+  RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
+    TThirdMaskEdit]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

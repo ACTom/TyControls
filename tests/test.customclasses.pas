@@ -1096,14 +1096,14 @@ initialization
     'TTyDropDownButton', 'TTyMenuButton', 'TTyColorButton', 'TTyButtonGroup',
     // T3 labels
     'TTyLabel', 'TTyHtmlLabel', 'TTyLinkLabel', 'TTyShadowLabel', 'TTyGlowLabel', 'TTyTag',
-    'TTyBadge']);
+    'TTyBadge',
+    // T4 edits I
+    'TTyEdit', 'TTyNumericEdit', 'TTyCurrencyEdit', 'TTyMaskEdit', 'TTyURLEdit', 'TTyComboEdit',
+    'TTyTrackEdit', 'TTyCalcEdit', 'TTyCalcCurrencyEdit']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T4 edits I
-    'TTyEdit', 'TTyNumericEdit', 'TTyCurrencyEdit', 'TTyMaskEdit', 'TTyURLEdit', 'TTyComboEdit',
-    'TTyTrackEdit', 'TTyCalcEdit', 'TTyCalcCurrencyEdit',
     // T5 edits II
     'TTyCalculator', 'TTyMemo', 'TTySpinEdit', 'TTyFloatSpinEdit', 'TTyUpDown',
     // T6 choice

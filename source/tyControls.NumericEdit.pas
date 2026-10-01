@@ -16,12 +16,12 @@ function TyParseNumber(const AText: string; AThousands, ADecimalSep: Char;
   out AValue: Double): Boolean;
 
 type
-  { A numeric edit: subclasses TTyEdit and reuses its whole text engine + the 'TyEdit'
+  { A numeric edit: descends from TTyCustomEdit and reuses its whole text engine + the 'TyEdit'
     theme. Input is filtered to digits / sign / decimal separator. The field is edited
     RAW (no grouping) while focused and re-displayed GROUPED on blur, so the caret never
     fights a live-reformatted string. Value is the typed accessor; MinValue/MaxValue
     clamp on blur (only when MaxValue > MinValue). }
-  TTyNumericEdit = class(TTyEdit)
+  TTyCustomNumericEdit = class(TTyCustomEdit)
   private
     FDecimals: Integer;
     FThousands: Char;
@@ -49,11 +49,83 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     property Value: Double read GetValue write SetValue;
-  published
     property Decimals: Integer read FDecimals write SetDecimals default 2;
     property UseThousands: Boolean read FUseThousands write SetUseThousands default True;
     property MinValue: Double read FMinValue write SetMinValue;
     property MaxValue: Double read FMaxValue write SetMaxValue;
+  end;
+
+  { TTyNumericEdit publishes TTyCustomNumericEdit's properties; everything lives in TTyCustomNumericEdit. }
+  TTyNumericEdit = class(TTyCustomNumericEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
   end;
 
 implementation
@@ -122,9 +194,9 @@ begin
   if not Result then AValue := 0;
 end;
 
-{ TTyNumericEdit }
+{ TTyCustomNumericEdit }
 
-constructor TTyNumericEdit.Create(AOwner: TComponent);
+constructor TTyCustomNumericEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FDecimals := 2;
@@ -137,7 +209,7 @@ begin
   Text := Formatted(0, True);
 end;
 
-function TTyNumericEdit.ClampVal(AValue: Double): Double;
+function TTyCustomNumericEdit.ClampVal(AValue: Double): Double;
 begin
   Result := AValue;
   if FMaxValue > FMinValue then
@@ -147,24 +219,24 @@ begin
   end;
 end;
 
-function TTyNumericEdit.Formatted(AValue: Double; AGroup: Boolean): string;
+function TTyCustomNumericEdit.Formatted(AValue: Double; AGroup: Boolean): string;
 begin
   Result := TyFormatNumber(AValue, FDecimals, FThousands, FDecimalSep,
     AGroup and FUseThousands);
 end;
 
-function TTyNumericEdit.GetValue: Double;
+function TTyCustomNumericEdit.GetValue: Double;
 begin
   if not TyParseNumber(Text, FThousands, FDecimalSep, Result) then Result := 0;
   Result := ClampVal(Result);
 end;
 
-procedure TTyNumericEdit.SetValue(const AValue: Double);
+procedure TTyCustomNumericEdit.SetValue(const AValue: Double);
 begin
   Text := Formatted(ClampVal(AValue), not Focused);
 end;
 
-procedure TTyNumericEdit.Reformat(AGroup: Boolean);
+procedure TTyCustomNumericEdit.Reformat(AGroup: Boolean);
 var
   WasModified: Boolean;
 begin
@@ -180,7 +252,7 @@ begin
   Modified := WasModified;
 end;
 
-procedure TTyNumericEdit.SetDecimals(const AValue: Integer);
+procedure TTyCustomNumericEdit.SetDecimals(const AValue: Integer);
 var v: Integer;
 begin
   v := AValue;
@@ -190,28 +262,28 @@ begin
   if not Focused then Reformat(True);
 end;
 
-procedure TTyNumericEdit.SetUseThousands(const AValue: Boolean);
+procedure TTyCustomNumericEdit.SetUseThousands(const AValue: Boolean);
 begin
   if FUseThousands = AValue then Exit;
   FUseThousands := AValue;
   if not Focused then Reformat(True);
 end;
 
-procedure TTyNumericEdit.SetMinValue(const AValue: Double);
+procedure TTyCustomNumericEdit.SetMinValue(const AValue: Double);
 begin
   if FMinValue = AValue then Exit;
   FMinValue := AValue;
   if not Focused then Reformat(True);
 end;
 
-procedure TTyNumericEdit.SetMaxValue(const AValue: Double);
+procedure TTyCustomNumericEdit.SetMaxValue(const AValue: Double);
 begin
   if FMaxValue = AValue then Exit;
   FMaxValue := AValue;
   if not Focused then Reformat(True);
 end;
 
-procedure TTyNumericEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomNumericEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var c: Char;
 begin
   if Length(UTF8Key) = 1 then
@@ -226,13 +298,13 @@ begin
     UTF8Key := '';      // reject multi-byte (non-numeric) input
 end;
 
-procedure TTyNumericEdit.DoEnter;
+procedure TTyCustomNumericEdit.DoEnter;
 begin
   Reformat(False);      // strip grouping so the raw number is easy to edit
   inherited DoEnter;
 end;
 
-procedure TTyNumericEdit.DoExit;
+procedure TTyCustomNumericEdit.DoExit;
 begin
   { GetValue already clamps, so this IS Reformat(True) — routed through it rather than
     spelled out again so the blur re-display gets the same dirty-flag treatment as every

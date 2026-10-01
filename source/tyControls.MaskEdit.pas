@@ -99,7 +99,7 @@ function TyMaskNextEditable(const AMask: string; AFrom: Integer): Integer;
 function TyMaskPrevEditable(const AMask: string; ABefore: Integer): Integer;
 
 type
-  { A masked edit (date / phone / IP ...). Subclasses TTyEdit and reuses its text engine +
+  { A masked edit (date / phone / IP ...). Descends from TTyCustomEdit and reuses its text engine +
     'TyEdit' theme. The displayed Text is always the whole mask -- literals in place and
     the placeholder in every slot not yet filled -- so it is addressable by position, and
     entry is IN PLACE: the caret can sit in any editable slot and typing overwrites that
@@ -107,7 +107,7 @@ type
 
     SpaceChar = #0 removes the placeholder, and with it the slots a caret could sit in;
     that mode keeps the older append-only behaviour. }
-  TTyMaskEdit = class(TTyEdit)
+  TTyCustomMaskEdit = class(TTyCustomEdit)
   private
     FMask: string;
     FSpec: TTyMaskSpec;
@@ -185,7 +185,28 @@ type
       implicit default is the other way, but LCL is answering about its Text and ours is
       the display string, so there is nothing to be compatible with. }
     property MaskSavesLiterals: Boolean read GetMaskSavesLiterals;
-  published
+    { Typing (UTF8KeyPress), Delete/Backspace (KeyDown) and paste (FilterInsert) were all
+      overridden. The plainest entry point of all was not: `Ed.Text := 'hello world'` went
+      straight to TTyEdit's setter, so a phone field held a sentence, IsComplete then
+      answered about a string the mask had never approved -- it counted slot POSITIONS, not
+      legal characters, so '000-000' holding 'abc-def' reported COMPLETE -- and the
+      caller's TyMaskExtract read back 'abcdef'.
+
+      An assignment is now judged exactly as a paste into an empty field is: feed the
+      incoming characters through the free slots in turn, keep what fits, drop the rest,
+      rebuild the literals. One rule for both, so `Ed.Text := S` and Ctrl+V of the same S
+      can never disagree.
+
+      It never rejects and never raises -- LCL does not either (maskedit.pp:1656
+      ApplyMaskToText, whose own comment ends "The text that is set, does not need to
+      validate"; it pads and truncates instead). We do both.
+
+      Static binding, unavoidable: this is a property override, so it intercepts
+      assignments made through a TTyCustomMaskEdit-typed (or descendant) reference. Casting to
+      the base -- `TTyCustomEdit(M).Text := X` -- still reaches the plain edit's setter unfiltered.
+      Do not do that. }
+    property Text write SetMaskedText;
+  protected
     { THE MASK LANGUAGE.
 
       This is LCL and Delphi's language (maskedit.pp), not the three-code dialect this
@@ -247,27 +268,78 @@ type
       from either failed to compile on the name alone. This is an alias on the same
       field, not a second mask. Not streamed: Mask is the persisted name. }
     property EditMask: string read FMask write SetMask stored False;
-    { Typing (UTF8KeyPress), Delete/Backspace (KeyDown) and paste (FilterInsert) were all
-      overridden. The plainest entry point of all was not: `Ed.Text := 'hello world'` went
-      straight to TTyEdit's setter, so a phone field held a sentence, IsComplete then
-      answered about a string the mask had never approved -- it counted slot POSITIONS, not
-      legal characters, so '000-000' holding 'abc-def' reported COMPLETE -- and the
-      caller's TyMaskExtract read back 'abcdef'.
+  end;
 
-      An assignment is now judged exactly as a paste into an empty field is: feed the
-      incoming characters through the free slots in turn, keep what fits, drop the rest,
-      rebuild the literals. One rule for both, so `Ed.Text := S` and Ctrl+V of the same S
-      can never disagree.
-
-      It never rejects and never raises -- LCL does not either (maskedit.pp:1656
-      ApplyMaskToText, whose own comment ends "The text that is set, does not need to
-      validate"; it pads and truncates instead). We do both.
-
-      Static binding, unavoidable: this is a property override, so it intercepts
-      assignments made through a TTyMaskEdit-typed (or descendant) reference. Casting to
-      the base -- `TTyEdit(M).Text := X` -- still reaches TTyEdit's setter unfiltered.
-      Do not do that. }
-    property Text write SetMaskedText;
+  { TTyMaskEdit publishes TTyCustomMaskEdit's properties; everything lives in TTyCustomMaskEdit. }
+  TTyMaskEdit = class(TTyCustomMaskEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Mask;
+    property SpaceChar;
+    property EditMask;
   end;
 
 implementation
@@ -771,9 +843,9 @@ begin
   end;
 end;
 
-{ ---------------------------------------------------------------------- TTyMaskEdit --- }
+{ ---------------------------------------------------------------- TTyCustomMaskEdit --- }
 
-constructor TTyMaskEdit.Create(AOwner: TComponent);
+constructor TTyCustomMaskEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FSpaceChar := TyMaskDefaultBlank;
@@ -782,27 +854,27 @@ begin
   FSpec := TyMaskParse('');
 end;
 
-function TTyMaskEdit.GetMaskSavesLiterals: Boolean;
+function TTyCustomMaskEdit.GetMaskSavesLiterals: Boolean;
 begin
   Result := FSpec.SaveLiterals;
 end;
 
-function TTyMaskEdit.RawText: string;
+function TTyCustomMaskEdit.RawText: string;
 begin
   Result := ExtractSpec(FSpec, Text, FSpaceChar);
 end;
 
-function TTyMaskEdit.InPlace: Boolean;
+function TTyCustomMaskEdit.InPlace: Boolean;
 begin
   Result := (FMask <> '') and (FSpaceChar <> #0);
 end;
 
-function TTyMaskEdit.ShapedText: string;
+function TTyCustomMaskEdit.ShapedText: string;
 begin
   Result := NormalizeSpec(FSpec, Text, FSpaceChar);
 end;
 
-procedure TTyMaskEdit.Commit(const AText: string; ACaret: Integer);
+procedure TTyCustomMaskEdit.Commit(const AText: string; ACaret: Integer);
 begin
   { Straight to the base writer on purpose: AText is already a display string this mask
     produced, so SetMaskedText would only re-derive it. AByCode=False because this IS the
@@ -812,7 +884,7 @@ begin
   CaretPos := ACaret;
 end;
 
-procedure TTyMaskEdit.BlankRange(var AText: string; AFrom, ATo: Integer);
+procedure TTyCustomMaskEdit.BlankRange(var AText: string; AFrom, ATo: Integer);
 var
   i: Integer;
 begin
@@ -822,7 +894,7 @@ begin
     if not IsLiteralAtSpec(FSpec, i) then AText[i] := FSpaceChar;
 end;
 
-procedure TTyMaskEdit.SetSpaceChar(const AValue: Char);
+procedure TTyCustomMaskEdit.SetSpaceChar(const AValue: Char);
 var
   s, raw: string;
   i, caret: Integer;
@@ -851,7 +923,7 @@ begin
   ApplyRaw(raw);              // and re-render it under the new one
 end;
 
-procedure TTyMaskEdit.SetMask(const AValue: string);
+procedure TTyCustomMaskEdit.SetMask(const AValue: string);
 var
   spec: TTyMaskSpec;
 begin
@@ -865,8 +937,8 @@ begin
     silently undo SpaceChar := #0 on every change of mask. }
   if spec.HasBlank then FSpaceChar := spec.Blank;
   if csLoading in ComponentState then
-    { Streaming order is fixed and against us: Text keeps the RTTI slot it inherited from
-      TTyEdit, so the writer emits it BEFORE this descendant's Mask and the reader has
+    { Streaming order is fixed and against us: Text keeps the RTTI slot the plain edit's
+      published list gives it, so the writer emits it BEFORE this descendant's Mask and the reader has
       already handed it over with no mask in force. Clearing here (below) threw away every
       value designed in the Object Inspector. Re-run it through the new mask instead. }
     SetMaskedText(Text)
@@ -874,7 +946,7 @@ begin
     Text := '';   // a new mask starts empty (predictable; masks are set before use)
 end;
 
-procedure TTyMaskEdit.ApplyRaw(const ARaw: string);
+procedure TTyCustomMaskEdit.ApplyRaw(const ARaw: string);
 begin
   { Entry through the append path: the display is rebuilt from the accepted characters and
     the caret parks on the slot the next one will fill. That is NOT the end of the display
@@ -883,7 +955,7 @@ begin
   Commit(ApplySpec(FSpec, ARaw, FSpaceChar), CaretSlotSpec(FSpec, Length(ARaw)));
 end;
 
-procedure TTyMaskEdit.SetMaskedText(const AValue: TCaption);
+procedure TTyCustomMaskEdit.SetMaskedText(const AValue: TCaption);
 var
   raw: string;
   i, caret: Integer;
@@ -919,7 +991,7 @@ begin
   CaretPos := CaretSlotSpec(FSpec, Length(raw));
 end;
 
-procedure TTyMaskEdit.TypeInPlace(ACh: Char);
+procedure TTyCustomMaskEdit.TypeInPlace(ACh: Char);
 var
   s: string;
   idx, nxt, ss, sl: Integer;
@@ -944,7 +1016,7 @@ begin
   Commit(s, nxt - 1);
 end;
 
-procedure TTyMaskEdit.ErasePlace(AForward: Boolean);
+procedure TTyCustomMaskEdit.ErasePlace(AForward: Boolean);
 var
   s: string;
   idx, ss, sl: Integer;
@@ -967,7 +1039,7 @@ begin
   Commit(s, idx - 1);
 end;
 
-function TTyMaskEdit.PasteInPlace(const AText: string): Boolean;
+function TTyCustomMaskEdit.PasteInPlace(const AText: string): Boolean;
 var
   s: string;
   i, idx, ss, sl: Integer;
@@ -1000,7 +1072,7 @@ begin
   Commit(s, idx - 1);
 end;
 
-procedure TTyMaskEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomMaskEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   raw: string;
   c, o: Char;
@@ -1028,7 +1100,7 @@ begin
   UTF8Key := '';   // always swallow: we manage Text ourselves (also rejects multibyte)
 end;
 
-procedure TTyMaskEdit.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomMaskEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if FMask <> '' then
   begin
@@ -1071,7 +1143,7 @@ begin
   inherited KeyDown(Key, Shift);
 end;
 
-function TTyMaskEdit.FilterInsert(const AText: string): string;
+function TTyCustomMaskEdit.FilterInsert(const AText: string): string;
 var
   raw, keep: string;
 begin
@@ -1092,7 +1164,7 @@ begin
   Result := '';
 end;
 
-procedure TTyMaskEdit.InjectBackspace;
+procedure TTyCustomMaskEdit.InjectBackspace;
 var
   raw: string;
 begin
@@ -1113,7 +1185,7 @@ begin
   ApplyRaw(raw);
 end;
 
-procedure TTyMaskEdit.InjectDelete;
+procedure TTyCustomMaskEdit.InjectDelete;
 begin
   if FMask = '' then
   begin
@@ -1129,17 +1201,17 @@ begin
     InjectBackspace;
 end;
 
-function TTyMaskEdit.IsComplete: Boolean;
+function TTyCustomMaskEdit.IsComplete: Boolean;
 begin
   Result := IsCompleteSpec(FSpec, Text, FSpaceChar);
 end;
 
-function TTyMaskEdit.MaskedValue: string;
+function TTyCustomMaskEdit.MaskedValue: string;
 begin
   Result := RawText;
 end;
 
-procedure TTyMaskEdit.ValidateEdit;
+procedure TTyCustomMaskEdit.ValidateEdit;
 begin
   if FMask = '' then Exit;          // nothing to validate against
   if IsComplete then Exit;
@@ -1147,14 +1219,14 @@ begin
     [Text, FMask]);
 end;
 
-procedure TTyMaskEdit.DoEnter;
+procedure TTyCustomMaskEdit.DoEnter;
 begin
   inherited DoEnter;
   FTextOnEnter := Text;             // the baseline the exit check compares against
   FValidationFailed := False;
 end;
 
-procedure TTyMaskEdit.DoExit;
+procedure TTyCustomMaskEdit.DoExit;
 begin
   { OnExit gets its chance FIRST, exactly as in LCL -- a handler that completes or clears the
     value must be able to do so before anything is raised. }
