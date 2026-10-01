@@ -70,7 +70,7 @@ type
     { Draw the current directory's glyph + clean label (no indentation) into the field. }
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     { The drop-down list draws each row's glyph + indented label. }
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     { Always pick-only -- ignore any attempt to make the field editable. }
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
   public
@@ -462,7 +462,7 @@ begin
     ResolveFontSize(AStyle));
 end;
 
-function TTyCustomShellComboBox.CreatePopupList: TTyListBox;
+function TTyCustomShellComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyShellComboPopupList.Create(Self);
 end;

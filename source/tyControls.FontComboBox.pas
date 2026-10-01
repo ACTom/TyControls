@@ -30,7 +30,7 @@ type
     function GetSelectedFont: string;
     procedure SetSelectedFont(const AValue: string);
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -164,7 +164,7 @@ begin
   if Items.Count > 0 then ItemIndex := 0;
 end;
 
-function TTyCustomFontComboBox.CreatePopupList: TTyListBox;
+function TTyCustomFontComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyFontPopupList.Create(Self);
 end;

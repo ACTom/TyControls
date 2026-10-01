@@ -92,7 +92,7 @@ type
     function RowState(AIndex: Integer): TCheckBoxState;
     function RowEnabled(AIndex: Integer): Boolean;
     procedure DoItemChange(AIndex: Integer); virtual;
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     { A row pick must NOT commit/close — checking is a toggle, and the popup stays open. The
       checkbox toggle + field sync happen in the checklist / PopupCheckClick, so this is a no-op. }
@@ -415,7 +415,7 @@ end;
 
 procedure TTyCustomCheckComboBox.SetState(AIndex: Integer; AValue: TCheckBoxState);
 var
-  lst: TTyListBox;   // PopupList (nil when the dropdown is closed — no side effect)
+  lst: TTyCustomListBox;   // PopupList (nil when the dropdown is closed — no side effect)
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   if GetState(AIndex) = AValue then Exit;
@@ -645,7 +645,7 @@ begin
     PushChecksToList(TTyCheckListBox(PopupList));
 end;
 
-function TTyCustomCheckComboBox.CreatePopupList: TTyListBox;
+function TTyCustomCheckComboBox.CreatePopupList: TTyCustomListBox;
 var lst: TTyCheckComboPopupList;
 begin
   lst := TTyCheckComboPopupList.Create(Self);

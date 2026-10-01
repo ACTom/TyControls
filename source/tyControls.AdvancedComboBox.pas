@@ -45,7 +45,7 @@ type
     FImages: TCustomImageList;
     procedure SetImages(const AValue: TCustomImageList);
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     { Locked to csDropDownList: editable/prefix-filtered csDropDown drives a SINGLE-line
@@ -260,7 +260,7 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);
 end;
 
-function TTyCustomAdvancedComboBox.CreatePopupList: TTyListBox;
+function TTyCustomAdvancedComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyAdvancedComboPopupList.Create(Self);
   Result.ItemHeight := 40;   // taller rows to match the rich two-line layout

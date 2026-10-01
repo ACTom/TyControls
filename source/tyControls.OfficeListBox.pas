@@ -12,7 +12,7 @@ type
     is stored IN Objects[] so it stays aligned with its item through Sorted / Delete (no parallel
     array). A header renders as a tinted band with bold text (from the 'TyGroupBox' token) and
     cannot be selected — clicking it is swallowed. Use AddHeader / AddItem to build the list. }
-  TTyOfficeListBox = class(TTyListBox)
+  TTyCustomOfficeListBox = class(TTyCustomListBox)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -31,6 +31,74 @@ type
     procedure AddItem(const S: string);
     // True when the row at AIndex is a group header.
     function IsHeader(AIndex: Integer): Boolean;
+  end;
+
+  { TTyOfficeListBox publishes TTyCustomOfficeListBox's properties; everything lives in TTyCustomOfficeListBox. }
+  TTyOfficeListBox = class(TTyCustomOfficeListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
   end;
 
 { Shared header-band draw: a tinted band (the 'TyGroupBox' background) with bold, left-aligned
@@ -67,25 +135,25 @@ begin
     taLeftJustify, tlCenter, True);
 end;
 
-{ TTyOfficeListBox }
+{ TTyCustomOfficeListBox }
 
-procedure TTyOfficeListBox.AddHeader(const S: string);
+procedure TTyCustomOfficeListBox.AddHeader(const S: string);
 begin
   Items.AddObject(S, TObject(PtrInt(1)));
 end;
 
-procedure TTyOfficeListBox.AddItem(const S: string);
+procedure TTyCustomOfficeListBox.AddItem(const S: string);
 begin
   Items.AddObject(S, TObject(PtrInt(0)));
 end;
 
-function TTyOfficeListBox.IsHeader(AIndex: Integer): Boolean;
+function TTyCustomOfficeListBox.IsHeader(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex < Items.Count)
     and (PtrInt(Items.Objects[AIndex]) = 1);
 end;
 
-procedure TTyOfficeListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomOfficeListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   if IsHeader(AIndex) then
@@ -94,7 +162,7 @@ begin
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;
 
-procedure TTyOfficeListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomOfficeListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   row: Integer;
 begin
@@ -106,7 +174,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-function TTyOfficeListBox.NextSelectable(ATarget: Integer): Integer;
+function TTyCustomOfficeListBox.NextSelectable(ATarget: Integer): Integer;
 var dir, i: Integer;
 begin
   if ATarget >= ItemIndex then dir := 1 else dir := -1;
@@ -122,7 +190,7 @@ begin
   Result := i;
 end;
 
-procedure TTyOfficeListBox.SelectItem(AIndex: Integer);
+procedure TTyCustomOfficeListBox.SelectItem(AIndex: Integer);
 begin
   if IsHeader(AIndex) then
   begin

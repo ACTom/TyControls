@@ -916,9 +916,10 @@ begin
   Result := (P.green > 150) and (P.green > P.red + 40) and (P.green > P.blue + 40);
 end;
 
-{ The two popup-list families do not share an ancestor (the check combo's descends from
-  TTyCheckListBox), so the render seam is reached by class, exactly as the protocol is. }
-procedure RenderAnyPopupList(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect;
+{ The two popup-list families share no ancestor below TTyCustomListBox (the check combo's
+  descends from TTyCheckListBox), so the render seam is reached by class, exactly as the
+  protocol is. }
+procedure RenderAnyPopupList(AList: TTyCustomListBox; ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 begin
   if AList is TTyCheckComboPopupList then
@@ -928,7 +929,7 @@ begin
 end;
 
 { Renders two popup lists and reports whether ANY pixel differs. }
-function ListRenderDiffers(A, B: TTyListBox; AW, AH: Integer): Boolean;
+function ListRenderDiffers(A, B: TTyCustomListBox; AW, AH: Integer): Boolean;
 var
   BmpA, BmpB: TBitmap;
   x, y: Integer;
@@ -1626,10 +1627,10 @@ type
     TTyCustomComboBox descendants and not TTyComboBox ones. }
   TComboFactoryAccess = class(TTyCustomComboBox)
   public
-    function MakePopupList: TTyListBox;
+    function MakePopupList: TTyCustomListBox;
   end;
 
-function TComboFactoryAccess.MakePopupList: TTyListBox;
+function TComboFactoryAccess.MakePopupList: TTyCustomListBox;
 begin
   Result := CreatePopupList;
 end;
@@ -1664,7 +1665,7 @@ const
 var
   k, before: Integer;
   cOwn, cPlain: TTyCustomComboBox;
-  lOwn, lPlain: TTyListBox;
+  lOwn, lPlain: TTyCustomListBox;
   klass: string;
 
   function Build(AIndex: Integer; AHandler: TTyDrawItemEvent): TTyCustomComboBox;
@@ -1686,7 +1687,7 @@ var
     if AHandler <> nil then Result.Style := csOwnerDrawFixed;
   end;
 
-  function BuildList(ACombo: TTyCustomComboBox): TTyListBox;
+  function BuildList(ACombo: TTyCustomComboBox): TTyCustomListBox;
   begin
     Result := TComboFactoryAccess(ACombo).MakePopupList;
     Result.Parent := FForm;

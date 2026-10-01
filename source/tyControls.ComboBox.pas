@@ -142,7 +142,7 @@ type
     FOnGetItems: TNotifyEvent;
     { Dropdown popup state }
     FPopup: TTyDropdownPopup; // lazy; created on first DropDown; freed in Destroy
-    FPopupList: TTyListBox;   // owned by Self; parented into FPopup.Form via SetContent --
+    FPopupList: TTyCustomListBox;   // owned by Self; parented into FPopup.Form via SetContent --
     // or, in csSimple, docked as a child of the combo itself (same instance, same class,
     // whichever shape the Style asks for; see AttachEmbeddedList/DetachEmbeddedList)
     { Type-ahead state }
@@ -159,7 +159,7 @@ type
     procedure SetOnMeasureItem(const AValue: TTyMeasureItemEvent);
     { OnDrawItem's Index is an index into ITEMS. The popup may be holding the
       prefix-filtered subset instead, so map it back. }
-    function RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
+    function RowSourceIndex(AList: TTyCustomListBox; ARow: Integer): Integer;
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetText(const AValue: TCaption);
@@ -288,7 +288,7 @@ type
     procedure PaintTextHint(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
     // Factory for the drop-down list (default: a plain TTyListBox). A subclass returns a
     // custom TTyListBox (e.g. one whose PaintItemContent draws colour swatches).
-    function CreatePopupList: TTyListBox; virtual;
+    function CreatePopupList: TTyCustomListBox; virtual;
     // Style setter is virtual so a subclass can lock the mode (e.g. TTyColorBox forces
     // csDropDownList — a filtered editable popup would desync its per-item swatches).
     procedure SetStyle(AValue: TTyComboBoxStyle); virtual;
@@ -355,7 +355,7 @@ type
     procedure AddHistoryItem(const AItem: string; AnObject: TObject;
       AMaxHistoryCount: Integer; ASetAsText, ACaseSensitive: Boolean); overload;
     { Expose popup list for headless tests and internal use }
-    function PopupList: TTyListBox;
+    function PopupList: TTyCustomListBox;
     { --- the drop-down row owner-draw protocol --------------------------------------
       True when the application has actually taken the rows over: an owner-draw Style AND a
       handler. Without the handler the themed default stays, so assigning Style alone can
@@ -364,9 +364,9 @@ type
 
       The three calls below are what a drop-down list makes to join in. They are METHODS on
       the combo (with free-function wrappers underneath) rather than an ancestor class,
-      because the popup lists in this family do not share one: TTyCheckComboBox's descends
-      from TTyCheckListBox, everyone else's from TTyListBox, and single inheritance means no
-      shim class can reach both.
+      because the popup lists in this family do not share one below TTyCustomListBox (which
+      is what the protocol takes): TTyCheckComboBox's descends from TTyCheckListBox, everyone
+      else's from TTyListBox, and single inheritance means no shim class can reach both.
 
         Begin  -- before the list paints; drops anything a previous paint left behind.
         Collect -- from PaintItemContent, per row. True = the host owns this row, so the
@@ -379,7 +379,7 @@ type
                   already dispatch this way). }
     function OwnerDrawsRows: Boolean;
     procedure BeginRowOwnerDraw;
-    function CollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+    function CollectRowOwnerDraw(AList: TTyCustomListBox; const ARowRect: TRect;
       AIndex: Integer): Boolean;
     procedure DispatchRowOwnerDraw(ACanvas: TCanvas; const ARect: TRect);
     { Test seam: how many rows the last list paint handed to the host. }
@@ -402,7 +402,7 @@ type
       those wrong is a stale row height nobody can explain. If a host ever needs the calls
       counted down, it can memoise inside its own handler. }
     function MeasuresRows: Boolean;
-    function MeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+    function MeasureRowHeight(AList: TTyCustomListBox; ARow, ADefault: Integer): Integer;
     { The three control-level list methods LCL's combo has. Clear empties Items AND blanks
       Text -- doing only the first leaves the field displaying an item that is no longer in
       the list, which is the bug you get from calling Items.Clear by hand. }
@@ -591,14 +591,14 @@ type
   finds the combo through the list's Owner -- CreatePopupList does Create(Self) throughout
   this family, which is the same route every one of these lists already takes to reach its
   combo from PaintItemContent. A list with no combo owner is left alone. }
-procedure TyComboBeginRowOwnerDraw(AList: TTyListBox);
-function  TyComboCollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+procedure TyComboBeginRowOwnerDraw(AList: TTyCustomListBox);
+function  TyComboCollectRowOwnerDraw(AList: TTyCustomListBox; const ARowRect: TRect;
   AIndex: Integer): Boolean;
-procedure TyComboDispatchRowOwnerDraw(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect);
+procedure TyComboDispatchRowOwnerDraw(AList: TTyCustomListBox; ACanvas: TCanvas; const ARect: TRect);
 { The height half of the same story: a popup list whose ancestor is fixed elsewhere calls
   this from its own RowHeight override. ADefault is what the row would be without a host
   answer, and it is what comes back when there is none. }
-function  TyComboMeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+function  TyComboMeasureRowHeight(AList: TTyCustomListBox; ARow, ADefault: Integer): Integer;
 
 implementation
 uses
@@ -645,21 +645,21 @@ end;
 
 { Any combo owns its popup list: every derived combo (ColorBox, ComboBoxEx, ...) is a
   TTyCustomComboBox and, since 4.0, not a TTyComboBox. }
-function TyComboOwnerOf(AList: TTyListBox): TTyCustomComboBox;
+function TyComboOwnerOf(AList: TTyCustomListBox): TTyCustomComboBox;
 begin
   Result := nil;
   if (AList <> nil) and (AList.Owner is TTyCustomComboBox) then
     Result := TTyCustomComboBox(AList.Owner);
 end;
 
-procedure TyComboBeginRowOwnerDraw(AList: TTyListBox);
+procedure TyComboBeginRowOwnerDraw(AList: TTyCustomListBox);
 var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
   if C <> nil then C.BeginRowOwnerDraw;
 end;
 
-function TyComboCollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+function TyComboCollectRowOwnerDraw(AList: TTyCustomListBox; const ARowRect: TRect;
   AIndex: Integer): Boolean;
 var C: TTyCustomComboBox;
 begin
@@ -667,14 +667,14 @@ begin
   Result := (C <> nil) and C.CollectRowOwnerDraw(AList, ARowRect, AIndex);
 end;
 
-procedure TyComboDispatchRowOwnerDraw(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect);
+procedure TyComboDispatchRowOwnerDraw(AList: TTyCustomListBox; ACanvas: TCanvas; const ARect: TRect);
 var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
   if C <> nil then C.DispatchRowOwnerDraw(ACanvas, ARect);
 end;
 
-function TyComboMeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+function TyComboMeasureRowHeight(AList: TTyCustomListBox; ARow, ADefault: Integer): Integer;
 var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
@@ -1398,7 +1398,7 @@ begin
   Result := TyComboStyleIsVariable(FStyle) and Assigned(FOnMeasureItem);
 end;
 
-function TTyCustomComboBox.MeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+function TTyCustomComboBox.MeasureRowHeight(AList: TTyCustomListBox; ARow, ADefault: Integer): Integer;
 var
   h: Integer;
 begin
@@ -1419,7 +1419,7 @@ begin
   Result := FRowDrawCount;
 end;
 
-function TTyCustomComboBox.RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
+function TTyCustomComboBox.RowSourceIndex(AList: TTyCustomListBox; ARow: Integer): Integer;
 begin
   { OnDrawItem's Index indexes ITEMS, as LCL documents it -- but the popup may be holding
     the prefix-filtered subset (the editable styles' autocomplete) rather than Items, and a
@@ -1449,7 +1449,7 @@ begin
   FRowDrawCount := 0;
 end;
 
-function TTyCustomComboBox.CollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+function TTyCustomComboBox.CollectRowOwnerDraw(AList: TTyCustomListBox; const ARowRect: TRect;
   AIndex: Integer): Boolean;
 var
   St: TOwnerDrawState;
@@ -2112,7 +2112,7 @@ begin
 end;
 
 { Protected accessor for headless tests }
-function TTyCustomComboBox.PopupList: TTyListBox;
+function TTyCustomComboBox.PopupList: TTyCustomListBox;
 begin
   Result := FPopupList;
 end;
@@ -2217,7 +2217,7 @@ begin
     AStyle.FontWeight, HintColor, taLeftJustify, tlCenter, True);
 end;
 
-function TTyCustomComboBox.CreatePopupList: TTyListBox;
+function TTyCustomComboBox.CreatePopupList: TTyCustomListBox;
 begin
   { TTyComboPopupList, not a bare TTyListBox: the only difference is the three owner-draw
     calls, every one of which is inert while OwnerDrawsRows is False, so the default combo

@@ -139,7 +139,7 @@ type
     function EffectiveRectWidth: Integer;
     function EffectiveRectOffset: Integer;
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
     procedure Loaded; override;
@@ -722,7 +722,7 @@ begin
   ItemIndex := TySelectColorIndexIn(Items, AValue, FPaletteStyle);
 end;
 
-function TTyCustomColorBox.CreatePopupList: TTyListBox;
+function TTyCustomColorBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyColorPopupList.Create(Self);
 end;

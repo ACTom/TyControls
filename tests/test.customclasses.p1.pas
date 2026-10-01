@@ -297,7 +297,7 @@ type
   { CreatePopupList is protected: this builds the list a combo would drop. }
   TP1ComboCracker = class(TTyCustomComboBox)
   public
-    function MakePopupList: TTyListBox;
+    function MakePopupList: TTyCustomListBox;
   end;
 
   { RenderTo is protected on every family; one cracker each reaches it. }
@@ -430,7 +430,7 @@ begin
   Result := Increment;
 end;
 
-function TP1ComboCracker.MakePopupList: TTyListBox;
+function TP1ComboCracker.MakePopupList: TTyCustomListBox;
 begin
   Result := CreatePopupList;
 end;
@@ -1280,7 +1280,7 @@ end;
 procedure TTyCustomClassesP1Test.TestDerivedComboPopupReachesTheOwnerDraw;
 var
   c: TTyComboBoxEx;
-  l: TTyListBox;
+  l: TTyCustomListBox;
   bmp: TBitmap;
 begin
   c := TTyComboBoxEx.Create(FForm);
@@ -1368,7 +1368,7 @@ end;
 { The combo's own drop-down list, built and rendered off-screen. }
 function RenderColorComboList(AForm: TForm; ACombo: TTyCustomComboBox): TBitmap;
 var
-  l: TTyListBox;
+  l: TTyCustomListBox;
 begin
   l := TP1ComboCracker(ACombo).MakePopupList;
   l.Parent := AForm;

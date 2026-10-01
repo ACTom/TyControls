@@ -173,8 +173,9 @@ const
     ('TTyCustomGrid', 'TTyCustomControl', 'TTyDrawGrid'));
 
 type
-  { Reads the per-row type key of the list-box family (GetItemStyleTypeKey). }
-  TListBoxKeyAccess = class(TTyListBox);
+  { Reads the per-row type key of the list-box family (GetItemStyleTypeKey) -- any
+    TTyCustomListBox, since 4.0 the derived list boxes are not TTyListBox descendants. }
+  TListBoxKeyAccess = class(TTyCustomListBox);
 
 var
   GSplit, GPending, GDemoted: TStringList;
@@ -363,7 +364,7 @@ function SubKeys(AInst: TComponent): string;
 begin
   Result := '-';
   try
-    if AInst is TTyListBox then
+    if AInst is TTyCustomListBox then
       Result := TListBoxKeyAccess(AInst).GetItemStyleTypeKey
     else if AInst is TTyTreeSelect then
       Result := TTyTreeSelectTree(TTyTreeSelect(AInst).Tree).StyleTypeKey
@@ -1268,14 +1269,14 @@ initialization
     'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard', 'TTyEmpty',
     'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox',
     // T14 tabs
-    'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel']);
+    'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel',
+    // T15 list boxes
+    'TTyListBox', 'TTyCheckListBox', 'TTyOfficeListBox', 'TTyAdvancedListBox',
+    'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T15 list boxes
-    'TTyListBox', 'TTyCheckListBox', 'TTyOfficeListBox', 'TTyAdvancedListBox',
-    'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox',
     // T16 compound pickers
     'TTyTransfer', 'TTyTreeSelect', 'TTyCascader',
     // T17 trees and list views

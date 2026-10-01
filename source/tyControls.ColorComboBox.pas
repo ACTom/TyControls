@@ -27,7 +27,7 @@ type
     function IsMoreIndex(AIndex: Integer): Boolean;
     procedure RebuildMoreItem;
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure DoSelect; override;
   public
@@ -172,7 +172,7 @@ begin
   Result := (AIndex >= 0) and (AIndex < Items.Count) and (ColorAt(AIndex) = clNone);
 end;
 
-function TTyCustomColorComboBox.CreatePopupList: TTyListBox;
+function TTyCustomColorComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyColorMorePopupList.Create(Self);
 end;

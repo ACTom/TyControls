@@ -173,7 +173,7 @@ type
     { Items -> ItemsEx: give every row an entry, drop entries no row references. }
     procedure ReconcileFromItems;
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure DoItemsChanged; override;
@@ -961,7 +961,7 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);   // empty field -> the TextHint
 end;
 
-function TTyCustomComboBoxEx.CreatePopupList: TTyListBox;
+function TTyCustomComboBoxEx.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyComboBoxExPopupList.Create(Self);
 end;

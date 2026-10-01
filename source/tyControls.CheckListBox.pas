@@ -20,7 +20,7 @@ type
     otherwise works as in TTyListBox. A row turned off through ItemEnabled[] refuses both
     and renders in the theme's disabled row style. Checkbox chrome comes from the
     'TyCheckBox' token. OnClickCheck fires when a check toggles. }
-  TTyCheckListBox = class(TTyListBox)
+  TTyCustomCheckListBox = class(TTyCustomListBox)
   private
     FAllowGrayed: Boolean;
     FOnClickCheck: TNotifyEvent;
@@ -69,11 +69,80 @@ type
       can toggle it. LCL checklst.pas:84 plus its keyboard gate at :336. An options list
       where some choices are unavailable no longer has to delete the rows. }
     property ItemEnabled[AIndex: Integer]: Boolean read GetItemEnabled write SetItemEnabled;
-  published
     { Whether the user's toggle passes through cbGrayed. LCL checklst.pas:79, default
       False -- and the same name and default TTyCheckBox already carries. }
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
     property OnClickCheck: TNotifyEvent read FOnClickCheck write FOnClickCheck;
+  end;
+
+  { TTyCheckListBox publishes TTyCustomCheckListBox's properties; everything lives in TTyCustomCheckListBox. }
+  TTyCheckListBox = class(TTyCustomCheckListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property AllowGrayed;
+    property OnClickCheck;
   end;
 
 { THE CHECK BOX INSIDE ONE ROW -- the only arithmetic in this control that says where the
@@ -117,7 +186,7 @@ const
   ckDisabled  = PtrInt(4);
   ckAllBits   = ckStateMask or ckDisabled;
 
-function TTyCheckListBox.ItemFlags(AIndex: Integer): PtrInt;
+function TTyCustomCheckListBox.ItemFlags(AIndex: Integer): PtrInt;
 begin
   Result := 0;
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
@@ -131,7 +200,7 @@ begin
   if (Result and not ckAllBits) <> 0 then Result := 0;
 end;
 
-procedure TTyCheckListBox.SetItemFlags(AIndex: Integer; AFlags: PtrInt);
+procedure TTyCustomCheckListBox.SetItemFlags(AIndex: Integer; AFlags: PtrInt);
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   if PtrInt(Items.Objects[AIndex]) = AFlags then Exit;
@@ -139,7 +208,7 @@ begin
   Invalidate;
 end;
 
-function TTyCheckListBox.GetState(AIndex: Integer): TCheckBoxState;
+function TTyCustomCheckListBox.GetState(AIndex: Integer): TCheckBoxState;
 var v: PtrInt;
 begin
   v := ItemFlags(AIndex) and ckStateMask;
@@ -149,12 +218,12 @@ begin
   Result := TCheckBoxState(v);
 end;
 
-procedure TTyCheckListBox.SetState(AIndex: Integer; AValue: TCheckBoxState);
+procedure TTyCustomCheckListBox.SetState(AIndex: Integer; AValue: TCheckBoxState);
 begin
   SetItemFlags(AIndex, (ItemFlags(AIndex) and not ckStateMask) or PtrInt(Ord(AValue)));
 end;
 
-function TTyCheckListBox.GetChecked(AIndex: Integer): Boolean;
+function TTyCustomCheckListBox.GetChecked(AIndex: Integer): Boolean;
 begin
   // cbGrayed reads as checked, exactly as LCL's GetChecked does (checklst.pas:279-282):
   // "not fully off" is what a two-value caller means by checked.
@@ -162,17 +231,17 @@ begin
     and (GetState(AIndex) <> cbUnchecked);
 end;
 
-procedure TTyCheckListBox.SetChecked(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomCheckListBox.SetChecked(AIndex: Integer; AValue: Boolean);
 begin
   if AValue then SetState(AIndex, cbChecked) else SetState(AIndex, cbUnchecked);
 end;
 
-function TTyCheckListBox.GetItemEnabled(AIndex: Integer): Boolean;
+function TTyCustomCheckListBox.GetItemEnabled(AIndex: Integer): Boolean;
 begin
   Result := (ItemFlags(AIndex) and ckDisabled) = 0;
 end;
 
-procedure TTyCheckListBox.SetItemEnabled(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomCheckListBox.SetItemEnabled(AIndex: Integer; AValue: Boolean);
 var f: PtrInt;
 begin
   f := ItemFlags(AIndex) and not ckDisabled;
@@ -180,7 +249,7 @@ begin
   SetItemFlags(AIndex, f);
 end;
 
-procedure TTyCheckListBox.Toggle(AIndex: Integer);
+procedure TTyCustomCheckListBox.Toggle(AIndex: Integer);
 const
   { LCL's NextStateMap, checklst.pas:233-243, value for value. }
   NextState: array[TCheckBoxState] of array[Boolean] of TCheckBoxState = (
@@ -194,7 +263,7 @@ begin
   ClickCheck;
 end;
 
-procedure TTyCheckListBox.CheckAll(AState: TCheckBoxState; aAllowGrayed: Boolean;
+procedure TTyCustomCheckListBox.CheckAll(AState: TCheckBoxState; aAllowGrayed: Boolean;
   aAllowDisabled: Boolean);
 var i: Integer;
 begin
@@ -206,12 +275,12 @@ begin
   end;
 end;
 
-procedure TTyCheckListBox.ClickCheck;
+procedure TTyCustomCheckListBox.ClickCheck;
 begin
   if Assigned(FOnClickCheck) then FOnClickCheck(Self);
 end;
 
-function TTyCheckListBox.CheckedCount: Integer;
+function TTyCustomCheckListBox.CheckedCount: Integer;
 var i: Integer;
 begin
   Result := 0;
@@ -219,7 +288,7 @@ begin
     if GetChecked(i) then Inc(Result);
 end;
 
-function TTyCheckListBox.ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet;
+function TTyCustomCheckListBox.ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet;
 begin
   Result := inherited ItemStatesFor(AIndex, ABaseStates);
   // A row the host turned off must LOOK off. Without this ItemEnabled[] would only refuse
@@ -232,7 +301,7 @@ begin
   end;
 end;
 
-function TTyCheckListBox.CheckZoneRect: TRect;
+function TTyCustomCheckListBox.CheckZoneRect: TRect;
 var
   ppi, pad, sh, l, r: Integer;
   slot: TRect;
@@ -254,7 +323,7 @@ begin
     Result := Rect(0, 0, slot.Right + pad, ClientHeight);
 end;
 
-procedure TTyCheckListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomCheckListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   cs: TTyStyleSet;
@@ -299,7 +368,7 @@ begin
     BidiFlipAlignment(taLeftJustify, RtlRowLayout), tlCenter, True);
 end;
 
-procedure TTyCheckListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomCheckListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var row: Integer;
 begin
   // Let the base handle focus + row selection first, THEN toggle if the click landed in the
@@ -316,7 +385,7 @@ begin
   end;
 end;
 
-procedure TTyCheckListBox.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomCheckListBox.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if (Key = VK_SPACE) and (Shift = []) and (ItemIndex >= 0) then
   begin

@@ -26,7 +26,7 @@ type
     real item (so arrowing onto / clicking a header lands on that group's first entry). }
   TTyCustomOfficeComboBox = class(TTyCustomComboBox)
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     { Nearest non-header index at/after ATarget in the direction of travel (inferred from ATarget
       vs the current ItemIndex, flipping at the ends); -1 if the list is all headers. }
     function NextSelectable(ATarget: Integer): Integer;
@@ -185,7 +185,7 @@ begin
     and (PtrInt(Items.Objects[AIndex]) = 1);
 end;
 
-function TTyCustomOfficeComboBox.CreatePopupList: TTyListBox;
+function TTyCustomOfficeComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyOfficeComboPopupList.Create(Self);
 end;

@@ -14,26 +14,27 @@ interface
 
 uses
   Classes, tyControls.ActivityBar, tyControls.ActivityIndicator, tyControls.AdvancedComboBox,
-  tyControls.AnalogClock, tyControls.Badge, tyControls.Bevel, tyControls.Button,
-  tyControls.ButtonGroup, tyControls.CalcCurrencyEdit, tyControls.CalcEdit, tyControls.Calculator,
-  tyControls.Card, tyControls.CheckBox, tyControls.CheckComboBox, tyControls.CheckGroup,
-  tyControls.CircularProgress, tyControls.ColorBox, tyControls.ColorButton,
-  tyControls.ColorComboBox, tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit,
-  tyControls.ControlBar, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.Dial,
-  tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.AdvancedListBox, tyControls.AnalogClock, tyControls.Badge, tyControls.Bevel,
+  tyControls.Button, tyControls.ButtonGroup, tyControls.CalcCurrencyEdit, tyControls.CalcEdit,
+  tyControls.Calculator, tyControls.Card, tyControls.CheckBox, tyControls.CheckComboBox,
+  tyControls.CheckGroup, tyControls.CheckListBox, tyControls.CircularProgress, tyControls.ColorBox,
+  tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorListBox, tyControls.ComboBox,
+  tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar, tyControls.CoolBar,
+  tyControls.CurrencyEdit, tyControls.Dial, tyControls.Divider, tyControls.DropButtons,
+  tyControls.Edit, tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox,
+  tyControls.FloatSpinEdit, tyControls.FontComboBox, tyControls.FontListBox,
   tyControls.FontSizeComboBox, tyControls.Gauge, tyControls.GearActivityIndicator,
   tyControls.GearDial, tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GridPanel,
   tyControls.GroupBox, tyControls.HtmlLabel, tyControls.LevelMeter, tyControls.LinkLabel,
-  tyControls.ListGroupPanel, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
-  tyControls.Meter, tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.PageControl,
-  tyControls.PaintPanel, tyControls.Panel, tyControls.ProgressBar, tyControls.RadioGroup,
-  tyControls.Rating, tyControls.RelativePanel, tyControls.ScrollBox, tyControls.ScrollContent,
-  tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel, tyControls.ShellComboBox,
-  tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit, tyControls.Splitter,
-  tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.ToggleSwitch,
-  tyControls.ToolGroupPanel, tyControls.TrackBar, tyControls.TrackEdit, tyControls.TyLabel,
-  tyControls.URLEdit, tyControls.UpDown;
+  tyControls.ListBox, tyControls.ListGroupPanel, tyControls.MRUComboBox, tyControls.MaskEdit,
+  tyControls.Memo, tyControls.Meter, tyControls.NumericEdit, tyControls.OfficeComboBox,
+  tyControls.OfficeListBox, tyControls.PageControl, tyControls.PaintPanel, tyControls.Panel,
+  tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
+  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented,
+  tyControls.ShadowLabel, tyControls.ShellComboBox, tyControls.SizeBox, tyControls.Sparkline,
+  tyControls.SpinEdit, tyControls.Splitter, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag,
+  tyControls.ToggleSwitch, tyControls.ToolGroupPanel, tyControls.TrackBar, tyControls.TrackEdit,
+  tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor;
 
 type
   TGenActivityBar = class(TTyCustomActivityBar)
@@ -201,6 +202,74 @@ type
     property OnDropDown;
     property OnCloseUp;
     property OnGetItems;
+    property Align;
+    property Anchors;
+    property Images;
+  end;
+
+  TGenAdvancedListBox = class(TTyCustomAdvancedListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
     property Align;
     property Anchors;
     property Images;
@@ -959,6 +1028,75 @@ type
     property OnItemClick;
   end;
 
+  TGenCheckListBox = class(TTyCustomCheckListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property AllowGrayed;
+    property OnClickCheck;
+  end;
+
   TGenCircularProgress = class(TTyCustomCircularProgress)
   published
     property Version;
@@ -1246,6 +1384,80 @@ type
     property NoneColorColor;
     property OnGetColors;
     property MoreCaption;
+  end;
+
+  TGenColorListBox = class(TTyCustomColorListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property Selected;
+    property Style;
+    property ColorRectWidth;
+    property ColorRectOffset;
+    property DefaultColorColor;
+    property NoneColorColor;
+    property OnGetColors;
   end;
 
   TGenComboBox = class(TTyCustomComboBox)
@@ -2311,6 +2523,73 @@ type
     property Anchors;
   end;
 
+  TGenFontListBox = class(TTyCustomFontListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+  end;
+
   TGenFontSizeComboBox = class(TTyCustomFontSizeComboBox)
   published
     property Version;
@@ -3177,6 +3456,73 @@ type
     property Layout;
   end;
 
+  TGenListBox = class(TTyCustomListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+  end;
+
   TGenListGroupPanel = class(TTyCustomListGroupPanel)
   published
     property Version;
@@ -3728,6 +4074,73 @@ type
     property OnDropDown;
     property OnCloseUp;
     property OnGetItems;
+    property Align;
+    property Anchors;
+  end;
+
+  TGenOfficeListBox = class(TTyCustomOfficeListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
     property Align;
     property Anchors;
   end;
@@ -5544,12 +5957,88 @@ type
     property Anchors;
   end;
 
+  TGenValueListEditor = class(TTyCustomValueListEditor)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property KeyColumnWidth;
+    property ReadOnly;
+    property KeyOptions;
+    property Images;
+    property OnValueChanged;
+    property OnKeyChanged;
+    property OnKeyRejected;
+    property OnEditRow;
+  end;
+
 const
   { (mimic, final class) }
-  CGenMimics: array[0..83, 0..1] of TClass = (
+  CGenMimics: array[0..90, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
+    (TGenAdvancedListBox, TTyAdvancedListBox),
     (TGenAnalogClock, TTyAnalogClock),
     (TGenBadge, TTyBadge),
     (TGenBevel, TTyBevel),
@@ -5562,10 +6051,12 @@ const
     (TGenCheckBox, TTyCheckBox),
     (TGenCheckComboBox, TTyCheckComboBox),
     (TGenCheckGroup, TTyCheckGroup),
+    (TGenCheckListBox, TTyCheckListBox),
     (TGenCircularProgress, TTyCircularProgress),
     (TGenColorBox, TTyColorBox),
     (TGenColorButton, TTyColorButton),
     (TGenColorComboBox, TTyColorComboBox),
+    (TGenColorListBox, TTyColorListBox),
     (TGenComboBox, TTyComboBox),
     (TGenComboBoxEx, TTyComboBoxEx),
     (TGenComboEdit, TTyComboEdit),
@@ -5581,6 +6072,7 @@ const
     (TGenFilterComboBox, TTyFilterComboBox),
     (TGenFloatSpinEdit, TTyFloatSpinEdit),
     (TGenFontComboBox, TTyFontComboBox),
+    (TGenFontListBox, TTyFontListBox),
     (TGenFontSizeComboBox, TTyFontSizeComboBox),
     (TGenGauge, TTyGauge),
     (TGenGearActivityIndicator, TTyGearActivityIndicator),
@@ -5595,6 +6087,7 @@ const
     (TGenLabel, TTyLabel),
     (TGenLevelMeter, TTyLevelMeter),
     (TGenLinkLabel, TTyLinkLabel),
+    (TGenListBox, TTyListBox),
     (TGenListGroupPanel, TTyListGroupPanel),
     (TGenMRUComboBox, TTyMRUComboBox),
     (TGenMaskEdit, TTyMaskEdit),
@@ -5603,6 +6096,7 @@ const
     (TGenMeter, TTyMeter),
     (TGenNumericEdit, TTyNumericEdit),
     (TGenOfficeComboBox, TTyOfficeComboBox),
+    (TGenOfficeListBox, TTyOfficeListBox),
     (TGenPageControl, TTyPageControl),
     (TGenPaintPanel, TTyPaintPanel),
     (TGenPanel, TTyPanel),
@@ -5630,7 +6124,8 @@ const
     (TGenTrackBar, TTyTrackBar),
     (TGenTrackEdit, TTyTrackEdit),
     (TGenURLEdit, TTyURLEdit),
-    (TGenUpDown, TTyUpDown));
+    (TGenUpDown, TTyUpDown),
+    (TGenValueListEditor, TTyValueListEditor));
 
 implementation
 

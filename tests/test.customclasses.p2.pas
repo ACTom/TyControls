@@ -23,7 +23,8 @@ uses
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
   tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
   tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox, tyControls.TabStrip,
-  tyControls.TabSheet, tyControls.PageControl;
+  tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
+  tyControls.ComboBox, tyControls.CheckComboBox;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
@@ -47,6 +48,10 @@ type
     procedure TestPageControlDropsAFreedThirdPartySheet;
     procedure TestPageControlHandsOutAThirdPartySheetAsItIs;
     procedure TestThirdTabSheetKeepsItsBoundsOutOfTheStream;
+    { Task 15: list boxes }
+    procedure TestThirdListBox;
+    procedure TestThirdCheckListBox;
+    procedure TestCheckComboPopupListTravelsTheWidenedApi;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -99,6 +104,18 @@ type
     property ImageIndex;
   end;
 
+  TThirdListBox = class(TTyCustomListBox)
+  published
+    property Items;
+    property ItemIndex;
+  end;
+
+  TThirdCheckListBox = class(TTyCustomCheckListBox)
+  published
+    property Items;
+    property AllowGrayed;
+  end;
+
 implementation
 
 type
@@ -114,6 +131,18 @@ type
   TP2GroupBoxCracker = class(TTyCustomGroupBox)
   public
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+  end;
+
+  TP2ListBoxCracker = class(TTyCustomListBox)
+  public
+    procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+    function ItemKey: string;
+  end;
+
+  { CreatePopupList is protected: the list a check combo would drop. }
+  TP2CheckComboCracker = class(TTyCustomCheckComboBox)
+  public
+    function MakePopupList: TTyCustomListBox;
   end;
 
   { ContentHost is protected: where the box actually puts its children. }
@@ -140,6 +169,21 @@ end;
 procedure TP2GroupBoxCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TP2ListBoxCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+function TP2ListBoxCracker.ItemKey: string;
+begin
+  Result := GetItemStyleTypeKey;
+end;
+
+function TP2CheckComboCracker.MakePopupList: TTyCustomListBox;
+begin
+  Result := CreatePopupList;
 end;
 
 function TP2ScrollBoxCracker.Host: TWinControl;
@@ -573,8 +617,115 @@ begin
   CheckFreshDefaults(TThirdTabSheet, ['Caption', 'ImageIndex']);
 end;
 
+{ ------------------------------------------------------------------ Task 15: list boxes }
+
+procedure TTyCustomClassesP2Test.TestThirdListBox;
+var
+  third, back: TThirdListBox;
+  own: TTyListBox;
+  c: TTyCustomListBox;
+  bmA, bmB: TBitmap;
+  diff: string;
+begin
+  third := TThirdListBox.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 150, 100);
+  CheckPublishesOnly(TThirdListBox, ['Items', 'ItemIndex']);
+  third.Items.CommaText := 'cherry,apple,banana';
+  third.ItemIndex := 2;
+  CheckStreamText(third, ['Items', 'ItemIndex'], 'Sorted');
+  back := TThirdListBox.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: Items round-trip', 'cherry,apple,banana', back.Items.CommaText);
+  AssertEquals('T-c: ItemIndex round-trips', 2, back.ItemIndex);
+  own := TTyListBox.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 110, 150, 100);
+  own.Items.CommaText := 'cherry,apple,banana';
+  own.ItemIndex := 2;
+  CheckSameTypeKey(third, own);
+  AssertEquals('T-d: the row type key is the custom class''s too',
+    TP2ListBoxCracker(own).ItemKey, TP2ListBoxCracker(third).ItemKey);
+  bmA := NewSentinelBitmap(150, 100);
+  bmB := NewSentinelBitmap(150, 100);
+  try
+    TP2ListBoxCracker(third).DoRender(bmA.Canvas, Rect(0, 0, 150, 100));
+    TP2ListBoxCracker(own).DoRender(bmB.Canvas, Rect(0, 0, 150, 100));
+    AssertTrue('T-d: the mimic paints exactly what TTyListBox paints: ' + diff,
+      SameBitmaps(bmA, bmB, diff));
+  finally
+    bmA.Free;
+    bmB.Free;
+  end;
+  CheckFreshDefaults(TThirdListBox, ['Items', 'ItemIndex']);
+  { T-v: Sorted is public (TCustomListBox). }
+  c := third;
+  c.Sorted := True;
+  AssertEquals('T-v: sorting through a TTyCustomListBox reference', 'apple,banana,cherry',
+    third.Items.CommaText);
+end;
+
+procedure TTyCustomClassesP2Test.TestThirdCheckListBox;
+var
+  third, back: TThirdCheckListBox;
+  own: TTyCheckListBox;
+  c: TTyCustomCheckListBox;
+begin
+  third := TThirdCheckListBox.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 150, 100);
+  CheckPublishesOnly(TThirdCheckListBox, ['Items', 'AllowGrayed']);
+  third.Items.CommaText := 'one,two';
+  third.AllowGrayed := True;
+  third.ItemIndex := 1;
+  CheckStreamText(third, ['Items', 'AllowGrayed'], 'ItemIndex');
+  back := TThirdCheckListBox.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: Items round-trip', 'one,two', back.Items.CommaText);
+  AssertTrue('T-c: AllowGrayed round-trips', back.AllowGrayed);
+  AssertEquals('T-c: the unpublished ItemIndex stayed at its default', -1, back.ItemIndex);
+  own := TTyCheckListBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdCheckListBox, ['Items', 'AllowGrayed']);
+  c := third;
+  c.Checked[0] := True;
+  AssertTrue('T-v: Checked[] is public through a TTyCustomCheckListBox reference',
+    third.Checked[0]);
+end;
+
+{ S15-1. The check combo's drop-down list descends from TTyCheckListBox, which since 4.0 is a
+  TTyCustomListBox and no longer a TTyListBox -- which is why the combo popup API (the
+  CreatePopupList factory, PopupList, the row owner-draw calls) takes TTyCustomListBox. The
+  factory hands the list over through that API and a tick on it reaches the combo. }
+procedure TTyCustomClassesP2Test.TestCheckComboPopupListTravelsTheWidenedApi;
+var
+  cc: TTyCheckComboBox;
+  l: TTyCustomListBox;
+begin
+  cc := TTyCheckComboBox.Create(FForm);
+  cc.Parent := FForm;
+  cc.Items.CommaText := 'red,green,blue';
+  l := TP2CheckComboCracker(cc).MakePopupList;
+  try
+    AssertTrue('the check combo drops a check list', l is TTyCheckListBox);
+    AssertFalse('which is no TTyListBox since 4.0 (the reason the API widened)',
+      TObject(l) is TTyListBox);
+    l.Items.Assign(cc.Items);
+    TTyCheckListBox(l).Checked[1] := True;
+    cc.PullChecksForTest(TTyCheckListBox(l));
+    AssertTrue('the tick on the popup list reached the combo', cc.Checked[1]);
+    AssertFalse('and only that one', cc.Checked[0] or cc.Checked[2]);
+  finally
+    l.Free;
+  end;
+end;
+
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
-    TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet]);
+    TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet, TThirdListBox,
+    TThirdCheckListBox]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

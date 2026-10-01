@@ -109,11 +109,11 @@ type
     triangles for nested rows) and an editable VALUE column, split by a DRAGGABLE divider. Rows
     are TTyValueRow objects (Key/DisplayKey, Value/DisplayValue, a value TYPE, per-row bold/colour/
     image, and CHILD rows). Build with AddRow (returns the row to nest / type / style) or the
-    simple InsertRow(key, value). Row layout, selection and scrolling come from TTyListBox.
+    simple InsertRow(key, value). Row layout, selection and scrolling come from TTyCustomListBox.
 
-    It REUSES TTyListBox's virtualised row loop but is not a list box, so it renders from its
+    It REUSES TTyCustomListBox's virtualised row loop but is not a list box, so it renders from its
     own keys -- see GetStyleTypeKey / GetItemStyleTypeKey / PaintItemContent. }
-  TTyValueListEditor = class(TTyListBox)
+  TTyCustomValueListEditor = class(TTyCustomListBox)
   private
     FRoot: array of TTyValueRow;      // owned root rows
     FFlatRow: array of TTyValueRow;   // visible (expanded) rows, flattened
@@ -302,7 +302,7 @@ type
       this name returned here -- so paging maths ported from Lazarus compiled and computed
       garbage: with 500 expanded rows it paged 500 rows at a time. Both are Integer and both
       are public, so nothing warned anybody. This is the same collision fixed on TTyCustomGrid
-      in 03c29b3; it did not land here because ours is a TTyListBox, not a grid.
+      in 03c29b3; it did not land here because ours is a TTyCustomListBox, not a grid.
 
       Faithful to LCL down to the off-by-one: LCL answers `VisibleGrid.Bottom - VisibleGrid.Top`,
       one LESS than the number of rows touching the viewport, so a page turn leaves one row of
@@ -344,7 +344,6 @@ type
     // Root row AIndex's value -- the row-numbered form, pairing with Keys[] above.
     property ValueFromIndex[AIndex: Integer]: string read GetValueFromIndex write SetValueFromIndex;
     property InlineEditor: TTyValueEdit read FEditor;
-  published
     property KeyColumnWidth: Integer read FKeyColumnWidth write SetKeyColumnWidth default 110;
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { What the user may do to the row set: rename a key, add a row, delete a row, and whether a
@@ -366,6 +365,82 @@ type
     property OnKeyRejected: TTyKeyRejectedEvent read FOnKeyRejected write FOnKeyRejected;
     // Fires for a vekDialog row (click its value / '…'): show a custom dialog and set ARow.Value.
     property OnEditRow: TTyValueEditEvent read FOnEditRow write FOnEditRow;
+  end;
+
+  { TTyValueListEditor publishes TTyCustomValueListEditor's properties; everything lives in TTyCustomValueListEditor. }
+  TTyValueListEditor = class(TTyCustomValueListEditor)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property KeyColumnWidth;
+    property ReadOnly;
+    property KeyOptions;
+    property Images;
+    property OnValueChanged;
+    property OnKeyChanged;
+    property OnKeyRejected;
+    property OnEditRow;
   end;
 
 { Parse a 'Name, Size' font descriptor defensively. The LAST comma-separated token that is a
@@ -521,9 +596,9 @@ begin
   if DisplayValue <> '' then Result := DisplayValue else Result := Value;
 end;
 
-{ ---- TTyValueListEditor ---- }
+{ ---- TTyCustomValueListEditor ---- }
 
-constructor TTyValueListEditor.Create(AOwner: TComponent);
+constructor TTyCustomValueListEditor.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FEditFlat := -1;
@@ -542,7 +617,7 @@ begin
   FEditor.OnEllipsis := @EditorEllipsis;
 end;
 
-destructor TTyValueListEditor.Destroy;
+destructor TTyCustomValueListEditor.Destroy;
 begin
   Application.RemoveAsyncCalls(Self);   // cancel a pending deferred "more…" colour dialog
   FreeAndNil(FDropPopup);   // free the popup (its form) before the lists it only parented
@@ -552,7 +627,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyValueListEditor.FreeRows;
+procedure TTyCustomValueListEditor.FreeRows;
 var i: Integer;
 begin
   for i := 0 to High(FRoot) do FRoot[i].Free;
@@ -561,7 +636,7 @@ begin
   SetLength(FFlatLevel, 0);
 end;
 
-procedure TTyValueListEditor.AppendFlat(ARow: TTyValueRow; ALevel: Integer);
+procedure TTyCustomValueListEditor.AppendFlat(ARow: TTyValueRow; ALevel: Integer);
 var i, n: Integer;
 begin
   n := Length(FFlatRow);
@@ -574,7 +649,7 @@ begin
       AppendFlat(ARow.Child[i], ALevel + 1);
 end;
 
-procedure TTyValueListEditor.RebuildFlat;
+procedure TTyCustomValueListEditor.RebuildFlat;
 var i, newIdx: Integer; sel: TTyValueRow;
 begin
   if FRebuilding then Exit;
@@ -612,28 +687,28 @@ begin
   Invalidate;
 end;
 
-function TTyValueListEditor.Dp(ALogical: Integer): Integer;
+function TTyCustomValueListEditor.Dp(ALogical: Integer): Integer;
 begin
   Result := MulDiv(ALogical, Font.PixelsPerInch, 96);
 end;
 
-function TTyValueListEditor.ContentLeftDp: Integer;
+function TTyCustomValueListEditor.ContentLeftDp: Integer;
 begin
   Result := Dp(CurrentStyle.Padding.Left);
 end;
 
-function TTyValueListEditor.ContentTopDp: Integer;
+function TTyCustomValueListEditor.ContentTopDp: Integer;
 begin
   Result := Dp(CurrentStyle.Padding.Top);
 end;
 
-function TTyValueListEditor.ContentRightDp: Integer;
+function TTyCustomValueListEditor.ContentRightDp: Integer;
 begin
   Result := ClientWidth - Dp(CurrentStyle.Padding.Right);
   if Length(FFlatRow) > VisibleRows then Dec(Result, Dp(ActiveController.Metric('--scrollbar-size', TyScrollbarSize)));
 end;
 
-function TTyValueListEditor.SplitXDp: Integer;
+function TTyCustomValueListEditor.SplitXDp: Integer;
 var lo, hi: Integer;
 begin
   Result := ContentLeftDp + Dp(FKeyColumnWidth);
@@ -644,7 +719,7 @@ begin
   if Result > hi then Result := hi;
 end;
 
-function TTyValueListEditor.CellRect(AFlat, ACol: Integer): TRect;
+function TTyCustomValueListEditor.CellRect(AFlat, ACol: Integer): TRect;
 var sh, rowTop, splitX: Integer;
 begin
   sh := Dp(ItemHeight);
@@ -657,7 +732,7 @@ begin
     Result := Rect(splitX, rowTop, ContentRightDp, rowTop + sh);
 end;
 
-function TTyValueListEditor.FlatAtY(AY: Integer): Integer;
+function TTyCustomValueListEditor.FlatAtY(AY: Integer): Integer;
 var sh: Integer;
 begin
   sh := Dp(ItemHeight);
@@ -666,7 +741,7 @@ begin
   if (Result < 0) or (Result > High(FFlatRow)) then Result := -1;
 end;
 
-function TTyValueListEditor.TriangleHit(AFlat, AX: Integer): Boolean;
+function TTyCustomValueListEditor.TriangleHit(AFlat, AX: Integer): Boolean;
 var tx, indent: Integer;
 begin
   Result := False;
@@ -677,14 +752,14 @@ begin
   Result := (AX >= tx) and (AX < tx + indent);
 end;
 
-function TTyValueListEditor.OverSplit(AX: Integer): Boolean;
+function TTyCustomValueListEditor.OverSplit(AX: Integer): Boolean;
 begin
   Result := Abs(AX - SplitXDp) <= Dp(3);
 end;
 
 { ---- data API (root rows) ---- }
 
-function TTyValueListEditor.AddRow(const AKey, AValue: string): TTyValueRow;
+function TTyCustomValueListEditor.AddRow(const AKey, AValue: string): TTyValueRow;
 begin
   Result := TTyValueRow.Create;
   Result.Key := AKey;
@@ -694,7 +769,7 @@ begin
   RebuildFlat;
 end;
 
-function TTyValueListEditor.InsertRowAt(AIndex: Integer;
+function TTyCustomValueListEditor.InsertRowAt(AIndex: Integer;
   const AKey, AValue: string): TTyValueRow;
 var
   i: Integer;
@@ -710,7 +785,7 @@ begin
   RebuildFlat;
 end;
 
-function TTyValueListEditor.CurrentRootIndex: Integer;
+function TTyCustomValueListEditor.CurrentRootIndex: Integer;
 var
   r: TTyValueRow;
   i: Integer;
@@ -723,7 +798,7 @@ begin
     if FRoot[i] = r then Exit(i);
 end;
 
-function TTyValueListEditor.InsertRow(const AKey, AValue: string;
+function TTyCustomValueListEditor.InsertRow(const AKey, AValue: string;
   AAppend: Boolean = True): Integer;
 var
   at: Integer;
@@ -739,19 +814,19 @@ begin
   Result := at;
 end;
 
-procedure TTyValueListEditor.Clear;
+procedure TTyCustomValueListEditor.Clear;
 begin
   if FEditFlat >= 0 then EndEdit(False);
   FreeRows;
   RebuildFlat;
 end;
 
-function TTyValueListEditor.GetRowCount: Integer;
+function TTyCustomValueListEditor.GetRowCount: Integer;
 begin
   Result := Length(FRoot);
 end;
 
-procedure TTyValueListEditor.SetRowCount(AValue: Integer);
+procedure TTyCustomValueListEditor.SetRowCount(AValue: Integer);
 var
   i: Integer;
 begin
@@ -771,12 +846,12 @@ begin
   RebuildFlat;
 end;
 
-function TTyValueListEditor.DisplayRowCount: Integer;
+function TTyCustomValueListEditor.DisplayRowCount: Integer;
 begin
   Result := Length(FFlatRow);
 end;
 
-function TTyValueListEditor.VisibleRowCount: Integer;
+function TTyCustomValueListEditor.VisibleRowCount: Integer;
 var
   sh, avail, touching, rest: Integer;
 begin
@@ -799,17 +874,17 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyValueListEditor.UpdateRows;
+procedure TTyCustomValueListEditor.UpdateRows;
 begin
   RebuildFlat;
 end;
 
-function TTyValueListEditor.Row(AIndex: Integer): TTyValueRow;
+function TTyCustomValueListEditor.Row(AIndex: Integer): TTyValueRow;
 begin
   if (AIndex >= 0) and (AIndex <= High(FRoot)) then Result := FRoot[AIndex] else Result := nil;
 end;
 
-function TTyValueListEditor.GetKey(AIndex: Integer): string;
+function TTyCustomValueListEditor.GetKey(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex <= High(FRoot)) then Result := FRoot[AIndex].Key else Result := '';
 end;
@@ -829,7 +904,7 @@ end;
   A committed rename fires OnKeyChanged whichever path it took -- programmatic value
   writes report through OnValueChanged, so a programmatic rename reporting through
   OnKeyChanged is the same contract on the other column. }
-procedure TTyValueListEditor.SetKey(AIndex: Integer; const AValue: string);
+procedure TTyCustomValueListEditor.SetKey(AIndex: Integer; const AValue: string);
 begin
   if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
   if FRoot[AIndex].Key = AValue then Exit;
@@ -838,14 +913,14 @@ begin
   if Assigned(FOnKeyChanged) then FOnKeyChanged(Self, FRoot[AIndex]);
 end;
 
-function TTyValueListEditor.GetValueFromIndex(AIndex: Integer): string;
+function TTyCustomValueListEditor.GetValueFromIndex(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex <= High(FRoot)) then Result := FRoot[AIndex].Value else Result := '';
 end;
 
 { The row-numbered setter addresses EXISTING rows only -- out of range is a no-op. It must NOT
   grow the list the way the keyed setter does, or a stray index would append an empty-keyed row. }
-procedure TTyValueListEditor.SetValueFromIndex(AIndex: Integer; const AValue: string);
+procedure TTyCustomValueListEditor.SetValueFromIndex(AIndex: Integer; const AValue: string);
 begin
   if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
   if FRoot[AIndex].Value = AValue then Exit;
@@ -858,7 +933,7 @@ end;
   Strings.IndexOfName (valedit.pas:1094), which compares with TStringList.DoCompareText on a
   list whose CaseSensitive is never set -- i.e. False. Comparing with '=' here would compile and
   then read '' for a ported Values['height'] whose row is keyed 'Height'. }
-function TTyValueListEditor.GetValue(const AKey: string): string;
+function TTyCustomValueListEditor.GetValue(const AKey: string): string;
 var i: Integer;
 begin
   for i := 0 to High(FRoot) do
@@ -871,7 +946,7 @@ end;
   that do not exist yet, and dropping those writes would be silent data loss. The append is a
   row ADD, not a value CHANGE, so it stays silent like AddRow / InsertRow: OnValueChanged
   reports which EXISTING row changed and has no prior row to name here. }
-procedure TTyValueListEditor.SetValue(const AKey, AValue: string);
+procedure TTyCustomValueListEditor.SetValue(const AKey, AValue: string);
 var i: Integer;
 begin
   for i := 0 to High(FRoot) do
@@ -879,7 +954,7 @@ begin
   AddRow(AKey, AValue);   // (key, value) -- see AddRow's declaration, not the other order
 end;
 
-procedure TTyValueListEditor.DeleteRow(AIndex: Integer);
+procedure TTyCustomValueListEditor.DeleteRow(AIndex: Integer);
 var i: Integer;
 begin
   if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
@@ -890,7 +965,7 @@ begin
   RebuildFlat;
 end;
 
-procedure TTyValueListEditor.SetExpanded(ARow: TTyValueRow; AExpanded: Boolean);
+procedure TTyCustomValueListEditor.SetExpanded(ARow: TTyValueRow; AExpanded: Boolean);
 begin
   if ARow = nil then Exit;
   if ARow.Expanded = AExpanded then Exit;
@@ -898,7 +973,7 @@ begin
   RebuildFlat;
 end;
 
-procedure TTyValueListEditor.SetKeyColumnWidth(AValue: Integer);
+procedure TTyCustomValueListEditor.SetKeyColumnWidth(AValue: Integer);
 begin
   if AValue < 16 then AValue := 16;
   if FKeyColumnWidth = AValue then Exit;
@@ -911,7 +986,7 @@ end;
   blank row you cannot name is not a row anybody wanted. So `KeyOptions := [keyAdd]` READS BACK as
   [keyEdit, keyAdd] -- deliberate, and pinned by a test, since a setter that silently rewrites its
   argument is exactly the kind of thing a later refactor "tidies away". }
-procedure TTyValueListEditor.SetKeyOptions(AValue: TTyKeyOptions);
+procedure TTyCustomValueListEditor.SetKeyOptions(AValue: TTyKeyOptions);
 begin
   if keyAdd in AValue then Include(AValue, keyEdit);
   if FKeyOptions = AValue then Exit;
@@ -921,7 +996,7 @@ begin
   if (FEditFlat >= 0) and (FEditCol = 0) and not (keyEdit in FKeyOptions) then EndEdit(False);
 end;
 
-procedure TTyValueListEditor.SetImages(const AValue: TCustomImageList);
+procedure TTyCustomValueListEditor.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -930,7 +1005,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyValueListEditor.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomValueListEditor.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
@@ -938,13 +1013,13 @@ end;
 
 { ---- inline editor ---- }
 
-procedure TTyValueListEditor.CommitEditor(AFlat: Integer; const AText: string);
+procedure TTyCustomValueListEditor.CommitEditor(AFlat: Integer; const AText: string);
 begin
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   CommitEditorRow(FFlatRow[AFlat], AText);
 end;
 
-function TTyValueListEditor.KeyCollides(ARow: TTyValueRow; const AKey: string): Boolean;
+function TTyCustomValueListEditor.KeyCollides(ARow: TTyValueRow; const AKey: string): Boolean;
 var
   i: Integer;
   p, sib: TTyValueRow;
@@ -968,7 +1043,7 @@ begin
     end;
 end;
 
-function TTyValueListEditor.CommitKeyEdit(ARow: TTyValueRow; const AText: string): Boolean;
+function TTyCustomValueListEditor.CommitKeyEdit(ARow: TTyValueRow; const AText: string): Boolean;
 begin
   Result := True;
   if ARow = nil then Exit;
@@ -987,7 +1062,7 @@ end;
 
 { Commit by row IDENTITY (not flat index) — used by the deferred colour dialog, which must survive
   the row being renumbered/scrolled across the async + modal boundary. }
-procedure TTyValueListEditor.CommitEditorRow(ARow: TTyValueRow; const AText: string);
+procedure TTyCustomValueListEditor.CommitEditorRow(ARow: TTyValueRow; const AText: string);
 begin
   if (ARow = nil) or (ARow.Value = AText) then Exit;
   ARow.Value := AText;
@@ -996,12 +1071,12 @@ begin
   Invalidate;
 end;
 
-procedure TTyValueListEditor.SetRowValue(ARow: TTyValueRow; const AText: string);
+procedure TTyCustomValueListEditor.SetRowValue(ARow: TTyValueRow; const AText: string);
 begin
   CommitEditorRow(ARow, AText);
 end;
 
-function TTyValueListEditor.ChildByKey(ARow: TTyValueRow; const AKey: string): TTyValueRow;
+function TTyCustomValueListEditor.ChildByKey(ARow: TTyValueRow; const AKey: string): TTyValueRow;
 var i: Integer;
 begin
   Result := nil;
@@ -1012,7 +1087,7 @@ end;
 
 { Space-separated enabled style words from the Bold/Italic/Underline/StrikeOut children (the four
   TFont.Style flags), in that order — e.g. '' / 'Bold' / 'Bold Underline'. }
-function TTyValueListEditor.StyleFlags(ARow: TTyValueRow): string;
+function TTyCustomValueListEditor.StyleFlags(ARow: TTyValueRow): string;
 
   function On_(const AKey: string): Boolean;
   var c: TTyValueRow;
@@ -1030,14 +1105,14 @@ begin
   Result := Trim(Result);
 end;
 
-function TTyValueListEditor.IsStyleComposite(ARow: TTyValueRow): Boolean;
+function TTyCustomValueListEditor.IsStyleComposite(ARow: TTyValueRow): Boolean;
 begin
   Result := SameText(ARow.Key, 'style') and
     ((ChildByKey(ARow, 'bold') <> nil) or (ChildByKey(ARow, 'italic') <> nil) or
      (ChildByKey(ARow, 'underline') <> nil) or (ChildByKey(ARow, 'strikeout') <> nil));
 end;
 
-function TTyValueListEditor.IsFontComposite(ARow: TTyValueRow): Boolean;
+function TTyCustomValueListEditor.IsFontComposite(ARow: TTyValueRow): Boolean;
 begin
   Result := (ARow.EditorKind = vekFont) and ARow.HasChildren;
 end;
@@ -1046,7 +1121,7 @@ end;
   reads 'Regular' or e.g. 'Bold, Italic'; a Font node reads 'Name, Size' + trailing style words
   (so a Bold change is visible on the Font row too), pulling style from a nested Style child if
   present, else from direct Bold/Italic children. }
-function TTyValueListEditor.ComposeValue(ARow: TTyValueRow; out AValue: string): Boolean;
+function TTyCustomValueListEditor.ComposeValue(ARow: TTyValueRow; out AValue: string): Boolean;
 var nm, sz, flags: string; c, styleNode: TTyValueRow;
 begin
   Result := True;
@@ -1070,7 +1145,7 @@ begin
     Result := False;
 end;
 
-procedure TTyValueListEditor.PropagateUp(ARow: TTyValueRow);
+procedure TTyCustomValueListEditor.PropagateUp(ARow: TTyValueRow);
 var p, nextP: TTyValueRow; nv: string;
 begin
   p := ARow.Parent;
@@ -1089,7 +1164,7 @@ end;
 
 { Recompute composite values across a subtree, deepest first (so a Style node is summarised
   before the Font node that folds it in). Used after the font dialog writes the leaf children. }
-procedure TTyValueListEditor.RecomputeComposite(ARow: TTyValueRow);
+procedure TTyCustomValueListEditor.RecomputeComposite(ARow: TTyValueRow);
 var i: Integer; nv: string;
 begin
   for i := 0 to ARow.ChildCount - 1 do RecomputeComposite(ARow.Child[i]);
@@ -1102,7 +1177,7 @@ end;
 
 { Is ARow still somewhere in the tree? Guards the deferred colour dialog against a row freed
   (DeleteRow / Clear) while the async call / modal was pending. }
-function TTyValueListEditor.RowExists(ARow: TTyValueRow): Boolean;
+function TTyCustomValueListEditor.RowExists(ARow: TTyValueRow): Boolean;
 
   function InNode(ANode: TTyValueRow): Boolean;
   var i: Integer;
@@ -1121,7 +1196,7 @@ begin
     if InNode(FRoot[i]) then Exit(True);
 end;
 
-procedure TTyValueListEditor.BeginEdit(AFlat: Integer);
+procedure TTyCustomValueListEditor.BeginEdit(AFlat: Integer);
 var r: TTyValueRow;
 begin
   if FReadOnly then Exit;
@@ -1163,7 +1238,7 @@ end;
 { Show the inline text editor over the value cell. The text is freely editable / selectable /
   copyable; ANumeric restricts typing to a number; AEllipsis adds a trailing "…" button whose
   click (only) opens the row's dialog (font / custom) — see EditorEllipsis. }
-procedure TTyValueListEditor.BeginInlineEdit(AFlat: Integer; ANumeric: TTyValueNumericMode;
+procedure TTyCustomValueListEditor.BeginInlineEdit(AFlat: Integer; ANumeric: TTyValueNumericMode;
   AEllipsis: Boolean);
 begin
   FEditFlat := AFlat;
@@ -1184,12 +1259,12 @@ end;
   nothing to say about the name, so a vekColor row's key is still typed, not picked. A read-only
   ROW is read-only in its value only: renaming the entry is a row-set operation, which is what
   KeyOptions governs. }
-function TTyValueListEditor.IsEditingKey: Boolean;
+function TTyCustomValueListEditor.IsEditingKey: Boolean;
 begin
   Result := (FEditFlat >= 0) and (FEditCol = 0);
 end;
 
-procedure TTyValueListEditor.BeginKeyEdit(AFlat: Integer);
+procedure TTyCustomValueListEditor.BeginKeyEdit(AFlat: Integer);
 begin
   if FReadOnly or not (keyEdit in FKeyOptions) then Exit;
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
@@ -1213,7 +1288,7 @@ end;
 
 { Create the shared dropdown popup + its two content lists (text for enum/bool, swatches for
   colour) lazily. Both lists route selection through DropPick/DropClick → HandleDropCommit. }
-procedure TTyValueListEditor.EnsureDropPopup;
+procedure TTyCustomValueListEditor.EnsureDropPopup;
 begin
   if FDropPopup <> nil then Exit;
   FDropPopup := TTyDropdownPopup.Create;
@@ -1228,7 +1303,7 @@ end;
 
 { Match the popup WINDOW's rounded region to the list's themed fill radius, else the square
   window corners show through as black outside the rounded fill. Mirrors TTyComboBox.DropDown. }
-procedure TTyValueListEditor.ConfigureDropCorners;
+procedure TTyCustomValueListEditor.ConfigureDropCorners;
 begin
   FDropPopup.Controller := Controller;
   { 'TyListBox' on purpose, NOT this control's key: the popup's CONTENT is a real TTyListBox
@@ -1238,7 +1313,7 @@ begin
   FDropPopup.CornerRadiusLogical := ActiveController.Model.ResolveStyle('TyListBox', '', []).BorderRadius;
 end;
 
-function TTyValueListEditor.DropdownHeightFor(ARows: Integer): Integer;
+function TTyCustomValueListEditor.DropdownHeightFor(ARows: Integer): Integer;
 var
   S: TTyStyleSet;
 begin
@@ -1252,7 +1327,7 @@ begin
   Result := ARows * Dp(ItemHeight) + Dp(S.Padding.Top) + Dp(S.Padding.Bottom);
 end;
 
-procedure TTyValueListEditor.BeginDropdown(AFlat: Integer; const AOptions: string);
+procedure TTyCustomValueListEditor.BeginDropdown(AFlat: Integer; const AOptions: string);
 var cell: TRect; rows: Integer;
 begin
   FEditFlat := AFlat;
@@ -1283,7 +1358,7 @@ end;
 
 { vekColor: a palette dropdown (swatch per colour) whose LAST row is a "more…" entry (clNone
   sentinel) that opens the themed colour dialog. }
-procedure TTyValueListEditor.BeginColorDropdown(AFlat: Integer);
+procedure TTyCustomValueListEditor.BeginColorDropdown(AFlat: Integer);
 var cell: TRect; rows, idx: Integer;
 begin
   FEditFlat := AFlat;
@@ -1316,7 +1391,7 @@ end;
 
 { Shared commit for both dropdown lists (fired by OnChange and by OnMouseUp — the latter so a
   click on the ALREADY-selected row still commits, since SelectItem fires no OnChange). }
-procedure TTyValueListEditor.HandleDropCommit;
+procedure TTyCustomValueListEditor.HandleDropCommit;
 var flat, idx: Integer;
 begin
   if FDropSeeding then Exit;
@@ -1352,7 +1427,7 @@ begin
   end;
 end;
 
-procedure TTyValueListEditor.DeferredColorDialog(Data: PtrInt);
+procedure TTyCustomValueListEditor.DeferredColorDialog(Data: PtrInt);
 var col: TColor; a: Byte; r: TTyValueRow;
 begin
   r := FColorDlgRow;
@@ -1364,20 +1439,20 @@ begin
     CommitEditorRow(r, ColorToString(col));
 end;
 
-procedure TTyValueListEditor.DropPick(Sender: TObject);
+procedure TTyCustomValueListEditor.DropPick(Sender: TObject);
 begin
   HandleDropCommit;
 end;
 
 { Clicking a row that is ALREADY selected fires no OnChange (SelectItem exits early), so the pick
   would be a dead interaction — commit from MouseUp too (a safe no-op on a changing click). }
-procedure TTyValueListEditor.DropClick(Sender: TObject; Button: TMouseButton;
+procedure TTyCustomValueListEditor.DropClick(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   if Button = mbLeft then HandleDropCommit;
 end;
 
-procedure TTyValueListEditor.DropClosed(Sender: TObject);
+procedure TTyCustomValueListEditor.DropClosed(Sender: TObject);
 begin
   FDropMode := False;
   FDropKind := dkNone;
@@ -1388,12 +1463,12 @@ begin
 end;
 
 { The inline "…" button was clicked (or InvokeRowDialog called): run the row's dialog editor. }
-procedure TTyValueListEditor.EditorEllipsis(Sender: TObject);
+procedure TTyCustomValueListEditor.EditorEllipsis(Sender: TObject);
 begin
   InvokeRowDialog(FEditFlat);
 end;
 
-procedure TTyValueListEditor.InvokeRowDialog(AFlat: Integer);
+procedure TTyCustomValueListEditor.InvokeRowDialog(AFlat: Integer);
 var r: TTyValueRow;
 begin
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
@@ -1430,7 +1505,7 @@ begin
   else Result := False;
 end;
 
-procedure TTyValueListEditor.SeedFontFromRow(ARow: TTyValueRow; AFont: TFont);
+procedure TTyCustomValueListEditor.SeedFontFromRow(ARow: TTyValueRow; AFont: TFont);
 var i, j, sz: Integer; c, g: TTyValueRow; k, nm: string; flag: TFontStyle;
 begin
   if ARow.HasChildren then
@@ -1467,7 +1542,7 @@ begin
   if AOn then Result := 'True' else Result := 'False';
 end;
 
-procedure TTyValueListEditor.SyncFontChildren(ARow: TTyValueRow; AFont: TFont);
+procedure TTyCustomValueListEditor.SyncFontChildren(ARow: TTyValueRow; AFont: TFont);
 var didChange: Boolean;
 
   procedure SetChild(ARowc: TTyValueRow; const ANewValue: string);
@@ -1501,7 +1576,7 @@ begin
   if didChange then RebuildFlat;
 end;
 
-procedure TTyValueListEditor.EditFontRow(AFlat: Integer);
+procedure TTyCustomValueListEditor.EditFontRow(AFlat: Integer);
 var dlg: TTyFontDialog; r: TTyValueRow;
 begin
   r := FFlatRow[AFlat];
@@ -1525,7 +1600,7 @@ begin
   if CanFocus then SetFocus;
 end;
 
-procedure TTyValueListEditor.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
+procedure TTyCustomValueListEditor.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
 var flat, col: Integer;
 begin
   if FEditor = nil then Exit;
@@ -1570,7 +1645,7 @@ begin
   end;
 end;
 
-procedure TTyValueListEditor.RepositionEditor;
+procedure TTyCustomValueListEditor.RepositionEditor;
 begin
   if FEditor = nil then Exit;
   if FEditFlat < 0 then Exit;
@@ -1580,7 +1655,7 @@ begin
     FEditor.BoundsRect := CellRect(FEditFlat, FEditCol);
 end;
 
-procedure TTyValueListEditor.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomValueListEditor.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   case Key of
     VK_RETURN: begin EndEdit(True,  True); Key := 0; end;
@@ -1588,32 +1663,32 @@ begin
   end;
 end;
 
-procedure TTyValueListEditor.EditorExit(Sender: TObject);
+procedure TTyCustomValueListEditor.EditorExit(Sender: TObject);
 begin
   if csDestroying in ComponentState then Exit;
   if FDropMode then Exit;   // the popup took focus; the dropdown drives commit/close, not this
   if (FEditFlat >= 0) and not FEndingEdit then EndEdit(True);
 end;
 
-procedure TTyValueListEditor.SetController(AValue: TTyStyleController);
+procedure TTyCustomValueListEditor.SetController(AValue: TTyStyleController);
 begin
   inherited SetController(AValue);
   if FEditor <> nil then FEditor.Controller := AValue;
 end;
 
-procedure TTyValueListEditor.SetTopIndex(const AValue: Integer);
+procedure TTyCustomValueListEditor.SetTopIndex(const AValue: Integer);
 begin
   if (FEditFlat >= 0) and (AValue <> TopIndex) then EndEdit(True);
   inherited SetTopIndex(AValue);
 end;
 
-procedure TTyValueListEditor.Resize;
+procedure TTyCustomValueListEditor.Resize;
 begin
   inherited Resize;
   RepositionEditor;
 end;
 
-procedure TTyValueListEditor.Paint;
+procedure TTyCustomValueListEditor.Paint;
 begin
   inherited Paint;
   RepositionEditor;
@@ -1621,14 +1696,14 @@ end;
 
 { ---- painting ---- }
 
-function TTyValueListEditor.RtlRowLayout: Boolean;
+function TTyCustomValueListEditor.RtlRowLayout: Boolean;
 begin
   { See the declaration: the x-axis hit tests here are computed a second time and would not
     follow. }
   Result := False;
 end;
 
-function TTyValueListEditor.GetStyleTypeKey: string;
+function TTyCustomValueListEditor.GetStyleTypeKey: string;
 begin
   { Its own key, not the ancestor's. This is a property inspector that merely reuses
     TTyListBox's row loop: it draws two COLUMNS split by a user-draggable divider, an indented
@@ -1641,13 +1716,13 @@ begin
   Result := 'TyValueListEditor';
 end;
 
-function TTyValueListEditor.GetItemStyleTypeKey: string;
+function TTyCustomValueListEditor.GetItemStyleTypeKey: string;
 begin
   { The inspector's rows are not list items: this is the seam that unwelds them. }
   Result := 'TyValueListEditorRow';
 end;
 
-procedure TTyValueListEditor.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomValueListEditor.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   r: TTyValueRow;
@@ -1779,7 +1854,7 @@ end;
 
 { ---- mouse / keyboard ---- }
 
-procedure TTyValueListEditor.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomValueListEditor.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var flat: Integer;
 begin
   if (Button = mbLeft) and OverSplit(X) then
@@ -1804,7 +1879,7 @@ begin
   end;
 end;
 
-procedure TTyValueListEditor.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomValueListEditor.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if FDraggingSplit then
   begin
@@ -1815,13 +1890,13 @@ begin
   inherited MouseMove(Shift, X, Y);
 end;
 
-procedure TTyValueListEditor.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomValueListEditor.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if FDraggingSplit and (Button = mbLeft) then FDraggingSplit := False;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
-procedure TTyValueListEditor.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomValueListEditor.KeyDown(var Key: Word; Shift: TShiftState);
 var at: Integer;
 begin
   { keyAdd / keyDelete are ROW-SET gestures, so they run before the edit keys and regardless of
