@@ -17,6 +17,7 @@ Ribbon 按钮消费。
 | `FontFamily` | 渲染用的字体族名(须与已注册/已安装的族一致;设了 `FontFile` 时通常就是该文件的族名)。 |
 | `FontFile` | 可选 .ttf 路径,进程内私有加载(Windows);重设/清空会注销上一个。 |
 | `Glyphs` | `name=HEX` 码点映射,每行一条,如 `save=F0C7`。设计期可编辑或从文件载入。 |
+| `ChangeStamp`(只读,public) | 字形外观每变一次(映射、字体族、字体文件)就加一。缓存了渲染结果的一方比较它就知道该不该重画。**4.0 起由 `Version` 更名**:3.0 的 `Version: Integer` 遮住了每个组件都有的库版本号 `Version: string`;读 `IconFont.Version` 当计数器的代码改读 `ChangeStamp`。`TTyImageCollection` 同名属性做的是同一件事。 |
 
 ## 方法
 
