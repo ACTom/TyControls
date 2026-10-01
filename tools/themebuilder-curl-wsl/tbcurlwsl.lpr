@@ -20,7 +20,8 @@ program tbcurlwsl;
 {$mode objfpc}{$H+}
 
 uses
-  cthreads, Classes, SysUtils, BaseUnix, Unix, tbhttp, tbhttpcurl, tbfakehttp, tbaichecks;
+  cthreads, Classes, SysUtils, BaseUnix, Unix, tbhttp, tbhttpcurl, tbfakehttp, tbaisettings,
+  tbaichecks;
 
 type
   TCheckFn = function(out AWhy: string): Boolean;
@@ -153,6 +154,11 @@ begin
   Run('C9@curl silence times out', @AiCheckTimeout);
   Run('C13@curl a reply not streamed', @AiCheckNotStreamed);
   Run('C15@curl stop', @AiCheckCancel);
+
+  Run('K1 profiles come back as they were', @SettingsCheckRoundTrip);
+  Run('K2 the key file is 0600, the ini has no key', @SettingsCheckUnixKeyFile);
+  Run('K9 a key file others could read is made 0600', @SettingsCheckWideKeyFile);
+  Run('K10 a new private file is 0600 under umask 022', @SettingsCheckPrivateFile);
 
   WriteLn(Format('tbcurlwsl: %d passed, %d failed', [Passed, Failed]));
   Halt(Failed);

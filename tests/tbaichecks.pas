@@ -12,7 +12,7 @@ unit tbaichecks;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, SyncObjs, tbhttp, tbfakehttp, tbaiformat, tbaiclient;
+  Classes, SysUtils, SyncObjs, tbhttp, tbfakehttp, tbaiformat, tbaiclient, tbaisettings;
 
 type
   { one Execute on a worker thread, with everything the checks look at afterwards }
@@ -99,10 +99,20 @@ function AiCheckBadFormat(out AWhy: string): Boolean;         { C14 }
 function AiCheckCancel(out AWhy: string): Boolean;            { C15 }
 function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
 
+{ the AI settings: the plan's K numbers (the Windows-only ones are in the test unit) }
+function TbAiTempDir: string;                                 { a fresh folder }
+procedure TbAiRemoveDir(const ADir: string);
+function SettingsCheckRoundTrip(out AWhy: string): Boolean;   { K1 }
+{$IFDEF UNIX}
+function SettingsCheckUnixKeyFile(out AWhy: string): Boolean; { K2, Unix }
+function SettingsCheckWideKeyFile(out AWhy: string): Boolean; { K9 }
+function SettingsCheckPrivateFile(out AWhy: string): Boolean; { K10 }
+{$ENDIF}
+
 implementation
 
 uses
-  fpjson, jsonparser;
+  fpjson, jsonparser{$IFDEF UNIX}, BaseUnix{$ENDIF};
 
 const
   cChinese = #$E4#$B8#$AD#$E6#$96#$87;    { 中文 in UTF-8 }
@@ -1241,5 +1251,208 @@ begin
     srv.Free;
   end;
 end;
+
+
+{ ---- the K checks (settings and keys) ---- }
+
+var
+  GTempSeq: Integer = 0;
+
+function TbAiTempDir: string;
+begin
+  Inc(GTempSeq);
+  Result := IncludeTrailingPathDelimiter(GetTempDir(False)) +
+    Format('tb3-ai-%d-%d', [GetProcessID, GTempSeq]) + PathDelim;
+  ForceDirectories(Result);
+end;
+
+procedure TbAiRemoveDir(const ADir: string);
+var
+  sr: TSearchRec;
+begin
+  if FindFirst(ADir + '*', faAnyFile, sr) = 0 then
+  begin
+    repeat
+      if (sr.Name <> '.') and (sr.Name <> '..') then
+        SysUtils.DeleteFile(ADir + sr.Name);
+    until FindNext(sr) <> 0;
+    FindClose(sr);
+  end;
+  RemoveDir(ExcludeTrailingPathDelimiter(ADir));
+end;
+
+function ReadAll(const AFileName: string): RawByteString;
+var
+  fs: TFileStream;
+begin
+  Result := '';
+  if not FileExists(AFileName) then Exit;
+  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+  try
+    SetLength(Result, fs.Size);
+    if fs.Size > 0 then
+      fs.ReadBuffer(Result[1], fs.Size);
+  finally
+    fs.Free;
+  end;
+end;
+
+function SameProfile(const A, B: TTbAiProfile): Boolean;
+begin
+  Result := (A.Id = B.Id) and (A.Name = B.Name) and (A.Format = B.Format) and
+    (A.BaseUrl = B.BaseUrl) and (A.Model = B.Model) and (A.MaxOutput = B.MaxOutput) and
+    (A.TimeoutSec = B.TimeoutSec);
+end;
+
+function SettingsCheckRoundTrip(out AWhy: string): Boolean;
+var
+  dir, ini, keys: string;
+  a, b: TTbAiSettings;
+  p1, p2, cur: TTbAiProfile;
+begin
+  Result := False;
+  dir := TbAiTempDir;
+  try
+    TbAiFilesFor(dir + 'themebuilder.ini', ini, keys);
+    a := TTbAiSettings.Create(ini, keys);
+    b := TTbAiSettings.Create(ini, keys);
+    try
+      p1 := TbPresetProfile(tapAnthropic);
+      p1.Name := 'Claude ' + cChinese;
+      p1.MaxOutput := 12345;
+      p2 := TbPresetProfile(tapOllama);
+      p2.Name := 'Mine';
+      p2.TimeoutSec := 77;
+      a.Put(p1);
+      a.Put(p2);
+      a.CurrentId := p2.Id;
+      if not a.Save then Exit(Fail(AWhy, 'Save said no'));
+      b.Load;
+      if b.Count <> 2 then Exit(Fail(AWhy, Format('%d profiles read back', [b.Count])));
+      if not SameProfile(b.Profile(0), p1) then Exit(Fail(AWhy, 'the first profile changed'));
+      if not SameProfile(b.Profile(1), p2) then Exit(Fail(AWhy, 'the second profile changed'));
+      if not b.Current(cur) or (cur.Id <> p2.Id) then Exit(Fail(AWhy, 'the current profile changed'));
+      Result := True;
+      AWhy := '';
+    finally
+      a.Free;
+      b.Free;
+    end;
+  finally
+    TbAiRemoveDir(dir);
+  end;
+end;
+
+{$IFDEF UNIX}
+function FileMode(const AFileName: string): Integer;
+var
+  st: TStat;
+begin
+  if fpStat(PChar(AFileName), st) <> 0 then
+    Exit(-1);
+  Result := st.st_mode and &777;
+end;
+
+function SettingsCheckUnixKeyFile(out AWhy: string): Boolean;
+const
+  cKey = 'sk-test-ABCDEFGH12345678';
+var
+  dir, ini, keys: string;
+  a, b: TTbAiSettings;
+  p: TTbAiProfile;
+begin
+  Result := False;
+  dir := TbAiTempDir;
+  try
+    TbAiFilesFor(dir + 'themebuilder.ini', ini, keys);
+    if keys = '' then Exit(Fail(AWhy, 'no key file on Unix'));
+    a := TTbAiSettings.Create(ini, keys);
+    b := TTbAiSettings.Create(ini, keys);
+    try
+      p := TbPresetProfile(tapOpenAI);
+      a.Put(p);
+      a.SetKey(p.Id, cKey);
+      if not a.Save then Exit(Fail(AWhy, 'Save said no'));
+      if not FileExists(keys) then Exit(Fail(AWhy, 'no key file was written'));
+      if FileMode(keys) <> &600 then Exit(Fail(AWhy, Format('the key file has mode %d (decimal; 384 = 0600)', [FileMode(keys)])));
+      if (Pos(cKey, ReadAll(ini)) > 0) or (Pos('ABCDEFGH', ReadAll(ini)) > 0) then
+        Exit(Fail(AWhy, 'the key is in the ini'));
+      b.Load;
+      if b.GetKey(p.Id) <> cKey then Exit(Fail(AWhy, 'the key did not come back'));
+      Result := True;
+      AWhy := '';
+    finally
+      a.Free;
+      b.Free;
+    end;
+  finally
+    TbAiRemoveDir(dir);
+  end;
+end;
+
+{ K9: a key file left readable by others is set back to 0600 when it is read }
+function SettingsCheckWideKeyFile(out AWhy: string): Boolean;
+var
+  dir, ini, keys: string;
+  a: TTbAiSettings;
+  p: TTbAiProfile;
+  sl: TStringList;
+begin
+  Result := False;
+  dir := TbAiTempDir;
+  try
+    TbAiFilesFor(dir + 'themebuilder.ini', ini, keys);
+    a := TTbAiSettings.Create(ini, keys);
+    try
+      p := TbPresetProfile(tapOpenAI);
+      a.Put(p);
+      if not a.Save then Exit(Fail(AWhy, 'Save said no'));
+    finally
+      a.Free;
+    end;
+    sl := TStringList.Create;
+    try
+      sl.Add(p.Id + '=sk-test-0000');
+      sl.SaveToFile(keys);
+    finally
+      sl.Free;
+    end;
+    fpChmod(PChar(keys), &644);
+    if FileMode(keys) <> &644 then Exit(Fail(AWhy, 'could not make the file 0644 first'));
+    a := TTbAiSettings.Create(ini, keys);
+    try
+      a.Load;
+      if a.GetKey(p.Id) <> 'sk-test-0000' then Exit(Fail(AWhy, 'the key was not read'));
+    finally
+      a.Free;
+    end;
+    if FileMode(keys) <> &600 then Exit(Fail(AWhy, Format('still mode %d (decimal; 384 = 0600) after reading', [FileMode(keys)])));
+    Result := True;
+    AWhy := '';
+  finally
+    TbAiRemoveDir(dir);
+  end;
+end;
+
+{ K10: a new private file is 0600 under the usual umask 022 }
+function SettingsCheckPrivateFile(out AWhy: string): Boolean;
+var
+  dir: string;
+begin
+  Result := False;
+  dir := TbAiTempDir;
+  try
+    fpUmask(&022);
+    if not TbWritePrivateFile(dir + 'p.keys', 'x=y'#10) then Exit(Fail(AWhy, 'not written'));
+    if FileMode(dir + 'p.keys') <> &600 then
+      Exit(Fail(AWhy, Format('created with mode %d (decimal; 384 = 0600)', [FileMode(dir + 'p.keys')])));
+    if ReadAll(dir + 'p.keys') <> 'x=y'#10 then Exit(Fail(AWhy, 'the bytes changed'));
+    Result := True;
+    AWhy := '';
+  finally
+    TbAiRemoveDir(dir);
+  end;
+end;
+{$ENDIF}
 
 end.
