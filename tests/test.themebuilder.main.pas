@@ -70,6 +70,7 @@ type
     procedure TestTheSnippetsNameTheFile;
     procedure TestTheViewMenuShowsTheSidePages;
     procedure TestAWindowGoesWithItsHooks;
+    procedure TestHowLongARefreshTakes;
   end;
 
 implementation
@@ -1222,6 +1223,36 @@ end;
 
 { The preview's hooks and the seeds page outlive FormDestroy by a little (they are freed
   with the window): neither calls back into it. }
+{ Not a pass / fail: how long a refresh (lint, preview, seeds page) takes on a big theme, the
+  median of five, printed for the sign-off. Red only past ten times what it should take. }
+procedure TTbMainFormTests.TestHowLongARefreshTakes;
+var
+  times: array[0..4] of Int64;
+  i, j: Integer;
+  t0, x: Int64;
+begin
+  WriteBytes(FDir + 'auto.tycss', ReadBytes(TbThemesDir + 'auto.tycss'));
+  AssertTrue('opened', FForm.OpenFile(FDir + 'auto.tycss'));
+  for i := 0 to High(times) do
+  begin
+    FForm.Preview.Controller.Model.RefreshSystemTokens;   { no cached resolves }
+    t0 := GetTickCount64;
+    FForm.RefreshNow;
+    times[i] := GetTickCount64 - t0;
+  end;
+  for i := 0 to High(times) do
+    for j := i + 1 to High(times) do
+      if times[j] < times[i] then
+      begin
+        x := times[i];
+        times[i] := times[j];
+        times[j] := x;
+      end;
+  WriteLn(Format('TTbMainFormTests.TestHowLongARefreshTakes: auto.tycss, median of five %d ms (%d..%d)',
+    [times[2], times[0], times[4]]));
+  AssertTrue('a refresh in reasonable time', times[2] < 1500);
+end;
+
 procedure TTbMainFormTests.TestAWindowGoesWithItsHooks;
 var
   f: TTbMainForm;
