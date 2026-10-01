@@ -118,6 +118,7 @@ type
     procedure TestPerControlApiAndCollectionAreOneState;
     procedure TestEditingTheCollectionRelaysAndNotifies;
     procedure TestFreeingAChildDropsItsBand;
+    procedure TestFreeingTheBarWhileItsOwnerLives;
     procedure TestBandDisplayNamePrefersItsCaption;
     procedure TestVerticalPutsTheGripAboveTheBand;
     procedure TestGripperDragMovesTheSeamNotTheDraggedBand;
@@ -798,6 +799,24 @@ begin
   AssertEquals('one band', 1, CB.Bands.Count);
   b.Free;
   AssertEquals('the band went with its control', 0, CB.Bands.Count);
+end;
+
+{ Code that frees a bar at run time (CoolBar1.Free) while the form lives on: the form, as the
+  owner, notifies everything it owns of the removal -- the bar included, whose band list its
+  destructor has already freed. That notice used to look the bar up in the freed list. }
+procedure TCoolBarControlTest.TestFreeingTheBarWhileItsOwnerLives;
+var CB: TCoolBarAccess; b: TControl; n: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  CB.SetBandWidth(b, 80);
+  AssertEquals('precondition: the bar has a band', 1, CB.Bands.Count);
+  n := FForm.ComponentCount;
+  CB.Free;
+  AssertEquals('the bar left its owner and nothing else did', n - 1, FForm.ComponentCount);
+  if b = nil then ;
 end;
 
 procedure TCoolBarControlTest.TestBandDisplayNamePrefersItsCaption;
