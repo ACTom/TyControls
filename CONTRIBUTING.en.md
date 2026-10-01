@@ -55,7 +55,7 @@ So when you hit a problem, upgrading to the latest minor version gets you the fi
 
 For anything sizeable, open an issue or comment on an existing one first, so the work doesn't end up going in a different direction.
 
-**Branches**: a fix for a released version goes on the maintenance branch, `major.minor-fixes`, of the newest release that still has the bug (a 3.0.x bug goes on `3.0-fixes`). The maintainer cherry-picks fixes to the other maintenance branches and to `main`; branches are never merged into one another. Features and everything else go on `main`.
+**Branches**: a fix for a released version goes on the maintenance branch, `major.minor-fixes`, of the newest release that still has the bug (a 3.0.x bug goes on `3.0-fixes`). The maintainer cherry-picks fixes to the other maintenance branches and to `main`; maintenance branches are never merged with any other branch. Features and everything else go on `main`; larger features are built on a feature branch and merged back into `main`.
 
 **Build and test**:
 
