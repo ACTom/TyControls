@@ -566,6 +566,16 @@ type
     FAnimPending: Boolean;
     FAnimLive: Boolean;
     FAnimWindow: Boolean;
+    { THE RENDER BEFORE AN UPDATE [Batch 90]: what the last list held and
+      its series' keys, taken when a new option is laid out and kept until
+      the render that animates it; that render's build, kept alive for its
+      coordinate systems (a point added to a line starts where the old axes
+      put it); and the old option's series view keys, read before the option
+      text is replaced. }
+    FAnimPrev: TTyChartAnimPrev;
+    FAnimOldBuild: TTyChartBuild;
+    FAnimOldBindings: TTySeriesBindingArray;
+    FAnimOldViewKeys: TTyStringArray;
     FPaintList: TTyPaintList;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
@@ -584,6 +594,16 @@ type
       element's proxy }
     procedure AnimAfterBuild;
     function AnimSeriesInfo: TTyChartAnimSeriesArray;
+    { ---- the update [Batch 90] ---- }
+    { upstream's series view ids of an option, by series index }
+    function AnimViewKeys(ARoot: TJSONData): TTyStringArray;
+    { each view row's DataDiffer key and raw index }
+    procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
+      out ARaws: TTyIntegerArray);
+    { the list and keys of the render an update starts from }
+    procedure AnimSnapshot;
+    procedure AnimDropPrev;
+    function AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
     procedure AnimArmTimer;
     procedure AnimTimerFired(Sender: TObject);
     procedure SetAnimMode(AValue: TTyChartAnimationMode);
@@ -1273,6 +1293,12 @@ type
     function AnimProxy(AIndex: Integer): TTyChartAnimProxy;
     function AnimFindProxy(ASeries, AIndex: Integer;
       const ARole: string): TTyChartAnimProxy;
+    { A REMOVED ELEMENT STILL LEAVING [Batch 90]: the ghost of the OLD row
+      AIndex of series ASeries, nil once its fade has ended; and how many
+      are still drawn }
+    function AnimFindGhost(ASeries, AIndex: Integer;
+      const ARole: string): TTyChartAnimProxy;
+    function AnimGhostCount: Integer;
     function AxisZoom(const AMainType: string; AAxisIndex: Integer;
       out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
     { The rows of series ASeriesIndex as the last build left them -- filtered
@@ -1457,6 +1483,7 @@ begin
   FreeAndNil(FAnimSet);
   FreeAndNil(FAnim);
   FreeAndNil(FAnimFrame);
+  FreeAndNil(FAnimOldBuild);
   inherited Destroy;
 end;
 
@@ -1516,6 +1543,10 @@ procedure TTyAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
   FOptionText := AValue;
+  { THE OLD OPTION'S SERIES VIEWS, before the text goes: an update keeps a
+    series whose view id and type are the same -- unless an update already
+    waits, whose old render is still the one before it [Batch 90] }
+  if not FAnimPrev.Valid then FAnimOldViewKeys := AnimViewKeys(FOption.Root);
   FOption.SetOptionText(AValue);
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
@@ -2114,8 +2145,15 @@ begin
   Inc(FStGen);
   { A NEW LAYOUT SNAPS: a resize, a theme, a zoom -- upstream sets those
     directly ({duration: 0}) -- and a new option is armed again after the
-    build [Batch 89] }
-  AnimDropAll;
+    build [Batch 89]. A NEW OPTION UPDATES: the render before it is kept --
+    its list, its keys, its build -- for the render that arms it, and the
+    proxies run on [Batch 90]. }
+  if FAnimPending and (FAnimMode <> camOff) and not (csDesigning in ComponentState) then
+  begin
+    if not FAnimPrev.Valid then AnimSnapshot;
+  end
+  else
+    AnimDropAll;
   Rebuild;
   { The layout pass measures the labels the PAINT pass will draw, so it has to
     be handed the same font and the same gaps. Resolving them here rather than
@@ -13509,7 +13547,189 @@ begin
   if FAnimSet <> nil then FAnimSet.Clear;
   FAnimBind := nil;
   FAnimLive := False;
+  AnimDropPrev;
   AnimArmTimer;
+end;
+
+procedure TTyAdvanceChart.AnimDropPrev;
+begin
+  FAnimPrev := Default(TTyChartAnimPrev);
+  FreeAndNil(FAnimOldBuild);
+  FAnimOldBindings := nil;
+end;
+
+function TTyAdvanceChart.AnimViewKeys(ARoot: TJSONData): TTyStringArray;
+var
+  ser, s, d: TJSONData;
+  i, n, k: Integer;
+  names: TStringList;
+  nm: string;
+begin
+  { upstream's makeIdAndName under notMerge: the option's id; else its name
+    and '\0' + the count of earlier series of that name; else the dummy
+    name 'series\0' + its index }
+  Result := nil;
+  if not (ARoot is TJSONObject) then Exit;
+  ser := TJSONObject(ARoot).Find('series');
+  if ser = nil then Exit;
+  if ser.JSONType = jtArray then n := ser.Count
+  else if ser.JSONType = jtObject then n := 1
+  else Exit;
+  SetLength(Result, n);
+  names := TStringList.Create;
+  try
+    for i := 0 to n - 1 do
+    begin
+      if ser.JSONType = jtArray then s := ser.Items[i] else s := ser;
+      Result[i] := 'x:' + IntToStr(i);
+      if not (s is TJSONObject) then Continue;
+      d := TJSONObject(s).Find('id');
+      if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+      begin
+        Result[i] := 'i:' + d.AsString;
+        Continue;
+      end;
+      d := TJSONObject(s).Find('name');
+      if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+      begin
+        nm := d.AsString;
+        k := 0;
+        while names.IndexOf(nm + #0 + IntToStr(k)) >= 0 do Inc(k);
+        names.Add(nm + #0 + IntToStr(k));
+        Result[i] := 'n:' + nm + #0 + IntToStr(k);
+      end;
+    end;
+  finally
+    names.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
+  out ARaws: TTyIntegerArray);
+var
+  rawKeys: TTyStringArray;
+  counts: TStringList;
+  d, ord_, raw, k, c: Integer;
+  id, nm: string;
+  v: Double;
+begin
+  AKeys := nil;
+  ARaws := nil;
+  if AStore = nil then Exit;
+  { the first category dimension names a row that has no name of its own
+    (createSeriesData gives it the item-name role) }
+  ord_ := -1;
+  for d := 0 to AStore.DimCount - 1 do
+    if AStore.DimType(d) = ddtOrdinal then
+    begin
+      ord_ := d;
+      Break;
+    end;
+  { getId over the raw rows, in order: an id; else the name, '__ec__' and
+    its count from the second time on; else 'e\0\0' + the raw index }
+  SetLength(rawKeys, AStore.RawCount);
+  counts := TStringList.Create;
+  try
+    counts.CaseSensitive := True;
+    for raw := 0 to AStore.RawCount - 1 do
+    begin
+      id := AStore.GetIdByRaw(raw);
+      if id <> '' then
+      begin
+        rawKeys[raw] := id;
+        Continue;
+      end;
+      nm := AStore.GetNameByRaw(raw);
+      if (nm = '') and (ord_ >= 0) then
+      begin
+        v := AStore.GetByRaw(ord_, raw);
+        if (not IsNan(v)) and (Frac(v) = 0) and (v >= 0)
+          and (v < AStore.CategoryCount(ord_)) then
+          nm := AStore.CategoryAt(ord_, Trunc(v));
+      end;
+      if nm = '' then
+      begin
+        rawKeys[raw] := 'e'#0#0 + IntToStr(raw);
+        Continue;
+      end;
+      k := counts.IndexOf(nm);
+      if k < 0 then
+      begin
+        counts.AddObject(nm, TObject(PtrInt(1)));
+        c := 1;
+      end
+      else
+      begin
+        c := PtrInt(counts.Objects[k]) + 1;
+        counts.Objects[k] := TObject(PtrInt(c));
+      end;
+      if c > 1 then rawKeys[raw] := nm + '__ec__' + IntToStr(c)
+      else rawKeys[raw] := nm;
+    end;
+  finally
+    counts.Free;
+  end;
+  SetLength(AKeys, AStore.Count);
+  SetLength(ARaws, AStore.Count);
+  for k := 0 to AStore.Count - 1 do
+  begin
+    raw := AStore.GetRawIndex(k);
+    ARaws[k] := raw;
+    if (raw >= 0) and (raw <= High(rawKeys)) then AKeys[k] := rawKeys[raw]
+    else AKeys[k] := 'e'#0#0 + IntToStr(raw);
+  end;
+end;
+
+procedure TTyAdvanceChart.AnimSnapshot;
+var
+  slot, si, i, n: Integer;
+  r: TTyChartAnimSeries;
+  el: TTyChartElement;
+begin
+  AnimDropPrev;
+  { NOTHING DRAWN BEFORE: the option enters }
+  if FPaintList = nil then Exit;
+  FAnimPrev.Valid := True;
+  for slot := 0 to High(FBindings) do
+  begin
+    si := FBindings[slot].SeriesIndex;
+    if si < 0 then Continue;
+    if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
+    r := Default(TTyChartAnimSeries);
+    r.Present := True;
+    r.SeriesType := FBindings[slot].SeriesType;
+    if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]
+    else r.ViewKey := 'x:' + IntToStr(si);
+    if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      AnimRowKeys(FStores[slot], r.Keys, r.Raws);
+    FAnimPrev.Series[si] := r;
+  end;
+  n := 0;
+  SetLength(FAnimPrev.Elements, FPaintList.Count);
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    el := FPaintList.Element(i);
+    if el.Anim.Role = carNone then Continue;
+    FAnimPrev.Elements[n] := el;
+    Inc(n);
+  end;
+  SetLength(FAnimPrev.Elements, n);
+  FAnimPrev.ToOldPoint := @AnimToOldPoint;
+  { THE OLD BUILD STAYS ALIVE for its coordinate systems; Rebuild's
+    DropBuild finds nothing to free }
+  FAnimOldBuild := FBuild;
+  FBuild := nil;
+  FAnimOldBindings := Copy(FBindings, 0, Length(FBindings));
+end;
+
+function TTyAdvanceChart.AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
+var i: Integer;
+begin
+  Result := TyPointF(NaN, NaN);
+  for i := 0 to High(FAnimOldBindings) do
+    if (FAnimOldBindings[i].SeriesIndex = AOldSeries)
+      and (FAnimOldBindings[i].Cart <> nil) then
+      Exit(FAnimOldBindings[i].Cart.DataToPoint([AX, AY]));
 end;
 
 function TTyAdvanceChart.AnimSeriesInfo: TTyChartAnimSeriesArray;
@@ -13519,8 +13739,10 @@ var
   t: string;
   ser, lbl, va: TJSONData;
   v: TTyAnimOptValue;
+  viewKeys: TTyStringArray;
 begin
   Result := nil;
+  viewKeys := AnimViewKeys(FOption.Root);
   for slot := 0 to High(FBindings) do
   begin
     si := FBindings[slot].SeriesIndex;
@@ -13553,8 +13775,16 @@ begin
     end;
     r.BaseHoriz := (FBindings[slot].BaseAxis = nil)
       or FBindings[slot].BaseAxis.Horizontal;
+    { AN UPDATE'S VIEW [Batch 90] }
+    r.SeriesType := t;
+    if si <= High(viewKeys) then r.ViewKey := viewKeys[si]
+    else r.ViewKey := 'x:' + IntToStr(si);
+    if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      AnimRowKeys(FStores[slot], r.Keys, r.Raws);
     if t = TyPieSeriesTypeName then
     begin
+      v := TyAnimGetShallow(r.Model, 'animationTypeUpdate');
+      r.PieExpandAlways := (v.Kind = aokString) and (v.Str = 'expansion');
       v := TyAnimGetShallow(r.Model, 'animationType');
       r.PieScale := (v.Kind = aokString) and (v.Str = 'scale');
       { A FIRST RENDER'S SHARED START: the first slice's whose start is a
@@ -13581,7 +13811,16 @@ begin
       FAnimPending := False;
       if FAnim = nil then FAnim := TTyAnimation.Create;
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
-      FAnimSet.Arm(FPaintList, AnimSeriesInfo);
+      { AN UPDATE when there was a render before, an entry otherwise
+        [Batch 90] }
+      if FAnimPrev.Valid then
+        FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev)
+      else
+      begin
+        FAnimSet.Clear;
+        FAnimSet.Arm(FPaintList, AnimSeriesInfo);
+      end;
+      AnimDropPrev;
       { THE FLUSH: upstream's setOption ends with a synchronous update, so
         every clip it made starts NOW and this same paint shows the from
         values. A step on the next tick would shift every timeline by up
@@ -13591,9 +13830,16 @@ begin
       AnimArmTimer;
     end
     else if FAnimMode = camOff then
+    begin
       FAnimPending := False;
+      AnimDropPrev;
+    end;
   end;
-  if (FAnimSet <> nil) and (FAnimSet.Count > 0) then
+  { A LIST WAITING FOR ITS ARMING is drawn as laid out: the proxies are the
+    old render's, keyed by the old rows [Batch 90] }
+  if FAnimPending then
+    FAnimBind := nil
+  else if (FAnimSet <> nil) and (FAnimSet.Count > 0) then
     FAnimBind := FAnimSet.Bind(FPaintList)
   else
     FAnimBind := nil;
@@ -13625,6 +13871,8 @@ procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
 begin
   if FAnim = nil then Exit;
   FAnim.Update(ANowMs);
+  { a fade that ended removed its element [Batch 90] }
+  if FAnimSet <> nil then FAnimSet.Purge;
   if FAnimLive and (FAnim.ClipCount = 0) then
   begin
     { AT REST: the series go back into the static layer, drawn once more
@@ -13660,11 +13908,24 @@ begin
   Result := FAnimSet.Find(ASeries, AIndex, ARole);
 end;
 
+function TTyAdvanceChart.AnimFindGhost(ASeries, AIndex: Integer;
+  const ARole: string): TTyChartAnimProxy;
+begin
+  if FAnimSet = nil then Exit(nil);
+  Result := FAnimSet.FindGhost(ASeries, AIndex, ARole);
+end;
+
+function TTyAdvanceChart.AnimGhostCount: Integer;
+begin
+  if FAnimSet = nil then Result := 0 else Result := FAnimSet.LiveGhostCount;
+end;
+
 function TTyAdvanceChart.AnimFrame: TTyPaintList;
 begin
-  if (FPaintList = nil) or (Length(FAnimBind) = 0) then Exit(FPaintList);
+  if (FPaintList = nil) or ((Length(FAnimBind) = 0)
+    and ((FAnimSet = nil) or (FAnimSet.GhostCount = 0))) then Exit(FPaintList);
   if FAnimFrame = nil then FAnimFrame := TTyPaintList.Create;
-  TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind);
+  TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind, FAnimSet);
   Result := FAnimFrame;
 end;
 

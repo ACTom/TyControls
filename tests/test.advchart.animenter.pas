@@ -935,7 +935,8 @@ begin
   AssertEquals('four labels fade in', 4, FChart.AnimProxyCount);
 end;
 
-{ A NEW OPTION ENTERS AGAIN; A RESIZE SNAPS. }
+{ A NEW OPTION ANIMATES AGAIN -- as an update since batch 90: A and B move,
+  C fades out; A RESIZE SNAPS. }
 procedure TAdvChartAnimEnterTest.TestANewOptionAnimatesAgainAndAResizeSnaps;
 begin
   NewChart(camAlways);
@@ -948,8 +949,9 @@ begin
   FChart.Option := '{"xAxis":{"type":"category","data":["A","B"]},"yAxis":{"type":"value"},'
     + '"series":[{"type":"bar","data":[5,6]}]}';
   Draw;
-  AssertTrue('the next option enters', FChart.AnimLive);
-  AssertEquals('two bars', 2, FChart.AnimClipCount);
+  AssertTrue('the next option animates', FChart.AnimLive);
+  AssertEquals('two bars move and one leaves', 3, FChart.AnimClipCount);
+  AssertEquals('the one leaving is still drawn', 1, FChart.AnimGhostCount);
 end;
 
 { UPSTREAM'S QUIRK, KEPT: `clip: false` widens the line's clip rect after
