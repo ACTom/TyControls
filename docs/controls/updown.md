@@ -72,9 +72,10 @@ Ud.Associate := Ed;           // 自己贴到 Ed 右边,并把 5 写进去
 | **键盘 / 滚轮** | `ArrowKeys` 开时,在**字段里**按 ↑/↓(横排时 ←/→)步进;在字段上滚滚轮也步进。 |
 
 **它认字段的哪个属性:** 优先写字段 published 的 `Text`(`TTyEdit`、`TTyMemo`、LCL 的 `TEdit`),
-没有才退回 `Caption`。LCL 只写 `Caption` —— 那在 LCL 里没问题,因为它家的编辑框都把 `Caption`
-经 `RealSetText` 路由到同一根字符串上;而 `TTyEdit` 画的是自己的 `FText`,`TControl.Caption`
-指向的是句柄那份**看不见的**原生文字。照抄 LCL,绑本库自家的编辑框会**一个字都不动**。
+没有才退回 `Caption`。LCL 只写 `Caption` —— 它家的编辑框都把 `Caption` 经 `RealSetText` 路由到
+同一根字符串上。3.0 的 `TTyEdit` 画的是自己的 `FText`,`Caption` 指向句柄那份看不见的原生文字,
+照抄 LCL 会一个字都不动,所以才先找 `Text`。4.0 起本库的编辑框、多行编辑框、组合框也像 LCL 那样
+让 `Caption` 就是 `Text`,所以从 `TTyCustomEdit` 派生、没有发布 `Text` 的编辑框,一样能被驱动。
 
 **一个字段只能被一个按钮对驱动。** 绑第二个会抛异常(LCL 同样如此)——两个微调器抢一个框,
 症状是"点一下加二",不出声的话根本没法查。

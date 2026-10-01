@@ -178,14 +178,14 @@ type
       is pressed INSIDE the field. Set to nil to unbind.
 
       WHICH TEXT. LCL writes Associate.Caption (customupdown.inc:254-262), which reaches the
-      visible string on every LCL edit because they route Caption through RealSetText. It
-      does NOT reach it on this library's own edits: TTyEdit paints its private FText and
-      publishes `Text` as a property of its own, leaving TControl.Caption pointing at the
-      handle's invisible native text. Binding the LCL way would therefore have moved nothing
-      on screen for the single most likely associate in this package. So the target is
+      visible string on every LCL edit because they route Caption through RealSetText. Up to
+      3.0 it did NOT reach it on this library's own edits -- TTyEdit painted its private FText
+      while TControl.Caption pointed at the handle's invisible native text -- so the target is
       resolved: a published `Text` if the field has one (TTyEdit, TTyMemo, LCL's TEdit),
-      Caption otherwise (TTyLabel, and anything that overrides RealSetText -- TTySpinEdit
-      does). Both spellings land on the right string, on both families.
+      Caption otherwise (TTyLabel, and anything that overrides RealSetText). Since 4.0 the
+      edit, memo and combo families route Caption to Text as LCL's do (TTySpinEdit always
+      did), so the Caption branch also drives a third party's TTyCustomEdit descendant that
+      does not publish Text. Both spellings land on the right string, on both families.
 
       REFUSED BINDINGS. Pointing a second up-down at a field a first one already drives
       raises, as it does in LCL: two steppers on one field is a fight, not a setting. Self

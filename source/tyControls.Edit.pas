@@ -108,6 +108,7 @@ type
       (include/customedit.inc:615-616). Without the flag the two are indistinguishable,
       which is why a hand-rolled OnChange dirty-tracker can never reproduce Modified. }
     FTextChangeByCode: Boolean;
+    FInActionChange: Boolean;
     FAutoSelect: Boolean;
     FAutoSelected: Boolean;
     FOnChange: TNotifyEvent;
@@ -259,6 +260,19 @@ type
     // Clipboard virtual hooks (override in tests to avoid real clipboard)
     function ReadClipboardText: string; virtual;
     procedure WriteClipboardText(const S: string); virtual;
+    { Caption IS Text, as on every LCL edit (TCustomEdit.RealGetText / RealSetText,
+      customedit.inc:534-562): code that holds the edit as a TControl -- TTyUpDown's Associate
+      when the edit does not publish Text, an action link -- reads and writes the string the
+      user sees, not the invisible native caption. Programmatic, like a Text write. }
+    function RealGetText: TCaption; override;
+    procedure RealSetText(const AValue: TCaption); override;
+    { TControl.ActionChange copies the action's Caption into Caption on every change of a
+      linked action. With Caption routed to Text that would overwrite what the user typed;
+      the edit keeps its text, as it did before Caption was routed. }
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
+    { True while ActionChange runs; RealSetText ignores the write then. Read by descendants
+      that route Caption through a setter of their own (TTyCustomMaskEdit). }
+    property InActionChange: Boolean read FInActionChange;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -522,6 +536,10 @@ end;
 constructor TTyCustomEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { Not csSetCaption: with Caption routed to Text (RealGetText), LCL's SetName would write a
+    fresh edit's Name into its text the first time it is named -- TEdit does, this control
+    never did, and a form that names its fields in code would suddenly show the names. }
+  ControlStyle := ControlStyle - [csSetCaption];
   TabStop := True;
   Cursor := crIBeam;
   Width := 140;
@@ -1056,6 +1074,27 @@ begin
   ResetCaretBlink;
   Invalidate;
   DoChange;
+end;
+
+function TTyCustomEdit.RealGetText: TCaption;
+begin
+  Result := FText;
+end;
+
+procedure TTyCustomEdit.RealSetText(const AValue: TCaption);
+begin
+  if FInActionChange then Exit;
+  SetText(AValue);
+end;
+
+procedure TTyCustomEdit.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  FInActionChange := True;
+  try
+    inherited ActionChange(Sender, CheckDefaults);
+  finally
+    FInActionChange := False;
+  end;
 end;
 
 procedure TTyCustomEdit.SetText(const AValue: TCaption);

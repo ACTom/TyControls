@@ -78,6 +78,7 @@ type
     // Logical text model: one TStrings line per logical line. Exposed (read-only
     // direction) via the published Lines:TStrings; writes go through SetLines.
     FLines: TStringList;
+    FInActionChange: Boolean;   // see ActionChange
     // 2D caret. FCaretLine in 0..LineCountLogical-1; FCaretCol is a codepoint
     // index in 0..UTF8Length(line). FDesiredCol remembers the column for
     // vertical motion across short lines (used by later tasks).
@@ -724,6 +725,14 @@ type
       MousePos: TPoint): Boolean; override;
     // Keep the scrollbar in sync when the control is resized.
     procedure Resize; override;
+    { Caption IS Text, as on LCL's TCustomMemo (TCustomEdit.RealGetText / RealSetText,
+      customedit.inc:534-562): code holding the memo as a TControl -- TTyUpDown's Associate when
+      the memo does not publish Text, an action link -- reaches the document. }
+    function RealGetText: TCaption; override;
+    procedure RealSetText(const AValue: TCaption); override;
+    { TControl.ActionChange copies a linked action's Caption into Caption on every change;
+      routed to Text that would replace the document. The memo keeps it. }
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -990,6 +999,9 @@ implementation
 constructor TTyCustomMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { Not csSetCaption: Caption reads the document now (RealGetText), and LCL's SetName would
+    otherwise write a fresh memo's Name into it the first time it is named. }
+  ControlStyle := ControlStyle - [csSetCaption];
   TabStop := True;
   Cursor := crIBeam;
   FLines := TStringList.Create;
@@ -1547,6 +1559,27 @@ function TTyCustomMemo.GetText: TCaption;
 begin
   // Whole-document string with platform line breaks (TStrings.Text semantics).
   Result := FLines.Text;
+end;
+
+function TTyCustomMemo.RealGetText: TCaption;
+begin
+  Result := GetText;
+end;
+
+procedure TTyCustomMemo.RealSetText(const AValue: TCaption);
+begin
+  if FInActionChange then Exit;
+  SetText(AValue);
+end;
+
+procedure TTyCustomMemo.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  FInActionChange := True;
+  try
+    inherited ActionChange(Sender, CheckDefaults);
+  finally
+    FInActionChange := False;
+  end;
 end;
 
 procedure TTyCustomMemo.SetText(const AValue: TCaption);

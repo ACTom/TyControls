@@ -22,7 +22,8 @@ unit test.customclasses.p1;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, LCLType, LMessages, ActnList, fpcunit,
+  testregistry,
   test.customclasses,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
   tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
@@ -36,6 +37,8 @@ type
   private
     FForm: TForm;
     FDrawCalls: Integer;
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
     procedure CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer; ARect: TRect;
       AState: TOwnerDrawState);
   protected
@@ -68,6 +71,8 @@ type
     procedure TestThirdMemo;
     procedure TestThirdUpDown;
     procedure TestUpDownAssociationIsExclusiveAcrossThirdParties;
+    procedure TestUpDownDrivesAThirdPartyEditThatDoesNotPublishText;
+    procedure TestCaptionIsTextOnEditMemoAndCombo;
     procedure TestFloatSpinEditKeepsItsUseThousandsDefault;
     { Task 6: choice }
     procedure TestThirdCheckBox;
@@ -131,6 +136,14 @@ type
   TThirdMemo = class(TTyCustomMemo)
   published
     property Lines;
+    property ReadOnly;
+  end;
+
+  { An edit that publishes no Text at all: TTyUpDown cannot find a published Text on it and
+    falls back to Caption, which reaches the field only because the custom edit routes
+    Caption to Text (RealGetText / RealSetText). }
+  TThirdEditNoText = class(TTyCustomEdit)
+  published
     property ReadOnly;
   end;
 
@@ -268,6 +281,25 @@ type
 
 const
   CSentinel = TColor($00FF00FF);
+
+{ The console runner registers no window classes until the LCL widgetset is up, and a handle
+  then fails with error 1407. The same lazy bootstrap test.focus.tabstop uses; only the tests
+  that send real input messages need a handle. }
+var
+  GP1WidgetSet: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if GP1WidgetSet then Exit;
+  Forms.Application.Initialize;
+  GP1WidgetSet := True;
+end;
+
+{ The lParam the widgetset packs a click position into. }
+function MousePos(X, Y: Integer): PtrInt;
+begin
+  Result := PtrInt((Y shl 16) or (X and $FFFF));
+end;
 
 procedure TP1ButtonCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
 begin
@@ -412,6 +444,11 @@ end;
 procedure TTyCustomClassesP1Test.TearDown;
 begin
   FreeAndNil(FForm);
+end;
+
+procedure TTyCustomClassesP1Test.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
 end;
 
 procedure TTyCustomClassesP1Test.CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer;
@@ -897,6 +934,109 @@ begin
     raised := True;
   end;
   AssertTrue('and the library''s cannot take one the third party drives', raised);
+end;
+
+{ The up-down writes Position into its field and reads it back from there. A field that does
+  not publish Text is driven through Caption, LCL's way; before Caption was routed to Text a
+  click wrote the number into the edit's invisible native caption and the field the user sees
+  never moved. Driven with a real press and release on the upper half of the up-down. }
+procedure TTyCustomClassesP1Test.TestUpDownDrivesAThirdPartyEditThatDoesNotPublishText;
+var
+  ed: TThirdEditNoText;
+  ud: TTyUpDown;
+
+  procedure ClickUp;
+  begin
+    ud.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(ud.Width div 2, 2));
+    ud.Perform(LM_LBUTTONUP, 0, MousePos(ud.Width div 2, 2));
+  end;
+
+begin
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  ed := TThirdEditNoText.Create(FForm);
+  ed.Name := 'NoTextField';
+  ed.Parent := FForm;
+  ed.SetBounds(10, 10, 100, 28);
+  AssertTrue('precondition: the edit publishes no Text (or this proves nothing)',
+    GetPropInfo(ed, 'Text') = nil);
+  ud := TTyUpDown.Create(FForm);
+  ud.Parent := FForm;
+  ud.Associate := ed;
+  AssertEquals('binding writes Position into the field the user sees', '0', ed.Text);
+  ClickUp;
+  AssertEquals('a click on the upper half steps the field', '1', ed.Text);
+  AssertEquals('and Position', 1, ud.Position);
+  ed.Text := '41';
+  ClickUp;
+  AssertEquals('Position is read back from the field before the step', '42', ed.Text);
+  AssertEquals('Position follows', 42, ud.Position);
+end;
+
+{ Caption IS Text on the edit, memo and combo families, as on LCL's (TCustomEdit.RealGetText /
+  RealSetText) -- and nothing a 3.0 form relied on moves: naming a control does not put the
+  name into its text (csSetCaption is off), a linked action does not overwrite the text, a
+  Caption write fires OnChange once like a Text write, and Caption is not published. }
+procedure TTyCustomClassesP1Test.TestCaptionIsTextOnEditMemoAndCombo;
+var
+  e: TTyEdit;
+  m: TTyMemo;
+  c: TTyComboBox;
+  me: TTyMaskEdit;
+  act: TAction;
+  al: TActionList;
+begin
+  e := TTyEdit.Create(FForm);
+  e.Name := 'NamedField';
+  AssertEquals('naming an edit leaves its text alone', '', e.Text);
+  e.Parent := FForm;
+  e.OnChange := @CountChange;
+  FChanges := 0;
+  TControl(e).Caption := 'abc';
+  AssertEquals('Caption writes the edit''s text', 'abc', e.Text);
+  AssertEquals('one OnChange, as for a Text write', 1, FChanges);
+  e.Text := 'xyz';
+  AssertEquals('Caption reads it back', 'xyz', TControl(e).Caption);
+  AssertEquals('a Text write still fires once', 2, FChanges);
+  AssertTrue('Caption is not published on the edit', GetPropInfo(e, 'Caption') = nil);
+
+  al := TActionList.Create(FForm);
+  act := TAction.Create(FForm);
+  act.ActionList := al;
+  act.Caption := 'Do it';
+  e.Text := 'typed';
+  e.Action := act;
+  AssertEquals('linking an action leaves the text alone', 'typed', e.Text);
+  act.Enabled := False;
+  AssertEquals('so does a change of the linked action', 'typed', e.Text);
+  AssertFalse('while the rest of the link still works', e.Enabled);
+
+  me := TTyMaskEdit.Create(FForm);
+  me.Parent := FForm;
+  me.Mask := '00/00';
+  TControl(me).Caption := '1234';
+  AssertEquals('a Caption write is judged by the mask, like a Text write', '12/34', me.Text);
+
+  m := TTyMemo.Create(FForm);
+  m.Name := 'NamedMemo';
+  AssertEquals('naming a memo leaves its document alone', 0, m.Lines.Count);
+  m.Parent := FForm;
+  TControl(m).Caption := 'one' + LineEnding + 'two';
+  AssertEquals('Caption writes the memo''s document', 2, m.Lines.Count);
+  AssertEquals('and reads it back', m.Text, TControl(m).Caption);
+  m.Action := act;
+  act.Enabled := True;
+  AssertEquals('a linked action leaves the document alone', 2, m.Lines.Count);
+
+  c := TTyComboBox.Create(FForm);
+  c.Name := 'NamedCombo';
+  AssertEquals('naming a combo leaves its field alone', '', c.Text);
+  c.Parent := FForm;
+  TControl(c).Caption := 'pick';
+  AssertEquals('Caption writes the combo''s field', 'pick', c.Text);
+  c.Action := act;
+  act.Caption := 'Done';
+  AssertEquals('a linked action leaves the field alone', 'pick', c.Text);
 end;
 
 { TTyFloatSpinEdit groups no thousands by default although the numeric edit it descends from

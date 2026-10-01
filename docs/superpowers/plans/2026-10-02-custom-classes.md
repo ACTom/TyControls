@@ -213,7 +213,7 @@
 
 **V19. 只 `RegisterClass`、会出现在 `.lfm` 里的控件类**：`TTyScrollContent`（`ScrollContent.pas:168`，`examples/containers` 里两处）——自己一个 published 都没有，全靠基类；D7 后不补就读不进 `.lfm`。它没有 LCL 对应物，按可视规则拆（Task 12），快照要包含它。`TTyCustomGrid` 也被 `RegisterClasses` 了（`Grid.pas:16012`），但面板上没有、仓库里没有 `.lfm` 用它，不兼容清单第 3 条记一句。
 
-**V20. 库里按 RTTI 读写属性的地方**：`NativeStyler.pas:190-219`（`IsPublishedProp(AControl, 'Font' / 'ParentFont' / 'Color' / 'ParentColor')`，对象是原生 LCL 控件）、`UpDown.pas:566-589`（`GetPropInfo(FAssociate, 'Text')`，关联的控件）、`PropEditors.pas:476-477/504-505`（宿主的 `IconFont`）。最终类照旧发布这些名字，行为不变；第三方 Custom 子类若不发布 `Text` / `IconFont`，UpDown 驱动不了它、GlyphName 编辑器拿不到字体——文档写进限制。
+**V20. 库里按 RTTI 读写属性的地方**：`NativeStyler.pas:190-219`（`IsPublishedProp(AControl, 'Font' / 'ParentFont' / 'Color' / 'ParentColor')`，对象是原生 LCL 控件）、`UpDown.pas:566-589`（`GetPropInfo(FAssociate, 'Text')`，关联的控件）、`PropEditors.pas:476-477/504-505`（宿主的 `IconFont`）。最终类照旧发布这些名字，行为不变；第三方 Custom 子类若不发布 ~~`Text` / `IconFont`，UpDown 驱动不了它、~~ `IconFont`，GlyphName 编辑器拿不到字体——文档写进限制。**UpDown 一条已解决（第 0、1 期期末修复）**：UpDown 找不到 published `Text` 时退回写 `Caption`（LCL 的做法），而 `TTyCustomEdit` / `TTyCustomMemo` / `TTyCustomComboBox` 现在照 LCL 覆写 `RealGetText` / `RealSetText` 指向各自的 `Text`（Caption 就是 Text，`TTyCustomMaskEdit` 的走带掩码的 setter），不发布 `Text` 的第三方编辑框照样被驱动；为了对现有控件零副作用，三个 Custom 类去掉了 `csSetCaption`（否则 LCL 的 `SetName` 会把新控件的名字写进文字）并在 `ActionChange` 期间不让 Caption 写进文字（否则关联的 Action 每变一次就把它的 Caption 盖到用户输入上）。
 
 **V21. `feat/advancechart` 对 `Base.pas` 的改动**（`git diff main...feat/advancechart -- source/tyControls.Base.pas`，+36 / −10）：在两个基类的 protected 段各加一个 `PointerStateChanged` 虚方法声明，实现段里 MouseEnter / Leave 等改调它。**与 published 段不重叠**；Task 1 只删 published 段、在 public 段加 4 行，git 应能自动合并；冲突时两边都要（published 段取本分支的结果、方法声明取 AdvChart 的）。
 
@@ -1286,7 +1286,7 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 3. **主题**：typeKey 跟着 Custom 类走——`TTyCustomEdit` 的子类自动吃 `TyEdit` 的 tycss 规则，`.tycss` 里永远不写 Custom；若覆写 `GetStyleTypeKey` 换成自己的 key，主题里要写它的规则，否则走不到样式（#14 之后会有回落）。
 4. 可见性：Custom 类里的属性照 LCL 是 public 或 protected（附录 E 的结论用一句话说清：编辑框、组合框、列表框、按钮多为 public，标签、树、列表视图、网格基类多为 protected）；要从外面访问 protected 的，在自己的类里 `public property X;`。
 5. 设计期：属性编辑器自动跟着用；组件编辑器要自己注册（`RegisterComponentEditor(TMyTree, TTyTreeViewComponentEditor)`）；`DefineProperties` 存的数据照样存（N20）。
-6. 限制：LCL 根的 15 个属性藏不掉（N13）；宿主属性写死子项最终类型的（`TTyForm.TitleBar`、`TTyPageControl.ActivePage` 等，附录 D）；UpDown 按 RTTI 找 `Text`、GlyphName 编辑器按 RTTI 找 `IconFont`（V20）；`TTyGridCell` 由 GridPanel 自己建，第三方子类只能手动放进去；直接继承 `TTyCustomControl` 写全新控件时，Ty 控件惯用的那段通用属性（给出可复制的 published 段）。
+6. 限制：LCL 根的 15 个属性藏不掉（N13）；宿主属性写死子项最终类型的（`TTyForm.TitleBar` 等，附录 D；~~`TTyPageControl.ActivePage`~~ 期末修复改为 Custom 类型，见 R7-4）；~~UpDown 按 RTTI 找 `Text`、~~ GlyphName 编辑器按 RTTI 找 `IconFont`（V20；UpDown 已不是限制：编辑框一族的 Caption 就是 Text，不发布 `Text` 的子类照样被驱动——这句写进文档的「可以放心不发布的」那一侧）；`TTyGridCell` 由 GridPanel 自己建，第三方子类只能手动放进去；直接继承 `TTyCustomControl` 写全新控件时，Ty 控件惯用的那段通用属性（给出可复制的 published 段）。
 7. **从 3.0 升级**（一节）：「不兼容变化清单」逐条的用户版；全部父类变化的控件表（附录 C-0 的 55 行：控件、3.0 的父类、4.0 的父类）；一条规则（**想表示「任意 Xxx」就判 `TTyCustomXxx`**）；示例代码改前改后（`Sender as TTyButton` → `Sender as TTyCustomButton`；`if AEditor is TTyEdit` → `TTyCustomEdit`；TreeView 事件处理过程的签名；直接继承基类的类补 published 段）；`.lfm` 不用改、主题不用改。
 - [ ] **Step 1: 写文档**；`python scripts/check-example-po.py .` 不受影响。
 - [ ] **Step 2: 提交** `docs: deriving from Ty controls through TTyCustomXxx, and upgrading from 3.0`。

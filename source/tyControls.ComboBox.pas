@@ -115,6 +115,7 @@ type
     FItems: TStringList;
     FItemIndex: Integer;
     FText: TCaption;
+    FInActionChange: Boolean;   // see ActionChange
     FDropDownCount: Integer;
     FSorted: Boolean;
     FMaxLength: Integer;
@@ -305,6 +306,14 @@ type
     procedure Click; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { Caption IS Text, as on LCL's TCustomComboBox (it is a TWinControl whose text is the
+      field's): code holding the combo as a TControl -- TTyUpDown's Associate when the combo
+      does not publish Text, an action link -- reaches the field. }
+    function RealGetText: TCaption; override;
+    procedure RealSetText(const AValue: TCaption); override;
+    { TControl.ActionChange copies a linked action's Caption into Caption on every change;
+      routed to Text that would replace the field. The combo keeps it. }
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -745,6 +754,9 @@ end;
 constructor TTyCustomComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { Not csSetCaption: Caption reads the field now (RealGetText), and LCL's SetName would
+    otherwise write a fresh combo's Name into it the first time it is named. }
+  ControlStyle := ControlStyle - [csSetCaption];
   FItems := TStringList.Create;
   FItems.OnChange := @ItemsChanged;
   FItemIndex := -1;
@@ -876,6 +888,27 @@ begin
   if FItems.Sorted <> FSorted then
     FItems.Sorted := FSorted;
   Invalidate;
+end;
+
+function TTyCustomComboBox.RealGetText: TCaption;
+begin
+  Result := FText;
+end;
+
+procedure TTyCustomComboBox.RealSetText(const AValue: TCaption);
+begin
+  if FInActionChange then Exit;
+  SetText(AValue);
+end;
+
+procedure TTyCustomComboBox.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  FInActionChange := True;
+  try
+    inherited ActionChange(Sender, CheckDefaults);
+  finally
+    FInActionChange := False;
+  end;
 end;
 
 procedure TTyCustomComboBox.SetText(const AValue: TCaption);

@@ -159,6 +159,10 @@ type
       and the caller's TyMaskExtract read back nonsense. LCL guards the same three
       messages (LM_PASTE/LM_CUT/LM_CLEAR) for the same reason. }
     function FilterInsert(const AText: string): string; override;
+    { Caption is Text here too (TTyCustomEdit.RealSetText), and a Text write is judged by the
+      mask; so is a Caption write -- the up-down that drives a masked field which does not
+      publish Text goes through here. }
+    procedure RealSetText(const AValue: TCaption); override;
   public
     constructor Create(AOwner: TComponent); override;
     { The two erase entry points that do NOT go through KeyDown, so overriding KeyDown alone
@@ -953,6 +957,12 @@ begin
     string once a skeleton fills the box -- after '12' on '00/00/0000' the display runs to
     '____' and the caret belongs on the third slot, not past the eighth. }
   Commit(ApplySpec(FSpec, ARaw, FSpaceChar), CaretSlotSpec(FSpec, Length(ARaw)));
+end;
+
+procedure TTyCustomMaskEdit.RealSetText(const AValue: TCaption);
+begin
+  if InActionChange then Exit;
+  SetMaskedText(AValue);
 end;
 
 procedure TTyCustomMaskEdit.SetMaskedText(const AValue: TCaption);
