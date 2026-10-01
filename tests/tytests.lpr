@@ -225,7 +225,8 @@ uses
   test.themebuilder.main,
   test.themebuilder.scan,
   test.themebuilder.seeds,
-  test.themebuilder.pick;
+  test.themebuilder.pick,
+  test.themebuilder.export;
 
 type
   TTyTestRunner = class(TTestRunner)
