@@ -1024,3 +1024,52 @@ msgstr "值"
 #: tbsnippets.rstbsnippetwhere
 msgid "in your main form (a TTyForm):"
 msgstr "放在主窗体（TTyForm）里："
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbexport.rstbexportcaseclash
+#, object-pascal-format
+msgid "also written as %s: a system that tells capitals from small letters finds only one of the two -- write it the same way everywhere"
+msgstr "别处写成了 %s：区分大小写的系统上两种写法只找得到一个——请各处写成一样"
+
+#: tbexport.rstbexportentryclash
+#, object-pascal-format
+msgid "the bundle's own %s goes there -- rename this file"
+msgstr "包自己的 %s 要放在这个位置——请给这个文件改个名"
+
+#: tbexport.rstbexportmovefailed
+#, object-pascal-format
+msgid "Could not move the bundle to %s: %s"
+msgstr "没能把包挪到 %s：%s"
+
+#: tbseedsframe.rstbseedimported
+msgid "from an imported file"
+msgstr "来自导入的文件"
+
+#: tbseedsframe.rstbseedoverridden
+msgid "overridden by an imported @mode"
+msgstr "被导入文件的 @mode 盖过"
+
+#: tbseedsframe.rstbseedoverriddenhint
+#, object-pascal-format
+msgid ":root says %s, but an @mode block in an imported file wins over it. A change goes into this file's own @mode block, which wins over the import."
+msgstr ":root 里写的是 %s，但导入文件里的 @mode 块盖过了它。改动会写进本文件自己的 @mode 块，它在导入之后、盖得过导入。"
+
+#: tbseedsframe.rstbseedradiusask
+#, object-pascal-format
+msgid "The %s block has no --radius of its own. Yes: set it in :root, for light and dark (the modern density still puts its own radius over it). No: set it in the %s block only, where it also wins over the modern density's radius. Cancel: change nothing."
+msgstr "%s块没有自己的 --radius。选「是」写进 :root，亮暗两种模式都用（现代密度仍会用它自己的圆角盖过它）；选「否」只写进%s块，在那里它也会盖过现代密度的圆角；选「取消」不改。"
+
+#: tbseedsframe.rstbseedsharedexpression
+msgid "from :root, an expression"
+msgstr "来自 :root，是表达式"
+
+#: tbsnippetsform.rstbsnippetregisterneedsfiles
+#, object-pascal-format
+msgid "Not for this theme: a theme registered as text finds no %s. Load it from a file or a folder bundle."
+msgstr "这个主题用不了：注册成文本的主题找不到 %s。请从文件或文件夹包加载。"
+
+#: tbsnippetsform.rstbsnippetzipneedsfiles
+#, object-pascal-format
+msgid "Not for this theme: a zip cannot carry %s. Export a folder bundle."
+msgstr "这个主题用不了：zip 包带不了 %s。请导出成文件夹包。"
