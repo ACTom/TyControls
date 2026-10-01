@@ -38,6 +38,8 @@ type
     procedure TestTheStripIsNotHooked;
     procedure TestUnhooking;
     procedure TestTheFrameGoesCleanly;
+    procedure TestAReleaseThatWentElsewhereIsNotWaitedFor;
+    procedure TestACtrlDoubleClickPicksOnce;
   end;
 
   { the coverage check (tbcoverage): the three sets, the two lists, the part table held to
@@ -260,6 +262,54 @@ begin
   AssertEquals('a pick', 1, FPicks);
   FreeAndNil(FFrame);
   AssertNull('P9: gone', FFrame);
+end;
+
+{ The review found it: a Ctrl+press whose release lands on something not hooked (the editor,
+  outside the window) left the picker waiting for a release -- and it ate the release of the
+  next ordinary click on the control, which stayed pressed, held the mouse and never
+  clicked. (The capture itself is the widgetset's to let go on a real release -- a press
+  Performed here keeps it either way, so the button's own state is what is checked.) }
+procedure TTbPickTests.TestAReleaseThatWentElsewhereIsNotWaitedFor;
+begin
+  HostFrame;
+  FFrame.BtnPrimary.OnClick := @ClickStub;
+  FFrame.BtnPrimary.OnMouseUp := @UpStub;
+  FUps := 0;
+  CtrlDown(FFrame.BtnPrimary);
+  AssertEquals('a pick', 1, FPicks);
+  { its release went to the editor: no message here }
+  PlainDown(FFrame.BtnPrimary);
+  AssertTrue('P10: the next press reaches the button', TTyCustomControlAccess(FFrame.BtnPrimary).FPressed);
+  Up(FFrame.BtnPrimary);
+  AssertEquals('P10: and so does its release', 1, FUps);
+  AssertEquals('P10: one click', 1, FClicks);
+  AssertFalse('P10: not left pressed', TTyCustomControlAccess(FFrame.BtnPrimary).FPressed);
+end;
+
+{ Ctrl+double click: down, up, double click, up. One gesture, one pick -- the second press
+  used to pick again and go to the next rule. A Ctrl+double click right after a plain click
+  (the first press was the control's own) still picks once. }
+procedure TTbPickTests.TestACtrlDoubleClickPicksOnce;
+var
+  b: TControl;
+begin
+  HostFrame;
+  b := FFrame.BtnPrimary;
+  FFrame.BtnPrimary.OnClick := @ClickStub;
+  b.Perform(LM_LBUTTONDOWN, MK_LBUTTON or MK_CONTROL, 0);
+  b.Perform(LM_LBUTTONUP, MK_CONTROL, 0);
+  b.Perform(LM_LBUTTONDBLCLK, MK_LBUTTON or MK_CONTROL, 0);
+  b.Perform(LM_LBUTTONUP, MK_CONTROL, 0);
+  AssertEquals('P11: one pick', 1, FPicks);
+  AssertEquals('P11: no click', 0, FClicks);
+  AssertFalse('P11: not pressed', TTyCustomControlAccess(FFrame.BtnPrimary).FPressed);
+  PlainDown(b);
+  Up(b);
+  AssertEquals('a plain click', 1, FClicks);
+  b.Perform(LM_LBUTTONDBLCLK, MK_LBUTTON or MK_CONTROL, 0);
+  b.Perform(LM_LBUTTONUP, MK_CONTROL, 0);
+  AssertEquals('P11: a Ctrl+double click after a plain click picks', 2, FPicks);
+  AssertEquals('P11: and does not click', 1, FClicks);
 end;
 
 { ---- coverage ---- }

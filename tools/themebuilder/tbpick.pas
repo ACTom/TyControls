@@ -9,7 +9,10 @@ unit tbpick;
   library. The hook takes a left press (or double click) made with Ctrl held -- Command on a
   Mac, where Ctrl+click is the context-menu gesture -- and the release that follows it; the
   control never sees either: no press, no focus, no click, no checkbox ticked. Everything
-  else is handed on untouched.
+  else is handed on untouched. A swallowed press captures no mouse, so its release may go
+  to a control that is not hooked (the editor) and never come: the next press of a hooked
+  control's own stops waiting for it. The second press of a Ctrl+double click is the same
+  gesture as the first: swallowed, and not picked twice.
 
   Who was clicked: the control the message came to, or, when that is a container, the
   deepest control under the point -- disabled ones included (a disabled graphic control
@@ -32,7 +35,8 @@ type
   TTbPicker = class(TComponent)
   private
     FHooks: TFPList;
-    FSwallowUp: Boolean;
+    FSwallowUp: Boolean;           { a pick's press was swallowed: so is the release after it }
+    FLastPressPicked: Boolean;     { the last left press on a hooked control was a pick }
     FOnPick: TTbPickEvent;
     procedure HookOne(AControl: TControl);
     procedure Pick(AControl: TControl; const APos: TPoint);
@@ -99,12 +103,25 @@ end;
 
 procedure TTbPickHook.WndProc(var AMsg: TLMessage);
 begin
-  if ((AMsg.Msg = LM_LBUTTONDOWN) or (AMsg.Msg = LM_LBUTTONDBLCLK)) and TbIsPickMessage(AMsg) then
+  if (AMsg.Msg = LM_LBUTTONDOWN) or (AMsg.Msg = LM_LBUTTONDBLCLK) then
   begin
-    FPicker.FSwallowUp := True;
-    FPicker.Pick(FControl, Point(TLMMouse(AMsg).XPos, TLMMouse(AMsg).YPos));
-    AMsg.Result := 0;
-    Exit;                        { the control never sees it: no press, no focus, no click }
+    if TbIsPickMessage(AMsg) then
+    begin
+      FPicker.FSwallowUp := True;
+      { the second press of a double click whose first one was a pick is the same gesture:
+        swallowed, not picked again (it would go to the next rule) }
+      if (AMsg.Msg = LM_LBUTTONDOWN) or not FPicker.FLastPressPicked then
+        FPicker.Pick(FControl, Point(TLMMouse(AMsg).XPos, TLMMouse(AMsg).YPos));
+      FPicker.FLastPressPicked := True;
+      AMsg.Result := 0;
+      Exit;                      { the control never sees it: no press, no focus, no click }
+    end;
+    { A press of the control's own. The release of a pick that went elsewhere -- over the
+      editor, outside the window (a swallowed press captures nothing, so the release goes
+      wherever the mouse is) -- never came, and must not be waited for any more: this
+      press's release is this press's. }
+    FPicker.FSwallowUp := False;
+    FPicker.FLastPressPicked := False;
   end;
   if (AMsg.Msg = LM_LBUTTONUP) and FPicker.FSwallowUp then
   begin
@@ -201,6 +218,7 @@ begin
   end;
   FHooks.Clear;
   FSwallowUp := False;
+  FLastPressPicked := False;
 end;
 
 function TTbPicker.HookCount: Integer;
