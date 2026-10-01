@@ -179,6 +179,7 @@ type
     property Outcome: TTbAiOutcome read FOutcome;
     property Streamed: string read FStreamed;     { the current answer so far }
     property Busy: Boolean read FBusy;
+    property Round: Integer read FRound;          { 1, then 2 and 3 for the feedback rounds }
     property LastMessages: TTbChatMessages read FMessages;   { FOR THE TESTS }
     property OnStage: TNotifyEvent read FOnStage write FOnStage;
     property OnStreamed: TNotifyEvent read FOnStreamed write FOnStreamed;

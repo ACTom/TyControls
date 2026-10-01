@@ -86,6 +86,18 @@ object TbMainForm: TTbMainForm
           OnDblClick = ProblemsListDblClick
         end
       end
+      object AiWin: TTyToolWindow
+        Caption = 'AI'
+        ImageName = 'sparkles'
+        StripHint = 'AI'
+        object AiHost: TTyPanel
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+        end
+      end
     end
     object PreviewHost: TTyPanel
       Left = 720
@@ -117,6 +129,7 @@ object TbMainForm: TTbMainForm
     Names.Strings = (
       'circle-alert'
       'palette'
+      'sparkles'
     )
     Left = 360
     Top = 160
@@ -203,12 +216,20 @@ object TbMainForm: TTbMainForm
         Caption = '&Problems'
         OnClick = MnuProblemsClick
       end
+      object MnuAi: TMenuItem
+        Caption = 'A&I'
+        OnClick = MnuAiClick
+      end
       object MnuViewSep2: TMenuItem
         Caption = '-'
       end
       object MnuCoverage: TMenuItem
         Caption = '&Coverage check...'
         OnClick = MnuCoverageClick
+      end
+      object MnuAiSettings: TMenuItem
+        Caption = 'AI se&ttings...'
+        OnClick = MnuAiSettingsClick
       end
     end
   end

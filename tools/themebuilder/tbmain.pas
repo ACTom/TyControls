@@ -1,6 +1,6 @@
 unit tbmain;
-{ The theme builder's main window: a side-bar workbench (the Seeds and Problems pages), the
-  .tycss editor in the middle, the preview on the right.
+{ The theme builder's main window: a side-bar workbench (the Seeds, Problems and AI pages),
+  the .tycss editor in the middle, the preview on the right.
 
   Typing restarts a 300 ms timer; when it fires the text is linted (the problem list, the
   marks in the gutter, the tinted lines) and, unless it does not parse, loaded into the
@@ -19,6 +19,13 @@ unit tbmain;
   to the rule for the control's typeKey and variant (tbrules); clicking the same control
   again goes to the next rule of that name, round and round.
 
+  The AI page (tbaiframe) hands over a version the checks let through; the comparison window
+  (BuildCompareForm) shows it beside the editor's text, can try it in the preview
+  (CompareTrial -- while a trial is on, refreshing does not load the editor's text into the
+  preview) and on Accept it goes into the editor as one edit over the differing lines, one
+  undo step (AcceptCandidate, ApplyEdits). If the editor changed after the request went out,
+  accepting asks first. A new or another opened document starts a new AI conversation.
+
   Every question the window asks goes through Ask, and the tests answer it
   (PromptAnswerForTest) -- nothing in a test path shows a modal window. Save As in a test
   takes SaveAsNameForTest, and the settings file SettingsFileForTest. }
@@ -32,7 +39,8 @@ uses
   tyControls.Splitter, tyControls.Icons.Lucide, tyControls.Dialogs.FileDialog,
   tyControls.ThemeLint, tyControls.Design.CssEditKit,
   tbdocument, tbsettings, tbproblems, tbpreview, tbeditorlook, tbcssscan, tbseedsframe,
-  tbcoverageform, tbexportform, tbsnippetsform;
+  tbcoverageform, tbexportform, tbsnippetsform, tbaisettings, tbaisession, tbaiframe,
+  tbcompareform, tbaisettingsform;
 
 resourcestring
   rsTbTitle = '%s%s - Theme Builder';
@@ -51,6 +59,8 @@ resourcestring
   rsTbReload = 'The file %s was changed by another program. Reload it?';
   rsTbReloadLoses = 'Your unsaved changes will be lost.';
   rsTbExported = 'Exported to %s.';
+  rsTbAiEditedSince = 'The editor changed after this was generated. Accepting replaces those changes too. Accept?';
+  rsTbAiAccepted = 'Accepted the AI''s version. Ctrl+Z undoes it.';
 
 type
   TTbMainForm = class(TTyForm)
@@ -63,6 +73,8 @@ type
     SeedsHost: TTyPanel;
     ProblemsWin: TTyToolWindow;
     ProblemsList: TTyListBox;
+    AiWin: TTyToolWindow;
+    AiHost: TTyPanel;
     PreviewHost: TTyPanel;
     PreviewSplitter: TTySplitter;
     Editor: TSynEdit;
@@ -88,8 +100,10 @@ type
     MnuViewSep: TMenuItem;
     MnuSeeds: TMenuItem;
     MnuProblems: TMenuItem;
+    MnuAi: TMenuItem;
     MnuViewSep2: TMenuItem;
     MnuCoverage: TMenuItem;
+    MnuAiSettings: TMenuItem;
     DlgOpen: TTyOpenDialog;
     DlgSave: TTySaveDialog;
     RefreshTimer: TTimer;
@@ -115,6 +129,8 @@ type
     procedure MnuCoverageClick(Sender: TObject);
     procedure MnuExportClick(Sender: TObject);
     procedure MnuSnippetsClick(Sender: TObject);
+    procedure MnuAiClick(Sender: TObject);
+    procedure MnuAiSettingsClick(Sender: TObject);
   private
     FDoc: TTbDocument;
     FKit: TTyCssEditKit;
@@ -138,6 +154,13 @@ type
     FJumpIndex: Integer;               { which of its selectors }
     FMergeKey: string;                 { the kind of the last change ApplyEdits may fold into }
     FMergeBefore, FMergeAfter: string; { the text before it, and the text it left }
+    FAi: TTbAiFrame;
+    FAiSettings: TTbAiSettings;
+    FTrialText: string;                { the version the comparison window tries }
+    function AiDocument: TTbAiDocument;
+    procedure AiCandidate(Sender: TObject);
+    procedure AiSettingsClick(Sender: TObject);
+    function RunModal(AForm: TCustomForm): TModalResult;
     procedure OpenPending(Data: PtrInt);
     function SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits;
       const AMergeKey: string): Boolean;
@@ -175,6 +198,9 @@ type
     { FOR THE TESTS: called first thing whenever a window hears the tool's theme change
       (before it touches itself), so a test can tell a freed window still listening }
     class var ToolThemeChangedForTest: TNotifyEvent;
+    { FOR THE TESTS: called with the comparison or AI settings window instead of showing it;
+      its ModalResult afterwards is the answer }
+    class var ShowModalForTest: TNotifyEvent;
     procedure RefreshNow;                          { lint + preview + problem list, now }
     procedure NewMinimal;
     procedure NewFromBuiltin(const AName: string);
@@ -204,6 +230,14 @@ type
     function BuildExportForm: TTbExportForm;         { prepared, not shown }
     function BuildSnippetsForm: TTbSnippetsForm;     { prepared, not shown }
     function EntryBytes: string;                     { what Save would write, without a BOM }
+    { the comparison of the AI's last version, prepared, not shown }
+    function BuildCompareForm: TTbCompareForm;
+    { the AI's version into the editor: one edit over the lines that differ, one undo step;
+      asks first when the editor no longer has ABase }
+    function AcceptCandidate(const ABase, ACandidate: string): Boolean;
+    function BuildAiSettingsForm: TTbAiSettingsForm;   { prepared, not shown }
+    { the comparison window's "Try it in the preview" }
+    procedure CompareTrial(Sender: TObject; AOn: Boolean; out AError: string);
     function SnippetName: string;
     { FOR THE TESTS: how many times Ask answered from PromptAnswerForTest, and the last
       message it was given }
@@ -217,6 +251,8 @@ type
     property Problems: TTbProblems read FProblems;
     property Settings: TTbSettings read FSettings;
     property Seeds: TTbSeedsFrame read FSeeds;
+    property Ai: TTbAiFrame read FAi;
+    property AiSettings: TTbAiSettings read FAiSettings;
   end;
 
 var
@@ -228,7 +264,7 @@ implementation
 
 uses
   Math, StrUtils, tyControls.BuiltinThemes, tyControls.Dialogs, tbtemplates, tbrules,
-  tbcoverage, tbsnippets;
+  tbcoverage, tbsnippets, tbdiff;
 
 { ---- create / destroy ---- }
 
@@ -237,7 +273,7 @@ var
   names: TStringArray;
   i: Integer;
   item: TMenuItem;
-  err, ini: string;
+  err, ini, aiIni, aiKeys: string;
 begin
   TyRegisterBuiltinThemes;
   if SettingsFileForTest <> '' then
@@ -277,6 +313,18 @@ begin
   FSeeds.OnSync := @SeedsSync;
   SeedsWin.OnShow := @SeedsWinShow;
 
+  { the AI page: its settings sit next to the tool's own (themebuilder-ai.ini) }
+  TbAiFilesFor(FSettings.FileName, aiIni, aiKeys);
+  FAiSettings := TTbAiSettings.Create(aiIni, aiKeys);
+  FAiSettings.Load;
+  FAi := TTbAiFrame.Create(Self);
+  FAi.Parent := AiHost;
+  FAi.Align := alClient;
+  FAi.OnGetDocument := @AiDocument;
+  FAi.OnCandidate := @AiCandidate;
+  FAi.OnSettings := @AiSettingsClick;
+  FAi.Setup(FAiSettings, FBaseVars);
+
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
   begin
@@ -312,6 +360,16 @@ end;
 procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
   Application.RemoveAsyncCalls(Self);
+  { a generation still running stops; nothing of the AI page calls back any more }
+  if FAi <> nil then
+  begin
+    FAi.Session.Stop;
+    FAi.OnGetDocument := nil;
+    FAi.OnCandidate := nil;
+    FAi.OnSettings := nil;
+  end;
+  if FPreview <> nil then
+    FPreview.EndTrial;
   { the frames outlive this handler: nothing of theirs may call back into the window }
   SeedsWin.OnShow := nil;
   if FSeeds <> nil then
@@ -337,6 +395,11 @@ begin
   FreeAndNil(FBaseVars);
   FreeAndNil(FDoc);
   FreeAndNil(FSettings);
+  { the frame (a child of the window) is freed after this handler: it stops its session,
+    and never reads the settings again }
+  if FAi <> nil then
+    FAi.Session.Backend := nil;
+  FreeAndNil(FAiSettings);
 end;
 
 procedure TTbMainForm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -453,6 +516,8 @@ begin
   if not ConfirmDiscard then Exit;
   FDoc.NewUntitled(TbMinimalTemplate, '');
   LoadEditor(FDoc.EditorText);
+  if FAi <> nil then
+    FAi.DocumentChanged(TbErrorCount(FProblems) > 0);
 end;
 
 procedure TTbMainForm.NewFromBuiltin(const AName: string);
@@ -464,6 +529,8 @@ begin
   if not ConfirmDiscard then Exit;
   FDoc.NewUntitled(css, AName);
   LoadEditor(FDoc.EditorText);
+  if FAi <> nil then
+    FAi.DocumentChanged(TbErrorCount(FProblems) > 0);
 end;
 
 function TTbMainForm.OpenFile(const AFileName: string): Boolean;
@@ -491,6 +558,9 @@ begin
   SaveSettings;   { the recent list outlives a crash of this session }
   RebuildRecentMenu;
   LoadEditor(FDoc.EditorText);
+  { another document: a new conversation (a reload of the same one keeps it) }
+  if FAi <> nil then
+    FAi.DocumentChanged(TbErrorCount(FProblems) > 0);
   if FDoc.ConvertedFrom <> '' then
   begin
     Editor.Modified := True;
@@ -605,7 +675,8 @@ begin
   ClampToEditor(FLint);
   FParseFailed := TbHasParseError(FLint);
   FLoadError := '';
-  if not FParseFailed then
+  { while the comparison window tries the AI's version, the preview keeps showing it }
+  if not FParseFailed and not FPreview.InTrial then
     if not FPreview.LoadDocument(css, FDoc.BaseDir, err) then
       FLoadError := err;
   { the seeds page follows the text; a text that does not parse leaves it disabled }
@@ -717,6 +788,8 @@ begin
     SetStatus(rsTbParseKept)
   else
     SetStatus('');
+  if FAi <> nil then
+    FAi.ProblemsChanged(errors > 0);
 end;
 
 procedure TTbMainForm.EditorSpecialLineMarkup(Sender: TObject; Line: Integer;
@@ -1065,6 +1138,119 @@ end;
 function TTbMainForm.SnippetName: string;
 begin
   Result := TbSnippetThemeName(FDoc.FileName, FDoc.BasedOn);
+end;
+
+{ ---- the AI ---- }
+
+function TTbMainForm.AiDocument: TTbAiDocument;
+begin
+  if FSeeds <> nil then
+    FSeeds.FlushRadius;      { a spin box step still waiting is part of the text }
+  Result := Default(TTbAiDocument);
+  Result.Text := Editor.Lines.Text;
+  Result.BaseDir := FDoc.BaseDir;
+  Result.Untitled := FDoc.Untitled;
+  Result.Problems := Copy(FProblems);
+end;
+
+function TTbMainForm.BuildCompareForm: TTbCompareForm;
+var
+  o: TTbAiOutcome;
+begin
+  o := FAi.Session.Outcome;
+  FTrialText := o.Candidate;
+  Result := TTbCompareForm.Create(Self);
+  Result.OnTrial := @CompareTrial;
+  Result.Prepare(o.BaseText, o.Candidate, o.Issues, FLook);
+end;
+
+procedure TTbMainForm.AiCandidate(Sender: TObject);
+var
+  f: TTbCompareForm;
+  o: TTbAiOutcome;
+begin
+  if (FAi = nil) or not FAi.Session.Outcome.HasCandidate then Exit;
+  o := FAi.Session.Outcome;
+  f := BuildCompareForm;
+  try
+    if (RunModal(f) = mrOk) and f.Accepted then
+      AcceptCandidate(o.BaseText, o.Candidate)
+    else
+      FAi.Session.MarkLast(False);
+  finally
+    f.Free;      { the window's close already ended a trial; Free makes sure }
+  end;
+end;
+
+procedure TTbMainForm.CompareTrial(Sender: TObject; AOn: Boolean; out AError: string);
+begin
+  AError := '';
+  if AOn then
+    FPreview.BeginTrial(FTrialText, FDoc.BaseDir, AError)
+  else
+    FPreview.EndTrial;
+  BuildProblems;
+end;
+
+function TTbMainForm.AcceptCandidate(const ABase, ACandidate: string): Boolean;
+var
+  current: string;
+begin
+  Result := False;
+  if FSeeds <> nil then
+    FSeeds.FlushRadius;
+  current := Editor.Lines.Text;
+  { the editor changed after the request went out: say so, and replace what is there now }
+  if TbNormalizeEol(current) <> TbNormalizeEol(ABase) then
+    if Ask(rsTbAiEditedSince, [mbYes, mbNo], mtConfirmation) <> mrYes then
+      Exit;
+  Result := ApplyEdits(current, [TbWholeTextEdit(current, TbNormalizeEol(ACandidate))]);
+  if Result then
+  begin
+    FAi.Session.MarkLast(True);
+    SetStatus(rsTbAiAccepted);
+  end;
+end;
+
+function TTbMainForm.BuildAiSettingsForm: TTbAiSettingsForm;
+begin
+  Result := TTbAiSettingsForm.Create(Self);
+  Result.OnAsk := @AskFor;
+  Result.Prepare(FAiSettings);
+end;
+
+procedure TTbMainForm.AiSettingsClick(Sender: TObject);
+var
+  f: TTbAiSettingsForm;
+begin
+  f := BuildAiSettingsForm;
+  try
+    if RunModal(f) = mrOk then
+      FAi.RefreshProfiles;
+  finally
+    f.Free;
+  end;
+end;
+
+function TTbMainForm.RunModal(AForm: TCustomForm): TModalResult;
+begin
+  if Assigned(ShowModalForTest) then
+  begin
+    ShowModalForTest(AForm);
+    Result := AForm.ModalResult;     { freeing the window ends what closing it would }
+  end
+  else
+    Result := AForm.ShowModal;
+end;
+
+procedure TTbMainForm.MnuAiSettingsClick(Sender: TObject);
+begin
+  AiSettingsClick(Sender);
+end;
+
+procedure TTbMainForm.MnuAiClick(Sender: TObject);
+begin
+  ShowSidePage(AiWin);
 end;
 
 function TTbMainForm.BuildExportForm: TTbExportForm;

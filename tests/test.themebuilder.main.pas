@@ -1,12 +1,13 @@
 unit test.themebuilder.main;
-{ The theme builder's main window (phases 1 and 2), built for real and never shown (as the
+{ The theme builder's main window (phases 1, 2 and 3), built for real and never shown (as the
   terminal example's tests do). Every question it asks is answered by PromptAnswerForTest, Save As
   takes SaveAsNameForTest and the settings go to a file in a temporary folder -- no test
   path shows a window or touches the user's configuration. }
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Controls, Dialogs, tyControls.Controller, tbmain;
+  Classes, SysUtils, fpcunit, testregistry, Controls, Dialogs, tyControls.Controller, tbmain,
+  tbaitesthelp;
 
 type
   TTbMainFormTests = class(TTestCase)
@@ -16,11 +17,18 @@ type
     FThemeName, FMode: string;
     FDensity: TTyDensity;
     FHeard: Integer;
+    FModals: Integer;
     procedure Heard(Sender: TObject);
     procedure WriteBytes(const AFileName, ABytes: string);
     function ReadBytes(const AFileName: string): string;
     function Unify(const S: string): string;
     function PreviewButtonBg: Integer;
+    function ScriptedAi: TScriptedBackend;
+    procedure ModalAccept(Sender: TObject);
+    procedure ModalDiscard(Sender: TObject);
+    procedure ModalLeave(Sender: TObject);
+    procedure ModalOllama(Sender: TObject);
+    function PreviewPrimaryBg: Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -83,6 +91,19 @@ type
     procedure TestRadiusStepsAreOneUndoStep;
     procedure TestAWaitingRadiusIsSaved;
     procedure TestALongNoteTakesASecondLine;
+    { phase 3 }
+    procedure TestTheAiPageIsBuilt;              { M1 }
+    procedure TestGenerateCompareAcceptUndo;     { M2 }
+    procedure TestAcceptingKeepsTheCaret;        { M3 }
+    procedure TestEditedSinceAsksFirst;          { M4 }
+    procedure TestATrialSurvivesARefresh;        { M5 }
+    procedure TestANewDocumentStartsAfresh;      { M6 }
+    procedure TestTheProblemsBoxFollows;         { M7 }
+    procedure TestDiscardChangesNothing;         { M8 }
+    procedure TestTheSettingsWindowIsWired;      { M9 }
+    procedure TestStopIsWired;                   { M10 }
+    procedure TestClosingWhileGenerating;        { M11 }
+    procedure TestTheAnswerStreamsIn;            { M12 }
   end;
 
 implementation
@@ -91,7 +112,9 @@ uses
   Forms, FileUtil, IniFiles, Graphics, Types, fpjson, jsonparser, SynEdit, SynEditKeyCmds, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden,
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
-  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules;
+  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules,
+  tbaiformat, tbaiclient, tbaisettings, tbaisession, tbaiframe, tbcompareform, tbaisettingsform,
+  tbdiff;
 
 const
   { a document whose one value no base theme has }
@@ -129,12 +152,15 @@ begin
   TTbMainForm.SettingsFileForTest := FDir + 'settings' + PathDelim + 'themebuilder.ini';
   TTbMainForm.PromptAnswerForTest := mrNo;
   TTbMainForm.SaveAsNameForTest := '';
+  TTbMainForm.ShowModalForTest := nil;
+  FModals := 0;
   FForm := TTbMainForm.Create(nil);
 end;
 
 procedure TTbMainFormTests.TearDown;
 begin
   FreeAndNil(FForm);
+  TTbMainForm.ShowModalForTest := nil;
   TTbMainForm.SaveAsNameForTest := '';
   TTbMainForm.PromptAnswerForTest := mrNone;
   TTbMainForm.SettingsFileForTest := '';
@@ -194,9 +220,10 @@ end;
 
 procedure TTbMainFormTests.TestTheWindowIsBuilt;
 begin
-  AssertEquals('F1: two side windows', 2, FForm.SideBar.WindowCount);
+  AssertEquals('F1: three side windows', 3, FForm.SideBar.WindowCount);
   AssertTrue('F1: the seeds first', FForm.SideBar.Windows[0] = FForm.SeedsWin);
   AssertTrue('F1: the problems', FForm.SideBar.Windows[1] = FForm.ProblemsWin);
+  AssertTrue('F1: the AI page', FForm.SideBar.Windows[2] = FForm.AiWin);
   AssertTrue('F1: the kit is attached', FForm.Editor.Highlighter is TSynCssSyn);
   AssertTrue('F1: the kit is the form''s', FForm.Kit.Edit = FForm.Editor);
   AssertFalse('F1: no tidying of the line left', FForm.Kit.FormatOnLineLeave);
@@ -341,14 +368,18 @@ end;
 
 procedure TTbMainFormTests.TestTheProjectListsItsUnits;
 const
-  cUnits: array[0..20] of string = ('themebuilder.lpr', 'tbmain.pas', 'tbpreview.pas',
+  cUnits: array[0..33] of string = ('themebuilder.lpr', 'tbmain.pas', 'tbpreview.pas',
     'tbsamplewin.pas', 'tbtemplates.pas', 'tbproblems.pas', 'tbdocument.pas',
     'tbsettings.pas', 'tbthemesource.pas', 'tbeditorlook.pas',
     'tbcssscan.pas', 'tbseeds.pas', 'tbseedsframe.pas', 'tbrules.pas', 'tbpick.pas',
     'tbcoverage.pas', 'tbcoverageform.pas', 'tbexport.pas', 'tbexportform.pas',
-    'tbsnippets.pas', 'tbsnippetsform.pas');
+    'tbsnippets.pas', 'tbsnippetsform.pas',
+    'ai/tbhttp.pas', 'ai/tbhttpwin.pas', 'ai/tbhttpcurl.pas', 'ai/tbsse.pas',
+    'ai/tbaiformat.pas', 'ai/tbaiclient.pas', 'ai/tbaisettings.pas', 'ai/tbreference.pas',
+    'ai/tbaisession.pas', 'tbdiff.pas', 'tbcompareform.pas', 'tbaisettingsform.pas',
+    'tbaiframe.pas');
 var
-  lpi, dir: string;
+  lpi, dir, rel: string;
   sl: TStringList;
   files: TStringList;
   i: Integer;
@@ -367,12 +398,18 @@ begin
   AssertTrue('F11: SynEdit', Pos('<PackageName Value="SynEdit"/>', lpi) > 0);
   AssertTrue('F11: not the installed package', Pos('"tycontrols"', LowerCase(lpi)) = 0);
   AssertTrue('F11: the design-time sources', Pos('../../designtime', lpi) > 0);
-  files := FindAllFiles(dir, '*.pas', False);
+  AssertTrue('F11: the ai folder is searched', Pos('<OtherUnitFiles Value=".;ai;', lpi) > 0);
+  { every unit under the tool's folder, the ai folder included, by its path from there }
+  files := FindAllFiles(dir, '*.pas', True);
   try
-    AssertTrue('there are units on disk', files.Count >= 9);
+    AssertTrue('there are units on disk', files.Count >= 30);
     for i := 0 to files.Count - 1 do
-      AssertTrue('F11: on disk and in the project: ' + ExtractFileName(files[i]),
-        Pos('<Filename Value="' + ExtractFileName(files[i]) + '"/>', lpi) > 0);
+    begin
+      rel := StringReplace(ExtractRelativePath(dir, files[i]), PathDelim, '/', [rfReplaceAll]);
+      if Copy(rel, 1, 4) = 'lib/' then Continue;
+      AssertTrue('F11: on disk and in the project: ' + rel,
+        Pos('<Filename Value="' + rel + '"/>', lpi) > 0);
+    end;
   finally
     files.Free;
   end;
@@ -710,7 +747,7 @@ var
 begin
   names := TStringList.Create;
   names.Sorted := True;
-  files := FindAllFiles(ToolDir, '*.pas', False);
+  files := FindAllFiles(ToolDir, '*.pas', True);     { the ai folder too }
   src := TStringList.Create;
   try
     for i := 0 to files.Count - 1 do
@@ -1728,6 +1765,305 @@ begin
   AssertTrue('J1: changed for light only', FForm.Seeds.ApplyValue(TbRadiusSeed, 0, '10px'));
   AssertEquals('J1: in the light block it wins over the density (asked first)', 10,
     FForm.Preview.Controller.Model.ResolveMetric('--radius', -1));
+end;
+
+{ ---- phase 3: the AI page ---- }
+
+function BlueMinimal: string;
+begin
+  Result := StringReplace(TbMinimalTemplate, '--accent: #3B82F6;', '--accent: #ABCDEF;', []);
+end;
+
+{ a service to talk to, and the scripted model in place of its client }
+function TTbMainFormTests.ScriptedAi: TScriptedBackend;
+begin
+  FForm.AiSettings.Put(TbPresetProfile(tapCustom));
+  FForm.Ai.RefreshProfiles;
+  Result := TScriptedBackend.Create;
+  FForm.Ai.Session.Backend := Result;
+end;
+
+{ what the comparison / settings window would be answered with; the handlers below act
+  on it as the user would }
+procedure TTbMainFormTests.ModalAccept(Sender: TObject);
+begin
+  Inc(FModals);
+  if Sender is TTbCompareForm then
+  begin
+    TTbCompareForm(Sender).BtnAcceptClick(nil);
+    TTbCompareForm(Sender).ModalResult := mrOk;
+  end;
+end;
+
+procedure TTbMainFormTests.ModalDiscard(Sender: TObject);
+begin
+  Inc(FModals);
+  if Sender is TTbCompareForm then
+    TTbCompareForm(Sender).ModalResult := mrCancel;
+end;
+
+procedure TTbMainFormTests.ModalLeave(Sender: TObject);
+begin
+  Inc(FModals);
+  if Sender is TCustomForm then
+    TCustomForm(Sender).ModalResult := mrCancel;
+end;
+
+procedure TTbMainFormTests.ModalOllama(Sender: TObject);
+begin
+  Inc(FModals);
+  if Sender is TTbAiSettingsForm then
+  begin
+    TTbAiSettingsForm(Sender).AddPreset(tapOllama);
+    if TTbAiSettingsForm(Sender).Commit then
+      TTbAiSettingsForm(Sender).ModalResult := mrOk;
+  end;
+end;
+
+function TTbMainFormTests.PreviewPrimaryBg: Integer;
+begin
+  Result := Integer(Cardinal(FForm.Preview.Controller.Model.ResolveStyle('TyButton', 'primary', [])
+    .Background.Color) and $FFFFFF);
+end;
+
+procedure TTbMainFormTests.TestTheAiPageIsBuilt;
+begin
+  AssertEquals('M1: three side windows', 3, FForm.SideBar.WindowCount);
+  AssertTrue('M1: the AI page last', FForm.SideBar.Windows[2] = FForm.AiWin);
+  AssertTrue('M1: the frame is in its host', FForm.Ai.Parent = FForm.AiHost);
+  AssertFalse('M1: nothing to generate with', FForm.Ai.BtnGenerate.Enabled);
+  AssertEquals('M1: says so', rsTbAiNoProfile, FForm.Ai.LblStatus.Caption);
+  AssertTrue('M1: the AI settings sit with the test settings: ' + FForm.AiSettings.IniFile,
+    Pos(ExcludeTrailingPathDelimiter(FDir), FForm.AiSettings.IniFile) = 1);
+end;
+
+procedure TTbMainFormTests.TestGenerateCompareAcceptUndo;
+var
+  b: TScriptedBackend;
+begin
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalAccept;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  AssertEquals('M2: the comparison was shown', 1, FModals);
+  AssertTrue('M2: the editor has it', Pos('--accent: #ABCDEF;', FForm.Editor.Lines.Text) > 0);
+  AssertEquals('M2: the preview has it', $ABCDEF, PreviewPrimaryBg);
+  AssertEquals('M2: accepted', 1, PtrInt(FForm.Ai.Session.History.Objects[0]));
+  FForm.Editor.Undo;
+  AssertEquals('M2: one undo takes it back', Unify(TbMinimalTemplate), Unify(FForm.Editor.Lines.Text));
+end;
+
+procedure TTbMainFormTests.TestAcceptingKeepsTheCaret;
+var
+  b: TScriptedBackend;
+  text, cand: string;
+begin
+  { a whole-text replacement would move the caret: shown first, then undone }
+  text := FForm.Editor.Lines.Text;
+  cand := TbNormalizeEol(BlueMinimal);
+  FForm.Editor.LogicalCaretXY := Point(2, 3);
+  AssertTrue('replaced whole', FForm.ApplyEdits(text, [TbEdit(1, Length(text) + 1 - Length(LineEnding),
+    Copy(cand, 1, Length(cand) - Length(LineEnding)))]));
+  AssertFalse('a whole replacement moves the caret',
+    (FForm.Editor.LogicalCaretXY.X = 2) and (FForm.Editor.LogicalCaretXY.Y = 3));
+  FForm.Editor.Undo;
+  AssertEquals('back', Unify(TbMinimalTemplate), Unify(FForm.Editor.Lines.Text));
+
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalAccept;
+  FForm.Editor.LogicalCaretXY := Point(2, 3);
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  AssertTrue('accepted', Pos('--accent: #ABCDEF;', FForm.Editor.Lines.Text) > 0);
+  AssertEquals('M3: the caret line', 3, FForm.Editor.LogicalCaretXY.Y);
+  AssertEquals('M3: the caret column', 2, FForm.Editor.LogicalCaretXY.X);
+end;
+
+procedure TTbMainFormTests.TestEditedSinceAsksFirst;
+var
+  b: TScriptedBackend;
+  o: TTbAiOutcome;
+  added: string;
+begin
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  o := FForm.Ai.Session.Outcome;
+  AssertTrue('a candidate', o.HasCandidate);
+  FForm.Editor.Lines.Add('/* added */');
+  added := FForm.Editor.Lines.Text;
+  TTbMainForm.PromptAnswerForTest := mrNo;
+  AssertFalse('M4: not accepted', FForm.AcceptCandidate(o.BaseText, o.Candidate));
+  AssertEquals('M4: the text stays', added, FForm.Editor.Lines.Text);
+  AssertEquals('M4: it asked', rsTbAiEditedSince, FForm.LastAsk);
+  TTbMainForm.PromptAnswerForTest := mrYes;
+  AssertTrue('M4: accepted', FForm.AcceptCandidate(o.BaseText, o.Candidate));
+  AssertEquals('M4: the AI''s version', Unify(BlueMinimal), Unify(FForm.Editor.Lines.Text));
+  FForm.Editor.Undo;
+  AssertEquals('M4: one undo goes back to the edited text', Unify(added), Unify(FForm.Editor.Lines.Text));
+end;
+
+procedure TTbMainFormTests.TestATrialSurvivesARefresh;
+var
+  b: TScriptedBackend;
+  f: TTbCompareForm;
+begin
+  FForm.Editor.Lines.Text := cMarkerDocMain;
+  FForm.RefreshNow;
+  AssertEquals('the editor''s version', $123456, PreviewButtonBg);
+  b := ScriptedAi;
+  b.Add(TbAnswerWith('TyButton { background: #654321; }'));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'darker';
+  FForm.Ai.GenerateClick(nil);
+  f := FForm.BuildCompareForm;
+  try
+    f.TrialCheck.Checked := True;
+    AssertEquals('M5: the trial is shown', $654321, PreviewButtonBg);
+    FForm.Editor.Lines.Add('/* typed */');
+    FForm.RefreshNow;
+    AssertEquals('M5: a refresh keeps the trial', $654321, PreviewButtonBg);
+    f.TrialCheck.Checked := False;
+    AssertEquals('M5: the editor''s version again', $123456, PreviewButtonBg);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTbMainFormTests.TestANewDocumentStartsAfresh;
+var
+  b: TScriptedBackend;
+  f: string;
+begin
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalDiscard;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  AssertEquals('one request', 1, FForm.Ai.Session.History.Count);
+  FForm.NewMinimal;
+  AssertEquals('M6: a new document forgets', 0, FForm.Ai.Session.History.Count);
+  { a reload of the same document does not }
+  f := FDir + 'ai.tycss';
+  WriteBytes(f, TbMinimalTemplate);
+  AssertTrue('opened', FForm.OpenFile(f));
+  FForm.Ai.GenerateClick(nil);
+  AssertEquals('one request again', 1, FForm.Ai.Session.History.Count);
+  WriteBytes(f, TbMinimalTemplate + '/* changed outside */'#10);
+  TTbMainForm.PromptAnswerForTest := mrYes;
+  FForm.CheckDiskNow;
+  AssertTrue('reloaded', Pos('changed outside', FForm.Editor.Lines.Text) > 0);
+  AssertEquals('M6: a reload keeps the conversation', 1, FForm.Ai.Session.History.Count);
+end;
+
+procedure TTbMainFormTests.TestTheProblemsBoxFollows;
+var
+  f: string;
+begin
+  f := FDir + 'broken.tycss';
+  WriteBytes(f, 'TyButton { color: red'#10);
+  AssertTrue('opened', FForm.OpenFile(f));
+  AssertTrue('M7: ticked for a broken file', FForm.Ai.ChkProblems.Checked);
+  FForm.Editor.Lines.Text := cMarkerDocMain;
+  FForm.RefreshNow;
+  AssertFalse('M7: unticked once fixed', FForm.Ai.ChkProblems.Checked);
+  FForm.Ai.ChkProblems.Checked := True;           { the user's own choice }
+  FForm.Editor.Lines.Text := 'TyButton { color: red';
+  FForm.RefreshNow;
+  FForm.Editor.Lines.Text := cMarkerDocMain;
+  FForm.RefreshNow;
+  AssertTrue('M7: the user''s choice holds', FForm.Ai.ChkProblems.Checked);
+end;
+
+procedure TTbMainFormTests.TestDiscardChangesNothing;
+var
+  b: TScriptedBackend;
+  before: string;
+begin
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalDiscard;
+  before := FForm.Editor.Lines.Text;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  AssertEquals('the comparison was shown', 1, FModals);
+  AssertEquals('M8: the text stays', before, FForm.Editor.Lines.Text);
+  AssertEquals('M8: not used', 2, PtrInt(FForm.Ai.Session.History.Objects[0]));
+  AssertTrue('M8: it can be shown again', FForm.Ai.BtnShowCompare.Enabled);
+end;
+
+procedure TTbMainFormTests.TestTheSettingsWindowIsWired;
+begin
+  TTbMainForm.ShowModalForTest := @ModalOllama;
+  FForm.MnuAiSettingsClick(nil);
+  AssertEquals('the settings were shown', 1, FModals);
+  AssertEquals('M9: the page lists it', 1, FForm.Ai.ProfileCombo.Items.Count);
+  AssertTrue('M9: sent to localhost: ' + FForm.Ai.LblSentTo.Caption,
+    Pos('localhost', FForm.Ai.LblSentTo.Caption) > 0);
+  AssertTrue('M9: generate is possible', FForm.Ai.BtnGenerate.Enabled);
+end;
+
+procedure TTbMainFormTests.TestStopIsWired;
+var
+  b: TScriptedBackend;
+begin
+  b := ScriptedAi;
+  b.Hold := True;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  AssertTrue('M10: stop is offered', FForm.Ai.BtnStop.Enabled);
+  AssertFalse('M10: generate is not', FForm.Ai.BtnGenerate.Enabled);
+  FForm.Ai.StopClick(nil);
+  AssertEquals('M10: the backend was told', 1, b.Cancels);
+  b.ReleaseWith(aekCancelled);
+  AssertEquals('M10: says so', rsTbAiCancelled, FForm.Ai.LblStatus.Caption);
+  AssertTrue('M10: generate again', FForm.Ai.BtnGenerate.Enabled);
+end;
+
+procedure TTbMainFormTests.TestClosingWhileGenerating;
+var
+  b: TScriptedBackend;
+  cancelled, freed: Integer;
+begin
+  b := ScriptedAi;
+  b.Hold := True;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  cancelled := TScriptedBackend.Cancelled;
+  freed := TScriptedBackend.Freed;
+  FreeAndNil(FForm);
+  AssertTrue('M11: the backend was told to stop', TScriptedBackend.Cancelled > cancelled);
+  AssertTrue('M11: and freed', TScriptedBackend.Freed > freed);
+  CheckSynchronize(50);
+end;
+
+procedure TTbMainFormTests.TestTheAnswerStreamsIn;
+var
+  b: TScriptedBackend;
+  s: string;
+  i: Integer;
+  t0: QWord;
+begin
+  b := ScriptedAi;
+  s := '';
+  for i := 1 to 600 do
+    s := s + Format('/* line %d of the answer */', [i]) + #10;
+  b.Add(s, aekNone, 200, 30);
+  b.HoldDone := True;
+  FForm.Ai.EdtPrompt.Text := 'long';
+  FForm.Ai.GenerateClick(nil);
+  AssertTrue('M12: the flush timer is running', FForm.Ai.FlushTimer.Enabled);
+  t0 := GetTickCount64;
+  FForm.Ai.FlushTimerTimer(nil);
+  WriteLn(Format('M12: 600 lines into the output box in %d ms', [GetTickCount64 - t0]));
+  AssertTrue(Format('M12: %d lines shown', [FForm.Ai.OutputMemo.Lines.Count]),
+    FForm.Ai.OutputMemo.Lines.Count >= 600);
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  b.FinishHeld;
 end;
 
 initialization

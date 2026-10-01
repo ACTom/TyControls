@@ -26,6 +26,9 @@ type
     Next: Integer;
     Hold: Boolean;
     Held: Boolean;
+    HoldDone: Boolean;            { Release streams the pieces and keeps the result back }
+    DoneHeld: Boolean;
+    HeldResult: TTbAiResult;
     Starts, Cancels: Integer;
     Systems: TStringList;
     Sent: array of TTbChatMessages;
@@ -41,6 +44,7 @@ type
     { end the held request with AKind and no text }
     procedure ReleaseWith(AKind: TTbAiErrorKind; AStatus: Integer = 0);
     function AllSent(AIndex: Integer): string;   { request AIndex's messages joined }
+    procedure FinishHeld;                        { the result HoldDone kept back }
   end;
 
 { '... sentence'#10'```tycss'#10 + ABody + #10'```' }
@@ -144,8 +148,22 @@ begin
     if (a.Pieces[i] <> '') and Assigned(OnDelta) then
       OnDelta(Self, tspText, a.Pieces[i]);
   end;
+  if HoldDone then
+  begin
+    HeldResult := r;
+    DoneHeld := True;
+    Exit;
+  end;
   if Assigned(OnDone) then
     OnDone(Self, r);
+end;
+
+procedure TScriptedBackend.FinishHeld;
+begin
+  if not DoneHeld then Exit;
+  DoneHeld := False;
+  if Assigned(OnDone) then
+    OnDone(Self, HeldResult);
 end;
 
 procedure TScriptedBackend.ReleaseWith(AKind: TTbAiErrorKind; AStatus: Integer);
