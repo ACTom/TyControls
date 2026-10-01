@@ -78,12 +78,24 @@ const
 function TbSplitUrl(const AUrl: string; out AParts: TTbUrlParts): Boolean;
 { localhost, 127.x.x.x, ::1 }
 function TbIsLoopbackHost(const AHost: string): Boolean;
+{ http:// (not https) to a host that is not this computer: what is sent crosses the
+  network readable by anyone on the way. False for an address that does not split }
+function TbIsPlainRemote(const AUrl: string): Boolean;
 { nil + AReason when this platform cannot do HTTP (no libcurl) }
 function TbCreateTransport(out AReason: string): TTbHttpTransport;
 function TbTransportAvailable(out AReason: string): Boolean;
 { the timeouts a request asks for, the defaults filled in }
 function TbConnectTimeoutMs(const ARequest: TTbHttpRequest): Integer;
 function TbIdleTimeoutMs(const ARequest: TTbHttpRequest): Integer;
+
+type
+  TTbTransportFactory = function(out AReason: string): TTbHttpTransport;
+
+var
+  { FOR THE TESTS: TbCreateTransport hands out what this makes instead (a transport that
+    only records being asked), so a check that a request must NOT go out never reaches
+    the network even when the check is broken }
+  TbTransportFactoryForTest: TTbTransportFactory = nil;
 
 implementation
 
@@ -189,9 +201,18 @@ begin
   Result := Length(AHost) > 4;
 end;
 
+function TbIsPlainRemote(const AUrl: string): Boolean;
+var
+  p: TTbUrlParts;
+begin
+  Result := TbSplitUrl(AUrl, p) and not p.Secure and not TbIsLoopbackHost(p.Host);
+end;
+
 function TbCreateTransport(out AReason: string): TTbHttpTransport;
 begin
   AReason := '';
+  if Assigned(TbTransportFactoryForTest) then
+    Exit(TbTransportFactoryForTest(AReason));
   {$IFDEF MSWINDOWS}
   Result := TTbWinHttpTransport.Create;
   {$ELSE}

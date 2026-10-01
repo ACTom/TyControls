@@ -100,6 +100,24 @@ function AiCheckCancel(out AWhy: string): Boolean;            { C15 }
 function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
 { after the phase 3 reviews }
 function AiCheckRedirects(out AWhy: string): Boolean;         { C18 }
+function AiCheckInsecureKey(out AWhy: string): Boolean;       { C19 }
+
+type
+  { a transport that only counts being asked and answers "cannot connect": installed with
+    TbRecordTransports so a request that must not go out never reaches the network }
+  TTbRecordingTransport = class(TTbHttpTransport)
+  public
+    function Execute(const ARequest: TTbHttpRequest; AOnStatus: TTbHttpStatusEvent;
+      AOnData: TTbHttpDataEvent): TTbHttpResult; override;
+    procedure Cancel; override;
+  end;
+
+var
+  TbRecordedRequests: Integer = 0;    { Execute calls on recording transports }
+  TbRecordedUrl: string = '';
+
+{ AOn: TbCreateTransport hands out recording transports (and the count starts at 0) }
+procedure TbRecordTransports(AOn: Boolean);
 
 { the AI settings: the plan's K numbers (the Windows-only ones are in the test unit) }
 function TbAiTempDir: string;                                 { a fresh folder }
@@ -1307,6 +1325,107 @@ begin
   end;
   Result := True;
   AWhy := '';
+end;
+
+{ ---- recording transports ---- }
+
+function TTbRecordingTransport.Execute(const ARequest: TTbHttpRequest;
+  AOnStatus: TTbHttpStatusEvent; AOnData: TTbHttpDataEvent): TTbHttpResult;
+begin
+  InterLockedIncrement(TbRecordedRequests);
+  TbRecordedUrl := ARequest.Url;
+  Result := Default(TTbHttpResult);
+  Result.Error := hekCannotConnect;
+end;
+
+procedure TTbRecordingTransport.Cancel;
+begin
+end;
+
+function MakeRecording(out AReason: string): TTbHttpTransport;
+begin
+  AReason := '';
+  Result := TTbRecordingTransport.Create;
+end;
+
+procedure TbRecordTransports(AOn: Boolean);
+begin
+  TbRecordedRequests := 0;
+  TbRecordedUrl := '';
+  if AOn then
+    TbTransportFactoryForTest := @MakeRecording
+  else
+    TbTransportFactoryForTest := nil;
+end;
+
+{ C19: a key is never sent over http:// to another computer -- the client refuses before a
+  transport is even made; without a key (a local model elsewhere on the network), over
+  https, or to this computer it goes. Recording transports: nothing reaches the network }
+function AiCheckInsecureKey(out AWhy: string): Boolean;
+
+  function TryRun(const AUrl, AKey: string; out ARun: TTbAiRun): Boolean;
+  var
+    prof: TTbAiProfile;
+  begin
+    prof := Default(TTbAiProfile);
+    prof.Format := tafOpenAI;
+    prof.BaseUrl := AUrl;
+    prof.Model := 'm';
+    prof.TimeoutSec := 5;
+    TbRecordedRequests := 0;
+    ARun := TTbAiRun.Create(prof, AKey);
+    ARun.Start;
+    Result := ARun.WaitDone(5000);
+  end;
+
+var
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  TbRecordTransports(True);
+  try
+    if not TryRun('http://192.0.2.10:8080/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
+    if run.Outcome.Kind <> aekInsecureKey then
+      Exit(Fail(AWhy, 'a key over remote http: ' + AiDescribe(run)));
+    if TbRecordedRequests <> 0 then Exit(Fail(AWhy, 'a transport was asked to send it'));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if sentence <> Format(rsTbAiInsecureKey, ['192.0.2.10']) then
+      Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    if Pos(cFakeKey, sentence) > 0 then Exit(Fail(AWhy, 'the key is in the sentence'));
+    FreeAndNil(run);
+    { the same with the upper-case scheme }
+    if not TryRun('HTTP://192.0.2.10/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
+    if run.Outcome.Kind <> aekInsecureKey then
+      Exit(Fail(AWhy, 'HTTP:// in capitals: ' + AiDescribe(run)));
+    FreeAndNil(run);
+    { allowed: no key; https; this computer by name, address and IPv6 }
+    if not TryRun('http://192.0.2.10:11434/v1', '', run) then Exit(Fail(AWhy, 'did not finish'));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'no key over remote http was not let through: ' + AiDescribe(run)));
+    FreeAndNil(run);
+    if not TryRun('https://192.0.2.10/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'a key over https was not let through: ' + AiDescribe(run)));
+    FreeAndNil(run);
+    if not TryRun('http://localhost:11434/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'a key to localhost was not let through: ' + AiDescribe(run)));
+    FreeAndNil(run);
+    if not TryRun('http://127.0.0.2:11434/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'a key to 127.0.0.2 was not let through: ' + AiDescribe(run)));
+    FreeAndNil(run);
+    if not TryRun('http://[::1]:11434/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'a key to [::1] was not let through: ' + AiDescribe(run)));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    TbRecordTransports(False);
+  end;
 end;
 
 { ---- the K checks (settings and keys) ---- }

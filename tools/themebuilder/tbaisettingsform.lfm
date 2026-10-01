@@ -241,10 +241,19 @@ object TbAiSettingsForm: TTbAiSettingsForm
         WordWrap = True
         Visible = False
       end
+      object PlainHttpAlert: TTyAlert
+        Left = 16
+        Height = 52
+        Top = 274
+        Width = 528
+        Anchors = [akTop, akLeft, akRight]
+        AlertType = atWarning
+        Visible = False
+      end
       object BtnTest: TTyButton
         Left = 16
         Height = 30
-        Top = 322
+        Top = 332
         Width = 130
         AutoSize = True
         Caption = 'Test connection'
@@ -253,7 +262,7 @@ object TbAiSettingsForm: TTbAiSettingsForm
       object LblTest: TTyLabel
         Left = 160
         Height = 44
-        Top = 322
+        Top = 332
         Width = 384
         Anchors = [akTop, akLeft, akRight]
         AutoSize = False

@@ -18,6 +18,7 @@ uses
   Classes, SysUtils, Forms, Controls, ExtCtrls,
   tyControls.Panel, tyControls.TyLabel, tyControls.Memo, tyControls.CheckBox,
   tyControls.Button, tyControls.GlyphButtons, tyControls.ComboBox, tyControls.Icons.Lucide,
+  tyControls.Alert,
   tbaiformat, tbaiclient, tbaisettings, tbaisession;
 
 resourcestring
@@ -34,6 +35,7 @@ type
     TopRow: TTyPanel;
     BtnSettings: TTySpeedButton;
     ProfileCombo: TTyComboBox;
+    PlainHttpAlert: TTyAlert;
     LblDescribe: TTyLabel;
     EdtPrompt: TTyMemo;
     ChkProblems: TTyCheckBox;
@@ -109,6 +111,8 @@ begin
   FSession.OnStreamed := @SessionStreamed;
   FSession.OnFinished := @SessionFinished;
   FAvailable := True;
+  PlainHttpAlert.Message := rsTbAiPlainHttp;
+  PlainHttpAlert.Description := rsTbAiPlainHttpMore;
 end;
 
 destructor TTbAiFrame.Destroy;
@@ -185,6 +189,9 @@ begin
     FSession.Backend := nil;
     LblSentTo.Caption := '';
   end;
+  { http:// to another computer: what is sent can be read on the way (with a key nothing
+    goes out at all -- the client refuses, the status line says so) }
+  PlainHttpAlert.Visible := has and TbIsPlainRemote(cur.BaseUrl);
   UpdateButtons;
 end;
 

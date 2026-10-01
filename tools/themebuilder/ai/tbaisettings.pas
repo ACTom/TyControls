@@ -27,6 +27,9 @@ uses
 resourcestring
   rsTbAiPresetLocal = 'Local (Ollama)';
   rsTbAiPresetCustom = 'Custom';
+  { the warning the settings and the AI page show for http:// to another computer }
+  rsTbAiPlainHttp = 'Not encrypted (http://)';
+  rsTbAiPlainHttpMore = 'Others on the network can read the theme and your descriptions.';
 
 type
   TTbAiPreset = (tapOpenAI, tapDeepSeek, tapAnthropic, tapOllama, tapCustom);

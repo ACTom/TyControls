@@ -32,6 +32,7 @@ type
     procedure TestScrubbing;                 { C17 }
     { after the phase 3 reviews }
     procedure TestARedirectIsNotFollowed;    { C18 }
+    procedure TestAKeyIsNotSentOverHttp;     { C19 }
   end;
 
   TTbAiSettingsTests = class(TTestCase)
@@ -236,6 +237,15 @@ var
 begin
   ok := AiCheckRedirects(why);
   AssertTrue('C18: ' + why, ok);
+end;
+
+procedure TTbAiClientTests.TestAKeyIsNotSentOverHttp;
+var
+  why: string;
+  ok: Boolean;
+begin
+  ok := AiCheckInsecureKey(why);
+  AssertTrue('C19: ' + why, ok);
 end;
 
 { ---- TTbAiSettingsTests ---- }

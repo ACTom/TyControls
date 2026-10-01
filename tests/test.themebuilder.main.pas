@@ -104,6 +104,8 @@ type
     procedure TestStopIsWired;                   { M10 }
     procedure TestClosingWhileGenerating;        { M11 }
     procedure TestTheAnswerStreamsIn;            { M12 }
+    { phase 3, after the reviews }
+    procedure TestTheAiPageWarnsOfPlainHttp;     { M13 }
   end;
 
 implementation
@@ -114,7 +116,7 @@ uses
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
   tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules,
   tbaiformat, tbaiclient, tbaisettings, tbaisession, tbaiframe, tbcompareform, tbaisettingsform,
-  tbdiff;
+  tbdiff, tbaichecks;
 
 const
   { a document whose one value no base theme has }
@@ -2064,6 +2066,44 @@ begin
     FForm.Ai.OutputMemo.Lines.Count >= 600);
   TTbMainForm.ShowModalForTest := @ModalLeave;
   b.FinishHeld;
+end;
+
+{ wait (the worker's results come through the queue) until the AI page is idle again }
+function WaitAiIdle(AForm: TTbMainForm; AMs: Integer): Boolean;
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  while AForm.Ai.Session.Busy and (GetTickCount64 - t0 < QWord(AMs)) do
+    CheckSynchronize(10);
+  Result := not AForm.Ai.Session.Busy;
+end;
+
+procedure TTbMainFormTests.TestTheAiPageWarnsOfPlainHttp;
+var
+  p: TTbAiProfile;
+begin
+  p := TbPresetProfile(tapCustom);
+  p.BaseUrl := 'https://192.0.2.10/v1';
+  FForm.AiSettings.Put(p);
+  FForm.Ai.RefreshProfiles;
+  AssertFalse('M13: https, no warning', FForm.Ai.PlainHttpAlert.Visible);
+  p.BaseUrl := 'http://192.0.2.10:11434/v1';
+  FForm.AiSettings.Put(p);
+  FForm.AiSettings.SetKey(p.Id, 'sk-test-0000-page');
+  FForm.Ai.RefreshProfiles;
+  AssertTrue('M13: http to another computer, warned', FForm.Ai.PlainHttpAlert.Visible);
+  TbRecordTransports(True);
+  try
+    FForm.Ai.EdtPrompt.Text := 'blue';
+    FForm.Ai.GenerateClick(nil);
+    AssertTrue('M13: finished', WaitAiIdle(FForm, 5000));
+    AssertEquals('M13: the status line says it was not sent',
+      Format(rsTbAiInsecureKey, ['192.0.2.10']), FForm.Ai.LblStatus.Caption);
+    AssertEquals('M13: nothing was asked of a transport', 0, TbRecordedRequests);
+  finally
+    TbRecordTransports(False);
+  end;
 end;
 
 initialization

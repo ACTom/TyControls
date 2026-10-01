@@ -40,6 +40,19 @@ object AiFrame: TTbAiFrame
       OnChange = ProfileComboChange
     end
   end
+  object PlainHttpAlert: TTyAlert
+    Left = 8
+    Height = 52
+    Top = 38
+    Width = 264
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 8
+    AlertType = atWarning
+    Visible = False
+  end
   object LblDescribe: TTyLabel
     Left = 8
     Height = 36

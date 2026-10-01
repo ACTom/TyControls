@@ -15,6 +15,7 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.FormSurface, tyControls.TyLabel,
   tyControls.Edit, tyControls.ComboBox, tyControls.SpinEdit, tyControls.ListBox,
   tyControls.Button, tyControls.DropButtons, tyControls.Panel, tyControls.Menu,
+  tyControls.Alert,
   tbaiformat, tbaiclient, tbaisettings, tbaisession, tbseedsframe;
 
 resourcestring
@@ -28,6 +29,7 @@ resourcestring
   rsTbAiTestOk = 'Connected: %s is answering.';
   rsTbAiNeedMaxOutput = 'Anthropic needs a maximum output length above 0.';
   rsTbAiRemoveAsk = 'Remove the service "%s" and its key?';
+  rsTbAiPlainHttpKey = 'A key cannot go to %s over http://: it would cross the network unencrypted. Use an https:// address, or remove the key.';
 
 type
   TTbAiSettingsForm = class(TTyForm)
@@ -57,6 +59,7 @@ type
     LblTimeout: TTyLabel;
     SpnTimeout: TTySpinEdit;
     LblHint: TTyLabel;
+    PlainHttpAlert: TTyAlert;
     BtnTest: TTyButton;
     LblTest: TTyLabel;
     LblPrivacy: TTyLabel;
@@ -134,6 +137,8 @@ begin
   CmbFormat.Items.Add(rsTbAiFormatAnthropic);
   LblPrivacy.Caption := rsTbAiPrivacy + ' ' +
     {$IFDEF MSWINDOWS}rsTbAiKeyStoreWin{$ELSE}rsTbAiKeyStoreUnix{$ENDIF};
+  PlainHttpAlert.Message := rsTbAiPlainHttp;
+  PlainHttpAlert.Description := rsTbAiPlainHttpMore;
   { without libcurl (Linux, macOS) there is nothing to test with: say so, grey the button }
   FAvailable := TbTransportAvailable(FUnavailable);
   if not FAvailable then
@@ -287,6 +292,9 @@ begin
   end
   else
     LblHint.Visible := False;
+  { http:// to another computer: allowed (a local model on the user's network), said out
+    loud; with a key, OK refuses it (Commit) and the client would not send it }
+  PlainHttpAlert.Visible := TbIsPlainRemote(EdtUrl.Text);
 end;
 
 procedure TTbAiSettingsForm.SelectProfile(AIndex: Integer);
@@ -488,6 +496,14 @@ begin
     begin
       SelectProfile(i);
       SetTestText(rsTbAiNeedMaxOutput);
+      ModalResult := mrNone;
+      Exit;
+    end;
+  for i := 0 to High(FWork) do
+    if (KeyOf(FWork[i].Id) <> '') and TbIsPlainRemote(FWork[i].BaseUrl) then
+    begin
+      SelectProfile(i);
+      SetTestText(Format(rsTbAiPlainHttpKey, [TbHostOf(FWork[i].BaseUrl)]));
       ModalResult := mrNone;
       Exit;
     end;

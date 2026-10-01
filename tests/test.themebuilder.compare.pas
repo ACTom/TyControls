@@ -47,6 +47,8 @@ type
     procedure TestAFailedConnectionTest;     { G6 }
     procedure TestThePrivacyNote;            { G7 }
     procedure TestClosingDuringATest;        { G8 }
+    { after the phase 3 reviews }
+    procedure TestPlainHttpToAnotherComputer;   { G9 }
   end;
 
 { the widgetset, once (the SynEdit completion window needs it) }
@@ -456,6 +458,38 @@ begin
   finally
     srv.Free;
   end;
+end;
+
+{ G9: http:// to another computer -- a warning, and no key: OK refuses, Test connection says
+  it was not sent (recording transports: nothing reaches the network either way) }
+procedure TTbAiSettingsFormTests.TestPlainHttpToAnotherComputer;
+begin
+  FForm.AddPreset(tapCustom);
+  FForm.EdtUrl.Text := 'https://192.0.2.10/v1';
+  AssertFalse('G9: https, no warning', FForm.PlainHttpAlert.Visible);
+  FForm.EdtUrl.Text := 'http://localhost:11434/v1';
+  AssertFalse('G9: this computer, no warning', FForm.PlainHttpAlert.Visible);
+  FForm.EdtUrl.Text := 'http://192.0.2.10:11434/v1';
+  AssertTrue('G9: http to another computer, warned', FForm.PlainHttpAlert.Visible);
+  AssertEquals('G9: the warning says it', rsTbAiPlainHttp, FForm.PlainHttpAlert.Message);
+  FForm.EdtKey.Text := cFormKey;
+  AssertFalse('G9: with a key, OK refuses', FForm.Commit);
+  AssertEquals('G9: nothing was kept', 0, FSettings.Count);
+  AssertEquals('G9: says why', Format(rsTbAiPlainHttpKey, ['192.0.2.10']), FForm.TestText);
+  AssertTrue('G9: the key is not in it', Pos(cFormKey, FForm.TestText) = 0);
+  TbRecordTransports(True);
+  try
+    AssertTrue('G9: the test starts', FForm.StartTest);
+    AssertTrue('G9: answered within 5 s', WaitTest(5000));
+    AssertEquals('G9: the test says it was not sent', Format(rsTbAiInsecureKey, ['192.0.2.10']),
+      FForm.TestText);
+    AssertEquals('G9: nothing was asked of a transport', 0, TbRecordedRequests);
+  finally
+    TbRecordTransports(False);
+  end;
+  FForm.EdtKey.Text := '';
+  AssertTrue('G9: without a key it is kept', FForm.Commit);
+  AssertEquals('G9: kept', 1, FSettings.Count);
 end;
 
 initialization

@@ -4,6 +4,7 @@ unit tbaiclient;
   of a fixed set of outcomes -- each told to the user in one sentence (TbAiErrorSentence).
 
   How the outcome is decided, the first that holds:
+    0. a key and an http:// address that is not this computer: nothing is sent;
     1. the transport failed: cancelled, or which way it failed (no host, no connection,
        TLS, silence for too long, the line broken off);
     2. the service answered 3xx: a redirect, not followed (the key would go along to
@@ -50,11 +51,13 @@ resourcestring
   rsTbAiOther = 'The request failed.';
   rsTbAiServiceSays = '(%s)';
   rsTbAiRedirect = 'The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings.';
+  rsTbAiInsecureKey = 'Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network.';
 
 type
   TTbAiErrorKind = (aekNone, aekCancelled, aekNoTransport, aekBadUrl, aekNameNotResolved,
     aekCannotConnect, aekTls, aekTimeout, aekBroken, aekAuth, aekNotFound, aekRateLimit,
-    aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekRedirect, aekOther);
+    aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekRedirect,
+    aekInsecureKey, aekOther);
 
   TTbAiResult = record
     Kind: TTbAiErrorKind;
@@ -235,6 +238,11 @@ begin
         Result := Format(rsTbAiRedirect, [AResult.Status, AResult.RedirectTo]);
         withDetail := False;
       end;
+    aekInsecureKey:
+      begin
+        Result := Format(rsTbAiInsecureKey, [host]);
+        withDetail := False;
+      end;
   else
     Result := rsTbAiOther;
   end;
@@ -369,6 +377,13 @@ begin
   if IsCancelled then
   begin
     Result.Kind := aekCancelled;
+    Exit;
+  end;
+  { a key never goes out in the clear: http:// is for this computer, or for a service on
+    the user's own network that needs no key (a local Ollama on another machine) }
+  if (FKey <> '') and TbIsPlainRemote(TbEndpointUrl(FProfile)) then
+  begin
+    Result.Kind := aekInsecureKey;
     Exit;
   end;
   transport := TbCreateTransport(reason);
