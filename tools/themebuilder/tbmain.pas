@@ -729,8 +729,11 @@ begin
   if FLoadError <> '' then
     TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, Format(rsTbPreviewKept, [FLoadError]),
       Format(cTbPreviewKeptEn, [TbAsciiOr(FLoadError, 'the theme does not load')]));
-  if (not FParseFailed) and (FPreview.ModeError <> '') then
-    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, FPreview.ModeError, FPreview.ModeErrorEn);
+  { during a trial the preview's own refusal may be the tried version's: the list keeps to
+    the editor's }
+  if (not FParseFailed) and (FPreview.DocumentModeError <> '') then
+    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, FPreview.DocumentModeError,
+      FPreview.DocumentModeErrorEn);
   ShowProblems;
 end;
 
@@ -1168,6 +1171,11 @@ var
   o: TTbAiOutcome;
   current: string;
 begin
+  { a refresh still waiting for its timer is done now: fired during a trial it would load
+    nothing (the preview shows the trial), and the end of the trial would put back the
+    version from before the last keystroke }
+  if RefreshTimer.Enabled then
+    RefreshNow;
   o := FAi.Session.Outcome;
   FTrialText := o.Candidate;
   { "Now" is the editor as it is now -- what Accept replaces -- and the summary says when

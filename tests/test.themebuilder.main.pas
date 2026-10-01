@@ -119,6 +119,8 @@ type
     procedure TestMarkedLinesAreReadable;        { M20 }
     procedure TestTheCountSaysRequestOrRequests;   { M21 }
     procedure TestANewDocumentForgetsTheLastJump;  { M22 }
+    procedure TestTheComparisonStartsFromTheLatestText;   { M23 }
+    procedure TestATrialStaysOutOfTheProblemList;  { M24 }
   end;
 
 implementation
@@ -2541,6 +2543,110 @@ begin
   CtrlPress(FForm.Preview.BtnPrimary);
   AssertEquals('M22: the first rule of the new one', 2, FForm.Editor.LogicalCaretXY.Y);
   AssertEquals('M22: at its start', 1, FForm.Editor.LogicalCaretXY.X);
+end;
+
+{ M23: the comparison starts from the editor as it is: a refresh still waiting (a keystroke
+  just before the answer came) is done first. Left waiting, it fired during the trial,
+  loaded nothing (the preview was showing the trial), and the end of the trial put back
+  the version from before the keystroke. }
+procedure TTbMainFormTests.TestTheComparisonStartsFromTheLatestText;
+var
+  b: TScriptedBackend;
+  f: TTbCompareForm;
+begin
+  FForm.Editor.Lines.Text := cMarkerDocMain;
+  FForm.RefreshNow;
+  AssertEquals('the first version is shown', $123456, PreviewButtonBg);
+  b := ScriptedAi;
+  b.Add(TbAnswerWith('TyButton { background: #654321; }'));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'darker';
+  FForm.Ai.GenerateClick(nil);
+  { typed as the answer came in: the refresh waits for its timer }
+  FForm.Editor.Lines.Text := 'TyButton { background: #ABCDEF; }';
+  if not FForm.RefreshTimer.Enabled then
+    FForm.Editor.OnChange(FForm.Editor);   { headless SynEdit may not fire it: call the chain }
+  AssertTrue('a refresh is waiting', FForm.RefreshTimer.Enabled);
+  f := FForm.BuildCompareForm;
+  try
+    f.TrialCheck.Checked := True;
+    AssertEquals('the trial is shown', $654321, PreviewButtonBg);
+    if FForm.RefreshTimer.Enabled then
+      FForm.RefreshNow;               { its timer fires during the trial }
+    f.TrialCheck.Checked := False;
+    AssertEquals('M23: after the trial, the editor''s latest version', $ABCDEF, PreviewButtonBg);
+  finally
+    f.Free;
+  end;
+end;
+
+{ M24: during a trial the problem list is about the editor's version: its refusal of dark
+  stays listed (loading the trial cleared it), and a refusal of the version being tried is
+  not listed (it is not about what is being written) }
+procedure TTbMainFormTests.TestATrialStaysOutOfTheProblemList;
+const
+  cLightOnly = '@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyButton { background: var(--x); }';
+var
+  b: TScriptedBackend;
+  f: TTbCompareForm;
+
+  function Refusals: Integer;
+  var
+    i: Integer;
+    head: string;
+  begin
+    Result := 0;
+    head := Format(rsTbModeFailed, [rsTbModeDark, '']);
+    for i := 0 to High(FForm.Problems) do
+      if (FForm.Problems[i].Origin = tpoLoad) and (Pos(head, FForm.Problems[i].Text) = 1) then
+        Inc(Result);
+  end;
+
+begin
+  { the editor's version is refused in dark; the trial's is not }
+  FForm.Editor.Lines.Text := cLightOnly;
+  FForm.RefreshNow;
+  FForm.Preview.DarkSwitch.Checked := True;
+  AssertFalse('dark was refused', FForm.Preview.IsDark);
+  AssertEquals('the refusal is listed', 1, Refusals);
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(cMarkerDocMain));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'plain';
+  FForm.Ai.GenerateClick(nil);
+  f := FForm.BuildCompareForm;
+  try
+    f.TrialCheck.Checked := True;
+    AssertEquals('the trial is shown', $123456, PreviewButtonBg);
+    AssertEquals('M24: the editor''s refusal stays listed during the trial', 1, Refusals);
+    f.TrialCheck.Checked := False;
+    AssertEquals('M24: and after it', 1, Refusals);
+  finally
+    f.Free;
+  end;
+
+  { the other way round: the version tried is refused in dark }
+  FForm.Editor.Lines.Text := cMarkerDocMain;
+  FForm.RefreshNow;
+  AssertEquals('nothing refused', 0, Refusals);
+  b.Add(TbAnswerWith(cLightOnly));
+  b.Add(TbAnswerWith(cLightOnly));     { the checks find dark refused and ask again, twice }
+  b.Add(TbAnswerWith(cLightOnly));
+  FForm.Ai.EdtPrompt.Text := 'light only';
+  FForm.Ai.GenerateClick(nil);
+  f := FForm.BuildCompareForm;
+  try
+    f.TrialCheck.Checked := True;
+    AssertTrue('the trial is on', FForm.Preview.InTrial);
+    FForm.Preview.DarkSwitch.Checked := True;
+    AssertFalse('the trial was refused in dark', FForm.Preview.IsDark);
+    AssertEquals('M24: the trial''s refusal is not listed', 0, Refusals);
+    f.TrialCheck.Checked := False;
+    AssertEquals('M24: nor after it', 0, Refusals);
+  finally
+    f.Free;
+  end;
 end;
 
 initialization

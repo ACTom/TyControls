@@ -271,6 +271,8 @@ type
       out ATouched: Boolean): Boolean;
     function GetIsDark: Boolean;
     function GetIsModern: Boolean;
+    function GetDocumentModeError: string;
+    function GetDocumentModeErrorEn: string;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -303,6 +305,11 @@ type
       different document }
     property ModeError: string read FModeError;
     property ModeErrorEn: string read FModeErrorEn;   { ModeError in English }
+    { the refused switch of the EDITOR's version: ModeError, or during a trial what it was
+      when the trial began -- a refusal of the version being tried is not about the text
+      being written (the problem list) }
+    property DocumentModeError: string read GetDocumentModeError;
+    property DocumentModeErrorEn: string read GetDocumentModeErrorEn;
     property InTrial: Boolean read FInTrial;
     property AllDisabled: Boolean read FAllDisabled;
     property IsDark: Boolean read GetIsDark;
@@ -901,6 +908,16 @@ begin
       the probe did not: put the last good version back (or the bare base) }
     RestoreGood;
   UpdateModeNote;
+end;
+
+function TTbPreviewFrame.GetDocumentModeError: string;
+begin
+  if FInTrial then Result := FTrialModeError else Result := FModeError;
+end;
+
+function TTbPreviewFrame.GetDocumentModeErrorEn: string;
+begin
+  if FInTrial then Result := FTrialModeErrorEn else Result := FModeErrorEn;
 end;
 
 function TTbPreviewFrame.BeginTrial(const AText, ABaseDir: string; out AError: string): Boolean;
