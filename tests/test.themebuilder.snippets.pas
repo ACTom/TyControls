@@ -197,6 +197,14 @@ begin
   AssertEquals('S2: the compiled function gives the text back', TbMinimalTemplate, ThemeCss);
 end;
 
+{ a body of AKind that calls AName (as a part of a word) has AUnit on its uses line }
+procedure CheckUnit(AKind: TTbSnippetKind; const AName, AUnit: string);
+begin
+  if Pos(AName, TbSnippetBody(AKind, 'mytheme', 'mytheme.tycss')) > 0 then
+    TAssert.AssertTrue('S3: snippet ' + IntToStr(Ord(AKind)) + ' calls ' + AName + ', its uses line needs ' + AUnit,
+      Pos(LowerCase(AUnit), LowerCase(TbSnippetUses(AKind))) > 0);
+end;
+
 procedure TTbSnippetsTests.TestTheUsesAreHere;
 var
   src: TStringList;
@@ -223,6 +231,13 @@ begin
       Delete(names, 1, Pos(',', names));
       AssertTrue('S3: the uses here have ' + one, Pos(LowerCase(one), usesClause) > 0);
     end;
+    { and the uses line the window shows names the unit of everything the body calls: the
+      code here compiles with all of them in scope, a program pasting one snippet has only
+      what its line says }
+    CheckUnit(k, 'TyDefaultController', 'tyControls.Controller');
+    CheckUnit(k, 'TyRegisterTheme', 'tyControls.ThemeRegistry');
+    CheckUnit(k, 'ThemeSource', 'tyControls.ThemeBundle');
+    CheckUnit(k, 'TTyThemeZipSource', 'tyControls.ThemeBundle');
   end;
 end;
 
