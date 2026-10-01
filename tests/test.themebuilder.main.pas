@@ -118,6 +118,7 @@ type
     { the last batch before the merge }
     procedure TestMarkedLinesAreReadable;        { M20 }
     procedure TestTheCountSaysRequestOrRequests;   { M21 }
+    procedure TestANewDocumentForgetsTheLastJump;  { M22 }
   end;
 
 implementation
@@ -2520,6 +2521,26 @@ begin
   RunAsyncCalls;
   AssertEquals('M21: two requests', Format(rsTbAiConversation, [2]),
     FForm.Ai.LblConversation.Caption);
+end;
+
+{ M22: Ctrl+click in a document just opened goes to ITS first rule: the last jump was
+  remembered across documents, and a second rule of the same name in the new one was taken
+  first }
+procedure TTbMainFormTests.TestANewDocumentForgetsTheLastJump;
+const
+  cTwo = '/* two */'#10'TyButton.primary { }'#10'/* between */'#10'TyEdit, TyButton.primary { }'#10;
+var
+  f: string;
+begin
+  FForm.Editor.Lines.Text := cRulesDocMain;
+  CtrlPress(FForm.Preview.BtnPrimary);
+  AssertEquals('the first rule of the old document', 2, FForm.Editor.LogicalCaretXY.Y);
+  f := FDir + 'two.tycss';
+  WriteBytes(f, cTwo);
+  AssertTrue('opened', FForm.OpenFile(f));
+  CtrlPress(FForm.Preview.BtnPrimary);
+  AssertEquals('M22: the first rule of the new one', 2, FForm.Editor.LogicalCaretXY.Y);
+  AssertEquals('M22: at its start', 1, FForm.Editor.LogicalCaretXY.X);
 end;
 
 initialization

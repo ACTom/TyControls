@@ -504,6 +504,9 @@ end;
 procedure TTbMainForm.LoadEditor(const AText: string);
 begin
   FMergeKey := '';
+  { Ctrl+click starts again at the first rule: the last jump was into the other text }
+  FJumpKey := '';
+  FJumpIndex := 0;
   { a new or opened document replaces the whole text: nothing to undo into }
   Editor.Lines.Text := AText;
   Editor.Modified := False;
