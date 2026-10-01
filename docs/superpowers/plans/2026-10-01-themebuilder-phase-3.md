@@ -1679,4 +1679,139 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## 签收
 
-（Task 15 填写：起点与提交、期末审查的处理、集中变异、测试结果、WSL 结果、量到的数、主控已做、与规格不符之处的写回、计划外发现、遗留。）
+签收日期 2026-10-01。起点 `df1fd13b`（2 期修复批签收、主控冒烟之后）；本期提交 `ce3a1b30`..本签收提交。实现 agent 做了 Task 0–14、Task 15 能做的部分（一次编译含工具工程、本期 suite、全量、WSL 三遍、集中修红、`.po` 脚本、按 spec 逐条核代码、集中变异、写回 spec）与 Task 16；标【主控执行】的（编两个 `.lpk`、编 examples、截图、GUI 冒烟、真实生成、派期末审查）没做，见「主控要做的」。库（`source/`、`designtime/`）一个字节没改。
+
+### 提交表
+
+| 任务 | 提交 | 内容 |
+|---|---|---|
+| Task 0 | `ce3a1b30` | 开工核对：状态、主控的两处修正、「实现期修正（开工核对）」九条 |
+| Task 1 | `5bd2cffd` | `tbhttp`、`tbhttpwin`、`tests/tbfakehttp`、`tests/tbaichecks`（共用判据，计划外新文件）、H1–H13 |
+| Task 2 | `255d07cf` | `tbhttpcurl`、WSL 控制台程序 |
+| Task 3 | `9fbddfbc` | `tbsse`、E1–E13 |
+| Task 4 | `26678731` | `tbaiformat`、13 份样本、`.gitattributes` 让样本按字节保存、A1–A12 |
+| Task 5 | `e14b67bd` | `tbaiclient`、C1–C17，WSL 加 C 组 |
+| Task 6 | `488445ad` | `tbaisettings`、K1–K8，WSL 加 K 组 |
+| Task 7 | `64a576a5` | `tbreference`、R1–R10 |
+| Task 8 | `ecb9fb86` | `tbdiff`、D1–D13 |
+| Task 9 | `de21e505` | `tbaisession`、`tests/tbaitesthelp`、S1–S18 |
+| Task 10 | `a72b4a52` | 预览试看、三种行底色、对比窗口、V1–V9 |
+| Task 11 | `d0f9adfe` | AI 设置对话框、G1–G8 |
+| Task 12 | `0c372a49` | AI 页、主窗体接线、F1 / F11 / I3 跟着改、M1–M12 |
+| Task 13 | `541719a7` | 中文：38 条 `.lfm`、51 条代码字符串 |
+| Task 14 | `6d570853` | `docs/themebuilder.md` / `.en.md`、README |
+| Task 15 修红 | `62d37612` | 两处编译错：属性类型（`History`）、局部变量与窗体的 `Left` 同名 |
+| | `8f1cb77b` | 回答里的 `\u` 转义先自己解成 UTF-8 再交给 fpjson（A4、A6、C1、C7、C15 红） |
+| | `7a84e985` | 参考里 `padding` 收 1–4 个值（R5 红：引擎收 3 个值，参考手册 §5.7 说 3 个报错是旧的） |
+| | `02523aec` | AI 输出框每次 tick 一次改动、不折行（M12：600 行折行要 12.3 s，不折行 0.4 s） |
+| | `0525ba2c` | 测试：常量与 UTF8String 比较经变量（A3）、篡改改在密文中间（K3）、uses 扫描认嵌套注释（R9） |
+| | `51d5d24b` | WSL 编译：`BaseUnix` 没有 `fpFChmod`，改按路径 `fpChmod` |
+| | `a26731cd` | `example-rsj2po.py` 补进 51 条代码条目 |
+| 变异补强 | `9ad22008` | C17 加「只有后四位 / 前六位」两行（原表里的半遮串被 `***` 规则先洗掉，删前后缀规则也绿）；D6 加「首尾不重叠」（原夹具首尾都不相同，去掉重叠保护也绿） |
+| 核 spec | `d3871507` | 找不到 libcurl 时设置对话框的「测试连接」灰掉并说明（计划只写了 AI 页） |
+| Task 15 / 16 | 本提交 | 签收、spec 写回、验收文档 |
+
+### 测试结果
+
+- 基线（`df1fd13b`，`tests/tytests-tb3base.exe`）全量：**8801 / 0 / 0**（20 分 02 秒），与 2 期修复批签收相同。
+- 首次编译后：本期十个 suite 里 HTTP、SSE、对比都一次过；红的是 A3 / A4 / A6、C1 / C7 / C15、K3、R5、R9，见上面修红四个提交。1、2 期的 suite（TTbMainFormTests 等）照旧全绿。
+- 修红后全量（`51d5d24b` 的构建，与集中变异同时跑）：**8934 / 0 / 0**（21 分 25 秒）= 基线 8801 + 本期 133。
+- 签收全量（`d3871507` 上 `lazbuild -B`，`tests/tytests-tb3.exe`）：**8934 / 0 errors / 0 failures**（21 分 31 秒）= 基线 8801 + 本期 133；没有计时类偶发红。
+- 本期 suite：TTbHttpTests 13、TTbSseTests 13、TTbAiFormatTests 12、TTbAiClientTests 17、TTbAiSettingsTests 8、TTbReferenceTests 10、TTbDiffTests 13、TTbAiSessionTests 18、TTbCompareTests 9、TTbAiSettingsFormTests 8、TTbMainFormTests 68（2 期 56 + 本期 M1–M12），全绿；TTbPreviewTests 24、TTbProblemsTests 6、TTbCssScanTests 15、TTbSeedEditTests 15、TTbSeedsFrameTests 18、TTbExportTests 16、TTbSnippetsTests 8、TCssCatalogTest 14、TI18NTest 7、TReleaseManifestTest 15 照旧全绿。
+- 工具：`lazbuild -B tools/themebuilder/themebuilder.lpi` 0 错，没有重编 SynEdit；`example-rsj2po.py` added=51（= 本期 resourcestring 数），无 FATAL；`check-example-po.py` 103 个文件 0 问题；`check-lfm-props.py` OK。
+
+### WSL（Ubuntu，fpc 3.2.2）
+
+`tools/themebuilder-curl-wsl/tbcurlwsl` 三遍：默认加载 `libcurl.so.4`，22 passed / 0 failed；`THEMEBUILDER_LIBCURL=libcurl-gnutls.so.4` 加载它，22 / 0；`THEMEBUILDER_LIBCURL=/nonexistent/libcurl.so --expect-missing` 1 / 0（原因：`libcurl was not found (tried /nonexistent/libcurl.so). …`）。三次 `exit=0`。22 条 = W1–W12（H1、H2、H3、H5、H6、H7、H8、H9、H10、W10 代理、W11 库名、H13）+ C1、C3、C7、C9、C13、C15 @curl + K1、K2（Unix 版）、K9、K10。`git status` 里目录下没有新文件。
+
+### 量到的数（Step 4）
+
+- 精简参考 19 220 字节，约 4 805 token（R6 打印；守卫 4 000–8 500）。
+- D8：1409 行（`light.tycss`）对比 0 ms（去首尾之后只剩两处）。
+- M12：600 行进输出框 375 ms（不折行；折行时 12.3 s，见修红）。
+- 请求体（估算，未单独打印）：系统提示 = 规则约 1.6 KB + 参考 19.2 KB ≈ 5 200 token；加极简模板与一句描述 ≈ 5 500 token；拿 `themes/auto.tycss`（32 KB）当文档 ≈ 13 000 token，回答再要约 8 000 token。本地 8B 模型的上下文至少要 32k——文档与设置页的提示用的就是 `OLLAMA_CONTEXT_LENGTH=32768`。
+
+### 按 spec 逐条核（不看测试）
+
+| spec | 实现 | 结论 |
+|---|---|---|
+| §7.1 多个配置、选一个当前 | `TTbAiSettings`（`Order`、`Current`）、AI 页的服务下拉 | 实现 |
+| §7.1 六个字段 | 格式、地址、模型、密钥、最大输出、超时（另有名称） | 实现；超时 = 空闲超时（写回） |
+| §7.1 五种预置 | `TbPresetProfile` | 实现；值写回 §2 |
+| §7.1 测试连接 | `TTbAiSettingsForm.StartTest`（收到第一段就停） | 实现 |
+| §7.1 写明主题文本会发给服务 | `LblPrivacy` | 实现，另说明密钥怎么存 |
+| §7.1 DPAPI / 0600、不进日志与错误消息 | `TbProtectKey`、`TbWritePrivateFile`、`TbScrubSecret`；工具没有日志 | 实现 |
+| §7.1 两种代理 | WinHTTP 自动代理（老系统退回 netsh）、libcurl 环境变量；本机地址不走代理 | 实现 |
+| §7.2 不发整份手册、参考的五样内容、来源是代码、守卫 | `tbreference`、R1–R10 | 实现；改为运行时拼（写回） |
+| §7.2 四条规则 | `cRules`（另加：规则要重申全部状态、保持可读、保留没让改的） | 实现 |
+| §7.2 每次请求三样（+ 问题） | `TTbAiSession.UserMessage`、`TbSystemPrompt` | 实现 |
+| §7.2 多轮 | `History`、不重发旧回答 | 实现；记到哪写回 |
+| §7.3 五步 | 流式 + 停止；取代码块；检查 + 回喂 ≤ 2；交给用户；对比 / 试看 / 接受 / 放弃 | 实现；多一道试解析、对比窗口形态、编辑过先问（写回） |
+| §7.4 每种错误一句话、libcurl 缺失 | `TbAiErrorSentence`、`TTbAiFrame.Setup` / `RefreshProfiles`、设置对话框（核 spec 时补，`d3871507`） | 实现；句子列表写回 |
+| §8 AI 一行 | 两种样本、三种喂法、本机服务（成功、断流、401、429、超时、取消、连不上、localhost、大正文）、假模型、参考守卫 | 实现；样本手写、WSL 写回 |
+| §2 第 3、4、8 条 | 两种格式 + 本地、默认流式；整份交回 → 检查 → 回喂 → 对比 → 接受可撤销；WinHTTP / 运行时 libcurl | 实现；绑定自己声明写回 |
+| §10 libcurl 库名、参考太长太短 | `TbCurlCandidates`、R6 | 实现；环境变量、macOS 变参风险、Ollama 上下文写回 |
+| 接线 | frame 三个事件（`FormCreate`）；session 三个事件（frame 构造）；`TTbClientBackend` 两个 `Queue`（`WorkerDelta` / `WorkerDone`，析构里各 `RemoveQueuedEvents`）；对比窗口的 `OnTrial`（`BuildCompareForm`）；`RefreshNow` 的 `InTrial`；`DocumentChanged` 三处（`NewMinimal`、`NewFromBuiltin`、`OpenFile`）+ `ProblemsChanged`（`ShowProblems`）；两个菜单项（`.lfm`）；设置窗体确定后 `RefreshProfiles` | 全部接上，M1–M12、S17、V4 守着 |
+
+### 集中变异（每条改字符串 → `lazbuild`（增量）→ 跑指定测试 → 写回原字节；W10 在 WSL 里重编重跑）
+
+94 条，93 条红、1 条等价。脚本逐条断言替换点恰好命中一处；全部还原后 `git diff --quiet -- source tools tests designtime` 为真，再 `lazbuild -B` 跑全量（上面「签收全量」）。
+
+| 组 | 变异 | 结果 |
+|---|---|---|
+| H | H1 头不发、H2 攒满再交、H3 4xx 当错误、H5 出错清状态、H6 接收超时用连接超时、H7 12029 归「其他」、H8 `Cancel` 只置标志、H9 不看 `OnData` 返回值、H11 默认端口写反、H12 回环只看前缀 | 全红（H6、H8 是 10 秒等不到） |
+| W10 | 本机地址不设 `CURLOPT_PROXY = ''` | **红**（计划估计可能等价：这台 WSL 的 libcurl 对 127.0.0.1 也走了环境变量里的代理） |
+| E | E2、E3、E4、E5（注释当数据）、E6、E8、E9（每块都去 BOM）、E11 | 全红 |
+| A | A1、A2、A3、A5、A7、A8（签名当正文）、A9、A10、A12 | 全红 |
+| C | C1（不跨块保留半行）、C3（不洗密钥）、C4、C7、C8、C13、C15、C17（只换整串） | 全红；C17 靠补强的两行（见提交表） |
+| K | K1 不写 `Order`、K2 存 base64 明文、K3 解不开就抛、K4 `Delete` 不删密钥、K5 写不进去也返回 True | 全红 |
+| R | R1 说明表多 `margin` 少 `opacity`、R2 签名表少 `on`、R3 只列前 100 个、R4 亮暗取反、R6 变量写成「名字: 值」、R7 例子用只在亮色定义的变量、R8 全角逗号、R9 `tbaiclient` 引 `Forms` | 全红 |
+| D | D2、D5、D6（靠补强）、D7、D11、D12 | 全红 |
+| D8 | 不先去首尾（整段 LCS） | **等价**：1409 × 1408 ≈ 200 万格的 LCS 在这台机器上也在 200 ms 内（计划已预见） |
+| S | S2、S3a（`<`）、S3b（`+ 1`）、S4、S5、S6、S7、S8、S9、S11、S12、S15、S16、S17（`OnDelta` 在工作线程直接调） | 全红 |
+| V | V1、V2、V3、V4、V5、V7、V8、V9 | 全红 |
+| G | G2 字段改动直接落盘、G4 不拦、G5 连上后不 `Cancel`、G7 不显示、G8 析构不停测试（AV） | 全红 |
+| M | M1、M2（`Lines.Text :=`）、M3（整篇替换）、M4、M5、M6、M7、M8、M9、M11（不停 session 也不摘后端）、M12（`OnStreamed` 没接） | 全红 |
+
+计划列的变异里没做的：H4、H10、H13、E1、E7、E10、E12、E13、A4、A6、A11、C2、C5、C6、C9–C12、C14、C16、K6–K8、R5、R10、D1、D3、D4、D9、D10、S1、S10、S13、S14、S18、V6、G1、G3、G6、M10（计划标「—」或没列进 Step 7）。M11 计划写「`FormDestroy` 不停 session」：只删 `Stop` 是等价的——`FormDestroy` 末尾摘后端时 `SetBackend` 本身就 `Cancel`，所以变异把两处一起删。
+
+### 与规格不符之处（已写回 spec，标「实现期修正（3 期）」）
+
+状态行；§2 第 3、8 条（预置与最大输出、两个绑定都自己声明）；§4（十三个单元，`ureference.inc` 不存在）；§6（对比窗口也用 SynEdit）；§7.1（空闲超时、密钥文件与洗密钥、本机不走代理）；§7.2（运行时拼参考、守卫、实测 token、英文、多轮与「附上问题」）；§7.3 第 3 步（试解析）、第 5 步（对比窗口形态、只换改了的行、编辑过先问）；§7.4（每种结果的那句话）；§8（样本手写、三种喂法、共用判据、WSL）；§10（库名与环境变量、macOS 变参风险与后备、Ollama 上下文、参考与请求体的量）。即本计划「与规格不符之处」1–7 条全部写回。开工前问题一的十一条未单独询问用户，列进验收文档 E27–E37。
+
+### 实现期修正（执行中，对计划的偏离）
+
+- **共用判据单元** `tests/tbaichecks.pas`（计划没有）：H / C / K 的判据写一次，tytests 与 WSL 程序都调它——「libcurl 上的同一判据」就是同一份代码。
+- `TTbStreamDelta` 多一个 `Ends` 字段：OpenAI 可能在带文字的同一块里给 `finish_reason`，一个 `Kind` 装不下两件事。
+- `TbCurlCandidates`：设了 `THEMEBUILDER_LIBCURL` 就**只试它**（计划写「放第一个」）——否则验收「找不到 libcurl」那一项永远找得到系统的库。
+- libcurl 的变参实参一律按指针宽度传（开工核对第 8 条）。
+- AI 页的齿轮用 `TTySpeedButton` 的 `IconFont` + `GlyphName`（计划写 `Images` + `ImageName`，这个按钮没有）；设置对话框没有 `TestTimer`（结果经 `TThread.Queue` 回到主线程，用不着轮询）。
+- `TTbAiSettingsForm.Commit` 是函数（拒绝时返回 False）；`TTbAiSession` 多 `Busy`、`Round`；`TTbMainForm` 多 `RunModal` 与测试缝 `ShowModalForTest`（对比窗口、设置窗口在测试里不 `ShowModal`，M2 / M8 / M9 走真的 `AiCandidate` / `AiSettingsClick`），`CompareTrial` 公开。
+- 一次生成里，后一轮请求失败（网络、截断）时，前一轮带问题的候选仍交给用户（对比窗口照样弹）；用户停止时不弹。
+- M12 判据「`FlushTimerTimer` 手动调」：测试后端多了「流完先扣住结果」（`HoldDone`），否则结束时的那次刷新会把 `OnStreamed` 没接的变异盖过去。
+- 参考的两句按引擎改：`border-radius` 只收 1 或 4 个值（计划写 1、2、4）、`padding` 收 1–4 个值；示例主题不写 `TyEdit:focus`（计划有）——那会让底层对 `TyEdit` 整个让位，示范错误用法。
+- Anthropic 默认最大输出 32000（开工核对第 3 条）；菜单「AI」的加速键是 `A&I`（`&A` 与「编辑器外观」冲突）。
+
+### 计划外发现
+
+- FPC 3.2.2 的 JSON 扫描器把任意两个相邻的 `\u` 转义当代理对拼：`中文`（Python 的 `ensure_ascii` 就这么写中文）第二个字是乱的。计划核实记录 15 说「两个 BMP 字符相邻拼起来结果仍对」——不对。
+- 不带 `{$codepage}` 的单元里，含 `#$E4` 之类的字符串常量与 `UTF8String` 比较时，编译期按编译器的代码页转换，字节就变了；测试里经 `string` 变量比较。
+- DPAPI 密文开头的提供者 GUID 改一个字节照样解得开；改密文中间才失败。
+- `docs/tycss-reference.md` §5.7 说 `padding` 三个值报错，引擎（`ParsePadding`）按 CSS 收；§6.3 说 `alpha(#fff, 50%)` 不会除以 100，引擎会；§9 第 7 条说渐变只有两个色标，§7 与引擎是多色标。手册没改（不在本期范围）。
+- `TTyMemo` 开着 `WordWrap` 时一次加 600 行，无头下重排要 12 秒（不折行 0.67 秒，按 tick 合并后 0.38 秒）；有句柄时快多少要真机看。
+- WSL 的 Ubuntu 里 libcurl 对 `127.0.0.1` 也会用 `http_proxy`，`CURLOPT_PROXY = ''` 必要（W10 变异红）。
+- FPC 的 `BaseUnix` 没有 `fpFChmod`。
+
+### 遗留
+
+- 真机验收第 53–72 项；其中第 67 项（macOS 上 libcurl 的变参调用）是重点，不过就做后备方案（调用 `/usr/bin/curl` 进程）。
+- 真实服务从没在本期打过：样本按文档手写，格式细节（尤其 DeepSeek 的 `reasoning_content`、Anthropic 的思考块）以真流为准。
+- 输出框不折行（模型的说明句很长时要横向滚动）；`TTyMemo` 折行排版慢，真机若快可以再打开。
+- 期末审查（规格核对 + 代码质量）还没做。
+
+### 主控要做的
+
+1. 在本签收头提交上 `lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`（本期库没改，按惯例确认）、examples 与 `tools/themebuilder/themebuilder.lpi`；`powershell -File scripts/smoke-launch-examples.ps1 -Dirs tools\themebuilder` 冒烟。
+2. Task 15 Step 6 的看一眼：侧栏第三页 AI → 设置里加一个 DeepSeek 预置（不填密钥）→ 测试连接看 401 那句话 → 关设置 → AI 页状态行；能拿到密钥或本机有 Ollama 的话做一次真实生成（「暖色调，圆角大一点」→ 流式、对比、试看、接受、Ctrl+Z），用完删掉密钥。
+3. 截图 `p3-ai-settings-win32.png`（以及做了真实生成的 `p3-ai-page-win32.png`、`p3-compare-win32.png`）放 `docs/superpowers/plans/2026-10-01-themebuilder-acceptance-shots/`（验收文档已引用）。
+4. Task 15 Step 8 的期末审查（`git diff df1fd13b..HEAD`）。
