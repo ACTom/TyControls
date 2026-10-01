@@ -469,6 +469,8 @@ type
     GroupIndex. AllowAllUp lets a click on the already-down button toggle it back
     up (so the whole group can be up). Inherits the resting :selected state via
     Down. }
+  TTySpeedButton = class;   { FindDownButton answers the published class (R7-4) }
+
   TTyCustomSpeedButton = class(TTyGlyphButtonBase)
   private
     FGroupIndex: Integer;
