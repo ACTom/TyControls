@@ -103,6 +103,8 @@
 | Q7 | = D10 | 照 LCL 改 |
 | Q8 | = D11 | 照 LCL 改（`IconFont` 是被迫的，另三类是照 LCL） |
 
+> **状态**：主控 2026-10-02 按建议定（用户确认计划）：Q1–Q8 全部照「建议」列执行；Q3 的提交单独做（签收「Task 1 基类」记了提交号），由主控转告 AdvChart 会话摘取；Q8 下 `Controller` 等引用属性要再碰 `Base.pas`（Task 27），用户已同意。
+
 ---
 
 ## 不兼容变化清单（这些变化进 4.0；3.0 是 LTS，不受影响）
@@ -115,6 +117,8 @@
 4. **可见性（D3）。** 原 published 属性在 Custom 类里按 LCL 是 public 或 protected。影响：拿 `TTyCustomXxx` 类型的引用（包括第 1 条迁移后的写法）访问一个 protected 属性编不过——最终类类型的引用不受影响。迁移：判完 `is TTyCustomXxx` 后若要动的属性是 protected，就强转成最终类（对内置控件这是真话），或在自己的子类里提成 public。
 5. **签名类型。** 被迫的：组合框弹层 API 的 `TTyListBox` → `TTyCustomListBox`（`CreatePopupList` 等，Task 15）、`IconFont` 属性 / 参数 `TTyIconFont` → `TTyCustomIconFont`（Task 28）、`TTyToolBar.ApplyToButton` / `TTyCalcDropdown.Create` 等内部签名（Task 2、4、20）。照 LCL 的：事件 Sender（D10）、`Controller` 等组件引用属性（D11）。影响：覆写了这些虚方法、写了这些事件处理过程的用户代码要改签名。迁移：类型换成 Custom 类。
 6. **3.0 → 4.0 摘修复要手工移植。** 不影响用户，影响维护：拆过的单元里实现头都成了 `TTyCustomXxx.Foo`、published 段都换了地方，`3.0-fixes` 的修复 cherry-pick 到 main 必冲突（N10）。
+7. **`TTyIconFont.Version: Integer` 改名 `ChangeStamp`（1 期执行中发现，Task 1）。** 3.0 的 `TTyIconFont` 在 public 段声明了一个 `Version: Integer` 变更计数，遮住 `TTyComponent` 发布的库版本 `Version: string`。Q2 让基类不再发布之后，`TTyIconFont` 得自己发布字符串 `Version`，而同一个类里不能既声明又重新发布同名属性（FPC：Duplicate identifier）。照 `TTyImageCollection` 早有的先例改名 `ChangeStamp`。影响：读 `IconFont.Version` 当计数器的代码（库内 `ImageCollection.pas` 两处、`test.iconfont` 已改）。迁移：改读 `ChangeStamp`。文档里没写过这个计数器。
+8. **`Checked` 等在 Custom 类里是 protected（D3 的直接结果，举例写进文档）。** `TTyCustomCheckBox` / `TTyCustomRadioButton` / `TTyCustomToggleSwitch` 的 `Checked` 照 LCL（`TButtonControl.Checked` protected）放 protected；组合框的 `OnChange` / `OnDrawItem` / `ItemHeight` 等照 `TCustomComboBox` protected；标签、`TTyCustomUpDown`、`TTyCustomMaskEdit` 的独有属性 protected。经最终类引用访问不受影响；经 Custom 引用访问要强转或在子类里提成 public（第 4 条）。
 
 **仍然守的（与版本号无关，为了用户的窗体文件不坏）**：每个已注册类（及 `TTyScrollContent`）的 published 属性名、类型（D11 的改名表除外）、default、stored、index、读写、**写出顺序**；新实例的 `IsStoredProp` 与默认值比较；`GetStyleTypeKey` 与默认 `StyleClass`、子部件 typeKey；新实例的默认尺寸。全部由快照守卫 G6 逐项比对。组件面板（组、顺序、图标）不动，由 `test.paletteicons` 与【主控】编包核对。
 
@@ -721,17 +725,17 @@ if __name__ == '__main__':
 - Modify: `tests/tytests.lpr`（uses 末尾加 `test.customclasses`）
 - 不进仓库：`<scratchpad>/split.py`
 
-- [ ] **Step 1: 【主控执行】需主控确认的 Q1–Q8**：答复写进「需主控确认」表下方（加一个「状态」引用块）；没回复就按建议做。Q7（D10）选「不改」时，Task 17 / 20 / 21 改回 `AsPublished` 做法；Q8（D11）只做被迫的 `IconFont` 时，Task 27 / 28 跳过另三类属性类型。
+- [x] **Step 1: 【主控执行】需主控确认的 Q1–Q8**：答复写进「需主控确认」表下方（加一个「状态」引用块）；没回复就按建议做。Q7（D10）选「不改」时，Task 17 / 20 / 21 改回 `AsPublished` 做法；Q8（D11）只做被迫的 `IconFont` 时，Task 27 / 28 跳过另三类属性类型。
 
-- [ ] **Step 2: 起点**
+- [x] **Step 2: 起点**
 
 ```bash
 cd /d/Projects/ty-split && git status --short && git branch --show-current && git merge --no-edit main && git log --oneline -1 && git cherry main 3.0-fixes | grep -c '^+'
 ```
 
-Expected：工作区干净；分支 `feat/custom-classes`；合并成功；**最后一个数是 0**。不为 0 = 3.0-fixes 还有修复没进 main，**停下交主控**。
+Expected：工作区干净；分支 `feat/custom-classes`；合并成功；**最后一个数除下列 6 个外为 0**（主控 2026-10-02 核实、用户确认 3.0 已合完）：`d87ed893 release: 3.0.0-RC2`、`4a21ebeb release: 3.0.0-RC3`、`e41a8908 docs(readme): 165 controls…` 只属于 3.0 的发版 / 文档提交；另 3 个（ClearType 文字、3.0.0 发版、设计期注册内置主题）在 main 上以不同补丁存在（`b23893ba`、`cd9907e9`、`ca2596db`）。多出这 6 个以外的 = 3.0-fixes 还有修复没进 main，**停下交主控**。
 
-- [ ] **Step 3: 复核排除清单**
+- [x] **Step 3: 复核排除清单**
 
 ```bash
 cd /d/Projects/ty-split && for b in feat/advancechart tmp/an1; do for c in $(git cherry main $b | grep '^+' | awk '{print $2}'); do git show --name-only --format= $c; done; done | grep -E '^(source|designtime)/' | grep -vE 'AdvChart\.|AdvanceChart|Base\.pas|Painter\.pas|FontUnits|DefaultTheme|Css\.Catalog|StrConsts' | sort -u; for t in /d/Projects/ty-advchart /d/Projects/ty-an1 /d/Projects/ty-3.1; do git -C $t status --short | grep -E '(source|designtime)/'; done; for c in $(git cherry main feat/theme-builder | grep '^+' | awk '{print $2}'); do git show --name-only --format= $c; done | grep -E '^source/tyControls\.' | grep -vE 'ThemeLint|Css\.' | sort -u; git diff main...feat/advancechart -- source/tyControls.Base.pas | grep -cE '^[-+]\s+property '
@@ -739,9 +743,9 @@ cd /d/Projects/ty-split && for b in feat/advancechart tmp/an1; do for c in $(git
 
 Expected：第一段只有 `Calendar.pas`、`DateTimePicker.pas`；第二段只有 AdvChart 相关与共享单元；第三段为空；**最后一个数是 0**（AdvChart 没碰基类的 published 段，V21）。多出任何控件单元：把它的类移进 `CNotSplit`（理由「touched by <branch>, split after it merges」），从对应任务里划掉，附录 B 加一行，签收写明。最后一个数不为 0：停下交主控（Task 1 会和它冲突）。
 
-- [ ] **Step 4: 辅助脚本**：照「辅助脚本 `split.py`」一节用 Write 工具写进 scratchpad；`python split.py` 不带参数应打印用法并以 1 退出；`python split.py vis TCustomEdit Text` 应打印 `Text  public  TCustomEdit stdctrls.pp:878`。
+- [x] **Step 4: 辅助脚本**：照「辅助脚本 `split.py`」一节用 Write 工具写进 scratchpad；`python split.py` 不带参数应打印用法并以 1 退出；`python split.py vis TCustomEdit Text` 应打印 `Text  public  TCustomEdit stdctrls.pp:878`。
 
-- [ ] **Step 5: 守卫单元 `tests/test.customclasses.pas`**（单元头注释：为什么有它——issue #8 的拆分要保证「`.lfm` 一个字不变、主题一个规则不变、第三方子类拿到同样的默认值」，快照在拆分前由当时的代码生成；G6 是迁移期的，Task 32 删除，G1–G5、G7、G8 常驻）。uses `test.designregistry`（`CollectRegisteredClassNames`、`RepoRoot`）、`test.version`（它的 initialization 把所有注册类 `RegisterClasses`）、各基类 / 中间类所在单元、`ScrollContent`。
+- [x] **Step 5: 守卫单元 `tests/test.customclasses.pas`**（单元头注释：为什么有它——issue #8 的拆分要保证「`.lfm` 一个字不变、主题一个规则不变、第三方子类拿到同样的默认值」，快照在拆分前由当时的代码生成；G6 是迁移期的，Task 32 删除，G1–G5、G7、G8 常驻）。uses `test.designregistry`（`CollectRegisteredClassNames`、`RepoRoot`）、`test.version`（它的 initialization 把所有注册类 `RegisterClasses`）、各基类 / 中间类所在单元、`ScrollContent`。
 
   **清单常量**（R10）：
   - `CSplit`：已拆的最终类，Task 0 为空（initialization 里填的动态数组）。
@@ -779,9 +783,9 @@ Expected：第一段只有 `Calendar.pas`、`DateTimePicker.pas`；第二段只�
 
   **G8 `TestDemotedClassesPublishOnlyTheLclRoot`（D7 与中间类）**：对 `CDemoted` 每个类：published 名字集合 = 它的 LCL 根的；外加 `TTyCustomControl`、`TTyGraphicControl`、`TTyComponent` 三者在 Task 1 之后恒成立。变异 M-G8：在 `Base.pas` 的 `TTyCustomControl` 里留一行 `published property Enabled;` → 红。
 
-- [ ] **Step 6: 注册**：`tests/tytests.lpr` uses 末尾加 `test.customclasses`。
+- [x] **Step 6: 注册**：`tests/tytests.lpr` uses 末尾加 `test.customclasses`。
 
-- [ ] **Step 7: 基线编译、生成夹具、跑全量**：
+- [x] **Step 7: 基线编译、生成夹具、跑全量**：
 
 ```bash
 cd /d/Projects/ty-split && ls source/*.ppu source/*.o 2>/dev/null | wc -l && lazbuild -B tests/tytests.lpi > /tmp/split-build.txt 2>&1 || { tail -30 /tmp/split-build.txt; false; }; cd tests && cp tytests.exe tytests-split.exe && mkdir -p fixtures/customclasses && TY_WRITE_GOLDEN=1 ./tytests-split.exe --suite=TTyCustomClassesGuardTest --format=plain > /tmp/split-gold-w.txt 2>&1; ./tytests-split.exe --suite=TTyCustomClassesGuardTest --format=plain > /tmp/split-gold.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/split-gold.txt; grep -c "^# " fixtures/customclasses/published-snapshot.txt; grep -c "^#typekey" fixtures/customclasses/published-snapshot.txt; wc -l fixtures/customclasses/published-snapshot.txt; grep -c "	x$" fixtures/customclasses/published-snapshot.txt
@@ -789,7 +793,7 @@ cd /d/Projects/ty-split && ls source/*.ppu source/*.o 2>/dev/null | wc -l && laz
 
 Expected：编译 0 错；第二次跑 8 条全过；类头个数、typekey 行数（= 注册类 + 1）、`x` 的个数记下（执行中不许变）。然后跑全量，条数与红名单记进草稿。**除已知偶发失败外有别的红就停。**
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 cd /d/Projects/ty-split && git add tests/test.customclasses.pas tests/fixtures/customclasses tests/tytests.lpr && git commit -m "test(controls): snapshot every published property and type key before the custom-class split
@@ -818,12 +822,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:** Modify `source/tyControls.Base.pas`、`source/tyControls.Component.pas`（Q2）；每个直接子类所在单元（V18 的清单：窗口化 57 + 图形 28 + `TTyComponent` 20 个注册类、`TTyCustomTabStrip`、`TTyCustomGrid`、`TTyCustomFileDialog`、`TTyScrollContent`、`TTyToolWindowManager`；其中 `AdvanceChart.pas`、`Calendar.pas`、`DateTimePicker.pas` 单独一个提交，Q3）；`tests/test.customclasses.pas`（`CDemoted` 加三个基类）；N30 涉及的测试探针。
 
-- [ ] **Step 1: 生成每个类的基类块**：对上面每个类 `python split.py base <Class> > <scratchpad>/base/<Class>.txt 2> <scratchpad>/base/<Class>.merge`。`.merge` 非空的（预计就是附录 A「带说明符的重声明」列里 `TabStop default True / False` 那 40 来个类、TabSheet / ToolWindow 的 `TabOrder / Visible stored False`、ToolWindow / ToolWindowActions 的 `Controller stored False`）：块里那一行换成该类源码里的那条带说明符的声明，并删掉它在原 published 段里的那一行（同一个类里一个名字只能声明一次）。
-- [ ] **Step 2: 插块**：每个类的 published 段**开头**插入它的块（注释一行：`{ The universal properties the base classes stopped publishing in 4.0 (LCL visibility); RTTI order is the 3.0 order. }`）。没有 published 段的（`TTyScrollContent`）新开一段。中间类 `TTyCustomTabStrip` / `TTyCustomGrid` 插在它们自己的段首（它们在 Task 14 / 18 才降级）；`TTyCustomToolWindowManager` 不发布东西（Q4），块插进 `TTyToolWindowManager`（只有 `Version`）。
-- [ ] **Step 3: 改基类**：`Base.pas` 两个基类的 published 段整段删掉，其中 `Version`、`StyleClass`、`StyleOverride`、`Controller` 四行移到各自的 public 段（说明注释跟着走；`Visible` / `AutoSize` / 拖放那几段注释讲的是「为什么基类要发布」——改写成一句「4.0: published by every final class, not here (LCL TControl publishes none of these)」放在 public 段那四行上方，旧长注释删掉，内容并进 `docs/subclassing.md` 的历史说明里）。`Component.pas`：`Version` 移到 public（Q2）。**方法、protected 段一个字不动**（V21）。
-- [ ] **Step 4: 编译、快照、全量**（本任务的例外：后面每个任务都站在它上面）。Expected：G6 全绿（逐项相同、typeKey 相同）；G8 对三个基类绿；全量与 Task 0 基线相同。红了按 N30 处理探针，或回去查块 / 合并。
-- [ ] **Step 5: 测试**：`test.customclasses.pas` 加 `TestBaseClassesPublishNothing`（就是 G8 对三个基类的实例；单列一条方便签收）与 `TestThirdPartyOnTheBareBaseSeesOnlyTheLclRoot`：一个直接继承 `TTyCustomControl` 的测试类不写 published 段，`GetPropList` 的名字集合 = `TCustomControl` 的 15 个（这条就是不兼容清单第 2 条的现场证明）。
-- [ ] **Step 6: 提交**（两个）：先 `git add` 三个排除单元单独提交 `refactor(controls): republish the base-class properties on the excluded charts and date controls`（正文写明只插了块、为什么、Q3；结尾 Co-Authored-By）；再提交其余 `refactor(controls): the base classes publish nothing; every control republishes them in the 3.0 order`。【主控执行】把第一个提交号告诉 AdvChart 会话（Q3）。
+- [x] **Step 1: 生成每个类的基类块**：对上面每个类 `python split.py base <Class> > <scratchpad>/base/<Class>.txt 2> <scratchpad>/base/<Class>.merge`。`.merge` 非空的（预计就是附录 A「带说明符的重声明」列里 `TabStop default True / False` 那 40 来个类、TabSheet / ToolWindow 的 `TabOrder / Visible stored False`、ToolWindow / ToolWindowActions 的 `Controller stored False`）：块里那一行换成该类源码里的那条带说明符的声明，并删掉它在原 published 段里的那一行（同一个类里一个名字只能声明一次）。
+- [x] **Step 2: 插块**：每个类的 published 段**开头**插入它的块（注释一行：`{ The universal properties the base classes stopped publishing in 4.0 (LCL visibility); RTTI order is the 3.0 order. }`）。没有 published 段的（`TTyScrollContent`）新开一段。中间类 `TTyCustomTabStrip` / `TTyCustomGrid` 插在它们自己的段首（它们在 Task 14 / 18 才降级）；`TTyCustomToolWindowManager` 不发布东西（Q4），块插进 `TTyToolWindowManager`（只有 `Version`）。
+- [x] **Step 3: 改基类**：`Base.pas` 两个基类的 published 段整段删掉，其中 `Version`、`StyleClass`、`StyleOverride`、`Controller` 四行移到各自的 public 段（说明注释跟着走；`Visible` / `AutoSize` / 拖放那几段注释讲的是「为什么基类要发布」——改写成一句「4.0: published by every final class, not here (LCL TControl publishes none of these)」放在 public 段那四行上方，旧长注释删掉，内容并进 `docs/subclassing.md` 的历史说明里）。`Component.pas`：`Version` 移到 public（Q2）。**方法、protected 段一个字不动**（V21）。
+- [x] **Step 4: 编译、快照、全量**（本任务的例外：后面每个任务都站在它上面）。Expected：G6 全绿（逐项相同、typeKey 相同）；G8 对三个基类绿；全量与 Task 0 基线相同。红了按 N30 处理探针，或回去查块 / 合并。
+- [x] **Step 5: 测试**：`test.customclasses.pas` 加 `TestBaseClassesPublishNothing`（就是 G8 对三个基类的实例；单列一条方便签收）与 `TestThirdPartyOnTheBareBaseSeesOnlyTheLclRoot`：一个直接继承 `TTyCustomControl` 的测试类不写 published 段，`GetPropList` 的名字集合 = `TCustomControl` 的 15 个（这条就是不兼容清单第 2 条的现场证明）。
+- [x] **Step 6: 提交**（两个）：先 `git add` 三个排除单元单独提交 `refactor(controls): republish the base-class properties on the excluded charts and date controls`（正文写明只插了块、为什么、Q3；结尾 Co-Authored-By）；再提交其余 `refactor(controls): the base classes publish nothing; every control republishes them in the 3.0 order`。【主控执行】把第一个提交号告诉 AdvChart 会话（Q3）。
 
 ---
 
@@ -856,10 +860,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | TTySpeedButton | TTyGlyphButtonBase | TTyGlyphButtonBase | `TCustomSpeedButton` |
 | TTyButtonGroup | TTyCustomControl | TTyCustomControl | 无（public） |
 
-- [ ] **Step 1: 拆（父先子后）**：`TTyButton` → `TTyDropDownButton`、`TTyMenuButton`、`TTyColorButton`（`R2s` 预计有 ColorButton 的 `Alignment default taLeftJustify`）→ `TTyGlyphButtonBase`：类头改 `class(TTyCustomButton)`，published 段按 R2 / R3 / D3 降级（它的 11 个属性变成 Custom 层的声明），**同一任务里**给它的 4 个注册后代补发布段：GlyphButton、GlyphContainerButton、SpeedButton 随拆分生成，`TTyToolButton`（ToolBar.pas，3 期才拆）此刻只取 `split.py block TTyToolButton` 输出里的 `property X;` 行，替换它现有 published 段的全部内容（它仍是 `class(TTyGlyphButtonBase)`）；stderr 里 `R2s` 列出的 `TabStop`、`GlyphLayout` 两个名字，块里那一行换成它源码里原来带说明符的写法（`property TabStop default False;`、`property GlyphLayout stored FGlyphLayoutExplicit nodefault;`——同 Task 1 的合并，一个名字只声明一次；3 期拆它时这两行挪进 `TTyCustomToolButton`）；G6 确认位置与说明符都没动→ GlyphButton、GlyphContainerButton（`R2s` 有 `GlyphLayout default glTop`）、SpeedButton（`R2s` 有 `TabStop default False`）→ ButtonGroup。`TTyRibbonAppMenu`（`class(TTyMenuButton)`，3 期）与 `TTyTransferArrowButton`（内部）不受影响。`CDemoted` 加 `TTyGlyphButtonBase`。
-- [ ] **Step 2: A 下必改**（附录 C-1）：A2-1 `ToolBar.pas:1838`（`is TTyButton` + 强转，扁平样式）→ `TTyCustomButton`，同时 `ApplyToButton(B: TTyButton)`（`:416/1713`）参数放宽到 `TTyCustomButton`（C-4；读写 protected 属性用 access 类）；A2-2 `ToolBarEx.pas:236/248-253`、A2-3 `ToolBarEx.pas:393-396/445-446`（溢出弹层包装 OnClick）→ `TTyCustomButton`（`OnClick` 在 LCL 是 public，直接用）；A2-4 `examples/toolbar/umain.pas:162` `ToolClicked`：`(Sender as TTyButton).Caption` → `(Sender as TTyCustomButton).Caption`（它挂在 13 个 TTyButton、4 个 TTyToolButton、3 个 TTyGlyphButton 上）；`:172` `ToolToggle` 只挂在 TTyButton 上、要读写 `Down`——保持 `as TTyButton`（C-3，「恰好这个类」）；A2-5 `tools/gallery/tyGalleryCapture.pas:157`（按标题在示例窗体上找按钮，示例里有 GlyphButton）→ `TTyCustomButton`。C-4：`tests/test.parity.buttons.pas:500/562/1293/1314/1328/1343/1364`、`tests/test.parity.pas:321/769/783/1296/1538` 的 `B: TTyButton := TTyGlyphButton / TTyColorButton / TTySpeedButton.Create(...)` → 声明改 `TTyCustomButton`（读写 protected 的属性就强转回那个最终类——对象就是它，是真话）。
-- [ ] **Step 3: 为第三方放宽**（附录 C-2）：C1-1（GlyphButtons 同组互斥 `is TTySpeedButton`，`:962/987/1008-1010`）→ `TTyCustomSpeedButton`。
-- [ ] **Step 4: 测试**（`test.customclasses.p1.pas`）：
+- [x] **Step 1: 拆（父先子后）**：`TTyButton` → `TTyDropDownButton`、`TTyMenuButton`、`TTyColorButton`（`R2s` 预计有 ColorButton 的 `Alignment default taLeftJustify`）→ `TTyGlyphButtonBase`：类头改 `class(TTyCustomButton)`，published 段按 R2 / R3 / D3 降级（它的 11 个属性变成 Custom 层的声明），**同一任务里**给它的 4 个注册后代补发布段：GlyphButton、GlyphContainerButton、SpeedButton 随拆分生成，`TTyToolButton`（ToolBar.pas，3 期才拆）此刻只取 `split.py block TTyToolButton` 输出里的 `property X;` 行，替换它现有 published 段的全部内容（它仍是 `class(TTyGlyphButtonBase)`）；stderr 里 `R2s` 列出的 `TabStop`、`GlyphLayout` 两个名字，块里那一行换成它源码里原来带说明符的写法（`property TabStop default False;`、`property GlyphLayout stored FGlyphLayoutExplicit nodefault;`——同 Task 1 的合并，一个名字只声明一次；3 期拆它时这两行挪进 `TTyCustomToolButton`）；G6 确认位置与说明符都没动→ GlyphButton、GlyphContainerButton（`R2s` 有 `GlyphLayout default glTop`）、SpeedButton（`R2s` 有 `TabStop default False`）→ ButtonGroup。`TTyRibbonAppMenu`（`class(TTyMenuButton)`，3 期）与 `TTyTransferArrowButton`（内部）不受影响。`CDemoted` 加 `TTyGlyphButtonBase`。
+- [x] **Step 2: A 下必改**（附录 C-1）：A2-1 `ToolBar.pas:1838`（`is TTyButton` + 强转，扁平样式）→ `TTyCustomButton`，同时 `ApplyToButton(B: TTyButton)`（`:416/1713`）参数放宽到 `TTyCustomButton`（C-4；读写 protected 属性用 access 类）；A2-2 `ToolBarEx.pas:236/248-253`、A2-3 `ToolBarEx.pas:393-396/445-446`（溢出弹层包装 OnClick）→ `TTyCustomButton`（`OnClick` 在 LCL 是 public，直接用）；A2-4 `examples/toolbar/umain.pas:162` `ToolClicked`：`(Sender as TTyButton).Caption` → `(Sender as TTyCustomButton).Caption`（它挂在 13 个 TTyButton、4 个 TTyToolButton、3 个 TTyGlyphButton 上）；`:172` `ToolToggle` 只挂在 TTyButton 上、要读写 `Down`——保持 `as TTyButton`（C-3，「恰好这个类」）；A2-5 `tools/gallery/tyGalleryCapture.pas:157`（按标题在示例窗体上找按钮，示例里有 GlyphButton）→ `TTyCustomButton`。C-4：`tests/test.parity.buttons.pas:500/562/1293/1314/1328/1343/1364`、`tests/test.parity.pas:321/769/783/1296/1538` 的 `B: TTyButton := TTyGlyphButton / TTyColorButton / TTySpeedButton.Create(...)` → 声明改 `TTyCustomButton`（读写 protected 的属性就强转回那个最终类——对象就是它，是真话）。
+- [x] **Step 3: 为第三方放宽**（附录 C-2）：C1-1（GlyphButtons 同组互斥 `is TTySpeedButton`，`:962/987/1008-1010`）→ `TTyCustomSpeedButton`。
+- [x] **Step 4: 测试**（`test.customclasses.p1.pas`）：
   - S2-1：`Flat = True` 的 `TTyToolBar` 上放一个 `TTyGlyphButton`、一个 `TTySpeedButton`，手调一次布局（N26），两者 `StyleClass = 'ghost'`。**把 A2-1 改回 `is TTyButton` 必须红。**
   - S2-2：同 S2-1，换成 `TTyToolBarEx`。**A2-2 改回必须红。**
   - S2-3：`TTyToolBarEx` 溢出时，弹层里的 `TTyGlyphButton` 被点击后宿主收到 `PopupItemClick`、关闭弹层后原 `OnClick` 还原。**A2-3 改回必须红**；溢出弹层无头驱动不到就写「—：与 S2-2 同一判断，审查覆盖」。
@@ -868,8 +872,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - S1-1：同一父控件上一个 `TTySpeedButton` 和一个 `TThirdSpeedButton`，`GroupIndex = 1`：按下一个，另一个弹起；两个方向。C1-1 改回 → 红。
   - 模拟类：`TThirdButton`（发布 `Caption`、`Down`；隐藏 `ModalResult`）、`TThirdSpeedButton`（发布 `GroupIndex`、`Down`；隐藏 `AllowAllUp`）；T-a…T-e、T-v。
   - G7 生效的几行：`TTyDropDownButton`、`TTyMenuButton`、`TTyColorButton` → `TTyCustomButton`；`TTyGlyphButtonBase` → `TTyCustomButton`；三个 glyph 按钮 → `TTyGlyphButtonBase`。
-- [ ] **Step 5: `CPending` → `CSplit`**：上表 8 个类。
-- [ ] **Step 6: 提交**：`refactor(controls): split the button family into TTyCustomXxx and a published TTyXxx`（正文：A 的链、为什么工具栏与示例的判断跟着改、`TTyToolButton` 先补了发布段；结尾 Co-Authored-By）。
+- [x] **Step 5: `CPending` → `CSplit`**：上表 8 个类。
+- [x] **Step 6: 提交**：`refactor(controls): split the button family into TTyCustomXxx and a published TTyXxx`（正文：A 的链、为什么工具栏与示例的判断跟着改、`TTyToolButton` 先补了发布段；结尾 Co-Authored-By）。
 
 ### Task 3: 标签
 
@@ -877,9 +881,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 全部 Custom 父类 = 原父类（`TTyHtmlLabel` 是 `TTyCustomControl`，其余 `TTyGraphicControl`）。LCL 对应：`TCustomLabel`（`stdctrls.pp:1556`，独有属性 **protected**）给 TyLabel、HtmlLabel、LinkLabel、ShadowLabel、GlowLabel；Tag、Badge 无对应（public）。无附录 C 条目。`TTyLabel` 是主题锁定的（仓库记忆），画法全在 Custom 里。
 
-- [ ] **Step 1: 拆** 7 个类。
-- [ ] **Step 2: 测试**：`TThirdLabel`（发布 `Caption`、`WordWrap`；隐藏 `Layout`）、`TThirdTag`（发布 `Caption`、`Closable`；隐藏属性从附录 A 该类新发布的非事件属性里挑）；T-a…T-e、T-v，`TTyLabel` 走 `RenderTo` 逐像素。
-- [ ] **Step 3: `CPending` → `CSplit`**、提交 `refactor(controls): split the label family ...`。
+- [x] **Step 1: 拆** 7 个类。
+- [x] **Step 2: 测试**：`TThirdLabel`（发布 `Caption`、`WordWrap`；隐藏 `Layout`）、`TThirdTag`（发布 `Caption`、`Closable`；隐藏属性从附录 A 该类新发布的非事件属性里挑）；T-a…T-e、T-v，`TTyLabel` 走 `RenderTo` 逐像素。
+- [x] **Step 3: `CPending` → `CSplit`**、提交 `refactor(controls): split the label family ...`。
 
 ### Task 4: 编辑框 I
 
@@ -897,10 +901,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | TTyURLEdit | TTyEdit | **TTyCustomEdit** | `TCustomEdit` |
 | TTyComboEdit | TTyEdit | **TTyCustomEdit** | `TCustomEditButton`（protected） |
 
-- [ ] **Step 1: 拆**：Edit → NumericEdit → Currency / Track / Calc → CalcCurrency；Mask / URL / ComboEdit。`TTyEdit` 的接口列表 `ITyTextEditActions, ITyImeEditable` 写在 `TTyCustomEdit` 类头上（R1）。`TTyMaskEdit` 的 `Text write SetMaskedText` 是 `R2s`（原来在 R3，A + D7 下 Text 不是 LCL 根已 published 的），带着它上面那段「静态绑定」注释放 `TTyCustomMaskEdit`，可见性照 `TCustomMaskEdit` 的 Text（`split.py vis TCustomMaskEdit Text`）。`TTyValueEdit`（内部）不动。
-- [ ] **Step 2: A 下必改**：A4-1 `tests/test.calcedit.pas:40/60`：原断言 `e is TTyNumericEdit` / `e is TTyCurrencyEdit`（e 是 CalcEdit / CalcCurrencyEdit）A 下变假——改写成两句：`e is TTyCustomNumericEdit`（「仍是数值编辑框一族」）与 `not (e is TTyNumericEdit)`（「4.0 起不再是 TTyNumericEdit 的后代——LCL 式继承链」，注释写明这是有意的不兼容变化、见计划清单第 1 条）；货币那条同理（`TTyCustomCurrencyEdit` / `not ... TTyCurrencyEdit`）。这两句本身就是层级的钉子：**把 `TTyCustomCalcEdit` 改挂回 `TTyNumericEdit`，第二句必须红**（G7 也红）。A4-2 `examples/grid/umain.pas:1332-1334`：网格的格编辑器有 `TTyCalcEdit`、`TTyMaskEdit`（`Grid.pas:8024/8031`），`AEditor is TTyEdit` A 下认不出它们 → `TTyCustomEdit`，`Font` 是 LCL public，直接 `TTyCustomEdit(AEditor).Font.Color`。「—：示例无测试」，【主控】冒烟时在 grid 示例打开一个计算列，编辑器字体为红（列进 Task 11）。C-4：`CalcEdit.pas:16/22/78` `TTyCalcDropdown` 的 `FEdit` / `Create(AEdit: TTyNumericEdit)`——两个 calc 编辑框都把 `Self` 传进来，A 下 `Self` 不是 `TTyNumericEdit` → 放宽到 `TTyCustomNumericEdit`（内部类）。
-- [ ] **Step 3: 测试**：`TThirdEdit`（发布 `Text`、`ReadOnly`；隐藏 `MaxLength`）；T-a…T-e、T-v，T-f：`Supports(TThirdEdit 实例, ITyImeEditable)` 与 `ITyTextEditActions` 都为 True（变异：接口列表挪到 `TTyEdit` 类头 → 红）。`TThirdMaskEdit`（发布 `EditMask`、`Text`；隐藏 `SpaceChar`）：经 `Text` 赋值走带掩码的 setter（与 `TTyMaskEdit` 同输入同输出；变异：把 `Text write SetMaskedText` 从 Custom 挪到最终类 → 红）。S4-1：`TTyCalcEdit` 下拉计算器打开、算完回写到编辑框（经 `TTyCalcDropdown` 的放宽参数）——C-4 是编译期的，这条只证明行为没变。
-- [ ] **Step 4: `CPending` → `CSplit`**、提交。
+- [x] **Step 1: 拆**：Edit → NumericEdit → Currency / Track / Calc → CalcCurrency；Mask / URL / ComboEdit。`TTyEdit` 的接口列表 `ITyTextEditActions, ITyImeEditable` 写在 `TTyCustomEdit` 类头上（R1）。`TTyMaskEdit` 的 `Text write SetMaskedText` 是 `R2s`（原来在 R3，A + D7 下 Text 不是 LCL 根已 published 的），带着它上面那段「静态绑定」注释放 `TTyCustomMaskEdit`，可见性照 `TCustomMaskEdit` 的 Text（`split.py vis TCustomMaskEdit Text`）。`TTyValueEdit`（内部）不动。
+- [x] **Step 2: A 下必改**：A4-1 `tests/test.calcedit.pas:40/60`：原断言 `e is TTyNumericEdit` / `e is TTyCurrencyEdit`（e 是 CalcEdit / CalcCurrencyEdit）A 下变假——改写成两句：`e is TTyCustomNumericEdit`（「仍是数值编辑框一族」）与 `not (e is TTyNumericEdit)`（「4.0 起不再是 TTyNumericEdit 的后代——LCL 式继承链」，注释写明这是有意的不兼容变化、见计划清单第 1 条）；货币那条同理（`TTyCustomCurrencyEdit` / `not ... TTyCurrencyEdit`）。这两句本身就是层级的钉子：**把 `TTyCustomCalcEdit` 改挂回 `TTyNumericEdit`，第二句必须红**（G7 也红）。A4-2 `examples/grid/umain.pas:1332-1334`：网格的格编辑器有 `TTyCalcEdit`、`TTyMaskEdit`（`Grid.pas:8024/8031`），`AEditor is TTyEdit` A 下认不出它们 → `TTyCustomEdit`，`Font` 是 LCL public，直接 `TTyCustomEdit(AEditor).Font.Color`。「—：示例无测试」，【主控】冒烟时在 grid 示例打开一个计算列，编辑器字体为红（列进 Task 11）。C-4：`CalcEdit.pas:16/22/78` `TTyCalcDropdown` 的 `FEdit` / `Create(AEdit: TTyNumericEdit)`——两个 calc 编辑框都把 `Self` 传进来，A 下 `Self` 不是 `TTyNumericEdit` → 放宽到 `TTyCustomNumericEdit`（内部类）。
+- [x] **Step 3: 测试**：`TThirdEdit`（发布 `Text`、`ReadOnly`；隐藏 `MaxLength`）；T-a…T-e、T-v，T-f：`Supports(TThirdEdit 实例, ITyImeEditable)` 与 `ITyTextEditActions` 都为 True（变异：接口列表挪到 `TTyEdit` 类头 → 红）。`TThirdMaskEdit`（发布 `EditMask`、`Text`；隐藏 `SpaceChar`）：经 `Text` 赋值走带掩码的 setter（与 `TTyMaskEdit` 同输入同输出；变异：把 `Text write SetMaskedText` 从 Custom 挪到最终类 → 红）。S4-1：`TTyCalcEdit` 下拉计算器打开、算完回写到编辑框（经 `TTyCalcDropdown` 的放宽参数）——C-4 是编译期的，这条只证明行为没变。
+- [x] **Step 4: `CPending` → `CSplit`**、提交。
 
 ### Task 5: 编辑框 II
 
@@ -914,19 +918,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | TTyFloatSpinEdit | TTyNumericEdit | **TTyCustomNumericEdit**（Task 4 已有） | `TCustomFloatSpinEdit`（`spin.pp:33`，public） |
 | TTyUpDown | TTyGraphicControl | TTyGraphicControl | `TCustomUpDown`（`comctrls.pp:1922`，独有属性 **protected**） |
 
-- [ ] **Step 1: 拆**；FloatSpinEdit 的 `UseThousands default False` 是 `R2s`（原来 R3），放 `TTyCustomFloatSpinEdit`。
-- [ ] **Step 2: 为第三方放宽**：C4-1（UpDown 关联互斥）→ `TTyCustomUpDown`。
-- [ ] **Step 3: 测试**：`TThirdMemo`（发布 `Lines`、`ReadOnly`；隐藏 `WantTabs`）、`TThirdUpDown`（发布 `Associate`、`Position`；隐藏 `Increment`）；T-a…T-e、T-v。S4-2：同一父控件上 `TTyUpDown` 已关联某个编辑框，`TThirdUpDown` 再关联同一个 → 抛异常；反过来也一样。C4-1 改回 → 红。`TTyFloatSpinEdit` 的 `UseThousands` default：新实例 `UseThousands = False` 且 RTTI default = 0（先证明 `TTyNumericEdit` 的是 1）；变异：把那行从 Custom 挪到最终类 → G3b 红。
-- [ ] **Step 4: `CPending` → `CSplit`**、提交。
+- [x] **Step 1: 拆**；FloatSpinEdit 的 `UseThousands default False` 是 `R2s`（原来 R3），放 `TTyCustomFloatSpinEdit`。
+- [x] **Step 2: 为第三方放宽**：C4-1（UpDown 关联互斥）→ `TTyCustomUpDown`。
+- [x] **Step 3: 测试**：`TThirdMemo`（发布 `Lines`、`ReadOnly`；隐藏 `WantTabs`）、`TThirdUpDown`（发布 `Associate`、`Position`；隐藏 `Increment`）；T-a…T-e、T-v。S4-2：同一父控件上 `TTyUpDown` 已关联某个编辑框，`TThirdUpDown` 再关联同一个 → 抛异常；反过来也一样。C4-1 改回 → 红。`TTyFloatSpinEdit` 的 `UseThousands` default：新实例 `UseThousands = False` 且 RTTI default = 0（先证明 `TTyNumericEdit` 的是 1）；变异：把那行从 Custom 挪到最终类 → G3b 红。
+- [x] **Step 4: `CPending` → `CSplit`**、提交。
 
 ### Task 6: 选择
 
 **Files:** `source/tyControls.CheckBox.pas`（CheckBox + RadioButton）、`ToggleSwitch.pas`、`Segmented.pas`、测试单元。四个类 Custom 父类 = `TTyCustomControl`；LCL 对应 `TCustomCheckBox`（`stdctrls.pp:1326`，public）给前三个，Segmented 无（public）。`TabStop default True` 都是 `R2s` → Custom 的 public 段（LCL `TWinControl.TabStop` 是 public）。
 
-- [ ] **Step 1: 拆**：CheckBox.pas 两个类分两次 `impl`；确认 `a0606352` 的 AutoSize 改动随 R1 进了 Custom。
-- [ ] **Step 2: 类型判断**：C5-1 放宽（单选同组互斥 → `TTyCustomRadioButton`）；C5-2 保持（RadioGroup 的 Sender 只会是它自己建的 `TTyRadioButton`）。
-- [ ] **Step 3: 测试**：`TThirdCheckBox`（发布 `Checked`、`Caption`；隐藏 `AllowGrayed`）、`TThirdRadioButton`（发布 `Checked`、`GroupIndex`）；T-a…T-e、T-v。S5-1：同一父控件、同 `GroupIndex` 的 `TTyRadioButton` 与 `TThirdRadioButton`，勾一个另一个取消，两个方向。C5-1 改回 → 红。
-- [ ] **Step 4: `CPending` → `CSplit`**、提交。
+- [x] **Step 1: 拆**：CheckBox.pas 两个类分两次 `impl`；确认 `a0606352` 的 AutoSize 改动随 R1 进了 Custom。
+- [x] **Step 2: 类型判断**：C5-1 放宽（单选同组互斥 → `TTyCustomRadioButton`）；C5-2 保持（RadioGroup 的 Sender 只会是它自己建的 `TTyRadioButton`）。
+- [x] **Step 3: 测试**：`TThirdCheckBox`（发布 `Checked`、`Caption`；隐藏 `AllowGrayed`）、`TThirdRadioButton`（发布 `Checked`、`GroupIndex`）；T-a…T-e、T-v。S5-1：同一父控件、同 `GroupIndex` 的 `TTyRadioButton` 与 `TThirdRadioButton`，勾一个另一个取消，两个方向。C5-1 改回 → 红。
+- [x] **Step 4: `CPending` → `CSplit`**、提交。
 
 ### Task 7: 组合框 I
 
@@ -941,11 +945,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | TTyAdvancedComboBox | TTyComboBox | **TTyCustomComboBox** | `TCustomComboBox` |
 | TTyCheckComboBox | TTyComboBox | **TTyCustomComboBox** | `TCustomCheckCombo`（`comboex.pas:271`，public） |
 
-- [ ] **Step 1: 拆**：`TTyComboPopupList` 及其子类（内部）不动。弹层 API 的 `TTyListBox` 本任务**不动**（`TTyCustomListBox` 还不存在；Task 15 放宽，V12）。
-- [ ] **Step 2: A 下必改**：A7-1 `ComboBox.pas:565-569` `TyComboOwnerOf`：弹层的 `Owner is TTyComboBox`——A 下 5 个派生组合框（本任务）与 6 个（Task 8）全部认不出，弹层的行自绘 / 量行高全断 → `TTyCustomComboBox`，返回类型一起放宽（implementation 私有），调用处 `:575/583/590/597` 随之；`BeginRowOwnerDraw` 等若是 protected，用 access 类。C-4：`tests/test.parity.combo.pas` 的 `c: TTyComboBox := TTyComboBoxEx / TTyCheckComboBox / TTyColorBox / ... .Create`（`:443/461/484/500/512/534/553/574/875/1598/1734-1738/1754/1778-1784/2006`，27 处）→ 声明 `TTyCustomComboBox`；`PopulateForFamily(C: TTyComboBox)`（`:1638`）参数 → `TTyCustomComboBox`，其中 `C is TTyColorBox`（`:1647`，C 可能是 `TTyColorComboBox`）属 Task 8 的 A8-2。`tests/test.parity.pas:490/506` 的 `C: TTyComboBox := TTyColorBox.Create` 在 Task 8 改（ColorBox 那时才改挂；此刻 ColorBox 仍是 `TTyComboBox` 的后代，编得过）。
-- [ ] **Step 3: 为第三方放宽**：C6-2（ComboBoxEx 的 ItemsEx 所有者 ×3）、C6-3（AdvancedComboBox 弹层取 Images）、C6-4（CheckComboBox 弹层所有者）→ 各自的 Custom 类；C6-5（`is TTyCheckListBox` ×3，弹层是自己建的）保持——**Task 15 复核**：`TTyCheckComboPopupList` 仍从 `TTyCheckListBox` 派生，保持成立。
-- [ ] **Step 4: 测试**：S7-1：`TTyComboBoxEx`（内置派生）设 owner-draw 风格 + 行绘制事件，建它的弹层列表画一行，事件被调用。**把 A7-1 改回 `Owner is TTyComboBox` 必须红**（先证明事件确实只经 `TyComboOwnerOf` 这条路到达）。S7-2：`TThirdComboBoxEx = class(TTyCustomComboBoxEx)` 发布 `ItemsEx`、`Images`，往 `ItemsEx` 加一项，`Items.Count` 跟着变。C6-2 的 `Update` 那一处改回 → 红。C6-3、C6-4：能观察就写，驱动不到写「—」与理由。模拟类 `TThirdComboBox`（发布 `Items`、`ItemIndex`；隐藏 `DropDownCount`）；T-a…T-e、T-v。
-- [ ] **Step 5: `CPending` → `CSplit`**、提交。
+- [x] **Step 1: 拆**：`TTyComboPopupList` 及其子类（内部）不动。弹层 API 的 `TTyListBox` 本任务**不动**（`TTyCustomListBox` 还不存在；Task 15 放宽，V12）。
+- [x] **Step 2: A 下必改**：A7-1 `ComboBox.pas:565-569` `TyComboOwnerOf`：弹层的 `Owner is TTyComboBox`——A 下 5 个派生组合框（本任务）与 6 个（Task 8）全部认不出，弹层的行自绘 / 量行高全断 → `TTyCustomComboBox`，返回类型一起放宽（implementation 私有），调用处 `:575/583/590/597` 随之；`BeginRowOwnerDraw` 等若是 protected，用 access 类。C-4：`tests/test.parity.combo.pas` 的 `c: TTyComboBox := TTyComboBoxEx / TTyCheckComboBox / TTyColorBox / ... .Create`（`:443/461/484/500/512/534/553/574/875/1598/1734-1738/1754/1778-1784/2006`，27 处）→ 声明 `TTyCustomComboBox`；`PopulateForFamily(C: TTyComboBox)`（`:1638`）参数 → `TTyCustomComboBox`，其中 `C is TTyColorBox`（`:1647`，C 可能是 `TTyColorComboBox`）属 Task 8 的 A8-2。`tests/test.parity.pas:490/506` 的 `C: TTyComboBox := TTyColorBox.Create` 在 Task 8 改（ColorBox 那时才改挂；此刻 ColorBox 仍是 `TTyComboBox` 的后代，编得过）。
+- [x] **Step 3: 为第三方放宽**：C6-2（ComboBoxEx 的 ItemsEx 所有者 ×3）、C6-3（AdvancedComboBox 弹层取 Images）、C6-4（CheckComboBox 弹层所有者）→ 各自的 Custom 类；C6-5（`is TTyCheckListBox` ×3，弹层是自己建的）保持——**Task 15 复核**：`TTyCheckComboPopupList` 仍从 `TTyCheckListBox` 派生，保持成立。
+- [x] **Step 4: 测试**：S7-1：`TTyComboBoxEx`（内置派生）设 owner-draw 风格 + 行绘制事件，建它的弹层列表画一行，事件被调用。**把 A7-1 改回 `Owner is TTyComboBox` 必须红**（先证明事件确实只经 `TyComboOwnerOf` 这条路到达）。S7-2：`TThirdComboBoxEx = class(TTyCustomComboBoxEx)` 发布 `ItemsEx`、`Images`，往 `ItemsEx` 加一项，`Items.Count` 跟着变。C6-2 的 `Update` 那一处改回 → 红。C6-3、C6-4：能观察就写，驱动不到写「—」与理由。模拟类 `TThirdComboBox`（发布 `Items`、`ItemIndex`；隐藏 `DropDownCount`）；T-a…T-e、T-v。
+- [x] **Step 5: `CPending` → `CSplit`**、提交。
 
 ### Task 8: 组合框 II，属性编辑器第一次挪到 Custom 类
 
@@ -958,34 +962,34 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | TTyFontComboBox / TTyFontSizeComboBox / TTyShellComboBox | TTyComboBox | **TTyCustomComboBox** | `TCustomComboBox` |
 | TTyFilterComboBox | TTyComboBox | **TTyCustomComboBox** | `TCustomFilterComboBox`（`filectrl.pp:147`，public） |
 
-- [ ] **Step 1: 拆**：`TTyColorBox` 的 `Style: TTyColorBoxStyle read FPaletteStyle write SetPaletteStyle ...`（同名换类型）是 `R2s`，整条原样放 `TTyCustomColorBox`，可见性照 `TCustomColorBox.Style`（public）。`RegisterClass(TTyFilterComboBox)` 保持。`TTyFilterComboBox.ConvertFilterToStrings`（class procedure）随 R1 进 Custom。
-- [ ] **Step 2: A 下必改**：A8-1 `ColorBox.pas:468-470`（弹层 `Owner is TTyColorBox` 取色块几何与伪行颜色）——A 下 `TTyColorComboBox` 认不出，下拉画回原始哨兵色、忽略 `ColorRectWidth` → `TTyCustomColorBox`（`SwatchColorFor`、`EffectiveRectWidth` 若 protected 用 access 类）。A8-2 `tests/test.parity.combo.pas:1647-1651` `C is TTyColorBox`（`PopulateForFamily` 对 `TTyColorComboBox` 也要填色）→ `TTyCustomColorBox`，`AddColor` 照 D3 可见性访问。A8-3 `tests/test.colorbox.pas:97-99` `TTyComboBox(c).Style`（经祖先拿组合框的下拉模式）A 下是对内置控件的类型假话 → `TTyCustomComboBox(c).Style`（`TCustomComboBox.Style` 是 public；ColorBox 的 `Style` 在 `TTyCustomColorBox` 里换了类型，经 `TTyCustomComboBox` 类型拿到的是组合框那个）；源码注释 `ColorBox.pas:179/503` 的 `TTyComboBox(Box).Style` 一并改成 `TTyCustomComboBox(Box).Style`（N27）。C-4：`tests/test.parity.pas:490/506` 声明 → `TTyCustomComboBox`。
-- [ ] **Step 3: 为第三方放宽**：C7-2（ShellComboBox 弹层所有者）→ `TTyCustomShellComboBox`。
-- [ ] **Step 4: 设计期**（R8）：`PropEditors.pas:765` `TTyFilterComboBox` → `TTyCustomFilterComboBox`；`:770` `TTyShellComboBox` → `TTyCustomShellComboBox`。`tests/test.designeditors.pas`：`TestEveryRegistrationTargetsARealProperty` 改成 R8 的规则（失败消息里说明两种合法情形）——基类上的 `StyleClass` / `StyleOverride` / `Version` 注册（Task 1 之后基类不发布了）、`TTyGlyphButtonBase.GlyphName`（Task 2 之后不发布了）也靠新规则的第二种情形通过；`RegisterClasses` 块加两个 Custom 类。
-- [ ] **Step 5: 测试**：S8-1：`TTyColorComboBox` 设一个非默认 `ColorRectWidth`，弹层画一行，色块宽度用的是它的值（数像素宽度）。**A8-1 改回必须红。** A8-2：`test.parity.combo` 里依赖 `PopulateForFamily` 的那条对 `TTyColorComboBox` 的断言——**A8-2 改回必须红**（若那条断言对空列表也成立，先补强：断言填色后行数 = 3）。A8-3 是硬转、无运行时差异：「—：类型假话，审查覆盖」。模拟类 `TThirdColorBox`（发布 `Selected`、`Style`；隐藏 `ColorRectWidth`）、`TThirdShellComboBox`（发布 `Directory`、`Items`）；T-a…T-e、T-v。S8-2：ShellComboBox 弹层能观察就写，否则「—」。
-- [ ] **Step 6: `CPending` → `CSplit`**、提交（正文提一句 test.designeditors 的新规则）。
+- [x] **Step 1: 拆**：`TTyColorBox` 的 `Style: TTyColorBoxStyle read FPaletteStyle write SetPaletteStyle ...`（同名换类型）是 `R2s`，整条原样放 `TTyCustomColorBox`，可见性照 `TCustomColorBox.Style`（public）。`RegisterClass(TTyFilterComboBox)` 保持。`TTyFilterComboBox.ConvertFilterToStrings`（class procedure）随 R1 进 Custom。
+- [x] **Step 2: A 下必改**：A8-1 `ColorBox.pas:468-470`（弹层 `Owner is TTyColorBox` 取色块几何与伪行颜色）——A 下 `TTyColorComboBox` 认不出，下拉画回原始哨兵色、忽略 `ColorRectWidth` → `TTyCustomColorBox`（`SwatchColorFor`、`EffectiveRectWidth` 若 protected 用 access 类）。A8-2 `tests/test.parity.combo.pas:1647-1651` `C is TTyColorBox`（`PopulateForFamily` 对 `TTyColorComboBox` 也要填色）→ `TTyCustomColorBox`，`AddColor` 照 D3 可见性访问。A8-3 `tests/test.colorbox.pas:97-99` `TTyComboBox(c).Style`（经祖先拿组合框的下拉模式）A 下是对内置控件的类型假话 → `TTyCustomComboBox(c).Style`（`TCustomComboBox.Style` 是 public；ColorBox 的 `Style` 在 `TTyCustomColorBox` 里换了类型，经 `TTyCustomComboBox` 类型拿到的是组合框那个）；源码注释 `ColorBox.pas:179/503` 的 `TTyComboBox(Box).Style` 一并改成 `TTyCustomComboBox(Box).Style`（N27）。C-4：`tests/test.parity.pas:490/506` 声明 → `TTyCustomComboBox`。
+- [x] **Step 3: 为第三方放宽**：C7-2（ShellComboBox 弹层所有者）→ `TTyCustomShellComboBox`。
+- [x] **Step 4: 设计期**（R8）：`PropEditors.pas:765` `TTyFilterComboBox` → `TTyCustomFilterComboBox`；`:770` `TTyShellComboBox` → `TTyCustomShellComboBox`。`tests/test.designeditors.pas`：`TestEveryRegistrationTargetsARealProperty` 改成 R8 的规则（失败消息里说明两种合法情形）——基类上的 `StyleClass` / `StyleOverride` / `Version` 注册（Task 1 之后基类不发布了）、`TTyGlyphButtonBase.GlyphName`（Task 2 之后不发布了）也靠新规则的第二种情形通过；`RegisterClasses` 块加两个 Custom 类。
+- [x] **Step 5: 测试**：S8-1：`TTyColorComboBox` 设一个非默认 `ColorRectWidth`，弹层画一行，色块宽度用的是它的值（数像素宽度）。**A8-1 改回必须红。** A8-2：`test.parity.combo` 里依赖 `PopulateForFamily` 的那条对 `TTyColorComboBox` 的断言——**A8-2 改回必须红**（若那条断言对空列表也成立，先补强：断言填色后行数 = 3）。A8-3 是硬转、无运行时差异：「—：类型假话，审查覆盖」。模拟类 `TThirdColorBox`（发布 `Selected`、`Style`；隐藏 `ColorRectWidth`）、`TThirdShellComboBox`（发布 `Directory`、`Items`）；T-a…T-e、T-v。S8-2：ShellComboBox 弹层能观察就写，否则「—」。
+- [x] **Step 6: `CPending` → `CSplit`**、提交（正文提一句 test.designeditors 的新规则）。
 
 ### Task 9: 进度与指示
 
 **Files:** `source/tyControls.ProgressBar.pas`、`Gauge.pas`、`Meter.pas`、`LevelMeter.pas`、`CircularProgress.pas`、`ActivityIndicator.pas`、`ActivityBar.pas`、`GearActivityIndicator.pas`、`Sparkline.pas`、测试单元。9 个类 Custom 父类 = `TTyGraphicControl`；LCL 对应：ProgressBar、Gauge、Meter、LevelMeter、CircularProgress ↔ `TCustomProgressBar`（`comctrls.pp:1814`，public；同义：Value ↔ Position）；其余无（public）。无附录 C 条目。
 
-- [ ] **Step 1: 拆** 9 个类。
-- [ ] **Step 2: 测试**：`TThirdProgressBar`（发布 `Position`、`Max`；隐藏 `Step`）——T-c 额外断言：`Max = 50, Position = 40` 写出的文本里 `Max` 在 `Position` 前面（第三方自己的发布顺序决定，V5-7）；`TThirdGauge`（发布 `Value`、`Max`）；T-a…T-e、T-v。
-- [ ] **Step 3: `CPending` → `CSplit`**、提交。
+- [x] **Step 1: 拆** 9 个类。
+- [x] **Step 2: 测试**：`TThirdProgressBar`（发布 `Position`、`Max`；隐藏 `Step`）——T-c 额外断言：`Max = 50, Position = 40` 写出的文本里 `Max` 在 `Position` 前面（第三方自己的发布顺序决定，V5-7）；`TThirdGauge`（发布 `Value`、`Max`）；T-a…T-e、T-v。
+- [x] **Step 3: `CPending` → `CSplit`**、提交。
 
 ### Task 10: 旋钮与滑块
 
 **Files:** `source/tyControls.Rating.pas`、`Dial.pas`、`GearDial.pas`、`AnalogClock.pas`、`TrackBar.pas`、测试单元。`TTyRating`、`TTyDial`、`TTyGearDial`、`TTyTrackBar` 父类 `TTyCustomControl`；`TTyAnalogClock` 父类 `TTyGraphicControl`。LCL 对应：TrackBar ↔ `TCustomTrackBar`（异例，Q6：public）；其余无（public）。
 
-- [ ] **Step 1: 拆** 5 个类。
-- [ ] **Step 2: 测试**：`TThirdTrackBar`（发布 `Position`、`Max`；隐藏 `TickMarks`）；T-a…T-e、T-v；T-e 特别验 `TabStop`：`TThirdTrackBar` 新实例 `TabStop = True`，且一个发布 `TabStop` 的第三方子类 `GetPropInfo(...,'TabStop')^.Default = 1`（先证明 `TCustomControl` 的是 0）。变异：把 `TTyCustomTrackBar` 的 `TabStop default True` 挪进 `TTyTrackBar` → 这条红（G3b 也红）。
-- [ ] **Step 3: `CPending` → `CSplit`**、提交。
+- [x] **Step 1: 拆** 5 个类。
+- [x] **Step 2: 测试**：`TThirdTrackBar`（发布 `Position`、`Max`；隐藏 `TickMarks`）；T-a…T-e、T-v；T-e 特别验 `TabStop`：`TThirdTrackBar` 新实例 `TabStop = True`，且一个发布 `TabStop` 的第三方子类 `GetPropInfo(...,'TabStop')^.Default = 1`（先证明 `TCustomControl` 的是 0）。变异：把 `TTyCustomTrackBar` 的 `TabStop default True` 挪进 `TTyTrackBar` → 这条红（G3b 也红）。
+- [x] **Step 3: `CPending` → `CSplit`**、提交。
 
 ### Task 11: 1 期收尾——编译、全量、集中变异、主控编包冒烟、审查、签收
 
-- [ ] **Step 1: 一次编译 + 本期 suite + 全量**。Expected：守卫与 P1 suite 全 0 / 0；全量 errors / failures 与 Task 1 后相同、总数 = 基线 + 本期新增。红了集中修：拆错的以快照与 G1–G8 为准；修复提交 `fix(controls): ...`，一个问题一个提交。编译器报出的、附录 C 没列的类型错误：按规则改并补进附录 C（签收列出）。
-- [ ] **Step 2: 结构核对（不看测试）**：本期 59 个类逐个看源码：最终类只有 `property X;`（R0）；Custom 类头带着原接口列表；R3 的行在 Custom 的 published 段；`R2s` 的行在 Custom 里、可见性照 D3（每类抽 5 个跑 `split.py vis`）；`git diff <Task 1 HEAD>..HEAD -- source | grep -E "^[-+]\s+T\w+ = class\("` 里每个改了父类的都在附录 C-0；没有新增的 `RegisterClass`；`split.py check` 对本期每个改过的文件都 ok；附录 C-1 本期的每一行都落实了。
-- [ ] **Step 3: 集中变异**：M-G1、M-G2、M-G3a（用 TabSheet 前先用本期的 `TTyCustomMaskEdit` 若有 R3 行，否则留到 2 期）、M-G3b、M-G4、M-G5、M-G6a、M-G6b、M-G6k、M-G7、M-G8、M-T（Button 家族）、M-D1、M-D2，以及本期 S / A 条目的变异（S2-1、S2-2、S2-3、S1-1、A4-1、S4-2、S5-1、S7-1、S7-2、S8-1、A8-2，加上实际写了的其它）。逐条记「红 / 补强 / 等价」。
+- [x] **Step 1: 一次编译 + 本期 suite + 全量**。Expected：守卫与 P1 suite 全 0 / 0；全量 errors / failures 与 Task 1 后相同、总数 = 基线 + 本期新增。红了集中修：拆错的以快照与 G1–G8 为准；修复提交 `fix(controls): ...`，一个问题一个提交。编译器报出的、附录 C 没列的类型错误：按规则改并补进附录 C（签收列出）。
+- [x] **Step 2: 结构核对（不看测试）**：本期 59 个类逐个看源码：最终类只有 `property X;`（R0）；Custom 类头带着原接口列表；R3 的行在 Custom 的 published 段；`R2s` 的行在 Custom 里、可见性照 D3（每类抽 5 个跑 `split.py vis`）；`git diff <Task 1 HEAD>..HEAD -- source | grep -E "^[-+]\s+T\w+ = class\("` 里每个改了父类的都在附录 C-0；没有新增的 `RegisterClass`；`split.py check` 对本期每个改过的文件都 ok；附录 C-1 本期的每一行都落实了。
+- [x] **Step 3: 集中变异**：M-G1、M-G2、M-G3a（用 TabSheet 前先用本期的 `TTyCustomMaskEdit` 若有 R3 行，否则留到 2 期）、M-G3b、M-G4、M-G5、M-G6a、M-G6b、M-G6k、M-G7、M-G8、M-T（Button 家族）、M-D1、M-D2，以及本期 S / A 条目的变异（S2-1、S2-2、S2-3、S1-1、A4-1、S4-2、S5-1、S7-1、S7-2、S8-1、A8-2，加上实际写了的其它）。逐条记「红 / 补强 / 等价」。
 - [ ] **Step 4: 【主控执行】编包、编全部示例、冒烟**
 
 ```bash
@@ -994,7 +998,7 @@ cd /d/Projects/ty-split && lazbuild -B tycontrols.lpk > /tmp/split-pkg.txt 2>&1;
 
 Expected：两个包编过；没有 `FAIL`；两个脚本都过；`git status` 干净。另手点两处：toolbar 示例里点一个 GlyphButton、一个 ToolButton（A2-4），grid 示例打开计算列编辑器字体为红（A4-2）。编包会改机器级包注册，主控决定用不用私有 `--pcp`。
 - [ ] **Step 5: 期末审查（主控派两个审查 agent）**：规格核对（R0–R10、D3 抽查、附录 C 对本期的每一行）与代码质量（`git diff <Task 0 的 HEAD>..HEAD`）。重点：R2 / R3 / D3 分拣（N16）、C-1 每处都有测试或理由、没有动共享文件与排除单元（Task 1 的插块除外）。审出来的问题修完回到 Step 1。
-- [ ] **Step 6: 签收写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、本期 suite 条数、变异结果、R7 新增的签名（补进附录 D）、附录 C 新增行、计划外发现。【主控执行】通知「3.0 问题修复」会话：本期已拆的单元清单与移植规矩（N10）。
+- [x] **Step 6: 签收写进本计划末尾，提交**：全量条数（基线 → 签收）、提交区间、本期 suite 条数、变异结果、R7 新增的签名（补进附录 D）、附录 C 新增行、计划外发现。【主控执行】通知「3.0 问题修复」会话：本期已拆的单元清单与移植规矩（N10）。
 
 ```bash
 cd /d/Projects/ty-split && git add docs/superpowers/plans/2026-10-02-custom-classes.md && git commit -m "docs(controls): custom-class split phase 1 sign-off
@@ -1591,7 +1595,7 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 | A4-1 | `tests/test.calcedit.pas:40, 60` | `e is TTyNumericEdit` / `e is TTyCurrencyEdit` | CalcEdit / CalcCurrencyEdit | 改写成 `is TTyCustomNumericEdit` + `not ... is TTyNumericEdit`（货币同理） | T4 | 它自己：把 `TTyCustomCalcEdit` 改挂回 `TTyNumericEdit`，第二句红 |
 | A4-2 | `examples/grid/umain.pas:1332-1334` | `AEditor is TTyEdit` + `TTyEdit(AEditor)` | 网格建的 `TTyCalcEdit`、`TTyMaskEdit`（`Grid.pas:8024/8031`） | `TTyCustomEdit` | T4 | —：示例无测试；【主控】冒烟（Task 11 Step 4） |
 | A7-1 | `ComboBox.pas:565-569`（`TyComboOwnerOf`，调用处 :575/583/590/597） | `AList.Owner is TTyComboBox` + 强转 | 10 个派生组合框的弹层 | `TTyCustomComboBox`（返回类型一起） | T7 | S7-1 |
-| A8-1 | `ColorBox.pas:468-470` | `Owner is TTyColorBox` + 强转 | ColorComboBox 的弹层 | `TTyCustomColorBox` | T8 | S8-1 |
+| A8-1 | `ColorBox.pas:468-470` | `Owner is TTyColorBox` + 强转 | ~~ColorComboBox 的弹层~~ **执行中核实：不翻转**——`TTyColorComboBox` 的弹层是它自己的 `TTyColorMorePopupList`，3.0 起就不读宿主的色块几何，从不走这条判断。实际是 C-2（为第三方放宽）：第三方 `TTyCustomColorBox` 子类用的是共享的 `TTyColorPopupList` | `TTyCustomColorBox` | T8 | S8-1（改用第三方模拟类 `TThirdColorBox` 作见证） |
 | A8-2 | `tests/test.parity.combo.pas:1647-1651`（+ 参数 `C: TTyComboBox` :1638） | `C is TTyColorBox` + 强转 | 传进来的 `TTyColorComboBox` | `TTyCustomColorBox` | T8 | test.parity.combo 里对 ColorComboBox 行数的断言（必要时补强） |
 | A8-3 | `tests/test.colorbox.pas:97-99`；源码注释 `ColorBox.pas:179/503` | `TTyComboBox(c).Style` | ColorBox 不再是 TTyComboBox（硬转成了类型假话） | `TTyCustomComboBox(c).Style` | T8 | —：硬转无运行时差异，审查覆盖 |
 | A15-1 | `tests/test.scrollbar.autohide.pas:1415` | `TTyValueListEditor.InheritsFrom(TTyListBox)` | ValueListEditor | `InheritsFrom(TTyCustomListBox)` + `not InheritsFrom(TTyListBox)` | T15 | 它自己：把 `TTyCustomValueListEditor` 改挂回 `TTyListBox`，第二句红 |
@@ -1654,6 +1658,12 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 | 8 个 `IconFont: TTyIconFont` 属性及字段 / 参数（全库 44 处类型出现） | `TTyIconFont` | Lucide 字体挂不上（D11） | `TTyCustomIconFont` | T28 |
 | `TyTakeVectorBitmap` 等 `ImageDraw.pas` 内部函数的参数 | `TTyVirtualImageList` | A28-1 | `TTyCustomVirtualImageList` | T28 |
 
+| `tests/test.trailingzone.pas:42/56/124/155`（1 期编译发现） | `ctls: array of TTyEdit`、`ZoneOf(AEdit: TTyEdit)`、`TEditAccess = class(TTyEdit)` | 数组里放 ComboEdit / URLEdit / Calc / FloatSpin / TrackEdit | `TTyCustomEdit`（cracker 同理，N9） | T4（签收补） |
+| `tests/test.combohint.pas:23/29/50`（1 期编译发现） | `TComboRenderAccess = class(TTyComboBox)`、`RendersDiffer(A, B: TTyComboBox)` | 传入整族派生组合框 | `TTyCustomComboBox` | T7（签收补） |
+| `tests/test.parity.combo.pas:1625/1664/1668/1684/1723/1764`（原表 C-4 的行号多数已是精确类型，无需改） | `TComboFactoryAccess = class(TTyComboBox)`（硬转派生组合框）、`Build` / `BuildList` / 两个循环变量 | 派生组合框 | `TTyCustomComboBox`；`OnDrawItem` 在 Custom 里 protected，经 `TComboFactoryAccess` 写 | T7 |
+| `tests/test.parity.buttons.pas:500…1364`、`tests/test.parity.pas:321…1538`（原表所列） | 执行时核实：变量本来就声明成 `TTyGlyphButton` / `TTyColorButton` / `TTySpeedButton`，不是 `TTyButton`——无需改 | — | — | T2 |
+| `source/tyControls.GlyphButtons.pas`（1 期编译发现） | `FindDownButton: TTySpeedButton` 在 Custom 类里先于最终类声明 | 前向声明缺失 | 加 `TTySpeedButton = class;`（R9） | T2（修复提交 `9cbe2e6d`） |
+
 执行中编译器报出的其它处，按规则判断后补进本表（签收列出）。
 
 ---
@@ -1662,7 +1672,7 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 
 写计划时在各单元 interface 段静态扫到的；执行中改了的标「改」、保持的标「保持」，新增的追加：
 - **事件类型的 Sender**（D10，建议全改 Custom）：`TreeView.pas:127-244`（21 个 `procedure(Sender: TTyTreeView; ...)`）、`HeaderControl.pas:78/82/90`、`StatusBar.pas:60`（`TTyDrawPanelEvent`）、`ToolBar.pas`（Sender 为 `TTyToolButton` 的 1 个）、`Ribbon.pas`（Sender 为 `TTyRibbonGroup` 的 1 个）。
-- **宿主属性 / 方法里的子项类型**（R7-4，保持，LCL `TPageControl.ActivePage: TTabSheet` 先例；getter 里强转）：`PageControl.pas:17-86`（`TTyTabSheet`）、`Ribbon.pas:74-239`（`TTyRibbonPage` / `TTyRibbonBackstage` / `TTyRibbonGroup`）、`RibbonAppMenu.pas:66/107`、`RadioGroup.pas:54/144`（`TTyRadioButton`）、`CheckGroup.pas:38/77/109`（`TTyCheckBox`）、`ToolBar.pas:249/347/379/445/447`、`Form.pas:279/355/356/510/515/659`（`TTyForm.TitleBar` / `MenuBar`）、`GlyphButtons.pas:361`（`FindDownButton`）、`RibbonQuickAccess.pas:62`（`TTyGlyphButton`）。内部注册方法（`RegisterPage` 等）照 R7-3 放宽。
+- **宿主属性 / 方法里的子项类型**（R7-4，保持，LCL `TPageControl.ActivePage: TTabSheet` 先例；getter 里强转）：`PageControl.pas:17-86`（`TTyTabSheet`）、`Ribbon.pas:74-239`（`TTyRibbonPage` / `TTyRibbonBackstage` / `TTyRibbonGroup`）、`RibbonAppMenu.pas:66/107`、`RadioGroup.pas:54/144`（`TTyRadioButton`）、`CheckGroup.pas:38/77/109`（`TTyCheckBox`）、`ToolBar.pas:249/347/379/445/447`、`Form.pas:279/355/356/510/515/659`（`TTyForm.TitleBar` / `MenuBar`）、`GlyphButtons.pas:361`（`FindDownButton`；1 期执行：返回类型保持 `TTySpeedButton`，体内对 `Self` 与找到的 `TTyCustomSpeedButton` 兄弟强转，加前向声明）、`RibbonQuickAccess.pas:62`（`TTyGlyphButton`）。内部注册方法（`RegisterPage` 等）照 R7-3 放宽。
 - **互指的 shell 控件**（保持）：`ShellTreeView.pas:187/390`、`FilterComboBox.pas:37/83`（`TTyShellListView`）。
 - **内嵌控件的类型**（保持，本来就该是最终类）：`ScrollBar.pas:72`、`ScrollBox.pas:132`、`ListBox.pas:118`、`ListView.pas:509/510/569/607`、`Memo.pas:691`、`Terminal.pas:589/632`、`TreeView.pas:832/1064/1065/1097`、`Grid.pas:1505/1560/1561/2289-2308/2991/3005/3211`、`Transfer.pas:248-320`、`TreeSelect.pas:108-226`、`Dialogs*.pas` 里对话框自己的控件。
 - **被迫放宽的**（改）：附录 C-4。
@@ -1825,14 +1835,47 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 ## 签收（执行时填）
 
 ### Task 0 基线
-（全量条数、红名单、快照类头数、typekey 行数与 `x` 个数、合并 main 后的 HEAD）
+- 起点：`feat/custom-classes` @ `6fff2bd3`（已含 main `9cb48996`），`git merge main` 无新内容。`git cherry main 3.0-fixes` = 6，正是 Step 2 判据里列明的 6 个（主控核实），其余为 0。排除清单复核与 V10 一致：AdvChart 两个分支只碰 `Calendar.pas` / `DateTimePicker.pas` 与 AdvChart / 共享单元；theme-builder 不碰控件单元；AdvChart 对 `Base.pas` 的改动不含 property 行（0）。
+- 提交：`12ec0e78`（守卫单元 `tests/test.customclasses.pas`、快照夹具、`tytests.lpr` 注册）。
+- 快照：类头 **190**（注册 175 + `TTyScrollContent` + 输入 10 + LCL 根 4）、`#typekey` 行 **176**、文件 **12440** 行、`x` **0** 个。判据逐项核过：`TTyEdit` 的 chain 以 `TTyCustomControl,TCustomControl,TWinControl,TControl` 开头、第一行属性 `Name`、含 `Text`、`TabStop` default 1、typekey `TyEdit`、尺寸 `140x28`；`TTyGlyphButton` → `TyButton`，`TTySpeedButton` → `TySpeedButton`；`TTyScrollContent` 段在。
+- 基线全量：**8590** 条，0 错 0 败（18 分钟）。
+- 守卫实现上与计划文字的两处差异（判据不变）：① G6 比对时类头行只比类名与 `n=`，**不比 `chain=`**——父类链正是拆分要改的东西（G1 / G7 管它），比 chain 的话第一个拆分就红；② `CSnapshotTypeRenames` 两边都映射（不只映射夹具一侧），否则改名落地前的每一次比对都红。
+- `split.py` 的 `check` 改用 `git cat-file --filters HEAD:<file>`：仓库 `core.autocrlf=true`，索引里是 LF、工作区是 CRLF，原写法拿 LF 的 blob 比 CRLF 的工作区，永远报「换行变了」。
 
 ### Task 1 基类
-（插块的类数、合并说明符的类数、N30 补了 published 的探针数、排除单元提交号）
+- 提交：**Q3 单独提交 `e4f3c648`**（`AdvanceChart.pas` / `Calendar.pas` / `DateTimePicker.pas` 只插基类块；三个类原本在 published 段里重声明过的基类名字——`TabStop default False`、`Font`、`OnClick` 等——同一个类不能声明两次，只能挪进块里它的 3.0 位置，连同上方注释，别的一行没动；该提交单独可编译，供 AdvChart 会话 cherry-pick）；其余 `950fe415`。
+- 插块：**110** 个类（窗口化 60 = 注册 57 + `TTyCustomGrid` + `TTyCustomTabStrip` + `TTyScrollContent`；图形 28；`TTyComponent` 一系 21 = 注册 20 + `TTyCustomFileDialog`，另 `TTyToolWindowManager` 只插 `Version`）。说明符合并 **39** 个类（`TabStop default True` 36、TabSheet / ToolWindow 的 `TabOrder` / `Visible stored False`、ToolWindow / ToolWindowActions 的 `Controller stored False`）；此外 106 个类原来就在 published 段里重声明了部分基类名字（多是无说明符的 `StyleClass` / `Controller` / `Font`），一并挪进块、去重。
+- N30 探针补 published：**0** 处（`test.base` 的 `TestBaselinePropertiesPublished` 查的是最终类，照常绿）。
+- 计划外但非改不可：① **`TTyIconFont.Version: Integer` 改名 `ChangeStamp`**——它在 public 段遮住了库版本 `Version: string`；Q2 之后最终类要自己发布字符串 `Version`，同一类里不能既声明又重发布同名属性（FPC Duplicate identifier，scratchpad 探针确认）。照 `TTyImageCollection` 的先例改名；`ImageCollection.pas` 两处、`test.iconfont` 跟着改。进不兼容清单第 7 条。② **R8（test.designeditors 的新规则）从 Task 8 提前到 Task 1**：基类不再发布 `Version` / `StyleClass` / `StyleOverride` 之后，注册在基类上的 7 条属性编辑器按旧规则立即红，而 Task 1 Step 4 要求全量与基线相同。
+- 全量（Task 1 编译）：**8592** 条，0 错，1 败 = `EveryTestUnitThatRegistersTestsIsLinked`——全量跑的时候我在磁盘上新建了 `test.customclasses.p1.pas`、还没写进 `tytests.lpr`，测试按磁盘扫描所以报它；不是代码问题，1 期全量里这条绿。
 
 ### 1 期
+- 提交区间：`321deaea`（Task 2）…`8a2205a3`（Task 10）+ 收尾修复 `9cbe2e6d`、`be07479b`、`1bfa1276`、`151fba70`（另 `d5b83c89` 是 Task 6 后补强的测试）。逐任务：Task 2 `321deaea`、Task 3 `1ea68a36`、Task 4 `aab24e7f`、Task 5 `ca9d04a5`、Task 6 `69cf1006`、Task 7 `ba5b5ce6`、Task 8 `e0924b7e`、Task 9 `b6d7d7e1`、Task 10 `8a2205a3`。
+- 拆分：59 个最终类全部进 `CSplit`（`CPending` 剩 97 个，全是 2–4 期的）；`TTyGlyphButtonBase` 改挂 `TTyCustomButton` 并降级、进 `CDemoted`；`TTyToolButton` 先补了完整发布段。设计期：`TTyFilterComboBox` / `TTyShellComboBox` 的属性编辑器挪到 Custom 类（`PropEditors.pas`）。`designtime/` 用 fpc 对着测试构建产出的运行时单元单独编过（7 个单元，0 错，4 个既有警告都在 AdvChart 编辑器）；输出只写 scratchpad。
+- 本期 suite：守卫 10 条、`TTyCustomClassesP1Test` 25 条，全绿；`TVersionTest` 6、`TDesignEditorsTest` 5、`TPaletteIconTest` 3、`TTyFocusTabStopTest` 7、`TTyClickFocusTest` 4，全绿。
+- 全量：一次编译后 **8617** 条，0 错 2 败——`test.parity.buttons` 两条断言「`TTyGlyphButtonBase` 本身发布 GlyphLayout / Spacing」，钉的正是要拆掉的旧形状，改成按 4.0 说法（`151fba70`）。变异之后 `lazbuild -B` 再跑全量（终验）：**8617** 条（= 基线 8590 + Task 1 的 2 + P1 的 25），**0 错 0 败**；红名单为空。
+- 编译器在收尾时报出、补进附录 C-4 的：`test.trailingzone`（数组 / `ZoneOf` / access 类）、`test.combohint`（`RendersDiffer` / access 类）、`GlyphButtons.pas` 缺 `TTySpeedButton` 前向声明。原 C-4 表里 `test.parity.buttons` / `test.parity` 的行执行时核实无需改（变量本来就是派生类型）。
+- 结构核对（不看测试）：最终类只有 `property X;`（G3b 绿，人工抽看 Button / Edit / ColorBox / UpDown）；带接口的 Custom 类头保住接口（`TTyCustomEdit`、`TTyCustomMemo`）；本期没有 R3 行；`git diff 950fe415..HEAD -- source` 里改了父类的类都在附录 C-0；没有新增 `RegisterClass`；不许碰的共享文件与排除单元自 Q3 提交后 0 行改动，`Base.pas` / `Component.pas` 只在 Task 1 动过；每个改过的文件 `split.py check` 都 ok。D3 分拣由脚本按附录 E 的 LCL 对应类逐个查 `vis` 决定，抽查：`TTyCustomEdit.AutoSelect` protected、标签独有属性 protected、`TTyCustomUpDown` 全部 protected、`TTyCustomCheckBox.Checked` protected（`TButtonControl`）、`TTyCustomComboBox` 的 `Sorted` / `MaxLength` / `ItemHeight` / `ItemWidth` / 各条目事件 protected、`TTyCustomTrackBar` 全 public（Q6）。
+- 附录 C-1 本期逐行：A2-1、A2-2、A2-3、A2-4、A2-5、A4-1、A4-2、A7-1、A8-2、A8-3 已落实；**A8-1 执行中核实不是翻转**（`TTyColorComboBox` 的弹层是自己的 `TTyColorMorePopupList`，3.0 起就不读宿主色块几何），改归 C-2，S8-1 改用第三方模拟类作见证（附录 C 已改写那一行）。C-2 本期：C1-1、C4-1、C5-1、C6-2、C6-3、C6-4、C7-2 已放宽。C-3：C5-2（RadioGroup）、C6-5 保持。
+- 集中变异（`<scratchpad>/mut.py`：改 → 读回比对 → 编译 → 跑点名 suite → 写回原字节并核对 → 最后 `-B` 重编；28 条）：
+  - **红**（26）：M-G1（改用 `TTyCalcCurrencyEdit` 改挂 `TTyCustomCurrencyEdit`；URLEdit 那个写法编不过，测试用到它的方法）、M-G2、M-G3b、M-G4、M-G5（把已拆的 `TTyBadge` 也写进 `CPending`）、M-G6a、M-G6b、M-G6k（`TTyCustomSpeedButton` 的 typeKey 改回 `'TyButton'`，与删覆写等价）、M-G7（改用 MRUComboBox 改挂回 `TTyComboBox`）、M-G8、M-T（**改在标签家族**：`GetStyleTypeKey` 从 `TTyCustomLabel` 挪到 `TTyLabel` → `TestThirdLabel` 红）、M-D1、M-D2（Filter 编辑器注册到 `TTyCustomShellComboBox`，它的注册后代都不发布 Filter）、S2-1、S2-2、S1-1、A4-1、S4-2、S5-1、S7-1、S7-2、S8-1、A8-2、S8-2、MaskEdit 的 `Text write SetMaskedText` 挪到最终类（`TestThirdMaskEdit` + G3b）、FloatSpinEdit 的 `UseThousands default False` 挪到最终类（G3b）、TrackBar 的 `TabStop default True` 挪到最终类（`TestThirdTrackBar` T-e + G3b）。
+  - **编译期即挡住**（2，等价于红，没法跑到测试）：M-T 按计划写在按钮家族——`ToolBar.pas` 的 `TTyToolButton.GetStyleTypeKey` 调 `inherited`，覆写一离开 `TTyCustomButton` 就成了调抽象方法，编不过；Edit 的接口列表挪到 `TTyEdit`——`Edit.pas` 自己把 `Self` 当 `ITyTextEditActions` 传，编不过。
+  - 本期没做：M-G3a / M-G6c（本期没有 R3 行，留 2 期 TabSheet）；S2-3（溢出弹层要真窗口，与 S2-2 同一判断，「—」）；S4-1（计算器弹层要真窗口；C-4 是编译期的，编过即证，「—」）。
+- 判据上与计划文字的差异：
+  - T-e 实现为「新实例流出的文本里没有这个名字；序数且有 default 的再比读值」——计划写的「= Default 或 IsStoredProp = False」对没有 default 的字符串属性（Caption 等）恒不成立，而写不写进 `.lfm` 才是要守的事。几处按 3.0 实情排除并写了注释：`TTyColorBox.Selected`、`TTyComboBox.ItemIndex`、`TTyGauge.Max`（三者 3.0 就没有 default，新实例就会写）、`ItemsEx`（集合属性在没有祖先可比时 TWriter 一律写，`writer.inc`）。
+  - `TThirdMaskEdit` 发布 `Mask` 而不是 `EditMask`：`EditMask` 是 `stored False` 的别名，流不出来。
+  - `TThirdGauge` 先发布 `Max` 再 `Value`：反过来读回时 Value 被默认 Max=100 钳住——这正是 N1 / V5-7 说的顺序问题，在第三方身上照样成立（文档要写）。
+  - `TThirdUpDown` 的 `Associate` 是组件引用，单独流一个 up-down 没有 owner 可解析，不进 T-c；由 S4-2 驱动。
+  - `TTyToolButton` 补发布段：计划写「只取 block 输出的 `property X;` 行替换整个发布段」会把它自己带类型的声明（Style、Grouped、Wrap…）全删掉；实际做法是按快照顺序写全部名字，它自己声明过的名字在原位置用它自己的声明（同 Task 1 的合并）。
+  - 纯重发布行（`property AutoSize;` 等）上方的说明注释挪到了最终类发布段里对应行的上方（G3b 去掉注释再查，不受影响）；降级的 `TTyGlyphButtonBase` 没有最终类，那段 AutoSize 注释留在它的 public 段、措辞改成「由各最终类发布」。
+- R7 新增签名（已补附录 D / C-4）：`TTyCalcDropdown.Create(AEdit: TTyCustomNumericEdit)`、`TyComboOwnerOf` 返回 `TTyCustomComboBox`、`TTyToolBar.ApplyToButton(B: TTyCustomButton)`；`FindDownButton` 返回类型保持 `TTySpeedButton`（R7-4），体内强转。
+- 注释（N27）：写着层级事实的改成真话（`GlyphButtons` / `DropButtons` / `ColorButton` / 编辑框一族 / `ColorBox` / `FontComboBox` / `ComboBoxEx` / `FloatSpinEdit` 的单元头与几处行内注释，`ToolBar` 的 `Default` 遮蔽说明）；`{ TTyXxx }` 与 `{ --- TTyXxx --- }` 分隔注释都改成 Custom 名。
+- 【主控执行】待办：编 `tycontrols.lpk` / `tycontrols_dt.lpk`、编全部 examples（本期改了 `examples/toolbar/umain.pas`、`examples/grid/umain.pas` 与 `tools/gallery/tyGalleryCapture.pas`，未编）、`check-lfm-props.py`、冒烟手点两处（toolbar 示例点一个 GlyphButton 与一个 ToolButton，状态栏显示标题不弹异常；grid 示例打开计算列，编辑器字体为红）、期末审查。
 ### 2 期
 ### 3 期
 ### 4 期
 ### 计划外发现
+- `TTyColorComboBox` 的下拉列表（`TTyColorMorePopupList`）不读宿主的 `ColorRectWidth` / `ColorRectOffset` 与伪行颜色，只有字段区用得上——3.0 起如此，与本计划无关；`TTyColorBox` 的下拉（`TTyColorPopupList`）是读的。是否算 bug 交主控定。
+- `TTyIconFont.Version: Integer` 遮住库版本 `Version: string` 的写法（见 Task 1 签收），已按 `ChangeStamp` 先例改名。
+- 计划 C-4 列的 `test.parity.buttons` / `test.parity` 行号是声明成派生类型的变量，原本就编得过；真正要改的在 `test.trailingzone`、`test.combohint`、`test.parity.combo` 的 access 类，编译器报出来才补上。
 ### 遗留
