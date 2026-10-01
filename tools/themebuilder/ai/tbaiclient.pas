@@ -92,6 +92,8 @@ type
     function HttpData(const AData: RawByteString): Boolean;
     procedure SseEvent(const AEvent: TTbSseEvent);
     procedure Delta(APiece: TTbStreamPiece; const AText: string);
+    function DoRun(const ASystem: string; const AMessages: TTbChatMessages;
+      AOnDelta: TTbAiDeltaEvent): TTbAiResult;
   public
     constructor Create(const AProfile: TTbAiProfile; const AKey: string);
     destructor Destroy; override;
@@ -147,42 +149,107 @@ begin
   Result := '?';
 end;
 
+{ a key shown with its middle hidden: up to six of its first characters, a mask (an
+  ellipsis, three dots or stars), up to four of its last -- "sk-te…9zz", "sk-...wxyz";
+  ALowWord and ALowKey in lower case }
+function MaskedForm(const ALowWord, ALowKey: string): Boolean;
+const
+  cEllipsis = #$E2#$80#$A6;
+var
+  p, len, k: Integer;
+  before, after: string;
+begin
+  Result := False;
+  p := Pos(cEllipsis, ALowWord);
+  len := 3;
+  if p = 0 then
+    p := Pos('...', ALowWord);
+  if p = 0 then
+  begin
+    p := Pos('*', ALowWord);
+    len := 1;
+    if p > 0 then
+      while (p + len <= Length(ALowWord)) and (ALowWord[p + len] = '*') do
+        Inc(len);
+  end;
+  if p = 0 then Exit;
+  before := Copy(ALowWord, 1, p - 1);
+  after := Copy(ALowWord, p + len, MaxInt);
+  while (after <> '') and (after[1] in ['.', '*']) do
+    Delete(after, 1, 1);
+  { the key's start right before the mask, or its end right after it }
+  for k := 6 downto 3 do
+    if (Length(before) >= k) and
+       (Copy(before, Length(before) - k + 1, k) = Copy(ALowKey, 1, k)) then
+      Exit(True);
+  for k := 4 downto 3 do
+    if (Length(after) >= k) and (Copy(after, 1, k) = Copy(ALowKey, Length(ALowKey) - k + 1, k)) then
+      Exit(True);
+end;
+
+{ any eight characters in a row of the key }
+function HasKeyPiece(const ALowWord, ALowKey: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(ALowKey) - 7 do
+    if Pos(Copy(ALowKey, i, 8), ALowWord) > 0 then
+      Exit(True);
+  Result := False;
+end;
+
 function TbScrubSecret(const AText, AKey: string): string;
 const
-  cBreaks = [' ', #9, #10, #13, '"', '''', ','];
+  cBreaks = [' ', #9, #10, #13, '"', '''', ',', '(', ')', '[', ']', '{', '}', '<', '>', '=',
+    '&', '`'];
 var
-  i, start, coreEnd: Integer;
-  word, core, rest, head, tail: string;
+  i, start, coreEnd, p: Integer;
+  word, core, lowCore, rest, lowKey, head, tail, text: string;
   keyed: Boolean;
 begin
+  lowKey := LowerCase(AKey);
+  text := AText;
+  { a short key: no part of it can be told from ordinary words, so the whole of it goes,
+    wherever it stands (any case) }
+  if (AKey <> '') and (Length(AKey) < 8) then
+  begin
+    p := Pos(lowKey, LowerCase(text));
+    while p > 0 do
+    begin
+      text := Copy(text, 1, p - 1) + '***' + Copy(text, p + Length(AKey), MaxInt);
+      p := Pos(lowKey, LowerCase(text));
+    end;
+  end;
   keyed := Length(AKey) >= 8;
   if keyed then
   begin
-    head := Copy(AKey, 1, 6);
-    tail := Copy(AKey, Length(AKey) - 3, 4);
+    head := Copy(lowKey, 1, 6);
+    tail := Copy(lowKey, Length(lowKey) - 3, 4);
   end;
   Result := '';
   i := 1;
-  while i <= Length(AText) do
+  while i <= Length(text) do
   begin
-    if AText[i] in cBreaks then
+    if text[i] in cBreaks then
     begin
-      Result := Result + AText[i];
+      Result := Result + text[i];
       Inc(i);
       Continue;
     end;
     start := i;
-    while (i <= Length(AText)) and not (AText[i] in cBreaks) do
+    while (i <= Length(text)) and not (text[i] in cBreaks) do
       Inc(i);
-    word := Copy(AText, start, i - start);
+    word := Copy(text, start, i - start);
     { a word that ends a sentence: look at it without its full stops }
     coreEnd := Length(word);
     while (coreEnd > 0) and (word[coreEnd] in ['.', ';', ')', ':']) do
       Dec(coreEnd);
     core := Copy(word, 1, coreEnd);
     rest := Copy(word, coreEnd + 1, MaxInt);
+    lowCore := LowerCase(core);
     if (Pos('***', core) > 0)
-       or (keyed and ((Pos(AKey, core) > 0) or (Pos(head, core) > 0) or (Pos(tail, core) > 0))) then
+       or (keyed and ((Pos(lowKey, lowCore) > 0) or (Pos(head, lowCore) > 0) or
+         (Pos(tail, lowCore) > 0) or MaskedForm(lowCore, lowKey) or HasKeyPiece(lowCore, lowKey))) then
       Result := Result + '***' + rest
     else
       Result := Result + word;
@@ -355,7 +422,25 @@ begin
   end;
 end;
 
+{ whatever is raised on the way (a transport, a parser, out of memory) ends as one outcome
+  -- its words scrubbed like every other string that leaves this unit }
 function TTbAiClient.Run(const ASystem: string; const AMessages: TTbChatMessages;
+  AOnDelta: TTbAiDeltaEvent): TTbAiResult;
+begin
+  try
+    Result := DoRun(ASystem, AMessages, AOnDelta);
+  except
+    on E: Exception do
+    begin
+      Result := Default(TTbAiResult);
+      Result.Kind := aekOther;
+      Result.Text := FText;
+      Result.Detail := TbScrubSecret(Trim(StripControls(E.Message)), FKey);
+    end;
+  end;
+end;
+
+function TTbAiClient.DoRun(const ASystem: string; const AMessages: TTbChatMessages;
   AOnDelta: TTbAiDeltaEvent): TTbAiResult;
 var
   reason, detail, whole: string;

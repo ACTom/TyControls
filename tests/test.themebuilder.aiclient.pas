@@ -6,10 +6,14 @@ unit test.themebuilder.aiclient;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry;
+  Classes, SysUtils, fpcunit, testregistry, tbaiclient;
 
 type
   TTbAiClientTests = class(TTestCase)
+  private
+    FBackendResult: TTbAiResult;
+    FBackendDone: Boolean;
+    procedure BackendDone(Sender: TObject; const AResult: TTbAiResult);
   protected
     procedure SetUp; override;
   published
@@ -33,6 +37,7 @@ type
     { after the phase 3 reviews }
     procedure TestARedirectIsNotFollowed;    { C18 }
     procedure TestAKeyIsNotSentOverHttp;     { C19 }
+    procedure TestARaiseIsScrubbed;          { C20 }
   end;
 
   TTbAiSettingsTests = class(TTestCase)
@@ -55,7 +60,7 @@ type
 implementation
 
 uses
-  base64, tbaiformat, tbaiclient, tbaisettings, tbaichecks, test.themebuilder.sse;
+  base64, tbaiformat, tbaisettings, tbaisession, tbaichecks, test.themebuilder.sse;
 
 const
   cTestKey = 'sk-test-ABCDEFGH12345678';
@@ -228,6 +233,90 @@ begin
   AssertTrue('C17: the last four alone: ' + s, Pos('ab12', s) = 0);
   s := TbScrubSecret('key sk-pro... was refused', 'sk-proj-xyzxyzxyzab12');
   AssertTrue('C17: the first six alone: ' + s, Pos('sk-pro', s) = 0);
+  { after the phase 3 reviews: a short key goes whole, wherever it stands, any case }
+  AssertEquals('C17: a short key', 'Invalid key: ***.', TbScrubSecret('Invalid key: sk-1234.', 'sk-1234'));
+  AssertEquals('C17: a short key inside a word', 'key=***&x', TbScrubSecret('key=sk-1234&x', 'sk-1234'));
+  AssertEquals('C17: a short key in capitals', 'Invalid key ***', TbScrubSecret('Invalid key SK-1234', 'sk-1234'));
+  { the middle hidden: a few first and last characters around an ellipsis, dots or stars }
+  s := TbScrubSecret('Invalid key sk-te'#$E2#$80#$A6'9zz given', 'sk-test-FAKEKEY0123456789zz');
+  AssertEquals('C17: start, ellipsis, end', 'Invalid key *** given', s);
+  s := TbScrubSecret('API key sk-...wxyz is wrong', 'sk-test-FAKEKEY01234wxyz');
+  AssertEquals('C17: start, dots, end', 'API key *** is wrong', s);
+  s := TbScrubSecret('API key sk-t*9zz is wrong', 'sk-test-FAKEKEY0123456789zz');
+  AssertEquals('C17: one star', 'API key *** is wrong', s);
+  { case: a service that writes the key in lower case }
+  s := TbScrubSecret('Invalid x-api-key sk-live-abcdefghijklwxyz', 'SK-LIVE-ABCDEFGHIJKLWXYZ');
+  AssertEquals('C17: another case', 'Invalid x-api-key ***', s);
+  s := TbScrubSecret('ends with ...789ZZ', 'sk-test-FAKEKEY0123456789zz');
+  AssertTrue('C17: the end in capitals: ' + s, Pos('789', s) = 0);
+  { the middle of the key with neither end }
+  s := TbScrubSecret('API key <code>-test-FAKEKEY0123456</code>', 'sk-test-FAKEKEY0123456789zz');
+  AssertTrue('C17: the middle alone: ' + s, Pos('FAKEKEY', s) = 0);
+  AssertTrue('C17: the markup stays: ' + s, Pos('<code>', s) > 0);
+  { what is not a key stays }
+  AssertEquals('C17: ordinary dots', 'Wait... and see.',
+    TbScrubSecret('Wait... and see.', 'sk-test-FAKEKEY0123456789zz'));
+end;
+
+{ C20: what is raised inside the client (or past it, on the worker) ends as one outcome,
+  its words scrubbed }
+procedure TTbAiClientTests.TestARaiseIsScrubbed;
+const
+  cKey = 'sk-test-RAISEKEY0123456789';
+var
+  c: TTbAiClient;
+  b: TTbClientBackend;
+  r: TTbAiResult;
+  prof: TTbAiProfile;
+  msgs: TTbChatMessages;
+  t0: QWord;
+begin
+  prof := Default(TTbAiProfile);
+  prof.BaseUrl := 'http://127.0.0.1:9/v1';
+  prof.Model := 'm';
+  SetLength(msgs, 1);
+  msgs[0] := TbChatMessage(tcrUser, 'x');
+  TbRaiseInTransports('the request with ' + cKey + ' failed');
+  try
+    c := TTbAiClient.Create(prof, cKey);
+    try
+      try
+        r := c.Run('sys', msgs, nil);
+      except
+        Fail('C20: Run raised (its message is not shown: it holds the key)');
+      end;
+    finally
+      c.Free;
+    end;
+    AssertEquals('C20: the transport was asked', 1, TbRecordedRequests);
+    AssertTrue('C20: another failure', r.Kind = aekOther);
+    AssertTrue('C20: the words are kept', Pos('the request with', r.Detail) = 1);
+    AssertTrue('C20: the key is not', Pos('RAISEKEY', r.Detail) = 0);
+    { the same through the worker thread }
+    FBackendResult := Default(TTbAiResult);
+    FBackendDone := False;
+    b := TTbClientBackend.Create(prof, cKey);
+    try
+      b.OnDone := @BackendDone;
+      b.Start('sys', msgs);
+      t0 := GetTickCount64;
+      while (not FBackendDone) and (GetTickCount64 - t0 < 5000) do
+        CheckSynchronize(10);
+      AssertTrue('C20: the worker finished', FBackendDone);
+      AssertTrue('C20: worker, another failure', FBackendResult.Kind = aekOther);
+      AssertTrue('C20: worker, the key is not there', Pos('RAISEKEY', FBackendResult.Detail) = 0);
+    finally
+      b.Free;
+    end;
+  finally
+    TbRecordTransports(False);
+  end;
+end;
+
+procedure TTbAiClientTests.BackendDone(Sender: TObject; const AResult: TTbAiResult);
+begin
+  FBackendResult := AResult;
+  FBackendDone := True;
 end;
 
 procedure TTbAiClientTests.TestARedirectIsNotFollowed;

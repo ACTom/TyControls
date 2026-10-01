@@ -465,9 +465,10 @@ begin
   except
     on E: Exception do
     begin
+      { Run catches what it can; this is the last line, scrubbed the same way }
       r := Default(TTbAiResult);
       r.Kind := aekOther;
-      r.Detail := E.Message;
+      r.Detail := TbScrubSecret(E.Message, FOwner.FKey);
     end;
   end;
   FOwner.WorkerDone(r);

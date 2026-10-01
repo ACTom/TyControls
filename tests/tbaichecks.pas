@@ -118,6 +118,9 @@ var
 
 { AOn: TbCreateTransport hands out recording transports (and the count starts at 0) }
 procedure TbRecordTransports(AOn: Boolean);
+{ TbCreateTransport hands out transports whose Execute raises AMessage (undone by
+  TbRecordTransports(False)) }
+procedure TbRaiseInTransports(const AMessage: string);
 
 { the AI settings: the plan's K numbers (the Windows-only ones are in the test unit) }
 function TbAiTempDir: string;                                 { a fresh folder }
@@ -1356,6 +1359,41 @@ begin
     TbTransportFactoryForTest := @MakeRecording
   else
     TbTransportFactoryForTest := nil;
+end;
+
+type
+  TTbRaisingTransport = class(TTbHttpTransport)
+  public
+    function Execute(const ARequest: TTbHttpRequest; AOnStatus: TTbHttpStatusEvent;
+      AOnData: TTbHttpDataEvent): TTbHttpResult; override;
+    procedure Cancel; override;
+  end;
+
+var
+  GRaiseMessage: string = '';
+
+function TTbRaisingTransport.Execute(const ARequest: TTbHttpRequest;
+  AOnStatus: TTbHttpStatusEvent; AOnData: TTbHttpDataEvent): TTbHttpResult;
+begin
+  InterLockedIncrement(TbRecordedRequests);
+  raise Exception.Create(GRaiseMessage);
+end;
+
+procedure TTbRaisingTransport.Cancel;
+begin
+end;
+
+function MakeRaising(out AReason: string): TTbHttpTransport;
+begin
+  AReason := '';
+  Result := TTbRaisingTransport.Create;
+end;
+
+procedure TbRaiseInTransports(const AMessage: string);
+begin
+  TbRecordedRequests := 0;
+  GRaiseMessage := AMessage;
+  TbTransportFactoryForTest := @MakeRaising;
 end;
 
 { C19: a key is never sent over http:// to another computer -- the client refuses before a
