@@ -51,8 +51,9 @@ resourcestring
 
 type
   TTbAskEvent = function(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult of object;
-  TTbEditsEvent = procedure(Sender: TObject; const AText: string;
-    const AEdits: TTbTextEdits) of object;
+  { False: not taken (the editor no longer has AText) -- the page shows the text's values again }
+  TTbEditsEvent = function(Sender: TObject; const AText: string;
+    const AEdits: TTbTextEdits): Boolean of object;
 
   TTbSeedsFrame = class(TFrame)
     ModeNote: TTyLabel;
@@ -366,8 +367,7 @@ function TTbSeedsFrame.Hand(const AEdits: TTbTextEdits): Boolean;
 begin
   Result := False;
   if (Length(AEdits) = 0) or not Assigned(FOnEdits) then Exit;
-  FOnEdits(Self, FText, AEdits);
-  Result := True;
+  Result := FOnEdits(Self, FText, AEdits);
 end;
 
 function TTbSeedsFrame.ApplyValue(ASeed, AColumnIndex: Integer; const AValue: string): Boolean;

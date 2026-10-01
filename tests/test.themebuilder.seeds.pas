@@ -43,8 +43,9 @@ type
     FLastEdits: TTbTextEdits;
     FSyncText: string;
     FSynced: Integer;
+    FRefuse: Boolean;                 { OnEdits answers False: the window refused }
     function AskStub(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
-    procedure EditsStub(Sender: TObject; const AText: string; const AEdits: TTbTextEdits);
+    function EditsStub(Sender: TObject; const AText: string; const AEdits: TTbTextEdits): Boolean;
     procedure SyncStub(Sender: TObject);
     function Applied: string;
   protected
@@ -64,6 +65,7 @@ type
     procedure TestTheWindowCatchesUpFirst;
     procedure TestModesFromAnImport;
     procedure TestTheRadiusIsAskedWhereItGoes;
+    procedure TestARefusedChangeLeavesTheSwatch;
   end;
 
 const
@@ -415,6 +417,7 @@ begin
   FLastEdits := nil;
   FSyncText := '';
   FSynced := 0;
+  FRefuse := False;
 end;
 
 procedure TTbSeedsFrameTests.TearDown;
@@ -428,12 +431,13 @@ begin
   Result := FAnswer;
 end;
 
-procedure TTbSeedsFrameTests.EditsStub(Sender: TObject; const AText: string;
-  const AEdits: TTbTextEdits);
+function TTbSeedsFrameTests.EditsStub(Sender: TObject; const AText: string;
+  const AEdits: TTbTextEdits): Boolean;
 begin
   Inc(FEdits);
   FLastText := AText;
   FLastEdits := Copy(AEdits);
+  Result := not FRefuse;
 end;
 
 { the window catching up: a newer text than the panel last scanned, once }
@@ -683,6 +687,19 @@ begin
   FAsked := 0;
   AssertTrue('SF13: its own', FFrame.ApplyValue(TbRadiusSeed, 1, '9px'));
   AssertEquals('SF13: is not asked about', 0, FAsked);
+end;
+
+{ The window refuses edits worked out on a text it no longer has (ApplyEdits): the swatch
+  goes back to what the text says, as for a No -- it used to keep the colour picked. }
+procedure TTbSeedsFrameTests.TestARefusedChangeLeavesTheSwatch;
+begin
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  FRefuse := True;
+  FFrame.Swatch(0, 0).SelectedColor := TyRGBA($12, $34, $56, $FF);
+  AssertEquals('handed over', 1, FEdits);
+  AssertEquals('SF14: refused: the swatch shows the text''s value again', '#3B82F6',
+    TyColorHex(FFrame.Swatch(0, 0).SelectedColor));
+  AssertFalse('SF14: ApplyValue says so', FFrame.ApplyValue(0, 0, '#123456'));
 end;
 
 procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;

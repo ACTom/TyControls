@@ -137,7 +137,7 @@ type
     FJumpKey: string;                  { the rule Ctrl+click went to last (lower case) }
     FJumpIndex: Integer;               { which of its selectors }
     procedure OpenPending(Data: PtrInt);
-    procedure SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits);
+    function SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits): Boolean;
     procedure SeedsSync(Sender: TObject);
     procedure PreviewPick(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure ShowSidePage(AWin: TTyToolWindow);
@@ -799,9 +799,9 @@ begin
   Result := True;
 end;
 
-procedure TTbMainForm.SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits);
+function TTbMainForm.SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits): Boolean;
 begin
-  ApplyEdits(AText, AEdits);
+  Result := ApplyEdits(AText, AEdits);
 end;
 
 { the seeds page is about to work out an edit: what it scanned must be what the editor has
