@@ -5,7 +5,7 @@ unit test.themebuilder.compare;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, tbcompareform;
+  Classes, SysUtils, fpcunit, testregistry, tbcompareform, tbaisettings, tbaisettingsform;
 
 type
   TTbCompareTests = class(TTestCase)
@@ -29,6 +29,26 @@ type
     procedure TestABadTrialEndsAtOnce;       { V9 }
   end;
 
+  TTbAiSettingsFormTests = class(TTestCase)
+  private
+    FDir, FIni, FKeys: string;
+    FSettings: TTbAiSettings;
+    FForm: TTbAiSettingsForm;
+    function WaitTest(AMs: Integer): Boolean;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAPreset;                   { G1 }
+    procedure TestOkKeepsCancelDoesNot;      { G2 }
+    procedure TestTheLocalHint;              { G3 }
+    procedure TestAnthropicNeedsAMaximum;    { G4 }
+    procedure TestTheConnectionTest;         { G5 }
+    procedure TestAFailedConnectionTest;     { G6 }
+    procedure TestThePrivacyNote;            { G7 }
+    procedure TestClosingDuringATest;        { G8 }
+  end;
+
 { the widgetset, once (the SynEdit completion window needs it) }
 procedure TbNeedWidgetSet;
 
@@ -36,7 +56,7 @@ implementation
 
 uses
   Forms, Graphics, SynEditTypes, SynEditMiscClasses, tyControls.Controller, tyControls.Types,
-  tbdiff, tbeditorlook, tbaisession, tbpreview;
+  tbdiff, tbeditorlook, tbaisession, tbpreview, tbaiformat, tbaiclient, tbaichecks, tbfakehttp;
 
 var
   GReady: Boolean = False;
@@ -244,6 +264,201 @@ begin
   end;
 end;
 
+{ ---- TTbAiSettingsFormTests ---- }
+
+const
+  cFormKey = 'sk-test-0000-settings';
+
+procedure TTbAiSettingsFormTests.SetUp;
+begin
+  TbNeedWidgetSet;
+  FDir := TbAiTempDir;
+  TbAiFilesFor(FDir + 'themebuilder.ini', FIni, FKeys);
+  FSettings := TTbAiSettings.Create(FIni, FKeys);
+  FSettings.Load;
+  FForm := TTbAiSettingsForm.Create(nil);
+  FForm.Prepare(FSettings);
+end;
+
+procedure TTbAiSettingsFormTests.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FSettings);
+  CheckSynchronize(20);
+  TbAiRemoveDir(FDir);
+end;
+
+function TTbAiSettingsFormTests.WaitTest(AMs: Integer): Boolean;
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  while FForm.Testing and (GetTickCount64 - t0 < QWord(AMs)) do
+    CheckSynchronize(10);
+  Result := not FForm.Testing;
+end;
+
+procedure TTbAiSettingsFormTests.TestAPreset;
+begin
+  AssertEquals('nothing yet', 0, FForm.ProfileList.Items.Count);
+  FForm.AddPreset(tapAnthropic);
+  AssertEquals('G1: one more', 1, FForm.ProfileList.Items.Count);
+  AssertEquals('G1: selected', 0, FForm.ProfileList.ItemIndex);
+  AssertEquals('G1: the format', 1, FForm.CmbFormat.ItemIndex);
+  AssertEquals('G1: the address', 'https://api.anthropic.com/v1', FForm.EdtUrl.Text);
+  AssertEquals('G1: the maximum', 32000, FForm.SpnMaxOutput.Value);
+end;
+
+procedure TTbAiSettingsFormTests.TestOkKeepsCancelDoesNot;
+var
+  other: TTbAiSettings;
+  f2: TTbAiSettingsForm;
+  p: TTbAiProfile;
+begin
+  FForm.AddPreset(tapDeepSeek);
+  FForm.EdtName.Text := 'Mine';
+  FForm.EdtModel.Text := 'deepseek-reasoner';
+  FForm.EdtKey.Text := cFormKey;
+  FForm.SpnTimeout.Value := 90;
+  AssertTrue('G2: committed', FForm.Commit);
+  other := TTbAiSettings.Create(FIni, FKeys);
+  try
+    other.Load;
+    AssertEquals('G2: one profile', 1, other.Count);
+    p := other.Profile(0);
+    AssertEquals('G2: the name', 'Mine', p.Name);
+    AssertEquals('G2: the model', 'deepseek-reasoner', p.Model);
+    AssertEquals('G2: the timeout', 90, p.TimeoutSec);
+    AssertTrue('G2: the key', other.GetKey(p.Id) = cFormKey);
+  finally
+    other.Free;
+  end;
+  { a second dialog: changed, then closed without OK }
+  f2 := TTbAiSettingsForm.Create(nil);
+  try
+    f2.Prepare(FSettings);
+    f2.EdtName.Text := 'Changed';
+    AssertEquals('the copy changed', 'Changed', f2.ProfileList.Items[0]);
+  finally
+    f2.Free;
+  end;
+  other := TTbAiSettings.Create(FIni, FKeys);
+  try
+    other.Load;
+    AssertEquals('G2: Cancel keeps the file', 'Mine', other.Profile(0).Name);
+    AssertEquals('G2: and the settings', 'Mine', FSettings.Profile(0).Name);
+  finally
+    other.Free;
+  end;
+end;
+
+procedure TTbAiSettingsFormTests.TestTheLocalHint;
+begin
+  FForm.AddPreset(tapCustom);
+  FForm.EdtUrl.Text := 'http://localhost:11434/v1';
+  AssertTrue('G3: the Ollama hint', FForm.LblHint.Visible);
+  FForm.EdtUrl.Text := 'https://api.openai.com/v1';
+  AssertFalse('G3: not for a remote service', FForm.LblHint.Visible);
+end;
+
+procedure TTbAiSettingsFormTests.TestAnthropicNeedsAMaximum;
+begin
+  FForm.AddPreset(tapCustom);
+  AssertEquals('starts at 0', 0, FForm.SpnMaxOutput.Value);
+  FForm.CmbFormat.ItemIndex := 1;
+  AssertEquals('G4: filled in', 32000, FForm.SpnMaxOutput.Value);
+  FForm.SpnMaxOutput.Value := 0;
+  AssertFalse('G4: refused', FForm.Commit);
+  AssertEquals('G4: the settings did not change', 0, FSettings.Count);
+  AssertEquals('G4: says why', rsTbAiNeedMaxOutput, FForm.TestText);
+end;
+
+function TestServerStream: RawByteString;
+begin
+  Result := 'data: {"id":"x","object":"chat.completion.chunk","choices":[{"index":0,' +
+    '"delta":{"content":"OK"},"finish_reason":null}]}'#10#10;
+end;
+
+procedure TTbAiSettingsFormTests.TestTheConnectionTest;
+var
+  srv: TTbFakeHttpServer;
+  t0: QWord;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Script([FakeSend(FakeHead(200, 'text/event-stream', True)),
+      FakeSend(FakeChunk(TestServerStream)), FakeHold]);
+    FForm.AddPreset(tapCustom);
+    FForm.EdtUrl.Text := srv.Url('/v1');
+    FForm.EdtModel.Text := 'tiny';
+    AssertTrue('G5: started', FForm.StartTest);
+    AssertTrue('G5: answered within 5 s', WaitTest(5000));
+    AssertTrue('G5: connected: ' + FForm.TestText, Pos('Connected', FForm.TestText) = 1);
+    AssertTrue('G5: the ping went out', Pos('"ping"', srv.LastRequest.Body) > 0);
+    { the test stopped the request once it knew: the server's held line goes }
+    t0 := GetTickCount64;
+    while (srv.ClosedByPeer = 0) and (GetTickCount64 - t0 < 5000) do
+      CheckSynchronize(10);
+    AssertTrue('G5: the request was stopped', srv.ClosedByPeer > 0);
+  finally
+    FreeAndNil(FForm);
+    srv.Free;
+  end;
+end;
+
+procedure TTbAiSettingsFormTests.TestAFailedConnectionTest;
+var
+  srv: TTbFakeHttpServer;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Script([FakeSend(FakeHead(401, 'application/json', False,
+      '{"error":{"message":"bad key ' + cFormKey + '"}}'))]);
+    FForm.AddPreset(tapCustom);
+    FForm.EdtUrl.Text := srv.Url('/v1');
+    FForm.EdtKey.Text := cFormKey;
+    AssertTrue('G6: started', FForm.StartTest);
+    AssertTrue('G6: answered within 5 s', WaitTest(5000));
+    AssertTrue('G6: the key was refused: ' + FForm.TestText,
+      Pos(Format(rsTbAiAuth, [401]), FForm.TestText) = 1);
+    AssertTrue('G6: the key is not in the sentence', Pos(cFormKey, FForm.TestText) = 0);
+  finally
+    FreeAndNil(FForm);
+    srv.Free;
+  end;
+end;
+
+procedure TTbAiSettingsFormTests.TestThePrivacyNote;
+begin
+  AssertTrue('G7: what is sent where', Pos(rsTbAiPrivacy, FForm.LblPrivacy.Caption) > 0);
+  {$IFDEF MSWINDOWS}
+  AssertTrue('G7: how keys are kept', Pos(rsTbAiKeyStoreWin, FForm.LblPrivacy.Caption) > 0);
+  {$ELSE}
+  AssertTrue('G7: how keys are kept', Pos(rsTbAiKeyStoreUnix, FForm.LblPrivacy.Caption) > 0);
+  {$ENDIF}
+end;
+
+procedure TTbAiSettingsFormTests.TestClosingDuringATest;
+var
+  srv: TTbFakeHttpServer;
+  t0: QWord;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Script([FakeHold]);
+    FForm.AddPreset(tapCustom);
+    FForm.EdtUrl.Text := srv.Url('/v1');
+    AssertTrue('G8: started', FForm.StartTest);
+    t0 := GetTickCount64;
+    FreeAndNil(FForm);
+    AssertTrue('G8: closing did not hang', GetTickCount64 - t0 < 5000);
+    CheckSynchronize(50);
+  finally
+    srv.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTbCompareTests);
+  RegisterTest(TTbAiSettingsFormTests);
 end.
