@@ -416,9 +416,11 @@ var
   e: TTbTextEdits;
 begin
   SetLength(e, 2);
-  e[0] := TbEdit(2, 4, 'XY');
+  { the first edit changes the length: applied front to back, the second would land two
+    bytes early }
+  e[0] := TbEdit(2, 4, 'WXYZ');
   e[1] := TbEdit(6, 6, '!');
-  AssertEquals('C14: back to front', 'aXYde!f', TbApplyEdits('abcdef', e));
+  AssertEquals('C14: back to front', 'aWXYZde!f', TbApplyEdits('abcdef', e));
   e[1] := TbEdit(3, 3, '!');
   AssertEquals('C14: overlapping edits leave the text', 'abcdef', TbApplyEdits('abcdef', e));
   AssertEquals('C14: CRLF end', 2, TbEndInsertPos('a'#13#10));

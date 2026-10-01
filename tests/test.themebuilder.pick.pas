@@ -16,10 +16,12 @@ type
     FPicks: Integer;
     FKey, FCls: string;
     FClicks: Integer;
+    FUps: Integer;
     FHost: TForm;
     procedure HostFrame;
     procedure PickStub(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure ClickStub(Sender: TObject);
+    procedure UpStub(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure CtrlDown(AControl: TControl; AX: Integer = 0; AY: Integer = 0);
     procedure PlainDown(AControl: TControl);
     procedure Up(AControl: TControl);
@@ -109,6 +111,11 @@ begin
   Inc(FClicks);
 end;
 
+procedure TTbPickTests.UpStub(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FUps);
+end;
+
 procedure TTbPickTests.CtrlDown(AControl: TControl; AX: Integer; AY: Integer);
 begin
   AControl.Perform(LM_LBUTTONDOWN, MK_LBUTTON or MK_CONTROL, LPARAM((AY shl 16) or (AX and $FFFF)));
@@ -150,13 +157,17 @@ procedure TTbPickTests.TestTheReleaseAfterAPickIsSwallowed;
 begin
   HostFrame;
   FFrame.BtnPrimary.OnClick := @ClickStub;
+  FFrame.BtnPrimary.OnMouseUp := @UpStub;
+  FUps := 0;
   CtrlDown(FFrame.BtnPrimary);
   Up(FFrame.BtnPrimary);      { Ctrl let go before the button: still the pick's release }
+  AssertEquals('P3: the release never reached the button', 0, FUps);
   AssertEquals('P3: not clicked', 0, FClicks);
   AssertFalse('P3: not pressed', TTyCustomControlAccess(FFrame.BtnPrimary).FPressed);
   PlainDown(FFrame.BtnPrimary);
   AssertTrue('P3: the next plain press goes through', TTyCustomControlAccess(FFrame.BtnPrimary).FPressed);
   Up(FFrame.BtnPrimary);
+  AssertEquals('P3: and its release too', 1, FUps);
 end;
 
 procedure TTbPickTests.TestADisabledLabel;
