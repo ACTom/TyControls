@@ -803,14 +803,17 @@ begin
   Result := True;
 end;
 
+{ G3. The plan's part (a) -- "whatever the custom class publishes has the same RTTI attributes
+  on the final class" -- is gone: a final class that holds only `property X;` lines (part (b)
+  below) inherits every attribute unchanged, so (a) could only fail where (b) already had, and
+  no mutation could turn it red on its own. Where a specifier lives -- custom class or final
+  class -- is checked from the third party's side by G9 (TestGeneratedMimicsMatchTheirFinalClass),
+  and against 3.0 by G6. }
 procedure TTyCustomClassesGuardTest.TestCustomAndFinalAgree;
 var
   l: TList;
   i, k, f, ln: Integer;
   bad, src, code, cname, header, line: string;
-  cust: TClass;
-  cn: TStringList;
-  pc, pf: PPropInfo;
   files, lines: TStringList;
   found: Boolean;
 begin
@@ -819,27 +822,6 @@ begin
   files := FindAllFiles(RepoRoot + 'source', '*.pas', False);
   lines := TStringList.Create;
   try
-    { (a) RTTI: whatever the custom class publishes (only the LCL root's names) has the same
-      attributes on the final class. }
-    for i := 0 to l.Count - 1 do
-    begin
-      cust := TClass(l[i]).ClassParent;
-      cn := PublishedNames(cust);
-      try
-        for k := 0 to cn.Count - 1 do
-        begin
-          pc := GetPropInfo(cust, cn[k]);
-          pf := GetPropInfo(TClass(l[i]), cn[k]);
-          if (pf = nil) or (AttrColumns(pc) <> AttrColumns(pf)) then
-            bad := bad + ' ' + TClass(l[i]).ClassName + '.' + cn[k];
-        end;
-      finally
-        cn.Free;
-      end;
-    end;
-    AssertEquals('final class disagrees with its custom class on a property the custom class '
-      + 'publishes:' + bad, '', bad);
-
     { (b) source: the final class declaration is nothing but `published` and `property X;`. }
     for i := 0 to l.Count - 1 do
     begin

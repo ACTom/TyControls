@@ -912,7 +912,7 @@ Expected：第一段只有 `Calendar.pas`、`DateTimePicker.pas`；第二段只�
 
   **G2 `TestCustomClassesPublishNothingNew`**：对 `CSplit` 每个类：`Custom := C.ClassParent`；Custom 的 published 名字集合（不区分大小写）= 它的 LCL 根（`ClassParent` 链上第一个不以 `TTy` 开头的类）的 published 名字集合。失败列出「类：多出的名字」。变异 M-G2：在 `TTyCustomEdit` 的 published 段留一行 `property MaxLength ...` → 红。
 
-  **G3 `TestCustomAndFinalAgree`**：(a) RTTI：对 `CSplit` 每个类，Custom 发布的每个属性（只会是 LCL 根的 15 个）与最终类同名属性的 `TypeName`、`Default`、`Stored`、`Index`、`Access` 一致。(b) **源码**：读 `source/` 下每个单元，找出 `CSplit` 每个类的 `TTyXxx = class(TTyCustomXxx)` 声明块（到 `end;`），去掉注释后每个非空行都必须匹配 `^\s*(published|property\s+\w+\s*;)\s*$`。失败列出「类：违规的行」。变异：M-G3a 把 `TTyCustomTabSheet` 的 `property Left stored False;` 挪到 `TTyTabSheet` → (a) 红（且 G3b 红）；M-G3b 在 `TTyEdit` 发布段写 `property TabStop default True;`、删掉 Custom 里那行 → (b) 红。
+  **G3 `TestCustomAndFinalAgree`**：~~(a) RTTI：对 `CSplit` 每个类，Custom 发布的每个属性（只会是 LCL 根的 15 个）与最终类同名属性的 `TypeName`、`Default`、`Stored`、`Index`、`Access` 一致。~~ **(a) 第 0、1 期期末修复删除**：最终类只有 `property X;`（(b)）时它原样继承每个说明符，(a) 只可能在 (b) 已经红的地方红，没有哪个变异能单独让它红——它是自证的；说明符写在 Custom 还是最终类里，从第三方那一侧由 G9 查、对 3.0 由 G6 查。(b) **源码**：读 `source/` 下每个单元，找出 `CSplit` 每个类的 `TTyXxx = class(TTyCustomXxx)` 声明块（到 `end;`），去掉注释后每个非空行都必须匹配 `^\s*(published|property\s+\w+\s*;)\s*$`。失败列出「类：违规的行」。变异：M-G3a 把 `TTyCustomTabSheet` 的 `property Left stored False;` 挪到 `TTyTabSheet` → ~~(a) 红（且 G3b 红）~~ G3b 红、G9 红（期末修复后 (a) 不存在）；M-G3b 在 `TTyEdit` 发布段写 `property TabStop default True;`、删掉 Custom 里那行 → (b) 红。
 
   **G4 `TestFinalClassesAddNoFields`**：对 `CSplit` 每个类：`C.InstanceSize = C.ClassParent.InstanceSize`。变异 M-G4：给 `TTyEdit` 加一个 `FDummy: Integer` 字段 → 红。
 
