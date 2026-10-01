@@ -37,7 +37,7 @@ uses
   tyControls.TabStrip, tyControls.Grid, tyControls.TreeView, tyControls.ShellListView,
   tyControls.IconFont, tyControls.Dialogs.FileDialog, tyControls.ToolWindows,
   tyControls.ScrollContent, tyControls.ListBox, tyControls.TreeSelect, tyControls.Popover,
-  tyControls.Notification;
+  tyControls.Notification, tyControls.Types, test.customclasses.mimic;
 
 type
   TTyCustomClassesGuardTest = class(TTestCase)
@@ -52,6 +52,7 @@ type
     procedure TestDemotedClassesPublishOnlyTheLclRoot;
     procedure TestBaseClassesPublishNothing;
     procedure TestThirdPartyOnTheBareBaseSeesOnlyTheLclRoot;
+    procedure TestGeneratedMimicsMatchTheirFinalClass;
   end;
 
 { Shared with the per-phase suites (test.customclasses.p1 ...). }
@@ -1079,6 +1080,166 @@ begin
     cn.Free;
     rn.Free;
   end;
+end;
+
+{ ------------------------------------------------------------------ G9: the generated mimics }
+
+type
+  TCtlStyleAccess = class(TTyCustomControl);
+  TGfxStyleAccess = class(TTyGraphicControl);
+
+{ Every published property of AClass in RTTI order: name and the snapshot's attribute columns. }
+function RttiRows(AClass: TClass): string;
+var
+  pl: PPropList;
+  n, i: Integer;
+begin
+  Result := '';
+  n := GetPropList(AClass.ClassInfo, pl);
+  try
+    for i := 0 to n - 1 do
+      Result := Result + IntToStr(i) + #9 + pl^[i]^.Name + #9 + AttrColumns(pl^[i]) + LineEnding;
+  finally
+    if n > 0 then FreeMem(pl);
+  end;
+end;
+
+{ What a fresh instance writes into a .lfm, without the `object` line (it names the class). }
+function FreshStreamBody(AComp: TComponent): string;
+var
+  ms: TMemoryStream;
+  ss: TStringStream;
+  p: Integer;
+begin
+  ms := TMemoryStream.Create;
+  ss := TStringStream.Create('');
+  try
+    ms.WriteComponent(AComp);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ss);
+    Result := ss.DataString;
+  finally
+    ms.Free;
+    ss.Free;
+  end;
+  p := Pos(#10, Result);
+  if p > 0 then Delete(Result, 1, p);
+end;
+
+{ The resolved theme style, as far as a control's look depends on it. }
+function StyleText(AComp: TComponent): string;
+var
+  s: TTyStyleSet;
+begin
+  if AComp is TTyCustomControl then
+    s := TCtlStyleAccess(AComp).CurrentStyle
+  else if AComp is TTyGraphicControl then
+    s := TGfxStyleAccess(AComp).CurrentStyle
+  else
+    Exit('-');
+  Result := Format('bg=%d/%x txt=%x bc=%x bw=%d bs=%d rs=%d br=%d pad=%d,%d,%d,%d '
+    + 'font=%s/%d/%d op=%.3f sh=%x/%d/%d,%d ol=%x/%d/%d',
+    [Ord(s.Background.Kind), s.Background.Color, s.TextColor, s.BorderColor, s.BorderWidth,
+     Ord(s.BorderStyle), Ord(s.RenderStyle), s.BorderRadius, s.Padding.Left, s.Padding.Top,
+     s.Padding.Right, s.Padding.Bottom, s.FontName, s.FontSize, s.FontWeight, s.Opacity,
+     s.ShadowColor, s.ShadowBlur, s.ShadowOffset.X, s.ShadowOffset.Y, s.OutlineColor,
+     s.OutlineWidth, s.OutlineOffset]);
+end;
+
+{ G9 (standing; it does NOT retire with the snapshot). A third party derives TTyCustomXxx and
+  publishes what it wants (issue #8). If it publishes exactly what TTyXxx publishes, it must BE
+  TTyXxx in every way a form file and a theme can see: same RTTI rows (order, type, default,
+  stored, index, access), same fresh stream, same type key, same default size, same resolved
+  style. That holds only when every default, stored clause, type key and constructor value the
+  final class shows lives in the custom class -- the third party's view, which the snapshot (G6)
+  never looked at: G6 compares the final class with 3.0 and passes whether a redeclaration
+  sits in the custom class or in the final one. The mimics are generated from source by the
+  plan's gen-mimic.py (test.customclasses.mimic); the first check makes a split class without a
+  mimic red, so the generator is re-run as each phase splits more. }
+procedure TTyCustomClassesGuardTest.TestGeneratedMimicsMatchTheirFinalClass;
+var
+  i: Integer;
+  bad, a, b: string;
+  gen, fin: TComponent;
+  host, host2: TForm;
+  sa, sb: ITyStyleable;
+  covered: TStringList;
+begin
+  bad := '';
+  covered := TStringList.Create;
+  covered.CaseSensitive := False;
+  try
+    for i := Low(CGenMimics) to High(CGenMimics) do
+    begin
+      covered.Add(CGenMimics[i, 1].ClassName);
+      if GSplit.IndexOf(CGenMimics[i, 1].ClassName) < 0 then
+        bad := bad + LineEnding + '  mimic for a class not in CSplit: ' + CGenMimics[i, 1].ClassName;
+      if CGenMimics[i, 0].ClassParent <> CGenMimics[i, 1].ClassParent then
+        bad := bad + LineEnding + '  ' + CGenMimics[i, 0].ClassName + ' does not derive from '
+          + CGenMimics[i, 1].ClassParent.ClassName;
+    end;
+    for i := 0 to GSplit.Count - 1 do
+      if covered.IndexOf(GSplit[i]) < 0 then
+        bad := bad + LineEnding + '  split class without a mimic (re-run gen-mimic.py): ' + GSplit[i];
+  finally
+    covered.Free;
+  end;
+  AssertEquals('the generated mimics do not cover CSplit:' + bad, '', bad);
+
+  { Two hosts, so neither instance's TabOrder reflects the other one sitting next to it. }
+  host := TForm.CreateNew(nil);
+  host2 := TForm.CreateNew(nil);
+  try
+    host.SetBounds(0, 0, 640, 480);
+    host2.SetBounds(0, 0, 640, 480);
+    for i := Low(CGenMimics) to High(CGenMimics) do
+    begin
+      a := RttiRows(CGenMimics[i, 0]);
+      b := RttiRows(CGenMimics[i, 1]);
+      if a <> b then
+        bad := bad + LineEnding + '  RTTI ' + CGenMimics[i, 1].ClassName + LineEnding + '    mimic: '
+          + StringReplace(a, LineEnding, ' | ', [rfReplaceAll]) + LineEnding + '    final: '
+          + StringReplace(b, LineEnding, ' | ', [rfReplaceAll]);
+      gen := TComponentClass(CGenMimics[i, 0]).Create(host);
+      fin := TComponentClass(CGenMimics[i, 1]).Create(host2);
+      try
+        if gen is TControl then TControl(gen).Parent := host;
+        if fin is TControl then TControl(fin).Parent := host2;
+        a := FreshStreamBody(gen);
+        b := FreshStreamBody(fin);
+        if a <> b then
+          bad := bad + LineEnding + '  fresh stream ' + CGenMimics[i, 1].ClassName + LineEnding
+            + '--mimic--' + LineEnding + a + '--final--' + LineEnding + b;
+        a := '-';
+        b := '-';
+        if Supports(gen, ITyStyleable, sa) then a := sa.GetStyleTypeKey;
+        if Supports(fin, ITyStyleable, sb) then b := sb.GetStyleTypeKey;
+        sa := nil;
+        sb := nil;
+        if a <> b then
+          bad := bad + LineEnding + '  type key ' + CGenMimics[i, 1].ClassName + ': ' + a + ' vs ' + b;
+        if (gen is TControl) and ((TControl(gen).Width <> TControl(fin).Width)
+           or (TControl(gen).Height <> TControl(fin).Height)) then
+          bad := bad + LineEnding + Format('  default size %s: %dx%d vs %dx%d',
+            [CGenMimics[i, 1].ClassName, TControl(gen).Width, TControl(gen).Height,
+             TControl(fin).Width, TControl(fin).Height]);
+        a := StyleText(gen);
+        b := StyleText(fin);
+        if a <> b then
+          bad := bad + LineEnding + '  style ' + CGenMimics[i, 1].ClassName + LineEnding + '    mimic: '
+            + a + LineEnding + '    final: ' + b;
+      finally
+        gen.Free;
+        fin.Free;
+      end;
+    end;
+  finally
+    host.Free;
+    host2.Free;
+  end;
+  AssertTrue('anti-vacuity: no mimics were compared', Length(CGenMimics) >= GSplit.Count);
+  AssertEquals('a third party publishing what the final class publishes is not that class:' + bad,
+    '', bad);
 end;
 
 initialization

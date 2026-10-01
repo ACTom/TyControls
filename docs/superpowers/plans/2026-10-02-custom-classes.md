@@ -82,7 +82,7 @@
 
 **D8 文档。** 新建 `docs/subclassing.md` + `docs/subclassing.en.md`（含「从 3.0 升级」一节）；`README.md` / `README.en.md` 文档索引各加一行；`docs/controls/README.md` 顶部一句指过去；`CONTRIBUTING.md` / `.en.md` 的「几条硬规矩」加一条「新控件生来就拆成 `TTyCustomXxx` + `TTyXxx`（G5 会查）」。CHANGELOG 发版时在「变更」写一条并关联 #8（CONTRIBUTING：changelog 发版时写，不在功能分支里改）。
 
-**D9 守卫去留。** 迁移期快照守卫 G6 在 Task 32 撤掉（附录 B 补拆时临时恢复）；结构守卫 G1–G5、G7、G8 常驻。
+**D9 守卫去留。** 迁移期快照守卫 G6 在 Task 32 撤掉（附录 B 补拆时临时恢复）；结构守卫 G1–G5、G7、G8 常驻；第 0、1 期期末修复加的 G9（生成的第三方模拟子类与最终类逐项相同）也常驻。
 
 **D10 事件类型里的 Sender（需主控确认，建议照 LCL 改）。** LCL 在有 Custom 类的家族里，事件的 Sender 写 Custom 类（`comctrls.pp` 的 `TTVCustomDrawEvent = procedure(Sender: TCustomTreeView; ...)`、`TLVCustomDrawEvent = procedure(Sender: TCustomListView; ...)`、`TCustomSectionNotifyEvent = procedure(HeaderControl: TCustomHeaderControl; ...)`）。A 下这一条对 TreeView 是**被迫的**：`TTyShellTreeView` 不再是 `TTyTreeView`，`TTyCustomTreeView` 里 `FOnGetText(Self, ...)` 只有两条路——Sender 改成 `TTyCustomTreeView`，或者把一个 ShellTreeView 当成 `TTyTreeView` 硬转传出去（对内置控件说类型假话）。建议 27 个事件类型（TreeView 21、HeaderControl 3、StatusBar 1、RibbonGroup 1、ToolButton 1，附录 D）全部改 Custom 类。代价：用户代码里这些事件的处理过程要改签名（`Sender: TTyTreeView` → `TTyCustomTreeView`）；仓库里 tests 约 200 个、examples 约 110 个处理过程跟着改（机械）。`.lfm` 不受影响（流式按方法名找，不查签名）。不改的话：A 下 TreeView 那 21 个仍用 `AsPublished` 硬转，文档写明「ShellTreeView 的事件里 Sender 的类型是假的」。
 
@@ -701,8 +701,147 @@ if __name__ == '__main__':
 4. 在 Custom 类 `end;` 后贴第 1 步打印的最终类声明，前面加一行注释（N27）。
 5. `python split.py impl source/tyControls.Xxx.pas TTyXxx`；改 `{ TTyXxx }` 分隔注释。
 6. 同单元内其余 `TTyXxx` 引用按 R6 / R7 / 附录 C 处理。
-7. `tests/test.customclasses.pas`：`CPending` → `CSplit`（R10）。
+7. `tests/test.customclasses.pas`：`CPending` → `CSplit`（R10）；然后在仓库根跑 `python <scratchpad>/gen-mimic.py`，重生成 `tests/test.customclasses.mimic.pas`（G9；不重跑，G9 报「split class without a mimic」）。生成器拒绝发布段里有 `property X;` 以外内容的最终类（与 G3b 同一条规矩）。
 8. `python split.py check` 本任务动过的每个文件。
+
+---
+
+## 辅助脚本 `gen-mimic.py`（scratchpad，不进仓库；第 0、1 期期末修复加）
+
+每期开工时若 scratchpad 里没有，用 **Write 工具**原样写到 `<scratchpad>/gen-mimic.py`。在 `D:/Projects/ty-split` 下运行，无参数；输出 `tests/test.customclasses.mimic.pas`（CRLF）。生成物进仓库（G9 读它），手不改它。
+
+```python
+#!/usr/bin/env python
+"""Generate tests/test.customclasses.mimic.pas. Run from the repo root (D:/Projects/ty-split).
+
+For every class in CSplit (the AddAll(GSplit, [...]) block of tests/test.customclasses.pas) it
+finds `TTyXxx = class(TTyCustomXxx)` in source/*.pas and writes `TGenXxx = class(TTyCustomXxx)`
+with the final class's published section copied line by line (comments dropped). The guard
+TestGeneratedMimicsMatchTheirFinalClass then holds each pair to identical RTTI, fresh stream,
+type key, default size and resolved style -- i.e. a third party that publishes what the final
+class publishes gets exactly the final class. Re-run after every split task; the guard turns red
+when a split class has no mimic."""
+import glob, io, re, sys
+
+GUARD = 'tests/test.customclasses.pas'
+OUT = 'tests/test.customclasses.mimic.pas'
+
+
+def strip_comments(src):
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '{':
+            j = src.find('}', i)
+            j = n - 1 if j < 0 else j
+            out.append('\n' * src[i:j + 1].count('\n'))
+            i = j + 1
+            continue
+        if src.startswith('(*', i):
+            j = src.find('*)', i)
+            j = n - 2 if j < 0 else j
+            out.append('\n' * src[i:j + 2].count('\n'))
+            i = j + 2
+            continue
+        if src.startswith('//', i):
+            j = src.find('\n', i)
+            i = n if j < 0 else j
+            continue
+        if c == "'":
+            j = src.find("'", i + 1)
+            j = n - 1 if j < 0 else j
+            out.append(src[i:j + 1])
+            i = j + 1
+            continue
+        out.append(c)
+        i += 1
+    return ''.join(out)
+
+
+def split_names():
+    g = io.open(GUARD, encoding='utf-8').read()
+    m = re.search(r'AddAll\(GSplit,\s*\[(.*?)\]\);', g, re.S)
+    if not m:
+        sys.exit('no AddAll(GSplit, [...]) block in ' + GUARD)
+    body = re.sub(r'//[^\n]*', '', m.group(1))
+    return re.findall(r"'(TTy\w+)'", body)
+
+
+def main():
+    names = split_names()
+    found = {}
+    for f in sorted(glob.glob('source/*.pas')):
+        raw = io.open(f, encoding='utf-8', errors='replace').read().replace('\r\n', '\n')
+        unit = re.search(r'^unit\s+([\w.]+)\s*;', raw, re.M | re.I).group(1)
+        lines = strip_comments(raw).split('\n')
+        for i, l in enumerate(lines):
+            m = re.match(r'\s*(TTy\w+)\s*=\s*class\((TTyCustom\w+)\)\s*$', l)
+            if not m or m.group(1) not in names:
+                continue
+            if m.group(2) != 'TTyCustom' + m.group(1)[3:]:
+                continue
+            body, j = [], i + 1
+            while not re.match(r'\s*end\s*;', lines[j]):
+                t = lines[j].strip()
+                if t:
+                    if not re.match(r'^(published|property\s+\w+\s*;)$', t, re.I):
+                        sys.exit('%s: %s is not property-only: %r' % (f, m.group(1), t))
+                    body.append('    ' + t if t.lower().startswith('property') else '  ' + t)
+                j += 1
+            found[m.group(1)] = (unit, m.group(2), body)
+    missing = [n for n in names if n not in found]
+    if missing:
+        sys.exit('split classes without a declaration in source/: ' + ', '.join(missing))
+    units = sorted(set(v[0] for v in found.values()))
+    out = []
+    out.append('unit test.customclasses.mimic;')
+    out.append('{$mode objfpc}{$H+}')
+    out.append('')
+    out.append('{ GENERATED by the plan\'s gen-mimic.py -- do not edit by hand; re-run it after every split.')
+    out.append('')
+    out.append('  One mimic per split class: TGenXxx derives from TTyCustomXxx the way a third party does')
+    out.append('  (issue #8) and publishes exactly the lines the library\'s TTyXxx publishes. The guard')
+    out.append('  TestGeneratedMimicsMatchTheirFinalClass (test.customclasses) holds each pair to the same')
+    out.append('  RTTI, fresh stream, type key, default size and resolved style -- so every default, stored')
+    out.append('  clause and type key a final class shows must come from its custom class, where a third')
+    out.append('  party gets it too. }')
+    out.append('')
+    out.append('interface')
+    out.append('')
+    out.append('uses')
+    uses = ['Classes'] + units
+    line = '  '
+    for k, u in enumerate(uses):
+        piece = u + (',' if k < len(uses) - 1 else ';')
+        if len(line) + len(piece) + 1 > 100:
+            out.append(line.rstrip())
+            line = '  '
+        line += piece + ' '
+    out.append(line.rstrip())
+    out.append('')
+    out.append('type')
+    for n in sorted(found):
+        unit, cust, body = found[n]
+        out.append('  TGen%s = class(%s)' % (n[3:], cust))
+        out.extend(body)
+        out.append('  end;')
+        out.append('')
+    out.append('const')
+    out.append('  { (mimic, final class) }')
+    out.append('  CGenMimics: array[0..%d, 0..1] of TClass = (' % (len(found) - 1))
+    pairs = ['    (TGen%s, %s)' % (n[3:], n) for n in sorted(found)]
+    out.append(',\n'.join(pairs) + ');')
+    out.append('')
+    out.append('implementation')
+    out.append('')
+    out.append('end.')
+    io.open(OUT, 'w', encoding='utf-8', newline='\r\n').write('\n'.join(out) + '\n')
+    print('%s: %d mimics' % (OUT, len(found)))
+
+
+if __name__ == '__main__':
+    main()
+```
 
 ---
 
@@ -782,6 +921,8 @@ Expected：第一段只有 `Calendar.pas`、`DateTimePicker.pas`；第二段只�
   **G7 `TestDerivedControlsHangOnTheCustomChain`（A）**：对 `CChain` 里已生效的每一行：① 期望父类对上：最终类行查 `C.ClassParent.ClassParent.ClassName`，中间类行查 `C.ClassParent.ClassName`；② **链上没有注册最终类**：从 `C.ClassParent` 一路往上到 LCL 根，经过的每个类名都不在注册类集合里；③ 正向：`C.InheritsFrom(<期望父类>)`。失败分三类列名字。这条就是「派生控件是其 Custom 父类的子类」与「不再是原父控件的子类」。变异 M-G7：把 `TTyCustomGlyphButton` 改挂回 `TTyButton`（`class(TTyButton)`）→ ①② 红。
 
   **G8 `TestDemotedClassesPublishOnlyTheLclRoot`（D7 与中间类）**：对 `CDemoted` 每个类：published 名字集合 = 它的 LCL 根的；外加 `TTyCustomControl`、`TTyGraphicControl`、`TTyComponent` 三者在 Task 1 之后恒成立。变异 M-G8：在 `Base.pas` 的 `TTyCustomControl` 里留一行 `published property Enabled;` → 红。
+
+  **G9 `TestGeneratedMimicsMatchTheirFinalClass`（第 0、1 期期末修复加，常驻，不随 Task 32 退役）**：`tests/test.customclasses.mimic.pas` 由 `gen-mimic.py`（见「辅助脚本 `gen-mimic.py`」）从源码生成：对 `CSplit` 每个类 `TTyXxx`，写一个 `TGenXxx = class(TTyCustomXxx)`，发布段逐行照抄 `TTyXxx` 的；常量 `CGenMimics` 列出（模拟类，最终类）对。判据：① 覆盖：`CGenMimics` 的最终类集合 = `CSplit`（少一个就红——每个任务拆完都要重跑生成器），每个模拟类与最终类同父类；② 每对 RTTI 行逐项相同（位置、名字、类型、default、stored、index、读写）；③ 各放在一个新 `TForm.CreateNew` 上（两个窗体，免得 TabOrder 互相影响）的新实例，流式文本去掉首行后相同；④ typeKey 相同；⑤ 默认尺寸相同；⑥ `CurrentStyle` 解析出的样式相同（背景、文字、边框、圆角、内距、字体、透明度、阴影、外框）。为什么要它：G6 比的是最终类与 3.0，改 default 的重声明写在 Custom 类还是最终类里它都绿；G9 比的是「第三方照抄发布段」与最终类，default / stored / typeKey / 构造值有任何一样只在最终类上，就红——这是审查 M2 / M3（「Custom 类声明的默认值对第三方生效」）在 P1 全绿下漏掉的视角。变异 M-G9：把 `TTyCustomSpeedButton` 的 `property TabStop default False;` 挪进 `TTySpeedButton` → G9 红（G3b 也红，G6 绿）。
 
 - [x] **Step 6: 注册**：`tests/tytests.lpr` uses 末尾加 `test.customclasses`。
 
