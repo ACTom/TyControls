@@ -39,10 +39,22 @@ unit tyControls.AdvChart.Anim;
 
   WHAT IS NOT HERE: additive animation (only visualMap's continuous indicator
   uses it upstream), gradients, per-keyframe easing (ECharts never sets it),
-  pause/resume (ECharts never pauses a series), saveTo and the state
-  machine's __changeFinalValue (AN3). A numeric STRING is interpolated as its
-  number; upstream classifies it as a number too but then concatenates, which
-  no chart relies on.
+  pause/resume (ECharts never pauses a series). A numeric STRING is
+  interpolated as its number; upstream classifies it as a number too but then
+  concatenates, which no chart relies on.
+
+  STATES [Batch 94, AN3b]. zrender's useStates / clearStates on an element
+  (Element.ts:952-1150, _applyStateObj with Displayable's and Path's): the
+  values a state sets are saved into the element's NORMAL state when it
+  leaves normal (only the root keys the state sets, the whole style, the whole
+  shape -- and then every running animator that is not a state transition's
+  own, or is the normal one's, writes its FINAL values there: saveTo), and
+  each switch either TRANSITIONS -- the transform keys, the style keys
+  getAnimationStyleProps names and the primitive shape keys animate to the
+  target with the element's stateTransition -- or, without one, sets them and
+  moves every running animator's last keyframe onto the new values
+  (__changeFinalValue). The transitions' animators carry the state name
+  (__fromStateTransition).
 
   LIFETIME. Upstream leans on the garbage collector; here an element owns
   every animator made on it, and an animator that has finished (done or
@@ -181,6 +193,9 @@ type
     FDoneCbs, FAbortedCbs, FDuringCbs: array of TTyAnimCb;
     FGroups: array of TTyAnimGroup;
     FDead, FInGrave: Boolean;
+    { __fromStateTransition: the state list a transition's animator was made
+      for ('' for any other animator) [Batch 94] }
+    FFromState: string;
     function FindTrack(const AProp: string): TTyAnimTrack;
     function FullKey(const AProp: string): string;
     procedure ClipFrame(APercent: Double);
@@ -221,6 +236,17 @@ type
     function TrackCount: Integer;
     function TrackAt(AIndex: Integer): TTyAnimTrack;
     function GetTrack(const AProp: string): TTyAnimTrack;
+    { Animator.saveTo: every unfinished track's LAST keyframe, raw, into
+      AProps under its full key ('style.opacity'); a root key named in ASkip
+      is left out [Batch 94] }
+    procedure SaveTo(var AProps: TTyAnimProps; const ASkip: array of string);
+    { Animator.__changeFinalValue: the last keyframe of each track named in
+      AKeys (inner names) replaced by the value at its time, and the track
+      prepared again; a track with a single keyframe is left [Batch 94] }
+    procedure ChangeFinalValue(const AKeys: array of string;
+      const AValues: array of TTyAnimValue);
+    property Loop: Boolean read FLoop;
+    property FromStateTransition: string read FFromState write FFromState;
     property Element: TTyAnimElement read FElement;
     property TargetName: string read FTargetName;
     property Scope: string read FScope write FScope;
@@ -280,19 +306,49 @@ type
     During: TTyAnimDuring;
   end;
 
+  { A STATE OBJECT as useStates merges it (Element._mergeStates and the
+    Displayable / Path overrides), flattened: the keys the state sets --
+    'x', 'scaleX', 'style.fill', 'shape.r' -- and whether it carries a
+    style object and a shape object at all (a state without a style leaves
+    the style to the normal state) [Batch 94] }
+  TTyAnimState = record
+    Props: TTyAnimProps;
+    HasStyle, HasShape: Boolean;
+  end;
+
   { ---- the element (zrender/src/Element.ts) ---- }
   TTyAnimElement = class
   private
     FAnimation: TTyAnimation;
     FAnimators: TFPList;
     FOwned: TFPList;
+    { THE STATES [Batch 94]: _normalState (flattened, and whether its style
+      and shape objects exist), currentStates joined, stateTransition, the
+      root keys that are not this element's (a symbol's group position in
+      the same bag), and whether it is a Path (fill, stroke ... animate) }
+    FNormal: TTyAnimProps;
+    FNormalStyle, FNormalShape: Boolean;
+    FCurStates: string;
+    FStateCfg: TTyAnimCfg;
+    FHasStateCfg: Boolean;
+    FStateSkip: array of string;
+    FStatePath: Boolean;
     procedure SetAnimation(AValue: TTyAnimation);
     procedure AddAnimator(AAnimator: TTyAnimator);
     procedure RemoveFromList(AAnimator: TTyAnimator);
-    procedure DoAnimateTo(const AProps: TTyAnimProps; const ACfg: TTyAnimCfg; AReverse: Boolean);
+    procedure DoAnimateTo(const AProps: TTyAnimProps; const ACfg: TTyAnimCfg;
+      AReverse: Boolean; const AStateName: string = '';
+      AStyleFilter: Boolean = False);
     procedure Shallow(const ATopKey: string; const AKeys: array of string;
       const AValues: array of TTyAnimValue; const ACfg: TTyAnimCfg;
-      AReverse: Boolean; var AList: TFPList);
+      AReverse, AFilter: Boolean; var AList: TFPList);
+    function InStateSkip(const AKey: string): Boolean;
+    function HasAnimKey(const AKey: string): Boolean;
+    procedure SaveCurrentToNormal(const AState: TTyAnimState);
+    procedure ApplyStateObj(const AName: string; AHasState: Boolean;
+      const AState: TTyAnimState; ATransition: Boolean);
+    function CanTransition(ANoAnimation: Boolean): Boolean;
+    procedure StopTracksDetached(const ATopKey: string; const AProps: TTyAnimProps);
   protected
     { upstream's updateDuringAnimation / markRedraw: ATargetName changed }
     procedure AnimDirty(const ATargetName: string); virtual;
@@ -317,6 +373,33 @@ type
     function AnimatorAt(AIndex: Integer): TTyAnimator;
     { basicTransition's isElementRemoved: no driver, or a 'leave' animator }
     function IsRemoved: Boolean;
+    { every key the element holds, for the normal state's style and shape
+      clones (TTyAnimBag answers its own) [Batch 94] }
+    function AnimKeyList: TTyStringArray; virtual;
+    { ---- states [Batch 94] ---- }
+    { el.stateTransition: a duration of 0 or less transitions nothing }
+    procedure SetStateTransition(const ACfg: TTyAnimCfg);
+    procedure ClearStateTransition;
+    { useStates(list): AName is the list joined (the transitions' animator
+      name); the same list as now does nothing. ANoAnimation: no transition
+      whatever the stateTransition (useStates' noAnimation, and an element
+      in the hover layer) }
+    procedure UseStates(const AName: string; const AState: TTyAnimState;
+      ANoAnimation: Boolean = False);
+    { clearStates: back to the normal state, which is then forgotten }
+    procedure ClearStates(ANoAnimation: Boolean = False);
+    { the normal state's value of a key; False when it holds none }
+    function NormalValue(const AKey: string; out AValue: TTyAnimValue): Boolean;
+    { root keys outside this element's states: not saved, not restored }
+    procedure SetStateSkip(const AKeys: array of string);
+    property CurrentStates: string read FCurStates;
+    property HasStateTransition: Boolean read FHasStateCfg;
+    property StateTransition: TTyAnimCfg read FStateCfg;
+    property NormalHasStyle: Boolean read FNormalStyle;
+    property NormalHasShape: Boolean read FNormalShape;
+    { a Path (its fill, stroke, width ... animate), else a Text (opacity and
+      the shadow only); True by default }
+    property StatePath: Boolean read FStatePath write FStatePath;
     property Animation: TTyAnimation read FAnimation write SetAnimation;
   end;
 
@@ -332,6 +415,7 @@ type
   public
     function GetAnimProp(const AKey: string): TTyAnimValue; override;
     procedure SetAnimProp(const AKey: string; const AValue: TTyAnimValue); override;
+    function AnimKeyList: TTyStringArray; override;
     function Num(const AKey: string): Double;
     procedure SetNum(const AKey: string; AValue: Double);
     property DirtyCount: Integer read FDirtyCount;
@@ -356,6 +440,19 @@ function TyAnimRgbaString(AR, AG, AB, AA: Double): string;
 
 { A cfg: HasDuration True, no force, no setToFinal. }
 function TyAnimCfg(ADuration, ADelay: Double; const AEasing: string): TTyAnimCfg;
+
+const
+  { the state name clearStates transitions under (PRESERVED_NORMAL_STATE) }
+  TyAnimNormalState = '__zr_normal__';
+
+{ a key of a flattened prop list: its index, -1 for none [Batch 94] }
+function TyAnimPropIndex(const AProps: TTyAnimProps; const AKey: string): Integer;
+{ set (or add at the end) a key of a flattened prop list }
+procedure TyAnimPropPut(var AProps: TTyAnimProps; const AKey: string;
+  const AValue: TTyAnimValue);
+{ createStyle's prototype (DEFAULT_PATH_STYLE over DEFAULT_COMMON_STYLE): the
+  default of a style key (inner name); False for a key it has none of }
+function TyAnimStyleDefault(const AKey: string; out AValue: TTyAnimValue): Boolean;
 
 { The chart clock: epoch milliseconds, whole, from a monotonic source --
   upstream's `new Date().getTime()`. The epoch base matters to the bits: a
@@ -1260,6 +1357,51 @@ begin
   end;
 end;
 
+procedure TTyAnimator.SaveTo(var AProps: TTyAnimProps; const ASkip: array of string);
+var
+  i, k, n: Integer;
+  track: TTyAnimTrack;
+  skip: Boolean;
+begin
+  for i := 0 to High(FTrackKeys) do
+  begin
+    track := FTrackKeys[i];
+    { a finished track is ignored }
+    if track.FFinished then Continue;
+    n := Length(track.FKeyframes);
+    if n = 0 then Continue;
+    skip := False;
+    if FTargetName = '' then
+      for k := 0 to High(ASkip) do
+        if ASkip[k] = track.FPropName then skip := True;
+    if skip then Continue;
+    { the raw value, not the parsed one }
+    TyAnimPropPut(AProps, FullKey(track.FPropName),
+      TyAnimClone(track.FKeyframes[n - 1].Raw));
+  end;
+end;
+
+procedure TTyAnimator.ChangeFinalValue(const AKeys: array of string;
+  const AValues: array of TTyAnimValue);
+var
+  i, n: Integer;
+  track: TTyAnimTrack;
+  t: Double;
+begin
+  for i := 0 to High(AKeys) do
+  begin
+    track := FindTrack(AKeys[i]);
+    if track = nil then Continue;
+    n := Length(track.FKeyframes);
+    if n <= 1 then Continue;
+    { the original last keyframe out, the new one in at its time }
+    t := track.FKeyframes[n - 1].Time;
+    SetLength(track.FKeyframes, n - 1);
+    track.AddKeyframe(t, AValues[i]);
+    track.Prepare(OrZero(FMaxTime));
+  end;
+end;
+
 { ==================== Animation ==================== }
 
 constructor TTyAnimation.Create;
@@ -1414,6 +1556,7 @@ begin
   inherited Create;
   FAnimators := TFPList.Create;
   FOwned := TFPList.Create;
+  FStatePath := True;
 end;
 
 destructor TTyAnimElement.Destroy;
@@ -1579,6 +1722,11 @@ begin
   DoAnimateTo(AProps, ACfg, True);
 end;
 
+function TTyAnimElement.AnimKeyList: TTyStringArray;
+begin
+  Result := nil;
+end;
+
 function PrefixOf(const AKey: string; out AInner: string): string;
 var p: Integer;
 begin
@@ -1624,9 +1772,33 @@ begin
   Result.Stride := ASource.Stride;
 end;
 
+{ getAnimationStyleProps: Path's (Path.ts:75-86) over Displayable's
+  (Displayable.ts:42-50) }
+const
+  cPathAnimStyle: array[0..12] of string = ('fill', 'stroke', 'strokePercent',
+    'fillOpacity', 'strokeOpacity', 'lineDashOffset', 'lineWidth', 'miterLimit',
+    'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'shadowColor', 'opacity');
+  cCommonAnimStyle: array[0..4] of string = ('shadowBlur', 'shadowOffsetX',
+    'shadowOffsetY', 'shadowColor', 'opacity');
+
+function StyleAnimatable(APath: Boolean; const AKey: string): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  if APath then
+  begin
+    for i := 0 to High(cPathAnimStyle) do
+      if cPathAnimStyle[i] = AKey then Exit;
+  end
+  else
+    for i := 0 to High(cCommonAnimStyle) do
+      if cCommonAnimStyle[i] = AKey then Exit;
+  Result := False;
+end;
+
 procedure TTyAnimElement.Shallow(const ATopKey: string; const AKeys: array of string;
   const AValues: array of TTyAnimValue; const ACfg: TTyAnimCfg;
-  AReverse: Boolean; var AList: TFPList);
+  AReverse, AFilter: Boolean; var AList: TFPList);
 var
   keys: array of string;
   vals: array of TTyAnimValue;
@@ -1653,7 +1825,10 @@ begin
   begin
     full := FullOf(AKeys[i]);
     cur := GetAnimProp(full);
-    if (AValues[i].Kind <> avkNull) and (cur.Kind <> avkNull) then
+    { animationProps: a state transition's style animates only the props
+      getAnimationStyleProps names; the rest is assigned [Batch 94] }
+    if (AValues[i].Kind <> avkNull) and (cur.Kind <> avkNull)
+      and not (AFilter and (ATopKey = 'style') and not StyleAnimatable(FStatePath, AKeys[i])) then
     begin
       n := Length(keys);
       SetLength(keys, n + 1); SetLength(vals, n + 1); SetLength(assigned, n + 1);
@@ -1749,7 +1924,7 @@ begin
 end;
 
 procedure TTyAnimElement.DoAnimateTo(const AProps: TTyAnimProps; const ACfg: TTyAnimCfg;
-  AReverse: Boolean);
+  AReverse: Boolean; const AStateName: string; AStyleFilter: Boolean);
 var
   list: TFPList;
   prefixes: array of string;
@@ -1799,9 +1974,9 @@ begin
           groupKeys[n] := inner2;
           groupVals[n] := AProps[j].Value;
         end;
-      Shallow(pre, groupKeys, groupVals, ACfg, AReverse, list);
+      Shallow(pre, groupKeys, groupVals, ACfg, AReverse, AStyleFilter, list);
     end;
-    Shallow('', topKeys, topVals, ACfg, AReverse, list);
+    Shallow('', topKeys, topVals, ACfg, AReverse, AStyleFilter, list);
 
     group := TTyAnimGroup.Create;
     group.FFinishCount := list.Count;
@@ -1824,8 +1999,454 @@ begin
       if ACfg.Force then a.Duration(ACfg.Duration, ACfg.HasDuration);
       a.Start(ACfg.Easing);
     end;
+    { _transitionState: the animators carry the state name }
+    if AStateName <> '' then
+      for i := 0 to list.Count - 1 do
+        TTyAnimator(list[i]).FFromState := AStateName;
   finally
     list.Free;
+    LeaveEngine(g);
+  end;
+end;
+
+{ ==================== states [Batch 94] ==================== }
+
+function TyAnimPropIndex(const AProps: TTyAnimProps; const AKey: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(AProps) do
+    if AProps[i].Key = AKey then Exit(i);
+  Result := -1;
+end;
+
+procedure TyAnimPropPut(var AProps: TTyAnimProps; const AKey: string;
+  const AValue: TTyAnimValue);
+var i: Integer;
+begin
+  i := TyAnimPropIndex(AProps, AKey);
+  if i < 0 then
+  begin
+    i := Length(AProps);
+    SetLength(AProps, i + 1);
+    AProps[i].Key := AKey;
+  end;
+  AProps[i].Value := TyAnimClone(AValue);
+end;
+
+function TyAnimStyleDefault(const AKey: string; out AValue: TTyAnimValue): Boolean;
+begin
+  Result := True;
+  if AKey = 'fill' then AValue := TyAnimStr('#000')
+  else if AKey = 'stroke' then AValue := TyAnimNull
+  else if (AKey = 'strokePercent') or (AKey = 'fillOpacity')
+    or (AKey = 'strokeOpacity') or (AKey = 'lineWidth') or (AKey = 'opacity') then
+    AValue := TyAnimNum(1)
+  else if (AKey = 'lineDashOffset') or (AKey = 'shadowBlur')
+    or (AKey = 'shadowOffsetX') or (AKey = 'shadowOffsetY') then
+    AValue := TyAnimNum(0)
+  else if AKey = 'miterLimit' then AValue := TyAnimNum(10)
+  else if AKey = 'shadowColor' then AValue := TyAnimStr('#000')
+  else
+  begin
+    AValue := TyAnimNull;
+    Result := False;
+  end;
+end;
+
+const
+  { PRIMARY_STATES_KEYS (Element.ts:281): TRANSFORMABLE_PROPS and ignore }
+  cPrimaryKeys: array[0..11] of string = ('x', 'y', 'originX', 'originY',
+    'anchorX', 'anchorY', 'rotation', 'scaleX', 'scaleY', 'skewX', 'skewY',
+    'ignore');
+
+function SubOf(const AKey, APrefix: string; out AInner: string): Boolean;
+begin
+  Result := (Length(AKey) > Length(APrefix) + 1)
+    and (Copy(AKey, 1, Length(APrefix) + 1) = APrefix + '.');
+  if Result then AInner := Copy(AKey, Length(APrefix) + 2, MaxInt)
+  else AInner := '';
+end;
+
+function IsRootKey(const AKey: string): Boolean;
+begin
+  Result := Pos('.', AKey) = 0;
+end;
+
+function PropGet(const AProps: TTyAnimProps; const AKey: string;
+  out AValue: TTyAnimValue): Boolean;
+var i: Integer;
+begin
+  i := TyAnimPropIndex(AProps, AKey);
+  Result := i >= 0;
+  if Result then AValue := TyAnimClone(AProps[i].Value) else AValue := TyAnimNull;
+end;
+
+function TTyAnimElement.InStateSkip(const AKey: string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(FStateSkip) do
+    if FStateSkip[i] = AKey then Exit(True);
+  Result := False;
+end;
+
+function TTyAnimElement.HasAnimKey(const AKey: string): Boolean;
+var
+  keys: TTyStringArray;
+  i: Integer;
+begin
+  keys := AnimKeyList;
+  for i := 0 to High(keys) do
+    if keys[i] = AKey then Exit(True);
+  Result := False;
+end;
+
+procedure TTyAnimElement.SetStateSkip(const AKeys: array of string);
+var i: Integer;
+begin
+  SetLength(FStateSkip, Length(AKeys));
+  for i := 0 to High(AKeys) do FStateSkip[i] := AKeys[i];
+end;
+
+procedure TTyAnimElement.SetStateTransition(const ACfg: TTyAnimCfg);
+begin
+  FStateCfg := ACfg;
+  FHasStateCfg := True;
+end;
+
+procedure TTyAnimElement.ClearStateTransition;
+begin
+  FStateCfg := Default(TTyAnimCfg);
+  FHasStateCfg := False;
+end;
+
+function TTyAnimElement.NormalValue(const AKey: string; out AValue: TTyAnimValue): Boolean;
+begin
+  Result := PropGet(FNormal, AKey, AValue);
+end;
+
+{ canTransition (Element.ts:2163-2169): no noAnimation, a stateTransition,
+  a duration above 0 }
+function TTyAnimElement.CanTransition(ANoAnimation: Boolean): Boolean;
+begin
+  Result := (not ANoAnimation) and FHasStateCfg and (FStateCfg.Duration > 0);
+end;
+
+{ saveCurrentToNormalState (Element.ts:860-909, Displayable.ts:494-503,
+  Path.ts:509-521) }
+procedure TTyAnimElement.SaveCurrentToNormal(const AState: TTyAnimState);
+var
+  i: Integer;
+  v: TTyAnimValue;
+  keys: TTyStringArray;
+  inner: string;
+  a: TTyAnimator;
+  ok: Boolean;
+begin
+  { _savePrimaryToNormal: only a key the state sets, and not saved yet }
+  for i := 0 to High(cPrimaryKeys) do
+  begin
+    if InStateSkip(cPrimaryKeys[i]) then Continue;
+    if not PropGet(AState.Props, cPrimaryKeys[i], v) or (v.Kind = avkNull) then Continue;
+    if TyAnimPropIndex(FNormal, cPrimaryKeys[i]) >= 0 then Continue;
+    TyAnimPropPut(FNormal, cPrimaryKeys[i], GetAnimProp(cPrimaryKeys[i]));
+  end;
+  keys := AnimKeyList;
+  { the whole style, once; the whole shape, once }
+  if AState.HasStyle and not FNormalStyle then
+  begin
+    FNormalStyle := True;
+    for i := 0 to High(keys) do
+      if SubOf(keys[i], 'style', inner) then
+        TyAnimPropPut(FNormal, keys[i], GetAnimProp(keys[i]));
+  end;
+  if FStatePath and AState.HasShape and not FNormalShape then
+  begin
+    FNormalShape := True;
+    for i := 0 to High(keys) do
+      if SubOf(keys[i], 'shape', inner) then
+        TyAnimPropPut(FNormal, keys[i], GetAnimProp(keys[i]));
+  end;
+  { switching away from normal during an animation: its FINAL values are the
+    normal state's, not the interpolated ones -- except a loop's and another
+    state's transition }
+  for i := 0 to FAnimators.Count - 1 do
+  begin
+    a := TTyAnimator(FAnimators[i]);
+    if a.FLoop then Continue;
+    if (a.FFromState <> '') and (a.FFromState <> TyAnimNormalState) then Continue;
+    if a.FTargetName = '' then ok := True
+    else if a.FTargetName = 'style' then ok := FNormalStyle
+    else if a.FTargetName = 'shape' then ok := FNormalShape
+    else ok := False;
+    if ok then a.SaveTo(FNormal, FStateSkip);
+  end;
+end;
+
+{ A TRANSITION'S STYLE AND SHAPE ARE NEW OBJECTS (Displayable.ts:556,
+  Path.ts:565): the running animators' tracks on the target keys stop, and a
+  track stopped before it ever stepped writes its from value back into the
+  OLD object -- which the element no longer holds. So the values stay what
+  they were: an enter fade that had not stepped yet ends where setToFinal
+  left it, and the transition finds nothing to do on that key. }
+procedure TTyAnimElement.StopTracksDetached(const ATopKey: string; const AProps: TTyAnimProps);
+var
+  keys: array of string;
+  snap: TTyAnimProps;
+  i, idx: Integer;
+  inner: string;
+  a: TTyAnimator;
+begin
+  keys := nil;
+  snap := nil;
+  for i := 0 to High(AProps) do
+    if SubOf(AProps[i].Key, ATopKey, inner) then
+    begin
+      SetLength(keys, Length(keys) + 1);
+      keys[High(keys)] := inner;
+      TyAnimPropPut(snap, AProps[i].Key, GetAnimProp(AProps[i].Key));
+    end;
+  if Length(keys) = 0 then Exit;
+  i := 0;
+  while i < FAnimators.Count do
+  begin
+    a := TTyAnimator(FAnimators[i]);
+    if a.FTargetName = ATopKey then
+      if a.StopTracks(keys) then
+      begin
+        idx := FAnimators.IndexOf(a);
+        if idx >= 0 then FAnimators.Delete(idx);
+      end;
+    Inc(i);
+  end;
+  for i := 0 to High(snap) do SetAnimProp(snap[i].Key, snap[i].Value);
+end;
+
+{ _applyStateObj: Element's (Element.ts:1232-1315), then Displayable's
+  style (Displayable.ts:503-600), then Path's shape (Path.ts:523-586). Not
+  keeping the current states: everything the state does not set returns to
+  the normal state's. }
+procedure TTyAnimElement.ApplyStateObj(const AName: string; AHasState: Boolean;
+  const AState: TTyAnimState; ATransition: Boolean);
+var
+  i, j: Integer;
+  v: TTyAnimValue;
+  tProps, target, prims: TTyAnimProps;
+  keys: TTyStringArray;
+  inner, tn: string;
+  hasTarget: Boolean;
+  snap: TFPList;
+  a: TTyAnimator;
+  ck: array of string;
+  cv: array of TTyAnimValue;
+  src: TTyAnimProps;
+  srcStyle, srcShape: Boolean;
+  cfg: TTyAnimCfg;
+begin
+  cfg := FStateCfg;
+  { ---- the transform keys and ignore ---- }
+  tProps := nil;
+  for i := 0 to High(cPrimaryKeys) do
+  begin
+    if InStateSkip(cPrimaryKeys[i]) then Continue;
+    if AHasState and PropGet(AState.Props, cPrimaryKeys[i], v) and (v.Kind <> avkNull) then
+    else if PropGet(FNormal, cPrimaryKeys[i], v) and (v.Kind <> avkNull) then
+    else Continue;
+    if ATransition and (cPrimaryKeys[i] <> 'ignore') then
+      TyAnimPropPut(tProps, cPrimaryKeys[i], v)
+    else
+    begin
+      SetAnimProp(cPrimaryKeys[i], v);
+      AnimDirty('');
+    end;
+  end;
+  { WITHOUT A TRANSITION the running animations keep going to the NEW values
+    (not stopped: that would jump) -- the state's, or the normal state's }
+  if not ATransition then
+  begin
+    if AHasState then
+    begin
+      src := AState.Props;
+      srcStyle := AState.HasStyle;
+      srcShape := AState.HasShape;
+    end
+    else
+    begin
+      src := FNormal;
+      srcStyle := FNormalStyle;
+      srcShape := FNormalShape;
+    end;
+    snap := TFPList.Create;
+    try
+      snap.Assign(FAnimators);
+      for i := 0 to snap.Count - 1 do
+      begin
+        a := TTyAnimator(snap[i]);
+        if a.FLoop then Continue;
+        tn := a.FTargetName;
+        ck := nil;
+        cv := nil;
+        for j := 0 to High(src) do
+        begin
+          if tn = '' then
+          begin
+            if not IsRootKey(src[j].Key) then Continue;
+            inner := src[j].Key;
+          end
+          else if ((tn = 'style') and srcStyle) or ((tn = 'shape') and srcShape) then
+          begin
+            if not SubOf(src[j].Key, tn, inner) then Continue;
+          end
+          else
+            Continue;
+          SetLength(ck, Length(ck) + 1);
+          SetLength(cv, Length(cv) + 1);
+          ck[High(ck)] := inner;
+          cv[High(cv)] := src[j].Value;
+        end;
+        a.ChangeFinalValue(ck, cv);
+      end;
+    finally
+      snap.Free;
+    end;
+  end;
+  if Length(tProps) > 0 then DoAnimateTo(tProps, cfg, False, AName);
+  { ---- the style ---- }
+  hasTarget := False;
+  target := nil;
+  if AHasState and AState.HasStyle then
+  begin
+    hasTarget := True;
+    { the normal style with the state's over it }
+    for i := 0 to High(FNormal) do
+      if SubOf(FNormal[i].Key, 'style', inner) then
+        TyAnimPropPut(target, FNormal[i].Key, FNormal[i].Value);
+    for i := 0 to High(AState.Props) do
+      if SubOf(AState.Props[i].Key, 'style', inner) then
+        TyAnimPropPut(target, AState.Props[i].Key, AState.Props[i].Value);
+  end
+  else if FNormalStyle then
+  begin
+    hasTarget := True;
+    for i := 0 to High(FNormal) do
+      if SubOf(FNormal[i].Key, 'style', inner) then
+        TyAnimPropPut(target, FNormal[i].Key, FNormal[i].Value);
+  end;
+  if hasTarget then
+  begin
+    keys := AnimKeyList;
+    if ATransition then
+    begin
+      { a key of the style the target lacks takes createStyle's default
+        (`key in targetStyle` reaches the prototype); a target key the style
+        lacks starts from its default }
+      for i := 0 to High(keys) do
+        if SubOf(keys[i], 'style', inner) and (TyAnimPropIndex(target, keys[i]) < 0)
+          and TyAnimStyleDefault(inner, v) then
+          TyAnimPropPut(target, keys[i], v);
+      for i := 0 to High(target) do
+        if not HasAnimKey(target[i].Key) and SubOf(target[i].Key, 'style', inner)
+          and TyAnimStyleDefault(inner, v) then
+          SetAnimProp(target[i].Key, v);
+      StopTracksDetached('style', target);
+      DoAnimateTo(target, cfg, False, AName, True);
+    end
+    else
+    begin
+      { useStyle: the target is the whole style now }
+      for i := 0 to High(keys) do
+        if SubOf(keys[i], 'style', inner) and (TyAnimPropIndex(target, keys[i]) < 0) then
+        begin
+          TyAnimStyleDefault(inner, v);
+          SetAnimProp(keys[i], v);
+        end;
+      for i := 0 to High(target) do SetAnimProp(target[i].Key, target[i].Value);
+      AnimDirty('style');
+    end;
+  end;
+  { ---- the shape (a Path's) ---- }
+  if not FStatePath then Exit;
+  hasTarget := False;
+  target := nil;
+  if AHasState and AState.HasShape then
+  begin
+    hasTarget := True;
+    for i := 0 to High(FNormal) do
+      if SubOf(FNormal[i].Key, 'shape', inner) then
+        TyAnimPropPut(target, FNormal[i].Key, FNormal[i].Value);
+    for i := 0 to High(AState.Props) do
+      if SubOf(AState.Props[i].Key, 'shape', inner) then
+        TyAnimPropPut(target, AState.Props[i].Key, AState.Props[i].Value);
+  end
+  else if FNormalShape then
+  begin
+    hasTarget := True;
+    for i := 0 to High(FNormal) do
+      if SubOf(FNormal[i].Key, 'shape', inner) then
+        TyAnimPropPut(target, FNormal[i].Key, FNormal[i].Value);
+  end;
+  if not hasTarget then Exit;
+  if ATransition then
+  begin
+    { only the primitive keys transition; an object (an array) is assigned }
+    prims := nil;
+    for i := 0 to High(target) do
+      if target[i].Value.Kind = avkArray then
+        SetAnimProp(target[i].Key, target[i].Value)
+      else
+        TyAnimPropPut(prims, target[i].Key, target[i].Value);
+    if Length(prims) > 0 then
+    begin
+      StopTracksDetached('shape', prims);
+      DoAnimateTo(prims, cfg, False, AName);
+    end;
+  end
+  else
+  begin
+    for i := 0 to High(target) do SetAnimProp(target[i].Key, target[i].Value);
+    AnimDirty('shape');
+  end;
+end;
+
+procedure TTyAnimElement.UseStates(const AName: string; const AState: TTyAnimState;
+  ANoAnimation: Boolean);
+var
+  g: TEngineGuard;
+  trans: Boolean;
+begin
+  if AName = '' then
+  begin
+    ClearStates(ANoAnimation);
+    Exit;
+  end;
+  { the same list: nothing at all }
+  if AName = FCurStates then Exit;
+  g := EnterEngine;
+  try
+    trans := CanTransition(ANoAnimation);
+    SaveCurrentToNormal(AState);
+    ApplyStateObj(AName, True, AState, trans);
+    FCurStates := AName;
+  finally
+    LeaveEngine(g);
+  end;
+end;
+
+procedure TTyAnimElement.ClearStates(ANoAnimation: Boolean);
+var
+  g: TEngineGuard;
+  none: TTyAnimState;
+begin
+  { from normal to normal: nothing }
+  if FCurStates = '' then Exit;
+  g := EnterEngine;
+  try
+    none := Default(TTyAnimState);
+    ApplyStateObj(TyAnimNormalState, False, none, CanTransition(ANoAnimation));
+    FCurStates := '';
+    FNormal := nil;
+    FNormalStyle := False;
+    FNormalShape := False;
+  finally
     LeaveEngine(g);
   end;
 end;
@@ -1865,6 +2486,13 @@ begin
     FKeys[i] := AKey;
   end;
   FValues[i] := TyAnimClone(AValue);
+end;
+
+function TTyAnimBag.AnimKeyList: TTyStringArray;
+var i: Integer;
+begin
+  SetLength(Result, Length(FKeys));
+  for i := 0 to High(FKeys) do Result[i] := FKeys[i];
 end;
 
 function TTyAnimBag.Num(const AKey: string): Double;
