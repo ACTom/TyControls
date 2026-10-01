@@ -2,7 +2,7 @@ unit tyControls.Base;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType, LCLVersion,
   BGRABitmap, BGRABitmapTypes, BGRAGradientScanner,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Painter, tyControls.IconFont;
@@ -11,6 +11,11 @@ const
     a constructor gives its control, the numbers a designer stores in a form file. It is
     also the PPI a control is born at -- see SetParent on TTyGraphicControl. }
   TyDesignPPI = 96;
+{$IF LCL_FULLVERSION < 4000000}
+  { Same value as LCL 4.0, which added it. Older designers never send it, so a handler
+    for it just stays idle there. }
+  CM_MASKHITTEST = CM_BASE + 89;
+{$ENDIF}
 type
   ITyStyleable = interface
     ['{A1B2C3D4-0001-0002-0003-000000000001}']

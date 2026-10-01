@@ -582,7 +582,7 @@ implementation
 // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
 // win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
-uses Math, Themes, BGRABitmap, BGRABitmapTypes;
+uses Math, Themes, LCLVersion, BGRABitmap, BGRABitmapTypes;
 
 type
   { Reaches TMenuItem's protected InitiateActions / DoDrawItem / DoMeasureItem. Those three
@@ -2761,7 +2761,13 @@ begin
   // Mirrors popupmenu.inc, minus the native handle it does not need.
   if (ActivePopupMenu <> nil) and (ActivePopupMenu <> Self) then
     ActivePopupMenu.Close;
-  SetPopupPoint(Point(X, Y));       // so PopupPoint reads the cursor, not history
+  // So PopupPoint reads the cursor, not history. LCL before 4.0 has no setter, only the
+  // field-backed read; its PopUp assigns the field directly, and so do we.
+  {$IF LCL_FULLVERSION >= 4000000}
+  SetPopupPoint(Point(X, Y));
+  {$ELSE}
+  PPoint(@PopupPoint)^ := Point(X, Y);
+  {$ENDIF}
   DoPopup(Self);                    // OnPopup -- may add, remove or re-enable items
   if Items.Count = 0 then Exit;     // an empty menu shows nothing, as LCL decides here
   ActivePopupMenu := Self;          // what makes Close/OnClose reachable at all
