@@ -114,6 +114,7 @@ type
     procedure TestTheComparisonWaitsForAModal;   { M16 }
     procedure TestTheModelIsToldInEnglish;       { M17 }
     procedure TestTheComparisonShowsTheEditorNow;   { M18 }
+    procedure TestClosingTheComparisonEndsTheTrial;   { M19 }
   end;
 
 implementation
@@ -1806,17 +1807,14 @@ procedure TTbMainFormTests.ModalAccept(Sender: TObject);
 begin
   Inc(FModals);
   if Sender is TTbCompareForm then
-  begin
-    TTbCompareForm(Sender).BtnAcceptClick(nil);
-    TTbCompareForm(Sender).ModalResult := mrOk;
-  end;
+    TTbCompareForm(Sender).BtnAccept.Click;     { OnClick, and the .lfm's ModalResult }
 end;
 
 procedure TTbMainFormTests.ModalDiscard(Sender: TObject);
 begin
   Inc(FModals);
   if Sender is TTbCompareForm then
-    TTbCompareForm(Sender).ModalResult := mrCancel;
+    TTbCompareForm(Sender).BtnDiscard.Click;    { the .lfm's ModalResult }
 end;
 
 procedure TTbMainFormTests.ModalLeave(Sender: TObject);
@@ -1832,8 +1830,7 @@ begin
   if Sender is TTbAiSettingsForm then
   begin
     TTbAiSettingsForm(Sender).AddPreset(tapOllama);
-    if TTbAiSettingsForm(Sender).Commit then
-      TTbAiSettingsForm(Sender).ModalResult := mrOk;
+    TTbAiSettingsForm(Sender).BtnOk.Click;      { Commit, and the .lfm's ModalResult }
   end;
 end;
 
@@ -2419,6 +2416,32 @@ begin
     AssertTrue('M18: the left title stays: ' + f.LeftTitle.Caption, f.LeftTitle.Caption = 'Now');
     AssertTrue('M18: the summary says it changed: ' + f.Summary.Caption,
       Pos(rsTbCompareEditedSince, f.Summary.Caption) > 0);
+  finally
+    f.Free;
+  end;
+end;
+
+{ M19: closing the comparison window -- its own Close, OnClose -- ends a trial before the
+  window is freed (the preview shows the editor's version again) }
+procedure TTbMainFormTests.TestClosingTheComparisonEndsTheTrial;
+var
+  b: TScriptedBackend;
+  f: TTbCompareForm;
+begin
+  FForm.Editor.Lines.Text := cMarkerDocMain;
+  FForm.RefreshNow;
+  b := ScriptedAi;
+  b.Add(TbAnswerWith('TyButton { background: #654321; }'));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'darker';
+  FForm.Ai.GenerateClick(nil);
+  f := FForm.BuildCompareForm;
+  try
+    f.TrialCheck.Checked := True;
+    AssertEquals('the trial is shown', $654321, PreviewButtonBg);
+    f.Close;
+    AssertEquals('M19: closing ended it', $123456, PreviewButtonBg);
+    AssertFalse('M19: no trial', FForm.Preview.InTrial);
   finally
     f.Free;
   end;

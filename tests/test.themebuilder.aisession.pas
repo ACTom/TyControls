@@ -43,6 +43,7 @@ type
     { after the phase 3 reviews }
     procedure TestNothingOutsideTheFolderIsRead;   { S19 }
     procedure TestAnOpenBlockIsNotComplete;        { S20 }
+    procedure TestFeedbackOnTheRealBackend;        { S21 }
   end;
 
 implementation
@@ -409,6 +410,48 @@ begin
     AssertEquals('S17: one request', 1, FSession.Outcome.Requests);
     AssertTrue('S17: streamed', FStreamedCalls > 0);
     AssertFalse('S17: on the main thread', FStreamedOffMain);
+    FreeAndNil(FSession);
+    CheckSynchronize(50);
+  finally
+    srv.Free;
+  end;
+end;
+
+{ S21: a round of feedback on the real client and its thread: the first answer has an
+  error, the session starts the second request from inside the first one's queued result
+  (DoneOnMain -> Start -> DropWorker -> WaitFor), and the second answer is taken }
+procedure TTbAiSessionTests.TestFeedbackOnTheRealBackend;
+var
+  srv: TTbFakeHttpServer;
+  prof: TTbAiProfile;
+  t0: QWord;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Queue([FakeSend(FakeHead(200, 'text/event-stream', True)),
+      FakeSend(FakeChunk(TbOpenAIStream(TbAnswerWith('TyButton { frobnicate: 1px; }')))),
+      FakeSend(FakeLastChunk)]);
+    srv.Queue([FakeSend(FakeHead(200, 'text/event-stream', True)), FakeSleep(100),
+      FakeSend(FakeChunk(TbOpenAIStream(TbAnswerWith(BlueTemplate)))), FakeSend(FakeLastChunk)]);
+    prof := Default(TTbAiProfile);
+    prof.Format := tafOpenAI;
+    prof.BaseUrl := srv.Url('/v1');
+    prof.Model := 'm';
+    prof.TimeoutSec := 10;
+    FSession.Backend := TTbClientBackend.Create(prof, '');
+    FBackend := nil;
+    AssertTrue('started', FSession.Generate('make it blue', Doc(TbMinimalTemplate), False));
+    t0 := GetTickCount64;
+    while (FFinished = 0) and (GetTickCount64 - t0 < 15000) do
+      CheckSynchronize(10);
+    AssertEquals('S21: finished once within 15 s', 1, FFinished);
+    AssertTrue('S21: done: ' + FSession.Outcome.Sentence, FSession.Stage = tasDone);
+    AssertEquals('S21: two requests', 2, FSession.Outcome.Requests);
+    AssertEquals('S21: two at the server', 2, srv.RequestCount);
+    AssertTrue('S21: the second carried the feedback',
+      Pos('frobnicate', srv.LastRequest.Body) > 0);
+    AssertEquals('S21: no error left', 0, TbIssueErrorCount(FSession.Outcome.Issues));
+    AssertTrue('S21: the second answer is the candidate', Pos('#ABCDEF', FSession.Outcome.Candidate) > 0);
     FreeAndNil(FSession);
     CheckSynchronize(50);
   finally
