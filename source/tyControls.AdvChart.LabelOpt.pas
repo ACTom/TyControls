@@ -254,7 +254,11 @@ end;
 
 function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
   const ABase: TTyLabelSpec): TTyLabelSpec;
+const
+  cStates: array[0..2] of string = ('emphasis', 'blur', 'select');
 var
+  st: TJSONObject;
+  k: Integer;
   series, node: TJSONObject;
   d: TJSONData;
   arr: TJSONArray;
@@ -265,6 +269,18 @@ begin
   Result := ABase;
   series := ASeries;
   node := ANode;
+  { A STATE THAT SHOWS THE LABEL, read whether or not the series writes a
+    `label` of its own: needsCreateText [Batch 88] }
+  if series <> nil then
+    for k := 0 to 2 do
+    begin
+      st := ObjOf(series.Find(cStates[k]));
+      if st <> nil then st := ObjOf(st.Find('label'));
+      if st = nil then Continue;
+      d := st.Find('show');
+      if (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean then
+        Result.StateShow := True;
+    end;
   if node = nil then Exit;
 
   d := node.Find('show');

@@ -13,8 +13,8 @@ unit test.advchart.mouseevents;
   it does not).
 
   Upstream's published action events (select, selectchanged,
-  legendselectchanged, ...) are left out here: they are the selection and
-  legend batches' to make. }
+  legendselectchanged, ...) are left out here: test.advchart.select holds
+  the selection's [Batch 88], the legend's are B3's. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -79,6 +79,10 @@ const
     { a legend click toggles the series: B3's }
     (Case_: 'legend-trigger'; Step: 3)
   );
+
+const
+  cPubTypes: array[0..5] of string = ('select', 'unselect', 'toggleselect',
+    'selectchanged', 'highlight', 'downplay');
 
 { ==================== the probe ==================== }
 
@@ -284,6 +288,17 @@ begin
     else q := d.AsJSON;
     FChart.ChartOn(r.Strings['type'], @lg.Handle, q);
   end;
+  { THEN 'pub', one plain handler for every event type the chart publishes
+    (the oracle's chart._messageCenter types): the selection's are the
+    port's since batch 88, so an item click's select / selectchanged are
+    compared here too, across every series type of this fixture. The
+    legend's and the drill-downs' are not emitted yet and filtered below. }
+  lg := TMeLogger.Create;
+  lg.Id := 'pub';
+  lg.Log := FLog;
+  FLoggers.Add(lg);
+  for i := 0 to High(cPubTypes) do
+    FChart.ChartOn(cPubTypes[i], @lg.Handle);
 end;
 
 procedure TAdvChartMouseEventsOracleTest.Run(const AOnly: string; AMinimum: Integer);
@@ -340,7 +355,14 @@ begin
         evs := st.Arrays['events'];
         for e := 0 to evs.Count - 1 do
           if TyChartEventTypeOf(evs.Objects[e].Strings['type']) <> '' then
+          begin
+            { a legend item's hover highlight / downplay is the legend
+              batch's (B3) }
+            if (Copy(cs.Strings['id'], 1, 6) = 'legend')
+              and ((evs.Objects[e].Strings['type'] = 'highlight')
+                or (evs.Objects[e].Strings['type'] = 'downplay')) then Continue;
             want.Add(UpstreamLine(evs.Objects[e]));
+          end;
         Inc(FCompared);
         if want.Text <> FLog.Text then
         begin
@@ -380,8 +402,11 @@ begin
   FLoggers.Add(lg);
   lg.Id := 'x';
   lg.Log := FLog;
-  AssertEquals('selectchanged is not a mouse event', -1,
-    FChart.ChartOn('selectchanged', @lg.Handle));
+  { [Batch 88: this asked about selectchanged, which the chart emits since
+    the selection batch -- upstream publishes it from the select actions. A
+    type it never emits is the question: brushselected, the brush's.] }
+  AssertEquals('brushselected is not emitted', -1,
+    FChart.ChartOn('brushselected', @lg.Handle));
   FChart.Option := '{"animation":false,"xAxis":{"type":"category","data":["a"]},'
     + '"yAxis":{"type":"value"},"series":[{"type":"bar","data":[10]}]}';
   FChart.SetBounds(0, 0, 600, 400);
