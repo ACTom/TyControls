@@ -26,12 +26,14 @@ type
     procedure TestTheUrlIsSplit;            { H11 }
     procedure TestLoopbackHosts;            { H12 }
     procedure TestALargeBodyArrives;        { H13 }
+    { after the phase 3 reviews }
+    procedure TestTlsIsOneTwoOrThree;       { H14 }
   end;
 
 implementation
 
 uses
-  tbhttp, tbaichecks;
+  tbhttp, tbaichecks, tbfakehttp{$IFDEF MSWINDOWS}, tbhttpwin{$ENDIF};
 
 procedure TTbHttpTests.SetUp;
 begin
@@ -186,6 +188,46 @@ begin
   ok := HttpCheckBigBody(why);
   AssertTrue('H13: ' + why, ok);
 end;
+
+{ H14 (WinHTTP): an https request is limited to TLS 1.2 and 1.3 (1.2 alone where the system
+  does not know 1.3); plain http sets nothing. Against a dead port on this computer: the
+  protocols are set before the connection is tried }
+procedure TTbHttpTests.TestTlsIsOneTwoOrThree;
+{$IFDEF MSWINDOWS}
+const
+  cTls12 = $00000800;
+  cTls13 = $00002000;
+var
+  t: TTbWinHttpTransport;
+  req: TTbHttpRequest;
+  r: TTbHttpResult;
+begin
+  req := Default(TTbHttpRequest);
+  req.Url := 'https://127.0.0.1:' + IntToStr(FakeDeadPort) + '/v1';
+  req.IdleTimeoutMs := 5000;
+  t := TTbWinHttpTransport.Create;
+  try
+    r := t.Execute(req, nil, nil);
+    AssertTrue('H14: nothing listens there', r.Error <> hekNone);
+    AssertTrue(Format('H14: TLS 1.2 and 1.3, or 1.2 alone (%x)', [t.SecureProtocols]),
+      (t.SecureProtocols = cTls12 or cTls13) or (t.SecureProtocols = cTls12));
+  finally
+    t.Free;
+  end;
+  req.Url := 'http://127.0.0.1:' + IntToStr(FakeDeadPort) + '/v1';
+  t := TTbWinHttpTransport.Create;
+  try
+    t.Execute(req, nil, nil);
+    AssertEquals('H14: plain http sets nothing', 0, t.SecureProtocols);
+  finally
+    t.Free;
+  end;
+end;
+{$ELSE}
+begin
+  { libcurl takes the system's TLS settings }
+end;
+{$ENDIF}
 
 initialization
   RegisterTest(TTbHttpTests);

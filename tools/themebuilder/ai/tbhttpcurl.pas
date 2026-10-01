@@ -110,6 +110,7 @@ const
   CURLOPT_FOLLOWLOCATION = 52;
   CURLINFO_RESPONSE_CODE = $200002;
   CURLINFO_REDIRECT_URL = $10001F;    { CURLINFO_STRING + 31 }
+  CURLINFO_HTTP_CONNECTCODE = $200016; { CURLINFO_LONG + 22: the proxy's answer to CONNECT }
   CURL_GLOBAL_DEFAULT = 3;
 
 var
@@ -341,7 +342,7 @@ var
   redirect: PChar;
   i: Integer;
   code: LongInt;
-  idleSec, connectSec: PtrInt;
+  idleSec, connectSec, connectCode: PtrInt;
 begin
   Result := Default(TTbHttpResult);
   FStatus := 0;
@@ -422,6 +423,19 @@ begin
       redirect := nil;
       if (CurlGetInfo(h, CURLINFO_REDIRECT_URL, @redirect) = 0) and (redirect <> nil) then
         Result.Location := StrPas(redirect);
+    end;
+    connectCode := 0;
+    if (code <> 0) and (FStatus = 0) and
+       (CurlGetInfo(h, CURLINFO_HTTP_CONNECTCODE, @connectCode) = 0) and (connectCode = 407) then
+    begin
+      { an https tunnel the proxy refused without a password: told as the status it is,
+        as WinHTTP does }
+      FStatus := 407;
+      FStatusSent := True;
+      if Assigned(FOnStatus) then
+        FOnStatus(FStatus);
+      Result.Status := FStatus;
+      code := 0;
     end;
     if code <> 0 then
     begin

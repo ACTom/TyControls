@@ -103,6 +103,7 @@ function AiCheckRedirects(out AWhy: string): Boolean;         { C18 }
 function AiCheckInsecureKey(out AWhy: string): Boolean;       { C19 }
 function AiCheckHeartbeats(out AWhy: string): Boolean;        { C21 }
 function AiCheckLimits(out AWhy: string): Boolean;            { C22 }
+function AiCheckProxyAuth(out AWhy: string): Boolean;         { C23 }
 
 type
   { a transport that only counts being asked and answers "cannot connect": installed with
@@ -1447,6 +1448,32 @@ begin
     if (run.Outcome.Kind <> aekServer) or (run.Outcome.Status <> 500) then
       Exit(Fail(AWhy, 'a 10 MB error body: ' + AiDescribe(run)));
     if not PeerGone(srv) then Exit(Fail(AWhy, 'a 10 MB error body: the line was not dropped'));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+{ C23: 407 is a proxy that wants a password, told as that }
+function AiCheckProxyAuth(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Script([FakeSend('HTTP/1.1 407 Proxy Authentication Required'#13#10 +
+      'Proxy-Authenticate: Basic realm="x"'#13#10'Content-Length: 4'#13#10 +
+      'Connection: close'#13#10#13#10'auth')]);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekProxyAuth then Exit(Fail(AWhy, 'not a proxy password: ' + AiDescribe(run)));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if sentence <> rsTbAiProxyAuth then Exit(Fail(AWhy, 'the sentence: ' + sentence));
     Result := True;
     AWhy := '';
   finally

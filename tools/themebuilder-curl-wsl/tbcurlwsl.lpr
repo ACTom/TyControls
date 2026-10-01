@@ -157,6 +157,7 @@ begin
   Run('C18@curl a redirect is not followed', @AiCheckRedirects);
   Run('C21@curl heartbeats and events after the end', @AiCheckHeartbeats);
   Run('C22@curl a reply has limits', @AiCheckLimits);
+  Run('C23@curl 407 is a proxy that wants a password', @AiCheckProxyAuth);
 
   Run('K1 profiles come back as they were', @SettingsCheckRoundTrip);
   Run('K2 the key file is 0600, the ini has no key', @SettingsCheckUnixKeyFile);

@@ -40,6 +40,7 @@ type
     procedure TestARaiseIsScrubbed;          { C20 }
     procedure TestHeartbeatsAndLateEvents;   { C21 }
     procedure TestAReplyHasLimits;           { C22 }
+    procedure TestAProxyWantsAPassword;      { C23 }
   end;
 
   TTbAiSettingsTests = class(TTestCase)
@@ -331,6 +332,15 @@ var
 begin
   ok := AiCheckLimits(why);
   AssertTrue('C22: ' + why, ok);
+end;
+
+procedure TTbAiClientTests.TestAProxyWantsAPassword;
+var
+  why: string;
+  ok: Boolean;
+begin
+  ok := AiCheckProxyAuth(why);
+  AssertTrue('C23: ' + why, ok);
 end;
 
 procedure TTbAiClientTests.BackendDone(Sender: TObject; const AResult: TTbAiResult);

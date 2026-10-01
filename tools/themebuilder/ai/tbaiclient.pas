@@ -13,7 +13,7 @@ unit tbaiclient;
     2. the service answered 3xx: a redirect, not followed (the key would go along to
        wherever it points), told with the host it named; 4xx / 5xx: the key (401 / 403),
        the address or the model (404), too many requests (429), a refused request (other
-       4xx), the service's trouble (5xx);
+       4xx), a proxy that wants a password (407), the service's trouble (5xx);
     3. the stream carried an error;
     4. the model declined, or the reply hit the maximum output length;
     5. no event at all: a service that answered the whole reply as one JSON is taken as it
@@ -54,13 +54,14 @@ resourcestring
   rsTbAiOther = 'The request failed.';
   rsTbAiServiceSays = '(%s)';
   rsTbAiRedirect = 'The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings.';
-  rsTbAiInsecureKey = 'Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network.';
+  rsTbAiProxyAuth = 'The proxy asks for a user name and password (407). Set them in the system''s proxy settings, or use a proxy that does not ask.';
+  rsTbAiInsecureKey ='Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network.';
 
 type
   TTbAiErrorKind = (aekNone, aekCancelled, aekNoTransport, aekBadUrl, aekNameNotResolved,
     aekCannotConnect, aekTls, aekTimeout, aekBroken, aekAuth, aekNotFound, aekRateLimit,
     aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekRedirect,
-    aekInsecureKey, aekOther);
+    aekInsecureKey, aekProxyAuth, aekOther);
 
   TTbAiResult = record
     Kind: TTbAiErrorKind;
@@ -316,6 +317,11 @@ begin
         Result := Format(rsTbAiInsecureKey, [host]);
         withDetail := False;
       end;
+    aekProxyAuth:
+      begin
+        Result := rsTbAiProxyAuth;
+        withDetail := False;
+      end;
   else
     Result := rsTbAiOther;
   end;
@@ -564,8 +570,9 @@ begin
       case FStatus of
         401, 403: Result.Kind := aekAuth;
         404: Result.Kind := aekNotFound;
+        407: Result.Kind := aekProxyAuth;
         429: Result.Kind := aekRateLimit;
-        400, 402, 405..428, 430..499: Result.Kind := aekBadRequest;
+        400, 402, 405, 406, 408..428, 430..499: Result.Kind := aekBadRequest;
         500..599: Result.Kind := aekServer;
       else
         Result.Kind := aekOther;

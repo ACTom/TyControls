@@ -15,6 +15,10 @@ unit tbhttpwin;
   (the headers, each QueryDataAvailable, each ReadData) the idle timeout -- WinHTTP applies
   the receive timeout to each blocking call, so "no byte for this long" is what it means.
 
+  TLS: an https request is limited to TLS 1.2 and 1.3 (1.2 alone where the system does not
+  know 1.3). One session per request: nothing is kept between requests (a request a minute
+  at most -- the TLS handshake it repeats is not worth a shared session's locking).
+
   Redirects: the request handle's redirect policy is "never" (WinHTTP's default follows a
   redirect to any host, our headers -- the key -- included); a 3xx comes back as the status
   with its Location header.
@@ -32,6 +36,12 @@ uses
 type
   HINTERNET = Pointer;
 
+const
+  { winhttp.h; TLS 1.3 is not in FPC's binding }
+  WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 = $00000800;
+  WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3 = $00002000;
+
+type
   TTbWinHttpTransport = class(TTbHttpTransport)
   private
     FLock: TCriticalSection;
@@ -39,6 +49,7 @@ type
     FCancelled: Boolean;
     FRequestClosed: Boolean;
     FStatus: DWORD;
+    FProtocols: DWORD;
     function IsCancelled: Boolean;
     function OpenRequest(AConnect: HINTERNET; const APath: UnicodeString; AFlags: DWORD): Boolean;
     procedure CloseRequest;
@@ -48,6 +59,10 @@ type
     function Execute(const ARequest: TTbHttpRequest; AOnStatus: TTbHttpStatusEvent;
       AOnData: TTbHttpDataEvent): TTbHttpResult; override;
     procedure Cancel; override;
+    { the protocols an https request was limited to: TLS 1.2 and 1.3, or 1.2 alone where
+      the system does not know 1.3; 0 = the system's own choice (neither was accepted) or
+      not https }
+    property SecureProtocols: DWORD read FProtocols;
   end;
 
 function TbWinHttpErrorKind(ACode: DWORD): TTbHttpErrorKind;
@@ -68,6 +83,7 @@ const
   WINHTTP_QUERY_FLAG_NUMBER = $20000000;
   WINHTTP_OPTION_REDIRECT_POLICY = 88;
   WINHTTP_OPTION_REDIRECT_POLICY_NEVER = 0;
+  WINHTTP_OPTION_SECURE_PROTOCOLS = 84;
   WINHTTP_ADDREQ_FLAG_ADD = $20000000;
   WINHTTP_ADDREQ_FLAG_REPLACE = $80000000;
   ERROR_WINHTTP_TIMEOUT = 12002;
@@ -244,7 +260,7 @@ function TTbWinHttpTransport.Execute(const ARequest: TTbHttpRequest;
 var
   url: TTbUrlParts;
   session, conn: HINTERNET;
-  access, flags, status, size, avail, got, policy: DWORD;
+  access, flags, status, size, avail, got, policy, protocols: DWORD;
   buf: RawByteString;
   headers: UnicodeString;
   location: string;
@@ -291,6 +307,20 @@ begin
   try
     WinHttpSetTimeouts(session, TbConnectTimeoutMs(ARequest), TbConnectTimeoutMs(ARequest),
       TbIdleTimeoutMs(ARequest), TbIdleTimeoutMs(ARequest));
+    { TLS 1.2 and 1.3 only -- 1.2 alone on a system that does not know 1.3 (Windows 10
+      before 2004); a system that knows neither keeps its own choice }
+    FProtocols := 0;
+    if url.Secure then
+    begin
+      protocols := WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+      if not WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, @protocols, SizeOf(protocols)) then
+      begin
+        protocols := WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+        if not WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, @protocols, SizeOf(protocols)) then
+          protocols := 0;
+      end;
+      FProtocols := protocols;
+    end;
     conn := WinHttpConnect(session, PWideChar(UTF8Decode(url.Host)), url.Port, 0);
     if conn = nil then
       Exit(Fail(hekOther));
