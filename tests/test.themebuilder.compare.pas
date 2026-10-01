@@ -29,6 +29,7 @@ type
     procedure TestABadTrialEndsAtOnce;       { V9 }
     { the last batch before the merge }
     procedure TestTintedRowsAreReadable;     { V10 }
+    procedure TestTheTrialBoxIsNotCut;       { V11 }
   end;
 
   TTbAiSettingsFormTests = class(TTestCase)
@@ -380,6 +381,50 @@ begin
       TyDefaultController.ThemeName := oldTheme;
     if TyDefaultController.Mode <> oldMode then
       TyDefaultController.Mode := oldMode;
+  end;
+end;
+
+{ V11: "Try it in the preview" is not cut short, in English or in Chinese: the box is as
+  wide as the painter needs for padding, indicator, gap and caption -- the caption measured
+  the way the painter decides to cut it -- and it takes the room the buttons leave. An
+  AutoSize check box sized itself by the canvas's measure of the caption, a few pixels short
+  of the renderer's with some fonts: "Try it in the previ...". The fonts are the real
+  program's (the system font as the fallback: the tests leave it empty, and an empty name
+  measures the same both ways). }
+procedure TTbCompareTests.TestTheTrialBoxIsNotCut;
+const
+  cCaptions: array[0..1] of string = ('Try it in the preview', #$E5#$9C#$A8#$E9#$A2#$84#$E8#$A7#$88#$E9#$87#$8C#$E8#$AF#$95#$E7#$9C#$8B);
+var
+  c: TTyControlAccess;
+  s: TTyStyleSet;
+  i, ppi, need: Integer;
+  oldFallback: string;
+begin
+  oldFallback := TyFallbackFontName;
+  TyFallbackFontName := Screen.SystemFont.Name;
+  try
+    c := TTyControlAccess(FForm.TrialCheck);
+    for i := 0 to High(cCaptions) do
+    begin
+      c.Caption := cCaptions[i];
+      c.Invalidate;           { the floor and the AutoSize width follow the font, as on a theme change }
+      AutoSized(c);
+      LayOut(FForm.Buttons);
+      s := c.CurrentStyle;
+      ppi := c.Font.PixelsPerInch;
+      if ppi <= 0 then ppi := 96;
+      need := MulDiv(s.Padding.Left + s.Padding.Right, ppi, 96) +
+        MulDiv(c.ActiveController.Metric('--checkbox-size', TyCheckBoxBox), ppi, 96) +
+        MulDiv(c.ActiveController.Metric('--checkbox-gap', TyCheckBoxGap), ppi, 96) +
+        TyMeasureRenderedTextWidth(cCaptions[i], s.FontName, c.ResolveFontSize(s), s.FontWeight, ppi);
+      AssertTrue(Format('V11: "%s" is whole: %d px for %d', [cCaptions[i], c.Width, need]),
+        c.Width >= need);
+      AssertTrue(Format('V11: the box takes the room left of the buttons (to %d, Accept at %d)',
+        [c.Left + c.Width, FForm.BtnAccept.Left]), c.Left + c.Width >= FForm.BtnAccept.Left - 20);
+      AssertFalse('V11: clear of Accept', Overlap(c, FForm.BtnAccept));
+    end;
+  finally
+    TyFallbackFontName := oldFallback;
   end;
 end;
 

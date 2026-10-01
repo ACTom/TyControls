@@ -6,6 +6,9 @@ unit tbcompareform;
   preview" swaps the preview to the AI's version until it is unticked or the window closes
   (OnTrial -- the main window does the swapping); Accept and Discard close the window.
   Accepting is allowed with problems left: the user decides (spec §7.3, step 4).
+  The trial box takes the button bar's free width (alClient) rather than sizing itself: the
+  library's check box measures its caption on the canvas for AutoSize, a few pixels short of
+  what its renderer draws with some fonts, and the caption came out "Try it in the previ...".
 
   The two text panes are read-only SynEdits -- the same control, highlighter and colours as
   the editor (tbeditorlook): the library has no Ty control that shows a thousand lines of

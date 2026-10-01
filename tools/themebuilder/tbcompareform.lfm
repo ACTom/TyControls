@@ -96,9 +96,8 @@ object TbCompareForm: TTbCompareForm
         Left = 10
         Height = 24
         Top = 10
-        Width = 200
-        Align = alLeft
-        AutoSize = True
+        Width = 876
+        Align = alClient
         BorderSpacing.Around = 10
         Caption = 'Try it in the preview'
         OnChange = TrialCheckChange
