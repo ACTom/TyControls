@@ -310,6 +310,11 @@ begin
   AssertTrue('X8: why: ' + err, Pos(Format(rsTbExportFolderNotEmpty, [target]), err) > 0);
   AssertTrue('X8: the file is still there', FileExists(target + PathDelim + 'keep.txt'));
   AssertNothingLeft('X8', FDir);
+  target := FDir + 'onlyafolder';
+  ForceDirectories(target + PathDelim + 'sub');
+  AssertFalse('X8: a folder holding only a folder is not empty', TbExportBundle(TbMinimalTemplate, nil, Info,
+    tbfFolder, target, err));
+  AssertTrue('X8: and its folder stays', DirectoryExists(target + PathDelim + 'sub'));
   target := FDir + 'empty';
   ForceDirectories(target);
   AssertTrue('X8: an empty folder is taken: ' + err, TbExportBundle(TbMinimalTemplate, nil, Info,

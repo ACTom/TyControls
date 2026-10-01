@@ -381,10 +381,27 @@ end;
 
 { ---- writing ---- }
 
+{ ADir holds anything at all -- a file, a folder, hidden ones too. The first entry answers:
+  a target that is a big folder (a drive's root, a home folder) is not walked whole. }
+function FolderHasAnything(const ADir: string): Boolean;
+var
+  sr: TSearchRec;
+begin
+  Result := False;
+  if FindFirst(IncludeTrailingPathDelimiter(ADir) + AllFilesMask, faAnyFile, sr) = 0 then
+  try
+    repeat
+      if (sr.Name <> '.') and (sr.Name <> '..') then
+        Exit(True);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+end;
+
 function CheckTarget(AFormat: TTbBundleFormat; const ATarget: string; out AError: string): Boolean;
 var
   parent: string;
-  found: TStringList;
 begin
   Result := False;
   AError := '';
@@ -406,24 +423,11 @@ begin
       AError := Format(rsTbExportFolderNotEmpty, [ATarget]);
       Exit;
     end;
-    if DirectoryExists(ATarget) then
+    { the tool never deletes a folder of the user's: only an empty one is taken }
+    if DirectoryExists(ATarget) and FolderHasAnything(ATarget) then
     begin
-      { the tool never deletes a folder of the user's: only an empty one is taken }
-      found := FindAllFiles(ATarget, '*', True);
-      try
-        if found.Count = 0 then
-        begin
-          found.Free;
-          found := FindAllDirectories(ATarget, False);
-        end;
-        if found.Count > 0 then
-        begin
-          AError := Format(rsTbExportFolderNotEmpty, [ATarget]);
-          Exit;
-        end;
-      finally
-        found.Free;
-      end;
+      AError := Format(rsTbExportFolderNotEmpty, [ATarget]);
+      Exit;
     end;
   end
   else if DirectoryExists(ATarget) then
