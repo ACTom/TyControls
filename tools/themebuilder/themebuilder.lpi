@@ -25,7 +25,7 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="26">
+    <Units Count="27">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
@@ -52,6 +52,7 @@
       <Unit23><Filename Value="ai/tbhttpcurl.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbhttpcurl"/></Unit23>
       <Unit24><Filename Value="ai/tbsse.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsse"/></Unit24>
       <Unit25><Filename Value="ai/tbaiformat.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbaiformat"/></Unit25>
+      <Unit26><Filename Value="ai/tbaiclient.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbaiclient"/></Unit26>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

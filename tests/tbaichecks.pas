@@ -12,7 +12,7 @@ unit tbaichecks;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, SyncObjs, tbhttp, tbfakehttp;
+  Classes, SysUtils, SyncObjs, tbhttp, tbfakehttp, tbaiformat, tbaiclient;
 
 type
   { one Execute on a worker thread, with everything the checks look at afterwards }
@@ -42,6 +42,25 @@ type
     function DataCount: Integer;
   end;
 
+  { one TTbAiClient.Run on a worker thread }
+  TTbAiRun = class(TThread)
+  private
+    FLock: TCriticalSection;
+    procedure DoDelta(Sender: TObject; APiece: TTbStreamPiece; const AText: string);
+  protected
+    procedure Execute; override;
+  public
+    Client: TTbAiClient;
+    Profile: TTbAiProfile;
+    Outcome: TTbAiResult;
+    TextPieces, ThinkingPieces, OffWorker: Integer;   { OffWorker: deltas on the main thread }
+    Streamed: string;
+    constructor Create(const AProfile: TTbAiProfile; const AKey: string);
+    destructor Destroy; override;
+    function WaitDone(AMs: Integer): Boolean;
+    function TextCount: Integer;
+  end;
+
 var
   { where tests/fixtures/themebuilder/ai is, with a trailing delimiter; the caller sets it }
   TbAiFixtureDir: string = '';
@@ -62,7 +81,28 @@ function HttpCheckRefuseData(out AWhy: string): Boolean;     { H9 }
 function HttpCheckLocalhost(out AWhy: string): Boolean;      { H10 }
 function HttpCheckBigBody(out AWhy: string): Boolean;        { H13 }
 
+{ the AI client against the local server: the plan's C numbers }
+function AiCheckOpenAIStream(out AWhy: string): Boolean;      { C1 }
+function AiCheckAnthropicStream(out AWhy: string): Boolean;   { C2 }
+function AiCheckKeyIsScrubbed(out AWhy: string): Boolean;     { C3 }
+function AiCheckRateLimit(out AWhy: string): Boolean;         { C4 }
+function AiCheckNotFound(out AWhy: string): Boolean;          { C5 }
+function AiCheckServerErrors(out AWhy: string): Boolean;      { C6 }
+function AiCheckBroken(out AWhy: string): Boolean;            { C7 }
+function AiCheckNeverFinished(out AWhy: string): Boolean;     { C8 }
+function AiCheckTimeout(out AWhy: string): Boolean;           { C9 }
+function AiCheckStreamError(out AWhy: string): Boolean;       { C10 }
+function AiCheckTruncated(out AWhy: string): Boolean;         { C11 }
+function AiCheckRefused(out AWhy: string): Boolean;           { C12 }
+function AiCheckNotStreamed(out AWhy: string): Boolean;       { C13 }
+function AiCheckBadFormat(out AWhy: string): Boolean;         { C14 }
+function AiCheckCancel(out AWhy: string): Boolean;            { C15 }
+function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
+
 implementation
+
+uses
+  fpjson, jsonparser;
 
 const
   cChinese = #$E4#$B8#$AD#$E6#$96#$87;    { 中文 in UTF-8 }
@@ -515,6 +555,689 @@ begin
       run.Free;
     end;
   finally
+    srv.Free;
+  end;
+end;
+
+
+{ ---- TTbAiRun ---- }
+
+constructor TTbAiRun.Create(const AProfile: TTbAiProfile; const AKey: string);
+begin
+  FreeOnTerminate := False;
+  inherited Create(True);
+  FLock := TCriticalSection.Create;
+  Profile := AProfile;
+  Client := TTbAiClient.Create(AProfile, AKey);
+end;
+
+destructor TTbAiRun.Destroy;
+begin
+  if not Finished then
+  begin
+    Client.Cancel;
+    WaitFor;
+  end;
+  Client.Free;
+  FLock.Free;
+  inherited Destroy;
+end;
+
+procedure TTbAiRun.DoDelta(Sender: TObject; APiece: TTbStreamPiece; const AText: string);
+begin
+  FLock.Enter;
+  try
+    if GetCurrentThreadId = MainThreadID then
+      Inc(OffWorker);
+    if APiece = tspText then
+    begin
+      Inc(TextPieces);
+      Streamed := Streamed + AText;
+    end
+    else if APiece = tspThinking then
+      Inc(ThinkingPieces);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TTbAiRun.TextCount: Integer;
+begin
+  FLock.Enter;
+  try
+    Result := TextPieces;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TTbAiRun.Execute;
+var
+  msgs: TTbChatMessages;
+begin
+  SetLength(msgs, 1);
+  msgs[0] := TbChatMessage(tcrUser, 'make it blue');
+  try
+    Outcome := Client.Run('SYSTEM', msgs, @DoDelta);
+  except
+    on E: Exception do
+    begin
+      Outcome.Kind := aekOther;
+      Outcome.Detail := 'raised: ' + E.Message;
+    end;
+  end;
+end;
+
+function TTbAiRun.WaitDone(AMs: Integer): Boolean;
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  while not Finished do
+  begin
+    if GetTickCount64 - t0 > QWord(AMs) then
+      Exit(False);
+    CheckSynchronize(10);
+  end;
+  Result := True;
+end;
+
+{ ---- helpers for the C checks ---- }
+
+type
+  TTbIntArray = array of Integer;
+
+const
+  cOpenAIText = 'Here is the theme, ' + cChinese + '.'#10'```tycss'#10 +
+    ':root { --accent: #2563EB; } /* '#$F0#$9F#$8E#$A8' */'#10'```';
+  cAnthropicText = 'Warmer colours.'#10'```tycss'#10'@mode light { :root { --accent: #C2410C; } }'#10'```';
+  cFakeKey = 'sk-test-0000';
+
+function AiKindName(AKind: TTbAiErrorKind): string;
+begin
+  WriteStr(Result, AKind);
+end;
+
+function AiDescribe(ARun: TTbAiRun): string;
+begin
+  Result := Format('%s, status %d, detail "%s", %d text pieces, text "%s"',
+    [AiKindName(ARun.Outcome.Kind), ARun.Outcome.Status, ARun.Outcome.Detail, ARun.TextPieces,
+     Copy(ARun.Outcome.Text, 1, 60)]);
+end;
+
+function AiProfile(AServer: TTbFakeHttpServer; AFormat: TTbAiFormat): TTbAiProfile;
+begin
+  Result := Default(TTbAiProfile);
+  Result.Id := 'test';
+  Result.Name := 'test';
+  Result.Format := AFormat;
+  Result.BaseUrl := AServer.Url('/v1');
+  Result.Model := 'm-1';
+  Result.MaxOutput := 0;
+  Result.TimeoutSec := 10;
+end;
+
+{ the start of the event (its "data:" or "event:" line) that holds AMark }
+function EventStartOf(const AData, AMark: string): Integer;
+var
+  p: Integer;
+begin
+  p := Pos(AMark, AData);
+  Result := 0;
+  if p = 0 then Exit;
+  while p > 1 do
+  begin
+    if ((AData[p - 1] = #10) or (AData[p - 1] = #13)) and
+       ((Copy(AData, p, 6) = 'data: ') or (Copy(AData, p, 7) = 'event: ')) then
+    begin
+      { an "event:" line just above belongs to the same event }
+      Result := p;
+      if (p > 2) then
+      begin
+        Dec(p);
+        if (AData[p] = #10) and (p > 1) and (AData[p - 1] = #13) then Dec(p);
+        while (p > 1) and not (AData[p - 1] in [#10, #13]) do Dec(p);
+        if Copy(AData, p, 7) = 'event: ' then
+          Result := p;
+      end;
+      Exit;
+    end;
+    Dec(p);
+  end;
+end;
+
+{ the reply streamed in pieces cut at ACuts (offsets the pieces start at), 50 ms apart }
+procedure StreamPieces(AServer: TTbFakeHttpServer; const AData: RawByteString;
+  const ACuts: array of Integer; AEnd: Boolean; AHoldAfter: Boolean = False);
+var
+  steps: array of TTbFakeStep;
+  i, from, upto: Integer;
+
+  procedure Add(const AStep: TTbFakeStep);
+  begin
+    SetLength(steps, Length(steps) + 1);
+    steps[High(steps)] := AStep;
+  end;
+
+begin
+  steps := nil;
+  Add(FakeSend(FakeHead(200, 'text/event-stream', True)));
+  from := 1;
+  for i := 0 to Length(ACuts) do
+  begin
+    if i < Length(ACuts) then
+      upto := ACuts[i]
+    else
+      upto := Length(AData) + 1;
+    if upto > from then
+    begin
+      Add(FakeSend(FakeChunk(Copy(AData, from, upto - from))));
+      Add(FakeSleep(50));
+    end;
+    from := upto;
+  end;
+  if AEnd then
+    Add(FakeSend(FakeLastChunk))
+  else if AHoldAfter then
+    Add(FakeHold)
+  else
+    Add(FakeClose);
+  AServer.Script(steps);
+end;
+
+function RunClient(AServer: TTbFakeHttpServer; const AProfile: TTbAiProfile; const AKey: string;
+  out ARun: TTbAiRun; out AWhy: string): Boolean;
+begin
+  ARun := TTbAiRun.Create(AProfile, AKey);
+  ARun.Start;
+  Result := ARun.WaitDone(10000);
+  if not Result then
+    AWhy := 'the client did not finish in 10 s';
+end;
+
+{ a reply of one status and one body, run to its end; the caller checks }
+function RunStatus(ACode: Integer; const ABody: RawByteString; AFormat: TTbAiFormat;
+  const AKey: string; out ARun: TTbAiRun; out AWhy: string; AServer: TTbFakeHttpServer): Boolean;
+begin
+  AServer.Script([FakeSend(FakeHead(ACode, 'application/json', False, ABody))]);
+  Result := RunClient(AServer, AiProfile(AServer, AFormat), AKey, ARun, AWhy);
+end;
+
+function ComparePtrInts(A, B: Pointer): Integer;
+begin
+  Result := PtrInt(A) - PtrInt(B);
+end;
+
+function CutsFor(const AData: RawByteString): TTbIntArray;
+var
+  p, i, n, c: Integer;
+  list: TList;
+begin
+  list := TList.Create;
+  try
+    { inside the data line of the second content event }
+    p := Pos('```tycss', AData);
+    if p > 0 then
+      list.Add(Pointer(PtrInt(p + 3)));
+    { between a CR and the LF after it (when the sample uses CRLF) }
+    p := Pos(#13#10, Copy(AData, Length(AData) div 3, MaxInt));
+    if p > 0 then
+      list.Add(Pointer(PtrInt(Length(AData) div 3 + p)));
+    n := Length(AData);
+    for i := 1 to 6 do
+    begin
+      if list.Count >= 6 then Break;
+      c := (n * i) div 7;
+      if list.IndexOf(Pointer(PtrInt(c))) < 0 then
+        list.Add(Pointer(PtrInt(c)));
+    end;
+    list.Sort(@ComparePtrInts);
+    SetLength(Result, list.Count);
+    for i := 0 to list.Count - 1 do
+      Result[i] := PtrInt(list[i]);
+  finally
+    list.Free;
+  end;
+end;
+
+{ ---- the C checks ---- }
+
+function AiCheckOpenAIStream(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+  body: TJSONData;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbLoadFixture('openai-ok.sse');
+    if Pos(#13#10, data) = 0 then Exit(Fail(AWhy, 'the sample has no CRLF to cut through'));
+    StreamPieces(srv, data, CutsFor(data), True);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekNone then Exit(Fail(AWhy, 'failed: ' + AiDescribe(run)));
+    if run.Outcome.Text <> cOpenAIText then Exit(Fail(AWhy, 'the text: ' + run.Outcome.Text));
+    if run.TextPieces < 4 then Exit(Fail(AWhy, Format('%d text pieces', [run.TextPieces])));
+    if run.OffWorker > 0 then Exit(Fail(AWhy, 'pieces came on the main thread'));
+    if srv.LastRequest.Path <> '/v1/chat/completions' then
+      Exit(Fail(AWhy, 'the path ' + srv.LastRequest.Path));
+    body := GetJSON(srv.LastRequest.Body);
+    try
+      if not ((body is TJSONObject) and (TJSONObject(body).Find('stream') <> nil) and
+         TJSONObject(body).Booleans['stream']) then
+        Exit(Fail(AWhy, 'no "stream": true in ' + srv.LastRequest.Body));
+    finally
+      body.Free;
+    end;
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckAnthropicStream(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbLoadFixture('anthropic-ok.sse');
+    StreamPieces(srv, data, CutsFor(data), True);
+    if not RunClient(srv, AiProfile(srv, tafAnthropic), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekNone then Exit(Fail(AWhy, 'failed: ' + AiDescribe(run)));
+    if run.Outcome.Text <> cAnthropicText then Exit(Fail(AWhy, 'the text: ' + run.Outcome.Text));
+    if run.ThinkingPieces = 0 then Exit(Fail(AWhy, 'no thinking was reported'));
+    if srv.HeaderValue('x-api-key') <> cFakeKey then Exit(Fail(AWhy, 'no x-api-key header'));
+    if srv.HeaderValue('anthropic-version') = '' then Exit(Fail(AWhy, 'no anthropic-version header'));
+    if srv.LastRequest.Path <> '/v1/messages' then Exit(Fail(AWhy, 'the path ' + srv.LastRequest.Path));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckKeyIsScrubbed(out AWhy: string): Boolean;
+const
+  cKey = 'sk-proj-abcdefghijklmnopqrstuvwxyzab12';
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  body: RawByteString;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    body := TbLoadFixture('openai-401.json');
+    { the service's message really quotes the key's last four }
+    if Pos('ab12', body) = 0 then Exit(Fail(AWhy, 'the sample does not quote the key'));
+    if not RunStatus(401, body, tafOpenAI, cKey, run, AWhy, srv) then Exit;
+    if run.Outcome.Kind <> aekAuth then Exit(Fail(AWhy, 'not a key error: ' + AiKindName(run.Outcome.Kind)));
+    if run.Outcome.Status <> 401 then Exit(Fail(AWhy, Format('status %d', [run.Outcome.Status])));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if (Pos('ab12', run.Outcome.Detail) > 0) or (Pos('ab12', sentence) > 0) then
+      Exit(Fail(AWhy, 'the key''s last four are still there'));
+    if (Pos('sk-proj-a', run.Outcome.Detail) > 0) or (Pos('sk-proj-a', sentence) > 0) then
+      Exit(Fail(AWhy, 'the key''s start is still there'));
+    if (Pos(cKey, run.Outcome.Detail) > 0) or (Pos(cKey, sentence) > 0) then
+      Exit(Fail(AWhy, 'the key is still there'));
+    if Pos('***', sentence) = 0 then Exit(Fail(AWhy, 'nothing was masked'));
+    if Pos('Incorrect API key', sentence) = 0 then Exit(Fail(AWhy, 'the service''s words are gone'));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckRateLimit(out AWhy: string): Boolean;
+const
+  cBody = '{"type":"error","error":{"type":"rate_limit_error","message":"Number of requests has exceeded your rate limit"}}';
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    if not RunStatus(429, cBody, tafAnthropic, cFakeKey, run, AWhy, srv) then Exit;
+    if run.Outcome.Kind <> aekRateLimit then Exit(Fail(AWhy, 'not a rate limit: ' + AiDescribe(run)));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if Pos(rsTbAiRateLimit, sentence) <> 1 then Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    if Pos('(Number of requests has exceeded your rate limit)', sentence) = 0 then
+      Exit(Fail(AWhy, 'the service''s words: ' + sentence));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckNotFound(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    if not RunStatus(404, TbLoadFixture('ollama-404.json'), tafOpenAI, '', run, AWhy, srv) then Exit;
+    if run.Outcome.Kind <> aekNotFound then Exit(Fail(AWhy, 'not "not found": ' + AiDescribe(run)));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if Pos('model "qwen9" not found', sentence) = 0 then Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckServerErrors(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  code, k: Integer;
+begin
+  Result := False;
+  for k := 0 to 1 do
+  begin
+    if k = 0 then code := 500 else code := 529;
+    run := nil;
+    srv := TTbFakeHttpServer.Create;
+    try
+      if not RunStatus(code, '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+         tafAnthropic, cFakeKey, run, AWhy, srv) then Exit;
+      if run.Outcome.Kind <> aekServer then
+        Exit(Fail(AWhy, Format('%d: not a server error: %s', [code, AiDescribe(run)])));
+    finally
+      run.Free;
+      srv.Free;
+    end;
+  end;
+  Result := True;
+  AWhy := '';
+end;
+
+function AiCheckBroken(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+  cut: Integer;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbLoadFixture('openai-ok.sse');
+    cut := EventStartOf(data, ':root { --accent');
+    if cut = 0 then Exit(Fail(AWhy, 'the sample has no :root event'));
+    StreamPieces(srv, Copy(data, 1, cut - 1), [cut div 2], False);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekBroken then Exit(Fail(AWhy, 'not broken: ' + AiDescribe(run)));
+    if run.Outcome.Text <> 'Here is the theme, ' + cChinese + '.'#10'```tycss'#10 then
+      Exit(Fail(AWhy, 'the half that came: ' + run.Outcome.Text));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckNeverFinished(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+  cut: Integer;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbLoadFixture('openai-ok.sse');
+    cut := EventStartOf(data, '"finish_reason":"stop"');
+    if cut = 0 then Exit(Fail(AWhy, 'the sample has no final chunk'));
+    StreamPieces(srv, Copy(data, 1, cut - 1), [], True);    { a proper end of the body }
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekBroken then Exit(Fail(AWhy, 'taken as complete: ' + AiDescribe(run)));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckTimeout(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+  prof: TTbAiProfile;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbLoadFixture('openai-ok.sse');
+    StreamPieces(srv, Copy(data, 1, EventStartOf(data, 'Here is the theme') - 1), [], False, True);
+    prof := AiProfile(srv, tafOpenAI);
+    prof.TimeoutSec := 1;
+    if not RunClient(srv, prof, cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekTimeout then Exit(Fail(AWhy, 'not a timeout: ' + AiDescribe(run)));
+    sentence := TbAiErrorSentence(run.Outcome, prof);
+    if Pos(Format(rsTbAiTimeout, ['127.0.0.1', 1]), sentence) <> 1 then
+      Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckStreamError(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    StreamPieces(srv, TbLoadFixture('anthropic-error.sse'), [], True);
+    if not RunClient(srv, AiProfile(srv, tafAnthropic), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekServer then Exit(Fail(AWhy, 'not an error: ' + AiDescribe(run)));
+    if run.Outcome.Status <> 200 then Exit(Fail(AWhy, Format('status %d', [run.Outcome.Status])));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if sentence <> rsTbAiStreamError + ' ' + Format(rsTbAiServiceSays, ['Overloaded']) then
+      Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckTruncated(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    StreamPieces(srv, TbLoadFixture('openai-length.sse'), [], True);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekTruncated then Exit(Fail(AWhy, 'OpenAI not cut off: ' + AiDescribe(run)));
+    if run.Outcome.Text <> 'Here is the theme' then Exit(Fail(AWhy, 'OpenAI text: ' + run.Outcome.Text));
+  finally
+    FreeAndNil(run);
+    srv.Free;
+  end;
+  srv := TTbFakeHttpServer.Create;
+  try
+    StreamPieces(srv, TbLoadFixture('anthropic-max-tokens.sse'), [], True);
+    if not RunClient(srv, AiProfile(srv, tafAnthropic), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekTruncated then Exit(Fail(AWhy, 'Anthropic not cut off: ' + AiDescribe(run)));
+    if run.Outcome.Text <> 'Here is' then Exit(Fail(AWhy, 'Anthropic text: ' + run.Outcome.Text));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckRefused(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    StreamPieces(srv, TbLoadFixture('anthropic-refusal.sse'), [], True);
+    if not RunClient(srv, AiProfile(srv, tafAnthropic), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekRefused then Exit(Fail(AWhy, 'not refused: ' + AiDescribe(run)));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckNotStreamed(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    if not RunStatus(200, TbLoadFixture('openai-whole.json'), tafOpenAI, cFakeKey, run, AWhy, srv) then Exit;
+    if run.Outcome.Kind <> aekNone then Exit(Fail(AWhy, 'refused a whole reply: ' + AiDescribe(run)));
+    if run.Outcome.Text <> 'Done.'#10'```tycss'#10':root { --accent: #7C3AED; }'#10'```' then
+      Exit(Fail(AWhy, 'the text: ' + run.Outcome.Text));
+    if run.TextPieces <> 1 then Exit(Fail(AWhy, Format('%d text pieces (one expected)', [run.TextPieces])));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckBadFormat(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Script([FakeSend(FakeHead(200, 'text/html', False, '<html>hello</html>'))]);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekBadFormat then Exit(Fail(AWhy, 'not a bad format: ' + AiDescribe(run)));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if Pos('(<html>hello', sentence) = 0 then Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckCancel(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+  prof: TTbAiProfile;
+  t0, cancelAt: QWord;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbLoadFixture('openai-ok.sse');
+    StreamPieces(srv, Copy(data, 1, EventStartOf(data, '```tycss') - 1), [], False, True);
+    prof := AiProfile(srv, tafOpenAI);
+    prof.TimeoutSec := 30;
+    run := TTbAiRun.Create(prof, cFakeKey);
+    run.Start;
+    t0 := GetTickCount64;
+    while (run.TextCount = 0) and (GetTickCount64 - t0 < 5000) and not run.Finished do
+      CheckSynchronize(10);
+    if run.TextCount = 0 then Exit(Fail(AWhy, 'no text before cancelling: ' + AiDescribe(run)));
+    while GetTickCount64 - t0 < 300 do
+      CheckSynchronize(10);
+    cancelAt := GetTickCount64;
+    run.Client.Cancel;
+    if not run.WaitDone(10000) then Exit(Fail(AWhy, 'Cancel did not stop it in 10 s'));
+    if run.Outcome.Kind <> aekCancelled then Exit(Fail(AWhy, 'not cancelled: ' + AiDescribe(run)));
+    if GetTickCount64 - cancelAt > QWord(TbCancelGraceMs) then
+      Exit(Fail(AWhy, Format('came back %d ms after Cancel', [GetTickCount64 - cancelAt])));
+    if run.Outcome.Text <> 'Here is the theme, ' + cChinese + '.'#10 then
+      Exit(Fail(AWhy, 'the text that came: ' + run.Outcome.Text));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  i: Integer;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    StreamPieces(srv, TbLoadFixture('openai-ok.sse'), [], True);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), '', run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekNone then Exit(Fail(AWhy, 'failed: ' + AiDescribe(run)));
+    for i := 0 to High(srv.LastRequest.Headers) do
+      if Copy(srv.LastRequest.Headers[i], 1, 14) = 'authorization:' then
+        Exit(Fail(AWhy, 'an Authorization header went out with no key'));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
     srv.Free;
   end;
 end;

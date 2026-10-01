@@ -96,6 +96,8 @@ var
   reason, why: string;
   ok: Boolean;
 begin
+  { the samples and the sentences are UTF-8; so is every string here }
+  DefaultSystemCodePage := CP_UTF8;
   fpSignal(SIGPIPE, SignalHandler(SIG_IGN));
   TbAiFixtureDir := ExpandFileName('../../tests/fixtures/themebuilder/ai') + PathDelim;
   { libcurl notices a cancel in its progress callback, about once a second }
@@ -144,6 +146,13 @@ begin
   Run('W10 a local address skips the proxy', @CheckProxyBypass);
   Run('W11 the loaded library is a candidate', @CheckLoadedName);
   Run('W12 a large body arrives (H13)', @HttpCheckBigBody);
+
+  Run('C1@curl an OpenAI stream, cut anywhere', @AiCheckOpenAIStream);
+  Run('C3@curl the key is scrubbed from a 401', @AiCheckKeyIsScrubbed);
+  Run('C7@curl a broken stream', @AiCheckBroken);
+  Run('C9@curl silence times out', @AiCheckTimeout);
+  Run('C13@curl a reply not streamed', @AiCheckNotStreamed);
+  Run('C15@curl stop', @AiCheckCancel);
 
   WriteLn(Format('tbcurlwsl: %d passed, %d failed', [Passed, Failed]));
   Halt(Failed);
