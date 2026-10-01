@@ -37,7 +37,9 @@ Versions are ordered, not dated. A finished Milestone doesn't mean an immediate 
 
 Versions are `major.minor.patch`. Patch releases only fix bugs; minor releases add features but stay compatible, as described below.
 
-**Support window**: the latest minor version gets fixes and releases. The one before it keeps getting fixes and releases too, until the next minor version after that ships; then it gets one last release and support ends. For example, the last 3.0.x comes out together with 3.2. Severe problems are exempt from this.
+**Support window**: the latest minor version gets fixes and releases. The one before it keeps getting fixes and releases too, until the next minor version after that ships; then it gets one last release and support ends. For example, the last 4.0.x comes out together with 4.2. Severe problems are exempt from this.
+
+**Long-term support**: 3.0 is a long-term support release. It keeps getting fixes and releases until 2027-09-30, one year after 3.0.0, while new work goes into 4.x.
 
 **Compatibility**: within a major version (all of 3.x, say), a minor release guarantees that:
 
