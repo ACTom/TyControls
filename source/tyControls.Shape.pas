@@ -29,8 +29,10 @@ unit tyControls.Shape;
   from, so "clickable" and "visible" cannot drift apart. }
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, Forms, LCLType, GraphType,
-  BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
+  // LazRegions before GraphType: LCL before 4.0 declares TPointArray only in LazRegions,
+  // 4.0 moved it to GraphType and left LazRegions an alias of it.
+  Classes, SysUtils, Types, Math, Controls, Graphics, Forms, LCLType, LazRegions,
+  GraphType, BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 
 type

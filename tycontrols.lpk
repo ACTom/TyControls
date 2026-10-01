@@ -951,6 +951,7 @@ Homepage: https://github.com/ACTom/TyControls"/>
       </Item>
       <Item>
         <PackageName Value="LCL"/>
+        <MinVersion Major="3" Valid="True"/>
       </Item>
     </RequiredPkgs>
     <UsageOptions>

@@ -19,9 +19,9 @@ unit test.parity.starshape;
        callout meant writing a TTyGraphicControl descendant. }
 interface
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Graphics, GraphType,
+  Classes, SysUtils, Types, TypInfo, Controls, Graphics, LazRegions, GraphType,  // TPointArray: see tyControls.Shape
   fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Shape, tyControls.StarShape;
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Shape, tyControls.StarShape;
 
 type
   { The runtime half: what LCL's ControlAtPos asks a control while routing a mouse
