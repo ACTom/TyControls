@@ -74,7 +74,7 @@ const
     (Name: 'border-radius'; Text: 'one length, or four (top-left top-right bottom-right bottom-left). Two or three values are an error.'),
     (Name: 'border-style'; Text: 'solid is the default; outset and inset are square two-colour 3D bevels derived from border-color.'),
     (Name: 'render-style'; Text: 'a classic 3D frame preset for the whole control; flat is the default.'),
-    (Name: 'padding'; Text: 'one, two or four lengths (all; top-bottom left-right; top right bottom left). Three values are an error.'),
+    (Name: 'padding'; Text: 'one to four lengths, as in CSS (all; top-bottom left-right; top left-right bottom; top right bottom left).'),
     (Name: 'font-family'; Text: 'a font name WITHOUT quotes, for example Segoe UI.'),
     (Name: 'font-size'; Text: 'a number in POINTS; a px suffix is ignored (10px means 10pt).'),
     (Name: 'font-weight'; Text: 'normal, bold or a number; 600 and above draws bold, anything else normal.'),
@@ -255,7 +255,7 @@ begin
   Add('no width', 'TyButton { width: 10px; }', False);
   Add('no per-corner radius', 'TyButton { border-top-left-radius: 2px; }', False);
   Add('border-radius: not two values', 'TyButton { border-radius: 2px 4px; }', False);
-  Add('padding: not three values', 'TyButton { padding: 1px 2px 3px; }', False);
+  Add('padding: three values, as in CSS', 'TyButton { padding: 1px 2px 3px; }', True);
   Add('every declaration ends with a semicolon', 'TyButton { color: #000 }', False);
   Add('@import comes first', ':root { --a: #fff; }'#10'@import "x.tycss";', False);
   Add('only :root inside @mode', '@mode dark { TyButton { color: #000; } }', False);
