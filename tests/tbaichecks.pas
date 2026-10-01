@@ -101,6 +101,7 @@ function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
 { after the phase 3 reviews }
 function AiCheckRedirects(out AWhy: string): Boolean;         { C18 }
 function AiCheckInsecureKey(out AWhy: string): Boolean;       { C19 }
+function AiCheckHeartbeats(out AWhy: string): Boolean;        { C21 }
 
 type
   { a transport that only counts being asked and answers "cannot connect": installed with
@@ -1328,6 +1329,54 @@ begin
   end;
   Result := True;
   AWhy := '';
+end;
+
+{ C21: heartbeats that are not JSON (an empty data line, "ping") are nothing, and whatever
+  follows the service's "finished" (a late error, more text) is not part of the reply; a
+  stream of nothing but heartbeats is not in the expected format }
+function AiCheckHeartbeats(out AWhy: string): Boolean;
+const
+  cBeat = 'data:'#13#10#13#10'data: ping'#13#10#13#10;
+  cLateError = 'data: {"error":{"message":"late"}}'#13#10#13#10;
+  cLateText = 'data: {"choices":[{"index":0,"delta":{"content":"EXTRA"},"finish_reason":null}]}'#13#10#13#10;
+  cAnthropicLate = 'event: error'#10'data: {"type":"error","error":{"type":"x","message":"late"}}'#10#10 +
+    'event: content_block_delta'#10'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"EXTRA"}}'#10#10;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  data: RawByteString;
+  p: Integer;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  try
+    { OpenAI: heartbeats first and in the middle, a late error and late text after [DONE] }
+    data := TbLoadFixture('openai-ok.sse');
+    p := EventStartOf(data, ':root { --accent');
+    if p = 0 then Exit(Fail(AWhy, 'the sample has no :root event'));
+    data := cBeat + Copy(data, 1, p - 1) + cBeat + Copy(data, p, MaxInt) + cBeat + cLateError + cLateText;
+    StreamPieces(srv, data, CutsFor(data), True);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekNone then Exit(Fail(AWhy, 'OpenAI with heartbeats: ' + AiDescribe(run)));
+    if run.Outcome.Text <> cOpenAIText then Exit(Fail(AWhy, 'OpenAI text: ' + run.Outcome.Text));
+    FreeAndNil(run);
+    { Anthropic: an error and text after message_stop }
+    StreamPieces(srv, TbLoadFixture('anthropic-ok.sse') + cAnthropicLate, [], True);
+    if not RunClient(srv, AiProfile(srv, tafAnthropic), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekNone then Exit(Fail(AWhy, 'Anthropic, late events: ' + AiDescribe(run)));
+    if run.Outcome.Text <> cAnthropicText then Exit(Fail(AWhy, 'Anthropic text: ' + run.Outcome.Text));
+    FreeAndNil(run);
+    { nothing but heartbeats }
+    StreamPieces(srv, 'data: hello'#10#10'data: ping'#10#10, [], True);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekBadFormat then Exit(Fail(AWhy, 'only heartbeats: ' + AiDescribe(run)));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
 end;
 
 { ---- recording transports ---- }

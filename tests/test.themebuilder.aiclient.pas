@@ -38,6 +38,7 @@ type
     procedure TestARedirectIsNotFollowed;    { C18 }
     procedure TestAKeyIsNotSentOverHttp;     { C19 }
     procedure TestARaiseIsScrubbed;          { C20 }
+    procedure TestHeartbeatsAndLateEvents;   { C21 }
   end;
 
   TTbAiSettingsTests = class(TTestCase)
@@ -311,6 +312,15 @@ begin
   finally
     TbRecordTransports(False);
   end;
+end;
+
+procedure TTbAiClientTests.TestHeartbeatsAndLateEvents;
+var
+  why: string;
+  ok: Boolean;
+begin
+  ok := AiCheckHeartbeats(why);
+  AssertTrue('C21: ' + why, ok);
 end;
 
 procedure TTbAiClientTests.BackendDone(Sender: TObject; const AResult: TTbAiResult);

@@ -155,6 +155,7 @@ begin
   Run('C13@curl a reply not streamed', @AiCheckNotStreamed);
   Run('C15@curl stop', @AiCheckCancel);
   Run('C18@curl a redirect is not followed', @AiCheckRedirects);
+  Run('C21@curl heartbeats and events after the end', @AiCheckHeartbeats);
 
   Run('K1 profiles come back as they were', @SettingsCheckRoundTrip);
   Run('K2 the key file is 0600, the ini has no key', @SettingsCheckUnixKeyFile);

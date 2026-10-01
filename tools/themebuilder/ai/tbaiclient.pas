@@ -384,8 +384,12 @@ var
   d: TTbStreamDelta;
   t: QWord;
 begin
-  Inc(FEvents);
+  { the service said it was finished ([DONE], message_stop, a finish_reason): whatever
+    follows -- a late error, more text, a heartbeat -- is not part of this reply }
+  if FDone then Exit;
   d := TbParseStreamEvent(FProfile.Format, AEvent);
+  if d.NotJson then Exit;      { a heartbeat }
+  Inc(FEvents);
   case d.Kind of
     tspText:
       begin
@@ -538,6 +542,8 @@ begin
     end
     else if FStreamError <> '' then
     begin
+      { an error the service sent before it said it was finished (after that, SseEvent
+        does not look) }
       Result.Kind := aekServer;
       detail := FStreamError;
     end

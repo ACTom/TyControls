@@ -632,18 +632,29 @@ begin
   AssertFalse('A11: something else, Anthropic', TbParseWholeReply(tafAnthropic, '{"x":1}', t));
 end;
 
+{ after the phase 3 reviews: data that is not JSON is a heartbeat -- nothing, not an error
+  (a proxy's "data: ping" or an empty data line failed a whole, complete answer) }
 procedure TTbAiFormatTests.TestNotJsonIsAnError;
 var
   ev: TTbSseEvent;
   d: TTbStreamDelta;
+  f: TTbAiFormat;
+  i: Integer;
+const
+  cBeats: array[0..3] of string = ('hello', '', 'ping', ' ');
 begin
   ev.Name := 'message';
-  ev.Data := 'hello';
-  d := TbParseStreamEvent(tafOpenAI, ev);
-  AssertTrue('A12: an error', d.Kind = tspError);
-  AssertTrue('A12: says so', Pos('hello', d.Text) > 0);
-  d := TbParseStreamEvent(tafAnthropic, ev);
-  AssertTrue('A12: an error, Anthropic', d.Kind = tspError);
+  for f := Low(TTbAiFormat) to High(TTbAiFormat) do
+    for i := 0 to High(cBeats) do
+    begin
+      ev.Data := cBeats[i];
+      d := TbParseStreamEvent(f, ev);
+      AssertTrue(Format('A12: "%s" is nothing (%d)', [cBeats[i], Ord(f)]), d.Kind = tspNone);
+      AssertTrue(Format('A12: "%s" ends nothing (%d)', [cBeats[i], Ord(f)]), d.Ends = tspNone);
+      AssertTrue(Format('A12: "%s" is marked (%d)', [cBeats[i], Ord(f)]), d.NotJson);
+    end;
+  ev.Data := '{"choices":[]}';
+  AssertFalse('A12: JSON is not marked', TbParseStreamEvent(tafOpenAI, ev).NotJson);
 end;
 
 initialization

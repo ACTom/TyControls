@@ -9,6 +9,8 @@ unit tbaiformat;
     finish_reason (stop / length = cut off / content_filter), then "data: [DONE]".
     DeepSeek's reasoning models send delta.reasoning_content first (thinking) and
     ": keep-alive" comments. An error mid-stream: data: {"error": {"message": ...}}.
+    Data that is not JSON (an empty data line, "ping" -- heartbeats from services and
+    proxies) is nothing; everything after [DONE] is ignored (tbaiclient).
 
   Anthropic (Messages API):
     POST {base}/messages; x-api-key, anthropic-version: 2023-06-01; body: model,
@@ -61,6 +63,9 @@ type
     { the event also ends the reply (OpenAI puts finish_reason on a chunk that may still
       carry text): tspDone, tspTruncated, tspRefused, or tspNone }
     Ends: TTbStreamPiece;
+    { the data was not JSON (a proxy's heartbeat, an empty data line, "ping"): nothing --
+      neither text nor an error }
+    NotJson: Boolean;
   end;
 
 const
@@ -357,8 +362,9 @@ begin
   obj := ParseObject(AEvent.Data);
   if obj = nil then
   begin
-    Result.Kind := tspError;
-    Result.Text := 'not JSON: ' + StripControls(Copy(AEvent.Data, 1, 80));
+    { a heartbeat some services and proxies send ("data: ping", "data:"): ignored -- a
+      reply made only of such events is not in the expected format (tbaiclient) }
+    Result.NotJson := True;
     Exit;
   end;
   try
