@@ -311,8 +311,9 @@ begin
   notShown := TStringList.Create;
   def := TStringList.Create;
   try
-    doc.CommaText := 'TyButton,TyRibbon,TyButon';
-    prev.CommaText := 'TyButton,TyTab,TyFormSurface';
+    { TyCard: shown and styled by the document, not by the base -- it keeps no built-in look }
+    doc.CommaText := 'TyButton,TyRibbon,TyButon,TyCard';
+    prev.CommaText := 'TyButton,TyTab,TyFormSurface,TyCard';
     base.CommaText := 'TyButton,TyTab';
     TbCoverageLists(doc, prev, base, notShown, def);
     AssertEquals('CV2: not shown', 'TyButon,TyRibbon', notShown.CommaText);
