@@ -8499,3 +8499,50 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 - 矩形树图、旭日图、桑基图自己先截断/换行再盖章,rich 标记会被当成字截;没有用例。
 - 漏斗 `color: 'inherit'` 的特殊规则不进块。
 - 仪表盘的 rich 不接根 textStyle;文字阴影不模糊;`fontStyle` 仍画不出。
+
+## 122. Tier 1 第八十七批：动画引擎（AN1，2026-10-01）
+
+端口到现在没有动画：setOption 之后一帧画到位。Q7 承诺的「入场动画」要先有引擎——zrender 的 Clip、Track、Animator、Animation 和 Element.animateTo，加上 ECharts 读 `animation*` 选项、决定开不开、用什么时长缓动延迟的那一层。这一批只做引擎和选项解析，不接任何系列；AN2 起逐个系列接上。
+
+### 上游的做法（zrender 6.1 / ECharts 6.1，`wf86/anim.md` 第 1、2 节逐行对照）
+
+- **注意版本**：echarts-doc 里的 zrender 是 5.6.1，对照一律用 `D:/Projects/zrender`（6.1）。
+- **模型**：一切都是元素上的属性补间。每个嵌套对象（元素自身、`shape`、`style`）一个 Animator，每个属性一条 Track，每个 Animator 一个 Clip；时间、延迟、时长、循环和**整段一种缓动**都在 Clip 上。每帧 `percent = clamp((now - (首次步进 + delay)) / life, 0, 1)`，`w = easing(percent)`，`值 = (to - from) * w + from`。
+- **时钟从第一次步进算起**，不是从 animateTo 算起。浏览器里 setOption 末尾同步 flush 一次，所以同一次 setOption 建的 clip 起点都是那一刻，那一帧已经写回 from 值。`life || 1000`：时长 0 是 1000。延迟期间照样步进、percent 为 0，一直写 from。`percent === 1` 那一帧写 `easing(1)` 的结果并结束——终值是算出来的，0.7 → 0.1 停在 0.09999999999999998。循环重启保留相位：`start = now - elapsed % life`，负延迟从周期中间开始。
+- **31 个缓动**按 JS 的运算顺序（`--k`、`k -= c` 先改 k，乘法左结合）；pow/sin/cos/acos 是 V8 的。弹性族的 `a = 0.1` 恒被改成 1、asin 分支是死的。**cubic-bezier**：正则 `/cubic-bezier\(([0-9,\.e ]+)\)/` 没有负号，`1e-1` 也不认；按逗号切、trim 后 `+`，缺的一项是 `+null = 0`（所以三个数的写法**能**解析，`d = 0`——`wf86` 说缺项是 NaN，是错的，fixture 为准）；四项和为 NaN 才放弃。根用盛金公式，平坦情形写了根却返回 0，于是 x(t) = t 的贝塞尔在开区间上恒为 0。名字查不到、大小写不对、空串一律没有缓动，即线性。
+- **Track**：按第一帧定类型——数、一维数组、二维数组、颜色（解析成 rgba 插值，写回 `rgba(r,g,b,a)`，rgb 向下取整）、其余离散；类型不一致也离散。ECharts 的 animateTo 不允许离散动画：离散轨在 start 时直接跳到终值。数组按最后一帧对齐（长的截、短的补、NaN 取终帧的），原地写进元素的数组；Float32Array 每次存储都舍入到单精度。
+- **animateTo**：嵌套对象在它出现的位置先递归、先建 Animator，元素自身的键最后建；先对同名目标的旧 Animator `stopTracks`（**已 start 未步进的，轨道先步回 0**——setToFinal 把元素留在终值，得把 from 放回去），再丢掉没变的键（非 force），setToFinal 时克隆当前值作第 0 帧、把目标值抄到元素上（同长的类型化数组不抄——这个怪癖照搬）。done 在全部结束且至少一个正常结束时调一次，during 只挂在第一个 Animator 上；没有 Animator 时 done 立刻调。
+- **选项**：getShallow 先系列自己的选项（作者写的；没写的键才有系列类型的默认值，如折线的 easing 'linear'、K 线 300），再根选项，再全局默认（'auto'、1000/500、'cubicInOut'、阈值 2000，**没有** delay）。写成 null 的键往下落，也挡住类型默认值。`isAnimationEnabled`：animation 为真且数据量**严格大于**阈值才关。enter 读 `animationDuration/Easing/Delay`，update 读 `*Update`，**leave 什么都不读**：200 ms、cubicOut、0（`removeOpt || {}` 永远是对象）；更新载荷的 animation 覆盖三者。函数形式拿 dataIndex，有的调用点传 null。时长不大于 0 就不动画：停掉、直接设值、`during(1)`、done。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Easing`**（纯）：31 个缓动、`TyCubicAt`/`TyCubicRootAt`、`TyCubicBezierParse`（正则语义逐字照搬，`Number()` 用 `TyJsToNumber`）、`TyEasingResolve`/`TyEasingApply`；`'@Name'` 走缓动句柄注册表。非二进制小数的常量从位模式取。
+- **新单元 `tyControls.AdvChart.Anim`**：`TTyAnimClip`、`TTyAnimTrack`、`TTyAnimator`、驱动 `TTyAnimation`（双向链表、`Update(now)` 与上游的 update 一一对应、`ClipCount`、`OnWake`）、元素 `TTyAnimElement`（`AnimateTo`/`AnimateFrom`/`StopAnimation`/`Attr`）与现成的属性袋 `TTyAnimBag`。**目标是按点分的键**：`'x'`、`'shape.height'`、`'style.opacity'`，第一个点前的部分就是上游的 targetName；值是 `TTyAnimValue`（数、扁平数组——`Stride` 标二维、`Float32` 标类型化数组——字符串、布尔、null）。AN2 让图元派生自 `TTyAnimElement` 即可接上。时钟 `TyAnimClockMs`：单调来源、整毫秒、以 epoch 为基（小数延迟的舍入跟上游的量级一致）。
+- **生命周期**：上游靠 GC；这里元素拥有它建的 Animator，结束的进墓地，只在引擎调用栈清空时释放——done 回调里销毁元素是合法的。元素销毁先把自己的 clip 从驱动上摘掉。引擎入口屏蔽浮点陷阱，NaN 照 JS 传播。
+- **新单元 `tyControls.AdvChart.AnimOpt`**：`TTyAnimModel`（自己的选项、根选项、类型键、是否系列、数据量）、`TyAnimGetShallow`、类型默认表（`wf86` 2.1 的表）、`TyAnimIsEnabled`、`TyAnimGetConfig`、`TyAnimateOrSetProps` 与 `TyInitProps`/`TyUpdateProps`/`TyRemoveElement`/`TyFadeOutElement`；函数形式是 `'@Name'`，注册 `TTyAnimTimingHandler = function(ADataIndex: Integer; AHasIndex: Boolean): Double of object`。
+- 三个单元已进 `.lpk`。
+
+### 基准
+
+- `tools/advchart-oracle/animation.js`（代理写，附 `wf86/anim.md`）：替换 `Date` 手动步进真 dist，67 个用例在 0…1500 ms 的 12 个采样点记录每个元素的动画属性、动画器数和活动 clip 数，以及每个系列 getShallow 的结果；缓动表 45 行 × 95 个点。6 条守卫。
+- `test.advchart.animengine`（24 个测试）：
+  - 缓动表逐位比较（4275 个值），resolved 标志一致；
+  - **重放**：凡轨道全是数或数组、作用域只有 enter/update/leave 的系列元素，给属性袋 t = 0 的值、按用例自己的选项建模型、交给 `TyInitProps`/`TyUpdateProps`/`TyRemoveElement`，驱动在 T0 = 1700000000000 起的绝对时刻步进，每个采样逐位比较、比较元素的动画器数，以及「被重放元素的动画器之和 = 驱动的 clip 数」；全部动画元素都重放到的用例还比上游的 clips[]。bar-v 七个变体、bar-h 与堆叠六个、其余 186 个元素（散点、雷达、K 线、饼、漏斗、仪表盘指针与进度、折线裁剪矩形、柱/饼/折线更新、离场淡出、阈值）全部逐位对上——折线更新的点是 Float32 数组，靠的是存储时的单精度舍入和 setToFinal 的类型化数组怪癖；
+  - 每个用例每个系列的 8 个 getShallow 值与 enabled；六个阈值用例；
+  - 手写：时钟从首次步进起、延迟期写 from、stopTracks 步回 from、步进后不步回、stop 带 forwardToLast、leave 时序与载荷覆盖与不重复淡出、零时长直接设值、循环相位、终值差一个 ulp、Float32 舍入与怪癖、颜色字符串、离散跳变与不变的键、during 只挂第一个、life 0 = 1000、stopTracks 删除后跳过下一个动画器、数组按末帧对齐。
+
+### 变异测试
+
+`an1_mutate.py` / `an1_mutate2.py`：27 个变异。第一组 14 个是这批的要害：弹跳常数 7.5625、backIn 的 s 差一位、起点每步重定、起点不加 delay、上下两头的钳制、终值改成 `from*(1-w)+to*w`、终值在 w=1 时直接取目标、`_started === 1` 不步回、leave 时长 300、leave 读模型、leave 缓动改 linear、阈值 `>` 改 `>=`、去掉 Float32 舍入——全部变红。第二组 13 个：同长类型化数组也抄、不变的键不丢、life 0 不改 1000、during 挂到每个动画器、stopTracks 删除后不跳过下一个、颜色四舍五入、类型默认值不读、update 读 enter 的键、载荷不覆盖、平坦根计数、正则收负号、缺项取 NaN、不对齐数组。首轮存活 3 个：
+- 「stopTracks 删除后不跳过下一个」：没有同一 targetName 上两个动画器、前一个整个被中止的用例——补了先后两次 animateTo 分别动 x、y，第三次同时动 x、y：上游只中止第一个，第二个被跳过、继续跑（动画器 2 个、clip 2 个）；
+- 「不对齐数组」：所有用例的数组首尾等长、没有 NaN——补了不带 setToFinal 的短数组到长数组（前一帧补上末帧的项）与含 NaN 的数组；
+- 「平坦根计数」：**等价变异**——这条分支写的根是 0，`cubicAt(0, y1, y2, 1, 0)` 恰好也是 0，计不计数结果一样。
+补完后其余全部杀死。
+
+### 已知偏差
+
+- additive（只有 visualMap 连续型指示器用）、渐变插值、逐关键帧缓动、pause/resume、saveTo 与 `__changeFinalValue`（状态机，AN3）没做。
+- 数字字符串按数插值；上游归为数却在加法里拼接字符串。字符串形式的 duration/delay 按 `Number()` 取；上游的字符串 delay 会拼到时钟上、让 clip 停在起点。未注册的句柄名当 NaN：时长句柄缺失即不动画。
+- 只有一个关键帧且类型未知的轨道按离散处理（上游会写出 `'NaN…'` 之类的字符串）。
+- `easingFuncs` 上的原型属性名（`toString` 等）不当缓动。
+- 标签的淡入与位移（`#label` 元素）、线的符号逐个弹出（作用域为空的原始 animateTo）、effectScatter 的涟漪、仪表盘数值文字、标注这一批不重放：它们的时序规则在 AN2、AN4。
