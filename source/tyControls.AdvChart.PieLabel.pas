@@ -173,7 +173,7 @@ function TyPieBleedMargin(const AViewRect: TTyRectF): Double;
 
 implementation
 
-uses tyControls.AdvChart.RichStyle;
+uses tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath;
 
 const
   cRadian = Pi / 180;
@@ -438,8 +438,10 @@ begin
   nudge := cNormalNudge * scale;
 
   mid := (ASector.StartRad + ASector.EndRad) / 2;
-  nx := Cos(mid);
-  ny := Sin(mid);
+  { V8'S cos AND sin, as the label's place is upstream's to the bit: an
+    update moves it from its old place [Batch 92] }
+  nx := TyJsCos(mid);
+  ny := TyJsSin(mid);
 
   if ASpec.Position = tplCentre then
   begin
@@ -541,7 +543,7 @@ begin
       outer label, where tangential rotation makes no sense -- which is almost
       certainly not what was meant. The condition above is the same shape.
       Transcribing the intent instead would draw different pies. }
-    rad := ArcTan2(nx, ny);
+    rad := TyJsAtan2(nx, ny);
     if rad < 0 then rad := 2 * Pi + rad;
     if (ny > 0) and (ASpec.Rotate <> tprTangentialNoFlip) then rad := Pi + rad;
     Result.RotationRad := rad - Pi;

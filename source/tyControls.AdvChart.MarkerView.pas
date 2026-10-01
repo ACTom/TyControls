@@ -75,6 +75,13 @@ type
     RtHasInherit: Boolean;
     RtInherit: TTyChartColor;
     RtScale: Double;
+    { Line.beforeUpdate's inputs, kept for its other percents [Batch 92]:
+      the position as a code (0 end, 1 start, 2 insideStart*, 3
+      insideMiddle* / middle, 4 insideEnd*, 5 none of them), the distances,
+      dy, the tangent's x sign, and whether the author wrote the alignments }
+    PosCode: Integer;
+    DistX, DistY, Dy, Dir: Double;
+    AuthorAlign, AuthorVAlign: Boolean;
   end;
 
   TTyMkLinePic = record
@@ -274,6 +281,15 @@ function TyMkModifyAlpha(const AColour: string; A: Double): string;
   polygon shape carrying them }
 function TyMkZrShape(const APath: TTyZrPath; const M: TTyMat2D;
   AHasMatrix: Boolean): TTyChartShape;
+
+{ LINE.beforeUpdate AT ANOTHER PERCENT, for a straight line: where the end
+  symbol stands (pointAt(percent)) and where the label is, with the
+  alignment the position implies (-1: the author's, or none to change; 0
+  left / top, 1 centre / middle, 2 right / bottom). AG is a markLine label
+  element's TTyChartAnim.G: x1, y1, x2, y2, distance x, y, the position
+  code, dy, the tangent's x sign. [Batch 92, AN4] }
+procedure TyMkLineAt(const AG: array of Double; APercent: Double;
+  out AToX, AToY, ALabelX, ALabelY: Double; out AAlignH, AAlignV: Integer);
 
 implementation
 
@@ -1047,6 +1063,21 @@ var
     label_.Rotation := 0;
     label_.OriginX := 0;
     label_.OriginY := 0;
+    { the inputs again, for the percents before 1 [Batch 92] }
+    label_.DistX := distX;
+    label_.DistY := distY;
+    label_.Dir := dirv;
+    label_.AuthorAlign := rawA <> '';
+    label_.AuthorVAlign := rawV <> '';
+    if pos = 'end' then label_.PosCode := 0
+    else if pos = 'start' then label_.PosCode := 1
+    else if (pos = 'insideStartTop') or (pos = 'insideStart')
+      or (pos = 'insideStartBottom') then label_.PosCode := 2
+    else if (pos = 'insideMiddleTop') or (pos = 'insideMiddle')
+      or (pos = 'insideMiddleBottom') or (pos = 'middle') then label_.PosCode := 3
+    else if (pos = 'insideEndTop') or (pos = 'insideEnd')
+      or (pos = 'insideEndBottom') then label_.PosCode := 4
+    else label_.PosCode := 5;
     if (pos <> 'start') and (pos <> 'end') then
     begin
       label_.Rotation := -TyJsAtan2(ty, tx);
@@ -1069,6 +1100,7 @@ var
       dy := 0;
       textVAlign := 'middle';
     end;
+    label_.Dy := dy;
     textAlign := '';
     if pos = 'end' then
     begin
@@ -1360,6 +1392,96 @@ begin
   Result.Cmds := cmds;
 end;
 
+procedure TyMkLineAt(const AG: array of Double; APercent: Double;
+  out AToX, AToY, ALabelX, ALabelY: Double; out AAlignH, AAlignV: Integer);
+var
+  x1, y1, x2, y2, distX, distY, dy, dirv, fx, fy, dx, dy_, len, hp, cpx, cpy: Double;
+  code: Integer;
+  mask: TFPUExceptionMask;
+begin
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    x1 := AG[0];
+    y1 := AG[1];
+    x2 := AG[2];
+    y2 := AG[3];
+    distX := AG[4];
+    distY := AG[5];
+    code := Round(AG[6]);
+    dy := AG[7];
+    dirv := AG[8];
+    { LinePath.pointAt: [x1 * (1 - p) + x2 * p, ...] }
+    fx := x1 * (1 - 0) + x2 * 0;
+    fy := y1 * (1 - 0) + y2 * 0;
+    AToX := x1 * (1 - APercent) + x2 * APercent;
+    AToY := y1 * (1 - APercent) + y2 * APercent;
+    { d = normalize(toPos - fromPos): nought for nought }
+    dx := AToX - fx;
+    dy_ := AToY - fy;
+    len := Sqrt(dx * dx + dy_ * dy_);
+    if len = 0 then
+    begin
+      dx := 0;
+      dy_ := 0;
+    end
+    else
+    begin
+      dx := dx / len;
+      dy_ := dy_ / len;
+    end;
+    hp := APercent / 2;
+    cpx := x1 * (1 - hp) + x2 * hp;
+    cpy := y1 * (1 - hp) + y2 * hp;
+    AAlignH := -1;
+    AAlignV := -1;
+    ALabelX := 0;
+    ALabelY := 0;
+    case code of
+      0:
+        begin
+          ALabelX := dx * distX + AToX;
+          ALabelY := dy_ * distY + AToY;
+          if dx > 0.8 then AAlignH := 0
+          else if dx < -0.8 then AAlignH := 2
+          else AAlignH := 1;
+          if dy_ > 0.8 then AAlignV := 0
+          else if dy_ < -0.8 then AAlignV := 2
+          else AAlignV := 1;
+        end;
+      1:
+        begin
+          ALabelX := -dx * distX + fx;
+          ALabelY := -dy_ * distY + fy;
+          if dx > 0.8 then AAlignH := 2
+          else if dx < -0.8 then AAlignH := 0
+          else AAlignH := 1;
+          if dy_ > 0.8 then AAlignV := 2
+          else if dy_ < -0.8 then AAlignV := 0
+          else AAlignV := 1;
+        end;
+      2:
+        begin
+          ALabelX := distX * dirv + fx;
+          ALabelY := fy + dy;
+        end;
+      3:
+        begin
+          ALabelX := cpx;
+          ALabelY := cpy + dy;
+        end;
+      4:
+        begin
+          ALabelX := -distX * dirv + AToX;
+          ALabelY := AToY + dy;
+        end;
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
 { THE ELEMENTS ONE MARKER ADDED, from AFirst on, AS ITS HIT TARGET: its
   host series and its place in the marker's data, and silent only where the
   marker says so -- upstream's markers answer the pointer [Batch 84] }
@@ -1513,6 +1635,44 @@ var
     Inc(Result);
   end;
 
+  { THE ANIMATION'S VIEW of what was just added: one proxy per line, its
+    percent (Line.ts _createLine) [Batch 92, AN4] }
+  procedure TagLast(AAt: Integer; ARole: TTyChartAnimRole; const P: TTyMkLinePic);
+  var e: TTyChartElement;
+  begin
+    if (AHostSeries < 0) or (AList.Count <= AAt) then Exit;
+    e := AList.Element(AList.Count - 1);
+    e.Anim := Default(TTyChartAnim);
+    e.Anim.Role := ARole;
+    e.Anim.Series := AHostSeries;
+    e.Anim.Index := ABlock.Lines[P.Item].DataIndex;
+    e.Anim.G[0] := P.X1;
+    e.Anim.G[1] := P.Y1;
+    e.Anim.G[2] := P.X2;
+    e.Anim.G[3] := P.Y2;
+    case ARole of
+      carMarkLine:
+        if Length(P.Path) = 2 then
+        begin
+          e.Anim.G[4] := P.Path[0].V[0];
+          e.Anim.G[5] := P.Path[0].V[1];
+          e.Anim.G[6] := P.Path[1].V[0];
+          e.Anim.G[7] := P.Path[1].V[1];
+        end;
+      carMarkLineLabel:
+        begin
+          e.Anim.G[4] := P.Lbl.DistX;
+          e.Anim.G[5] := P.Lbl.DistY;
+          e.Anim.G[6] := P.Lbl.PosCode;
+          e.Anim.G[7] := P.Lbl.Dy;
+          e.Anim.G[8] := P.Lbl.Dir;
+          e.Anim.G[9] := Ord(P.Lbl.AuthorAlign) + 2 * Ord(P.Lbl.AuthorVAlign);
+        end;
+    end;
+    AList.SetElement(AList.Count - 1, e);
+  end;
+
+var at: Integer;
 begin
   Result := 0;
   if AList = nil then Exit;
@@ -1535,10 +1695,17 @@ begin
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
       AList.Add(el);
       Inc(Result);
+      TagLast(first, carMarkLine, APics[i]);
     end;
+    at := AList.Count;
     Symbol(APics[i].FromSym);
+    TagLast(at, carMarkLineFrom, APics[i]);
+    at := AList.Count;
     Symbol(APics[i].ToSym);
+    TagLast(at, carMarkLineTo, APics[i]);
+    at := AList.Count;
     Lbl(APics[i].Lbl);
+    TagLast(at, carMarkLineLabel, APics[i]);
     MkTarget(AList, first, ctkMarkLine, AHostSeries,
       ABlock.Lines[APics[i].Item].DataIndex, ABlock.Silent);
   end;
@@ -2384,6 +2551,26 @@ begin
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].StyleOpacity));
     if (APics[i].ScaleX <> 0) and (APics[i].ScaleY <> 0) then
     begin
+      { IT POPS IN: SymbolDraw's symbol, scale 0 -> size / 2 about the
+        path's own origin and opacity 0 -> its own (Symbol.ts:184-200)
+        [Batch 92, AN4] }
+      if AHostSeries >= 0 then
+      begin
+        el.Anim.Role := carMarkPoint;
+        el.Anim.Series := AHostSeries;
+        el.Anim.Index := ABlock.Points[APics[i].Item].DataIndex;
+        if APics[i].HasGlobal then
+          TyZrApply(APics[i].Global, 0, 0, el.Anim.G[0], el.Anim.G[1])
+        else
+        begin
+          el.Anim.G[0] := APics[i].GroupX + APics[i].X;
+          el.Anim.G[1] := APics[i].GroupY + APics[i].Y;
+        end;
+        el.Anim.G[2] := APics[i].ScaleX;
+        el.Anim.G[3] := APics[i].ScaleY;
+        if IsNan(APics[i].StyleOpacity) then el.Anim.G[4] := 1
+        else el.Anim.G[4] := APics[i].StyleOpacity;
+      end;
       AList.Add(el);
       Inc(Result);
     end;

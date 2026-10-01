@@ -379,6 +379,18 @@ type
     RtPieces: TTyRtPieceArray;
     RtEmph: TTyRtPieceArray;
     RtScale: Double;
+    { A VALUE THAT COUNTS (label.valueAnimation, a bar's or a gauge's
+      reading): the raw value (ValHas: there is one -- the next render's
+      prevValue), and the words with #1 where the value goes -- upstream's
+      text for an interpolated value; ValHasPrec False is the precision
+      'auto'. ValAnim False, the zero value, counts nothing.
+      [Batch 92, AN4] }
+    ValAnim: Boolean;
+    ValHas: Boolean;
+    ValNum: Double;
+    ValTpl: string;
+    ValHasPrec: Boolean;
+    ValPrec: Double;
   end;
 
   { WHAT AN ELEMENT IS TO THE ENTER ANIMATION [Batch 89, AN2]: which of
@@ -393,7 +405,13 @@ type
   TTyChartAnimRole = (carNone, carBar, carSymbol, carLineSymbol, carLineRun,
     carLineArea, carSector, carFunnel, carGaugePointer, carGaugeProgress,
     carGaugeCap, carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
-    carCandleWickLow, carLabel, carGuide);
+    carCandleWickLow, carLabel, carGuide,
+    { [Batch 92, AN4] a gauge's reading; an effectScatter's symbol and its
+      ripples (Sub: which ripple); a markPoint's symbol; a markLine's
+      segment, its two end symbols and its label (one proxy, the line's
+      percent); a line's end label (driven by its clip) }
+    carGaugeDetail, carEffectSymbol, carRipple, carMarkPoint, carMarkLine,
+    carMarkLineFrom, carMarkLineTo, carMarkLineLabel, carEndLabel);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

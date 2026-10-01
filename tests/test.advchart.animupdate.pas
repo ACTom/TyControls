@@ -37,9 +37,10 @@ unit test.advchart.animupdate;
       upstream tracks must be one the proxy holds; the proxy's other keys
       hold still;
     - the proxy's animators against the sum of its elements';
-    - the clips against upstream's, less the animators of what a later
-      batch models (a label's move from its old layout, a guide line's
-      points, a value counting -- AN4);
+    - the clips against upstream's, all of them [Batch 92: a label's move
+      from its old layout, a guide line's points and a value counting are
+      modelled -- nothing is subtracted]; the words a count writes as
+      strings;
     - the frame holds the list plus one silent element per live ghost;
     - at rest: no ghost, every key at (to - from) * 1 + from, and the frame
       the static list wherever the proxy rests on the layout. }
@@ -95,6 +96,7 @@ type
     procedure TearDown; override;
   published
     procedure TestUpdateTimelinesAsUpstream;
+    procedure TestAn4UpdateTimelinesAsUpstream;
     procedure TestDataDiffAsUpstream;
     procedure TestLineBoundingDiff;
     procedure TestAGhostIsDrawnAndSilent;
@@ -111,6 +113,7 @@ const
 var
   GMain: TJSONData = nil;
   GExtra: TJSONData = nil;
+  GAn4: TJSONData = nil;
 
 function LoadJson(const AName: string): TJSONData;
 var sl: TStringList;
@@ -261,6 +264,12 @@ begin
   end;
 end;
 
+function An4: TJSONObject;
+begin
+  if GAn4 = nil then GAn4 := LoadJson('advchart-animation-an4.json');
+  Result := TJSONObject(GAn4);
+end;
+
 function T0: Double;
 begin
   Result := Main.Objects['clock'].Floats['T0'];
@@ -360,14 +369,6 @@ begin
   di := -1;
   d := AEl.Find('dataIndex');
   if (d <> nil) and (d.JSONType = jtNumber) then di := d.AsInteger;
-  { AN4: a value counting, a label moving from its old layout, a guide
-    line's points }
-  if Tracks(AEl, 'style.text') or (Pos('#label', id) > 0) and (Tracks(AEl, 'x')
-    or Tracks(AEl, 'y')) or (Pos('#guide', id) > 0) and Tracks(AEl, 'shape.points') then
-  begin
-    Result.Kind := aukDeferred;
-    Exit;
-  end;
   Result.Kind := aukUnknown;
   p := Pos(':', owner);
   if p = 0 then Exit;
@@ -446,6 +447,31 @@ begin
         Result.Role := 'symbol';
         Result.Index := di;
       end;
+    end
+    else if stype = 'effectScatter' then
+    begin
+      { 0.<row> the group, 0.<row>.0.0 the symbol's path -- one proxy;
+        0.<row>.1.<i> ripple i [Batch 92] }
+      if parts.Count >= 2 then
+      begin
+        Result.Kind := aukModel;
+        Result.Index := StrToIntDef(parts[1], -1);
+        if (parts.Count >= 4) and (parts[2] = '1') then Result.Role := 'ripple' + parts[3]
+        else Result.Role := 'effectSymbol';
+      end;
+    end
+    else if stype = 'gauge' then
+    begin
+      Result.Kind := aukModel;
+      Result.Index := di;
+      if typ = 'pointer' then Result.Role := 'gaugePointer'
+      else if typ = 'sector' then Result.Role := 'gaugeProgress'
+      else if (typ = 'text') and (parts.Count >= 3) then
+      begin
+        Result.Role := 'gaugeDetail';
+        Result.Index := StrToIntDef(parts[1], -1);
+      end
+      else Result.Kind := aukUnknown;
     end;
   finally
     parts.Free;
@@ -612,7 +638,7 @@ var
   samples, anim, steps: TJSONArray;
   maps: array of TAuMap;
   entries: array of TAuEntry;
-  e, s, k, j, n, ti, want, deferred, sumAnim, live, ghosts: Integer;
+  e, s, k, j, n, ti, want, sumAnim, live, ghosts: Integer;
   el, track: TJSONObject;
   m: TAuMap;
   p, tp: TTyChartAnimProxy;
@@ -620,7 +646,8 @@ var
   up, upF, got, gotF: TTyDoubleArray;
   tracked: TStringList;
   present, upPresent: Boolean;
-  start: Double;
+  start, t: Double;
+  upT: TJSONData;
   lst, frm: TTyPaintList;
   a, b: TTyChartElement;
 
@@ -633,9 +660,18 @@ var
 begin
   NewChart(camAlways);
   Load(OptionText(AOption));
-  { the first render run out }
-  FChart.AnimTick(T0 + 5000);
-  if FChart.AnimClipCount <> 0 then Miss(AName + ': the first render did not settle');
+  { THE FIRST RENDER RUN OUT on the oracle's own frames, every 250 ms from
+    16: a looping clip restarts at whatever frame passes its end, so the
+    ripples' phase -- to the bit, at the epoch's ulp -- follows the frames
+    [Batch 92] }
+  t := 16;
+  while t <= 5000 do
+  begin
+    FChart.AnimTick(T0 + t);
+    t := t + 250;
+  end;
+  if FChart.AnimClipCount <> FChart.AnimLoopClipCount then
+    Miss(AName + ': the first render did not settle');
   FChart.AnimNow := T1;
   SetNext(OptionText(ANext));
   start := T1;
@@ -680,10 +716,6 @@ begin
       if s > 0 then FChart.AnimTick(start + samples.Items[s].AsFloat);
       frm := FChart.Frame;
       lst := FChart.List;
-      deferred := 0;
-      for e := 0 to AEls.Count - 1 do
-        if (maps[e].Kind = aukDeferred) and (AEls.Objects[e].Find('animators') is TJSONArray) then
-          Inc(deferred, AEls.Objects[e].Arrays['animators'].Items[s].AsInteger);
       ghosts := 0;
       for j := 0 to High(entries) do
       begin
@@ -742,6 +774,18 @@ begin
               Miss(Format('%s: no %s proxy for %s', [AName, tRole, eid]), AName + eid + tRole);
               Continue;
             end;
+            { THE WORDS A COUNT WRITES, as strings [Batch 92] }
+            if tKey = 'style.text' then
+            begin
+              upT := track.Arrays[key].Items[s];
+              if not tp.HasText then
+                Miss(Format('%s t=%s %s: no words counted here', [AName,
+                  samples.Items[s].AsString, eid]), AName + eid + 'text0')
+              else if (upT.JSONType = jtString) and (tp.Text <> upT.AsString) then
+                Miss(Format('%s t=%s %s: "%s" here, "%s" upstream', [AName,
+                  samples.Items[s].AsString, eid, tp.Text, upT.AsString]), AName + eid + 'text');
+              Continue;
+            end;
             if not ValNums(tp.GetAnimProp(tKey), got) then
             begin
               Miss(Format('%s: %s %s is not modelled', [AName, eid, key]), AName + eid + key + 'mod');
@@ -763,11 +807,17 @@ begin
                    Fmt(up[n])]), AName + eid + key);
                 Break;
               end;
-            { and where it comes to rest }
-            if (not m.Ghost) and NumsOf(el.Objects['final'].Find(key), upF)
+            { and where it comes to rest: the layout's value -- a ripple never
+              rests, and a tween that set out in flight lands where its own
+              final step puts it, `(to - from) * 1 + from` for a `from` no
+              layout knows, a unit or two in the last place off (the samples
+              above hold it to upstream's, bit for bit) [Batch 92] }
+            if (not m.Ghost) and (Pos('ripple', m.Role) <> 1)
+              and NumsOf(el.Objects['final'].Find(key), upF)
               and ValNums(tp.FinalOf(tKey), gotF) and (Length(upF) = Length(gotF)) then
               for n := 0 to High(gotF) do
-                if not SameBits(gotF[n], upF[n]) then
+                if not SameBits(gotF[n], upF[n])
+                  and not (Abs(gotF[n] - upF[n]) <= 4e-16 * Max(Abs(upF[n]), 1)) then
                 begin
                   Miss(Format('%s %s: %s[%d] rests at %s here, %s upstream',
                     [AName, eid, key, n, Fmt(gotF[n]), Fmt(upF[n])]), AName + eid + key + 'final');
@@ -781,7 +831,7 @@ begin
           begin
             key := p.Final[k].Key;
             if tracked.IndexOf(key) >= 0 then Continue;
-            if (key = 'style.strokePercent') then Continue;
+            if (key = 'style.strokePercent') or (key = 'percent') then Continue;
             if not ValNums(p.GetAnimProp(key), got) then Continue;
             if not ValNums(p.FinalOf(key), gotF) then Continue;
             if Length(got) <> Length(gotF) then Continue;
@@ -804,11 +854,11 @@ begin
         if frm.Count <> lst.Count + live then
           Miss(Format('%s t=%s: a frame of %d for a list of %d and %d ghosts', [AName,
             samples.Items[s].AsString, frm.Count, lst.Count, live]), AName + 'frame');
-      want := AClips.Items[s].AsInteger - deferred;
+      want := AClips.Items[s].AsInteger;
       if FChart.AnimClipCount <> want then
-        Miss(Format('%s t=%s: %d clips here, %d upstream less %d deferred',
+        Miss(Format('%s t=%s: %d clips here, %d upstream',
           [AName, samples.Items[s].AsString, FChart.AnimClipCount,
-           AClips.Items[s].AsInteger, deferred]), AName + 'clips');
+           AClips.Items[s].AsInteger]), AName + 'clips');
     end;
   finally
     tracked.Free;
@@ -834,7 +884,8 @@ begin
         end;
         for n := 0 to High(got) do
           if not SameBits(got[n], gotF[n]) then
-            if not SameBits(got[n], (gotF[n] - got[n]) * 1 + got[n]) then
+            if not SameBits(got[n], (gotF[n] - got[n]) * 1 + got[n])
+              and not (Abs(got[n] - gotF[n]) <= 4e-16 * Max(Abs(gotF[n]), 1)) then
               Miss(Format('%s: %s.%s rests at %s, the layout says %s', [AName,
                 p.Role, p.Final[j].Key, Fmt(got[n]), Fmt(gotF[n])]));
       end;
@@ -911,6 +962,39 @@ begin
     FBad = 0);
   AssertTrue(Format('only %d cases ran', [ran]), ran >= 22);
   AssertTrue(Format('only %d proxy samples', [FCompared]), FCompared >= 1400);
+end;
+
+{ THE AN4 FIXTURE'S UPDATE CASES [Batch 92], every option set whole: counts
+  changed and changed again in flight (the count goes on from the
+  interpolated value), a gauge counting down, a pie interrupted (every label
+  jumps to its last layout and moves on from there), effectScatter symbols
+  moving under running ripples, an end-label line updated (the label stands
+  at its end). }
+procedure TAdvChartAnimUpdateTest.TestAn4UpdateTimelinesAsUpstream;
+var
+  cases: TJSONArray;
+  cs: TJSONObject;
+  i, ran: Integer;
+  mid: TJSONData;
+begin
+  AssertEquals('the same samples', Extra.Arrays['samplesMs'].AsJSON,
+    An4.Arrays['samplesMs'].AsJSON);
+  cases := An4.Arrays['cases'];
+  ran := 0;
+  for i := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[i];
+    if cs.Strings['kind'] <> 'update' then Continue;
+    mid := cs.Find('mid');
+    if (mid <> nil) and (mid.JSONType <> jtObject) then mid := nil;
+    RunCase(cs.Strings['id'], cs.Elements['option'], cs.Elements['next'], mid,
+      cs.Arrays['clips'], cs.Arrays['elements']);
+    Inc(ran);
+  end;
+  AssertTrue(Format('%d mismatches over %d proxy samples:%s', [FBad, FCompared, FReport]),
+    FBad = 0);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 5);
+  AssertTrue(Format('only %d proxy samples', [FCompared]), FCompared >= 250);
 end;
 
 { ==================== by hand ==================== }
@@ -1076,4 +1160,5 @@ initialization
 finalization
   FreeAndNil(GMain);
   FreeAndNil(GExtra);
+  FreeAndNil(GAn4);
 end.

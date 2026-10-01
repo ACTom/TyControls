@@ -197,6 +197,11 @@ type
       own rect. Only `rich` takes this path: a plain reading keeps its plate
       and its one run. [Batch 86] }
     Rt: TTyRtBlockStyle;
+    { `valueAnimation` (false by default) and `precision`, read for the
+      detail: the reading counts from the previous value [Batch 92, AN4] }
+    ValueAnim: Boolean;
+    HasPrecision: Boolean;
+    Precision: Double;
   end;
 
   { A per-datum override of the two text blocks. Read from the series' own
@@ -337,6 +342,9 @@ function TyGaugeNeedlePoints(ACX, ACY, AAngleRad, AHalfWidth, ALen,
   as written. }
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
   AValue: Double; AKeepRich: Boolean = False): string;
+{ formatLabel for an interpolated value: the words with #1 where the value
+  goes; '' for a handler formatter (it is not a template) [Batch 92] }
+function TyGaugeFormatTpl(const AFormatter: string; AHasFormatter: Boolean): string;
 
 { The label at major position AIndex of ASplitNumber, computed FORWARD from
   min -- `i * (max - min) / splitNumber + min`, multiplied before dividing so
@@ -563,6 +571,27 @@ begin
   begin
     AText.Formatter := StrIn(n, 'formatter', '');
     AText.HasFormatter := AText.Formatter <> '';
+  end;
+  { the count [Batch 92] }
+  if n.Find('valueAnimation') <> nil then
+    case n.Find('valueAnimation').JSONType of
+      jtBoolean: AText.ValueAnim := n.Find('valueAnimation').AsBoolean;
+      jtNull: AText.ValueAnim := False;
+      jtNumber: AText.ValueAnim := (not IsNan(n.Find('valueAnimation').AsFloat))
+        and (n.Find('valueAnimation').AsFloat <> 0);
+      jtString: AText.ValueAnim := n.Find('valueAnimation').AsString <> '';
+    else
+      AText.ValueAnim := True;
+    end;
+  if n.Find('precision') <> nil then
+  begin
+    if n.Find('precision').JSONType = jtNumber then
+    begin
+      AText.HasPrecision := True;
+      AText.Precision := n.Find('precision').AsFloat;
+    end
+    else
+      AText.HasPrecision := False;
   end;
   { The plate. }
   ReadColour(n, 'backgroundColor', AText.Auto, AText.HasBackground,
@@ -1115,6 +1144,20 @@ begin
   Result := StringReplace(Result, #13, ' ', [rfReplaceAll]);
 end;
 
+function TyGaugeFormatTpl(const AFormatter: string; AHasFormatter: Boolean): string;
+begin
+  Result := #1;
+  if AHasFormatter then
+  begin
+    if TyChartIsHandlerRef(AFormatter) then Exit('');
+    Result := TyReplaceFirst(AFormatter, '{value}', #1);
+  end;
+  Result := StripRich(Result);
+  Result := StringReplace(Result, #13#10, ' ', [rfReplaceAll]);
+  Result := StringReplace(Result, #10, ' ', [rfReplaceAll]);
+  Result := StringReplace(Result, #13, ' ', [rfReplaceAll]);
+end;
+
 function TyGaugeLabelValue(AMin, AMax: Double; AIndex,
   ASplitNumber: Integer): Double;
 begin
@@ -1596,8 +1639,9 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
 var
-  k, raw, n, textZ2: Integer;
+  k, raw, n, textZ2, added: Integer;
   val, frac, angle, endA, pw, r0, r1, len, halfW, ox, oy, scale: Double;
+  det: TTyChartElement;
   fill, autoC: TTyChartColor;
   el: TTyChartElement;
   pts: TTyPointFArray;
@@ -1642,12 +1686,34 @@ begin
       ALayout.CX, ALayout.CY, ALayout.R, AVisual.TitleColour, autoC,
       AVisual.TitleFontName, AVisual.TitleFontSizeLogical,
       AVisual.TitleFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList));
-    Inc(Result, AddGaugeText(ti.Detail,
+    added := AddGaugeText(ti.Detail,
       TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, val,
         ti.Detail.Rt.Needed),
       ALayout.CX, ALayout.CY, ALayout.R, AVisual.DetailColour, autoC,
       AVisual.DetailFontName, AVisual.DetailFontSizeLogical,
-      AVisual.DetailFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList));
+      AVisual.DetailFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList);
+    Inc(Result, added);
+    { THE READING, last in: it counts from the value before (GaugeView's
+      setLabelValueAnimation / animateLabelValue). A rich reading's block is
+      laid out once and does not count. [Batch 92, AN4] }
+    if added > 0 then
+    begin
+      det := AList.Element(AList.Count - 1);
+      det.Anim.Role := carGaugeDetail;
+      det.Anim.Series := ABinding.SeriesIndex;
+      det.Anim.Index := k;
+      det.Caption.ValHas := True;
+      det.Caption.ValNum := val;
+      if ti.Detail.ValueAnim and not ti.Detail.Rt.Needed then
+      begin
+        det.Caption.ValTpl := TyGaugeFormatTpl(ti.Detail.Formatter,
+          ti.Detail.HasFormatter);
+        det.Caption.ValAnim := det.Caption.ValTpl <> '';
+        det.Caption.ValHasPrec := ti.Detail.HasPrecision;
+        det.Caption.ValPrec := ti.Detail.Precision;
+      end;
+      AList.SetElement(AList.Count - 1, det);
+    end;
   end;
 
   { ---- the anchor, once, whatever the data says ---- }
