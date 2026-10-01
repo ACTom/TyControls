@@ -231,7 +231,8 @@ uses
   test.themebuilder.http,
   test.themebuilder.sse,
   test.themebuilder.aiclient,
-  test.themebuilder.reference;
+  test.themebuilder.reference,
+  test.themebuilder.diff;
 
 type
   TTyTestRunner = class(TTestRunner)
