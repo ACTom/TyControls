@@ -98,6 +98,8 @@ function AiCheckNotStreamed(out AWhy: string): Boolean;       { C13 }
 function AiCheckBadFormat(out AWhy: string): Boolean;         { C14 }
 function AiCheckCancel(out AWhy: string): Boolean;            { C15 }
 function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
+{ after the phase 3 reviews }
+function AiCheckRedirects(out AWhy: string): Boolean;         { C18 }
 
 { the AI settings: the plan's K numbers (the Windows-only ones are in the test unit) }
 function TbAiTempDir: string;                                 { a fresh folder }
@@ -1252,6 +1254,60 @@ begin
   end;
 end;
 
+{ C18: a 301 / 302 / 307 / 308 from server A to server B is not followed -- B never sees a
+  connection (it would get the key in a header) -- and the sentence names B's host but not
+  the Location's query }
+function AiCheckRedirects(out AWhy: string): Boolean;
+const
+  cCodes: array[0..3] of Integer = (301, 302, 307, 308);
+var
+  a, b: TTbFakeHttpServer;
+  run: TTbAiRun;
+  fmt: TTbAiFormat;
+  loc, sentence: string;
+  i: Integer;
+  t0: QWord;
+begin
+  Result := False;
+  for i := 0 to High(cCodes) do
+  begin
+    run := nil;
+    a := TTbFakeHttpServer.Create;
+    b := TTbFakeHttpServer.Create;
+    try
+      b.Script([FakeSend(FakeHead(200, 'text/event-stream', False, TbLoadFixture('openai-ok.sse')))]);
+      if Odd(i) then fmt := tafAnthropic else fmt := tafOpenAI;
+      loc := 'http://localhost:' + IntToStr(b.Port) + '/v1/chat/completions?token=QSECRET';
+      a.Script([FakeSend('HTTP/1.1 ' + IntToStr(cCodes[i]) + ' Moved'#13#10'Location: ' + loc +
+        #13#10'Content-Length: 0'#13#10'Connection: close'#13#10#13#10)]);
+      if not RunClient(a, AiProfile(a, fmt), cFakeKey, run, AWhy) then Exit;
+      { a follow would have connected by now; give a late one a moment anyway }
+      t0 := GetTickCount64;
+      while GetTickCount64 - t0 < 150 do
+        CheckSynchronize(10);
+      if (b.RequestCount <> 0) or (b.DoneCount <> 0) then
+        Exit(Fail(AWhy, Format('%d: the redirect was followed (%d requests, %d connections at the target)',
+          [cCodes[i], b.RequestCount, b.DoneCount])));
+      if a.RequestCount <> 1 then
+        Exit(Fail(AWhy, Format('%d: %d requests at the first server', [cCodes[i], a.RequestCount])));
+      if run.Outcome.Kind <> aekRedirect then
+        Exit(Fail(AWhy, Format('%d: not a redirect: %s', [cCodes[i], AiDescribe(run)])));
+      if run.Outcome.Status <> cCodes[i] then
+        Exit(Fail(AWhy, Format('%d: status %d', [cCodes[i], run.Outcome.Status])));
+      sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+      if sentence <> Format(rsTbAiRedirect, [cCodes[i], 'localhost']) then
+        Exit(Fail(AWhy, Format('%d: the sentence: %s', [cCodes[i], sentence])));
+      if Pos('QSECRET', sentence) > 0 then
+        Exit(Fail(AWhy, 'the Location''s query is in the sentence'));
+    finally
+      run.Free;
+      a.Free;
+      b.Free;
+    end;
+  end;
+  Result := True;
+  AWhy := '';
+end;
 
 { ---- the K checks (settings and keys) ---- }
 

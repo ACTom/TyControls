@@ -30,6 +30,8 @@ type
     procedure TestStop;                      { C15 }
     procedure TestNoKeyNoHeader;             { C16 }
     procedure TestScrubbing;                 { C17 }
+    { after the phase 3 reviews }
+    procedure TestARedirectIsNotFollowed;    { C18 }
   end;
 
   TTbAiSettingsTests = class(TTestCase)
@@ -225,6 +227,15 @@ begin
   AssertTrue('C17: the last four alone: ' + s, Pos('ab12', s) = 0);
   s := TbScrubSecret('key sk-pro... was refused', 'sk-proj-xyzxyzxyzab12');
   AssertTrue('C17: the first six alone: ' + s, Pos('sk-pro', s) = 0);
+end;
+
+procedure TTbAiClientTests.TestARedirectIsNotFollowed;
+var
+  why: string;
+  ok: Boolean;
+begin
+  ok := AiCheckRedirects(why);
+  AssertTrue('C18: ' + why, ok);
 end;
 
 { ---- TTbAiSettingsTests ---- }

@@ -22,7 +22,8 @@ unit tbhttpcurl;
   on macOS (not done in phase 3).
 
   Proxies: libcurl reads http_proxy / https_proxy / no_proxy itself; a loopback address is
-  told to use none. The idle timeout is libcurl's low-speed check (under 1 byte a second for
+  told to use none. Redirects are not followed (CURLOPT_FOLLOWLOCATION 0, libcurl's own
+  default, set anyway): the 3xx is the status, CURLINFO_REDIRECT_URL its Location. The idle timeout is libcurl's low-speed check (under 1 byte a second for
   that many seconds). Cancel only raises a flag: the progress callback (about once a second
   even when idle) and the write callback see it and stop the transfer. }
 {$mode objfpc}{$H+}
@@ -106,7 +107,9 @@ const
   CURLOPT_CONNECTTIMEOUT = 78;
   CURLOPT_NOSIGNAL = 99;
   CURLOPT_XFERINFOFUNCTION = 20219;
+  CURLOPT_FOLLOWLOCATION = 52;
   CURLINFO_RESPONSE_CODE = $200002;
+  CURLINFO_REDIRECT_URL = $10001F;    { CURLINFO_STRING + 31 }
   CURL_GLOBAL_DEFAULT = 3;
 
 var
@@ -335,6 +338,7 @@ var
   url: TTbUrlParts;
   reason, address, body, agent, msg: string;
   h, slist, appended: Pointer;
+  redirect: PChar;
   i: Integer;
   code: LongInt;
   idleSec, connectSec: PtrInt;
@@ -406,11 +410,19 @@ begin
     CurlSetLong(h, CURLOPT_LOW_SPEED_LIMIT, 1);
     CurlSetLong(h, CURLOPT_LOW_SPEED_TIME, idleSec);
     CurlSetLong(h, CURLOPT_NOSIGNAL, 1);
+    { libcurl's default, said out loud: a redirect would take the key to another host }
+    CurlSetLong(h, CURLOPT_FOLLOWLOCATION, 0);
     if TbIsLoopbackHost(url.Host) then
       CurlSetOpt(h, CURLOPT_PROXY, PChar(''));   { '' = no proxy for a local service }
     code := GCurl.EasyPerform(h);
     SendStatusOnce;      { a reply with no body: the status still counts }
     Result.Status := FStatus;
+    if (FStatus >= 300) and (FStatus < 400) then
+    begin
+      redirect := nil;
+      if (CurlGetInfo(h, CURLINFO_REDIRECT_URL, @redirect) = 0) and (redirect <> nil) then
+        Result.Location := StrPas(redirect);
+    end;
     if code <> 0 then
     begin
       if IsCancelled then

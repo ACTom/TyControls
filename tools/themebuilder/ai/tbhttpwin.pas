@@ -15,6 +15,10 @@ unit tbhttpwin;
   (the headers, each QueryDataAvailable, each ReadData) the idle timeout -- WinHTTP applies
   the receive timeout to each blocking call, so "no byte for this long" is what it means.
 
+  Redirects: the request handle's redirect policy is "never" (WinHTTP's default follows a
+  redirect to any host, our headers -- the key -- included); a 3xx comes back as the status
+  with its Location header.
+
   Cancel closes the request handle from the other thread; the blocked call then fails
   (12017 or 6) and Execute reports hekCancelled. The handle is closed once only: under a
   lock, with a flag, whoever comes first. }
@@ -60,7 +64,10 @@ const
   WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY = 4;   { Windows 8.1 and later }
   WINHTTP_FLAG_SECURE = $00800000;
   WINHTTP_QUERY_STATUS_CODE = 19;
+  WINHTTP_QUERY_LOCATION = 33;
   WINHTTP_QUERY_FLAG_NUMBER = $20000000;
+  WINHTTP_OPTION_REDIRECT_POLICY = 88;
+  WINHTTP_OPTION_REDIRECT_POLICY_NEVER = 0;
   WINHTTP_ADDREQ_FLAG_ADD = $20000000;
   WINHTTP_ADDREQ_FLAG_REPLACE = $80000000;
   ERROR_WINHTTP_TIMEOUT = 12002;
@@ -100,6 +107,25 @@ function WinHttpQueryDataAvailable(h: HINTERNET; lpdwNumberOfBytesAvailable: PDW
 function WinHttpReadData(h: HINTERNET; lpBuffer: Pointer; dwNumberOfBytesToRead: DWORD;
   lpdwNumberOfBytesRead: PDWORD): BOOL; stdcall; external cWinHttp;
 function WinHttpCloseHandle(h: HINTERNET): BOOL; stdcall; external cWinHttp;
+function WinHttpSetOption(h: HINTERNET; dwOption: DWORD; lpBuffer: Pointer;
+  dwBufferLength: DWORD): BOOL; stdcall; external cWinHttp;
+
+{ the Location header of the response; '' when there is none }
+function QueryLocation(ARequest: HINTERNET): string;
+var
+  size: DWORD;
+  buf: UnicodeString;
+begin
+  Result := '';
+  size := 0;
+  WinHttpQueryHeaders(ARequest, WINHTTP_QUERY_LOCATION, nil, nil, @size, nil);
+  if size < SizeOf(WideChar) then Exit;
+  SetLength(buf, size div SizeOf(WideChar));
+  if not WinHttpQueryHeaders(ARequest, WINHTTP_QUERY_LOCATION, nil, PWideChar(buf), @size, nil) then
+    Exit;
+  SetLength(buf, size div SizeOf(WideChar));
+  Result := UTF8Encode(buf);
+end;
 
 function TbWinHttpErrorKind(ACode: DWORD): TTbHttpErrorKind;
 begin
@@ -218,9 +244,10 @@ function TTbWinHttpTransport.Execute(const ARequest: TTbHttpRequest;
 var
   url: TTbUrlParts;
   session, conn: HINTERNET;
-  access, flags, status, size, avail, got: DWORD;
+  access, flags, status, size, avail, got, policy: DWORD;
   buf: RawByteString;
   headers: UnicodeString;
+  location: string;
 
   function Fail(AKind: TTbHttpErrorKind): TTbHttpResult;
   var
@@ -244,6 +271,7 @@ var
 begin
   Result := Default(TTbHttpResult);
   FStatus := 0;
+  location := '';
   if not TbSplitUrl(ARequest.Url, url) then
     Exit(Fail(hekBadUrl));
   if IsCancelled then
@@ -269,6 +297,11 @@ begin
     if url.Secure then flags := WINHTTP_FLAG_SECURE else flags := 0;
     if not OpenRequest(conn, UTF8Decode(url.Path), flags) then   { sets FRequest under FLock }
       Exit(Fail(hekOther));
+    { never follow a redirect: WinHTTP's default policy follows one to another host with
+      every header we added -- the key among them. Not sent at all when this is refused. }
+    policy := WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+    if not WinHttpSetOption(FRequest, WINHTTP_OPTION_REDIRECT_POLICY, @policy, SizeOf(policy)) then
+      Exit(Fail(hekOther));
     headers := UTF8Decode(JoinHeaders(ARequest.Headers));
     if (headers <> '') and not WinHttpAddRequestHeaders(FRequest, PWideChar(headers),
        DWORD(-1), WINHTTP_ADDREQ_FLAG_ADD or WINHTTP_ADDREQ_FLAG_REPLACE) then
@@ -284,6 +317,8 @@ begin
        nil, @status, @size, nil) then
       Exit(Fail(hekOther));
     FStatus := status;
+    if (status >= 300) and (status < 400) then
+      location := QueryLocation(FRequest);
     if Assigned(AOnStatus) then
       AOnStatus(status);
     repeat
@@ -313,6 +348,7 @@ begin
   end;
   Result.Status := FStatus;
   Result.Error := hekNone;
+  Result.Location := location;
 end;
 
 {$ENDIF}

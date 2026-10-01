@@ -6,8 +6,10 @@ unit tbaiclient;
   How the outcome is decided, the first that holds:
     1. the transport failed: cancelled, or which way it failed (no host, no connection,
        TLS, silence for too long, the line broken off);
-    2. the service answered 4xx / 5xx: the key (401 / 403), the address or the model (404),
-       too many requests (429), a refused request (other 4xx), the service's trouble (5xx);
+    2. the service answered 3xx: a redirect, not followed (the key would go along to
+       wherever it points), told with the host it named; 4xx / 5xx: the key (401 / 403),
+       the address or the model (404), too many requests (429), a refused request (other
+       4xx), the service's trouble (5xx);
     3. the stream carried an error;
     4. the model declined, or the reply hit the maximum output length;
     5. no event at all: a service that answered the whole reply as one JSON is taken as it
@@ -47,17 +49,19 @@ resourcestring
   rsTbAiRefused = 'The model declined the request.';
   rsTbAiOther = 'The request failed.';
   rsTbAiServiceSays = '(%s)';
+  rsTbAiRedirect = 'The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings.';
 
 type
   TTbAiErrorKind = (aekNone, aekCancelled, aekNoTransport, aekBadUrl, aekNameNotResolved,
     aekCannotConnect, aekTls, aekTimeout, aekBroken, aekAuth, aekNotFound, aekRateLimit,
-    aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekOther);
+    aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekRedirect, aekOther);
 
   TTbAiResult = record
     Kind: TTbAiErrorKind;
     Status: Integer;
     Text: string;                 { all the answer text that arrived (also when it failed) }
     Detail: string;               { the service's or the system's words, scrubbed }
+    RedirectTo: string;           { aekRedirect: the host the Location named (no path, no query) }
   end;
 
   { on the WORKER thread }
@@ -123,6 +127,21 @@ begin
   for i := 1 to Length(Result) do
     if Result[i] < ' ' then
       Result[i] := ' ';
+end;
+
+{ the host a redirect's Location names -- never its path or query (they may hold a token);
+  a relative Location stays on the request's host; '?' when it cannot be read }
+function RedirectHost(const ALocation, ARequestUrl: string): string;
+var
+  p: TTbUrlParts;
+  loc: string;
+begin
+  loc := Trim(ALocation);
+  if TbSplitUrl(loc, p) then
+    Exit(p.Host);
+  if (loc <> '') and (loc[1] = '/') and (Copy(loc, 1, 2) <> '//') and TbSplitUrl(ARequestUrl, p) then
+    Exit(p.Host);
+  Result := '?';
 end;
 
 function TbScrubSecret(const AText, AKey: string): string;
@@ -211,6 +230,11 @@ begin
     aekBadFormat: Result := rsTbAiBadFormat;
     aekTruncated: Result := rsTbAiTruncated;
     aekRefused: Result := rsTbAiRefused;
+    aekRedirect:
+      begin
+        Result := Format(rsTbAiRedirect, [AResult.Status, AResult.RedirectTo]);
+        withDetail := False;
+      end;
   else
     Result := rsTbAiOther;
   end;
@@ -392,6 +416,12 @@ begin
         Result.Kind := aekOther;
       end;
       detail := http.Detail;
+    end
+    else if (FStatus >= 300) and (FStatus < 400) then
+    begin
+      { not followed (tbhttp): the user decides whether the address it names is right }
+      Result.Kind := aekRedirect;
+      Result.RedirectTo := RedirectHost(http.Location, req.Url);
     end
     else if (FStatus < 200) or (FStatus >= 300) then
     begin

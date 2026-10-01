@@ -12,7 +12,9 @@ unit tbhttp;
 
   Execute blocks: the caller runs it on a worker thread (tbaiclient / tbaisession) and gets
   the status once, then the body piece by piece, on that thread. Cancel may come from any
-  thread at any time.
+  thread at any time. A redirect is never followed (WinHTTP's policy is set to never,
+  libcurl does not follow unless told to): the 3xx comes back as the status, with its
+  Location.
 
   This unit and the two transports use the RTL and FCL only -- no LCL: the same sources are
   compiled in WSL by tools/themebuilder-curl-wsl to run the libcurl path. }
@@ -38,8 +40,12 @@ type
 
   TTbHttpResult = record
     Status: Integer;              { 0 when no response came }
-    Error: TTbHttpErrorKind;      { hekNone also for a 4xx / 5xx: that is Status's business }
+    Error: TTbHttpErrorKind;      { hekNone also for a 3xx / 4xx / 5xx: that is Status's business }
     Detail: string;               { the system's words (error code, message); never headers or body }
+    { a 3xx: the Location it named, as sent. Never followed: the request carries the key in
+      a header, and a redirect to another host would take the key along (WinHTTP's default
+      policy does exactly that); the user decides whether the new address is right }
+    Location: string;
   end;
 
   { both on the worker thread, in this order: the status once, after the headers; then the
