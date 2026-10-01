@@ -611,6 +611,158 @@ msgstr "复制"
 msgid "Close"
 msgstr "关闭"
 
+#: ttbmainform.aiwin.caption
+msgid "AI"
+msgstr "AI"
+
+#: ttbmainform.aiwin.striphint
+msgid "AI"
+msgstr "AI"
+
+#: ttbmainform.mnuai.caption
+msgid "A&I"
+msgstr "AI(&I)"
+
+#: ttbmainform.mnuaisettings.caption
+msgid "AI se&ttings..."
+msgstr "AI 设置(&T)…"
+
+#: ttbcompareform.caption
+msgid "Compare the AI's version"
+msgstr "对比 AI 的版本"
+
+#: ttbcompareform.bar.caption
+msgid "Compare the AI's version"
+msgstr "对比 AI 的版本"
+
+#: ttbcompareform.lefttitle.caption
+msgid "Now"
+msgstr "现在"
+
+#: ttbcompareform.righttitle.caption
+msgid "AI's version"
+msgstr "AI 的版本"
+
+#: ttbcompareform.btndiscard.caption
+msgid "Discard"
+msgstr "放弃"
+
+#: ttbcompareform.btnaccept.caption
+msgid "Accept"
+msgstr "接受"
+
+#: ttbcompareform.trialcheck.caption
+msgid "Try it in the preview"
+msgstr "在预览里试看"
+
+#: ttbaisettingsform.caption
+msgid "AI settings"
+msgstr "AI 设置"
+
+#: ttbaisettingsform.bar.caption
+msgid "AI settings"
+msgstr "AI 设置"
+
+#: ttbaisettingsform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: ttbaisettingsform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: ttbaisettingsform.btnadd.caption
+msgid "Add"
+msgstr "添加"
+
+#: ttbaisettingsform.btnremove.caption
+msgid "Remove"
+msgstr "删除"
+
+#: ttbaisettingsform.lblname.caption
+msgid "Name"
+msgstr "名称"
+
+#: ttbaisettingsform.lblformat.caption
+msgid "Format"
+msgstr "格式"
+
+#: ttbaisettingsform.lblurl.caption
+msgid "Address"
+msgstr "地址"
+
+#: ttbaisettingsform.lblmodel.caption
+msgid "Model"
+msgstr "模型"
+
+#: ttbaisettingsform.lblkey.caption
+msgid "Key"
+msgstr "密钥"
+
+#: ttbaisettingsform.edtkey.texthint
+msgid "Not needed for a local model"
+msgstr "本地模型不需要"
+
+#: ttbaisettingsform.lblmaxoutput.caption
+msgid "Maximum output (tokens, 0 = not sent)"
+msgstr "最大输出（token，0 = 不发送）"
+
+#: ttbaisettingsform.lbltimeout.caption
+msgid "Timeout (seconds without data)"
+msgstr "超时（多少秒收不到数据）"
+
+#: ttbaisettingsform.btntest.caption
+msgid "Test connection"
+msgstr "测试连接"
+
+#: ttbaisettingsform.miopenai.caption
+msgid "OpenAI"
+msgstr "OpenAI"
+
+#: ttbaisettingsform.mideepseek.caption
+msgid "DeepSeek"
+msgstr "DeepSeek"
+
+#: ttbaisettingsform.mianthropic.caption
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: ttbaisettingsform.miollama.caption
+msgid "Local (Ollama)"
+msgstr "本地（Ollama）"
+
+#: ttbaisettingsform.micustom.caption
+msgid "Custom"
+msgstr "自定义"
+
+#: ttbaiframe.btnsettings.hint
+msgid "AI settings"
+msgstr "AI 设置"
+
+#: ttbaiframe.lbldescribe.caption
+msgid "Describe the theme or the change, for example: warm colours, rounder corners."
+msgstr "描述想要的主题或改动，例如：暖色调，圆角大一点。"
+
+#: ttbaiframe.chkproblems.caption
+msgid "Include the problem list"
+msgstr "附上问题列表"
+
+#: ttbaiframe.btngenerate.caption
+msgid "Generate"
+msgstr "生成"
+
+#: ttbaiframe.btnstop.caption
+msgid "Stop"
+msgstr "停止"
+
+#: ttbaiframe.btnnewchat.caption
+msgid "New conversation"
+msgstr "新对话"
+
+#: ttbaiframe.btnshowcompare.caption
+msgid "Show the comparison..."
+msgstr "查看对比…"
+
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: tbmain.rstbconverted
