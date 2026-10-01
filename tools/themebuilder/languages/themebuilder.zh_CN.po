@@ -910,3 +910,117 @@ msgstr "极简主题：只有明暗两套的六个种子，其余全部来自底
 #, object-pascal-format
 msgid "In the %s density: %s"
 msgstr "%s密度下：%s"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbcoverageform.rstbcovunknownkey
+msgid "(not a known typeKey)"
+msgstr "（不是已知的 typeKey）"
+
+#: tbexport.rstbexportabsolute
+msgid "an absolute path; move the file next to the theme"
+msgstr "绝对路径；请把文件挪到主题旁边"
+
+#: tbexport.rstbexportbadref
+#, object-pascal-format
+msgid "%s: %s"
+msgstr "%s：%s"
+
+#: tbexport.rstbexportfoldernotempty
+#, object-pascal-format
+msgid "%s is not an empty folder."
+msgstr "%s 不是空文件夹。"
+
+#: tbexport.rstbexportmissing
+msgid "not found"
+msgstr "找不到"
+
+#: tbexport.rstbexportnoparent
+#, object-pascal-format
+msgid "The folder %s does not exist."
+msgstr "文件夹 %s 不存在。"
+
+#: tbexport.rstbexportnotafile
+#, object-pascal-format
+msgid "%s is a folder."
+msgstr "%s 是一个文件夹。"
+
+#: tbexport.rstbexportnotarget
+msgid "Choose where to export to."
+msgstr "请选择导出到哪里。"
+
+#: tbexport.rstbexportoutside
+msgid "outside the theme's folder"
+msgstr "在主题所在文件夹之外"
+
+#: tbexport.rstbexportunsaved
+msgid "save the theme first: paths are read from its folder"
+msgstr "请先保存主题：路径按它所在的文件夹读取"
+
+#: tbexport.rstbexportverifyfailed
+msgid "The bundle did not load back"
+msgstr "导出的包读回来加载不了"
+
+#: tbexport.rstbexportziprefs
+msgid "A zip bundle cannot carry the files this theme refers to (the library reads neither @import nor images from a zip). Export a folder."
+msgstr "zip 包带不了这个主题引用的文件（库读 zip 时既不解析 @import，也不读里面的图片）。请导出成文件夹。"
+
+#: tbexportform.rstbexportonlytheme
+msgid "(none)"
+msgstr "（无）"
+
+#: tbexportform.rstbexportoverwrite
+#, object-pascal-format
+msgid "%s exists. Replace it?"
+msgstr "%s 已存在。替换它吗？"
+
+#: tbmain.rstbexported
+#, object-pascal-format
+msgid "Exported to %s."
+msgstr "已导出到 %s。"
+
+#: tbseedsframe.rstbseeddark
+msgid "Dark"
+msgstr "暗色"
+
+#: tbseedsframe.rstbseedexprask
+#, object-pascal-format
+msgid "%s is the expression %s. Replace it with %s?"
+msgstr "%s 现在是表达式 %s，改成 %s 吗？"
+
+#: tbseedsframe.rstbseedexpression
+msgid "expression"
+msgstr "表达式"
+
+#: tbseedsframe.rstbseedinherited
+msgid "inherited"
+msgstr "继承"
+
+#: tbseedsframe.rstbseedlight
+msgid "Light"
+msgstr "亮色"
+
+#: tbseedsframe.rstbseedsbroken
+msgid "Fix the errors in the problem list first."
+msgstr "先修好问题列表里的错误。"
+
+#: tbseedsframe.rstbseedshared
+msgid "from :root"
+msgstr "来自 :root"
+
+#: tbseedsframe.rstbseedsharedask
+#, object-pascal-format
+msgid "%s is set in :root and shared by light and dark. Yes: change it there (both modes). No: add it to %s only."
+msgstr "%s 写在 :root 里，亮暗共用。选「是」改 :root（两种模式都变），选「否」只给%s加一行。"
+
+#: tbseedsframe.rstbseedssinglemode
+msgid "One mode: the seeds of both light and dark."
+msgstr "单模式：明暗共用这一组种子。"
+
+#: tbseedsframe.rstbseedvalue
+msgid "Value"
+msgstr "值"
+
+#: tbsnippets.rstbsnippetwhere
+msgid "in your main form (a TTyForm):"
+msgstr "放在主窗体（TTyForm）里："
