@@ -32,7 +32,7 @@ uses
   tyControls.Types, tyControls.Base;
 
 type
-  TTyScrollContent = class(TTyCustomControl)
+  TTyCustomScrollContent = class(TTyCustomControl)
   private
     FScrollOrigin: TPoint;
     FContentW, FContentH: Integer;
@@ -66,9 +66,11 @@ type
       one here would put a line where the content is supposed to run under. }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+  end;
+
+  { TTyScrollContent publishes TTyCustomScrollContent's properties; everything lives in TTyCustomScrollContent. }
+  TTyScrollContent = class(TTyCustomScrollContent)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -126,7 +128,7 @@ implementation
 uses
   tyControls.Painter;
 
-constructor TTyScrollContent.Create(AOwner: TComponent);
+constructor TTyCustomScrollContent.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { csDesignFixedBounds: the box owns this control's bounds -- they are the viewport, derived
@@ -136,7 +138,7 @@ begin
   SetInitialBounds(0, 0, 100, 100);
 end;
 
-procedure TTyScrollContent.SetScrollOrigin(const AOrigin: TPoint;
+procedure TTyCustomScrollContent.SetScrollOrigin(const AOrigin: TPoint;
   AContentW, AContentH: Integer);
 begin
   FScrollOrigin := AOrigin;
@@ -161,7 +163,7 @@ begin
     WITHOUT touching a child, put it back -- and add the scenario that catches it. }
 end;
 
-function TTyScrollContent.GetLogicalClientRect: TRect;
+function TTyCustomScrollContent.GetLogicalClientRect: TRect;
 var
   viewW, viewH: Integer;
 begin
@@ -176,7 +178,7 @@ begin
   if FContentH > viewH then Result.Bottom := Result.Top + FContentH;
 end;
 
-procedure TTyScrollContent.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomScrollContent.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
   { WHERE the children start. They are stored in SCROLLED coordinates (the box's ScrollBy
@@ -185,14 +187,14 @@ begin
   Types.OffsetRect(ARect, -FScrollOrigin.x, -FScrollOrigin.y);
 end;
 
-function TTyScrollContent.GetStyleTypeKey: string;
+function TTyCustomScrollContent.GetStyleTypeKey: string;
 begin
   { Its own key rather than borrowing TyScrollBox: a theme that dresses the box's frame must not
     have that frame resolved a second time for the viewport inside it. }
   Result := 'TyScrollContent';
 end;
 
-procedure TTyScrollContent.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomScrollContent.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -210,7 +212,7 @@ begin
   end;
 end;
 
-procedure TTyScrollContent.Paint;
+procedure TTyCustomScrollContent.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

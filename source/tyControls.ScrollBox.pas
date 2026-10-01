@@ -9,7 +9,7 @@ uses
 type
   { TTyScrollBox — a scrolling viewport for oversized child content.
 
-    Subclasses TTyPanel for the frame + container plumbing, but carries its OWN
+    Descends from TTyCustomPanel for the frame + container plumbing, but carries its OWN
     'TyScrollBox' typeKey (see GetStyleTypeKey). It hosts
     arbitrary child controls whose bounding box may exceed the viewport; a vertical
     and a horizontal TTyScrollBar (both csNoDesignVisible, owned by Self) appear ONLY
@@ -32,9 +32,9 @@ type
     aligned children. Re-measuring is likewise automatic — Resize, Loaded (the .lfm's
     children arrive after the last Resize) and ControlsAligned (any child added, removed,
     moved or resized) all funnel into UpdateScrollRange. }
-  TTyScrollBox = class(TTyPanel, ITyScrollBarFrameHost)
+  TTyCustomScrollBox = class(TTyCustomPanel, ITyScrollBarFrameHost)
   private
-    FContent: TTyScrollContent;
+    FContent: TTyCustomScrollContent;
     FVScrollBar: TTyScrollBar;   // nil until first needed
     FHScrollBar: TTyScrollBar;   // nil until first needed
     FScrollX: Integer;           // >= 0 : logical px the content is scrolled left
@@ -239,7 +239,81 @@ type
     property ContentHeight: Integer read FContentH;
     property ScrollX: Integer read FScrollX;
     property ScrollY: Integer read FScrollY;
+    { Whether this box's two scrollbars fade out while nobody is using them. Forwarded to
+      the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
+  end;
+
+  { TTyScrollBox publishes TTyCustomScrollBox's properties; everything lives in TTyCustomScrollBox. }
+  TTyScrollBox = class(TTyCustomScrollBox)
   published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
     { Republished as TScrollBox does (forms.pp:257). It is declared in TControl's PROTECTED
       "optional properties" block (controls.pp:1580), so unlike most of the events this
       library republishes it was unreachable from CODE too, not merely absent from the
@@ -247,14 +321,7 @@ type
       could express, and a limit that depends on the form ("never wider than half of it")
       had no expression at all. }
     property OnConstrainedResize;
-    { Whether this box's two scrollbars fade out while nobody is using them. Forwarded to
-      the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
-    property ScrollBarAutoHide: TTyScrollBarAutoHide
-      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
+    property ScrollBarAutoHide;
   end;
 
 { --- Pure, headless-tested scroll math ------------------------------------------- }
@@ -307,9 +374,9 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-{ TTyScrollBox }
+{ TTyCustomScrollBox }
 
-constructor TTyScrollBox.Create(AOwner: TComponent);
+constructor TTyCustomScrollBox.Create(AOwner: TComponent);
 begin
   // NB: inherited Create (TTyPanel) sets Width/Height, which fires Resize ->
   // UpdateScrollRange -> EnsureBars. Fields are zero-initialized by the RTL before
@@ -327,29 +394,29 @@ begin
   Height := 150;
 end;
 
-destructor TTyScrollBox.Destroy;
+destructor TTyCustomScrollBox.Destroy;
 begin
   // FVScrollBar / FHScrollBar are owned by Self (Create(Self)) -> freed by TComponent.
   inherited Destroy;
 end;
 
-function TTyScrollBox.GetStyleTypeKey: string;
+function TTyCustomScrollBox.GetStyleTypeKey: string;
 begin
   Result := 'TyScrollBox';
 end;
 
-function TTyScrollBox.ScrollbarThick: Integer;
+function TTyCustomScrollBox.ScrollbarThick: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyScrollBox.ContentHost: TWinControl;
+function TTyCustomScrollBox.ContentHost: TWinControl;
 begin
   if FContent <> nil then Result := FContent else Result := Self;
 end;
 
-function TTyScrollBox.LeadingInset: Integer;
+function TTyCustomScrollBox.LeadingInset: Integer;
 begin
   if IsRightToLeft and (FVScrollBar <> nil) and FVScrollBar.Visible then
     Result := FVScrollBar.Width
@@ -357,20 +424,20 @@ begin
     Result := 0;
 end;
 
-procedure TTyScrollBox.InsertControl(AControl: TControl; Index: Integer);
+procedure TTyCustomScrollBox.InsertControl(AControl: TControl; Index: Integer);
 begin
   inherited InsertControl(AControl, Index);
   { Claim the viewport here rather than in the viewport's SetParent: every path -- created in
     code, dropped in the designer, streamed from a .lfm -- goes through InsertControl, and this
     way the viewport unit needs no reference back to this one. }
-  if AControl is TTyScrollContent then
+  if AControl is TTyCustomScrollContent then
   begin
-    FContent := TTyScrollContent(AControl);
+    FContent := TTyCustomScrollContent(AControl);
     UpdateScrollRange;
   end;
 end;
 
-function TTyScrollBox.IsContentChild(AControl: TControl): Boolean;
+function TTyCustomScrollBox.IsContentChild(AControl: TControl): Boolean;
 begin
   { Not a scrollbar, and not the viewport -- the viewport is CHROME from the box's point of
     view: its size comes from the box, so counting it as content would feed the layout back
@@ -379,19 +446,19 @@ begin
         and (AControl <> FContent);
 end;
 
-function TTyScrollBox.CountsInWidth(AControl: TControl): Boolean;
+function TTyCustomScrollBox.CountsInWidth(AControl: TControl): Boolean;
 begin
   Result := IsContentChild(AControl)
         and not (AControl.Align in [alTop, alBottom, alClient]);
 end;
 
-function TTyScrollBox.CountsInHeight(AControl: TControl): Boolean;
+function TTyCustomScrollBox.CountsInHeight(AControl: TControl): Boolean;
 begin
   Result := IsContentChild(AControl)
         and not (AControl.Align in [alLeft, alRight, alClient]);
 end;
 
-procedure TTyScrollBox.EnsureBars;
+procedure TTyCustomScrollBox.EnsureBars;
 begin
   if FVScrollBar = nil then
   begin
@@ -429,7 +496,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBox.NoteHostHover(AHovered: Boolean);
+procedure TTyCustomScrollBox.NoteHostHover(AHovered: Boolean);
 begin
   { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
     两条都是惰性建的（EnsureBars），nil 判断是真的会走到。 }
@@ -437,13 +504,13 @@ begin
   if FHScrollBar <> nil then FHScrollBar.SetHostHovered(AHovered);
 end;
 
-procedure TTyScrollBox.CMMouseEnter(var Message: TLMessage);
+procedure TTyCustomScrollBox.CMMouseEnter(var Message: TLMessage);
 begin
   inherited;
   NoteHostHover(MouseInClient);
 end;
 
-procedure TTyScrollBox.CMMouseLeave(var Message: TLMessage);
+procedure TTyCustomScrollBox.CMMouseLeave(var Message: TLMessage);
 begin
   inherited;
   { 只是起倒计时，不当场隐藏：指针从一颗子控件挪到另一颗、或者挪到条上，
@@ -451,7 +518,7 @@ begin
   NoteHostHover(MouseInClient);
 end;
 
-procedure TTyScrollBox.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+procedure TTyCustomScrollBox.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
 begin
   if FScrollBarAutoHide = AValue then Exit;
   FScrollBarAutoHide := AValue;
@@ -463,17 +530,17 @@ begin
 end;
 
 { See the declaration for why this override exists at all. }
-procedure TTyScrollBox.ScrollBy(DeltaX, DeltaY: Integer);
+procedure TTyCustomScrollBox.ScrollBy(DeltaX, DeltaY: Integer);
 begin
   ScrollByDelta(-DeltaX, -DeltaY);
 end;
 
-procedure TTyScrollBox.UpdateScrollbars;
+procedure TTyCustomScrollBox.UpdateScrollbars;
 begin
   UpdateScrollRange;
 end;
 
-procedure TTyScrollBox.ScrollInView(AControl: TControl);
+procedure TTyCustomScrollBox.ScrollInView(AControl: TControl);
 var
   R: TRect;
   P: TPoint;
@@ -510,7 +577,7 @@ begin
     ScrollByDelta(dx, dy);
 end;
 
-procedure TTyScrollBox.ScrollTo(AX, AY: Integer);
+procedure TTyCustomScrollBox.ScrollTo(AX, AY: Integer);
 begin
   { Through ScrollByDelta, not ScrollContentTo: the delta path re-measures and clamps to
     the real scrollable range, and ScrollContentTo does not. Two entry points with two
@@ -518,7 +585,7 @@ begin
   ScrollByDelta(AX - FScrollX, AY - FScrollY);
 end;
 
-procedure TTyScrollBox.UpdateScrollRange;
+procedure TTyCustomScrollBox.UpdateScrollRange;
 var
   pass: Integer;
 begin
@@ -545,7 +612,7 @@ end;
 
 { One measure + dock pass. Returns True when it changed something the NEXT pass would
   measure differently (content extent or bar visibility), so the caller can settle. }
-function TTyScrollBox.MeasureAndDock: Boolean;
+function TTyCustomScrollBox.MeasureAndDock: Boolean;
 var
   host: TWinControl;
   bw: Integer;
@@ -700,17 +767,17 @@ begin
     InvalidateClientRectCache(True);
 end;
 
-function TTyScrollBox.ScrollBarFrameStyle: TTyStyleSet;
+function TTyCustomScrollBox.ScrollBarFrameStyle: TTyStyleSet;
 begin
   Result := CurrentStyle;   // TTyPanel.RenderTo's DrawFrame uses exactly this
 end;
 
-function TTyScrollBox.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+function TTyCustomScrollBox.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
 begin
   Result := (ABar = FVScrollBar) or (ABar = FHScrollBar);
 end;
 
-function TTyScrollBox.FrameInset: Integer;
+function TTyCustomScrollBox.FrameInset: Integer;
 var
   S: TTyStyleSet;
 begin
@@ -729,7 +796,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyScrollBox.GetClientRect: TRect;
+function TTyCustomScrollBox.GetClientRect: TRect;
 begin
   { THIS DOES NOT MIRROR, and it is the one hook of the three that must not.
 
@@ -755,12 +822,12 @@ begin
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
 end;
 
-procedure TTyScrollBox.Paint;
+procedure TTyCustomScrollBox.Paint;
 begin
   RenderTo(Canvas, Rect(0, 0, Width, Height), Font.PixelsPerInch);
 end;
 
-function TTyScrollBox.GetLogicalClientRect: TRect;
+function TTyCustomScrollBox.GetLogicalClientRect: TRect;
 var
   viewW, viewH, bw: Integer;
 begin
@@ -785,7 +852,7 @@ begin
     Result.Bottom := Result.Top + FContentH + bw;
 end;
 
-procedure TTyScrollBox.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomScrollBox.AdjustClientRect(var ARect: TRect);
 var
   bw: Integer;
 begin
@@ -820,7 +887,7 @@ begin
   Types.OffsetRect(ARect, -FScrollX, -FScrollY);
 end;
 
-procedure TTyScrollBox.Loaded;
+procedure TTyCustomScrollBox.Loaded;
 begin
   inherited Loaded;
   // The .lfm streams the content children in AFTER the Width/Height writes that fired the
@@ -829,7 +896,7 @@ begin
   UpdateScrollRange;
 end;
 
-procedure TTyScrollBox.ControlsAligned;
+procedure TTyCustomScrollBox.ControlsAligned;
 begin
   inherited ControlsAligned;
   // Re-entrant by nature: docking the bars below moves children, which asks the align
@@ -838,7 +905,7 @@ begin
   UpdateScrollRange;
 end;
 
-procedure TTyScrollBox.ScrollByDelta(ADx, ADy: Integer);
+procedure TTyCustomScrollBox.ScrollByDelta(ADx, ADy: Integer);
 var
   nx, ny: Integer;
 begin
@@ -867,7 +934,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBox.ScrollContentTo(ANewX, ANewY: Integer);
+procedure TTyCustomScrollBox.ScrollContentTo(ANewX, ANewY: Integer);
 var
   dx, dy: Integer;
 begin
@@ -962,7 +1029,7 @@ end;
   case, whose bar stopped drifting (its Top read 187 before and after the scroll, where the real
   code moves it). So the one-liner buys exactly the half that was already provably harmless, and
   leaves the reported bar where it was. Measured, understood, left alone. }
-procedure TTyScrollBox.RedockBars;
+procedure TTyCustomScrollBox.RedockBars;
 begin
   if (FVScrollBar <> nil) and FVScrollBar.Visible and not IsRectEmpty(FVBarRect) then
     FVScrollBar.BoundsRect := FVBarRect;
@@ -970,7 +1037,7 @@ begin
     FHScrollBar.BoundsRect := FHBarRect;
 end;
 
-procedure TTyScrollBox.VScrollBarChange(Sender: TObject);
+procedure TTyCustomScrollBox.VScrollBarChange(Sender: TObject);
 begin
   if FSyncing then Exit;
   FSyncing := True;
@@ -981,7 +1048,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBox.HScrollBarChange(Sender: TObject);
+procedure TTyCustomScrollBox.HScrollBarChange(Sender: TObject);
 begin
   if FSyncing then Exit;
   FSyncing := True;
@@ -992,7 +1059,7 @@ begin
   end;
 end;
 
-function TTyScrollBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomScrollBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   step: Integer;
@@ -1018,7 +1085,7 @@ begin
     Result := False;
 end;
 
-procedure TTyScrollBox.Resize;
+procedure TTyCustomScrollBox.Resize;
 begin
   inherited Resize;
   UpdateScrollRange;

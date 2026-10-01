@@ -33,15 +33,11 @@ uses
   tyControls.ProgressBar, tyControls.Gauge, tyControls.TrackBar;
 
 type
-  TTyCustomClassesP1Test = class(TTestCase)
-  private
-    FForm: TForm;
-    FDrawCalls: Integer;
-    FChanges: Integer;
-    procedure CountChange(Sender: TObject);
-    procedure CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer; ARect: TRect;
-      AState: TOwnerDrawState);
+  { The fixture (a bare TForm.CreateNew) and the T-b / T-c / T-d / T-e checks that every
+    phase's suite shares (test.customclasses.p2 derives from it too). }
+  TTyCustomClassesPhaseCase = class(TTestCase)
   protected
+    FForm: TForm;
     procedure SetUp; override;
     procedure TearDown; override;
     { T-b: AClass publishes its LCL root's names plus ANames, nothing else. }
@@ -54,6 +50,15 @@ type
     procedure CheckFreshDefaults(AClass: TComponentClass; const ANames: array of string);
     { T-d: both resolve the same theme type key. }
     procedure CheckSameTypeKey(AThird, AFinal: TComponent);
+  end;
+
+  TTyCustomClassesP1Test = class(TTyCustomClassesPhaseCase)
+  private
+    FDrawCalls: Integer;
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
+    procedure CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer; ARect: TRect;
+      AState: TOwnerDrawState);
   published
     { Task 2: buttons }
     procedure TestFlatToolBarGhostsGlyphAndSpeedButtons;
@@ -239,12 +244,24 @@ type
     property Max;
   end;
 
+const
+  { The ground a render starts from; a pixel still this colour was never painted. }
+  CSentinel = TColor($00FF00FF);
+
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
 function StreamedText(AComp: TComponent): string;
 { Stream ASrc and read it back into ADst. }
 procedure StreamInto(ASrc, ADst: TComponent);
 { Fill with a sentinel, then compare every pixel. }
 function SameBitmaps(A, B: TBitmap; out AFirstDiff: string): Boolean;
+{ A pf32bit bitmap of the given size filled with CSentinel. }
+function NewSentinelBitmap(AW, AH: Integer): TBitmap;
+{ `Name = value` or `Name.Strings = (` in a streamed text. }
+function HasProp(const AText, AName: string): Boolean;
+{ Bring the LCL widgetset up once, for the tests that need a window handle. }
+procedure NeedWidgetSet;
+{ The lParam the widgetset packs a click position into. }
+function MousePos(X, Y: Integer): PtrInt;
 
 implementation
 
@@ -355,9 +372,6 @@ type
     procedure ForceLayout;
   end;
 
-const
-  CSentinel = TColor($00FF00FF);
-
 { The console runner registers no window classes until the LCL widgetset is up, and a handle
   then fails with error 1407. The same lazy bootstrap test.focus.tabstop uses; only the tests
   that send real input messages need a handle. }
@@ -371,7 +385,6 @@ begin
   GP1WidgetSet := True;
 end;
 
-{ The lParam the widgetset packs a click position into. }
 function MousePos(X, Y: Integer): PtrInt;
 begin
   Result := PtrInt((Y shl 16) or (X and $FFFF));
@@ -511,13 +524,13 @@ end;
 
 { ------------------------------------------------------------------ fixture }
 
-procedure TTyCustomClassesP1Test.SetUp;
+procedure TTyCustomClassesPhaseCase.SetUp;
 begin
   FForm := TForm.CreateNew(nil);
   FForm.SetBounds(0, 0, 600, 400);
 end;
 
-procedure TTyCustomClassesP1Test.TearDown;
+procedure TTyCustomClassesPhaseCase.TearDown;
 begin
   FreeAndNil(FForm);
 end;
@@ -533,7 +546,7 @@ begin
   Inc(FDrawCalls);
 end;
 
-procedure TTyCustomClassesP1Test.CheckPublishesOnly(AClass: TClass; const ANames: array of string);
+procedure TTyCustomClassesPhaseCase.CheckPublishesOnly(AClass: TClass; const ANames: array of string);
 var
   want, got: TStringList;
   i: Integer;
@@ -551,7 +564,7 @@ begin
   end;
 end;
 
-procedure TTyCustomClassesP1Test.CheckStreamText(AComp: TComponent; const AShown: array of string;
+procedure TTyCustomClassesPhaseCase.CheckStreamText(AComp: TComponent; const AShown: array of string;
   const AHidden: string);
 var
   txt: string;
@@ -566,7 +579,7 @@ begin
       + 'stream it:' + LineEnding + txt, HasProp(txt, AHidden));
 end;
 
-procedure TTyCustomClassesP1Test.CheckFreshDefaults(AClass: TComponentClass;
+procedure TTyCustomClassesPhaseCase.CheckFreshDefaults(AClass: TComponentClass;
   const ANames: array of string);
 var
   inst: TComponent;
@@ -595,7 +608,7 @@ begin
   end;
 end;
 
-procedure TTyCustomClassesP1Test.CheckSameTypeKey(AThird, AFinal: TComponent);
+procedure TTyCustomClassesPhaseCase.CheckSameTypeKey(AThird, AFinal: TComponent);
 var
   a, b: ITyStyleable;
 begin

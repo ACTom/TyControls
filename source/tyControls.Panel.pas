@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel,
   tyControls.Controller;
 type
-  TTyPanel = class(TTyCustomControl)
+  TTyCustomPanel = class(TTyCustomControl)
   protected
     { protected, not private: a test drives the invalidation rule through it. }
     FPaintCache: TTyPaintCache;
@@ -38,9 +38,42 @@ type
     procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
+  protected
+    { The caption's VERTICAL placement. The horizontal Alignment has been here since the
+      start and this axis was hardcoded to the middle, so a section-header band -- label at
+      the top, children below -- could not be expressed with the panel's own Caption at all.
+
+      THE TYPE IS THE PARITY CLAIM. TCustomPanel declares
+        VerticalAlignment: TVerticalAlignment ... default taVerticalCenter  (extctrls.pp:1154)
+      over the RTL's enum (taAlignTop, taAlignBottom, taVerticalCenter -- classesh.inc:94,
+      ordinals 0/1/2, and the `default` directive below stores that ordinal). This property
+      briefly shipped in-dev typed Graphics.TTextLayout: same name, wrong type, so
+      `P.VerticalAlignment := taAlignBottom` did not compile and an .lfm written by a real
+      TPanel ('VerticalAlignment = taAlignBottom') refused to load -- the exact collision
+      class (LCL's name, not LCL's meaning) this library keeps removing. BREAKING for any
+      .lfm saved by the three-day dev window that streamed `tlTop`/`tlBottom`: those now
+      fail to read LOUDLY (never silently reinterpreted); the streamed DEFAULT wrote no
+      line at all and is unaffected. The painter still thinks in TTextLayout -- RenderTo
+      maps through LCL's own name-map (see VerticalAlignmentToTextLayout there). }
+    property VerticalAlignment: TVerticalAlignment read FVerticalAlignment
+      write SetVerticalAlignment default taVerticalCenter;
+    { Wrap a long caption instead of ellipsising it. The painter has taken AMultiLine since
+      multi-line text landed and the panel simply never passed it, so a banner/caption panel
+      silently clipped its second line to "...". Default False = the behaviour every existing
+      form already has. }
+    property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
+    { Interpret '&' as a mnemonic marker: the '&' is eaten and the next character underlined
+      while Alt is held. tyControls.Accel has done the parsing for ten other controls; the
+      panel was the container that still painted the ampersand literally. Display only, as
+      TCustomPanel's is -- a panel takes no focus, so there is nothing for Alt+letter to
+      activate. Default False matches extctrls.pp:1153. }
+    property ShowAccelChar: Boolean read FShowAccelChar write SetShowAccelChar default False;
+  end;
+
+  { TTyPanel publishes TTyCustomPanel's properties; everything lives in TTyCustomPanel. }
+  TTyPanel = class(TTyCustomPanel)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -100,36 +133,10 @@ type
       string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
       overriding TextChanged. That is what this does now. }
     property Caption;
-    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
-    { The caption's VERTICAL placement. The horizontal Alignment has been here since the
-      start and this axis was hardcoded to the middle, so a section-header band -- label at
-      the top, children below -- could not be expressed with the panel's own Caption at all.
-
-      THE TYPE IS THE PARITY CLAIM. TCustomPanel declares
-        VerticalAlignment: TVerticalAlignment ... default taVerticalCenter  (extctrls.pp:1154)
-      over the RTL's enum (taAlignTop, taAlignBottom, taVerticalCenter -- classesh.inc:94,
-      ordinals 0/1/2, and the `default` directive below stores that ordinal). This property
-      briefly shipped in-dev typed Graphics.TTextLayout: same name, wrong type, so
-      `P.VerticalAlignment := taAlignBottom` did not compile and an .lfm written by a real
-      TPanel ('VerticalAlignment = taAlignBottom') refused to load -- the exact collision
-      class (LCL's name, not LCL's meaning) this library keeps removing. BREAKING for any
-      .lfm saved by the three-day dev window that streamed `tlTop`/`tlBottom`: those now
-      fail to read LOUDLY (never silently reinterpreted); the streamed DEFAULT wrote no
-      line at all and is unaffected. The painter still thinks in TTextLayout -- RenderTo
-      maps through LCL's own name-map (see VerticalAlignmentToTextLayout there). }
-    property VerticalAlignment: TVerticalAlignment read FVerticalAlignment
-      write SetVerticalAlignment default taVerticalCenter;
-    { Wrap a long caption instead of ellipsising it. The painter has taken AMultiLine since
-      multi-line text landed and the panel simply never passed it, so a banner/caption panel
-      silently clipped its second line to "...". Default False = the behaviour every existing
-      form already has. }
-    property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
-    { Interpret '&' as a mnemonic marker: the '&' is eaten and the next character underlined
-      while Alt is held. tyControls.Accel has done the parsing for ten other controls; the
-      panel was the container that still painted the ampersand literally. Display only, as
-      TCustomPanel's is -- a panel takes no focus, so there is nothing for Alt+letter to
-      activate. Default False matches extctrls.pp:1153. }
-    property ShowAccelChar: Boolean read FShowAccelChar write SetShowAccelChar default False;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
     { Docking, republished exactly as TPanel does. Every member here is TWinControl's or
       TControl's own and the dock manager that drives them is LCL code we do not touch --
       the probe in tests/test.parity.container.pas docks a real control into a TTyPanel and
@@ -150,7 +157,7 @@ type
     property Anchors;
   end;
 implementation
-constructor TTyPanel.Create(AOwner: TComponent);
+constructor TTyCustomPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Designer container: the IDE drops child controls INTO the panel.
@@ -171,7 +178,7 @@ begin
 end;
 
 { See the declaration: this is the only place BorderWidth is read. }
-procedure TTyPanel.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomPanel.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
   if BorderWidth > 0 then
@@ -181,37 +188,37 @@ begin
     if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
   end;
 end;
-function TTyPanel.GetStyleTypeKey: string;
+function TTyCustomPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';
 end;
-procedure TTyPanel.TextChanged;
+procedure TTyCustomPanel.TextChanged;
 begin
   inherited TextChanged;
   Invalidate;
 end;
-procedure TTyPanel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomPanel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyPanel.SetVerticalAlignment(AValue: TVerticalAlignment);
+procedure TTyCustomPanel.SetVerticalAlignment(AValue: TVerticalAlignment);
 begin
   if FVerticalAlignment = AValue then Exit;
   FVerticalAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyPanel.SetWordWrap(AValue: Boolean);
+procedure TTyCustomPanel.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
   Invalidate;
 end;
 
-procedure TTyPanel.SetShowAccelChar(AValue: Boolean);
+procedure TTyCustomPanel.SetShowAccelChar(AValue: Boolean);
 begin
   if FShowAccelChar = AValue then Exit;
   FShowAccelChar := AValue;
@@ -223,7 +230,7 @@ begin
   if FShowAccelChar then TyAccelRegister(Self) else TyAccelUnregister(Self);
   Invalidate;
 end;
-procedure TTyPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 const
   { LCL's own map, verbatim (custompanel.inc:147) -- and it maps by NAME, not by ordinal:
     the two enums order their members differently ((top, BOTTOM, centre) on the RTL side,
@@ -312,7 +319,7 @@ begin
     P.Free;
   end;
 end;
-destructor TTyPanel.Destroy;
+destructor TTyCustomPanel.Destroy;
 begin
   { Only ever registered while ShowAccelChar was on; unregistering an absent control is a
     no-op, so this needs no flag test and cannot leave a dangling entry behind. }
@@ -321,7 +328,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyPanel.Invalidate;
+procedure TTyCustomPanel.Invalidate;
 begin
   { The one thing the cache keys on: our OWN look changed. A child's damage never reaches
     here, which is exactly why the cache survives it. }
@@ -329,7 +336,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyPanel.Paint;
+procedure TTyCustomPanel.Paint;
 var
   w, h: Integer;
 begin
