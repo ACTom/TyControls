@@ -326,7 +326,8 @@ begin
   end;
   if (s = '') or (s[1] <> '#') then Exit(False);
   n := Length(s) - 1;
-  if not (n in [3, 4, 6, 8]) then Exit(False);
+  { the lengths the engine reads (TyParseColor): #rgb, #rrggbb, #rrggbbaa -- not #rgba }
+  if not (n in [3, 6, 8]) then Exit(False);
   for i := 2 to Length(s) do
     if not (s[i] in ['0'..'9', 'a'..'f', 'A'..'F']) then
       Exit(False);

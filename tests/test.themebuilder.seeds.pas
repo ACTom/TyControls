@@ -220,6 +220,9 @@ procedure TTbSeedEditTests.TestWhatIsALiteral;
 begin
   AssertTrue('E11: #abc', TbIsLiteralSeedValue(cAccent, '#abc'));
   AssertTrue('E11: #AABBCCDD', TbIsLiteralSeedValue(cAccent, '#AABBCCDD'));
+  { the engine has no #rgba (TyParseColor: 3, 6 or 8 digits): not a plain colour -- replacing
+    it is asked about like an expression }
+  AssertFalse('E11: #abcd is not one the engine reads', TbIsLiteralSeedValue(cAccent, '#abcd'));
   AssertFalse('E11: darken', TbIsLiteralSeedValue(cAccent, 'darken(--x, 4%)'));
   AssertFalse('E11: system-accent', TbIsLiteralSeedValue(cAccent, 'system-accent'));
   AssertFalse('E11: var', TbIsLiteralSeedValue(cAccent, 'var(--a)'));
