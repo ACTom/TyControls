@@ -302,6 +302,11 @@ var
   x, y: Integer;
   a, b: PBGRAPixel;
 begin
+  { THE POINTER LEAVES FIRST: a hover held through a new option stays on the
+    element the option keeps -- the same series view and the same row -- as
+    upstream's reused element keeps its hoverState [Batch 96], and the cold
+    picture is one nothing is hovered in }
+  FChart.Hover(1, 1);
   Draw(AOption);
   cold := TBGRABitmap.Create(cW, cH, BGRAWhite);
   try

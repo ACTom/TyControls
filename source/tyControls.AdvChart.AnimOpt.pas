@@ -62,6 +62,13 @@ type
     Str: string;      // aokString; aokHandler: the name after '@'
   end;
 
+  { removeOpt, or an update payload's animation: each part only when set }
+  TTyAnimOverride = record
+    HasDuration, HasEasing, HasDelay: Boolean;
+    Duration, Delay: Double;
+    Easing: string;
+  end;
+
   { The animatable model. Present False is upstream's null model (BarView's
     animationModel when the series does not animate): nothing animates. }
   TTyAnimModel = record
@@ -78,13 +85,12 @@ type
     IsSeries: Boolean;
     { getData().count(): the series' data count after filtering }
     DataCount: Integer;
-  end;
-
-  { removeOpt, or an update payload's animation: each part only when set }
-  TTyAnimOverride = record
-    HasDuration, HasEasing, HasDelay: Boolean;
-    Duration, Delay: Double;
-    Easing: string;
+    { THE UPDATE PAYLOAD'S animation, model.ecModel.getUpdatePayload():
+      the action the render runs for (a dataZoom from the inside roam or a
+      realtime slider) overrides every enter, update and leave timing it
+      makes; a call's own payload goes first [Batch 96] }
+    Payload: TTyAnimOverride;
+    HasPayload: Boolean;
   end;
 
   TTyAnimTiming = record
@@ -551,6 +557,13 @@ begin
       if AOpts.Payload.HasDuration then dur := OptNum(AOpts.Payload.Duration);
       if AOpts.Payload.HasEasing then eas := OptStr(AOpts.Payload.Easing);
       if AOpts.Payload.HasDelay then del := OptNum(AOpts.Payload.Delay);
+    end
+    { the model's: ecModel.getUpdatePayload().animation [Batch 96] }
+    else if AModel.HasPayload then
+    begin
+      if AModel.Payload.HasDuration then dur := OptNum(AModel.Payload.Duration);
+      if AModel.Payload.HasEasing then eas := OptStr(AModel.Payload.Easing);
+      if AModel.Payload.HasDelay then del := OptNum(AModel.Payload.Delay);
     end;
     { the delay function first, then the duration's, as upstream calls them }
     ATiming.Delay := CallTiming(del, AOpts);

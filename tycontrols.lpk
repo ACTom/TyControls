@@ -1029,6 +1029,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.AnimView"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.AnimAxis.pas"/>
+        <UnitName Value="tyControls.AdvChart.AnimAxis"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Diagnose.pas"/>
         <UnitName Value="tyControls.AdvChart.Diagnose"/>
       </Item>

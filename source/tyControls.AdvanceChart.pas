@@ -57,8 +57,8 @@ uses
   tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
   tyControls.AdvChart.Dataset,
   tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
-  tyControls.AdvChart.AnimView,
-  fpjson, tyControls.SubPixel;
+  tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
+  fpjson, contnrs, tyControls.SubPixel;
 
 const
   { The four axis metrics, and the defaults to fall back on when a theme has not
@@ -190,6 +190,18 @@ type
     { getComponentStates(series).isBlured: blurSeries reached it, so the next
       allLeaveBlur walks it [Batch 90] }
     IsBlured: Boolean;
+  end;
+
+  { WHAT A notMerge OPTION CARRIES OVER of a series' state records
+    [Batch 96]: the series' view key and type, and each view row's
+    DataDiffer key and raw index -- upstream keeps the view (same id, same
+    type) and its elements by the data diff, and a reused element keeps its
+    hoverState and __highByOuter bits }
+  TTyStCarryKeys = record
+    Present: Boolean;
+    ViewKey, SeriesType: string;
+    Keys: TTyStringArray;
+    Raws: TTyIntegerArray;
   end;
 
   TTyChartEventReg = record
@@ -344,6 +356,12 @@ type
     FSel: array of TTySelModel;
     FSelInit: TTyBoolArray;
     FSt: array of TTyStSeries;
+    { the old option's records and keys, until the new one's first sync maps
+      them across; the hovered item's series and raw row [Batch 96] }
+    FStCarry: array of TTyStSeries;
+    FStCarryKeys: array of TTyStCarryKeys;
+    FStCarryHover: Boolean;
+    FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
     FHighlightKeys: TTyStringArray;
@@ -602,6 +620,17 @@ type
     FAnimOldBuild: TTyChartBuild;
     FAnimOldBindings: TTySeriesBindingArray;
     FAnimOldViewKeys: TTyStringArray;
+    { A FULL UPDATE OF THE SAME OPTION waiting for its arming -- a legend
+      toggle, a dataZoom -- and the update payload's animation it renders
+      with (a dataZoom from the inside roam or a realtime slider) [Batch 96] }
+    FAnimFull: Boolean;
+    FAnimPayload: TTyAnimOverride;
+    FAnimHasPayload: Boolean;
+    { THE AXES' groupTransition [Batch 96]: one proxy per leaf of an axis
+      group, by 'xAxis0/anid', on the series' driver; made by a full update's
+      arming, dropped with every other proxy }
+    FAxisProxies: TFPHashList;
+    FAxisList: TFPList;
     FPaintList: TTyPaintList;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
@@ -645,6 +674,29 @@ type
     { each view row's DataDiffer key and raw index }
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
+    { A FULL UPDATE ANIMATES [Batch 96]: before its layout, the render it
+      starts from is kept as a new option's is (and the payload noted);
+      after its list is built, armed at once where the chart may animate --
+      the clips first step on the next frame, as an action does not flush --
+      or left for a window's paint }
+    procedure AnimFullBegin(const APayload: TTyAnimOverride; AHasPayload: Boolean);
+    procedure AnimFullEnd;
+    { ---- the axes' groupTransition [Batch 96] ---- }
+    procedure AxisAnimDrop;
+    { every leaf of every cartesian axis of a build, as AnimAxis makes them,
+      AKeys their proxy keys }
+    function AxisAnimElementsOf(ABuild: TTyChartBuild; APPI: Integer;
+      out AKeys: TTyStringArray; out AAxisKeys: TTyStringArray): TTyAxisAnimElArray;
+    { the new build's leaves as proxies: a leaf an old one matched starts
+      where that one is -- its proxy's value while it moves -- and tweens at
+      update timing on its axis' model, no data index; the rest stand }
+    procedure AxisAnimArm(AOldBuild, ANewBuild: TTyChartBuild);
+    function AxisProxyOf(const AKey: string): TTyChartAnimProxy;
+    { while the series move, axes with proxies are drawn in the dynamic
+      layer from them }
+    function AxesDynamic: Boolean;
+    procedure PaintAxes(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
     { the list and keys of the render an update starts from }
     procedure AnimSnapshot;
     procedure AnimDropPrev;
@@ -689,7 +741,7 @@ type
       rubs out the x axis line that `onZero` had just put there. }
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
       const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean = False);
     { THE TWO LAYERS, split by what makes them change rather than by what they
       look like. Static is everything the model decides; dynamic is what moves
       while the model stands still. }
@@ -740,14 +792,14 @@ type
     procedure DzBrushMove(AIndex: Integer; AX, AY: Double);
     procedure DzBrushEnd(AIndex: Integer);
     procedure DzSliderDispatch(AIndex: Integer; ARealtime: Boolean);
-    procedure DzRunSliderAction(AIndex: Integer; ADeferred: Boolean);
+    procedure DzRunSliderAction(AIndex: Integer; ADeferred, ARealtime: Boolean);
     function DzRoam(AGrid: Integer; const AKind: string; AShift: TShiftState;
       AOldX, AOldY, ANewX, ANewY, AScale, AScroll: Double): Boolean;
     procedure DzRoamDispatch(AGrid: Integer; const AItems: TTyDzActionItemArray);
     procedure DzDispatch(const AAction: TTyDzAction);
     procedure DzViewUpdate;
     function DzStateKey: string;
-    procedure DzSyncLayout;
+    procedure DzSyncLayout(const APayload: TTyAnimOverride; AHasPayload: Boolean);
     procedure DzApplyCursor;
     procedure DzArmTimer;
     procedure DzTimerFired(Sender: TObject);
@@ -1141,6 +1193,10 @@ type
       re-applies the previous lists, upstream's full update), the selection
       flags are synced, the flags applied and the values written back }
     procedure StSync(AList: TTyPaintList; APPI: Integer);
+    { a notMerge option: the records taken before the option goes, then put
+      on the reused rows of the reused series views [Batch 96] }
+    procedure StCarryTake;
+    procedure StCarryApply;
     procedure StDeclareItem(ASlot, ARaw: Integer; AList: TTyPaintList;
       APPI: Integer);
     procedure StDeclareLine(ASlot: Integer; AList: TTyPaintList);
@@ -1211,6 +1267,8 @@ type
       upstream's update runs inside dispatchAction -- so the action that
       follows finds the new elements }
     procedure FullUpdate;
+    { ... with an update payload's animation (a dataZoom's) [Batch 96] }
+    procedure FullUpdateWith(const APayload: TTyAnimOverride; AHasPayload: Boolean);
     { the target the element at AIndex of the list answers as }
     function TargetOfElement(AIndex: Integer): TTyChartEventTarget;
     { the series' (or the datum's) border, for its legend icon }
@@ -1407,6 +1465,11 @@ type
       inner row ARow, the part 'host', 'label', 'guide' (the row's), 'poly'
       or 'area' (a line's, ARow ignored); nil when none is bound }
     function AnimStateProxy(ASeries, ARow: Integer; const APart: string): TTyChartAnimProxy;
+    { THE AXES' groupTransition [Batch 96]: the proxy of the leaf AAnid
+      ('label_20', 'ticks_5', 'line_10', 'line') of axis AAxisKey ('xAxis0',
+      'yAxis1'); nil when there is none -- a full update makes them }
+    function AnimAxisProxyCount: Integer;
+    function AnimAxisProxy(const AAxisKey, AAnid: string): TTyChartAnimProxy;
     function AxisZoom(const AMainType: string; AAxisIndex: Integer;
       out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
     { The rows of series ASeriesIndex as the last build left them -- filtered
@@ -1589,6 +1652,9 @@ begin
   FreeAndNil(FDzTimer);
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
   FreeAndNil(FAnimTimer);
+  AxisAnimDrop;
+  FreeAndNil(FAxisProxies);
+  FreeAndNil(FAxisList);
   FreeAndNil(FAnimSet);
   FreeAndNil(FAnim);
   FreeAndNil(FAnimFrame);
@@ -1655,6 +1721,7 @@ begin
 end;
 
 procedure TTyAdvanceChart.SetOptionText(const AValue: string);
+var i: Integer;
 begin
   if FOptionText = AValue then Exit;
   FOptionText := AValue;
@@ -1662,6 +1729,19 @@ begin
     series whose view id and type are the same -- unless an update already
     waits, whose old render is still the one before it [Batch 90] }
   if not FAnimPrev.Valid then FAnimOldViewKeys := AnimViewKeys(FOption.Root);
+  { the state records the reused elements keep, while the old option and
+    its stores are still there [Batch 96] }
+  StCarryTake;
+  { a full update still waiting: its models are the option's about to go,
+    and what it arms now is a notMerge update [Batch 96] }
+  if FAnimPrev.FullUpdate then
+  begin
+    FAnimPrev.FullUpdate := False;
+    for i := 0 to High(FAnimPrev.Series) do
+      FAnimPrev.Series[i].Model := TyAnimNoModel;
+  end;
+  FAnimFull := False;
+  FAnimHasPayload := False;
   FOption.SetOptionText(AValue);
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
@@ -1683,7 +1763,9 @@ begin
   FDzDrag := Default(TTyDzTarget);
   FDzHasDown := False;
   FDzPanGrid := -1;
-  { new series models: no selection, no element survives [Batch 88] }
+  { new series models: no selection [Batch 88]. AN ELEMENT SURVIVES where
+    the view and the row do: upstream diffs the new data against the old
+    and keeps its hoverState and __highByOuter bits [Batch 96] }
   FSel := nil;
   { AND WHAT THE POINTER IS OVER IS A REMOVED ELEMENT: the next move finds a
     new one there -- an out to the old, an over to the new, as zrender's
@@ -2260,11 +2342,12 @@ begin
   FLastPPI := APPI;
   { a full update: the next sync re-renders the states [Batch 88] }
   Inc(FStGen);
-  { A NEW LAYOUT SNAPS: a resize, a theme, a zoom -- upstream sets those
-    directly ({duration: 0}) -- and a new option is armed again after the
-    build [Batch 89]. A NEW OPTION UPDATES: the render before it is kept --
-    its list, its keys, its build -- for the render that arms it, and the
-    proxies run on [Batch 90]. }
+  { A NEW LAYOUT SNAPS: a resize, a theme -- upstream sets those directly
+    ({duration: 0}) -- and a new option is armed again after the build
+    [Batch 89]. A NEW OPTION UPDATES: the render before it is kept -- its
+    list, its keys, its build -- for the render that arms it, and the
+    proxies run on [Batch 90]. So does a full update of the same option, a
+    legend toggle or a dataZoom (AnimFullBegin) [Batch 96]. }
   if FAnimPending and (FAnimMode <> camOff) and not (csDesigning in ComponentState) then
   begin
     if not FAnimPrev.Valid then AnimSnapshot;
@@ -2339,8 +2422,10 @@ end;
 
 procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean);
 var
+  akey: string;
+  lx, ly: Double;
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
   lblStyle, primaryS: TTyStyleSet;
@@ -2485,8 +2570,37 @@ var
     batched := 0;
   end;
 
+  { A LEAF IN ITS groupTransition [Batch 96]: the line where its proxy is
+    now -- upstream's shape, already on the pixel grid at its ends and drawn
+    as it is in between -- when the axis is drawn from its proxies }
+  function ProxLine(const AAnid: string): Boolean;
+  var p: TTyChartAnimProxy;
+  begin
+    Result := False;
+    if not AProxied then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(akey, AAnid));
+    if p = nil then Exit;
+    APainter.MoveTo(p.Num('shape.x1'), p.Num('shape.y1'));
+    APainter.LineTo(p.Num('shape.x2'), p.Num('shape.y2'));
+    Inc(batched);
+    Result := True;
+  end;
+
+  { ... and a label's anchor }
+  procedure ProxLabel(AIndex: Integer; var AX, AY: Double);
+  var p: TTyChartAnimProxy;
+  begin
+    if not AProxied or (spec = nil) or (AIndex > High(spec^.TickValues)) then Exit;
+    p := AxisProxyOf(TyAxisAnimKey(akey, 'label_'
+      + TyJsNumberToString(spec^.TickValues[AIndex])));
+    if p = nil then Exit;
+    AX := p.Num('x');
+    AY := p.Num('y');
+  end;
+
 begin
   if AAxis = nil then Exit;
+  akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
   { `show: false` means "do not draw me". The axis still exists and its series
     still map to pixels; only the domain, ticks, labels and split lines go. }
   if not AAxis.Visible then Exit;
@@ -2654,6 +2768,7 @@ begin
     for i := 0 to High(spec^.SplitLineMarks) do
     begin
       if not spec^.SplitLineMarks[i].Drawn then Continue;
+      if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
       along := spec^.SplitLineMarks[i].Coord;
       if horiz then
         BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
@@ -2682,7 +2797,8 @@ begin
   if furn.ShowLine and (tpBorderColor in lineS.Present) then
   begin
     APainter.BeginPath;
-    if horiz then
+    if ProxLine('line') then
+    else if horiz then
       BatchLine(APlot.Left, at, APlot.Right, at, LineWidth(lineS))
     else
       BatchLine(at, APlot.Top, at, APlot.Bottom, LineWidth(lineS));
@@ -2702,6 +2818,7 @@ begin
     for i := 0 to High(spec^.TickMarks) do
     begin
       if not spec^.TickMarks[i].Drawn then Continue;
+      if ProxLine('ticks_' + TyJsNumberToString(spec^.TickMarks[i].Value)) then Continue;
       along := spec^.TickMarks[i].Coord;
       if horiz then
       begin
@@ -2809,10 +2926,14 @@ begin
         glyphs come to disagree. }
       lblStyle := labelS;
       if places[i].Emphasis then lblStyle := primaryS;
+      { where its groupTransition has it now [Batch 96] }
+      lx := places[i].X;
+      ly := places[i].Y;
+      ProxLabel(i, lx, ly);
       { A BLOCK DRAWS ITS PIECES [Batch 86] }
       if Length(places[i].Rt) > 0 then
       begin
-        TyRenderRtPieces(APainter, places[i].Rt, places[i].X, places[i].Y,
+        TyRenderRtPieces(APainter, places[i].Rt, lx, ly,
           spec^.RotationRad, spec^.RtScale, 1, True, lblStyle.TextColor);
         Continue;
       end;
@@ -2843,12 +2964,12 @@ begin
       begin
         APainter.DrawTextRotated(places[i].Text, lblStyle.FontName,
           ResolveFontSize(lblStyle), lblStyle.FontWeight, lblStyle.TextColor,
-          places[i].X, places[i].Y, spec^.RotationRad,
+          lx, ly, spec^.RotationRad,
           AnchorAlign(places[i].AnchorH), AnchorLayout(places[i].AnchorV));
         Continue;
       end;
       APainter.DrawText(
-        AnchorBox(places[i].X, places[i].Y, lblW, lblH,
+        AnchorBox(lx, ly, lblW, lblH,
                   places[i].AnchorH, places[i].AnchorV),
         places[i].Text, lblStyle.FontName, ResolveFontSize(lblStyle),
         lblStyle.FontWeight, lblStyle.TextColor, taCenter, tlCenter,
@@ -2912,8 +3033,6 @@ procedure TTyAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
 var
   boxStyle: TTyStyleSet;
   plotF: TTyRectF;
-  g, a: Integer;
-  gb: TTyGridBuild;
   bg: TTyChartColor;
   fill: TTyFill;
 begin
@@ -2942,26 +3061,9 @@ begin
     or (plotF.Bottom <> FLastRect.Bottom) then
     Relayout(APainter, plotF, APPI, AMeasurer);
 
-  if FBuild <> nil then
-    for g := 0 to FBuild.GridCount - 1 do
-    begin
-      gb := FBuild.Grid(g);
-      { EVERY AXIS' GRID FIRST, then every axis' line. Two passes over the
-        same list rather than one, because the order that matters is
-        between the LAYERS and not between the axes. }
-      for a := 0 to gb.XAxisCount - 1 do
-        PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                  True);
-      for a := 0 to gb.YAxisCount - 1 do
-        PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                  True);
-      for a := 0 to gb.XAxisCount - 1 do
-        PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                  False);
-      for a := 0 to gb.YAxisCount - 1 do
-        PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                  False);
-    end;
+  { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
+    the series are [Batch 96] }
+  if not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
@@ -2971,6 +3073,34 @@ begin
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
   if not FAnimLive or FAnimContinuous then PaintTitles(APainter);
+end;
+
+procedure TTyAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
+var
+  g, a: Integer;
+  gb: TTyGridBuild;
+begin
+  if FBuild = nil then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    { EVERY AXIS' GRID FIRST, then every axis' line. Two passes over the
+      same list rather than one, because the order that matters is
+      between the LAYERS and not between the axes. }
+    for a := 0 to gb.XAxisCount - 1 do
+      PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                True, AProxied);
+    for a := 0 to gb.YAxisCount - 1 do
+      PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                True, AProxied);
+    for a := 0 to gb.XAxisCount - 1 do
+      PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                False, AProxied);
+    for a := 0 to gb.YAxisCount - 1 do
+      PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                False, AProxied);
+  end;
 end;
 
 function TTyAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
@@ -4159,7 +4289,7 @@ end;
 procedure TTyAdvanceChart.DzSliderDispatch(AIndex: Integer; ARealtime: Boolean);
 begin
   if TyDzThrottleCall(FDzState[AIndex].Throttle, DzClock, FDzInteract[AIndex].Throttle) then
-    DzRunSliderAction(AIndex, False)
+    DzRunSliderAction(AIndex, False, ARealtime)
   else
   begin
     FDzState[AIndex].PendingRealtime := ARealtime;
@@ -4167,11 +4297,12 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DzRunSliderAction(AIndex: Integer; ADeferred: Boolean);
+procedure TTyAdvanceChart.DzRunSliderAction(AIndex: Integer; ADeferred, ARealtime: Boolean);
 var a: TTyDzAction;
 begin
   a := Default(TTyDzAction);
   a.Deferred := ADeferred;
+  a.Realtime := ARealtime;
   a.FromSlider := AIndex;
   SetLength(a.Items, 1);
   a.Items[0].DataZoomIndex := AIndex;
@@ -4284,6 +4415,8 @@ end;
 procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction);
 var
   n, it, i, j, t, u: Integer;
+  pay: TTyAnimOverride;
+  hasPay: Boolean;
   found: array of Boolean;
   keys: array of string;
   more, linked: Boolean;
@@ -4337,8 +4470,27 @@ begin
       end;
   end;
   if AAction.Batch then FDzFrom := -1 else FDzFrom := AAction.FromSlider;
+  { THE PAYLOAD'S animation [Batch 96]: the inside roam's {cubicOut, 100}
+    (roams.ts), a realtime slider's {cubicOut, 100, delay 0}
+    (SliderZoomView's REALTIME_ANIMATION_CONFIG); none for the slider's other
+    dispatches (`animation: null`) and for the API's }
+  pay := TyAnimNoOverride;
+  hasPay := False;
+  if AAction.Batch or ((AAction.FromSlider >= 0) and AAction.Realtime) then
+  begin
+    hasPay := True;
+    pay.HasDuration := True;
+    pay.Duration := 100;
+    pay.HasEasing := True;
+    pay.Easing := 'cubicOut';
+    if not AAction.Batch then
+    begin
+      pay.HasDelay := True;
+      pay.Delay := 0;
+    end;
+  end;
   try
-    DzSyncLayout;
+    DzSyncLayout(pay, hasPay);
   finally
     FDzFrom := -1;
   end;
@@ -4377,7 +4529,8 @@ end;
 { AN ACTION IS SYNCHRONOUS upstream: the model, the axes and every view are
   new before dispatchAction returns -- so the click that follows a brush
   finds the handles where the brush put them }
-procedure TTyAdvanceChart.DzSyncLayout;
+procedure TTyAdvanceChart.DzSyncLayout(const APayload: TTyAnimOverride;
+  AHasPayload: Boolean);
 begin
   if FLastPPI <= 0 then
   begin
@@ -4385,11 +4538,10 @@ begin
     inherited Invalidate;
     Exit;
   end;
-  Relayout(nil, FLastRect, FLastPPI, NewTextMeasurer(FLastPPI));
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+  { A FULL UPDATE, animated with the action's payload: the list built now,
+    the hovered element found again (zrender #6198) [Batch 96] }
+  FullUpdateWith(APayload, AHasPayload);
   DropStatic;
-  inherited Invalidate;
 end;
 
 procedure TTyAdvanceChart.DzApplyCursor;
@@ -4490,7 +4642,7 @@ begin
     if kind = 0 then
     begin
       TyDzThrottleFire(FDzState[best].Throttle, ANow);
-      DzRunSliderAction(best, True);
+      DzRunSliderAction(best, True, FDzState[best].PendingRealtime);
     end
     else
     begin
@@ -11016,7 +11168,7 @@ end;
 
 procedure TTyAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
 var
-  slot, s, k, raw, n, i: Integer;
+  slot, s, k, raw, n, i, hoverS: Integer;
   el: TTyChartElement;
   item: PTyStItem;
   prev: TTyStNames;
@@ -11035,6 +11187,14 @@ begin
   { renderSeries' clearStates comes before the render: the proxies back to
     normal at once, the lists kept, before an update's animators exist }
   if FStRerender then StAnimClearAll;
+  { a notMerge option's first sync: the reused rows keep their records
+    [Batch 96] }
+  hoverS := -1;
+  if FStCarry <> nil then
+  begin
+    StCarryApply;
+    if FStCarryHoverSeries <= -2 then hoverS := -2 - FStCarryHoverSeries;
+  end;
   n := 0;
   for slot := 0 to High(FBindings) do
     if FBindings[slot].SeriesIndex >= n then n := FBindings[slot].SeriesIndex + 1;
@@ -11178,6 +11338,109 @@ begin
   end;
   FStDirty := False;
   StWrite(AList);
+  { THE POINTER STILL OVER A REUSED ELEMENT: zrender's hover target is the
+    same element, so the next move sends neither an out nor an over }
+  if (hoverS >= 0) and (hoverS <= High(FSt)) and (FSt[hoverS].Kind <> sskNone)
+    and (FStCarryHoverRaw <= High(FSt[hoverS].HostIdx))
+    and (FSt[hoverS].HostIdx[FStCarryHoverRaw] >= 0) then
+  begin
+    FEvHover := TargetOfElement(FSt[hoverS].HostIdx[FStCarryHoverRaw]);
+    slot := SlotOfSeries(hoverS);
+    FEvHover.HdRow := FStores[slot].IndexOfRawIndex(FStCarryHoverRaw);
+  end;
+end;
+
+procedure TTyAdvanceChart.StCarryTake;
+var
+  slot, si: Integer;
+  vk: TTyStringArray;
+begin
+  FStCarry := FSt;
+  FStCarryKeys := nil;
+  FStCarryHover := False;
+  { -2 - the NEW series index once StCarryApply found the hovered row }
+  FStCarryHoverSeries := -1;
+  FStCarryHoverRaw := -1;
+  if Length(FSt) = 0 then Exit;
+  vk := AnimViewKeys(FOption.Root);
+  SetLength(FStCarryKeys, Length(FSt));
+  for slot := 0 to High(FBindings) do
+  begin
+    si := FBindings[slot].SeriesIndex;
+    if (si < 0) or (si > High(FSt)) or FBindings[slot].Hidden then Continue;
+    if (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    if FSt[si].Kind = sskNone then Continue;
+    FStCarryKeys[si].Present := True;
+    if si <= High(vk) then FStCarryKeys[si].ViewKey := vk[si]
+    else FStCarryKeys[si].ViewKey := 'x:' + IntToStr(si);
+    FStCarryKeys[si].SeriesType := FBindings[slot].SeriesType;
+    AnimRowKeys(FStores[slot], FStCarryKeys[si].Keys, FStCarryKeys[si].Raws);
+  end;
+  { the hovered data item, which the pointer keeps hovering if it is reused }
+  if (FEvHover.Id > 0) and (FEvHover.HdKind = 1) then
+  begin
+    FStCarryHoverSeries := FEvHover.HdSeries;
+    FStCarryHoverRaw := StInnerRaw(FEvHover.HdSeries, FEvHover.HdRow);
+    FStCarryHover := FStCarryHoverRaw >= 0;
+  end;
+end;
+
+procedure TTyAdvanceChart.StCarryApply;
+var
+  slot, s, o, k, n, oldRaw, newRaw: Integer;
+  vk, keys: TTyStringArray;
+  raws: TTyIntegerArray;
+  cmds: TTyDataDiffCmdArray;
+begin
+  vk := AnimViewKeys(FOption.Root);
+  n := 0;
+  for slot := 0 to High(FBindings) do
+    if FBindings[slot].SeriesIndex >= n then n := FBindings[slot].SeriesIndex + 1;
+  if Length(FSt) < n then SetLength(FSt, n);
+  for slot := 0 to High(FBindings) do
+  begin
+    s := FBindings[slot].SeriesIndex;
+    if (s < 0) or FBindings[slot].Hidden then Continue;
+    if (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    { the view upstream keeps: the same model id and type }
+    o := -1;
+    for k := 0 to High(FStCarryKeys) do
+      if FStCarryKeys[k].Present and (k <= High(vk)) and (s <= High(vk))
+        and (FStCarryKeys[k].ViewKey = vk[s])
+        and (FStCarryKeys[k].SeriesType = FBindings[slot].SeriesType) then
+      begin
+        o := k;
+        Break;
+      end;
+    if (o < 0) or (o > High(FStCarry)) then Continue;
+    AnimRowKeys(FStores[slot], keys, raws);
+    cmds := TyDataDiff(FStCarryKeys[o].Keys, keys);
+    if Length(FSt[s].Rows) < FStores[slot].RawCount then
+      SetLength(FSt[s].Rows, FStores[slot].RawCount);
+    for k := 0 to High(cmds) do
+    begin
+      if cmds[k].Kind <> ddkUpdate then Continue;
+      oldRaw := FStCarryKeys[o].Raws[cmds[k].OldIdx];
+      newRaw := raws[cmds[k].NewIdx];
+      if (oldRaw < 0) or (oldRaw > High(FStCarry[o].Rows)) then Continue;
+      if (newRaw < 0) or (newRaw > High(FSt[s].Rows)) then Continue;
+      { THE SAME ELEMENT: its flags and its lists }
+      FSt[s].Rows[newRaw] := FStCarry[o].Rows[oldRaw];
+      if FStCarryHover and (o = FStCarryHoverSeries) and (oldRaw = FStCarryHoverRaw) then
+      begin
+        { found: re-targeted after the sync }
+        FStCarryHover := False;
+        FStCarryHoverSeries := -2 - s;
+        FStCarryHoverRaw := newRaw;
+      end;
+    end;
+    { a line's polyline and area are kept with the view }
+    FSt[s].Run := FStCarry[o].Run;
+    FSt[s].Area := FStCarry[o].Area;
+  end;
+  FStCarryHover := False;
+  FStCarry := nil;
+  FStCarryKeys := nil;
 end;
 
 procedure TTyAdvanceChart.StWrite(AList: TTyPaintList);
@@ -13036,6 +13299,12 @@ begin
 end;
 
 procedure TTyAdvanceChart.FullUpdate;
+begin
+  FullUpdateWith(TyAnimNoOverride, False);
+end;
+
+procedure TTyAdvanceChart.FullUpdateWith(const APayload: TTyAnimOverride;
+  AHasPayload: Boolean);
 var
   m: ITyTextMeasurer;
   hk, hs, hraw, slot, inner: Integer;
@@ -13047,6 +13316,8 @@ begin
     Invalidate;
     Exit;
   end;
+  { THE UPDATE ANIMATES [Batch 96]: the render it starts from is kept }
+  AnimFullBegin(APayload, AHasPayload);
   { THE HOVERED ELEMENT, by series and RAW row: a reused element keeps being
     the hovered one, whatever index the new list gives it }
   hk := FEvHover.HdKind;
@@ -13058,6 +13329,7 @@ begin
     (the generation Relayout moves) }
   Relayout(nil, FLastRect, FLastPPI, m);
   BuildSeriesList(m, FLastPPI);
+  AnimFullEnd;
   if FEvHover.Id > 0 then
   begin
     if (hk = 1) and (hraw >= 0) and (hs <= High(FSt)) and (FSt[hs].Kind <> sskNone)
@@ -14799,6 +15071,7 @@ end;
 procedure TTyAdvanceChart.AnimDropAll;
 begin
   if FAnimSet <> nil then FAnimSet.Clear;
+  AxisAnimDrop;
   FAnimBind := nil;
   FAnimStBind := nil;
   FAnimFlush := False;
@@ -14806,6 +15079,192 @@ begin
   FAnimContinuous := False;
   AnimDropPrev;
   AnimArmTimer;
+end;
+
+{ ==================== the axes' groupTransition [Batch 96] ==================== }
+
+procedure TTyAdvanceChart.AxisAnimDrop;
+var i: Integer;
+begin
+  if FAxisList = nil then Exit;
+  { the proxies free their clips off the driver }
+  for i := 0 to FAxisList.Count - 1 do TObject(FAxisList[i]).Free;
+  FAxisList.Clear;
+  FAxisProxies.Clear;
+end;
+
+function TTyAdvanceChart.AxisProxyOf(const AKey: string): TTyChartAnimProxy;
+begin
+  if FAxisProxies = nil then Exit(nil);
+  Result := TTyChartAnimProxy(FAxisProxies.Find(AKey));
+end;
+
+function TTyAdvanceChart.AnimAxisProxyCount: Integer;
+begin
+  if FAxisList = nil then Result := 0 else Result := FAxisList.Count;
+end;
+
+function TTyAdvanceChart.AnimAxisProxy(const AAxisKey, AAnid: string): TTyChartAnimProxy;
+begin
+  Result := AxisProxyOf(TyAxisAnimKey(AAxisKey, AAnid));
+end;
+
+function TTyAdvanceChart.AxesDynamic: Boolean;
+begin
+  Result := FAnimLive and not FAnimContinuous and (AnimAxisProxyCount > 0);
+end;
+
+function TTyAdvanceChart.AxisAnimElementsOf(ABuild: TTyChartBuild; APPI: Integer;
+  out AKeys: TTyStringArray; out AAxisKeys: TTyStringArray): TTyAxisAnimElArray;
+var
+  g, a, k, n: Integer;
+  gb: TTyGridBuild;
+  ax: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  furn: TTyAxisFurniture;
+  inp: TTyAxisAnimInput;
+  els, all_: TTyAxisAnimElArray;
+  keys, axKeys: TTyStringArray;
+  akey: string;
+  model: TTyStyleModel;
+  scale: Double;
+
+  { the width a pen is drawn in, device px (PaintAxis' LineWidth) }
+  function PenWidth(const AKey: string): Double;
+  var st: TTyStyleSet;
+  begin
+    st := model.ResolveStyle(AKey, '', []);
+    if tpBorderWidth in st.Present then Result := st.BorderWidth else Result := 1;
+    if Result < 0.05 then Result := 0.05;
+    Result := Result * scale;
+  end;
+
+  procedure Take(AAxis: TTyAxis);
+  var i: Integer;
+  begin
+    if (AAxis = nil) or not AAxis.Visible then Exit;
+    spec := gb.SpecFor(AAxis);
+    if spec = nil then Exit;
+    furn := gb.FurnitureFor(AAxis);
+    inp := Default(TTyAxisAnimInput);
+    inp.ShowLine := furn.ShowLine;
+    inp.ShowTicks := furn.ShowTicks and not AAxis.Scale.Blank;
+    inp.ShowLabels := furn.ShowLabels and spec^.ShowLabels;
+    inp.ShowSplitLine := furn.ShowSplitLine;
+    inp.TickInside := furn.TickInside;
+    inp.TickLength := spec^.TickLengthLogical * scale;
+    inp.LineWidth := PenWidth('TyAdvChartAxisLine');
+    inp.TickWidth := PenWidth('TyAdvChartAxisTick');
+    inp.SplitWidth := PenWidth('TyAdvChartSplitLine');
+    inp.Horizontal := AAxis.Horizontal;
+    inp.Plot := gb.PlotXYWH;
+    els := TyAxisAnimElements(spec^, inp);
+    akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
+    SetLength(all_, n + Length(els));
+    SetLength(keys, n + Length(els));
+    SetLength(axKeys, n + Length(els));
+    for i := 0 to High(els) do
+    begin
+      all_[n] := els[i];
+      keys[n] := TyAxisAnimKey(akey, els[i].Anid);
+      axKeys[n] := akey;
+      Inc(n);
+    end;
+  end;
+
+begin
+  Result := nil;
+  AKeys := nil;
+  AAxisKeys := nil;
+  all_ := nil;
+  keys := nil;
+  axKeys := nil;
+  n := 0;
+  if ABuild = nil then Exit;
+  model := ActiveController.Model;
+  scale := APPI / 96;
+  for g := 0 to ABuild.GridCount - 1 do
+  begin
+    gb := ABuild.Grid(g);
+    for a := 0 to gb.XAxisCount - 1 do Take(gb.XAxis(a));
+    for a := 0 to gb.YAxisCount - 1 do Take(gb.YAxis(a));
+  end;
+  k := n;
+  SetLength(all_, k);
+  Result := all_;
+  AKeys := keys;
+  AAxisKeys := axKeys;
+end;
+
+procedure TTyAdvanceChart.AxisAnimArm(AOldBuild, ANewBuild: TTyChartBuild);
+var
+  oldEls, newEls: TTyAxisAnimElArray;
+  oldKeys, newKeys, oldAx, newAx: TTyStringArray;
+  oldIdx, oldMap: TFPHashList;
+  oldList: TFPList;
+  i, k: Integer;
+  p, q: TTyChartAnimProxy;
+  props, from: TTyAnimProps;
+  model: TTyAnimModel;
+  v: Pointer;
+  ak: string;
+begin
+  if FAnim = nil then Exit;
+  if FAxisList = nil then
+  begin
+    FAxisList := TFPList.Create;
+    FAxisProxies := TFPHashList.Create;
+  end;
+  oldEls := AxisAnimElementsOf(AOldBuild, FLastPPI, oldKeys, oldAx);
+  newEls := AxisAnimElementsOf(ANewBuild, FLastPPI, newKeys, newAx);
+  oldList := FAxisList;
+  oldMap := FAxisProxies;
+  FAxisList := TFPList.Create;
+  FAxisProxies := TFPHashList.Create;
+  oldIdx := TFPHashList.Create;
+  try
+    { the old group's leaves by anid (getElMap) }
+    for i := 0 to High(oldEls) do
+      if oldIdx.Find(oldKeys[i]) = nil then
+        oldIdx.Add(oldKeys[i], Pointer(PtrInt(i + 1)));
+    for i := 0 to High(newEls) do
+    begin
+      props := TyAxisAnimProps(newEls[i]);
+      p := TTyChartAnimProxy.Create(-1, -1, newKeys[i]);
+      p.Animation := FAnim;
+      FAxisList.Add(p);
+      if FAxisProxies.Find(newKeys[i]) = nil then FAxisProxies.Add(newKeys[i], p);
+      v := oldIdx.Find(newKeys[i]);
+      if v = nil then
+      begin
+        { NO OLD LEAF OF THAT ANID: it appears where it is }
+        p.Attr(props);
+        p.SetFinal(props);
+        Continue;
+      end;
+      { the old leaf's props as they are NOW: its proxy's, while it moves }
+      from := TyAxisAnimProps(oldEls[PtrInt(v) - 1]);
+      q := TTyChartAnimProxy(oldMap.Find(newKeys[i]));
+      if q <> nil then
+        for k := 0 to High(from) do
+          if q.GetAnimProp(from[k].Key).Kind = avkNumber then
+            from[k].Value := q.GetAnimProp(from[k].Key);
+      p.Attr(from);
+      p.SetFinal(props);
+      { updateProps on the axis model, at no data index }
+      ak := newAx[i];
+      model := TyAnimComponentModel(FOption.ComponentAt(Copy(ak, 1, 5),
+        StrToIntDef(Copy(ak, 6, MaxInt), 0)), FOption.Root, 'axis');
+      model.Payload := FAnimPayload;
+      model.HasPayload := FAnimHasPayload;
+      TyUpdateProps(p, props, model, TyAnimCallNoIndex);
+    end;
+  finally
+    oldIdx.Free;
+    for i := 0 to oldList.Count - 1 do TObject(oldList[i]).Free;
+    oldList.Free;
+    oldMap.Free;
+  end;
 end;
 
 procedure TTyAdvanceChart.AnimDropPrev;
@@ -14937,6 +15396,46 @@ begin
   end;
 end;
 
+procedure TTyAdvanceChart.AnimFullBegin(const APayload: TTyAnimOverride;
+  AHasPayload: Boolean);
+begin
+  { off, or the designer: the layout snaps (Relayout drops every proxy) }
+  if (FAnimMode = camOff) or (csDesigning in ComponentState) then Exit;
+  { AN UPDATE ALREADY WAITS for its arming: that render is still the one it
+    starts from -- a new option's stays notMerge, a full update takes the
+    latest payload }
+  if FAnimPending then
+  begin
+    if FAnimFull then
+    begin
+      FAnimPayload := APayload;
+      FAnimHasPayload := AHasPayload;
+    end;
+    Exit;
+  end;
+  { the same option: its series views are the ones there are now }
+  FAnimOldViewKeys := AnimViewKeys(FOption.Root);
+  FAnimPayload := APayload;
+  FAnimHasPayload := AHasPayload;
+  FAnimFull := True;
+  FAnimPending := True;
+end;
+
+procedure TTyAdvanceChart.AnimFullEnd;
+begin
+  if not (FAnimPending and FAnimFull) then Exit;
+  { a chart that animates only in its window's paint is armed there }
+  if not AnimAllowed then Exit;
+  AnimAfterBuild;
+  StAnimSync;
+  { NO FLUSH: dispatchAction renders and returns, and the clips the render
+    made take their first step on the next frame }
+  FAnimFlush := False;
+  FAnimLive := (FAnim <> nil) and (FAnim.ClipCount > 0);
+  FAnimContinuous := FAnimLive and AnimLoopOnly;
+  AnimArmTimer;
+end;
+
 procedure TTyAdvanceChart.AnimSnapshot;
 var
   slot, si, i, n: Integer;
@@ -14947,14 +15446,29 @@ begin
   { NOTHING DRAWN BEFORE: the option enters }
   if FPaintList = nil then Exit;
   FAnimPrev.Valid := True;
+  FAnimPrev.FullUpdate := FAnimFull;
   for slot := 0 to High(FBindings) do
   begin
     si := FBindings[slot].SeriesIndex;
     if si < 0 then Continue;
+    { A SERIES THE LEGEND SWITCHED OFF drew nothing: switched back on it
+      enters, its view having kept no data (BarView._clear nulls _data)
+      [Batch 96] }
+    if FBindings[slot].Hidden then Continue;
     if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
     r := Default(TTyChartAnimSeries);
     r.Present := True;
     r.SeriesType := FBindings[slot].SeriesType;
+    { the same option: its model, for the view's remove() }
+    if FAnimFull then
+    begin
+      n := 0;
+      if (slot <= High(FStores)) and (FStores[slot] <> nil) then n := FStores[slot].Count;
+      r.Model := TyAnimSeriesModel(FOption.Root, si, n);
+      r.Model.Payload := FAnimPayload;
+      r.Model.HasPayload := FAnimHasPayload;
+      r.Enabled := TyAnimIsEnabled(r.Model);
+    end;
     if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]
     else r.ViewKey := 'x:' + IntToStr(si);
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
@@ -15004,6 +15518,8 @@ begin
   begin
     si := FBindings[slot].SeriesIndex;
     if si < 0 then Continue;
+    { switched off by the legend: no view content [Batch 96] }
+    if FBindings[slot].Hidden then Continue;
     if si > High(Result) then SetLength(Result, si + 1);
     r := Default(TTyChartAnimSeries);
     r.Present := True;
@@ -15011,6 +15527,9 @@ begin
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       n := FStores[slot].Count;
     r.Model := TyAnimSeriesModel(FOption.Root, si, n);
+    { the update payload's animation, every timing of this render [Batch 96] }
+    r.Model.Payload := FAnimPayload;
+    r.Model.HasPayload := FAnimHasPayload;
     r.Enabled := TyAnimIsEnabled(r.Model);
     r.On_ := TyAnimOptTruthy(TyAnimGetShallow(r.Model, 'animation'));
     t := FBindings[slot].SeriesType;
@@ -15040,10 +15559,18 @@ begin
       begin
         mk := TJSONObject(ser).Find('markLine');
         if mk is TJSONObject then
+        begin
           r.MarkLine := TyAnimComponentModel(mk, FOption.Root, 'markLine');
+          r.MarkLine.Payload := FAnimPayload;
+          r.MarkLine.HasPayload := FAnimHasPayload;
+        end;
         mk := TJSONObject(ser).Find('markPoint');
         if mk is TJSONObject then
+        begin
           r.MarkPoint := TyAnimComponentModel(mk, FOption.Root, 'markPoint');
+          r.MarkPoint.Payload := FAnimPayload;
+          r.MarkPoint.HasPayload := FAnimHasPayload;
+        end;
       end;
     end;
     r.BaseHoriz := (FBindings[slot].BaseAxis = nil)
@@ -15093,6 +15620,16 @@ begin
         FAnimSet.Clear;
         FAnimSet.Arm(FPaintList, AnimSeriesInfo);
       end;
+      { THE AXES: a full update of the same option renders the same axis
+        views again and groupTransitions them; a new option's are new views,
+        which never do (probed: under notMerge only the series move)
+        [Batch 96] }
+      if FAnimPrev.Valid and FAnimPrev.FullUpdate and (FAnimOldBuild <> nil) then
+        AxisAnimArm(FAnimOldBuild, FBuild)
+      else
+        AxisAnimDrop;
+      FAnimFull := False;
+      FAnimHasPayload := False;
       AnimDropPrev;
       { THE FLUSH: upstream's setOption ends with a synchronous update, so
         every clip it made starts NOW and this same paint shows the from
@@ -15103,6 +15640,8 @@ begin
     else if FAnimMode = camOff then
     begin
       FAnimPending := False;
+      FAnimFull := False;
+      FAnimHasPayload := False;
       AnimDropPrev;
     end;
   end;
@@ -15581,6 +16120,9 @@ begin
     TyRenderPaintList(APainter, AnimPart(True))
   else if FAnimLive then
   begin
+    { the axes in their groupTransition under the series, as the static
+      layer draws them [Batch 96] }
+    if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
     TyRenderPaintList(APainter, AnimFrame);
     PaintTitles(APainter);
   end;

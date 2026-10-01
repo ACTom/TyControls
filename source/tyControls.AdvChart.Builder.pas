@@ -2256,7 +2256,10 @@ var
       TyFixOnBandMarks(Result, AAxis.OnBand, AAlign, AAxis.BandWidth,
         ASpec.OrdinalStart + n - 1);
       for q := 0 to High(Result) do
+      begin
+        Result[q].Local := Result[q].Coord;
         Result[q].Coord := AAxis.ToGlobal(Result[q].Coord);
+      end;
     end;
 
   begin
@@ -2285,7 +2288,8 @@ var
         if ticks[k].Level <> 0 then Continue;
         ASpec.TickMarks[i] := Default(TTyAxisMark);
         ASpec.TickMarks[i].Value := ticks[k].Value;
-        ASpec.TickMarks[i].Coord := AAxis.DataToCoord(ticks[k].Value);
+        ASpec.TickMarks[i].Local := AAxis.DataToLocal(ticks[k].Value);
+        ASpec.TickMarks[i].Coord := AAxis.ToGlobal(ASpec.TickMarks[i].Local);
         Inc(i);
       end;
       SetLength(ASpec.TickMarks, i);

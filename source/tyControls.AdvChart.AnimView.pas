@@ -299,6 +299,12 @@ type
     its list tagged, and its coordinate systems [Batch 90] }
   TTyChartAnimPrev = record
     Valid: Boolean;
+    { A FULL UPDATE OF THE SAME OPTION (a legend toggle, a dataZoom)
+      [Batch 96]: a series it no longer draws kept its view, whose remove()
+      runs -- a bar fades, a line's or a scatter's symbols fade and shrink --
+      where notMerge disposes the view (gone at once). Series then carry
+      their models. }
+    FullUpdate: Boolean;
     Series: TTyChartAnimSeriesArray;
     Elements: array of TTyChartElement;
     ToOldPoint: TTyChartAnimToPoint;
@@ -2430,6 +2436,52 @@ begin
         for k := 0 to High(diffs[s]) do
           if diffs[s][k].Kind = ddkRemove then
             Leave(s, oldOf[s], diffs[s][k].OldIdx, ASeries[s].Model);
+    { A VIEW A FULL UPDATE NO LONGER RENDERS (the legend switched its series
+      off) is remove()d, not disposed [Batch 96]: BarView._clear fades every
+      bar when its model animates, a line's and a scatter's
+      SymbolDraw.remove(true) fades and shrinks every symbol (the polyline
+      goes at once), every other view empties at once }
+    if APrev.FullUpdate then
+      for o := 0 to High(APrev.Series) do
+      begin
+        if not APrev.Series[o].Present then Continue;
+        done := False;
+        for s := 0 to High(oldOf) do
+          if oldOf[s] = o then done := True;
+        if done then Continue;
+        role := APrev.Series[o].SeriesType;
+        if (role <> 'bar') and (role <> 'line') and (role <> 'scatter') then Continue;
+        if not TyAnimIsEnabled(APrev.Series[o].Model) then Continue;
+        for k := 0 to High(APrev.Series[o].Keys) do
+          Leave(o, o, k, APrev.Series[o].Model);
+      end;
+    { THE STATES' OWN PROXIES of a reused element go with it [Batch 96]: a
+      line symbol's path, a line's polyline and area, the other types' own
+      ('st:' roles, by raw index) -- upstream's element is the same one and
+      keeps its state lists, so a held hover does not transition again }
+    for i := 0 to oldItems.Count - 1 do
+    begin
+      p := TTyChartAnimProxy(oldItems[i]);
+      if p.FClaimed or (Copy(p.FRole, 1, 3) <> 'st:') then Continue;
+      for s := 0 to High(ASeries) do
+      begin
+        if (not upd[s]) or (oldOf[s] <> p.FSeries) then Continue;
+        if p.FIndex < 0 then
+        begin
+          Carry(p, s, -1);
+          Break;
+        end;
+        r := -1;
+        for k := 0 to High(diffs[s]) do
+          if (diffs[s][k].Kind = ddkUpdate)
+            and (diffs[s][k].OldIdx <= High(APrev.Series[oldOf[s]].Raws))
+            and (APrev.Series[oldOf[s]].Raws[diffs[s][k].OldIdx] = p.FIndex)
+            and (diffs[s][k].NewIdx <= High(ASeries[s].Raws)) then
+            r := ASeries[s].Raws[diffs[s][k].NewIdx];
+        if r >= 0 then Carry(p, s, r);
+        Break;
+      end;
+    end;
     { EVERYTHING ELSE OF THE OLD RENDER IS GONE AT ONCE }
     for i := 0 to oldItems.Count - 1 do
     begin

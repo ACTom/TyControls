@@ -715,12 +715,12 @@ begin
     if ValueAt(AEl, 'states', i, v) and (v.AsString = '') then Exit(i);
 end;
 
-{ the oracle's id of the event a known deviation starts at: the port keeps no
-  hover through a new option (B1 resets the state records), so the
-  highlight held across the notMerge setOption is not compared from there }
+{ the sample a known deviation starts at; none now: a highlight held across
+  a notMerge setOption is kept on the reused element as upstream's is
+  [Batch 96: bar-hover-notmerge was compared only to 400] }
 function CompareUntil(const ACase: string): Double;
 begin
-  if ACase = 'bar-hover-notmerge' then Result := 400 else Result := Infinity;
+  Result := Infinity;
 end;
 
 procedure TAdvChartAnimStateTest.RunCase(ACase: TJSONObject);
