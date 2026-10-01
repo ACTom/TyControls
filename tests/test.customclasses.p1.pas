@@ -92,6 +92,15 @@ type
     procedure TestThirdGauge;
     { Task 10: dials and sliders }
     procedure TestThirdTrackBar;
+    { Real input, one per family: the message a widgetset delivers, not a property write. }
+    procedure TestInputThirdButtonClicksOnPressAndRelease;
+    procedure TestInputThirdLabelClicksOnPressAndRelease;
+    procedure TestInputThirdEditTakesTypingAndBackspace;
+    procedure TestInputThirdMemoTakesTypingAndReturn;
+    procedure TestInputThirdCheckBoxTogglesOnSpaceAndClick;
+    procedure TestInputThirdComboBoxStepsOnArrowKeys;
+    procedure TestInputThirdProgressBarClicks;
+    procedure TestInputThirdTrackBarStepsOnArrowKeys;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -1477,6 +1486,232 @@ begin
   c.TickMarks := ttmTopLeft;
   AssertTrue('T-v: TickMarks is public through a TTyCustomTrackBar reference (Q6: public, not '
     + 'LCL''s published)', third.TickMarks = ttmTopLeft);
+end;
+
+{ ------------------------------------------------------------------ real input, per family
+
+  Each family's mimic gets the messages a widgetset delivers -- LM_LBUTTONDOWN / LM_LBUTTONUP,
+  CN_KEYDOWN, IntfUTF8KeyPress -- next to the library's own final class, and must answer the
+  same. The handlers live in the custom class; these prove a third party gets them, not only
+  the published surface. }
+
+procedure TypeInto(C: TWinControl; const S: string);
+var
+  i: Integer;
+  k: TUTF8Char;
+begin
+  for i := 1 to Length(S) do
+  begin
+    k := S[i];
+    C.IntfUTF8KeyPress(k, 1, False);
+  end;
+end;
+
+procedure PressAndRelease(C: TControl; X, Y: Integer);
+begin
+  C.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(X, Y));
+  C.Perform(LM_LBUTTONUP, 0, MousePos(X, Y));
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdButtonClicksOnPressAndRelease;
+var
+  third: TThirdButton;
+  own: TTyButton;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  third := TThirdButton.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 80, 28);
+  third.HandleNeeded;
+  own := TTyButton.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 40, 80, 28);
+  own.HandleNeeded;
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 10, 10);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 10, 10);
+  AssertEquals('the mimic clicks once on press + release', 1, a);
+  AssertEquals('as TTyButton does', FChanges, a);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdLabelClicksOnPressAndRelease;
+var
+  third: TThirdLabel;
+  own: TTyLabel;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  third := TThirdLabel.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 80, 20);
+  third.Caption := 'Hello';
+  own := TTyLabel.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 40, 80, 20);
+  own.Caption := 'Hello';
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 5, 5);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 5, 5);
+  AssertEquals('the label mimic clicks once', 1, a);
+  AssertEquals('as TTyLabel does', FChanges, a);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdEditTakesTypingAndBackspace;
+var
+  third: TThirdEdit;
+  own: TTyEdit;
+begin
+  NeedWidgetSet;
+  third := TThirdEdit.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 120, 28);
+  third.HandleNeeded;
+  own := TTyEdit.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 40, 120, 28);
+  own.HandleNeeded;
+  TypeInto(third, 'abc');
+  TypeInto(own, 'abc');
+  AssertEquals('typing reaches the mimic', 'abc', third.Text);
+  AssertEquals('as it reaches TTyEdit', own.Text, third.Text);
+  third.Perform(CN_KEYDOWN, VK_BACK, 0);
+  own.Perform(CN_KEYDOWN, VK_BACK, 0);
+  AssertEquals('backspace', 'ab', third.Text);
+  AssertEquals('backspace as on TTyEdit', own.Text, third.Text);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdMemoTakesTypingAndReturn;
+var
+  third: TThirdMemo;
+  own: TTyMemo;
+begin
+  NeedWidgetSet;
+  third := TThirdMemo.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 200, 100);
+  third.HandleNeeded;
+  own := TTyMemo.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 110, 200, 100);
+  own.HandleNeeded;
+  TypeInto(third, 'ab');
+  TypeInto(own, 'ab');
+  third.Perform(CN_KEYDOWN, VK_RETURN, 0);
+  own.Perform(CN_KEYDOWN, VK_RETURN, 0);
+  TypeInto(third, 'c');
+  TypeInto(own, 'c');
+  AssertEquals('Return breaks the line in the mimic', 2, third.Lines.Count);
+  AssertEquals('the same document as TTyMemo', own.Lines.Text, third.Lines.Text);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdCheckBoxTogglesOnSpaceAndClick;
+var
+  third: TThirdCheckBox;
+  own: TTyCheckBox;
+begin
+  NeedWidgetSet;
+  third := TThirdCheckBox.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 120, 24);
+  third.HandleNeeded;
+  own := TTyCheckBox.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 30, 120, 24);
+  own.HandleNeeded;
+  third.Perform(CN_KEYDOWN, VK_SPACE, 0);
+  own.Perform(CN_KEYDOWN, VK_SPACE, 0);
+  AssertTrue('Space checks the mimic', third.Checked);
+  AssertEquals('as it checks TTyCheckBox', own.Checked, third.Checked);
+  PressAndRelease(third, 5, 10);
+  PressAndRelease(own, 5, 10);
+  AssertFalse('a press + release unchecks it', third.Checked);
+  AssertEquals('as on TTyCheckBox', own.Checked, third.Checked);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdComboBoxStepsOnArrowKeys;
+var
+  third: TThirdComboBox;
+  own: TTyComboBox;
+begin
+  NeedWidgetSet;
+  third := TThirdComboBox.Create(FForm);
+  third.Parent := FForm;
+  third.HandleNeeded;
+  own := TTyComboBox.Create(FForm);
+  own.Parent := FForm;
+  own.HandleNeeded;
+  third.Items.CommaText := 'x,y,z';
+  own.Items.CommaText := 'x,y,z';
+  third.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  third.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  own.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  own.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  AssertEquals('Down twice steps the mimic to the second item', 1, third.ItemIndex);
+  AssertEquals('as on TTyComboBox', own.ItemIndex, third.ItemIndex);
+  third.Perform(CN_KEYDOWN, VK_END, 0);
+  own.Perform(CN_KEYDOWN, VK_END, 0);
+  AssertEquals('End goes to the last item', 2, third.ItemIndex);
+  AssertEquals('End as on TTyComboBox', own.ItemIndex, third.ItemIndex);
+end;
+
+{ A progress bar takes no keys; the click is the only input its family answers. }
+procedure TTyCustomClassesP1Test.TestInputThirdProgressBarClicks;
+var
+  third: TThirdProgressBar;
+  own: TTyProgressBar;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  third := TThirdProgressBar.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 120, 20);
+  own := TTyProgressBar.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 30, 120, 20);
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 10, 10);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 10, 10);
+  AssertEquals('the progress bar mimic clicks once', 1, a);
+  AssertEquals('as TTyProgressBar does', FChanges, a);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdTrackBarStepsOnArrowKeys;
+var
+  third: TThirdTrackBar;
+  own: TTyTrackBar;
+begin
+  NeedWidgetSet;
+  third := TThirdTrackBar.Create(FForm);
+  third.Parent := FForm;
+  third.HandleNeeded;
+  own := TTyTrackBar.Create(FForm);
+  own.Parent := FForm;
+  own.HandleNeeded;
+  third.Position := 10;
+  own.Position := 10;
+  third.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  own.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  AssertTrue('Right moves the mimic', third.Position > 10);
+  AssertEquals('as it moves TTyTrackBar', own.Position, third.Position);
+  third.Perform(CN_KEYDOWN, VK_END, 0);
+  own.Perform(CN_KEYDOWN, VK_END, 0);
+  AssertEquals('End goes to Max', third.Max, third.Position);
+  AssertEquals('End as on TTyTrackBar', own.Position, third.Position);
 end;
 
 initialization
