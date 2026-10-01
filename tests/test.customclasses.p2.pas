@@ -27,7 +27,7 @@ uses
   tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
   tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader,
   tyControls.ImageCollection, tyControls.TreeView, tyControls.ShellTreeView, tyControls.ListView,
-  tyControls.ShellListView;
+  tyControls.ShellListView, tyControls.Grid, tyControls.Columns;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
@@ -37,6 +37,7 @@ type
     FGetTextSenderIsCustom: Boolean;
     procedure CountChange(Sender: TObject);
     procedure TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure GridGetCellText(Sender: TObject; ACol, ARow: Integer; var AText: string);
     { A three-icon virtual list (home / settings / search), owned by the caller. }
     function NewNamedImages(out AColl: TTyImageCollection): TTyVirtualImageList;
   published
@@ -70,6 +71,10 @@ type
     procedure TestThirdTreeViewNodeCollectionBuildsTheTree;
     procedure TestShellListItemResolvesItsIconOnTheShellList;
     procedure TestThirdListView;
+    { Task 18: grids }
+    procedure TestThirdStringGrid;
+    procedure TestThirdDrawGrid;
+    procedure TestDrawGridPromotesWhatTCustomDrawGridPromotes;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -158,6 +163,19 @@ type
     property Items;
   end;
 
+  { No ColCount on this grid: the columns are Header.Columns, so the mimic publishes Header. }
+  TThirdStringGrid = class(TTyCustomStringGrid)
+  published
+    property RowCount;
+    property Header;
+  end;
+
+  TThirdDrawGrid = class(TTyCustomDrawGrid)
+  published
+    property RowCount;
+    property OnGetCellText;
+  end;
+
 implementation
 
 type
@@ -201,6 +219,12 @@ type
     procedure SetRowHeightTo(AValue: Integer);
     function RowHeightNow: Integer;
     procedure SetSmall(AValue: TCustomImageList);
+  end;
+
+  { GetCellText is protected: what the grid would draw in a cell. }
+  TP2DrawGridCracker = class(TTyCustomDrawGrid)
+  public
+    function CellText(ACol, ARow: Integer): string;
   end;
 
   { ContentHost is protected: where the box actually puts its children. }
@@ -274,6 +298,11 @@ begin
   SmallImages := AValue;
 end;
 
+function TP2DrawGridCracker.CellText(ACol, ARow: Integer): string;
+begin
+  Result := GetCellText(ACol, ARow);
+end;
+
 function TP2ScrollBoxCracker.Host: TWinControl;
 begin
   Result := ContentHost;
@@ -290,6 +319,13 @@ begin
   FGetTextSender := Sender;
   FGetTextSenderIsCustom := TObject(Sender) is TTyCustomTreeView;
   Text := 'row ' + IntToStr(Node^.Index);
+end;
+
+procedure TTyCustomClassesP2Test.GridGetCellText(Sender: TObject; ACol, ARow: Integer;
+  var AText: string);
+begin
+  Inc(FChanges);
+  AText := Format('%d:%d', [ACol, ARow]);
 end;
 
 function TTyCustomClassesP2Test.NewNamedImages(out AColl: TTyImageCollection): TTyVirtualImageList;
@@ -1079,9 +1115,105 @@ begin
   AssertTrue('T-v: MultiSelect is public through a TTyCustomListView reference', third.MultiSelect);
 end;
 
+{ ------------------------------------------------------------------ Task 18: grids }
+
+procedure TTyCustomClassesP2Test.TestThirdStringGrid;
+var
+  third, back: TThirdStringGrid;
+  own: TTyStringGrid;
+  c: TTyCustomStringGrid;
+  col: TTyGridColumn;
+begin
+  third := TThirdStringGrid.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 300, 200);
+  CheckPublishesOnly(TThirdStringGrid, ['RowCount', 'Header']);
+  col := third.Header.Columns.Add as TTyGridColumn;
+  col.Text := 'Name';
+  col := third.Header.Columns.Add as TTyGridColumn;
+  col.Text := 'Qty';
+  col.Width := 68;
+  third.RowCount := 5;
+  third.ReadOnly := True;
+  CheckStreamText(third, ['RowCount', 'Header'], 'ReadOnly');
+  back := TThirdStringGrid.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: RowCount round-trips', 5, back.RowCount);
+  AssertEquals('T-c: the columns round-trip', 2, back.Header.Columns.Count);
+  AssertEquals('T-c: with their captions', 'Qty', (back.Header.Columns.Items[1] as TTyColumn).Text);
+  AssertEquals('T-c: and widths', 68, (back.Header.Columns.Items[1] as TTyColumn).Width);
+  AssertTrue('T-c: the column class came back', back.Header.Columns.Items[0] is TTyGridColumn);
+  AssertFalse('T-c: the unpublished ReadOnly stayed at its default', back.ReadOnly);
+  own := TTyStringGrid.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdStringGrid, ['RowCount']);
+  { T-v: Cells[] and SelectionMode are public (TCustomStringGrid / Ty's own, public there). }
+  c := third;
+  c.Cells[0, 1] := 'apple';
+  AssertEquals('T-v: Cells[] through a TTyCustomStringGrid reference', 'apple', third.Cells[0, 1]);
+end;
+
+procedure TTyCustomClassesP2Test.TestThirdDrawGrid;
+var
+  third, back: TThirdDrawGrid;
+  own: TTyDrawGrid;
+begin
+  third := TThirdDrawGrid.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdDrawGrid, ['RowCount', 'OnGetCellText']);
+  third.RowCount := 7;
+  third.FixedRows := 1;
+  CheckStreamText(third, ['RowCount'], 'FixedRows');
+  back := TThirdDrawGrid.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: RowCount round-trips', 7, back.RowCount);
+  AssertEquals('T-c: the unpublished FixedRows stayed at its default', 0, back.FixedRows);
+  FChanges := 0;
+  third.OnGetCellText := @GridGetCellText;
+  AssertEquals('the published event supplies the cell text', '2:3',
+    TP2DrawGridCracker(third).CellText(2, 3));
+  AssertEquals('once', 1, FChanges);
+  own := TTyDrawGrid.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdDrawGrid, ['RowCount', 'OnGetCellText']);
+end;
+
+{ TCustomGrid keeps its grid properties protected and TCustomDrawGrid promotes a batch of them
+  to public (grids.pas:1397); TTyCustomGrid and TTyCustomDrawGrid do the same. Reaching them
+  through a TTyCustomDrawGrid reference compiles -- that is the check -- and the values land. }
+procedure TTyCustomClassesP2Test.TestDrawGridPromotesWhatTCustomDrawGridPromotes;
+var
+  g: TTyCustomDrawGrid;
+begin
+  g := TThirdDrawGrid.Create(FForm);
+  g.Parent := FForm;
+  g.RowCount := 4;
+  g.FixedRows := 1;
+  g.FixedCols := 1;
+  g.DefaultRowHeight := 30;
+  g.DefaultColWidth := 90;
+  g.AutoFillColumns := True;
+  g.FocusRectVisible := False;
+  g.FadeUnfocusedSelection := False;
+  g.GridLineWidth := 2;
+  AssertEquals('RowCount', 4, g.RowCount);
+  AssertEquals('FixedRows', 1, g.FixedRows);
+  AssertEquals('FixedCols', 1, g.FixedCols);
+  AssertEquals('DefaultRowHeight', 30, g.DefaultRowHeight);
+  AssertEquals('DefaultColWidth', 90, g.DefaultColWidth);
+  AssertTrue('AutoFillColumns', g.AutoFillColumns);
+  AssertFalse('FocusRectVisible', g.FocusRectVisible);
+  AssertEquals('GridLineWidth', 2, g.GridLineWidth);
+end;
+
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
     TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet, TThirdListBox,
-    TThirdCheckListBox, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView]);
+    TThirdCheckListBox, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView,
+    TThirdStringGrid, TThirdDrawGrid]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

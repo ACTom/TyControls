@@ -25,16 +25,16 @@ uses
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Gauge,
   tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
-  tyControls.GlyphButtons, tyControls.GridPanel, tyControls.GroupBox, tyControls.HeaderControl,
-  tyControls.HtmlLabel, tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox,
-  tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit,
-  tyControls.Memo, tyControls.Meter, tyControls.NumericEdit, tyControls.OfficeComboBox,
-  tyControls.OfficeListBox, tyControls.PageControl, tyControls.PaintPanel, tyControls.Panel,
-  tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
-  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented,
-  tyControls.ShadowLabel, tyControls.ShellComboBox, tyControls.ShellListView,
-  tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
-  tyControls.Splitter, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag,
+  tyControls.GlyphButtons, tyControls.Grid, tyControls.GridPanel, tyControls.GroupBox,
+  tyControls.HeaderControl, tyControls.HtmlLabel, tyControls.LevelMeter, tyControls.LinkLabel,
+  tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox,
+  tyControls.MaskEdit, tyControls.Memo, tyControls.Meter, tyControls.NumericEdit,
+  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
+  tyControls.PaintPanel, tyControls.Panel, tyControls.ProgressBar, tyControls.RadioGroup,
+  tyControls.Rating, tyControls.RelativePanel, tyControls.ScrollBox, tyControls.ScrollContent,
+  tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel, tyControls.ShellComboBox,
+  tyControls.ShellListView, tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline,
+  tyControls.SpinEdit, tyControls.Splitter, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag,
   tyControls.ToggleSwitch, tyControls.ToolGroupPanel, tyControls.TrackBar, tyControls.TrackEdit,
   tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel,
   tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor;
@@ -2084,6 +2084,122 @@ type
     property LeftIndent;
     property Align;
     property Anchors;
+  end;
+
+  TGenDrawGrid = class(TTyCustomDrawGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Header;
+    property RowCount;
+    property DefaultRowHeight;
+    property DefaultColWidth;
+    property AutoFillColumns;
+    property VertScrollBarMode;
+    property HorzScrollBarMode;
+    property ScrollBars;
+    property Options;
+    property ShowFocusCell;
+    property FocusRectVisible;
+    property HideSelectionWhenInactive;
+    property FadeUnfocusedSelection;
+    property FixedCols;
+    property FixedRows;
+    property FixedRowsBottom;
+    property FixedColsRight;
+    property ShowIndicator;
+    property ShowRowNumbers;
+    property IndicatorWidth;
+    property GridLines;
+    property HeaderGroups;
+    property GroupHeaderHeight;
+    property GridLineStyle;
+    property AlternateRows;
+    property WordWrap;
+    property GridLineWidth;
+    property Images;
+    property OnGetCellStyle;
+    property OnGetCellBorder;
+    property OnGetHeaderStyle;
+    property OnColumnSizing;
+    property OnEndColumnSize;
+    property OnRowSizing;
+    property OnEndRowSize;
+    property OnColumnMove;
+    property OnRowMove;
+    property OnGetEditorProp;
+    property MinEditorWidth;
+    property MinRowHeight;
+    property MaxRowHeight;
+    property MinColWidth;
+    property MaxColWidth;
+    property OnClickCell;
+    property OnDblClickCell;
+    property OnRightClickCell;
+    property OnCanClickCell;
+    property OnCellButtonClick;
+    property OnCanToggleCheck;
+    property OnCheckBoxChange;
+    property OnRatingChange;
+    property OnEllipsisClick;
+    property OnGetCellWordWrap;
+    property OnHeaderClick;
+    property OnHeaderRightClick;
+    property OnTopLeftChanged;
+    property ScrollBarAutoHide;
+    property ShowFooter;
+    property FooterHeight;
+    property Align;
+    property Anchors;
+    property OnGetCellText;
   end;
 
   TGenDropDownButton = class(TTyCustomDropDownButton)
@@ -5826,6 +5942,177 @@ type
     property Anchors;
   end;
 
+  TGenStringGrid = class(TTyCustomStringGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Header;
+    property RowCount;
+    property DefaultRowHeight;
+    property DefaultColWidth;
+    property AutoFillColumns;
+    property VertScrollBarMode;
+    property HorzScrollBarMode;
+    property ScrollBars;
+    property Options;
+    property ShowFocusCell;
+    property FocusRectVisible;
+    property HideSelectionWhenInactive;
+    property FadeUnfocusedSelection;
+    property FixedCols;
+    property FixedRows;
+    property FixedRowsBottom;
+    property FixedColsRight;
+    property ShowIndicator;
+    property ShowRowNumbers;
+    property IndicatorWidth;
+    property GridLines;
+    property HeaderGroups;
+    property GroupHeaderHeight;
+    property GridLineStyle;
+    property AlternateRows;
+    property WordWrap;
+    property GridLineWidth;
+    property Images;
+    property OnGetCellStyle;
+    property OnGetCellBorder;
+    property OnGetHeaderStyle;
+    property OnColumnSizing;
+    property OnEndColumnSize;
+    property OnRowSizing;
+    property OnEndRowSize;
+    property OnColumnMove;
+    property OnRowMove;
+    property OnGetEditorProp;
+    property MinEditorWidth;
+    property MinRowHeight;
+    property MaxRowHeight;
+    property MinColWidth;
+    property MaxColWidth;
+    property OnClickCell;
+    property OnDblClickCell;
+    property OnRightClickCell;
+    property OnCanClickCell;
+    property OnCellButtonClick;
+    property OnCanToggleCheck;
+    property OnCheckBoxChange;
+    property OnRatingChange;
+    property OnEllipsisClick;
+    property OnGetCellWordWrap;
+    property OnHeaderClick;
+    property OnHeaderRightClick;
+    property OnTopLeftChanged;
+    property ScrollBarAutoHide;
+    property ShowFooter;
+    property FooterHeight;
+    property Align;
+    property Anchors;
+    property OnGetCellText;
+    property Col;
+    property Row;
+    property OnSelectCell;
+    property ReadOnly;
+    property GroupRowFormat;
+    property SelectionMode;
+    property RangeSelectMode;
+    property OnSelectionChanged;
+    property DefaultEditorKind;
+    property OnGetEditorKind;
+    property OnCellEdited;
+    property OnValidateCell;
+    property OnInvalidEditExit;
+    property OnCanEditCell;
+    property OnEditChange;
+    property OnCanInsertRow;
+    property OnCanDeleteRow;
+    property OnReturn;
+    property OnCtrlReturn;
+    property OnScrollHint;
+    property OnCellLinkClick;
+    property OnColumnCalc;
+    property OnGetFormat;
+    property OnGetFilterValues;
+    property AllowGrayed;
+    property SortKind;
+    property BlanksPosition;
+    property SortIgnoreCase;
+    property OnCanSort;
+    property OnCompareCells;
+    property OnFilterRow;
+    property OnGetPickList;
+    property OnCreateEditLink;
+    property AutoGrowOnPaste;
+    property OnClipboardCopy;
+    property OnClipboardPaste;
+    property OnBeforePasteCell;
+    property OnAfterPasteCell;
+    property OnGetFooterText;
+    property DefaultCellDisplay;
+    property OnGetCellDisplay;
+    property OnGetRowHeight;
+    property OnDrawCell;
+    property OnGetCellHint;
+    property ShowFilterButtons;
+    property TreeColumn;
+    property TreeIndent;
+    property OnGetNodeLevel;
+    property OnGetHasChildren;
+    property ShowFilterRow;
+    property FilterRowHeight;
+    property ShowGroupSubtotals;
+    property UndoLimit;
+    property SortMode;
+    property OnFillCells;
+  end;
+
   TGenTabSet = class(TTyCustomTabSet)
   published
     property Version;
@@ -6717,7 +7004,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..98, 0..1] of TClass = (
+  CGenMimics: array[0..100, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -6749,6 +7036,7 @@ const
     (TGenCurrencyEdit, TTyCurrencyEdit),
     (TGenDial, TTyDial),
     (TGenDivider, TTyDivider),
+    (TGenDrawGrid, TTyDrawGrid),
     (TGenDropDownButton, TTyDropDownButton),
     (TGenEdit, TTyEdit),
     (TGenEmpty, TTyEmpty),
@@ -6804,6 +7092,7 @@ const
     (TGenSpeedButton, TTySpeedButton),
     (TGenSpinEdit, TTySpinEdit),
     (TGenSplitter, TTySplitter),
+    (TGenStringGrid, TTyStringGrid),
     (TGenTabSet, TTyTabSet),
     (TGenTabSheet, TTyTabSheet),
     (TGenTag, TTyTag),

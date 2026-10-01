@@ -1276,13 +1276,13 @@ initialization
     // T16 compound pickers
     'TTyTransfer', 'TTyTreeSelect', 'TTyCascader',
     // T17 trees and list views
-    'TTyTreeView', 'TTyShellTreeView', 'TTyListView', 'TTyShellListView', 'TTyHeaderControl']);
+    'TTyTreeView', 'TTyShellTreeView', 'TTyListView', 'TTyShellListView', 'TTyHeaderControl',
+    // T18 grids
+    'TTyDrawGrid', 'TTyStringGrid']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T18 grids
-    'TTyDrawGrid', 'TTyStringGrid',
     // T20 bars
     'TTyStatusBar', 'TTyToolBar', 'TTyToolBarEx', 'TTyToolButton', 'TTyToolSeparator', 'TTyAlert',
     'TTyPagination', 'TTySteps', 'TTyBreadcrumb', 'TTyScrollBar',
@@ -1310,7 +1310,7 @@ initialization
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
-  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip']);
+  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid']);
 
   RegisterTest(TTyCustomClassesGuardTest);
 
