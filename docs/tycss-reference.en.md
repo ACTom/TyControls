@@ -453,14 +453,16 @@ elliptical two-radius form (`<a> / <b>`).
 ```
 padding: <all> ;
 padding: <vertical> <horizontal> ;
+padding: <top> <horizontal> <bottom> ;
 padding: <top> <right> <bottom> <left> ;
 ```
 
-Space-separated; exactly 1, 2, or 4 values (3 raises). Semantics match CSS.
+Space-separated, 1 to 4 values, with the same meaning as in CSS; any other count raises.
 
 ```css
 TyButton { padding: 6px; }
 TyPanel  { padding: 8px 12px; }
+TyLabel  { padding: 2px 6px 4px; }
 TyEdit   { padding: 4px 8px 4px 8px; }
 ```
 
@@ -611,13 +613,13 @@ Darkens toward black: per channel `ch × (1 − p/100)`; **alpha is unchanged**.
 TyButton:active { background: darken(--surface, 10%); }
 ```
 
-### 6.3 `alpha(<color>, <opacity 0..1>)`
+### 6.3 `alpha(<color>, <opacity>)`
 
 **Replaces** the color's alpha with the given value (RGB unchanged); `0` fully transparent, `1` opaque.
+The opacity can also be a percentage: `alpha(#fff, 50%)` equals `alpha(#fff, 0.5)`.
 
-> **Trap**: the second argument is a 0..1 decimal, **not a percentage**. The engine strips a `%` suffix but
-> **does not divide by 100**: `alpha(#fff, 50%)` equals `alpha(#fff, 50)`, which clamps to fully opaque.
-> Always write a decimal: `alpha(#FFFFFF, 0.18)`.
+> **Trap**: a number without `%` is read as 0..1, not as a percentage. `alpha(#fff, 50)` clamps to fully
+> opaque; write `0.5` or `50%`.
 
 ```css
 TyCaptionButton:hover { background: alpha(#FFFFFF, 0.18); }
@@ -1250,9 +1252,10 @@ Engine-level limitations (each expanded in the sections above):
    color functions are unusable; for translucency use `#rrggbbaa` (§5.12).
 5. **`opacity` and `shadow` work on all controls (v1.1)**: v1.1 fixed the render paths of `TyCheckBox` and
    `TyRadioButton` so they too support `opacity` and `shadow`; all typeKeys are covered.
-6. **The second `alpha()` argument is a 0..1 decimal**; writing a percent sign does not trigger percentage conversion (§6.3).
+6. **Without `%`, the second `alpha()` argument is a 0..1 decimal**: `alpha(#fff, 50)` is fully opaque;
+   for half transparency write `0.5` or `50%` (§6.3).
 7. **Gradient angle directions differ from CSS**: `0deg` left→right, `90deg` top→bottom (§7.1);
-   only two-stop linear gradients are supported.
+   gradients are linear only, and the direction is an angle; keywords such as `to right` are not supported (§7).
 8. **`font-size` numbers are interpreted as pt**; the `px` suffix is decoration (§5.9). `font-weight`
    renders in just two steps: ≥600 bold, everything else regular (§5.10).
 9. **Do not quote `font-family`**; the quotes are kept as part of the name (§5.8).
