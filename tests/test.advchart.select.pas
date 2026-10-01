@@ -65,8 +65,10 @@ type
     procedure Handle(Sender: TObject; const AEvent: TTyChartEvent);
   end;
 
-  TAdvChartSelectOracleTest = class(TTestCase)
-  private
+  { THE REPLAY HARNESS, shared with the focus / blur batch's test
+    (test.advchart.focusblur) [Batch 90] }
+  TAdvChartSelectHarness = class(TTestCase)
+  protected
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TSelProbe;
@@ -94,6 +96,11 @@ type
     function LabelOf(ASeries, ARow: Integer; out AEl: TTyChartElement): Boolean;
     function GuideOf(ASeries, ARow: Integer; out AEl: TTyChartElement): Boolean;
     procedure RunCases(const AIds: array of string; AMinSteps: Integer);
+    procedure Plain(const AOption: string);
+    function Indices(ASeries: Integer): string;
+  end;
+
+  TAdvChartSelectOracleTest = class(TAdvChartSelectHarness)
   published
     procedure TestSelectionAsUpstream;
     procedure TestAnUnregisteredLegacyEventIsNotPublished;
@@ -107,9 +114,6 @@ type
     procedure TestANameQueryTakesTheFirstItemOfThatName;
     procedure TestADataIndexIsRawUnderAFilter;
     procedure TestAnItemHighlightedByActionIgnoresTheHover;
-  private
-    procedure Plain(const AOption: string);
-    function Indices(ASeries: Integer): string;
   end;
 
 implementation
@@ -261,7 +265,7 @@ begin
   Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim + AName;
 end;
 
-procedure TAdvChartSelectOracleTest.SetUp;
+procedure TAdvChartSelectHarness.SetUp;
 var sl: TStringList;
 begin
   inherited SetUp;
@@ -287,7 +291,7 @@ begin
   FReport := '';
 end;
 
-procedure TAdvChartSelectOracleTest.TearDown;
+procedure TAdvChartSelectHarness.TearDown;
 begin
   FLogger.Log.Free;
   FLogger.Free;
@@ -299,14 +303,14 @@ begin
   inherited TearDown;
 end;
 
-procedure TAdvChartSelectOracleTest.Bad(const AWhat: string);
+procedure TAdvChartSelectHarness.Bad(const AWhat: string);
 begin
   Inc(FBad);
   if Length(FReport) < 9000 then
     FReport := FReport + LineEnding + FWhere + ': ' + AWhat;
 end;
 
-procedure TAdvChartSelectOracleTest.NewChart(AOption: TJSONObject);
+procedure TAdvChartSelectHarness.NewChart(AOption: TJSONObject);
 const
   cTypes: array[0..12] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
@@ -331,7 +335,7 @@ begin
   FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
 end;
 
-function TAdvChartSelectOracleTest.HostOf(ASeries, ARow: Integer;
+function TAdvChartSelectHarness.HostOf(ASeries, ARow: Integer;
   out AEl: TTyChartElement): Boolean;
 var k: Integer; el: TTyChartElement; l: TTyPaintList;
 begin
@@ -345,12 +349,15 @@ begin
     if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex <> ASeries)
       or (el.Datum.DataIndex <> ARow) or el.Datum.IsEdge then Continue;
     if (el.Caption.FontSizeLogical > 0) or el.IsGuide or el.Silent then Continue;
+    { a candlestick's body, not one of its wicks [Batch 90] }
+    if Result and (el.Anim.Role <> carCandleBody) then Continue;
     AEl := el;
-    Exit(True);
+    Result := True;
+    if el.Anim.Role = carCandleBody then Exit;
   end;
 end;
 
-function TAdvChartSelectOracleTest.LabelOf(ASeries, ARow: Integer;
+function TAdvChartSelectHarness.LabelOf(ASeries, ARow: Integer;
   out AEl: TTyChartElement): Boolean;
 var k: Integer; el: TTyChartElement; l: TTyPaintList;
 begin
@@ -369,7 +376,7 @@ begin
   end;
 end;
 
-function TAdvChartSelectOracleTest.GuideOf(ASeries, ARow: Integer;
+function TAdvChartSelectHarness.GuideOf(ASeries, ARow: Integer;
   out AEl: TTyChartElement): Boolean;
 var k: Integer; el: TTyChartElement; l: TTyPaintList;
 begin
@@ -389,7 +396,7 @@ end;
 
 { ==================== the events ==================== }
 
-procedure TAdvChartSelectOracleTest.CompareEvents(AWant: TJSONArray);
+procedure TAdvChartSelectHarness.CompareEvents(AWant: TJSONArray);
 var
   i, p: Integer;
   ev: TJSONObject;
@@ -458,7 +465,7 @@ begin
   end;
 end;
 
-procedure TAdvChartSelectOracleTest.CompareItem(ASeries: Integer;
+procedure TAdvChartSelectHarness.CompareItem(ASeries: Integer;
   AItem: TJSONObject; AInit: Boolean);
 var
   i: Integer;
@@ -472,6 +479,13 @@ var
 begin
   i := AItem.Integers['i'];
   what := Format('s%d i%d ', [ASeries, i]);
+  { an item upstream draws no element for (a sunburst's virtual root): none
+    here either [Batch 90] }
+  if AItem.Find('el').JSONType = jtNull then
+  begin
+    if FChart.ItemStates(ASeries, i, st) then Bad(what + 'a state record where upstream has no element');
+    Exit;
+  end;
   if not FChart.ItemStates(ASeries, i, st) then
   begin
     Bad(what + 'no state record');
@@ -503,8 +517,12 @@ begin
       BoolToStr(AItem.Booleans['sel'], True)]));
   if st.Host.Proxy <> AItem.Booleans['px'] then
     Bad(what + 'proxy differs');
-  if (st.Host.HighByOuter <> 0) <> (AItem.Integers['hbo'] <> 0) then
+  { hbo is the dispatcher's: a line symbol's GROUP, whose path has its own
+    (phbo) [Batch 90] }
+  if (TyStDispatcherHbo(st) <> 0) <> (AItem.Integers['hbo'] <> 0) then
     Bad(what + '__highByOuter differs');
+  if (AItem.Find('phbo') <> nil) and ((st.Host.HighByOuter <> 0) <> (AItem.Integers['phbo'] <> 0)) then
+    Bad(what + 'the path''s __highByOuter differs');
 
   { ---- z2, as the distance from rest, on the machine and on the mark ---- }
   restZ2 := st.Host.Rest.Num[stkZ2];
@@ -542,10 +560,12 @@ begin
   end
   else if TyStHasColour(st.Host.Rest, stkStroke) then
   begin
-    { the port's own rest stroke, kept }
+    { the port's own rest stroke, kept -- its width moved as upstream's did
+      (a candlestick's emphasis border 2) [Batch 90] }
     if (el.Style.StrokeColor <> restStroke)
-      or (el.Style.StrokeWidthLogical <> st.Host.Rest.Num[stkLineWidth]) then
-      Bad(what + 'the stroke left rest');
+      or (el.Style.StrokeWidthLogical - st.Host.Rest.Num[stkLineWidth]
+        <> AItem.Floats['lineWidth'] - restObj.Floats['lineWidth']) then
+      Bad(what + Format('the stroke left rest (width %g)', [el.Style.StrokeWidthLogical]));
   end
   else if (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0) then
     Bad(what + 'a stroke where rest has none');
@@ -595,8 +615,8 @@ begin
       or (Abs(el.Shape.CY - AItem.Floats['gy']) > 1e-9) then
       Bad(what + Format('symbol at %g,%g, upstream %g,%g', [el.Shape.CX, el.Shape.CY,
         AItem.Floats['gx'], AItem.Floats['gy']]));
-    if st.Host.HoverState <> AItem.Integers['ghs'] then
-      Bad(what + 'group hoverState differs');
+    if not st.HasGroup or (st.GroupHover <> AItem.Integers['ghs']) then
+      Bad(what + Format('group hoverState %d, upstream %d', [st.GroupHover, AItem.Integers['ghs']]));
   end;
 
   { ---- the label ---- }
@@ -606,14 +626,31 @@ begin
   else if d is TJSONObject then
   begin
     lr := TJSONObject(d);
-    if not LabelOf(ASeries, i, lab) then
-    begin
-      Bad(what + 'no label in the display list');
-      Exit;
-    end;
     if TyStNamesText(st.Label_.States) <> StatesText(lr.Arrays['st']) then
       Bad(what + Format('label states [%s], upstream [%s]',
         [TyStNamesText(st.Label_.States), StatesText(lr.Arrays['st'])]));
+    { the opacity as a ratio of rest: the port's label rest is its host's }
+    v := st.Label_.Rest.Num[stkOpacity] * lr.Floats['opacity']
+      / lr.Objects['rest'].Floats['opacity'];
+    if Abs(st.Label_.Cur.Num[stkOpacity] - v) > 1e-12 then
+      Bad(what + Format('label opacity %g, want %g (upstream %g)',
+        [st.Label_.Cur.Num[stkOpacity], v, lr.Floats['opacity']]));
+    if not LabelOf(ASeries, i, lab) then
+    begin
+      { A PIE'S HIDDEN TEXT has no element here: the machine's values only
+        [Batch 90] }
+      if not lr.Objects['rest'].Booleans['ignore'] or not lr.Booleans['ignore']
+        or (st.Label_.Cur.Num[stkIgnore] = 0) then
+        Bad(what + 'no label in the display list')
+      else if Round(st.Label_.Cur.Num[stkZ2] - st.Label_.Rest.Num[stkZ2])
+        <> lr.Integers['z2'] - lr.Objects['rest'].Integers['z2'] then
+        Bad(what + Format('hidden label z2 rest + %d, upstream rest + %d',
+          [Round(st.Label_.Cur.Num[stkZ2] - st.Label_.Rest.Num[stkZ2]),
+           lr.Integers['z2'] - lr.Objects['rest'].Integers['z2']]));
+      Exit;
+    end;
+    if Abs(lab.Style.Alpha - v) > 1e-12 then
+      Bad(what + Format('drawn label opacity %g, want %g', [lab.Style.Alpha, v]));
     if lab.Ignore <> lr.Booleans['ignore'] then
       Bad(what + Format('label ignore %s, upstream %s', [BoolToStr(lab.Ignore, True),
         BoolToStr(lr.Booleans['ignore'], True)]));
@@ -681,11 +718,28 @@ begin
   end;
 end;
 
-procedure TAdvChartSelectOracleTest.ComparePoly(ASeries: Integer; APoly: TJSONObject);
+procedure TAdvChartSelectHarness.ComparePoly(ASeries: Integer; APoly: TJSONObject);
 var
   poly, area_: TTyStItem;
   want: TTyChartColor;
   what: string;
+  el: TTyChartElement;
+
+  function FindRun(AS_: Integer; out AEl: TTyChartElement): Boolean;
+  var k: Integer; l: TTyPaintList;
+  begin
+    Result := False;
+    AEl := Default(TTyChartElement);
+    l := FChart.List;
+    if l = nil then Exit;
+    for k := 0 to l.Count - 1 do
+    begin
+      AEl := l.Element(k);
+      if (AEl.Datum.Kind = ctkSeries) and (AEl.Datum.SeriesIndex = AS_)
+        and (AEl.Datum.DataIndex < 0) and (AEl.Shape.Kind = cskPolyline) then Exit(True);
+    end;
+  end;
+
 begin
   what := Format('s%d polyline ', [ASeries]);
   if not FChart.LineStates(ASeries, poly, area_) then
@@ -707,9 +761,15 @@ begin
     Bad(what + Format('stroke %s, want %s', [Hex(poly.Host.Cur.Color[stkStroke]), Hex(want)]));
   if poly.Host.Cur.Num[stkLineWidth] <> APoly.Floats['lineWidth'] then
     Bad(what + 'lineWidth differs');
+  if Abs(poly.Host.Cur.Num[stkOpacity] - poly.Host.Rest.Num[stkOpacity]
+    * APoly.Floats['opacity'] / APoly.Objects['rest'].Floats['opacity']) > 1e-12 then
+    Bad(what + Format('opacity %g, upstream %g', [poly.Host.Cur.Num[stkOpacity],
+      APoly.Floats['opacity']]));
+  if FindRun(ASeries, el) and (Abs(el.Style.Alpha - poly.Host.Cur.Num[stkOpacity]) > 1e-12) then
+    Bad(what + Format('drawn opacity %g', [el.Style.Alpha]));
 end;
 
-procedure TAdvChartSelectOracleTest.CompareState(AState: TJSONObject; AInit: Boolean);
+procedure TAdvChartSelectHarness.CompareState(AState: TJSONObject; AInit: Boolean);
 var
   ser: TJSONArray;
   so: TJSONObject;
@@ -778,7 +838,7 @@ begin
   end;
 end;
 
-procedure TAdvChartSelectOracleTest.RunCases(const AIds: array of string;
+procedure TAdvChartSelectHarness.RunCases(const AIds: array of string;
   AMinSteps: Integer);
 var
   cases, steps: TJSONArray;
@@ -941,7 +1001,7 @@ begin
   AssertTrue(FChart.DispatchAction('{"type":"toggleSelect","dataIndex":0}'));
 end;
 
-procedure TAdvChartSelectOracleTest.Plain(const AOption: string);
+procedure TAdvChartSelectHarness.Plain(const AOption: string);
 begin
   FChart := TSelProbe.Create(FForm);
   FChart.Parent := FForm;
@@ -951,7 +1011,7 @@ begin
   FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
 end;
 
-function TAdvChartSelectOracleTest.Indices(ASeries: Integer): string;
+function TAdvChartSelectHarness.Indices(ASeries: Integer): string;
 var idx: TTyIntegerArray; i: Integer;
 begin
   idx := FChart.SelectedDataIndices(ASeries);

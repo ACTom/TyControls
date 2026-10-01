@@ -8586,12 +8586,12 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 - 「JS 键序不管」：名字都不是数字——补 `b、10、02、2`，表是 `{"2","10","b","02"}`、下标 `2,1,0,3`。
 - 「name 取最后一个」：重名用例只用点击——补按名选重名项，下标只有第一个。
 - 「dataIndex 当内部下标」：没有过滤——补 dataZoom 过滤掉前两个类目，dataIndex 3 是内部 1。
-第六个「悬停 over 不管 hbo」在 B1 里是**等价变异**：hbo 非零的项一定已在 emphasis（没有模糊就没有别的去处），over 再设 2 不变；上游 `highlight-focus` 里「带 hbo 却显示 blur」的项要 B2 才有，届时会杀它。另加「悬停 out 不管 hbo」变异，配手写「动作高亮的柱悬停进出仍亮着、downplay 才灭」，杀死。补完重跑全部杀死（等价的那个除外）。
+第六个「悬停 over 不管 hbo」在 B1 里是**等价变异**：hbo 非零的项一定已在 emphasis（没有模糊就没有别的去处），over 再设 2 不变；上游 `highlight-focus` 里「带 hbo 却显示 blur」的项要 B2 才有，届时会杀它。**[第 90 批：B2 的重放杀死了它，见 §125。]**另加「悬停 out 不管 hbo」变异，配手写「动作高亮的柱悬停进出仍亮着、downplay 才灭」，杀死。补完重跑全部杀死（等价的那个除外）。
 
 ### 已知偏差
 
 - 状态机只接了柱、饼、笛卡尔上的折线/散点/涟漪散点。其余类型（漏斗、雷达、K 线、象形柱、热力图、关系图、树系……）选中模型、动作和事件都有，**没有选中的样子**，悬停仍在覆盖层；它们的默认选中边框（漏斗、关系图、热力图、桑基图、象形柱）随之没有。关系图的边（dataType edge）不进选中模型，selectchanged 的项也不带 dataType。
-- highlight/downplay 只有事件与 hbo 位：动作前的 allLeaveBlur、按 focus 的 blurSeries、`notBlur`、折线单点高亮落在符号路径上（悬停离开会清掉它）都是 B2；`excludeSeriesId` 读了。悬停的 focus/blur 也是 B2。
+- highlight/downplay 只有事件与 hbo 位：动作前的 allLeaveBlur、按 focus 的 blurSeries、`notBlur`、折线单点高亮落在符号路径上（悬停离开会清掉它）都是 B2；`excludeSeriesId` 读了。悬停的 focus/blur 也是 B2。**[第 90 批已做，见 §125；漏斗、热力图、K 线、象形柱、旭日图与日历上的散点也接上了状态机。]**
 - 整体更新（Invalidate、换尺寸）后先回 rest、再套旧列表、再套标志，这条照上游写了但没有 B1 的用例；上游 `legend-pie` 里那一步（z2 继续爬）和过滤后饼的内部/原始下标对应都是 B3 的。
 - payload 没写任何下标字段时什么也不做（上游会对 `undefined` 做选择，拿到 `'e\0\0undefined'` 之类的键）；越界的下标丢掉；batch 不收；动作要在第一次渲染之后（选中模型要建好的数据）。
 - 饼常态不显示标签、只在状态里显示时不建标签（上游一直有一个 ignore 的 Text）；状态的 `label.show` 决定是否建标签只读系列级。内侧标签在选中色上不重新挑墨色，标签不透明度不写（模糊在 B2）。
@@ -8660,6 +8660,59 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 - 悬停高亮在动画中画的是静止几何（`PaintEmphasis` 读列表）；命中测试已经跟着帧走。
 - 饼在端口里先滤掉负值，视图行号与上游的 dataIndex 在有负值时不一致（延迟函数拿到的序号不同）。
 - 一帧仍要开一张控件大小的 BGRA 位图画动态层（Q7 那 13 ms 的底价）；动画期间所有系列、图例、标题都在动态层，不按元素是否在动细分。
+
+## 125. Tier 1 第九十批：聚焦与淡化（B2，2026-10-01）
+
+B1 把悬停、选中、动作高亮搬上了标志加状态代理的模型，但 highlight/downplay 只记 hbo 位、不淡化别的东西，`emphasis.focus` / `blurScope` 除了关系图和树谁都不读，而且状态机只接了柱、饼和笛卡尔上的折线/散点。这一批把上游的 blurSeries / allLeaveBlur 接到同一套标志上，把 highlight/downplay 补成上游的三步，并把状态机推到更多系列类型。
+
+### 上游的做法（`wf87/states.md` §2、§3；`util/states.ts`、`core/echarts.ts` 逐行核过）
+
+- **highlight / downplay**（`echarts.ts:2178-2205、1792-1865`）：每次派发**先 allLeaveBlur 一次**；然后对查询到的每个系列（排除 `excludeSeriesId`），highlight 且没有 `notBlur`、系列级 `emphasis.disabled` 不为真时，按 payload 指的那个元素的 focus 去 blurSeries——指的是列表时取第一个，`|| 0`，那里没有元素就取第一个有元素的，一个都没有才读系列选项（`states.ts:545-586`）；**这一遍对所有系列做完之后**，才逐个系列 enter/leave emphasis：查询到的项（没写就是全部）里是派发者的那些，hbo 置/清 highlightKey 的位，清空后才离开 emphasis。
+- **折线的单点高亮**（`LineView.ts:937-1026`）：先 `_changePolyState`（折线和面积直接设标志），payload 是**单个**非负下标时走 `Symbol.highlight()`——`enterEmphasis(符号路径)`，位落在**路径**上、固定是第 0 位、不查是否派发者；列表走整系列的分支（符号组带位）。downplay 那边 `dataIndex >= 0` 对只有一个元素的列表会被 JS 强转成数字，于是也走路径。悬停的派发者是符号**组**，组上没有位，所以悬停进出会把动作高亮清掉（surprise 9）。
+- **悬停**（`states.ts:638-695`）：over 先按派发者的 ecData.focus / blurScope 做 blurSeries，再在派发者没有 hbo 时进入 emphasis；out 先 allLeaveBlur，再在没有 hbo 时离开 emphasis。`emphasis.disabled` 的元素根本不是派发者：悬停它什么都不发生（连 allLeaveBlur 都没有）。
+- **blurSeries**（`states.ts:429-517`）：focus 假值或 `'none'` 不做；`blurScope` 假值当 `'coordinateSystem'`。逐个**显示中**的系列：坐标系取 `coordinateSystem.master`（笛卡尔的是 grid），两边都有才比，**没有坐标系的只和自己相同**；`scope 'series'` 且不是同一系列、`'coordinateSystem'` 且不同坐标系、`focus 'series'` 且是同一系列，三者之一就跳过；其余整个视图组里每个元素进 blur，**只有** `focus 'self'` 且同一系列时跳过带 hbo 的元素；focus 是下标数组时（树系）再让这些下标的元素离开 blur——对**每一个**被淡化的系列都用目标系列的下标；记 isBlured。focus 的取值只和 `'self'`、`'series'`、`'none'` 比较：其他任何真值（`'adjacency'` 放在柱上、`true`）都淡化范围内的一切、包括自己系列，而且不放过带 hbo 的元素；`blurScope` 写成既不是 `'series'` 也不是 `'coordinateSystem'` 的值就等于全局。
+- **allLeaveBlur**（`states.ts:404-427`）：isBlured 的系列整组离开 blur（只把 1 变回 0），全部 isBlured 清掉。
+- **折线**：符号组每次 hoverState 变化、折线自己的变化，都经 `onHoverStateChange` 把折线和面积设成同一状态；blurSeries 遍历视图组时折线本身也在里面（没画符号的线也会被淡化）。
+- **标签**：状态列表永远等于宿主的；blur 的默认代理给标签自己的不透明度乘 0.1，`blur.label.opacity` 声明了就用声明值。饼永远有一个 Text：常态隐藏、没有任何状态 `label.show` 时它只有 select 状态对象——emphasis 不抬 z2，但 blur 代理照样给它 0.1（surprise 13）。
+- **旭日图**（`SunburstPiece.ts:152-160`、`SunburstSeries.ts:270-281`）：focus 默认 `'descendant'`；`ancestor`/`descendant`/`relative` 在建元素时就换成数据下标（祖先从根到自己，子树前序，relative 两者相连；根的下标没有元素）；系列默认 `blur.itemStyle.opacity 0.2`、`blur.label.opacity 0.1`；没有坐标系。
+- **各类型**：漏斗、热力图、象形柱、散点的默认选中是 `borderColor: tokens.color.primary`（不带宽度）；K 线的 emphasis 默认 `borderWidth 2`，每个状态按涨跌取 `color`/`color0`、`borderColor`/`borderColor0`（缺边框用颜色），**body 与影线是同一条路径**；象形柱的每个图形各有状态，`emphasis.scale`（默认 false）放大 1.1；漏斗的 emphasis 标签默认显示。
+
+### 做法
+
+- **`States` 单元**：`TTyStItem` 多了符号组自己的 `GroupHover / GroupHbo`（`HasGroup`：折线、散点、涟漪散点的符号，宿主是路径）和 `Parts`（同一派发者下各有状态的其余路径，象形柱的其余图形，列表跟宿主走，和标签一样）。项级的纯函数：`TyStItemHoverEnter/Leave`（看派发者的 hbo）、`TyStItemEnter/LeaveEmphasisBy`（`AOnPath` 即 Symbol.highlight）、`TyStItemEnterBlur`（`ASpareHeld`）、`TyStItemLeaveBlur`；组的每次变化经 `APoly` 带上折线。`TTyStFocus`（none/self/series/other/indices）与 `TTyStScope`、`TyStFocusOf/ScopeOf/BlursSeries` 按上面的比较规则；`TyStFind` 沿节点链取原值。
+- **控件**：`StBlurSeries / StAllLeaveBlur`（系列的 `IsBlured`）、`StCoordKey`（`grid<n>`、`calendar<n>`、`radar<n>`，没有坐标系是空串）、`StItemFocus`（数据项 → 旭日的层级 → 系列；旭日的词换成下标）、`StDispatcher`（数据项、折线、面积三种派发者；disabled 不算）。`StHoverOver/Out`、`DoHighDownAction` 照上游的顺序重写；B1 那个把折线 hbo 置位的整系列高亮改成直接设折线状态。
+- **标签**：rest 不透明度取宿主建出时的（上游的 defaultOpacity），blur 时写回元素；状态标签读 `[state].label.opacity`。饼的标签没建出来时补一个**不画的**状态元素（只有 select 对象，除非某状态的 `label.show` 写了），让它照上游吃 blur、不抬 z2。漏斗的引导线带上带的 datum、标成 guide，跟着带走状态。
+- **推到更多类型**（`TTyStKind`）：热力图（笛卡尔与日历，`sskRect`）、漏斗、K 线（实体是宿主，影线是**跟随者**：取宿主改过的描边/线宽、宿主的不透明度、同样的 z2 增量，不取宿主抬亮的填充）、象形柱（第一个图形是宿主，其余是 Parts，透明的条形命中框不动）、旭日图，以及日历上的散点/涟漪散点（B1 排除了日历；元素和笛卡尔的一样）。这些类型的悬停不再走覆盖层。
+- **命中**：折线的命中容差改成 zrender 的 `max(线宽, strokeContainThreshold 5) / 2`（原来是半线宽加 4，即 5 px）——fixture `focus-series-coord` 里柱子中心离折线 3.9 px，上游命中柱子，端口原先命中折线。
+
+### 基准
+
+- `tools/advchart-oracle/select-legend.js` 加了 7 个用例：`focus-funnel-self`（无坐标系的漏斗 self，标签和引导线跟着淡化、按下标高亮）、`focus-heatmap-scatter`（同一 grid 上的热力图 series 与散点 self+series 范围，散点的高亮位在**组**上、悬停不清它）、`focus-candlestick`（K 线淡化同 grid 的折线、emphasis 边框 2、整系列高亮）、`focus-truthy-other`（focus `'adjacency'`、blurScope `'nope'`：自己系列也淡化、饼也淡化、带 hbo 的不放过）、`focus-self-held`（self 放过带 hbo 的元素）、`focus-sunburst`（默认 descendant、默认 0.2/0.1、按节点高亮）、`focus-sunburst-ancestor`（系列 ancestor、单个节点 relative）。规则转写跟着扩展（旭日的树、下标 focus 的离开 blur、各类型默认选中/强调、散点是 Symbol），新增 7 条守卫（self 放过 hbo、真值 focus、未知 scope、K 线边框、旭日默认 focus、下标离开 blur、旭日默认不透明度）。整份 fixture 45 个用例、234 步、251 个事件，转写逐步全对，34 条守卫全过，两次生成逐字节一致。
+- `test.advchart.focusblur`：B1 的重放器提成 `TAdvChartSelectHarness`（B1 的测试改为继承它），重放 18 个 B2 用例（原有 11 个加新 7 个）共 100 步、35 个事件、752 个项快照：事件、标志（派发者的 hbo、折线路径的 phbo、组的 hoverState）、列表、画出来的颜色/不透明度/z2/几何、标签（列表、隐藏、墨色、**不透明度**、z2；饼不画的标签只比状态机的值）、折线（列表、描边、线宽、**不透明度**，状态机与画出来的都比）。上游没有元素的项（旭日的虚根）端口也不能有记录。
+- 首跑：原有 11 个用例只差 `focus-series-coord / -global` 的一步——就是上面折线命中容差的问题；新用例只差 K 线（重放器取了影线当宿主、线宽只在描边变了时比），改了重放器后全对。
+- 手写 11 个：象形柱的图形一起变（抬亮、z2+10、放大 1.1、条形框仍无墨、B 淡化）；K 线影线跟随实体（淡化到 0.1、z2、线宽 2，描边和无填充不变，实体抬亮）；日历是坐标系（同日历的散点淡化、grid 上的柱不动）；折线作为派发者（悬停线段：折线和面积 emphasis、符号不进、M 淡化）；高亮按**项自己的** focus 淡化、指不到元素时取第一个元素的；离开画布就是 mouseout；声明的标签 blur 不透明度；折线高亮的列表走组、downplay 的单元素列表走路径；以及下面变异补的两条。
+
+### 变异测试
+
+`b2_mut.py`：40 个变异，逐个改源码、重编、跑 focusblur、select、mouse-events 三套、还原。清除先于淡化、两种 scope 的匹配、无坐标系只配自己、grid 的身份、self 与 series 对自己系列、self 放过 hbo（不放过 / 谁都放过）、0.1 改 0.2、悬停 over/out 不看 hbo、折线不跟符号、blurSeries 不遍历折线、没有 blur 对象的标签不淡化（隐藏的饼标签）、隐藏的饼标签有 emphasis 对象、单点高亮落在组上、单元素列表不强转、真值 focus 当 none、未知 scope 当 coordinateSystem、下标不离开 blur、旭日没有默认 focus、ancestor 当 descendant、旭日的 0.2、标签 blur 不透明度不读、高亮按系列 focus、notBlur 不读、禁用系列的高亮也淡化、out 不 allLeaveBlur、over 不淡化、K 线没有边框 2、影线不跟随、图形不随列表、象形柱 scale 不读、标签不透明度不写、日历不算坐标系、折线容差回到 5 px、散点没有组、离开画布不 out、新类型没有选中边框。
+
+首轮 39 个存活 1 个：**blurSeries 不遍历折线**——符号组的变化本来就会带上折线，有符号的线分不出来；补手写「不画符号的折线也被淡化」。另加「新类型没有选中边框」（fixture 不点选这些类型），配手写漏斗与热力图的选中边框。补完全部杀死。
+
+### 推迟与偏差
+
+- **桑基图**（adjacency/trajectory）**没做**：它的 focus 是 `{node: [...], edge: [...]}` 两套下标，边是另一份数据（`dataType: 'edge'`），状态模型目前只有节点一套行（B1 起就跳过 `IsEdge`）。要做：`TTyStSeries` 加一套按边下标的行、`StItemAt` 认 dataType、`TTyStFocus` 带两套下标、`StBlurSeries` 分别离开 blur，再给 fixture 加桑基的记录（`getData('edge')`）与转写。
+- **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
+- **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。
+- 面积在端口里是 silent（拿不到指针），所以「悬停面积只有面积 emphasis」的分支写了但到不了；悬停折线时面积跟着走与上游一致。
+- 折线 `showSymbol: false` 时上游会为单点高亮临时建一个符号，端口不建（只设折线状态）。
+- 漏斗常态隐藏标签时不建标签，上游默认的 emphasis 标签显示因此看不到（标签只在常态显示时才建，和 B1 的饼一样）；fixture 的漏斗用例标签常态显示。
+- 象形柱的标签挂在透明条形框上，上游这个框没有状态对象，标签永远不进状态——端口同样不动它。
+- 标注（markPoint/Line/Area）的 `toggleBlurSeries` 不做：被淡化系列的标注不变淡。
+- 旭日图悬停原来走覆盖层，会把扇形外半径加 scaleSize 放大；上游旭日的 emphasis 没有半径变化，现在不放大了。
+
+### 留给 B3 的接口
+
+图例悬停就是一次普通的 highlight：B3 在图例项 over 时 `DispatchAction('{"type":"highlight","seriesName":…,"name":null,"excludeSeriesId":[…]}')`（数据图例写 `name`、`seriesName: null`），out 时同样的 downplay；点击的序列是 downplay → legendToggleSelect → highlight。allLeaveBlur、按第 0 项的 focus 淡化（`legend-hover-focus`）、`excludeSeriesId` 都已经在 `DoHighDownAction` 里；图例 `selectedMode: false` 时命中框 silent，什么都不派发。过滤掉的系列 `FBindings[].Hidden`，blurSeries 已跳过。
 
 ## 126. Tier 1 第九十一批：更新与离场动画（AN3，2026-10-01）
 

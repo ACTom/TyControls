@@ -929,6 +929,11 @@ begin
         { SILENT: a guide line is a pointer at a band, not a target of its
           own, and a hit on it would report the datum twice over. }
         el.Silent := True;
+        { ITS BAND'S DATUM, as a pie's: the states move it with the band
+          [Batch 90] }
+        el.IsGuide := True;
+        el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Items[i].Index,
+          raw);
         el.Anim.Role := carGuide;
         el.Anim.Series := ABinding.SeriesIndex;
         el.Anim.Index := ALayout.Items[i].Index;
