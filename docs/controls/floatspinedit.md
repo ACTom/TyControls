@@ -88,7 +88,8 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 |------|------|
 | 数字 / `-` / 小数点 | 插入（继承 `TTyNumericEdit` 的输入过滤；小数点仅当 `Decimals > 0`）|
 | `↑` / `↓` | `Value ± Increment`。**先跑 `inherited`（也就是应用的 `OnKeyDown`）**，处理程序把 `Key` 置 0 表示自己消费掉了，这时**不**步进 |
-| 点击上 / 下按钮 | `Value ± Increment`，并把焦点交给字段 |
+| 鼠标移到按钮上 | 光标变成普通箭头（文字区仍是 I 形）；指针下那一半显示悬停底色（`ReadOnly` 时不显示） |
+| 按下上 / 下按钮 | `Value ± Increment`，并把焦点交给字段；按住约 400 ms 后每 100 ms 再走一步，松开或移出控件即停；按住期间显示按下底色 |
 | 鼠标滚轮 | `Value ± Increment`；应用的 `OnMouseWheel` 先跑，它消费了就不再步进 |
 | 聚焦 | 去掉千分位（若开启），显示原始数字（继承） |
 | 失焦 | 夹紧 + 重新格式化（继承） |
@@ -100,7 +101,8 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 
 - **按钮列宽 = `--field-button-width` 令牌**（缺省 18px），**实时读取**——和 `TTyComboBox` 的下拉按钮、`TTyComboEdit` 的箭头区、`TTySpinEdit` 的上下键读的是**同一个**令牌，所以换密度包 / 换皮肤时四者一起变。
 - **上下半区**由 `TySpinUpButtonRect` / `TySpinDownButtonRect` 切分——直接复用 `TTySpinEdit` 的几何函数，两个微调控件不会对"上按钮到哪里为止"给出两个答案。
-- **箭头**是 `tgArrowUp` / `tgArrowDown`，走 `TyDrawGlyph`，因此可被主题的 `--glyph-arrow-up` / `--glyph-arrow-down` 覆盖（图标字体或图片）；颜色取解析样式的 `TextColor`。
+- **箭头**是 `tgArrowUp` / `tgArrowDown`，走 `TyDrawGlyph`，因此可被主题的 `--glyph-arrow-up` / `--glyph-arrow-down` 覆盖（图标字体或图片）；颜色平时取解析样式的 `TextColor`。
+- **悬停 / 按下**：指针下那一半铺 `TyButton:hover` / `TyButton:active` 的底色，箭头改用该状态的 `color`，和 `TTySpinEdit`、`TTyUpDown` 一样。底色只铺在字段的边框和焦点环以内。
 
 ### 和 `TTySpinEdit` 的一处**刻意**差异：按钮区被内距挤进来了
 
