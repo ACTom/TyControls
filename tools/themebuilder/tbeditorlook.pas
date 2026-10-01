@@ -16,6 +16,7 @@ unit tbeditorlook;
     comparison: added   --success, 18 % over the background (the AI comparison window)
                 removed --danger, 18 % over the background
                 filler  --surface-chrome (a row one side has no line for)
+    text on a tinted row    the text colour (one colour, so it reads on the tint)
     font                --terminal-font-family (monospace -> the platform's), --font-size-base
 
   A token the theme does not define falls back as listed, or to the text colour. Borders and

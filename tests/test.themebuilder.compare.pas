@@ -5,7 +5,7 @@ unit test.themebuilder.compare;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, tbcompareform, tbaisettings, tbaisettingsform;
+  Classes, SysUtils, Graphics, fpcunit, testregistry, tbcompareform, tbaisettings, tbaisettingsform;
 
 type
   TTbCompareTests = class(TTestCase)
@@ -27,6 +27,8 @@ type
     procedure TestThePreviewTrial;           { V7 }
     procedure TestATrialKeepsARefusedMode;   { V8 }
     procedure TestABadTrialEndsAtOnce;       { V9 }
+    { the last batch before the merge }
+    procedure TestTintedRowsAreReadable;     { V10 }
   end;
 
   TTbAiSettingsFormTests = class(TTestCase)
@@ -52,14 +54,72 @@ type
     procedure TestOkChecksBeforeItChanges;      { G10 }
   end;
 
+{ the contrast of two LCL colours (WCAG, 1..21) }
+function TbContrast(AFg, ABg: TColor): Double;
+
 { the widgetset, once (the SynEdit completion window needs it) }
 procedure TbNeedWidgetSet;
 
 implementation
 
 uses
-  Forms, Controls, Graphics, SynEditTypes, SynEditMiscClasses, tyControls.Controller, tyControls.Types,
+  Types, LCLType, Forms, Controls, SynEditTypes, SynEditMiscClasses, tyControls.Controller, tyControls.Types,
+  tyControls.Base, tyControls.Painter, tyControls.TyLabel, tyControls.Terminal.Core,
+  tyControls.Terminal.Render, tyControls.DropButtons,
   tbdiff, tbeditorlook, tbaisession, tbpreview, tbaiformat, tbaiclient, tbaichecks, tbfakehttp;
+
+type
+  TTyControlAccess = class(TTyCustomControl);
+  TWinControlAccess = class(TWinControl);
+  TControlAccess = class(TControl);
+
+function TbContrast(AFg, ABg: TColor): Double;
+
+  function Rgb(C: TColor): Cardinal;
+  begin
+    C := ColorToRGB(C);       { $00BBGGRR }
+    Result := (Cardinal(C and $FF) shl 16) or Cardinal(C and $FF00) or Cardinal((C shr 16) and $FF);
+  end;
+
+begin
+  Result := TyTermContrastRatio(TyTermRelativeLuminance(Rgb(AFg)), TyTermRelativeLuminance(Rgb(ABg)));
+end;
+
+{ What LCL does to an AutoSize control on the screen and cannot do here (a window never
+  shown delays all auto-sizing): the control takes its preferred size -- the width of a
+  check box, the height of a wrapping label (a label's preferred width is not its wrap
+  width: its width stays). }
+procedure AutoSized(AControl: TControl);
+var
+  w, h: Integer;
+begin
+  if not AControl.AutoSize then Exit;
+  w := 0;
+  h := 0;
+  TControlAccess(AControl).CalculatePreferredSize(w, h, True);
+  if (AControl is TTyLabel) and TTyLabel(AControl).WordWrap then
+  begin
+    if h > 0 then AControl.Height := h;
+  end
+  else if w > 0 then
+    AControl.Width := w;
+end;
+
+{ the anchors and aligns of AParent's children, as a shown window would place them }
+procedure LayOut(AParent: TWinControl);
+var
+  r: TRect;
+begin
+  r := Rect(0, 0, AParent.Width, AParent.Height);
+  TWinControlAccess(AParent).AlignControls(nil, r);
+end;
+
+function Overlap(A, B: TControl): Boolean;
+var
+  r: TRect;
+begin
+  Result := A.Visible and B.Visible and IntersectRect(r, A.BoundsRect, B.BoundsRect);
+end;
 
 var
   GReady: Boolean = False;
@@ -264,6 +324,60 @@ begin
     AssertEquals('V9: A is still shown', $123456, ButtonBg(f));
   finally
     f.Free;
+  end;
+end;
+
+{ V10: a tinted row -- changed, added, removed, a filler -- is written in a colour of its own
+  that reads on its tint (4.5:1), in the tool's light and in its dark appearance. SynEdit
+  hands the markup over with clHighlightText, a near white, and that is what the rows were
+  written in. }
+procedure TTbCompareTests.TestTintedRowsAreReadable;
+const
+  cModes: array[0..1] of string = ('light', 'dark');
+var
+  oldTheme, oldMode: string;
+  look: TTbEditorColors;
+  m: TSynSelectedColor;
+  special: Boolean;
+  i: Integer;
+
+  procedure Check(AEdit: TObject; ALine: Integer; const AWhat: string);
+  begin
+    special := False;
+    m.Foreground := clHighlightText;      { as SynEdit hands it over }
+    m.Background := clHighlight;
+    FForm.EditSpecialLineMarkup(AEdit, ALine, special, m);
+    AssertTrue(AWhat + ' is tinted', special);
+    AssertTrue('V10: ' + AWhat + ' has a text colour of its own (' + cModes[i] + ')',
+      (m.Foreground <> clHighlightText) and (m.Foreground <> clNone));
+    AssertTrue(Format('V10: %s reads on its tint (%s): %.2f', [AWhat, cModes[i],
+      TbContrast(m.Foreground, m.Background)]), TbContrast(m.Foreground, m.Background) >= 4.5);
+  end;
+
+begin
+  oldTheme := TyDefaultController.ThemeName;
+  oldMode := TyDefaultController.Mode;
+  m := TSynSelectedColor.Create;
+  try
+    for i := 0 to High(cModes) do
+    begin
+      TyDefaultController.ThemeName := 'default';
+      TyDefaultController.Mode := cModes[i];
+      look := TbEditorColors(TyDefaultController);
+      FForm.Prepare(Bars('a|b|c'), Bars('a|x|c|d'), nil, look);
+      Check(FForm.LeftEdit, 2, 'a changed line, left');
+      Check(FForm.RightEdit, 2, 'a changed line, right');
+      Check(FForm.RightEdit, 4, 'an added line');
+      Check(FForm.LeftEdit, 4, 'a filler');
+      FForm.Prepare(Bars('a|b|c|r'), Bars('a|b|c'), nil, look);
+      Check(FForm.LeftEdit, 4, 'a removed line');
+    end;
+  finally
+    m.Free;
+    if TyDefaultController.ThemeName <> oldTheme then
+      TyDefaultController.ThemeName := oldTheme;
+    if TyDefaultController.Mode <> oldMode then
+      TyDefaultController.Mode := oldMode;
   end;
 end;
 

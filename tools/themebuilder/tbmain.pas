@@ -805,6 +805,9 @@ begin
   k := FLineSeverity.IndexOf(IntToStr(Line));
   if k < 0 then Exit;
   Special := True;
+  { the editor's text colour on the tint: SynEdit's default foreground for a marked line
+    is clHighlightText, a near white that a pale tint does not carry }
+  Markup.Foreground := FLook.Text;
   if PtrInt(FLineSeverity.Objects[k]) = 1 then
     Markup.Background := FLook.ErrorLine
   else

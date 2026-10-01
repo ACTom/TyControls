@@ -237,6 +237,9 @@ var
 begin
   i := Line - 1;
   if (i < 0) or (i > High(FRows)) then Exit;
+  { a tinted row is written in the editor's own text colour: the markup's foreground would
+    otherwise stay at SynEdit's default (clHighlightText, a near white) on a pale ground }
+  Markup.Foreground := FLook.Text;
   onRight := Sender = RightEdit;
   if onRight then k := FRightKinds[i] else k := FLeftKinds[i];
   if k = cFiller then

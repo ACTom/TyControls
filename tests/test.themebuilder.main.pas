@@ -115,6 +115,8 @@ type
     procedure TestTheModelIsToldInEnglish;       { M17 }
     procedure TestTheComparisonShowsTheEditorNow;   { M18 }
     procedure TestClosingTheComparisonEndsTheTrial;   { M19 }
+    { the last batch before the merge }
+    procedure TestMarkedLinesAreReadable;        { M20 }
   end;
 
 implementation
@@ -125,7 +127,8 @@ uses
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
   tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules,
   tbaiformat, tbaiclient, tbaisettings, tbaisession, tbaiframe, tbcompareform, tbaisettingsform,
-  tbdiff, tbaichecks, tbfakehttp, Translations, Math, tyControls.StrConsts;
+  tbdiff, tbaichecks, tbfakehttp, Translations, Math, tyControls.StrConsts,
+  test.themebuilder.compare;
 
 const
   { a document whose one value no base theme has }
@@ -2444,6 +2447,55 @@ begin
     AssertFalse('M19: no trial', FForm.Preview.InTrial);
   finally
     f.Free;
+  end;
+end;
+
+{ ---- the last batch before the merge ---- }
+
+{ M20: a marked line -- an error, a warning -- is written in a colour of its own that reads on
+  its tint (4.5:1), in the tool's light and in its dark appearance. SynEdit hands the markup
+  over with clHighlightText, a near white, and that is what the line was written in. }
+procedure TTbMainFormTests.TestMarkedLinesAreReadable;
+const
+  cDoc = 'TyButton.primary:hover { background: #111111; color: #131313; }'#10 +
+    'TyEdit { color: var(--missing); }'#10;
+var
+  special: Boolean;
+  markup: TSynSelectedColor;
+  dark: Boolean;
+  line, errors, warnings: Integer;
+  mode: string;
+begin
+  WriteBytes(FDir + 'marked.tycss', cDoc);
+  markup := TSynSelectedColor.Create;
+  try
+    for dark := False to True do
+    begin
+      FForm.SetEditorAppearance('default', dark);
+      if dark then mode := 'dark' else mode := 'light';
+      AssertTrue('opened', FForm.OpenFile(FDir + 'marked.tycss'));
+      errors := 0;
+      warnings := 0;
+      for line := 1 to FForm.Editor.Lines.Count do
+      begin
+        special := False;
+        markup.Foreground := clHighlightText;     { as SynEdit hands it over }
+        markup.Background := clHighlight;
+        FForm.EditorSpecialLineMarkup(FForm.Editor, line, special, markup);
+        if not special then Continue;
+        if markup.Background = FForm.Look.ErrorLine then Inc(errors);
+        if markup.Background = FForm.Look.WarningLine then Inc(warnings);
+        AssertTrue(Format('M20: line %d has a text colour of its own (%s)', [line, mode]),
+          (markup.Foreground <> clHighlightText) and (markup.Foreground <> clNone));
+        AssertTrue(Format('M20: line %d reads on its tint (%s): %.2f', [line, mode,
+          TbContrast(markup.Foreground, markup.Background)]),
+          TbContrast(markup.Foreground, markup.Background) >= 4.5);
+      end;
+      AssertTrue('an error line (' + mode + ')', errors > 0);
+      AssertTrue('a warning line (' + mode + ')', warnings > 0);
+    end;
+  finally
+    markup.Free;
   end;
 end;
 
