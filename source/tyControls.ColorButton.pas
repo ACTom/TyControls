@@ -255,7 +255,7 @@ function TTyColorButton.MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet)
 var
   Meas: TBitmap;
   txt: string;
-  mp: Integer;
+  mp, rw: Integer;
 begin
   txt := ContentText;
   if txt = '' then Exit(0);
@@ -270,6 +270,12 @@ begin
     TyConfigureMeasureFont(Meas.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
       AStyle.FontWeight, APPI);
     Result := Meas.Canvas.TextWidth(txt);
+    { 量法要和 TTyButton.MeasureCaption 一致,就得连它后来补的这一步一起:再问一次渲染器,
+      取较大的。画字的是渲染器,它量得宽就按它截断;只按画布量,AutoSize 刚量好的标题会被
+      画成 "Try it in the previ..."。 }
+    rw := TyMeasureRenderedTextWidth(txt, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, APPI);
+    if rw > Result then Result := rw;
     if Result < 0 then Result := 0;
   finally
     Meas.Free;

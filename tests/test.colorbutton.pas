@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
   tyControls.Base, tyControls.Types, tyControls.Painter, tyControls.Controller,
-  tyControls.ColorButton, tyControls.ToolBar;
+  tyControls.ColorButton, tyControls.ToolBar, test.captionfit;
 type
   // Expose the protected DrawContent so a headless render can be exercised without
   // opening the (GUI-only) colour dialog.
@@ -20,6 +20,7 @@ type
     function CallMeasureHex(APPI: Integer): Integer;
     { 一行文字的高度(参考字形,与 Caption 无关):高度下限里的文字那一项。 }
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   TColorButtonTest = class(TTestCase)
@@ -51,6 +52,7 @@ type
     procedure TestSwatchSlotTracksTheRowHeight;
     procedure TestRoomierThemeWidensPreferredWidth;
     procedure TestPreferredHeightIsAlwaysZero;
+    procedure TestAutoSizedButtonDrawsItsWholeCaption;
   end;
 
   { SIZE FLOOR(Constraints.Min*)。手写的 Height 和主题的 --control-height 都只是**请求**;
@@ -104,6 +106,11 @@ end;
 procedure TTyColorButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
 begin
   MeasureCaption(APPI, AW, AH);
+end;
+
+procedure TTyColorButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
 procedure TColorButtonTest.HandleColorChange(Sender: TObject);
@@ -624,6 +631,31 @@ begin
       [B.Constraints.MinHeight]), B.Constraints.MinHeight <= 40);
   finally
     F.Free;
+  end;
+end;
+
+{ An AutoSize colour button draws the caption it measured, whole. Its width comes from
+  MeasureHexText, not from the base button's MeasureCaption, so the base's fix (ask the renderer
+  too) never reached it and the caption showed "Try it in the previ...". See test.captionfit. }
+procedure TColorButtonAutoSizeTest.TestAutoSizedButtonDrawsItsWholeCaption;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  B: TTyColorButtonAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    Form.Color := clWhite;
+    B := TTyColorButtonAccess.Create(Form);
+    B.Parent := Form;
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.AutoSize := True;
+    CheckAutoSizeDrawsWholeCaption(Ctl, B, 'TyButton', @B.RenderTo, False);
+  finally
+    Form.Free;
+    Ctl.Free;
   end;
 end;
 
