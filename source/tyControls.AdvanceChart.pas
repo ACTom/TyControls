@@ -1714,6 +1714,70 @@ type
     function ComponentModelName(const AMainType: string; AIndex: Integer): string;
     function ComponentModelSubType(const AMainType: string; AIndex: Integer): string;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { NOT a tab stop today, and the declaration has to say so or a .lfm cannot
+      stream the choice: the streamer omits a value that equals the declared
+      default, so a mismatched pair silently loses whatever the host wrote.
+      A chart with no keyboard behaviour that took focus on click would pull it
+      off whatever the user was editing and then do nothing with it. Being
+      WINDOWED is what makes focus possible later; it is not a reason to take it
+      now. When dataZoom, brush or a keyboard tooltip land, this flips to True
+      and the class moves to the focusable table -- which the tables in
+      test.focus.tabstop.pas will force somebody to decide rather than drift.
+      [Batch 62: dataZoom landed and did NOT flip it. Upstream's dataZoom is
+      pointer-only -- drag, click, brush, wheel -- with no key binding at all,
+      so the reason this line once gave for it no longer holds.] }
+    property TabStop default False;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { THE API. Relaxed JSON: unquoted keys, single quotes, trailing commas and
       comments all parse, because that is what an ECharts config in the wild
       looks like.
@@ -1735,35 +1799,8 @@ type
     property OptionError: string read GetErrorText;
     property Align;
     property Anchors;
-    property BorderSpacing;
     property Color;
-    property Font;
     property ParentFont;
-    property ParentShowHint;
-    property PopupMenu;
-    property ShowHint;
-    property TabOrder;
-    { NOT a tab stop today, and the declaration has to say so or a .lfm cannot
-      stream the choice: the streamer omits a value that equals the declared
-      default, so a mismatched pair silently loses whatever the host wrote.
-      A chart with no keyboard behaviour that took focus on click would pull it
-      off whatever the user was editing and then do nothing with it. Being
-      WINDOWED is what makes focus possible later; it is not a reason to take it
-      now. When a brush or a keyboard tooltip lands, this flips to True
-      and the class moves to the focusable table -- which the tables in
-      test.focus.tabstop.pas will force somebody to decide rather than drift.
-      [Batch 62: dataZoom landed and did NOT flip it. Upstream's dataZoom is
-      pointer-only -- drag, click, brush, wheel -- with no key binding at all,
-      so the reason this line once gave for it no longer holds.] }
-    property TabStop default False;
-    property Visible;
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseMove;
-    property OnMouseUp;
-    property OnMouseWheel;
-    property OnResize;
     property OnGraphRoam: TTyGraphRoamEvent read FOnGraphRoam write FOnGraphRoam;
     property OnTreeExpandAndCollapse: TTyTreeToggleEvent read FOnTreeToggle write FOnTreeToggle;
     { EVERY chart mouse event, unfiltered -- the published face of ChartOn
