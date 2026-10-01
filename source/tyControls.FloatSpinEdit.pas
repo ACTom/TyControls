@@ -20,7 +20,7 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 type
   { A DECIMAL spin edit: the counterpart of LCL's TFloatSpinEdit (spin.pp:89).
 
-    WHY IT DESCENDS FROM TTyNumericEdit AND NOT FROM TTySpinEdit. LCL builds the family the
+    WHY IT DESCENDS FROM TTyCustomNumericEdit AND NOT FROM TTyCustomSpinEdit. LCL builds the family the
     other way up — TCustomSpinEdit = class(TCustomFloatSpinEdit) (spin.pp:146) — so the
     integer control is the descendant there and the same direction is not available to us:
     TTySpinEdit's three public virtual seams (GetLimitedValue / ValueToStr / StrToValue,
@@ -40,7 +40,7 @@ type
     '--field-button-width' metric — the same token the combo box, the combo edit and the
     integer spin edit read — and the arrows are the '--glyph-arrow-up' / '--glyph-arrow-down'
     overridable glyphs. }
-  TTyFloatSpinEdit = class(TTyNumericEdit)
+  TTyCustomFloatSpinEdit = class(TTyCustomNumericEdit)
   private
     FSpin: TTySpinButtons;
     FIncrement: Double;
@@ -87,7 +87,6 @@ type
       (a control too narrow to hold a button column). }
     function UpButtonRect(APPI: Integer): TRect;
     function DownButtonRect(APPI: Integer): TRect;
-  published
     { The step, as a Double — the property that makes this control worth having (LCL:
       spin.pp:80, same default 1, same `stored` rule so a .lfm does not carry the default).
 
@@ -126,6 +125,81 @@ type
     property UseThousands default False;
   end;
 
+  { TTyFloatSpinEdit publishes TTyCustomFloatSpinEdit's properties; everything lives in TTyCustomFloatSpinEdit. }
+  TTyFloatSpinEdit = class(TTyCustomFloatSpinEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
+    property Increment;
+    property EditorEnabled;
+  end;
+
 implementation
 
 function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
@@ -136,9 +210,9 @@ begin
   Result := TySquareGlyphBox(AHalf);
 end;
 
-{ TTyFloatSpinEdit }
+{ TTyCustomFloatSpinEdit }
 
-constructor TTyFloatSpinEdit.Create(AOwner: TComponent);
+constructor TTyCustomFloatSpinEdit.Create(AOwner: TComponent);
 begin
   { Before inherited, and freed after it in Destroy: anything the LCL routes here while the
     control is being built or torn down (a paint, a mouse-leave) finds it there. }
@@ -146,24 +220,24 @@ begin
   inherited Create(AOwner);
   FIncrement := 1;          // LCL DefIncrement (spin.pp:35)
   FEditorEnabled := True;   // LCL spin.pp:79
-  { Through the setter, because the field is private to TTyNumericEdit — and the setter also
+  { Through the setter, because the field is private to TTyCustomNumericEdit — and the setter also
     re-derives the display, so the initial text is the ungrouped form from the first paint. }
   UseThousands := False;
 end;
 
-destructor TTyFloatSpinEdit.Destroy;
+destructor TTyCustomFloatSpinEdit.Destroy;
 begin
   if FSpin <> nil then FSpin.MouseUp;   // first: a held button's repeat timer must not fire mid-teardown
   inherited Destroy;
   FreeAndNil(FSpin);
 end;
 
-function TTyFloatSpinEdit.IncrementStored: Boolean;
+function TTyCustomFloatSpinEdit.IncrementStored: Boolean;
 begin
   Result := not SameValue(FIncrement, Double(1));
 end;
 
-procedure TTyFloatSpinEdit.SetIncrement(const AValue: Double);
+procedure TTyCustomFloatSpinEdit.SetIncrement(const AValue: Double);
 begin
   if FIncrement = AValue then Exit;
   FIncrement := AValue;
@@ -171,13 +245,13 @@ begin
     only pushes the number at the widget (include/spinedit.inc:101-106). }
 end;
 
-procedure TTyFloatSpinEdit.SetEditorEnabled(const AValue: Boolean);
+procedure TTyCustomFloatSpinEdit.SetEditorEnabled(const AValue: Boolean);
 begin
   if FEditorEnabled = AValue then Exit;
   FEditorEnabled := AValue;
 end;
 
-function TTyFloatSpinEdit.KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
+function TTyCustomFloatSpinEdit.KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
 var
   Cmd: Boolean;
 begin
@@ -186,7 +260,7 @@ begin
     or (Cmd and ((AKey = VK_X) or (AKey = VK_V) or (AKey = VK_Z) or (AKey = VK_Y)));
 end;
 
-function TTyFloatSpinEdit.RightReserve(APPI: Integer): Integer;
+function TTyCustomFloatSpinEdit.RightReserve(APPI: Integer): Integer;
 begin
   { Read the metric LIVE, exactly as TTyComboEdit does, so the button column tracks the theme's
     density and lines up with a combo box's drop button and a spin edit's arrows. No constructor
@@ -194,7 +268,7 @@ begin
   Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
 end;
 
-function TTyFloatSpinEdit.UpButtonRect(APPI: Integer): TRect;
+function TTyCustomFloatSpinEdit.UpButtonRect(APPI: Integer): TRect;
 var
   Z: TRect;
 begin
@@ -207,7 +281,7 @@ begin
   Result := TySpinUpButtonRect(Z, APPI, Z.Right - Z.Left);
 end;
 
-function TTyFloatSpinEdit.DownButtonRect(APPI: Integer): TRect;
+function TTyCustomFloatSpinEdit.DownButtonRect(APPI: Integer): TRect;
 var
   Z: TRect;
 begin
@@ -216,7 +290,7 @@ begin
   Result := TySpinDownButtonRect(Z, APPI, Z.Right - Z.Left);
 end;
 
-procedure TTyFloatSpinEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
+procedure TTyCustomFloatSpinEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
   const AStyle: TTyStyleSet);
 var
   ppi, w, bw: Integer;
@@ -244,12 +318,12 @@ begin
   TyDrawGlyph(APainter, ActiveController, TyFloatSpinGlyphBox(dnR), tgTriangleDown, dnInk, 2, 1);
 end;
 
-procedure TTyFloatSpinEdit.SpinStep(ADir: Integer);
+procedure TTyCustomFloatSpinEdit.SpinStep(ADir: Integer);
 begin
   StepValue(ADir * FIncrement);   // StepValue itself refuses while ReadOnly
 end;
 
-function TTyFloatSpinEdit.SpinHitAt(X, Y: Integer): Integer;
+function TTyCustomFloatSpinEdit.SpinHitAt(X, Y: Integer): Integer;
 var
   ppi: Integer;
 begin
@@ -262,7 +336,7 @@ begin
     Result := 0;
 end;
 
-procedure TTyFloatSpinEdit.StepValue(ADelta: Double);
+procedure TTyCustomFloatSpinEdit.StepValue(ADelta: Double);
 begin
   { ReadOnly locks the value entirely — the arrows included. LCL agrees at the widgetset
     (win32wsspin.pp guards its UDN_DELTAPOS branch with the same flag), and so does the
@@ -275,13 +349,13 @@ begin
   Modified := True;
 end;
 
-function TTyFloatSpinEdit.FilterInsert(const AText: string): string;
+function TTyCustomFloatSpinEdit.FilterInsert(const AText: string): string;
 begin
   if not FEditorEnabled then Exit('');
   Result := inherited FilterInsert(AText);
 end;
 
-procedure TTyFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   { Rejected here rather than in FilterInsert because InjectKey deletes any selection BEFORE
     it consults the filter (Edit.pas:1858-1869): a locked editor must not be able to wipe a
@@ -294,7 +368,7 @@ begin
   inherited UTF8KeyPress(UTF8Key);
 end;
 
-procedure TTyFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   { Before inherited, for the same reason as above: TTyEdit's handler would already have
@@ -321,7 +395,7 @@ begin
   end;
 end;
 
-procedure TTyFloatSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomFloatSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   { A press on a button steps once and holds it, repeating until the release (TTySpinButtons).
@@ -342,26 +416,26 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-procedure TTyFloatSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomFloatSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if not Enabled then Exit;
   FSpin.MouseMove(SpinHitAt(X, Y), not ReadOnly);
 end;
 
-procedure TTyFloatSpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomFloatSpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   FSpin.MouseUp;
 end;
 
-procedure TTyFloatSpinEdit.MouseLeave;
+procedure TTyCustomFloatSpinEdit.MouseLeave;
 begin
   inherited MouseLeave;
   FSpin.MouseLeave;
 end;
 
-function TTyFloatSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomFloatSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if not Enabled then Exit(False);

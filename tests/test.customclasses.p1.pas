@@ -26,7 +26,8 @@ uses
   test.customclasses,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
   tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
-  tyControls.MaskEdit;
+  tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
+  tyControls.FloatSpinEdit;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -58,6 +59,11 @@ type
     { Task 4: edits I }
     procedure TestThirdEdit;
     procedure TestThirdMaskEdit;
+    { Task 5: edits II }
+    procedure TestThirdMemo;
+    procedure TestThirdUpDown;
+    procedure TestUpDownAssociationIsExclusiveAcrossThirdParties;
+    procedure TestFloatSpinEditKeepsItsUseThousandsDefault;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -100,6 +106,18 @@ type
     property Text;
   end;
 
+  TThirdMemo = class(TTyCustomMemo)
+  published
+    property Lines;
+    property ReadOnly;
+  end;
+
+  TThirdUpDown = class(TTyCustomUpDown)
+  published
+    property Associate;
+    property Position;
+  end;
+
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
 function StreamedText(AComp: TComponent): string;
 { Stream ASrc and read it back into ADst. }
@@ -129,6 +147,13 @@ type
   public
     procedure SetSpace(AValue: Char);
     function SpaceNow: Char;
+  end;
+
+  { The up-down's own properties are protected (TCustomUpDown keeps them protected). }
+  TP1UpDownCracker = class(TTyCustomUpDown)
+  public
+    procedure SetIncrementTo(AValue: Integer);
+    function IncrementNow: Integer;
   end;
 
   TP1ToolBar = class(TTyToolBar)
@@ -172,6 +197,16 @@ end;
 function TP1MaskCracker.SpaceNow: Char;
 begin
   Result := SpaceChar;
+end;
+
+procedure TP1UpDownCracker.SetIncrementTo(AValue: Integer);
+begin
+  Increment := AValue;
+end;
+
+function TP1UpDownCracker.IncrementNow: Integer;
+begin
+  Result := Increment;
 end;
 
 procedure TP1ToolBar.ForceLayout;
@@ -252,7 +287,8 @@ end;
 
 function HasProp(const AText, AName: string): Boolean;
 begin
-  Result := Pos(' ' + AName + ' = ', AText) > 0;
+  { `Name = value`, or `Name.Strings = (` for a TStrings property. }
+  Result := (Pos(' ' + AName + ' = ', AText) > 0) or (Pos(' ' + AName + '.', AText) > 0);
 end;
 
 { ------------------------------------------------------------------ fixture }
@@ -644,8 +680,115 @@ begin
   CheckFreshDefaults(TThirdMaskEdit, ['Mask', 'Text']);
 end;
 
+{ ------------------------------------------------------------------ Task 5: edits II }
+
+procedure TTyCustomClassesP1Test.TestThirdMemo;
+var
+  third, back: TThirdMemo;
+  own: TTyMemo;
+  c: TTyCustomMemo;
+begin
+  third := TThirdMemo.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdMemo, ['Lines', 'ReadOnly']);
+  third.Lines.Text := 'one' + LineEnding + 'two';
+  third.ReadOnly := True;
+  third.WantTabs := True;
+  CheckStreamText(third, ['Lines', 'ReadOnly'], 'WantTabs');
+  back := TThirdMemo.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Lines round-trip', 2, back.Lines.Count);
+  AssertEquals('T-c: line two', 'two', back.Lines[1]);
+  AssertTrue('T-c: ReadOnly round-trips', back.ReadOnly);
+  AssertFalse('T-c: the unpublished WantTabs stayed at its default', back.WantTabs);
+  own := TTyMemo.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdMemo, ['Lines', 'ReadOnly']);
+  c := third;
+  c.WantTabs := False;
+  AssertFalse('T-v: WantTabs is public through a TTyCustomMemo reference', third.WantTabs);
+end;
+
+{ Associate is a component reference and so is not part of the stream check here (a lone
+  up-down streamed as its own root has no owner to resolve it against); S4-2 below drives it. }
+procedure TTyCustomClassesP1Test.TestThirdUpDown;
+var
+  third, back: TThirdUpDown;
+  own: TTyUpDown;
+begin
+  third := TThirdUpDown.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdUpDown, ['Associate', 'Position']);
+  third.Position := 40;
+  TP1UpDownCracker(third).SetIncrementTo(5);
+  CheckStreamText(third, ['Position'], 'Increment');
+  back := TThirdUpDown.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Position round-trips', 40, back.Position);
+  AssertEquals('T-c: the unpublished Increment stayed at its default', 1,
+    TP1UpDownCracker(back).IncrementNow);
+  own := TTyUpDown.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdUpDown, ['Associate', 'Position']);
+  { T-v: everything the up-down adds is protected (TCustomUpDown), hence the cracker. }
+end;
+
+{ S4-2. One field, one stepper: a second up-down that tries to drive a field a sibling already
+  drives is refused -- and a third party's up-down is a sibling like any other. }
+procedure TTyCustomClassesP1Test.TestUpDownAssociationIsExclusiveAcrossThirdParties;
+var
+  ed: TTyEdit;
+  own: TTyUpDown;
+  third: TThirdUpDown;
+  raised: Boolean;
+begin
+  ed := TTyEdit.Create(FForm);
+  ed.Name := 'Field';
+  ed.Parent := FForm;
+  own := TTyUpDown.Create(FForm);
+  own.Name := 'OwnUpDown';
+  own.Parent := FForm;
+  third := TThirdUpDown.Create(FForm);
+  third.Name := 'ThirdUpDown';
+  third.Parent := FForm;
+  own.Associate := ed;
+  raised := False;
+  try
+    third.Associate := ed;
+  except
+    raised := True;
+  end;
+  AssertTrue('a third-party up-down cannot take a field the library''s already drives', raised);
+  own.Associate := nil;
+  third.Associate := ed;
+  raised := False;
+  try
+    own.Associate := ed;
+  except
+    raised := True;
+  end;
+  AssertTrue('and the library''s cannot take one the third party drives', raised);
+end;
+
+{ TTyFloatSpinEdit groups no thousands by default although the numeric edit it descends from
+  does. The `default False` redeclaration lives on TTyCustomFloatSpinEdit, so the published
+  class reads it -- and so does any descendant of the custom class. }
+procedure TTyCustomClassesP1Test.TestFloatSpinEditKeepsItsUseThousandsDefault;
+var
+  e: TTyFloatSpinEdit;
+begin
+  AssertEquals('precondition: the numeric edit declares True', 1,
+    GetPropInfo(TTyNumericEdit, 'UseThousands')^.Default);
+  AssertEquals('the float spin edit declares False', 0,
+    GetPropInfo(TTyFloatSpinEdit, 'UseThousands')^.Default);
+  e := TTyFloatSpinEdit.Create(FForm);
+  AssertFalse('and its constructor agrees', e.UseThousands);
+end;
+
 initialization
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
-    TThirdMaskEdit]);
+    TThirdMaskEdit, TThirdMemo, TThirdUpDown]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

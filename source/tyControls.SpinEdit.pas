@@ -57,7 +57,7 @@ type
     property RepeatTimer: TTimer read FRepeatTimer;
   end;
 
-  TTySpinEdit = class(TTyCustomControl)
+  TTyCustomSpinEdit = class(TTyCustomControl)
   private
     FSpin: TTySpinButtons;
     FMinValue, FMaxValue, FValue, FIncrement: Integer;
@@ -174,16 +174,57 @@ type
       False in the resulting OnChange (include/spinedit.inc:38-42,163-165) -- so a host
       can drive enable-Save / prompt-on-close off it. }
     property Modified: Boolean read FModified write FModified;
+    property TabStop default True;
+    property MinValue: Integer read FMinValue write SetMinValue default 0;
+    { LCL's DefMaxValue is 0 (spin.pp:37) and Max <= Min means "no limit", so a freshly
+      dropped spin edit accepts any integer. Ours shipped 100, which turned the same
+      fresh control into a silent 0..100 clamp: type 250, get 100, no diagnostic. The
+      clamp rule itself was already LCL's; only the shipped default disagreed.
+      BREAKING: a form that relied on the old default now has no ceiling. }
+    property MaxValue: Integer read FMaxValue write SetMaxValue default 0;
+    property Value: Integer read FValue write SetValue default 0;
+    property Increment: Integer read FIncrement write SetIncrement default 1;
+    // ReadOnly locks the value entirely (LCL TSpinEdit semantics): it blocks
+    // both inline text editing AND +/- stepping (buttons/arrows/wheel).
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    { The other half of the pair LCL keeps ORTHOGONAL to ReadOnly (spin.pp:79, default
+      True): False makes the TEXT non-typeable while the arrows keep stepping -- the
+      standard way to force a value onto a legal grid (multiples of 5, even numbers)
+      without turning the control inert. ReadOnly locks the value entirely; this locks
+      only the keyboard. Both blocking typing is the same on the Win32 widgetset
+      (win32wsspin.pp:409 ORs them into EM_SETREADONLY). }
+    property EditorEnabled: Boolean read FEditorEnabled write SetEditorEnabled default True;
+    // Default taLeftJustify == the alignment RenderTo used before this property
+    // existed, so existing pixel tests stay unchanged.
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    // 0 == unlimited; caps the inline edit buffer length in codepoints on insert.
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
+    { Show the field BLANK instead of a number -- the "nothing entered yet / mixed
+      selection" state a filter form or a property-inspector row needs, and which 0
+      cannot honestly stand in for. LCL: spin.pp:84. Like LCL's, this is a state the
+      program sets and real input clears (include/spinedit.inc:76): typing a digit,
+      deleting one, or stepping puts a number back. }
+    property ValueEmpty: Boolean read FValueEmpty write SetValueEmpty default False;
+    { Placeholder drawn in the muted 'TyTextHint' ink while the field is blank -- the
+      same token and the same paint rule the sibling TTyEdit already uses. LCL:
+      TCustomEdit.TextHint, stdctrls.pp:879. }
+    property TextHint: TCaption read FTextHint write SetTextHint;
+    { Text changed (see DoChange): every keystroke, delete, step, clamp and Value write. }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { The committed Value moved (see DoValueChange). }
+    property OnValueChange: TNotifyEvent read FOnValueChange write FOnValueChange;
+  end;
+
+  { TTySpinEdit publishes TTyCustomSpinEdit's properties; everything lives in TTyCustomSpinEdit. }
+  TTySpinEdit = class(TTyCustomSpinEdit)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -227,44 +268,18 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property MinValue: Integer read FMinValue write SetMinValue default 0;
-    { LCL's DefMaxValue is 0 (spin.pp:37) and Max <= Min means "no limit", so a freshly
-      dropped spin edit accepts any integer. Ours shipped 100, which turned the same
-      fresh control into a silent 0..100 clamp: type 250, get 100, no diagnostic. The
-      clamp rule itself was already LCL's; only the shipped default disagreed.
-      BREAKING: a form that relied on the old default now has no ceiling. }
-    property MaxValue: Integer read FMaxValue write SetMaxValue default 0;
-    property Value: Integer read FValue write SetValue default 0;
-    property Increment: Integer read FIncrement write SetIncrement default 1;
-    // ReadOnly locks the value entirely (LCL TSpinEdit semantics): it blocks
-    // both inline text editing AND +/- stepping (buttons/arrows/wheel).
-    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
-    { The other half of the pair LCL keeps ORTHOGONAL to ReadOnly (spin.pp:79, default
-      True): False makes the TEXT non-typeable while the arrows keep stepping -- the
-      standard way to force a value onto a legal grid (multiples of 5, even numbers)
-      without turning the control inert. ReadOnly locks the value entirely; this locks
-      only the keyboard. Both blocking typing is the same on the Win32 widgetset
-      (win32wsspin.pp:409 ORs them into EM_SETREADONLY). }
-    property EditorEnabled: Boolean read FEditorEnabled write SetEditorEnabled default True;
-    // Default taLeftJustify == the alignment RenderTo used before this property
-    // existed, so existing pixel tests stay unchanged.
-    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    // 0 == unlimited; caps the inline edit buffer length in codepoints on insert.
-    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
-    { Show the field BLANK instead of a number -- the "nothing entered yet / mixed
-      selection" state a filter form or a property-inspector row needs, and which 0
-      cannot honestly stand in for. LCL: spin.pp:84. Like LCL's, this is a state the
-      program sets and real input clears (include/spinedit.inc:76): typing a digit,
-      deleting one, or stepping puts a number back. }
-    property ValueEmpty: Boolean read FValueEmpty write SetValueEmpty default False;
-    { Placeholder drawn in the muted 'TyTextHint' ink while the field is blank -- the
-      same token and the same paint rule the sibling TTyEdit already uses. LCL:
-      TCustomEdit.TextHint, stdctrls.pp:879. }
-    property TextHint: TCaption read FTextHint write SetTextHint;
-    { Text changed (see DoChange): every keystroke, delete, step, clamp and Value write. }
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    { The committed Value moved (see DoValueChange). }
-    property OnValueChange: TNotifyEvent read FOnValueChange write FOnValueChange;
+    property MinValue;
+    property MaxValue;
+    property Value;
+    property Increment;
+    property ReadOnly;
+    property EditorEnabled;
+    property Alignment;
+    property MaxLength;
+    property ValueEmpty;
+    property TextHint;
+    property OnChange;
+    property OnValueChange;
     property Align;
     property Anchors;
   end;
@@ -480,9 +495,9 @@ begin
   Result := Rect(X0, HalfY, ALocal.Right, ALocal.Bottom);
 end;
 
-{ TTySpinEdit }
+{ TTyCustomSpinEdit }
 
-constructor TTySpinEdit.Create(AOwner: TComponent);
+constructor TTyCustomSpinEdit.Create(AOwner: TComponent);
 begin
   { Before inherited, and freed after it in Destroy: anything the LCL routes here while the
     control is being built or torn down (a paint, a mouse-leave) finds it there. }
@@ -508,7 +523,7 @@ begin
   SyncBufferToValue;
 end;
 
-destructor TTySpinEdit.Destroy;
+destructor TTyCustomSpinEdit.Destroy;
 begin
   // Stop the timers first so their OnTimer callbacks can never fire mid-teardown.
   if FSpin <> nil then FSpin.MouseUp;   // ends a held press, and the repeat timer with it
@@ -520,7 +535,7 @@ end;
 
 // ---- Blinking caret (Task 10) ----
 
-procedure TTySpinEdit.EnsureBlinkTimer;
+procedure TTyCustomSpinEdit.EnsureBlinkTimer;
 begin
   if FBlinkTimer = nil then
   begin
@@ -531,20 +546,20 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.HandleBlink(Sender: TObject);
+procedure TTyCustomSpinEdit.HandleBlink(Sender: TObject);
 begin
   Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
   FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
   Invalidate;
 end;
 
-procedure TTySpinEdit.ResetCaretBlink;
+procedure TTyCustomSpinEdit.ResetCaretBlink;
 begin
   FCaretVisible := True;
   FBlinkElapsedMs := 0;
 end;
 
-procedure TTySpinEdit.DoEnter;
+procedure TTyCustomSpinEdit.DoEnter;
 begin
   inherited DoEnter;
   ResetCaretBlink;
@@ -555,22 +570,22 @@ begin
   end;
 end;
 
-function TTySpinEdit.GetStyleTypeKey: string;
+function TTyCustomSpinEdit.GetStyleTypeKey: string;
 begin
   Result := 'TySpinEdit';
 end;
 
-procedure TTySpinEdit.DoChange;
+procedure TTyCustomSpinEdit.DoChange;
 begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTySpinEdit.DoValueChange;
+procedure TTyCustomSpinEdit.DoValueChange;
 begin
   if Assigned(FOnValueChange) then FOnValueChange(Self);
 end;
 
-function TTySpinEdit.GetLimitedValue(const AValue: Integer): Integer;
+function TTyCustomSpinEdit.GetLimitedValue(const AValue: Integer): Integer;
 begin
   Result := AValue;
   { An empty range (Max <= Min) means "no limit", not "pin everything to Min". With the
@@ -584,19 +599,19 @@ begin
   end;
 end;
 
-function TTySpinEdit.ValueToStr(const AValue: Integer): string;
+function TTyCustomSpinEdit.ValueToStr(const AValue: Integer): string;
 begin
   Result := IntToStr(GetLimitedValue(AValue));
 end;
 
-function TTySpinEdit.StrToValue(const S: string): Integer;
+function TTyCustomSpinEdit.StrToValue(const S: string): Integer;
 begin
   // Unparseable text keeps the current value, as LCL's StrToValue does
   // (include/spinedit.inc:240-247), and the clamp runs on the way in.
   Result := GetLimitedValue(StrToIntDef(Trim(S), FValue));
 end;
 
-procedure TTySpinEdit.SetValue(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetValue(const AValue: Integer);
 var
   Clamped: Integer;
   Moved: Boolean;
@@ -619,13 +634,13 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.StepValue(ADelta: Integer);
+procedure TTyCustomSpinEdit.StepValue(ADelta: Integer);
 begin
   Value := FValue + ADelta;
   FModified := True;          // the arrows are the user editing, exactly like typing
 end;
 
-procedure TTySpinEdit.SpinStep(ADir: Integer);
+procedure TTyCustomSpinEdit.SpinStep(ADir: Integer);
 begin
   { A held button repeats from a timer, and ReadOnly may have been switched on meanwhile;
     every other route checks it before calling StepValue, so this one does too. }
@@ -633,7 +648,7 @@ begin
   StepValue(ADir * FIncrement);
 end;
 
-function TTySpinEdit.SpinHitAt(X, Y: Integer): Integer;
+function TTyCustomSpinEdit.SpinHitAt(X, Y: Integer): Integer;
 var
   ppi, bw: Integer;
 begin
@@ -647,7 +662,7 @@ begin
     Result := 0;
 end;
 
-procedure TTySpinEdit.SetMinValue(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetMinValue(const AValue: Integer);
 begin
   if FMinValue = AValue then Exit;
   FMinValue := AValue;
@@ -658,14 +673,14 @@ begin
   SetValue(FValue);
 end;
 
-procedure TTySpinEdit.SetMaxValue(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetMaxValue(const AValue: Integer);
 begin
   if FMaxValue = AValue then Exit;
   FMaxValue := AValue;
   SetValue(FValue);           // same re-clamp + notify path as SetMinValue
 end;
 
-procedure TTySpinEdit.SetIncrement(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetIncrement(const AValue: Integer);
 begin
   if FIncrement = AValue then Exit;
   if AValue < 1 then
@@ -675,21 +690,21 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetReadOnly(const AValue: Boolean);
+procedure TTyCustomSpinEdit.SetReadOnly(const AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetEditorEnabled(const AValue: Boolean);
+procedure TTyCustomSpinEdit.SetEditorEnabled(const AValue: Boolean);
 begin
   if FEditorEnabled = AValue then Exit;
   FEditorEnabled := AValue;
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetValueEmpty(const AValue: Boolean);
+procedure TTyCustomSpinEdit.SetValueEmpty(const AValue: Boolean);
 begin
   if FValueEmpty = AValue then Exit;
   FValueEmpty := AValue;
@@ -697,14 +712,14 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetTextHint(const AValue: TCaption);
+procedure TTyCustomSpinEdit.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetCaretPos(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetCaretPos(const AValue: Integer);
 var
   V, L: Integer;
 begin
@@ -718,12 +733,12 @@ begin
   Invalidate;
 end;
 
-function TTySpinEdit.RealGetText: TCaption;
+function TTyCustomSpinEdit.RealGetText: TCaption;
 begin
   Result := FEditText;
 end;
 
-procedure TTySpinEdit.RealSetText(const AValue: TCaption);
+procedure TTyCustomSpinEdit.RealSetText(const AValue: TCaption);
 var
   Parsed: Integer;
 begin
@@ -745,7 +760,7 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomSpinEdit.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -766,7 +781,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTySpinEdit.SetAlignment(const AValue: TAlignment);
+procedure TTyCustomSpinEdit.SetAlignment(const AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
@@ -774,7 +789,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetMaxLength(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetMaxLength(const AValue: Integer);
 var
   V: Integer;
 begin
@@ -785,7 +800,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SyncBufferToValue;
+procedure TTyCustomSpinEdit.SyncBufferToValue;
 var
   Old: string;
 begin
@@ -801,7 +816,7 @@ begin
   if FEditText <> Old then DoChange;
 end;
 
-function TTySpinEdit.AlignOffset(APPI: Integer): Integer;
+function TTyCustomSpinEdit.AlignOffset(APPI: Integer): Integer;
 { Horizontal shift applied to the text (and caret) so the caret tracks the
   DrawText H-alignment. 0 for taLeftJustify, or the slack inside the text rect
   for center/right. Mirrors RenderTo's TextR (Padding.Left .. Right-BtnW-Padding.Right). }
@@ -834,7 +849,7 @@ begin
   end;
 end;
 
-function TTySpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
+function TTyCustomSpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   EffSize: Integer;
@@ -849,7 +864,7 @@ begin
   Result := Result + FMeasureBmp.TextSize(UTF8Copy(FEditText, 1, AIdx)).cx;
 end;
 
-procedure TTySpinEdit.CommitEdit;
+procedure TTyCustomSpinEdit.CommitEdit;
 var
   v: Integer;
   WasModified: Boolean;
@@ -864,7 +879,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.InsertEditChar(const C: TUTF8Char);
+procedure TTyCustomSpinEdit.InsertEditChar(const C: TUTF8Char);
 var
   Before, After: string;
   L: Integer;
@@ -889,7 +904,7 @@ begin
   DoChange;                   // a typed character is a text change (the path that used to be silent)
 end;
 
-procedure TTySpinEdit.EditBackspace;
+procedure TTyCustomSpinEdit.EditBackspace;
 var
   Before, After: string;
   L: Integer;
@@ -907,7 +922,7 @@ begin
   DoChange;                   // a deleted character is a text change too
 end;
 
-procedure TTySpinEdit.EditDelete;
+procedure TTyCustomSpinEdit.EditDelete;
 var
   Before, After: string;
   L: Integer;
@@ -924,7 +939,7 @@ begin
   DoChange;
 end;
 
-procedure TTySpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomSpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -981,12 +996,12 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.Paint;
+procedure TTyCustomSpinEdit.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTySpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   if not Enabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
@@ -994,7 +1009,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -1020,7 +1035,7 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.DoExit;
+procedure TTyCustomSpinEdit.DoExit;
 begin
   inherited DoExit;
   CommitEdit;
@@ -1029,7 +1044,7 @@ begin
   Invalidate;
 end;
 
-function TTySpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if not Enabled then Exit(False);
@@ -1048,7 +1063,7 @@ begin
   Result := True;
 end;
 
-procedure TTySpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -1064,20 +1079,20 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if not Enabled then Exit;
   FSpin.MouseMove(SpinHitAt(X, Y), not FReadOnly);
 end;
 
-procedure TTySpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   FSpin.MouseUp;
 end;
 
-procedure TTySpinEdit.MouseLeave;
+procedure TTyCustomSpinEdit.MouseLeave;
 begin
   inherited MouseLeave;
   FSpin.MouseLeave;

@@ -83,7 +83,7 @@ type
     auto-repeat (an initial delay, then fast). Vertical (default) stacks up-over-down;
     horizontal places down-left, up-right. Reuses the 'TyButton' theming (no extra
     .tycss); a leaf TTyGraphicControl so it needs no backdrop fill. }
-  TTyUpDown = class(TTyGraphicControl)
+  TTyCustomUpDown = class(TTyGraphicControl)
   private
     FMin, FMax, FPosition, FIncrement: Integer;
     FOrientation: TTyUpDownOrientation;
@@ -149,48 +149,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
-    property Enabled;
-    property Visible;
-    property Font;
-    property ShowHint;
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    property AutoSize;
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property ParentShowHint;
-    property Action;
-    property OnPaint;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
+  protected
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
     { Reading this READS THROUGH to the associated control when there is one, because while
@@ -274,6 +233,65 @@ type
     property OnChanging: TTyUpDownChangingEvent read FOnChanging write FOnChanging;
     { Refuse a user-driven step, knowing where it would land; see TTyUpDownChangingEventEx. }
     property OnChangingEx: TTyUpDownChangingEventEx read FOnChangingEx write FOnChangingEx;
+  end;
+
+  { TTyUpDown publishes TTyCustomUpDown's properties; everything lives in TTyCustomUpDown. }
+  TTyUpDown = class(TTyCustomUpDown)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Position;
+    property Increment;
+    property Orientation;
+    property Wrap;
+    property MinRepeatInterval;
+    property Associate;
+    property AlignButton;
+    property ArrowKeys;
+    property Thousands;
+    property OnChange;
+    property OnArrowClick;
+    property OnChanging;
+    property OnChangingEx;
     property Align;
     property Anchors;
   end;
@@ -402,9 +420,9 @@ begin
   Result := Rect(L, T, L + W, T + H);
 end;
 
-{ TTyUpDown }
+{ TTyCustomUpDown }
 
-constructor TTyUpDown.Create(AOwner: TComponent);
+constructor TTyCustomUpDown.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMin := 0;
@@ -425,14 +443,14 @@ begin
   Height := TyDensityHeight(ActiveController, 34);
 end;
 
-destructor TTyUpDown.Destroy;
+destructor TTyCustomUpDown.Destroy;
 begin
   DetachAssociate;            // unhook before anything of ours can be called back into
   FreeAndNil(FRepeatTimer);   // stop the callback before teardown
   inherited Destroy;
 end;
 
-function TTyUpDown.GetStyleTypeKey: string;
+function TTyCustomUpDown.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyButton': two arrow halves split by a hairline divider is not one button face.
     Added to 'TyButton's rule block as an extra selector, so every resolved value is
@@ -440,19 +458,19 @@ begin
   Result := 'TyUpDown';
 end;
 
-function TTyUpDown.IsVertical: Boolean;
+function TTyCustomUpDown.IsVertical: Boolean;
 begin
   Result := FOrientation = udoVertical;
 end;
 
-function TTyUpDown.CanChange(ANewValue: Integer; ADirection: TTyUpDownDirection): Boolean;
+function TTyCustomUpDown.CanChange(ANewValue: Integer; ADirection: TTyUpDownDirection): Boolean;
 begin
   Result := True;
   if Assigned(FOnChanging) then FOnChanging(Self, Result);
   if Assigned(FOnChangingEx) then FOnChangingEx(Self, Result, ANewValue, ADirection);
 end;
 
-procedure TTyUpDown.Step(ADir: Integer);
+procedure TTyCustomUpDown.Step(ADir: Integer);
 var
   v, base: Integer;
   dir: TTyUpDownDirection;
@@ -488,7 +506,7 @@ begin
   end;
 end;
 
-procedure TTyUpDown.SetMin(const AValue: Integer);
+procedure TTyCustomUpDown.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -496,7 +514,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyUpDown.SetMax(const AValue: Integer);
+procedure TTyCustomUpDown.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -504,7 +522,7 @@ begin
   Invalidate;
 end;
 
-function TTyUpDown.GetPosition: Integer;
+function TTyCustomUpDown.GetPosition: Integer;
 var
   v: Integer;
 begin
@@ -530,7 +548,7 @@ begin
   Result := FPosition;
 end;
 
-procedure TTyUpDown.SetPosition(const AValue: Integer);
+procedure TTyCustomUpDown.SetPosition(const AValue: Integer);
 var v: Integer;
 begin
   v := TyUpDownClamp(AValue, FMin, FMax, False);   // direct set never wraps
@@ -551,26 +569,26 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyUpDown.SetIncrement(const AValue: Integer);
+procedure TTyCustomUpDown.SetIncrement(const AValue: Integer);
 begin
   if FIncrement = AValue then Exit;
   FIncrement := Math.Max(1, AValue);
 end;
 
-procedure TTyUpDown.SetOrientation(const AValue: TTyUpDownOrientation);
+procedure TTyCustomUpDown.SetOrientation(const AValue: TTyUpDownOrientation);
 begin
   if FOrientation = AValue then Exit;
   FOrientation := AValue;
   Invalidate;
 end;
 
-procedure TTyUpDown.SetWrap(const AValue: Boolean);
+procedure TTyCustomUpDown.SetWrap(const AValue: Boolean);
 begin
   if FWrap = AValue then Exit;
   FWrap := AValue;
 end;
 
-procedure TTyUpDown.SetMinRepeatInterval(const AValue: Byte);
+procedure TTyCustomUpDown.SetMinRepeatInterval(const AValue: Byte);
 begin
   if FMinRepeatInterval = AValue then Exit;
   FMinRepeatInterval := AValue;
@@ -584,7 +602,7 @@ end;
 
 // ---- Associate ----
 
-function TTyUpDown.ThousandSepChar: Char;
+function TTyCustomUpDown.ThousandSepChar: Char;
 begin
   Result := DefaultFormatSettings.ThousandSeparator;
   { A locale whose group character is NUL -- or, absurdly but legally, a digit or the minus
@@ -594,7 +612,7 @@ begin
   if (Result = #0) or (Result in ['0'..'9']) or (Result = '-') then Result := ',';
 end;
 
-function TTyUpDown.AssociateTextProp: PPropInfo;
+function TTyCustomUpDown.AssociateTextProp: PPropInfo;
 begin
   { The published `Text` of a TTyEdit / TTyMemo / LCL TEdit, when there is one. Nil sends
     the caller to Caption instead. The kind check matters: `Text` is only the right target
@@ -608,7 +626,7 @@ begin
     Result := nil;
 end;
 
-function TTyUpDown.GetAssociateText: string;
+function TTyCustomUpDown.GetAssociateText: string;
 var
   pi: PPropInfo;
 begin
@@ -619,7 +637,7 @@ begin
   else Result := FAssociate.Caption;
 end;
 
-procedure TTyUpDown.SetAssociateText(const AValue: string);
+procedure TTyCustomUpDown.SetAssociateText(const AValue: string);
 var
   pi: PPropInfo;
 begin
@@ -629,7 +647,7 @@ begin
   else FAssociate.Caption := AValue;
 end;
 
-procedure TTyUpDown.WriteAssociateText;
+procedure TTyCustomUpDown.WriteAssociateText;
 begin
   if FAssociate = nil then Exit;
   { Not at design time: the field shows whatever the developer typed into the Object
@@ -646,7 +664,7 @@ begin
   end;
 end;
 
-procedure TTyUpDown.DetachAssociate;
+procedure TTyCustomUpDown.DetachAssociate;
 begin
   if FAssociate = nil then Exit;
   FAssociate.RemoveAllHandlersOfObject(Self);
@@ -654,7 +672,7 @@ begin
   FAssociate := nil;
 end;
 
-procedure TTyUpDown.SetAssociate(const AValue: TWinControl);
+procedure TTyCustomUpDown.SetAssociate(const AValue: TWinControl);
 var
   i: Integer;
   other: TControl;
@@ -669,8 +687,9 @@ begin
     for i := 0 to Parent.ControlCount - 1 do
     begin
       other := Parent.Controls[i];
-      if (other <> Self) and (other is TTyUpDown)
-         and (TTyUpDown(other).FAssociate = AValue) then
+      { Any up-down counts, a third-party TTyCustomUpDown descendant too. }
+      if (other <> Self) and (other is TTyCustomUpDown)
+         and (TTyCustomUpDown(other).FAssociate = AValue) then
         raise Exception.CreateFmt(rsTyUpDownAlreadyAssociated, [AValue.Name, other.Name]);
     end;
   DetachAssociate;
@@ -693,7 +712,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyUpDown.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomUpDown.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FAssociate) then
@@ -706,21 +725,21 @@ begin
   end;
 end;
 
-procedure TTyUpDown.SetAlignButton(const AValue: TTyUpDownAlignButton);
+procedure TTyCustomUpDown.SetAlignButton(const AValue: TTyUpDownAlignButton);
 begin
   if FAlignButton = AValue then Exit;
   FAlignButton := AValue;
   UpdateAlignButtonPos;
 end;
 
-procedure TTyUpDown.SetThousands(const AValue: Boolean);
+procedure TTyCustomUpDown.SetThousands(const AValue: Boolean);
 begin
   if FThousands = AValue then Exit;
   FThousands := AValue;
   WriteAssociateText;   // a display switch has to change the display; LCL's setter does not
 end;
 
-procedure TTyUpDown.UpdateAlignButtonPos;
+procedure TTyCustomUpDown.UpdateAlignButtonPos;
 var
   R: TRect;
 begin
@@ -733,7 +752,7 @@ begin
   SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
 end;
 
-procedure TTyUpDown.AssociateKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomUpDown.AssociateKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   if not FArrowKeys then Exit;
   { Bare arrow only. With a modifier the key belongs to the field -- Shift+Up extends a
@@ -761,7 +780,7 @@ begin
   end;
 end;
 
-procedure TTyUpDown.AssociateMouseWheel(Sender: TObject; Shift: TShiftState;
+procedure TTyCustomUpDown.AssociateMouseWheel(Sender: TObject; Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
 begin
   { Not gated on ArrowKeys -- LCL does not gate it either (customupdown.inc:475-492), and a
@@ -771,29 +790,29 @@ begin
   else if WheelDelta < 0 then begin Step(-1); Handled := True; end;
 end;
 
-procedure TTyUpDown.AssociateBoundsChanged(Sender: TObject);
+procedure TTyCustomUpDown.AssociateBoundsChanged(Sender: TObject);
 begin
   UpdateAlignButtonPos;
 end;
 
-procedure TTyUpDown.AssociateEnabledChanged(Sender: TObject);
+procedure TTyCustomUpDown.AssociateEnabledChanged(Sender: TObject);
 begin
   if FAssociate <> nil then Enabled := FAssociate.Enabled;
 end;
 
-procedure TTyUpDown.AssociateVisibleChanged(Sender: TObject);
+procedure TTyCustomUpDown.AssociateVisibleChanged(Sender: TObject);
 begin
   if FAssociate <> nil then Visible := FAssociate.Visible;
 end;
 
-procedure TTyUpDown.SetHot(AValue: Integer);
+procedure TTyCustomUpDown.SetHot(AValue: Integer);
 begin
   if FHot = AValue then Exit;
   FHot := AValue;
   Invalidate;
 end;
 
-procedure TTyUpDown.EnsureRepeatTimer;
+procedure TTyCustomUpDown.EnsureRepeatTimer;
 begin
   if FRepeatTimer = nil then
   begin
@@ -803,7 +822,7 @@ begin
   end;
 end;
 
-procedure TTyUpDown.HandleRepeat(Sender: TObject);
+procedure TTyCustomUpDown.HandleRepeat(Sender: TObject);
 begin
   if FHeldDir = 0 then begin StopRepeat; Exit; end;
   if not FRepeatFast then
@@ -814,13 +833,13 @@ begin
   Step(FHeldDir);
 end;
 
-procedure TTyUpDown.StopRepeat;
+procedure TTyCustomUpDown.StopRepeat;
 begin
   if FRepeatTimer <> nil then FRepeatTimer.Enabled := False;
   FRepeatFast := False;
 end;
 
-procedure TTyUpDown.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomUpDown.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var hit: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
@@ -836,20 +855,20 @@ begin
   Invalidate;
 end;
 
-procedure TTyUpDown.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomUpDown.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   SetHot(TyUpDownHit(X, Y, ClientWidth, ClientHeight, IsVertical));
 end;
 
-procedure TTyUpDown.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomUpDown.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   StopRepeat;
   if FHeldDir <> 0 then begin FHeldDir := 0; Invalidate; end;
 end;
 
-procedure TTyUpDown.MouseLeave;
+procedure TTyCustomUpDown.MouseLeave;
 begin
   inherited MouseLeave;
   StopRepeat;
@@ -857,7 +876,7 @@ begin
   SetHot(0);
 end;
 
-procedure TTyUpDown.Paint;
+procedure TTyCustomUpDown.Paint;
 var
   P: TTyPainter;
   S, halfS: TTyStyleSet;
