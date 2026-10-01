@@ -218,7 +218,16 @@
 
 ## 截图
 
-1 期不截图。2 期两张（主控截，放 `docs/superpowers/plans/2026-10-01-themebuilder-acceptance-shots/`）：`p2-seeds-win32.png`（种子页，win11 主题，对应第 30、33 项）、`p2-export-win32.png`（导出对话框，对应第 43、44 项）。3 期三张（主控截，同一目录）：`p3-ai-settings-win32.png`（AI 设置，对应第 54 项）；做了真实生成的话再截 `p3-ai-page-win32.png`（AI 页带输出，第 57 项）与 `p3-compare-win32.png`（对比窗口，第 57、69 项），没做就留给验收。
+1 期不截图。2、3 期的图在 `docs/superpowers/plans/2026-10-01-themebuilder-acceptance-shots/`，由 `tools/themebuilder-shots` 在进程里建好工具的窗口后截出（窗口在屏幕外，`PrintWindow` 只画这一个窗口；Win32、96 PPI、英文界面、工具默认外观）。每张怎么来、看什么、怎么重新生成，见该目录的 `index.md`。
+
+- `p2-seeds-win32.png`：种子页，win11 主题（第 30、33 项）。
+- `p2-export-win32.png`：导出对话框，green 主题：文件列表里有 `assets/background.jpg`，zip 灰掉并写了原因（第 43、44 项）。
+- `p3-ai-settings-win32.png`：AI 设置，五种预置都加上、选中 Anthropic，密钥是假的 `sk-test-0000`（第 54 项）。
+- `p3-ai-settings-ollama-win32.png`：同一窗口选中本机预置，出现 Ollama 上下文的提示（第 54 项）。
+- `p3-ai-page-win32.png`：AI 页带输出（第 57 项）。**假后端**：测试用的脚本模型给一段固定回答，没连任何服务。
+- `p3-compare-win32.png`：对比窗口（第 57、69 项）。**假后端**的回答，同上。
+
+真实服务的生成（第 57 项），以及 GTK2、Cocoa、HiDPI 下的样子，仍留给验收。
 
 ## 发现问题怎么报
 
