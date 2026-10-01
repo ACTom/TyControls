@@ -2071,3 +2071,10 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 - `TTyIconFont.Version: Integer` 遮住库版本 `Version: string` 的写法（见 Task 1 签收），已按 `ChangeStamp` 先例改名。
 - 计划 C-4 列的 `test.parity.buttons` / `test.parity` 行号是声明成派生类型的变量，原本就编得过；真正要改的在 `test.trailingzone`、`test.combohint`、`test.parity.combo` 的 access 类，编译器报出来才补上。
 ### 遗留
+
+#### 第 0、1 期 · 主控已做（4a870bc5 之上）
+
+- `lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`：0 错；全部 49 个 examples：0 失败。
+- `check-lfm-props.py`：通过（0 误报）；`check-example-po.py`：0 问题。
+- 冒烟：逐个启动 49 个示例并枚举可见窗口类，全部只有主窗体、没有 `#32770` 错误框（`scripts/smoke-launch-examples.ps1` 不认错误框，主控另用按窗口类判断的脚本）。
+- 已通知 AdvChart 会话摘取 `e4f3c648`；已告知 3.0 会话拆分后的移植规矩。审查用的临时工作树 `split-mut` 已删除。
