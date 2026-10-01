@@ -8,8 +8,8 @@ uses
 
 type
   { A currency edit with a trailing button that drops down a TTyCalculator; the calculator's
-    result is written back into the edit. Everything else is TTyCurrencyEdit (currency symbol
-    on the blurred display + grouped formatting). Reuses TTyCalcDropdown + the shared trailing
+    result is written back into the edit. Everything else is the currency edit's
+    (TTyCustomCurrencyEdit: currency symbol on the blurred display + grouped formatting). Reuses TTyCalcDropdown + the shared trailing
     button from tyControls.CalcEdit. }
   TTyCustomCalcCurrencyEdit = class(TTyCustomCurrencyEdit)
   private

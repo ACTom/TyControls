@@ -546,7 +546,8 @@ begin
   // The popup is created by the combo (Create(Self)), so its owner is the control whose
   // swatch geometry and pseudo-row colours the rows must match. Without this the dropdown
   // drew clNone/clDefault as raw sentinel values and ignored ColorRectWidth entirely.
-  { Any colour box, the colour combo (a TTyCustomColorBox descendant, not a TTyColorBox) too. }
+  { Any colour box, a third party's TTyCustomColorBox descendant too. (TTyColorComboBox never
+    comes here: it drops a list of its own, TTyColorMorePopupList.) }
   if Owner is TTyCustomColorBox then
   begin
     host := TTyCustomColorBox(Owner);

@@ -27,8 +27,8 @@ type
   end;
 
   { A numeric edit with a trailing button that drops down a TTyCalculator; the calculator's
-    result is written back into the edit. Everything else is TTyNumericEdit (input filter +
-    grouped-on-blur formatting + range). }
+    result is written back into the edit. Everything else is the numeric edit's
+    (TTyCustomNumericEdit: input filter + grouped-on-blur formatting + range). }
   TTyCustomCalcEdit = class(TTyCustomNumericEdit)
   private
     FDrop: TTyCalcDropdown;

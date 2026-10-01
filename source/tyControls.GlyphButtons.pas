@@ -243,9 +243,10 @@ type
     property Images: TTyImageCollection read FImages write SetImages;
     { The icon name in Images to draw. Empty -> fall back to the IconFont glyph. }
     property ImageName: string read FImageName write SetImageName;
-    { Where the glyph sits relative to the caption. Published so the choice can be made in
-      the designer and streamed — it used to be protected, which meant an app that wanted a
-      trailing icon had to SUBCLASS to reach a property that already existed.
+    { Where the glyph sits relative to the caption. Public here and published by every glyph
+      button, so the choice can be made in the designer and streamed — it used to be protected,
+      which meant an app that wanted a trailing icon had to SUBCLASS to reach a property that
+      already existed.
       Each concrete button still seeds its own (glLeft for the compact command button and the
       speed button, glTop for the ribbon tile), so nothing changes unless it is set. }
     property GlyphLayout: TTyGlyphLayout read FGlyphLayout write SetGlyphLayout default glLeft;
@@ -465,7 +466,8 @@ type
 
   { Flat/toolbar toggle button (glyph-left). Groupable like a classic
     TSpeedButton: with GroupIndex > 0 it behaves as a radio within its Parent —
-    clicking presses it (Down) and releases sibling TTySpeedButtons that share the
+    clicking presses it (Down) and releases the sibling speed buttons (any
+    TTyCustomSpeedButton, a third party's too) that share the
     GroupIndex. AllowAllUp lets a click on the already-down button toggle it back
     up (so the whole group can be up). Inherits the resting :selected state via
     Down. }
@@ -479,8 +481,8 @@ type
     FInGroupUpdate: Boolean;
     procedure SetGroupIndex(AValue: Integer);
     procedure SetAllowAllUp(AValue: Boolean);
-    { Release (Down := False) every sibling TTySpeedButton in the same Parent that
-      shares FGroupIndex, except Self. No-op when parentless. }
+    { Release (Down := False) every sibling speed button (any TTyCustomSpeedButton) in the
+      same Parent that shares FGroupIndex, except Self. No-op when parentless. }
     procedure UnpressSiblings;
   protected
     { Own key: a flat toolbar TOGGLE rests flat where a push button rests framed,
