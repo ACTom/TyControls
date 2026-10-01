@@ -25,7 +25,7 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="21">
+    <Units Count="23">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
@@ -47,6 +47,8 @@
       <Unit18><Filename Value="tbexportform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbExportForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbexportform"/></Unit18>
       <Unit19><Filename Value="tbsnippets.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsnippets"/></Unit19>
       <Unit20><Filename Value="tbsnippetsform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbSnippetsForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbsnippetsform"/></Unit20>
+      <Unit21><Filename Value="ai/tbhttp.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbhttp"/></Unit21>
+      <Unit22><Filename Value="ai/tbhttpwin.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbhttpwin"/></Unit22>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -55,7 +57,7 @@
       <Filename Value="lib/$(TargetCPU)-$(TargetOS)/themebuilder"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value=".;../../source;../../designtime"/>
+      <OtherUnitFiles Value=".;ai;../../source;../../designtime"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <SyntaxOptions><SyntaxMode Value="ObjFPC"/></SyntaxOptions>

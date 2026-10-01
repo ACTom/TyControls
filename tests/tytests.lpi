@@ -50,7 +50,7 @@
       <Filename Value="tytests"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="../source;.;../examples/terminal;../designtime;../tools/themebuilder"/>
+      <OtherUnitFiles Value="../source;.;../examples/terminal;../designtime;../tools/themebuilder;../tools/themebuilder/ai"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
   </CompilerOptions>
