@@ -2,27 +2,28 @@ unit tbaiformat;
 { The two request formats the AI page speaks, and how their streamed replies read.
 
   OpenAI-compatible (OpenAI, DeepSeek, Ollama's /v1, most proxies):
-    POST {base}/chat/completions; "Authorization: Bearer <key>" (left out with no key);
+    POST (base)/chat/completions; "Authorization: Bearer <key>" (left out with no key);
     body: model, stream: true, messages = [system, user / assistant ...], max_tokens only
     when set (the newer OpenAI models refuse max_tokens).
-    stream: "data: {...choices[0].delta.content...}" events, a last chunk with
+    stream: "data:" events (JSON: choices[0].delta.content), a last chunk with
     finish_reason (stop / length = cut off / content_filter), then "data: [DONE]".
     DeepSeek's reasoning models send delta.reasoning_content first (thinking) and
-    ": keep-alive" comments. An error mid-stream: data: {"error": {"message": ...}}.
+    ": keep-alive" comments. An error mid-stream: data: an "error" object with a "message".
     Data that is not JSON (an empty data line, "ping" -- heartbeats from services and
     proxies) is nothing; everything after [DONE] is ignored (tbaiclient).
 
   Anthropic (Messages API):
-    POST {base}/messages; x-api-key, anthropic-version: 2023-06-01; body: model,
+    POST (base)/messages; x-api-key, anthropic-version: 2023-06-01; body: model,
     max_tokens (required), system, messages, stream: true.
     stream: event: message_start, content_block_start (text or thinking),
     content_block_delta (text_delta / thinking_delta / signature_delta),
     content_block_stop, message_delta (stop_reason: end_turn, max_tokens = cut off,
     refusal, stop_sequence), message_stop; event: ping in between;
-    event: error + {"type":"error","error":{"type":..., "message":...}}.
+    event: error + a JSON object: "type": "error", and an "error" object (type, message).
     The current models think first by default: a thinking block, then the text.
 
-  Both: a non-2xx body is {"error": {"message": ...}} (Ollama's own API: {"error": "..."});
+  Both: a non-2xx body is a JSON object whose "error" object has a "message" (Ollama's own
+  API: "error" is the message itself);
   a service that does not stream may answer 2xx with the whole reply as one JSON
   (TbParseWholeReply).
 
