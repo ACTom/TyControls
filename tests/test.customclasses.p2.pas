@@ -24,7 +24,7 @@ uses
   tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
   tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox, tyControls.TabStrip,
   tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
-  tyControls.ComboBox, tyControls.CheckComboBox;
+  tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
@@ -52,6 +52,9 @@ type
     procedure TestThirdListBox;
     procedure TestThirdCheckListBox;
     procedure TestCheckComboPopupListTravelsTheWidenedApi;
+    { Task 16: compound pickers }
+    procedure TestThirdCascader;
+    procedure TestThirdTransfer;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -114,6 +117,18 @@ type
   published
     property Items;
     property AllowGrayed;
+  end;
+
+  TThirdCascader = class(TTyCustomCascader)
+  published
+    property Nodes;
+    property Separator;
+  end;
+
+  TThirdTransfer = class(TTyCustomTransfer)
+  published
+    property Items;
+    property Selected;
   end;
 
 implementation
@@ -723,9 +738,79 @@ begin
   end;
 end;
 
+{ ------------------------------------------------------------------ Task 16: compound pickers }
+
+procedure TTyCustomClassesP2Test.TestThirdCascader;
+var
+  third, back: TThirdCascader;
+  own: TTyCascader;
+  c: TTyCustomCascader;
+  east, zj: TTyCascaderNode;
+begin
+  third := TThirdCascader.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdCascader, ['Nodes', 'Separator']);
+  east := third.Nodes.AddNode('East');
+  zj := east.Children.AddNode('Zhejiang');
+  zj.Children.AddNode('Hangzhou');
+  third.Nodes.AddNode('West');
+  third.Separator := ' > ';
+  third.DropDownRows := 4;
+  CheckStreamText(third, ['Nodes', 'Separator'], 'DropDownRows');
+  back := TThirdCascader.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  { T-c on a nested collection: every level comes back. }
+  AssertEquals('T-c: the top level round-trips', 2, back.Nodes.Count);
+  AssertEquals('T-c: captions too', 'East', back.Nodes[0].Caption);
+  AssertEquals('T-c: and the second level', 'Zhejiang', back.Nodes[0].Children[0].Caption);
+  AssertEquals('T-c: and the third', 'Hangzhou', back.Nodes[0].Children[0].Children[0].Caption);
+  AssertEquals('T-c: Separator round-trips', ' > ', back.Separator);
+  AssertEquals('T-c: the unpublished DropDownRows stayed at its default', 8, back.DropDownRows);
+  own := TTyCascader.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { No T-e: Nodes is a collection (TWriter writes one whenever there is no ancestor to compare
+    with) and Separator has had no declared default since 3.0, so a fresh TTyCascader streams
+    both as well. }
+  c := third;
+  c.DropDownRows := 5;
+  AssertEquals('T-v: DropDownRows is public through a TTyCustomCascader reference', 5,
+    third.DropDownRows);
+end;
+
+procedure TTyCustomClassesP2Test.TestThirdTransfer;
+var
+  third, back: TThirdTransfer;
+  own: TTyTransfer;
+  c: TTyCustomTransfer;
+begin
+  third := TThirdTransfer.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 360, 200);
+  CheckPublishesOnly(TThirdTransfer, ['Items', 'Selected']);
+  third.Items.CommaText := 'a,b,c';
+  third.Selected.CommaText := 'x,y';
+  third.LeftTitle := 'Source';
+  CheckStreamText(third, ['Items', 'Selected'], 'LeftTitle');
+  back := TThirdTransfer.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: Items round-trip', 'a,b,c', back.Items.CommaText);
+  AssertEquals('T-c: Selected round-trips', 'x,y', back.Selected.CommaText);
+  AssertEquals('T-c: the unpublished LeftTitle stayed at its default', '', back.LeftTitle);
+  own := TTyTransfer.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTransfer, ['Items', 'Selected']);
+  c := third;
+  c.ShowTitles := False;
+  AssertFalse('T-v: ShowTitles is public through a TTyCustomTransfer reference', third.ShowTitles);
+end;
+
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
     TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet, TThirdListBox,
-    TThirdCheckListBox]);
+    TThirdCheckListBox, TThirdCascader, TThirdTransfer]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

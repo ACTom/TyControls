@@ -108,7 +108,7 @@ function TyTreeSelectCommitsOn(APart: TTyTreeHitPart; AFullRowSelect, AMultiSele
 function TyTreeSelectNodeText(ATree: TTyTreeView; ANode: PTyTreeNode): string;
 
 type
-  TTyTreeSelect = class;
+  TTyCustomTreeSelect = class;
 
   { The tree that lives in the drop. It exists ONLY so the picker can watch for the commit
     gestures without eating TTyTreeView.OnNodeClick / OnChange: those are the APP's events —
@@ -118,7 +118,7 @@ type
     With Picker = nil it is an ordinary TTyTreeView. }
   TTyTreeSelectTree = class(TTyTreeView)
   private
-    FPicker: TTyTreeSelect;
+    FPicker: TTyCustomTreeSelect;
   protected
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -128,7 +128,7 @@ type
       reaches it through here rather than by re-spelling the key and hoping the two agree. }
     function StyleTypeKey: string;
     { The field this tree drops from; nil = a plain tree. }
-    property Picker: TTyTreeSelect read FPicker write FPicker;
+    property Picker: TTyCustomTreeSelect read FPicker write FPicker;
   end;
 
   { A combo-like field that drops a real tree. The app builds the hierarchy through the
@@ -137,7 +137,7 @@ type
     Colour/size variants are plain StyleClass, and because the field resolves 'TyComboBox'
     they are the COMBO's variants — 'TyComboBox.small' dresses a TreeSelect and a ComboBox
     identically, which is the point of sharing the key. }
-  TTyTreeSelect = class(TTyCustomControl)
+  TTyCustomTreeSelect = class(TTyCustomControl)
   private
     FTree: TTyTreeSelectTree;
     FPopup: TTyDropdownPopup;      // lazy; created on first DropDown; freed in Destroy
@@ -232,16 +232,42 @@ type
     { The pick's caption; '' when nothing is selected. Read-only: the value here is a NODE —
       text is what it looks like, not what it is, and writing a caption could not name one. }
     property Text: TCaption read GetFieldText;
+    property TabStop default True;
+    { The dropdown tree's DESIGN-TIME item model, forwarded: the embedded tree is unnamed
+      and streams nothing of its own, so the .lfm carries the nodes through this property
+      (the setter is REQUIRED -- FPC's writer silently skips a published collection
+      without one). Filling it puts the tree in ITEM mode; leave it empty to keep the
+      classic virtual-API path (build on Tree in code: RootNodeCount / OnGetText /
+      OnInitChildren). Mixing the two raises -- the tree's own mode gates. The node
+      editor (double-click / 'Edit Nodes...') edits this same collection. }
+    property Items: TTyTreeNodes read GetItems write SetItems;
+    { Drawn in the 'TyTextHint' ink while nothing is selected (the same key, and so the same
+      dim colour, as TTyEdit.TextHint). A selected node's blank caption is NOT the empty
+      state and does not bring it back. }
+    property TextHint: TCaption read FTextHint write SetTextHint;
+    { The drop's width in LOGICAL px; 0 (default) = as wide as the field. }
+    property DropDownWidth: Integer read FDropDownWidth write SetDropDownWidth default 0;
+    { The drop's height in LOGICAL px; 0 (default) = the theme's --treeselect-drop-height. }
+    property DropDownHeight: Integer read FDropDownHeight write SetDropDownHeight default 0;
+    { The pick changed — by the user, or by writing SelectedNode. }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { Fired BEFORE the popup window shows (unlike TTyComboBox, which fires it after): a tree
+      is the one drop whose content is routinely built on demand, and this is the hook that
+      has to be able to (re)populate Tree while the size is still being decided. }
+    property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
+    property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
+  end;
+
+  { TTyTreeSelect publishes TTyCustomTreeSelect's properties; everything lives in TTyCustomTreeSelect. }
+  TTyTreeSelect = class(TTyCustomTreeSelect)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -285,29 +311,13 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    { The dropdown tree's DESIGN-TIME item model, forwarded: the embedded tree is unnamed
-      and streams nothing of its own, so the .lfm carries the nodes through this property
-      (the setter is REQUIRED -- FPC's writer silently skips a published collection
-      without one). Filling it puts the tree in ITEM mode; leave it empty to keep the
-      classic virtual-API path (build on Tree in code: RootNodeCount / OnGetText /
-      OnInitChildren). Mixing the two raises -- the tree's own mode gates. The node
-      editor (double-click / 'Edit Nodes...') edits this same collection. }
-    property Items: TTyTreeNodes read GetItems write SetItems;
-    { Drawn in the 'TyTextHint' ink while nothing is selected (the same key, and so the same
-      dim colour, as TTyEdit.TextHint). A selected node's blank caption is NOT the empty
-      state and does not bring it back. }
-    property TextHint: TCaption read FTextHint write SetTextHint;
-    { The drop's width in LOGICAL px; 0 (default) = as wide as the field. }
-    property DropDownWidth: Integer read FDropDownWidth write SetDropDownWidth default 0;
-    { The drop's height in LOGICAL px; 0 (default) = the theme's --treeselect-drop-height. }
-    property DropDownHeight: Integer read FDropDownHeight write SetDropDownHeight default 0;
-    { The pick changed — by the user, or by writing SelectedNode. }
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    { Fired BEFORE the popup window shows (unlike TTyComboBox, which fires it after): a tree
-      is the one drop whose content is routinely built on demand, and this is the hook that
-      has to be able to (re)populate Tree while the size is still being decided. }
-    property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
-    property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
+    property Items;
+    property TextHint;
+    property DropDownWidth;
+    property DropDownHeight;
+    property OnChange;
+    property OnDropDown;
+    property OnCloseUp;
     property Align;
     property Anchors;
   end;
@@ -435,9 +445,9 @@ begin
   inherited KeyDown(Key, Shift);
 end;
 
-{ --- TTyTreeSelect ------------------------------------------------------------ }
+{ --- TTyCustomTreeSelect ------------------------------------------------------ }
 
-constructor TTyTreeSelect.Create(AOwner: TComponent);
+constructor TTyCustomTreeSelect.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FSelectedNode := nil;
@@ -458,7 +468,7 @@ begin
   FTree.Picker := Self;
 end;
 
-destructor TTyTreeSelect.Destroy;
+destructor TTyCustomTreeSelect.Destroy;
 begin
   { A queued DeferredCloseUp must not fire into a freed field. }
   Application.RemoveAsyncCalls(Self);
@@ -473,33 +483,33 @@ begin
   inherited Destroy;
 end;
 
-function TTyTreeSelect.GetStyleTypeKey: string;
+function TTyCustomTreeSelect.GetStyleTypeKey: string;
 begin
   // Not 'TyTreeSelect': see the unit header. This IS a combo field.
   Result := 'TyComboBox';
 end;
 
-function TTyTreeSelect.GetTree: TTyTreeView;
+function TTyCustomTreeSelect.GetTree: TTyTreeView;
 begin
   Result := FTree;
 end;
 
-function TTyTreeSelect.GetItems: TTyTreeNodes;
+function TTyCustomTreeSelect.GetItems: TTyTreeNodes;
 begin
   Result := FTree.Items;
 end;
 
-procedure TTyTreeSelect.SetItems(AValue: TTyTreeNodes);
+procedure TTyCustomTreeSelect.SetItems(AValue: TTyTreeNodes);
 begin
   FTree.Items.Assign(AValue);
 end;
 
-function TTyTreeSelect.GetFieldText: TCaption;
+function TTyCustomTreeSelect.GetFieldText: TCaption;
 begin
   Result := FText;
 end;
 
-procedure TTyTreeSelect.SetController(AValue: TTyStyleController);
+procedure TTyCustomTreeSelect.SetController(AValue: TTyStyleController);
 begin
   inherited SetController(AValue);
   { Keep the parts themed by the same controller when it is reassigned; otherwise the tree
@@ -512,7 +522,7 @@ end;
 
 { --- selection ---------------------------------------------------------------- }
 
-procedure TTyTreeSelect.SetSelectedNode(AValue: PTyTreeNode);
+procedure TTyCustomTreeSelect.SetSelectedNode(AValue: PTyTreeNode);
 begin
   if FSelectedNode = AValue then Exit;
   FSelectedNode := AValue;
@@ -521,18 +531,18 @@ begin
   DoChange;
 end;
 
-procedure TTyTreeSelect.ClearSelection;
+procedure TTyCustomTreeSelect.ClearSelection;
 begin
   SetSelectedNode(nil);
 end;
 
-procedure TTyTreeSelect.UpdateText;
+procedure TTyCustomTreeSelect.UpdateText;
 begin
   FText := TyTreeSelectNodeText(FTree, FSelectedNode);
   Invalidate;
 end;
 
-procedure TTyTreeSelect.PickNode(ANode: PTyTreeNode);
+procedure TTyCustomTreeSelect.PickNode(ANode: PTyTreeNode);
 begin
   SetSelectedNode(ANode);
   { Deferred: hiding the popup synchronously here — still inside the tree's mouse/key
@@ -543,7 +553,7 @@ begin
     Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
-procedure TTyTreeSelect.SyncTreeToSelection;
+procedure TTyCustomTreeSelect.SyncTreeToSelection;
 begin
   if FTree = nil then Exit;
   if FSelectedNode = nil then
@@ -559,7 +569,7 @@ end;
 
 { --- dropdown ----------------------------------------------------------------- }
 
-procedure TTyTreeSelect.EnsurePopup;
+procedure TTyCustomTreeSelect.EnsurePopup;
 begin
   if FPopup <> nil then Exit;
   FPopup := TTyDropdownPopup.Create;
@@ -577,7 +587,7 @@ begin
   FPopup.Form.OnKeyDown := @PopupFormKeyDown;
 end;
 
-function TTyTreeSelect.DropDownSize: TSize;
+function TTyCustomTreeSelect.DropDownSize: TSize;
 var
   ppi: Integer;
 begin
@@ -588,7 +598,7 @@ begin
     MulDiv(ActiveController.Metric(TyTreeSelectDropHeightVar, TyTreeSelectDropHeight), ppi, 96));
 end;
 
-procedure TTyTreeSelect.DropDown;
+procedure TTyCustomTreeSelect.DropDown;
 var
   sz: TSize;
   treeStyle: TTyStyleSet;
@@ -616,7 +626,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeSelect.CloseUp;
+procedure TTyCustomTreeSelect.CloseUp;
 begin
   if (FPopup <> nil) and FPopup.IsOpen then
   begin
@@ -630,12 +640,12 @@ begin
   DoCloseUp;
 end;
 
-function TTyTreeSelect.DroppedDown: Boolean;
+function TTyCustomTreeSelect.DroppedDown: Boolean;
 begin
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
-procedure TTyTreeSelect.PopupClosed(Sender: TObject);
+procedure TTyCustomTreeSelect.PopupClosed(Sender: TObject);
 begin
   { Mirror the helper's tick into our own so the Click guard can use it without reaching into
     FPopup (and so it survives the helper being freed). }
@@ -645,7 +655,7 @@ begin
   DoCloseUp;
 end;
 
-procedure TTyTreeSelect.PopupFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomTreeSelect.PopupFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   if Key = VK_ESCAPE then
   begin
@@ -654,38 +664,38 @@ begin
   end;
 end;
 
-procedure TTyTreeSelect.DeferredCloseUp(Data: PtrInt);
+procedure TTyCustomTreeSelect.DeferredCloseUp(Data: PtrInt);
 begin
   CloseUp;
 end;
 
 { --- events ------------------------------------------------------------------- }
 
-procedure TTyTreeSelect.DoChange;
+procedure TTyCustomTreeSelect.DoChange;
 begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyTreeSelect.DoDropDown;
+procedure TTyCustomTreeSelect.DoDropDown;
 begin
   if Assigned(FOnDropDown) then FOnDropDown(Self);
 end;
 
-procedure TTyTreeSelect.DoCloseUp;
+procedure TTyCustomTreeSelect.DoCloseUp;
 begin
   if Assigned(FOnCloseUp) then FOnCloseUp(Self);
 end;
 
 { --- property setters --------------------------------------------------------- }
 
-procedure TTyTreeSelect.SetTextHint(const AValue: TCaption);
+procedure TTyCustomTreeSelect.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;
   Invalidate;   // only visible while nothing is selected; a repaint decides that
 end;
 
-procedure TTyTreeSelect.SetDropDownWidth(AValue: Integer);
+procedure TTyCustomTreeSelect.SetDropDownWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;   // "<= 0 = follow the field" has one spelling
   if FDropDownWidth = AValue then Exit;
@@ -694,7 +704,7 @@ begin
     under the user's pointer is worse than applying it on the next drop. }
 end;
 
-procedure TTyTreeSelect.SetDropDownHeight(AValue: Integer);
+procedure TTyCustomTreeSelect.SetDropDownHeight(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FDropDownHeight = AValue then Exit;
@@ -703,7 +713,7 @@ end;
 
 { --- input -------------------------------------------------------------------- }
 
-procedure TTyTreeSelect.Click;
+procedure TTyCustomTreeSelect.Click;
 begin
   if not Enabled then Exit;
   inherited Click;
@@ -716,7 +726,7 @@ begin
     DropDown;
 end;
 
-procedure TTyTreeSelect.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomTreeSelect.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -738,7 +748,7 @@ end;
 
 { --- painting ----------------------------------------------------------------- }
 
-function TTyTreeSelect.LayoutFor(AWidth, AHeight, APPI: Integer): TTyTreeSelectLayout;
+function TTyCustomTreeSelect.LayoutFor(AWidth, AHeight, APPI: Integer): TTyTreeSelectLayout;
 var
   S: TTyStyleSet;
 begin
@@ -752,7 +762,7 @@ begin
     MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96));
 end;
 
-procedure TTyTreeSelect.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTreeSelect.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, hintS: TTyStyleSet;
@@ -819,7 +829,7 @@ begin
   end;
 end;
 
-procedure TTyTreeSelect.Paint;
+procedure TTyCustomTreeSelect.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

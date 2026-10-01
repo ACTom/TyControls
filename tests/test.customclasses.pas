@@ -1272,13 +1272,13 @@ initialization
     'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel',
     // T15 list boxes
     'TTyListBox', 'TTyCheckListBox', 'TTyOfficeListBox', 'TTyAdvancedListBox',
-    'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox']);
+    'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox',
+    // T16 compound pickers
+    'TTyTransfer', 'TTyTreeSelect', 'TTyCascader']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T16 compound pickers
-    'TTyTransfer', 'TTyTreeSelect', 'TTyCascader',
     // T17 trees and list views
     'TTyTreeView', 'TTyShellTreeView', 'TTyListView', 'TTyShellListView', 'TTyHeaderControl',
     // T18 grids
