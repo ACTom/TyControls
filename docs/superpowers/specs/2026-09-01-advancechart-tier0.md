@@ -6548,7 +6548,7 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 - 上游按线宽在数据单位里做子像素对齐,这里没有(只记录,另立任务)。
 - 上游放标签前把宿主的包围盒按描边加宽,这里的标签不算描边,带边框的符号标签差半个边框。所有系列都如此,与 roam 无关(另立任务)。
 - 只读系列级 `label`;节点自己的 `label` 不读。
-- 给 `Option` 赋和现在一样的文本什么也不做,不等于上游的 notMerge 重置。
+- 给 `Option` 赋和现在一样的文本什么也不做,不等于上游的 notMerge 重置。（第 95 批修正：属性是声明，同一文本不算变化是对的；上游的 notMerge 是 `SetOption(text, True)`，同一文本也重来；合并是 `MergeOption`。见 §130。）
 - 双指缩放、光标样式、拖动节点、roam 动画、拖动后抑制点击:不做。拖动期间悬停命中要等下一次重画才恢复。
 
 ### 变异测试
@@ -8758,7 +8758,7 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 ### 推迟与偏差
 
 - **AN4**：标签从旧布局位移（`LabelManager` 的 oldLayout 过渡：饼标签的 x/y、引导线的点）、`valueAnimation`（`bar-label-update` 的文字）。测试从 clip 数里扣掉它们的动画器。
-- **`groupTransition` 不做**：控件只有 notMerge，上游 notMerge 下坐标轴不过渡（见上）。将来若加 merge 式的 setOption，需要把坐标轴画进动态层、按 `anid` 建代理。
+- **`groupTransition` 不做**：控件只有 notMerge，上游 notMerge 下坐标轴不过渡（见上）。将来若加 merge 式的 setOption，需要把坐标轴画进动态层、按 `anid` 建代理。（第 95 批：merge 式的 setOption 已有（§130），“控件只有 notMerge”这条理由不再成立；坐标轴仍没有代理，合并下轴直接到终值，仍未做。）
 - **阶梯线**的更新直接到终值（上游补间阶梯化后的点、符号跟 `__points`，没移植）；`step` 改变时上游会整条重新入场，这里同样直接到终值。
 - 漏斗的更新只补间不透明度，多边形的点不补间；仪表盘、雷达、K 线的更新按 3B 的规则做了，没有 fixture 用例。仪表盘「没有旧指针时从 startAngle 当 rotation」的怪癖没有覆盖。
 - 端口不构建完全被裁掉的柱子，所以「旧的被裁掉、新的露出来」走的是「旧行无元素」那条路：从零长出，上游是从裁到边上的形状补间。
@@ -8825,7 +8825,7 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 
 ### 推迟与偏差
 
-- **dataZoom / 漫游的载荷动画不做**：上游这时是同一个 Option 的 merge 式更新，坐标轴走 `groupTransition`，系列与轴一起补间 100 ms。端口只有 notMerge 的更新路径，也没有坐标轴代理（AN3 已推迟）；只让系列补间、轴跳到终值会让柱子与刻度错位，比不动更糟。等做 merge 式更新与 `groupTransition` 时一起做。上游 fixture 未录。
+- **dataZoom / 漫游的载荷动画不做**：上游这时是同一个 Option 的 merge 式更新，坐标轴走 `groupTransition`，系列与轴一起补间 100 ms。端口只有 notMerge 的更新路径，也没有坐标轴代理（AN3 已推迟）；只让系列补间、轴跳到终值会让柱子与刻度错位，比不动更糟。等做 merge 式更新与 `groupTransition` 时一起做。上游 fixture 未录。（第 95 批：merge 式更新已有（§130），`groupTransition` 仍未做，这一条仍推迟。）
 - **指示器标签**：上游对标签的 x/y 单独以同一时序补间；端口的标签框按皮肤排版，跟着线走，不与上游逐位比较。轴上 `axisPointer` 组件根的动画键（全局 `axisPointer` 选项）不读；悬停高亮的 stateTransition（AN3b）不在这批。
 - **末端标签**：状态里的 `endLabel.show`、富文本末端标签（画成一段）、阶梯线（沿未阶梯化的路径走）、只有一个点的折线（没有 run，不画）不支持；值是数组的数据项不滚动（文字停在终值）。浏览器里路径数据画过一次后会转成 Float32Array，平滑线的 `getPointOn` 在浏览器里读的是单精度控制点；oracle（不绘制）与端口都是双精度。
 - **计数**：handler formatter、富文本标签、数组原始值不滚动；静止时画的是静态列表的文字（`12.50` 这样的原样文本），上游 during(1) 之后是 `12.5`。
@@ -8848,7 +8848,7 @@ B1、B2 之后，图例仍然只是一张画：`legend.selected` 与 single 模�
 
 ### 做法
 
-- **`Legend` 单元**：`TyLegendSelectedNode / IsSelected / SelectName / UnSelectName / ToggleName / AllSelect / InverseSelect / ResolveSingle` 直接在选项树里图例节点的 `selected` 对象上读写（控件的 Option 文本仍是宿主写的；同一文本再设不算新选项，不同文本 notMerge 重来）；`TyJsKeyOrder` 给出 JS 键序（整数样的键升序在前），`TyLegendSelectedJson` 按它输出。Spec 多了 `InactiveBorderAuto`，Source 多了系列的描边与视觉线宽，Item 多了解析后的图标笔（`HasStroke/Stroke/IconPen`），Ink 多了 `InactiveBorder`、规则线的 `LineInactive/LineInactiveWidth`。命中框在 selectedMode false 时 silent。
+- **`Legend` 单元**：`TyLegendSelectedNode / IsSelected / SelectName / UnSelectName / ToggleName / AllSelect / InverseSelect / ResolveSingle` 直接在选项树里图例节点的 `selected` 对象上读写（控件的 Option 文本仍是宿主写的；同一文本再设不算新选项，不同文本 notMerge 重来。第 95 批起：合并之后 Option 是合并后的选项，合并保留 `selected`，`SetOption(text, True)` 无论文本是否相同都重来，见 §130）；`TyJsKeyOrder` 给出 JS 键序（整数样的键升序在前），`TyLegendSelectedJson` 按它输出。Spec 多了 `InactiveBorderAuto`，Source 多了系列的描边与视觉线宽，Item 多了解析后的图标笔（`HasStroke/Stroke/IconPen`），Ink 多了 `InactiveBorder`、规则线的 `LineInactive/LineInactiveWidth`。命中框在 selectedMode false 时 silent。
 - **控件**：`SolveLegendData` 每个选项只做一次加载（`FLegendLoaded`：建 `selected`、single 模式选一个写进表），之后标志一律按表读（不再每次 Rebuild 重新挑 single）。`DoLegendAction` 照 legendAction 的三步；`FullUpdate` 在动作里**同步**整体更新：Relayout（`FStGen` 前进，StSync 走「回 rest、套旧列表、再套标志」）、建显示列表，并按上游重找悬停目标——数据项按（系列、原始下标）认回复用的元素，其余（图例项总是）在最后一个点重找、不发 out/over。没画出来的系列（包括全部被关掉、列表里一个系列都没有时）状态记录清空，重新显示就是新元素。
 - **事件目标**：`TTyChartEventTarget` 的 `HdKind 4` 是图例项（`HdName`、`HdLegendSeries`），不管 triggerEvent 都有；mouseover / mouseout 派发 highlight / downplay，click 在选中派发和用户 click 之前跑 downplay → legendToggleSelect → highlight。`LegendExcludeIds` 按类型默认表算 legendHoverLink。`DispatchAction` 收五个图例动作；事件类型表加了 legendselectchanged 等五个。
 - **样子**：`LegendTextOf` 读 `inactiveColor`、`inactiveBorderColor`、`lineStyle.inactiveColor / inactiveWidth`（主题的 inactive 墨是默认值）；`LegendBorderOf` 从系列（数据图例再叠数据项）的 `itemStyle.borderColor / borderWidth` 和饼、漏斗的默认值得出图标的描边。
@@ -8884,3 +8884,97 @@ B1、B2 之后，图例仍然只是一张画：`legend.selected` 与 single 模�
 - 漏斗图标的默认边是图表底色而不是上游写死的 `#fff`（主题令牌原则）。
 - `legend.selected` 不是对象时（比如写成 `true`）直接换成 `{}`；上游在严格模式下对原始值写属性会抛异常。
 - 悬停目标的复用只认数据项（按系列和原始下标）与折线本体；悬停在数据项的标签上时，整体更新后认回的是宿主元素，下一次移动在标签上会多一对 out/over（没有用例）。
+
+## 130. Tier 1 第九十五批：option 合并（A10，2026-10-01）
+
+控件的 `Option` 一直是 notMerge：每次赋值都换一套全新的模型。上游最常用的却是不带 notMerge 的 setOption——拿新选项去合并已有的模型：按 id、名字、序号找到对应的组件和系列，深合并进去，模型身上的状态（图例的选中、roam 的中心和缩放、dataZoom 的窗口、系列的选中）都留着。这一批把这条路接上：`MergeOption`、带 notMerge 开关的 `SetOption`、`GetOptionJson`，以及模型的 id / 名字 / 子类型；并把 §79 留下的“完全相同的文本”的语义理顺。replaceMerge、replaceAll 和序号空洞留给 A11。
+
+### 上游的做法（`wf-a10/merge.md`；`Global.ts` `_mergeOption`、`util/model.ts` `mappingToExists` / `makeIdAndName`、zrender `merge`、`layout.ts` `mergeLayoutParam` 逐行核过，关键处在真 dist 上探针确认）
+
+- **根上不是组件的键**（color、backgroundColor、textStyle、animation*……）：新值为 null 时忽略（根上的 null 删不掉任何东西）；旧值为空时克隆；否则对**根上的值本身**调 zrender 的 `merge`——数组在 `isObject` 眼里也是对象，所以根上的数组**按下标合并**：`color: ['#a','#b','#c']` 再合并 `color: ['#x']` 得 `['#x','#b','#c']`。
+- **哪些主类型被访问**：写了（非 null）的组件主类型，加上依赖它们的主类型（`topologicalTravel` 的 `removeEdgeAndAdd`；依赖表从 dist 的各类 `dependencies` 取）。**但预处理器每次都往选项里写东西**（探针：只合并 title 也会跑系列的 mergeOption 和图例的 optionUpdated）：backwardCompat 写 `series`（至少 `[]`），axisPointer 预处理写 `axisPointer: {}`，有 xAxis 和 yAxis 却没有 grid 时写 `grid: {}`。于是**每一次** setOption 都访问系列和所有依赖系列的主类型：每个系列重建数据（树图的展开状态因此丢失），每个图例重新解决 single 模式。grid 和 axisPointer 的那个 `{}` 是谁都没写的模型（getOption 里有），之后写 grid 的选项是合并进它。
+- **映射**（`mappingToExists`）：主类型第一次出现时是 replaceAll（按下标一一对应，空洞保留）——但 series 的列表在 initBase 时就有了，所以系列永远是 normalMerge；其余都是 normalMerge：
+  1. 结果先按已有的下标排好（空洞也占一个位置），已有组件的下标**永远不动**；
+  2. 按 id：新选项的 id（字符串原样，数字按 JS 转成字符串）等于某个已有模型的 id 就落在那里；两个新选项落在同一个 id 上上游直接断言抛错；
+  3. 按名字：**只有没写 id 的**新选项按名字找第一个还没被认领、同名的模型（模型的名字是写过的名字，否则上一次的名字，否则 `'series\0' + 下标`——非系列组件也一样）；
+  4. 按序号：剩下的每个新选项从 0 开始找第一个没被认领的位置（空洞也算），但带 id 的选项跳过 id 不同的已有模型（“id 只能落进空洞或追加”）；找不到就追加；
+  5. `makeIdAndName`：名字是选项的名字、否则已有模型的名字、否则 `'series\0' + 结果下标`；id 是已有模型的 id（**永远不变**）、否则写的 id、否则 `'\0' + 名字 + '\0' + n`，n 取第一个没被任何已有 id、本次写的 id、本次已生成的 id 占用的数。
+- **合并**：子类型取新选项的 `type`（真值时），否则已有模型的子类型，否则主类型的默认器（轴 `data ? 'category' : 'value'`，dataZoom `'slider'`，legend `'plain'`，visualMap 按 categories/pieces/splitNumber/calculable）。类相同（系列按 type，轴、dataZoom、legend、visualMap、timeline 按子类型，其余只有一个类）就 `merge(this.option, newOption, true)`：两边都是普通对象才递归，其余——数组、null——原样写进去（**数组整体替换，null 是一个值，键不删除**），新键追加在后面。类不同（bar 换成 line、value 轴换成 category、plain 图例换成 scroll）就**只用新选项**建新模型，旧选项整个丢掉，但 id 沿用这个位置的。
+- **模型自己的合并规则**：
+  - `mergeLayoutParam`（`box` 布局的组件）：每个方向 `[width, left, right]` / `[height, top, bottom]`，目标是**带默认值的完整选项**。ignoreSize（title、legend、visualMap、toolbox）：新写了有值的 left 就把 right 置 null，反之亦然；其余按计数：合并后正好两个有值或新选项一个都没写，照合并结果；新写了两个以上，只要新的；新写了一个，再按顺序从目标里补第一个**拥有**的键（init 之后三个键都被 `copy` 写成了自有键，值可能是 undefined）。三个键随后全部写回。所以 `grid: {left: 50, width: 300}` 再合并 `{right: 20}` 得 width 300、right 20、left 没了。
+  - **系列的盒子跟自己合并**：`SeriesModel.mergeOption` 把 `merge()` 的返回值——也就是 `this.option`——当作新选项交给 `mergeLayoutParam`，每个键都算“新写的”，什么也不丢，盒子就是深合并的结果（探针：树图 left 10%、width 50% 再合并 right 30%，三个都在）。
+  - dataZoom：`_doInit` 按每一对（start/startValue、end/endValue）重新定模式——只写了百分比是 percent，只写了值是 value，都写或都没写看 `rangeMode`，再没有就看写没写百分比，否则沿用；value 模式的那一对把百分比置 null。动作（`setRawRange`）把窗口写进 option，所以没写这一对的合并都保留缩放。
+  - dataset 的 `transform` 被标成 primitive：整体替换，不合并。
+  - legend 的 `selected` 在 option 里（init 时 `||= {}`），像别的对象一样深合并：`selected: {C: false}` 只改 C，别的保留。
+- **getOption 返回什么**：模型 option 的克隆，组件主类型一律数组、空洞为 null、末尾的空洞去掉。它是**模型的** option：主题和默认值都合并进去了，模型写的东西（legend 的 `selected`、dataZoom 计算出的窗口、`emphasis.label.show`）都在，访问过但谁都没写的主类型是 `[]`；**没有 id**，id 只在模型上（`getModel().getComponent(t, i).id`）。
+- **完全相同的选项**：上游没有“同一段文本”的概念。`setOption(o, true)` 即使 o 不变也是全新的模型——roam、缩放窗口、图例和系列的选中全部重来；`setOption(o)` 把每个键合并到自己身上，写过的都不变，模型的状态全留着（被点掉的图例项仍然关着，除非 o 写了 `selected`），single 模式重新解决一次。
+
+### 做法
+
+- **新单元 `OptionMerge`**（纯 fpjson）：
+  - `TTyOptionKeys`：按主类型存上游组件列表的每个位置——有没有模型、id、名字、子类型。**身份放在树旁边**：一个改了名的系列是哪个，树自己说不出来，下一次合并按 id 和名字找人全靠它。一个主类型被访问过就有列表（哪怕是空的），下一次写它就是 normalMerge 而不是 replaceAll。
+  - `TyOptionKeysOfTree`（notMerge / 第一次）：写了的主类型按树的下标 replaceAll，其余被访问的给空列表；再补上预处理器的模型（axisPointer、有轴没 grid 时的 grid）——**只在 keys 里**，树里没有，作者没写过。
+  - `TyOptionMerge`：先查重复 id（有就整个拒绝，什么都不改）；根上的非组件键按上面的规则；每个被访问的主类型做映射、合并或新建、重写树里的这一项；最后补预处理器的模型。树里一个主类型只在作者写过时才出现；写成单个对象、合并后仍是一个的，仍存成单个对象（不少读者只认对象形式）。keys 里有、树里没有节点的模型（预处理器的 grid）被写到时现建一个空节点再合并——和上游模型的原始 option 一样是 `{}`。
+  - 盒子：对端口实际布局的那几种（grid、title、legend、visualMap、tree / sankey / treemap 系列），新选项碰了哪个方向，就按上游算出那个方向合并后的三个键，**全部写进树**（上游的 undefined 写成 null）。读者用 init 的规则读这三个自有键，得到的正是上游此刻的值。默认值和各读者自己用的一致（grid 15% / 10% / 65 / 80，title center / 15，legend center / bottom 15，visualMap 0 / null / null / 0，树 12%，桑基 5% / 20% / 5% / 5%，矩形树 20 / 50）。
+  - `TyOptionToJson`：按 getOption 的形状输出——组件主类型一律数组、空洞 null、末尾空洞去掉、根上的 null 不输出；对象按 JS 键序（整数样的键升序在前）；数字按 `Number#toString`（NaN、无穷写 null）；字符串按 `JSON.stringify` 转义。
+- **`TTyChartOption`**：`SetOptionText` 之后由 `TyOptionKeysOfTree` 建 keys；新的 `MergeOptionText`（没有树或树不是对象时就是第一次 setOption，即 SetOptionText）：解析失败、不是对象、重复 id 都**拒绝**，树不动、`Error` 说明原因——和 SetOptionText 的“拒绝就清空”不同，因为合并是对眼前画面的编辑，不是声明。合并进来的选项留到下一次设置，报告里的 `NewOpt` 指向它。`ComponentId / ComponentModelName / ComponentSubType / OptionJson`。新的 resourcestring `rsTyOptMergeNotObject`、`rsTyOptDuplicateId`（.pot 与 zh_CN.po 已同步）。
+- **控件**：
+  - `SetOption(AJson, ANotMerge = False)`：notMerge 就是上游的 notMerge——**同样的文本也重来**；否则 `MergeOption`。
+  - `MergeOption(AJson): Boolean`：第一次是 init；否则先记下旧的视图键、合并、把 `Option` 属性的文本换成合并后的 `GetOptionJson`、按报告处理树外的状态、置 `FAnimPending`（这是一次更新）、重画。
+  - 树外的状态按位置的命运处理（`MergeKeepStates`）：留下来的系列（kept / merged）保留力导向的 preservedPoints、roam 的写回、选中模型、树图视图的上一个盒子；合并写了 `center` 或 `zoom` 的，roam 状态里对应的那一半换成选项里的（`MergeRoamOverride`，读法与系列的 spec 相同）；新建的系列这些都清掉。树图的展开状态**全部清掉**（每次都访问系列、重建数据）。dataZoom：动作留下的窗口在合并写了这个 dataZoom 的范围（start/end/startValue/endValue/rangeMode 任一）时先写回树里（`MergeBefore`，start/end 百分比、两个值置 null，和 setRawRange 一样），再合并，再按模式规则置 null；没写的保留窗口；数组按新的个数伸长、新的没有窗口。悬停、按下、拖动、状态记录照 notMerge 清空；`FLegendLoaded := False`（图例每次都被访问，single 模式重新解决，`selected` 本身在树里、已合并）。
+  - `GetOptionJson`、`ComponentModelId / ComponentModelName / ComponentModelSubType`。
+  - **身份从 keys 来**：`AnimViewKeys`（更新动画配对新旧系列视图）改成模型 id；`SeriesModelId`（事件的 seriesId、图例悬停的 excludeSeriesId）先取模型 id；`SeriesNameOf` 在选项没写名字时先用模型留下的非虚名（类型改变后系列只剩新选项，名字仍是原来的——图例仍叫它 S，点 S 仍能关掉它）。
+
+### 完全相同的文本（修正 §79）
+
+§79 记下的偏差是“给 Option 赋和现在一样的文本什么也不做，不等于上游的 notMerge 重置”；B3 又依赖它（“同一文本再设不算新选项”）。问题不在于这条规则错，而在于属性一直被当成 setOption。现在分开：
+
+- **`Option` 属性是声明**：它已经持有的文本再赋一次不是变化。LCL 流式加载、对象查看器、选项编辑器都会原样写回，点掉的图例项不能因此复位。
+- **`SetOption(text, True)` 是上游的 notMerge**：同样的文本也是全新的模型，一切重来（fixture `identical-notmerge`）。
+- **`SetOption(text)` / `MergeOption(text)` 是上游的合并**：从不是空操作；同样的文本合并到自己身上，状态全留（`identical-merge`）。
+- 合并之后属性的文本是合并后的选项（画面与属性一致）；再赋**合并之前**那段文本就是真的变化，回到那个选项（notMerge）。
+
+### 动画
+
+合并是一次更新。系列视图按 `(模型 id, 类型)` 配对，id 在合并里不变：改了名的系列（id 仍是 `'\0A\00'`）保留视图、从原来的柱高补间过去；同样的改名用 notMerge 是新视图（id `'\0B\00'`）、从零长出来（手写测试与 fixture 的 `series-view-kept-on-rename` 一致）。fixture 每一步都记下上游复用了哪个视图，测试逐系列核对“上游复用 ⇔ 端口的 (id, 子类型) 配得上”。
+
+**坐标轴的 `groupTransition` 仍然不做**（§126 推迟时的理由是“控件只有 notMerge，上游 notMerge 下坐标轴不过渡”——这个理由不成立了，原处已标注）：上游合并时坐标轴、网格这些组件视图保留，`groupTransition` 让刻度、标签、分隔线跟着新范围补间。端口没有坐标轴代理，合并下的轴直接跳到终值，系列照常补间——和 notMerge 下一样，与上游合并的画面有差别（AN 系列另立任务）。同理，标注（markPoint/markLine/markArea）在合并下上游是同一个视图、走更新，端口仍按 AN4 的规则每次重新入场；dataZoom / roam 的载荷动画（§127）也仍未做。
+
+### 基准
+
+- `tools/advchart-oracle/option-merge.js` → `tests/fixtures/advchart-option-merge.json`：真 dist（SSR、600×400、每个用例第一个选项 `animation: false`）。**原始合并层**由钩子录：包住所有组件类原型链上的 `init` 和 `mergeOption`，最外层调用时克隆进来的选项（默认值合并之前），之后每次 mergeOption 用 dist 自己的 `zrUtil.merge` 合进去（dataset 的 transform 按 primitive 整体替换）；根上的非组件键按 `_mergeOption` 的三行规则；再叠上端口也存在树里的模型写入——legend 的 `selected`（位置在 init 的键之后）、`mergeLayoutParam` 写回的方向（undefined 记为 null）。dataZoom 的四个范围键不比（端口把动作的窗口放在树外，窗口作为画面结果比较）。每一步记：原始合并层（端口 `GetOptionJson` 应给出的）、每个模型的 id / 名字 / 子类型（NUL 原样）、画面结果（每个系列的行数、是否被图例过滤、柱子的形状、选中的下标、树图每行的展开、graph 的中心和缩放；网格矩形；标题框；dataZoom 窗口）、每个系列用的是第几个视图对象。另记主类型表、依赖表、带子类型的主类型。标题都写明了字号（18 px 粗体，副标题 12 px）：端口的标题字来自主题，上游默认 18 px 粗体，不写明时标题框比不了。
+- 52 个用例、134 步：系列按序号 / 追加 / 按名字 / 按 id / id 优先于名字 / 数字 id / id 不匹配时追加 / 名字之后按序号 / 带 id 的名字不匹配 / 改名（id 不变）/ 同名两个 / 类型改变（旧选项丢掉、id 和名字保留、新视图）/ 同类型显式写 / null 项不占序号 / 单个对象 / 改名保留视图而 notMerge 不保留；组件：xAxis 数组、title 由对象变数组、title 按 id、title 第一次出现（replaceAll 留空洞、之后按序号填洞）、legend 第一次写（随系列访问过，normalMerge 压缩空洞）、yAxis 类型改变、轴的默认子类型沿用；深合并、数组替换、null 写入、根上的 null 和 `[]`、根上的数组按下标合并（顺带比较系列颜色）；盒子：title ignoreSize（left→right、'auto'、默认 left 被 right 置 null 后再清掉）、legend、grid 计数规则（一个新键补优先的、两个新键、没写盒子的默认值、不碰盒子）、visualMap、树图系列（自己跟自己合并）；图例：合并后保留选中、`selected` 深合并、single 模式在只合并 title 时也重新解决、legend 类型改变（新模型、选中丢失）；相同文本的合并与 notMerge；dataZoom：动作窗口保留、value 盖过 percent、动作之后只写 end；系列选中保留与类型改变后丢失；树图展开在合并后丢失；graph 的 roam 保留、合并 zoom 只换缩放、合并 center 只换中心；dataset 的 transform 整体替换；预处理器的 axisPointer 与 grid 模型（init 时建的，合并时建的）。
+- 守卫（任一失败不写文件）：每一步原始合并层的每个叶子都等于上游 getOption 同一路径上的值（这一层是上游所持有的子集）；逐用例的显式期望（改名 id 不变、类型改变保留 id 丢旧选项、空洞先填、根数组按下标、相同文本保留/重置……）；有盒子写回发生；两次生成逐字节相同。
+- `test.advchart.optionmerge`（8 个测试）：真控件 600×400、SSR 量字，每步之后渲染：
+  - 重放全部用例：`GetOptionJson` 按结构逐项比（组件内的键序也比，根上的键只比集合）、数字逐位；模型的 id / 名字 / 子类型逐个比（多出来的模型也算错）；行数、过滤、柱子形状（1e-9）、选中下标、树图展开、graph 中心与缩放逐位、网格矩形、标题框、dataZoom 窗口（1e-9）；视图配对。共约一万零七百项。
+  - 主类型表、依赖表、子类型表与 dist 一致。
+  - 手写：属性是声明（同文本不复位）而 `SetOption(text, True)` 复位、`SetOption(text)` 保留；合并后属性就是合并后的选项，再赋原文本回到原选项；拒绝的合并（解析失败、不是对象、重复 id——连同一选项里的 title 也不合并）什么都不改、下一次成功清掉错误；第一次合并就是 init；合并是更新（改名后柱子从旧高度补间，notMerge 改名从零长出）；类型改变后模型名字仍是 S、按 S 切换图例仍能关掉它。
+
+### 变异测试
+
+`wf-a10/mutate.py`：39 个变异，逐个改源码、重编、依次跑本批、B3（legendact）、AN3（animupdate）与 graph roam 四套测试、还原。
+
+- 映射（5）：不按 id、不按名字、带 id 的选项也按名字、按序号时不跳过 id 不同的模型、没对上的丢掉而不追加；
+- 合并（4）：较短的数组保留旧的、null 删除键、根上的数组整体替换、根上的 null 写进去；
+- 模型（6）：类型改变也合并、合并不更新名字、id 重新生成、第一次出现也按 normalMerge、虚名从 1 数、生成的 id 可以重复；
+- 访问与预处理器（5）：所有主类型都算访问过、不访问依赖者、init 时不建预处理器的模型、合并时不建、轴有 data 也默认 value；
+- 盒子与模型规则（5）：不写回盒子、title 不按 ignoreSize、系列的盒子按新选项合并、value 模式不把百分比置空、dataset 的 transform 深合并；
+- 树外的状态（6）：动作窗口不写回、合并丢掉所有动作窗口、roam 不按合并覆盖、合并过的系列丢掉状态、树图展开在合并后还留着、合并清掉图例的选中；
+- 图例与身份（3）：single 模式不重新解决、视图键按名字、不读模型的名字；
+- 属性与更新（5）：属性对同一文本也重来（B3 的测试也红）、notMerge 遇到同一文本跳过、合并后属性仍是合并前的文本、合并不当更新、不取合并前的视图键。
+
+首轮 38 个杀死，存活 1 个：**合并时不建预处理器的模型**——已有用例里的 grid 都是 init 时由预处理器建的。补上游用例 `grid-preprocessed-on-merge`（先是饼图，再合并进坐标轴和柱子——这次合并的预处理器建出 grid——再合并 `grid.width`：上游合并进那个模型，盒子按默认值补出 left 15%），重跑杀死。
+
+### 推迟与偏差
+
+- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。
+- **notMerge 下系列的 null 项不压缩**：上游 initBase 给 series 预置了列表，所以 `[bar, null, line]` 的 line 是系列 1（虚名 `series\u00001`）；端口的 notMerge 树照写的下标，line 是系列 2。只影响写了 null 系列项的选项，合并时按端口的下标找。
+- 盒子写回只做端口实际布局的那几种；calendar（与 cellSize 联动的二次合并）、singleAxis、geo、parallel、matrix、timeline、thumbnail、slider dataZoom、map 系列、grid 的 `outerBounds` 只做深合并——合并没有碰盒子键时与上游相同。
+- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。
+- `emphasis.label.show` 上游只在 init 时由 `label.show` 补（defaultEmphasis），合并改了 `label.show` 之后它保持 init 时的值；端口在读的时候从当前的 `label.show` 补。
+- 系列从 dataset 维度自动取的名字（autoSeriesName）不进 keys；合并时按名字找人用的是写过的名字或虚名，维度名变了以后与上游可能不同。
+- 选中：合并后留下来的系列保留选中模型，但 `selectedMode` 的改变和新数据里 `selected: true` 的补选（`_initSelectedMapFromData`）不重读。
+- 合并后的悬停状态、强调状态记录照 notMerge 清空，下一次移动重新建立；上游复用的元素会带着状态。
+- 拒绝的合并（重复 id）整个不生效；上游在断言处抛错，模型可能已经部分合并。
+- `GetOptionJson` 是原始合并层：没有主题和默认值、没有模型 id、没有访问过但没写的主类型（上游是 `[]`），根上键的顺序是树里的顺序（上游按拓扑访问顺序）。上游 getOption 中 dataZoom 的 start/end 是计算出的窗口，端口树里是作者写的（动作的窗口在树外，直到合并写到它）。
+- 未知的系列类型：上游找不到类时跳过这一项（后面的下标前移）；端口照常占位置。

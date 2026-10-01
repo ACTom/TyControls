@@ -352,6 +352,8 @@ resourcestring
   rsTyOptFunctionValue =
     'JavaScript functions cannot be used here. Write a template string such as '
   + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';
+  rsTyOptMergeNotObject = 'An option to merge must be an object.';
+  rsTyOptDuplicateId = 'Two %s components carry the id "%s".';
 
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the

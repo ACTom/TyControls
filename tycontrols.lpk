@@ -985,6 +985,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Option"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.OptionMerge.pas"/>
+        <UnitName Value="tyControls.AdvChart.OptionMerge"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Catalog.pas"/>
         <UnitName Value="tyControls.AdvChart.Catalog"/>
       </Item>

@@ -14,12 +14,12 @@ unit tyControls.AdvChart.Option;
   mode; verified empirically rather than assumed, and there is no hand-written
   JSON5 lexer here as a result.
 
-  WHAT IT DOES NOT DO, deliberately: incremental merge. ECharts' setOption
-  carries normalMerge / replaceMerge / replaceAll with id and name matching and
-  deliberate index holes -- about 3,700 lines in its own source, and an XL on its
-  own. SetOptionText replaces the option WHOLE (ECharts' notMerge). Nothing in a
-  first release needs the incremental form, and building it later changes no call
-  site that only ever replaced.
+  TWO WAYS IN. SetOptionText replaces the option WHOLE (ECharts' notMerge);
+  MergeOptionText merges into it the way a setOption without notMerge does --
+  components and series mapped by id, name and index, objects merged deeply
+  (OptionMerge, [Batch 95]). The models' ids and names live beside the tree in
+  Keys: the tree alone cannot say which series a renamed one was. replaceMerge
+  and its index holes are not here yet.
 
   A REJECTED OPTION LEAVES NO OPTION. The tree goes and Error says why, so the
   chart is blank rather than showing something the option no longer says. The
@@ -30,7 +30,8 @@ unit tyControls.AdvChart.Option;
 
   LCL-free: SysUtils, Classes and fcl-json only. }
 interface
-uses SysUtils, Classes, fpjson, jsonparser, jsonscanner;
+uses SysUtils, Classes, fpjson, jsonparser, jsonscanner,
+  tyControls.AdvChart.OptionMerge;
 
 type
   TTyOptionError = record
@@ -46,8 +47,14 @@ type
     FRoot: TJSONData;
     FText: string;
     FError: TTyOptionError;
+    FKeys: TTyOptionKeys;
+    { the option the last merge took in, kept for its report }
+    FMerged: TJSONData;
     procedure SetError(const AMsg: string; ALine, ACol: Integer);
     procedure ClearError;
+    { AText parsed, or False with Error set and AParsed nil }
+    function ParseText(const AText: string; out AParsed: TJSONData): Boolean;
+    function KeyOf(const AMainType: string; AIndex: Integer; out AKey: TTyOptionKey): Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -58,6 +65,25 @@ type
       is what remembers the text a host wrote. }
     function SetOptionText(const AText: string): Boolean;
     procedure Clear;
+
+    { MERGE AText into the option, as upstream's setOption without notMerge
+      [Batch 95]. With no option yet (or one that is no object) it is the
+      first setOption: SetOptionText. A text that does not parse, is no
+      object, or carries one id twice in a main type is REFUSED: the option
+      stays as it was and Error says why -- unlike SetOptionText, because a
+      merge is an edit of what is shown, not a declaration of it. AReport
+      says what became of every slot; its NewOpt entries point into the
+      merged-in option, which is kept until the next set, merge or clear. }
+    function MergeOptionText(const AText: string; ABefore: TTyMergeBeforeComponent;
+      out AReport: TTyMergeReport): Boolean;
+    { THE MODELS: the id, name and subType upstream's model at that index has
+      ('' where there is none). }
+    function ComponentId(const AMainType: string; AIndex: Integer): string;
+    function ComponentModelName(const AMainType: string; AIndex: Integer): string;
+    function ComponentSubType(const AMainType: string; AIndex: Integer): string;
+    { the merged option, shaped as upstream's getOption shapes it }
+    function OptionJson: string;
+    property Keys: TTyOptionKeys read FKeys;
 
     { Resolve a dotted/indexed path -- 'series[0].itemStyle.color'. nil when any
       step is missing, which is the normal case for an option nobody set, not an
@@ -182,6 +208,7 @@ end;
 destructor TTyChartOption.Destroy;
 begin
   FreeAndNil(FRoot);
+  FreeAndNil(FMerged);
   inherited Destroy;
 end;
 
@@ -204,7 +231,9 @@ end;
 procedure TTyChartOption.Clear;
 begin
   FreeAndNil(FRoot);
+  FreeAndNil(FMerged);
   FText := '';
+  FKeys := nil;
   ClearError;
 end;
 
@@ -483,27 +512,18 @@ begin
   end;
 end;
 
-function TTyChartOption.SetOptionText(const AText: string): Boolean;
+function TTyChartOption.ParseText(const AText: string; out AParsed: TJSONData): Boolean;
 var
   parser: TJSONParser;
-  parsed: TJSONData;
   line, col: Integer;
   msg: string;
 begin
   Result := False;
-  if Trim(AText) = '' then
-  begin
-    { An empty option is a legitimate state -- a chart with nothing configured --
-      and is not an error. }
-    Clear;
-    Exit(True);
-  end;
-  parsed := nil;
+  AParsed := nil;
   { TOO DEEP IS REFUSED before the parser can recurse into it }
   if TyJsonNestingExceeds(AText, TyOptionMaxNesting, line, col) then
   begin
     SetError(Format(rsTyOptTooDeep, [TyOptionMaxNesting]), line, col);
-    FreeAndNil(FRoot);
     Exit(False);
   end;
   { DECODED FIRST -- see TyDecodeUnicodeEscapes. The scanner in FPC 3.2.2 drops
@@ -513,7 +533,7 @@ begin
     [joUTF8, joComments, joIgnoreTrailingComma]);
   try
     try
-      parsed := parser.Parse;
+      AParsed := parser.Parse;
     except
       on E: Exception do
       begin
@@ -522,32 +542,124 @@ begin
         if TyOptionTextHasFunction(AText) then
           msg := msg + ' ' + rsTyOptFunctionValue;
         SetError(msg, line, col);
-        { THE TREE GOES. An option that does not parse leaves NO chart, not the
-          previous one.
-
-          It used to keep the last good tree, on the theory that a design-time
-          editor re-applies the text on every keystroke and blanking on each
-          half-typed character would be unusable. That premise is gone: the
-          editor is a modal dialog that writes back on OK, and the Object
-          Inspector commits once per edit, so nothing ever pushes half-typed
-          text at the control.
-
-          What was left was a control that lies -- the property holding one
-          option while the picture showed another, with nothing on screen
-          saying so. At design time that reads as "my edit did nothing", which
-          is a worse signal than a blank chart next to an error. }
-        FreeAndNil(FRoot);
+        AParsed := nil;
         Exit(False);
       end;
     end;
   finally
     parser.Free;
   end;
+  Result := True;
+end;
+
+function TTyChartOption.SetOptionText(const AText: string): Boolean;
+var
+  parsed: TJSONData;
+begin
+  Result := False;
+  if Trim(AText) = '' then
+  begin
+    { An empty option is a legitimate state -- a chart with nothing configured --
+      and is not an error. }
+    Clear;
+    Exit(True);
+  end;
+  if not ParseText(AText, parsed) then
+  begin
+    { THE TREE GOES. An option that does not parse leaves NO chart, not the
+      previous one.
+
+      It used to keep the last good tree, on the theory that a design-time
+      editor re-applies the text on every keystroke and blanking on each
+      half-typed character would be unusable. That premise is gone: the
+      editor is a modal dialog that writes back on OK, and the Object
+      Inspector commits once per edit, so nothing ever pushes half-typed
+      text at the control.
+
+      What was left was a control that lies -- the property holding one
+      option while the picture showed another, with nothing on screen
+      saying so. At design time that reads as "my edit did nothing", which
+      is a worse signal than a blank chart next to an error. }
+    FreeAndNil(FRoot);
+    FKeys := nil;
+    Exit(False);
+  end;
   FreeAndNil(FRoot);
+  FreeAndNil(FMerged);
   FRoot := parsed;
   FText := AText;
+  { new models: every id made afresh [Batch 95] }
+  TyOptionKeysOfTree(FRoot, FKeys);
   ClearError;
   Result := True;
+end;
+
+function TTyChartOption.MergeOptionText(const AText: string;
+  ABefore: TTyMergeBeforeComponent; out AReport: TTyMergeReport): Boolean;
+var
+  parsed: TJSONData;
+  err: string;
+begin
+  AReport := Default(TTyMergeReport);
+  { THE FIRST setOption is an init whatever its flag says }
+  if not (FRoot is TJSONObject) then
+  begin
+    Result := SetOptionText(AText);
+    Exit;
+  end;
+  Result := False;
+  FreeAndNil(FMerged);
+  if Trim(AText) = '' then parsed := TJSONObject.Create
+  else if not ParseText(AText, parsed) then Exit(False);
+  if not (parsed is TJSONObject) then
+  begin
+    parsed.Free;
+    SetError(rsTyOptMergeNotObject, 0, 0);
+    Exit(False);
+  end;
+  FMerged := parsed;
+  if not TyOptionMerge(TJSONObject(FRoot), FKeys, TJSONObject(parsed), ABefore,
+    AReport, err) then
+  begin
+    SetError(err, 0, 0);
+    Exit(False);
+  end;
+  ClearError;
+  Result := True;
+end;
+
+function TTyChartOption.KeyOf(const AMainType: string; AIndex: Integer;
+  out AKey: TTyOptionKey): Boolean;
+var i: Integer;
+begin
+  AKey := Default(TTyOptionKey);
+  i := TyOptionKeyIndex(FKeys, AMainType);
+  Result := (i >= 0) and (AIndex >= 0) and (AIndex <= High(FKeys[i].Items))
+    and FKeys[i].Items[AIndex].Exists;
+  if Result then AKey := FKeys[i].Items[AIndex];
+end;
+
+function TTyChartOption.ComponentId(const AMainType: string; AIndex: Integer): string;
+var k: TTyOptionKey;
+begin
+  if KeyOf(AMainType, AIndex, k) then Result := k.Id else Result := '';
+end;
+
+function TTyChartOption.ComponentModelName(const AMainType: string; AIndex: Integer): string;
+var k: TTyOptionKey;
+begin
+  if KeyOf(AMainType, AIndex, k) then Result := k.Name else Result := '';
+end;
+
+function TTyChartOption.ComponentSubType(const AMainType: string; AIndex: Integer): string;
+var k: TTyOptionKey;
+begin
+  if KeyOf(AMainType, AIndex, k) then Result := k.SubType else Result := '';
+end;
+
+function TTyChartOption.OptionJson: string;
+begin
+  Result := TyOptionToJson(FRoot);
 end;
 
 { Split one path step into a name and an optional index: 'series[0]' -> 'series',
