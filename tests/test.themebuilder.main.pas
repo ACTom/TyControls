@@ -1,6 +1,6 @@
 unit test.themebuilder.main;
-{ The theme builder's main window (phase 1), built for real and never shown (as the terminal
-  example's tests do). Every question it asks is answered by PromptAnswerForTest, Save As
+{ The theme builder's main window (phases 1 and 2), built for real and never shown (as the
+  terminal example's tests do). Every question it asks is answered by PromptAnswerForTest, Save As
   takes SaveAsNameForTest and the settings go to a file in a temporary folder -- no test
   path shows a window or touches the user's configuration. }
 {$mode objfpc}{$H+}
@@ -58,13 +58,26 @@ type
     procedure TestTheMarksDoNotTakeTheBookmarkImages;
     procedure TestAFailureIsAnErrorNotAQuestion;
     procedure TestTrailingSpacesOfAnEditedLineAreKept;
+    { phase 2 }
+    procedure TestTheSeedsPageIsBuilt;
+    procedure TestASeedChangeIsOneUndoStep;
+    procedure TestEditsOnAnotherTextAreRefused;
+    procedure TestTheSeedsFollowTheText;
+    procedure TestCtrlClickGoesToTheRule;
+    procedure TestCtrlClickAddsARule;
+    procedure TestTheCoverageCheckReadsTheDocument;
+    procedure TestTheExportTakesTheSavedBytes;
+    procedure TestTheSnippetsNameTheFile;
+    procedure TestTheViewMenuShowsTheSidePages;
+    procedure TestAWindowGoesWithItsHooks;
   end;
 
 implementation
 
 uses
   Forms, FileUtil, IniFiles, Graphics, Types, fpjson, jsonparser, SynEdit, SynEditKeyCmds, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
-  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden;
+  tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden,
+  LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform;
 
 const
   { a document whose one value no base theme has }
@@ -167,8 +180,9 @@ end;
 
 procedure TTbMainFormTests.TestTheWindowIsBuilt;
 begin
-  AssertEquals('F1: one side window', 1, FForm.SideBar.WindowCount);
-  AssertTrue('F1: the problems', FForm.SideBar.Windows[0] = FForm.ProblemsWin);
+  AssertEquals('F1: two side windows', 2, FForm.SideBar.WindowCount);
+  AssertTrue('F1: the seeds first', FForm.SideBar.Windows[0] = FForm.SeedsWin);
+  AssertTrue('F1: the problems', FForm.SideBar.Windows[1] = FForm.ProblemsWin);
   AssertTrue('F1: the kit is attached', FForm.Editor.Highlighter is TSynCssSyn);
   AssertTrue('F1: the kit is the form''s', FForm.Kit.Edit = FForm.Editor);
   AssertFalse('F1: no tidying of the line left', FForm.Kit.FormatOnLineLeave);
@@ -313,9 +327,12 @@ end;
 
 procedure TTbMainFormTests.TestTheProjectListsItsUnits;
 const
-  cUnits: array[0..9] of string = ('themebuilder.lpr', 'tbmain.pas', 'tbpreview.pas',
+  cUnits: array[0..20] of string = ('themebuilder.lpr', 'tbmain.pas', 'tbpreview.pas',
     'tbsamplewin.pas', 'tbtemplates.pas', 'tbproblems.pas', 'tbdocument.pas',
-    'tbsettings.pas', 'tbthemesource.pas', 'tbeditorlook.pas');
+    'tbsettings.pas', 'tbthemesource.pas', 'tbeditorlook.pas',
+    'tbcssscan.pas', 'tbseeds.pas', 'tbseedsframe.pas', 'tbrules.pas', 'tbpick.pas',
+    'tbcoverage.pas', 'tbcoverageform.pas', 'tbexport.pas', 'tbexportform.pas',
+    'tbsnippets.pas', 'tbsnippetsform.pas');
 var
   lpi, dir: string;
   sl: TStringList;
@@ -565,21 +582,22 @@ end;
 
 procedure TTbMainFormTests.TestTheCatalogueCoversTheForms;
 var
-  want, have, po: TStringList;
+  want, have, po, forms: TStringList;
   i: Integer;
   k: string;
 begin
   want := TStringList.Create;
   have := TStringList.Create;
   po := LoadLines(ToolDir + 'languages' + PathDelim + 'themebuilder.zh_CN.po');
+  forms := FindAllFiles(ToolDir, '*.lfm', False);
   try
     want.Sorted := True;
     want.Duplicates := dupIgnore;
     have.Sorted := True;
     have.Duplicates := dupIgnore;
-    LfmKeys(ToolDir + 'tbmain.lfm', want);
-    LfmKeys(ToolDir + 'tbpreview.lfm', want);
-    LfmKeys(ToolDir + 'tbsamplewin.lfm', want);
+    AssertTrue('the forms', forms.Count >= 7);
+    for i := 0 to forms.Count - 1 do
+      LfmKeys(forms[i], want);
     AssertTrue('the forms have texts', want.Count > 50);
     AssertTrue('a menu item', want.IndexOf('ttbmainform.mnufile.caption') >= 0);
     AssertTrue('a frame control', want.IndexOf('ttbpreviewframe.btndefault.caption') >= 0);
@@ -599,6 +617,7 @@ begin
     want.Free;
     have.Free;
     po.Free;
+    forms.Free;
   end;
 end;
 
@@ -1001,6 +1020,217 @@ begin
   AssertEquals('F28: the edited line keeps its spaces', cLine1, FForm.Editor.Lines[0]);
   AssertTrue('saved', FForm.SaveDocument);
   AssertTrue('F28: the same bytes', ReadBytes(f) = cBytes);
+end;
+
+{ ---- phase 2: the seeds page, Ctrl+click, the coverage check, export, snippets ---- }
+
+const
+  cRulesDocMain = 'TyButton { }'#10'TyButton.primary { }'#10'TyButton.primary:hover { }'#10 +
+    'TyEdit, TyButton.primary { }';
+
+{ each line without its trailing blanks, LF breaks, no trailing ones }
+function TrimmedLines(const S: string): string;
+var
+  sl: TStringList;
+  i: Integer;
+begin
+  sl := TStringList.Create;
+  try
+    sl.Text := S;
+    Result := '';
+    for i := 0 to sl.Count - 1 do
+    begin
+      if i > 0 then Result := Result + #10;
+      Result := Result + TrimRight(sl[i]);
+    end;
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure CtrlPress(AControl: TControl);
+begin
+  AControl.Perform(LM_LBUTTONDOWN, MK_LBUTTON or MK_CONTROL, 0);
+  AControl.Perform(LM_LBUTTONUP, 0, 0);
+end;
+
+function PrimaryBg(AForm: TTbMainForm): Integer;
+begin
+  Result := Integer(Cardinal(AForm.Preview.Controller.Model.ResolveStyle('TyButton', 'primary', [])
+    .Background.Color) and $FFFFFF);
+end;
+
+procedure TTbMainFormTests.TestTheSeedsPageIsBuilt;
+begin
+  AssertTrue('F29: the frame is in its host', FForm.Seeds.Parent = FForm.SeedsHost);
+  AssertTrue('F29: the seeds page shows first', FForm.SideBar.ActiveWindow = FForm.SeedsWin);
+  AssertEquals('F29: two columns for the minimal template', 2, Length(FForm.Seeds.Columns));
+  AssertEquals('F29: light', 'light', FForm.Seeds.Columns[0]);
+  AssertEquals('F29: dark', 'dark', FForm.Seeds.Columns[1]);
+  AssertFalse('F29: not broken', FForm.Seeds.Broken);
+end;
+
+{ A character typed first, then a seed changed from the page: one Undo takes the seed back
+  and leaves the character -- the seed's edits are one step of their own. }
+procedure TTbMainFormTests.TestASeedChangeIsOneUndoStep;
+var
+  typed: string;
+begin
+  FForm.Editor.LogicalCaretXY := Point(4, 1);   { inside the header comment: still parses }
+  FForm.Editor.CommandProcessor(ecChar, 'x', nil);
+  typed := FForm.Editor.Lines.Text;
+  AssertTrue('typed', Pos('/* xA minimal', typed) = 1);
+  AssertTrue('F30: applied', FForm.Seeds.ApplyValue(0, 0, '#123456'));
+  AssertTrue('F30: the light accent', Pos('--accent: #123456;', FForm.Editor.Lines.Text) > 0);
+  AssertTrue('F30: the dark one as it was', Pos('--accent: #60A5FA;', FForm.Editor.Lines.Text) > 0);
+  AssertEquals('F30: the preview has it', $123456, PrimaryBg(FForm));
+  FForm.Editor.Undo;
+  AssertEquals('F30: one undo: the seed back, the x still there', Unify(typed), Unify(FForm.Editor.Lines.Text));
+end;
+
+procedure TTbMainFormTests.TestEditsOnAnotherTextAreRefused;
+var
+  t, u: string;
+  e: TTbTextEdits;
+begin
+  t := FForm.Editor.Lines.Text;
+  AssertEquals('the page scanned it', t, FForm.Seeds.ScannedText);
+  u := StringReplace(t, '#1F2937', '#222222', []);
+  AssertTrue('a different text', u <> t);
+  FForm.Editor.Lines.Text := u;      { not refreshed }
+  SetLength(e, 1);
+  e[0] := TbEdit(1, 1, 'x');
+  AssertFalse('F31: edits on the old text are refused', FForm.ApplyEdits(t, e));
+  AssertEquals('F31: the text is untouched', Unify(u), Unify(FForm.Editor.Lines.Text));
+  AssertTrue('F31: the page catches up first', FForm.Seeds.ApplyValue(0, 0, '#ABCDEF'));
+  AssertTrue('F31: landed on the new text', Pos('#222222', FForm.Editor.Lines.Text) > 0);
+  AssertTrue('F31: with the seed', Pos('--accent: #ABCDEF;', FForm.Editor.Lines.Text) > 0);
+end;
+
+procedure TTbMainFormTests.TestTheSeedsFollowTheText;
+begin
+  FForm.Editor.Lines.Text := '@mode light { :root { --accent: #ABCDEF; } }'#10 +
+    '@mode dark { :root { --accent: #222222; } }';
+  AssertTrue('not yet', FForm.Seeds.ResolvedText(0, 0) <> '#ABCDEF');
+  FForm.RefreshNow;
+  AssertEquals('F32: the page follows', '#ABCDEF', FForm.Seeds.ResolvedText(0, 0));
+end;
+
+procedure TTbMainFormTests.TestCtrlClickGoesToTheRule;
+begin
+  FForm.Editor.Lines.Text := cRulesDocMain;
+  CtrlPress(FForm.Preview.BtnPrimary);
+  AssertEquals('F33: first x', 1, FForm.Editor.LogicalCaretXY.X);
+  AssertEquals('F33: first y', 2, FForm.Editor.LogicalCaretXY.Y);
+  CtrlPress(FForm.Preview.BtnPrimary);
+  AssertEquals('F33: next x', 9, FForm.Editor.LogicalCaretXY.X);
+  AssertEquals('F33: next y', 4, FForm.Editor.LogicalCaretXY.Y);
+  CtrlPress(FForm.Preview.BtnPrimary);
+  AssertEquals('F33: round again x', 1, FForm.Editor.LogicalCaretXY.X);
+  AssertEquals('F33: round again y', 2, FForm.Editor.LogicalCaretXY.Y);
+end;
+
+procedure TTbMainFormTests.TestCtrlClickAddsARule;
+var
+  t, want: string;
+begin
+  t := TrimmedLines(FForm.Editor.Lines.Text);
+  CtrlPress(FForm.Preview.TagDanger);
+  want := 'TyTag.danger {'#10#10'}';
+  AssertEquals('F34: an empty rule at the end', want,
+    Copy(TrimmedLines(FForm.Editor.Lines.Text), Length(TrimmedLines(FForm.Editor.Lines.Text)) - Length(want) + 1, MaxInt));
+  AssertEquals('F34: the caret on the line in the braces', FForm.Editor.Lines.Count - 1,
+    FForm.Editor.LogicalCaretXY.Y);
+  AssertEquals('F34: indented', 3, FForm.Editor.LogicalCaretXY.X);
+  FForm.Editor.Undo;
+  AssertEquals('F34: one undo takes it away', t, TrimmedLines(FForm.Editor.Lines.Text));
+end;
+
+procedure TTbMainFormTests.TestTheCoverageCheckReadsTheDocument;
+var
+  f: TTbCoverageForm;
+  i: Integer;
+  found: Boolean;
+begin
+  FForm.Editor.Lines.Text := 'TyRibbon { }';
+  f := FForm.BuildCoverageForm;
+  try
+    found := False;
+    for i := 0 to f.LstNotShown.Items.Count - 1 do
+      if Pos('TyRibbon', f.LstNotShown.Items[i]) = 1 then
+        found := True;
+    AssertTrue('F35: the ribbon is listed', found);
+  finally
+    f.Free;
+  end;
+end;
+
+{ A file with LF breaks, opened on Windows: the editor's Lines.Text has CRLF; the bundle's
+  theme.tycss has the bytes a save would write (the file's own). }
+procedure TTbMainFormTests.TestTheExportTakesTheSavedBytes;
+var
+  bytes, err: string;
+  f: TTbExportForm;
+begin
+  bytes := StringReplace(ReadBytes(TbThemesDir + 'green.tycss'), #13#10, #10, [rfReplaceAll]);
+  WriteBytes(FDir + 'theme' + PathDelim + 'green.tycss', bytes);
+  WriteBytes(FDir + 'theme' + PathDelim + 'assets' + PathDelim + 'background.jpg',
+    ReadBytes(TbThemesDir + 'assets' + PathDelim + 'background.jpg'));
+  AssertTrue('opened', FForm.OpenFile(FDir + 'theme' + PathDelim + 'green.tycss'));
+  AssertTrue('F36: what a save would write', FForm.EntryBytes = bytes);
+  f := FForm.BuildExportForm;
+  try
+    AssertEquals('F36: the picture goes in', 1, Length(f.Files));
+    AssertEquals('F36: as referred to', 'assets/background.jpg', f.Files[0].Archive);
+    f.EdtTarget.Text := FDir + 'bundle';
+    AssertTrue('F36: exported: ' + err, f.DoExport(err));
+  finally
+    f.Free;
+  end;
+  AssertTrue('F36: the file''s bytes', ReadBytes(FDir + 'bundle' + PathDelim + 'theme.tycss') = bytes);
+end;
+
+procedure TTbMainFormTests.TestTheSnippetsNameTheFile;
+var
+  f: TTbSnippetsForm;
+begin
+  WriteBytes(FDir + 'green.tycss', ReadBytes(TbThemesDir + 'green.tycss'));
+  AssertTrue('opened', FForm.OpenFile(FDir + 'green.tycss'));
+  AssertEquals('the name', 'green', FForm.SnippetName);
+  f := FForm.BuildSnippetsForm;
+  try
+    AssertTrue('F37: the file', Pos('''green.tycss''', f.MemoFile.Lines.Text) > 0);
+    AssertTrue('F37: the folder', Pos('''green''', f.MemoFolder.Lines.Text) > 0);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTbMainFormTests.TestTheViewMenuShowsTheSidePages;
+begin
+  AssertFalse('open', FForm.SideBar.Collapsed);
+  AssertTrue('on the seeds', FForm.SideBar.ActiveWindow = FForm.SeedsWin);
+  FForm.MnuSeedsClick(nil);
+  AssertTrue('F38: the page showing: folded away', FForm.SideBar.Collapsed);
+  FForm.MnuSeedsClick(nil);
+  AssertFalse('F38: opened again', FForm.SideBar.Collapsed);
+  AssertTrue('F38: on the seeds', FForm.SideBar.ActiveWindow = FForm.SeedsWin);
+  FForm.MnuProblemsClick(nil);
+  AssertFalse('F38: still open', FForm.SideBar.Collapsed);
+  AssertTrue('F38: on the problems', FForm.SideBar.ActiveWindow = FForm.ProblemsWin);
+end;
+
+{ The preview's hooks and the seeds page outlive FormDestroy by a little (they are freed
+  with the window): neither calls back into it. }
+procedure TTbMainFormTests.TestAWindowGoesWithItsHooks;
+var
+  f: TTbMainForm;
+begin
+  f := TTbMainForm.Create(nil);
+  f.Preview.BuildSampleWindow;
+  CtrlPress(f.Preview.BtnPrimary);
+  f.Free;
+  AssertTrue('F39: gone without a fault', True);
 end;
 
 initialization

@@ -1,6 +1,6 @@
 unit tbmain;
-{ The theme builder's main window: a side-bar workbench (the Problems page), the .tycss
-  editor in the middle, the preview on the right.
+{ The theme builder's main window: a side-bar workbench (the Seeds and Problems pages), the
+  .tycss editor in the middle, the preview on the right.
 
   Typing restarts a 300 ms timer; when it fires the text is linted (the problem list, the
   marks in the gutter, the tinted lines) and, unless it does not parse, loaded into the
@@ -10,6 +10,14 @@ unit tbmain;
   The window's own look is the tool's theme on TyDefaultController ("View > Editor
   appearance"); the preview is on a controller of its own. The SynEdit is the one non-Ty
   control (the library has no code editor); its colours come from the tool's theme.
+
+  Every change that is not typed -- a seed from the seeds page, a rule added by Ctrl+click in
+  the preview or from the coverage check -- arrives as a set of edits worked out on the
+  text as it was (tbcssscan): ApplyEdits checks the editor still has that text, applies them
+  back to front inside one undo block (Ctrl+Z takes the whole change back at once) and
+  refreshes, and the refresh brings the seeds page up to date (UpdateFrom). Ctrl+click goes
+  to the rule for the control's typeKey and variant (tbrules); clicking the same control
+  again goes to the next rule of that name, round and round.
 
   Every question the window asks goes through Ask, and the tests answer it
   (PromptAnswerForTest) -- nothing in a test path shows a modal window. Save As in a test
@@ -23,7 +31,8 @@ uses
   tyControls.StatusBar, tyControls.ToolWindows, tyControls.ListBox, tyControls.Panel,
   tyControls.Splitter, tyControls.Icons.Lucide, tyControls.Dialogs.FileDialog,
   tyControls.ThemeLint, tyControls.Design.CssEditKit,
-  tbdocument, tbsettings, tbproblems, tbpreview, tbeditorlook;
+  tbdocument, tbsettings, tbproblems, tbpreview, tbeditorlook, tbcssscan, tbseedsframe,
+  tbcoverageform, tbexportform, tbsnippetsform;
 
 resourcestring
   rsTbTitle = '%s%s - Theme Builder';
@@ -41,6 +50,7 @@ resourcestring
   rsTbFilter = 'Theme files (*.tycss)|*.tycss|All files|*';
   rsTbReload = 'The file %s was changed by another program. Reload it?';
   rsTbReloadLoses = 'Your unsaved changes will be lost.';
+  rsTbExported = 'Exported to %s.';
 
 type
   TTbMainForm = class(TTyForm)
@@ -49,6 +59,8 @@ type
     MainMenuBar: TTyMenuBar;
     Status: TTyStatusBar;
     SideBar: TTyToolWindowBar;
+    SeedsWin: TTyToolWindow;
+    SeedsHost: TTyPanel;
     ProblemsWin: TTyToolWindow;
     ProblemsList: TTyListBox;
     PreviewHost: TTyPanel;
@@ -65,13 +77,19 @@ type
     MnuRecent: TMenuItem;
     MnuSave: TMenuItem;
     MnuSaveAs: TMenuItem;
+    MnuExportSep: TMenuItem;
+    MnuExport: TMenuItem;
+    MnuSnippets: TMenuItem;
     MnuFileSep: TMenuItem;
     MnuExit: TMenuItem;
     MnuView: TMenuItem;
     MnuAppearance: TMenuItem;
     MnuEditorDark: TMenuItem;
     MnuViewSep: TMenuItem;
+    MnuSeeds: TMenuItem;
     MnuProblems: TMenuItem;
+    MnuViewSep2: TMenuItem;
+    MnuCoverage: TMenuItem;
     DlgOpen: TTyOpenDialog;
     DlgSave: TTySaveDialog;
     RefreshTimer: TTimer;
@@ -93,6 +111,10 @@ type
     procedure MnuExitClick(Sender: TObject);
     procedure MnuEditorDarkClick(Sender: TObject);
     procedure MnuProblemsClick(Sender: TObject);
+    procedure MnuSeedsClick(Sender: TObject);
+    procedure MnuCoverageClick(Sender: TObject);
+    procedure MnuExportClick(Sender: TObject);
+    procedure MnuSnippetsClick(Sender: TObject);
   private
     FDoc: TTbDocument;
     FKit: TTyCssEditKit;
@@ -111,7 +133,15 @@ type
     FLastAskType: TMsgDlgType;
     FPrompting: Boolean;
     FPendingOpen: string;
+    FSeeds: TTbSeedsFrame;
+    FJumpKey: string;                  { the rule Ctrl+click went to last (lower case) }
+    FJumpIndex: Integer;               { which of its selectors }
     procedure OpenPending(Data: PtrInt);
+    procedure SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits);
+    procedure SeedsSync(Sender: TObject);
+    procedure PreviewPick(Sender: TObject; const ATypeKey, AStyleClass: string);
+    procedure ShowSidePage(AWin: TTyToolWindow);
+    function AskFor(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
     procedure MnuNewBuiltinClick(Sender: TObject);
     procedure MnuRecentClick(Sender: TObject);
     procedure MnuAppearanceClick(Sender: TObject);
@@ -149,6 +179,17 @@ type
     procedure CheckDiskNow;                        { what the watch timer does }
     procedure JumpToProblem(AIndex: Integer);
     procedure SetEditorAppearance(const ATheme: string; ADark: Boolean);
+    { the edits (worked out on AText) as ONE undo step, then a refresh. False when the editor
+      no longer has AText: offsets into another text mean nothing }
+    function ApplyEdits(const AText: string; const AEdits: TTbTextEdits): Boolean;
+    { go to the rule for ATypeKey and a class of AStyleClass (the next one, when it is the
+      same control again), or add an empty one at the end }
+    procedure JumpToRule(const ATypeKey, AStyleClass: string);
+    function BuildCoverageForm: TTbCoverageForm;     { filled, not shown }
+    function BuildExportForm: TTbExportForm;         { prepared, not shown }
+    function BuildSnippetsForm: TTbSnippetsForm;     { prepared, not shown }
+    function EntryBytes: string;                     { what Save would write, without a BOM }
+    function SnippetName: string;
     { FOR THE TESTS: how many times Ask answered from PromptAnswerForTest, and the last
       message it was given }
     property AskCount: Integer read FAskCount;
@@ -160,6 +201,7 @@ type
     property Preview: TTbPreviewFrame read FPreview;
     property Problems: TTbProblems read FProblems;
     property Settings: TTbSettings read FSettings;
+    property Seeds: TTbSeedsFrame read FSeeds;
   end;
 
 var
@@ -170,7 +212,8 @@ implementation
 {$R *.lfm}
 
 uses
-  Math, tyControls.BuiltinThemes, tyControls.Dialogs, tbtemplates;
+  Math, StrUtils, tyControls.BuiltinThemes, tyControls.Dialogs, tbtemplates, tbrules,
+  tbcoverage, tbsnippets;
 
 { ---- create / destroy ---- }
 
@@ -208,6 +251,15 @@ begin
   FPreview.Parent := PreviewHost;
   FPreview.Align := alClient;
   FPreview.OnChanged := @PreviewChanged;
+  FPreview.OnPick := @PreviewPick;
+
+  { the seeds page: its changes come back as edits, its questions go through Ask }
+  FSeeds := TTbSeedsFrame.Create(Self);
+  FSeeds.Parent := SeedsHost;
+  FSeeds.Align := alClient;
+  FSeeds.OnEdits := @SeedsEdits;
+  FSeeds.OnAsk := @AskFor;
+  FSeeds.OnSync := @SeedsSync;
 
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
@@ -244,6 +296,15 @@ end;
 procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
   Application.RemoveAsyncCalls(Self);
+  { the frames outlive this handler: nothing of theirs may call back into the window }
+  if FSeeds <> nil then
+  begin
+    FSeeds.OnEdits := nil;
+    FSeeds.OnAsk := nil;
+    FSeeds.OnSync := nil;
+  end;
+  if FPreview <> nil then
+    FPreview.OnPick := nil;
   TyDefaultController.RemoveChangeListener(@ToolThemeChanged);
   { the editor outlives this handler: it must not call back into a window taken apart }
   if FKit <> nil then
@@ -298,6 +359,12 @@ begin
     Exit(PromptAnswerForTest);
   end;
   Result := TyMessageDlg(AMsg, AType, AButtons, 0);
+end;
+
+{ Ask, in the shape the frames and dialogs ask in (TTbAskEvent): a question }
+function TTbMainForm.AskFor(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
+begin
+  Result := Ask(AMsg, AButtons);
 end;
 
 function TTbMainForm.ConfirmDiscard: Boolean;
@@ -520,6 +587,9 @@ begin
   if not FParseFailed then
     if not FPreview.LoadDocument(css, FDoc.BaseDir, err) then
       FLoadError := err;
+  { the seeds page follows the text; a text that does not parse leaves it disabled }
+  if FSeeds <> nil then
+    FSeeds.UpdateFrom(css, FDoc.BaseDir, FParseFailed);
   BuildProblems;
 end;
 
@@ -671,6 +741,210 @@ begin
   BuildProblems;
 end;
 
+{ ---- edits from the seeds page, Ctrl+click and the coverage check ---- }
+
+function TTbMainForm.ApplyEdits(const AText: string; const AEdits: TTbTextEdits): Boolean;
+var
+  i, last: Integer;
+  e: TTbTextEdit;
+  tail: string;
+begin
+  Result := False;
+  { the edits were worked out on AText; on any other text their offsets mean nothing }
+  if (Length(AEdits) = 0) or (Editor.Lines.Text <> AText) then Exit;
+  { Lines.Text ends with a line break the editor has no line after (only a whole-text
+    replacement reaches it): such an edit stops before it, and leaves its own final break }
+  last := TbEndInsertPos(AText);
+  tail := Copy(AText, last, MaxInt);
+  Editor.BeginUndoBlock;
+  try
+    for i := High(AEdits) downto 0 do   { back to front: the earlier offsets stay good }
+    begin
+      e := AEdits[i];
+      if e.Stop > last then
+      begin
+        e.Stop := last;
+        if (tail <> '') and (Copy(e.Text, Length(e.Text) - Length(tail) + 1, MaxInt) = tail) then
+          SetLength(e.Text, Length(e.Text) - Length(tail));
+      end;
+      if e.Start > last then
+        e.Start := last;
+      Editor.SetTextBetweenPoints(TbOffsetToPoint(AText, e.Start), TbOffsetToPoint(AText, e.Stop),
+        e.Text, [], scamAdjust);
+    end;
+  finally
+    Editor.EndUndoBlock;
+  end;
+  UpdateTitle;
+  RefreshNow;
+  Result := True;
+end;
+
+procedure TTbMainForm.SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits);
+begin
+  ApplyEdits(AText, AEdits);
+end;
+
+{ the seeds page is about to work out an edit: what it scanned must be what the editor has
+  (a keystroke may be waiting on the refresh timer) }
+procedure TTbMainForm.SeedsSync(Sender: TObject);
+begin
+  if RefreshTimer.Enabled or ((FSeeds <> nil) and (Editor.Lines.Text <> FSeeds.ScannedText)) then
+    RefreshNow;
+end;
+
+{ 'primary ghost' -> ['primary', 'ghost'] }
+function SplitClasses(const S: string): TStringArray;
+var
+  i, n: Integer;
+begin
+  n := WordCount(S, [' ', #9]);
+  SetLength(Result, n);
+  for i := 1 to n do
+    Result[i - 1] := ExtractWord(i, S, [' ', #9]);
+end;
+
+procedure TTbMainForm.JumpToRule(const ATypeKey, AStyleClass: string);
+var
+  scan: TTbCssScan;
+  classes: TStringArray;
+  hits: TTbOffsets;
+  i, caret: Integer;
+  variant, key, text: string;
+  edits: TTbTextEdits;
+begin
+  if ATypeKey = '' then Exit;
+  text := Editor.Lines.Text;
+  scan := TbScanCss(text);
+  try
+    classes := SplitClasses(AStyleClass);
+    hits := nil;
+    variant := '';
+    { a control with several classes: the first one the document has a rule for }
+    for i := 0 to High(classes) do
+    begin
+      hits := TbFindRuleSelectors(scan, ATypeKey, classes[i]);
+      if Length(hits) > 0 then
+      begin
+        variant := classes[i];
+        Break;
+      end;
+    end;
+    if (Length(hits) = 0) and (Length(classes) = 0) then
+      hits := TbFindRuleSelectors(scan, ATypeKey, '');
+    if (Length(hits) = 0) and (Length(classes) > 0) then
+      variant := classes[0];
+    if Length(hits) > 0 then
+    begin
+      { the same control again: the next rule of that name, round and round }
+      key := LowerCase(TbSelectorText(ATypeKey, variant));
+      if key = FJumpKey then
+        FJumpIndex := (FJumpIndex + 1) mod Length(hits)
+      else
+        FJumpIndex := 0;
+      FJumpKey := key;
+      Editor.LogicalCaretXY := TbOffsetToPoint(text, hits[FJumpIndex]);
+    end
+    else
+    begin
+      FJumpKey := '';
+      edits := TbNewRuleEdits(scan, TbDetectEol(text), ATypeKey, variant, caret);
+      if ApplyEdits(text, edits) then
+        Editor.LogicalCaretXY := TbOffsetToPoint(TbApplyEdits(text, edits), caret);
+    end;
+  finally
+    scan.Free;
+  end;
+  Editor.EnsureCursorPosVisible;
+  { a click in the sample window: the editor's window comes forward }
+  if Showing and not Active then
+    BringToFront;
+  if Editor.CanSetFocus then
+    Editor.SetFocus;
+end;
+
+procedure TTbMainForm.PreviewPick(Sender: TObject; const ATypeKey, AStyleClass: string);
+begin
+  JumpToRule(ATypeKey, AStyleClass);
+end;
+
+{ ---- the dialogs ---- }
+
+function TTbMainForm.BuildCoverageForm: TTbCoverageForm;
+var
+  doc, prev, base, notShown, def: TStringList;
+  scan: TTbCssScan;
+
+  function NewKeys: TStringList;
+  begin
+    Result := TStringList.Create;
+    Result.CaseSensitive := False;
+    Result.Sorted := True;
+    Result.Duplicates := dupIgnore;
+  end;
+
+begin
+  doc := NewKeys;
+  prev := NewKeys;
+  base := NewKeys;
+  notShown := TStringList.Create;
+  def := TStringList.Create;
+  scan := TbScanCss(Editor.Lines.Text);
+  try
+    TbDocTypeKeys(scan, doc);
+    FPreview.CollectTypeKeys(prev);
+    TbBaseTypeKeys(base);
+    TbCoverage(doc, prev, base, notShown, def);
+    Result := TTbCoverageForm.Create(nil);
+    Result.Fill(notShown, def);
+  finally
+    scan.Free;
+    doc.Free;
+    prev.Free;
+    base.Free;
+    notShown.Free;
+    def.Free;
+  end;
+end;
+
+function TTbMainForm.EntryBytes: string;
+begin
+  Result := TbJoinLines(Editor.Lines, FDoc.LineEnding, FDoc.TrailingEol);
+end;
+
+function TTbMainForm.SnippetName: string;
+begin
+  Result := TbSnippetThemeName(FDoc.FileName, FDoc.BasedOn);
+end;
+
+function TTbMainForm.BuildExportForm: TTbExportForm;
+var
+  scan: TTbCssScan;
+  dual: Boolean;
+begin
+  scan := TbScanCss(Editor.Lines.Text);
+  try
+    dual := scan.HasModes;
+  finally
+    scan.Free;
+  end;
+  Result := TTbExportForm.Create(nil);
+  Result.OnAsk := @AskFor;
+  Result.Prepare(EntryBytes, FDoc.BaseDir, SnippetName, dual);
+end;
+
+function TTbMainForm.BuildSnippetsForm: TTbSnippetsForm;
+var
+  fname: string;
+begin
+  if FDoc.Untitled then
+    fname := SnippetName + '.tycss'
+  else
+    fname := ExtractFileName(FDoc.FileName);
+  Result := TTbSnippetsForm.Create(nil);
+  Result.Prepare(SnippetName, fname, Editor.Lines.Text);
+end;
+
 { ---- the file on disk ---- }
 
 procedure TTbMainForm.WatchTimerTimer(Sender: TObject);
@@ -818,9 +1092,65 @@ begin
   SetEditorAppearance(FSettings.EditorTheme, MnuEditorDark.Checked);
 end;
 
+{ a side page from the View menu: shown (and the bar opened) or, when it is already the one
+  showing, the bar folded away }
+procedure TTbMainForm.ShowSidePage(AWin: TTyToolWindow);
+begin
+  if SideBar.Collapsed or (SideBar.ActiveWindow <> AWin) then
+  begin
+    SideBar.Collapsed := False;
+    SideBar.ActivateWindow(AWin);
+  end
+  else
+    SideBar.Collapsed := True;
+end;
+
 procedure TTbMainForm.MnuProblemsClick(Sender: TObject);
 begin
-  SideBar.Collapsed := not SideBar.Collapsed;
+  ShowSidePage(ProblemsWin);
+end;
+
+procedure TTbMainForm.MnuSeedsClick(Sender: TObject);
+begin
+  ShowSidePage(SeedsWin);
+end;
+
+procedure TTbMainForm.MnuCoverageClick(Sender: TObject);
+var
+  f: TTbCoverageForm;
+begin
+  f := BuildCoverageForm;
+  try
+    if (f.ShowModal = mrOk) and (f.Chosen <> '') then
+      JumpToRule(f.Chosen, '');
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTbMainForm.MnuExportClick(Sender: TObject);
+var
+  f: TTbExportForm;
+begin
+  f := BuildExportForm;
+  try
+    if f.ShowModal = mrOk then
+      SetStatus(Format(rsTbExported, [f.EdtTarget.Text]));
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTbMainForm.MnuSnippetsClick(Sender: TObject);
+var
+  f: TTbSnippetsForm;
+begin
+  f := BuildSnippetsForm;
+  try
+    f.ShowModal;
+  finally
+    f.Free;
+  end;
 end;
 
 end.

@@ -59,6 +59,19 @@ object TbMainForm: TTbMainForm
       ExpandedSize = 280
       Images = Icons
       ShowHint = True
+      ActiveIndex = 0
+      object SeedsWin: TTyToolWindow
+        Caption = 'Seeds'
+        ImageName = 'palette'
+        StripHint = 'Seeds'
+        object SeedsHost: TTyPanel
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+        end
+      end
       object ProblemsWin: TTyToolWindow
         Caption = 'Problems'
         ImageName = 'circle-alert'
@@ -103,6 +116,7 @@ object TbMainForm: TTbMainForm
   object Icons: TTyLucideImageList
     Names.Strings = (
       'circle-alert'
+      'palette'
     )
     Left = 360
     Top = 160
@@ -149,6 +163,17 @@ object TbMainForm: TTbMainForm
         ShortCut = 24659
         OnClick = MnuSaveAsClick
       end
+      object MnuExportSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuExport: TMenuItem
+        Caption = '&Export theme bundle...'
+        OnClick = MnuExportClick
+      end
+      object MnuSnippets: TMenuItem
+        Caption = '&Use it in a program...'
+        OnClick = MnuSnippetsClick
+      end
       object MnuFileSep: TMenuItem
         Caption = '-'
       end
@@ -170,9 +195,20 @@ object TbMainForm: TTbMainForm
       object MnuViewSep: TMenuItem
         Caption = '-'
       end
+      object MnuSeeds: TMenuItem
+        Caption = '&Seeds'
+        OnClick = MnuSeedsClick
+      end
       object MnuProblems: TMenuItem
         Caption = '&Problems'
         OnClick = MnuProblemsClick
+      end
+      object MnuViewSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuCoverage: TMenuItem
+        Caption = '&Coverage check...'
+        OnClick = MnuCoverageClick
       end
     end
   end
