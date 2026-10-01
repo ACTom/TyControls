@@ -134,6 +134,7 @@ function HttpCheckCurlOption(out AWhy: string): Boolean;      { W13, libcurl }
 function SettingsCheckUnixKeyFile(out AWhy: string): Boolean; { K2, Unix }
 function SettingsCheckWideKeyFile(out AWhy: string): Boolean; { K9 }
 function SettingsCheckPrivateFile(out AWhy: string): Boolean; { K10 }
+function SettingsCheckPrivateFileTraps(out AWhy: string): Boolean; { K11 }
 {$ENDIF}
 
 implementation
@@ -1840,6 +1841,50 @@ begin
     if FileMode(dir + 'p.keys') <> &600 then
       Exit(Fail(AWhy, Format('created with mode %d (decimal; 384 = 0600)', [FileMode(dir + 'p.keys')])));
     if ReadAll(dir + 'p.keys') <> 'x=y'#10 then Exit(Fail(AWhy, 'the bytes changed'));
+    Result := True;
+    AWhy := '';
+  finally
+    TbAiRemoveDir(dir);
+  end;
+end;
+
+{ K11: what is left under the temporary name is not written through -- a leftover 0644 file
+  (the result is 0600 anyway) and a symbolic link to another file (that file is untouched,
+  the result is a file of its own, 0600) }
+function SettingsCheckPrivateFileTraps(out AWhy: string): Boolean;
+var
+  dir: string;
+  st: TStat;
+  fd: cint;
+begin
+  Result := False;
+  dir := TbAiTempDir;
+  try
+    fpUmask(&022);
+    { a leftover temporary file, readable by others }
+    fd := fpOpen(PChar(dir + 'a.keys.tmp'), O_WRONLY or O_CREAT, &644);
+    fpWrite(fd, 'old'#10, 4);
+    fpClose(fd);
+    fpChmod(PChar(dir + 'a.keys.tmp'), &644);
+    if FileMode(dir + 'a.keys.tmp') <> &644 then Exit(Fail(AWhy, 'could not leave a 0644 file'));
+    if not TbWritePrivateFile(dir + 'a.keys', 'k=v'#10) then Exit(Fail(AWhy, 'a leftover: not written'));
+    if FileMode(dir + 'a.keys') <> &600 then
+      Exit(Fail(AWhy, Format('a leftover: mode %d (decimal; 384 = 0600)', [FileMode(dir + 'a.keys')])));
+    if ReadAll(dir + 'a.keys') <> 'k=v'#10 then Exit(Fail(AWhy, 'a leftover: the bytes'));
+    { a symbolic link to someone else's file }
+    fd := fpOpen(PChar(dir + 'victim'), O_WRONLY or O_CREAT, &644);
+    fpWrite(fd, 'victim'#10, 7);
+    fpClose(fd);
+    fpChmod(PChar(dir + 'victim'), &644);
+    if fpSymlink(PChar(dir + 'victim'), PChar(dir + 'b.keys.tmp')) <> 0 then
+      Exit(Fail(AWhy, 'could not make the link'));
+    if not TbWritePrivateFile(dir + 'b.keys', 'k=v'#10) then Exit(Fail(AWhy, 'a link: not written'));
+    if ReadAll(dir + 'victim') <> 'victim'#10 then Exit(Fail(AWhy, 'a link: the file it points to was written'));
+    if FileMode(dir + 'victim') <> &644 then Exit(Fail(AWhy, 'a link: the file it points to changed its mode'));
+    if (fpLStat(PChar(dir + 'b.keys'), st) <> 0) or not fpS_ISREG(st.st_mode) then
+      Exit(Fail(AWhy, 'a link: the result is not a file of its own'));
+    if FileMode(dir + 'b.keys') <> &600 then Exit(Fail(AWhy, 'a link: the result is not 0600'));
+    if ReadAll(dir + 'b.keys') <> 'k=v'#10 then Exit(Fail(AWhy, 'a link: the bytes'));
     Result := True;
     AWhy := '';
   finally

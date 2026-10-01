@@ -210,6 +210,7 @@ begin
   Run('K2 the key file is 0600, the ini has no key', @SettingsCheckUnixKeyFile);
   Run('K9 a key file others could read is made 0600', @SettingsCheckWideKeyFile);
   Run('K10 a new private file is 0600 under umask 022', @SettingsCheckPrivateFile);
+  Run('K11 a leftover temporary file or a link under its name is not written through', @SettingsCheckPrivateFileTraps);
 
   WriteLn(Format('tbcurlwsl: %d passed, %d failed', [Passed, Failed]));
   Halt(Failed);

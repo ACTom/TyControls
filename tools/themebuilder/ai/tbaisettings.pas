@@ -209,12 +209,15 @@ var
 begin
   Result := False;
   tmp := AFileName + '.tmp';
-  { created 0600: never readable by others, not even for a moment }
-  fd := fpOpen(PChar(tmp), O_WRONLY or O_CREAT or O_TRUNC, &600);
+  { whatever is there under that name goes first -- a temporary file left over with a wider
+    mode (it would keep its mode), or a symbolic link someone put there (the key would be
+    written to where it points): unlink removes the link, not what it points to. Then a
+    new file, 0600 from the start, never one that exists (O_EXCL does not follow a link
+    either; O_NOFOLLOW says so twice) }
+  fpUnlink(PChar(tmp));
+  fd := fpOpen(PChar(tmp), O_WRONLY or O_CREAT or O_EXCL or O_NOFOLLOW, &600);
   if fd < 0 then Exit;
   try
-    { a temporary file left over with a wider mode keeps its mode under O_CREAT }
-    fpChmod(PChar(tmp), &600);
     done := 0;
     while done < Length(AData) do
     begin
