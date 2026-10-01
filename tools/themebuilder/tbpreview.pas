@@ -18,7 +18,13 @@ unit tbpreview;
   document is probed (TbProbeDocument): every declaration a paint could evaluate is
   evaluated once against the mode's variables (TbFastProbe), and if that raises, every
   catalog typeKey is resolved with all its variants and states (TbProbeResolve), which has
-  the last word and names the typeKey. A failure puts the last version that worked back. }
+  the last word and names the typeKey. A failure puts the last version that worked back.
+
+  Ctrl+click (tbpick): every control under Root, and the sample window when it is built, has
+  its WindowProc hooked; a left press made with Ctrl held (Command on a Mac) never reaches
+  the control and is reported through OnPick with the control's typeKey and StyleClass.
+  The strip at the top (Tools) is the tool's, not the preview's: it is not hooked. The
+  hooks come off first thing when the frame goes. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -35,7 +41,7 @@ uses
   tyControls.ScrollBox, tyControls.Splitter, tyControls.Menu, tyControls.ToolBar,
   tyControls.StatusBar, tyControls.Breadcrumb, tyControls.ScrollBar, tyControls.ProgressBar,
   tyControls.CircularProgress, tyControls.ActivityIndicator, tyControls.Alert,
-  tyControls.Empty, tyControls.Notification, tyControls.Icons.Lucide, tbsamplewin;
+  tyControls.Empty, tyControls.Notification, tyControls.Icons.Lucide, tbsamplewin, tbpick;
 
 resourcestring
   rsTbDensityClassic = 'Classic';
@@ -237,6 +243,9 @@ type
     FAllDisabled: Boolean;
     FUpdating: Boolean;
     FOnChanged: TNotifyEvent;
+    FPicker: TTbPicker;
+    FOnPick: TTbPickEvent;
+    procedure PickerPick(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure FillCodeOnlyData;
     procedure UpdateModeNote;
     procedure SyncSwitches;
@@ -272,6 +281,9 @@ type
     property IsDark: Boolean read GetIsDark;
     property IsModern: Boolean read GetIsModern;
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;  { a switch was used }
+    { Ctrl+click on a preview control: its typeKey and StyleClass }
+    property OnPick: TTbPickEvent read FOnPick write FOnPick;
+    property Picker: TTbPicker read FPicker;         { FOR THE TESTS }
   end;
 
 type
@@ -615,6 +627,10 @@ begin
   TbApplyController(Root, FController);
   SamplePopup.Controller := FController;
   SampleNotify.Controller := FController;
+  { Ctrl+click: the preview's controls only, not the strip above them }
+  FPicker := TTbPicker.Create(Self);
+  FPicker.OnPick := @PickerPick;
+  FPicker.HookTree(Root);
   FUpdating := True;
   try
     DensityCombo.Items.Add(rsTbDensityClassic);
@@ -628,6 +644,10 @@ end;
 
 destructor TTbPreviewFrame.Destroy;
 begin
+  { the hooks first, while every hooked control is still there }
+  FOnPick := nil;
+  if FPicker <> nil then
+    FPicker.UnhookAll;
   { before the controller (a component of this frame) goes: the windows on it }
   FreeAndNil(FSampleWin);
   FreeAndNil(FDialogOwner);
@@ -1091,8 +1111,15 @@ begin
   begin
     FSampleWin := TTbSampleForm.Create(Self);
     FSampleWin.UseController(FController);
+    FPicker.HookTree(FSampleWin);
   end;
   Result := FSampleWin;
+end;
+
+procedure TTbPreviewFrame.PickerPick(Sender: TObject; const ATypeKey, AStyleClass: string);
+begin
+  if Assigned(FOnPick) then
+    FOnPick(Self, ATypeKey, AStyleClass);
 end;
 
 procedure TTbPreviewFrame.ShowSampleWindow;
