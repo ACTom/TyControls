@@ -1,0 +1,317 @@
+object SeedsFrame: TTbSeedsFrame
+  Left = 0
+  Height = 560
+  Top = 0
+  Width = 280
+  ClientHeight = 560
+  ClientWidth = 280
+  TabOrder = 0
+  DesignLeft = 0
+  DesignTop = 0
+  object ModeNote: TTyLabel
+    Left = 0
+    Height = 36
+    Top = 0
+    Width = 280
+    Align = alTop
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 6
+    BorderSpacing.Right = 8
+    WordWrap = True
+  end
+  object SplitButton: TTyButton
+    Left = 8
+    Height = 30
+    Top = 42
+    Width = 264
+    Align = alTop
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 4
+    BorderSpacing.Right = 8
+    BorderSpacing.Bottom = 4
+    Caption = 'Split into light and dark'
+    OnClick = SplitButtonClick
+  end
+  object Scroll: TTyScrollBox
+    Left = 0
+    Height = 484
+    Top = 76
+    Width = 280
+    Align = alClient
+    object Header: TTyPanel
+      Left = 0
+      Height = 26
+      Top = 0
+      Width = 280
+      Align = alTop
+      object HdrLeft: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 104
+        Caption = 'Light'
+      end
+      object HdrRight: TTyLabel
+        Left = 120
+        Height = 20
+        Top = 4
+        Width = 104
+        Caption = 'Dark'
+      end
+    end
+    object RowAccent: TTyPanel
+      Left = 0
+      Height = 78
+      Top = 26
+      Width = 280
+      Align = alTop
+      object LblAccent: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 216
+        Caption = '--accent'
+      end
+      object SwAccentL: TTyColorButton
+        Left = 8
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object SwAccentR: TTyColorButton
+        Left = 120
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object NoteAccentL: TTyLabel
+        Left = 8
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+      object NoteAccentR: TTyLabel
+        Left = 120
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+    end
+    object RowSurface: TTyPanel
+      Left = 0
+      Height = 78
+      Top = 104
+      Width = 280
+      Align = alTop
+      object LblSurface: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 216
+        Caption = '--surface'
+      end
+      object SwSurfaceL: TTyColorButton
+        Left = 8
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object SwSurfaceR: TTyColorButton
+        Left = 120
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object NoteSurfaceL: TTyLabel
+        Left = 8
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+      object NoteSurfaceR: TTyLabel
+        Left = 120
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+    end
+    object RowOnSurface: TTyPanel
+      Left = 0
+      Height = 78
+      Top = 182
+      Width = 280
+      Align = alTop
+      object LblOnSurface: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 216
+        Caption = '--on-surface'
+      end
+      object SwOnSurfaceL: TTyColorButton
+        Left = 8
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object SwOnSurfaceR: TTyColorButton
+        Left = 120
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object NoteOnSurfaceL: TTyLabel
+        Left = 8
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+      object NoteOnSurfaceR: TTyLabel
+        Left = 120
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+    end
+    object RowBorder: TTyPanel
+      Left = 0
+      Height = 78
+      Top = 260
+      Width = 280
+      Align = alTop
+      object LblBorder: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 216
+        Caption = '--border'
+      end
+      object SwBorderL: TTyColorButton
+        Left = 8
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object SwBorderR: TTyColorButton
+        Left = 120
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object NoteBorderL: TTyLabel
+        Left = 8
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+      object NoteBorderR: TTyLabel
+        Left = 120
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+    end
+    object RowDanger: TTyPanel
+      Left = 0
+      Height = 78
+      Top = 338
+      Width = 280
+      Align = alTop
+      object LblDanger: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 216
+        Caption = '--danger'
+      end
+      object SwDangerL: TTyColorButton
+        Left = 8
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object SwDangerR: TTyColorButton
+        Left = 120
+        Height = 28
+        Top = 26
+        Width = 104
+        ShowText = True
+        OnColorChange = SwatchColorChange
+      end
+      object NoteDangerL: TTyLabel
+        Left = 8
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+      object NoteDangerR: TTyLabel
+        Left = 120
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+    end
+    object RowRadius: TTyPanel
+      Left = 0
+      Height = 78
+      Top = 416
+      Width = 280
+      Align = alTop
+      object LblRadius: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 4
+        Width = 216
+        Caption = '--radius'
+      end
+      object SpnRadiusL: TTySpinEdit
+        Left = 8
+        Height = 28
+        Top = 26
+        Width = 104
+        MinValue = 0
+        MaxValue = 64
+        OnValueChange = RadiusChange
+      end
+      object SpnRadiusR: TTySpinEdit
+        Left = 120
+        Height = 28
+        Top = 26
+        Width = 104
+        MinValue = 0
+        MaxValue = 64
+        OnValueChange = RadiusChange
+      end
+      object NoteRadiusL: TTyLabel
+        Left = 8
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+      object NoteRadiusR: TTyLabel
+        Left = 120
+        Height = 18
+        Top = 56
+        Width = 104
+      end
+    end
+  end
+end

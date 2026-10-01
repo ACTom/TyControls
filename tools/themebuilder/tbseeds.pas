@@ -55,7 +55,80 @@ function TbSeedSetEdits(AScan: TTbCssScan; const AEol: string; ASeed: Integer;
 function TbSplitModesEdits(AScan: TTbCssScan; const AEol: string;
   const AValues: array of string): TTbTextEdits;
 
+type
+  { What a column's seed comes to, on a model of its own. Not the preview's controller: it is
+    in one mode at a time (two columns would mean switching it back and forth, and every
+    switch repaints the preview), and in the modern density it carries the density pack,
+    whose --radius (8px) is not the document's. So: the text loaded over the base as the
+    preview loads it (url() and @import from the document's folder) and nothing on top. }
+  TTbSeedEval = class
+  private
+    FModel: TTyStyleModel;
+    FLoaded: Boolean;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    { the text over the base, as the preview loads it but without a density pack; False: it does not load }
+    function Load(const AText, ABaseDir: string): Boolean;
+    function Color(ASeed: Integer; const AColumn: string; out AColor: TTyColor): Boolean;
+    function Radius(const AColumn: string; out APx: Integer): Boolean;
+  end;
+
 implementation
+
+uses
+  tbthemesource;
+
+{ ---- TTbSeedEval ---- }
+
+constructor TTbSeedEval.Create;
+begin
+  inherited Create;
+  FModel := TTyStyleModel.Create;   { the base layer, as every model starts }
+end;
+
+destructor TTbSeedEval.Destroy;
+begin
+  FModel.Free;
+  inherited Destroy;
+end;
+
+function TTbSeedEval.Load(const AText, ABaseDir: string): Boolean;
+begin
+  try
+    FModel.LoadFromSource(TTbTextThemeSource.Create(AText, ABaseDir));
+    FLoaded := True;
+  except
+    FLoaded := False;
+  end;
+  Result := FLoaded;
+end;
+
+function TTbSeedEval.Color(ASeed: Integer; const AColumn: string; out AColor: TTyColor): Boolean;
+var
+  s: TTyStyleSet;
+begin
+  AColor := 0;
+  Result := False;
+  if not FLoaded then Exit;
+  FModel.SetMode(AColumn);
+  s := FModel.ResolveOverride('color: var(--' + TbSeedNames[ASeed] + ');');
+  if tpTextColor in s.Present then
+  begin
+    AColor := s.TextColor;
+    Result := True;
+  end;
+end;
+
+function TTbSeedEval.Radius(const AColumn: string; out APx: Integer): Boolean;
+begin
+  APx := -1;
+  Result := False;
+  if not FLoaded then Exit;
+  FModel.SetMode(AColumn);
+  APx := FModel.ResolveMetric('--radius', -1);
+  Result := APx >= 0;
+end;
 
 function TbSeedColumns(AScan: TTbCssScan): TStringArray;
 begin

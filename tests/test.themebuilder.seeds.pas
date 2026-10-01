@@ -5,7 +5,7 @@ unit test.themebuilder.seeds;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, tbcssscan, tbseeds;
+  Classes, SysUtils, Controls, Dialogs, fpcunit, testregistry, tbcssscan, tbseeds, tbseedsframe;
 
 type
   TTbSeedEditTests = class(TTestCase)
@@ -29,6 +29,39 @@ type
     procedure TestTheRepositoryThemes;
   end;
 
+  { The seeds panel, built headless (no parent). OnAsk answers from FAnswer and counts,
+    OnEdits records what it was handed and counts; nothing is shown. }
+  TTbSeedsFrameTests = class(TTestCase)
+  private
+    FFrame: TTbSeedsFrame;
+    FAnswer: TModalResult;
+    FAsked: Integer;
+    FEdits: Integer;
+    FLastText: string;
+    FLastEdits: TTbTextEdits;
+    FSyncText: string;
+    FSynced: Integer;
+    function AskStub(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
+    procedure EditsStub(Sender: TObject; const AText: string; const AEdits: TTbTextEdits);
+    procedure SyncStub(Sender: TObject);
+    function Applied: string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheMinimalTemplate;
+    procedure TestAOneModeDocument;
+    procedure TestInheritedSeedsAreGreyAndPerMode;
+    procedure TestAnExpressionIsAskedAbout;
+    procedure TestASharedSeedIsAskedAbout;
+    procedure TestABrokenDocumentDisablesThePage;
+    procedure TestTheDensityDoesNotCount;
+    procedure TestARefreshWritesNothingBack;
+    procedure TestSplittingFromThePanel;
+    procedure TestTheRadiusOfTheDarkColumn;
+    procedure TestTheWindowCatchesUpFirst;
+  end;
+
 const
   { E6: the accent in :root, shared by both modes }
   cSharedDoc = ':root { --accent: #3DAEE9; }'#10'@mode light {'#10'  :root {'#10'    --surface: #EFF0F1;'#10'  }'#10'}'#10 +
@@ -37,6 +70,7 @@ const
 implementation
 
 uses
+  tyControls.Types, tyControls.DefaultTheme, tyControls.ColorButton, tbtemplates, tbpreview,
   test.themebuilder.golden;
 
 const
@@ -285,6 +319,238 @@ begin
   end;
 end;
 
+{ ---- the panel ---- }
+
+const
+  cDarkDoc = '@mode light { :root { --accent: #111111; } }'#10'@mode dark { :root { --accent: #222222; } }';
+  cExprDoc = '@mode light { :root { --surface: darken(#FFFFFF, 10%); } }'#10 +
+    '@mode dark { :root { --surface: #222222; } }';
+
+procedure TTbSeedsFrameTests.SetUp;
+begin
+  FFrame := TTbSeedsFrame.Create(nil);
+  FFrame.OnAsk := @AskStub;
+  FFrame.OnEdits := @EditsStub;
+  FAnswer := mrCancel;
+  FAsked := 0;
+  FEdits := 0;
+  FLastText := '';
+  FLastEdits := nil;
+  FSyncText := '';
+  FSynced := 0;
+end;
+
+procedure TTbSeedsFrameTests.TearDown;
+begin
+  FreeAndNil(FFrame);
+end;
+
+function TTbSeedsFrameTests.AskStub(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
+begin
+  Inc(FAsked);
+  Result := FAnswer;
+end;
+
+procedure TTbSeedsFrameTests.EditsStub(Sender: TObject; const AText: string;
+  const AEdits: TTbTextEdits);
+begin
+  Inc(FEdits);
+  FLastText := AText;
+  FLastEdits := Copy(AEdits);
+end;
+
+{ the window catching up: a newer text than the panel last scanned, once }
+procedure TTbSeedsFrameTests.SyncStub(Sender: TObject);
+begin
+  Inc(FSynced);
+  if FSyncText <> '' then
+  begin
+    FFrame.UpdateFrom(FSyncText, '', False);
+    FSyncText := '';
+  end;
+end;
+
+function TTbSeedsFrameTests.Applied: string;
+begin
+  Result := TbApplyEdits(FLastText, FLastEdits);
+end;
+
+procedure TTbSeedsFrameTests.TestTheMinimalTemplate;
+var
+  seed, col: Integer;
+begin
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  AssertEquals('SF1: two columns', 2, Length(FFrame.Columns));
+  AssertEquals('SF1: light', 'light', FFrame.Columns[0]);
+  AssertEquals('SF1: dark', 'dark', FFrame.Columns[1]);
+  AssertTrue('SF1: the dark swatches show', FFrame.Swatch(0, 1).Visible);
+  AssertFalse('SF1: no split', FFrame.SplitButton.Visible);
+  AssertFalse('SF1: not broken', FFrame.Broken);
+  AssertEquals('SF1: light accent', '#3B82F6', FFrame.ResolvedText(0, 0));
+  AssertEquals('SF1: dark accent', '#60A5FA', FFrame.ResolvedText(0, 1));
+  AssertEquals('SF1: light radius', '6px', FFrame.ResolvedText(TbRadiusSeed, 0));
+  AssertEquals('SF1: dark radius', '6px', FFrame.ResolvedText(TbRadiusSeed, 1));
+  for seed := 0 to TbSeedCount - 1 do
+    for col := 0 to 1 do
+      AssertEquals('SF1: no note ' + IntToStr(seed) + '/' + IntToStr(col), '',
+        FFrame.Note(seed, col).Caption);
+  AssertEquals('SF1: the dark swatch shows the dark accent', '#60A5FA',
+    TyColorHex(FFrame.Swatch(0, 1).SelectedColor));
+  AssertEquals('SF1: the light one the light accent', '#3B82F6',
+    TyColorHex(FFrame.Swatch(0, 0).SelectedColor));
+  AssertEquals('SF1: the spin box', 6, FFrame.RadiusSpin(1).Value);
+end;
+
+procedure TTbSeedsFrameTests.TestAOneModeDocument;
+begin
+  FFrame.UpdateFrom(TyBuiltinThemeCss, '', False);
+  AssertEquals('SF2: one column', 1, Length(FFrame.Columns));
+  AssertEquals('SF2: the mode-less one', '', FFrame.Columns[0]);
+  AssertFalse('SF2: no right column', FFrame.Swatch(0, 1).Visible);
+  AssertFalse('SF2: no right spin box', FFrame.RadiusSpin(1).Visible);
+  AssertTrue('SF2: split is offered', FFrame.SplitButton.Visible);
+  AssertEquals('SF2: says so', rsTbSeedsSingleMode, FFrame.ModeNote.Caption);
+end;
+
+procedure TTbSeedsFrameTests.TestInheritedSeedsAreGreyAndPerMode;
+begin
+  FFrame.UpdateFrom(cDarkDoc, '', False);
+  AssertEquals('SF3: light surface inherited', Ord(tssInherited), Ord(FFrame.Cell(1, 0).Source));
+  AssertEquals('SF3: dark surface inherited', Ord(tssInherited), Ord(FFrame.Cell(1, 1).Source));
+  AssertEquals('SF3: says so', rsTbSeedInherited, FFrame.Note(1, 0).Caption);
+  AssertFalse('SF3: greyed', FFrame.Note(1, 0).Enabled);
+  AssertTrue('SF3: an own one is not', FFrame.Note(0, 0).Enabled);
+  AssertEquals('SF3: the base light surface', '#FFFFFF', FFrame.ResolvedText(1, 0));
+  AssertEquals('SF3: the base dark surface', '#1E1E1E', FFrame.ResolvedText(1, 1));
+end;
+
+procedure TTbSeedsFrameTests.TestAnExpressionIsAskedAbout;
+begin
+  FFrame.UpdateFrom(cExprDoc, '', False);
+  AssertEquals('an expression', rsTbSeedExpression, FFrame.Note(1, 0).Caption);
+  FAnswer := mrNo;
+  AssertFalse('SF4: no keeps it', FFrame.ApplyValue(1, 0, '#EEEEEE'));
+  AssertEquals('SF4: nothing handed over', 0, FEdits);
+  AssertEquals('SF4: asked once', 1, FAsked);
+  FAnswer := mrYes;
+  AssertTrue('SF4: yes replaces it', FFrame.ApplyValue(1, 0, '#EEEEEE'));
+  AssertEquals('SF4: one set of edits', 1, FEdits);
+  AssertEquals('SF4: the expression became the colour',
+    StringReplace(cExprDoc, 'darken(#FFFFFF, 10%)', '#EEEEEE', []), Applied);
+  FAsked := 0;
+  AssertTrue('SF4: a literal', FFrame.ApplyValue(1, 1, '#333333'));
+  AssertEquals('SF4: is not asked about', 0, FAsked);
+end;
+
+procedure TTbSeedsFrameTests.TestASharedSeedIsAskedAbout;
+begin
+  FFrame.UpdateFrom(cSharedDoc, '', False);
+  AssertEquals('from :root', rsTbSeedShared, FFrame.Note(0, 0).Caption);
+  FAnswer := mrYes;
+  AssertTrue('SF5: yes', FFrame.ApplyValue(0, 0, '#000000'));
+  AssertEquals('SF5: yes changes :root', StringReplace(cSharedDoc, '#3DAEE9', '#000000', []), Applied);
+  FAnswer := mrNo;
+  AssertTrue('SF5: no', FFrame.ApplyValue(0, 0, '#000000'));
+  AssertEquals('SF5: no adds to the light block',
+    StringReplace(cSharedDoc, '    --surface: #EFF0F1;'#10,
+      '    --surface: #EFF0F1;'#10'    --accent: #000000;'#10, []), Applied);
+  FEdits := 0;
+  FAnswer := mrCancel;
+  AssertFalse('SF5: cancel', FFrame.ApplyValue(0, 0, '#000000'));
+  AssertEquals('SF5: cancel changes nothing', 0, FEdits);
+  AssertEquals('SF5: it asked each time', 3, FAsked);
+end;
+
+procedure TTbSeedsFrameTests.TestABrokenDocumentDisablesThePage;
+begin
+  FFrame.UpdateFrom('TyButton {', '', True);
+  AssertTrue('SF6: broken', FFrame.Broken);
+  FAnswer := mrYes;
+  AssertFalse('SF6: no change', FFrame.ApplyValue(0, 0, '#000000'));
+  AssertEquals('SF6: not asked', 0, FAsked);
+  AssertEquals('SF6: nothing handed over', 0, FEdits);
+  AssertEquals('SF6: says why', rsTbSeedsBroken, FFrame.ModeNote.Caption);
+  AssertFalse('SF6: the page is disabled', FFrame.Scroll.Enabled);
+  AssertFalse('SF6: no split either', FFrame.SplitButton.Visible);
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  AssertTrue('a good one enables it', FFrame.Scroll.Enabled);
+  FFrame.UpdateFrom('TyButton { border-radius: 1px 2px 3px; }', '', False);
+  AssertTrue('SF6: a text that does not load is broken too', FFrame.Broken);
+end;
+
+{ The preview in the modern density carries the density pack: a theme that sets --radius
+  in its top-level :root (as the base does) is drawn with the pack's 8px there. The panel
+  shows what the DOCUMENT says. (A theme with --radius in its @mode blocks keeps it in the
+  preview too: the mode's :root is merged over the top-level one, the pack included.) }
+procedure TTbSeedsFrameTests.TestTheDensityDoesNotCount;
+var
+  preview: TTbPreviewFrame;
+  err: string;
+begin
+  preview := TTbPreviewFrame.Create(nil);
+  try
+    AssertTrue('loaded', preview.LoadDocument(TyBuiltinThemeCss, '', err));
+    AssertEquals('classic: the document''s', 6, preview.Controller.Model.ResolveMetric('--radius', -1));
+    AssertTrue('modern', preview.SetModern(True));
+    AssertEquals('SF7: the preview in modern is 8', 8, preview.Controller.Model.ResolveMetric('--radius', -1));
+    FFrame.UpdateFrom(TyBuiltinThemeCss, '', False);
+    AssertEquals('SF7: the panel says what the document says', '6px', FFrame.ResolvedText(TbRadiusSeed, 0));
+  finally
+    preview.Free;
+  end;
+end;
+
+procedure TTbSeedsFrameTests.TestARefreshWritesNothingBack;
+begin
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  AssertEquals('the first light accent', '#3B82F6', FFrame.ResolvedText(0, 0));
+  FFrame.UpdateFrom(cDarkDoc, '', False);
+  AssertEquals('SF8: a different light accent', '#111111', FFrame.ResolvedText(0, 0));
+  AssertEquals('SF8: refreshing wrote nothing', 0, FEdits);
+  FFrame.Swatch(0, 0).SelectedColor := TyRGBA($12, $34, $56, $FF);
+  AssertEquals('SF8: a pick writes once', 1, FEdits);
+  AssertEquals('SF8: the value', '#123456', FLastEdits[0].Text);
+end;
+
+procedure TTbSeedsFrameTests.TestSplittingFromThePanel;
+begin
+  FFrame.UpdateFrom(TyBuiltinThemeCss, '', False);
+  AssertTrue('SF9: split', FFrame.SplitModes);
+  AssertEquals('SF9: one set of edits', 1, FEdits);
+  FFrame.UpdateFrom(Applied, '', False);
+  AssertEquals('SF9: two columns', 2, Length(FFrame.Columns));
+  AssertEquals('SF9: light', 'light', FFrame.Columns[0]);
+  AssertEquals('SF9: own light', Ord(tssOwn), Ord(FFrame.Cell(1, 0).Source));
+  AssertEquals('SF9: own dark', Ord(tssOwn), Ord(FFrame.Cell(1, 1).Source));
+  AssertEquals('SF9: own dark radius', Ord(tssOwn), Ord(FFrame.Cell(TbRadiusSeed, 1).Source));
+  AssertEquals('SF9: dark starts as light', FFrame.ResolvedText(1, 0), FFrame.ResolvedText(1, 1));
+  AssertEquals('SF9: the dark accent too', FFrame.ResolvedText(0, 0), FFrame.ResolvedText(0, 1));
+  AssertFalse('SF9: no split now', FFrame.SplitModes);
+end;
+
+procedure TTbSeedsFrameTests.TestTheRadiusOfTheDarkColumn;
+begin
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  FFrame.RadiusSpin(1).Value := 9;
+  AssertEquals('SF10: one set of edits', 1, FEdits);
+  AssertEquals('SF10: the value', '9px', FLastEdits[0].Text);
+  AssertTrue('SF10: in the dark block', FLastEdits[0].Start > Pos('@mode dark', FLastText));
+end;
+
+procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;
+const
+  cNewer = '@mode light { :root { --accent: #444444; } }'#10'@mode dark { :root { --accent: #555555; } }';
+begin
+  FFrame.OnSync := @SyncStub;
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  FSyncText := cNewer;
+  AssertTrue('applied', FFrame.ApplyValue(0, 0, '#ABCDEF'));
+  AssertEquals('SF11: synced', 1, FSynced);
+  AssertEquals('SF11: worked out on the newer text', cNewer, FLastText);
+  AssertEquals('SF11: and landed there', StringReplace(cNewer, '#444444', '#ABCDEF', []), Applied);
+end;
+
 initialization
   RegisterTest(TTbSeedEditTests);
+  RegisterTest(TTbSeedsFrameTests);
 end.
