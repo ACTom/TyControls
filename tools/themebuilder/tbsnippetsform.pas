@@ -46,14 +46,14 @@ uses
 
 procedure TTbSnippetsForm.FormCreate(Sender: TObject);
 var
-  font: string;
+  mono: string;
 begin
   ApplyChromeTheme(TyDefaultController);
-  font := TbEditorColors(TyDefaultController).FontName;
-  MemoFile.Font.Name := font;
-  MemoFolder.Font.Name := font;
-  MemoZip.Font.Name := font;
-  MemoRegister.Font.Name := font;
+  mono := TbEditorColors(TyDefaultController).FontName;
+  MemoFile.Font.Name := mono;
+  MemoFolder.Font.Name := mono;
+  MemoZip.Font.Name := mono;
+  MemoRegister.Font.Name := mono;
   BtnCopyFile.Tag := 0;
   BtnCopyFolder.Tag := 1;
   BtnCopyZip.Tag := 2;

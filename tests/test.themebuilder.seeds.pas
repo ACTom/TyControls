@@ -5,7 +5,7 @@ unit test.themebuilder.seeds;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls, Dialogs, fpcunit, testregistry, tbcssscan, tbseeds, tbseedsframe;
+  Classes, SysUtils, Controls, Forms, Dialogs, fpcunit, testregistry, tbcssscan, tbseeds, tbseedsframe;
 
 type
   TTbSeedEditTests = class(TTestCase)

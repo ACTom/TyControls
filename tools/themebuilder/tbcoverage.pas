@@ -36,7 +36,7 @@ procedure TbPartKeysOfClass(AClass: TClass; ADest: TStrings); { its unit's row a
 function TbPartKeyUnits: TStringArray;                          { FOR THE TESTS }
 { ANotShown: in ADoc, not in APreview. ADefaultLook: in APreview, in neither ADoc nor ABase.
   Both cleared, then filled in alphabetical order. }
-procedure TbCoverage(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
+procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
 
 implementation
 
@@ -266,7 +266,7 @@ begin
   end;
 end;
 
-procedure TbCoverage(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
+procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
 var
   i: Integer;
 begin

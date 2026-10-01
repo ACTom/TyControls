@@ -198,10 +198,10 @@ end;
 procedure TTbSeedsFrame.UpdateView;
 var
   seed, col, px: Integer;
-  two, show: Boolean;
+  two, shown: Boolean;
   c: TTbSeedCell;
-  color: TTyColor;
-  note: TTyLabel;
+  clr: TTyColor;
+  lbl: TTyLabel;
   where: string;
 begin
   FUpdating := True;
@@ -224,14 +224,14 @@ begin
     for seed := 0 to TbSeedCount - 1 do
       for col := 0 to 1 do
       begin
-        show := (col = 0) or two;
-        note := FNote[seed, col];
+        shown := (col = 0) or two;
+        lbl := FNote[seed, col];
         if seed = TbRadiusSeed then
-          FSpin[col].Visible := show
+          FSpin[col].Visible := shown
         else
-          FSwatch[seed, col].Visible := show;
-        note.Visible := show;
-        if not show then Continue;
+          FSwatch[seed, col].Visible := shown;
+        lbl.Visible := shown;
+        if not shown then Continue;
         c := Cell(seed, col);
         if seed = TbRadiusSeed then
         begin
@@ -242,8 +242,8 @@ begin
         end
         else
         begin
-          if (not FBroken) and FEval.Color(seed, FColumns[col], color) then
-            FSwatch[seed, col].SelectedColor := color;
+          if (not FBroken) and FEval.Color(seed, FColumns[col], clr) then
+            FSwatch[seed, col].SelectedColor := clr;
           where := ColumnName(col);
           if not two then where := rsTbSeedValue;
           FSwatch[seed, col].DialogCaption := '--' + TbSeedNames[seed] + ' (' + where + ')';
@@ -251,18 +251,18 @@ begin
           FSwatch[seed, col].ShowHint := c.Raw <> '';
         end;
         case c.Source of
-          tssInherited: note.Caption := rsTbSeedInherited;
-          tssShared: note.Caption := rsTbSeedShared;
+          tssInherited: lbl.Caption := rsTbSeedInherited;
+          tssShared: lbl.Caption := rsTbSeedShared;
         else
           if c.IsExpression then
-            note.Caption := rsTbSeedExpression
+            lbl.Caption := rsTbSeedExpression
           else
-            note.Caption := '';
+            lbl.Caption := '';
         end;
         if (c.Source = tssShared) and c.IsExpression then
-          note.Caption := rsTbSeedShared + ', ' + rsTbSeedExpression;
+          lbl.Caption := rsTbSeedShared + ', ' + rsTbSeedExpression;
         { inherited: the base's value, greyed -- a change adds the line }
-        note.Enabled := c.Source <> tssInherited;
+        lbl.Enabled := c.Source <> tssInherited;
       end;
   finally
     FUpdating := False;
@@ -285,7 +285,7 @@ end;
 
 function TTbSeedsFrame.ResolvedText(ASeed, AColumnIndex: Integer): string;
 var
-  color: TTyColor;
+  clr: TTyColor;
   px: Integer;
 begin
   Result := '';
@@ -295,8 +295,8 @@ begin
     if FEval.Radius(FColumns[AColumnIndex], px) then
       Result := TbRadiusText(px);
   end
-  else if FEval.Color(ASeed, FColumns[AColumnIndex], color) then
-    Result := TbColorText(color);
+  else if FEval.Color(ASeed, FColumns[AColumnIndex], clr) then
+    Result := TbColorText(clr);
 end;
 
 function TTbSeedsFrame.Swatch(ASeed, AColumnIndex: Integer): TTyColorButton;

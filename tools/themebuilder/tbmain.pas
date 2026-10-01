@@ -810,12 +810,12 @@ var
   classes: TStringArray;
   hits: TTbOffsets;
   i, caret: Integer;
-  variant, key, text: string;
+  variant, key, src: string;
   edits: TTbTextEdits;
 begin
   if ATypeKey = '' then Exit;
-  text := Editor.Lines.Text;
-  scan := TbScanCss(text);
+  src := Editor.Lines.Text;
+  scan := TbScanCss(src);
   try
     classes := SplitClasses(AStyleClass);
     hits := nil;
@@ -843,14 +843,14 @@ begin
       else
         FJumpIndex := 0;
       FJumpKey := key;
-      Editor.LogicalCaretXY := TbOffsetToPoint(text, hits[FJumpIndex]);
+      Editor.LogicalCaretXY := TbOffsetToPoint(src, hits[FJumpIndex]);
     end
     else
     begin
       FJumpKey := '';
-      edits := TbNewRuleEdits(scan, TbDetectEol(text), ATypeKey, variant, caret);
-      if ApplyEdits(text, edits) then
-        Editor.LogicalCaretXY := TbOffsetToPoint(TbApplyEdits(text, edits), caret);
+      edits := TbNewRuleEdits(scan, TbDetectEol(src), ATypeKey, variant, caret);
+      if ApplyEdits(src, edits) then
+        Editor.LogicalCaretXY := TbOffsetToPoint(TbApplyEdits(src, edits), caret);
     end;
   finally
     scan.Free;
@@ -872,7 +872,7 @@ end;
 
 function TTbMainForm.BuildCoverageForm: TTbCoverageForm;
 var
-  doc, prev, base, notShown, def: TStringList;
+  docKeys, prevKeys, baseKeys, notShown, defKeys: TStringList;
   scan: TTbCssScan;
 
   function NewKeys: TStringList;
@@ -884,26 +884,26 @@ var
   end;
 
 begin
-  doc := NewKeys;
-  prev := NewKeys;
-  base := NewKeys;
+  docKeys := NewKeys;
+  prevKeys := NewKeys;
+  baseKeys := NewKeys;
   notShown := TStringList.Create;
-  def := TStringList.Create;
+  defKeys := TStringList.Create;
   scan := TbScanCss(Editor.Lines.Text);
   try
-    TbDocTypeKeys(scan, doc);
-    FPreview.CollectTypeKeys(prev);
-    TbBaseTypeKeys(base);
-    TbCoverage(doc, prev, base, notShown, def);
+    TbDocTypeKeys(scan, docKeys);
+    FPreview.CollectTypeKeys(prevKeys);
+    TbBaseTypeKeys(baseKeys);
+    TbCoverageLists(docKeys, prevKeys, baseKeys, notShown, defKeys);
     Result := TTbCoverageForm.Create(nil);
-    Result.Fill(notShown, def);
+    Result.Fill(notShown, defKeys);
   finally
     scan.Free;
-    doc.Free;
-    prev.Free;
-    base.Free;
+    docKeys.Free;
+    prevKeys.Free;
+    baseKeys.Free;
     notShown.Free;
-    def.Free;
+    defKeys.Free;
   end;
 end;
 
