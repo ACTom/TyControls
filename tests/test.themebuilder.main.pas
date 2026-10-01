@@ -71,6 +71,8 @@ type
     procedure TestTheViewMenuShowsTheSidePages;
     procedure TestAWindowGoesWithItsHooks;
     procedure TestHowLongARefreshTakes;
+    { phase 2, after the review }
+    procedure TestAnEmptyEditorGetsNoExtraLine;
   end;
 
 implementation
@@ -1262,6 +1264,37 @@ begin
   CtrlPress(f.Preview.BtnPrimary);
   f.Free;
   AssertTrue('F39: gone without a fault', True);
+end;
+
+{ An editor with no line at all: Lines.Text is '', with no final break for an edit to stop
+  before. A block added to it is that block and nothing more -- not one empty line after. }
+procedure TTbMainFormTests.TestAnEmptyEditorGetsNoExtraLine;
+var
+  src, want: string;
+  scan: TTbCssScan;
+  edits: TTbTextEdits;
+begin
+  FForm.Editor.Lines.Text := '';
+  FForm.RefreshNow;
+  src := FForm.Editor.Lines.Text;
+  AssertEquals('no line at all', '', src);
+  scan := TbScanCss(src);
+  try
+    edits := TbSeedSetEdits(scan, TbDetectEol(src), 0, '', '#ABCDEF', False);
+  finally
+    scan.Free;
+  end;
+  want := TbApplyEdits(src, edits);
+  AssertTrue('applied', FForm.ApplyEdits(src, edits));
+  AssertEquals('G1: the block and its final break, no empty line after', want, FForm.Editor.Lines.Text);
+  AssertEquals('G1: three lines', 3, FForm.Editor.Lines.Count);
+  FForm.Editor.Lines.Text := '';
+  FForm.RefreshNow;
+  FForm.JumpToRule('TyTag', 'danger');
+  AssertEquals('G1: an empty rule in an empty editor', 'TyTag.danger {' + LineEnding + '  ' + LineEnding + '}' + LineEnding,
+    FForm.Editor.Lines.Text);
+  AssertEquals('G1: the caret in the braces (line)', 2, FForm.Editor.LogicalCaretXY.Y);
+  AssertEquals('G1: the caret in the braces (column)', 3, FForm.Editor.LogicalCaretXY.X);
 end;
 
 initialization

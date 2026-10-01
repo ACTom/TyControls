@@ -745,17 +745,23 @@ end;
 
 function TTbMainForm.ApplyEdits(const AText: string; const AEdits: TTbTextEdits): Boolean;
 var
-  i, last: Integer;
+  i, last, n: Integer;
   e: TTbTextEdit;
   tail: string;
+  wasEmpty: Boolean;
 begin
   Result := False;
   { the edits were worked out on AText; on any other text their offsets mean nothing }
   if (Length(AEdits) = 0) or (Editor.Lines.Text <> AText) then Exit;
   { Lines.Text ends with a line break the editor has no line after (only a whole-text
-    replacement reaches it): such an edit stops before it, and leaves its own final break }
+    replacement reaches it): such an edit stops before it, and leaves its own final break.
+    An editor with no line at all has no such break (Lines.Text is ''): what an edit at
+    its end brings ends with a break Lines.Text adds by itself, so it goes too -- and
+    SynEdit, inserting into no line, makes one empty line after what it inserts, which
+    goes as well (in the same undo step). Either one kept is one empty line more. }
   last := TbEndInsertPos(AText);
   tail := Copy(AText, last, MaxInt);
+  wasEmpty := Editor.Lines.Count = 0;
   Editor.BeginUndoBlock;
   try
     for i := High(AEdits) downto 0 do   { back to front: the earlier offsets stay good }
@@ -766,12 +772,18 @@ begin
         e.Stop := last;
         if (tail <> '') and (Copy(e.Text, Length(e.Text) - Length(tail) + 1, MaxInt) = tail) then
           SetLength(e.Text, Length(e.Text) - Length(tail));
-      end;
+      end
+      else if (tail = '') and (e.Stop = last) then
+        SetLength(e.Text, TbEndInsertPos(e.Text) - 1);
       if e.Start > last then
         e.Start := last;
       Editor.SetTextBetweenPoints(TbOffsetToPoint(AText, e.Start), TbOffsetToPoint(AText, e.Stop),
         e.Text, [], scamAdjust);
     end;
+    n := Editor.Lines.Count;
+    if wasEmpty and (n > 1) and (Editor.Lines[n - 1] = '') then
+      Editor.SetTextBetweenPoints(Point(Length(Editor.Lines[n - 2]) + 1, n - 1), Point(1, n), '',
+        [], scamAdjust);
   finally
     Editor.EndUndoBlock;
   end;
