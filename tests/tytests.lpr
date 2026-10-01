@@ -233,7 +233,8 @@ uses
   test.themebuilder.aiclient,
   test.themebuilder.reference,
   test.themebuilder.diff,
-  test.themebuilder.aisession;
+  test.themebuilder.aisession,
+  test.themebuilder.compare;
 
 type
   TTyTestRunner = class(TTestRunner)

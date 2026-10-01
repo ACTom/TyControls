@@ -13,6 +13,9 @@ unit tbeditorlook;
     numbers, units      --warning           at-rules --info (TSynCssSyn colours them as
                                              keywords: no attribute of their own)
     problem lines       --danger / --warning, 18 % over the background
+    comparison: added   --success, 18 % over the background (the AI comparison window)
+                removed --danger, 18 % over the background
+                filler  --surface-chrome (a row one side has no line for)
     font                --terminal-font-family (monospace -> the platform's), --font-size-base
 
   A token the theme does not define falls back as listed, or to the text colour. Borders and
@@ -26,6 +29,7 @@ type
   TTbEditorColors = record
     Background, Text, Selection, Gutter, LineNumbers, Comment, Keyword, Str, Number,
     AtRule, ErrorLine, WarningLine: TColor;
+    AddedLine, RemovedLine, FillerLine: TColor;   { the comparison window's rows }
     FontName: string;
     FontSize: Integer;       { points }
   end;
@@ -133,6 +137,11 @@ begin
   Result.ErrorLine := TyColorToLCL(TyMix(bg, c, 18));
   c := Pick('warning', fg) or TTyColor($FF000000);
   Result.WarningLine := TyColorToLCL(TyMix(bg, c, 18));
+  c := Pick('success', fg) or TTyColor($FF000000);
+  Result.AddedLine := TyColorToLCL(TyMix(bg, c, 18));
+  c := Pick('danger', fg) or TTyColor($FF000000);
+  Result.RemovedLine := TyColorToLCL(TyMix(bg, c, 18));
+  Result.FillerLine := Result.Gutter;
 
   fname := Trim(AController.Model.RawVar('--terminal-font-family'));
   if (Length(fname) >= 2) and (fname[1] in ['"', '''']) and (fname[Length(fname)] = fname[1]) then

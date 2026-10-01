@@ -24,7 +24,14 @@ unit tbpreview;
   its WindowProc hooked; a left press made with Ctrl held (Command on a Mac) never reaches
   the control and is reported through OnPick with the control's typeKey and StyleClass.
   The strip at the top (Tools) is the tool's, not the preview's: it is not hooked. The
-  hooks come off first thing when the frame goes. }
+  hooks come off first thing when the frame goes.
+
+  Trying a version (the AI comparison's "Try it in the preview"): BeginTrial loads another
+  text the ordinary way, after putting aside what the editor's document left here -- the
+  last version that worked, its folder, and a switch refused for it. EndTrial loads that
+  back and restores the refusal (a load of a different text clears it). While a trial is
+  on, the window does not load the editor's text into the preview (TTbMainForm.RefreshNow);
+  a trial the preview refuses ends at once. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -245,6 +252,9 @@ type
     FOnChanged: TNotifyEvent;
     FPicker: TTbPicker;
     FOnPick: TTbPickEvent;
+    FInTrial: Boolean;
+    FTrialGoodText, FTrialGoodDir: string;
+    FTrialModeError: string;
     procedure PickerPick(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure FillCodeOnlyData;
     procedure UpdateModeNote;
@@ -261,6 +271,11 @@ type
     { AText over the base, as an app would load it; url() / @import from ABaseDir.
       False + AError: the preview keeps the last version that loaded (or the base) }
     function LoadDocument(const AText, ABaseDir: string; out AError: string): Boolean;
+    { AText shown instead of the document, until EndTrial; False + AError when the preview
+      refuses it (the trial is then over already) }
+    function BeginTrial(const AText, ABaseDir: string; out AError: string): Boolean;
+    { the document's version back, and its refused switch with it }
+    procedure EndTrial;
     { False + AError: the document does not resolve in that mode; the mode is unchanged }
     function SetDark(ADark: Boolean; out AError: string): Boolean;
     { False (ModeError says why): the document does not resolve in that density; the
@@ -281,6 +296,7 @@ type
     { the last refused switch; '' after a switch that went through or a good load of a
       different document }
     property ModeError: string read FModeError;
+    property InTrial: Boolean read FInTrial;
     property AllDisabled: Boolean read FAllDisabled;
     property IsDark: Boolean read GetIsDark;
     property IsModern: Boolean read GetIsModern;
@@ -874,6 +890,32 @@ begin
     { a load that raised left the model as it was, but one that loaded and then failed
       the probe did not: put the last good version back (or the bare base) }
     RestoreGood;
+  UpdateModeNote;
+end;
+
+function TTbPreviewFrame.BeginTrial(const AText, ABaseDir: string; out AError: string): Boolean;
+begin
+  if not FInTrial then
+  begin
+    { what the editor's document left here; EndTrial puts exactly this back }
+    FTrialGoodText := FGoodText;
+    FTrialGoodDir := FGoodDir;
+    FTrialModeError := FModeError;
+    FInTrial := True;
+  end;
+  Result := LoadDocument(AText, ABaseDir, AError);
+  if not Result then
+    EndTrial;                       { refused: the preview shows the editor's version again }
+end;
+
+procedure TTbPreviewFrame.EndTrial;
+var
+  err: string;
+begin
+  if not FInTrial then Exit;
+  FInTrial := False;
+  LoadDocument(FTrialGoodText, FTrialGoodDir, err);
+  FModeError := FTrialModeError;   { LoadDocument cleared it: the text changed twice }
   UpdateModeNote;
 end;
 
