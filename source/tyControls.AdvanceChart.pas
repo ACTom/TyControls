@@ -165,14 +165,26 @@ type
     port's builders it speaks for, every data item's elements by RAW index
     (a filter does not move them), and a line's polyline and area. The
     element indices are the last build's. }
-  TTyStKind = (sskNone, sskBar, sskPie, sskSymbol);
+  { [Batch 90] a heatmap's cell (sskRect), a funnel's band, a candlestick
+    (its body the host, the wicks of the same path FOLLOWERS that take the
+    host's changes), a pictorial bar (its glyphs, the first the host, the
+    rest PARTS with states of their own) }
+  TTyStKind = (sskNone, sskBar, sskPie, sskSymbol, sskRect, sskFunnel,
+    sskCandle, sskPictorial, sskSunburst);
+  TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
     IsLine: Boolean;
     Rows: array of TTyStItem;
     HostIdx, LabelIdx, GuideIdx: TTyIntegerArray;
+    { by raw index: more elements of the item -- drawn from the host's
+      values (FollowIdx) or with states of their own (PartIdx) [Batch 90] }
+    FollowIdx, PartIdx: array of TTyIntegerArray;
     Run, Area: TTyStItem;
     RunIdx, AreaIdx: TTyIntegerArray;
+    { getComponentStates(series).isBlured: blurSeries reached it, so the next
+      allLeaveBlur walks it [Batch 90] }
+    IsBlured: Boolean;
   end;
 
   TTyChartEventReg = record
@@ -1050,13 +1062,37 @@ type
     procedure StDeclareItem(ASlot, ARaw: Integer; AList: TTyPaintList;
       APPI: Integer);
     procedure StDeclareLine(ASlot: Integer; AList: TTyPaintList);
+    procedure StDeclareCandle(ASlot, ARaw: Integer;
+      const ANodes: array of TJSONObject; var AHost: TTyStElement);
     procedure StWrite(AList: TTyPaintList);
     { upstream's frame: every flag that changed since the last one becomes a
       state list. True when an element changed. }
     function StApplyChanged: Boolean;
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
-    procedure StChangeHover(ASeriesIndex: Integer; var AEl: TTyStElement;
-      AState: Integer);
+    { ---- focus and blur [Batch 90] ---- }
+    { a line's polyline state, -1 for any other series; and setting it (the
+      area follows the polyline, _changePolyState) }
+    function StPolyOf(ASeriesIndex: Integer): Integer;
+    procedure StPolyTo(ASeriesIndex, AState: Integer);
+    { the coordinate system blurSeries compares: the grid of a cartesian, a
+      calendar, a radar; '' for none (a series with none matches itself) }
+    function StCoordKey(ASlot: Integer): string;
+    { ecData.focus / blurScope of an item's element (the item, then the
+      series) and of the series' own elements }
+    function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+    function StItemFocus(ASeriesIndex, ARaw: Integer;
+      out AScope: TTyStScope): TTyStFocus;
+    function StSeriesFocus(ASeriesIndex: Integer;
+      out AScope: TTyStScope): TTyStFocus;
+    procedure StBlurSeries(ATarget: Integer; const AFocus: TTyStFocus;
+      AScope: TTyStScope);
+    procedure StAllLeaveBlur;
+    { the hover dispatcher under a target: a data item (APart 0), a line's
+      polyline (1) or area (2); False when there is none or its emphasis is
+      disabled }
+    function StDispatcher(const ATarget: TTyChartEventTarget;
+      out AItem: PTyStItem; out APart: Integer): Boolean;
+    function StInnerRaw(ASeriesIndex, AInner: Integer): Integer;
     procedure StHoverOut(const ATarget: TTyChartEventTarget);
     procedure StHoverOver(const ATarget: TTyChartEventTarget);
     { an element the state machine draws (the overlay leaves it alone) }
@@ -9914,6 +9950,12 @@ end;
 { an element's values at rest, as the state machine keeps them: zrender's
   default lineWidth 1 where the port draws no stroke, so a state that only
   names a border colour draws a one-pixel border as upstream does }
+procedure StPush(var AArr: TTyIntegerArray; AValue: Integer);
+begin
+  SetLength(AArr, Length(AArr) + 1);
+  AArr[High(AArr)] := AValue;
+end;
+
 function StRestOf(const AEl: TTyChartElement): TTyStObject;
 begin
   Result := TyStNoObject;
@@ -9942,7 +9984,9 @@ end;
 function StLabelRestOf(const AEl: TTyChartElement): TTyStObject;
 begin
   Result := TyStNoObject;
-  TyStSetNum(Result, stkOpacity, 1);
+  { the label's own opacity: the host's at build, as defaultOpacity hands it
+    over [Batch 90] }
+  TyStSetNum(Result, stkOpacity, AEl.Style.Alpha);
   TyStSetNum(Result, stkZ2, AEl.Z2);
   TyStSetNum(Result, stkX, AEl.Caption.X);
   TyStSetNum(Result, stkY, AEl.Caption.Y);
@@ -9954,7 +9998,7 @@ end;
 function StGuideRestOf(const AEl: TTyChartElement): TTyStObject;
 begin
   Result := TyStNoObject;
-  TyStSetNum(Result, stkOpacity, 1);
+  TyStSetNum(Result, stkOpacity, AEl.Style.Alpha);
   TyStSetNum(Result, stkZ2, AEl.Z2);
   TyStSetNum(Result, stkX, 0);
   TyStSetNum(Result, stkY, 0);
@@ -10046,6 +10090,33 @@ begin
   AEl.Ignore := c.Num[stkIgnore] <> 0;
 end;
 
+{ A FOLLOWER: another stretch of the host's own path (a candlestick's
+  wicks) -- the colours the states changed, the host's opacity and its
+  paint order, the same translation [Batch 90] }
+procedure StWriteFollower(var AEl: TTyChartElement; const AHost: TTyStElement);
+var c, r: TTyStObject;
+begin
+  c := AHost.Cur;
+  r := AHost.Rest;
+  if not SameColourKey(c, r, stkFill) and AEl.Style.HasFill then
+  begin
+    if c.None[stkFill] then AEl.Style.HasFill := False
+    else AEl.Style.FillColor := c.Color[stkFill];
+  end;
+  if not SameColourKey(c, r, stkStroke) and (AEl.Style.StrokeColor <> 0) then
+  begin
+    if c.None[stkStroke] then AEl.Style.StrokeColor := 0
+    else AEl.Style.StrokeColor := c.Color[stkStroke];
+  end;
+  if not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]) then
+    AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+  if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+    AEl.Style.Alpha := c.Num[stkOpacity];
+  AEl.Z2 := AEl.Z2 + Round(c.Num[stkZ2] - r.Num[stkZ2]);
+  StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
+  AEl.Ignore := c.Num[stkIgnore] <> 0;
+end;
+
 procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement);
 var c, r: TTyStObject; dx, dy: Double;
 begin
@@ -10058,6 +10129,9 @@ begin
   StShiftShape(AEl.Shape, dx, dy);
   AEl.Z2 := Round(c.Num[stkZ2]);
   AEl.Ignore := c.Num[stkIgnore] <> 0;
+  { blur: the label's opacity, a tenth of it by default [Batch 90] }
+  if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+    AEl.Style.Alpha := c.Num[stkOpacity];
   { the ink: a colour a state declares, else the hover's own under emphasis }
   if TyStHasColour(c, stkFill) then
   begin
@@ -10078,6 +10152,8 @@ begin
   StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   AEl.Z2 := Round(c.Num[stkZ2]);
   AEl.Ignore := c.Num[stkIgnore] <> 0;
+  if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+    AEl.Style.Alpha := c.Num[stkOpacity];
 end;
 
 function TTyAdvanceChart.StKindOf(ASlot: Integer): TTyStKind;
@@ -10085,14 +10161,22 @@ var t: string;
 begin
   Result := sskNone;
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
-  { a calendar's scatter, a radar's polygons and a polar bar are drawn by
-    builders of their own, still on the overlay }
-  if (FBindings[ASlot].CalendarIndex >= 0) or (FBindings[ASlot].RadarIndex >= 0) then Exit;
+  { a radar's polygons are drawn by a builder of its own, still on the
+    overlay; a calendar's scatter and heatmap are the cartesian ones'
+    elements [Batch 90] }
+  if FBindings[ASlot].RadarIndex >= 0 then Exit;
   t := FBindings[ASlot].SeriesType;
   if t = 'bar' then Result := sskBar
   else if t = TyPieSeriesTypeName then Result := sskPie
   else if (t = 'line') or (t = 'scatter') or (t = 'effectScatter') then
-    Result := sskSymbol;
+    Result := sskSymbol
+  else if t = 'heatmap' then Result := sskRect
+  else if t = 'funnel' then Result := sskFunnel
+  else if t = 'candlestick' then Result := sskCandle
+  else if t = TyPictorialSeriesTypeName then Result := sskPictorial
+  else if t = TySunburstSeriesTypeName then Result := sskSunburst;
+  { a line on a calendar is not drawn at all }
+  if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
 
 function TTyAdvanceChart.StSeriesNode(ASeriesIndex: Integer): TJSONObject;
@@ -10105,9 +10189,18 @@ begin
 end;
 
 function TTyAdvanceChart.StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
-var s: TJSONObject; d: TJSONData;
+var s: TJSONObject; d: TJSONData; slot: Integer;
 begin
   Result := nil;
+  { A SUNBURST'S DATA IS ITS TREE: the row's own node [Batch 90] }
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid then
+  begin
+    if (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))
+      and (FSunbursts[slot].Hier.Nodes[ARaw].Item is TJSONObject) then
+      Result := TJSONObject(FSunbursts[slot].Hier.Nodes[ARaw].Item);
+    Exit;
+  end;
   s := StSeriesNode(ASeriesIndex);
   if s = nil then Exit;
   d := s.Find('data');
@@ -10131,7 +10224,7 @@ var
   s, idx: Integer;
   item: PTyStItem;
   host, cap, guide: TTyChartElement;
-  nodes: array[0..1] of TJSONObject;
+  nodes: TTyStNodeArray;
   scale, off, mid, dx, dy, ss, half: Double;
   has, bolder, disabled, was, normalShow, stShow, doScale: Boolean;
   base, obj: TTyStObject;
@@ -10139,17 +10232,20 @@ var
   n: TTyStName;
   txt: string;
   c: TTyChartColor;
+  k: Integer;
 begin
   s := FBindings[ASlot].SeriesIndex;
   item := @FSt[s].Rows[ARaw];
   host := AList.Element(FSt[s].HostIdx[ARaw]);
-  nodes[0] := StItemNode(s, ARaw);
-  nodes[1] := StSeriesNode(s);
+  nodes := StNodes(s, ARaw);
   if APPI > 0 then scale := APPI / 96 else scale := 1;
 
   { ---- the mark ---- }
   item^.Host.Exists := True;
   item^.Host.IsPath := True;
+  { a symbol (a line's, a scatter's): the group dispatches, the path draws
+    [Batch 90] }
+  item^.HasGroup := FSt[s].Kind = sskSymbol;
   { emphasis.disabled: no hover dispatcher and no default proxy }
   disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
   item^.Host.Proxy := not disabled;
@@ -10167,11 +10263,20 @@ begin
       end;
     sskSymbol:
       if not FSt[s].IsLine then TyStSetColor(base, stkStroke, StPrimaryInk);
+    { a heatmap's, a funnel's and a pictorial bar's: the border only
+      (HeatmapSeries.ts:130, FunnelSeries.ts:200, PictorialBarSeries.ts:173)
+      [Batch 90] }
+    sskRect, sskFunnel, sskPictorial:
+      TyStSetColor(base, stkStroke, StPrimaryInk);
   end;
   item^.Host.Decl[stnSelect] := TyStOverlay(base,
     TyStReadStyle(nodes, 'select', 'itemStyle', bolder));
   item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', 'itemStyle', bolder);
   item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', 'itemStyle', bolder);
+  if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
+  { a sunburst blurs to 0.2 unless told (SunburstSeries.ts:274-279) [Batch 90] }
+  if (FSt[s].Kind = sskSunburst) and not item^.Host.Decl[stnBlur].Has[stkOpacity] then
+    TyStSetNum(item^.Host.Decl[stnBlur], stkOpacity, 0.2);
   dx := 0;
   dy := 0;
   case FSt[s].Kind of
@@ -10210,13 +10315,83 @@ begin
           TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale,
             TyChartSymbolScaleRatio(spec, half / scale));
       end;
+    sskPictorial:
+      { emphasis.scale (default false): every glyph a tenth larger about its
+        own origin (PictorialBarView.ts:920-924) [Batch 90] }
+      if TyStReadBool(nodes, ['emphasis', 'scale'], has) then
+        TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale, 1.1);
+  end;
+
+  { ---- the other glyphs: the host's declared states on their own rest
+    values; a new one takes the host's list [Batch 90] ---- }
+  if Length(item^.Parts) <> Length(FSt[s].PartIdx[ARaw]) then
+    SetLength(item^.Parts, 0);
+  was := Length(item^.Parts) > 0;
+  SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
+  for k := 0 to High(item^.Parts) do
+  begin
+    item^.Parts[k].Exists := True;
+    item^.Parts[k].IsPath := True;
+    item^.Parts[k].Proxy := item^.Host.Proxy;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      item^.Parts[k].HasState[n] := True;
+      item^.Parts[k].Decl[n] := item^.Host.Decl[n];
+    end;
+    item^.Parts[k].Rest := StRestOf(AList.Element(FSt[s].PartIdx[ARaw][k]));
+    if not was then
+    begin
+      item^.Parts[k].Cur := item^.Parts[k].Rest;
+      item^.Parts[k].States := [];
+      if item^.Host.States <> [] then
+        TyStUseStates(item^.Parts[k], item^.Host.States);
+    end;
   end;
 
   { ---- its label: the host's states, its own select / emphasis / blur
     label style (labelStyle.ts:255-273) ---- }
   idx := FSt[s].LabelIdx[ARaw];
   was := item^.Label_.Exists;
-  if idx < 0 then
+  if (idx < 0) and (FSt[s].Kind = sskPie) then
+  begin
+    { A PIE ALWAYS OWNS A TEXT (PieView.ts:49-51), hidden when no state shows
+      it: it takes its slice's list, a select state of its own (the offset)
+      and -- with no emphasis or blur object unless some state's label.show
+      created the text's states -- no emphasis lift, but the blur proxy's
+      opacity all the same. Nothing of it is drawn. [Batch 90] }
+    normalShow := False;
+    stShow := False;
+    for n := Low(TTyStName) to High(TTyStName) do
+      if TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has) and has then
+        stShow := True;
+    item^.Label_.Exists := True;
+    item^.Label_.IsPath := False;
+    item^.Label_.Proxy := not disabled;
+    item^.Label_.HasState[stnSelect] := True;
+    item^.Label_.HasState[stnEmphasis] := stShow;
+    item^.Label_.HasState[stnBlur] := stShow;
+    obj := TyStNoObject;
+    TyStSetNum(obj, stkOpacity, 1);
+    TyStSetNum(obj, stkZ2, host.Z2 + 2);
+    TyStSetNum(obj, stkX, 0);
+    TyStSetNum(obj, stkY, 0);
+    TyStSetNum(obj, stkR, 0);
+    TyStSetNum(obj, stkScale, 1);
+    TyStSetNum(obj, stkIgnore, 1);
+    item^.Label_.Rest := obj;
+    for n := Low(TTyStName) to High(TTyStName) do
+      item^.Label_.Decl[n] := TyStNoObject;
+    TyStSetNum(item^.Label_.Decl[stnSelect], stkX, dx);
+    TyStSetNum(item^.Label_.Decl[stnSelect], stkY, dy);
+    if not was then
+    begin
+      item^.Label_.Cur := item^.Label_.Rest;
+      item^.Label_.States := [];
+      if item^.Host.Exists and (item^.Host.States <> []) then
+        TyStUseStates(item^.Label_, item^.Host.States);
+    end;
+  end
+  else if idx < 0 then
     item^.Label_ := Default(TTyStElement)
   else
   begin
@@ -10237,6 +10412,12 @@ begin
       if has and (txt <> 'inherit') and (txt <> 'auto')
         and TyTryParseChartColor(txt, c) then
         TyStSetColor(obj, stkFill, c);
+      { a declared opacity, the blur proxy's tenth otherwise [Batch 90] }
+      ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
+      if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss)
+      { a sunburst's label blurs to 0.1 by its series' default }
+      else if (n = stnBlur) and (FSt[s].Kind = sskSunburst) then
+        TyStSetNum(obj, stkOpacity, 0.1);
       { a pie's label rides with its slice: the laid-out place plus the offset
         (pie/labelLayout.ts:541-544) }
       if (n = stnSelect) and (FSt[s].Kind = sskPie) then
@@ -10280,6 +10461,66 @@ begin
         TyStUseStates(item^.Guide, item^.Host.States);
     end;
   end;
+end;
+
+{ CandlestickView.setBoxCommon (CandlestickView.ts:298-325): every state
+  takes the colour of the candle's sign from its own itemStyle -- color or
+  color0, borderColor or borderColor0, the colour again for a missing border
+  -- and the emphasis border is 2 wide unless declared
+  (CandlestickSeries.ts:130-134) [Batch 90] }
+procedure TTyAdvanceChart.StDeclareCandle(ASlot, ARaw: Integer;
+  const ANodes: array of TJSONObject; var AHost: TTyStElement);
+var
+  st: TTyDataStore;
+  inner, cO, cC, sign: Integer;
+  o, c, prev: Double;
+  n: TTyStName;
+  fill, stroke: string;
+  hasF, hasS: Boolean;
+  col: TTyChartColor;
+begin
+  if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  inner := st.IndexOfRawIndex(ARaw);
+  cO := st.DimIndexOf('open');
+  cC := st.DimIndexOf('close');
+  if (inner < 0) or (cO < 0) or (cC < 0) then Exit;
+  { the sign as the layout gives it: a doji takes the previous close's }
+  o := st.Get(cO, inner);
+  c := st.Get(cC, inner);
+  if o > c then sign := -1
+  else if o < c then sign := 1
+  else
+  begin
+    sign := 1;
+    if inner > 0 then
+    begin
+      prev := st.Get(cC, inner - 1);
+      if not IsNan(prev) and (prev > c) then sign := -1;
+    end;
+  end;
+  for n := Low(TTyStName) to High(TTyStName) do
+  begin
+    if sign > 0 then
+    begin
+      fill := TyStReadString(ANodes, [cStNames[n], 'itemStyle', 'color'], hasF);
+      stroke := TyStReadString(ANodes, [cStNames[n], 'itemStyle', 'borderColor'], hasS);
+    end
+    else
+    begin
+      fill := TyStReadString(ANodes, [cStNames[n], 'itemStyle', 'color0'], hasF);
+      stroke := TyStReadString(ANodes, [cStNames[n], 'itemStyle', 'borderColor0'], hasS);
+    end;
+    if not hasS then
+    begin
+      stroke := fill;
+      hasS := hasF;
+    end;
+    if hasF and TyTryParseChartColor(fill, col) then TyStSetColor(AHost.Decl[n], stkFill, col);
+    if hasS and TyTryParseChartColor(stroke, col) then TyStSetColor(AHost.Decl[n], stkStroke, col);
+  end;
+  if not AHost.Decl[stnEmphasis].Has[stkLineWidth] then
+    TyStSetNum(AHost.Decl[stnEmphasis], stkLineWidth, 2);
 end;
 
 procedure TTyAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
@@ -10361,6 +10602,8 @@ begin
     FSt[s].GuideIdx := nil;
     FSt[s].RunIdx := nil;
     FSt[s].AreaIdx := nil;
+    FSt[s].FollowIdx := nil;
+    FSt[s].PartIdx := nil;
   end;
   for slot := 0 to High(FBindings) do
   begin
@@ -10376,6 +10619,8 @@ begin
     SetLength(FSt[s].HostIdx, k);
     SetLength(FSt[s].LabelIdx, k);
     SetLength(FSt[s].GuideIdx, k);
+    SetLength(FSt[s].FollowIdx, k);
+    SetLength(FSt[s].PartIdx, k);
     for i := 0 to k - 1 do
     begin
       FSt[s].HostIdx[i] := -1;
@@ -10417,6 +10662,27 @@ begin
     end
     else if el.IsGuide then
       FSt[s].GuideIdx[raw] := k
+    else if FSt[s].Kind = sskPictorial then
+    begin
+      { THE GLYPHS ARE THE PATHS (silent here: the inkless bar rect is the
+        target), the first the host, the rest parts [Batch 90] }
+      if not el.Silent then Continue;
+      if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
+      else StPush(FSt[s].PartIdx[raw], k);
+    end
+    else if FSt[s].Kind = sskCandle then
+    begin
+      { ONE PATH upstream, body and wicks: the body hosts, the wicks follow
+        [Batch 90] }
+      if el.Silent then Continue;
+      if el.Anim.Role = carCandleBody then
+      begin
+        if FSt[s].HostIdx[raw] >= 0 then StPush(FSt[s].FollowIdx[raw], FSt[s].HostIdx[raw]);
+        FSt[s].HostIdx[raw] := k;
+      end
+      else if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
+      else StPush(FSt[s].FollowIdx[raw], k);
+    end
     else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
       FSt[s].HostIdx[raw] := k;
   end;
@@ -10476,7 +10742,24 @@ begin
         el := AList.Element(FSt[s].HostIdx[raw]);
         StWriteHost(el, item^.Host);
         AList.SetElement(FSt[s].HostIdx[raw], el);
+        { the rest of the same path: the host's changes [Batch 90] }
+        if raw <= High(FSt[s].FollowIdx) then
+          for k := 0 to High(FSt[s].FollowIdx[raw]) do
+          begin
+            el := AList.Element(FSt[s].FollowIdx[raw][k]);
+            StWriteFollower(el, item^.Host);
+            AList.SetElement(FSt[s].FollowIdx[raw][k], el);
+          end;
       end;
+      { the other paths, their own values [Batch 90] }
+      if raw <= High(FSt[s].PartIdx) then
+        for k := 0 to Min(High(FSt[s].PartIdx[raw]), High(item^.Parts)) do
+          if item^.Parts[k].States <> [] then
+          begin
+            el := AList.Element(FSt[s].PartIdx[raw][k]);
+            StWriteHost(el, item^.Parts[k]);
+            AList.SetElement(FSt[s].PartIdx[raw][k], el);
+          end;
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists
         and (item^.Label_.States <> []) then
       begin
@@ -10545,66 +10828,302 @@ begin
   Result := @FSt[ASeriesIndex].Rows[raw];
 end;
 
-{ doChangeHoverState: the flag -- and on a line every symbol's change, and
-  the polyline's own, carries the polyline and the area with it
-  (LineView.ts:893-900, onHoverStateChange) }
-procedure TTyAdvanceChart.StChangeHover(ASeriesIndex: Integer;
-  var AEl: TTyStElement; AState: Integer);
+{ ---- focus and blur [Batch 90] ---- }
+
+function TTyAdvanceChart.StPolyOf(ASeriesIndex: Integer): Integer;
 begin
-  if AEl.HoverState = AState then Exit;
-  AEl.HoverState := AState;
+  Result := -1;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  if FSt[ASeriesIndex].IsLine and FSt[ASeriesIndex].Run.Host.Exists then
+    Result := FSt[ASeriesIndex].Run.Host.HoverState;
+end;
+
+{ LineView._changePolyState: setStatesFlag on the polyline and the area }
+procedure TTyAdvanceChart.StPolyTo(ASeriesIndex, AState: Integer);
+begin
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  if not FSt[ASeriesIndex].IsLine then Exit;
+  FSt[ASeriesIndex].Run.Host.HoverState := AState;
+  FSt[ASeriesIndex].Area.Host.HoverState := AState;
   FStDirty := True;
-  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt)) and FSt[ASeriesIndex].IsLine then
+end;
+
+function TTyAdvanceChart.StCoordKey(ASlot: Integer): string;
+begin
+  Result := '';
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { coordinateSystem.master: a cartesian's is its GRID, so two axis pairs
+    of one grid are one system }
+  if FBindings[ASlot].Cart <> nil then
   begin
-    FSt[ASeriesIndex].Run.Host.HoverState := AState;
-    FSt[ASeriesIndex].Area.Host.HoverState := AState;
+    if FBindings[ASlot].XAxis <> nil then
+      Result := 'grid' + IntToStr(FBindings[ASlot].XAxis.GridIndex)
+    else
+      Result := 'cart' + IntToStr(PtrUInt(FBindings[ASlot].Cart));
+  end
+  else if FBindings[ASlot].CalendarIndex >= 0 then
+    Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
+  else if FBindings[ASlot].RadarIndex >= 0 then
+    Result := 'radar' + IntToStr(FBindings[ASlot].RadarIndex);
+end;
+
+{ an item's model chain: the item, a sunburst row's level, the series }
+function TTyAdvanceChart.StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+var slot, d: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
+    and (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes)) then
+  begin
+    SetLength(Result, 3);
+    Result[0] := StItemNode(ASeriesIndex, ARaw);
+    d := FSunbursts[slot].Hier.Nodes[ARaw].Depth;
+    Result[1] := nil;
+    if (d >= 0) and (d <= High(FSunbursts[slot].Levels)) then
+      Result[1] := FSunbursts[slot].Levels[d];
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
+  SetLength(Result, 2);
+  Result[0] := StItemNode(ASeriesIndex, ARaw);
+  Result[1] := StSeriesNode(ASeriesIndex);
+end;
+
+function TTyAdvanceChart.StItemFocus(ASeriesIndex, ARaw: Integer;
+  out AScope: TTyStScope): TTyStFocus;
+var
+  nodes: TTyStNodeArray;
+  d: TJSONData;
+  w: string;
+  slot, i, p: Integer;
+  anc: TTyIntegerArray;
+
+  procedure Add(AIndex: Integer);
+  begin
+    SetLength(Result.Indices, Length(Result.Indices) + 1);
+    Result.Indices[High(Result.Indices)] := AIndex;
+  end;
+
+begin
+  nodes := StNodes(ASeriesIndex, ARaw);
+  d := TyStFind(nodes, ['emphasis', 'focus']);
+  AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
+  slot := SlotOfSeries(ASeriesIndex);
+  if not ((slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
+    and (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))) then
+    Exit(TyStFocusOf(d));
+  { A SUNBURST'S WORDS ARE INDICES (SunburstPiece.ts:152-160), its default
+    'descendant' (SunburstSeries.ts:271): the row's ancestors from the root
+    down, its subtree in pre-order, or both [Batch 90] }
+  if d = nil then w := 'descendant'
+  else if d.JSONType = jtString then w := d.AsString
+  else w := '';
+  if (w <> 'descendant') and (w <> 'ancestor') and (w <> 'relative') then
+    Exit(TyStFocusOf(d));
+  Result := Default(TTyStFocus);
+  Result.Kind := sfkIndices;
+  if (w = 'ancestor') or (w = 'relative') then
+  begin
+    anc := nil;
+    p := ARaw;
+    while p >= 0 do
+    begin
+      SetLength(anc, Length(anc) + 1);
+      anc[High(anc)] := p;
+      p := FSunbursts[slot].Hier.Nodes[p].Parent;
+    end;
+    for i := High(anc) downto 0 do Add(anc[i]);
+  end;
+  if (w = 'descendant') or (w = 'relative') then
+    for i := 0 to High(FSunbursts[slot].Hier.Nodes) do
+    begin
+      p := i;
+      while (p >= 0) and (p <> ARaw) do p := FSunbursts[slot].Hier.Nodes[p].Parent;
+      if p = ARaw then Add(i);
+    end;
+end;
+
+function TTyAdvanceChart.StSeriesFocus(ASeriesIndex: Integer;
+  out AScope: TTyStScope): TTyStFocus;
+var nodes: array[0..0] of TJSONObject;
+begin
+  nodes[0] := StSeriesNode(ASeriesIndex);
+  Result := TyStFocusOf(TyStFind(nodes, ['emphasis', 'focus']));
+  AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
+end;
+
+function TTyAdvanceChart.StInnerRaw(ASeriesIndex, AInner: Integer): Integer;
+var slot: Integer;
+begin
+  Result := -1;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (AInner < 0) or (AInner >= FStores[slot].Count) then Exit;
+  Result := FStores[slot].GetRawIndex(AInner);
+end;
+
+{ blurSeries (util/states.ts:429-517): every SHOWN series the scope reaches
+  -- by series, by coordinate system (a series with none matches only
+  itself), or all -- except the target itself under focus 'series': every
+  element enters blur, but one held by an action stays in the target series
+  under focus 'self'; data indices of a focus list leave the blur again. }
+procedure TTyAdvanceChart.StBlurSeries(ATarget: Integer; const AFocus: TTyStFocus;
+  AScope: TTyStScope);
+var
+  slot, s, raw, k, poly, tslot: Integer;
+  tkey, key: string;
+  same, sameCoord, spare: Boolean;
+  item: PTyStItem;
+begin
+  if ATarget < 0 then Exit;
+  if AFocus.Kind = sfkNone then Exit;
+  tslot := SlotOfSeries(ATarget);
+  if tslot < 0 then Exit;
+  tkey := StCoordKey(tslot);
+  for slot := 0 to High(FBindings) do
+  begin
+    if FBindings[slot].Hidden then Continue;
+    s := FBindings[slot].SeriesIndex;
+    if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    same := s = ATarget;
+    key := StCoordKey(slot);
+    if (key <> '') and (tkey <> '') then sameCoord := key = tkey
+    else sameCoord := same;
+    if not TyStBlursSeries(AFocus, AScope, same, sameCoord) then Continue;
+    spare := same and (AFocus.Kind = sfkSelf);
+    poly := StPolyOf(s);
+    { the polyline and the area are elements of the group too }
+    if poly >= 0 then poly := TyStHoverBlur;
+    for raw := 0 to High(FSt[s].Rows) do
+      if FSt[s].Rows[raw].Host.Exists then
+        TyStItemEnterBlur(FSt[s].Rows[raw], spare, poly);
+    if poly >= 0 then StPolyTo(s, poly);
+    if AFocus.Kind = sfkIndices then
+      for k := 0 to High(AFocus.Indices) do
+      begin
+        item := StItemAt(s, AFocus.Indices[k]);
+        if item = nil then Continue;
+        poly := StPolyOf(s);
+        TyStItemLeaveBlur(item^, poly);
+        if poly >= 0 then StPolyTo(s, poly);
+      end;
+    FSt[s].IsBlured := True;
+    FStDirty := True;
   end;
 end;
 
-procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
-var item: PTyStItem; s: Integer;
+{ allLeaveBlur (util/states.ts:404-427): every series blurSeries reached
+  leaves blur, whole; none is blured after }
+procedure TTyAdvanceChart.StAllLeaveBlur;
+var s, raw, poly: Integer;
 begin
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].IsBlured then
+    begin
+      poly := StPolyOf(s);
+      if poly = TyStHoverBlur then poly := TyStHoverNormal;
+      for raw := 0 to High(FSt[s].Rows) do
+        if FSt[s].Rows[raw].Host.Exists then
+          TyStItemLeaveBlur(FSt[s].Rows[raw], poly);
+      if poly >= 0 then StPolyTo(s, poly);
+      { the area on its own, should it be blurred apart from the polyline }
+      if FSt[s].Area.Host.HoverState = TyStHoverBlur then
+        FSt[s].Area.Host.HoverState := TyStHoverNormal;
+      FStDirty := True;
+    end;
+    FSt[s].IsBlured := False;
+  end;
+end;
+
+function TTyAdvanceChart.StDispatcher(const ATarget: TTyChartEventTarget;
+  out AItem: PTyStItem; out APart: Integer): Boolean;
+var s, idx, k: Integer;
+begin
+  Result := False;
+  AItem := nil;
+  APart := -1;
   s := ATarget.HdSeries;
   if ATarget.HdKind = 1 then
   begin
     if ATarget.HdEdge then Exit;
-    item := StItemAt(s, ATarget.HdRow);
-    { not a dispatcher (emphasis disabled), or held by an action }
-    if (item = nil) or not item^.Host.Proxy or (item^.Host.HighByOuter <> 0) then Exit;
-    if item^.Host.HoverState = TyStHoverEmphasis then
-      StChangeHover(s, item^.Host, TyStHoverNormal);
-  end
-  else if ATarget.HdKind = 2 then
+    AItem := StItemAt(s, ATarget.HdRow);
+    { emphasis.disabled: not a highDownDispatcher at all }
+    if (AItem = nil) or not AItem^.Host.Proxy then Exit;
+    APart := 0;
+    Exit(True);
+  end;
+  if ATarget.HdKind <> 2 then Exit;
+  if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) or not FSt[s].IsLine then Exit;
+  idx := Integer(ATarget.Id) - 1;
+  for k := 0 to High(FSt[s].RunIdx) do
+    if FSt[s].RunIdx[k] = idx then
+    begin
+      AItem := @FSt[s].Run;
+      APart := 1;
+    end;
+  for k := 0 to High(FSt[s].AreaIdx) do
+    if FSt[s].AreaIdx[k] = idx then
+    begin
+      AItem := @FSt[s].Area;
+      APart := 2;
+    end;
+  Result := (AItem <> nil) and AItem^.Host.Exists and AItem^.Host.Proxy;
+end;
+
+{ handleGlobalMouseOutForHighDown: allLeaveBlur, then the dispatcher leaves
+  emphasis unless an action holds it }
+procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
+var item: PTyStItem; part, s, poly: Integer;
+begin
+  if not StDispatcher(ATarget, item, part) then Exit;
+  s := ATarget.HdSeries;
+  StAllLeaveBlur;
+  if part = 0 then
   begin
-    if (s < 0) or (s > High(FSt)) or not FSt[s].Run.Host.Exists then Exit;
-    if not FSt[s].Run.Host.Proxy or (FSt[s].Run.Host.HighByOuter <> 0) then Exit;
-    if FSt[s].Run.Host.HoverState = TyStHoverEmphasis then
-      StChangeHover(s, FSt[s].Run.Host, TyStHoverNormal);
+    poly := StPolyOf(s);
+    if TyStItemHoverLeave(item^, poly) then FStDirty := True;
+    if poly >= 0 then StPolyTo(s, poly);
   end
-  else
-    Exit;
+  else if (item^.Host.HighByOuter = 0) and (item^.Host.HoverState = TyStHoverEmphasis) then
+  begin
+    { the polyline's own change carries the area; the area is alone }
+    if part = 1 then StPolyTo(s, TyStHoverNormal)
+    else item^.Host.HoverState := TyStHoverNormal;
+    FStDirty := True;
+  end;
   if FStDirty then InvalidateFrame;
 end;
 
+{ handleGlobalMouseOverForHighDown: blurSeries by the dispatcher's focus,
+  then it enters emphasis unless an action holds it }
 procedure TTyAdvanceChart.StHoverOver(const ATarget: TTyChartEventTarget);
-var item: PTyStItem; s: Integer;
+var
+  item: PTyStItem;
+  part, s, poly: Integer;
+  focus: TTyStFocus;
+  scope: TTyStScope;
 begin
+  if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
-  if ATarget.HdKind = 1 then
-  begin
-    if ATarget.HdEdge then Exit;
-    item := StItemAt(s, ATarget.HdRow);
-    if (item = nil) or not item^.Host.Proxy or (item^.Host.HighByOuter <> 0) then Exit;
-    StChangeHover(s, item^.Host, TyStHoverEmphasis);
-  end
-  else if ATarget.HdKind = 2 then
-  begin
-    if (s < 0) or (s > High(FSt)) or not FSt[s].Run.Host.Exists then Exit;
-    if not FSt[s].Run.Host.Proxy or (FSt[s].Run.Host.HighByOuter <> 0) then Exit;
-    StChangeHover(s, FSt[s].Run.Host, TyStHoverEmphasis);
-  end
+  if part = 0 then
+    focus := StItemFocus(s, StInnerRaw(s, ATarget.HdRow), scope)
   else
-    Exit;
+    focus := StSeriesFocus(s, scope);
+  StBlurSeries(s, focus, scope);
+  if part = 0 then
+  begin
+    poly := StPolyOf(s);
+    if TyStItemHoverEnter(item^, poly) then FStDirty := True;
+    if poly >= 0 then StPolyTo(s, poly);
+  end
+  else if item^.Host.HighByOuter = 0 then
+  begin
+    if part = 1 then StPolyTo(s, TyStHoverEmphasis)
+    else item^.Host.HoverState := TyStHoverEmphasis;
+    FStDirty := True;
+  end;
   if FStDirty then InvalidateFrame;
 end;
 
@@ -11045,41 +11564,52 @@ begin
   end;
 end;
 
-{ highlight / downplay: the event, and the emphasis by action on the
-  queried items (all of a series when none) -- the bit of highlightKey's
-  digit, or 0. The blur that goes with them is B2's. }
+{ highlight / downplay (echarts.ts:2178-2205, 1792-1865): allLeaveBlur once;
+  for a highlight without notBlur, every queried series whose emphasis is
+  not disabled blurs by the focus of the element the payload names (its
+  first, the first element there is when that one is missing); then each
+  series' view enters / leaves emphasis on the queried items (all of them
+  when none) with highlightKey's bit -- a line's one-point highlight on the
+  symbol PATH, with the polyline (LineView.ts:937-1026). [Batch 90] }
 procedure TTyAdvanceChart.DoHighDownAction(APayload: TJSONObject);
 var
   t, key: string;
-  series, inner: TTyIntegerArray;
+  series, inner, kept: TTyIntegerArray;
   excl: TTyStringArray;
-  i, k, slot, s, digit, raw: Integer;
+  i, k, slot, s, digit, raw, q, poly: Integer;
   d: TJSONData;
   item: PTyStItem;
-  skip, all: Boolean;
+  skip, has, isArr, single, isHigh: Boolean;
   ev: TJSONObject;
+  focus: TTyStFocus;
+  scope: TTyStScope;
+  nodes: array[0..0] of TJSONObject;
 
-  procedure Apply(var AEl: TTyStElement);
-  var was: Integer;
+  procedure Apply(var AItem: TTyStItem; AOnPath: Boolean);
   begin
-    { only a highDownDispatcher: emphasis not disabled }
-    if not AEl.Exists or not AEl.Proxy then Exit;
-    was := AEl.HoverState;
-    if t = 'highlight' then TyStEnterEmphasisBy(AEl, digit)
-    else TyStLeaveEmphasisBy(AEl, digit);
-    if AEl.HoverState <> was then
+    poly := StPolyOf(s);
+    if isHigh then
     begin
+      if TyStItemEnterEmphasisBy(AItem, digit, AOnPath, poly) then FStDirty := True;
+    end
+    else if TyStItemLeaveEmphasisBy(AItem, digit, AOnPath, poly) then
       FStDirty := True;
-      if FSt[s].IsLine then
-      begin
-        FSt[s].Run.Host.HoverState := AEl.HoverState;
-        FSt[s].Area.Host.HoverState := AEl.HoverState;
-      end;
-    end;
+    if poly >= 0 then StPolyTo(s, poly);
+  end;
+
+  { which field queryDataIndex reads, and whether it is a list }
+  function QueryIsArray: Boolean;
+  var x: TJSONData;
+  begin
+    x := APayload.Find('dataIndexInside');
+    if (x = nil) or (x.JSONType = jtNull) then x := APayload.Find('dataIndex');
+    if (x = nil) or (x.JSONType = jtNull) then x := APayload.Find('name');
+    Result := x is TJSONArray;
   end;
 
 begin
   t := APayload.Strings['type'];
+  isHigh := t = 'highlight';
   { getHighlightDigit: in order of first use, 1 to 32, then bit 0 }
   digit := 0;
   d := APayload.Find('highlightKey');
@@ -11113,7 +11643,12 @@ begin
     SetLength(excl, 1);
     excl[0] := d.AsString;
   end;
+
+  { ONCE PER DISPATCH, before anything: every blur goes }
+  StAllLeaveBlur;
+
   series := MatchSeries(APayload);
+  kept := nil;
   for i := 0 to High(series) do
   begin
     s := series[i];
@@ -11122,20 +11657,90 @@ begin
       if excl[k] = SeriesModelId(s) then skip := True;
     if skip then Continue;
     if (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    SetLength(kept, Length(kept) + 1);
+    kept[High(kept)] := s;
+  end;
+
+  { THE BLUR, a pass of its own before any series highlights }
+  if isHigh and not JsTruthy(APayload.Find('notBlur')) then
+    for i := 0 to High(kept) do
+    begin
+      s := kept[i];
+      nodes[0] := StSeriesNode(s);
+      if TyStReadBool(nodes, ['emphasis', 'disabled'], has) then Continue;
+      slot := SlotOfSeries(s);
+      { the first index of a list; || 0 }
+      q := 0;
+      if QueryDataIndex(slot, APayload, inner) and (Length(inner) > 0) then q := inner[0];
+      item := StItemAt(s, q);
+      if item = nil then
+      begin
+        q := 0;
+        while (item = nil) and (slot >= 0) and (slot <= High(FStores))
+          and (FStores[slot] <> nil) and (q < FStores[slot].Count) do
+        begin
+          item := StItemAt(s, q);
+          if item = nil then Inc(q);
+        end;
+      end;
+      if item <> nil then
+        focus := StItemFocus(s, StInnerRaw(s, q), scope)
+      else
+      begin
+        { no element at all: the series' own option, only when written }
+        if TyStFind(nodes, ['emphasis', 'focus']) = nil then Continue;
+        focus := StSeriesFocus(s, scope);
+      end;
+      StBlurSeries(s, focus, scope);
+    end;
+
+  { THE EMPHASIS }
+  for i := 0 to High(kept) do
+  begin
+    s := kept[i];
     slot := SlotOfSeries(s);
-    all := not QueryDataIndex(slot, APayload, inner);
-    if all then
+    has := QueryDataIndex(slot, APayload, inner);
+    isArr := QueryIsArray;
+    if FSt[s].IsLine then
+    begin
+      { _changePolyState first, whatever the payload names }
+      if isHigh then StPolyTo(s, TyStHoverEmphasis) else StPolyTo(s, TyStHoverNormal);
+      { one index (`dataIndex >= 0`: a list of one coerces on the downplay
+        side only) -> Symbol.highlight / downplay: the path, bit 0 }
+      if has and (Length(inner) > 0) then
+      begin
+        if isHigh then single := not isArr and (inner[0] >= 0)
+        else single := (not isArr or (Length(inner) = 1)) and (inner[0] >= 0);
+      end
+      else
+        single := False;
+      if single then
+      begin
+        item := StItemAt(s, inner[0]);
+        if item <> nil then
+        begin
+          if isHigh then
+          begin
+            if TyStItemEnterEmphasisBy(item^, 0, True, poly) then FStDirty := True;
+          end
+          else if TyStItemLeaveEmphasisBy(item^, 0, True, poly) then
+            FStDirty := True;
+        end;
+        Continue;
+      end;
+    end;
+    if not has then
     begin
       for raw := 0 to High(FSt[s].Rows) do
-        Apply(FSt[s].Rows[raw].Host);
-      { a line's whole series: its polyline too }
-      if FSt[s].IsLine then Apply(FSt[s].Run.Host);
+        { only a highDownDispatcher: emphasis not disabled }
+        if FSt[s].Rows[raw].Host.Exists and FSt[s].Rows[raw].Host.Proxy then
+          Apply(FSt[s].Rows[raw], False);
     end
     else
       for k := 0 to High(inner) do
       begin
         item := StItemAt(s, inner[k]);
-        if item <> nil then Apply(item^.Host);
+        if (item <> nil) and item^.Host.Proxy then Apply(item^, False);
       end;
   end;
   if FStDirty then InvalidateFrame;

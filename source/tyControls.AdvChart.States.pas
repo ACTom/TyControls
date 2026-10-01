@@ -87,11 +87,40 @@ type
   end;
 
   { A data item's element and what is attached to it: the label, which
-    always takes its host's state list, and a pie's label line. }
+    always takes its host's state list, and a pie's label line.
+
+    A LINE'S SYMBOL IS TWO ELEMENTS upstream: the Symbol group, which is the
+    hover dispatcher, and its path (childAt(0)), which carries the states.
+    traverseUpdateState walks both, so their hoverStates move together --
+    except that Symbol.highlight, the line's one-point highlight action,
+    enters emphasis on the PATH alone and sets the path's __highByOuter
+    (Symbol.ts:125-134). The group's own flags are kept apart here; the
+    Host is the path. [Batch 90] }
   TTyStItem = record
     Host, Label_, Guide: TTyStElement;
+    { MORE PATHS OF THE SAME DISPATCHER, each with states of its own (a
+      pictorial bar's glyphs): traverseUpdateState gives them the host's
+      flags, so they take the host's list like the label does }
+    Parts: array of TTyStElement;
+    HasGroup: Boolean;
+    GroupHover: Integer;
+    GroupHbo: Cardinal;
   end;
   PTyStItem = ^TTyStItem;
+
+  { emphasis.focus as blurSeries reads it (util/states.ts:429-517): a falsy
+    value or 'none' does nothing, 'series' spares the hovered series, 'self'
+    spares an element held by an action in it; any other truthy value blurs
+    everything the scope reaches. The tree family turns its words into the
+    data indices that leave the blur again (Indices, inner). }
+  TTyStFocusKind = (sfkNone, sfkSelf, sfkSeries, sfkOther, sfkIndices);
+  TTyStFocus = record
+    Kind: TTyStFocusKind;
+    Indices: TTyIntegerArray;
+  end;
+  { blurScope: falsy is 'coordinateSystem'; anything but the two words acts
+    as 'global' }
+  TTyStScope = (sbsCoordinateSystem, sbsSeries, sbsGlobal);
 
 const
   TyStZ2EmphasisLift = 10;
@@ -141,6 +170,38 @@ procedure TyStLeaveEmphasis(var AEl: TTyStElement);
 procedure TyStEnterEmphasisBy(var AEl: TTyStElement; ADigit: Integer);
 procedure TyStLeaveEmphasisBy(var AEl: TTyStElement; ADigit: Integer);
 
+{ ---- an item's flags as the actions and the pointer move them [Batch 90] ----
+  APoly is the hoverState of a line's polyline (and area), -1 when there is
+  none: every change of a symbol group's hoverState carries it along
+  (LineView.ts:893-899, onHoverStateChange -> _changePolyState). }
+{ the dispatcher's __highByOuter: the group's on a line symbol }
+function TyStDispatcherHbo(const AItem: TTyStItem): Cardinal;
+{ enterEmphasisWhenMouseOver / leaveEmphasisWhenMouseOut: nothing while the
+  dispatcher is held by an action }
+function TyStItemHoverEnter(var AItem: TTyStItem; var APoly: Integer): Boolean;
+function TyStItemHoverLeave(var AItem: TTyStItem; var APoly: Integer): Boolean;
+{ enterEmphasis / leaveEmphasis with a highlight digit; AOnPath: the bit and
+  the emphasis on the path only (Symbol.highlight) }
+function TyStItemEnterEmphasisBy(var AItem: TTyStItem; ADigit: Integer;
+  AOnPath: Boolean; var APoly: Integer): Boolean;
+function TyStItemLeaveEmphasisBy(var AItem: TTyStItem; ADigit: Integer;
+  AOnPath: Boolean; var APoly: Integer): Boolean;
+{ blurSeries' singleEnterBlur on every element of the item, except one with
+  a __highByOuter when ASpareHeld (the hovered series under focus 'self') }
+function TyStItemEnterBlur(var AItem: TTyStItem; ASpareHeld: Boolean;
+  var APoly: Integer): Boolean;
+{ singleLeaveBlur: blur back to normal, nothing else }
+function TyStItemLeaveBlur(var AItem: TTyStItem; var APoly: Integer): Boolean;
+
+{ ---- focus and scope ---- }
+function TyStFocusOf(AValue: TJSONData): TTyStFocus;
+function TyStScopeOf(AValue: TJSONData): TTyStScope;
+{ blurSeries' filter: is series T blurred when the target's focus and scope
+  say so; ASame T is the target, ASameCoord they share a coordinate system
+  (a series with none shares only with itself) }
+function TyStBlursSeries(const AFocus: TTyStFocus; AScope: TTyStScope;
+  ASame, ASameCoord: Boolean): Boolean;
+
 { ---- reading what the option declares ---- }
 { `[state].[block]` read nearest node first (a data item, then its series):
   itemStyle -> color fill, borderColor stroke, borderWidth lineWidth,
@@ -157,6 +218,9 @@ function TyStReadNumber(const ANodes: array of TJSONObject;
   const APath: array of string; out AHas: Boolean): Double;
 function TyStReadString(const ANodes: array of TJSONObject;
   const APath: array of string; out AHas: Boolean): string;
+{ the value the first node writes at APath (null falls through), or nil }
+function TyStFind(const ANodes: array of TJSONObject;
+  const APath: array of string): TJSONData;
 
 { ==================== the selection model ==================== }
 
@@ -403,6 +467,7 @@ begin
 end;
 
 function TyStUseItemStates(var AItem: TTyStItem; ANew: TTyStNames): Boolean;
+var i: Integer;
 begin
   Result := TyStUseStates(AItem.Host, ANew);
   { the attached text and line get useStates(sameList) only from inside the
@@ -410,6 +475,7 @@ begin
   if not Result then Exit;
   TyStUseStates(AItem.Label_, ANew);
   TyStUseStates(AItem.Guide, ANew);
+  for i := 0 to High(AItem.Parts) do TyStUseStates(AItem.Parts[i], ANew);
 end;
 
 function TyStApplyItem(var AItem: TTyStItem): Boolean;
@@ -425,10 +491,12 @@ begin
 end;
 
 procedure TyStClearItem(var AItem: TTyStItem);
+var i: Integer;
 begin
   ClearEl(AItem.Host);
   ClearEl(AItem.Label_);
   ClearEl(AItem.Guide);
+  for i := 0 to High(AItem.Parts) do ClearEl(AItem.Parts[i]);
 end;
 
 function TyStNamesText(ANames: TTyStNames): string;
@@ -474,6 +542,164 @@ begin
   if AEl.HighByOuter = 0 then TyStLeaveEmphasis(AEl);
 end;
 
+{ ==================== an item's flags [Batch 90] ==================== }
+
+function TyStDispatcherHbo(const AItem: TTyStItem): Cardinal;
+begin
+  if AItem.HasGroup then Result := AItem.GroupHbo
+  else Result := AItem.Host.HighByOuter;
+end;
+
+{ doChangeHoverState on the group: a change carries the polyline }
+function GroupTo(var AItem: TTyStItem; AValue: Integer; var APoly: Integer): Boolean;
+begin
+  Result := AItem.GroupHover <> AValue;
+  if Result and (APoly >= 0) then APoly := AValue;
+  AItem.GroupHover := AValue;
+end;
+
+function HostTo(var AItem: TTyStItem; AValue: Integer): Boolean;
+begin
+  Result := AItem.Host.HoverState <> AValue;
+  AItem.Host.HoverState := AValue;
+end;
+
+{ traverseUpdateState: the group first, then the path }
+function AllTo(var AItem: TTyStItem; AValue: Integer; var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if AItem.HasGroup and GroupTo(AItem, AValue, APoly) then Result := True;
+  if HostTo(AItem, AValue) then Result := True;
+end;
+
+{ every element whose hoverState is AFrom to ATo }
+function AllFromTo(var AItem: TTyStItem; AFrom, ATo: Integer; var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if AItem.HasGroup and (AItem.GroupHover = AFrom) and GroupTo(AItem, ATo, APoly) then
+    Result := True;
+  if (AItem.Host.HoverState = AFrom) and HostTo(AItem, ATo) then Result := True;
+end;
+
+function TyStItemHoverEnter(var AItem: TTyStItem; var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if not AItem.Host.Exists or (TyStDispatcherHbo(AItem) <> 0) then Exit;
+  Result := AllTo(AItem, TyStHoverEmphasis, APoly);
+end;
+
+function TyStItemHoverLeave(var AItem: TTyStItem; var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if not AItem.Host.Exists or (TyStDispatcherHbo(AItem) <> 0) then Exit;
+  Result := AllFromTo(AItem, TyStHoverEmphasis, TyStHoverNormal, APoly);
+end;
+
+function TyStItemEnterEmphasisBy(var AItem: TTyStItem; ADigit: Integer;
+  AOnPath: Boolean; var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if not AItem.Host.Exists then Exit;
+  if AOnPath or not AItem.HasGroup then
+    AItem.Host.HighByOuter := AItem.Host.HighByOuter or DigitBit(ADigit)
+  else
+    AItem.GroupHbo := AItem.GroupHbo or DigitBit(ADigit);
+  if AOnPath then Result := HostTo(AItem, TyStHoverEmphasis)
+  else Result := AllTo(AItem, TyStHoverEmphasis, APoly);
+end;
+
+function TyStItemLeaveEmphasisBy(var AItem: TTyStItem; ADigit: Integer;
+  AOnPath: Boolean; var APoly: Integer): Boolean;
+var left: Cardinal;
+begin
+  Result := False;
+  if not AItem.Host.Exists then Exit;
+  if AOnPath or not AItem.HasGroup then
+  begin
+    AItem.Host.HighByOuter := AItem.Host.HighByOuter and not DigitBit(ADigit);
+    left := AItem.Host.HighByOuter;
+  end
+  else
+  begin
+    AItem.GroupHbo := AItem.GroupHbo and not DigitBit(ADigit);
+    left := AItem.GroupHbo;
+  end;
+  { only when every bit is gone }
+  if left <> 0 then Exit;
+  if AOnPath then
+  begin
+    if AItem.Host.HoverState = TyStHoverEmphasis then
+      Result := HostTo(AItem, TyStHoverNormal);
+  end
+  else
+    Result := AllFromTo(AItem, TyStHoverEmphasis, TyStHoverNormal, APoly);
+end;
+
+function TyStItemEnterBlur(var AItem: TTyStItem; ASpareHeld: Boolean;
+  var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if not AItem.Host.Exists then Exit;
+  if AItem.HasGroup and not (ASpareHeld and (AItem.GroupHbo <> 0))
+    and GroupTo(AItem, TyStHoverBlur, APoly) then Result := True;
+  if not (ASpareHeld and (AItem.Host.HighByOuter <> 0))
+    and HostTo(AItem, TyStHoverBlur) then Result := True;
+end;
+
+function TyStItemLeaveBlur(var AItem: TTyStItem; var APoly: Integer): Boolean;
+begin
+  Result := False;
+  if not AItem.Host.Exists then Exit;
+  Result := AllFromTo(AItem, TyStHoverBlur, TyStHoverNormal, APoly);
+end;
+
+function JsTruthyValue(AValue: TJSONData): Boolean;
+begin
+  if (AValue = nil) or (AValue.JSONType = jtNull) then Exit(False);
+  case AValue.JSONType of
+    jtBoolean: Result := AValue.AsBoolean;
+    jtNumber: Result := (AValue.AsFloat <> 0) and not IsNan(AValue.AsFloat);
+    jtString: Result := AValue.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+function TyStFocusOf(AValue: TJSONData): TTyStFocus;
+var s: string;
+begin
+  Result := Default(TTyStFocus);
+  Result.Kind := sfkNone;
+  if not JsTruthyValue(AValue) then Exit;
+  Result.Kind := sfkOther;
+  if AValue.JSONType <> jtString then Exit;
+  s := AValue.AsString;
+  if s = 'none' then Result.Kind := sfkNone
+  else if s = 'self' then Result.Kind := sfkSelf
+  else if s = 'series' then Result.Kind := sfkSeries;
+end;
+
+function TyStScopeOf(AValue: TJSONData): TTyStScope;
+begin
+  Result := sbsCoordinateSystem;
+  if not JsTruthyValue(AValue) then Exit;
+  Result := sbsGlobal;
+  if AValue.JSONType <> jtString then Exit;
+  if AValue.AsString = 'series' then Result := sbsSeries
+  else if AValue.AsString = 'coordinateSystem' then Result := sbsCoordinateSystem;
+end;
+
+function TyStBlursSeries(const AFocus: TTyStFocus; AScope: TTyStScope;
+  ASame, ASameCoord: Boolean): Boolean;
+begin
+  Result := False;
+  if AFocus.Kind = sfkNone then Exit;
+  if (AScope = sbsSeries) and not ASame then Exit;
+  if (AScope = sbsCoordinateSystem) and not ASameCoord then Exit;
+  if (AFocus.Kind = sfkSeries) and ASame then Exit;
+  Result := True;
+end;
+
 { ==================== reading the option ==================== }
 
 function Walk(ANode: TJSONObject; const APath: array of string): TJSONData;
@@ -488,6 +714,20 @@ begin
     if d = nil then Exit;
   end;
   Result := d;
+end;
+
+function TyStFind(const ANodes: array of TJSONObject;
+  const APath: array of string): TJSONData;
+var i: Integer; d: TJSONData;
+begin
+  Result := nil;
+  for i := 0 to High(ANodes) do
+  begin
+    if ANodes[i] = nil then Continue;
+    d := Walk(ANodes[i], APath);
+    if (d = nil) or (d.JSONType = jtNull) then Continue;
+    Exit(d);
+  end;
 end;
 
 function TyStReadBool(const ANodes: array of TJSONObject;

@@ -156,6 +156,8 @@ const B_DATA = [8, 25, 18, 22];
 const barOpt = (a, b, top) => Object.assign({ animation: false,
   xAxis: { type: 'category', data: CAT }, yAxis: { type: 'value' },
   series: [barS('A', A_DATA, a), barS('B', B_DATA, b)] }, top || {});
+const SUN_DATA = [{ name: 'A', children: [{ name: 'a1', value: 2 }, { name: 'a2', children: [{ name: 'x', value: 1 }, { name: 'y', value: 2 }] }] },
+  { name: 'B', children: [{ name: 'b1', value: 4 }] }];
 const lineS = (name, data, extra) => Object.assign({ type: 'line', name, data, symbolSize: 12 }, extra || {});
 
 const item = (s, d) => ({ item: [s, d] });
@@ -288,6 +290,37 @@ const CASES = [
   { id: 'emphasis-disabled', note: 'bar A emphasis.disabled: not a highlight dispatcher -- hover and the highlight action change nothing, the click still selects',
     option: barOpt({ selectedMode: 'single', emphasis: { disabled: true, focus: 'series' } }),
     steps: [mv(item(0, 1)), act({ type: 'highlight', seriesIndex: 0, dataIndex: 1 }), ck(item(0, 1)), mv(empty())] },
+  // ---------------------------------------------------------------- focus / blur on more types (batch 90)
+  { id: 'focus-funnel-self', note: "funnel focus 'self' (no coordinate system): hovering a band blurs the others, their labels and label lines; the hovered band's emphasis label (shown by default) and lift; highlight by dataIndex with the series blurred first; downplay",
+    option: { animation: false, series: [{ type: 'funnel', name: 'F', left: 100, width: 300, top: 40, bottom: 40, emphasis: { focus: 'self' },
+      data: [{ name: 'a', value: 60 }, { name: 'b', value: 40 }, { name: 'c', value: 20 }] }] },
+    steps: [mv(item(0, 1)), mv(item(0, 0)), mv(empty()), act({ type: 'highlight', seriesIndex: 0, dataIndex: 2 }), act({ type: 'downplay', seriesIndex: 0, dataIndex: 2 })] },
+  { id: 'focus-heatmap-scatter', note: "a heatmap (focus 'series') and a scatter (focus 'self', blurScope 'series') on one grid: a cell blurs the scatter; a symbol blurs its own series' other symbols (the scatter's group is the dispatcher, its path grows by max(1.1, 3 / r)); a highlight of one symbol sets the GROUP's bit (no Symbol.highlight for a scatter) and its hover does not clear it",
+    option: { animation: false, xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'category', data: ['x', 'y'] },
+      visualMap: { min: 0, max: 3, show: false, seriesIndex: 0 },
+      series: [{ type: 'heatmap', name: 'H', emphasis: { focus: 'series' }, data: [[0, 0, 1], [1, 0, 2], [2, 1, 3]] },
+        { type: 'scatter', name: 'S', symbolSize: 14, emphasis: { focus: 'self', blurScope: 'series' }, data: [[0, 1], [1, 1], [2, 0]] }] },
+    steps: [mv(item(0, 1)), mv(item(1, 0)), mv(empty()), act({ type: 'highlight', seriesIndex: 1, dataIndex: 2 }), mv(item(1, 2)), mv(empty()), act({ type: 'downplay', seriesIndex: 1, dataIndex: 2 })] },
+  { id: 'focus-candlestick', note: "a candlestick (focus 'series') and a line on one grid: hovering a candle blurs the line (symbols and polyline) and gives the candle the series' default emphasis border width 2; highlight the whole candlestick, downplay",
+    option: { animation: false, xAxis: { type: 'category', data: CAT }, yAxis: { type: 'value', scale: true },
+      series: [{ type: 'candlestick', name: 'K', emphasis: { focus: 'series' }, data: [[20, 30, 10, 35], [30, 25, 20, 40], [25, 32, 22, 36], [32, 28, 26, 38]] },
+        lineS('L', [22, 28, 30, 33])] },
+    steps: [mv(item(0, 1)), mv(empty()), act({ type: 'highlight', seriesIndex: 0 }), act({ type: 'downplay', seriesIndex: 0 })] },
+  { id: 'focus-truthy-other', note: "bar A focus 'adjacency' (truthy, none of the words: blurs everything in scope, its own series included) and blurScope 'nope' (neither 'series' nor 'coordinateSystem': global, the pie too); an element held by an action is NOT spared (only focus 'self' spares)",
+    option: { animation: false, xAxis: { type: 'category', data: CAT }, yAxis: { type: 'value' },
+      series: [barS('A', A_DATA, { emphasis: { focus: 'adjacency', blurScope: 'nope' } }), barS('B', B_DATA),
+        { type: 'pie', name: 'P', center: [520, 80], radius: [0, 40], label: { show: false }, data: [{ name: 'x', value: 1 }, { name: 'y', value: 2 }] }] },
+    steps: [mv(item(0, 1)), mv(empty()), act({ type: 'highlight', seriesIndex: 0, dataIndex: 2, notBlur: true }), mv(item(0, 0)), mv(empty())] },
+  { id: 'focus-sunburst', note: "sunburst, default focus 'descendant' (SunburstSeries.ts:271, SunburstPiece.ts:152-160): hovering a node blurs the series, then its own subtree leaves the blur; the series' default blur opacities (item 0.2, label 0.1); a highlight blurs by the focus of the node it names",
+    option: { animation: false, series: [{ type: 'sunburst', name: 'U', radius: [0, '80%'], data: SUN_DATA }] },
+    steps: [mv(item(0, 1)), mv(item(0, 3)), mv(empty()), act({ type: 'highlight', seriesIndex: 0, dataIndex: 5 }), act({ type: 'downplay', seriesIndex: 0, dataIndex: 5 })] },
+  { id: 'focus-sunburst-ancestor', note: "sunburst focus 'ancestor' on the series, 'relative' on one node: the ancestors (the root's index has no element) or the ancestors and the subtree leave the blur",
+    option: { animation: false, series: [{ type: 'sunburst', name: 'U', radius: [0, '80%'], emphasis: { focus: 'ancestor' },
+      data: [{ name: 'A', children: [{ name: 'a1', value: 2 }, { name: 'a2', emphasis: { focus: 'relative' }, children: [{ name: 'x', value: 1 }, { name: 'y', value: 2 }] }] }, { name: 'B', children: [{ name: 'b1', value: 4 }] }] }] },
+    steps: [mv(item(0, 4)), mv(item(0, 3)), mv(empty())] },
+  { id: 'focus-self-held', note: "bar A focus 'self' blurScope 'series': an element held by an action IS spared when its own series blurs (states.ts:478-480); a highlight with focus 'self' blurs the series but spares the held bar",
+    option: barOpt({ emphasis: { focus: 'self', blurScope: 'series' } }),
+    steps: [act({ type: 'highlight', seriesIndex: 0, dataIndex: 2 }), mv(item(0, 0)), mv(empty()), act({ type: 'highlight', seriesIndex: 0, dataIndex: 1 })] },
 ];
 
 // ============================================================================
@@ -416,7 +449,7 @@ function pathRec(p, elId, poly) {
   return r;
 }
 function itemRec(type, el, i, data, elId) {
-  const isSymbol = type === 'line';
+  const isSymbol = type === 'line' || type === 'scatter';
   const p = isSymbol ? el.childAt(0) : el;
   const r = Object.assign({ i, d: data.getRawIndex(i), name: data.getName(i) }, pathRec(p, elId));
   r.hbo = el.__highByOuter || 0;
@@ -592,6 +625,8 @@ const RULES = {
   legendSingleNoUnselect: true, legendInactiveWidthAutoOnly: true, legendClickDownplayFirst: true, liftFromSelectFill: true,
   selectDisabledHonoured: true, legacyNeedsSelected: true, symbolHighlightOnPath: true, pieLabelFollowsOffset: true,
   disabledHasNoProxy: true, labelLiftNeedsState: true, rerenderRestoresPrevStates: true, refindRemovedHover: true,
+  selfSparesHeld: true, truthyFocusBlurs: true, unknownScopeGlobal: true, candleEmphasisWidth: true, funnelEmphasisLabel: true,
+  sunburstDescendant: true, focusIndicesLeaveBlur: true, sunburstBlurDefaults: true,
 };
 
 // ---- small helpers --------------------------------------------------------
@@ -708,18 +743,28 @@ function predictCase(c, R) {
   const SO = opt.series;
   const legendOpt = opt.legend;
   const cats = get(opt, ['xAxis', 'data']) || get(opt, ['xAxis', 0, 'data']);
+  // a sunburst's data is its tree, pre-order, the virtual root at 0 (data/Tree.ts)
+  const flatTree = so => {
+    const out = [{ name: so.name, parent: -1, item: null }];
+    const walk = (list, parent) => { for (const d of list || []) { const k = out.length; out.push({ name: d.name, parent, item: d }); walk(d.children, k); } };
+    walk(so.data, 0);
+    return out;
+  };
   const S = SO.map((so, s) => {
     const type = so.type;
-    const rawData = so.data.map((d, k) => {
-      const o = d != null && typeof d === 'object' && !Array.isArray(d) ? d : null;
-      const name = type === 'pie' ? o.name : cats[k];
-      return { name, selected: !!(o && o.selected), selectDisabled: !!get(o, ['select', 'disabled']) };
-    });
+    const tree = type === 'sunburst' ? flatTree(so) : null;
+    const rawData = tree ? tree.map(t => ({ name: t.name, selected: false, selectDisabled: false, parent: t.parent, item: t.item }))
+      : so.data.map((d, k) => {
+        const o = d != null && typeof d === 'object' && !Array.isArray(d) ? d : null;
+        const name = type === 'pie' || type === 'funnel' ? o.name : cats ? cats[k] : undefined;
+        return { name, selected: !!(o && o.selected), selectDisabled: !!get(o, ['select', 'disabled']) };
+      });
     const xAxes = [].concat(opt.xAxis || []);
-    const coord = type === 'pie' ? null : 'grid' + ((xAxes[so.xAxisIndex || 0] || {}).gridIndex || 0);
+    const coord = ['pie', 'funnel', 'sunburst'].includes(type) ? null : 'grid' + ((xAxes[so.xAxisIndex || 0] || {}).gridIndex || 0);
     return {
       s, type, so, name: so.name, id: so.id, mode: so.selectedMode, coord, rawData,
-      focus: get(so, ['emphasis', 'focus']), scope: get(so, ['emphasis', 'blurScope']), disabled: !!get(so, ['emphasis', 'disabled']),
+      focus: get(so, ['emphasis', 'focus']) != null ? get(so, ['emphasis', 'focus']) : type === 'sunburst' && R.sunburstDescendant ? 'descendant' : undefined,
+      scope: get(so, ['emphasis', 'blurScope']), disabled: !!get(so, ['emphasis', 'disabled']),
       hoverLink: so.legendHoverLink !== false, map: null, idxMap: {}, isBlured: false,
     };
   });
@@ -795,7 +840,7 @@ function predictCase(c, R) {
   const keyNode = (s, raw) => s + ':' + raw;
   function freshNode(x, raw) {
     const p = { hs: 0, hbo: 0, sel: false };
-    const g = x.type === 'line' ? { hs: 0, hbo: 0, sym: true, s: x.s } : p;
+    const g = x.type === 'line' || x.type === 'scatter' ? { hs: 0, hbo: 0, sym: true, s: x.s } : p;
     return { g, p, x, raw };
   }
   // structure from a recorded snapshot: which elements exist (by element id)
@@ -845,9 +890,24 @@ function predictCase(c, R) {
     for (const o of traverse(n)) if (o.hs === 2) doChange(o, 'normal');
   }
   const seriesNodes = s => Array.from(nodes.values()).filter(n => n.x.s === s);
+  // ecData.focus of an item's element: the tree family's words become the
+  // data indices that leave the blur again (SunburstPiece.ts:152-160)
+  function focusOf(x, raw) {
+    if (x.type !== 'sunburst') return x.focus;
+    const it = x.rawData[raw].item;
+    const f = get(it, ['emphasis', 'focus']) != null ? get(it, ['emphasis', 'focus']) : x.focus;
+    const anc = () => { const r = []; for (let k = raw; k >= 0; k = x.rawData[k].parent) r.push(k); return r.reverse(); };
+    const desc = () => { const r = []; x.rawData.forEach((d, k) => { for (let p = k; p >= 0; p = x.rawData[p].parent) if (p === raw) { r.push(k); break; } }); return r; };
+    if (f === 'relative') return anc().concat(desc());
+    if (f === 'ancestor') return anc();
+    if (f === 'descendant') return desc();
+    return f;
+  }
   function blurSeries(ts, focus, scope) {
     if (ts == null || !focus || focus === 'none') return;
+    if (!R.truthyFocusBlurs && !['self', 'series'].includes(focus)) return;
     scope = scope || 'coordinateSystem';
+    if (!R.unknownScopeGlobal && scope !== 'series') scope = 'coordinateSystem';
     const tx = S[ts];
     for (const x of S) {
       if (!shown(x)) continue;
@@ -858,8 +918,15 @@ function predictCase(c, R) {
       if (polyFlag.has(x.s)) polyFlag.set(x.s, 1);
       for (const n of seriesNodes(x.s)) {
         for (const o of traverse(n)) {
-          if (o.hbo && same && focus === 'self') continue;
+          if (R.selfSparesHeld && o.hbo && same && focus === 'self') continue;
           doChange(o, 'blur');
+        }
+      }
+      // leaveBlurOfIndices -- on EVERY series blurred, by the target's indices
+      if (Array.isArray(focus) && R.focusIndicesLeaveBlur) {
+        for (const k of focus) {
+          const n = nodes.get(keyNode(x.s, k));
+          if (n) for (const o of traverse(n)) if (o.hs === 1) doChange(o, 'normal');
         }
       }
       x.isBlured = true;
@@ -902,7 +969,7 @@ function predictCase(c, R) {
           let q = queryInner(x, p);
           q = (Array.isArray(q) ? q[0] : q) || 0;
           const n = nodeAtInner(x, q) || seriesNodes(x.s)[0];
-          if (n) blurSeries(x.s, x.focus, x.scope); else if (x.focus != null) blurSeries(x.s, x.focus, x.scope);
+          if (n) blurSeries(x.s, focusOf(x, n.raw), x.scope); else if (x.focus != null) blurSeries(x.s, x.focus, x.scope);
         }
       }
       const digit = digitOf(p.highlightKey);
@@ -996,7 +1063,7 @@ function predictCase(c, R) {
     if (h.legend != null) dispatch(legendPayload('highlight', h.legend));
     const n = nodeOfHit(h);
     if (n) {
-      blurSeries(n.x.s, n.x.focus, n.x.scope);
+      blurSeries(n.x.s, focusOf(n.x, n.raw), n.x.scope);
       hoverEnter(n);
     }
   }
@@ -1144,7 +1211,7 @@ function predictCase(c, R) {
 
     const out = { d: it.d, st: el.list, sel: n.p.sel, hs: n.p.hs, hbo: n.g.hbo, z2: el.cur.z2, fill: el.cur.fill, stroke: el.cur.stroke, lineWidth: el.cur.lineWidth, opacity: el.cur.opacity };
     if (x.type === 'pie') Object.assign(out, { x: el.cur.x, y: el.cur.y, r: el.cur.r });
-    if (x.type === 'line') Object.assign(out, { sx: el.cur.sx, sy: el.cur.sy, ghs: n.g.hs, phbo: n.p.hbo });
+    if (x.type === 'line' || x.type === 'scatter') Object.assign(out, { sx: el.cur.sx, sy: el.cur.sy, ghs: n.g.hs, phbo: n.p.hbo });
     if (lab) out.label = { st: lab.list, ignore: !!lab.cur.ignore, fill: lab.cur.fill, opacity: lab.cur.opacity, z2: lab.cur.z2, x: lab.cur.x, y: lab.cur.y };
     if (it.guide) { const off = pieOffset(); out.guide = { st: el.list, x: el.list.includes('select') ? off[0] : 0, y: el.list.includes('select') ? off[1] : 0 }; }
     return out;
@@ -1156,7 +1223,9 @@ function predictCase(c, R) {
     }
     function itemState(name, e, l) {
       const lifts = { path: true, normalFill: it.rest.fill, normalStroke: it.rest.stroke };
-      const selStyle = Object.assign(x.type === 'bar' ? { stroke: '#3c3c41', lineWidth: 2 } : {}, styleOf(get(so, ['select', 'itemStyle'])));
+      const selBase = x.type === 'bar' ? { stroke: '#3c3c41', lineWidth: 2 }
+        : ['scatter', 'funnel', 'heatmap', 'pictorialBar'].includes(x.type) ? { stroke: '#3c3c41' } : {};
+      const selStyle = Object.assign(selBase, styleOf(get(so, ['select', 'itemStyle'])));
       lifts.selectFill = selStyle.fill || null;
       lifts.selectStroke = selStyle.stroke || null;
       if (name === 'select') {
@@ -1165,13 +1234,14 @@ function predictCase(c, R) {
         return proxied(raw, name, e, l, R);
       }
       if (name === 'emphasis') {
-        const raw = { style: styleOf(get(so, ['emphasis', 'itemStyle'])) };
+        // a candlestick's emphasis border is 2 wide (CandlestickSeries.ts:130-134)
+        const raw = { style: Object.assign(x.type === 'candlestick' && R.candleEmphasisWidth ? { lineWidth: 2 } : {}, styleOf(get(so, ['emphasis', 'itemStyle']))) };
         if (x.type === 'pie') {
           const scale = get(so, ['emphasis', 'scale']);
           const size = get(so, ['emphasis', 'scaleSize']);
           raw.r = it.rest.r + (scale === undefined || scale ? (size != null ? size : 5) : 0);
         }
-        if (x.type === 'line') {
+        if (x.type === 'line' || x.type === 'scatter') {
           const hsc = get(so, ['emphasis', 'scale']);
           const ratio = hsc == null || hsc === true ? Math.max(1.1, 3 / it.rest.sy) : isFinite(hsc) && hsc > 0 ? +hsc : 1;
           raw.sx = it.rest.sx * ratio;
@@ -1179,19 +1249,23 @@ function predictCase(c, R) {
         }
         return proxied(raw, name, e, l, R, lifts);
       }
-      return proxied({ style: styleOf(get(so, ['blur', 'itemStyle'])) }, name, e, l, R);
+      // a sunburst's blur.itemStyle.opacity defaults to 0.2 (SunburstSeries.ts:274-279)
+      return proxied({ style: Object.assign(x.type === 'sunburst' && R.sunburstBlurDefaults ? { opacity: 0.2 } : {}, styleOf(get(so, ['blur', 'itemStyle']))) }, name, e, l, R);
     }
     function labelState(name, e, l) {
-      const normalShow = get(so, ['label', 'show']) != null ? !!get(so, ['label', 'show']) : x.type === 'pie';
-      const shows = ['emphasis', 'blur', 'select'].map(s => get(so, [s, 'label', 'show']));
+      const normalShow = get(so, ['label', 'show']) != null ? !!get(so, ['label', 'show']) : ['pie', 'funnel', 'sunburst'].includes(x.type);
+      // a funnel's emphasis label shows by default (FunnelSeries.ts:195-199)
+      const stateShow = s => (get(so, [s, 'label', 'show']) != null ? get(so, [s, 'label', 'show']) : R.funnelEmphasisLabel && x.type === 'funnel' && s === 'emphasis' ? true : undefined);
+      const shows = ['emphasis', 'blur', 'select'].map(stateShow);
       const created = normalShow || shows.some(v => v);
       let raw = null;
       if (created) {
-        const stShow = get(so, [name, 'label', 'show']) != null ? !!get(so, [name, 'label', 'show']) : normalShow;
+        const stShow = stateShow(name) != null ? !!stateShow(name) : normalShow;
         raw = { style: {} };
         const col = get(so, [name, 'label', 'color']);
         if (col != null) raw.style.fill = col;
-        const op = get(so, [name, 'label', 'opacity']);
+        const op = get(so, [name, 'label', 'opacity']) != null ? get(so, [name, 'label', 'opacity'])
+          : x.type === 'sunburst' && name === 'blur' && R.sunburstBlurDefaults ? 0.1 : undefined;
         if (op != null) raw.style.opacity = op;
         if (stShow !== normalShow) raw.ignore = !stShow;
       }
@@ -1302,6 +1376,13 @@ const GUARDS = [
   { id: 'G-rerender-prev-states', mutation: 'a re-render does not re-apply the previous states before the new ones', mut: { rerenderRestoresPrevStates: false }, named: ['legend-pie'] },
   { id: 'G-refound', mutation: 'a hovered element removed by a re-render is not re-found', mut: { refindRemovedHover: false }, named: ['legend-single'] },
   { id: 'G-label-lift-state', mutation: 'a label without an emphasis / select state object still lifts z2', mut: { labelLiftNeedsState: false }, named: ['focus-series-coord'] },
+  { id: 'G-self-spares-held', mutation: "focus 'self' blurs an element held by an action too", mut: { selfSparesHeld: false }, named: ['focus-self-held'] },
+  { id: 'G-truthy-focus', mutation: "a truthy focus that is neither 'self' nor 'series' blurs nothing", mut: { truthyFocusBlurs: false }, named: ['focus-truthy-other'] },
+  { id: 'G-unknown-scope', mutation: "an unknown blurScope acts as 'coordinateSystem'", mut: { unknownScopeGlobal: false }, named: ['focus-truthy-other'] },
+  { id: 'G-sunburst-descendant', mutation: "a sunburst has no default focus", mut: { sunburstDescendant: false }, named: ['focus-sunburst'] },
+  { id: 'G-focus-indices', mutation: 'the focus indices do not leave the blur', mut: { focusIndicesLeaveBlur: false }, named: ['focus-sunburst', 'focus-sunburst-ancestor'] },
+  { id: 'G-sunburst-blur', mutation: "a sunburst's blur opacities are the default tenth", mut: { sunburstBlurDefaults: false }, named: ['focus-sunburst'] },
+  { id: 'G-candle-emphasis-width', mutation: 'a candlestick has no default emphasis border width', mut: { candleEmphasisWidth: false }, named: ['focus-candlestick'] },
 ];
 
 let diffCases = 0;

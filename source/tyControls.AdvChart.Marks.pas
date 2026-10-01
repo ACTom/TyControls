@@ -762,10 +762,12 @@ end;
 
   A LINE IS A RIBBON. PolylineNear measures to the mathematical segment and the
   shape record carries no stroke width, so half the pen has to arrive as slop
-  or a three-pixel line is hittable only along its centre line. }
+  or a three-pixel line is hittable only along its centre line -- half of
+  zrender's max(pen, 5) [Batch 90]. }
 const
   cHitSlopSymbolLogical = 4;
-  cHitSlopLineLogical = 4;
+  { zrender's strokeContainThreshold [Batch 90] }
+  cLineContainThreshold: Double = 5;
 
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;
   ASeries, ARow: Integer): TTyChartElement;
@@ -1569,9 +1571,17 @@ var
       if AVisual.VisualLineStroke then ApplyVisualLine(v, False);
       el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
       AttachPath(el.Shape, lineRuns, spec.Smooth > 0);
-      { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
-        resolved width -- the default 2 was filled in a few lines up. }
-      el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
+      { HALF THE PEN, AT LEAST FIVE WIDE. `v.StrokeWidthLogical` is already the
+        resolved width -- the default 2 was filled in a few lines up. zrender's
+        Path.contain tests an unfilled stroke at max(lineWidth,
+        strokeContainThreshold 5) (graphic/Path.ts:406-411, 676): a default
+        line is hit 2.5 px either side of its centre. [Batch 90: it was half
+        the pen plus a 4 px ribbon, 5 px, which took a bar 3.9 px under a
+        line away from upstream's hover (fixture focus-series-coord).] }
+      if v.StrokeWidthLogical > cLineContainThreshold then
+        el.HitSlopLogical := v.StrokeWidthLogical / 2
+      else
+        el.HitSlopLogical := cLineContainThreshold / 2;
       el.HasClip := True;
       el.ClipRect := lineClip;
       TagClip(el, carLineRun);
