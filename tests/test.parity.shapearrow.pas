@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Types, TypInfo, Controls, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Shape, tyControls.Arrow;
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Shape, tyControls.Arrow;
 
 type
   { The runtime half: what LCL's ControlAtPos asks a control while routing a mouse

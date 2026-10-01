@@ -54,7 +54,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 | Linux | GTK2, Qt5, Qt6; GTK3 partially supported ([known issues](docs/known-issues.en.md) under Wayland) |
 | macOS | Cocoa |
 
-Requires Lazarus 3.x+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
+Requires Lazarus 3.0+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
 
 ---
 
@@ -405,6 +405,7 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
 | [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
+| [CONTRIBUTING.en.md](CONTRIBUTING.en.md) | Bug reports, feature requests, pull requests, roadmap |
 
 ---
 

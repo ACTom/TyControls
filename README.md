@@ -54,7 +54,7 @@ Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.t
 | Linux | GTK2、Qt5、Qt6;GTK3 部分支持(Wayland 下有[已知问题](docs/known-issues.md)) |
 | macOS | Cocoa |
 
-依赖:Lazarus 3.x+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
+依赖:Lazarus 3.0+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
 
 ---
 
@@ -405,6 +405,7 @@ CharImage1.GlyphName := 'house';
 | [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
 | [known-issues.md](docs/known-issues.md) | 已知问题 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 报告问题、功能建议、提交代码、路线图 |
 
 ---
 
