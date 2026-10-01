@@ -29,7 +29,7 @@ type
   TTyBevelEdge = (tbeTop, tbeBottom, tbeLeft, tbeRight);
   TTyBevelEdges = set of TTyBevelEdge;
 
-  TTyBevel = class(TTyGraphicControl)
+  TTyCustomBevel = class(TTyGraphicControl)
   private
     FShape: TTyBevelShape;
     FStyle: TTyBevelStyle;
@@ -41,9 +41,13 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
+    property Shape: TTyBevelShape read FShape write SetShape default tbsBox;
+    property Style: TTyBevelStyle read FStyle write SetStyle default tbsLowered;
+  end;
+
+  { TTyBevel publishes TTyCustomBevel's properties; everything lives in TTyCustomBevel. }
+  TTyBevel = class(TTyCustomBevel)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -83,8 +87,8 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Shape: TTyBevelShape read FShape write SetShape default tbsBox;
-    property Style: TTyBevelStyle read FStyle write SetStyle default tbsLowered;
+    property Shape;
+    property Style;
     property Align;
     property Anchors;
   end;
@@ -258,7 +262,7 @@ begin
   Result := TyResolveParentBg(AControl, AColor);
 end;
 
-constructor TTyBevel.Create(AOwner: TComponent);
+constructor TTyCustomBevel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FShape := tbsBox;
@@ -267,7 +271,7 @@ begin
   Height := 50;
 end;
 
-function TTyBevel.GetStyleTypeKey: string;
+function TTyCustomBevel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a bevel draws NO panel: no fill, no border, no caption — only highlight/shadow rails.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -275,21 +279,21 @@ begin
   Result := 'TyBevel';
 end;
 
-procedure TTyBevel.SetShape(AValue: TTyBevelShape);
+procedure TTyCustomBevel.SetShape(AValue: TTyBevelShape);
 begin
   if FShape = AValue then Exit;
   FShape := AValue;
   Invalidate;
 end;
 
-procedure TTyBevel.SetStyle(AValue: TTyBevelStyle);
+procedure TTyCustomBevel.SetStyle(AValue: TTyBevelStyle);
 begin
   if FStyle = AValue then Exit;
   FStyle := AValue;
   Invalidate;
 end;
 
-procedure TTyBevel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomBevel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -387,7 +391,7 @@ begin
   end;
 end;
 
-procedure TTyBevel.Paint;
+procedure TTyCustomBevel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

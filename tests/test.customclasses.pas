@@ -1260,14 +1260,14 @@ initialization
     'TTyRating', 'TTyDial', 'TTyGearDial', 'TTyAnalogClock', 'TTyTrackBar',
     // T12 panels
     'TTyPanel', 'TTyPaintPanel', 'TTyExPanel', 'TTyGridPanel', 'TTyRelativePanel', 'TTyScrollBox',
-    'TTyScrollPanel', 'TTyControlBar', 'TTyCoolBar', 'TTyGridCell', 'TTyScrollContent']);
+    'TTyScrollPanel', 'TTyControlBar', 'TTyCoolBar', 'TTyGridCell', 'TTyScrollContent',
+    // T13 groups and decoration
+    'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard', 'TTyEmpty',
+    'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T13 groups and decoration
-    'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard', 'TTyEmpty',
-    'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox',
     // T14 tabs
     'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel',
     // T15 list boxes

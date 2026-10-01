@@ -21,7 +21,8 @@ uses
   Classes, SysUtils, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
-  tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button;
+  tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
+  tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
@@ -36,6 +37,9 @@ type
     procedure TestScrollBoxTakesAThirdPartyViewport;
     procedure TestThirdCoolBarBandsReachTheirHost;
     procedure TestScrollContentStreamsFromAFormFile;
+    { Task 13: groups and decoration }
+    procedure TestThirdGroupBox;
+    procedure TestThirdRadioGroup;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -63,6 +67,19 @@ type
     property Vertical;
   end;
 
+  TThirdGroupBox = class(TTyCustomGroupBox)
+  published
+    property Caption;
+    property Alignment;
+  end;
+
+  { Items before ItemIndex: the index is read back against the items already there. }
+  TThirdRadioGroup = class(TTyCustomRadioGroup)
+  published
+    property Items;
+    property ItemIndex;
+  end;
+
 implementation
 
 type
@@ -72,6 +89,11 @@ type
   public
     procedure SetWrap(AValue: Boolean);
     function WrapNow: Boolean;
+    procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+  end;
+
+  TP2GroupBoxCracker = class(TTyCustomGroupBox)
+  public
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
   end;
 
@@ -92,6 +114,11 @@ begin
 end;
 
 procedure TP2PanelCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TP2GroupBoxCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderTo(ACanvas, ARect, 96);
 end;
@@ -301,7 +328,93 @@ begin
   end;
 end;
 
+{ ------------------------------------------------------------------ Task 13: groups }
+
+procedure TTyCustomClassesP2Test.TestThirdGroupBox;
+var
+  third, back: TThirdGroupBox;
+  own: TTyGroupBox;
+  c: TTyCustomGroupBox;
+  bmA, bmB: TBitmap;
+  diff: string;
+begin
+  third := TThirdGroupBox.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(10, 10, 180, 90);
+  CheckPublishesOnly(TThirdGroupBox, ['Caption', 'Alignment']);
+  third.Caption := 'Options';
+  third.Alignment := taCenter;
+  third.ClientWidth := 150;
+  CheckStreamText(third, ['Caption', 'Alignment'], 'ClientWidth');
+  back := TThirdGroupBox.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'Options', back.Caption);
+  AssertTrue('T-c: Alignment round-trips', back.Alignment = taCenter);
+  own := TTyGroupBox.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(10, 110, 180, 90);
+  own.Caption := 'Options';
+  own.Alignment := taCenter;
+  third.SetBounds(10, 10, 180, 90);
+  CheckSameTypeKey(third, own);
+  bmA := NewSentinelBitmap(180, 90);
+  bmB := NewSentinelBitmap(180, 90);
+  try
+    TP2GroupBoxCracker(third).DoRender(bmA.Canvas, Rect(0, 0, 180, 90));
+    TP2GroupBoxCracker(own).DoRender(bmB.Canvas, Rect(0, 0, 180, 90));
+    AssertTrue('T-d: the mimic paints exactly what TTyGroupBox paints: ' + diff,
+      SameBitmaps(bmA, bmB, diff));
+  finally
+    bmA.Free;
+    bmB.Free;
+  end;
+  CheckFreshDefaults(TThirdGroupBox, ['Caption', 'Alignment']);
+  c := third;
+  c.Alignment := taRightJustify;
+  AssertTrue('T-v: Alignment is public through a TTyCustomGroupBox reference',
+    third.Alignment = taRightJustify);
+end;
+
+{ The radio group builds its own TTyRadioButton children -- a third party's group does too, and
+  checking one of them reports back to the group that built it. }
+procedure TTyCustomClassesP2Test.TestThirdRadioGroup;
+var
+  third, back: TThirdRadioGroup;
+  own: TTyRadioGroup;
+  c: TTyCustomRadioGroup;
+begin
+  third := TThirdRadioGroup.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 200, 120);
+  CheckPublishesOnly(TThirdRadioGroup, ['Items', 'ItemIndex']);
+  third.Items.CommaText := 'one,two,three';
+  third.ItemIndex := 2;
+  third.Columns := 2;
+  CheckStreamText(third, ['Items', 'ItemIndex'], 'Columns');
+  back := TThirdRadioGroup.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: Items round-trip', 'one,two,three', back.Items.CommaText);
+  AssertEquals('T-c: ItemIndex round-trips', 2, back.ItemIndex);
+  AssertEquals('T-c: the unpublished Columns stayed at its default', 1, back.Columns);
+  { The group's own children are the library's radio buttons, and they answer to it. }
+  AssertTrue('the group built a TTyRadioButton for each item', third.Buttons[1] is TTyRadioButton);
+  FChanges := 0;
+  third.OnSelectionChanged := @CountChange;
+  third.Buttons[1].Checked := True;
+  AssertEquals('checking the second child selects it in the third-party group', 1, third.ItemIndex);
+  AssertTrue('and the group reports the change', FChanges > 0);
+  own := TTyRadioGroup.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdRadioGroup, ['Items', 'ItemIndex']);
+  c := third;
+  c.Columns := 3;
+  AssertEquals('T-v: Columns is public through a TTyCustomRadioGroup reference', 3, third.Columns);
+end;
+
 initialization
-  RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar]);
+  RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
+    TThirdGroupBox, TThirdRadioGroup]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

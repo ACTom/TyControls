@@ -68,7 +68,7 @@ function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
   ARightToLeft: Boolean = False): TTyDividerLayout;
 
 type
-  TTyDivider = class(TTyGraphicControl)
+  TTyCustomDivider = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLeftIndent: Integer;
@@ -85,9 +85,27 @@ type
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
+    { Where the caption sits relative to the rule:
+        taLeftJustify  — caption at the left, rule fills the space to its right;
+        taRightJustify — mirror (caption at the right, rule to its left);
+        taCenter       — caption centred with a rule segment on each side.
+      Ignored while LeftIndent >= 0. }
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    { LOGICAL-pixel offset of the caption's leading edge from the content rect's
+      left, the knob TDividerBevel calls LeftIndent (dividerbevel.pas:80). >= 0
+      overrides Alignment; TyDividerIndentAuto (-1, the default) leaves Alignment
+      in charge — see that constant for the LCL porting note and why the default
+      is "off" rather than LCL's 60 (which would silently re-indent every divider
+      that already exists).
+
+      Logical, not device, px: it is scaled through the painter alongside the gap
+      and rule thickness, so an indent set once looks the same at 96 and 192 dpi. }
+    property LeftIndent: Integer read FLeftIndent write SetLeftIndent default TyDividerIndentAuto;
+  end;
+
+  { TTyDivider publishes TTyCustomDivider's properties; everything lives in TTyCustomDivider. }
+  TTyDivider = class(TTyCustomDivider)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -136,22 +154,8 @@ type
       string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
       overriding TextChanged. That is what this does now. }
     property Caption;
-    { Where the caption sits relative to the rule:
-        taLeftJustify  — caption at the left, rule fills the space to its right;
-        taRightJustify — mirror (caption at the right, rule to its left);
-        taCenter       — caption centred with a rule segment on each side.
-      Ignored while LeftIndent >= 0. }
-    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    { LOGICAL-pixel offset of the caption's leading edge from the content rect's
-      left, the knob TDividerBevel calls LeftIndent (dividerbevel.pas:80). >= 0
-      overrides Alignment; TyDividerIndentAuto (-1, the default) leaves Alignment
-      in charge — see that constant for the LCL porting note and why the default
-      is "off" rather than LCL's 60 (which would silently re-indent every divider
-      that already exists).
-
-      Logical, not device, px: it is scaled through the painter alongside the gap
-      and rule thickness, so an indent set once looks the same at 96 and 192 dpi. }
-    property LeftIndent: Integer read FLeftIndent write SetLeftIndent default TyDividerIndentAuto;
+    property Alignment;
+    property LeftIndent;
     property Align;
     property Anchors;
   end;
@@ -277,9 +281,9 @@ begin
   end;
 end;
 
-{ TTyDivider }
+{ TTyCustomDivider }
 
-constructor TTyDivider.Create(AOwner: TComponent);
+constructor TTyCustomDivider.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlignment := taLeftJustify;
@@ -288,7 +292,7 @@ begin
   Height := TyDensityHeight(ActiveController, 24);
 end;
 
-function TTyDivider.GetStyleTypeKey: string;
+function TTyCustomDivider.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': this is a RULE, not text chrome — it strokes solid bands around an optional caption.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -296,25 +300,25 @@ begin
   Result := 'TyDivider';
 end;
 
-function TTyDivider.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomDivider.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyDivider.TextChanged;
+procedure TTyCustomDivider.TextChanged;
 begin
   inherited TextChanged;
   Invalidate;
 end;
 
-procedure TTyDivider.SetAlignment(AValue: TAlignment);
+procedure TTyCustomDivider.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyDivider.SetLeftIndent(AValue: Integer);
+procedure TTyCustomDivider.SetLeftIndent(AValue: Integer);
 begin
   { Every negative value is the same state ("Alignment decides"), so normalise to
     the named one -- otherwise -2 and -1 would both work but only one of them
@@ -325,7 +329,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDivider.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomDivider.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -420,7 +424,7 @@ begin
   end;
 end;
 
-procedure TTyDivider.Paint;
+procedure TTyCustomDivider.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
