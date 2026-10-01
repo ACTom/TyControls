@@ -787,7 +787,7 @@ end;
 procedure TTyTabMemberParity.PageControlReadsAndWritesTheHost;
 var
   Other: TTyPageControl;
-  Sheet: TTyTabSheet;
+  Sheet: TTyCustomTabSheet;
 begin
   BuildPager(2);
   Sheet := FPager.Pages[0];
@@ -805,7 +805,7 @@ end;
 
 procedure TTyTabMemberParity.PageIndexMovesThePage;
 var
-  First: TTyTabSheet;
+  First: TTyCustomTabSheet;
 begin
   BuildPager(3);
   First := FPager.Pages[0];
@@ -856,7 +856,7 @@ procedure TTyTabMemberParity.PageGeometryIsNotStreamed;
 const
   Names: array[0..5] of string = ('Left', 'Top', 'Width', 'Height', 'TabOrder', 'Visible');
 var
-  Sheet: TTyTabSheet;
+  Sheet: TTyCustomTabSheet;
   I: Integer;
 begin
   BuildPager(1);

@@ -22,7 +22,8 @@ uses
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
   tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
-  tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox;
+  tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox, tyControls.TabStrip,
+  tyControls.TabSheet, tyControls.PageControl;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
@@ -40,6 +41,12 @@ type
     { Task 13: groups and decoration }
     procedure TestThirdGroupBox;
     procedure TestThirdRadioGroup;
+    { Task 14: tabs }
+    procedure TestThirdPageControl;
+    procedure TestTabSheetJoinsAThirdPartyPageControl;
+    procedure TestPageControlDropsAFreedThirdPartySheet;
+    procedure TestPageControlHandsOutAThirdPartySheetAsItIs;
+    procedure TestThirdTabSheetKeepsItsBoundsOutOfTheStream;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -78,6 +85,18 @@ type
   published
     property Items;
     property ItemIndex;
+  end;
+
+  TThirdPageControl = class(TTyCustomPageControl)
+  published
+    property ActivePageIndex;
+    property TabPosition;
+  end;
+
+  TThirdTabSheet = class(TTyCustomTabSheet)
+  published
+    property Caption;
+    property ImageIndex;
   end;
 
 implementation
@@ -413,8 +432,149 @@ begin
   AssertEquals('T-v: Columns is public through a TTyCustomRadioGroup reference', 3, third.Columns);
 end;
 
+{ ------------------------------------------------------------------ Task 14: tabs }
+
+procedure TTyCustomClassesP2Test.TestThirdPageControl;
+var
+  third, back: TThirdPageControl;
+  own: TTyPageControl;
+  c: TTyCustomPageControl;
+  pg: TTyTabSheet;
+  i: Integer;
+begin
+  { Owned by the page control itself, so they stream as its children. }
+  third := TThirdPageControl.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 300, 200);
+  CheckPublishesOnly(TThirdPageControl, ['ActivePageIndex', 'TabPosition']);
+  for i := 0 to 2 do
+  begin
+    pg := TTyTabSheet.Create(third);
+    pg.Name := 'Pg' + IntToStr(i);
+    pg.Caption := 'Page ' + IntToStr(i);
+    pg.Parent := third;
+  end;
+  third.ActivePageIndex := 1;
+  third.TabPosition := tpBottom;
+  third.TabsClosable := True;
+  CheckStreamText(third, ['ActivePageIndex', 'TabPosition'], 'TabsClosable');
+  back := TThirdPageControl.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: the pages came along', 3, back.PageCount);
+  AssertEquals('T-c: ActivePageIndex round-trips', 1, back.ActivePageIndex);
+  AssertTrue('T-c: TabPosition round-trips', back.TabPosition = tpBottom);
+  AssertFalse('T-c: the unpublished TabsClosable stayed at its default', back.TabsClosable);
+  own := TTyPageControl.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdPageControl, ['ActivePageIndex', 'TabPosition']);
+  c := third;
+  c.TabsClosable := False;
+  AssertFalse('T-v: TabsClosable is public through a TTyCustomPageControl reference',
+    third.TabsClosable);
+end;
+
+{ S14-1. A library page parented to a third party's page control joins it: the page asks
+  `is TTyCustomPageControl`, so the host counts it, it names the host, and activating it shows
+  it. Asking for TTyPageControl left the mimic with no pages at all. }
+procedure TTyCustomClassesP2Test.TestTabSheetJoinsAThirdPartyPageControl;
+var
+  pc: TThirdPageControl;
+  a, b: TTyTabSheet;
+begin
+  pc := TThirdPageControl.Create(FForm);
+  pc.Parent := FForm;
+  pc.SetBounds(0, 0, 300, 200);
+  AssertFalse('the mimic is no TTyPageControl (or this proves nothing)', TObject(pc) is TTyPageControl);
+  a := TTyTabSheet.Create(FForm);
+  a.Parent := pc;
+  b := TTyTabSheet.Create(FForm);
+  b.Parent := pc;
+  AssertEquals('both pages registered with the third-party host', 2, pc.PageCount);
+  AssertTrue('a page names its host', TObject(b.PageControl) = TObject(pc));
+  AssertEquals('and knows its place in it', 1, b.PageIndex);
+  pc.ActivePageIndex := 1;
+  AssertTrue('activating the page shows it', b.Visible);
+  AssertFalse('and hides the other', a.Visible);
+end;
+
+{ S14-2. A third party's page, the active one, freed: the page control hears the removal --
+  it asks `is TTyCustomTabSheet` -- and forgets it. The judgement is "ActivePage = nil"; the
+  page must never be dereferenced after the free. }
+procedure TTyCustomClassesP2Test.TestPageControlDropsAFreedThirdPartySheet;
+var
+  pc: TTyPageControl;
+  sheet: TThirdTabSheet;
+begin
+  pc := TTyPageControl.Create(FForm);
+  pc.Parent := FForm;
+  pc.SetBounds(0, 0, 300, 200);
+  sheet := TThirdTabSheet.Create(FForm);
+  sheet.Parent := pc;
+  AssertEquals('the third-party page registered', 1, pc.PageCount);
+  AssertTrue('and is the active page', pc.ActivePage = sheet);
+  sheet.Free;
+  AssertEquals('freeing it removed it from the host', 0, pc.PageCount);
+  AssertTrue('and the host no longer hands it out', pc.ActivePage = nil);
+end;
+
+{ S14-3. The page control hands out what it holds. A third party's page is a TTyCustomTabSheet
+  and not a TTyTabSheet, so ActivePage and Pages[] are typed TTyCustomTabSheet -- the way
+  LCL's TCustomTabControl hands out TCustomPage -- rather than cast to the final class, which
+  would be a lie about this page. The declared type is pinned through RTTI (the getter is
+  private), which is also what the snapshot's type-rename table allows for. }
+procedure TTyCustomClassesP2Test.TestPageControlHandsOutAThirdPartySheetAsItIs;
+var
+  pc: TTyPageControl;
+  sheet: TThirdTabSheet;
+  got: TTyCustomTabSheet;
+  pi: PPropInfo;
+begin
+  pc := TTyPageControl.Create(FForm);
+  pc.Parent := FForm;
+  pc.SetBounds(0, 0, 300, 200);
+  pc.AddPage('library');
+  sheet := TThirdTabSheet.Create(FForm);
+  sheet.Parent := pc;
+  pc.ActivePage := sheet;
+  got := pc.ActivePage;
+  AssertTrue('ActivePage is the third party''s page', got = sheet);
+  AssertFalse('which is not a TTyTabSheet', TObject(got) is TTyTabSheet);
+  AssertTrue('Pages[] hands out the same page', pc.Pages[1] = sheet);
+  AssertTrue('AddPage still builds a TTyTabSheet', TObject(pc.Pages[0]) is TTyTabSheet);
+  pi := GetPropInfo(TTyPageControl, 'ActivePage');
+  AssertTrue('ActivePage is published', pi <> nil);
+  AssertEquals('and declared as the custom class', 'TTyCustomTabSheet', pi^.PropType^.Name);
+end;
+
+{ The page's bounds, TabOrder and Visible belong to the pager; their `stored False` sits on
+  TTyCustomTabSheet (Left..Height in its published section, where TControl already has them),
+  so a third party's page keeps them out of its .lfm too. }
+procedure TTyCustomClassesP2Test.TestThirdTabSheetKeepsItsBoundsOutOfTheStream;
+var
+  third: TThirdTabSheet;
+  own: TTyTabSheet;
+  txt: string;
+begin
+  third := TThirdTabSheet.Create(FForm);
+  CheckPublishesOnly(TThirdTabSheet, ['Caption', 'ImageIndex']);
+  third.Caption := 'Third';
+  third.ImageIndex := 3;
+  third.SetBounds(30, 40, 120, 90);
+  AssertEquals('precondition: Left really is non-zero', 30, third.Left);
+  CheckStreamText(third, ['Caption', 'ImageIndex'], 'Left');
+  txt := StreamedText(third);
+  AssertFalse('nor Top', HasProp(txt, 'Top'));
+  AssertFalse('nor Width', HasProp(txt, 'Width'));
+  AssertFalse('nor Height', HasProp(txt, 'Height'));
+  own := TTyTabSheet.Create(FForm);
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTabSheet, ['Caption', 'ImageIndex']);
+end;
+
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
-    TThirdGroupBox, TThirdRadioGroup]);
+    TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

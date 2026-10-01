@@ -6,7 +6,7 @@ uses
 type
   { TTyTabSet — a pure tab strip (no page container) on the SP1 TTyCustomTabStrip
     header engine. Captions live in a TStrings; selection = TabIndex + OnChange. }
-  TTyTabSet = class(TTyCustomTabStrip)
+  TTyCustomTabSet = class(TTyCustomTabStrip)
   private
     { Backed by a TStringList (for its OnChange), but typed TStrings so the
       published Tabs field-read property matches its declared type. }
@@ -33,9 +33,77 @@ type
     function TabCaptionForTest(AIndex: Integer): string;
     procedure RemoveTabForTest(AIndex: Integer);
     function StyleTypeKeyForTest: string;
-  published
+  protected
     property Tabs: TStrings read FTabs write SetTabs;
     property TabIndex: Integer read FTabIndex write SetTabIndex default -1;
+  end;
+
+  { TTyTabSet publishes TTyCustomTabSet's properties; everything lives in TTyCustomTabSet. }
+  TTyTabSet = class(TTyCustomTabSet)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Images;
+    property ImagesWidth;
+    property OnGetImageIndex;
+    property TabHeight;
+    property TabsClosable;
+    property OnTabClose;
+    property OnChange;
+    property OnChanging;
+    property OnReorder;
+    property Align;
+    property Anchors;
+    property Tabs;
+    property TabIndex;
     { Promoted from public on the header engine -- see TTyPageControl.TabPosition for why
       it is published on the concrete strips and not on the shared base. A caption-only
       strip on the left edge is the "sider" shape, which is the main reason to want it. }
@@ -49,7 +117,7 @@ type
   end;
 implementation
 
-constructor TTyTabSet.Create(AOwner: TComponent);
+constructor TTyCustomTabSet.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FTabs := TStringList.Create;
@@ -57,13 +125,13 @@ begin
   Width := 240; Height := 32;
 end;
 
-destructor TTyTabSet.Destroy;
+destructor TTyCustomTabSet.Destroy;
 begin
   FTabs.Free;
   inherited Destroy;
 end;
 
-function TTyTabSet.GetStyleTypeKey: string;
+function TTyCustomTabSet.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyTabControl': 'TyTabControl' names no control at all, and a caption-only strip is not a page container.
     Added to 'TyTabControl's rule block as an extra selector, so every resolved value is
@@ -71,32 +139,32 @@ begin
   Result := 'TyTabSet';
 end;
 
-function TTyTabSet.HasPageBody: Boolean;
+function TTyCustomTabSet.HasPageBody: Boolean;
 begin
   Result := False;
 end;
 
-function TTyTabSet.DesignTabClicksEnabled: Boolean;
+function TTyCustomTabSet.DesignTabClicksEnabled: Boolean;
 begin
   Result := True;
 end;
 
-function TTyTabSet.GetTabCount: Integer;
+function TTyCustomTabSet.GetTabCount: Integer;
 begin
   Result := FTabs.Count;
 end;
 
-function TTyTabSet.GetTabCaption(AIndex: Integer): string;
+function TTyCustomTabSet.GetTabCaption(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < FTabs.Count) then Result := FTabs[AIndex] else Result := '';
 end;
 
-procedure TTyTabSet.DoSelectTab(AIndex: Integer);
+procedure TTyCustomTabSet.DoSelectTab(AIndex: Integer);
 begin
   Invalidate;
 end;
 
-procedure TTyTabSet.DoReorderTabs(AFrom, ATo: Integer);
+procedure TTyCustomTabSet.DoReorderTabs(AFrom, ATo: Integer);
 begin
   // Selection stays pinned to the POSITION, not the moved tab (matches TTyPageControl.DoReorderTabs — FTabIndex unadjusted).
   if (AFrom >= 0) and (AFrom < FTabs.Count) and (ATo >= 0) and (ATo < FTabs.Count) then
@@ -108,7 +176,7 @@ begin
   end;
 end;
 
-procedure TTyTabSet.RemoveTabData(AIndex: Integer);
+procedure TTyCustomTabSet.RemoveTabData(AIndex: Integer);
 var want: Integer;
 begin
   // Base DoCloseClick delegates ALL reconciliation here (mirror TTyPageControl.UnregisterPage).
@@ -133,22 +201,22 @@ begin
     FTabIndex := FTabs.Count - 1;
 end;
 
-procedure TTyTabSet.SetTabs(AValue: TStrings);
+procedure TTyCustomTabSet.SetTabs(AValue: TStrings);
 begin
   FTabs.Assign(AValue);
 end;
 
-procedure TTyTabSet.TabsListChanged(Sender: TObject);
+procedure TTyCustomTabSet.TabsListChanged(Sender: TObject);
 begin
   // Only the upper bound is clamped. A direct Tabs.Delete BELOW the selection shifts the highlight by one (bare TStringList.OnChange carries no index) — the close-button path goes through RemoveTabData which handles it; direct Tabs edits below the selection are a known, uncommon desync.
   if FTabIndex > FTabs.Count - 1 then FTabIndex := FTabs.Count - 1;
   TabsChanged;
 end;
 
-function TTyTabSet.TabCountForTest: Integer; begin Result := GetTabCount; end;
-function TTyTabSet.TabCaptionForTest(AIndex: Integer): string; begin Result := GetTabCaption(AIndex); end;
-procedure TTyTabSet.RemoveTabForTest(AIndex: Integer); begin RemoveTabData(AIndex); end;
-function TTyTabSet.StyleTypeKeyForTest: string; begin Result := GetStyleTypeKey; end;
+function TTyCustomTabSet.TabCountForTest: Integer; begin Result := GetTabCount; end;
+function TTyCustomTabSet.TabCaptionForTest(AIndex: Integer): string; begin Result := GetTabCaption(AIndex); end;
+procedure TTyCustomTabSet.RemoveTabForTest(AIndex: Integer); begin RemoveTabData(AIndex); end;
+function TTyCustomTabSet.StyleTypeKeyForTest: string; begin Result := GetStyleTypeKey; end;
 
 initialization
   RegisterClass(TTyTabSet);

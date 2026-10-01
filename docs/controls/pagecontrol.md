@@ -30,8 +30,8 @@
 | 成员 | 类型 | 说明 |
 |---|---|---|
 | `ActivePageIndex` | `Integer`（published, 默认 -1） | 当前活动页零基索引；-1 表示无；赋值裁剪越界；真变化才触发 `OnChange`；随 `.lfm` 往返（载入期写入的值在 `Loaded` 应用） |
-| `ActivePage` | `TTyTabSheet`（published） | 当前活动页（读/写；写入即切到该页）。与 `TPageControl` 一致已 published：设计器与 `.lfm` 从此能按**页引用**指定显示哪一页——按索引指定的话，一旦有人重排页签，索引就悄悄指向了另一页。二者指的是同一个选择，`ActivePageIndex` 保留给更方便用索引的代码 |
-| `Pages[i]` | `TTyTabSheet`（public, 只读 indexed） | 第 i 页；越界返回 `nil` |
+| `ActivePage` | `TTyCustomTabSheet`（published） | 当前活动页（读/写；写入即切到该页）。4.0 起类型是 `TTyCustomTabSheet`：宿主收任何 `TTyCustomTabSheet` 后代的页，交出来的就只能说是它；确知是内置页、要用 `TTyTabSheet` 才有的东西时写 `as TTyTabSheet`。与 `TPageControl` 一致已 published：设计器与 `.lfm` 从此能按**页引用**指定显示哪一页——按索引指定的话，一旦有人重排页签，索引就悄悄指向了另一页。二者指的是同一个选择，`ActivePageIndex` 保留给更方便用索引的代码 |
+| `Pages[i]` | `TTyCustomTabSheet`（public, 只读 indexed） | 第 i 页；越界返回 `nil`。类型同 `ActivePage`；`AddPage` / `AddTab` / `AddTabSheet` 建的就是 `TTyTabSheet`，仍返回 `TTyTabSheet` |
 | `PageCount` | `Integer` | 页数 |
 | `AddPage(caption)` / `AddTab(caption)` | `: TTyTabSheet` | 追加一页（`Owner` = 控件的 Owner，即窗体；`Parent` = 控件），返回该页；首次追加自动选中 |
 | `AddTabSheet` | `: TTyTabSheet` | LCL 的写法与签名（`TPageControl.AddTabSheet`）：不带 caption 参数，返回新页。这是现有 Delphi / Lazarus 代码里建页最常见的一种写法，也是本类此前唯一不认的一种。caption 留空而不是自动生成 `TabSheet1`——LCL 也留空，凭空造一个标签只会变成宿主还得注意去清掉的文字 |

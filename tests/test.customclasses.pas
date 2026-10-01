@@ -96,11 +96,14 @@ const
 
   { Property type renames the snapshot allows (plan D11): a component-reference property now
     names the custom class, as LCL's Images: TCustomImageList does. }
-  CSnapshotTypeRenames: array[0..3, 0..1] of string = (
+  CSnapshotTypeRenames: array[0..4, 0..1] of string = (
     ('TTyIconFont', 'TTyCustomIconFont'),
     ('TTyStyleController', 'TTyCustomStyleController'),
     ('TTyImageCollection', 'TTyCustomImageCollection'),
-    ('TTyVirtualImageList', 'TTyCustomVirtualImageList'));
+    ('TTyVirtualImageList', 'TTyCustomVirtualImageList'),
+    { Not a component reference: TTyPageControl.ActivePage hands out the page it shows, and a
+      page control takes any TTyCustomTabSheet (plan R7-4). }
+    ('TTyTabSheet', 'TTyCustomTabSheet'));
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
@@ -1263,13 +1266,13 @@ initialization
     'TTyScrollPanel', 'TTyControlBar', 'TTyCoolBar', 'TTyGridCell', 'TTyScrollContent',
     // T13 groups and decoration
     'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard', 'TTyEmpty',
-    'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox']);
+    'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox',
+    // T14 tabs
+    'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T14 tabs
-    'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel',
     // T15 list boxes
     'TTyListBox', 'TTyCheckListBox', 'TTyOfficeListBox', 'TTyAdvancedListBox',
     'TTyValueListEditor', 'TTyColorListBox', 'TTyFontListBox',
@@ -1306,7 +1309,7 @@ initialization
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
-  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase']);
+  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip']);
 
   RegisterTest(TTyCustomClassesGuardTest);
 
