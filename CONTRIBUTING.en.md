@@ -27,15 +27,35 @@ TyControls is a general-purpose, cross-platform, multi-theme control library. Th
 - Docking layouts. For IDE-style UIs, use the tool-window workbench.
 - Multiple windows (tearing panels off into separate windows).
 
-## Roadmap
+## Roadmap and releases
 
-Each version has a Milestone whose description says what the release is mainly about. Each major feature has a tracking issue you can subscribe to and discuss. Versions are ordered, not dated: a release ships when it's done.
+Each version has a Milestone whose description says what the release is mainly about. Each major feature has a tracking issue you can subscribe to and discuss.
+
+Versions are ordered, not dated. A finished Milestone doesn't mean an immediate release: a bug-fix release usually waits a while longer, until no new problem reports come in.
+
+## Versions and support
+
+Versions are `major.minor.patch`. Patch releases only fix bugs; minor releases add features but stay compatible, as described below.
+
+**Support window**: the latest minor version gets fixes and releases. The one before it keeps getting fixes and releases too, until the next minor version after that ships; then it gets one last release and support ends. For example, the last 3.0.x comes out together with 3.2. Severe problems are exempt from this.
+
+**Compatibility**: within a major version (all of 3.x, say), a minor release guarantees that:
+
+- Public API is neither removed nor changed in signature. Anything on its way out is marked `deprecated` first and only removed in the next major version.
+- Properties stored in form files (`.lfm`) are neither removed nor renamed, and their default values don't change.
+- Existing `.tycss` files keep working: token names and syntax are only ever added to.
+- The minimum requirements don't go up: Lazarus 3.0, FPC 3.2.2.
+- Controls keep their default sizes, padding and `AutoSize` results, so upgrading doesn't shift your layout. Colors in the built-in themes may be fine-tuned.
+
+Fixing a bug doesn't count as breaking compatibility, even if some code relied on the old, wrong behavior.
+
+So when you hit a problem, upgrading to the latest minor version gets you the fix.
 
 ## Pull requests
 
 For anything sizeable, open an issue or comment on an existing one first, so the work doesn't end up going in a different direction.
 
-**Branches**: fixes for a released version go on that version's maintenance branch, `major.minor-fixes` (a 3.0.x bug goes on `3.0-fixes`); features and everything else go on `main`.
+**Branches**: a fix for a released version goes on the maintenance branch, `major.minor-fixes`, of the newest release that still has the bug (a 3.0.x bug goes on `3.0-fixes`). The maintainer cherry-picks fixes to the other maintenance branches and to `main`; branches are never merged into one another. Features and everything else go on `main`.
 
 **Build and test**:
 
@@ -53,6 +73,7 @@ Bug fixes should come with a test that fails without the fix.
 - Add new units to `tycontrols.lpk` (design-time ones to `tycontrols_dt.lpk`).
 - User-visible text goes in a `resourcestring`, with the zh_CN `.po` under `languages/` updated to match.
 - New examples use `.lfm` forms, have a title bar and can switch themes at runtime.
+- Don't use LCL API newer than Lazarus 3.0; where you must, keep a path for older versions behind `LCL_FULLVERSION`.
 - Otherwise, follow the code around you.
 
 **Commit messages** are in English, as `type(scope): summary`, e.g. `fix(grid): header loses focus after sort`. If it fixes an issue, put `Fixes #N` in the body.

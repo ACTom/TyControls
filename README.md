@@ -54,7 +54,7 @@ Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.t
 | Linux | GTK2、Qt5、Qt6;GTK3 部分支持(Wayland 下有[已知问题](docs/known-issues.md)) |
 | macOS | Cocoa |
 
-依赖:Lazarus 3.x+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
+依赖:Lazarus 3.0+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
 
 ---
 

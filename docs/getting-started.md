@@ -24,7 +24,7 @@ TyControls 是一套面向 Lazarus 的**皮肤控件库**,让你的应用在 Win
 
 | 项目 | 要求 |
 |---|---|
-| Lazarus | 3.x+ |
+| Lazarus | 3.0+ |
 | FPC | 3.2.2+ |
 | 第三方依赖 | BGRABitmap(仅运行期) |
 | 目标平台 | Windows / Linux / macOS |

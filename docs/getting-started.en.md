@@ -24,7 +24,7 @@ The layers are strictly decoupled: controls know nothing about colors, the engin
 
 | Item | Requirement |
 |---|---|
-| Lazarus | 3.x+ |
+| Lazarus | 3.0+ |
 | FPC | 3.2.2+ |
 | Third-party dependency | BGRABitmap (runtime only) |
 | Target platforms | Windows / Linux / macOS |
