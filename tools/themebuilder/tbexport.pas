@@ -40,6 +40,7 @@ resourcestring
   rsTbExportNotAFile = '%s is a folder.';
   rsTbExportZipRefs = 'A zip bundle cannot carry the files this theme refers to (the library reads neither @import nor images from a zip). Export a folder.';
   rsTbExportVerifyFailed = 'The bundle did not load back';
+  rsTbExportMoveFailed = 'Could not move the bundle to %s: %s';
 
 type
   TTbBundleFormat = (tbfFolder, tbfZip);
@@ -62,6 +63,10 @@ function TbManifestJson(const AInfo: TTbBundleInfo): string;
 function TbExportBundle(const AEntry: string; const AFiles: TTbBundleFiles;
   const AInfo: TTbBundleInfo; AFormat: TTbBundleFormat; const ATarget: string;
   out AError: string): Boolean;
+
+var
+  { FOR THE TESTS: how the bundle (and an old target) is moved; RenameFile when nil }
+  TbExportRenameForTest: function(const AFrom, ATo: string): Boolean = nil;
 
 implementation
 
@@ -554,22 +559,64 @@ begin
   Result := True;
 end;
 
+function MoveFile(const AFrom, ATo: string): Boolean;
+begin
+  if Assigned(TbExportRenameForTest) then
+    Result := TbExportRenameForTest(AFrom, ATo)
+  else
+    Result := RenameFile(AFrom, ATo);
+end;
+
+{ why the last move failed, in the system's words }
+function MoveFailure(const ATarget: string): string;
+begin
+  Result := Format(rsTbExportMoveFailed, [ATarget, SysErrorMessage(GetLastOSError)]);
+end;
+
+{ ABase, else ABase with a number before its extension that is not taken }
+function FreeName(const ABase, AExt: string): string;
+var
+  n: Integer;
+begin
+  Result := ABase + AExt;
+  n := 1;
+  while FileExists(Result) or DirectoryExists(Result) do
+  begin
+    Result := ABase + '.' + IntToStr(n) + AExt;
+    Inc(n);
+  end;
+end;
+
 function CommitBundle(AFormat: TTbBundleFormat; const ATemp, ATarget: string;
   out AError: string): Boolean;
 var
-  bak: string;
+  bak, aside: string;
 begin
   Result := False;
   AError := '';
   if AFormat = tbfFolder then
   begin
+    { The user's empty folder is moved aside, not deleted: if the bundle cannot be moved in,
+      it goes back as it was. }
+    aside := '';
     if DirectoryExists(ATarget) then
-      RemoveDir(ATarget);           { empty: CheckTarget made sure }
-    if not RenameFile(ATemp, ATarget) then
     begin
-      AError := Format(rsTbExportNoParent, [ATarget]);
+      aside := FreeName(ATarget, '.tbold');
+      if not MoveFile(ATarget, aside) then
+      begin
+        AError := MoveFailure(ATarget);
+        Exit;
+      end;
+    end;
+    if not MoveFile(ATemp, ATarget) then
+    begin
+      AError := MoveFailure(ATarget);
+      if aside <> '' then
+        MoveFile(aside, ATarget);
       Exit;
     end;
+    if aside <> '' then
+      RemoveDir(aside);             { empty: CheckTarget made sure }
   end
   else
   begin

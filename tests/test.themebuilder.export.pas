@@ -36,11 +36,13 @@ type
     procedure TestTheManifestEscapes;
     procedure TestTheDialog;
     procedure TestTheModernDensityIsTriedToo;
+    procedure TestAFailedMoveKeepsTheFolder;
   end;
 
 implementation
 
 uses
+  {$IFDEF MSWINDOWS}Windows,{$ENDIF}
   FileUtil, zipper, Controls, tyControls.ThemeBundle, tbtemplates, tbexportform, tbpreview,
   test.themebuilder.golden;
 
@@ -399,6 +401,47 @@ begin
   AssertNothingLeft('X12', FDir);
   AssertTrue('X12: a theme that is fine in both goes: ' + err,
     TbExportBundle(TbMinimalTemplate, nil, Info, tbfFolder, target, err));
+end;
+
+{ the bundle cannot be moved into place (another program has the folder open): the move of
+  the temporary bundle fails, with the system's reason }
+function FailTheBundleMove(const AFrom, ATo: string): Boolean;
+begin
+  if Pos('.tbtmp', AFrom) > 0 then
+  begin
+    {$IFDEF MSWINDOWS}
+    Windows.SetLastError(ERROR_ACCESS_DENIED);
+    {$ENDIF}
+    Exit(False);
+  end;
+  Result := RenameFile(AFrom, ATo);
+end;
+
+{ The review found it: an empty target folder was deleted first, and when the bundle could
+  not be moved in after that, the user's folder was gone -- and the message said the folder
+  did not exist. It is moved aside and put back, and the message says why the move failed. }
+procedure TTbExportTests.TestAFailedMoveKeepsTheFolder;
+var
+  err, target: string;
+begin
+  target := FDir + 'mine';
+  ForceDirectories(target);
+  TbExportRenameForTest := @FailTheBundleMove;
+  try
+    AssertFalse('X14: the move fails', TbExportBundle(TbMinimalTemplate, nil, Info, tbfFolder, target, err));
+  finally
+    TbExportRenameForTest := nil;
+  end;
+  AssertTrue('X14: the user''s folder is still there', DirectoryExists(target));
+  AssertFalse('X14: nothing moved aside is left', DirectoryExists(target + '.tbold'));
+  AssertTrue('X14: says the move failed: ' + err, Pos(Format(rsTbExportMoveFailed, [target, '']), err) = 1);
+  {$IFDEF MSWINDOWS}
+  AssertTrue('X14: with the system''s reason: ' + err, Pos(SysErrorMessage(ERROR_ACCESS_DENIED), err) > 0);
+  {$ENDIF}
+  AssertNothingLeft('X14', FDir);
+  AssertTrue('X14: and the next try goes in: ' + err,
+    TbExportBundle(TbMinimalTemplate, nil, Info, tbfFolder, target, err));
+  AssertFalse('X14: the folder it took is not left aside', DirectoryExists(target + '.tbold'));
 end;
 
 initialization
