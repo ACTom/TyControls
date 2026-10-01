@@ -431,10 +431,10 @@ var
   T: TTyGlyphContainerButton;
 begin
   { It existed as a PROTECTED property, so reaching it meant subclassing. Publishing it is
-    the fix -- on the base and, because a fix that lands on a base and not its descendants
-    is half a fix, on all four concrete buttons. }
-  AssertTrue('base publishes GlyphLayout',
-    GetPropInfo(TTyGlyphButtonBase, 'GlyphLayout') <> nil);
+    the fix -- on all four concrete buttons. (Since 4.0 the base itself publishes nothing,
+    the LCL way: it declares GlyphLayout public and each final class publishes it.) }
+  AssertTrue('the base declares it for every descendant (public, not published)',
+    GetPropInfo(TTyGlyphButtonBase, 'GlyphLayout') = nil);
   AssertTrue('TTyGlyphButton', GetPropInfo(TTyGlyphButton, 'GlyphLayout') <> nil);
   AssertTrue('TTySpeedButton', GetPropInfo(TTySpeedButton, 'GlyphLayout') <> nil);
   AssertTrue('TTyGlyphContainerButton',
@@ -495,7 +495,7 @@ procedure TGlyphButtonParityTest.SpacingIsPublishedWithTheThemeSentinel;
 var
   B: TTyGlyphButton;
 begin
-  AssertTrue('base publishes Spacing', GetPropInfo(TTyGlyphButtonBase, 'Spacing') <> nil);
+  AssertTrue('TTyGlyphButton publishes Spacing', GetPropInfo(TTyGlyphButton, 'Spacing') <> nil);
   AssertTrue('TTySpeedButton too', GetPropInfo(TTySpeedButton, 'Spacing') <> nil);
   B := TTyGlyphButton.Create(nil);
   try
