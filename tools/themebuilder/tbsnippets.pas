@@ -52,7 +52,14 @@ var
   dash: Boolean;
 begin
   if AFileName <> '' then
-    s := ChangeFileExt(ExtractFileName(AFileName), '')
+  begin
+    { the name without its extension -- '.tycss' alone is all extension (ChangeFileExt
+      keeps a name that starts with its only dot) }
+    s := ExtractFileName(AFileName);
+    i := LastDelimiter('.', s);
+    if i > 0 then
+      s := Copy(s, 1, i - 1);
+  end
   else
     s := ABasedOn;
   s := LowerCase(s);
