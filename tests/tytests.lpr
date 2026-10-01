@@ -214,7 +214,8 @@ uses
   test.toolwindow.hide,
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
   test.dpi.dialogs, test.dpi.snapshot,
-  test.parity.datetime;
+  test.parity.datetime,
+  test.customclasses;
 
 type
   TTyTestRunner = class(TTestRunner)
