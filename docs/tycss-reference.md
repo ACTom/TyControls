@@ -447,14 +447,16 @@ TyTabControl { border-radius: var(--radius) var(--radius) 0 0; }
 ```
 padding: <全部> ;
 padding: <上下> <左右> ;
+padding: <上> <左右> <下> ;
 padding: <上> <右> <下> <左> ;
 ```
 
-空格分隔,只接受 1、2、4 个值(3 个值报错)。语义与 CSS 一致。
+空格分隔,1 到 4 个值,语义与 CSS 一致;其它个数报错。
 
 ```css
 TyButton { padding: 6px; }
 TyPanel  { padding: 8px 12px; }
+TyLabel  { padding: 2px 6px 4px; }
 TyEdit   { padding: 4px 8px 4px 8px; }
 ```
 
@@ -606,13 +608,13 @@ TyButton.primary:hover { background: lighten(--accent, 8%); }
 TyButton:active { background: darken(--surface, 10%); }
 ```
 
-### 6.3 `alpha(<颜色>, <不透明度 0..1>)`
+### 6.3 `alpha(<颜色>, <不透明度>)`
 
-把颜色的 alpha **替换**为给定值(RGB 不变),`0` 全透明、`1` 不透明。
+把颜色的 alpha **替换**为给定值(RGB 不变),`0` 全透明、`1` 不透明。不透明度也可以写成
+百分比:`alpha(#fff, 50%)` 等于 `alpha(#fff, 0.5)`。
 
-> **陷阱**:第二个参数是 0..1 的小数,**不是百分比**。引擎会剥掉 `%` 后缀但
-> **不会除以 100**——`alpha(#fff, 50%)` 等价于 `alpha(#fff, 50)`,结果被钳为完全不透明。
-> 永远写小数:`alpha(#FFFFFF, 0.18)`。
+> **陷阱**:不带 `%` 的数按 0..1 理解,不是百分比。`alpha(#fff, 50)` 会被钳成完全不透明,
+> 要写 `0.5` 或 `50%`。
 
 ```css
 TyCaptionButton:hover { background: alpha(#FFFFFF, 0.18); }
@@ -1235,9 +1237,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
    颜色函数;需要半透明用 `#rrggbbaa`(§5.12)。
 5. **`opacity` 与 `shadow` 全控件生效（v1.1）**：v1.1 修复了 `TyCheckBox` 与
    `TyRadioButton` 的渲染路径，使其也支持 `opacity` 和 `shadow`；所有 typeKey 均已生效。
-6. **`alpha()` 第二参数是 0..1 小数**,写百分号不会按百分比换算(§6.3)。
+6. **`alpha()` 第二参数不带 `%` 时是 0..1 小数**:`alpha(#fff, 50)` 是完全不透明,
+   半透明写 `0.5` 或 `50%`(§6.3)。
 7. **渐变角度方向与 CSS 不同**:`0deg` 左→右,`90deg` 上→下(§7.1);
-   只支持双色标线性渐变。
+   只有线性渐变,方向只能写角度,不支持 `to right` 这类关键字(§7)。
 8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.9);`font-weight`
    渲染只分 ≥600 粗体 / 其余常规两档(§5.10)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.8)。
