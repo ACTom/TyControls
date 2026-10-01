@@ -1110,6 +1110,17 @@ begin
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
+    { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
+      length signed, after the clip -- the bar grows its height (or, laid
+      on its side, its width) from 0 to this [Batch 89] }
+    el.Anim.Role := carBar;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := i;
+    el.Anim.G[0] := lx;
+    el.Anim.G[1] := ly;
+    el.Anim.G[2] := lw;
+    el.Anim.G[3] := lh;
+    if baseHoriz then el.Anim.G[4] := 1 else el.Anim.G[4] := 0;
     ItemCaption(AVisual, AStore, i, el.Caption);
     el.Caption.Outside := BarOutside(len, zero, baseHoriz, inverse);
     AList.Add(el);
@@ -1139,6 +1150,9 @@ var
   lineRuns, areaRuns: TTyPathCmdArray2;
   runsMatch: Boolean;
   runIdx: Integer;
+  { upstream's clip rect before a `clip: false` widening, and the widening;
+    the base axis' direction as flags: 2 horizontal, 4 inverse [Batch 89] }
+  clipX, clipY, clipW, clipH, clipEx, animFlags: Double;
 
   { One marker, answering for its own row. False when the symbol draws
     nothing. }
@@ -1171,9 +1185,38 @@ var
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
     el.Z2 := el.Z2 + Round(lift);
     el.HitSlopLogical := cHitSlopSymbolLogical;
+    { THE SYMBOL GROUP'S POSITION and the clip it is measured against: a
+      line's symbol pops in when the growing clip reaches it
+      (LineView._initSymbolLabelAnimation). Flag 1: there is a clip.
+      [Batch 89] }
+    el.Anim.Role := carLineSymbol;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := ARow;
+    el.Anim.G[0] := AP.X;
+    el.Anim.G[1] := AP.Y;
+    el.Anim.G[2] := symbolArea.X;
+    el.Anim.G[3] := symbolArea.Y;
+    el.Anim.G[4] := symbolArea.W;
+    el.Anim.G[5] := symbolArea.H;
+    el.Anim.G[6] := animFlags;
+    if spec.Clip then el.Anim.G[6] := el.Anim.G[6] + 1;
     ItemCaption(AVisual, AStore, ARow, el.Caption);
     AList.Add(el);
     Result := True;
+  end;
+
+  { The line's clip, the enter animation's view of a run or an area. }
+  procedure TagClip(var AEl: TTyChartElement; ARole: TTyChartAnimRole);
+  begin
+    AEl.Anim.Role := ARole;
+    AEl.Anim.Series := ABinding.SeriesIndex;
+    AEl.Anim.Index := -1;
+    AEl.Anim.G[0] := clipX;
+    AEl.Anim.G[1] := clipY;
+    AEl.Anim.G[2] := clipW;
+    AEl.Anim.G[3] := clipH;
+    AEl.Anim.G[4] := clipEx;
+    AEl.Anim.G[5] := animFlags;
   end;
 
   { showAllSymbol. Upstream: 'auto' shows every marker unless one would crowd
@@ -1247,9 +1290,15 @@ var
       x := JsFloor(x);
       w := w + 1;
     end;
+    clipX := x;
+    clipY := y;
+    clipW := w;
+    clipH := h;
+    clipEx := 0;
     if not spec.Clip then
     begin
       ex := Max(w, h);
+      clipEx := ex;
       if baseHoriz then
       begin
         y := y - ex;
@@ -1496,6 +1545,7 @@ var
         el.Silent := True;
         el.HasClip := True;
         el.ClipRect := lineClip;
+        TagClip(el, carLineArea);
         AList.Add(el);
         Inc(Result);
       end;
@@ -1520,6 +1570,7 @@ var
       el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
       el.HasClip := True;
       el.ClipRect := lineClip;
+      TagClip(el, carLineRun);
       AList.Add(el);
       Inc(Result);
 
@@ -1543,6 +1594,10 @@ begin
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
   startV := AreaStartValue(ABinding.ValueAxis, spec);
+  animFlags := 0;
+  if baseHoriz then animFlags := animFlags + 2;
+  if (ABinding.BaseAxis <> nil) and ABinding.BaseAxis.Inverse then
+    animFlags := animFlags + 4;
   PrepareThinning;
   PrepareClip;
   PreparePath;
@@ -1709,6 +1764,21 @@ begin
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
   el.Z2 := 100 + Round(lift);
   el.HitSlopLogical := cHitSlopSymbolLogical;
+  { A SCATTER SYMBOL POPS IN: its path scales from nought to half its size
+    about its own origin -- the point and the symbol's offset -- and fades
+    in (Symbol.ts:184-200). An effectScatter's runs on update timing and
+    with its ripples, which are AN4's. [Batch 89] }
+  if AVisual.SeriesType = 'scatter' then
+  begin
+    el.Anim.Role := carSymbol;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := ARow;
+    el.Anim.G[0] := AP.X + rs.OffsetX;
+    el.Anim.G[1] := AP.Y + rs.OffsetY;
+    el.Anim.G[2] := rs.WidthPx / 2;
+    el.Anim.G[3] := rs.HeightPx / 2;
+    el.Anim.G[4] := el.Style.Alpha;
+  end;
   ItemCaption(AVisual, AStore, ARow, el.Caption);
   AList.Add(el);
   Inc(Result);
@@ -1934,6 +2004,8 @@ var
   v: TTySeriesVisual;
   r: TTyRectF;
   el: TTyChartElement;
+  { the enter animation's numbers, shared by the body and its two wicks }
+  anim: TTyChartAnim;
 
   { Where one of the four values lands, along the value axis. }
   function ValueCoord(AValue: Double): Double;
@@ -1943,7 +2015,7 @@ var
     Result := ABinding.ValueAxis.DataToCoord(AValue);
   end;
 
-  procedure Wick(AFrom, ATo: Double);
+  procedure Wick(AFrom, ATo: Double; ARole: TTyChartAnimRole);
   var w: TTySeriesVisual; wel: TTyChartElement;
   begin
     if IsNan(AFrom) or IsNan(ATo) or (AFrom = ATo) then Exit;
@@ -1958,6 +2030,11 @@ var
     else
       wel := MarkElement(TyShapePolyline([TyPointF(AFrom, at),
         TyPointF(ATo, at)]), w, ABinding.SeriesIndex, i);
+    if ARole <> carNone then
+    begin
+      wel.Anim := anim;
+      wel.Anim.Role := ARole;
+    end;
     AList.Add(wel);
     Inc(Result);
   end;
@@ -2040,26 +2117,51 @@ begin
 
     if simple then
       { No body to speak of: one stroke from lowest to highest. }
-      Wick(ValueCoord(lowV), ValueCoord(highV))
+      Wick(ValueCoord(lowV), ValueCoord(highV), carNone)
     else
     begin
-      { THE WICK IS TWO SEGMENTS, not one line behind the body. They look the
-        same under an opaque candle and not at all the same under a hollow
-        one -- and a hollow candle is how half the world draws a rising bar. }
-      Wick(ValueCoord(highV), bodyHi);
-      Wick(ValueCoord(lowV), bodyLo);
       if baseHoriz then
         r := TyRectF(at - width / 2, Min(bodyLo, bodyHi),
                      at + width / 2, Max(bodyLo, bodyHi))
       else
         r := TyRectF(Min(bodyLo, bodyHi), at - width / 2,
                      Max(bodyLo, bodyHi), at + width / 2);
+      { THE ENTER ANIMATION'S NUMBERS: where the open price lands (every
+        point grows out of it, candlestickLayout.ts:128), the body's two
+        ends, the two wick ends, the spine and the body's two sides across
+        it [Batch 89] }
+      anim := Default(TTyChartAnim);
+      anim.Series := ABinding.SeriesIndex;
+      anim.Index := i;
+      anim.G[0] := ValueCoord(openV);
+      anim.G[1] := bodyHi;
+      anim.G[2] := bodyLo;
+      anim.G[3] := ValueCoord(highV);
+      anim.G[4] := ValueCoord(lowV);
+      anim.G[5] := at;
+      if baseHoriz then
+      begin
+        anim.G[6] := r.Left;
+        anim.G[7] := r.Right;
+      end
+      else
+      begin
+        anim.G[6] := r.Top;
+        anim.G[7] := r.Bottom;
+      end;
+      { THE WICK IS TWO SEGMENTS, not one line behind the body. They look the
+        same under an opaque candle and not at all the same under a hollow
+        one -- and a hollow candle is how half the world draws a rising bar. }
+      Wick(ValueCoord(highV), bodyHi, carCandleWickHigh);
+      Wick(ValueCoord(lowV), bodyLo, carCandleWickLow);
       { A DOJI HAS NO BODY AT ALL -- open equals close, so the rect is a line.
         Given a whole pixel so the stroke has something to sit on, which is
         what upstream's own sub-pixel pass does for the same case. }
       if baseHoriz and (r.Bottom - r.Top < 1) then r.Bottom := r.Top + 1;
       if (not baseHoriz) and (r.Right - r.Left < 1) then r.Right := r.Left + 1;
       el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
+      el.Anim := anim;
+      el.Anim.Role := carCandleBody;
       { NO CAPTION. Upstream's candlestick view never builds a label, whatever
         label.show says -- the option is accepted and draws nothing. }
       AList.Add(el);

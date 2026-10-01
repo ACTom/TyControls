@@ -849,7 +849,7 @@ var
   strokeW: Double;
   pos: TTyLabelPosition;
   bounds, box: TTyRectF;
-  x, y, w, h, scale, dist, sw, atX, atY: Double;
+  x, y, w, h, scale, dist, sw, atX, atY, inflate: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   autoSpec: TTyLabelSpec;
@@ -894,12 +894,14 @@ begin
       the line width, or by at least five where nothing is filled, half on
       each side. A label outside a bordered cell sits past the border.
       [Batch 68] }
+    inflate := 0;
     if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0)
       and not host.Caption.HasHostBox then
     begin
       sw := host.Style.StrokeWidthLogical;
       if not host.Style.HasFill then sw := Max(sw, 5.0);
       sw := sw * scale;
+      inflate := sw / 2;
       bounds.Left := bounds.Left - sw / 2;
       bounds.Top := bounds.Top - sw / 2;
       bounds.Right := bounds.Right + sw / 2;
@@ -1028,6 +1030,27 @@ begin
       number has to report that bar. }
     cap.Silent := host.Silent;
     cap.Datum := host.Datum;
+    { THE ENTER ANIMATION'S VIEW: a label of this datum, fading in, and --
+      unless the mark fixed its own anchor -- hanging off its host as the
+      host grows: zrender recomputes a text's place from its host's current
+      rect every frame (Element.updateInnerText) [Batch 89] }
+    cap.Anim := Default(TTyChartAnim);
+    cap.Anim.Role := carLabel;
+    cap.Anim.Series := host.Datum.SeriesIndex;
+    cap.Anim.Index := host.Datum.DataIndex;
+    if not host.Caption.HasFixedAnchor then
+    begin
+      cap.Anim.HostPlus1 := i + 1;
+      cap.Anim.LabelPos := Ord(pos);
+      cap.Anim.LabelDist := dist;
+      cap.Anim.LabelAtXPct := spec.AtXIsPercent;
+      cap.Anim.LabelAtYPct := spec.AtYIsPercent;
+      if spec.AtXIsPercent then cap.Anim.LabelAtX := spec.AtX
+      else cap.Anim.LabelAtX := spec.AtX * scale;
+      if spec.AtYIsPercent then cap.Anim.LabelAtY := spec.AtY
+      else cap.Anim.LabelAtY := spec.AtY * scale;
+      cap.Anim.LabelInflate := inflate;
+    end;
     cap.Caption.FontName := spec.FontName;
     cap.Caption.FontSizeLogical := spec.FontSizeLogical;
     cap.Caption.FontWeight := spec.FontWeight;

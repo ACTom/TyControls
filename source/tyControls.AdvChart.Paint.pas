@@ -381,6 +381,38 @@ type
     RtScale: Double;
   end;
 
+  { WHAT AN ELEMENT IS TO THE ENTER ANIMATION [Batch 89, AN2]: which of
+    upstream's animated elements it stands for, and the numbers upstream
+    animates it in -- a bar's signed layout, a symbol's centre and half
+    size, a line's clip rect. The zero value is carNone: not animated, which
+    is every element nobody tagged.
+
+    THE KEY is (Series, Index, the role's proxy): AdvChart.AnimView keeps one
+    animated proxy per key, and the proxy outlives the list -- the list is
+    rebuilt on every static render, the proxy only when the option is. }
+  TTyChartAnimRole = (carNone, carBar, carSymbol, carLineSymbol, carLineRun,
+    carLineArea, carSector, carFunnel, carGaugePointer, carGaugeProgress,
+    carGaugeCap, carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
+    carCandleWickLow, carLabel, carGuide);
+
+  TTyChartAnim = record
+    Role: TTyChartAnimRole;
+    { the series index, and the datum's view row (-1 for a whole series) }
+    Series, Index: Integer;
+    { the role's own numbers -- see AdvChart.AnimView for each }
+    G: array[0..7] of Double;
+    { A LABEL THAT FOLLOWS ITS HOST: the host's insertion index + 1 (0, the
+      zero value, follows nothing -- a pie's or a funnel's words are placed
+      absolutely, upstream too), and how it hangs off the host's rect: the
+      position (Ord of the label unit's TTyLabelPosition), the distance, the
+      array form's two numbers and whether each is a fraction, and how far
+      the host's stroke grew the rect, all device px. }
+    HostPlus1: Integer;
+    LabelPos: Integer;
+    LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
+    LabelAtXPct, LabelAtYPct: Boolean;
+  end;
+
   TTyChartElement = record
     Shape: TTyChartShape;
     Style: TTyChartElementStyle;
@@ -421,6 +453,8 @@ type
     HasClip: Boolean;
     ClipRect: TTyRectF;
     Datum: TTyChartDatumRef;
+    { the enter animation's view of it [Batch 89] }
+    Anim: TTyChartAnim;
   end;
 
   TTyPaintList = class

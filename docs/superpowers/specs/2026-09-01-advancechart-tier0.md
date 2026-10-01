@@ -8546,3 +8546,66 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 - 只有一个关键帧且类型未知的轨道按离散处理（上游会写出 `'NaN…'` 之类的字符串）。
 - `easingFuncs` 上的原型属性名（`toString` 等）不当缓动。
 - 标签的淡入与位移（`#label` 元素）、线的符号逐个弹出（作用域为空的原始 animateTo）、effectScatter 的涟漪、仪表盘数值文字、标注这一批不重放：它们的时序规则在 AN2、AN4。
+
+## 124. Tier 1 第八十九批：入场动画（AN2，2026-10-01）
+
+AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，按 fixture 的顺序把入场动画逐个接上：柱（竖、横、堆叠）、散点、折线（裁剪矩形、符号逐个弹出、符号标签淡入）、饼（扫开、`scale`、玫瑰）、漏斗、仪表盘（指针、进度弧）、雷达、K 线，以及 LabelManager 的标签淡入与引导线描入。热力图格子、坐标轴、图例、标题不动。
+
+### 上游的做法（`wf86/anim.md` 第 3A、3B 节；源码逐行核过）
+
+- **柱**：`animationModel` 为真时创建器先把高（横放时是宽）置 0，再 `initProps(el, {shape: layout}, seriesModel, dataIndex)`；x、y 不动，y 是起点或堆叠底，负值往下长。堆叠的两层各自从自己的底长。
+- **散点**：符号路径 `scaleX/Y` 从 0 到 `size/2`、`style.opacity` 从 0 到自己的不透明度，绕路径原点（数据点加 symbolOffset）缩放，入场时序、带 dataIndex；两个动画器、两个 clip。
+- **折线**：`hasAnimation = !ssr && get('animation')`——**不看阈值**。裁剪矩形 `createGridClipPath`：区域按线宽一半外扩、宽向上取整、x 有小数时取整并补 1；横向基轴从宽 0 长出（inverse 从右边），竖向从底边长出；`initProps` 不带 dataIndex（延迟函数拿到 null），带 done，所以是 force 动画。符号是原始 `animateTo`：先 `scale 0`，200 ms、**没有缓动**、`setToFinal`，延迟 = `duration × ratio + delay`（ratio 是符号在加 0.1 的区域里沿基轴的位置，inverse 取 1 − ratio；没有区域时 `undefined === undefined` 得 0），延迟写成函数时整条换成 `delay(idx)`；符号的标签 `animateFrom opacity 0`、300 ms、同一个延迟，并关掉 LabelManager。
+- **饼**：首次渲染取第一个起始角不是 NaN 的扇区的 `startAngle` 当共同起点，每个扇区两个角都从它补间到自己的；`animationType: 'scale'` 只把 r 从 r0 长出。
+- **漏斗**：多边形不透明度从 0 到 `itemStyle.opacity ?? 1`。
+- **仪表盘**：指针 `rotation` 从 `-(startAngle + π/2)` 到值的角，进度弧 `endAngle` 从起始角长出，都不带 dataIndex。
+- **雷达**：折线和多边形的点全从中心长出；多边形**总在**（没写 areaStyle 也在、也动）。符号不动（fixture 已确认）。
+- **K 线**：8 个点的数值维从开盘价的像素长出（`transInit`），300 ms linear。
+- **标签**（`LabelManager._animateLabels`）：系列 `isAnimationEnabled` 时，新标签 `opacity 0 → 1`、入场时序、带 dataIndex；`valueAnimation` 的不淡入；引导线 `strokePercent 0 → 1`、不带 dataIndex，和文字的条件无关。宿主动的时候，zrender 每帧按宿主当前的矩形重算文字位置（`updateInnerText`），所以柱顶的标签跟着柱子长。
+
+### 驱动与分层（照 Q7 / §32）
+
+- **一个图表一个 `TTyAnimation`**。时钟 `AnimNow`：NaN 用机器时钟（`TyAnimClockMs`，以 epoch 为基的整毫秒），数字是测试注入的——照 `DataZoomNow` 的样子。
+- **同步的第一步**：选项落地后第一次构建绘制列表时布防（创建代理、开动画），紧接着 `Update(now, True)`——上游 setOption 末尾的 flush。同一次绘制已经画出 from 值。挪到下一个 tick，所有时间线都会错开最多 16 ms。
+- **16 ms 的 `TTimer`**：有 clip 时开，每一跳 `AnimTick(now)`（推进 + `InvalidateFrame`），clip 清空时停。测试直接调 `AnimTick`；注入了时钟就不开定时器。
+- **分层**：动起来的系列属于**动态层**。动画进行中，静态层只画外框和坐标轴（列表照样构建，命中测试要用它），系列、图例等列表元素和标题在动态层逐帧画；最后一个 clip 结束时丢掉静态层，下一帧把静态的系列（静止值）画回静态层，动态层又空了。`HasDynamicContent` 多一个「在动」。一帧的代价是一次 blit 加动态层的那张 BGRA 位图（Q7 量过约 13 ms 的底价）加系列本身；标题跟着进动态层，是为了仍盖在系列上面。
+- **什么时候不动**：任何重新布局（尺寸、主题、PPI、dataZoom 同步、树的漫游）都直接到终值——上游 resize 派发 `{duration: 0}`；新的选项再布防一次。AN2 里每次布防都按「首次渲染」处理（同一系列的更新动画是 AN3 的）。
+
+### 绑定：代理
+
+绘制列表每次静态渲染都重建，动画得比它活得久，所以动的不是元素，是**代理**：`TTyChartAnimProxy`（`TTyAnimBag` 派生）按 (系列, 视图行, 角色) 存上游的属性——柱的 `shape.x/y/width/height`、符号的 `scaleX/scaleY/style.opacity`、折线的裁剪矩形、扇区的六个形状量……键名与上游一致，测试直接拿 fixture 比。
+
+- **构建器打标签**：`TTyChartElement` 多一个 `Anim: TTyChartAnim`（角色、键、上游的几何数、标签的宿主与挂法），零值 `carNone` 即不动。柱存裁剪之后带符号的 layout；散点存路径原点和半尺寸；折线符号存点和加 0.1 的区域及基轴方向；折线的线和面存 clip:false 加宽之前的矩形和加宽量；饼和进度弧存**没被 `TyShapeSector` 换过序**的上游角度；指针存枢轴、值的角和起始角；K 线的体和两根影线共用 [开盘价、实体两端、最高最低、脊线、实体两侧]；`TyExpandLabels` 产出的标签记下宿主的插入序号和挂法（位置、距离、`[x, y]` 两项、描边外扩）。饼、漏斗的标签和引导线是绝对定位的，上游也不跟宿主。
+- **新单元 `tyControls.AdvChart.AnimView`**（纯，已进 `.lpk`）：`TTyChartAnimSet.Arm` 按上表逐个角色建代理、开动画（`TyInitProps` / 原始 `AnimateTo` / `AnimateFrom`），`Bind` 在每次重建后按键找回代理，`TyAnimBuildFrame` 把列表按代理当前值改写成**这一帧**（插入序号不变，所以动画中命中测试打在帧上，名字仍是列表的元素），跟随标签按「宿主现在的矩形上的锚点 − 静止矩形上的锚点」平移。代理每个键都等于布局值时元素原样不动，所以停下来的图就是静态的那张；差一个 ulp 的静止值照画在那里。
+- **控件**：`AnimationMode`（published，`camAuto` 默认 / `camAlways` / `camOff`）、`AnimNow`、`AnimTick`、`AnimClipCount`、`AnimLive`、`AnimProxyCount/AnimProxy/AnimFindProxy`；受保护的 `AnimFrame`。选项里的 `animation: false`（根或系列）在任何模式下都关。
+
+### 现有测试与无头渲染：只在窗口上动
+
+上游每次 setOption 都动。这里的控件还有第二种渲染：`RenderTo`——导出（`SaveToPng`）、设计器、以及几千个按静态版式断言的无头测试。**定为：`camAuto` 只在控件自己的窗口绘制（`Paint`）里布防**；无头渲染画完成态，选项留着等窗口的第一次绘制。设计器任何模式都不动（它没有定时器）。测试动画的地方显式 `camAlways`。没有给现有测试加一行 `animation: false`。示例截图工具（`scripts/make-gallery.ps1`）截的是窗口，要等动画结束（约 1.5 s）再截，或在示例上设 `camOff`。
+
+### 基准
+
+`test.advchart.animenter`（8 个测试）：
+
+- **时间线**：fixture 里 57 个 enter/threshold 用例（effectScatter 除外），真控件 400×300、zrender 的 SSR 量字、`camAlways`、时钟停在 T0 = 1700000000000 渲染（这次渲染就是第 0 个采样），然后 `AnimTick` 到每个采样。fixture 的元素按 id/role/type 映射到代理（`series0:bar/3` → (0, 3, bar)，`0.k.0#label` → 符号 k 的标签，`1#clip` → 裁剪矩形，`k#guide` → 引导线……），每个采样比：每个被记录的键**逐位比**，终值也算在内；唯一的例外是 K 线实体两侧的横坐标——上游做了 subPixelOptimize、端口没有，上下游都不动——比**权重** `(v − from)/(to − from)`（全程为 0，到 1e-9）；fixture 没追踪的键必须不动；代理的动画器数等于元素的；clip 数等于上游的减去推迟元素的动画器数。4668 个元素采样全部对上，其中 576 个按权重。
+- **静止**：clip 清零后不再 live；每个键要么等于布局值，要么正好是 `(to − from) × 1 + from`；再渲染一次，凡代理静止在布局上的元素，帧与静态列表逐位相同。
+- 手写：无头 `camAuto` 不布防而 `camAlways` 布防；`camOff`、`animation: false`、中途切到 `camOff`；动态层（t = 0 时最高那根柱子三分之一处是地色，结束后是柱色）；柱顶标签跟着柱子走、半透明；热力图只有标签在动；新选项再动一次、改尺寸直接到终值；clip:false 的上游怪癖（见下）。
+
+### clip:false 的怪癖，照搬
+
+折线 `clip: false` 在 `createGridClipPath` 返回**之后**才把裁剪矩形沿值轴加宽；而裁剪动画带 done、是 force 的，四个键都有轨道，第一帧就把没加宽的 y 和 height 写回去。所以上游开着动画时 clip:false 的线最后仍被裁在网格里，关掉动画才真的不裁。用真 dist 探针核过（动画：静止在 y 64、height 157；关动画：y −238、height 761）。端口照搬，测试守着两种情况。
+
+### 变异测试
+
+`an2/mutate.py`：24 个变异，逐个改源码、重编、只跑本测试、还原——柱从 0 长（竖、横各一）、饼的共同起点（每片从自己的起点；取最后一片而不是第一片）、折线符号延迟的三项（`duration × ratio`、`+ delay`、函数按行号调）、符号标签 300 ms、散点缩放的终值与从 0、同步的第一步、阈值（只看 `animation`；数据量当 0）、热力图格子也淡入、引导线、雷达面总在、K 线从开盘价、指针的起点、裁剪矩形的起始宽、clip:false 加宽之后、标签跟随、valueAnimation 不淡入、动态层画列表而不画帧、无头也布防。
+
+首轮存活 1 个：**散点缩放的终值改成 1**。基准原先在「端口终值与上游不同」时一律退到比权重，而权重对终值不敏感——5 和 1 的 0…1 曲线一模一样。这条退路本来只为 K 线实体两侧的 x 准备，却对所有键敞开。改成：终值不同就是错，唯一的例外是 K 线、而且那个坐标在上下游都不动。收紧后重跑，24 个全部杀死。
+
+### 推迟与偏差
+
+- **AN4**：仪表盘读数的数值滚动（`valueAnimation`，fixture 的 `style.text`）、`bar-label` 的标签数值滚动、折线的 `endLabel`、markPoint/markLine/markArea、effectScatter（符号以更新时序缩放 + 涟漪）。测试里这些元素的动画器从上游 clip 数里扣掉。
+- **AN3**：同一系列的更新、离场，饼的后续扇区只扫 endAngle，折线的数据差分；现在第二次 setOption 当作新的入场。
+- 这一批没接：象形柱、箱线图、关系图/树/矩形树图/旭日图/桑基图的入场；它们的标签也不淡入（LabelManager 的淡入只给柱、散点、热力图、饼、漏斗）。雷达符号的标签端口本来不画。K 线 simple 模式（实体窄于 1.3 px）不动；部分出界的 K 线没有静态裁剪。
+- 悬停高亮在动画中画的是静止几何（`PaintEmphasis` 读列表）；命中测试已经跟着帧走。
+- 饼在端口里先滤掉负值，视图行号与上游的 dataIndex 在有负值时不一致（延迟函数拿到的序号不同）。
+- 一帧仍要开一张控件大小的 BGRA 位图画动态层（Q7 那 13 ms 的底价）；动画期间所有系列、图例、标题都在动态层，不按元素是否在动细分。
