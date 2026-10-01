@@ -18,8 +18,8 @@ unit test.customclasses.p2;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, BGRABitmap, BGRABitmapTypes, fpcunit,
-  testregistry,
+  Classes, SysUtils, Types, TypInfo, ImgList, Controls, Forms, Graphics, ComCtrls, BGRABitmap,
+  BGRABitmapTypes, fpcunit, testregistry,
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
   tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
@@ -27,19 +27,28 @@ uses
   tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
   tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader,
   tyControls.ImageCollection, tyControls.TreeView, tyControls.ShellTreeView, tyControls.ListView,
-  tyControls.ShellListView, tyControls.Grid, tyControls.Columns;
+  tyControls.ListView.Layout, tyControls.ShellListView, tyControls.Grid, tyControls.Columns;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
   private
     FChanges: Integer;
+    FHosts: TList;
     FGetTextSender: TObject;
     FGetTextSenderIsCustom: Boolean;
     procedure CountChange(Sender: TObject);
     procedure TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
     procedure GridGetCellText(Sender: TObject; ACol, ARow: Integer; var AText: string);
+    { A form to put a control on for HostRoundTrip; freed in TearDown. }
+    function NewHost: TForm;
+    { T-c for a control that builds children it owns (a radio group's buttons, a transfer's
+      panes): stream the form that owns ASrc, read it into a fresh form, and return the copy of
+      ASrc -- the way a .lfm carries it, children left to the control to rebuild. }
+    function HostRoundTrip(ASrc: TComponent): TComponent;
     { A three-icon virtual list (home / settings / search), owned by the caller. }
     function NewNamedImages(out AColl: TTyImageCollection): TTyVirtualImageList;
+  protected
+    procedure TearDown; override;
   published
     { Task 12: panels }
     procedure TestThirdPanel;
@@ -219,6 +228,7 @@ type
     procedure SetRowHeightTo(AValue: Integer);
     function RowHeightNow: Integer;
     procedure SetSmall(AValue: TCustomImageList);
+    procedure SetLarge(AValue: TCustomImageList);
   end;
 
   { GetCellText is protected: what the grid would draw in a cell. }
@@ -298,6 +308,11 @@ begin
   SmallImages := AValue;
 end;
 
+procedure TP2ListViewCracker.SetLarge(AValue: TCustomImageList);
+begin
+  LargeImages := AValue;
+end;
+
 function TP2DrawGridCracker.CellText(ACol, ARow: Integer): string;
 begin
   Result := GetCellText(ACol, ARow);
@@ -311,6 +326,43 @@ end;
 procedure TTyCustomClassesP2Test.CountChange(Sender: TObject);
 begin
   Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP2Test.TearDown;
+var
+  i: Integer;
+begin
+  if FHosts <> nil then
+    for i := FHosts.Count - 1 downto 0 do
+      TObject(FHosts[i]).Free;
+  FreeAndNil(FHosts);
+  inherited TearDown;
+end;
+
+function TTyCustomClassesP2Test.NewHost: TForm;
+begin
+  if FHosts = nil then FHosts := TList.Create;
+  Result := TForm.CreateNew(nil);
+  Result.SetBounds(0, 0, 600, 400);
+  FHosts.Add(Result);
+end;
+
+function TTyCustomClassesP2Test.HostRoundTrip(ASrc: TComponent): TComponent;
+var
+  ms: TMemoryStream;
+  dst: TForm;
+begin
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(ASrc.Owner);
+    ms.Position := 0;
+    dst := NewHost;
+    ms.ReadComponent(dst);
+  finally
+    ms.Free;
+  end;
+  Result := dst.FindComponent(ASrc.Name);
+  AssertTrue('the round trip brought ' + ASrc.Name + ' back', Result <> nil);
 end;
 
 procedure TTyCustomClassesP2Test.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
@@ -594,21 +646,24 @@ end;
   checking one of them reports back to the group that built it. }
 procedure TTyCustomClassesP2Test.TestThirdRadioGroup;
 var
+  host: TForm;
   third, back: TThirdRadioGroup;
   own: TTyRadioGroup;
   c: TTyCustomRadioGroup;
 begin
-  third := TThirdRadioGroup.Create(FForm);
-  third.Parent := FForm;
+  { On a host form of its own: the group builds and owns its radio buttons, which a .lfm never
+    carries -- streamed as the root, the group would write them out as its children. }
+  host := NewHost;
+  third := TThirdRadioGroup.Create(host);
+  third.Name := 'RG';
+  third.Parent := host;
   third.SetBounds(0, 0, 200, 120);
   CheckPublishesOnly(TThirdRadioGroup, ['Items', 'ItemIndex']);
   third.Items.CommaText := 'one,two,three';
   third.ItemIndex := 2;
   third.Columns := 2;
   CheckStreamText(third, ['Items', 'ItemIndex'], 'Columns');
-  back := TThirdRadioGroup.Create(FForm);
-  back.Parent := FForm;
-  StreamInto(third, back);
+  back := HostRoundTrip(third) as TThirdRadioGroup;
   AssertEquals('T-c: Items round-trip', 'one,two,three', back.Items.CommaText);
   AssertEquals('T-c: ItemIndex round-trips', 2, back.ItemIndex);
   AssertEquals('T-c: the unpublished Columns stayed at its default', 1, back.Columns);
@@ -918,21 +973,23 @@ end;
 
 procedure TTyCustomClassesP2Test.TestThirdTransfer;
 var
+  host: TForm;
   third, back: TThirdTransfer;
   own: TTyTransfer;
   c: TTyCustomTransfer;
 begin
-  third := TThirdTransfer.Create(FForm);
-  third.Parent := FForm;
+  { On a host form of its own: the transfer builds and owns its panes and arrow buttons. }
+  host := NewHost;
+  third := TThirdTransfer.Create(host);
+  third.Name := 'Tr';
+  third.Parent := host;
   third.SetBounds(0, 0, 360, 200);
   CheckPublishesOnly(TThirdTransfer, ['Items', 'Selected']);
   third.Items.CommaText := 'a,b,c';
   third.Selected.CommaText := 'x,y';
   third.LeftTitle := 'Source';
-  CheckStreamText(third, ['Items', 'Selected'], 'LeftTitle');
-  back := TThirdTransfer.Create(FForm);
-  back.Parent := FForm;
-  StreamInto(third, back);
+  CheckStreamText(host, ['Items', 'Selected'], 'LeftTitle');
+  back := HostRoundTrip(third) as TThirdTransfer;
   AssertEquals('T-c: Items round-trip', 'a,b,c', back.Items.CommaText);
   AssertEquals('T-c: Selected round-trips', 'x,y', back.Selected.CommaText);
   AssertEquals('T-c: the unpublished LeftTitle stayed at its default', '', back.LeftTitle);
@@ -1073,6 +1130,7 @@ begin
     AssertFalse('the shell list is no TTyListView since 4.0 (or this proves nothing)',
       TObject(lv) is TTyListView);
     TP2ListViewCracker(lv).SetSmall(imgs);
+    TP2ListViewCracker(lv).SetLarge(imgs);
     it := lv.Items.Add;
     it.ImageName := 'settings';
     AssertEquals('the item resolves its name against the shell list''s images', 1, it.ImageIndex);
