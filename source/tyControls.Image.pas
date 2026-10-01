@@ -87,6 +87,47 @@ type
       to any size on demand, so the requested edge IS the answer. 0 when no list. }
     property ImageSize: Integer read GetImageSize;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Picture: TPicture read FPicture write SetPicture;
     property Stretch: Boolean read FStretch write SetStretch default False;
     property Proportional: Boolean read FProportional write SetProportional default False;
@@ -157,13 +198,8 @@ type
       claimed by the control itself (autosize depends on it), so this was the only
       seam that could exist. }
     property OnPictureChanged: TNotifyEvent read FOnPictureChanged write FOnPictureChanged;
-    property Enabled;
-    property AutoSize;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
   end;
 
 { Pure fit-math helper (module-level, unit-tested). Computes where the image is drawn

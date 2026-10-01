@@ -128,6 +128,9 @@ type
     constructor Create(AOwner: TComponent); override;
     function Execute: TModalResult;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Title: TCaption read FTitle write FTitle;
     property Msg: string read FMsg write FMsg;
     property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
@@ -153,6 +156,9 @@ type
   public
     function Execute: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
@@ -178,6 +184,9 @@ type
     constructor Create(AOwner: TComponent); override;
     function Execute: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
@@ -213,6 +222,9 @@ type
   public
     function Execute: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
@@ -275,6 +287,9 @@ type
     function Execute: Boolean;
     function SelectedText: string;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Items: TStrings read FItems write SetItems;

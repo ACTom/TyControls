@@ -328,6 +328,9 @@ type
     { Whether the card is currently up. }
     property Showing: Boolean read FShowing;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { The headline, drawn in the card font at --notification-title-weight. Empty = no title:
       the message then takes the whole text column. }
     property Title: TCaption read FTitle write SetTitle;

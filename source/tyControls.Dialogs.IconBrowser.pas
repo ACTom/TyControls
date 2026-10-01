@@ -189,6 +189,9 @@ type
   public
     function Execute: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     { The font to browse. Without one the dialog opens empty and says so, rather than
       pretending the font has no icons. }

@@ -210,6 +210,59 @@ type
     property SectionMaxWidth[AIndex: Integer]: Integer read GetSectionMaxWidth write SetSectionMaxWidth;
     property Sort[AIndex: Integer]: TTyHeaderSortDirection read GetSortDirection write SetSortDirection;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
     { Fires ONCE, when the drag is released, with the settled width. It used to fire on
       every mouse-move pixel as well, so a handler that did anything real (re-query, relayout
@@ -221,8 +274,6 @@ type
       before OnSectionResize). AState is what makes a live preview possible: set it up on
       Begin, redraw it on Move, tear it down on End. }
     property OnSectionTrack: TTyHeaderTrackEvent read FOnSectionTrack write FOnSectionTrack;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
     property Align;
     { Every sibling in this family publishes Anchors (TTyTreeView, TTyListView) and the strip
       did not, so the one layout a header strip most obviously wants -- pinned left+right+top

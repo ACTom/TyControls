@@ -89,6 +89,61 @@ type
       document info, …). Anchor it [akLeft,akTop,akRight,akBottom] so it tracks resizes. }
     function ContentRect: TRect;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { The constructor turns this on (the sidebar walks with the arrow keys); declaring the
+      default to match is what lets a host turn it OFF in the .lfm — against the inherited
+      `default False` that value is dropped as "already the default". }
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Commands: TStrings read FCommands write SetCommands;
     { Optional per-command glyph names, rendered from IconFont at the left of each row.
 
@@ -120,14 +175,8 @@ type
     property SidebarWidth: Integer read GetSidebarWidth write SetSidebarWidth stored FSidebarWidthExplicit;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
-    { The constructor turns this on (the sidebar walks with the arrow keys); declaring the
-      default to match is what lets a host turn it OFF in the .lfm — against the inherited
-      `default False` that value is dropped as "already the default". }
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 { Pure geometry (device px, (0,0)-local). }

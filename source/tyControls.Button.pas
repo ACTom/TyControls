@@ -152,12 +152,70 @@ type
     // handler (and headless tests) route through here.
     function WantsDialogKey(ACharCode: Word): Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { A push button is a tab stop, exactly as the native TButton is: Tab reaches it and
+      Space/Enter presses it (KeyDown below), and TTyCustomControl.MouseDown gates its
+      click-to-focus on this flag, so without it a click never moved focus off whatever
+      had it. Re-published with default True so a host that wants a particular button OUT
+      of the cycle can say TabStop=False in the .lfm and have it STREAM — with the
+      inherited `default False` a False was equal to the declared default and silently
+      dropped, leaving the constructor's True to win at run time. }
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { Off by default (a designed button keeps the width the .lfm gave it). Switch it on and
       the button WIDENS to hug its caption plus the theme's padding, so a caption that grows
       — a longer translation, a denser scale, a heavier font — lengthens the button instead
       of being ellipsised. Height is left alone (see CalculatePreferredSize): it belongs to
       whoever lays out the row, which is what makes this safe inside a TTyToolBar. }
     property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     // On by default. When enabled and the control has a window handle, hovering
     // fades the background between the normal and hover styles; with no handle
     // (every render test) it snaps, preserving the existing exact-pixel paint tests.
@@ -195,21 +253,8 @@ type
     property BadgePosition: TTyBadgePosition read FBadgePosition write SetBadgePosition default bpBottomRight;
     property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
     property Caption;
-    property Enabled;
-    property Font;
-    { A push button is a tab stop, exactly as the native TButton is: Tab reaches it and
-      Space/Enter presses it (KeyDown below), and TTyCustomControl.MouseDown gates its
-      click-to-focus on this flag, so without it a click never moved focus off whatever
-      had it. Re-published with default True so a host that wants a particular button OUT
-      of the cycle can say TabStop=False in the .lfm and have it STREAM — with the
-      inherited `default False` a False was equal to the declared default and silently
-      dropped, leaving the constructor's True to win at run time. }
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
   end;
 
 { The badge corner mirrored for a right-to-left button: left <-> right, top/bottom fixed.

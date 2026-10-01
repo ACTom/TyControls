@@ -57,11 +57,65 @@ type
     destructor Destroy; override;
     procedure Click; override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { 构造函数把它打开(复选框天然是 tab stop);这里把**声明的默认值**也改成 True,
+      是为了让"关掉"这条路走得通 —— 继承来的声明默认值是 False,设计器里设成 False
+      就等于默认值,压根不会写进 .lfm,运行时又被构造函数的 True 盖回去。 }
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { 默认关(设计好的复选框保持 .lfm 给的宽度)。打开后控件会横向撑开,刚好裹住
       指示框 + 间距 + 标题 + 主题 padding,标题变长时是控件变长而不是文字被截。
       高度不参与(见 CalculatePreferredSize):行高是排版方的事,这样放进任何会钉死
       子控件高度的容器里都不会打架。 }
     property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property State: TCheckBoxState read FState write SetState default cbUnchecked;
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
     property Checked: Boolean read GetChecked write SetChecked default False;
@@ -78,17 +132,8 @@ type
       不用分支。 }
     property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
     property Caption;
-    property Enabled;
-    property Font;
-    { 构造函数把它打开(复选框天然是 tab stop);这里把**声明的默认值**也改成 True,
-      是为了让"关掉"这条路走得通 —— 继承来的声明默认值是 False,设计器里设成 False
-      就等于默认值,压根不会写进 .lfm,运行时又被构造函数的 True 盖回去。 }
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
@@ -127,24 +172,69 @@ type
     destructor Destroy; override;
     procedure Click; override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { 默认关。打开后控件横向撑开到刚好裹住圆点 + 间距 + 标题 + 主题 padding;
       高度不参与,交给排版方。见 TTyCheckBox.AutoSize。 }
     property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Checked: Boolean read FChecked write SetChecked default False;
     property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
     { 圆点在标题的哪一侧 —— 见 TTyCheckBox.Alignment,同名同型同默认值
       (LCL 在 TRadioButton 上转发的是同一个 TCustomCheckBox.Alignment)。 }
     property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
     property Caption;
-    property Enabled;
-    property Font;
-    // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 implementation

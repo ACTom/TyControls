@@ -1642,6 +1642,59 @@ type
       否则按方向键会"把光标走丢"。 }
     procedure ScrollIntoView(ACol, ARow: Integer);
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    { 主题接线。 }
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { 列模型(含列集合、列头高度、排序列、自动适宽列)。 }
     property Header: TTyHeader read FHeader write SetHeader;
     { 数据行数(不含列头与固定行)。 }
@@ -1866,14 +1919,6 @@ type
       "Unknown property: Anchors"),编译期完全看不出来。 }
     property Align;
     property Anchors;
-    property BorderSpacing;
-    property Constraints;
-    property Visible;
-    property PopupMenu;
-    property TabStop default True;
-    { 主题接线。 }
-    property StyleClass;
-    property Controller;
   end;
 
   { 单元格文本由宿主提供 —— 对齐 LCL TDrawGrid 的"内容不归控件管"的定位。 }

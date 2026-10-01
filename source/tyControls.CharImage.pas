@@ -56,6 +56,47 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property IconFont: TTyIconFont read FIconFont write SetIconFont;
     property GlyphName: string read FGlyphName write SetGlyphName;
     { Glyph edge length in LOGICAL px (scaled by PPI). 0 = auto: fit the smaller
@@ -64,13 +105,8 @@ type
     { Glyph fill color. TyGlyphColorDefault (the default) = use the theme's
       resolved TextColor; any other value overrides it. }
     property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default TyGlyphColorDefault;
-    property Enabled;
     property Align;
     property Anchors;
-    property AutoSize;
-    property StyleClass;
-    property Controller;
-    property OnClick;
   end;
 
 { Pure helper: the glyph edge length (device px) for a client box of AWidthPx x

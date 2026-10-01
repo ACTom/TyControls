@@ -91,24 +91,72 @@ type
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
     function Count: Integer;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { Declared True to match the constructor, so that a host wanting this bar out of the
+      tab cycle writes TabStop=False and it actually STREAMS (against the inherited
+      `default False` that value looks like the default and is dropped). }
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { Off by default (a designed bar keeps the width the .lfm gave it). Switch it on and the bar
       WIDENS so every cell fits its caption plus the theme's padding — a longer translation, a
       denser scale, a heavier font or a roomier skin lengthens the bar instead of ellipsising
       each segment. Height is left alone (see CalculatePreferredSize): it belongs to whoever
       lays out the row. }
     property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Items: TStrings read FItems write SetItems;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
-    { Declared True to match the constructor, so that a host wanting this bar out of the
-      tab cycle writes TabStop=False and it actually STREAMS (against the inherited
-      `default False` that value looks like the default and is dropped). }
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 { Which segment index AX (device px, 0-based from the group's left edge) falls in,

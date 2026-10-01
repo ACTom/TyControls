@@ -61,19 +61,54 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { Off by default (a designed link keeps the width the .lfm gave it). Switch it on and the
       link WIDENS to hug its caption plus the theme's padding, so a caption that grows
       lengthens the control -- and with it the accent underline -- instead of being clipped.
       Height is left alone (see CalculatePreferredSize): it belongs to whoever lays out the row. }
     property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Caption;
-    property Enabled;
-    property Font;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property URL: string read FURL write SetURL;
     property AutoOpen: Boolean read FAutoOpen write FAutoOpen default True;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;

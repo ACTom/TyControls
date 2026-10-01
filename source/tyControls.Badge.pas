@@ -138,6 +138,47 @@ type
     { Whether it currently draws anything (the Value / ShowZero rule). }
     function IsShowing: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { The control this badge marks. Setting it MOVES the badge onto that control: a
       windowed target becomes the badge's Parent (the badge then paints on the target's
       own canvas, inside its client rect, exactly where TTyButton puts its built-in
@@ -159,9 +200,6 @@ type
     { The badge is always its natural (measured) size, so there is no Align/AutoSize to
       publish; Anchors is for standalone use — an attached badge is placed by Target. }
     property Anchors;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
   end;
 
 implementation

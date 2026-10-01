@@ -1162,6 +1162,62 @@ type
       published, so only one of the two names streams. }
     property DefaultItemHeight: Integer read GetDefaultNodeHeight write SetDefaultNodeHeight;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    { The LCL drag-and-drop surface the base class publishes. Re-listed here only so
+      the tree's own published block shows it is back — TTyTreeDragOverEvent used to
+      shadow OnDragOver, which made this the one TTy control that could not be an LCL
+      drop target. }
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { B1: option flags set (default [] = ③a/③b behaviour) }
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
     { B (columns): header sub-object }
@@ -1205,10 +1261,6 @@ type
     { C1: re-published standard LCL properties }
     property Align;
     property Anchors;
-    property Font;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
     { events }
     property OnFreeNode:      TTyTreeNodeEvent         read FOnFreeNode      write FOnFreeNode;
     property OnInitNode:      TTyTreeInitNodeEvent     read FOnInitNode      write FOnInitNode;
@@ -1261,16 +1313,6 @@ type
       it was moved off the name TControl already owns — see TTyTreeDragOverEvent. }
     property OnNodeDragOver:  TTyTreeDragOverEvent   read FOnDragOver      write FOnDragOver;
     property OnNodeMoved:     TTyTreeNodeEvent       read FOnNodeMoved     write FOnNodeMoved;
-    { The LCL drag-and-drop surface the base class publishes. Re-listed here only so
-      the tree's own published block shows it is back — TTyTreeDragOverEvent used to
-      shadow OnDragOver, which made this the one TTy control that could not be an LCL
-      drop target. }
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    property DragMode;
-    property DragCursor;
   end;
 
 { ---------------------------------------------------------------------------

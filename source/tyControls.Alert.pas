@@ -200,6 +200,55 @@ type
     { The status-icon slot in DEVICE px, (0,0)-local; empty when ShowIcon is off. }
     function TyAlertIconRect: TRect;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { With AutoSize the banner's HEIGHT hugs its content (padding + one or two lines, at
+      least as tall as its slots). The WIDTH is left alone — a banner spans its host via
+      Align/Anchors, and re-fitting it to its text would fight that layout. }
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    { An EXTRA variant on top of the type's own. AlertType always contributes its variant
+      token first and this one is appended, so the semantic look is always there and an
+      explicit class layers over it per-property — the engine's ordinary multi-token
+      cascade (later token wins). A theme rule `TyAlert.compact` setting only a tighter
+      padding thus trims any type of banner without touching its colours. }
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { The banner's semantic type: it picks BOTH the style variant ('info' / 'success' /
       'warning' / 'error' — the theme writes a `TyAlert.warning` rule) and the status
       glyph. Changing it re-fits an auto-sized banner, because a theme may pad a variant
@@ -220,23 +269,8 @@ type
       hide unless vetoed); the banner's own OnClick never fires for that gesture. }
     property Closable: Boolean read FClosable write SetClosable default False;
     property OnClose: TTyAlertCloseEvent read FOnClose write FOnClose;
-    { With AutoSize the banner's HEIGHT hugs its content (padding + one or two lines, at
-      least as tall as its slots). The WIDTH is left alone — a banner spans its host via
-      Align/Anchors, and re-fitting it to its text would fight that layout. }
-    property AutoSize;
     property Align;
     property Anchors;
-    property Enabled;
-    property Font;
-    { An EXTRA variant on top of the type's own. AlertType always contributes its variant
-      token first and this one is appended, so the semantic look is always there and an
-      explicit class layers over it per-property — the engine's ordinary multi-token
-      cascade (later token wins). A theme rule `TyAlert.compact` setting only a tighter
-      padding thus trims any type of banner without touching its colours. }
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
-    property OnClick;
   end;
 
 implementation

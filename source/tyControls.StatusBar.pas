@@ -118,6 +118,58 @@ type
       publishes it to Application.Hint, and until now nothing in this library listened. }
     function ExecuteAction(ExeAction: TBasicAction): Boolean; override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Panels: TTyStatusPanels read FPanels write SetPanels;
     property SimplePanel: Boolean read FSimplePanel write SetSimplePanel default False;
     property SimpleText: string read FSimpleText write SetSimpleText;
@@ -134,8 +186,6 @@ type
     property OnDrawPanel: TTyDrawPanelEvent read FOnDrawPanel write FOnDrawPanel;
     property Align default alBottom;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 { ARightToLeft MIRRORS the finished tiling about the bar's vertical centre: panel 0 sits at

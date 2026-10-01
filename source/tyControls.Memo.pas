@@ -857,6 +857,64 @@ type
     procedure RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
     procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    // Standard control properties/events re-published to match TMemo (all inherited; the key/mouse
+    // overrides call inherited so the events fire). Color/BorderStyle are intentionally NOT published:
+    // this control is theme-/self-drawn. BidiMode stays out of scope -- RTL is realized by the
+    // widgetset on a native EDIT handle, so there is nothing for a self-drawn control to inherit.
+    // (Alignment and CharCase used to be listed here as out of scope too. Alignment was a real
+    // capability gap and CharCase was one method away from the sibling Edit; both are above now.)
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Lines: TStrings read GetLines write SetLines;
     // Whole-document text as one string with platform line breaks (TStrings.Text
     // get/set). Writing replaces all lines, collapses the caret to the origin and
@@ -901,53 +959,13 @@ type
     // Caps total content codepoints (typing blocked at the cap; paste truncated
     // to the remaining room). 0 = unlimited. Default 0.
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
-    property Enabled;
-    property Font;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     // Fired when the caret position or selection range changes without a text
     // mutation (arrow keys, click, shift-select, programmatic SetCaret) and after
     // edits that move the caret. Self-guarded: a no-op move never fires.
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
-    // Standard control properties/events re-published to match TMemo (all inherited; the key/mouse
-    // overrides call inherited so the events fire). Color/BorderStyle are intentionally NOT published:
-    // this control is theme-/self-drawn. BidiMode stays out of scope -- RTL is realized by the
-    // widgetset on a native EDIT handle, so there is nothing for a self-drawn control to inherit.
-    // (Alignment and CharCase used to be listed here as out of scope too. Alignment was a real
-    // capability gap and CharCase was one method away from the sibling Edit; both are above now.)
-    property TabStop default True;
-    property TabOrder;
-    property Visible;
-    property PopupMenu;
-    property ShowHint;
-    property ParentShowHint;
-    property Constraints;
-    property BorderSpacing;
-    property DragCursor;
-    property DragKind;
-    property DragMode;
-    property OnContextPopup;
-    property OnDblClick;
-    property OnDragDrop;
-    property OnDragOver;
-    property OnEndDrag;
-    property OnStartDrag;
-    property OnEditingDone;
-    property OnEnter;
-    property OnExit;
-    property OnKeyDown;
-    property OnKeyPress;
-    property OnKeyUp;
-    property OnMouseDown;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseMove;
-    property OnMouseUp;
-    property OnMouseWheel;
   end;
 
 implementation

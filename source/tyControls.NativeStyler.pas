@@ -44,6 +44,9 @@ type
     class procedure RegisterDeny(AClass: TControlClass);
     class function IsDenied(AControl: TControl): Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Controller: TTyStyleController read FController write SetController;
     property Root: TWinControl read FRoot write FRoot;
     property Enabled: Boolean read FEnabled write FEnabled default True;

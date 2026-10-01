@@ -151,6 +151,61 @@ type
     { The segment at client device (X, Y), or -1 (the track's padding gutter included). }
     function TySegmentAt(X, Y: Integer): Integer;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { With AutoSize the track hugs its widest label (every segment takes that width, plus
+      the segment padding and the track's own inset); off, it keeps the bounds it was given
+      and the segments split them evenly. }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { The segments, one per line. Editing them re-fits an auto-sized track; an edit that
       leaves ItemIndex out of range resets it to -1 SILENTLY (see SetItemIndex). }
     property Items: TStrings read FItems write SetItems;
@@ -160,16 +215,8 @@ type
     { Fires whenever ItemIndex actually changes — by click, by key, or from code. Setting
       the same index again is not a change and stays silent. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    { With AutoSize the track hugs its widest label (every segment takes that width, plus
-      the segment padding and the track's own inset); off, it keeps the bounds it was given
-      and the segments split them evenly. }
-    property AutoSize;
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
   end;
 
 implementation

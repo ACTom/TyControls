@@ -50,6 +50,8 @@ type
     procedure TestEveryRegisteredClassIsAccountedFor;
     procedure TestDerivedControlsHangOnTheCustomChain;
     procedure TestDemotedClassesPublishOnlyTheLclRoot;
+    procedure TestBaseClassesPublishNothing;
+    procedure TestThirdPartyOnTheBareBaseSeesOnlyTheLclRoot;
   end;
 
 { Shared with the per-phase suites (test.customclasses.p1 ...). }
@@ -1024,6 +1026,61 @@ begin
   AssertEquals('demoted classes still publishing:' + bad, '', bad);
 end;
 
+type
+  { A third party that derives straight from the windowed base and writes no published
+    section -- the shape the incompatibility list (item 2) is about. }
+  TBareThirdParty = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
+  end;
+
+function TBareThirdParty.GetStyleTypeKey: string;
+begin
+  Result := 'TyPanel';
+end;
+
+procedure TTyCustomClassesGuardTest.TestBaseClassesPublishNothing;
+const
+  CBases: array[0..2] of string = ('TTyCustomControl', 'TTyGraphicControl', 'TTyComponent');
+var
+  i: Integer;
+  c: TClass;
+  cn, rn: TStringList;
+begin
+  for i := Low(CBases) to High(CBases) do
+  begin
+    AssertTrue(CBases[i] + ' is in CDemoted', GDemoted.IndexOf(CBases[i]) >= 0);
+    c := FindClassByName(CBases[i]);
+    cn := PublishedNames(c);
+    rn := PublishedNames(LclRootOf(c));
+    try
+      AssertEquals(CBases[i] + ' publishes exactly its LCL root''s names (' + LclRootOf(c).ClassName
+        + ')', rn.CommaText, cn.CommaText);
+    finally
+      cn.Free;
+      rn.Free;
+    end;
+  end;
+end;
+
+procedure TTyCustomClassesGuardTest.TestThirdPartyOnTheBareBaseSeesOnlyTheLclRoot;
+var
+  cn, rn: TStringList;
+begin
+  cn := PublishedNames(TBareThirdParty);
+  rn := PublishedNames(TCustomControl);
+  try
+    AssertEquals('TCustomControl publishes Name, Tag and TControl''s 13', 15, rn.Count);
+    AssertEquals('a class on the bare base publishes only what TCustomControl does',
+      rn.CommaText, cn.CommaText);
+    AssertTrue('Enabled is no longer published by the base', cn.IndexOf('Enabled') < 0);
+    AssertTrue('nor is the library''s own StyleClass', cn.IndexOf('StyleClass') < 0);
+  finally
+    cn.Free;
+    rn.Free;
+  end;
+end;
+
 initialization
   GSplit := TStringList.Create;
   GSplit.CaseSensitive := False;
@@ -1107,7 +1164,7 @@ initialization
     'TTySelectValueDialog', 'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
-  AddAll(GDemoted, []);
+  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent']);
 
   RegisterTest(TTyCustomClassesGuardTest);
 

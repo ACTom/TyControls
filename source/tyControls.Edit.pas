@@ -386,6 +386,62 @@ type
       first click inside an already-focused edit does not re-select. Cleared on focus loss. }
     property AutoSelected: Boolean read FAutoSelected write FAutoSelected;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { The constructor turns this on (an edit is always a tab stop); declaring the default
+      to match is what makes the OPT-OUT work — against the inherited `default False` a
+      designer's TabStop=False equals the declared default, is never written to the .lfm,
+      and the constructor's True silently wins again at run time. }
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Text: TCaption read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
@@ -417,18 +473,8 @@ type
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     property NumbersOnly: Boolean read FNumbersOnly write FNumbersOnly default False;
-    property Enabled;
-    property Font;
-    { The constructor turns this on (an edit is always a tab stop); declaring the default
-      to match is what makes the OPT-OUT work — against the inherited `default False` a
-      designer's TabStop=False equals the declared default, is never written to the .lfm,
-      and the constructor's True silently wins again at run time. }
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 

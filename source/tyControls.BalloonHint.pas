@@ -75,6 +75,9 @@ type
     { Hide immediately (also called by the auto-hide timer). }
     procedure HideHint;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Title: TCaption read FTitle write FTitle;
     property Description: string read FDescription write FDescription;
     property Icon: TTyBalloonIcon read FIcon write FIcon default biNone;

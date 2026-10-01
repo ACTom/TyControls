@@ -147,6 +147,47 @@ type
       row and column, because the stroke is centred on a path inset by ceil(width/2). }
     function PtInShape(const APt: TPoint): Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Shape: TTyShapeKind read FShape write SetShape default tskRectangle;
     { Fires on a click that landed on the drawn shape rather than merely inside the
       control's rectangle. LCL: extctrls.pp:343. }
@@ -158,9 +199,6 @@ type
     property OnShapePoints: TTyShapePointsEvent read FOnShapePoints write SetOnShapePoints;
     property Align;
     property Anchors;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
   end;
 
 const

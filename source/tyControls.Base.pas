@@ -251,79 +251,12 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
-  published
+    { 4.0: published by every final class, not here (LCL TControl publishes none of these).
+      The universal properties (Enabled, Font, OnClick, ...) stay at their LCL visibility;
+      these four are the library's own and live in public. }
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
     property Version: string read GetVersion;
-    property Enabled;
-    { Visible was never published anywhere in this library, on either base class, so
-      no TTy control could be hidden from the designer or from a .lfm -- only from
-      code. TControl.Visible is public, which is exactly why it went unnoticed: it
-      works everywhere except the one place you look for it. Default True, so it
-      streams only where someone actually hid something. }
-    property Visible;
-    property Font;
-    property Hint;
-    property ShowHint;
-    { Tier A universal events/props (published; dispatch intact via inherited). }
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
-      the whole point of which is to answer "how big do I want to be" -- and TControl's
-      AutoSize is what asks. It was reachable from code and absent from the designer, so
-      the measurement work was done and could not be switched on where forms are built.
-      Default False, so no existing form changes; a control that does NOT implement a
-      preferred size simply keeps its bounds, exactly as in the LCL. }
-    property AutoSize;
-    { Drag-and-drop, republished. Every one of these is a TControl member with the
-      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
-      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
-      because dragging is decided above the paint layer. They were simply never
-      republished on either base class, so NO control in this library could be made a
-      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
-      was invisible from the code side: TControl declares them public, so
-      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
-      the streamed form that had nothing. }
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    { Horizontal / tilt wheel. The vertical three were already here; these are what a
-      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
-      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
-      them and nowhere else. }
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
-      the only way to say "this hint depends on what the pointer is over". }
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property Cursor;
-    property ParentShowHint;
-    property Action;
-    { Fired AFTER the control has finished drawing itself, with the control's own Canvas --
-      the seam for one badge, one overlay, one debug rectangle, without subclassing. It is
-      NOT an owner-draw replacement: the themed control is already on the canvas when the
-      handler runs, and the handler draws over it. Ordering is the whole property, and it is
-      why the fire site is WMPaint rather than Paint -- see the body. }
-    property OnPaint;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: a per-instance CSS declaration block (e.g. 'border-color: var(--accent);')
       applied on top of the theme for THIS control only. May reference var(--...) tokens,
@@ -415,97 +348,12 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
-  published
+    { 4.0: published by every final class, not here (LCL TControl publishes none of these).
+      The universal properties (Enabled, Font, OnClick, ...) stay at their LCL visibility;
+      these four are the library's own and live in public. }
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
     property Version: string read GetVersion;
-    property Enabled;
-    { Visible was never published anywhere in this library, on either base class, so
-      no TTy control could be hidden from the designer or from a .lfm -- only from
-      code. TControl.Visible is public, which is exactly why it went unnoticed: it
-      works everywhere except the one place you look for it. Default True, so it
-      streams only where someone actually hid something. }
-    property Visible;
-    property Font;
-    property Hint;
-    property ShowHint;
-    property TabOrder;
-    property TabStop;
-    { Tier A universal events/props (published; dispatch intact via inherited). }
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
-      the whole point of which is to answer "how big do I want to be" -- and TControl's
-      AutoSize is what asks. It was reachable from code and absent from the designer, so
-      the measurement work was done and could not be switched on where forms are built.
-      Default False, so no existing form changes; a control that does NOT implement a
-      preferred size simply keeps its bounds, exactly as in the LCL. }
-    property AutoSize;
-    { Container geometry, republished for the windowed base only -- both are TWinControl
-      members and meaningless on a graphic control that hosts nothing.
-      BorderWidth insets the child area; ChildSizing is the LCL's per-container child
-      layout engine (Layout, ControlsPerLine, the spacings, EnlargeHorizontal and friends),
-      already fully implemented in TWinControl's align pass. Neither was published, so a
-      TTy container could not be given either from the designer. }
-    property BorderWidth;
-    property ChildSizing;
-    { Drag-and-drop, republished. Every one of these is a TControl member with the
-      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
-      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
-      because dragging is decided above the paint layer. They were simply never
-      republished on either base class, so NO control in this library could be made a
-      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
-      was invisible from the code side: TControl declares them public, so
-      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
-      the streamed form that had nothing. }
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    { Horizontal / tilt wheel. The vertical three were already here; these are what a
-      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
-      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
-      them and nowhere else. }
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
-      the only way to say "this hint depends on what the pointer is over". }
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property Cursor;
-    property ParentShowHint;
-    property Action;
-    { Fired AFTER the control has finished drawing itself, with the control's own Canvas.
-      Same contract as the graphic base's -- see there. On a CACHED container (TTyPanel and
-      friends) the handler runs after the cache blit, so its output is never baked into the
-      cache: a child's damage still costs a blit, and the overlay is still redrawn on top of
-      it. That is the reason the hook is outside RenderTo and not merely after EndPaint. }
-    property OnPaint;
-    { Tier B focusable events (TWinControl-declared; custom control only). }
-    property OnKeyDown;
-    property OnKeyUp;
-    property OnKeyPress;
-    property OnUTF8KeyPress;
-    property OnEnter;
-    property OnExit;
-    property OnEditingDone;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: per-instance CSS declaration block applied on top of the theme for THIS control
       only. May reference var(--...) tokens (resolved against the active theme); a

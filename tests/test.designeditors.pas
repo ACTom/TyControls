@@ -153,7 +153,41 @@ end;
   registration was written to replace, and the suite stays green.
 
   So: resolve each named registration against real RTTI. Blanket registrations (empty property
-  name — the TTyFormSurface hide rules) match by type alone and are skipped. }
+  name — the TTyFormSurface hide rules) match by type alone and are skipped.
+
+  TWO WAYS A REGISTRATION IS LIVE. The IDE matches a registration by InheritsFrom, and the
+  Object Inspector only ever shows PUBLISHED properties, so the editor fires for a property
+  the registered class publishes itself -- or for one that a registered (palette) class
+  DERIVED from it publishes. The second case is the 4.0 shape: the base classes and the
+  TTyCustomXxx classes publish nothing beyond their LCL root, and the editor is hung on them
+  so every final class and every third-party descendant that publishes the name gets it. A
+  registration neither the class nor any registered descendant publishes still fires for no
+  one, and that is what this test catches. }
+
+{ The registered (palette / no-icon / designer-base) class that inherits from AClass and
+  publishes AProp; nil when there is none. }
+function PublishingDescendant(AClass: TClass; const AProp: string): PPropInfo;
+var
+  names: TStringList;
+  i: Integer;
+  c: TPersistentClass;
+begin
+  Result := nil;
+  names := TStringList.Create;
+  try
+    CollectRegisteredClassNames(names);
+    for i := 0 to names.Count - 1 do
+    begin
+      c := GetClass(names[i]);
+      if (c = nil) or not c.InheritsFrom(AClass) then Continue;
+      Result := GetPropInfo(c, AProp);
+      if Result <> nil then Exit;
+    end;
+  finally
+    names.Free;
+  end;
+end;
+
 procedure TDesignEditorsTest.TestEveryRegistrationTargetsARealProperty;
 var
   regs, unresolved, missing, mistyped: TStringList;
@@ -185,6 +219,8 @@ begin
       end;
       pi := GetPropInfo(cls, prop);
       if pi = nil then
+        pi := PublishingDescendant(cls, prop);
+      if pi = nil then
       begin
         missing.Add(base + '.' + prop);
         Continue;
@@ -202,9 +238,10 @@ begin
     AssertEquals('property editors registered on classes this test cannot resolve — add them to'
       + ' the RegisterClasses block in tests/test.designeditors.pas:' + LineEnding
       + unresolved.Text, 0, unresolved.Count);
-    AssertEquals('property editor registered on a property the class does not publish — the'
-      + ' Object Inspector will never consult that editor and shows a plain edit box:'
-      + LineEnding + missing.Text, 0, missing.Count);
+    AssertEquals('property editor registered on a property that neither the class publishes'
+      + ' nor any registered class derived from it does (either is enough: the IDE matches by'
+      + ' InheritsFrom) — the Object Inspector will never consult that editor and shows a plain'
+      + ' edit box:' + LineEnding + missing.Text, 0, missing.Count);
     AssertEquals('registered with TypeInfo(string) but the property is a DIFFERENT string type'
       + ' — RegisterPropertyEditor compares type names, so this editor never fires:' + LineEnding
       + mistyped.Text, 0, mistyped.Count);

@@ -103,6 +103,47 @@ type
       because the stroke is centred on a path inset by ceil(width/2). }
     function PtInShape(const APt: TPoint): Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Points: Integer read FPoints write SetPoints default 5;
     property InnerRatio: Single read FInnerRatio write SetInnerRatio;
     { Turns the ring a half-step so vertex 0 points at 6 o'clock. This is LCL's
@@ -115,9 +156,6 @@ type
     property OnShapeClick: TNotifyEvent read FOnShapeClick write FOnShapeClick;
     property Align;
     property Anchors;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
   end;
 
 { Pure geometry: the vertices of an N-point star inscribed in ARect.
