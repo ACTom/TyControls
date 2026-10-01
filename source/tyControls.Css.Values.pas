@@ -196,18 +196,6 @@ end;
 
 // --- expression evaluation -------------------------------------------------
 
-// The name var(--name) refers to, without the leading --.
-function VarRefKey(const Expr: string): string;
-var
-  inner: string;
-begin
-  inner := Trim(Copy(Expr, 5, Length(Expr) - 5)); // strip 'var(' .. ')'
-  if (Length(inner) >= 2) and (inner[1] = '-') and (inner[2] = '-') then
-    Result := Copy(inner, 3, Length(inner) - 2)
-  else
-    Result := inner;
-end;
-
 // The names on the current path of variable lookups, '|a|b|' (lower case), plus AKey --
 // or a raise when AKey is already on it: following it again would never end. Passed by
 // value down the recursion, so one variable used twice side by side (mix(var(--a),
@@ -225,19 +213,32 @@ begin
     Result := AChain + k + '|';
 end;
 
-// Resolve var(--name) -> the raw string from Vars (name without leading --).
-// Vars holds entries 'name=value'; var(--accent) looks up 'accent'.
-function ResolveVarRef(const Expr: string; Vars: TStrings): string;
+// Resolve var(--name) -> the raw string from Vars (name without leading --), and the name
+// in AKey. Vars holds entries 'name=value'; var(--accent) looks up 'accent'. One pass over
+// Vars: IndexOfName is a linear scan, and Values[] would make a second one.
+function LookupVarRef(const Expr: string; Vars: TStrings; out AKey: string): string;
 var
-  inner, key: string;
+  inner: string;
+  k: Integer;
 begin
   inner := Trim(Copy(Expr, 5, Length(Expr) - 5)); // strip 'var(' .. ')'
-  key := VarRefKey(Expr);
+  if (Length(inner) >= 2) and (inner[1] = '-') and (inner[2] = '-') then
+    AKey := Copy(inner, 3, Length(inner) - 2)
+  else
+    AKey := inner;
   if Vars = nil then
     raise Exception.CreateFmt('var(%s) but no vars provided', [inner]);
-  if Vars.IndexOfName(key) < 0 then
-    raise Exception.CreateFmt(rsCssUndefinedVariable, [key]);
-  Result := Vars.Values[key];
+  k := Vars.IndexOfName(AKey);
+  if k < 0 then
+    raise Exception.CreateFmt(rsCssUndefinedVariable, [AKey]);
+  Result := Vars.ValueFromIndex[k];
+end;
+
+function ResolveVarRef(const Expr: string; Vars: TStrings): string;
+var
+  key: string;
+begin
+  Result := LookupVarRef(Expr, Vars, key);
 end;
 
 // Split the comma-separated argument list of a function call, honoring nested parens.
@@ -281,7 +282,7 @@ end;
 
 function EvalColor(const Expr: string; Vars: TStrings; const AChain: string): TTyColor;
 var
-  E, fn, body, key: string;
+  E, fn, body, key, val: string;
   p: Integer;
   args: TStringList;
   a: string;
@@ -299,8 +300,8 @@ begin
   // var(...)
   if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
   begin
-    key := VarRefKey(E);
-    Exit(EvalColor(ResolveVarRef(E, Vars), Vars, EnterVar(AChain, key)));
+    val := LookupVarRef(E, Vars, key);     { sets key: used on the next line, not beside it }
+    Exit(EvalColor(val, Vars, EnterVar(AChain, key)));
   end;
   // function call: name( args )
   p := Pos('(', E);
@@ -409,8 +410,8 @@ begin
   chain := AChain;
   if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
   begin
-    chain := EnterVar(chain, VarRefKey(E));
-    E := Trim(ResolveVarRef(E, Vars));
+    E := Trim(LookupVarRef(E, Vars, key));
+    chain := EnterVar(chain, key);
   end;
   // bare '--name' leaf: look up in Vars and recurse
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
@@ -436,8 +437,8 @@ begin
   chain := AChain;
   if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
   begin
-    chain := EnterVar(chain, VarRefKey(E));
-    E := Trim(ResolveVarRef(E, Vars));
+    E := Trim(LookupVarRef(E, Vars, key));
+    chain := EnterVar(chain, key);
   end;
   // bare '--name' leaf: look up in Vars and recurse
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
