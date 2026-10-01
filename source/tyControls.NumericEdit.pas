@@ -28,6 +28,9 @@ type
     FDecimalSep: Char;
     FUseThousands: Boolean;
     FMinValue, FMaxValue: Double;
+    { A Value streamed in while the component is loading, applied in Loaded (see SetValue). }
+    FPendingValue: Double;
+    FHasPendingValue: Boolean;
     function GetValue: Double;
     procedure SetValue(const AValue: Double);
     procedure SetDecimals(const AValue: Integer);
@@ -46,6 +49,7 @@ type
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure DoEnter; override;   // show RAW (ungrouped) for editing
     procedure DoExit; override;    // clamp + re-display GROUPED on blur
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     property Value: Double read GetValue write SetValue;
@@ -227,13 +231,35 @@ end;
 
 function TTyCustomNumericEdit.GetValue: Double;
 begin
+  if FHasPendingValue then Exit(FPendingValue);   // still loading: what was streamed in
   if not TyParseNumber(Text, FThousands, FDecimalSep, Result) then Result := 0;
   Result := ClampVal(Result);
 end;
 
 procedure TTyCustomNumericEdit.SetValue(const AValue: Double);
 begin
+  { While a form is loading, hold the value until Loaded. Value is kept as the text it formats
+    to, so a Value read before Decimals, MinValue or MaxValue would be rounded to the default 2
+    places, or clamped by half a range, for good. TTyNumericEdit streams Text and not Value,
+    but a descendant of the custom class may publish Value in any order (issue #8); this
+    makes the order not matter. }
+  if csLoading in ComponentState then
+  begin
+    FPendingValue := AValue;
+    FHasPendingValue := True;
+    Exit;
+  end;
   Text := Formatted(ClampVal(AValue), not Focused);
+end;
+
+procedure TTyCustomNumericEdit.Loaded;
+begin
+  inherited Loaded;
+  if FHasPendingValue then
+  begin
+    FHasPendingValue := False;
+    SetValue(FPendingValue);
+  end;
 end;
 
 procedure TTyCustomNumericEdit.Reformat(AGroup: Boolean);

@@ -1282,7 +1282,7 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 
 内容（仓库记忆「文档要原生语感」，中英各写一遍，不是互译腔）：
 1. 什么时候派生 `TTyCustomXxx`（只想露一部分属性）、什么时候派生 `TTyXxx`（全要、再加）。
-2. 一个完整的最小例子：`TMyTagEdit = class(TTyCustomEdit)`，published 段 `property Text; property ReadOnly; property OnChange;`，注册到自己的包；default / stored 会跟过来；**顺序由你的 published 段决定**（V5-7 用户能感知的那一面：先写会钳住别人的属性，比如先 `Max` 后 `Position`）。
+2. 一个完整的最小例子：`TMyTagEdit = class(TTyCustomEdit)`，published 段 `property Text; property ReadOnly; property OnChange;`，注册到自己的包；default / stored 会跟过来；**顺序由你的 published 段决定**（V5-7 用户能感知的那一面：先写会钳住别人的属性，比如先 `Max` 后 `Position`）。逐个写明（第 0、1 期期末修复核实）：**数值编辑框一族（`TTyCustomNumericEdit` 及 Currency / Track / Calc / CalcCurrency / FloatSpin）与顺序无关**——加载期间 `Value` 先暂存、`Loaded` 时按最终的 `Decimals` / `MinValue` / `MaxValue` 设入；**仍要求「范围在前、值在后」的**：`TTyCustomSpinEdit`（`MinValue` / `MaxValue` 先于 `Value`）、`TTyCustomProgressBar`（`Max` 先于 `Position`）、`TTyCustomGauge`（`Max` 先于 `Value`）、`TTyCustomTrackBar`（`Min` / `Max` 先于 `Position`）——这几个的值是 setter 当场钳住的，照最终类的发布顺序写就对；2–4 期新拆的家族核实后追加到这张单子。
 3. **主题**：typeKey 跟着 Custom 类走——`TTyCustomEdit` 的子类自动吃 `TyEdit` 的 tycss 规则，`.tycss` 里永远不写 Custom；若覆写 `GetStyleTypeKey` 换成自己的 key，主题里要写它的规则，否则走不到样式（#14 之后会有回落）。
 4. 可见性：Custom 类里的属性照 LCL 是 public 或 protected（附录 E 的结论用一句话说清：编辑框、组合框、列表框、按钮多为 public，标签、树、列表视图、网格基类多为 protected）；要从外面访问 protected 的，在自己的类里 `public property X;`。
 5. 设计期：属性编辑器自动跟着用；组件编辑器要自己注册（`RegisterComponentEditor(TMyTree, TTyTreeViewComponentEditor)`）；`DefineProperties` 存的数据照样存（N20）。

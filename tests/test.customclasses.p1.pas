@@ -67,6 +67,7 @@ type
     { Task 4: edits I }
     procedure TestThirdEdit;
     procedure TestThirdMaskEdit;
+    procedure TestNumericValueSurvivesAnyPublishingOrder;
     { Task 5: edits II }
     procedure TestThirdMemo;
     procedure TestThirdUpDown;
@@ -131,6 +132,22 @@ type
   published
     property Mask;
     property Text;
+  end;
+
+  { Value BEFORE Decimals, and Value before the range: the order a third party might well
+    publish in. Value is held as the text it formats to, so read first it used to be rounded to
+    the default two places (and clamped by half a range) before the rest arrived. }
+  TThirdNumericEdit = class(TTyCustomNumericEdit)
+  published
+    property Value;
+    property Decimals;
+  end;
+
+  TThirdNumericRange = class(TTyCustomNumericEdit)
+  published
+    property Value;
+    property MaxValue;
+    property MinValue;
   end;
 
   TThirdMemo = class(TTyCustomMemo)
@@ -844,6 +861,44 @@ begin
   CheckFreshDefaults(TThirdMaskEdit, ['Mask', 'Text']);
 end;
 
+{ The numeric edit applies a streamed Value in Loaded, after every other property has arrived,
+  so a descendant's publishing order cannot cut the value short. }
+procedure TTyCustomClassesP1Test.TestNumericValueSurvivesAnyPublishingOrder;
+var
+  n, back: TThirdNumericEdit;
+  r, rback: TThirdNumericRange;
+  txt: string;
+begin
+  n := TThirdNumericEdit.Create(FForm);
+  n.Decimals := 4;
+  n.Value := 3.14159;
+  AssertEquals('precondition: four places', '3.1416', n.Text);
+  txt := StreamedText(n);
+  AssertTrue('precondition: Value is written before Decimals (or this proves nothing):'
+    + LineEnding + txt, (Pos(' Value = ', txt) > 0)
+    and (Pos(' Value = ', txt) < Pos(' Decimals = ', txt)));
+  back := TThirdNumericEdit.Create(FForm);
+  StreamInto(n, back);
+  AssertEquals('Decimals round-trips', 4, back.Decimals);
+  AssertEquals('Value keeps its four places', 3.1416, back.Value, 1e-9);
+  AssertEquals('and so does the field', '3.1416', back.Text);
+
+  r := TThirdNumericRange.Create(FForm);
+  r.MinValue := -10;
+  r.MaxValue := 100;
+  r.Value := -5;
+  { No owner: a second unnamed root read into the same owner would collide on the name the
+    reader makes up for it. }
+  rback := TThirdNumericRange.Create(nil);
+  try
+    StreamInto(r, rback);
+    AssertEquals('a value inside the final range is not clamped by half of it', -5, rback.Value,
+      1e-9);
+  finally
+    rback.Free;
+  end;
+end;
+
 { ------------------------------------------------------------------ Task 5: edits II }
 
 procedure TTyCustomClassesP1Test.TestThirdMemo;
@@ -1425,6 +1480,7 @@ begin
 end;
 
 initialization
+  RegisterClasses([TThirdNumericEdit, TThirdNumericRange, TThirdEditNoText]);
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
     TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
     TThirdComboBox, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox, TThirdProgressBar,
