@@ -83,6 +83,7 @@ type
     procedure TestALineSeriesDrawsARuleWithAMarkerOnIt;
     procedure TestTheMarksCarryTheItemsOwnColourAndWords;
     procedure TestADeselectedItemIsGreyedRightThrough;
+    procedure TestANameNothingAnswersToTakesNoPlaceBetweenTwo;
     procedure TestTheMarksAreSilentAndSitAboveTheSeries;
     procedure TestLeftWinsTheKeywordSwitchWhenBothEdgesNameOne;
     procedure TestTheWrapLimitIsTheContainerLessItsPadding;
@@ -490,16 +491,59 @@ procedure TAdvChartLegendTest.TestANameTheChartCannotOfferIsNeverSelected;
 var
   e: TTyLegendEntryArray;
   f: TTyLegendFlags;
+  src: TTyLegendSourceArray;
+  lg, alone: TTyLegendLayout;
 begin
   { isSelected has a SECOND condition nobody documents: the name has to be one
-    the chart can produce. A `legend.data` entry naming a series that does not
-    exist is drawn, and drawn greyed. }
+    the chart can produce.
+    [Batch 100: this said such an entry "is drawn, and drawn greyed". It is
+    not drawn at all -- LegendView.renderInner adds no child for a name no
+    series and no data provider has (the 6.1 build: data A, Nope, B draws
+    the items 0 and 2 -- tools/advchart-oracle/legend-scroll.js, h-unknown
+    and sel-unknown). The selection rule below is unchanged; the layout
+    half is new.] }
   AssertTrue(FOpt.SetOptionText(
     '{ "legend": { "data": ["real", "ghost"] } }'));
   e := TyLegendEntries(FOpt, 0, []);
   f := TyLegendSelected(FOpt, 0, e, ['real'], tlsMultiple);
   AssertTrue('the one the chart has is on', f[0]);
   AssertFalse('the one it does not is off however the map is written', f[1]);
+
+  { and the ghost takes no place: the legend is the one 'real' alone makes }
+  src := BarSources(2);
+  src[1].Found := False;
+  lg := LayWith('{ "legend": { "data": ["real", "ghost"] } }', [], src);
+  AssertTrue('laid out', lg.Valid);
+  AssertEquals('two entries, indices kept', 2, Length(lg.Items));
+  AssertFalse('the ghost is not placed', TyRectFIsValid(lg.Items[1].Bounds));
+  alone := LayWith('{ "legend": { "data": ["real"] } }', [], BarSources(1));
+  AssertEquals('real sits where it sits alone', alone.Items[0].Bounds.Left,
+    lg.Items[0].Bounds.Left);
+  AssertEquals('and the content is as wide', alone.Content.Right - alone.Content.Left,
+    lg.Content.Right - lg.Content.Left);
+end;
+
+procedure TAdvChartLegendTest.TestANameNothingAnswersToTakesNoPlaceBetweenTwo;
+var
+  src: TTyLegendSourceArray;
+  lg, two: TTyLegendLayout;
+begin
+  { [Batch 100] A, Nope, B on a plain legend: B follows A by one itemGap,
+    exactly as in A, B -- the box layout's `next` is the next CHILD, so a
+    hole between them would move B -- and keeps its legend data index 2 }
+  src := BarSources(3);
+  src[1].Found := False;
+  lg := LayWith('{ "legend": { "data": ["A", "Nope", "B"] } }', [], src);
+  two := LayWith('{ "legend": { "data": ["A", "B"] } }', [], BarSources(2));
+  AssertTrue('laid out', lg.Valid and two.Valid);
+  AssertEquals('B keeps its index', 'B', lg.Items[2].Name);
+  AssertFalse('Nope is not placed', TyRectFIsValid(lg.Items[1].Bounds));
+  AssertEquals('A where it is in A, B', two.Items[0].Bounds.Left, lg.Items[0].Bounds.Left);
+  AssertEquals('B where it is in A, B', two.Items[1].Bounds.Left, lg.Items[2].Bounds.Left);
+  AssertEquals('B on the same row', two.Items[1].Bounds.Top, lg.Items[2].Bounds.Top);
+  { and a legend handed no sources at all treats every entry as found }
+  lg := LayWith('{ "legend": { "data": ["A", "Nope", "B"] } }', [], nil);
+  AssertTrue('no sources: all three placed', TyRectFIsValid(lg.Items[1].Bounds));
 end;
 
 procedure TAdvChartLegendTest.TestSingleModeForcesOneItemOnAtLoad;

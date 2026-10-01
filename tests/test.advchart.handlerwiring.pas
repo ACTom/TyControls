@@ -32,6 +32,8 @@ type
     function AxisContent(const AHits: TTyAxisHitArray;
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     function PointerText(const AHit: TTyAxisHit): string;
+    { [Batch 100] the pointers an axis' `status: 'show'` draws untouched }
+    function OptionPointers: TTyAxisHitArray;
   end;
 
   { the handlers: each prints what it was given, as handlers.js does }
@@ -87,15 +89,16 @@ implementation
 { Cases whose sites the port does not draw yet; the upstream answer stays in
   the fixture for the batch that does. }
 const
-  cDeferred: array[0..2] of string = (
+  cDeferred: array[0..1] of string = (
     'label radar: one call per indicator',  // radar series labels: not ported (batch 35)
     { a treemap truncates its words to the box by their measured width, and
       this harness measures with the real font where upstream's node run
       estimates -- test.advchart.treemap holds the words with zrender's own
       SSR measure }
-    'label treemap',
-    { axisPointer.status / value on the option: not ported -- batch B5 }
-    'axisPointer status show with a value, no tooltip trigger'
+    'label treemap'
+    { [Batch 100] 'axisPointer status show with a value, no tooltip
+      trigger' is no longer deferred: the option's own status / value
+      pointer is drawn (OptionPointerHits), its label read below }
   );
 
 { ==================== the probe ==================== }
@@ -129,6 +132,11 @@ end;
 function THwProbe.PointerText(const AHit: TTyAxisHit): string;
 begin
   Result := PointerLabelText(AHit, PointerValue(AHit));
+end;
+
+function THwProbe.OptionPointers: TTyAxisHitArray;
+begin
+  Result := OptionPointerHits;
 end;
 
 { ==================== the handlers ==================== }
@@ -337,6 +345,7 @@ end;
 procedure TAdvChartHandlerWiringOracleTest.SceneTexts(AOut: TStrings);
 var
   lst: TTyPaintList;
+  hits: TTyAxisHitArray;
   i, g, a: Integer;
   gb: TTyGridBuild;
   spec: PTyAxisLayoutSpec;
@@ -363,6 +372,11 @@ begin
     for i := 0 to lst.Count - 1 do
       if lst.Element(i).Caption.FontSizeLogical > 0 then
         Take(lst.Element(i).Caption.Text);
+  { the labels of the pointers the option shows before any pointer event
+    [Batch 100] }
+  hits := FChart.OptionPointers;
+  for i := 0 to High(hits) do
+    if hits[i].Spec.LabelSpec.Show then Take(FChart.PointerText(hits[i]));
   if FChart.Build <> nil then
     for g := 0 to FChart.Build.GridCount - 1 do
     begin

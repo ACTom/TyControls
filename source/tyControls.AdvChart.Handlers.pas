@@ -117,6 +117,54 @@ type
     registry addressed by name from serialised text needs. }
   TTyChartFormatter = function(const AParams: TTyChartParams): string of object;
 
+  { ==== tooltip.position as a function [Batch 100] ====
+
+    Upstream calls `position(point, params, dom, rect, size)` and reads
+    whatever comes back the way it reads the option: an array of two
+    numbers or percent strings, a word ('inside', 'top', 'left', 'right',
+    'bottom'), an object of left / top / right / bottom, or nothing (the
+    default placement). A function's answer has to be a value, not a string,
+    so a position handler has its own type and its own registry. }
+
+  { One number-or-text a position holds: what parsePercent is handed. }
+  TTyChartPosValueKind = (cpvAbsent, cpvNumber, cpvText);
+  TTyChartPosValue = record
+    Kind: TTyChartPosValueKind;
+    Num: Double;
+    Text: string;
+  end;
+
+  TTyChartTooltipPosKind = (ctpDefault, ctpPoint, ctpSide, ctpBox);
+  { THE FOUR FORMS. ctpPoint: X, Y (the array); ctpSide: Side (the word,
+    any text -- one upstream does not know places the box at nought);
+    ctpBox: Left, Top, Right, Bottom (getLayoutRect's; the width and height
+    are always the content's); ctpDefault: follow the pointer. }
+  TTyChartTooltipPos = record
+    Kind: TTyChartTooltipPosKind;
+    X, Y: TTyChartPosValue;
+    Side: string;
+    Left, Top, Right, Bottom: TTyChartPosValue;
+  end;
+
+  { What upstream hands the function, in device px of the chart: the
+    pointer; the params (one record for an item tooltip, every series' for
+    an axis one -- IsAxis); the hovered element's bounding rect (HasRect
+    False under an axis trigger, where upstream passes undefined); and
+    size.viewSize / size.contentSize. The `dom` argument has no analogue
+    here: the box is drawn, not a DOM node. }
+  TTyChartTooltipPosArgs = record
+    PointX, PointY: Double;
+    Params: TTyChartParams;
+    IsAxis: Boolean;
+    HasRect: Boolean;
+    RectX, RectY, RectW, RectH: Double;
+    ViewW, ViewH: Double;
+    ContentW, ContentH: Double;
+  end;
+
+  TTyChartPositionHandler = function(
+    const AArgs: TTyChartTooltipPosArgs): TTyChartTooltipPos of object;
+
 { ---- the registry ---- }
 { Registering the same name twice REPLACES, so a form reopened at design time
   does not accumulate stale handlers. }
@@ -126,6 +174,24 @@ function TyChartFindFormatter(const AName: string; out AHandler: TTyChartFormatt
 { The registered names, for a design-time editor to offer. }
 procedure TyChartFormatterNames(AList: TStrings);
 procedure TyChartClearFormatters;
+
+{ ---- tooltip.position handlers [Batch 100] ----
+  The same rules as the formatters': a name, registered once, replaced when
+  registered again; a separate registry because the answer is a position. }
+procedure TyChartRegisterPositionHandler(const AName: string;
+  AHandler: TTyChartPositionHandler);
+procedure TyChartUnregisterPositionHandler(const AName: string);
+function TyChartFindPositionHandler(const AName: string;
+  out AHandler: TTyChartPositionHandler): Boolean;
+procedure TyChartClearPositionHandlers;
+{ Runs the handler '@Name' names. False -- and the default placement in
+  APos -- when nobody registered it. }
+function TyChartRunPositionHandler(const ASpec: string;
+  const AArgs: TTyChartTooltipPosArgs; out APos: TTyChartTooltipPos): Boolean;
+{ Building an answer: a number, a text ('50%', 'center'), nothing. }
+function TyChartPosNum(AValue: Double): TTyChartPosValue;
+function TyChartPosText(const AText: string): TTyChartPosValue;
+function TyChartPosAbsent: TTyChartPosValue;
 
 { ---- template strings ---- }
 { String.prototype.replace(pattern, replacement) with a STRING pattern: the
@@ -202,6 +268,96 @@ type
 
 var
   GFormatters: array of TFormatterEntry;
+
+type
+  TPositionEntry = record
+    Name: string;
+    Handler: TTyChartPositionHandler;
+  end;
+
+var
+  GPositions: array of TPositionEntry;
+
+function IndexOfPosition(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GPositions) do
+    if SameText(GPositions[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterPositionHandler(const AName: string;
+  AHandler: TTyChartPositionHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfPosition(AName);
+  if i < 0 then
+  begin
+    i := Length(GPositions);
+    SetLength(GPositions, i + 1);
+    GPositions[i].Name := AName;
+  end;
+  GPositions[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterPositionHandler(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfPosition(AName);
+  if i < 0 then Exit;
+  for j := i to High(GPositions) - 1 do
+    GPositions[j] := GPositions[j + 1];
+  SetLength(GPositions, Length(GPositions) - 1);
+end;
+
+function TyChartFindPositionHandler(const AName: string;
+  out AHandler: TTyChartPositionHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfPosition(AName);
+  Result := (i >= 0) and Assigned(GPositions[i].Handler);
+  if Result then AHandler := GPositions[i].Handler;
+end;
+
+procedure TyChartClearPositionHandlers;
+begin
+  GPositions := nil;
+end;
+
+function TyChartRunPositionHandler(const ASpec: string;
+  const AArgs: TTyChartTooltipPosArgs; out APos: TTyChartTooltipPos): Boolean;
+var h: TTyChartPositionHandler;
+begin
+  APos := Default(TTyChartTooltipPos);
+  APos.Kind := ctpDefault;
+  Result := False;
+  if not TyChartIsHandlerRef(ASpec) then Exit;
+  if not TyChartFindPositionHandler(Copy(ASpec, 2, MaxInt), h) then Exit;
+  APos := h(AArgs);
+  Result := True;
+end;
+
+function TyChartPosNum(AValue: Double): TTyChartPosValue;
+begin
+  Result := Default(TTyChartPosValue);
+  Result.Kind := cpvNumber;
+  Result.Num := AValue;
+end;
+
+function TyChartPosText(const AText: string): TTyChartPosValue;
+begin
+  Result := Default(TTyChartPosValue);
+  Result.Kind := cpvText;
+  Result.Text := AText;
+end;
+
+function TyChartPosAbsent: TTyChartPosValue;
+begin
+  Result := Default(TTyChartPosValue);
+end;
 
 function IndexOfFormatter(const AName: string): Integer;
 var i: Integer;
@@ -452,5 +608,6 @@ end;
 
 finalization
   TyChartClearFormatters;
+  TyChartClearPositionHandlers;
 
 end.

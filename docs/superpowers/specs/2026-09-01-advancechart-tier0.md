@@ -3769,6 +3769,7 @@ Wayland 没有 XShape,圆角会退化成"方窗口里画个圆角"。
 而上游那个 `confine` 比的是**原始的 `renderMode` 选项字符串**,默认值是 `'auto'`,
 `'auto' <> 'richText'` 所以它在任何环境里都解析成 false——跟它自己声明上方那条注释
 正好相反。端口无条件钳住,选项读下来但不遵守,**这是有意分歧**。
+**[第一百批更正:没写的 confine 仍按真处理(理由不变),写明的 `confine` 现在照 `!!confine` 遵守,`false` 时盒子按上游的位置放、出了控件的部分被裁掉——上游 richText 的样子。见 §135。]**
 
 ### 抄 richText,不抄 html
 
@@ -3827,9 +3828,9 @@ Wayland 没有 XShape,圆角会退化成"方窗口里画个圆角"。
 ### 这一批没做的
 
 `trigger: 'axis'` 和整个 axisPointer(线/阴影/十字/吸附/指示标签)是下一批。
-`position` 的四种形式、`order` 排序(上游只在轴触发和雷达图上置 `sortBlocks`,
+`position` 的四种形式 **[第一百批已做,§135]**、`order` 排序(上游只在轴触发和雷达图上置 `sortBlocks`,
 所以 item tooltip 上它本来就是空操作)、`valueFormatter`(是函数,JSON 里写不出来)、
-`enterable`(画在控件里没有"进入"这回事)、`showDelay`/`hideDelay` 的定时器,
+`enterable`(画在控件里没有"进入"这回事)、`showDelay`/`hideDelay` 的定时器 **[第一百批已做,§135]**,
 都还欠着。
 
 ### 一处按主题规则的有意分歧
@@ -5153,7 +5154,7 @@ single 模式的图例、没有 data 的类目轴、有名字的节点、带值�
 - 节点的 `itemStyle.borderColor/borderWidth` 不画,每个数据项自己的 `label`(那三个年份标签)不读,图例色块没有 2px 边框。view 上的 graph 也一样。
 - 内部标签的自动描边没有:上游给 inside 文字加一圈 2px 宿主色描边,溢出节点的白字靠它看得见。这里 "Very Loooong Thu" 溢出的部分白底白字。全库的问题。
 - `{c}` 在轴上读值轴那一列;上游是原始值,值数组会整个拼出来。两个目标示例都不用。
-- 没有 `tooltip` 组件的图(life-expectancy)这里照样弹 tooltip。全库的问题。
+- 没有 `tooltip` 组件的图(life-expectancy)这里照样弹 tooltip。全库的问题。**[第一百批已修,§135。]**
 - 轴上的 graph 不能拖节点(拖动还没做)。
 
 ### 落地
@@ -9180,4 +9181,121 @@ B3 之后图例能点、能联动，但 `selector`（全选 / 反选按钮）和
 - **`emphasis.selectorLabel` 只读颜色**：上游默认只有颜色，作者写的字号、背景等悬停样式不读；按钮的字体是 `selectorLabel` 的 fontFamily / fontSize / fontWeight 盖在皮肤的上面，不经过根 textStyle（上游的默认值里写了字号和字体，根 textStyle 本来就到不了；fontWeight 没核）。
 - **语言**：默认标题走端口的资源字符串（英文 All / Inv，中文目录里是上游中文语言包的「全选」「反选」），跟宿主程序的翻译走，不跟 ECharts 的 `locale` 选项——端口没有那个选项。
 - **补间的时钟**：动作之后由端口的动画计时器开始第一步（上游是下一帧）；补间期间静态层每帧重建一次。只有内容组在动，选择器和翻页器不动——与上游相同。滚轮在滚动图例上什么都不做，与上游相同。
-- **找不到名字的图例项**：上游 `renderInner` 对既不是系列名、也不在任何数据提供者里的名字**什么都不画**；端口从第 45 批起把它画成灰的（Legend 单元 `TTyLegendSource.Found` 的注释说上游也画——那条理由是错的）。在滚动图例里这会多出一项、页码按端口画出的项算。这一批的用例都避开了它；改过来会动到第 45 批的测试，留作单独一项。
+- **找不到名字的图例项**：上游 `renderInner` 对既不是系列名、也不在任何数据提供者里的名字**什么都不画**；端口从第 45 批起把它画成灰的（Legend 单元 `TTyLegendSource.Found` 的注释说上游也画——那条理由是错的）。在滚动图例里这会多出一项、页码按端口画出的项算。这一批的用例都避开了它；改过来会动到第 45 批的测试，留作单独一项。**[第一百批已改：不画、不占位、不算页，见 §135 第 0 部分。]**
+
+## 135. Tier 1 第一百批：tooltip 收尾（B5，2026-10-02）
+
+§55、§56 起 tooltip 的内容和轴触发都有了，但盒子的**位置**只有一种（跟着指针右下 20，翻转，永远夹住），`showDelay` / `hideDelay` / `alwaysShowContent` 读了不执行，没有 `tooltip` 组件的图照样出 tooltip（§66 记下的全库问题），标注、热力图、旭日图、矩形树图、桑基图悬停上去不是没有盒子就是内容不对。这一批把这些收尾，连同 A1 推给这里的两件事：`tooltip.position` 的函数形式（`@Name` 句柄）、坐标轴 `axisPointer.status: 'show'` 加 `value` 的初始指针。另外先把 B4 查出的图例问题改掉（第 0 部分）。
+
+### 第 0 部分：图例里找不到的名字不画
+
+B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名、也不在任何数据提供者里的名字**不往 contentGroup 加任何子元素**（只在开发版打一句警告）。`legend.data: ['A', 'Nope', 'B']` 画出的是第 0 项和第 2 项。端口从第 45 批起把这种项画成灰的，`TTyLegendSource.Found` 的注释还说上游也这么画——理由是错的。
+
+- **上游的其余部分不受影响**（真 dist 探针）：`legendInverseSelect` 之后 `selected` 是 `{A: false, Nope: false, B: false}`，`legendAllSelect` 之后 `{A: true, Nope: false, B: true}`——选择表照样记着这个名字，只是 isSelected 的「可用」条件让它永远是 false；`selectedMode: 'single'` 时排在第一位的未知名字不会被选上，选上的是 A。后面的项保留自己的 legend data 下标（`__legendDataIndex` 2），事件的 dataIndex 也是 2。滚动图例的翻页只数实际的子元素；`scrollDataIndex` 指向未知名字时没有目标，按第一项。
+- **做法**：`TyLayoutLegend` 里一个条目在有来源表、来源说 `Found = False`、又不是换行符时记为「缺席」：不量、不放、`Bounds` 无效，但仍占着自己的下标（`Items` 按条目下标排，事件、悬停、`FLegends[k].Items[d.DataIndex]` 这些按下标取的地方都不用改）。普通图例的盒子布局先把缺席的条目剔掉再排（box 布局的「下一个」是下一个子元素，留一个零尺寸的洞会让后一项多挪一个 itemGap），排完把位置散回原下标；带选择器 / 滚动的 `LayoutRich` 收集子元素时跳过它。没传来源表的调用（单元测试的旧写法）一律当作找得到。
+- **顺带修的**：`LegendSources` 的第一轮按系列名查找时跳过了饼图、漏斗这些按数据项出图例的系列。上游 `getSeriesByName` 不管提供者，`legend.data` 写饼图自己的系列名时画一个系列项（探针：MyPie 取调色板第一色）。以前这一项被画成灰的；按新规则它会消失，所以一并改成按系列项画。
+- **被推翻的旧说法**：`test.advchart.legend.pas` 的 `TestANameTheChartCannotOfferIsNeverSelected` 注释写着这种条目「is drawn, and drawn greyed」——原处标注更正，并在同一个测试里加上布局断言（ghost 不放，real 的位置与单独一项时相同）。第 45 批的其余测试都用全部找得到的来源，没有一条依赖灰色的未知项；全量测试在改动后只有一条已知的网格剪贴板偶发失败。
+- **基准**：在已有的 `legend-scroll.js` 上加 4 个用例，其余用例逐字节不变：`h-unknown`（滚动图例，12 个系列，`legend.data` 在第 1、7 位插入两个不存在的名字，`scrollDataIndex: 7`；三次翻页点击和一次 `legendScroll` 到 9）、`sel-unknown`（普通图例 + 选择器，A、Nope、Bb、Ccc；点一次项、反选、全选，记 `selected`）、`sel-unknown-single`（single 模式，未知名字在首位）、`sel-pie-name`（饼图系列名写进 `legend.data`）。新守卫 4 条：未知名字不是子元素、`scrollDataIndex` 落在它上面按第一项、普通图例同样跳过、饼图系列名照画。
+
+### 上游的做法（`TooltipView.ts` 的 `_tryShow` / `_showOrMove` / `_showSeriesItemTooltip` / `_showTooltipContent` / `_updatePosition` / `refixTooltipPosition` / `confineTooltipPosition` / `calcTooltipPosition` / `manuallyHideTip`、`TooltipRichContent.ts` 的 `show` / `hideLater`、`helper.ts` 的 `shouldTooltipConfine`、`axisPointer/globalListener.ts` 与 `axisTrigger.ts`、`MarkerModel.formatTooltip`、`TreemapSeries` / `SankeySeries` 的 `formatTooltip`、`seriesFormatTooltip.ts` 与 `dimensionHelper.ts` 逐行核过，全部在真 dist 上由基准确认）
+
+- **没有组件就没有 tooltip**：TooltipView 只在选项里有 `tooltip` 组件时存在。`tooltip: {}`、`[{}]` 有组件；不写、`[]`、`null`、根上写字符串（`'abc'`——以前端口把它当格式器）、只在系列上写 tooltip，都没有组件，也就没有盒子。
+- **位置**（`_updatePosition`）：`position` 取级联（数据项 → 系列 → 全局；轴触发只有全局），函数先调用、返回值按选项的写法再解释一遍：
+  - **数组**：两项各自 `parsePercent(v, 视图宽/高)`——数字原样，`'50%'` 按视图，`'center' / 'middle'` 是 50%、`'left' / 'top'` 是 0、`'right' / 'bottom'` 是 100%，其它字符串 `parseFloat`（`'30px'` 是 30，`' 25% '` 先修剪）。
+  - **对象**：`getLayoutRect({left, top, right, bottom, width: 内容宽, height: 内容高}, 视图)`，并且**丢掉 align / verticalAlign**。`{}` 落在 (0, 0)。
+  - **字符串且有元素**（`calcTooltipPosition`）：围着悬停元素的包围盒，`offset = ceil(√2 × borderWidth) + 8`（borderWidth 是 tooltip 模型的，默认 1）；`inside / top / bottom / left / right` 五个词，**别的词落在 (0, 0)**。轴触发没有元素，字符串退回默认。
+  - **默认**（`refixTooltipPosition`）：指针右下各 20；横向判断是 `x + 宽 + 20 + 2 > 视图宽`（那个 2 只在判断里，是 CSS float 的补丁，richText 下照样有），超出就翻到左边 `x - 宽 - 20`；纵向同理没有 2。写了 align 的轴不加 gap、不翻。
+  - 然后 `align`（`center` / `middle` 减半宽，`right` 减全宽）、`verticalAlign`，最后 confine：`x = min(x + 宽, 视图宽) - 宽` 再 `max(x, 0)`。
+  - **confine 的取值**：写了（不是 null）就是 `!!confine`；没写时比的是**原始的** `renderMode` 选项是否等于 `'richText'`——默认 `'auto'`，所以不夹（§55 已记）。
+  - **函数**的参数 `(point, params, dom, rect, {viewSize, contentSize})`：物品触发 params 是一个对象、rect 是元素的全局包围盒；轴触发 params 是每个系列一项的数组、rect 是 `undefined`。返回 null 走默认。
+- **计时器**：
+  - `_showOrMove`：每次请求先 `clearTimeout`；`showDelay > 0` 时等它过去才显示，内容和位置用的是**这次请求那一刻**的指针——一直在动就一直往后推，停下 showDelay 毫秒后才出。物品触发读级联的 showDelay（系列上写的有效），轴触发读全局。
+  - `hideLater(hideDelay)`：hideDelay 读**全局**模型（系列上写的无效，基准 `tm-series-delay`）；只有 `_show` 还为真时才起作用，起作用的那一刻就把 `_show` 置假、盒子留着，到点再藏；`alwaysShowContent` 时什么都不做。所以连续两次移到空处，第二次不会重新计时（`tm-hide-not-rearmed`）。
+  - `show()` 取消正在等的隐藏：从一个柱子经过空白到另一个柱子，盒子不会闪掉。
+  - **离开不取消等待中的显示**：`_hide` 不碰 `_showTimout`。showDelay 50 时进柱子、20 ms 后移开，移开时 `_show` 还是假（还没显示过），hideLater 什么都不做；到 50 ms 盒子照样出现，而且一直留着，直到下一次指针事件再走一遍隐藏（`tm-show-then-leave`）。这是上游的行为，照搬。
+  - 每次指针移动，两个全局监听器一起跑：tooltip 自己的（有数据的元素且级联的 trigger 是 item 就显示，否则隐藏），和 axisPointer 的 `updateAxisPointer`（没有轴数据就派发 hideTip）。合起来：有轴命中 → 轴 tooltip；有物品且级联 trigger 是 item → 物品 tooltip；其余一律隐藏。级联 trigger 不是 item 的物品（例如全局 `trigger: 'axis'` 而指针在网格外的标注上）也是隐藏。`triggerOn` 不含 `mousemove` 时移动既不显示也不隐藏；`'none'` 两个监听器都不理。
+- **标注的 tooltip**（`MarkerModel.formatTooltip`）：一个 section，表头是标注模型的名字——就是**宿主系列的模型名**，没写名字时是自动名 `series\0<序号>`，而且不检查 `isNameSpecified`；里面一行没有色点的 nameValue：名字是 `data.getName`（自己的 name；markPoint 没写名字时退回数据的名字维，即第一个类目坐标，`coord: ['B', 70]` 名字是 `B`），`noName: !itemName`；值是 `getRawValue`（type 统计算出的值、写的 value），`noValue: value == null`（`x/y` 像素定位不写 value 的 markPoint、markArea 都没有值）。级联是 **[标注数据项, 标注模型, 全局]**——宿主系列的 tooltip（例如它的 formatter）够不着标注（`mk-host-tooltip`）。标注模型 defaultOption 里的 `tooltip: {trigger: 'item'}` **不在它的 option 里**（不经过 mergeDefaultAndTheme），所以全局 `trigger: 'axis'` 时标注读到的是 `'axis'`，不出自己的盒子；在 `markPoint.tooltip` 上写明 `trigger: 'item'` 才出。边框是标注自己的颜色（markPoint 的填充、markLine 的线色、markArea 的填充）。格式器参数 `componentType` 是 markPoint / markLine / markArea，`{a}` 是宿主的模型名。
+- **热力图**：默认系列 tooltip。`createSeriesData(generateCoord: 'value')` 让第三个元素成为一个**非额外**的坐标维，它是最后一个适合做标签的坐标维，于是 `defaultedTooltip = defaultedLabel = [value]`——只显示值（`1,234.5`），名字是 `getName` 退回 x 类目（`b`）；有系列名才有表头。
+- **旭日图**：默认系列 tooltip——写了系列名才有表头，一行带色点，名字是节点名，值是节点值（父节点是 `completeTreeValue` 写进去的和）。
+- **矩形树图**（`TreemapSeries.formatTooltip`）：一个**裸的** nameValue：没有 section、没有色点；没写 `noName`，所以没名字的节点读 `-`；值是原始值，数组时各格 `makeValueReadable` 后用两个空格连（`60  7`）。
+- **桑基图**（`SankeySeries.formatTooltip`）：裸 nameValue。节点：名字是数据项的 `name`（没有读 `-`），值是**布局值**（自己的值和流量取大者）；连线：名字是原始选项的 `source + ' -- ' + target`，值是连线的值；NaN 或 null 没有值格。连线的 `params.color` 是 undefined，盒子没有边框色。
+- **`axisPointer.status: 'show'` 与 `value`**（A1 推迟的）：`BaseAxisPointer.render` 从轴的 axisPointer 模型读 status 和 value，所以有指针的轴（自己 `show: true`，或轴触发 tooltip 的基轴）写了 `status: 'show'` 和 value 时，一开始就画在那儿，标签参数没有 seriesData；第一个指针事件（`updateAxisPointer` 的 `updateModelActually`）把每个轴的 status 改写掉，之后就没了。
+
+### 做法
+
+- **`Handlers` 单元**：新的位置句柄注册表——`TTyChartPositionHandler = function(const AArgs: TTyChartTooltipPosArgs): TTyChartTooltipPos of object`，与格式器分开（返回值是一个位置，不是字符串）；参数记录带指针、params（轴触发是全部系列）、IsAxis、元素矩形（轴触发 HasRect 为假）、视图和内容尺寸；返回值 `TTyChartTooltipPos` 是四种写法之一（`ctpPoint` 的两个数或文字、`ctpSide` 的词、`ctpBox` 的四边、`ctpDefault`）。`TyChartRegisterPositionHandler` / `TyChartRunPositionHandler` 等；没注册的名字走默认位置。
+- **`Tooltip` 单元**：
+  - Spec 增加 `HasComponent`、`Position` / `PositionHandler`、`Align` / `VerticalAlign`、`ConfineSet`；`confine` 按 `!!confine` 读，写成 null 的键（position、align、confine）落到上一层，与 `Model.get` 一致。全局层改读**组件**（`TyTooltipComponent`：根上的对象，或数组的第一个对象），根上的字符串不再当格式器。
+  - `TyTooltipSpecOfMarker`：标注的级联（标注数据项——markLine / markArea 的数据项是一对，取第一端——、标注、全局）。
+  - `TyTooltipPlace`：`_updatePosition` 逐行照抄（句柄、数组、对象、词、默认、align、confine），坐标是控件自己的；算不出数（NaN）时落在 0。`TyTooltipBoxAt` 改为它的默认位置——**补回了上游的 +2**（§55 说画布没有 float 所以丢掉，但 refixTooltipPosition 在 richText 下一样跑）。
+- **控件——盒子自己的状态机**：悬停（`FTipDatum` / `FTipHits`）只是请求，画出来的是快照 `TTyTipSnap`（数据、轴命中、元素、指针）。`TipPointerMoved` / `TipPointerLeft` 把上游两个监听器合成一个决定：`TipTryShow`（showDelay 时挂起，替换已挂起的）、`TipApplyShow`（`show: false` / `showContent: false` 什么都不改；取消等待的隐藏）、`TipHide`（全局 hideDelay、`_show` 标志、alwaysShowContent）。时钟是可注入的 `TooltipNow`（NaN 用机器时钟 `TyAnimClockMs`，只有这时才开 `TTimer`），`TooltipTick` 按到期顺序（时间，再按创建顺序）触发；每个指针事件先触发已到期的。`PaintTooltip` 画快照，在快照的指针处、围着快照元素的 `TyShapeBounds` 放置，边框宽度（主题或选项）按设备像素进 `offset`；最后一次的盒子和元素矩形留给 `TooltipBox` / `TooltipTargetRect`。供测试与宿主：`TooltipShown`、`TooltipShownWhich`、`TooltipShownDatum`、`TooltipAnchor`，受保护的虚方法 `TooltipContentSize`（测试用它把内容尺寸换成基准给的）。重建（Invalidate、dataZoom、动作、DropBuild）连同盒子一起清掉。
+- **没有组件**：`TipPointerMoved` 和 `PaintTooltip` 都看 `HasComponent`。
+- **标注**：`TipTargetValid` 接受标注目标；`TooltipSpecFor` 对标注走 `TyTooltipSpecOfMarker`（用标注项在选项里的下标）；`MarkerTooltipContent`、`MarkerTooltipParams`、`MarkerColour`（从 markPoint / markLine / markArea 的画面取颜色），`MarkerNameValue` 含 markPoint 的类目名回退。
+- **热力图**：`HeatmapTipDims` 在 `ResolveTextDims` 之后把 tooltip 位置定为第三个元素（`encode.tooltip` / `encode.label` 优先）。
+- **旭日图、矩形树图、桑基图**：`HierTooltipContent` 按上面的规则组内容；`DatumColour` 取节点颜色（旭日图的扇区、矩形树图的填充、桑基图的节点；连线没有）。桑基图的节点和连线以前是 silent 的（`TyChartElement` 的默认），现在接指针；连线的命中区域以前只有两个端点（一个两点的多边形），改成把两条三次曲线各采 32 段围成的带状多边形——画仍然走曲线命令。
+- **状态显示的指针**：`OptionPointerHits` 收集写了 `status: 'show'` 和 value（数字，或类目轴上的类目名）的轴；动态层没有悬停命中时画它们；`FOptPtrGone` 在第一次 MouseMove / MouseLeave 时置真，每次 setOption 复位。
+
+### 基准
+
+- `tools/advchart-oracle/tooltip-finish.js`（真 dist，env.node 关掉、getDom 打桩，TooltipView 在 zrender 画布上建 richText 内容；setTimeout / clearTimeout 换成虚拟时钟上的队列；指针直接送 zrender 的 Handler，离开是画布外的 mouseout）→ `tests/fixtures/advchart-tooltip-finish.json`：
+  - 组件 8 例：上面的八种写法，各移到一个柱子上看有没有盒子。
+  - 位置 44 例：默认（右下、横向翻转、纵向翻转、+2 正好翻与正好不翻、比视图宽）、confine（richText 未写、auto 未写、false、true、翻转后再夹）、数组（像素、百分比、关键词、带 px 和空格的字符串、轴触发）、词（五个词、borderWidth 3、未知词、轴触发、系列级和数据项级的 position 覆盖全局）、对象（左上、右下带百分比、居中、`'right'` / `'bottom'` 关键词、空对象、写了 align 也不管用）、align / verticalAlign（默认位置上的居中、只写 align、数组上、词上）、系列级 position 写成 null 落到全局、函数（由参数算出的数组、百分比、`'top'`、对象、null、视图外的点、轴触发的参数列表、轴触发返回词）。内容尺寸用 `getSize` 桩给定的数，记录 moveTo 的参数（盒子左上角）、元素矩形、borderWidth、函数的每一次调用的参数。
+  - 计时 14 例：默认、hideDelay 0、移开不重复计时、显示前离开画布、到期之后的移动（隐藏已到期、挂起的显示已到期）、隐藏途中回到另一个柱子、showDelay 的重新计时与快照位置、显示前移开（显示了并留着）、alwaysShowContent（含离开画布）、离开画布、轴触发的隐藏、轴触发的 showDelay、系列的 showDelay 有效而 hideDelay 无效。每一步之后记录盒子在不在、在说谁（`item:系列:行` 或 `axis:类目`）、从哪个指针位置放的。
+  - 内容 23 例：markPoint（type max、coord 带 value 而系列没名字、x/y 像素没值）、markLine（average、yAxis 没名字）、markArea（没值）、模板格式器 `{a}|{b}|{c}`、全局轴触发下的 markPoint（无盒子）与写明 item 的、标注自己的 tooltip.formatter 与标注数据项的、宿主系列的 formatter 够不着标注；热力图（有名、无名带项名、值为 '-' 的另一格）；旭日图（叶、无名系列的父节点）；矩形树图（叶、无名叶、数组值）；桑基图（节点、自己的值大于流量的节点、连线）。记录命中的目标（componentType、seriesIndex、dataIndex、dataType）、按段落样式解析出的每一行（色点 / 名字 / 值，空行全 null）、模板的文字、边框色。
+  - 22 条守卫取自源码（没有组件没有盒子的四种情形、+20、+2、confine 的原始 renderMode 解析、未知词是 (0,0)、`ceil(√2·bw)+8`、轴触发下的词走默认、轴触发函数拿到参数数组且 rect 为空、hideDelay 100 在 109 还在 110 不在、showDelay 每次重新计时、显示前离开照样显示并留着、第二次隐藏不重新计时、alwaysShowContent 离开画布仍在、标注表头是宿主系列名、宿主的 formatter 够不着标注、矩形树图没有色点没有表头、桑基连线 `source -- target`）；两次生成逐字节一致。
+- `test.advchart.tooltipfinish`（新）：四部分全部重放——选项、指针（MouseMove / MouseLeave）、时钟（`TooltipNow` / `TooltipTick`）、每步之后渲染一次，量字用 zrender 的 SSR 宽度表。位置逐位比较盒子左上角和元素矩形，函数的参数逐位比较；同一组位置输入另外直接喂给 `TyTooltipPlace`（不经过控件），规则错和接线错分开报。内容按行比较；边框色只比选项里写明的颜色（调色板的颜色是皮肤的）。手写 6 个：没注册的位置句柄走默认、机器时钟下的延迟、重建清掉盒子（alwaysShowContent 也一样）、confine 的读法（未写为真、0 为假、字符串为真、null 落到全局的 false）、状态显示的指针（有、移动后没了、setOption 后又有、没有指针的轴没有）。
+- `test.advchart.handlerwiring`：`'axisPointer status show with a value, no tooltip trigger'` 从推迟名单里拿掉，场景文字加上 `OptionPointerHits` 的标签——与上游的 `P:x|0|c1|0|` 一致。
+- 图例：见第 0 部分。
+
+### 被推翻的旧测试和旧说法
+
+- `test.advchart.tooltip.pas` 的 `TestATooltipStringIsAFormatter`：根上的字符串不是组件（`cmp-string`），改为断言没有组件、没有格式器，糖改在系列和数据项上钉住。画盒子的用例的选项都加了 `"tooltip":{}`——没有它们只会数到悬停的高亮（这几条在全量里仍是绿的，正因为高亮也是像素；原处有标注）。`TestLeavingTheChartTakesItAway` 现在先断言离开后盒子还在（hideDelay），走过时钟后再比画面。
+- `test.advchart.axispointer.pas` 的 `TestLeavingTheChartTakesThePointerAway`：同样先走过 hideDelay。
+- `test.advchart.emphasis.pas` 的 `TestTriggerOnGovernsTheBoxAndNotTheHighlight`：对照组的选项加上 tooltip 组件。
+- §55 「`confine: true`，永远……有意分歧」与 `TyTooltipBoxAt` 去掉 +2 的说法：都改了，原处标注。
+
+### 变异测试
+
+`b5/mut.py`：逐个改源码、重编、跑 `test.advchart.tooltipfinish`（图例的跑 `legendscroll` 与 `legend`，状态显示的指针另跑 `handlerwiring`）、还原。69 个变异：
+- 位置：数组按视图高解析 x、数组被忽略；对象不丢 align、不带内容尺寸、被忽略；词：`top` 不减 offset、offset 不加 8、`ceil` 换 `round`、未知词不归零、没有元素也按词放、`left` 当 `right`、`inside` 不居中；函数：从不调用、不给 rect、内容尺寸给成视图尺寸、轴触发只给一个 params；默认位置去掉 +2、纵向翻转不减 gap、写了 align 照样加 gap、`verticalAlign: 'bottom'` 不读、`center` 当 `right`、align 不读；confine：写明的不遵守、未写的为假、先夹近边再夹远边；级联：null 不落到上一层、系列级 position 不读；元素矩形不传、边框宽度不进 offset。
+- 组件：恒有组件、根上数组不认。
+- 计时：showDelay 不读、不重新计时、到点显示的是当时的悬停而不是请求时的快照；hideDelay 不读、取已显示目标的级联而不是全局、show 不取消等待的隐藏、alwaysShowContent 不读、`_show` 已假仍重新计时、离开时取消等待的显示、离开不隐藏、事件前不先触发到期的计时、触发不是 item 也显示、画的是悬停而不是快照。
+- 内容：标注表头用显示名、markPoint 不回退类目名、标注走宿主系列的级联、不读标注数据项的 tooltip、没值也画 `-`、标注不是目标、markLine 的值取成名字；热力图显示全部格；旭日图总有表头、没有色点；矩形树图没名字不读 `-`、数组只取第一格；桑基节点没有值、连线名用别的分隔、连线 silent、连线只按两端命中；标注边框没有颜色。
+- 状态显示的指针：从不画、移动后不消失、setOption 后不回来。
+- 图例：未知名字照画、普通图例不剔除（留零尺寸的洞）、带选择器 / 滚动的不跳过、没传来源表也当缺席、饼图系列名照旧跳过。
+
+首轮杀死 63 个，存活 6 个，全部补上后杀死：
+- **null 不落到上一层**：基准里没有哪一层写 null。补上游用例 `str-null-falls-through`（系列 `position: null`、全局 `'top'`：上游按 `'top'` 放），杀死。
+- **离开时取消等待的显示**：已有用例是移到空白处，不是离开画布。补 `tm-leave-before-show`（showDelay 50，20 ms 时离开画布，上游 50 ms 照样显示并留着），杀死。
+- **事件前不先触发到期的计时**：已有用例在到期后都用 wait 步推进。补 `tm-late-move`（隐藏 110 到期，200 ms 时再移到空处——上游此时盒子早已不在）和 `tm-late-move-delay`（showDelay 50，100 ms 再动一次——上游先按第一次的位置显示，再挂起第二次），杀死。
+- **画的是悬停而不是快照**：测试只比 `TooltipShown` / `TooltipShownWhich`，都来自快照，画面没比。计时用例的每一步加比「画出了盒子」与上游的可见性一致（移开后 hideDelay 期间悬停已经无效，画悬停就没有盒子），杀死。
+- **标注边框没有颜色**：变异改的是 `DatumColour`，而 `MarkerTooltipParams` 自己另调 `MarkerColour`——同一个问题两个答案。改成参数的颜色也走 `DatumColour`（盒子边框用的就是它），杀死。
+- **hideDelay 取级联**：首轮的写法只在「悬停在有效目标上又要隐藏」（级联 trigger 不是 item）时才走级联，`tm-series-delay` 移开时悬停已无效——这个写法与原代码在已有用例下等价。换成真实的错法（取已显示目标的级联，系列上写的 500 生效），被 `tm-series-delay` 杀死。
+
+### 推迟与偏差
+
+- **未写的 confine 按真**：上游按原始 `renderMode` 选项（默认 `'auto'`）解析为假，HTML 盒子可以伸出图表；端口的盒子画在控件里，伸出去就被裁掉，按真才与浏览器里的样子最接近。测试里这类用例（`conf-auto-null`）期望值是上游结果再夹一次——confine 是 `_updatePosition` 的最后一步。写明的 `confine` 照 `!!confine` 遵守。
+- **内容尺寸**：上游 richText 的 `getSize` 是文字框加上阴影的外扩（默认左右上下各 9、11、8、12），HTML 是 div 的 offset 尺寸；端口用自己的盒子尺寸（不含阴影）。基准用桩把尺寸固定，比的是规则；实际位置随端口自己的盒子。默认位置的 gap 走主题度量（默认 20）。
+- **元素矩形**：端口用 `TyShapeBounds`（柱子是矩形本身，扇区是整个圆盘，路径是命令的包围盒，不含描边）；zrender 是路径的紧包围盒，有描边时外扩半个线宽。基准用的都是无边框的柱子，逐位一致。
+- **函数形式**：每次绘制都调用一次（上游每次 `_updatePosition`），没有 `dom` 参数；没注册的名字走默认位置（不显示错误——位置没有地方写字）。算出 NaN 时落在 0（上游把 NaN 交给 DOM）。
+- **重建清掉盒子**：Invalidate、dataZoom、动作、重排时盒子和计时一起清掉，alwaysShowContent 也一样；上游的盒子留着，并在下一拍按上次的指针重新显示（`_keepShow`）。
+- **计时器**：机器时钟下用 `TTimer`（毫秒粒度，消息循环驱动）；同时到期的按创建顺序。`triggerOn: 'click'` 仍然不出盒子（端口还没有点击显示的路径，原有的限制）。`enterable` 不适用。
+- **`show: false` 的目标不会把已显示的盒子撤掉**：照上游（`_showTooltipContent` 提前返回，什么都不改）；基准没有这个用例。
+- **桑基连线**没有颜色，上游的盒子没有边框色，端口用主题的边框色。连线的命中是两条曲线各 32 段围成的多边形，不是 zrender 的精确路径。
+- **标注**：markPoint 的名字回退只认 x、y 中第一个类目坐标（写的类目名或整数下标）；markArea 的值取第一端的 `value`，没有再取第二端。
+- **旭日图、矩形树图、桑基图的格式器参数**仍走通用的 `TooltipParams`（标签那边的参数是 A1 对过的），基准没有这三种系列上的 tooltip 格式器用例。
+- **热力图**的 tooltip 维固定是第三个元素（`encode.tooltip` / `encode.label` 优先）；日历上的热力图没动。
+- **状态显示的指针**：只认直角坐标系的轴；值是数字或类目名（时间轴上的日期字符串不解析）；任何一次 setOption 都让它回来，上游只有新选项又写了 `status: 'show'` 时才回来（模型里的 status 已被指针事件改写）。
+- **图例**：选择表、single 模式对未知名字的处理本来就与上游一致（`sel-unknown`、`sel-unknown-single` 逐步对上），这一批只改画面。
+
+### 落地
+
+- `source/tyControls.AdvChart.Handlers.pas`：位置句柄的类型、注册表、`TyChartRunPositionHandler`、`TyChartPos*`。
+- `source/tyControls.AdvChart.Tooltip.pas`：Spec 的新字段、`TyTooltipComponent`、`TyTooltipSpecOfMarker`、`TyTooltipReadPosition`、`TyTooltipPlace`，`TyTooltipBoxAt` 改为默认位置（+2 补回）。
+- `source/tyControls.AdvanceChart.pas`：盒子的状态机（`TTyTipSnap`、`Tip*`、`TooltipNow` / `TooltipTick` 与查询）、`PaintTooltip` 的放置、标注与旭日 / 矩形树 / 桑基的内容和颜色、`HeatmapTipDims`、`OptionPointerHits`；`LegendSources` 不再跳过按数据项出图例的系列。
+- `source/tyControls.AdvChart.Sankey.pas`：节点和连线接指针，连线的带状命中多边形。
+- `source/tyControls.AdvChart.Legend.pas`：缺席的条目。
+- `tools/advchart-oracle/tooltip-finish.js`、`tests/fixtures/advchart-tooltip-finish.json`、`tests/test.advchart.tooltipfinish.pas`（新，注册在 `tytests.lpr`）；`tools/advchart-oracle/legend-scroll.js` 与它的 fixture（加 4 例）；`test.advchart.legend`、`legendscroll`、`tooltip`、`axispointer`、`emphasis`、`handlerwiring` 的改动见上。
+
+全量 **8092 个测试，0 错误，0 失败**。
+

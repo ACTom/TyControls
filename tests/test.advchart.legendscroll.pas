@@ -458,8 +458,11 @@ begin
   { the items: each data index's global transform and bounding rect }
   arr := AState.Arrays['items'];
   cnt := 0;
+  { [Batch 100] an entry nothing answers to is not placed: its bounds are
+    invalid (NaN), so ask validity rather than compare the edges }
   for i := 0 to High(lay.Items) do
-    if (lay.Items[i].Bounds.Right > lay.Items[i].Bounds.Left) then Inc(cnt);
+    if TyRectFIsValid(lay.Items[i].Bounds)
+      and (lay.Items[i].Bounds.Right > lay.Items[i].Bounds.Left) then Inc(cnt);
   if cnt <> arr.Count then Bad(Format('%d items placed, upstream %d', [cnt, arr.Count]));
   for j := 0 to arr.Count - 1 do
   begin

@@ -1258,6 +1258,49 @@ var
     mx[0] := JsMax(mx[0], x2_[0]); mx[1] := JsMax(mx[1], x2_[1]);
   end;
 
+  { [Batch 100] THE BAND AS A POLYGON, for the pointer only: the painter
+    draws the curves (Cmds), and a hit test that knew only the two ends
+    could never land on a link. The two cubics sampled -- the near edge from
+    the source, the far edge back -- 32 steps each, device px. }
+  procedure BandPolygon(AE: Double);
+  const cSteps = 32;
+  var
+    k, m: Integer;
+    t, u: Double;
+    ox, oy: Double;
+  begin
+    if ASolved.Vertical then
+    begin
+      ox := AE;
+      oy := 0;
+    end
+    else
+    begin
+      ox := 0;
+      oy := AE;
+    end;
+    SetLength(shape.Points, 2 * (cSteps + 1));
+    m := 0;
+    for k := 0 to cSteps do
+    begin
+      t := k / cSteps;
+      u := 1 - t;
+      shape.Points[m] := TyPointF(
+        u * u * u * x1 + 3 * u * u * t * cpx1 + 3 * u * t * t * cpx2 + t * t * t * x2 + tx,
+        u * u * u * y1 + 3 * u * u * t * cpy1 + 3 * u * t * t * cpy2 + t * t * t * y2 + ty);
+      Inc(m);
+    end;
+    for k := cSteps downto 0 do
+    begin
+      t := k / cSteps;
+      u := 1 - t;
+      shape.Points[m] := TyPointF(
+        u * u * u * x1 + 3 * u * u * t * cpx1 + 3 * u * t * t * cpx2 + t * t * t * x2 + tx + ox,
+        u * u * u * y1 + 3 * u * u * t * cpy1 + 3 * u * t * t * cpy2 + t * t * t * y2 + ty + oy);
+      Inc(m);
+    end;
+  end;
+
 begin
   Result := 0;
   if (AList = nil) or not ASolved.Valid then Exit;
@@ -1327,6 +1370,7 @@ begin
       { A BAND UPSTREAM CANNOT SEE -- a NaN or infinite end, a link of no
         breadth -- is not emitted: the painter has nothing to draw it with }
       if not Finite([x1, x2, y1, y2, cpx1, cpx2, cpy1, cpy2, e]) then Continue;
+      BandPolygon(e);
       shape.HasCmdBounds := True;
       shape.CmdBounds := TyRectF(mn[0] + tx, mn[1] + ty, mx[0] + tx, mx[1] + ty);
       el := TyChartElement(shape);
@@ -1404,6 +1448,9 @@ begin
       el.Z := ASolved.Z;
       el.Z2 := 0;
       el.Datum := TyChartEdgeDatum(ASeriesIndex, i);
+      { a link takes the pointer -- its ECData has a dataIndex, so upstream
+        hovers it and shows its tooltip [Batch 100] }
+      el.Silent := False;
       AList.Add(el);
       Inc(Result);
     end;
@@ -1438,6 +1485,8 @@ begin
       el.Z := ASolved.Z;
       el.Z2 := 10;
       el.Datum := TyChartDatum(ASeriesIndex, i, i);
+      { and so does a node [Batch 100] }
+      el.Silent := False;
       if ASolved.Nodes[i].HasLabel and Finite([ASolved.Nodes[i].LabelX, ASolved.Nodes[i].LabelY]) then
       begin
         el.Caption.Text := ASolved.Nodes[i].LabelText;

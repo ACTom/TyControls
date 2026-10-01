@@ -856,6 +856,9 @@ begin
     FChart.Hover(p.X, p.Y);
     FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
     FChart.MouseLeave;
+    { [Batch 100] the pointer goes at once, the box after hideDelay (100 ms
+      by default, upstream's hideLater): the clock is stepped past it }
+    FChart.TooltipTick(1e15);
     FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
     diff := 0;
     for y := 0 to cH - 1 do

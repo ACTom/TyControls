@@ -259,6 +259,18 @@ type
 function TySetOptionOptsOf(const AJson: string; out AOpts: TTySetOptionOpts): Boolean;
 
 type
+  { [Batch 100] ONE TOOLTIP AS IT WAS ASKED FOR: the hover at the moment of
+    a show -- or of a show still waiting out its delay. The box on screen is
+    this, not the pointer: with a delay, or while a hide waits, the two are
+    different things. Hits hold axis pointers into the build, so a rebuild
+    drops every snapshot. }
+  TTyTipSnap = record
+    Datum: TTyChartDatumRef;
+    Hits: TTyAxisHitArray;
+    Element: Integer;
+    X, Y: Integer;
+  end;
+
   TTyAdvanceChart = class(TTyCustomControl)
   private
     FOption: TTyChartOption;
@@ -591,6 +603,26 @@ type
       miss a per-datum itemStyle. }
     FTipElement: Integer;
     FTipX, FTipY: Integer;
+    { [Batch 100] THE BOX'S OWN STATE, upstream's TooltipView and
+      TooltipRichContent: whether it is on screen (the content element
+      shown) and what for; `_show`, which only hideLater reads (it goes false
+      the moment a hide is ARMED, while the box stays up); the show waiting
+      out showDelay and when it fires; the hide waiting out hideDelay; the
+      clock (NaN: the machine's, and only then does the timer run); the box
+      and the element rect the last paint used. }
+    FTipShown: Boolean;
+    FTipShowFlag: Boolean;
+    FTipSnap: TTyTipSnap;
+    FTipPend: TTyTipSnap;
+    FTipShowAt, FTipHideAt: Double;
+    FTipShowSeq, FTipHideSeq, FTipSeq: Integer;
+    FTipNow: Double;
+    FTipTimer: TTimer;
+    FTipBox, FTipRect: TTyRectF;
+    { [Batch 100] the option's own `status: 'show'` pointers are gone: the
+      first pointer event rewrites every status, and an option set brings
+      them back }
+    FOptPtrGone: Boolean;
     { THE ENTER ANIMATION [Batch 89]. One driver per chart; the proxies the
       animated elements read, keyed so they outlive a rebuilt list; each
       list element's proxy by insertion index; the frame the dynamic layer
@@ -971,6 +1003,11 @@ type
     { upstream's defaultedLabel and defaultedTooltip for one axis series,
       into its store as raw positions. }
     procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+    { a heatmap's tooltip dimension: its generated `value` coordinate, the
+      third element -- upstream's defaultedLabel, x and y being categories
+      [Batch 100] }
+    procedure HeatmapTipDims(ASlot: Integer; const AEnc: TTySeriesEncode;
+      AStore: TTyDataStore);
     { The series' MODEL name -- what `{a}` and a handler's seriesName print:
       as written, '' when written '', and the auto name `series\0<index>`
       when not written at all. SeriesNameOf is the DISPLAY name, '' then. }
@@ -1032,6 +1069,43 @@ type
       ancestor, descendant, relative -- and upstream's edge rule. [Batch 83] }
     procedure ApplyTreeHover(AList: TTyPaintList; APPI: Integer);
     function IsTreeDatum(const ADatum: TTyChartDatumRef): Boolean;
+    { ==== [Batch 100] the tooltip's timers and the targets it gained ==== }
+    function TipClock: Double;
+    function TipSnapNow: TTyTipSnap;
+    { a series item, or a markPoint / markLine / markArea item }
+    function TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
+    function TipIsMarker(const ADatum: TTyChartDatumRef): Boolean;
+    { the spec a snapshot is shown under: the global one for an axis
+      tooltip, the cascade for an item }
+    function TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
+    procedure TipTryShow(const ASnap: TTyTipSnap; const ASpec: TTyTooltipSpec);
+    procedure TipApplyShow(const ASnap: TTyTipSnap);
+    procedure TipHide(const AGlobal: TTyTooltipSpec);
+    { the timers due by ANow, in the order they would have fired; True
+      when the box changed }
+    function TipAdvance(ANow: Double): Boolean;
+    procedure TipArmTimer;
+    procedure TipTimerFired(Sender: TObject);
+    { the pointer moved / left: upstream's two global listeners at once --
+      the item tooltip's and the axis pointer's hideTip }
+    procedure TipPointerMoved;
+    procedure TipPointerLeft;
+    { a rebuild: the hover and the box both go }
+    procedure TipReset;
+    procedure TipDropDisplay;
+    { a marker item: its kind, its block and its place in the block }
+    function MarkerItemOf(const ADatum: TTyChartDatumRef;
+      out AKind: TTyMarkerKind; out ABlock: TTyMkBlock;
+      out AItem: Integer): Boolean;
+    { MarkerModel.formatTooltip's name and value (getName, getRawValue) }
+    procedure MarkerNameValue(const ADatum: TTyChartDatumRef;
+      out AName: string; out AValue: TTyMkVal);
+    function MarkerTooltipContent(const ADatum: TTyChartDatumRef): TTyTooltipBlock;
+    function MarkerTooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    function MarkerColour(const ADatum: TTyChartDatumRef): TTyChartColor;
+    { sunburst, treemap and sankey content [Batch 100] }
+    function HierTooltipContent(const ADatum: TTyChartDatumRef;
+      const AColour: TTyChartColor; out ABlock: TTyTooltipBlock): Boolean;
     function TreeEmphasisOf(ASlot, ARow: Integer): TTyChartEmphasisSpec;
     function TreeFocusOf(ASlot, ARow: Integer): string;
     function TreeRowName(ASlot, ARow: Integer): string;
@@ -1176,6 +1250,14 @@ type
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     { hit -> the record a formatter is given. }
     function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    { [Batch 100] THE BOX'S SIZE AS MEASURED, device px, just before it is
+      placed. Nothing here; a test that compares a placement against
+      upstream's -- whose sizes come from another measurer -- answers the
+      size the fixture gave. }
+    procedure TooltipContentSize(var AW, AH: Double); virtual;
+    { [Batch 100] THE POINTERS THE OPTION SHOWS BY ITSELF: an axis'
+      `axisPointer: {status: 'show', value}` before any pointer event }
+    function OptionPointerHits: TTyAxisHitArray;
     procedure PointerStateChanged; override;
     { WHERE THE POINTER IS, every pixel of the way. The tooltip's anchor is the
       cursor, so this repaints on movement and not only when the datum under it
@@ -1464,6 +1546,26 @@ type
     { ms; NaN (the default) is the machine's clock -- and only then does the
       timer run }
     property AnimNow: Double read FAnimNow write FAnimNow;
+    { ---- the tooltip's box [Batch 100] ---- }
+    { ms; NaN (the default) is the machine's clock -- and only then does the
+      timer run. A test sets it and steps TooltipTick. }
+    property TooltipNow: Double read FTipNow write FTipNow;
+    { every showDelay / hideDelay timer due by ANowMs fires, in order }
+    procedure TooltipTick(ANowMs: Double);
+    { the box is on screen }
+    function TooltipShown: Boolean;
+    { what it shows: 'item:<series>:<row>' (a graph's or a sankey's link
+      'edge:<series>:<row>', a marker 'markPoint:<host>:<n>'),
+      'axis:<the first section's header>', '' when hidden }
+    function TooltipShownWhich: string;
+    { the pointer the shown box was placed from, and the datum it describes
+      (no datum for an axis tooltip) }
+    function TooltipAnchor: TPoint;
+    function TooltipShownDatum: TTyChartDatumRef;
+    { the box the last paint drew and the element rect it was placed
+      around (invalid: none) -- device px }
+    function TooltipBox: TTyRectF;
+    function TooltipTargetRect: TTyRectF;
     { the clips still running, and whether the series are in motion }
     function AnimClipCount: Integer;
     { the clips that loop (an effectScatter's ripples) [Batch 92] }
@@ -1696,6 +1798,11 @@ begin
   FDirty := True;
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
+  FTipNow := NaN;
+  FTipShowAt := NaN;
+  FTipHideAt := NaN;
+  FTipBox := TyInvalidRectF;
+  FTipRect := TyInvalidRectF;
   Width := 320;
   Height := 200;
   TabStop := False;   { see the published declaration }
@@ -1719,6 +1826,7 @@ begin
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
   FreeAndNil(FDzTimer);
+  FreeAndNil(FTipTimer);
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
   FreeAndNil(FAnimTimer);
   FreeAndNil(FAnimSet);
@@ -1751,6 +1859,8 @@ begin
     going through Invalidate -- so the one place that can be trusted to clear
     it is the one that does the freeing. }
   FTipHits := nil;
+  { and the box with its snapshots, which hold the same pointers [Batch 100] }
+  TipDropDisplay;
   { the pointer's slide goes with the axes [Batch 92] }
   PtrAnimDrop;
   { AND THE RADARS WITH THEM, for the same reason: a binding holds a radar's
@@ -2000,6 +2110,9 @@ end;
 
 procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
+  { an axis' `axisPointer.status: 'show'` holds again until a pointer moves
+    [Batch 100] }
+  FOptPtrGone := False;
   if ALazy then
   begin
     { the next frame does the update: one pending at a time, its silent the
@@ -2221,9 +2334,10 @@ begin
     thrown away -- the row it names may not exist in the next one. Upstream
     re-shows the tooltip after a setOption while the pointer is still there;
     here the next movement re-establishes it, which is a real difference and a
-    small one, and the alternative is a box describing a bar nobody can see. }
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+    small one, and the alternative is a box describing a bar nobody can see.
+    [Batch 100] The box shown goes with it, whatever alwaysShowContent says
+    -- upstream keeps it and re-shows at the last pointer. }
+  TipReset;
   { THE AXIS HOVER IS NOT CLEARED HERE, and deliberately not: every Invalidate
     sets FDirty, every FDirty relayouts, and every relayout rebuilds -- so
     DropBuild has already been reached by the time anything could read the
@@ -2451,6 +2565,7 @@ begin
       SeriesDataEncode(i, dims, enc);
       TyFillSeriesStore(FOption, i, dims, st);
       ResolveTextDims(enc, st);
+      HeatmapTipDims(i, enc, st);
       Continue;
     end;
     { THE COORDINATES, AS THE ENCODE RULES SEE THEM: a name and whether the
@@ -2484,6 +2599,7 @@ begin
     FEncodes[i] := enc;
     TyFillStoreFromSource(FSources[i], enc, dims, st);
     ResolveTextDims(enc, st);
+    HeatmapTipDims(i, enc, st);
     Continue;
   end;
   { AFTER THE STORES AND BEFORE EVERYTHING THAT COUNTS. A pie legend names
@@ -4861,8 +4977,7 @@ procedure TTyAdvanceChart.DzViewUpdate;
 begin
   if (FBuild = nil) or (FLastPPI <= 0) then Exit;
   SolveDataZoomViews(NewTextMeasurer(FLastPPI), FLastPPI);
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+  TipReset;
   DropStatic;
   inherited Invalidate;
 end;
@@ -4879,8 +4994,7 @@ begin
     Exit;
   end;
   Relayout(nil, FLastRect, FLastPPI, NewTextMeasurer(FLastPPI));
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+  TipReset;
   DropStatic;
   inherited Invalidate;
 end;
@@ -6167,8 +6281,7 @@ begin
   { A NEW PICTURE, NOT A NEW LAYOUT: the static layer goes, the build and
     the force answer stay. The hover names an element of a list about to be
     rebuilt. }
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+  TipReset;
   DropStatic;
   inherited Invalidate;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
@@ -6590,8 +6703,7 @@ begin
   Relayout(nil, FLastRect, FLastPPI, m);
   DropStatic;
   BuildSeriesList(m, FLastPPI);
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+  TipReset;
   inherited Invalidate;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   EmitUpdated;
@@ -7817,9 +7929,14 @@ begin
     { A SERIES NAME WINS OVER A SLICE NAME, because upstream asks
       getSeriesByName first and only falls to the per-datum providers when
       nothing answered. }
+    { [Batch 100] EVERY SERIES, a pie's and a funnel's included: upstream's
+      getSeriesByName knows no provider, so `legend.data` naming a pie's own
+      name draws an item in the series' colour (the 6.1 build: MyPie gets
+      the palette's first). It used to skip them, which drew that item greyed
+      -- and, now that a name nothing answers to is not drawn, would have
+      dropped it. }
     for j := 0 to High(FBindings) do
     begin
-      if TySeriesLegendByDatum(FBindings[j].SeriesType) then Continue;
       if SeriesNameOf(FBindings[j].SeriesIndex) <> AEntries[i].Name then
         Continue;
       Result[i].Found := True;
@@ -8227,6 +8344,26 @@ begin
     if Length(tip) = 0 then tip := Copy(lab);
   end;
   AStore.SetLabelPositions(lab);
+  AStore.SetTooltipPositions(tip);
+end;
+
+procedure TTyAdvanceChart.HeatmapTipDims(ASlot: Integer;
+  const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+var tip: TTyIntegerArray;
+begin
+  if (AStore = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].SeriesType <> 'heatmap' then Exit;
+  { encode.tooltip, then encode.label, as for any series }
+  if Length(AEnc.Tooltip) > 0 then Exit;
+  if Length(AEnc.Labels) > 0 then tip := Copy(AEnc.Labels)
+  else
+  begin
+    { createSeriesData(generateCoord: 'value'): the element past x and y is
+      a coordinate of its own, not extra, a float -- the last one a label
+      suits, and so the tooltip's }
+    SetLength(tip, 1);
+    tip[0] := 2;
+  end;
   AStore.SetTooltipPositions(tip);
 end;
 
@@ -9695,7 +9832,32 @@ end;
 
 function TTyAdvanceChart.TooltipSpecFor(
   const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+var
+  kind: TTyMarkerKind;
+  blk: TTyMkBlock;
+  it, opt: Integer;
 begin
+  { A MARKER'S CASCADE IS ITS OWN [Batch 100]: its data item, the marker,
+    the global -- never the host series' }
+  if TipIsMarker(ADatum) then
+  begin
+    opt := -1;
+    if MarkerItemOf(ADatum, kind, blk, it) then
+      case kind of
+        mkPoint: opt := blk.Points[it].Index;
+        mkLine: opt := blk.Lines[it].Index;
+        mkArea: opt := blk.Areas[it].Index;
+      end
+    else
+      case ADatum.Kind of
+        ctkMarkLine: kind := mkLine;
+        ctkMarkArea: kind := mkArea;
+      else
+        kind := mkPoint;
+      end;
+    Exit(TyTooltipSpecOfMarker(FOption, ADatum.ComponentIndex,
+      TyMarkerKey[kind], opt));
+  end;
   { THE RAW ROW, not the view row. A data-item tooltip is written beside the
     datum in the option text, and the option text is the raw order -- a filter
     is a view for readers and has never moved anything in the tree. }
@@ -9791,8 +9953,38 @@ begin
     it drew an invisible white dot on a white box. Falling back to the stroke
     is no answer either, because a bar carries its colour in the fill. What
     the marker names is a SERIES and a ROW, so that is what it asks. }
+  { [Batch 100] A MARKER'S is its own visual: the symbol's fill, the line's
+    stroke, the area's fill }
+  if TipIsMarker(ADatum) then Exit(MarkerColour(ADatum));
   slot := SlotOfSeries(ADatum.SeriesIndex);
   if slot < 0 then Exit;
+  { [Batch 100] A SUNBURST SECTOR, A TREEMAP RECTANGLE, A SANKEY NODE: the
+    node's colour visual; a sankey link has none (upstream's params.color is
+    undefined there) }
+  if (FBindings[slot].SeriesType = TySunburstSeriesTypeName)
+    and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid then
+  begin
+    if (ADatum.DataIndex >= 0) and (ADatum.DataIndex <= High(FSunbursts[slot].Nodes)) then
+      Result := FSunbursts[slot].Nodes[ADatum.DataIndex].Fill;
+    Exit;
+  end;
+  if (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
+    and (slot <= High(FTreemaps)) and FTreemaps[slot].Valid then
+  begin
+    if (ADatum.DataIndex >= 0) and (ADatum.DataIndex <= High(FTreemaps[slot].Nodes))
+      and FTreemaps[slot].Nodes[ADatum.DataIndex].HasFill then
+      Result := FTreemaps[slot].Nodes[ADatum.DataIndex].Fill;
+    Exit;
+  end;
+  if (FBindings[slot].SeriesType = TySankeySeriesTypeName)
+    and (slot <= High(FSankeys)) and FSankeys[slot].Valid then
+  begin
+    if (not ADatum.IsEdge) and (ADatum.DataIndex >= 0)
+      and (ADatum.DataIndex <= High(FSankeys[slot].Nodes))
+      and FSankeys[slot].Nodes[ADatum.DataIndex].HasColour then
+      Result := FSankeys[slot].Nodes[ADatum.DataIndex].Colour;
+    Exit;
+  end;
   { A GRAPH LINK'S COLOUR IS ITS STROKE, found by its own row. }
   if ADatum.IsEdge then
   begin
@@ -9872,6 +10064,7 @@ var
   st: TTyDataStore;
   pct: TTyDoubleArray;
 begin
+  if TipIsMarker(ADatum) then Exit(MarkerTooltipParams(ADatum));
   Result := TyChartBlankParams;
   Result.ComponentType := 'series';
   Result.SeriesIndex := ADatum.SeriesIndex;
@@ -10200,6 +10393,10 @@ var
   cells: TTyTipCells;
 begin
   Result := nil;
+  { [Batch 100] a marker's own formatTooltip; a sunburst's, a treemap's and
+    a sankey's }
+  if TipIsMarker(ADatum) then Exit(MarkerTooltipContent(ADatum));
+  if HierTooltipContent(ADatum, DatumColour(ADatum), Result) then Exit;
   p := TooltipParams(ADatum);
   { The DISPLAY name heads the section: an unnamed series has none. }
   seriesName := SeriesNameOf(ADatum.SeriesIndex);
@@ -13924,8 +14121,7 @@ begin
         out and no over }
       FEvHover := EventTargetAt(FEvLastX, FEvLastY);
   end;
-  FTipDatum := TyChartNoDatum;
-  FTipElement := -1;
+  TipReset;
   { the cached picture is the old render's; the list is the new one's }
   if FStatic <> nil then FStatic.Drop;
   inherited Invalidate;
@@ -15317,6 +15513,755 @@ begin
   if rows = 0 then FreeAndNil(Result);
 end;
 
+{ ==================== the tooltip's box and timers [Batch 100] ====================
+
+  UPSTREAM'S MACHINE, two objects of it: TooltipView._showOrMove (a show now,
+  or after showDelay -- every new request replaces the waiting one) and
+  TooltipRichContent (show() cancels a waiting hide; hideLater() arms one
+  only while `_show` is set, and never under alwaysShowContent). The two
+  global listeners that drive it are folded into one decision per pointer
+  event: an axis hit shows the axis tooltip; an item whose cascade says
+  `trigger: 'item'` shows its own; anything else is a hide -- the axis
+  pointer's hideTip, which upstream dispatches on every move that finds no
+  axis data. }
+
+function TTyAdvanceChart.TipClock: Double;
+begin
+  if IsNan(FTipNow) then Result := TyAnimClockMs else Result := FTipNow;
+end;
+
+function TTyAdvanceChart.TipSnapNow: TTyTipSnap;
+begin
+  Result.Datum := FTipDatum;
+  Result.Hits := Copy(FTipHits, 0, Length(FTipHits));
+  Result.Element := FTipElement;
+  Result.X := FTipX;
+  Result.Y := FTipY;
+end;
+
+function TTyAdvanceChart.TipIsMarker(const ADatum: TTyChartDatumRef): Boolean;
+begin
+  Result := (ADatum.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea])
+    and (ADatum.ComponentIndex >= 0) and (ADatum.DataIndex >= 0);
+end;
+
+function TTyAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
+begin
+  Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum);
+end;
+
+function TTyAdvanceChart.TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
+begin
+  if Length(ASnap.Hits) > 0 then Result := TyTooltipSpecOf(FOption, -1, -1)
+  else Result := TooltipSpecFor(ASnap.Datum);
+end;
+
+procedure TTyAdvanceChart.TipTryShow(const ASnap: TTyTipSnap;
+  const ASpec: TTyTooltipSpec);
+begin
+  { _showOrMove: clearTimeout first, whatever the delay -- a show waiting
+    is replaced by this one, or dropped when this one is immediate }
+  FTipShowAt := NaN;
+  if ASpec.ShowDelayMs > 0 then
+  begin
+    FTipPend := ASnap;
+    FTipShowAt := TipClock + ASpec.ShowDelayMs;
+    Inc(FTipSeq);
+    FTipShowSeq := FTipSeq;
+  end
+  else
+    TipApplyShow(ASnap);
+end;
+
+procedure TTyAdvanceChart.TipApplyShow(const ASnap: TTyTipSnap);
+var spec: TTyTooltipSpec;
+begin
+  spec := TipSpecOf(ASnap);
+  { _showTooltipContent returns before anything for `show: false` or
+    `showContent: false` -- and a box already up stays as it was }
+  if not spec.HasComponent or not spec.Show or not spec.ShowContent then Exit;
+  { show(): the waiting hide is cancelled }
+  FTipHideAt := NaN;
+  FTipShown := True;
+  FTipShowFlag := True;
+  FTipSnap := ASnap;
+end;
+
+procedure TTyAdvanceChart.TipHide(const AGlobal: TTyTooltipSpec);
+begin
+  { hideLater(hideDelay), the GLOBAL model's: nothing unless `_show` is
+    still set, nothing under alwaysShowContent; a delay arms a timer and
+    clears `_show` at once (the box stays up), none hides now }
+  if (not FTipShowFlag) or AGlobal.AlwaysShowContent then Exit;
+  FTipShowFlag := False;
+  if AGlobal.HideDelayMs > 0 then
+  begin
+    FTipHideAt := TipClock + AGlobal.HideDelayMs;
+    Inc(FTipSeq);
+    FTipHideSeq := FTipSeq;
+  end
+  else
+    FTipShown := False;
+end;
+
+function TTyAdvanceChart.TipAdvance(ANow: Double): Boolean;
+var showDue, hideDue, showFirst: Boolean;
+begin
+  Result := False;
+  if IsNan(ANow) then Exit;
+  repeat
+    showDue := (not IsNan(FTipShowAt)) and (FTipShowAt <= ANow);
+    hideDue := (not IsNan(FTipHideAt)) and (FTipHideAt <= ANow);
+    if not (showDue or hideDue) then Break;
+    { in the order the two timeouts would have fired: by time, then by
+      creation }
+    if showDue and hideDue then
+      showFirst := (FTipShowAt < FTipHideAt)
+        or ((FTipShowAt = FTipHideAt) and (FTipShowSeq < FTipHideSeq))
+    else
+      showFirst := showDue;
+    if showFirst then
+    begin
+      FTipShowAt := NaN;
+      TipApplyShow(FTipPend);
+      FTipPend := Default(TTyTipSnap);
+      FTipPend.Datum := TyChartNoDatum;
+      FTipPend.Element := -1;
+    end
+    else
+    begin
+      FTipHideAt := NaN;
+      FTipShown := False;
+    end;
+    Result := True;
+  until False;
+end;
+
+procedure TTyAdvanceChart.TipArmTimer;
+var due, ms: Double;
+begin
+  due := NaN;
+  if not IsNan(FTipShowAt) then due := FTipShowAt;
+  if (not IsNan(FTipHideAt)) and (IsNan(due) or (FTipHideAt < due)) then
+    due := FTipHideAt;
+  { only on the machine's clock: a test steps TooltipTick itself }
+  if IsNan(due) or (not IsNan(FTipNow)) or (csDesigning in ComponentState) then
+  begin
+    if FTipTimer <> nil then FTipTimer.Enabled := False;
+    Exit;
+  end;
+  if FTipTimer = nil then
+  begin
+    FTipTimer := TTimer.Create(nil);
+    FTipTimer.Enabled := False;
+    FTipTimer.OnTimer := @TipTimerFired;
+  end;
+  ms := due - TipClock;
+  if ms < 1 then ms := 1;
+  if ms > 600000 then ms := 600000;
+  FTipTimer.Enabled := False;
+  FTipTimer.Interval := Cardinal(Ceil(ms));
+  FTipTimer.Enabled := True;
+end;
+
+procedure TTyAdvanceChart.TipTimerFired(Sender: TObject);
+begin
+  if FTipTimer <> nil then FTipTimer.Enabled := False;
+  if TipAdvance(TipClock) then InvalidateFrame;
+  TipArmTimer;
+end;
+
+procedure TTyAdvanceChart.TooltipTick(ANowMs: Double);
+begin
+  if TipAdvance(ANowMs) then InvalidateFrame;
+  TipArmTimer;
+end;
+
+procedure TTyAdvanceChart.TipPointerMoved;
+var
+  g, spec: TTyTooltipSpec;
+  snap: TTyTipSnap;
+begin
+  g := TyTooltipSpecOf(FOption, -1, -1);
+  { NO TOOLTIP COMPONENT, NO TOOLTIP: upstream builds no TooltipView at
+    all, whatever a series or a data item writes }
+  if not g.HasComponent then
+  begin
+    TipDropDisplay;
+    Exit;
+  end;
+  { the timers that fell due before this event fire first }
+  TipAdvance(TipClock);
+  try
+    { 'none': neither listener reacts to the pointer; a triggerOn without
+      'mousemove' ignores a move altogether -- no show, no hide }
+    if g.TriggerOn = 'none' then Exit;
+    if not FTipTrack then Exit;
+    snap := TipSnapNow;
+    if Length(FTipHits) > 0 then
+    begin
+      TipTryShow(snap, g);
+      Exit;
+    end;
+    if TipTargetValid(FTipDatum) then
+    begin
+      spec := TipSpecOf(snap);
+      { the cascade's trigger must be 'item' -- a marker's default 'item'
+        is not in its option, so under a global 'axis' it fails too }
+      if spec.Trigger = tttItem then
+      begin
+        TipTryShow(snap, spec);
+        Exit;
+      end;
+    end;
+    TipHide(g);
+  finally
+    TipArmTimer;
+  end;
+end;
+
+procedure TTyAdvanceChart.TipPointerLeft;
+var g: TTyTooltipSpec;
+begin
+  g := TyTooltipSpecOf(FOption, -1, -1);
+  if not g.HasComponent then
+  begin
+    TipDropDisplay;
+    Exit;
+  end;
+  TipAdvance(TipClock);
+  { the leave is a hide unless triggerOn is 'none' -- and a show still
+    waiting out its delay is NOT cancelled: upstream's _hide leaves the
+    timeout alone, so the box appears after the pointer has gone }
+  if g.TriggerOn <> 'none' then TipHide(g);
+  TipArmTimer;
+end;
+
+procedure TTyAdvanceChart.TipDropDisplay;
+begin
+  FTipShown := False;
+  FTipShowFlag := False;
+  FTipShowAt := NaN;
+  FTipHideAt := NaN;
+  FTipSnap := Default(TTyTipSnap);
+  FTipSnap.Datum := TyChartNoDatum;
+  FTipSnap.Element := -1;
+  FTipPend := FTipSnap;
+  if FTipTimer <> nil then FTipTimer.Enabled := False;
+end;
+
+procedure TTyAdvanceChart.TipReset;
+begin
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  TipDropDisplay;
+end;
+
+procedure TTyAdvanceChart.TooltipContentSize(var AW, AH: Double);
+begin
+end;
+
+function TTyAdvanceChart.OptionPointerHits: TTyAxisHitArray;
+var
+  g, c, k, n: Integer;
+  gb: TTyGridBuild;
+  cart: TTyCartesian2D;
+  ax: TTyAxis;
+  node, ap, d, st, sh: TJSONData;
+  tipSpec: TTyTooltipSpec;
+  isCat, fromTip: Boolean;
+  v: Double;
+  hit: TTyAxisHit;
+  seen: array of TTyAxis;
+
+  function Seen_(AAxis: TTyAxis): Boolean;
+  var j: Integer;
+  begin
+    for j := 0 to High(seen) do
+      if seen[j] = AAxis then Exit(True);
+    SetLength(seen, Length(seen) + 1);
+    seen[High(seen)] := AAxis;
+    Result := False;
+  end;
+
+begin
+  { BaseAxisPointer.render reads `status` and `value` off the axis'
+    axisPointer model: an axis that HAS a pointer (its own `show: true`, or
+    the base axis of an axis-triggered tooltip) and whose option writes
+    status 'show' with a value is drawn there before anything moves. Its
+    seriesDataIndices are empty -- no series data for a label formatter. }
+  Result := nil;
+  seen := nil;
+  if FOptPtrGone or (FBuild = nil) or (FOption = nil) then Exit;
+  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for c := 0 to gb.CartesianCount - 1 do
+    begin
+      cart := gb.CartesianByIndex(c);
+      if cart = nil then Continue;
+      for k := 0 to 1 do
+      begin
+        if k = 0 then ax := cart.AxisByDim('x') else ax := cart.AxisByDim('y');
+        if (ax = nil) or Seen_(ax) then Continue;
+        node := FOption.ComponentAt(ax.MainType, ax.ComponentIndex);
+        if not (node is TJSONObject) then Continue;
+        ap := TJSONObject(node).Find('axisPointer');
+        if not (ap is TJSONObject) then Continue;
+        st := TJSONObject(ap).Find('status');
+        if (st = nil) or (st.JSONType <> jtString) or (st.AsString <> 'show') then
+          Continue;
+        d := TJSONObject(ap).Find('value');
+        if (d = nil) or not (d.JSONType in [jtNumber, jtString]) then Continue;
+        sh := TJSONObject(ap).Find('show');
+        fromTip := tipSpec.HasComponent and (tipSpec.Trigger = tttAxis)
+          and (ax = cart.GetBaseAxis);
+        if not (fromTip or ((sh <> nil) and (sh.JSONType = jtBoolean)
+          and sh.AsBoolean)) then Continue;
+        isCat := ax.Scale is TTyOrdinalScale;
+        v := NaN;
+        if d.JSONType = jtNumber then v := d.AsFloat
+        else if isCat and (ax.Categories <> nil) then
+        begin
+          n := ax.Categories.GetOrdinal(d.AsString);
+          if n >= 0 then v := n;
+        end;
+        if IsNan(v) or IsInfinite(v) then Continue;
+        hit := Default(TTyAxisHit);
+        hit.Axis := ax;
+        hit.Plot := gb.PlotRect;
+        hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
+          isCat, fromTip, fromTip, False);
+        if hit.Spec.Show = apsNo then Continue;
+        hit.Value := v;
+        hit.SnapValue := v;
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)] := hit;
+      end;
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.TooltipShown: Boolean;
+begin
+  Result := FTipShown;
+end;
+
+function TTyAdvanceChart.TooltipShownWhich: string;
+const
+  cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
+    'markArea', 'legend', 'legend', 'legend');
+var block: TTyTooltipBlock;
+begin
+  Result := '';
+  if not FTipShown then Exit;
+  if Length(FTipSnap.Hits) > 0 then
+  begin
+    block := AxisTooltipContent(FTipSnap.Hits, TyTooltipSpecOf(FOption, -1, -1));
+    try
+      Result := 'axis:';
+      if (block <> nil) and (block.BlockCount > 0) then
+        Result := Result + block.Blocks[0].Header;
+    finally
+      block.Free;
+    end;
+    Exit;
+  end;
+  if TipIsMarker(FTipSnap.Datum) then
+    Result := cMk[FTipSnap.Datum.Kind] + ':'
+      + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
+      + IntToStr(FTipSnap.Datum.DataIndex)
+  else if FTipSnap.Datum.IsEdge then
+    Result := 'edge:' + IntToStr(FTipSnap.Datum.SeriesIndex) + ':'
+      + IntToStr(FTipSnap.Datum.DataIndex)
+  else
+    Result := 'item:' + IntToStr(FTipSnap.Datum.SeriesIndex) + ':'
+      + IntToStr(FTipSnap.Datum.DataIndex);
+end;
+
+function TTyAdvanceChart.TooltipShownDatum: TTyChartDatumRef;
+begin
+  if FTipShown and (Length(FTipSnap.Hits) = 0) then Result := FTipSnap.Datum
+  else Result := TyChartNoDatum;
+end;
+
+function TTyAdvanceChart.TooltipAnchor: TPoint;
+begin
+  Result := Point(FTipSnap.X, FTipSnap.Y);
+end;
+
+function TTyAdvanceChart.TooltipBox: TTyRectF;
+begin
+  Result := FTipBox;
+end;
+
+function TTyAdvanceChart.TooltipTargetRect: TTyRectF;
+begin
+  Result := FTipRect;
+end;
+
+{ ---- the markers' own tooltip [Batch 100] ---- }
+
+function TTyAdvanceChart.MarkerItemOf(const ADatum: TTyChartDatumRef;
+  out AKind: TTyMarkerKind; out ABlock: TTyMkBlock; out AItem: Integer): Boolean;
+var k, q: Integer;
+begin
+  Result := False;
+  AItem := -1;
+  ABlock := Default(TTyMkBlock);
+  case ADatum.Kind of
+    ctkMarkPoint: AKind := mkPoint;
+    ctkMarkLine: AKind := mkLine;
+    ctkMarkArea: AKind := mkArea;
+  else
+    AKind := mkPoint;
+    Exit;
+  end;
+  for k := 0 to High(FMarkers) do
+    if FMarkers[k].SeriesIndex = ADatum.ComponentIndex then
+    begin
+      ABlock := FMarkers[k].Blocks[AKind];
+      case AKind of
+        mkPoint:
+          for q := 0 to High(ABlock.Points) do
+            if ABlock.Points[q].DataIndex = ADatum.DataIndex then
+            begin
+              AItem := q;
+              Exit(True);
+            end;
+        mkLine:
+          for q := 0 to High(ABlock.Lines) do
+            if ABlock.Lines[q].DataIndex = ADatum.DataIndex then
+            begin
+              AItem := q;
+              Exit(True);
+            end;
+        mkArea:
+          for q := 0 to High(ABlock.Areas) do
+            if ABlock.Areas[q].DataIndex = ADatum.DataIndex then
+            begin
+              AItem := q;
+              Exit(True);
+            end;
+      end;
+      Exit;
+    end;
+end;
+
+function MkValName(const AV: TTyMkVal): string;
+begin
+  case AV.Kind of
+    mvkStr: Result := AV.Str;
+    mvkNum: Result := TyJsNumberToString(AV.Num);
+  else
+    Result := '';
+  end;
+end;
+
+procedure TTyAdvanceChart.MarkerNameValue(const ADatum: TTyChartDatumRef;
+  out AName: string; out AValue: TTyMkVal);
+var
+  kind: TTyMarkerKind;
+  blk: TTyMkBlock;
+  it, k, n: Integer;
+  e: TTyMkEnd;
+  ax: TTyAxis;
+  v: TTyMkVal;
+  d: TJSONData;
+begin
+  AName := '';
+  AValue := TyMkUndef;
+  if not MarkerItemOf(ADatum, kind, blk, it) then Exit;
+  case kind of
+    mkPoint:
+      begin
+        e := blk.Points[it].E;
+        AValue := e.Value;
+        AName := MkValName(e.Name);
+        { getName: the item's own name, else the data's NAME DIMENSION --
+          its first category coordinate, read through the axis' categories
+          (a coord ['B', 70] is named 'B') }
+        if not (e.Name.Kind in [mvkStr, mvkNum]) then
+          for k := 0 to 1 do
+          begin
+            if k = 0 then ax := blk.XAxis else ax := blk.YAxis;
+            if (ax = nil) or (ax.Categories = nil) then Continue;
+            v := e.Values[k];
+            if (v.Kind = mvkStr) and (ax.Categories.GetOrdinal(v.Str) >= 0) then
+              AName := v.Str
+            else if (v.Kind = mvkNum) and not IsNan(v.Num)
+              and not IsInfinite(v.Num) then
+            begin
+              n := Round(v.Num);
+              if (n = v.Num) and (n >= 0) and (n < ax.Categories.Count) then
+                AName := ax.Categories.CategoryAt(n);
+            end;
+            Break;
+          end;
+      end;
+    mkLine:
+      begin
+        AName := MkValName(blk.Lines[it].LineName);
+        AValue := blk.Lines[it].LineValue;
+      end;
+    mkArea:
+      begin
+        AName := MkValName(blk.Areas[it].Name);
+        { the merged item's value: the first corner's, else the second's }
+        d := nil;
+        if blk.Areas[it].LtSrc <> nil then d := blk.Areas[it].LtSrc.Find('value');
+        if (d = nil) and (blk.Areas[it].RbSrc <> nil) then
+          d := blk.Areas[it].RbSrc.Find('value');
+        if d <> nil then AValue := TyMkOf(d);
+      end;
+  end;
+end;
+
+function TTyAdvanceChart.MarkerTooltipContent(
+  const ADatum: TTyChartDatumRef): TTyTooltipBlock;
+var
+  nm, header, valueText: string;
+  v: TTyMkVal;
+  noValue: Boolean;
+begin
+  MarkerNameValue(ADatum, nm, v);
+  { MarkerModel.formatTooltip: a section headed by the marker model's name
+    -- its HOST's model name, an auto name included, and no noHeader: a
+    blank one reads '-' -- holding one marker-less row }
+  header := SeriesModelName(ADatum.ComponentIndex);
+  if Trim(header) = '' then header := '-';
+  noValue := v.Kind in [mvkUndef, mvkNull];
+  case v.Kind of
+    mvkNum: valueText := TyReadableCell(TyDataNum(v.Num), ddtFloat);
+    mvkStr: valueText := TyReadableCell(TyDataText(v.Str), ddtFloat);
+  else
+    valueText := '-';
+  end;
+  { noName is `!itemName`; any other name goes through makeValueReadable }
+  if nm <> '' then nm := TipRowName(nm);
+  Result := TTyTooltipBlock.CreateSection(header, False);
+  Result.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, nm = '',
+    valueText, noValue));
+end;
+
+function TTyAdvanceChart.MarkerTooltipParams(
+  const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+var
+  nm: string;
+  v: TTyMkVal;
+  kind: TTyMarkerKind;
+  blk: TTyMkBlock;
+  it, slot: Integer;
+begin
+  Result := TyChartBlankParams;
+  MarkerNameValue(ADatum, nm, v);
+  if not MarkerItemOf(ADatum, kind, blk, it) then
+    case ADatum.Kind of
+      ctkMarkLine: kind := mkLine;
+      ctkMarkArea: kind := mkArea;
+    else
+      kind := mkPoint;
+    end;
+  { MarkerModel.getDataParams: the marker's own, with the HOST's series
+    fields }
+  Result.ComponentType := TyMarkerKey[kind];
+  Result.SeriesIndex := ADatum.ComponentIndex;
+  slot := SlotOfSeries(ADatum.ComponentIndex);
+  if slot >= 0 then Result.SeriesType := FBindings[slot].SeriesType;
+  Result.SeriesName := SeriesModelName(ADatum.ComponentIndex);
+  Result.SeriesId := SeriesIdOf(FOption, ADatum.ComponentIndex);
+  Result.DataIndex := ADatum.DataIndex;
+  Result.RawDataIndex := ADatum.DataIndex;
+  Result.Name := nm;
+  { the colour the box's border takes: one answer, DatumColour's }
+  Result.Color := DatumColour(ADatum);
+  case v.Kind of
+    mvkNum:
+      begin
+        SetLength(Result.Values, 1);
+        Result.Values[0] := v.Num;
+        Result.ValueText := TyJsNumberToString(v.Num);
+      end;
+    mvkStr:
+      begin
+        Result.Raw.Shape := rshScalar;
+        Result.Raw.Scalar := TyDataText(v.Str);
+        Result.ValueText := v.Str;
+      end;
+  else
+    Result.Raw.Shape := rshAbsent;
+  end;
+end;
+
+function TTyAdvanceChart.MarkerColour(const ADatum: TTyChartDatumRef): TTyChartColor;
+var
+  kind: TTyMarkerKind;
+  blk: TTyMkBlock;
+  it, q: Integer;
+  c: TTyChartColor;
+  pp: TTyMkPointPicArray;
+  lp: TTyMkLinePicArray;
+  ap: TTyMkAreaPicArray;
+begin
+  Result := 0;
+  if not MarkerItemOf(ADatum, kind, blk, it) then Exit;
+  case kind of
+    mkPoint:
+      begin
+        pp := MarkPointPictures(ADatum.ComponentIndex);
+        for q := 0 to High(pp) do
+          if (pp[q].Item = it) and TyTryParseChartColor(pp[q].Fill, c) then
+            Exit(c);
+      end;
+    mkLine:
+      begin
+        lp := MarkLinePictures(ADatum.ComponentIndex);
+        for q := 0 to High(lp) do
+          if (lp[q].Item = it) and TyTryParseChartColor(lp[q].Stroke, c) then
+            Exit(c);
+      end;
+    mkArea:
+      begin
+        ap := MarkAreaPictures(ADatum.ComponentIndex);
+        for q := 0 to High(ap) do
+          if (ap[q].Item = it) and ap[q].HasFill
+            and TyTryParseChartColor(ap[q].Fill, c) then
+            Exit(c);
+      end;
+  end;
+end;
+
+{ ---- the hierarchies' tooltip [Batch 100] ---- }
+
+{ a node's `name` as upstream's getName answers it: a string, a number's
+  text, or nothing }
+function HierItemName(AItem: TJSONData): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if not (AItem is TJSONObject) then Exit;
+  d := TJSONObject(AItem).Find('name');
+  if d = nil then Exit;
+  if d.JSONType = jtString then Result := d.AsString
+  else if d.JSONType = jtNumber then Result := TyJsNumberToString(d.AsFloat);
+end;
+
+{ JavaScript's String() of an option value, for `source + ' -- ' + target` }
+function TipJsString(AData: TJSONData): string;
+begin
+  if AData = nil then Exit('undefined');
+  case AData.JSONType of
+    jtString: Result := AData.AsString;
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+    jtObject: Result := '[object Object]';
+  else
+    Result := '';
+  end;
+end;
+
+{ makeValueReadable of one raw cell, no type }
+function TipCellText(AData: TJSONData): string;
+begin
+  if AData = nil then Exit('-');
+  case AData.JSONType of
+    jtNumber: Result := TyReadableCell(TyDataNum(AData.AsFloat), ddtFloat);
+    jtString: Result := TyReadableCell(TyDataText(AData.AsString), ddtFloat);
+    jtBoolean: Result := TyReadableCell(TyDataBool(AData.AsBoolean), ddtFloat);
+  else
+    Result := '-';
+  end;
+end;
+
+function TTyAdvanceChart.HierTooltipContent(const ADatum: TTyChartDatumRef;
+  const AColour: TTyChartColor; out ABlock: TTyTooltipBlock): Boolean;
+var
+  slot, row, k: Integer;
+  st, nm, valueText: string;
+  item, d: TJSONData;
+  v: Double;
+begin
+  ABlock := nil;
+  Result := False;
+  if ADatum.SeriesIndex < 0 then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if slot < 0 then Exit;
+  row := ADatum.DataIndex;
+  st := FBindings[slot].SeriesType;
+
+  { SUNBURST: upstream's default series tooltip -- headed by the series'
+    name when it was written, one row with the item marker, the node's
+    name and its value (a parent's is the sum completeTreeValue wrote) }
+  if (st = TySunburstSeriesTypeName) and (slot <= High(FSunbursts))
+    and FSunbursts[slot].Valid then
+  begin
+    if (row <= 0) or (row > High(FSunbursts[slot].Nodes)) then Exit;
+    Result := True;
+    nm := SeriesNameOf(ADatum.SeriesIndex);
+    if (nm <> '') and (Trim(nm) = '') then nm := '-';
+    ABlock := TTyTooltipBlock.CreateSection(nm, False);
+    nm := HierItemName(FSunbursts[slot].Hier.Nodes[row].Item);
+    v := FSunbursts[slot].Nodes[row].Value;
+    ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmItem, AColour, nm, False,
+      TyTooltipValueText(v), False));
+    Exit;
+  end;
+
+  { TREEMAP: one bare nameValue -- no marker, no section; a missing name
+    reads '-' (no noName); the value is the raw one, an array's cells joined
+    by two spaces, the first being the value completeTreeValue settled }
+  if (st = TyTreemapSeriesTypeName) and (slot <= High(FTreemaps))
+    and FTreemaps[slot].Valid then
+  begin
+    if (row <= 0) or (row > High(FTreemaps[slot].Nodes)) then Exit;
+    Result := True;
+    item := FTreemaps[slot].Hier.Nodes[row].Item;
+    nm := TipRowName(HierItemName(item));
+    v := FTreemaps[slot].Nodes[row].Value;
+    valueText := TyTooltipValueText(v);
+    d := nil;
+    if item is TJSONObject then d := TJSONObject(item).Find('value');
+    if (d <> nil) and (d.JSONType = jtArray) and (d.Count > 1) then
+      for k := 1 to d.Count - 1 do
+        valueText := valueText + '  ' + TipCellText(d.Items[k]);
+    ABlock := TTyTooltipBlock.CreateSection('', True);
+    ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False,
+      valueText, False));
+    Exit;
+  end;
+
+  { SANKEY: a bare nameValue too. A node: its `name` ('-' without one) and
+    its LAYOUT value -- the larger of its own and its flow; a link: the
+    written `source -- target` and its value. NaN is no value. }
+  if (st = TySankeySeriesTypeName) and (slot <= High(FSankeys))
+    and FSankeys[slot].Valid then
+  begin
+    if ADatum.IsEdge then
+    begin
+      if (row < 0) or (row > High(FSankeys[slot].Edges)) then Exit;
+      item := FSankeys[slot].Edges[row].Item;
+      if item is TJSONObject then
+        nm := TipJsString(TJSONObject(item).Find('source')) + ' -- '
+          + TipJsString(TJSONObject(item).Find('target'))
+      else
+        nm := 'undefined -- undefined';
+      v := FSankeys[slot].Edges[row].Value;
+    end
+    else
+    begin
+      if (row < 0) or (row > High(FSankeys[slot].Nodes)) then Exit;
+      nm := TipRowName(HierItemName(FSankeys[slot].Nodes[row].Item));
+      v := FSankeys[slot].Nodes[row].Value;
+    end;
+    Result := True;
+    ABlock := TTyTooltipBlock.CreateSection('', True);
+    ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False,
+      TyTooltipValueText(v), IsNan(v)));
+  end;
+end;
+
 procedure TTyAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
@@ -15336,16 +16281,26 @@ var
   corners: TTyCorners;
   surface: TTyFill;
   borderCol: TTyColor;
+  snap: TTyTipSnap;
+  pin: TTyTooltipPlaceIn;
+  at: TTyPointF;
+  elRect: TTyRectF;
 begin
-  if not FTipTrack then Exit;
-  onAxis := Length(FTipHits) > 0;
-  if not TyChartDatumValid(FTipDatum) and not onAxis then Exit;
+  FTipBox := TyInvalidRectF;
+  FTipRect := TyInvalidRectF;
+  { [Batch 100] WHAT IS SHOWN, NOT WHAT IS HOVERED: the box's own state
+    decides -- a show waiting out showDelay is not drawn yet, a hide waiting
+    out hideDelay still is, at the place and with the content of the show }
+  if not FTipShown then Exit;
+  snap := FTipSnap;
+  onAxis := Length(snap.Hits) > 0;
+  if not TipTargetValid(snap.Datum) and not onAxis then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
     valueFormatter is global there. }
-  if onAxis then spec := TyTooltipSpecOf(FOption, -1, -1)
-  else spec := TooltipSpecFor(FTipDatum);
+  spec := TipSpecOf(snap);
+  if not spec.HasComponent then Exit;
   if not spec.Show or not spec.ShowContent then Exit;
   { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's SHAPE --
     if a coordinate system reported axes, the axis path runs and the item
@@ -15373,8 +16328,8 @@ begin
       { A FORMATTER UNDER AN AXIS TRIGGER IS GIVEN EVERY SERIES, in the order
         the sections hold them -- which is what makes `{a1}` and `{c2}` mean
         anything at all. }
-      if onAxis then params := AxisTooltipParams(FTipHits)
-      else params[0] := TooltipParams(FTipDatum);
+      if onAxis then params := AxisTooltipParams(snap.Hits)
+      else params[0] := TooltipParams(snap.Datum);
       if Length(params) = 0 then Exit;
       if not TyChartResolveText(spec.Formatter, params, tipText) then
         { A named handler that is not registered says so rather than drawing
@@ -15390,9 +16345,9 @@ begin
         '', True));
     end
     else if onAxis then
-      block := AxisTooltipContent(FTipHits, spec)
+      block := AxisTooltipContent(snap.Hits, spec)
     else
-      block := TooltipContent(FTipDatum, spec);
+      block := TooltipContent(snap.Datum, spec);
     if block = nil then Exit;
 
     lines := TyTooltipFlatten(block, ink);
@@ -15414,12 +16369,48 @@ begin
     end;
 
     TyTooltipMeasure(lines, ink, AMeasurer, APPI, padL, padT, padR, padB, w, h);
+    TooltipContentSize(w, h);
     if (w <= 0) or (h <= 0) then Exit;
 
+    borderW := st.BorderWidth;
+    if spec.HasBorderWidth then borderW := spec.BorderWidthLogical;
+
+    { [Batch 100] WHERE IT GOES: TooltipView._updatePosition -- the option's
+      position (a handler's answer read the same way), align, confine -- in
+      the control's own coordinates, the pointer of the SHOW and, for an item,
+      the element it was over. The gap is the theme's (upstream's 20). }
     gap := APainter.ScaleF(ActiveController.Metric(TyAdvChartTooltipGapVar,
       TyAdvChartTooltipGap));
-    box := TyTooltipBoxAt(FTipX, FTipY, w, h, gap,
-      TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom));
+    pin := Default(TTyTooltipPlaceIn);
+    pin.PointX := snap.X - ARect.Left;
+    pin.PointY := snap.Y - ARect.Top;
+    pin.ContentW := w;
+    pin.ContentH := h;
+    pin.ViewW := ARect.Right - ARect.Left;
+    pin.ViewH := ARect.Bottom - ARect.Top;
+    pin.Gap := gap;
+    pin.BorderWidth := APainter.ScaleF(borderW);
+    pin.IsAxis := onAxis;
+    elRect := TyInvalidRectF;
+    if (not onAxis) and (FPaintList <> nil) and FPaintListValid
+      and (snap.Element >= 0) and (snap.Element < FPaintList.Count) then
+      elRect := TyShapeBounds(FPaintList.Element(snap.Element).Shape);
+    if TyRectFIsValid(elRect) then
+    begin
+      pin.HasRect := True;
+      pin.Rect := TyXYWH(elRect.Left - ARect.Left, elRect.Top - ARect.Top,
+        elRect.Right - elRect.Left, elRect.Bottom - elRect.Top);
+      FTipRect := elRect;
+    end;
+    if spec.PositionHandler <> '' then
+    begin
+      if onAxis then pin.Params := AxisTooltipParams(snap.Hits)
+      else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
+    end;
+    at := TyTooltipPlace(spec, pin);
+    box := TyRectF(ARect.Left + at.X, ARect.Top + at.Y,
+      ARect.Left + at.X + w, ARect.Top + at.Y + h);
+    FTipBox := box;
     r := Rect(Round(box.Left), Round(box.Top),
               Round(box.Right), Round(box.Bottom));
 
@@ -15457,14 +16448,12 @@ begin
       fallback for an AXIS tooltip, and an item tooltip takes the datum's own
       colour. A written borderColor still wins over both. }
     if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
-    else if not onAxis and (DatumColour(FTipDatum) <> 0) then
-      borderCol := TTyColor(DatumColour(FTipDatum))
+    else if not onAxis and (DatumColour(snap.Datum) <> 0) then
+      borderCol := TTyColor(DatumColour(snap.Datum))
     else
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
         describing several series cannot take one of their colours. }
       borderCol := st.BorderColor;
-    borderW := st.BorderWidth;
-    if spec.HasBorderWidth then borderW := spec.BorderWidthLogical;
     if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
       APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
 
@@ -15516,7 +16505,7 @@ var
   d: TTyChartDatumRef;
   spec: TTyTooltipSpec;
   el: Integer;
-  wasOn, graphChanged: Boolean;
+  wasOn, graphChanged, tipWas: Boolean;
   dx, dy: Double;
 begin
   graphChanged := False;
@@ -15570,6 +16559,18 @@ begin
     answer holds axis POINTERS into the build, and DropBuild clears it for
     exactly that reason. }
   FTipHits := ResolveAxisPointers(X, Y);
+  { THE OPTION'S status: 'show' POINTERS GO with the first pointer event:
+    updateAxisPointer rewrites every axis' status [Batch 100] }
+  if not FOptPtrGone then
+  begin
+    FOptPtrGone := True;
+    InvalidateFrame;
+  end;
+  { THE BOX'S OWN STATE MACHINE [Batch 100]: a show now or after showDelay,
+    or a hide after hideDelay -- what the hover says is a request, not the
+    picture }
+  tipWas := FTipShown;
+  TipPointerMoved;
   { the pointer slides where upstream's does [Batch 92] }
   PtrAnimSync;
   { the chart's own mouse events [Batch 84] }
@@ -15582,7 +16583,8 @@ begin
     TTyChart needed was compensating for a control that re-rendered everything
     from scratch each paint, and that is what the cache removed. }
   if graphChanged then RestyleStatic
-  else if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) then
+  else if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
+    or tipWas or FTipShown then
     InvalidateFrame;
 end;
 
@@ -15590,11 +16592,22 @@ procedure TTyAdvanceChart.MouseLeave;
 var wasOn, wasGraph: Boolean;
 begin
   if not (csDesigning in ComponentState) then EventLeave(FEvLastX, FEvLastY);
-  wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
+  wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) or FTipShown;
   wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum);
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   FTipHits := nil;
+  { the box: a hide, after hideDelay -- or never, under alwaysShowContent
+    [Batch 100] }
+  if not (csDesigning in ComponentState) then
+  begin
+    TipPointerLeft;
+    if not FOptPtrGone then
+    begin
+      FOptPtrGone := True;
+      wasOn := True;
+    end;
+  end;
   { the pointer left the canvas: a mouseout to what it was over }
   if FDzHover.Kind <> dtkNone then
   begin
@@ -16421,7 +17434,12 @@ begin
     the bars is the layer debt showing -- series marks live in the static
     layer, so the band cannot go beneath them -- and re-drawing the hovered
     marks on top of the band is what hides it. }
-  PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits);
+  { and before any pointer event, the ones the option shows itself
+    [Batch 100] }
+  if Length(FTipHits) > 0 then
+    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits)
+  else
+    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
   PaintEmphasis(APainter, APPI, FTipHits);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
@@ -16437,7 +17455,8 @@ begin
     "would the tooltip draw": resolving the option cascade and the theme to
     find out costs more than the pass it would save. }
   Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
-    or FAnimLive;
+    or FAnimLive or FTipShown
+    or ((not FOptPtrGone) and (Length(OptionPointerHits) > 0));
 end;
 
 procedure TTyAdvanceChart.DropStatic;

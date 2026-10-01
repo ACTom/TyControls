@@ -103,8 +103,12 @@ implementation
 const
   cW = 420;
   cH = 300;
+  { [Batch 100] every option the box is drawn for carries a tooltip
+    component: upstream shows no box without one (tooltip-finish.js,
+    cmp-none), and without it these tests would count only the hover's
+    highlight }
   cBars =
-    '{"xAxis":{"type":"category","data":["A","B","C","D"]},' +
+    '{"tooltip":{},"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
     '"series":[{"type":"bar","name":"Sales","data":[20,40,60,80]}]}';
 
@@ -359,12 +363,24 @@ end;
 procedure TAdvChartTooltipRuleTest.TestATooltipStringIsAFormatter;
 var s: TTyTooltipSpec;
 begin
-  { `tooltip: 'text'` is sugar for `{formatter: 'text'}` at any cascade level,
-    and a port that required an object would silently draw the default. }
+  { `tooltip: 'text'` is sugar for `{formatter: 'text'}` at the series and
+    data-item levels, and a port that required an object would silently draw
+    the default.
+    [Batch 100: this asserted the sugar at the ROOT too. A root string is no
+    tooltip component at all -- upstream builds no TooltipView and shows no
+    box (tooltip-finish.js, cmp-string) -- so the root case now says that,
+    and the sugar is pinned where it lives.] }
   s := SpecOf('{"tooltip":"{b}: {c}","series":[{"type":"bar","data":[1]}]}',
               0, -1);
+  AssertFalse('a root string is no component', s.HasComponent);
+  AssertFalse('and no formatter either', s.HasFormatter);
+  s := SpecOf('{"tooltip":{},"series":[{"type":"bar","tooltip":"{b}: {c}",'
+    + '"data":[1, {"value":2,"tooltip":"item {c}"}]}]}', 0, -1);
   AssertTrue(s.HasFormatter);
   AssertEquals('{b}: {c}', s.Formatter);
+  s := SpecOf('{"tooltip":{},"series":[{"type":"bar","tooltip":"{b}: {c}",'
+    + '"data":[1, {"value":2,"tooltip":"item {c}"}]}]}', 0, 1);
+  AssertEquals('the item''s own', 'item {c}', s.Formatter);
 end;
 
 procedure TAdvChartTooltipRuleTest.TestTextStyleIsReplacedWholesaleNotMerged;
@@ -704,7 +720,7 @@ var
   end;
 
 const
-  cFun = '{"series":[{"type":"funnel","name":"P","data":['
+  cFun = '{"tooltip":{},"series":[{"type":"funnel","name":"P","data":['
     + '{"name":"a","value":100},{"name":"b","value":80},'
     + '{"name":"c","value":60},{"name":"d","value":40}]}]}';
 begin
@@ -731,7 +747,7 @@ begin
                     [a.Color, d.Color]), a.Color <> d.Color);
   { AND A SERIES THAT DOES NOT COLOUR BY DATUM still answers with its own
     colour for every row, which is the half a one-sided test would lose. }
-  Draw('{"xAxis":{"type":"category","data":["a","b","c","d"]},"yAxis":{},'
+  Draw('{"tooltip":{},"xAxis":{"type":"category","data":["a","b","c","d"]},"yAxis":{},'
     + '"series":[{"type":"bar","name":"B","data":[1,2,3,4]}]}');
   a := FChart.ParamsFor(Datum(0));
   d := FChart.ParamsFor(Datum(3));
@@ -745,7 +761,7 @@ begin
     not: the series takes palette slot 0 and category Y the shared cursor's
     slot 1. And it is found by the node's VIEW row -- the legend has taken
     'a' out, so 'b' is row 0 of the view and row 1 of what was written. }
-  Draw('{"color":["#111111","#222222","#333333"],'
+  Draw('{"tooltip":{},"color":["#111111","#222222","#333333"],'
     + '"legend":{"selected":{"X":false}},'
     + '"series":[{"type":"graph","layout":"none",'
     + '"categories":[{"name":"X"},{"name":"Y"}],'
@@ -784,6 +800,10 @@ begin
     FChart.Hover(p.X, p.Y + 6);
     FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
     FChart.Unhover;
+    { [Batch 100] the box waits out hideDelay (100 ms by default) before it
+      goes: still up straight after the leave, gone once the clock passes it }
+    AssertTrue('the box waits out hideDelay', FChart.TooltipShown);
+    FChart.TooltipTick(1e15);
     FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
     diff := 0;
     for y := 0 to cH - 1 do
@@ -959,7 +979,7 @@ var
   d: TTyChartDatumRef;
   i, found: Integer;
 begin
-  Draw('{"series":[{"type":"pie","radius":"70%","data":[' +
+  Draw('{"tooltip":{},"series":[{"type":"pie","radius":"70%","data":[' +
        '{"name":"Rent","value":1200},{"name":"Food","value":800}]}]}');
   found := 0;
   for i := 0 to 359 do
@@ -995,7 +1015,7 @@ var
   plain, formatted: Integer;
   base, withFmt: string;
 begin
-  base := '{"xAxis":{"type":"category","data":["A","B","C","D"]},' +
+  base := '{"tooltip":{},"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
     '"series":[{"type":"bar","name":"Sales","data":[20,40,60,80]}]}';
   withFmt := '{"tooltip":{"formatter":"{a} / {b} / {c} / a much longer line"},' +

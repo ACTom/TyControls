@@ -439,8 +439,9 @@ begin
     bar's own area is a few thousand pixels and so is the box's; a threshold
     between them would be a number that means nothing to a reader and breaks
     on a theme with a different bar width. }
+  { [Batch 100] with a tooltip COMPONENT: without one upstream shows no box }
   both := ChangedByHover(
-    '{"xAxis":{"type":"category","data":["A","B","C","D"]},' +
+    '{"tooltip":{},"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
     '"series":[{"type":"bar","name":"Sales","data":[20,40,60,80]}]}',
     p.X, p.Y + 6);

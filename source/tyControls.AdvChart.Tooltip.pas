@@ -12,8 +12,12 @@ unit tyControls.AdvChart.Tooltip;
   answer is to draw the tooltip on the canvas. So does this.
 
   THE PRICE, STATED ONCE: a tooltip drawn inside the control cannot leave the
-  control. That is `confine: true`, always, and it is a DELIBERATE DIVERGENCE --
-  see TyTooltipBoxAt.
+  control. So an unwritten `confine` is TRUE here -- what upstream's own
+  comment says richText means -- where upstream's resolution, on the raw
+  renderMode option (default 'auto'), answers false. A written `confine:
+  false` is obeyed: the box goes where upstream puts it, and what falls
+  outside the control is clipped, as upstream's richText box is. See
+  TyTooltipPlace. [Batch 100: it used to clamp always and read nothing.]
 
   RICHTEXT, NOT HTML. The two upstream renderers are not two skins of one
   layout; they differ in units (borderRadius 10 vs 5 for the same dot), in
@@ -33,7 +37,8 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
-  tyControls.AdvChart.Measure, tyControls.AdvChart.Data;
+  tyControls.AdvChart.Measure, tyControls.AdvChart.Data,
+  tyControls.AdvChart.Handlers;
 
 type
   { `'none'` blocks a series-item tooltip and nothing else -- upstream lets a
@@ -60,9 +65,28 @@ type
       'mousemove|click|mousewheel' contains 'click' and yet is not treated as
       click by the second. A flag set cannot express that. }
     TriggerOn: string;
+    { `!!confine` when it is written (not null), else TRUE -- see the unit
+      header. ConfineSet says which. }
     Confine: Boolean;
+    ConfineSet: Boolean;
     ShowDelayMs: Integer;
     HideDelayMs: Integer;
+    { [Batch 100] THERE IS A TOOLTIP COMPONENT: the option's root `tooltip`
+      is an object, or an array holding one at index 0. Without one upstream
+      builds no TooltipView and no box ever shows, whatever a series or a
+      data item writes -- `tooltip: []`, a string, null all count as none. }
+    HasComponent: Boolean;
+    { [Batch 100] `position`, nearest cascade level that writes it (a null
+      falls through, as Model.get does): Position.Kind is the form (an
+      array, a word, an object, or ctpDefault for none); PositionHandler a
+      '@Name' to run instead -- a position FUNCTION. }
+    Position: TTyChartTooltipPos;
+    PositionHandler: string;
+    { `align` / `verticalAlign`: '' when unwritten. Truthy words shift the
+      box after it is placed ('center' / 'middle' by half, 'right' / 'bottom'
+      by all of it) and switch the default placement's gap off on that axis;
+      the object form ignores them. }
+    Align, VerticalAlign: string;
     { A template, or '@Name' for a registered handler -- see AdvChart.Handlers.
       HasFormatter is separate because `formatter: ''` is falsy upstream and
       does NOT override the default content. }
@@ -264,6 +288,17 @@ function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
 { `triggerOn` matching, upstream's way: a raw substring test, not equality and
   not a split on '|'. 'none' answers False for everything. }
 function TyTooltipTriggerOnHas(const ATriggerOn, AWhat: string): Boolean;
+{ [Batch 100] The tooltip COMPONENT: the root's `tooltip` when it is an
+  object, or the first of an array when that is one; nil -- no component,
+  no tooltip -- otherwise. }
+function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
+{ [Batch 100] A marker's cascade: the marker data item's own tooltip, the
+  marker's (`series[i].markPoint.tooltip`), the global component's. NOT the
+  host series' -- upstream's dataModel is the marker model. The marker
+  model's default `trigger: 'item'` is not in its option, so under a global
+  `trigger: 'axis'` the marker shows no box of its own. }
+function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
+  const AKind: string; AItem: Integer): TTyTooltipSpec;
 
 { ---- content ---- }
 { How a VALUE reaches the default content: grouped in threes, `1048` becoming
@@ -275,6 +310,42 @@ function TyTooltipTriggerOnHas(const ATriggerOn, AWhat: string): Boolean;
   are IntervalScale.getLabel, grouped as well, in TyScaleValueLabel. This
   said they were ungrouped; that was never upstream.) }
 function TyTooltipValueText(AValue: Double): string;
+
+{ ---- placement [Batch 100] ---- }
+type
+  { What _updatePosition knows: the pointer, the box's size, the view (the
+    whole control), the hovered element's bounding rect (none under an axis
+    trigger), the border width calcTooltipPosition clears, the default
+    placement's gap (upstream's 20), and the params a position handler is
+    handed. View coordinates throughout: (0, 0) is the control's corner. }
+  TTyTooltipPlaceIn = record
+    PointX, PointY: Double;
+    ContentW, ContentH: Double;
+    ViewW, ViewH: Double;
+    HasRect: Boolean;
+    Rect: TTyXYWH;
+    BorderWidth: Double;
+    Gap: Double;
+    Params: TTyChartParams;
+    IsAxis: Boolean;
+  end;
+
+{ TooltipView._updatePosition, line for line: a position handler is run and
+  its answer read as the option is; an array is parsePercent against the
+  view; an object is getLayoutRect with the content's size, and drops align;
+  a word with an element is calcTooltipPosition (an unknown word: nought);
+  anything else is refixTooltipPosition -- the gap down and right, flipped
+  per axis when it would overflow (the horizontal test with upstream's
+  extra 2), and no gap on an axis that has an align. Then align and
+  verticalAlign, then confine. Answers the box's top-left. A coordinate
+  that comes out not-a-number (a short array, a word parseFloat cannot
+  read) is nought here; upstream would hand NaN to the DOM. }
+function TyTooltipPlace(const ASpec: TTyTooltipSpec;
+  const AIn: TTyTooltipPlaceIn): TTyPointF;
+{ The position an option value means: an array, a word or '@Name' (the
+  handler goes to AHandler), an object; anything else is the default. }
+procedure TyTooltipReadPosition(AData: TJSONData; out APos: TTyChartTooltipPos;
+  out AHandler: string);
 
 { ---- layout ---- }
 { The tree, flattened into lines of runs. }
@@ -295,21 +366,18 @@ procedure TyTooltipMeasure(var ALines: TTyTooltipLineArray;
   there are four outcomes and no diagonal special case, and there is no re-test
   after a flip.
 
-  THEN CONFINED, always. Upstream's `confine` compares the RAW `renderMode`
-  option, whose default is 'auto', so `'auto' <> 'richText'` and confine
-  resolves FALSE in every environment -- contrary to the comment above its own
-  declaration. A tooltip drawn on the control's own surface has no such choice:
-  outside the bounds is not clipped, it is not drawn. So this clamps
-  unconditionally and the option is recorded but not obeyed. It is a slide and
-  not a second flip: the box keeps its side and slides along the edge, and an
-  oversized box overflows right and bottom rather than left and top, because
-  the right/bottom clamp runs first and the left/top clamp wins. }
+  THEN CONFINED, as an unwritten `confine` is here (see the unit header). It is
+  a slide and not a second flip: the box keeps its side and slides along the
+  edge, and an oversized box overflows right and bottom rather than left and
+  top, because the right/bottom clamp runs first and the left/top clamp wins.
+  [Batch 100: the default placement of TyTooltipPlace, which reads the
+  option's position, align and confine.] }
 function TyTooltipBoxAt(AAnchorX, AAnchorY, AWidth, AHeight, AGapPx: Double;
   const ABounds: TTyRectF): TTyRectF;
 
 implementation
 
-uses tyControls.AdvChart.Handlers, tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.Layout;
 
 { ============================ the tree ============================ }
 
@@ -513,9 +581,16 @@ begin
   Result.AlwaysShowContent := False;
   Result.Trigger := tttItem;
   Result.TriggerOn := 'mousemove|click|mousewheel';
-  { RECORDED, NOT OBEYED -- see TyTooltipBoxAt. Upstream's own default is the
-    sentinel `null`, and its resolution answers False everywhere. }
+  { UNWRITTEN IS TRUE -- see the unit header. Upstream's own default is the
+    sentinel `null`, resolved on the raw renderMode. }
   Result.Confine := True;
+  Result.ConfineSet := False;
+  Result.HasComponent := False;
+  Result.Position := Default(TTyChartTooltipPos);
+  Result.Position.Kind := ctpDefault;
+  Result.PositionHandler := '';
+  Result.Align := '';
+  Result.VerticalAlign := '';
   Result.ShowDelayMs := 0;
   { Milliseconds, while transitionDuration is SECONDS. Upstream does not unify
     the unit and neither does this. }
@@ -664,10 +739,34 @@ begin
     d := ANode.Find('triggerOn');
     if d.JSONType = jtString then ASpec.TriggerOn := d.AsString;
   end;
-  if Fresh('confine') then
+  { `!!confine` once it is not null [Batch 100] -- and a null falls through
+    to the level above, as Model.get does }
+  d := ANode.Find('confine');
+  if (d <> nil) and (d.JSONType <> jtNull) and Fresh('confine') then
   begin
-    d := ANode.Find('confine');
-    if d.JSONType = jtBoolean then ASpec.Confine := d.AsBoolean;
+    case d.JSONType of
+      jtBoolean: ASpec.Confine := d.AsBoolean;
+      jtNumber: ASpec.Confine := (not IsNan(d.AsFloat)) and (d.AsFloat <> 0);
+      jtString: ASpec.Confine := d.AsString <> '';
+    else
+      ASpec.Confine := True;
+    end;
+    ASpec.ConfineSet := True;
+  end;
+  d := ANode.Find('position');
+  if (d <> nil) and (d.JSONType <> jtNull) and Fresh('position') then
+    TyTooltipReadPosition(d, ASpec.Position, ASpec.PositionHandler);
+  d := ANode.Find('align');
+  if (d <> nil) and (d.JSONType <> jtNull) and Fresh('align') then
+  begin
+    if d.JSONType = jtString then ASpec.Align := d.AsString
+    else ASpec.Align := '';
+  end;
+  d := ANode.Find('verticalAlign');
+  if (d <> nil) and (d.JSONType <> jtNull) and Fresh('verticalAlign') then
+  begin
+    if d.JSONType = jtString then ASpec.VerticalAlign := d.AsString
+    else ASpec.VerticalAlign := '';
   end;
   if Fresh('showDelay') then
   begin
@@ -785,6 +884,7 @@ var
   seriesNode, dataNode: TJSONData;
   arr: TJSONData;
   s: string;
+  comp: TJSONObject;
 begin
   Result := TyTooltipSpecDefault;
   seen := nil;
@@ -823,13 +923,285 @@ begin
   end;
   MergeTooltipNode(TooltipNodeOf(seriesNode), Result, seen);
 
-  { ---- the global component ---- }
-  if TooltipStringOf(AOption.Root, s) and not Result.HasFormatter then
+  { ---- the global component ----
+    [Batch 100] THE COMPONENT, not the root's key: an array's first object
+    is the component, and a root string or null is no component at all (it
+    used to be read as a formatter). }
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(comp, Result, seen);
+end;
+
+function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if AOption = nil then Exit;
+  d := AOption.ComponentAt('tooltip', 0);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
+  const AKind: string; AItem: Integer): TTyTooltipSpec;
+var
+  seen: TTyStringArray;
+  seriesNode, mk, arr, it, comp: TJSONData;
+  s: string;
+begin
+  Result := TyTooltipSpecDefault;
+  seen := nil;
+  if AOption = nil then Exit;
+  seriesNode := AOption.ComponentAt('series', AHostSeries);
+  mk := nil;
+  if seriesNode is TJSONObject then mk := TJSONObject(seriesNode).Find(AKind);
+  if not (mk is TJSONObject) then mk := nil;
+  { ---- the marker's data item: a markLine / markArea item is a pair, and
+    its tooltip is the first end's (the merged item takes the first end's
+    keys) ---- }
+  if (mk <> nil) and (AItem >= 0) then
   begin
-    Result.Formatter := s;
-    Result.HasFormatter := s <> '';
+    arr := TJSONObject(mk).Find('data');
+    if (arr is TJSONArray) and (AItem < TJSONArray(arr).Count) then
+    begin
+      it := TJSONArray(arr).Items[AItem];
+      if (it is TJSONArray) and (TJSONArray(it).Count > 0) then
+        it := TJSONArray(it).Items[0];
+      if TooltipStringOf(it, s) then
+      begin
+        Result.Formatter := s;
+        Result.HasFormatter := s <> '';
+        SetLength(seen, Length(seen) + 1);
+        seen[High(seen)] := 'formatter';
+      end;
+      MergeTooltipNode(TooltipNodeOf(it), Result, seen);
+    end;
   end;
-  MergeTooltipNode(TooltipNodeOf(AOption.Root), Result, seen);
+  { ---- the marker ---- }
+  if mk <> nil then
+  begin
+    if TooltipStringOf(mk, s) then
+    begin
+      if not Result.HasFormatter then
+      begin
+        Result.Formatter := s;
+        Result.HasFormatter := s <> '';
+      end;
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end;
+    MergeTooltipNode(TooltipNodeOf(mk), Result, seen);
+  end;
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(TJSONObject(comp), Result, seen);
+end;
+
+{ ============================ placement ============================ }
+
+function PosValueOf(AData: TJSONData): TTyChartPosValue;
+begin
+  Result := TyChartPosAbsent;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := TyChartPosNum(AData.AsFloat);
+    jtString: Result := TyChartPosText(AData.AsString);
+    jtBoolean: if AData.AsBoolean then Result := TyChartPosNum(1)
+               else Result := TyChartPosNum(0);
+  end;
+end;
+
+procedure TyTooltipReadPosition(AData: TJSONData; out APos: TTyChartTooltipPos;
+  out AHandler: string);
+var o: TJSONObject;
+begin
+  APos := Default(TTyChartTooltipPos);
+  APos.Kind := ctpDefault;
+  AHandler := '';
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtString:
+      if TyChartIsHandlerRef(AData.AsString) then
+        AHandler := AData.AsString
+      else
+      begin
+        APos.Kind := ctpSide;
+        APos.Side := AData.AsString;
+      end;
+    jtArray:
+      begin
+        APos.Kind := ctpPoint;
+        if AData.Count > 0 then APos.X := PosValueOf(AData.Items[0]);
+        if AData.Count > 1 then APos.Y := PosValueOf(AData.Items[1]);
+      end;
+    jtObject:
+      begin
+        o := TJSONObject(AData);
+        APos.Kind := ctpBox;
+        APos.Left := PosValueOf(o.Find('left'));
+        APos.Top := PosValueOf(o.Find('top'));
+        APos.Right := PosValueOf(o.Find('right'));
+        APos.Bottom := PosValueOf(o.Find('bottom'));
+      end;
+  end;
+end;
+
+function RawOfPos(const AV: TTyChartPosValue): TTyBoxRaw;
+begin
+  case AV.Kind of
+    cpvNumber: Result := TyBoxRawNum(AV.Num);
+    cpvText: Result := TyBoxRawStr(AV.Text);
+  else
+    Result := Default(TTyBoxRaw);
+  end;
+end;
+
+const
+  cJsSqrt2: Double = 1.4142135623730951;
+
+{ `align && (...)`: a truthy word; 'center' and 'middle' are the centre }
+function IsCentreWord(const AWord: string): Boolean;
+begin
+  Result := (AWord = 'center') or (AWord = 'middle');
+end;
+
+function TyTooltipPlace(const ASpec: TTyTooltipSpec;
+  const AIn: TTyTooltipPlaceIn): TTyPointF;
+var
+  pos: TTyChartTooltipPos;
+  args: TTyChartTooltipPosArgs;
+  x, y, w, h, off: Double;
+  align, valign: string;
+  box: TTyRawBox;
+  lay: TTyXYWH;
+  mask: TFPUExceptionMask;
+begin
+  w := AIn.ContentW;
+  h := AIn.ContentH;
+  x := AIn.PointX;
+  y := AIn.PointY;
+  align := ASpec.Align;
+  valign := ASpec.VerticalAlign;
+  pos := ASpec.Position;
+  { A FUNCTION FIRST: its answer is read exactly as the option would be }
+  if ASpec.PositionHandler <> '' then
+  begin
+    args := Default(TTyChartTooltipPosArgs);
+    args.PointX := AIn.PointX;
+    args.PointY := AIn.PointY;
+    args.Params := AIn.Params;
+    args.IsAxis := AIn.IsAxis;
+    args.HasRect := AIn.HasRect;
+    args.RectX := AIn.Rect.X;
+    args.RectY := AIn.Rect.Y;
+    args.RectW := AIn.Rect.W;
+    args.RectH := AIn.Rect.H;
+    args.ViewW := AIn.ViewW;
+    args.ViewH := AIn.ViewH;
+    args.ContentW := w;
+    args.ContentH := h;
+    { a name nobody registered: the default placement }
+    TyChartRunPositionHandler(ASpec.PositionHandler, args, pos);
+  end;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    case pos.Kind of
+      ctpPoint:
+        begin
+          x := TyBoxRawResolve(RawOfPos(pos.X), AIn.ViewW);
+          y := TyBoxRawResolve(RawOfPos(pos.Y), AIn.ViewH);
+        end;
+      ctpBox:
+        begin
+          box := Default(TTyRawBox);
+          box.Left := RawOfPos(pos.Left);
+          box.Top := RawOfPos(pos.Top);
+          box.Right := RawOfPos(pos.Right);
+          box.Bottom := RawOfPos(pos.Bottom);
+          box.Width := TyBoxRawNum(w);
+          box.Height := TyBoxRawNum(h);
+          lay := TyGetLayoutRect(box, 0, 0, AIn.ViewW, AIn.ViewH, []);
+          x := lay.X;
+          y := lay.Y;
+          { left/top/right/bottom: align and verticalAlign do not apply }
+          align := '';
+          valign := '';
+        end;
+    end;
+    if (pos.Kind = ctpSide) and AIn.HasRect then
+    begin
+      { calcTooltipPosition: the offset clears the border's corner }
+      { Math.SQRT2 as a typed Double: a folded Sqrt(2) can come out Single }
+      off := Ceil(cJsSqrt2 * AIn.BorderWidth) + 8;
+      x := 0;
+      y := 0;
+      if pos.Side = 'inside' then
+      begin
+        x := AIn.Rect.X + AIn.Rect.W / 2 - w / 2;
+        y := AIn.Rect.Y + AIn.Rect.H / 2 - h / 2;
+      end
+      else if pos.Side = 'top' then
+      begin
+        x := AIn.Rect.X + AIn.Rect.W / 2 - w / 2;
+        y := AIn.Rect.Y - h - off;
+      end
+      else if pos.Side = 'bottom' then
+      begin
+        x := AIn.Rect.X + AIn.Rect.W / 2 - w / 2;
+        y := AIn.Rect.Y + AIn.Rect.H + off;
+      end
+      else if pos.Side = 'left' then
+      begin
+        x := AIn.Rect.X - w - off;
+        y := AIn.Rect.Y + AIn.Rect.H / 2 - h / 2;
+      end
+      else if pos.Side = 'right' then
+      begin
+        x := AIn.Rect.X + AIn.Rect.W + off;
+        y := AIn.Rect.Y + AIn.Rect.H / 2 - h / 2;
+      end;
+    end
+    else if (pos.Kind = ctpDefault) or (pos.Kind = ctpSide) then
+    begin
+      { refixTooltipPosition: a gap only on an axis with no align. The extra
+        2 is on the horizontal TEST and never in the arithmetic. }
+      if align = '' then
+      begin
+        if x + w + AIn.Gap + 2 > AIn.ViewW then x := x - (w + AIn.Gap)
+        else x := x + AIn.Gap;
+      end;
+      if valign = '' then
+      begin
+        if y + h + AIn.Gap > AIn.ViewH then y := y - (h + AIn.Gap)
+        else y := y + AIn.Gap;
+      end;
+    end;
+    if align <> '' then
+    begin
+      if IsCentreWord(align) then x := x - w / 2
+      else if align = 'right' then x := x - w;
+    end;
+    if valign <> '' then
+    begin
+      if IsCentreWord(valign) then y := y - h / 2
+      else if valign = 'bottom' then y := y - h;
+    end;
+    { not a number: nought (upstream hands NaN to the DOM) }
+    if IsNan(x) or IsInfinite(x) then x := 0;
+    if IsNan(y) or IsInfinite(y) then y := 0;
+    if ASpec.Confine then
+    begin
+      x := Min(x + w, AIn.ViewW) - w;
+      y := Min(y + h, AIn.ViewH) - h;
+      x := Max(x, 0);
+      y := Max(y, 0);
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+  Result.X := x;
+  Result.Y := y;
 end;
 
 { ============================ content ============================ }
@@ -1074,36 +1446,28 @@ end;
 function TyTooltipBoxAt(AAnchorX, AAnchorY, AWidth, AHeight, AGapPx: Double;
   const ABounds: TTyRectF): TTyRectF;
 var
-  x, y, bw, bh: Double;
+  pin: TTyTooltipPlaceIn;
+  p: TTyPointF;
 begin
   if AWidth < 0 then AWidth := 0;
   if AHeight < 0 then AHeight := 0;
   if AGapPx < 0 then AGapPx := 0;
-  bw := ABounds.Right - ABounds.Left;
-  bh := ABounds.Bottom - ABounds.Top;
-
-  x := AAnchorX - ABounds.Left;
-  y := AAnchorY - ABounds.Top;
-
-  { DOWN AND RIGHT, flipped per axis, each decided on its own. Upstream adds 2
-    to the horizontal TEST only -- never to the arithmetic -- as a workaround
-    for the CSS float its values are laid out with. A canvas has no float and
-    no analogue, so the 2 is dropped and the flip threshold sits two pixels
-    further right than upstream's. }
-  if x + AWidth + AGapPx > bw then x := x - AWidth - AGapPx
-  else x := x + AGapPx;
-  if y + AHeight + AGapPx > bh then y := y - AHeight - AGapPx
-  else y := y + AGapPx;
-
-  { Then confined. Far edge first, near edge second, so an oversized box keeps
-    its top-left and overflows the other way. }
-  x := Min(x + AWidth, bw) - AWidth;
-  y := Min(y + AHeight, bh) - AHeight;
-  if x < 0 then x := 0;
-  if y < 0 then y := 0;
-
-  Result := TyRectF(ABounds.Left + x, ABounds.Top + y,
-                    ABounds.Left + x + AWidth, ABounds.Top + y + AHeight);
+  { DOWN AND RIGHT, flipped per axis, each decided on its own, then
+    confined -- TyTooltipPlace's default placement. [Batch 100: upstream's
+    extra 2 on the horizontal test is kept now; refixTooltipPosition runs in
+    both of its modes, richText included, so dropping it was a difference
+    from the renderer this one copies.] }
+  pin := Default(TTyTooltipPlaceIn);
+  pin.PointX := AAnchorX - ABounds.Left;
+  pin.PointY := AAnchorY - ABounds.Top;
+  pin.ContentW := AWidth;
+  pin.ContentH := AHeight;
+  pin.ViewW := ABounds.Right - ABounds.Left;
+  pin.ViewH := ABounds.Bottom - ABounds.Top;
+  pin.Gap := AGapPx;
+  p := TyTooltipPlace(TyTooltipSpecDefault, pin);
+  Result := TyRectF(ABounds.Left + p.X, ABounds.Top + p.Y,
+                    ABounds.Left + p.X + AWidth, ABounds.Top + p.Y + AHeight);
 end;
 
 end.

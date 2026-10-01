@@ -155,6 +155,19 @@ const CASES = [
   { id: 'scroll-sel-v', note: 'scroll + selector, vertical (start)', option: opt({ type: 'scroll', selector: true, orient: 'vertical', right: 10, top: 20, bottom: 20 }, NAMES20) },
   { id: 'scroll-sel-v-end', note: "scroll + selector, vertical 'end', buttons 'start'", option: opt({ type: 'scroll', selector: true, selectorPosition: 'end', pageButtonPosition: 'start', orient: 'vertical', left: 10, top: 20, bottom: 60 }, NAMES20) },
   { id: 'scroll-sel-fits', note: 'scroll + selector, everything fits', option: opt({ type: 'scroll', selector: true }, ['A', 'B']) },
+  // ---- [batch 100] legend.data names nothing answers to: not drawn ----
+  { id: 'h-unknown', note: 'scroll, legend.data with two names no series has (1, 7): no child, no page; scrollDataIndex 7 is one of them',
+    option: opt({ type: 'scroll', scrollDataIndex: 7, data: NAMES12.slice(0, 1).concat(['Nope'], NAMES12.slice(1, 6), ['Gone'], NAMES12.slice(6)) }, NAMES12),
+    steps: [{ type: 'click', at: { pager: 'next' } }, { type: 'click', at: { pager: 'next' } }, { type: 'click', at: { pager: 'prev' } },
+      { type: 'action', payload: { type: 'legendScroll', scrollDataIndex: 9 } }] },
+  { id: 'sel-unknown', note: 'plain legend with a selector, legend.data A, Nope, Bb, Ccc: the selector and the selected map',
+    option: opt({ selector: true, data: ['A', 'Nope', 'Bb', 'Ccc'] }, ['A', 'Bb', 'Ccc']),
+    steps: [{ type: 'click', at: { item: 'Bb' } }, { type: 'click', at: { selector: 1 } }, { type: 'click', at: { selector: 0 } }] },
+  { id: 'sel-unknown-single', note: "selectedMode 'single' with the unknown name first",
+    option: opt({ selector: true, selectedMode: 'single', data: ['Nope', 'A', 'Bb'] }, ['A', 'Bb']) },
+  { id: 'sel-pie-name', note: "legend.data naming a pie's own series name: drawn as a series item",
+    option: { animation: false, legend: { selector: true, data: ['MyPie', 'a', 'Nope', 'b'] },
+      series: [{ type: 'pie', name: 'MyPie', data: [{ name: 'a', value: 1 }, { name: 'b', value: 2 }] }] } },
 ];
 
 // ---- interaction sequences (cases with steps) ----
@@ -470,6 +483,15 @@ function guards(cases) {
   const sh = by('seq-selector-hover');
   guard('hover emphasis then the re-render clears it', sh.steps[1].state.selector[0].st.join() === 'emphasis'
     && sh.steps[4].state.selector[1].st.length === 0 && sh.steps[6].state.selector[1].st.join() === 'emphasis');
+  // [batch 100] LegendView.renderInner: a name no series and no provider has
+  // adds no child -- the items keep their legend data index
+  const un = by('h-unknown').steps[0].state;
+  guard('an unknown name is no child (h-unknown: no item 1 or 7, twelve items)',
+    un.items.length === 12 && !un.items.some(it => it.i === 1 || it.i === 7));
+  guard('scrollDataIndex on an unknown name is the first item', un.page.index === 0);
+  const su = by('sel-unknown').steps[0].state;
+  guard('a plain legend skips it too', JSON.stringify(su.items.map(it => it.i)) === '[0,2,3]');
+  guard('the pie name is drawn', by('sel-pie-name').steps[0].state.items.some(it => it.i === 0));
   return g;
 }
 

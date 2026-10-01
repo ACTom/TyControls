@@ -160,13 +160,14 @@ type
     this unit asks the theme and the data nothing.
 
     Found = False is a real answer and not a failure: a `legend.data` entry
-    naming a series that does not exist is drawn, greyed, and upstream logs a
-    warning.
-    [Batch 98: the reason is wrong -- LegendView.renderInner draws NOTHING for
-    a name no series and no data provider answers to (a probe on the 6.1
-    build: data A, Nope, B gives the items 0 and 2); it only warns. The port
-    still draws it greyed; a scroll legend counts its pages over that extra
-    item. Left as is: changing it moves batch 45's tests.] }
+    naming nothing the chart has is NOT DRAWN -- LegendView.renderInner adds
+    no child for a name no series and no data provider answers to (only a
+    dev warning), so it takes no place, no gap and no page, and the items
+    after it keep their legend data index (the 6.1 build: data A, Nope, B
+    draws the items 0 and 2).
+    [Batch 100: until then the port drew it greyed, on a claim that upstream
+    did the same; batch 98 found the claim wrong.] A legend handed NO
+    sources at all treats every entry as found. }
   TTyLegendSource = record
     Found: Boolean;
     { 'bar' | 'line' | 'scatter' | 'pie' | '' }
@@ -1953,7 +1954,7 @@ end;
 procedure LayoutRich(const ASpec: TTyLegendSpec; const ADeco: TTyLegendDeco;
   const AContainer: TTyRectF; APPI: Integer; AScale, AGap: Double;
   const APad: array of Double; const AMaxBox: TTyXYWH;
-  const ARects: array of TTyRectF; const ANewline: array of Boolean;
+  const ARects: array of TTyRectF; const ANewline, AAbsent: array of Boolean;
   var R: TTyLegendLayout);
 var
   o, i, k, n, nk, ns, target, winStart, winEnd, cur: Integer;
@@ -1984,12 +1985,14 @@ begin
 
   { THE CONTENT'S CHILDREN: every entry drawn, line breaks included on a
     plain legend; a scroll legend disables line breaks (newlineDisabled), so
-    its '' and '\n' are names no series answers to and draw nothing }
+    its '' and '\n' are names no series answers to and draw nothing -- nor
+    does any other such name [Batch 100] }
   SetLength(kids, n);
   nk := 0;
   for i := 0 to n - 1 do
   begin
     if ASpec.IsScroll and ANewline[i] then Continue;
+    if AAbsent[i] then Continue;
     kids[nk] := i;
     Inc(nk);
   end;
@@ -2338,8 +2341,14 @@ var
   content: TTyRectF;
   spec2: TTyBoxSpec;
   rects: array of TTyRectF;
-  newline: array of Boolean;
+  newline, absent: array of Boolean;
   px, py: array of Double;
+  { the children the content group holds: no absent entry among them }
+  kids: array of Integer;
+  krects: array of TTyRectF;
+  knl: array of Boolean;
+  kx, ky: array of Double;
+  nk, k: Integer;
   src: TTyLegendSource;
   it: TTyLegendItem;
   iconR, textR: TTyRectF;
@@ -2383,6 +2392,7 @@ begin
   SetLength(Result.Items, n);
   SetLength(rects, n);
   SetLength(newline, n);
+  SetLength(absent, n);
   SetLength(px, n);
   SetLength(py, n);
 
@@ -2393,9 +2403,14 @@ begin
     it.Name := AEntries[i].Name;
     it.Selected := (i <= High(AFlags)) and AFlags[i];
     newline[i] := AEntries[i].Newline;
+    { A NAME NOTHING ANSWERS TO IS NO CHILD AT ALL [Batch 100]: not placed,
+      not measured into the box, not a page -- but it keeps its index, so
+      the items after it carry their legend data index as upstream's do }
+    absent[i] := (not newline[i]) and (i <= High(ASources))
+      and not ASources[i].Found;
     px[i] := 0;
     py[i] := 0;
-    if newline[i] then
+    if newline[i] or absent[i] then
     begin
       { An empty group measures (0, 0, 0, 0) and that zero is load-bearing: it
         is what resets the row pitch.
@@ -2490,18 +2505,45 @@ begin
   if ASpec.IsScroll or ASpec.HasSelector then
   begin
     LayoutRich(ASpec, ADeco, AContainer, APPI, scale, gap, pad, maxBox, rects,
-      newline, Result);
+      newline, absent, Result);
     Exit;
   end;
 
-  BoxLayout(ASpec.Orient = tloHorizontal, rects, newline, gap,
-    maxBox.W, maxBox.H, px, py);
+  { THE CONTENT GROUP'S CHILDREN, the absent entries left out: the box
+    layout's `next` is the next CHILD, so a hole must not stand between two
+    items [Batch 100] }
+  SetLength(kids, n);
+  nk := 0;
+  for i := 0 to n - 1 do
+    if not absent[i] then
+    begin
+      kids[nk] := i;
+      Inc(nk);
+    end;
+  SetLength(krects, nk);
+  SetLength(knl, nk);
+  SetLength(kx, nk);
+  SetLength(ky, nk);
+  for k := 0 to nk - 1 do
+  begin
+    krects[k] := rects[kids[k]];
+    knl[k] := newline[kids[k]];
+    kx[k] := 0;
+    ky[k] := 0;
+  end;
+  BoxLayout(ASpec.Orient = tloHorizontal, krects, knl, gap,
+    maxBox.W, maxBox.H, kx, ky);
+  for k := 0 to nk - 1 do
+  begin
+    px[kids[k]] := kx[k];
+    py[kids[k]] := ky[k];
+  end;
 
   content := TyInvalidRectF;
   drawn := 0;
   for i := 0 to n - 1 do
   begin
-    if newline[i] then Continue;
+    if newline[i] or absent[i] then Continue;
     content := RectUnion(content,
       TyRectF(px[i] + rects[i].Left, py[i] + rects[i].Top,
               px[i] + rects[i].Right, py[i] + rects[i].Bottom));
@@ -2524,7 +2566,7 @@ begin
 
   for i := 0 to n - 1 do
   begin
-    if newline[i] then Continue;
+    if newline[i] or absent[i] then Continue;
     it := Result.Items[i];
     it.IconBox := TyRectF(ox + px[i], oy + py[i],
                           ox + px[i] + iw, oy + py[i] + ih);
