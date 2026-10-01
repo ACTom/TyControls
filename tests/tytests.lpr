@@ -222,7 +222,8 @@ uses
   test.themebuilder.doc,
   test.themebuilder.problems,
   test.themebuilder.preview,
-  test.themebuilder.main;
+  test.themebuilder.main,
+  test.themebuilder.scan;
 
 type
   TTyTestRunner = class(TTestRunner)
