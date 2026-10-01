@@ -22,17 +22,21 @@ unit test.customclasses.p1;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, LCLType, fpcunit, testregistry,
   test.customclasses,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
   tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
   tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
-  tyControls.FloatSpinEdit, tyControls.CheckBox;
+  tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ListBox, tyControls.ComboBox,
+  tyControls.ComboBoxEx;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
   private
     FForm: TForm;
+    FDrawCalls: Integer;
+    procedure CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer; ARect: TRect;
+      AState: TOwnerDrawState);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -68,6 +72,10 @@ type
     procedure TestThirdCheckBox;
     procedure TestThirdRadioButton;
     procedure TestRadioGroupTakesAThirdPartyMember;
+    { Task 7: combo boxes I }
+    procedure TestDerivedComboPopupReachesTheOwnerDraw;
+    procedure TestThirdComboBoxExItemsDriveTheList;
+    procedure TestThirdComboBox;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -134,6 +142,18 @@ type
     property GroupIndex;
   end;
 
+  TThirdComboBox = class(TTyCustomComboBox)
+  published
+    property Items;
+    property ItemIndex;
+  end;
+
+  TThirdComboBoxEx = class(TTyCustomComboBoxEx)
+  published
+    property ItemsEx;
+    property Images;
+  end;
+
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
 function StreamedText(AComp: TComponent): string;
 { Stream ASrc and read it back into ADst. }
@@ -170,6 +190,12 @@ type
   public
     procedure SetIncrementTo(AValue: Integer);
     function IncrementNow: Integer;
+  end;
+
+  { CreatePopupList is protected: this builds the list a combo would drop. }
+  TP1ComboCracker = class(TTyCustomComboBox)
+  public
+    function MakePopupList: TTyListBox;
   end;
 
   TP1ToolBar = class(TTyToolBar)
@@ -223,6 +249,11 @@ end;
 function TP1UpDownCracker.IncrementNow: Integer;
 begin
   Result := Increment;
+end;
+
+function TP1ComboCracker.MakePopupList: TTyListBox;
+begin
+  Result := CreatePopupList;
 end;
 
 procedure TP1ToolBar.ForceLayout;
@@ -318,6 +349,12 @@ end;
 procedure TTyCustomClassesP1Test.TearDown;
 begin
   FreeAndNil(FForm);
+end;
+
+procedure TTyCustomClassesP1Test.CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer;
+  ARect: TRect; AState: TOwnerDrawState);
+begin
+  Inc(FDrawCalls);
 end;
 
 procedure TTyCustomClassesP1Test.CheckPublishesOnly(AClass: TClass; const ANames: array of string);
@@ -882,8 +919,95 @@ begin
   AssertFalse('and the other way round', third.Checked);
 end;
 
+{ ------------------------------------------------------------------ Task 7: combo boxes I }
+
+{ S7-1. A combo's drop-down list finds its combo through Owner to hand rows to the host's
+  OnDrawItem. Every derived combo -- TTyComboBoxEx here -- is a TTyCustomComboBox and, since 4.0,
+  not a TTyComboBox; the lookup that asked for TTyComboBox left every one of their lists painting
+  their own rows behind the host's back. }
+procedure TTyCustomClassesP1Test.TestDerivedComboPopupReachesTheOwnerDraw;
+var
+  c: TTyComboBoxEx;
+  l: TTyListBox;
+  bmp: TBitmap;
+begin
+  c := TTyComboBoxEx.Create(FForm);
+  c.Items.Add('Alpha');
+  c.Items.Add('Beta');
+  c.OnDrawItem := @CountDraw;
+  c.Style := csOwnerDrawFixed;
+  l := TP1ComboCracker(c).MakePopupList;
+  AssertTrue('the Ex combo drops a TTyComboPopupList (or this proves nothing)',
+    l is TTyComboPopupList);
+  l.Parent := FForm;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 24;
+  l.SetBounds(0, 0, 160, 80);
+  l.Items.Assign(c.Items);
+  l.TopIndex := 0;
+  bmp := NewSentinelBitmap(160, 80);
+  try
+    FDrawCalls := 0;
+    TTyComboPopupList(l).RenderWithOwnerDraw(bmp.Canvas, Rect(0, 0, 160, 80), 96);
+    AssertEquals('the host''s OnDrawItem ran once per row of the derived combo''s list', 2,
+      FDrawCalls);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ S7-2. ItemsEx is the item source: the collection tells its combo when it changes, and the
+  combo rebuilds Items. The collection finds that combo through its owner, which for a third
+  party's TTyCustomComboBoxEx descendant is not a TTyComboBoxEx. }
+procedure TTyCustomClassesP1Test.TestThirdComboBoxExItemsDriveTheList;
+var
+  third: TThirdComboBoxEx;
+begin
+  third := TThirdComboBoxEx.Create(FForm);
+  CheckPublishesOnly(TThirdComboBoxEx, ['ItemsEx', 'Images']);
+  third.ItemsEx.AddItem('Save', 3);
+  third.ItemsEx.AddItem('Open', 4);
+  AssertEquals('the collection reached the painted list', 2, third.Items.Count);
+  third.ItemsEx[0].Caption := 'Store';
+  AssertEquals('so does a caption edit', 'Store', third.Items[0]);
+  { Images only: TWriter writes a collection property whenever there is no ancestor to compare
+    with, empty or not (writer.inc), so ItemsEx = <> is in every fresh stream. }
+  CheckFreshDefaults(TThirdComboBoxEx, ['Images']);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdComboBox;
+var
+  third, back: TThirdComboBox;
+  own: TTyComboBox;
+  c: TTyCustomComboBox;
+begin
+  third := TThirdComboBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdComboBox, ['Items', 'ItemIndex']);
+  third.Items.Add('one');
+  third.Items.Add('two');
+  third.ItemIndex := 1;
+  third.DropDownCount := 3;
+  CheckStreamText(third, ['Items', 'ItemIndex'], 'DropDownCount');
+  back := TThirdComboBox.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Items round-trip', 2, back.Items.Count);
+  AssertEquals('T-c: ItemIndex round-trips', 1, back.ItemIndex);
+  AssertEquals('T-c: the unpublished DropDownCount stayed at its default', 8, back.DropDownCount);
+  own := TTyComboBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdComboBox, ['Items', 'ItemIndex']);
+  AssertTrue('T-e: the mimic is a tab stop, like TTyComboBox', third.TabStop);
+  c := third;
+  c.DropDownCount := 5;
+  AssertEquals('T-v: DropDownCount is public through a TTyCustomComboBox reference', 5,
+    third.DropDownCount);
+end;
+
 initialization
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
-    TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton]);
+    TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
+    TThirdComboBox, TThirdComboBoxEx]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

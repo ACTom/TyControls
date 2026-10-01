@@ -1622,7 +1622,9 @@ end;
 type
   { Calls the virtual factory, so the list under test is the one the control REALLY builds
     -- not one the test picked by name and could pick wrongly. }
-  TComboFactoryAccess = class(TTyComboBox)
+  { Cast onto every combo in the family, derived ones included -- which since 4.0 are
+    TTyCustomComboBox descendants and not TTyComboBox ones. }
+  TComboFactoryAccess = class(TTyCustomComboBox)
   public
     function MakePopupList: TTyListBox;
   end;
@@ -1635,7 +1637,7 @@ end;
 { Three rows, chosen so each list takes its OWN painting branch rather than falling through
   to the ancestor -- the grouped combo needs a real header row, or its override never runs
   and the guard passes against unwired code. }
-procedure PopulateForFamily(C: TTyComboBox);
+procedure PopulateForFamily(C: TTyCustomComboBox);
 begin
   C.Items.Clear;
   if C is TTyOfficeComboBox then
@@ -1661,11 +1663,11 @@ const
   Rows = 3;
 var
   k, before: Integer;
-  cOwn, cPlain: TTyComboBox;
+  cOwn, cPlain: TTyCustomComboBox;
   lOwn, lPlain: TTyListBox;
   klass: string;
 
-  function Build(AIndex: Integer; AHandler: TTyDrawItemEvent): TTyComboBox;
+  function Build(AIndex: Integer; AHandler: TTyDrawItemEvent): TTyCustomComboBox;
   begin
     case AIndex of
       0: Result := TTyFontComboBox.Create(FForm);
@@ -1676,14 +1678,15 @@ var
     else Result := TTyColorComboBox.Create(FForm);
     end;
     PopulateForFamily(Result);
-    Result.OnDrawItem := AHandler;
-    { Assigned through a TTyComboBox reference on purpose: on a colour box `Style` is the
+    { OnDrawItem is protected on the custom class (as on TCustomComboBox). }
+    TComboFactoryAccess(Result).OnDrawItem := AHandler;
+    { Assigned through a TTyCustomComboBox reference on purpose: on a colour box `Style` is the
       PALETTE set, and the combo mode is reachable only this way -- which is precisely the
       route a host has to take, so it is the route the guard has to take. }
     if AHandler <> nil then Result.Style := csOwnerDrawFixed;
   end;
 
-  function BuildList(ACombo: TTyComboBox): TTyListBox;
+  function BuildList(ACombo: TTyCustomComboBox): TTyListBox;
   begin
     Result := TComboFactoryAccess(ACombo).MakePopupList;
     Result.Parent := FForm;
@@ -1720,7 +1723,7 @@ end;
 procedure TComboOwnerDrawTest.TestEveryPickOnlyLockKeepsOwnerDraw;
 var
   k: Integer;
-  c: TTyComboBox;
+  c: TTyCustomComboBox;
   klass: string;
 begin
   { FIVE controls locked themselves pick-only by flattening every Style value to
@@ -1761,7 +1764,7 @@ end;
 procedure TComboOwnerDrawTest.TestSimpleFlattensToDropDownListAcrossThePickOnlyFamily;
 var
   k: Integer;
-  c: TTyComboBox;
+  c: TTyCustomComboBox;
   klass: string;
 begin
   { csSimple ON A PICK-ONLY COMBO lands as csDropDownList -- all SEVEN of them, stated

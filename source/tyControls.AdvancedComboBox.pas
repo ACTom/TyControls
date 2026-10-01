@@ -40,7 +40,7 @@ type
   { A combo of rich two-line items. Add items with AddItem(title, subtitle, imageIndex);
     read them back with TitleOf / SubtitleOf / ImageIndexOf. The image source is the
     Images (TTyVirtualImageList). }
-  TTyAdvancedComboBox = class(TTyComboBox)
+  TTyCustomAdvancedComboBox = class(TTyCustomComboBox)
   private
     FImages: TCustomImageList;
     procedure SetImages(const AValue: TCustomImageList);
@@ -65,15 +65,91 @@ type
     { The list this combo's popup draws with; also the source the popup rows read Images
       from (they cast Owner back to this combo). Exposed for the shared field draw. }
     property ImagesRef: TCustomImageList read FImages;
-  published
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
     property Images: TCustomImageList read FImages write SetImages;
   end;
 
+  { TTyAdvancedComboBox publishes TTyCustomAdvancedComboBox's properties; everything lives in TTyCustomAdvancedComboBox. }
+  TTyAdvancedComboBox = class(TTyCustomAdvancedComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Images;
+  end;
+
 implementation
 
-procedure TTyAdvancedComboBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomAdvancedComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
   { Pick-only, and ONLY pick-only: the edit box is what the joined two-line item string
     cannot survive, so that is what comes off. Flattening the whole value to csDropDownList
@@ -95,9 +171,9 @@ begin
   // The Owner is the combo (Create(Self) in CreatePopupList); it supplies the Images
   // reference. The image index rides in Objects[] (copied from the combo via Items.Assign):
   // PtrInt(Objects[i]) - 1, so 0 => -1 (no image).
-  if Owner is TTyAdvancedComboBox then
+  if Owner is TTyCustomAdvancedComboBox then
   begin
-    imgs := TTyAdvancedComboBox(Owner).ImagesRef;
+    imgs := TTyCustomAdvancedComboBox(Owner).ImagesRef;
     TyDrawAdvancedRow(P, ARowRect, Items[AIndex], PtrInt(Items.Objects[AIndex]) - 1,
       imgs, AStyle, ResolveFontSize(AStyle));
   end
@@ -105,9 +181,9 @@ begin
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;
 
-{ TTyAdvancedComboBox }
+{ TTyCustomAdvancedComboBox }
 
-procedure TTyAdvancedComboBox.SetImages(const AValue: TCustomImageList);
+procedure TTyCustomAdvancedComboBox.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then
@@ -118,21 +194,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyAdvancedComboBox.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomAdvancedComboBox.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then
     FImages := nil;
 end;
 
-procedure TTyAdvancedComboBox.AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer);
+procedure TTyCustomAdvancedComboBox.AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer);
 begin
   // Join the two lines into one entry (both survive Sorted/Delete); the image index rides
   // in Objects[] (offset by +1 so 0 = no image) — copied by Items.Assign into the popup.
   Items.AddObject(ATitle + LineEnding + ASubtitle, TObject(PtrInt(AImageIndex + 1)));
 end;
 
-function TTyAdvancedComboBox.TitleOf(AIndex: Integer): string;
+function TTyCustomAdvancedComboBox.TitleOf(AIndex: Integer): string;
 var
   t, s: string;
 begin
@@ -145,7 +221,7 @@ begin
     Result := '';
 end;
 
-function TTyAdvancedComboBox.SubtitleOf(AIndex: Integer): string;
+function TTyCustomAdvancedComboBox.SubtitleOf(AIndex: Integer): string;
 var
   t, s: string;
 begin
@@ -158,7 +234,7 @@ begin
     Result := '';
 end;
 
-function TTyAdvancedComboBox.ImageIndexOf(AIndex: Integer): Integer;
+function TTyCustomAdvancedComboBox.ImageIndexOf(AIndex: Integer): Integer;
 begin
   if (AIndex >= 0) and (AIndex < Items.Count) then
     Result := PtrInt(Items.Objects[AIndex]) - 1
@@ -166,7 +242,7 @@ begin
     Result := -1;
 end;
 
-procedure TTyAdvancedComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
+procedure TTyCustomAdvancedComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
   const AStyle: TTyStyleSet);
 var
   titleOnly: string;
@@ -184,7 +260,7 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);
 end;
 
-function TTyAdvancedComboBox.CreatePopupList: TTyListBox;
+function TTyCustomAdvancedComboBox.CreatePopupList: TTyListBox;
 begin
   Result := TTyAdvancedComboPopupList.Create(Self);
   Result.ItemHeight := 40;   // taller rows to match the rich two-line layout

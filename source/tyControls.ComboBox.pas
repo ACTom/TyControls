@@ -110,7 +110,7 @@ type
     St: TOwnerDrawState;
   end;
 
-  TTyComboBox = class(TTyCustomControl)
+  TTyCustomComboBox = class(TTyCustomControl)
   private
     FItems: TStringList;
     FItemIndex: Integer;
@@ -414,16 +414,81 @@ type
     property SelStart: Integer read GetSelStart write SetSelStart;
     property SelLength: Integer read GetSelLength write SetSelLength;
     property SelText: string read GetSelText write SetSelText;
+    property TabStop default True;
+    property Items: TStringList read FItems write SetItems stored ItemsStored;
+    property ItemIndex: Integer read FItemIndex write SetItemIndex;
+    property Text: TCaption read FText write SetText;
+    { Max number of rows visible in the dropdown before it scrolls (LCL default 8). }
+    property DropDownCount: Integer read FDropDownCount write SetDropDownCount default 8;
+    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
+    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete;
+      csOwnerDrawFixed / csOwnerDrawEditableFixed = the same two with the rows drawn by
+      OnDrawItem; csOwnerDrawVariable / csOwnerDrawEditableVariable = those two again, with
+      each row's HEIGHT coming from OnMeasureItem; csSimple = the editable field with the
+      list PERMANENTLY docked under it (Height spans field + list, no popup, no arrow).
+      NOTE the default is the OPPOSITE of LCL's csDropDown, and deliberately so: every
+      .lfm in this repo and in users' projects omits Style and expects a pick-only combo.
+      See docs/controls/combobox.md §8.1 for the full value table, including csSimple's
+      ordinal divergence from LCL (6 here, 1 there -- appended, never inserted). }
+    property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
+    { Placeholder shown while the field is empty. Forwarded to the embedded editor in
+      csDropDown; painted by the field itself in csDropDownList, which has no editor. }
+    property TextHint: TCaption read FTextHint write SetTextHint;
+    { Rejects typing in the edit portion while the dropdown still works. Inert in
+      csDropDownList, which has no editable text at all. }
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+  protected
+    { When True, Items are kept in ascending (case-insensitive) order and the
+      previously-selected item stays selected (tracked by its text). }
+    property Sorted: Boolean read FSorted write SetSorted default False;
+    { MaxLength/CharCase apply to the embedded edit field. In csDropDown mode they
+      are forwarded to that field (CharCase transforms typed text; MaxLength caps
+      its length). In csDropDownList mode there is no editable text, so they are
+      inert — published for native-API parity and streaming round-trip. }
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
+    { Pixel height of one dropdown row. 0 (default) = follow the theme's --item-height,
+      so a density change still moves the rows; a positive value pins them. }
+    property ItemHeight: Integer read FItemHeight write SetItemHeight default 0;
+    { MINIMUM dropdown width in logical px. 0 (default) = exactly the field width. Lets a
+      list of long paths open wider than the closed combo. }
+    property ItemWidth: Integer read FItemWidth write SetItemWidth default 0;
+    { The application paints a drop-down row -- and, in csOwnerDrawFixed, the closed field.
+      LCL's OnDrawItem (stdctrls.pp:399) plus the canvas its signature leaves implicit; see
+      TTyDrawItemEvent for why that one parameter had to be added. Runs only when Style is
+      one of the owner-draw values; the handler is called AFTER the themed background is down
+      (odBackgroundPainted) and after the painter has composited, on the real canvas.
+
+      ARect is the row's own painted rect and the clip is set to it, so a handler cannot
+      bleed into its neighbour. Index is an index into Items -- mapped back for you when the
+      popup is showing the autocomplete's filtered subset. }
+    property OnDrawItem: TTyDrawItemEvent read FOnDrawItem write SetOnDrawItem;
+    { The application says how tall ONE drop-down row is. LCL's OnMeasureItem
+      (stdctrls.pp:402). Consulted ONLY by the two Variable styles -- csOwnerDrawVariable
+      and csOwnerDrawEditableVariable -- because they are the only ones that have per-row
+      heights at all; under any other Style every row is ItemHeight and this never fires.
+      That pairing is the reason the event and the styles landed together: an event no Style
+      could reach would be a published property the control does not honour. }
+    property OnMeasureItem: TTyMeasureItemEvent read FOnMeasureItem write SetOnMeasureItem;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
+    property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
+    property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
+    { Fires as the list is about to be shown, so the application can fill Items
+      just-in-time. It runs BEFORE DropDown's empty-list guard — that ordering is the
+      whole point, since a lazy combo starts empty and would otherwise never open. }
+    property OnGetItems: TNotifyEvent read FOnGetItems write FOnGetItems;
+  end;
+
+  { TTyComboBox publishes TTyCustomComboBox's properties; everything lives in TTyCustomComboBox. }
+  TTyComboBox = class(TTyCustomComboBox)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -467,67 +532,25 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Items: TStringList read FItems write SetItems stored ItemsStored;
-    property ItemIndex: Integer read FItemIndex write SetItemIndex;
-    property Text: TCaption read FText write SetText;
-    { Max number of rows visible in the dropdown before it scrolls (LCL default 8). }
-    property DropDownCount: Integer read FDropDownCount write SetDropDownCount default 8;
-    { When True, Items are kept in ascending (case-insensitive) order and the
-      previously-selected item stays selected (tracked by its text). }
-    property Sorted: Boolean read FSorted write SetSorted default False;
-    { MaxLength/CharCase apply to the embedded edit field. In csDropDown mode they
-      are forwarded to that field (CharCase transforms typed text; MaxLength caps
-      its length). In csDropDownList mode there is no editable text, so they are
-      inert — published for native-API parity and streaming round-trip. }
-    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
-    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
-    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete;
-      csOwnerDrawFixed / csOwnerDrawEditableFixed = the same two with the rows drawn by
-      OnDrawItem; csOwnerDrawVariable / csOwnerDrawEditableVariable = those two again, with
-      each row's HEIGHT coming from OnMeasureItem; csSimple = the editable field with the
-      list PERMANENTLY docked under it (Height spans field + list, no popup, no arrow).
-      NOTE the default is the OPPOSITE of LCL's csDropDown, and deliberately so: every
-      .lfm in this repo and in users' projects omits Style and expects a pick-only combo.
-      See docs/controls/combobox.md §8.1 for the full value table, including csSimple's
-      ordinal divergence from LCL (6 here, 1 there -- appended, never inserted). }
-    property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
-    { Pixel height of one dropdown row. 0 (default) = follow the theme's --item-height,
-      so a density change still moves the rows; a positive value pins them. }
-    property ItemHeight: Integer read FItemHeight write SetItemHeight default 0;
-    { MINIMUM dropdown width in logical px. 0 (default) = exactly the field width. Lets a
-      list of long paths open wider than the closed combo. }
-    property ItemWidth: Integer read FItemWidth write SetItemWidth default 0;
-    { Placeholder shown while the field is empty. Forwarded to the embedded editor in
-      csDropDown; painted by the field itself in csDropDownList, which has no editor. }
-    property TextHint: TCaption read FTextHint write SetTextHint;
-    { Rejects typing in the edit portion while the dropdown still works. Inert in
-      csDropDownList, which has no editable text at all. }
-    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
-    { The application paints a drop-down row -- and, in csOwnerDrawFixed, the closed field.
-      LCL's OnDrawItem (stdctrls.pp:399) plus the canvas its signature leaves implicit; see
-      TTyDrawItemEvent for why that one parameter had to be added. Runs only when Style is
-      one of the owner-draw values; the handler is called AFTER the themed background is down
-      (odBackgroundPainted) and after the painter has composited, on the real canvas.
-
-      ARect is the row's own painted rect and the clip is set to it, so a handler cannot
-      bleed into its neighbour. Index is an index into Items -- mapped back for you when the
-      popup is showing the autocomplete's filtered subset. }
-    property OnDrawItem: TTyDrawItemEvent read FOnDrawItem write SetOnDrawItem;
-    { The application says how tall ONE drop-down row is. LCL's OnMeasureItem
-      (stdctrls.pp:402). Consulted ONLY by the two Variable styles -- csOwnerDrawVariable
-      and csOwnerDrawEditableVariable -- because they are the only ones that have per-row
-      heights at all; under any other Style every row is ItemHeight and this never fires.
-      That pairing is the reason the event and the styles landed together: an event no Style
-      could reach would be a published property the control does not honour. }
-    property OnMeasureItem: TTyMeasureItemEvent read FOnMeasureItem write SetOnMeasureItem;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
-    property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
-    property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
-    { Fires as the list is about to be shown, so the application can fill Items
-      just-in-time. It runs BEFORE DropDown's empty-list guard — that ordering is the
-      whole point, since a lazy combo starts empty and would otherwise never open. }
-    property OnGetItems: TNotifyEvent read FOnGetItems write FOnGetItems;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
     property Align;
     property Anchors;
   end;
@@ -611,15 +634,17 @@ begin
   end;
 end;
 
-function TyComboOwnerOf(AList: TTyListBox): TTyComboBox;
+{ Any combo owns its popup list: every derived combo (ColorBox, ComboBoxEx, ...) is a
+  TTyCustomComboBox and, since 4.0, not a TTyComboBox. }
+function TyComboOwnerOf(AList: TTyListBox): TTyCustomComboBox;
 begin
   Result := nil;
-  if (AList <> nil) and (AList.Owner is TTyComboBox) then
-    Result := TTyComboBox(AList.Owner);
+  if (AList <> nil) and (AList.Owner is TTyCustomComboBox) then
+    Result := TTyCustomComboBox(AList.Owner);
 end;
 
 procedure TyComboBeginRowOwnerDraw(AList: TTyListBox);
-var C: TTyComboBox;
+var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
   if C <> nil then C.BeginRowOwnerDraw;
@@ -627,21 +652,21 @@ end;
 
 function TyComboCollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
   AIndex: Integer): Boolean;
-var C: TTyComboBox;
+var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
   Result := (C <> nil) and C.CollectRowOwnerDraw(AList, ARowRect, AIndex);
 end;
 
 procedure TyComboDispatchRowOwnerDraw(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect);
-var C: TTyComboBox;
+var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
   if C <> nil then C.DispatchRowOwnerDraw(ACanvas, ARect);
 end;
 
 function TyComboMeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
-var C: TTyComboBox;
+var C: TTyCustomComboBox;
 begin
   C := TyComboOwnerOf(AList);
   if C = nil then Exit(ADefault);
@@ -717,7 +742,7 @@ begin
       Exit(i);
 end;
 
-constructor TTyComboBox.Create(AOwner: TComponent);
+constructor TTyCustomComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -761,7 +786,7 @@ begin
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
 end;
 
-destructor TTyComboBox.Destroy;
+destructor TTyCustomComboBox.Destroy;
 begin
   { Cancel any queued async calls so they can't fire into a freed combo. }
   Application.RemoveAsyncCalls(Self);
@@ -778,12 +803,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyComboBox.GetStyleTypeKey: string;
+function TTyCustomComboBox.GetStyleTypeKey: string;
 begin
   Result := 'TyComboBox';
 end;
 
-procedure TTyComboBox.SetController(AValue: TTyStyleController);
+procedure TTyCustomComboBox.SetController(AValue: TTyStyleController);
 begin
   inherited SetController(AValue);
   { Keep an already-created popup list in sync when the controller is reassigned;
@@ -807,33 +832,33 @@ begin
   end;
 end;
 
-procedure TTyComboBox.DoSelect;
+procedure TTyCustomComboBox.DoSelect;
 begin
   if Assigned(FOnSelect) then FOnSelect(Self);
 end;
 
-procedure TTyComboBox.DoEditorCommit;
+procedure TTyCustomComboBox.DoEditorCommit;
 begin
   // default: no-op (see TTyMRUComboBox)
 end;
 
-procedure TTyComboBox.DoPopupPick(AIndex: Integer);
+procedure TTyCustomComboBox.DoPopupPick(AIndex: Integer);
 begin
   UserSelect(AIndex);                                 // commit the picked row...
   Application.QueueAsyncCall(@DeferredCloseUp, 0);     // ...and close the dropdown
 end;
 
-procedure TTyComboBox.DoDropDown;
+procedure TTyCustomComboBox.DoDropDown;
 begin
   if Assigned(FOnDropDown) then FOnDropDown(Self);
 end;
 
-procedure TTyComboBox.DoCloseUp;
+procedure TTyCustomComboBox.DoCloseUp;
 begin
   if Assigned(FOnCloseUp) then FOnCloseUp(Self);
 end;
 
-procedure TTyComboBox.UserSelect(AIndex: Integer);
+procedure TTyCustomComboBox.UserSelect(AIndex: Integer);
 var
   OldIndex: Integer;
 begin
@@ -843,7 +868,7 @@ begin
     DoSelect;                    // OnSelect = the user actually picked something
 end;
 
-procedure TTyComboBox.SetItems(const AValue: TStringList);
+procedure TTyCustomComboBox.SetItems(const AValue: TStringList);
 begin
   { TStringList.Assign copies the source's Sorted flag, which would silently drop
     our Sorted state. Re-apply it so an externally-set Items list stays sorted. }
@@ -853,7 +878,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetText(const AValue: TCaption);
+procedure TTyCustomComboBox.SetText(const AValue: TCaption);
 begin
   if FText = AValue then Exit;
   FText := AValue;
@@ -864,12 +889,12 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetItemIndex(const AValue: Integer);
+procedure TTyCustomComboBox.SetItemIndex(const AValue: Integer);
 begin
   SelectItem(AValue);
 end;
 
-procedure TTyComboBox.SetDropDownCount(const AValue: Integer);
+procedure TTyCustomComboBox.SetDropDownCount(const AValue: Integer);
 begin
   if FDropDownCount = AValue then Exit;
   { Clamp to at least 1 visible row, mirroring LCL behaviour. }
@@ -881,7 +906,7 @@ begin
     resize here to keep the open popup stable. }
 end;
 
-procedure TTyComboBox.SetSorted(const AValue: Boolean);
+procedure TTyCustomComboBox.SetSorted(const AValue: Boolean);
 begin
   if FSorted = AValue then Exit;
   FSorted := AValue;
@@ -902,7 +927,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetMaxLength(const AValue: Integer);
+procedure TTyCustomComboBox.SetMaxLength(const AValue: Integer);
 begin
   FMaxLength := AValue;
   { Forward to the embedded field so csDropDown caps typed text (mirrors
@@ -912,7 +937,7 @@ begin
     FEditor.MaxLength := AValue;
 end;
 
-procedure TTyComboBox.SetCharCase(const AValue: TEditCharCase);
+procedure TTyCustomComboBox.SetCharCase(const AValue: TEditCharCase);
 begin
   FCharCase := AValue;
   { In editable mode the transform applies to the embedded field. }
@@ -926,12 +951,12 @@ begin
   end;
 end;
 
-function TTyComboBox.EditorVisibleForTest: Boolean;
+function TTyCustomComboBox.EditorVisibleForTest: Boolean;
 begin
   Result := (FEditor <> nil) and FEditor.Visible;
 end;
 
-function TTyComboBox.EditorMaxLengthForTest: Integer;
+function TTyCustomComboBox.EditorMaxLengthForTest: Integer;
 begin
   if FEditor <> nil then
     Result := FEditor.MaxLength
@@ -939,40 +964,40 @@ begin
     Result := -1;
 end;
 
-function TTyComboBox.EditorTextHintForTest: string;
+function TTyCustomComboBox.EditorTextHintForTest: string;
 begin
   if FEditor <> nil then Result := FEditor.TextHint else Result := '';
 end;
 
-function TTyComboBox.EditorReadOnlyForTest: Boolean;
+function TTyCustomComboBox.EditorReadOnlyForTest: Boolean;
 begin
   Result := (FEditor <> nil) and FEditor.ReadOnly;
 end;
 
-function TTyComboBox.ComputePopupHeightForTest(APPI: Integer): Integer;
+function TTyCustomComboBox.ComputePopupHeightForTest(APPI: Integer): Integer;
 begin
   Result := ComputePopupHeight(APPI);
 end;
 
-procedure TTyComboBox.SimulateTypedTextForTest(const S: string);
+procedure TTyCustomComboBox.SimulateTypedTextForTest(const S: string);
 begin
   if FEditor = nil then Exit;
   FEditor.Text := S;   // NOT SetEditorText: the guard must stay down so EditorChange runs
 end;
 
-function TTyComboBox.SimulateEditorKeyForTest(AKey: Word): Word;
+function TTyCustomComboBox.SimulateEditorKeyForTest(AKey: Word): Word;
 begin
   Result := AKey;
   if FEditor = nil then Exit;
   EditorKeyDown(FEditor, Result, []);
 end;
 
-function TTyComboBox.ComputePopupWidthForTest(APPI: Integer): Integer;
+function TTyCustomComboBox.ComputePopupWidthForTest(APPI: Integer): Integer;
 begin
   Result := ComputePopupWidth(APPI);
 end;
 
-procedure TTyComboBox.SetItemHeight(const AValue: Integer);
+procedure TTyCustomComboBox.SetItemHeight(const AValue: Integer);
 begin
   if FItemHeight = AValue then Exit;
   if AValue < 0 then FItemHeight := 0 else FItemHeight := AValue;
@@ -983,7 +1008,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetItemWidth(const AValue: Integer);
+procedure TTyCustomComboBox.SetItemWidth(const AValue: Integer);
 begin
   if FItemWidth = AValue then Exit;
   if AValue < 0 then FItemWidth := 0 else FItemWidth := AValue;
@@ -991,7 +1016,7 @@ begin
     DropDownCount already follows. }
 end;
 
-procedure TTyComboBox.SetTextHint(const AValue: TCaption);
+procedure TTyCustomComboBox.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;
@@ -1003,7 +1028,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetReadOnly(const AValue: Boolean);
+procedure TTyCustomComboBox.SetReadOnly(const AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
@@ -1011,7 +1036,7 @@ begin
     FEditor.ReadOnly := AValue;
 end;
 
-function TTyComboBox.GetDroppedDown: Boolean;
+function TTyCustomComboBox.GetDroppedDown: Boolean;
 begin
   { csSimple: True, always. Measured, not assumed -- a real CBS_SIMPLE combo answers 1 to
     CB_GETDROPPEDSTATE while its permanent list shows, which is what LCL's Win32
@@ -1020,7 +1045,7 @@ begin
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
-procedure TTyComboBox.SetDroppedDown(const AValue: Boolean);
+procedure TTyCustomComboBox.SetDroppedDown(const AValue: Boolean);
 begin
   { csSimple: writes are ignored, both directions -- CB_SHOWDROPDOWN "has no effect on a
     combo box created with the CBS_SIMPLE style", and the probe confirms DroppedDown stays
@@ -1036,32 +1061,32 @@ begin
     CloseUp;
 end;
 
-function TTyComboBox.GetSelStart: Integer;
+function TTyCustomComboBox.GetSelStart: Integer;
 begin
   if FEditor <> nil then Result := FEditor.SelStart else Result := 0;
 end;
 
-procedure TTyComboBox.SetSelStart(const AValue: Integer);
+procedure TTyCustomComboBox.SetSelStart(const AValue: Integer);
 begin
   if FEditor <> nil then FEditor.SelStart := AValue;
 end;
 
-function TTyComboBox.GetSelLength: Integer;
+function TTyCustomComboBox.GetSelLength: Integer;
 begin
   if FEditor <> nil then Result := FEditor.SelLength else Result := 0;
 end;
 
-procedure TTyComboBox.SetSelLength(const AValue: Integer);
+procedure TTyCustomComboBox.SetSelLength(const AValue: Integer);
 begin
   if FEditor <> nil then FEditor.SelLength := AValue;
 end;
 
-function TTyComboBox.GetSelText: string;
+function TTyCustomComboBox.GetSelText: string;
 begin
   if FEditor <> nil then Result := FEditor.SelText else Result := '';
 end;
 
-procedure TTyComboBox.SetSelText(const AValue: string);
+procedure TTyCustomComboBox.SetSelText(const AValue: string);
 begin
   { No resync afterwards on purpose: TTyEdit.SetSelText fires its OnChange once for the
     whole replace, and our EditorChange handler is what pulls the new text back into
@@ -1069,18 +1094,18 @@ begin
   if FEditor <> nil then FEditor.SelText := AValue;
 end;
 
-procedure TTyComboBox.SelectAll;
+procedure TTyCustomComboBox.SelectAll;
 begin
   if FEditor <> nil then FEditor.SelectAll;
 end;
 
-procedure TTyComboBox.AddHistoryItem(const AItem: string; AMaxHistoryCount: Integer;
+procedure TTyCustomComboBox.AddHistoryItem(const AItem: string; AMaxHistoryCount: Integer;
   ASetAsText, ACaseSensitive: Boolean);
 begin
   AddHistoryItem(AItem, nil, AMaxHistoryCount, ASetAsText, ACaseSensitive);
 end;
 
-procedure TTyComboBox.AddHistoryItem(const AItem: string; AnObject: TObject;
+procedure TTyCustomComboBox.AddHistoryItem(const AItem: string; AnObject: TObject;
   AMaxHistoryCount: Integer; ASetAsText, ACaseSensitive: Boolean);
 var
   Existing: Integer;
@@ -1106,7 +1131,7 @@ begin
   if ASetAsText then Text := AItem;
 end;
 
-procedure TTyComboBox.SetEditorText(const S: string);
+procedure TTyCustomComboBox.SetEditorText(const S: string);
 begin
   if FEditor = nil then Exit;
   FSyncingText := True;
@@ -1117,7 +1142,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.Clear;
+procedure TTyCustomComboBox.Clear;
 begin
   FItems.Clear;
   { Items.Clear fires ItemsChanged -> ResyncIndexFromText, which drops ItemIndex and blanks
@@ -1130,24 +1155,24 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.ClearSelection;
+procedure TTyCustomComboBox.ClearSelection;
 begin
   { Drops the selection without touching the list. LCL spells it this way; ItemIndex := -1
     is the same thing, but only if you already know that -1 is the sentinel. }
   SelectItem(-1);
 end;
 
-procedure TTyComboBox.AddItem(const AItem: string; AnObject: TObject);
+procedure TTyCustomComboBox.AddItem(const AItem: string; AnObject: TObject);
 begin
   FItems.AddObject(AItem, AnObject);
 end;
 
-function TTyComboBox.Count: Integer;
+function TTyCustomComboBox.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
-procedure TTyComboBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomComboBox.SetStyle(AValue: TTyComboBoxStyle);
 var
   WasSimple: Boolean;
 begin
@@ -1185,7 +1210,7 @@ begin
   Invalidate;
 end;
 
-function TTyComboBox.FieldZoneHeight(APPI: Integer): Integer;
+function TTyCustomComboBox.FieldZoneHeight(APPI: Integer): Integer;
 begin
   { The themed field height (classic 26 / modern --control-height), scaled to device px --
     the strip the FIELD keeps in csSimple. NOT derived from the control's Height: in
@@ -1194,12 +1219,12 @@ begin
   Result := MulDiv(TyDensityHeight(ActiveController, TyComboClassicFieldHeight), APPI, 96);
 end;
 
-function TTyComboBox.FieldZoneHeightForTest(APPI: Integer): Integer;
+function TTyCustomComboBox.FieldZoneHeightForTest(APPI: Integer): Integer;
 begin
   Result := FieldZoneHeight(APPI);
 end;
 
-procedure TTyComboBox.EnsureListBox;
+procedure TTyCustomComboBox.EnsureListBox;
 begin
   if FPopupList <> nil then Exit;
   FPopupList := CreatePopupList;  // virtual: a subclass returns its own list class, and
@@ -1223,7 +1248,7 @@ begin
   FPopupList.OnClick  := @PopupListClick;
 end;
 
-procedure TTyComboBox.AttachEmbeddedList;
+procedure TTyCustomComboBox.AttachEmbeddedList;
 begin
   EnsureListBox;
   { If the list is currently the popup form's content, take it back through SetContent(nil)
@@ -1247,7 +1272,7 @@ begin
   LayoutEmbeddedList;
 end;
 
-procedure TTyComboBox.DetachEmbeddedList;
+procedure TTyCustomComboBox.DetachEmbeddedList;
 begin
   if FPopupList = nil then Exit;
   FPopupList.Visible := False;         // hide first: no flash while it changes homes
@@ -1258,7 +1283,7 @@ begin
   FPopupList.Visible := True;          // the popup form's Show/Hide is the gate again
 end;
 
-procedure TTyComboBox.LayoutEmbeddedList;
+procedure TTyCustomComboBox.LayoutEmbeddedList;
 var
   FieldH, ListH: Integer;
 begin
@@ -1270,7 +1295,7 @@ begin
   FPopupList.SetBounds(0, FieldH, ClientWidth, ListH);
 end;
 
-procedure TTyComboBox.ApplyEmbeddedListColor;
+procedure TTyCustomComboBox.ApplyEmbeddedListColor;
 var
   S: TTyStyleSet;
 begin
@@ -1286,7 +1311,7 @@ begin
     FPopupList.Color := TyColorToLCL(S.Background.Color);
 end;
 
-procedure TTyComboBox.SyncEmbeddedItems;
+procedure TTyCustomComboBox.SyncEmbeddedItems;
 begin
   if FPopupList = nil then Exit;
   FPopupList.OnChange := nil;
@@ -1297,7 +1322,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.SyncEmbeddedSelection;
+procedure TTyCustomComboBox.SyncEmbeddedSelection;
 begin
   if FPopupList = nil then Exit;
   FPopupList.OnChange := nil;
@@ -1308,7 +1333,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.SetOnDrawItem(const AValue: TTyDrawItemEvent);
+procedure TTyCustomComboBox.SetOnDrawItem(const AValue: TTyDrawItemEvent);
 begin
   { Assigning (or clearing) the handler is what switches an owner-draw Style between the
     host's rows and the themed default, so it has to repaint -- setting Style first and the
@@ -1318,7 +1343,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetOnMeasureItem(const AValue: TTyMeasureItemEvent);
+procedure TTyCustomComboBox.SetOnMeasureItem(const AValue: TTyMeasureItemEvent);
 begin
   { Assigning (or clearing) this changes every ROW HEIGHT in the drop-down, so an already-
     built list has to repaint -- its row geometry is derived live from RowHeight, but nothing
@@ -1330,17 +1355,17 @@ begin
   Invalidate;
 end;
 
-function TTyComboBox.OwnerDrawsRows: Boolean;
+function TTyCustomComboBox.OwnerDrawsRows: Boolean;
 begin
   Result := TyComboStyleIsOwnerDrawn(FStyle) and Assigned(FOnDrawItem);
 end;
 
-function TTyComboBox.MeasuresRows: Boolean;
+function TTyCustomComboBox.MeasuresRows: Boolean;
 begin
   Result := TyComboStyleIsVariable(FStyle) and Assigned(FOnMeasureItem);
 end;
 
-function TTyComboBox.MeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+function TTyCustomComboBox.MeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
 var
   h: Integer;
 begin
@@ -1356,12 +1381,12 @@ begin
   if h > 0 then Result := h;
 end;
 
-function TTyComboBox.RowOwnerDrawCountForTest: Integer;
+function TTyCustomComboBox.RowOwnerDrawCountForTest: Integer;
 begin
   Result := FRowDrawCount;
 end;
 
-function TTyComboBox.RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
+function TTyCustomComboBox.RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
 begin
   { OnDrawItem's Index indexes ITEMS, as LCL documents it -- but the popup may be holding
     the prefix-filtered subset (the editable styles' autocomplete) rather than Items, and a
@@ -1376,14 +1401,14 @@ begin
   Result := FItems.IndexOf(AList.Items[ARow]);
 end;
 
-function TTyComboBox.FieldOwnerDrawState: TOwnerDrawState;
+function TTyCustomComboBox.FieldOwnerDrawState: TOwnerDrawState;
 begin
   Result := [odComboBoxEdit, odBackgroundPainted];
   if not Enabled then Result := Result + [odDisabled, odGrayed];
   if Focused then Include(Result, odFocused);
 end;
 
-procedure TTyComboBox.BeginRowOwnerDraw;
+procedure TTyCustomComboBox.BeginRowOwnerDraw;
 begin
   { Drop anything a previous paint left: a RenderTo that collects and never dispatches
     (a golden-image test drawing the list straight to a bitmap) would otherwise leak its
@@ -1391,7 +1416,7 @@ begin
   FRowDrawCount := 0;
 end;
 
-function TTyComboBox.CollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+function TTyCustomComboBox.CollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
   AIndex: Integer): Boolean;
 var
   St: TOwnerDrawState;
@@ -1419,7 +1444,7 @@ begin
   Inc(FRowDrawCount);
 end;
 
-procedure TTyComboBox.DispatchRowOwnerDraw(ACanvas: TCanvas; const ARect: TRect);
+procedure TTyCustomComboBox.DispatchRowOwnerDraw(ACanvas: TCanvas; const ARect: TRect);
 var
   k: Integer;
   R: TRect;
@@ -1461,7 +1486,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.LayoutEditor;
+procedure TTyCustomComboBox.LayoutEditor;
 var
   BtnW, PPI, PadL, PadT, PadR, PadB, BottomY: Integer;
   S: TTyStyleSet;
@@ -1495,7 +1520,7 @@ begin
     BottomY - PadT - PadB);
 end;
 
-procedure TTyComboBox.EditorChange(Sender: TObject);
+procedure TTyCustomComboBox.EditorChange(Sender: TObject);
 var filtered: TStringList;
 begin
   if FSyncingText then Exit;
@@ -1522,7 +1547,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyComboBox.EditorExit(Sender: TObject);
+procedure TTyCustomComboBox.EditorExit(Sender: TObject);
 begin
   { Close the autocomplete popup when the editable field truly loses focus (click
     elsewhere). Skip the transient blur while we are opening the popup and bouncing
@@ -1542,7 +1567,7 @@ begin
   DoEditorCommit;   // genuine focus-out: let a subclass (MRU) remember the typed text
 end;
 
-procedure TTyComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   { csSimple: Up/Down in the field move the LIST selection -- the Win32 simple combo's
     behaviour, and the only way the docked list is keyboard-reachable while the field
@@ -1579,14 +1604,14 @@ begin
   end;
 end;
 
-function TTyComboBox.PointInChevron(const P: TPoint): Boolean;
+function TTyCustomComboBox.PointInChevron(const P: TPoint): Boolean;
 var BtnW: Integer;
 begin
   BtnW := MulDiv(ButtonWidthLogical, Font.PixelsPerInch, 96);
   Result := P.X >= ClientWidth - BtnW;
 end;
 
-procedure TTyComboBox.ResyncIndexFromText;
+procedure TTyCustomComboBox.ResyncIndexFromText;
 var
   Idx: Integer;
 begin
@@ -1607,17 +1632,17 @@ begin
   end;
 end;
 
-procedure TTyComboBox.DoItemsChanged;
+procedure TTyCustomComboBox.DoItemsChanged;
 begin
   // default: no-op (see TTyComboBoxEx)
 end;
 
-function TTyComboBox.ItemsStored: Boolean;
+function TTyCustomComboBox.ItemsStored: Boolean;
 begin
   Result := FItemsStreamed;
 end;
 
-procedure TTyComboBox.ItemsChanged(Sender: TObject);
+procedure TTyCustomComboBox.ItemsChanged(Sender: TObject);
 begin
   { Subclass side models reconcile first — they may change what Items holds in Objects[],
     and ResyncIndexFromText below must see the settled list. }
@@ -1635,12 +1660,12 @@ begin
   Invalidate;
 end;
 
-function TTyComboBox.ComputePopupHeight(APPI: Integer): Integer;
+function TTyCustomComboBox.ComputePopupHeight(APPI: Integer): Integer;
 begin
   Result := PopupHeightFor(FItems.Count, APPI);
 end;
 
-function TTyComboBox.PopupHeightFor(ACount, APPI: Integer): Integer;
+function TTyCustomComboBox.PopupHeightFor(ACount, APPI: Integer): Integer;
 var
   RowH, i, n: Integer;
   S: TTyStyleSet;
@@ -1673,7 +1698,7 @@ begin
     Inc(Result, MulDiv(MeasureRowHeight(FPopupList, i, RowH), APPI, 96));
 end;
 
-function TTyComboBox.ComputePopupWidth(APPI: Integer): Integer;
+function TTyCustomComboBox.ComputePopupWidth(APPI: Integer): Integer;
 var Scaled: Integer;
 begin
   { The field width is the floor — a dropdown narrower than the combo it hangs off looks
@@ -1687,12 +1712,12 @@ begin
   end;
 end;
 
-function TTyComboBox.ButtonWidthLogical: Integer;
+function TTyCustomComboBox.ButtonWidthLogical: Integer;
 begin
   Result := ActiveController.Metric('--field-button-width', TyFieldButtonWidth);
 end;
 
-procedure TTyComboBox.SelectItem(AIndex: Integer);
+procedure TTyCustomComboBox.SelectItem(AIndex: Integer);
 var
   NewIndex: Integer;
   NewText: string;
@@ -1727,7 +1752,7 @@ end;
 
 { Lazily create the popup helper and the list box (both live for the combo's
   lifetime — the helper reuses its form across multiple show/hide cycles). }
-procedure TTyComboBox.EnsurePopup;
+procedure TTyCustomComboBox.EnsurePopup;
 begin
   if FPopup <> nil then Exit;
   FPopup := TTyDropdownPopup.Create;
@@ -1750,7 +1775,7 @@ begin
 end;
 
 { Ensure the popup helper and its TTyListBox child exist, then show the popup. }
-procedure TTyComboBox.DropDown;
+procedure TTyCustomComboBox.DropDown;
 var
   PopupH: Integer;
   S: TTyStyleSet;
@@ -1797,7 +1822,7 @@ end;
 
 { Editable-mode autocomplete: show the popup populated with the prefix-filtered
   subset (FVisibleItems) instead of the full list. Mirrors DropDown otherwise. }
-procedure TTyComboBox.DropDownFiltered;
+procedure TTyCustomComboBox.DropDownFiltered;
 var
   PopupH, PopupW: Integer;
   S: TTyStyleSet;
@@ -1848,14 +1873,14 @@ begin
   end;
 end;
 
-procedure TTyComboBox.Resize;
+procedure TTyCustomComboBox.Resize;
 begin
   inherited Resize;
   LayoutEditor;
   LayoutEmbeddedList;   // csSimple only (guarded inside): the list zone tracks the bounds
 end;
 
-procedure TTyComboBox.Loaded;
+procedure TTyCustomComboBox.Loaded;
 begin
   inherited Loaded;
   { Streaming order writes Height (a TControl property) before Style (ours), so SetStyle's
@@ -1868,7 +1893,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.CloseUp;
+procedure TTyCustomComboBox.CloseUp;
 begin
   { csSimple: a full no-op, matching the wire. The list cannot hide, and OnCloseUp must
     not fire for a close that did not happen -- LCL's fires from CBN_CLOSEUP, which a
@@ -1889,7 +1914,7 @@ begin
   DoCloseUp;
 end;
 
-procedure TTyComboBox.Click;
+procedure TTyCustomComboBox.Click;
 begin
   if not Enabled then Exit;
   inherited Click;
@@ -1910,7 +1935,7 @@ begin
     DropDown;
 end;
 
-procedure TTyComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomComboBox.KeyDown(var Key: Word; Shift: TShiftState);
 var Cnt: Integer;
 begin
   if not Enabled then Exit;
@@ -1953,7 +1978,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomComboBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var nowTick: QWord; hit: Integer;
 begin
   if not Enabled then Exit;
@@ -1969,7 +1994,7 @@ end;
 
 { Popup event handlers }
 
-procedure TTyComboBox.PopupListChange(Sender: TObject);
+procedure TTyCustomComboBox.PopupListChange(Sender: TObject);
 var
   Picked: string;
   FullIdx, OldIndex: Integer;
@@ -2017,14 +2042,14 @@ begin
   DoPopupPick(FPopupList.ItemIndex);
 end;
 
-procedure TTyComboBox.DeferredCloseUp(Data: PtrInt);
+procedure TTyCustomComboBox.DeferredCloseUp(Data: PtrInt);
 begin
   CloseUp;
 end;
 
 { Called by TTyDropdownPopup.OnClose when the popup hides (click-away, Escape,
   or programmatic FPopup.Close).  This is the single bookkeeping point. }
-procedure TTyComboBox.PopupClosed(Sender: TObject);
+procedure TTyCustomComboBox.PopupClosed(Sender: TObject);
 begin
   { Mirror the helper's close-up tick into the protected field so test subclasses
     (e.g. AgeCloseUpTick) and the Click guard can use it without touching FPopup. }
@@ -2034,7 +2059,7 @@ begin
   DoCloseUp;
 end;
 
-procedure TTyComboBox.PopupListClick(Sender: TObject);
+procedure TTyCustomComboBox.PopupListClick(Sender: TObject);
 begin
   { Fires on mouse-UP for any click inside the list. A row whose selection changed already committed
     + queued its close in PopupListChange (MouseDown); re-clicking the CURRENT row fires no OnChange,
@@ -2044,7 +2069,7 @@ begin
     Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
-procedure TTyComboBox.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomComboBox.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   if Key = VK_ESCAPE then
   begin
@@ -2054,12 +2079,12 @@ begin
 end;
 
 { Protected accessor for headless tests }
-function TTyComboBox.PopupList: TTyListBox;
+function TTyCustomComboBox.PopupList: TTyListBox;
 begin
   Result := FPopupList;
 end;
 
-procedure TTyComboBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomComboBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -2137,7 +2162,7 @@ begin
   end;
 end;
 
-procedure TTyComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
   // Default: the selected item's text (unchanged from the old inline draw).
   if FText <> '' then
@@ -2147,7 +2172,7 @@ begin
     PaintTextHint(P, ATextRect, AStyle);
 end;
 
-procedure TTyComboBox.PaintTextHint(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomComboBox.PaintTextHint(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 var HintColor: TTyColor;
 begin
   { Only the pick-only field paints its own hint: in csDropDown the embedded TTyEdit
@@ -2159,7 +2184,7 @@ begin
     AStyle.FontWeight, HintColor, taLeftJustify, tlCenter, True);
 end;
 
-function TTyComboBox.CreatePopupList: TTyListBox;
+function TTyCustomComboBox.CreatePopupList: TTyListBox;
 begin
   { TTyComboPopupList, not a bare TTyListBox: the only difference is the three owner-draw
     calls, every one of which is inert while OwnerDrawsRows is False, so the default combo
@@ -2167,7 +2192,7 @@ begin
   Result := TTyComboPopupList.Create(Self);
 end;
 
-procedure TTyComboBox.Paint;
+procedure TTyCustomComboBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

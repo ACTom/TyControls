@@ -1103,14 +1103,14 @@ initialization
     // T5 edits II
     'TTyCalculator', 'TTyMemo', 'TTySpinEdit', 'TTyFloatSpinEdit', 'TTyUpDown',
     // T6 choice
-    'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented']);
+    'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented',
+    // T7 combo boxes I
+    'TTyComboBox', 'TTyMRUComboBox', 'TTyComboBoxEx', 'TTyOfficeComboBox', 'TTyAdvancedComboBox',
+    'TTyCheckComboBox']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T7 combo boxes I
-    'TTyComboBox', 'TTyMRUComboBox', 'TTyComboBoxEx', 'TTyOfficeComboBox', 'TTyAdvancedComboBox',
-    'TTyCheckComboBox',
     // T8 combo boxes II
     'TTyColorBox', 'TTyColorComboBox', 'TTyFontComboBox', 'TTyFontSizeComboBox',
     'TTyFilterComboBox', 'TTyShellComboBox',
