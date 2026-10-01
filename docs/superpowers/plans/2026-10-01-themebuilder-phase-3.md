@@ -1898,3 +1898,85 @@ spec 标「实现期修正（3 期）：期末修复批」的段落：§7.1（�
 1. 在本签收头提交上 `lazbuild -B` 重编 `tycontrols.lpk`、`tycontrols_dt.lpk`（本批库没改，按惯例确认）与 `tools/themebuilder/themebuilder.lpi`；`powershell -File scripts/smoke-launch-examples.ps1 -Dirs tools\themebuilder` 冒烟。
 2. 对照两份审查原文核一遍「规格审查列的 6 条偏差」是否都已写回 spec（本批没拿到原文，见「规格写回」）。
 3. 截图照旧暂缓到三期统一出；真机验收加第 73–76 项。
+
+## 合并前最后一批
+
+截图暴露的界面问题与总审查的问题，合并 `feat/theme-builder` 之前一次修完。起点 `dee806ee`。每个问题先写会红的测试，修好后把修复变异掉确认红、写回原字节（不用 git）。
+
+### 提交
+
+| # | 问题 | 提交 | 处理 | 测试 |
+|---|---|---|---|---|
+| 1 | 对比窗口改动行、编辑器错误 / 警告行的字几乎看不清 | `8d36991d` | 两处 `OnSpecialLineMarkup` 只设了背景，前景停在 SynEdit 默认的 `clHighlightText`（浅灰白）。现在前景一律用编辑器正文色（`FLook.Text`，取自工具主题）；整行一种颜色，语法高亮在标记行上让位 | V10（亮 / 暗两种工具外观，改动、新增、删除、填充四种行，前景不是 `clHighlightText` / `clNone`，对比度 ≥ 4.5，用库的 `TyTermContrastRatio` 算）、M20（错误行、警告行，同样两种外观） |
+| 2 | AI 设置里 Ollama 提示第三行被「测试连接」挡住 | `14807b70` | 提示原来固定两行高，第三行被裁、按钮占了它的位置。提示与明文 http 警告改为 `AutoSize`，用锚点串在「超时」下面：警告 → 提示 → 「测试连接」（LCL 遇到隐藏的锚点控件会顺着它自己的锚点往上找，所以哪个显示就排在哪个下面），结果行与按钮同高；窗口加高 40 px 给隐私说明留位置 | G11（按真程序的字体：提示完整、按钮在它下面、不碰隐私说明；四倍长的提示、两倍高的警告下按钮跟着下移；都不显示时按钮紧跟超时） |
+| 3 | 对比窗口复选框截成「Try it in the previ...」 | `247b072d` | 复选框本来就是 `AutoSize`：截断的根源在库——`TTyCheckBox` 的 AutoSize 只用画布量标题，本机字体（Microsoft YaHei UI）下比渲染器画出来的短 3 px（给 144、要 147）。不改库，复选框改为 `alClient` 占按钮栏的剩余宽度 | V11（中英文两种标题，宽度 ≥ 内边距 + 指示框 + 间距 + 渲染器量的标题宽；占满到「接受」按钮前） |
+| 4 | 「Add」下拉按钮文字被截 | `f664d7fc` | 也已经是 `AutoSize`，宽度够；看着像截断是分割按钮的分隔线贴着「d」。「Add」只用来打开预置列表，分割按钮左半边点了什么都不做——换成整块的 `TTyMenuButton`：点哪都打开列表，没有分隔线 | G12（点「Add」就请求弹出预置菜单、`AutoSize`、不压「Remove」） |
+| 5 | 「This conversation: 1 requests.」 | `ae8fdab4` | 英文分单复数两条资源串（`rsTbAiConversationOne` 新增）；中文两条同文（I3 要求每条资源串都有译文），`example-rsj2po.py` 加 1 条 | M21 |
+| 6 | 验收文档第 9 行「库里改了三处」、第 192 行「侧栏只有『问题』一页」 | `ab99b306` | 改为四处，补上 `tyControls.Css.Values` 的变量成环防护（运行时热路径，冷解析约慢 3–6%）；「与规格不符」那条改为「侧栏三页分期加入」 | — |
+| 7 | 换文档后 Ctrl+点接着旧文档的位置 | `6d4bbbb4` | `LoadEditor` 清 `FJumpKey` / `FJumpIndex` | M22（旧文档点过，新文档有两条同名规则，第一次跳第一条） |
+| 8 | 试看结束后预览可能停在旧版本；试看期间问题列表里的「模式被拒」 | `d51378cd` | `BuildCompareForm` 开头若 `RefreshTimer.Enabled` 先 `RefreshNow`；预览加 `DocumentModeError` / `DocumentModeErrorEn`（试看期间是试看开始时编辑器版本的那条），`BuildProblems` 只用它：编辑器版本的拒绝在试看期间照样列着，试看版本的拒绝不进列表 | M23（敲键后计时器未到就开对比、试看期间计时器触发，结束后预览是最新文本）、M24（两个方向） |
+| 9 | H6 计时上限 4 s，负载下 4.687 s | `bcc72ddd` | 静默从最后一个字节算起（空闲计时从那里开始，负载拖慢的连接建立不算进去），上限 = 空闲超时 + 3 s；「根本不超时」由 10 s 的等待抓，「用了 WinHTTP 自己的 30 s」由上限抓 | H6 |
+| 10 | 使用文档「已知限制」、验收第 70 项 | `41432856` | 中英文都加：Linux / macOS 上正在解析主机名时关工具（或关正在测试连接的设置窗口）最长约 15 秒；第 70 项平台加 GTK2 | — |
+| 11 | `tbaiformat.pas` 头注释 10 条「Comment level 2」 | `dd26ad63` | `{base}` 改 `(base)`，JSON 例子改成文字描述；单独编译旧 / 新头注释：10 条 → 0 条，工具全量编译里 `tools/` 下再没有这条警告 | — |
+| 12 | `.gitignore` 里永远匹配不到的 `/tools/themebuilder/themebuilder` | `63636bba` | 删掉；产物确实在 `tools/themebuilder/lib/<平台>/`（`.lpi` 的 Target），已被 `lib/` 覆盖 | — |
+| 13 | （可选）`Css.Values` 的变量查找 | `83daec51` | 做了，见下面的计时 | 全量 |
+| 截图 | 6 张重拍 | `8fb2ceac` | `tbshots.lpr` 里 4 张图的说明改成修好后的样子 | 见「截图复核」 |
+| 签收 | 本节 | 本提交 | | |
+
+### 第 13 项：变量查找一遍扫描
+
+`ResolveVarRef` 先 `IndexOfName` 再读 `Values[]`——每个 `var()` 对变量表做两遍线性扫描；`EvalColor` / `EvalLength` / `EvalFloat` 又各自再算一次名字。改成 `LookupVarRef` 一次拿到名字和值（`IndexOfName` + `ValueFromIndex`），`VarRefKey` 删掉；成环防护的查找链本来就只在遇到 `var` / `--name` 时才拼，没动。名字在调用之前单独一行取出，不和 `EnterVar` 写在同一个参数表里（求值顺序）。
+
+总审查的探针（`ResolveStyle` 冷求值：每个规则 × 每个状态，先 `SetVarOverride` 让缓存失效，各 20 遍取平均；载入 20 遍取平均），改前改后两个 exe 交替各跑三次，ms：
+
+| 主题 | 冷求值 改前 | 冷求值 改后 | 载入 改前 | 载入 改后 |
+|---|---|---|---|---|
+| `light.tycss`（292 键） | 678.5 / 716.0 / 718.0 | 410.7 / 414.9 / 410.2 | 181.9 / 206.7 / 190.2 | 146.0 / 151.6 / 162.3 |
+| `builtin/win11.tycss`（62 键） | 486.9 / 535.5 / 500.1 | 302.8 / 308.9 / 269.3 | 104.0 / 112.5 / 104.8 | 65.8 / 59.8 / 61.2 |
+| `builtin/material3.tycss`（63 键） | 463.5 / 455.7 / 466.8 | 248.5 / 267.2 / 255.3 | 105.7 / 102.9 / 100.0 | 59.4 / 55.1 / 58.5 |
+
+冷求值快约 40%，比加成环防护之前的 `main`（总审查记的 light 699、win11 530、material3 450）还快，那 3–6% 被完全抵消。
+
+### 测试结果
+
+- 构建：`lazbuild -B tests/tytests.lpi` 0 错（全部变异写回、第 13 项改完之后），exe 复制成 `tests/tytests-tbfinal.exe`。拆提交时每个代码提交的索引都导出到临时目录编过一遍（0 错）。
+- 全量（`--all`，输出重定向）：**8965 / 0 errors / 0 failures**（17 分 36 秒）= 期末修复批的 8956 + 本批 9 条（V10、V11、G11、G12、M20–M24）。没有红，计时类也没有偶发。
+- 本批相关 suite（取自全量）：TTbCompareTests 11、TTbAiSettingsFormTests 12、TTbMainFormTests 80、TTbHttpTests 14、TTbPreviewTests 24，全绿。
+- 工具：`lazbuild -B tools/themebuilder/themebuilder.lpi` 0 错、没有重编 SynEdit；`example-rsj2po.py` 加 1 条、无 FATAL；`check-example-po.py` 103 个文件 0 问题；`check-lfm-props.py` OK。
+
+### 变异（改字符串 → 增量 `lazbuild` → 跑指定 suite → 写回原字节）
+
+脚本逐条断言替换点恰好命中一处；只改 `.lfm` 的那一轮同时碰一下对应 `.pas`（3 期修复批记过：增量编译不因 `.lfm` 变了重编单元）。全部写回后 `lazbuild -B`、跑全量（上面的全量）。
+
+| 变异 | 结果 |
+|---|---|
+| 对比窗口不设前景 | V10 红 |
+| 编辑器标记行不设前景 | M20 红 |
+| 提示 `AutoSize = False` | G11 红 |
+| 「测试连接」不锚在提示下 | G11 红（四倍长的提示） |
+| 提示不锚在警告下 | G11 红（两倍高的警告） |
+| 复选框回到 `alLeft` + `AutoSize` | V11 红（144 px，要 147） |
+| 「Add」回到 `TTyDropDownButton` | G12 红 |
+| 一条也用复数 | M21 红 |
+| `LoadEditor` 不清跳转 | M22 红（跳到第 4 行） |
+| `BuildCompareForm` 不先刷新 | M23 红（预览回到 `#123456`） |
+| `BuildProblems` 用 `ModeError` | M24 红；把前半的两条断言临时拿掉再跑，后半（试看版本的拒绝不进列表）也红 |
+| WinHTTP 接收超时 5 s | H6 红（最后一个字节后 6.9 s） |
+| WinHTTP 接收超时 30 s | H6 红（10 s 内没超时） |
+
+说明：V11、G11 第一版在无头里是绿的——测试进程里 `TyFallbackFontName` 是空的（库为了确定性在无头里不设），空字体名两种量法一致，量不出差别。改为测试里临时把回退字体设成 `Screen.SystemFont.Name`（与真程序一样），结束还原；这样本机的 144 / 147 才出现。G11 原来的「锚点」变异也是绿的：英文提示三行时固定位置的按钮碰巧还在它下面，加了四倍长提示与两倍高警告两种情况才抓得住。
+
+### 截图复核
+
+`lazbuild -B tools/themebuilder-shots/tbshots.lpi`，仓库根 `tools\themebuilder-shots\tbshots.exe > tbshots.log 2>&1`，退出码 0，6 张全写出（都走 `PrintWindow`）。逐张看过：
+
+- `p2-seeds-win32.png`：与上次逐字节相同（种子页没动）。
+- `p2-export-win32.png`：与上次逐字节相同。
+- `p3-ai-settings-win32.png`：Anthropic 不显示提示，「测试连接」紧跟在超时下面；左下「Add ⌄」是整块按钮，字完整、没有分隔线；窗口高 580。
+- `p3-ai-settings-ollama-win32.png`：Ollama 提示三行完整，「测试连接」在它下面，不重叠，隐私说明在底下不受挤。
+- `p3-ai-page-win32.png`：状态行下面是「This conversation: 1 request.」（单数）。
+- `p3-compare-win32.png`：改动行的字是编辑器正文的深色，红、绿底上都清楚；左下「Try it in the preview」完整。
+
+### 留给以后
+
+- 库的 `TTyCheckBox`（可能还有 `TTyRadioButton`）的 AutoSize 只用画布量标题，没有像 `TTyButton.MeasureCaption` 那样再问渲染器取大者，某些字体下会截 3 px。本批不能改库，工具里绕开了；库里应照 `TTyButton` 补上。
