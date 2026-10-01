@@ -78,7 +78,7 @@ type
     procedure TestThirdComboBoxExItemsDriveTheList;
     procedure TestThirdComboBox;
     { Task 8: combo boxes II }
-    procedure TestColorComboPopupUsesItsOwnSwatchGeometry;
+    procedure TestColorBoxPopupUsesItsOwnSwatchGeometry;
     procedure TestThirdColorBox;
     procedure TestThirdShellComboBox;
     { Task 9: progress and indicators }
@@ -184,10 +184,12 @@ type
     property Position;
   end;
 
+  { Max before Value: the reader applies properties in the order they were published, and a
+    Value read before its Max is clamped to the default Max of 100. }
   TThirdGauge = class(TTyCustomGauge)
   published
-    property Value;
     property Max;
+    property Value;
   end;
 
   TThirdTrackBar = class(TTyCustomTrackBar)
@@ -1058,7 +1060,9 @@ begin
   own := TTyComboBox.Create(FForm);
   own.Parent := FForm;
   CheckSameTypeKey(third, own);
-  CheckFreshDefaults(TThirdComboBox, ['Items', 'ItemIndex']);
+  { Items only: ItemIndex has no declared default on TTyComboBox either, so a fresh combo
+    writes ItemIndex = -1 (the 3.0 snapshot records the same). }
+  CheckFreshDefaults(TThirdComboBox, ['Items']);
   AssertTrue('T-e: the mimic is a tab stop, like TTyComboBox', third.TabStop);
   c := third;
   c.DropDownCount := 5;
@@ -1086,24 +1090,26 @@ begin
 end;
 
 { S8-1. The colour list's rows take the swatch geometry and pseudo-row colours from the box
-  that owns them. The colour combo is a TTyCustomColorBox and, since 4.0, not a TTyColorBox: a
-  lookup that asked for TTyColorBox left its drop-down ignoring ColorRectWidth altogether. }
-procedure TTyCustomClassesP1Test.TestColorComboPopupUsesItsOwnSwatchGeometry;
+  that owns them, which they find through Owner. A third party's colour box is a
+  TTyCustomColorBox and not a TTyColorBox; a lookup that asked for TTyColorBox left its
+  drop-down ignoring ColorRectWidth. (The library's own TTyColorComboBox drops a list of its
+  own that never consulted the owner's geometry, in 3.0 as now -- so it is not the witness.) }
+procedure TTyCustomClassesP1Test.TestColorBoxPopupUsesItsOwnSwatchGeometry;
 var
-  narrow, wide: TTyColorComboBox;
+  narrow, wide: TThirdColorBox;
   a, b: TBitmap;
   diff: string;
 begin
-  narrow := TTyColorComboBox.Create(FForm);
+  narrow := TThirdColorBox.Create(FForm);
   narrow.ColorRectWidth := 8;
-  wide := TTyColorComboBox.Create(FForm);
+  wide := TThirdColorBox.Create(FForm);
   wide.ColorRectWidth := 40;
-  AssertFalse('a colour combo is not a TTyColorBox since 4.0 (or this proves nothing)',
+  AssertFalse('the mimic is not a TTyColorBox (or this proves nothing)',
     TObject(narrow) is TTyColorBox);
   a := RenderColorComboList(FForm, narrow);
   b := RenderColorComboList(FForm, wide);
   try
-    AssertFalse('the drop-down rows follow the combo''s own ColorRectWidth',
+    AssertFalse('the drop-down rows follow the box''s own ColorRectWidth',
       SameBitmaps(a, b, diff));
   finally
     a.Free;
@@ -1214,11 +1220,11 @@ var
 begin
   third := TThirdGauge.Create(FForm);
   third.Parent := FForm;
-  CheckPublishesOnly(TThirdGauge, ['Value', 'Max']);
+  CheckPublishesOnly(TThirdGauge, ['Max', 'Value']);
   third.Max := 200;
   third.Value := 150;
   third.Thickness := 20;
-  CheckStreamText(third, ['Value', 'Max'], 'Thickness');
+  CheckStreamText(third, ['Max', 'Value'], 'Thickness');
   back := TThirdGauge.Create(FForm);
   StreamInto(third, back);
   AssertEquals('T-c: Max round-trips', 200, back.Max, 1e-9);
