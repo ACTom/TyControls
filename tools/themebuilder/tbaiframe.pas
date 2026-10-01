@@ -2,7 +2,8 @@ unit tbaiframe;
 { The side bar's AI page (spec §7): pick a service, describe the theme or the change, and
   Generate; the answer streams into the box below as it comes, Stop ends it, and when a
   version comes out of the checks the comparison window opens by itself (OnCandidate --
-  the main window owns it). "New conversation" forgets the earlier requests; so does a new
+  the main window owns it) -- a moment later, from the application's queue, and only when
+  no modal window is open (otherwise the status line points at "Show the comparison"). "New conversation" forgets the earlier requests; so does a new
   or another opened document (DocumentChanged). "Include the problem list" follows the
   document -- ticked while it has errors -- until the user sets it by hand.
 
@@ -27,6 +28,7 @@ resourcestring
   rsTbAiDescribe = 'Describe the theme or the change first.';
   rsTbAiRound = 'Round %d';
   rsTbAiConversation = 'This conversation: %d requests.';
+  rsTbAiCompareWaits = 'Use "Show the comparison" to look at it.';
 
 type
   TTbAiDocEvent = function: TTbAiDocument of object;
@@ -72,9 +74,11 @@ type
     FMadeBackend: TTbChatBackend;
     FMadeProfile: TTbAiProfile;
     FMadeKey: string;
+    FCompareDue: Boolean;         { a finished generation's comparison waits in the queue }
     FOnGetDocument: TTbAiDocEvent;
     FOnCandidate: TNotifyEvent;
     FOnSettings: TNotifyEvent;
+    procedure ShowCompareLater(Data: PtrInt);
     procedure SessionStage(Sender: TObject);
     procedure SessionStreamed(Sender: TObject);
     procedure SessionFinished(Sender: TObject);
@@ -122,6 +126,8 @@ end;
 
 destructor TTbAiFrame.Destroy;
 begin
+  FCompareDue := False;
+  Application.RemoveAsyncCalls(Self);
   FlushTimer.Enabled := False;
   FOnGetDocument := nil;
   FOnCandidate := nil;
@@ -277,6 +283,7 @@ begin
   FShown := 0;
   FShownRound := 1;
   FLineOpen := False;
+  FCompareDue := False;
   BtnShowCompare.Enabled := False;
   if FSession.Generate(EdtPrompt.Text, doc, ChkProblems.Checked) then
   begin
@@ -293,6 +300,7 @@ end;
 procedure TTbAiFrame.BtnNewChatClick(Sender: TObject);
 begin
   FSession.ResetConversation;
+  FCompareDue := False;
   BtnShowCompare.Enabled := False;
   UpdateConversation;
 end;
@@ -305,6 +313,7 @@ end;
 
 procedure TTbAiFrame.BtnShowCompareClick(Sender: TObject);
 begin
+  FCompareDue := False;
   if Assigned(FOnCandidate) and FSession.Outcome.HasCandidate then
     FOnCandidate(Self);
 end;
@@ -318,6 +327,7 @@ end;
 procedure TTbAiFrame.DocumentChanged(AHasErrors: Boolean);
 begin
   FSession.ResetConversation;
+  FCompareDue := False;
   BtnShowCompare.Enabled := False;
   UpdateConversation;
   FProblemsTouched := False;
@@ -440,10 +450,42 @@ begin
   begin
     BtnShowCompare.Enabled := True;
     { the comparison opens by itself -- not after a stop (a candidate an earlier round
-      left waits behind "Show the comparison") }
-    if (FSession.Stage <> tasStopped) and Assigned(FOnCandidate) then
-      FOnCandidate(Self);
+      left waits behind "Show the comparison"), and not from in here: this runs inside
+      the worker's queued call, perhaps under another modal window. Later, from the
+      application's own queue, and only when no modal window is open }
+    if FSession.Stage <> tasStopped then
+    begin
+      FCompareDue := True;
+      Application.QueueAsyncCall(@ShowCompareLater, 0);
+    end;
   end;
+end;
+
+function TbModalWindowOpen: Boolean;
+var
+  i: Integer;
+begin
+  if Application.ModalLevel > 0 then
+    Exit(True);
+  for i := 0 to Screen.CustomFormCount - 1 do
+    if fsModal in Screen.CustomForms[i].FormState then
+      Exit(True);
+  Result := False;
+end;
+
+procedure TTbAiFrame.ShowCompareLater(Data: PtrInt);
+begin
+  if not FCompareDue then Exit;          { a new request, a new document since }
+  FCompareDue := False;
+  if not FSession.Outcome.HasCandidate then Exit;
+  if TbModalWindowOpen then
+  begin
+    { another window is waiting for an answer: the comparison waits for the button }
+    SetStatus(FSession.Outcome.Sentence + ' ' + rsTbAiCompareWaits);
+    Exit;
+  end;
+  if Assigned(FOnCandidate) then
+    FOnCandidate(Self);
 end;
 
 end.

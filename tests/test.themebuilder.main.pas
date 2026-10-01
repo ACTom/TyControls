@@ -111,6 +111,7 @@ type
     procedure TestTheAiPageWarnsOfPlainHttp;     { M13 }
     procedure TestSettingsOkDuringAGeneration;   { M14 }
     procedure TestAnotherServiceDuringAGeneration;   { M15 }
+    procedure TestTheComparisonWaitsForAModal;   { M16 }
   end;
 
 implementation
@@ -129,6 +130,13 @@ const
 
 type
   TTyCustomControlAccess = class(TTyCustomControl);
+  TApplicationAccess = class(TApplication);
+
+{ what the application's idle loop would run: the calls queued with QueueAsyncCall }
+procedure RunAsyncCalls;
+begin
+  TApplicationAccess(Application).ProcessAsyncCallQueue;
+end;
 
 var
   GMainSeq: Integer = 0;
@@ -1853,6 +1861,7 @@ begin
   TTbMainForm.ShowModalForTest := @ModalAccept;
   FForm.Ai.EdtPrompt.Text := 'blue';
   FForm.Ai.GenerateClick(nil);
+  RunAsyncCalls;     { the comparison opens from the application's queue }
   AssertEquals('M2: the comparison was shown', 1, FModals);
   AssertTrue('M2: the editor has it', Pos('--accent: #ABCDEF;', FForm.Editor.Lines.Text) > 0);
   AssertEquals('M2: the preview has it', $ABCDEF, PreviewPrimaryBg);
@@ -1883,6 +1892,7 @@ begin
   FForm.Editor.LogicalCaretXY := Point(2, 3);
   FForm.Ai.EdtPrompt.Text := 'blue';
   FForm.Ai.GenerateClick(nil);
+  RunAsyncCalls;     { the comparison opens from the application's queue }
   AssertTrue('accepted', Pos('--accent: #ABCDEF;', FForm.Editor.Lines.Text) > 0);
   AssertEquals('M3: the caret line', 3, FForm.Editor.LogicalCaretXY.Y);
   AssertEquals('M3: the caret column', 2, FForm.Editor.LogicalCaretXY.X);
@@ -1951,6 +1961,7 @@ begin
   TTbMainForm.ShowModalForTest := @ModalDiscard;
   FForm.Ai.EdtPrompt.Text := 'blue';
   FForm.Ai.GenerateClick(nil);
+  RunAsyncCalls;     { the comparison opens from the application's queue }
   AssertEquals('one request', 1, FForm.Ai.Session.History.Count);
   FForm.NewMinimal;
   AssertEquals('M6: a new document forgets', 0, FForm.Ai.Session.History.Count);
@@ -1997,6 +2008,7 @@ begin
   before := FForm.Editor.Lines.Text;
   FForm.Ai.EdtPrompt.Text := 'blue';
   FForm.Ai.GenerateClick(nil);
+  RunAsyncCalls;     { the comparison opens from the application's queue }
   AssertEquals('the comparison was shown', 1, FModals);
   AssertEquals('M8: the text stays', before, FForm.Editor.Lines.Text);
   AssertEquals('M8: not used', 2, PtrInt(FForm.Ai.Session.History.Objects[0]));
@@ -2231,6 +2243,47 @@ begin
     FreeAndNil(FForm);
     srv.Free;
   end;
+end;
+
+{ M16: a generation that ends while a modal window is open does not open the comparison on
+  top of it (nor from inside the worker's call); the button does, once it is closed }
+procedure TTbMainFormTests.TestTheComparisonWaitsForAModal;
+var
+  b: TScriptedBackend;
+begin
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  b.Hold := True;
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  { no modal window: opened -- from the queue, not inside the call that ended it }
+  FForm.Ai.GenerateClick(nil);
+  b.Release;
+  AssertTrue('done', FForm.Ai.Session.Stage = tasDone);
+  AssertEquals('M16: not from inside the call that ended it', 0, FModals);
+  RunAsyncCalls;
+  AssertEquals('M16: from the queue', 1, FModals);
+  FModals := 0;
+  { a modal window open when it ends }
+  FForm.Ai.GenerateClick(nil);
+  AssertTrue('busy', FForm.Ai.Session.Busy);
+  Application.ModalStarted;          { what ShowModal does: another window waits for an answer }
+  try
+    b.Release;
+    AssertTrue('done', FForm.Ai.Session.Stage = tasDone);
+    AssertEquals('M16: not opened from the worker''s call', 0, FModals);
+    RunAsyncCalls;
+    AssertEquals('M16: not opened over the modal window', 0, FModals);
+    AssertTrue('M16: the status line points at the button: ' + FForm.Ai.LblStatus.Caption,
+      Pos(rsTbAiCompareWaits, FForm.Ai.LblStatus.Caption) > 0);
+    AssertTrue('M16: the button is there', FForm.Ai.BtnShowCompare.Enabled);
+  finally
+    Application.ModalFinished;
+  end;
+  RunAsyncCalls;
+  AssertEquals('M16: not later either', 0, FModals);
+  FForm.Ai.BtnShowCompare.Click;
+  AssertEquals('M16: the button opens it', 1, FModals);
 end;
 
 initialization
