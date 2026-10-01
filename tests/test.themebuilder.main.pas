@@ -121,6 +121,8 @@ type
     procedure TestANewDocumentForgetsTheLastJump;  { M22 }
     procedure TestTheComparisonStartsFromTheLatestText;   { M23 }
     procedure TestATrialStaysOutOfTheProblemList;  { M24 }
+    { acceptance feedback }
+    procedure TestTheEditorTextIsSmooth;         { M25 }
   end;
 
 implementation
@@ -132,7 +134,7 @@ uses
   tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules,
   tbaiformat, tbaiclient, tbaisettings, tbaisession, tbaiframe, tbcompareform, tbaisettingsform,
   tbdiff, tbaichecks, tbfakehttp, Translations, Math, tyControls.StrConsts,
-  test.themebuilder.compare;
+  test.themebuilder.compare, tyControls.Design.CssEditKit;
 
 const
   { a document whose one value no base theme has }
@@ -2647,6 +2649,32 @@ begin
   finally
     f.Free;
   end;
+end;
+
+{ M25: the editor's text is smooth -- SynEdit's own default is pixel text -- in the code face
+  the tool's theme names (the default theme says "monospace": the platform's), and stays so
+  when the tool's theme changes (TbApplyEditorColors sets the font again) }
+procedure TTbMainFormTests.TestTheEditorTextIsSmooth;
+var
+  bare: TSynEdit;
+begin
+  { the look alone makes it smooth (the comparison window's editors take only the look) }
+  bare := TSynEdit.Create(nil);
+  try
+    TbApplyEditorColors(bare, nil, FForm.Look);
+    AssertTrue('M25: the look sets the quality', bare.Font.Quality = TyCssEditFontQuality);
+  finally
+    bare.Free;
+  end;
+  AssertTrue('M25: smooth', FForm.Editor.Font.Quality = TyCssEditFontQuality);
+  {$IFDEF MSWINDOWS}
+  AssertTrue('M25: ClearType', FForm.Editor.Font.Quality = fqCleartypeNatural);
+  AssertEquals('M25: Consolas', 'Consolas', FForm.Editor.Font.Name);
+  {$ENDIF}
+  AssertEquals('M25: the platform''s face', TyCssEditFontName, FForm.Editor.Font.Name);
+  FForm.SetEditorAppearance('xp', True);
+  AssertTrue('M25: still smooth after a change of look', FForm.Editor.Font.Quality = TyCssEditFontQuality);
+  AssertTrue('M25: a size in points', FForm.Editor.Font.Size >= 8);
 end;
 
 initialization

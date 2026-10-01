@@ -30,6 +30,8 @@ type
     { the last batch before the merge }
     procedure TestTintedRowsAreReadable;     { V10 }
     procedure TestTheTrialBoxIsNotCut;       { V11 }
+    { acceptance feedback }
+    procedure TestTheTextIsSmooth;           { V12 }
   end;
 
   TTbAiSettingsFormTests = class(TTestCase)
@@ -70,7 +72,8 @@ uses
   Types, LCLType, Forms, Controls, SynEditTypes, SynEditMiscClasses, tyControls.Controller, tyControls.Types,
   tyControls.Base, tyControls.Painter, tyControls.TyLabel, tyControls.Terminal.Core,
   tyControls.Terminal.Render, tyControls.DropButtons,
-  tbdiff, tbeditorlook, tbaisession, tbpreview, tbaiformat, tbaiclient, tbaichecks, tbfakehttp;
+  tbdiff, tbeditorlook, tbaisession, tbpreview, tbaiformat, tbaiclient, tbaichecks, tbfakehttp,
+  tyControls.Design.CssEditKit;
 
 type
   TTyControlAccess = class(TTyCustomControl);
@@ -427,6 +430,19 @@ begin
   finally
     TyFallbackFontName := oldFallback;
   end;
+end;
+
+{ V12: both sides' text is smooth, in the editor's face (SynEdit's own default is pixel text) }
+procedure TTbCompareTests.TestTheTextIsSmooth;
+var
+  look: TTbEditorColors;
+begin
+  look := TbEditorColors(TyDefaultController);
+  FForm.Prepare(Bars('a|b'), Bars('a|c'), nil, look);
+  AssertTrue('V12: the left side is smooth', FForm.LeftEdit.Font.Quality = TyCssEditFontQuality);
+  AssertTrue('V12: the right side is smooth', FForm.RightEdit.Font.Quality = TyCssEditFontQuality);
+  AssertEquals('V12: the editor''s face, left', look.FontName, FForm.LeftEdit.Font.Name);
+  AssertEquals('V12: the editor''s face, right', look.FontName, FForm.RightEdit.Font.Name);
 end;
 
 { ---- TTbAiSettingsFormTests ---- }

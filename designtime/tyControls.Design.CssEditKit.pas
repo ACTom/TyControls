@@ -12,7 +12,15 @@ unit tyControls.Design.CssEditKit;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls, SynEdit, SynEditTypes, SynCompletion, SynHighlighterCss;
+  Classes, SysUtils, Controls, Graphics, SynEdit, SynEditTypes, SynCompletion, SynHighlighterCss;
+
+{ The monospace face the tycss editors use: Consolas on Windows (Courier New where it is not
+  installed), Menlo on macOS, DejaVu Sans Mono elsewhere (fontconfig's "monospace" where that
+  is missing too). }
+function TyCssEditFontName: string;
+{ Smooth text: ClearType on Windows, antialiased elsewhere. SynEdit's own default is
+  fqNonAntialiased -- pixel text, the one control in the window that looked like it. }
+function TyCssEditFontQuality: TFontQuality;
 
 type
   TTyCssEditKit = class(TComponent)
@@ -59,7 +67,32 @@ type
 implementation
 
 uses
-  Math, tyControls.Css.Complete;
+  Math, Forms, tyControls.Css.Complete;
+
+function FontInstalled(const AName: string): Boolean;
+begin
+  Result := (Screen <> nil) and (Screen.Fonts.IndexOf(AName) >= 0);
+end;
+
+function TyCssEditFontName: string;
+begin
+  {$IF DEFINED(MSWINDOWS)}
+  if FontInstalled('Consolas') then Result := 'Consolas' else Result := 'Courier New';
+  {$ELSEIF DEFINED(DARWIN)}
+  Result := 'Menlo';
+  {$ELSE}
+  if FontInstalled('DejaVu Sans Mono') then Result := 'DejaVu Sans Mono' else Result := 'monospace';
+  {$ENDIF}
+end;
+
+function TyCssEditFontQuality: TFontQuality;
+begin
+  {$IFDEF MSWINDOWS}
+  Result := fqCleartypeNatural;
+  {$ELSE}
+  Result := fqAntialiased;
+  {$ENDIF}
+end;
 
 constructor TTyCssEditKit.Create(AOwner: TComponent);
 begin
@@ -85,6 +118,16 @@ begin
   { Clamp the caret to real text: clicking past a line's end puts it AT the last
     character, not in virtual space past it. }
   FEdit.Options := FEdit.Options - [eoScrollPastEol];
+  { Smooth monospace text. A font the host has not chosen (still SynEdit's default face) gets
+    the platform's code face at 10 pt -- in points, so it follows the font's PPI as a height
+    in pixels would not. A host with its own face (the theme builder takes it from its
+    theme) keeps it; the quality is set either way. }
+  if FEdit.Font.Name = SynDefaultFontName then
+  begin
+    FEdit.Font.Name := TyCssEditFontName;
+    FEdit.Font.Size := 10;
+  end;
+  FEdit.Font.Quality := TyCssEditFontQuality;
   { tycss is a CSS dialect: the stock CSS highlighter colours comments, selectors,
     properties, values, braces and hex well enough; --tokens and darken() fall back to
     its identifier / function colouring. }

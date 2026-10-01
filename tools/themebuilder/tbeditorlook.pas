@@ -17,7 +17,8 @@ unit tbeditorlook;
                 removed --danger, 18 % over the background
                 filler  --surface-chrome (a row one side has no line for)
     text on a tinted row    the text colour (one colour, so it reads on the tint)
-    font                --terminal-font-family (monospace -> the platform's), --font-size-base
+    font                --terminal-font-family (monospace -> the platform's), --font-size-base,
+                        smooth (ClearType on Windows, antialiased elsewhere)
 
   A token the theme does not define falls back as listed, or to the text colour. Borders and
   scroll bars are the platform's (SynEdit draws them natively). }
@@ -42,17 +43,13 @@ procedure TbApplyEditorColors(AEdit: TSynEdit; AHighlighter: TSynCssSyn;
 implementation
 
 uses
-  SynGutterBase, tyControls.Types, tyControls.Css.Values;
+  SynGutterBase, tyControls.Types, tyControls.Css.Values, tyControls.Design.CssEditKit;
 
+{ the face the tycss editors share: Consolas (else Courier New), Menlo, DejaVu Sans Mono
+  (else monospace) }
 function PlatformMonospace: string;
 begin
-  {$IF DEFINED(MSWINDOWS)}
-  Result := 'Consolas';
-  {$ELSEIF DEFINED(DARWIN)}
-  Result := 'Menlo';
-  {$ELSE}
-  Result := 'Monospace';
-  {$ENDIF}
+  Result := TyCssEditFontName;
 end;
 
 { a token's colour; False when the theme does not define it (or it is not a colour) }
@@ -167,6 +164,8 @@ begin
   AEdit.Font.Color := AColors.Text;
   AEdit.Font.Name := AColors.FontName;
   AEdit.Font.Size := AColors.FontSize;
+  { smooth text (SynEdit's default is pixel text): ClearType on Windows, antialiased elsewhere }
+  AEdit.Font.Quality := TyCssEditFontQuality;
   AEdit.SelectedColor.Background := AColors.Selection;
   AEdit.SelectedColor.Foreground := AColors.Text;
   AEdit.Gutter.Color := AColors.Gutter;

@@ -33,12 +33,14 @@ type
     procedure TestTheEditorCanGoFirst;
     procedure TestTheUnitNeedsNoIde;
     procedure TestTheDialogUsesTheKit;
+    { acceptance feedback }
+    procedure TestTheTextIsSmooth;
   end;
 
 implementation
 
 uses
-  Forms, SynHighlighterCss, tyControls.Css.Complete, test.themebuilder.golden;
+  Forms, Graphics, SynHighlighterCss, tyControls.Css.Complete, test.themebuilder.golden;
 
 { TSynCompletion builds its popup form when it is created, and that needs the widgetset
   (the tool and the IDE always have one; this console runner does not until asked). Asked
@@ -240,6 +242,40 @@ begin
   AssertTrue('K8: and attaches it', Pos('.Attach(', dlg) > 0);
   AssertTrue('K8: no completion of its own', Pos('TSynCompletion.Create', dlg) = 0);
   AssertTrue('K8: no highlighter of its own', Pos('TSynCssSyn.Create', dlg) = 0);
+end;
+
+{ The editor's text is smooth (SynEdit's own default is fqNonAntialiased: pixel text) and in a
+  code face: Consolas on Windows where it is installed (it is on every Windows since Vista),
+  at 10 pt -- a size in points, which follows the PPI. A host that chose its own face keeps it;
+  the quality is set either way. }
+procedure TTbCssEditKitTests.TestTheTextIsSmooth;
+var
+  own: TSynEdit;
+  kit: TTyCssEditKit;
+begin
+  FKit.Attach(FEdit, False);
+  {$IFDEF MSWINDOWS}
+  AssertTrue('ClearType', FEdit.Font.Quality = fqCleartypeNatural);
+  AssertEquals('Consolas', 'Consolas', FEdit.Font.Name);
+  {$ELSE}
+  AssertTrue('antialiased', FEdit.Font.Quality = fqAntialiased);
+  {$ENDIF}
+  AssertTrue('the shared quality', FEdit.Font.Quality = TyCssEditFontQuality);
+  AssertEquals('the shared face', TyCssEditFontName, FEdit.Font.Name);
+  AssertEquals('10 pt', 10, FEdit.Font.Size);
+  own := TSynEdit.Create(nil);
+  kit := TTyCssEditKit.Create(nil);
+  try
+    own.Font.Name := 'Lucida Console';
+    own.Font.Size := 13;
+    kit.Attach(own, True);
+    AssertEquals('a face of the host''s own is kept', 'Lucida Console', own.Font.Name);
+    AssertEquals('and its size', 13, own.Font.Size);
+    AssertTrue('smooth all the same', own.Font.Quality = TyCssEditFontQuality);
+  finally
+    kit.Free;
+    own.Free;
+  end;
 end;
 
 initialization
