@@ -295,6 +295,44 @@ type
     property TabStop;
   end;
 
+  { The same for the other families whose final class redeclares a default. Each publishes
+    only the one property, so what it reads is what the custom class declares -- the default a
+    third party's .lfm is written against. }
+  TP1ButtonTabStop = class(TTyCustomButton)
+  published
+    property TabStop;
+  end;
+
+  TP1SpeedButtonTabStop = class(TTyCustomSpeedButton)
+  published
+    property TabStop;
+  end;
+
+  TP1EditTabStop = class(TTyCustomEdit)
+  published
+    property TabStop;
+  end;
+
+  TP1CheckBoxTabStop = class(TTyCustomCheckBox)
+  published
+    property TabStop;
+  end;
+
+  TP1ComboBoxTabStop = class(TTyCustomComboBox)
+  published
+    property TabStop;
+  end;
+
+  TP1NumericThousands = class(TTyCustomNumericEdit)
+  published
+    property UseThousands;
+  end;
+
+  TP1FloatSpinThousands = class(TTyCustomFloatSpinEdit)
+  published
+    property UseThousands;
+  end;
+
   TP1ToolBar = class(TTyToolBar)
   public
     procedure ForceLayout;
@@ -713,8 +751,10 @@ begin
   { A speed button stays out of the tab cycle; the redeclared default lives in the custom
     class, so the mimic gets it too. }
   AssertFalse('T-e: the mimic is not a tab stop, like TTySpeedButton', third.TabStop);
-  AssertEquals('T-e: and TabStop''s declared default on the custom class says so', 0,
-    GetPropInfo(TTySpeedButton, 'TabStop')^.Default);
+  AssertEquals('precondition: the custom button it descends from declares TabStop True', 1,
+    GetPropInfo(TP1ButtonTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom speed button publishing TabStop reads default '
+    + 'False', 0, GetPropInfo(TP1SpeedButtonTabStop, 'TabStop')^.Default);
   c := third;
   c.AllowAllUp := False;
   AssertFalse('T-v: AllowAllUp is public through a TTyCustomSpeedButton reference', c.AllowAllUp);
@@ -829,6 +869,10 @@ begin
   { The edit is a tab stop and says so in its declared default; that redeclaration lives in
     the custom class, so a mimic that publishes TabStop gets the same default. }
   AssertTrue('T-e: the mimic is a tab stop, like TTyEdit', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom edit publishing TabStop reads default True', 1,
+    GetPropInfo(TP1EditTabStop, 'TabStop')^.Default);
   { T-f: the edit interfaces are on the custom class's header, so the mimic has them -- the
     shared right-click menu and the IME bridge both find a third party's edit. }
   AssertTrue('T-f: ITyImeEditable', Supports(third, ITyImeEditable, ime));
@@ -1104,17 +1148,18 @@ begin
 end;
 
 { TTyFloatSpinEdit groups no thousands by default although the numeric edit it descends from
-  does. The `default False` redeclaration lives on TTyCustomFloatSpinEdit, so the published
-  class reads it -- and so does any descendant of the custom class. }
+  does. The `default False` redeclaration lives on TTyCustomFloatSpinEdit, so a descendant of
+  the custom class that publishes UseThousands reads it -- asked of the third party's class,
+  not of TTyFloatSpinEdit, whose own answer would be the same wherever the line sat. }
 procedure TTyCustomClassesP1Test.TestFloatSpinEditKeepsItsUseThousandsDefault;
 var
-  e: TTyFloatSpinEdit;
+  e: TP1FloatSpinThousands;
 begin
-  AssertEquals('precondition: the numeric edit declares True', 1,
-    GetPropInfo(TTyNumericEdit, 'UseThousands')^.Default);
-  AssertEquals('the float spin edit declares False', 0,
-    GetPropInfo(TTyFloatSpinEdit, 'UseThousands')^.Default);
-  e := TTyFloatSpinEdit.Create(FForm);
+  AssertEquals('precondition: a descendant of the custom numeric edit reads True', 1,
+    GetPropInfo(TP1NumericThousands, 'UseThousands')^.Default);
+  AssertEquals('a descendant of the custom float spin edit reads False', 0,
+    GetPropInfo(TP1FloatSpinThousands, 'UseThousands')^.Default);
+  e := TP1FloatSpinThousands.Create(FForm);
   AssertFalse('and its constructor agrees', e.UseThousands);
 end;
 
@@ -1143,6 +1188,10 @@ begin
   CheckSameTypeKey(third, own);
   CheckFreshDefaults(TThirdCheckBox, ['Checked', 'Caption']);
   AssertTrue('T-e: the mimic is a tab stop, like TTyCheckBox', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom check box publishing TabStop reads default True',
+    1, GetPropInfo(TP1CheckBoxTabStop, 'TabStop')^.Default);
   { T-v: AllowGrayed is public (TCustomCheckBox); Checked is protected there, as in LCL, which
     is why the mimic publishes it. }
   c := third;
@@ -1279,6 +1328,10 @@ begin
     writes ItemIndex = -1 (the 3.0 snapshot records the same). }
   CheckFreshDefaults(TThirdComboBox, ['Items']);
   AssertTrue('T-e: the mimic is a tab stop, like TTyComboBox', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom combo publishing TabStop reads default True', 1,
+    GetPropInfo(TP1ComboBoxTabStop, 'TabStop')^.Default);
   c := third;
   c.DropDownCount := 5;
   AssertEquals('T-v: DropDownCount is public through a TTyCustomComboBox reference', 5,
