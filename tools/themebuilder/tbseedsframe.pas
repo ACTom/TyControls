@@ -6,7 +6,11 @@ unit tbseedsframe;
   Each cell shows what the seed comes to in that mode (TTbSeedEval: the document over the
   base, no density pack) and says where it comes from: nothing when the column's own block
   sets it, "from :root" when a two-mode document sets it once for both, "inherited" (greyed)
-  when only the base theme does, "expression" when the value is not a plain colour (length).
+  when only the base theme does, "from an imported file" (greyed) when a file the document
+  @imports does, "overridden by an imported @mode" when the document's :root sets it but an
+  imported @mode block wins over that (the swatch shows what wins; a change goes into the
+  document's own block for the mode, which wins over the import -- no question asked),
+  "expression" when the value is not a plain colour (length).
 
   A change goes back into the text as one set of edits (tbseeds) handed to the window
   (OnEdits), which applies them as one undo step and refreshes -- and the refresh comes back
@@ -32,6 +36,9 @@ resourcestring
   rsTbSeedInherited = 'inherited';
   rsTbSeedShared = 'from :root';
   rsTbSeedExpression = 'expression';
+  rsTbSeedImported = 'from an imported file';
+  rsTbSeedOverridden = 'overridden by an imported @mode';
+  rsTbSeedOverriddenHint = ':root says %s, but an @mode block in an imported file wins over it. A change goes into this file''s own @mode block, which wins over the import.';
   rsTbSeedSharedAsk = '%s is set in :root and shared by light and dark. Yes: change it there (both modes). No: add it to %s only.';
   rsTbSeedExprAsk = '%s is the expression %s. Replace it with %s?';
 
@@ -88,6 +95,7 @@ type
     procedure SplitButtonClick(Sender: TObject);
   private
     FScan: TTbCssScan;
+    FImports: TTbCssScans;      { the files the text @imports, scanned (TbScanImports) }
     FEval: TTbSeedEval;
     FText, FEol: string;
     FColumns: TStringArray;
@@ -102,6 +110,7 @@ type
     procedure UpdateView;
     function Ask(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
     function ColumnName(AColumnIndex: Integer): string;
+    function DocRaw(const ACell: TTbSeedCell): string;
     function Hand(const AEdits: TTbTextEdits): Boolean;
   public
     constructor Create(AOwner: TComponent); override;
@@ -169,6 +178,7 @@ begin
   FOnAsk := nil;
   FOnSync := nil;
   FreeAndNil(FScan);
+  TbFreeScans(FImports);
   FreeAndNil(FEval);
   inherited Destroy;
 end;
@@ -178,10 +188,16 @@ begin
   FText := AText;
   FreeAndNil(FScan);
   FScan := TbScanCss(AText);
+  TbFreeScans(FImports);
+  FImports := TbScanImports(AText, ABaseDir);
   FEol := TbDetectEol(AText);
-  FColumns := TbSeedColumns(FScan);
   { a text that does not parse or load: its value spans may no longer be what they look like }
   FBroken := ABroken or not FEval.Load(AText, ABaseDir);
+  { the model says whether there are modes: an imported file may bring them all }
+  if FBroken then
+    FColumns := TbSeedColumns(FScan)
+  else
+    FColumns := TbSeedColumnsFor(FEval.HasModes);
   UpdateView;
 end;
 
@@ -247,12 +263,20 @@ begin
           where := ColumnName(col);
           if not two then where := rsTbSeedValue;
           FSwatch[seed, col].DialogCaption := '--' + TbSeedNames[seed] + ' (' + where + ')';
-          FSwatch[seed, col].Hint := c.Raw;
-          FSwatch[seed, col].ShowHint := c.Raw <> '';
+          if c.Overridden then
+            FSwatch[seed, col].Hint := Format(rsTbSeedOverriddenHint, [DocRaw(c)])
+          else
+            FSwatch[seed, col].Hint := c.Raw;
+          FSwatch[seed, col].ShowHint := FSwatch[seed, col].Hint <> '';
         end;
         case c.Source of
           tssInherited: lbl.Caption := rsTbSeedInherited;
           tssShared: lbl.Caption := rsTbSeedShared;
+          tssImported:
+            if c.Overridden then
+              lbl.Caption := rsTbSeedOverridden
+            else
+              lbl.Caption := rsTbSeedImported;
         else
           if c.IsExpression then
             lbl.Caption := rsTbSeedExpression
@@ -261,8 +285,8 @@ begin
         end;
         if (c.Source = tssShared) and c.IsExpression then
           lbl.Caption := rsTbSeedShared + ', ' + rsTbSeedExpression;
-        { inherited: the base's value, greyed -- a change adds the line }
-        lbl.Enabled := c.Source <> tssInherited;
+        { not in this file (the base's, an imported file's): greyed -- a change adds the line }
+        lbl.Enabled := (c.Source <> tssInherited) and ((c.Source <> tssImported) or c.Overridden);
       end;
   finally
     FUpdating := False;
@@ -280,7 +304,16 @@ begin
     Result.Source := tssInherited;
     Exit;
   end;
-  Result := TbSeedCell(FScan, ASeed, FColumns[AColumnIndex]);
+  Result := TbSeedCellIn(FScan, FImports, ASeed, FColumns[AColumnIndex]);
+end;
+
+{ the document's own (overridden) value of an Overridden cell }
+function TTbSeedsFrame.DocRaw(const ACell: TTbSeedCell): string;
+begin
+  if (FScan <> nil) and (ACell.Block >= 0) then
+    Result := FScan.DeclValue(ACell.Block, ACell.Decl)
+  else
+    Result := '';
 end;
 
 function TTbSeedsFrame.ResolvedText(ASeed, AColumnIndex: Integer): string;

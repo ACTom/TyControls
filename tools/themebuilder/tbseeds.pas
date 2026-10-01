@@ -3,11 +3,19 @@ unit tbseeds;
   --on-surface, --border, --danger and --radius. Everything else in a theme can be derived
   from them, so the seeds panel shows and edits just these.
 
-  A column is a mode: a document with @mode blocks has two (light, dark), one with only a
-  top-level :root has one (''). The value a column shows is the one the engine would use
-  in that mode (TTyStyleModel.RebuildMergedVars): the mode's own :root if it sets the seed
-  (the last declaration counts, later wins), else the top-level :root's (shared by both
-  modes), else the base theme's (inherited -- shown greyed).
+  A column is a mode: a theme with @mode blocks has two (light, dark), one with only a
+  top-level :root has one (''). Whether it has modes is the style model's answer, not the
+  text's: a document whose @mode blocks all come from a file it @imports has two columns
+  too (TbSeedColumnsFor, TTbSeedEval.HasModes). The value a column shows is the one the
+  engine would use in that mode (TTyStyleModel.RebuildMergedVars): any @mode block for the
+  mode wins over any :root, and of each kind the importer wins over what it imports (a
+  file's own content goes on top of its imports, StyleModel.ExpandSheet). So, in order: the
+  document's own block for the mode (the last declaration counts); an imported file's
+  block for it (tssImported -- when the document's :root sets the seed too, that value is
+  overridden: Overridden); the document's top-level :root (shared by both modes); an
+  imported file's :root (tssImported); else the base theme's (inherited -- shown greyed).
+  Only the files the document imports are looked at (TbScanImports), and only for where a
+  seed is set, never for what it comes to (that is TTbSeedEval's).
 
   Changing a seed changes the text as little as it can: a value that is there has just its
   value span replaced (the rest of its line -- other declarations, alignment spaces,
@@ -32,22 +40,34 @@ const
   TbRadiusSeed = 5;
 
 type
-  TTbSeedSource = (tssOwn, tssShared, tssInherited);
+  { tssShared: only in the top-level :root of a two-mode document; tssImported: a file the
+    document @imports decides it }
+  TTbSeedSource = (tssOwn, tssShared, tssInherited, tssImported);
   TTbSeedCell = record
     Seed: Integer;
     Column: string;          { '' = a one-mode document; 'light' / 'dark' }
-    Source: TTbSeedSource;   { tssShared: only in the top-level :root of a two-mode document }
-    Block, Decl: Integer;    { the declaration that counts; -1 when inherited }
-    Raw: string;             { as written; '' when inherited }
+    Source: TTbSeedSource;
+    Block, Decl: Integer;    { the document's declaration (the one overridden, for an
+                               Overridden cell); -1 when it has none }
+    Raw: string;             { as written -- in the document, else in the imported file; ''
+                               when inherited }
     IsExpression: Boolean;
+    Overridden: Boolean;     { tssImported: the document's :root sets it, an imported @mode
+                               block for the column wins over it }
   end;
 
 function TbSeedColumns(AScan: TTbCssScan): TStringArray;       { [''] or ['light', 'dark'] }
+function TbSeedColumnsFor(AHasModes: Boolean): TStringArray;   { the same, by the model's answer }
 function TbSeedCell(AScan: TTbCssScan; ASeed: Integer; const AColumn: string): TTbSeedCell;
+{ the same, with the files the document imports (TbScanImports) taken into account }
+function TbSeedCellIn(AScan: TTbCssScan; const AImports: TTbCssScans; ASeed: Integer;
+  const AColumn: string): TTbSeedCell;
 function TbIsLiteralSeedValue(ASeed: Integer; const ARaw: string): Boolean;
 function TbColorText(AColor: TTyColor): string;                { '#RRGGBB'; '#RRGGBBAA' when not opaque }
 function TbRadiusText(APx: Integer): string;                    { '6px' }
 { AShared: for a tssShared cell, True = change the :root value, False = add to the column's block.
+  A tssImported cell (TbSeedCell sees it as shared or inherited) takes AShared = False: only
+  the document's own block for the column comes after the import and wins.
   nil when there is nowhere to put it (a block that never closes). }
 function TbSeedSetEdits(AScan: TTbCssScan; const AEol: string; ASeed: Integer;
   const AColumn, AValue: string; AShared: Boolean): TTbTextEdits;
@@ -70,6 +90,7 @@ type
     destructor Destroy; override;
     { the text over the base, as the preview loads it but without a density pack; False: it does not load }
     function Load(const AText, ABaseDir: string): Boolean;
+    function HasModes: Boolean;     { the loaded theme has @mode blocks, its own or imported }
     function Color(ASeed: Integer; const AColumn: string; out AColor: TTyColor): Boolean;
     function Radius(const AColumn: string; out APx: Integer): Boolean;
   end;
@@ -104,6 +125,11 @@ begin
   Result := FLoaded;
 end;
 
+function TTbSeedEval.HasModes: Boolean;
+begin
+  Result := FLoaded and (Length(FModel.ModeNames) > 0);
+end;
+
 function TTbSeedEval.Color(ASeed: Integer; const AColumn: string; out AColor: TTyColor): Boolean;
 var
   s: TTyStyleSet;
@@ -132,7 +158,12 @@ end;
 
 function TbSeedColumns(AScan: TTbCssScan): TStringArray;
 begin
-  if AScan.HasModes then
+  Result := TbSeedColumnsFor(AScan.HasModes);
+end;
+
+function TbSeedColumnsFor(AHasModes: Boolean): TStringArray;
+begin
+  if AHasModes then
   begin
     SetLength(Result, 2);
     Result[0] := 'light';
@@ -170,9 +201,33 @@ begin
 end;
 
 function TbSeedCell(AScan: TTbCssScan; ASeed: Integer; const AColumn: string): TTbSeedCell;
+begin
+  Result := TbSeedCellIn(AScan, nil, ASeed, AColumn);
+end;
+
+{ the last of the imported files (the one added last, which wins) that sets AName in a block
+  of this kind (and mode); its raw value }
+function FindImported(const AImports: TTbCssScans; AKind: TTbBlockKind; const AMode, AName: string;
+  out ARaw: string): Boolean;
 var
-  name: string;
+  i, b, d: Integer;
+begin
+  ARaw := '';
+  for i := High(AImports) downto 0 do
+    if FindLast(AImports[i], AKind, AMode, AName, b, d) then
+    begin
+      ARaw := AImports[i].DeclValue(b, d);
+      Exit(True);
+    end;
+  Result := False;
+end;
+
+function TbSeedCellIn(AScan: TTbCssScan; const AImports: TTbCssScans; ASeed: Integer;
+  const AColumn: string): TTbSeedCell;
+var
+  name, imported: string;
   b, d: Integer;
+  inRoot: Boolean;
 begin
   Result := Default(TTbSeedCell);
   Result.Seed := ASeed;
@@ -184,12 +239,35 @@ begin
   name := '--' + TbSeedNames[ASeed];
   if (AColumn <> '') and FindLast(AScan, tbkModeRoot, AColumn, name, b, d) then
     Result.Source := tssOwn
-  else if FindLast(AScan, tbkRoot, '', name, b, d) then
-  begin
-    if AColumn = '' then Result.Source := tssOwn else Result.Source := tssShared;
-  end
   else
-    Exit;
+  begin
+    inRoot := FindLast(AScan, tbkRoot, '', name, b, d);
+    if (AColumn <> '') and FindImported(AImports, tbkModeRoot, AColumn, name, imported) then
+    begin
+      { an imported @mode block beats every :root, the document's too }
+      Result.Source := tssImported;
+      Result.Overridden := inRoot;
+      Result.Raw := imported;
+      Result.IsExpression := not TbIsLiteralSeedValue(ASeed, imported);
+      if inRoot then
+      begin
+        Result.Block := b;
+        Result.Decl := d;
+      end;
+      Exit;
+    end;
+    if not inRoot then
+    begin
+      if FindImported(AImports, tbkRoot, '', name, imported) then
+      begin
+        Result.Source := tssImported;
+        Result.Raw := imported;
+        Result.IsExpression := not TbIsLiteralSeedValue(ASeed, imported);
+      end;
+      Exit;
+    end;
+    if AColumn = '' then Result.Source := tssOwn else Result.Source := tssShared;
+  end;
   Result.Block := b;
   Result.Decl := d;
   Result.Raw := AScan.DeclValue(b, d);

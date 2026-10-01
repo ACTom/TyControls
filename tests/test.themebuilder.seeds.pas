@@ -27,6 +27,7 @@ type
     procedure TestWhatIsALiteral;
     procedure TestSplittingIntoTwoModes;
     procedure TestTheRepositoryThemes;
+    procedure TestWhatAnImportedFileDecides;
   end;
 
   { The seeds panel, built headless (no parent). OnAsk answers from FAnswer and counts,
@@ -60,6 +61,7 @@ type
     procedure TestSplittingFromThePanel;
     procedure TestTheRadiusOfTheDarkColumn;
     procedure TestTheWindowCatchesUpFirst;
+    procedure TestModesFromAnImport;
   end;
 
 const
@@ -265,6 +267,7 @@ end;
 
 procedure TTbSeedEditTests.TestTheRepositoryThemes;
 var
+  imports: TTbCssScans;
   s: TTbCssScan;
   seed: Integer;
   c: TTbSeedCell;
@@ -311,11 +314,60 @@ begin
     for seed := 0 to TbSeedCount - 1 do
       AssertEquals('E13: light ' + TbSeedNames[seed], Ord(tssOwn), Ord(TbSeedCell(s, seed, '').Source));
     Open('palettes/catppuccin.tycss');
-    AssertEquals('E13: catppuccin light radius', Ord(tssInherited), Ord(TbSeedCell(s, cRadius, 'light').Source));
-    AssertEquals('E13: catppuccin dark radius', Ord(tssInherited), Ord(TbSeedCell(s, cRadius, 'dark').Source));
+    { the radius is auto.tycss's, which the palette imports -- not the base's }
+    imports := TbScanImports(s.Text, TbThemesDir + 'palettes');
+    try
+      AssertEquals('E13: catppuccin imports auto', 1, Length(imports));
+      AssertEquals('E13: catppuccin light radius', Ord(tssImported), Ord(TbSeedCellIn(s, imports, cRadius, 'light').Source));
+      AssertEquals('E13: catppuccin dark radius', Ord(tssImported), Ord(TbSeedCellIn(s, imports, cRadius, 'dark').Source));
+      AssertEquals('E13: as auto writes it', '6px', TbSeedCellIn(s, imports, cRadius, 'dark').Raw);
+      AssertEquals('E13: its own accent is its own', Ord(tssOwn), Ord(TbSeedCellIn(s, imports, cAccent, 'light').Source));
+    finally
+      TbFreeScans(imports);
+    end;
     AssertEquals('on-surface is a seed', 'on-surface', TbSeedNames[cOnSurface]);
   finally
     s.Free;
+  end;
+end;
+
+{ Where a seed comes from when a file the document imports has a say: an imported @mode
+  block beats the document's :root (which is then overridden), the document's own @mode
+  block beats the import, an imported :root counts only where the document has no value. }
+procedure TTbSeedEditTests.TestWhatAnImportedFileDecides;
+var
+  doc: TTbCssScan;
+  imports: TTbCssScans;
+  c: TTbSeedCell;
+begin
+  doc := TbScanCss(':root { --accent: #FF0000; --border: #00FF00; }'#10'@mode dark { :root { --surface: #333333; } }');
+  SetLength(imports, 1);
+  imports[0] := TbScanCss('@mode light { :root { --accent: #111111; } }'#10 +
+    '@mode dark { :root { --surface: #444444; } }'#10':root { --danger: #222222; --border: #555555; }');
+  try
+    c := TbSeedCellIn(doc, imports, cAccent, 'light');
+    AssertEquals('E14: an imported @mode wins', Ord(tssImported), Ord(c.Source));
+    AssertTrue('E14: over the document''s :root', c.Overridden);
+    AssertEquals('E14: what wins', '#111111', c.Raw);
+    AssertTrue('E14: the document''s own declaration is kept', c.Block >= 0);
+    c := TbSeedCellIn(doc, imports, cAccent, 'dark');
+    AssertEquals('E14: no imported dark accent: the :root, shared', Ord(tssShared), Ord(c.Source));
+    AssertFalse('E14: not overridden', c.Overridden);
+    c := TbSeedCellIn(doc, imports, cSurface, 'dark');
+    AssertEquals('E14: the document''s own @mode beats the import', Ord(tssOwn), Ord(c.Source));
+    c := TbSeedCellIn(doc, imports, 4, 'light');
+    AssertEquals('E14: an imported :root where the document has nothing', Ord(tssImported), Ord(c.Source));
+    AssertFalse('E14: overrides nothing', c.Overridden);
+    AssertEquals('E14: its value', '#222222', c.Raw);
+    c := TbSeedCellIn(doc, imports, 3, 'light');
+    AssertEquals('E14: the document''s :root beats an imported :root', Ord(tssShared), Ord(c.Source));
+    c := TbSeedCellIn(doc, imports, cOnSurface, 'light');
+    AssertEquals('E14: nobody: the base', Ord(tssInherited), Ord(c.Source));
+    c := TbSeedCell(doc, cAccent, 'light');
+    AssertEquals('E14: without the imports it looked shared', Ord(tssShared), Ord(c.Source));
+  finally
+    doc.Free;
+    TbFreeScans(imports);
   end;
 end;
 
@@ -535,6 +587,42 @@ begin
   AssertEquals('SF10: one set of edits', 1, FEdits);
   AssertEquals('SF10: the value', '9px', FLastEdits[0].Text);
   AssertTrue('SF10: in the dark block', FLastEdits[0].Start > Pos('@mode dark', FLastText));
+end;
+
+{ The review found it: a document whose @mode blocks all come from an @import showed one
+  column, with the :root's red where the preview (and the engine) has auto.tycss's blue.
+  Now: two columns, each what the mode comes to, and the :root cell says it is overridden.
+  A change goes into the document's own @mode block -- which comes after the import and
+  wins -- without asking about :root (changing :root would change nothing). }
+procedure TTbSeedsFrameTests.TestModesFromAnImport;
+const
+  cDoc = '@import "../auto.tycss";'#10':root { --accent: #FF0000; }'#10;
+var
+  dir: string;
+begin
+  dir := TbThemesDir + 'palettes';
+  FFrame.UpdateFrom(cDoc, dir, False);
+  AssertFalse('loads', FFrame.Broken);
+  AssertEquals('SF12: two columns', 2, Length(FFrame.Columns));
+  AssertEquals('SF12: light', 'light', FFrame.Columns[0]);
+  AssertEquals('SF12: light accent, as the engine has it', '#3B82F6', FFrame.ResolvedText(0, 0));
+  AssertEquals('SF12: dark accent, as the engine has it', '#60A5FA', FFrame.ResolvedText(0, 1));
+  AssertEquals('SF12: the swatch too', '#3B82F6', TyColorHex(FFrame.Swatch(0, 0).SelectedColor));
+  AssertEquals('SF12: the :root cell is overridden', Ord(tssImported), Ord(FFrame.Cell(0, 0).Source));
+  AssertTrue('SF12: overridden', FFrame.Cell(0, 0).Overridden);
+  AssertEquals('SF12: and says so', rsTbSeedOverridden, FFrame.Note(0, 0).Caption);
+  AssertEquals('SF12: a seed only the import sets', rsTbSeedImported, FFrame.Note(1, 0).Caption);
+  AssertTrue('SF12: the hint names the overridden value', Pos('#FF0000', FFrame.Swatch(0, 0).Hint) > 0);
+  FAnswer := mrYes;
+  AssertTrue('SF12: a change goes through', FFrame.ApplyValue(0, 0, '#123456'));
+  AssertEquals('SF12: without asking', 0, FAsked);
+  AssertTrue('SF12: into the document''s own light block',
+    Pos('@mode light {'#10'  :root {'#10'    --accent: #123456;', Applied) > 0);
+  AssertTrue('SF12: the :root left alone', Pos(':root { --accent: #FF0000; }', Applied) > 0);
+  FFrame.UpdateFrom(Applied, dir, False);
+  AssertEquals('SF12: and it wins', '#123456', FFrame.ResolvedText(0, 0));
+  AssertEquals('SF12: the dark one as it was', '#60A5FA', FFrame.ResolvedText(0, 1));
+  AssertEquals('SF12: its own now', Ord(tssOwn), Ord(FFrame.Cell(0, 0).Source));
 end;
 
 procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;

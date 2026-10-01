@@ -93,6 +93,9 @@
   "tbseedsframe.rstbseedinherited": "继承",
   "tbseedsframe.rstbseedshared": "来自 :root",
   "tbseedsframe.rstbseedexpression": "表达式",
+  "tbseedsframe.rstbseedimported": "来自导入的文件",
+  "tbseedsframe.rstbseedoverridden": "被导入文件的 @mode 盖过",
+  "tbseedsframe.rstbseedoverriddenhint": ":root 里写的是 %s，但导入文件里的 @mode 块盖过了它。改动会写进本文件自己的 @mode 块，它在导入之后、盖得过导入。",
   "tbseedsframe.rstbseedsharedask": "%s 写在 :root 里，亮暗共用。选「是」改 :root（两种模式都变），选「否」只给%s加一行。",
   "tbseedsframe.rstbseedexprask": "%s 现在是表达式 %s，改成 %s 吗？",
   "tbsnippets.rstbsnippetwhere": "放在主窗体（TTyForm）里："
