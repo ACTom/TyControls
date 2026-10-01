@@ -81,6 +81,8 @@ function TbSplitModesEdits(AScan: TTbCssScan; const AEol: string;
   const AValues: array of string): TTbTextEdits;
 
 type
+  TTbSeedValues = array[0..TbSeedCount - 1] of string;   { '#RRGGBB[AA]' / '6px'; '' = none }
+
   { What a column's seed comes to, on a model of its own. Not the preview's controller: it is
     in one mode at a time (two columns would mean switching it back and forth, and every
     switch repaints the preview), and in the modern density it carries the density pack,
@@ -98,6 +100,9 @@ type
     function HasModes: Boolean;     { the loaded theme has @mode blocks, its own or imported }
     function Color(ASeed: Integer; const AColumn: string; out AColor: TTyColor): Boolean;
     function Radius(const AColumn: string; out APx: Integer): Boolean;
+    { all six for a column, the model switched to its mode once (Color and Radius switch on
+      every call): TbColorText / TbRadiusText, '' for one that does not resolve }
+    procedure Values(const AColumn: string; out AValues: TTbSeedValues);
   end;
 
 implementation
@@ -149,6 +154,30 @@ begin
     AColor := s.TextColor;
     Result := True;
   end;
+end;
+
+procedure TTbSeedEval.Values(const AColumn: string; out AValues: TTbSeedValues);
+var
+  seed, px: Integer;
+  s: TTyStyleSet;
+begin
+  for seed := 0 to TbSeedCount - 1 do
+    AValues[seed] := '';
+  if not FLoaded then Exit;
+  FModel.SetMode(AColumn);
+  for seed := 0 to TbSeedCount - 1 do
+    if seed = TbRadiusSeed then
+    begin
+      px := FModel.ResolveMetric('--radius', -1);
+      if px >= 0 then
+        AValues[seed] := TbRadiusText(px);
+    end
+    else
+    begin
+      s := FModel.ResolveOverride('color: var(--' + TbSeedNames[seed] + ');');
+      if tpTextColor in s.Present then
+        AValues[seed] := TbColorText(s.TextColor);
+    end;
 end;
 
 function TTbSeedEval.Radius(const AColumn: string; out APx: Integer): Boolean;

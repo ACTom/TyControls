@@ -79,6 +79,9 @@ type
     procedure TestAnImportedPlainRuleIsNotCopiedOver;
     procedure TestTheCoverageCheckGoesToAnyRuleOfTheType;
     procedure TestASplitKeepsTheModernRadius;
+    procedure TestTheSeedsPageWaitsTillItIsShown;
+    procedure TestRadiusStepsAreOneUndoStep;
+    procedure TestAWaitingRadiusIsSaved;
   end;
 
 implementation
@@ -1230,38 +1233,145 @@ begin
   AssertTrue('F38: on the problems', FForm.SideBar.ActiveWindow = FForm.ProblemsWin);
 end;
 
-{ The preview's hooks and the seeds page outlive FormDestroy by a little (they are freed
-  with the window): neither calls back into it. }
-{ Not a pass / fail: how long a refresh (lint, preview, seeds page) takes on a big theme, the
-  median of five, printed for the sign-off. Red only past ten times what it should take. }
+function MedianOf(var A: array of Int64): Int64;
+var
+  i, j: Integer;
+  x: Int64;
+begin
+  for i := 0 to High(A) do
+    for j := i + 1 to High(A) do
+      if A[j] < A[i] then
+      begin
+        x := A[i];
+        A[i] := A[j];
+        A[j] := x;
+      end;
+  Result := A[Length(A) div 2];
+end;
+
+{ How long a refresh takes on a big theme, in its three parts, each the median of five on a
+  text changed each time (no cache helps): the lint, the preview's load and probe, the seeds
+  page (its scan and second model, worked through as when it shows). Printed for the
+  sign-off. The seeds page does less than the preview (no probe, no controls): when it costs
+  more than the preview, its work has grown (twice what it should, at least) -- red. The whole
+  refresh red only past ten times what it should take. }
 procedure TTbMainFormTests.TestHowLongARefreshTakes;
 var
-  times: array[0..4] of Int64;
-  i, j: Integer;
-  t0, x: Int64;
+  lint, prev, seeds, total, again: array[0..4] of Int64;
+  i: Integer;
+  t0: Int64;
+  css, dir, err: string;
+  base: TStringList;
+  probs: TTbProblems;
 begin
   WriteBytes(FDir + 'auto.tycss', ReadBytes(TbThemesDir + 'auto.tycss'));
   AssertTrue('opened', FForm.OpenFile(FDir + 'auto.tycss'));
-  for i := 0 to High(times) do
-  begin
-    FForm.Preview.Controller.Model.RefreshSystemTokens;   { no cached resolves }
-    t0 := GetTickCount64;
-    FForm.RefreshNow;
-    times[i] := GetTickCount64 - t0;
+  dir := FForm.Doc.BaseDir;
+  base := TStringList.Create;
+  try
+    TbBaseVarNames(base);
+    for i := 0 to 4 do
+    begin
+      css := FForm.Editor.Lines.Text + '/* ' + IntToStr(i) + ' */' + LineEnding;
+      t0 := GetTickCount64;
+      probs := TbCollectProblems(css, dir, False, base);
+      lint[i] := GetTickCount64 - t0;
+      AssertTrue('clean', not TbHasParseError(probs));
+      FForm.Preview.Controller.Model.RefreshSystemTokens;   { no cached resolves }
+      t0 := GetTickCount64;
+      AssertTrue('loads', FForm.Preview.LoadDocument(css, dir, err));
+      prev[i] := GetTickCount64 - t0;
+      t0 := GetTickCount64;
+      FForm.Seeds.UpdateFrom(css, dir, False);
+      FForm.Seeds.CatchUp;
+      seeds[i] := GetTickCount64 - t0;
+      t0 := GetTickCount64;
+      FForm.Seeds.UpdateFrom(css, dir, False);
+      FForm.Seeds.CatchUp;
+      again[i] := GetTickCount64 - t0;
+      FForm.Preview.Controller.Model.RefreshSystemTokens;
+      t0 := GetTickCount64;
+      FForm.RefreshNow;
+      total[i] := GetTickCount64 - t0;
+    end;
+  finally
+    base.Free;
   end;
-  for i := 0 to High(times) do
-    for j := i + 1 to High(times) do
-      if times[j] < times[i] then
-      begin
-        x := times[i];
-        times[i] := times[j];
-        times[j] := x;
-      end;
-  WriteLn(Format('TTbMainFormTests.TestHowLongARefreshTakes: auto.tycss, median of five %d ms (%d..%d)',
-    [times[2], times[0], times[4]]));
-  AssertTrue('a refresh in reasonable time', times[2] < 1500);
+  WriteLn(Format('TTbMainFormTests.TestHowLongARefreshTakes: auto.tycss, medians of five -- ' +
+    'lint %d ms, preview %d ms, seeds page %d ms (the same text again %d ms); ' +
+    'a whole refresh with the page hidden %d ms',
+    [MedianOf(lint), MedianOf(prev), MedianOf(seeds), MedianOf(again), MedianOf(total)]));
+  AssertTrue('K1: the seeds page costs less than the preview', MedianOf(seeds) <= MedianOf(prev));
+  AssertTrue('K1: the same text again costs next to nothing', MedianOf(again) * 4 <= MedianOf(seeds) + 4);
+  AssertTrue('a refresh in reasonable time', MedianOf(total) < 1500);
 end;
 
+{ The page is hidden (here: the window is never shown): a refresh takes the text and loads
+  nothing; the page works it through when it is shown (the side bar window's OnShow), or
+  when something is asked of it; the same text again loads nothing. }
+procedure TTbMainFormTests.TestTheSeedsPageWaitsTillItIsShown;
+var
+  n: Integer;
+begin
+  AssertEquals('two columns', 2, Length(FForm.Seeds.Columns));
+  n := FForm.Seeds.EvalLoads;
+  FForm.Editor.Lines.Text := '@mode light { :root { --accent: #ABCDEF; } }'#10 +
+    '@mode dark { :root { --accent: #222222; } }';
+  FForm.RefreshNow;
+  AssertEquals('K2: hidden: nothing loaded', n, FForm.Seeds.EvalLoads);
+  FForm.SeedsWin.OnShow(FForm.SeedsWin);
+  AssertEquals('K2: shown: loaded', n + 1, FForm.Seeds.EvalLoads);
+  AssertEquals('K2: the new value', '#ABCDEF', FForm.Seeds.ResolvedText(0, 0));
+  FForm.RefreshNow;
+  FForm.SeedsWin.OnShow(FForm.SeedsWin);
+  AssertEquals('K2: the same text: nothing loaded', n + 1, FForm.Seeds.EvalLoads);
+  FForm.Editor.Lines.Text := '@mode light { :root { --accent: #ABCDEE; } }'#10 +
+    '@mode dark { :root { --accent: #222222; } }';
+  FForm.RefreshNow;
+  AssertEquals('K2: asked: worked through', '#ABCDEE', FForm.Seeds.ResolvedText(0, 0));
+end;
+
+{ Radius steps one after another are one undo step back to where the first one started; a
+  keystroke in between makes them two. }
+procedure TTbMainFormTests.TestRadiusStepsAreOneUndoStep;
+var
+  t0, t1: string;
+begin
+  t0 := FForm.Editor.Lines.Text;
+  FForm.Seeds.RadiusSpin(0).Value := 7;
+  FForm.Seeds.FlushRadius;
+  FForm.Seeds.RadiusSpin(0).Value := 8;
+  FForm.Seeds.FlushRadius;
+  FForm.Seeds.RadiusSpin(0).Value := 9;
+  FForm.Seeds.FlushRadius;
+  AssertTrue('K3: the light radius is 9', Pos('--radius: 9px;', FForm.Editor.Lines.Text) > 0);
+  AssertEquals('K3: the preview has it', 9, FForm.Preview.Controller.Model.ResolveMetric('--radius', -1));
+  FForm.Editor.Undo;
+  AssertEquals('K3: one undo takes all three back', Unify(t0), Unify(FForm.Editor.Lines.Text));
+  FForm.RefreshNow;
+  FForm.Seeds.RadiusSpin(0).Value := 7;
+  FForm.Seeds.FlushRadius;
+  FForm.Editor.LogicalCaretXY := Point(4, 1);   { inside the header comment }
+  FForm.Editor.CommandProcessor(ecChar, 'x', nil);
+  t1 := FForm.Editor.Lines.Text;
+  FForm.Seeds.RadiusSpin(0).Value := 8;
+  FForm.Seeds.FlushRadius;
+  FForm.Editor.Undo;
+  AssertEquals('K3: a keystroke between: the second step alone', Unify(t1), Unify(FForm.Editor.Lines.Text));
+end;
+
+{ A spin box step still waiting its 250 ms when the file is saved goes into the file. }
+procedure TTbMainFormTests.TestAWaitingRadiusIsSaved;
+begin
+  FForm.Seeds.RadiusSpin(1).Value := 11;
+  AssertTrue('waiting', FForm.Seeds.RadiusPending);
+  AssertTrue('saved', FForm.SaveTo(FDir + 'r.tycss'));
+  AssertTrue('K4: the waiting radius is in the file', Pos('--radius: 11px;', ReadBytes(FDir + 'r.tycss')) > 0);
+  AssertFalse('K4: and waits no more', FForm.Seeds.RadiusPending);
+end;
+
+{ The preview's hooks and the seeds page outlive FormDestroy by a little (they are freed
+  with the window): neither calls back into it. }
 procedure TTbMainFormTests.TestAWindowGoesWithItsHooks;
 var
   f: TTbMainForm;

@@ -136,8 +136,13 @@ type
     FSeeds: TTbSeedsFrame;
     FJumpKey: string;                  { the rule Ctrl+click went to last (lower case) }
     FJumpIndex: Integer;               { which of its selectors }
+    FMergeKey: string;                 { the kind of the last change ApplyEdits may fold into }
+    FMergeBefore, FMergeAfter: string; { the text before it, and the text it left }
     procedure OpenPending(Data: PtrInt);
-    function SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits): Boolean;
+    function SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits;
+      const AMergeKey: string): Boolean;
+    procedure SeedsWinShow(Sender: TObject);
+    procedure PutEdits(const AText: string; const AEdits: TTbTextEdits);
     procedure SeedsSync(Sender: TObject);
     procedure PreviewPick(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure ShowSidePage(AWin: TTyToolWindow);
@@ -180,8 +185,11 @@ type
     procedure JumpToProblem(AIndex: Integer);
     procedure SetEditorAppearance(const ATheme: string; ADark: Boolean);
     { the edits (worked out on AText) as ONE undo step, then a refresh. False when the editor
-      no longer has AText: offsets into another text mean nothing }
-    function ApplyEdits(const AText: string; const AEdits: TTbTextEdits): Boolean;
+      no longer has AText: offsets into another text mean nothing. AMergeKey: a change of
+      the same kind right after the last one (nothing else in between) joins its undo step
+      -- the radius spin boxes, step after step }
+    function ApplyEdits(const AText: string; const AEdits: TTbTextEdits;
+      const AMergeKey: string = ''): Boolean;
     { go to the rule for ATypeKey and a class of AStyleClass (the next one, when it is the
       same control again), or add one: a variant rule empty at the end, a plain rule as a
       copy of the base's rules for the typeKey (tbrules: an empty one would take the base
@@ -267,6 +275,7 @@ begin
   FSeeds.OnEdits := @SeedsEdits;
   FSeeds.OnAsk := @AskFor;
   FSeeds.OnSync := @SeedsSync;
+  SeedsWin.OnShow := @SeedsWinShow;
 
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
@@ -304,6 +313,7 @@ procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
   Application.RemoveAsyncCalls(Self);
   { the frames outlive this handler: nothing of theirs may call back into the window }
+  SeedsWin.OnShow := nil;
   if FSeeds <> nil then
   begin
     FSeeds.OnEdits := nil;
@@ -377,6 +387,8 @@ end;
 function TTbMainForm.ConfirmDiscard: Boolean;
 begin
   Result := True;
+  if FSeeds <> nil then
+    FSeeds.FlushRadius;     { a spin box step still waiting is a change too }
   if not Editor.Modified then Exit;
   case Ask(Format(rsTbSaveChanges, [DisplayName]), [mbYes, mbNo, mbCancel]) of
     mrYes: Result := SaveDocument;
@@ -425,6 +437,7 @@ end;
 
 procedure TTbMainForm.LoadEditor(const AText: string);
 begin
+  FMergeKey := '';
   { a new or opened document replaces the whole text: nothing to undo into }
   Editor.Lines.Text := AText;
   Editor.Modified := False;
@@ -491,6 +504,7 @@ function TTbMainForm.SaveTo(const AFileName: string): Boolean;
 var
   regen: string;
 begin
+  FSeeds.FlushRadius;       { a spin box step still waiting goes into what is saved }
   try
     FDoc.SaveToFile(AFileName, Editor.Lines);
   except
@@ -750,16 +764,73 @@ end;
 
 { ---- edits from the seeds page, Ctrl+click and the coverage check ---- }
 
-function TTbMainForm.ApplyEdits(const AText: string; const AEdits: TTbTextEdits): Boolean;
+{ the one edit that turns ABefore into AAfter: what lies between their common start and
+  their common end }
+function DiffEdit(const ABefore, AAfter: string): TTbTextEdits;
+var
+  p, s, nb, na: Integer;
+begin
+  nb := Length(ABefore);
+  na := Length(AAfter);
+  p := 0;
+  while (p < nb) and (p < na) and (ABefore[p + 1] = AAfter[p + 1]) do
+    Inc(p);
+  s := 0;
+  while (s < nb - p) and (s < na - p) and (ABefore[nb - s] = AAfter[na - s]) do
+    Inc(s);
+  SetLength(Result, 1);
+  Result[0] := TbEdit(p + 1, nb - s + 1, Copy(AAfter, p + 1, na - s - p));
+end;
+
+function TTbMainForm.ApplyEdits(const AText: string; const AEdits: TTbTextEdits;
+  const AMergeKey: string): Boolean;
+var
+  target: string;
+begin
+  Result := False;
+  { the edits were worked out on AText; on any other text their offsets mean nothing }
+  if (Length(AEdits) = 0) or (Editor.Lines.Text <> AText) then Exit;
+  { The same kind of change again, right after the last one (the editor has exactly what it
+    left): the last one is undone and both go back in as one step, from where the first
+    one started. Undo must land on that text -- if it does not, the step on top was not
+    ours: it is redone, and this change is a step of its own. }
+  if (AMergeKey <> '') and (AMergeKey = FMergeKey) and (AText = FMergeAfter) then
+  begin
+    target := TbApplyEdits(AText, AEdits);
+    Editor.Undo;
+    if Editor.Lines.Text = FMergeBefore then
+    begin
+      PutEdits(FMergeBefore, DiffEdit(FMergeBefore, target));
+      FMergeAfter := Editor.Lines.Text;
+      UpdateTitle;
+      RefreshNow;
+      Exit(True);
+    end;
+    Editor.Redo;
+    if Editor.Lines.Text <> AText then
+      Exit;          { the editor is not where the edits were worked out any more }
+  end;
+  PutEdits(AText, AEdits);
+  if AMergeKey <> '' then
+  begin
+    FMergeKey := AMergeKey;
+    FMergeBefore := AText;
+    FMergeAfter := Editor.Lines.Text;
+  end
+  else
+    FMergeKey := '';
+  UpdateTitle;
+  RefreshNow;
+  Result := True;
+end;
+
+procedure TTbMainForm.PutEdits(const AText: string; const AEdits: TTbTextEdits);
 var
   i, last, n: Integer;
   e: TTbTextEdit;
   tail: string;
   wasEmpty: Boolean;
 begin
-  Result := False;
-  { the edits were worked out on AText; on any other text their offsets mean nothing }
-  if (Length(AEdits) = 0) or (Editor.Lines.Text <> AText) then Exit;
   { Lines.Text ends with a line break the editor has no line after (only a whole-text
     replacement reaches it): such an edit stops before it, and leaves its own final break.
     An editor with no line at all has no such break (Lines.Text is ''): what an edit at
@@ -794,14 +865,18 @@ begin
   finally
     Editor.EndUndoBlock;
   end;
-  UpdateTitle;
-  RefreshNow;
-  Result := True;
 end;
 
-function TTbMainForm.SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits): Boolean;
+function TTbMainForm.SeedsEdits(Sender: TObject; const AText: string; const AEdits: TTbTextEdits;
+  const AMergeKey: string): Boolean;
 begin
-  Result := ApplyEdits(AText, AEdits);
+  Result := ApplyEdits(AText, AEdits, AMergeKey);
+end;
+
+procedure TTbMainForm.SeedsWinShow(Sender: TObject);
+begin
+  if FSeeds <> nil then
+    FSeeds.CatchUp;     { refreshes while it was hidden were only taken, not worked through }
 end;
 
 { the seeds page is about to work out an edit: what it scanned must be what the editor has
@@ -850,6 +925,7 @@ var
   edits: TTbTextEdits;
 begin
   if ATypeKey = '' then Exit;
+  FSeeds.FlushRadius;
   src := Editor.Lines.Text;
   scan := TbScanCss(src);
   try
@@ -996,6 +1072,7 @@ var
   scan: TTbCssScan;
   dual: Boolean;
 begin
+  FSeeds.FlushRadius;
   scan := TbScanCss(Editor.Lines.Text);
   try
     dual := scan.HasModes;
@@ -1011,6 +1088,7 @@ function TTbMainForm.BuildSnippetsForm: TTbSnippetsForm;
 var
   fname: string;
 begin
+  FSeeds.FlushRadius;
   if FDoc.Untitled then
     fname := SnippetName + '.tycss'
   else

@@ -44,8 +44,10 @@ type
     FSyncText: string;
     FSynced: Integer;
     FRefuse: Boolean;                 { OnEdits answers False: the window refused }
+    FLastMergeKey: string;
     function AskStub(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult;
-    function EditsStub(Sender: TObject; const AText: string; const AEdits: TTbTextEdits): Boolean;
+    function EditsStub(Sender: TObject; const AText: string; const AEdits: TTbTextEdits;
+      const AMergeKey: string): Boolean;
     procedure SyncStub(Sender: TObject);
     function Applied: string;
   protected
@@ -66,6 +68,8 @@ type
     procedure TestModesFromAnImport;
     procedure TestTheRadiusIsAskedWhereItGoes;
     procedure TestARefusedChangeLeavesTheSwatch;
+    procedure TestTheRadiusWaitsForTheLastStep;
+    procedure TestTheModelLoadsOncePerText;
   end;
 
 const
@@ -432,9 +436,10 @@ begin
 end;
 
 function TTbSeedsFrameTests.EditsStub(Sender: TObject; const AText: string;
-  const AEdits: TTbTextEdits): Boolean;
+  const AEdits: TTbTextEdits; const AMergeKey: string): Boolean;
 begin
   Inc(FEdits);
+  FLastMergeKey := AMergeKey;
   FLastText := AText;
   FLastEdits := Copy(AEdits);
   Result := not FRefuse;
@@ -617,6 +622,7 @@ procedure TTbSeedsFrameTests.TestTheRadiusOfTheDarkColumn;
 begin
   FFrame.UpdateFrom(TbMinimalTemplate, '', False);
   FFrame.RadiusSpin(1).Value := 9;
+  FFrame.FlushRadius;                { not waiting the 250 ms }
   AssertEquals('SF10: one set of edits', 1, FEdits);
   AssertEquals('SF10: the value', '9px', FLastEdits[0].Text);
   AssertTrue('SF10: in the dark block', FLastEdits[0].Start > Pos('@mode dark', FLastText));
@@ -700,6 +706,50 @@ begin
   AssertEquals('SF14: refused: the swatch shows the text''s value again', '#3B82F6',
     TyColorHex(FFrame.Swatch(0, 0).SelectedColor));
   AssertFalse('SF14: ApplyValue says so', FFrame.ApplyValue(0, 0, '#123456'));
+end;
+
+{ The review measured five radius steps at 1.4 s: each step wrote, refreshed the window and
+  was an undo step of its own. A step now waits 250 ms for the next; three quick steps are
+  one change, of the last value -- marked as a radius change of its column, so the window
+  can fold the next one into the same undo step. }
+procedure TTbSeedsFrameTests.TestTheRadiusWaitsForTheLastStep;
+begin
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  FFrame.RadiusSpin(0).Value := 7;
+  FFrame.RadiusSpin(0).Value := 8;
+  FFrame.RadiusSpin(0).Value := 9;
+  AssertEquals('SF15: nothing written yet', 0, FEdits);
+  AssertTrue('SF15: waiting', FFrame.RadiusPending);
+  FFrame.UpdateFrom(TbMinimalTemplate + ' ', '', False);   { a text it has not seen: worked through }
+  AssertEquals('SF15: a refresh meanwhile leaves the spin box alone', 9, FFrame.RadiusSpin(0).Value);
+  FFrame.FlushRadius;
+  AssertEquals('SF15: one change', 1, FEdits);
+  AssertEquals('SF15: of the last value', '9px', FLastEdits[0].Text);
+  AssertEquals('SF15: a radius change of the light column', 'radius0', FLastMergeKey);
+  AssertFalse('SF15: nothing waiting any more', FFrame.RadiusPending);
+  FFrame.FlushRadius;
+  AssertEquals('SF15: written once', 1, FEdits);
+  FFrame.ApplyValue(0, 0, '#123456');
+  AssertEquals('SF15: a swatch is no radius change', '', FLastMergeKey);
+end;
+
+{ The second model loads the whole theme -- about what the preview's load costs. The same
+  text and folder again (a save, a refresh with nothing typed) load nothing. }
+procedure TTbSeedsFrameTests.TestTheModelLoadsOncePerText;
+var
+  n: Integer;
+begin
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  n := FFrame.EvalLoads;
+  AssertTrue('loaded', n > 0);
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  AssertEquals('SF16: the same text: no load', n, FFrame.EvalLoads);
+  AssertEquals('SF16: still the values', '#3B82F6', FFrame.ResolvedText(0, 0));
+  FFrame.UpdateFrom(TbMinimalTemplate, 'C:\elsewhere', False);
+  AssertEquals('SF16: another folder: a load', n + 1, FFrame.EvalLoads);
+  FFrame.UpdateFrom(cDarkDoc, 'C:\elsewhere', False);
+  AssertEquals('SF16: another text: a load', n + 2, FFrame.EvalLoads);
+  AssertEquals('SF16: its values', '#111111', FFrame.ResolvedText(0, 0));
 end;
 
 procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;
