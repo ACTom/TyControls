@@ -1,0 +1,62 @@
+# Contributing
+
+> 中文: [CONTRIBUTING.md](CONTRIBUTING.md)
+
+Bug reports, suggestions and pull requests are all welcome. Please file issues on [GitHub](https://github.com/ACTom/TyControls/issues), in English or Chinese. The Gitee repository is a mirror.
+
+## Reporting a bug
+
+Check the [known issues](docs/known-issues.en.md) first; the cause and a workaround may already be listed there.
+
+Please include:
+
+- TyControls, Lazarus and FPC versions
+- Operating system and widgetset (win32 / gtk2 / gtk3 / qt5 / qt6 / cocoa); on Linux, whether it's X11 or Wayland
+- Display scaling (100%, 150%, …) and the theme in use
+- How to reproduce it: ideally a few lines changed in one of the `examples/`; otherwise a minimal project that compiles
+- What you see and what you expected; a screenshot for anything visual
+
+## Suggesting a feature
+
+Have a look at the [roadmap](https://github.com/ACTom/TyControls/milestones) first; it may already be planned.
+
+Tell us what you want to do with it rather than only the solution you have in mind. There is often a better fit for the same need.
+
+TyControls is a general-purpose, cross-platform, multi-theme control library. The built-in skins exist to prove the theme system, not to replicate any one design system in full. These are out of scope:
+
+- Docking layouts. For IDE-style UIs, use the tool-window workbench.
+- Multiple windows (tearing panels off into separate windows).
+
+## Roadmap
+
+Each version has a Milestone whose description says what the release is mainly about. Each major feature has a tracking issue you can subscribe to and discuss. Versions are ordered, not dated: a release ships when it's done.
+
+## Pull requests
+
+For anything sizeable, open an issue or comment on an existing one first, so the work doesn't end up going in a different direction.
+
+**Branches**: fixes for a released version go on that version's maintenance branch, `major.minor-fixes` (a 3.0.x bug goes on `3.0-fixes`); features and everything else go on `main`.
+
+**Build and test**:
+
+```
+lazbuild tests/tytests.lpi
+tests/tytests --all --format=plain
+```
+
+Bug fixes should come with a test that fails without the fix.
+
+**Ground rules**:
+
+- Visual values (colors, sizes, radii) come from theme tokens, never hard-coded.
+- No native LCL controls (`TEdit`, `TButton`, …) inside owner-drawn UI.
+- Add new units to `tycontrols.lpk` (design-time ones to `tycontrols_dt.lpk`).
+- User-visible text goes in a `resourcestring`, with the zh_CN `.po` under `languages/` updated to match.
+- New examples use `.lfm` forms, have a title bar and can switch themes at runtime.
+- Otherwise, follow the code around you.
+
+**Commit messages** are in English, as `type(scope): summary`, e.g. `fix(grid): header loses focus after sort`. If it fixes an issue, put `Fixes #N` in the body.
+
+## Changelog
+
+Each release's changes go in [CHANGELOG.en.md](CHANGELOG.en.md). It only records changes users can notice, each linked to its issue; docs, refactoring and tests are left out. Don't edit the changelog in a PR; it's written up at release time.

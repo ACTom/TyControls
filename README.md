@@ -403,6 +403,7 @@ CharImage1.GlyphName := 'house';
 | [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
 | [known-issues.md](docs/known-issues.md) | 已知问题 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 报告问题、功能建议、提交代码、路线图 |
 
 ---
 

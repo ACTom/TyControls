@@ -403,6 +403,7 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
 | [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
+| [CONTRIBUTING.en.md](CONTRIBUTING.en.md) | Bug reports, feature requests, pull requests, roadmap |
 
 ---
 
