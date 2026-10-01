@@ -113,7 +113,21 @@
 
 每条都给了建议，**计划正文按建议写**；改了哪条，执行时改对应任务，Task 15 写回 spec 原处。第一类由主控在 Task 0 决定问不问用户；用户没回复前按建议做（三期一起验收时仍可改，Task 16 把它们写进验收文档的「等你定的决定」）。
 
-> **状态**：（Task 0 Step 1 由主控填写：问了没有、答复是什么。）
+> **状态**：未单独询问用户，按建议执行（用户 2026-10-01 以 /goal 指示按计划、开发、验证、修复顺序完成 spec 全部内容），一起验收时可改。主控的决定：第一类十一条全部按建议，另有两处修正——① 第 1 条 Anthropic 预置的模型改用 `claude-sonnet-5`，最大输出要大于 0（主控举例 8192，执行时定为 32000，理由见下面「实现期修正（开工核对）」第 3 条）；② 第二类第 4 条（macOS 也运行时加载 libcurl）的后备方案改为「macOS 若不行，改为调用 `/usr/bin/curl` 进程」（本期不实现）。第 9 条（对比窗口用两个只读 SynEdit）主控同意。
+
+### 实现期修正（开工核对）
+
+Task 0 对照 2 期实际留下的代码（`df1fd13b`，含 2 期期末修复）逐个核对本计划用到的接口，与计划写的不同之处如下，正文已就地改过：
+
+1. `ApplyEdits(const AText: string; const AEdits: TTbTextEdits; const AMergeKey: string = ''): Boolean`——多了合并键（圆角微调框用）。接受 AI 的版本不传合并键：传空串会把「上一步可合并」清掉，正是要的（接受是单独一步）。陈旧保护、`BeginUndoBlock` / `EndUndoBlock`、末尾 `RefreshNow` 与计划写的一样；另外 `PutEdits` 已处理「改动终点在文末换行之后」与「零行编辑器多出一个空行」两种边角，`TbWholeTextEdit` 的终点不会超出文本，碰不到前者。
+2. `Ask(AMsg, AButtons, AType = mtConfirmation)` 是三参的；框和对话框问话用的类型 `TTbAskEvent`（`tbseedsframe`）是两参的，主窗体给它们的是 `AskFor`。Task 12 的 `BuildAiSettingsForm` 写成 `Result.OnAsk := @AskFor`（计划原写 `@Ask`，类型不配）。
+3. **Anthropic 预置的最大输出**定为 32000（`TbAnthropicDefaultMaxOutput`，请求体里 `MaxOutput <= 0` 时也用它；设置对话框切到 Anthropic 且原值 0 时自动填它）：整份重写一份内置主题要的输出就不少——`themes/auto.tycss` 32 KB，按 4 字节一个 token 约 8 千，而当前模型默认先思考、思考也算在 `max_tokens` 里；8192 会把整份重写截断。32000 在 Sonnet 级模型的上限之内。计划里原写 64000 的地方（Task 4 请求体、Task 6 预置表、Task 11 自动填、G1、G4、A3）都改为这个常量。
+4. `TbSeedNames` 是常量数组（`array[0..TbSeedCount - 1] of string`，`tbseeds.pas:38`），不是函数；用法照常量。
+5. `ShowSidePage(AWin: TTyToolWindow)` 是主窗体的私有方法，`MnuAiClick` 在窗体里调它，不受影响。侧栏页的建法与 2 期种子页相同（frame 运行时建、放进 `.lfm` 里的宿主面板）。种子页「看得见时才算」的缓存（`SeedsWin.OnShow` → `CatchUp`）与 AI 页无关：AI 页在前台时种子页只收文本、不算。
+6. 主窗体测试 F1（`TestTheWindowIsBuilt`）现在断言侧栏 2 页，Task 12 改为 3 页（M1 另断言第三页）。F11（`TestTheProjectListsItsUnits`）与 I3（`TestTheTranslationsCoverTheCode`）现在都 `FindAllFiles(…, False)`，照计划改递归。
+7. 验收文档现在最后一项是第 52 项、最后一个决定是 E26：Task 16 的 3 期项编 53–72、决定编 E27–E37。
+8. **libcurl 的变参只有一个调用点**（主控决定）：`curl_easy_setopt` 与 `curl_easy_getinfo` 各经一个函数（`CurlSetOpt` / `CurlGetInfo`）调用，所有选项都从这里过；实参一律按指针宽度传（`Pointer(PtrInt(x))`）——C 的 `long` 在 Linux / macOS 上（LP64，以及 32 位的 ILP32）与指针一样宽，比计划原写的 `Int64(x)` 在 32 位系统上也对。注释写明 Apple arm64 变参走栈、靠 FPC 对 cdecl `array of const` 的处理、本机测不到、后备方案是调用 `/usr/bin/curl` 进程（第二类第 4 条，本期不实现）。
+9. 基线（`df1fd13b`）的条数与红名单记在签收里。
 
 ### 一、产品方向 / 用户可见（问用户）
 
@@ -123,7 +137,7 @@
    |---|---|---|---|---|---|
    | OpenAI | OpenAI 兼容 | `https://api.openai.com/v1` | `gpt-5` | 0（不发） | 120 s |
    | DeepSeek | OpenAI 兼容 | `https://api.deepseek.com/v1` | `deepseek-chat` | 8192 | 120 s |
-   | Anthropic | Anthropic | `https://api.anthropic.com/v1` | `claude-opus-5` | 64000 | 300 s |
+   | Anthropic | Anthropic | `https://api.anthropic.com/v1` | ~~`claude-opus-5`~~ `claude-sonnet-5`（主控） | ~~64000~~ 32000（开工核对第 3 条） | 300 s |
    | 本地（Ollama） | OpenAI 兼容 | `http://localhost:11434/v1` | `qwen2.5-coder:7b` | 0 | 300 s |
    | 自定义 | OpenAI 兼容 | （空） | （空） | 0 | 120 s |
 
@@ -144,7 +158,7 @@
 1. **新单元（`tb` 前缀）与目录**：`ai/` 下 `tbhttp`（接口、地址拆分、工厂）、`tbhttpwin`（WinHTTP，`{$IFDEF MSWINDOWS}`）、`tbhttpcurl`（libcurl，`{$IFDEF UNIX}`）、`tbsse`、`tbaiformat`、`tbaiclient`、`tbaisettings`、`tbreference`、`tbaisession`；顶层 `tbdiff`、`tbcompareform`、`tbaisettingsform`、`tbaiframe`（界面放顶层，`.lfm` 检查脚本与 I1 的 `.lfm` 清单都只看顶层，不用改）。工具工程 `OtherUnitFiles` 加 `ai`；测试工程加 `../tools/themebuilder/ai`。spec §4 的 `ai/uhttp.pas` / `uaiclient.pas` / `uaisettings.pas` / `uaisession.pas` / `ureference.inc` 与 `udiff.pas` 写回为这些名字。
 2. **WinHTTP、DPAPI 自己声明，libcurl 自己建运行时函数表**（核实记录 1、6、12）。
 3. **线程**：只有 HTTP 在工作线程；字节经 SSE 拆分、格式解读后的「文字片段」在工作线程里攒进带锁的缓冲，`TThread.Queue(nil, @方法)` 交给主线程（FPC 3.2.2 有 `Queue` 与 `RemoveQueuedEvents`，`rtl/objpas/classes/classesh.inc:1801-1805`）；取代码块、解析、lint、试解析、界面全在主线程（样式模型与解析器有进程级状态：`GThemeBaseDir`、全局回退字号、测量缓存）。对象析构前 `Cancel` + `WaitFor` + `RemoveQueuedEvents`。
-4. **macOS 也走运行时加载**（spec 原文）。风险：Apple arm64 的 C 变参走栈，`curl_easy_setopt` 能不能对靠 FPC 对 cdecl `array of const` 的处理（核实记录 7）；本机与 WSL 都测不到，验收在真 Mac 上做一次真实生成。不行的退路（不在本期做）：Darwin 改用静态 `external 'curl'`（macOS 自带 libcurl，静态链接不会「起不来」）。
+4. **macOS 也走运行时加载**（spec 原文）。风险：Apple arm64 的 C 变参走栈，`curl_easy_setopt` 能不能对靠 FPC 对 cdecl `array of const` 的处理（核实记录 7）；本机与 WSL 都测不到，验收在真 Mac 上做一次真实生成。不行的退路（不在本期做）：~~Darwin 改用静态 `external 'curl'`（macOS 自带 libcurl，静态链接不会「起不来」）~~ 改为调用 `/usr/bin/curl` 进程（主控决定，开工核对）。
 5. **精简参考运行时拼**（核实记录 22），写回 spec §7.2；守卫测试见 Task 7。
 6. **测试缝**：AI 配置文件跟着 1 期的 `SettingsFileForTest` 走（同目录下的 `themebuilder-ai.ini` / `themebuilder-ai.keys`，`TbAiFilesFor`）；一次生成的后端可替换（`TTbAiSession.Backend`，测试用按脚本回答的假后端，spec §8「按脚本回答的假模型」）；对比窗口、设置对话框只 `Create` + `Prepare`、从不 `ShowModal`，测试直接调按钮的处理方法；等异步结果用 `CheckSynchronize` 循环（上限 10 秒，超时的失败消息说等的是什么）。
 7. **密钥不外露**（spec §7.1）：只在请求头里出现；错误句子与 `Detail` 都过 `TbScrubSecret`（整串、前 6 个字符、后 4 个字符、含 `***` 的词都换成 `***`）；Windows 的配置文件里只有 DPAPI 密文的 base64；Unix 的密钥文件 0600；工具没有日志。测试断言密钥不在任何对外的字符串、不在 ini 字节里。
@@ -975,7 +989,7 @@ end;
 - [ ] **Step 1: 单元**（uses `Classes, SysUtils, fpjson, jsonparser, tbsse`；单元头注释：两种格式各是什么样（核实记录 17 的摘要），来源）：
   - `TbEndpointUrl`：`b := TrimRight(BaseUrl)` 去掉末尾 `/`；OpenAI 格式：`b` 已以 `/chat/completions` 结尾就原样，否则 `b + '/chat/completions'`；Anthropic：已以 `/messages` 结尾就原样，否则 `b + '/messages'`。
   - `TbRequestHeaders`：都有 `Content-Type: application/json`、`Accept: text/event-stream`；OpenAI：`AKey <> ''` 时 `Authorization: Bearer <key>`；Anthropic：`x-api-key: <key>`（空也发——Anthropic 没有无密钥的用法，让服务说 401）、`anthropic-version: 2023-06-01`。
-  - `TbRequestBody`（`TJSONObject`，`AsJSON`）：OpenAI：`model`、`stream: true`、`messages` = `[{"role":"system","content":ASystem}]` + 每条（`user` / `assistant`）、`MaxOutput > 0` 时 `max_tokens`；Anthropic：`model`、`max_tokens`（`MaxOutput`，≤ 0 时用 64000）、`system`、`messages`、`stream: true`。**不发** `temperature`（当前的推理 / 思考模型拒收）。
+  - `TbRequestBody`（`TJSONObject`，`AsJSON`）：OpenAI：`model`、`stream: true`、`messages` = `[{"role":"system","content":ASystem}]` + 每条（`user` / `assistant`）、`MaxOutput > 0` 时 `max_tokens`；Anthropic：`model`、`max_tokens`（`MaxOutput`，≤ 0 时用 ~~64000~~ `TbAnthropicDefaultMaxOutput` = 32000，开工核对第 3 条）、`system`、`messages`、`stream: true`。**不发** `temperature`（当前的推理 / 思考模型拒收）。
   - `TbParseStreamEvent`：`Data` 解析失败 → `tspError`、文字 `'not JSON: ' + Copy(Data, 1, 80)`。OpenAI：`Data = '[DONE]'` → `tspDone`；有 `error` 对象 → `tspError`（`error.message`）；`choices[0].delta.content` 是非空字符串 → `tspText`；`delta.reasoning_content` 非空 → `tspThinking`；`finish_reason = 'length'` → `tspTruncated`；`= 'content_filter'` → `tspRefused`；其余（`stop`、空的开头块）→ `tspNone`。Anthropic（看 `Name`，名字是 `message` 时看 JSON 的 `type`）：`content_block_delta` + `delta.type = 'text_delta'` → `tspText`（`delta.text`）；`thinking_delta` / `signature_delta` 或 `content_block_start` 且 `content_block.type = 'thinking'` → `tspThinking`；`message_delta` 的 `delta.stop_reason = 'max_tokens'` → `tspTruncated`、`= 'refusal'` → `tspRefused`；`message_stop` → `tspDone`；`error` → `tspError`（`error.message`，没有就 `error.type`）；`ping`、`message_start`、`content_block_stop`、其余 → `tspNone`。
   - `TbParseWholeReply`：OpenAI `choices[0].message.content`；Anthropic `content` 数组里 `type = 'text'` 的 `text` 连起来；都没有 → False。
   - `TbErrorBodyMessage`：JSON 里 `error` 是对象 → `error.message`（没有就 `error.type`）；`error` 是字符串 → 它；顶层有 `message` → 它；解析不了 → `Trim(Copy(去掉控制字符的原文, 1, 200))`。
@@ -995,7 +1009,7 @@ end;
 |---|---|---|
 | A1 | `TbEndpointUrl`：(`https://api.openai.com/v1`, OpenAI) → `…/v1/chat/completions`；(`…/v1/`, OpenAI) 同；(`http://h/v1/chat/completions`, OpenAI) 原样；(`https://api.anthropic.com/v1`, Anthropic) → `…/v1/messages`；(`…/v1/messages`, Anthropic) 原样 | 不去末尾 `/`（得到 `//chat`） |
 | A2 | 请求头：OpenAI 有密钥 → 含 `Authorization: Bearer k`；无密钥 → 没有任何 `Authorization`；Anthropic → `x-api-key: k`、`anthropic-version: 2023-06-01`；两者都有 `Content-Type: application/json` | 空密钥也发 `Authorization: Bearer ` |
-| A3 | 请求体（解析回 JSON 再查字段）：OpenAI、`MaxOutput = 0` → 没有 `max_tokens`；`= 8192` → 有；`messages[0]` 是 `system`、其后 `user` / `assistant` 顺序与输入相同；`stream = true`；没有 `temperature`；Anthropic → `system` 在顶层、`messages` 里没有 `system`、`max_tokens = 64000`（`MaxOutput = 0` 时）；**中文与 `"`、`\`、换行、制表符**的描述往返解析后逐字相同，原始请求体里中文是 UTF-8 原样（不是 `\u`） | OpenAI 在 `MaxOutput = 0` 时也发 `max_tokens` |
+| A3 | 请求体（解析回 JSON 再查字段）：OpenAI、`MaxOutput = 0` → 没有 `max_tokens`；`= 8192` → 有；`messages[0]` 是 `system`、其后 `user` / `assistant` 顺序与输入相同；`stream = true`；没有 `temperature`；Anthropic → `system` 在顶层、`messages` 里没有 `system`、`max_tokens = 32000`（`MaxOutput = 0` 时；开工核对第 3 条）；**中文与 `"`、`\`、换行、制表符**的描述往返解析后逐字相同，原始请求体里中文是 UTF-8 原样（不是 `\u`） | OpenAI 在 `MaxOutput = 0` 时也发 `max_tokens` |
 | A4 | `openai-ok.sse` → 文字 = 期望的完整回答（含 `中文` 与 🎨 的 UTF-8）、最后一个有意义的片段是 `tspDone`；`tspText` 片段数 = 4 | — |
 | A5 | `deepseek-reasoning.sse` → 有 `tspThinking`、文字只含 `content` 的部分 | `reasoning_content` 当正文 |
 | A6 | `\u` 写的汉字与代理对（A4 的那两块）解码正确——这一条单列，红了就是 fpjson 的 `\u` 问题（核实记录 15），修法：解析前自己把 `\uXXXX` 解成 UTF-8（`\u0022`、`\u005C`、`< \u0020` 保留转义） | — |
@@ -1404,7 +1418,7 @@ end;
   - 非可视：`PresetMenu: TTyPopupMenu`（五项：`'OpenAI'`、`'DeepSeek'`、`'Anthropic'`、`'Local (Ollama)'`、`'Custom'`，`Tag` 0..4，`OnClick = PresetClick`）、`TestTimer: TTimer`（100 ms，`Enabled = False`，`OnTimer = TestTimerTimer`）
 - [ ] **Step 2: `tbaisettingsform.pas`**：
   - `Prepare(ASettings)`：把配置**复制**进 `FWork: array of TTbAiProfile` 与 `FKeys: TStringList`（id → 密钥）；填 `ProfileList`；选中当前那个；`CmbFormat.Items` = `rsTbAiFormatOpenAI`（`'OpenAI-compatible'`）/ `rsTbAiFormatAnthropic`（`'Anthropic'`）；`LblPrivacy.Caption := rsTbAiPrivacy + ' ' + {$IFDEF MSWINDOWS}rsTbAiKeyStoreWin{$ELSE}rsTbAiKeyStoreUnix{$ENDIF}`：`rsTbAiPrivacy = 'The theme text and your descriptions are sent to the service set here. A local model (an address on localhost) keeps them on this computer.'`、`rsTbAiKeyStoreWin = 'Keys are stored encrypted for your Windows user.'`、`rsTbAiKeyStoreUnix = 'Keys are stored in a file only you can read.'`。
-  - 字段改动随时写回 `FWork[当前]`（各控件 `OnChange`，`FUpdating` 挡住代码里的同步，2 期地雷 22）；`EdtUrl` 改了刷新 `LblHint`（`TbIsLoopbackHost(主机)` 时显示 `rsTbAiOllamaHint`：`'Ollama keeps only a short context by default and cuts the start of a long request without saying so. Set OLLAMA_CONTEXT_LENGTH=32768 (or more) before starting Ollama.'`）；`CmbFormat` 改成 Anthropic 且 `MaxOutput = 0` → 自动填 64000。
+  - 字段改动随时写回 `FWork[当前]`（各控件 `OnChange`，`FUpdating` 挡住代码里的同步，2 期地雷 22）；`EdtUrl` 改了刷新 `LblHint`（`TbIsLoopbackHost(主机)` 时显示 `rsTbAiOllamaHint`：`'Ollama keeps only a short context by default and cuts the start of a long request without saying so. Set OLLAMA_CONTEXT_LENGTH=32768 (or more) before starting Ollama.'`）；`CmbFormat` 改成 Anthropic 且 `MaxOutput = 0` → 自动填 ~~64000~~ 32000（开工核对第 3 条）。
   - `AddPreset` / `PresetClick`：`TbPresetProfile` 追加、选中、`EdtKey` 聚焦（`CanSetFocus`）。`BtnRemove`：问一次（借主窗体的 `Ask`，经 `OnAsk: TTbAskEvent`，2 期的类型）再删。
   - `StartTest`：当前配置 + `FKeys` 里的密钥建一个 `TTbClientBackend`，`OnDelta` / `OnDone` 挂上；系统提示 `'Reply with the single word OK.'`、消息 `[user('ping')]`；`LblTest.Caption := rsTbAiTesting`（`'Testing...'`）；第一个 `tspText` 或 `tspThinking` 到达就算连上了：`Cancel` 后端、`LblTest := Format(rsTbAiTestOk, [Model])`（`'Connected: %s is answering.'`）；`OnDone` 先到（没有片段）：`aekNone` → 同样成功，否则 `LblTest := TbAiErrorSentence(...)`。`Testing` = 后端还在跑。窗体关闭 / 析构时有测试在跑就 `Cancel` + 释放（地雷 29）。
   - `Commit`：Anthropic 且 `MaxOutput <= 0` 的配置拒绝提交（`LblTest := rsTbAiNeedMaxOutput`，`'Anthropic needs a maximum output length above 0.'`，`ModalResult := mrNone`）；否则把 `FWork` 全部 `Put` 回设置、删掉列表里没有了的、写密钥、`CurrentId` = 选中的、`Save`。`BtnOkClick` = `Commit`。
@@ -1412,10 +1426,10 @@ end;
 
 | # | 判据 | 在哪个变异下必须红 |
 |---|---|---|
-| G1 | 预置：`AddPreset(tapAnthropic)` → 列表多一项、选中它、`CmbFormat.ItemIndex = 1`、`EdtUrl.Text = 'https://api.anthropic.com/v1'`、`SpnMaxOutput.Value = 64000` | — |
+| G1 | 预置：`AddPreset(tapAnthropic)` → 列表多一项、选中它、`CmbFormat.ItemIndex = 1`、`EdtUrl.Text = 'https://api.anthropic.com/v1'`、`SpnMaxOutput.Value = 32000`（开工核对第 3 条） | — |
 | G2 | 改字段 + 密钥 + `Commit` → 另建 `TTbAiSettings` `Load` 读回相同；`Cancel`（不 `Commit`）的改动不落盘（先证明改过） | 字段改动直接写进真设置（不 `Commit` 也落盘） |
 | G3 | 本机提示：地址改成 `http://localhost:11434/v1` → `LblHint.Visible`；改成 `https://api.openai.com/v1` → 不可见 | — |
-| G4 | Anthropic 的最大输出：格式切到 Anthropic 且原值 0 → 自动 64000；手动改回 0 再 `Commit` → 设置没变、`LblTest` 是 `rsTbAiNeedMaxOutput` | 不拦 |
+| G4 | Anthropic 的最大输出：格式切到 Anthropic 且原值 0 → 自动 32000；手动改回 0 再 `Commit` → 设置没变、`LblTest` 是 `rsTbAiNeedMaxOutput` | 不拦 |
 | G5 | 测试连接成功：配置指向 `TTbFakeHttpServer`（OpenAI 形状的流，第一块之后 `FakeHold`）→ `StartTest`，`CheckSynchronize` 等到 `Testing = False`（≤ 5 秒）→ `TestText` 以 `Connected` 开头；服务端收到的正文里 `"content":"ping"`；**测试结束服务端的连接被取消了**（服务端的 Hold 被客户端断开：服务端记到的连接已关闭——`TTbFakeHttpServer` 加一个 `ClosedByPeer` 计数） | 连上之后不 `Cancel`（要等到空闲超时，用例超时失败） |
 | G6 | 测试连接失败：401 → `TestText` 以 `rsTbAiAuth` 的格式开头；不含密钥 | — |
 | G7 | 隐私说明：`LblPrivacy.Caption` 含 `rsTbAiPrivacy` 与本平台那一句 | 不显示 |
@@ -1489,7 +1503,7 @@ end;
 ```
 
   （`rsTbAiEditedSince = 'The editor changed after this was generated. Accepting replaces those changes too. Accept?'`、`rsTbAiAccepted = 'Accepted the AI''s version. Ctrl+Z undoes it.'`；`Ask` 的第三个参数是 1 期期末加的消息类型，以实际签名为准。`TbWholeTextEdit` 返回的改动 `Start = Stop` 且 `Text = ''`（完全相同）时 `ApplyEdits` 什么都不做——session 那边已经把这种情况说成「没改」、不会走到这里。）
-  - `BuildAiSettingsForm`：`Result := TTbAiSettingsForm.Create(Self); Result.OnAsk := @Ask; Result.Prepare(FAiSettings);`。`AiSettingsClick` / `MnuAiSettingsClick`：`f := BuildAiSettingsForm; try if f.ShowModal = mrOk then FAi.RefreshProfiles; finally f.Free; end;`。`MnuAiClick` → `ShowSidePage(AiWin)`。
+  - `BuildAiSettingsForm`：`Result := TTbAiSettingsForm.Create(Self); Result.OnAsk := @AskFor; Result.Prepare(FAiSettings);`（开工核对第 2 条：`Ask` 是三参的）。`AiSettingsClick` / `MnuAiSettingsClick`：`f := BuildAiSettingsForm; try if f.ShowModal = mrOk then FAi.RefreshProfiles; finally f.Free; end;`。`MnuAiClick` → `ShowSidePage(AiWin)`。
 - [ ] **Step 5: 1 期测试跟着改**（`tests/test.themebuilder.main.pas`）：F1 的侧栏页数改为 3、`Windows[2] = AiWin`；F11 的 `cUnits` 加本期的单元（`ai/` 下的写相对路径），从磁盘问清单改为 `FindAllFiles(dir, '*.pas', True)`，每个文件按「相对 `tools/themebuilder/` 的路径、分隔符换成 `/`」在 `.lpi` 里找 `<Filename Value="…"/>`；F11 另查 `OtherUnitFiles` 含 `ai`；I3 的 `FindAllFiles(ToolDir, '*.pas', False)` 改为 `True`。
 - [ ] **Step 6: 判据测试**（接着写 `TTbMainFormTests`；`SetUp` / `TearDown` 照 1 期，AI 配置文件随 `SettingsFileForTest` 落在临时目录；需要后端的用例在测试里把 `Ai.Session.Backend` 换成 `tests/tbaitesthelp.pas` 的 `TScriptedBackend`（Task 9）；需要配置的用例先 `AiSettings.Put(TbPresetProfile(tapCustom))` 并 `Ai.RefreshProfiles`，再换后端——`RefreshProfiles` 会按配置建真后端，换的顺序反了就被覆盖）：
 
