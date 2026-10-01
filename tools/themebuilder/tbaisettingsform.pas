@@ -88,6 +88,8 @@ type
     FTestRunning: Boolean;
     FTestProfile: TTbAiProfile;
     FTestText: string;
+    FAvailable: Boolean;          { this platform can do HTTP (libcurl found) }
+    FUnavailable: string;
     FOnAsk: TTbAskEvent;
     function KeyOf(const AId: string): string;
     function IndexOfWork(const AId: string): Integer;
@@ -132,6 +134,10 @@ begin
   CmbFormat.Items.Add(rsTbAiFormatAnthropic);
   LblPrivacy.Caption := rsTbAiPrivacy + ' ' +
     {$IFDEF MSWINDOWS}rsTbAiKeyStoreWin{$ELSE}rsTbAiKeyStoreUnix{$ENDIF};
+  { without libcurl (Linux, macOS) there is nothing to test with: say so, grey the button }
+  FAvailable := TbTransportAvailable(FUnavailable);
+  if not FAvailable then
+    SetTestText(Format(rsTbAiNoTransport, [FUnavailable]));
 end;
 
 procedure TTbAiSettingsForm.FormDestroy(Sender: TObject);
@@ -226,7 +232,7 @@ var
 begin
   has := (FSel >= 0) and (FSel <= High(FWork));
   BtnRemove.Enabled := has;
-  BtnTest.Enabled := has;
+  BtnTest.Enabled := has and FAvailable;
   EdtName.Enabled := has;
   CmbFormat.Enabled := has;
   EdtUrl.Enabled := has;
@@ -294,7 +300,8 @@ begin
     FUpdating := False;
   end;
   ShowProfile;
-  SetTestText('');
+  if FAvailable then
+    SetTestText('');
 end;
 
 procedure TTbAiSettingsForm.ProfileListClick(Sender: TObject);
@@ -313,7 +320,8 @@ begin
   FSel := n;
   FillList;
   ShowProfile;
-  SetTestText('');
+  if FAvailable then
+    SetTestText('');
   if EdtKey.CanSetFocus then
     EdtKey.SetFocus;
 end;
@@ -427,7 +435,7 @@ var
   msgs: TTbChatMessages;
 begin
   Result := False;
-  if (FSel < 0) or (FSel > High(FWork)) then Exit;
+  if (FSel < 0) or (FSel > High(FWork)) or not FAvailable then Exit;
   StopTest;
   FTestProfile := FWork[FSel];
   FTest := TTbClientBackend.Create(FTestProfile, KeyOf(FTestProfile.Id));
