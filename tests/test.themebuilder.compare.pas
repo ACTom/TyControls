@@ -55,6 +55,7 @@ type
     procedure TestOkChecksBeforeItChanges;      { G10 }
     { the last batch before the merge }
     procedure TestTheOllamaHintIsWhole;         { G11 }
+    procedure TestAddIsOneMenuButton;           { G12 }
   end;
 
 { the contrast of two LCL colours (WCAG, 1..21) }
@@ -754,6 +755,23 @@ begin
   finally
     TyFallbackFontName := oldFallback;
   end;
+end;
+
+{ G12: "Add" only opens the list of presets: one menu button, a click anywhere on it opens
+  the list -- on the split button the caption half did nothing, and its divider ran against
+  the caption ("Add|"); sized to its caption, clear of "Remove" }
+procedure TTbAiSettingsFormTests.TestAddIsOneMenuButton;
+begin
+  { never a real menu here: PopUp would wait for the user }
+  AssertFalse('no window behind the button', FForm.BtnAdd.HandleAllocated);
+  FForm.BtnAdd.Click;
+  AssertTrue('G12: a click on Add opens the presets', FForm.BtnAdd.RequestedPopup);
+  AssertTrue('G12: the presets', FForm.BtnAdd.DropDownMenu = FForm.PresetMenu);
+  AssertTrue('G12: it sizes itself', FForm.BtnAdd.AutoSize);
+  AutoSized(FForm.BtnAdd);
+  AutoSized(FForm.BtnRemove);
+  LayOut(FForm.PaneButtons);
+  AssertFalse('G12: clear of Remove', Overlap(FForm.BtnAdd, FForm.BtnRemove));
 end;
 
 initialization

@@ -46,7 +46,7 @@ type
     BtnOk: TTyButton;
     LeftPane: TTyPanel;
     PaneButtons: TTyPanel;
-    BtnAdd: TTyDropDownButton;
+    BtnAdd: TTyMenuButton;            { the whole button opens the presets }
     BtnRemove: TTyButton;
     ProfileList: TTyListBox;
     Fields: TTyPanel;

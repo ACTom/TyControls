@@ -69,7 +69,7 @@ object TbAiSettingsForm: TTbAiSettingsForm
         Top = 454
         Width = 220
         Align = alBottom
-        object BtnAdd: TTyDropDownButton
+        object BtnAdd: TTyMenuButton
           Left = 8
           Height = 28
           Top = 8
