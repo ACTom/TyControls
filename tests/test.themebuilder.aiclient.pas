@@ -305,7 +305,7 @@ var
   a: TTbAiSettings;
   p: TTbAiProfile;
   bytes: RawByteString;
-  at: Integer;
+  at, len: Integer;
 begin
   TbAiFilesFor(FDir + 'themebuilder.ini', ini, keys);
   a := TTbAiSettings.Create(ini, keys);
@@ -320,7 +320,13 @@ begin
   bytes := ReadFileBytes(ini);
   at := Pos(p.Id + '=', bytes);
   AssertTrue('K3: the entry is there', at > 0);
-  at := at + Length(p.Id) + 1 + 20;      { a character well inside the cipher text }
+  { a character in the middle of the stored value: the encrypted part, not the blob's
+    fixed header (DPAPI does not check the provider id it starts with) }
+  at := at + Length(p.Id) + 1;
+  len := 0;
+  while (at + len <= Length(bytes)) and not (bytes[at + len] in [#10, #13]) do
+    Inc(len);
+  at := at + len div 2;
   if bytes[at] = 'A' then bytes[at] := 'B' else bytes[at] := 'A';
   WriteFileBytes(ini, bytes);
   a := TTbAiSettings.Create(ini, keys);

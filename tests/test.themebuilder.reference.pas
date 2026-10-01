@@ -297,7 +297,7 @@ end;
 function UsedUnits(const ASource: string): TStringList;
 var
   clean: string;
-  i, n: Integer;
+  i, n, depth: Integer;
   word: string;
   inUses: Boolean;
 begin
@@ -308,7 +308,18 @@ begin
   begin
     if ASource[i] = '{' then
     begin
-      while (i <= n) and (ASource[i] <> '}') do Inc(i);
+      { FPC nests brace comments: a comment that shows {"json": ...} goes on past it }
+      depth := 0;
+      while i <= n do
+      begin
+        if ASource[i] = '{' then Inc(depth)
+        else if ASource[i] = '}' then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end;
+        Inc(i);
+      end;
       Inc(i);
       clean := clean + ' ';
     end

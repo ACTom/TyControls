@@ -399,6 +399,12 @@ begin
   AssertFalse('A2: no bearer for Anthropic', HasPrefix(h, 'Authorization'));
 end;
 
+{ byte for byte, whatever code page either side is marked with }
+function SameBytes(const A, B: RawByteString): Boolean;
+begin
+  Result := (Length(A) = Length(B)) and ((A = '') or CompareMem(@A[1], @B[1], Length(A)));
+end;
+
 procedure TTbAiFormatTests.TestTheBody;
 const
   cDesc = 'warm ' + cChinese + ' "quoted" back\slash'#10'next'#9'tab';
@@ -409,9 +415,14 @@ var
   o: TJSONObject;
   arr: TJSONArray;
   i: Integer;
+  desc, chinese: string;
 begin
+  { through variables: a constant compared with a UTF8String is converted at compile time
+    from the compiler's code page, which is not what the bytes mean }
+  desc := cDesc;
+  chinese := cChinese;
   SetLength(msgs, 3);
-  msgs[0] := TbChatMessage(tcrUser, cDesc);
+  msgs[0] := TbChatMessage(tcrUser, desc);
   msgs[1] := TbChatMessage(tcrAssistant, 'first answer');
   msgs[2] := TbChatMessage(tcrUser, 'again');
 
@@ -430,11 +441,12 @@ begin
     AssertEquals('A3: user', 'user', arr.Objects[1].Strings['role']);
     AssertEquals('A3: assistant', 'assistant', arr.Objects[2].Strings['role']);
     AssertEquals('A3: user again', 'user', arr.Objects[3].Strings['role']);
-    AssertTrue('A3: the description comes back as it was', arr.Objects[1].Strings['content'] = cDesc);
+    AssertTrue('A3: the description comes back as it was',
+      SameBytes(arr.Objects[1].Strings['content'], desc));
   finally
     d.Free;
   end;
-  AssertTrue('A3: Chinese is UTF-8 in the body, not \u', Pos(cChinese, body) > 0);
+  AssertTrue('A3: Chinese is UTF-8 in the body, not escaped', Pos(RawByteString(chinese), body) > 0);
 
   body := TbRequestBody(Profile(tafOpenAI, 'x', 8192), 'SYS', msgs);
   d := GetJSON(body);
@@ -457,7 +469,7 @@ begin
     AssertEquals('A3: Anthropic messages', 3, arr.Count);
     for i := 0 to arr.Count - 1 do
       AssertTrue('A3: no system message', arr.Objects[i].Strings['role'] <> 'system');
-    AssertTrue('A3: Anthropic description', arr.Objects[0].Strings['content'] = cDesc);
+    AssertTrue('A3: Anthropic description', SameBytes(arr.Objects[0].Strings['content'], desc));
   finally
     d.Free;
   end;
