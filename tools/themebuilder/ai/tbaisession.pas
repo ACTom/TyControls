@@ -174,7 +174,7 @@ type
       AWithProblems: Boolean): string;
     property Backend: TTbChatBackend read FBackend write SetBackend;   { owned }
     property BaseVars: TStrings read FBaseVars write FBaseVars;        { not owned }
-    property History: TStrings read FHistory;     { descriptions; Objects: 0 open, 1 accepted, 2 not used }
+    property History: TStringList read FHistory;     { descriptions; Objects: 0 open, 1 accepted, 2 not used }
     property Stage: TTbAiStage read FStage;
     property Outcome: TTbAiOutcome read FOutcome;
     property Streamed: string read FStreamed;     { the current answer so far }

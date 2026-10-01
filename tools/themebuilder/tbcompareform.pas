@@ -145,14 +145,14 @@ end;
 procedure TTbCompareForm.Prepare(const ABase, ACandidate: string; const AIssues: TTbAiIssues;
   const ALook: TTbEditorColors);
 var
-  a, b, left, right: TStringList;
+  a, b, leftLines, rightLines: TStringList;
   i: Integer;
   r: TTbDiffRow;
 begin
   a := TStringList.Create;
   b := TStringList.Create;
-  left := TStringList.Create;
-  right := TStringList.Create;
+  leftLines := TStringList.Create;
+  rightLines := TStringList.Create;
   try
     TbSplitLines(ABase, a);
     TbSplitLines(ACandidate, b);
@@ -164,32 +164,32 @@ begin
       r := FRows[i];
       if r.Left >= 0 then
       begin
-        left.Add(a[r.Left]);
+        leftLines.Add(a[r.Left]);
         FLeftKinds[i] := Ord(r.Kind);
       end
       else
       begin
-        left.Add('');
+        leftLines.Add('');
         FLeftKinds[i] := cFiller;
       end;
       if r.Right >= 0 then
       begin
-        right.Add(b[r.Right]);
+        rightLines.Add(b[r.Right]);
         FRightKinds[i] := Ord(r.Kind);
       end
       else
       begin
-        right.Add('');
+        rightLines.Add('');
         FRightKinds[i] := cFiller;
       end;
     end;
-    LeftEdit.Lines.Assign(left);
-    RightEdit.Lines.Assign(right);
+    LeftEdit.Lines.Assign(leftLines);
+    RightEdit.Lines.Assign(rightLines);
   finally
     a.Free;
     b.Free;
-    left.Free;
-    right.Free;
+    leftLines.Free;
+    rightLines.Free;
   end;
   FLook := ALook;
   TbApplyEditorColors(LeftEdit, FKitLeft.Highlighter, ALook);
@@ -228,26 +228,26 @@ procedure TTbCompareForm.EditSpecialLineMarkup(Sender: TObject; Line: Integer;
   var Special: Boolean; Markup: TSynSelectedColor);
 var
   i, k: Integer;
-  right: Boolean;
+  onRight: Boolean;
 begin
   i := Line - 1;
   if (i < 0) or (i > High(FRows)) then Exit;
-  right := Sender = RightEdit;
-  if right then k := FRightKinds[i] else k := FLeftKinds[i];
+  onRight := Sender = RightEdit;
+  if onRight then k := FRightKinds[i] else k := FLeftKinds[i];
   if k = cFiller then
   begin
     Special := True;
     Markup.Background := FLook.FillerLine;
   end
-  else if (TTbDiffKind(k) = tdkChanged) or (right and (TTbDiffKind(k) = tdkAdded)) then
+  else if (TTbDiffKind(k) = tdkChanged) or (onRight and (TTbDiffKind(k) = tdkAdded)) then
   begin
     Special := True;
-    if right then
+    if onRight then
       Markup.Background := FLook.AddedLine
     else
       Markup.Background := FLook.RemovedLine;
   end
-  else if (not right) and (TTbDiffKind(k) = tdkRemoved) then
+  else if (not onRight) and (TTbDiffKind(k) = tdkRemoved) then
   begin
     Special := True;
     Markup.Background := FLook.RemovedLine;
