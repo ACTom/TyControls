@@ -266,6 +266,7 @@ procedure TTyTag.MeasureCaption(APPI: Integer; out AWidthPx, AHeightPx: Integer)
 var
   S: TTyStyleSet;
   Meas: TBitmap;
+  rw: Integer;
 begin
   S := CurrentStyle;
   Meas := TBitmap.Create;
@@ -273,6 +274,12 @@ begin
     Meas.SetSize(1, 1);
     TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidthPx := Meas.Canvas.TextWidth(Caption);
+    { ...and the renderer too, keeping the larger. The caption is drawn through the painter,
+      which ellipsises against the renderer's own measurement, and the two rasterisers round
+      differently: a pill sized to the canvas alone showed "Try it in the previ...". The same
+      remedy as TTyButton.MeasureCaption. }
+    rw := TyMeasureRenderedTextWidth(Caption, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidthPx then AWidthPx := rw;
     // A stable reference glyph: an empty caption still sizes the pill to one line.
     AHeightPx := Meas.Canvas.TextHeight('Ag');
     if AWidthPx < 0 then AWidthPx := 0;

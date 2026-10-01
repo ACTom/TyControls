@@ -313,7 +313,7 @@ procedure TTyLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
   Behaviour is unchanged: the same font, the same 'Ag' line box, the same wrap. }
 var
   S: TTyStyleSet;
-  mpos, wrapW: Integer;
+  mpos, wrapW, rw: Integer;
   disp: string;
 begin
   S := CurrentStyle;
@@ -324,6 +324,17 @@ begin
     wrapW := 0;
   TyMeasureTextBlock(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
     wrapW, TyLineHeight(ActiveController), AWidthPx, AHeightPx);
+  { ...and, unwrapped, the renderer too, keeping the larger. The caption is drawn through the
+    painter, whose own advance widths decide where its ink ends; TyMeasureTextBlock measures on
+    an LCL canvas, and the two round differently. A label never ellipsises, so a canvas width
+    that came out short did not show as "...": the label's edge cut the last letter off. The
+    same remedy as TTyButton.MeasureCaption, per line like it. A wrapping label is left alone:
+    its width is the width it was given, not the text's. }
+  if not FWordWrap then
+  begin
+    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidthPx then AWidthPx := rw;
+  end;
 end;
 
 procedure TTyLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);

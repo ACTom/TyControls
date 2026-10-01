@@ -350,7 +350,7 @@ var
   S: TTyStyleSet;
   Meas: TBitmap;
   disp: string;
-  mp: Integer;
+  mp, rw: Integer;
 begin
   // RenderTo 画标题用的是 S(盒子那份样式)的字体,CaptionS 只提供墨色 —— 所以这里也
   // 必须用 S 量,否则 :active 一旦带了自己的字体,量出来的和画出来的就对不上。
@@ -362,6 +362,11 @@ begin
     Meas.SetSize(1, 1);
     TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
+    { 再问一次渲染器,取较大的那个。画布和渲染器是两套光栅化,取整不同;RenderTo 画标题时按
+      渲染器量的宽度决定要不要截断,渲染器只要多出一两个像素,AutoSize 刚量好的标题就被画成
+      "Try it in the previ..."。TTyButton.MeasureCaption 遇到过同一个问题,做法也一样。 }
+    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidth then AWidth := rw;
     // 用固定的参考字形取行高:标题为空时也仍然是一行的高度。
     AHeight := Meas.Canvas.TextHeight('Ag');
     if AWidth < 0 then AWidth := 0;
@@ -658,7 +663,7 @@ var
   S: TTyStyleSet;
   Meas: TBitmap;
   disp: string;
-  mp: Integer;
+  mp, rw: Integer;
 begin
   // 见 TTyCheckBox.MeasureCaption:字体取自 S(圆点那份样式),CaptionS 只给墨色。
   S := CurrentStyle;
@@ -668,6 +673,9 @@ begin
     Meas.SetSize(1, 1);
     TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
+    // 渲染器量出来更宽就按它算,理由见 TTyCheckBox.MeasureCaption。
+    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidth then AWidth := rw;
     AHeight := Meas.Canvas.TextHeight('Ag');
     if AWidth < 0 then AWidth := 0;
     if AHeight < 1 then AHeight := 1;
