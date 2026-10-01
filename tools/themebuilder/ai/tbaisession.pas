@@ -29,13 +29,16 @@ interface
 uses
   Classes, SysUtils, SyncObjs, tbaiformat, tbaiclient, tbproblems;
 
+const
+  cTbAiModeProbeEn = 'In %s mode: %s';    { rsTbAiModeProbe in English: what the AI is told }
+
 resourcestring
   rsTbAiNoBlock = 'The reply has no tycss code block; its text is shown below.';
   rsTbAiRetrying = 'Found %d problems; asking the model to fix them (%d of %d)...';
   rsTbAiNoChange = 'The model returned the file unchanged.';
   rsTbAiDoneIssues = 'Done, with %d problems left.';
   rsTbAiDoneClean = 'Done.';
-  rsTbAiModeProbe = 'In %s mode: %s';
+  rsTbAiModeProbe = cTbAiModeProbeEn;
   rsTbAiSending = 'Sending to %s...';
   rsTbAiThinking = 'The model is thinking...';
   rsTbAiReceiving = 'Receiving: %d lines so far.';
@@ -492,8 +495,9 @@ begin
     probs := TbCollectProblems(AText, ABaseDir, AUntitled, ABaseVars);
     for i := 0 to High(probs) do
     begin
-      { lint puts an imported file's problems on the @import that brought it in }
-      feed := probs[i].Text;
+      { lint puts an imported file's problems on the @import that brought it in; the
+        model is told in English whatever the interface's language }
+      feed := probs[i].FeedText;
       if (probs[i].Line > 0) and (probs[i].Line <= imports.Count) and
          (imports.Objects[probs[i].Line - 1] <> nil) then
         feed := cImportedProblem
@@ -515,7 +519,8 @@ begin
     except
       on E: Exception do
       begin
-        AddIssue(Result, Issue(0, 0, True, E.Message, Unplaced(E.Message)));
+        AddIssue(Result, Issue(0, 0, True, E.Message,
+          TbAsciiOr(Unplaced(E.Message), 'the theme does not load')));
         Exit;
       end;
     end;
@@ -524,17 +529,16 @@ begin
     begin
       model.SetMode('');
       if not TbProbeDocument(model, AText, False, err) then
-        AddIssue(Result, Issue(0, 0, True, err, Unplaced(err)));
+        AddIssue(Result, Issue(0, 0, True, err, TbAsciiOr(Unplaced(err), 'it does not resolve')));
     end
     else
       for i := 0 to High(modes) do
       begin
         model.SetMode(modes[i]);
         if not TbProbeDocument(model, AText, False, err) then
-        begin
-          err := Format(rsTbAiModeProbe, [ModeCaption(modes[i]), err]);
-          AddIssue(Result, Issue(0, 0, True, err, Unplaced(err)));
-        end;
+          { the mode's own name for the model, its display name for the user }
+          AddIssue(Result, Issue(0, 0, True, Format(rsTbAiModeProbe, [ModeCaption(modes[i]), err]),
+            Format(cTbAiModeProbeEn, [modes[i], TbAsciiOr(Unplaced(err), 'it does not resolve')])));
       end;
   finally
     model.Free;
@@ -809,7 +813,7 @@ function TTbAiSession.UserMessage(const ADescription: string; const ADoc: TTbAiD
   AWithProblems: Boolean): string;
 var
   i, n: Integer;
-  s: string;
+  s, feed: string;
 begin
   s := '';
   if FHistory.Count > 0 then
@@ -831,11 +835,17 @@ begin
   begin
     s := s + cProblems + #10;
     for i := 0 to n - 1 do
+    begin
+      { English, whatever the interface's language }
+      feed := ADoc.Problems[i].FeedText;
+      if feed = '' then
+        feed := TbAsciiOr(ADoc.Problems[i].Text, 'a problem');
       if ADoc.Problems[i].Line > 0 then
         s := s + Format('- line %d, col %d: %s', [ADoc.Problems[i].Line, ADoc.Problems[i].Col,
-          ADoc.Problems[i].Text]) + #10
+          feed]) + #10
       else
-        s := s + '- ' + ADoc.Problems[i].Text + #10;
+        s := s + '- ' + feed + #10;
+    end;
     s := s + #10;
   end;
   s := s + cCurrent + #10 + '```tycss' + #10 + Lf(ADoc.Text);

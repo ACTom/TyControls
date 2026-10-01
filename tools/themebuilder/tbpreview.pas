@@ -50,14 +50,19 @@ uses
   tyControls.CircularProgress, tyControls.ActivityIndicator, tyControls.Alert,
   tyControls.Empty, tyControls.Notification, tyControls.Icons.Lucide, tbsamplewin, tbpick;
 
+const
+  { the English of the refusals below: what the AI is told (ModeErrorEn) }
+  cTbModeFailedEn = 'In %s mode: %s';
+  cTbDensityFailedEn = 'In the %s density: %s';
+
 resourcestring
   rsTbDensityClassic = 'Classic';
   rsTbDensityModern = 'Modern';
   rsTbSingleMode = 'One mode only';
-  rsTbModeFailed = 'In %s mode: %s';
+  rsTbModeFailed = cTbModeFailedEn;
   rsTbModeLight = 'light';
   rsTbModeDark = 'dark';
-  rsTbDensityFailed = 'In the %s density: %s';
+  rsTbDensityFailed = cTbDensityFailedEn;
   rsTbSampleMessage = 'Save the changes to this theme?';
   rsTbSampleInputTitle = 'Rename';
   rsTbSampleInputPrompt = 'New name:';
@@ -247,6 +252,7 @@ type
     FGoodText, FGoodDir: string;
     FLoadedText: string;                  { the user text the model holds now }
     FModeError: string;
+    FModeErrorEn: string;                 { the same in English, for the AI }
     FAllDisabled: Boolean;
     FUpdating: Boolean;
     FOnChanged: TNotifyEvent;
@@ -254,7 +260,7 @@ type
     FOnPick: TTbPickEvent;
     FInTrial: Boolean;
     FTrialGoodText, FTrialGoodDir: string;
-    FTrialModeError: string;
+    FTrialModeError, FTrialModeErrorEn: string;
     procedure PickerPick(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure FillCodeOnlyData;
     procedure UpdateModeNote;
@@ -296,6 +302,7 @@ type
     { the last refused switch; '' after a switch that went through or a good load of a
       different document }
     property ModeError: string read FModeError;
+    property ModeErrorEn: string read FModeErrorEn;   { ModeError in English }
     property InTrial: Boolean read FInTrial;
     property AllDisabled: Boolean read FAllDisabled;
     property IsDark: Boolean read GetIsDark;
@@ -331,7 +338,7 @@ implementation
 uses
   tyControls.Css.Catalog, tyControls.Css.Parser, tyControls.DefaultTheme,
   tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns, tbthemesource,
-  tbcoverage;
+  tbcoverage, tbproblems;
 
 var
   GBaseSheet: TTyCssStylesheet = nil;   { the model's base layer, parsed once }
@@ -882,7 +889,10 @@ begin
     { a refused switch holds until the document changes: the same text loaded again (a
       save, a refresh) resolves in that mode no better than it did }
     if (AText <> FGoodText) or (ABaseDir <> FGoodDir) then
+    begin
       FModeError := '';
+      FModeErrorEn := '';
+    end;
     FGoodText := AText;
     FGoodDir := ABaseDir;
   end
@@ -901,6 +911,7 @@ begin
     FTrialGoodText := FGoodText;
     FTrialGoodDir := FGoodDir;
     FTrialModeError := FModeError;
+    FTrialModeErrorEn := FModeErrorEn;
     FInTrial := True;
   end;
   Result := LoadDocument(AText, ABaseDir, AError);
@@ -916,6 +927,7 @@ begin
   FInTrial := False;
   LoadDocument(FTrialGoodText, FTrialGoodDir, err);
   FModeError := FTrialModeError;   { LoadDocument cleared it: the text changed twice }
+  FModeErrorEn := FTrialModeErrorEn;
   UpdateModeNote;
 end;
 
@@ -1019,12 +1031,16 @@ begin
   begin
     FController.Model.SetMode(old);
     Notify(ignored);
-    { the mode's display name, not its internal one: it is read in the problem list }
+    { the mode's display name, not its internal one: it is read in the problem list; and
+      the English, for the AI }
+    FModeErrorEn := Format(cTbModeFailedEn, [want, TbAsciiOr(AError, 'it does not resolve')]);
     if ADark then
       AError := Format(rsTbModeFailed, [rsTbModeDark, AError])
     else
       AError := Format(rsTbModeFailed, [rsTbModeLight, AError]);
-  end;
+  end
+  else
+    FModeErrorEn := '';
   FModeError := AError;
   SyncSwitches;
 end;
@@ -1060,9 +1076,15 @@ begin
     Apply(not AModern);
     RestoreGood;
     if AModern then
-      FModeError := Format(rsTbDensityFailed, [rsTbDensityModern, err])
+    begin
+      FModeError := Format(rsTbDensityFailed, [rsTbDensityModern, err]);
+      FModeErrorEn := Format(cTbDensityFailedEn, ['modern', TbAsciiOr(err, 'it does not resolve')]);
+    end
     else
+    begin
       FModeError := Format(rsTbDensityFailed, [rsTbDensityClassic, err]);
+      FModeErrorEn := Format(cTbDensityFailedEn, ['classic', TbAsciiOr(err, 'it does not resolve')]);
+    end;
     Result := False;
   end;
   UpdateModeNote;

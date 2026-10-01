@@ -42,6 +42,9 @@ uses
   tbcoverageform, tbexportform, tbsnippetsform, tbaisettings, tbaisession, tbaiframe,
   tbcompareform, tbaisettingsform;
 
+const
+  cTbPreviewKeptEn = 'The preview kept the last version that worked: %s';  { for the AI }
+
 resourcestring
   rsTbTitle = '%s%s - Theme Builder';
   rsTbUntitled = 'Untitled';
@@ -51,7 +54,7 @@ resourcestring
   rsTbSaved = 'Saved.';
   rsTbRegenerate = 'Saved. This theme is compiled into the library: run scripts/%s.';
   rsTbConverted = 'Read as %s; it will be saved as UTF-8.';
-  rsTbPreviewKept = 'The preview kept the last version that worked: %s';
+  rsTbPreviewKept = cTbPreviewKeptEn;
   rsTbParseKept = 'Not loaded: the preview shows the last version that worked.';
   rsTbNoProblems = 'No problems';
   rsTbLineCol = 'Ln %d, Col %d';
@@ -721,9 +724,10 @@ procedure TTbMainForm.BuildProblems;
 begin
   FProblems := Copy(FLint);
   if FLoadError <> '' then
-    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, Format(rsTbPreviewKept, [FLoadError]));
+    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, Format(rsTbPreviewKept, [FLoadError]),
+      Format(cTbPreviewKeptEn, [TbAsciiOr(FLoadError, 'the theme does not load')]));
   if (not FParseFailed) and (FPreview.ModeError <> '') then
-    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, FPreview.ModeError);
+    TbAddProblem(FProblems, 0, 0, tlsError, tpoLoad, FPreview.ModeError, FPreview.ModeErrorEn);
   ShowProblems;
 end;
 

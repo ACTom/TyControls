@@ -11,8 +11,13 @@ interface
 uses
   Classes, SysUtils, tyControls.ThemeLint;
 
+const
+  { the English of the tool's own problem texts: what the AI is told, whatever the
+    interface language (the resourcestrings below are these, translated) }
+  cTbSaveForAssetsEn = 'Save the file first: url() paths are read from the file''s folder.';
+
 resourcestring
-  rsTbSaveForAssets = 'Save the file first: url() paths are read from the file''s folder.';
+  rsTbSaveForAssets = cTbSaveForAssetsEn;
 
 type
   TTbProblemOrigin = (tpoLint, tpoLoad, tpoDocument);
@@ -21,7 +26,8 @@ type
     Severity: TTyLintSeverity;
     Origin: TTbProblemOrigin;
     Kind: TTyLintKind;                  { meaningful for tpoLint only }
-    Text: string;
+    Text: string;                       { in the interface's language }
+    FeedText: string;                   { the same in English, for the AI }
   end;
   TTbProblems = array of TTbProblem;
 
@@ -31,9 +37,17 @@ procedure TbBaseVarNames(ADest: TStrings);
   when the document has no folder yet; sorted: no position first, then by line and column }
 function TbCollectProblems(const AText, ABaseDir: string; AUntitled: Boolean;
   ABaseVars: TStrings): TTbProblems;
-{ inserted after every row with the same key, so the list stays sorted }
+{ inserted after every row with the same key, so the list stays sorted; AFeedText is the
+  English for the AI ('' = AText already is) }
 procedure TbAddProblem(var AList: TTbProblems; ALine, ACol: Integer;
-  ASeverity: TTyLintSeverity; AOrigin: TTbProblemOrigin; const AText: string);
+  ASeverity: TTyLintSeverity; AOrigin: TTbProblemOrigin; const AText: string;
+  const AFeedText: string = '');
+{ a lint issue in English, whatever language the library's strings are in: rebuilt from
+  its kind and subject; a parse error or a refused value keeps its message when that is
+  plain ASCII, else says only what kind of problem it is }
+function TbLintFeedText(const AIssue: TTyLintIssue): string;
+{ AText when it is plain ASCII (English, or never translated), else AFallback }
+function TbAsciiOr(const AText, AFallback: string): string;
 function TbHasParseError(const AList: TTbProblems): Boolean;
 function TbErrorCount(const AList: TTbProblems): Integer;
 { '12:5  text' / '—  text' }
@@ -107,7 +121,8 @@ begin
 end;
 
 procedure TbAddProblem(var AList: TTbProblems; ALine, ACol: Integer;
-  ASeverity: TTyLintSeverity; AOrigin: TTbProblemOrigin; const AText: string);
+  ASeverity: TTyLintSeverity; AOrigin: TTbProblemOrigin; const AText: string;
+  const AFeedText: string);
 var
   p: TTbProblem;
 begin
@@ -118,7 +133,45 @@ begin
   p.Origin := AOrigin;
   p.Kind := tlkParseError;
   p.Text := AText;
+  if AFeedText <> '' then
+    p.FeedText := AFeedText
+  else
+    p.FeedText := AText;
   InsertSorted(AList, p);
+end;
+
+function TbAsciiOr(const AText, AFallback: string): string;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(AText) do
+    if Ord(AText[i]) >= $80 then
+      Exit(AFallback);
+  Result := AText;
+end;
+
+function TbLintFeedText(const AIssue: TTyLintIssue): string;
+var
+  rebuilt: string;
+begin
+  { the library's English (tyControls.StrConsts) when its strings were translated }
+  case AIssue.Kind of
+    tlkUnknownProperty: rebuilt := Format('unknown property ''%s''', [AIssue.Subject]);
+    tlkUndefinedVar: rebuilt := Format('undefined variable --%s', [AIssue.Subject]);
+    tlkMissingAsset: rebuilt := Format('missing asset ''%s''', [AIssue.Subject]);
+    tlkLowContrast: rebuilt := Format('low contrast on ''%s''', [AIssue.Subject]);
+    tlkImportTooDeep: rebuilt := 'import nesting too deep';
+    tlkEmptyImportPath: rebuilt := 'empty @import path';
+    tlkMissingImport: rebuilt := Format('missing @import ''%s''', [AIssue.Subject]);
+    tlkImportCycle: rebuilt := Format('@import cycle ''%s''', [AIssue.Subject]);
+    tlkUnreadableImport: rebuilt := Format('unreadable @import ''%s''', [AIssue.Subject]);
+    tlkImportParseError: rebuilt := Format('parse error in @import ''%s''', [AIssue.Subject]);
+    tlkBadValue: rebuilt := Format('a value the engine refuses (%s)', [AIssue.Subject]);
+  else
+    rebuilt := 'parse error';
+  end;
+  { untranslated, the message is the English itself, word for word }
+  Result := TbAsciiOr(AIssue.Message, rebuilt);
 end;
 
 procedure AppendLint(var AList: TTbProblems; const AIssue: TTyLintIssue);
@@ -134,6 +187,7 @@ begin
   AList[n].Origin := tpoLint;
   AList[n].Kind := AIssue.Kind;
   AList[n].Text := AIssue.Message;
+  AList[n].FeedText := TbLintFeedText(AIssue);
 end;
 
 { a warning on each line with a url() that is not a data: URL, comments skipped (they may
@@ -189,6 +243,7 @@ begin
             p.Origin := tpoDocument;
             p.Kind := tlkMissingAsset;
             p.Text := rsTbSaveForAssets;
+            p.FeedText := cTbSaveForAssetsEn;
             SetLength(AList, Length(AList) + 1);
             AList[High(AList)] := p;
             reported := True;

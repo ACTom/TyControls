@@ -112,6 +112,7 @@ type
     procedure TestSettingsOkDuringAGeneration;   { M14 }
     procedure TestAnotherServiceDuringAGeneration;   { M15 }
     procedure TestTheComparisonWaitsForAModal;   { M16 }
+    procedure TestTheModelIsToldInEnglish;       { M17 }
   end;
 
 implementation
@@ -122,7 +123,7 @@ uses
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
   tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules,
   tbaiformat, tbaiclient, tbaisettings, tbaisession, tbaiframe, tbcompareform, tbaisettingsform,
-  tbdiff, tbaichecks, tbfakehttp;
+  tbdiff, tbaichecks, tbfakehttp, Translations, Math, tyControls.StrConsts;
 
 const
   { a document whose one value no base theme has }
@@ -2284,6 +2285,109 @@ begin
   AssertEquals('M16: not later either', 0, FModals);
   FForm.Ai.BtnShowCompare.Click;
   AssertEquals('M16: the button opens it', 1, FModals);
+end;
+
+{ ---- the interface in Chinese, the model told in English ---- }
+
+const
+  cToolUnits: array[0..4] of string = ('tbaisession', 'tbproblems', 'tbpreview', 'tbmain',
+    'tbaiclient');
+
+function KeepDefault(Name, Value: AnsiString; Hash: Longint; Arg: Pointer): AnsiString;
+begin
+  Result := Value;     { the value the source gives: English }
+end;
+
+procedure ChineseUi(AOn: Boolean);
+var
+  i: Integer;
+begin
+  if AOn then
+  begin
+    for i := 0 to High(cToolUnits) do
+      TranslateUnitResourceStrings(cToolUnits[i],
+        ToolDir + 'languages' + PathDelim + 'themebuilder.zh_CN.po');
+    TranslateUnitResourceStrings('tyControls.StrConsts',
+      ToolDir + 'languages' + PathDelim + 'tycontrols.zh_CN.po');
+  end
+  else
+  begin
+    for i := 0 to High(cToolUnits) do
+      SetUnitResourceStrings(cToolUnits[i], @KeepDefault, nil);
+    SetUnitResourceStrings('tyControls.StrConsts', @KeepDefault, nil);
+  end;
+end;
+
+function AllAscii(const S: string; out AAt: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(S) do
+    if Ord(S[i]) >= $80 then
+    begin
+      AAt := Copy(S, Max(1, i - 40), 80);
+      Exit(False);
+    end;
+  AAt := '';
+  Result := True;
+end;
+
+{ M17: with the interface in Chinese, what goes to the model -- the problem list sent with a
+  request (the lint's, the tool's own, a refused mode, a preview that kept the last
+  version) and the feedback on a candidate (lint, a mode that does not resolve) -- is all
+  English }
+procedure TTbMainFormTests.TestTheModelIsToldInEnglish;
+const
+  cLightOnly = '@mode light { :root { --x: #ffffff; } } @mode dark { :root { --z: #000000; } } ' +
+    'TyButton { background: var(--x); }';
+var
+  b: TScriptedBackend;
+  first, feedback, at: string;
+begin
+  ChineseUi(True);
+  try
+    AssertTrue('the tool speaks Chinese', rsTbModeFailed <> 'In %s mode: %s');
+    AssertTrue('the problems too', rsTbSaveForAssets <> cTbSaveForAssetsEn);
+    AssertTrue('the library too', rsLintUnknownProperty <> 'unknown property ''%s''');
+    b := ScriptedAi;
+    TTbMainForm.ShowModalForTest := @ModalLeave;
+    { a document with a lint error, a url() while untitled, and a refused dark mode }
+    FForm.Editor.Lines.Text := cLightOnly + #10'TyButton { frobnicate: 1px; }'#10 +
+      'TyPanel { background-image: url(x.png); }';
+    FForm.RefreshNow;
+    FForm.Preview.DarkSwitch.Checked := True;
+    AssertFalse('dark was refused', FForm.Preview.IsDark);
+    { the answer: a lint error and a mode that does not resolve }
+    b.Add(TbAnswerWith(cLightOnly + #10'TyButton { frobnicate: 1px; }'#10 +
+      'TyButton:disabled { color: var(--x); }'));
+    b.Add(TbAnswerWith(BlueMinimal));
+    FForm.Ai.ChkProblems.Checked := True;
+    FForm.Ai.EdtPrompt.Text := 'blue';
+    FForm.Ai.GenerateClick(nil);
+    AssertTrue('two requests', Length(b.Sent) >= 2);
+    first := b.Sent[0][0].Text;
+    AssertTrue('M17: the problems were sent', Pos('Problems the editor reports', first) > 0);
+    AssertTrue('M17: the refused mode, in English: ' + first, Pos('In dark mode:', first) > 0);
+    AssertTrue('M17: the lint, in English', Pos('unknown property ''frobnicate''', first) > 0);
+    AssertTrue('M17: the tool''s own, in English', Pos(cTbSaveForAssetsEn, first) > 0);
+    AssertTrue('M17: the request is all English: ' + at, AllAscii(first, at));
+    feedback := b.Sent[1][2].Text;
+    AssertTrue('M17: the feedback names the property', Pos('unknown property ''frobnicate''', feedback) > 0);
+    AssertTrue('M17: the feedback names the mode', Pos('In dark mode:', feedback) > 0);
+    AssertTrue('M17: the feedback is all English: ' + at, AllAscii(feedback, at));
+    { a document the preview cannot load: "kept the last version" goes in English }
+    FForm.Editor.Lines.Text := 'TyButton { border-radius: 1px 2px 3px; }';
+    FForm.RefreshNow;
+    AssertTrue('the preview kept the last version', FForm.Problems[0].Origin = tpoLoad);
+    FForm.Ai.ChkProblems.Checked := True;
+    FForm.Ai.GenerateClick(nil);
+    first := b.Sent[High(b.Sent)][0].Text;
+    AssertTrue('M17: "kept", in English: ' + first, Pos('The preview kept the last version that worked:', first) > 0);
+    AssertTrue('M17: that request is all English: ' + at, AllAscii(first, at));
+  finally
+    ChineseUi(False);
+  end;
+  AssertEquals('English again', 'In %s mode: %s', rsTbModeFailed);
 end;
 
 initialization
