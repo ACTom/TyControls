@@ -216,8 +216,10 @@ const
     'change both consistently. If it has none, do not add them unless asked.'#10 +
     '3. Use only the properties, functions, states and TypeKeys listed in the reference.'#10 +
     '4. Prefer changing the seed variables and the derived variables over writing rules.'#10 +
-    '5. A rule for a TypeKey replaces all of the base theme''s rules for that TypeKey. If you ' +
-    'write one, restate everything that control needs, in every state.'#10 +
+    '5. A plain rule for a TypeKey (no .variant, no :state) replaces all of the base theme''s ' +
+    'rules for that TypeKey: if you write one, restate everything that control needs, in every ' +
+    'state and variant. A rule with a variant or a state replaces nothing and is applied on top ' +
+    'of the base, so it can stay small (TyEdit:focus { border-color: ...; }).'#10 +
     '6. Keep text readable: enough contrast against its background, in both modes.'#10 +
     '7. Keep everything the user did not ask to change, comments included.'#10#10;
   cEarlier = 'Earlier requests in this conversation, oldest first:';

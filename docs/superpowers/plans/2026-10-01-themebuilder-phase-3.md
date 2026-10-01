@@ -1789,7 +1789,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - `TTbAiSettingsForm.Commit` 是函数（拒绝时返回 False）；`TTbAiSession` 多 `Busy`、`Round`；`TTbMainForm` 多 `RunModal` 与测试缝 `ShowModalForTest`（对比窗口、设置窗口在测试里不 `ShowModal`，M2 / M8 / M9 走真的 `AiCandidate` / `AiSettingsClick`），`CompareTrial` 公开。
 - 一次生成里，后一轮请求失败（网络、截断）时，前一轮带问题的候选仍交给用户（对比窗口照样弹）；用户停止时不弹。
 - M12 判据「`FlushTimerTimer` 手动调」：测试后端多了「流完先扣住结果」（`HoldDone`），否则结束时的那次刷新会把 `OnStreamed` 没接的变异盖过去。
-- 参考的两句按引擎改：`border-radius` 只收 1 或 4 个值（计划写 1、2、4）、`padding` 收 1–4 个值；示例主题不写 `TyEdit:focus`（计划有）——那会让底层对 `TyEdit` 整个让位，示范错误用法。
+- 参考的两句按引擎改：`border-radius` 只收 1 或 4 个值（计划写 1、2、4）、`padding` 收 1–4 个值；~~示例主题不写 `TyEdit:focus`（计划有）——那会让底层对 `TyEdit` 整个让位，示范错误用法。~~ **更正（期末修复批）：这条理由是错的。** 让底层让位的只有「不带变体、也不带状态」的规则（`StyleModel.UserHasTypeKey`）；`TyEdit:focus` 只带状态，叠加在底层之上，什么也不让位。参考与系统提示里「一条规则让底层整个让位」的说法也因此说错了，已改成两种都说；示例恢复了一条 `TyEdit:focus { border-color: var(--accent); }` 演示叠加，守卫 R11 按引擎钉住（见期末修复批签收）。
 - Anthropic 默认最大输出 32000（开工核对第 3 条）；菜单「AI」的加速键是 `A&I`（`&A` 与「编辑器外观」冲突）。
 
 ### 计划外发现

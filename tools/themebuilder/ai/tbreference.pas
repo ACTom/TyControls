@@ -108,7 +108,8 @@ const
     '- Colours: #rgb, #rrggbb, #rrggbbaa, transparent, or a colour function.'#10 +
     '- Lengths are plain numbers or numbers with px. font-size is in points.'#10 +
     '- The file sits on top of the built-in base theme: anything the file does not define comes from the base.'#10 +
-    '- A rule for a TypeKey replaces ALL of the base theme''s rules for that TypeKey (every state and variant), not just the properties you write. Restate everything the control needs, or leave the TypeKey alone and change variables instead.'#10 +
+    '- A plain rule for a TypeKey (no .variant and no :state, like TyButton { ... }) replaces ALL of the base theme''s rules for that TypeKey (every state and variant), not just the properties you write. Restate everything the control needs, or leave the TypeKey alone and change variables instead.'#10 +
+    '- A rule with a variant or a state (TyButton.primary, TyEdit:focus, TyButton.primary:hover) replaces nothing: it is applied on top of the base theme''s rules, so it can set just what it changes.'#10 +
     'Not supported (the parser rejects them, or the engine reports them as errors):'#10 +
     '- descendant or child selectors (TyPanel TyButton, TyPanel > TyButton), *, .variant without a type, :state without a type, two variants (TyButton.a.b), chained states (:hover:focus)'#10 +
     '- @media, !important, // comments, escapes in strings'#10 +
@@ -120,8 +121,10 @@ const
   cExample =
     '/* A complete small theme. The two @mode blocks set the six seeds and a few derived'#10 +
     '   variables; everything else derives from them or comes from the base theme.'#10 +
-    '   The button rules restyle buttons completely: a rule for a TypeKey replaces all of'#10 +
-    '   the base theme''s rules for it, so every state and variant is written out. */'#10 +
+    '   The button rules restyle buttons completely: a plain rule for a TypeKey replaces all'#10 +
+    '   of the base theme''s rules for it, so every state and variant is written out.'#10 +
+    '   TyEdit:focus is the other kind: a rule with a state (or a variant) replaces nothing,'#10 +
+    '   it is applied on top of the base, so one declaration is enough. */'#10 +
     '@mode light {'#10 +
     '  :root {'#10 +
     '    --accent: #0F766E; --surface: #FFFFFF; --on-surface: #1F2937;'#10 +
@@ -158,7 +161,8 @@ const
     'TyButton.danger, TySpeedButton.danger { background: var(--danger); color: on(var(--danger)); border-color: var(--danger); }'#10 +
     'TyButton.danger:hover, TySpeedButton.danger:hover { background: lighten(--danger, 8%); }'#10 +
     'TyButton.ghost, TySpeedButton.ghost { background: transparent; border-color: transparent; }'#10 +
-    'TyButton.ghost:hover, TySpeedButton.ghost:hover { background: var(--surface-hover); }'#10;
+    'TyButton.ghost:hover, TySpeedButton.ghost:hover { background: var(--surface-hover); }'#10 +
+    'TyEdit:focus { border-color: var(--accent); }'#10;
 
 var
   GText: string = '';

@@ -22,6 +22,8 @@ type
     procedure TestAsciiOnly;                     { R8 }
     procedure TestTheWslUnitsUseNoLcl;           { R9 }
     procedure TestItIsBuiltOnce;                 { R10 }
+    { after the phase 3 reviews }
+    procedure TestWhatReplacesTheBase;           { R11 }
   end;
 
 implementation
@@ -29,7 +31,7 @@ implementation
 uses
   StrUtils, tyControls.Css.Catalog, tyControls.Css.Parser, tyControls.Css.Values,
   tyControls.StyleModel, tyControls.BuiltinThemes, tyControls.ThemeLint, tbseeds, tbproblems, tbpreview, tbthemesource,
-  tbreference, test.themebuilder.golden;
+  tbreference, tbaisession, tyControls.Types, test.themebuilder.golden;
 
 function SameSet(const A, B: array of string; out AWhy: string): Boolean;
 var
@@ -424,6 +426,56 @@ begin
   a := TbReferenceText;
   b := TbReferenceText;
   AssertTrue('R10: the same string both times', Pointer(a) = Pointer(b));
+end;
+
+{ R11: what the reference and the system prompt say about the base theme is what the engine
+  does (StyleModel.UserHasTypeKey): a rule with only a state is laid on top of the base --
+  TyEdit's plain look stays the base's, its focus look takes the new value -- while a plain
+  rule for the TypeKey takes the base's rules away }
+procedure TTbReferenceTests.TestWhatReplacesTheBase;
+
+  function Look(const S: TTyStyleSet): string;
+  begin
+    Result := Format('bg=%x txt=%x bd=%x/%d pad=%d', [Cardinal(S.Background.Color),
+      Cardinal(S.TextColor), Cardinal(S.BorderColor), S.BorderWidth, S.Padding.Left]);
+  end;
+
+  function Resolve(const ADoc: string; AStates: TTyStateSet): TTyStyleSet;
+  var
+    m: TTyStyleModel;
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromSource(TTbTextThemeSource.Create(ADoc, ''));
+      Result := m.ResolveStyle('TyEdit', '', AStates);
+    finally
+      m.Free;
+    end;
+  end;
+
+const
+  cBase = ':root { --tb-r11: #010203; }'#10;
+var
+  plainBase, plainState, focusState, plainRule: TTyStyleSet;
+  ref: string;
+begin
+  plainBase := Resolve(cBase, []);
+  plainState := Resolve(cBase + 'TyEdit:focus { border-color: #123456; }', []);
+  focusState := Resolve(cBase + 'TyEdit:focus { border-color: #123456; }', [tysFocused]);
+  plainRule := Resolve(cBase + 'TyEdit { color: #010203; }', []);
+  AssertTrue('R11: the base gives TyEdit a background', plainBase.Background.Color <> 0);
+  AssertEquals('R11: a state rule leaves the plain look the base''s', Look(plainBase), Look(plainState));
+  AssertEquals('R11: the focus look takes the new value', $FF123456, Cardinal(focusState.BorderColor) or $FF000000);
+  AssertTrue('R11: a plain rule takes the base away: ' + Look(plainRule), Look(plainRule) <> Look(plainBase));
+  AssertEquals('R11: and keeps only what it says', 0, plainRule.BorderWidth);
+  { the words: both kinds said, in the reference and in the rules }
+  ref := TbReferenceText;
+  AssertTrue('R11: the reference says a plain rule replaces',
+    Pos('A plain rule for a TypeKey (no .variant and no :state', ref) > 0);
+  AssertTrue('R11: and that a state or variant rule does not',
+    Pos('A rule with a variant or a state (TyButton.primary, TyEdit:focus', ref) > 0);
+  AssertTrue('R11: the example shows it', Pos('TyEdit:focus { border-color: var(--accent); }', TbReferenceExample) > 0);
+  AssertTrue('R11: the rules say it', Pos('A rule with a variant or a state replaces nothing', TbSystemPrompt) > 0);
 end;
 
 initialization
