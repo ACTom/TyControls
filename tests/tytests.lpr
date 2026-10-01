@@ -228,7 +228,8 @@ uses
   test.themebuilder.pick,
   test.themebuilder.export,
   test.themebuilder.snippets,
-  test.themebuilder.http;
+  test.themebuilder.http,
+  test.themebuilder.sse;
 
 type
   TTyTestRunner = class(TTestRunner)
