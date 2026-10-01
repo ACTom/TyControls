@@ -35,6 +35,10 @@ type
     { the pointer, in the control's client pixels; globalout has none }
     HasOffset: Boolean;
     OffsetX, OffsetY: Integer;
+    { AN ACTION'S EVENT (select, selectchanged, highlight, ...) carries no
+      params and no pointer: what upstream hands the handler is this object,
+      as JSON text. '' on a mouse event. [Batch 88] }
+    Payload: string;
   end;
 
   TTyChartEventHandler = procedure(Sender: TObject;
@@ -70,21 +74,40 @@ function TyEventQueryOf(const AQuery: string): TTyEventQuery;
 function TyEventQueryMatches(const AQuery: TTyEventQuery;
   const AModel: TTyEventModel; const AEvent: TTyChartEvent): Boolean;
 
-{ The nine the chart emits, lowercased as upstream lowercases a name it is
-  given; '' for one it does not know. }
+{ The types the chart emits, lowercased as upstream lowercases a name it is
+  given; '' for one it does not know: the nine mouse events, and the events
+  of the state actions [Batch 88] -- select, unselect, toggleselect,
+  selectchanged, highlight, downplay and the six legacy pie / map select
+  events. }
 function TyChartEventTypeOf(const AName: string): string;
+{ whether a type is one of the action events (no params, a payload) }
+function TyChartEventIsAction(const AType: string): Boolean;
 
 implementation
 
-function TyChartEventTypeOf(const AName: string): string;
 const
-  cTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown', 'mouseup',
-    'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
+  cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
+    'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
+  cActionTypes: array[0..11] of string = ('select', 'unselect', 'toggleselect',
+    'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
+    'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
+    'pieunselected');
+
+function TyChartEventIsAction(const AType: string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(cActionTypes) do
+    if AType = cActionTypes[i] then Exit(True);
+  Result := False;
+end;
+
+function TyChartEventTypeOf(const AName: string): string;
 var i: Integer;
 begin
   Result := LowerCase(AName);
-  for i := 0 to High(cTypes) do
-    if Result = cTypes[i] then Exit;
+  for i := 0 to High(cMouseTypes) do
+    if Result = cMouseTypes[i] then Exit;
+  if TyChartEventIsAction(Result) then Exit;
   Result := '';
 end;
 

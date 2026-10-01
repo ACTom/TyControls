@@ -8547,6 +8547,57 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 - `easingFuncs` 上的原型属性名（`toString` 等）不当缓动。
 - 标签的淡入与位移（`#label` 元素）、线的符号逐个弹出（作用域为空的原始 animateTo）、effectScatter 的涟漪、仪表盘数值文字、标注这一批不重放：它们的时序规则在 AN2、AN4。
 
+## 123. Tier 1 第八十八批：选中状态（B1，2026-10-01）
+
+以前端口没有「选中」：`selectedMode`、`select` 块、饼图的 `selectedOffset`、select/unselect/toggleSelect 动作和 selectchanged 事件都不读；悬停高亮是覆盖层上临时画的一份，和任何别的状态都合不起来。`tyControls.AdvChart.Style` 里早就有一套两槽状态机，测试之外从没被调用过。这一批把上游的状态机照搬过来，选中挂在它上面，悬停也搬上去。
+
+### 上游的做法（`wf87/states.md` §0、§1 逐行对照）
+
+- **两层**：悬停、动作、选中只改元素上的**标志**——hoverState（0 常态、1 模糊、2 强调）、selected、`__highByOuter`（动作高亮的位）；下一帧 `applyElementStates` 把标志变成状态列表，**永远先 select、再 emphasis 或 blur**，交给 zrender 的 `useStates`：列表没变什么都不做；空列表所有键回到 rest；否则按列表顺序合并状态对象（后者赢），状态写了的键取状态值，其余回 rest。标签和引导线的列表永远等于宿主的，只在宿主的列表变了时跟着换。
+- **默认代理**（`states.ts:225-341`，`emphasis.disabled` 时不装）在 `useStates` 那一刻按元素的**当前**值造状态：emphasis——没写 fill 时抬亮 fill，抬亮的起点在列表里有 select 且 select 声明了 fill 时是**选中色**，否则是常态色；只有没抬 fill 才抬描边；抬亮是每个通道 `×1.1|0`；z2 = 当前 z2 + 10，只在状态存在时（没有 emphasis 对象的标签不抬）。select——z2 = 当前 + 9。blur——当前不透明度 ×0.1（已在 blur 里就保持）。z2 加在**当前**值上，所以一直挂着状态的元素切一次涨一次（选中的扇区悬停进出：11、21、31、40、50……），只有空列表才回 rest。
+- **选中模型**（`model/Series.ts:602-741`）：按**名字**（没有名字按 id）做键，同名的项一起选中，`getSelectedDataIndices` 只列第一个的原始下标；selectedMap 是 null、`'all'` 或对象，对象的键是 **JS 的键序**（整数样的键升序在前，其余按插入）。single 和 `true` 换掉整张表只留最后一个；multiple 累加；series 设 `'all'`。unselect 在 series 模式或 `'all'` 时清空一切，否则 `map[name]=false`、下标表记 -1。`select.disabled` 的项进表也进下标，但永远不显示选中。数据项写 `selected: true` 在建模时先选上。
+- **动作与事件**（`echarts.ts:2150-2272、3375-3412`）：按 seriesIndex（数组按给的顺序）> seriesId > seriesName 找系列，都没写就是所有系列；按 dataIndexInside（照用）> dataIndex（原始，经 indexOfRawIndex）> name（第一个同名的内部下标）找项。先发不精炼的事件（payload 的拷贝、type 小写：select/unselect/toggleselect），再发 selectchanged `{selected: 显示中的系列里有选中的那些 {dataIndex: 原始下标[], seriesIndex}, isFromClick, fromAction, fromActionPayload, escapeConnect: true}`；**只有注册了处理器**时才发旧事件：点击→map/pieselectchanged，动作 select→*selected，unselect→*unselected，toggleSelect 没有；每个出现在 selected 里的**饼**系列一次（map 那组也只认饼）。
+- **点击就派发**（`echarts.ts:2341-2357`）：宿主/父链上第一个带 dataIndex 的元素，selected 就 unselect，否则 select——**不管 selectedMode**；关着的系列照样发 select 和 `selectchanged {selected: []}`，点两次还是 select。顺序：select 的事件在用户的 click 之前。标注也带 dataIndex（标注数据里的序号）和宿主的 seriesIndex，点标注会对宿主系列的同号项派发 select。
+- **各类型的样子**：柱的默认 select 是 `{borderColor: tokens.color.primary, borderWidth: 2}`（散点只有边框色），饼、折线没有；饼的 select 平移 `(cos(中角), sin(中角)) × selectedOffset`（系列级，默认 10），标签（布局位置加平移）和引导线一起走，emphasis 半径 = 布局半径 + scaleSize；折线符号 emphasis 缩放 `max(1.1, 3/(size/2))`，select 只有 z2；折线的整条线跟着每个符号的悬停变（onHoverStateChange）。标签在任何状态的 `label.show` 为真时就建出来，常态不显示时 ignore，状态的 show 和常态不同时才翻。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.States`**（纯，已进 `.lpk`）：`TTyStElement`（标志、三种声明的状态对象、rest 与当前值、当前列表、是否装了代理）、`TTyStItem`（宿主、标签、引导线）、`TyStUseStates`（上面那套 useStates 与默认代理）、`TyStApplyItem`（applyElementStates）、进出 emphasis 与 hbo 位；选中模型 `TTySelModel` 与 select/unselect/toggle/isSelected/indices/initFromData/mapJson，JS 键序在 `MapSet` 里。能变的键：fill、stroke、lineWidth、opacity、z2、平移 x/y、扇形半径、符号缩放、ignore；几何是设备 px，颜色打包。
+- **控件**：`FSt` 按系列下标、按**原始**下标存每项的状态（过滤不搬家），每次建完显示列表 `StSync` 认元素（宿主、已摆好的标签、引导线、折线与面积）、刷新 rest 和声明、同步 selected 标志、应用标志，再 `StWrite` 把当前值写回元素。**帧 = 下一次绘制**：标志变了只记脏，`RenderTo`/`RenderCached` 开头 `StApplyChanged`，有元素变了就丢静态层——一次点击（移动、按下、松开、click）之间没有帧，和上游一样只算一帧，z2 不多爬。`Relayout`（Invalidate、换尺寸）算上游的整体更新：先回 rest、套旧列表、再套标志。
+- **悬停搬到标志上**：柱、饼、折线/散点（笛卡尔，日历和雷达之外）。在 A3 的 mouseout/mouseover 判定处离开/进入 emphasis（`TTyChartEventTarget` 多了派发者 `HdKind/HdSeries/HdRow`），emphasis 禁用的不是派发者，hbo 非零的不理会；画在静态层。覆盖层不再画这几类的项悬停；坐标轴触发的整列高亮仍走覆盖层，跳过已经由标志点亮的项。其余系列类型的悬停原样留在覆盖层。
+- **公开接口**：`DispatchAction(JSON)`（select/unselect/toggleSelect/highlight/downplay，batch 与未知类型答 False）、`SelectedDataIndices`、`SelectedMapText`、`ItemStates`、`LineStates`。事件走 A3 的路：`TTyChartEvent.Payload` 是动作事件的 JSON，查询对它们不过滤（上游 eventInfo 为空）；`TyChartEventTypeOf` 认这十二种。highlight/downplay 只做事件和 hbo 位（highlightKey 按首次使用编号），模糊是 B2 的。
+- **样子**：柱/散点默认选中边框取皮肤的**标题字色**（上游的 tokens.color.primary 就是标题色，走皮肤令牌而不硬编码 `#3c3c41`）；rest 没有描边时线宽按 zrender 默认 1；饼的平移用 `TyJsCos/TyJsSin`；声明的 `select.itemStyle`、`select.label.color/show`、`emphasis.*` 按数据项→系列读。标签只因状态才显示时建成 `Ignore` 元素（`TTyChartElement.Ignore`：不画、不命中）；饼的引导线带上扇区的 datum（仍 silent，`IsGuide`）。
+- **顺带修的**：折线符号的 z2 一直是系列的 z2（0），上游是 100——悬停时整条线抬到 10 就盖住了所有符号、也挡住它们的命中。改成 100，和散点（第 71 批）一致。整体换 option 时 A3 记着的悬停目标作废（上游那是被删掉的元素，下次移动重新 over）。
+
+### 基准
+
+- `tools/advchart-oracle/select-legend.js`（代理写，附 `wf87/states.md`）跑真的 dist：38 个用例、194 步、240 个事件，自带规则转写逐步重放全部对上，27 条守卫，两次运行逐字节一致。B1 的 17 个用例（`pie-*`、`bar-*`、`line-select`、`action-select-*`、`emphasis-disabled`）：90 步、157 个事件、523 个项快照。
+- `test.advchart.select`：每步经真控件（`MouseMove/MouseDown/MouseUp`、`DispatchAction`，SSR 量字），渲染一次当一帧，比较：事件的类型、顺序与 payload 每个字段（旧事件的 `<auto id>` 只要求是字符串，fpjson 读回会吞掉 `\u0000`，原文另测）；selectedMap（键序也比）与选中下标；每项的列表、标志、代理；**画出来的**——显示列表里宿主的 fill/stroke/线宽/不透明度、z2 相对 rest 的距离、扇形的平移/半径/角度、柱的矩形、符号的中心与缩放、标签的位置/隐藏/墨色/z2、引导线的平移、折线。颜色按皮肤映射：fixture 里等于 rest 色的就是端口的 rest 色，它的抬亮就是端口 rest 的抬亮，`#3c3c41` 是皮肤标题色，其余是声明色、逐位比。状态机算的几何（平移、半径、符号缩放）逐位比；从显示列表读回的位置容差 1e-9（平移加到中心上再减回来不一定等于平移本身），饼标签的 rest 位置 1e-6。z2 比到 rest 的距离（端口的 rest z2 是自己的）。
+- 首跑就过的之外，全量套件抓到四处：A3 的 mouse-events fixture 里本来就录了 `pub` 处理器收到的 select/selectchanged，过去因为端口不认这些类型被滤掉；现在补注册 `pub`，**全 fixture 每种系列的点击都比 select 事件**——一比就查出标注点击要派发 select（上面那条上游行为）；图例悬停的 highlight 是 B3 的，按名滤掉。一个 visualMap 把符号尺寸映成 NaN 时，声明阶段对 NaN 做有序比较在 FPU 陷阱下抛异常，改成先判 NaN。一个旧测试在同一控件上换两次 option，悬停目标没作废，第二次悬停不 over。
+- 另有手写：遗留事件没有注册就不发（OnChartEvent 不算注册）、z2 爬升与空列表复位、batch 与未知动作拒收，以及下面变异补的六条。不属于 B1 的用例顺带跑了一遍：`highlight-bar`、`highlight-pie` 已经全对，其余 focus/blur 与图例的留给 B2、B3。
+
+### 变异测试
+
+45 个变异：列表顺序（emphasis 先合并）、single 留第一个、multiple 换表、series 当 multiple、series 的 unselect 只清一项、`true` 不算 single、按下标做键、unselect 不记 -1、关掉的系列点击不派发、select 在用户 click 之后、disabled 也显示、抬亮总从常态色起、描边与填充都抬、select 抬 10、emphasis 抬 9、z2 不爬（两处）、标签也抬/不抬、禁用仍装代理、饼的 cos/sin 对调、按起始角平移、selectedOffset 不读、标签不跟扇区走、引导线不跟、柱没有默认边框、scaleSize 不读、标志当场应用而不是等帧、折线不跟符号、map 旧事件不认饼、toggleSelect 也发旧事件、isFromClick 丢掉、`'all'` 的下标为空、JS 键序不管、name 取最后一个、dataIndex 当内部下标、`selected: true` 不读、状态的 label.show 不读、状态的标签墨色不写、悬停不管 hbo（进/出两处）、禁用项也接高亮、符号缩放 1、折线符号 z2 回到系列的。
+
+首轮 44 个（一个锚点失配，改后重跑）存活 6 个，五个是基准缺用例，补手写：
+- 「`true` 不算 single」：fixture 没有 `selectedMode: true`——补 `[0,2]` 选中后表里只有最后一个。
+- 「toggleSelect 也发旧事件」：唯一的 toggleSelect 让饼什么都没选，本来就不发——补一个 toggle 后留着选中的。
+- 「JS 键序不管」：名字都不是数字——补 `b、10、02、2`，表是 `{"2","10","b","02"}`、下标 `2,1,0,3`。
+- 「name 取最后一个」：重名用例只用点击——补按名选重名项，下标只有第一个。
+- 「dataIndex 当内部下标」：没有过滤——补 dataZoom 过滤掉前两个类目，dataIndex 3 是内部 1。
+第六个「悬停 over 不管 hbo」在 B1 里是**等价变异**：hbo 非零的项一定已在 emphasis（没有模糊就没有别的去处），over 再设 2 不变；上游 `highlight-focus` 里「带 hbo 却显示 blur」的项要 B2 才有，届时会杀它。另加「悬停 out 不管 hbo」变异，配手写「动作高亮的柱悬停进出仍亮着、downplay 才灭」，杀死。补完重跑全部杀死（等价的那个除外）。
+
+### 已知偏差
+
+- 状态机只接了柱、饼、笛卡尔上的折线/散点/涟漪散点。其余类型（漏斗、雷达、K 线、象形柱、热力图、关系图、树系……）选中模型、动作和事件都有，**没有选中的样子**，悬停仍在覆盖层；它们的默认选中边框（漏斗、关系图、热力图、桑基图、象形柱）随之没有。关系图的边（dataType edge）不进选中模型，selectchanged 的项也不带 dataType。
+- highlight/downplay 只有事件与 hbo 位：动作前的 allLeaveBlur、按 focus 的 blurSeries、`notBlur`、折线单点高亮落在符号路径上（悬停离开会清掉它）都是 B2；`excludeSeriesId` 读了。悬停的 focus/blur 也是 B2。
+- 整体更新（Invalidate、换尺寸）后先回 rest、再套旧列表、再套标志，这条照上游写了但没有 B1 的用例；上游 `legend-pie` 里那一步（z2 继续爬）和过滤后饼的内部/原始下标对应都是 B3 的。
+- payload 没写任何下标字段时什么也不做（上游会对 `undefined` 做选择，拿到 `'e\0\0undefined'` 之类的键）；越界的下标丢掉；batch 不收；动作要在第一次渲染之后（选中模型要建好的数据）。
+- 饼常态不显示标签、只在状态里显示时不建标签（上游一直有一个 ignore 的 Text）；状态的 `label.show` 决定是否建标签只读系列级。内侧标签在选中色上不重新挑墨色，标签不透明度不写（模糊在 B2）。
+- 渐变不抬亮（原有偏差）；z2 只比到 rest 的距离：端口的 rest z2 自己的（柱 0、饼 0、标签宿主 +1），折线符号已改成上游的 100。
+- 旧事件只在 `ChartOn` 注册了该类型时才发，发出时 `OnChartEvent` 也收到一份。
+
 ## 124. Tier 1 第八十九批：入场动画（AN2，2026-10-01）
 
 AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，按 fixture 的顺序把入场动画逐个接上：柱（竖、横、堆叠）、散点、折线（裁剪矩形、符号逐个弹出、符号标签淡入）、饼（扫开、`scale`、玫瑰）、漏斗、仪表盘（指针、进度弧）、雷达、K 线，以及 LabelManager 的标签淡入与引导线描入。热力图格子、坐标轴、图例、标题不动。

@@ -462,6 +462,13 @@ type
     HasClip: Boolean;
     ClipRect: TTyRectF;
     Datum: TTyChartDatumRef;
+    { zrender's `ignore`: neither drawn nor hit. A label that only a state
+      shows (`select.label.show` over a hidden normal label) is built
+      ignored and the state flips it. [Batch 88] }
+    Ignore: Boolean;
+    { A PIE'S LABEL LINE, which carries its slice's datum (silent all the
+      same) so the slice's select state can move it. [Batch 88] }
+    IsGuide: Boolean;
     { the enter animation's view of it [Batch 89] }
     Anim: TTyChartAnim;
   end;
@@ -565,7 +572,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     { A ROW IS A DATUM'S, never a graph link's that happens to share its
       number. }
@@ -584,7 +591,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     if FItems[idx].Datum.IsEdge then Continue;
     if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
@@ -849,7 +856,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
     if APPI > 0 then
       slop := FItems[idx].HitSlopLogical * APPI / 96
     else

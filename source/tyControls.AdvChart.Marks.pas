@@ -654,7 +654,8 @@ begin
     spec := AVisual.ItemLabels[raw];
     ACaption.ItemSpec := raw + 1;
   end;
-  if not spec.Show then Exit;
+  { a label only a state shows is built too, ignored [Batch 88] }
+  if not (spec.Show or spec.StateShow) then Exit;
   if spec.Position = tlpNone then Exit;
   ACaption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
     AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False,
@@ -1186,7 +1187,10 @@ var
       else sv.Fill := AVisual.EmptyFill;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
-    el.Z2 := el.Z2 + Round(lift);
+    { z2 100, as a scatter's (Symbol.ts:85): above the polyline, which a
+      hover lifts by ten [Batch 88: it was the series' z2, and the hovered
+      line's polyline then covered every other symbol] }
+    el.Z2 := 100 + Round(lift);
     el.HitSlopLogical := cHitSlopSymbolLogical;
     { THE SYMBOL GROUP'S POSITION and the clip it is measured against: a
       line's symbol pops in when the growing clip reaches it

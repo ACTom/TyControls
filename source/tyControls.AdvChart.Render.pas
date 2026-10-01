@@ -531,7 +531,8 @@ begin
   { Paint order, back to front. The hit test walks the same order in reverse, so
     what the eye sees on top is what the pointer gets. }
   for i := 0 to AList.Count - 1 do
-    TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
+    if not AList.Element(AList.PaintOrder(i)).Ignore then
+      TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
 end;
 
 end.

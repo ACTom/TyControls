@@ -638,6 +638,9 @@ begin
       { SILENT. A leader line is a pointer at the slice, not a target of its
         own, and a hit on it would report the datum twice over. }
       el.Silent := True;
+      { but it is the slice's: its select state moves it [Batch 88] }
+      el.IsGuide := True;
+      el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Sectors[i].Index, row);
       { it draws itself in on entering (LabelManager's strokePercent) }
       el.Anim.Role := carGuide;
       el.Anim.Series := ABinding.SeriesIndex;

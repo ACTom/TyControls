@@ -34,7 +34,7 @@ uses
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers, tyControls.FontUnits,
-  tyControls.AdvChart.Events,
+  tyControls.AdvChart.Events, tyControls.AdvChart.States,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
@@ -151,6 +151,28 @@ type
     HasData: Boolean;
     Params: TTyChartCallbackParams;
     Model: TTyEventModel;
+    { THE ELEMENT'S HOVER DISPATCHER and select dispatcher [Batch 88]: 1 a
+      data item (HdSeries, HdRow its inner row, HdEdge a graph link), 2 the
+      whole-series element of a line (its polyline), 3 a marker (HdSeries
+      its host, HdRow its place in the marker's data: a select dispatcher
+      only), 0 nothing that has states. A label answers for its host. }
+    HdKind: Integer;
+    HdSeries, HdRow: Integer;
+    HdEdge: Boolean;
+  end;
+
+  { WHAT THE STATE MACHINE KEEPS FOR ONE SERIES [Batch 88]: which of the
+    port's builders it speaks for, every data item's elements by RAW index
+    (a filter does not move them), and a line's polyline and area. The
+    element indices are the last build's. }
+  TTyStKind = (sskNone, sskBar, sskPie, sskSymbol);
+  TTyStSeries = record
+    Kind: TTyStKind;
+    IsLine: Boolean;
+    Rows: array of TTyStItem;
+    HostIdx, LabelIdx, GuideIdx: TTyIntegerArray;
+    Run, Area: TTyStItem;
+    RunIdx, AreaIdx: TTyIntegerArray;
   end;
 
   TTyChartEventReg = record
@@ -297,6 +319,17 @@ type
     FEventNextId: Integer;
     FOnChartEvent: TTyChartEventHandler;
     FEvHover: TTyChartEventTarget;
+    { ELEMENT STATES AND THE SELECTION [Batch 88]: each series' selection
+      model (by series index, made at its first build and kept until the
+      option changes), the state machine's records, the layout generation
+      they were last re-rendered at, whether a flag changed since the last
+      frame applied them, and the highlightKey digits in order of first use. }
+    FSel: array of TTySelModel;
+    FSelInit: TTyBoolArray;
+    FSt: array of TTyStSeries;
+    FStGen, FStBuiltGen: Integer;
+    FStRerender, FStDirty: Boolean;
+    FHighlightKeys: TTyStringArray;
     FEvDownId, FEvUpId: Int64;
     FEvDownArmed: Boolean;
     FEvDownX, FEvDownY: Integer;
@@ -902,6 +935,8 @@ type
     { The elements the last render built, series and labels -- the list the
       hit test walks and the painter draws, read-only. }
     property SeriesList: TTyPaintList read FPaintList;
+    { what zrender's hover holds now, with its dispatcher [Batch 88] }
+    property EvHover: TTyChartEventTarget read FEvHover;
     { THE LIST AS IT STANDS THIS FRAME: every animated element read from its
       proxy, insertion indices kept. The list itself when nothing is bound.
       [Batch 89] }
@@ -1024,6 +1059,42 @@ type
     procedure EventDblClick(AX, AY: Integer);
     procedure EventContextMenu(AX, AY: Integer);
     procedure EventLeave(AX, AY: Integer);
+    { ---- element states and the selection [Batch 88] ---- }
+    function StKindOf(ASlot: Integer): TTyStKind;
+    function StSeriesNode(ASeriesIndex: Integer): TJSONObject;
+    function StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
+    { after every build: the records follow the new elements (a re-layout
+      re-applies the previous lists, upstream's full update), the selection
+      flags are synced, the flags applied and the values written back }
+    procedure StSync(AList: TTyPaintList; APPI: Integer);
+    procedure StDeclareItem(ASlot, ARaw: Integer; AList: TTyPaintList;
+      APPI: Integer);
+    procedure StDeclareLine(ASlot: Integer; AList: TTyPaintList);
+    procedure StWrite(AList: TTyPaintList);
+    { upstream's frame: every flag that changed since the last one becomes a
+      state list. True when an element changed. }
+    function StApplyChanged: Boolean;
+    function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+    procedure StChangeHover(ASeriesIndex: Integer; var AEl: TTyStElement;
+      AState: Integer);
+    procedure StHoverOut(const ATarget: TTyChartEventTarget);
+    procedure StHoverOver(const ATarget: TTyChartEventTarget);
+    { an element the state machine draws (the overlay leaves it alone) }
+    function StOwnsElement(AIndex: Integer): Boolean;
+    function StEmphasised(AIndex: Integer): Boolean;
+    function StPrimaryInk: TTyChartColor;
+    procedure SelEnsure(ASlot: Integer);
+    function SelData(ASlot: Integer): TTySelData;
+    procedure SelSyncFlags(ASlot: Integer);
+    function MatchSeries(APayload: TJSONObject): TTyIntegerArray;
+    function QueryDataIndex(ASlot: Integer; APayload: TJSONObject;
+      out AInner: TTyIntegerArray): Boolean;
+    procedure DoSelectAction(APayload: TJSONObject);
+    procedure DoHighDownAction(APayload: TJSONObject);
+    procedure StClickSelect(const ATarget: TTyChartEventTarget);
+    procedure EmitPayloadEvent(const AType, APayloadJson: string);
+    function HasChartHandler(const AType: string): Boolean;
+    function SeriesModelId(ASeriesIndex: Integer): string;
     { THE ROAM GESTURES. A left press inside a graph's roam area arms a drag
       that pans by every movement after it -- off the control too -- until
       the left button comes up or the capture is lost; a wheel turn over the
@@ -1133,6 +1204,27 @@ type
       and on every dataZoom linked to it through a shared axis, and the chart
       follows at once. False when there is no such dataZoom. }
     function DispatchDataZoom(AIndex: Integer; AStart, AEnd: Double): Boolean;
+    { UPSTREAM'S dispatchAction for the state actions [Batch 88], the payload
+      as JSON text: `select`, `unselect`, `toggleSelect` (by seriesIndex /
+      seriesId / seriesName, and dataIndexInside / dataIndex / name; no series
+      named is every series) publish select / unselect / toggleselect and then
+      selectchanged; `highlight` and `downplay` set the emphasis by action and
+      publish their own event. The picture follows at the next paint. False
+      for any other type, a payload that is not an object, or a `batch`. }
+    function DispatchAction(const APayloadJson: string): Boolean;
+    { getSelectedDataIndices: the RAW indices of series ASeriesIndex's
+      selection, in the order the names entered it }
+    function SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
+    { the series' selectedMap as JSON: null, "all" or an object }
+    function SelectedMapText(ASeriesIndex: Integer): string;
+    { THE STATE OF A DATA ITEM'S ELEMENTS, as the last paint left it: flags,
+      state list, rest and current values -- for a bar, a pie slice (with its
+      label and label line) or a line / scatter symbol. False when the item
+      has no element the state machine speaks for. }
+    function ItemStates(ASeriesIndex, ADataIndex: Integer;
+      out AItem: TTyStItem): Boolean;
+    { a line's polyline and area }
+    function LineStates(ASeriesIndex: Integer; out ARun, AArea: TTyStItem): Boolean;
     { THE POINTER, as the mouse handlers feed it: device px on this control.
       Answers whether upstream would have stopped the event (a wheel in a
       zooming grid, a drag). Public so a test can drive a gesture step by
@@ -1315,7 +1407,7 @@ uses
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvChart family keeps, invisible to a host. }
   tyControls.StrConsts,
-  tyControls.AdvChart.RichStyle;
+  tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath;
 
 { ==================== construction ==================== }
 
@@ -1440,6 +1532,16 @@ begin
   FDzDrag := Default(TTyDzTarget);
   FDzHasDown := False;
   FDzPanGrid := -1;
+  { new series models: no selection, no element survives [Batch 88] }
+  FSel := nil;
+  { AND WHAT THE POINTER IS OVER IS A REMOVED ELEMENT: the next move finds a
+    new one there -- an out to the old, an over to the new, as zrender's
+    hover meets elements a notMerge setOption replaced. Its identity is
+    made one no element answers. }
+  if FEvHover.Id <> 0 then FEvHover.Id := Low(Int64);
+  FSelInit := nil;
+  FSt := nil;
+  FStDirty := False;
   { A NEW OPTION ENTERS: the next render that may animate plays it }
   FAnimPending := True;
   FDirty := True;
@@ -2003,6 +2105,8 @@ var
 begin
   FLastRect := ARect;
   FLastPPI := APPI;
+  { a full update: the next sync re-renders the states [Batch 88] }
+  Inc(FStGen);
   { A NEW LAYOUT SNAPS: a resize, a theme, a zoom -- upstream sets those
     directly ({duration: 0}) -- and a new option is armed again after the
     build [Batch 89]. A NEW OPTION UPDATES: the render before it is kept --
@@ -2639,6 +2743,8 @@ begin
     { LOCAL space. EndPaint blits at ARect's origin, so everything below is
       measured from zero. }
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    { upstream's frame: the flags become state lists [Batch 88] }
+    StApplyChanged;
     P.BeginPaint(ACanvas, ARect, APPI);
     PaintStatic(P, R, APPI, measurer);
     PaintDynamic(P, R, APPI, measurer);
@@ -8406,6 +8512,8 @@ begin
     { AFTER THE LABELS, so a caption dims and rises with its node. }
     if drawn > 0 then ApplyGraphHover(list, APPI);
     if drawn > 0 then ApplyTreeHover(list, APPI);
+    { THE STATES, onto the elements just built [Batch 88] }
+    if drawn > 0 then StSync(list, APPI);
     { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because
       its captions are ANSWERS rather than requests -- they arrive with a
       font and an anchor already on them, which is what the expansion exists
@@ -9526,7 +9634,15 @@ begin
     Result.Id := idx + 1;
     case d.Kind of
       ctkSeries:
-        if d.SeriesIndex >= 0 then Result := SeriesEventTarget(d, idx);
+        if d.SeriesIndex >= 0 then
+        begin
+          Result := SeriesEventTarget(d, idx);
+          { the dispatcher behind it [Batch 88] }
+          Result.HdSeries := d.SeriesIndex;
+          Result.HdRow := d.DataIndex;
+          Result.HdEdge := d.IsEdge;
+          if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
+        end;
       ctkMarkPoint, ctkMarkLine, ctkMarkArea:
         begin
           slot := SlotOfSeries(d.ComponentIndex);
@@ -9575,6 +9691,12 @@ begin
             end;
           { a query is matched against the host series }
           Result.Model := SeriesEventModel(d.ComponentIndex);
+          { ITS ECData HAS A dataIndex, the marker's, and the host's
+            seriesIndex: a click on it dispatches select for the HOST
+            series' item at that index [Batch 88] }
+          Result.HdKind := 3;
+          Result.HdSeries := d.ComponentIndex;
+          Result.HdRow := d.DataIndex;
         end;
       ctkLegend:
         begin
@@ -9717,11 +9839,18 @@ begin
   FEvLastX := AX;
   FEvLastY := AY;
   t := EventTargetAt(AX, AY);
-  if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) and FEvHover.HasData then
-    EmitChartEvent('mouseout', FEvHover, AX, AY);
+  if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
+  begin
+    { echarts' own mouseout first: the dispatcher leaves emphasis [Batch 88] }
+    StHoverOut(FEvHover);
+    if FEvHover.HasData then EmitChartEvent('mouseout', FEvHover, AX, AY);
+  end;
   if t.HasData then EmitChartEvent('mousemove', t, AX, AY);
-  if (t.Id <> 0) and (t.Id <> FEvHover.Id) and t.HasData then
-    EmitChartEvent('mouseover', t, AX, AY);
+  if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
+  begin
+    StHoverOver(t);
+    if t.HasData then EmitChartEvent('mouseover', t, AX, AY);
+  end;
   FEvHover := t;
 end;
 
@@ -9754,6 +9883,9 @@ begin
   if (FEvDownId <> FEvUpId) or not FEvDownArmed
     or (Sqrt(Sqr(AX - FEvDownX) + Sqr(AY - FEvDownY)) > 4) then Exit;
   FEvDownArmed := False;
+  { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
+    unselect, whatever selectedMode says [Batch 88] }
+  StClickSelect(t);
   if t.HasData then EmitChartEvent('click', t, AX, AY);
 end;
 
@@ -9777,6 +9909,7 @@ end;
 procedure TTyAdvanceChart.EventLeave(AX, AY: Integer);
 var none: TTyChartEventTarget;
 begin
+  if FEvHover.Id <> 0 then StHoverOut(FEvHover);
   if (FEvHover.Id <> 0) and FEvHover.HasData then
     EmitChartEvent('mouseout', FEvHover, AX, AY);
   none := Default(TTyChartEventTarget);
@@ -9795,6 +9928,1377 @@ begin
   if not (csDesigning in ComponentState) then
     EventContextMenu(MousePos.X, MousePos.Y);
   inherited DoContextPopup(MousePos, Handled);
+end;
+
+{ ==================== element states and the selection [Batch 88] ==================== }
+
+const
+  cStNames: array[TTyStName] of string = ('select', 'emphasis', 'blur');
+
+{ A NaN NEVER MEETS A COMPARISON HERE: an ordered compare of a NaN raises
+  with the FPU traps on, and a visualMap can hand a mark a NaN size or
+  width. }
+function StPositive(AValue: Double): Boolean;
+begin
+  Result := not IsNan(AValue) and (AValue > 0);
+end;
+
+function StSameNum(A, B: Double): Boolean;
+begin
+  if IsNan(A) or IsNan(B) then Exit(IsNan(A) and IsNan(B));
+  Result := A = B;
+end;
+
+{ an element's values at rest, as the state machine keeps them: zrender's
+  default lineWidth 1 where the port draws no stroke, so a state that only
+  names a border colour draws a one-pixel border as upstream does }
+function StRestOf(const AEl: TTyChartElement): TTyStObject;
+begin
+  Result := TyStNoObject;
+  if AEl.Style.HasFill then TyStSetColor(Result, stkFill, AEl.Style.FillColor)
+  else TyStSetNone(Result, stkFill);
+  if StPositive(AEl.Style.StrokeWidthLogical) and (AEl.Style.StrokeColor <> 0) then
+    TyStSetColor(Result, stkStroke, AEl.Style.StrokeColor)
+  else
+    TyStSetNone(Result, stkStroke);
+  if StPositive(AEl.Style.StrokeWidthLogical) then
+    TyStSetNum(Result, stkLineWidth, AEl.Style.StrokeWidthLogical)
+  else
+    TyStSetNum(Result, stkLineWidth, 1);
+  TyStSetNum(Result, stkOpacity, AEl.Style.Alpha);
+  TyStSetNum(Result, stkZ2, AEl.Z2);
+  TyStSetNum(Result, stkX, 0);
+  TyStSetNum(Result, stkY, 0);
+  if AEl.Shape.Kind = cskSector then TyStSetNum(Result, stkR, AEl.Shape.R1)
+  else TyStSetNum(Result, stkR, 0);
+  TyStSetNum(Result, stkScale, 1);
+  TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
+end;
+
+{ a label's: its anchor (the Text's own x / y), its paint order, whether it
+  shows; its fill stays absent -- the automatic ink is the port's }
+function StLabelRestOf(const AEl: TTyChartElement): TTyStObject;
+begin
+  Result := TyStNoObject;
+  TyStSetNum(Result, stkOpacity, 1);
+  TyStSetNum(Result, stkZ2, AEl.Z2);
+  TyStSetNum(Result, stkX, AEl.Caption.X);
+  TyStSetNum(Result, stkY, AEl.Caption.Y);
+  TyStSetNum(Result, stkR, 0);
+  TyStSetNum(Result, stkScale, 1);
+  TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
+end;
+
+function StGuideRestOf(const AEl: TTyChartElement): TTyStObject;
+begin
+  Result := TyStNoObject;
+  TyStSetNum(Result, stkOpacity, 1);
+  TyStSetNum(Result, stkZ2, AEl.Z2);
+  TyStSetNum(Result, stkX, 0);
+  TyStSetNum(Result, stkY, 0);
+  TyStSetNum(Result, stkR, 0);
+  TyStSetNum(Result, stkScale, 1);
+  TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
+end;
+
+procedure StShiftShape(var AShape: TTyChartShape; ADX, ADY: Double);
+var i: Integer;
+begin
+  if (ADX = 0) and (ADY = 0) then Exit;
+  AShape.Bounds.Left := AShape.Bounds.Left + ADX;
+  AShape.Bounds.Right := AShape.Bounds.Right + ADX;
+  AShape.Bounds.Top := AShape.Bounds.Top + ADY;
+  AShape.Bounds.Bottom := AShape.Bounds.Bottom + ADY;
+  AShape.CX := AShape.CX + ADX;
+  AShape.CY := AShape.CY + ADY;
+  AShape.RotCX := AShape.RotCX + ADX;
+  AShape.RotCY := AShape.RotCY + ADY;
+  for i := 0 to High(AShape.Points) do
+  begin
+    AShape.Points[i].X := AShape.Points[i].X + ADX;
+    AShape.Points[i].Y := AShape.Points[i].Y + ADY;
+  end;
+  for i := 0 to High(AShape.Cmds) do
+  begin
+    AShape.Cmds[i].X1 := AShape.Cmds[i].X1 + ADX;
+    AShape.Cmds[i].Y1 := AShape.Cmds[i].Y1 + ADY;
+    AShape.Cmds[i].X2 := AShape.Cmds[i].X2 + ADX;
+    AShape.Cmds[i].Y2 := AShape.Cmds[i].Y2 + ADY;
+    AShape.Cmds[i].X := AShape.Cmds[i].X + ADX;
+    AShape.Cmds[i].Y := AShape.Cmds[i].Y + ADY;
+  end;
+  if AShape.HasCmdBounds then
+  begin
+    AShape.CmdBounds.Left := AShape.CmdBounds.Left + ADX;
+    AShape.CmdBounds.Right := AShape.CmdBounds.Right + ADX;
+    AShape.CmdBounds.Top := AShape.CmdBounds.Top + ADY;
+    AShape.CmdBounds.Bottom := AShape.CmdBounds.Bottom + ADY;
+  end;
+end;
+
+function SameColourKey(const A, B: TTyStObject; AKey: TTyStKey): Boolean;
+begin
+  Result := (A.Has[AKey] = B.Has[AKey]) and (A.None[AKey] = B.None[AKey])
+    and (A.None[AKey] or (A.Color[AKey] = B.Color[AKey]));
+end;
+
+{ THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
+  the build drew it -- a gradient stays a gradient; a lifted colour over a
+  gradient fill leaves the gradient too (the port does not lift a ramp). }
+procedure StWriteHost(var AEl: TTyChartElement; const AState: TTyStElement);
+var c, r: TTyStObject;
+begin
+  c := AState.Cur;
+  r := AState.Rest;
+  if not SameColourKey(c, r, stkFill) then
+  begin
+    if c.None[stkFill] then AEl.Style.HasFill := False
+    else if not (c.Lifted[stkFill] and (AEl.Style.FillGradient.Kind <> cgkNone)) then
+    begin
+      AEl.Style.HasFill := True;
+      AEl.Style.FillColor := c.Color[stkFill];
+      AEl.Style.FillGradient := Default(TTyChartGradient);
+    end;
+  end;
+  if not SameColourKey(c, r, stkStroke) then
+  begin
+    if c.None[stkStroke] then AEl.Style.StrokeColor := 0
+    else if not (c.Lifted[stkStroke] and (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
+    begin
+      AEl.Style.StrokeColor := c.Color[stkStroke];
+      AEl.Style.StrokeGradient := Default(TTyChartGradient);
+    end;
+  end;
+  { the width wherever a stroke is drawn -- zrender's own 1 where the build
+    had none -- and a changed one anyway }
+  if TyStHasColour(c, stkStroke)
+    or not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]) then
+    AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+  if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then AEl.Style.Alpha := c.Num[stkOpacity];
+  AEl.Z2 := Round(c.Num[stkZ2]);
+  StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
+  if (AEl.Shape.Kind = cskSector) and not StSameNum(c.Num[stkR], r.Num[stkR]) then
+    AEl.Shape.R1 := c.Num[stkR];
+  if not StSameNum(c.Num[stkScale], 1) and StPositive(c.Num[stkScale]) then
+    AEl.Shape := TyScaleShape(AEl.Shape, c.Num[stkScale]);
+  AEl.Ignore := c.Num[stkIgnore] <> 0;
+end;
+
+procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement);
+var c, r: TTyStObject; dx, dy: Double;
+begin
+  c := AState.Cur;
+  r := AState.Rest;
+  dx := c.Num[stkX] - r.Num[stkX];
+  dy := c.Num[stkY] - r.Num[stkY];
+  AEl.Caption.X := c.Num[stkX];
+  AEl.Caption.Y := c.Num[stkY];
+  StShiftShape(AEl.Shape, dx, dy);
+  AEl.Z2 := Round(c.Num[stkZ2]);
+  AEl.Ignore := c.Num[stkIgnore] <> 0;
+  { the ink: a colour a state declares, else the hover's own under emphasis }
+  if TyStHasColour(c, stkFill) then
+  begin
+    AEl.Caption.Colour := c.Color[stkFill];
+    if Length(AEl.Caption.RtPieces) > 0 then
+      AEl.Caption.RtPieces := TyRtReink(AEl.Caption.RtPieces, c.Color[stkFill],
+        False, AEl.Caption.StrokeColour, AEl.Caption.StrokeWidthLogical);
+  end
+  else if stnEmphasis in AState.States then
+    TyCaptionToEmphasis(AEl.Caption);
+end;
+
+procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement);
+var c, r: TTyStObject;
+begin
+  c := AState.Cur;
+  r := AState.Rest;
+  StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
+  AEl.Z2 := Round(c.Num[stkZ2]);
+  AEl.Ignore := c.Num[stkIgnore] <> 0;
+end;
+
+function TTyAdvanceChart.StKindOf(ASlot: Integer): TTyStKind;
+var t: string;
+begin
+  Result := sskNone;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { a calendar's scatter, a radar's polygons and a polar bar are drawn by
+    builders of their own, still on the overlay }
+  if (FBindings[ASlot].CalendarIndex >= 0) or (FBindings[ASlot].RadarIndex >= 0) then Exit;
+  t := FBindings[ASlot].SeriesType;
+  if t = 'bar' then Result := sskBar
+  else if t = TyPieSeriesTypeName then Result := sskPie
+  else if (t = 'line') or (t = 'scatter') or (t = 'effectScatter') then
+    Result := sskSymbol;
+end;
+
+function TTyAdvanceChart.StSeriesNode(ASeriesIndex: Integer): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', ASeriesIndex);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+function TTyAdvanceChart.StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
+var s: TJSONObject; d: TJSONData;
+begin
+  Result := nil;
+  s := StSeriesNode(ASeriesIndex);
+  if s = nil then Exit;
+  d := s.Find('data');
+  if not (d is TJSONArray) then Exit;
+  if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
+  d := TJSONArray(d).Items[ARaw];
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ tokens.color.primary -- the ink a title is written in, which is how the
+  skin says it }
+function TTyAdvanceChart.StPrimaryInk: TTyChartColor;
+begin
+  Result := TTyChartColor(ActiveController.Model.ResolveStyle('TyAdvChartTitle',
+    '', []).TextColor);
+end;
+
+procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
+  AList: TTyPaintList; APPI: Integer);
+var
+  s, idx: Integer;
+  item: PTyStItem;
+  host, cap, guide: TTyChartElement;
+  nodes: array[0..1] of TJSONObject;
+  scale, off, mid, dx, dy, ss, half: Double;
+  has, bolder, disabled, was, normalShow, stShow, doScale: Boolean;
+  base, obj: TTyStObject;
+  spec: TTyChartEmphasisSpec;
+  n: TTyStName;
+  txt: string;
+  c: TTyChartColor;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].Rows[ARaw];
+  host := AList.Element(FSt[s].HostIdx[ARaw]);
+  nodes[0] := StItemNode(s, ARaw);
+  nodes[1] := StSeriesNode(s);
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+
+  { ---- the mark ---- }
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  { emphasis.disabled: no hover dispatcher and no default proxy }
+  disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  item^.Host.Proxy := not disabled;
+  for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
+  item^.Host.Rest := StRestOf(host);
+  { THE SELECT LOOK the series type brings under what is declared: a bar's
+    and a scatter's border in the primary ink (BarSeries.ts:165,
+    ScatterSeries.ts:151); a pie's and a line's nothing }
+  base := TyStNoObject;
+  case FSt[s].Kind of
+    sskBar:
+      begin
+        TyStSetColor(base, stkStroke, StPrimaryInk);
+        TyStSetNum(base, stkLineWidth, 2);
+      end;
+    sskSymbol:
+      if not FSt[s].IsLine then TyStSetColor(base, stkStroke, StPrimaryInk);
+  end;
+  item^.Host.Decl[stnSelect] := TyStOverlay(base,
+    TyStReadStyle(nodes, 'select', 'itemStyle', bolder));
+  item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', 'itemStyle', bolder);
+  item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', 'itemStyle', bolder);
+  dx := 0;
+  dy := 0;
+  case FSt[s].Kind of
+    sskPie:
+      begin
+        { PieView.ts:128-150: the SERIES' selectedOffset along the mid angle,
+          and the emphasis radius the layout's plus scaleSize }
+        off := TyStReadNumber([nodes[1]], ['selectedOffset'], has);
+        if not has or IsNan(off) then off := 10;
+        mid := (host.Shape.StartRad + host.Shape.EndRad) / 2;
+        if IsNan(mid) or IsNan(off) then mid := 0;
+        dx := TyJsCos(mid) * (off * scale);
+        dy := TyJsSin(mid) * (off * scale);
+        TyStSetNum(item^.Host.Decl[stnSelect], stkX, dx);
+        TyStSetNum(item^.Host.Decl[stnSelect], stkY, dy);
+        doScale := TyStReadBool(nodes, ['emphasis', 'scale'], has);
+        if not has then doScale := True;
+        if doScale then
+        begin
+          ss := TyStReadNumber(nodes, ['emphasis', 'scaleSize'], has);
+          if not has then ss := 5
+          else if IsNan(ss) then ss := 0;
+          TyStSetNum(item^.Host.Decl[stnEmphasis], stkR, host.Shape.R1 + ss * scale);
+        end;
+      end;
+    sskSymbol:
+      begin
+        { Symbol.ts:218-357: the path grows by the emphasis ratio }
+        spec := TyChartReadEmphasis(nodes[1]);
+        if nodes[0] <> nil then
+          spec := TyChartMergeEmphasis(spec, TyChartReadEmphasis(nodes[0]));
+        half := (host.Shape.Bounds.Bottom - host.Shape.Bounds.Top) / 2;
+        if host.Shape.Kind in [cskCircle, cskEllipse] then half := host.Shape.R1;
+        { a symbol of no size or a NaN one keeps its size }
+        if StPositive(half) then
+          TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale,
+            TyChartSymbolScaleRatio(spec, half / scale));
+      end;
+  end;
+
+  { ---- its label: the host's states, its own select / emphasis / blur
+    label style (labelStyle.ts:255-273) ---- }
+  idx := FSt[s].LabelIdx[ARaw];
+  was := item^.Label_.Exists;
+  if idx < 0 then
+    item^.Label_ := Default(TTyStElement)
+  else
+  begin
+    cap := AList.Element(idx);
+    item^.Label_.Exists := True;
+    item^.Label_.IsPath := False;
+    item^.Label_.Proxy := not disabled;
+    for n := Low(TTyStName) to High(TTyStName) do item^.Label_.HasState[n] := True;
+    item^.Label_.Rest := StLabelRestOf(cap);
+    normalShow := not cap.Ignore;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      obj := TyStNoObject;
+      { ignore = !show only when the state's show differs from the normal one }
+      stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
+      if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+      txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
+      if has and (txt <> 'inherit') and (txt <> 'auto')
+        and TyTryParseChartColor(txt, c) then
+        TyStSetColor(obj, stkFill, c);
+      { a pie's label rides with its slice: the laid-out place plus the offset
+        (pie/labelLayout.ts:541-544) }
+      if (n = stnSelect) and (FSt[s].Kind = sskPie) then
+      begin
+        TyStSetNum(obj, stkX, cap.Caption.X + dx);
+        TyStSetNum(obj, stkY, cap.Caption.Y + dy);
+      end;
+      item^.Label_.Decl[n] := obj;
+    end;
+    if not was then
+    begin
+      item^.Label_.Cur := item^.Label_.Rest;
+      item^.Label_.States := [];
+      if item^.Host.Exists and (item^.Host.States <> []) then
+        TyStUseStates(item^.Label_, item^.Host.States);
+    end;
+  end;
+
+  { ---- a pie's label line: translated with the slice ---- }
+  idx := FSt[s].GuideIdx[ARaw];
+  was := item^.Guide.Exists;
+  if idx < 0 then
+    item^.Guide := Default(TTyStElement)
+  else
+  begin
+    guide := AList.Element(idx);
+    item^.Guide.Exists := True;
+    item^.Guide.IsPath := False;
+    item^.Guide.Proxy := not disabled;
+    for n := Low(TTyStName) to High(TTyStName) do item^.Guide.HasState[n] := True;
+    item^.Guide.Rest := StGuideRestOf(guide);
+    for n := Low(TTyStName) to High(TTyStName) do
+      item^.Guide.Decl[n] := TyStNoObject;
+    TyStSetNum(item^.Guide.Decl[stnSelect], stkX, dx);
+    TyStSetNum(item^.Guide.Decl[stnSelect], stkY, dy);
+    if not was then
+    begin
+      item^.Guide.Cur := item^.Guide.Rest;
+      item^.Guide.States := [];
+      if item^.Host.Exists and (item^.Host.States <> []) then
+        TyStUseStates(item^.Guide, item^.Host.States);
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
+
+  procedure One(var AItem: TTyStItem; const AIdx: TTyIntegerArray;
+    const ABlock: string);
+  var
+    s: Integer;
+    nodes: array[0..0] of TJSONObject;
+    was, has, bolder: Boolean;
+    prev: TTyStNames;
+    n: TTyStName;
+    obj: TTyStObject;
+  begin
+    if Length(AIdx) = 0 then
+    begin
+      AItem := Default(TTyStItem);
+      Exit;
+    end;
+    s := FBindings[ASlot].SeriesIndex;
+    nodes[0] := StSeriesNode(s);
+    was := AItem.Host.Exists;
+    prev := AItem.Host.States;
+    AItem.Host.Exists := True;
+    AItem.Host.IsPath := True;
+    AItem.Host.Proxy := not TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+    for n := Low(TTyStName) to High(TTyStName) do AItem.Host.HasState[n] := True;
+    AItem.Host.Rest := StRestOf(AList.Element(AIdx[0]));
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      obj := TyStReadStyle(nodes, cStNames[n], ABlock, bolder);
+      { LineView.ts:844-847: 'bolder' is the rest width plus one }
+      if bolder then
+        TyStSetNum(obj, stkLineWidth, AItem.Host.Rest.Num[stkLineWidth] + 1);
+      AItem.Host.Decl[n] := obj;
+    end;
+    if not was then
+    begin
+      AItem.Host.Cur := AItem.Host.Rest;
+      AItem.Host.States := [];
+    end
+    else if FStRerender then
+    begin
+      TyStClearItem(AItem);
+      if prev <> [] then TyStUseStates(AItem.Host, prev);
+    end;
+    TyStUseStates(AItem.Host, TyStTargetStates(AItem.Host));
+  end;
+
+var s: Integer;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  One(FSt[s].Run, FSt[s].RunIdx, 'lineStyle');
+  One(FSt[s].Area, FSt[s].AreaIdx, 'areaStyle');
+end;
+
+procedure TTyAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
+var
+  slot, s, k, raw, n, i: Integer;
+  el: TTyChartElement;
+  item: PTyStItem;
+  prev: TTyStNames;
+  was: Boolean;
+begin
+  if AList = nil then Exit;
+  { a full update since the last sync re-renders: rest, the previous list,
+    then the flags (echarts.ts:2667-2748) }
+  FStRerender := FStBuiltGen <> FStGen;
+  FStBuiltGen := FStGen;
+  n := 0;
+  for slot := 0 to High(FBindings) do
+    if FBindings[slot].SeriesIndex >= n then n := FBindings[slot].SeriesIndex + 1;
+  if Length(FSt) < n then SetLength(FSt, n);
+  for s := 0 to High(FSt) do
+  begin
+    FSt[s].Kind := sskNone;
+    FSt[s].HostIdx := nil;
+    FSt[s].LabelIdx := nil;
+    FSt[s].GuideIdx := nil;
+    FSt[s].RunIdx := nil;
+    FSt[s].AreaIdx := nil;
+  end;
+  for slot := 0 to High(FBindings) do
+  begin
+    if slot > High(FStores) then Break;
+    if FBindings[slot].Hidden or (FStores[slot] = nil) then Continue;
+    s := FBindings[slot].SeriesIndex;
+    if s < 0 then Continue;
+    FSt[s].Kind := StKindOf(slot);
+    FSt[s].IsLine := FBindings[slot].SeriesType = 'line';
+    if FSt[s].Kind = sskNone then Continue;
+    k := FStores[slot].RawCount;
+    if Length(FSt[s].Rows) < k then SetLength(FSt[s].Rows, k);
+    SetLength(FSt[s].HostIdx, k);
+    SetLength(FSt[s].LabelIdx, k);
+    SetLength(FSt[s].GuideIdx, k);
+    for i := 0 to k - 1 do
+    begin
+      FSt[s].HostIdx[i] := -1;
+      FSt[s].LabelIdx[i] := -1;
+      FSt[s].GuideIdx[i] := -1;
+    end;
+  end;
+  { WHICH ELEMENT IS WHICH: the mark, its label (a placed caption), its
+    label line, and a line's polyline and area }
+  for k := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if el.Datum.Kind <> ctkSeries then Continue;
+    s := el.Datum.SeriesIndex;
+    if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    if el.Datum.IsEdge then Continue;
+    if el.Datum.DataIndex < 0 then
+    begin
+      if not FSt[s].IsLine then Continue;
+      if el.Shape.Kind = cskPolyline then
+      begin
+        SetLength(FSt[s].RunIdx, Length(FSt[s].RunIdx) + 1);
+        FSt[s].RunIdx[High(FSt[s].RunIdx)] := k;
+      end
+      else if el.Shape.Kind = cskPolygon then
+      begin
+        SetLength(FSt[s].AreaIdx, Length(FSt[s].AreaIdx) + 1);
+        FSt[s].AreaIdx[High(FSt[s].AreaIdx)] := k;
+      end;
+      Continue;
+    end;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
+    if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
+    if el.Caption.FontSizeLogical > 0 then
+    begin
+      if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
+    end
+    else if el.IsGuide then
+      FSt[s].GuideIdx[raw] := k
+    else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
+      FSt[s].HostIdx[raw] := k;
+  end;
+  for slot := 0 to High(FBindings) do
+  begin
+    s := FBindings[slot].SeriesIndex;
+    if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    SelEnsure(slot);
+    for raw := 0 to High(FSt[s].Rows) do
+    begin
+      item := @FSt[s].Rows[raw];
+      if (raw > High(FSt[s].HostIdx)) or (FSt[s].HostIdx[raw] < 0) then
+      begin
+        { gone from the picture: a NEW element if it comes back }
+        item^ := Default(TTyStItem);
+        Continue;
+      end;
+      was := item^.Host.Exists;
+      prev := item^.Host.States;
+      StDeclareItem(slot, raw, AList, APPI);
+      if not was then
+      begin
+        item^.Host.Cur := item^.Host.Rest;
+        item^.Host.States := [];
+      end
+      else if FStRerender then
+      begin
+        TyStClearItem(item^);
+        if prev <> [] then TyStUseItemStates(item^, prev);
+      end;
+    end;
+    { updateSeriesElementSelection, then applyElementStates }
+    SelSyncFlags(slot);
+    for raw := 0 to High(FSt[s].Rows) do
+      if FSt[s].Rows[raw].Host.Exists then TyStApplyItem(FSt[s].Rows[raw]);
+    if FSt[s].IsLine then StDeclareLine(slot, AList);
+  end;
+  FStDirty := False;
+  StWrite(AList);
+end;
+
+procedure TTyAdvanceChart.StWrite(AList: TTyPaintList);
+var
+  s, raw, k: Integer;
+  el: TTyChartElement;
+  item: PTyStItem;
+begin
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].Kind = sskNone then Continue;
+    for raw := 0 to High(FSt[s].HostIdx) do
+    begin
+      if FSt[s].HostIdx[raw] < 0 then Continue;
+      item := @FSt[s].Rows[raw];
+      if item^.Host.States <> [] then
+      begin
+        el := AList.Element(FSt[s].HostIdx[raw]);
+        StWriteHost(el, item^.Host);
+        AList.SetElement(FSt[s].HostIdx[raw], el);
+      end;
+      if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists
+        and (item^.Label_.States <> []) then
+      begin
+        el := AList.Element(FSt[s].LabelIdx[raw]);
+        StWriteLabel(el, item^.Label_);
+        AList.SetElement(FSt[s].LabelIdx[raw], el);
+      end;
+      if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists
+        and (item^.Guide.States <> []) then
+      begin
+        el := AList.Element(FSt[s].GuideIdx[raw]);
+        StWriteGuide(el, item^.Guide);
+        AList.SetElement(FSt[s].GuideIdx[raw], el);
+      end;
+    end;
+    if FSt[s].Run.Host.Exists and (FSt[s].Run.Host.States <> []) then
+      for k := 0 to High(FSt[s].RunIdx) do
+      begin
+        el := AList.Element(FSt[s].RunIdx[k]);
+        StWriteHost(el, FSt[s].Run.Host);
+        AList.SetElement(FSt[s].RunIdx[k], el);
+      end;
+    if FSt[s].Area.Host.Exists and (FSt[s].Area.Host.States <> []) then
+      for k := 0 to High(FSt[s].AreaIdx) do
+      begin
+        el := AList.Element(FSt[s].AreaIdx[k]);
+        StWriteHost(el, FSt[s].Area.Host);
+        AList.SetElement(FSt[s].AreaIdx[k], el);
+      end;
+  end;
+end;
+
+function TTyAdvanceChart.StApplyChanged: Boolean;
+var s, raw: Integer;
+begin
+  Result := False;
+  if not FStDirty then Exit;
+  FStDirty := False;
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].Kind = sskNone then Continue;
+    for raw := 0 to High(FSt[s].Rows) do
+      if FSt[s].Rows[raw].Host.Exists and TyStApplyItem(FSt[s].Rows[raw]) then
+        Result := True;
+    if FSt[s].Run.Host.Exists
+      and TyStUseStates(FSt[s].Run.Host, TyStTargetStates(FSt[s].Run.Host)) then
+      Result := True;
+    if FSt[s].Area.Host.Exists
+      and TyStUseStates(FSt[s].Area.Host, TyStTargetStates(FSt[s].Area.Host)) then
+      Result := True;
+  end;
+end;
+
+function TTyAdvanceChart.StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+var slot, raw: Integer;
+begin
+  Result := nil;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
+  if FSt[ASeriesIndex].Kind = sskNone then Exit;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
+  raw := FStores[slot].GetRawIndex(AInnerRow);
+  if (raw < 0) or (raw > High(FSt[ASeriesIndex].Rows)) then Exit;
+  if not FSt[ASeriesIndex].Rows[raw].Host.Exists then Exit;
+  Result := @FSt[ASeriesIndex].Rows[raw];
+end;
+
+{ doChangeHoverState: the flag -- and on a line every symbol's change, and
+  the polyline's own, carries the polyline and the area with it
+  (LineView.ts:893-900, onHoverStateChange) }
+procedure TTyAdvanceChart.StChangeHover(ASeriesIndex: Integer;
+  var AEl: TTyStElement; AState: Integer);
+begin
+  if AEl.HoverState = AState then Exit;
+  AEl.HoverState := AState;
+  FStDirty := True;
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt)) and FSt[ASeriesIndex].IsLine then
+  begin
+    FSt[ASeriesIndex].Run.Host.HoverState := AState;
+    FSt[ASeriesIndex].Area.Host.HoverState := AState;
+  end;
+end;
+
+procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
+var item: PTyStItem; s: Integer;
+begin
+  s := ATarget.HdSeries;
+  if ATarget.HdKind = 1 then
+  begin
+    if ATarget.HdEdge then Exit;
+    item := StItemAt(s, ATarget.HdRow);
+    { not a dispatcher (emphasis disabled), or held by an action }
+    if (item = nil) or not item^.Host.Proxy or (item^.Host.HighByOuter <> 0) then Exit;
+    if item^.Host.HoverState = TyStHoverEmphasis then
+      StChangeHover(s, item^.Host, TyStHoverNormal);
+  end
+  else if ATarget.HdKind = 2 then
+  begin
+    if (s < 0) or (s > High(FSt)) or not FSt[s].Run.Host.Exists then Exit;
+    if not FSt[s].Run.Host.Proxy or (FSt[s].Run.Host.HighByOuter <> 0) then Exit;
+    if FSt[s].Run.Host.HoverState = TyStHoverEmphasis then
+      StChangeHover(s, FSt[s].Run.Host, TyStHoverNormal);
+  end
+  else
+    Exit;
+  if FStDirty then InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.StHoverOver(const ATarget: TTyChartEventTarget);
+var item: PTyStItem; s: Integer;
+begin
+  s := ATarget.HdSeries;
+  if ATarget.HdKind = 1 then
+  begin
+    if ATarget.HdEdge then Exit;
+    item := StItemAt(s, ATarget.HdRow);
+    if (item = nil) or not item^.Host.Proxy or (item^.Host.HighByOuter <> 0) then Exit;
+    StChangeHover(s, item^.Host, TyStHoverEmphasis);
+  end
+  else if ATarget.HdKind = 2 then
+  begin
+    if (s < 0) or (s > High(FSt)) or not FSt[s].Run.Host.Exists then Exit;
+    if not FSt[s].Run.Host.Proxy or (FSt[s].Run.Host.HighByOuter <> 0) then Exit;
+    StChangeHover(s, FSt[s].Run.Host, TyStHoverEmphasis);
+  end
+  else
+    Exit;
+  if FStDirty then InvalidateFrame;
+end;
+
+function TTyAdvanceChart.StOwnsElement(AIndex: Integer): Boolean;
+var d: TTyChartDatumRef;
+begin
+  Result := False;
+  if (FPaintList = nil) or (AIndex < 0) or (AIndex >= FPaintList.Count) then Exit;
+  d := FPaintList.Element(AIndex).Datum;
+  if (d.Kind <> ctkSeries) or (d.SeriesIndex < 0) or (d.SeriesIndex > High(FSt)) then Exit;
+  Result := FSt[d.SeriesIndex].Kind <> sskNone;
+end;
+
+function TTyAdvanceChart.StEmphasised(AIndex: Integer): Boolean;
+var d: TTyChartDatumRef; item: PTyStItem;
+begin
+  Result := False;
+  if not StOwnsElement(AIndex) then Exit;
+  d := FPaintList.Element(AIndex).Datum;
+  item := StItemAt(d.SeriesIndex, d.DataIndex);
+  Result := (item <> nil) and (stnEmphasis in item^.Host.States);
+end;
+
+{ ---- the selection model ---- }
+
+function TTyAdvanceChart.SelData(ASlot: Integer): TTySelData;
+var
+  st: TTyDataStore;
+  i, n, raw, s: Integer;
+  key: string;
+  has: Boolean;
+begin
+  Result := Default(TTySelData);
+  if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  s := FBindings[ASlot].SeriesIndex;
+  n := st.Count;
+  SetLength(Result.Keys, n);
+  SetLength(Result.Raws, n);
+  SetLength(Result.Disabled, n);
+  for i := 0 to n - 1 do
+  begin
+    raw := st.GetRawIndex(i);
+    Result.Raws[i] := raw;
+    { getSelectionKey: the name, else the id (SeriesData's own 'e\0\0' + raw
+      for an item that has neither) }
+    key := st.GetItemName(i);
+    if key = '' then key := st.GetId(i);
+    if key = '' then key := 'e'#0#0 + IntToStr(raw);
+    Result.Keys[i] := key;
+    { the item model's select.disabled: the item's, else the series' }
+    Result.Disabled[i] := TyStReadBool([StItemNode(s, raw), StSeriesNode(s)],
+      ['select', 'disabled'], has);
+  end;
+end;
+
+procedure TTyAdvanceChart.SelEnsure(ASlot: Integer);
+var
+  s, i: Integer;
+  node: TJSONObject;
+  data: TTySelData;
+  flags: TTyBoolArray;
+  has: Boolean;
+begin
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  s := FBindings[ASlot].SeriesIndex;
+  if s < 0 then Exit;
+  if Length(FSel) <= s then
+  begin
+    SetLength(FSel, s + 1);
+    SetLength(FSelInit, s + 1);
+  end;
+  if FSelInit[s] then Exit;
+  if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  node := StSeriesNode(s);
+  if node <> nil then FSel[s] := TySelNew(TySelModeOf(node.Find('selectedMode')))
+  else FSel[s] := TySelNew(ssmOff);
+  FSelInit[s] := True;
+  { _initSelectedMapFromData: `selected: true` on a data item }
+  data := SelData(ASlot);
+  flags := nil;
+  SetLength(flags, Length(data.Raws));
+  for i := 0 to High(data.Raws) do
+    flags[i] := TyStReadBool([StItemNode(s, data.Raws[i])], ['selected'], has);
+  TySelInitFromData(FSel[s], data, flags);
+end;
+
+procedure TTyAdvanceChart.SelSyncFlags(ASlot: Integer);
+var
+  s, raw, inner: Integer;
+  data: TTySelData;
+  st: TTyDataStore;
+  was: Boolean;
+begin
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  s := FBindings[ASlot].SeriesIndex;
+  if (s < 0) or (s > High(FSt)) or (s > High(FSel)) or not FSelInit[s] then Exit;
+  if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  data := SelData(ASlot);
+  for raw := 0 to High(FSt[s].Rows) do
+  begin
+    if not FSt[s].Rows[raw].Host.Exists then Continue;
+    inner := st.IndexOfRawIndex(raw);
+    was := FSt[s].Rows[raw].Host.Selected;
+    FSt[s].Rows[raw].Host.Selected := (inner >= 0)
+      and TySelIsSelected(FSel[s], data, inner);
+    if was <> FSt[s].Rows[raw].Host.Selected then FStDirty := True;
+  end;
+end;
+
+{ makeQueryConditionKindA + findComponents: seriesIndex (a number or a
+  list, in its order), else seriesId, else seriesName (in series order);
+  none of them is every series }
+function TTyAdvanceChart.MatchSeries(APayload: TJSONObject): TTyIntegerArray;
+var
+  d: TJSONData;
+  i, k, n, cnt: Integer;
+  want: TTyStringArray;
+  byId: Boolean;
+  v: string;
+
+  procedure Add(AIndex: Integer);
+  begin
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := AIndex;
+  end;
+
+  function KeyText(AData: TJSONData; out AText: string): Boolean;
+  begin
+    Result := (AData <> nil) and (AData.JSONType in [jtString, jtNumber]);
+    if Result then AText := AData.AsString;
+  end;
+
+begin
+  Result := nil;
+  cnt := FOption.ComponentCount('series');
+  d := APayload.Find('seriesIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    if d is TJSONArray then
+    begin
+      for k := 0 to TJSONArray(d).Count - 1 do
+        if TJSONArray(d).Items[k].JSONType = jtNumber then
+        begin
+          n := Trunc(TJSONArray(d).Items[k].AsFloat);
+          if (n >= 0) and (n < cnt) then Add(n);
+        end;
+    end
+    else if d.JSONType = jtNumber then
+    begin
+      n := Trunc(d.AsFloat);
+      if (n >= 0) and (n < cnt) then Add(n);
+    end;
+    Exit;
+  end;
+  byId := True;
+  d := APayload.Find('seriesId');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    byId := False;
+    d := APayload.Find('seriesName');
+  end;
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    for i := 0 to cnt - 1 do Add(i);
+    Exit;
+  end;
+  want := nil;
+  if d is TJSONArray then
+  begin
+    for k := 0 to TJSONArray(d).Count - 1 do
+      if KeyText(TJSONArray(d).Items[k], v) then
+      begin
+        SetLength(want, Length(want) + 1);
+        want[High(want)] := v;
+      end;
+  end
+  else if KeyText(d, v) then
+  begin
+    SetLength(want, 1);
+    want[0] := v;
+  end;
+  for i := 0 to cnt - 1 do
+  begin
+    if byId then v := SeriesModelId(i) else v := SeriesModelName(i);
+    for k := 0 to High(want) do
+      if want[k] = v then
+      begin
+        Add(i);
+        Break;
+      end;
+  end;
+end;
+
+{ queryDataIndex (util/model.ts:704-726): dataIndexInside as it is, else
+  dataIndex (raw) through indexOfRawIndex, else name -- the first inner index
+  of that name. False when the payload names no item at all. }
+function TTyAdvanceChart.QueryDataIndex(ASlot: Integer; APayload: TJSONObject;
+  out AInner: TTyIntegerArray): Boolean;
+var
+  d: TJSONData;
+  st: TTyDataStore;
+  mode, k: Integer;
+
+  function One(AItem: TJSONData): Integer;
+  var i: Integer; nm: string;
+  begin
+    Result := -1;
+    if mode = 2 then
+    begin
+      if not (AItem.JSONType in [jtString, jtNumber]) then Exit;
+      nm := AItem.AsString;
+      for i := 0 to st.Count - 1 do
+        if st.GetItemName(i) = nm then Exit(i);
+      Exit;
+    end;
+    if AItem.JSONType <> jtNumber then Exit;
+    if Frac(AItem.AsFloat) <> 0 then Exit;
+    i := Trunc(AItem.AsFloat);
+    if mode = 0 then Result := i
+    else Result := st.IndexOfRawIndex(i);
+  end;
+
+begin
+  AInner := nil;
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FStores[ASlot];
+  mode := 0;
+  d := APayload.Find('dataIndexInside');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    mode := 1;
+    d := APayload.Find('dataIndex');
+  end;
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    mode := 2;
+    d := APayload.Find('name');
+  end;
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  Result := True;
+  if d is TJSONArray then
+  begin
+    SetLength(AInner, TJSONArray(d).Count);
+    for k := 0 to TJSONArray(d).Count - 1 do
+      AInner[k] := One(TJSONArray(d).Items[k]);
+  end
+  else
+  begin
+    SetLength(AInner, 1);
+    AInner[0] := One(d);
+  end;
+end;
+
+{ model/Series.ts's id: the written one, else '\0' + name + '\0' + n, n the
+  first number no earlier series took (util/model.ts:500-525) }
+function TTyAdvanceChart.SeriesModelId(ASeriesIndex: Integer): string;
+var
+  ids: TTyStringArray;
+  i, k, num: Integer;
+  n, d: TJSONData;
+  taken: Boolean;
+  cand: string;
+begin
+  Result := '';
+  ids := nil;
+  SetLength(ids, ASeriesIndex + 1);
+  { the written ids first: they are reserved before any is generated }
+  for i := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    n := FOption.ComponentAt('series', i);
+    if not (n is TJSONObject) then Continue;
+    d := TJSONObject(n).Find('id');
+    if (d <> nil) and (d.JSONType in [jtString, jtNumber]) and (i <= ASeriesIndex) then
+      ids[i] := d.AsString;
+  end;
+  for i := 0 to ASeriesIndex do
+  begin
+    if ids[i] <> '' then Continue;
+    num := 0;
+    repeat
+      cand := #0 + SeriesModelName(i) + #0 + IntToStr(num);
+      Inc(num);
+      taken := False;
+      for k := 0 to High(ids) do
+        if ids[k] = cand then taken := True;
+    until not taken;
+    ids[i] := cand;
+  end;
+  Result := ids[ASeriesIndex];
+end;
+
+function TTyAdvanceChart.HasChartHandler(const AType: string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(FEventRegs) do
+    if FEventRegs[i].EventType = AType then Exit(True);
+  Result := False;
+end;
+
+{ an action's event: no params, no pointer, the object as JSON; a query
+  never filters it (upstream's eventInfo is empty for these) }
+procedure TTyAdvanceChart.EmitPayloadEvent(const AType, APayloadJson: string);
+var
+  ev: TTyChartEvent;
+  regs: array of TTyChartEventReg;
+  i: Integer;
+begin
+  ev := Default(TTyChartEvent);
+  ev.EventType := AType;
+  ev.HasParams := False;
+  ev.Params := TyChartBlankParams;
+  ev.HasOffset := False;
+  ev.Payload := APayloadJson;
+  if Assigned(FOnChartEvent) then FOnChartEvent(Self, ev);
+  regs := Copy(FEventRegs);
+  for i := 0 to High(regs) do
+    if regs[i].EventType = AType then regs[i].Handler(Self, ev);
+end;
+
+function JsTruthy(AData: TJSONData): Boolean;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit(False);
+  case AData.JSONType of
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+procedure TTyAdvanceChart.DoSelectAction(APayload: TJSONObject);
+var
+  t, lt, sel, selMap, nm: string;
+  series, inner: TTyIntegerArray;
+  i, k, slot, s, kind: Integer;
+  data: TTySelData;
+  idx: TTyIntegerArray;
+  ev, fromPayload: TJSONObject;
+  d: TJSONData;
+  legacy: array[0..1] of string;
+  post: string;
+begin
+  t := APayload.Strings['type'];
+  if t = 'select' then kind := 0 else if t = 'unselect' then kind := 1 else kind := 2;
+  { updateDirectly: every series the query names }
+  series := MatchSeries(APayload);
+  for i := 0 to High(series) do
+  begin
+    slot := SlotOfSeries(series[i]);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    SelEnsure(slot);
+    s := series[i];
+    if (s > High(FSel)) or not FSelInit[s] then Continue;
+    { a graph's links are not this model's data }
+    d := APayload.Find('dataType');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge') then Continue;
+    if not QueryDataIndex(slot, APayload, inner) then Continue;
+    data := SelData(slot);
+    case kind of
+      0: TySelSelect(FSel[s], data, inner);
+      1: TySelUnselect(FSel[s], data, inner);
+    else
+      TySelToggle(FSel[s], data, inner);
+    end;
+    SelSyncFlags(slot);
+  end;
+  if FStDirty then InvalidateFrame;
+
+  { THE EVENTS. First the action's own, a copy of the payload with the type
+    lowercased; then selectchanged }
+  lt := LowerCase(t);
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Strings['type'] := lt;
+    EmitPayloadEvent(lt, ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+  { getAllSelectedIndices: the shown series with a selection, in order }
+  sel := '';
+  for slot := 0 to High(FBindings) do
+  begin
+    if FBindings[slot].Hidden then Continue;
+    s := FBindings[slot].SeriesIndex;
+    if (s < 0) or (s > High(FSel)) or not FSelInit[s] then Continue;
+    idx := TySelIndices(FSel[s], SelData(slot));
+    if Length(idx) = 0 then Continue;
+    if sel <> '' then sel := sel + ',';
+    sel := sel + '{"dataIndex":[';
+    for k := 0 to High(idx) do
+    begin
+      if k > 0 then sel := sel + ',';
+      sel := sel + IntToStr(idx[k]);
+    end;
+    sel := sel + '],"seriesIndex":' + IntToStr(s) + '}';
+  end;
+  d := APayload.Find('isFromClick');
+  if JsTruthy(d) then post := d.AsJSON else post := 'false';
+  EmitPayloadEvent('selectchanged', '{"type":"selectchanged","selected":[' + sel
+    + '],"isFromClick":' + post + ',"fromAction":' + '"' + StringToJSONString(t)
+    + '","fromActionPayload":' + APayload.AsJSON + ',"escapeConnect":true}');
+
+  { THE LEGACY EVENTS (legacy/dataSelectAction.ts), only to a handler that
+    asked: a click -> map/pie selectchanged, an action select -> selected,
+    unselect -> unselected; once per PIE series in the selection, the map
+    variant included }
+  if JsTruthy(APayload.Find('isFromClick')) then post := 'selectchanged'
+  else if t = 'select' then post := 'selected'
+  else if t = 'unselect' then post := 'unselected'
+  else post := '';
+  if post = '' then Exit;
+  legacy[0] := 'map' + post;
+  legacy[1] := 'pie' + post;
+  for k := 0 to 1 do
+  begin
+    if not HasChartHandler(legacy[k]) then Continue;
+    for slot := 0 to High(FBindings) do
+    begin
+      if FBindings[slot].SeriesType <> TyPieSeriesTypeName then Continue;
+      if FBindings[slot].Hidden then Continue;
+      s := FBindings[slot].SeriesIndex;
+      if (s < 0) or (s > High(FSel)) or not FSelInit[s] then Continue;
+      if Length(TySelIndices(FSel[s], SelData(slot))) = 0 then Continue;
+      nm := '';
+      fromPayload := APayload;
+      if QueryDataIndex(slot, fromPayload, inner) and (Length(inner) > 0)
+        and (inner[0] >= 0) and (inner[0] < FStores[slot].Count) then
+        nm := FStores[slot].GetItemName(inner[0]);
+      selMap := TySelMapJson(FSel[s]);
+      EmitPayloadEvent(legacy[k], '{"type":"' + legacy[k] + '","seriesId":"'
+        + StringToJSONString(SeriesModelId(s)) + '","name":"'
+        + StringToJSONString(nm) + '","selected":' + selMap + '}');
+    end;
+  end;
+end;
+
+{ highlight / downplay: the event, and the emphasis by action on the
+  queried items (all of a series when none) -- the bit of highlightKey's
+  digit, or 0. The blur that goes with them is B2's. }
+procedure TTyAdvanceChart.DoHighDownAction(APayload: TJSONObject);
+var
+  t, key: string;
+  series, inner: TTyIntegerArray;
+  excl: TTyStringArray;
+  i, k, slot, s, digit, raw: Integer;
+  d: TJSONData;
+  item: PTyStItem;
+  skip, all: Boolean;
+  ev: TJSONObject;
+
+  procedure Apply(var AEl: TTyStElement);
+  var was: Integer;
+  begin
+    { only a highDownDispatcher: emphasis not disabled }
+    if not AEl.Exists or not AEl.Proxy then Exit;
+    was := AEl.HoverState;
+    if t = 'highlight' then TyStEnterEmphasisBy(AEl, digit)
+    else TyStLeaveEmphasisBy(AEl, digit);
+    if AEl.HoverState <> was then
+    begin
+      FStDirty := True;
+      if FSt[s].IsLine then
+      begin
+        FSt[s].Run.Host.HoverState := AEl.HoverState;
+        FSt[s].Area.Host.HoverState := AEl.HoverState;
+      end;
+    end;
+  end;
+
+begin
+  t := APayload.Strings['type'];
+  { getHighlightDigit: in order of first use, 1 to 32, then bit 0 }
+  digit := 0;
+  d := APayload.Find('highlightKey');
+  if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+  begin
+    key := d.AsString;
+    digit := -1;
+    for i := 0 to High(FHighlightKeys) do
+      if FHighlightKeys[i] = key then digit := i + 1;
+    if (digit < 0) and (Length(FHighlightKeys) < 32) then
+    begin
+      SetLength(FHighlightKeys, Length(FHighlightKeys) + 1);
+      FHighlightKeys[High(FHighlightKeys)] := key;
+      digit := Length(FHighlightKeys);
+    end;
+    if digit < 0 then digit := 0;
+  end;
+  excl := nil;
+  d := APayload.Find('excludeSeriesId');
+  if d is TJSONArray then
+  begin
+    for k := 0 to TJSONArray(d).Count - 1 do
+      if TJSONArray(d).Items[k].JSONType in [jtString, jtNumber] then
+      begin
+        SetLength(excl, Length(excl) + 1);
+        excl[High(excl)] := TJSONArray(d).Items[k].AsString;
+      end;
+  end
+  else if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+  begin
+    SetLength(excl, 1);
+    excl[0] := d.AsString;
+  end;
+  series := MatchSeries(APayload);
+  for i := 0 to High(series) do
+  begin
+    s := series[i];
+    skip := False;
+    for k := 0 to High(excl) do
+      if excl[k] = SeriesModelId(s) then skip := True;
+    if skip then Continue;
+    if (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    slot := SlotOfSeries(s);
+    all := not QueryDataIndex(slot, APayload, inner);
+    if all then
+    begin
+      for raw := 0 to High(FSt[s].Rows) do
+        Apply(FSt[s].Rows[raw].Host);
+      { a line's whole series: its polyline too }
+      if FSt[s].IsLine then Apply(FSt[s].Run.Host);
+    end
+    else
+      for k := 0 to High(inner) do
+      begin
+        item := StItemAt(s, inner[k]);
+        if item <> nil then Apply(item^.Host);
+      end;
+  end;
+  if FStDirty then InvalidateFrame;
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Strings['type'] := t;
+    EmitPayloadEvent(t, ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
+function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
+var
+  d, tp: TJSONData;
+  p: TJSONObject;
+  t: string;
+begin
+  Result := False;
+  try
+    d := GetJSON(APayloadJson);
+  except
+    d := nil;
+  end;
+  if not (d is TJSONObject) then
+  begin
+    d.Free;
+    Exit;
+  end;
+  p := TJSONObject(d);
+  try
+    tp := p.Find('type');
+    if (tp = nil) or (tp.JSONType <> jtString) then Exit;
+    { a batch is not taken: its events are a different shape }
+    if p.Find('batch') <> nil then Exit;
+    t := tp.AsString;
+    if (t = 'select') or (t = 'unselect') or (t = 'toggleSelect') then
+    begin
+      DoSelectAction(p);
+      Result := True;
+    end
+    else if (t = 'highlight') or (t = 'downplay') then
+    begin
+      DoHighDownAction(p);
+      Result := True;
+    end;
+  finally
+    p.Free;
+  end;
+end;
+
+{ echarts.ts:2341-2357: the first element on the chain with a dataIndex --
+  a data item, a label for its host -- dispatches unselect when it is
+  selected, select otherwise, whatever selectedMode says }
+procedure TTyAdvanceChart.StClickSelect(const ATarget: TTyChartEventTarget);
+var
+  slot, s: Integer;
+  selected: Boolean;
+  p: string;
+begin
+  if not (ATarget.HdKind in [1, 3]) then Exit;
+  s := ATarget.HdSeries;
+  slot := SlotOfSeries(s);
+  if slot < 0 then Exit;
+  selected := False;
+  { a marker's element is never flagged selected: always select }
+  if (ATarget.HdKind = 1) and not ATarget.HdEdge then
+  begin
+    SelEnsure(slot);
+    if (s <= High(FSel)) and FSelInit[s] then
+      selected := TySelIsSelected(FSel[s], SelData(slot), ATarget.HdRow);
+  end;
+  if selected then p := '{"type":"unselect"' else p := '{"type":"select"';
+  { a graph's data type rides along }
+  if (ATarget.HdKind = 1) and (FBindings[slot].SeriesType = TyGraphSeriesTypeName) then
+  begin
+    if ATarget.HdEdge then p := p + ',"dataType":"edge"'
+    else p := p + ',"dataType":"node"';
+  end;
+  p := p + ',"dataIndexInside":' + IntToStr(ATarget.HdRow) + ',"seriesIndex":'
+    + IntToStr(s) + ',"isFromClick":true}';
+  DispatchAction(p);
+end;
+
+function TTyAdvanceChart.SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if slot < 0 then Exit;
+  SelEnsure(slot);
+  if (ASeriesIndex > High(FSel)) or not FSelInit[ASeriesIndex] then Exit;
+  Result := TySelIndices(FSel[ASeriesIndex], SelData(slot));
+end;
+
+function TTyAdvanceChart.SelectedMapText(ASeriesIndex: Integer): string;
+var slot: Integer;
+begin
+  Result := 'null';
+  slot := SlotOfSeries(ASeriesIndex);
+  if slot >= 0 then SelEnsure(slot);
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSel)) or not FSelInit[ASeriesIndex] then Exit;
+  Result := TySelMapJson(FSel[ASeriesIndex]);
+end;
+
+function TTyAdvanceChart.ItemStates(ASeriesIndex, ADataIndex: Integer;
+  out AItem: TTyStItem): Boolean;
+var item: PTyStItem;
+begin
+  AItem := Default(TTyStItem);
+  item := StItemAt(ASeriesIndex, ADataIndex);
+  Result := item <> nil;
+  if Result then AItem := item^;
+end;
+
+function TTyAdvanceChart.LineStates(ASeriesIndex: Integer; out ARun,
+  AArea: TTyStItem): Boolean;
+begin
+  ARun := Default(TTyStItem);
+  AArea := Default(TTyStItem);
+  Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and FSt[ASeriesIndex].IsLine and FSt[ASeriesIndex].Run.Host.Exists;
+  if not Result then Exit;
+  ARun := FSt[ASeriesIndex].Run;
+  AArea := FSt[ASeriesIndex].Area;
 end;
 
 function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
@@ -10720,7 +12224,7 @@ procedure TTyAdvanceChart.PaintEmphasis(APainter: TTyPainter; APPI: Integer;
 var
   list: TTyPaintList;
   el: TTyChartElement;
-  i, k, slot: Integer;
+  i, j, k, slot: Integer;
 
   procedure Lift(AIndex: Integer);
   var j: Integer; cap: TTyChartElement;
@@ -10766,11 +12270,16 @@ begin
       begin
         slot := AHits[i].Slots[k];
         if (slot < 0) or (slot > High(FBindings)) then Continue;
-        Lift(FPaintList.IndexOfDatum(FBindings[slot].SeriesIndex,
-          AHits[i].Rows[k]));
+        j := FPaintList.IndexOfDatum(FBindings[slot].SeriesIndex,
+          AHits[i].Rows[k]);
+        { a row the states already show in emphasis is drawn so in the static
+          layer [Batch 88] }
+        if not StEmphasised(j) then Lift(j);
       end;
-    { And an item hover highlights the one thing under the pointer. }
-    if Length(AHits) = 0 then Lift(FTipElement);
+    { And an item hover highlights the one thing under the pointer -- unless
+      it is one the states draw, whose hover is its flag [Batch 88]. }
+    if (Length(AHits) = 0) and not StOwnsElement(FTipElement) then
+      Lift(FTipElement);
     if list.Count > 0 then TyRenderPaintList(APainter, list);
   finally
     list.Free;
@@ -11894,6 +13403,9 @@ begin
     FStatic.Drop;
     FStaticPPI := APPI;
   end;
+  { upstream's frame: the flags become state lists, and a changed element
+    is a changed static layer [Batch 88] }
+  if StApplyChanged then FStatic.Drop;
 
   if FStatic.NeedsRender(w, h) then
   begin

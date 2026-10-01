@@ -155,6 +155,11 @@ type
       the hover's own. }
     EmphHasColour: Boolean;
     EmphColour: TTyChartColor;
+    { A STATE SHOWS WHAT THE NORMAL LABEL HIDES: `select.label.show`,
+      `emphasis.label.show` or `blur.label.show` true on the series.
+      zrender creates the label when any state shows it (needsCreateText) and
+      leaves it ignored at rest; the state flips it. [Batch 88] }
+    StateShow: Boolean;
     EmphHasBorderWidth: Boolean;
     EmphBorderWidthLogical: Double;
     EmphHasBorderColour, EmphBorderColourNone, EmphBorderColourInherit: Boolean;
@@ -879,7 +884,7 @@ begin
     if (host.Caption.ItemSpec > 0) and (si <= High(AItemSpecs))
       and (host.Caption.ItemSpec - 1 <= High(AItemSpecs[si])) then
       spec := AItemSpecs[si][host.Caption.ItemSpec - 1];
-    if not spec.Show then Continue;
+    if not (spec.Show or spec.StateShow) then Continue;
     if spec.Position = tlpNone then Continue;
 
     bounds := TyShapeBounds(host.Shape);
@@ -1030,6 +1035,8 @@ begin
       number has to report that bar. }
     cap.Silent := host.Silent;
     cap.Datum := host.Datum;
+    { built for a state only: hidden until the state shows it [Batch 88] }
+    cap.Ignore := not spec.Show;
     { THE ENTER ANIMATION'S VIEW: a label of this datum, fading in, and --
       unless the mark fixed its own anchor -- hanging off its host as the
       host grows: zrender recomputes a text's place from its host's current
