@@ -13,7 +13,7 @@ type
     TTyPainter.DrawText -- first offset by (ShadowOffsetX, ShadowOffsetY) logical
     px in ShadowColor, then the main text at the normal position in the theme's
     TextColor. Offsets are PPI-scaled through P.Scale. }
-  TTyShadowLabel = class(TTyGraphicControl)
+  TTyCustomShadowLabel = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLayout: TTextLayout;
@@ -54,9 +54,17 @@ type
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
+  protected
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
+    property ShadowColor: TTyColor read FShadowColor write SetShadowColor;
+    property ShadowOffsetX: Integer read FShadowOffsetX write SetShadowOffsetX default 1;
+    property ShadowOffsetY: Integer read FShadowOffsetY write SetShadowOffsetY default 1;
+  end;
+
+  { TTyShadowLabel publishes TTyCustomShadowLabel's properties; everything lives in TTyCustomShadowLabel. }
+  TTyShadowLabel = class(TTyCustomShadowLabel)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -103,16 +111,16 @@ type
     property Caption;
     property Align;
     property Anchors;
-    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
-    property ShadowColor: TTyColor read FShadowColor write SetShadowColor;
-    property ShadowOffsetX: Integer read FShadowOffsetX write SetShadowOffsetX default 1;
-    property ShadowOffsetY: Integer read FShadowOffsetY write SetShadowOffsetY default 1;
+    property Alignment;
+    property Layout;
+    property ShadowColor;
+    property ShadowOffsetX;
+    property ShadowOffsetY;
   end;
 
 implementation
 
-constructor TTyShadowLabel.Create(AOwner: TComponent);
+constructor TTyCustomShadowLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlignment := taLeftJustify;
@@ -122,7 +130,7 @@ begin
   FShadowOffsetY := 1;
 end;
 
-function TTyShadowLabel.GetStyleTypeKey: string;
+function TTyCustomShadowLabel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': it draws the caption twice, and the shadow pass is chrome a plain label has no notion of.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -130,47 +138,47 @@ begin
   Result := 'TyShadowLabel';
 end;
 
-function TTyShadowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomShadowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyShadowLabel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomShadowLabel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetLayout(AValue: TTextLayout);
+procedure TTyCustomShadowLabel.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetShadowColor(AValue: TTyColor);
+procedure TTyCustomShadowLabel.SetShadowColor(AValue: TTyColor);
 begin
   if FShadowColor = AValue then Exit;
   FShadowColor := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetShadowOffsetX(AValue: Integer);
+procedure TTyCustomShadowLabel.SetShadowOffsetX(AValue: Integer);
 begin
   if FShadowOffsetX = AValue then Exit;
   FShadowOffsetX := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetShadowOffsetY(AValue: Integer);
+procedure TTyCustomShadowLabel.SetShadowOffsetY(AValue: Integer);
 begin
   if FShadowOffsetY = AValue then Exit;
   FShadowOffsetY := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomShadowLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -194,7 +202,7 @@ begin
   end;
 end;
 
-procedure TTyShadowLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomShadowLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -223,7 +231,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyShadowLabel.TextChanged;
+procedure TTyCustomShadowLabel.TextChanged;
 begin
   inherited TextChanged;
   // The new caption needs a different width, so an auto-sized label must re-fit.
@@ -235,7 +243,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyShadowLabel.Invalidate;
+procedure TTyCustomShadowLabel.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch reaches every control as a bare Invalidate (TTyStyleController broadcasts
@@ -257,7 +265,7 @@ begin
   end;
 end;
 
-procedure TTyShadowLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomShadowLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -299,7 +307,7 @@ begin
   end;
 end;
 
-procedure TTyShadowLabel.Paint;
+procedure TTyCustomShadowLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

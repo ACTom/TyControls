@@ -68,7 +68,7 @@ type
     typeKey 'TyTag' for the pill; the x's chip + ink resolve from 'TyTagClose', whose
     :hover state is driven by the pointer being precisely over the GLYPH (not the pill),
     so the x lights up on its own. }
-  TTyTag = class(TTyGraphicControl)
+  TTyCustomTag = class(TTyGraphicControl)
   private
     FClosable: Boolean;
     FHoverClose: Boolean;     // pointer is precisely over the x
@@ -113,9 +113,15 @@ type
     { The close-glyph slot in DEVICE px, (0,0)-local — the exact rect the paint fills and
       the hit-test measures against; empty when not Closable. Exposed for tests. }
     function TyTagCloseRect: TRect;
+    { Shows the close (x) glyph and makes it live. Clicking it runs Close (OnClose, then
+      hide unless vetoed); the pill's own OnClick never fires for that gesture. }
+    property Closable: Boolean read FClosable write SetClosable default False;
+    property OnClose: TTyTagCloseEvent read FOnClose write FOnClose;
+  end;
+
+  { TTyTag publishes TTyCustomTag's properties; everything lives in TTyCustomTag. }
+  TTyTag = class(TTyCustomTag)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -158,10 +164,8 @@ type
     property StyleOverride;
     property Controller;
     property Caption;
-    { Shows the close (x) glyph and makes it live. Clicking it runs Close (OnClose, then
-      hide unless vetoed); the pill's own OnClick never fires for that gesture. }
-    property Closable: Boolean read FClosable write SetClosable default False;
-    property OnClose: TTyTagCloseEvent read FOnClose write FOnClose;
+    property Closable;
+    property OnClose;
     property Align;
     property Anchors;
   end;
@@ -218,9 +222,9 @@ begin
   end;
 end;
 
-{ TTyTag }
+{ TTyCustomTag }
 
-constructor TTyTag.Create(AOwner: TComponent);
+constructor TTyCustomTag.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FClosable := False;
@@ -230,17 +234,17 @@ begin
   Height := 22;
 end;
 
-function TTyTag.GetStyleTypeKey: string;
+function TTyCustomTag.GetStyleTypeKey: string;
 begin
   Result := 'TyTag';
 end;
 
-function TTyTag.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomTag.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyTag.SetClosable(AValue: Boolean);
+procedure TTyCustomTag.SetClosable(AValue: Boolean);
 begin
   if FClosable = AValue then Exit;
   FClosable := AValue;
@@ -258,7 +262,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTag.Close;
+procedure TTyCustomTag.Close;
 var
   allow: Boolean;
 begin
@@ -269,7 +273,7 @@ begin
   if allow then Visible := False;
 end;
 
-function TTyTag.LayoutFor(AWidth, AHeight, APPI: Integer): TTyTagLayout;
+function TTyCustomTag.LayoutFor(AWidth, AHeight, APPI: Integer): TTyTagLayout;
 var
   S: TTyStyleSet;
 begin
@@ -283,12 +287,12 @@ begin
     MulDiv(ActiveController.Metric('--tag-close-size', TyTagCloseSize), APPI, 96));
 end;
 
-function TTyTag.TyTagCloseRect: TRect;
+function TTyCustomTag.TyTagCloseRect: TRect;
 begin
   Result := LayoutFor(ClientWidth, ClientHeight, Font.PixelsPerInch).CloseRect;
 end;
 
-function TTyTag.PtOnClose(X, Y: Integer): Boolean;
+function TTyCustomTag.PtOnClose(X, Y: Integer): Boolean;
 var
   R: TRect;
 begin
@@ -297,7 +301,7 @@ begin
     and (Y >= R.Top) and (Y < R.Bottom);
 end;
 
-procedure TTyTag.MeasureCaption(APPI: Integer; out AWidthPx, AHeightPx: Integer);
+procedure TTyCustomTag.MeasureCaption(APPI: Integer; out AWidthPx, AHeightPx: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -324,7 +328,7 @@ begin
   end;
 end;
 
-procedure TTyTag.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomTag.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -347,7 +351,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTyTag.TextChanged;
+procedure TTyCustomTag.TextChanged;
 begin
   inherited TextChanged;
   if AutoSize then
@@ -358,7 +362,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTag.Click;
+procedure TTyCustomTag.Click;
 begin
   // See the declaration: Click runs BEFORE MouseUp, so a still-set FClosePressed means
   // this press started on the x — the close gesture owns it, the pill's OnClick does not
@@ -367,7 +371,7 @@ begin
   inherited Click;
 end;
 
-procedure TTyTag.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTag.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   closeHit: Boolean;
 begin
@@ -389,7 +393,7 @@ begin
   end;
 end;
 
-procedure TTyTag.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTag.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   wasClose: Boolean;
 begin
@@ -402,7 +406,7 @@ begin
     Close;
 end;
 
-procedure TTyTag.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTag.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Boolean;
 begin
@@ -416,7 +420,7 @@ begin
   end;
 end;
 
-procedure TTyTag.MouseLeave;
+procedure TTyCustomTag.MouseLeave;
 begin
   inherited MouseLeave;   // clears the pill's own hover
   if FHoverClose then
@@ -426,7 +430,7 @@ begin
   end;
 end;
 
-procedure TTyTag.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTag.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, closeS: TTyStyleSet;
@@ -490,7 +494,7 @@ begin
   end;
 end;
 
-procedure TTyTag.Paint;
+procedure TTyCustomTag.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

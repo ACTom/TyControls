@@ -25,7 +25,7 @@ uses
   Classes, SysUtils, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   test.customclasses,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
-  tyControls.ToolBarEx;
+  tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -51,6 +51,9 @@ type
     procedure TestSpeedButtonGroupTakesAThirdPartyMember;
     procedure TestThirdButton;
     procedure TestThirdSpeedButton;
+    { Task 3: labels }
+    procedure TestThirdLabel;
+    procedure TestThirdTag;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -67,6 +70,18 @@ type
     property Down;
   end;
 
+  TThirdLabel = class(TTyCustomLabel)
+  published
+    property Caption;
+    property WordWrap;
+  end;
+
+  TThirdTag = class(TTyCustomTag)
+  published
+    property Caption;
+    property Closable;
+  end;
+
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
 function StreamedText(AComp: TComponent): string;
 { Stream ASrc and read it back into ADst. }
@@ -80,6 +95,15 @@ type
   TP1ButtonCracker = class(TTyCustomButton)
   public
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+  end;
+
+  { Reaches the label's protected layout properties (D3: protected, as in TCustomLabel) and
+    its renderer. }
+  TP1LabelCracker = class(TTyCustomLabel)
+  public
+    procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+    procedure SetLayoutTo(AValue: TTextLayout);
+    function LayoutNow: TTextLayout;
   end;
 
   TP1ToolBar = class(TTyToolBar)
@@ -98,6 +122,21 @@ const
 procedure TP1ButtonCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TP1LabelCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TP1LabelCracker.SetLayoutTo(AValue: TTextLayout);
+begin
+  Layout := AValue;
+end;
+
+function TP1LabelCracker.LayoutNow: TTextLayout;
+begin
+  Result := Layout;
 end;
 
 procedure TP1ToolBar.ForceLayout;
@@ -420,7 +459,87 @@ begin
   AssertFalse('T-v: AllowAllUp is public through a TTyCustomSpeedButton reference', c.AllowAllUp);
 end;
 
+{ ------------------------------------------------------------------ Task 3: labels }
+
+procedure TTyCustomClassesP1Test.TestThirdLabel;
+var
+  third, back: TThirdLabel;
+  own: TTyLabel;
+  c: TTyCustomLabel;
+  bmA, bmB: TBitmap;
+  diff: string;
+begin
+  third := TThirdLabel.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(10, 10, 120, 20);
+  CheckPublishesOnly(TThirdLabel, ['Caption', 'WordWrap']);
+  third.Caption := 'Hello';
+  third.WordWrap := True;
+  { Layout is protected on the custom class, as on TCustomLabel: the mimic reaches it only
+    through a subclass of its own, and did not publish it. }
+  TP1LabelCracker(third).SetLayoutTo(tlBottom);
+  CheckStreamText(third, ['Caption', 'WordWrap'], 'Layout');
+  back := TThirdLabel.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'Hello', back.Caption);
+  AssertTrue('T-c: WordWrap round-trips', back.WordWrap);
+  AssertTrue('T-c: the unpublished Layout stayed at its default',
+    TP1LabelCracker(back).LayoutNow = tlCenter);
+  { T-d: the label is theme-locked and drawn entirely by the custom class, so a mimic with the
+    same caption and bounds is the same picture. }
+  own := TTyLabel.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(10, 40, 120, 20);
+  own.Caption := 'Hello';
+  third.WordWrap := False;
+  TP1LabelCracker(third).SetLayoutTo(tlCenter);
+  CheckSameTypeKey(third, own);
+  bmA := NewSentinelBitmap(120, 20);
+  bmB := NewSentinelBitmap(120, 20);
+  try
+    TP1LabelCracker(third).DoRender(bmA.Canvas, Rect(0, 0, 120, 20));
+    TP1LabelCracker(own).DoRender(bmB.Canvas, Rect(0, 0, 120, 20));
+    AssertTrue('T-d: the mimic paints exactly what TTyLabel paints: ' + diff,
+      SameBitmaps(bmA, bmB, diff));
+  finally
+    bmA.Free;
+    bmB.Free;
+  end;
+  CheckFreshDefaults(TThirdLabel, ['Caption', 'WordWrap']);
+  { T-v: Caption is public (TControl); the label's own properties are protected (TCustomLabel),
+    which is what the cracker above is for. }
+  c := third;
+  c.Caption := 'via the custom class';
+  AssertEquals('T-v', 'via the custom class', third.Caption);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdTag;
+var
+  third, back: TThirdTag;
+  own: TTyTag;
+  c: TTyCustomTag;
+begin
+  third := TThirdTag.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdTag, ['Caption', 'Closable']);
+  third.Caption := 'beta';
+  third.Closable := True;
+  third.Align := alTop;   // TTyTag publishes Align; the mimic does not
+  CheckStreamText(third, ['Caption', 'Closable'], 'Align');
+  back := TThirdTag.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'beta', back.Caption);
+  AssertTrue('T-c: Closable round-trips', back.Closable);
+  own := TTyTag.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTag, ['Caption', 'Closable']);
+  c := third;
+  c.Closable := False;
+  AssertFalse('T-v: Closable is public through a TTyCustomTag reference', third.Closable);
+end;
+
 initialization
-  RegisterClasses([TThirdButton, TThirdSpeedButton]);
+  RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

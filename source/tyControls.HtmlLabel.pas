@@ -44,7 +44,7 @@ type
 
   TTyHtmlLinkEvent = procedure(Sender: TObject; const AHref: string) of object;
 
-  TTyHtmlLabel = class(TTyCustomControl)
+  TTyCustomHtmlLabel = class(TTyCustomControl)
   private
     FHtml: string;
     FRuns: TTyHtmlRunArray;
@@ -79,9 +79,15 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
+  protected
+    property Html: string read FHtml write SetHtml;
+    property WordWrap: Boolean read FWordWrap write SetWordWrap default True;
+    property OnLinkClick: TTyHtmlLinkEvent read FOnLinkClick write FOnLinkClick;
+  end;
+
+  { TTyHtmlLabel publishes TTyCustomHtmlLabel's properties; everything lives in TTyCustomHtmlLabel. }
+  TTyHtmlLabel = class(TTyCustomHtmlLabel)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -132,9 +138,9 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Html: string read FHtml write SetHtml;
-    property WordWrap: Boolean read FWordWrap write SetWordWrap default True;
-    property OnLinkClick: TTyHtmlLinkEvent read FOnLinkClick write FOnLinkClick;
+    property Html;
+    property WordWrap;
+    property OnLinkClick;
     property Align;
     property Anchors;
   end;
@@ -410,9 +416,9 @@ begin
   ABmp.FontStyle := fs;
 end;
 
-{ ---- TTyHtmlLabel ---- }
+{ ---- TTyCustomHtmlLabel ---- }
 
-constructor TTyHtmlLabel.Create(AOwner: TComponent);
+constructor TTyCustomHtmlLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FWordWrap := True;
@@ -420,7 +426,7 @@ begin
   SetInitialBounds(0, 0, 120, 20);
 end;
 
-function TTyHtmlLabel.GetStyleTypeKey: string;
+function TTyCustomHtmlLabel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': it paints per-run fragments plus link underlines — marks a plain label has no concept of.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -428,7 +434,7 @@ begin
   Result := 'TyHtmlLabel';
 end;
 
-procedure TTyHtmlLabel.SetHtml(const AValue: string);
+procedure TTyCustomHtmlLabel.SetHtml(const AValue: string);
 begin
   if FHtml = AValue then Exit;
   FHtml := AValue;
@@ -442,7 +448,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyHtmlLabel.SetWordWrap(AValue: Boolean);
+procedure TTyCustomHtmlLabel.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
@@ -455,7 +461,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyHtmlLabel.BuildLayout(AContentLeft, AContentTop, AContentWidth, APPI: Integer;
+procedure TTyCustomHtmlLabel.BuildLayout(AContentLeft, AContentTop, AContentWidth, APPI: Integer;
   out AExtW, AExtH: Integer);
 var
   bmp: TBGRABitmap;
@@ -593,7 +599,7 @@ begin
   end;
 end;
 
-procedure TTyHtmlLabel.EnsureLayout;
+procedure TTyCustomHtmlLabel.EnsureLayout;
 var
   S: TTyStyleSet;
   ppi, cl, ct, cw, ew, eh: Integer;
@@ -610,7 +616,7 @@ begin
   BuildLayout(cl, ct, cw, ppi, ew, eh);
 end;
 
-function TTyHtmlLabel.LinkAt(X, Y: Integer): string;
+function TTyCustomHtmlLabel.LinkAt(X, Y: Integer): string;
 var
   ii: Integer;
   pt: TPoint;
@@ -622,13 +628,13 @@ begin
       Exit(FLayout[ii].Run.Href);
 end;
 
-procedure TTyHtmlLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+procedure TTyCustomHtmlLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
 begin
   inherited ShouldAutoAdjust(AWidth, AHeight);
   if AutoSize and FWordWrap then AWidth := True;
 end;
 
-procedure TTyHtmlLabel.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomHtmlLabel.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -655,7 +661,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTyHtmlLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+procedure TTyCustomHtmlLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
 var
   widthChanged: Boolean;
 begin
@@ -669,7 +675,7 @@ begin
   end;
 end;
 
-procedure TTyHtmlLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomHtmlLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, ov: TTyStyleSet;
@@ -736,12 +742,12 @@ begin
   end;
 end;
 
-procedure TTyHtmlLabel.Paint;
+procedure TTyCustomHtmlLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyHtmlLabel.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHtmlLabel.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   onLink: Boolean;
 begin
@@ -763,7 +769,7 @@ begin
   inherited MouseMove(Shift, X, Y);
 end;
 
-procedure TTyHtmlLabel.MouseLeave;
+procedure TTyCustomHtmlLabel.MouseLeave;
 begin
   if FOverLink then
   begin
@@ -773,7 +779,7 @@ begin
   inherited MouseLeave;
 end;
 
-procedure TTyHtmlLabel.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHtmlLabel.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   href: string;
 begin

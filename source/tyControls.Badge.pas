@@ -75,7 +75,7 @@ function TyBadgeCornerPos(const AHost: TRect; AW, AH, AInset: Integer;
   APosition: TTyBadgePosition): TPoint;
 
 type
-  TTyBadge = class(TTyGraphicControl)
+  TTyCustomBadge = class(TTyGraphicControl)
   private
     FTarget: TControl;
     FTargetHooked: Boolean;   // our bounds-follow handler is in FTarget's handler list
@@ -137,9 +137,29 @@ type
     function DisplayText: string;
     { Whether it currently draws anything (the Value / ShowZero rule). }
     function IsShowing: Boolean;
+    { The control this badge marks. Setting it MOVES the badge onto that control: a
+      windowed target becomes the badge's Parent (the badge then paints on the target's
+      own canvas, inside its client rect, exactly where TTyButton puts its built-in
+      badge); a windowless target cannot be a parent, so the badge joins it as a sibling
+      and anchors to its bounds. nil = standalone: an ordinary control the user places.
+      The badge follows the target's moves and resizes, and detaches by itself if the
+      target is freed. }
+    property Target: TControl read FTarget write SetTarget;
+    { The count. > 99 renders '99+' (TTyButton's rule). 0 hides the badge unless ShowZero. }
+    property Value: Integer read FValue write SetValue default 0;
+    { Show a 0 count instead of hiding the badge. }
+    property ShowZero: Boolean read FShowZero write SetShowZero default False;
+    { Draw a plain dot (--badge-dot-size across) instead of the number: 'something is
+      here' without a count. Value still decides whether it shows (with ShowZero). }
+    property Dot: Boolean read FDot write SetDot default False;
+    { Which corner of the target the badge sits in, inset like TTyButton's badge.
+      Same default as TTyButton.BadgePosition. Inert while standalone (no host corner). }
+    property Position: TTyBadgePosition read FPosition write SetPosition default bpBottomRight;
+  end;
+
+  { TTyBadge publishes TTyCustomBadge's properties; everything lives in TTyCustomBadge. }
+  TTyBadge = class(TTyCustomBadge)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -179,24 +199,11 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    { The control this badge marks. Setting it MOVES the badge onto that control: a
-      windowed target becomes the badge's Parent (the badge then paints on the target's
-      own canvas, inside its client rect, exactly where TTyButton puts its built-in
-      badge); a windowless target cannot be a parent, so the badge joins it as a sibling
-      and anchors to its bounds. nil = standalone: an ordinary control the user places.
-      The badge follows the target's moves and resizes, and detaches by itself if the
-      target is freed. }
-    property Target: TControl read FTarget write SetTarget;
-    { The count. > 99 renders '99+' (TTyButton's rule). 0 hides the badge unless ShowZero. }
-    property Value: Integer read FValue write SetValue default 0;
-    { Show a 0 count instead of hiding the badge. }
-    property ShowZero: Boolean read FShowZero write SetShowZero default False;
-    { Draw a plain dot (--badge-dot-size across) instead of the number: 'something is
-      here' without a count. Value still decides whether it shows (with ShowZero). }
-    property Dot: Boolean read FDot write SetDot default False;
-    { Which corner of the target the badge sits in, inset like TTyButton's badge.
-      Same default as TTyButton.BadgePosition. Inert while standalone (no host corner). }
-    property Position: TTyBadgePosition read FPosition write SetPosition default bpBottomRight;
+    property Target;
+    property Value;
+    property ShowZero;
+    property Dot;
+    property Position;
     { The badge is always its natural (measured) size, so there is no Align/AutoSize to
       publish; Anchors is for standalone use — an attached badge is placed by Target. }
     property Anchors;
@@ -248,9 +255,9 @@ begin
   end;
 end;
 
-{ --- TTyBadge ----------------------------------------------------------------- }
+{ --- TTyCustomBadge ----------------------------------------------------------- }
 
-constructor TTyBadge.Create(AOwner: TComponent);
+constructor TTyCustomBadge.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FValue := 0;
@@ -265,7 +272,7 @@ begin
   ApplyNaturalSize;
 end;
 
-destructor TTyBadge.Destroy;
+destructor TTyCustomBadge.Destroy;
 begin
   // Unhook while the target is still alive: it would otherwise keep a dangling method
   // pointer in its handler list and AV on its next bounds change.
@@ -273,25 +280,25 @@ begin
   inherited Destroy;
 end;
 
-function TTyBadge.GetStyleTypeKey: string;
+function TTyCustomBadge.GetStyleTypeKey: string;
 begin
   // The same key TTyButton.DrawBadge resolves: one theme rule drives both badges.
   Result := 'TyBadge';
 end;
 
-function TTyBadge.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomBadge.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-function TTyBadge.DotSizeLogical: Integer;
+function TTyCustomBadge.DotSizeLogical: Integer;
 begin
   // v3/C metric token: a skin can retune the dot without a width/height vocabulary.
   Result := ActiveController.Metric(TyBadgeDotSizeVar, TyBadgeDotSize);
   if Result < 1 then Result := 1;
 end;
 
-function TTyBadge.InsetLogical: Integer;
+function TTyCustomBadge.InsetLogical: Integer;
 begin
   // Resolved exactly as TTyButton.DrawBadge resolves it, so an attached badge keeps
   // landing on the pixels the button's built-in badge would have used.
@@ -299,53 +306,53 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyBadge.MinSizeLogical: Integer;
+function TTyCustomBadge.MinSizeLogical: Integer;
 begin
   Result := ActiveController.Metric(TyBadgeMinSizeVar, TyBadgeMinSize);
   if Result < 1 then Result := 1;
 end;
 
-function TTyBadge.DisplayText: string;
+function TTyCustomBadge.DisplayText: string;
 begin
   Result := TyBadgeText(FValue, FDot);
 end;
 
-function TTyBadge.IsShowing: Boolean;
+function TTyCustomBadge.IsShowing: Boolean;
 begin
   Result := TyBadgeVisible(FValue, FShowZero);
 end;
 
 { --- property setters --------------------------------------------------------- }
 
-procedure TTyBadge.SetValue(AValue: Integer);
+procedure TTyCustomBadge.SetValue(AValue: Integer);
 begin
   if FValue = AValue then Exit;
   FValue := AValue;
   Invalidate;   // re-measures (the text width changed) and repaints
 end;
 
-procedure TTyBadge.SetShowZero(AValue: Boolean);
+procedure TTyCustomBadge.SetShowZero(AValue: Boolean);
 begin
   if FShowZero = AValue then Exit;
   FShowZero := AValue;
   Invalidate;
 end;
 
-procedure TTyBadge.SetDot(AValue: Boolean);
+procedure TTyCustomBadge.SetDot(AValue: Boolean);
 begin
   if FDot = AValue then Exit;
   FDot := AValue;
   Invalidate;   // dot <-> pill is a size change, not just a repaint
 end;
 
-procedure TTyBadge.SetPosition(AValue: TTyBadgePosition);
+procedure TTyCustomBadge.SetPosition(AValue: TTyBadgePosition);
 begin
   if FPosition = AValue then Exit;
   FPosition := AValue;
   UpdateAttachment;   // a different corner of the same host
 end;
 
-procedure TTyBadge.SetTarget(AValue: TControl);
+procedure TTyCustomBadge.SetTarget(AValue: TControl);
 begin
   if FTarget = AValue then Exit;
   if AValue = Self then Exit;   // a badge cannot mark itself
@@ -359,7 +366,7 @@ end;
 
 { --- target following --------------------------------------------------------- }
 
-procedure TTyBadge.HookTarget;
+procedure TTyCustomBadge.HookTarget;
 begin
   if (FTarget = nil) or FTargetHooked then Exit;
   // Observe the target's bounds WITHOUT stealing its OnChangeBounds: LCL keeps a handler
@@ -368,14 +375,14 @@ begin
   FTargetHooked := True;
 end;
 
-procedure TTyBadge.UnhookTarget;
+procedure TTyCustomBadge.UnhookTarget;
 begin
   if (FTarget = nil) or not FTargetHooked then Exit;
   FTarget.RemoveHandlerOnChangeBounds(@TargetBoundsChanged);
   FTargetHooked := False;
 end;
 
-procedure TTyBadge.TargetBoundsChanged(Sender: TObject);
+procedure TTyCustomBadge.TargetBoundsChanged(Sender: TObject);
 begin
   // The target moved or resized, so its corner did too. UpdateAttachment (not just
   // ApplyNaturalSize) because this is also where a target that only got its Parent
@@ -384,7 +391,7 @@ begin
   UpdateAttachment;
 end;
 
-procedure TTyBadge.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomBadge.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FTarget) then
@@ -398,7 +405,7 @@ begin
   end;
 end;
 
-procedure TTyBadge.Loaded;
+procedure TTyCustomBadge.Loaded;
 begin
   inherited Loaded;
   // Target is a component REFERENCE: the streamer fixes it up only once the whole form
@@ -409,7 +416,7 @@ end;
 
 { --- geometry ----------------------------------------------------------------- }
 
-function TTyBadge.AnchorHost(out AHost: TRect): Boolean;
+function TTyCustomBadge.AnchorHost(out AHost: TRect): Boolean;
 begin
   Result := False;
   AHost := Rect(0, 0, 0, 0);
@@ -430,7 +437,7 @@ begin
   end;
 end;
 
-procedure TTyBadge.ApplyNaturalSize;
+procedure TTyCustomBadge.ApplyNaturalSize;
 var
   sz: TSize;
   pt: TPoint;
@@ -456,7 +463,7 @@ begin
   end;
 end;
 
-procedure TTyBadge.UpdateAttachment;
+procedure TTyCustomBadge.UpdateAttachment;
 begin
   if (not FReady) or (csDestroying in ComponentState) then Exit;
   if csLoading in ComponentState then Exit;
@@ -481,14 +488,14 @@ begin
   ApplyNaturalSize;
 end;
 
-procedure TTyBadge.Invalidate;
+procedure TTyCustomBadge.Invalidate;
 begin
   inherited Invalidate;
   // FUpdatingBounds keeps the SetBounds this triggers from re-entering.
   ApplyNaturalSize;
 end;
 
-function TTyBadge.MeasureBadge(APPI: Integer): TSize;
+function TTyCustomBadge.MeasureBadge(APPI: Integer): TSize;
 { Measures with a CANVAS-LESS painter — the tyControls.Form idiom: BeginPaint(nil, ...)
   builds only the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so
   this is safe outside a paint cycle and leaks nothing. It has to be the painter and not
@@ -519,7 +526,7 @@ end;
 
 { --- input -------------------------------------------------------------------- }
 
-procedure TTyBadge.CMHitTest(var Message: TCMHitTest);
+procedure TTyCustomBadge.CMHitTest(var Message: TCMHitTest);
 begin
   inherited;              // TControl.CMHitTest answers 1 (a normal hit)
   if FTarget <> nil then
@@ -528,7 +535,7 @@ end;
 
 { --- painting ----------------------------------------------------------------- }
 
-procedure TTyBadge.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomBadge.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -582,7 +589,7 @@ begin
   end;
 end;
 
-procedure TTyBadge.Paint;
+procedure TTyCustomBadge.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
