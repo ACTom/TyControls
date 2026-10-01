@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, fpcunit, testregistry, Forms, Controls, StdCtrls,
   Graphics, BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.TyLabel, tyControls.Painter, tyControls.Controller,
-  tyControls.ToolBar;
+  tyControls.ToolBar, test.captionfit;
 type
   TTyLabelAccess = class(TTyLabel)
   public
@@ -56,6 +56,7 @@ type
     procedure TestWrappingFloorDoesNotMoveWithTheWidth;
     procedure TestSmallerFontLowersTheMinimum;
     procedure TestMinimumSurvivesAHeightPinningParent;
+    procedure TestAutoSizedLabelDrawsItsWholeCaption;
   end;
 implementation
 
@@ -743,6 +744,31 @@ begin
     AssertEquals('a label announces itself as one',
       Ord(larLabel), Ord(L.AccessibleRole));
   finally L.Free; end;
+end;
+
+{ An AutoSize label draws the caption it measured, whole. A label never ellipsises, so a
+  canvas width that came out short did not show as "..." here: the last letter was simply cut
+  off at the label's edge ("previe" and half a w). See test.captionfit. }
+procedure TLabelSizeFloorTest.TestAutoSizedLabelDrawsItsWholeCaption;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  L: TTyLabelAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    Form.Color := clWhite;
+    L := TTyLabelAccess.Create(Form);
+    L.Parent := Form;
+    L.Controller := Ctl;
+    L.Font.PixelsPerInch := 96;
+    L.AutoSize := True;
+    CheckAutoSizeDrawsWholeCaption(Ctl, L, 'TyLabel', @L.RenderTo, False);
+  finally
+    Form.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization
