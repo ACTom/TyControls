@@ -1638,4 +1638,159 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## 签收
 
-（Task 11 填写：起点与提交、期末审查的处理、集中变异、测试结果、刷新耗时、主控已做、与规格不符之处的写回、计划外发现、遗留。）
+签收日期 2026-10-01。起点 `f87c46c6`（1 期签收、主控冒烟之后）；本期提交 `6e4d1254`..`eab654f5`（中间的 `ba0df847` 是 3 期计划 agent 的提交，不属本期）。实现 agent 做了 Task 0–10、Task 11 能做的部分（一次编译含工具工程、本期 suite、全量、集中修红、`.po` 脚本、按 spec 逐条核代码、集中变异、写回 spec）与 Task 12；标【主控执行】的（编两个 `.lpk`、截图、GUI 冒烟、派期末审查）没做，见「主控要做的」。库（`source/`、`designtime/`）一个字节没改。
+
+### 提交表
+
+| 任务 | 提交 | 内容 |
+|---|---|---|
+| Task 0 | —（`9e71f6f1` 记开工核对） | 基线编译与全量；对照 1 期期末修复核对计划，调整写在「开工前要定的问题」之前 |
+| Task 1 | `6e4d1254` | `tbcssscan`：容错扫描、偏移与行列、文本改动 |
+| Task 2 | `7393721e` | `tbseeds`：种子的定位、改写、拆成两套 |
+| Task 3 | `51bb6070` | `TTbSeedEval`、种子页 frame |
+| Task 4 | `073cee64` | `tbrules` |
+| Task 5 | `2c040679` | `tbpick`，预览挂钩 |
+| Task 6 | `607e6682` | 覆盖检查（算法、子部件表、对话框） |
+| Task 7 | `e72ec61f` | 导出主题包与对话框 |
+| Task 8 | `8ba0753c` | 代码片段与小窗，片段编进测试工程 |
+| Task 9 | `e51f9519` | 主窗体接线，1 期 F1 / F11 / I1 跟着改，F29–F39 |
+| Task 10 | `d798aa0d` | 中文 `.lfm` 条目与代码条目译文 |
+| Task 11 修红 | `6cf9daa8` | FPC 注释里引号中的 `}` 提前结束注释（`tbcssscan`、`tbseeds`） |
+| | `17da53b8` | 局部变量与继承属性同名（`Show`、`Color`、`Note`、`Font`、`Text`、`Doc`）；`TbCoverage` 与单元同名、改名 `TbCoverageLists`；测试单元缺 `Forms`（`TModalResult`） |
+| | `80d5e7e0` | 只有扩展名的文件名（`.tycss`）得到默认主题名（S6） |
+| | `50b71ad7` | 测试：交给控件的按下会抓鼠标、要窗口句柄——P2、P3、P7 把 frame 放到一个不显示的窗体上 |
+| | `1a29b1e3` | `example-rsj2po.py` 补进 26 条代码条目 |
+| | `4f900970` | 测试：S3 加「片段正文调用的名字，其单元在片段的 uses 行里」 |
+| | `f453159d` | 测试：刷新耗时（打印，> 1.5 s 才红） |
+| 变异补强 | `d3f5809d` | C14 换成改变长度的改动；P3 加 `OnMouseUp` 计数 |
+| | `eab654f5` | CV2 夹具加一个文档写了、底层没有的键 |
+| Task 11 / 12 | 本提交、下一提交 | 签收、spec 写回；验收文档 |
+
+### 测试结果
+
+- 基线（`f87c46c6`，`tests/tytests-tb2base.exe`）全量：8679 / 0 errors / 3 failures（12 分 29 秒）。三条里两条是我在跑基线时写进工作区的新文件造成的（F11「磁盘上的单元都在工程里」看到了还没登记的 `tbexport.pas`；I3 看到了还没译的 `rsTbCovUnknownKey`）；第三条 `TTyStringGridTest.TestBulkFillStaysLinear`（「第 1 批 110 ms，第 9 批 406 ms」）是计时类，单跑两次都绿，另一棵树同时在跑全量。
+- 首次编译后：本期八个 suite 与 1 期、相关库 suite 全绿（列表见「跑测试的固定套路」）；TTbCssScanTests 14、TTbRulesTests 7、TTbSeedEditTests 13、TTbSeedsFrameTests 11、TTbPickTests 9、TTbCoverageTests 7、TTbExportTests 11、TTbSnippetsTests 7、TTbMainFormTests 44（1 期 33 + 本期 11）。
+- 修红后全量（`1a29b1e3` 之后的构建）：8769 / 0 / 0（12 分 17 秒），= 基线 8679 + 本期 90。
+- 签收（`eab654f5` 重编，`tests/tytests-tb2.exe`）全量：**8770 / 0 errors / 0 failures**（12 分 03 秒）= 基线 8679 + 本期 91（90 条判据 + 刷新耗时那一条）；跑时另一棵树（`ty-advchart`）的全量同时在跑，没有计时类红。
+- 本期 suite 用时（全量里）：TTbMainFormTests 54.5 s（44 条，每条真建主窗体），TTbSeedsFrameTests 4.1 s，TTbPickTests 3.3 s，TTbExportTests 2.5 s，TTbCoverageTests 1.1 s，其余 < 0.2 s。
+- 刷新耗时（Step 3）：打开 `themes/auto.tycss` 的副本、丢掉解析缓存后 `RefreshNow` 五次的中位数 **328 ms**（五次 297–359 ms，全量里、另一棵树同时在跑）——超过计划定的 150 ms 提示线，记在这里、不因此失败；没有拆开量各段（lint、预览加载与试解析、种子页的扫描与独立模型加载）各占多少，留给真机第 27、37 项看打字后是否有可感觉的停顿（含 lint、预览加载与试解析、种子页的扫描与独立模型加载）。1 期签收没记同一数字，只记了试解析 15–31 ms。
+- 工具：`lazbuild -B tools/themebuilder/themebuilder.lpi` 0 错，没有重编 SynEdit；`example-rsj2po.py` added=26（本期 26 条 resourcestring），无 FATAL；`check-example-po.py` 103 个文件 0 问题；`check-lfm-props.py` OK。
+
+### 按 spec 逐条核（不看测试）
+
+| spec | 实现 | 结论 |
+|---|---|---|
+| §5.1 第 2 条：种子改值 → 替换 → 刷新 | `TTbSeedsFrame.ApplyValue` → `OnEdits` → `TTbMainForm.SeedsEdits` → `ApplyEdits`（末尾 `RefreshNow`） | 实现；只替换值区间，不是「那一行」（§5.2 的说法为准） |
+| §5.1 第 4 条：各算一步撤销 | `ApplyEdits` 的 `BeginUndoBlock` / `EndUndoBlock`；Ctrl+点击插入也走它 | 实现（F30、F34） |
+| §5.2 六个种子 | `TbSeedNames` | 实现 |
+| §5.2 两列 / 一列 + 拆成两套（暗色先用亮色值） | `TbSeedColumns`、`TTbSeedsFrame.UpdateView`、`SplitModes` + `TbSplitModesEdits` | 实现；只插入、`:root` 不动（写回） |
+| §5.2 色块显示求值后的颜色（经预览控制器） | `TTbSeedEval`（独立模型、不带密度包） | 与规格不符，写回 §5.2 |
+| §5.2 表达式标注、改前确认、改后写色值 | `UpdateView` 的说明标签；`ApplyValue` 的 `rsTbSeedExprAsk` | 实现；确认在选好颜色之后（写回）；另加共用 `:root` 的询问（写回） |
+| §5.2 没写的灰着显示继承值，一改补一行 | `tssInherited` 说明标签 `Enabled := False`、色块显示底层值；`TbSeedSetEdits` 的 `InsertIntoBlock` / `NewModeBlock` / `NewRootBlock` | 实现；「灰」的是说明文字，色块保持可点（要能改） |
+| §5.2 只替换值，容错扫描认得注释、字符串、嵌套块 | `tbcssscan`（库的词法器）、`TbSeedSetEdits` | 实现；未知 at 规则整块跳过 |
+| §5.3 Ctrl+点击：typeKey 与变体、跳规则、没有就文末插入空规则、光标在花括号里 | `tbpick`、`TTbPreviewFrame.PickerPick` → `TTbMainForm.JumpToRule`、`tbrules` | 实现；范围、同名多条、状态规则不算等写回 §5.3 |
+| §5.3 覆盖检查两张单子 | `tbcoverage`、`TTbPreviewFrame.CollectTypeKeys`、`TTbCoverageForm`、`MnuCoverageClick` | 实现；放在对话框、「预览摆了」的来源、只看入口文档写回 §5.3 |
+| §6 导出：tycss + 引用文件 + 清单，读回加载，失败不留坏包 | `tbexport`、`TTbExportForm` | 实现；两种格式、zip 限制、路径与目标规则写回 §6 |
+| §6 代码片段：三种写法、可复制 | `tbsnippets`、`TTbSnippetsForm` | 实现；三页四段写回 §6 |
+| §8 种子扫描 / 规则定位 / 覆盖检查 / 导出 | E1–E13、SF1–SF11；R1–R7、F33、F34；CV1–CV7；X1–X11、F36 | 实现；导出读回文件夹用目录源（写回 §8） |
+| 接线：frame 三个事件、`OnPick`、`RefreshNow` 里的 `UpdateFrom`、四个菜单项、`BuildSampleWindow` 里的 `HookTree`、导出对话框的 `OnAsk` | `TTbMainForm.FormCreate`、`.lfm` 的 `OnClick`、`TTbPreviewFrame.BuildSampleWindow`、`BuildExportForm` | 全部接上；`FormDestroy` 先摘 frame 的事件和 `OnPick` |
+
+### 集中变异（每条改字符串 → `lazbuild` → 跑指定测试 → 写回原字节）
+
+增量构建每条约 10 s。变异文件都是 LF，替换前断言命中恰好一处。全部还原后 `git diff --quiet -- source tools tests designtime` 为真，再 `lazbuild -B` 跑全量（上面「签收」那一行）。
+
+| # | 变异 | 结果 |
+|---|---|---|
+| C1 | 偏移不减 1 | 红 |
+| C2 | `ReadMode` 不写 `OuterClose` | 红 |
+| C4 | 值的结尾不跳尾随注释 | 红 |
+| C7 | 逗号后不读下一个选择器 | 红 |
+| C9 | `ReadDecls` 遇 EOF 不停 | 红（超时，180 s 杀掉——按 PID） |
+| C10 | 未知 at 规则不整块跳过 | 红 |
+| C12 | 单独的 CR 不断行 | 红 |
+| C14 | `TbApplyEdits` 从前往后 | **先存活**：夹具的第一个改动长度不变（2 字节换 2 字节），前后顺序结果一样；改用改变长度的改动（`d3f5809d`）后红 |
+| E1 | 改写整段「名字: 值」 | 红（对齐空格丢失） |
+| E3 | `FindLast` 取第一条 | 红 |
+| E4 | 插入不看缩进 | 红 |
+| E5 | 一行的块也按多行插 | 红 |
+| E6a | 双模式下 `:root` 里的算 `tssOwn` | 红（E6、E13 win11） |
+| E6b | 忽略 `AShared` | 红 |
+| E7 | 亮色块也建在后面 | 红 |
+| E9 | 插入固定用 `#10` | 红 |
+| E10 | 不查 `CloseBrace = 0` | 红 |
+| E11 | 颜色只认 6、8 位 | 红 |
+| E12 | 两个模式块插在 `:root` 之前 | 红 |
+| SF1 | 右列用左列的值 | 红 |
+| SF3 | 求值不按列 `SetMode` | 红 |
+| SF4a / b | 不问表达式 / 字面值也问 | 红 / 红 |
+| SF5 | 共用格子不问 | 红 |
+| SF6 | 不看 `FEval.Load` 的结果 | 红 |
+| SF7 | 独立模型也加密度包（等价于「改用预览控制器的模型」：多出来的正是密度包） | 红 |
+| SF8 | `UpdateView` 不设 `FUpdating` | 红（刷新写回 14 次） |
+| SF9 | 暗色块写成另一组值 | 红 |
+| SF10 | 圆角取错列 | 红 |
+| SF11 | `ApplyValue` 不调 `OnSync` | 红 |
+| R1 / R2 / R5 | 不看状态 / 区分大小写 / 插在文末换行之后 | 红 / 红 / 红 |
+| P1 | 拦下后仍交给控件 | 红（控件处理按下时抓鼠标要句柄，抛） |
+| P2 | 不按 Ctrl 也当拾取 | 红 |
+| P3 | 抬起只在带 Ctrl 时吞 | **先存活**：没被按下的按钮收到抬起什么也不做，`OnClick` 与 `FPressed` 看不出；加 `OnMouseUp` 计数（`d3f5809d`）后红 |
+| P4 | 去掉 `capfAllowDisabled` | 红（得到 `TyTabSheet`） |
+| P5 | 不往上找 | 红 |
+| P6 | `BuildSampleWindow` 不 `HookTree` | 红（按下到了按钮，按钮抓鼠标要句柄、抛 1407——没被拦下） |
+| P7 | 挂整个 frame | 红 |
+| P8a / b | `UnhookAll` 不还原 / 不 `FreeNotification` | 红 / 红 |
+| P9 | 析构不先 `UnhookAll` | **等价**：picker 是 frame 拥有的组件，随后在继承的析构里释放时自己 `UnhookAll`；先释放的控件靠 `FreeNotification` 从挂钩里摘掉，不会 AV |
+| CV1 | 只收每条规则的第一个选择器 | 红（`TyUpDown`） |
+| CV2 | 第二张单子不减文档 | **先存活**：夹具里文档写了的键底层都有，减不减一样；夹具加 `TyCard`（`eab654f5`）后红 |
+| CV3a / b | 只取控件自己的 typeKey / 不走祖先类 | 红 / 红 |
+| CV4 | 从 `TabStrip` 行删掉 `TyTab` | 红 |
+| CV5 | 第二张单子不减底层 | 红 |
+| CV7 | 双击存的是显示文本 | 红 |
+| X2a / b | 嵌套 `@import` 相对入口 / `url()` 相对导入它的文件 | 红 / 红 |
+| X3 | 不查 `..` | 红 |
+| X5 | zip 漏写 `theme.json` | 红 |
+| X6 | 去掉「zip 不带文件」的检查 | 红 |
+| X7a / b | 读回只试第一个模式 / 失败不删临时目录 | 红 / 红 |
+| X8 | 不查非空目录 | 红 |
+| X9 | 成功后不删 `.tbbak` | 红 |
+| X10 | 手拼 JSON 不转义 | 红 |
+| X11 | `Prepare` 不按引用禁用 zip | 红 |
+| S1 / S2 / S3 / S5 / S7 | 片段名字改错 / 末行不按文末换行 / zip 的 uses 少 `ThemeBundle` / 按 200 字节硬切 / 漏填一个 Memo | 全红（S3 靠 `4f900970` 补的那一半：计划原来的 S3 只查「片段的 uses ⊆ 测试单元的 uses」，少写一个单元查不出来） |
+| F29 | frame 不放进 `SeedsHost` | 红 |
+| F30 | `ApplyEdits` 改用 `Lines.Text :=` | 红 |
+| F31a / b | 去掉陈旧保护 / `OnSync` 不挂 | 红 / 红 |
+| F32 | `RefreshNow` 不调 `UpdateFrom` | 红 |
+| F33a / b | `OnPick` 不挂 / 不循环 | 红 / 红 |
+| F34 | 插入不走 `ApplyEdits` | 红 |
+| F35 | `BuildCoverageForm` 用空的文档键 | 红 |
+| F36 | `EntryBytes` 用 `Lines.Text` | 红 |
+| F37 | `SnippetName` 不看文件名 | 红 |
+| F39 | `FormDestroy` 不清 `OnPick` | **等价**：预览 frame 的析构第一件事自己清 `FOnPick` 并摘钩，窗体释放之后不会再有拾取 |
+
+计划列的变异里不做的：C3、C5、C6、C8、C11、C13、E2、E8、SF2、R3、R4、R6、R7、CV6、X1、X4、S4、S6、F38（计划标「—」）。
+
+### 与规格不符之处（已写回 spec，标「实现期修正（2 期）」）
+
+状态行；§2 第 5 条（侧栏两页、默认种子）；§4（十一个单元）；§5.2（求值不经预览控制器、询问的时机与共用 `:root`、拆分只插入、坏文本整页禁用、生效顺序）；§5.3（Ctrl+点击的范围与规则、覆盖检查的放法与来源）；§6（两种格式与 zip 的限制、路径与目标规则、读回标准；片段三页四段）；§8（导出读回文件夹用目录源）。即本计划「与规格不符之处」1–8 条全部写回。开工前问题一的十一条未单独询问，按建议执行，列进验收文档 E11–E21。
+
+### 计划外发现
+
+- `ThemeLint.pas:917` 对导入文件里的 `url()` 用导入文件自己的目录查缺图，运行时是一律相对入口文件目录（核实记录 28）——两边不一致，库里的小问题，本期没改。
+- FPC 的 `{ }` 注释里写 `'}'` 会把注释提前结束（注释不认引号），编译报的是后面某处「String exceeds line」；本期四处，已改成文字。
+- 过程名与单元名只差大小写（`TbCoverage` / `tbcoverage`）时，在用了这个单元的地方 `TbCoverage(` 被当成单元限定，报「"." expected」。
+- `ChangeFileExt('.tycss', '')` 原样返回（以点开头的名字不算有扩展名）。
+- 交给控件的鼠标按下会让它抓鼠标，无头、没有父窗口时抛「has no parent window」——测试里要么只发会被拦下的按下，要么把 frame 放到窗体上并初始化 widgetset。
+- 1 期期末的主窗体测试已用到 F28，本期计划的 F19–F29 撞号，顺延为 F29–F39。
+- 1 期期末之后验收文档已用到第 29 项、E10，本期的真机项与决定顺延为 30–47、E11–E21（计划原写 23–40、E9–E19）。
+
+### 遗留
+
+- 真机验收第 30–47 项（种子页的样子与各平台表现、Ctrl+点击在 Win32 / GTK2 / Qt6 / Cocoa 上是否真的拦得住、导出的包在示例程序里能用）。
+- 种子页的布局（两列色块各 104 px、侧栏 280 px）在宽皮肤、中文下是否挤，要真机看（第 30、46、47 项）。
+- `TTbSeedsFrame` 的独立模型与预览各加载一次文档，`auto.tycss` 这类大主题刷新多一次加载（见上面的刷新耗时）。
+
+### 主控要做的
+
+1. 在签收头提交上 `lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`（本期库没改，按惯例确认）与 `tools/themebuilder/themebuilder.lpi`；`powershell -File scripts/smoke-launch-examples.ps1 -Dirs tools\themebuilder` 冒烟（只有主窗体与应用窗口、没有 `#32770`）。
+2. Task 11 Step 5 的看一眼（种子页、改色、Ctrl+Z、win11 改圆角看询问、Ctrl+点击、覆盖检查、导出 green 到临时文件夹、片段小窗），并截两张图 `p2-seeds-win32.png`、`p2-export-win32.png` 放 `docs/superpowers/plans/2026-10-01-themebuilder-acceptance-shots/`（验收文档已引用）。
+3. Task 11 Step 7 的期末审查（规格核对 + 代码质量，`git diff f87c46c6..HEAD`）。
