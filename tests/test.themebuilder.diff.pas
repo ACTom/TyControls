@@ -111,6 +111,8 @@ procedure TTbDiffTests.TestFirstGoneLastNew;
 begin
   AssertEquals('D6', 'removed(0,-1), same(1,0), same(2,1), added(-1,2)', DiffOf('x|a|b', 'a|b|y'));
   AssertEquals('D6: two places', 2, CountOf('x|a|b', 'a|b|y'));
+  { the common start and end must not overlap: all of 'a|a' is a common start already }
+  AssertEquals('D6: no overlap', 'same(0,0), same(1,1), added(-1,2)', DiffOf('a|a', 'a|a|a'));
 end;
 
 procedure TTbDiffTests.TestLineBreaksDoNotCount;

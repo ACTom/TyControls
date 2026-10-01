@@ -220,6 +220,11 @@ begin
   AssertEquals('C17: nothing to hide', 'no secret here', TbScrubSecret('no secret here', 'k'));
   s := TbScrubSecret('the key "sk-test-ABCDEFGH12345678" was bad', 'sk-test-ABCDEFGH12345678');
   AssertTrue('C17: in quotes', Pos('ABCDEFGH', s) = 0);
+  { a service that quotes only the end of the key, without stars }
+  s := TbScrubSecret('the key ending ab12 was refused', 'sk-proj-xyzxyzxyzab12');
+  AssertTrue('C17: the last four alone: ' + s, Pos('ab12', s) = 0);
+  s := TbScrubSecret('key sk-pro... was refused', 'sk-proj-xyzxyzxyzab12');
+  AssertTrue('C17: the first six alone: ' + s, Pos('sk-pro', s) = 0);
 end;
 
 { ---- TTbAiSettingsTests ---- }
