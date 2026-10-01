@@ -846,6 +846,7 @@ begin
   CheckPublishesOnly(TThirdRadioButton, ['Checked', 'GroupIndex']);
   third.GroupIndex := 3;
   third.Checked := True;
+  third.Alignment := taLeftJustify;   // public, not published by the mimic
   CheckStreamText(third, ['Checked', 'GroupIndex'], 'Alignment');
   back := TThirdRadioButton.Create(FForm);
   StreamInto(third, back);
