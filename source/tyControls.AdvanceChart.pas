@@ -56,6 +56,8 @@ uses
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
   tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
   tyControls.AdvChart.Dataset,
+  tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
+  tyControls.AdvChart.AnimView,
   fpjson, tyControls.SubPixel;
 
 const
@@ -199,6 +201,23 @@ type
     Role: TTyDzRole;
   end;
   TTyDzPointer = (dpMove, dpDown, dpUp, dpClick, dpWheel);
+
+  { WHEN THE CHART PLAYS ITS ENTER ANIMATIONS. [Batch 89]
+
+    camAuto, the default: when it paints onto a window on screen -- the
+    first window paint after an option is set. A render that is not a
+    window's (RenderTo, SaveToPng, the designer, a headless test) draws the
+    finished picture and leaves the animation for the window. Upstream
+    animates on every setOption wherever it is; a control that also
+    exports and is rendered headless has two kinds of render, and only one
+    of them has a viewer to watch a tween.
+
+    camAlways: every render that builds the series after an option is set
+    animates, headless or not -- what a test of the timelines uses.
+
+    camOff: never. The option's own `animation: false` (root or series)
+    switches a chart off in every mode. }
+  TTyChartAnimationMode = (camAuto, camAlways, camOff);
 
   TTyAdvanceChart = class(TTyCustomControl)
   private
@@ -518,6 +537,23 @@ type
       miss a per-datum itemStyle. }
     FTipElement: Integer;
     FTipX, FTipY: Integer;
+    { THE ENTER ANIMATION [Batch 89]. One driver per chart; the proxies the
+      animated elements read, keyed so they outlive a rebuilt list; each
+      list element's proxy by insertion index; the frame the dynamic layer
+      draws; the clock (NaN: the machine's; a number: a test's); the 16 ms
+      timer; whether an option waits for the render that animates it;
+      whether the series are in motion -- drawn in the dynamic layer, not
+      the static one -- and whether the paint in progress is a window's. }
+    FAnim: TTyAnimation;
+    FAnimSet: TTyChartAnimSet;
+    FAnimBind: TTyChartAnimProxyArray;
+    FAnimFrame: TTyPaintList;
+    FAnimNow: Double;
+    FAnimTimer: TTimer;
+    FAnimMode: TTyChartAnimationMode;
+    FAnimPending: Boolean;
+    FAnimLive: Boolean;
+    FAnimWindow: Boolean;
     FPaintList: TTyPaintList;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
@@ -526,6 +562,19 @@ type
     FPaintListValid: Boolean;
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
+    { ---- the enter animation [Batch 89] ---- }
+    function AnimClock: Double;
+    function AnimAllowed: Boolean;
+    { every proxy dropped: the layout moved, so the picture is the layout's }
+    procedure AnimDropAll;
+    { after a list is built: arm a waiting option's enter animations (and
+      take the synchronous first step, upstream's flush), then find every
+      element's proxy }
+    procedure AnimAfterBuild;
+    function AnimSeriesInfo: TTyChartAnimSeriesArray;
+    procedure AnimArmTimer;
+    procedure AnimTimerFired(Sender: TObject);
+    procedure SetAnimMode(AValue: TTyChartAnimationMode);
     function GetErrorText: string;
     procedure FreeStores;
     procedure DropBuild;
@@ -868,6 +917,10 @@ type
     property SeriesList: TTyPaintList read FPaintList;
     { what zrender's hover holds now, with its dispatcher [Batch 88] }
     property EvHover: TTyChartEventTarget read FEvHover;
+    { THE LIST AS IT STANDS THIS FRAME: every animated element read from its
+      proxy, insertion indices kept. The list itself when nothing is bound.
+      [Batch 89] }
+    function AnimFrame: TTyPaintList;
     { What the bar solve gave a series -- its band, offset and width. An
       unsolved column (not a bar, or no such series) when there is none. }
     function BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
@@ -1167,6 +1220,23 @@ type
     property DataZoomCursorName: string read FDzCursor;
     { ms; NaN (the default) is the machine's clock }
     property DataZoomNow: Double read FDzNow write FDzNow;
+    { ---- the enter animation [Batch 89] ---- }
+    { THE CLOCK STEPPED BY HAND: every clip advanced to ANowMs (epoch ms, as
+      upstream's Date), the frame repainted, and -- when the last clip has
+      run -- the series put back into the static layer. The 16 ms timer
+      calls the same with the machine's clock. }
+    procedure AnimTick(ANowMs: Double);
+    { ms; NaN (the default) is the machine's clock -- and only then does the
+      timer run }
+    property AnimNow: Double read FAnimNow write FAnimNow;
+    { the clips still running, and whether the series are in motion }
+    function AnimClipCount: Integer;
+    property AnimLive: Boolean read FAnimLive;
+    { the animated proxies, for a test or a host to read }
+    function AnimProxyCount: Integer;
+    function AnimProxy(AIndex: Integer): TTyChartAnimProxy;
+    function AnimFindProxy(ASeries, AIndex: Integer;
+      const ARole: string): TTyChartAnimProxy;
     function AxisZoom(const AMainType: string; AAxisIndex: Integer;
       out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
     { The rows of series ASeriesIndex as the last build left them -- filtered
@@ -1299,6 +1369,9 @@ type
     property OnChartEvent: TTyChartEventHandler read FOnChartEvent write FOnChartEvent;
     property OnTreeRoam: TTyGraphRoamEvent read FOnTreeRoam write FOnTreeRoam;
     property OnDataZoom: TTyDataZoomEvent read FOnDataZoom write FOnDataZoom;
+    { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
+    property AnimationMode: TTyChartAnimationMode read FAnimMode
+      write SetAnimMode default camAuto;
   end;
 
 implementation
@@ -1327,6 +1400,8 @@ begin
   FDzFrom := -1;
   FDzPanGrid := -1;
   FDzNow := NaN;
+  FAnimNow := NaN;
+  FAnimMode := camAuto;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -1341,6 +1416,11 @@ begin
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
   FreeAndNil(FDzTimer);
+  { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
+  FreeAndNil(FAnimTimer);
+  FreeAndNil(FAnimSet);
+  FreeAndNil(FAnim);
+  FreeAndNil(FAnimFrame);
   inherited Destroy;
 end;
 
@@ -1431,6 +1511,8 @@ begin
   FSelInit := nil;
   FSt := nil;
   FStDirty := False;
+  { A NEW OPTION ENTERS: the next render that may animate plays it }
+  FAnimPending := True;
   FDirty := True;
   Invalidate;
 end;
@@ -1994,6 +2076,10 @@ begin
   FLastPPI := APPI;
   { a full update: the next sync re-renders the states [Batch 88] }
   Inc(FStGen);
+  { A NEW LAYOUT SNAPS: a resize, a theme, a zoom -- upstream sets those
+    directly ({duration: 0}) -- and a new option is armed again after the
+    build [Batch 89] }
+  AnimDropAll;
   Rebuild;
   { The layout pass measures the labels the PAINT pass will draw, so it has to
     be handed the same font and the same gaps. Resolving them here rather than
@@ -2690,8 +2776,10 @@ begin
     series, the paint list decides the order. }
   PaintSeries(APainter, AMeasurer, APPI);
   { AND THE TITLE LAST. It floats over the container rather than reserving
-    room, so anything it overlaps it is meant to overlap. }
-  PaintTitles(APainter);
+    room, so anything it overlaps it is meant to overlap. While the series
+    move the title goes with them into the dynamic layer, so it stays over
+    them [Batch 89]. }
+  if not FAnimLive then PaintTitles(APainter);
 end;
 
 function TTyAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
@@ -8404,10 +8492,21 @@ end;
 
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
+var drawn: Integer;
 begin
   { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. }
-  if BuildSeriesList(AMeasurer, APPI) > 0 then
-    TyRenderPaintList(APainter, FPaintList);
+  drawn := BuildSeriesList(AMeasurer, APPI);
+  AnimAfterBuild;
+  { IN MOTION, THE SERIES ARE THE DYNAMIC LAYER'S: a static layer holding
+    them would freeze the first frame under every later one (Q7). }
+  if FAnimLive then Exit;
+  if drawn > 0 then
+    { AT REST, a proxy may still hold a value a unit in the last place off
+      the layout -- the frame draws where upstream's element rests }
+    if Length(FAnimBind) > 0 then
+      TyRenderPaintList(APainter, AnimFrame)
+    else
+      TyRenderPaintList(APainter, FPaintList);
 end;
 
 function TTyAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
@@ -8469,7 +8568,12 @@ begin
   Result := TyChartNoDatum;
   AElement := -1;
   if (FPaintList = nil) or not FPaintListValid then Exit;
-  idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
+  { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT: the frame keeps the list's
+    insertion indices, so the element named is the list's [Batch 89] }
+  if FAnimLive then
+    idx := AnimFrame.HitTestElement(AX, AY, FPaintListPPI)
+  else
+    idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
   if idx < 0 then Exit;
   AElement := idx;
   Result := FPaintList.Element(idx).Datum;
@@ -12762,6 +12866,203 @@ begin
   else if wasOn then InvalidateFrame;
 end;
 
+{ ==================== the enter animation [Batch 89] ==================== }
+
+function TTyAdvanceChart.AnimClock: Double;
+begin
+  if IsNan(FAnimNow) then Result := TyAnimClockMs else Result := FAnimNow;
+end;
+
+function TTyAdvanceChart.AnimAllowed: Boolean;
+begin
+  { the designer streams and repaints at will and runs no timer: never }
+  if csDesigning in ComponentState then Exit(False);
+  case FAnimMode of
+    camAlways: Result := True;
+    camOff: Result := False;
+  else
+    Result := FAnimWindow;
+  end;
+end;
+
+procedure TTyAdvanceChart.SetAnimMode(AValue: TTyChartAnimationMode);
+begin
+  if FAnimMode = AValue then Exit;
+  FAnimMode := AValue;
+  { switched off mid-flight: the picture finishes at once }
+  if AValue = camOff then
+  begin
+    AnimDropAll;
+    FAnimPending := False;
+    DropStatic;
+    inherited Invalidate;
+  end;
+end;
+
+procedure TTyAdvanceChart.AnimDropAll;
+begin
+  if FAnimSet <> nil then FAnimSet.Clear;
+  FAnimBind := nil;
+  FAnimLive := False;
+  AnimArmTimer;
+end;
+
+function TTyAdvanceChart.AnimSeriesInfo: TTyChartAnimSeriesArray;
+var
+  slot, si, n, k: Integer;
+  r: TTyChartAnimSeries;
+  t: string;
+  ser, lbl, va: TJSONData;
+  v: TTyAnimOptValue;
+begin
+  Result := nil;
+  for slot := 0 to High(FBindings) do
+  begin
+    si := FBindings[slot].SeriesIndex;
+    if si < 0 then Continue;
+    if si > High(Result) then SetLength(Result, si + 1);
+    r := Default(TTyChartAnimSeries);
+    r.Present := True;
+    n := 0;
+    if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      n := FStores[slot].Count;
+    r.Model := TyAnimSeriesModel(FOption.Root, si, n);
+    r.Enabled := TyAnimIsEnabled(r.Model);
+    r.On_ := TyAnimOptTruthy(TyAnimGetShallow(r.Model, 'animation'));
+    t := FBindings[slot].SeriesType;
+    { THE TYPES WHOSE LABELS FADE IN HERE: the ones this batch animates,
+      and the heatmap, whose cells never move but whose labels upstream's
+      LabelManager fades all the same }
+    r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
+      or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName);
+    ser := r.Model.Own;
+    if ser is TJSONObject then
+    begin
+      lbl := TJSONObject(ser).Find('label');
+      if lbl is TJSONObject then
+      begin
+        va := TJSONObject(lbl).Find('valueAnimation');
+        r.LabelValueAnim := (va <> nil) and (va.JSONType = jtBoolean)
+          and va.AsBoolean;
+      end;
+    end;
+    r.BaseHoriz := (FBindings[slot].BaseAxis = nil)
+      or FBindings[slot].BaseAxis.Horizontal;
+    if t = TyPieSeriesTypeName then
+    begin
+      v := TyAnimGetShallow(r.Model, 'animationType');
+      r.PieScale := (v.Kind = aokString) and (v.Str = 'scale');
+      { A FIRST RENDER'S SHARED START: the first slice's whose start is a
+        number (PieView.ts:248-256) }
+      if (slot <= High(FPies)) and FPies[slot].Valid then
+        for k := 0 to High(FPies[slot].Sectors) do
+          if not IsNan(FPies[slot].Sectors[k].StartRad) then
+          begin
+            r.HasPieStart := True;
+            r.PieStart := FPies[slot].Sectors[k].StartRad;
+            Break;
+          end;
+    end;
+    Result[si] := r;
+  end;
+end;
+
+procedure TTyAdvanceChart.AnimAfterBuild;
+begin
+  if FAnimPending then
+  begin
+    if AnimAllowed then
+    begin
+      FAnimPending := False;
+      if FAnim = nil then FAnim := TTyAnimation.Create;
+      if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+      FAnimSet.Arm(FPaintList, AnimSeriesInfo);
+      { THE FLUSH: upstream's setOption ends with a synchronous update, so
+        every clip it made starts NOW and this same paint shows the from
+        values. A step on the next tick would shift every timeline by up
+        to 16 ms. }
+      FAnim.Update(AnimClock, True);
+      FAnimLive := FAnim.ClipCount > 0;
+      AnimArmTimer;
+    end
+    else if FAnimMode = camOff then
+      FAnimPending := False;
+  end;
+  if (FAnimSet <> nil) and (FAnimSet.Count > 0) then
+    FAnimBind := FAnimSet.Bind(FPaintList)
+  else
+    FAnimBind := nil;
+end;
+
+procedure TTyAdvanceChart.AnimArmTimer;
+begin
+  if FAnimLive and IsNan(FAnimNow) and not (csDesigning in ComponentState) then
+  begin
+    if FAnimTimer = nil then
+    begin
+      FAnimTimer := TTimer.Create(nil);
+      FAnimTimer.Enabled := False;
+      FAnimTimer.Interval := 16;
+      FAnimTimer.OnTimer := @AnimTimerFired;
+    end;
+    FAnimTimer.Enabled := True;
+  end
+  else if FAnimTimer <> nil then
+    FAnimTimer.Enabled := False;
+end;
+
+procedure TTyAdvanceChart.AnimTimerFired(Sender: TObject);
+begin
+  AnimTick(AnimClock);
+end;
+
+procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
+begin
+  if FAnim = nil then Exit;
+  FAnim.Update(ANowMs);
+  if FAnimLive and (FAnim.ClipCount = 0) then
+  begin
+    { AT REST: the series go back into the static layer, drawn once more
+      at the values they rest at }
+    FAnimLive := False;
+    AnimArmTimer;
+    DropStatic;
+  end;
+  InvalidateFrame;
+end;
+
+function TTyAdvanceChart.AnimClipCount: Integer;
+begin
+  if FAnim = nil then Result := 0 else Result := FAnim.ClipCount;
+end;
+
+function TTyAdvanceChart.AnimProxyCount: Integer;
+begin
+  if FAnimSet = nil then Result := 0 else Result := FAnimSet.Count;
+end;
+
+function TTyAdvanceChart.AnimProxy(AIndex: Integer): TTyChartAnimProxy;
+begin
+  Result := nil;
+  if (FAnimSet = nil) or (AIndex < 0) or (AIndex >= FAnimSet.Count) then Exit;
+  Result := FAnimSet.Item(AIndex);
+end;
+
+function TTyAdvanceChart.AnimFindProxy(ASeries, AIndex: Integer;
+  const ARole: string): TTyChartAnimProxy;
+begin
+  if FAnimSet = nil then Exit(nil);
+  Result := FAnimSet.Find(ASeries, AIndex, ARole);
+end;
+
+function TTyAdvanceChart.AnimFrame: TTyPaintList;
+begin
+  if (FPaintList = nil) or (Length(FAnimBind) = 0) then Exit(FPaintList);
+  if FAnimFrame = nil then FAnimFrame := TTyPaintList.Create;
+  TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind);
+  Result := FAnimFrame;
+end;
+
 procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 begin
@@ -12774,6 +13075,13 @@ begin
     skips the whole pass and the new thing is written, compiled and never
     drawn. That is the failure this body's empty version was left here to
     prevent, and the tooltip is the first thing to test it. }
+  { THE SERIES IN MOTION, and the title over them: this frame's values,
+    read from the proxies [Batch 89] }
+  if FAnimLive then
+  begin
+    TyRenderPaintList(APainter, AnimFrame);
+    PaintTitles(APainter);
+  end;
   { THE POINTER UNDER THE HIGHLIGHT UNDER THE BOX. A shadow band drawn over
     the bars is the layer debt showing -- series marks live in the static
     layer, so the band cannot go beneath them -- and re-drawing the hovered
@@ -12793,7 +13101,8 @@ begin
     answer has to be cheap and it has to be exact. It is deliberately not
     "would the tooltip draw": resolving the option cascade and the theme to
     find out costs more than the pass it would save. }
-  Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
+  Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
+    or FAnimLive;
 end;
 
 procedure TTyAdvanceChart.DropStatic;
@@ -12879,7 +13188,13 @@ begin
     RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
     Exit;
   end;
-  RenderCached(Canvas, ClientRect, Font.PixelsPerInch);
+  { A WINDOW'S PAINT: the one render camAuto animates [Batch 89] }
+  FAnimWindow := True;
+  try
+    RenderCached(Canvas, ClientRect, Font.PixelsPerInch);
+  finally
+    FAnimWindow := False;
+  end;
 end;
 
 procedure TTyAdvanceChart.SaveToPng(const AFileName: string);

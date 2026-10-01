@@ -922,6 +922,18 @@ begin
       own inverse, which answers -1 for a row a filter has since dropped. }
     el.Datum := TyChartDatum(ABinding.SeriesIndex,
       ALayout.Sectors[i].Index, ALayout.Sectors[i].RawIndex);
+    { the enter animation sweeps it, or grows its radius [Batch 89] }
+    el.Anim.Role := carSector;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := ALayout.Sectors[i].Index;
+    { upstream's shape as the layout gave it -- the angles NOT swapped into
+      the order TyShapeSector keeps }
+    el.Anim.G[0] := ALayout.Sectors[i].CX;
+    el.Anim.G[1] := ALayout.Sectors[i].CY;
+    el.Anim.G[2] := ALayout.Sectors[i].R0;
+    el.Anim.G[3] := ALayout.Sectors[i].R1;
+    el.Anim.G[4] := ALayout.Sectors[i].StartRad;
+    el.Anim.G[5] := ALayout.Sectors[i].EndRad;
     AList.Add(el);
     Inc(drawn);
   end;

@@ -1013,6 +1013,22 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.RichStyle"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Easing.pas"/>
+        <UnitName Value="tyControls.AdvChart.Easing"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Anim.pas"/>
+        <UnitName Value="tyControls.AdvChart.Anim"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.AnimOpt.pas"/>
+        <UnitName Value="tyControls.AdvChart.AnimOpt"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.AnimView.pas"/>
+        <UnitName Value="tyControls.AdvChart.AnimView"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Diagnose.pas"/>
         <UnitName Value="tyControls.AdvChart.Diagnose"/>
       </Item>

@@ -626,6 +626,10 @@ begin
       the same reason a pie carries both. }
     el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Items[i].Index,
       ALayout.Items[i].RawIndex);
+    { it fades in on entering (FunnelView.ts:70-79) [Batch 89] }
+    el.Anim.Role := carFunnel;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := ALayout.Items[i].Index;
     AList.Add(el);
     Inc(Result);
   end;
@@ -925,6 +929,9 @@ begin
         { SILENT: a guide line is a pointer at a band, not a target of its
           own, and a hit on it would report the datum twice over. }
         el.Silent := True;
+        el.Anim.Role := carGuide;
+        el.Anim.Series := ABinding.SeriesIndex;
+        el.Anim.Index := ALayout.Items[i].Index;
         AList.Add(el);
         Inc(Result);
       end;
@@ -1002,6 +1009,9 @@ begin
     el.Silent := False;
     el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Items[i].Index,
       raw);
+    el.Anim.Role := carLabel;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := ALayout.Items[i].Index;
     AList.Add(el);
     Inc(Result);
   end;

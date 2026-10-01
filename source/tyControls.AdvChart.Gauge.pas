@@ -1140,12 +1140,12 @@ end;
   shape this library does not have; a disc needs one it does. }
 procedure AddCaps(const ALayout: TTyGaugeLayout; AR0, AR1, AFrom, ATo: Double;
   AFill: TTyChartColor; AZ, AZ2: Integer; AList: TTyPaintList;
-  var ACount: Integer);
+  var ACount: Integer; ASeries: Integer = -1; AIndex: Integer = -1);
 var
   dr, rc: Double;
   el: TTyChartElement;
 
-  procedure Cap(AAngle: Double);
+  procedure Cap(AAngle: Double; AEnd: Boolean);
   begin
     el := TyChartElement(TyShapeCircle(ALayout.CX + Cos(AAngle) * rc,
       ALayout.CY + Sin(AAngle) * rc, dr));
@@ -1154,6 +1154,17 @@ var
     el.Z := AZ;
     el.Z2 := AZ2;
     el.Silent := True;
+    { THE END CAP RIDES THE GROWING END of the progress arc: upstream's
+      Sausage is one path, its round end where endAngle is [Batch 89] }
+    if AEnd and (ASeries >= 0) then
+    begin
+      el.Anim.Role := carGaugeCap;
+      el.Anim.Series := ASeries;
+      el.Anim.Index := AIndex;
+      el.Anim.G[0] := ALayout.CX;
+      el.Anim.G[1] := ALayout.CY;
+      el.Anim.G[2] := rc;
+    end;
     AList.Add(el);
     Inc(ACount);
   end;
@@ -1162,8 +1173,8 @@ begin
   dr := (AR1 - AR0) / 2;
   if dr <= 0 then Exit;
   rc := AR0 + dr;
-  Cap(AFrom);
-  Cap(ATo);
+  Cap(AFrom, False);
+  Cap(ATo, True);
 end;
 
 { One band of the track. }
@@ -1716,9 +1727,20 @@ begin
           el.Z2 := 0;
         el.Silent := False;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
+        { its end angle grows from the start (GaugeView.ts:477-483) }
+        el.Anim.Role := carGaugeProgress;
+        el.Anim.Series := ABinding.SeriesIndex;
+        el.Anim.Index := k;
+        el.Anim.G[0] := ALayout.CX;
+        el.Anim.G[1] := ALayout.CY;
+        el.Anim.G[2] := Max(Double(0), r0);
+        el.Anim.G[3] := r1;
+        el.Anim.G[4] := ALayout.StartRad;
+        el.Anim.G[5] := endA;
         if ASpec.Progress.RoundCap then
           AddCaps(ALayout, Max(Double(0), r0), r1, ALayout.StartRad, endA,
-            el.Style.FillColor, AVisual.Z, el.Z2, AList, Result);
+            el.Style.FillColor, AVisual.Z, el.Z2, AList, Result,
+            ABinding.SeriesIndex, k);
         AList.Add(el);
         Inc(Result);
       end;
@@ -1746,6 +1768,14 @@ begin
           el.Z2 := 0;
           el.Silent := False;
           el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
+          { it turns from the start angle (GaugeView.ts:464-472) [Batch 89] }
+          el.Anim.Role := carGaugePointer;
+          el.Anim.Series := ABinding.SeriesIndex;
+          el.Anim.Index := k;
+          el.Anim.G[0] := ALayout.CX;
+          el.Anim.G[1] := ALayout.CY;
+          el.Anim.G[2] := angle;
+          el.Anim.G[3] := ALayout.StartRad;
           AList.Add(el);
           Inc(Result);
         end;
@@ -1787,6 +1817,13 @@ begin
         el.Z2 := 0;
         el.Silent := False;
         el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
+        el.Anim.Role := carGaugePointer;
+        el.Anim.Series := ABinding.SeriesIndex;
+        el.Anim.Index := k;
+        el.Anim.G[0] := ALayout.CX;
+        el.Anim.G[1] := ALayout.CY;
+        el.Anim.G[2] := angle;
+        el.Anim.G[3] := ALayout.StartRad;
         AList.Add(el);
         Inc(Result);
       end;

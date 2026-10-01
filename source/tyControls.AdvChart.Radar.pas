@@ -1413,6 +1413,12 @@ begin
       el.Z2 := AVisual.Z2;
       el.Silent := False;
       el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
+      { its points grow out of the centre (RadarView.ts:111-130) [Batch 89] }
+      el.Anim.Role := carRadarArea;
+      el.Anim.Series := ABinding.SeriesIndex;
+      el.Anim.Index := k;
+      el.Anim.G[0] := ARadar.CX;
+      el.Anim.G[1] := ARadar.CY;
       AList.Add(el);
       Inc(Result);
     end;
@@ -1427,6 +1433,11 @@ begin
       spoke -- the same shape a line series' run has. }
     el.Datum := TyChartDatum(ABinding.SeriesIndex, k, raw);
     el.HitSlopLogical := AVisual.LineWidthLogical / 2 + 4;
+    el.Anim.Role := carRadarLine;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := k;
+    el.Anim.G[0] := ARadar.CX;
+    el.Anim.G[1] := ARadar.CY;
     AList.Add(el);
     Inc(Result);
 
