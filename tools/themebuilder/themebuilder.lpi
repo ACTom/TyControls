@@ -25,7 +25,7 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="13">
+    <Units Count="14">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
@@ -39,6 +39,7 @@
       <Unit10><Filename Value="tbcssscan.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbcssscan"/></Unit10>
       <Unit11><Filename Value="tbseeds.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbseeds"/></Unit11>
       <Unit12><Filename Value="tbseedsframe.pas"/><IsPartOfProject Value="True"/><ComponentName Value="SeedsFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbseedsframe"/></Unit12>
+      <Unit13><Filename Value="tbrules.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbrules"/></Unit13>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

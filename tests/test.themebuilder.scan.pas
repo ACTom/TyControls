@@ -29,10 +29,25 @@ type
     procedure TestApplyingEdits;
   end;
 
+  { the rule for a typeKey and variant: found, or added empty at the end (tbrules) }
+  TTbRulesTests = class(TTestCase)
+  private
+    function Points(const AText, ATypeKey, AVariant: string): string;
+    procedure CheckNew(const ATag, AText, ATypeKey, AVariant, AWant: string; AX, AY: Integer);
+  published
+    procedure TestTheStateIsNotTheRule;
+    procedure TestTheCaseDoesNotMatter;
+    procedure TestACommentedRuleIsNotFound;
+    procedure TestModeBlocksHaveNoRules;
+    procedure TestAddingAtTheEnd;
+    procedure TestAddingWithoutAFinalBreak;
+    procedure TestAddingToAnEmptyText;
+  end;
+
 implementation
 
 uses
-  FileUtil, tyControls.Css.Parser, test.themebuilder.golden;
+  FileUtil, tyControls.Css.Parser, tbrules, test.themebuilder.golden;
 
 function TTbCssScanTests.Scan(const AText: string): TTbCssScan;
 begin
@@ -414,6 +429,101 @@ begin
   AssertEquals('a lone CR', #13, TbDetectEol('a'#13'b'));
 end;
 
+{ ---- rules ---- }
+
+const
+  cRulesDoc = 'TyButton { }'#10'TyButton.primary { }'#10'TyButton.primary:hover { }'#10'TyEdit, TyButton.primary { }';
+
+{ '(x,y) (x,y)' of what TbFindRuleSelectors finds }
+function TTbRulesTests.Points(const AText, ATypeKey, AVariant: string): string;
+var
+  s: TTbCssScan;
+  hits: TTbOffsets;
+  i: Integer;
+  p: TPoint;
+begin
+  Result := '';
+  s := TbScanCss(AText);
+  try
+    hits := TbFindRuleSelectors(s, ATypeKey, AVariant);
+    for i := 0 to High(hits) do
+    begin
+      p := TbOffsetToPoint(AText, hits[i]);
+      if Result <> '' then Result := Result + ' ';
+      Result := Result + Format('(%d,%d)', [p.X, p.Y]);
+    end;
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TTbRulesTests.CheckNew(const ATag, AText, ATypeKey, AVariant, AWant: string;
+  AX, AY: Integer);
+var
+  s: TTbCssScan;
+  e: TTbTextEdits;
+  caret: Integer;
+  after: string;
+  p: TPoint;
+begin
+  s := TbScanCss(AText);
+  try
+    e := TbNewRuleEdits(s, #10, ATypeKey, AVariant, caret);
+    after := TbApplyEdits(AText, e);
+  finally
+    s.Free;
+  end;
+  AssertEquals(ATag + ': the text', AWant, after);
+  p := TbOffsetToPoint(after, caret);
+  AssertEquals(ATag + ': caret x', AX, p.X);
+  AssertEquals(ATag + ': caret y', AY, p.Y);
+end;
+
+procedure TTbRulesTests.TestTheStateIsNotTheRule;
+begin
+  AssertEquals('R1', '(1,2) (9,4)', Points(cRulesDoc, 'TyButton', 'primary'));
+  AssertEquals('the selector text', 'TyButton.primary', TbSelectorText('TyButton', 'primary'));
+  AssertEquals('without a variant', 'TyButton', TbSelectorText('TyButton', ''));
+end;
+
+procedure TTbRulesTests.TestTheCaseDoesNotMatter;
+begin
+  AssertEquals('R2: the plain one', '(1,1)', Points(cRulesDoc, 'TyButton', ''));
+  AssertEquals('R2: any case', '(1,2) (9,4)', Points(cRulesDoc, 'tybutton', 'PRIMARY'));
+end;
+
+procedure TTbRulesTests.TestACommentedRuleIsNotFound;
+begin
+  AssertEquals('R3', '(1,2)', Points('/* TyButton.primary { } */'#10'TyButton.primary { }',
+    'TyButton', 'primary'));
+end;
+
+procedure TTbRulesTests.TestModeBlocksHaveNoRules;
+const
+  cT = '@mode dark { :root { --a: #111; } }'#10'TyEdit { }';
+begin
+  AssertEquals('R4: found', '(1,2)', Points(cT, 'TyEdit', ''));
+  AssertEquals('R4: none', '', Points(cT, 'TyButton', ''));
+end;
+
+procedure TTbRulesTests.TestAddingAtTheEnd;
+begin
+  CheckNew('R5', 'TyEdit { }'#10, 'TyButton', 'primary',
+    'TyEdit { }'#10#10'TyButton.primary {'#10'  '#10'}'#10, 3, 4);
+end;
+
+procedure TTbRulesTests.TestAddingWithoutAFinalBreak;
+begin
+  CheckNew('R6', 'TyEdit { }', 'TyButton', 'primary',
+    'TyEdit { }'#10#10'TyButton.primary {'#10'  '#10'}', 3, 4);
+end;
+
+procedure TTbRulesTests.TestAddingToAnEmptyText;
+begin
+  CheckNew('R7', '', 'TyButton', '', 'TyButton {'#10'  '#10'}'#10, 3, 2);
+end;
+
 initialization
   RegisterTest(TTbCssScanTests);
+  RegisterTest(TTbRulesTests);
 end.
