@@ -8832,3 +8832,57 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 - **markLine** 只按直线做（端口没有 curveness）；percent 为 0 时 `end/start` 标签按零向量居中，对齐用 `TyAnchorBox` 重排，旋转的标签不重排框。markArea 在 notMerge 下从不动画（与上游一致）。
 - **effectScatter**：`showEffectOn: 'emphasis'` 的涟漪不启动（上游悬停时启动、离开时清掉）；涟漪与 effectScatter 符号在持续阶段画在动态层，压在其它系列之上（z 序偏差）；涟漪不受 `animation: false` 约束（上游如此），但受 `AnimationMode` 约束。
 - 饼标签以外的独立标签（漏斗）更新时不位移（上游靠 `style.x/y` 补间，没有 fixture）。
+
+## 129. Tier 1 第九十四批：状态过渡动画（AN3b，2026-10-01）
+
+Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半做完了；B1、B2 把悬停、选中、动作高亮和淡化搬上了标志加状态列表的模型，但状态一变就一帧切过去：柱子的抬亮色、饼的放大与选中平移、符号的放大、淡化的不透明度都是瞬间到位。上游不是这样——系列的 `stateAnimation`（默认 300 ms、`cubicOut`）作为元素的 `stateTransition`，zrender 的 `useStates` 用它把状态的变化补间过去。这一批把这一层接上。
+
+### 上游的做法（`wf86/anim.md` 1.7、2.4、3B §B14；`core/echarts.ts`、`zrender/Element.ts`、`Displayable.ts`、`Path.ts` 逐行核过）
+
+- **谁有过渡**（`updateStates`，`echarts.ts:2697-2747`）：每次渲染之后，凡有 emphasis 状态对象的元素，系列 `isAnimationEnabled()` 时设 `stateTransition = {duration, delay, easing}`——读系列的 `stateAnimation` 子模型，没写的键落到根上的 `stateAnimation`，再落到全局默认（300、`cubicOut`，没有 delay）；`duration` 不大于 0 就是 null。同一份配置给它的标签和引导线。渲染开头的 `clearStates` 先把它们都置 null、无过渡地回到常态并记下 prevStates；渲染之后先无过渡地套回 prevStates，**再**设过渡、再按标志套列表——所以整体更新里状态的变化是带过渡的，而且它的 clip 被 setOption 末尾的同步 flush 一起步进。`animation: false`、超过阈值的系列根本没有 stateTransition。
+- **一帧的顺序**：悬停、动作只记标志；下一帧 `Animation.update` 先步进所有 clip，再在 `frame` 事件里 `applyChangedStates`——过渡的动画器在这一帧建出来，**下一帧**才第一次步进（起点是那一帧的时刻）。
+- **zrender 的 `useStates`**（`Element.ts:952-1150`）：同一列表什么都不做；离开常态时先 `saveCurrentToNormalState`——只存状态设了的根键（变换与 ignore）、整份 style、整份 shape（各一次），**然后**对每个不循环、不是别的状态过渡（常态的过渡算）的动画器 `saveTo`：把未结束轨道的**终值**写进常态，所以入场或更新进行中被悬停，常态记下的是终值而不是插值。`canTransition = !noAnimation && !__inHover && duration > 0`。有过渡时：变换键（x、y、scale、rotation……）、`getAnimationStyleProps` 列出的样式键（Path：fill、stroke、lineWidth、opacity、阴影……；Text 只有 opacity 和阴影）、shape 的原始键 `animateTo` 过去，动画器带 `__fromStateTransition = 列表名`（回常态是 `'__zr_normal__'`）；样式不在可动列表里的键、当前值或目标值为 null 的键直接赋值（选中边框色从无到有就是这样）；目标样式是常态样式叠上状态样式，常态里没有、原型有默认值的键取默认值（柱子的线宽从默认 1 补间到选中的 2）。没有过渡时直接设值，并对正在跑的动画器 `__changeFinalValue`——它们改去状态（或常态）的值，不停、不跳。补间从**当前值**出发，同名键上旧的轨道先 `stopTracks`；颜色按 rgba 插值，写回 `rgba(r,g,b,a)`、rgb 向下取整。
+- **悬停层**：只有 canvas 渲染器、元素数超过 `hoverLayerThreshold`（默认 3000）时 emphasis 才进悬停层；进出悬停层都没有过渡（`__inHover`），而且只改样式。
+- **过渡的 style、shape 是新对象**（`Displayable.ts:556`、`Path.ts:565`）：`stopTracks` 对还没步进的轨道把 from 值写回去，写进的是**旧**对象——元素已经换了新的。所以首次渲染就选中的饼（`pie-select-initial`）：标签的淡入刚建出来（setToFinal 把不透明度留在 1），select 的过渡一来就停掉它，标签既不淡入也没有样式过渡。端口的属性袋只有一份，`StopTracksDetached` 先停轨道、再把值放回去，模拟这一点（第一轮回放在这个用例上差 32 处，就是它）。
+- **LabelManager 的旧布局**：整体更新时，若 prevStates 里有 select，标签的旧位置是选中状态下的位置（`oldLayoutSelect`），有 emphasis 时再被 `oldLayoutEmphasis` 覆盖（`LabelManager.ts:565-576`）。
+
+### 做法
+
+- **引擎**（`tyControls.AdvChart.Anim`）：`TTyAnimator` 多了 `SaveTo`、`ChangeFinalValue`、`Loop`、`FromStateTransition`；`TTyAnimElement` 多了上游的状态机——`TTyAnimState`（扁平化的状态对象：设了的键 `'x'`、`'style.fill'`、`'shape.r'`，以及有没有 style、shape 对象）、`UseStates` / `ClearStates`、常态 `NormalValue`、`SetStateTransition`、`StatePath`（Path 还是 Text，决定哪些样式键能动）、`SetStateSkip`（同一个属性袋里不属于这个元素的根键：散点代理里的组位置）。`saveCurrentToNormalState` 与 `_applyStateObj` 照 Element → Displayable → Path 的顺序逐行转写；样式过渡走 `animationProps` 过滤（`DoAnimateTo` 带上过滤与状态名）；`TyAnimStyleDefault` 是 `createStyle` 原型的默认值表。
+- **跑在哪个元素上**：代理。上游是同一个元素的（柱、扇区、散点符号路径、漏斗块、K 线、标签、引导线），状态就跑在入场/更新动画的那个代理上——于是悬停撞上入场或更新时，`saveTo`、`stopTracks`、`__changeFinalValue` 和上游一模一样地相互作用；不是同一个元素的（折线符号的路径在组之下、折线与面积不是裁剪矩形）以及没有入场动画的（热力图格子、象形柱图形、旭日扇区、涟漪散点的符号），用状态自己的代理（`'st:'` 角色，按原始下标存）。代理上的状态键——`style.fill/stroke/lineWidth/opacity`、`x/y`、`scaleX/scaleY`、`shape.r`——以 rest 值**播种**（`StSeed`，旁边记着 rest 值）；角色动画持有的键（散点的缩放与不透明度、扇区的形状、标签的淡入）不被覆盖。`AnimStateProxy` 公开给测试。
+- **接线**（控件）：状态机（`States`）照旧决定列表与合并后的状态对象（`TTyStElement.Merged` 新记下），`StAnimSync` 在每次构建、布防之后把它译成代理的键：颜色按打包值译回字符串（抬亮的是 `liftColor` 的 `rgba()`，其余 `#rrggbb`——「同一颜色不同字符串」也会补间这点与上游一致），符号缩放是 `半尺寸 × 比例`（与 `this._sizeX * scaleRatio` 同序），饼的半径、平移，标签的不透明度按 rest 的倍数；过渡配置由 `StAnimCfg` 读；元素数过 `hoverLayerThreshold` 时含 emphasis 的切换不过渡。整体更新：`StSync` 一开头（在任何更新动画器建出之前）对所有带状态的代理无过渡 `ClearStates` 并记下 `StPrev`，布防之后先无过渡套回、再带过渡套标志；新选项的布防 flush 挪到状态之后（`AnimFlushArmed`），状态过渡的 clip 也在 setOption 那一刻步进。
+- **画**：代理上的元素，列表只写 z2 与可见性，可动的键交给帧——`TyAnimApplyState` 把偏离 rest 的状态键画到元素上（颜色、线宽、不透明度照值，x/y 平移，缩放绕符号中心，扇区半径），角色分支画过的键不重复画。有过渡时 `AnimLive`、系列进动态层，结束后回静态层，静态层画的就是停在状态值上的帧。命中测试和指针事件在动画中、或有状态代理时都打在帧上（选中扇区移出 10 px 也照画的地方命中）。没有代理的渲染（`camAuto` 的无头渲染、`camOff`、设计器）照旧由列表瞬间切换。
+- **顺带修的**：A3 的指针事件命中一直读静态列表，动画进行中悬停的是终点的几何——改成读帧（`pie-update-hover` 一比就查出来：更新进行中悬停扇区 b，端口命中的是终态下的 a）。饼标签在整体更新时的旧位置按 prevStates 取 `oldLayoutSelect`。`AnimProxyCount/AnimProxy` 不计状态自己的代理。
+
+### 基准
+
+- `tools/advchart-oracle/state-anim.js`（复制 `animation-update.js` 的钩子：替换 `Date`、`_ssr = false`、`env.node = false`、种子随机数、手动步进）→ `tests/fixtures/advchart-state-anim.json`：35 个用例、28 个采样点（0…1500 ms），每个采样先放事件（`zr.handler.mousemove` 指向元素中心、`dispatchAction`、notMerge 的 setOption），再走一帧，记录每个系列元素的变换/样式/形状键、z2、`currentStates`、状态动画器（`__fromStateTransition:targetName`）与 `stateTransition`。用例：柱的悬停进出、中途移出再移入、换柱、动作高亮/取消、选中（边框色直接赋值、线宽 1→2 补间）、选中后悬停（从选中色抬亮）、`focus: 'series'` 的淡化、动作 focus self、`stateAnimation` 覆盖（600/linear/delay 50）与根级（200/quadraticIn）、时长 0、`animation: false`；饼的悬停（r+5、抬亮）、选中（扇区、标签、引导线一起平移）、single 模式中途换选；散点悬停（`max(1.1, 3/5)`）与 `emphasis.scale` 1.6；折线符号悬停（路径缩放、折线描边抬亮）、折线 focus 淡化柱子；**交互**：散点入场 300 ms 时高亮（saveTo 记终值）及时长 0 的版本（`__changeFinalValue`）、柱的更新中高亮、饼的更新中悬停（形状过渡接管更新、标签旧布局同样被常态吸收）、首次渲染数据里就选中（选中平移与扫开同时）；**notMerge**：选中后整体更新（选中丢失，带过渡退回）、饼数据里再次选中、高亮期间整体更新；**其余类型**：漏斗、热力图、K 线（边框 2）、象形柱、旭日（descendant 淡化到 0.2）、涟漪散点、面积折线（折线与面积各自过渡）、带标签的 focus 淡化。41 条守卫（默认 300/cubicOut 与首次步进时刻、通道向下取整、时长 0 与关动画无状态动画器、关动画无 stateTransition、每个用例静止、饼选中三件一起动、覆盖的延迟与时长），两次生成逐字节一致。
+- `test.advchart.animstate`（新单元，已登记）：
+  - `TAdvChartAnimStateTest.TestStateTransitionsAsUpstream`：每个用例经真控件（`camAlways`、注入时钟、SSR 量字、400×300）在 T0 设选项并照 oracle 的方式静止，之后每个采样先放事件（`MouseMove`、`DispatchAction`、`Option`），再 `AnimTick`、渲染一次，用 `AnimStateProxy` 找到每个上游元素对应的代理，逐采样比：状态列表、状态动画器（名字与目标）、`stateTransition` 的时长/缓动/延迟、整个图表的 clip 数，以及上游追踪的每个键**逐位比**（颜色按解析比，经皮肤映射：上游的 rest 色是端口的 rest 色、它的抬亮是端口 rest 的抬亮、`#3c3c41` 是标题墨色），端口代理带着而上游没动的状态键必须一直等于上游的值。约 2.5 万次键比较，其中 4000 多次是被追踪的键。唯一的豁免是 `bar-hover-notmerge` 在 400 ms 之后（见偏差）。
+  - 手写：帧里画的就是代理的颜色、位图中心像素就是它、静止后静态层是抬亮色；选中扇区在帧里移出、命中按帧；无头渲染没有代理、列表当场切换；超过 `hoverLayerThreshold` 进出 emphasis 都不过渡。
+  - `TAdvChartAnimStateEngineTest`（11 个）：从当前值过渡（cubicOut 与向下取整的通道）、中途离开从所在处出发、无过渡时直接设值并 `__changeFinalValue`、`saveTo` 记入场的终值、别的状态的过渡不进常态、常态的过渡会进、Text 只动不透明度、shape 的对象直接赋值而原始键补间、同一列表什么都不做、未步进的淡入停在 setToFinal 的终值、回常态就忘掉常态。
+
+### 变异测试
+
+`an3b/mutate.py`：26 个变异，逐个改源码、重编、跑本单元两个测试类、还原。
+
+- 选项与门槛（4）：默认时长 300 改 400、`cubicOut` 改 `cubicIn`、`isAnimationEnabled` 的门去掉、`stateAnimation.delay` 不读；
+- 引擎（13）：`duration > 0` 改 `>= 0`、样式不按 `getAnimationStyleProps` 过滤、ignore 也补间、shape 里的对象也补间、`__changeFinalValue` 不做 / 总落到常态的值、`saveTo` 不做 / 别的状态的过渡也存 / 常态的过渡不存、过渡从正在跑的过渡的**终值**出发（而不是当前值）、rgb 四舍五入、回常态后常态不清空、新 style 对象上的 `stopTracks` 步回写进当前值；
+- 接线（9）：悬停层门槛去掉、整体更新不先清状态、prevStates 带过渡套回、标签旧位置不取 `oldLayoutSelect`、指针事件命中读列表、布防 flush 先于状态、代理上的元素列表也写状态值（帧里平移两次）、符号缩放不乘半尺寸、抬亮色不写成 `rgba()`（「同色不同字符串」也要补间）。
+
+首轮 22 个杀死，存活 4 个：
+- 「回常态后常态不清空」：用例里没有 rest 在两次悬停之间变了的元素——补引擎手写「回常态就忘掉常态」（散点尺寸由 5 变 7 后再悬停，回到 7），杀死；
+- 「代理上的元素列表也写状态值」：回放比的是代理、命中测试只看落在哪个扇区——手写的选中扇区补上「列表的扇区在 rest、帧里正好移出代理的 x」，杀死；
+- 「ignore 也补间」：**等价变异**——ECharts 的 animateTo 不允许离散动画，离散轨在 start 时直接写终值、没有 clip，与直接赋值无从区分；
+- 「prevStates 带过渡套回」：**等价变异**——`StAnimClearAll` 已经把 stateTransition 清掉（上游 clearStates 也是先置 null），没有过渡配置，带不带 noAnimation 都一样。
+
+补完重跑全部杀死（两个等价的除外）。
+
+### 推迟与偏差
+
+- **新选项后悬停不保留**：B1 在设 Option 时清掉了状态记录（`FSt := nil`），上游 notMerge 下复用的元素带着 hoverState 和 hbo 位。`bar-hover-notmerge` 里上游高亮一直保持到 downplay，端口在 400 ms 的整体更新时带过渡退回常态；测试只比到 400 ms。选中的丢失与上游一致（新模型没有 selectedMap）。这是 B3 的「重渲染语义」要解决的。
+- **悬停层**只做了「不过渡」这一半：上游在悬停层里只改样式（饼不放大、符号不缩放、z2 不变），端口照常改；元素数用显示列表的长度近似 storage 里的非组元素数。
+- **标签的不透明度**在代理上是相对 rest 的倍数（与淡入一致）：rest 不透明度为 1 时与上游逐位相同，否则数值成比例、画面相同。
+- 改尺寸、换主题等重新布局（`AnimDropAll`）丢掉代理：进行中的状态过渡直接到终值（上游会接着跑）。
+- 象形柱 `emphasis.scale` 的缩放是端口的相对比例、绕图形中心，不与上游的符号缩放值逐位对应；涟漪散点的状态跑在自己的代理上，与它的更新缩放相乘（上游同一个键会互相停掉）。
+- `stateAnimation.delay` 写成函数、`duration` 写成字符串不支持。仪表盘、雷达、关系图、树、矩形树图、桑基图的悬停仍是原有的覆盖层或原地重样式，没有过渡。

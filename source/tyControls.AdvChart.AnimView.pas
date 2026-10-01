@@ -122,7 +122,24 @@ unit tyControls.AdvChart.AnimView;
                  unless the type, period, scale or number changed
     endLabel     a line's end label rides its clip: the clip's during is
                  LineView._endLabelOnDuring (the place on the line where the
-                 clip has got to, and the value there). }
+                 clip has got to, and the value there).
+
+  STATES [Batch 94, AN3b]. emphasis, blur and select switch through the
+  engine's useStates on the SAME proxy the enter and update animations run on
+  when upstream's element is the same one (a bar, a slice, a scatter symbol's
+  path, a funnel piece, a candle, a label, a label line), so a hover in the
+  middle of an enter or an update meets its animators as upstream's does
+  (saveTo, stopTracks, __changeFinalValue); elsewhere a proxy of the states'
+  own ('st:' roles: a line symbol's path under its group, a line's polyline
+  and area, a heatmap cell, a pictorial glyph, a sunburst piece). The state
+  keys a proxy carries -- style.fill / stroke / lineWidth / opacity, x / y,
+  scaleX / scaleY, shape.r -- are SEEDED with the rest values (StKeys, with
+  their rest values beside); a frame draws each one that is off its rest
+  over the list's element (TyAnimApplyState): colours and widths and
+  opacities as they are, x / y as a translation, a scale about the symbol's
+  centre, a radius as the slice's. A key the role's own branch draws (a
+  symbol's scale and opacity, a slice's shape, a label's place and fade) is
+  left to it. }
 interface
 uses SysUtils, Classes, Math, contnrs,
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
@@ -183,6 +200,14 @@ type
     FHasText: Boolean;
     { a line's clip: its end label }
     FEnd: TTyChartAnimEndLabel;
+    { THE STATE KEYS and their rest values [Batch 94] }
+    FStKeys: TTyStringArray;
+    FStRest: TTyAnimProps;
+    FStPrev: string;
+    { a pie label's place under its select state: LabelManager's
+      oldLayoutSelect }
+    FStSelX, FStSelY: Double;
+    FStHasSel: Boolean;
   public
     constructor Create(ASeries, AIndex: Integer; const ARole: string);
     { the values the layout gave every key }
@@ -200,6 +225,19 @@ type
     { the line clip's during and done, for its end label }
     procedure EndLabelDuring(APercent: Double);
     procedure EndLabelDone;
+    { A STATE KEY at its rest value [Batch 94]: added (and set) when the
+      proxy has none yet, or when AForce; its rest value either way }
+    procedure StSeed(const AKey: string; const AValue: TTyAnimValue; AForce: Boolean);
+    { the rest value of a state key; False for none }
+    function StRestOf(const AKey: string; out AValue: TTyAnimValue): Boolean;
+    function HasStKey(const AKey: string): Boolean;
+    property StKeys: TTyStringArray read FStKeys;
+    { a full update's prevStates: the list clearStates took away, to be put
+      back at once after the render (echarts.ts:2667-2748) }
+    property StPrev: string read FStPrev write FStPrev;
+    { a label's place under its select state, kept for the next update's
+      move (LabelManager's oldLayoutSelect) }
+    procedure StNoteSelect(AX, AY: Double);
     { the words now, while a count runs }
     property Text: string read FText;
     property HasText: Boolean read FHasText;
@@ -292,6 +330,8 @@ type
     function Count: Integer;
     function Item(AIndex: Integer): TTyChartAnimProxy;
     function Find(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
+    { a proxy of the states' own, keyed as given [Batch 94] }
+    function MakeState(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
     { The enter animation of everything in AList that asks for one and has
       no proxy yet, as upstream's views start it. ASeries by series index. }
     procedure Arm(AList: TTyPaintList; const ASeries: TTyChartAnimSeriesArray);
@@ -326,12 +366,21 @@ function TyAnimInterpolateValue(AFrom, ATo, APercent: Double; AHasPrec: Boolean;
   APrec: Double): Double;
 { One element as its proxy says it is now. }
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+{ ... and as its STATE proxy says [Batch 94]: every state key off its rest
+  value drawn over the element; ARole: the proxy is also the element's role
+  proxy, whose branch drew the keys it knows }
+procedure TyAnimApplyState(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy;
+  ARole: Boolean);
+{ a packed colour as the state machine hands it to the engine: lifted (or
+  not opaque) as zrender's rgba() string, else as '#rrggbb' }
+function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
 { ADest := ASource with every bound element applied and every following label
   moved with its host, then every ghost still leaving. Insertion indices are
   kept, so a hit on the frame names the same element as a hit on the list
   (a ghost is silent). ASet may be nil. }
 procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
-  const ABind: TTyChartAnimProxyArray; ASet: TTyChartAnimSet = nil);
+  const ABind: TTyChartAnimProxyArray; ASet: TTyChartAnimSet = nil;
+  const AStBind: TTyChartAnimProxyArray = nil);
 { A shape scaled by (AFX, AFY) about (ACX, ACY). }
 procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Double);
 { ... and moved by (ADX, ADY). }
@@ -349,7 +398,7 @@ function TyLineBoundingDiff(const A, B: TTyDoubleArray): Double;
 
 implementation
 
-uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data,
+uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.Color,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView;
 
@@ -413,6 +462,45 @@ begin
     end;
   end;
   Result := True;
+end;
+
+procedure TTyChartAnimProxy.StSeed(const AKey: string; const AValue: TTyAnimValue;
+  AForce: Boolean);
+var have: Boolean;
+begin
+  have := HasStKey(AKey);
+  if not have then
+  begin
+    SetLength(FStKeys, Length(FStKeys) + 1);
+    FStKeys[High(FStKeys)] := AKey;
+  end;
+  { a key a role's animation already holds keeps its value }
+  if AForce or (not have and (GetAnimProp(AKey).Kind = avkNull)) then
+    SetAnimProp(AKey, AValue);
+  TyAnimPropPut(FStRest, AKey, AValue);
+end;
+
+function TTyChartAnimProxy.StRestOf(const AKey: string; out AValue: TTyAnimValue): Boolean;
+var i: Integer;
+begin
+  i := TyAnimPropIndex(FStRest, AKey);
+  Result := i >= 0;
+  if Result then AValue := TyAnimClone(FStRest[i].Value) else AValue := TyAnimNull;
+end;
+
+procedure TTyChartAnimProxy.StNoteSelect(AX, AY: Double);
+begin
+  FStSelX := AX;
+  FStSelY := AY;
+  FStHasSel := True;
+end;
+
+function TTyChartAnimProxy.HasStKey(const AKey: string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(FStKeys) do
+    if FStKeys[i] = AKey then Exit(True);
+  Result := False;
 end;
 
 procedure TTyChartAnimProxy.LeaveDone;
@@ -741,6 +829,12 @@ function TTyChartAnimSet.Find(ASeries, AIndex: Integer;
   const ARole: string): TTyChartAnimProxy;
 begin
   Result := TTyChartAnimProxy(FIndex.Find(KeyOf(ASeries, AIndex, ARole)));
+end;
+
+function TTyChartAnimSet.MakeState(ASeries, AIndex: Integer;
+  const ARole: string): TTyChartAnimProxy;
+begin
+  Result := Make(ASeries, AIndex, ARole);
 end;
 
 procedure TTyChartAnimSet.NoOp;
@@ -1625,12 +1719,30 @@ var
     put the text, at update timing and the row [Batch 92] }
   procedure MoveLabel(var AP: TTyChartAnimProxy; const AOldEl, AEl: TTyChartElement;
     ASer, ARow: Integer; const AModel: TTyAnimModel);
-  var props: TTyAnimProps;
+  var
+    props: TTyAnimProps;
+    fx, fy: Double;
   begin
     props := TyAnimProps([Num1('x', AEl.Caption.X), Num1('y', AEl.Caption.Y),
       Num1('rotation', AEl.Caption.RotationRad)]);
+    { the move starts where the old layout was -- or, under a select the
+      render took away (prevStates), where the select state had put it,
+      unless emphasis was there too: oldLayoutEmphasis is applied last
+      (LabelManager.ts:565-576) [Batch 94] }
+    fx := AOldEl.Caption.X;
+    fy := AOldEl.Caption.Y;
+    if (AP <> nil) and AP.FStHasSel and (Pos('select', AP.FStPrev) > 0) then
+    begin
+      fx := AP.FStSelX;
+      fy := AP.FStSelY;
+    end;
+    if (AP <> nil) and (Pos('emphasis', AP.FStPrev) > 0) then
+    begin
+      fx := AOldEl.Caption.X;
+      fy := AOldEl.Caption.Y;
+    end;
     if AP = nil then AP := Make(ASer, ARow, 'label');
-    AP.Attr(TyAnimProps([Num1('x', AOldEl.Caption.X), Num1('y', AOldEl.Caption.Y),
+    AP.Attr(TyAnimProps([Num1('x', fx), Num1('y', fy),
       Num1('rotation', AOldEl.Caption.RotationRad)]));
     MergeFinal(AP, props);
     TyUpdateProps(AP, props, AModel, TyAnimCallAt(ARow));
@@ -2837,6 +2949,159 @@ begin
   end;
 end;
 
+function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
+var a: Cardinal;
+begin
+  a := (AColor shr 24) and $FF;
+  if ALifted or (a <> 255) then
+    Result := TyAnimStr(TyAnimRgbaString((AColor shr 16) and $FF, (AColor shr 8) and $FF,
+      AColor and $FF, a / 255))
+  else
+    Result := TyAnimStr('#' + LowerCase(IntToHex((AColor shr 16) and $FF, 2)
+      + IntToHex((AColor shr 8) and $FF, 2) + IntToHex(AColor and $FF, 2)));
+end;
+
+{ a colour value as the canvas paints it: AOk False for null or 'none' }
+function StColourOf(const AV: TTyAnimValue; out AColor: TTyChartColor): Boolean;
+begin
+  AColor := 0;
+  Result := (AV.Kind = avkString) and not TyChartColorIsNone(AV.Str)
+    and TyTryParseChartColor(AV.Str, AColor);
+end;
+
+{ the same value as far as the drawing goes: a colour by its parse }
+function StSameValue(const A, B: TTyAnimValue): Boolean;
+var ca, cb: TTyChartColor; oa, ob: Boolean;
+begin
+  if (A.Kind = avkString) or (B.Kind = avkString) then
+  begin
+    oa := StColourOf(A, ca);
+    ob := StColourOf(B, cb);
+    Exit((oa = ob) and (not oa or (ca = cb)));
+  end;
+  if A.Kind <> B.Kind then Exit(False);
+  if A.Kind in [avkNumber, avkBool] then
+    Exit(SameBitsD(A.Num, B.Num) or (IsNan(A.Num) and IsNan(B.Num)));
+  Result := A.Kind = avkNull;
+end;
+
+procedure TyAnimApplyState(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy;
+  ARole: Boolean);
+var
+  i: Integer;
+  key: string;
+  v, rest, vx, vy, rx, ry: TTyAnimValue;
+  c: TTyChartColor;
+  fx, fy, cx, cy: Double;
+  b: TTyRectF;
+
+  { the role's branch draws a key its proxy rests at a layout value of }
+  function RoleHas(const AKey: string): Boolean;
+  begin
+    Result := ARole and (AProxy.FinalOf(AKey).Kind <> avkNull);
+  end;
+
+  function Off(const AKey: string; out AV, ARest: TTyAnimValue): Boolean;
+  begin
+    AV := AProxy.GetAnimProp(AKey);
+    Result := AProxy.StRestOf(AKey, ARest) and not StSameValue(AV, ARest);
+  end;
+
+begin
+  if AProxy = nil then Exit;
+  for i := 0 to High(AProxy.FStKeys) do
+  begin
+    key := AProxy.FStKeys[i];
+    if key = 'style.fill' then
+    begin
+      if RoleHas(key) or not Off(key, v, rest) then Continue;
+      { a follower (a candle's wick) has no fill to change }
+      if not AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then Continue;
+      if StColourOf(v, c) then
+      begin
+        AEl.Style.HasFill := True;
+        AEl.Style.FillColor := c;
+        AEl.Style.FillGradient := Default(TTyChartGradient);
+      end
+      else
+        AEl.Style.HasFill := False;
+    end
+    else if key = 'style.stroke' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if StColourOf(v, c) then
+      begin
+        AEl.Style.StrokeColor := c;
+        AEl.Style.StrokeGradient := Default(TTyChartGradient);
+        if not (AEl.Style.StrokeWidthLogical > 0) then
+          AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
+      end
+      else
+        AEl.Style.StrokeColor := 0;
+    end
+    else if key = 'style.lineWidth' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if v.Kind = avkNumber then AEl.Style.StrokeWidthLogical := v.Num;
+    end
+    else if key = 'style.opacity' then
+    begin
+      if RoleHas(key) then Continue;
+      if not Off(key, v, rest) or (v.Kind <> avkNumber) then Continue;
+      { a label's is a factor over its own, as its fade's is }
+      if AEl.Caption.FontSizeLogical > 0 then
+        AEl.Style.Alpha := AEl.Style.Alpha * v.Num
+      else
+        AEl.Style.Alpha := v.Num;
+    end
+    else if key = 'x' then
+    begin
+      if RoleHas('x') or RoleHas('y') then Continue;
+      vx := AProxy.GetAnimProp('x');
+      vy := AProxy.GetAnimProp('y');
+      if not (AProxy.StRestOf('x', rx) and AProxy.StRestOf('y', ry)) then Continue;
+      if (vx.Kind <> avkNumber) or (vy.Kind <> avkNumber) then Continue;
+      if (rx.Kind <> avkNumber) or (ry.Kind <> avkNumber) then Continue;
+      if AEl.Caption.FontSizeLogical > 0 then
+        { a label's x / y are its anchor }
+        MoveCaption(AEl, vx.Num - AEl.Caption.X, vy.Num - AEl.Caption.Y)
+      else
+        TyShapeMove(AEl.Shape, vx.Num - rx.Num, vy.Num - ry.Num);
+    end
+    else if key = 'scaleX' then
+    begin
+      if RoleHas('scaleX') or RoleHas('scaleY') then Continue;
+      vx := AProxy.GetAnimProp('scaleX');
+      vy := AProxy.GetAnimProp('scaleY');
+      if not (AProxy.StRestOf('scaleX', rx) and AProxy.StRestOf('scaleY', ry)) then Continue;
+      if StSameValue(vx, rx) and StSameValue(vy, ry) then Continue;
+      if (rx.Num = 0) or (ry.Num = 0) or IsNan(rx.Num) or IsNan(ry.Num) then Continue;
+      fx := vx.Num / rx.Num;
+      fy := vy.Num / ry.Num;
+      { about the symbol's centre: a line symbol's point }
+      if AEl.Anim.Role in [carLineSymbol, carSymbol, carEffectSymbol] then
+      begin
+        cx := AEl.Anim.G[0];
+        cy := AEl.Anim.G[1];
+      end
+      else
+      begin
+        b := TyShapeBounds(AEl.Shape);
+        cx := (b.Left + b.Right) / 2;
+        cy := (b.Top + b.Bottom) / 2;
+      end;
+      if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then MakeInkless(AEl)
+      else TyShapeScaleAbout(AEl.Shape, cx, cy, fx, fy);
+    end
+    else if key = 'shape.r' then
+    begin
+      if RoleHas(key) then Continue;
+      if not Off(key, v, rest) or (v.Kind <> avkNumber) then Continue;
+      if AEl.Shape.Kind = cskSector then AEl.Shape.R1 := v.Num;
+    end;
+  end;
+end;
+
 function PointsOf(const A: TTyDoubleArray): TTyPointFArray;
 var i: Integer;
 begin
@@ -2966,7 +3231,8 @@ begin
 end;
 
 procedure TyAnimBuildFrame(ASource, ADest: TTyPaintList;
-  const ABind: TTyChartAnimProxyArray; ASet: TTyChartAnimSet);
+  const ABind: TTyChartAnimProxyArray; ASet: TTyChartAnimSet;
+  const AStBind: TTyChartAnimProxyArray);
 var
   i, h: Integer;
   el, hostS, hostF: TTyChartElement;
@@ -2980,6 +3246,9 @@ begin
   begin
     el := ASource.Element(i);
     if (i <= High(ABind)) and (ABind[i] <> nil) then TyAnimApply(el, ABind[i]);
+    { THE STATES [Batch 94] }
+    if (i <= High(AStBind)) and (AStBind[i] <> nil) then
+      TyAnimApplyState(el, AStBind[i], (i <= High(ABind)) and (ABind[i] = AStBind[i]));
     { A LINE'S POINTS IN AN UPDATE [Batch 90] }
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
       ApplyLine(el, ASet.Find(el.Anim.Series, -1, 'linePoly'),

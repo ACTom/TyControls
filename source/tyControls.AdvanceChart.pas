@@ -559,6 +559,13 @@ type
     FAnim: TTyAnimation;
     FAnimSet: TTyChartAnimSet;
     FAnimBind: TTyChartAnimProxyArray;
+    { THE STATE PROXIES by insertion index [Batch 94, AN3b]: the proxy each
+      state element's states run on -- its role's, or one of the states'
+      own; whether this build's states run through them; and an option
+      armed this build, whose synchronous first step waits for them }
+    FAnimStBind: TTyChartAnimProxyArray;
+    FStProxied: Boolean;
+    FAnimFlush: Boolean;
     FAnimFrame: TTyPaintList;
     FAnimNow: Double;
     FAnimTimer: TTimer;
@@ -603,7 +610,26 @@ type
       take the synchronous first step, upstream's flush), then find every
       element's proxy }
     procedure AnimAfterBuild;
+    { the synchronous first step of an option armed this build, after the
+      states had their say (upstream's updateStates runs inside the render,
+      before setOption's flush) [Batch 94] }
+    procedure AnimFlushArmed;
     function AnimSeriesInfo: TTyChartAnimSeriesArray;
+    { ---- the states on the proxies [Batch 94, AN3b] ---- }
+    { after the build and its arming: every state element's proxy found or
+      made, seeded with the rest values, given the series' stateTransition,
+      a full update's previous list put back at once, then the element's
+      list applied -- with a transition where upstream's would make one }
+    procedure StAnimSync;
+    procedure StAnimEl(var AEl: TTyStElement; AListIdx, ASeries, ARaw: Integer;
+      const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
+      AHasCfg, AOver: Boolean);
+    { the series' stateAnimation as updateStates reads it (series, root,
+      300 / cubicOut), when the series animates and the duration is above 0 }
+    function StAnimCfg(ASeriesIndex: Integer; out ACfg: TTyAnimCfg): Boolean;
+    { a full update's clearStates on every proxy, without a transition: the
+      list each had is kept to be put back }
+    procedure StAnimClearAll;
     { ---- the update [Batch 90] ---- }
     { upstream's series view ids of an option, by series index }
     function AnimViewKeys(ARoot: TJSONData): TTyStringArray;
@@ -1323,7 +1349,8 @@ type
     { only loops are live: the static layer holds the rest }
     property AnimContinuous: Boolean read FAnimContinuous;
     property AnimLive: Boolean read FAnimLive;
-    { the animated proxies, for a test or a host to read }
+    { the animated proxies, for a test or a host to read (not the states'
+      own: AnimStateProxy) }
     function AnimProxyCount: Integer;
     function AnimProxy(AIndex: Integer): TTyChartAnimProxy;
     function AnimFindProxy(ASeries, AIndex: Integer;
@@ -1334,6 +1361,10 @@ type
     function AnimFindGhost(ASeries, AIndex: Integer;
       const ARole: string): TTyChartAnimProxy;
     function AnimGhostCount: Integer;
+    { THE PROXY AN ELEMENT'S STATES RUN ON [Batch 94]: of series ASeries,
+      inner row ARow, the part 'host', 'label', 'guide' (the row's), 'poly'
+      or 'area' (a line's, ARow ignored); nil when none is bound }
+    function AnimStateProxy(ASeries, ARow: Integer; const APart: string): TTyChartAnimProxy;
     function AxisZoom(const AMainType: string; AAxisIndex: Integer;
       out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
     { The rows of series ASeriesIndex as the last build left them -- filtered
@@ -8794,6 +8825,9 @@ begin
   { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. }
   drawn := BuildSeriesList(AMeasurer, APPI);
   AnimAfterBuild;
+  { the states on their proxies, then the armed option's flush [Batch 94] }
+  StAnimSync;
+  AnimFlushArmed;
   { IN MOTION, THE SERIES ARE THE DYNAMIC LAYER'S: a static layer holding
     them would freeze the first frame under every later one (Q7). }
   { ONLY LOOPS LEFT: everything but the ripples and their symbols stays
@@ -8807,7 +8841,7 @@ begin
   if drawn > 0 then
     { AT REST, a proxy may still hold a value a unit in the last place off
       the layout -- the frame draws where upstream's element rests }
-    if Length(FAnimBind) > 0 then
+    if (Length(FAnimBind) > 0) or (Length(FAnimStBind) > 0) then
       TyRenderPaintList(APainter, AnimFrame)
     else
       TyRenderPaintList(APainter, FPaintList);
@@ -8874,7 +8908,9 @@ begin
   if (FPaintList = nil) or not FPaintListValid then Exit;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT: the frame keeps the list's
     insertion indices, so the element named is the list's [Batch 89] }
-  if FAnimLive then
+  { and AT REST ON A STATE PROXY, where the list keeps the rest values (a
+    selected slice is out, a hovered symbol larger) [Batch 94] }
+  if FAnimLive or (Length(FAnimStBind) > 0) then
     idx := AnimFrame.HitTestElement(AX, AY, FPaintListPPI)
   else
     idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
@@ -9889,10 +9925,17 @@ begin
       Exit;
     end;
   end;
-  { THE DISPLAY LIST: series items, their labels, markers, legend items }
+  { THE DISPLAY LIST: series items, their labels, markers, legend items --
+    as DRAWN: in motion, or on a state proxy, the frame (its insertion
+    indices are the list's) [Batch 94] }
   idx := -1;
   if (FPaintList <> nil) and FPaintListValid then
-    idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
+  begin
+    if FAnimLive or (Length(FAnimStBind) > 0) then
+      idx := AnimFrame.HitTestElement(AX, AY, FPaintListPPI)
+    else
+      idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
+  end;
   if idx >= 0 then
   begin
     el := FPaintList.Element(idx);
@@ -10319,11 +10362,21 @@ end;
 { THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
   the build drew it -- a gradient stays a gradient; a lifted colour over a
   gradient fill leaves the gradient too (the port does not lift a ramp). }
-procedure StWriteHost(var AEl: TTyChartElement; const AState: TTyStElement);
+procedure StWriteHost(var AEl: TTyChartElement; const AState: TTyStElement;
+  AProxied: Boolean);
 var c, r: TTyStObject;
 begin
   c := AState.Cur;
   r := AState.Rest;
+  { ON A PROXY the animatable keys are the frame's: the list keeps the rest
+    values, and only the paint order and the visibility are written
+    [Batch 94] }
+  if AProxied then
+  begin
+    AEl.Z2 := Round(c.Num[stkZ2]);
+    AEl.Ignore := c.Num[stkIgnore] <> 0;
+    Exit;
+  end;
   if not SameColourKey(c, r, stkFill) then
   begin
     if c.None[stkFill] then AEl.Style.HasFill := False
@@ -10361,11 +10414,18 @@ end;
 { A FOLLOWER: another stretch of the host's own path (a candlestick's
   wicks) -- the colours the states changed, the host's opacity and its
   paint order, the same translation [Batch 90] }
-procedure StWriteFollower(var AEl: TTyChartElement; const AHost: TTyStElement);
+procedure StWriteFollower(var AEl: TTyChartElement; const AHost: TTyStElement;
+  AProxied: Boolean);
 var c, r: TTyStObject;
 begin
   c := AHost.Cur;
   r := AHost.Rest;
+  if AProxied then
+  begin
+    AEl.Z2 := AEl.Z2 + Round(c.Num[stkZ2] - r.Num[stkZ2]);
+    AEl.Ignore := c.Num[stkIgnore] <> 0;
+    Exit;
+  end;
   if not SameColourKey(c, r, stkFill) and AEl.Style.HasFill then
   begin
     if c.None[stkFill] then AEl.Style.HasFill := False
@@ -10385,20 +10445,26 @@ begin
   AEl.Ignore := c.Num[stkIgnore] <> 0;
 end;
 
-procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement);
+procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement;
+  AProxied: Boolean);
 var c, r: TTyStObject; dx, dy: Double;
 begin
   c := AState.Cur;
   r := AState.Rest;
-  dx := c.Num[stkX] - r.Num[stkX];
-  dy := c.Num[stkY] - r.Num[stkY];
-  AEl.Caption.X := c.Num[stkX];
-  AEl.Caption.Y := c.Num[stkY];
-  StShiftShape(AEl.Shape, dx, dy);
+  { on a proxy the place and the opacity are the frame's; the ink is not
+    animated (a Text's style animates its opacity only) [Batch 94] }
+  if not AProxied then
+  begin
+    dx := c.Num[stkX] - r.Num[stkX];
+    dy := c.Num[stkY] - r.Num[stkY];
+    AEl.Caption.X := c.Num[stkX];
+    AEl.Caption.Y := c.Num[stkY];
+    StShiftShape(AEl.Shape, dx, dy);
+  end;
   AEl.Z2 := Round(c.Num[stkZ2]);
   AEl.Ignore := c.Num[stkIgnore] <> 0;
   { blur: the label's opacity, a tenth of it by default [Batch 90] }
-  if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+  if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
   { the ink: a colour a state declares, else the hover's own under emphasis }
   if TyStHasColour(c, stkFill) then
@@ -10412,15 +10478,17 @@ begin
     TyCaptionToEmphasis(AEl.Caption);
 end;
 
-procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement);
+procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement;
+  AProxied: Boolean);
 var c, r: TTyStObject;
 begin
   c := AState.Cur;
   r := AState.Rest;
-  StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
+  if not AProxied then
+    StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   AEl.Z2 := Round(c.Num[stkZ2]);
   AEl.Ignore := c.Num[stkIgnore] <> 0;
-  if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+  if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
 end;
 
@@ -10858,6 +10926,14 @@ begin
     then the flags (echarts.ts:2667-2748) }
   FStRerender := FStBuiltGen <> FStGen;
   FStBuiltGen := FStGen;
+  { THE STATES RUN ON PROXIES [Batch 94] where the render animates, or
+    where proxies are bound -- a list that waits for its arming is drawn as
+    laid out }
+  FStProxied := AnimAllowed or ((FAnimSet <> nil) and (FAnimSet.Count > 0)
+    and not FAnimPending);
+  { renderSeries' clearStates comes before the render: the proxies back to
+    normal at once, the lists kept, before an update's animators exist }
+  if FStRerender then StAnimClearAll;
   n := 0;
   for slot := 0 to High(FBindings) do
     if FBindings[slot].SeriesIndex >= n then n := FBindings[slot].SeriesIndex + 1;
@@ -11008,14 +11084,14 @@ begin
       if item^.Host.States <> [] then
       begin
         el := AList.Element(FSt[s].HostIdx[raw]);
-        StWriteHost(el, item^.Host);
+        StWriteHost(el, item^.Host, FStProxied);
         AList.SetElement(FSt[s].HostIdx[raw], el);
         { the rest of the same path: the host's changes [Batch 90] }
         if raw <= High(FSt[s].FollowIdx) then
           for k := 0 to High(FSt[s].FollowIdx[raw]) do
           begin
             el := AList.Element(FSt[s].FollowIdx[raw][k]);
-            StWriteFollower(el, item^.Host);
+            StWriteFollower(el, item^.Host, FStProxied);
             AList.SetElement(FSt[s].FollowIdx[raw][k], el);
           end;
       end;
@@ -11025,21 +11101,21 @@ begin
           if item^.Parts[k].States <> [] then
           begin
             el := AList.Element(FSt[s].PartIdx[raw][k]);
-            StWriteHost(el, item^.Parts[k]);
+            StWriteHost(el, item^.Parts[k], FStProxied);
             AList.SetElement(FSt[s].PartIdx[raw][k], el);
           end;
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists
         and (item^.Label_.States <> []) then
       begin
         el := AList.Element(FSt[s].LabelIdx[raw]);
-        StWriteLabel(el, item^.Label_);
+        StWriteLabel(el, item^.Label_, FStProxied);
         AList.SetElement(FSt[s].LabelIdx[raw], el);
       end;
       if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists
         and (item^.Guide.States <> []) then
       begin
         el := AList.Element(FSt[s].GuideIdx[raw]);
-        StWriteGuide(el, item^.Guide);
+        StWriteGuide(el, item^.Guide, FStProxied);
         AList.SetElement(FSt[s].GuideIdx[raw], el);
       end;
     end;
@@ -11047,14 +11123,14 @@ begin
       for k := 0 to High(FSt[s].RunIdx) do
       begin
         el := AList.Element(FSt[s].RunIdx[k]);
-        StWriteHost(el, FSt[s].Run.Host);
+        StWriteHost(el, FSt[s].Run.Host, FStProxied);
         AList.SetElement(FSt[s].RunIdx[k], el);
       end;
     if FSt[s].Area.Host.Exists and (FSt[s].Area.Host.States <> []) then
       for k := 0 to High(FSt[s].AreaIdx) do
       begin
         el := AList.Element(FSt[s].AreaIdx[k]);
-        StWriteHost(el, FSt[s].Area.Host);
+        StWriteHost(el, FSt[s].Area.Host, FStProxied);
         AList.SetElement(FSt[s].AreaIdx[k], el);
       end;
   end;
@@ -11078,6 +11154,387 @@ begin
     if FSt[s].Area.Host.Exists
       and TyStUseStates(FSt[s].Area.Host, TyStTargetStates(FSt[s].Area.Host)) then
       Result := True;
+  end;
+end;
+
+{ ==================== state transitions [Batch 94, AN3b] ====================
+
+  updateStates (echarts.ts:2697-2747) gives every element with an emphasis
+  state -- and its label and label line -- the series' stateAnimation as its
+  stateTransition when the series animates; zrender's useStates then
+  transitions the transform keys, the animatable style keys and the shape's
+  primitive keys (Anim.pas, TTyAnimElement.UseStates). Here the element is
+  its proxy: the role's where upstream's element is the one the enter and
+  update animations run on, else one of the states' own. The state machine
+  (States.pas) still decides the lists and the merged objects; this turns a
+  merged object into the proxy's keys and lets the engine run it. }
+
+const
+  { the element kinds a proxy's state keys are seeded for }
+  cStPxPath = 0;
+  cStPxLabel = 1;
+  cStPxGuide = 2;
+  cStPxPart = 3;
+  cStPxLine = 4;
+
+function StNamesOf(const AText: string): TTyStNames;
+var n: TTyStName; parts: TStringArray; i: Integer;
+begin
+  Result := [];
+  parts := AText.Split([',']);
+  for i := 0 to High(parts) do
+    for n := Low(TTyStName) to High(TTyStName) do
+      if parts[i] = cStNames[n] then Include(Result, n);
+end;
+
+{ a colour key of a state object as the engine takes it: 'none', null for
+  no stroke, a lifted colour as liftColor's rgba() string }
+function StColourValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue;
+begin
+  if AObj.None[AKey] then
+  begin
+    if AKey = stkStroke then Result := TyAnimNull
+    else Result := TyAnimStr('none');
+  end
+  else
+    Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
+end;
+
+{ A MERGED STATE OBJECT as the proxy's keys: the style keys, and the place,
+  the scale and the radius where the proxy carries them }
+function StAnimStateOf(const AEl: TTyStElement; const AM: TTyStObject;
+  AKind: Integer; P: TTyChartAnimProxy): TTyAnimState;
+var
+  rx, ry: TTyAnimValue;
+  f: Double;
+begin
+  Result := Default(TTyAnimState);
+  { setStatesStylesFromModel gives every state a style object }
+  Result.HasStyle := True;
+  if AKind = cStPxLabel then
+  begin
+    { a label's opacity is a factor over its own (as its fade's) }
+    if AM.Has[stkOpacity] then
+    begin
+      f := AM.Num[stkOpacity];
+      if StPositive(AEl.Rest.Num[stkOpacity]) then f := f / AEl.Rest.Num[stkOpacity];
+      TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(f));
+    end;
+  end
+  else
+  begin
+    if AM.Has[stkFill] and P.HasStKey('style.fill') then
+      TyAnimPropPut(Result.Props, 'style.fill', StColourValue(AM, stkFill));
+    if AM.Has[stkStroke] and P.HasStKey('style.stroke') then
+      TyAnimPropPut(Result.Props, 'style.stroke', StColourValue(AM, stkStroke));
+    if AM.Has[stkLineWidth] and P.HasStKey('style.lineWidth') then
+      TyAnimPropPut(Result.Props, 'style.lineWidth', TyAnimNum(AM.Num[stkLineWidth]));
+    if AM.Has[stkOpacity] then
+      TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
+  end;
+  if AM.Has[stkX] and P.HasStKey('x') then
+    TyAnimPropPut(Result.Props, 'x', TyAnimNum(AM.Num[stkX]));
+  if AM.Has[stkY] and P.HasStKey('y') then
+    TyAnimPropPut(Result.Props, 'y', TyAnimNum(AM.Num[stkY]));
+  { Symbol.ts: emphasisState.scaleX = this._sizeX * scaleRatio }
+  if AM.Has[stkScale] and P.HasStKey('scaleX') and P.StRestOf('scaleX', rx)
+    and P.StRestOf('scaleY', ry) then
+  begin
+    TyAnimPropPut(Result.Props, 'scaleX', TyAnimNum(rx.Num * AM.Num[stkScale]));
+    TyAnimPropPut(Result.Props, 'scaleY', TyAnimNum(ry.Num * AM.Num[stkScale]));
+  end;
+  { PieView: the emphasis shape is r = layout.r + scaleSize }
+  if AM.Has[stkR] and P.HasStKey('shape.r') then
+  begin
+    TyAnimPropPut(Result.Props, 'shape.r', TyAnimNum(AM.Num[stkR]));
+    Result.HasShape := True;
+  end;
+end;
+
+procedure TTyAdvanceChart.StAnimClearAll;
+var
+  i: Integer;
+  p: TTyChartAnimProxy;
+begin
+  if FAnimSet = nil then Exit;
+  for i := 0 to FAnimSet.Count - 1 do
+  begin
+    p := FAnimSet.Item(i);
+    if p.CurrentStates = '' then Continue;
+    { clearStates (echarts.ts:2667-2695): the transition nulled, prevStates
+      kept, back to normal without one }
+    p.StPrev := p.CurrentStates;
+    p.ClearStateTransition;
+    p.ClearStates(True);
+  end;
+end;
+
+function TTyAdvanceChart.StAnimCfg(ASeriesIndex: Integer; out ACfg: TTyAnimCfg): Boolean;
+var
+  slot, n: Integer;
+  model: TTyAnimModel;
+  own, root: TJSONObject;
+  dur, delay: Double;
+  easing: string;
+
+  { stateAnimation.<key>: the series', the root's, the global default }
+  function Find(const AKey: string): TJSONData;
+  var d: TJSONData;
+  begin
+    Result := nil;
+    if own <> nil then
+    begin
+      d := own.Find(AKey);
+      if (d <> nil) and (d.JSONType <> jtNull) then Exit(d);
+    end;
+    if root <> nil then
+    begin
+      d := root.Find(AKey);
+      if (d <> nil) and (d.JSONType <> jtNull) then Exit(d);
+    end;
+  end;
+
+var d: TJSONData;
+begin
+  ACfg := Default(TTyAnimCfg);
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  n := 0;
+  if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+    n := FStores[slot].Count;
+  model := TyAnimSeriesModel(FOption.Root, ASeriesIndex, n);
+  { model.isAnimationEnabled(): `animation` and the threshold }
+  if not TyAnimIsEnabled(model) then Exit;
+  own := nil;
+  root := nil;
+  if model.Own is TJSONObject then
+  begin
+    d := TJSONObject(model.Own).Find('stateAnimation');
+    if d is TJSONObject then own := TJSONObject(d);
+  end;
+  if FOption.Root is TJSONObject then
+  begin
+    d := TJSONObject(FOption.Root).Find('stateAnimation');
+    if d is TJSONObject then root := TJSONObject(d);
+  end;
+  d := Find('duration');
+  if d = nil then dur := 300
+  else if d.JSONType = jtNumber then dur := d.AsFloat
+  else dur := NaN;
+  d := Find('easing');
+  if (d <> nil) and (d.JSONType = jtString) then easing := d.AsString
+  else easing := 'cubicOut';
+  d := Find('delay');
+  if (d <> nil) and (d.JSONType = jtNumber) then delay := d.AsFloat
+  else delay := 0;
+  { a duration above 0 makes a stateTransition, anything else none }
+  if IsNan(dur) or not (dur > 0) then Exit;
+  ACfg := TyAnimCfg(dur, delay, easing);
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.StAnimEl(var AEl: TTyStElement; AListIdx, ASeries,
+  ARaw: Integer; const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
+  AHasCfg, AOver: Boolean);
+var
+  el: TTyChartElement;
+  p, role: TTyChartAnimProxy;
+  isPie: Boolean;
+  tmp: TTyStElement;
+  want: string;
+  noAnim: Boolean;
+  st: TTyAnimState;
+
+  { a state key at rest: re-seeded on a full update unless the role's own
+    animation holds it }
+  procedure Seed(const AKey: string; const AValue: TTyAnimValue);
+  begin
+    p.StSeed(AKey, AValue, FStRerender and (p.FinalOf(AKey).Kind = avkNull));
+  end;
+
+begin
+  if (AListIdx < 0) or (AListIdx >= FPaintList.Count) then Exit;
+  el := FPaintList.Element(AListIdx);
+  role := nil;
+  if AListIdx <= High(FAnimBind) then role := FAnimBind[AListIdx];
+  { UPSTREAM'S SAME ELEMENT: the proxy its enter and update animations run
+    on; anything else (a line symbol's group is not its path, a clip is not
+    its polyline) a proxy of the states' own }
+  if (role <> nil) and (el.Anim.Role in [carBar, carSymbol, carSector, carFunnel,
+    carCandleBody, carCandleWickHigh, carCandleWickLow, carLabel, carGuide]) then
+    p := role
+  else
+  begin
+    p := FAnimSet.Find(ASeries, ARaw, 'st:' + AName);
+    if p = nil then p := FAnimSet.MakeState(ASeries, ARaw, 'st:' + AName);
+  end;
+  FAnimStBind[AListIdx] := p;
+  { a Text's style animates only its opacity }
+  p.StatePath := AKind <> cStPxLabel;
+  isPie := FSt[ASeries].Kind = sskPie;
+  { ---- the rest values ---- }
+  if AKind = cStPxLabel then
+  begin
+    Seed('style.opacity', TyAnimNum(1));
+    { a pie's label is placed by its layout: x / y are its anchor }
+    if isPie then
+    begin
+      Seed('x', TyAnimNum(AEl.Rest.Num[stkX]));
+      Seed('y', TyAnimNum(AEl.Rest.Num[stkY]));
+    end;
+  end
+  else
+  begin
+    if AKind <> cStPxGuide then
+    begin
+      Seed('style.fill', StColourValue(AEl.Rest, stkFill));
+      Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
+      Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
+    end;
+    Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
+    if isPie and (AKind in [cStPxPath, cStPxGuide]) then
+    begin
+      Seed('x', TyAnimNum(0));
+      Seed('y', TyAnimNum(0));
+    end;
+    if isPie and (AKind = cStPxPath) and (el.Shape.Kind = cskSector) then
+      Seed('shape.r', TyAnimNum(AEl.Rest.Num[stkR]));
+    { a symbol path's scale is half its size; a pictorial glyph's its own }
+    if AKind = cStPxPath then
+      case el.Anim.Role of
+        carSymbol, carEffectSymbol:
+          begin
+            Seed('scaleX', TyAnimNum(el.Anim.G[2]));
+            Seed('scaleY', TyAnimNum(el.Anim.G[3]));
+          end;
+        carLineSymbol:
+          begin
+            Seed('scaleX', TyAnimNum(el.Anim.G[7]));
+            Seed('scaleY', TyAnimNum(el.Anim.G[8]));
+          end;
+      else
+        { a pictorial glyph's emphasis.scale: a factor over its own scale }
+        if (FSt[ASeries].Kind = sskPictorial) and AEl.Decl[stnEmphasis].Has[stkScale] then
+        begin
+          Seed('scaleX', TyAnimNum(1));
+          Seed('scaleY', TyAnimNum(1));
+        end;
+      end
+    else if (AKind = cStPxPart) and (FSt[ASeries].Kind = sskPictorial)
+      and AEl.Decl[stnEmphasis].Has[stkScale] then
+    begin
+      Seed('scaleX', TyAnimNum(1));
+      Seed('scaleY', TyAnimNum(1));
+    end;
+  end;
+  { ---- a full update: the previous list back at once (no transition: the
+    render nulled it), the merged object made on the new element ---- }
+  if p.StPrev <> '' then
+  begin
+    tmp := AEl;
+    tmp.Cur := tmp.Rest;
+    tmp.States := [];
+    TyStUseStates(tmp, StNamesOf(p.StPrev));
+    p.UseStates(p.StPrev, StAnimStateOf(tmp, tmp.Merged, AKind, p), True);
+    p.StPrev := '';
+  end;
+  { ---- the series' stateTransition, only when it animates ---- }
+  if AHasCfg then p.SetStateTransition(ACfg) else p.ClearStateTransition;
+  want := TyStNamesText(AEl.States);
+  if want = p.CurrentStates then Exit;
+  { no timer, no transition; and an element in the hover layer has none }
+  noAnim := not AnimAllowed or (AOver and ((Pos('emphasis', want) > 0)
+    or (Pos('emphasis', p.CurrentStates) > 0)));
+  if want = '' then p.ClearStates(noAnim)
+  else
+  begin
+    st := StAnimStateOf(AEl, AEl.Merged, AKind, p);
+    p.UseStates(want, st, noAnim);
+    { a pie label's select place, for the next update's move from it }
+    if (AKind = cStPxLabel) and (stnSelect in AEl.States)
+      and (TyAnimPropIndex(st.Props, 'x') >= 0) and (TyAnimPropIndex(st.Props, 'y') >= 0) then
+      p.StNoteSelect(st.Props[TyAnimPropIndex(st.Props, 'x')].Value.Num,
+        st.Props[TyAnimPropIndex(st.Props, 'y')].Value.Num);
+  end;
+end;
+
+procedure TTyAdvanceChart.StAnimSync;
+var
+  s, raw, k, clips: Integer;
+  item: PTyStItem;
+  cfg: TTyAnimCfg;
+  hasCfg, over: Boolean;
+  hostP: TTyChartAnimProxy;
+  d: TJSONData;
+  threshold: Double;
+begin
+  if not FStProxied or (FPaintList = nil) then Exit;
+  if FAnim = nil then FAnim := TTyAnimation.Create;
+  if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+  SetLength(FAnimStBind, FPaintList.Count);
+  for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
+  clips := FAnim.ClipCount;
+  { THE HOVER LAYER: past hoverLayerThreshold elements upstream's canvas
+    hovers an element in a layer of its own, where it never transitions
+    (canTransition, __inHover) }
+  threshold := 3000;
+  if FOption.Root is TJSONObject then
+  begin
+    d := TJSONObject(FOption.Root).Find('hoverLayerThreshold');
+    if (d <> nil) and (d.JSONType = jtNumber) then threshold := d.AsFloat;
+  end;
+  over := FPaintList.Count > threshold;
+  for s := 0 to High(FSt) do
+  begin
+    if FSt[s].Kind = sskNone then Continue;
+    hasCfg := StAnimCfg(s, cfg);
+    for raw := 0 to High(FSt[s].HostIdx) do
+    begin
+      if FSt[s].HostIdx[raw] < 0 then Continue;
+      if raw > High(FSt[s].Rows) then Continue;
+      item := @FSt[s].Rows[raw];
+      if not item^.Host.Exists then Continue;
+      StAnimEl(item^.Host, FSt[s].HostIdx[raw], s, raw, 'host', cStPxPath,
+        cfg, hasCfg, over);
+      { the rest of the same path: the host's proxy }
+      hostP := FAnimStBind[FSt[s].HostIdx[raw]];
+      if raw <= High(FSt[s].FollowIdx) then
+        for k := 0 to High(FSt[s].FollowIdx[raw]) do
+          FAnimStBind[FSt[s].FollowIdx[raw][k]] := hostP;
+      if raw <= High(FSt[s].PartIdx) then
+        for k := 0 to Min(High(FSt[s].PartIdx[raw]), High(item^.Parts)) do
+          StAnimEl(item^.Parts[k], FSt[s].PartIdx[raw][k], s, raw,
+            'part' + IntToStr(k), cStPxPart, cfg, hasCfg, over);
+      if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists then
+        StAnimEl(item^.Label_, FSt[s].LabelIdx[raw], s, raw, 'label', cStPxLabel,
+          cfg, hasCfg, over);
+      if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists then
+        StAnimEl(item^.Guide, FSt[s].GuideIdx[raw], s, raw, 'guide', cStPxGuide,
+          cfg, hasCfg, over);
+    end;
+    { a line's polyline and area: one element each upstream, its runs here }
+    if FSt[s].Run.Host.Exists and (Length(FSt[s].RunIdx) > 0) then
+    begin
+      StAnimEl(FSt[s].Run.Host, FSt[s].RunIdx[0], s, -1, 'poly', cStPxLine,
+        cfg, hasCfg, over);
+      for k := 1 to High(FSt[s].RunIdx) do
+        FAnimStBind[FSt[s].RunIdx[k]] := FAnimStBind[FSt[s].RunIdx[0]];
+    end;
+    if FSt[s].Area.Host.Exists and (Length(FSt[s].AreaIdx) > 0) then
+    begin
+      StAnimEl(FSt[s].Area.Host, FSt[s].AreaIdx[0], s, -1, 'area', cStPxLine,
+        cfg, hasCfg, over);
+      for k := 1 to High(FSt[s].AreaIdx) do
+        FAnimStBind[FSt[s].AreaIdx[k]] := FAnimStBind[FSt[s].AreaIdx[0]];
+    end;
+  end;
+  { A TRANSITION BEGAN: the series go to the dynamic layer until it ends
+    (an armed option's flush decides that itself) }
+  if (FAnim.ClipCount > clips) and not FAnimFlush then
+  begin
+    FAnimLive := True;
+    FAnimContinuous := AnimLoopOnly;
+    AnimArmTimer;
   end;
 end;
 
@@ -13780,6 +14237,8 @@ procedure TTyAdvanceChart.AnimDropAll;
 begin
   if FAnimSet <> nil then FAnimSet.Clear;
   FAnimBind := nil;
+  FAnimStBind := nil;
+  FAnimFlush := False;
   FAnimLive := False;
   FAnimContinuous := False;
   AnimDropPrev;
@@ -14075,11 +14534,8 @@ begin
       { THE FLUSH: upstream's setOption ends with a synchronous update, so
         every clip it made starts NOW and this same paint shows the from
         values. A step on the next tick would shift every timeline by up
-        to 16 ms. }
-      FAnim.Update(AnimClock, True);
-      FAnimLive := FAnim.ClipCount > 0;
-      FAnimContinuous := FAnimLive and AnimLoopOnly;
-      AnimArmTimer;
+        to 16 ms. It waits for the states (AnimFlushArmed). }
+      FAnimFlush := True;
     end
     else if FAnimMode = camOff then
     begin
@@ -14087,6 +14543,7 @@ begin
       AnimDropPrev;
     end;
   end;
+  FAnimStBind := nil;
   { A LIST WAITING FOR ITS ARMING is drawn as laid out: the proxies are the
     old render's, keyed by the old rows [Batch 90] }
   if FAnimPending then
@@ -14095,6 +14552,17 @@ begin
     FAnimBind := FAnimSet.Bind(FPaintList)
   else
     FAnimBind := nil;
+end;
+
+procedure TTyAdvanceChart.AnimFlushArmed;
+begin
+  if not FAnimFlush then Exit;
+  FAnimFlush := False;
+  if FAnim = nil then Exit;
+  FAnim.Update(AnimClock, True);
+  FAnimLive := FAnim.ClipCount > 0;
+  FAnimContinuous := FAnimLive and AnimLoopOnly;
+  AnimArmTimer;
 end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
@@ -14446,16 +14914,33 @@ begin
     if FAnim.ClipAt(i).Loop then Inc(Result);
 end;
 
-function TTyAdvanceChart.AnimProxyCount: Integer;
+{ the states' own proxies ('st:' roles) are not the animations' [Batch 94] }
+function IsStateOnlyProxy(P: TTyChartAnimProxy): Boolean;
 begin
-  if FAnimSet = nil then Result := 0 else Result := FAnimSet.Count;
+  Result := Copy(P.Role, 1, 3) = 'st:';
+end;
+
+function TTyAdvanceChart.AnimProxyCount: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  if FAnimSet = nil then Exit;
+  for i := 0 to FAnimSet.Count - 1 do
+    if not IsStateOnlyProxy(FAnimSet.Item(i)) then Inc(Result);
 end;
 
 function TTyAdvanceChart.AnimProxy(AIndex: Integer): TTyChartAnimProxy;
+var i, n: Integer;
 begin
   Result := nil;
-  if (FAnimSet = nil) or (AIndex < 0) or (AIndex >= FAnimSet.Count) then Exit;
-  Result := FAnimSet.Item(AIndex);
+  if (FAnimSet = nil) or (AIndex < 0) then Exit;
+  n := 0;
+  for i := 0 to FAnimSet.Count - 1 do
+  begin
+    if IsStateOnlyProxy(FAnimSet.Item(i)) then Continue;
+    if n = AIndex then Exit(FAnimSet.Item(i));
+    Inc(n);
+  end;
 end;
 
 function TTyAdvanceChart.AnimFindProxy(ASeries, AIndex: Integer;
@@ -14472,6 +14957,35 @@ begin
   Result := FAnimSet.FindGhost(ASeries, AIndex, ARole);
 end;
 
+function TTyAdvanceChart.AnimStateProxy(ASeries, ARow: Integer;
+  const APart: string): TTyChartAnimProxy;
+var slot, raw, idx: Integer;
+begin
+  Result := nil;
+  if (ASeries < 0) or (ASeries > High(FSt)) or (FSt[ASeries].Kind = sskNone) then Exit;
+  idx := -1;
+  if APart = 'poly' then
+  begin
+    if Length(FSt[ASeries].RunIdx) > 0 then idx := FSt[ASeries].RunIdx[0];
+  end
+  else if APart = 'area' then
+  begin
+    if Length(FSt[ASeries].AreaIdx) > 0 then idx := FSt[ASeries].AreaIdx[0];
+  end
+  else
+  begin
+    slot := SlotOfSeries(ASeries);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+    if (ARow < 0) or (ARow >= FStores[slot].Count) then Exit;
+    raw := FStores[slot].GetRawIndex(ARow);
+    if (raw < 0) or (raw > High(FSt[ASeries].HostIdx)) then Exit;
+    if APart = 'host' then idx := FSt[ASeries].HostIdx[raw]
+    else if APart = 'label' then idx := FSt[ASeries].LabelIdx[raw]
+    else if APart = 'guide' then idx := FSt[ASeries].GuideIdx[raw];
+  end;
+  if (idx >= 0) and (idx <= High(FAnimStBind)) then Result := FAnimStBind[idx];
+end;
+
 function TTyAdvanceChart.AnimGhostCount: Integer;
 begin
   if FAnimSet = nil then Result := 0 else Result := FAnimSet.LiveGhostCount;
@@ -14479,10 +14993,10 @@ end;
 
 function TTyAdvanceChart.AnimFrame: TTyPaintList;
 begin
-  if (FPaintList = nil) or ((Length(FAnimBind) = 0)
+  if (FPaintList = nil) or ((Length(FAnimBind) = 0) and (Length(FAnimStBind) = 0)
     and ((FAnimSet = nil) or (FAnimSet.GhostCount = 0))) then Exit(FPaintList);
   if FAnimFrame = nil then FAnimFrame := TTyPaintList.Create;
-  TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind, FAnimSet);
+  TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind, FAnimSet, FAnimStBind);
   Result := FAnimFrame;
 end;
 

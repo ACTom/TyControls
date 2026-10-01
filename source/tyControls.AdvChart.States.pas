@@ -84,6 +84,9 @@ type
     Rest, Cur: TTyStObject;
     { el.currentStates }
     States: TTyStNames;
+    { the merged state object the last useStates applied (what the proxies'
+      transitions aim at) [Batch 94] }
+    Merged: TTyStObject;
   end;
 
   { A data item's element and what is attached to it: the label, which
@@ -450,6 +453,7 @@ begin
     { clearStates: every saved key back to rest }
     AEl.Cur := AEl.Rest;
     AEl.States := [];
+    AEl.Merged := TyStNoObject;
     Exit;
   end;
   merged := TyStNoObject;
@@ -464,6 +468,7 @@ begin
     if merged.Has[k] then CopyKey(AEl.Cur, merged, k)
     else CopyKey(AEl.Cur, AEl.Rest, k);
   AEl.States := ANew;
+  AEl.Merged := merged;
 end;
 
 function TyStUseItemStates(var AItem: TTyStItem; ANew: TTyStNames): Boolean;
@@ -488,6 +493,7 @@ procedure ClearEl(var AEl: TTyStElement);
 begin
   AEl.Cur := AEl.Rest;
   AEl.States := [];
+  AEl.Merged := TyStNoObject;
 end;
 
 procedure TyStClearItem(var AItem: TTyStItem);
