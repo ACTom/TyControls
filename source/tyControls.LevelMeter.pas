@@ -25,7 +25,7 @@ type
     its own because it is drawn ON the lit bar — sharing the fill colour made it invisible
     exactly when the signal reached it, and no theme rule could repair that. Eased value
     movement (snaps headless). }
-  TTyLevelMeter = class(TTyGraphicControl)
+  TTyCustomLevelMeter = class(TTyGraphicControl)
   private
     FMin, FMax, FValue: Double;
     FOrientation: TTyLevelOrientation;
@@ -62,9 +62,20 @@ type
     destructor Destroy; override;
     { Clear the peak-hold marker back to the current value. }
     procedure ResetPeak;
+    property Min: Double read FMin write SetMin;
+    property Max: Double read FMax write SetMax;
+    property Value: Double read FValue write SetValue;
+    property Orientation: TTyLevelOrientation read FOrientation write SetOrientation default loHorizontal;
+    property Segments: Integer read FSegments write SetSegments default 0;
+    property PeakHold: Boolean read FPeakHold write SetPeakHold default False;
+    property ShowValue: Boolean read FShowValue write SetShowValue default False;
+    property ValueFormat: string read FValueFormat write SetValueFormat;
+    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+  end;
+
+  { TTyLevelMeter publishes TTyCustomLevelMeter's properties; everything lives in TTyCustomLevelMeter. }
+  TTyLevelMeter = class(TTyCustomLevelMeter)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -104,15 +115,15 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Min: Double read FMin write SetMin;
-    property Max: Double read FMax write SetMax;
-    property Value: Double read FValue write SetValue;
-    property Orientation: TTyLevelOrientation read FOrientation write SetOrientation default loHorizontal;
-    property Segments: Integer read FSegments write SetSegments default 0;
-    property PeakHold: Boolean read FPeakHold write SetPeakHold default False;
-    property ShowValue: Boolean read FShowValue write SetShowValue default False;
-    property ValueFormat: string read FValueFormat write SetValueFormat;
-    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+    property Min;
+    property Max;
+    property Value;
+    property Orientation;
+    property Segments;
+    property PeakHold;
+    property ShowValue;
+    property ValueFormat;
+    property AnimationsEnabled;
     property Align;
     property Anchors;
   end;
@@ -128,9 +139,9 @@ begin
   else if Result > ASegments then Result := ASegments;
 end;
 
-{ TTyLevelMeter }
+{ TTyCustomLevelMeter }
 
-constructor TTyLevelMeter.Create(AOwner: TComponent);
+constructor TTyCustomLevelMeter.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMin := 0;
@@ -153,20 +164,20 @@ begin
   Height := 24;
 end;
 
-destructor TTyLevelMeter.Destroy;
+destructor TTyCustomLevelMeter.Destroy;
 begin
   FreeAndNil(FTimer);   // stop the callback before teardown
   inherited Destroy;
 end;
 
-function TTyLevelMeter.GetStyleTypeKey: string;
+function TTyCustomLevelMeter.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: segments and a peak-hold marker are geometry TTyGauge has
     no code for, and a VU meter is exactly what a skin wants to restyle on its own. }
   Result := 'TyLevelMeter';
 end;
 
-procedure TTyLevelMeter.EnsureTimer;
+procedure TTyCustomLevelMeter.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -177,23 +188,23 @@ begin
   end;
 end;
 
-procedure TTyLevelMeter.HandleTimer(Sender: TObject);
+procedure TTyCustomLevelMeter.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then Invalidate;
   if not FPosAnim.Running then FTimer.Enabled := False;
 end;
 
-function TTyLevelMeter.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomLevelMeter.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyLevelMeter.DisplayFrac: Single;
+function TTyCustomLevelMeter.DisplayFrac: Single;
 begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyLevelMeter.ArmTo(AFrac: Double);
+procedure TTyCustomLevelMeter.ArmTo(AFrac: Double);
 begin
   if AFrac < 0 then AFrac := 0 else if AFrac > 1 then AFrac := 1;
   { Peak-hold: remember the highest fraction; it only rises (until ResetPeak). }
@@ -219,27 +230,27 @@ begin
   Invalidate;
 end;
 
-procedure TTyLevelMeter.ResetPeak;
+procedure TTyCustomLevelMeter.ResetPeak;
 begin
   FPeakFrac := TyGaugeFraction(FValue, FMin, FMax);
   Invalidate;
 end;
 
-procedure TTyLevelMeter.SetMin(const AValue: Double);
+procedure TTyCustomLevelMeter.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyLevelMeter.SetMax(const AValue: Double);
+procedure TTyCustomLevelMeter.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyLevelMeter.SetValue(const AValue: Double);
+procedure TTyCustomLevelMeter.SetValue(const AValue: Double);
 var v: Double;
 begin
   v := AValue;
@@ -249,21 +260,21 @@ begin
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyLevelMeter.SetOrientation(const AValue: TTyLevelOrientation);
+procedure TTyCustomLevelMeter.SetOrientation(const AValue: TTyLevelOrientation);
 begin
   if FOrientation = AValue then Exit;
   FOrientation := AValue;
   Invalidate;
 end;
 
-procedure TTyLevelMeter.SetSegments(const AValue: Integer);
+procedure TTyCustomLevelMeter.SetSegments(const AValue: Integer);
 begin
   if FSegments = AValue then Exit;
   FSegments := Math.Max(0, AValue);
   Invalidate;
 end;
 
-procedure TTyLevelMeter.SetPeakHold(const AValue: Boolean);
+procedure TTyCustomLevelMeter.SetPeakHold(const AValue: Boolean);
 begin
   if FPeakHold = AValue then Exit;
   FPeakHold := AValue;
@@ -271,21 +282,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyLevelMeter.SetShowValue(const AValue: Boolean);
+procedure TTyCustomLevelMeter.SetShowValue(const AValue: Boolean);
 begin
   if FShowValue = AValue then Exit;
   FShowValue := AValue;
   Invalidate;
 end;
 
-procedure TTyLevelMeter.SetValueFormat(const AValue: string);
+procedure TTyCustomLevelMeter.SetValueFormat(const AValue: string);
 begin
   if FValueFormat = AValue then Exit;
   FValueFormat := AValue;
   Invalidate;
 end;
 
-procedure TTyLevelMeter.DrawContinuous(P: TTyPainter; const ATrack: TRect;
+procedure TTyCustomLevelMeter.DrawContinuous(P: TTyPainter; const ATrack: TRect;
   AFrac: Double; const AFillS: TTyStyleSet);
 var fillR: TRect;
 begin
@@ -295,7 +306,7 @@ begin
     P.FillBackground(fillR, AFillS.Background, TyUniformCorners(AFillS.BorderRadius));
 end;
 
-procedure TTyLevelMeter.DrawSegments(P: TTyPainter; const ATrack: TRect;
+procedure TTyCustomLevelMeter.DrawSegments(P: TTyPainter; const ATrack: TRect;
   AFrac: Double; const AFillS: TTyStyleSet);
 var
   lit, i, gap, spanW, spanH, segLen, ofs: Integer;
@@ -334,7 +345,7 @@ begin
   end;
 end;
 
-procedure TTyLevelMeter.DrawPeak(P: TTyPainter; const ATrack: TRect;
+procedure TTyCustomLevelMeter.DrawPeak(P: TTyPainter; const ATrack: TRect;
   APeak: Double; AColor: TTyColor);
 var
   ctx: TBGRACanvas2D;
@@ -366,7 +377,7 @@ begin
   ctx.stroke;
 end;
 
-procedure TTyLevelMeter.Paint;
+procedure TTyCustomLevelMeter.Paint;
 var
   P: TTyPainter;
   trackS, fillS, peakS: TTyStyleSet;

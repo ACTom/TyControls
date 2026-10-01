@@ -31,7 +31,7 @@ type
     grid text, not a dial), series colour is the most commonly restyled thing in any
     chart, and the last dot is the conventional CONTRAST marker — it had the line's own
     colour, so it could not contrast with anything. Data-driven — no animation. }
-  TTySparkline = class(TTyGraphicControl)
+  TTyCustomSparkline = class(TTyGraphicControl)
   private
     FValues: array of Double;
     FStyle: TTySparkStyle;
@@ -56,9 +56,16 @@ type
     { Store a COPY of AValues into the internal series and repaint. }
     procedure SetValues(const AValues: array of Double);
     property Count: Integer read GetCount;
+    property Style: TTySparkStyle read FStyle write SetStyle default ssLine;
+    property ShowLast: Boolean read FShowLast write SetShowLast default True;
+    property AutoRange: Boolean read FAutoRange write SetAutoRange default True;
+    property MinValue: Double read FMinValue write SetMinValue;
+    property MaxValue: Double read FMaxValue write SetMaxValue;
+  end;
+
+  { TTySparkline publishes TTyCustomSparkline's properties; everything lives in TTyCustomSparkline. }
+  TTySparkline = class(TTyCustomSparkline)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -98,11 +105,11 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Style: TTySparkStyle read FStyle write SetStyle default ssLine;
-    property ShowLast: Boolean read FShowLast write SetShowLast default True;
-    property AutoRange: Boolean read FAutoRange write SetAutoRange default True;
-    property MinValue: Double read FMinValue write SetMinValue;
-    property MaxValue: Double read FMaxValue write SetMaxValue;
+    property Style;
+    property ShowLast;
+    property AutoRange;
+    property MinValue;
+    property MaxValue;
     property Align;
     property Anchors;
   end;
@@ -126,9 +133,9 @@ begin
   Result := TySparklineY(Math.Max(Double(0), AMin), AMin, AMax, ATop, AHeight);
 end;
 
-{ TTySparkline }
+{ TTyCustomSparkline }
 
-constructor TTySparkline.Create(AOwner: TComponent);
+constructor TTyCustomSparkline.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FStyle := ssLine;
@@ -140,19 +147,19 @@ begin
   Height := 36;
 end;
 
-function TTySparkline.GetStyleTypeKey: string;
+function TTyCustomSparkline.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: a data-series surface belongs with the chart/grid
     vocabulary, so a skin can recolour the series without touching clock hands or spinners. }
   Result := 'TySparkline';
 end;
 
-function TTySparkline.GetCount: Integer;
+function TTyCustomSparkline.GetCount: Integer;
 begin
   Result := Length(FValues);
 end;
 
-procedure TTySparkline.SetValues(const AValues: array of Double);
+procedure TTyCustomSparkline.SetValues(const AValues: array of Double);
 var i: Integer;
 begin
   SetLength(FValues, Length(AValues));
@@ -161,22 +168,22 @@ begin
   Invalidate;
 end;
 
-procedure TTySparkline.SetStyle(const AValue: TTySparkStyle);
+procedure TTyCustomSparkline.SetStyle(const AValue: TTySparkStyle);
 begin if FStyle = AValue then Exit; FStyle := AValue; Invalidate; end;
 
-procedure TTySparkline.SetShowLast(const AValue: Boolean);
+procedure TTyCustomSparkline.SetShowLast(const AValue: Boolean);
 begin if FShowLast = AValue then Exit; FShowLast := AValue; Invalidate; end;
 
-procedure TTySparkline.SetAutoRange(const AValue: Boolean);
+procedure TTyCustomSparkline.SetAutoRange(const AValue: Boolean);
 begin if FAutoRange = AValue then Exit; FAutoRange := AValue; Invalidate; end;
 
-procedure TTySparkline.SetMinValue(const AValue: Double);
+procedure TTyCustomSparkline.SetMinValue(const AValue: Double);
 begin if FMinValue = AValue then Exit; FMinValue := AValue; if not FAutoRange then Invalidate; end;
 
-procedure TTySparkline.SetMaxValue(const AValue: Double);
+procedure TTyCustomSparkline.SetMaxValue(const AValue: Double);
 begin if FMaxValue = AValue then Exit; FMaxValue := AValue; if not FAutoRange then Invalidate; end;
 
-procedure TTySparkline.ResolveRange(out AMin, AMax: Double);
+procedure TTyCustomSparkline.ResolveRange(out AMin, AMax: Double);
 var i: Integer;
 begin
   if FAutoRange then
@@ -197,7 +204,7 @@ begin
   end;
 end;
 
-procedure TTySparkline.DrawLine(P: TTyPainter; const R: TRect; AMin, AMax: Double;
+procedure TTyCustomSparkline.DrawLine(P: TTyPainter; const R: TRect; AMin, AMax: Double;
   const AFillS: TTyStyleSet);
 var
   ctx: TBGRACanvas2D;
@@ -233,7 +240,7 @@ begin
   ctx.stroke;
 end;
 
-procedure TTySparkline.DrawBars(P: TTyPainter; const R: TRect; AMin, AMax: Double;
+procedure TTyCustomSparkline.DrawBars(P: TTyPainter; const R: TRect; AMin, AMax: Double;
   const AFillS: TTyStyleSet);
 var
   n, i, gap, x0, x1, yTop, yBase: Integer;
@@ -262,7 +269,7 @@ begin
   end;
 end;
 
-procedure TTySparkline.DrawLastDot(P: TTyPainter; const R: TRect; AMin, AMax: Double;
+procedure TTyCustomSparkline.DrawLastDot(P: TTyPainter; const R: TRect; AMin, AMax: Double;
   const ADotS: TTyStyleSet);
 var
   ctx: TBGRACanvas2D;
@@ -281,7 +288,7 @@ begin
   ctx.fill;
 end;
 
-procedure TTySparkline.Paint;
+procedure TTyCustomSparkline.Paint;
 var
   P: TTyPainter;
   frameS, fillS, dotS: TTyStyleSet;

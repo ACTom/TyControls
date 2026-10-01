@@ -18,7 +18,7 @@ type
     a toolbar or a dark overlay the gear spun with a wrongly-coloured plug in its middle and
     no theme rule could fix it. Spins only when Active AND painted (has a parent handle);
     headless it is static, keeping render/golden tests pixel-stable. }
-  TTyGearActivityIndicator = class(TTyGraphicControl)
+  TTyCustomGearActivityIndicator = class(TTyGraphicControl)
   private
     FActive: Boolean;
     FTeeth: Integer;
@@ -39,9 +39,13 @@ type
     function AdvanceAnimation(AMs: Integer): Boolean;
     // Read-only current rotation, for tests/introspection.
     property Angle: Double read FAngle;
+    property Active: Boolean read FActive write SetActive default True;
+    property Teeth: Integer read FTeeth write SetTeeth default 9;
+  end;
+
+  { TTyGearActivityIndicator publishes TTyCustomGearActivityIndicator's properties; everything lives in TTyCustomGearActivityIndicator. }
+  TTyGearActivityIndicator = class(TTyCustomGearActivityIndicator)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -81,8 +85,8 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Active: Boolean read FActive write SetActive default True;
-    property Teeth: Integer read FTeeth write SetTeeth default 9;
+    property Active;
+    property Teeth;
     property Align;
     property Anchors;
   end;
@@ -92,7 +96,7 @@ implementation
 const
   cPeriodMs = 1400;   // ~1.4s per full turn
 
-constructor TTyGearActivityIndicator.Create(AOwner: TComponent);
+constructor TTyCustomGearActivityIndicator.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FActive := True;
@@ -102,20 +106,20 @@ begin
   Height := 32;
 end;
 
-destructor TTyGearActivityIndicator.Destroy;
+destructor TTyCustomGearActivityIndicator.Destroy;
 begin
   FreeAndNil(FTimer);   // stop the callback before teardown
   inherited Destroy;
 end;
 
-function TTyGearActivityIndicator.GetStyleTypeKey: string;
+function TTyCustomGearActivityIndicator.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: here the box background is the gear's HOLE, so it must match
     whatever surface hosts the spinner. Under 'TyGauge' that was a track colour and unfixable. }
   Result := 'TyGearActivityIndicator';
 end;
 
-procedure TTyGearActivityIndicator.EnsureTimer;
+procedure TTyCustomGearActivityIndicator.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -126,19 +130,19 @@ begin
   end;
 end;
 
-function TTyGearActivityIndicator.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomGearActivityIndicator.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   FAngle := TyActivityAdvance(FAngle, AMs, cPeriodMs);   // reuse the spinner's wrapped advance
   Result := True;
 end;
 
-procedure TTyGearActivityIndicator.HandleTimer(Sender: TObject);
+procedure TTyCustomGearActivityIndicator.HandleTimer(Sender: TObject);
 begin
   AdvanceAnimation(FTimer.Interval);
   Invalidate;
 end;
 
-procedure TTyGearActivityIndicator.UpdateRunning;
+procedure TTyCustomGearActivityIndicator.UpdateRunning;
 begin
   if FActive and (Parent <> nil) and Parent.HandleAllocated then
   begin
@@ -149,7 +153,7 @@ begin
     FTimer.Enabled := False;
 end;
 
-procedure TTyGearActivityIndicator.SetActive(const AValue: Boolean);
+procedure TTyCustomGearActivityIndicator.SetActive(const AValue: Boolean);
 begin
   if FActive = AValue then Exit;
   FActive := AValue;
@@ -157,7 +161,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGearActivityIndicator.SetTeeth(const AValue: Integer);
+procedure TTyCustomGearActivityIndicator.SetTeeth(const AValue: Integer);
 var v: Integer;
 begin
   v := AValue;
@@ -167,7 +171,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGearActivityIndicator.Paint;
+procedure TTyCustomGearActivityIndicator.Paint;
 var
   P: TTyPainter;
   trackS, fillS: TTyStyleSet;

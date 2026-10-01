@@ -22,7 +22,7 @@ type
     (several builtins pill them), which wearing the gauge's key made impossible. Marches
     only when Active AND painted (has a parent handle); headless it is static, keeping
     render/golden tests pixel-stable. }
-  TTyActivityBar = class(TTyGraphicControl)
+  TTyCustomActivityBar = class(TTyGraphicControl)
   private
     FActive: Boolean;
     FPhase: Double;       // current march phase in [0,1)
@@ -41,9 +41,12 @@ type
     function AdvanceAnimation(AMs: Integer): Boolean;
     // Read-only current phase, for tests/introspection.
     property Phase: Double read FPhase;
+    property Active: Boolean read FActive write SetActive default True;
+  end;
+
+  { TTyActivityBar publishes TTyCustomActivityBar's properties; everything lives in TTyCustomActivityBar. }
+  TTyActivityBar = class(TTyCustomActivityBar)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -83,7 +86,7 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Active: Boolean read FActive write SetActive default True;
+    property Active;
     property Align;
     property Anchors;
   end;
@@ -118,9 +121,9 @@ begin
   Result := Point(L, Rr);
 end;
 
-{ TTyActivityBar }
+{ TTyCustomActivityBar }
 
-constructor TTyActivityBar.Create(AOwner: TComponent);
+constructor TTyCustomActivityBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FActive := True;
@@ -129,20 +132,20 @@ begin
   Height := 8;
 end;
 
-destructor TTyActivityBar.Destroy;
+destructor TTyCustomActivityBar.Destroy;
 begin
   FreeAndNil(FTimer);   // stop the callback before teardown
   inherited Destroy;
 end;
 
-function TTyActivityBar.GetStyleTypeKey: string;
+function TTyCustomActivityBar.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: a skin that pills or recolours the determinate progress bar
     can now match the busy bar sitting next to it, instead of leaving it looking like a gauge. }
   Result := 'TyActivityBar';
 end;
 
-procedure TTyActivityBar.EnsureTimer;
+procedure TTyCustomActivityBar.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -153,19 +156,19 @@ begin
   end;
 end;
 
-function TTyActivityBar.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomActivityBar.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   FPhase := TyActivityBarAdvance(FPhase, AMs, cPeriodMs);
   Result := True;
 end;
 
-procedure TTyActivityBar.HandleTimer(Sender: TObject);
+procedure TTyCustomActivityBar.HandleTimer(Sender: TObject);
 begin
   AdvanceAnimation(FTimer.Interval);
   Invalidate;
 end;
 
-procedure TTyActivityBar.UpdateRunning;
+procedure TTyCustomActivityBar.UpdateRunning;
 begin
   { A graphic control paints onto its parent; "has a window to march into" means the parent
     handle is allocated. Headless render tests parent to an unshown form (no handle) -> the
@@ -179,7 +182,7 @@ begin
     FTimer.Enabled := False;
 end;
 
-procedure TTyActivityBar.SetActive(const AValue: Boolean);
+procedure TTyCustomActivityBar.SetActive(const AValue: Boolean);
 begin
   if FActive = AValue then Exit;
   FActive := AValue;
@@ -187,7 +190,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyActivityBar.Paint;
+procedure TTyCustomActivityBar.Paint;
 var
   P: TTyPainter;
   trackS, fillS: TTyStyleSet;

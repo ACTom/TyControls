@@ -28,7 +28,8 @@ uses
   tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
   tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
   tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ListBox, tyControls.ComboBox,
-  tyControls.ComboBoxEx, tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ShellComboBox;
+  tyControls.ComboBoxEx, tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ShellComboBox,
+  tyControls.ProgressBar, tyControls.Gauge;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -80,6 +81,9 @@ type
     procedure TestColorComboPopupUsesItsOwnSwatchGeometry;
     procedure TestThirdColorBox;
     procedure TestThirdShellComboBox;
+    { Task 9: progress and indicators }
+    procedure TestThirdProgressBar;
+    procedure TestThirdGauge;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -168,6 +172,20 @@ type
   published
     property Directory;
     property Items;
+  end;
+
+  { Max before Position on purpose: the order a descendant publishes in is the order its .lfm
+    is written in. }
+  TThirdProgressBar = class(TTyCustomProgressBar)
+  published
+    property Max;
+    property Position;
+  end;
+
+  TThirdGauge = class(TTyCustomGauge)
+  published
+    property Value;
+    property Max;
   end;
 
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
@@ -1129,9 +1147,66 @@ begin
   CheckFreshDefaults(TThirdShellComboBox, ['Directory']);
 end;
 
+{ ------------------------------------------------------------------ Task 9: progress }
+
+procedure TTyCustomClassesP1Test.TestThirdProgressBar;
+var
+  third, back: TThirdProgressBar;
+  own: TTyProgressBar;
+  c: TTyCustomProgressBar;
+  txt: string;
+begin
+  third := TThirdProgressBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdProgressBar, ['Max', 'Position']);
+  third.Max := 50;
+  third.Position := 40;
+  third.Step := 5;
+  CheckStreamText(third, ['Max', 'Position'], 'Step');
+  txt := StreamedText(third);
+  AssertTrue('T-c: Max is written before Position, the order the mimic published them in',
+    Pos(' Max = ', txt) < Pos(' Position = ', txt));
+  back := TThirdProgressBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 50, back.Max);
+  AssertEquals('T-c: Position round-trips (not clamped by a default Max)', 40, back.Position);
+  AssertEquals('T-c: the unpublished Step stayed at its default', 10, back.Step);
+  own := TTyProgressBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdProgressBar, ['Max', 'Position']);
+  c := third;
+  c.Step := 2;
+  AssertEquals('T-v: Step is public through a TTyCustomProgressBar reference', 2, third.Step);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdGauge;
+var
+  third, back: TThirdGauge;
+  own: TTyGauge;
+begin
+  third := TThirdGauge.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdGauge, ['Value', 'Max']);
+  third.Max := 200;
+  third.Value := 150;
+  third.Thickness := 20;
+  CheckStreamText(third, ['Value', 'Max'], 'Thickness');
+  back := TThirdGauge.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 200, back.Max, 1e-9);
+  AssertEquals('T-c: Value round-trips', 150, back.Value, 1e-9);
+  own := TTyGauge.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { Value only: Max is a Double with no default on TTyGauge too, so a fresh gauge writes it. }
+  CheckFreshDefaults(TThirdGauge, ['Value']);
+end;
+
 initialization
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
     TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
-    TThirdComboBox, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox]);
+    TThirdComboBox, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox, TThirdProgressBar,
+    TThirdGauge]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

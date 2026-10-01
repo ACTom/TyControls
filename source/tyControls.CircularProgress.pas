@@ -14,7 +14,7 @@ type
     same reason TTyProgressBar owns TyProgressBar/TyProgressFill rather than borrowing the
     gauge's: skins already pill or recolour the linear progress pair independently of
     gauges, and the ring must be able to follow them. Eases like TTyProgressBar. }
-  TTyCircularProgress = class(TTyGraphicControl)
+  TTyCustomCircularProgress = class(TTyGraphicControl)
   private
     FMin, FMax, FPosition: Integer;
     FThickness: Integer;
@@ -41,9 +41,18 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    property Min: Integer read FMin write SetMin default 0;
+    property Max: Integer read FMax write SetMax default 100;
+    property Position: Integer read FPosition write SetPosition default 0;
+    property Thickness: Integer read FThickness write SetThickness default 10;
+    property ShowValue: Boolean read FShowValue write SetShowValue default True;
+    property ValueFormat: string read FValueFormat write SetValueFormat;
+    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+  end;
+
+  { TTyCircularProgress publishes TTyCustomCircularProgress's properties; everything lives in TTyCustomCircularProgress. }
+  TTyCircularProgress = class(TTyCustomCircularProgress)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -83,20 +92,20 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Min: Integer read FMin write SetMin default 0;
-    property Max: Integer read FMax write SetMax default 100;
-    property Position: Integer read FPosition write SetPosition default 0;
-    property Thickness: Integer read FThickness write SetThickness default 10;
-    property ShowValue: Boolean read FShowValue write SetShowValue default True;
-    property ValueFormat: string read FValueFormat write SetValueFormat;
-    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+    property Min;
+    property Max;
+    property Position;
+    property Thickness;
+    property ShowValue;
+    property ValueFormat;
+    property AnimationsEnabled;
     property Align;
     property Anchors;
   end;
 
 implementation
 
-constructor TTyCircularProgress.Create(AOwner: TComponent);
+constructor TTyCustomCircularProgress.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMin := 0;
@@ -116,13 +125,13 @@ begin
   Height := 96;
 end;
 
-destructor TTyCircularProgress.Destroy;
+destructor TTyCustomCircularProgress.Destroy;
 begin
   FreeAndNil(FTimer);
   inherited Destroy;
 end;
 
-function TTyCircularProgress.GetStyleTypeKey: string;
+function TTyCustomCircularProgress.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: this is "progress", and the library already ruled progress
     and gauge separately skinnable for the linear pair. Being able to pill TyProgressFill but
@@ -130,7 +139,7 @@ begin
   Result := 'TyCircularProgress';
 end;
 
-procedure TTyCircularProgress.EnsureTimer;
+procedure TTyCustomCircularProgress.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -141,23 +150,23 @@ begin
   end;
 end;
 
-procedure TTyCircularProgress.HandleTimer(Sender: TObject);
+procedure TTyCustomCircularProgress.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then Invalidate;
   if not FPosAnim.Running then FTimer.Enabled := False;
 end;
 
-function TTyCircularProgress.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomCircularProgress.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyCircularProgress.DisplayFrac: Single;
+function TTyCustomCircularProgress.DisplayFrac: Single;
 begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyCircularProgress.ArmTo(AFrac: Double);
+procedure TTyCustomCircularProgress.ArmTo(AFrac: Double);
 begin
   if AFrac < 0 then AFrac := 0 else if AFrac > 1 then AFrac := 1;
   if FAnimEnabled and (Parent <> nil) and Parent.HandleAllocated then
@@ -178,7 +187,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCircularProgress.SetMin(const AValue: Integer);
+procedure TTyCustomCircularProgress.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -186,7 +195,7 @@ begin
   ArmTo(TyGaugeFraction(FPosition, FMin, FMax));
 end;
 
-procedure TTyCircularProgress.SetMax(const AValue: Integer);
+procedure TTyCustomCircularProgress.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -194,7 +203,7 @@ begin
   ArmTo(TyGaugeFraction(FPosition, FMin, FMax));
 end;
 
-procedure TTyCircularProgress.SetPosition(const AValue: Integer);
+procedure TTyCustomCircularProgress.SetPosition(const AValue: Integer);
 var v: Integer;
 begin
   v := AValue;
@@ -204,28 +213,28 @@ begin
   ArmTo(TyGaugeFraction(FPosition, FMin, FMax));
 end;
 
-procedure TTyCircularProgress.SetThickness(const AValue: Integer);
+procedure TTyCustomCircularProgress.SetThickness(const AValue: Integer);
 begin
   if FThickness = AValue then Exit;
   FThickness := Math.Max(1, AValue);
   Invalidate;
 end;
 
-procedure TTyCircularProgress.SetShowValue(const AValue: Boolean);
+procedure TTyCustomCircularProgress.SetShowValue(const AValue: Boolean);
 begin
   if FShowValue = AValue then Exit;
   FShowValue := AValue;
   Invalidate;
 end;
 
-procedure TTyCircularProgress.SetValueFormat(const AValue: string);
+procedure TTyCustomCircularProgress.SetValueFormat(const AValue: string);
 begin
   if FValueFormat = AValue then Exit;
   FValueFormat := AValue;
   Invalidate;
 end;
 
-procedure TTyCircularProgress.Paint;
+procedure TTyCustomCircularProgress.Paint;
 var
   P: TTyPainter;
   trackS, fillS: TTyStyleSet;
