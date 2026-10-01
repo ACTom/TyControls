@@ -39,6 +39,7 @@ type
     procedure TestAFailedMoveKeepsTheFolder;
     procedure TestABackupThatIsThereStays;
     procedure TestOneFileWrittenTwoWays;
+    procedure TestAFileNamedLikeTheEntry;
   end;
 
 implementation
@@ -481,6 +482,26 @@ begin
   AssertTrue('X16: names the other spelling: ' + err, Pos('Assets/Background.jpg', err) > 0);
   {$ENDIF}
   AssertTrue('X16: one spelling goes: ' + err, Collect(CopyGreen, FDir + 'theme', files, err));
+end;
+
+{ my.tycss imports theme.tycss from its folder: the bundle's entry is theme.tycss too, and
+  one of the two would overwrite the other. Refused (a rename would mean rewriting the
+  @import in what is exported); theme.json the same. }
+procedure TTbExportTests.TestAFileNamedLikeTheEntry;
+var
+  files: TTbBundleFiles;
+  err: string;
+begin
+  WriteBytes(FDir + 'theme.tycss', ':root { --accent: #123456; }');
+  WriteBytes(FDir + 'theme.json', '{}');
+  AssertFalse('X17: an imported theme.tycss', Collect('@import "theme.tycss";', FDir, files, err));
+  AssertTrue('X17: says why: ' + err, Pos(Format(rsTbExportEntryClash, ['theme.tycss']), err) > 0);
+  AssertFalse('X17: any case', Collect('@import "Theme.tycss";', FDir, files, err));
+  AssertFalse('X17: a theme.json', Collect('TyPanel { background-image: url(theme.json); }', FDir, files, err));
+  AssertTrue('X17: says why: ' + err, Pos(Format(rsTbExportEntryClash, ['theme.json']), err) > 0);
+  WriteBytes(FDir + 'parts' + PathDelim + 'theme.tycss', ':root { --accent: #123456; }');
+  AssertTrue('X17: in a folder of its own it is another file: ' + err,
+    Collect('@import "parts/theme.tycss";', FDir, files, err));
 end;
 
 initialization

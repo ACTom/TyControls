@@ -34,6 +34,7 @@ resourcestring
   rsTbExportOutside = 'outside the theme''s folder';
   rsTbExportUnsaved = 'save the theme first: paths are read from its folder';
   rsTbExportMissing = 'not found';
+  rsTbExportEntryClash = 'the bundle''s own %s goes there -- rename this file';
   rsTbExportCaseClash = 'also written as %s: a system that tells capitals from small letters finds only one of the two -- write it the same way everywhere';
   rsTbExportNoTarget = 'Choose where to export to.';
   rsTbExportFolderNotEmpty = '%s is not an empty folder.';
@@ -344,6 +345,13 @@ begin
     for i := 0 to n - 1 do
       if SameText(ExtractFileExt(AFiles[i].Source), '.tycss') then
         Urls(ReadFileBytes(AFiles[i].Source));
+    { the entry is written as theme.tycss and the manifest as theme.json, whatever the
+      document's own name: a file the theme refers to by either name would be overwritten
+      (or overwrite the entry) -- refused, not renamed: renaming means rewriting the
+      reference, and what is exported is the text a save would write }
+    for i := 0 to High(AFiles) do
+      if SameText(AFiles[i].Archive, cTyDefaultThemeEntry) or SameText(AFiles[i].Archive, 'theme.json') then
+        Fail(AFiles[i].Archive, Format(rsTbExportEntryClash, [LowerCase(AFiles[i].Archive)]));
   finally
     seen.Free;
     spelled.Free;
