@@ -1980,3 +1980,12 @@ spec 标「实现期修正（3 期）：期末修复批」的段落：§7.1（�
 ### 留给以后
 
 - 库的 `TTyCheckBox`（可能还有 `TTyRadioButton`）的 AutoSize 只用画布量标题，没有像 `TTyButton.MeasureCaption` 那样再问渲染器取大者，某些字体下会截 3 px。本批不能改库，工具里绕开了；库里应照 `TTyButton` 补上。
+
+### 主控已做（合并 main 之后，348f0b32）
+
+- 合入 main 的 3 个提交（CONTRIBUTING 两份、`defec412` Lazarus 3.0 编译修复），无冲突。
+- `lazbuild -B` 编 `tycontrols.lpk`、`tycontrols_dt.lpk`、`tools/themebuilder/themebuilder.lpi`、`tests/tytests.lpi`：都 0 错；`check-example-po` 103 份 0 问题，`check-lfm-props` 通过。这一步同时补上修复批签收的「主控待做 1」（总审查第 2 条）。
+- 冒烟：枚举工具进程的可见窗口，只有主窗体「未命名 - 主题编辑器」与应用窗口，没有 `#32770`。
+- 全量 8965 条：0 错，1 失败——`TTyTerminalPerfTests.TestAFloodStillPaints`（最长无重绘 349.8 ms，上限 300 ms），终端的计时测试，与本分支无关；该 suite 单独重跑三次都是 0 / 0。
+- 抽看重拍后的 `p3-compare-win32.png`：改动行的字清楚，「Try it in the preview」完整。
+- 库里 `TTyCheckBox` 量标题偏短 3 px 的问题另开了任务，不在本分支修。
