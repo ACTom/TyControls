@@ -123,6 +123,7 @@ type
     procedure TestATrialStaysOutOfTheProblemList;  { M24 }
     { acceptance feedback }
     procedure TestTheEditorTextIsSmooth;         { M25 }
+    procedure TestTheWindowIsWiderForTheEditor;  { M26 }
   end;
 
 implementation
@@ -2675,6 +2676,15 @@ begin
   FForm.SetEditorAppearance('xp', True);
   AssertTrue('M25: still smooth after a change of look', FForm.Editor.Font.Quality = TyCssEditFontQuality);
   AssertTrue('M25: a size in points', FForm.Editor.Font.Size >= 8);
+end;
+
+{ M26: the window is 200 px wider than it was (1480), and the editor has it -- the preview
+  keeps its 560. On a work area narrower than that the window is the work area's width. }
+procedure TTbMainFormTests.TestTheWindowIsWiderForTheEditor;
+begin
+  AssertEquals('M26: 1480 wide (or the work area)', Min(1480, Screen.WorkAreaWidth), FForm.Width);
+  AssertEquals('M26: the preview keeps its width', 560, FForm.PreviewHost.Width);
+  AssertEquals('M26: the editor has the rest', 634, FForm.Editor.Width);
 end;
 
 initialization

@@ -2,10 +2,10 @@ object TbMainForm: TTbMainForm
   Left = 0
   Height = 680
   Top = 0
-  Width = 1280
+  Width = 1480
   Caption = 'Theme Builder'
   ClientHeight = 680
-  ClientWidth = 1280
+  ClientWidth = 1480
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCloseQuery = FormCloseQuery
@@ -17,13 +17,13 @@ object TbMainForm: TTbMainForm
     Left = 0
     Height = 680
     Top = 0
-    Width = 1280
+    Width = 1480
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 1280
+      Width = 1480
       Align = alTop
       Caption = 'Theme Builder  · TyControls'
       TitleAlignment = taCenter
@@ -40,10 +40,10 @@ object TbMainForm: TTbMainForm
       Left = 0
       Height = 24
       Top = 656
-      Width = 1280
+      Width = 1480
       Panels = <
         item
-          Width = 640
+          Width = 840
         end
         item
           Width = 140
@@ -100,14 +100,14 @@ object TbMainForm: TTbMainForm
       end
     end
     object PreviewHost: TTyPanel
-      Left = 720
+      Left = 920
       Height = 622
       Top = 34
       Width = 560
       Align = alRight
     end
     object PreviewSplitter: TTySplitter
-      Left = 714
+      Left = 914
       Height = 622
       Top = 34
       Width = 6
@@ -117,7 +117,7 @@ object TbMainForm: TTbMainForm
       Left = 280
       Height = 622
       Top = 34
-      Width = 434
+      Width = 634
       Align = alClient
       Gutter.Visible = True
       OnChange = EditorChange

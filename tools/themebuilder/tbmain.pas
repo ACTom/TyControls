@@ -278,6 +278,12 @@ var
   item: TMenuItem;
   err, ini, aiIni, aiKeys: string;
 begin
+  { the window is laid out for 1480 x 680 (the editor takes what the preview does not): on a
+    smaller work area -- a laptop at 150 % -- it is no bigger than the work area }
+  if (Screen.WorkAreaWidth > 0) and (Width > Screen.WorkAreaWidth) then
+    Width := Screen.WorkAreaWidth;
+  if (Screen.WorkAreaHeight > 0) and (Height > Screen.WorkAreaHeight) then
+    Height := Screen.WorkAreaHeight;
   TyRegisterBuiltinThemes;
   if SettingsFileForTest <> '' then
     ini := SettingsFileForTest
