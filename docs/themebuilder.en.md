@@ -73,6 +73,8 @@ A preset only fills in the address and model name; everything can be changed. Mo
 
 The dialog also says it plainly: the theme text and your descriptions go to the service you set up here. With a local model they stay on your computer.
 
+When the address is `http://` (not `https://`) and not on this computer — Ollama on another machine on your network, say — the settings and the AI page show a "Not encrypted" warning: others on the network can read what is sent. Such an address can't have a key: OK refuses it, and nothing would be sent anyway. When a service redirects the request somewhere else, the tool doesn't follow (the key would go along); it tells you which host it points to, and if that's right you change the address in the settings.
+
 ### Local models
 
 Install [Ollama](https://ollama.com), pull a 7–8B code model (`ollama pull qwen2.5-coder:7b`), and **set the context length before starting Ollama**:
@@ -89,7 +91,7 @@ Write what you want on the AI page — "warm colours, rounder corners" — and p
 
 1. The answer streams into the box below. Stop ends it at any time. With a model that thinks first, the status line says so until the text starts.
 2. When the answer is complete, the `tycss` code block is taken out of it and checked the way the editor checks your own text: does it parse, are the properties known, are the variables defined, can the preview draw it in light and in dark mode. Errors go back to the model with a request to fix them, at most twice. Hints such as low contrast don't.
-3. The comparison window opens: your text on the left, the model's version on the right, changed lines tinted, both sides scrolling together, any remaining problems listed below. Tick "Try it in the preview" to see the model's version in the preview; untick it or close the window to go back.
+3. The comparison window opens (if another dialog is open at that moment it doesn't; the status line points you to "Show the comparison"): the editor's text as it is now on the left, the model's version on the right, changed lines tinted, both sides scrolling together, any remaining problems listed below. Tick "Try it in the preview" to see the model's version in the preview; untick it or close the window to go back.
 4. Accept puts the model's version into the editor — one Ctrl+Z takes it back. Discard changes nothing. "Show the comparison..." on the AI page opens the window again.
 
 If you edit the file after the request went out, Accept asks first, because your edits would be replaced too.
@@ -115,6 +117,10 @@ The rules and the syntax reference sent to the model are in English, which model
 | The reply reached the maximum output length and was cut off | Raise the maximum output |
 | The reply is not in the expected format | The address is not a service of that format |
 | The reply has no tycss code block | The model did not follow the rules; its text is in the output box |
+| The reply is not complete: it ended inside its code block | The service said it was done, but the code block wasn't |
+| The service answered with a redirect ... to ... | The address moved; the tool doesn't follow — check it and change the settings |
+| Not sent: over http:// the key would cross the network ... | An address with a key must be https:// |
+| The proxy asks for a user name and password (407) | Set them in the system's proxy settings |
 
 Whatever happens, the editor is not affected.
 

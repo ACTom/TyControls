@@ -1815,3 +1815,86 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 2. Task 15 Step 6 的看一眼：侧栏第三页 AI → 设置里加一个 DeepSeek 预置（不填密钥）→ 测试连接看 401 那句话 → 关设置 → AI 页状态行；能拿到密钥或本机有 Ollama 的话做一次真实生成（「暖色调，圆角大一点」→ 流式、对比、试看、接受、Ctrl+Z），用完删掉密钥。
 3. 截图 `p3-ai-settings-win32.png`（以及做了真实生成的 `p3-ai-page-win32.png`、`p3-compare-win32.png`）放 `docs/superpowers/plans/2026-10-01-themebuilder-acceptance-shots/`（验收文档已引用）。
 4. Task 15 Step 8 的期末审查（`git diff df1fd13b..HEAD`）。
+
+---
+
+## 期末修复批签收
+
+3 期实现到 `f7338993` 之后做了两份期末审查（规格核对 + 代码质量），这一批按主控整理的 18 条修复加测试质量三条处理。每个问题一个提交，每条修复都先配一条「去掉修复就会红」的测试，修完后把修复变异掉确认红、再写回原字节（不用 git）。安全硬要求：测试只连 127.0.0.1、只用假密钥；「一定不能发出去」的检查用只记录的传输（`TbTransportFactoryForTest`），检查坏了也连不到网络。
+
+### 修复提交
+
+| # | 问题 | 提交 | 怎么修的 | 守卫 |
+|---|---|---|---|---|
+| 1 | WinHTTP 跟着重定向把密钥头带到别的主机 | `27cb990a` | 请求句柄 `WINHTTP_OPTION_REDIRECT_POLICY`(88) = `NEVER`(0)，设不上就不发；libcurl 明说 `FOLLOWLOCATION 0`；3xx 是新的一种结果 `aekRedirect`，句子只报 `Location` 的主机名（相对地址算原主机），不带路径与查询串 | C18（两平台：A 回 301/302/307/308 指向 B，B 一个连接都没有） |
+| 2 | 远程 `http://` 静默放行 | `41ccb712` | `TbIsPlainRemote`（非 https 且不是 `TbIsLoopbackHost`：`localhost`、`127.0.0.0/8`、`::1`，核实过）；带密钥：客户端在建传输前拒绝（`aekInsecureKey`，生成与测试连接同一句），设置页「确定」拒绝并说明；不带密钥：设置页与 AI 页各一条 `TTyAlert` 警告，允许 | C19、G9、M13 |
+| 3 | 洗密钥的盲区 | `850e0d40` | 短于 8 的密钥整串替换（不分大小写、词内也换）；遮罩形态（前 3–6 + `…`/`...`/`*` + 后 3–4）；密钥任意连续 8 个字符；比较一律小写；括号、尖括号、`=`、`&`、反引号也断词；`TTbAiClient.Run` 包一层 try/except，异常消息先洗；工作线程的兜底也洗 | C17（`sk-1234`、`sk-te…9zz`、`sk-...wxyz`、`sk-t*9zz`、大小写、中段）、C20 |
+| 4 | 候选的 `@import` / `url()` 读到文档目录外、经回喂泄露 | `5c9089bf` | 候选新加的、越出文档目录的引用（`..`、绝对、UNC、盘符、带协议；未保存文档的任何新 `@import`）不解析，整份候选这一轮只报这些错误；`@import` 行上的问题回喂时只说「这一行导入的文件有问题」，无位置的消息在有导入时去掉引号里的片段。核实：原来会带出——导入文件的解析错误 `(got "…")` 原样进回喂 | S19（文档目录外放一个「TOPSECRET hunter2」文件，回喂里一个字都没有） |
+| 5 | 生成中设置「确定」或换服务，请求被静默丢弃 | `aa063364` | AI 页只在当前服务或密钥真的变了才换后端；忙时服务下拉与齿轮灰掉；`SetBackend` 忙时走 `Finish(tasStopped, …)`（事件照发），前一轮的候选保留、不自动弹对比 | M14（真后端慢流，确定不改：照常完成）、M15（真后端第二轮中换模型：已停止、按钮空闲、第一轮候选还在） |
+| 6 | 非 JSON 的 data、`[DONE]` 之后的事件让完整回答判失败 | `882bf632` | `TbParseStreamEvent` 对非 JSON 返回什么都不是（`NotJson`）；客户端收到完成信号后不再看任何事件，所以错误只在完成前到达才算；只有心跳没有 JSON 事件的流算「格式不对」 | A12（改写：原来钉的是 bug）、C21（两平台） |
+| 7 | 对比窗口在线程回调里弹模态、叠在别的模态上 | `3a333a4d` | 结束时 `Application.QueueAsyncCall`，轮到时 `Application.ModalLevel = 0` 且没有 `fsModal` 窗体才开；否则状态行提示用「查看对比…」；新请求 / 新文档 / 新对话取消排队的；析构 `RemoveAsyncCalls` | M16 |
+| 8 | SSE 与正文无上限 | `9ed5d9bd` | 单行 1 MB、单事件 4 MB（`TTbSseParser.MaxLine/MaxEvent`，`Overflow`）、回答文字 8 MB：断开、按「格式不对」结束；非 2xx 错误体读满 64 KB 就断开、按状态码报 | E14、E15、C22（两平台；每种之后服务都一直挂着，只有客户端自己的上限能结束） |
+| 9 | `TbEndpointUrl` 拼在查询串 / 片段后 | `aeed0747` | 先去片段、拆查询串，拼路径，接回查询串 | A1 加五行 |
+| 10 | 参考与系统提示说错引擎规则 | `a53e8e27` | 两处都改成「不带变体也不带状态的规则才让底层让位；带变体或状态的叠加」；例子恢复 `TyEdit:focus`；3 期签收的理由在原处更正 | R11（引擎：只加 `TyEdit:focus` 时普通态与底层相同、焦点态带新值；文字三处） |
+| 11 | 发给模型的文字混入界面语言 | `02ff102f` | `TTbProblem` / `TTbAiIssue` 另存英文 `FeedText`；工具自己的文字出自英文常量（resourcestring = 常量）；模式名用引擎名；库被翻译时 lint 按种类与对象拼回英文；引擎消息只在纯 ASCII 时照原样 | M17（工具与库都切中文：请求与回喂全 ASCII） |
+| 12 | 设置窗 `Commit` 的异常路径 | `ce96d4af` | 密钥在输入 / 粘贴时去掉控制字符；先校验全部再改内存；保存失败：说明、按磁盘读回、窗口不关 | G10（经 `BtnOk.Click`） |
+| 13 | `TbExtractCodeBlock` | `f7e46353` | 取最后一个 `tycss` 块；回答停在 `tycss` 块里（或没有完整 `tycss` 块又停在块里）失败，句子「回答不完整」；「最大输出长度」只在服务这么说时（客户端早已报 `aekTruncated`） | S16 加六行、S20 |
+| 14 | 对比窗口左栏 | `7048b117` | 左栏用编辑器此刻的文本，标题仍是「现在」；与请求时不同则摘要加一句 | M18 |
+| 15 | WinHTTP 细节 | `cf03851b` | 会话设 `WINHTTP_OPTION_SECURE_PROTOCOLS`(84) = TLS1.2 `0x800` \| TLS1.3 `0x2000`（核实 winhttp.h；FPC 绑定没有 1.3），不认就只 1.2，两个都不认用系统的；407 = `aekProxyAuth`「代理要求用户名和密码」（libcurl 隧道被拒也报成状态 407）；会话不复用（写明在单元注释与 spec） | H14（Windows）、C23（两平台）、W14（WSL：经本机代理的 https 隧道被 407 拒绝） |
+| 16 | libcurl 不查 `curl_easy_setopt` 返回值 | `2227678d` | 每个选项都查，被拒就不发、`hekOption`/`aekOption` 句子点名选项；DNS 期间取消的限制写进 spec §10 与使用文档「已知限制」 | W13（测试缝让 `NOSIGNAL` 返回 48） |
+| 17 | OpenAI 预置空闲超时 | `c9fd5b5d` | 300 秒，写回 spec §7.1 | K6 |
+| 18 | Unix `TbWritePrivateFile` | `7e4927e8` | 先 `fpUnlink(tmp)`，再 `O_WRONLY or O_CREAT or O_EXCL or O_NOFOLLOW`、0600，去掉按路径 chmod | K11（WSL：残留 0644 临时文件；指向别处的符号链接——目标不变、结果是 0600 的独立文件） |
+| 测试质量 | 测试缝点按钮、真关窗、真后端多轮 | `3203ec06` | `ModalAccept` / `ModalDiscard` / `ModalOllama` 改为 `BtnAccept.Click` / `BtnDiscard.Click` / `BtnOk.Click`（经 `.lfm` 的 `ModalResult`）；M19 用窗体自己的 `Close` 走 `FormClose → EndTrial`；S21 真后端两轮回喂（`DoneOnMain` 里嵌套 `Start` / `DropWorker` / `WaitFor`） | M19、S21 |
+| i18n | 十二条新文字 | `26cb533a` | `themebuilder.zh_CN.json` 加十二条，`example-rsj2po.py` 合进 `.po` | I3 |
+| 签收 | 本节、spec、验收文档 | 本提交 | | |
+
+### 测试结果
+
+- 构建：`lazbuild -B tests/tytests.lpi` 0 错（在 `26cb533a` 上，全部变异写回之后），exe 复制成 `tests/tytests-tb3fix.exe`。
+- 全量（`--all`，输出重定向）：**8956 / 0 errors / 1 failure**（23 分 20 秒）= 3 期签收的 8934 + 本批 22 条。唯一的红是 `TTyTerminalPerfTests.TestTheLongestSliceStaysNearTheBudget`（终端的计时类测试：最长一片 21.9 ms，限 18.8 ms；跑全量的头几分钟 WSL 同时在跑 libcurl 的三遍）——与本批无关，单独重跑三次都绿（2.7–3.1 s，0 failures），记为计时类偶发。
+- 本期 suite（取自全量）：TTbHttpTests 14、TTbSseTests 15、TTbAiFormatTests 12、TTbAiClientTests 23、TTbAiSettingsTests 8、TTbReferenceTests 11、TTbDiffTests 13、TTbAiSessionTests 21、TTbCompareTests 9、TTbAiSettingsFormTests 10、TTbMainFormTests 75，全绿；TTbProblemsTests 6、TTbPreviewTests 24 照旧全绿。新增 22 条：C18–C23、G9、G10、M13–M19、S19–S21、E14、E15、R11、H14；改写 A12（原来钉的就是 bug：非 JSON 判错误）、扩充 A1、C17、S16、K6。
+- 工具：`lazbuild -B tools/themebuilder/themebuilder.lpi` 0 错；`example-rsj2po.py` 加 12 条、无 FATAL；`check-example-po.py` 103 个文件 0 问题；`check-lfm-props.py` OK。
+
+### WSL（Ubuntu，fpc 3.2.2）
+
+`tools/themebuilder-curl-wsl/tbcurlwsl`（`rm -rf lib` 后重编）三遍：默认加载 `libcurl.so.4`，**29 passed / 0 failed**；`THEMEBUILDER_LIBCURL=libcurl-gnutls.so.4`，**29 / 0**；`THEMEBUILDER_LIBCURL=/nonexistent/libcurl.so --expect-missing`，**1 / 0**（`libcurl was not found (tried /nonexistent/libcurl.so). …`）。三次 `exit=0`。29 条 = 原 22 条 + W13（被拒的选项）、W14（407 隧道）、C18、C21、C22、C23 @curl、K11。
+
+### 集中变异（改字符串 → 增量 `lazbuild` → 跑指定测试 → 写回原字节；WSL 的在 WSL 重编重跑）
+
+67 条，全红，没有等价变异。脚本逐条断言替换点恰好命中一处；全部还原后 `git status` 干净，再 `lazbuild -B` 跑全量（上面的全量）。
+
+| 组 | 变异 | 结果 |
+|---|---|---|
+| 1 重定向 | R1 不设重定向策略、R2 3xx 不单列 | 全红（R1：B 收到了请求） |
+| 2 明文 http | P1 客户端照发、P2「确定」不拦、P3 设置页无警告、P4 AI 页无警告、P5 https 也算明文 | 全红 |
+| 3 洗密钥 | S1 短密钥不换、S2 无遮罩形态、S3 无中段、S4a 密钥按原样比、S4b 文字按原样比、S5 异常消息不洗、S6 `Run` 不接异常 | 全红 |
+| 4 目录外引用 | O1 不查、O2 `@import` 行原样回喂、O3 未保存文档不算、O4 无位置消息留引号、O5 盘符与协议不算越界 | 全红（O2、O4 的红是 `hunter2` 进了回喂：泄露是真的） |
+| 5 换后端 | B1 每次刷新都换、B2 丢请求不发事件、B3 忙时下拉可用、B4 停止后也自动弹 | 全红 |
+| 6 心跳 | J1 非 JSON 又算错误、J2 完成后还读、J3 心跳计入事件 | 全红 |
+| 7 对比推迟 | Q1 在结束的调用里直接开、Q2 不看模态 | 全红 |
+| 8 上限 | L1a 未结束的行不限、L1b 整行不限、L2 事件不限、L3 客户端不看溢出、L4 文字不限、L5 错误体读到底、L6 超限当「已停止」 | 全红（L3–L5 是 10 秒等不到） |
+| 9 地址 | U1 不拆查询串、U2 不去片段 | 全红 |
+| 10 参考 | E1 参考少「叠加」一句、E2 例子无 `TyEdit:focus`、E3 系统规则说都让位 | 全红 |
+| 11 英文 | T1 请求里用界面文字、T2 回喂 lint 用界面文字、T3 模式用显示名、T4「预览保持」无英文、T5「模式被拒」无英文、T6 工具提示无英文、T7 lint 按库原文 | 全红 |
+| 12 设置提交 | G1 粘贴不清理（`BtnOk.Click` 抛异常）、G2 保存失败照关、G3 保存失败不读回 | 全红 |
+| 13 代码块 | X1 取第一个、X2 只在没有完整块时算截断、X3 说成最大长度 | 全红 |
+| 14 对比左栏 | V1 左栏用请求时的文本、V2 不提示 | 全红 |
+| 15 WinHTTP | Y1 不限协议、Y2 407 当「拒绝请求」 | 全红 |
+| 16–18 | Z1 被拒选项照发（W13）、Z2 隧道 407 不当状态（W14）、F1 不先删残留（K11）、F2 新标志不先删、F2b 原代码原样（K11：链接目标被写）、F3 OpenAI 回到 120 秒（K6） | 全红 |
+| 测试质量 | W1b `BtnAccept` 去掉 `ModalResult`（M2）、W2 `BtnOkClick` 不提交（M9）、W3 `FormClose` 不结束试看（M19）、W4 工作线程用 `Synchronize` 交结果（S21 死锁超时） | 全红 |
+
+说明：W1 第一次只改 `.lfm` 是绿的——增量 `lazbuild` 不因 `.lfm` 变了重编单元；同时碰一下 `.pas`（W1b）才进了程序，红。以后只改 `.lfm` 的变异都要这样做。工作线程 `TTbAiWorker.Execute` 里的兜底洗密钥没有单独的变异：`Run` 已经接住一切，它到不了，属防御。
+
+### 规格写回
+
+spec 标「实现期修正（3 期）：期末修复批」的段落：§7.1（重定向、明文 http、TLS 与 407、会话不复用、洗密钥的补充、密钥文件、地址的查询串、OpenAI 超时、设置窗口的校验与保存失败、忙时换服务）、§7.2（引擎规则的说法与例子、发给模型一律英文）、§7.3 第 3 步（取哪个代码块、「回答不完整」、目录外引用与回喂不带导入文件原文）、§7.3 第 5 步（对比窗口推迟、不叠在模态上、左栏是编辑器此刻的文本）、§7.4（新增的句子、心跳与完成后事件、上限）、§8（新判据与测试缝）、§10（libcurl 选项检查、DNS 期间的取消）。规格审查列出的偏差里，「参考与系统提示说错引擎规则」一条按引擎改正了；其余各条都随对应的修复在上面这些段落里写回（审查原文不在本批手里，逐条对照由主控做）。使用文档 `docs/themebuilder.md` / `.en.md` 补了明文 http 警告、重定向、对比窗口不叠弹、四句新的出错说法与两条已知限制。验收文档加第 73–76 项（重定向不带走密钥、远程 http 带密钥被拒、生成中开设置不丢请求、模态期间不叠弹）与三条「与规格不符」。
+
+### 主控已做
+
+在 `f7338993` 上 `lazbuild -B` 编过两个 `.lpk` 与 `themebuilder.lpi`（0 错），`check-example-po` / `check-lfm-props` 通过，冒烟只有主窗体与应用窗口。截图暂缓（三期做完统一出）。
+
+### 主控待做
+
+1. 在本签收头提交上 `lazbuild -B` 重编 `tycontrols.lpk`、`tycontrols_dt.lpk`（本批库没改，按惯例确认）与 `tools/themebuilder/themebuilder.lpi`；`powershell -File scripts/smoke-launch-examples.ps1 -Dirs tools\themebuilder` 冒烟。
+2. 对照两份审查原文核一遍「规格审查列的 6 条偏差」是否都已写回 spec（本批没拿到原文，见「规格写回」）。
+3. 截图照旧暂缓到三期统一出；真机验收加第 73–76 项。
