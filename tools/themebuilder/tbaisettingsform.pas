@@ -5,7 +5,9 @@ unit tbaisettingsform;
   and says what came back; a note says what is sent where and how the keys are kept.
 
   The dialog works on a copy (Prepare): nothing reaches the settings or the disk until OK
-  (Commit), so Cancel leaves everything as it was. The test runs on the service's own client
+  (Commit), so Cancel leaves everything as it was. OK checks everything before it changes
+  anything; a save that fails puts the settings back as the disk has them and keeps the
+  window open. A key is cleaned as it is typed or pasted (tabs, line breaks). The test runs on the service's own client
   thread (TTbClientBackend); the first piece of an answer is proof enough -- the request is
   stopped there -- and closing the window stops a test still running. }
 {$mode objfpc}{$H+}
@@ -29,7 +31,8 @@ resourcestring
   rsTbAiTestOk = 'Connected: %s is answering.';
   rsTbAiNeedMaxOutput = 'Anthropic needs a maximum output length above 0.';
   rsTbAiRemoveAsk = 'Remove the service "%s" and its key?';
-  rsTbAiPlainHttpKey = 'A key cannot go to %s over http://: it would cross the network unencrypted. Use an https:// address, or remove the key.';
+  rsTbAiSaveFailed = 'The settings could not be saved (%s). Nothing was changed.';
+  rsTbAiPlainHttpKey ='A key cannot go to %s over http://: it would cross the network unencrypted. Use an https:// address, or remove the key.';
 
 type
   TTbAiSettingsForm = class(TTyForm)
@@ -410,10 +413,35 @@ begin
   FWork[FSel].BaseUrl := Trim(EdtUrl.Text);
 end;
 
+{ a key with no line breaks, tabs or other control characters: what a paste brings along
+  (a key copied from a table, a line with its break) goes }
+function CleanKey(const S: string): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(S) do
+    if S[i] >= ' ' then
+      Result := Result + S[i];
+  Result := Trim(Result);
+end;
+
 procedure TTbAiSettingsForm.KeyChange(Sender: TObject);
+var
+  clean: string;
 begin
   if FUpdating or (FSel < 0) or (FSel > High(FWork)) then Exit;
-  SetKeyOf(FWork[FSel].Id, Trim(EdtKey.Text));
+  clean := CleanKey(EdtKey.Text);
+  if clean <> Trim(EdtKey.Text) then
+  begin
+    FUpdating := True;
+    try
+      EdtKey.Text := clean;
+    finally
+      FUpdating := False;
+    end;
+  end;
+  SetKeyOf(FWork[FSel].Id, clean);
 end;
 
 procedure TTbAiSettingsForm.SetTestText(const AText: string);
@@ -507,6 +535,8 @@ begin
       ModalResult := mrNone;
       Exit;
     end;
+  { everything checked -- and the keys are clean (KeyChange takes out what the settings
+    would refuse): only now do the settings change }
   { the ones taken out of the list go, keys and all }
   SetLength(existing, FSettings.Count);
   for i := 0 to FSettings.Count - 1 do
@@ -524,7 +554,15 @@ begin
   end;
   if (FSel >= 0) and (FSel <= High(FWork)) then
     FSettings.CurrentId := FWork[FSel].Id;
-  FSettings.Save;
+  if not FSettings.Save then
+  begin
+    { not on disk: the settings go back to what is there, the window stays with the
+      changes in it -- OK again, or Cancel }
+    FSettings.Load;
+    SetTestText(Format(rsTbAiSaveFailed, [FSettings.IniFile]));
+    ModalResult := mrNone;
+    Exit;
+  end;
   Result := True;
 end;
 

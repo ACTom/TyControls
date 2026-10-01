@@ -49,6 +49,7 @@ type
     procedure TestClosingDuringATest;        { G8 }
     { after the phase 3 reviews }
     procedure TestPlainHttpToAnotherComputer;   { G9 }
+    procedure TestOkChecksBeforeItChanges;      { G10 }
   end;
 
 { the widgetset, once (the SynEdit completion window needs it) }
@@ -57,7 +58,7 @@ procedure TbNeedWidgetSet;
 implementation
 
 uses
-  Forms, Graphics, SynEditTypes, SynEditMiscClasses, tyControls.Controller, tyControls.Types,
+  Forms, Controls, Graphics, SynEditTypes, SynEditMiscClasses, tyControls.Controller, tyControls.Types,
   tbdiff, tbeditorlook, tbaisession, tbpreview, tbaiformat, tbaiclient, tbaichecks, tbfakehttp;
 
 var
@@ -490,6 +491,45 @@ begin
   FForm.EdtKey.Text := '';
   AssertTrue('G9: without a key it is kept', FForm.Commit);
   AssertEquals('G9: kept', 1, FSettings.Count);
+end;
+
+{ G10: a key pasted with a tab and a line break is cleaned as it comes in (the settings
+  would refuse it, half way through OK); a save that fails leaves the window open, says so,
+  and the settings as they are on disk }
+procedure TTbAiSettingsFormTests.TestOkChecksBeforeItChanges;
+var
+  blocker: string;
+  s: TTbAiSettings;
+  f: TTbAiSettingsForm;
+  fs: TFileStream;
+begin
+  FForm.AddPreset(tapDeepSeek);
+  FForm.EdtKey.Text := 'sk-test'#9'0000-g10'#13#10;
+  AssertEquals('G10: the pasted key is cleaned', 'sk-test0000-g10', FForm.EdtKey.Text);
+  FForm.BtnOk.Click;
+  AssertEquals('G10: OK closes', Ord(mrOk), Ord(FForm.ModalResult));
+  AssertEquals('G10: kept', 1, FSettings.Count);
+  AssertEquals('G10: the clean key', 'sk-test0000-g10', FSettings.GetKey(FSettings.Profile(0).Id));
+  { a settings file that cannot be written: a folder under a file }
+  blocker := FDir + 'blocker';
+  fs := TFileStream.Create(blocker, fmCreate);
+  fs.Free;
+  s := TTbAiSettings.Create(blocker + PathDelim + 'sub' + PathDelim + 'themebuilder-ai.ini',
+    blocker + PathDelim + 'sub' + PathDelim + 'themebuilder-ai.keys');
+  f := TTbAiSettingsForm.Create(nil);
+  try
+    s.Load;
+    f.Prepare(s);
+    f.AddPreset(tapOllama);
+    f.BtnOk.Click;
+    AssertEquals('G10: a failed save keeps the window', Ord(mrNone), Ord(f.ModalResult));
+    AssertEquals('G10: and says so', Format(rsTbAiSaveFailed, [s.IniFile]), f.TestText);
+    AssertEquals('G10: the settings are what the disk has', 0, s.Count);
+    AssertEquals('G10: the window still has the change', 1, f.ProfileList.Items.Count);
+  finally
+    f.Free;
+    s.Free;
+  end;
 end;
 
 initialization
