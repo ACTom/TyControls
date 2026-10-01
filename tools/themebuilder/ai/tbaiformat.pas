@@ -175,13 +175,97 @@ end;
 
 { ---- reading JSON without raising ---- }
 
+function HexValue(const S: string; AFrom: Integer; out AValue: Integer): Boolean;
+var
+  i: Integer;
+  c: Char;
+begin
+  AValue := 0;
+  Result := AFrom + 3 <= Length(S);
+  if not Result then Exit;
+  for i := AFrom to AFrom + 3 do
+  begin
+    c := S[i];
+    case c of
+      '0'..'9': AValue := AValue * 16 + Ord(c) - Ord('0');
+      'a'..'f': AValue := AValue * 16 + Ord(c) - Ord('a') + 10;
+      'A'..'F': AValue := AValue * 16 + Ord(c) - Ord('A') + 10;
+    else
+      Exit(False);
+    end;
+  end;
+end;
+
+function Utf8Of(ACode: Cardinal): RawByteString;
+begin
+  if ACode < $80 then
+    Result := Chr(ACode)
+  else if ACode < $800 then
+    Result := Chr($C0 or (ACode shr 6)) + Chr($80 or (ACode and $3F))
+  else if ACode < $10000 then
+    Result := Chr($E0 or (ACode shr 12)) + Chr($80 or ((ACode shr 6) and $3F)) +
+      Chr($80 or (ACode and $3F))
+  else
+    Result := Chr($F0 or (ACode shr 18)) + Chr($80 or ((ACode shr 12) and $3F)) +
+      Chr($80 or ((ACode shr 6) and $3F)) + Chr($80 or (ACode and $3F));
+end;
+
+{ Unicode escapes turned into the UTF-8 they stand for before fpjson sees the text: FPC
+  3.2.2's scanner takes any two such escapes in a row for a surrogate pair, so the second of
+  two plain characters written that way (Python's ensure_ascii writes Chinese like that)
+  came out wrong. A real pair is joined here; a quote, a backslash and the control
+  characters stay escaped (they mean something to the parser). }
+function DecodeUnicodeEscapes(const S: string): RawByteString;
+const
+  cBackslash = #92;
+var
+  i, n, code, low: Integer;
+begin
+  if Pos(cBackslash + 'u', S) = 0 then
+    Exit(S);
+  Result := '';
+  i := 1;
+  n := Length(S);
+  while i <= n do
+  begin
+    if (S[i] = cBackslash) and (i < n) then
+    begin
+      if (S[i + 1] = 'u') and HexValue(S, i + 2, code) and (code >= $20) and (code <> $22) and
+         (code <> $5C) then
+      begin
+        Inc(i, 6);
+        if (code >= $D800) and (code <= $DBFF) then
+        begin
+          if (i + 5 <= n) and (S[i] = cBackslash) and (S[i + 1] = 'u') and
+             HexValue(S, i + 2, low) and (low >= $DC00) and (low <= $DFFF) then
+          begin
+            Inc(i, 6);
+            code := $10000 + ((code - $D800) shl 10) + (low - $DC00);
+          end
+          else
+            code := $FFFD;
+        end
+        else if (code >= $DC00) and (code <= $DFFF) then
+          code := $FFFD;
+        Result := Result + Utf8Of(code);
+        Continue;
+      end;
+      Result := Result + S[i] + S[i + 1];   { any other escape stays as it is }
+      Inc(i, 2);
+      Continue;
+    end;
+    Result := Result + S[i];
+    Inc(i);
+  end;
+end;
+
 function ParseObject(const S: string): TJSONObject;
 var
   d: TJSONData;
 begin
   Result := nil;
   try
-    d := GetJSON(S, True);
+    d := GetJSON(DecodeUnicodeEscapes(S), True);
   except
     Exit;
   end;
