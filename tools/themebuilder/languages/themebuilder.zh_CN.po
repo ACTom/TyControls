@@ -1458,11 +1458,6 @@ msgstr "生成之后编辑器里又改过。接受会把这些改动一起替换
 
 # --- code resourcestrings (msgid=Pascal source) ---
 
-#: tbaiclient.rstbaiinsecurekey
-#, object-pascal-format
-msgid "Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network."
-msgstr "没有发送：用 http:// 发往 %s，密钥会明文经过网络。请改用 https:// 地址；自己网络里的服务可以不填密钥。"
-
 #: tbaiclient.rstbaioption
 #, object-pascal-format
 msgid "The libcurl on this system does not accept an option the AI needs: %s. A newer libcurl is needed."
@@ -1495,13 +1490,8 @@ msgid "Not encrypted (http://)"
 msgstr "未加密（http://）"
 
 #: tbaisettings.rstbaiplainhttpmore
-msgid "Others on the network can read the theme and your descriptions."
-msgstr "网络上的其他人能看到主题文本和你的描述。"
-
-#: tbaisettingsform.rstbaiplainhttpkey
-#, object-pascal-format
-msgid "A key cannot go to %s over http://: it would cross the network unencrypted. Use an https:// address, or remove the key."
-msgstr "密钥不能用 http:// 发往 %s：它会明文经过网络。请改用 https:// 地址，或去掉密钥。"
+msgid "This address uses http: the key and the theme text cross the network unencrypted."
+msgstr "这个地址用 http，密钥和主题文本会明文经过网络。"
 
 #: tbaisettingsform.rstbaisavefailed
 #, object-pascal-format

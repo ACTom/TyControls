@@ -100,7 +100,7 @@ function AiCheckCancel(out AWhy: string): Boolean;            { C15 }
 function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
 { after the phase 3 reviews }
 function AiCheckRedirects(out AWhy: string): Boolean;         { C18 }
-function AiCheckInsecureKey(out AWhy: string): Boolean;       { C19 }
+function AiCheckPlainHttpKey(out AWhy: string): Boolean;      { C19 }
 function AiCheckHeartbeats(out AWhy: string): Boolean;        { C21 }
 function AiCheckLimits(out AWhy: string): Boolean;            { C22 }
 function AiCheckProxyAuth(out AWhy: string): Boolean;         { C23 }
@@ -118,6 +118,7 @@ type
 var
   TbRecordedRequests: Integer = 0;    { Execute calls on recording transports }
   TbRecordedUrl: string = '';
+  TbRecordedHeaders: string = '';     { the last request's headers, one per line }
 
 { AOn: TbCreateTransport hands out recording transports (and the count starts at 0) }
 procedure TbRecordTransports(AOn: Boolean);
@@ -1498,6 +1499,7 @@ function TTbRecordingTransport.Execute(const ARequest: TTbHttpRequest;
 begin
   InterLockedIncrement(TbRecordedRequests);
   TbRecordedUrl := ARequest.Url;
+  TbRecordedHeaders := string.Join(#10, ARequest.Headers);
   Result := Default(TTbHttpResult);
   Result.Error := hekCannotConnect;
 end;
@@ -1516,6 +1518,7 @@ procedure TbRecordTransports(AOn: Boolean);
 begin
   TbRecordedRequests := 0;
   TbRecordedUrl := '';
+  TbRecordedHeaders := '';
   if AOn then
     TbTransportFactoryForTest := @MakeRecording
   else
@@ -1557,10 +1560,12 @@ begin
   TbTransportFactoryForTest := @MakeRaising;
 end;
 
-{ C19: a key is never sent over http:// to another computer -- the client refuses before a
-  transport is even made; without a key (a local model elsewhere on the network), over
-  https, or to this computer it goes. Recording transports: nothing reaches the network }
-function AiCheckInsecureKey(out AWhy: string): Boolean;
+{ C19 (acceptance feedback): a key goes over http:// to another computer too -- inside a
+  company network http is common, and the settings and the AI page warn of it; it used to be
+  refused before a transport was made. The transport is asked, with the key in its header;
+  without a key, over https, and to this computer it goes as before. Recording transports:
+  nothing reaches the network }
+function AiCheckPlainHttpKey(out AWhy: string): Boolean;
 
   function TryRun(const AUrl, AKey: string; out ARun: TTbAiRun): Boolean;
   var
@@ -1586,18 +1591,19 @@ begin
   TbRecordTransports(True);
   try
     if not TryRun('http://192.0.2.10:8080/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
-    if run.Outcome.Kind <> aekInsecureKey then
-      Exit(Fail(AWhy, 'a key over remote http: ' + AiDescribe(run)));
-    if TbRecordedRequests <> 0 then Exit(Fail(AWhy, 'a transport was asked to send it'));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'a key over remote http was not let through: ' + AiDescribe(run)));
+    if TbRecordedUrl <> 'http://192.0.2.10:8080/v1/chat/completions' then
+      Exit(Fail(AWhy, 'sent to ' + TbRecordedUrl));
+    if Pos('Bearer ' + cFakeKey, TbRecordedHeaders) = 0 then
+      Exit(Fail(AWhy, 'the key is not in the request''s header'));
     sentence := TbAiErrorSentence(run.Outcome, run.Profile);
-    if sentence <> Format(rsTbAiInsecureKey, ['192.0.2.10']) then
-      Exit(Fail(AWhy, 'the sentence: ' + sentence));
     if Pos(cFakeKey, sentence) > 0 then Exit(Fail(AWhy, 'the key is in the sentence'));
     FreeAndNil(run);
     { the same with the upper-case scheme }
     if not TryRun('HTTP://192.0.2.10/v1', cFakeKey, run) then Exit(Fail(AWhy, 'did not finish'));
-    if run.Outcome.Kind <> aekInsecureKey then
-      Exit(Fail(AWhy, 'HTTP:// in capitals: ' + AiDescribe(run)));
+    if (run.Outcome.Kind <> aekCannotConnect) or (TbRecordedRequests <> 1) then
+      Exit(Fail(AWhy, 'HTTP:// in capitals was not let through: ' + AiDescribe(run)));
     FreeAndNil(run);
     { allowed: no key; https; this computer by name, address and IPv6 }
     if not TryRun('http://192.0.2.10:11434/v1', '', run) then Exit(Fail(AWhy, 'did not finish'));

@@ -221,8 +221,8 @@ begin
     FMadeKey := '';
     LblSentTo.Caption := '';
   end;
-  { http:// to another computer: what is sent can be read on the way (with a key nothing
-    goes out at all -- the client refuses, the status line says so) }
+  { http:// to another computer: what is sent -- the key too -- can be read on the way. It
+    is sent all the same (the user's network, the user's call); the warning stays up }
   PlainHttpAlert.Visible := has and TbIsPlainRemote(cur.BaseUrl);
   UpdateButtons;
 end;

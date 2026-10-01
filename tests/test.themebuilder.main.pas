@@ -2154,6 +2154,9 @@ begin
   Result := not AForm.Ai.Session.Busy;
 end;
 
+{ M13 (acceptance feedback): http:// to another computer -- the page warns that the key and
+  the theme cross the network unencrypted, and generating sends it all the same, key and all
+  (it used to refuse). Recording transports: nothing reaches the network. }
 procedure TTbMainFormTests.TestTheAiPageWarnsOfPlainHttp;
 var
   p: TTbAiProfile;
@@ -2168,14 +2171,18 @@ begin
   FForm.AiSettings.SetKey(p.Id, 'sk-test-0000-page');
   FForm.Ai.RefreshProfiles;
   AssertTrue('M13: http to another computer, warned', FForm.Ai.PlainHttpAlert.Visible);
+  AssertEquals('M13: the warning says what goes across', rsTbAiPlainHttpMore,
+    FForm.Ai.PlainHttpAlert.Description);
   TbRecordTransports(True);
   try
     FForm.Ai.EdtPrompt.Text := 'blue';
     FForm.Ai.GenerateClick(nil);
     AssertTrue('M13: finished', WaitAiIdle(FForm, 5000));
-    AssertEquals('M13: the status line says it was not sent',
-      Format(rsTbAiInsecureKey, ['192.0.2.10']), FForm.Ai.LblStatus.Caption);
-    AssertEquals('M13: nothing was asked of a transport', 0, TbRecordedRequests);
+    AssertTrue('M13: a transport was asked', TbRecordedRequests >= 1);
+    AssertTrue('M13: with the key', Pos('sk-test-0000-page', TbRecordedHeaders) > 0);
+    AssertTrue('M13: the key is not on the status line',
+      Pos('sk-test-0000-page', FForm.Ai.LblStatus.Caption) = 0);
+    AssertTrue('M13: still warned', FForm.Ai.PlainHttpAlert.Visible);
   finally
     TbRecordTransports(False);
   end;

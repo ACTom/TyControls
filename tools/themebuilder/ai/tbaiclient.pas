@@ -4,8 +4,7 @@ unit tbaiclient;
   of a fixed set of outcomes -- each told to the user in one sentence (TbAiErrorSentence).
 
   How the outcome is decided, the first that holds:
-    0. a key and an http:// address that is not this computer: nothing is sent;
-    0b. the reply went over a limit -- a line of 1 MB, an event of 4 MB, 8 MB of answer
+    0. the reply went over a limit -- a line of 1 MB, an event of 4 MB, 8 MB of answer
        text: the transfer is stopped and the reply is not in the expected format (an
        error body is read to 64 KB, then the line is dropped and its status decides);
     1. the transport failed: cancelled, or which way it failed (no host, no connection,
@@ -23,9 +22,12 @@ unit tbaiclient;
     7. otherwise fine.
   The text that arrived is kept in every case (the page shows it).
 
-  The key travels in a request header and nowhere else. Every string that leaves this unit
-  (the Detail, the sentence) goes through TbScrubSecret first: OpenAI's 401 message quotes
-  the key half-masked ("sk-proj-****ab12").
+  The key travels in a request header and nowhere else -- over http:// too, to another
+  computer as well: inside a company network that is common, so it is the user's call (the
+  settings window and the AI page warn of it, acceptance feedback; it used to be refused).
+  What is never done is following a redirect, which would take the key to another host.
+  Every string that leaves this unit (the Detail, the sentence) goes through TbScrubSecret
+  first: OpenAI's 401 message quotes the key half-masked ("sk-proj-****ab12").
 
   No LCL: the WSL console program compiles it too. }
 {$mode objfpc}{$H+}
@@ -56,13 +58,12 @@ resourcestring
   rsTbAiRedirect = 'The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings.';
   rsTbAiOption = 'The libcurl on this system does not accept an option the AI needs: %s. A newer libcurl is needed.';
   rsTbAiProxyAuth ='The proxy asks for a user name and password (407). Set them in the system''s proxy settings, or use a proxy that does not ask.';
-  rsTbAiInsecureKey ='Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network.';
 
 type
   TTbAiErrorKind = (aekNone, aekCancelled, aekNoTransport, aekBadUrl, aekNameNotResolved,
     aekCannotConnect, aekTls, aekTimeout, aekBroken, aekAuth, aekNotFound, aekRateLimit,
     aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekRedirect,
-    aekInsecureKey, aekProxyAuth, aekOption, aekOther);
+    aekProxyAuth, aekOption, aekOther);
 
   TTbAiResult = record
     Kind: TTbAiErrorKind;
@@ -313,11 +314,6 @@ begin
         Result := Format(rsTbAiRedirect, [AResult.Status, AResult.RedirectTo]);
         withDetail := False;
       end;
-    aekInsecureKey:
-      begin
-        Result := Format(rsTbAiInsecureKey, [host]);
-        withDetail := False;
-      end;
     aekProxyAuth:
       begin
         Result := rsTbAiProxyAuth;
@@ -502,13 +498,6 @@ begin
   if IsCancelled then
   begin
     Result.Kind := aekCancelled;
-    Exit;
-  end;
-  { a key never goes out in the clear: http:// is for this computer, or for a service on
-    the user's own network that needs no key (a local Ollama on another machine) }
-  if (FKey <> '') and TbIsPlainRemote(TbEndpointUrl(FProfile)) then
-  begin
-    Result.Kind := aekInsecureKey;
     Exit;
   end;
   transport := TbCreateTransport(reason);

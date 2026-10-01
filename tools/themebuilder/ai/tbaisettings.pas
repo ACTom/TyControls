@@ -28,8 +28,9 @@ resourcestring
   rsTbAiPresetLocal = 'Local (Ollama)';
   rsTbAiPresetCustom = 'Custom';
   { the warning the settings and the AI page show for http:// to another computer }
+  { it goes out all the same, key and all: inside a company network http is common }
   rsTbAiPlainHttp = 'Not encrypted (http://)';
-  rsTbAiPlainHttpMore = 'Others on the network can read the theme and your descriptions.';
+  rsTbAiPlainHttpMore = 'This address uses http: the key and the theme text cross the network unencrypted.';
 
 type
   TTbAiPreset = (tapOpenAI, tapDeepSeek, tapAnthropic, tapOllama, tapCustom);

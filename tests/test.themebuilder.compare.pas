@@ -639,8 +639,10 @@ begin
   end;
 end;
 
-{ G9: http:// to another computer -- a warning, and no key: OK refuses, Test connection says
-  it was not sent (recording transports: nothing reaches the network either way) }
+{ G9 (acceptance feedback): http:// to another computer -- a warning that says the key and
+  the theme cross the network unencrypted, and nothing refused: OK keeps it with its key, and
+  Test connection sends it, key and all (recording transports: nothing reaches the network).
+  It used to refuse a key. }
 procedure TTbAiSettingsFormTests.TestPlainHttpToAnotherComputer;
 begin
   FForm.AddPreset(tapCustom);
@@ -651,24 +653,22 @@ begin
   FForm.EdtUrl.Text := 'http://192.0.2.10:11434/v1';
   AssertTrue('G9: http to another computer, warned', FForm.PlainHttpAlert.Visible);
   AssertEquals('G9: the warning says it', rsTbAiPlainHttp, FForm.PlainHttpAlert.Message);
+  AssertEquals('G9: and what goes across', rsTbAiPlainHttpMore, FForm.PlainHttpAlert.Description);
   FForm.EdtKey.Text := cFormKey;
-  AssertFalse('G9: with a key, OK refuses', FForm.Commit);
-  AssertEquals('G9: nothing was kept', 0, FSettings.Count);
-  AssertEquals('G9: says why', Format(rsTbAiPlainHttpKey, ['192.0.2.10']), FForm.TestText);
-  AssertTrue('G9: the key is not in it', Pos(cFormKey, FForm.TestText) = 0);
+  AssertTrue('G9: still warned with a key', FForm.PlainHttpAlert.Visible);
   TbRecordTransports(True);
   try
     AssertTrue('G9: the test starts', FForm.StartTest);
     AssertTrue('G9: answered within 5 s', WaitTest(5000));
-    AssertEquals('G9: the test says it was not sent', Format(rsTbAiInsecureKey, ['192.0.2.10']),
-      FForm.TestText);
-    AssertEquals('G9: nothing was asked of a transport', 0, TbRecordedRequests);
+    AssertEquals('G9: the test asked a transport', 1, TbRecordedRequests);
+    AssertTrue('G9: with the key', Pos(cFormKey, TbRecordedHeaders) > 0);
+    AssertTrue('G9: the key is not in what the window says', Pos(cFormKey, FForm.TestText) = 0);
   finally
     TbRecordTransports(False);
   end;
-  FForm.EdtKey.Text := '';
-  AssertTrue('G9: without a key it is kept', FForm.Commit);
+  AssertTrue('G9: with a key, OK keeps it', FForm.Commit);
   AssertEquals('G9: kept', 1, FSettings.Count);
+  AssertEquals('G9: the key with it', cFormKey, FSettings.GetKey(FSettings.Profile(0).Id));
 end;
 
 { G10: a key pasted with a tab and a line break is cleaned as it comes in (the settings

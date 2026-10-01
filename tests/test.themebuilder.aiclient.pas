@@ -36,7 +36,7 @@ type
     procedure TestScrubbing;                 { C17 }
     { after the phase 3 reviews }
     procedure TestARedirectIsNotFollowed;    { C18 }
-    procedure TestAKeyIsNotSentOverHttp;     { C19 }
+    procedure TestAKeyGoesOverHttpToo;       { C19, acceptance feedback }
     procedure TestARaiseIsScrubbed;          { C20 }
     procedure TestHeartbeatsAndLateEvents;   { C21 }
     procedure TestAReplyHasLimits;           { C22 }
@@ -358,12 +358,12 @@ begin
   AssertTrue('C18: ' + why, ok);
 end;
 
-procedure TTbAiClientTests.TestAKeyIsNotSentOverHttp;
+procedure TTbAiClientTests.TestAKeyGoesOverHttpToo;
 var
   why: string;
   ok: Boolean;
 begin
-  ok := AiCheckInsecureKey(why);
+  ok := AiCheckPlainHttpKey(why);
   AssertTrue('C19: ' + why, ok);
 end;
 

@@ -35,7 +35,6 @@ resourcestring
   rsTbAiNeedMaxOutput = 'Anthropic needs a maximum output length above 0.';
   rsTbAiRemoveAsk = 'Remove the service "%s" and its key?';
   rsTbAiSaveFailed = 'The settings could not be saved (%s). Nothing was changed.';
-  rsTbAiPlainHttpKey ='A key cannot go to %s over http://: it would cross the network unencrypted. Use an https:// address, or remove the key.';
 
 type
   TTbAiSettingsForm = class(TTyForm)
@@ -298,8 +297,8 @@ begin
   end
   else
     LblHint.Visible := False;
-  { http:// to another computer: allowed (a local model on the user's network), said out
-    loud; with a key, OK refuses it (Commit) and the client would not send it }
+  { http:// to another computer: allowed, key and all (inside a company network http is
+    common -- acceptance feedback; OK used to refuse a key), and said out loud }
   PlainHttpAlert.Visible := TbIsPlainRemote(EdtUrl.Text);
 end;
 
@@ -527,14 +526,6 @@ begin
     begin
       SelectProfile(i);
       SetTestText(rsTbAiNeedMaxOutput);
-      ModalResult := mrNone;
-      Exit;
-    end;
-  for i := 0 to High(FWork) do
-    if (KeyOf(FWork[i].Id) <> '') and TbIsPlainRemote(FWork[i].BaseUrl) then
-    begin
-      SelectProfile(i);
-      SetTestText(Format(rsTbAiPlainHttpKey, [TbHostOf(FWork[i].BaseUrl)]));
       ModalResult := mrNone;
       Exit;
     end;

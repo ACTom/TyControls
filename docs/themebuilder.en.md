@@ -73,7 +73,7 @@ A preset only fills in the address and model name; everything can be changed. Mo
 
 The dialog also says it plainly: the theme text and your descriptions go to the service you set up here. With a local model they stay on your computer.
 
-When the address is `http://` (not `https://`) and not on this computer — Ollama on another machine on your network, say — the settings and the AI page show a "Not encrypted" warning: others on the network can read what is sent. Such an address can't have a key: OK refuses it, and nothing would be sent anyway. When a service redirects the request somewhere else, the tool doesn't follow (the key would go along); it tells you which host it points to, and if that's right you change the address in the settings.
+When the address is `http://` (not `https://`) and not on this computer — a service on your company network, or Ollama on another machine, say — the settings and the AI page show a "Not encrypted" warning: this address uses http, so the key and the theme text cross the network unencrypted. It is only a warning: the address works, with a key too — only you know whether that network can be trusted. When a service redirects the request somewhere else, the tool doesn't follow (the key would go along); it tells you which host it points to, and if that's right you change the address in the settings.
 
 ### Local models
 
@@ -119,7 +119,6 @@ The rules and the syntax reference sent to the model are in English, which model
 | The reply has no tycss code block | The model did not follow the rules; its text is in the output box |
 | The reply is not complete: it ended inside its code block | The service said it was done, but the code block wasn't |
 | The service answered with a redirect ... to ... | The address moved; the tool doesn't follow — check it and change the settings |
-| Not sent: over http:// the key would cross the network ... | An address with a key must be https:// |
 | The proxy asks for a user name and password (407) | Set them in the system's proxy settings |
 
 Whatever happens, the editor is not affected.
