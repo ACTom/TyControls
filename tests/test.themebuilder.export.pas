@@ -38,6 +38,7 @@ type
     procedure TestTheModernDensityIsTriedToo;
     procedure TestAFailedMoveKeepsTheFolder;
     procedure TestABackupThatIsThereStays;
+    procedure TestOneFileWrittenTwoWays;
   end;
 
 implementation
@@ -463,6 +464,23 @@ begin
   src := nil;
   AssertTrue('X15: the backup that was there is as it was', ReadBytes(target + '.tbbak') = mine);
   AssertFalse('X15: no backup of ours left', FileExists(FDir + 'kept.zip.1.tbbak'));
+end;
+
+{ The same picture written Assets/background.jpg in one place and assets/background.jpg in
+  another: on Windows one file, so one bundle path -- and on a system that tells capitals from
+  small letters the other spelling finds nothing. Refused, both spellings named. }
+procedure TTbExportTests.TestOneFileWrittenTwoWays;
+var
+  files: TTbBundleFiles;
+  err, entry: string;
+begin
+  entry := CopyGreen + LineEnding + 'TyPanel { background-image: url(Assets/Background.jpg); }';
+  AssertFalse('X16: refused', Collect(entry, FDir + 'theme', files, err));
+  {$IFDEF MSWINDOWS}
+  AssertTrue('X16: says why: ' + err, Pos(Format(rsTbExportCaseClash, ['assets/background.jpg']), err) > 0);
+  AssertTrue('X16: names the other spelling: ' + err, Pos('Assets/Background.jpg', err) > 0);
+  {$ENDIF}
+  AssertTrue('X16: one spelling goes: ' + err, Collect(CopyGreen, FDir + 'theme', files, err));
 end;
 
 initialization

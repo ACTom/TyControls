@@ -34,6 +34,7 @@ resourcestring
   rsTbExportOutside = 'outside the theme''s folder';
   rsTbExportUnsaved = 'save the theme first: paths are read from its folder';
   rsTbExportMissing = 'not found';
+  rsTbExportCaseClash = 'also written as %s: a system that tells capitals from small letters finds only one of the two -- write it the same way everywhere';
   rsTbExportNoTarget = 'Choose where to export to.';
   rsTbExportFolderNotEmpty = '%s is not an empty folder.';
   rsTbExportNoParent = 'The folder %s does not exist.';
@@ -227,6 +228,7 @@ function TbCollectBundleFiles(const AText, ABaseDir: string; out AFiles: TTbBund
 var
   base: string;
   seen: TStringList;     { expanded paths already in AFiles (or expanded, for an import) }
+  spelled: TStringList;  { for each of seen, the bundle path it was first written as }
   errors: string;
 
   procedure Fail(const APath, AWhy: string);
@@ -265,12 +267,25 @@ var
     end;
   end;
 
+  { AFull is in already. On a system that does not tell capitals from small letters the same
+    file may be written two ways (Assets/a.png, assets/a.png); one bundle path has to do for
+    both, and on one that does tell them apart the other would not be found -- refused }
+  function AlreadyIn(const AFull, AArchive, APath: string): Boolean;
+  var
+    k: Integer;
+  begin
+    k := seen.IndexOf(Key(AFull));
+    Result := k >= 0;
+    if Result and (spelled[k] <> AArchive) then
+      Fail(APath, Format(rsTbExportCaseClash, [spelled[k]]));
+  end;
+
   procedure AddFile(const AFull, AArchive: string);
   var
     n: Integer;
   begin
-    if seen.IndexOf(Key(AFull)) >= 0 then Exit;
     seen.Add(Key(AFull));
+    spelled.Add(AArchive);
     n := Length(AFiles);
     SetLength(AFiles, n + 1);
     AFiles[n].Source := AFull;
@@ -289,7 +304,7 @@ var
     begin
       arch := NormArchive(APrefix + NormArchive(paths[i]));
       if not Check(paths[i], arch, full) then Continue;
-      if seen.IndexOf(Key(full)) >= 0 then Continue;   { a diamond, or a cycle }
+      if AlreadyIn(full, arch, paths[i]) then Continue;   { a diamond, or a cycle }
       AddFile(full, arch);
       Imports(ReadFileBytes(full), Copy(arch, 1, LastDelimiter('/', arch)));
     end;
@@ -305,7 +320,7 @@ var
     for i := 0 to High(paths) do
     begin
       arch := NormArchive(paths[i]);       { always from the entry's folder }
-      if Check(paths[i], arch, full) then
+      if Check(paths[i], arch, full) and not AlreadyIn(full, arch, paths[i]) then
         AddFile(full, arch);
     end;
   end;
@@ -320,6 +335,7 @@ begin
   else
     base := '';
   seen := TStringList.Create;
+  spelled := TStringList.Create;
   try
     Urls(AText);
     Imports(AText, '');
@@ -330,6 +346,7 @@ begin
         Urls(ReadFileBytes(AFiles[i].Source));
   finally
     seen.Free;
+    spelled.Free;
   end;
   AError := errors;
   Result := errors = '';
