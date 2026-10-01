@@ -452,7 +452,7 @@ object SeedsFrame: TTbSeedsFrame
         Width = 104
         BorderSpacing.Top = 2
         MinValue = 0
-        MaxValue = 64
+        MaxValue = 256
         OnValueChange = RadiusChange
       end
       object SpnRadiusR: TTySpinEdit
@@ -467,7 +467,7 @@ object SeedsFrame: TTbSeedsFrame
         BorderSpacing.Top = 2
         BorderSpacing.Left = 8
         MinValue = 0
-        MaxValue = 64
+        MaxValue = 256
         OnValueChange = RadiusChange
       end
       object NoteRadiusL: TTyLabel

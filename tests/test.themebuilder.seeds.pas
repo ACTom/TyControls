@@ -71,6 +71,7 @@ type
     procedure TestTheRadiusWaitsForTheLastStep;
     procedure TestTheModelLoadsOncePerText;
     procedure TestASharedExpressionSaysBoth;
+    procedure TestABigRadiusIsShownAsItIs;
   end;
 
 const
@@ -768,6 +769,16 @@ begin
   FFrame.UpdateFrom(':root { --surface: darken(#FFFFFF, 10%); }'#10 + cDarkDoc, '', False);
   AssertEquals('shared', Ord(tssShared), Ord(FFrame.Cell(1, 1).Source));
   AssertEquals('SF17: one string for both', rsTbSeedSharedExpression, FFrame.Note(1, 1).Caption);
+end;
+
+{ The spin boxes stopped at 64: a theme with a 200 px radius (a pill, a round tile) showed
+  64 -- and the next step wrote 63 or 64 over it. Up to 256 is shown as it is. }
+procedure TTbSeedsFrameTests.TestABigRadiusIsShownAsItIs;
+begin
+  FFrame.UpdateFrom(':root { --radius: 200px; }', '', False);
+  AssertEquals('the value', '200px', FFrame.ResolvedText(TbRadiusSeed, 0));
+  AssertEquals('SF18: the spin box shows it', 200, FFrame.RadiusSpin(0).Value);
+  AssertEquals('SF18: the right one goes as far', 256, FFrame.RadiusSpin(1).MaxValue);
 end;
 
 procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;
