@@ -18,3 +18,6 @@ tests/fixtures/terminal-wt-defaults.json  -text
 # The terminal example's ZModem recordings: lrzsz's bytes on the wire and the files it
 # sent, byte for byte (tools/terminal-oracle/zmodem-record.sh).
 tests/fixtures/terminal-zmodem/**  -text
+
+# The AI samples: hand-written streams, byte for byte (one of them uses CRLF on purpose).
+tests/fixtures/themebuilder/ai/**  -text
