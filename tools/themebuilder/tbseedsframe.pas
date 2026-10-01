@@ -5,6 +5,10 @@ unit tbseedsframe;
   rows at all, only the note to fix the errors first (the values would be the last good
   text's).
 
+  The rows size themselves (.lfm: AutoSize, the notes word-wrapped and anchored under their
+  swatch), so a long note -- a translation, "overridden by an imported @mode" -- takes a
+  second line instead of being cut.
+
   Each cell shows what the seed comes to in that mode (TTbSeedEval: the document over the
   base, no density pack) and says where it comes from: nothing when the column's own block
   sets it, "from :root" when a two-mode document sets it once for both, "inherited" (greyed)
@@ -60,6 +64,7 @@ resourcestring
   rsTbSeedInherited = 'inherited';
   rsTbSeedShared = 'from :root';
   rsTbSeedExpression = 'expression';
+  rsTbSeedSharedExpression = 'from :root, an expression';
   rsTbSeedImported = 'from an imported file';
   rsTbSeedOverridden = 'overridden by an imported @mode';
   rsTbSeedOverriddenHint = ':root says %s, but an @mode block in an imported file wins over it. A change goes into this file''s own @mode block, which wins over the import.';
@@ -395,7 +400,7 @@ begin
             lbl.Caption := '';
         end;
         if (c.Source = tssShared) and c.IsExpression then
-          lbl.Caption := rsTbSeedShared + ', ' + rsTbSeedExpression;
+          lbl.Caption := rsTbSeedSharedExpression;
         { not in this file (the base's, an imported file's): greyed -- a change adds the line }
         lbl.Enabled := (c.Source <> tssInherited) and ((c.Source <> tssImported) or c.Overridden);
       end;

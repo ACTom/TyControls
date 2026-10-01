@@ -17,6 +17,7 @@ object SeedsFrame: TTbSeedsFrame
     BorderSpacing.Left = 8
     BorderSpacing.Top = 6
     BorderSpacing.Right = 8
+    AutoSize = True
     WordWrap = True
   end
   object SplitButton: TTyButton
@@ -52,10 +53,13 @@ object SeedsFrame: TTbSeedsFrame
         Caption = 'Light'
       end
       object HdrRight: TTyLabel
+        AnchorSideLeft.Control = HdrLeft
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 20
         Top = 4
         Width = 104
+        BorderSpacing.Left = 8
         Caption = 'Dark'
       end
     end
@@ -65,6 +69,8 @@ object SeedsFrame: TTbSeedsFrame
       Top = 26
       Width = 280
       Align = alTop
+      AutoSize = True
+      BorderSpacing.Bottom = 4
       object LblAccent: TTyLabel
         Left = 8
         Height = 20
@@ -73,32 +79,61 @@ object SeedsFrame: TTbSeedsFrame
         Caption = '--accent'
       end
       object SwAccentL: TTyColorButton
+        AnchorSideTop.Control = LblAccent
+        AnchorSideTop.Side = asrBottom
         Left = 8
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object SwAccentR: TTyColorButton
+        AnchorSideTop.Control = LblAccent
+        AnchorSideTop.Side = asrBottom
+        AnchorSideLeft.Control = SwAccentL
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
+        BorderSpacing.Left = 8
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object NoteAccentL: TTyLabel
+        AnchorSideLeft.Control = SwAccentL
+        AnchorSideTop.Control = SwAccentL
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwAccentL
+        AnchorSideRight.Side = asrBottom
         Left = 8
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
       object NoteAccentR: TTyLabel
+        AnchorSideLeft.Control = SwAccentR
+        AnchorSideTop.Control = SwAccentR
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwAccentR
+        AnchorSideRight.Side = asrBottom
         Left = 120
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
     end
     object RowSurface: TTyPanel
@@ -107,6 +142,8 @@ object SeedsFrame: TTbSeedsFrame
       Top = 104
       Width = 280
       Align = alTop
+      AutoSize = True
+      BorderSpacing.Bottom = 4
       object LblSurface: TTyLabel
         Left = 8
         Height = 20
@@ -115,32 +152,61 @@ object SeedsFrame: TTbSeedsFrame
         Caption = '--surface'
       end
       object SwSurfaceL: TTyColorButton
+        AnchorSideTop.Control = LblSurface
+        AnchorSideTop.Side = asrBottom
         Left = 8
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object SwSurfaceR: TTyColorButton
+        AnchorSideTop.Control = LblSurface
+        AnchorSideTop.Side = asrBottom
+        AnchorSideLeft.Control = SwSurfaceL
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
+        BorderSpacing.Left = 8
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object NoteSurfaceL: TTyLabel
+        AnchorSideLeft.Control = SwSurfaceL
+        AnchorSideTop.Control = SwSurfaceL
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwSurfaceL
+        AnchorSideRight.Side = asrBottom
         Left = 8
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
       object NoteSurfaceR: TTyLabel
+        AnchorSideLeft.Control = SwSurfaceR
+        AnchorSideTop.Control = SwSurfaceR
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwSurfaceR
+        AnchorSideRight.Side = asrBottom
         Left = 120
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
     end
     object RowOnSurface: TTyPanel
@@ -149,6 +215,8 @@ object SeedsFrame: TTbSeedsFrame
       Top = 182
       Width = 280
       Align = alTop
+      AutoSize = True
+      BorderSpacing.Bottom = 4
       object LblOnSurface: TTyLabel
         Left = 8
         Height = 20
@@ -157,32 +225,61 @@ object SeedsFrame: TTbSeedsFrame
         Caption = '--on-surface'
       end
       object SwOnSurfaceL: TTyColorButton
+        AnchorSideTop.Control = LblOnSurface
+        AnchorSideTop.Side = asrBottom
         Left = 8
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object SwOnSurfaceR: TTyColorButton
+        AnchorSideTop.Control = LblOnSurface
+        AnchorSideTop.Side = asrBottom
+        AnchorSideLeft.Control = SwOnSurfaceL
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
+        BorderSpacing.Left = 8
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object NoteOnSurfaceL: TTyLabel
+        AnchorSideLeft.Control = SwOnSurfaceL
+        AnchorSideTop.Control = SwOnSurfaceL
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwOnSurfaceL
+        AnchorSideRight.Side = asrBottom
         Left = 8
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
       object NoteOnSurfaceR: TTyLabel
+        AnchorSideLeft.Control = SwOnSurfaceR
+        AnchorSideTop.Control = SwOnSurfaceR
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwOnSurfaceR
+        AnchorSideRight.Side = asrBottom
         Left = 120
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
     end
     object RowBorder: TTyPanel
@@ -191,6 +288,8 @@ object SeedsFrame: TTbSeedsFrame
       Top = 260
       Width = 280
       Align = alTop
+      AutoSize = True
+      BorderSpacing.Bottom = 4
       object LblBorder: TTyLabel
         Left = 8
         Height = 20
@@ -199,32 +298,61 @@ object SeedsFrame: TTbSeedsFrame
         Caption = '--border'
       end
       object SwBorderL: TTyColorButton
+        AnchorSideTop.Control = LblBorder
+        AnchorSideTop.Side = asrBottom
         Left = 8
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object SwBorderR: TTyColorButton
+        AnchorSideTop.Control = LblBorder
+        AnchorSideTop.Side = asrBottom
+        AnchorSideLeft.Control = SwBorderL
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
+        BorderSpacing.Left = 8
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object NoteBorderL: TTyLabel
+        AnchorSideLeft.Control = SwBorderL
+        AnchorSideTop.Control = SwBorderL
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwBorderL
+        AnchorSideRight.Side = asrBottom
         Left = 8
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
       object NoteBorderR: TTyLabel
+        AnchorSideLeft.Control = SwBorderR
+        AnchorSideTop.Control = SwBorderR
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwBorderR
+        AnchorSideRight.Side = asrBottom
         Left = 120
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
     end
     object RowDanger: TTyPanel
@@ -233,6 +361,8 @@ object SeedsFrame: TTbSeedsFrame
       Top = 338
       Width = 280
       Align = alTop
+      AutoSize = True
+      BorderSpacing.Bottom = 4
       object LblDanger: TTyLabel
         Left = 8
         Height = 20
@@ -241,32 +371,61 @@ object SeedsFrame: TTbSeedsFrame
         Caption = '--danger'
       end
       object SwDangerL: TTyColorButton
+        AnchorSideTop.Control = LblDanger
+        AnchorSideTop.Side = asrBottom
         Left = 8
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object SwDangerR: TTyColorButton
+        AnchorSideTop.Control = LblDanger
+        AnchorSideTop.Side = asrBottom
+        AnchorSideLeft.Control = SwDangerL
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
+        BorderSpacing.Left = 8
         ShowText = True
         OnColorChange = SwatchColorChange
       end
       object NoteDangerL: TTyLabel
+        AnchorSideLeft.Control = SwDangerL
+        AnchorSideTop.Control = SwDangerL
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwDangerL
+        AnchorSideRight.Side = asrBottom
         Left = 8
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
       object NoteDangerR: TTyLabel
+        AnchorSideLeft.Control = SwDangerR
+        AnchorSideTop.Control = SwDangerR
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SwDangerR
+        AnchorSideRight.Side = asrBottom
         Left = 120
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
     end
     object RowRadius: TTyPanel
@@ -275,6 +434,8 @@ object SeedsFrame: TTbSeedsFrame
       Top = 416
       Width = 280
       Align = alTop
+      AutoSize = True
+      BorderSpacing.Bottom = 4
       object LblRadius: TTyLabel
         Left = 8
         Height = 20
@@ -283,34 +444,63 @@ object SeedsFrame: TTbSeedsFrame
         Caption = '--radius'
       end
       object SpnRadiusL: TTySpinEdit
+        AnchorSideTop.Control = LblRadius
+        AnchorSideTop.Side = asrBottom
         Left = 8
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
         MinValue = 0
         MaxValue = 64
         OnValueChange = RadiusChange
       end
       object SpnRadiusR: TTySpinEdit
+        AnchorSideTop.Control = LblRadius
+        AnchorSideTop.Side = asrBottom
+        AnchorSideLeft.Control = SpnRadiusL
+        AnchorSideLeft.Side = asrBottom
         Left = 120
         Height = 28
         Top = 26
         Width = 104
+        BorderSpacing.Top = 2
+        BorderSpacing.Left = 8
         MinValue = 0
         MaxValue = 64
         OnValueChange = RadiusChange
       end
       object NoteRadiusL: TTyLabel
+        AnchorSideLeft.Control = SpnRadiusL
+        AnchorSideTop.Control = SpnRadiusL
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SpnRadiusL
+        AnchorSideRight.Side = asrBottom
         Left = 8
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
       object NoteRadiusR: TTyLabel
+        AnchorSideLeft.Control = SpnRadiusR
+        AnchorSideTop.Control = SpnRadiusR
+        AnchorSideTop.Side = asrBottom
+        AnchorSideRight.Control = SpnRadiusR
+        AnchorSideRight.Side = asrBottom
         Left = 120
         Height = 18
         Top = 56
         Width = 104
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 2
+        BorderSpacing.Bottom = 6
+        WordWrap = True
       end
     end
   end

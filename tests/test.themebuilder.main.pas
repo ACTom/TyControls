@@ -82,6 +82,7 @@ type
     procedure TestTheSeedsPageWaitsTillItIsShown;
     procedure TestRadiusStepsAreOneUndoStep;
     procedure TestAWaitingRadiusIsSaved;
+    procedure TestALongNoteTakesASecondLine;
   end;
 
 implementation
@@ -90,7 +91,7 @@ uses
   Forms, FileUtil, IniFiles, Graphics, Types, fpjson, jsonparser, SynEdit, SynEditKeyCmds, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden,
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
-  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tbthemesource, tbrules;
+  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules;
 
 const
   { a document whose one value no base theme has }
@@ -1358,6 +1359,45 @@ begin
   FForm.Seeds.FlushRadius;
   FForm.Editor.Undo;
   AssertEquals('K3: a keystroke between: the second step alone', Unify(t1), Unify(FForm.Editor.Lines.Text));
+end;
+
+{ The rows size themselves: a note longer than its column wraps and the row grows to hold
+  it. They used to be cut at one line (a fixed 18 px label in a fixed 78 px row). The
+  window is never shown here, and the LCL sizes nothing for a window that is not (autosizing
+  waits for it): what is checked is what the layout is built from -- each note asks for
+  more height for a longer text at its column's width, and every row and note is set to
+  follow what its contents ask for, each note held under its swatch at the swatch's width. }
+procedure TTbMainFormTests.TestALongNoteTakesASecondLine;
+var
+  s: TTbSeedsFrame;
+  seed, col, w, hShort, hLong: Integer;
+  note: TTyLabel;
+  row: TControl;
+  above: TControl;
+begin
+  s := FForm.Seeds;
+  for seed := 0 to TbSeedCount - 1 do
+    for col := 0 to 1 do
+    begin
+      note := s.Note(seed, col);
+      row := note.Parent;
+      if seed = TbRadiusSeed then above := s.RadiusSpin(col) else above := s.Swatch(seed, col);
+      AssertTrue('L1: the row grows with its notes ' + IntToStr(seed), row.AutoSize);
+      AssertTrue('L1: the note grows with its text ' + note.Name, note.AutoSize);
+      AssertTrue('L1: and wraps ' + note.Name, note.WordWrap);
+      AssertTrue('L1: under its swatch ' + note.Name, note.AnchorSideTop.Control = above);
+      AssertTrue('L1: as wide as it, left ' + note.Name, note.AnchorSideLeft.Control = above);
+      AssertTrue('L1: as wide as it, right ' + note.Name, note.AnchorSideRight.Control = above);
+    end;
+  note := s.Note(0, 0);
+  w := 0;
+  note.Caption := 'x';
+  note.GetPreferredSize(w, hShort);
+  note.Caption := rsTbSeedOverridden + ' ' + rsTbSeedOverridden;
+  w := 0;
+  note.GetPreferredSize(w, hLong);
+  AssertTrue('L1: a long note asks for more lines', hLong > hShort);
+  AssertTrue('L1: the mode note grows too', s.ModeNote.AutoSize and s.ModeNote.WordWrap);
 end;
 
 { A spin box step still waiting its 250 ms when the file is saved goes into the file. }

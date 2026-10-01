@@ -70,6 +70,7 @@ type
     procedure TestARefusedChangeLeavesTheSwatch;
     procedure TestTheRadiusWaitsForTheLastStep;
     procedure TestTheModelLoadsOncePerText;
+    procedure TestASharedExpressionSaysBoth;
   end;
 
 const
@@ -758,6 +759,15 @@ begin
   FFrame.UpdateFrom(cDarkDoc, 'C:\elsewhere', False);
   AssertEquals('SF16: another text: a load', n + 2, FFrame.EvalLoads);
   AssertEquals('SF16: its values', '#111111', FFrame.ResolvedText(0, 0));
+end;
+
+{ A seed both modes share that is an expression: one note, one whole string (a translation
+  cannot be glued from two with a comma). }
+procedure TTbSeedsFrameTests.TestASharedExpressionSaysBoth;
+begin
+  FFrame.UpdateFrom(':root { --surface: darken(#FFFFFF, 10%); }'#10 + cDarkDoc, '', False);
+  AssertEquals('shared', Ord(tssShared), Ord(FFrame.Cell(1, 1).Source));
+  AssertEquals('SF17: one string for both', rsTbSeedSharedExpression, FFrame.Note(1, 1).Caption);
 end;
 
 procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;
