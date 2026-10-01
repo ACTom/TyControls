@@ -273,6 +273,10 @@ type
     function BuildSampleWindow: TTbSampleForm;      { built once, not shown }
     procedure ShowSampleWindow;
     function StyledControlCount: Integer;           { FOR THE TESTS }
+    { what the preview shows: every control's typeKey and the sub-parts its code draws
+      (tbcoverage's table), the sample window, the two dialogs, the pop-up menu and the
+      notification included }
+    procedure CollectTypeKeys(ADest: TStrings);
     property Controller: TTyStyleController read FController;
     { the last refused switch; '' after a switch that went through or a good load of a
       different document }
@@ -310,7 +314,8 @@ implementation
 
 uses
   tyControls.Css.Catalog, tyControls.Css.Parser, tyControls.DefaultTheme,
-  tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns, tbthemesource;
+  tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns, tbthemesource,
+  tbcoverage;
 
 var
   GBaseSheet: TTyCssStylesheet = nil;   { the model's base layer, parsed once }
@@ -904,6 +909,52 @@ begin
   Result := CountIn(Root);
   if Root.Controller = FController then
     Inc(Result);
+end;
+
+procedure TTbPreviewFrame.CollectTypeKeys(ADest: TStrings);
+
+  procedure Add(const AKey: string);
+  var
+    i: Integer;
+  begin
+    for i := 0 to ADest.Count - 1 do
+      if SameText(ADest[i], AKey) then
+        Exit;
+    ADest.Add(AKey);
+  end;
+
+  procedure AddControl(AControl: TControl);
+  var
+    i: Integer;
+  begin
+    if Supports(AControl, ITyStyleable) then
+      Add((AControl as ITyStyleable).GetStyleTypeKey);
+    TbPartKeysOfClass(AControl.ClassType, ADest);
+    if AControl is TWinControl then
+      for i := 0 to TWinControl(AControl).ControlCount - 1 do
+        AddControl(TWinControl(AControl).Controls[i]);
+  end;
+
+var
+  d: TTyDialog;
+begin
+  AddControl(Root);
+  AddControl(BuildSampleWindow);
+  d := BuildSampleDialog;
+  try
+    AddControl(d);
+  finally
+    d.Free;
+  end;
+  d := BuildSampleInput;
+  try
+    AddControl(d);
+  finally
+    d.Free;
+  end;
+  TbPartKeysOfClass(SamplePopup.ClassType, ADest);
+  Add(TTyNotification.StyleTypeKey);
+  Add(TTyNotification.CloseStyleTypeKey);
 end;
 
 { ---- the switches ---- }

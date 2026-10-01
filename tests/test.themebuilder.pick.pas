@@ -36,10 +36,27 @@ type
     procedure TestTheFrameGoesCleanly;
   end;
 
+  { the coverage check (tbcoverage): the three sets, the two lists, the part table held to
+    the sources, the dialog }
+  TTbCoverageTests = class(TTestCase)
+  private
+    function NewList: TStringList;
+  published
+    procedure TestTheBaseKeys;
+    procedure TestTheTwoLists;
+    procedure TestWhatThePreviewShows;
+    procedure TestThePartTableMatchesTheSources;
+    procedure TestEndToEnd;
+    procedure TestTheDocumentKeys;
+    procedure TestTheDialog;
+  end;
+
 implementation
 
 uses
-  ExtCtrls, tyControls.Base, tyControls.Button, tbpick, tbsamplewin;
+  ExtCtrls, Forms, tyControls.Base, tyControls.Button, tyControls.Dialogs, tyControls.Notification,
+  tyControls.Css.Catalog, tbpick, tbsamplewin, tbcssscan, tbcoverage, tbcoverageform, tbtemplates,
+  test.themebuilder.golden;
 
 type
   TTyCustomControlAccess = class(TTyCustomControl);
@@ -210,6 +227,365 @@ begin
   AssertNull('P9: gone', FFrame);
 end;
 
+{ ---- coverage ---- }
+
+function TTbCoverageTests.NewList: TStringList;
+begin
+  Result := TStringList.Create;
+  Result.CaseSensitive := False;
+  Result.Sorted := True;
+  Result.Duplicates := dupIgnore;
+end;
+
+function Has(AList: TStrings; const AKey: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to AList.Count - 1 do
+    if SameText(AList[i], AKey) then
+      Exit(True);
+  Result := False;
+end;
+
+procedure TTbCoverageTests.TestTheBaseKeys;
+var
+  base: TStringList;
+begin
+  base := NewList;
+  try
+    TbBaseTypeKeys(base);
+    AssertTrue('CV1: TyButton', Has(base, 'TyButton'));
+    AssertTrue('CV1: TyTab', Has(base, 'TyTab'));
+    AssertTrue('CV1: TyScrollThumb', Has(base, 'TyScrollThumb'));
+    AssertTrue('CV1: TyUpDown, never first in its list', Has(base, 'TyUpDown'));
+    AssertFalse('CV1: not TyFormSurface', Has(base, 'TyFormSurface'));
+    AssertFalse('CV1: not TyListViewLine', Has(base, 'TyListViewLine'));
+    AssertTrue('CV1: many: ' + IntToStr(base.Count), base.Count >= 150);
+  finally
+    base.Free;
+  end;
+end;
+
+procedure TTbCoverageTests.TestTheTwoLists;
+var
+  doc, prev, base, notShown, def: TStringList;
+begin
+  doc := NewList;
+  prev := NewList;
+  base := NewList;
+  notShown := TStringList.Create;
+  def := TStringList.Create;
+  try
+    doc.CommaText := 'TyButton,TyRibbon,TyButon';
+    prev.CommaText := 'TyButton,TyTab,TyFormSurface';
+    base.CommaText := 'TyButton,TyTab';
+    TbCoverage(doc, prev, base, notShown, def);
+    AssertEquals('CV2: not shown', 'TyButon,TyRibbon', notShown.CommaText);
+    AssertEquals('CV2: the default look', 'TyFormSurface', def.CommaText);
+  finally
+    doc.Free;
+    prev.Free;
+    base.Free;
+    notShown.Free;
+    def.Free;
+  end;
+end;
+
+procedure TTbCoverageTests.TestWhatThePreviewShows;
+const
+  cIn: array[0..7] of string = ('TyButton', 'TyTab', 'TyScrollThumb', 'TyMenuItem',
+    'TyNotificationClose', 'TyCaptionButton', 'TyTitleBar', 'TyToggleKnob');
+  cOut: array[0..2] of string = ('TyRibbon', 'TyTerminal', 'TyAdvChart');
+var
+  frame: TTbPreviewFrame;
+  prev: TStringList;
+  i: Integer;
+begin
+  frame := TTbPreviewFrame.Create(nil);
+  prev := NewList;
+  try
+    frame.CollectTypeKeys(prev);
+    for i := 0 to High(cIn) do
+      AssertTrue('CV3: shows ' + cIn[i], Has(prev, cIn[i]));
+    for i := 0 to High(cOut) do
+      AssertFalse('CV3: does not show ' + cOut[i], Has(prev, cOut[i]));
+  finally
+    prev.Free;
+    frame.Free;
+  end;
+end;
+
+{ the typeKeys a unit names in string literals: comments stripped (braces nest in FPC),
+  every quoted string that is a whole Ty[A-Z]... identifier, TyControls left out }
+function LiteralKeys(const AUnit: string): TStringList;
+var
+  sl: TStringList;
+  t, lit: string;
+  i, n, depth: Integer;
+
+  procedure Take(const S: string);
+  var
+    k: Integer;
+    ok: Boolean;
+  begin
+    ok := (Length(S) >= 3) and (S[1] = 'T') and (S[2] = 'y') and (S[3] in ['A'..'Z']);
+    if ok then
+      for k := 4 to Length(S) do
+        if not (S[k] in ['A'..'Z', 'a'..'z', '0'..'9']) then
+          ok := False;
+    if ok and (S <> 'TyControls') and not Has(Result, S) then
+      Result.Add(S);
+  end;
+
+begin
+  Result := TStringList.Create;
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(TbRepoDir + 'source' + PathDelim + AUnit + '.pas');
+    t := sl.Text;
+  finally
+    sl.Free;
+  end;
+  n := Length(t);
+  i := 1;
+  depth := 0;
+  while i <= n do
+  begin
+    if depth > 0 then
+    begin
+      if t[i] = '{' then Inc(depth)
+      else if t[i] = '}' then Dec(depth);
+      Inc(i);
+      Continue;
+    end;
+    if t[i] = '{' then
+    begin
+      depth := 1;
+      Inc(i);
+      Continue;
+    end;
+    if (t[i] = '(') and (i < n) and (t[i + 1] = '*') then
+    begin
+      i := i + 2;
+      while (i < n) and not ((t[i] = '*') and (t[i + 1] = ')')) do Inc(i);
+      i := i + 2;
+      Continue;
+    end;
+    if (t[i] = '/') and (i < n) and (t[i + 1] = '/') then
+    begin
+      while (i <= n) and not (t[i] in [#10, #13]) do Inc(i);
+      Continue;
+    end;
+    if t[i] = '''' then
+    begin
+      lit := '';
+      Inc(i);
+      while i <= n do
+      begin
+        if t[i] = '''' then
+        begin
+          if (i < n) and (t[i + 1] = '''') then
+          begin
+            lit := lit + '''';
+            i := i + 2;
+            Continue;
+          end;
+          Break;
+        end;
+        lit := lit + t[i];
+        Inc(i);
+      end;
+      Inc(i);
+      Take(lit);
+      Continue;
+    end;
+    Inc(i);
+  end;
+end;
+
+function IsCatalogKey(const AKey: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(TyCatalogTypeKeys) do
+    if SameText(TyCatalogTypeKeys[i], AKey) then
+      Exit(True);
+  Result := False;
+end;
+
+procedure TTbCoverageTests.TestThePartTableMatchesTheSources;
+var
+  frame: TTbPreviewFrame;
+  units, row, lits: TStringList;
+  d: TTyDialog;
+  i, k: Integer;
+  rowUnits: TStringArray;
+
+  procedure AddClass(AClass: TClass);
+  begin
+    while AClass <> nil do
+    begin
+      if (Copy(AClass.UnitName, 1, 11) = 'tyControls.') and not Has(units, AClass.UnitName) then
+        units.Add(AClass.UnitName);
+      AClass := AClass.ClassParent;
+    end;
+  end;
+
+  procedure Walk(AControl: TControl);
+  var
+    j: Integer;
+  begin
+    AddClass(AControl.ClassType);
+    if AControl is TWinControl then
+      for j := 0 to TWinControl(AControl).ControlCount - 1 do
+        Walk(TWinControl(AControl).Controls[j]);
+  end;
+
+begin
+  frame := TTbPreviewFrame.Create(nil);
+  units := TStringList.Create;
+  row := TStringList.Create;
+  try
+    Walk(frame.Root);
+    Walk(frame.BuildSampleWindow);
+    d := frame.BuildSampleDialog;
+    try
+      Walk(d);
+    finally
+      d.Free;
+    end;
+    d := frame.BuildSampleInput;
+    try
+      Walk(d);
+    finally
+      d.Free;
+    end;
+    AddClass(frame.SamplePopup.ClassType);
+    AddClass(TTyNotification);
+    AssertTrue('CV4: units were met', units.Count > 30);
+    for i := 0 to units.Count - 1 do
+    begin
+      lits := LiteralKeys(units[i]);
+      try
+        row.CommaText := TbPartKeysOfUnit(units[i]);
+        for k := 0 to lits.Count - 1 do
+          AssertTrue('CV4: ' + units[i] + ' names ' + lits[k] + ', its row does not have it',
+            Has(row, lits[k]));
+      finally
+        lits.Free;
+      end;
+    end;
+    rowUnits := TbPartKeyUnits;
+    for i := 0 to High(rowUnits) do
+    begin
+      lits := LiteralKeys(rowUnits[i]);
+      try
+        row.CommaText := TbPartKeysOfUnit(rowUnits[i]);
+        AssertTrue('CV4: a row with keys: ' + rowUnits[i], row.Count > 0);
+        for k := 0 to row.Count - 1 do
+          AssertTrue('CV4: ' + rowUnits[i] + ' has ' + row[k] +
+            ', which is neither in its source nor a catalogue key',
+            Has(lits, row[k]) or IsCatalogKey(row[k]));
+      finally
+        lits.Free;
+      end;
+    end;
+  finally
+    row.Free;
+    units.Free;
+    frame.Free;
+  end;
+end;
+
+procedure TTbCoverageTests.TestEndToEnd;
+var
+  frame: TTbPreviewFrame;
+  doc, prev, base, notShown, def: TStringList;
+  s: TTbCssScan;
+
+  procedure Run(const AText: string);
+  begin
+    doc.Clear;
+    s := TbScanCss(AText);
+    try
+      TbDocTypeKeys(s, doc);
+    finally
+      s.Free;
+    end;
+    TbCoverage(doc, prev, base, notShown, def);
+  end;
+
+begin
+  frame := TTbPreviewFrame.Create(nil);
+  doc := NewList;
+  prev := NewList;
+  base := NewList;
+  notShown := TStringList.Create;
+  def := TStringList.Create;
+  try
+    frame.CollectTypeKeys(prev);
+    TbBaseTypeKeys(base);
+    Run(TbMinimalTemplate);
+    AssertEquals('CV5: nothing styled is missing', 0, notShown.Count);
+    AssertTrue('CV5: TyFormSurface keeps its look', Has(def, 'TyFormSurface'));
+    AssertTrue('CV5: TyListViewLine keeps its look', Has(def, 'TyListViewLine'));
+    AssertFalse('CV5: the base styles TyButton', Has(def, 'TyButton'));
+    Run('TyRibbon { }');
+    AssertEquals('CV5: a ribbon is not shown', 'TyRibbon', notShown.CommaText);
+  finally
+    doc.Free;
+    prev.Free;
+    base.Free;
+    notShown.Free;
+    def.Free;
+    frame.Free;
+  end;
+end;
+
+procedure TTbCoverageTests.TestTheDocumentKeys;
+var
+  doc: TStringList;
+  s: TTbCssScan;
+begin
+  doc := NewList;
+  s := TbScanCss('TyButton.primary:hover, TyEdit { }'#10'@mode dark { :root { --a: #111; } }');
+  try
+    TbDocTypeKeys(s, doc);
+    AssertEquals('CV6', 'TyButton,TyEdit', doc.CommaText);
+  finally
+    s.Free;
+    doc.Free;
+  end;
+end;
+
+procedure TTbCoverageTests.TestTheDialog;
+var
+  f: TTbCoverageForm;
+  notShown, def: TStringList;
+begin
+  notShown := TStringList.Create;
+  def := TStringList.Create;
+  f := TTbCoverageForm.Create(nil);
+  try
+    notShown.CommaText := 'TyButon,TyRibbon';
+    def.CommaText := 'TyFormSurface';
+    f.Fill(notShown, def);
+    AssertEquals('CV7: two entries', 2, f.LstNotShown.Items.Count);
+    AssertTrue('CV7: a typo is marked', Pos(rsTbCovUnknownKey, f.LstNotShown.Items[0]) > 0);
+    AssertTrue('CV7: a real key is not', Pos(rsTbCovUnknownKey, f.LstNotShown.Items[1]) = 0);
+    AssertEquals('CV7: the second list', 1, f.LstDefault.Items.Count);
+    f.LstNotShown.ItemIndex := 0;
+    f.LstNotShown.OnDblClick(f.LstNotShown);
+    AssertEquals('CV7: the key, not the caption', 'TyButon', f.Chosen);
+    AssertEquals('CV7: closes with OK', Ord(mrOk), Ord(f.ModalResult));
+  finally
+    f.Free;
+    notShown.Free;
+    def.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTbPickTests);
+  RegisterTest(TTbCoverageTests);
 end.

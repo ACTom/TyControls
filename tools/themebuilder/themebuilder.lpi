@@ -25,7 +25,7 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="15">
+    <Units Count="17">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
@@ -41,6 +41,8 @@
       <Unit12><Filename Value="tbseedsframe.pas"/><IsPartOfProject Value="True"/><ComponentName Value="SeedsFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbseedsframe"/></Unit12>
       <Unit13><Filename Value="tbrules.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbrules"/></Unit13>
       <Unit14><Filename Value="tbpick.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbpick"/></Unit14>
+      <Unit15><Filename Value="tbcoverage.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbcoverage"/></Unit15>
+      <Unit16><Filename Value="tbcoverageform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbCoverageForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbcoverageform"/></Unit16>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

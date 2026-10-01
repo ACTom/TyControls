@@ -1,0 +1,79 @@
+object TbCoverageForm: TTbCoverageForm
+  Left = 0
+  Height = 460
+  Top = 0
+  Width = 520
+  Caption = 'Coverage check'
+  ClientHeight = 460
+  ClientWidth = 520
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 460
+    Top = 0
+    Width = 520
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 520
+      Align = alTop
+      Caption = 'Coverage check'
+    end
+    object LblNotShown: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 44
+      Width = 488
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'Styled in this theme but not in the preview:'
+    end
+    object LstNotShown: TTyListBox
+      Left = 16
+      Height = 130
+      Top = 66
+      Width = 488
+      Anchors = [akTop, akLeft, akRight]
+      OnDblClick = LstNotShownDblClick
+    end
+    object LblDefault: TTyLabel
+      Left = 16
+      Height = 36
+      Top = 204
+      Width = 488
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'In the preview, but neither this theme nor the base styles them (they keep their built-in look):'
+      WordWrap = True
+    end
+    object LstDefault: TTyListBox
+      Left = 16
+      Height = 130
+      Top = 244
+      Width = 488
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      OnDblClick = LstDefaultDblClick
+    end
+    object LblHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 382
+      Width = 380
+      Anchors = [akLeft, akBottom]
+      Caption = 'Double-click an entry to go to its rule, or add one.'
+    end
+    object BtnClose: TTyButton
+      Left = 412
+      Height = 30
+      Top = 414
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Caption = 'Close'
+      ModalResult = 2
+    end
+  end
+end
