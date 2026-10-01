@@ -9,7 +9,10 @@ unit tbaisettingsform;
   anything; a save that fails puts the settings back as the disk has them and keeps the
   window open. A key is cleaned as it is typed or pasted (tabs, line breaks). The test runs on the service's own client
   thread (TTbClientBackend); the first piece of an answer is proof enough -- the request is
-  stopped there -- and closing the window stops a test still running. }
+  stopped there -- and closing the window stops a test still running.
+  Under the fields, the http warning and the Ollama hint (never both) size to their text and
+  "Test connection" is anchored below whichever shows (LCL follows an anchor past a hidden
+  control to that control's own anchor). }
 {$mode objfpc}{$H+}
 interface
 uses

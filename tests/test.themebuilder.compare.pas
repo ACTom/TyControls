@@ -52,6 +52,8 @@ type
     { after the phase 3 reviews }
     procedure TestPlainHttpToAnotherComputer;   { G9 }
     procedure TestOkChecksBeforeItChanges;      { G10 }
+    { the last batch before the merge }
+    procedure TestTheOllamaHintIsWhole;         { G11 }
   end;
 
 { the contrast of two LCL colours (WCAG, 1..21) }
@@ -643,6 +645,69 @@ begin
   finally
     f.Free;
     s.Free;
+  end;
+end;
+
+{ G11: the Ollama hint is whole (three lines in English here) and what is under it moves
+  down for it: the hint had a fixed height, its third line was cut and "Test connection"
+  sat where it would have been. The http warning, the other note that shows there, too.
+  The fonts are the real program's (see V11). }
+procedure TTbAiSettingsFormTests.TestTheOllamaHintIsWhole;
+var
+  w, h: Integer;
+  oldFallback, hint: string;
+begin
+  oldFallback := TyFallbackFontName;
+  TyFallbackFontName := Screen.SystemFont.Name;
+  try
+    FForm.AddPreset(tapOllama);
+    AssertTrue('the hint shows', FForm.LblHint.Visible);
+    AssertTrue('G11: the hint sizes itself', FForm.LblHint.AutoSize);
+    FForm.LblHint.Invalidate;      { the floor follows the font, as on a theme change }
+    AutoSized(FForm.LblHint);
+    LayOut(FForm.Fields);
+    w := 0;
+    h := 0;
+    TControlAccess(FForm.LblHint).CalculatePreferredSize(w, h, True);
+    AssertTrue(Format('G11: all of the hint (%d px of %d)', [FForm.LblHint.Height, h]),
+      FForm.LblHint.Height >= h);
+    AssertTrue('G11: the hint under the timeout',
+      FForm.LblHint.Top >= FForm.SpnTimeout.Top + FForm.SpnTimeout.Height);
+    AssertTrue(Format('G11: Test connection under the hint (at %d, the hint ends at %d)',
+      [FForm.BtnTest.Top, FForm.LblHint.Top + FForm.LblHint.Height]),
+      FForm.BtnTest.Top >= FForm.LblHint.Top + FForm.LblHint.Height);
+    AssertFalse('G11: the button clear of the privacy note', Overlap(FForm.BtnTest, FForm.LblPrivacy));
+    AssertFalse('G11: the result clear of the privacy note', Overlap(FForm.LblTest, FForm.LblPrivacy));
+    { a much longer hint (a translation, a bigger font): the button goes down with it }
+    hint := FForm.LblHint.Caption;
+    FForm.LblHint.Caption := hint + ' ' + hint + ' ' + hint + ' ' + hint;
+    AutoSized(FForm.LblHint);
+    LayOut(FForm.Fields);
+    AssertTrue('a longer hint is taller', FForm.LblHint.Height > h);
+    AssertTrue(Format('G11: Test connection under a longer hint (at %d, the hint ends at %d)',
+      [FForm.BtnTest.Top, FForm.LblHint.Top + FForm.LblHint.Height]),
+      FForm.BtnTest.Top >= FForm.LblHint.Top + FForm.LblHint.Height);
+    AssertEquals('G11: the result line beside the button', FForm.BtnTest.Top, FForm.LblTest.Top);
+    { the warning instead of the hint }
+    FForm.EdtUrl.Text := 'http://192.0.2.10:11434/v1';
+    AssertTrue('the warning shows', FForm.PlainHttpAlert.Visible);
+    AssertFalse('and not the hint', FForm.LblHint.Visible);
+    LayOut(FForm.Fields);
+    AssertTrue('G11: Test connection under the warning',
+      FForm.BtnTest.Top >= FForm.PlainHttpAlert.Top + FForm.PlainHttpAlert.Height);
+    AssertFalse('G11: the button clear of the privacy note (warning)',
+      Overlap(FForm.BtnTest, FForm.LblPrivacy));
+    FForm.PlainHttpAlert.Height := FForm.PlainHttpAlert.Height * 2;   { a longer warning }
+    LayOut(FForm.Fields);
+    AssertTrue('G11: Test connection under a longer warning',
+      FForm.BtnTest.Top >= FForm.PlainHttpAlert.Top + FForm.PlainHttpAlert.Height);
+    { neither: right under the fields }
+    FForm.EdtUrl.Text := 'https://api.openai.com/v1';
+    LayOut(FForm.Fields);
+    AssertTrue('G11: Test connection under the timeout',
+      FForm.BtnTest.Top >= FForm.SpnTimeout.Top + FForm.SpnTimeout.Height);
+  finally
+    TyFallbackFontName := oldFallback;
   end;
 end;
 
