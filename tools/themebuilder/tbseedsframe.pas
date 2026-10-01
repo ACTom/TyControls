@@ -1,7 +1,9 @@
 unit tbseedsframe;
 { The seeds page of the side bar: the six seeds (tbseeds), one column per mode -- light and
   dark for a document with @mode blocks, one column (and "Split into light and dark") for a
-  document with a top-level :root only.
+  document with a top-level :root only. A document that does not parse or load shows no
+  rows at all, only the note to fix the errors first (the values would be the last good
+  text's).
 
   Each cell shows what the seed comes to in that mode (TTbSeedEval: the document over the
   base, no density pack) and says where it comes from: nothing when the column's own block
@@ -341,7 +343,9 @@ begin
       HdrLeft.Caption := rsTbSeedValue;
     HdrRight.Caption := rsTbSeedDark;
     HdrRight.Visible := two;
-    Scroll.Enabled := not FBroken;
+    { a text that does not parse or load: the last values are not this text's -- the rows go,
+      the note above says why }
+    Scroll.Visible := not FBroken;
     for seed := 0 to TbSeedCount - 1 do
       for col := 0 to 1 do
       begin

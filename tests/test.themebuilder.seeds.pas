@@ -556,10 +556,18 @@ begin
   AssertEquals('SF6: not asked', 0, FAsked);
   AssertEquals('SF6: nothing handed over', 0, FEdits);
   AssertEquals('SF6: says why', rsTbSeedsBroken, FFrame.ModeNote.Caption);
-  AssertFalse('SF6: the page is disabled', FFrame.Scroll.Enabled);
+  AssertFalse('SF6: no rows', FFrame.Scroll.Visible);
   AssertFalse('SF6: no split either', FFrame.SplitButton.Visible);
   FFrame.UpdateFrom(TbMinimalTemplate, '', False);
-  AssertTrue('a good one enables it', FFrame.Scroll.Enabled);
+  AssertTrue('a good one shows them', FFrame.Scroll.Visible);
+  AssertEquals('with its values', '#3B82F6', FFrame.ResolvedText(0, 0));
+  { the review found it: a good text, then a broken one -- the rows still showed the good
+    one's values, as if they were the broken text's }
+  FFrame.UpdateFrom(StringReplace(TbMinimalTemplate, '#3B82F6;', '#3B82F6', []) + '}', '', True);
+  AssertFalse('SF6: after a good text, a broken one shows no rows', FFrame.Scroll.Visible);
+  AssertEquals('SF6: and says why', rsTbSeedsBroken, FFrame.ModeNote.Caption);
+  AssertEquals('SF6: no values', '', FFrame.ResolvedText(0, 0));
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
   FFrame.UpdateFrom('TyButton { border-radius: 1px 2px 3px; }', '', False);
   AssertTrue('SF6: a text that does not load is broken too', FFrame.Broken);
 end;
