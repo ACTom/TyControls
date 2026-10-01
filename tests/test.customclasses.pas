@@ -1090,27 +1090,27 @@ initialization
   GDemoted.CaseSensitive := False;
 
   { CSplit: the final classes already split. }
-  AddAll(GSplit, []);
+  AddAll(GSplit, [
+    // T2 buttons
+    'TTyButton', 'TTyGlyphButton', 'TTyGlyphContainerButton', 'TTySpeedButton',
+    'TTyDropDownButton', 'TTyMenuButton', 'TTyColorButton', 'TTyButtonGroup']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T2 buttons
-    'TTyButton', 'TTyGlyphButton', 'TTyGlyphContainerButton', 'TTySpeedButton',
-    'TTyDropDownButton', 'TTyMenuButton', 'TTyColorButton', 'TTyButtonGroup',
     // T3 labels
     'TTyLabel', 'TTyHtmlLabel', 'TTyLinkLabel', 'TTyShadowLabel', 'TTyGlowLabel', 'TTyTag',
     'TTyBadge',
     // T4 edits I
-    'TTyEdit', 'TTyNumericEdit', 'TTyCurrencyEdit', 'TTyMaskEdit', 'TTyURLEdit',
-    'TTyComboEdit', 'TTyTrackEdit', 'TTyCalcEdit', 'TTyCalcCurrencyEdit',
+    'TTyEdit', 'TTyNumericEdit', 'TTyCurrencyEdit', 'TTyMaskEdit', 'TTyURLEdit', 'TTyComboEdit',
+    'TTyTrackEdit', 'TTyCalcEdit', 'TTyCalcCurrencyEdit',
     // T5 edits II
     'TTyCalculator', 'TTyMemo', 'TTySpinEdit', 'TTyFloatSpinEdit', 'TTyUpDown',
     // T6 choice
     'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented',
     // T7 combo boxes I
-    'TTyComboBox', 'TTyMRUComboBox', 'TTyComboBoxEx', 'TTyOfficeComboBox',
-    'TTyAdvancedComboBox', 'TTyCheckComboBox',
+    'TTyComboBox', 'TTyMRUComboBox', 'TTyComboBoxEx', 'TTyOfficeComboBox', 'TTyAdvancedComboBox',
+    'TTyCheckComboBox',
     // T8 combo boxes II
     'TTyColorBox', 'TTyColorComboBox', 'TTyFontComboBox', 'TTyFontSizeComboBox',
     'TTyFilterComboBox', 'TTyShellComboBox',
@@ -1120,12 +1120,11 @@ initialization
     // T10 dials and sliders
     'TTyRating', 'TTyDial', 'TTyGearDial', 'TTyAnalogClock', 'TTyTrackBar',
     // T12 panels
-    'TTyPanel', 'TTyPaintPanel', 'TTyExPanel', 'TTyGridPanel', 'TTyRelativePanel',
-    'TTyScrollBox', 'TTyScrollPanel', 'TTyControlBar', 'TTyCoolBar', 'TTyGridCell',
-    'TTyScrollContent',
+    'TTyPanel', 'TTyPaintPanel', 'TTyExPanel', 'TTyGridPanel', 'TTyRelativePanel', 'TTyScrollBox',
+    'TTyScrollPanel', 'TTyControlBar', 'TTyCoolBar', 'TTyGridCell', 'TTyScrollContent',
     // T13 groups and decoration
-    'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard',
-    'TTyEmpty', 'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox',
+    'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard', 'TTyEmpty',
+    'TTyBevel', 'TTyDivider', 'TTySplitter', 'TTySizeBox',
     // T14 tabs
     'TTyPageControl', 'TTyTabSet', 'TTyTabSheet', 'TTyListGroupPanel',
     // T15 list boxes
@@ -1138,8 +1137,8 @@ initialization
     // T18 grids
     'TTyDrawGrid', 'TTyStringGrid',
     // T20 bars
-    'TTyStatusBar', 'TTyToolBar', 'TTyToolBarEx', 'TTyToolButton', 'TTyToolSeparator',
-    'TTyAlert', 'TTyPagination', 'TTySteps', 'TTyBreadcrumb', 'TTyScrollBar',
+    'TTyStatusBar', 'TTyToolBar', 'TTyToolBarEx', 'TTyToolButton', 'TTyToolSeparator', 'TTyAlert',
+    'TTyPagination', 'TTySteps', 'TTyBreadcrumb', 'TTyScrollBar',
     // T21 ribbon
     'TTyRibbon', 'TTyRibbonPage', 'TTyRibbonGroup', 'TTyRibbonAppMenu', 'TTyRibbonQuickAccess',
     'TTyRibbonGallery', 'TTyRibbonBackstage',
@@ -1160,11 +1159,11 @@ initialization
     // T29 hints and notifications
     'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification',
     // T30 dialogs
-    'TTyMessage', 'TTyInputDialog', 'TTyPasswordDialog', 'TTyTextDialog',
-    'TTySelectValueDialog', 'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
+    'TTyMessage', 'TTyInputDialog', 'TTyPasswordDialog', 'TTyTextDialog', 'TTySelectValueDialog',
+    'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
-  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent']);
+  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase']);
 
   RegisterTest(TTyCustomClassesGuardTest);
 

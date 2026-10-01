@@ -12,7 +12,7 @@ type
     like a button; the selected segment(s) resolve with tysSelected, the hovered one
     with tysHover. Only the group's OUTER corners are rounded (left cell rounds left,
     right cell rounds right, middles are square). }
-  TTyButtonGroup = class(TTyCustomControl)
+  TTyCustomButtonGroup = class(TTyCustomControl)
   private
     FItems: TStrings;
     FMultiSelect: Boolean;
@@ -90,19 +90,26 @@ type
       (=ItemIndex := AIndex); AValue=False clears it only when it was the selected one. }
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
     function Count: Integer;
+    { Declared True to match the constructor, so that a host wanting this bar out of the
+      tab cycle writes TabStop=False and it actually STREAMS (against the inherited
+      `default False` that value looks like the default and is dropped). }
+    property TabStop default True;
+    property Items: TStrings read FItems write SetItems;
+    property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
+    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
+    property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
+  end;
+
+  { TTyButtonGroup publishes TTyCustomButtonGroup's properties; everything lives in TTyCustomButtonGroup. }
+  TTyButtonGroup = class(TTyCustomButtonGroup)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    { Declared True to match the constructor, so that a host wanting this bar out of the
-      tab cycle writes TabStop=False and it actually STREAMS (against the inherited
-      `default False` that value looks like the default and is dropped). }
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -151,10 +158,10 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Items: TStrings read FItems write SetItems;
-    property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
-    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
-    property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
+    property Items;
+    property MultiSelect;
+    property ItemIndex;
+    property OnSelectionChange;
     property Align;
     property Anchors;
   end;
@@ -215,9 +222,9 @@ begin
   Result := Rect(l, 0, r, AHeightPx);
 end;
 
-{ TTyButtonGroup }
+{ TTyCustomButtonGroup }
 
-constructor TTyButtonGroup.Create(AOwner: TComponent);
+constructor TTyCustomButtonGroup.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -234,14 +241,14 @@ begin
   Height := TyDensityHeight(ActiveController, 30);
 end;
 
-destructor TTyButtonGroup.Destroy;
+destructor TTyCustomButtonGroup.Destroy;
 begin
   TyAccelUnregister(Self);
   FItems.Free;
   inherited Destroy;
 end;
 
-function TTyButtonGroup.GetStyleTypeKey: string;
+function TTyCustomButtonGroup.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyButton': a segmented bar with asymmetric per-cell corners is not one button.
     Added to 'TyButton's rule block as an extra selector, so every resolved value is
@@ -249,28 +256,28 @@ begin
   Result := 'TyButtonGroup';
 end;
 
-function TTyButtonGroup.Count: Integer;
+function TTyCustomButtonGroup.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
-procedure TTyButtonGroup.EnsureSelectedLen;
+procedure TTyCustomButtonGroup.EnsureSelectedLen;
 begin
   if Length(FSelected) <> FItems.Count then
     SetLength(FSelected, FItems.Count);   // new slots default False
 end;
 
-procedure TTyButtonGroup.DoSelectionChange;
+procedure TTyCustomButtonGroup.DoSelectionChange;
 begin
   if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
 end;
 
-procedure TTyButtonGroup.SetItems(AValue: TStrings);
+procedure TTyCustomButtonGroup.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged, which resizes + clamps + repaints
 end;
 
-procedure TTyButtonGroup.ItemsChanged(Sender: TObject);
+procedure TTyCustomButtonGroup.ItemsChanged(Sender: TObject);
 var
   i: Integer;
 begin
@@ -295,7 +302,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyButtonGroup.Invalidate;
+procedure TTyCustomButtonGroup.Invalidate;
 begin
   inherited Invalidate;
   { 换肤时每个控件收到的只是一个裸 Invalidate(TTyStyleController 向注册控件广播),而新主题
@@ -323,7 +330,7 @@ begin
   end;
 end;
 
-procedure TTyButtonGroup.SetMultiSelect(AValue: Boolean);
+procedure TTyCustomButtonGroup.SetMultiSelect(AValue: Boolean);
 var
   i: Integer;
 begin
@@ -336,7 +343,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyButtonGroup.SetItemIndex(AValue: Integer);
+procedure TTyCustomButtonGroup.SetItemIndex(AValue: Integer);
 var
   NewIndex: Integer;
 begin
@@ -350,7 +357,7 @@ begin
   DoSelectionChange;
 end;
 
-function TTyButtonGroup.IsSelected(AIndex: Integer): Boolean;
+function TTyCustomButtonGroup.IsSelected(AIndex: Integer): Boolean;
 begin
   if (AIndex < 0) or (AIndex >= FItems.Count) then Exit(False);
   if FMultiSelect then
@@ -362,7 +369,7 @@ begin
     Result := (AIndex = FItemIndex);
 end;
 
-procedure TTyButtonGroup.SetSelected(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomButtonGroup.SetSelected(AIndex: Integer; AValue: Boolean);
 begin
   if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
   if FMultiSelect then
@@ -379,7 +386,7 @@ begin
     SetItemIndex(-1);                         // clearing the selected one deselects
 end;
 
-procedure TTyButtonGroup.SelectAt(AX: Integer);
+procedure TTyCustomButtonGroup.SelectAt(AX: Integer);
 var
   seg: Integer;
 begin
@@ -396,7 +403,7 @@ begin
     SetItemIndex(seg);                        // single: fires only when index changes
 end;
 
-procedure TTyButtonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomButtonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -404,7 +411,7 @@ begin
     SelectAt(X);
 end;
 
-procedure TTyButtonGroup.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomButtonGroup.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   seg: Integer;
 begin
@@ -417,7 +424,7 @@ begin
   end;
 end;
 
-procedure TTyButtonGroup.MouseLeave;
+procedure TTyCustomButtonGroup.MouseLeave;
 begin
   inherited MouseLeave;
   if FHoverSeg <> -1 then
@@ -427,7 +434,7 @@ begin
   end;
 end;
 
-procedure TTyButtonGroup.MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
+procedure TTyCustomButtonGroup.MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
   out AWidestPx, ALineHeightPx: Integer);
 { 用 TTyPainter 量,而不是 LCL canvas:每格文字是 P.DrawText 以 BGRA 字体度量画出来的,只有
   同一个度量器给出的宽度才等于这些字形真正占的位置。画布传 nil —— BeginPaint 只建内部位图,
@@ -464,7 +471,7 @@ begin
   if ALineHeightPx < 1 then ALineHeightPx := 1;
 end;
 
-procedure TTyButtonGroup.MeasureNeeded(out AWidthPx, AHeightPx: Integer);
+procedure TTyCustomButtonGroup.MeasureNeeded(out AWidthPx, AHeightPx: Integer);
 var
   S: TTyStyleSet;
   ppi, n, widest, lineH, cellW: Integer;
@@ -497,7 +504,7 @@ begin
   AHeightPx := lineH;
 end;
 
-procedure TTyButtonGroup.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomButtonGroup.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   w, h: Integer;
@@ -511,7 +518,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyButtonGroup.DoUpdateSizeConstraints;
+procedure TTyCustomButtonGroup.DoUpdateSizeConstraints;
 var
   w, h: Integer;
 begin
@@ -522,7 +529,7 @@ begin
   Constraints.MinHeight := h;
 end;
 
-procedure TTyButtonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomButtonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   W, H, i, n: Integer;
@@ -608,7 +615,7 @@ begin
   end;
 end;
 
-procedure TTyButtonGroup.Paint;
+procedure TTyCustomButtonGroup.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

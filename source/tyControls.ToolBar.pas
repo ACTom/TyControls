@@ -298,6 +298,93 @@ type
     { The bar this button sits on, or nil. }
     property ToolBar: TTyToolBar read GetToolBar;
   published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { A tool button never takes focus — the point of a toolbar is that clicking it leaves the
+      caret where it was. Same call TTySpeedButton makes, and the declared default has to
+      agree with the constructor or the streamer writes TabStop into every .lfm. }
+    property TabStop default False;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    { The resting pressed state, from TTyCustomButton: on a tbsCheck it is the CHECKED state a
+      click flips (and that the group keeps exclusive), where on the other styles it is just the
+      ':selected' look. }
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property IconFont;
+    property GlyphName;
+    property GlyphKind;
+    property GlyphSize;
+    property GlyphColor;
+    property Images;
+    property ImageName;
+    { Re-declared for its STORAGE, not its meaning: the host bar's List pushes a layout onto
+      every tool that never chose one (AdoptGlyphLayout), so an ADOPTED layout must not
+      stream — reloading would turn it into an explicit choice and List could never move the
+      button again. `stored FGlyphLayoutExplicit` is ShowCaption's exact arrangement, and
+      `nodefault` removes the base's `default glLeft` for the same reason ShowCaption carries
+      no default: an EXPLICIT glLeft written on a List=False bar must survive the round trip,
+      and a default directive would suppress writing exactly that case. }
+    property GlyphLayout stored FGlyphLayoutExplicit nodefault;
+    property Spacing;
+    property ShowCaption;
     { Which of the six kinds this button is. Changing it to a space holder resizes the button
       to TyToolSeparatorWidth / TyToolDividerWidth, as LCL's SetStyle does. }
     property Style: TTyToolButtonStyle read FStyle write SetStyle default tbsButton;
@@ -369,23 +456,6 @@ type
       ALTERNATIVE to a menu, not a hook in front of it. If you need to run code BEFORE the
       menu pops (to build it, say), TTyDropDownButton.OnDropDown is that hook. }
     property OnArrowClick: TNotifyEvent read FOnArrowClick write FOnArrowClick;
-    { A tool button never takes focus — the point of a toolbar is that clicking it leaves the
-      caret where it was. Same call TTySpeedButton makes, and the declared default has to
-      agree with the constructor or the streamer writes TabStop into every .lfm. }
-    property TabStop default False;
-    { The resting pressed state. Inherited from TTyButton and re-listed only to say that on a
-      tbsCheck it is the CHECKED state a click flips (and that the group keeps exclusive), where
-      on the other styles it is just the ':selected' look. Caption / Enabled / Visible / Hint /
-      ShowHint / Align / Anchors / StyleClass / Controller / OnClick all come from the bases. }
-    property Down;
-    { Re-declared for its STORAGE, not its meaning: the host bar's List pushes a layout onto
-      every tool that never chose one (AdoptGlyphLayout), so an ADOPTED layout must not
-      stream — reloading would turn it into an explicit choice and List could never move the
-      button again. `stored FGlyphLayoutExplicit` is ShowCaption's exact arrangement, and
-      `nodefault` removes the base's `default glLeft` for the same reason ShowCaption carries
-      no default: an EXPLICIT glLeft written on a List=False bar must survive the round trip,
-      and a default directive would suppress writing exactly that case. }
-    property GlyphLayout stored FGlyphLayoutExplicit nodefault;
   end;
 
   { LCL's TToolBarOnPaintButton (comctrls.pp:2253), member for member: the button, and the
@@ -463,7 +533,7 @@ type
     function BottomBorderPx(APPI: Integer): Integer;
     { Protected rather than private so a test can drive the one call a relayout makes
       without needing a window handle and a live align pass. }
-    procedure ApplyToButton(B: TTyButton);
+    procedure ApplyToButton(B: TTyCustomButton);
     { Push Images + ShowCaptions (and, to tool buttons, List's glyph layout) onto every tool
       that can draw an icon. Protected for the same reason. }
     procedure ApplyToolProperties;
@@ -914,7 +984,7 @@ begin
 end;
 
 { A 1px hairline / rule fill. Factored out because `Default(TTyFill)` is NOT usable inside
-  TTyToolButton: TTyButton publishes a property named `Default`, which shadows the compiler
+  TTyToolButton: TTyCustomButton declares a property named `Default`, which shadows the compiler
   intrinsic of that name inside every method of a descendant, and the resulting error
   ("Incompatible types: got Boolean expected TTyFill") points at the assignment rather than at
   the shadowing. One helper, so no method of that class has to know. }
@@ -1810,7 +1880,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolBar.ApplyToButton(B: TTyButton);
+procedure TTyToolBar.ApplyToButton(B: TTyCustomButton);
 begin
   { A tbsSeparator / tbsDivider tool button is a SPACE HOLDER, not a button: it resolves the
     'TyToolSeparator' key and paints a rule, so stamping the button-family 'ghost' variant on
@@ -1935,7 +2005,9 @@ begin
     SetLength(kids, n); SetLength(sizes, n); SetLength(wrapAfter, n);
     for i := 0 to n - 1 do
     begin
-      if kids[i] is TTyButton then ApplyToButton(TTyButton(kids[i]));
+      { Every push button counts: a glyph, speed or tool button is a TTyCustomButton but no
+        longer a TTyButton (4.0 hangs them on the custom chain, the LCL way). }
+      if kids[i] is TTyCustomButton then ApplyToButton(TTyCustomButton(kids[i]));
       { The natural width, raised to ButtonWidth for a real tool button (LCL's floor).
         With ButtonWidth unset this is exactly kids[i].Width — no existing bar moves. }
       sizes[i].cx := EffectiveToolWidth(kids[i]);

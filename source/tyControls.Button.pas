@@ -13,7 +13,7 @@ type
   TTyBadgeDisplayEvent = procedure(Sender: TObject; AValue: Integer;
     var AText: string; var AVisible: Boolean) of object;
 
-  TTyButton = class(TTyCustomControl)
+  TTyCustomButton = class(TTyCustomControl)
   private
     FBgAnim: TTyAnimator;
     FAnimationsEnabled: Boolean;
@@ -151,15 +151,6 @@ type
     // ACharCode — VK_RETURN when Default, VK_ESCAPE when Cancel. The CMDialogKey
     // handler (and headless tests) route through here.
     function WantsDialogKey(ACharCode: Word): Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
-    property Enabled;
-    property Visible;
-    property Font;
-    property ShowHint;
-    property TabOrder;
     { A push button is a tab stop, exactly as the native TButton is: Tab reaches it and
       Space/Enter presses it (KeyDown below), and TTyCustomControl.MouseDown gates its
       click-to-focus on this flag, so without it a click never moved focus off whatever
@@ -168,6 +159,54 @@ type
       inherited `default False` a False was equal to the declared default and silently
       dropped, leaving the constructor's True to win at run time. }
     property TabStop default True;
+    // On by default. When enabled and the control has a window handle, hovering
+    // fades the background between the normal and hover styles; with no handle
+    // (every render test) it snaps, preserving the existing exact-pixel paint tests.
+    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
+    // Native TButton parity. Default: Enter on the form activates this button.
+    // Cancel: Esc activates it. ModalResult: clicking sets the host form's
+    // ModalResult (closing a modal dialog).
+    property Default: Boolean read FDefault write SetDefault default False;
+    property Cancel: Boolean read FCancel write SetCancel default False;
+    // VS Code-style persistent selected state: when True, CurrentStates injects
+    // tysSelected, triggering the theme's ':selected' rules (e.g. TyButton.ghost:selected).
+    // Mutually-exclusive grouping is left to the app, which toggles each button's Down
+    // in OnClick (no built-in GroupIndex this round).
+    property Down: Boolean read FDown write SetDown default False;
+    property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
+    { Horizontal placement of the caption inside the button. taCenter (the default) is the
+      push-button look; taLeftJustify is what a vertical navigation rail or a ribbon's file
+      menu needs, where icon and label must line up down the left edge. LCL's self-drawn
+      button spells it the same way (TCustomSpeedButton.Alignment, buttons.pp:414, also
+      default taCenter).
+      A glyph button applies this to the caption in the rect LEFT OVER beside the glyph, so
+      the glyph stays anchored and only the text moves. }
+    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
+    { On by default: '&' in the caption marks the next character as the Alt accelerator and
+      is not drawn. Turn it OFF for a caption that legitimately contains an ampersand --
+      'AT&T', 'Save & Close', or any string coming from data -- which otherwise silently
+      loses the character AND acquires a stray accelerator. The button then also stops
+      answering Alt+letter, because it no longer has one. LCL: buttons.pp:431. }
+    property ShowAccelChar: Boolean read FShowAccelChar write SetShowAccelChar default True;
+    // Badge: numeric only, >99 shows '99+'. ShowBadge is the master switch; by default
+    // it shows even for 0, and OnBadgeDisplay may rewrite the text or set AVisible:=False
+    // to hide it. Styled via the TyBadge typeKey theme.
+    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
+    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
+    property BadgePosition: TTyBadgePosition read FBadgePosition write SetBadgePosition default bpBottomRight;
+    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
+  end;
+
+  { TTyButton publishes TTyCustomButton's properties; everything lives in TTyCustomButton. }
+  TTyButton = class(TTyCustomButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -216,42 +255,17 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    // On by default. When enabled and the control has a window handle, hovering
-    // fades the background between the normal and hover styles; with no handle
-    // (every render test) it snaps, preserving the existing exact-pixel paint tests.
-    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
-    // Native TButton parity. Default: Enter on the form activates this button.
-    // Cancel: Esc activates it. ModalResult: clicking sets the host form's
-    // ModalResult (closing a modal dialog).
-    property Default: Boolean read FDefault write SetDefault default False;
-    property Cancel: Boolean read FCancel write SetCancel default False;
-    // VS Code-style persistent selected state: when True, CurrentStates injects
-    // tysSelected, triggering the theme's ':selected' rules (e.g. TyButton.ghost:selected).
-    // Mutually-exclusive grouping is left to the app, which toggles each button's Down
-    // in OnClick (no built-in GroupIndex this round).
-    property Down: Boolean read FDown write SetDown default False;
-    property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
-    { Horizontal placement of the caption inside the button. taCenter (the default) is the
-      push-button look; taLeftJustify is what a vertical navigation rail or a ribbon's file
-      menu needs, where icon and label must line up down the left edge. LCL's self-drawn
-      button spells it the same way (TCustomSpeedButton.Alignment, buttons.pp:414, also
-      default taCenter).
-      A glyph button applies this to the caption in the rect LEFT OVER beside the glyph, so
-      the glyph stays anchored and only the text moves. }
-    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
-    { On by default: '&' in the caption marks the next character as the Alt accelerator and
-      is not drawn. Turn it OFF for a caption that legitimately contains an ampersand --
-      'AT&T', 'Save & Close', or any string coming from data -- which otherwise silently
-      loses the character AND acquires a stray accelerator. The button then also stops
-      answering Alt+letter, because it no longer has one. LCL: buttons.pp:431. }
-    property ShowAccelChar: Boolean read FShowAccelChar write SetShowAccelChar default True;
-    // Badge: numeric only, >99 shows '99+'. ShowBadge is the master switch; by default
-    // it shows even for 0, and OnBadgeDisplay may rewrite the text or set AVisible:=False
-    // to hide it. Styled via the TyBadge typeKey theme.
-    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
-    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
-    property BadgePosition: TTyBadgePosition read FBadgePosition write SetBadgePosition default bpBottomRight;
-    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
     property Caption;
     property Align;
     property Anchors;
@@ -278,7 +292,7 @@ begin
   Result := BidiBadgePos[AFlip, APos];
 end;
 
-constructor TTyButton.Create(AOwner: TComponent);
+constructor TTyCustomButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -301,7 +315,7 @@ begin
   Height := TyDensityHeight(ActiveController, 30);
 end;
 
-destructor TTyButton.Destroy;
+destructor TTyCustomButton.Destroy;
 begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
@@ -310,14 +324,14 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyButton.SetAlignment(AValue: TAlignment);
+procedure TTyCustomButton.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyButton.SetShowAccelChar(AValue: Boolean);
+procedure TTyCustomButton.SetShowAccelChar(AValue: Boolean);
 begin
   if FShowAccelChar = AValue then Exit;
   FShowAccelChar := AValue;
@@ -327,7 +341,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyButton.ResolveCaptionText(out AText: string; out AMnemonicPos: Integer);
+procedure TTyCustomButton.ResolveCaptionText(out AText: string; out AMnemonicPos: Integer);
 begin
   if FShowAccelChar then
     TyParseMnemonic(Caption, AText, AMnemonicPos)
@@ -341,7 +355,7 @@ begin
   end;
 end;
 
-function TTyButton.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomButton.DialogChar(var Message: TLMKey): Boolean;
 begin
   { No mnemonic parsing means no mnemonic: a button showing 'AT&T' literally must not also
     answer Alt+T, or the escape hatch would only fix half the bug. }
@@ -353,7 +367,7 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-procedure TTyButton.Click;
+procedure TTyCustomButton.Click;
 var
   Form: TCustomForm;
 begin
@@ -370,7 +384,7 @@ begin
   inherited Click;  // OnClick may now veto by resetting Form.ModalResult
 end;
 
-procedure TTyButton.RegisterDefaultWithForm;
+procedure TTyCustomButton.RegisterDefaultWithForm;
 var
   Form: TCustomForm;
 begin
@@ -385,7 +399,7 @@ begin
   end;
 end;
 
-procedure TTyButton.RegisterCancelWithForm;
+procedure TTyCustomButton.RegisterCancelWithForm;
 var
   Form: TCustomForm;
 begin
@@ -400,7 +414,7 @@ begin
   end;
 end;
 
-procedure TTyButton.Loaded;
+procedure TTyCustomButton.Loaded;
 begin
   inherited Loaded;
   // Parent is assigned by now; re-apply registration dropped during streaming
@@ -409,28 +423,28 @@ begin
   if FCancel then RegisterCancelWithForm;
 end;
 
-procedure TTyButton.SetDefault(AValue: Boolean);
+procedure TTyCustomButton.SetDefault(AValue: Boolean);
 begin
   if FDefault = AValue then Exit;
   FDefault := AValue;
   RegisterDefaultWithForm;
 end;
 
-procedure TTyButton.SetCancel(AValue: Boolean);
+procedure TTyCustomButton.SetCancel(AValue: Boolean);
 begin
   if FCancel = AValue then Exit;
   FCancel := AValue;
   RegisterCancelWithForm;
 end;
 
-procedure TTyButton.SetDown(AValue: Boolean);
+procedure TTyCustomButton.SetDown(AValue: Boolean);
 begin
   if FDown = AValue then Exit;
   FDown := AValue;
   Invalidate;
 end;
 
-function TTyButton.CurrentStates: TTyStateSet;
+function TTyCustomButton.CurrentStates: TTyStateSet;
 begin
   Result := inherited CurrentStates;   // hover/active/focused/disabled, or normal
   // Enabled=False makes inherited return [tysDisabled] only; disabled wins, so we
@@ -442,28 +456,28 @@ begin
   end;
 end;
 
-procedure TTyButton.SetShowBadge(AValue: Boolean);
+procedure TTyCustomButton.SetShowBadge(AValue: Boolean);
 begin
   if FShowBadge = AValue then Exit;
   FShowBadge := AValue;
   Invalidate;
 end;
 
-procedure TTyButton.SetBadgeValue(AValue: Integer);
+procedure TTyCustomButton.SetBadgeValue(AValue: Integer);
 begin
   if FBadgeValue = AValue then Exit;
   FBadgeValue := AValue;
   if FShowBadge then Invalidate;
 end;
 
-procedure TTyButton.SetBadgePosition(AValue: TTyBadgePosition);
+procedure TTyCustomButton.SetBadgePosition(AValue: TTyBadgePosition);
 begin
   if FBadgePosition = AValue then Exit;
   FBadgePosition := AValue;
   if FShowBadge then Invalidate;
 end;
 
-function TTyButton.ResolveBadgeDisplay(out AText: string): Boolean;
+function TTyCustomButton.ResolveBadgeDisplay(out AText: string): Boolean;
 var vis: Boolean;
 begin
   Result := False;
@@ -475,7 +489,7 @@ begin
   Result := vis and (AText <> '');
 end;
 
-procedure TTyButton.DrawBadge(P: TTyPainter; const AFullRect: TRect);
+procedure TTyCustomButton.DrawBadge(P: TTyPainter; const AFullRect: TRect);
 var
   S: TTyStyleSet;
   txt: string;
@@ -539,13 +553,13 @@ begin
   P.DrawText(badgeRect, txt, S.FontName, fs, fw, S.TextColor, taCenter, tlCenter, False, 0, True);
 end;
 
-function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;
+function TTyCustomButton.WantsDialogKey(ACharCode: Word): Boolean;
 begin
   Result := (FDefault and (ACharCode = VK_RETURN)) or
             (FCancel  and (ACharCode = VK_ESCAPE));
 end;
 
-procedure TTyButton.ExecuteDefaultAction;
+procedure TTyCustomButton.ExecuteDefaultAction;
 begin
   if FDefault then
     Click
@@ -553,7 +567,7 @@ begin
     inherited ExecuteDefaultAction;
 end;
 
-procedure TTyButton.ExecuteCancelAction;
+procedure TTyCustomButton.ExecuteCancelAction;
 begin
   if FCancel then
     Click
@@ -561,7 +575,7 @@ begin
     inherited ExecuteCancelAction;
 end;
 
-procedure TTyButton.CMDialogKey(var Message: TCMDialogKey);
+procedure TTyCustomButton.CMDialogKey(var Message: TCMDialogKey);
 begin
   if WantsDialogKey(Message.CharCode) then
   begin
@@ -572,7 +586,7 @@ begin
     inherited;
 end;
 
-procedure TTyButton.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomButton.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -583,12 +597,12 @@ begin
   end;
 end;
 
-function TTyButton.GetStyleTypeKey: string;
+function TTyCustomButton.GetStyleTypeKey: string;
 begin
   Result := 'TyButton';
 end;
 
-procedure TTyButton.EnsureTimer;
+procedure TTyCustomButton.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -599,7 +613,7 @@ begin
   end;
 end;
 
-procedure TTyButton.HandleTimer(Sender: TObject);
+procedure TTyCustomButton.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then
     Invalidate;
@@ -607,22 +621,22 @@ begin
     FTimer.Enabled := False;
 end;
 
-function TTyButton.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomButton.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FBgAnim.Advance(AMs);
 end;
 
-procedure TTyButton.ArmBgAnim(ATarget: Single);
+procedure TTyCustomButton.ArmBgAnim(ATarget: Single);
 begin
   FBgAnim.Target := ATarget;
 end;
 
-function TTyButton.GetBgAnimProgress: Single;
+function TTyCustomButton.GetBgAnimProgress: Single;
 begin
   Result := FBgAnim.Progress;
 end;
 
-procedure TTyButton.MouseEnter;
+procedure TTyCustomButton.MouseEnter;
 begin
   inherited MouseEnter;  // sets FHover := True; Invalidate
   FBgAnim.Target := 1;
@@ -640,7 +654,7 @@ begin
     FBgAnim.SetTargetImmediate(1);
 end;
 
-procedure TTyButton.MouseLeave;
+procedure TTyCustomButton.MouseLeave;
 begin
   inherited MouseLeave;  // sets FHover := False; Invalidate
   FBgAnim.Target := 0;
@@ -653,7 +667,7 @@ begin
     FBgAnim.SetTargetImmediate(0);
 end;
 
-procedure TTyButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, NormalS, HoverS: TTyStyleSet;
@@ -712,7 +726,7 @@ begin
   end;
 end;
 
-function TTyButton.MeasureContentHeight(APPI: Integer): Integer;
+function TTyCustomButton.MeasureContentHeight(APPI: Integer): Integer;
 var
   tw, th: Integer;
 begin
@@ -721,7 +735,7 @@ begin
   Result := th;
 end;
 
-procedure TTyButton.DoUpdateSizeConstraints;
+procedure TTyCustomButton.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, padH, pw, ph: Integer;
@@ -748,7 +762,7 @@ begin
   Constraints.MinHeight := MeasureContentHeight(ppi) + padH;
 end;
 
-procedure TTyButton.TextChanged;
+procedure TTyCustomButton.TextChanged;
 begin
   inherited TextChanged;
   UpdateSizeConstraints;
@@ -761,7 +775,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyButton.Invalidate;
+procedure TTyCustomButton.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch reaches every control as a bare Invalidate (TTyStyleController broadcasts
@@ -788,7 +802,7 @@ begin
   end;
 end;
 
-procedure TTyButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -820,7 +834,7 @@ begin
   if AHeight < 1 then AHeight := 1;
 end;
 
-procedure TTyButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -843,7 +857,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+procedure TTyCustomButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
   disp: string;
@@ -857,7 +871,7 @@ begin
     False, True, TyLineHeight(ActiveController));
 end;
 
-procedure TTyButton.Paint;
+procedure TTyCustomButton.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

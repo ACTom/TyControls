@@ -159,7 +159,8 @@ end;
 
 procedure TMainForm.ToolClicked(Sender: TObject);
 begin
-  LblStatus.Caption := Format(rsFiredFmt, [(Sender as TTyButton).Caption]);
+  // Shared by plain, glyph and tool buttons: TTyCustomButton is the type all of them are.
+  LblStatus.Caption := Format(rsFiredFmt, [(Sender as TTyCustomButton).Caption]);
 end;
 
 procedure TMainForm.ToolToggle(Sender: TObject);

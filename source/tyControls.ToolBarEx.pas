@@ -233,7 +233,7 @@ begin
         rule no skin defines AND leave a StyleClass on a control the host never styled. The
         base's ApplyToButton skips them for the same reason; this override has its own copy of
         the flat rule and so needs its own copy of the exception. }
-      if (kids[i] is TTyButton)
+      if (kids[i] is TTyCustomButton)
          and not ((kids[i] is TTyToolButton)
                   and (TTyToolButton(kids[i]).Style in [tbsSeparator, tbsDivider])) then
       begin
@@ -245,12 +245,12 @@ begin
           ApplyToButton, kept the old line. }
         if Flat then
         begin
-          if TTyButton(kids[i]).StyleClass = '' then
-            TTyButton(kids[i]).StyleClass := 'ghost';
+          if TTyCustomButton(kids[i]).StyleClass = '' then
+            TTyCustomButton(kids[i]).StyleClass := 'ghost';
         end
         else
-          if TTyButton(kids[i]).StyleClass = 'ghost' then
-            TTyButton(kids[i]).StyleClass := '';
+          if TTyCustomButton(kids[i]).StyleClass = 'ghost' then
+            TTyCustomButton(kids[i]).StyleClass := '';
       end;
       { The base bar's ButtonWidth floor, through the base's own arbitration — the overflow
         fit must be decided over the widths the buttons will actually be laid out at, or a
@@ -390,10 +390,10 @@ begin
     FPopupItems[i].Visible := True;
     // Wrap the button's OnClick so picking an item runs its own handler THEN dismisses the flyout
     // (menu semantics). The original is stashed + restored on close.
-    if FPopupItems[i] is TTyButton then
+    if FPopupItems[i] is TTyCustomButton then
     begin
-      FSavedClicks[i] := TTyButton(FPopupItems[i]).OnClick;
-      TTyButton(FPopupItems[i]).OnClick := @PopupItemClick;
+      FSavedClicks[i] := TTyCustomButton(FPopupItems[i]).OnClick;
+      TTyCustomButton(FPopupItems[i]).OnClick := @PopupItemClick;
     end;
     Inc(y, itemH + gap);
   end;
@@ -442,8 +442,8 @@ begin
   for i := 0 to High(FPopupItems) do
     if FPopupItems[i] <> nil then
     begin
-      if (FPopupItems[i] is TTyButton) and (i <= High(FSavedClicks)) then
-        TTyButton(FPopupItems[i]).OnClick := FSavedClicks[i];
+      if (FPopupItems[i] is TTyCustomButton) and (i <= High(FSavedClicks)) then
+        TTyCustomButton(FPopupItems[i]).OnClick := FSavedClicks[i];
       FPopupItems[i].Parent := Self;
       FPopupItems[i].Visible := False;
     end;
