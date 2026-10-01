@@ -155,10 +155,15 @@ type
       data item (HdSeries, HdRow its inner row, HdEdge a graph link), 2 the
       whole-series element of a line (its polyline), 3 a marker (HdSeries
       its host, HdRow its place in the marker's data: a select dispatcher
-      only), 0 nothing that has states. A label answers for its host. }
+      only), 0 nothing that has states. A label answers for its host.
+      [Batch 93] 4 a legend item: HdSeries the legend, HdRow the item, HdName
+      its name, HdLegendSeries whether a series wears that name (the item's
+      handlers name the series) or not (they name the data). }
     HdKind: Integer;
     HdSeries, HdRow: Integer;
     HdEdge: Boolean;
+    HdName: string;
+    HdLegendSeries: Boolean;
   end;
 
   { WHAT THE STATE MACHINE KEEPS FOR ONE SERIES [Batch 88]: which of the
@@ -396,6 +401,10 @@ type
     FLegendEntries: array of TTyLegendEntryArray;
     FLegendFlags: array of TTyLegendFlags;
     FLegends: array of TTyLegendLayout;
+    { THE LEGEND MODELS HAVE BEEN LOADED from this option [Batch 93]: init's
+      `selected ||= {}` and optionUpdated's single-mode pick ran -- once per
+      option; after it the map is what the actions made of it. }
+    FLegendLoaded: Boolean;
     { Whose rows KeepSlice is deciding about, for the length of one
       FilterSelf call and no longer. }
     FFilterStore: TTyDataStore;
@@ -1181,6 +1190,31 @@ type
     procedure DoSelectAction(APayload: TJSONObject);
     procedure DoHighDownAction(APayload: TJSONObject);
     procedure StClickSelect(const ATarget: TTyChartEventTarget);
+    { ---- the legend's actions and its item's handlers [Batch 93] ---- }
+    { legendAction.ts: the method on every legend the payload names, the
+      selected map of those, written back into EVERY legend, the full update,
+      then the event }
+    procedure DoLegendAction(APayload: TJSONObject);
+    { eachComponent({mainType: 'legend', query}): legendIndex, legendId,
+      legendName; none is every legend }
+    function LegendQuery(APayload: TJSONObject): TTyIntegerArray;
+    { makeSelectedMap: every name of the legend's data but the line breaks,
+      ANDed into AMap }
+    procedure LegendSelectedMapInto(AIndex: Integer; AMap: TJSONObject);
+    { the ids of the series whose legendHoverLink is falsy, as a JSON array }
+    function LegendExcludeIds: string;
+    { dispatchHighlightAction / dispatchDownplayAction for an item }
+    procedure LegendHighDown(const ATarget: TTyChartEventTarget; const AType: string);
+    { dispatchSelectAction: downplay, legendToggleSelect, highlight }
+    procedure LegendClick(const ATarget: TTyChartEventTarget);
+    { A FULL UPDATE NOW: the model, the layout, the list and the states, as
+      upstream's update runs inside dispatchAction -- so the action that
+      follows finds the new elements }
+    procedure FullUpdate;
+    { the target the element at AIndex of the list answers as }
+    function TargetOfElement(AIndex: Integer): TTyChartEventTarget;
+    { the series' (or the datum's) border, for its legend icon }
+    procedure LegendBorderOf(ASlot, ARaw: Integer; var ASrc: TTyLegendSource);
     procedure EmitPayloadEvent(const AType, APayloadJson: string);
     function HasChartHandler(const AType: string): Boolean;
     function SeriesModelId(ASeriesIndex: Integer): string;
@@ -1299,13 +1333,21 @@ type
       named is every series) publish select / unselect / toggleselect and then
       selectchanged; `highlight` and `downplay` set the emphasis by action and
       publish their own event. The picture follows at the next paint. False
-      for any other type, a payload that is not an object, or a `batch`. }
+      for any other type, a payload that is not an object, or a `batch`.
+      [Batch 93] `legendToggleSelect`, `legendSelect`, `legendUnSelect`,
+      `legendAllSelect` and `legendInverseSelect` (legendIndex / legendId /
+      legendName, none is every legend) switch legend items, re-render the
+      chart at once and publish legendselectchanged, legendselected,
+      legendunselected, legendselectall or legendinverseselect. }
     function DispatchAction(const APayloadJson: string): Boolean;
     { getSelectedDataIndices: the RAW indices of series ASeriesIndex's
       selection, in the order the names entered it }
     function SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
     { the series' selectedMap as JSON: null, "all" or an object }
     function SelectedMapText(ASeriesIndex: Integer): string;
+    { LEGEND AIndex's `selected` map as the actions left it, as JSON in
+      JavaScript's key order; '{}' when it has none [Batch 93] }
+    function LegendSelectedText(AIndex: Integer): string;
     { THE STATE OF A DATA ITEM'S ELEMENTS, as the last paint left it: flags,
       state list, rest and current values -- for a bar, a pie slice (with its
       label and label line) or a line / scatter symbol. False when the item
@@ -1651,6 +1693,8 @@ begin
   FSelInit := nil;
   FSt := nil;
   FStDirty := False;
+  { new legend models: init and optionUpdated run again [Batch 93] }
+  FLegendLoaded := False;
   { A NEW OPTION ENTERS: the next render that may animate plays it }
   FAnimPending := True;
   FDirty := True;
@@ -7280,7 +7324,9 @@ begin
         widths become an option the two will read it from one place; until
         then they agree by saying the same thing. }
       if Result[i].OwnIcon then
-        Result[i].LineWidthLogical := 2;
+        Result[i].LineWidthLogical := 2
+      else
+        LegendBorderOf(j, -1, Result[i]);
       found := True;
       Break;
     end;
@@ -7382,7 +7428,8 @@ begin
           Result[i].DefaultIcon := TyLegendDefaultIcon(
             FBindings[j].SeriesType, SeriesSymbolWord(j));
           Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
-          if Result[i].OwnIcon then Result[i].LineWidthLogical := 2;
+          if Result[i].OwnIcon then Result[i].LineWidthLogical := 2
+          else LegendBorderOf(j, k, Result[i]);
           found := True;
           Break;
         end;
@@ -7409,10 +7456,21 @@ begin
   begin
     FLegendSpecs[i] := TyLegendSpecOf(FOption, i);
     FLegendEntries[i] := TyLegendEntries(FOption, i, potential);
+    { THE MODEL, ONCE PER OPTION [Batch 93]: init makes `selected`,
+      optionUpdated forces single mode's one item ON INTO THE MAP -- an
+      update afterwards (a legend action) does not run it again, so what the
+      actions leave in the map is what is shown }
+    if not FLegendLoaded then
+    begin
+      TyLegendSelectedNode(FOption, i);
+      if FLegendSpecs[i].SelectedMode = tlsSingle then
+        TyLegendResolveSingle(FOption, i, FLegendEntries[i], available);
+    end;
     FLegendFlags[i] := TyLegendSelected(FOption, i, FLegendEntries[i],
-      available, FLegendSpecs[i].SelectedMode);
+      available, tlsMultiple);
     FLegends[i] := Default(TTyLegendLayout);
   end;
+  FLegendLoaded := True;
 end;
 
 { A name is switched off when ANY legend says so -- legendFilter.ts:36-41.
@@ -7968,6 +8026,25 @@ begin
   AFont.Rt := Default(TTyRtBlockStyle);
   node := FOption.ComponentAt('legend', AIndex);
   if not (node is TJSONObject) then Exit;
+  { AN UNSELECTED ITEM'S COLOURS: inactiveColor (its words and its icon),
+    inactiveBorderColor (its pen) and the rule's lineStyle.inactiveColor /
+    inactiveWidth, over the theme's inactive ink [Batch 93] }
+  d := TJSONObject(node).Find('inactiveColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+    AInk.Inactive := col;
+  d := TJSONObject(node).Find('inactiveBorderColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+    AInk.InactiveBorder := col;
+  st := TJSONObject(node).Find('lineStyle');
+  if st is TJSONObject then
+  begin
+    d := TJSONObject(st).Find('inactiveColor');
+    if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+      AInk.LineInactive := col;
+    d := TJSONObject(st).Find('inactiveWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat >= 0) then
+      AInk.LineInactiveWidth := d.AsFloat;
+  end;
   st := TJSONObject(node).Find('textStyle');
   if not (st is TJSONObject) then Exit;
   { the items' text block: free text [Batch 86] }
@@ -7997,6 +8074,11 @@ begin
     model.ResolveStyle('TyAdvChartLegendBorder', '', []).BorderColor);
   Result.Background := TTyChartColor(
     model.ResolveStyle('TyAdvChartLegendBackground', '', []).Background.Color);
+  { upstream's three inactive defaults are the one disabled token; the rule
+    is 2 wide [Batch 93] }
+  Result.InactiveBorder := Result.Inactive;
+  Result.LineInactive := Result.Inactive;
+  Result.LineInactiveWidth := 2;
   { The hole in a ring is the chart's own ground, the same substitution the
     mark builders make for a datum's `empty` marker. }
   Result.EmptyFill := TTyChartColor(
@@ -8731,6 +8813,7 @@ begin
       { A HEATMAP CELL is labelled with the third element of its raw row, and
         rounded by its series' itemStyle.borderRadius }
       v.HeatPadPx := 0.5 * APPI / 96;
+      v.PxScale := APPI / 96;
       if FBindings[i].SeriesType = 'heatmap' then
       begin
         v.Label_.DefaultText := tldRawThird;
@@ -8802,8 +8885,10 @@ begin
     { AFTER THE LABELS, so a caption dims and rises with its node. }
     if drawn > 0 then ApplyGraphHover(list, APPI);
     if drawn > 0 then ApplyTreeHover(list, APPI);
-    { THE STATES, onto the elements just built [Batch 88] }
-    if drawn > 0 then StSync(list, APPI);
+    { THE STATES, onto the elements just built [Batch 88] -- and with
+      nothing drawn too: a legend can switch every series off, and their
+      records go with their elements [Batch 93] }
+    StSync(list, APPI);
     { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because
       its captions are ANSWERS rather than requests -- they arrive with a
       font and an anchor already on them, which is what the expansion exists
@@ -10009,11 +10094,24 @@ begin
         end;
       ctkLegend:
         begin
-          node := FOption.ComponentAt('legend', d.ComponentIndex);
-          if not TriggersEvent(node) then Exit;
           if (d.ComponentIndex > High(FLegends))
             or (d.DataIndex > High(FLegends[d.ComponentIndex].Items)) then Exit;
           nm := FLegends[d.ComponentIndex].Items[d.DataIndex].Name;
+          { THE ITEM GROUP'S OWN HANDLERS, whatever triggerEvent says: a
+            series legend when getSeriesByName finds one -- filtered or not --
+            a data legend otherwise (LegendView.ts:208-292) [Batch 93] }
+          Result.HdKind := 4;
+          Result.HdSeries := d.ComponentIndex;
+          Result.HdRow := d.DataIndex;
+          Result.HdName := nm;
+          for k := 0 to FOption.ComponentCount('series') - 1 do
+            if SeriesModelName(k) = nm then
+            begin
+              Result.HdLegendSeries := True;
+              Break;
+            end;
+          node := FOption.ComponentAt('legend', d.ComponentIndex);
+          if not TriggersEvent(node) then Exit;
           Result.HasData := True;
           Result.Params.ComponentType := 'legend';
           Result.Params.ComponentIndex := d.ComponentIndex;
@@ -10192,6 +10290,9 @@ begin
   if (FEvDownId <> FEvUpId) or not FEvDownArmed
     or (Sqrt(Sqr(AX - FEvDownX) + Sqr(AY - FEvDownY)) > 4) then Exit;
   FEvDownArmed := False;
+  { THE ELEMENT'S OWN HANDLER BEFORE ANY zr-LEVEL ONE: a legend item's click
+    is downplay, legendToggleSelect, highlight [Batch 93] }
+  if t.HdKind = 4 then LegendClick(t);
   { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
     unselect, whatever selectedMode says [Batch 88] }
   StClickSelect(t);
@@ -10972,6 +11073,17 @@ begin
       FSt[s].GuideIdx[i] := -1;
     end;
   end;
+  { A SERIES NOT DRAWN HAS NO ELEMENTS: a legend that switched it off took
+    its view's group away, and switched back on it is drawn by new elements
+    -- no flags, no states (render's `chart.remove`) [Batch 93] }
+  for s := 0 to High(FSt) do
+    if FSt[s].Kind = sskNone then
+    begin
+      FSt[s].Rows := nil;
+      FSt[s].Run := Default(TTyStItem);
+      FSt[s].Area := Default(TTyStItem);
+      FSt[s].IsBlured := False;
+    end;
   { WHICH ELEMENT IS WHICH: the mark, its label (a placed caption), its
     label line, and a line's polyline and area }
   for k := 0 to AList.Count - 1 do
@@ -11802,6 +11914,12 @@ end;
 procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
 var item: PTyStItem; part, s, poly: Integer;
 begin
+  { a legend item's own mouseout: the downplay action [Batch 93] }
+  if ATarget.HdKind = 4 then
+  begin
+    LegendHighDown(ATarget, 'downplay');
+    Exit;
+  end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   StAllLeaveBlur;
@@ -11830,6 +11948,12 @@ var
   focus: TTyStFocus;
   scope: TTyStScope;
 begin
+  { a legend item's own mouseover: the highlight action [Batch 93] }
+  if ATarget.HdKind = 4 then
+  begin
+    LegendHighDown(ATarget, 'highlight');
+    Exit;
+  end;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   if part = 0 then
@@ -12478,6 +12602,51 @@ begin
   end;
 end;
 
+{ A NUL SURVIVES THE PARSE [Batch 93]. fpjson decodes `\u0000` to nothing
+  (its scanner parks a zero code unit as half a surrogate pair), and
+  upstream's generated ids are '\0' + name + '\0' + n -- so the ids a legend
+  hover puts in excludeSeriesId came back as 'H0' and matched no series. The
+  escape is swapped for a noncharacter (U+FDD0) before the parse and back to
+  #0 in every string after it. }
+function NulSafeJson(const AText: string): string;
+var i, n: Integer;
+begin
+  Result := '';
+  i := 1;
+  n := Length(AText);
+  while i <= n do
+  begin
+    if AText[i] = '\' then
+    begin
+      if (i + 5 <= n) and (Copy(AText, i, 6) = '\u0000') then
+      begin
+        Result := Result + '\ufdd0';
+        Inc(i, 6);
+        Continue;
+      end;
+      { any other escape pair passes whole, so `\\u0000` stays a backslash }
+      Result := Result + Copy(AText, i, 2);
+      Inc(i, 2);
+      Continue;
+    end;
+    Result := Result + AText[i];
+    Inc(i);
+  end;
+end;
+
+procedure NulRestore(AData: TJSONData);
+var i: Integer;
+begin
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtString:
+      if Pos(#$EF#$B7#$90, AData.AsString) > 0 then
+        AData.AsString := StringReplace(AData.AsString, #$EF#$B7#$90, #0, [rfReplaceAll]);
+    jtArray, jtObject:
+      for i := 0 to AData.Count - 1 do NulRestore(AData.Items[i]);
+  end;
+end;
+
 function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
 var
   d, tp: TJSONData;
@@ -12486,7 +12655,8 @@ var
 begin
   Result := False;
   try
-    d := GetJSON(APayloadJson);
+    d := GetJSON(NulSafeJson(APayloadJson));
+    NulRestore(d);
   except
     d := nil;
   end;
@@ -12510,6 +12680,13 @@ begin
     else if (t = 'highlight') or (t = 'downplay') then
     begin
       DoHighDownAction(p);
+      Result := True;
+    end
+    else if (t = 'legendToggleSelect') or (t = 'legendSelect')
+      or (t = 'legendUnSelect') or (t = 'legendAllSelect')
+      or (t = 'legendInverseSelect') then
+    begin
+      DoLegendAction(p);
       Result := True;
     end;
   finally
@@ -12569,6 +12746,392 @@ begin
   if slot >= 0 then SelEnsure(slot);
   if (ASeriesIndex < 0) or (ASeriesIndex > High(FSel)) or not FSelInit[ASeriesIndex] then Exit;
   Result := TySelMapJson(FSel[ASeriesIndex]);
+end;
+
+function TTyAdvanceChart.LegendSelectedText(AIndex: Integer): string;
+begin
+  Result := TyLegendSelectedJson(FOption, AIndex);
+end;
+
+{ ==================== the legend's actions [Batch 93] ==================== }
+
+function TTyAdvanceChart.LegendQuery(APayload: TJSONObject): TTyIntegerArray;
+var
+  d, x: TJSONData;
+  i, k, n, cnt: Integer;
+  byId: Boolean;
+  v: string;
+  node: TJSONObject;
+
+  procedure Add(AIndex: Integer);
+  var j: Integer;
+  begin
+    for j := 0 to High(Result) do
+      if Result[j] = AIndex then Exit;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := AIndex;
+  end;
+
+  function Wanted(AValue: string): Boolean;
+  var j: Integer;
+  begin
+    Result := False;
+    if d is TJSONArray then
+    begin
+      for j := 0 to TJSONArray(d).Count - 1 do
+        if (TJSONArray(d).Items[j].JSONType in [jtString, jtNumber])
+          and (TJSONArray(d).Items[j].AsString = AValue) then Exit(True);
+    end
+    else if d.JSONType in [jtString, jtNumber] then
+      Result := d.AsString = AValue;
+  end;
+
+begin
+  Result := nil;
+  cnt := Length(FLegendSpecs);
+  { the index (a number or a list), else the id, else the name -- in
+    component order for the last two }
+  d := APayload.Find('legendIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    if d is TJSONArray then
+    begin
+      for k := 0 to TJSONArray(d).Count - 1 do
+        if TJSONArray(d).Items[k].JSONType = jtNumber then
+        begin
+          n := Trunc(TJSONArray(d).Items[k].AsFloat);
+          if (n >= 0) and (n < cnt) then Add(n);
+        end;
+    end
+    else if d.JSONType = jtNumber then
+    begin
+      n := Trunc(d.AsFloat);
+      if (n >= 0) and (n < cnt) then Add(n);
+    end;
+    Exit;
+  end;
+  byId := True;
+  d := APayload.Find('legendId');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    byId := False;
+    d := APayload.Find('legendName');
+  end;
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    for i := 0 to cnt - 1 do Add(i);
+    Exit;
+  end;
+  for i := 0 to cnt - 1 do
+  begin
+    node := nil;
+    if FOption.ComponentAt('legend', i) is TJSONObject then
+      node := TJSONObject(FOption.ComponentAt('legend', i));
+    if node = nil then Continue;
+    if byId then x := node.Find('id') else x := node.Find('name');
+    if (x = nil) or not (x.JSONType in [jtString, jtNumber]) then Continue;
+    v := x.AsString;
+    if Wanted(v) then Add(i);
+  end;
+end;
+
+procedure TTyAdvanceChart.LegendSelectedMapInto(AIndex: Integer; AMap: TJSONObject);
+var
+  i, k: Integer;
+  nm: string;
+  on_: Boolean;
+begin
+  if (AIndex < 0) or (AIndex > High(FLegendEntries)) then Exit;
+  for i := 0 to High(FLegendEntries[AIndex]) do
+  begin
+    nm := FLegendEntries[AIndex][i].Name;
+    { a wrap element is no item }
+    if (nm = '') or (nm = #10) then Continue;
+    on_ := TyLegendIsSelected(FOption, AIndex, FLegendAvailable, nm);
+    { unselected if any legend is unselected }
+    k := AMap.IndexOfName(nm);
+    if k >= 0 then AMap.Booleans[nm] := AMap.Booleans[nm] and on_
+    else AMap.Booleans[nm] := on_;
+  end;
+end;
+
+{ the map as JSON in JavaScript's key order }
+function JsMapJson(AMap: TJSONObject): string;
+var keys: TTyLegendNames; i: Integer;
+begin
+  keys := TyJsKeyOrder(AMap);
+  Result := '{';
+  for i := 0 to High(keys) do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + '"' + StringToJSONString(keys[i]) + '":'
+      + AMap.Find(keys[i]).AsJSON;
+  end;
+  Result := Result + '}';
+end;
+
+procedure TTyAdvanceChart.DoLegendAction(APayload: TJSONObject);
+var
+  t, ev, nm, nameJson, idx: string;
+  isAll: Boolean;
+  legends: TTyIntegerArray;
+  i, k: Integer;
+  map, all_: TJSONObject;
+  keys: TTyLegendNames;
+  d: TJSONData;
+begin
+  t := APayload.Strings['type'];
+  if t = 'legendToggleSelect' then ev := 'legendselectchanged'
+  else if t = 'legendSelect' then ev := 'legendselected'
+  else if t = 'legendUnSelect' then ev := 'legendunselected'
+  else if t = 'legendAllSelect' then ev := 'legendselectall'
+  else ev := 'legendinverseselect';
+  isAll := (t = 'legendAllSelect') or (t = 'legendInverseSelect');
+  { payload.name as JavaScript keys it: a missing name is the key
+    'undefined' and leaves the event's name out }
+  d := APayload.Find('name');
+  if d = nil then
+  begin
+    nm := 'undefined';
+    nameJson := '';
+  end
+  else
+  begin
+    case d.JSONType of
+      jtString, jtNumber: nm := d.AsString;
+      jtNull: nm := 'null';
+      jtBoolean: if d.AsBoolean then nm := 'true' else nm := 'false';
+    else
+      nm := d.AsString;
+    end;
+    nameJson := d.AsJSON;
+  end;
+  map := TJSONObject.Create;
+  all_ := TJSONObject.Create;
+  try
+    { the method on every legend the payload names, and their map }
+    legends := LegendQuery(APayload);
+    for i := 0 to High(legends) do
+    begin
+      k := legends[i];
+      if t = 'legendToggleSelect' then
+        TyLegendToggleName(FOption, k, FLegendEntries[k], FLegendSpecs[k].SelectedMode, nm)
+      else if t = 'legendSelect' then
+        TyLegendSelectName(FOption, k, FLegendEntries[k], FLegendSpecs[k].SelectedMode, nm)
+      else if t = 'legendUnSelect' then
+        TyLegendUnSelectName(FOption, k, FLegendSpecs[k].SelectedMode, nm)
+      else if t = 'legendAllSelect' then
+        TyLegendAllSelect(FOption, k, FLegendEntries[k])
+      else
+        TyLegendInverseSelect(FOption, k, FLegendEntries[k]);
+      LegendSelectedMapInto(k, map);
+    end;
+    { EVERY LEGEND IS FORCED TO THE SAME STATUSES -- which writes every name
+      of the map into every legend's `selected`, and re-enforces single
+      mode (legendAction.ts:52-64) }
+    keys := TyJsKeyOrder(map);
+    for k := 0 to High(FLegendSpecs) do
+    begin
+      for i := 0 to High(keys) do
+        if map.Booleans[keys[i]] then
+          TyLegendSelectName(FOption, k, FLegendEntries[k], FLegendSpecs[k].SelectedMode, keys[i])
+        else
+          TyLegendUnSelectName(FOption, k, FLegendSpecs[k].SelectedMode, keys[i]);
+      LegendSelectedMapInto(k, all_);
+    end;
+    { the update runs before the event is published }
+    FullUpdate;
+    if isAll then
+    begin
+      idx := '';
+      for i := 0 to High(legends) do
+      begin
+        if i > 0 then idx := idx + ',';
+        idx := idx + IntToStr(legends[i]);
+      end;
+      EmitPayloadEvent(ev, '{"selected":' + JsMapJson(all_) + ',"legendIndex":['
+        + idx + '],"type":"' + ev + '"}');
+    end
+    else if nameJson <> '' then
+      EmitPayloadEvent(ev, '{"name":' + nameJson + ',"selected":' + JsMapJson(all_)
+        + ',"type":"' + ev + '"}')
+    else
+      EmitPayloadEvent(ev, '{"selected":' + JsMapJson(all_) + ',"type":"' + ev + '"}');
+  finally
+    map.Free;
+    all_.Free;
+  end;
+end;
+
+{ every raw series whose legendHoverLink is falsy: the option's value, else
+  the type's default -- true where a type's defaultOption says so, undefined
+  (falsy) elsewhere (a heatmap, a sunburst, a treemap, a tree, a sankey) }
+function TTyAdvanceChart.LegendExcludeIds: string;
+const
+  cLinked: array[0..14] of string = ('bar', 'pictorialBar', 'line', 'scatter',
+    'effectScatter', 'pie', 'funnel', 'gauge', 'graph', 'radar', 'candlestick',
+    'boxplot', 'lines', 'custom', 'chord');
+var
+  i, k: Integer;
+  n, d: TJSONData;
+  linked: Boolean;
+  tp: string;
+begin
+  Result := '[';
+  for i := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    n := FOption.ComponentAt('series', i);
+    d := nil;
+    tp := '';
+    if n is TJSONObject then
+    begin
+      d := TJSONObject(n).Find('legendHoverLink');
+      tp := TJSONObject(n).Get('type', '');
+    end;
+    if (d <> nil) and (d.JSONType <> jtNull) then
+      linked := JsTruthy(d)
+    else
+    begin
+      linked := False;
+      for k := 0 to High(cLinked) do
+        if cLinked[k] = tp then linked := True;
+    end;
+    if linked then Continue;
+    if Result <> '[' then Result := Result + ',';
+    Result := Result + '"' + StringToJSONString(SeriesModelId(i)) + '"';
+  end;
+  Result := Result + ']';
+end;
+
+procedure TTyAdvanceChart.LegendHighDown(const ATarget: TTyChartEventTarget;
+  const AType: string);
+var p: string;
+begin
+  p := '{"type":"' + AType + '","seriesName":';
+  if ATarget.HdLegendSeries then
+    p := p + '"' + StringToJSONString(ATarget.HdName) + '","name":null'
+  else
+    p := p + 'null,"name":"' + StringToJSONString(ATarget.HdName) + '"';
+  DispatchAction(p + ',"excludeSeriesId":' + LegendExcludeIds + '}');
+end;
+
+procedure TTyAdvanceChart.LegendClick(const ATarget: TTyChartEventTarget);
+begin
+  { downplay before unselect, highlight after select (LegendView.ts:709-724) }
+  LegendHighDown(ATarget, 'downplay');
+  DispatchAction('{"type":"legendToggleSelect","name":"'
+    + StringToJSONString(ATarget.HdName) + '"}');
+  LegendHighDown(ATarget, 'highlight');
+end;
+
+function TTyAdvanceChart.TargetOfElement(AIndex: Integer): TTyChartEventTarget;
+var d: TTyChartDatumRef;
+begin
+  d := FPaintList.Element(AIndex).Datum;
+  Result := SeriesEventTarget(d, AIndex);
+  Result.HdSeries := d.SeriesIndex;
+  Result.HdRow := d.DataIndex;
+  Result.HdEdge := d.IsEdge;
+  if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
+end;
+
+procedure TTyAdvanceChart.FullUpdate;
+var
+  m: ITyTextMeasurer;
+  hk, hs, hraw, slot, inner: Integer;
+begin
+  { nothing laid out yet: the first paint does it all }
+  if (FLastPPI <= 0) or (FBuild = nil) then
+  begin
+    FDirty := True;
+    Invalidate;
+    Exit;
+  end;
+  { THE HOVERED ELEMENT, by series and RAW row: a reused element keeps being
+    the hovered one, whatever index the new list gives it }
+  hk := FEvHover.HdKind;
+  hs := FEvHover.HdSeries;
+  hraw := -1;
+  if (FEvHover.Id > 0) and (hk = 1) then hraw := StInnerRaw(hs, FEvHover.HdRow);
+  m := NewTextMeasurer(FLastPPI);
+  { renderSeries: clearStates, render, the previous states, then the flags
+    (the generation Relayout moves) }
+  Relayout(nil, FLastRect, FLastPPI, m);
+  BuildSeriesList(m, FLastPPI);
+  if FEvHover.Id > 0 then
+  begin
+    if (hk = 1) and (hraw >= 0) and (hs <= High(FSt)) and (FSt[hs].Kind <> sskNone)
+      and (hraw <= High(FSt[hs].HostIdx)) and (FSt[hs].HostIdx[hraw] >= 0) then
+    begin
+      FEvHover := TargetOfElement(FSt[hs].HostIdx[hraw]);
+      slot := SlotOfSeries(hs);
+      inner := FStores[slot].IndexOfRawIndex(hraw);
+      FEvHover.HdRow := inner;
+    end
+    else if (hk = 2) and (hs <= High(FSt)) and (FSt[hs].Kind <> sskNone)
+      and (Length(FSt[hs].RunIdx) > 0) then
+      FEvHover := TargetOfElement(FSt[hs].RunIdx[0])
+    else
+      { REMOVED BY THE RE-RENDER -- a legend item always is: zrender finds
+        the hovered target again at the point it was found (#6198), with no
+        out and no over }
+      FEvHover := EventTargetAt(FEvLastX, FEvLastY);
+  end;
+  FTipDatum := TyChartNoDatum;
+  FTipElement := -1;
+  { the cached picture is the old render's; the list is the new one's }
+  if FStatic <> nil then FStatic.Drop;
+  inherited Invalidate;
+end;
+
+procedure TTyAdvanceChart.LegendBorderOf(ASlot, ARaw: Integer;
+  var ASrc: TTyLegendSource);
+var
+  s, k: Integer;
+  t: string;
+  nodes: array[0..1] of TJSONObject;
+  st, d: TJSONData;
+  col: TTyChartColor;
+begin
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  s := FBindings[ASlot].SeriesIndex;
+  t := FBindings[ASlot].SeriesType;
+  ASrc.HasStroke := False;
+  ASrc.Stroke := 0;
+  ASrc.VisualLineWidth := 0;
+  { the types' own defaults: a pie's borderWidth 1 (no colour), a funnel's
+    1 in the chart's ground colour (tokens.color.neutral00) }
+  if t = TyPieSeriesTypeName then ASrc.VisualLineWidth := 1
+  else if t = TyFunnelSeriesTypeName then
+  begin
+    ASrc.VisualLineWidth := 1;
+    ASrc.HasStroke := True;
+    ASrc.Stroke := TTyChartColor(ActiveController.Model.ResolveStyle(
+      GetStyleTypeKey, StyleClass, [tysNormal]).Background.Color);
+  end;
+  { the series' itemStyle, then the datum's }
+  nodes[0] := StSeriesNode(s);
+  nodes[1] := nil;
+  if ARaw >= 0 then nodes[1] := StItemNode(s, ARaw);
+  for k := 0 to 1 do
+  begin
+    if nodes[k] = nil then Continue;
+    st := nodes[k].Find('itemStyle');
+    if not (st is TJSONObject) then Continue;
+    d := TJSONObject(st).Find('borderColor');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      if TyTryParseChartColor(d.AsString, col) then
+      begin
+        ASrc.HasStroke := True;
+        ASrc.Stroke := col;
+      end
+      else
+        ASrc.HasStroke := False;
+    end;
+    d := TJSONObject(st).Find('borderWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) then ASrc.VisualLineWidth := d.AsFloat;
+  end;
 end;
 
 function TTyAdvanceChart.ItemStates(ASeriesIndex, ADataIndex: Integer;

@@ -29,6 +29,11 @@ unit tyControls.AdvChart.Legend;
     [Stale since the tooltip batches: the paint list IS hit-tested now --
     HitTestAt serves the tooltip and the hover. The click itself is still not
     here, and the rest of this paragraph stands.]
+    [Batch 93: the click, the hover and the five legend actions are here --
+    LegendModel's select / unSelect / toggleSelected / allSelect /
+    inverseSelect on the option's own `selected` map (the model keeps its
+    state in its option, and so does this port), and the control runs the
+    full update after each.]
 
     What IS here is everything decided before anyone clicks: `legend.selected`,
     the `selectedMode: 'single'` resolution that upstream performs AT LOAD, the
@@ -63,6 +68,10 @@ unit tyControls.AdvChart.Legend;
     a visualMap's included, are read from the option now; the legend reads
     whether it has a `backgroundColor`. Its own text, inactive and swatch
     colours are still the theme's.]
+    [Batch 83 reads `textStyle.color`; batch 93 `inactiveColor`,
+    `inactiveBorderColor`, `inactiveBorderWidth` and the rule's
+    `lineStyle.inactiveColor` / `inactiveWidth`, over the theme's inactive
+    ink, and the series' own border on the icon.]
 
   THE FILTER, and where it lives. `TyLegendHides` is the whole rule this unit
   contributes; the control applies it, because what a switched-off name MEANS
@@ -170,6 +179,13 @@ type
       visualMap's. HasOpacity False is opaque. }
     HasOpacity: Boolean;
     Opacity: Double;
+    { THE SERIES' (or the datum's) OWN BORDER, its style visual: the stroke
+      `itemStyle.stroke: 'inherit'` takes and the width
+      `borderWidth: 'auto'` asks about -- a pie's is 1 by default and has no
+      colour, a bar's none at all. LOGICAL px. [Batch 93] }
+    HasStroke: Boolean;
+    Stroke: TTyChartColor;
+    VisualLineWidth: Double;
   end;
   TTyLegendSourceArray = array of TTyLegendSource;
 
@@ -197,6 +213,11 @@ type
     { `legend.z`, so the legend sorts against the series in the one paint
       list. Default 4. }
     Z: Integer;
+    { `inactiveBorderWidth: 'auto'`, the default and the ONLY value upstream
+      resolves: any other value -- a number included -- leaves an unselected
+      icon the width its selected self had (LegendView.ts:668-670)
+      [Batch 93] }
+    InactiveBorderAuto: Boolean;
   end;
 
   { One placed item. Everything is DEVICE px and absolute. }
@@ -224,6 +245,15 @@ type
     { the datum's opacity on its swatch }
     HasOpacity: Boolean;
     Opacity: Double;
+    { THE ICON'S PEN, getLegendStyle's (LegendView.ts:599-681) for this
+      item's state: selected, the series' stroke at 2 when the series has a
+      border and 0 when not; unselected, inactiveBorderColor -- at 2 only
+      when the series has a border AND a stroke (`'auto'`), else at the
+      selected width. HasStroke is the series' stroke; IconPen LOGICAL px,
+      0 no pen. [Batch 93] }
+    HasStroke: Boolean;
+    Stroke: TTyChartColor;
+    IconPen: Double;
   end;
   TTyLegendItemArray = array of TTyLegendItem;
 
@@ -247,6 +277,13 @@ type
     { The hole in an `empty` icon: the chart's own ground, so the ring reads as
       a hole rather than as a white dot on a dark skin. }
     EmptyFill: TTyChartColor;
+    { AN UNSELECTED ITEM'S PEN AND RULE: `inactiveBorderColor`, and the line
+      series' rule's `lineStyle.inactiveColor` / `inactiveWidth` -- the
+      theme's inactive ink and 2 unless the author wrote them. A width of 0
+      keeps the selected rule's width. [Batch 93] }
+    InactiveBorder: TTyChartColor;
+    LineInactive: TTyChartColor;
+    LineInactiveWidth: Double;
   end;
 
 { How many legends the option carries. An object counts as one. }
@@ -340,6 +377,48 @@ function TyLegendNameSelected(AOption: TTyChartOption; AIndex: Integer;
   const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
   const AAvailable: array of string; const AName: string): Boolean;
 
+{ ==== THE SELECTION AFTER LOAD, LegendModel.ts:388-440 [Batch 93] ====
+
+  THE MODEL KEEPS ITS STATE IN ITS OPTION: `init` makes `option.selected`
+  when it is missing, every action writes into it, and `isSelected` reads
+  it. So does this port -- these work on the `selected` object of the
+  legend's own node in the option tree (the control's Option text is left as
+  the host wrote it), and everything above that reads `selected` reads what
+  the actions wrote. }
+
+{ `option.selected ||= {}`: the map, made when missing (and when what is
+  there is not an object). nil when the legend itself is not an object. }
+function TyLegendSelectedNode(AOption: TTyChartOption; AIndex: Integer): TJSONObject;
+{ isSelected: not switched off in the map (any falsy value is off), and a
+  name the chart offers. }
+function TyLegendIsSelected(AOption: TTyChartOption; AIndex: Integer;
+  const AAvailable: array of string; const AName: string): Boolean;
+{ select: in single mode every item of the legend's data goes false first --
+  line breaks included, they are items upstream. }
+procedure TyLegendSelectName(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; AMode: TTyLegendSelectedMode;
+  const AName: string);
+{ unSelect: a no-op in single mode. }
+procedure TyLegendUnSelectName(AOption: TTyChartOption; AIndex: Integer;
+  AMode: TTyLegendSelectedMode; const AName: string);
+{ toggleSelected: an absent name counts as selected. }
+procedure TyLegendToggleName(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; AMode: TTyLegendSelectedMode;
+  const AName: string);
+procedure TyLegendAllSelect(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray);
+procedure TyLegendInverseSelect(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray);
+{ optionUpdated in single mode: the first selected item is selected (the
+  others go false), or the first item when none is. }
+procedure TyLegendResolveSingle(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; const AAvailable: array of string);
+{ An object's keys in JavaScript's own order: integer-like keys ascending,
+  then the rest in insertion order. }
+function TyJsKeyOrder(AObj: TJSONObject): TTyLegendNames;
+{ The legend's `selected` map as JSON, in that order; '{}' when it has none. }
+function TyLegendSelectedJson(AOption: TTyChartOption; AIndex: Integer): string;
+
 { `{name}`, replaced once. An empty formatter answers the name unchanged. }
 function TyLegendText(const AFormatter, AName: string): string;
 
@@ -385,7 +464,8 @@ function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
 
 implementation
 
-uses tyControls.AdvChart.Handlers, tyControls.AdvChart.RichStyle;
+uses tyControls.AdvChart.Handlers, tyControls.AdvChart.RichStyle,
+  tyControls.AdvChart.States;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -487,6 +567,7 @@ begin
   Result.BorderWidth := 0;
   Result.BorderRadii := TyCornerRadii([]);
   Result.Z := cDefaultZ;
+  Result.InactiveBorderAuto := True;
 end;
 
 procedure ReadPadding(ANode: TJSONObject; var APadding: array of Double);
@@ -588,6 +669,10 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then
     Result.BorderRadii := TyCornerRadii([d.AsFloat]);
   Result.Z := TyRoundOpt(NumIn(node, 'z', cDefaultZ), cDefaultZ);
+  { anything written but 'auto' (null falls back to the default) }
+  d := node.Find('inactiveBorderWidth');
+  Result.InactiveBorderAuto := (d = nil) or (d.JSONType = jtNull)
+    or ((d.JSONType = jtString) and (d.AsString = 'auto'));
 end;
 
 { ==================== entries ==================== }
@@ -872,6 +957,203 @@ begin
     if AAvailable[i] = AName then Exit(True);
 end;
 
+{ ==================== the selection after load [Batch 93] ==================== }
+
+{ JavaScript's falsy, for a value in the map }
+function JsFalsy(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(True);
+  case AData.JSONType of
+    jtBoolean: Result := not AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat = 0) or IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString = '';
+    jtNull: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+function TyLegendSelectedNode(AOption: TTyChartOption; AIndex: Integer): TJSONObject;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  k: Integer;
+begin
+  Result := nil;
+  if AOption = nil then Exit;
+  node := ObjOf(AOption.ComponentAt('legend', AIndex));
+  if node = nil then Exit;
+  d := node.Find('selected');
+  if d is TJSONObject then Exit(TJSONObject(d));
+  k := node.IndexOfName('selected');
+  if k >= 0 then node.Delete(k);
+  Result := TJSONObject.Create;
+  node.Add('selected', Result);
+end;
+
+function TyLegendIsSelected(AOption: TTyChartOption; AIndex: Integer;
+  const AAvailable: array of string; const AName: string): Boolean;
+var
+  sel: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+begin
+  sel := TyLegendSelectedNode(AOption, AIndex);
+  if sel <> nil then
+  begin
+    d := sel.Find(AName);
+    if (d <> nil) and JsFalsy(d) then Exit(False);
+  end;
+  Result := False;
+  for i := 0 to High(AAvailable) do
+    if AAvailable[i] = AName then Exit(True);
+end;
+
+procedure TyLegendSelectName(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; AMode: TTyLegendSelectedMode;
+  const AName: string);
+var
+  sel: TJSONObject;
+  i: Integer;
+begin
+  sel := TyLegendSelectedNode(AOption, AIndex);
+  if sel = nil then Exit;
+  if AMode = tlsSingle then
+    for i := 0 to High(AEntries) do sel.Booleans[AEntries[i].Name] := False;
+  sel.Booleans[AName] := True;
+end;
+
+procedure TyLegendUnSelectName(AOption: TTyChartOption; AIndex: Integer;
+  AMode: TTyLegendSelectedMode; const AName: string);
+var sel: TJSONObject;
+begin
+  if AMode = tlsSingle then Exit;
+  sel := TyLegendSelectedNode(AOption, AIndex);
+  if sel = nil then Exit;
+  sel.Booleans[AName] := False;
+end;
+
+procedure TyLegendToggleName(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; AMode: TTyLegendSelectedMode;
+  const AName: string);
+var sel: TJSONObject;
+begin
+  sel := TyLegendSelectedNode(AOption, AIndex);
+  if sel = nil then Exit;
+  if sel.IndexOfName(AName) < 0 then sel.Booleans[AName] := True;
+  if JsFalsy(sel.Find(AName)) then
+    TyLegendSelectName(AOption, AIndex, AEntries, AMode, AName)
+  else
+    TyLegendUnSelectName(AOption, AIndex, AMode, AName);
+end;
+
+procedure TyLegendAllSelect(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray);
+var
+  sel: TJSONObject;
+  i: Integer;
+begin
+  sel := TyLegendSelectedNode(AOption, AIndex);
+  if sel = nil then Exit;
+  for i := 0 to High(AEntries) do sel.Booleans[AEntries[i].Name] := True;
+end;
+
+procedure TyLegendInverseSelect(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray);
+var
+  sel: TJSONObject;
+  i: Integer;
+  on_: Boolean;
+begin
+  sel := TyLegendSelectedNode(AOption, AIndex);
+  if sel = nil then Exit;
+  for i := 0 to High(AEntries) do
+  begin
+    { initially the default is true }
+    if sel.IndexOfName(AEntries[i].Name) < 0 then on_ := True
+    else on_ := not JsFalsy(sel.Find(AEntries[i].Name));
+    sel.Booleans[AEntries[i].Name] := not on_;
+  end;
+end;
+
+procedure TyLegendResolveSingle(AOption: TTyChartOption; AIndex: Integer;
+  const AEntries: TTyLegendEntryArray; const AAvailable: array of string);
+var i: Integer;
+begin
+  if Length(AEntries) = 0 then Exit;
+  for i := 0 to High(AEntries) do
+    if TyLegendIsSelected(AOption, AIndex, AAvailable, AEntries[i].Name) then
+    begin
+      TyLegendSelectName(AOption, AIndex, AEntries, tlsSingle, AEntries[i].Name);
+      Exit;
+    end;
+  TyLegendSelectName(AOption, AIndex, AEntries, tlsSingle, AEntries[0].Name);
+end;
+
+function TyJsKeyOrder(AObj: TJSONObject): TTyLegendNames;
+var
+  i, j, n: Integer;
+  idx: array of QWord;
+  t: string;
+  v: QWord;
+begin
+  Result := nil;
+  if AObj = nil then Exit;
+  SetLength(Result, AObj.Count);
+  n := 0;
+  idx := nil;
+  { the index keys first, ascending by value (an insertion sort) }
+  for i := 0 to AObj.Count - 1 do
+  begin
+    t := AObj.Names[i];
+    if not TyJsIsIndexKey(t) then Continue;
+    v := StrToQWord(t);
+    SetLength(idx, n + 1);
+    j := n;
+    while (j > 0) and (idx[j - 1] > v) do
+    begin
+      idx[j] := idx[j - 1];
+      Result[j] := Result[j - 1];
+      Dec(j);
+    end;
+    idx[j] := v;
+    Result[j] := t;
+    Inc(n);
+  end;
+  for i := 0 to AObj.Count - 1 do
+  begin
+    t := AObj.Names[i];
+    if TyJsIsIndexKey(t) then Continue;
+    Result[n] := t;
+    Inc(n);
+  end;
+end;
+
+function TyLegendSelectedJson(AOption: TTyChartOption; AIndex: Integer): string;
+var
+  node, sel: TJSONObject;
+  d: TJSONData;
+  keys: TTyLegendNames;
+  i: Integer;
+begin
+  Result := '{}';
+  if AOption = nil then Exit;
+  node := ObjOf(AOption.ComponentAt('legend', AIndex));
+  if node = nil then Exit;
+  d := node.Find('selected');
+  if not (d is TJSONObject) then Exit;
+  sel := TJSONObject(d);
+  keys := TyJsKeyOrder(sel);
+  Result := '{';
+  for i := 0 to High(keys) do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + '"' + StringToJSONString(keys[i]) + '":'
+      + sel.Find(keys[i]).AsJSON;
+  end;
+  Result := Result + '}';
+end;
+
 function TyLegendText(const AFormatter, AName: string): string;
 var
   p: Integer;
@@ -951,7 +1233,7 @@ end;
   ARulePx is the line series' rule, 0 when there is none; APenPx is the pen a
   ring or a bare stroke is drawn with, which is never 0. Both DEVICE px. }
 function IconExtent(const AIcon: string; AOwn: Boolean;
-  AIconW, AIconH, ARulePx, APenPx: Double): TTyRectF;
+  AIconW, AIconH, ARulePx, APenPx: Double; AStrokePx: Double = 0): TTyRectF;
 var
   spec: TTySymbolSpec;
   empty: Boolean;
@@ -1004,6 +1286,14 @@ begin
   if empty or (kind = tsyLine) then
   begin
     grow := StrokeGrow(APenPx);
+    Result := TyRectF(Result.Left - grow, Result.Top - grow,
+                      Result.Right + grow, Result.Bottom + grow);
+  end
+  else if AStrokePx > 0 then
+  begin
+    { [Batch 93] A SERIES WITH A BORDER gives its icon a pen, and the icon
+      has a fill: half the pen, Path.ts:360-384 }
+    grow := StrokeGrow(AStrokePx);
     Result := TyRectF(Result.Left - grow, Result.Top - grow,
                       Result.Right + grow, Result.Bottom + grow);
   end;
@@ -1224,13 +1514,31 @@ begin
       it is the one rule here that needs to know whether the SERIES draws a
       line, and this unit does not. Zero means no rule. }
     it.LineWidthLogical := src.LineWidthLogical;
+    { THE ICON'S PEN [Batch 93]: `borderWidth: 'auto'` is 2 for a series
+      with a border; unselected, inactiveBorderWidth 'auto' asks for the
+      series' stroke too, and any other value keeps the selected width }
+    it.HasStroke := src.HasStroke;
+    it.Stroke := src.Stroke;
+    if src.VisualLineWidth > 0 then it.IconPen := 2 else it.IconPen := 0;
+    if (not it.Selected) and ASpec.InactiveBorderAuto then
+    begin
+      if (src.VisualLineWidth > 0) and src.HasStroke then it.IconPen := 2
+      else it.IconPen := 0;
+    end;
     it.Text := TyLegendText(ASpec.Formatter, it.Name);
 
     AMeasurer.MeasureLine(it.Text, AFont.Name, AFont.SizeLogical,
       AFont.Weight, it.TextW, it.TextH);
 
-    iconR := IconExtent(it.Icon, it.OwnIcon, iw, ih,
-      it.LineWidthLogical * scale, RingPen(it.LineWidthLogical) * scale);
+    { stroked: unselected always has inactiveBorderColor, selected only the
+      series' stroke }
+    if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then
+      iconR := IconExtent(it.Icon, it.OwnIcon, iw, ih,
+        it.LineWidthLogical * scale, RingPen(it.LineWidthLogical) * scale,
+        it.IconPen * scale)
+    else
+      iconR := IconExtent(it.Icon, it.OwnIcon, iw, ih,
+        it.LineWidthLogical * scale, RingPen(it.LineWidthLogical) * scale);
 
     { THE WORDS HANG OFF THE ICON'S FAR EDGE, and off its NEAR edge when the
       legend is right-aligned -- where the anchor goes NEGATIVE and the item's
@@ -1381,6 +1689,14 @@ var
     begin
       Result.Style.HasFill := True;
       Result.Style.FillColor := colour;
+      { THE PEN [Batch 93]: the series' stroke while selected,
+        inactiveBorderColor while not -- the width resolved by the layout }
+      if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then
+      begin
+        if it.Selected then Result.Style.StrokeColor := it.Stroke
+        else Result.Style.StrokeColor := AInk.InactiveBorder;
+        Result.Style.StrokeWidthLogical := it.IconPen;
+      end;
     end;
   end;
 
@@ -1423,7 +1739,11 @@ begin
     begin
       el := Blank;
       el.Shape := TyShapeRect(it.Bounds);
-      el.Silent := False;
+      { `hitRect.silent = !selectMode` (LegendView.ts:506): selectedMode
+        false takes the pointer away -- no hover link, no click, and no
+        legend mouse event either, its children being silent already
+        [Batch 93] }
+      el.Silent := ASpec.SelectedMode = tlsOff;
       el.Datum := TyChartComponentDatum(ctkLegend, ALegendIndex, i);
       AList.Add(el);
       Inc(Result);
@@ -1454,7 +1774,12 @@ begin
         if it.Selected then
           el.Style.StrokeColor := it.LineColour
         else
-          el.Style.StrokeColor := AInk.Inactive;
+        begin
+          { `lineStyle.inactiveColor` / `inactiveWidth` [Batch 93] }
+          el.Style.StrokeColor := AInk.LineInactive;
+          if AInk.LineInactiveWidth > 0 then
+            el.Style.StrokeWidthLogical := AInk.LineInactiveWidth;
+        end;
         AList.Add(el);
         Inc(Result);
       end;

@@ -31,7 +31,10 @@ unit test.advchart.select;
   to 1e-9 (an offset added to a centre is not always the offset again).
 
   The highlight / blur and legend cases of the same fixture are B2's and
-  B3's. }
+  B3's. [Batch 93: the harness compares what a legend case adds too -- a
+  series the legend switched off has no element and no selected indices,
+  and the legend's `selected` map (key order too) and its items' drawn
+  colours, pen and opacity.] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -40,7 +43,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Shape,
      tyControls.AdvChart.Handlers, tyControls.AdvChart.Events,
      tyControls.AdvChart.Style, tyControls.AdvChart.Color,
-     tyControls.AdvChart.States,
+     tyControls.AdvChart.States, tyControls.AdvChart.Legend,
      tyControls.AdvChart.Measure, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -78,6 +81,10 @@ type
     FLogger: TSelLogger;
     FBad, FCompared, FCases: Integer;
     FReport, FWhere: string;
+    { the option of the case running; whether the step ran a legend action
+      (a full update) }
+    FCaseOption: TJSONObject;
+    FRerendered: Boolean;
     { the init step's elements where nothing was applied, by series and
       inner row; a pie's centre }
     FRestHost, FRestGuide: array of array of TTyChartElement;
@@ -92,6 +99,10 @@ type
     procedure CompareState(AState: TJSONObject; AInit: Boolean);
     procedure CompareItem(ASeries: Integer; AItem: TJSONObject; AInit: Boolean);
     procedure ComparePoly(ASeries: Integer; APoly: TJSONObject);
+    { [Batch 93] a series switched off: nothing of it drawn or recorded }
+    procedure CompareHidden(ASeries: Integer);
+    { [Batch 93] legend 0: its map and its items as drawn }
+    procedure CompareLegend(ALegend: TJSONObject);
     function HostOf(ASeries, ARow: Integer; out AEl: TTyChartElement): Boolean;
     function LabelOf(ASeries, ARow: Integer; out AEl: TTyChartElement): Boolean;
     function GuideOf(ASeries, ARow: Integer; out AEl: TTyChartElement): Boolean;
@@ -312,10 +323,13 @@ end;
 
 procedure TAdvChartSelectHarness.NewChart(AOption: TJSONObject);
 const
-  cTypes: array[0..12] of string = ('select', 'unselect', 'toggleselect',
+  cTypes: array[0..17] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
-    'pieunselected', 'click');
+    'pieunselected', 'click',
+    { the legend's [Batch 93] }
+    'legendselectchanged', 'legendselected', 'legendunselected',
+    'legendselectall', 'legendinverseselect');
 var i: Integer;
 begin
   FChart.Free;
@@ -769,6 +783,146 @@ begin
     Bad(what + Format('drawn opacity %g', [el.Style.Alpha]));
 end;
 
+procedure TAdvChartSelectHarness.CompareHidden(ASeries: Integer);
+var
+  k: Integer;
+  l: TTyPaintList;
+  st: TTyStItem;
+begin
+  l := FChart.List;
+  if l <> nil then
+    for k := 0 to l.Count - 1 do
+      if (l.Element(k).Datum.Kind = ctkSeries)
+        and (l.Element(k).Datum.SeriesIndex = ASeries) then
+      begin
+        Bad(Format('s%d is switched off upstream and drawn here', [ASeries]));
+        Exit;
+      end;
+  if FChart.ItemStates(ASeries, 0, st) then
+    Bad(Format('s%d is switched off upstream and has a state record here', [ASeries]));
+end;
+
+{ the port's colour for a legend colour upstream drew: its two defaults are
+  the skin's (textStyle.color #54555a, the disabled token #cfd2d7), a
+  selected icon's fill is the series' colour (the port's own), anything else
+  is an author's and compared exactly }
+procedure TAdvChartSelectHarness.CompareLegend(ALegend: TJSONObject);
+var
+  got, d: TJSONData;
+  items: TJSONArray;
+  lay: TTyLegendLayout;
+  i, k, p: Integer;
+  it, icon: TJSONObject;
+  l: TTyPaintList;
+  el, iconEl, textEl: TTyChartElement;
+  hasIcon, hasText, fixSel: Boolean;
+  themeText, themeInactive, want: TTyChartColor;
+  what: string;
+
+  function Map(const AFix: string): TTyChartColor;
+  begin
+    if LowerCase(AFix) = '#54555a' then Exit(themeText);
+    if LowerCase(AFix) = '#cfd2d7' then Exit(themeInactive);
+    Result := ColourOf(AFix);
+  end;
+
+begin
+  got := GetJSON(FChart.LegendSelectedText(0));
+  try
+    if not SameJson(ALegend.Find('selected'), got, True) then
+      Bad(Format('legend.selected %s, upstream %s', [got.AsJSON,
+        ALegend.Find('selected').AsJSON]));
+  finally
+    got.Free;
+  end;
+  items := ALegend.Arrays['items'];
+  lay := FChart.LegendLayout(0);
+  if Length(lay.Items) <> items.Count then
+  begin
+    Bad(Format('%d legend items, upstream %d', [Length(lay.Items), items.Count]));
+    Exit;
+  end;
+  themeText := TTyChartColor(FCtl.Model.ResolveStyle('TyAdvChartLegend', '', []).TextColor);
+  themeInactive := TTyChartColor(FCtl.Model.ResolveStyle('TyAdvChartLegendInactive', '',
+    []).TextColor);
+  l := FChart.List;
+  for i := 0 to items.Count - 1 do
+  begin
+    it := items.Objects[i];
+    what := Format('legend item %d ', [i]);
+    if lay.Items[i].Name <> it.Strings['name'] then
+      Bad(what + Format('named %s, upstream %s', [lay.Items[i].Name, it.Strings['name']]));
+    { the item's hit rect, then its icon and its words }
+    hasIcon := False;
+    hasText := False;
+    p := -1;
+    for k := 0 to l.Count - 1 do
+      if (l.Element(k).Datum.Kind = ctkLegend) and (l.Element(k).Datum.DataIndex = i) then
+      begin
+        p := k;
+        Break;
+      end;
+    if p < 0 then
+    begin
+      Bad(what + 'no hit rect');
+      Continue;
+    end;
+    for k := p + 1 to l.Count - 1 do
+    begin
+      el := l.Element(k);
+      if el.Datum.Kind = ctkLegend then Break;
+      if el.Caption.FontSizeLogical > 0 then
+      begin
+        if not hasText then textEl := el;
+        hasText := True;
+      end
+      else if (el.Shape.Kind <> cskPolyline) and not hasIcon then
+      begin
+        iconEl := el;
+        hasIcon := True;
+      end;
+    end;
+    { the words }
+    want := Map(it.Objects['text'].Strings['fill']);
+    if not hasText then Bad(what + 'no words')
+    else if textEl.Caption.Colour <> want then
+      Bad(what + Format('words %s, want %s (upstream %s)', [Hex(textEl.Caption.Colour),
+        Hex(want), it.Objects['text'].Strings['fill']]));
+    { selected: the words' colour is textStyle.color's, not inactiveColor's }
+    d := FCaseOption.FindPath('legend.inactiveColor');
+    if d <> nil then fixSel := it.Objects['text'].Strings['fill'] <> d.AsString
+    else fixSel := LowerCase(it.Objects['text'].Strings['fill']) <> '#cfd2d7';
+    if lay.Items[i].Selected <> fixSel then
+      Bad(what + Format('selected %s, upstream %s', [BoolToStr(lay.Items[i].Selected, True),
+        BoolToStr(fixSel, True)]));
+    { the icon }
+    if not (it.Find('icon') is TJSONObject) then Continue;
+    icon := it.Objects['icon'];
+    if not hasIcon then
+    begin
+      Bad(what + 'no icon');
+      Continue;
+    end;
+    if fixSel then want := lay.Items[i].Colour
+    else want := Map(icon.Strings['fill']);
+    if not iconEl.Style.HasFill or (iconEl.Style.FillColor <> want) then
+      Bad(what + Format('icon fill %s, want %s (upstream %s)', [Hex(iconEl.Style.FillColor),
+        Hex(want), icon.Strings['fill']]));
+    if (icon.Find('stroke') <> nil) and (icon.Floats['lineWidth'] > 0) then
+    begin
+      want := Map(icon.Strings['stroke']);
+      if (iconEl.Style.StrokeColor <> want)
+        or (iconEl.Style.StrokeWidthLogical <> icon.Floats['lineWidth']) then
+        Bad(what + Format('icon pen %s %g, upstream %s %g', [Hex(iconEl.Style.StrokeColor),
+          iconEl.Style.StrokeWidthLogical, icon.Strings['stroke'], icon.Floats['lineWidth']]));
+    end
+    else if iconEl.Style.StrokeWidthLogical > 0 then
+      Bad(what + Format('an icon pen %g where upstream has none', [iconEl.Style.StrokeWidthLogical]));
+    if iconEl.Style.Alpha <> icon.Floats['opacity'] then
+      Bad(what + Format('icon opacity %g, upstream %g', [iconEl.Style.Alpha, icon.Floats['opacity']]));
+  end;
+end;
+
 procedure TAdvChartSelectHarness.CompareState(AState: TJSONObject; AInit: Boolean);
 var
   ser: TJSONArray;
@@ -798,8 +952,14 @@ begin
   begin
     so := ser.Objects[k];
     s := so.Integers['s'];
-    if AInit then
+    if AInit or FRerendered then
     begin
+      { [Batch 93] a legend's full update lays everything out anew: the rest
+        pictures are taken again, from the items that show none of a state }
+      FRestHost[s] := nil;
+      FRestGuide[s] := nil;
+      FRestHas[s] := nil;
+      FRestGuideHas[s] := nil;
       SetLength(FRestHost[s], so.Arrays['items'].Count);
       SetLength(FRestGuide[s], so.Arrays['items'].Count);
       SetLength(FRestHas[s], so.Arrays['items'].Count);
@@ -813,6 +973,13 @@ begin
           so.Find('selectedMap').AsJSON]));
     finally
       got.Free;
+    end;
+    { SWITCHED OFF BY THE LEGEND: no element, and no selected indices to
+      ask for (getAllSelectedIndices walks the shown series) [Batch 93] }
+    if (so.Find('shown') <> nil) and not so.Booleans['shown'] then
+    begin
+      CompareHidden(s);
+      Continue;
     end;
     idx := FChart.SelectedDataIndices(s);
     line := '[';
@@ -832,10 +999,12 @@ begin
     end;
     { the items }
     for i := 0 to so.Arrays['items'].Count - 1 do
-      CompareItem(s, so.Arrays['items'].Objects[i], AInit);
+      CompareItem(s, so.Arrays['items'].Objects[i], AInit or FRerendered);
     if (so.Find('poly') <> nil) and (so.Find('poly').JSONType = jtObject) then
       ComparePoly(s, so.Objects['poly']);
   end;
+  if AState.Find('legend') is TJSONObject then
+    CompareLegend(AState.Objects['legend']);
 end;
 
 procedure TAdvChartSelectHarness.RunCases(const AIds: array of string;
@@ -856,6 +1025,7 @@ begin
       if AIds[k] = cs.Strings['id'] then found := True;
     if not found then Continue;
     Inc(FCases);
+    FCaseOption := cs.Objects['option'];
     NewChart(cs.Objects['option']);
     steps := cs.Arrays['steps'];
     for s := 0 to steps.Count - 1 do
@@ -884,7 +1054,13 @@ begin
           Bad('the pointer is over an item, upstream over none');
       end;
       CompareEvents(st.Arrays['events']);
+      { a legend action re-rendered the chart [Batch 93] }
+      FRerendered := False;
+      for k := 0 to st.Arrays['events'].Count - 1 do
+        if Copy(st.Arrays['events'].Objects[k].Strings['type'], 1, 6) = 'legend' then
+          FRerendered := True;
       CompareState(st.Objects['state'], kind = 'init');
+      FRerendered := False;
     end;
   end;
 end;

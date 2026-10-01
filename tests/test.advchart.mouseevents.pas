@@ -13,8 +13,9 @@ unit test.advchart.mouseevents;
   it does not).
 
   Upstream's published action events (select, selectchanged,
-  legendselectchanged, ...) are left out here: test.advchart.select holds
-  the selection's [Batch 88], the legend's are B3's. }
+  legendselectchanged, ...) are compared too, through a 'pub' handler for
+  each: the selection's since batch 88, the legend's (an item's hover
+  highlight / downplay, its click's legendselectchanged) since batch 93. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -72,17 +73,20 @@ implementation
 { Steps the port cannot follow yet, by case and the step from which on: what
   upstream does to the picture there is a later batch's. }
 const
-  cStopAt: array[0..2] of record Case_: string; Step: Integer; end = (
+  cStopAt: array[0..1] of record Case_: string; Step: Integer; end = (
     { a treemap and a sunburst click drill in: the drilled picture is C6's }
     (Case_: 'treemap-zoom'; Step: 3),
-    (Case_: 'sunburst'; Step: 3),
-    { a legend click toggles the series: B3's }
-    (Case_: 'legend-trigger'; Step: 3)
+    (Case_: 'sunburst'; Step: 3)
+    { [Batch 93: 'legend-trigger' stopped at step 3, the legend click being
+      B3's -- it runs to the end now] }
   );
 
 const
-  cPubTypes: array[0..5] of string = ('select', 'unselect', 'toggleselect',
-    'selectchanged', 'highlight', 'downplay');
+  cPubTypes: array[0..10] of string = ('select', 'unselect', 'toggleselect',
+    'selectchanged', 'highlight', 'downplay',
+    { the legend's [Batch 93] }
+    'legendselectchanged', 'legendselected', 'legendunselected',
+    'legendselectall', 'legendinverseselect');
 
 { ==================== the probe ==================== }
 
@@ -291,8 +295,8 @@ begin
   { THEN 'pub', one plain handler for every event type the chart publishes
     (the oracle's chart._messageCenter types): the selection's are the
     port's since batch 88, so an item click's select / selectchanged are
-    compared here too, across every series type of this fixture. The
-    legend's and the drill-downs' are not emitted yet and filtered below. }
+    compared here too, across every series type of this fixture; the
+    legend's since batch 93. The drill-downs' are not emitted yet. }
   lg := TMeLogger.Create;
   lg.Id := 'pub';
   lg.Log := FLog;
@@ -355,14 +359,9 @@ begin
         evs := st.Arrays['events'];
         for e := 0 to evs.Count - 1 do
           if TyChartEventTypeOf(evs.Objects[e].Strings['type']) <> '' then
-          begin
-            { a legend item's hover highlight / downplay is the legend
-              batch's (B3) }
-            if (Copy(cs.Strings['id'], 1, 6) = 'legend')
-              and ((evs.Objects[e].Strings['type'] = 'highlight')
-                or (evs.Objects[e].Strings['type'] = 'downplay')) then Continue;
+            { [Batch 93: a legend item's hover highlight / downplay was
+              filtered out here as B3's; it is compared now] }
             want.Add(UpstreamLine(evs.Objects[e]));
-          end;
         Inc(FCompared);
         if want.Text <> FLog.Text then
         begin
