@@ -39,7 +39,7 @@ type
   private
     FForm: TForm;
     { The zone of one live control, sized AWidth x AHeight at 96 PPI. }
-    function ZoneOf(AEdit: TTyEdit; AWidth, AHeight: Integer): TRect;
+    function ZoneOf(AEdit: TTyCustomEdit; AWidth, AHeight: Integer): TRect;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -53,7 +53,9 @@ type
 implementation
 
 type
-  TEditAccess = class(TTyEdit)
+  { Cast onto every edit with a trailing widget -- all TTyCustomEdit descendants, none of them a
+    TTyEdit since 4.0. }
+  TEditAccess = class(TTyCustomEdit)
   public
     function Zone(APPI: Integer): TRect;
     function Reserve(APPI: Integer): Integer;
@@ -80,7 +82,7 @@ begin
   FForm.Free;
 end;
 
-function TTrailingZoneTest.ZoneOf(AEdit: TTyEdit; AWidth, AHeight: Integer): TRect;
+function TTrailingZoneTest.ZoneOf(AEdit: TTyCustomEdit; AWidth, AHeight: Integer): TRect;
 begin
   AEdit.Parent := FForm;
   AEdit.Font.PixelsPerInch := 96;
@@ -118,7 +120,7 @@ procedure TTrailingZoneTest.TestEveryTrailingFieldIsFlushRight;
 const
   W = 200;
 var
-  ctls: array of TTyEdit;
+  ctls: array of TTyCustomEdit;
   i: Integer;
   z: TRect;
   bad: string;
