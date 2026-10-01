@@ -27,7 +27,7 @@ uses
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
   tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
   tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
-  tyControls.FloatSpinEdit;
+  tyControls.FloatSpinEdit, tyControls.CheckBox;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -64,6 +64,10 @@ type
     procedure TestThirdUpDown;
     procedure TestUpDownAssociationIsExclusiveAcrossThirdParties;
     procedure TestFloatSpinEditKeepsItsUseThousandsDefault;
+    { Task 6: choice }
+    procedure TestThirdCheckBox;
+    procedure TestThirdRadioButton;
+    procedure TestRadioGroupTakesAThirdPartyMember;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -116,6 +120,18 @@ type
   published
     property Associate;
     property Position;
+  end;
+
+  TThirdCheckBox = class(TTyCustomCheckBox)
+  published
+    property Checked;
+    property Caption;
+  end;
+
+  TThirdRadioButton = class(TTyCustomRadioButton)
+  published
+    property Checked;
+    property GroupIndex;
   end;
 
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
@@ -787,8 +803,86 @@ begin
   AssertFalse('and its constructor agrees', e.UseThousands);
 end;
 
+{ ------------------------------------------------------------------ Task 6: choice }
+
+procedure TTyCustomClassesP1Test.TestThirdCheckBox;
+var
+  third, back: TThirdCheckBox;
+  own: TTyCheckBox;
+  c: TTyCustomCheckBox;
+begin
+  third := TThirdCheckBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdCheckBox, ['Checked', 'Caption']);
+  third.Checked := True;
+  third.Caption := 'Agree';
+  third.AllowGrayed := True;
+  CheckStreamText(third, ['Checked', 'Caption'], 'AllowGrayed');
+  back := TThirdCheckBox.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Checked round-trips', back.Checked);
+  AssertEquals('T-c: Caption round-trips', 'Agree', back.Caption);
+  AssertFalse('T-c: the unpublished AllowGrayed stayed at its default', back.AllowGrayed);
+  own := TTyCheckBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdCheckBox, ['Checked', 'Caption']);
+  AssertTrue('T-e: the mimic is a tab stop, like TTyCheckBox', third.TabStop);
+  { T-v: AllowGrayed is public (TCustomCheckBox); Checked is protected there, as in LCL, which
+    is why the mimic publishes it. }
+  c := third;
+  c.AllowGrayed := False;
+  AssertFalse('T-v: AllowGrayed is public through a TTyCustomCheckBox reference', third.AllowGrayed);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdRadioButton;
+var
+  third, back: TThirdRadioButton;
+  own: TTyRadioButton;
+  c: TTyCustomRadioButton;
+begin
+  third := TThirdRadioButton.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdRadioButton, ['Checked', 'GroupIndex']);
+  third.GroupIndex := 3;
+  third.Checked := True;
+  CheckStreamText(third, ['Checked', 'GroupIndex'], 'Alignment');
+  back := TThirdRadioButton.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Checked round-trips', back.Checked);
+  AssertEquals('T-c: GroupIndex round-trips', 3, back.GroupIndex);
+  own := TTyRadioButton.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdRadioButton, ['Checked', 'GroupIndex']);
+  c := third;
+  c.GroupIndex := 4;
+  AssertEquals('T-v: GroupIndex is public through a TTyCustomRadioButton reference', 4,
+    third.GroupIndex);
+end;
+
+{ S5-1. Same parent, same GroupIndex: checking one radio unchecks the other, whichever of the
+  two is the third party's. }
+procedure TTyCustomClassesP1Test.TestRadioGroupTakesAThirdPartyMember;
+var
+  own: TTyRadioButton;
+  third: TThirdRadioButton;
+begin
+  own := TTyRadioButton.Create(FForm);
+  own.Parent := FForm;
+  own.GroupIndex := 1;
+  third := TThirdRadioButton.Create(FForm);
+  third.Parent := FForm;
+  third.GroupIndex := 1;
+  own.Checked := True;
+  third.Checked := True;
+  AssertFalse('checking the third-party radio unchecks the library''s', own.Checked);
+  own.Checked := True;
+  AssertFalse('and the other way round', third.Checked);
+end;
+
 initialization
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
-    TThirdMaskEdit, TThirdMemo, TThirdUpDown]);
+    TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

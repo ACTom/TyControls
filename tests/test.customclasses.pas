@@ -1101,13 +1101,13 @@ initialization
     'TTyEdit', 'TTyNumericEdit', 'TTyCurrencyEdit', 'TTyMaskEdit', 'TTyURLEdit', 'TTyComboEdit',
     'TTyTrackEdit', 'TTyCalcEdit', 'TTyCalcCurrencyEdit',
     // T5 edits II
-    'TTyCalculator', 'TTyMemo', 'TTySpinEdit', 'TTyFloatSpinEdit', 'TTyUpDown']);
+    'TTyCalculator', 'TTyMemo', 'TTySpinEdit', 'TTyFloatSpinEdit', 'TTyUpDown',
+    // T6 choice
+    'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T6 choice
-    'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented',
     // T7 combo boxes I
     'TTyComboBox', 'TTyMRUComboBox', 'TTyComboBoxEx', 'TTyOfficeComboBox', 'TTyAdvancedComboBox',
     'TTyCheckComboBox',
