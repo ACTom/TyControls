@@ -99,7 +99,7 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 
 | 方法 | 返回 | 说明 |
 |------|------|------|
-| `FindDownButton` | `TTySpeedButton` | 本按钮所在分组当前被按下的那一个；全部弹起时返回 `nil`，`GroupIndex = 0`（未分组）也返回 `nil`。以前只有"释放兄弟"的写侧、没有读侧，每个 app 都得自己写一遍带类型判断的 `Parent.Controls` 扫描。**作用域分歧要说清楚**：本实现只扫**直接父容器**，与 `UnpressSiblings`、与 LCL 的 `UpdateExclusive`（`include/speedbutton.inc:479-491`，`Parent.Broadcast`）一致；LCL 自己的 `FindDownButton` 却扫整个窗体（`include/speedbutton.inc:81-111`），因而可能返回一个它自己的分组逻辑根本不管的按钮。 |
+| `FindDownButton` | `TTyCustomSpeedButton` | 本按钮所在分组当前被按下的那一个；全部弹起时返回 `nil`，`GroupIndex = 0`（未分组）也返回 `nil`。以前只有"释放兄弟"的写侧、没有读侧，每个 app 都得自己写一遍带类型判断的 `Parent.Controls` 扫描。**作用域分歧要说清楚**：本实现只扫**直接父容器**，与 `UnpressSiblings`、与 LCL 的 `UpdateExclusive`（`include/speedbutton.inc:479-491`，`Parent.Broadcast`）一致；LCL 自己的 `FindDownButton` 却扫整个窗体（`include/speedbutton.inc:81-111`），因而可能返回一个它自己的分组逻辑根本不管的按钮。 |
 
 ### 3.3 继承自 [[TTyButton]] 的常用成员
 

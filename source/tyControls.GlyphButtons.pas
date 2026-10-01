@@ -469,8 +469,6 @@ type
     GroupIndex. AllowAllUp lets a click on the already-down button toggle it back
     up (so the whole group can be up). Inherits the resting :selected state via
     Down. }
-  TTySpeedButton = class;   { FindDownButton answers the published class (R7-4) }
-
   TTyCustomSpeedButton = class(TTyGlyphButtonBase)
   private
     FGroupIndex: Integer;
@@ -515,8 +513,12 @@ type
       something Down/Click actually keeps in step.
 
       Self counts -- a group of one still has a pressed member. GroupIndex = 0 means "not
-      grouped", so it answers nil rather than pretending every ungrouped button is a group. }
-    function FindDownButton: TTySpeedButton;
+      grouped", so it answers nil rather than pretending every ungrouped button is a group.
+
+      The result is the custom class, as LCL's is (TCustomSpeedButton, buttons.pp:409): the
+      group takes any speed button, a third party's TTyCustomSpeedButton descendant too, so
+      the pressed member is not necessarily a TTySpeedButton. }
+    function FindDownButton: TTyCustomSpeedButton;
   protected
     { Grouping belongs HERE and not only in Click: `Btn.Down := True` from code is a
       perfectly ordinary way to preselect a radio (restoring a saved toolbar mode, say),
@@ -1214,23 +1216,20 @@ begin
     end;
 end;
 
-function TTyCustomSpeedButton.FindDownButton: TTySpeedButton;
+function TTyCustomSpeedButton.FindDownButton: TTyCustomSpeedButton;
 var
   i: Integer;
   sib: TTyCustomSpeedButton;
 begin
-  { The result keeps the final class's type, as LCL's TPageControl.ActivePage keeps TTabSheet
-    and casts in its getter: every member of the group is laid out as a TTySpeedButton (the
-    final class adds no field), so the cast reads the same object. }
   Result := nil;
   if FGroupIndex <= 0 then Exit;
-  if Down then Exit(TTySpeedButton(Self));
+  if Down then Exit(Self);
   if Parent = nil then Exit;
   for i := 0 to Parent.ControlCount - 1 do
     if Parent.Controls[i] is TTyCustomSpeedButton then
     begin
       sib := TTyCustomSpeedButton(Parent.Controls[i]);
-      if (sib.FGroupIndex = FGroupIndex) and sib.Down then Exit(TTySpeedButton(sib));
+      if (sib.FGroupIndex = FGroupIndex) and sib.Down then Exit(sib);
     end;
 end;
 

@@ -549,6 +549,7 @@ procedure TTyCustomClassesP1Test.TestSpeedButtonGroupTakesAThirdPartyMember;
 var
   own: TTySpeedButton;
   third: TThirdSpeedButton;
+  find: function: TTyCustomSpeedButton of object;
 begin
   own := TTySpeedButton.Create(FForm);
   own.Parent := FForm;
@@ -562,6 +563,16 @@ begin
   own.Down := True;
   AssertFalse('and the other way round', third.Down);
   AssertTrue('FindDownButton sees the group across both', own.FindDownButton = own);
+  { The pressed member may be the third party's, so FindDownButton answers the custom class
+    (LCL: TCustomSpeedButton, buttons.pp:409), never a TTySpeedButton cast of something that
+    is not one. The procedure variable pins the declared result type at compile time: with a
+    TTySpeedButton result this line does not compile. }
+  third.Down := True;
+  find := @own.FindDownButton;
+  AssertTrue('FindDownButton answers the third party''s pressed member',
+    find() = TTyCustomSpeedButton(third));
+  AssertFalse('which is not a TTySpeedButton, and the answer does not pretend it is',
+    find() is TTySpeedButton);
 end;
 
 procedure TTyCustomClassesP1Test.TestThirdButton;
