@@ -462,8 +462,15 @@ begin
       run.Go;
       if not run.WaitDone(10000) then Exit(Fail(AWhy, 'no timeout in 10 s'));
       if run.Outcome.Error <> hekTimeout then Exit(Fail(AWhy, 'not a timeout: ' + Describe(run)));
-      if (run.EndMs < 900) or (run.EndMs > 4000) then
-        Exit(Fail(AWhy, Format('timed out after %d ms (0.9 - 4 s)', [run.EndMs])));
+      { the silence counted from the last byte, where the idle timer starts: a start slowed
+        down by a loaded machine is not part of it. Up to the idle time + 3 s -- the loaded
+        machine again (4.7 s from the start was seen); a transport that does not time out
+        at all is caught by the 10 s wait above, one that waits a default (WinHTTP's 30 s)
+        by this. }
+      if run.FirstDataMs < 0 then Exit(Fail(AWhy, 'the first byte never came: ' + Describe(run)));
+      if (run.EndMs - run.FirstDataMs < 900) or (run.EndMs - run.FirstDataMs > req.IdleTimeoutMs + 3000) then
+        Exit(Fail(AWhy, Format('timed out %d ms after the last byte (0.9 - %d ms)',
+          [run.EndMs - run.FirstDataMs, req.IdleTimeoutMs + 3000])));
       Result := True;
       AWhy := '';
     finally
