@@ -924,6 +924,15 @@ msgstr ""
 msgid "Two %s components carry the id \"%s\"."
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr ""
+
 #: tycontrols.strconsts.rstyoptstatusneedstype
 msgid "write a type first -- what is under here depends on which one"
 msgstr ""

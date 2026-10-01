@@ -18,8 +18,9 @@ unit tyControls.AdvChart.Option;
   MergeOptionText merges into it the way a setOption without notMerge does --
   components and series mapped by id, name and index, objects merged deeply
   (OptionMerge, [Batch 95]). The models' ids and names live beside the tree in
-  Keys: the tree alone cannot say which series a renamed one was. replaceMerge
-  and its index holes are not here yet.
+  Keys: the tree alone cannot say which series a renamed one was. A merge
+  may name main types for replaceMerge, whose unmatched models leave index
+  HOLES -- a null entry in the tree, no model in Keys [Batch 97].
 
   A REJECTED OPTION LEAVES NO OPTION. The tree goes and Error says why, so the
   chart is blank rather than showing something the option no longer says. The
@@ -75,7 +76,17 @@ type
       says what became of every slot; its NewOpt entries point into the
       merged-in option, which is kept until the next set, merge or clear. }
     function MergeOptionText(const AText: string; ABefore: TTyMergeBeforeComponent;
-      out AReport: TTyMergeReport): Boolean;
+      out AReport: TTyMergeReport): Boolean; overload;
+    { the same with AReplaceMerge's main types merged in replaceMerge mode:
+      only an id keeps a model, the rest leave holes [Batch 97] }
+    function MergeOptionText(const AText: string; const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; out AReport: TTyMergeReport): Boolean; overload;
+    { False, with Error saying which, when a name is no component main type
+      -- upstream asserts on it before it touches anything; the option is
+      left as it was. [Batch 97] }
+    function CheckReplaceMerge(const AReplaceMerge: array of string): Boolean;
+    { refuse a setOption for AMsg: the option is left as it was }
+    procedure Refuse(const AMsg: string);
     { THE MODELS: the id, name and subType upstream's model at that index has
       ('' where there is none). }
     function ComponentId(const AMainType: string; AIndex: Integer): string;
@@ -588,6 +599,8 @@ begin
   FreeAndNil(FMerged);
   FRoot := parsed;
   FText := AText;
+  { initBase seeds the series' list: a null entry takes no index [Batch 97] }
+  TyOptionCompactSeries(FRoot);
   { new models: every id made afresh [Batch 95] }
   TyOptionKeysOfTree(FRoot, FKeys);
   ClearError;
@@ -596,11 +609,32 @@ end;
 
 function TTyChartOption.MergeOptionText(const AText: string;
   ABefore: TTyMergeBeforeComponent; out AReport: TTyMergeReport): Boolean;
+begin
+  Result := MergeOptionText(AText, [], ABefore, AReport);
+end;
+
+function TTyChartOption.CheckReplaceMerge(const AReplaceMerge: array of string): Boolean;
+var bad: string;
+begin
+  bad := TyOptionBadReplaceType(AReplaceMerge);
+  Result := bad = '';
+  if not Result then SetError(Format(rsTyOptReplaceMergeBadType, [bad]), 0, 0);
+end;
+
+procedure TTyChartOption.Refuse(const AMsg: string);
+begin
+  SetError(AMsg, 0, 0);
+end;
+
+function TTyChartOption.MergeOptionText(const AText: string;
+  const AReplaceMerge: array of string; ABefore: TTyMergeBeforeComponent;
+  out AReport: TTyMergeReport): Boolean;
 var
   parsed: TJSONData;
   err: string;
 begin
   AReport := Default(TTyMergeReport);
+  if not CheckReplaceMerge(AReplaceMerge) then Exit(False);
   { THE FIRST setOption is an init whatever its flag says }
   if not (FRoot is TJSONObject) then
   begin
@@ -618,8 +652,8 @@ begin
     Exit(False);
   end;
   FMerged := parsed;
-  if not TyOptionMerge(TJSONObject(FRoot), FKeys, TJSONObject(parsed), ABefore,
-    AReport, err) then
+  if not TyOptionMerge(TJSONObject(FRoot), FKeys, TJSONObject(parsed), AReplaceMerge,
+    ABefore, AReport, err) then
   begin
     SetError(err, 0, 0);
     Exit(False);

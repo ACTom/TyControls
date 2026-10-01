@@ -480,7 +480,17 @@ begin
   Result := nil;
   SetLength(Result, ABuild.AxisCount(AMainType));
   for i := 0 to High(Result) do
-    Result[i] := ABuild.Axis(AMainType, i).Id;
+    if ABuild.Axis(AMainType, i) <> nil then Result[i] := ABuild.Axis(AMainType, i).Id
+    else Result[i] := '';
+end;
+
+{ Which axes of a family are index holes [Batch 97] }
+function AxisHoles(ABuild: TTyChartBuild; const AMainType: string): TTyBoolArray;
+var i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, ABuild.AxisCount(AMainType));
+  for i := 0 to High(Result) do Result[i] := ABuild.Axis(AMainType, i) = nil;
 end;
 
 { Each calendar component's `id`, '' where it has none. }
@@ -524,6 +534,14 @@ begin
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
+    { AN INDEX HOLE replaceMerge left: no model, so nothing to say about it
+      either -- the slot stays so the later series keep their indices
+      [Batch 97] }
+    if (node = nil) and (AOption.ComponentAt('series', i) <> nil) then
+    begin
+      Result[i] := b;
+      Continue;
+    end;
     b.SeriesType := StrOf(node, 'type', '');
     if b.SeriesType = '' then
     begin
@@ -633,9 +651,9 @@ begin
       series is not consulted, and the catalog's default for it is 0, so an
       ungated read would find a polar axis every single time. }
     xi := TyResolveComponentRef(node, 'xAxisIndex', 'xAxisId',
-      ABuild.AxisCount('xAxis'), AxisIds(ABuild, 'xAxis'));
+      ABuild.AxisCount('xAxis'), AxisIds(ABuild, 'xAxis'), AxisHoles(ABuild, 'xAxis'));
     yi := TyResolveComponentRef(node, 'yAxisIndex', 'yAxisId',
-      ABuild.AxisCount('yAxis'), AxisIds(ABuild, 'yAxis'));
+      ABuild.AxisCount('yAxis'), AxisIds(ABuild, 'yAxis'), AxisHoles(ABuild, 'yAxis'));
     if (xi < 0) or (yi < 0) then
     begin
       ABuild.Note(Format(rsTyChartSeriesNoAxis, [i]));

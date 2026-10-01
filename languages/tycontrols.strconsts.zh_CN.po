@@ -911,6 +911,15 @@ msgstr "要合并的选项必须是一个对象。"
 msgid "Two %s components carry the id \"%s\"."
 msgstr "有两个 %s 组件用了同一个 id \"%s\"。"
 
+#: tycontrols.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr "replaceMerge 里的 \"%s\" 不是组件主类型。"
+
+#: tycontrols.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr "setOption 的选项必须是一个对象。"
+
 #: tycontrols.strconsts.rstychartaxistypeunknown
 #, object-pascal-format
 msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"

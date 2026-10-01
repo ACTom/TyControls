@@ -42,6 +42,18 @@ outcome instead).
 
 Per case: {id, steps[], compare[]}; steps:
   {kind: 'set', notMerge, text}  chart.setOption(JSON.parse(text), notMerge)
+  {kind: 'set', notMerge, opts, text}
+                                 chart.setOption(JSON.parse(text),
+                                 JSON.parse(opts)) -- the options form (A11:
+                                 replaceMerge, lazyUpdate, silent, notMerge);
+                                 a lazy step runs the frame it waits for
+                                 (chart._onframe) before it is recorded --
+                                 unless it says noFrame: then nothing is
+                                 drawn and only tree, models and the events
+                                 are recorded (out and views null), and the
+                                 next step's update is the one it waits for
+  {kind: 'action', payload, frame}
+                                 frame: a frame runs after the dispatch
   {kind: 'action', payload}      chart.dispatchAction(payload)
 Per step (after it):
   tree    the raw merge, as the port's GetOptionJson must give it: every
@@ -51,8 +63,8 @@ Per step (after it):
   models  {mainType: [null | {id, name, sub}]} for series and every main type
           in tree: the model's id (NULs kept, '\0' + name + '\0' + n), name,
           subType ('' for none)
-  out     {series: [null | {count, shown, fill, sel, bars?, expanded?,
-            centre?, zoom?}],
+  out     {series: [null | {count, shown, fill, sel, bars?, barFills?,
+            expanded?, centre?, zoom?}],
            grids: [{x, y, w, h}], titles: [null | [x, y, w, h]],
            dz: [[start, end]]}
           count = getData().count(); shown = not filtered by the legend; fill
@@ -63,10 +75,20 @@ Per step (after it):
           centre / zoom = a graph's option.center / option.zoom (what a roam
           writes back); grids = coordinateSystem.getRect(); titles = the
           background rect of each title (group position + shape); dz =
-          getPercentRange()
+          getPercentRange() (a third entry: the x axis it zooms, where that is
+          not xAxis 0); barFills = each bar's own style fill
   views   [view number per series]: the n-th distinct series view object
           seen in this case -- the same number across steps is the same view
           (an update), a new number a new view (an entrance)
+  updNow  the `updated` events the call itself triggered (0 for a lazy or a
+          silent setOption)
+  upd     the `updated` events of the whole step, the lazy frame included
+  sel     an action step: the `selected` of every selectchanged it fired
+  (out.legend: per legend slot the names it lists -- getData() over the
+          available names; null in a hole)
+A main type named in a merge's replaceMerge is written (as `[]` when the
+option leaves it out); a notMerge or the first setOption ignores
+replaceMerge, as initBase does.
 Also: mainTypes (getAllClassMainTypes, the component main types), deps
 (main type -> the main types it depends on), subTypes (main types whose
 classes are per subType, with their subtypes).
@@ -185,14 +207,29 @@ function runCase(c) {
   const viewIds = new Map();
   let viewNext = 0;
   const caseStats = { box: 0 };
+  let upd = 0;
+  chart.on('updated', () => { upd++; });
+  let selLog = [];
+  chart.on('selectchanged', (e) => { selLog.push(zr.clone(e.selected)); });
   try {
     for (const st of c.steps) {
       const rec = { step: st };
+      const updBefore = upd;
+      selLog = [];
       if (st.kind === 'set') {
         const opt = JSON.parse(st.text);
-        if (st.notMerge || steps.length === 0) {
+        const opts = st.opts ? JSON.parse(st.opts) : null;
+        const notMerge = !!st.notMerge || !!(opts && opts.notMerge);
+        const fresh = notMerge || steps.length === 0;
+        if (fresh) {
           rootRaw = {};
           written = new Set();
+        }
+        // replaceMerge: a merge visits the named types as `[]` when absent
+        if (!fresh && opts && opts.replaceMerge != null) {
+          for (const t of zr.isArray(opts.replaceMerge) ? opts.replaceMerge : [opts.replaceMerge]) {
+            if (IS_CMPT.has(t)) written.add(t);
+          }
         }
         // the root keys that are no component, as _mergeOption merges them
         for (const k of Object.keys(opt)) {
@@ -205,7 +242,11 @@ function runCase(c) {
           rootRaw[k] = rootRaw[k] == null ? zr.clone(v) : zr.merge(rootRaw[k], zr.clone(v), true);
         }
         HOOK_LOG = [];
-        chart.setOption(opt, !!st.notMerge);
+        if (opts) chart.setOption(opt, opts);
+        else chart.setOption(opt, !!st.notMerge);
+        rec.updNow = upd - updBefore;
+        // the frame a lazy setOption waits for
+        if (opts && opts.lazyUpdate && !st.noFrame) chart._onframe();
         const log = HOOK_LOG;
         HOOK_LOG = null;
         // a box merge: mergeLayoutParam wrote all three keys of a direction
@@ -224,6 +265,20 @@ function runCase(c) {
         }
       } else {
         chart.dispatchAction(st.payload);
+        rec.updNow = upd - updBefore;
+        rec.sel = selLog.slice();
+        if (st.frame) chart._onframe();
+      }
+      rec.upd = upd - updBefore;
+      if (st.noFrame) {
+        // nothing drawn: the update waits for the next step
+        rec.tree = treeOf(chart, rootRaw, written);
+        rec.models = modelsOf(chart, written);
+        rec.out = null;
+        rec.views = null;
+        checkSubset(rec.tree, chart.getOption(), c.id + ' step ' + steps.length);
+        steps.push(rec);
+        continue;
       }
       chart.renderToSVGString();
       rec.tree = treeOf(chart, rootRaw, written);
@@ -293,9 +348,12 @@ function outOf(chart) {
     o.fill = style && typeof style.fill === 'string' ? style.fill : null;
     if (m.subType === 'bar') {
       o.bars = [];
+      o.barFills = [];
       for (let i = 0; i < data.count(); i++) {
         const el = data.getItemGraphicEl(i);
         o.bars.push(el && el.shape ? [el.shape.x, el.shape.y, el.shape.width, el.shape.height] : null);
+        // the bar's own fill: a visualMap colours the items, not the series
+        o.barFills.push(el && el.style && typeof el.style.fill === 'string' ? el.style.fill : null);
       }
     }
     o.sel = (m.getSelectedDataIndices() || []).slice().sort((a, b) => a - b);
@@ -322,8 +380,20 @@ function outOf(chart) {
     if (!bg) return null;
     return [g.x + bg.shape.x, g.y + bg.shape.y, bg.shape.width, bg.shape.height];
   });
-  const dz = (slotsOf(chart, 'dataZoom') || []).map(z => z ? z.getPercentRange() : null);
-  return { series, grids, titles, dz };
+  const dz = (slotsOf(chart, 'dataZoom') || []).map(z => {
+    // a dataZoom whose axes are gone has no window
+    const r = z ? z.getPercentRange() : null;
+    if (!r) return null;
+    // the x axis it zooms first, where that is not xAxis 0
+    let xi = 0;
+    let found = false;
+    z.eachTargetAxis((dim, idx) => { if (!found && dim === 'x') { xi = idx; found = true; } });
+    return xi === 0 ? r : [r[0], r[1], xi];
+  });
+  const legend = (slotsOf(chart, 'legend') || []).map(l => l
+    ? l.getData().map(d => d.get('name')).filter(n => l._availableNames.indexOf(n) >= 0)
+    : null);
+  return { series, grids, titles, dz, legend };
 }
 
 // ---------- guard 1: the raw layer is a subset of getOption ----------
@@ -383,6 +453,12 @@ const S = (o) => JSON.stringify(o);
 const TS = { textStyle: { fontSize: 18, fontWeight: 'bold' }, subtextStyle: { fontSize: 12 } };
 const T = (o) => Object.assign({}, o, TS);
 const set = (o, notMerge) => ({ kind: 'set', notMerge: !!notMerge, text: S(o) });
+// the options form: setOption(option, opts)
+const setO = (o, opts) => ({ kind: 'set', notMerge: !!opts.notMerge, opts: S(opts), text: S(o) });
+const RM = (types) => ({ replaceMerge: types });
+// a lazy setOption whose frame does not come before the next step
+const setLazy = (o, opts) => Object.assign(setO(o, Object.assign({ lazyUpdate: true }, opts)), { noFrame: true });
+const actF = (p) => ({ kind: 'action', payload: p, frame: true });
 const act = (p) => ({ kind: 'action', payload: p });
 const LEGEND3 = bars({
   legend: {},
@@ -390,6 +466,16 @@ const LEGEND3 = bars({
     { type: 'bar', name: 'A', data: [1, 2, 3, 4] },
     { type: 'bar', name: 'B', data: [4, 3, 2, 1] },
     { type: 'bar', name: 'C', data: [2, 2, 2, 2] },
+  ],
+});
+// LEGEND3 with ids written, and a palette: the port's theme has its own
+const LEGEND_ID3 = bars({
+  color: ['#aa0000', '#00aa00', '#0000aa', '#aaaa00', '#00aaaa'],
+  legend: {},
+  series: [
+    { id: 'a', type: 'bar', name: 'A', data: [1, 2, 3, 4] },
+    { id: 'b', type: 'bar', name: 'B', data: [4, 3, 2, 1] },
+    { id: 'c', type: 'bar', name: 'C', data: [2, 2, 2, 2] },
   ],
 });
 const GRAPH = {
@@ -695,6 +781,226 @@ const CASES = [
     set({ series: [{ zoom: 2 }] }),
     set({ series: [{ center: [60, 60] }] }),
   ] },
+  // ======== A11: replaceMerge, index holes, the options form ========
+  { id: 'rm-series-by-id', steps: [
+    set(LEGEND_ID3),
+    setO({ series: [{ id: 'a' }, { id: 'c', data: [3, 3, 3, 3] }] }, RM(['series'])),
+  ], compare: ['fill'], expect: (r) => {
+    const s = r.steps[1];
+    must(s.models.series[1] === null && s.models.series[2].id === 'c', 'rm-series-by-id: b removed, c keeps index 2');
+    must(s.tree.series[1] === null, 'rm-series-by-id: a hole in the tree');
+    must(s.out.series[2].fill === r.steps[0].out.series[1].fill, 'rm-series-by-id: c takes the second colour');
+    must(S(s.out.legend[0]) === S(['A', 'C']), 'rm-series-by-id: the legend lists what is left');
+    must(s.views[2] === r.steps[0].views[2], 'rm-series-by-id: c keeps its view');
+  } },
+  { id: 'rm-series-fill-hole', steps: [
+    set(LEGEND_ID3),
+    setO({ series: [{ id: 'a' }, { id: 'c' }] }, RM(['series'])),
+    set({ series: [{ id: 'd', type: 'bar', name: 'D', data: [1, 3, 1, 3] }] }),
+    set({ series: [{ id: 'e', type: 'bar', name: 'E', data: [2, 1, 2, 1] }] }),
+  ], compare: ['fill'], expect: (r) => {
+    must(r.steps[2].models.series[1].id === 'd', 'rm-series-fill-hole: an id goes to the hole');
+    must(r.steps[3].models.series.length === 4 && r.steps[3].models.series[3].name === 'E',
+      'rm-series-fill-hole: then appended');
+  } },
+  { id: 'rm-series-brand-new', steps: [
+    set(bars({ series: [{ type: 'bar', name: 'A', data: [1, 2, 3, 4] }, { type: 'bar', data: [2, 3, 4, 5] }] })),
+    setO({ series: [{ type: 'bar', name: 'A', data: [4, 3, 2, 1] }] }, RM('series')),
+    set({ series: [{ data: [2, 2, 2, 2] }] }),
+  ], expect: (r) => {
+    must(r.steps[1].models.series[0].id === r.steps[0].models.series[0].id, 'rm-series-brand-new: the same id made again');
+    must(r.steps[1].views[0] !== r.steps[0].views[0], 'rm-series-brand-new: a new view all the same');
+    must(r.steps[2].views[0] === r.steps[1].views[0], 'rm-series-brand-new: once');
+    must(r.steps[1].models.series[1] === null, 'rm-series-brand-new: the second removed');
+  } },
+  { id: 'rm-series-append', steps: [
+    set(bars({ series: [{ id: 'a', type: 'bar', data: [1, 2, 3, 4] }, { id: 'b', type: 'bar', data: [2, 3, 4, 5] }] })),
+    setO({ series: [{ id: 'x', type: 'bar', data: [1, 1, 1, 1] }, { id: 'a' }, { id: 'y', type: 'bar', data: [3, 3, 3, 3] }] }, RM(['series'])),
+  ], expect: (r) => {
+    const m = r.steps[1].models.series;
+    must(m[0].id === 'a' && m[1].id === 'x' && m[2].id === 'y', 'rm-series-append: id first, then the removed slot, then appended');
+  } },
+  { id: 'rm-series-absent', steps: [
+    set(LEGEND_ID3),
+    setO({ title: T({ text: 'no series' }) }, RM(['series'])),
+    set({ series: [{ type: 'line', data: [1, 2, 1, 2] }] }),
+  ], expect: (r) => {
+    must(r.steps[1].models.series.every(m => m === null) && r.steps[1].tree.series.length === 0, 'rm-series-absent: all removed');
+    must(r.steps[2].models.series[0] !== null && r.steps[2].models.series.length === 3, 'rm-series-absent: the first hole filled');
+  } },
+  { id: 'rm-series-last-removed', steps: [
+    set(LEGEND_ID3),
+    setO({ series: [{ id: 'a' }, { id: 'b' }] }, RM(['series'])),
+    set({ series: [{}, { data: [4, 4, 4, 4] }] }),
+  ], expect: (r) => must(r.steps[1].tree.series.length === 2 && r.steps[1].models.series.length === 3,
+    'rm-series-last-removed: a trailing hole is trimmed from the option, not from the models') },
+  { id: 'rm-series-type-by-id', steps: [
+    set(LEGEND_ID3),
+    setO({ series: [{ id: 'b', type: 'line', data: [1, 4, 1, 4] }, { id: 'a' }, { id: 'c' }] }, RM(['series'])),
+  ], expect: (r) => must(r.steps[1].models.series[1].sub === 'line' && r.steps[1].tree.series[1].name === undefined,
+    'rm-series-type-by-id: a new class, the old option dropped') },
+  { id: 'rm-series-mixed-normal', steps: [
+    set(LEGEND_ID3),
+    setO({ xAxis: { data: ['p', 'q', 'r', 's'] }, title: T({ text: 'T' }), series: [{ id: 'c', data: [1, 1, 1, 1] }] }, RM(['series'])),
+    setO({ series: [{ id: 'c' }, { id: 'a', type: 'bar', name: 'A2', data: [2, 2, 2, 2] }] }, RM('series')),
+  ], expect: (r) => {
+    must(r.steps[1].tree.xAxis[0].data[0] === 'p', 'rm-series-mixed-normal: the axis normally merged');
+    must(r.steps[2].models.series[0].id === 'a' && r.steps[2].models.series[2].id === 'c',
+      'rm-series-mixed-normal: a new a fills the first hole');
+  } },
+  { id: 'rm-xaxis', steps: [
+    set({ animation: false,
+      xAxis: [{ id: 'x0', type: 'category', data: ['a', 'b', 'c'] }, { id: 'x1', type: 'category', data: ['p', 'q'], position: 'top' }],
+      yAxis: {},
+      series: [{ id: 's0', type: 'bar', data: [1, 2, 3] }, { id: 's1', type: 'bar', xAxisIndex: 1, data: [5, 6] }] }),
+    setO({ xAxis: [{ id: 'x1' }], series: [{ id: 's1', data: [6, 5] }] }, RM(['xAxis', 'series'])),
+    set({ xAxis: [{ type: 'category', data: ['m', 'n', 'o', 'p'] }], series: [{ type: 'bar', data: [2, 2, 2, 2] }] }),
+  ], expect: (r) => {
+    must(r.steps[1].models.xAxis[0] === null && r.steps[1].models.xAxis[1].id === 'x1', 'rm-xaxis: x0 removed');
+    must(r.steps[2].models.xAxis[0] !== null && r.steps[2].models.series[0] !== null, 'rm-xaxis: holes refilled');
+  } },
+  { id: 'rm-grid', steps: [
+    set({ animation: false,
+      grid: [{ id: 'g0', left: 40, width: 200 }, { id: 'g1', left: 320, width: 200 }],
+      xAxis: [{ id: 'x0', gridIndex: 0, type: 'category', data: ['a', 'b'] }, { id: 'x1', gridIndex: 1, type: 'category', data: ['p', 'q', 'r'] }],
+      yAxis: [{ id: 'y0', gridIndex: 0 }, { id: 'y1', gridIndex: 1 }],
+      series: [{ id: 's0', type: 'bar', data: [1, 2] }, { id: 's1', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: [3, 4, 5] }] }),
+    setO({ grid: [{ id: 'g1' }], xAxis: [{ id: 'x1' }], yAxis: [{ id: 'y1' }], series: [{ id: 's1' }] },
+      RM(['grid', 'xAxis', 'yAxis', 'series'])),
+    set({ grid: [{ left: 40, width: 150 }], xAxis: [{ gridIndex: 0, type: 'category', data: ['m', 'n'] }],
+      yAxis: [{ gridIndex: 0 }], series: [{ type: 'bar', data: [7, 8] }] }),
+  ], expect: (r) => {
+    must(r.steps[1].out.grids[0] === null && r.steps[1].out.grids[1] !== null, 'rm-grid: grid 1 keeps its index');
+    must(r.steps[2].out.grids[0] !== null, 'rm-grid: refilled');
+  } },
+  { id: 'rm-datazoom', steps: [
+    set(Object.assign({}, JSON.parse(S(DZ)), { dataZoom: [{ id: 'z0', type: 'inside', start: 20, end: 60 }] })),
+    act({ type: 'dataZoom', dataZoomIndex: 0, start: 30, end: 50 }),
+    setO({ dataZoom: [{ id: 'z0' }] }, RM(['dataZoom'])),
+    setO({ dataZoom: [{ id: 'z1', type: 'inside', start: 10, end: 30 }] }, RM(['dataZoom'])),
+    set({ dataZoom: [{ end: 40 }] }),
+  ], expect: (r) => {
+    must(r.steps[2].out.dz[0][0] === 30, 'rm-datazoom: the id keeps the model and its window');
+    must(r.steps[3].models.dataZoom[0].id === 'z1' && r.steps[3].out.dz[0][0] === 10, 'rm-datazoom: a new model in the slot');
+  } },
+  { id: 'rm-datazoom-hole-axis', steps: [
+    set({ animation: false,
+      xAxis: [{ id: 'x0', type: 'category', data: ['a', 'b', 'c', 'd'] }, { id: 'x1', type: 'category', data: ['p', 'q'], position: 'top' }],
+      yAxis: {}, dataZoom: [{ type: 'inside', xAxisIndex: 1, start: 0, end: 50 }],
+      series: [{ type: 'bar', data: [1, 2, 3, 4] }] }),
+    setO({ xAxis: [{ id: 'x0' }] }, RM('xAxis')),
+  ], expect: (r) => must(r.steps[1].out.dz[0] === null && r.steps[1].models.dataZoom[0] !== null,
+    'rm-datazoom-hole-axis: the model stays, with no window') },
+  { id: 'rm-title', steps: [
+    set(bars({ title: [T({ id: 't1', text: 'One' }), T({ id: 't2', text: 'Two', top: 40 })], series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    setO({ title: { id: 't2', subtext: 'two' }, series: [{ data: [4, 3, 2, 1] }] }, RM(['title'])),
+    set({ title: T({ text: 'filled', top: 80 }) }),
+  ], expect: (r) => {
+    must(r.steps[1].out.titles[0] === null && r.steps[1].tree.series[0].data[0] === 4, 'rm-title: t1 gone, the series merged');
+    must(r.steps[2].models.title[0].name === 'series\u00000', 'rm-title: the hole filled by index');
+  } },
+  { id: 'rm-legend', steps: [
+    set(LEGEND3),
+    act({ type: 'legendToggleSelect', name: 'B' }),
+    setO({ legend: [] }, RM(['legend'])),
+    set({ legend: {} }),
+  ], expect: (r) => {
+    must(!r.steps[1].out.series[1].shown && r.steps[2].out.series[1].shown, 'rm-legend: a removed legend filters nothing');
+    must(r.steps[2].out.legend[0] === null && r.steps[3].out.legend[0] !== null, 'rm-legend: the hole, then filled');
+  } },
+  { id: 'rm-visualmap', steps: [
+    set(bars({ color: ['#aa0000', '#00aa00'],
+      visualMap: { type: 'continuous', min: 0, max: 10, show: false, inRange: { color: ['#00ff00', '#ff0000'] } },
+      series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    setO({}, RM(['visualMap'])),
+  ], compare: ['fill'] },
+  { id: 'rm-event-index', steps: [
+    set(bars({ series: [{ id: 'q', type: 'bar', selectedMode: 'multiple', data: [1, 2, 3, 4] },
+      { id: 'r', type: 'bar', selectedMode: 'multiple', data: [2, 3, 4, 5] },
+      { id: 's', type: 'bar', name: 'S', selectedMode: 'multiple', data: [3, 4, 5, 6] }] })),
+    setO({ series: [{ id: 'r' }, { id: 's' }] }, RM(['series'])),
+    act({ type: 'select', seriesIndex: 2, dataIndex: 1 }),
+    act({ type: 'select', seriesIndex: 0, dataIndex: 2 }),
+    act({ type: 'select', seriesName: 'S', dataIndex: 3 }),
+    act({ type: 'select', seriesIndex: 1, dataIndex: 0 }),
+  ], expect: (r) => {
+    must(S(r.steps[2].sel) === S([[{ dataIndex: [1], seriesIndex: 2 }]]),
+      'rm-event-index: the index after a hole is the slot ' + S(r.steps[2].sel));
+  } },
+  { id: 'rm-notmerge-compacts', steps: [
+    set(bars({ series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set(bars({ series: [{ type: 'bar', data: [1, 2, 3, 4] }, null, 5, { type: 'line', data: [2, 3, 2, 3] }] }), true),
+    set({ series: [{}, { data: [3, 3, 3, 3] }] }),
+  ], expect: (r) => {
+    must(r.steps[1].models.series.length === 2 && r.steps[1].models.series[1].name === 'series\u00001',
+      'rm-notmerge-compacts: a null takes no index');
+  } },
+  { id: 'rm-init-compacts', steps: [
+    set(bars({ series: [null, { type: 'bar', data: [1, 2, 3, 4] }, null, { type: 'bar', data: [2, 2, 2, 2] }] })),
+  ], expect: (r) => must(r.steps[0].tree.series.length === 2, 'rm-init-compacts') },
+  { id: 'rm-notmerge-ignores', steps: [
+    set(LEGEND_ID3),
+    setO(bars({ series: [{ type: 'bar', data: [1, 2, 3, 4] }, null, { type: 'bar', data: [3, 2, 1, 0] }] }),
+      { notMerge: true, replaceMerge: ['series', 'title'] }),
+  ], expect: (r) => must(r.steps[1].tree.title === undefined && r.steps[1].models.series.length === 2,
+    'rm-notmerge-ignores: replaceMerge is not looked at') },
+  { id: 'rm-first-ignores', steps: [
+    setO(bars({ series: [{ type: 'bar', data: [1, 2, 3, 4] }] }), RM(['series', 'legend'])),
+    setO({ series: [{ type: 'line', data: [4, 3, 2, 1] }] }, RM(['series'])),
+  ], expect: (r) => must(r.steps[0].tree.legend === undefined && r.steps[1].views[0] !== r.steps[0].views[0],
+    'rm-first-ignores: the init ignores it, the next merge does not') },
+  { id: 'opts-silent', steps: [
+    set(LEGEND3),
+    setO({ series: [{ data: [2, 2, 2, 2] }] }, { silent: true }),
+    setO({ series: [{ data: [3, 3, 3, 3] }] }, {}),
+    setO({ series: [{ data: [4, 3, 4, 3] }] }, { silent: false, notMerge: false }),
+  ], expect: (r) => must(r.steps[0].upd === 1 && r.steps[1].upd === 0 && r.steps[2].upd === 1, 'opts-silent') },
+  { id: 'opts-lazy', steps: [
+    set(LEGEND3),
+    setO({ series: [{ data: [2, 2, 2, 2] }] }, { lazyUpdate: true }),
+    setO({ series: [{ data: [3, 1, 3, 1] }] }, { lazyUpdate: true, silent: true }),
+    setO({ series: [{ type: 'bar', name: 'N', data: [1, 1, 3, 3] }] }, { lazyUpdate: true, replaceMerge: ['series'] }),
+  ], expect: (r) => {
+    must(r.steps[1].updNow === 0 && r.steps[1].upd === 1, 'opts-lazy: the event waits for the frame');
+    must(r.steps[2].upd === 0, 'opts-lazy: a silent lazy one has none');
+  } },
+  { id: 'rm-title-absent', steps: [
+    set(bars({ title: [T({ id: 't1', text: 'One' }), T({ id: 't2', text: 'Two', top: 40 })], series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    setO({ series: [{ data: [2, 2, 2, 2] }] }, RM(['title'])),
+  ], expect: (r) => must(r.steps[1].models.title.every(m => m === null) && r.steps[1].tree.title.length === 0,
+    'rm-title-absent: a named type the option leaves out is all removed') },
+  { id: 'rm-lazy-fill', steps: [
+    set(bars({ series: [{ id: 'a', type: 'bar', data: [1, 2, 3, 4] }, { type: 'bar', data: [2, 3, 4, 5] }] })),
+    setLazy({ series: [{ id: 'a' }] }, RM(['series'])),
+    set({ series: [{ id: 'a' }, { type: 'bar', data: [4, 4, 4, 4] }] }),
+  ], expect: (r) => {
+    must(r.steps[1].models.series[1] === null, 'rm-lazy-fill: removed at once');
+    must(r.steps[2].views[1] === r.steps[0].views[1],
+      'rm-lazy-fill: no update between, so the filled slot finds the removed one\'s view');
+  } },
+  { id: 'rm-grid-axes-left', steps: [
+    set({ animation: false, grid: [{ id: 'g0' }, { id: 'g1', left: 320 }],
+      xAxis: [{ type: 'category', data: ['a'] }, { gridIndex: 1, type: 'category', data: ['b'] }],
+      yAxis: [{}, { gridIndex: 1 }],
+      series: [{ type: 'bar', data: [1] }, { type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: [2] }] }),
+    setO({ grid: [{ id: 'g1' }] }, RM(['grid'])),
+  ], expect: (r) => must(r.steps[1].out.series[0].bars[0] !== null,
+    'rm-grid-axes-left: axes that name no grid go to the first there is') },
+  { id: 'opts-lazy-action', steps: [
+    set(LEGEND3),
+    setLazy({ series: [{ data: [2, 2, 2, 2] }] }, {}),
+    actF({ type: 'legendToggleSelect', name: 'A' }),
+    setLazy({ series: [{ data: [3, 3, 3, 3] }] }, {}),
+    actF({ type: 'select', seriesIndex: 1, dataIndex: 0 }),
+  ], expect: (r) => {
+    must(r.steps[2].upd === 1, 'opts-lazy-action: a legend action takes the lazy update with it');
+    must(r.steps[4].upd === 2, 'opts-lazy-action: a select does not');
+  } },
+  { id: 'opts-actions-update', steps: [
+    set(LEGEND3),
+    act({ type: 'legendToggleSelect', name: 'A' }),
+    act({ type: 'highlight', seriesIndex: 0, dataIndex: 1 }),
+  ], expect: (r) => must(r.steps[1].upd === 1 && r.steps[2].upd === 1, 'opts-actions-update: every dispatch') },
 ];
 
 function generate() {
@@ -705,13 +1011,17 @@ function generate() {
     if (c.expect) c.expect(r);
     tally.box += r.stats.box;
     recs.push({ id: c.id, compare: c.compare || [], steps: r.steps.map(s => ({
-      kind: s.step.kind, notMerge: s.step.notMerge, text: s.step.text, payload: s.step.payload,
-      tree: s.tree, models: s.models, out: s.out, views: s.views })) });
+      kind: s.step.kind, notMerge: s.step.notMerge, opts: s.step.opts, noFrame: !!s.step.noFrame,
+      text: s.step.text, payload: s.step.payload,
+      tree: s.tree, models: s.models, out: s.out, views: s.views,
+      updNow: s.updNow, upd: s.upd, sel: s.sel })) });
   }
   // distinctness, coarse: each mechanism appears in at least one case
   const ids = new Set(CASES.map(c => c.id));
   for (const need of ['series-by-id', 'series-by-name', 'series-by-index', 'series-append', 'series-type-change',
-    'title-first-seen-holes']) must(ids.has(need), 'missing case ' + need);
+    'title-first-seen-holes', 'rm-series-by-id', 'rm-series-fill-hole', 'rm-series-brand-new', 'rm-grid',
+    'rm-event-index', 'rm-notmerge-compacts', 'opts-silent', 'opts-lazy', 'rm-lazy-fill', 'rm-title-absent',
+    'opts-lazy-action']) must(ids.has(need), 'missing case ' + need);
   must(tally.box > 0, 'no box merge was materialised');
   return JSON.stringify({
     source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg), ' + W + ' x ' + H,

@@ -236,6 +236,26 @@ type
     switches a chart off in every mode. }
   TTyChartAnimationMode = (camAuto, camAlways, camOff);
 
+  { UPSTREAM'S setOption(option, opts) [Batch 97].
+    NotMerge: replace the option whole (a new set of models).
+    ReplaceMerge: the main types whose models only an id keeps -- the rest
+      are removed and leave index holes; ignored by a notMerge and by the
+      first setOption, as upstream's initBase ignores it.
+    LazyUpdate: the update -- and its `updated` event -- waits for the next
+      render; the merge itself happens now, as upstream's does.
+    Silent: no `updated` event for this update. }
+  TTySetOptionOpts = record
+    NotMerge, LazyUpdate, Silent: Boolean;
+    ReplaceMerge: TTyStringArray;
+  end;
+
+{ The options object as JSON text -- `{notMerge, replaceMerge, lazyUpdate,
+  silent}`, replaceMerge a main type or an array of them, the flags read for
+  their JavaScript truthiness, other keys (`transition`) ignored. '' is no
+  options. False when the text is no object. }
+function TySetOptionOptsOf(const AJson: string; out AOpts: TTySetOptionOpts): Boolean;
+
+type
   TTyAdvanceChart = class(TTyCustomControl)
   private
     FOption: TTyChartOption;
@@ -602,6 +622,13 @@ type
     FAnimOldBuild: TTyChartBuild;
     FAnimOldBindings: TTySeriesBindingArray;
     FAnimOldViewKeys: TTyStringArray;
+    { THE SERIES WHOSE MODEL replaceMerge MADE BRAND NEW since the old keys
+      were taken: upstream's __requireNewView, a new view whatever the id
+      [Batch 97]. Consumed by the update that pairs the views. }
+    FAnimFresh: array of Boolean;
+    { A LAZY setOption's update waits for the next render, and its
+      `updated` event with it [Batch 97] }
+    FLazyPending, FLazySilent: Boolean;
     FPaintList: TTyPaintList;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
@@ -613,6 +640,14 @@ type
     { ---- setOption [Batch 95] ---- }
     { the notMerge setOption: the text is the option, every model is new }
     procedure ApplyNotMerge(const AValue: string);
+    { the merge setOption, AReplace's main types in replaceMerge mode }
+    function DoMerge(const AJson: string; const AReplace: array of string): Boolean;
+    { what every setOption ends with: the `updated` event now, or with the
+      next render when lazy [Batch 97] }
+    procedure AfterSetOption(ALazy, ASilent: Boolean);
+    procedure EmitUpdated;
+    { a lazy update done by the render that just laid out }
+    procedure LazyUpdateDone;
     { a merge writing back what the control keeps outside the tree and
       upstream keeps in the model's option: an action's dataZoom window,
       when the merge writes that dataZoom's range }
@@ -1507,7 +1542,20 @@ type
       sees no change: every model is new, so a roam, a dataZoom window, the
       legend's and the series' selection all start again. Otherwise it is
       MergeOption. }
-    procedure SetOption(const AJson: string; ANotMerge: Boolean = False);
+    procedure SetOption(const AJson: string; ANotMerge: Boolean = False); overload;
+    { THE OPTIONS FORM, setOption(option, opts) [Batch 97]: notMerge,
+      replaceMerge, lazyUpdate, silent (TTySetOptionOpts). False, with the
+      option as it was and OptionError saying why, for what MergeOption
+      refuses and for a replaceMerge naming no component main type. }
+    function SetOption(const AJson: string; const AOpts: TTySetOptionOpts): Boolean; overload;
+    { the same with the options as JSON text, '{"replaceMerge":["series"]}';
+      refused when that text is no object }
+    function SetOption(const AJson, AOptsJson: string): Boolean; overload;
+    { THE VIEW KEY the next update pairs series ASeries by -- its model id,
+      or a key no old view has when replaceMerge made it brand new -- and
+      the old render's key at an index. For the tests. [Batch 97] }
+    function SeriesViewKey(ASeries: Integer): string;
+    function SeriesOldViewKey(ASeries: Integer): string;
     { A MERGE setOption: components and series mapped onto the models there
       by id, then name, then index, and merged into them (see
       tyControls.AdvChart.OptionMerge). What upstream keeps in the models
@@ -1709,10 +1757,74 @@ end;
   reset everything -- that is SetOption(AJson, True). After a merge the
   property holds the merged option, so assigning the text set before the
   merge is a real change. [Batch 95] }
+function TySetOptionOptsOf(const AJson: string; out AOpts: TTySetOptionOpts): Boolean;
+var
+  d, r: TJSONData;
+  o: TJSONObject;
+  k: Integer;
+
+  function Truthy(A: TJSONData): Boolean;
+  begin
+    if (A = nil) or (A.JSONType = jtNull) then Exit(False);
+    case A.JSONType of
+      jtBoolean: Result := A.AsBoolean;
+      jtNumber: Result := (A.AsFloat <> 0) and not IsNan(A.AsFloat);
+      jtString: Result := A.AsString <> '';
+    else
+      Result := True;
+    end;
+  end;
+
+  procedure AddType(A: TJSONData);
+  var n: Integer;
+  begin
+    { normalizeToArray, each entry a main type as it is named -- anything
+      but a string is named by its text, and so is refused }
+    n := Length(AOpts.ReplaceMerge);
+    SetLength(AOpts.ReplaceMerge, n + 1);
+    if A.JSONType = jtString then AOpts.ReplaceMerge[n] := A.AsString
+    else AOpts.ReplaceMerge[n] := A.AsJSON;
+  end;
+
+begin
+  AOpts := Default(TTySetOptionOpts);
+  if Trim(AJson) = '' then Exit(True);
+  try
+    d := GetJSON(AJson);
+  except
+    d := nil;
+  end;
+  if not (d is TJSONObject) then
+  begin
+    d.Free;
+    Exit(False);
+  end;
+  o := TJSONObject(d);
+  try
+    AOpts.NotMerge := Truthy(o.Find('notMerge'));
+    AOpts.LazyUpdate := Truthy(o.Find('lazyUpdate'));
+    AOpts.Silent := Truthy(o.Find('silent'));
+    r := o.Find('replaceMerge');
+    if r <> nil then
+    begin
+      if r.JSONType = jtArray then
+      begin
+        for k := 0 to r.Count - 1 do AddType(r.Items[k]);
+      end
+      else
+        AddType(r);
+    end;
+  finally
+    o.Free;
+  end;
+  Result := True;
+end;
+
 procedure TTyAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
   ApplyNotMerge(AValue);
+  AfterSetOption(False, False);
 end;
 
 procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string);
@@ -1720,8 +1832,11 @@ begin
   FOptionText := AValue;
   { THE OLD OPTION'S SERIES VIEWS, before the text goes: an update keeps a
     series whose view id and type are the same -- unless an update already
-    waits, whose old render is still the one before it [Batch 90] }
-  if not FAnimPrev.Valid then FAnimOldViewKeys := AnimViewKeys;
+    waits, whose old render is still the one before it [Batch 90] -- or a
+    lazy one does [Batch 97] }
+  if not FAnimPrev.Valid and not FLazyPending then FAnimOldViewKeys := AnimViewKeys;
+  { new models: none asks for a new view (initBase ignores replaceMerge) }
+  FAnimFresh := nil;
   FOption.SetOptionText(AValue);
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
@@ -1767,26 +1882,73 @@ begin
 end;
 
 procedure TTyAdvanceChart.SetOption(const AJson: string; ANotMerge: Boolean);
+var o: TTySetOptionOpts;
 begin
-  if ANotMerge then ApplyNotMerge(AJson)
-  else MergeOption(AJson);
+  o := Default(TTySetOptionOpts);
+  o.NotMerge := ANotMerge;
+  SetOption(AJson, o);
+end;
+
+function TTyAdvanceChart.SetOption(const AJson: string;
+  const AOpts: TTySetOptionOpts): Boolean;
+begin
+  { normalizeSetOptionInput asserts before anything is touched }
+  if not FOption.CheckReplaceMerge(AOpts.ReplaceMerge) then Exit(False);
+  { THE FIRST OPTION is an init whatever the flag says (echarts.ts:768),
+    and an init ignores replaceMerge (initBase merges with no opts) }
+  if AOpts.NotMerge or not (FOption.Root is TJSONObject) then
+  begin
+    ApplyNotMerge(AJson);
+    Result := not FOption.Error.Failed;
+  end
+  else
+    Result := DoMerge(AJson, AOpts.ReplaceMerge);
+  if Result then AfterSetOption(AOpts.LazyUpdate, AOpts.Silent);
+end;
+
+function TTyAdvanceChart.SetOption(const AJson, AOptsJson: string): Boolean;
+var o: TTySetOptionOpts;
+begin
+  if not TySetOptionOptsOf(AOptsJson, o) then
+  begin
+    FOption.Refuse(rsTyOptSetOptsNotObject);
+    Exit(False);
+  end;
+  Result := SetOption(AJson, o);
 end;
 
 function TTyAdvanceChart.MergeOption(const AJson: string): Boolean;
+begin
+  Result := SetOption(AJson, Default(TTySetOptionOpts));
+end;
+
+function TTyAdvanceChart.DoMerge(const AJson: string;
+  const AReplace: array of string): Boolean;
 var
   rep: TTyMergeReport;
   oldKeys: TTyStringArray;
+  si, s: Integer;
 begin
-  { THE FIRST OPTION is an init whatever the flag says (echarts.ts:768) }
-  if not (FOption.Root is TJSONObject) then
-  begin
-    ApplyNotMerge(AJson);
-    Exit(not FOption.Error.Failed);
-  end;
   { the old views, before the merge renames anything }
   oldKeys := AnimViewKeys;
-  if not FOption.MergeOptionText(AJson, @MergeBefore, rep) then Exit(False);
-  if not FAnimPrev.Valid then FAnimOldViewKeys := oldKeys;
+  if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, rep) then Exit(False);
+  { the views the next update pairs with: the last render's -- unless an
+    update already waits (an old render kept) or a lazy one does }
+  if not FAnimPrev.Valid and not FLazyPending then
+  begin
+    FAnimOldViewKeys := oldKeys;
+    FAnimFresh := nil;
+  end;
+  { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
+    model's, often) -- until the update that pairs the views [Batch 97] }
+  si := TyMergeSlotsIndex(rep, 'series');
+  if si >= 0 then
+    for s := 0 to High(rep.Slots[si].Brand) do
+      if rep.Slots[si].Brand[s] then
+      begin
+        if s > High(FAnimFresh) then SetLength(FAnimFresh, s + 1);
+        FAnimFresh[s] := True;
+      end;
   FOptionText := FOption.OptionJson;
   MergeKeepStates(rep);
   { AN UPDATE: the series keep their views where their ids and types do }
@@ -1794,6 +1956,63 @@ begin
   FDirty := True;
   Invalidate;
   Result := True;
+end;
+
+procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
+begin
+  if ALazy then
+  begin
+    { the next frame does the update: one pending at a time, its silent the
+      last lazy call's }
+    FLazyPending := True;
+    FLazySilent := ASilent;
+    Exit;
+  end;
+  { a synchronous update takes a pending lazy one with it }
+  FLazyPending := False;
+  if not ASilent then EmitUpdated;
+end;
+
+procedure TTyAdvanceChart.LazyUpdateDone;
+begin
+  if not FLazyPending then Exit;
+  FLazyPending := False;
+  if not FLazySilent then EmitUpdated;
+end;
+
+{ `updated`: triggerUpdatedEvent, no params. Only to a handler registered
+  for it -- the catch-all OnChartEvent does not count as asking, as with
+  the legacy select events [Batch 97] }
+procedure TTyAdvanceChart.EmitUpdated;
+var
+  ev: TTyChartEvent;
+  regs: array of TTyChartEventReg;
+  i: Integer;
+begin
+  if not HasChartHandler('updated') then Exit;
+  ev := Default(TTyChartEvent);
+  ev.EventType := 'updated';
+  ev.Params := TyChartBlankParams;
+  regs := Copy(FEventRegs);
+  for i := 0 to High(regs) do
+    if regs[i].EventType = 'updated' then regs[i].Handler(Self, ev);
+end;
+
+function TTyAdvanceChart.SeriesViewKey(ASeries: Integer): string;
+var keys: TTyStringArray;
+begin
+  keys := AnimViewKeys;
+  Result := '';
+  if (ASeries < 0) or (ASeries > High(keys)) then Exit;
+  Result := keys[ASeries];
+  if (ASeries <= High(FAnimFresh)) and FAnimFresh[ASeries] then Result := 'n:' + Result;
+end;
+
+function TTyAdvanceChart.SeriesOldViewKey(ASeries: Integer): string;
+begin
+  Result := '';
+  if (ASeries >= 0) and (ASeries <= High(FAnimOldViewKeys)) then
+    Result := FAnimOldViewKeys[ASeries];
 end;
 
 function TTyAdvanceChart.GetOptionJson: string;
@@ -3161,7 +3380,11 @@ begin
   plotF := TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
   if FDirty or (plotF.Right <> FLastRect.Right)
     or (plotF.Bottom <> FLastRect.Bottom) then
+  begin
     Relayout(APainter, plotF, APPI, AMeasurer);
+    { the frame a lazy setOption waited for [Batch 97] }
+    LazyUpdateDone;
+  end;
 
   if FBuild <> nil then
     for g := 0 to FBuild.GridCount - 1 do
@@ -3313,6 +3536,9 @@ begin
     d := FOption.ComponentAt('series', i);
     node := nil;
     if (d <> nil) and (d.JSONType = jtObject) then node := TJSONObject(d);
+    { AN INDEX HOLE takes no colour: eachSeries never meets it, so the
+      series after it pick on from the palette [Batch 97] }
+    if node = nil then Continue;
     st := '';
     if node <> nil then
     begin
@@ -4564,6 +4790,8 @@ begin
     FDzFrom := -1;
   end;
   if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
+  { the dispatch's triggerUpdatedEvent [Batch 97] }
+  EmitUpdated;
 end;
 
 { what the views draw from the slider states: a pointer event that leaves
@@ -5899,6 +6127,8 @@ begin
   FTipElement := -1;
   DropStatic;
   inherited Invalidate;
+  { the dispatch's triggerUpdatedEvent [Batch 97] }
+  EmitUpdated;
 end;
 
 function TTyAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
@@ -6309,6 +6539,7 @@ begin
   if FLastPPI <= 0 then
   begin
     Invalidate;
+    EmitUpdated;
     Exit;
   end;
   m := NewTextMeasurer(FLastPPI);
@@ -6318,6 +6549,8 @@ begin
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   inherited Invalidate;
+  { the dispatch's triggerUpdatedEvent [Batch 97] }
+  EmitUpdated;
 end;
 
 function TTyAdvanceChart.TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
@@ -6365,7 +6598,12 @@ begin
     Result := True;
     if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
   end;
-  if Result then Invalidate;
+  if Result then
+  begin
+    Invalidate;
+    { the dispatch's triggerUpdatedEvent [Batch 97] }
+    EmitUpdated;
+  end;
 end;
 
 function TTyAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
@@ -7684,6 +7922,9 @@ begin
   begin
     FLegendSpecs[i] := TyLegendSpecOf(FOption, i);
     FLegendEntries[i] := TyLegendEntries(FOption, i, potential);
+    { an index hole is no legend: no items, and it filters nothing [Batch 97] }
+    if not (FOption.ComponentAt('legend', i) is TJSONObject) then
+      FLegendEntries[i] := nil;
     { THE MODEL, ONCE PER OPTION [Batch 93]: init makes `selected`,
       optionUpdated forces single mode's one item ON INTO THE MAP -- an
       update afterwards (a legend action) does not run it again, so what the
@@ -12923,6 +13164,8 @@ begin
   finally
     p.Free;
   end;
+  { every dispatch ends with triggerUpdatedEvent [Batch 97] }
+  if Result then EmitUpdated;
 end;
 
 { echarts.ts:2341-2357: the first element on the chain with a dataIndex --
@@ -13212,6 +13455,8 @@ begin
   for i := 0 to FOption.ComponentCount('series') - 1 do
   begin
     n := FOption.ComponentAt('series', i);
+    { eachRawSeries never meets an index hole [Batch 97] }
+    if not (n is TJSONObject) then Continue;
     d := nil;
     tp := '';
     if n is TJSONObject then
@@ -13288,6 +13533,9 @@ begin
   { renderSeries: clearStates, render, the previous states, then the flags
     (the generation Relayout moves) }
   Relayout(nil, FLastRect, FLastPPI, m);
+  { AN ACTION THAT UPDATES does the lazy update waiting, and the dispatch
+    publishes the one `updated` (echarts.ts doDispatchAction) [Batch 97] }
+  FLazyPending := False;
   BuildSeriesList(m, FLastPPI);
   if FEvHover.Id > 0 then
   begin
@@ -15256,6 +15504,8 @@ begin
     r.SeriesType := t;
     if si <= High(viewKeys) then r.ViewKey := viewKeys[si]
     else r.ViewKey := 'x:' + IntToStr(si);
+    { brand new: a key no old view has [Batch 97] }
+    if (si <= High(FAnimFresh)) and FAnimFresh[si] then r.ViewKey := 'n:' + r.ViewKey;
     if (slot <= High(FStores)) and (FStores[slot] <> nil) then
       AnimRowKeys(FStores[slot], r.Keys, r.Raws);
     if t = TyPieSeriesTypeName then
@@ -15298,6 +15548,8 @@ begin
         FAnimSet.Arm(FPaintList, AnimSeriesInfo);
       end;
       AnimDropPrev;
+      { the views are paired: __requireNewView works once }
+      FAnimFresh := nil;
       { THE FLUSH: upstream's setOption ends with a synchronous update, so
         every clip it made starts NOW and this same paint shows the from
         values. A step on the next tick would shift every timeline by up
@@ -15308,6 +15560,7 @@ begin
     begin
       FAnimPending := False;
       AnimDropPrev;
+      FAnimFresh := nil;
     end;
   end;
   FAnimStBind := nil;

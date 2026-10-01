@@ -44,10 +44,24 @@ unit tyControls.AdvChart.OptionMerge;
   - dataZoom: a pair written in value mode nulls its percent (_doInit);
     dataset: transform is replaced, never merged.
 
-  WHAT IT DOES NOT DO (A11 and later): replaceMerge, the replaceAll of a
-  whole option, timeline / media / baseOption; the box merge of calendar,
-  singleAxis, geo, parallel, matrix, timeline, thumbnail, the slider
-  dataZoom and the map series; upstream's preprocessors otherwise.
+  REPLACEMERGE [Batch 97, A11]: the main types a setOption names in
+  `replaceMerge` keep no model but those its options name by id; every other
+  model of the type is REMOVED and leaves a hole at its index -- indices
+  never move -- and the options mapped by index are BRAND NEW (a new view
+  even where the id they make was a removed model's): they fill the first
+  slot no id took, a removed model's or an older hole, and append after.
+  A named type the option leaves out is merged as `[]`: all removed.
+
+  NOTMERGE COMPACTS THE SERIES: upstream seeds the series' list at init, so
+  a fresh option's series are a normalMerge over nothing -- a null entry
+  takes no index (TyOptionCompactSeries). The other main types are seen
+  for the first time there: replaceAll, holes kept.
+
+  WHAT IT DOES NOT DO: timeline / media / baseOption (and with them the
+  replaceAll of a whole option, which without them is the notMerge); the
+  box merge of calendar, singleAxis, geo, parallel, matrix, timeline,
+  thumbnail, the slider dataZoom and the map series; upstream's
+  preprocessors otherwise.
 
   LCL-free: SysUtils, Math, fcl-json and the scale's number printer. }
 interface
@@ -76,11 +90,13 @@ type
     mfHole,    // no model before or after
     mfKept,    // the model stayed, nothing written for it
     mfMerged,  // the model stayed and the new option was merged into it
-    mfNew      // a new model: none was there, or its class changed
+    mfNew,     // a new model: none was there, or its class changed
+    mfRemoved  // replaceMerge: the model went, the index is a hole now
   );
 
   TTyMergeFateArray = array of TTyMergeFate;
   TTyMergeOptArray = array of TJSONObject;
+  TTyMergeBoolArray = array of Boolean;
 
   TTyMergeSlots = record
     MainType: string;
@@ -88,6 +104,9 @@ type
     { the new option merged into the slot, BORROWED from the merged-in
       option (alive while the caller keeps it); nil where none }
     NewOpt: TTyMergeOptArray;
+    { a new model replaceMerge mapped by index: upstream's brandNew, which
+      asks for a new view whatever its id (__requireNewView) }
+    Brand: TTyMergeBoolArray;
   end;
 
   TTyMergeReport = record
@@ -119,12 +138,30 @@ function TyOptionVisited(const AWritten: array of string): TStringArray;
   entry is a hole), every other visited one an empty list. }
 procedure TyOptionKeysOfTree(ARoot: TJSONData; out AKeys: TTyOptionKeys);
 
-{ THE MERGE. ARoot is changed in place; AKeys follows. False, with nothing
+{ THE MERGE. ARoot is changed in place; AKeys follows. AReplaceMerge: the
+  main types merged in replaceMerge mode [Batch 97]. False, with nothing
   changed, when two of the new option's components of one main type carry
-  the same id (upstream asserts). }
+  the same id, or AReplaceMerge names no component main type (upstream
+  asserts). }
 function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
   ANew: TJSONObject; ABefore: TTyMergeBeforeComponent;
-  out AReport: TTyMergeReport; out AError: string): Boolean;
+  out AReport: TTyMergeReport; out AError: string): Boolean; overload;
+function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
+  ANew: TJSONObject; const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent;
+  out AReport: TTyMergeReport; out AError: string): Boolean; overload;
+
+{ '' when every name is a component main type, else the first that is not }
+function TyOptionBadReplaceType(const AReplaceMerge: array of string): string;
+
+{ A FRESH OPTION'S SERIES, as initBase's seeded list maps them: a normalMerge
+  over no model, so an entry that is no object takes no index -- dropped,
+  the ones after it move up. A series value that is neither an array, an
+  object nor null becomes `[]`. [Batch 97] }
+procedure TyOptionCompactSeries(ARoot: TJSONData);
+
+{ whether a model was there after the merge }
+function TyMergeHasModel(AFate: TTyMergeFate): Boolean;
 
 { the list of AMainType in AKeys, or -1 }
 function TyOptionKeyIndex(const AKeys: TTyOptionKeys; const AMainType: string): Integer;
@@ -778,6 +815,7 @@ type
     ExNode: TJSONData;          // the existing model's node in the tree
     NewOpt: TJSONObject;        // borrowed from the new option
     Info: TTyOptionKey;         // keyInfo
+    Brand: Boolean;             // brandNew: replaceMerge mapped it by index
   end;
   TSlotArray = array of TSlot;
 
@@ -998,9 +1036,12 @@ end;
 
 { ==================== the merge ==================== }
 
-{ mappingToExists, normalMerge (AReplaceAll False) or replaceAll }
+type
+  TMapMode = (mmNormal, mmReplaceMerge, mmReplaceAll);
+
+{ mappingToExists in one of its three modes }
 function MapSlots(const AExisting: TTyOptionKeyArray; const AExNodes: TNodeArray;
-  const ANew: TNodeArray; AReplaceAll: Boolean): TSlotArray;
+  const ANew: TNodeArray; AMode: TMapMode): TSlotArray;
 var
   opts: array of TJSONObject;
   i, j: Integer;
@@ -1014,7 +1055,7 @@ begin
     if (ANew[i] <> nil) and (ANew[i].JSONType = jtObject) then opts[i] := TJSONObject(ANew[i])
     else opts[i] := nil;
 
-  if AReplaceAll then
+  if AMode = mmReplaceAll then
   begin
     SetLength(Result, Length(opts));
     for i := 0 to High(opts) do
@@ -1026,12 +1067,13 @@ begin
     Exit;
   end;
 
-  { prepareResult: a slot per existing index, holes too }
+  { prepareResult: a slot per existing index, holes too -- and in
+    replaceMerge none keeps its model until an id maps it back }
   SetLength(Result, Length(AExisting));
   for i := 0 to High(AExisting) do
   begin
     Result[i] := Default(TSlot);
-    Result[i].HasExisting := AExisting[i].Exists;
+    Result[i].HasExisting := AExisting[i].Exists and (AMode = mmNormal);
     if Result[i].HasExisting then
     begin
       Result[i].Existing := AExisting[i];
@@ -1039,24 +1081,28 @@ begin
     end;
   end;
 
-  { by id }
+  { by id: in both modes the option merges into the model of its id }
   for i := 0 to High(opts) do
   begin
     if opts[i] = nil then Continue;
     d := opts[i].Find('id');
     if not Given(d) then Continue;
     key := ComparableKey(d);
-    for j := 0 to High(Result) do
-      if Result[j].HasExisting and (Result[j].Existing.Id = key) then
+    for j := 0 to High(AExisting) do
+      if AExisting[j].Exists and (AExisting[j].Id = key) then
       begin
         Result[j].NewOpt := opts[i];
+        Result[j].HasExisting := True;
+        Result[j].Existing := AExisting[j];
+        if j <= High(AExNodes) then Result[j].ExNode := AExNodes[j];
         opts[i] := nil;
         Break;
       end;
   end;
 
   { by name: only an option without an id, onto the first unmapped model
-    of that name }
+    of that name -- normalMerge only }
+  if AMode = mmNormal then
   for i := 0 to High(opts) do
   begin
     if opts[i] = nil then Continue;
@@ -1076,7 +1122,8 @@ begin
   end;
 
   { by index: the first slot from 0 with no option yet -- a hole is one --
-    skipping a model whose id differs from the option's }
+    skipping a model whose id differs from the option's. In replaceMerge
+    every slot no id took is free, and what lands is brand new. }
   for i := 0 to High(opts) do
   begin
     if opts[i] = nil then Continue;
@@ -1093,6 +1140,7 @@ begin
       Result[j] := Default(TSlot);
     end;
     Result[j].NewOpt := opts[i];
+    Result[j].Brand := AMode = mmReplaceMerge;
   end;
 
   MakeIdAndName(Result);
@@ -1214,8 +1262,47 @@ begin
   if AMainType = 'dataZoom' then DataZoomRangeModes(ANode, ANew);
 end;
 
+function TyMergeHasModel(AFate: TTyMergeFate): Boolean;
+begin
+  Result := AFate in [mfKept, mfMerged, mfNew];
+end;
+
+function TyOptionBadReplaceType(const AReplaceMerge: array of string): string;
+var i: Integer;
+begin
+  for i := 0 to High(AReplaceMerge) do
+    if not TyOptionIsComponentType(AReplaceMerge[i]) then Exit(AReplaceMerge[i]);
+  Result := '';
+end;
+
+procedure TyOptionCompactSeries(ARoot: TJSONData);
+var
+  d: TJSONData;
+  i: Integer;
+begin
+  if not (ARoot is TJSONObject) then Exit;
+  d := TJSONObject(ARoot).Find('series');
+  if d = nil then Exit;
+  case d.JSONType of
+    jtNull, jtObject: ;
+    jtArray:
+      for i := d.Count - 1 downto 0 do
+        if d.Items[i].JSONType <> jtObject then TJSONArray(d).Delete(i);
+  else
+    TJSONObject(ARoot).Elements['series'] := TJSONArray.Create;
+  end;
+end;
+
 function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
   ANew: TJSONObject; ABefore: TTyMergeBeforeComponent;
+  out AReport: TTyMergeReport; out AError: string): Boolean;
+begin
+  Result := TyOptionMerge(ARoot, AKeys, ANew, [], ABefore, AReport, AError);
+end;
+
+function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
+  ANew: TJSONObject; const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent;
   out AReport: TTyMergeReport; out AError: string): Boolean;
 var
   i, j, ki, si: Integer;
@@ -1225,18 +1312,31 @@ var
   newComps, exNodes: TNodeArray;
   existing, items: TTyOptionKeyArray;
   slots: TSlotArray;
-  replaceAll, wasBare, newBare, sameClass, writeTree: Boolean;
+  wasBare, newBare, sameClass, writeTree, replacing: Boolean;
+  mode: TMapMode;
   pool: TBoxPool;
   arr: TJSONArray;
   node: TJSONData;
   fates: TTyMergeFateArray;
   opts: TTyMergeOptArray;
+  brands: TTyMergeBoolArray;
   reused, virt: array of Boolean;
   exObj: TJSONObject;
+  replace: TStringArray;
 begin
   AReport := Default(TTyMergeReport);
   AError := '';
   Result := False;
+
+  { normalizeSetOptionInput asserts every name is a component main type }
+  k := TyOptionBadReplaceType(AReplaceMerge);
+  if k <> '' then
+  begin
+    AError := Format(rsTyOptReplaceMergeBadType, [k]);
+    Exit;
+  end;
+  replace := nil;
+  for i := 0 to High(AReplaceMerge) do AddTo(replace, AReplaceMerge[i]);
 
   written := nil;
   for i := 0 to ANew.Count - 1 do
@@ -1244,6 +1344,9 @@ begin
     k := ANew.Names[i];
     if TyOptionIsComponentType(k) and Given(ANew.Items[i]) then AddTo(written, k);
   end;
+  { A REPLACEMERGE TYPE THE OPTION LEAVES OUT is merged as `{xxx: []}`:
+    every model of it goes }
+  for k in replace do AddTo(written, k);
   { THE ASSERT FIRST, so a refused merge changes nothing }
   for k in written do
     if DuplicateId(ComponentsOf(ANew.Find(k)), dupId) then
@@ -1276,22 +1379,28 @@ begin
     begin
       if not InList(visited, mt) then Continue;
       ki := TyOptionKeyIndex(AKeys, mt);
-      replaceAll := ki < 0;
-      if replaceAll then existing := nil else existing := AKeys[ki].Items;
+      replacing := InList(replace, mt);
+      { no list yet is init's replaceAll; then replaceMerge where named }
+      if ki < 0 then mode := mmReplaceAll
+      else if replacing then mode := mmReplaceMerge
+      else mode := mmNormal;
+      if ki < 0 then existing := nil else existing := AKeys[ki].Items;
       oldVal := ARoot.Find(mt);
       exNodes := ComponentsOf(oldVal);
       newComps := ComponentsOf(ANew.Find(mt));
-      slots := MapSlots(existing, exNodes, newComps, replaceAll);
+      slots := MapSlots(existing, exNodes, newComps, mode);
 
       SetLength(fates, Length(slots));
       SetLength(opts, Length(slots));
       SetLength(items, Length(slots));
       SetLength(reused, Length(slots));
       SetLength(virt, Length(slots));
+      SetLength(brands, Length(slots));
       for j := 0 to High(slots) do
       begin
         opts[j] := slots[j].NewOpt;
         reused[j] := False;
+        brands[j] := False;
         { A MODEL THE TREE HAS NO NODE FOR -- a preprocessor's: its node is
           made, empty, when anything needs it }
         virt[j] := slots[j].HasExisting and (slots[j].ExNode = nil);
@@ -1305,7 +1414,10 @@ begin
           end
           else
           begin
-            fates[j] := mfHole;
+            { a model replaceMerge did not map by id goes; an older hole
+              stays one }
+            if (j <= High(existing)) and existing[j].Exists then fates[j] := mfRemoved
+            else fates[j] := mfHole;
             items[j] := Default(TTyOptionKey);
           end;
           Continue;
@@ -1347,15 +1459,16 @@ begin
           fates[j] := mfNew;
           items[j] := slots[j].Info;
           items[j].SubType := sub;
+          brands[j] := slots[j].Brand;
         end;
       end;
 
       { ---- the tree: only where the author wrote this main type ---- }
       wasBare := oldVal is TJSONObject;
       newBare := (oldVal = nil) and (ANew.Find(mt) is TJSONObject);
-      writeTree := Given(ANew.Find(mt)) or (oldVal <> nil);
+      writeTree := Given(ANew.Find(mt)) or (oldVal <> nil) or replacing;
       if writeTree and (Length(slots) = 1) and (wasBare or newBare)
-        and (fates[0] <> mfHole) then
+        and TyMergeHasModel(fates[0]) then
       begin
         { still one component, written bare: kept bare, merged in place }
         if fates[0] = mfNew then ARoot.Elements[mt] := slots[0].NewOpt.Clone
@@ -1395,6 +1508,7 @@ begin
       AReport.Slots[si].MainType := mt;
       AReport.Slots[si].Fate := Copy(fates);
       AReport.Slots[si].NewOpt := Copy(opts);
+      AReport.Slots[si].Brand := Copy(brands);
     end;
   finally
     pool.Free;

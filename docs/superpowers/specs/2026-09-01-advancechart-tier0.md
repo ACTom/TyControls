@@ -9021,8 +9021,8 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 
 ### 推迟与偏差
 
-- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。
-- **notMerge 下系列的 null 项不压缩**：上游 initBase 给 series 预置了列表，所以 `[bar, null, line]` 的 line 是系列 1（虚名 `series\u00001`）；端口的 notMerge 树照写的下标，line 是系列 2。只影响写了 null 系列项的选项，合并时按端口的下标找。
+- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。（第 97 批：已做，见 §132；整份选项的 replaceAll 只在 timeline / media 里用，端口没有它们，它等同 notMerge，不单独提供。）
+- **notMerge 下系列的 null 项不压缩**：上游 initBase 给 series 预置了列表，所以 `[bar, null, line]` 的 line 是系列 1（虚名 `series\u00001`）；端口的 notMerge 树照写的下标，line 是系列 2。只影响写了 null 系列项的选项，合并时按端口的下标找。（第 97 批：已修正，notMerge 与第一次 setOption 都压缩系列，见 §132。）
 - 盒子写回只做端口实际布局的那几种；calendar（与 cellSize 联动的二次合并）、singleAxis、geo、parallel、matrix、timeline、thumbnail、slider dataZoom、map 系列、grid 的 `outerBounds` 只做深合并——合并没有碰盒子键时与上游相同。
 - 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。
 - `emphasis.label.show` 上游只在 init 时由 `label.show` 补（defaultEmphasis），合并改了 `label.show` 之后它保持 init 时的值；端口在读的时候从当前的 `label.show` 补。
@@ -9032,3 +9032,91 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - 拒绝的合并（重复 id）整个不生效；上游在断言处抛错，模型可能已经部分合并。
 - `GetOptionJson` 是原始合并层：没有主题和默认值、没有模型 id、没有访问过但没写的主类型（上游是 `[]`），根上键的顺序是树里的顺序（上游按拓扑访问顺序）。上游 getOption 中 dataZoom 的 start/end 是计算出的窗口，端口树里是作者写的（动作的窗口在树外，直到合并写到它）。
 - 未知的系列类型：上游找不到类时跳过这一项（后面的下标前移）；端口照常占位置。
+
+## 132. Tier 1 第九十七批：replaceMerge 与索引空洞（A11，2026-10-01）
+
+§130 接上了上游的普通合并：已有的模型一个都不少，新选项按 id、名字、序号落进去。上游还有另一种合并——`replaceMerge`：点名的主类型里，只有被新选项按 id 认领的模型留下，其余的**被移除**，原来的下标空着（空洞），以后的选项先填空洞再追加。这一批把它做完，连同 `setOption` 的选项对象形式（`notMerge / replaceMerge / lazyUpdate / silent`）、`updated` 事件、notMerge 对系列 null 项的压缩，以及空洞在各个读者里的含义。
+
+### 上游的做法（`Global.ts` `_mergeOption` / `_resetOption` / `normalizeSetOptionInput`、`util/model.ts` `mappingToExists` 的三种模式、`echarts.ts` 的 `setOption` / `_onframe` / `doPrepare` / `triggerUpdatedEvent` 逐行核过，关键处在真 dist 上探针确认，`wf-a11/probe1.js`、`probe2.js`）
+
+- **选项对象**：`setOption(option, {notMerge, replaceMerge, lazyUpdate, silent, transition})`。`replaceMerge` 是一个主类型或一个数组；`normalizeSetOptionInput` 断言每一个都是组件主类型（dev 版直接抛错，探针 `"nope" is not valid component main type in "replaceMerge"`）。
+- **映射**（`mappingToExists(existings, newOptions, 'replaceMerge')`）：
+  1. `prepareResult` 照样按已有的下标排好位置，但**一个已有模型都不放进去**（`existingIdIdxMap` 记着它们的 id）；
+  2. 按 id：新选项的 id 等于某个已有模型的 id，就把那个模型放回它的位置，合并进去（两种模式在这里一样）；
+  3. **不按名字**；
+  4. 按序号：剩下的每个选项从 0 找第一个还没有选项的位置——没被 id 认领的模型的位置、以前的空洞都算——找不到就追加；这些选项标 `brandNew`；
+  5. `makeIdAndName` 的 `idMap` 里只有被认领回来的模型，所以按序号进来的新模型重新生成的 id 常常**正是被移除的那个模型的 id**（虚名、同名都是如此）。
+  没被认领的模型被移除：`componentsMap` 那一格是 `undefined`，`getOption` 输出 `null`，末尾的空洞去掉；**下标永远不动**（探针：A、B、C 三个系列 replaceMerge 留 A、C，C 仍是 `componentIndex` 2）。
+- **没写的主类型**：`replaceMerge` 点了名、选项里却没写的主类型当作写了 `{xxx: []}`——全部移除，`getOption` 是 `[]`。
+- **brandNew 与视图**：新模型带 `__requireNewView`，`doPrepare` 里 `!requireNewView && viewMap[viewId]`——即使 viewId 相同也建新视图，读完即清，**只生效一次**。被 id 认领回来的模型照常合并、照常保留视图。
+- **init 忽略 replaceMerge**：`_resetOption` 在还没有 option 时走 `initBase`，它调 `_mergeOption(baseOption, null)`；notMerge 是新建一个 GlobalModel 再 init。所以第一次 setOption、notMerge 都不看 `replaceMerge`（探针：notMerge 带 `replaceMerge: ['series', 'title']`，`getOption` 里没有 title，系列也没有新视图的要求）。
+- **notMerge 压缩系列**：`initBase` 预置了 `{series: []}`，第一次 / notMerge 的系列是空列表上的 normalMerge——null、数字这类不是对象的项不占位置（`[bar, null, 5, line]` 的 line 是系列 1，虚名 `series\u00001`）。其余主类型第一次出现是 replaceAll，空洞保留（§130 已做）。
+- **replaceAll**：只在主类型第一次被访问时（§130 已做），以及 `resetOption('recreate')`——timeline / media 用，它就是对存着的原始选项重做一次 `initBase`。
+- **空洞处处跳过**：`eachComponent`、`eachSeries`、`eachRawSeries` 都跳过 `undefined`；`getSeriesCount` 只数有模型的；`componentIndex` 是位置下标。于是：
+  - 系列颜色按 `eachSeries` 的顺序从调色板取：A、C 之间的 B 被移除后，C 取第二个颜色；
+  - 图例的默认数据只来自剩下的系列；被移除的图例不过滤任何系列（被它点掉的 B 重新显示）；
+  - `select` 的 `seriesIndex: 2` 仍是 C；指向空洞的 `seriesIndex` 什么也不选，`selectchanged` 照发，`selected` 是当前所有选中；
+  - 系列的 `xAxisIndex` 指向空洞时上游直接抛错（`xAxis "1" not found`）；dataZoom 的 `xAxisIndex` 指向空洞时模型还在，但没有窗口（`getPercentRange` 为 `undefined`）；
+  - 两个 grid 移除第一个，第二个的矩形、轴、系列都不动；之后普通合并写 grid 按序号填回下标 0；
+  - **引用的缺省值跳过空洞**：没写 `gridIndex` / `xAxisIndex` 这类引用时，`getReferringComponents` 的 `useDefault` 取 `getComponent(mainType)`——它跳过 `undefined`，是**第一个不是空洞的**；写了下标、下标是空洞就什么也没有。探针：grid 0 被移除而 x0、y0 没写 gridIndex，它们去了 grid 1，系列 0 照样画在那里。
+- **silent 与 lazyUpdate**：`silent` 只压掉这次更新的 `updated` 事件（`triggerUpdatedEvent`）和更新期间排队动作的事件；`lazyUpdate` 时模型**照样立刻合并**（`getOption` 立刻是新的），更新和 `updated` 留到下一帧 `_onframe`；其间的同步 setOption 带走等着的更新（`PENDING_UPDATE` 置空，事件按这一次的 silent）；连着几次 lazy 只等一次，silent 是最后那次的。`updated` 在每次 setOption、dispatchAction、resize、setTheme 之后各触发一次（探针：silent 0；lazy 调用时 0、帧后 1；lazy + silent 0；dispatchAction 1）。
+
+### 做法
+
+- **`OptionMerge`**：
+  - 映射分三种模式（`TMapMode`：normal / replaceMerge / replaceAll）。replaceMerge 下 `prepareResult` 的每个位置不带已有模型；按 id 时从已有列表里找，找到就把模型（id、名字、子类型、树里的节点）放回位置；跳过按名字；按序号时第一个没有选项的位置就能落（空洞、被移除的位置都算），落下的标 `Brand`。
+  - `TyOptionMerge` 新重载带 `AReplaceMerge`：先查名字（不是组件主类型就整个拒绝，`rsTyOptReplaceMergeBadType`，什么都不改），点了名没写的主类型算作写了 `[]`（因此也被访问、它的依赖者也被访问）。命运多了 `mfRemoved`（之前有模型、之后是空洞）；报告每个位置多了 `Brand`。树里被移除的位置写 null（`writeTree` 对 replaceMerge 的主类型总是成立，所以全部移除时树里是 `[]`）；“仍是一个、写成单个对象”的特例只在那个位置有模型时成立（`TyMergeHasModel`）。
+  - `TyOptionCompactSeries`：根上的 `series` 是数组就删掉不是对象的项，是别的非 null 值就换成 `[]`。
+- **引用的解析**：`TyResolveComponentRef` 新重载带空洞表：下标或 id 指向空洞是“没有”，两个都没写是第一个不是空洞的。轴找网格、系列找 x / y 轴都走它。
+- **`TTyChartOption`**：`SetOptionText` 解析后先压缩系列再建 keys；`MergeOptionText` 的新重载带 `AReplaceMerge`；`CheckReplaceMerge`（拒绝时设 `Error`、选项不动）、`Refuse`。
+- **控件**：
+  - `TTySetOptionOpts`（NotMerge、LazyUpdate、Silent、ReplaceMerge）与 `TySetOptionOptsOf`（JSON 文本，`replaceMerge` 是字符串或数组，非字符串的项按它的文本记、因而被拒绝；标志按 JS 真值；`transition` 等其余键忽略；空串是没有选项；不是对象就拒绝）。
+  - `SetOption(AJson, AOpts)` / `SetOption(AJson, AOptsJson)` 返回是否接受。先查 `replaceMerge` 的名字（notMerge 也查，上游在这里断言）；notMerge 或第一次是 `ApplyNotMerge`（不看 replaceMerge）；否则 `DoMerge`。原来的 `SetOption(AJson, ANotMerge)`、`MergeOption`、`Option` 属性都走这条路。
+  - **`updated` 事件**：新的事件类型（`ChartOn('updated', ...)`），没有 params、没有载荷。每次被接受的 setOption 之后发（silent 不发）；lazy 的留到下一次布局的渲染（`PaintStatic` 里 `Relayout` 之后，`LazyUpdateDone`），silent 取最后那次 lazy 的；同步的 setOption 带走等着的。`DispatchAction`（被接受时）、dataZoom 的派发（`DzDispatch`，API 和手势都经过它）、graph / tree 的 roam、树的展开收起之后也各发一次。图例动作的同步重排（`FullUpdate`）就是上游那次更新，它带走等着的 lazy 更新（上游 legendToggleSelect 之后帧里不再有更新；`select` 不带走，帧里再发一次）。
+  - **空洞的读者**：系列绑定遇到空洞什么也不说（不再有“没有 type”的诊断）；调色板跳过空洞；图例的空洞没有项（`FLegendEntries` 置空），因此不画、不过滤；网格的空洞保留下标、不收任何轴，指向它的轴没有网格；轴的空洞（`TTyAxis.Hole`）不进任何网格、`TTyChartBuild.Axis` 对它答 nil，所以 dataZoom 指向它没有目标、系列指向它解析失败并给诊断；图例悬停的 `excludeSeriesId` 跳过空洞。dataZoom、visualMap、标题的读者遇到 null 节点本来就得到“没有子类型 / 没有文字”，由 fixture 验证。
+  - 树外的状态：`mfRemoved` 与 `mfNew` 一样不是“活着”的模型，roam、力导向、选中、树图的盒子、dataZoom 动作的窗口都清掉；被 id 认领回来的照 §130 保留。
+
+### 动画
+
+- **配对**：`DoMerge` 把报告里 `Brand` 的系列记进 `FAnimFresh`；武装更新时（`AnimSeriesInfo`）这些系列的视图键加前缀 `n:`，与任何旧视图都配不上——从零长出来，即使它重新生成的 id 正是被移除的那个模型的。只生效一次：配对之后（武装或 camOff 丢弃时）清空；notMerge 也清空（新模型没有这个要求）。被 id 认领回来的系列照常按 `(模型 id, 类型)` 配对、从旧位置补间；被移除的系列没有新视图，和 notMerge 下一样当帧消失（上游视图 `__alive` 为假，立即移除，没有淡出）。
+- **lazy 的更新配的是它之前的渲染**：旧视图键只在“上一次更新已经用掉、且没有 lazy 更新在等”时重新取。lazy 的 notMerge 把 A 改名为 B、再同步合并一次、再渲染：上游唯一的那次更新找不到 `'\0B\00'` 的视图，B 从零长出（手写测试）。
+- 测试钩子：`SeriesViewKey(i)`（下一次更新按什么配，brand new 的带 `n:`）、`SeriesOldViewKey(i)`（旧渲染的键）。
+
+### 基准
+
+- `option-merge.js` 扩展：步骤可带选项对象（`setO`），lazy 的步骤在记录前跑它等的那一帧（`chart._onframe()`）——标 `noFrame` 的不跑：那一步什么也不画，只记树、模型和事件，它等的更新由下一步做（端口那一步也不渲染，下一步的视图配对对的是它之前的那次渲染）；动作步骤可标 `frame`，派发之后跑一帧；合并时 `replaceMerge` 点名的主类型记为写过（第一次和 notMerge 不记）。每步新记 `updNow`（调用本身触发的 `updated` 个数）、`upd`（整步的，含 lazy 的帧）、动作步骤的 `sel`（每个 `selectchanged` 的 `selected`）；`out` 新记每个图例列出的名字（`getData()` 里可用的名字，空洞为 null）、每根柱子自己的填充色 `barFills`（visualMap 给的是数据项的颜色，不是系列的）、dataZoom 窗口的第三项（缩放的不是 xAxis 0 时，它缩放的 x 轴下标）。旧的守卫照旧（原始合并层是 getOption 的子集、逐用例的显式期望、覆盖面、两次生成逐字节相同），覆盖面加上 replaceMerge、空洞、压缩、silent、lazy 的用例。
+- 新增 27 个用例、81 步（共 79 个用例、215 步）：系列按 id 留下（空洞、颜色顺延、图例只列剩下的、留下的保持视图）、id 填洞后追加、同名重新生成的 id 仍是新视图且只一次、id 优先再填被移除的位置再追加、没写的主类型全部移除再按序号填回、末尾空洞（树里去掉、模型表里还在）、按 id 认领但类型改变、replaceMerge 与普通合并混在一次里（xAxis、title 普通合并，系列 replaceMerge）、xAxis 空洞与填回、两个 grid 移除第一个与填回、dataZoom 按 id 留下（窗口保留）与换成新模型（窗口重来）、dataZoom 指向空洞轴、title 的 replaceMerge 混普通合并、图例移除（不再过滤）与填回、visualMap 移除（颜色回到调色板）、空洞之后事件的 seriesIndex（含指向空洞的 select、按名字的 select）、notMerge 压缩、第一次 setOption 压缩、notMerge 与第一次都忽略 replaceMerge、silent、lazy（含 lazy + silent、lazy + replaceMerge）、每次动作都发 `updated`、没写的 title 被 replaceMerge 全部移除（title 不随系列被访问，只有点名才动它）、lazy 移除后不经渲染就按序号填回（没有更新夹在中间，填进来的模型配上被移除那个的视图）、grid 0 被移除而轴没写 gridIndex（轴去了第一个不是空洞的 grid）、lazy 之后的图例动作（带走更新）与 select（不带走）。
+- `test.advchart.optionmerge`：重放改用选项对象形式；逐步核 `updated` 的个数（调用后、渲染后）、`selectchanged` 的 `selected`、图例的名字、空洞系列没有元素、每根柱子的填充色（rgba 换成十六进制比）；视图配对改用控件自己的键（setOption 之后、渲染之前取），动作步骤仍按 id。手写：被替换的系列入场而按 id 留下的更新（并且只一次）、坏的 replaceMerge 与坏的选项文本被拒绝（notMerge 也是）、空洞不产生诊断、系列落在空洞轴上不画并说明原因、空洞轴没有缩放窗口、选项文本的解析、lazy 的更新配它之前的渲染、图例动作做掉等着的 lazy 更新（之后的渲染不再发 `updated`）。14 个测试，比较约一万八千六百项。
+
+### 变异测试
+
+`wf-a11/mutate.py`：31 个变异，逐个改源码、重编、跑本批测试、还原。
+
+- 映射（6）：replaceMerge 也按名字找回模型、replaceMerge 保留所有模型、replaceMerge 只追加不填空洞、树里压掉空洞、keys 里压掉空洞、被移除的模型留在 keys 里；
+- 主类型与模式（4）：点名而没写的主类型不动、notMerge 也看 replaceMerge、坏的名字照收、notMerge 不压缩系列；
+- 事件（6）：silent 照发、lazy 当场发、lazy 的事件永远不来、派发不发 `updated`、图例动作不带走 lazy 更新、lazy 等待时仍重取旧视图键；
+- 视图（4）：brand new 的系列按 id 配对、合并不提新视图的要求、新视图的要求用不完、普通合并的新模型也算 brand new；
+- 空洞的读者（9）：空洞占一个颜色、图例空洞列出所有系列、图例空洞显示、网格空洞照收轴、轴空洞仍是轴、`Axis` 对空洞也答、引用缺省时落在空洞上、下标指向空洞时退回第一个、系列空洞报诊断；
+- 树外的状态（1）：被替换的 dataZoom 保留动作窗口；
+- 原始的“replaceMerge 也按名字”（1）：见下。
+
+首轮 28 个里杀死 21 个，存活 7 个：
+- **replaceMerge 也按名字**（只放开名字那一步的模式判断）：等价——replaceMerge 下没有哪个位置带着模型，名字那一步的条件本来就不会成立。换成真正的变异（名字那一步从已有列表里找回模型），`rm-series-brand-new` 里同名而没写 id 的 A 被合并进旧 A、保留视图，杀死。
+- **普通合并的新模型也算 brand new**：补用例 `rm-lazy-fill`（lazy 的 replaceMerge 移除 B 之后不经渲染、普通合并按序号填回——上游没有更新夹在中间，填进来的模型配上 B 的视图），杀死。
+- **图例空洞列出所有系列 / 图例空洞显示**：两道防线互相遮住。删掉 `TyLegendSpecOf` 里那一道（空洞没有项就已经不画、不过滤），剩下的那一道单独变异，杀死。
+- **网格空洞照收轴**：补用例 `rm-grid-axes-left`，并按上游改了引用的缺省值（第一个不是空洞的）；杀死。新增的两个引用变异（缺省时落在空洞上、下标指向空洞时退回第一个）也都杀死。
+- **点名而没写的主类型不动**：已有用例里点名的 series、visualMap 本来就随系列被访问。补用例 `rm-title-absent`，杀死。
+- **图例动作不带走 lazy 更新**：消费原先写在 `DispatchAction` 的图例分支里，而图例动作的 `FullUpdate` 当场重排、`FDirty` 已清，等着的事件只会在之后某次重排时多发一次，用例里没有那样的重排。把消费移进 `FullUpdate`（重排就是那次更新），补手写测试（图例动作之后 `Invalidate` 再渲染，`updated` 仍是 1），杀死。
+
+重跑之后全部杀死（等价的 1 个与删掉的 1 个除外）。
+
+### 推迟与偏差
+
+- **坏的 replaceMerge 名字**：上游在 dev 版断言抛错——notMerge 时已经换掉了模型、`IN_EC_CYCLE_KEY` 也没复位，图表等于坏了；端口整个拒绝，选项不变，`OptionError` 说明是哪个名字。
+- **系列落在空洞轴上**：上游抛错；端口这个系列解析失败、不画，给诊断，其余照画。
+- **`updated` 只发给为它注册的处理器**：通配的 `OnChartEvent` 不算（和 legacy 的选中事件一样），否则每次派发都多一个事件。resize、换主题不发（上游会发）；派发的 `silent` 选项端口没有（`DispatchAction` 只接受载荷）；lazy 更新期间排队的动作端口也没有。dataZoom、roam、树的动作不带走等着的 lazy 更新（上游 dataZoom 等会带走）——只影响 lazy 之后、渲染之前派发这些动作时 `updated` 的个数。
+- **lazy 的“下一帧”是下一次布局的渲染**：端口的构建本来就在渲染时做，lazy 与否只差 `updated` 的时机和旧视图键的取法；查询类接口（`SeriesStore`、命中测试）一直读的是上一次渲染的结果，这一点 lazy 与否都一样，和上游同步 setOption 之后立刻就能查不同（§130 之前就是如此）。
+- **整份选项的 replaceAll**（`resetOption('recreate')`）不单独提供：它只服务 timeline / media，端口没有这两样；没有它们时它就是 notMerge。
+- **内部组件**（`'\0_ec_\0'` 开头的 id，工具箱的 dataZoom）：上游在两种模式下都不让它们参与映射；端口的工具箱 dataZoom 不进 keys，不涉及。
+- **被移除的系列当帧消失**，和上游一样没有离场动画；被移除的组件（轴、图例、标题）同样直接消失。
+- 空洞网格仍按默认盒子算了一个外框（只是不收轴、不画），`Build.Grid(i)` 的下标因此与组件下标一致；上游那里没有网格。
