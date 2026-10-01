@@ -620,27 +620,27 @@ begin
   end
   else
   begin
-    bak := ATarget + '.tbbak';
     if FileExists(ATarget) then
     begin
-      if FileExists(bak) then
-        DeleteFile(bak);
-      if not RenameFile(ATarget, bak) then
+      { the old zip moved aside under a name nobody uses -- a .tbbak that is there already
+        is somebody's file (a backup of an earlier crash, the user's own) and stays }
+      bak := FreeName(ATarget, '.tbbak');
+      if not MoveFile(ATarget, bak) then
       begin
-        AError := Format(rsTbExportNotAFile, [ATarget]);
+        AError := MoveFailure(ATarget);
         Exit;
       end;
-      if not RenameFile(ATemp, ATarget) then
+      if not MoveFile(ATemp, ATarget) then
       begin
-        RenameFile(bak, ATarget);   { the old zip back as it was }
-        AError := Format(rsTbExportNotAFile, [ATarget]);
+        AError := MoveFailure(ATarget);
+        MoveFile(bak, ATarget);     { the old zip back as it was }
         Exit;
       end;
       DeleteFile(bak);
     end
-    else if not RenameFile(ATemp, ATarget) then
+    else if not MoveFile(ATemp, ATarget) then
     begin
-      AError := Format(rsTbExportNotAFile, [ATarget]);
+      AError := MoveFailure(ATarget);
       Exit;
     end;
   end;

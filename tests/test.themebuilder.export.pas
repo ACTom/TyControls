@@ -37,6 +37,7 @@ type
     procedure TestTheDialog;
     procedure TestTheModernDensityIsTriedToo;
     procedure TestAFailedMoveKeepsTheFolder;
+    procedure TestABackupThatIsThereStays;
   end;
 
 implementation
@@ -442,6 +443,26 @@ begin
   AssertTrue('X14: and the next try goes in: ' + err,
     TbExportBundle(TbMinimalTemplate, nil, Info, tbfFolder, target, err));
   AssertFalse('X14: the folder it took is not left aside', DirectoryExists(target + '.tbold'));
+end;
+
+{ The review found it: replacing a zip deleted a <zip>.tbbak that was there, without a word --
+  it may be the only copy of something (a backup an earlier crash left, the user's own). The
+  old zip goes aside under a name nobody uses; the one that was there stays as it was. }
+procedure TTbExportTests.TestABackupThatIsThereStays;
+var
+  err, target, mine: string;
+  src: ITyThemeSource;
+begin
+  target := FDir + 'kept.zip';
+  AssertTrue('first', TbExportBundle(TbMinimalTemplate, nil, Info('1.0'), tbfZip, target, err));
+  mine := 'the user''s own backup' + #0#1;
+  WriteBytes(target + '.tbbak', mine);
+  AssertTrue('X15: replaced: ' + err, TbExportBundle(TbMinimalTemplate, nil, Info('2.0'), tbfZip, target, err));
+  src := TTyThemeZipSource.Create(target);
+  AssertEquals('X15: the new one', '2.0', src.Manifest.Version);
+  src := nil;
+  AssertTrue('X15: the backup that was there is as it was', ReadBytes(target + '.tbbak') = mine);
+  AssertFalse('X15: no backup of ours left', FileExists(FDir + 'kept.zip.1.tbbak'));
 end;
 
 initialization
