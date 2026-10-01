@@ -1672,7 +1672,9 @@ end;
   one, again), and adds nothing; a typeKey with no rule at all still gets one. }
 procedure TTbMainFormTests.TestTheCoverageCheckGoesToAnyRuleOfTheType;
 var
-  t: string;
+  t, before: string;
+  plain: TStringList;
+  caret: Integer;
 begin
   FForm.Editor.Lines.Text := 'TyButon:hover { color: #FF0000; }' + LineEnding + LineEnding +
     '  TyButon.big { color: #00FF00; }' + LineEnding;
@@ -1686,8 +1688,20 @@ begin
   AssertEquals('I1: then the next (line)', 3, FForm.Editor.LogicalCaretXY.Y);
   AssertEquals('I1: then the next (column)', 3, FForm.Editor.LogicalCaretXY.X);
   AssertEquals('I1: still nothing added', t, FForm.Editor.Lines.Text);
-  FForm.JumpToTypeKey('TyFormSurface');
-  AssertTrue('I1: a typeKey with no rule gets one', Pos('TyFormSurface {', FForm.Editor.Lines.Text) > 0);
+  plain := TStringList.Create;
+  try
+    plain.Add('');
+    before := FForm.Editor.Lines.Text;
+    FForm.JumpToTypeKey('TyFormSurface');
+    AssertTrue('I1: a typeKey with no rule gets one', Pos('TyFormSurface {', FForm.Editor.Lines.Text) > 0);
+    { the base has no rule for TyFormSurface (it is left out on purpose): the empty plain rule
+      takes away a base layer that has nothing for it -- nothing changes }
+    AssertEquals('I1: the base has nothing to copy', '', TbBaseRulesText('TyFormSurface', LineEnding, caret));
+    AssertEquals('I1: and the empty rule changes nothing', LookOf(before, 'TyFormSurface', plain),
+      LookOf(FForm.Editor.Lines.Text, 'TyFormSurface', plain));
+  finally
+    plain.Free;
+  end;
 end;
 
 { The review found it: splitting a one-mode theme copied --radius into both @mode blocks,
