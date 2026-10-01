@@ -92,6 +92,8 @@ type
     procedure TestThirdGauge;
     { Task 10: dials and sliders }
     procedure TestThirdTrackBar;
+    { T-d for the families whose mimic test did not render: pixel for pixel. }
+    procedure TestMimicsPaintLikeTheirFinalClass;
     { Real input, one per family: the message a widgetset delivers, not a property write. }
     procedure TestInputThirdButtonClicksOnPressAndRelease;
     procedure TestInputThirdLabelClicksOnPressAndRelease;
@@ -280,6 +282,16 @@ type
   public
     function MakePopupList: TTyListBox;
   end;
+
+  { RenderTo is protected on every family; one cracker each reaches it. }
+  TP1TagRender = class(TTyCustomTag);
+  TP1EditRender = class(TTyCustomEdit);
+  TP1MemoRender = class(TTyCustomMemo);
+  TP1CheckBoxRender = class(TTyCustomCheckBox);
+  TP1RadioRender = class(TTyCustomRadioButton);
+  TP1ComboRender = class(TTyCustomComboBox);
+  TP1ProgressRender = class(TTyCustomProgressBar);
+  TP1TrackRender = class(TTyCustomTrackBar);
 
   { Two descendants that publish nothing but TabStop: on the bare base it carries LCL's
     `default False`; on the track bar's custom class it carries the redeclared True. }
@@ -1539,6 +1551,140 @@ begin
   c.TickMarks := ttmTopLeft;
   AssertTrue('T-v: TickMarks is public through a TTyCustomTrackBar reference (Q6: public, not '
     + 'LCL''s published)', third.TickMarks = ttmTopLeft);
+end;
+
+{ ------------------------------------------------------------------ T-d, the remaining families }
+
+{ Paint AControl through its family's RenderTo onto a sentinel-filled bitmap of its size. }
+function RenderFamily(AControl: TControl): TBitmap;
+var
+  r: TRect;
+begin
+  Result := NewSentinelBitmap(AControl.Width, AControl.Height);
+  r := Rect(0, 0, AControl.Width, AControl.Height);
+  if AControl is TTyCustomTag then TP1TagRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomEdit then TP1EditRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomMemo then TP1MemoRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomCheckBox then
+    TP1CheckBoxRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomRadioButton then
+    TP1RadioRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomComboBox then TP1ComboRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomProgressBar then
+    TP1ProgressRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomTrackBar then TP1TrackRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else raise Exception.Create('no renderer for ' + AControl.ClassName);
+end;
+
+{ Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
+  same pixels: the drawing, the state it reads and the theme rules it resolves all live in the
+  custom class, where the third party gets them. }
+procedure TTyCustomClassesP1Test.TestMimicsPaintLikeTheirFinalClass;
+
+  procedure Same(AThird, AOwn: TControl; AW, AH: Integer);
+  var
+    a, b: TBitmap;
+    diff: string;
+    x, y, painted: Integer;
+  begin
+    AThird.Parent := FForm;
+    AOwn.Parent := FForm;
+    AThird.SetBounds(0, 0, AW, AH);
+    AOwn.SetBounds(0, AH + 10, AW, AH);
+    a := RenderFamily(AThird);
+    b := RenderFamily(AOwn);
+    try
+      painted := 0;
+      for y := 0 to a.Height - 1 do
+        for x := 0 to a.Width - 1 do
+          if a.Canvas.Pixels[x, y] <> CSentinel then Inc(painted);
+      AssertTrue('T-d: ' + AThird.ClassName + ' painted something (or this proves nothing)',
+        painted > 0);
+      AssertTrue('T-d: ' + AThird.ClassName + ' paints exactly what ' + AOwn.ClassName
+        + ' paints: ' + diff, SameBitmaps(a, b, diff));
+    finally
+      a.Free;
+      b.Free;
+    end;
+  end;
+
+var
+  tg: TThirdTag;
+  otg: TTyTag;
+  ed: TThirdEdit;
+  oed: TTyEdit;
+  me: TThirdMemo;
+  ome: TTyMemo;
+  cb: TThirdCheckBox;
+  ocb: TTyCheckBox;
+  rb: TThirdRadioButton;
+  orb: TTyRadioButton;
+  co: TThirdComboBox;
+  oco: TTyComboBox;
+  pb: TThirdProgressBar;
+  opb: TTyProgressBar;
+  tb: TThirdTrackBar;
+  otb: TTyTrackBar;
+begin
+  tg := TThirdTag.Create(FForm);
+  otg := TTyTag.Create(FForm);
+  tg.Caption := 'beta';
+  otg.Caption := 'beta';
+  tg.Closable := True;
+  otg.Closable := True;
+  Same(tg, otg, 80, 24);
+
+  ed := TThirdEdit.Create(FForm);
+  oed := TTyEdit.Create(FForm);
+  ed.Text := 'abc';
+  oed.Text := 'abc';
+  Same(ed, oed, 140, 28);
+
+  me := TThirdMemo.Create(FForm);
+  ome := TTyMemo.Create(FForm);
+  me.Lines.Text := 'one' + LineEnding + 'two';
+  ome.Lines.Text := 'one' + LineEnding + 'two';
+  Same(me, ome, 160, 80);
+
+  cb := TThirdCheckBox.Create(FForm);
+  ocb := TTyCheckBox.Create(FForm);
+  cb.Caption := 'Agree';
+  ocb.Caption := 'Agree';
+  cb.Checked := True;
+  ocb.Checked := True;
+  Same(cb, ocb, 120, 24);
+
+  rb := TThirdRadioButton.Create(FForm);
+  orb := TTyRadioButton.Create(FForm);
+  rb.GroupIndex := 7;
+  orb.GroupIndex := 8;
+  rb.Checked := True;
+  orb.Checked := True;
+  Same(rb, orb, 120, 24);
+
+  co := TThirdComboBox.Create(FForm);
+  oco := TTyComboBox.Create(FForm);
+  co.Items.CommaText := 'one,two';
+  oco.Items.CommaText := 'one,two';
+  co.ItemIndex := 1;
+  oco.ItemIndex := 1;
+  Same(co, oco, 145, 28);
+
+  pb := TThirdProgressBar.Create(FForm);
+  opb := TTyProgressBar.Create(FForm);
+  pb.Max := 50;
+  opb.Max := 50;
+  pb.Position := 40;
+  opb.Position := 40;
+  Same(pb, opb, 160, 20);
+
+  tb := TThirdTrackBar.Create(FForm);
+  otb := TTyTrackBar.Create(FForm);
+  tb.Max := 20;
+  otb.Max := 20;
+  tb.Position := 7;
+  otb.Position := 7;
+  Same(tb, otb, 160, 32);
 end;
 
 { ------------------------------------------------------------------ real input, per family
