@@ -73,6 +73,10 @@ type
     procedure TestHowLongARefreshTakes;
     { phase 2, after the review }
     procedure TestAnEmptyEditorGetsNoExtraLine;
+    procedure TestCtrlClickKeepsTheLook;
+    procedure TestCtrlClickOnAVariantTakesNothingAway;
+    procedure TestTheBaseRulesGoBeforeTheDocumentsOwn;
+    procedure TestAnImportedPlainRuleIsNotCopiedOver;
   end;
 
 implementation
@@ -80,7 +84,8 @@ implementation
 uses
   Forms, FileUtil, IniFiles, Graphics, Types, fpjson, jsonparser, SynEdit, SynEditKeyCmds, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden,
-  LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform;
+  LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
+  tyControls.Types, tyControls.StyleModel, tbthemesource, tbrules;
 
 const
   { a document whose one value no base theme has }
@@ -1295,6 +1300,202 @@ begin
     FForm.Editor.Lines.Text);
   AssertEquals('G1: the caret in the braces (line)', 2, FForm.Editor.LogicalCaretXY.Y);
   AssertEquals('G1: the caret in the braces (column)', 3, FForm.Editor.LogicalCaretXY.X);
+end;
+
+{ ---- what a control looks like, every field a paint reads ---- }
+
+function ColorHex(C: TTyColor): string;
+begin
+  Result := IntToHex(Cardinal(C), 8);
+end;
+
+function StyleText(const S: TTyStyleSet): string;
+var
+  p: TTyProp;
+begin
+  Result := '[';
+  for p := Low(TTyProp) to High(TTyProp) do
+    if p in S.Present then
+      Result := Result + IntToStr(Ord(p)) + ',';
+  Result := Result + '] bg=' + IntToStr(Ord(S.Background.Kind)) + '/' + ColorHex(S.Background.Color)
+    + '/' + ColorHex(S.Background.GradFrom) + '>' + ColorHex(S.Background.GradTo)
+    + ' txt=' + ColorHex(S.TextColor) + ' bd=' + ColorHex(S.BorderColor) + '/'
+    + IntToStr(S.BorderWidth) + '/' + IntToStr(Ord(S.BorderStyle)) + '/' + IntToStr(Ord(S.RenderStyle))
+    + ' rad=' + IntToStr(S.BorderRadius) + '/' + IntToStr(S.Radius.TL) + ',' + IntToStr(S.Radius.TR)
+    + ',' + IntToStr(S.Radius.BR) + ',' + IntToStr(S.Radius.BL)
+    + ' pad=' + IntToStr(S.Padding.Left) + ',' + IntToStr(S.Padding.Top) + ','
+    + IntToStr(S.Padding.Right) + ',' + IntToStr(S.Padding.Bottom)
+    + ' fnt=' + S.FontName + '/' + IntToStr(S.FontSize) + '/' + IntToStr(S.FontWeight)
+    + ' op=' + IntToStr(Round(S.Opacity * 1000))
+    + ' sh=' + ColorHex(S.ShadowColor) + '/' + IntToStr(S.ShadowBlur) + '/'
+    + IntToStr(S.ShadowOffset.X) + ',' + IntToStr(S.ShadowOffset.Y)
+    + ' ol=' + ColorHex(S.OutlineColor) + '/' + IntToStr(S.OutlineWidth) + '/' + IntToStr(S.OutlineOffset);
+end;
+
+const
+  cLookStates: array[0..9] of TTyStateSet = ([], [tysHover], [tysActive], [tysFocused],
+    [tysDisabled], [tysSelected], [tysHover, tysFocused], [tysSelected, tysHover],
+    [tysHover, tysActive], [tysDisabled, tysFocused]);
+
+{ AText's look for AKey with each class of AClasses ('' first) in every state, light and dark }
+function LookOf(const AText, AKey: string; AClasses: TStrings): string;
+var
+  m: TTyStyleModel;
+  md, c, s: Integer;
+  mode: string;
+begin
+  Result := '';
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromSource(TTbTextThemeSource.Create(AText, ''));
+    for md := 0 to 1 do
+    begin
+      if md = 0 then mode := 'light' else mode := 'dark';
+      m.SetMode(mode);
+      for c := 0 to AClasses.Count - 1 do
+        for s := 0 to High(cLookStates) do
+          Result := Result + mode + '/' + AClasses[c] + '/' + IntToStr(s) + ': '
+            + StyleText(m.ResolveStyle(AKey, AClasses[c], cLookStates[s])) + LineEnding;
+    end;
+  finally
+    m.Free;
+  end;
+end;
+
+{ '' and every variant the base or AText knows for AKey }
+function ClassesOf(const AText, AKey: string): TStringList;
+var
+  m: TTyStyleModel;
+begin
+  Result := TStringList.Create;
+  Result.Add('');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromSource(TTbTextThemeSource.Create(AText, ''));
+    m.GetVariantsForType(AKey, Result);
+  finally
+    m.Free;
+  end;
+end;
+
+{ The review found it: Ctrl+click on a control the minimal template has no rule for added an
+  empty plain rule, and an empty plain rule takes the whole base layer away from the typeKey
+  (UserHasTypeKey) -- the edit, the button, the check box and the list lost every style.
+  Now the rule starts as the base's rules for it: every variant in every state, light and
+  dark, resolves exactly as before. }
+procedure TTbMainFormTests.TestCtrlClickKeepsTheLook;
+const
+  cKeys: array[0..3] of string = ('TyEdit', 'TyButton', 'TyCheckBox', 'TyListBox');
+var
+  ctl: array[0..3] of TControl;
+  i: Integer;
+  before, after, shown: string;
+  classes: TStringList;
+  scan: TTbCssScan;
+  hits: TTbOffsets;
+begin
+  ctl[0] := FForm.Preview.EdtText;
+  ctl[1] := FForm.Preview.BtnDefault;
+  ctl[2] := FForm.Preview.ChkOn;
+  ctl[3] := FForm.Preview.LstSample;
+  for i := 0 to High(cKeys) do
+  begin
+    before := FForm.Editor.Lines.Text;
+    classes := ClassesOf(before, cKeys[i]);
+    try
+      shown := StyleText(FForm.Preview.Controller.Model.ResolveStyle(cKeys[i], '', [tysHover]));
+      CtrlPress(ctl[i]);
+      after := FForm.Editor.Lines.Text;
+      scan := TbScanCss(after);
+      try
+        hits := TbFindRuleSelectors(scan, cKeys[i], '');
+      finally
+        scan.Free;
+      end;
+      AssertEquals('H1: one plain rule for ' + cKeys[i], 1, Length(hits));
+      AssertEquals('H1: the caret on its first declaration (line) ' + cKeys[i],
+        TbOffsetToPoint(after, hits[0]).Y + 1, FForm.Editor.LogicalCaretXY.Y);
+      AssertEquals('H1: the caret on its first declaration (column) ' + cKeys[i], 3,
+        FForm.Editor.LogicalCaretXY.X);
+      AssertEquals('H1: ' + cKeys[i] + ' looks as it did', LookOf(before, cKeys[i], classes),
+        LookOf(after, cKeys[i], classes));
+      AssertEquals('H1: and the preview shows it so', shown,
+        StyleText(FForm.Preview.Controller.Model.ResolveStyle(cKeys[i], '', [tysHover])));
+    finally
+      classes.Free;
+    end;
+  end;
+end;
+
+{ A rule for a variant does not take the base layer away (UserHasTypeKey wants a plain one):
+  Ctrl+click on the primary button adds it empty, and nothing changes. }
+procedure TTbMainFormTests.TestCtrlClickOnAVariantTakesNothingAway;
+var
+  before, after: string;
+  classes: TStringList;
+begin
+  before := FForm.Editor.Lines.Text;
+  classes := ClassesOf(before, 'TyButton');
+  try
+    CtrlPress(FForm.Preview.BtnPrimary);
+    after := FForm.Editor.Lines.Text;
+    AssertTrue('H2: an empty variant rule at the end',
+      Pos('TyButton.primary {' + LineEnding + '  ' + LineEnding + '}', after) > 0);
+    AssertEquals('H2: no plain rule', 0, Pos('TyButton {', after));
+    AssertEquals('H2: every variant and state as before', LookOf(before, 'TyButton', classes),
+      LookOf(after, 'TyButton', classes));
+  finally
+    classes.Free;
+  end;
+end;
+
+{ The document already has `TyEdit:focus`, written over the base's: the base's rules come in
+  before it, so its own still has the last word, and the plain look in every state is what
+  it was. }
+procedure TTbMainFormTests.TestTheBaseRulesGoBeforeTheDocumentsOwn;
+var
+  before, after: string;
+  plain: TStringList;
+  scan: TTbCssScan;
+  hits: TTbOffsets;
+begin
+  FForm.Editor.Lines.Text := TbMinimalTemplate + LineEnding + 'TyEdit:focus { border-color: #FF0000; }' + LineEnding;
+  FForm.RefreshNow;
+  before := FForm.Editor.Lines.Text;
+  plain := TStringList.Create;
+  try
+    plain.Add('');
+    CtrlPress(FForm.Preview.EdtText);
+    after := FForm.Editor.Lines.Text;
+    scan := TbScanCss(after);
+    try
+      hits := TbFindRuleSelectors(scan, 'TyEdit', '');
+    finally
+      scan.Free;
+    end;
+    AssertEquals('H3: one plain rule', 1, Length(hits));
+    AssertTrue('H3: before the document''s own TyEdit:focus', hits[0] < Pos('TyEdit:focus { border-color: #FF0000; }', after));
+    AssertEquals('H3: the plain look in every state', LookOf(before, 'TyEdit', plain), LookOf(after, 'TyEdit', plain));
+  finally
+    plain.Free;
+  end;
+end;
+
+{ A file the document imports has `TyEdit { ... }`: the base layer is gone for TyEdit
+  already, and copying the base's rules in would put them over the imported ones. The rule
+  is added empty, and the edit keeps the imported look. }
+procedure TTbMainFormTests.TestAnImportedPlainRuleIsNotCopiedOver;
+begin
+  WriteBytes(FDir + 'mine.tycss', 'TyEdit { background: #123456; color: #ABCDEF; }'#10);
+  WriteBytes(FDir + 'doc.tycss', '@import "mine.tycss";'#10);
+  AssertTrue('opened', FForm.OpenFile(FDir + 'doc.tycss'));
+  AssertEquals('the imported look', $123456,
+    Integer(Cardinal(FForm.Preview.Controller.Model.ResolveStyle('TyEdit', '', []).Background.Color) and $FFFFFF));
+  CtrlPress(FForm.Preview.EdtText);
+  AssertTrue('H4: an empty rule', Pos('TyEdit {' + LineEnding + '  ' + LineEnding + '}', FForm.Editor.Lines.Text) > 0);
+  AssertEquals('H4: nothing of the base copied in', 0, Pos('TyEdit:', FForm.Editor.Lines.Text));
+  AssertEquals('H4: the imported look stays', $123456,
+    Integer(Cardinal(FForm.Preview.Controller.Model.ResolveStyle('TyEdit', '', []).Background.Color) and $FFFFFF));
 end;
 
 initialization

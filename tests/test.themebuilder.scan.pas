@@ -27,6 +27,7 @@ type
     procedure TestOffsetsToPoints;
     procedure TestTheRepositoryThemesAgreeWithTheParser;
     procedure TestApplyingEdits;
+    procedure TestTheImportChain;
   end;
 
   { the rule for a typeKey and variant: found, or added empty at the end (tbrules) }
@@ -193,6 +194,57 @@ begin
     AssertEquals('C8: one block', 1, s.Count);
   finally
     s.Free;
+  end;
+end;
+
+{ The files a text @imports, as the style model reads them: each from the folder of the file
+  that imports it, an imported file before the one that imports it, a file once, a cycle and
+  a missing file passed over. Every file starts with a comment naming it. }
+procedure TTbCssScanTests.TestTheImportChain;
+var
+  dir, got: string;
+  scans: TTbCssScans;
+  i: Integer;
+
+  procedure Put(const ARel, AText: string);
+  var
+    sl: TStringList;
+  begin
+    ForceDirectories(ExtractFilePath(dir + ARel));
+    sl := TStringList.Create;
+    try
+      sl.Text := AText;
+      sl.SaveToFile(dir + ARel);
+    finally
+      sl.Free;
+    end;
+  end;
+
+begin
+  dir := IncludeTrailingPathDelimiter(GetTempDir(False)) + Format('tb2-imports-%d', [GetProcessID]) + PathDelim;
+  try
+    Put('a.tycss', '/*a*/ @import "sub/c.tycss";');
+    Put('sub' + PathDelim + 'c.tycss', '/*c*/ @import "d.tycss"; @import url(../b.tycss); @import "gone.tycss";');
+    Put('sub' + PathDelim + 'd.tycss', '/*d*/ @import "c.tycss";');
+    Put('b.tycss', '/*b*/ :root { --x: 1px; }');
+    scans := TbScanImports('@import "a.tycss";'#10'@import "b.tycss";'#10':root { }', dir);
+    try
+      got := '';
+      for i := 0 to High(scans) do
+        got := got + Copy(scans[i].Text, 3, 1);
+      AssertEquals('C15: d, b, c, a -- b once, the cycle and the missing file passed over', 'dbca', got);
+      AssertEquals('C15: the url() form is a path too', '../b.tycss', scans[2].Imports[1]);
+    finally
+      TbFreeScans(scans);
+    end;
+    scans := TbScanImports('@import "a.tycss";', '');
+    try
+      AssertEquals('C15: no folder, no files', 0, Length(scans));
+    finally
+      TbFreeScans(scans);
+    end;
+  finally
+    DeleteDirectory(ExcludeTrailingPathDelimiter(dir), False);
   end;
 end;
 

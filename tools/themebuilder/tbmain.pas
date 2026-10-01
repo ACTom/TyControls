@@ -183,7 +183,9 @@ type
       no longer has AText: offsets into another text mean nothing }
     function ApplyEdits(const AText: string; const AEdits: TTbTextEdits): Boolean;
     { go to the rule for ATypeKey and a class of AStyleClass (the next one, when it is the
-      same control again), or add an empty one at the end }
+      same control again), or add one: a variant rule empty at the end, a plain rule as a
+      copy of the base's rules for the typeKey (tbrules: an empty one would take the base
+      layer away and leave the control unstyled) }
     procedure JumpToRule(const ATypeKey, AStyleClass: string);
     function BuildCoverageForm: TTbCoverageForm;     { filled, not shown }
     function BuildExportForm: TTbExportForm;         { prepared, not shown }
@@ -816,6 +818,23 @@ begin
     Result[i - 1] := ExtractWord(i, S, [' ', #9]);
 end;
 
+{ some file AText @imports has a plain rule for ATypeKey: the user layer owns it already }
+function ImportsHavePlainRule(const AText, ABaseDir, ATypeKey: string): Boolean;
+var
+  scans: TTbCssScans;
+  i: Integer;
+begin
+  Result := False;
+  scans := TbScanImports(AText, ABaseDir);
+  try
+    for i := 0 to High(scans) do
+      if Length(TbFindRuleSelectors(scans[i], ATypeKey, '')) > 0 then
+        Exit(True);
+  finally
+    TbFreeScans(scans);
+  end;
+end;
+
 procedure TTbMainForm.JumpToRule(const ATypeKey, AStyleClass: string);
 var
   scan: TTbCssScan;
@@ -860,7 +879,14 @@ begin
     else
     begin
       FJumpKey := '';
-      edits := TbNewRuleEdits(scan, TbDetectEol(src), ATypeKey, variant, caret);
+      { a plain rule takes the base layer's rules for the typeKey away (UserHasTypeKey):
+        it starts as a copy of them, unless the theme already has one of its own (from an
+        @import) and the base is gone anyway -- see tbrules }
+      if (variant = '') and not FPreview.Controller.Model.PropertyCascade
+         and not ImportsHavePlainRule(src, FDoc.BaseDir, ATypeKey) then
+        edits := TbOwnRuleEdits(scan, TbDetectEol(src), ATypeKey, caret)
+      else
+        edits := TbNewRuleEdits(scan, TbDetectEol(src), ATypeKey, variant, caret);
       if ApplyEdits(src, edits) then
         Editor.LogicalCaretXY := TbOffsetToPoint(TbApplyEdits(src, edits), caret);
     end;

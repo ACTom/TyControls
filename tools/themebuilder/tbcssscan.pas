@@ -55,6 +55,7 @@ type
   public
     Text: string;
     ImportEnd: Integer;    { one past the last top-level @import's ';' (0: none) }
+    Imports: array of string;   { the top-level @import paths as written (unquoted), text order }
     constructor Create;
     destructor Destroy; override;
     procedure Add(ABlock: TTbBlock);
@@ -70,9 +71,18 @@ type
   end;
   TTbTextEdits = array of TTbTextEdit;   { ascending, never overlapping }
   TTbOffsets = array of Integer;
+  TTbCssScans = array of TTbCssScan;
 
 { a forgiving walk: never raises, whatever the text }
 function TbScanCss(const AText: string): TTbCssScan;
+{ The files AText (the entry, in ABaseDir) @imports, followed down the way the style model
+  does (StyleModel.ExpandSheet): a path as written if that file is there, else from the
+  folder of the file that imports it; each file once; a cycle, a file that is not there or
+  cannot be read is passed over (the model raises -- the problem list says so). Their scans
+  in the order the model adds them: an imported file before the one that imports it, so a
+  later one wins. The caller frees them (TbFreeScans). }
+function TbScanImports(const AText, ABaseDir: string): TTbCssScans;
+procedure TbFreeScans(var AScans: TTbCssScans);
 { AOffset (1-based, may be Length+1) -> Point(byte column, line), lines broken as the tycss
   lexer breaks them (LF, CRLF, a lone CR) -- SynEdit's logical caret }
 function TbOffsetToPoint(const AText: string; AOffset: Integer): TPoint;
@@ -577,7 +587,7 @@ procedure TScanner.Run;
 var
   t, colon, lb: TTyCssToken;
   blk: TTbBlock;
-  name: string;
+  name, path: string;
 begin
   while True do
   begin
@@ -590,11 +600,32 @@ begin
           name := LowerCase(t.Text);
           if name = 'import' then
           begin
-            repeat
+            { the path: a string, or url(...) -- a string inside, or the bare path in pieces }
+            path := '';
+            t := FLex.Next;
+            if t.Kind = ctkString then
+              path := t.Text
+            else if (t.Kind = ctkFunction) and SameText(t.Text, 'url') then
+            begin
               t := FLex.Next;
-            until t.Kind in [ctkSemicolon, ctkEOF];
+              while not (t.Kind in [ctkRParen, ctkSemicolon, ctkEOF]) do
+              begin
+                if t.Kind = ctkHash then
+                  path := path + '#' + t.Text
+                else
+                  path := path + t.Text;
+                t := FLex.Next;
+              end;
+            end;
+            while not (t.Kind in [ctkSemicolon, ctkEOF]) do
+              t := FLex.Next;
             if t.Kind = ctkSemicolon then
               FScan.ImportEnd := Off(t) + 1;
+            if Trim(path) <> '' then
+            begin
+              SetLength(FScan.Imports, Length(FScan.Imports) + 1);
+              FScan.Imports[High(FScan.Imports)] := Trim(path);
+            end;
           end
           else if name = 'mode' then
             ReadMode(t)
@@ -641,6 +672,84 @@ begin
   except
     { forgiving: what was scanned so far stands }
   end;
+end;
+
+function TbScanImports(const AText, ABaseDir: string): TTbCssScans;
+var
+  active, done: TStringList;
+
+  procedure Follow(AScan: TTbCssScan; const ADir: string; ADepth: Integer);
+  var
+    i: Integer;
+    raw, resolved, canon: string;
+    sl: TStringList;
+    child: TTbCssScan;
+  begin
+    if ADepth > 16 then Exit;
+    for i := 0 to High(AScan.Imports) do
+    begin
+      raw := AScan.Imports[i];
+      { as ExpandSheet: the path as written when that file is there, else from ADir }
+      resolved := raw;
+      if (ADir <> '') and not FileExists(resolved) and FileExists(ADir + raw) then
+        resolved := ADir + raw;
+      if not FileExists(resolved) then Continue;
+      canon := LowerCase(ExpandFileName(resolved));
+      if (active.IndexOf(canon) >= 0) or (done.IndexOf(canon) >= 0) then Continue;
+      child := nil;
+      sl := TStringList.Create;
+      try
+        try
+          sl.LoadFromFile(resolved);
+          child := TbScanCss(sl.Text);
+        except
+          child := nil;
+        end;
+      finally
+        sl.Free;
+      end;
+      if child = nil then Continue;
+      active.Add(canon);
+      done.Add(canon);
+      try
+        Follow(child, ExtractFilePath(ExpandFileName(resolved)), ADepth + 1);
+      finally
+        active.Delete(active.IndexOf(canon));
+      end;
+      { after what it imports: the model adds a file on top of its own imports }
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := child;
+    end;
+  end;
+
+var
+  root: TTbCssScan;
+  dir: string;
+begin
+  Result := nil;
+  if ABaseDir <> '' then
+    dir := ExtractFilePath(ExpandFileName(IncludeTrailingPathDelimiter(ABaseDir)))
+  else
+    dir := '';
+  root := TbScanCss(AText);
+  active := TStringList.Create;
+  done := TStringList.Create;
+  try
+    Follow(root, dir, 0);
+  finally
+    active.Free;
+    done.Free;
+    root.Free;
+  end;
+end;
+
+procedure TbFreeScans(var AScans: TTbCssScans);
+var
+  i: Integer;
+begin
+  for i := 0 to High(AScans) do
+    AScans[i].Free;
+  AScans := nil;
 end;
 
 end.
