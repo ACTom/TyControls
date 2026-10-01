@@ -1768,9 +1768,15 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent is TControl) then
   begin
-    // Drop the freed child's band (found by control, never by position).
-    bnd := FBandList.FindBand(TControl(AComponent));
-    if bnd <> nil then bnd.Free;
+    { Drop the freed child's band (found by control, never by position). FBandList is nil when
+      the notice is about the bar itself: freeing a bar whose form lives on removes it from the
+      form, and the form tells every component it owns -- the dying bar included, after its
+      destructor has already freed the list. }
+    if FBandList <> nil then
+    begin
+      bnd := FBandList.FindBand(TControl(AComponent));
+      if bnd <> nil then bnd.Free;
+    end;
     { A freed band must not survive as EITHER end of the drag -- the seam owner is dereferenced
       on every MouseMove, so leaving it dangling is a use-after-free one mouse move away. }
     if (FDragCtl = AComponent) or (FDragSeam = AComponent) then
