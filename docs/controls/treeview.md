@@ -232,7 +232,9 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 
 ## 4. 事件
 
-`TTyTreeView` 暴露的专有事件极多，按用途分组：
+`TTyTreeView` 暴露的专有事件极多，按用途分组。
+
+4.0 起这些事件的 `Sender` 是 `TTyCustomTreeView`（照 LCL：`TTVExpandingEvent` 一类写的是 `TCustomTreeView`）。`TTyShellTreeView` 和第三方从 `TTyCustomTreeView` 派生的树不是 `TTyTreeView`，事件交出来的就是它们自己。处理过程的签名照此写；3.0 的 `Sender: TTyTreeView` 要改成 `Sender: TTyCustomTreeView`，`.lfm` 不用动。
 
 ### 虚拟模型 / 生命周期
 
@@ -467,7 +469,7 @@ Tree.RootNodeCount := 3;
 
 // —— 事件处理器 ——
 
-procedure TForm1.TreeInitNode(Sender: TTyTreeView;
+procedure TForm1.TreeInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 var data: PRowRec;
 begin
@@ -478,13 +480,13 @@ begin
     data^.NameIdx := Integer(Node^.Index); // 存稳定 key，排序后不失效
 end;
 
-procedure TForm1.TreeInitChildren(Sender: TTyTreeView;
+procedure TForm1.TreeInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 5;                         // 展开时懒惰返回子节点数
 end;
 
-procedure TForm1.TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TForm1.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; TextType: TTyVSTTextType; var CellText: string);
 var data: PRowRec;
 begin
@@ -496,7 +498,7 @@ begin
   end;
 end;
 
-procedure TForm1.TreeCompareNodes(Sender: TTyTreeView;
+procedure TForm1.TreeCompareNodes(Sender: TTyCustomTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
 var d1, d2: PRowRec;
 begin

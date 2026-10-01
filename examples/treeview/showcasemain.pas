@@ -104,21 +104,21 @@ type
     procedure BtnDragClearClick  (Sender: TObject);
     procedure BtnDragRebuildClick(Sender: TObject);
     { .lfm-bound Tab 6 (Owner-draw) tree handlers }
-    procedure DrawInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure DrawInitNode    (Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                var InitStates: TTyNodeInitStates);
-    procedure DrawInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure DrawInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                var ChildCount: Cardinal);
-    procedure DrawGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure DrawGetText     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                var AText: string);
-    procedure DrawMeasureItem (Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure DrawMeasureItem (Sender: TTyCustomTreeView; ACanvas: TCanvas;
                                Node: PTyTreeNode; var ANodeHeight: Integer);
-    procedure DrawDrawNode    (Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure DrawDrawNode    (Sender: TTyCustomTreeView; ACanvas: TCanvas;
                                Node: PTyTreeNode; Column: Integer;
                                const ACellRect: TRect);
-    procedure DrawAfterCellPaint(Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure DrawAfterCellPaint(Sender: TTyCustomTreeView; ACanvas: TCanvas;
                                Node: PTyTreeNode; Column: Integer;
                                const ACellRect: TRect);
-    procedure DrawChange      (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure DrawChange      (Sender: TTyCustomTreeView; Node: PTyTreeNode);
   private
     { Explorer-style row icons for the Columns tab (owned by the form) }
     FFileIcons:   TImageList;
@@ -142,79 +142,79 @@ type
     procedure SetFocusInfo(const AText: string);
 
     { Tab 1 — Virtual }
-    procedure VirtualInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure VirtualInitNode    (Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                   var InitStates: TTyNodeInitStates);
-    procedure VirtualInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure VirtualInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                   var ChildCount: Cardinal);
-    procedure VirtualGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure VirtualGetText     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                   var AText: string);
-    procedure VirtualExpanding   (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure VirtualExpanding   (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                   var Allowed: Boolean);
-    procedure VirtualExpanded    (Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure VirtualCollapsed   (Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure VirtualNodeClick   (Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure VirtualNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure VirtualExpanded    (Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure VirtualCollapsed   (Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure VirtualNodeClick   (Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure VirtualNodeDblClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 
     { Tab 2 — Columns + sort }
-    procedure ColInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure ColInitNode    (Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                               var InitStates: TTyNodeInitStates);
-    procedure ColInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure ColInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               var ChildCount: Cardinal);
-    procedure ColGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure ColGetText     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               Column: Integer; TextType: TTyVSTTextType;
                               var CellText: string);
-    procedure ColGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure ColGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               Kind: TTyVTImageKind; Column: Integer;
                               var Ghosted: Boolean; var ImageIndex: Integer);
-    procedure ColCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure ColCompareNodes(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
                               Column: Integer; var CompareResult: Integer);
-    procedure ColNewText     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure ColNewText     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               Column: Integer; const NewText: string);
-    procedure ColEditing     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure ColEditing     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               Column: Integer; var Allowed: Boolean);
-    procedure ColEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure ColEditCancelled(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               Column: Integer);
-    procedure ColHeaderClick (Sender: TTyTreeView; Column: Integer);
-    procedure ColColumnResized(Sender: TTyTreeView; Column: Integer);
-    procedure ColColumnReorder(Sender: TTyTreeView;
+    procedure ColHeaderClick (Sender: TTyCustomTreeView; Column: Integer);
+    procedure ColColumnResized(Sender: TTyCustomTreeView; Column: Integer);
+    procedure ColColumnReorder(Sender: TTyCustomTreeView;
                               OldPosition, NewPosition: Integer);
 
     { Tab 3 — Checkboxes }
-    procedure CheckInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure CheckInitNode    (Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                 var InitStates: TTyNodeInitStates);
-    procedure CheckInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure CheckInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                 var ChildCount: Cardinal);
-    procedure CheckGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure CheckGetText     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                 var AText: string);
-    procedure CheckOnChecked   (Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure CheckChecking     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure CheckOnChecked   (Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure CheckChecking     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                  var Allowed: Boolean);
 
     { Tab 4 — Multi-select }
-    procedure MultiInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure MultiInitNode    (Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                 var InitStates: TTyNodeInitStates);
-    procedure MultiInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure MultiInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                 var ChildCount: Cardinal);
-    procedure MultiGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure MultiGetText     (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                 var AText: string);
     procedure MultiSelectionChanged(Sender: TObject);
-    procedure MultiFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure MultiIncrementalSearch(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure MultiFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure MultiIncrementalSearch(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                 const ASearchText: string; var AMatch: Boolean);
 
     { Tab 5 — Drag to move (small, reparent-safe) }
-    procedure DragGetText   (Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure DragGetText   (Sender: TTyCustomTreeView; Node: PTyTreeNode;
                              var AText: string);
-    procedure DragNodeMoved (Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure DragDragOver  (Sender: TTyTreeView; Src, Target: PTyTreeNode;
+    procedure DragNodeMoved (Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure DragDragOver  (Sender: TTyCustomTreeView; Src, Target: PTyTreeNode;
                              Mode: TTyTreeDropMode; var Allowed: Boolean);
-    procedure DragFreeNode  (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure DragFreeNode  (Sender: TTyCustomTreeView; Node: PTyTreeNode);
 
     { Tab 6 — Owner-draw helpers (shared geometry / colours for the two
       per-cell paint hooks). }
-    function  DrawRowPercent(Sender: TTyTreeView; Node: PTyTreeNode): Integer;
+    function  DrawRowPercent(Sender: TTyCustomTreeView; Node: PTyTreeNode): Integer;
     function  DrawPillRect(const ACellRect: TRect): TRect;
-    function  DrawCaptionRect(Sender: TTyTreeView; Node: PTyTreeNode;
+    function  DrawCaptionRect(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       const ACellRect: TRect): TRect;
     function  OwnerDrawInk: TColor;
   end;
@@ -368,7 +368,7 @@ const
   on, and with toMultiSelect it moves independently of the selection (Ctrl+arrows move
   focus without selecting; Ctrl+Space then toggles that row into the set). Panel 1 keeps
   it so the two never overwrite each other. }
-procedure TShowcaseForm.MultiFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.MultiFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   if Node = nil then
     SetFocusInfo('')
@@ -379,7 +379,7 @@ end;
 
 { The built-in incremental search matches a PREFIX. Handling the event replaces that
   test wholesale -- here with a substring match, so typing "23" also finds "Item 123". }
-procedure TShowcaseForm.MultiIncrementalSearch(Sender: TTyTreeView;
+procedure TShowcaseForm.MultiIncrementalSearch(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean);
 var
   rowText: string;
@@ -527,20 +527,20 @@ begin
   VirtualTree.RootNodeCount := 1000000;
 end;
 
-procedure TShowcaseForm.VirtualInitNode(Sender: TTyTreeView;
+procedure TShowcaseForm.VirtualInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) < 4 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TShowcaseForm.VirtualInitChildren(Sender: TTyTreeView;
+procedure TShowcaseForm.VirtualInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 10;
 end;
 
-procedure TShowcaseForm.VirtualGetText(Sender: TTyTreeView;
+procedure TShowcaseForm.VirtualGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
   AText := Format(rsVirtNodeFmt, [Node^.Index, Sender.GetNodeLevel(Node)]);
@@ -550,7 +550,7 @@ end;
   nodes are never allocated. Level 3 is the last expandable level (VirtualInitNode
   stops flagging children at level 4), so refusing it makes level 4 unreachable —
   exactly the shape of an app that gates a branch behind a permission check. }
-procedure TShowcaseForm.VirtualExpanding(Sender: TTyTreeView;
+procedure TShowcaseForm.VirtualExpanding(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var Allowed: Boolean);
 begin
   if (Node <> nil) and (Sender.GetNodeLevel(Node) = 3) then
@@ -560,19 +560,19 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.VirtualExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.VirtualExpanded(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   if Node = nil then Exit;
   SetStatus(Format(rsExpandedFmt, [Node^.Index]));
 end;
 
-procedure TShowcaseForm.VirtualCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.VirtualCollapsed(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   if Node = nil then Exit;
   SetStatus(Format(rsCollapsedFmt, [Node^.Index]));
 end;
 
-procedure TShowcaseForm.VirtualNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.VirtualNodeClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 var
   s: string;
 begin
@@ -582,7 +582,7 @@ begin
   SetStatus(Format(rsClickedFmt, [s]));
 end;
 
-procedure TShowcaseForm.VirtualNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.VirtualNodeDblClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 var
   s: string;
 begin
@@ -828,7 +828,7 @@ begin
   ColTree.RootNodeCount := 3;
 end;
 
-procedure TShowcaseForm.ColInitNode(Sender: TTyTreeView;
+procedure TShowcaseForm.ColInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 var
   level:      Integer;
@@ -868,7 +868,7 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.ColInitChildren(Sender: TTyTreeView;
+procedure TShowcaseForm.ColInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 var
   data:      PRowRec;
@@ -885,7 +885,7 @@ begin
     ChildCount := 0;
 end;
 
-procedure TShowcaseForm.ColGetText(Sender: TTyTreeView;
+procedure TShowcaseForm.ColGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType;
   var CellText: string);
 var
@@ -940,7 +940,7 @@ end;
 
 { Explorer-style icon for the Name column.  Reads the stored TRowRec (never
   Node^.Index — Sort re-stamps Index) to pick folder / file / image / archive. }
-procedure TShowcaseForm.ColGetImageIndex(Sender: TTyTreeView;
+procedure TShowcaseForm.ColGetImageIndex(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 var
@@ -980,7 +980,7 @@ begin
     ImageIndex := ICON_FILE;
 end;
 
-procedure TShowcaseForm.ColCompareNodes(Sender: TTyTreeView;
+procedure TShowcaseForm.ColCompareNodes(Sender: TTyCustomTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
 var
   t1, t2:  string;
@@ -1028,7 +1028,7 @@ end;
   write the committed string straight into the node's own blob, then invalidate
   so ColGetText re-reads it. The edit lives in TRowRec.EditedName (data-in-node),
   so it follows the row across sorts — it is NOT keyed on Node^.Index. }
-procedure TShowcaseForm.ColNewText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TShowcaseForm.ColNewText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; const NewText: string);
 var
   data: PRowRec;
@@ -1046,7 +1046,7 @@ end;
 { FIX 8: gate which cells open an editor. Only the Name column (0) is writable
   (ColNewText no-ops elsewhere), so veto an edit on Kind/Size/Modified — otherwise
   the editor would open on those columns and silently discard the user's typing. }
-procedure TShowcaseForm.ColEditing(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TShowcaseForm.ColEditing(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; var Allowed: Boolean);
 begin
   Allowed := (Column = 0);
@@ -1054,7 +1054,7 @@ end;
 
 { The other half of the edit lifecycle: Esc (or a programmatic CancelEdit) closes
   the editor WITHOUT firing OnNewText, so the node blob is left untouched. }
-procedure TShowcaseForm.ColEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TShowcaseForm.ColEditCancelled(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer);
 begin
   SetStatus(rsRenameCancelled);
@@ -1063,7 +1063,7 @@ end;
 { Header notifications. OnHeaderClick fires AFTER the automatic sort has run
   (hoHeaderClickAutoSort), so the header already carries the new SortColumn /
   SortDirection when we read them here. }
-procedure TShowcaseForm.ColHeaderClick(Sender: TTyTreeView; Column: Integer);
+procedure TShowcaseForm.ColHeaderClick(Sender: TTyCustomTreeView; Column: Integer);
 var
   dir: string;
 begin
@@ -1074,14 +1074,14 @@ begin
     [TTyColumn(ColTree.Header.Columns.Items[Column]).Text, dir]));
 end;
 
-procedure TShowcaseForm.ColColumnResized(Sender: TTyTreeView; Column: Integer);
+procedure TShowcaseForm.ColColumnResized(Sender: TTyCustomTreeView; Column: Integer);
 begin
   if (Column < 0) or (Column >= ColTree.Header.Columns.Count) then Exit;
   SetStatus(Format(rsColResizedFmt,
     [Column, TTyColumn(ColTree.Header.Columns.Items[Column]).Width]));
 end;
 
-procedure TShowcaseForm.ColColumnReorder(Sender: TTyTreeView;
+procedure TShowcaseForm.ColColumnReorder(Sender: TTyCustomTreeView;
   OldPosition, NewPosition: Integer);
 begin
   SetStatus(Format(rsColMovedFmt, [OldPosition, NewPosition]));
@@ -1123,7 +1123,7 @@ begin
   CheckTree.RootNodeCount := 3;
 end;
 
-procedure TShowcaseForm.CheckInitNode(Sender: TTyTreeView;
+procedure TShowcaseForm.CheckInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
@@ -1141,13 +1141,13 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.CheckInitChildren(Sender: TTyTreeView;
+procedure TShowcaseForm.CheckInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 4;
 end;
 
-procedure TShowcaseForm.CheckGetText(Sender: TTyTreeView;
+procedure TShowcaseForm.CheckGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var AText: string);
 var
   fi, ci: Integer;
@@ -1162,7 +1162,7 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.CheckOnChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.CheckOnChecked(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 var
   NodeName: string;
 begin
@@ -1179,7 +1179,7 @@ end;
 { OnChecking is the VETO half of the check pair: it runs before the state flips and can
   refuse it, while OnChecked only reports what already happened. Here the first root is
   a locked branch -- a permission-gated group in a real app. }
-procedure TShowcaseForm.CheckChecking(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TShowcaseForm.CheckChecking(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Allowed: Boolean);
 begin
   if (Sender.GetNodeLevel(Node) = 0) and (Node^.Index = 0) then
@@ -1207,20 +1207,20 @@ begin
   MultiTree.RootNodeCount := 200;
 end;
 
-procedure TShowcaseForm.MultiInitNode(Sender: TTyTreeView;
+procedure TShowcaseForm.MultiInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) < 3 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TShowcaseForm.MultiInitChildren(Sender: TTyTreeView;
+procedure TShowcaseForm.MultiInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 5;
 end;
 
-procedure TShowcaseForm.MultiGetText(Sender: TTyTreeView;
+procedure TShowcaseForm.MultiGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
   AText := Format(rsItemFmt, [Node^.Index, Sender.GetNodeLevel(Node)]);
@@ -1314,7 +1314,7 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.DragGetText(Sender: TTyTreeView;
+procedure TShowcaseForm.DragGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var AText: string);
 var
   data: PDragRec;
@@ -1332,7 +1332,7 @@ end;
   happens rather than undoing it afterwards. dmOn means "make it a CHILD of the
   target", which only makes sense for a branch -- so it is refused on a leaf, while
   dmAbove / dmBelow (pure reordering) always pass. }
-procedure TShowcaseForm.DragDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+procedure TShowcaseForm.DragDragOver(Sender: TTyCustomTreeView; Src, Target: PTyTreeNode;
   Mode: TTyTreeDropMode; var Allowed: Boolean);
 begin
   if (Mode = dmOn) and (Target <> nil) and (Sender.GetNodeLevel(Target) > 0) then
@@ -1344,7 +1344,7 @@ end;
 
 { Fires for EVERY node the control releases, whoever caused it: Delete, Clear, or the
   form closing. A real app frees managed node data here; the showcase just counts. }
-procedure TShowcaseForm.DragFreeNode(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.DragFreeNode(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FFreedNodes);
 end;
@@ -1380,7 +1380,7 @@ begin
   SetStatus(rsRebuilt);
 end;
 
-procedure TShowcaseForm.DragNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.DragNodeMoved(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 var
   s: string;
 begin
@@ -1400,14 +1400,14 @@ end;
   ======================================================================= }
 
 { Level 0 = a build (tall row, progress pill), level 1 = a stage (short row). }
-procedure TShowcaseForm.DrawInitNode(Sender: TTyTreeView;
+procedure TShowcaseForm.DrawInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TShowcaseForm.DrawInitChildren(Sender: TTyTreeView;
+procedure TShowcaseForm.DrawInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 4;
@@ -1415,7 +1415,7 @@ end;
 
 { Still needed with toOwnerDraw: the control uses it for incremental search, for
   accessibility and as the fallback if the paint hook does nothing. }
-procedure TShowcaseForm.DrawGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TShowcaseForm.DrawGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var AText: string);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
@@ -1425,14 +1425,14 @@ begin
 end;
 
 { toVariableNodeHeight makes the control ask per row instead of using one height. }
-procedure TShowcaseForm.DrawMeasureItem(Sender: TTyTreeView; ACanvas: TCanvas;
+procedure TShowcaseForm.DrawMeasureItem(Sender: TTyCustomTreeView; ACanvas: TCanvas;
   Node: PTyTreeNode; var ANodeHeight: Integer);
 begin
   if Sender.GetNodeLevel(Node) = 0 then ANodeHeight := 40 else ANodeHeight := 22;
 end;
 
 { A deterministic 0..100 per build, so the pills do not dance on every repaint. }
-function TShowcaseForm.DrawRowPercent(Sender: TTyTreeView; Node: PTyTreeNode): Integer;
+function TShowcaseForm.DrawRowPercent(Sender: TTyCustomTreeView; Node: PTyTreeNode): Integer;
 begin
   Result := ((Node^.Index * 37) mod 101);
 end;
@@ -1444,7 +1444,7 @@ end;
   publishes the answer per node (indent + expander + checkbox + image slots
   already consumed), so the owner-drawn caption lands exactly where the default
   one would have. Falls back to the cell for a node that is not on screen. }
-function TShowcaseForm.DrawCaptionRect(Sender: TTyTreeView; Node: PTyTreeNode;
+function TShowcaseForm.DrawCaptionRect(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   const ACellRect: TRect): TRect;
 begin
   if not Sender.DisplayRect(Node, True, Result) then
@@ -1471,7 +1471,7 @@ begin
     TyDefaultController.Model.ResolveStyle('TyTreeView', '', []).TextColor);
 end;
 
-procedure TShowcaseForm.DrawDrawNode(Sender: TTyTreeView; ACanvas: TCanvas;
+procedure TShowcaseForm.DrawDrawNode(Sender: TTyCustomTreeView; ACanvas: TCanvas;
   Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
 var
   txt:  string;
@@ -1519,7 +1519,7 @@ end;
   The ink is put back before returning. An overlay borrows the host's canvas; the
   next cell -- and the next paint -- inherits whatever it leaves behind, and this one
   used to leave clWhite, which is how the child captions ended up white on white. }
-procedure TShowcaseForm.DrawAfterCellPaint(Sender: TTyTreeView; ACanvas: TCanvas;
+procedure TShowcaseForm.DrawAfterCellPaint(Sender: TTyCustomTreeView; ACanvas: TCanvas;
   Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
 const
   BadgeW = 34;
@@ -1560,7 +1560,7 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.DrawChange(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TShowcaseForm.DrawChange(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 var
   txt: string;
 begin

@@ -36,13 +36,13 @@ type
     function  NodePath(Node: PTyTreeNode): string;
     procedure PopulateChildren(Node: PTyTreeNode);
     // Tree event handlers.
-    procedure TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
-    procedure TreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var AText: string);
+    procedure TreeInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
-    procedure TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure TreeExpanding(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean);
+    procedure TreeGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
-    procedure TreeFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure TreeFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
     procedure NewFolderClick(Sender: TObject);
   protected
     procedure LayoutContent; override;
@@ -280,7 +280,7 @@ begin
   end;
 end;
 
-procedure TTySelectPathForm.TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
+procedure TTySelectPathForm.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var AText: string);
 var p: string;
 begin
   p := NodePath(Node);
@@ -288,7 +288,7 @@ begin
   if AText = '' then AText := p;   // a drive root like 'C:\' collapses to '' above
 end;
 
-procedure TTySelectPathForm.TreeInitNode(Sender: TTyTreeView;
+procedure TTySelectPathForm.TreeInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   { show an expand arrow iff this directory actually has subdirectories }
@@ -296,7 +296,7 @@ begin
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTySelectPathForm.TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTySelectPathForm.TreeGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
 begin
   { Single folder glyph for every node — every entry in this tree is a
@@ -304,7 +304,7 @@ begin
   ImageIndex := 0;
 end;
 
-procedure TTySelectPathForm.TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
+procedure TTySelectPathForm.TreeExpanding(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean);
 begin
   Allowed := True;
   { lazy population: enumerate subdirs on first expand only. AddChild bumps
@@ -364,7 +364,7 @@ begin
   if found <> nil then FTree.FocusedNode := found;
 end;
 
-procedure TTySelectPathForm.TreeFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTySelectPathForm.TreeFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   { Every node in this tree is a folder, so "a folder node is selected" reduces
     to "the tree has a focused node". Node is nil when nothing is selected. }

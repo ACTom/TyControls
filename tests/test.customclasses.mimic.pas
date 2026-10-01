@@ -25,18 +25,19 @@ uses
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Gauge,
   tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
-  tyControls.GlyphButtons, tyControls.GridPanel, tyControls.GroupBox, tyControls.HtmlLabel,
-  tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
-  tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Meter,
-  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
-  tyControls.PageControl, tyControls.PaintPanel, tyControls.Panel, tyControls.ProgressBar,
-  tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel, tyControls.ScrollBox,
-  tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel,
-  tyControls.ShellComboBox, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
+  tyControls.GlyphButtons, tyControls.GridPanel, tyControls.GroupBox, tyControls.HeaderControl,
+  tyControls.HtmlLabel, tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox,
+  tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit,
+  tyControls.Memo, tyControls.Meter, tyControls.NumericEdit, tyControls.OfficeComboBox,
+  tyControls.OfficeListBox, tyControls.PageControl, tyControls.PaintPanel, tyControls.Panel,
+  tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
+  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented,
+  tyControls.ShadowLabel, tyControls.ShellComboBox, tyControls.ShellListView,
+  tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
   tyControls.Splitter, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag,
   tyControls.ToggleSwitch, tyControls.ToolGroupPanel, tyControls.TrackBar, tyControls.TrackEdit,
-  tyControls.Transfer, tyControls.TreeSelect, tyControls.TyLabel, tyControls.URLEdit,
-  tyControls.UpDown, tyControls.ValueListEditor;
+  tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel,
+  tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor;
 
 type
   TGenActivityBar = class(TTyCustomActivityBar)
@@ -3306,6 +3307,65 @@ type
     property Anchors;
   end;
 
+  TGenHeaderControl = class(TTyCustomHeaderControl)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property OnSectionClick;
+    property OnSectionResize;
+    property OnSectionTrack;
+    property Align;
+    property Anchors;
+  end;
+
   TGenHtmlLabel = class(TTyCustomHtmlLabel)
   published
     property Version;
@@ -3650,6 +3710,100 @@ type
     property OnGroupToggle;
     property OnItemClick;
     property OnItemDblClick;
+    property Align;
+    property Anchors;
+  end;
+
+  TGenListView = class(TTyCustomListView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ViewStyle;
+    property RowHeight;
+    property OwnerData;
+    property ItemCount;
+    property Items;
+    property Header;
+    property ShowColumnHeaders;
+    property GridLines;
+    property RowSelect;
+    property HotTrack;
+    property MultiSelect;
+    property SortColumn;
+    property SortDirection;
+    property SortKind;
+    property AutoSort;
+    property LargeImages;
+    property SmallImages;
+    property Checkboxes;
+    property ReadOnly;
+    property GroupView;
+    property Groups;
+    property ScrollBarAutoHide;
+    property OnGetItemText;
+    property OnGetItemImage;
+    property OnGetItemState;
+    property OnCompare;
+    property OnColumnClick;
+    property OnItemActivate;
+    property OnSelectItem;
+    property OnChange;
+    property OnChanging;
+    property OnItemChecked;
+    property OnInsert;
+    property OnDeletion;
+    property OnEditing;
+    property OnEdited;
+    property OnGetItemGroup;
+    property OnGroupCollapsed;
     property Align;
     property Anchors;
   end;
@@ -5140,6 +5294,234 @@ type
     property OnSelectPath;
   end;
 
+  TGenShellListView = class(TTyCustomShellListView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ViewStyle;
+    property RowHeight;
+    property OwnerData;
+    property ItemCount;
+    property Items;
+    property Header;
+    property ShowColumnHeaders;
+    property GridLines;
+    property RowSelect;
+    property HotTrack;
+    property MultiSelect;
+    property SortColumn;
+    property SortDirection;
+    property SortKind;
+    property AutoSort;
+    property LargeImages;
+    property SmallImages;
+    property Checkboxes;
+    property ReadOnly;
+    property GroupView;
+    property Groups;
+    property ScrollBarAutoHide;
+    property OnGetItemText;
+    property OnGetItemImage;
+    property OnGetItemState;
+    property OnCompare;
+    property OnColumnClick;
+    property OnItemActivate;
+    property OnSelectItem;
+    property OnChange;
+    property OnChanging;
+    property OnItemChecked;
+    property OnInsert;
+    property OnDeletion;
+    property OnEditing;
+    property OnEdited;
+    property OnGetItemGroup;
+    property OnGroupCollapsed;
+    property Align;
+    property Anchors;
+    property Directory;
+    property Mask;
+    property MaskCaseSensitivity;
+    property ObjectTypes;
+    property ShowHidden;
+    property AutoSizeColumns;
+    property UseBuiltInIcons;
+    property FoldersFirst;
+    property GroupByKind;
+    property OnFileActivate;
+    property OnDirectoryChange;
+    property OnAddItem;
+    property ShellTreeView;
+  end;
+
+  TGenShellTreeView = class(TTyCustomShellTreeView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Options;
+    property Header;
+    property Items;
+    property NodeDataSize;
+    property DefaultNodeHeight;
+    property RootNodeCount;
+    property Indent;
+    property Images;
+    property EmptyListMessage;
+    property ShowButtons;
+    property ShowTreeLines;
+    property ShowRoot;
+    property ToggleOnDblClick;
+    property HotTrack;
+    property ScrollBars;
+    property ScrollBarAutoHide;
+    property AutoExpand;
+    property RightClickSelect;
+    property HideSelection;
+    property ShowSeparators;
+    property SearchTimeout;
+    property Align;
+    property Anchors;
+    property OnFreeNode;
+    property OnInitNode;
+    property OnInitChildren;
+    property OnExpanding;
+    property OnExpanded;
+    property OnCollapsing;
+    property OnCollapsed;
+    property OnChange;
+    property OnChanging;
+    property OnFocusChanged;
+    property OnChecking;
+    property OnChecked;
+    property OnSelectionChanged;
+    property OnNodeClick;
+    property OnNodeDblClick;
+    property OnGetText;
+    property OnGetTextWithType;
+    property OnGetImageIndex;
+    property OnPaintText;
+    property OnDrawNode;
+    property OnAfterCellPaint;
+    property OnMeasureItem;
+    property OnIncrementalSearch;
+    property OnColumnResized;
+    property OnColumnReorder;
+    property OnCompareNodes;
+    property OnHeaderClick;
+    property OnEditing;
+    property OnNewText;
+    property OnEditCancelled;
+    property OnEditingEnd;
+    property OnNodeDragOver;
+    property OnNodeMoved;
+    property Directory;
+    property Root;
+    property ObjectTypes;
+    property ShowHidden;
+    property FileSortType;
+    property ExpandCollapseMode;
+    property UseBuiltinIcons;
+    property OnPathChange;
+    property OnAddItem;
+    property OnSortCompare;
+    property ShellListView;
+  end;
+
   TGenSizeBox = class(TTyCustomSizeBox)
   published
     property Version;
@@ -6020,6 +6402,116 @@ type
     property Anchors;
   end;
 
+  TGenTreeView = class(TTyCustomTreeView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Options;
+    property Header;
+    property Items;
+    property NodeDataSize;
+    property DefaultNodeHeight;
+    property RootNodeCount;
+    property Indent;
+    property Images;
+    property EmptyListMessage;
+    property ShowButtons;
+    property ShowTreeLines;
+    property ShowRoot;
+    property ToggleOnDblClick;
+    property HotTrack;
+    property ScrollBars;
+    property ScrollBarAutoHide;
+    property AutoExpand;
+    property RightClickSelect;
+    property HideSelection;
+    property ShowSeparators;
+    property SearchTimeout;
+    property Align;
+    property Anchors;
+    property OnFreeNode;
+    property OnInitNode;
+    property OnInitChildren;
+    property OnExpanding;
+    property OnExpanded;
+    property OnCollapsing;
+    property OnCollapsed;
+    property OnChange;
+    property OnChanging;
+    property OnFocusChanged;
+    property OnChecking;
+    property OnChecked;
+    property OnSelectionChanged;
+    property OnNodeClick;
+    property OnNodeDblClick;
+    property OnGetText;
+    property OnGetTextWithType;
+    property OnGetImageIndex;
+    property OnPaintText;
+    property OnDrawNode;
+    property OnAfterCellPaint;
+    property OnMeasureItem;
+    property OnIncrementalSearch;
+    property OnColumnResized;
+    property OnColumnReorder;
+    property OnCompareNodes;
+    property OnHeaderClick;
+    property OnEditing;
+    property OnNewText;
+    property OnEditCancelled;
+    property OnEditingEnd;
+    property OnNodeDragOver;
+    property OnNodeMoved;
+  end;
+
   TGenURLEdit = class(TTyCustomURLEdit)
   published
     property Version;
@@ -6225,7 +6717,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..93, 0..1] of TClass = (
+  CGenMimics: array[0..98, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -6275,12 +6767,14 @@ const
     (TGenGridCell, TTyGridCell),
     (TGenGridPanel, TTyGridPanel),
     (TGenGroupBox, TTyGroupBox),
+    (TGenHeaderControl, TTyHeaderControl),
     (TGenHtmlLabel, TTyHtmlLabel),
     (TGenLabel, TTyLabel),
     (TGenLevelMeter, TTyLevelMeter),
     (TGenLinkLabel, TTyLinkLabel),
     (TGenListBox, TTyListBox),
     (TGenListGroupPanel, TTyListGroupPanel),
+    (TGenListView, TTyListView),
     (TGenMRUComboBox, TTyMRUComboBox),
     (TGenMaskEdit, TTyMaskEdit),
     (TGenMemo, TTyMemo),
@@ -6303,6 +6797,8 @@ const
     (TGenSegmented, TTySegmented),
     (TGenShadowLabel, TTyShadowLabel),
     (TGenShellComboBox, TTyShellComboBox),
+    (TGenShellListView, TTyShellListView),
+    (TGenShellTreeView, TTyShellTreeView),
     (TGenSizeBox, TTySizeBox),
     (TGenSparkline, TTySparkline),
     (TGenSpeedButton, TTySpeedButton),
@@ -6317,6 +6813,7 @@ const
     (TGenTrackEdit, TTyTrackEdit),
     (TGenTransfer, TTyTransfer),
     (TGenTreeSelect, TTyTreeSelect),
+    (TGenTreeView, TTyTreeView),
     (TGenURLEdit, TTyURLEdit),
     (TGenUpDown, TTyUpDown),
     (TGenValueListEditor, TTyValueListEditor));

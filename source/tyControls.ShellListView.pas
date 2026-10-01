@@ -1,11 +1,11 @@
 unit tyControls.ShellListView;
 {$mode objfpc}{$H+}
-{ TTyShellListView -- a file-system-backed TTyListView.
+{ TTyShellListView -- a file-system-backed list view (a TTyCustomListView descendant).
 
   Design: docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md
   Plan  : docs/superpowers/plans/2026-07-11-phase7-shelllistview.md
 
-  This is a PURE ADAPTER. It is a TTyListView in OwnerData mode whose sole backing
+  This is a PURE ADAPTER. It is a TTyCustomListView in OwnerData mode whose sole backing
   store is a TTyFsEntryArray from tyControls.FileSystem: item index == index into
   FEntries. It overrides only the five data accessors, CommitEdit (the F2-rename
   seam) and DoCompare (raw-value sort), plus the directory/mask/hidden plumbing.
@@ -59,7 +59,7 @@ type
     The methods are protected: TTyShellListView is declared in the same unit and
     can therefore reach them, while application code cannot mistake them for the
     tree's public API (Directory / SelectPath / UpdateView are that). }
-  TTyShellTreeLink = class(TTyTreeView)
+  TTyShellTreeLink = class(TTyCustomTreeView)
   protected
     { Move the tree's selection to APath. Must not push back to the list. }
     procedure ShellLinkSelect(const APath: string); virtual; abstract;
@@ -70,7 +70,7 @@ type
   { ===================================================================
     TTyShellListView
     =================================================================== }
-  TTyShellListView = class(TTyListView)
+  TTyCustomShellListView = class(TTyCustomListView)
   private
     FDirectory:    string;
     FEntries:      TTyFsEntryArray;      { the ONLY backing store; item index == subscript }
@@ -182,7 +182,6 @@ type
       Inspector two rows that overwrite each other. This exists so ported code that
       says `List.Root := Dir` compiles and means what it says. }
     property Root: string read FDirectory write LoadDirectory;
-  published
     { Setting Directory reads that path from disk (LoadDirectory). }
     property Directory: string read FDirectory write LoadDirectory;
     { The file filter (';'-separated masks). Changing it re-reads. }
@@ -250,6 +249,114 @@ type
       Inspector still offers every shell tree on the form, since that is the only
       concrete descendant. }
     property ShellTreeView: TTyShellTreeLink read FShellTreeView write SetShellTreeView;
+  end;
+
+  { TTyShellListView publishes TTyCustomShellListView's properties; everything lives in TTyCustomShellListView. }
+  TTyShellListView = class(TTyCustomShellListView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ViewStyle;
+    property RowHeight;
+    property OwnerData;
+    property ItemCount;
+    property Items;
+    property Header;
+    property ShowColumnHeaders;
+    property GridLines;
+    property RowSelect;
+    property HotTrack;
+    property MultiSelect;
+    property SortColumn;
+    property SortDirection;
+    property SortKind;
+    property AutoSort;
+    property LargeImages;
+    property SmallImages;
+    property Checkboxes;
+    property ReadOnly;
+    property GroupView;
+    property Groups;
+    property ScrollBarAutoHide;
+    property OnGetItemText;
+    property OnGetItemImage;
+    property OnGetItemState;
+    property OnCompare;
+    property OnColumnClick;
+    property OnItemActivate;
+    property OnSelectItem;
+    property OnChange;
+    property OnChanging;
+    property OnItemChecked;
+    property OnInsert;
+    property OnDeletion;
+    property OnEditing;
+    property OnEdited;
+    property OnGetItemGroup;
+    property OnGroupCollapsed;
+    property Align;
+    property Anchors;
+    property Directory;
+    property Mask;
+    property MaskCaseSensitivity;
+    property ObjectTypes;
+    property ShowHidden;
+    property AutoSizeColumns;
+    property UseBuiltInIcons;
+    property FoldersFirst;
+    property GroupByKind;
+    property OnFileActivate;
+    property OnDirectoryChange;
+    property OnAddItem;
+    property ShellTreeView;
   end;
 
 { bytes -> '512 B' / '1.2 KB' / '3.4 MB' / ... . Pure and exported: the unit words come
@@ -340,7 +447,7 @@ end;
   Lifecycle
   --------------------------------------------------------------------------- }
 
-constructor TTyShellListView.Create(AOwner: TComponent);
+constructor TTyCustomShellListView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
@@ -376,7 +483,7 @@ begin
   SortDirection := sdAscending;
 end;
 
-destructor TTyShellListView.Destroy;
+destructor TTyCustomShellListView.Destroy;
 begin
   { FImages/FIcons are created with no owner (see BuildGlyphs) so we free them. Freeing
     FImages fires its FreeNotification, which nils the inherited Small/LargeImages refs. }
@@ -386,7 +493,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyShellListView.BuildColumns;
+procedure TTyCustomShellListView.BuildColumns;
 
   procedure AddCol(const AText: string; AWidth: Integer; AAlign: TAlignment);
   var
@@ -417,7 +524,7 @@ end;
   resolved -- theming them would introduce a "no theme at construct time + rebuild on
   theme change" complexity that is not worth it for what is really content. An app can
   override the whole set via SmallImages/LargeImages. }
-procedure TTyShellListView.BuildGlyphs;
+procedure TTyCustomShellListView.BuildGlyphs;
 const
   G = 128;   { master edge, px }
 
@@ -516,7 +623,7 @@ begin
   LargeImages := FImages;
 end;
 
-procedure TTyShellListView.Loaded;
+procedure TTyCustomShellListView.Loaded;
 begin
   inherited Loaded;
   { Do the deferred initial read now that every streamed property is in place. }
@@ -527,7 +634,7 @@ end;
   Directory intake
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.ReloadEntries;
+procedure TTyCustomShellListView.ReloadEntries;
 begin
   { Never touch disk mid-stream (properties arrive in arbitrary order -> Loaded does the
     one real read) or in the IDE designer. At runtime neither flag is set, so a code
@@ -543,7 +650,7 @@ begin
   ItemsChanged;   { inherited: resizes order/rank/selection, re-sorts under AutoSort }
 end;
 
-procedure TTyShellListView.ApplyAddItemVeto;
+procedure TTyCustomShellListView.ApplyAddItemVeto;
 var
   i, n: Integer;
   keep: TTyFsEntryArray;
@@ -570,7 +677,7 @@ end;
   Returns a caller-owned list of FullPaths (sorted, so the restore is a binary
   search rather than a scan per row) and, separately, the focused one -- focus and
   selection are different things and both have to come back. }
-function TTyShellListView.SnapshotSelectedPaths(out AFocused: string): TStringList;
+function TTyCustomShellListView.SnapshotSelectedPaths(out AFocused: string): TStringList;
 var
   i: Integer;
 begin
@@ -586,7 +693,7 @@ begin
       Result.Add(FEntries[i].FullPath);
 end;
 
-procedure TTyShellListView.RestoreSelectedPaths(APaths: TStringList;
+procedure TTyCustomShellListView.RestoreSelectedPaths(APaths: TStringList;
   const AFocused: string);
 var
   i, focusRow: Integer;
@@ -612,7 +719,7 @@ begin
       Selected[i] := True;
 end;
 
-procedure TTyShellListView.LoadDirectory(const APath: string);
+procedure TTyCustomShellListView.LoadDirectory(const APath: string);
 begin
   FDirectory := APath;
   ReloadEntries;
@@ -631,7 +738,7 @@ begin
   PushToTree;
 end;
 
-procedure TTyShellListView.PushToTree;
+procedure TTyCustomShellListView.PushToTree;
 begin
   if (FShellTreeView = nil) or (FLinkLock > 0) then Exit;
   if FDirectory = '' then Exit;
@@ -644,12 +751,12 @@ begin
   end;
 end;
 
-function TTyShellListView.ShellLinkBusy: Boolean;
+function TTyCustomShellListView.ShellLinkBusy: Boolean;
 begin
   Result := FLinkLock > 0;
 end;
 
-procedure TTyShellListView.SetShellTreeView(AValue: TTyShellTreeLink);
+procedure TTyCustomShellListView.SetShellTreeView(AValue: TTyShellTreeLink);
 begin
   if FShellTreeView = AValue then Exit;
   FShellTreeView := AValue;
@@ -658,7 +765,7 @@ begin
     AValue.FreeNotification(Self);
 end;
 
-procedure TTyShellListView.Notification(AComponent: TComponent;
+procedure TTyCustomShellListView.Notification(AComponent: TComponent;
   Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
@@ -666,7 +773,7 @@ begin
     FShellTreeView := nil;
 end;
 
-procedure TTyShellListView.UpdateView;
+procedure TTyCustomShellListView.UpdateView;
 var
   paths: TStringList;
   focusPath: string;   { not `focused`: TWinControl.Focused is already that name }
@@ -684,13 +791,13 @@ end;
   The five data accessors -- FEntries only, never disk
   --------------------------------------------------------------------------- }
 
-function TTyShellListView.GetItemCount: Integer;
+function TTyCustomShellListView.GetItemCount: Integer;
 begin
   { Called every paint / scroll / sort: it MUST stay O(1) and disk-free. }
   Result := Length(FEntries);
 end;
 
-function TTyShellListView.GetItemText(AIndex, AColumn: Integer): string;
+function TTyCustomShellListView.GetItemText(AIndex, AColumn: Integer): string;
 begin
   Result := '';
   if (AIndex < 0) or (AIndex > High(FEntries)) then Exit;
@@ -704,7 +811,7 @@ begin
   end;
 end;
 
-function TTyShellListView.GetItemImageIndex(AIndex, AColumn: Integer): Integer;
+function TTyCustomShellListView.GetItemImageIndex(AIndex, AColumn: Integer): Integer;
 begin
   { The kind glyph lives in the main column only; other columns carry no icon. }
   if AColumn > 0 then Exit(-1);
@@ -716,7 +823,7 @@ begin
   Result := Ord(TyShellKindOf(FEntries[AIndex]));
 end;
 
-function TTyShellListView.GetItemGroup(AItemIndex: Integer): Integer;
+function TTyCustomShellListView.GetItemGroup(AItemIndex: Integer): Integer;
 begin
   { Only consulted while GroupByKind is on; returns the group index of this entry's TYPE
     (its Type-column value), or -1 for the implicit bucket if the type has no group. }
@@ -731,7 +838,7 @@ end;
   F2 rename -> RenameFileUTF8
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.CommitEdit(AIndex: Integer; const AText: string);
+procedure TTyCustomShellListView.CommitEdit(AIndex: Integer; const AText: string);
 var
   newPath: string;
 begin
@@ -760,7 +867,7 @@ end;
   --------------------------------------------------------------------------- }
 
 { Sort on the RAW values, never the display strings (the whole point of the adapter). }
-function TTyShellListView.CompareItems(AItemA, AItemB: Integer): Integer;
+function TTyCustomShellListView.CompareItems(AItemA, AItemB: Integer): Integer;
 begin
   { An application handler wins: it is the caller's ordering, and the whole point of
     taking the event slot back from the constructor was that the app owns it. Without
@@ -779,13 +886,13 @@ end;
 
 { A folder navigates; a file fires OnFileActivate. inherited last, so an application that
   also wants the raw OnItemActivate still gets it. }
-procedure TTyShellListView.DoItemActivate(AIndex: Integer);
+procedure TTyCustomShellListView.DoItemActivate(AIndex: Integer);
 begin
   ShellActivate(AIndex);
   inherited DoItemActivate(AIndex);
 end;
 
-procedure TTyShellListView.ShellCompare(AIndex1, AIndex2,
+procedure TTyCustomShellListView.ShellCompare(AIndex1, AIndex2,
   AColumn: Integer; var ACompare: Integer);
 var
   asc: Boolean;
@@ -813,7 +920,7 @@ end;
   Activation -- folder navigates, file fires OnFileActivate
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.ShellActivate(AIndex: Integer);
+procedure TTyCustomShellListView.ShellActivate(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex > High(FEntries)) then Exit;
   if FEntries[AIndex].IsDir then
@@ -828,7 +935,7 @@ end;
 
 { Rebuild the inherited Groups collection to one band per kind PRESENT in FEntries (in
   canonical kind order) and record the kind->group-index map GetItemGroup reads. }
-procedure TTyShellListView.RebuildKindGroups;
+procedure TTyCustomShellListView.RebuildKindGroups;
 var
   i, gi: Integer;
   fileTypes: TStringList;
@@ -867,12 +974,12 @@ end;
   Public queries
   --------------------------------------------------------------------------- }
 
-function TTyShellListView.SelectedFile: string;
+function TTyCustomShellListView.SelectedFile: string;
 begin
   Result := FileAt(ItemIndex);
 end;
 
-function TTyShellListView.FileAt(AIndex: Integer): string;
+function TTyCustomShellListView.FileAt(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex <= High(FEntries)) then
     Result := FEntries[AIndex].FullPath
@@ -884,14 +991,14 @@ end;
   Setters
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.SetMask(const AValue: string);
+procedure TTyCustomShellListView.SetMask(const AValue: string);
 begin
   if FMask = AValue then Exit;
   FMask := AValue;
   ReloadEntries;
 end;
 
-procedure TTyShellListView.SetMaskCaseSensitivity(AValue: TTyMaskCaseSensitivity);
+procedure TTyCustomShellListView.SetMaskCaseSensitivity(AValue: TTyMaskCaseSensitivity);
 begin
   if FMaskCase = AValue then Exit;
   FMaskCase := AValue;
@@ -901,7 +1008,7 @@ begin
   ReloadEntries;
 end;
 
-procedure TTyShellListView.SetObjectTypes(AValue: TTyFsObjectTypes);
+procedure TTyCustomShellListView.SetObjectTypes(AValue: TTyFsObjectTypes);
 begin
   if FObjectTypes = AValue then Exit;
   FObjectTypes := AValue;
@@ -912,7 +1019,7 @@ begin
   ReloadEntries;
 end;
 
-procedure TTyShellListView.SetShowHidden(AValue: Boolean);
+procedure TTyCustomShellListView.SetShowHidden(AValue: Boolean);
 begin
   if FShowHidden = AValue then Exit;
   FShowHidden := AValue;
@@ -923,7 +1030,7 @@ begin
   ReloadEntries;
 end;
 
-procedure TTyShellListView.SetAutoSizeColumns(AValue: Boolean);
+procedure TTyCustomShellListView.SetAutoSizeColumns(AValue: Boolean);
 begin
   if FAutoSizeCols = AValue then Exit;
   FAutoSizeCols := AValue;
@@ -937,7 +1044,7 @@ begin
   end;
 end;
 
-procedure TTyShellListView.SetUseBuiltInIcons(AValue: Boolean);
+procedure TTyCustomShellListView.SetUseBuiltInIcons(AValue: Boolean);
 begin
   if FUseBuiltIn = AValue then Exit;
   FUseBuiltIn := AValue;
@@ -960,7 +1067,7 @@ end;
   Column auto-size
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.CaptureColumnWeights;
+procedure TTyCustomShellListView.CaptureColumnWeights;
 var
   i: Integer;
 begin
@@ -969,7 +1076,7 @@ begin
     FColWeights[i] := Max(1, TTyColumn(Header.Columns.Items[i]).Width);
 end;
 
-procedure TTyShellListView.ApplyAutoSizeColumns;
+procedure TTyCustomShellListView.ApplyAutoSizeColumns;
 var
   i, n, sum, avail, used, w: Integer;
 begin
@@ -1003,13 +1110,13 @@ begin
   TTyColumn(Header.Columns.Items[n - 1]).Width := avail - used;
 end;
 
-procedure TTyShellListView.Resize;
+procedure TTyCustomShellListView.Resize;
 begin
   inherited Resize;
   ApplyAutoSizeColumns;
 end;
 
-procedure TTyShellListView.SetFoldersFirst(AValue: Boolean);
+procedure TTyCustomShellListView.SetFoldersFirst(AValue: Boolean);
 begin
   if FFoldersFirst = AValue then Exit;
   FFoldersFirst := AValue;
@@ -1018,7 +1125,7 @@ begin
   if SortColumn >= 0 then Sort else Invalidate;
 end;
 
-procedure TTyShellListView.SetGroupByKind(AValue: Boolean);
+procedure TTyCustomShellListView.SetGroupByKind(AValue: Boolean);
 begin
   if FGroupByKind = AValue then Exit;
   FGroupByKind := AValue;

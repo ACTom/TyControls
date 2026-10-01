@@ -116,7 +116,7 @@ type
     procedure CountCompare(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
       var ACompare: Integer);
     procedure CountTopClick(Sender: TObject);
-    procedure CountGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
+    procedure CountGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var AText: string);
     procedure CountItemChange(Sender: TObject; AIndex: Integer);
     procedure CountPopup(Sender: TObject);
     procedure RecordArrow(Sender: TObject; AButton: TTyUpDownButton);
@@ -1367,7 +1367,7 @@ begin
     TMethod(@TTyShellListView(nil).Refresh).Code = TMethod(@TControl(nil).Refresh).Code);
 end;
 
-procedure TParityTest.CountGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TParityTest.CountGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var AText: string);
 begin
   Inc(FGetTextCalls);

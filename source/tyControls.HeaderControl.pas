@@ -60,7 +60,7 @@ type
   end;
   TTyHeaderSectionArray = array of TTyHeaderSection;
 
-  TTyHeaderControl = class;   { forward — the events below name the strip, as LCL's do }
+  TTyCustomHeaderControl = class;   { forward — the events below name the strip, as LCL's do }
 
   { Which PHASE of a divider drag an OnSectionTrack call is reporting. Values named for
     LCL's TSectionTrackState (comctrls.pp:4021) so a `case AState of tsTrackBegin..`
@@ -75,11 +75,11 @@ type
     .SectionWidth[AIndex], .Sort[AIndex], .Sections[AIndex]. The first argument IS typed
     though: it used to be a bare TObject, so a handler that wanted the strip had to cast
     the one thing the event was certain about. }
-  TTyHeaderSectionEvent = procedure(AHeader: TTyHeaderControl; AIndex: Integer) of object;
+  TTyHeaderSectionEvent = procedure(AHeader: TTyCustomHeaderControl; AIndex: Integer) of object;
   { Fired ONCE, when a divider drag is released. AWidth is the settled logical width.
     LCL: TCustomSectionNotifyEvent (comctrls.pp:4025), whose handler reads Section.Width
     -- AWidth is that same number, handed over directly. }
-  TTyHeaderResizeEvent = procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer) of object;
+  TTyHeaderResizeEvent = procedure(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer) of object;
   { Fired at EVERY phase of a divider drag. LCL: TCustomSectionTrackEvent
     (comctrls.pp:4022), which carries the phase for the same reason we now do.
 
@@ -87,7 +87,7 @@ type
     job a continuous event exists for -- start a live preview when the drag opens, tear it
     down when it closes -- was not expressible: a handler saw a run of identical calls and
     had to guess which was the first and which the last. }
-  TTyHeaderTrackEvent = procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+  TTyHeaderTrackEvent = procedure(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer;
     AState: TTyHeaderTrackState) of object;
 
   { TTyHeaderControl — a standalone column-header strip.
@@ -114,7 +114,7 @@ type
     overrides it); each section is drawn with the 'TyTreeHeaderSection' resolved style
     (+ :hover / :selected states) — NO new .tycss. All colours are theme-driven. }
 
-  TTyHeaderControl = class(TTyCustomControl)
+  TTyCustomHeaderControl = class(TTyCustomControl)
   private
     FSections: TTyHeaderSectionArray;
     FHotIndex: Integer;             // section under the mouse (-1 none)
@@ -209,17 +209,31 @@ type
     property SectionMinWidth[AIndex: Integer]: Integer read GetSectionMinWidth write SetSectionMinWidth;
     property SectionMaxWidth[AIndex: Integer]: Integer read GetSectionMaxWidth write SetSectionMaxWidth;
     property Sort[AIndex: Integer]: TTyHeaderSortDirection read GetSortDirection write SetSortDirection;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
+    property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
+    { Fires ONCE, when the drag is released, with the settled width. It used to fire on
+      every mouse-move pixel as well, so a handler that did anything real (re-query, relayout
+      a grid, save a setting) ran hundreds of times per drag. LCL splits the two the same
+      way: OnSectionTrack is the continuous one, OnSectionResize the final one. }
+    property OnSectionResize: TTyHeaderResizeEvent read FOnSectionResize write FOnSectionResize;
+    { Fires through a whole divider drag -- once at tsTrackBegin when it is grabbed, once
+      per width-changing move at tsTrackMove, once at tsTrackEnd when it is released (just
+      before OnSectionResize). AState is what makes a live preview possible: set it up on
+      Begin, redraw it on Move, tear it down on End. }
+    property OnSectionTrack: TTyHeaderTrackEvent read FOnSectionTrack write FOnSectionTrack;
+  end;
+
+  { TTyHeaderControl publishes TTyCustomHeaderControl's properties; everything lives in TTyCustomHeaderControl. }
+  TTyHeaderControl = class(TTyCustomHeaderControl)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -263,17 +277,9 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
-    { Fires ONCE, when the drag is released, with the settled width. It used to fire on
-      every mouse-move pixel as well, so a handler that did anything real (re-query, relayout
-      a grid, save a setting) ran hundreds of times per drag. LCL splits the two the same
-      way: OnSectionTrack is the continuous one, OnSectionResize the final one. }
-    property OnSectionResize: TTyHeaderResizeEvent read FOnSectionResize write FOnSectionResize;
-    { Fires through a whole divider drag -- once at tsTrackBegin when it is grabbed, once
-      per width-changing move at tsTrackMove, once at tsTrackEnd when it is released (just
-      before OnSectionResize). AState is what makes a live preview possible: set it up on
-      Begin, redraw it on Move, tear it down on End. }
-    property OnSectionTrack: TTyHeaderTrackEvent read FOnSectionTrack write FOnSectionTrack;
+    property OnSectionClick;
+    property OnSectionResize;
+    property OnSectionTrack;
     property Align;
     { Every sibling in this family publishes Anchors (TTyTreeView, TTyListView) and the strip
       did not, so the one layout a header strip most obviously wants -- pinned left+right+top
@@ -487,9 +493,9 @@ begin
   FHidden := not AValue;
 end;
 
-{ ---- TTyHeaderControl ---- }
+{ ---- TTyCustomHeaderControl ---- }
 
-constructor TTyHeaderControl.Create(AOwner: TComponent);
+constructor TTyCustomHeaderControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FHotIndex := -1;
@@ -508,20 +514,20 @@ end;
 
 { ---- event seams ---- }
 
-procedure TTyHeaderControl.SectionClick(AIndex: Integer);
+procedure TTyCustomHeaderControl.SectionClick(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if Assigned(FOnSectionClick) then FOnSectionClick(Self, AIndex);
 end;
 
-procedure TTyHeaderControl.SectionResize(AIndex: Integer);
+procedure TTyCustomHeaderControl.SectionResize(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if Assigned(FOnSectionResize) then
     FOnSectionResize(Self, AIndex, FSections[AIndex].Width);
 end;
 
-procedure TTyHeaderControl.SectionTrack(AIndex: Integer; AState: TTyHeaderTrackState);
+procedure TTyCustomHeaderControl.SectionTrack(AIndex: Integer; AState: TTyHeaderTrackState);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   { The width is READ here rather than passed in, exactly as LCL reads Section.FWidth
@@ -532,7 +538,7 @@ begin
     FOnSectionTrack(Self, AIndex, FSections[AIndex].Width, AState);
 end;
 
-function TTyHeaderControl.GetStyleTypeKey: string;
+function TTyCustomHeaderControl.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyTreeHeader': a standalone header control was wearing the tree's clothes, so the same tokens meant two different things to two consumers.
     Added to 'TyTreeHeader's rule block as an extra selector, so every resolved value is
@@ -540,12 +546,12 @@ begin
   Result := 'TyHeaderControl';
 end;
 
-function TTyHeaderControl.GetSectionCount: Integer;
+function TTyCustomHeaderControl.GetSectionCount: Integer;
 begin
   Result := Length(FSections);
 end;
 
-function TTyHeaderControl.GetSection(AIndex: Integer): TTyHeaderSection;
+function TTyCustomHeaderControl.GetSection(AIndex: Integer): TTyHeaderSection;
 begin
   if (AIndex >= 0) and (AIndex < Length(FSections)) then
     Result := FSections[AIndex]
@@ -553,7 +559,7 @@ begin
     Result := Default(TTyHeaderSection);
 end;
 
-procedure TTyHeaderControl.SetSection(AIndex: Integer; const AValue: TTyHeaderSection);
+procedure TTyCustomHeaderControl.SetSection(AIndex: Integer; const AValue: TTyHeaderSection);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   FSections[AIndex] := AValue;
@@ -561,7 +567,7 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.ClampSectionWidth(AIndex, AWidth: Integer): Integer;
+function TTyCustomHeaderControl.ClampSectionWidth(AIndex, AWidth: Integer): Integer;
 var
   lo, hi: Integer;
 begin
@@ -580,12 +586,12 @@ begin
   if Result < lo then Result := lo;
 end;
 
-function TTyHeaderControl.GetSectionVisible(AIndex: Integer): Boolean;
+function TTyCustomHeaderControl.GetSectionVisible(AIndex: Integer): Boolean;
 begin
   Result := GetSection(AIndex).Visible;
 end;
 
-procedure TTyHeaderControl.SetSectionVisible(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomHeaderControl.SetSectionVisible(AIndex: Integer; AValue: Boolean);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if FSections[AIndex].Visible = AValue then Exit;
@@ -596,12 +602,12 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.GetSectionMinWidth(AIndex: Integer): Integer;
+function TTyCustomHeaderControl.GetSectionMinWidth(AIndex: Integer): Integer;
 begin
   Result := GetSection(AIndex).MinWidth;
 end;
 
-procedure TTyHeaderControl.SetSectionMinWidth(AIndex: Integer; AValue: Integer);
+procedure TTyCustomHeaderControl.SetSectionMinWidth(AIndex: Integer; AValue: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if AValue < 0 then AValue := 0;
@@ -613,12 +619,12 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.GetSectionMaxWidth(AIndex: Integer): Integer;
+function TTyCustomHeaderControl.GetSectionMaxWidth(AIndex: Integer): Integer;
 begin
   Result := GetSection(AIndex).MaxWidth;
 end;
 
-procedure TTyHeaderControl.SetSectionMaxWidth(AIndex: Integer; AValue: Integer);
+procedure TTyCustomHeaderControl.SetSectionMaxWidth(AIndex: Integer; AValue: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if AValue < 0 then AValue := 0;
@@ -628,7 +634,7 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.GetEffectiveSectionWidth(AIndex: Integer): Integer;
+function TTyCustomHeaderControl.GetEffectiveSectionWidth(AIndex: Integer): Integer;
 var
   rects: TTyHeaderRectArray;
   ppi: Integer;
@@ -648,12 +654,12 @@ begin
   Result := MulDiv(rects[AIndex].Right - rects[AIndex].Left, 96, ppi);
 end;
 
-function TTyHeaderControl.GetSectionText(AIndex: Integer): string;
+function TTyCustomHeaderControl.GetSectionText(AIndex: Integer): string;
 begin
   Result := GetSection(AIndex).Text;
 end;
 
-procedure TTyHeaderControl.SetSectionText(AIndex: Integer; const AValue: string);
+procedure TTyCustomHeaderControl.SetSectionText(AIndex: Integer; const AValue: string);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if FSections[AIndex].Text = AValue then Exit;
@@ -661,12 +667,12 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.GetSectionWidth(AIndex: Integer): Integer;
+function TTyCustomHeaderControl.GetSectionWidth(AIndex: Integer): Integer;
 begin
   Result := GetSection(AIndex).Width;
 end;
 
-procedure TTyHeaderControl.SetSectionWidth(AIndex: Integer; AValue: Integer);
+procedure TTyCustomHeaderControl.SetSectionWidth(AIndex: Integer; AValue: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   AValue := ClampSectionWidth(AIndex, AValue);
@@ -675,12 +681,12 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.GetSortDirection(AIndex: Integer): TTyHeaderSortDirection;
+function TTyCustomHeaderControl.GetSortDirection(AIndex: Integer): TTyHeaderSortDirection;
 begin
   Result := GetSection(AIndex).SortDirection;
 end;
 
-procedure TTyHeaderControl.SetSortDirection(AIndex: Integer; AValue: TTyHeaderSortDirection);
+procedure TTyCustomHeaderControl.SetSortDirection(AIndex: Integer; AValue: TTyHeaderSortDirection);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   if FSections[AIndex].SortDirection = AValue then Exit;
@@ -688,7 +694,7 @@ begin
   Invalidate;
 end;
 
-function TTyHeaderControl.DeviceWidths: TIntegerDynArray;
+function TTyCustomHeaderControl.DeviceWidths: TIntegerDynArray;
 var
   i: Integer;
 begin
@@ -704,18 +710,18 @@ begin
       Result[i] := 0;
 end;
 
-function TTyHeaderControl.ScaledGrip: Integer;
+function TTyCustomHeaderControl.ScaledGrip: Integer;
 begin
   Result := MulDiv(TyHeaderResizeGrip, Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyHeaderControl.AddSection(const AText: string; AWidth: Integer): Integer;
+function TTyCustomHeaderControl.AddSection(const AText: string; AWidth: Integer): Integer;
 begin
   Result := InsertSection(Length(FSections), AText, AWidth);
 end;
 
-function TTyHeaderControl.InsertSection(AIndex: Integer; const AText: string;
+function TTyCustomHeaderControl.InsertSection(AIndex: Integer; const AText: string;
   AWidth: Integer): Integer;
 var
   i: Integer;
@@ -737,7 +743,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyHeaderControl.DeleteSection(AIndex: Integer);
+procedure TTyCustomHeaderControl.DeleteSection(AIndex: Integer);
 var
   i: Integer;
 begin
@@ -749,14 +755,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyHeaderControl.ClearSections;
+procedure TTyCustomHeaderControl.ClearSections;
 begin
   SetLength(FSections, 0);
   FHotIndex := -1;
   Invalidate;
 end;
 
-procedure TTyHeaderControl.ToggleSort(AIndex: Integer);
+procedure TTyCustomHeaderControl.ToggleSort(AIndex: Integer);
 var
   i: Integer;
   cur: TTyHeaderSortDirection;
@@ -774,7 +780,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyHeaderControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomHeaderControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, secStyle, hotStyle: TTyStyleSet;
@@ -911,12 +917,12 @@ begin
   end;
 end;
 
-procedure TTyHeaderControl.Paint;
+procedure TTyCustomHeaderControl.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyHeaderControl.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHeaderControl.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   widths: TIntegerDynArray;
   edge: Integer;
@@ -941,7 +947,7 @@ begin
   end;
 end;
 
-procedure TTyHeaderControl.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHeaderControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   widths: TIntegerDynArray;
   deltaLogical, newW, edge, hit: Integer;
@@ -984,7 +990,7 @@ begin
   end;
 end;
 
-procedure TTyHeaderControl.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHeaderControl.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   widths: TIntegerDynArray;
   hit, movedX: Integer;
@@ -1023,7 +1029,7 @@ end;
 
 { Swap in the resize cursor over a divider and put the caller's own cursor back on the
   way out -- mirrors TTyListView.SetDividerCursor. }
-procedure TTyHeaderControl.SetResizeCursor(AOn: Boolean);
+procedure TTyCustomHeaderControl.SetResizeCursor(AOn: Boolean);
 begin
   if AOn = FCursorOverridden then Exit;
   if AOn then
@@ -1036,7 +1042,7 @@ begin
   FCursorOverridden := AOn;
 end;
 
-procedure TTyHeaderControl.MouseLeave;
+procedure TTyCustomHeaderControl.MouseLeave;
 begin
   inherited MouseLeave;
   if FHotIndex <> -1 then

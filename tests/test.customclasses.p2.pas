@@ -18,19 +18,27 @@ unit test.customclasses.p2;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, BGRABitmap, BGRABitmapTypes, fpcunit,
+  testregistry,
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
   tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
   tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox, tyControls.TabStrip,
   tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
-  tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader;
+  tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader,
+  tyControls.ImageCollection, tyControls.TreeView, tyControls.ShellTreeView, tyControls.ListView,
+  tyControls.ShellListView;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
   private
     FChanges: Integer;
+    FGetTextSender: TObject;
+    FGetTextSenderIsCustom: Boolean;
     procedure CountChange(Sender: TObject);
+    procedure TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    { A three-icon virtual list (home / settings / search), owned by the caller. }
+    function NewNamedImages(out AColl: TTyImageCollection): TTyVirtualImageList;
   published
     { Task 12: panels }
     procedure TestThirdPanel;
@@ -55,6 +63,13 @@ type
     { Task 16: compound pickers }
     procedure TestThirdCascader;
     procedure TestThirdTransfer;
+    { Task 17: trees and list views }
+    procedure TestThirdTreeView;
+    procedure TestTreeNodeResolvesItsIconOnAThirdPartyTree;
+    procedure TestShellTreeViewHearsItsNodeCollection;
+    procedure TestThirdTreeViewNodeCollectionBuildsTheTree;
+    procedure TestShellListItemResolvesItsIconOnTheShellList;
+    procedure TestThirdListView;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -131,6 +146,18 @@ type
     property Selected;
   end;
 
+  TThirdTreeView = class(TTyCustomTreeView)
+  published
+    property Items;
+    property OnGetText;
+  end;
+
+  TThirdListView = class(TTyCustomListView)
+  published
+    property ViewStyle;
+    property Items;
+  end;
+
 implementation
 
 type
@@ -158,6 +185,22 @@ type
   TP2CheckComboCracker = class(TTyCustomCheckComboBox)
   public
     function MakePopupList: TTyCustomListBox;
+  end;
+
+  { The tree's own properties are protected (TCustomTreeView keeps them protected). }
+  TP2TreeCracker = class(TTyCustomTreeView)
+  public
+    procedure SetRootCount(AValue: Cardinal);
+    procedure SetNodeHeight(AValue: Integer);
+    function NodeHeightNow: Integer;
+  end;
+
+  { RowHeight is protected (Ty's own, and TCustomListView's are mostly protected). }
+  TP2ListViewCracker = class(TTyCustomListView)
+  public
+    procedure SetRowHeightTo(AValue: Integer);
+    function RowHeightNow: Integer;
+    procedure SetSmall(AValue: TCustomImageList);
   end;
 
   { ContentHost is protected: where the box actually puts its children. }
@@ -201,6 +244,36 @@ begin
   Result := CreatePopupList;
 end;
 
+procedure TP2TreeCracker.SetRootCount(AValue: Cardinal);
+begin
+  RootNodeCount := AValue;
+end;
+
+procedure TP2TreeCracker.SetNodeHeight(AValue: Integer);
+begin
+  DefaultNodeHeight := AValue;
+end;
+
+function TP2TreeCracker.NodeHeightNow: Integer;
+begin
+  Result := DefaultNodeHeight;
+end;
+
+procedure TP2ListViewCracker.SetRowHeightTo(AValue: Integer);
+begin
+  RowHeight := AValue;
+end;
+
+function TP2ListViewCracker.RowHeightNow: Integer;
+begin
+  Result := RowHeight;
+end;
+
+procedure TP2ListViewCracker.SetSmall(AValue: TCustomImageList);
+begin
+  SmallImages := AValue;
+end;
+
 function TP2ScrollBoxCracker.Host: TWinControl;
 begin
   Result := ContentHost;
@@ -209,6 +282,34 @@ end;
 procedure TTyCustomClassesP2Test.CountChange(Sender: TObject);
 begin
   Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP2Test.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  FGetTextSender := Sender;
+  FGetTextSenderIsCustom := TObject(Sender) is TTyCustomTreeView;
+  Text := 'row ' + IntToStr(Node^.Index);
+end;
+
+function TTyCustomClassesP2Test.NewNamedImages(out AColl: TTyImageCollection): TTyVirtualImageList;
+
+  procedure AddImg(const AName: string; AColor: TBGRAPixel);
+  var bmp: TBGRABitmap;
+  begin
+    bmp := TBGRABitmap.Create(24, 24, AColor);
+    try AColl.AddBitmap(AName, bmp); finally bmp.Free; end;
+  end;
+
+begin
+  NeedWidgetSet;
+  AColl := TTyImageCollection.Create(nil);
+  AddImg('home', BGRA(255, 0, 0, 255));
+  AddImg('settings', BGRA(0, 255, 0, 255));
+  AddImg('search', BGRA(0, 0, 255, 255));
+  Result := TTyVirtualImageList.Create(nil);
+  Result.Collection := AColl;
+  Result.Names.Text := 'home' + LineEnding + 'settings' + LineEnding + 'search';
 end;
 
 { ------------------------------------------------------------------ Task 12: panels }
@@ -808,9 +909,179 @@ begin
   AssertFalse('T-v: ShowTitles is public through a TTyCustomTransfer reference', third.ShowTitles);
 end;
 
+{ ------------------------------------------------------------------ Task 17: trees and lists }
+
+{ The mimic tree, and T-f: an event fired on a third party's tree hands over that tree, typed as
+  what it is -- a TTyCustomTreeView (plan D10, LCL's TTVExpandingEvent and friends name
+  TCustomTreeView). With the old TTyTreeView Sender the library would have had to call a
+  third party's (or the shell) tree a TTyTreeView. }
+procedure TTyCustomClassesP2Test.TestThirdTreeView;
+var
+  third, back: TThirdTreeView;
+  own: TTyTreeView;
+  c: TTyCustomTreeView;
+  n: PTyTreeNode;
+begin
+  third := TThirdTreeView.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 200, 150);
+  CheckPublishesOnly(TThirdTreeView, ['Items', 'OnGetText']);
+  third.Items.Add(nil, 'alpha');
+  third.Items.AddChild(third.Items[0], 'beta');
+  TP2TreeCracker(third).SetNodeHeight(31);
+  CheckStreamText(third, ['Items'], 'DefaultNodeHeight');
+  back := TThirdTreeView.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertEquals('T-c: the items round-trip', 2, back.Items.Count);
+  AssertEquals('T-c: with their text', 'beta', back.Items[1].Text);
+  AssertTrue('T-c: the unpublished DefaultNodeHeight stayed unset',
+    TP2TreeCracker(back).NodeHeightNow <> 31);
+  own := TTyTreeView.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTreeView, ['OnGetText']);
+  { T-f, on a virtual tree (Items and OnGetText do not mix). }
+  c := TThirdTreeView.Create(FForm);
+  c.Parent := FForm;
+  TThirdTreeView(c).OnGetText := @TreeGetText;
+  TP2TreeCracker(c).SetRootCount(2);
+  n := c.GetFirst;
+  AssertTrue('the virtual tree has a first node', n <> nil);
+  FGetTextSender := nil;
+  AssertEquals('OnGetText supplied the text', 'row 0', c.NodeText[n]);
+  AssertTrue('T-f: Sender is the third-party tree itself', FGetTextSender = TObject(c));
+  AssertTrue('T-f: typed as the custom class', FGetTextSenderIsCustom);
+  AssertFalse('T-f: which is not a TTyTreeView', FGetTextSender is TTyTreeView);
+end;
+
+{ S17-1. A node's ImageName resolves against its tree's Images when the tree is any
+  TTyCustomTreeView: the node item asks its collection's owner `is TTyCustomTreeView`.
+  (Executing it found the shell tree never reaches this path -- it refuses the item model --
+  so this is a widening for third parties, witnessed by a mimic.) }
+procedure TTyCustomClassesP2Test.TestTreeNodeResolvesItsIconOnAThirdPartyTree;
+var
+  coll: TTyImageCollection;
+  imgs: TTyVirtualImageList;
+  tree: TThirdTreeView;
+  node: TTyTreeNodeItem;
+begin
+  imgs := NewNamedImages(coll);
+  tree := TThirdTreeView.Create(nil);
+  try
+    tree.Images := imgs;
+    node := tree.Items.Add(nil, 'a node');
+    node.ImageName := 'search';
+    AssertEquals('the node resolves its name against the third-party tree''s list', 2,
+      node.ImageIndex);
+    node.ImageIndex := 1;
+    AssertEquals('and an index turns into the durable name', 'settings', node.ImageName);
+  finally
+    tree.Free;
+    imgs.Free;
+    coll.Free;
+  end;
+end;
+
+{ S17-2, the library's own derived tree. The shell tree builds its nodes from the file system
+  and refuses the item model: an item added to its Items must be heard -- the collection asks
+  its owner `is TTyCustomTreeView` -- and refused with the item-model error. Asking for
+  TTyTreeView, the shell tree never heard its own collection change. }
+procedure TTyCustomClassesP2Test.TestShellTreeViewHearsItsNodeCollection;
+var
+  tree: TTyShellTreeView;
+  raised: Boolean;
+begin
+  tree := TTyShellTreeView.Create(FForm);
+  AssertFalse('the shell tree is no TTyTreeView since 4.0 (or this proves nothing)',
+    TObject(tree) is TTyTreeView);
+  raised := False;
+  try
+    tree.Items.Add(nil, 'not from the file system');
+  except
+    on E: ETyTreeItemMode do raised := True;
+  end;
+  AssertTrue('the shell tree heard the item and refused the item model', raised);
+end;
+
+{ S17-2 again, on a mimic: a node added to a third party's tree's Items reaches the tree, which
+  rebuilds its nodes from them. }
+procedure TTyCustomClassesP2Test.TestThirdTreeViewNodeCollectionBuildsTheTree;
+var
+  tree: TThirdTreeView;
+  n: PTyTreeNode;
+begin
+  tree := TThirdTreeView.Create(FForm);
+  tree.Parent := FForm;
+  AssertTrue('an empty tree has no first node', tree.GetFirst = nil);
+  tree.Items.Add(nil, 'first');
+  n := tree.GetFirst;
+  AssertTrue('adding an item built a node', n <> nil);
+  AssertEquals('carrying the item''s text', 'first', tree.NodeText[n]);
+  tree.Items[0].Text := 'renamed';
+  AssertEquals('and an edit to the item reaches the node', 'renamed', tree.NodeText[tree.GetFirst]);
+end;
+
+{ S17-3. A list item's ImageName resolves against its view's Small/LargeImages for any
+  TTyCustomListView -- the shell list included, which is no TTyListView since 4.0. }
+procedure TTyCustomClassesP2Test.TestShellListItemResolvesItsIconOnTheShellList;
+var
+  coll: TTyImageCollection;
+  imgs: TTyVirtualImageList;
+  lv: TTyShellListView;
+  it: TTyListItem;
+begin
+  imgs := NewNamedImages(coll);
+  lv := TTyShellListView.Create(nil);
+  try
+    AssertFalse('the shell list is no TTyListView since 4.0 (or this proves nothing)',
+      TObject(lv) is TTyListView);
+    TP2ListViewCracker(lv).SetSmall(imgs);
+    it := lv.Items.Add;
+    it.ImageName := 'settings';
+    AssertEquals('the item resolves its name against the shell list''s images', 1, it.ImageIndex);
+  finally
+    lv.Free;
+    imgs.Free;
+    coll.Free;
+  end;
+end;
+
+procedure TTyCustomClassesP2Test.TestThirdListView;
+var
+  third, back: TThirdListView;
+  own: TTyListView;
+  c: TTyCustomListView;
+begin
+  third := TThirdListView.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 240, 160);
+  CheckPublishesOnly(TThirdListView, ['ViewStyle', 'Items']);
+  third.ViewStyle := lvsList;
+  third.Items.Add.Caption := 'one';
+  third.Items.Add.Caption := 'two';
+  TP2ListViewCracker(third).SetRowHeightTo(33);
+  CheckStreamText(third, ['ViewStyle', 'Items'], 'RowHeight');
+  back := TThirdListView.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(third, back);
+  AssertTrue('T-c: ViewStyle round-trips', back.ViewStyle = lvsList);
+  AssertEquals('T-c: the items round-trip', 2, back.Items.Count);
+  AssertEquals('T-c: with their captions', 'two', back.Items[1].Caption);
+  AssertTrue('T-c: the unpublished RowHeight stayed unset', TP2ListViewCracker(back).RowHeightNow <> 33);
+  own := TTyListView.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdListView, ['ViewStyle']);
+  { T-v: MultiSelect is public (TCustomListView). }
+  c := third;
+  c.MultiSelect := True;
+  AssertTrue('T-v: MultiSelect is public through a TTyCustomListView reference', third.MultiSelect);
+end;
+
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
     TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet, TThirdListBox,
-    TThirdCheckListBox, TThirdCascader, TThirdTransfer]);
+    TThirdCheckListBox, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

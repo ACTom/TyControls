@@ -771,8 +771,8 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTySelectPathDialog, 'Root', TDirectoryPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTySelectPathDialog, 'Directory', TDirectoryPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomShellComboBox, 'Directory', TDirectoryPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyShellListView, 'Directory', TDirectoryPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyShellTreeView, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomShellListView, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomShellTreeView, 'Directory', TDirectoryPropertyEditor);
   // Version: read-only version display + design-time About dialog, on every registered class.
   // FIVE base classes cover the whole library through inheritance: the two control bases take
   // every visual control, TTyComponent every non-visual one (TTyStyleController included —

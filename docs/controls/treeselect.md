@@ -263,7 +263,7 @@ begin
 end;
 
 // 树答文字的路径 —— 字段显示的就是这里给出的字
-procedure TForm1.TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+procedure TForm1.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
 begin
   Text := FDeptNames[PInteger(Sender.GetNodeData(Node))^];
 end;

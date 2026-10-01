@@ -42,8 +42,8 @@ type
   private
     FFireCount: Integer;
     FLastNode: PTyTreeNode;
-    procedure OnFree(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnFreeManagedRec(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnFree(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnFreeManagedRec(Sender: TTyCustomTreeView; Node: PTyTreeNode);
   published
     procedure TestClearFiresOnFreeNodeForAll;
     procedure TestClearResetsCountsToZero;
@@ -66,10 +66,10 @@ type
   TTreeC3PaintTest = class(TTestCase)
   private
     FGetTextCalled: Integer;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                         var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                              var ChildCount: Cardinal);
   published
     procedure TestSelectedRowHasAccentBlue;
@@ -92,14 +92,14 @@ type
     FOnExpandedCount:   Integer;
     FOnExpandedNode:    PTyTreeNode;
 
-    procedure OnChange(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnChange(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnNodeClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnNodeDblClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnExpanded(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnInitNodeHasChildren(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                     var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren3(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               var ChildCount: Cardinal);
     procedure ResetCounters;
 
@@ -148,11 +148,11 @@ type
     returns False for non-visible nodes. }
   TTreeGetCellRectTest = class(TTestCase)
   private
-    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnGetTextWithType(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
-    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnInitNodeHasChildren(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren2(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren2(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
     { Build the 3-column tree at the given PPI; out-params expose the form/ctl
       (caller frees F then Ctl) and the root + its first child. }
@@ -189,7 +189,7 @@ type
   TTreeB1VariableHeightTest = class(TTestCase)
   private
     FMeasureCalls: Integer;
-    procedure OnMeasureItem(Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure OnMeasureItem(Sender: TTyCustomTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; var ANodeHeight: Integer);
     { Build a flat tree of AChildCount root children at APPI; optionally wire
       OnMeasureItem + toVariableNodeHeight. Caller frees F then Ctl. }
@@ -229,9 +229,9 @@ type
   TTreeC1IncSearchTest = class(TTestCase)
   private
     FCustomSearchHits: Integer;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var CellText: string);
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var CellText: string);
     { custom predicate: CONTAINS (case-insensitive substring) instead of prefix }
-    procedure OnContainsSearch(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnContainsSearch(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       const ASearchText: string; var AMatch: Boolean);
     { Build a flat tree of the named leaves; optionally turn on toIncrementalSearch.
       Caller frees F then Ctl. }
@@ -265,8 +265,8 @@ type
     output bitmap, AND the node caption must still render (icon didn't clobber it). }
   TTreeNodeImageRenderTest = class(TTestCase)
   private
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
   published
     { Opaque RED icon present in the main-column icon slot of row 0 in the output. }
@@ -288,25 +288,25 @@ type
     FLastDrawNode:    PTyTreeNode;
     FCapturedNode:    PTyTreeNode;  // node to capture ACellRect for (compare vs GetCellRect)
     FStaleInkCells:   Integer;   // cells whose DC ink was NOT the one the handler asked for
-    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnGetTextWithType(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
-    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnInitNodeHasChildren(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren2(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren2(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
     { OnDrawNode: fill the WHOLE cell rect with opaque GREEN (probe). }
-    procedure OnDrawNodeFillGreen(Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure OnDrawNodeFillGreen(Sender: TTyCustomTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
     { OnAfterCellPaint: paint a small BLUE probe rect near the cell's top-left. }
-    procedure OnAfterPaintBlueDot(Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure OnAfterPaintBlueDot(Sender: TTyCustomTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
     { OnDrawNode / OnAfterCellPaint: ask for the SAME pen + ink on every call —
       the shape that catches a canvas whose cached state no longer describes its
       DC. The two passes stroke DIFFERENT pixels (horizontals vs verticals) in
       DIFFERENT colours, so neither can repaint over the other's evidence. }
-    procedure OnDrawNodeSameStateEveryCall(Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure OnDrawNodeSameStateEveryCall(Sender: TTyCustomTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
-    procedure OnAfterCellSameStateEveryCall(Sender: TTyTreeView; ACanvas: TCanvas;
+    procedure OnAfterCellSameStateEveryCall(Sender: TTyCustomTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
     function BuildTree(out Ctl: TTyStyleController; out F: TForm;
       out ARoot, AChild0: PTyTreeNode): TTyTreeView;
@@ -750,13 +750,13 @@ end;
 
 { TTreeDeleteTest }
 
-procedure TTreeDeleteTest.OnFree(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeDeleteTest.OnFree(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FFireCount);
   FLastNode := Node;
 end;
 
-procedure TTreeDeleteTest.OnFreeManagedRec(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeDeleteTest.OnFreeManagedRec(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   // Finalize the heap-allocated AnsiString before FreeMem destroys the raw blob.
   PManagedRec(Sender.GetNodeData(Node))^.S := '';
@@ -1087,16 +1087,16 @@ type
     FCollapsedCount:    Integer;
     FVetoExpanding:     Boolean;
 
-    procedure OnInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                          var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                              var ChildCount: Cardinal);
-    procedure OnExpanding(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnExpanding(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                           var Allowed: Boolean);
-    procedure OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnCollapsing(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnExpanded(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnCollapsing(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                            var Allowed: Boolean);
-    procedure OnCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnCollapsed(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 
     // Build a standard test tree: attach the handlers and set RootNodeCount.
     function MakeTree: TTyTreeView;
@@ -1130,7 +1130,7 @@ type
   ivsHasChildren is set for levels 0, 1, and 2 (so level 3 nodes are leaves).
   We always signal HasChildren for simplicity; InitChildren/OnInitChildren
   will be called to actually materialise child nodes. }
-procedure TTreeLazyTest.OnInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+procedure TTreeLazyTest.OnInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                    var InitStates: TTyNodeInitStates);
 begin
   Inc(FInitNodeCount);
@@ -1138,33 +1138,33 @@ begin
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeLazyTest.OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeLazyTest.OnInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                        var ChildCount: Cardinal);
 begin
   Inc(FInitChildrenCount);
   ChildCount := 4;
 end;
 
-procedure TTreeLazyTest.OnExpanding(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeLazyTest.OnExpanding(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                     var Allowed: Boolean);
 begin
   Inc(FExpandingCount);
   Allowed := not FVetoExpanding;
 end;
 
-procedure TTreeLazyTest.OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeLazyTest.OnExpanded(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FExpandedCount);
 end;
 
-procedure TTreeLazyTest.OnCollapsing(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeLazyTest.OnCollapsing(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                      var Allowed: Boolean);
 begin
   Inc(FCollapsingCount);
   Allowed := True;
 end;
 
-procedure TTreeLazyTest.OnCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeLazyTest.OnCollapsed(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FCollapsedCount);
 end;
@@ -1443,9 +1443,9 @@ type
     { Shared event state for scenario 3 (auto-expand via ivsExpanded). }
     FAutoExpandLevel: Integer;  // OnInitNode sets ivsExpanded for nodes at this level
 
-    procedure OnInitNodeAutoExpand(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnInitNodeAutoExpand(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                    var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren4(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren4(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               var ChildCount: Cardinal);
     { Count all nodes via depth-first GetFirst/GetNext (no init side-effects, but we
       call GetFirst which does call InitNode for the first node; for counting purposes
@@ -1476,7 +1476,7 @@ type
   end;
 
 procedure TTreeHeightInvariantTest.OnInitNodeAutoExpand(
-  Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+  Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
   var InitStates: TTyNodeInitStates);
 begin
   { Auto-expand nodes at level FAutoExpandLevel (or all levels if -1).
@@ -1487,7 +1487,7 @@ begin
 end;
 
 procedure TTreeHeightInvariantTest.OnInitChildren4(
-  Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal);
+  Sender: TTyCustomTreeView; Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 4;
 end;
@@ -2334,11 +2334,11 @@ type
     FOnFocusLastNode:    PTyTreeNode;
     FInitChildrenCount:  Integer;
 
-    procedure OnChange(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnChange(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure OnInitChildren3(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                               var ChildCount: Cardinal);
-    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnInitNodeHasChildren(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
                                     var InitStates: TTyNodeInitStates);
     procedure ResetCounters;
   published
@@ -2369,26 +2369,26 @@ type
     procedure TestScrollIntoViewNoMoveWhenVisible;
   end;
 
-procedure TTreeC1Test.OnChange(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC1Test.OnChange(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnChangeCount);
   FOnChangeLastNode := Node;
 end;
 
-procedure TTreeC1Test.OnFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC1Test.OnFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnFocusCount);
   FOnFocusLastNode := Node;
 end;
 
-procedure TTreeC1Test.OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeC1Test.OnInitChildren3(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                        var ChildCount: Cardinal);
 begin
   Inc(FInitChildrenCount);
   ChildCount := 3;
 end;
 
-procedure TTreeC1Test.OnInitNodeHasChildren(Sender: TTyTreeView;
+procedure TTreeC1Test.OnInitNodeHasChildren(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   { Give every node children so FullExpand/FullCollapse can act on them.
@@ -2689,10 +2689,10 @@ end;
 type
   TTreeC2Test = class(TTestCase)
   private
-    procedure OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildrenX(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                var ChildCount: Cardinal);
     { FIX 4 helper: returns a text string wide enough to overflow a 50px viewport }
-    procedure OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetTextWide(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
   published
     { Scrollbars exist immediately after Create — never lazily created during paint. }
     procedure TestScrollBarsExistAfterConstruction;
@@ -2714,13 +2714,13 @@ type
     procedure TestFRangeXRetractsAfterClear;
   end;
 
-procedure TTreeC2Test.OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeC2Test.OnInitChildrenX(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                        var ChildCount: Cardinal);
 begin
   ChildCount := 5;
 end;
 
-procedure TTreeC2Test.OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeC2Test.OnGetTextWide(Sender: TTyCustomTreeView; Node: PTyTreeNode;
                                      var Text: string);
 begin
   Text := 'Wide label text that overflows the narrow 50px viewport easily';
@@ -2989,21 +2989,21 @@ end;
   expanded via SetExpanded so it has 3 children; OnInitNode signals ivsHasChildren
   for level<2 and OnInitChildren returns ChildCount=3. }
 
-procedure TTreeC3PaintTest.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeC3PaintTest.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Inc(FGetTextCalled);
   Text := 'Node ' + IntToStr(Node^.Index) + ' L' + IntToStr(Sender.GetNodeLevel(Node));
 end;
 
-procedure TTreeC3PaintTest.OnInitNode(Sender: TTyTreeView;
+procedure TTreeC3PaintTest.OnInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) < 2 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeC3PaintTest.OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeC3PaintTest.OnInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var ChildCount: Cardinal);
 begin
   ChildCount := 3;
@@ -3288,44 +3288,44 @@ end;
 
 { TTreeC4Test event handlers }
 
-procedure TTreeC4Test.OnChange(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC4Test.OnChange(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnChangeCount);
   FOnChangeLastNode := Node;
 end;
 
-procedure TTreeC4Test.OnFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC4Test.OnFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnFocusCount);
   FOnFocusLastNode := Node;
 end;
 
-procedure TTreeC4Test.OnNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC4Test.OnNodeClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnClickCount);
   FOnClickLastNode := Node;
 end;
 
-procedure TTreeC4Test.OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC4Test.OnNodeDblClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnDblClickCount);
   FOnDblClickLastNode := Node;
 end;
 
-procedure TTreeC4Test.OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeC4Test.OnExpanded(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FOnExpandedCount);
   FOnExpandedNode := Node;
 end;
 
-procedure TTreeC4Test.OnInitNodeHasChildren(Sender: TTyTreeView;
+procedure TTreeC4Test.OnInitNodeHasChildren(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) < 1 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeC4Test.OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeC4Test.OnInitChildren3(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var ChildCount: Cardinal);
 begin
   ChildCount := 3;
@@ -3938,17 +3938,17 @@ type
   TTreeColumnPaintTest = class(TTestCase)
   private
     { Per-column text returned by OnGetTextWithType }
-    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnGetTextWithType(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
-    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure OnInitNodeHasChildren(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitChildren3(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
     { C0 regression: 0-column callbacks mimicking ① (same as TTreeC3PaintTest) }
-    procedure C0GetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure C0InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure C0GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure C0InitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure C0InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure C0InitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
 
     { Build a 3-column tree and render it.  Returns the BGRA bitmap (caller
@@ -3988,7 +3988,7 @@ type
   private
     FColumnResizedCount: Integer;
     FColumnResizedLast:  Integer;
-    procedure OnColumnResized(Sender: TTyTreeView; Column: Integer);
+    procedure OnColumnResized(Sender: TTyCustomTreeView; Column: Integer);
     { Build a 3-column tree (widths 120/80/100, PPI=96, header height=22,
       hoVisible+hoColumnResize, all columns coResizable).
       Caller owns F and Ctl. }
@@ -4036,7 +4036,7 @@ const
   COL1_LEFT = COL0_W;          // left edge of col 1 (device px at 96 DPI)
   COL2_LEFT = COL0_W + COL1_W; // left edge of col 2
 
-procedure TTreeColumnPaintTest.OnGetTextWithType(Sender: TTyTreeView;
+procedure TTreeColumnPaintTest.OnGetTextWithType(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
 begin
   case Column of
@@ -4048,14 +4048,14 @@ begin
   end;
 end;
 
-procedure TTreeColumnPaintTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+procedure TTreeColumnPaintTest.OnInitNodeHasChildren(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeColumnPaintTest.OnInitChildren3(Sender: TTyTreeView;
+procedure TTreeColumnPaintTest.OnInitChildren3(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 2;
@@ -4538,20 +4538,20 @@ begin
   end;
 end;
 
-procedure TTreeColumnPaintTest.C0GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeColumnPaintTest.C0GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'Node ' + IntToStr(Node^.Index) + ' L' + IntToStr(Sender.GetNodeLevel(Node));
 end;
 
-procedure TTreeColumnPaintTest.C0InitNode(Sender: TTyTreeView;
+procedure TTreeColumnPaintTest.C0InitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) < 2 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeColumnPaintTest.C0InitChildren(Sender: TTyTreeView;
+procedure TTreeColumnPaintTest.C0InitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 3;
@@ -4612,7 +4612,7 @@ end;
 
 { ── D1/D2 ── header/column hit-test + column resize ─────────────────────── }
 
-procedure TTreeD1D2Test.OnColumnResized(Sender: TTyTreeView; Column: Integer);
+procedure TTreeD1D2Test.OnColumnResized(Sender: TTyCustomTreeView; Column: Integer);
 begin
   Inc(FColumnResizedCount);
   FColumnResizedLast := Column;
@@ -4906,7 +4906,7 @@ type
     FReorderFired:   Boolean;
     FReorderOldPos:  Integer;
     FReorderNewPos:  Integer;
-    procedure OnColumnReorder(Sender: TTyTreeView; OldPosition, NewPosition: Integer);
+    procedure OnColumnReorder(Sender: TTyCustomTreeView; OldPosition, NewPosition: Integer);
     { Build a 3-column tree ready for drag-reorder tests.
       widths 100/80/60, hoDrag, all coDraggable, PPI=96, header height=22.
       Layout: col0=[0..100), col1=[100..180), col2=[180..240).
@@ -4924,7 +4924,7 @@ type
     procedure TestD3_OnColumnReorderFired;
   end;
 
-procedure TTreeD3DragTest.OnColumnReorder(Sender: TTyTreeView;
+procedure TTreeD3DragTest.OnColumnReorder(Sender: TTyCustomTreeView;
   OldPosition, NewPosition: Integer);
 begin
   FReorderFired  := True;
@@ -5275,7 +5275,7 @@ type
   private
     FCompareCount: Integer;
     FLastColumn:   Integer;
-    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure OnCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
                         Column: Integer; var Result: Integer);
     { Build a parent+children tree with the keys [3,1,4,1,5,9,2,6].
       Returns the tree (caller frees); AParent = the parent node. }
@@ -5293,7 +5293,7 @@ type
     procedure TestE1_OnCompareNodesFiredWithCorrectColumn;
   end;
 
-procedure TTreeE1SortTest.OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+procedure TTreeE1SortTest.OnCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
   Column: Integer; var Result: Integer);
 begin
   Inc(FCompareCount);
@@ -5524,7 +5524,7 @@ end;
 type
   TTreeE2SortTreeTest = class(TTestCase)
   private
-    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure OnCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
                         Column: Integer; var Result: Integer);
     { Build a 3-level tree:
         root
@@ -5540,7 +5540,7 @@ type
     procedure TestE2_GetNodeAtOffsetConsistentAfterSort;
   end;
 
-procedure TTreeE2SortTreeTest.OnCompare(Sender: TTyTreeView;
+procedure TTreeE2SortTreeTest.OnCompare(Sender: TTyCustomTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var Result: Integer);
 begin
   Result := PInteger(Sender.GetNodeData(Node1))^ -
@@ -5748,10 +5748,10 @@ type
     FHeaderClickCol:  Integer;
     FHeaderClickCount: Integer;
     FNodeDblClicks:   Integer;
-    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure OnCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
                         Column: Integer; var Result: Integer);
-    procedure OnHeaderClick(Sender: TTyTreeView; Column: Integer);
-    procedure OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnHeaderClick(Sender: TTyCustomTreeView; Column: Integer);
+    procedure OnNodeDblClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
     { Build a sortable multi-column tree with 4 root nodes keyed [4,2,3,1]. }
     function BuildE3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
   published
@@ -5764,7 +5764,7 @@ type
     procedure TestE3_ReleaseOffTheSectionDoesNotSort;
   end;
 
-procedure TTreeE3HeaderClickTest.OnCompare(Sender: TTyTreeView;
+procedure TTreeE3HeaderClickTest.OnCompare(Sender: TTyCustomTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var Result: Integer);
 begin
   FCompareCol := Column;
@@ -5772,13 +5772,13 @@ begin
             PInteger(Sender.GetNodeData(Node2))^;
 end;
 
-procedure TTreeE3HeaderClickTest.OnHeaderClick(Sender: TTyTreeView; Column: Integer);
+procedure TTreeE3HeaderClickTest.OnHeaderClick(Sender: TTyCustomTreeView; Column: Integer);
 begin
   Inc(FHeaderClickCount);
   FHeaderClickCol := Column;
 end;
 
-procedure TTreeE3HeaderClickTest.OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeE3HeaderClickTest.OnNodeDblClick(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FNodeDblClicks);
 end;
@@ -6792,8 +6792,8 @@ type
     FCheckingAllowed: Boolean;
     FCheckedCount: Integer;
     FCheckedLastNode: PTyTreeNode;
-    procedure OnChecking(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
-    procedure OnChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnChecking(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean);
+    procedure OnChecked(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 
     { Build a tree with toCheckSupport (PPI=96, NodeHeight=20, Indent=16, ShowRoot=True)
       ready for checkbox-slot hit tests.  Returns TTyTreeViewAccess.
@@ -6836,14 +6836,14 @@ type
     procedure TestAutoTriStateUpAllUnchecked;
   end;
 
-procedure TTreeC1CheckBehaviourTest.OnChecking(Sender: TTyTreeView;
+procedure TTreeC1CheckBehaviourTest.OnChecking(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var Allowed: Boolean);
 begin
   Inc(FCheckingCount);
   Allowed := FCheckingAllowed;
 end;
 
-procedure TTreeC1CheckBehaviourTest.OnChecked(Sender: TTyTreeView;
+procedure TTreeC1CheckBehaviourTest.OnChecked(Sender: TTyCustomTreeView;
   Node: PTyTreeNode);
 begin
   Inc(FCheckedCount);
@@ -8084,7 +8084,7 @@ end;
 
 { ── ③d A1 ── GetCellRect tests ──────────────────────────────────────────── }
 
-procedure TTreeGetCellRectTest.OnGetTextWithType(Sender: TTyTreeView;
+procedure TTreeGetCellRectTest.OnGetTextWithType(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
 begin
   case Column of
@@ -8096,14 +8096,14 @@ begin
   end;
 end;
 
-procedure TTreeGetCellRectTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+procedure TTreeGetCellRectTest.OnInitNodeHasChildren(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeGetCellRectTest.OnInitChildren2(Sender: TTyTreeView;
+procedure TTreeGetCellRectTest.OnInitChildren2(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 2;
@@ -8516,7 +8516,7 @@ end;
 
 { ── ③d D1 ── per-cell owner-draw (OnDrawNode + OnAfterCellPaint) ───────────── }
 
-procedure TTreeD1OwnerDrawTest.OnGetTextWithType(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnGetTextWithType(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
 begin
   case Column of
@@ -8528,14 +8528,14 @@ begin
   end;
 end;
 
-procedure TTreeD1OwnerDrawTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnInitNodeHasChildren(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TTreeD1OwnerDrawTest.OnInitChildren2(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnInitChildren2(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 2;
@@ -8545,7 +8545,7 @@ end;
   opaque GREEN. Only fires for the probed column (so the other cells keep their
   default ink for the "ink absent only where replaced" check). Captures the rect
   for the GetCellRect cross-check. }
-procedure TTreeD1OwnerDrawTest.OnDrawNodeFillGreen(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnDrawNodeFillGreen(Sender: TTyCustomTreeView;
   ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
 begin
   Inc(FDrawNodeCalls);
@@ -8563,7 +8563,7 @@ end;
 
 { OnAfterCellPaint — overlay: a small BLUE probe rect near the cell's top-left,
   for the probed column only. }
-procedure TTreeD1OwnerDrawTest.OnAfterPaintBlueDot(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnAfterPaintBlueDot(Sender: TTyCustomTreeView;
   ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
 var
   r: TRect;
@@ -8897,7 +8897,7 @@ end;
   the DC is currently holding. (FillRect is deliberately not used here: LCL hands
   it the brush handle explicitly, so it is the one primitive this cannot bite.)
   Lines are drawn along the cell's own top and bottom edges, never across it. }
-procedure TTreeD1OwnerDrawTest.OnDrawNodeSameStateEveryCall(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnDrawNodeSameStateEveryCall(Sender: TTyCustomTreeView;
   ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
 const
   Probe = TColor($00C800);   // GREEN, identical on every call
@@ -8922,7 +8922,7 @@ end;
   pixels: a vertical stroke inset from the corners, so the OnDrawNode pass's
   horizontals can neither cover it nor be covered by it. Without that separation
   a correct pass would repaint over a broken one and hide it. }
-procedure TTreeD1OwnerDrawTest.OnAfterCellSameStateEveryCall(Sender: TTyTreeView;
+procedure TTreeD1OwnerDrawTest.OnAfterCellSameStateEveryCall(Sender: TTyCustomTreeView;
   ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
 const
   Probe = TColor($C80000);   // BLUE, identical on every call
@@ -9052,7 +9052,7 @@ begin
   Result := 18 + 6 * (Index mod 3);   // 0→18, 1→24, 2→30
 end;
 
-procedure TTreeB1VariableHeightTest.OnMeasureItem(Sender: TTyTreeView;
+procedure TTreeB1VariableHeightTest.OnMeasureItem(Sender: TTyCustomTreeView;
   ACanvas: TCanvas; Node: PTyTreeNode; var ANodeHeight: Integer);
 begin
   Inc(FMeasureCalls);
@@ -9350,7 +9350,7 @@ const
   C1_NAMES: array[0..4] of string =
     ('apple', 'banana', 'band', 'cherry', 'date');
 
-procedure TTreeC1IncSearchTest.OnGetText(Sender: TTyTreeView;
+procedure TTreeC1IncSearchTest.OnGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var CellText: string);
 begin
   if Integer(Node^.Index) in [0..4] then
@@ -9359,7 +9359,7 @@ begin
     CellText := '';
 end;
 
-procedure TTreeC1IncSearchTest.OnContainsSearch(Sender: TTyTreeView;
+procedure TTreeC1IncSearchTest.OnContainsSearch(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean);
 var
   txt: string;
@@ -9574,13 +9574,13 @@ end;
 
 { ── End-to-end node-image render gate ───────────────────────────────────── }
 
-procedure TTreeNodeImageRenderTest.OnGetText(Sender: TTyTreeView;
+procedure TTreeNodeImageRenderTest.OnGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var Text: string);
 begin
   Text := 'NodeText' + IntToStr(Node^.Index);
 end;
 
-procedure TTreeNodeImageRenderTest.OnGetImageIndex(Sender: TTyTreeView;
+procedure TTreeNodeImageRenderTest.OnGetImageIndex(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 begin

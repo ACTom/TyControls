@@ -259,7 +259,7 @@ type
     procedure SiderItemClick(Sender: TObject; AGroupIndex, AItemIndex: Integer);
     procedure CrumbClick(Sender: TObject; AIndex: Integer);
     { 各页 }
-    procedure DataTreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
+    procedure DataTreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var AText: string);
     procedure TagClosed(Sender: TObject; var AllowClose: Boolean);
     procedure TagFilterClick(Sender: TObject);
     procedure GridSelectionChanged(Sender: TObject);
@@ -1483,7 +1483,7 @@ begin
   BuildOrgTreeInto(TsDept.Tree);
 end;
 
-procedure TMainForm.DataTreeGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TMainForm.DataTreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var AText: string);
 var
   data: POrgRec;

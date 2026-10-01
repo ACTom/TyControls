@@ -72,9 +72,9 @@ type
     FForm: TForm;
     FHdr:  THeaderParityAccess;
     FLog:  array of THdrRec;
-    procedure HClick(AHeader: TTyHeaderControl; AIndex: Integer);
-    procedure HResize(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
-    procedure HTrack(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+    procedure HClick(AHeader: TTyCustomHeaderControl; AIndex: Integer);
+    procedure HResize(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer);
+    procedure HTrack(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer;
       AState: TTyHeaderTrackState);
     procedure Log(AKind: THdrKind; AHeader: TObject; AIndex, AWidth: Integer;
       AState: TTyHeaderTrackState);
@@ -201,18 +201,18 @@ begin
   FLog[n].State  := AState;
 end;
 
-procedure THeaderSectionEventParityTest.HClick(AHeader: TTyHeaderControl; AIndex: Integer);
+procedure THeaderSectionEventParityTest.HClick(AHeader: TTyCustomHeaderControl; AIndex: Integer);
 begin
   Log(hkClick, AHeader, AIndex, 0, tsTrackBegin);
 end;
 
-procedure THeaderSectionEventParityTest.HResize(AHeader: TTyHeaderControl;
+procedure THeaderSectionEventParityTest.HResize(AHeader: TTyCustomHeaderControl;
   AIndex, AWidth: Integer);
 begin
   Log(hkResize, AHeader, AIndex, AWidth, tsTrackEnd);
 end;
 
-procedure THeaderSectionEventParityTest.HTrack(AHeader: TTyHeaderControl;
+procedure THeaderSectionEventParityTest.HTrack(AHeader: TTyCustomHeaderControl;
   AIndex, AWidth: Integer; AState: TTyHeaderTrackState);
 begin
   Log(hkTrack, AHeader, AIndex, AWidth, AState);

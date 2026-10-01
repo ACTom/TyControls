@@ -1153,9 +1153,10 @@ begin
   RegisterComponentEditor(TTyToolWindowBar, TTyToolWindowBarEditor);
   RegisterComponentEditor(TTyToolWindow, TTyToolWindowEditor);
   // Double-click a tree in the designer to open its node editor, the way LCL's own
-  // TTreeView opens the "TreeView Items Editor". GetComponentEditor picks the
-  // most-derived registration, so this also covers TTyShellTreeView -- the editor asks
-  // SupportsItemModel and offers no verb there.
+  // TTreeView opens the "TreeView Items Editor". Since 4.0 TTyShellTreeView is no
+  // TTyTreeView (it hangs on TTyCustomTreeView, the LCL way), so it gets the default
+  // editor -- it never had a verb here anyway: the editor asks SupportsItemModel, and the
+  // shell tree builds its nodes from the file system.
   RegisterComponentEditor(TTyTreeView, TTyTreeViewComponentEditor);
   { Right-click -> "Icon browser...". Registered on the BASE icon font, so every bundled pack
     (TTyLucideIconFont and whatever follows it) inherits the verb without another line here;
