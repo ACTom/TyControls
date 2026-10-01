@@ -2022,6 +2022,47 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 - R7 新增签名（已补附录 D / C-4）：`TTyCalcDropdown.Create(AEdit: TTyCustomNumericEdit)`、`TyComboOwnerOf` 返回 `TTyCustomComboBox`、`TTyToolBar.ApplyToButton(B: TTyCustomButton)`；~~`FindDownButton` 返回类型保持 `TTySpeedButton`（R7-4），体内强转~~（期末修复改为返回 `TTyCustomSpeedButton`，见「第 0、1 期期末修复」）。
 - 注释（N27）：写着层级事实的改成真话（`GlyphButtons` / `DropButtons` / `ColorButton` / 编辑框一族 / `ColorBox` / `FontComboBox` / `ComboBoxEx` / `FloatSpinEdit` 的单元头与几处行内注释，`ToolBar` 的 `Default` 遮蔽说明）；`{ TTyXxx }` 与 `{ --- TTyXxx --- }` 分隔注释都改成 Custom 名。
 - 【主控执行】待办：编 `tycontrols.lpk` / `tycontrols_dt.lpk`、编全部 examples（本期改了 `examples/toolbar/umain.pas`、`examples/grid/umain.pas` 与 `tools/gallery/tyGalleryCapture.pas`，未编）、`check-lfm-props.py`、冒烟手点两处（toolbar 示例点一个 GlyphButton 与一个 ToolButton，状态栏显示标题不弹异常；grid 示例打开计算列，编辑器字体为红）、期末审查。
+### 第 0、1 期期末修复（2026-10-02，起点 `41509003`）
+- 起因：主控派的两个期末审查（规格核对、代码质量）与审查探针（scratchpad `splitrv1/`：`gen.py` 生成的 `test.zz.genmimic`、`test.zz.rvprobe`）。
+- 提交（每个问题一个，正文 `Refs #8`）：
+
+| # | 提交 | 处理 |
+|---|---|---|
+| 1 | `05797028` | `FindDownButton` 照 LCL（`buttons.pp:409`）返回 `TTyCustomSpeedButton`，删前向声明与两处强转；S1-1 加「第三方成员按下时交出它、不假定 `is TTySpeedButton`」，过程变量钉住返回类型。附录 C-2 的 C1-1、C-4、附录 D、不兼容清单第 5 条同步。**PageControl.ActivePage 重新评估**：先例读反了——LCL 的 getter 强转是真话，因为 `TPageControl.ChildClassAllowed` 只收 `TTabSheet`（`pagecontrol.inc:113-117`），LCL 也没有 `TCustomTabSheet`；接受任意页的 `TCustomTabControl` 对外写 `TCustomPage`。R7-4 改成按「宿主实际交出什么」分两种，Task 14（`ActivePage` / `Pages[]` → `TTyCustomTabSheet`，`CSnapshotTypeRenames` 加一行，S14-3）、Task 20（`Buttons[]` → `TTyCustomToolButton`）、Task 21（Ribbon 页、组 → Custom）写明改法；本次不改 PageControl 代码 |
+| 2 | `97bb38e8` | 计划原文：中间类降级时尚未拆的后代（Task 2 的 `TTyToolButton`、Task 14 的 `TTyRibbon`）按快照顺序写全部名字、自己带类型 / 说明符的声明原位保留；Task 20 / 21 先把这些声明挪进 Custom 再换成 block 输出。2–4 期其它任务（Task 18、28 的降级）后代同任务拆，无此写法 |
+| 3 | `72b0dfdc` | `test.designeditors` 加 `TestClassTypedRegistrationsMatchThePropertyType`（按名字沿属性类的祖先链找注册类型，至少 6 条），现在绿；Task 27 / 28 写明改类型的同一提交改 `PropEditors.pas:737-738/742-743/837` 的注册与 `:478/506` 的 `is TTyIconFont` |
+| 4 | `2419f944` | `TTyCustomEdit` / `TTyCustomMemo` / `TTyCustomComboBox` 覆写 `RealGetText` / `RealSetText` 指向 `Text`（`TTyCustomMaskEdit` 的走 `SetMaskedText`）。核实副作用时发现两处 LCL 行为会改变 3.0 窗体，都挡掉：`csSetCaption`（`SetName` 会把新控件的名字写进文字）从三个 Custom 类的 `ControlStyle` 去掉；`ActionChange`（关联的 Action 每变一次把它的 Caption 盖到文字上）期间不让 Caption 写进文字。`.lfm` 里没有 Caption（示例 / 测试全扫）、`Text` 的 stored / default 不变、Caption 不 published、Text 写入的 `OnChange` 次数不变（测试钉住）、主题 / 绘制不读 Caption。V20、Task 31 第 6 条、`docs/controls/updown.md` 从「限制」改为「已解决」 |
+| 5 | `800565ad` | `TTyCustomNumericEdit` 加载期间暂存 `Value`、`Loaded` 时设入（Currency / Track / Calc / CalcCurrency / FloatSpin 继承，核实它们都不覆写 `SetValue`）；测试：第三方按「Value、Decimals」发布，Decimals=4、Value=3.14159 往返得 3.1416，「Value、MaxValue、MinValue」发布 -5 不被半个范围钳住。仍与顺序有关的（SpinEdit、ProgressBar、Gauge、TrackBar：setter 当场钳）写进 Task 31 第 2 条 |
+| 6 | `0a152cbd` | `check-lfm-props.py` 从 `lcl/controls.pp` 读 `TControl` / `TWinControl` / `TCustomControl` / `TGraphicControl` 的 published 段、从 FPC rtl 的 `classesh.inc` 读 `TComponent` 的（读出的正是 V3 的 15 个），找不到 Lazarus 源码就以 2 退出。重跑 0 误报；临时坏 `.lfm`（`Bogusity = 1`）仍报出，已删 |
+| 7 | `8e8b088b` | G9 常驻守卫 `TestGeneratedMimicsMatchTheirFinalClass` + 生成的 `tests/test.customclasses.mimic.pas`（59 对）；生成器 `gen-mimic.py` 写进计划，「每个类的标准步骤」第 7 步要求每次拆完重跑 |
+| 7 | `d17e6ed0` | P1 每家族一条真实消息路径（按钮 / 标签 / 进度条点击、编辑框打字与退格、多行回车、复选框空格与点击、组合框与滑块方向键 / End），与最终类并排比 |
+| 7 | `7bbe1c34` | SpeedButton / Edit / CheckBox / ComboBox 的 `TabStop`、FloatSpinEdit 的 `UseThousands` 改读「只发布这一个属性的第三方子类」的 RTTI default，并先证明上一层的值不同 |
+| 7 | `6fb06bf1` | T-d 逐像素补上 Tag、Edit、Memo、CheckBox、RadioButton、ComboBox、ProgressBar、TrackBar（防空图：位图里必须有非哨兵像素）。MaskEdit 由 G9 的 typeKey / 样式比较与 `TestThirdMaskEdit` 覆盖，没单独画 |
+| 7 | `8f489161` | G3(a) 删除：最终类只有 `property X;` 时它原样继承，(a) 只会在 (b) 已红处红，没有变异能单独让它红；说明符在哪一层由 G9（第三方一侧）与 G6（对 3.0）查 |
+| 8 | `475bf84f` | 注释：`ColorBox.pas:549`、`GlyphButtons.pas` 的 `GlyphLayout`「Published so」与 `UnpressSiblings` / 类头「sibling TTySpeedButtons」、`CalcEdit.pas:30-31`、`CalcCurrencyEdit.pas:11`；`tools/gallery/tyGalleryCapture.pas` 的 `TButtonAccess = class(TTyCustomButton)` |
+| 8 | `2110cefd` | `docs/controls/iconfont.md` 补 `ChangeStamp`；工具窗口规格 `:579` 原处标注改名 |
+| 8 | `3986167e` | 不兼容清单第 9 条（经基类 / Custom 引用访问 LCL protected 的 22 个成员，按 `controls.pp` 逐个列出，`OnKeyDown` 等 `TWinControl` public 的不在此列）与迁移写法；Task 31 第 8、9 条（要同步的 6 个文档、`Base.pas` 删掉的长注释的去处）；A8-1 挪进 C-2（C8-1），Task 8 Step 2 / 5 的见证改为 `TThirdColorBox`；N31（G6 不比 stored 方法与 setter 身份，由 G3b、G9 与行为测试兜底） |
+
+- 全量（`lazbuild -B` 后复制成 `tests/tytests-split1fix.exe`，输出重定向）：**8631** 条，**0 错 0 败**（= 1 期签收的 8617 + P1 新增 12 + 设计期检查 1 + G9 1），红名单空。守卫 11 条、P1 37 条。
+- `check-lfm-props.py` 0 误报；`check-example-po` 101 个文件 0 问题；设计期单元用 fpc 对着测试构建产出的运行时单元单独编过（7 个单元，0 错，4 个既有警告都在 AdvChart 编辑器），输出只写 scratchpad。
+- 变异（改 → 读回比对 → `lazbuild -B` → 跑点名 suite → 写回原字节并核对；最后 `-B` 重编再跑全量）：全部红。
+  - `FindDownButton` 返回类型改回 `TTySpeedButton`（+ 前向声明、强转）→ 编译期红（S1-1 的过程变量赋值 Incompatible types）。
+  - `PropEditors.pas:738` 注册类型改成更派生的 `TTyLucideIconFont`（模拟 D11 后的失配）→ `TestClassTypedRegistrationsMatchThePropertyType` 红。
+  - Edit 的 `RealGetText` / `RealSetText` 改回 inherited → UpDown 驱动测试与 Caption 测试红；Edit 保留 `csSetCaption` → 「命名不改文字」红；去掉 Edit 的 ActionChange 守卫 → 「Action 不盖文字」红；MaskEdit 的 `RealSetText` 不走掩码 → 红；Memo、ComboBox 的 `RealSetText` 改回 inherited → 各红。
+  - NumericEdit 去掉加载期暂存 → `TestNumericValueSurvivesAnyPublishingOrder` 红。
+  - M-G9：`TTyCustomSpeedButton` 的 `TabStop default False` 挪进 `TTySpeedButton` → G9、G3b、`TestThirdSpeedButton`（新 RTTI 断言）红，G6 绿——正是 G9 要补的视角。Edit 的 `TabStop default True` 挪进 `TTyEdit` → G9、G3b、G6、`TestThirdEdit` 红。
+  - 真实输入：Edit 的 `UTF8KeyPress` 只对 `TTyEdit` 生效 → `TestInputThirdEditTakesTypingAndBackspace` 红。
+  - 逐像素：CheckBox 的 typeKey 只对 `TTyCheckBox` 给 `'TyCheckBox'` → `TestMimicsPaintLikeTheirFinalClass`、`TestThirdCheckBox`、G9 红。
+  - **S2-4**（补跑）：`TTyToolButton` 发布段对调 `Version` / `Enabled` 两行 → G6 红。
+  - G9 覆盖：从生成单元删掉 `TTyBadge` 那一对 → G9 红（「split class without a mimic」）。
+- 偏差：
+  - 第 4 条比提示多做两件：`TTyCustomMaskEdit` 的 Caption 走掩码（否则 Caption 与 Text 对掩码框说的不是一回事）；`csSetCaption` 与 `ActionChange` 两处防护（核实副作用时发现的，见上表）。这是 LCL `TEdit` 有、3.0 Ty 编辑框没有的两种行为，选的是「3.0 行为不变」。
+  - 第 5 条的数值族修成与顺序无关；SpinEdit / ProgressBar / Gauge / TrackBar 没改代码，按提示写进 Task 31 的发布顺序要求。
+  - 第 7 条 G3(a) 选「删除并说明」而不是改判据：最终类只剩 `property X;` 之后，RTTI 一侧能红的判据就是 G9。
+  - G9 的流式比较要两个宿主窗体（同一父控件上两个实例的 TabOrder 会不同），已写进判据。
+  - 工具（`tools/gallery`）只改了一行类型，未编译（实现 agent 不编 tools）。
+- 主控已做（本轮修复之前，在 `41509003` 上）：`lazbuild -B` 编过 `tycontrols.lpk`、`tycontrols_dt.lpk`（0 错）与全部 49 个 examples（0 失败）；逐个启动 49 个示例枚举窗口类，全部只有主窗体、没有 `#32770` 错误框；`check-example-po` 0 问题；`check-lfm-props.py` 的 51 处 Hint / Cursor 报告判为脚本误报（本轮第 6 条已修）；已通知 AdvChart 会话摘取 `e4f3c648`、通知 3.0 会话移植规矩。
+- 主控待做：本轮改了 `source/`（Edit、MaskEdit、Memo、ComboBox、NumericEdit、UpDown 注释、GlyphButtons、ColorBox / CalcEdit / CalcCurrencyEdit 注释）、`designtime/`（未改）与 `tools/gallery/tyGalleryCapture.pas`——重编两个包与全部 examples、`check-lfm-props.py`、冒烟（toolbar 示例点 GlyphButton / ToolButton，grid 示例计算列编辑器字体为红；顺手在任一示例里拖一个 TTyEdit 到窗体，确认文字不是控件名）；本轮新增的「Caption 就是 Text」与 NumericEdit 加载期暂存是 3.0 没有的行为，告诉 3.0 会话**不要**移植（4.0 才有第三方子类这个场景）；gallery 工具下次跑时核对。
 ### 2 期
 ### 3 期
 ### 4 期
