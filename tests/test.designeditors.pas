@@ -40,6 +40,7 @@ type
   TDesignEditorsTest = class(TTestCase)
   published
     procedure TestEveryRegistrationTargetsARealProperty;
+    procedure TestClassTypedRegistrationsMatchThePropertyType;
     procedure TestControllerStringPropertiesAreGuided;
     procedure TestThemeFileIsPickedFromAFileDialog;
     procedure TestValueListsStayTypeable;
@@ -249,6 +250,61 @@ begin
     mistyped.Free;
     missing.Free;
     unresolved.Free;
+    regs.Free;
+  end;
+end;
+
+{ A registration made with a CLASS type -- TypeInfo(TTyStyleController), TypeInfo(TTyIconFont),
+  TypeInfo(TTyImageCollection), the Hidden editors on the Lucide list, the tool windows and the
+  form surface -- matches a property only when the property's own class INHERITS FROM the
+  registered one (propedits.pp GetEditorClass: `TypeData^.ClassType.InheritsFrom(...)`). Nothing
+  checks that at compile time. The custom-class split will retype these properties to the custom
+  class (plan D11: Controller -> TTyCustomStyleController, IconFont -> TTyCustomIconFont, ...);
+  TTyCustomStyleController does not inherit from TTyStyleController, so a registration left on
+  the final class would stop matching without a sound and the hidden property would reappear in
+  the inspector. The registered type is compared BY NAME along the property class's ancestry, so
+  LCL types (TFont, TStringList, ...) need no class registry. }
+procedure TDesignEditorsTest.TestClassTypedRegistrationsMatchThePropertyType;
+var
+  regs, bad: TStringList;
+  i, checked: Integer;
+  ty, base, prop, ed, tyName: string;
+  cls: TPersistentClass;
+  pi: PPropInfo;
+  c: TClass;
+begin
+  regs := Registrations;
+  bad := TStringList.Create;
+  try
+    checked := 0;
+    for i := 0 to regs.Count - 1 do
+    begin
+      if not SplitEditorRegistration(regs[i], ty, base, prop, ed) then Continue;
+      ty := Squeezed(ty); base := Squeezed(base); prop := Squeezed(prop);
+      if prop = '' then Continue;      // blanket rules match by type alone
+      if not (AnsiStartsText('TypeInfo(', ty) and AnsiEndsText(')', ty)) then Continue;
+      tyName := Copy(ty, Length('TypeInfo(') + 1, Length(ty) - Length('TypeInfo(') - 1);
+      cls := GetClass(base);
+      if cls = nil then Continue;      // reported by TestEveryRegistrationTargetsARealProperty
+      pi := GetPropInfo(cls, prop);
+      if pi = nil then pi := PublishingDescendant(cls, prop);
+      if (pi = nil) or (pi^.PropType^.Kind <> tkClass) then Continue;
+      Inc(checked);
+      c := GetTypeData(pi^.PropType)^.ClassType;
+      while (c <> nil) and not SameText(c.ClassName, tyName) do
+        c := c.ClassParent;
+      if c = nil then
+        bad.Add(Format('%s.%s is a %s, which does not inherit from the registered %s',
+          [base, prop, GetTypeData(pi^.PropType)^.ClassType.ClassName, tyName]));
+    end;
+    AssertTrue(Format('only %d class-typed named registrations were checked -- the parse has'
+      + ' shrunk and this check is passing vacuously', [checked]), checked >= 6);
+    AssertEquals('property editor registered with a class type the property''s class does not'
+      + ' inherit from -- the IDE never matches it (propedits.pp GetEditorClass). When a property'
+      + ' is retyped to a custom class, retype its registrations in the same commit:' + LineEnding
+      + bad.Text, 0, bad.Count);
+  finally
+    bad.Free;
     regs.Free;
   end;
 end;
