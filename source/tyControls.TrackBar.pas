@@ -16,7 +16,7 @@ type
     is expressed. }
   TTyTrackTickStyle = (ttsNone, ttsAuto, ttsManual);
 
-  TTyTrackBar = class(TTyCustomControl)
+  TTyCustomTrackBar = class(TTyCustomControl)
   private
     FMin, FMax, FPosition: Integer;
     FOrientation: TTyTrackOrientation;
@@ -108,16 +108,54 @@ type
     // the new value; with no handle (every render test) or while dragging it
     // snaps, preserving exact-pixel tests and live mouse tracking.
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+    property TabStop default True;
+    property Min: Integer read FMin write SetMin default 0;
+    property Max: Integer read FMax write SetMax default 100;
+    property Position: Integer read FPosition write SetPosition default 0;
+    property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
+    { Flip the value axis WITHOUT changing the orientation: a horizontal bar that counts
+      down left-to-right, or a vertical bar with Min at the top. It used to be hard-wired
+      to the orientation (vertical inverted, horizontal not) with no opt-out, so two of
+      the four configurations were unreachable. LCL: comctrls.pp:2789.
+
+      DIFFERS FROM LCL ON THE VERTICAL AXIS, deliberately: this bar's un-reversed
+      vertical direction is Max at the top (a volume slider), because that is what makes
+      "up increases" true for the keyboard, the wheel and the drag alike -- see KeyDown.
+      LCL/Win32's un-reversed vertical is Min at the top, so a ported form that sets
+      Reversed on a VERTICAL bar draws the other way round here. Migration: drop
+      Reversed on ported vertical bars, set it on ported horizontal ones unchanged. }
+    property Reversed: Boolean read FReversed write SetReversed default False;
+    { Which side of the groove the ticks are drawn on. LCL: comctrls.pp:2795, same
+      default. Ticks used to be nailed to one side (below when horizontal, right when
+      vertical), so a slider needing them above its groove could not have them. }
+    property TickMarks: TTyTrackTickMark read FTickMarks write SetTickMarks default ttmBottomRight;
+    { How the ticks are chosen: ttsAuto (every Frequency units, the default and the old
+      behaviour), ttsNone, or ttsManual -- only the values passed to SetTick. LCL:
+      comctrls.pp:2796, same default. Frequency = 0 still suppresses the automatic
+      ticks, so nothing that relied on that sentinel changes. }
+    property TickStyle: TTyTrackTickStyle read FTickStyle write SetTickStyle default ttsAuto;
+    { One tick per value-unit, matching LCL's TTrackBar (comctrls.pp: default 1). It
+      was 0 here, and 0 means "no ticks" -- so a track bar dropped on a form showed a
+      bare groove and the tick marks looked unimplemented rather than switched off. }
+    property Frequency: Integer read FFrequency write SetFrequency default 1;
+    property LineSize: Integer read FLineSize write SetLineSize default 1;
+    property PageSize: Integer read FPageSize write SetPageSize default 10;
+    { 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,
+      不该悄悄改变已有界面的排版。 }
+    property ShowValue: Boolean read FShowValue write SetShowValue default False;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyTrackBar publishes TTyCustomTrackBar's properties; everything lives in TTyCustomTrackBar. }
+  TTyTrackBar = class(TTyCustomTrackBar)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -161,41 +199,18 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Min: Integer read FMin write SetMin default 0;
-    property Max: Integer read FMax write SetMax default 100;
-    property Position: Integer read FPosition write SetPosition default 0;
-    property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
-    { Flip the value axis WITHOUT changing the orientation: a horizontal bar that counts
-      down left-to-right, or a vertical bar with Min at the top. It used to be hard-wired
-      to the orientation (vertical inverted, horizontal not) with no opt-out, so two of
-      the four configurations were unreachable. LCL: comctrls.pp:2789.
-
-      DIFFERS FROM LCL ON THE VERTICAL AXIS, deliberately: this bar's un-reversed
-      vertical direction is Max at the top (a volume slider), because that is what makes
-      "up increases" true for the keyboard, the wheel and the drag alike -- see KeyDown.
-      LCL/Win32's un-reversed vertical is Min at the top, so a ported form that sets
-      Reversed on a VERTICAL bar draws the other way round here. Migration: drop
-      Reversed on ported vertical bars, set it on ported horizontal ones unchanged. }
-    property Reversed: Boolean read FReversed write SetReversed default False;
-    { Which side of the groove the ticks are drawn on. LCL: comctrls.pp:2795, same
-      default. Ticks used to be nailed to one side (below when horizontal, right when
-      vertical), so a slider needing them above its groove could not have them. }
-    property TickMarks: TTyTrackTickMark read FTickMarks write SetTickMarks default ttmBottomRight;
-    { How the ticks are chosen: ttsAuto (every Frequency units, the default and the old
-      behaviour), ttsNone, or ttsManual -- only the values passed to SetTick. LCL:
-      comctrls.pp:2796, same default. Frequency = 0 still suppresses the automatic
-      ticks, so nothing that relied on that sentinel changes. }
-    property TickStyle: TTyTrackTickStyle read FTickStyle write SetTickStyle default ttsAuto;
-    { One tick per value-unit, matching LCL's TTrackBar (comctrls.pp: default 1). It
-      was 0 here, and 0 means "no ticks" -- so a track bar dropped on a form showed a
-      bare groove and the tick marks looked unimplemented rather than switched off. }
-    property Frequency: Integer read FFrequency write SetFrequency default 1;
-    property LineSize: Integer read FLineSize write SetLineSize default 1;
-    property PageSize: Integer read FPageSize write SetPageSize default 10;
-    { 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,
-      不该悄悄改变已有界面的排版。 }
-    property ShowValue: Boolean read FShowValue write SetShowValue default False;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property Min;
+    property Max;
+    property Position;
+    property Orientation;
+    property Reversed;
+    property TickMarks;
+    property TickStyle;
+    property Frequency;
+    property LineSize;
+    property PageSize;
+    property ShowValue;
+    property OnChange;
     property Align;
     property Anchors;
   end;
@@ -229,9 +244,9 @@ begin
   if AInvert then Result := AMax - eff else Result := AMin + eff;
 end;
 
-{ TTyTrackBar }
+{ TTyCustomTrackBar }
 
-constructor TTyTrackBar.Create(AOwner: TComponent);
+constructor TTyCustomTrackBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -260,7 +275,7 @@ begin
   Height := TyDensityHeight(ActiveController, 24);
 end;
 
-destructor TTyTrackBar.Destroy;
+destructor TTyCustomTrackBar.Destroy;
 begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
@@ -268,18 +283,18 @@ begin
   inherited Destroy;
 end;
 
-function TTyTrackBar.GetStyleTypeKey: string;
+function TTyCustomTrackBar.GetStyleTypeKey: string;
 begin
   Result := 'TyTrackBar';
 end;
 
-function TTyTrackBar.ThumbWAtPPI(APPI: Integer): Integer;
+function TTyCustomTrackBar.ThumbWAtPPI(APPI: Integer): Integer;
 begin
   Result := MulDiv(12, APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyTrackBar.MainLen: Integer;
+function TTyCustomTrackBar.MainLen: Integer;
 begin
   if FOrientation = toVertical then Result := ClientHeight
   else Result := ClientWidth;
@@ -289,7 +304,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyTrackBar.SetShowValue(const AValue: Boolean);
+procedure TTyCustomTrackBar.SetShowValue(const AValue: Boolean);
 begin
   if FShowValue = AValue then Exit;
   FShowValue := AValue;
@@ -297,12 +312,12 @@ begin
   Invalidate;
 end;
 
-function TTyTrackBar.ValueText: string;
+function TTyCustomTrackBar.ValueText: string;
 begin
   Result := IntToStr(FPosition);
 end;
 
-function TTyTrackBar.Inverted: Boolean;
+function TTyCustomTrackBar.Inverted: Boolean;
 begin
   { The axis' natural direction (horizontal = Min left, vertical = Max top), flipped by
     Reversed. Every geometry call -- thumb offset, drag, ticks -- reads this one
@@ -310,28 +325,28 @@ begin
   Result := (FOrientation = toVertical) xor FReversed;
 end;
 
-procedure TTyTrackBar.SetReversed(const AValue: Boolean);
+procedure TTyCustomTrackBar.SetReversed(const AValue: Boolean);
 begin
   if FReversed = AValue then Exit;
   FReversed := AValue;
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetTickMarks(const AValue: TTyTrackTickMark);
+procedure TTyCustomTrackBar.SetTickMarks(const AValue: TTyTrackTickMark);
 begin
   if FTickMarks = AValue then Exit;
   FTickMarks := AValue;
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetTickStyle(const AValue: TTyTrackTickStyle);
+procedure TTyCustomTrackBar.SetTickStyle(const AValue: TTyTrackTickStyle);
 begin
   if FTickStyle = AValue then Exit;
   FTickStyle := AValue;
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetTick(AValue: Integer);
+procedure TTyCustomTrackBar.SetTick(AValue: Integer);
 var
   i: Integer;
 begin
@@ -343,19 +358,19 @@ begin
   if FTickStyle = ttsManual then Invalidate;
 end;
 
-procedure TTyTrackBar.ClearTicks;
+procedure TTyCustomTrackBar.ClearTicks;
 begin
   if Length(FManualTicks) = 0 then Exit;
   SetLength(FManualTicks, 0);
   if FTickStyle = ttsManual then Invalidate;
 end;
 
-function TTyTrackBar.TickCount: Integer;
+function TTyCustomTrackBar.TickCount: Integer;
 begin
   Result := Length(FManualTicks);
 end;
 
-procedure TTyTrackBar.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomTrackBar.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -391,7 +406,7 @@ begin
   end;
 end;
 
-procedure TTyTrackBar.EnsureTimer;
+procedure TTyCustomTrackBar.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -402,7 +417,7 @@ begin
   end;
 end;
 
-procedure TTyTrackBar.HandleTimer(Sender: TObject);
+procedure TTyCustomTrackBar.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then
     Invalidate;
@@ -410,17 +425,17 @@ begin
     FTimer.Enabled := False;
 end;
 
-function TTyTrackBar.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomTrackBar.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyTrackBar.DisplayPos: Single;
+function TTyCustomTrackBar.DisplayPos: Single;
 begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyTrackBar.SetPositionAnimating(AValue: Integer);
+procedure TTyCustomTrackBar.SetPositionAnimating(AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -438,7 +453,7 @@ begin
   Invalidate;
 end;
 
-function TTyTrackBar.ThumbRect: TRect;
+function TTyCustomTrackBar.ThumbRect: TRect;
 var
   TW, Off: Integer;
   PPI: Integer;
@@ -457,7 +472,7 @@ begin
     Result := Rect(Off, 0, Off + TW, ClientHeight);
 end;
 
-procedure TTyTrackBar.DragTo(APos: Integer);
+procedure TTyCustomTrackBar.DragTo(APos: Integer);
 var
   TW, Off: Integer;
   PPI: Integer;
@@ -468,7 +483,7 @@ begin
   Position := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, Off, Inverted);
 end;
 
-procedure TTyTrackBar.SetMin(const AValue: Integer);
+procedure TTyCustomTrackBar.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -476,7 +491,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetMax(const AValue: Integer);
+procedure TTyCustomTrackBar.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -484,7 +499,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetPosition(const AValue: Integer);
+procedure TTyCustomTrackBar.SetPosition(const AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -525,7 +540,7 @@ begin
     FOnChange(Self);
 end;
 
-procedure TTyTrackBar.SetOrientation(const AValue: TTyTrackOrientation);
+procedure TTyCustomTrackBar.SetOrientation(const AValue: TTyTrackOrientation);
 var
   w, h: Integer;
 begin
@@ -544,7 +559,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetFrequency(const AValue: Integer);
+procedure TTyCustomTrackBar.SetFrequency(const AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -554,7 +569,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTrackBar.SetLineSize(const AValue: Integer);
+procedure TTyCustomTrackBar.SetLineSize(const AValue: Integer);
 begin
   if AValue < 1 then
     FLineSize := 1
@@ -562,7 +577,7 @@ begin
     FLineSize := AValue;
 end;
 
-procedure TTyTrackBar.SetPageSize(const AValue: Integer);
+procedure TTyCustomTrackBar.SetPageSize(const AValue: Integer);
 begin
   if AValue < 1 then
     FPageSize := 1
@@ -570,7 +585,7 @@ begin
     FPageSize := AValue;
 end;
 
-procedure TTyTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
 var
   DecKey, IncKey: Word;
 begin
@@ -621,7 +636,7 @@ begin
     end;
 end;
 
-procedure TTyTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -633,7 +648,7 @@ begin
   end;
 end;
 
-procedure TTyTrackBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTrackBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   HoverRect: TRect;
   WasHover: Boolean;
@@ -656,7 +671,7 @@ begin
   end;
 end;
 
-procedure TTyTrackBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTrackBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
@@ -666,7 +681,7 @@ begin
   end;
 end;
 
-procedure TTyTrackBar.MouseLeave;
+procedure TTyCustomTrackBar.MouseLeave;
 begin
   inherited MouseLeave;
   FThumbHover := False;
@@ -675,7 +690,7 @@ begin
   Invalidate;
 end;
 
-function TTyTrackBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomTrackBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   // Let the published OnMouseWheel/Up/Down events fire first; if a handler marks
@@ -689,7 +704,7 @@ begin
   Result := True;
 end;
 
-procedure TTyTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, ThumbS, GrooveS: TTyStyleSet;
@@ -883,7 +898,7 @@ begin
   end;
 end;
 
-procedure TTyTrackBar.Paint;
+procedure TTyCustomTrackBar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

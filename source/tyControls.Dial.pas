@@ -26,7 +26,7 @@ type
     body, and a skin could not give the cap its own colour. Direct manipulation
     SNAPS (no ease) so the notch tracks the pointer and headless render tests stay
     pixel-stable. }
-  TTyDial = class(TTyCustomControl)
+  TTyCustomDial = class(TTyCustomControl)
   private
     FMin, FMax, FValue: Double;
     FStartAngle, FSweepAngle: Integer;
@@ -55,16 +55,28 @@ type
       MousePos: TPoint): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
+    property TabStop default True;
+    property Min: Double read FMin write SetMin;
+    property Max: Double read FMax write SetMax;
+    property Value: Double read FValue write SetValue;
+    property StartAngle: Integer read FStartAngle write SetStartAngle default 135;
+    property SweepAngle: Integer read FSweepAngle write SetSweepAngle default 270;
+    property Step: Double read FStep write FStep;
+    property ShowValue: Boolean read FShowValue write SetShowValue default False;
+    property ValueFormat: string read FValueFormat write SetValueFormat;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyDial publishes TTyCustomDial's properties; everything lives in TTyCustomDial. }
+  TTyDial = class(TTyCustomDial)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -108,15 +120,15 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Min: Double read FMin write SetMin;
-    property Max: Double read FMax write SetMax;
-    property Value: Double read FValue write SetValue;
-    property StartAngle: Integer read FStartAngle write SetStartAngle default 135;
-    property SweepAngle: Integer read FSweepAngle write SetSweepAngle default 270;
-    property Step: Double read FStep write FStep;
-    property ShowValue: Boolean read FShowValue write SetShowValue default False;
-    property ValueFormat: string read FValueFormat write SetValueFormat;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property Min;
+    property Max;
+    property Value;
+    property StartAngle;
+    property SweepAngle;
+    property Step;
+    property ShowValue;
+    property ValueFormat;
+    property OnChange;
     property Align;
     property Anchors;
   end;
@@ -147,9 +159,9 @@ begin
   Result := AMin + frac * (AMax - AMin);
 end;
 
-{ TTyDial }
+{ TTyCustomDial }
 
-constructor TTyDial.Create(AOwner: TComponent);
+constructor TTyCustomDial.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -166,14 +178,14 @@ begin
   Height := 72;
 end;
 
-function TTyDial.GetStyleTypeKey: string;
+function TTyCustomDial.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: a raised knob body and a sunk gauge track want opposite
     surface treatments, so a skin can now style the knob without touching every gauge. }
   Result := 'TyDial';
 end;
 
-procedure TTyDial.ApplyValue(AValue: Double);
+procedure TTyCustomDial.ApplyValue(AValue: Double);
 var v: Double;
 begin
   v := AValue;
@@ -184,7 +196,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyDial.DragToPoint(X, Y: Integer);
+procedure TTyCustomDial.DragToPoint(X, Y: Integer);
 var c: TPoint;
 begin
   c := Point(ClientWidth div 2, ClientHeight div 2);
@@ -192,7 +204,7 @@ begin
     FStartAngle, FSweepAngle, FMin, FMax));
 end;
 
-procedure TTyDial.SetMin(const AValue: Double);
+procedure TTyCustomDial.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -200,7 +212,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDial.SetMax(const AValue: Double);
+procedure TTyCustomDial.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -208,25 +220,25 @@ begin
   Invalidate;
 end;
 
-procedure TTyDial.SetValue(const AValue: Double);
+procedure TTyCustomDial.SetValue(const AValue: Double);
 begin
   // Programmatic set clamps + fires OnChange (only on a real change), like drag/wheel.
   ApplyValue(AValue);
 end;
 
-procedure TTyDial.SetStartAngle(const AValue: Integer);
+procedure TTyCustomDial.SetStartAngle(const AValue: Integer);
 begin if FStartAngle = AValue then Exit; FStartAngle := AValue; Invalidate; end;
 
-procedure TTyDial.SetSweepAngle(const AValue: Integer);
+procedure TTyCustomDial.SetSweepAngle(const AValue: Integer);
 begin if FSweepAngle = AValue then Exit; FSweepAngle := Math.Max(1, AValue); Invalidate; end;
 
-procedure TTyDial.SetShowValue(const AValue: Boolean);
+procedure TTyCustomDial.SetShowValue(const AValue: Boolean);
 begin if FShowValue = AValue then Exit; FShowValue := AValue; Invalidate; end;
 
-procedure TTyDial.SetValueFormat(const AValue: string);
+procedure TTyCustomDial.SetValueFormat(const AValue: string);
 begin if FValueFormat = AValue then Exit; FValueFormat := AValue; Invalidate; end;
 
-procedure TTyDial.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomDial.KeyDown(var Key: Word; Shift: TShiftState);
 var stp: Double;
 begin
   if not Enabled then Exit;
@@ -243,7 +255,7 @@ begin
   end;
 end;
 
-procedure TTyDial.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomDial.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -255,20 +267,20 @@ begin
   end;
 end;
 
-procedure TTyDial.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomDial.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then DragToPoint(X, Y);
 end;
 
-procedure TTyDial.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomDial.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then FDragging := False;
 end;
 
-function TTyDial.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomDial.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var stp: Double;
 begin
@@ -284,7 +296,7 @@ begin
   Result := True;
 end;
 
-procedure TTyDial.Paint;
+procedure TTyCustomDial.Paint;
 var
   P: TTyPainter;
   bodyS, pointerS: TTyStyleSet;

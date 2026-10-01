@@ -22,7 +22,7 @@ type
     industrial skin actually wants to do to a machine-look knob. Direct manipulation
     SNAPS (no ease) so the notch tracks the pointer and headless render tests stay
     pixel-stable. }
-  TTyGearDial = class(TTyCustomControl)
+  TTyCustomGearDial = class(TTyCustomControl)
   private
     FMin, FMax, FValue: Double;
     FStartAngle, FSweepAngle: Integer;
@@ -53,16 +53,29 @@ type
       MousePos: TPoint): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
+    property TabStop default True;
+    property Min: Double read FMin write SetMin;
+    property Max: Double read FMax write SetMax;
+    property Value: Double read FValue write SetValue;
+    property StartAngle: Integer read FStartAngle write SetStartAngle default 135;
+    property SweepAngle: Integer read FSweepAngle write SetSweepAngle default 270;
+    property Teeth: Integer read FTeeth write SetTeeth default 12;
+    property Step: Double read FStep write FStep;
+    property ShowValue: Boolean read FShowValue write SetShowValue default False;
+    property ValueFormat: string read FValueFormat write SetValueFormat;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyGearDial publishes TTyCustomGearDial's properties; everything lives in TTyCustomGearDial. }
+  TTyGearDial = class(TTyCustomGearDial)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -106,16 +119,16 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Min: Double read FMin write SetMin;
-    property Max: Double read FMax write SetMax;
-    property Value: Double read FValue write SetValue;
-    property StartAngle: Integer read FStartAngle write SetStartAngle default 135;
-    property SweepAngle: Integer read FSweepAngle write SetSweepAngle default 270;
-    property Teeth: Integer read FTeeth write SetTeeth default 12;
-    property Step: Double read FStep write FStep;
-    property ShowValue: Boolean read FShowValue write SetShowValue default False;
-    property ValueFormat: string read FValueFormat write SetValueFormat;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property Min;
+    property Max;
+    property Value;
+    property StartAngle;
+    property SweepAngle;
+    property Teeth;
+    property Step;
+    property ShowValue;
+    property ValueFormat;
+    property OnChange;
     property Align;
     property Anchors;
   end;
@@ -128,9 +141,9 @@ begin
   Result := AIndex * 360 / ACount;
 end;
 
-{ TTyGearDial }
+{ TTyCustomGearDial }
 
-constructor TTyGearDial.Create(AOwner: TComponent);
+constructor TTyCustomGearDial.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -148,14 +161,14 @@ begin
   Height := 76;
 end;
 
-function TTyGearDial.GetStyleTypeKey: string;
+function TTyCustomGearDial.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: teeth and a machined inner ring exist in no other control,
     so a skin can now shade them without dragging every gauge track along. }
   Result := 'TyGearDial';
 end;
 
-procedure TTyGearDial.ApplyValue(AValue: Double);
+procedure TTyCustomGearDial.ApplyValue(AValue: Double);
 var v: Double;
 begin
   v := AValue;
@@ -166,7 +179,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyGearDial.DragToPoint(X, Y: Integer);
+procedure TTyCustomGearDial.DragToPoint(X, Y: Integer);
 var c: TPoint;
 begin
   c := Point(ClientWidth div 2, ClientHeight div 2);
@@ -174,7 +187,7 @@ begin
     FStartAngle, FSweepAngle, FMin, FMax));
 end;
 
-procedure TTyGearDial.SetMin(const AValue: Double);
+procedure TTyCustomGearDial.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -182,7 +195,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGearDial.SetMax(const AValue: Double);
+procedure TTyCustomGearDial.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -190,28 +203,28 @@ begin
   Invalidate;
 end;
 
-procedure TTyGearDial.SetValue(const AValue: Double);
+procedure TTyCustomGearDial.SetValue(const AValue: Double);
 begin
   // Programmatic set clamps + fires OnChange (only on a real change), like drag/wheel.
   ApplyValue(AValue);
 end;
 
-procedure TTyGearDial.SetStartAngle(const AValue: Integer);
+procedure TTyCustomGearDial.SetStartAngle(const AValue: Integer);
 begin if FStartAngle = AValue then Exit; FStartAngle := AValue; Invalidate; end;
 
-procedure TTyGearDial.SetSweepAngle(const AValue: Integer);
+procedure TTyCustomGearDial.SetSweepAngle(const AValue: Integer);
 begin if FSweepAngle = AValue then Exit; FSweepAngle := Math.Max(1, AValue); Invalidate; end;
 
-procedure TTyGearDial.SetTeeth(const AValue: Integer);
+procedure TTyCustomGearDial.SetTeeth(const AValue: Integer);
 begin if FTeeth = AValue then Exit; FTeeth := Math.Max(0, AValue); Invalidate; end;
 
-procedure TTyGearDial.SetShowValue(const AValue: Boolean);
+procedure TTyCustomGearDial.SetShowValue(const AValue: Boolean);
 begin if FShowValue = AValue then Exit; FShowValue := AValue; Invalidate; end;
 
-procedure TTyGearDial.SetValueFormat(const AValue: string);
+procedure TTyCustomGearDial.SetValueFormat(const AValue: string);
 begin if FValueFormat = AValue then Exit; FValueFormat := AValue; Invalidate; end;
 
-procedure TTyGearDial.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomGearDial.KeyDown(var Key: Word; Shift: TShiftState);
 var stp: Double;
 begin
   if not Enabled then Exit;
@@ -228,7 +241,7 @@ begin
   end;
 end;
 
-procedure TTyGearDial.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomGearDial.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -240,20 +253,20 @@ begin
   end;
 end;
 
-procedure TTyGearDial.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomGearDial.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then DragToPoint(X, Y);
 end;
 
-procedure TTyGearDial.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomGearDial.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then FDragging := False;
 end;
 
-function TTyGearDial.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomGearDial.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var stp: Double;
 begin
@@ -269,7 +282,7 @@ begin
   Result := True;
 end;
 
-procedure TTyGearDial.Paint;
+procedure TTyCustomGearDial.Paint;
 var
   P: TTyPainter;
   bodyS, teethS, pointerS: TTyStyleSet;

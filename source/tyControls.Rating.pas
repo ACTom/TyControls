@@ -27,7 +27,7 @@ type
     The star style is resolved with :hover while the preview is live, so a skin can give
     the preview its own colour — previously impossible, the preview reused the committed
     fill. Direct manipulation SNAPS (no ease) so headless render tests stay pixel-stable. }
-  TTyRating = class(TTyCustomControl)
+  TTyCustomRating = class(TTyCustomControl)
   private
     FCount: Integer;
     FValue: Double;
@@ -50,16 +50,24 @@ type
     procedure MouseLeave; override;
   public
     constructor Create(AOwner: TComponent); override;
+    property TabStop default True;
+    property Count: Integer read FCount write SetCount default 5;
+    property Value: Double read FValue write SetValue;
+    property AllowHalf: Boolean read FAllowHalf write SetAllowHalf default False;
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyRating publishes TTyCustomRating's properties; everything lives in TTyCustomRating. }
+  TTyRating = class(TTyCustomRating)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -103,11 +111,11 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Count: Integer read FCount write SetCount default 5;
-    property Value: Double read FValue write SetValue;
-    property AllowHalf: Boolean read FAllowHalf write SetAllowHalf default False;
-    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property Count;
+    property Value;
+    property AllowHalf;
+    property ReadOnly;
+    property OnChange;
     property Align;
     property Anchors;
   end;
@@ -131,9 +139,9 @@ begin
   if Result > ACount then Result := ACount;  // clamp to the last star
 end;
 
-{ TTyRating }
+{ TTyCustomRating }
 
-constructor TTyRating.Create(AOwner: TComponent);
+constructor TTyCustomRating.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -146,14 +154,14 @@ begin
   Height := TyDensityHeight(ActiveController, 24);
 end;
 
-function TTyRating.GetStyleTypeKey: string;
+function TTyCustomRating.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: star gold is a per-theme decision that must be settable
     without dragging the app accent (and every gauge fill) along with it. }
   Result := 'TyRating';
 end;
 
-procedure TTyRating.ApplyValue(AValue: Double);
+procedure TTyCustomRating.ApplyValue(AValue: Double);
 var v: Double;
 begin
   v := AValue;
@@ -164,12 +172,12 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-function TTyRating.DisplayValue: Double;
+function TTyCustomRating.DisplayValue: Double;
 begin
   if FHoverValue >= 0 then Result := FHoverValue else Result := FValue;
 end;
 
-procedure TTyRating.SetCount(const AValue: Integer);
+procedure TTyCustomRating.SetCount(const AValue: Integer);
 begin
   if FCount = AValue then Exit;
   FCount := Math.Max(1, AValue);
@@ -177,13 +185,13 @@ begin
   Invalidate;
 end;
 
-procedure TTyRating.SetValue(const AValue: Double);
+procedure TTyCustomRating.SetValue(const AValue: Double);
 begin
   // Programmatic set clamps + fires OnChange (only on a real change), like click.
   ApplyValue(AValue);
 end;
 
-procedure TTyRating.SetAllowHalf(const AValue: Boolean);
+procedure TTyCustomRating.SetAllowHalf(const AValue: Boolean);
 begin
   if FAllowHalf = AValue then Exit;
   FAllowHalf := AValue;
@@ -191,7 +199,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRating.SetReadOnly(const AValue: Boolean);
+procedure TTyCustomRating.SetReadOnly(const AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
@@ -199,7 +207,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRating.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomRating.KeyDown(var Key: Word; Shift: TShiftState);
 var stp: Double;
 begin
   if not Enabled then Exit;
@@ -214,7 +222,7 @@ begin
   end;
 end;
 
-procedure TTyRating.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRating.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var v: Double;
 begin
   if not Enabled then Exit;
@@ -228,7 +236,7 @@ begin
   ApplyValue(v);
 end;
 
-procedure TTyRating.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRating.MouseMove(Shift: TShiftState; X, Y: Integer);
 var v: Double;
 begin
   if not Enabled then Exit;
@@ -242,7 +250,7 @@ begin
   end;
 end;
 
-procedure TTyRating.MouseLeave;
+procedure TTyCustomRating.MouseLeave;
 begin
   inherited MouseLeave;
   if FHoverValue >= 0 then
@@ -252,7 +260,7 @@ begin
   end;
 end;
 
-procedure TTyRating.Paint;
+procedure TTyCustomRating.Paint;
 var
   P: TTyPainter;
   faceS, starS: TTyStyleSet;

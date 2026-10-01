@@ -26,7 +26,7 @@ type
     ticks, black hands" face could not be written at all. When Running and painted (has
     a parent handle) a 1s timer advances Time to Now each tick; headless it is static so
     render tests stay pixel-stable. }
-  TTyAnalogClock = class(TTyGraphicControl)
+  TTyCustomAnalogClock = class(TTyGraphicControl)
   private
     FTime: TDateTime;
     FShowSeconds: Boolean;
@@ -48,9 +48,15 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    property Time: TDateTime read FTime write SetTime;
+    property ShowSeconds: Boolean read FShowSeconds write SetShowSeconds default True;
+    property ShowTicks: Boolean read FShowTicks write SetShowTicks default True;
+    property Running: Boolean read FRunning write SetRunning default True;
+  end;
+
+  { TTyAnalogClock publishes TTyCustomAnalogClock's properties; everything lives in TTyCustomAnalogClock. }
+  TTyAnalogClock = class(TTyCustomAnalogClock)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -90,10 +96,10 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Time: TDateTime read FTime write SetTime;
-    property ShowSeconds: Boolean read FShowSeconds write SetShowSeconds default True;
-    property ShowTicks: Boolean read FShowTicks write SetShowTicks default True;
-    property Running: Boolean read FRunning write SetRunning default True;
+    property Time;
+    property ShowSeconds;
+    property ShowTicks;
+    property Running;
     property Align;
     property Anchors;
   end;
@@ -115,7 +121,7 @@ begin
   Result := ASecond * 6;
 end;
 
-constructor TTyAnalogClock.Create(AOwner: TComponent);
+constructor TTyCustomAnalogClock.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FTime := Now;
@@ -126,20 +132,20 @@ begin
   Height := 120;
 end;
 
-destructor TTyAnalogClock.Destroy;
+destructor TTyCustomAnalogClock.Destroy;
 begin
   FreeAndNil(FTimer);   // stop the callback before teardown
   inherited Destroy;
 end;
 
-function TTyAnalogClock.GetStyleTypeKey: string;
+function TTyCustomAnalogClock.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: a clock shows no value and has neither track nor fill, so
     a skin can now restyle the face without touching every progress ring in the app. }
   Result := 'TyAnalogClock';
 end;
 
-procedure TTyAnalogClock.EnsureTimer;
+procedure TTyCustomAnalogClock.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -150,13 +156,13 @@ begin
   end;
 end;
 
-procedure TTyAnalogClock.HandleTimer(Sender: TObject);
+procedure TTyCustomAnalogClock.HandleTimer(Sender: TObject);
 begin
   FTime := Now;
   Invalidate;
 end;
 
-procedure TTyAnalogClock.UpdateRunning;
+procedure TTyCustomAnalogClock.UpdateRunning;
 begin
   { A graphic control paints onto its parent; "has a window to run into" means the
     parent handle is allocated. Headless render tests parent to an unshown form (no
@@ -170,28 +176,28 @@ begin
     FTimer.Enabled := False;
 end;
 
-procedure TTyAnalogClock.SetTime(const AValue: TDateTime);
+procedure TTyCustomAnalogClock.SetTime(const AValue: TDateTime);
 begin
   if FTime = AValue then Exit;
   FTime := AValue;
   Invalidate;
 end;
 
-procedure TTyAnalogClock.SetShowSeconds(const AValue: Boolean);
+procedure TTyCustomAnalogClock.SetShowSeconds(const AValue: Boolean);
 begin
   if FShowSeconds = AValue then Exit;
   FShowSeconds := AValue;
   Invalidate;
 end;
 
-procedure TTyAnalogClock.SetShowTicks(const AValue: Boolean);
+procedure TTyCustomAnalogClock.SetShowTicks(const AValue: Boolean);
 begin
   if FShowTicks = AValue then Exit;
   FShowTicks := AValue;
   Invalidate;
 end;
 
-procedure TTyAnalogClock.SetRunning(const AValue: Boolean);
+procedure TTyCustomAnalogClock.SetRunning(const AValue: Boolean);
 begin
   if FRunning = AValue then Exit;
   FRunning := AValue;
@@ -199,7 +205,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyAnalogClock.DrawHand(ctx: TBGRACanvas2D; cx, cy, ADeg, ALen, AWidth: Double;
+procedure TTyCustomAnalogClock.DrawHand(ctx: TBGRACanvas2D; cx, cy, ADeg, ALen, AWidth: Double;
   AColor: TTyColor);
 var ang: Double;
 begin
@@ -212,7 +218,7 @@ begin
   ctx.stroke;
 end;
 
-procedure TTyAnalogClock.Paint;
+procedure TTyCustomAnalogClock.Paint;
 var
   P: TTyPainter;
   faceS, handS, secondS: TTyStyleSet;

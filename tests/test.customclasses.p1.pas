@@ -29,7 +29,7 @@ uses
   tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
   tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ListBox, tyControls.ComboBox,
   tyControls.ComboBoxEx, tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ShellComboBox,
-  tyControls.ProgressBar, tyControls.Gauge;
+  tyControls.ProgressBar, tyControls.Gauge, tyControls.TrackBar;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -84,6 +84,8 @@ type
     { Task 9: progress and indicators }
     procedure TestThirdProgressBar;
     procedure TestThirdGauge;
+    { Task 10: dials and sliders }
+    procedure TestThirdTrackBar;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -188,6 +190,12 @@ type
     property Max;
   end;
 
+  TThirdTrackBar = class(TTyCustomTrackBar)
+  published
+    property Position;
+    property Max;
+  end;
+
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
 function StreamedText(AComp: TComponent): string;
 { Stream ASrc and read it back into ADst. }
@@ -230,6 +238,20 @@ type
   TP1ComboCracker = class(TTyCustomComboBox)
   public
     function MakePopupList: TTyListBox;
+  end;
+
+  { Two descendants that publish nothing but TabStop: on the bare base it carries LCL's
+    `default False`; on the track bar's custom class it carries the redeclared True. }
+  TP1BareTabStop = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
+  published
+    property TabStop;
+  end;
+
+  TP1TrackBarTabStop = class(TTyCustomTrackBar)
+  published
+    property TabStop;
   end;
 
   TP1ToolBar = class(TTyToolBar)
@@ -288,6 +310,11 @@ end;
 function TP1ComboCracker.MakePopupList: TTyListBox;
 begin
   Result := CreatePopupList;
+end;
+
+function TP1BareTabStop.GetStyleTypeKey: string;
+begin
+  Result := 'TyPanel';
 end;
 
 procedure TP1ToolBar.ForceLayout;
@@ -1203,10 +1230,47 @@ begin
   CheckFreshDefaults(TThirdGauge, ['Value']);
 end;
 
+{ ------------------------------------------------------------------ Task 10: dials and sliders }
+
+procedure TTyCustomClassesP1Test.TestThirdTrackBar;
+var
+  third, back: TThirdTrackBar;
+  own: TTyTrackBar;
+  c: TTyCustomTrackBar;
+begin
+  third := TThirdTrackBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdTrackBar, ['Position', 'Max']);
+  third.Max := 20;
+  third.Position := 7;
+  third.TickMarks := ttmBoth;
+  CheckStreamText(third, ['Position', 'Max'], 'TickMarks');
+  back := TThirdTrackBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 20, back.Max);
+  AssertEquals('T-c: Position round-trips', 7, back.Position);
+  own := TTyTrackBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTrackBar, ['Position', 'Max']);
+  { T-e, TabStop: a track bar is a tab stop out of the constructor, and the declaration that
+    says so must travel with the custom class -- a descendant that publishes TabStop has to
+    read default True, or a .lfm that switches it off loses the setting. }
+  AssertTrue('T-e: the mimic is a tab stop', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom track bar publishing TabStop reads default True',
+    1, GetPropInfo(TP1TrackBarTabStop, 'TabStop')^.Default);
+  c := third;
+  c.TickMarks := ttmTopLeft;
+  AssertTrue('T-v: TickMarks is public through a TTyCustomTrackBar reference (Q6: public, not '
+    + 'LCL''s published)', third.TickMarks = ttmTopLeft);
+end;
+
 initialization
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
     TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
     TThirdComboBox, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox, TThirdProgressBar,
-    TThirdGauge]);
+    TThirdGauge, TThirdTrackBar]);
   RegisterTest(TTyCustomClassesP1Test);
 end.
