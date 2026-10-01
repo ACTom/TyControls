@@ -299,29 +299,45 @@ end;
 
 { ---- the walk ---- }
 
-{ one past the value's last byte, walking back from the token that ended it over blanks and
-  trailing comments -- never before AStart }
+{ one past the value's last byte before AStop (the token that ended it): blanks and comments
+  after it are not part of it -- never before AStart. Read forwards the way the lexer reads:
+  a comment runs to the first '*/' (comments do not nest, so in '/* a /* b */' the comment
+  starts at the first '/*'), a string to its closing quote (a '/*' inside one is text).
+  Walking back from AStop to the nearest '/*' took the second '/*' of such a comment for
+  its start, and left '/* a' in the value. }
 function ValueEndBefore(const AText: string; AStart, AStop: Integer): Integer;
 var
-  p, q: Integer;
+  i, q: Integer;
+  quote: Char;
 begin
-  p := AStop;
-  while True do
+  Result := AStart;
+  i := AStart;
+  while i < AStop do
   begin
-    while (p > AStart) and (AText[p - 1] in [' ', #9, #10, #13]) do
-      Dec(p);
-    if (p - 2 >= AStart) and (AText[p - 1] = '/') and (AText[p - 2] = '*') then
+    if (AText[i] = '/') and (i < Length(AText)) and (AText[i + 1] = '*') then
     begin
-      q := p - 3;
-      while (q >= AStart) and not ((AText[q] = '/') and (AText[q + 1] = '*')) do
-        Dec(q);
-      if q < AStart then Break;
-      p := q;
-    end
-    else
-      Break;
+      q := i + 2;
+      while (q < Length(AText)) and not ((AText[q] = '*') and (AText[q + 1] = '/')) do
+        Inc(q);
+      i := q + 2;
+      Continue;
+    end;
+    if AText[i] in ['"', ''''] then
+    begin
+      quote := AText[i];
+      q := i + 1;
+      while (q <= Length(AText)) and (AText[q] <> quote) do
+        Inc(q);
+      i := q + 1;
+      Result := i;
+      Continue;
+    end;
+    if not (AText[i] in [' ', #9, #10, #13]) then
+      Result := i + 1;
+    Inc(i);
   end;
-  Result := p;
+  if Result > AStop then
+    Result := AStop;
 end;
 
 type

@@ -132,6 +132,22 @@ begin
   finally
     s.Free;
   end;
+  { comments do not nest: '/* a /* b */' is one comment, from its first '/*' -- the review
+    found the value ending at the second one, with '/* a' left in it }
+  s := Scan(':root { --accent: #333 /* a /* b */ ; --b: #444 /* x */ /* y /* z */; }');
+  try
+    AssertEquals('C16: the value only, a nested-looking comment after it', '#333', s.DeclValue(0, 0));
+    AssertEquals('C16: two comments after it', '#444', s.DeclValue(0, 1));
+  finally
+    s.Free;
+  end;
+  s := Scan(':root { --note: "a /* b" /* c */; --mid: #1 /* m */ #2 ; }');
+  try
+    AssertEquals('C16: a /* in a string is text', '"a /* b"', s.DeclValue(0, 0));
+    AssertEquals('C16: a comment between two parts stays in the value', '#1 /* m */ #2', s.DeclValue(0, 1));
+  finally
+    s.Free;
+  end;
 end;
 
 procedure TTbCssScanTests.TestAFunctionValue;
