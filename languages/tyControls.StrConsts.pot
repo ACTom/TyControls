@@ -550,6 +550,7 @@ msgid "Abort"
 msgstr ""
 
 #: tycontrols.strconsts.rsmsgbtnall
+msgctxt "tycontrols.strconsts.rsmsgbtnall"
 msgid "All"
 msgstr ""
 
@@ -709,6 +710,15 @@ msgstr ""
 #: tycontrols.strconsts.rstychartgridonedirection
 #, object-pascal-format
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartlegendselectall
+msgctxt "tycontrols.strconsts.rstychartlegendselectall"
+msgid "All"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartlegendselectinverse
+msgid "Inv"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartnosuchhandler

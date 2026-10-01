@@ -9120,3 +9120,64 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - **内部组件**（`'\0_ec_\0'` 开头的 id，工具箱的 dataZoom）：上游在两种模式下都不让它们参与映射；端口的工具箱 dataZoom 不进 keys，不涉及。
 - **被移除的系列当帧消失**，和上游一样没有离场动画；被移除的组件（轴、图例、标题）同样直接消失。
 - 空洞网格仍按默认盒子算了一个外框（只是不收轴、不画），`Build.Grid(i)` 的下标因此与组件下标一致；上游那里没有网格。
+
+## 133. Tier 1 第九十八批：图例选择器与翻页（B4，2026-10-01）
+
+B3 之后图例能点、能联动，但 `selector`（全选 / 反选按钮）和 `type: 'scroll'` 的翻页图例都还没有：选择器一个按钮都不画，滚动图例退化成会溢出的普通图例。这一批把上游 LegendView 的选择器布局、ScrollableLegendView 的翻页器、裁剪和页码计算、两种按钮的点击、`legendScroll` 动作和翻页的补间动画接上。
+
+### 上游的做法（`LegendModel.ts`、`LegendView.ts`、`ScrollableLegendModel.ts`、`ScrollableLegendView.ts`、`scrollableLegendAction.ts` 逐行核过，关键处在真 dist 上探针确认）
+
+- **选择器的模型**（`_updateSelector`）：`true` 换成 `['all', 'inverse']`；字符串换成 `{type}`；再用 `zrUtil.merge(item, 默认)` 补标题——不覆盖，写了 `title`（任何值）就留着；默认标题来自语言包 `legend.selector.all / inverse`，英文是 `All`、`Inv`。type 不是这两个时没有默认标题，点击走反选（视图只问 `type === 'all'`）。空数组也是选择器（`if (selector)`）。
+- **选择器的位置**：`selectorPosition` 没写或 `'auto'` 时，`orient === 'horizontal'` 为 `'end'`，否则 `'start'`；布局只问 `=== 'end'`，其余都是开头。`selectorItemGap` 7、`selectorButtonGap` 10。
+- **按钮**是一个 Text：`setLabelStyle` 用 `selectorLabel`（默认 `borderRadius 10`、`padding [3,5,3,5]`、`fontSize 12`、`fontFamily 'sans-serif'`、tertiary 字色、1 宽 border 色边框）**整个替换**了构造时的 `align: 'center'、verticalAlign: 'middle'`——所以盒子从原点左上挂出，包围盒是 `(-0.5, -0.5, 字宽 + 11, 19)`。`emphasis.selectorLabel` 只有 `color`（quaternary），悬停只换字色。命中：只有字形框和 1 px 的边框环（`strokeContainThreshold` 0），**内边距是空心的**。
+- **普通图例的选择器布局**（`layoutInner`）：按钮横排（`selectorItemGap`），`end` 时选择器移到内容主轴之后 `内容 + buttonGap`，否则内容后移 `选择器 + buttonGap`；横轴上选择器对着内容居中；mainRect 主轴 = 内容 + gap + 选择器，横轴取两者大者，`yx = min(0, 选择器上沿)`。注意普通图例的折行宽度**不减去**选择器。
+- **滚动图例**（`_layoutContentAndController`）：`newlineDisabled`——`''` 和 `'\n'` 不再是换行，而是查不到系列的名字、不画；内容**一行不折**（`boxLayout` 主轴极限是 null → Infinity）。翻页器是 `[上一页图标, 页码文字, 下一页图标]` 横排（`pageButtonItemGap` 5），页码文字按**占位符 `'xx/xx'`** 量宽排版（上游自己的 FIXME），排完再换成真正的页码。`showController = 内容主轴 > maxSize 主轴`；`end` 时翻页器移到 `maxSize - 翻页器`，`start` 时容器后移 `翻页器 + pageButtonGap`；`pageButtonGap` 是 null 时用 `itemGap`（`retrieve2`）。翻页器横轴对着内容居中。**mainRect 横轴把翻页器算进去，不管显不显示**——隐藏的翻页器只是 invisible + silent 的占位，所以三项的滚动图例比普通图例高 1 px（`y = -0.5`）。裁剪框在容器坐标里 `(0, 0, max(maxSize - 翻页器 - pageButtonGap, 0), mainRect 横轴)`。有选择器时 `maxSize` 主轴先减去 `选择器 + buttonGap`，`start` 时 mainRect 的 `xy` 往负方向挪 `offset`，选择器横轴对着 mainRect 居中（`mainRect[yx] + mainRect[hw]/2 - 选择器[hw]/2`）。
+- **页码**（`_getPageInfo`）：目标项是 `__legendDataIndex === scrollDataIndex` 的那一项（严格相等，字符串 `'4'` 永远不中；不显示翻页器时一律第一项），内容主轴位置 = `-目标.s`。向前一轮找下一页起点（半个最后项在窗外、或当前项与窗口不相交时，起点取窗尾或当前项），向后一轮数前面的页；`pageIndex`、`pageCount`、`pagePrevDataIndex`、`pageNextDataIndex`。窗口长度是裁剪宽度（不显示时是 maxSize）。
+- **页码文字**：`pageFormatter` 是字符串时 `{current}`、`{total}` **各替换一次**；函数时 `formatter({current, total})`；写成 `null` / `''` 时 `pageText && pageFormatter && ...` 不执行，**占位符 `'xx/xx'` 留在画面上**。
+- **图标**：`createIcon(pageIcons[orient][i], ..., {x: -w/2, y: -h/2, width: w, height: h})`——`image://` 是图片，其余去掉第一个 `path://` 后当路径数据，`makePath(..., 'center')` 保持比例居中。`'circle'` 这类符号名**不是**路径数据：解析为空，包围盒 `(0,0,0,0)`。`pageIconSize` 可以是 `[w, h]`。图标 `rectHover`，填充 `pageIconColor`（accent50）/ 不能翻时 `pageIconInactiveColor`（accent10）。页码文字字色 `pageTextStyle.color`（tertiary），字体走 `getFont`（没写的部分落到根 textStyle）。
+- **点击**：按钮的 onclick `dispatchAction({type: 'legendAllSelect' | 'legendInverseSelect', legendId: 本图例 id})`；翻页图标 `_pageGo`：对应方向的 dataIndex 不是 null 才派发 `{type: 'legendScroll', scrollDataIndex, legendId}`。都没有 ECData，不产生图表鼠标事件。
+- **`legendScroll` 动作**：`scrollDataIndex != null` 时对查询到的 **scroll 子类型**图例 `setScrollDataIndex`（写进 option）；默认整体更新；事件 `legendscroll` 的载荷是动作载荷的拷贝、type 改名。
+- **补间**：`updateProps(contentGroup, 页位置, showController ? legendModel : null)`——时长是图例自己的 `animationDurationUpdate` 800，缓动落到全局 `animationEasingUpdate` 'cubicInOut'；**起点是内容组当前的位置**：重渲染时是飞行中的位置，首次渲染是未翻页的 `-contentRect`（所以加载时 `scrollDataIndex: 5` 会从第一页滚过去）。不显示翻页器时直接到位。
+- **滚轮**：上游的滚动图例**不处理滚轮**（ScrollableLegendView 没有 mousewheel 处理器）。
+- **重渲染后的按钮**：整体更新重建选择器的 Text，新元素没有状态；指针停在原处，zrender 按 #6198 重找到新元素，不发 over——点完按钮，按钮回到常态色，移开再移回来才再高亮。
+
+### 做法
+
+- **`Legend` 单元**：Spec 增加 `IsScroll`、`HasSelector/Selector`（`TTyLegendSelectorBtn`：Kind、IsAll、Title）、`SelectorAtEnd`、两个选择器间距、`ScrollIsNum/ScrollNum`、`PageButtonItemGap`、`PageButtonGap`（NaN 即 null）、`PageButtonAtEnd`、`HasPageFormatter/PageFormatter`、`PageIcons[orient, 0..1]`、`PageIconW/H`。新的 `TyLayoutLegend` 重载多一个 `TTyLegendDeco`（控件解析好的按钮文字块与悬停块、页码字体、原始量字器）；没有选择器、不是滚动图例时走原来的路径，一位不动。
+- **`LayoutRich`** 把两个 `layoutInner`、`_layoutContentAndController` 与 `_getPageInfo` 按上游的运算一步步抄下来：矩形一律用 zrender 的 `x/width` 形式（`BoxLayoutXY`、`GroupRect` 用 `TyZrAccumulate`——第一个子元素和自己求并），所有位置在组坐标里算完，最后用 `Compose` 按 zrender 的矩阵乘法（`(1*lx + 0*ly) + px`，局部偏移在 5e-5 内则不建局部变换）逐层合成全局位置——这样每个位置都与 zrender 画在的位相同。按钮用 `TyRtLay` 排成文字块（左上挂）；图标用 `TyZrMakePathCenter` / `TyZrBBox`。Layout 增加 `GroupX/Y`、`MainRect`、`Selector[]`（位置、局部盒、全局盒、常态与悬停两套 pieces）、`ShowController`、三个翻页部件、`PageText`、页码四项、`HasClip/Clip`、内容组的终点与起点（补间用）。
+- **画面**（`TyBuildLegendMarks`）：滚动图例的图标、规则线、文字都带裁剪；项的命中框与裁剪框求交（zrender 的 isHover 问祖先的裁剪路径），完全在窗外的项没有命中框。按钮：整个盒子一个命中框（`ctkLegendSelector`），之后是文字块（悬停那一个用悬停 pieces）。翻页器只在显示时画：图标（`TyMkZrShape`）+ 包围盒命中框（`ctkLegendPager`，能不能翻都可点），页码文字居中。
+- **控件**：`LegendDeco` 解析 `selectorLabel`（链：选项的 selectorLabel → 上游默认盒子 `padding/borderWidth/borderRadius`；根 textStyle 的颜色不进来）、`emphasis.selectorLabel.color`、`pageTextStyle`；`LegendInk/LegendTextOf` 加 `pageIconColor`、`pageIconInactiveColor`、`pageTextStyle.color`。事件目标 `HdKind 5`（按钮）、`6`（翻页图标），没有数据；悬停按钮进 `FLegendSelHover`（静态层重画），移出时 `allLeaveBlur`；每次重排清掉（新元素无状态）。`EventUp` 在用户 click 之前跑按钮 / 翻页的 onclick。`DispatchAction` 收 `legendScroll`；`LegendQuery` 按 id 查时用模型 id（`ComponentModelId`，没写 id 时是生成的 `'\0series\00\00'`）——B3 只比写在选项里的 id，按钮带着生成的 id 派发就找不到图例。事件类型表加 `legendscroll`。
+- **补间**：每个滚动图例一个代理（`TTyChartAnimProxy`，键 `x/y` 是内容组位置），独立的驱动 `FLegAnim`；`SolveLegends` 之后 `LegAnimSync`：首次建代理时放在起点，横轴直接 `Attr`，主轴 `TyUpdateProps`（模型 `TyAnimComponentModel(legend, root, 'legend.scroll')`，翻页器不显示或不允许动画时 `TyAnimNoModel` 直接到位）。动画期间每一帧 `DropStatic`，`BuildLegends` 把项按（当前 - 终点）平移；命中框随之移动。notMerge 换新模型时丢掉代理（下一次是首次渲染）。
+- **主题**：新键 `TyAdvChartLegendSelector`（常态字色、边框色、字号）与 `:hover`（悬停字色）、`TyAdvChartLegendPageIcon`、`TyAdvChartLegendPageIconInactive`、`TyAdvChartLegendPageText`；`light.tycss` 改完重跑了 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`。
+- **语言**：`rsTyChartLegendSelectAll = 'All'`、`rsTyChartLegendSelectInverse = 'Inv'`，zh_CN 是「全选」「反选」（上游中文语言包的原文）。`'All'` 与已有的 `rsmsgbtnall` 同 msgid 不同译文，两条都加了 `msgctxt`。
+
+### 基准
+
+- `tools/advchart-oracle/legend-scroll.js`：真 dist、node SSR（量字是 zrender 的 SSR 宽度表）、`chart._ssr = false`、指针直接送 zrender 的 Handler。47 个用例、89 步、39 个事件：水平滚动（默认、start、放得下、scrollDataIndex 5 / 3 / 99 / `'4'`、长名字、窗口窄于一项、两种间距、itemGap 回落、四种 pageFormatter 含句柄、自定义图标含曲线和 Float32、图标尺寸数组与三种颜色、项高 30 与 8）、放得下时的 scrollDataIndex 2、窗口恰好四项长（变异补的，见下）、竖直滚动（默认、start、scrollDataIndex 10）、普通图例选择器（水平 auto / start、竖直 auto / end、带标题和间距、单个 inverse 加样式、两行折行旁的选择器、比项高的选择器）、滚动加选择器（四种方位组合与放得下），以及交互序列：legendScroll 动作（按下标、按不存在的 id、没有 scrollDataIndex、到末尾、按不存在的名字）、翻页按钮（水平、竖直 start、长名字、窄窗口，含不能翻的点击）、选择器点击（夹一次项点击）、悬停 / 移开 / 点击后不高亮、滚动 + 选择器、滚轮、single 模式。每一步记录图例组位置、mainRect、背景框、每一项的全局变换与包围盒、按钮（位置、盒子、墨色、状态）、翻页器三部件、裁剪、页码、scrollDataIndex、selected 与事件；14 条守卫取自源码（auto 方位、按钮盒子左上挂、pageButtonGap 回落、null 留占位符、占位符决定翻页器宽度、严格相等、不显示时的占位与无裁剪、滚轮无反应、翻页事件的键、不能翻不派发、重渲染清掉悬停）；两次生成逐字节一致。
+- `test.advchart.legendscroll`：47 个用例全部重放，每一步之前先比指针在显示列表里命中什么（与 zrender 找到的元素一致），之后比全部状态——**位置逐位比较**（8 千多项比较全部对上），颜色按皮肤映射（tertiary / quaternary / accent50 / accent10 是皮肤的键，作者写的逐位比）。手写 9 个：解析为空的图标是空盒、`image://` 是整个盒子、语言包标题与各种 selector 写法、`legendScroll` 点名普通图例不写入但照发事件、皮肤墨色、窗外的项不接指针而跨边的项只在窗内接、补间（800 ms、cubicInOut、首次步进写回起点、中途与四分之三处的值、终点）、首次渲染从未翻页处滚到 scrollDataIndex、两个图例时按钮只作用于自己的图例（期望值取自真 dist 探针）。
+
+### 变异测试
+
+`b4/mut.py`：逐个改源码、重编、跑 `test.advchart.legendscroll`（按 id 查询那一个另跑 `legendact`）、还原。51 个变异：
+- 选择器：auto 方位取反（两种写法）、写明的 `'end'` 不认、按钮间距用 buttonGap、普通图例 end / start 不加 buttonGap、不对着内容居中、mainRect 主轴不加 gap、滚动图例 start 时 mainRect 不左移、横轴居中不加 mainRect 上沿、maxSize 不减选择器；
+- 翻页器：end 时不推到末尾、start 时容器不加 pageButtonGap、pageButtonGap 不回落到 itemGap、不居中、图标间距用 itemGap、按真页码而非占位符排版、隐藏的翻页器不算进 mainRect、竖直图例用水平图标、`pageIconSize` 数组两项对调；
+- 页码：目标永远是第一项、不显示翻页器时也按 scrollDataIndex 找目标、`intersect` 两个比较改成严格、向后一轮 `<` 改 `<=`、下一页取最后找到的、pageIndex 不累加、窗口长度用 maxSize 而非裁剪宽度；
+- 裁剪：不减 pageButtonGap、横轴用内容高、命中框不与裁剪求交；
+- pageFormatter：current 用 pageIndex、`{total}` 不替换、null 也用默认模板（两种写法）、句柄的两个参数对调；
+- 颜色与点击：不能翻的图标也用常态色、`pageIconInactiveColor` 不读、全选按钮派发反选、按钮不带 legendId、按钮点击被忽略、按 id 查询只比写出的 id、悬停不高亮、重渲染后悬停不清、悬停色用常态色、上一页 / 下一页对调、legendScroll 也写普通图例、legendscroll 不发事件；
+- 补间：类型键不是 `legend.scroll`（时长落成全局 500）、首次渲染从页位置开始、从不补间。
+
+首轮 49 个里杀死 46 个（auto 方位取反与 null 用默认模板两个是靠空指针崩溃杀死的，第二轮换成真正改结果的写法：`not (...)` 整体取反、null 时页码文字为空，都被断言杀死），存活 3 个：
+- **不显示翻页器时也按 scrollDataIndex 找目标**：已有用例里放得下的都没写 scrollDataIndex。补上游用例 `h-fits-sdi`（三项放得下、scrollDataIndex 2：上游仍以第一项为目标，内容不动），杀死。
+- **`s <= winStart + size` 改成 `<`**：已有用例里没有哪一项的起点恰好落在窗口末端。补上游用例 `h-window-exact`（itemGap 0、pageButtonGap 0、`width: 315.76`，裁剪宽度 260.4 正好等于第 5 项的起点；上游第一页的下一页是第 5 项，严格比较会变成第 4 项），并带三次翻页点击，杀死。
+- **`e >= winStart` 改成 `>`**：**等价变异**——向前一轮里当前项在窗口起点之后，向后一轮里窗尾项在当前项之后，box 布局保证起点严格递增、宽度为正，`e` 永远严格大于比较的那个起点；只有负的 itemGap 让项往回叠，而且还要恰好相等才分得开。试了 `itemGap` 为 -2、-1.5 倍项宽等写法，名字宽度不一、累加有舍入，找不到相等的情形。照上游写法保留。
+
+### 推迟与偏差
+
+- **按钮的命中范围是整个盒子**：上游只有字形框和 1 px 的边框环能接住指针，内边距是空心的（点在按钮的空白处，上游什么都不做、也不高亮）。端口把整个盒子当成一个目标——按钮该像按钮；基准的点击都瞄在字上，两边一致。
+- **`image://` 翻页图标不画**：布局照上游按整个盒子算、照样可点，只是不画图片（端口的画面列表没有图片）。
+- **上游会抛错的写法**：`pageFormatter` 写成数字（上游当函数调用）、`pageIcons` 某一方向的数组少于两项（上游 `icon.name = ...` 写到 undefined 上）——端口分别留占位符、当空图标。`selector` 写成字符串（上游把字符串逐个字符当按钮）端口当没有选择器。
+- **`emphasis.selectorLabel` 只读颜色**：上游默认只有颜色，作者写的字号、背景等悬停样式不读；按钮的字体是 `selectorLabel` 的 fontFamily / fontSize / fontWeight 盖在皮肤的上面，不经过根 textStyle（上游的默认值里写了字号和字体，根 textStyle 本来就到不了；fontWeight 没核）。
+- **语言**：默认标题走端口的资源字符串（英文 All / Inv，中文目录里是上游中文语言包的「全选」「反选」），跟宿主程序的翻译走，不跟 ECharts 的 `locale` 选项——端口没有那个选项。
+- **补间的时钟**：动作之后由端口的动画计时器开始第一步（上游是下一帧）；补间期间静态层每帧重建一次。只有内容组在动，选择器和翻页器不动——与上游相同。滚轮在滚动图例上什么都不做，与上游相同。
+- **找不到名字的图例项**：上游 `renderInner` 对既不是系列名、也不在任何数据提供者里的名字**什么都不画**；端口从第 45 批起把它画成灰的（Legend 单元 `TTyLegendSource.Found` 的注释说上游也画——那条理由是错的）。在滚动图例里这会多出一项、页码按端口画出的项算。这一批的用例都避开了它；改过来会动到第 45 批的测试，留作单独一项。

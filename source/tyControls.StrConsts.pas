@@ -357,6 +357,11 @@ resourcestring
   rsTyOptReplaceMergeBadType = 'replaceMerge names "%s", which is not a component main type.';
   rsTyOptSetOptsNotObject = 'The setOption options must be an object.';
 
+  // --- AdvanceChart: the legend's selector buttons (ECharts' locale
+  // legend.selector.all / inverse; upstream's English is 'All' / 'Inv') ---
+  rsTyChartLegendSelectAll = 'All';
+  rsTyChartLegendSelectInverse = 'Inv';
+
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
   // design-time editor, so they are as translatable as any caption. They were

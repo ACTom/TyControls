@@ -256,6 +256,7 @@ msgid "Ignore"
 msgstr "忽略"
 
 #: tycontrols.strconsts.rsmsgbtnall
+msgctxt "tycontrols.strconsts.rsmsgbtnall"
 msgid "All"
 msgstr "全部"
 
@@ -887,6 +888,15 @@ msgstr "按名称搜索图标"
 #, object-pascal-format
 msgid "%s   (ImageIndex %d)"
 msgstr "%s   (ImageIndex %d)"
+
+#: tycontrols.strconsts.rstychartlegendselectall
+msgctxt "tycontrols.strconsts.rstychartlegendselectall"
+msgid "All"
+msgstr "全选"
+
+#: tycontrols.strconsts.rstychartlegendselectinverse
+msgid "Inv"
+msgstr "反选"
 
 #: tycontrols.strconsts.rstychartnosuchhandler
 #, object-pascal-format

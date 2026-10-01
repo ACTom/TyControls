@@ -1274,6 +1274,17 @@ begin
     'TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }' + LineEnding +
     'TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartLegendBackground { background: var(--surface); }' + LineEnding +
+    '/* The legend''s selector buttons (All / Inv) and the scrolling legend''s pager.' + LineEnding +
+    '   Upstream draws a button as tertiary ink in a pale rounded frame that turns' + LineEnding +
+    '   the lighter quaternary ink under the pointer, the page arrows in its accent' + LineEnding +
+    '   with a pale accent for one that cannot go further, and the page count in' + LineEnding +
+    '   the tertiary ink. Here the ink is the chart''s muted one (fainter when' + LineEnding +
+    '   hovered), the frame the border, and the arrows the skin''s own accent. */' + LineEnding +
+    'TyAdvChartLegendSelector { color: var(--muted); border-color: var(--border); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLegendSelector:hover { color: alpha(var(--on-surface), 0.35); border-color: var(--border); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLegendPageIcon { color: var(--accent); }' + LineEnding +
+    'TyAdvChartLegendPageIconInactive { color: alpha(var(--accent), 0.25); }' + LineEnding +
+    'TyAdvChartLegendPageText { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '/* A visualMap''s own picture. Upstream inks its texts with tokens.color.' + LineEnding +
     '   secondary, the bar''s inactive stretch and the frame with a pale grey, the' + LineEnding +
     '   handles'' rims white and the box transparent. The inactive stretch is the' + LineEnding +

@@ -158,7 +158,10 @@ type
       only), 0 nothing that has states. A label answers for its host.
       [Batch 93] 4 a legend item: HdSeries the legend, HdRow the item, HdName
       its name, HdLegendSeries whether a series wears that name (the item's
-      handlers name the series) or not (they name the data). }
+      handlers name the series) or not (they name the data).
+      [Batch 98] 5 a legend's selector button, 6 its pager's page button:
+      HdSeries the legend, HdRow the button (the pager's 0 previous, 1
+      next). Neither carries data. }
     HdKind: Integer;
     HdSeries, HdRow: Integer;
     HdEdge: Boolean;
@@ -425,6 +428,16 @@ type
       `selected ||= {}` and optionUpdated's single-mode pick ran -- once per
       option; after it the map is what the actions made of it. }
     FLegendLoaded: Boolean;
+    { [Batch 98] THE SELECTOR BUTTON UNDER THE POINTER, in its hovered ink:
+      legend and button, -1 none. A re-render of the legend makes new
+      buttons in no state, so every relayout drops it -- and the pointer
+      resting on the new one is no new mouseover (zrender #6198). }
+    FLegendSelHoverLegend, FLegendSelHoverIdx: Integer;
+    { [Batch 98] THE SCROLL'S TWEEN: per legend, a proxy holding the content
+      group's position (x, y), on a driver of its own -- the legend is drawn
+      in the static layer, so a tick redraws that layer }
+    FLegAnim: TTyAnimation;
+    FLegProxies: array of TTyChartAnimProxy;
     { Whose rows KeepSlice is deciding about, for the length of one
       FilterSelf call and no longer. }
     FFilterStore: TTyDataStore;
@@ -836,6 +849,9 @@ type
     function TitleFont(const AKey: string): TTyTitleFont;
     procedure LegendTextOf(AIndex: Integer; var AFont: TTyLegendFont;
       var AInk: TTyLegendInk);
+    { [Batch 98] the selector buttons' blocks and the pager's font: the
+      skin's under selectorLabel / emphasis.selectorLabel / pageTextStyle }
+    function LegendDeco(AIndex: Integer; const AMeasurer: ITyTextMeasurer): TTyLegendDeco;
     function TitleFontOf(AIndex: Integer; const AKey, AStyleKey: string;
       APick: TTyTextPick): TTyTitleFont;
     procedure PaintTitles(APainter: TTyPainter);
@@ -1257,6 +1273,24 @@ type
     procedure LegendHighDown(const ATarget: TTyChartEventTarget; const AType: string);
     { dispatchSelectAction: downplay, legendToggleSelect, highlight }
     procedure LegendClick(const ATarget: TTyChartEventTarget);
+    { [Batch 98] the selector button's onclick: legendAllSelect or
+      legendInverseSelect by the legend's id }
+    procedure LegendSelectorClick(const ATarget: TTyChartEventTarget);
+    { [Batch 98] a page button's onclick (_pageGo): legendScroll to the
+      previous or next page's first item, nothing when there is none }
+    procedure LegendPagerClick(const ATarget: TTyChartEventTarget);
+    { [Batch 98] scrollableLegendAction: scrollDataIndex into every scroll
+      legend the payload names, the full update, the event }
+    procedure DoLegendScroll(APayload: TJSONObject);
+    { [Batch 98] the selector button in its hovered ink, or none }
+    procedure LegendSelHover(ALegend, AIndex: Integer);
+    { [Batch 98] _layoutContentAndController's updateProps of the content
+      group: from where it stands (on a first render, unscrolled) to the
+      page, with the legend's update timing when the pager shows; at once
+      otherwise }
+    procedure LegAnimSync;
+    procedure LegAnimDrop;
+    function LegLive: Boolean;
     { A FULL UPDATE NOW: the model, the layout, the list and the states, as
       upstream's update runs inside dispatchAction -- so the action that
       follows finds the new elements }
@@ -1656,6 +1690,8 @@ constructor TTyAdvanceChart.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FOption := TTyChartOption.Create;
+  FLegendSelHoverLegend := -1;
+  FLegendSelHoverIdx := -1;
   FIndex := TTyAxisSeriesIndex.Create;
   FDirty := True;
   FTipDatum := TyChartNoDatum;
@@ -1692,6 +1728,8 @@ begin
   PtrAnimDrop;
   FreeAndNil(FPtrProxies);
   FreeAndNil(FPtrAnim);
+  LegAnimDrop;
+  FreeAndNil(FLegAnim);
   FreeAndNil(FAnimOldBuild);
   inherited Destroy;
 end;
@@ -1870,6 +1908,8 @@ begin
   FStDirty := False;
   { new legend models: init and optionUpdated run again [Batch 93] }
   FLegendLoaded := False;
+  { and new legend views: a first render again [Batch 98] }
+  LegAnimDrop;
   { A NEW OPTION ENTERS: the next render that may animate plays it }
   FAnimPending := True;
   FDirty := True;
@@ -2700,6 +2740,10 @@ begin
   FLastPPI := APPI;
   { a full update: the next sync re-renders the states [Batch 88] }
   Inc(FStGen);
+  { the legend is rendered anew: its buttons are new elements in no state
+    [Batch 98] }
+  FLegendSelHoverLegend := -1;
+  FLegendSelHoverIdx := -1;
   { A NEW LAYOUT SNAPS: a resize, a theme, a zoom -- upstream sets those
     directly ({duration: 0}) -- and a new option is armed again after the
     build [Batch 89]. A NEW OPTION UPDATES: the render before it is kept --
@@ -8504,6 +8548,20 @@ begin
   d := TJSONObject(node).Find('inactiveBorderColor');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
     AInk.InactiveBorder := col;
+  { the pager's colours [Batch 98] }
+  d := TJSONObject(node).Find('pageIconColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+    AInk.PageIcon := col;
+  d := TJSONObject(node).Find('pageIconInactiveColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+    AInk.PageIconInactive := col;
+  st := TJSONObject(node).Find('pageTextStyle');
+  if st is TJSONObject then
+  begin
+    d := TJSONObject(st).Find('color');
+    if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+      AInk.PageText := col;
+  end;
   st := TJSONObject(node).Find('lineStyle');
   if st is TJSONObject then
   begin
@@ -8548,11 +8606,121 @@ begin
   Result.InactiveBorder := Result.Inactive;
   Result.LineInactive := Result.Inactive;
   Result.LineInactiveWidth := 2;
+  { the pager [Batch 98] }
+  Result.PageIcon := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegendPageIcon', '', []).TextColor);
+  Result.PageIconInactive := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegendPageIconInactive', '', []).TextColor);
+  Result.PageText := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegendPageText', '', []).TextColor);
   { The hole in a ring is the chart's own ground, the same substitution the
     mark builders make for a datum's `empty` marker. }
   Result.EmptyFill := TTyChartColor(
     model.ResolveStyle(GetStyleTypeKey, StyleClass,
       [tysNormal]).Background.Color);
+end;
+
+function TTyAdvanceChart.LegendDeco(AIndex: Integer;
+  const AMeasurer: ITyTextMeasurer): TTyLegendDeco;
+var
+  model: TTyStyleModel;
+  st, stH, stP: TTyStyleSet;
+  node, d: TJSONData;
+  sel, em, pts, defs: TJSONObject;
+  g: TTyRtGlobal;
+  fam: string;
+  size, weight: Integer;
+  ink, inkH, col: TTyChartColor;
+  hasCol: Boolean;
+  gcol: Cardinal;
+begin
+  Result := Default(TTyLegendDeco);
+  Result.Measurer := AMeasurer;
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartLegendSelector', '', []);
+  stH := model.ResolveStyle('TyAdvChartLegendSelector', '', [tysHover]);
+  stP := model.ResolveStyle('TyAdvChartLegendPageText', '', []);
+  sel := nil;
+  em := nil;
+  pts := nil;
+  node := FOption.ComponentAt('legend', AIndex);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('selectorLabel');
+    if d is TJSONObject then sel := TJSONObject(d);
+    d := TJSONObject(node).Find('emphasis');
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('selectorLabel');
+      if d is TJSONObject then em := TJSONObject(d);
+    end;
+    d := TJSONObject(node).Find('pageTextStyle');
+    if d is TJSONObject then pts := TJSONObject(d);
+  end;
+
+  { THE SELECTOR BUTTONS: selectorLabel over its defaults -- the box
+    (padding [3, 5, 3, 5], a 1 px border, radius 10) as upstream writes it,
+    the font and the inks the skin's. Its own fontSize and family are
+    defaults upstream, so the root textStyle's never reach it. }
+  fam := st.FontName;
+  size := ResolveFontSize(st);
+  weight := st.FontWeight;
+  if sel <> nil then
+  begin
+    d := sel.Find('fontFamily');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+      fam := d.AsString;
+    size := TyOptFontSize(sel.Find('fontSize'), size);
+    weight := TyFontWeightOf(sel.Find('fontWeight'), weight);
+  end;
+  ink := TTyChartColor(st.TextColor);
+  inkH := TTyChartColor(stH.TextColor);
+  if em <> nil then
+  begin
+    d := em.Find('color');
+    if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
+      inkH := col;
+  end;
+  g := RtGlobal;
+  { no root colour: an unwritten one is the skin's, bound below }
+  g.HasColour := False;
+  defs := TJSONObject(GetJSON('{"padding":[3,5,3,5],"borderWidth":1,"borderRadius":10}'));
+  try
+    Result.SelBlock := TyRtResolve([sel, defs], g, TyRtResolveOpt(False));
+  finally
+    defs.Free;
+  end;
+  if not (Result.SelBlock.Style.HasBorderColor or Result.SelBlock.Style.BorderColorInherit) then
+  begin
+    Result.SelBlock.Style.HasBorderColor := True;
+    Result.SelBlock.Style.BorderColor := TTyChartColor(st.BorderColor);
+  end;
+  Result.SelBlock.Needed := True;
+  Result.SelEmphBlock := Result.SelBlock;
+  TyRtFinish(Result.SelBlock, fam, size, weight, g, True, ink);
+  TyRtFinish(Result.SelEmphBlock, fam, size, weight, g, True, inkH);
+  { emphasis.selectorLabel is only a colour: the state changes the fill }
+  Result.SelEmphBlock.Style.HasFill := True;
+  Result.SelEmphBlock.Style.FillNone := False;
+  Result.SelEmphBlock.Style.Fill := inkH;
+
+  { THE PAGE TEXT: getFont -- pageTextStyle, else the root textStyle, else
+    the skin's }
+  Result.PageFontName := stP.FontName;
+  Result.PageFontSize := ResolveFontSize(stP);
+  Result.PageFontWeight := stP.FontWeight;
+  hasCol := False;
+  gcol := 0;
+  GlobalTextOver(Result.PageFontName, Result.PageFontSize, Result.PageFontWeight,
+    hasCol, gcol, [ttpSize, ttpWeight, ttpFamily]);
+  if pts <> nil then
+  begin
+    d := pts.Find('fontFamily');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+      Result.PageFontName := d.AsString;
+    Result.PageFontSize := TyOptFontSize(pts.Find('fontSize'), Result.PageFontSize);
+    Result.PageFontWeight := TyFontWeightOf(pts.Find('fontWeight'), Result.PageFontWeight);
+  end;
 end;
 
 procedure TTyAdvanceChart.SolveLegends(const AMeasurer: ITyTextMeasurer;
@@ -8568,17 +8736,22 @@ begin
     fnt := LegendFont;
     ink := LegendInk;
     LegendTextOf(i, fnt, ink);
-    { a block is measured as the block it is drawn as [Batch 86] }
+    { a block is measured as the block it is drawn as [Batch 86]; the
+      selector and the pager measure their own [Batch 98] }
     FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
       FLegendFlags[i], LegendSources(FLegendEntries[i]), FLastRect,
-      TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI);
+      TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI,
+      LegendDeco(i, AMeasurer));
   end;
+  LegAnimSync;
 end;
 
 function TTyAdvanceChart.BuildLegends(APPI: Integer;
   AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
 var
-  i: Integer;
+  i, hov, k: Integer;
+  lay: TTyLegendLayout;
+  dx, dy: Double;
   ink: TTyLegendInk;
   fnt: TTyLegendFont;
 begin
@@ -8589,8 +8762,35 @@ begin
     ink := LegendInk;
     fnt := LegendFont;
     LegendTextOf(i, fnt, ink);
-    Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], FLegends[i], ink, fnt,
-      APPI, AList, i, AMeasurer));
+    if FLegendSelHoverLegend = i then hov := FLegendSelHoverIdx else hov := -1;
+    lay := FLegends[i];
+    { [Batch 98] THE SCROLL IN FLIGHT: the items where the content group is
+      now, not where the page will leave it }
+    if lay.IsScroll and (i <= High(FLegProxies)) and (FLegProxies[i] <> nil) then
+    begin
+      dx := FLegProxies[i].Num('x') - lay.ContentPosX;
+      dy := FLegProxies[i].Num('y') - lay.ContentPosY;
+      if IsNan(dx) then dx := 0;
+      if IsNan(dy) then dy := 0;
+      if (dx <> 0) or (dy <> 0) then
+      begin
+        lay.Items := Copy(lay.Items);
+        for k := 0 to High(lay.Items) do
+        begin
+          if not TyRectFIsValid(lay.Items[k].Bounds) then Continue;
+          lay.Items[k].IconBox := TyRectF(lay.Items[k].IconBox.Left + dx,
+            lay.Items[k].IconBox.Top + dy, lay.Items[k].IconBox.Right + dx,
+            lay.Items[k].IconBox.Bottom + dy);
+          lay.Items[k].Bounds := TyRectF(lay.Items[k].Bounds.Left + dx,
+            lay.Items[k].Bounds.Top + dy, lay.Items[k].Bounds.Right + dx,
+            lay.Items[k].Bounds.Bottom + dy);
+          lay.Items[k].TextX := lay.Items[k].TextX + dx;
+          lay.Items[k].TextY := lay.Items[k].TextY + dy;
+        end;
+      end;
+    end;
+    Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], lay, ink, fnt,
+      APPI, AList, i, AMeasurer, hov));
   end;
 end;
 
@@ -10388,7 +10588,7 @@ end;
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
-    'markLine', 'markArea', 'legend');
+    'markLine', 'markArea', 'legend', 'legend', 'legend');
 var
   i, k, g, a, q, idx, slot, nth: Integer;
   lay: TTyTitleLayout;
@@ -10601,6 +10801,15 @@ begin
             Result.Model.SubType := 'scroll';
           Result.Model.Index := d.ComponentIndex;
         end;
+      ctkLegendSelector, ctkLegendPager:
+        begin
+          { [Batch 98] no ECData: an identity and a handler, no event }
+          if (d.ComponentIndex < 0) or (d.ComponentIndex > High(FLegends)) then Exit;
+          if d.Kind = ctkLegendSelector then Result.HdKind := 5
+          else Result.HdKind := 6;
+          Result.HdSeries := d.ComponentIndex;
+          Result.HdRow := d.DataIndex;
+        end;
     end;
     Exit;
   end;
@@ -10761,7 +10970,10 @@ begin
   FEvDownArmed := False;
   { THE ELEMENT'S OWN HANDLER BEFORE ANY zr-LEVEL ONE: a legend item's click
     is downplay, legendToggleSelect, highlight [Batch 93] }
-  if t.HdKind = 4 then LegendClick(t);
+  if t.HdKind = 4 then LegendClick(t)
+  { [Batch 98] the selector's and the pager's own onclick }
+  else if t.HdKind = 5 then LegendSelectorClick(t)
+  else if t.HdKind = 6 then LegendPagerClick(t);
   { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
     unselect, whatever selectedMode says [Batch 88] }
   StClickSelect(t);
@@ -12389,6 +12601,16 @@ begin
     LegendHighDown(ATarget, 'downplay');
     Exit;
   end;
+  { [Batch 98] a selector button: allLeaveBlur, and it leaves emphasis;
+    a page button has no states }
+  if ATarget.HdKind = 5 then
+  begin
+    StAllLeaveBlur;
+    LegendSelHover(-1, -1);
+    if FStDirty then InvalidateFrame;
+    Exit;
+  end;
+  if ATarget.HdKind = 6 then Exit;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   StAllLeaveBlur;
@@ -12423,6 +12645,13 @@ begin
     LegendHighDown(ATarget, 'highlight');
     Exit;
   end;
+  { [Batch 98] a selector button enters emphasis (enableHoverEmphasis) }
+  if ATarget.HdKind = 5 then
+  begin
+    LegendSelHover(ATarget.HdSeries, ATarget.HdRow);
+    Exit;
+  end;
+  if ATarget.HdKind = 6 then Exit;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
   if part = 0 then
@@ -13160,6 +13389,12 @@ begin
     begin
       DoLegendAction(p);
       Result := True;
+    end
+    else if t = 'legendScroll' then
+    begin
+      { [Batch 98] }
+      DoLegendScroll(p);
+      Result := True;
     end;
   finally
     p.Free;
@@ -13302,9 +13537,16 @@ begin
     if FOption.ComponentAt('legend', i) is TJSONObject then
       node := TJSONObject(FOption.ComponentAt('legend', i));
     if node = nil then Continue;
-    if byId then x := node.Find('id') else x := node.Find('name');
-    if (x = nil) or not (x.JSONType in [jtString, jtNumber]) then Continue;
-    v := x.AsString;
+    { the MODEL's id -- the generated one when the option wrote none, which
+      is what the selector and the pager dispatch with [Batch 98] }
+    v := '';
+    if byId then v := ComponentModelId('legend', i);
+    if v = '' then
+    begin
+      if byId then x := node.Find('id') else x := node.Find('name');
+      if (x = nil) or not (x.JSONType in [jtString, jtNumber]) then Continue;
+      v := x.AsString;
+    end;
     if Wanted(v) then Add(i);
   end;
 end;
@@ -13498,6 +13740,132 @@ begin
   DispatchAction('{"type":"legendToggleSelect","name":"'
     + StringToJSONString(ATarget.HdName) + '"}');
   LegendHighDown(ATarget, 'highlight');
+end;
+
+procedure TTyAdvanceChart.LegendSelectorClick(const ATarget: TTyChartEventTarget);
+var k, b: Integer; p: string;
+begin
+  k := ATarget.HdSeries;
+  b := ATarget.HdRow;
+  if (k < 0) or (k > High(FLegends)) or (b < 0) or (b > High(FLegends[k].Selector)) then Exit;
+  if FLegends[k].Selector[b].IsAll then p := '{"type":"legendAllSelect"'
+  else p := '{"type":"legendInverseSelect"';
+  DispatchAction(p + ',"legendId":"' + StringToJSONString(ComponentModelId('legend', k))
+    + '"}');
+end;
+
+procedure TTyAdvanceChart.LegendPagerClick(const ATarget: TTyChartEventTarget);
+var k, toIdx: Integer;
+begin
+  k := ATarget.HdSeries;
+  if (k < 0) or (k > High(FLegends)) or not FLegends[k].IsScroll then Exit;
+  if ATarget.HdRow = 0 then toIdx := FLegends[k].PagePrevIndex
+  else toIdx := FLegends[k].PageNextIndex;
+  { `scrollDataIndex != null && dispatchAction(...)` }
+  if toIdx < 0 then Exit;
+  DispatchAction('{"type":"legendScroll","scrollDataIndex":' + IntToStr(toIdx)
+    + ',"legendId":"' + StringToJSONString(ComponentModelId('legend', k)) + '"}');
+end;
+
+procedure TTyAdvanceChart.DoLegendScroll(APayload: TJSONObject);
+var
+  d: TJSONData;
+  legends: TTyIntegerArray;
+  i, k: Integer;
+  ev: TJSONObject;
+begin
+  d := APayload.Find('scrollDataIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    { eachComponent over the legends of subType 'scroll' the query names }
+    legends := LegendQuery(APayload);
+    for i := 0 to High(legends) do
+    begin
+      k := legends[i];
+      if (k <= High(FLegendSpecs)) and FLegendSpecs[k].IsScroll then
+        TyLegendSetScrollDataIndex(FOption, k, d);
+    end;
+  end;
+  { the default update, then the event: the payload with its type renamed }
+  FullUpdate;
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Strings['type'] := 'legendscroll';
+    EmitPayloadEvent('legendscroll', ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
+function TTyAdvanceChart.LegLive: Boolean;
+begin
+  Result := (FLegAnim <> nil) and (FLegAnim.ClipCount > 0);
+end;
+
+procedure TTyAdvanceChart.LegAnimDrop;
+var i: Integer;
+begin
+  { the proxies before the driver: freeing one takes its clips off it }
+  for i := 0 to High(FLegProxies) do FreeAndNil(FLegProxies[i]);
+  FLegProxies := nil;
+end;
+
+procedure TTyAdvanceChart.LegAnimSync;
+var
+  i: Integer;
+  lay: TTyLegendLayout;
+  p: TTyChartAnimProxy;
+  props: TTyAnimProps;
+  model: TTyAnimModel;
+begin
+  for i := Length(FLegends) to High(FLegProxies) do FreeAndNil(FLegProxies[i]);
+  SetLength(FLegProxies, Length(FLegends));
+  for i := 0 to High(FLegends) do
+  begin
+    lay := FLegends[i];
+    if not (lay.Valid and lay.IsScroll) then
+    begin
+      FreeAndNil(FLegProxies[i]);
+      Continue;
+    end;
+    props := TyAnimProps([TyAnimProp('x', TyAnimNum(lay.ContentPosX)),
+      TyAnimProp('y', TyAnimNum(lay.ContentPosY))]);
+    p := FLegProxies[i];
+    if p = nil then
+    begin
+      if FLegAnim = nil then FLegAnim := TTyAnimation.Create;
+      p := TTyChartAnimProxy.Create(-1, i, 'legend.scroll');
+      p.Animation := FLegAnim;
+      { THE FIRST RENDER: the content group stands unscrolled }
+      p.Attr(TyAnimProps([TyAnimProp('x', TyAnimNum(lay.ContentFromX)),
+        TyAnimProp('y', TyAnimNum(lay.ContentFromY))]));
+      FLegProxies[i] := p;
+    end;
+    { the cross axis is setPosition's, at once: only the scroll moves }
+    if FLegendSpecs[i].Orient = tloVertical then
+      p.Attr(TyAnimProps([TyAnimProp('x', TyAnimNum(lay.ContentPosX))]))
+    else
+      p.Attr(TyAnimProps([TyAnimProp('y', TyAnimNum(lay.ContentPosY))]));
+    p.SetFinal(props);
+    { `showController ? legendModel : null`: a hidden pager snaps }
+    if lay.ShowController and AnimAllowed then
+      model := TyAnimComponentModel(FOption.ComponentAt('legend', i), FOption.Root,
+        'legend.scroll')
+    else
+      model := TyAnimNoModel;
+    TyUpdateProps(p, props, model, TyAnimCallNoIndex);
+  end;
+  AnimArmTimer;
+end;
+
+procedure TTyAdvanceChart.LegendSelHover(ALegend, AIndex: Integer);
+begin
+  if (FLegendSelHoverLegend = ALegend) and (FLegendSelHoverIdx = AIndex) then Exit;
+  FLegendSelHoverLegend := ALegend;
+  FLegendSelHoverIdx := AIndex;
+  { the button is drawn in the static layer: a new ink is a new picture }
+  if FStatic <> nil then FStatic.Drop;
+  InvalidateFrame;
 end;
 
 function TTyAdvanceChart.TargetOfElement(AIndex: Integer): TTyChartEventTarget;
@@ -15587,7 +15955,7 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive) and IsNan(FAnimNow)
+  if (FAnimLive or PtrLive or LegLive) and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -15621,6 +15989,14 @@ begin
       InvalidateFrame;
       if (FPtrAnim.ClipCount = 0) and not FAnimLive then AnimArmTimer;
     end;
+  end;
+  { the legend's scroll [Batch 98]: a frame of the static layer }
+  if LegLive then
+  begin
+    FLegAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not LegLive and not FAnimLive then AnimArmTimer;
   end;
   if FAnim = nil then Exit;
   FAnim.Update(ANowMs);

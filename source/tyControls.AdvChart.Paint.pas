@@ -86,7 +86,11 @@ type
   { Which datum an element belongs to. Both -1 together means "none" -- one
     place decides that, so the two can never disagree. }
   TTyChartTargetKind = (ctkSeries, ctkMarkPoint, ctkMarkLine, ctkMarkArea,
-    ctkLegend);
+    ctkLegend,
+    { [Batch 98] a legend's selector button (DataIndex the button) and its
+      pager's page buttons (DataIndex 0 the previous, 1 the next): targets
+      without ECData, so no chart mouse event names them }
+    ctkLegendSelector, ctkLegendPager);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;

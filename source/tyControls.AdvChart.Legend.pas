@@ -45,6 +45,10 @@ unit tyControls.AdvChart.Legend;
     controls -- an All/Inverse pair and a pager -- and an inert control is worse
     than an absent one. They land with the click. Two corpus examples ask for
     `type: 'scroll'` and get a plain legend that overflows instead.
+    [Batch 98: both are here -- LegendView's selector layout and
+    ScrollableLegendView's pager, clip and page info, transcribed in their own
+    arithmetic (LayoutRich), the buttons' and the page buttons' clicks, the
+    legendScroll action and the scroll's tween.]
 
     A `line` ICON WITH A VISIBLE PEN. Upstream draws `legend.icon: 'line'`
     on a bar or a pie as NOTHING AT ALL, and by a route worth naming:
@@ -97,7 +101,8 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Shape, tyControls.AdvChart.Layout,
-  tyControls.AdvChart.Symbol, tyControls.AdvChart.Paint;
+  tyControls.AdvChart.Symbol, tyControls.AdvChart.Paint,
+  tyControls.AdvChart.ZrPath;
 
 type
   TTyLegendOrient = (tloHorizontal, tloVertical);
@@ -108,6 +113,19 @@ type
     only silences the item, which is why it is indistinguishable from
     tlsMultiple until the click exists. }
   TTyLegendSelectedMode = (tlsMultiple, tlsSingle, tlsOff);
+
+  { ONE SELECTOR BUTTON as LegendModel._updateSelector normalises
+    `legend.selector`: `true` is ['all', 'inverse'], a word is the object (type: word),
+    and the locale's title fills a title the option left out (zrUtil.merge,
+    never overwriting). A type that is neither keeps no default title, and
+    its click is the inverse's -- the view asks `type === 'all'` and
+    nothing else. [Batch 98] }
+  TTyLegendSelectorBtn = record
+    Kind: string;
+    IsAll: Boolean;
+    Title: string;
+  end;
+  TTyLegendSelectorBtns = array of TTyLegendSelectorBtn;
 
   TTyLegendFont = record
     Name: string;
@@ -143,7 +161,12 @@ type
 
     Found = False is a real answer and not a failure: a `legend.data` entry
     naming a series that does not exist is drawn, greyed, and upstream logs a
-    warning. }
+    warning.
+    [Batch 98: the reason is wrong -- LegendView.renderInner draws NOTHING for
+    a name no series and no data provider answers to (a probe on the 6.1
+    build: data A, Nope, B gives the items 0 and 2); it only warns. The port
+    still draws it greyed; a scroll legend counts its pages over that extra
+    item. Left as is: changing it moves batch 45's tests.] }
   TTyLegendSource = record
     Found: Boolean;
     { 'bar' | 'line' | 'scatter' | 'pie' | '' }
@@ -218,6 +241,38 @@ type
       icon the width its selected self had (LegendView.ts:668-670)
       [Batch 93] }
     InactiveBorderAuto: Boolean;
+    { ==== [Batch 98] the selector buttons and the scrolling legend ====
+
+      `type: 'scroll'`: ScrollableLegendModel/View -- one line that never
+      wraps, clipped, with a pager. }
+    IsScroll: Boolean;
+    { `selector`, normalised; HasSelector False when it is false or absent.
+      An empty array is still a selector -- an empty group that takes its
+      gap, as upstream's `if (selector)` on [] does. }
+    HasSelector: Boolean;
+    Selector: TTyLegendSelectorBtns;
+    { selectorPosition, resolved: 'auto' (or missing) is 'end' on a
+      horizontal legend and 'start' otherwise; anything but 'end' lays out
+      as 'start' }
+    SelectorAtEnd: Boolean;
+    SelectorItemGap, SelectorButtonGap: Double;
+    { scrollDataIndex as the model holds it: a number, or anything else
+      (which matches no item -- `===` against an index) }
+    ScrollIsNum: Boolean;
+    ScrollNum: Double;
+    PageButtonItemGap: Double;
+    { NaN is null: retrieve2 falls back to itemGap }
+    PageButtonGap: Double;
+    { pageButtonPosition === 'end'; anything else is the start }
+    PageButtonAtEnd: Boolean;
+    { pageFormatter: a truthy string (a template, or '@Name'); anything else
+      leaves the placeholder text in place }
+    HasPageFormatter: Boolean;
+    PageFormatter: string;
+    { pageIcons[orient][0 prev, 1 next]: 'path://', raw path data or
+      'image://'; '' where the option's array is short }
+    PageIcons: array[TTyLegendOrient, 0..1] of string;
+    PageIconW, PageIconH: Double;
   end;
 
   { One placed item. Everything is DEVICE px and absolute. }
@@ -257,6 +312,33 @@ type
   end;
   TTyLegendItemArray = array of TTyLegendItem;
 
+  { [Batch 98] ONE SELECTOR BUTTON PLACED: its Text's global position (the
+    top-left of its padded box -- setLabelStyle drops the view's
+    center/middle, so the box hangs left/top from it), its box in its own
+    frame and in the chart's (the border's half pen included), and its
+    words laid out at rest and hovered. Device px. }
+  TTyLegendSelLaid = record
+    IsAll: Boolean;
+    Title: string;
+    X, Y: Double;
+    Local: TTyXYWH;
+    Box: TTyRectF;
+    Pieces, EmphPieces: TTyRtPieceArray;
+  end;
+  TTyLegendSelLaidArray = array of TTyLegendSelLaid;
+
+  { [Batch 98] one of the pager's three -- an icon or the page text: its
+    global position, its rect in its own frame and in the chart's, and an
+    icon's path fitted about the origin (graphic.createIcon). Device px. }
+  TTyLegendPagerPart = record
+    X, Y: Double;
+    Local: TTyXYWH;
+    Box: TTyRectF;
+    Path: TTyZrPath;
+    { an 'image://' icon: laid out, never drawn }
+    IsImage: Boolean;
+  end;
+
   TTyLegendLayout = record
     Valid: Boolean;
     { The background box, padding included. }
@@ -265,6 +347,45 @@ type
     Content: TTyRectF;
     Align: TTyLegendAlign;
     Items: TTyLegendItemArray;
+    { ==== [Batch 98] ====
+      the view group's position and what layoutInner returned, group-local }
+    GroupX, GroupY: Double;
+    MainRect: TTyXYWH;
+    Selector: TTyLegendSelLaidArray;
+    IsScroll: Boolean;
+    { the pager is drawn and takes the pointer only when the items overflow;
+      it is laid out (and sized into the main rect) either way }
+    ShowController: Boolean;
+    PagePrev, PageNext, PageTextPart: TTyLegendPagerPart;
+    PageText: string;
+    { _getPageInfo: the page shown (pageIndex, -1 with no items), how many,
+      and the data index a page button scrolls to (-1: null, nowhere) }
+    PageIndex, PageCount, PagePrevIndex, PageNextIndex: Integer;
+    { the content's clip, device px and absolute; HasClip only with the
+      pager shown }
+    HasClip: Boolean;
+    Clip: TTyRectF;
+    { the page text's font, as the layout measured it }
+    PageFontName: string;
+    PageFontSize, PageFontWeight: Integer;
+    { THE CONTENT GROUP'S POSITION, group-local: where the page puts it
+      (ContentPos) and where it stands before any page is applied
+      (ContentFrom -- a first render's start, contentPos before
+      _getPageInfo). The scroll tweens between them; everything above is
+      laid out at ContentPos. }
+    ContentPosX, ContentPosY, ContentFromX, ContentFromY: Double;
+  end;
+
+  { [Batch 98] WHAT THE CONTROL RESOLVES for the selector buttons and the
+    pager: the buttons' text block finished (the skin's font and ink under
+    selectorLabel, padding, border and radius in it) and the same block in
+    the hovered ink; the page text's font and the raw measurer the items'
+    block measurer wraps. }
+  TTyLegendDeco = record
+    SelBlock, SelEmphBlock: TTyRtBlockStyle;
+    PageFontName: string;
+    PageFontSize, PageFontWeight: Integer;
+    Measurer: ITyTextMeasurer;
   end;
 
   { Resolved from the theme by the control, like every other visual value in
@@ -284,6 +405,9 @@ type
     InactiveBorder: TTyChartColor;
     LineInactive: TTyChartColor;
     LineInactiveWidth: Double;
+    { [Batch 98] the pager: pageIconColor, pageIconInactiveColor and
+      pageTextStyle.color, the skin's under the option's }
+    PageIcon, PageIconInactive, PageText: TTyChartColor;
   end;
 
 { How many legends the option carries. An object counts as one. }
@@ -449,7 +573,25 @@ function TyLayoutLegend(const ASpec: TTyLegendSpec;
   const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
   const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
-  APPI: Integer): TTyLegendLayout;
+  APPI: Integer): TTyLegendLayout; overload;
+{ [Batch 98] The same with the selector buttons and the pager, which need
+  the control's resolved ADeco. A legend with neither is laid out exactly as
+  above. }
+function TyLayoutLegend(const ASpec: TTyLegendSpec;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
+  APPI: Integer; const ADeco: TTyLegendDeco): TTyLegendLayout; overload;
+
+{ [Batch 98] the page text: pageFormatter's `(current)` and `(total)` tokens in braces, each
+  replaced ONCE (String.replace with a string), or the named handler given
+  (current, total) -- current is pageIndex + 1 }
+function TyLegendPageText(const AFormatter: string; ACurrent, ATotal: Integer): string;
+
+{ [Batch 98] the legend's scrollDataIndex written into its option node --
+  ScrollableLegendModel.setScrollDataIndex }
+procedure TyLegendSetScrollDataIndex(AOption: TTyChartOption; AIndex: Integer;
+  AValue: TJSONData);
 
 { The elements, appended to AList. Answers how many were added.
 
@@ -460,12 +602,14 @@ function TyLayoutLegend(const ASpec: TTyLegendSpec;
 function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
   const ALayout: TTyLegendLayout; const AInk: TTyLegendInk;
   const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList;
-  ALegendIndex: Integer = -1; const AMeasurer: ITyTextMeasurer = nil): Integer;
+  ALegendIndex: Integer = -1; const AMeasurer: ITyTextMeasurer = nil;
+  ASelHover: Integer = -1): Integer;
 
 implementation
 
 uses tyControls.AdvChart.Handlers, tyControls.AdvChart.RichStyle,
-  tyControls.AdvChart.States;
+  tyControls.AdvChart.States, tyControls.AdvChart.MarkerView,
+  tyControls.StrConsts;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -477,6 +621,18 @@ const
   cDefaultItemWidth = 25.0;
   cDefaultItemHeight = 14.0;
   cDefaultZ = 4;
+  { [Batch 98] LegendModel.defaultOption's selector gaps and
+    ScrollableLegendModel.defaultOption's pager }
+  cSelectorItemGap = 7.0;
+  cSelectorButtonGap = 10.0;
+  cPageButtonItemGap = 5.0;
+  cPageIconSize = 15.0;
+  cPageFormatter = '{current}/{total}';
+  { the placeholder the page text is laid out with, whatever it then says
+    (ScrollableLegendView.renderInner: 'xx/xx', with a FIXME about it) }
+  cPagePlaceholder = 'xx/xx';
+  cPageIconsH: array[0..1] of string = ('M0,0L12,-10L12,10z', 'M0,0L-12,-10L-12,10z');
+  cPageIconsV: array[0..1] of string = ('M0,0L20,0L10,-20z', 'M0,0L20,0L10,20z');
   { The gap between an icon and its words. A HARD 5 in LegendView.ts:455, and
     not itemGap -- itemGap separates whole entries. }
   cTextGap = 5.0;
@@ -568,6 +724,143 @@ begin
   Result.BorderRadii := TyCornerRadii([]);
   Result.Z := cDefaultZ;
   Result.InactiveBorderAuto := True;
+  { [Batch 98] }
+  Result.IsScroll := False;
+  Result.HasSelector := False;
+  Result.Selector := nil;
+  Result.SelectorAtEnd := True;
+  Result.SelectorItemGap := cSelectorItemGap;
+  Result.SelectorButtonGap := cSelectorButtonGap;
+  Result.ScrollIsNum := True;
+  Result.ScrollNum := 0;
+  Result.PageButtonItemGap := cPageButtonItemGap;
+  Result.PageButtonGap := NaN;
+  Result.PageButtonAtEnd := True;
+  Result.HasPageFormatter := True;
+  Result.PageFormatter := cPageFormatter;
+  for i := 0 to 1 do
+  begin
+    Result.PageIcons[tloHorizontal, i] := cPageIconsH[i];
+    Result.PageIcons[tloVertical, i] := cPageIconsV[i];
+  end;
+  Result.PageIconW := cPageIconSize;
+  Result.PageIconH := cPageIconSize;
+end;
+
+{ `legend.selector` as _updateSelector leaves it [Batch 98] }
+procedure ReadSelector(ANode: TJSONObject; var ASpec: TTyLegendSpec);
+var
+  d, it, t: TJSONData;
+  arr: TJSONArray;
+  i: Integer;
+  b: TTyLegendSelectorBtn;
+
+  function Btn(const AKind: string): TTyLegendSelectorBtn;
+  begin
+    Result.Kind := AKind;
+    Result.IsAll := AKind = 'all';
+    if AKind = 'all' then Result.Title := rsTyChartLegendSelectAll
+    else if AKind = 'inverse' then Result.Title := rsTyChartLegendSelectInverse
+    else Result.Title := '';
+  end;
+
+begin
+  ASpec.HasSelector := False;
+  ASpec.Selector := nil;
+  if ANode = nil then Exit;
+  d := ANode.Find('selector');
+  if d = nil then Exit;
+  if d.JSONType = jtBoolean then
+  begin
+    if not d.AsBoolean then Exit;
+    ASpec.HasSelector := True;
+    SetLength(ASpec.Selector, 2);
+    ASpec.Selector[0] := Btn('all');
+    ASpec.Selector[1] := Btn('inverse');
+    Exit;
+  end;
+  if not (d is TJSONArray) then Exit;
+  arr := TJSONArray(d);
+  ASpec.HasSelector := True;
+  SetLength(ASpec.Selector, arr.Count);
+  for i := 0 to arr.Count - 1 do
+  begin
+    it := arr.Items[i];
+    if it.JSONType = jtString then b := Btn(it.AsString)
+    else if it is TJSONObject then
+    begin
+      t := TJSONObject(it).Find('type');
+      if (t <> nil) and (t.JSONType = jtString) then b := Btn(t.AsString)
+      else b := Btn('');
+      { merge never overwrites: a title written -- any value -- stays }
+      t := TJSONObject(it).Find('title');
+      if t <> nil then
+      begin
+        if t.JSONType in [jtString, jtNumber] then b.Title := t.AsString
+        else b.Title := '';
+      end;
+    end
+    else
+      b := Btn('');
+    ASpec.Selector[i] := b;
+  end;
+end;
+
+{ the scrolling legend's own keys [Batch 98] }
+procedure ReadScroll(ANode: TJSONObject; var ASpec: TTyLegendSpec);
+var
+  d, e: TJSONData;
+  o: TTyLegendOrient;
+  k: Integer;
+  w: string;
+begin
+  if ANode = nil then Exit;
+  d := ANode.Find('scrollDataIndex');
+  if d <> nil then
+  begin
+    ASpec.ScrollIsNum := d.JSONType = jtNumber;
+    if ASpec.ScrollIsNum then ASpec.ScrollNum := d.AsFloat;
+  end;
+  ASpec.PageButtonItemGap := NumIn(ANode, 'pageButtonItemGap', ASpec.PageButtonItemGap);
+  ASpec.PageButtonGap := NumIn(ANode, 'pageButtonGap', NaN);
+  d := ANode.Find('pageButtonPosition');
+  if d <> nil then
+    ASpec.PageButtonAtEnd := (d.JSONType = jtString) and (d.AsString = 'end');
+  d := ANode.Find('pageFormatter');
+  if d <> nil then
+  begin
+    ASpec.HasPageFormatter := (d.JSONType = jtString) and (d.AsString <> '');
+    if ASpec.HasPageFormatter then ASpec.PageFormatter := d.AsString
+    else ASpec.PageFormatter := '';
+  end;
+  d := ANode.Find('pageIcons');
+  if d is TJSONObject then
+    for o := Low(TTyLegendOrient) to High(TTyLegendOrient) do
+    begin
+      if o = tloHorizontal then w := 'horizontal' else w := 'vertical';
+      e := TJSONObject(d).Find(w);
+      if not (e is TJSONArray) then Continue;
+      for k := 0 to 1 do
+        if (k < TJSONArray(e).Count) and (TJSONArray(e).Items[k].JSONType = jtString) then
+          ASpec.PageIcons[o, k] := TJSONArray(e).Items[k].AsString
+        else
+          ASpec.PageIcons[o, k] := '';
+    end;
+  d := ANode.Find('pageIconSize');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    ASpec.PageIconW := d.AsFloat;
+    ASpec.PageIconH := d.AsFloat;
+  end
+  else if d is TJSONArray then
+  begin
+    ASpec.PageIconW := NaN;
+    ASpec.PageIconH := NaN;
+    if (TJSONArray(d).Count > 0) and (TJSONArray(d).Items[0].JSONType = jtNumber) then
+      ASpec.PageIconW := TJSONArray(d).Items[0].AsFloat;
+    if (TJSONArray(d).Count > 1) and (TJSONArray(d).Items[1].JSONType = jtNumber) then
+      ASpec.PageIconH := TJSONArray(d).Items[1].AsFloat;
+  end;
 end;
 
 procedure ReadPadding(ANode: TJSONObject; var APadding: array of Double);
@@ -673,6 +966,56 @@ begin
   d := node.Find('inactiveBorderWidth');
   Result.InactiveBorderAuto := (d = nil) or (d.JSONType = jtNull)
     or ((d.JSONType = jtString) and (d.AsString = 'auto'));
+
+  { [Batch 98] the selector and the pager }
+  Result.IsScroll := StrIn(node, 'type') = 'scroll';
+  ReadSelector(node, Result);
+  { `!selectorPosition || === 'auto'`: orient === 'horizontal' ? 'end' :
+    'start' -- the orient WORD, so only an absent or 'horizontal' one ends }
+  d := node.Find('selectorPosition');
+  if (d = nil) or (d.JSONType = jtNull)
+    or ((d.JSONType = jtBoolean) and not d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (d.AsFloat = 0))
+    or ((d.JSONType = jtString) and ((d.AsString = '') or (d.AsString = 'auto'))) then
+  begin
+    d := node.Find('orient');
+    Result.SelectorAtEnd := (d = nil)
+      or ((d.JSONType = jtString) and (d.AsString = 'horizontal'));
+  end
+  else
+    Result.SelectorAtEnd := (d.JSONType = jtString) and (d.AsString = 'end');
+  Result.SelectorItemGap := NumIn(node, 'selectorItemGap', Result.SelectorItemGap);
+  Result.SelectorButtonGap := NumIn(node, 'selectorButtonGap', Result.SelectorButtonGap);
+  if Result.IsScroll then ReadScroll(node, Result);
+end;
+
+procedure TyLegendSetScrollDataIndex(AOption: TTyChartOption; AIndex: Integer;
+  AValue: TJSONData);
+var node: TJSONObject;
+begin
+  if (AOption = nil) or (AValue = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt('legend', AIndex));
+  if node = nil then Exit;
+  node.Elements['scrollDataIndex'] := AValue.Clone;
+end;
+
+function TyLegendPageText(const AFormatter: string; ACurrent, ATotal: Integer): string;
+var prm: TTyChartCallbackParams;
+begin
+  if TyChartIsHandlerRef(AFormatter) then
+  begin
+    { upstream's pageFormatter with an object of current and total }
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'legend';
+    prm.Extra := 'page';
+    SetLength(prm.Values, 2);
+    prm.Values[0] := ACurrent;
+    prm.Values[1] := ATotal;
+    prm.DefaultText := TyLegendPageText(cPageFormatter, ACurrent, ATotal);
+    Exit(TyChartRunHandler(AFormatter, TyChartOneParams(prm)));
+  end;
+  Result := TyJsReplaceFirst(AFormatter, '{current}', IntToStr(ACurrent));
+  Result := TyJsReplaceFirst(Result, '{total}', IntToStr(ATotal));
 end;
 
 { ==================== entries ==================== }
@@ -1416,11 +1759,577 @@ begin
     AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, pad);
 end;
 
+{ ==================== [Batch 98] the selector and the pager ==================== }
+
+const
+  { Transformable's EPSILON: a move inside it is no move at all }
+  cAroundZero: Double = 5e-5;
+
+function NotAroundZero(V: Double): Boolean;
+begin
+  Result := (V > cAroundZero) or (V < -cAroundZero);
+end;
+
+{ ZRENDER'S GLOBAL TRANSFORM of a translated element under a translated
+  parent: matrix.mul(parent, local) is (1 * lx + 0 * ly) + px -- and an
+  element whose own move is inside the epsilon on both axes has no local
+  transform at all and takes its parent's as it is
+  (Transformable.needLocalTransform). Everything the selector and the
+  pager place is composed this way, so every position is the bits zrender
+  draws at. }
+procedure Compose(ALX, ALY, APX, APY: Double; out AX, AY: Double);
+begin
+  if NotAroundZero(ALX) or NotAroundZero(ALY) then
+  begin
+    AX := ALX + APX;
+    AY := ALY + APY;
+  end
+  else
+  begin
+    AX := APX;
+    AY := APY;
+  end;
+end;
+
+{ upstream's [wh] / [xy] by the orient index: 0 the width and x, 1 the
+  height and y }
+function WHOf(const R: TTyXYWH; AIdx: Integer): Double;
+begin
+  if AIdx = 0 then Result := R.W else Result := R.H;
+end;
+
+function XYOf(const R: TTyXYWH; AIdx: Integer): Double;
+begin
+  if AIdx = 0 then Result := R.X else Result := R.Y;
+end;
+
+procedure SetWH(var R: TTyXYWH; AIdx: Integer; V: Double);
+begin
+  if AIdx = 0 then R.W := V else R.H := V;
+end;
+
+procedure SetXY(var R: TTyXYWH; AIdx: Integer; V: Double);
+begin
+  if AIdx = 0 then R.X := V else R.Y := V;
+end;
+
+{ Math.min / Math.max of two doubles }
+function JsMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
+end;
+
+function JsMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+{ layout.ts boxLayout over rects as zrender holds them -- x and width, not
+  two edges -- so a gap lands on the bits upstream's does }
+procedure BoxLayoutXY(AHorizontal: Boolean; const ARects: array of TTyXYWH;
+  const ANewline: array of Boolean; AGap, AMaxW, AMaxH: Double;
+  var AX, AY: array of Double);
+var
+  i, n: Integer;
+  x, y, lineMax, moveX, moveY, nextX, nextY: Double;
+  r, nr: TTyXYWH;
+  hasNext, wrap: Boolean;
+begin
+  n := Length(ARects);
+  x := 0;
+  y := 0;
+  nextX := 0;
+  nextY := 0;
+  lineMax := 0;
+  for i := 0 to n - 1 do
+  begin
+    r := ARects[i];
+    hasNext := i + 1 < n;
+    if hasNext then nr := ARects[i + 1];
+    if AHorizontal then
+    begin
+      moveX := r.W;
+      if hasNext then moveX := r.W + (-nr.X + r.X);
+      nextX := x + moveX;
+      wrap := (nextX > AMaxW) or ANewline[i];
+      if wrap then
+      begin
+        x := 0;
+        nextX := moveX;
+        y := y + lineMax + AGap;
+        lineMax := r.H;
+      end
+      else
+        lineMax := JsMax(lineMax, r.H);
+    end
+    else
+    begin
+      moveY := r.H;
+      if hasNext then moveY := r.H + (-nr.Y + r.Y);
+      nextY := y + moveY;
+      wrap := (nextY > AMaxH) or ANewline[i];
+      if wrap then
+      begin
+        x := x + lineMax + AGap;
+        y := 0;
+        nextY := moveY;
+        lineMax := r.W;
+      end
+      else
+        lineMax := JsMax(lineMax, r.W);
+    end;
+    if ANewline[i] then Continue;
+    AX[i] := x;
+    AY[i] := y;
+    if AHorizontal then
+      x := nextX + AGap
+    else
+      y := nextY + AGap;
+  end;
+end;
+
+{ Group.getBoundingRect over the first ACount children, each at (AX, AY):
+  through its local transform, the first one unioned with itself; an empty
+  group is (0, 0, 0, 0) }
+function GroupRect(const ARects: array of TTyXYWH; const AX, AY: array of Double;
+  ACount: Integer): TTyXYWH;
+var
+  have: Boolean;
+  i: Integer;
+begin
+  have := False;
+  Result := TyXYWH(0, 0, 0, 0);
+  for i := 0 to ACount - 1 do
+    TyZrAccumulate(Result, have, ARects[i], TyZrLocal(1, 1, 0, AX[i], AY[i]));
+  if not have then Result := TyXYWH(0, 0, 0, 0);
+end;
+
+{ graphic.createIcon(str, no options, the box x -w/2, y -h/2, w by h): an
+  'image://' is an image of the box (laid out, not drawn here); anything else
+  is path data with the first 'path://' taken out, fitted into the box
+  keeping its aspect. A path that parses to nothing has the empty rect. }
+procedure PagerIcon(const AStr: string; AW, AH: Double; out APart: TTyLegendPagerPart);
+var
+  s: string;
+  box: TTyXYWH;
+  p: Integer;
+  f32: Boolean;
+begin
+  APart := Default(TTyLegendPagerPart);
+  box := TyXYWH(-AW / 2, -AH / 2, AW, AH);
+  if Copy(AStr, 1, 8) = 'image://' then
+  begin
+    APart.IsImage := True;
+    APart.Local := box;
+    Exit;
+  end;
+  s := AStr;
+  p := Pos('path://', s);
+  if p > 0 then Delete(s, p, Length('path://'));
+  APart.Path := nil;
+  if s <> '' then
+  begin
+    { an empty parse fits nothing: its rect is nought and its aspect not a
+      number, and upstream's transform of no points is no points }
+    if Length(TyZrParseSvg(s, f32)) > 0 then
+      APart.Path := TyZrMakePathCenter(s, box);
+  end;
+  APart.Local := TyZrBBox(APart.Path);
+end;
+
+procedure PlacePart(var APart: TTyLegendPagerPart; ALX, ALY, APX, APY: Double);
+begin
+  Compose(ALX, ALY, APX, APY, APart.X, APart.Y);
+  APart.Box := TyRectF(APart.X + APart.Local.X, APart.Y + APart.Local.Y,
+    APart.X + APart.Local.X + APart.Local.W, APart.Y + APart.Local.Y + APart.Local.H);
+end;
+
+{ LegendView.layoutInner with a selector, and ScrollableLegendView's
+  layoutInner / _layoutContentAndController / _getPageInfo -- in their own
+  arithmetic, step for step, everything group-local until the group is
+  placed. ARects are the items as measured, ANewline the line breaks. }
+procedure LayoutRich(const ASpec: TTyLegendSpec; const ADeco: TTyLegendDeco;
+  const AContainer: TTyRectF; APPI: Integer; AScale, AGap: Double;
+  const APad: array of Double; const AMaxBox: TTyXYWH;
+  const ARects: array of TTyRectF; const ANewline: array of Boolean;
+  var R: TTyLegendLayout);
+var
+  o, i, k, n, nk, ns, target, winStart, winEnd, cur: Integer;
+  horiz, show: Boolean;
+  kids: array of Integer;
+  krect, srect: array of TTyXYWH;
+  knl, snl: array of Boolean;
+  kx, ky, sx, sy, ks, ke: array of Double;
+  prect: array[0..2] of TTyXYWH;
+  pnl: array[0..2] of Boolean;
+  px, py: array[0..2] of Double;
+  content, selR, ctlR, mainR, maxS, lay, b: TTyXYWH;
+  selPos, contentPos, containerPos, ctlPos, finalPos: array[0..1] of Double;
+  gAx, gAy, cAx, cAy, nAx, nAy, sAx, sAy, tAx, tAy, ax, ay: Double;
+  selGap, pbGap, rectSize, w, h, offset, clipW, clipH: Double;
+  it: TTyLegendItem;
+  dflt: TTyRtDefault;
+
+  function Intersect(AK: Integer; AWinStart: Double): Boolean;
+  begin
+    Result := (ke[AK] >= AWinStart) and (ks[AK] <= AWinStart + rectSize);
+  end;
+
+begin
+  if ASpec.Orient = tloVertical then o := 1 else o := 0;
+  horiz := o = 0;
+  n := Length(ARects);
+
+  { THE CONTENT'S CHILDREN: every entry drawn, line breaks included on a
+    plain legend; a scroll legend disables line breaks (newlineDisabled), so
+    its '' and '\n' are names no series answers to and draw nothing }
+  SetLength(kids, n);
+  nk := 0;
+  for i := 0 to n - 1 do
+  begin
+    if ASpec.IsScroll and ANewline[i] then Continue;
+    kids[nk] := i;
+    Inc(nk);
+  end;
+  SetLength(kids, nk);
+  SetLength(krect, nk);
+  SetLength(knl, nk);
+  SetLength(kx, nk);
+  SetLength(ky, nk);
+  for k := 0 to nk - 1 do
+  begin
+    i := kids[k];
+    krect[k] := TyXYWH(ARects[i].Left, ARects[i].Top,
+      ARects[i].Right - ARects[i].Left, ARects[i].Bottom - ARects[i].Top);
+    knl[k] := ANewline[i];
+    kx[k] := 0;
+    ky[k] := 0;
+  end;
+
+  { THE SELECTOR'S BUTTONS, laid out left to right whatever the orient:
+    each a text block hung left/top from its origin }
+  ns := 0;
+  if ASpec.HasSelector then ns := Length(ASpec.Selector);
+  SetLength(R.Selector, ns);
+  SetLength(srect, ns);
+  SetLength(snl, ns);
+  SetLength(sx, ns);
+  SetLength(sy, ns);
+  dflt := TyRtDefaultOf(False, 0, False, 0, False, tahLeft, tavTop);
+  for k := 0 to ns - 1 do
+  begin
+    R.Selector[k].IsAll := ASpec.Selector[k].IsAll;
+    R.Selector[k].Title := ASpec.Selector[k].Title;
+    R.Selector[k].Pieces := nil;
+    R.Selector[k].EmphPieces := nil;
+    b := TyXYWH(0, 0, 0, 0);
+    if ADeco.Measurer <> nil then
+    begin
+      R.Selector[k].Pieces := TyRtLay(ASpec.Selector[k].Title, ADeco.SelBlock,
+        dflt, AScale, ADeco.Measurer);
+      R.Selector[k].EmphPieces := TyRtLay(ASpec.Selector[k].Title,
+        ADeco.SelEmphBlock, dflt, AScale, ADeco.Measurer);
+      b := TyRtBounds(R.Selector[k].Pieces);
+      if b.W < 0 then b := TyXYWH(0, 0, 0, 0);
+    end;
+    R.Selector[k].Local := TyXYWH(b.X * AScale, b.Y * AScale, b.W * AScale,
+      b.H * AScale);
+    srect[k] := R.Selector[k].Local;
+    snl[k] := False;
+    sx[k] := 0;
+    sy[k] := 0;
+  end;
+  selGap := ASpec.SelectorButtonGap * AScale;
+  selR := TyXYWH(0, 0, 0, 0);
+  if ASpec.HasSelector then
+  begin
+    BoxLayoutXY(True, srect, snl, ASpec.SelectorItemGap * AScale, Infinity,
+      Infinity, sx, sy);
+    selR := GroupRect(srect, sx, sy, ns);
+  end;
+  selPos[0] := -selR.X;
+  selPos[1] := -selR.Y;
+
+  rectSize := 0;
+  show := False;
+  if not ASpec.IsScroll then
+  begin
+    { ==== LegendView.layoutInner, the selector branch ==== }
+    BoxLayoutXY(horiz, krect, knl, AGap, AMaxBox.W, AMaxBox.H, kx, ky);
+    content := GroupRect(krect, kx, ky, nk);
+    contentPos[0] := -content.X;
+    contentPos[1] := -content.Y;
+    if ASpec.SelectorAtEnd then
+      selPos[o] := selPos[o] + (WHOf(content, o) + selGap)
+    else
+      contentPos[o] := contentPos[o] + (WHOf(selR, o) + selGap);
+    { always aligned to the content as 'middle' }
+    selPos[1 - o] := selPos[1 - o] + (WHOf(content, 1 - o) / 2 - WHOf(selR, 1 - o) / 2);
+    mainR := TyXYWH(0, 0, 0, 0);
+    SetWH(mainR, o, WHOf(content, o) + selGap + WHOf(selR, o));
+    SetWH(mainR, 1 - o, JsMax(WHOf(content, 1 - o), WHOf(selR, 1 - o)));
+    SetXY(mainR, 1 - o, JsMin(0, XYOf(selR, 1 - o) + selPos[1 - o]));
+    finalPos := contentPos;
+    containerPos[0] := 0;
+    containerPos[1] := 0;
+  end
+  else
+  begin
+    { ==== ScrollableLegendView.layoutInner ==== }
+    maxS := AMaxBox;
+    if ASpec.HasSelector then
+      SetWH(maxS, o, WHOf(AMaxBox, o) - WHOf(selR, o) - selGap);
+
+    { ==== _layoutContentAndController ==== one line, never wrapped }
+    BoxLayoutXY(horiz, krect, knl, AGap, Infinity, Infinity, kx, ky);
+    { the pager, laid out left to right around the PLACEHOLDER text }
+    w := ASpec.PageIconW * AScale;
+    h := ASpec.PageIconH * AScale;
+    PagerIcon(ASpec.PageIcons[ASpec.Orient, 0], w, h, R.PagePrev);
+    PagerIcon(ASpec.PageIcons[ASpec.Orient, 1], w, h, R.PageNext);
+    R.PageFontName := ADeco.PageFontName;
+    R.PageFontSize := ADeco.PageFontSize;
+    R.PageFontWeight := ADeco.PageFontWeight;
+    w := 0;
+    h := 0;
+    if ADeco.Measurer <> nil then
+      ADeco.Measurer.MeasureLine(cPagePlaceholder, ADeco.PageFontName,
+        ADeco.PageFontSize, ADeco.PageFontWeight, w, h);
+    prect[0] := R.PagePrev.Local;
+    prect[1] := TyXYWH(0 - w / 2, 0 - h / 2, w, h);
+    prect[2] := R.PageNext.Local;
+    for k := 0 to 2 do
+    begin
+      pnl[k] := False;
+      px[k] := 0;
+      py[k] := 0;
+    end;
+    BoxLayoutXY(True, prect, pnl, ASpec.PageButtonItemGap * AScale, Infinity,
+      Infinity, px, py);
+
+    content := GroupRect(krect, kx, ky, nk);
+    ctlR := GroupRect(prect, px, py, 3);
+    show := WHOf(content, o) > WHOf(maxS, o);
+    contentPos[0] := -content.X;
+    contentPos[1] := -content.Y;
+    containerPos[0] := 0;
+    containerPos[1] := 0;
+    ctlPos[0] := -ctlR.X;
+    ctlPos[1] := -ctlR.Y;
+    { retrieve2(pageButtonGap, itemGap) }
+    if IsNan(ASpec.PageButtonGap) then pbGap := AGap
+    else pbGap := ASpec.PageButtonGap * AScale;
+    if show then
+    begin
+      if ASpec.PageButtonAtEnd then
+        ctlPos[o] := ctlPos[o] + (WHOf(maxS, o) - WHOf(ctlR, o))
+      else
+        containerPos[o] := containerPos[o] + (WHOf(ctlR, o) + pbGap);
+    end;
+    { always aligned to the content as 'middle' }
+    ctlPos[1 - o] := ctlPos[1 - o] + (WHOf(content, 1 - o) / 2 - WHOf(ctlR, 1 - o) / 2);
+
+    { THE MAIN RECT counts the controller even when it is hidden: it is a
+      placeholder, kept and sized in }
+    mainR := TyXYWH(0, 0, 0, 0);
+    if show then SetWH(mainR, o, WHOf(maxS, o))
+    else SetWH(mainR, o, WHOf(content, o));
+    SetWH(mainR, 1 - o, JsMax(WHOf(content, 1 - o), WHOf(ctlR, 1 - o)));
+    SetXY(mainR, 1 - o, JsMin(0, XYOf(ctlR, 1 - o) + ctlPos[1 - o]));
+
+    rectSize := WHOf(maxS, o);
+    clipW := 0;
+    clipH := 0;
+    if show then
+    begin
+      offset := JsMax(WHOf(maxS, o) - WHOf(ctlR, o) - pbGap, 0);
+      if o = 0 then
+      begin
+        clipW := offset;
+        clipH := WHOf(mainR, 1 - o);
+      end
+      else
+      begin
+        clipH := offset;
+        clipW := WHOf(mainR, 1 - o);
+      end;
+      rectSize := offset;
+    end;
+
+    { ==== _getPageInfo ==== }
+    SetLength(ks, nk);
+    SetLength(ke, nk);
+    for k := 0 to nk - 1 do
+    begin
+      if o = 0 then ks[k] := XYOf(krect[k], 0) + kx[k]
+      else ks[k] := XYOf(krect[k], 1) + ky[k];
+      ke[k] := ks[k] + WHOf(krect[k], o);
+    end;
+    { _findTargetItemIndex: the first item unless the pager shows, then the
+      item whose data index IS scrollDataIndex (===), else the first }
+    target := -1;
+    if nk > 0 then
+    begin
+      target := 0;
+      if show and ASpec.ScrollIsNum then
+        for k := 0 to nk - 1 do
+          if kids[k] = ASpec.ScrollNum then target := k;
+    end;
+    finalPos := contentPos;
+    if nk > 0 then R.PageCount := 1 else R.PageCount := 0;
+    R.PageIndex := R.PageCount - 1;
+    R.PagePrevIndex := -1;
+    R.PageNextIndex := -1;
+    if target >= 0 then
+    begin
+      finalPos[o] := -ks[target];
+      winStart := target;
+      winEnd := target;
+      for i := target + 1 to nk do
+      begin
+        if i < nk then cur := i else cur := -1;
+        { half of the last item is out of the window, or the current item
+          does not reach it: a page starts at it or at the last one }
+        if ((cur < 0) and (ke[winEnd] > ks[winStart] + rectSize))
+          or ((cur >= 0) and not Intersect(cur, ks[winStart])) then
+        begin
+          if kids[winEnd] > kids[winStart] then winStart := winEnd
+          else winStart := cur;
+          if winStart >= 0 then
+          begin
+            if R.PageNextIndex < 0 then R.PageNextIndex := kids[winStart];
+            Inc(R.PageCount);
+          end;
+        end;
+        winEnd := cur;
+      end;
+      winStart := target;
+      winEnd := target;
+      for i := target - 1 downto -1 do
+      begin
+        cur := i;
+        if ((cur < 0) or not Intersect(winEnd, ks[cur]))
+          and (kids[winStart] < kids[winEnd]) then
+        begin
+          winEnd := winStart;
+          if R.PagePrevIndex < 0 then R.PagePrevIndex := kids[winStart];
+          Inc(R.PageCount);
+          Inc(R.PageIndex);
+        end;
+        winStart := cur;
+      end;
+    end;
+
+    { ==== back in layoutInner: the selector beside it all ==== }
+    if ASpec.HasSelector then
+    begin
+      if ASpec.SelectorAtEnd then
+        selPos[o] := selPos[o] + (WHOf(mainR, o) + selGap)
+      else
+      begin
+        offset := WHOf(selR, o) + selGap;
+        selPos[o] := selPos[o] - offset;
+        SetXY(mainR, o, XYOf(mainR, o) - offset);
+      end;
+      SetWH(mainR, o, WHOf(mainR, o) + (WHOf(selR, o) + selGap));
+      selPos[1 - o] := selPos[1 - o]
+        + (XYOf(mainR, 1 - o) + WHOf(mainR, 1 - o) / 2 - WHOf(selR, 1 - o) / 2);
+      SetWH(mainR, 1 - o, JsMax(WHOf(mainR, 1 - o), WHOf(selR, 1 - o)));
+      SetXY(mainR, 1 - o, JsMin(XYOf(mainR, 1 - o), XYOf(selR, 1 - o) + selPos[1 - o]));
+    end;
+  end;
+
+  { ==== LegendView.render: the group placed by the main rect ==== }
+  lay := TyLegendPlaceRect(ASpec, AContainer, mainR.W, mainR.H, APPI);
+  R.GroupX := lay.X - mainR.X;
+  R.GroupY := lay.Y - mainR.Y;
+  R.MainRect := mainR;
+  R.IsScroll := ASpec.IsScroll;
+  R.ShowController := show;
+  Compose(R.GroupX, R.GroupY, 0, 0, gAx, gAy);
+
+  { the items, under the container and the content }
+  R.ContentPosX := finalPos[0];
+  R.ContentPosY := finalPos[1];
+  R.ContentFromX := contentPos[0];
+  R.ContentFromY := contentPos[1];
+  Compose(containerPos[0], containerPos[1], gAx, gAy, cAx, cAy);
+  Compose(finalPos[0], finalPos[1], cAx, cAy, nAx, nAy);
+  for k := 0 to nk - 1 do
+  begin
+    if knl[k] then Continue;
+    i := kids[k];
+    Compose(kx[k], ky[k], nAx, nAy, ax, ay);
+    it := R.Items[i];
+    it.IconBox := TyRectF(ax, ay, ax + ASpec.ItemWidth * AScale,
+      ay + ASpec.ItemHeight * AScale);
+    it.TextX := it.TextX + ax;
+    it.TextY := it.TextY + ay;
+    it.Bounds := TyRectF(ax + krect[k].X, ay + krect[k].Y,
+      ax + krect[k].X + krect[k].W, ay + krect[k].Y + krect[k].H);
+    R.Items[i] := it;
+  end;
+
+  { the buttons }
+  Compose(selPos[0], selPos[1], gAx, gAy, sAx, sAy);
+  for k := 0 to ns - 1 do
+  begin
+    Compose(sx[k], sy[k], sAx, sAy, R.Selector[k].X, R.Selector[k].Y);
+    b := R.Selector[k].Local;
+    R.Selector[k].Box := TyRectF(R.Selector[k].X + b.X, R.Selector[k].Y + b.Y,
+      R.Selector[k].X + b.X + b.W, R.Selector[k].Y + b.Y + b.H);
+  end;
+
+  { the pager, and the clip on the container }
+  if ASpec.IsScroll then
+  begin
+    Compose(ctlPos[0], ctlPos[1], gAx, gAy, tAx, tAy);
+    PlacePart(R.PagePrev, px[0], py[0], tAx, tAy);
+    PlacePart(R.PageNext, px[2], py[2], tAx, tAy);
+    if ASpec.HasPageFormatter then
+      R.PageText := TyLegendPageText(ASpec.PageFormatter, R.PageIndex + 1,
+        R.PageCount)
+    else
+      R.PageText := cPagePlaceholder;
+    w := 0;
+    h := 0;
+    if ADeco.Measurer <> nil then
+      ADeco.Measurer.MeasureLine(R.PageText, ADeco.PageFontName,
+        ADeco.PageFontSize, ADeco.PageFontWeight, w, h);
+    R.PageTextPart := Default(TTyLegendPagerPart);
+    R.PageTextPart.Local := TyXYWH(0 - w / 2, 0 - h / 2, w, h);
+    PlacePart(R.PageTextPart, px[1], py[1], tAx, tAy);
+    R.HasClip := show;
+    if show then
+      R.Clip := TyRectF(cAx, cAy, cAx + clipW, cAy + clipH);
+  end;
+
+  { makeBackground(mainRect): the padding around it, group-local }
+  b := TyXYWH(mainR.X - APad[3], mainR.Y - APad[0],
+    mainR.W + APad[1] + APad[3], mainR.H + APad[0] + APad[2]);
+  R.Frame := TyRectF(gAx + b.X, gAy + b.Y, gAx + b.X + b.W, gAy + b.Y + b.H);
+  R.Content := TyRectF(gAx + mainR.X, gAy + mainR.Y, gAx + mainR.X + mainR.W,
+    gAy + mainR.Y + mainR.H);
+  R.Valid := True;
+end;
+
 function TyLayoutLegend(const ASpec: TTyLegendSpec;
   const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
   const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
   APPI: Integer): TTyLegendLayout;
+begin
+  Result := TyLayoutLegend(ASpec, AEntries, AFlags, ASources, AContainer,
+    AMeasurer, AFont, APPI, Default(TTyLegendDeco));
+end;
+
+function TyLayoutLegend(const ASpec: TTyLegendSpec;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
+  APPI: Integer; const ADeco: TTyLegendDeco): TTyLegendLayout;
 var
   n, i: Integer;
   scale, iw, ih, gap, tgap: Double;
@@ -1576,6 +2485,15 @@ begin
     Result.Items[i] := it;
   end;
 
+  { [Batch 98] A SELECTOR OR A PAGER is upstream's other layoutInner: the
+    plain one without either stays exactly as it was }
+  if ASpec.IsScroll or ASpec.HasSelector then
+  begin
+    LayoutRich(ASpec, ADeco, AContainer, APPI, scale, gap, pad, maxBox, rects,
+      newline, Result);
+    Exit;
+  end;
+
   BoxLayout(ASpec.Orient = tloHorizontal, rects, newline, gap,
     maxBox.W, maxBox.H, px, py);
 
@@ -1632,8 +2550,12 @@ end;
 function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
   const ALayout: TTyLegendLayout; const AInk: TTyLegendInk;
   const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList;
-  ALegendIndex: Integer; const AMeasurer: ITyTextMeasurer): Integer;
+  ALegendIndex: Integer; const AMeasurer: ITyTextMeasurer;
+  ASelHover: Integer): Integer;
 var
+  k: Integer;
+  hit: TTyRectF;
+  m: TTyMat2D;
   rtb: TTyRtBlockStyle;
   pieces: TTyRtPieceArray;
   rtScale: Double;
@@ -1655,6 +2577,48 @@ var
     Result.Silent := True;
     Result.Datum := TyChartNoDatum;
     Result.Style.Alpha := 1;
+  end;
+
+  { [Batch 98] an item's element under the scroll legend's clip }
+  procedure Clipped(var AEl: TTyChartElement);
+  begin
+    if not ALayout.HasClip then Exit;
+    AEl.HasClip := True;
+    AEl.ClipRect := ALayout.Clip;
+  end;
+
+  { the pager's icon: its fitted path where the part stands }
+  procedure DrawPagerIcon(const APart: TTyLegendPagerPart; ACanJump: Boolean;
+    AWhich: Integer);
+  begin
+    if APart.IsImage or (Length(APart.Path) = 0) then
+    begin
+      { an image icon is not drawn here; its box still takes the click }
+    end
+    else
+    begin
+      m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1;
+      m[4] := APart.X;
+      m[5] := APart.Y;
+      el := Blank;
+      el.Shape := TyMkZrShape(APart.Path, m, True);
+      el.Style.HasFill := True;
+      if ACanJump then el.Style.FillColor := AInk.PageIcon
+      else el.Style.FillColor := AInk.PageIconInactive;
+      AList.Add(el);
+      Inc(Result);
+    end;
+    { rectHover: the icon's box is its target, and it is clickable whether
+      or not it can jump -- a click that cannot does nothing }
+    if ALegendIndex >= 0 then
+    begin
+      el := Blank;
+      el.Shape := TyShapeRect(APart.Box);
+      el.Silent := False;
+      el.Datum := TyChartComponentDatum(ctkLegendPager, ALegendIndex, AWhich);
+      AList.Add(el);
+      Inc(Result);
+    end;
   end;
 
   { ONE ICON IN A GIVEN BOX. The marker on a line's own icon and the shared
@@ -1735,10 +2699,17 @@ begin
       which the icon and the words stay silent -- upstream's legend item is a
       single target too, so moving from its icon to its words is no
       out-and-over [Batch 84] }
-    if ALegendIndex >= 0 then
+    hit := it.Bounds;
+    { [Batch 98] the clip holds for the pointer too: zrender's isHover asks
+      every ancestor's clip path, so an item scrolled out of the window
+      takes no hover and no click }
+    if ALayout.HasClip then
+      hit := TyRectF(Max(hit.Left, ALayout.Clip.Left), Max(hit.Top, ALayout.Clip.Top),
+        Min(hit.Right, ALayout.Clip.Right), Min(hit.Bottom, ALayout.Clip.Bottom));
+    if (ALegendIndex >= 0) and (hit.Right > hit.Left) and (hit.Bottom > hit.Top) then
     begin
       el := Blank;
-      el.Shape := TyShapeRect(it.Bounds);
+      el.Shape := TyShapeRect(hit);
       { `hitRect.silent = !selectMode` (LegendView.ts:506): selectedMode
         false takes the pointer away -- no hover link, no click, and no
         legend mouse event either, its children being silent already
@@ -1769,6 +2740,7 @@ begin
         pts[1] := TyPointF(it.IconBox.Right,
                            (it.IconBox.Top + it.IconBox.Bottom) / 2);
         el := Blank;
+        Clipped(el);
         el.Shape := TyShapePolyline(pts);
         el.Style.StrokeWidthLogical := pen;
         if it.Selected then
@@ -1792,6 +2764,7 @@ begin
                   (it.IconBox.Top + it.IconBox.Bottom - size) / 2,
                   (it.IconBox.Left + it.IconBox.Right + size) / 2,
                   (it.IconBox.Top + it.IconBox.Bottom + size) / 2));
+        Clipped(el);
         AList.Add(el);
         Inc(Result);
       end;
@@ -1799,6 +2772,7 @@ begin
     else if kind <> tsyNone then
     begin
       el := Icon(kind, empty, path, it.IconBox);
+      Clipped(el);
       if it.HasOpacity then
         el.Style.Alpha := Min(Double(1), Max(Double(0), it.Opacity));
       AList.Add(el);
@@ -1808,6 +2782,7 @@ begin
     if it.Text <> '' then
     begin
       el := Blank;
+      Clipped(el);
       { A PLAIN RECT UNDER THE WORDS, never painted -- it is what gives the
         caption a place in a list whose every other member is a shape. }
       el.Shape := TyShapeRect(TyRectF(
@@ -1849,6 +2824,60 @@ begin
       AList.Add(el);
       Inc(Result);
     end;
+  end;
+
+  { [Batch 98] THE SELECTOR'S BUTTONS: the words as their block, in the
+    hovered ink while the pointer is on one (enableHoverEmphasis), and the
+    whole box as the target }
+  for k := 0 to High(ALayout.Selector) do
+  begin
+    if ALegendIndex >= 0 then
+    begin
+      el := Blank;
+      el.Shape := TyShapeRect(ALayout.Selector[k].Box);
+      el.Silent := False;
+      el.Datum := TyChartComponentDatum(ctkLegendSelector, ALegendIndex, k);
+      AList.Add(el);
+      Inc(Result);
+    end;
+    if Length(ALayout.Selector[k].Pieces) = 0 then Continue;
+    el := Blank;
+    el.Shape := TyShapeRect(ALayout.Selector[k].Box);
+    el.Caption.Text := ALayout.Selector[k].Title;
+    el.Caption.FontName := AFont.Name;
+    el.Caption.FontSizeLogical := AFont.SizeLogical;
+    el.Caption.FontWeight := AFont.Weight;
+    el.Caption.Colour := AInk.Text;
+    el.Caption.X := ALayout.Selector[k].X;
+    el.Caption.Y := ALayout.Selector[k].Y;
+    el.Caption.AnchorH := tahLeft;
+    el.Caption.AnchorV := tavTop;
+    if k = ASelHover then el.Caption.RtPieces := ALayout.Selector[k].EmphPieces
+    else el.Caption.RtPieces := ALayout.Selector[k].Pieces;
+    if APPI > 0 then el.Caption.RtScale := APPI / 96 else el.Caption.RtScale := 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
+
+  { [Batch 98] THE PAGER, only when the items overflow: hidden, it is a
+    placeholder neither drawn nor hit }
+  if ALayout.IsScroll and ALayout.ShowController then
+  begin
+    DrawPagerIcon(ALayout.PagePrev, ALayout.PagePrevIndex >= 0, 0);
+    el := Blank;
+    el.Shape := TyShapeRect(ALayout.PageTextPart.Box);
+    el.Caption.Text := ALayout.PageText;
+    el.Caption.FontName := ALayout.PageFontName;
+    el.Caption.FontSizeLogical := ALayout.PageFontSize;
+    el.Caption.FontWeight := ALayout.PageFontWeight;
+    el.Caption.Colour := AInk.PageText;
+    el.Caption.X := ALayout.PageTextPart.X;
+    el.Caption.Y := ALayout.PageTextPart.Y;
+    el.Caption.AnchorH := tahCentre;
+    el.Caption.AnchorV := tavMiddle;
+    AList.Add(el);
+    Inc(Result);
+    DrawPagerIcon(ALayout.PageNext, ALayout.PageNextIndex >= 0, 1);
   end;
 end;
 
