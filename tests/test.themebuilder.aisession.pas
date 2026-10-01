@@ -346,51 +346,6 @@ begin
   AssertEquals('S16: inner kept', 'a'#10'b', b);
 end;
 
-{ an OpenAI stream answering ATEXT in a few events }
-function OpenAIStream(const AText: string): RawByteString;
-
-  function Chunk(const AContent: string; const AFinish: string): string;
-  var
-    o, c, d: TJSONObject;
-    arr: TJSONArray;
-  begin
-    o := TJSONObject.Create;
-    try
-      o.Add('id', 'chatcmpl-s17');
-      o.Add('object', 'chat.completion.chunk');
-      arr := TJSONArray.Create;
-      c := TJSONObject.Create;
-      c.Add('index', 0);
-      d := TJSONObject.Create;
-      if AContent <> '' then
-        d.Add('content', AContent);
-      c.Add('delta', d);
-      if AFinish <> '' then
-        c.Add('finish_reason', AFinish)
-      else
-        c.Add('finish_reason', TJSONNull.Create);
-      arr.Add(c);
-      o.Add('choices', arr);
-      Result := 'data: ' + o.AsJSON + #10#10;
-    finally
-      o.Free;
-    end;
-  end;
-
-var
-  i, size: Integer;
-begin
-  Result := '';
-  size := Length(AText) div 4 + 1;
-  i := 1;
-  while i <= Length(AText) do
-  begin
-    Result := Result + Chunk(Copy(AText, i, size), '');
-    Inc(i, size);
-  end;
-  Result := Result + Chunk('', 'stop') + 'data: [DONE]'#10#10;
-end;
-
 procedure TTbAiSessionTests.TestTheRealBackend;
 var
   srv: TTbFakeHttpServer;
@@ -401,7 +356,7 @@ var
 begin
   srv := TTbFakeHttpServer.Create;
   try
-    data := OpenAIStream(TbAnswerWith(BlueTemplate));
+    data := TbOpenAIStream(TbAnswerWith(BlueTemplate));
     half := Length(data) div 2;
     srv.Script([FakeSend(FakeHead(200, 'text/event-stream', True)),
       FakeSend(FakeChunk(Copy(data, 1, half))), FakeSleep(100),

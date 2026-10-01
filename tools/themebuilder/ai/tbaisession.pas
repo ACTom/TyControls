@@ -771,8 +771,11 @@ begin
 end;
 
 procedure TTbAiSession.SetBackend(AValue: TTbChatBackend);
+var
+  wasBusy: Boolean;
 begin
   if AValue = FBackend then Exit;
+  wasBusy := FBusy;
   if FBackend <> nil then
   begin
     FBackend.OnDelta := nil;
@@ -780,20 +783,17 @@ begin
     FBackend.Cancel;
     FreeAndNil(FBackend);
   end;
-  if FBusy then
-  begin
-    { the request went with its backend: it will not call back any more }
-    FBusy := False;
-    FStopping := False;
-    FOutcome.Sentence := rsTbAiCancelled;
-    FStage := tasStopped;
-  end;
   FBackend := AValue;
   if FBackend <> nil then
   begin
     FBackend.OnDelta := @BackendDelta;
     FBackend.OnDone := @BackendDone;
   end;
+  { the request went with its backend and will not call back: it ends here as stopped,
+    the way a Stop ends -- the page hears it (OnStage, OnFinished) and goes idle. A
+    candidate an earlier round of it produced is kept, to be looked at }
+  if wasBusy then
+    Finish(tasStopped, rsTbAiCancelled);
 end;
 
 procedure TTbAiSession.SetStage(AStage: TTbAiStage);

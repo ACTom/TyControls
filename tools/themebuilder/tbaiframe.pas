@@ -67,6 +67,11 @@ type
     FShown: Integer;              { how much of Session.Streamed the box shows }
     FShownRound: Integer;
     FLineOpen: Boolean;           { the box's last line is still being written }
+    { the backend RefreshProfiles made, and for what: the next refresh replaces it only
+      when the current service or its key changed }
+    FMadeBackend: TTbChatBackend;
+    FMadeProfile: TTbAiProfile;
+    FMadeKey: string;
     FOnGetDocument: TTbAiDocEvent;
     FOnCandidate: TNotifyEvent;
     FOnSettings: TNotifyEvent;
@@ -152,11 +157,19 @@ begin
     Result := '';
 end;
 
+function SameProfile(const A, B: TTbAiProfile): Boolean;
+begin
+  Result := (A.Id = B.Id) and (A.Name = B.Name) and (A.Format = B.Format) and
+    (A.BaseUrl = B.BaseUrl) and (A.Model = B.Model) and (A.MaxOutput = B.MaxOutput) and
+    (A.TimeoutSec = B.TimeoutSec);
+end;
+
 procedure TTbAiFrame.RefreshProfiles;
 var
   i: Integer;
   cur: TTbAiProfile;
   has: Boolean;
+  key: string;
 begin
   if FSettings = nil then Exit;
   has := FSettings.Current(cur);
@@ -180,13 +193,25 @@ begin
     SetStatus('');
   if has then
   begin
-    { the session's backend follows the chosen service (a running request stops) }
-    FSession.Backend := TTbClientBackend.Create(cur, FSettings.GetKey(cur.Id));
+    { the session's backend follows the chosen service -- only when it really changed
+      (the settings' OK with nothing changed must not drop a running request); when it
+      did, a running request stops and says so }
+    key := FSettings.GetKey(cur.Id);
+    if (FSession.Backend = nil) or (FSession.Backend <> FMadeBackend) or
+       not SameProfile(FMadeProfile, cur) or (FMadeKey <> key) then
+    begin
+      FMadeBackend := TTbClientBackend.Create(cur, key);
+      FMadeProfile := cur;
+      FMadeKey := key;
+      FSession.Backend := FMadeBackend;
+    end;
     LblSentTo.Caption := Format(rsTbAiSentTo, [TbHostOf(cur.BaseUrl)]);
   end
   else
   begin
     FSession.Backend := nil;
+    FMadeBackend := nil;
+    FMadeKey := '';
     LblSentTo.Caption := '';
   end;
   { http:// to another computer: what is sent can be read on the way (with a key nothing
@@ -212,6 +237,9 @@ begin
   BtnGenerate.Enabled := FAvailable and (FSession.Backend <> nil) and not FSession.Busy;
   BtnStop.Enabled := FSession.Busy;
   BtnNewChat.Enabled := not FSession.Busy;
+  { another service in the middle of a request would end it: not while one runs }
+  ProfileCombo.Enabled := not FSession.Busy;
+  BtnSettings.Enabled := not FSession.Busy;
 end;
 
 procedure TTbAiFrame.UpdateConversation;
@@ -411,8 +439,10 @@ begin
   if FSession.Outcome.HasCandidate then
   begin
     BtnShowCompare.Enabled := True;
-    if Assigned(FOnCandidate) then
-      FOnCandidate(Self);     { the comparison opens by itself }
+    { the comparison opens by itself -- not after a stop (a candidate an earlier round
+      left waits behind "Show the comparison") }
+    if (FSession.Stage <> tasStopped) and Assigned(FOnCandidate) then
+      FOnCandidate(Self);
   end;
 end;
 

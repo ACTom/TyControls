@@ -49,8 +49,57 @@ type
 
 { '... sentence'#10'```tycss'#10 + ABody + #10'```' }
 function TbAnswerWith(const ABody: string; const ALead: string = 'Here it is.'): string;
+{ an OpenAI stream answering AText in a few events, finish_reason stop, [DONE] }
+function TbOpenAIStream(const AText: string): RawByteString;
 
 implementation
+
+uses
+  fpjson;
+
+function TbOpenAIStream(const AText: string): RawByteString;
+
+  function Chunk(const AContent: string; const AFinish: string): string;
+  var
+    o, c, d: TJSONObject;
+    arr: TJSONArray;
+  begin
+    o := TJSONObject.Create;
+    try
+      o.Add('id', 'chatcmpl-test');
+      o.Add('object', 'chat.completion.chunk');
+      arr := TJSONArray.Create;
+      c := TJSONObject.Create;
+      c.Add('index', 0);
+      d := TJSONObject.Create;
+      if AContent <> '' then
+        d.Add('content', AContent);
+      c.Add('delta', d);
+      if AFinish <> '' then
+        c.Add('finish_reason', AFinish)
+      else
+        c.Add('finish_reason', TJSONNull.Create);
+      arr.Add(c);
+      o.Add('choices', arr);
+      Result := 'data: ' + o.AsJSON + #10#10;
+    finally
+      o.Free;
+    end;
+  end;
+
+var
+  i, size: Integer;
+begin
+  Result := '';
+  size := Length(AText) div 4 + 1;
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    Result := Result + Chunk(Copy(AText, i, size), '');
+    Inc(i, size);
+  end;
+  Result := Result + Chunk('', 'stop') + 'data: [DONE]'#10#10;
+end;
 
 function TbAnswerWith(const ABody, ALead: string): string;
 begin

@@ -28,7 +28,10 @@ type
     procedure ModalDiscard(Sender: TObject);
     procedure ModalLeave(Sender: TObject);
     procedure ModalOllama(Sender: TObject);
+    procedure ModalSettingsOk(Sender: TObject);
+    procedure ModalSettingsOtherModel(Sender: TObject);
     function PreviewPrimaryBg: Integer;
+    procedure RealAi(AServer: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -106,6 +109,8 @@ type
     procedure TestTheAnswerStreamsIn;            { M12 }
     { phase 3, after the reviews }
     procedure TestTheAiPageWarnsOfPlainHttp;     { M13 }
+    procedure TestSettingsOkDuringAGeneration;   { M14 }
+    procedure TestAnotherServiceDuringAGeneration;   { M15 }
   end;
 
 implementation
@@ -116,7 +121,7 @@ uses
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
   tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tyControls.TyLabel, tbthemesource, tbrules,
   tbaiformat, tbaiclient, tbaisettings, tbaisession, tbaiframe, tbcompareform, tbaisettingsform,
-  tbdiff, tbaichecks;
+  tbdiff, tbaichecks, tbfakehttp;
 
 const
   { a document whose one value no base theme has }
@@ -2068,6 +2073,55 @@ begin
   b.FinishHeld;
 end;
 
+{ the settings window answered as the user would: OK with nothing changed; the comparison
+  window left alone }
+procedure TTbMainFormTests.ModalSettingsOk(Sender: TObject);
+begin
+  Inc(FModals);
+  if Sender is TTbAiSettingsForm then
+    TTbAiSettingsForm(Sender).BtnOk.Click
+  else if Sender is TCustomForm then
+    TCustomForm(Sender).ModalResult := mrCancel;
+end;
+
+{ ... the current service's model changed, then OK }
+procedure TTbMainFormTests.ModalSettingsOtherModel(Sender: TObject);
+begin
+  Inc(FModals);
+  if Sender is TTbAiSettingsForm then
+  begin
+    TTbAiSettingsForm(Sender).EdtModel.Text := 'another-model';
+    TTbAiSettingsForm(Sender).BtnOk.Click;
+  end
+  else if Sender is TCustomForm then
+    TCustomForm(Sender).ModalResult := mrCancel;
+end;
+
+{ a service on the local server AServer (a TTbFakeHttpServer), current, with the real client }
+procedure TTbMainFormTests.RealAi(AServer: TObject);
+var
+  p: TTbAiProfile;
+begin
+  p := TbPresetProfile(tapCustom);
+  p.BaseUrl := TTbFakeHttpServer(AServer).Url('/v1');
+  p.Model := 'm';
+  p.TimeoutSec := 10;
+  FForm.AiSettings.Put(p);
+  FForm.AiSettings.CurrentId := p.Id;
+  FForm.Ai.RefreshProfiles;
+end;
+
+{ wait (the worker's results come through the queue) until AStage or AMs }
+function WaitAiStage(AForm: TTbMainForm; AStage: TTbAiStage; AMs: Integer): Boolean;
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  while (AForm.Ai.Session.Stage <> AStage) and (GetTickCount64 - t0 < QWord(AMs)) do
+    CheckSynchronize(10);
+  Result := AForm.Ai.Session.Stage = AStage;
+end;
+
 { wait (the worker's results come through the queue) until the AI page is idle again }
 function WaitAiIdle(AForm: TTbMainForm; AMs: Integer): Boolean;
 var
@@ -2103,6 +2157,79 @@ begin
     AssertEquals('M13: nothing was asked of a transport', 0, TbRecordedRequests);
   finally
     TbRecordTransports(False);
+  end;
+end;
+
+{ M14: OK in the settings window with nothing changed, in the middle of a real request:
+  the request goes on and its answer arrives }
+procedure TTbMainFormTests.TestSettingsOkDuringAGeneration;
+var
+  srv: TTbFakeHttpServer;
+  data: RawByteString;
+  before: TObject;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    data := TbOpenAIStream(TbAnswerWith(BlueMinimal));
+    srv.Script([FakeSend(FakeHead(200, 'text/event-stream', True)),
+      FakeSend(FakeChunk(Copy(data, 1, 40))), FakeSleep(800),
+      FakeSend(FakeChunk(Copy(data, 41, MaxInt))), FakeSend(FakeLastChunk)]);
+    RealAi(srv);
+    before := FForm.Ai.Session.Backend;
+    FForm.Ai.EdtPrompt.Text := 'blue';
+    FForm.Ai.GenerateClick(nil);
+    AssertTrue('busy', FForm.Ai.Session.Busy);
+    AssertFalse('M14: no other service while it runs', FForm.Ai.ProfileCombo.Enabled);
+    AssertFalse('M14: nor the settings button', FForm.Ai.BtnSettings.Enabled);
+    TTbMainForm.ShowModalForTest := @ModalSettingsOk;
+    FForm.MnuAiSettingsClick(nil);        { the menu item is still there }
+    AssertEquals('the settings were shown', 1, FModals);
+    AssertTrue('M14: the same backend', FForm.Ai.Session.Backend = before);
+    AssertTrue('M14: still running', FForm.Ai.Session.Busy);
+    AssertTrue('M14: finished', WaitAiIdle(FForm, 10000));
+    AssertTrue('M14: done: ' + FForm.Ai.Session.Outcome.Sentence, FForm.Ai.Session.Stage = tasDone);
+    AssertTrue('M14: with its answer', FForm.Ai.Session.Outcome.HasCandidate);
+    AssertTrue('M14: the service can be changed again', FForm.Ai.ProfileCombo.Enabled);
+  finally
+    FreeAndNil(FForm);
+    srv.Free;
+  end;
+end;
+
+{ M15: the current service changed in the middle of a real request's second round: the
+  request ends as stopped, the page goes idle, the first round's candidate stays }
+procedure TTbMainFormTests.TestAnotherServiceDuringAGeneration;
+var
+  srv: TTbFakeHttpServer;
+  finished: Integer;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    { round 1: a file with an unknown property, fed back; round 2: hangs }
+    srv.Queue([FakeSend(FakeHead(200, 'text/event-stream', False,
+      TbOpenAIStream(TbAnswerWith('TyButton { frobnicate: 1px; }'))))]);
+    srv.Script([FakeSend(FakeHead(200, 'text/event-stream', True)), FakeHold]);
+    RealAi(srv);
+    TTbMainForm.ShowModalForTest := @ModalSettingsOtherModel;
+    FForm.Ai.EdtPrompt.Text := 'blue';
+    FForm.Ai.GenerateClick(nil);
+    AssertTrue('M15: the second round started', WaitAiStage(FForm, tasRetrying, 10000));
+    AssertTrue('the first round left a candidate', FForm.Ai.Session.Outcome.HasCandidate);
+    finished := FModals;
+    FForm.MnuAiSettingsClick(nil);
+    AssertEquals('the settings were shown, nothing else', finished + 1, FModals);
+    AssertFalse('M15: not busy', FForm.Ai.Session.Busy);
+    AssertTrue('M15: stopped', FForm.Ai.Session.Stage = tasStopped);
+    AssertEquals('M15: the status line says so', rsTbAiCancelled, FForm.Ai.LblStatus.Caption);
+    AssertTrue('M15: Generate again', FForm.Ai.BtnGenerate.Enabled);
+    AssertFalse('M15: no Stop', FForm.Ai.BtnStop.Enabled);
+    AssertTrue('M15: the first round''s candidate is kept', FForm.Ai.Session.Outcome.HasCandidate);
+    AssertTrue('M15: and can be shown', FForm.Ai.BtnShowCompare.Enabled);
+    AssertEquals('M15: the new service is the one used',
+      'another-model', FForm.Ai.Session.Backend.Profile.Model);
+  finally
+    FreeAndNil(FForm);
+    srv.Free;
   end;
 end;
 
