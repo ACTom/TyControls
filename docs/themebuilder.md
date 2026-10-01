@@ -18,6 +18,8 @@ Linux 上按需要的 widgetset 加参数，例如 `--ws=gtk2`、`--ws=qt6`；ma
 
 界面跟随系统语言，中文系统下是中文。
 
+**图标**：Windows 上图标编进了程序（`tools/themebuilder/themebuilder.ico`，任务栏、标题栏左边都是它）。Linux / macOS 的程序文件不带图标，要的话用 `tools/themebuilder/icon/themebuilder-256.png`：Linux 在 `.desktop` 文件里写 `Icon=<这张图的路径>`；macOS 打成 `.app` 时用它做 `.icns`（工具没有现成的 `.icns`）。图标由 `scripts/gen-themebuilder-icon.ps1` 生成，改了图标重跑它再重编工具。
+
 ## 界面
 
 - **左边是侧栏**，三页：种子、问题、AI。「视图」菜单里的同名项可以切到对应页，再点一次收起侧栏。

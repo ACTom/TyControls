@@ -37,7 +37,7 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.FormSurface, tyControls.Menu,
   tyControls.StatusBar, tyControls.ToolWindows, tyControls.ListBox, tyControls.Panel,
   tyControls.Splitter, tyControls.Icons.Lucide, tyControls.Dialogs.FileDialog,
-  tyControls.ThemeLint, tyControls.Design.CssEditKit,
+  tyControls.ThemeLint, tyControls.Design.CssEditKit, tyControls.Image,
   tbdocument, tbsettings, tbproblems, tbpreview, tbeditorlook, tbcssscan, tbseedsframe,
   tbcoverageform, tbexportform, tbsnippetsform, tbaisettings, tbaisession, tbaiframe,
   tbcompareform, tbaisettingsform;
@@ -69,6 +69,7 @@ type
   TTbMainForm = class(TTyForm)
     Surface: TTyFormSurface;
     Bar: TTyTitleBar;
+    AppIcon: TTyImage;
     MainMenuBar: TTyMenuBar;
     Status: TTyStatusBar;
     SideBar: TTyToolWindowBar;
@@ -205,6 +206,9 @@ type
       its ModalResult afterwards is the answer }
     class var ShowModalForTest: TNotifyEvent;
     procedure RefreshNow;                          { lint + preview + problem list, now }
+    { the application's icon (Application.Icon: the exe's MAINICON, themebuilder.ico) at the
+      left of the title bar, in the size nearest the slot; hidden when there is none }
+    procedure ShowAppIcon;
     procedure NewMinimal;
     procedure NewFromBuiltin(const AName: string);
     function OpenFile(const AFileName: string): Boolean;
@@ -351,6 +355,7 @@ begin
     MnuAppearance.Add(item);
   end;
   RebuildRecentMenu;
+  ShowAppIcon;
 
   { the editor's colours follow the tool's theme; the listener goes in FormDestroy (the
     default controller outlives this window) }
@@ -431,6 +436,27 @@ begin
     FSettings.Save;
   except
     { the next start begins from the defaults or the last file that was written }
+  end;
+end;
+
+procedure TTbMainForm.ShowAppIcon;
+var
+  ico: TIcon;
+  bmp: TBitmap;
+begin
+  AppIcon.Picture.Clear;
+  AppIcon.Visible := Application.Icon.Count > 0;
+  if not AppIcon.Visible then Exit;
+  ico := TIcon.Create;
+  bmp := TBitmap.Create;
+  try
+    ico.Assign(Application.Icon);
+    ico.Current := ico.GetBestIndexForSize(Size(AppIcon.Width, AppIcon.Height));
+    bmp.Assign(ico);
+    AppIcon.Picture.Assign(bmp);
+  finally
+    bmp.Free;
+    ico.Free;
   end;
 end;
 

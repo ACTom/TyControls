@@ -554,6 +554,9 @@ begin
       Application.Title := 'Theme Builder';
       Application.Initialize;
       Application.OnException := @Hooks.AppException;
+      { the tool's own icon, as its exe carries it (MAINICON): the title bar shows it }
+      Application.Icon.LoadFromFile(RepoDir + 'tools' + PathDelim + 'themebuilder' + PathDelim +
+        'themebuilder.ico');
 
       TmpDir := IncludeTrailingPathDelimiter(GetTempDir(False)) +
         Format('tbshots-%d', [GetProcessID]) + PathDelim;

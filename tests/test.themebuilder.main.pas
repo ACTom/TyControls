@@ -124,6 +124,7 @@ type
     { acceptance feedback }
     procedure TestTheEditorTextIsSmooth;         { M25 }
     procedure TestTheWindowIsWiderForTheEditor;  { M26 }
+    procedure TestTheToolHasAnIcon;              { M27 }
   end;
 
 implementation
@@ -2692,6 +2693,78 @@ begin
   AssertEquals('M26: 1480 wide (or the work area)', Min(1480, Screen.WorkAreaWidth), FForm.Width);
   AssertEquals('M26: the preview keeps its width', 560, FForm.PreviewHost.Width);
   AssertEquals('M26: the editor has the rest', 634, FForm.Editor.Width);
+end;
+
+{ M27: the tool has an icon. The .ico sits beside the .lpi under the project's name with
+  <Icon Value="0"/> (the only place Lazarus looks: lazbuild links it as MAINICON, which
+  Application.Icon and the task bar take), it holds the six sizes and LCL's own reader -- the
+  one that runs at start-up -- reads them all; the 256 px PNG for Linux / macOS is there; and
+  a window built while the application has the icon shows it at the left of its title bar,
+  in the 16 px picture. }
+procedure TTbMainFormTests.TestTheToolHasAnIcon;
+const
+  cSizes: array[0..5] of Integer = (16, 24, 32, 48, 64, 256);
+var
+  ico, keep: TIcon;
+  png: TPortableNetworkGraphic;
+  lpi: TStringList;
+  i, k: Integer;
+  fmt: TPixelFormat;
+  w, h: Word;
+  found: Boolean;
+begin
+  lpi := LoadLines(ToolDir + 'themebuilder.lpi');
+  try
+    AssertTrue('M27: the project has an icon', Pos('<Icon Value="0"/>', lpi.Text) > 0);
+  finally
+    lpi.Free;
+  end;
+  AssertTrue('M27: the .ico beside the .lpi', FileExists(ToolDir + 'themebuilder.ico'));
+  ico := TIcon.Create;
+  try
+    ico.LoadFromFile(ToolDir + 'themebuilder.ico');
+    AssertEquals('M27: six sizes, all read by LCL', 6, ico.Count);
+    for k := 0 to High(cSizes) do
+    begin
+      found := False;
+      for i := 0 to ico.Count - 1 do
+      begin
+        ico.GetDescription(i, fmt, h, w);
+        if (w = cSizes[k]) and (h = cSizes[k]) then
+          found := True;
+      end;
+      AssertTrue('M27: ' + IntToStr(cSizes[k]) + ' px', found);
+    end;
+  finally
+    ico.Free;
+  end;
+  png := TPortableNetworkGraphic.Create;
+  try
+    png.LoadFromFile(ToolDir + 'icon' + PathDelim + 'themebuilder-256.png');
+    AssertEquals('M27: the PNG is 256 wide', 256, png.Width);
+    AssertEquals('M27: and 256 high', 256, png.Height);
+  finally
+    png.Free;
+  end;
+
+  keep := TIcon.Create;
+  try
+    keep.Assign(Application.Icon);
+    Application.Icon.LoadFromFile(ToolDir + 'themebuilder.ico');
+    try
+      FreeAndNil(FForm);
+      FForm := TTbMainForm.Create(nil);
+      AssertTrue('M27: the title bar shows it', FForm.AppIcon.Visible);
+      AssertTrue('M27: a picture', FForm.AppIcon.HasGraphic);
+      AssertEquals('M27: the 16 px one', 16, FForm.AppIcon.Picture.Width);
+    finally
+      Application.Icon.Assign(keep);
+    end;
+  finally
+    keep.Free;
+  end;
+  FForm.ShowAppIcon;
+  AssertEquals('M27: no icon, nothing shown', Application.Icon.Count > 0, FForm.AppIcon.Visible);
 end;
 
 initialization

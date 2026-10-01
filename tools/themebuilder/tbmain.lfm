@@ -27,8 +27,18 @@ object TbMainForm: TTbMainForm
       Align = alTop
       Caption = 'Theme Builder  · TyControls'
       TitleAlignment = taCenter
+      object AppIcon: TTyImage
+        Left = 9
+        Height = 16
+        Top = 9
+        Width = 16
+        Center = True
+        Proportional = True
+        Stretch = True
+        Transparent = True
+      end
       object MainMenuBar: TTyMenuBar
-        Left = 4
+        Left = 31
         Height = 26
         Top = 4
         Width = 160
