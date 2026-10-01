@@ -415,6 +415,202 @@ msgstr "确定"
 msgid "Cancel"
 msgstr "取消"
 
+#: ttbmainform.seedswin.caption
+msgid "Seeds"
+msgstr "种子"
+
+#: ttbmainform.seedswin.striphint
+msgid "Seeds"
+msgstr "种子"
+
+#: ttbmainform.mnuexportsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuexport.caption
+msgid "&Export theme bundle..."
+msgstr "导出主题包(&E)…"
+
+#: ttbmainform.mnusnippets.caption
+msgid "&Use it in a program..."
+msgstr "在程序里怎么用(&U)…"
+
+#: ttbmainform.mnuseeds.caption
+msgid "&Seeds"
+msgstr "种子(&S)"
+
+#: ttbmainform.mnuviewsep2.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnucoverage.caption
+msgid "&Coverage check..."
+msgstr "覆盖检查(&C)…"
+
+#: ttbseedsframe.splitbutton.caption
+msgid "Split into light and dark"
+msgstr "拆成明暗两套"
+
+#: ttbseedsframe.hdrleft.caption
+msgid "Light"
+msgstr "亮色"
+
+#: ttbseedsframe.hdrright.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: ttbseedsframe.lblaccent.caption
+msgid "--accent"
+msgstr "--accent"
+
+#: ttbseedsframe.lblsurface.caption
+msgid "--surface"
+msgstr "--surface"
+
+#: ttbseedsframe.lblonsurface.caption
+msgid "--on-surface"
+msgstr "--on-surface"
+
+#: ttbseedsframe.lblborder.caption
+msgid "--border"
+msgstr "--border"
+
+#: ttbseedsframe.lbldanger.caption
+msgid "--danger"
+msgstr "--danger"
+
+#: ttbseedsframe.lblradius.caption
+msgid "--radius"
+msgstr "--radius"
+
+#: ttbcoverageform.caption
+msgid "Coverage check"
+msgstr "覆盖检查"
+
+#: ttbcoverageform.bar.caption
+msgid "Coverage check"
+msgstr "覆盖检查"
+
+#: ttbcoverageform.lblnotshown.caption
+msgid "Styled in this theme but not in the preview:"
+msgstr "主题写了、预览里没有的："
+
+#: ttbcoverageform.lbldefault.caption
+msgid "In the preview, but neither this theme nor the base styles them (they keep their built-in look):"
+msgstr "预览里有、主题和底层都没写的（它们保持内置的样子）："
+
+#: ttbcoverageform.lblhint.caption
+msgid "Double-click an entry to go to its rule, or add one."
+msgstr "双击一项跳到它的规则，没有就添加一条。"
+
+#: ttbcoverageform.btnclose.caption
+msgid "Close"
+msgstr "关闭"
+
+#: ttbexportform.caption
+msgid "Export a theme bundle"
+msgstr "导出主题包"
+
+#: ttbexportform.bar.caption
+msgid "Export a theme bundle"
+msgstr "导出主题包"
+
+#: ttbexportform.lblname.caption
+msgid "Name:"
+msgstr "名称："
+
+#: ttbexportform.lblauthor.caption
+msgid "Author:"
+msgstr "作者："
+
+#: ttbexportform.lblversion.caption
+msgid "Version:"
+msgstr "版本："
+
+#: ttbexportform.radfolder.caption
+msgid "A folder"
+msgstr "文件夹"
+
+#: ttbexportform.radzip.caption
+msgid "A zip file"
+msgstr "zip 文件"
+
+#: ttbexportform.lbltarget.caption
+msgid "Export to:"
+msgstr "导出到："
+
+#: ttbexportform.btnbrowse.caption
+msgid "Browse..."
+msgstr "浏览…"
+
+#: ttbexportform.lblfiles.caption
+msgid "Files that go in with theme.tycss and theme.json:"
+msgstr "随 theme.tycss 和 theme.json 一起打包的文件："
+
+#: ttbexportform.btnexport.caption
+msgid "Export"
+msgstr "导出"
+
+#: ttbexportform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: ttbsnippetsform.caption
+msgid "Use it in a program"
+msgstr "在程序里怎么用"
+
+#: ttbsnippetsform.bar.caption
+msgid "Use it in a program"
+msgstr "在程序里怎么用"
+
+#: ttbsnippetsform.tabfile.caption
+msgid "From a file"
+msgstr "从文件"
+
+#: ttbsnippetsform.lblfile.caption
+msgid "Put the .tycss file next to your program."
+msgstr "把 .tycss 文件放在程序旁边。"
+
+#: ttbsnippetsform.btncopyfile.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.tabbundle.caption
+msgid "From a theme bundle"
+msgstr "从主题包"
+
+#: ttbsnippetsform.lblfolder.caption
+msgid "A folder bundle, exported next to your program:"
+msgstr "文件夹主题包，导出到程序旁边："
+
+#: ttbsnippetsform.btncopyfolder.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.lblzip.caption
+msgid "A zip bundle (a theme that refers to no other file):"
+msgstr "zip 主题包（主题不引用其他文件时可用）："
+
+#: ttbsnippetsform.btncopyzip.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.tabregister.caption
+msgid "Registered by name"
+msgstr "注册成命名主题"
+
+#: ttbsnippetsform.lblregister.caption
+msgid "The theme compiled into your program, no file needed:"
+msgstr "主题编译进程序，不需要任何文件："
+
+#: ttbsnippetsform.btncopyregister.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.btnclose.caption
+msgid "Close"
+msgstr "关闭"
+
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: tbmain.rstbconverted
