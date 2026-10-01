@@ -554,6 +554,63 @@ type
     property Calendar:    TTyCalendar      read FCalendar;
 
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { Off by default, unlike LCL's picker (datetimepicker.pas:394 publishes it True):
+      turning it on for everyone would resize every field on every existing form. On,
+      the control measures its own text, checkbox and button and grows to fit -- which
+      is what a skin with a larger font or fatter padding needs, and what the fixed
+      130px width could not do. }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { Published so DateTime appears in the Object Inspector and is streamed. }
     property DateTime:    TDateTime       read FDateTime    write SetDateTime;
     property Kind:         TTyDateTimeKind read FKind        write SetKind        default dtkDate;
@@ -587,12 +644,6 @@ type
       at all. Was hardwired to Kind, so a date field could only drop a calendar and the
       button column was spent whether or not anything used it. }
     property DateMode:     TTyDTDateMode   read FDateMode    write SetDateMode    default dmComboBox;
-    { Off by default, unlike LCL's picker (datetimepicker.pas:394 publishes it True):
-      turning it on for everyone would resize every field on every existing form. On,
-      the control measures its own text, checkbox and button and grows to fit -- which
-      is what a skin with a larger font or fatter padding needs, and what the fixed
-      130px width could not do. }
-    property AutoSize;
     { Whether the USER may empty the field (N or Delete). Code can always write
       DateTime := TyNullDate -- LCL draws the line in the same place
       (datetimepicker.pas:3731 checks it, SetDateTime :1202 does not), and it is the
@@ -615,11 +666,6 @@ type
     property OnCheckBoxChange: TNotifyEvent read FOnChecked  write FOnChecked stored False;
     property Align;
     property Anchors;
-    property Font;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
-    property OnClick;
   end;
 
 { Button rect for the right-side button area (dtkDate = chevron, dtkTime = up/down) }
