@@ -546,6 +546,7 @@ begin
   AssertEquals('K6: OpenAI address', 'https://api.openai.com/v1', p.BaseUrl);
   AssertEquals('K6: OpenAI model', 'gpt-5', p.Model);
   AssertEquals('K6: OpenAI sends no maximum', 0, p.MaxOutput);
+  AssertEquals('K6: OpenAI waits as long as Anthropic', 300, p.TimeoutSec);
   p := TbPresetProfile(tapDeepSeek);
   AssertTrue('K6: DeepSeek format', p.Format = tafOpenAI);
   AssertEquals('K6: DeepSeek address', 'https://api.deepseek.com/v1', p.BaseUrl);

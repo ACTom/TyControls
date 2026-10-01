@@ -274,6 +274,7 @@ begin
         Result.BaseUrl := 'https://api.openai.com/v1';
         Result.Model := 'gpt-5';
         Result.MaxOutput := 0;      { the newer models refuse max_tokens: not sent }
+        Result.TimeoutSec := 300;   { a reasoning model thinks a while before the first byte }
       end;
     tapDeepSeek:
       begin
