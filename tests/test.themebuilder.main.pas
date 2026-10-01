@@ -1411,16 +1411,33 @@ begin
 end;
 
 { The preview's hooks and the seeds page outlive FormDestroy by a little (they are freed
-  with the window): neither calls back into it. }
+  with the window): neither calls back into it. The window goes with its hooks live (the
+  sample window's too) and a pick just made -- and freeing it raises nothing. }
 procedure TTbMainFormTests.TestAWindowGoesWithItsHooks;
 var
   f: TTbMainForm;
+  raised: string;
 begin
   f := TTbMainForm.Create(nil);
-  f.Preview.BuildSampleWindow;
-  CtrlPress(f.Preview.BtnPrimary);
-  f.Free;
-  AssertTrue('F39: gone without a fault', True);
+  try
+    f.Preview.BuildSampleWindow;
+    AssertTrue('F39: the sample window is hooked too',
+      f.Preview.Picker.HookCount > FForm.Preview.Picker.HookCount);
+    CtrlPress(f.Preview.BtnPrimary);
+    AssertTrue('F39: the hooks are live: the pick added the rule',
+      Pos('TyButton.primary {', f.Editor.Lines.Text) > 0);
+  except
+    f.Free;
+    raise;
+  end;
+  raised := '';
+  try
+    f.Free;
+  except
+    on E: Exception do
+      raised := E.ClassName + ': ' + E.Message;
+  end;
+  AssertEquals('F39: gone without a fault', '', raised);
 end;
 
 { An editor with no line at all: Lines.Text is '', with no final break for an edit to stop
