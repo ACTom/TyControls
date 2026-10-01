@@ -27,6 +27,7 @@ resourcestring
   rsTbAiSentTo = 'Sent to: %s';
   rsTbAiDescribe = 'Describe the theme or the change first.';
   rsTbAiRound = 'Round %d';
+  rsTbAiConversationOne = 'This conversation: %d request.';
   rsTbAiConversation = 'This conversation: %d requests.';
   rsTbAiCompareWaits = 'Use "Show the comparison" to look at it.';
 
@@ -252,6 +253,8 @@ procedure TTbAiFrame.UpdateConversation;
 begin
   if FSession.History.Count = 0 then
     LblConversation.Caption := ''
+  else if FSession.History.Count = 1 then
+    LblConversation.Caption := Format(rsTbAiConversationOne, [1])
   else
     LblConversation.Caption := Format(rsTbAiConversation, [FSession.History.Count]);
 end;

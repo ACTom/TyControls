@@ -1511,3 +1511,10 @@ msgstr "设置没能保存（%s），什么都没有改。"
 #: tbcompareform.rstbcompareeditedsince
 msgid "The editor changed after the request: \"Now\" shows it as it is now."
 msgstr "请求发出之后编辑器又改过：「现在」显示的是它此刻的样子。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbaiframe.rstbaiconversationone
+#, object-pascal-format
+msgid "This conversation: %d request."
+msgstr "本次对话：%d 条要求。"

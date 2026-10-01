@@ -117,6 +117,7 @@ type
     procedure TestClosingTheComparisonEndsTheTrial;   { M19 }
     { the last batch before the merge }
     procedure TestMarkedLinesAreReadable;        { M20 }
+    procedure TestTheCountSaysRequestOrRequests;   { M21 }
   end;
 
 implementation
@@ -2497,6 +2498,28 @@ begin
   finally
     markup.Free;
   end;
+end;
+
+{ M21: "1 request", "2 requests" }
+procedure TTbMainFormTests.TestTheCountSaysRequestOrRequests;
+var
+  b: TScriptedBackend;
+begin
+  AssertTrue('M21: the English singular is singular', Pos('requests', rsTbAiConversationOne) = 0);
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  RunAsyncCalls;
+  AssertEquals('M21: one request', Format(rsTbAiConversationOne, [1]),
+    FForm.Ai.LblConversation.Caption);
+  FForm.Ai.EdtPrompt.Text := 'bluer';
+  FForm.Ai.GenerateClick(nil);
+  RunAsyncCalls;
+  AssertEquals('M21: two requests', Format(rsTbAiConversation, [2]),
+    FForm.Ai.LblConversation.Caption);
 end;
 
 initialization

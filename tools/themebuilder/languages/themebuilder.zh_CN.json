@@ -154,6 +154,7 @@
   "tbaiframe.rstbaisentto": "发送到：%s",
   "tbaiframe.rstbaidescribe": "先描述想要的主题或改动。",
   "tbaiframe.rstbairound": "第 %d 轮",
+  "tbaiframe.rstbaiconversationone": "本次对话：%d 条要求。",
   "tbaiframe.rstbaiconversation": "本次对话：%d 条要求。",
   "tbmain.rstbaieditedsince": "生成之后编辑器里又改过。接受会把这些改动一起替换掉。接受吗？",
   "tbmain.rstbaiaccepted": "已接受 AI 的版本。Ctrl+Z 可以撤回。",
