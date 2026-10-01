@@ -77,6 +77,7 @@ type
     procedure TestCtrlClickOnAVariantTakesNothingAway;
     procedure TestTheBaseRulesGoBeforeTheDocumentsOwn;
     procedure TestAnImportedPlainRuleIsNotCopiedOver;
+    procedure TestTheCoverageCheckGoesToAnyRuleOfTheType;
   end;
 
 implementation
@@ -1496,6 +1497,29 @@ begin
   AssertEquals('H4: nothing of the base copied in', 0, Pos('TyEdit:', FForm.Editor.Lines.Text));
   AssertEquals('H4: the imported look stays', $123456,
     Integer(Cardinal(FForm.Preview.Controller.Model.ResolveStyle('TyEdit', '', []).Background.Color) and $FFFFFF));
+end;
+
+{ The first list of the coverage check names TyButon because the document has a rule for it
+  -- here only `TyButon:hover` and `TyButon.big`. A double click goes there (and to the next
+  one, again), and adds nothing; a typeKey with no rule at all still gets one. }
+procedure TTbMainFormTests.TestTheCoverageCheckGoesToAnyRuleOfTheType;
+var
+  t: string;
+begin
+  FForm.Editor.Lines.Text := 'TyButon:hover { color: #FF0000; }' + LineEnding + LineEnding +
+    '  TyButon.big { color: #00FF00; }' + LineEnding;
+  FForm.RefreshNow;
+  t := FForm.Editor.Lines.Text;
+  FForm.JumpToTypeKey('TyButon');
+  AssertEquals('I1: nothing added', t, FForm.Editor.Lines.Text);
+  AssertEquals('I1: at the first (line)', 1, FForm.Editor.LogicalCaretXY.Y);
+  AssertEquals('I1: at the first (column)', 1, FForm.Editor.LogicalCaretXY.X);
+  FForm.JumpToTypeKey('TyButon');
+  AssertEquals('I1: then the next (line)', 3, FForm.Editor.LogicalCaretXY.Y);
+  AssertEquals('I1: then the next (column)', 3, FForm.Editor.LogicalCaretXY.X);
+  AssertEquals('I1: still nothing added', t, FForm.Editor.Lines.Text);
+  FForm.JumpToTypeKey('TyFormSurface');
+  AssertTrue('I1: a typeKey with no rule gets one', Pos('TyFormSurface {', FForm.Editor.Lines.Text) > 0);
 end;
 
 initialization

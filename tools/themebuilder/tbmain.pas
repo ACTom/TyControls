@@ -187,6 +187,11 @@ type
       copy of the base's rules for the typeKey (tbrules: an empty one would take the base
       layer away and leave the control unstyled) }
     procedure JumpToRule(const ATypeKey, AStyleClass: string);
+    { the coverage check's double click: to the document's first rule for ATypeKey whatever
+      its variant and state (the next one, the same key again) -- an entry of the first list
+      is there because the document has one; only a typeKey with none gets a rule added
+      (JumpToRule) }
+    procedure JumpToTypeKey(const ATypeKey: string);
     function BuildCoverageForm: TTbCoverageForm;     { filled, not shown }
     function BuildExportForm: TTbExportForm;         { prepared, not shown }
     function BuildSnippetsForm: TTbSnippetsForm;     { prepared, not shown }
@@ -901,6 +906,37 @@ begin
     Editor.SetFocus;
 end;
 
+procedure TTbMainForm.JumpToTypeKey(const ATypeKey: string);
+var
+  scan: TTbCssScan;
+  hits: TTbOffsets;
+  src, key: string;
+begin
+  if ATypeKey = '' then Exit;
+  src := Editor.Lines.Text;
+  scan := TbScanCss(src);
+  try
+    hits := TbFindTypeSelectors(scan, ATypeKey);
+  finally
+    scan.Free;
+  end;
+  if Length(hits) = 0 then
+  begin
+    JumpToRule(ATypeKey, '');
+    Exit;
+  end;
+  key := '*' + LowerCase(ATypeKey);
+  if key = FJumpKey then
+    FJumpIndex := (FJumpIndex + 1) mod Length(hits)
+  else
+    FJumpIndex := 0;
+  FJumpKey := key;
+  Editor.LogicalCaretXY := TbOffsetToPoint(src, hits[FJumpIndex]);
+  Editor.EnsureCursorPosVisible;
+  if Editor.CanSetFocus then
+    Editor.SetFocus;
+end;
+
 procedure TTbMainForm.PreviewPick(Sender: TObject; const ATypeKey, AStyleClass: string);
 begin
   JumpToRule(ATypeKey, AStyleClass);
@@ -1160,7 +1196,7 @@ begin
   f := BuildCoverageForm;
   try
     if (f.ShowModal = mrOk) and (f.Chosen <> '') then
-      JumpToRule(f.Chosen, '');
+      JumpToTypeKey(f.Chosen);
   finally
     f.Free;
   end;

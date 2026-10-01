@@ -28,6 +28,9 @@ uses
 function TbSelectorText(const ATypeKey, AVariant: string): string;   { 'TyButton.primary' }
 { offsets of the selectors that are exactly ATypeKey[.AVariant] with no state, text order }
 function TbFindRuleSelectors(AScan: TTbCssScan; const ATypeKey, AVariant: string): TTbOffsets;
+{ offsets of every selector for ATypeKey, whatever its variant and state, text order (the
+  coverage check: "the document has a rule for it" is any of these) }
+function TbFindTypeSelectors(AScan: TTbCssScan; const ATypeKey: string): TTbOffsets;
 { an empty rule at the end; ACaret: where the caret goes in TbApplyEdits(AScan.Text, Result) }
 function TbNewRuleEdits(AScan: TTbCssScan; const AEol, ATypeKey, AVariant: string;
   out ACaret: Integer): TTbTextEdits;
@@ -192,6 +195,25 @@ begin
       if SameText(blk.Selectors[s].TypeName, ATypeKey)
          and SameText(blk.Selectors[s].Variant, AVariant)
          and (blk.Selectors[s].State = '') then
+      begin
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)] := blk.Selectors[s].Start;
+      end;
+  end;
+end;
+
+function TbFindTypeSelectors(AScan: TTbCssScan; const ATypeKey: string): TTbOffsets;
+var
+  b, s: Integer;
+  blk: TTbBlock;
+begin
+  Result := nil;
+  for b := 0 to AScan.Count - 1 do
+  begin
+    blk := AScan.Block(b);
+    if blk.Kind <> tbkRule then Continue;
+    for s := 0 to High(blk.Selectors) do
+      if SameText(blk.Selectors[s].TypeName, ATypeKey) then
       begin
         SetLength(Result, Length(Result) + 1);
         Result[High(Result)] := blk.Selectors[s].Start;
