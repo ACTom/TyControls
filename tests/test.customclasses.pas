@@ -1106,14 +1106,14 @@ initialization
     'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented',
     // T7 combo boxes I
     'TTyComboBox', 'TTyMRUComboBox', 'TTyComboBoxEx', 'TTyOfficeComboBox', 'TTyAdvancedComboBox',
-    'TTyCheckComboBox']);
+    'TTyCheckComboBox',
+    // T8 combo boxes II
+    'TTyColorBox', 'TTyColorComboBox', 'TTyFontComboBox', 'TTyFontSizeComboBox',
+    'TTyFilterComboBox', 'TTyShellComboBox']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T8 combo boxes II
-    'TTyColorBox', 'TTyColorComboBox', 'TTyFontComboBox', 'TTyFontSizeComboBox',
-    'TTyFilterComboBox', 'TTyShellComboBox',
     // T9 progress
     'TTyProgressBar', 'TTyGauge', 'TTyMeter', 'TTyLevelMeter', 'TTyCircularProgress',
     'TTyActivityIndicator', 'TTyActivityBar', 'TTyGearActivityIndicator', 'TTySparkline',

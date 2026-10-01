@@ -28,7 +28,7 @@ uses
   tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
   tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
   tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ListBox, tyControls.ComboBox,
-  tyControls.ComboBoxEx;
+  tyControls.ComboBoxEx, tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ShellComboBox;
 
 type
   TTyCustomClassesP1Test = class(TTestCase)
@@ -76,6 +76,10 @@ type
     procedure TestDerivedComboPopupReachesTheOwnerDraw;
     procedure TestThirdComboBoxExItemsDriveTheList;
     procedure TestThirdComboBox;
+    { Task 8: combo boxes II }
+    procedure TestColorComboPopupUsesItsOwnSwatchGeometry;
+    procedure TestThirdColorBox;
+    procedure TestThirdShellComboBox;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -152,6 +156,18 @@ type
   published
     property ItemsEx;
     property Images;
+  end;
+
+  TThirdColorBox = class(TTyCustomColorBox)
+  published
+    property Selected;
+    property Style;
+  end;
+
+  TThirdShellComboBox = class(TTyCustomShellComboBox)
+  published
+    property Directory;
+    property Items;
   end;
 
 { The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
@@ -1005,9 +1021,117 @@ begin
     third.DropDownCount);
 end;
 
+{ ------------------------------------------------------------------ Task 8: combo boxes II }
+
+{ The combo's own drop-down list, built and rendered off-screen. }
+function RenderColorComboList(AForm: TForm; ACombo: TTyCustomComboBox): TBitmap;
+var
+  l: TTyListBox;
+begin
+  l := TP1ComboCracker(ACombo).MakePopupList;
+  l.Parent := AForm;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 24;
+  l.SetBounds(0, 0, 160, 80);
+  l.Items.Assign(ACombo.Items);
+  l.TopIndex := 0;
+  Result := NewSentinelBitmap(160, 80);
+  TTyComboPopupList(l).RenderWithOwnerDraw(Result.Canvas, Rect(0, 0, 160, 80), 96);
+  l.Free;
+end;
+
+{ S8-1. The colour list's rows take the swatch geometry and pseudo-row colours from the box
+  that owns them. The colour combo is a TTyCustomColorBox and, since 4.0, not a TTyColorBox: a
+  lookup that asked for TTyColorBox left its drop-down ignoring ColorRectWidth altogether. }
+procedure TTyCustomClassesP1Test.TestColorComboPopupUsesItsOwnSwatchGeometry;
+var
+  narrow, wide: TTyColorComboBox;
+  a, b: TBitmap;
+  diff: string;
+begin
+  narrow := TTyColorComboBox.Create(FForm);
+  narrow.ColorRectWidth := 8;
+  wide := TTyColorComboBox.Create(FForm);
+  wide.ColorRectWidth := 40;
+  AssertFalse('a colour combo is not a TTyColorBox since 4.0 (or this proves nothing)',
+    TObject(narrow) is TTyColorBox);
+  a := RenderColorComboList(FForm, narrow);
+  b := RenderColorComboList(FForm, wide);
+  try
+    AssertFalse('the drop-down rows follow the combo''s own ColorRectWidth',
+      SameBitmaps(a, b, diff));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdColorBox;
+var
+  third, back: TThirdColorBox;
+  own: TTyColorBox;
+  c: TTyCustomColorBox;
+begin
+  third := TThirdColorBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdColorBox, ['Selected', 'Style']);
+  third.Style := [cbStandardColors];
+  third.Selected := clRed;
+  third.ColorRectWidth := 30;
+  CheckStreamText(third, ['Selected', 'Style'], 'ColorRectWidth');
+  back := TThirdColorBox.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Style round-trips', back.Style = [cbStandardColors]);
+  AssertEquals('T-c: Selected round-trips', clRed, back.Selected);
+  AssertEquals('T-c: the unpublished ColorRectWidth stayed at its default', 0, back.ColorRectWidth);
+  own := TTyColorBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { Style only: Selected has no default on TTyColorBox either (a fresh box streams it). }
+  CheckFreshDefaults(TThirdColorBox, ['Style']);
+  { T-v: the colour box's own properties are public (TCustomColorBox), and Style through the
+    custom class is the PALETTE set -- the redeclaration lives there, not on TTyColorBox. }
+  c := third;
+  c.ColorRectWidth := 12;
+  AssertEquals('T-v: ColorRectWidth is public through a TTyCustomColorBox reference', 12,
+    third.ColorRectWidth);
+  AssertTrue('T-v: and Style on the custom class is the palette', c.Style = [cbStandardColors]);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdShellComboBox;
+var
+  third: TThirdShellComboBox;
+  own: TTyShellComboBox;
+  dir, diff: string;
+  a, b: TBitmap;
+begin
+  third := TThirdShellComboBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdShellComboBox, ['Directory', 'Items']);
+  dir := ExcludeTrailingPathDelimiter(GetTempDir);
+  third.Directory := dir;
+  CheckStreamText(third, ['Directory'], '');
+  own := TTyShellComboBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { S8-2. The drop-down draws each folder with its glyph and indent, asking its owner for them;
+    a third party's shell combo is a TTyCustomShellComboBox, so its rows look the same. }
+  own.Directory := dir;
+  AssertTrue('the folder chain has rows (or this proves nothing)', own.Items.Count > 0);
+  a := RenderColorComboList(FForm, third);
+  b := RenderColorComboList(FForm, own);
+  try
+    AssertTrue('the mimic''s drop-down rows are the library''s: ' + diff, SameBitmaps(a, b, diff));
+  finally
+    a.Free;
+    b.Free;
+  end;
+  CheckFreshDefaults(TThirdShellComboBox, ['Directory']);
+end;
+
 initialization
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
     TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
-    TThirdComboBox, TThirdComboBoxEx]);
+    TThirdComboBox, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox]);
   RegisterTest(TTyCustomClassesP1Test);
 end.

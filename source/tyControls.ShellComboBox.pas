@@ -52,7 +52,7 @@ type
 function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray;
 
 type
-  TTyShellComboBox = class(TTyComboBox)
+  TTyCustomShellComboBox = class(TTyCustomComboBox)
   private
     FDirectory: string;             { current directory, trailing-separator-normalised }
     FPlaces: TTyLookInPlaceArray;   { the model behind the current Items; row <-> Objects[]=PtrInt(index) }
@@ -85,7 +85,6 @@ type
     function GlyphForDepth(ADepth: Integer): Integer;
     { The glyph list the popup rows + the field draw from (fixed-palette folder/drive). }
     property LookInImages: TTyVirtualImageList read FImages;
-  published
     { The current directory. Writing it rebuilds the drop-down and selects the current-dir
       row; fires no event. Early-exits when the new path SameFileName's the current one
       (re-entrancy guard: DoSelect -> SetDirectory -> host navigates -> host sets Directory
@@ -93,6 +92,84 @@ type
     property Directory: string read FDirectory write SetDirectory;
     { The user picked a place -- the host navigates to SelectedPath. }
     property OnSelectPath: TNotifyEvent read FOnSelectPath write FOnSelectPath;
+  end;
+
+  { TTyShellComboBox publishes TTyCustomShellComboBox's properties; everything lives in TTyCustomShellComboBox. }
+  TTyShellComboBox = class(TTyCustomShellComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Directory;
+    property OnSelectPath;
   end;
 
 implementation
@@ -191,15 +268,15 @@ type
 procedure TTyShellComboPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
-  combo: TTyShellComboBox;
+  combo: TTyCustomShellComboBox;
   model, depth: Integer;
 begin
   { Owner-draw first: the glyph branch below replaces the whole row, so an inherited call
     would be too late. Inert unless the combo has both an owner-draw Style and a handler. }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
-  if Owner is TTyShellComboBox then
+  if Owner is TTyCustomShellComboBox then
   begin
-    combo := TTyShellComboBox(Owner);
+    combo := TTyCustomShellComboBox(Owner);
     model := PtrInt(Items.Objects[AIndex]);
     depth := combo.DepthOfModel(model);
     TyDrawLookInRow(P, ARowRect, Items[AIndex], combo.GlyphForDepth(depth), depth,
@@ -209,15 +286,15 @@ begin
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;
 
-{ TTyShellComboBox }
+{ TTyCustomShellComboBox }
 
-constructor TTyShellComboBox.Create(AOwner: TComponent);
+constructor TTyCustomShellComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   BuildGlyphs;
 end;
 
-destructor TTyShellComboBox.Destroy;
+destructor TTyCustomShellComboBox.Destroy;
 begin
   FImages.Free;
   FIcons.Free;
@@ -228,7 +305,7 @@ end;
   TTyImageCollection, exposed index-addressed through a TTyVirtualImageList. Fixed
   palette (content icons, not theme tokens); the order matches the TyLookIn*Glyph
   constants: drive (0), folder (1). }
-procedure TTyShellComboBox.BuildGlyphs;
+procedure TTyCustomShellComboBox.BuildGlyphs;
 const
   G = 128;
 
@@ -279,7 +356,7 @@ begin
   FImages.Names.Text := 'drive' + LineEnding + 'folder';
 end;
 
-function TTyShellComboBox.DepthOfModel(AModel: Integer): Integer;
+function TTyCustomShellComboBox.DepthOfModel(AModel: Integer): Integer;
 begin
   if (AModel >= 0) and (AModel <= High(FPlaces)) then
     Result := FPlaces[AModel].Depth
@@ -287,7 +364,7 @@ begin
     Result := 0;
 end;
 
-function TTyShellComboBox.GlyphForDepth(ADepth: Integer): Integer;
+function TTyCustomShellComboBox.GlyphForDepth(ADepth: Integer): Integer;
 begin
   if ADepth = 0 then
     Result := TyLookInDriveGlyph
@@ -295,7 +372,7 @@ begin
     Result := TyLookInFolderGlyph;
 end;
 
-function TTyShellComboBox.SelectedPath: string;
+function TTyCustomShellComboBox.SelectedPath: string;
 var
   modelIdx: Integer;
 begin
@@ -308,7 +385,7 @@ begin
   Result := FDirectory;
 end;
 
-procedure TTyShellComboBox.SetDirectory(const AValue: string);
+procedure TTyCustomShellComboBox.SetDirectory(const AValue: string);
 var
   p2: string;
   i, sel: Integer;
@@ -341,7 +418,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyShellComboBox.DoSelect;
+procedure TTyCustomShellComboBox.DoSelect;
 var
   modelIdx: Integer;
   picked: string;
@@ -363,7 +440,7 @@ begin
   end;
 end;
 
-procedure TTyShellComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
+procedure TTyCustomShellComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
   const AStyle: TTyStyleSet);
 var
   lbl: string;
@@ -385,12 +462,12 @@ begin
     ResolveFontSize(AStyle));
 end;
 
-function TTyShellComboBox.CreatePopupList: TTyListBox;
+function TTyCustomShellComboBox.CreatePopupList: TTyListBox;
 begin
   Result := TTyShellComboPopupList.Create(Self);
 end;
 
-procedure TTyShellComboBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomShellComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
   { Pick-only, and ONLY pick-only: a FILTERED editable popup would desync the row<->place
     mapping, so the edit box is what has to go. Owner-draw is a different question and used

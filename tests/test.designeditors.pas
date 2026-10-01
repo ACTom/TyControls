@@ -425,6 +425,8 @@ initialization
     TTyFormSurface, TTyPopupMenu, TTyPopover, TTyIconFont, TTyCharImage, TTyGlyphButtonBase,
     TTyRibbonPage, TTyCustomFileDialog, TTyFilterComboBox, TTySelectPathDialog,
     TTyShellComboBox, TTyShellListView, TTyShellTreeView,
+    { 4.0: property editors registered on the custom classes, LCL style. }
+    TTyCustomFilterComboBox, TTyCustomShellComboBox,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

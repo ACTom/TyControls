@@ -111,12 +111,12 @@ type
   end;
 
   { A combo of named colours: the field and the drop-down each show a colour swatch beside
-    the name. Subclasses TTyComboBox, injecting a swatch-drawing popup list (CreatePopupList)
+    the name. Descends from TTyCustomComboBox, injecting a swatch-drawing popup list (CreatePopupList)
     and a swatch field (PaintFieldContent). The colour lives in Items.Objects[i], so it stays
     intrinsically aligned with the name through Sorted / Delete / direct edits (no parallel
     array). Locked to csDropDownList (pick-only): a filtered editable popup would break the
     swatch↔name mapping. Manage colours via AddColor / ClearColors; Selected is the TColor. }
-  TTyColorBox = class(TTyComboBox)
+  TTyCustomColorBox = class(TTyCustomComboBox)
   private
     FPaletteStyle:      TTyColorBoxStyle;
     FPaletteStylePending: Boolean;   { Style arrived during .lfm load; rebuild in Loaded }
@@ -164,19 +164,18 @@ type
       out-of-range index is ignored. }
     property Colors[AIndex: Integer]: TColor read GetColors write SetColors;
     property ColorNames[AIndex: Integer]: string read GetColorName;
-  published
     { PUBLISHED, as TColorBox does -- it is the control's headline property and it was
       public-only, so the one thing a colour box is for could not be set in the designer
       or streamed to the .lfm. Reading returns the current item's colour (clNone if none);
       writing selects the matching item, or reports clNone when the colour is not in the
       palette (unless cbCustomColor gives it a slot). }
     property Selected: TColor read GetSelected write SetSelected;
-    { WHICH colours the palette is made of. This name used to reach TTyComboBox's dropdown
+    { WHICH colours the palette is made of. This name used to reach the combo's dropdown
       mode, which this class overrides to force csDropDownList -- so the Object Inspector
       offered a Style whose every value was discarded on write. It now carries what Style
       means on a colour box everywhere else (LCL colorbox.pas:84-85 reintroduces it over
       the combo's for the same reason). The combo mode is still locked and still reachable
-      as TTyComboBox(Box).Style. }
+      as TTyCustomComboBox(Box).Style. }
     property Style: TTyColorBoxStyle read FPaletteStyle write SetPaletteStyle
       default TyDefaultColorBoxStyle;
     { Swatch geometry in LOGICAL px; 0 = follow the theme ('--color-swatch-width' /
@@ -191,6 +190,88 @@ type
     property DefaultColorColor: TColor read FDefaultColorColor write SetDefaultColorColor default clBlack;
     property NoneColorColor: TColor read FNoneColorColor write SetNoneColorColor default clBlack;
     property OnGetColors: TTyGetColorsEvent read FOnGetColors write FOnGetColors;
+  end;
+
+  { TTyColorBox publishes TTyCustomColorBox's properties; everything lives in TTyCustomColorBox. }
+  TTyColorBox = class(TTyCustomColorBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Selected;
+    property ColorRectWidth;
+    property ColorRectOffset;
+    property DefaultColorColor;
+    property NoneColorColor;
+    property OnGetColors;
   end;
 
 implementation
@@ -451,13 +532,13 @@ end;
 procedure TTyColorPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
-  host: TTyColorBox;
+  host: TTyCustomColorBox;
   c: TColor;
   w, off: Integer;
 begin
   { Owner-draw first: the swatch branch below replaces the whole row, so an inherited call
     would be too late. Inert unless the combo has both an owner-draw Style and a handler --
-    which on a colour box means TTyComboBox(Box).Style, since Style on this class is the
+    which on a colour box means TTyCustomComboBox(Box).Style, since Style on this class is the
     palette composition. }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   c := TyColorOfItem(Items, AIndex);
@@ -465,9 +546,10 @@ begin
   // The popup is created by the combo (Create(Self)), so its owner is the control whose
   // swatch geometry and pseudo-row colours the rows must match. Without this the dropdown
   // drew clNone/clDefault as raw sentinel values and ignored ColorRectWidth entirely.
-  if Owner is TTyColorBox then
+  { Any colour box, the colour combo (a TTyCustomColorBox descendant, not a TTyColorBox) too. }
+  if Owner is TTyCustomColorBox then
   begin
-    host := TTyColorBox(Owner);
+    host := TTyCustomColorBox(Owner);
     c   := host.SwatchColorFor(c);
     w   := host.EffectiveRectWidth;
     off := host.EffectiveRectOffset;
@@ -475,9 +557,9 @@ begin
   TyDrawColorRow(P, ARowRect, c, Items[AIndex], AStyle, ResolveFontSize(AStyle), w, off);
 end;
 
-{ TTyColorBox }
+{ TTyCustomColorBox }
 
-constructor TTyColorBox.Create(AOwner: TComponent);
+constructor TTyCustomColorBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPaletteStyle      := TyDefaultColorBoxStyle;
@@ -491,7 +573,7 @@ begin
   if Items.Count > 0 then ItemIndex := 0;
 end;
 
-procedure TTyColorBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomColorBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
   { A colour box is always PICK-ONLY: the editable csDropDown popup is prefix-FILTERED,
     which would map row indices to the wrong swatches. But pick-only is the only thing this
@@ -500,11 +582,11 @@ begin
     became unreachable. TyComboStylePickOnly takes off exactly the edit box, the way LCL's
     SetEditBox(False) does, so csOwnerDrawFixed and csOwnerDrawVariable get through and the
     editable spellings of them land on their pick-only twins.
-    (Reachable only as TTyComboBox(Box).Style -- `Style` on this class is the palette.) }
+    (Reachable only as TTyCustomComboBox(Box).Style -- `Style` on this class is the palette.) }
   inherited SetStyle(TyComboStylePickOnly(AValue));
 end;
 
-procedure TTyColorBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);
+procedure TTyCustomColorBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);
 begin
   if FPaletteStyle = AValue then Exit;
   FPaletteStyle := AValue;
@@ -517,7 +599,7 @@ begin
     SetColorList;
 end;
 
-procedure TTyColorBox.Loaded;
+procedure TTyCustomColorBox.Loaded;
 begin
   inherited Loaded;
   if FPaletteStylePending then
@@ -527,7 +609,7 @@ begin
   end;
 end;
 
-procedure TTyColorBox.SetColorList;
+procedure TTyCustomColorBox.SetColorList;
 var
   keep: TColor;
 begin
@@ -539,12 +621,12 @@ begin
   Invalidate;
 end;
 
-procedure TTyColorBox.DoGetColors;
+procedure TTyCustomColorBox.DoGetColors;
 begin
   if Assigned(FOnGetColors) then FOnGetColors(Self, Items);
 end;
 
-function TTyColorBox.SwatchColorFor(AColor: TColor): TColor;
+function TTyCustomColorBox.SwatchColorFor(AColor: TColor): TColor;
 begin
   // clNone / clDefault are sentinels, not colours: painting them raw gives whatever
   // $1FFFFFFF happens to look like. LCL asks the same two properties (colorbox.pas:88-89).
@@ -553,98 +635,98 @@ begin
   else Result := AColor;
 end;
 
-function TTyColorBox.EffectiveRectWidth: Integer;
+function TTyCustomColorBox.EffectiveRectWidth: Integer;
 begin
   if FColorRectWidth > 0 then Result := FColorRectWidth
   else Result := ActiveController.Metric('--color-swatch-width', 0);
 end;
 
-function TTyColorBox.EffectiveRectOffset: Integer;
+function TTyCustomColorBox.EffectiveRectOffset: Integer;
 begin
   if FColorRectOffset > 0 then Result := FColorRectOffset
   else Result := ActiveController.Metric('--color-swatch-offset', 0);
 end;
 
-procedure TTyColorBox.SetColorRectWidth(const AValue: Integer);
+procedure TTyCustomColorBox.SetColorRectWidth(const AValue: Integer);
 begin
   if FColorRectWidth = AValue then Exit;
   FColorRectWidth := AValue;
   Invalidate;
 end;
 
-procedure TTyColorBox.SetColorRectOffset(const AValue: Integer);
+procedure TTyCustomColorBox.SetColorRectOffset(const AValue: Integer);
 begin
   if FColorRectOffset = AValue then Exit;
   FColorRectOffset := AValue;
   Invalidate;
 end;
 
-procedure TTyColorBox.SetDefaultColorColor(const AValue: TColor);
+procedure TTyCustomColorBox.SetDefaultColorColor(const AValue: TColor);
 begin
   if FDefaultColorColor = AValue then Exit;
   FDefaultColorColor := AValue;
   Invalidate;
 end;
 
-procedure TTyColorBox.SetNoneColorColor(const AValue: TColor);
+procedure TTyCustomColorBox.SetNoneColorColor(const AValue: TColor);
 begin
   if FNoneColorColor = AValue then Exit;
   FNoneColorColor := AValue;
   Invalidate;
 end;
 
-function TTyColorBox.GetColors(AIndex: Integer): TColor;
+function TTyCustomColorBox.GetColors(AIndex: Integer): TColor;
 begin
   Result := TyColorOfItem(Items, AIndex);
 end;
 
-procedure TTyColorBox.SetColors(AIndex: Integer; const AValue: TColor);
+procedure TTyCustomColorBox.SetColors(AIndex: Integer; const AValue: TColor);
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   Items.Objects[AIndex] := TObject(PtrInt(AValue));
   Invalidate;
 end;
 
-function TTyColorBox.GetColorName(AIndex: Integer): string;
+function TTyCustomColorBox.GetColorName(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < Items.Count) then Result := Items[AIndex]
   else Result := '';
 end;
 
-procedure TTyColorBox.ClearColors;
+procedure TTyCustomColorBox.ClearColors;
 begin
   Items.Clear;
 end;
 
-procedure TTyColorBox.AddColor(const AName: string; AColor: TColor);
+procedure TTyCustomColorBox.AddColor(const AName: string; AColor: TColor);
 begin
   // Store the colour in the item's Objects[] so it can never desync from the name.
   TyAddColorItem(Items, AName, AColor);
 end;
 
-function TTyColorBox.ColorAt(AIndex: Integer): TColor;
+function TTyCustomColorBox.ColorAt(AIndex: Integer): TColor;
 begin
   Result := TyColorOfItem(Items, AIndex);
 end;
 
-function TTyColorBox.GetSelected: TColor;
+function TTyCustomColorBox.GetSelected: TColor;
 begin
   Result := ColorAt(ItemIndex);
 end;
 
-procedure TTyColorBox.SetSelected(const AValue: TColor);
+procedure TTyCustomColorBox.SetSelected(const AValue: TColor);
 begin
   // Matches, else the cbCustomColor slot, else -1. Never grows the palette: a picker that
   // added a row per write made `Selected := X` non-idempotent.
   ItemIndex := TySelectColorIndexIn(Items, AValue, FPaletteStyle);
 end;
 
-function TTyColorBox.CreatePopupList: TTyListBox;
+function TTyCustomColorBox.CreatePopupList: TTyListBox;
 begin
   Result := TTyColorPopupList.Create(Self);
 end;
 
-procedure TTyColorBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomColorBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) then
     TyDrawColorRow(P, ATextRect, SwatchColorFor(ColorAt(ItemIndex)), Items[ItemIndex],

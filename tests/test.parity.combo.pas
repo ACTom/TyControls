@@ -1646,11 +1646,11 @@ begin
     TTyOfficeComboBox(C).AddItem('Alpha');
     TTyOfficeComboBox(C).AddItem('Beta');
   end
-  else if C is TTyColorBox then
+  else if C is TTyCustomColorBox then   { the colour combo too: not a TTyColorBox since 4.0 }
   begin
-    TTyColorBox(C).AddColor('Red', clRed);
-    TTyColorBox(C).AddColor('Lime', clLime);
-    TTyColorBox(C).AddColor('Blue', clBlue);
+    TTyCustomColorBox(C).AddColor('Red', clRed);
+    TTyCustomColorBox(C).AddColor('Lime', clLime);
+    TTyCustomColorBox(C).AddColor('Blue', clBlue);
   end
   else
   begin
@@ -1708,6 +1708,11 @@ begin
   begin
     cOwn := Build(k, @HandleDrawSilent);
     klass := cOwn.ClassName;
+    { The colour lists must hold real colours, or their swatch branch is not the one being
+      skipped -- and the colour combo is a TTyCustomColorBox, not a TTyColorBox. }
+    if cOwn is TTyCustomColorBox then
+      AssertEquals(klass + ': the family helper filled the palette', clRed,
+        TTyCustomColorBox(cOwn).Colors[0]);
     lOwn := BuildList(cOwn);
     AssertTrue(klass + '''s drop-down list descends from TTyComboPopupList (which is what ' +
       'carries the post-composite dispatch)', lOwn is TTyComboPopupList);

@@ -94,9 +94,11 @@ var c: TTyColorBox;
 begin
   c := TTyColorBox.Create(nil);
   try
-    AssertTrue('starts list-only', TTyComboBox(c).Style = csDropDownList);
-    TTyComboBox(c).Style := csDropDown;   // must still be ignored
-    AssertTrue('stays list-only', TTyComboBox(c).Style = csDropDownList);
+    { The combo mode, reached through the combo ancestor: on a colour box `Style` is the
+      palette. TTyCustomComboBox, not TTyComboBox -- a colour box is not a TTyComboBox. }
+    AssertTrue('starts list-only', TTyCustomComboBox(c).Style = csDropDownList);
+    TTyCustomComboBox(c).Style := csDropDown;   // must still be ignored
+    AssertTrue('stays list-only', TTyCustomComboBox(c).Style = csDropDownList);
   finally c.Free; end;
 end;
 
