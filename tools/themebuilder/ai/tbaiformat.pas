@@ -90,11 +90,24 @@ begin
   Result.Text := AText;
 end;
 
+{ the path goes on the address's path: a query (Azure's ?api-version=...) is taken off
+  first and put back after it; a fragment is never sent, it goes }
 function TbEndpointUrl(const AProfile: TTbAiProfile): string;
 var
-  b, tail: string;
+  b, tail, query: string;
+  p: Integer;
 begin
   b := Trim(AProfile.BaseUrl);
+  p := Pos('#', b);
+  if p > 0 then
+    SetLength(b, p - 1);
+  query := '';
+  p := Pos('?', b);
+  if p > 0 then
+  begin
+    query := Copy(b, p, MaxInt);
+    SetLength(b, p - 1);
+  end;
   while (b <> '') and (b[Length(b)] = '/') do
     SetLength(b, Length(b) - 1);
   if AProfile.Format = tafAnthropic then
@@ -102,9 +115,9 @@ begin
   else
     tail := '/chat/completions';
   if LowerCase(Copy(b, Length(b) - Length(tail) + 1, Length(tail))) = tail then
-    Result := b
+    Result := b + query
   else
-    Result := b + tail;
+    Result := b + tail + query;
 end;
 
 function TbRequestHeaders(const AProfile: TTbAiProfile; const AKey: string): TStringArray;

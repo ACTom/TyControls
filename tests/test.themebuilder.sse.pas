@@ -444,6 +444,17 @@ begin
     TbEndpointUrl(Profile(tafAnthropic, 'https://api.anthropic.com/v1', 0)));
   AssertEquals('A1: Anthropic, complete', 'https://api.anthropic.com/v1/messages',
     TbEndpointUrl(Profile(tafAnthropic, 'https://api.anthropic.com/v1/messages', 0)));
+  { after the phase 3 reviews: the path goes before a query; a fragment goes }
+  AssertEquals('A1: a query stays at the end', 'https://h/v1/chat/completions?api-version=x',
+    TbEndpointUrl(Profile(tafOpenAI, 'https://h/v1?api-version=x', 0)));
+  AssertEquals('A1: a slash before the query', 'https://h/v1/chat/completions?api-version=x',
+    TbEndpointUrl(Profile(tafOpenAI, 'https://h/v1/?api-version=x', 0)));
+  AssertEquals('A1: a complete path with a query', 'https://h/v1/messages?a=1&b=2',
+    TbEndpointUrl(Profile(tafAnthropic, 'https://h/v1/messages?a=1&b=2', 0)));
+  AssertEquals('A1: a fragment goes', 'https://h/v1/chat/completions',
+    TbEndpointUrl(Profile(tafOpenAI, 'https://h/v1#frag', 0)));
+  AssertEquals('A1: a query and a fragment', 'https://h/v1/chat/completions?q=1',
+    TbEndpointUrl(Profile(tafOpenAI, 'https://h/v1/?q=1#frag', 0)));
 end;
 
 procedure TTbAiFormatTests.TestTheHeaders;
