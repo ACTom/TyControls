@@ -934,6 +934,9 @@ begin
     el.Anim.G[3] := ALayout.Sectors[i].R1;
     el.Anim.G[4] := ALayout.Sectors[i].StartRad;
     el.Anim.G[5] := ALayout.Sectors[i].EndRad;
+    { layout.angle, the sweep the datum was given: a shape key upstream's
+      update tweens with the rest [Batch 90] }
+    el.Anim.G[6] := ALayout.Sectors[i].Angle;
     AList.Add(el);
     Inc(drawn);
   end;

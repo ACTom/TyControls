@@ -1153,6 +1153,9 @@ var
   { upstream's clip rect before a `clip: false` widening, and the widening;
     the base axis' direction as flags: 2 horizontal, 4 inverse [Batch 89] }
   clipX, clipY, clipW, clipH, clipEx, animFlags: Double;
+  { the whole series' layout points, stacked-on points and data values,
+    flattened, for an update's lineAnimationDiff [Batch 90] }
+  animPts, animBase, animVals: TTyDoubleArray;
 
   { One marker, answering for its own row. False when the symbol draws
     nothing. }
@@ -1200,6 +1203,10 @@ var
     el.Anim.G[5] := symbolArea.H;
     el.Anim.G[6] := animFlags;
     if spec.Clip then el.Anim.G[6] := el.Anim.G[6] + 1;
+    { the symbol PATH's scale, half its size: a removed symbol fades and
+      shrinks it to nought (Symbol.fadeOut) [Batch 90] }
+    el.Anim.G[7] := rs.WidthPx / 2;
+    el.Anim.G[8] := rs.HeightPx / 2;
     ItemCaption(AVisual, AStore, ARow, el.Caption);
     AList.Add(el);
     Result := True;
@@ -1217,6 +1224,19 @@ var
     AEl.Anim.G[3] := clipH;
     AEl.Anim.G[4] := clipEx;
     AEl.Anim.G[5] := animFlags;
+    { WHAT AN UPDATE DIFFS: the run's place among the series' runs, the
+      whole series' points, the value start an added point's base falls
+      to, and how the path is drawn [Batch 90] }
+    AEl.Anim.Sub := runIdx;
+    AEl.Anim.Pts := animPts;
+    AEl.Anim.Base := animBase;
+    AEl.Anim.Vals := animVals;
+    AEl.Anim.G[6] := startV;
+    if spec.Step <> lstNone then AEl.Anim.G[7] := 1 else AEl.Anim.G[7] := 0;
+    AEl.Anim.G[8] := spec.Smooth;
+    AEl.Anim.G[9] := spec.StackedOnSmooth;
+    if spec.ConnectNulls then AEl.Anim.G[10] := 1 else AEl.Anim.G[10] := 0;
+    AEl.Anim.Mono := spec.SmoothMonotone;
   end;
 
   { showAllSymbol. Upstream: 'auto' shows every marker unless one would crowd
@@ -1417,6 +1437,10 @@ var
   begin
     SetLength(fullP, AStore.Count);
     SetLength(fullB, AStore.Count);
+    SetLength(animPts, AStore.Count * 2);
+    if spec.HasArea then SetLength(animBase, AStore.Count * 2)
+    else animBase := nil;
+    SetLength(animVals, AStore.Count * 3);
     runs := 0;
     inRun := False;
     anyLegal := False;
@@ -1440,6 +1464,11 @@ var
         base coordinate the row's own -- legal under a null value too }
       lv := NaN;
       if AStack.Stacked and (AStack.OverCol >= 0) then lv := AStore.Get(AStack.OverCol, k);
+      animPts[k * 2] := pp.X;
+      animPts[k * 2 + 1] := pp.Y;
+      animVals[k * 3] := px;
+      animVals[k * 3 + 1] := py;
+      animVals[k * 3 + 2] := lv;
       if IsNan(lv) then lv := startV;
       qq := TyPointF(NaN, NaN);
       if baseHoriz then
@@ -1450,6 +1479,11 @@ var
       if not (IsNan(qq.X) or IsNan(qq.Y)) then
         qq := TyPointF(TyJsFround(qq.X), TyJsFround(qq.Y));
       fullB[k] := qq;
+      if spec.HasArea then
+      begin
+        animBase[k * 2] := qq.X;
+        animBase[k * 2 + 1] := qq.Y;
+      end;
       { the loop's own gap rule }
       g := Illegal(pp) or (spec.HasArea and Illegal(qq));
       if not g then
@@ -1778,6 +1812,10 @@ begin
     el.Anim.G[2] := rs.WidthPx / 2;
     el.Anim.G[3] := rs.HeightPx / 2;
     el.Anim.G[4] := el.Style.Alpha;
+    { the symbol GROUP's position, the point: an update moves it
+      (SymbolDraw.updateData) [Batch 90] }
+    el.Anim.G[5] := AP.X;
+    el.Anim.G[6] := AP.Y;
   end;
   ItemCaption(AVisual, AStore, ARow, el.Caption);
   AList.Add(el);

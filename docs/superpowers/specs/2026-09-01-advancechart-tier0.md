@@ -8609,3 +8609,64 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 - 悬停高亮在动画中画的是静止几何（`PaintEmphasis` 读列表）；命中测试已经跟着帧走。
 - 饼在端口里先滤掉负值，视图行号与上游的 dataIndex 在有负值时不一致（延迟函数拿到的序号不同）。
 - 一帧仍要开一张控件大小的 BGRA 位图画动态层（Q7 那 13 ms 的底价）；动画期间所有系列、图例、标题都在动态层，不按元素是否在动细分。
+
+## 126. Tier 1 第九十一批：更新与离场动画（AN3，2026-10-01）
+
+AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子从零长出来，饼重新扫一圈。上游不是这样——同一个系列视图留着上一次的数据，拿新数据跟它做差分，留下的从原来的形状补间到新的，新来的入场，走掉的淡出。这一批把这套接上：柱、饼、散点的更新与离场，折线的 `lineAnimationDiff`，以及漏斗、仪表盘、雷达、K 线的更新（这几样没有 fixture 用例，见偏差）。状态动画（emphasis/blur/select 的过渡）留到 B1 合并之后的 AN3b。
+
+### 上游的做法（`wf86/anim.md` 第 1、2.3、3A、3B、4b、6 节；源码逐行核过，关键点在真 dist 上探针确认）
+
+- **控件的 Option 是 notMerge。** 上游 notMerge 的 setOption 重建所有模型，但系列视图按 `'_ec_' + model.id + '_' + type` 复用；模型 id 来自 `makeIdAndName`：写了 id 用 id，否则用 name（同名的第二个起后缀计数），都没有就是虚名 `'series\0' + 序号`。所以 id、名字或序号相同、类型相同的系列保留视图、拿旧数据做差分；其余系列的视图被移除，它的 group 立刻离开 zr 根节点，**没有淡出**（探针：两个柱系列变一个，第二个当帧消失）。坐标轴、图例这些组件在 notMerge 下是新视图，没有旧 group 可过渡，**`groupTransition` 根本不发生**（探针：同一组数据 merge 下 14 个 clip，notMerge 下 5 个，全是柱子）。fixture 里的 11 个更新用例是 merge 录的；新补充的 fixture 对每个用例按 notMerge 重录一遍，守卫系列元素逐条与 merge 版相同、组件一个都不动。
+- **差分**（`data/DataDiffer.ts` 一对一模式）：键是 `getId`——数据项的 id；否则名字（项自己的 name，没有就取第一个类目维度的类目名），第二次起加 `__ec__N`；都没有是 `'e\0\0' + 原始下标`。旧行按顺序走：新数据里还有同键的取最前一个，记为更新，否则删除；剩下的新行按顺序记为新增。回调拿到的是视图下标，即 dataIndex。
+- **柱**：更新 `updateProps(el, {shape: layout}, seriesModel, newIndex)`——更新时序，延迟函数拿**新**下标；旧行没有元素（原值不是数）时创建器把长度置零再 updateProps，以更新时序长出来；新增照入场；删除 `removeElementWithFadeOut`。
+- **饼**：更新把整个 `sectorShape`（含 `angle`）补间过去，更新时序、新下标；后来新增的一片只扫 `endAngle`，从它自己的起始角出发，**用更新时序**；`animationType: 'scale'` 的新增仍是 r 从 r0 长出、入场时序。`animationTypeUpdate: 'expansion'` 从不保存数据，每次都是首次渲染。
+- **散点**：路径的 `scaleX/Y` 以更新时序、新下标补间到 size/2；符号组的 x/y 以更新时序、**不带下标**补间（延迟函数拿到 undefined，`NaN || 0`）；样式（不透明度）直接设上；新增的是新 Symbol，照入场；删除 `fadeOut`：路径的 opacity 与 scale 一起到 0。
+- **离场**：`removeElement` 的时序永远是 200 ms、`cubicOut`、延迟 0，不读模型；先摘掉标签和引导线，再淡出，done 时从父节点删掉。离场不停别的动画——入场长到一半就被删的柱子边长边淡。模型不动画时立刻设值、立刻删。K 线、箱线图、LineDraw 的线、雷达删除即刻消失。
+- **折线**：符号先按新位置直接摆好（`disableAnimation`）；新旧 layout 点逐个相同（`isPointsSame`，长度不同即不同，`false` 对 `false` 算相同）就不碰折线；否则 `lineAnimationDiff`——`'='` 从旧 layout 点出发（旧点不是数就用新点），`'+'` 从**新数据在旧坐标系里的位置**出发（堆叠底同理：堆在下面的值，没有就旧值轴的起点），`'-'` 丢掉；按新的原始下标排序，写进 Float32Array；两边外包框四个角距离的最大值超过 3000 px 就直接设形状不补间；否则 `polyline.shape.points = current`、`stopAnimation`、`updateProps({points: next})`（更新时序、不带下标），多边形的 `stackedOnPoints` 同样补间、`points` 与折线共用一个数组；`'='` 的符号在折线第一个动画器的 during 里每帧跟到 `__points` 的对应点。裁剪矩形 `initProps` 到新矩形——**入场**时序、不带下标。新符号的标签是 LabelManager 的首次出现：入场时序淡入。
+- **copyValue 怪癖**：setToFinal 时同长的类型化数组不抄，折线补间开始前点仍是旧值——同步的第一步马上写回 from，在这里看不出差别。
+
+### 做法
+
+- **上一次渲染的快照**（`TTyChartAnimPrev`）：设 Option 时先记下旧 Option 的系列视图键；新选项布局时（`Relayout` 里，`FAnimPending` 且还没有快照），记下旧绘制列表里所有打了动画标签的元素、旧系列的类型与每行差分键，并把旧的 `TTyChartBuild` **留着不释放**——`'+'` 要用旧坐标系的 `DataToPoint`。代理不再在这次布局里丢掉；布防之后快照和旧 build 一起释放。改尺寸、换主题这类不是新选项的重新布局照旧全部直接到终值。
+- **`TTyChartAnimSet.ArmUpdate`**（`AnimView` 单元）：按视图键和类型配对新旧系列，`TyDataDiff` 做差分，把旧代理**带到新行号**上（`(系列, 行, 角色)` 重新建索引），按上面的规则对它 `TyUpdateProps`/`TyInitProps`；没有旧代理时就地从旧元素的标签值建一个。代理的「静止值」换成新布局。没认领的旧代理直接释放（即刻消失的那些）。
+- **幽灵**：删除的柱、扇区、漏斗块、散点与折线符号变成幽灵——旧元素的记录加上它的代理，`TyFadeOutElement`/`TyRemoveElement` 让它淡出，done 时标记离开，`AnimTick` 在引擎栈外释放。帧在列表之后追加还在走的幽灵：静默（命中测试打不到）、没有标签（标签当即消失）、不透明度取代理的。
+- **折线**：新代理 `linePoly`（`shape.points`，Float32）与 `lineArea`（`shape.stackedOnPoints`）。构建器给每段线和面挂上整条系列的 layout 点、堆叠底与每行数据值（`TTyChartAnim.Pts/Base/Vals`，第几段 `Sub`）。帧里用当前的点按上游的 `buildPath` 重建整条路径、切段、取本段。保留下来的符号代理加了 `x/y`，由折线代理的 during 每帧写入。
+- **散点**：代理多了组的 `x/y`；**饼**：多了 `shape.angle`。
+- 控件多了 `AnimFindGhost`、`AnimGhostCount`。无头渲染（`camAuto`）新选项时列表照布局画、不绑定旧代理，更新等窗口那次绘制。
+
+### 基准
+
+- `tools/advchart-oracle/animation-update.js`（复制 `animation.js` 的同一套钩子）→ `tests/fixtures/advchart-animation-update.json`：
+  - `twins`：主 fixture 的 11 个更新用例，合并后的完整选项按 notMerge 设置，记下 clip 数；守卫：系列元素与 merge 版逐条相同，组件全不动；
+  - `cases`：11 个新用例，全部 notMerge——类目平移加延迟函数（看新下标）、补间到 250 ms 时再来第三次选项（从当前值出发）、删掉一个系列（即刻消失）、具名系列换了位置（视图跟着名字走，原位置上的无名系列入场）、散点两种（移动、变大、离场、入场）、折线追加一个极远的点（超过 3000 px 直接设）、面积折线追加一点（点和它的底都从旧坐标出发）、null 补上值、线宽变粗（裁剪矩形以入场时序变大）、`scale` 饼的增删。
+- `test.advchart.animupdate`（6 个测试）：真控件 400×300、SSR 量字、`camAlways`，第一个选项在 T0 渲染并跑完，第二个在 T1 = T0 + 10000 设置并渲染（这次渲染布防并走同步第一步），`AnimTick` 到每个采样。fixture 里每个动画元素映射到它的代理（离场的映射到幽灵，按旧行号找），逐采样比：在不在（幽灵到淡出结束为止）；每个被追踪的键**逐位比**，含终值，上游追踪的键代理必须有；代理其余的键不动；代理的动画器数等于它所代表的元素之和（散点的组和路径合用一个代理）；clip 数等于上游的减去 AN4 那部分（旧布局出发的标签位移、引导线点、数值滚动）；帧等于列表加活着的幽灵数；静止时没有幽灵、每个键要么是布局值要么正好是 `(to − from) × 1 + from`、静止在布局上的元素帧与列表逐位相同。22 个用例 1410 个代理采样全部对上。
+- 手写：DataDiffer 的重复键、平移、全新；外包框差值（一边全非法是无穷大、两边都非法是 NaN）；幽灵在帧里、静默、没有字、不透明度为 cubicOut 的一半处、淡完即去；改尺寸结束更新；无头渲染下更新等窗口。
+- AN2 的「新选项再动一次」改成更新：两根移动、一根淡出，3 个 clip、1 个幽灵。
+
+### 变异测试
+
+`an3/mutate.py`、`an3/mutate2.py`：逐个改源码、重编、跑三个动画测试（本批、AN2、AN1 引擎）、还原。第一轮 26 个：
+- 本批测试杀死：柱的更新改入场时序、扇区的更新改入场时序、新增扇区改入场时序、新增柱改更新时序、柱的延迟用旧下标、散点组位置带下标、离场 300 ms、离场 linear、离场读模型的更新时长（这三个 AN1 引擎测试也红）、标签也当幽灵淡出、`'+'` 用新坐标、折线不按原始下标排序、不挂符号跟随、进行中的更新从布局值出发（不接代理）、幽灵不画、符号离场不缩放、旧标签照样淡入；
+- AN1 引擎测试杀死：stopTracks 的「已 start 未步进先步回 0」、copyValue 同长类型化数组也抄——这两个在本批的路径上看不出来：同步的第一步紧跟着布防，写回 from 值，抄不抄、步不步回都被它盖住；
+- 首轮存活 8 个：幽灵去掉标签（两处都清，互相掩护——删掉 Leave 里那一处，只留 ApplyGhost 的）；`'+'` 的堆叠底用新坐标（shift 用例里新旧坐标恰好重合）；外包框门槛（改成 3000000，那个极远点仍超过——改成去掉门槛）；目标数组不标 Float32（当前值那边已标，轨道按第一帧定类型——改成当前值不标）；裁剪矩形改更新时序（没有裁剪矩形会变的用例）；视图键不看（所有用例的系列都在原位）；`'='` 旧点不是数时取新点；sorted 数组不做单精度舍入。
+补了 4 个上游用例（面积折线加点、null 补值、线宽变粗、具名系列换位）和对应的改法，第二轮 8 个里 6 个杀死。剩下两个是**等价变异**：`'='` 旧点为 NaN 时取新点——引擎的 fillArray 本来就把 NaN 帧换成终帧的值（上游 Track.prepare 也是），两层做同一件事；sorted 数组的单精度舍入——当前值以 Float32 存进代理，第一帧写回时已经舍入，之后只在插值的中间量上差不到一个单精度 ulp，所有用例都看不出来。
+
+### 推迟与偏差
+
+- **AN4**：标签从旧布局位移（`LabelManager` 的 oldLayout 过渡：饼标签的 x/y、引导线的点）、`valueAnimation`（`bar-label-update` 的文字）。测试从 clip 数里扣掉它们的动画器。
+- **`groupTransition` 不做**：控件只有 notMerge，上游 notMerge 下坐标轴不过渡（见上）。将来若加 merge 式的 setOption，需要把坐标轴画进动态层、按 `anid` 建代理。
+- **阶梯线**的更新直接到终值（上游补间阶梯化后的点、符号跟 `__points`，没移植）；`step` 改变时上游会整条重新入场，这里同样直接到终值。
+- 漏斗的更新只补间不透明度，多边形的点不补间；仪表盘、雷达、K 线的更新按 3B 的规则做了，没有 fixture 用例。仪表盘「没有旧指针时从 startAngle 当 rotation」的怪癖没有覆盖。
+- 端口不构建完全被裁掉的柱子，所以「旧的被裁掉、新的露出来」走的是「旧行无元素」那条路：从零长出，上游是从裁到边上的形状补间。
+- 散点更新时样式里的不透明度直接设上；入场的不透明度若还在补间，上游换了 style 对象，旧补间落空，这里补间会接着写。
+- `animationTypeUpdate: 'expansion'` 的饼每次重新扫开，旧扇区当即丢掉（上游不删旧扇区，未核实）。
+- 删除的系列、类型变了的系列即刻消失——与上游 notMerge 一致。
+
+### AN3b 要做的（B1 合并之后）
+
+1. **stateTransition**：`updateStates`（`core/echarts.ts:2697-2747`）在每次渲染后给有 emphasis 状态的元素、它的标签和引导线设 `stateTransition = {duration, delay, easing}`（系列的 `stateAnimation`，默认 300 ms `cubicOut`），只在 `isAnimationEnabled()` 且元素不在离场时；`duration <= 0` 为 null；脏元素先不带动画恢复 `prevStates`。
+2. **zrender 一侧**：`useState/useStates` 经 `canTransition`（非 `noAnimation`、不在 hover 层、`duration > 0`）对变换属性、`getAnimationStyleProps` 里的样式（opacity、fill、stroke、lineWidth、阴影……）和形状里的原始键做 `animateTo`，作用域 `__fromStateTransition`；对象值的键直接赋；没有过渡时正在跑的动画器 `__changeFinalValue`；离开 normal 时先 `saveTo`。这两样 AN1 没做，要先补进引擎并配引擎测试。
+3. **端口的接线**：悬停与选中现在由 `PaintEmphasis` 读静态列表直接画——要改成状态代理：每个可高亮元素一个状态代理（或在现有代理上加状态键），emphasis/select/blur 的目标值从 B1 的状态样式里取，动画进行中元素进动态层，帧按代理当前值画；命中测试照旧跟帧。
+4. **要覆盖的效果**：饼 emphasis 的 `r + scaleSize`、select 的 `x/y = cos/sin(mid) × selectedOffset`（标签与引导线一起移）；符号的 `hoverScale`（`max(1.1, 3/sizeY)` 等规则）；blur 的不透明度；柱的 emphasis 样式。
+5. **基准**：在 `animation.js` 的套路上加 `dispatchAction({type: 'highlight'/'downplay'/'select'})` 的时间线用例（悬停走 `zr.handler`，或直接 `highlight` action），notMerge 下录；与本批一样按代理逐位比。
+6. **交互**：动画中再次悬停/移开的打断（stopTracks 与 `__changeFinalValue`）、更新动画进行中进入 emphasis 的组合，各要一个用例。

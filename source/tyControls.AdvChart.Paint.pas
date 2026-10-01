@@ -400,7 +400,16 @@ type
     { the series index, and the datum's view row (-1 for a whole series) }
     Series, Index: Integer;
     { the role's own numbers -- see AdvChart.AnimView for each }
-    G: array[0..7] of Double;
+    G: array[0..11] of Double;
+    { A LINE'S RUN OR AREA [Batch 90]: which of the series' runs it is,
+      upstream's whole-series layout points (flattened x, y, Float32 values,
+      not-a-number where a row has no point), its stacked-on points (nil
+      without an area -- upstream keeps `false` there), each row's
+      [x, y, stacked-over] data values for a point added in an update, and
+      smoothMonotone }
+    Sub: Integer;
+    Pts, Base, Vals: TTyDoubleArray;
+    Mono: string;
     { A LABEL THAT FOLLOWS ITS HOST: the host's insertion index + 1 (0, the
       zero value, follows nothing -- a pie's or a funnel's words are placed
       absolutely, upstream too), and how it hangs off the host's rect: the
