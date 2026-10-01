@@ -28,7 +28,7 @@ type
     NameStart: Integer;           { 1-based byte offset of the name }
     ValueStart, ValueEnd: Integer;{ the value is Text[ValueStart .. ValueEnd-1]; blanks and
                                     comments before the ';' are not part of it }
-    StopAt: Integer;              { the ';' that ends it; 0 when a '}' or the end did }
+    StopAt: Integer;              { the ';' that ends it; 0 when a closing brace or the end did }
   end;
 
   TTbSelectorRef = record
@@ -41,7 +41,7 @@ type
     Kind: TTbBlockKind;
     Mode: string;          { tbkModeRoot: the @mode name, lower case }
     ModeStart: Integer;    { tbkModeRoot: the '@' of its @mode; 0 otherwise }
-    OuterClose: Integer;   { tbkModeRoot: the @mode block's own '}'; 0 when missing }
+    OuterClose: Integer;   { tbkModeRoot: the @mode block's own closing brace; 0 when missing }
     HeadStart: Integer;    { ':' of :root, or the first selector's first byte }
     OpenBrace: Integer;
     CloseBrace: Integer;   { 0: the text ends first }
@@ -357,7 +357,8 @@ begin
     Result := Length(FText) + 1;
 end;
 
-{ the '{' is taken: everything up to and with its matching '}' (or the end) }
+{ the opening brace is taken: everything up to and with its matching closing brace (or the
+  end) }
 procedure TScanner.SkipBlockBody;
 var
   depth: Integer;
@@ -374,7 +375,7 @@ begin
   until depth = 0;
 end;
 
-{ up to and with a ';' at this level, or a whole '{ ... }' block, or a stray '}' }
+{ up to and with a ';' at this level, or a whole braced block, or a stray closing brace }
 procedure TScanner.SkipStatementOrBlock;
 var
   t: TTyCssToken;
@@ -620,7 +621,7 @@ begin
       ctkIdent:
         ReadRule(t);
     end;
-    { anything else (a stray '}', a lone ';') is passed over }
+    // anything else (a stray closing brace, a lone ';') is passed over
   end;
 end;
 

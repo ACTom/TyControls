@@ -258,7 +258,7 @@ begin
 end;
 
 { ALine as one more declaration of the block: on a line of its own, indented as the block's
-  last declaration, when the '}' is on a line of its own; else just before the '}' }
+  last declaration, when the closing brace is on a line of its own; else just before it }
 function InsertIntoBlock(AScan: TTbCssScan; ABlock: Integer; const ALine, AEol: string): TTbTextEdits;
 var
   blk: TTbBlock;
