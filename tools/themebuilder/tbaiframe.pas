@@ -9,7 +9,9 @@ unit tbaiframe;
   The status line always holds one sentence: what is happening, or what went wrong
   (tbaiclient, tbaisession). On Linux and macOS without libcurl the page stays, says what
   is missing, and Generate is greyed (Available). The text streams in through a 150 ms
-  timer, not on every piece: a long answer does not keep the window busy. }
+  timer, not on every piece, as one change to the box per tick: a long answer does not keep
+  the window busy. The box does not wrap lines: laying out a wrapped memo again costs far
+  more (600 lines: 12 s against 0.7 s, measured headless) and the answer is code. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -367,12 +369,18 @@ begin
         start := p + 1;
       end;
     parts.Add(Copy(fresh, start, MaxInt));   { the open end (maybe empty) }
-    for i := 0 to parts.Count - 1 do
-      if (i = 0) and FLineOpen and (OutputMemo.Lines.Count > 0) then
-        OutputMemo.Lines[OutputMemo.Lines.Count - 1] :=
-          OutputMemo.Lines[OutputMemo.Lines.Count - 1] + StringReplace(parts[0], #13, '', [rfReplaceAll])
-      else
-        OutputMemo.Append(StringReplace(parts[i], #13, '', [rfReplaceAll]));
+    { one change for the memo, not one per line: it lays out its rows again on each }
+    OutputMemo.Lines.BeginUpdate;
+    try
+      for i := 0 to parts.Count - 1 do
+        if (i = 0) and FLineOpen and (OutputMemo.Lines.Count > 0) then
+          OutputMemo.Lines[OutputMemo.Lines.Count - 1] :=
+            OutputMemo.Lines[OutputMemo.Lines.Count - 1] + StringReplace(parts[0], #13, '', [rfReplaceAll])
+        else
+          OutputMemo.Lines.Add(StringReplace(parts[i], #13, '', [rfReplaceAll]));
+    finally
+      OutputMemo.Lines.EndUpdate;
+    end;
     FLineOpen := True;
   finally
     parts.Free;

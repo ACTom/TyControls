@@ -187,7 +187,6 @@ object AiFrame: TTbAiFrame
     Align = alClient
     BorderSpacing.Around = 8
     ReadOnly = True
-    WordWrap = True
   end
   object AiIconFont: TTyLucideIconFont
     Left = 200
