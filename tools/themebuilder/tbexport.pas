@@ -19,7 +19,8 @@ unit tbexport;
 
   The bundle is written beside the target (<target>.tbtmp<pid>), read back through the
   library's own readers (TTyThemeDirSource / TTyThemeZipSource), loaded into a fresh style
-  model and probed in every mode the way the preview probes a document (TbProbeDocument).
+  model and probed in every mode the way the preview probes a document (TbProbeDocument) --
+  in the classic density, then with the modern density pack over it.
   Only when all of that passes is it moved to the target; on any failure the temporary
   bundle is deleted -- no half bundle is ever left, and a zip that was there is untouched. }
 {$mode objfpc}{$H+}
@@ -67,7 +68,7 @@ implementation
 uses
   fpjson, zipper, FileUtil, LazFileUtils,
   tyControls.Css.Tokens, tyControls.Css.Lexer, tyControls.StyleModel, tyControls.ThemeBundle,
-  tbcssscan, tbpreview;
+  tyControls.DensityPack, tbcssscan, tbpreview;
 
 { ---- collecting ---- }
 
@@ -516,6 +517,24 @@ begin
             else
               why := err;
             Break;
+          end;
+        end;
+        { and in the modern density, as an application that switches to it loads it: the
+          density pack over the theme (TTbPreviewFrame.LoadInto) -- a theme that uses one
+          of its variables as something else does not resolve there }
+        if why = '' then
+        begin
+          model.LoadFromCssAdditive(TyDensityModernCss);
+          for i := 0 to High(modes) do
+          begin
+            model.SetMode(modes[i]);
+            if not TbProbeDocument(model, css, True, err) then
+            begin
+              if modes[i] <> '' then
+                err := Format(rsTbModeFailed, [ModeCaption(modes[i]), err]);
+              why := Format(rsTbDensityFailed, [rsTbDensityModern, err]);
+              Break;
+            end;
           end;
         end;
       except

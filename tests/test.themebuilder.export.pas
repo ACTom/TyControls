@@ -35,12 +35,13 @@ type
     procedure TestReplacingAZip;
     procedure TestTheManifestEscapes;
     procedure TestTheDialog;
+    procedure TestTheModernDensityIsTriedToo;
   end;
 
 implementation
 
 uses
-  FileUtil, zipper, Controls, tyControls.ThemeBundle, tbtemplates, tbexportform,
+  FileUtil, zipper, Controls, tyControls.ThemeBundle, tbtemplates, tbexportform, tbpreview,
   test.themebuilder.golden;
 
 const
@@ -373,6 +374,25 @@ begin
   finally
     f.Free;
   end;
+end;
+
+{ The review found it: the bundle was read back and probed in the classic density only. A
+  theme that uses a variable of the modern density pack as a colour loads and paints in the
+  classic density, and cannot be drawn by an application that switches to the modern one. }
+procedure TTbExportTests.TestTheModernDensityIsTriedToo;
+const
+  cDoc = ':root { --segmented-height: #123456; }'#10'TyButton { background: var(--segmented-height); }';
+var
+  err, target: string;
+begin
+  target := FDir + 'dense';
+  AssertFalse('X12: refused', TbExportBundle(cDoc, nil, Info, tbfFolder, target, err));
+  AssertTrue('X12: names the density: ' + err,
+    Pos(Format(rsTbDensityFailed, [rsTbDensityModern, '']), err) > 0);
+  AssertFalse('X12: no folder', DirectoryExists(target));
+  AssertNothingLeft('X12', FDir);
+  AssertTrue('X12: a theme that is fine in both goes: ' + err,
+    TbExportBundle(TbMinimalTemplate, nil, Info, tbfFolder, target, err));
 end;
 
 initialization
