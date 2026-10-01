@@ -397,7 +397,7 @@ end;
 
 procedure TTbMainFormTests.TestTheProjectListsItsUnits;
 const
-  cUnits: array[0..33] of string = ('themebuilder.lpr', 'tbmain.pas', 'tbpreview.pas',
+  cUnits: array[0..35] of string = ('themebuilder.lpr', 'tbmain.pas', 'tbpreview.pas',
     'tbsamplewin.pas', 'tbtemplates.pas', 'tbproblems.pas', 'tbdocument.pas',
     'tbsettings.pas', 'tbthemesource.pas', 'tbeditorlook.pas',
     'tbcssscan.pas', 'tbseeds.pas', 'tbseedsframe.pas', 'tbrules.pas', 'tbpick.pas',
@@ -406,7 +406,7 @@ const
     'ai/tbhttp.pas', 'ai/tbhttpwin.pas', 'ai/tbhttpcurl.pas', 'ai/tbsse.pas',
     'ai/tbaiformat.pas', 'ai/tbaiclient.pas', 'ai/tbaisettings.pas', 'ai/tbreference.pas',
     'ai/tbaisession.pas', 'tbdiff.pas', 'tbcompareform.pas', 'tbaisettingsform.pas',
-    'tbaiframe.pas');
+    'tbaiframe.pas', 'tbformat.pas', 'tbfindbar.pas');
 var
   lpi, dir, rel: string;
   sl: TStringList;

@@ -26,7 +26,7 @@
       <Item2><PackageName Value="BGRABitmapPack"/></Item2>
       <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="34">
+    <Units Count="36">
       <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
       <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
       <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
@@ -61,6 +61,8 @@
       <Unit31><Filename Value="tbcompareform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbCompareForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbcompareform"/></Unit31>
       <Unit32><Filename Value="tbaisettingsform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbAiSettingsForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbaisettingsform"/></Unit32>
       <Unit33><Filename Value="tbaiframe.pas"/><IsPartOfProject Value="True"/><ComponentName Value="AiFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbaiframe"/></Unit33>
+      <Unit34><Filename Value="tbformat.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbformat"/></Unit34>
+      <Unit35><Filename Value="tbfindbar.pas"/><IsPartOfProject Value="True"/><ComponentName Value="FindBar"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbfindbar"/></Unit35>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

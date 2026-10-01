@@ -167,5 +167,9 @@
   "tbaisettings.rstbaiplainhttp": "未加密（http://）",
   "tbaisettings.rstbaiplainhttpmore": "这个地址用 http，密钥和主题文本会明文经过网络。",
   "tbaisettingsform.rstbaisavefailed": "设置没能保存（%s），什么都没有改。",
-  "tbcompareform.rstbcompareeditedsince": "请求发出之后编辑器又改过：「现在」显示的是它此刻的样子。"
+  "tbcompareform.rstbcompareeditedsince": "请求发出之后编辑器又改过：「现在」显示的是它此刻的样子。",
+  "tbmain.rstbformatted": "已格式化。Ctrl+Z 可以撤回。",
+  "tbmain.rstbalreadyformatted": "没有需要格式化的地方。",
+  "tbfindbar.rstbfindnotfound": "找不到",
+  "tbfindbar.rstbfindreplaced": "替换了 %d 处。"
 }

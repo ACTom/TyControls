@@ -123,16 +123,23 @@ object TbMainForm: TTbMainForm
       Width = 6
       Align = alRight
     end
-    object Editor: TSynEdit
+    object EditorHost: TTyPanel
       Left = 280
       Height = 622
       Top = 34
       Width = 634
       Align = alClient
-      Gutter.Visible = True
-      OnChange = EditorChange
-      OnStatusChange = EditorStatusChange
-      OnSpecialLineMarkup = EditorSpecialLineMarkup
+      object Editor: TSynEdit
+        Left = 0
+        Height = 622
+        Top = 0
+        Width = 634
+        Align = alClient
+        Gutter.Visible = True
+        OnChange = EditorChange
+        OnStatusChange = EditorStatusChange
+        OnSpecialLineMarkup = EditorSpecialLineMarkup
+      end
     end
   end
   object Icons: TTyLucideImageList
@@ -203,6 +210,83 @@ object TbMainForm: TTbMainForm
       object MnuExit: TMenuItem
         Caption = 'E&xit'
         OnClick = MnuExitClick
+      end
+    end
+    object MnuEdit: TMenuItem
+      Caption = '&Edit'
+      OnClick = MnuEditClick
+      object MnuUndo: TMenuItem
+        Caption = '&Undo'
+        ShortCut = 16474
+        OnClick = MnuUndoClick
+      end
+      object MnuRedo: TMenuItem
+        Caption = '&Redo'
+        ShortCut = 24666
+        OnClick = MnuRedoClick
+      end
+      object MnuEditSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuCut: TMenuItem
+        Caption = 'Cu&t'
+        ShortCut = 16472
+        OnClick = MnuCutClick
+      end
+      object MnuCopy: TMenuItem
+        Caption = '&Copy'
+        ShortCut = 16451
+        OnClick = MnuCopyClick
+      end
+      object MnuPaste: TMenuItem
+        Caption = '&Paste'
+        ShortCut = 16470
+        OnClick = MnuPasteClick
+      end
+      object MnuDelete: TMenuItem
+        Caption = '&Delete'
+        ShortCut = 46
+        OnClick = MnuDeleteClick
+      end
+      object MnuSelectAll: TMenuItem
+        Caption = 'Select &all'
+        ShortCut = 16449
+        OnClick = MnuSelectAllClick
+      end
+      object MnuEditSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuFormatDoc: TMenuItem
+        Caption = 'F&ormat document'
+        ShortCut = 24646
+        OnClick = MnuFormatDocClick
+      end
+      object MnuFormatSel: TMenuItem
+        Caption = 'Format &selection'
+        OnClick = MnuFormatSelClick
+      end
+      object MnuEditSep3: TMenuItem
+        Caption = '-'
+      end
+      object MnuFind: TMenuItem
+        Caption = '&Find...'
+        ShortCut = 16454
+        OnClick = MnuFindClick
+      end
+      object MnuFindNext: TMenuItem
+        Caption = 'Find &next'
+        ShortCut = 114
+        OnClick = MnuFindNextClick
+      end
+      object MnuFindPrev: TMenuItem
+        Caption = 'Find pre&vious'
+        ShortCut = 8306
+        OnClick = MnuFindPrevClick
+      end
+      object MnuReplace: TMenuItem
+        Caption = 'R&eplace...'
+        ShortCut = 16456
+        OnClick = MnuReplaceClick
       end
     end
     object MnuView: TMenuItem

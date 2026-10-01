@@ -234,7 +234,8 @@ uses
   test.themebuilder.reference,
   test.themebuilder.diff,
   test.themebuilder.aisession,
-  test.themebuilder.compare;
+  test.themebuilder.compare,
+  test.themebuilder.edit;
 
 type
   TTyTestRunner = class(TTestRunner)

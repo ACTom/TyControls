@@ -40,7 +40,7 @@ uses
   tyControls.ThemeLint, tyControls.Design.CssEditKit, tyControls.Image,
   tbdocument, tbsettings, tbproblems, tbpreview, tbeditorlook, tbcssscan, tbseedsframe,
   tbcoverageform, tbexportform, tbsnippetsform, tbaisettings, tbaisession, tbaiframe,
-  tbcompareform, tbaisettingsform;
+  tbcompareform, tbaisettingsform, tbfindbar, tyControls.TextMenu;
 
 const
   cTbPreviewKeptEn = 'The preview kept the last version that worked: %s';  { for the AI }
@@ -64,8 +64,14 @@ resourcestring
   rsTbExported = 'Exported to %s.';
   rsTbAiEditedSince = 'The editor changed after this was generated. Accepting replaces those changes too. Accept?';
   rsTbAiAccepted = 'Accepted the AI''s version. Ctrl+Z undoes it.';
+  rsTbFormatted = 'Formatted. Ctrl+Z undoes it.';
+  rsTbAlreadyFormatted = 'Nothing to format.';
 
 type
+  { what "Undo", "Cut", "Select all"... act on: the editor, the Ty text box that has the focus
+    (the find box, the AI page's description), or nothing (the focus is on a button, a list) }
+  TTbEditTarget = (etNone, etEditor, etText);
+
   TTbMainForm = class(TTyForm)
     Surface: TTyFormSurface;
     Bar: TTyTitleBar;
@@ -81,6 +87,7 @@ type
     AiHost: TTyPanel;
     PreviewHost: TTyPanel;
     PreviewSplitter: TTySplitter;
+    EditorHost: TTyPanel;
     Editor: TSynEdit;
     Icons: TTyLucideImageList;
     GutterIcons: TTyLucideImageList;
@@ -98,6 +105,23 @@ type
     MnuSnippets: TMenuItem;
     MnuFileSep: TMenuItem;
     MnuExit: TMenuItem;
+    MnuEdit: TMenuItem;
+    MnuUndo: TMenuItem;
+    MnuRedo: TMenuItem;
+    MnuEditSep1: TMenuItem;
+    MnuCut: TMenuItem;
+    MnuCopy: TMenuItem;
+    MnuPaste: TMenuItem;
+    MnuDelete: TMenuItem;
+    MnuSelectAll: TMenuItem;
+    MnuEditSep2: TMenuItem;
+    MnuFormatDoc: TMenuItem;
+    MnuFormatSel: TMenuItem;
+    MnuEditSep3: TMenuItem;
+    MnuFind: TMenuItem;
+    MnuFindNext: TMenuItem;
+    MnuFindPrev: TMenuItem;
+    MnuReplace: TMenuItem;
     MnuView: TMenuItem;
     MnuAppearance: TMenuItem;
     MnuEditorDark: TMenuItem;
@@ -135,6 +159,20 @@ type
     procedure MnuSnippetsClick(Sender: TObject);
     procedure MnuAiClick(Sender: TObject);
     procedure MnuAiSettingsClick(Sender: TObject);
+    procedure MnuEditClick(Sender: TObject);
+    procedure MnuUndoClick(Sender: TObject);
+    procedure MnuRedoClick(Sender: TObject);
+    procedure MnuCutClick(Sender: TObject);
+    procedure MnuCopyClick(Sender: TObject);
+    procedure MnuPasteClick(Sender: TObject);
+    procedure MnuDeleteClick(Sender: TObject);
+    procedure MnuSelectAllClick(Sender: TObject);
+    procedure MnuFormatDocClick(Sender: TObject);
+    procedure MnuFormatSelClick(Sender: TObject);
+    procedure MnuFindClick(Sender: TObject);
+    procedure MnuFindNextClick(Sender: TObject);
+    procedure MnuFindPrevClick(Sender: TObject);
+    procedure MnuReplaceClick(Sender: TObject);
   private
     FDoc: TTbDocument;
     FKit: TTyCssEditKit;
@@ -161,6 +199,16 @@ type
     FAi: TTbAiFrame;
     FAiSettings: TTbAiSettings;
     FTrialText: string;                { the version the comparison window tries }
+    FFindBar: TTbFindBar;
+    FEditTarget: TTbEditTarget;        { what the Edit menu's text commands act on }
+    { etText: the Ty edit or memo that had the focus. The control, not its interface: a
+      reference held across messages would be released on a control that may be gone }
+    FEditCtl: TWinControl;
+    FFocusForTest: TWinControl;
+    function TextTarget(out AIntf: ITyTextEditActions): Boolean;
+    function FocusedControl: TWinControl;
+    procedure AppIdle(Sender: TObject; var Done: Boolean);
+    procedure FindBarClosed(Sender: TObject);
     function AiDocument: TTbAiDocument;
     procedure AiCandidate(Sender: TObject);
     procedure AiSettingsClick(Sender: TObject);
@@ -209,6 +257,21 @@ type
     { the application's icon (Application.Icon: the exe's MAINICON, themebuilder.ico) at the
       left of the title bar, in the size nearest the slot; hidden when there is none }
     procedure ShowAppIcon;
+    { the Edit menu's items enabled for what they would act on now. AStrict: a shortcut is
+      being dispatched (TMenu.IsShortcut clicks the Edit menu first) -- the text commands act
+      only on the control that has the focus, the editor or a Ty text box, and a disabled item
+      lets the key through to that control. Otherwise (the menu opened with the mouse, the
+      idle refresh) a focus elsewhere means the editor. Format and find always mean the
+      editor. }
+    procedure UpdateEditMenu(AStrict: Boolean);
+    { the whole text tidied (tbformat) as one undo step; False when nothing changed }
+    function FormatDocument: Boolean;
+    { the lines the selection touches tidied, one undo step; False when nothing changed }
+    function FormatSelection: Boolean;
+    property EditTarget: TTbEditTarget read FEditTarget;
+    property FindBar: TTbFindBar read FFindBar;
+    { FOR THE TESTS: the control that has the focus (a window never shown has none) }
+    property FocusForTest: TWinControl read FFocusForTest write FFocusForTest;
     procedure NewMinimal;
     procedure NewFromBuiltin(const AName: string);
     function OpenFile(const AFileName: string): Boolean;
@@ -271,7 +334,7 @@ implementation
 
 uses
   Math, StrUtils, tyControls.BuiltinThemes, tyControls.Dialogs, tbtemplates, tbrules,
-  tbcoverage, tbsnippets, tbdiff;
+  tbcoverage, tbsnippets, tbdiff, tbformat;
 
 { ---- create / destroy ---- }
 
@@ -357,6 +420,17 @@ begin
   RebuildRecentMenu;
   ShowAppIcon;
 
+  { the find bar over the editor (Edit > Find, Replace) }
+  FFindBar := TTbFindBar.Create(Self);
+  FFindBar.Visible := False;
+  FFindBar.Parent := EditorHost;
+  FFindBar.Align := alTop;
+  FFindBar.Attach(Editor);
+  FFindBar.OnClosed := @FindBarClosed;
+  { the Edit menu follows the focus and the editor (AppIdle); a shortcut asks again first
+    (MnuEditClick) }
+  Application.AddOnIdleHandler(@AppIdle);
+
   { the editor's colours follow the tool's theme; the listener goes in FormDestroy (the
     default controller outlives this window) }
   TyDefaultController.AddChangeListener(@ToolThemeChanged);
@@ -374,6 +448,13 @@ end;
 procedure TTbMainForm.FormDestroy(Sender: TObject);
 begin
   Application.RemoveAsyncCalls(Self);
+  Application.RemoveOnIdleHandler(@AppIdle);
+  FEditCtl := nil;
+  if FFindBar <> nil then
+  begin
+    FFindBar.OnClosed := nil;
+    FFindBar.Attach(nil);
+  end;
   { a generation still running stops; nothing of the AI page calls back any more }
   if FAi <> nil then
   begin
@@ -458,6 +539,258 @@ begin
     bmp.Free;
     ico.Free;
   end;
+end;
+
+{ ---- the Edit menu ---- }
+
+function TTbMainForm.FocusedControl: TWinControl;
+begin
+  if FFocusForTest <> nil then
+    Result := FFocusForTest
+  else
+    Result := ActiveControl;
+end;
+
+procedure TTbMainForm.UpdateEditMenu(AStrict: Boolean);
+var
+  ac: TWinControl;
+  intf: ITyTextEditActions;
+  ro, sel: Boolean;
+begin
+  FEditCtl := nil;
+  intf := nil;
+  ac := FocusedControl;
+  if (ac <> nil) and (ac <> Editor) and Supports(ac, ITyTextEditActions, intf) then
+  begin
+    FEditTarget := etText;
+    FEditCtl := ac;
+  end
+  else if (ac = nil) or (ac = Editor) or not AStrict then
+    FEditTarget := etEditor
+  else
+    FEditTarget := etNone;
+  case FEditTarget of
+    etEditor:
+      begin
+        ro := Editor.ReadOnly;
+        sel := Editor.SelAvail;
+        MnuUndo.Enabled := Editor.CanUndo and not ro;
+        MnuRedo.Enabled := Editor.CanRedo and not ro;
+        MnuCut.Enabled := sel and not ro;
+        MnuCopy.Enabled := sel;
+        { not asked of the clipboard: on some systems that is a round trip, on every idle }
+        MnuPaste.Enabled := not ro;
+        MnuDelete.Enabled := sel and not ro;
+        MnuSelectAll.Enabled := Editor.Lines.Count > 0;
+      end;
+    etText:
+      begin
+        ro := intf.TeIsReadOnly;
+        sel := intf.TeHasSelection;
+        MnuUndo.Enabled := intf.TeCanUndo and not ro;
+        MnuRedo.Enabled := intf.TeCanRedo and not ro;
+        MnuCut.Enabled := sel and not ro;
+        MnuCopy.Enabled := sel;
+        MnuPaste.Enabled := not ro;
+        MnuDelete.Enabled := False;      { the Ty text boxes have no "delete the selection" }
+        MnuSelectAll.Enabled := intf.TeHasText;
+      end;
+  else
+    MnuUndo.Enabled := False;
+    MnuRedo.Enabled := False;
+    MnuCut.Enabled := False;
+    MnuCopy.Enabled := False;
+    MnuPaste.Enabled := False;
+    MnuDelete.Enabled := False;
+    MnuSelectAll.Enabled := False;
+  end;
+  ro := Editor.ReadOnly;
+  MnuFormatDoc.Enabled := (Editor.Lines.Count > 0) and not ro;
+  MnuFormatSel.Enabled := Editor.SelAvail and not ro;
+  MnuFind.Enabled := True;
+  MnuFindNext.Enabled := (FFindBar <> nil) and (FFindBar.SearchText <> '');
+  MnuFindPrev.Enabled := MnuFindNext.Enabled;
+  MnuReplace.Enabled := not ro;
+end;
+
+{ the Ty text box the menu was enabled for, as long as it still has the focus (a control that
+  went away has not) }
+function TTbMainForm.TextTarget(out AIntf: ITyTextEditActions): Boolean;
+begin
+  AIntf := nil;
+  Result := (FEditTarget = etText) and (FEditCtl <> nil) and (FEditCtl = FocusedControl)
+    and Supports(FEditCtl, ITyTextEditActions, AIntf);
+end;
+
+procedure TTbMainForm.AppIdle(Sender: TObject; var Done: Boolean);
+begin
+  UpdateEditMenu(False);
+end;
+
+{ TMenu.IsShortcut clicks the parent first: a shortcut on its way to one of the items }
+procedure TTbMainForm.MnuEditClick(Sender: TObject);
+begin
+  UpdateEditMenu(True);
+end;
+
+procedure TTbMainForm.MnuUndoClick(Sender: TObject);
+var
+  intf: ITyTextEditActions;
+begin
+  if FEditTarget = etEditor then
+    Editor.Undo
+  else if TextTarget(intf) then
+    intf.TeUndo;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuRedoClick(Sender: TObject);
+var
+  intf: ITyTextEditActions;
+begin
+  if FEditTarget = etEditor then
+    Editor.Redo
+  else if TextTarget(intf) then
+    intf.TeRedo;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuCutClick(Sender: TObject);
+var
+  intf: ITyTextEditActions;
+begin
+  if FEditTarget = etEditor then
+    Editor.CutToClipboard
+  else if TextTarget(intf) then
+    intf.TeCut;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuCopyClick(Sender: TObject);
+var
+  intf: ITyTextEditActions;
+begin
+  if FEditTarget = etEditor then
+    Editor.CopyToClipboard
+  else if TextTarget(intf) then
+    intf.TeCopy;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuPasteClick(Sender: TObject);
+var
+  intf: ITyTextEditActions;
+begin
+  if FEditTarget = etEditor then
+    Editor.PasteFromClipboard
+  else if TextTarget(intf) then
+    intf.TePaste;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuDeleteClick(Sender: TObject);
+begin
+  if FEditTarget = etEditor then
+    Editor.ClearSelection;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuSelectAllClick(Sender: TObject);
+var
+  intf: ITyTextEditActions;
+begin
+  if FEditTarget = etEditor then
+    Editor.SelectAll
+  else if TextTarget(intf) then
+    intf.TeSelectAll;
+  UpdateEditMenu(False);
+end;
+
+function TTbMainForm.FormatDocument: Boolean;
+var
+  src, tidy: string;
+begin
+  Result := False;
+  if Editor.ReadOnly then Exit;
+  if FSeeds <> nil then
+    FSeeds.FlushRadius;
+  src := Editor.Lines.Text;
+  tidy := TbFormatCss(src, 0, LineEnding);
+  if tidy <> '' then
+    tidy := tidy + LineEnding;
+  if TbNormalizeEol(tidy) = TbNormalizeEol(src) then
+  begin
+    SetStatus(rsTbAlreadyFormatted);
+    Exit;
+  end;
+  { one edit over the lines that differ (the caret and the bookmarks on the others stay put),
+    one undo step }
+  Result := ApplyEdits(src, [TbWholeTextEdit(src, tidy)]);
+  if Result then
+    SetStatus(rsTbFormatted);
+end;
+
+function TTbMainForm.FormatSelection: Boolean;
+var
+  src, tidy: string;
+  first, last, start, stop: Integer;
+begin
+  Result := False;
+  if Editor.ReadOnly or not Editor.SelAvail then Exit;
+  if FSeeds <> nil then
+    FSeeds.FlushRadius;
+  src := Editor.Lines.Text;
+  first := Editor.BlockBegin.Y;
+  last := Editor.BlockEnd.Y;
+  { a selection that ends at the start of a line does not take that line in }
+  if (last > first) and (Editor.BlockEnd.X = 1) then
+    Dec(last);
+  if not TbFormatLines(src, first, last, LineEnding, start, stop, tidy) then
+  begin
+    SetStatus(rsTbAlreadyFormatted);
+    Exit;
+  end;
+  Result := ApplyEdits(src, [TbEdit(start, stop, tidy)]);
+  if Result then
+    SetStatus(rsTbFormatted);
+end;
+
+procedure TTbMainForm.MnuFormatDocClick(Sender: TObject);
+begin
+  FormatDocument;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuFormatSelClick(Sender: TObject);
+begin
+  FormatSelection;
+  UpdateEditMenu(False);
+end;
+
+procedure TTbMainForm.MnuFindClick(Sender: TObject);
+begin
+  FFindBar.Open(False);
+end;
+
+procedure TTbMainForm.MnuReplaceClick(Sender: TObject);
+begin
+  FFindBar.Open(True);
+end;
+
+procedure TTbMainForm.MnuFindNextClick(Sender: TObject);
+begin
+  FFindBar.FindNext;
+end;
+
+procedure TTbMainForm.MnuFindPrevClick(Sender: TObject);
+begin
+  FFindBar.FindPrevious;
+end;
+
+procedure TTbMainForm.FindBarClosed(Sender: TObject);
+begin
+  if Editor.CanSetFocus then
+    Editor.SetFocus;
 end;
 
 { ---- asking ---- }

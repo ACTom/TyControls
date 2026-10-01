@@ -67,6 +67,74 @@ msgstr "-"
 msgid "E&xit"
 msgstr "退出(&X)"
 
+#: ttbmainform.mnuedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: ttbmainform.mnuundo.caption
+msgid "&Undo"
+msgstr "撤销(&U)"
+
+#: ttbmainform.mnuredo.caption
+msgid "&Redo"
+msgstr "重做(&R)"
+
+#: ttbmainform.mnueditsep1.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnucut.caption
+msgid "Cu&t"
+msgstr "剪切(&T)"
+
+#: ttbmainform.mnucopy.caption
+msgid "&Copy"
+msgstr "复制(&C)"
+
+#: ttbmainform.mnupaste.caption
+msgid "&Paste"
+msgstr "粘贴(&P)"
+
+#: ttbmainform.mnudelete.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: ttbmainform.mnuselectall.caption
+msgid "Select &all"
+msgstr "全选(&A)"
+
+#: ttbmainform.mnueditsep2.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuformatdoc.caption
+msgid "F&ormat document"
+msgstr "格式化文档(&O)"
+
+#: ttbmainform.mnuformatsel.caption
+msgid "Format &selection"
+msgstr "格式化选中部分(&S)"
+
+#: ttbmainform.mnueditsep3.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnufind.caption
+msgid "&Find..."
+msgstr "查找(&F)…"
+
+#: ttbmainform.mnufindnext.caption
+msgid "Find &next"
+msgstr "查找下一个(&N)"
+
+#: ttbmainform.mnufindprev.caption
+msgid "Find pre&vious"
+msgstr "查找上一个(&V)"
+
+#: ttbmainform.mnureplace.caption
+msgid "R&eplace..."
+msgstr "替换(&E)…"
+
 #: ttbmainform.mnuview.caption
 msgid "&View"
 msgstr "视图(&V)"
@@ -762,6 +830,42 @@ msgstr "新对话"
 #: ttbaiframe.btnshowcompare.caption
 msgid "Show the comparison..."
 msgstr "查看对比…"
+
+#: ttbfindbar.edtfind.texthint
+msgid "Find"
+msgstr "查找"
+
+#: ttbfindbar.btnprev.hint
+msgid "Previous (Shift+F3)"
+msgstr "上一个（Shift+F3）"
+
+#: ttbfindbar.btnnext.hint
+msgid "Next (F3)"
+msgstr "下一个（F3）"
+
+#: ttbfindbar.chkcase.caption
+msgid "Match case"
+msgstr "区分大小写"
+
+#: ttbfindbar.chkword.caption
+msgid "Whole word"
+msgstr "全字匹配"
+
+#: ttbfindbar.btnclose.hint
+msgid "Close (Esc)"
+msgstr "关闭（Esc）"
+
+#: ttbfindbar.edtreplace.texthint
+msgid "Replace with"
+msgstr "替换为"
+
+#: ttbfindbar.btnreplace.caption
+msgid "Replace"
+msgstr "替换"
+
+#: ttbfindbar.btnreplaceall.caption
+msgid "Replace all"
+msgstr "全部替换"
 
 # --- code resourcestrings (msgid=Pascal source) ---
 
@@ -1508,3 +1612,20 @@ msgstr "请求发出之后编辑器又改过：「现在」显示的是它此刻
 #, object-pascal-format
 msgid "This conversation: %d request."
 msgstr "本次对话：%d 条要求。"
+
+#: tbmain.rstbformatted
+msgid "Formatted. Ctrl+Z undoes it."
+msgstr "已格式化。Ctrl+Z 可以撤回。"
+
+#: tbmain.rstbalreadyformatted
+msgid "Nothing to format."
+msgstr "没有需要格式化的地方。"
+
+#: tbfindbar.rstbfindnotfound
+msgid "Not found"
+msgstr "找不到"
+
+#: tbfindbar.rstbfindreplaced
+#, object-pascal-format
+msgid "Replaced %d."
+msgstr "替换了 %d 处。"

@@ -44,6 +44,28 @@ Stop typing for 0.3 seconds and the text is parsed, checked and loaded into the 
 
 The language itself is described in [tycss-reference.en.md](tycss-reference.en.md).
 
+## The Edit menu and keys
+
+The Edit menu sits between File and View. Undo, Cut, Copy, Paste, Delete and Select all act on the text box that has the focus: the editor, or a Ty box such as the find box or the AI page's description. With the focus on a button or a list, their keys do nothing (the key goes to that control as usual), while choosing them from the menu acts on the editor. Cut, Copy and Delete are greyed with nothing selected, Undo with nothing to undo. Formatting and finding always act on the editor.
+
+**Format document / Format selection**: one declaration a line, written `name: value;`, two spaces of indent a level, closing braces on lines of their own, several empty lines made one. Selectors (the colon of `TyButton:hover`), comments (a header comment over several lines too) and quoted strings are left as they are. Format selection tidies the lines the selection touches, indented for the level they are at. Each is one undo step.
+
+**The find bar**: Ctrl+F opens it over the editor (a one-line selection goes into the find box), Ctrl+H opens it with a replace row as well. There are Match case and Whole word; Previous / Next go round to the other end; when nothing is found it says "Not found". Replace changes the selected match and finds the next; Replace all changes every one in one undo step and says how many. In the find box Enter finds the next one, Shift+Enter the previous; Esc closes the bar and goes back to the editor.
+
+| Action | Keys |
+|---|---|
+| Undo / Redo | Ctrl+Z / Ctrl+Shift+Z |
+| Cut / Copy / Paste | Ctrl+X / Ctrl+C / Ctrl+V |
+| Delete the selection | Del |
+| Select all | Ctrl+A |
+| Format document | Ctrl+Shift+F |
+| Format selection | (menu) |
+| Find / Replace | Ctrl+F / Ctrl+H |
+| Find next / previous | F3 / Shift+F3 |
+| Completion | Ctrl+Space |
+
+The editor also has SynEdit's own keys: Ctrl+Y deletes a line, Ctrl+I / Ctrl+U indent / unindent a block, Ctrl+Shift+digit sets a bookmark and Ctrl+digit goes to it.
+
 ## Saving and exporting
 
 Saving writes back the line endings, BOM and final newline the file was read with; lines you didn't touch stay byte for byte the same. The repository's built-in theme files can be opened and saved directly — the status bar reminds you to rerun the matching generator script.
