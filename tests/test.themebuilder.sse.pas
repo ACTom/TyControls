@@ -26,6 +26,9 @@ type
     procedure TestAHalfEventIsDropped;       { E11 }
     procedure TestUtf8SplitAnywhere;         { E12 }
     procedure TestTheSamples;                { E13 }
+    { after the phase 3 reviews }
+    procedure TestALineHasALimit;            { E14 }
+    procedure TestAnEventHasALimit;          { E15 }
   end;
 
   TTbAiFormatTests = class(TTestCase)
@@ -336,6 +339,66 @@ procedure TTbSseTests.TestTheSamples;
 begin
   One('openai-ok.sse', 7);
   One('anthropic-ok.sse', 13);
+end;
+
+{ E14: a line longer than MaxLine ends the reading -- also one that has not ended yet }
+procedure TTbSseTests.TestALineHasALimit;
+var
+  log: TSseLog;
+  p: TTbSseParser;
+begin
+  AssertEquals('E14: 1 MB by default', 1024 * 1024, TbSseMaxLine);
+  log := TSseLog.Create;
+  p := TTbSseParser.Create(@log.OnEvent);
+  try
+    p.MaxLine := 20;
+    p.Feed('data: short'#10#10);
+    AssertEquals('E14: a short line is fine', 'message=short'#1, log.Text);
+    p.Feed('data: ' + StringOfChar('x', 30));       { no line break yet }
+    AssertTrue('E14: an open line over the limit', p.Overflow <> '');
+    p.Feed(#10#10'data: after'#10#10);
+    p.Finish;
+    AssertEquals('E14: nothing after it', 'message=short'#1, log.Text);
+  finally
+    p.Free;
+    log.Free;
+  end;
+  log := TSseLog.Create;
+  p := TTbSseParser.Create(@log.OnEvent);
+  try
+    p.MaxLine := 20;
+    p.Feed('data: ' + StringOfChar('x', 30) + #10#10'data: after'#10#10);
+    AssertTrue('E14: a whole line over the limit', p.Overflow <> '');
+    AssertEquals('E14: no event from it or after it', '', log.Text);
+  finally
+    p.Free;
+    log.Free;
+  end;
+end;
+
+{ E15: an event whose data lines add up to more than MaxEvent ends the reading }
+procedure TTbSseTests.TestAnEventHasALimit;
+var
+  log: TSseLog;
+  p: TTbSseParser;
+  i: Integer;
+begin
+  AssertEquals('E15: 4 MB by default', 4 * 1024 * 1024, TbSseMaxEvent);
+  log := TSseLog.Create;
+  p := TTbSseParser.Create(@log.OnEvent);
+  try
+    p.MaxLine := 20;
+    p.MaxEvent := 50;
+    for i := 1 to 6 do
+      p.Feed('data: ' + StringOfChar('x', 10) + #10);     { each line under 20, 66 in all }
+    p.Feed(#10);
+    p.Finish;
+    AssertTrue('E15: over the limit', p.Overflow <> '');
+    AssertEquals('E15: not dispatched', '', log.Text);
+  finally
+    p.Free;
+    log.Free;
+  end;
 end;
 
 { ---- TTbAiFormatTests ---- }

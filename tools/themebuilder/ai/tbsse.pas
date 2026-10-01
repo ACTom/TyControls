@@ -13,6 +13,8 @@ unit tbsse;
       id, retry and unknown fields are ignored
     - a blank line dispatches the event (nothing when no data line came)
     - at the end of the stream, an event still waiting for its blank line is dropped
+    - a line over MaxLine (1 MB) or an event's data over MaxEvent (4 MB) ends the reading
+      (Overflow): a service that never breaks a line must not fill the memory
 
   No LCL: the WSL console program compiles it too. }
 {$mode objfpc}{$H+}
@@ -39,6 +41,8 @@ type
     FHead: RawByteString;         { the first bytes, until it is clear whether they are a BOM }
     FEventCount: Integer;
     FDroppedPartial: Boolean;
+    FMaxLine, FMaxEvent: Integer;
+    FOverflow: string;
     procedure HandleLine(const ALine: RawByteString);
     procedure DispatchEvent;
     procedure FeedBytes(const AChunk: RawByteString);
@@ -48,7 +52,16 @@ type
     procedure Finish;             { a last event without its blank line is dropped }
     property EventCount: Integer read FEventCount;
     property DroppedPartial: Boolean read FDroppedPartial;
+    { a line longer than MaxLine, or an event's data longer than MaxEvent, ends the
+      reading: nothing more is dispatched and Overflow says which ('' while all is well) }
+    property MaxLine: Integer read FMaxLine write FMaxLine;
+    property MaxEvent: Integer read FMaxEvent write FMaxEvent;
+    property Overflow: string read FOverflow;
   end;
+
+const
+  TbSseMaxLine = 1024 * 1024;           { 1 MB }
+  TbSseMaxEvent = 4 * 1024 * 1024;      { 4 MB }
 
 implementation
 
@@ -59,6 +72,8 @@ constructor TTbSseParser.Create(AOnEvent: TTbSseEventProc);
 begin
   inherited Create;
   FOnEvent := AOnEvent;
+  FMaxLine := TbSseMaxLine;
+  FMaxEvent := TbSseMaxEvent;
 end;
 
 procedure TTbSseParser.DispatchEvent;
@@ -110,6 +125,11 @@ begin
   end;
   if field = 'data' then
   begin
+    if Length(FData) + Length(value) + 1 > FMaxEvent then
+    begin
+      FOverflow := Format('an event of more than %d bytes', [FMaxEvent]);
+      Exit;
+    end;
     FData := FData + value + #10;
     FHasData := True;
   end
@@ -122,6 +142,7 @@ procedure TTbSseParser.Feed(const AChunk: RawByteString);
 var
   s: RawByteString;
 begin
+  if FOverflow <> '' then Exit;
   s := AChunk;
   if not FStarted then
   begin
@@ -155,10 +176,16 @@ begin
   start := i;
   while i <= Length(s) do
   begin
+    if FOverflow <> '' then Exit;
     c := s[i];
     if (c = #13) or (c = #10) then
     begin
       FLine := FLine + Copy(s, start, i - start);
+      if Length(FLine) > FMaxLine then
+      begin
+        FOverflow := Format('a line of more than %d bytes', [FMaxLine]);
+        Exit;
+      end;
       HandleLine(FLine);
       FLine := '';
       if c = #13 then
@@ -173,10 +200,17 @@ begin
     Inc(i);
   end;
   FLine := FLine + Copy(s, start, MaxInt);
+  { a line still open: it must not grow without end either }
+  if Length(FLine) > FMaxLine then
+  begin
+    FOverflow := Format('a line of more than %d bytes', [FMaxLine]);
+    FLine := '';
+  end;
 end;
 
 procedure TTbSseParser.Finish;
 begin
+  if FOverflow <> '' then Exit;
   if not FStarted then
   begin
     FStarted := True;

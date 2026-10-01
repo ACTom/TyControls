@@ -39,6 +39,7 @@ type
     procedure TestAKeyIsNotSentOverHttp;     { C19 }
     procedure TestARaiseIsScrubbed;          { C20 }
     procedure TestHeartbeatsAndLateEvents;   { C21 }
+    procedure TestAReplyHasLimits;           { C22 }
   end;
 
   TTbAiSettingsTests = class(TTestCase)
@@ -321,6 +322,15 @@ var
 begin
   ok := AiCheckHeartbeats(why);
   AssertTrue('C21: ' + why, ok);
+end;
+
+procedure TTbAiClientTests.TestAReplyHasLimits;
+var
+  why: string;
+  ok: Boolean;
+begin
+  ok := AiCheckLimits(why);
+  AssertTrue('C22: ' + why, ok);
 end;
 
 procedure TTbAiClientTests.BackendDone(Sender: TObject; const AResult: TTbAiResult);

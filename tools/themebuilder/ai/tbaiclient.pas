@@ -5,6 +5,9 @@ unit tbaiclient;
 
   How the outcome is decided, the first that holds:
     0. a key and an http:// address that is not this computer: nothing is sent;
+    0b. the reply went over a limit -- a line of 1 MB, an event of 4 MB, 8 MB of answer
+       text: the transfer is stopped and the reply is not in the expected format (an
+       error body is read to 64 KB, then the line is dropped and its status decides);
     1. the transport failed: cancelled, or which way it failed (no host, no connection,
        TLS, silence for too long, the line broken off);
     2. the service answered 3xx: a redirect, not followed (the key would go along to
@@ -83,6 +86,8 @@ type
     FText: string;
     FDone, FTruncated, FRefused: Boolean;
     FStreamError: string;
+    FTooLong: string;             { why the reply was cut short (a limit); '' while all is well }
+    FErrorBodyCut: Boolean;       { an error body longer than cMaxRawError: the rest not read }
     FEvents: Integer;
     FThinkingSent: Boolean;
     FThinkingAt: QWord;
@@ -112,7 +117,8 @@ implementation
 
 const
   cMaxRawOk = 256 * 1024;      { kept of a 2xx body, for the "not streamed" fallback }
-  cMaxRawError = 64 * 1024;    { kept of an error body }
+  cMaxRawError = 64 * 1024;    { read of an error body: then the line is dropped }
+  cMaxText = 8 * 1024 * 1024;  { the whole answer text; a theme is tens of kilobytes }
 
 function TbHostOf(const AUrl: string): string;
 var
@@ -373,9 +379,25 @@ begin
     if Length(FRaw) < cMaxRawOk then
       FRaw := FRaw + Copy(AData, 1, cMaxRawOk - Length(FRaw));
     FParser.Feed(AData);
+    { a reply that grows without end stops here -- as "not the expected format" }
+    if FParser.Overflow <> '' then
+      FTooLong := FParser.Overflow
+    else if Length(FText) > cMaxText then
+      FTooLong := Format('an answer of more than %d bytes', [cMaxText]);
+    if FTooLong <> '' then
+      Exit(False);
   end
-  else if Length(FRaw) < cMaxRawError then
-    FRaw := FRaw + Copy(AData, 1, cMaxRawError - Length(FRaw));
+  else
+  begin
+    if Length(FRaw) < cMaxRawError then
+      FRaw := FRaw + Copy(AData, 1, cMaxRawError - Length(FRaw));
+    { enough of an error body to say what it was: the rest is not read }
+    if Length(FRaw) >= cMaxRawError then
+    begin
+      FErrorBodyCut := True;
+      Exit(False);
+    end;
+  end;
   Result := not IsCancelled;
 end;
 
@@ -461,6 +483,8 @@ begin
   FTruncated := False;
   FRefused := False;
   FStreamError := '';
+  FTooLong := '';
+  FErrorBodyCut := False;
   FEvents := 0;
   FThinkingSent := False;
   if IsCancelled then
@@ -504,9 +528,17 @@ begin
     FParser.Finish;
     detail := '';
     Result.Status := FStatus;
-    if (http.Error = hekCancelled) or IsCancelled then
+    if IsCancelled then
       Result.Kind := aekCancelled
-    else if http.Error <> hekNone then
+    else if FTooLong <> '' then
+    begin
+      { we stopped it (HttpData said no): not the user's Stop }
+      Result.Kind := aekBadFormat;
+      detail := FTooLong;
+    end
+    else if (http.Error = hekCancelled) and not FErrorBodyCut then
+      Result.Kind := aekCancelled
+    else if (http.Error <> hekNone) and not FErrorBodyCut then
     begin
       case http.Error of
         hekNoTransport: Result.Kind := aekNoTransport;

@@ -102,6 +102,7 @@ function AiCheckNoKeyNoHeader(out AWhy: string): Boolean;     { C16 }
 function AiCheckRedirects(out AWhy: string): Boolean;         { C18 }
 function AiCheckInsecureKey(out AWhy: string): Boolean;       { C19 }
 function AiCheckHeartbeats(out AWhy: string): Boolean;        { C21 }
+function AiCheckLimits(out AWhy: string): Boolean;            { C22 }
 
 type
   { a transport that only counts being asked and answers "cannot connect": installed with
@@ -1371,6 +1372,81 @@ begin
     StreamPieces(srv, 'data: hello'#10#10'data: ping'#10#10, [], True);
     if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
     if run.Outcome.Kind <> aekBadFormat then Exit(Fail(AWhy, 'only heartbeats: ' + AiDescribe(run)));
+    Result := True;
+    AWhy := '';
+  finally
+    run.Free;
+    srv.Free;
+  end;
+end;
+
+{ C22: a reply that grows without end is stopped -- a line over 1 MB, 8 MB of answer text --
+  as "not the expected format", not "stopped"; an error body is read to 64 KB and the line
+  dropped. Each server then holds the line open: only the client's own limit ends it }
+function AiCheckLimits(out AWhy: string): Boolean;
+
+  function RunIt(AServer: TTbFakeHttpServer; out ARun: TTbAiRun): Boolean;
+  var
+    prof: TTbAiProfile;
+  begin
+    prof := AiProfile(AServer, tafOpenAI);
+    prof.TimeoutSec := 60;
+    Result := RunClient(AServer, prof, cFakeKey, ARun, AWhy);
+  end;
+
+  function PeerGone(AServer: TTbFakeHttpServer): Boolean;
+  var
+    t0: QWord;
+  begin
+    t0 := GetTickCount64;
+    while (AServer.ClosedByPeer = 0) and (GetTickCount64 - t0 < 5000) do
+      CheckSynchronize(10);
+    Result := AServer.ClosedByPeer > 0;
+  end;
+
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  big, events: RawByteString;
+  i: Integer;
+begin
+  Result := False;
+  run := nil;
+  srv := nil;
+  try
+    { a line that never ends }
+    srv := TTbFakeHttpServer.Create;
+    srv.Script([FakeSend(FakeHead(200, 'text/event-stream', True)),
+      FakeSend(FakeChunk('data: ' + StringOfChar('x', 1100 * 1024))), FakeHold]);
+    if not RunIt(srv, run) then Exit;
+    if run.Outcome.Kind <> aekBadFormat then Exit(Fail(AWhy, 'a 1.1 MB line: ' + AiDescribe(run)));
+    if not PeerGone(srv) then Exit(Fail(AWhy, 'a 1.1 MB line: the line was not dropped'));
+    FreeAndNil(run);
+    FreeAndNil(srv);
+    { 8.5 MB of answer text in events of 500 KB }
+    srv := TTbFakeHttpServer.Create;
+    big := StringOfChar('y', 500 * 1024);
+    events := '';
+    for i := 1 to 17 do
+      events := events + 'data: {"choices":[{"index":0,"delta":{"content":"' + big +
+        '"},"finish_reason":null}]}'#10#10;
+    srv.Script([FakeSend(FakeHead(200, 'text/event-stream', True)), FakeSend(FakeChunk(events)),
+      FakeHold]);
+    if not RunIt(srv, run) then Exit;
+    if run.Outcome.Kind <> aekBadFormat then
+      Exit(Fail(AWhy, '8.5 MB of text: ' + AiKindName(run.Outcome.Kind)));
+    if not PeerGone(srv) then Exit(Fail(AWhy, '8.5 MB of text: the line was not dropped'));
+    FreeAndNil(run);
+    FreeAndNil(srv);
+    { an error body announced at 10 MB }
+    srv := TTbFakeHttpServer.Create;
+    srv.Script([FakeSend('HTTP/1.1 500 Internal Server Error'#13#10'Content-Type: application/json'#13#10 +
+      'Content-Length: 10485760'#13#10'Connection: close'#13#10#13#10 +
+      '{"error":{"message":"big"},"pad":"' + StringOfChar('z', 200 * 1024)), FakeHold]);
+    if not RunIt(srv, run) then Exit;
+    if (run.Outcome.Kind <> aekServer) or (run.Outcome.Status <> 500) then
+      Exit(Fail(AWhy, 'a 10 MB error body: ' + AiDescribe(run)));
+    if not PeerGone(srv) then Exit(Fail(AWhy, 'a 10 MB error body: the line was not dropped'));
     Result := True;
     AWhy := '';
   finally
