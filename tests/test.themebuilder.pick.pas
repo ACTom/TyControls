@@ -7,7 +7,7 @@ unit test.themebuilder.pick;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Controls, LMessages, LCLType, tbpreview;
+  Classes, SysUtils, fpcunit, testregistry, Controls, Forms, LMessages, LCLType, tbpreview;
 
 type
   TTbPickTests = class(TTestCase)
@@ -16,6 +16,8 @@ type
     FPicks: Integer;
     FKey, FCls: string;
     FClicks: Integer;
+    FHost: TForm;
+    procedure HostFrame;
     procedure PickStub(Sender: TObject; const ATypeKey, AStyleClass: string);
     procedure ClickStub(Sender: TObject);
     procedure CtrlDown(AControl: TControl; AX: Integer = 0; AY: Integer = 0);
@@ -54,7 +56,7 @@ type
 implementation
 
 uses
-  ExtCtrls, Forms, tyControls.Base, tyControls.Button, tyControls.Dialogs, tyControls.Notification,
+  ExtCtrls, tyControls.Base, tyControls.Button, tyControls.Dialogs, tyControls.Notification,
   tyControls.Css.Catalog, tbpick, tbsamplewin, tbcssscan, tbcoverage, tbcoverageform, tbtemplates,
   test.themebuilder.golden;
 
@@ -74,6 +76,25 @@ end;
 procedure TTbPickTests.TearDown;
 begin
   FreeAndNil(FFrame);
+  FreeAndNil(FHost);
+end;
+
+{ A press that goes through to the control makes it capture the mouse, which takes a window
+  handle all the way up: the frame goes on a form (never shown) and the widgetset is
+  initialised once (the console runner does not do it). }
+var
+  GPickWidgetSet: Boolean = False;
+
+procedure TTbPickTests.HostFrame;
+begin
+  if not GPickWidgetSet then
+  begin
+    Forms.Application.Initialize;
+    GPickWidgetSet := True;
+  end;
+  FHost := TForm.CreateNew(nil);
+  FHost.SetBounds(0, 0, 640, 720);
+  FFrame.Parent := FHost;
 end;
 
 procedure TTbPickTests.PickStub(Sender: TObject; const ATypeKey, AStyleClass: string);
@@ -117,6 +138,7 @@ end;
 
 procedure TTbPickTests.TestAPlainPressGoesThrough;
 begin
+  HostFrame;
   PlainDown(FFrame.BtnPrimary);
   AssertEquals('P2: no pick', 0, FPicks);
   AssertTrue('P2: the button was pressed', TTyCustomControlAccess(FFrame.BtnPrimary).FPressed);
@@ -126,6 +148,7 @@ end;
 
 procedure TTbPickTests.TestTheReleaseAfterAPickIsSwallowed;
 begin
+  HostFrame;
   FFrame.BtnPrimary.OnClick := @ClickStub;
   CtrlDown(FFrame.BtnPrimary);
   Up(FFrame.BtnPrimary);      { Ctrl let go before the button: still the pick's release }
@@ -179,6 +202,7 @@ end;
 
 procedure TTbPickTests.TestTheStripIsNotHooked;
 begin
+  HostFrame;
   CtrlDown(FFrame.DarkSwitch);
   Up(FFrame.DarkSwitch);
   AssertEquals('P7: the strip is the tool''s', 0, FPicks);
@@ -279,7 +303,7 @@ begin
     doc.CommaText := 'TyButton,TyRibbon,TyButon';
     prev.CommaText := 'TyButton,TyTab,TyFormSurface';
     base.CommaText := 'TyButton,TyTab';
-    TbCoverage(doc, prev, base, notShown, def);
+    TbCoverageLists(doc, prev, base, notShown, def);
     AssertEquals('CV2: not shown', 'TyButon,TyRibbon', notShown.CommaText);
     AssertEquals('CV2: the default look', 'TyFormSurface', def.CommaText);
   finally
@@ -512,7 +536,7 @@ var
     finally
       s.Free;
     end;
-    TbCoverage(doc, prev, base, notShown, def);
+    TbCoverageLists(doc, prev, base, notShown, def);
   end;
 
 begin
