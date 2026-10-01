@@ -146,6 +146,14 @@ var
 begin
   AError := '';
   Result := False;
+  { a reference that cannot go in: Export is disabled -- and a call from anywhere else is
+    refused the same way, or the bundle would go out without that file }
+  if FCollectError <> '' then
+  begin
+    AError := FCollectError;
+    LblNote.Caption := AError;
+    Exit;
+  end;
   info.Name := Trim(EdtName.Text);
   info.Author := Trim(EdtAuthor.Text);
   info.Version := Trim(EdtVersion.Text);

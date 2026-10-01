@@ -371,6 +371,12 @@ begin
     f.Prepare('TyPanel { background-image: url(a.png); }', '', 'x', False);
     AssertFalse('X11: an unsaved theme with a picture cannot go', f.BtnExport.Enabled);
     AssertTrue('X11: and says why: ' + f.LblNote.Caption, Pos(rsTbExportUnsaved, f.LblNote.Caption) > 0);
+    { the review found it: only the button stood in the way -- DoExport itself went ahead and
+      wrote a bundle without the picture }
+    f.EdtTarget.Text := FDir + 'nopicture';
+    AssertFalse('X13: DoExport refuses too', f.DoExport(err));
+    AssertTrue('X13: with the reason: ' + err, Pos(rsTbExportUnsaved, err) > 0);
+    AssertFalse('X13: nothing written', DirectoryExists(FDir + 'nopicture'));
   finally
     f.Free;
   end;
