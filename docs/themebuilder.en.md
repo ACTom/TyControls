@@ -146,3 +146,5 @@ The tool's settings, recent files and AI services are in the user configuration 
 - The editor and the comparison window use SynEdit, whose borders and scroll bars are native and don't follow the editor appearance.
 - The AI always returns the whole file, even to change one colour.
 - On macOS (Apple silicon) the way libcurl is called has not been tried on real hardware yet.
+- On Linux and macOS, Stop does not take effect while the host name is being looked up (DNS): libcurl doesn't check for it then, so it waits for the lookup to finish or for the connect timeout (15 seconds).
+- On Linux and macOS, if the system's libcurl is too old to accept an option the AI needs, nothing is sent and the status line names the option; a newer libcurl fixes it.

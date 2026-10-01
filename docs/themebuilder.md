@@ -146,3 +146,5 @@ Windows 上跟随系统的代理设置。Linux / macOS 上读 `https_proxy`、`h
 - 编辑器和对比窗口用的是 SynEdit，它的边框和滚动条是系统原生的，不跟随编辑器外观。
 - AI 每次都交回整份文件，改一个颜色也一样。
 - macOS（Apple 芯片）上调用 libcurl 的方式还没在真机上验过。
+- Linux / macOS 上，正在解析主机名（DNS）时点「停止」不会立刻生效：libcurl 查名字时不回头看停止，要等查完或连接超时（15 秒）。
+- Linux / macOS 上系统的 libcurl 太旧、不认 AI 需要的某个选项时，生成不会发出，状态行说是哪个选项，换新一点的 libcurl 即可。

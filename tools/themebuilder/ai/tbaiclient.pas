@@ -54,14 +54,15 @@ resourcestring
   rsTbAiOther = 'The request failed.';
   rsTbAiServiceSays = '(%s)';
   rsTbAiRedirect = 'The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings.';
-  rsTbAiProxyAuth = 'The proxy asks for a user name and password (407). Set them in the system''s proxy settings, or use a proxy that does not ask.';
+  rsTbAiOption = 'The libcurl on this system does not accept an option the AI needs: %s. A newer libcurl is needed.';
+  rsTbAiProxyAuth ='The proxy asks for a user name and password (407). Set them in the system''s proxy settings, or use a proxy that does not ask.';
   rsTbAiInsecureKey ='Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network.';
 
 type
   TTbAiErrorKind = (aekNone, aekCancelled, aekNoTransport, aekBadUrl, aekNameNotResolved,
     aekCannotConnect, aekTls, aekTimeout, aekBroken, aekAuth, aekNotFound, aekRateLimit,
     aekBadRequest, aekServer, aekBadFormat, aekTruncated, aekRefused, aekRedirect,
-    aekInsecureKey, aekProxyAuth, aekOther);
+    aekInsecureKey, aekProxyAuth, aekOption, aekOther);
 
   TTbAiResult = record
     Kind: TTbAiErrorKind;
@@ -322,6 +323,11 @@ begin
         Result := rsTbAiProxyAuth;
         withDetail := False;
       end;
+    aekOption:
+      begin
+        Result := Format(rsTbAiOption, [AResult.Detail]);
+        withDetail := False;
+      end;
   else
     Result := rsTbAiOther;
   end;
@@ -554,6 +560,7 @@ begin
         hekTls: Result.Kind := aekTls;
         hekTimeout: Result.Kind := aekTimeout;
         hekBroken: Result.Kind := aekBroken;
+        hekOption: Result.Kind := aekOption;
       else
         Result.Kind := aekOther;
       end;

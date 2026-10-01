@@ -130,6 +130,7 @@ function TbAiTempDir: string;                                 { a fresh folder }
 procedure TbAiRemoveDir(const ADir: string);
 function SettingsCheckRoundTrip(out AWhy: string): Boolean;   { K1 }
 {$IFDEF UNIX}
+function HttpCheckCurlOption(out AWhy: string): Boolean;      { W13, libcurl }
 function SettingsCheckUnixKeyFile(out AWhy: string): Boolean; { K2, Unix }
 function SettingsCheckWideKeyFile(out AWhy: string): Boolean; { K9 }
 function SettingsCheckPrivateFile(out AWhy: string): Boolean; { K10 }
@@ -138,7 +139,7 @@ function SettingsCheckPrivateFile(out AWhy: string): Boolean; { K10 }
 implementation
 
 uses
-  fpjson, jsonparser{$IFDEF UNIX}, BaseUnix{$ENDIF};
+  fpjson, jsonparser{$IFDEF UNIX}, BaseUnix, tbhttpcurl{$ENDIF};
 
 const
   cChinese = #$E4#$B8#$AD#$E6#$96#$87;    { 中文 in UTF-8 }
@@ -1709,6 +1710,33 @@ begin
 end;
 
 {$IFDEF UNIX}
+{ W13: an option the libcurl refuses ends the request before it is sent, naming it }
+function HttpCheckCurlOption(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  run: TTbAiRun;
+  sentence: string;
+begin
+  Result := False;
+  run := nil;
+  srv := TTbFakeHttpServer.Create;
+  TbCurlRefuseOptionForTest := TbCurlOptNoSignal;
+  try
+    srv.Script([FakeSend(FakeHead(200, 'text/event-stream', False, TbLoadFixture('openai-ok.sse')))]);
+    if not RunClient(srv, AiProfile(srv, tafOpenAI), cFakeKey, run, AWhy) then Exit;
+    if run.Outcome.Kind <> aekOption then Exit(Fail(AWhy, 'not a refused option: ' + AiDescribe(run)));
+    sentence := TbAiErrorSentence(run.Outcome, run.Profile);
+    if Pos('CURLOPT_NOSIGNAL', sentence) = 0 then Exit(Fail(AWhy, 'the sentence: ' + sentence));
+    if srv.RequestCount <> 0 then Exit(Fail(AWhy, 'the request was sent anyway'));
+    Result := True;
+    AWhy := '';
+  finally
+    TbCurlRefuseOptionForTest := 0;
+    run.Free;
+    srv.Free;
+  end;
+end;
+
 function FileMode(const AFileName: string): Integer;
 var
   st: TStat;

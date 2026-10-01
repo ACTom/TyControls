@@ -23,7 +23,13 @@ unit tbhttpcurl;
 
   Proxies: libcurl reads http_proxy / https_proxy / no_proxy itself; a loopback address is
   told to use none. Redirects are not followed (CURLOPT_FOLLOWLOCATION 0, libcurl's own
-  default, set anyway): the 3xx is the status, CURLINFO_REDIRECT_URL its Location. The idle timeout is libcurl's low-speed check (under 1 byte a second for
+  default, set anyway): the 3xx is the status, CURLINFO_REDIRECT_URL its Location. Every
+  curl_easy_setopt's answer is checked: an option this libcurl refuses ends the request
+  before anything is sent (hekOption, naming it).
+
+  A limit: a cancel is seen in the progress callback, which libcurl does not call while it
+  resolves the host name (the system's resolver blocks) -- Stop during a slow DNS lookup
+  takes effect when the lookup ends or the connect timeout (15 s) runs out. The idle timeout is libcurl's low-speed check (under 1 byte a second for
   that many seconds). Cancel only raises a flag: the progress callback (about once a second
   even when idle) and the write callback see it and stop the transfer. }
 {$mode objfpc}{$H+}
@@ -54,6 +60,14 @@ type
       AOnData: TTbHttpDataEvent): TTbHttpResult; override;
     procedure Cancel; override;
   end;
+
+var
+  { FOR THE TESTS: curl_easy_setopt answers CURLE_UNKNOWN_OPTION for this option (0 = none),
+    as an old libcurl would }
+  TbCurlRefuseOptionForTest: LongInt = 0;
+
+const
+  TbCurlOptNoSignal = 99;               { CURLOPT_NOSIGNAL, for the test above }
 
 function TbCurlCandidates: TStringArray;            { $THEMEBUILDER_LIBCURL alone when set }
 function TbCurlLoad(out AReason: string): Boolean;  { once; the result is kept }
@@ -239,6 +253,9 @@ end;
 
 function CurlSetOpt(AHandle: Pointer; AOption: LongInt; AValue: Pointer): LongInt;
 begin
+  { FOR THE TESTS: a libcurl that does not know this option }
+  if (TbCurlRefuseOptionForTest <> 0) and (AOption = TbCurlRefuseOptionForTest) then
+    Exit(48);    { CURLE_UNKNOWN_OPTION }
   { one pointer-sized vararg; a C long is passed as Pointer(PtrInt(x)) }
   Result := GCurl.EasySetopt(AHandle, AOption, [AValue]);
 end;
@@ -343,6 +360,17 @@ var
   i: Integer;
   code: LongInt;
   idleSec, connectSec, connectCode: PtrInt;
+  refused: string;
+
+  procedure Opt(AOption: LongInt; AValue: Pointer; const AName: string);
+  var
+    c: LongInt;
+  begin
+    c := CurlSetOpt(h, AOption, AValue);
+    if (c <> 0) and (refused = '') then
+      refused := Format('%s (%d)', [AName, c]);
+  end;
+
 begin
   Result := Default(TTbHttpResult);
   FStatus := 0;
@@ -395,26 +423,35 @@ begin
     if idleSec < 1 then
       idleSec := 1;
     FillChar(FErrBuf, SizeOf(FErrBuf), 0);
-    CurlSetOpt(h, CURLOPT_ERRORBUFFER, @FErrBuf[0]);
-    CurlSetOpt(h, CURLOPT_URL, PChar(address));
-    CurlSetLong(h, CURLOPT_POST, 1);
-    CurlSetOpt(h, CURLOPT_POSTFIELDS, PChar(body));
-    CurlSetLong(h, CURLOPT_POSTFIELDSIZE, Length(body));
-    CurlSetOpt(h, CURLOPT_HTTPHEADER, slist);
-    CurlSetOpt(h, CURLOPT_USERAGENT, PChar(agent));
-    CurlSetOpt(h, CURLOPT_WRITEFUNCTION, @CurlWrite);
-    CurlSetOpt(h, CURLOPT_WRITEDATA, Self);
-    CurlSetLong(h, CURLOPT_NOPROGRESS, 0);
-    CurlSetOpt(h, CURLOPT_XFERINFOFUNCTION, @CurlProgress);
-    CurlSetOpt(h, CURLOPT_XFERINFODATA, Self);
-    CurlSetLong(h, CURLOPT_CONNECTTIMEOUT, connectSec);
-    CurlSetLong(h, CURLOPT_LOW_SPEED_LIMIT, 1);
-    CurlSetLong(h, CURLOPT_LOW_SPEED_TIME, idleSec);
-    CurlSetLong(h, CURLOPT_NOSIGNAL, 1);
+    { every option is needed (the redirect policy, the proxy bypass, the cancel hook): one
+      this libcurl refuses stops the request before anything is sent, naming it }
+    refused := '';
+    Opt(CURLOPT_ERRORBUFFER, @FErrBuf[0], 'CURLOPT_ERRORBUFFER');
+    Opt(CURLOPT_URL, PChar(address), 'CURLOPT_URL');
+    Opt(CURLOPT_POST, Pointer(PtrInt(1)), 'CURLOPT_POST');
+    Opt(CURLOPT_POSTFIELDS, PChar(body), 'CURLOPT_POSTFIELDS');
+    Opt(CURLOPT_POSTFIELDSIZE, Pointer(PtrInt(Length(body))), 'CURLOPT_POSTFIELDSIZE');
+    Opt(CURLOPT_HTTPHEADER, slist, 'CURLOPT_HTTPHEADER');
+    Opt(CURLOPT_USERAGENT, PChar(agent), 'CURLOPT_USERAGENT');
+    Opt(CURLOPT_WRITEFUNCTION, @CurlWrite, 'CURLOPT_WRITEFUNCTION');
+    Opt(CURLOPT_WRITEDATA, Self, 'CURLOPT_WRITEDATA');
+    Opt(CURLOPT_NOPROGRESS, Pointer(PtrInt(0)), 'CURLOPT_NOPROGRESS');
+    Opt(CURLOPT_XFERINFOFUNCTION, @CurlProgress, 'CURLOPT_XFERINFOFUNCTION');
+    Opt(CURLOPT_XFERINFODATA, Self, 'CURLOPT_XFERINFODATA');
+    Opt(CURLOPT_CONNECTTIMEOUT, Pointer(connectSec), 'CURLOPT_CONNECTTIMEOUT');
+    Opt(CURLOPT_LOW_SPEED_LIMIT, Pointer(PtrInt(1)), 'CURLOPT_LOW_SPEED_LIMIT');
+    Opt(CURLOPT_LOW_SPEED_TIME, Pointer(idleSec), 'CURLOPT_LOW_SPEED_TIME');
+    Opt(CURLOPT_NOSIGNAL, Pointer(PtrInt(1)), 'CURLOPT_NOSIGNAL');
     { libcurl's default, said out loud: a redirect would take the key to another host }
-    CurlSetLong(h, CURLOPT_FOLLOWLOCATION, 0);
+    Opt(CURLOPT_FOLLOWLOCATION, Pointer(PtrInt(0)), 'CURLOPT_FOLLOWLOCATION');
     if TbIsLoopbackHost(url.Host) then
-      CurlSetOpt(h, CURLOPT_PROXY, PChar(''));   { '' = no proxy for a local service }
+      Opt(CURLOPT_PROXY, PChar(''), 'CURLOPT_PROXY');   { '' = no proxy for a local service }
+    if refused <> '' then
+    begin
+      Result.Error := hekOption;
+      Result.Detail := refused;
+      Exit;
+    end;
     code := GCurl.EasyPerform(h);
     SendStatusOnce;      { a reply with no body: the status still counts }
     Result.Status := FStatus;

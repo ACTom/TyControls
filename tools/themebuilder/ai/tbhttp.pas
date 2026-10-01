@@ -28,7 +28,9 @@ resourcestring
 
 type
   TTbHttpErrorKind = (hekNone, hekCancelled, hekNoTransport, hekBadUrl, hekNameNotResolved,
-    hekCannotConnect, hekTls, hekTimeout, hekBroken, hekOther);
+    hekCannotConnect, hekTls, hekTimeout, hekBroken,
+    hekOption,      { the transport refused an option it needs (an old libcurl); Detail names it }
+    hekOther);
 
   TTbHttpRequest = record
     Url: string;

@@ -21,7 +21,7 @@ program tbcurlwsl;
 
 uses
   cthreads, Classes, SysUtils, BaseUnix, Unix, tbhttp, tbhttpcurl, tbfakehttp, tbaisettings,
-  tbaichecks;
+  tbaiformat, tbaiclient, tbaichecks;
 
 type
   TCheckFn = function(out AWhy: string): Boolean;
@@ -79,6 +79,31 @@ begin
     AWhy := Format('the child with a proxy set failed (status %d)', [status]);
 end;
 
+{ W14: an https request through a proxy (on this computer, the local server) that answers
+  the tunnel with 407 is "the proxy wants a password" -- libcurl fails the transfer and
+  only CURLINFO_HTTP_CONNECTCODE tells. In a child, whose environment names the proxy }
+function CheckProxy407(out AWhy: string): Boolean;
+var
+  srv: TTbFakeHttpServer;
+  status: cint;
+  proxy: string;
+begin
+  srv := TTbFakeHttpServer.Create;
+  try
+    srv.Script([FakeSend('HTTP/1.1 407 Proxy Authentication Required'#13#10 +
+      'Proxy-Authenticate: Basic realm="x"'#13#10'Content-Length: 0'#13#10#13#10)]);
+    proxy := 'http://127.0.0.1:' + IntToStr(srv.Port);
+    status := fpSystem('https_proxy=' + proxy + ' HTTPS_PROXY=' + proxy +
+      ' no_proxy= NO_PROXY= ./tbcurlwsl --proxy407-check');
+    Result := (status = 0) and (srv.RequestCount = 1) and (Pos('CONNECT', srv.LastRequest.Method) = 1);
+    if not Result then
+      AWhy := Format('the child said %d; the proxy saw %d requests (%s)',
+        [status, srv.RequestCount, srv.LastRequest.Method]);
+  finally
+    srv.Free;
+  end;
+end;
+
 { W11 }
 function CheckLoadedName(out AWhy: string): Boolean;
 var
@@ -96,6 +121,8 @@ end;
 var
   reason, why: string;
   ok: Boolean;
+  prof: TTbAiProfile;
+  child: TTbAiRun;
 begin
   { the samples and the sentences are UTF-8; so is every string here }
   DefaultSystemCodePage := CP_UTF8;
@@ -116,6 +143,24 @@ begin
     WriteLn('reason: ', reason);
     WriteLn(Format('tbcurlwsl: %d passed, %d failed', [Passed, Failed]));
     Halt(Failed);
+  end;
+
+  if ParamStr(1) = '--proxy407-check' then
+  begin
+    prof := Default(TTbAiProfile);
+    prof.BaseUrl := 'https://ai.invalid/v1';    { only the proxy is ever reached }
+    prof.Model := 'm';
+    prof.TimeoutSec := 10;
+    child := TTbAiRun.Create(prof, '');
+    try
+      child.Start;
+      ok := child.WaitDone(15000) and (child.Outcome.Kind = aekProxyAuth);
+      if not ok then
+        WriteLn('proxy407-check: ', Ord(child.Outcome.Kind), ' ', child.Outcome.Detail);
+    finally
+      child.Free;
+    end;
+    if ok then Halt(0) else Halt(1);
   end;
 
   if ParamStr(1) = '--proxy-check' then
@@ -147,6 +192,8 @@ begin
   Run('W10 a local address skips the proxy', @CheckProxyBypass);
   Run('W11 the loaded library is a candidate', @CheckLoadedName);
   Run('W12 a large body arrives (H13)', @HttpCheckBigBody);
+  Run('W13 an option libcurl refuses is named, nothing is sent', @HttpCheckCurlOption);
+  Run('W14 a proxy that refuses the tunnel with 407', @CheckProxy407);
 
   Run('C1@curl an OpenAI stream, cut anywhere', @AiCheckOpenAIStream);
   Run('C3@curl the key is scrubbed from a 401', @AiCheckKeyIsScrubbed);
