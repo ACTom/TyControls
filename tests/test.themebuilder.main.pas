@@ -78,6 +78,7 @@ type
     procedure TestTheBaseRulesGoBeforeTheDocumentsOwn;
     procedure TestAnImportedPlainRuleIsNotCopiedOver;
     procedure TestTheCoverageCheckGoesToAnyRuleOfTheType;
+    procedure TestASplitKeepsTheModernRadius;
   end;
 
 implementation
@@ -86,7 +87,7 @@ uses
   Forms, FileUtil, IniFiles, Graphics, Types, fpjson, jsonparser, SynEdit, SynEditKeyCmds, SynHighlighterCss, SynEditMiscClasses, tyControls.Base,
   tyControls.ThemeLint, tbproblems, tbtemplates, tbeditorlook, tbpreview, tbdocument, test.themebuilder.golden,
   LMessages, LCLType, tbcssscan, tbseeds, tbseedsframe, tbcoverageform, tbexportform, tbsnippetsform,
-  tyControls.Types, tyControls.StyleModel, tbthemesource, tbrules;
+  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme, tbthemesource, tbrules;
 
 const
   { a document whose one value no base theme has }
@@ -1520,6 +1521,32 @@ begin
   AssertEquals('I1: still nothing added', t, FForm.Editor.Lines.Text);
   FForm.JumpToTypeKey('TyFormSurface');
   AssertTrue('I1: a typeKey with no rule gets one', Pos('TyFormSurface {', FForm.Editor.Lines.Text) > 0);
+end;
+
+{ The review found it: splitting a one-mode theme copied --radius into both @mode blocks,
+  and any @mode block wins over the density pack's :root -- the modern density's 8px radius
+  was gone from the preview. Now the split leaves --radius in the :root; a radius set for
+  one mode on purpose (answering No) is the one way to get that, and the question says so. }
+procedure TTbMainFormTests.TestASplitKeepsTheModernRadius;
+begin
+  FForm.Editor.Lines.Text := TyBuiltinThemeCss;
+  FForm.RefreshNow;
+  AssertTrue('modern', FForm.Preview.SetModern(True));
+  AssertEquals('the modern radius', 8, FForm.Preview.Controller.Model.ResolveMetric('--radius', -1));
+  AssertTrue('split', FForm.Seeds.SplitModes);
+  AssertEquals('two columns', 2, Length(FForm.Seeds.Columns));
+  AssertEquals('J1: still the modern radius after the split', 8,
+    FForm.Preview.Controller.Model.ResolveMetric('--radius', -1));
+  AssertEquals('J1: the page shows the document''s', '6px', FForm.Seeds.ResolvedText(TbRadiusSeed, 0));
+  TTbMainForm.PromptAnswerForTest := mrYes;
+  AssertTrue('J1: changed for both modes', FForm.Seeds.ApplyValue(TbRadiusSeed, 0, '9px'));
+  AssertTrue('J1: the question names the density', Pos('density', FForm.LastAsk) > 0);
+  AssertEquals('J1: the density still wins over :root', 8,
+    FForm.Preview.Controller.Model.ResolveMetric('--radius', -1));
+  TTbMainForm.PromptAnswerForTest := mrNo;
+  AssertTrue('J1: changed for light only', FForm.Seeds.ApplyValue(TbRadiusSeed, 0, '10px'));
+  AssertEquals('J1: in the light block it wins over the density (asked first)', 10,
+    FForm.Preview.Controller.Model.ResolveMetric('--radius', -1));
 end;
 
 initialization

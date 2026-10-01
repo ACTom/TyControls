@@ -12,6 +12,12 @@ unit tbseedsframe;
   document's own block for the mode, which wins over the import -- no question asked),
   "expression" when the value is not a plain colour (length).
 
+  --radius is the one seed the density pack sets too (modern: 8px, in a :root). Any @mode
+  block wins over every :root, so a radius written into a mode's block wins over the density
+  as well; splitting into two modes leaves --radius where it was, and a radius the column
+  does not have of its own is asked about first: :root for both modes (the density still
+  wins there), or the mode's block (it wins over the density there too).
+
   A change goes back into the text as one set of edits (tbseeds) handed to the window
   (OnEdits), which applies them as one undo step and refreshes -- and the refresh comes back
   here through UpdateFrom. So the panel never edits its own state: the text is the truth.
@@ -41,6 +47,7 @@ resourcestring
   rsTbSeedOverriddenHint = ':root says %s, but an @mode block in an imported file wins over it. A change goes into this file''s own @mode block, which wins over the import.';
   rsTbSeedSharedAsk = '%s is set in :root and shared by light and dark. Yes: change it there (both modes). No: add it to %s only.';
   rsTbSeedExprAsk = '%s is the expression %s. Replace it with %s?';
+  rsTbSeedRadiusAsk = 'The %s block has no --radius of its own. Yes: set it in :root, for light and dark (the modern density still puts its own radius over it). No: set it in the %s block only, where it also wins over the modern density''s radius. Cancel: change nothing.';
 
 type
   TTbAskEvent = function(const AMsg: string; AButtons: TMsgDlgButtons): TModalResult of object;
@@ -375,7 +382,18 @@ begin
     Exit;
   c := Cell(ASeed, AColumnIndex);
   shared := False;
-  if c.Source = tssShared then
+  { --radius in a mode's block wins over the modern density's radius (the density pack is a
+    :root): one the column does not have of its own goes to :root unless asked otherwise }
+  if (ASeed = TbRadiusSeed) and (FColumns[AColumnIndex] <> '')
+     and (c.Source in [tssShared, tssInherited]) then
+    case Ask(Format(rsTbSeedRadiusAsk, [ColumnName(AColumnIndex), ColumnName(AColumnIndex)]),
+      [mbYes, mbNo, mbCancel]) of
+      mrYes: shared := True;
+      mrNo: shared := False;
+    else
+      Exit;
+    end
+  else if c.Source = tssShared then
     case Ask(Format(rsTbSeedSharedAsk, ['--' + TbSeedNames[ASeed], ColumnName(AColumnIndex)]),
       [mbYes, mbNo, mbCancel]) of
       mrYes: shared := True;

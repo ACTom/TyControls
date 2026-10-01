@@ -28,6 +28,7 @@ type
     procedure TestSplittingIntoTwoModes;
     procedure TestTheRepositoryThemes;
     procedure TestWhatAnImportedFileDecides;
+    procedure TestAnInheritedSeedForBothModes;
   end;
 
   { The seeds panel, built headless (no parent). OnAsk answers from FAnswer and counts,
@@ -62,6 +63,7 @@ type
     procedure TestTheRadiusOfTheDarkColumn;
     procedure TestTheWindowCatchesUpFirst;
     procedure TestModesFromAnImport;
+    procedure TestTheRadiusIsAskedWhereItGoes;
   end;
 
 const
@@ -228,8 +230,10 @@ procedure TTbSeedEditTests.TestSplittingIntoTwoModes;
 const
   cT = ':root {'#10'  --accent: #111111; --radius: 4px;'#10'  --muted: #999999;'#10'}'#10'TyButton { color: red; }'#10;
   cHead = ':root {'#10'  --accent: #111111; --radius: 4px;'#10'  --muted: #999999;'#10'}';
+  { the five colours: --radius stays in the :root (in an @mode block it would win over the
+    modern density's radius) }
   cSix = '    --accent: #111111;'#10'    --surface: #FFFFFF;'#10'    --on-surface: #1F2937;'#10 +
-    '    --border: #D1D5DB;'#10'    --danger: #EF4444;'#10'    --radius: 4px;'#10;
+    '    --border: #D1D5DB;'#10'    --danger: #EF4444;'#10;
 var
   s, s2: TTbCssScan;
   e: TTbTextEdits;
@@ -256,8 +260,12 @@ begin
     AssertEquals('E12: dark', 'dark', cols[1]);
     for seed := 0 to TbSeedCount - 1 do
       for col := 0 to 1 do
-        AssertEquals('E12: own ' + TbSeedNames[seed] + ' ' + cols[col], Ord(tssOwn),
-          Ord(TbSeedCell(s2, seed, cols[col]).Source));
+        if seed = cRadius then
+          AssertEquals('E12: the radius from :root ' + cols[col], Ord(tssShared),
+            Ord(TbSeedCell(s2, seed, cols[col]).Source))
+        else
+          AssertEquals('E12: own ' + TbSeedNames[seed] + ' ' + cols[col], Ord(tssOwn),
+            Ord(TbSeedCell(s2, seed, cols[col]).Source));
     AssertTrue('E12: a two-mode document is not split again',
       Length(TbSplitModesEdits(s2, #10, ['#111111', '#FFFFFF', '#1F2937', '#D1D5DB', '#EF4444', '4px'])) = 0);
   finally
@@ -371,12 +379,29 @@ begin
   end;
 end;
 
+{ An inherited seed of a two-mode document, given to both modes: a line in the top-level
+  :root (a new one before the first block when there is none), not in a mode's block. }
+procedure TTbSeedEditTests.TestAnInheritedSeedForBothModes;
+const
+  cT = '@mode light {'#10'  :root {'#10'    --accent: #111111;'#10'  }'#10'}'#10;
+begin
+  AssertEquals('E15: a :root of its own', ':root {'#10'  --radius: 9px;'#10'}'#10#10 + cT,
+    SetSeed(cT, cRadius, 'light', '9px', True));
+  AssertEquals('E15: into the :root there is', ':root {'#10'  --x: 1px;'#10'  --radius: 9px;'#10'}'#10 + cT,
+    SetSeed(':root {'#10'  --x: 1px;'#10'}'#10 + cT, cRadius, 'light', '9px', True));
+  AssertEquals('E15: not shared: the mode''s block',
+    StringReplace(cT, '    --accent: #111111;'#10, '    --accent: #111111;'#10'    --radius: 9px;'#10, []),
+    SetSeed(cT, cRadius, 'light', '9px', False));
+end;
+
 { ---- the panel ---- }
 
 const
   cDarkDoc = '@mode light { :root { --accent: #111111; } }'#10'@mode dark { :root { --accent: #222222; } }';
   cExprDoc = '@mode light { :root { --surface: darken(#FFFFFF, 10%); } }'#10 +
     '@mode dark { :root { --surface: #222222; } }';
+  cSharedRadius = ':root { --radius: 5px; }'#10'@mode light { :root { --accent: #111111; } }'#10 +
+    '@mode dark { :root { --accent: #222222; } }';
 
 procedure TTbSeedsFrameTests.SetUp;
 begin
@@ -565,16 +590,20 @@ begin
 end;
 
 procedure TTbSeedsFrameTests.TestSplittingFromThePanel;
+var
+  inserted: string;
 begin
   FFrame.UpdateFrom(TyBuiltinThemeCss, '', False);
   AssertTrue('SF9: split', FFrame.SplitModes);
   AssertEquals('SF9: one set of edits', 1, FEdits);
+  inserted := FLastEdits[0].Text;
   FFrame.UpdateFrom(Applied, '', False);
   AssertEquals('SF9: two columns', 2, Length(FFrame.Columns));
   AssertEquals('SF9: light', 'light', FFrame.Columns[0]);
   AssertEquals('SF9: own light', Ord(tssOwn), Ord(FFrame.Cell(1, 0).Source));
   AssertEquals('SF9: own dark', Ord(tssOwn), Ord(FFrame.Cell(1, 1).Source));
-  AssertEquals('SF9: own dark radius', Ord(tssOwn), Ord(FFrame.Cell(TbRadiusSeed, 1).Source));
+  AssertEquals('SF9: the radius stays in :root', Ord(tssShared), Ord(FFrame.Cell(TbRadiusSeed, 1).Source));
+  AssertEquals('SF9: no --radius in the mode blocks', 0, Pos('--radius', inserted));
   AssertEquals('SF9: dark starts as light', FFrame.ResolvedText(1, 0), FFrame.ResolvedText(1, 1));
   AssertEquals('SF9: the dark accent too', FFrame.ResolvedText(0, 0), FFrame.ResolvedText(0, 1));
   AssertFalse('SF9: no split now', FFrame.SplitModes);
@@ -623,6 +652,37 @@ begin
   AssertEquals('SF12: and it wins', '#123456', FFrame.ResolvedText(0, 0));
   AssertEquals('SF12: the dark one as it was', '#60A5FA', FFrame.ResolvedText(0, 1));
   AssertEquals('SF12: its own now', Ord(tssOwn), Ord(FFrame.Cell(0, 0).Source));
+end;
+
+{ --radius the column has not of its own: asked where it goes, with what that means for the
+  modern density -- :root for both (the density still wins there) or this mode's block
+  (where it wins over the density too). A shared one the same; an own one is just changed. }
+procedure TTbSeedsFrameTests.TestTheRadiusIsAskedWhereItGoes;
+begin
+  FFrame.UpdateFrom(cDarkDoc, '', False);
+  AssertEquals('inherited', Ord(tssInherited), Ord(FFrame.Cell(TbRadiusSeed, 0).Source));
+  FAnswer := mrYes;
+  AssertTrue('SF13: yes', FFrame.ApplyValue(TbRadiusSeed, 0, '9px'));
+  AssertEquals('SF13: asked', 1, FAsked);
+  AssertEquals('SF13: :root, for both', ':root {'#10'  --radius: 9px;'#10'}'#10#10 + cDarkDoc, Applied);
+  FAnswer := mrNo;
+  AssertTrue('SF13: no', FFrame.ApplyValue(TbRadiusSeed, 0, '9px'));
+  AssertEquals('SF13: the light block only',
+    StringReplace(cDarkDoc, '--accent: #111111; }', '--accent: #111111; --radius: 9px; }', []), Applied);
+  FEdits := 0;
+  FAnswer := mrCancel;
+  AssertFalse('SF13: cancel', FFrame.ApplyValue(TbRadiusSeed, 1, '9px'));
+  AssertEquals('SF13: changes nothing', 0, FEdits);
+  FFrame.UpdateFrom(cSharedRadius, '', False);
+  FAsked := 0;
+  FAnswer := mrYes;
+  AssertTrue('SF13: shared, yes', FFrame.ApplyValue(TbRadiusSeed, 1, '9px'));
+  AssertEquals('SF13: the radius question', 1, FAsked);
+  AssertEquals('SF13: :root changed', StringReplace(cSharedRadius, '5px', '9px', []), Applied);
+  FFrame.UpdateFrom(TbMinimalTemplate, '', False);
+  FAsked := 0;
+  AssertTrue('SF13: its own', FFrame.ApplyValue(TbRadiusSeed, 1, '9px'));
+  AssertEquals('SF13: is not asked about', 0, FAsked);
 end;
 
 procedure TTbSeedsFrameTests.TestTheWindowCatchesUpFirst;

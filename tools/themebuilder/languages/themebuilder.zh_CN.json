@@ -98,5 +98,6 @@
   "tbseedsframe.rstbseedoverriddenhint": ":root 里写的是 %s，但导入文件里的 @mode 块盖过了它。改动会写进本文件自己的 @mode 块，它在导入之后、盖得过导入。",
   "tbseedsframe.rstbseedsharedask": "%s 写在 :root 里，亮暗共用。选「是」改 :root（两种模式都变），选「否」只给%s加一行。",
   "tbseedsframe.rstbseedexprask": "%s 现在是表达式 %s，改成 %s 吗？",
+  "tbseedsframe.rstbseedradiusask": "%s块没有自己的 --radius。选「是」写进 :root，亮暗两种模式都用（现代密度仍会用它自己的圆角盖过它）；选「否」只写进%s块，在那里它也会盖过现代密度的圆角；选「取消」不改。",
   "tbsnippets.rstbsnippetwhere": "放在主窗体（TTyForm）里："
 }

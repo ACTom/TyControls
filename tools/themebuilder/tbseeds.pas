@@ -65,13 +65,18 @@ function TbSeedCellIn(AScan: TTbCssScan; const AImports: TTbCssScans; ASeed: Int
 function TbIsLiteralSeedValue(ASeed: Integer; const ARaw: string): Boolean;
 function TbColorText(AColor: TTyColor): string;                { '#RRGGBB'; '#RRGGBBAA' when not opaque }
 function TbRadiusText(APx: Integer): string;                    { '6px' }
-{ AShared: for a tssShared cell, True = change the :root value, False = add to the column's block.
+{ AShared: for a tssShared cell, True = change the :root value, False = add to the column's block;
+  for a tssInherited cell of a two-mode document, True = add it to the top-level :root (both
+  modes -- what the seeds page offers for --radius first).
   A tssImported cell (TbSeedCell sees it as shared or inherited) takes AShared = False: only
   the document's own block for the column comes after the import and wins.
   nil when there is nowhere to put it (a block that never closes). }
 function TbSeedSetEdits(AScan: TTbCssScan; const AEol: string; ASeed: Integer;
   const AColumn, AValue: string; AShared: Boolean): TTbTextEdits;
-{ a one-mode document -> two @mode blocks with the six seeds (AValues[seed]); nil for a two-mode one }
+{ a one-mode document -> two @mode blocks with the five colour seeds (AValues[seed]; the radius
+  one is not used); nil for a two-mode one. --radius stays where it is (the :root, or the
+  base): in an @mode block it would win over the modern density's radius (the density pack
+  is a :root, and any @mode block beats every :root) -- a split must not change the look. }
 function TbSplitModesEdits(AScan: TTbCssScan; const AEol: string;
   const AValues: array of string): TTbTextEdits;
 
@@ -439,6 +444,7 @@ var
   decl: TTbDecl;
   target: Integer;
   line: string;
+  toRoot: Boolean;
 begin
   Result := nil;
   cell := TbSeedCell(AScan, ASeed, AColumn);
@@ -449,13 +455,14 @@ begin
     decl := AScan.Block(cell.Block).Decls[cell.Decl];
     Exit(OneEdit(decl.ValueStart, decl.ValueEnd, AValue));
   end;
-  if AColumn = '' then
+  toRoot := (AColumn = '') or (AShared and (cell.Source = tssInherited));
+  if toRoot then
     target := LastBlock(AScan, tbkRoot, '')
   else
     target := LastBlock(AScan, tbkModeRoot, AColumn);
   if target >= 0 then
     Result := InsertIntoBlock(AScan, target, line, AEol)
-  else if AColumn = '' then
+  else if toRoot then
     Result := NewRootBlock(AScan, line, AEol)
   else
     Result := NewModeBlock(AScan, AColumn, [line], AEol);
@@ -470,8 +477,8 @@ var
 begin
   Result := nil;
   if AScan.HasModes or (Length(AValues) < TbSeedCount) then Exit;
-  SetLength(lines, TbSeedCount);
-  for i := 0 to TbSeedCount - 1 do
+  SetLength(lines, TbRadiusSeed);
+  for i := 0 to TbRadiusSeed - 1 do
     lines[i] := '--' + TbSeedNames[i] + ': ' + AValues[i] + ';';
   light := ModeBlockText('light', lines, AEol);
   dark := ModeBlockText('dark', lines, AEol);
