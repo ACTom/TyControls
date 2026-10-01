@@ -207,6 +207,10 @@ type
     RippleFill: Boolean;
     RippleHasColor: Boolean;
     RippleColor: TTyChartColor;
+    { rippleEffect.period (s, as written) and .scale, which the loop runs
+      at: EffectScatterSeries' 4 and 2.5 [Batch 92, AN4] }
+    RipplePeriod: Double;
+    RippleScale: Double;
     { a heatmap row's own itemStyle.borderRadius, by RAW row, when its item
       wrote one (an array form is not a scalar the override table keeps) }
     HeatRadii: TTyCornerRadiiArray;
@@ -531,6 +535,8 @@ begin
   Result.RippleFill := False;
   Result.RippleHasColor := False;
   Result.RippleColor := 0;
+  Result.RipplePeriod := 4;
+  Result.RippleScale := 2.5;
   Result.SymItems := nil;
   Result.SymItemHas := nil;
   Result.VisualRows := nil;
@@ -645,6 +651,9 @@ procedure ItemCaption(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
 var
   spec: TTyLabelSpec;
   raw: Integer;
+  it: TTyRawItem;
+  v: Double;
+  num: Boolean;
 begin
   ACaption.Text := '';
   spec := AVisual.Label_;
@@ -660,6 +669,43 @@ begin
   ACaption.Text := TyLabelText(spec.Formatter, spec.HasFormatter, spec.DefaultText,
     AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False,
     AVisual.SeriesIndex, AVisual.SeriesType, AVisual.Fill);
+  { A BAR'S VALUE COUNTS (BarView's setLabelValueAnimation with
+    seriesModel.getRawValue): a raw value that is a number, the words with
+    the value's slot marked. An array, a text or a handler formatter does
+    not count here. [Batch 92, AN4] }
+  if AVisual.SeriesType = 'bar' then
+  begin
+    it := AStore.RawItem(ARow);
+    num := False;
+    v := NaN;
+    case it.Shape of
+      rshNone:
+        if (AVisual.LabelValueDim >= 0) and (AVisual.LabelValueDim < AStore.DimCount) then
+        begin
+          v := AStore.Get(AVisual.LabelValueDim, ARow);
+          num := not IsNan(v);
+        end;
+      rshScalar:
+        if it.Scalar.Kind = dvkNumber then
+        begin
+          v := it.Scalar.Num;
+          num := True;
+        end;
+    end;
+    { the value is kept whether or not it counts: setLabelValueAnimation
+      stores it either way, and the next render's prevValue is it }
+    ACaption.ValHas := num;
+    ACaption.ValNum := v;
+    if num and spec.ValueAnim then
+    begin
+      ACaption.ValTpl := TyLabelValueTemplate(spec.Formatter, spec.HasFormatter,
+        spec.DefaultText, AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim,
+        AVisual.SeriesIndex, AVisual.SeriesType, AVisual.Fill);
+      ACaption.ValAnim := ACaption.ValTpl <> '';
+      ACaption.ValHasPrec := spec.HasPrecision;
+      ACaption.ValPrec := spec.Precision;
+    end;
+  end;
 end;
 
 { THIS ROW'S OWN COLOUR AND OPACITY, when the author gave them.
@@ -1727,7 +1773,7 @@ var
   shape: TTyChartShape;
   v: TTySeriesVisual;
   el, rip: TTyChartElement;
-  lift: Double;
+  lift, period, rscale: Double;
   k, n: Integer;
   ink: TTyChartColor;
   ov: TTyDataValue;
@@ -1764,10 +1810,40 @@ begin
       ov := AStore.GetOverride(ARow, TyOverrideKey('rippleEffect.number'));
       if ov.Kind = dvkNumber then n := Max(0, Trunc(ov.Num));
     end;
+    { the loop's period and scale, an item's own over the series' }
+    period := AVisual.RipplePeriod;
+    if AStore.HasOverrideByRaw(AStore.GetRawIndex(ARow), TyOverrideKey('rippleEffect.period')) then
+    begin
+      ov := AStore.GetOverride(ARow, TyOverrideKey('rippleEffect.period'));
+      if ov.Kind = dvkNumber then period := ov.Num;
+    end;
+    rscale := AVisual.RippleScale;
+    if AStore.HasOverrideByRaw(AStore.GetRawIndex(ARow), TyOverrideKey('rippleEffect.scale')) then
+    begin
+      ov := AStore.GetOverride(ARow, TyOverrideKey('rippleEffect.scale'));
+      if ov.Kind = dvkNumber then rscale := ov.Num;
+    end;
     for k := 1 to n do
     begin
       rip := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
       rip.Style.Alpha := 1;
+      { IT LOOPS: scale 0.5 -> rippleScale / 2 and opacity 1 -> 0 over the
+        period, ripple i of n started i / n of a period early, plus
+        idx / count ms (EffectSymbol.ts:77-119) [Batch 92, AN4] }
+      rip.Anim.Role := carRipple;
+      rip.Anim.Series := ABinding.SeriesIndex;
+      rip.Anim.Index := ARow;
+      rip.Anim.Sub := k - 1;
+      rip.Anim.G[0] := AP.X + rs.OffsetX;
+      rip.Anim.G[1] := AP.Y + rs.OffsetY;
+      rip.Anim.G[2] := k - 1;
+      rip.Anim.G[3] := n;
+      rip.Anim.G[4] := period * 1000;
+      rip.Anim.G[5] := rscale;
+      if AStore.Count > 0 then rip.Anim.G[6] := ARow / AStore.Count;
+      rip.Anim.G[7] := Ord(rs.Kind);
+      rip.Anim.G[8] := AP.X;
+      rip.Anim.G[9] := AP.Y;
       if AVisual.RippleFill then
       begin
         rip.Style.HasFill := True;
@@ -1806,9 +1882,12 @@ begin
     about its own origin -- the point and the symbol's offset -- and fades
     in (Symbol.ts:184-200). An effectScatter's runs on update timing and
     with its ripples, which are AN4's. [Batch 89] }
-  if AVisual.SeriesType = 'scatter' then
+  if (AVisual.SeriesType = 'scatter') or (AVisual.SeriesType = 'effectScatter') then
   begin
-    el.Anim.Role := carSymbol;
+    { an effectScatter's is EffectSymbol's: its scale at update timing, its
+      opacity left on a replaced style object [Batch 92, AN4] }
+    if AVisual.SeriesType = 'effectScatter' then el.Anim.Role := carEffectSymbol
+    else el.Anim.Role := carSymbol;
     el.Anim.Series := ABinding.SeriesIndex;
     el.Anim.Index := ARow;
     el.Anim.G[0] := AP.X + rs.OffsetX;

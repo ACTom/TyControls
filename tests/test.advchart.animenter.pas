@@ -18,15 +18,15 @@ unit test.advchart.animenter;
       compared by its animation WEIGHT; keys the fixture does not track must
       hold still;
     - the proxy's animator count against the element's;
-    - the clip count against upstream's, less the animators of the elements
-      a later batch models (a value count-up, a marker, a ripple);
+    - the clip count against upstream's, all of it [Batch 92: the counts,
+      the markers and the ripples are modelled -- nothing is subtracted];
+    - the words a count writes (style.text), as strings;
+    - what upstream derives every frame from another element's tween -- a
+      markLine's end symbols and label from its percent, a line's end label
+      from its clip -- against the port's derivation from the same proxy;
     - at rest: every key at (to - from) * 1 + from, and the frame drawn from
       the proxies identical to the static list wherever the proxy rests on
-      the layout.
-
-  Deferred, by element: valueAnimation texts (the gauge detail, bar-label's
-  labels, line-endlabel's end label), markLine / markPoint, and the whole
-  effectScatter case (its ripples) -- AN4. }
+      the layout. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -35,6 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Paint, tyControls.AdvChart.Measure,
      tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
      tyControls.AdvChart.AnimView, tyControls.AdvanceChart,
+     tyControls.AdvChart.MarkerView,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TAnProbe = class(TTyAdvanceChart)
@@ -47,11 +48,14 @@ type
     function Frame: TTyPaintList;
   end;
 
-  TAnMapKind = (amkStatic, amkModel, amkDeferred, amkUnknown);
+  TAnMapKind = (amkStatic, amkModel, amkDerived, amkUnknown);
   TAnMap = record
     Kind: TAnMapKind;
     Series, Index: Integer;
     Role: string;
+    { amkDerived: 'markFrom', 'markTo', 'markLabel' (a markLine's, from the
+      line's percent), 'endLabel' (a line's, from its clip) }
+    Derived: string;
   end;
 
   TAdvChartAnimEnterTest = class(TTestCase)
@@ -70,12 +74,17 @@ type
     procedure NewChart(AMode: TTyChartAnimationMode);
     procedure Load(const AOption: string);
     procedure RunCase(ACase: TJSONObject);
+    procedure CompareDerived(const AName: string; AEl: TJSONObject;
+      const M: TAnMap; ASample: Integer);
+    procedure CheckDerivedFrame(const AName, AId: string; const M: TAnMap;
+      APc, ATx, ATy, ALx, ALy: Double);
     function Draw: TBGRABitmap;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestEnterTimelinesAsUpstream;
+    procedure TestAn4EnterTimelinesAsUpstream;
     procedure TestHeadlessRenderDoesNotAnimateByDefault;
     procedure TestOffModeAndOptionOff;
     procedure TestSeriesMoveInTheDynamicLayer;
@@ -93,6 +102,26 @@ const
 
 var
   GFixture: TJSONData = nil;
+  GAn4: TJSONData = nil;
+
+{ tests/fixtures/advchart-animation-an4.json: tools/advchart-oracle/
+  animation-an4.js, the same harness, clock and samples [Batch 92] }
+function An4Fixture: TJSONObject;
+var sl: TStringList;
+begin
+  if GAn4 = nil then
+  begin
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+        + 'advchart-animation-an4.json');
+      GAn4 := GetJSON(sl.Text);
+    finally
+      sl.Free;
+    end;
+  end;
+  Result := TJSONObject(GAn4);
+end;
 
 function Fixture: TJSONObject;
 var sl: TStringList;
@@ -274,8 +303,33 @@ end;
 
 { ==================== mapping upstream's elements ==================== }
 
+{ THE SERIES OF A MARKER'S GROUP: MarkerView adds one group per series that
+  has the marker, in series order -- the path's first number is the
+  ordinal among them }
+function MarkerSeries(AOption: TJSONData; const AKey: string; AOrdinal: Integer): Integer;
+var
+  ser, s, m: TJSONData;
+  i, n, k: Integer;
+begin
+  Result := -1;
+  if not (AOption is TJSONObject) then Exit;
+  ser := TJSONObject(AOption).Find('series');
+  if ser = nil then Exit;
+  if ser.JSONType = jtArray then n := ser.Count else n := 1;
+  k := 0;
+  for i := 0 to n - 1 do
+  begin
+    if ser.JSONType = jtArray then s := ser.Items[i] else s := ser;
+    if not (s is TJSONObject) then Continue;
+    m := TJSONObject(s).Find(AKey);
+    if not (m is TJSONObject) or (TJSONObject(m).Find('data') = nil) then Continue;
+    if k = AOrdinal then Exit(i);
+    Inc(k);
+  end;
+end;
+
 { 'seriesN:type' -> N, type; and the path's leading number }
-function MapElement(AEl: TJSONObject): TAnMap;
+function MapElement(AEl: TJSONObject; AOption: TJSONData): TAnMap;
 var
   id, owner, path, typ, stype, role, base: string;
   p, k, di: Integer;
@@ -300,18 +354,52 @@ begin
   di := -1;
   d := AEl.Find('dataIndex');
   if (d <> nil) and (d.JSONType = jtNumber) then di := d.AsInteger;
-  { the markers, and a value counting up: AN4's }
+  { THE MARKERS [Batch 92]: a markPoint's symbol path; a markLine's line,
+    its two end symbols and its label (the group's text) }
   if (Pos('markLine', owner) = 1) or (Pos('markPoint', owner) = 1)
     or (Pos('markArea', owner) = 1) then
   begin
-    Result.Kind := amkDeferred;
-    Exit;
-  end;
-  d := AEl.Find('track');
-  if (d <> nil) and (d.JSONType = jtObject)
-    and (TJSONObject(d).Find('style.text') <> nil) then
-  begin
-    Result.Kind := amkDeferred;
+    Result.Kind := amkUnknown;
+    path := Copy(id, Pos('/', id) + 1, MaxInt);
+    base := path;
+    if Pos('#', base) > 0 then base := Copy(base, 1, Pos('#', base) - 1);
+    parts := TStringList.Create;
+    try
+      parts.Delimiter := '.';
+      parts.StrictDelimiter := True;
+      parts.DelimitedText := base;
+      if parts.Count < 2 then Exit;
+      if Pos('markPoint', owner) = 1 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'markPoint';
+        Result.Series := MarkerSeries(AOption, 'markPoint', StrToIntDef(parts[0], -1));
+        Result.Index := StrToIntDef(parts[1], -1);
+      end
+      else if Pos('markLine', owner) = 1 then
+      begin
+        Result.Series := MarkerSeries(AOption, 'markLine', StrToIntDef(parts[0], -1));
+        Result.Index := StrToIntDef(parts[1], -1);
+        Result.Role := 'markLine';
+        if Pos('#label', id) > 0 then
+        begin
+          Result.Kind := amkDerived;
+          Result.Derived := 'markLabel';
+        end
+        else if parts.Count >= 3 then
+        begin
+          if parts[2] = '0' then Result.Kind := amkModel
+          else
+          begin
+            Result.Kind := amkDerived;
+            if parts[2] = '1' then Result.Derived := 'markFrom'
+            else Result.Derived := 'markTo';
+          end;
+        end;
+      end;
+    finally
+      parts.Free;
+    end;
     Exit;
   end;
   Result.Kind := amkUnknown;
@@ -329,7 +417,14 @@ begin
     parts.DelimitedText := base;
     if stype = 'effectScatter' then
     begin
-      Result.Kind := amkDeferred;
+      { 0.<row>.0.0 the symbol's path; 0.<row>.1.<i> ripple i [Batch 92] }
+      if parts.Count >= 4 then
+      begin
+        Result.Kind := amkModel;
+        Result.Index := StrToIntDef(parts[1], -1);
+        if parts[2] = '0' then Result.Role := 'effectSymbol'
+        else Result.Role := 'ripple' + parts[3];
+      end;
       Exit;
     end;
     if stype = 'bar' then
@@ -367,7 +462,13 @@ begin
           Result.Index := StrToIntDef(parts[1], -1);
         end
         else
-          Result.Kind := amkDeferred;
+        begin
+          { the end label rides the clip [Batch 92] }
+          Result.Kind := amkDerived;
+          Result.Derived := 'endLabel';
+          Result.Role := 'lineClip';
+          Result.Index := -1;
+        end;
       end
       else if (typ = 'group') and (di >= 0) then
       begin
@@ -403,7 +504,14 @@ begin
     else if stype = 'gauge' then
     begin
       Result.Index := di;
-      if typ = 'pointer' then
+      { the reading counts: 83.<row>.1 [Batch 92] }
+      if (typ = 'text') and (parts.Count >= 3) then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'gaugeDetail';
+        Result.Index := StrToIntDef(parts[1], -1);
+      end
+      else if typ = 'pointer' then
       begin
         Result.Kind := amkModel;
         Result.Role := 'gaugePointer';
@@ -524,6 +632,8 @@ function Recorded(const AKey: string): Boolean;
 const
   cStyle: array[0..8] of string = ('opacity', 'fill', 'stroke', 'lineWidth',
     'text', 'x', 'y', 'fillOpacity', 'strokeOpacity');
+  cTransform: array[0..8] of string = ('x', 'y', 'scaleX', 'scaleY', 'rotation',
+    'originX', 'originY', 'skewX', 'skewY');
 var i: Integer;
 begin
   if Pos('shape.', AKey) = 1 then Exit(True);
@@ -533,7 +643,28 @@ begin
       if AKey = 'style.' + cStyle[i] then Exit(True);
     Exit(False);
   end;
-  Result := True;
+  { the element's own keys the oracle records: a count's `percent`, a
+    stranded tween's key are not among them }
+  for i := 0 to High(cTransform) do
+    if AKey = cTransform[i] then Exit(True);
+  Result := False;
+end;
+
+{ the list element of a role, by series and index -- its tag }
+function FindListEl(AList: TTyPaintList; ARole: TTyChartAnimRole;
+  ASeries, AIndex: Integer; out AEl: TTyChartElement): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  AEl := Default(TTyChartElement);
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+    if (AList.Element(i).Anim.Role = ARole) and (AList.Element(i).Anim.Series = ASeries)
+      and (AList.Element(i).Anim.Index = AIndex) then
+    begin
+      AEl := AList.Element(i);
+      Exit(True);
+    end;
 end;
 
 function TAdvChartAnimEnterTest.Draw: TBGRABitmap;
@@ -580,7 +711,8 @@ var
   el, track: TJSONObject;
   maps: array of TAnMap;
   name, key: string;
-  s, e, k, j, want, deferred, n: Integer;
+  s, e, k, j, want, n: Integer;
+  upT: TJSONData;
   m: TAnMap;
   p: TTyChartAnimProxy;
   up, upF, up0, got, gotF: TTyDoubleArray;
@@ -606,7 +738,7 @@ begin
   SetLength(got0, els.Count);
   for e := 0 to els.Count - 1 do
   begin
-    maps[e] := MapElement(els.Objects[e]);
+    maps[e] := MapElement(els.Objects[e], ACase.Elements['option']);
     if maps[e].Kind = amkUnknown then
       Miss(Format('%s: %s is not mapped', [name, els.Objects[e].Strings['id']]));
   end;
@@ -617,16 +749,15 @@ begin
     { a frame is built every sample; drawn on one }
     FChart.Frame;
     if s = 5 then Draw;
-    deferred := 0;
     for e := 0 to els.Count - 1 do
     begin
       el := els.Objects[e];
       m := maps[e];
       anim := nil;
       if el.Find('animators') is TJSONArray then anim := el.Arrays['animators'];
-      if m.Kind = amkDeferred then
+      if m.Kind = amkDerived then
       begin
-        if anim <> nil then Inc(deferred, anim.Items[s].AsInteger);
+        CompareDerived(name, el, m, s);
         Continue;
       end;
       if m.Kind <> amkModel then Continue;
@@ -649,6 +780,26 @@ begin
         held still at the layout's value }
       if el.Find('track') is TJSONObject then track := el.Objects['track']
       else track := nil;
+      { THE WORDS A COUNT WRITES, as strings [Batch 92] }
+      if (track <> nil) and (track.Find('style.text') <> nil) then
+      begin
+        upT := track.Arrays['style.text'].Items[s];
+        if not p.HasText then
+          Miss(Format('%s t=%s %s: no words counted here, %s upstream', [name,
+            samples.Items[s].AsString, el.Strings['id'], upT.AsJSON]),
+            name + el.Strings['id'] + 'text0')
+        else if (upT.JSONType = jtString) and (p.Text <> upT.AsString) then
+          Miss(Format('%s t=%s %s: "%s" here, "%s" upstream', [name,
+            samples.Items[s].AsString, el.Strings['id'], p.Text, upT.AsString]),
+            name + el.Strings['id'] + 'text');
+      end;
+      { every tracked key the port must hold }
+      if track <> nil then
+        for k := 0 to track.Count - 1 do
+          if (track.Names[k] <> 'style.text')
+            and (p.GetAnimProp(track.Names[k]).Kind = avkNull) then
+            Miss(Format('%s: %s %s is not modelled', [name, el.Strings['id'],
+              track.Names[k]]), name + el.Strings['id'] + track.Names[k] + 'mod');
       for k := 0 to High(p.Final) do
       begin
         key := p.Final[k].Key;
@@ -686,6 +837,16 @@ begin
         for j := 0 to High(got) do
         begin
           exact := SameBits(gotF[j], upF[j]);
+          { A RIPPLE NEVER RESTS: its last sample is mid-loop, its layout
+            value the first frame of a ripple -- the samples speak }
+          if Pos('ripple', m.Role) = 1 then
+          begin
+            if not SameBits(got[j], up[j]) then
+              Miss(Format('%s t=%s %s: %s[%d] %s here, %s upstream',
+                [name, samples.Items[s].AsString, el.Strings['id'], key, j,
+                 Fmt(got[j]), Fmt(up[j])]), name + el.Strings['id'] + key);
+            Continue;
+          end;
           if exact then
           begin
             if not SameBits(got[j], up[j]) then
@@ -716,11 +877,11 @@ begin
         end;
       end;
     end;
-    want := clips.Items[s].AsInteger - deferred;
+    want := clips.Items[s].AsInteger;
     if FChart.AnimClipCount <> want then
-      Miss(Format('%s t=%s: %d clips here, %d upstream less %d deferred',
+      Miss(Format('%s t=%s: %d clips here, %d upstream',
         [name, samples.Items[s].AsString, FChart.AnimClipCount,
-         clips.Items[s].AsInteger, deferred]), name + 'clips');
+         clips.Items[s].AsInteger]), name + 'clips');
   end;
 
   { AT REST. Every key at (to - from) * 1 + from, from being what the first
@@ -773,6 +934,158 @@ begin
   end;
 end;
 
+{ WHAT UPSTREAM DERIVES EVERY FRAME from another element's tween: a
+  markLine's end symbols (scale = percent, the end at pointAt(percent)) and
+  label (Line.beforeUpdate), a line's end label (_endLabelOnDuring on its
+  clip). The port derives the same from the proxy; compared bit for bit,
+  the words as strings. [Batch 92] }
+procedure TAdvChartAnimEnterTest.CompareDerived(const AName: string;
+  AEl: TJSONObject; const M: TAnMap; ASample: Integer);
+var
+  p: TTyChartAnimProxy;
+  track: TJSONObject;
+  k, ah, av: Integer;
+  key, eid: string;
+  up: TTyDoubleArray;
+  got, pc, tx, ty, lx, ly: Double;
+  g: TTyChartElement;
+  upT: TJSONData;
+  has: Boolean;
+begin
+  eid := AEl.Strings['id'];
+  p := FChart.AnimFindProxy(M.Series, M.Index, M.Role);
+  if p = nil then
+  begin
+    Miss(Format('%s: no %s proxy for %s', [AName, M.Role, eid]), AName + eid + 'dproxy');
+    Exit;
+  end;
+  if not (AEl.Find('track') is TJSONObject) then Exit;
+  track := AEl.Objects['track'];
+  Inc(FCompared);
+  pc := p.Num('shape.percent');
+  tx := NaN;
+  ty := NaN;
+  lx := NaN;
+  ly := NaN;
+  if M.Derived = 'markTo' then
+  begin
+    if FindListEl(FChart.List, carMarkLineTo, M.Series, M.Index, g) then
+      TyMkLineAt(g.Anim.G, pc, tx, ty, lx, ly, ah, av);
+  end
+  else if M.Derived = 'markLabel' then
+  begin
+    if FindListEl(FChart.List, carMarkLineLabel, M.Series, M.Index, g) then
+      TyMkLineAt(g.Anim.G, pc, tx, ty, lx, ly, ah, av)
+    { NO WORDS, NO ELEMENT: upstream keeps an empty text where it is,
+      nothing of it drawn }
+    else if (AEl.Objects['finalText'].Find('style.text') <> nil)
+      and (AEl.Objects['finalText'].Strings['style.text'] = '') then
+      Exit;
+  end;
+  for k := 0 to track.Count - 1 do
+  begin
+    key := track.Names[k];
+    if M.Derived = 'endLabel' then
+    begin
+      if key = 'style.text' then
+      begin
+        upT := track.Arrays[key].Items[ASample];
+        if (upT.JSONType = jtString) and (p.EndLabel.Text <> upT.AsString) then
+          Miss(Format('%s t=%d %s: "%s" here, "%s" upstream', [AName, ASample, eid,
+            p.EndLabel.Text, upT.AsString]), AName + eid + 'text');
+        Continue;
+      end;
+      has := True;
+      if key = 'x' then got := p.EndLabel.X
+      else if key = 'y' then got := p.EndLabel.Y
+      else has := False;
+    end
+    else
+    begin
+      has := True;
+      if (key = 'scaleX') or (key = 'scaleY') then got := pc
+      else if (M.Derived = 'markTo') and (key = 'x') then got := tx
+      else if (M.Derived = 'markTo') and (key = 'y') then got := ty
+      else if (M.Derived = 'markLabel') and (key = 'x') then got := lx
+      else if (M.Derived = 'markLabel') and (key = 'y') then got := ly
+      else has := False;
+    end;
+    if not has then
+    begin
+      Miss(Format('%s: %s %s is not derived here', [AName, eid, key]), AName + eid + key + 'dmod');
+      Continue;
+    end;
+    if not NumsOf(track.Arrays[key].Items[ASample], up) or (Length(up) <> 1) then Continue;
+    if not SameBits(got, up[0]) then
+      Miss(Format('%s t=%d %s: %s %s here, %s upstream', [AName, ASample, eid, key,
+        Fmt(got), Fmt(up[0])]), AName + eid + key);
+  end;
+  { AND THE FRAME DRAWS WHAT WAS DERIVED: the end symbol scaled by the
+    percent about its end and carried to pointAt(percent), the label moved
+    by its place now less its place at rest, the end label where the clip
+    put it }
+  CheckDerivedFrame(AName, eid, M, pc, tx, ty, lx, ly);
+end;
+
+procedure TAdvChartAnimEnterTest.CheckDerivedFrame(const AName, AId: string;
+  const M: TAnMap; APc, ATx, ATy, ALx, ALy: Double);
+var
+  lst, frm: TTyPaintList;
+  i, ah, av: Integer;
+  a, b: TTyChartElement;
+  role: TTyChartAnimRole;
+  want, lx1, ly1, tx1, ty1: Double;
+  p: TTyChartAnimProxy;
+begin
+  if M.Derived = 'markFrom' then role := carMarkLineFrom
+  else if M.Derived = 'markTo' then role := carMarkLineTo
+  else if M.Derived = 'markLabel' then role := carMarkLineLabel
+  else role := carEndLabel;
+  lst := FChart.List;
+  frm := FChart.Frame;
+  if (lst = nil) or (frm = nil) or (frm = lst) then Exit;
+  for i := 0 to lst.Count - 1 do
+  begin
+    a := lst.Element(i);
+    if (a.Anim.Role <> role) or (a.Anim.Series <> M.Series) then Continue;
+    if (role <> carEndLabel) and (a.Anim.Index <> M.Index) then Continue;
+    b := frm.Element(i);
+    case role of
+      carMarkLineFrom, carMarkLineTo:
+        if APc > 0 then
+        begin
+          { the bounds scaled by the percent about the end, then moved }
+          if role = carMarkLineFrom then
+            want := a.Anim.G[0] + (TyShapeBounds(a.Shape).Left - a.Anim.G[0]) * APc
+          else
+            want := a.Anim.G[2] + (TyShapeBounds(a.Shape).Left - a.Anim.G[2]) * APc
+              + (ATx - a.Anim.G[2]);
+          if Abs(TyShapeBounds(b.Shape).Left - want) > 1e-9 then
+            Miss(Format('%s %s: the frame''s symbol at %s, the percent says %s', [AName,
+              AId, Fmt(TyShapeBounds(b.Shape).Left), Fmt(want)]), AName + AId + 'frm');
+        end;
+      carMarkLineLabel:
+        begin
+          TyMkLineAt(a.Anim.G, 1, tx1, ty1, lx1, ly1, ah, av);
+          if (Abs(b.Caption.X - (a.Caption.X + (ALx - lx1))) > 1e-9)
+            or (Abs(b.Caption.Y - (a.Caption.Y + (ALy - ly1))) > 1e-9) then
+            Miss(Format('%s %s: the frame''s label at %s, %s', [AName, AId,
+              Fmt(b.Caption.X), Fmt(b.Caption.Y)]), AName + AId + 'frm');
+        end;
+      carEndLabel:
+        begin
+          p := FChart.AnimFindProxy(M.Series, -1, 'lineClip');
+          if (p <> nil) and not p.AtFinal and p.EndLabel.Active then
+            if not (SameBits(b.Caption.X, p.EndLabel.X) and SameBits(b.Caption.Y, p.EndLabel.Y)) then
+              Miss(Format('%s %s: the frame''s end label at %s, %s', [AName, AId,
+                Fmt(b.Caption.X), Fmt(b.Caption.Y)]), AName + AId + 'frm');
+        end;
+    end;
+    Exit;
+  end;
+  if ATy + ALy = 0 then ;
+end;
+
 procedure TAdvChartAnimEnterTest.TestEnterTimelinesAsUpstream;
 var
   cases: TJSONArray;
@@ -787,15 +1100,43 @@ begin
     cs := cases.Objects[c];
     kind := cs.Strings['kind'];
     if (kind <> 'enter') and (kind <> 'threshold') then Continue;
-    { the ripples loop for ever: AN4's }
-    if cs.Strings['chart'] = 'effectScatter' then Continue;
     RunCase(cs);
     Inc(ran);
   end;
   AssertTrue(Format('%d mismatches over %d element samples (%d weighed):%s',
     [FBad, FCompared, FWeighed, FReport]), FBad = 0);
-  AssertTrue(Format('only %d cases ran', [ran]), ran >= 55);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 56);
   AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 3000);
+end;
+
+{ THE AN4 FIXTURE'S ENTER CASES [Batch 92]: counts with a precision, a fixed
+  one and a template; a gauge's template; the end label on a smooth line,
+  across a gap, without the count, on a vertical base axis; markLine labels
+  at start / insideEndTop / end and a smaller markPoint; markers switched off
+  (their own animation, the host's); ripples of another period, scale,
+  number and brush; showEffectOn 'emphasis' (no ripple). }
+procedure TAdvChartAnimEnterTest.TestAn4EnterTimelinesAsUpstream;
+var
+  cases: TJSONArray;
+  cs: TJSONObject;
+  c, ran: Integer;
+begin
+  AssertEquals('the same clock', T0, An4Fixture.Objects['clock'].Floats['T0'], 0);
+  AssertEquals('the same samples', Fixture.Arrays['samplesMs'].AsJSON,
+    An4Fixture.Arrays['samplesMs'].AsJSON);
+  cases := An4Fixture.Arrays['cases'];
+  ran := 0;
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    if cs.Strings['kind'] <> 'enter' then Continue;
+    RunCase(cs);
+    Inc(ran);
+  end;
+  AssertTrue(Format('%d mismatches over %d element samples:%s',
+    [FBad, FCompared, FReport]), FBad = 0);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 12);
+  AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 700);
 end;
 
 { ==================== the policy ==================== }
@@ -1016,4 +1357,5 @@ initialization
   RegisterTest(TAdvChartAnimEnterTest);
 finalization
   FreeAndNil(GFixture);
+  FreeAndNil(GAn4);
 end.

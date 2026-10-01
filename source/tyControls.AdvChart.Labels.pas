@@ -192,6 +192,13 @@ type
     RtGlobal: TTyRtGlobal;
     RtChain: TTyStringArray;
     RtAny: Boolean;
+    { `valueAnimation`, truthy, and `precision`: a number, or 'auto' / none
+      (HasPrecision False). Only a bar counts its value (BarView's
+      setLabelValueAnimation); every other series ignores the key.
+      [Batch 92, AN4] }
+    ValueAnim: Boolean;
+    HasPrecision: Boolean;
+    Precision: Double;
   end;
   TTyLabelSpecArray = array of TTyLabelSpec;
   TTyLabelSpecTable = array of TTyLabelSpecArray;

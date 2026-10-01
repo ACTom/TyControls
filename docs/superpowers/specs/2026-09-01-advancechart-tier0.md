@@ -8721,3 +8721,61 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 4. **要覆盖的效果**：饼 emphasis 的 `r + scaleSize`、select 的 `x/y = cos/sin(mid) × selectedOffset`（标签与引导线一起移）；符号的 `hoverScale`（`max(1.1, 3/sizeY)` 等规则）；blur 的不透明度；柱的 emphasis 样式。
 5. **基准**：在 `animation.js` 的套路上加 `dispatchAction({type: 'highlight'/'downplay'/'select'})` 的时间线用例（悬停走 `zr.handler`，或直接 `highlight` action），notMerge 下录；与本批一样按代理逐位比。
 6. **交互**：动画中再次悬停/移开的打断（stopTracks 与 `__changeFinalValue`）、更新动画进行中进入 emphasis 的组合，各要一个用例。
+
+## 127. Tier 1 第九十二批：标签、标注与持续动画（AN4，2026-10-01）
+
+AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表盘读数、折线的末端标签、饼标签从旧位置挪到新位置、markLine 的划出与 markPoint 的弹出、effectScatter 的涟漪，以及坐标轴指示器的滑动。两批的测试一直从上游的 clip 数里减掉这些元素的动画器。这一批把它们都接上，减法删掉，三个 fixture 的 clip 数逐采样与上游完全相同。
+
+### 上游的做法（`wf86/anim.md` 3A §A5、3B §B3/B11–B13；源码逐行核过，几处在真 dist 上探针确认）
+
+- **LabelManager 的旧布局**：`_animateLabels` 对每个有 `oldLayout` 的文字先 `attr(oldLayout)`，再以更新时序、带 dataIndex `updateProps({x, y, rotation})`。挂在宿主上的标签（柱、符号）自身的 x/y 恒为 0，什么也不发生；真正会挪的是饼标签，它们由 `pieLabelLayout` 直接写 `label.x/y`。`oldLayout` 是**上一次布局的终值**，不是当前值：动画进行中再来一次 Option，标签先跳回上一次的终点再出发（新 fixture `pie-update.inflight` 确认）。引导线同理，`shape.points` 从旧点补间，**不带 dataIndex**。漏斗标签靠 `style.x/y` 定位，不走这条路。
+- **数值滚动**：只有 BarView 和 GaugeView 调 `setLabelValueAnimation`，别的系列写了 `label.valueAnimation` 也照样淡入。`animateLabelValue` 在值没变（`prevValue === value`）时什么都不做（进行中的那条接着跑）；否则先置 `percent = 0`，以 `percent: 1` 为目标，没有旧值时 `initProps`（入场时序）、有旧值时 `updateProps`（更新时序），during 里用 `interpolateRawValues` 算当前值写字。起点是**进行中那条的插值**，否则是旧值；`source || 0`。数值的精度：写了 `precision` 用它，否则取 `max(getPrecision(起点), getPrecision(终点))`，再 `toFixed`，打印用 `Number#toString`（`-0` 打成 `0`）。文字：没有 formatter 是值本身；模板里 `{c}` 换成插值，其余照常。数值滚动的标签不淡入。
+- **折线末端标签**：`endLabel` 是折线 polyline 的 textContent。裁剪矩形入场时，`_endLabelOnDuring` 是裁剪动画的 during：取裁剪矩形的前沿（横向基轴是 `x + width`，inverse 取另一侧），`getIndexRange` 在布局点里找跨过前沿的那一段——跨在空值上（`connectNulls` 关）停在空值前一点；找到就用 `polyline.getPointOn`（直线段线性、曲线段用 `cubicRootAt` 解三次方程）定位、值在两端之间按比例插值；没找到时取第一个点，**直到动画记录里有过一次有效区间**（或 percent 为 1）才取最后一个。创建时先 `during(1)` 设到终态，done 时回到第一次记下的位置。默认 `valueAnimation: true`、`distance: 8`，横向基轴左对齐垂直居中。**更新时裁剪矩形 initProps 不带 during**，末端标签直接站在终点。
+- **标注**：markPoint 是 SymbolDraw 的新符号（缩放 0 → size/2、不透明度 0 → 自己的），markLine 是 `Line._createLine`（`shape.percent` 0 → 1，然后 `beforeUpdate` 每帧按 percent 放两端符号——缩放 = percent，终点 = `pointAt(percent)`——和标签：`d = normalize(终点 − 起点)`，percent 为 0 时 d 是零向量，`end` 位置的标签居中）。时序走标注自己的模型链（`markLine` 的 easing 默认 `linear`），**系列的 animationDuration 管不到它**；开关是 `MarkerModel.isAnimationEnabled` = 标注的 `animation` 且宿主系列 `isAnimationEnabled()`。markArea 默认 `animation: false`。探针确认：**notMerge 下标注是新视图**，每次设 Option 都重新入场；markArea 的更新补间在 notMerge 下根本到不了。
+- **effectScatter**：构造时 `updateData` 一次（缩放与样式不透明度从 0 入场），紧接着 `EffectSymbol.updateData` 又调一次：缩放以**更新时序**重新补间（第一次的轨道尚未步进就被 stopTracks 步回 0），而 `_updateCommon` 换了 style 对象——不透明度那条补间还在跑、动画器还在数，却不再影响画面。涟漪是原始 `animate('', true)`：`when(period, scale/2)` 与 `animateStyle(true).when(period, {opacity: 0})`，延迟 `-i/n·period + idx/count`（负延迟从周期中途开始，小数延迟在 epoch 量级上舍入），循环重启保留相位；**不受系列 animation 开关约束**。只在 `DIFFICULT_PROPS`（符号类型、周期、缩放、个数）变了才重启，更新时接着跑；删除即刻消失。帧间隔超过一个周期时，跨过的那一帧写出终值再按余数续上（探针：更新用例 t = 0 的涟漪都是 1.25 / 0）。
+- **坐标轴指示器**：`BaseAxisPointer.render` 首次显示直接到位；之后 props 与上次不同（propsEqual）时，`determineAnimation` 为真就 `updateProps`（指示器模型链：轴自己的 axisPointer → tooltip.axisPointer，默认 `animation: 'auto'`、200 ms、`exponentialOut`），否则停掉直接设值。`'auto'`：类目轴 bandWidth > 15，或 snap 时 `|extent| / 该坐标系所有系列的数据量` > 15；值轴在 tooltip 触发下默认 snap。根上的 `animation: false` 挡不住它（tooltip 的 `'auto'` 先到）。隐藏只是 hide，下次显示从原处滑过去。clip 在下一个 rAF 才第一次步进。
+- **dataZoom / 漫游的载荷动画**：inside 缩放与 realtime 的 slider 派发 `{cubicOut, 100}` 的更新载荷，系列与坐标轴（`groupTransition`）一起补间 100 ms。
+
+### 做法
+
+- **代理加三样**（`AnimView`）：计数（`FVal*`、`ValueDuring`、当前文字 `Text`）；末端标签记录（`TTyChartAnimEndLabel`，挂在裁剪代理上，`EndLabelDuring` / `EndLabelDone` 照抄 `_endLabelOnDuring` 与动画记录）；`MergeFinal` 让一个代理在入场之后再加键。新角色：`gaugeDetail`、`effectSymbol`、`ripple0..n`（键带序号，`TyChartAnimRoleKey`）、`markPoint`、`markLine`（线、两端符号、标签共用一个代理，`shape.percent`）、末端标签读裁剪代理。`TyAnimInterpolateValue` 是 `interpolateRawValues` 的数值分支。
+- **构建器打标签**：`TTyElementCaption` 多了 `ValAnim/ValHas/ValNum/ValTpl/ValHasPrec/ValPrec`，文字模板里用 `#1` 占住值的位置（`TyLabelValueTemplate`：`TyLabelText` 加了「值的文字」覆盖参数，formatTpl 的 `{c}` 就落在那里；handler formatter 不滚动）；柱的 `ItemCaption` 记值，`label.valueAnimation/precision` 读进 `TTyLabelSpec`；仪表盘读数（`TyGaugeFormatTpl`）同理。markLine 的四个元素带端点、距离、位置码、dy、切线方向；`TyMkLineAt` 是 `Line.beforeUpdate` 对直线在任意 percent 的那一段（终点、标签位置、对齐）。effectScatter 的涟漪带中心、序号、个数、周期（ms）、缩放、`idx/count`、符号类型，`rippleEffect.period/scale` 读进视觉（含数据项覆盖）。
+- **末端标签**是新元素（端口以前没有画 `endLabel`）：控件在折线的标记之后建它——最后一个合法点、`during(1)` 的位置与文字（`LinePath` 新增 `TyPathPointOn`、`TyEndLabelStep`、`TyLastLegalRow`，traps 屏蔽），z2 200，主题字体，墨色按系列色作外侧标签；datum 为空，免得标签展开把它当宿主再展开一次。
+- **ArmUpdate**：保留下来的饼标签按旧布局位移；引导线按旧点补间；柱标签、仪表盘读数按上面的规则计数（进行中的接着插值，值没变不动）；标注一律重新入场；effectScatter 的符号按散点规则更新，涟漪按 DIFFICULT_PROPS 决定接着跑还是重启；裁剪代理的末端标签记录在更新时停用。
+- **持续动画与分层**：涟漪不停，图表一直 `AnimLive`。只剩循环 clip 时（`AnimLoopOnly`）进入 `AnimContinuous`：静态层重画一次、画除涟漪与 effectScatter 符号（及挂在它们上的标签）之外的一切，动态层每帧只画这三样（`AnimPart`）；入场或更新还在跑时仍按 AN2 的方式整体进动态层。
+- **指示器**：独立的 `FPtrAnim` 驱动，按轴（`xAxis0`）一个代理，键是上游指示器的形状（line 的 `x1/y1/x2/y2`，shadow 的 `x/y/width/height`）；`MouseMove` 解析出命中后 `PtrAnimSync`，`PaintAxisPointers` 画在代理当前的位置，标签跟着线走。指示器动画不碰系列分层，定时器在任一驱动有 clip 时开。`camOff` 不建代理（直接跳）。
+- **顺带修的**：饼标签的 `cos/sin/atan2` 改用 V8 的（`TyJsCos/TyJsSin/TyJsAtan2`）——标签要从旧位置逐位补间，FPC 的 libm 差一个 ulp 就对不上；`label.valueAnimation` 以前对所有系列都关掉淡入，现在只对柱生效；effectScatter 的标签加入 LabelManager 淡入。
+
+### 帧代价（持续动画）
+
+涟漪是端口第一个不会停的动画。只剩涟漪时，每 16 ms 一帧的代价是：静态层一次 blit，加动态层那张控件大小的 BGRA 位图的分配、填充、合成（Q7 量过的约 13 ms 底价），加涟漪与符号本身。临时探针（800×600、默认主题、`RenderCached` 连画 60 帧，未入库）：静态柱图约 0 ms/帧（只有 blit）；柱图入场约 10.9 ms；十个点的 effectScatter 加一条折线入场约 17.7 ms；入场结束、只剩 60 个涟漪 clip 时约 13.5 ms——分层省下的是系列本身，省不掉的是那张位图。也就是说，一个带 effectScatter 的图表在窗口里会持续占用接近一个核的 UI 线程时间——和上游在浏览器里 rAF 常驻一样，但没有 GPU 合成。分层把每帧要画的系列元素减到涟漪那几个，底价却省不掉。要静止的场合设 `AnimationMode := camOff`，或 `showEffectOn: 'emphasis'`（端口目前不在 emphasis 时启动涟漪，见偏差，等于没有涟漪）。无头渲染（`camAuto` 的 `RenderTo`、导出、设计器）从不布防，不受影响。
+
+### 基准
+
+- `tools/advchart-oracle/animation-an4.js`（复制 `animation-update.js` 的钩子）→ `tests/fixtures/advchart-animation-an4.json`：12 个入场用例（计数：auto 精度、固定精度、模板；仪表盘模板；末端标签：平滑线、空值、不滚动带 formatter、竖向基轴；markLine 的 start / insideEndTop / 两点线与小号 markPoint；标注关闭——markLine 自己关、宿主关；涟漪换周期/缩放/个数/描边；`showEffectOn: 'emphasis'`），5 个更新用例（计数两次打断、仪表盘倒数、饼打断、effectScatter 移动、末端标签折线更新），9 个指示器用例（line、shadow、中途换目标、tooltip 的时长缓动、轴自己的 axisPointer 压过 tooltip 的、`animation: false`、40 个类目带宽 7.5、值轴 snap、根 `animation: false`）。指示器组被加在 zr 根上而不在组件视图里，脚本按「不是任何视图的根」单独记录；派发后不 flush，采样 0 不跑帧（setToFinal 的终值），之后每个采样一帧。7 条守卫，两次生成逐字节一致。
+- `test.advchart.animenter`：删掉延期减法，原 fixture 的 57 个入场/阈值用例加上 effectScatter，新 fixture 的 12 个入场用例另起一个测试；计数的文字逐字符串比较；markLine 两端符号、标签与末端标签这些「每帧由别的补间推导」的值，按端口从同一代理推导的结果逐位比较，并检查帧里画出来的位置与推导一致。涟漪的「终值」不比（它从不静止），逐采样逐位比。
+- `test.advchart.animupdate`：删掉延期减法；第一次 Option 的收尾改成照 oracle 每 250 ms 一帧（循环 clip 的重启时刻决定相位，逐位比较要求帧时刻一致）；新 fixture 的 5 个更新用例另起一个测试；打断后的终值是 `(to − from) × 1 + from`，from 是布局不知道的中途值，静止检查对布局值放宽到 4e−16 的相对差（逐采样仍逐位）。
+- 新单元 `test.advchart.animlabels`（10 个测试）：9 个指示器用例经真控件的 `MouseMove`，每采样逐位比较指示器的移动键、动画器数与指示器 clip 数；手写：精度规则、`TyEndLabelStep` 的各种取舍、帧里的末端标签、值不变不计数、涟漪多周期后相位不变（含跨长间隔那一帧写终值）、只剩循环时分层、散点标签照样淡入、隐藏后再显示从原处滑、`camOff` 直接跳。
+
+### 变异测试
+
+`an4/mutate.py`：37 个变异，逐个改源码、重编、依次跑本批、AN2、AN3 的测试、还原。
+- 精度规则（4）：`max` 改 `min`、写了的 precision 不读、只看终点的精度、不取整——全部被手写的精度测试杀死，也都让 fixture 的文字对不上。
+- 计数（3）：进行中的从旧值而不是插值出发（`bar-label-update.inflight` 杀死）、值没变也重新计数、有旧值也用入场时序。
+- 末端标签（5）：动画记录的「找到过区间」规则去掉、前沿取 `x` 而不是 `x + width`、不加 distance、不插值、跨空值也插值。
+- 标注（8）：markLine 用系列的模型（时序与缓动不同）、终点符号不缩放、不移到 `pointAt(percent)`、标签停在终点、零向量不当零、markPoint 不从 0 缩放、不淡入、门槛不看宿主。终点符号与标签这几条只改帧、不改代理，只有「帧里画的与推导一致」那道检查看得见。
+- 涟漪（6）：不加 `idx/count`、不加 `-i/n·period`、不循环、循环重启不保留相位（引擎里的那一行）、更新时总是重启、effectScatter 符号缩放用入场时序。
+- 标签旧布局（5）：从新布局出发、不带 dataIndex、打断时从当前值而不是上一次终点出发、引导线从新点出发、引导线带 dataIndex。
+- 指示器（6）：200 改 300、`exponentialOut` 改 `cubicOut`、带宽门槛 15 改 75、snap 不看、首次显示也滑、轴自己的 axisPointer 不读。
+
+首轮 36 个杀死，存活 1 个：「轴自己的 axisPointer 不读」——fixture 只有写在 tooltip.axisPointer 上的时长。oracle 补了 `axisPointer.axisOwn`（xAxis.axisPointer 600 / linear 压过 tooltip 的 300 / cubicOut，真 dist 上轴的赢），重生成后其余用例逐字节不变，重跑杀死。
+
+### 推迟与偏差
+
+- **dataZoom / 漫游的载荷动画不做**：上游这时是同一个 Option 的 merge 式更新，坐标轴走 `groupTransition`，系列与轴一起补间 100 ms。端口只有 notMerge 的更新路径，也没有坐标轴代理（AN3 已推迟）；只让系列补间、轴跳到终值会让柱子与刻度错位，比不动更糟。等做 merge 式更新与 `groupTransition` 时一起做。上游 fixture 未录。
+- **指示器标签**：上游对标签的 x/y 单独以同一时序补间；端口的标签框按皮肤排版，跟着线走，不与上游逐位比较。轴上 `axisPointer` 组件根的动画键（全局 `axisPointer` 选项）不读；悬停高亮的 stateTransition（AN3b）不在这批。
+- **末端标签**：状态里的 `endLabel.show`、富文本末端标签（画成一段）、阶梯线（沿未阶梯化的路径走）、只有一个点的折线（没有 run，不画）不支持；值是数组的数据项不滚动（文字停在终值）。浏览器里路径数据画过一次后会转成 Float32Array，平滑线的 `getPointOn` 在浏览器里读的是单精度控制点；oracle（不绘制）与端口都是双精度。
+- **计数**：handler formatter、富文本标签、数组原始值不滚动；静止时画的是静态列表的文字（`12.50` 这样的原样文本），上游 during(1) 之后是 `12.5`。
+- **markLine** 只按直线做（端口没有 curveness）；percent 为 0 时 `end/start` 标签按零向量居中，对齐用 `TyAnchorBox` 重排，旋转的标签不重排框。markArea 在 notMerge 下从不动画（与上游一致）。
+- **effectScatter**：`showEffectOn: 'emphasis'` 的涟漪不启动（上游悬停时启动、离开时清掉）；涟漪与 effectScatter 符号在持续阶段画在动态层，压在其它系列之上（z 序偏差）；涟漪不受 `animation: false` 约束（上游如此），但受 `AnimationMode` 约束。
+- 饼标签以外的独立标签（漏斗）更新时不位移（上游靠 `style.x/y` 补间，没有 fixture）。

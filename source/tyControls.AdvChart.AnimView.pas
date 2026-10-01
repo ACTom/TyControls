@@ -92,7 +92,37 @@ unit tyControls.AdvChart.AnimView;
   dropped; sorted by the new raw index into Float32 arrays; past a 3000 px
   bounding difference the line is set, not tweened. The symbols kept
   ('=') follow the polyline's points every frame (its first animator's
-  during). }
+  during).
+
+  LABELS, MARKERS AND WHAT NEVER STOPS [Batch 92, AN4]:
+    label        a COUNT (label.valueAnimation, a bar's only -- BarView's
+                 setLabelValueAnimation): `percent` 0 -> 1 with the count
+                 as its during (labelStyle.ts animateLabelValue), from the
+                 previous value -- or the interpolated one of a count in
+                 flight -- and nothing when the value did not change; enter
+                 timing when there was no previous value, update otherwise;
+                 no fade. A pie's label in an update: x / y / rotation from
+                 the last layout (LabelManager's oldLayout) at update timing
+                 and the row
+    guide        in an update: shape.points from the old ones, no row
+    gaugeDetail  the reading counts the same way, the gauge's own timing
+    markPoint    SymbolDraw's pop-in on the MARKER's model (MarkerModel:
+                 its `animation` and the host's isAnimationEnabled), at the
+                 marker's data index
+    markLine     one proxy per line, shape.percent 0 -> 1 (Line.ts
+                 _createLine); the end symbols scale by the percent and the
+                 label follows Line.beforeUpdate at that percent
+    effectSymbol EffectSymbol: the scale at UPDATE timing from 0 (the
+                 second updateData stops the first's tracks before they
+                 step), the opacity tween stranded on a replaced style
+                 object -- it runs, and moves nothing
+    ripple       loops for ever: scale 0.5 -> rippleScale / 2, opacity
+                 1 -> 0 over the period, delay -i / n * period + idx /
+                 count (EffectSymbol.ts:77-119); carried through an update
+                 unless the type, period, scale or number changed
+    endLabel     a line's end label rides its clip: the clip's during is
+                 LineView._endLabelOnDuring (the place on the line where the
+                 clip has got to, and the value there). }
 interface
 uses SysUtils, Classes, Math, contnrs,
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
@@ -101,6 +131,29 @@ uses SysUtils, Classes, Math, contnrs,
 
 type
   TTyChartAnimProxy = class;
+
+  { A LINE'S END LABEL, driven by its clip (LineView._endLabelOnDuring)
+    [Batch 92, AN4] }
+  TTyChartAnimEndLabel = record
+    { the clip drives it: an entering clip with the label shown }
+    Active: Boolean;
+    { the layout points (flat x, y per row, Float32 values), each row's raw
+      value (not a number: none), the polyline's path }
+    Pts, Vals: TTyDoubleArray;
+    Cmds: TTyPathCmdArray;
+    Horiz, Inverse, ConnectNulls, ValueAnim, HasPrec: Boolean;
+    Prec, Distance: Double;
+    { the words, #1 where the value goes }
+    Tpl: string;
+    { the animation record }
+    LastFrameIndex: Integer;
+    HasOriginal: Boolean;
+    OriginalX, OriginalY: Double;
+    { where it is now, and what it says }
+    X, Y: Double;
+    Text: string;
+    HasText: Boolean;
+  end;
 
   { a symbol following a polyline's points: which, and its point }
   TTyChartAnimFollow = record
@@ -121,6 +174,15 @@ type
     FGhost: TTyChartElement;
     { a line's polyline: the symbols that follow its points }
     FFollow: array of TTyChartAnimFollow;
+    { A COUNT (animateLabelValue) [Batch 92]: from, to, the interpolated
+      value while it runs, the precision, the words; and the text now }
+    FValFrom, FValTo, FValInterp, FValPrec: Double;
+    FValHasInterp, FValHasPrec: Boolean;
+    FValTpl: string;
+    FText: string;
+    FHasText: Boolean;
+    { a line's clip: its end label }
+    FEnd: TTyChartAnimEndLabel;
   public
     constructor Create(ASeries, AIndex: Integer; const ARole: string);
     { the values the layout gave every key }
@@ -133,6 +195,15 @@ type
     { the polyline's during: every following symbol to its point }
     procedure FollowDuring(APercent: Double);
     function FollowCount: Integer;
+    { the count's during: the interpolated value into the words }
+    procedure ValueDuring(APercent: Double);
+    { the line clip's during and done, for its end label }
+    procedure EndLabelDuring(APercent: Double);
+    procedure EndLabelDone;
+    { the words now, while a count runs }
+    property Text: string read FText;
+    property HasText: Boolean read FHasText;
+    property EndLabel: TTyChartAnimEndLabel read FEnd;
     property Series: Integer read FSeries;
     property Index: Integer read FIndex;
     property Role: string read FRole;
@@ -175,6 +246,10 @@ type
     { a pie with animationTypeUpdate 'expansion': every render is its first
       (PieView never keeps its data) }
     PieExpandAlways: Boolean;
+    { THE SERIES' MARKERS' models [Batch 92]: MarkerModel.isAnimationEnabled
+      -- the marker's `animation` and the host's isAnimationEnabled -- is
+      Present False when the host does not animate }
+    MarkLine, MarkPoint: TTyAnimModel;
   end;
   TTyChartAnimSeriesArray = array of TTyChartAnimSeries;
 
@@ -241,6 +316,14 @@ type
 { The proxy a role reads: several roles share one (a line's run and area its
   clip, a candle's body and wicks, a progress arc and its end cap). }
 function TyChartAnimProxyRole(ARole: TTyChartAnimRole): string;
+{ ... and the key of one element's proxy: the role's, a ripple's with its
+  number [Batch 92] }
+function TyChartAnimRoleKey(const AEl: TTyChartElement): string;
+{ interpolateRawValues for a number (util/model.ts): from `AFrom || 0` to
+  ATo at APercent, rounded to the precision -- the larger of the two values'
+  getPrecision unless one is given (AHasPrec) [Batch 92] }
+function TyAnimInterpolateValue(AFrom, ATo, APercent: Double; AHasPrec: Boolean;
+  APrec: Double): Double;
 { One element as its proxy says it is now. }
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 { ADest := ASource with every bound element applied and every following label
@@ -267,7 +350,8 @@ function TyLineBoundingDiff(const A, B: TTyDoubleArray): Double;
 implementation
 
 uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data,
-  tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath;
+  tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView;
 
 { ==================== the proxy ==================== }
 
@@ -360,6 +444,110 @@ end;
 function TTyChartAnimProxy.FollowCount: Integer;
 begin
   Result := Length(FFollow);
+end;
+
+function TyAnimInterpolateValue(AFrom, ATo, APercent: Double; AHasPrec: Boolean;
+  APrec: Double): Double;
+var
+  s, v, p: Double;
+  mask: TFPUExceptionMask;
+begin
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    { `sourceValue || 0`: not a number, nought and minus nought are 0 }
+    if IsNan(AFrom) or (AFrom = 0) then s := 0 else s := AFrom;
+    { interpolateNumber: (p1 - p0) * percent + p0 }
+    v := (ATo - s) * APercent + s;
+    if AHasPrec then p := APrec
+    else p := Max(TyGetPrecision(s), TyGetPrecision(ATo));
+    Result := TyRoundP(v, p);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+procedure TTyChartAnimProxy.ValueDuring(APercent: Double);
+var v: Double;
+begin
+  v := TyAnimInterpolateValue(FValFrom, FValTo, APercent, FValHasPrec, FValPrec);
+  { interpolatedValue: null once it lands }
+  FValHasInterp := APercent <> 1;
+  FValInterp := v;
+  FText := StringReplace(FValTpl, #1, TyJsNumberToString(v), [rfReplaceAll]);
+  FHasText := True;
+end;
+
+function EndRowValue(const AE: TTyChartAnimEndLabel; ARow: Integer): Double;
+begin
+  if (ARow >= 0) and (ARow <= High(AE.Vals)) then Result := AE.Vals[ARow]
+  else Result := NaN;
+end;
+
+procedure TTyChartAnimProxy.EndLabelDuring(APercent: Double);
+var
+  xOrY, dX, dY, v: Double;
+  st: TTyEndLabelStep;
+begin
+  if not FEnd.Active then Exit;
+  { the record: where the label was the first time a frame is not the last
+    (the final place `during(1)` put it when the clip was made) }
+  if (APercent < 1) and not FEnd.HasOriginal then
+  begin
+    FEnd.HasOriginal := True;
+    FEnd.OriginalX := FEnd.X;
+    FEnd.OriginalY := FEnd.Y;
+  end;
+  { the clip's leading edge }
+  if FEnd.Inverse then
+  begin
+    if FEnd.Horiz then xOrY := Num('shape.x')
+    else xOrY := Num('shape.y') + Num('shape.height');
+  end
+  else if FEnd.Horiz then xOrY := Num('shape.x') + Num('shape.width')
+  else xOrY := Num('shape.y');
+  if FEnd.Horiz then dX := FEnd.Distance else dX := 0;
+  if FEnd.Horiz then dY := 0 else dY := -FEnd.Distance;
+  if FEnd.Inverse then
+  begin
+    dX := dX * -1;
+    dY := dY * -1;
+  end;
+  st := TyEndLabelStep(FEnd.Pts, FEnd.Cmds, xOrY, FEnd.Horiz, FEnd.ConnectNulls,
+    APercent = 1, FEnd.LastFrameIndex);
+  if st.HasPoint then
+  begin
+    FEnd.X := st.X + dX;
+    FEnd.Y := st.Y + dY;
+  end;
+  { valueAnimation: setLabelText(the value there) }
+  if FEnd.ValueAnim and (FEnd.Tpl <> '') then
+  begin
+    if st.Interp then
+    begin
+      if IsNan(EndRowValue(FEnd, st.Row1)) then Exit;
+      v := TyAnimInterpolateValue(EndRowValue(FEnd, st.Row0),
+        EndRowValue(FEnd, st.Row1), st.T, FEnd.HasPrec, FEnd.Prec);
+    end
+    else
+    begin
+      v := EndRowValue(FEnd, st.Row0);
+      if IsNan(v) then Exit;
+    end;
+    FEnd.Text := StringReplace(FEnd.Tpl, #1, TyJsNumberToString(v), [rfReplaceAll]);
+    FEnd.HasText := True;
+  end;
+end;
+
+procedure TTyChartAnimProxy.EndLabelDone;
+begin
+  { createLineClipPath's done: back to the original place }
+  if FEnd.Active and FEnd.HasOriginal then
+  begin
+    FEnd.X := FEnd.OriginalX;
+    FEnd.Y := FEnd.OriginalY;
+  end;
 end;
 
 { ==================== the diff ==================== }
@@ -647,14 +835,26 @@ begin
     carCandleBody, carCandleWickHigh, carCandleWickLow: Result := 'candle';
     carLabel: Result := 'label';
     carGuide: Result := 'guide';
+    carGaugeDetail: Result := 'gaugeDetail';
+    carEffectSymbol: Result := 'effectSymbol';
+    carRipple: Result := 'ripple';
+    carMarkPoint: Result := 'markPoint';
+    carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel: Result := 'markLine';
+    carEndLabel: Result := 'lineClip';
   else
     Result := '';
   end;
 end;
 
+function TyChartAnimRoleKey(const AEl: TTyChartElement): string;
+begin
+  Result := TyChartAnimProxyRole(AEl.Anim.Role);
+  if AEl.Anim.Role = carRipple then Result := Result + IntToStr(AEl.Anim.Sub);
+end;
+
 function KeyIndexOf(const AEl: TTyChartElement): Integer;
 begin
-  if AEl.Anim.Role in [carLineRun, carLineArea] then Result := -1
+  if AEl.Anim.Role in [carLineRun, carLineArea, carEndLabel] then Result := -1
   else Result := AEl.Anim.Index;
 end;
 
@@ -848,6 +1048,119 @@ begin
   end;
 end;
 
+{ the final values of AProps added to (or replacing) the proxy's }
+procedure MergeFinal(AP: TTyChartAnimProxy; const AProps: TTyAnimProps);
+var
+  i, k: Integer;
+  found: Boolean;
+begin
+  for i := 0 to High(AProps) do
+  begin
+    found := False;
+    for k := 0 to High(AP.FFinal) do
+      if AP.FFinal[k].Key = AProps[i].Key then
+      begin
+        AP.FFinal[k].Value := TyAnimClone(AProps[i].Value);
+        found := True;
+        Break;
+      end;
+    if not found then
+    begin
+      SetLength(AP.FFinal, Length(AP.FFinal) + 1);
+      AP.FFinal[High(AP.FFinal)].Key := AProps[i].Key;
+      AP.FFinal[High(AP.FFinal)].Value := TyAnimClone(AProps[i].Value);
+    end;
+  end;
+end;
+
+{ animateLabelValue: `text.percent = 0`, then initProps (no previous value)
+  or updateProps to 1, the count as the during, at the row [Batch 92] }
+procedure StartCount(AP: TTyChartAnimProxy; const AEl: TTyChartElement;
+  AFrom: Double; AUpdate: Boolean; const AModel: TTyAnimModel; ARow: Integer);
+var
+  opts: TTyAnimCallOpts;
+  props: TTyAnimProps;
+begin
+  AP.FValFrom := AFrom;
+  AP.FValTo := AEl.Caption.ValNum;
+  AP.FValTpl := AEl.Caption.ValTpl;
+  AP.FValHasPrec := AEl.Caption.ValHasPrec;
+  AP.FValPrec := AEl.Caption.ValPrec;
+  props := TyAnimProps([TyAnimProp('percent', TyAnimNum(1))]);
+  MergeFinal(AP, props);
+  AP.SetNum('percent', 0);
+  opts := TyAnimCallAt(ARow);
+  opts.During := @AP.ValueDuring;
+  if AUpdate then TyUpdateProps(AP, props, AModel, opts)
+  else TyInitProps(AP, props, AModel, opts);
+end;
+
+{ EffectSymbol.startEffectAnimation for one ripple: two looping animators,
+  `animate('', true).when(period, scale)` and `animateStyle(true)
+  .when(period, {opacity: 0})`, both delayed -i / n * period + idx / count }
+procedure StartRipple(AP: TTyChartAnimProxy; const AEl: TTyChartElement);
+var period, half, delay: Double;
+begin
+  period := AEl.Anim.G[4];
+  half := AEl.Anim.G[5] / 2;
+  delay := -AEl.Anim.G[2] / AEl.Anim.G[3] * period + AEl.Anim.G[6];
+  AP.Animate('', True).WhenWithKeys(period, ['scaleX', 'scaleY'],
+    [TyAnimNum(half), TyAnimNum(half)]).Delay(delay).Start('');
+  AP.Animate('style', True).WhenWithKeys(period, ['opacity'],
+    [TyAnimNum(0)]).Delay(delay).Start('');
+end;
+
+{ a run's points as points }
+function PtsOf(const A: TTyDoubleArray): TTyPointFArray;
+var i: Integer;
+begin
+  SetLength(Result, Length(A) div 2);
+  for i := 0 to High(Result) do Result[i] := TyPointF(A[i * 2], A[i * 2 + 1]);
+end;
+
+{ the series' end label in AList, if it has one }
+function FindEndLabel(AList: TTyPaintList; ASeries: Integer;
+  out AEl: TTyChartElement): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  AEl := Default(TTyChartElement);
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+    if (AList.Element(i).Anim.Role = carEndLabel)
+      and (AList.Element(i).Anim.Series = ASeries) then
+    begin
+      AEl := AList.Element(i);
+      Exit(True);
+    end;
+end;
+
+{ the clip's end label record from the label's tag: G[0] the distance, G[1]
+  flags (1 horizontal base, 2 inverse, 4 connectNulls, 8 valueAnimation, 16
+  a precision), G[2] the precision, G[3] smooth; Pts / Vals / Mono }
+procedure SetupEndLabel(AP: TTyChartAnimProxy; const AEnd: TTyChartElement);
+var flags: Integer;
+begin
+  AP.FEnd := Default(TTyChartAnimEndLabel);
+  flags := Round(AEnd.Anim.G[1]);
+  AP.FEnd.Active := True;
+  AP.FEnd.Pts := Copy(AEnd.Anim.Pts, 0, Length(AEnd.Anim.Pts));
+  AP.FEnd.Vals := Copy(AEnd.Anim.Vals, 0, Length(AEnd.Anim.Vals));
+  AP.FEnd.Horiz := (flags and 1) <> 0;
+  AP.FEnd.Inverse := (flags and 2) <> 0;
+  AP.FEnd.ConnectNulls := (flags and 4) <> 0;
+  AP.FEnd.ValueAnim := (flags and 8) <> 0;
+  AP.FEnd.HasPrec := (flags and 16) <> 0;
+  AP.FEnd.Prec := AEnd.Anim.G[2];
+  AP.FEnd.Distance := AEnd.Anim.G[0];
+  AP.FEnd.Tpl := AEnd.Caption.ValTpl;
+  AP.FEnd.Cmds := TyPolylinePath(PtsOf(AP.FEnd.Pts), AEnd.Anim.G[3],
+    AEnd.Anim.Mono, AP.FEnd.ConnectNulls);
+  AP.FEnd.X := AEnd.Caption.X;
+  AP.FEnd.Y := AEnd.Caption.Y;
+  AP.FEnd.Text := AEnd.Caption.Text;
+end;
+
 procedure TTyChartAnimSet.ArmOne(AList: TTyPaintList; AAt: Integer;
   const AEl: TTyChartElement; const AC: TTyChartAnimSeries; AUpdate: Boolean);
 var
@@ -858,7 +1171,7 @@ var
   cfg: TTyAnimCfg;
   x, y, w, h, ex, half, delay: Double;
   flags: Integer;
-  host: TTyChartElement;
+  host, endEl: TTyChartElement;
   ring, from: TTyDoubleArray;
 
   procedure Start(const AProps: TTyAnimProps; const AOpts: TTyAnimCallOpts);
@@ -954,6 +1267,13 @@ begin
         end;
         opts := TyAnimCallNoIndex;
         opts.Done := @NoOp;
+        { THE END LABEL RIDES THE CLIP: its during and done [Batch 92] }
+        if FindEndLabel(AList, AEl.Anim.Series, endEl) then
+        begin
+          SetupEndLabel(p, endEl);
+          opts.During := @p.EndLabelDuring;
+          opts.Done := @p.EndLabelDone;
+        end;
         Start(props, opts);
         { `clip: false` widens across the base axis AFTER the call; what the
           static layer draws is the widened rect }
@@ -971,6 +1291,8 @@ begin
           end;
         end;
         p.SetFinal(ClipProps(AEl));
+        { "Set to the final frame. To make sure label layout is right." }
+        if p.FEnd.Active then p.EndLabelDuring(1);
       end;
     carSector:
       begin
@@ -1058,6 +1380,15 @@ begin
         if (AEl.Anim.HostPlus1 > 0) and (AEl.Anim.HostPlus1 <= AList.Count) then
           host := AList.Element(AEl.Anim.HostPlus1 - 1);
         props := TyAnimProps([Num1('style.opacity', 1)]);
+        { A BAR'S LABEL COUNTS instead of fading: from nothing, at enter
+          timing and the row (LabelManager -> animateLabelValue) [Batch 92] }
+        if AEl.Caption.ValAnim then
+        begin
+          if not AC.Enabled then Exit;
+          p := Make(AEl.Anim.Series, idx, 'label');
+          StartCount(p, AEl, NaN, False, AC.Model, idx);
+          Exit;
+        end;
         if host.Anim.Role = carLineSymbol then
         begin
           if AUpdate then
@@ -1099,6 +1430,66 @@ begin
         p.SetNum('style.strokePercent', 0);
         Start(props, TyAnimCallNoIndex);
       end;
+    carGaugeDetail:
+      begin
+        { GaugeView: `hasAnimation && animateLabelValue(...)`, from nothing
+          on a first render, at the row [Batch 92] }
+        if not (AEl.Caption.ValAnim and AC.Enabled) then Exit;
+        p := Make(AEl.Anim.Series, idx, 'gaugeDetail');
+        StartCount(p, AEl, NaN, False, AC.Model, idx);
+      end;
+    carMarkPoint:
+      begin
+        { SymbolDraw's new symbol on the MARKER's model }
+        p := Make(AEl.Anim.Series, idx, 'markPoint');
+        props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]),
+          Num1('scaleY', AEl.Anim.G[3]), Num1('style.opacity', AEl.Anim.G[4])]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0);
+        p.SetNum('scaleY', 0);
+        p.SetNum('style.opacity', 0);
+        TyInitProps(p, props, AC.MarkPoint, TyAnimCallAt(idx));
+      end;
+    carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel:
+      begin
+        { Line.ts _createLine: `shape.percent = 0`, initProps to 1 on the
+          marker's model, at the marker's data index }
+        p := Make(AEl.Anim.Series, idx, 'markLine');
+        props := TyAnimProps([Num1('shape.percent', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.percent', 0);
+        TyInitProps(p, props, AC.MarkLine, TyAnimCallAt(idx));
+      end;
+    carEffectSymbol:
+      begin
+        p := Make(AEl.Anim.Series, idx, 'effectSymbol');
+        props := SymbolProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        { THE CONSTRUCTOR'S updateData: scale and the style's opacity from 0,
+          enter timing ... }
+        p.SetNum('scaleX', 0);
+        p.SetNum('scaleY', 0);
+        p.SetNum('orphan.opacity', 0);
+        Start(TyAnimProps([props[0], props[1], Num1('orphan.opacity', AEl.Anim.G[4])]),
+          TyAnimCallAt(idx));
+        { ... then EffectSymbol.updateData's: the scale again at UPDATE timing
+          (its tracks stop the first's before they step), while
+          _updateCommon's new style object leaves the opacity tween moving
+          nothing that is drawn }
+        TyUpdateProps(p, TyAnimProps([props[0], props[1]]), AC.Model, TyAnimCallAt(idx));
+      end;
+    carRipple:
+      begin
+        p := Make(AEl.Anim.Series, idx, TyChartAnimRoleKey(AEl));
+        props := TyAnimProps([Num1('scaleX', 0.5), Num1('scaleY', 0.5),
+          Num1('style.opacity', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        StartRipple(p, AEl);
+      end;
   end;
   if AAt < 0 then ;
 end;
@@ -1119,8 +1510,10 @@ begin
     if el.Anim.Role = carGaugeCap then Continue;
     s := el.Anim.Series;
     if (s < 0) or (s > High(ASeries)) or not ASeries[s].Present then Continue;
-    role := TyChartAnimProxyRole(el.Anim.Role);
+    role := TyChartAnimRoleKey(el);
     if Find(s, KeyIndexOf(el), role) <> nil then Continue;
+    { the end label is armed by its clip }
+    if el.Anim.Role = carEndLabel then Continue;
     ArmOne(AList, i, el, ASeries[s]);
   end;
 end;
@@ -1139,8 +1532,7 @@ begin
     if el.Anim.Role = carNone then
       Result[i] := nil
     else
-      Result[i] := Find(el.Anim.Series, KeyIndexOf(el),
-        TyChartAnimProxyRole(el.Anim.Role));
+      Result[i] := Find(el.Anim.Series, KeyIndexOf(el), TyChartAnimRoleKey(el));
   end;
 end;
 
@@ -1211,6 +1603,54 @@ var
     if AP.GetAnimProp(AKey).Kind = avkNull then AP.SetNum(AKey, AValue);
   end;
 
+  { A COUNT IN AN UPDATE (animateLabelValue) [Batch 92]: nothing when the
+    value is the previous one (a count in flight goes on); else from the
+    interpolated value of a count in flight, or the previous value, at
+    update timing -- enter timing from nothing when there was none }
+  procedure CountOn(var AP: TTyChartAnimProxy; const AOldEl, AEl: TTyChartElement;
+    ASer, ARow: Integer; const ARole: string; const AModel: TTyAnimModel);
+  var from: Double;
+  begin
+    if AOldEl.Caption.ValHas and (not IsNan(AOldEl.Caption.ValNum))
+      and (not IsNan(AEl.Caption.ValNum))
+      and (AOldEl.Caption.ValNum = AEl.Caption.ValNum) then Exit;
+    if AP = nil then AP := Make(ASer, ARow, ARole);
+    if AP.FValHasInterp then from := AP.FValInterp
+    else if AOldEl.Caption.ValHas then from := AOldEl.Caption.ValNum
+    else from := NaN;
+    StartCount(AP, AEl, from, AOldEl.Caption.ValHas, AModel, ARow);
+  end;
+
+  { LabelManager's oldLayout: x / y / rotation from where the last layout
+    put the text, at update timing and the row [Batch 92] }
+  procedure MoveLabel(var AP: TTyChartAnimProxy; const AOldEl, AEl: TTyChartElement;
+    ASer, ARow: Integer; const AModel: TTyAnimModel);
+  var props: TTyAnimProps;
+  begin
+    props := TyAnimProps([Num1('x', AEl.Caption.X), Num1('y', AEl.Caption.Y),
+      Num1('rotation', AEl.Caption.RotationRad)]);
+    if AP = nil then AP := Make(ASer, ARow, 'label');
+    AP.Attr(TyAnimProps([Num1('x', AOldEl.Caption.X), Num1('y', AOldEl.Caption.Y),
+      Num1('rotation', AOldEl.Caption.RotationRad)]));
+    MergeFinal(AP, props);
+    TyUpdateProps(AP, props, AModel, TyAnimCallAt(ARow));
+  end;
+
+  { a label line's points, flat }
+  function GuidePoints(const AEl: TTyChartElement): TTyAnimValue;
+  var
+    a: TTyDoubleArray;
+    k: Integer;
+  begin
+    SetLength(a, Length(AEl.Shape.Points) * 2);
+    for k := 0 to High(AEl.Shape.Points) do
+    begin
+      a[k * 2] := AEl.Shape.Points[k].X;
+      a[k * 2 + 1] := AEl.Shape.Points[k].Y;
+    end;
+    Result := TyAnimArr(a, 2);
+  end;
+
   { ---- one element of an updated series ---- }
   procedure UpdateOne(AAt: Integer; const AEl: TTyChartElement;
     const AC: TTyChartAnimSeries; AOld, AOldRow: Integer);
@@ -1221,6 +1661,7 @@ var
     ring, oring: TTyDoubleArray;
     a, rot: Double;
     q2: TTyChartAnimProxy;
+    rk: string;
   begin
     case AEl.Anim.Role of
       carBar:
@@ -1291,6 +1732,9 @@ var
           if hasOld then oprops := ClipProps(oe) else oprops := nil;
           p := Take(AOld, -1, s, -1, 'lineClip', oprops, props, hasOld);
           p.SetFinal(props);
+          { no during in an update: the end label stands where it ends
+            (createLineClipPath without animation, during(1)) [Batch 92] }
+          p.FEnd.Active := False;
           TyInitProps(p, props, AC.Model, TyAnimCallNoIndex);
         end;
       carSector:
@@ -1422,6 +1866,14 @@ var
             begin
               p := OldProxy(AOld, AOldRow, 'label');
               if p <> nil then Carry(p, s, r);
+              { the count, or a pie's words from their old layout [Batch 92] }
+              if AC.Enabled then
+              begin
+                if AEl.Caption.ValAnim then
+                  CountOn(p, oe, AEl, s, r, 'label', AC.Model)
+                else if (AEl.Anim.HostPlus1 = 0) and (AC.SeriesType = 'pie') then
+                  MoveLabel(p, oe, AEl, s, r, AC.Model);
+              end;
               Exit;
             end;
             { a kept LINE symbol's label is no new text either }
@@ -1435,7 +1887,74 @@ var
           begin
             p := OldProxy(AOld, AOldRow, 'guide');
             if p <> nil then Carry(p, s, r);
+            { LabelManager: the line from its old points, no row [Batch 92] }
+            if AC.Enabled and (Length(oe.Shape.Points) > 0) then
+            begin
+              if p = nil then p := Make(s, r, 'guide');
+              p.SetAnimProp('shape.points', GuidePoints(oe));
+              props := TyAnimProps([TyAnimProp('shape.points', GuidePoints(AEl))]);
+              MergeFinal(p, props);
+              TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+            end;
             Exit;
+          end;
+          ArmOne(AList, AAt, AEl, AC, True);
+        end;
+      carGaugeDetail:
+        begin
+          if (AOldRow < 0) or not OldEl(AOld, AOldRow, 'gaugeDetail', oe) then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          { the same Text, reused (GaugeView's diff): it counts on from the
+            previous value [Batch 92] }
+          p := OldProxy(AOld, AOldRow, 'gaugeDetail');
+          if p <> nil then Carry(p, s, r);
+          if AEl.Caption.ValAnim and AC.Enabled then
+            CountOn(p, oe, AEl, s, r, 'gaugeDetail', AC.Model);
+        end;
+      { a marker's view is a component's: new under notMerge, so it enters
+        again (probed on the real build) }
+      carMarkPoint:
+        if Find(s, r, 'markPoint') = nil then ArmOne(AList, AAt, AEl, AC, True);
+      carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel:
+        if Find(s, r, 'markLine') = nil then ArmOne(AList, AAt, AEl, AC, True);
+      carEffectSymbol:
+        begin
+          hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'effectSymbol', oe);
+          if not hasOld then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          { as a scatter symbol's: the path's scale at the row, the group's
+            place with none; the style set at once }
+          props := SymbolProps(AEl);
+          p := Take(AOld, AOldRow, s, r, 'effectSymbol', SymbolProps(oe), props, True);
+          Ensure(p, 'x', oe.Anim.G[5]);
+          Ensure(p, 'y', oe.Anim.G[6]);
+          p.SetFinal(props);
+          p.SetNum('style.opacity', AEl.Anim.G[4]);
+          TyUpdateProps(p, TyAnimProps([props[0], props[1]]), AC.Model, TyAnimCallAt(r));
+          TyUpdateProps(p, TyAnimProps([props[3], props[4]]), AC.Model, TyAnimCallNoIndex);
+        end;
+      carRipple:
+        begin
+          { THE RIPPLES RUN ON through an update, unless the symbol's type,
+            the period, the scale or the number changed
+            (updateEffectAnimation's DIFFICULT_PROPS): then they start over }
+          rk := TyChartAnimRoleKey(AEl);
+          if (AOldRow >= 0) and OldEl(AOld, AOldRow, rk, oe)
+            and (oe.Anim.G[3] = AEl.Anim.G[3]) and (oe.Anim.G[4] = AEl.Anim.G[4])
+            and (oe.Anim.G[5] = AEl.Anim.G[5]) and (oe.Anim.G[7] = AEl.Anim.G[7]) then
+          begin
+            p := OldProxy(AOld, AOldRow, rk);
+            if p <> nil then
+            begin
+              Carry(p, s, r);
+              Exit;
+            end;
           end;
           ArmOne(AList, AAt, AEl, AC, True);
         end;
@@ -1730,7 +2249,7 @@ begin
     for i := 0 to High(APrev.Elements) do
     begin
       el := APrev.Elements[i];
-      role := TyChartAnimProxyRole(el.Anim.Role);
+      role := TyChartAnimRoleKey(el);
       if role = '' then Continue;
       if prevIdx.Find(KeyOf(el.Anim.Series, KeyIndexOf(el), role)) = nil then
         prevIdx.Add(KeyOf(el.Anim.Series, KeyIndexOf(el), role), Pointer(PtrInt(i + 1)));
@@ -1771,8 +2290,10 @@ begin
       if el.Anim.Role in [carNone, carGaugeCap] then Continue;
       s := el.Anim.Series;
       if (s < 0) or (s > High(ASeries)) or not ASeries[s].Present then Continue;
-      role := TyChartAnimProxyRole(el.Anim.Role);
+      role := TyChartAnimRoleKey(el);
       r := KeyIndexOf(el);
+      { the end label is its clip's }
+      if el.Anim.Role = carEndLabel then Continue;
       if not upd[s] then
       begin
         if Find(s, r, role) = nil then ArmOne(AList, i, el, ASeries[s]);
@@ -2024,27 +2545,46 @@ begin
   end;
 end;
 
+{ a caption moved by (ADX, ADY), its box with it }
+procedure MoveCaption(var AEl: TTyChartElement; ADX, ADY: Double);
+begin
+  if IsNan(ADX) or IsNan(ADY) or ((ADX = 0) and (ADY = 0)) then Exit;
+  AEl.Caption.X := AEl.Caption.X + ADX;
+  AEl.Caption.Y := AEl.Caption.Y + ADY;
+  AEl.Shape.Bounds := TyRectF(AEl.Shape.Bounds.Left + ADX, AEl.Shape.Bounds.Top + ADY,
+    AEl.Shape.Bounds.Right + ADX, AEl.Shape.Bounds.Bottom + ADY);
+end;
+
+{ the words of a count, where the caption is one run }
+procedure ApplyText(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+begin
+  if AProxy.FHasText and (Length(AEl.Caption.RtPieces) = 0) then
+    AEl.Caption.Text := AProxy.FText;
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
-  x, y, fx, fy, a, d, c, s, cx, cy: Double;
+  x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh: Double;
   r: TTyRectF;
   v: TTyAnimValue;
-  i, n: Integer;
+  i, n, ah, av, ah1, av1, flags: Integer;
   pts: TTyPointFArray;
 begin
   if (AProxy = nil) or AProxy.AtFinal then Exit;
   case AEl.Anim.Role of
     carBar:
       BarFrom(AEl, AProxy);
-    carSymbol, carLineSymbol:
+    carSymbol, carLineSymbol, carEffectSymbol:
       begin
-        if AEl.Anim.Role = carSymbol then
+        if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
         begin
           if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2]
           else fx := 1;
           if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3]
           else fy := 1;
-          AEl.Style.Alpha := AProxy.Num('style.opacity');
+          { an effect symbol's opacity tween moves a style no one draws }
+          if AEl.Anim.Role = carSymbol then
+            AEl.Style.Alpha := AProxy.Num('style.opacity');
         end
         else
         begin
@@ -2067,7 +2607,7 @@ begin
         end;
         { THE GROUP'S PLACE [Batch 90]: a scatter symbol's group moves on an
           update, a line symbol's follows its polyline }
-        if AEl.Anim.Role = carSymbol then
+        if AEl.Anim.Role in [carSymbol, carEffectSymbol] then
           MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[5]) - AEl.Anim.G[5],
             NumOr(AProxy, 'y', AEl.Anim.G[6]) - AEl.Anim.G[6])
         else
@@ -2166,15 +2706,133 @@ begin
       end;
     carLabel:
       begin
-        a := AProxy.Num('style.opacity');
+        { a pie's words on their way from the old layout [Batch 92] }
+        v := AProxy.GetAnimProp('x');
+        if v.Kind = avkNumber then
+        begin
+          MoveCaption(AEl, AProxy.Num('x') - AEl.Caption.X,
+            AProxy.Num('y') - AEl.Caption.Y);
+          AEl.Caption.RotationRad := NumOr(AProxy, 'rotation', AEl.Caption.RotationRad);
+        end;
+        ApplyText(AEl, AProxy);
+        a := NumOr(AProxy, 'style.opacity', 1);
         if a <= 0 then MakeInkless(AEl)
         else AEl.Style.Alpha := AEl.Style.Alpha * a;
       end;
     carGuide:
       begin
-        a := AProxy.Num('style.strokePercent');
+        { an update's line on its way from its old points [Batch 92] }
+        v := AProxy.GetAnimProp('shape.points');
+        if (v.Kind = avkArray) and (Length(v.Arr) >= 2) then
+        begin
+          SetLength(pts, Length(v.Arr) div 2);
+          for i := 0 to High(pts) do pts[i] := TyPointF(v.Arr[i * 2], v.Arr[i * 2 + 1]);
+          AEl.Shape.Points := pts;
+        end;
+        a := NumOr(AProxy, 'style.strokePercent', 1);
         AEl.Shape.Points := TyPolylinePrefix(AEl.Shape.Points, a);
         if Length(AEl.Shape.Points) < 2 then MakeInkless(AEl);
+      end;
+    carGaugeDetail:
+      ApplyText(AEl, AProxy);
+    carMarkPoint:
+      begin
+        if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
+        if AEl.Anim.G[3] <> 0 then fy := AProxy.Num('scaleY') / AEl.Anim.G[3] else fy := 1;
+        a := AProxy.Num('style.opacity');
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) or not (a > 0) then
+          MakeInkless(AEl)
+        else
+        begin
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+          AEl.Style.Alpha := Min(1.0, a);
+        end;
+      end;
+    carMarkLine:
+      begin
+        { Line's buildPath at percent: the segment to x1 * (1 - p) + x2 * p }
+        a := AProxy.Num('shape.percent');
+        if Length(AEl.Shape.Points) = 2 then
+          AEl.Shape.Points := [AEl.Shape.Points[0],
+            TyPointF(AEl.Anim.G[4] * (1 - a) + AEl.Anim.G[6] * a,
+              AEl.Anim.G[5] * (1 - a) + AEl.Anim.G[7] * a)];
+        if not (a > 0) then MakeInkless(AEl);
+      end;
+    carMarkLineFrom, carMarkLineTo:
+      begin
+        { Line.beforeUpdate: the end symbols at pointAt(0) and
+          pointAt(percent), scaled by the percent }
+        a := AProxy.Num('shape.percent');
+        if not (a > 0) then
+          MakeInkless(AEl)
+        else if AEl.Anim.Role = carMarkLineFrom then
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], a, a)
+        else
+        begin
+          TyMkLineAt(AEl.Anim.G, a, tx, ty, lx, ly, ah, av);
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[2], AEl.Anim.G[3], a, a);
+          TyShapeMove(AEl.Shape, tx - AEl.Anim.G[2], ty - AEl.Anim.G[3]);
+        end;
+      end;
+    carMarkLineLabel:
+      begin
+        { and the label, placed for the percent: moved by where it is now
+          less where it rests, re-aligned where the author did not align it }
+        a := AProxy.Num('shape.percent');
+        TyMkLineAt(AEl.Anim.G, a, tx, ty, lx, ly, ah, av);
+        TyMkLineAt(AEl.Anim.G, 1, tx, ty, lx1, ly1, ah1, av1);
+        flags := Round(AEl.Anim.G[9]);
+        x := AEl.Caption.X + (lx - lx1);
+        y := AEl.Caption.Y + (ly - ly1);
+        if (ah >= 0) and ((flags and 1) = 0) then
+          case ah of
+            0: AEl.Caption.AnchorH := tahLeft;
+            1: AEl.Caption.AnchorH := tahCentre;
+          else
+            AEl.Caption.AnchorH := tahRight;
+          end;
+        if (av >= 0) and ((flags and 2) = 0) then
+          case av of
+            0: AEl.Caption.AnchorV := tavTop;
+            1: AEl.Caption.AnchorV := tavMiddle;
+          else
+            AEl.Caption.AnchorV := tavBottom;
+          end;
+        bw := AEl.Shape.Bounds.Right - AEl.Shape.Bounds.Left;
+        bh := AEl.Shape.Bounds.Bottom - AEl.Shape.Bounds.Top;
+        if not (IsNan(x) or IsNan(y)) then
+        begin
+          AEl.Caption.X := x;
+          AEl.Caption.Y := y;
+          if AEl.Caption.RotationRad = 0 then
+            AEl.Shape := TyShapeRect(TyAnchorBox(x, y, bw, bh, AEl.Caption.AnchorH,
+              AEl.Caption.AnchorV));
+        end;
+      end;
+    carRipple:
+      begin
+        { scale over the ripple's rest of 0.5 about its centre, the stroke
+          unscaled (strokeNoScale); the opacity over the static one }
+        fx := AProxy.Num('scaleX') / 0.5;
+        fy := AProxy.Num('scaleY') / 0.5;
+        a := AProxy.Num('style.opacity');
+        if (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) or not (a > 0) then
+          MakeInkless(AEl)
+        else
+        begin
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
+          AEl.Style.Alpha := AEl.Style.Alpha * Min(1.0, a);
+        end;
+      end;
+    carEndLabel:
+      if AProxy.FEnd.Active then
+      begin
+        { the box by the difference, the anchor exactly where the during put
+          it }
+        MoveCaption(AEl, AProxy.FEnd.X - AEl.Caption.X, AProxy.FEnd.Y - AEl.Caption.Y);
+        AEl.Caption.X := AProxy.FEnd.X;
+        AEl.Caption.Y := AProxy.FEnd.Y;
+        if AProxy.FEnd.HasText then AEl.Caption.Text := AProxy.FEnd.Text;
       end;
   end;
 end;
@@ -2326,6 +2984,15 @@ begin
     if (ASet <> nil) and (el.Anim.Role in [carLineRun, carLineArea]) then
       ApplyLine(el, ASet.Find(el.Anim.Series, -1, 'linePoly'),
         ASet.Find(el.Anim.Series, -1, 'lineArea'));
+    { A RIPPLE IS IN ITS SYMBOL'S GROUP, and the group moves in an update
+      [Batch 92] }
+    if (ASet <> nil) and (el.Anim.Role = carRipple) then
+    begin
+      g := ASet.Find(el.Anim.Series, el.Anim.Index, 'effectSymbol');
+      if (g <> nil) and not g.AtFinal then
+        TyShapeMove(el.Shape, NumOr(g, 'x', el.Anim.G[8]) - el.Anim.G[8],
+          NumOr(g, 'y', el.Anim.G[9]) - el.Anim.G[9]);
+    end;
     h := el.Anim.HostPlus1 - 1;
     if (el.Anim.Role = carLabel) and (h >= 0) and (h < i)
       and (h <= High(ABind)) and (ABind[h] <> nil) and not ABind[h].AtFinal then

@@ -71,7 +71,20 @@ function TyLabelText(const AFormatter: string; AHasFormatter: Boolean;
   const ASeriesName: string; AValueDim: Integer; APercent: Double;
   AHasPercent: Boolean; ASeriesIndex: Integer = -1;
   const ASeriesType: string = ''; AColor: TTyChartColor = 0;
-  const ADataType: string = ''): string;
+  const ADataType: string = ''; AHasValueText: Boolean = False;
+  const AValueText: string = ''): string;
+
+{ THE WORDS FOR AN INTERPOLATED VALUE, with #1 where the value goes: what
+  labelStyle's getLabelText answers once animateLabelValue has set
+  params.value -- with no formatter the value itself
+  (getDefaultInterpolatedLabel: `value + ''`), with a template the template
+  with its c placeholder standing for the value and the rest as TyLabelText fills it. A
+  named handler answers '' (no template: the label does not count).
+  [Batch 92] }
+function TyLabelValueTemplate(const AFormatter: string; AHasFormatter: Boolean;
+  ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
+  const ASeriesName: string; AValueDim: Integer; ASeriesIndex: Integer = -1;
+  const ASeriesType: string = ''; AColor: TTyChartColor = 0): string;
 
 { What a named label handler ('@Name') is given for row ARow: upstream's
   getDataParams -- the series, the item's name, its value as written, both
@@ -399,6 +412,29 @@ begin
     Result.HasFormatter := False;
   end;
 
+  { valueAnimation and its precision [Batch 92] }
+  d := node.Find('valueAnimation');
+  if d <> nil then
+    case d.JSONType of
+      jtBoolean: Result.ValueAnim := d.AsBoolean;
+      jtNumber: Result.ValueAnim := (not IsNan(d.AsFloat)) and (d.AsFloat <> 0);
+      jtString: Result.ValueAnim := d.AsString <> '';
+      jtNull: Result.ValueAnim := False;
+    else
+      Result.ValueAnim := True;
+    end;
+  d := node.Find('precision');
+  if d <> nil then
+  begin
+    if d.JSONType = jtNumber then
+    begin
+      Result.HasPrecision := True;
+      Result.Precision := d.AsFloat;
+    end
+    else if (d.JSONType = jtNull) or ((d.JSONType = jtString) and (d.AsString = 'auto')) then
+      Result.HasPrecision := False;
+  end;
+
   { AN AUTHOR'S fontSize IS CSS PX, not the theme's points: 14 read as a
     point size drew a third too large [Batch 83] }
   Result.FontSizeLogical := TyOptFontSize(node.Find('fontSize'),
@@ -520,11 +556,23 @@ begin
     + Copy(Result, p + Length(AToken), Length(Result));
 end;
 
+function TyLabelValueTemplate(const AFormatter: string; AHasFormatter: Boolean;
+  ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
+  const ASeriesName: string; AValueDim: Integer; ASeriesIndex: Integer;
+  const ASeriesType: string; AColor: TTyChartColor): string;
+begin
+  if AHasFormatter and TyChartIsHandlerRef(AFormatter) then Exit('');
+  Result := TyLabelText(AFormatter, AHasFormatter, ADefault, AStore, ARow,
+    ASeriesName, AValueDim, 0, False, ASeriesIndex, ASeriesType, AColor, '',
+    True, #1);
+end;
+
 function TyLabelText(const AFormatter: string; AHasFormatter: Boolean;
   ADefault: TTyLabelDefaultText; AStore: TTyDataStore; ARow: Integer;
   const ASeriesName: string; AValueDim: Integer; APercent: Double;
   AHasPercent: Boolean; ASeriesIndex: Integer; const ASeriesType: string;
-  AColor: TTyChartColor; const ADataType: string): string;
+  AColor: TTyChartColor; const ADataType: string; AHasValueText: Boolean;
+  const AValueText: string): string;
 var
   nameText, valueText: string;
   i, dim, openAt, n: Integer;
@@ -589,6 +637,8 @@ begin
 
   if not AHasFormatter then
   begin
+    { an interpolated value is its own default text, whatever the type's }
+    if AHasValueText then Exit(AValueText);
     if ADefault = tldName then Exit(nameText);
     if ADefault = tldRawThird then
     begin
@@ -615,6 +665,8 @@ begin
     `null`, `undefined`, `[object Object]` -- not the label dimension. }
   if hasRaw then vars[0][2] := TyRawItemText(it)
   else vars[0][2] := valueText;
+  { params.value is the interpolated one [Batch 92] }
+  if AHasValueText then vars[0][2] := AValueText;
   { the percentage as String() prints it -- 'NaN' included, which is what a
     funnel's missing value shows }
   if n = 4 then vars[0][3] := TyJsNumberToString(APercent);

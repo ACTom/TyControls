@@ -56,9 +56,241 @@ function TySplitRuns(const ACmds: TTyPathCmdArray): TTyPathCmdArray2;
 { PathProxy.getBoundingRect of the commands }
 function TyPathCmdsRect(const ACmds: TTyPathCmdArray): TTyXYWH;
 
+type
+  { LineView._endLabelOnDuring at one frame of the line's clip: where the
+    end label goes and which value it reads [Batch 92, AN4] }
+  TTyEndLabelStep = record
+    { False: getPointOn found no crossing -- the label stays where it was }
+    HasPoint: Boolean;
+    { the point, before the label's distance }
+    X, Y: Double;
+    { the value: Row0's, or interpolated from Row0's to Row1's at T }
+    Row0, Row1: Integer;
+    Interp: Boolean;
+    T: Double;
+  end;
+
+{ ECPolyline.getPointOn (chart/line/poly.ts): along the path's commands, the
+  first segment or cubic that reaches AXOrY on x (ADimX) or y, and the other
+  coordinate there -- a cubic by core/curve.ts cubicRootAt. False: none. }
+function TyPathPointOn(const ACmds: TTyPathCmdArray; AXOrY: Double;
+  ADimX: Boolean; out AX, AY: Double): Boolean;
+{ getIndexRange over the layout points (flat x, y per row; a point that is
+  not finite is illegal) and _endLabelOnDuring's choice of point and value.
+  ALastFrameIndex is the animation record's, updated as upstream's is;
+  AFinal is `percent === 1`. }
+function TyEndLabelStep(const APts: TTyDoubleArray; const ACmds: TTyPathCmdArray;
+  AXOrY: Double; ADimX, AConnectNulls, AFinal: Boolean;
+  var ALastFrameIndex: Integer): TTyEndLabelStep;
+{ getLastIndexNotNull: the last row with a legal point, -1 for none }
+function TyLastLegalRow(const APts: TTyDoubleArray): Integer;
+
 implementation
 
-uses tyControls.AdvChart.ZrPath;
+uses tyControls.AdvChart.ZrPath, tyControls.AdvChart.Easing;
+
+function PointIllegal(AX, AY: Double): Boolean;
+begin
+  { isPointIllegal: !isFinite(x) || !isFinite(y) }
+  Result := IsNan(AX) or IsNan(AY) or IsInfinite(AX) or IsInfinite(AY);
+end;
+
+function TyLastLegalRow(const APts: TTyDoubleArray): Integer;
+var len: Integer;
+begin
+  len := Length(APts) div 2;
+  while len > 0 do
+  begin
+    if not PointIllegal(APts[len * 2 - 2], APts[len * 2 - 1]) then Break;
+    Dec(len);
+  end;
+  Result := len - 1;
+end;
+
+function PathPointOn(const ACmds: TTyPathCmdArray; AXOrY: Double;
+  ADimX: Boolean; out AX, AY: Double): Boolean;
+var
+  i, k, nRoot: Integer;
+  x0, y0, t, v: Double;
+  roots: array[0..2] of Double;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  { x0 / y0 are undefined until the first move: NaN arithmetic, no hit }
+  x0 := NaN;
+  y0 := NaN;
+  for i := 0 to High(ACmds) do
+    case ACmds[i].Kind of
+      pckMove:
+        begin
+          x0 := ACmds[i].X;
+          y0 := ACmds[i].Y;
+        end;
+      pckLine:
+        begin
+          if ADimX then t := (AXOrY - x0) / (ACmds[i].X - x0)
+          else t := (AXOrY - y0) / (ACmds[i].Y - y0);
+          if (t <= 1) and (t >= 0) then
+          begin
+            if ADimX then
+            begin
+              v := (ACmds[i].Y - y0) * t + y0;
+              AX := AXOrY;
+              AY := v;
+            end
+            else
+            begin
+              v := (ACmds[i].X - x0) * t + x0;
+              AX := v;
+              AY := AXOrY;
+            end;
+            Exit(True);
+          end;
+          x0 := ACmds[i].X;
+          y0 := ACmds[i].Y;
+        end;
+      pckCurve:
+        begin
+          if ADimX then
+            nRoot := TyCubicRootAt(x0, ACmds[i].X1, ACmds[i].X2, ACmds[i].X, AXOrY, roots)
+          else
+            nRoot := TyCubicRootAt(y0, ACmds[i].Y1, ACmds[i].Y2, ACmds[i].Y, AXOrY, roots);
+          for k := 0 to nRoot - 1 do
+          begin
+            t := roots[k];
+            if (t <= 1) and (t >= 0) then
+            begin
+              if ADimX then
+              begin
+                AX := AXOrY;
+                AY := TyCubicAt(y0, ACmds[i].Y1, ACmds[i].Y2, ACmds[i].Y, t);
+              end
+              else
+              begin
+                AX := TyCubicAt(x0, ACmds[i].X1, ACmds[i].X2, ACmds[i].X, t);
+                AY := AXOrY;
+              end;
+              Exit(True);
+            end;
+          end;
+          x0 := ACmds[i].X;
+          y0 := ACmds[i].Y;
+        end;
+    end;
+end;
+
+function EndLabelStep(const APts: TTyDoubleArray; const ACmds: TTyPathCmdArray;
+  AXOrY: Double; ADimX, AConnectNulls, AFinal: Boolean;
+  var ALastFrameIndex: Integer): TTyEndLabelStep;
+var
+  len, i, dimIdx, prevIndex, nextIndex, diff, idx: Integer;
+  a, b: Double;
+  px, py: Double;
+begin
+  Result := Default(TTyEndLabelStep);
+  Result.X := NaN;
+  Result.Y := NaN;
+  Result.T := NaN;
+  { getIndexRange: `a` undefined until the first legal point at index 0 --
+    not a number, so every comparison with it is false }
+  len := Length(APts) div 2;
+  if ADimX then dimIdx := 0 else dimIdx := 1;
+  a := NaN;
+  b := NaN;
+  prevIndex := 0;
+  nextIndex := -1;
+  for i := 0 to len - 1 do
+  begin
+    b := APts[i * 2 + dimIdx];
+    if PointIllegal(b, APts[i * 2 + 1 - dimIdx]) then Continue;
+    if i = 0 then
+    begin
+      a := b;
+      Continue;
+    end;
+    if ((a <= AXOrY) and (b >= AXOrY)) or ((a >= AXOrY) and (b <= AXOrY)) then
+    begin
+      nextIndex := i;
+      Break;
+    end;
+    prevIndex := i;
+    a := b;
+  end;
+  Result.T := (AXOrY - a) / (b - a);
+  diff := nextIndex - prevIndex;
+  if diff >= 1 then
+  begin
+    if (diff > 1) and not AConnectNulls then
+    begin
+      { across a gap: the point before it }
+      Result.HasPoint := True;
+      Result.X := APts[prevIndex * 2];
+      Result.Y := APts[prevIndex * 2 + 1];
+      Result.Row0 := prevIndex;
+      Result.Row1 := prevIndex;
+    end
+    else
+    begin
+      if PathPointOn(ACmds, AXOrY, ADimX, px, py) then
+      begin
+        Result.HasPoint := True;
+        Result.X := px;
+        Result.Y := py;
+      end;
+      Result.Row0 := prevIndex;
+      Result.Row1 := nextIndex;
+      Result.Interp := True;
+    end;
+    ALastFrameIndex := prevIndex;
+  end
+  else
+  begin
+    { NOT FOUND (not a number included): the first point until the clip has
+      passed one, then the last }
+    if AFinal or (ALastFrameIndex > 0) then idx := prevIndex else idx := 0;
+    Result.HasPoint := True;
+    if idx * 2 + 1 <= High(APts) then
+    begin
+      Result.X := APts[idx * 2];
+      Result.Y := APts[idx * 2 + 1];
+    end;
+    Result.Row0 := idx;
+    Result.Row1 := idx;
+  end;
+end;
+
+{ NaN AND THE INFINITIES AS JAVASCRIPT HAS THEM: the comparisons with an
+  undefined `a` and the 0 / 0 of a flat segment run with the traps masked }
+function TyPathPointOn(const ACmds: TTyPathCmdArray; AXOrY: Double;
+  ADimX: Boolean; out AX, AY: Double): Boolean;
+var mask: TFPUExceptionMask;
+begin
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    Result := PathPointOn(ACmds, AXOrY, ADimX, AX, AY);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TyEndLabelStep(const APts: TTyDoubleArray; const ACmds: TTyPathCmdArray;
+  AXOrY: Double; ADimX, AConnectNulls, AFinal: Boolean;
+  var ALastFrameIndex: Integer): TTyEndLabelStep;
+var mask: TFPUExceptionMask;
+begin
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    Result := EndLabelStep(APts, ACmds, AXOrY, ADimX, AConnectNulls, AFinal,
+      ALastFrameIndex);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
 
 function TyLineSmoothOf(AData: TJSONData): Double;
 begin

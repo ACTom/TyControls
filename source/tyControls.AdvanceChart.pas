@@ -553,6 +553,16 @@ type
     FAnimMode: TTyChartAnimationMode;
     FAnimPending: Boolean;
     FAnimLive: Boolean;
+    { ONLY LOOPS LEFT (an effectScatter's ripples): the static layer takes
+      everything but them and their symbols, the dynamic layer only those
+      [Batch 92, AN4] }
+    FAnimContinuous: Boolean;
+    FAnimSplit: TTyPaintList;
+    { THE AXIS POINTER'S SLIDE [Batch 92, AN4]: a driver of its own, so a
+      pointer moving never takes the series out of the static layer; one
+      proxy per axis (its role the axis' key) }
+    FPtrAnim: TTyAnimation;
+    FPtrProxies: TFPList;
     FAnimWindow: Boolean;
     { THE RENDER BEFORE AN UPDATE [Batch 90]: what the last list held and
       its series' keys, taken when a new option is laid out and kept until
@@ -594,6 +604,20 @@ type
     function AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
     procedure AnimArmTimer;
     procedure AnimTimerFired(Sender: TObject);
+    { every live clip loops }
+    function AnimLoopOnly: Boolean;
+    { the pointer's slide: synced to the hover, dropped with the build }
+    procedure PtrAnimSync;
+    procedure PtrAnimDrop;
+    function PtrKeyOf(AAxis: TTyAxis): string;
+    function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
+    function PtrMoves(const AHit: TTyAxisHit; const AModel: TTyAnimModel): Boolean;
+    function PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
+    { where the pointer of AHit is drawn: its proxy's place, AAt without one }
+    function PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
+    function PtrLive: Boolean;
+    { the frame's continuous part (AContinuous) or the rest }
+    function AnimPart(AContinuous: Boolean): TTyPaintList;
     procedure SetAnimMode(AValue: TTyChartAnimationMode);
     function GetErrorText: string;
     procedure FreeStores;
@@ -644,6 +668,9 @@ type
     function MarkerSeriesColorData(ASlot: Integer): TJSONData;
     procedure MarkerGround(out ABackground: string; out AIsDark: Boolean);
     function BuildMarkers(const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
+    { a line's endLabel, after its marks [Batch 92, AN4] }
+    function BuildEndLabel(ASlot: Integer; const AVisual: TTySeriesVisual;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList): Integer;
     { ---- dataZoom interaction ---- }
     function DzRepresentative(AIndex: Integer): Integer;
     procedure DzRenderStates;
@@ -1251,6 +1278,14 @@ type
     property AnimNow: Double read FAnimNow write FAnimNow;
     { the clips still running, and whether the series are in motion }
     function AnimClipCount: Integer;
+    { the clips that loop (an effectScatter's ripples) [Batch 92] }
+    function AnimLoopClipCount: Integer;
+    { the axis pointer's slide [Batch 92]: its clips, and the proxy of an
+      axis by its key -- 'xAxis0', 'yAxis1' }
+    function AnimPointerClipCount: Integer;
+    function AnimPointerProxy(const AKey: string): TTyChartAnimProxy;
+    { only loops are live: the static layer holds the rest }
+    property AnimContinuous: Boolean read FAnimContinuous;
     property AnimLive: Boolean read FAnimLive;
     { the animated proxies, for a test or a host to read }
     function AnimProxyCount: Integer;
@@ -1407,7 +1442,8 @@ uses
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvChart family keeps, invisible to a host. }
   tyControls.StrConsts,
-  tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath;
+  tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.LinePath;
 
 { ==================== construction ==================== }
 
@@ -1447,6 +1483,10 @@ begin
   FreeAndNil(FAnimSet);
   FreeAndNil(FAnim);
   FreeAndNil(FAnimFrame);
+  FreeAndNil(FAnimSplit);
+  PtrAnimDrop;
+  FreeAndNil(FPtrProxies);
+  FreeAndNil(FPtrAnim);
   FreeAndNil(FAnimOldBuild);
   inherited Destroy;
 end;
@@ -1468,6 +1508,8 @@ begin
     going through Invalidate -- so the one place that can be trusted to clear
     it is the one that does the freeing. }
   FTipHits := nil;
+  { the pointer's slide goes with the axes [Batch 92] }
+  PtrAnimDrop;
   { AND THE RADARS WITH THEM, for the same reason: a binding holds a radar's
     INDEX, and the spoke objects a paint list was built against are about to
     stop existing. }
@@ -2817,7 +2859,7 @@ begin
     room, so anything it overlaps it is meant to overlap. While the series
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
-  if not FAnimLive then PaintTitles(APainter);
+  if not FAnimLive or FAnimContinuous then PaintTitles(APainter);
 end;
 
 function TTyAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
@@ -7550,6 +7592,180 @@ begin
   AStore.SetTooltipPositions(tip);
 end;
 
+{ A LINE'S END LABEL (LineView._initOrUpdateEndLabel and, for its place
+  and words, _endLabelOnDuring at percent 1 -- the call createLineClipPath
+  makes to "set to the final frame"): on the last legal point, pushed
+  `distance` along the base axis, aligned off it; the value as the words
+  ({c} the value, valueAnimation true by default), coloured as the series.
+  Its datum is none (the expansion must not take it for a host: it is the
+  label), and its tag carries what the clip's during needs.
+  NOT HERE: a state's endLabel.show, a rich end label (one run), a step
+  line's path (the unstepped one is walked), a line of one point (no run).
+  [Batch 92, AN4] }
+function TTyAdvanceChart.BuildEndLabel(ASlot: Integer; const AVisual: TTySeriesVisual;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList): Integer;
+var
+  node, en, d: TJSONData;
+  run, el: TTyChartElement;
+  i, last, flags, lfi, row: Integer;
+  spec: TTyLabelSpec;
+  st: TTyEndLabelStep;
+  pts: TTyPointFArray;
+  cmds: TTyPathCmdArray;
+  vals: TTyDoubleArray;
+  store: TTyDataStore;
+  it: TTyRawItem;
+  horiz, inverse, connect, found: Boolean;
+  xOrY, dist, dX, dY, x, y, v, w, h: Double;
+  tpl, words: string;
+  ink, stroke: TTyChartColor;
+  strokeW: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  Result := 0;
+  if (AList = nil) or (AMeasurer = nil) or (ASlot > High(FStores)) then Exit;
+  store := FStores[ASlot];
+  if store = nil then Exit;
+  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (node is TJSONObject) then Exit;
+  en := TJSONObject(node).Find('endLabel');
+  if not (en is TJSONObject) then Exit;
+  d := TJSONObject(en).Find('show');
+  if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
+  { the series' line: its points and its clip }
+  found := False;
+  run := Default(TTyChartElement);
+  for i := 0 to AList.Count - 1 do
+    if (AList.Element(i).Anim.Role = carLineRun)
+      and (AList.Element(i).Anim.Series = FBindings[ASlot].SeriesIndex) then
+    begin
+      run := AList.Element(i);
+      found := True;
+      Break;
+    end;
+  if not found then Exit;
+  last := TyLastLegalRow(run.Anim.Pts);
+  if last < 0 then Exit;
+  { the end label's own model over the theme: no series label leaks in;
+    distance 8, valueAnimation on (LineSeries' defaults) }
+  spec := LabelBaseFor(ASlot);
+  spec.Show := True;
+  spec.DistanceLogical := 8;
+  spec.ValueAnim := True;
+  spec := TyLabelSpecOfNode(TJSONObject(en), nil, spec);
+  horiz := (Round(run.Anim.G[5]) and 2) <> 0;
+  inverse := (Round(run.Anim.G[5]) and 4) <> 0;
+  connect := run.Anim.G[10] <> 0;
+  { each row's raw value, a number or none }
+  SetLength(vals, store.Count);
+  for row := 0 to store.Count - 1 do
+  begin
+    vals[row] := NaN;
+    it := store.RawItem(row);
+    case it.Shape of
+      rshNone:
+        if (AVisual.LabelValueDim >= 0) and (AVisual.LabelValueDim < store.DimCount) then
+          vals[row] := store.Get(AVisual.LabelValueDim, row);
+      rshScalar:
+        if it.Scalar.Kind = dvkNumber then vals[row] := it.Scalar.Num;
+    end;
+  end;
+  { the words: the value's template for the last row, else its text }
+  tpl := '';
+  if spec.ValueAnim then
+    tpl := TyLabelValueTemplate(spec.Formatter, spec.HasFormatter, tldValue,
+      store, last, AVisual.SeriesName, AVisual.LabelValueDim,
+      FBindings[ASlot].SeriesIndex, 'line', AVisual.Fill);
+  words := TyLabelText(spec.Formatter, spec.HasFormatter, tldValue, store, last,
+    AVisual.SeriesName, AVisual.LabelValueDim, 0, False,
+    FBindings[ASlot].SeriesIndex, 'line', AVisual.Fill);
+  { the final frame: the clip's leading edge at rest }
+  if inverse then
+  begin
+    if horiz then xOrY := run.Anim.G[0] else xOrY := run.Anim.G[1] + run.Anim.G[3];
+  end
+  else if horiz then xOrY := run.Anim.G[0] + run.Anim.G[2]
+  else xOrY := run.Anim.G[1];
+  SetLength(pts, Length(run.Anim.Pts) div 2);
+  for i := 0 to High(pts) do
+    pts[i] := TyPointF(run.Anim.Pts[i * 2], run.Anim.Pts[i * 2 + 1]);
+  cmds := TyPolylinePath(pts, run.Anim.G[8], run.Anim.Mono, connect);
+  lfi := 0;
+  st := TyEndLabelStep(run.Anim.Pts, cmds, xOrY, horiz, connect, True, lfi);
+  if not st.HasPoint then Exit;
+  dist := spec.DistanceLogical * APPI / 96;
+  if horiz then dX := dist else dX := 0;
+  if horiz then dY := 0 else dY := -dist;
+  if inverse then
+  begin
+    dX := dX * -1;
+    dY := dY * -1;
+  end;
+  x := st.X + dX;
+  y := st.Y + dY;
+  if (tpl <> '') then
+  begin
+    if st.Interp then
+      v := TyAnimInterpolateValue(vals[st.Row0], vals[st.Row1], st.T,
+        spec.HasPrecision, spec.Precision)
+    else
+      v := vals[st.Row0];
+    if not IsNan(v) then words := StringReplace(tpl, #1, TyJsNumberToString(v), [rfReplaceAll]);
+  end;
+  if words = '' then Exit;
+  { getEndLabelStateSpecified: off the line along the base axis }
+  if horiz then
+  begin
+    if inverse then ah := tahRight else ah := tahLeft;
+    av := tavMiddle;
+  end
+  else
+  begin
+    ah := tahCentre;
+    if inverse then av := tavTop else av := tavBottom;
+  end;
+  if spec.HasAlignH then ah := spec.AlignH;
+  if spec.HasAlignV then av := spec.AlignV;
+  AMeasurer.MeasureLine(words, spec.FontName, spec.FontSizeLogical, spec.FontWeight, w, h);
+  el := TyChartElement(TyShapeRect(TyAnchorBox(x, y, w, h, ah, av)));
+  el.Caption.Text := words;
+  el.Caption.FontName := spec.FontName;
+  el.Caption.FontSizeLogical := spec.FontSizeLogical;
+  el.Caption.FontWeight := spec.FontWeight;
+  TyLabelInk(spec, AVisual.Fill, True, False, False, ink, stroke, strokeW);
+  el.Caption.Colour := ink;
+  el.Caption.StrokeColour := stroke;
+  el.Caption.StrokeWidthLogical := strokeW;
+  el.Caption.X := x;
+  el.Caption.Y := y;
+  el.Caption.AnchorH := ah;
+  el.Caption.AnchorV := av;
+  el.Caption.ValTpl := tpl;
+  el.Z := AVisual.Z;
+  el.Z2 := 200;
+  el.Silent := True;
+  el.Datum := TyChartDatum(-1, -1);
+  el.Anim.Role := carEndLabel;
+  el.Anim.Series := FBindings[ASlot].SeriesIndex;
+  el.Anim.Index := -1;
+  el.Anim.Pts := run.Anim.Pts;
+  el.Anim.Vals := vals;
+  el.Anim.Mono := run.Anim.Mono;
+  el.Anim.G[0] := dist;
+  flags := 0;
+  if horiz then flags := flags or 1;
+  if inverse then flags := flags or 2;
+  if connect then flags := flags or 4;
+  if tpl <> '' then flags := flags or 8;
+  if spec.HasPrecision then flags := flags or 16;
+  el.Anim.G[1] := flags;
+  el.Anim.G[2] := spec.Precision;
+  el.Anim.G[3] := run.Anim.G[8];
+  AList.Add(el);
+  Result := 1;
+end;
+
 function TTyAdvanceChart.SeriesModelName(ASeriesIndex: Integer): string;
 var
   d: TJSONData;
@@ -7996,6 +8212,11 @@ begin
   d := TJSONObject(re).Find('number');
   if (d <> nil) and (d.JSONType = jtNumber) then
     AVisual.RippleNumber := Max(0, Trunc(d.AsFloat));
+  { the loop's own [Batch 92] }
+  d := TJSONObject(re).Find('period');
+  if (d <> nil) and (d.JSONType = jtNumber) then AVisual.RipplePeriod := d.AsFloat;
+  d := TJSONObject(re).Find('scale');
+  if (d <> nil) and (d.JSONType = jtNumber) then AVisual.RippleScale := d.AsFloat;
   d := TJSONObject(re).Find('brushType');
   if (d <> nil) and (d.JSONType = jtString) then
     AVisual.RippleFill := d.AsString <> 'stroke';
@@ -8499,6 +8720,8 @@ begin
       end;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
+      if FBindings[i].SeriesType = 'line' then
+        Inc(drawn, BuildEndLabel(i, v, AMeasurer, APPI, list));
     end;
     { THE EXPANSION RUNS ONCE, HERE, AND NOTHING IS APPENDED AFTER IT. Each
       caption's geometry is frozen from its host at this moment and the list
@@ -8537,6 +8760,13 @@ begin
   AnimAfterBuild;
   { IN MOTION, THE SERIES ARE THE DYNAMIC LAYER'S: a static layer holding
     them would freeze the first frame under every later one (Q7). }
+  { ONLY LOOPS LEFT: everything but the ripples and their symbols stays
+    here [Batch 92] }
+  if FAnimContinuous then
+  begin
+    if drawn > 0 then TyRenderPaintList(APainter, AnimPart(False));
+    Exit;
+  end;
   if FAnimLive then Exit;
   if drawn > 0 then
     { AT REST, a proxy may still hold a value a unit in the last place off
@@ -12324,6 +12554,8 @@ begin
       hands the end back as itself at or past it }
     at := hit.Axis.DataToCoord(pv, True);
     if IsNan(at) then Continue;
+    { ON ITS WAY THERE: the pointer, and the label with it [Batch 92] }
+    at := PtrAt(hit, at);
 
     case hit.Spec.PointerType of
       aptShadow:
@@ -12866,6 +13098,8 @@ begin
     answer holds axis POINTERS into the build, and DropBuild clears it for
     exactly that reason. }
   FTipHits := ResolveAxisPointers(X, Y);
+  { the pointer slides where upstream's does [Batch 92] }
+  PtrAnimSync;
   { the chart's own mouse events [Batch 84] }
   EventMove(X, Y);
   { REPAINT ON MOVEMENT, not only when the datum changes. The box is anchored
@@ -12942,6 +13176,7 @@ begin
   if FAnimSet <> nil then FAnimSet.Clear;
   FAnimBind := nil;
   FAnimLive := False;
+  FAnimContinuous := False;
   AnimDropPrev;
   AnimArmTimer;
 end;
@@ -13132,7 +13367,7 @@ var
   slot, si, n, k: Integer;
   r: TTyChartAnimSeries;
   t: string;
-  ser, lbl, va: TJSONData;
+  ser, lbl, va, mk: TJSONData;
   v: TTyAnimOptValue;
   viewKeys: TTyStringArray;
 begin
@@ -13156,7 +13391,8 @@ begin
       and the heatmap, whose cells never move but whose labels upstream's
       LabelManager fades all the same }
     r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
-      or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName);
+      or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
+      or (t = 'effectScatter');
     ser := r.Model.Own;
     if ser is TJSONObject then
     begin
@@ -13164,8 +13400,23 @@ begin
       if lbl is TJSONObject then
       begin
         va := TJSONObject(lbl).Find('valueAnimation');
-        r.LabelValueAnim := (va <> nil) and (va.JSONType = jtBoolean)
-          and va.AsBoolean;
+        { only a bar counts (BarView's setLabelValueAnimation): every other
+          series' labels fade whatever the key says [Batch 92] }
+        r.LabelValueAnim := (t = 'bar') and (va <> nil)
+          and (va.JSONType = jtBoolean) and va.AsBoolean;
+      end;
+      { THE MARKERS' MODELS: MarkerModel.isAnimationEnabled is the marker's
+        `animation` and the host's isAnimationEnabled [Batch 92] }
+      r.MarkLine := TyAnimNoModel;
+      r.MarkPoint := TyAnimNoModel;
+      if r.Enabled then
+      begin
+        mk := TJSONObject(ser).Find('markLine');
+        if mk is TJSONObject then
+          r.MarkLine := TyAnimComponentModel(mk, FOption.Root, 'markLine');
+        mk := TJSONObject(ser).Find('markPoint');
+        if mk is TJSONObject then
+          r.MarkPoint := TyAnimComponentModel(mk, FOption.Root, 'markPoint');
       end;
     end;
     r.BaseHoriz := (FBindings[slot].BaseAxis = nil)
@@ -13222,6 +13473,7 @@ begin
         to 16 ms. }
       FAnim.Update(AnimClock, True);
       FAnimLive := FAnim.ClipCount > 0;
+      FAnimContinuous := FAnimLive and AnimLoopOnly;
       AnimArmTimer;
     end
     else if FAnimMode = camOff then
@@ -13242,7 +13494,8 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if FAnimLive and IsNan(FAnimNow) and not (csDesigning in ComponentState) then
+  if (FAnimLive or PtrLive) and IsNan(FAnimNow)
+    and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
     begin
@@ -13263,7 +13516,19 @@ begin
 end;
 
 procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
+var ptrWas: Boolean;
 begin
+  { the pointer's own driver first [Batch 92] }
+  if FPtrAnim <> nil then
+  begin
+    ptrWas := FPtrAnim.ClipCount > 0;
+    FPtrAnim.Update(ANowMs);
+    if ptrWas then
+    begin
+      InvalidateFrame;
+      if (FPtrAnim.ClipCount = 0) and not FAnimLive then AnimArmTimer;
+    end;
+  end;
   if FAnim = nil then Exit;
   FAnim.Update(ANowMs);
   { a fade that ended removed its element [Batch 90] }
@@ -13273,15 +13538,307 @@ begin
     { AT REST: the series go back into the static layer, drawn once more
       at the values they rest at }
     FAnimLive := False;
+    FAnimContinuous := False;
     AnimArmTimer;
+    DropStatic;
+  end
+  else if FAnimLive and not FAnimContinuous and AnimLoopOnly then
+  begin
+    { ONLY LOOPS LEFT: the rest settles into the static layer [Batch 92] }
+    FAnimContinuous := True;
     DropStatic;
   end;
   InvalidateFrame;
 end;
 
+{ ==================== the axis pointer's slide [Batch 92] ====================
+
+  BaseAxisPointer.render: the first show is direct; a move -- the pointer's
+  props differing from the last ones (propsEqual) -- is updateProps on the
+  pointer's model when determineAnimation says so, else a stop and attr.
+  The model is the axis' axisPointer over the tooltip's (makeAxisPointerModel:
+  animation 'auto', 200 ms, exponentialOut), the root below. A hidden pointer
+  keeps its place: the next show slides from it. The label goes with the
+  pointer (upstream tweens its x / y with the same timing). }
+
+function TTyAdvanceChart.PtrLive: Boolean;
+begin
+  Result := (FPtrAnim <> nil) and (FPtrAnim.ClipCount > 0);
+end;
+
+function TTyAdvanceChart.PtrKeyOf(AAxis: TTyAxis): string;
+begin
+  Result := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
+end;
+
+procedure TTyAdvanceChart.PtrAnimDrop;
+var i: Integer;
+begin
+  if FPtrProxies <> nil then
+  begin
+    for i := 0 to FPtrProxies.Count - 1 do TObject(FPtrProxies[i]).Free;
+    FPtrProxies.Clear;
+  end;
+end;
+
+{ propsEqual: every key of AProps at the value AFinal holds }
+function PtrPropsSame(const AFinal, AProps: TTyAnimProps): Boolean;
+var i, k: Integer; hit: Boolean;
+begin
+  Result := False;
+  for i := 0 to High(AProps) do
+  begin
+    hit := False;
+    for k := 0 to High(AFinal) do
+      if AFinal[k].Key = AProps[i].Key then
+      begin
+        if not TyAnimValueSame(AFinal[k].Value, AProps[i].Value) then Exit;
+        hit := True;
+        Break;
+      end;
+    if not hit then Exit;
+  end;
+  Result := True;
+end;
+
+function TTyAdvanceChart.PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
+const
+  cKeys: array[0..3] of string = ('animation', 'animationDurationUpdate',
+    'animationEasingUpdate', 'animationDelayUpdate');
+var
+  axisNode, tip, ap, tap, d: TJSONData;
+  k: Integer;
+begin
+  { the axis' own axisPointer over the tooltip's, key by key }
+  AOwn := TJSONObject.Create;
+  ap := nil;
+  tap := nil;
+  axisNode := FOption.ComponentAt(AHit.Axis.MainType, AHit.Axis.ComponentIndex);
+  if axisNode is TJSONObject then ap := TJSONObject(axisNode).Find('axisPointer');
+  if FOption.Root is TJSONObject then
+  begin
+    tip := TJSONObject(FOption.Root).Find('tooltip');
+    if (tip is TJSONArray) and (tip.Count > 0) then tip := tip.Items[0];
+    if tip is TJSONObject then tap := TJSONObject(tip).Find('axisPointer');
+  end;
+  for k := 0 to High(cKeys) do
+  begin
+    d := nil;
+    if ap is TJSONObject then d := TJSONObject(ap).Find(cKeys[k]);
+    if ((d = nil) or (d.JSONType = jtNull)) and (tap is TJSONObject) then
+      d := TJSONObject(tap).Find(cKeys[k]);
+    if (d <> nil) and (d.JSONType <> jtNull) then AOwn.Add(cKeys[k], d.Clone);
+  end;
+  Result := TyAnimComponentModel(AOwn, FOption.Root, 'tooltip.axisPointer');
+end;
+
+function TTyAdvanceChart.PtrMoves(const AHit: TTyAxisHit; const AModel: TTyAnimModel): Boolean;
+var
+  v: TTyAnimOptValue;
+  isCat: Boolean;
+  s, cnt: Integer;
+begin
+  { determineAnimation (BaseAxisPointer.ts:211-242) }
+  isCat := AHit.Axis.Scale is TTyOrdinalScale;
+  if (not AHit.Spec.Snap) and not isCat then Exit(False);
+  v := TyAnimGetShallow(AModel, 'animation');
+  if (v.Kind in [aokUndefined, aokNull]) or ((v.Kind = aokString) and (v.Str = 'auto')) then
+  begin
+    if isCat and (AHit.Axis.BandWidth > 15) then Exit(True);
+    if AHit.Spec.Snap then
+    begin
+      { the series on the axis' coordinate system, all their data }
+      cnt := 0;
+      for s := 0 to High(FBindings) do
+        if (s <= High(FStores)) and (FStores[s] <> nil)
+          and ((FBindings[s].XAxis = AHit.Axis) or (FBindings[s].YAxis = AHit.Axis)) then
+          Inc(cnt, FStores[s].Count);
+      Exit(Abs(AHit.Axis.PxStart - AHit.Axis.PxStop) / cnt > 15);
+    end;
+    Exit(False);
+  end;
+  Result := (v.Kind = aokBool) and (v.Num <> 0);
+end;
+
+function TTyAdvanceChart.PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
+var w: Double;
+begin
+  { CartesianAxisPointer's shapes: a line across the other axis' extent, or
+    the category's band }
+  if AHit.Spec.PointerType = aptShadow then
+  begin
+    w := Max(Double(1), AHit.Axis.BandWidth);
+    if AHit.Axis.Horizontal then
+      Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AAt - w / 2)),
+        TyAnimProp('shape.y', TyAnimNum(AHit.Plot.Bottom)),
+        TyAnimProp('shape.width', TyAnimNum(w)),
+        TyAnimProp('shape.height', TyAnimNum(AHit.Plot.Top - AHit.Plot.Bottom))])
+    else
+      Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AHit.Plot.Left)),
+        TyAnimProp('shape.y', TyAnimNum(AAt - w / 2)),
+        TyAnimProp('shape.width', TyAnimNum(AHit.Plot.Right - AHit.Plot.Left)),
+        TyAnimProp('shape.height', TyAnimNum(w))]);
+  end
+  else if AHit.Axis.Horizontal then
+    Result := TyAnimProps([TyAnimProp('shape.x1', TyAnimNum(AAt)),
+      TyAnimProp('shape.y1', TyAnimNum(AHit.Plot.Bottom)),
+      TyAnimProp('shape.x2', TyAnimNum(AAt)),
+      TyAnimProp('shape.y2', TyAnimNum(AHit.Plot.Top))])
+  else
+    Result := TyAnimProps([TyAnimProp('shape.x1', TyAnimNum(AHit.Plot.Left)),
+      TyAnimProp('shape.y1', TyAnimNum(AAt)),
+      TyAnimProp('shape.x2', TyAnimNum(AHit.Plot.Right)),
+      TyAnimProp('shape.y2', TyAnimNum(AAt))]);
+end;
+
+procedure TTyAdvanceChart.PtrAnimSync;
+var
+  i, k: Integer;
+  hit: TTyAxisHit;
+  at: Double;
+  key: string;
+  p: TTyChartAnimProxy;
+  props: TTyAnimProps;
+  model: TTyAnimModel;
+  own: TJSONObject;
+begin
+  { a mouse moves only over a live window: every mode but camOff }
+  if (FAnimMode = camOff) or (csDesigning in ComponentState) then Exit;
+  for i := 0 to High(FTipHits) do
+  begin
+    hit := FTipHits[i];
+    if (hit.Axis = nil) or (hit.Spec.PointerType = aptNone) then Continue;
+    at := hit.Axis.DataToCoord(PointerValue(hit), True);
+    if IsNan(at) then Continue;
+    key := PtrKeyOf(hit.Axis);
+    props := PtrProps(hit, at);
+    if FPtrProxies = nil then FPtrProxies := TFPList.Create;
+    if FPtrAnim = nil then FPtrAnim := TTyAnimation.Create;
+    p := nil;
+    for k := 0 to FPtrProxies.Count - 1 do
+      if TTyChartAnimProxy(FPtrProxies[k]).Role = key then
+      begin
+        p := TTyChartAnimProxy(FPtrProxies[k]);
+        Break;
+      end;
+    if p = nil then
+    begin
+      { THE FIRST SHOW IS DIRECT }
+      p := TTyChartAnimProxy.Create(-1, -1, key);
+      p.Animation := FPtrAnim;
+      p.Attr(props);
+      p.SetFinal(props);
+      FPtrProxies.Add(p);
+      Continue;
+    end;
+    { propsEqual: nothing new, nothing done }
+    if PtrPropsSame(p.Final, props) then Continue;
+    model := PtrModelOf(hit, own);
+    try
+      p.SetFinal(props);
+      if PtrMoves(hit, model) then
+        TyUpdateProps(p, props, model, TyAnimCallNoIndex)
+      else
+      begin
+        p.StopAnimation;
+        p.Attr(props);
+      end;
+    finally
+      own.Free;
+    end;
+  end;
+  AnimArmTimer;
+end;
+
+function TTyAdvanceChart.PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
+var
+  k: Integer;
+  p: TTyChartAnimProxy;
+  key: string;
+begin
+  Result := AAt;
+  if (FPtrProxies = nil) or (AHit.Axis = nil) then Exit;
+  key := PtrKeyOf(AHit.Axis);
+  for k := 0 to FPtrProxies.Count - 1 do
+  begin
+    p := TTyChartAnimProxy(FPtrProxies[k]);
+    if p.Role <> key then Continue;
+    if p.AtFinal then Exit;
+    if AHit.Spec.PointerType = aptShadow then
+    begin
+      if AHit.Axis.Horizontal then Result := p.Num('shape.x') + p.Num('shape.width') / 2
+      else Result := p.Num('shape.y') + p.Num('shape.height') / 2;
+    end
+    else if AHit.Axis.Horizontal then Result := p.Num('shape.x1')
+    else Result := p.Num('shape.y1');
+    if IsNan(Result) then Result := AAt;
+    Exit;
+  end;
+end;
+
+function TTyAdvanceChart.AnimPointerClipCount: Integer;
+begin
+  if FPtrAnim = nil then Result := 0 else Result := FPtrAnim.ClipCount;
+end;
+
+function TTyAdvanceChart.AnimPointerProxy(const AKey: string): TTyChartAnimProxy;
+var k: Integer;
+begin
+  Result := nil;
+  if FPtrProxies = nil then Exit;
+  for k := 0 to FPtrProxies.Count - 1 do
+    if TTyChartAnimProxy(FPtrProxies[k]).Role = AKey then
+      Exit(TTyChartAnimProxy(FPtrProxies[k]));
+end;
+
+function TTyAdvanceChart.AnimLoopOnly: Boolean;
+var i: Integer;
+begin
+  Result := (FAnim <> nil) and (FAnim.ClipCount > 0);
+  if not Result then Exit;
+  for i := 0 to FAnim.ClipCount - 1 do
+    if not FAnim.ClipAt(i).Loop then Exit(False);
+end;
+
+function TTyAdvanceChart.AnimPart(AContinuous: Boolean): TTyPaintList;
+var
+  frame: TTyPaintList;
+  i, h: Integer;
+  el: TTyChartElement;
+  cont: Boolean;
+begin
+  frame := AnimFrame;
+  if FAnimSplit = nil then FAnimSplit := TTyPaintList.Create;
+  FAnimSplit.Clear;
+  Result := FAnimSplit;
+  if frame = nil then Exit;
+  for i := 0 to frame.Count - 1 do
+  begin
+    el := frame.Element(i);
+    { a ripple, an effect symbol, and a label hanging off one }
+    cont := el.Anim.Role in [carRipple, carEffectSymbol];
+    if (not cont) and (el.Anim.Role = carLabel) then
+    begin
+      h := el.Anim.HostPlus1 - 1;
+      cont := (h >= 0) and (h < frame.Count)
+        and (frame.Element(h).Anim.Role = carEffectSymbol);
+    end;
+    if cont = AContinuous then FAnimSplit.Add(el);
+  end;
+end;
+
 function TTyAdvanceChart.AnimClipCount: Integer;
 begin
   if FAnim = nil then Result := 0 else Result := FAnim.ClipCount;
+end;
+
+function TTyAdvanceChart.AnimLoopClipCount: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  if FAnim = nil then Exit;
+  for i := 0 to FAnim.ClipCount - 1 do
+    if FAnim.ClipAt(i).Loop then Inc(Result);
 end;
 
 function TTyAdvanceChart.AnimProxyCount: Integer;
@@ -13338,7 +13895,9 @@ begin
     prevent, and the tooltip is the first thing to test it. }
   { THE SERIES IN MOTION, and the title over them: this frame's values,
     read from the proxies [Batch 89] }
-  if FAnimLive then
+  if FAnimContinuous then
+    TyRenderPaintList(APainter, AnimPart(True))
+  else if FAnimLive then
   begin
     TyRenderPaintList(APainter, AnimFrame);
     PaintTitles(APainter);
