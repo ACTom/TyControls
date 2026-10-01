@@ -211,7 +211,7 @@ begin
   if fd < 0 then Exit;
   try
     { a temporary file left over with a wider mode keeps its mode under O_CREAT }
-    fpFChmod(fd, &600);
+    fpChmod(PChar(tmp), &600);
     done := 0;
     while done < Length(AData) do
     begin
