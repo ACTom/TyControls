@@ -8774,3 +8774,55 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 4. **要覆盖的效果**：饼 emphasis 的 `r + scaleSize`、select 的 `x/y = cos/sin(mid) × selectedOffset`（标签与引导线一起移）；符号的 `hoverScale`（`max(1.1, 3/sizeY)` 等规则）；blur 的不透明度；柱的 emphasis 样式。
 5. **基准**：在 `animation.js` 的套路上加 `dispatchAction({type: 'highlight'/'downplay'/'select'})` 的时间线用例（悬停走 `zr.handler`，或直接 `highlight` action），notMerge 下录；与本批一样按代理逐位比。
 6. **交互**：动画中再次悬停/移开的打断（stopTracks 与 `__changeFinalValue`）、更新动画进行中进入 emphasis 的组合，各要一个用例。
+
+## 128. Tier 1 第九十三批：图例点击与联动（B3，2026-10-01）
+
+B1、B2 之后，图例仍然只是一张画：`legend.selected` 与 single 模式在加载时读一次，点击、悬停、五个图例动作都没有，`inactiveColor` 这类作者颜色也不读。这一批把上游 LegendModel 的选择、legendAction 的五个动作、LegendView 的点击与悬停联动接上，并让图例动作后的整体更新按上游的顺序重放状态。
+
+### 上游的做法（`wf87/states.md` §0.2、§4、§6；`LegendModel.ts`、`legendAction.ts`、`LegendView.ts`、`core/echarts.ts` 逐行核过，关键处在真 dist 上探针确认）
+
+- **模型把状态放在自己的 option 里**：`init` 时 `option.selected ||= {}`；`optionUpdated`（只在 setOption 时）single 模式选第一个已选中的、否则第一个，其余写 false。`select`：single 模式先把图例数据的每个名字（换行项也算）写 false；`unSelect`：single 模式什么都不做；`toggleSelected`：没有这个键先当 true；`allSelect` 全写 true；`inverseSelect` 没有的键先当 true 再取反。`isSelected` = 映射里没写成假值，且名字在 availableNames 里。
+- **动作**（`legendAction.ts:28-92`）：对 payload 查询到的图例（legendIndex——数组按给的顺序——、legendId、legendName，都没写就是全部）调方法，并把这些图例的选中表 AND 成一张 map（跳过 `''` 和 `'\n'`）；然后**每一个**图例对 map 里的每个名字（JS 键序）调 select / unSelect——于是 `selected` 里会出现所有名字，single 模式被重新强制，一个图例的表里出现另一个图例才有的名字；最后事件里的 `selected` 是**写回之后**所有图例的表（AND），不是动作那张——single 模式下 legendAllSelect 的事件是 `{A:false, B:true}`。事件：toggle/select/unselect 是 `{name, selected, type}`（payload 没有 name 时没有这个字段，键是 `'undefined'`），allSelect/inverse 是 `{selected, legendIndex, type}`。默认 `update` 是整体更新，在事件之前同步跑完。
+- **整体更新**（`echarts.ts:2429-2539、2667-2748`）：被过滤的系列视图 `chart.remove`，元素没了；重新显示是新元素（标志全零）。复用的元素先 clearStates（记下旧列表），渲染，再 `useStates(旧列表)`、再按标志 applyElementStates——z2 继续爬。饼按名字 filterSelf，内部下标移位，选中按名字保留。
+- **视图**（`LegendView.ts:193-506、709-724`）：图例项按名字找系列（`getSeriesByName`，被过滤的也算）是系列图例，否则是数据图例（饼、漏斗按名字）；项组上的处理器：over → `highlight {seriesName|null, name|null, excludeSeriesId}`，out → 同样的 downplay，click → downplay、legendToggleSelect、highlight。项的处理器在 zr 级处理器（选中的派发、用户 click）**之前**。所有子元素 silent，透明命中框 `silent = !selectedMode`：**selectedMode false 时什么都打不到**——没有悬停联动、没有点击、triggerEvent 的鼠标事件也没有。`excludeSeriesId` 是 legendHoverLink 为假值的系列 id：选项写了用选项，否则用类型默认——柱、折线、散点、饼、漏斗等是 true，**热力图、旭日、矩形树图、树图、桑基图没有默认值，所以总被排除**。
+- **zrender 的 #6198**：上一个悬停目标被重渲染删掉了（图例项每次整体更新都重建），下一次 mousemove 先在它被找到的那个点重新找一遍，找到的若就是新指针下的元素，既不 out 也不 over；复用的元素（柱子）不重找，指针下换了元素就照常 out 旧的、over 新的。
+- **样子**（`getLegendStyle :599-681`）：文字 = 选中 ? textStyle.color : inactiveColor；图标填充 = 系列色或 inactiveColor；描边 = 系列视觉的描边（`itemStyle.borderColor`）或 inactiveBorderColor；线宽 `borderWidth 'auto'` = 系列视觉线宽 > 0 ? 2 : 0；未选中且 `inactiveBorderWidth 'auto'` = 视觉线宽 > 0 **且有描边** ? 2 : 0，写成数字**不用**，保留选中时的宽度。饼的默认 borderWidth 是 1（没有颜色），漏斗是 1 加 neutral00 的白边。有描边的图标包围盒外扩半个线宽。
+
+### 做法
+
+- **`Legend` 单元**：`TyLegendSelectedNode / IsSelected / SelectName / UnSelectName / ToggleName / AllSelect / InverseSelect / ResolveSingle` 直接在选项树里图例节点的 `selected` 对象上读写（控件的 Option 文本仍是宿主写的；同一文本再设不算新选项，不同文本 notMerge 重来）；`TyJsKeyOrder` 给出 JS 键序（整数样的键升序在前），`TyLegendSelectedJson` 按它输出。Spec 多了 `InactiveBorderAuto`，Source 多了系列的描边与视觉线宽，Item 多了解析后的图标笔（`HasStroke/Stroke/IconPen`），Ink 多了 `InactiveBorder`、规则线的 `LineInactive/LineInactiveWidth`。命中框在 selectedMode false 时 silent。
+- **控件**：`SolveLegendData` 每个选项只做一次加载（`FLegendLoaded`：建 `selected`、single 模式选一个写进表），之后标志一律按表读（不再每次 Rebuild 重新挑 single）。`DoLegendAction` 照 legendAction 的三步；`FullUpdate` 在动作里**同步**整体更新：Relayout（`FStGen` 前进，StSync 走「回 rest、套旧列表、再套标志」）、建显示列表，并按上游重找悬停目标——数据项按（系列、原始下标）认回复用的元素，其余（图例项总是）在最后一个点重找、不发 out/over。没画出来的系列（包括全部被关掉、列表里一个系列都没有时）状态记录清空，重新显示就是新元素。
+- **事件目标**：`TTyChartEventTarget` 的 `HdKind 4` 是图例项（`HdName`、`HdLegendSeries`），不管 triggerEvent 都有；mouseover / mouseout 派发 highlight / downplay，click 在选中派发和用户 click 之前跑 downplay → legendToggleSelect → highlight。`LegendExcludeIds` 按类型默认表算 legendHoverLink。`DispatchAction` 收五个图例动作；事件类型表加了 legendselectchanged 等五个。
+- **样子**：`LegendTextOf` 读 `inactiveColor`、`inactiveBorderColor`、`lineStyle.inactiveColor / inactiveWidth`（主题的 inactive 墨是默认值）；`LegendBorderOf` 从系列（数据图例再叠数据项）的 `itemStyle.borderColor / borderWidth` 和饼、漏斗的默认值得出图标的描边。
+- **顺带修的**：
+  - `DispatchAction` 解析 payload 前把 `\u0000` 换成 U+FDD0、解析后换回 #0——fpjson 会把它吞掉，上游自动生成的系列 id 是 `'\0' + 名 + '\0' + n`，图例悬停的 excludeSeriesId 因此一个都对不上（热力图那条手写测试先红了）。
+  - **柱的边框从布局里扣掉**（`BarView.ts:924-944, 1078-1092`）：有 borderColor 时取 min(borderWidth, |宽|, |高|)，两边各扣一半，在裁剪之前——夹具 `legend-inactive-custom` 的带边框柱子差半个像素，暴露了它。`TTySeriesVisual.PxScale` 把逻辑线宽换成设备 px。
+  - `test.advchart.mouseevents` 不再滤掉图例悬停的 highlight / downplay，`legend-trigger` 跑到最后一步，`pub` 也注册图例的五个事件类型：全部对上。
+
+### 基准
+
+- `tools/advchart-oracle/select-legend.js` 加了 8 个用例：`legend-single-actions`（single 模式下 allSelect 只留最后一个、inverse、unSelect 不动、select 切换、toggle 已选中的不动、select 一个没有的名字后**什么都不显示**——single 只在加载时解决）、`legend-mode-false-action`（selectedMode false 时动作照样过滤和发事件，指针什么都不做）、`legend-held-hover`（悬停柱子时做图例动作：复用、z2 重放、不重找、移开才 out）、`legend-held-hover-moves`（复用的悬停柱子缩走，同一个点上 out 旧的 over 新的）、`legend-pie-inverse`（选中且悬停的扇区被反选过滤、全选后作为新元素回来、按模型选中）、`legend-pie-border`（饼的边框色加默认宽 1：图标笔 2，未选中的 inactiveBorderColor；饼 legendHoverLink false）、`legend-inverse-fresh`（空表反选：没写的当 true，全部关掉）、`legend-reshown-new`（变异补的，见下）。转写修了一处：事件的 `selected` 要在写回之后算（single + allSelect 时转写原先与上游不一致），新增守卫 G-legend-write-back。整份 fixture 53 个用例、276 步、279 个事件，转写全对，35 条守卫全过，两次生成逐字节一致。
+- 重放器（`test.advchart.select` 的 `TAdvChartSelectHarness`）补了：`shown: false` 的系列不能画出任何元素、不能有状态记录（选中下标不比，上游只问显示中的系列）；`legend` 的 `selected`（键序也比）与每一项画出来的字色、图标填充、笔（颜色与宽度，上游没有笔时这里也不能有）、不透明度——两个默认色映射到皮肤（`#54555a` 是皮肤的图例字色，`#cfd2d7` 是皮肤的 inactive 墨），选中项的填充是端口自己的系列色，其余逐位比；整体更新后重新取 rest 画面（饼的引导线 rest 随重新布局变了）。
+- `test.advchart.legendact`：重放 18 个图例用例共 86 步，全部对上；手写 7 个，期望值取自真 dist 的临时探针：两个图例被强制成同样的状态（legendIndex 数组按序、legendId、legendName、没有 name 的 toggle）、查询到的图例的表 AND、JS 键序（`x、10、2` → `{"2","10","x"}`）、热力图被 legendHoverLink 排除（payload 里的 NUL 原样、排除确实生效）、漏斗图标的白边（端口是图表底色）、selectedMode false 连 triggerEvent 的鼠标事件也没有、Option 文本不变而新文本重新加载。
+
+### 变异测试
+
+`b3/mut.py`：逐个改源码、重编、跑 legendact、mouseevents、legend、select、focusblur 五套、还原。50 个变异：
+- 点击：先 toggle 后 downplay、highlight 在 toggle 之前、没有 downplay、图例的处理器排在用户 click 之后；
+- 模型：single 的 select 不清别的、single 的 unSelect 照写、加载时不解决 single、每次更新都重新解决 single、toggle 时没写的键当 false、inverse 时没写的键当 false、allSelect 什么都不做、没有写回、查询到的图例的表不 AND、忽略查询、键按插入序；
+- 事件：用写回之前的表（两处）、没有 legendIndex、没有 name、事件在更新之前、legendselected 认错动作；
+- 更新：推迟到下一次绘制、整体更新不重放旧列表、重新显示的系列沿用旧元素、复用的项也在点上重找、被删的项不重找、什么都没画时状态记录留着；
+- 过滤与联动：扇区不按名字过滤、饼按系列名过滤、数据图例按系列派发、系列名永远找不到、系列图例当数据图例、selectedMode false 仍然命中、所有类型都联动、选项的 legendHoverLink 不读、id 里的 NUL 丢掉；
+- 样子：inactiveColor / inactiveBorderColor 不读、未选中的图标和文字不换色、未选中的笔用系列描边、inactiveBorderWidth 永不 auto、auto 不看描边、选中笔宽 1、饼默认线宽 0、漏斗没有默认边、系列边框不读、柱不扣边框、柱的边框两边各扣一整份。
+
+首轮 48 个存活 1 个：**重新显示的系列沿用旧元素**——已有用例里被关掉的系列关掉前标志都已清零，新旧元素看不出区别。补上游用例 `legend-reshown-new`（悬停 B1、动作高亮 B2 之后关掉再打开：上游是新元素，没有 hoverState、没有 hbo），杀死；第二轮同时加了两个过滤的变异（扇区不按名字过滤、饼按系列名过滤），都被杀死。补完全部杀死。
+
+### 推迟与偏差
+
+- **图例切换不动画**：整体更新走 Relayout 的「直接到终值」分支并停掉进行中的动画。上游此时被关掉的柱子淡出（`BarView._clear` 的 removeElementWithFadeOut）、重新显示的系列作为新视图入场、留下的补间——要接 AN3 的更新布防，并区分「视图被 remove」与 notMerge 的删除，留给 AN 系列。
+- **selector 按钮（全选/反选）和滚动图例（`type: 'scroll'`）的翻页**没做；对应的动作（legendAllSelect / legendInverseSelect）已经在。
+- 图例项级的 `inactiveColor` 等（`legend.data[i]` 对象里写的）不读，只读图例级；图例项的 `textStyle` 同样只读图例级（第 83 批起就是）。
+- 图标描边只认作者写的 `itemStyle.borderColor / borderWidth` 与饼、漏斗的默认值；K 线等类型自带的默认边框（上游 K 线图例图标会有 2 宽的边）没有建模；折线自绘图标的规则线未选中时用 `lineStyle.inactiveColor / inactiveWidth`，标记点仍是 inactive 墨。
+- 漏斗图标的默认边是图表底色而不是上游写死的 `#fff`（主题令牌原则）。
+- `legend.selected` 不是对象时（比如写成 `true`）直接换成 `{}`；上游在严格模式下对原始值写属性会抛异常。
+- 悬停目标的复用只认数据项（按系列和原始下标）与折线本体；悬停在数据项的标签上时，整体更新后认回的是宿主元素，下一次移动在标签上会多一对 out/over（没有用例）。

@@ -259,6 +259,34 @@ const CASES = [
     steps: [act({ type: 'legendToggleSelect', name: 'A' })] },
   { id: 'legend-hoverlink-false', note: 'series B legendHoverLink false: hovering its legend item dispatches highlight with excludeSeriesId [B] (nothing lights); A still highlights',
     option: barOpt({ id: 'sa' }, { id: 'sb', legendHoverLink: false }, { legend: {} }), steps: [mv(legend('B')), mv(legend('A')), mv(empty())] },
+  // [Batch 93] the rules the first legend cases left open
+  { id: 'legend-single-actions', note: "selectedMode 'single' through the actions: legendAllSelect selects all, then the write-back selects each name in turn -- only the LAST stays on; legendInverseSelect; legendUnSelect is a no-op; legendSelect switches; legendToggleSelect on the selected item changes nothing",
+    option: barOpt({}, {}, { legend: { selectedMode: 'single' } }),
+    steps: [act({ type: 'legendAllSelect' }), act({ type: 'legendInverseSelect' }), act({ type: 'legendUnSelect', name: 'A' }),
+      act({ type: 'legendSelect', name: 'B' }), act({ type: 'legendToggleSelect', name: 'B' }),
+      // a name no item has: every item goes false and nothing is shown -- single mode is resolved at load only
+      act({ type: 'legendSelect', name: 'Nope' })] },
+  { id: 'legend-mode-false-action', note: 'selectedMode false makes the items inert, not the model: legendToggleSelect still filters and publishes; the pointer over the item still does nothing',
+    option: barOpt({}, {}, { legend: { selectedMode: false } }),
+    steps: [act({ type: 'legendToggleSelect', name: 'B' }), mv({ xy: 'legend B' }), ck({ xy: 'legend B' }), act({ type: 'legendToggleSelect', name: 'B' })] },
+  { id: 'legend-held-hover', note: 'a legend action while a bar is hovered: the bar is re-rendered (a reused element: its previous states re-applied, the z2 creeps), stays the hovered element (not re-found) and leaves emphasis on the next move off it; B comes back as new elements',
+    option: barOpt({}, {}, { legend: {} }),
+    steps: [mv(item(0, 1)), act({ type: 'legendToggleSelect', name: 'B' }), act({ type: 'legendToggleSelect', name: 'B' }), mv(empty())] },
+  { id: 'legend-pie-inverse', note: "pie 'multiple' with a selected, hovered slice: legendUnSelect Mon, legendInverseSelect (Mon back, the rest off: the selected Tue is filtered, its selection kept by name), legendAllSelect (Tue comes back as a new element, selected from the model)",
+    option: pieOpt({ selectedMode: 'multiple' }, { legend: {} }),
+    steps: [ck(item(0, 1)), act({ type: 'legendUnSelect', name: 'Mon' }), act({ type: 'legendInverseSelect' }), act({ type: 'legendAllSelect' }), mv(empty())] },
+  { id: 'legend-pie-border', note: "a pie with a border colour (its borderWidth the pie's default 1) and Tue off at load: the icons take the border at width 2, the unselected one inactiveBorderColor at 2 ('auto': a border and a stroke); legendHoverLink false on the pie: hovering a slice name highlights nothing",
+    option: pieOpt({ id: 'pp', legendHoverLink: false, itemStyle: { borderColor: '#000000' } }, { legend: { selected: { Tue: false }, inactiveBorderColor: '#00ff00' } }),
+    steps: [mv(legend('Mon')), mv(empty()), act({ type: 'legendToggleSelect', name: 'Tue' })] },
+  { id: 'legend-inverse-fresh', note: 'legendInverseSelect on a legend whose map is empty: an absent name counts as selected, so every item goes off (and the chart is empty), then on again',
+    option: barOpt({}, {}, { legend: {} }),
+    steps: [act({ type: 'legendInverseSelect' }), act({ type: 'legendInverseSelect' })] },
+  { id: 'legend-held-hover-moves', note: "B off, the pointer on A1's wide bar; B back on: A1 narrows away from the pointer and B1 is under it. A1 is still the hovered element (reused, not re-found), so the move at the same point is an out of A1 and an over of B1",
+    option: barOpt({}, {}, { legend: {} }),
+    steps: [act({ type: 'legendToggleSelect', name: 'B' }), mv({ pt: [280, 250] }), act({ type: 'legendToggleSelect', name: 'B' }), mv({ pt: [280, 250] }), mv(empty())] },
+  { id: 'legend-reshown-new', note: 'B1 hovered and B2 highlighted by action, then B switched off and on again: B comes back as NEW elements (render removed the view group) -- no hover state, no __highByOuter; the move off re-finds the new B1 at the old point and leaves nothing',
+    option: barOpt({}, {}, { legend: {} }),
+    steps: [mv(item(1, 1)), act({ type: 'highlight', seriesIndex: 1, dataIndex: 2 }), act({ type: 'legendToggleSelect', name: 'B' }), act({ type: 'legendToggleSelect', name: 'B' }), mv(empty())] },
   // ---------------------------------------------------------------- focus / blur
   { id: 'focus-series-coord', note: "bar A, bar B, line C on one grid and a pie P, all focus 'series' (blurScope default coordinateSystem): hovering A1 blurs B and C (the polyline too), not P (no coordinate system: only its own series counts)",
     option: { animation: false, xAxis: { type: 'category', data: CAT }, yAxis: { type: 'value' },
@@ -544,6 +572,10 @@ function runCase(def) {
         const p = aimNear([r.x + r.width / 2, r.y + r.height / 2], owner, 'legend');
         return { x: p[0], y: p[1], aim: 'legend \'' + at.legend + '\'' };
       }
+      if (at.pt) {
+        // a bare point, whatever is under it [Batch 93]
+        return { x: at.pt[0], y: at.pt[1], aim: 'point ' + at.pt.join(',') };
+      }
       if (at.empty) {
         must(!hd().findHover(at.empty[0], at.empty[1]).target, def.id + ': the empty point hits an element');
         return { x: at.empty[0], y: at.empty[1], aim: 'empty' };
@@ -627,6 +659,7 @@ const RULES = {
   disabledHasNoProxy: true, labelLiftNeedsState: true, rerenderRestoresPrevStates: true, refindRemovedHover: true,
   selfSparesHeld: true, truthyFocusBlurs: true, unknownScopeGlobal: true, candleEmphasisWidth: true, funnelEmphasisLabel: true,
   sunburstDescendant: true, focusIndicesLeaveBlur: true, sunburstBlurDefaults: true,
+  legendWriteBack: true,
 };
 
 // ---- small helpers --------------------------------------------------------
@@ -1030,8 +1063,12 @@ function predictCase(c, R) {
       const map = {};
       for (const d of L.data) map[d] = legendIsSelected(d);
       // legendAction.ts: every legend is then forced to the same statuses
-      for (const d of Object.keys(map)) (map[d] ? legendSelect : legendUnSelect)(d);
-      events.push({ type: LEG[t], payload: all ? { selected: map, legendIndex: [0], type: LEG[t] } : { name: p.name, selected: map, type: LEG[t] } });
+      if (R.legendWriteBack) for (const d of Object.keys(map)) (map[d] ? legendSelect : legendUnSelect)(d);
+      // the event's map is made AFTER the write-back (allSelectedMap): in single
+      // mode it is not the map the action made
+      const after = {};
+      for (const d of L.data) after[d] = legendIsSelected(d);
+      events.push({ type: LEG[t], payload: all ? { selected: after, legendIndex: [0], type: LEG[t] } : { name: p.name, selected: after, type: LEG[t] } });
       // the full update re-renders: elements are re-synced from the recording
       syncStructure(structureAfterUpdate);
       for (const n of nodes.values()) n.p.sel = isSelected(n.x, n.raw);
@@ -1383,6 +1420,7 @@ const GUARDS = [
   { id: 'G-focus-indices', mutation: 'the focus indices do not leave the blur', mut: { focusIndicesLeaveBlur: false }, named: ['focus-sunburst', 'focus-sunburst-ancestor'] },
   { id: 'G-sunburst-blur', mutation: "a sunburst's blur opacities are the default tenth", mut: { sunburstBlurDefaults: false }, named: ['focus-sunburst'] },
   { id: 'G-candle-emphasis-width', mutation: 'a candlestick has no default emphasis border width', mut: { candleEmphasisWidth: false }, named: ['focus-candlestick'] },
+  { id: 'G-legend-write-back', mutation: 'a legend action does not write every name of the map back (select / unSelect)', mut: { legendWriteBack: false }, named: ['legend-actions', 'legend-single-actions'] },
 ];
 
 let diffCases = 0;
@@ -1447,6 +1485,21 @@ function expectations(g) {
   const fg = st('focus-series-global', 1).state.series;
   must(fg[3].items.every(i => i.st.join() === 'blur'), 'global scope blurs the pie');
   must(st('emphasis-label', 1).state.series[1].items.every(i => i.opacity === 0.3), 'declared blur opacity');
+  // [Batch 93] single mode through the actions: allSelect leaves the LAST name on
+  const sa = st('legend-single-actions', 1).state;
+  must(canon(sa.legend.selected) === canon({ A: false, B: true }) && !sa.series[0].shown && sa.series[1].shown, 'single + allSelect: the last');
+  // selectedMode false: the model still takes the action
+  must(st('legend-mode-false-action', 1).state.series[1].shown === false && types('legend-mode-false-action', 1) === 'legendselectchanged'
+    && !st('legend-mode-false-action', 2).events.length && !st('legend-mode-false-action', 3).events.length, 'selectedMode false: actions only');
+  // the hovered bar is reused through the re-render: no out, then out on the move off it
+  must(!st('legend-held-hover', 2).refound && types('legend-held-hover', 4) === '' && item('legend-held-hover', 2, 0, 1).st.join() === 'emphasis'
+    && item('legend-held-hover', 4, 0, 1).st.length === 0, 'held hover through a legend action');
+  const hm = st('legend-held-hover-moves', 4);
+  must(hm.hit && hm.hit.dp && hm.hit.dp.s === 1 && hm.hit.dp.i === 1 && !hm.refound && item('legend-held-hover-moves', 3, 0, 1).st.join() === 'emphasis'
+    && item('legend-held-hover-moves', 4, 0, 1).st.length === 0 && item('legend-held-hover-moves', 4, 1, 1).st.join() === 'emphasis', 'the reused hovered bar moved away: out of it, over the new one');
+  must(!st('legend-single-actions', 6).state.series.some(x => x.shown), 'single mode is not resolved again after load');
+  must(st('legend-reshown-new', 4).state.series[1].items.every(i => !i.st.length && !i.hbo && !i.hs), 'a re-shown series is new elements');
+  must(st('legend-inverse-fresh', 1).state.series.every(x => !x.shown) && st('legend-inverse-fresh', 2).state.series.every(x => x.shown), 'inverse of an empty map');
   // emphasis.disabled: select without the z2 lift
   must(item('emphasis-disabled', 3, 0, 1).z2 === 1 && item('emphasis-disabled', 3, 0, 1).st.join() === 'select', 'disabled: no proxy');
 }

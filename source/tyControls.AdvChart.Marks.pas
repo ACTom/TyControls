@@ -192,6 +192,9 @@ type
     { the half pixel a heatmap cell is widened by, in device px: upstream's
       `.5` against its gaps, at this PPI [Batch 68] }
     HeatPadPx: Double;
+    { device px per logical px -- a border's width taken out of a bar's
+      layout is a length on the device [Batch 93] }
+    PxScale: Double;
     { AN effectScatter's RIPPLES, as upstream's static first frame: `number`
       copies of the symbol at its own size, stroked (brushType 'stroke') or
       filled, in rippleEffect.color or the row's own colour, at z2 99 --
@@ -491,6 +494,7 @@ begin
     itself. So the line read like a safeguard and was never once read; a
     mutant that flipped it changed nothing, which is how it was found. }
   Result.BackgroundFill := AFill;
+  Result.PxScale := 1;
   { upstream's series z }
   Result.Z := 2;
   Result.Z2 := 0;
@@ -915,6 +919,8 @@ var
   baseHoriz, haveCol, stacked: Boolean;
   shape: TTyChartShape;
   bgEl, el: TTyChartElement;
+  rv: TTySeriesVisual;
+  fix, sx, sy: Double;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -1038,6 +1044,22 @@ begin
       -Inf + Inf) and draws nothing. Here that sum would raise. }
     if IsInfinite(lx) or IsInfinite(ly) or IsInfinite(lw) or IsInfinite(lh) then
       Continue;
+    { A BORDER IS TAKEN OUT OF THE LAYOUT, half on each side, before the
+      clip (BarView.ts:924-944, getLineWidth :1078-1092): the item's border
+      width when it has a border colour, no more than the bar's own width or
+      height -- so the stroke's outer edge is where the bar's edge was.
+      [Batch 93: found by the legend fixture's bordered bars.] }
+    rv := RowVisual(AVisual, AStore, i);
+    if (rv.StrokeWidthLogical > 0) and (rv.Stroke <> 0) then
+    begin
+      fix := Min(rv.StrokeWidthLogical * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
+      if lw > 0 then sx := 1 else sx := -1;
+      if lh > 0 then sy := 1 else sy := -1;
+      lx := lx + sx * fix / 2;
+      ly := ly + sy * fix / 2;
+      lw := lw - sx * fix;
+      lh := lh - sy * fix;
+    end;
 
     { showBackground: the bar's own band, stretched over the WHOLE plot along
       the value axis -- BarView.ts:1237-1246. Emitted BEFORE the bar, because

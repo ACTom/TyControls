@@ -78,7 +78,7 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   given; '' for one it does not know: the nine mouse events, and the events
   of the state actions [Batch 88] -- select, unselect, toggleselect,
   selectchanged, highlight, downplay and the six legacy pie / map select
-  events. }
+  events; and the legend's five [Batch 93]. }
 function TyChartEventTypeOf(const AName: string): string;
 { whether a type is one of the action events (no params, a payload) }
 function TyChartEventIsAction(const AType: string): Boolean;
@@ -88,10 +88,13 @@ implementation
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..11] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..16] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
-    'pieunselected');
+    'pieunselected',
+    { the legend's actions [Batch 93] }
+    'legendselectchanged', 'legendselected', 'legendunselected',
+    'legendselectall', 'legendinverseselect');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;
